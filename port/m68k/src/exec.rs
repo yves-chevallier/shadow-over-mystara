@@ -156,60 +156,60 @@ impl Cpu {
     /// appelée avec une instruction constante, elle se spécialise à l'inlining.
     pub(crate) fn exec<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         match ins.op {
-            Op::Add(sz, s, d) | Op::Sub(sz, s, d) => self.op_00_add(bus, ins),
-            Op::Addx(sz, s, d) | Op::Subx(sz, s, d) => self.op_01_addx(bus, ins),
-            Op::Cmp(sz, s, d) => self.op_02_cmp(bus, ins),
-            Op::Adda(sz, s, n) | Op::Suba(sz, s, n) => self.op_03_adda(bus, ins),
-            Op::Cmpa(sz, s, n) => self.op_04_cmpa(bus, ins),
-            Op::And(sz, s, d) | Op::Or(sz, s, d) | Op::Eor(sz, s, d) => self.op_05_and(bus, ins),
-            Op::AndiCcr(v) => self.op_06_andiccr(bus, ins),
-            Op::OriCcr(v) => self.op_07_oriccr(bus, ins),
-            Op::EoriCcr(v) => self.op_08_eoriccr(bus, ins),
-            Op::AndiSr(v) | Op::OriSr(v) | Op::EoriSr(v) => self.op_09_andisr(bus, ins),
-            Op::Neg(sz, d) | Op::Negx(sz, d) => self.op_10_neg(bus, ins),
-            Op::Not(sz, d) => self.op_11_not(bus, ins),
-            Op::Clr(sz, d) => self.op_12_clr(bus, ins),
-            Op::Tst(sz, d) => self.op_13_tst(bus, ins),
-            Op::Tas(d) => self.op_14_tas(bus, ins),
-            Op::Ext(sz, n) => self.op_15_ext(bus, ins),
-            Op::Swap(n) => self.op_16_swap(bus, ins),
-            Op::Exg(mode, x, y) => self.op_17_exg(bus, ins),
-            Op::Mulu(s, n) | Op::Muls(s, n) => self.op_18_mulu(bus, ins),
-            Op::Divu(s, n) | Op::Divs(s, n) => self.op_19_divu(bus, ins),
-            Op::Abcd(s, d) | Op::Sbcd(s, d) => self.op_20_abcd(bus, ins),
-            Op::Nbcd(d) => self.op_21_nbcd(bus, ins),
-            Op::Chk(s, n) => self.op_22_chk(bus, ins),
-            Op::Move(sz, s, d) => self.op_23_move(bus, ins),
-            Op::Movea(sz, s, n) => self.op_24_movea(bus, ins),
-            Op::Moveq(v, n) => self.op_25_moveq(bus, ins),
-            Op::Movem { size, to_mem, mask, ea } => self.op_26_movem(bus, ins),
-            Op::Movep { size, to_mem, dn, an, disp } => self.op_27_movep(bus, ins),
-            Op::MoveFromSr(d) => self.op_28_movefromsr(bus, ins),
-            Op::MoveToCcr(s) => self.op_29_movetoccr(bus, ins),
-            Op::MoveToSr(s) => self.op_30_movetosr(bus, ins),
-            Op::MoveUsp { to_usp, an } => self.op_31_moveusp(bus, ins),
-            Op::Lea(ea, n) => self.op_32_lea(bus, ins),
-            Op::Pea(ea) => self.op_33_pea(bus, ins),
-            Op::Link(n, disp) => self.op_34_link(bus, ins),
-            Op::Unlk(n) => self.op_35_unlk(bus, ins),
-            Op::Bit(kind, count, d) => self.op_36_bit(bus, ins),
-            Op::Shift { kind, left, size, count, dn } => self.op_37_shift(bus, ins),
-            Op::ShiftMem { kind, left, ea } => self.op_38_shiftmem(bus, ins),
-            Op::Bra(t) => self.op_39_bra(bus, ins),
-            Op::Bsr(t) => self.op_40_bsr(bus, ins),
-            Op::Bcc(c, t) => self.op_41_bcc(bus, ins),
-            Op::Dbcc(c, n, t) => self.op_42_dbcc(bus, ins),
-            Op::Scc(c, d) => self.op_43_scc(bus, ins),
-            Op::Jmp(ea) => self.op_44_jmp(bus, ins),
-            Op::Jsr(ea) => self.op_45_jsr(bus, ins),
+            Op::Add(..) | Op::Sub(..) => self.op_00_add(bus, ins),
+            Op::Addx(..) | Op::Subx(..) => self.op_01_addx(bus, ins),
+            Op::Cmp(..) => self.op_02_cmp(bus, ins),
+            Op::Adda(..) | Op::Suba(..) => self.op_03_adda(bus, ins),
+            Op::Cmpa(..) => self.op_04_cmpa(bus, ins),
+            Op::And(..) | Op::Or(..) | Op::Eor(..) => self.op_05_and(bus, ins),
+            Op::AndiCcr(..) => self.op_06_andiccr(bus, ins),
+            Op::OriCcr(..) => self.op_07_oriccr(bus, ins),
+            Op::EoriCcr(..) => self.op_08_eoriccr(bus, ins),
+            Op::AndiSr(..) | Op::OriSr(..) | Op::EoriSr(..) => self.op_09_andisr(bus, ins),
+            Op::Neg(..) | Op::Negx(..) => self.op_10_neg(bus, ins),
+            Op::Not(..) => self.op_11_not(bus, ins),
+            Op::Clr(..) => self.op_12_clr(bus, ins),
+            Op::Tst(..) => self.op_13_tst(bus, ins),
+            Op::Tas(..) => self.op_14_tas(bus, ins),
+            Op::Ext(..) => self.op_15_ext(bus, ins),
+            Op::Swap(..) => self.op_16_swap(bus, ins),
+            Op::Exg(..) => self.op_17_exg(bus, ins),
+            Op::Mulu(..) | Op::Muls(..) => self.op_18_mulu(bus, ins),
+            Op::Divu(..) | Op::Divs(..) => self.op_19_divu(bus, ins),
+            Op::Abcd(..) | Op::Sbcd(..) => self.op_20_abcd(bus, ins),
+            Op::Nbcd(..) => self.op_21_nbcd(bus, ins),
+            Op::Chk(..) => self.op_22_chk(bus, ins),
+            Op::Move(..) => self.op_23_move(bus, ins),
+            Op::Movea(..) => self.op_24_movea(bus, ins),
+            Op::Moveq(..) => self.op_25_moveq(bus, ins),
+            Op::Movem { .. } => self.op_26_movem(bus, ins),
+            Op::Movep { .. } => self.op_27_movep(bus, ins),
+            Op::MoveFromSr(..) => self.op_28_movefromsr(bus, ins),
+            Op::MoveToCcr(..) => self.op_29_movetoccr(bus, ins),
+            Op::MoveToSr(..) => self.op_30_movetosr(bus, ins),
+            Op::MoveUsp { .. } => self.op_31_moveusp(bus, ins),
+            Op::Lea(..) => self.op_32_lea(bus, ins),
+            Op::Pea(..) => self.op_33_pea(bus, ins),
+            Op::Link(..) => self.op_34_link(bus, ins),
+            Op::Unlk(..) => self.op_35_unlk(bus, ins),
+            Op::Bit(..) => self.op_36_bit(bus, ins),
+            Op::Shift { .. } => self.op_37_shift(bus, ins),
+            Op::ShiftMem { .. } => self.op_38_shiftmem(bus, ins),
+            Op::Bra(..) => self.op_39_bra(bus, ins),
+            Op::Bsr(..) => self.op_40_bsr(bus, ins),
+            Op::Bcc(..) => self.op_41_bcc(bus, ins),
+            Op::Dbcc(..) => self.op_42_dbcc(bus, ins),
+            Op::Scc(..) => self.op_43_scc(bus, ins),
+            Op::Jmp(..) => self.op_44_jmp(bus, ins),
+            Op::Jsr(..) => self.op_45_jsr(bus, ins),
             Op::Rts => self.op_46_rts(bus, ins),
             Op::Rtr => self.op_47_rtr(bus, ins),
             Op::Rte => self.op_48_rte(bus, ins),
-            Op::Trap(n) => self.op_49_trap(bus, ins),
+            Op::Trap(..) => self.op_49_trap(bus, ins),
             Op::Trapv => self.op_50_trapv(bus, ins),
             Op::Nop => self.op_51_nop(bus, ins),
             Op::Reset => self.op_52_reset(bus, ins),
-            Op::Stop(v) => self.op_53_stop(bus, ins),
+            Op::Stop(..) => self.op_53_stop(bus, ins),
             Op::Illegal => self.op_54_illegal(bus, ins),
             Op::LineA => self.op_55_linea(bus, ins),
             Op::LineF => self.op_56_linef(bus, ins),
@@ -217,7 +217,7 @@ impl Cpu {
     }
 
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_00_add<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::Add(sz, s, d) | Op::Sub(sz, s, d)) = ins.op else { unreachable!() };
         {
@@ -231,7 +231,7 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_01_addx<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::Addx(sz, s, d) | Op::Subx(sz, s, d)) = ins.op else { unreachable!() };
         {
@@ -246,9 +246,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_02_cmp<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Cmp(sz, s, d)) = ins.op else { unreachable!() };
+        let Op::Cmp(sz, s, d) = ins.op else { unreachable!() };
         {
             let sv = self.read_ea(bus, s, sz);
             let dv = self.read_ea(bus, d, sz);
@@ -259,7 +259,7 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_03_adda<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::Adda(sz, s, n) | Op::Suba(sz, s, n)) = ins.op else { unreachable!() };
         {
@@ -270,9 +270,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_04_cmpa<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Cmpa(sz, s, n)) = ins.op else { unreachable!() };
+        let Op::Cmpa(sz, s, n) = ins.op else { unreachable!() };
         {
             let sv = sext(self.read_ea(bus, s, sz), sz);
             let dv = self.a[n as usize];
@@ -283,7 +283,7 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_05_and<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::And(sz, s, d) | Op::Or(sz, s, d) | Op::Eor(sz, s, d)) = ins.op else { unreachable!() };
         {
@@ -301,28 +301,28 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_06_andiccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::AndiCcr(v)) = ins.op else { unreachable!() };
+        let Op::AndiCcr(v) = ins.op else { unreachable!() };
         self.set_ccr(self.ccr() & v as u16);
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_07_oriccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::OriCcr(v)) = ins.op else { unreachable!() };
+        let Op::OriCcr(v) = ins.op else { unreachable!() };
         self.set_ccr(self.ccr() | v as u16);
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_08_eoriccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::EoriCcr(v)) = ins.op else { unreachable!() };
+        let Op::EoriCcr(v) = ins.op else { unreachable!() };
         self.set_ccr(self.ccr() ^ v as u16);
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_09_andisr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::AndiSr(v) | Op::OriSr(v) | Op::EoriSr(v)) = ins.op else { unreachable!() };
         {
@@ -339,7 +339,7 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_10_neg<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::Neg(sz, d) | Op::Negx(sz, d)) = ins.op else { unreachable!() };
         {
@@ -353,9 +353,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_11_not<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Not(sz, d)) = ins.op else { unreachable!() };
+        let Op::Not(sz, d) = ins.op else { unreachable!() };
         {
             let dl = self.resolve(d, sz);
             let r = !self.read(bus, dl, sz) & sz.mask();
@@ -365,9 +365,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_12_clr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Clr(sz, d)) = ins.op else { unreachable!() };
+        let Op::Clr(sz, d) = ins.op else { unreachable!() };
         {
             let dl = self.resolve(d, sz);
             if let Loc::Mem(_) = dl {
@@ -380,9 +380,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_13_tst<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Tst(sz, d)) = ins.op else { unreachable!() };
+        let Op::Tst(sz, d) = ins.op else { unreachable!() };
         {
             let v = self.read_ea(bus, d, sz);
             self.flags_logic(v, sz);
@@ -390,9 +390,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_14_tas<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Tas(d)) = ins.op else { unreachable!() };
+        let Op::Tas(d) = ins.op else { unreachable!() };
         {
             let dl = self.resolve(d, Size::Byte);
             let v = self.read(bus, dl, Size::Byte);
@@ -402,9 +402,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_15_ext<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Ext(sz, n)) = ins.op else { unreachable!() };
+        let Op::Ext(sz, n) = ins.op else { unreachable!() };
         {
             let r = &mut self.d[n as usize];
             let v = if sz == Size::Word {
@@ -419,9 +419,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_16_swap<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Swap(n)) = ins.op else { unreachable!() };
+        let Op::Swap(n) = ins.op else { unreachable!() };
         {
             let r = self.d[n as usize].rotate_left(16);
             self.d[n as usize] = r;
@@ -430,9 +430,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_17_exg<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Exg(mode, x, y)) = ins.op else { unreachable!() };
+        let Op::Exg(mode, x, y) = ins.op else { unreachable!() };
         {
             let (x, y) = (x as usize, y as usize);
             match mode {
@@ -444,7 +444,7 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_18_mulu<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::Mulu(s, n) | Op::Muls(s, n)) = ins.op else { unreachable!() };
         {
@@ -463,7 +463,7 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_19_divu<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::Divu(s, n) | Op::Divs(s, n)) = ins.op else { unreachable!() };
         {
@@ -504,7 +504,7 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_20_abcd<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let (Op::Abcd(s, d) | Op::Sbcd(s, d)) = ins.op else { unreachable!() };
         {
@@ -517,9 +517,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_21_nbcd<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Nbcd(d)) = ins.op else { unreachable!() };
+        let Op::Nbcd(d) = ins.op else { unreachable!() };
         {
             let dl = self.resolve(d, Size::Byte);
             let dv = self.read(bus, dl, Size::Byte);
@@ -529,9 +529,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_22_chk<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Chk(s, n)) = ins.op else { unreachable!() };
+        let Op::Chk(s, n) = ins.op else { unreachable!() };
         {
             let bound = self.read_ea(bus, s, Size::Word) as u16 as i16;
             let v = self.d[n as usize] as u16 as i16;
@@ -546,9 +546,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_23_move<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Move(sz, s, d)) = ins.op else { unreachable!() };
+        let Op::Move(sz, s, d) = ins.op else { unreachable!() };
         {
             let v = self.read_ea(bus, s, sz);
             let dl = self.resolve(d, sz);
@@ -558,9 +558,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_24_movea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Movea(sz, s, n)) = ins.op else { unreachable!() };
+        let Op::Movea(sz, s, n) = ins.op else { unreachable!() };
         {
             let v = sext(self.read_ea(bus, s, sz), sz);
             self.a[n as usize] = v;
@@ -568,9 +568,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_25_moveq<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Moveq(v, n)) = ins.op else { unreachable!() };
+        let Op::Moveq(v, n) = ins.op else { unreachable!() };
         {
             let v = v as i32 as u32;
             self.d[n as usize] = v;
@@ -579,16 +579,16 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_26_movem<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Movem { size, to_mem, mask, ea }) = ins.op else { unreachable!() };
+        let Op::Movem { size, to_mem, mask, ea } = ins.op else { unreachable!() };
         self.movem(bus, size, to_mem, mask, ea);
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_27_movep<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Movep { size, to_mem, dn, an, disp }) = ins.op else { unreachable!() };
+        let Op::Movep { size, to_mem, dn, an, disp } = ins.op else { unreachable!() };
         {
             let mut a = self.a[an as usize].wrapping_add(disp as i32 as u32);
             let n = size.bytes();
@@ -612,9 +612,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_28_movefromsr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::MoveFromSr(d)) = ins.op else { unreachable!() };
+        let Op::MoveFromSr(d) = ins.op else { unreachable!() };
         {
             let dl = self.resolve(d, Size::Word);
             if let Loc::Mem(_) = dl {
@@ -625,9 +625,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_29_movetoccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::MoveToCcr(s)) = ins.op else { unreachable!() };
+        let Op::MoveToCcr(s) = ins.op else { unreachable!() };
         {
             let v = self.read_ea(bus, s, Size::Word);
             self.set_ccr(v as u16);
@@ -635,9 +635,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_30_movetosr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::MoveToSr(s)) = ins.op else { unreachable!() };
+        let Op::MoveToSr(s) = ins.op else { unreachable!() };
         {
             if !self.privileged(bus, ins) {
                 return true;
@@ -648,9 +648,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_31_moveusp<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::MoveUsp { to_usp, an }) = ins.op else { unreachable!() };
+        let Op::MoveUsp { to_usp, an } = ins.op else { unreachable!() };
         {
             if !self.privileged(bus, ins) {
                 return true;
@@ -664,16 +664,16 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_32_lea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Lea(ea, n)) = ins.op else { unreachable!() };
+        let Op::Lea(ea, n) = ins.op else { unreachable!() };
         self.a[n as usize] = self.ea_address(ea);
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_33_pea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Pea(ea)) = ins.op else { unreachable!() };
+        let Op::Pea(ea) = ins.op else { unreachable!() };
         {
             let a = self.ea_address(ea);
             self.push32(bus, a);
@@ -681,9 +681,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_34_link<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Link(n, disp)) = ins.op else { unreachable!() };
+        let Op::Link(n, disp) = ins.op else { unreachable!() };
         {
             // LINK A7 empile l'ancienne valeur de A7
             let v = self.a[n as usize];
@@ -694,9 +694,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_35_unlk<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Unlk(n)) = ins.op else { unreachable!() };
+        let Op::Unlk(n) = ins.op else { unreachable!() };
         {
             self.a[7] = self.a[n as usize];
             let v = self.pop32(bus);
@@ -705,9 +705,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_36_bit<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Bit(kind, count, d)) = ins.op else { unreachable!() };
+        let Op::Bit(kind, count, d) = ins.op else { unreachable!() };
         {
             let bitn = match count {
                 ShiftCount::Imm(v) => v as u32,
@@ -733,9 +733,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_37_shift<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Shift { kind, left, size, count, dn }) = ins.op else { unreachable!() };
+        let Op::Shift { kind, left, size, count, dn } = ins.op else { unreachable!() };
         {
             let c = match count {
                 ShiftCount::Imm(v) => v as u32,
@@ -751,9 +751,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_38_shiftmem<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::ShiftMem { kind, left, ea }) = ins.op else { unreachable!() };
+        let Op::ShiftMem { kind, left, ea } = ins.op else { unreachable!() };
         {
             let dl = self.resolve(ea, Size::Word);
             let v = self.read(bus, dl, Size::Word);
@@ -763,16 +763,16 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_39_bra<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Bra(t)) = ins.op else { unreachable!() };
+        let Op::Bra(t) = ins.op else { unreachable!() };
         self.pc = t;
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_40_bsr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Bsr(t)) = ins.op else { unreachable!() };
+        let Op::Bsr(t) = ins.op else { unreachable!() };
         {
             self.push32(bus, self.pc);
             self.pc = t;
@@ -780,9 +780,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_41_bcc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Bcc(c, t)) = ins.op else { unreachable!() };
+        let Op::Bcc(c, t) = ins.op else { unreachable!() };
         {
             if self.cond(c) {
                 self.pc = t;
@@ -794,9 +794,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_42_dbcc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Dbcc(c, n, t)) = ins.op else { unreachable!() };
+        let Op::Dbcc(c, n, t) = ins.op else { unreachable!() };
         {
             if !self.cond(c) {
                 let r = &mut self.d[n as usize];
@@ -813,9 +813,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_43_scc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Scc(c, d)) = ins.op else { unreachable!() };
+        let Op::Scc(c, d) = ins.op else { unreachable!() };
         {
             let dl = self.resolve(d, Size::Byte);
             if let Loc::Mem(_) = dl {
@@ -830,16 +830,16 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_44_jmp<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Jmp(ea)) = ins.op else { unreachable!() };
+        let Op::Jmp(ea) = ins.op else { unreachable!() };
         self.pc = self.ea_address(ea);
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_45_jsr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Jsr(ea)) = ins.op else { unreachable!() };
+        let Op::Jsr(ea) = ins.op else { unreachable!() };
         {
             let t = self.ea_address(ea);
             self.push32(bus, self.pc);
@@ -848,16 +848,16 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_46_rts<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Rts) = ins.op else { unreachable!() };
+        let Op::Rts = ins.op else { unreachable!() };
         self.pc = self.pop32(bus);
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_47_rtr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Rtr) = ins.op else { unreachable!() };
+        let Op::Rtr = ins.op else { unreachable!() };
         {
             let ccr = self.pop16(bus);
             self.set_ccr(ccr);
@@ -866,9 +866,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_48_rte<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Rte) = ins.op else { unreachable!() };
+        let Op::Rte = ins.op else { unreachable!() };
         {
             if !self.privileged(bus, ins) {
                 return true;
@@ -881,9 +881,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_49_trap<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Trap(n)) = ins.op else { unreachable!() };
+        let Op::Trap(n) = ins.op else { unreachable!() };
         {
             self.exception(bus, 32 + n as u32, self.pc);
             return true;
@@ -891,9 +891,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_50_trapv<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Trapv) = ins.op else { unreachable!() };
+        let Op::Trapv = ins.op else { unreachable!() };
         {
             if self.sr & SR_V != 0 {
                 self.cycles = self.op_start_cycles + 34;
@@ -904,16 +904,16 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_51_nop<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Nop) = ins.op else { unreachable!() };
+        let Op::Nop = ins.op else { unreachable!() };
         {};
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_52_reset<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Reset) = ins.op else { unreachable!() };
+        let Op::Reset = ins.op else { unreachable!() };
         {
             if !self.privileged(bus, ins) {
                 return true;
@@ -923,9 +923,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_53_stop<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Stop(v)) = ins.op else { unreachable!() };
+        let Op::Stop(v) = ins.op else { unreachable!() };
         {
             if !self.privileged(bus, ins) {
                 return true;
@@ -936,9 +936,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_54_illegal<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::Illegal) = ins.op else { unreachable!() };
+        let Op::Illegal = ins.op else { unreachable!() };
         {
             self.exception(bus, 4, ins.pc);
             return true;
@@ -946,9 +946,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_55_linea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::LineA) = ins.op else { unreachable!() };
+        let Op::LineA = ins.op else { unreachable!() };
         {
             self.exception(bus, 10, ins.pc);
             return true;
@@ -956,9 +956,9 @@ impl Cpu {
         false
     }
     #[inline(always)]
-    #[allow(unused_variables, clippy::needless_return)]
+    #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_56_linef<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let (Op::LineF) = ins.op else { unreachable!() };
+        let Op::LineF = ins.op else { unreachable!() };
         {
             self.exception(bus, 11, ins.pc);
             return true;
@@ -1279,4 +1279,67 @@ fn divs_cycles(dividend: i32, divisor: i16) -> u32 {
         aquot <<= 1;
     }
     mcycles * 2
+}
+
+/// Nom de la fonction `Cpu::op_*` qui exécute `op` (utilisé par le recompilateur).
+pub fn op_fn_name(op: &Op) -> &'static str {
+    match op {
+        Op::Add(..) | Op::Sub(..) => "op_00_add",
+        Op::Addx(..) | Op::Subx(..) => "op_01_addx",
+        Op::Cmp(..) => "op_02_cmp",
+        Op::Adda(..) | Op::Suba(..) => "op_03_adda",
+        Op::Cmpa(..) => "op_04_cmpa",
+        Op::And(..) | Op::Or(..) | Op::Eor(..) => "op_05_and",
+        Op::AndiCcr(..) => "op_06_andiccr",
+        Op::OriCcr(..) => "op_07_oriccr",
+        Op::EoriCcr(..) => "op_08_eoriccr",
+        Op::AndiSr(..) | Op::OriSr(..) | Op::EoriSr(..) => "op_09_andisr",
+        Op::Neg(..) | Op::Negx(..) => "op_10_neg",
+        Op::Not(..) => "op_11_not",
+        Op::Clr(..) => "op_12_clr",
+        Op::Tst(..) => "op_13_tst",
+        Op::Tas(..) => "op_14_tas",
+        Op::Ext(..) => "op_15_ext",
+        Op::Swap(..) => "op_16_swap",
+        Op::Exg(..) => "op_17_exg",
+        Op::Mulu(..) | Op::Muls(..) => "op_18_mulu",
+        Op::Divu(..) | Op::Divs(..) => "op_19_divu",
+        Op::Abcd(..) | Op::Sbcd(..) => "op_20_abcd",
+        Op::Nbcd(..) => "op_21_nbcd",
+        Op::Chk(..) => "op_22_chk",
+        Op::Move(..) => "op_23_move",
+        Op::Movea(..) => "op_24_movea",
+        Op::Moveq(..) => "op_25_moveq",
+        Op::Movem { .. } => "op_26_movem",
+        Op::Movep { .. } => "op_27_movep",
+        Op::MoveFromSr(..) => "op_28_movefromsr",
+        Op::MoveToCcr(..) => "op_29_movetoccr",
+        Op::MoveToSr(..) => "op_30_movetosr",
+        Op::MoveUsp { .. } => "op_31_moveusp",
+        Op::Lea(..) => "op_32_lea",
+        Op::Pea(..) => "op_33_pea",
+        Op::Link(..) => "op_34_link",
+        Op::Unlk(..) => "op_35_unlk",
+        Op::Bit(..) => "op_36_bit",
+        Op::Shift { .. } => "op_37_shift",
+        Op::ShiftMem { .. } => "op_38_shiftmem",
+        Op::Bra(..) => "op_39_bra",
+        Op::Bsr(..) => "op_40_bsr",
+        Op::Bcc(..) => "op_41_bcc",
+        Op::Dbcc(..) => "op_42_dbcc",
+        Op::Scc(..) => "op_43_scc",
+        Op::Jmp(..) => "op_44_jmp",
+        Op::Jsr(..) => "op_45_jsr",
+        Op::Rts => "op_46_rts",
+        Op::Rtr => "op_47_rtr",
+        Op::Rte => "op_48_rte",
+        Op::Trap(..) => "op_49_trap",
+        Op::Trapv => "op_50_trapv",
+        Op::Nop => "op_51_nop",
+        Op::Reset => "op_52_reset",
+        Op::Stop(..) => "op_53_stop",
+        Op::Illegal => "op_54_illegal",
+        Op::LineA => "op_55_linea",
+        Op::LineF => "op_56_linef",
+    }
 }

@@ -5,7 +5,7 @@
 //! Pas de modélisation des erreurs d'adresse ni du timing exact du bus.
 
 pub mod decode;
-mod exec;
+pub mod exec;
 pub mod timing;
 
 pub use decode::{decode, Ea, Instr, Op, Size};
@@ -53,7 +53,7 @@ pub struct Cpu {
     /// Exception de trace due : prise au début de l'instruction suivante.
     pub trace_pending: bool,
     /// Compteur de cycles au début de l'instruction en cours (pour fixer la durée des exceptions).
-    pub(crate) op_start_cycles: u64,
+    pub op_start_cycles: u64,
 }
 
 pub(crate) const ADDR_MASK: u32 = 0x00ff_ffff;

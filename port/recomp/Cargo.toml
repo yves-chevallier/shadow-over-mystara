@@ -1,0 +1,8 @@
+[package]
+name = "recomp"
+version = "0.1.0"
+edition = "2021"
+description = "Recompilateur statique 68000 -> Rust (découverte du code, blocs de base, génération)"
+
+[dependencies]
+m68k = { path = "../m68k" }

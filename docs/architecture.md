@@ -47,3 +47,24 @@ C'est l'approche des projets N64Recomp / XenonRecomp, adaptée au 68000.
 4. **Jeu jouable** avec son.
 5. **Réécriture idiomatique** des sous-systèmes (physique, entrées, IA...) en remplaçant les blocs
    générés, chaque remplacement validé par comparaison de RAM.
+
+## État d'avancement
+
+| Jalon | État |
+|---|---|
+| 1. Rendu | ✅ pixel près sur 11 instantanés + 6 captures de jeu |
+| 2. Interpréteur de référence | ✅ 68000 et Z80 exacts au cycle près (SingleStepTests) ; machine identique à MAME sur 4800 images avec entrées |
+| 3. Recompilation | ✅ `recomp` + `ddsom-rc` : 53 000 blocs générés à la compilation depuis les ROMs locales ; 98 % des instructions exécutées en Rust généré, résultats identiques à l'interpréteur et à MAME |
+| 4. Jeu jouable avec son | ✅ `./jouer.sh` (code recompilé par défaut, `DDSOM_INTERP=1` pour l'interpréteur) |
+| 5. Réécriture idiomatique | à faire |
+
+### Fonctionnement du code recompilé
+
+- `recomp::discover` : descente récursive depuis les vecteurs + `ddsom-rc/entries.txt` (adresses
+  apprises à l'exécution : `MISSES_OUT=fichier` avec l'exemple `compare` de ddsom-rc).
+- Chaque instruction devient `c.op_*(bus, &I)` avec `I` constante : même code que l'interpréteur,
+  spécialisé par LLVM. Le bloc rend la main dès que l'échéance de la ligne est atteinte, ce qui
+  garde les interruptions au même cycle qu'avec l'interpréteur.
+- Toute adresse sans bloc (reprise en milieu de bloc, code non découvert) est exécutée par
+  l'interpréteur : le résultat ne dépend jamais de la qualité de la découverte, seulement la vitesse.
+- Le code généré dérive des ROMs : il n'est produit que localement (`build.rs`), jamais versionné.

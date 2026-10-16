@@ -1,0 +1,17 @@
+[package]
+name = "ddsom-rc"
+version = "0.1.0"
+edition = "2021"
+description = "Code 68000 de ddsom recompilé en Rust (généré à la compilation à partir des ROMs locales)"
+build = "build.rs"
+
+[dependencies]
+m68k = { path = "../m68k" }
+cps2 = { path = "../cps2" }
+
+[build-dependencies]
+recomp = { path = "../recomp" }
+cps2 = { path = "../cps2" }
+
+[dev-dependencies]
+png = "0.17"

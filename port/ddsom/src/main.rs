@@ -27,6 +27,11 @@ fn main() {
         }
     };
 
+    // code 68000 recompilé en Rust ; DDSOM_INTERP=1 pour tout interpréter
+    if std::env::var_os("DDSOM_INTERP").is_none() {
+        ddsom_rc::install(&mut m);
+    }
+
     let mut win = Window::new(
         "Dungeons & Dragons: Shadow over Mystara (port Rust)",
         384,

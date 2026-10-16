@@ -98,5 +98,5 @@ Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`M
 `Tab` avance rapide, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
 
 État actuel : la machine (68000 interprété, Z80, QSound HLE, vidéo CPS2) reproduit MAME à l'identique
-sur la RAM de jeu et l'image (4800 images testées avec entrées). Le code du jeu est encore
-interprété ; la recompilation vers du Rust natif est l'étape suivante (docs/architecture.md).
+sur la RAM de jeu et l'image (4800 images testées avec entrées). Le code 68000 du jeu est recompilé en
+Rust à la compilation (crate `ddsom-rc`, à partir des ROMs locales) ; voir docs/architecture.md.

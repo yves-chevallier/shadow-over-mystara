@@ -119,19 +119,19 @@ impl Delay {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct Echo {
     end_pos: u16,
     feedback: i16,
     length: i16,
     last_sample: i16,
-    line: Vec<i16>,
+    line: [i16; 1024],
     pos: i16,
 }
 
 impl Default for Echo {
     fn default() -> Self {
-        Echo { end_pos: 0, feedback: 0, length: 0, last_sample: 0, line: vec![0; 1024], pos: 0 }
+        Echo { end_pos: 0, feedback: 0, length: 0, last_sample: 0, line: [0; 1024], pos: 0 }
     }
 }
 

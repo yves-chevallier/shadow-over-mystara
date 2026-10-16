@@ -26,7 +26,16 @@ pub const DDSOM_PROG: [&str; 8] = [
     "dd2e.03e", "dd2e.04e", "dd2e.05e", "dd2e.06e", "dd2e.07", "dd2e.08", "dd2e.09", "dd2e.10",
 ];
 
+/// Exécuteur de blocs recompilés : (pc, cpu, bus, échéance) -> Some(pc suivant) ou None si aucun bloc.
+pub type BlockExecutor = fn(u32, &mut Cpu, &mut Cps2Bus, u64) -> Option<u32>;
+
 pub struct Machine {
+    /// Code recompilé (None = tout interprété).
+    pub executor: Option<BlockExecutor>,
+    /// Adresses où aucun bloc recompilé n'existait (exécutées par l'interpréteur).
+    pub misses: std::collections::BTreeMap<u32, u64>,
+    /// Instructions 68000 exécutées par l'interpréteur (le reste l'est par le code recompilé).
+    pub interp_steps: u64,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -42,18 +51,24 @@ pub struct Machine {
     z80_debt: f64,
 }
 
+/// Programme 68000 de ddsom : (vue données en clair, vue espace programme déchiffrée), mots big-endian.
+pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
+    let mut rom = Vec::with_capacity(0x200000);
+    for name in DDSOM_PROG {
+        let d = std::fs::read(romdir.join(name))?;
+        // ROM_LOAD16_WORD_SWAP : mots stockés petit-boutiste dans la puce
+        rom.extend(d.chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]])));
+    }
+    let key = std::fs::read(romdir.join("ddsom.key"))?;
+    let (k, lower, upper) = crypt::parse_key(&key);
+    let dec = crypt::decrypt(&rom, k, lower, upper);
+    Ok((rom, dec))
+}
+
 impl Machine {
     /// Charge ddsom depuis un dossier de ROMs extraites. `eeprom` : contenu nvram MAME (128 octets).
     pub fn load_ddsom(romdir: &Path, eeprom: Option<&[u8]>) -> io::Result<Self> {
-        let mut rom = Vec::with_capacity(0x200000);
-        for name in DDSOM_PROG {
-            let d = std::fs::read(romdir.join(name))?;
-            // ROM_LOAD16_WORD_SWAP : mots stockés petit-boutiste dans la puce
-            rom.extend(d.chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]])));
-        }
-        let key = std::fs::read(romdir.join("ddsom.key"))?;
-        let (k, lower, upper) = crypt::parse_key(&key);
-        let rom_dec = crypt::decrypt(&rom, k, lower, upper);
+        let (rom, rom_dec) = load_program(romdir)?;
         let gfx = cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?;
         // Z80 : dd2.01 = 0x8000 en 0, puis 0x18000 en 0x10000 (ROM_CONTINUE) ; dd2.02 en 0x28000
         let mut zrom = vec![0u8; 0x50000];
@@ -75,6 +90,9 @@ impl Machine {
             None => Eeprom93c46::new([0xffff; 64]),
         };
         let mut m = Machine {
+            executor: None,
+            misses: Default::default(),
+            interp_steps: 0,
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -102,7 +120,19 @@ impl Machine {
         let target = self.cycle_debt as u64;
         while self.cpu.cycles < target {
             self.cpu.irq_level = self.bus.irq_level();
+            if let Some(run) = self.executor {
+                let mask = ((self.cpu.sr >> 8) & 7) as u8;
+                let plain = self.cpu.irq_level <= mask && !self.cpu.stopped && !self.cpu.trace_pending
+                    && self.cpu.sr & m68k::SR_T == 0;
+                if plain {
+                    if run(self.cpu.pc, &mut self.cpu, &mut self.bus, target).is_some() {
+                        continue;
+                    }
+                    *self.misses.entry(self.cpu.pc).or_default() += 1;
+                }
+            }
             self.cpu.step(&mut self.bus);
+            self.interp_steps += 1;
         }
         // puis le Z80 sur la même tranche de temps (512 cycles à 8 MHz par ligne)
         self.sound.set_reset(!self.bus.z80_running);
