@@ -11,6 +11,7 @@
 pub mod inputs;
 pub mod mem;
 pub mod physics;
+pub mod scenario;
 pub mod timing;
 
 use std::collections::BTreeMap;
@@ -31,6 +32,24 @@ pub struct Native {
     /// La routine accède à la RAM partagée avec le Z80 : elle doit tenir dans la ligne en cours,
     /// sinon l'entrelacement avec le Z80 changerait.
     pub touches_sound: bool,
+    /// Contrat : registres et drapeaux que l'appelant peut lire au retour (voir `regs`). Les autres
+    /// registres sont libres ; la mémoire doit toujours être identique.
+    pub outputs: u32,
+    /// La durée déclarée est exacte (sinon c'est une estimation : seule la mémoire fait foi).
+    pub exact_cost: bool,
+}
+
+/// Masques de registres pour `Native::outputs`.
+pub mod regs {
+    pub const fn d(n: u32) -> u32 {
+        1 << n
+    }
+    pub const fn a(n: u32) -> u32 {
+        1 << (8 + n)
+    }
+    pub const CCR: u32 = 1 << 16;
+    /// Tous les registres et les drapeaux (remplacement exact d'une routine feuille).
+    pub const ALL: u32 = 0x1_ffff;
 }
 
 /// Toutes les routines natives.
@@ -44,6 +63,22 @@ pub const NATIVES: &[Native] = &[
 
 fn lookup(pc: u32) -> Option<&'static Native> {
     NATIVES.iter().find(|n| n.entry == pc)
+}
+
+/// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
+/// exécution jusqu'au retour, natives et blocs recompilés compris. Les cycles s'accumulent.
+pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
+    // adresse de retour sentinelle : jamais exécutée par le jeu
+    const RETURN: u32 = 0x00_fffe;
+    let sp = c.a[7];
+    c.a[7] = sp.wrapping_sub(4);
+    mem::wr32(b, c.a[7], RETURN);
+    c.pc = addr;
+    while !(c.pc == RETURN && c.a[7] == sp) {
+        if run(c.pc, c, b, u64::MAX).is_none() {
+            c.step(b);
+        }
+    }
 }
 
 /// Exécuteur : routine native si disponible, sinon bloc recompilé.
@@ -107,24 +142,41 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     (n.run)(c, b);
     c.cycles += cost;
     let mut diffs = Vec::new();
-    if c2.cycles - start != cost {
+    if n.exact_cost && c2.cycles - start != cost {
         diffs.push(format!("cycles {} au lieu de {}", cost, c2.cycles - start));
     }
     for i in 0..8 {
-        if c.d[i] != c2.d[i] {
+        if n.outputs & regs::d(i as u32) != 0 && c.d[i] != c2.d[i] {
             diffs.push(format!("d{i}={:08x} au lieu de {:08x}", c.d[i], c2.d[i]));
         }
-        if c.a[i] != c2.a[i] {
+        // A7 (pile) doit toujours être rétabli
+        if (n.outputs & regs::a(i as u32) != 0 || i == 7) && c.a[i] != c2.a[i] {
             diffs.push(format!("a{i}={:08x} au lieu de {:08x}", c.a[i], c2.a[i]));
         }
     }
-    if c.sr != c2.sr {
+    let sr_mask = if n.outputs & regs::CCR != 0 { 0xffff } else { 0xff00 };
+    if c.sr & sr_mask != c2.sr & sr_mask {
         diffs.push(format!("sr={:04x} au lieu de {:04x}", c.sr, c2.sr));
     }
     if c.pc != c2.pc {
         diffs.push(format!("pc={:06x} au lieu de {:06x}", c.pc, c2.pc));
     }
     mem::diff_bus(b, &b2, &mut diffs);
+    // Hors contrat, on reprend l'état de l'original (registres libres, durée réelle) : le reste de
+    // l'exécution suit exactement le même timing que le code d'origine, et seule la mémoire
+    // produite par la routine native peut encore différer.
+    for i in 0..8 {
+        if n.outputs & regs::d(i as u32) == 0 {
+            c.d[i] = c2.d[i];
+        }
+        if n.outputs & regs::a(i as u32) == 0 {
+            c.a[i] = c2.a[i];
+        }
+    }
+    if n.outputs & regs::CCR == 0 {
+        c.sr = c2.sr;
+    }
+    c.cycles = c2.cycles;
     let mut st = STATS.lock().unwrap();
     let s = st.entry(n.name).or_default();
     s.calls += 1;

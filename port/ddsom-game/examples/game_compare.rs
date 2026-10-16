@@ -10,7 +10,12 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
-    ddsom_game::install(&mut m);
+    // NATIVES=0 : code recompilé seul (référence pour isoler l'effet des routines natives)
+    if std::env::var("NATIVES").as_deref() == Ok("0") {
+        ddsom_rc::install(&mut m);
+    } else {
+        ddsom_game::install(&mut m);
+    }
     ddsom_game::set_check(std::env::var("CHECK").as_deref() == Ok("1"));
     let t0 = std::time::Instant::now();
     let dump = std::fs::read(&a[3]).expect("dump MAME");
@@ -22,7 +27,9 @@ fn main() {
             (usize::from_str_radix(a, 16).unwrap() - 0xff0000, usize::from_str_radix(b, 16).unwrap() - 0xff0000)
         })
         .collect();
-    let n = (dump.len() / 0x10000).min(a.get(4).map(|s| s.parse().unwrap()).unwrap_or(usize::MAX));
+    // STRIDE=k : le dump MAME ne contient qu'une image sur k (RAMDUMP "1 N fichier k")
+    let stride: usize = std::env::var("STRIDE").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
+    let n = (dump.len() / 0x10000 * stride + std::env::var("DUMP_FIRST").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(1) - 1).min(a.get(4).map(|s| s.parse().unwrap()).unwrap_or(usize::MAX));
     // SCENARIO=fichier (format mame/scenario.lua) : mêmes entrées, appliquées après l'image indiquée
     let mut actions: Vec<(usize, String, u32)> = Vec::new();
     if let Ok(path) = std::env::var("SCENARIO") {
@@ -55,6 +62,12 @@ fn main() {
             }
         }
         let img = m.run_frame();
+        // PCLOG="a-b" : PC et SR en fin d'image sur cet intervalle
+        if let Some((a, b)) = std::env::var("PCLOG").ok().and_then(|r| r.split_once('-').map(|(a, b)| (a.parse::<usize>().unwrap(), b.parse::<usize>().unwrap()))) {
+            if (a..=b).contains(&(f + 1)) {
+                println!("P {} pc={:06x} sr={:04x}", f + 1, m.cpu.pc, m.cpu.sr);
+            }
+        }
         if snaps.contains(&(f + 1)) {
             let file = std::fs::File::create(format!("{}/{}.png", snapdir, f + 1)).unwrap();
             let mut enc = png::Encoder::new(file, 384, 224);
@@ -62,14 +75,23 @@ fn main() {
             enc.set_depth(png::BitDepth::Eight);
             enc.write_header().unwrap().write_image_data(&img.concat()).unwrap();
         }
-        let mame = &dump[f * 0x10000..(f + 1) * 0x10000];
+        // DUMP_FIRST=n : première image contenue dans le dump (défaut 1)
+        let first: usize = std::env::var("DUMP_FIRST").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
+        if f + 1 < first || (f + 1 - first) % stride != 0 {
+            continue;
+        }
+        let k = (f + 1 - first) / stride;
+        if (k + 1) * 0x10000 > dump.len() {
+            break;
+        }
+        let mame = &dump[k * 0x10000..(k + 1) * 0x10000];
         let ours: Vec<u8> = m.bus.ram.iter().flat_map(|w| w.to_be_bytes()).collect();
         let ignored = |i: usize| ignore.iter().any(|&(a, b)| i >= a && i <= b);
         let diffs: Vec<usize> = (0..0x10000).filter(|&i| mame[i] != ours[i] && !ignored(i)).collect();
         for i in 0..0x10000 {
             if mame[i] != ours[i] && !ignored(i) {
                 run[i] += 1;
-                if run[i] == 30 && !reported[i] && persistent < 12 {
+                if run[i] == (30 / stride).max(3) as u32 && !reported[i] && persistent < 12 {
                     reported[i] = true;
                     persistent += 1;
                     println!("durable : {:06x} diffère depuis l'image {} (MAME {:02x} Rust {:02x})", 0xff0000 + i, f + 2 - 30, mame[i], ours[i]);
@@ -83,6 +105,10 @@ fn main() {
             for &i in &diffs {
                 println!("  {:06x}: MAME {:02x}  Rust {:02x}", 0xff0000 + i, mame[i], ours[i]);
             }
+        }
+        if std::env::var_os("VERBOSE").is_some() && !diffs.is_empty() {
+            let list: Vec<String> = diffs.iter().take(8).map(|&i| format!("{:06x}:{:02x}/{:02x}", 0xff0000 + i, mame[i], ours[i])).collect();
+            println!("  [{}] pc={:06x} {} écarts : {}", f + 1, m.cpu.pc, diffs.len(), list.join(" "));
         }
         if !diffs.is_empty() {
             if first_bad.is_none() {

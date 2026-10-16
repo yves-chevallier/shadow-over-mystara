@@ -73,6 +73,8 @@ pub const OBJ_MOVE_XY: Native = Native {
     cost: |_, b| path_cycles(b, 0x1d62, 0, |_| false),
     run: obj_move_xy,
     touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: true,
 };
 
 pub const OBJ_MOVE_X: Native = Native {
@@ -81,4 +83,6 @@ pub const OBJ_MOVE_X: Native = Native {
     cost: |_, b| path_cycles(b, 0x1d78, 0, |_| false),
     run: obj_move_x,
     touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: true,
 };

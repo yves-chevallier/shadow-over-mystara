@@ -132,6 +132,8 @@ pub const READ_INPUTS: Native = Native {
     cost: read_inputs_cost,
     run: read_inputs,
     touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: true,
 };
 
 /// 0x2aec : recopie les entrées dans les enregistrements des joueurs.
@@ -189,6 +191,8 @@ pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
     cost: copy_inputs_cost,
     run: copy_inputs_to_players,
     touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: true,
 };
 
 /// 0x2bfe : entrées du joueur de l'objet A0. Sortie : D0 = maintenues, D1 = nouveaux appuis.
@@ -211,4 +215,6 @@ pub const GET_PLAYER_INPUT: Native = Native {
     cost: |_, b| path_cycles(b, 0x2bfe, 0, |_| false),
     run: get_player_input,
     touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: true,
 };

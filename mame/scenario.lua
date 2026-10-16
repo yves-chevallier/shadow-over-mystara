@@ -2,7 +2,8 @@
 -- Configuration par variables d'environnement :
 --   SCENARIO  : fichier texte, une action par ligne "image champ valeur" (champ = nom MAME, ex. "P1 Right")
 --               ou "image snap" (capture PNG) ou "image quit"
---   RAMDUMP   : "debut fin fichier" : écrit FF0000-FFFFFF à chaque image de [debut, fin] dans fichier
+--   RAMDUMP   : "debut fin fichier [pas]" : écrit FF0000-FFFFFF toutes les `pas` images (défaut 1)
+--               de [debut, fin] dans fichier
 -- mame ddsom -rompath /home/ycr/som -autoboot_script scenario.lua -snapshot_directory snaps ...
 
 local machine = manager.machine
@@ -28,11 +29,12 @@ for line in io.lines(os.getenv("SCENARIO")) do
 	end
 end
 
-local dump_from, dump_to, dump_file
+local dump_from, dump_to, dump_file, dump_step
 local spec = os.getenv("RAMDUMP")
 if spec then
-	local a, b, f = spec:match("^(%d+)%s+(%d+)%s+(.+)$")
+	local a, b, f, st = spec:match("^(%d+)%s+(%d+)%s+(%S+)%s*(%d*)$")
 	dump_from, dump_to = tonumber(a), tonumber(b)
+	dump_step = tonumber(st) or 1
 	dump_file = io.open(f, "wb")
 end
 
@@ -46,7 +48,7 @@ frame_sub = emu.add_machine_frame_notifier(function()
 			elseif a.kind == "quit" then machine:exit() end
 		end
 	end
-	if dump_file and frame >= dump_from and frame <= dump_to then
+	if dump_file and frame >= dump_from and frame <= dump_to and (frame - dump_from) % dump_step == 0 then
 		local parts = {}
 		for addr = 0xff0000, 0xfffffe, 2 do
 			local w = space:read_u16(addr)
