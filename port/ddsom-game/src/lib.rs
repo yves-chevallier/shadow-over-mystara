@@ -10,6 +10,7 @@
 
 pub mod inputs;
 pub mod mem;
+pub mod palette;
 pub mod physics;
 pub mod scenario;
 pub mod sprites;
@@ -68,6 +69,10 @@ pub const NATIVES: &[Native] = &[
     text::PRINT_TALL_AT,
     text::CLEAR_BLOCKS,
     text::CLEAR_BOX,
+    palette::FULL_BRIGHTNESS,
+    palette::NO_BRIGHTNESS,
+    palette::OR_BRIGHTNESS,
+    palette::SET_BRIGHTNESS,
 ];
 
 fn lookup(pc: u32) -> Option<&'static Native> {
