@@ -15,3 +15,6 @@ ref/
 
 # Rust
 target/
+
+# EEPROM sauvegardée par le port jouable
+nvram/

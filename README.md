@@ -88,3 +88,15 @@ Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=..
 - la table d'objets affichée est celle verrouillée au vblank précédent ;
 - la palette est copiée au moment de l'écriture du registre CPS-A 0x0a, pas au rendu ;
 - entre sprites, c'est l'entrée d'indice le plus élevé qui reste visible (bit 31 du masque de priorité).
+
+## Jouer au port Rust
+
+    ./jouer.sh
+
+Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`Maj` (ou `W` `X` `C` `V`)
+= boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
+`Tab` avance rapide, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
+
+État actuel : la machine (68000 interprété, Z80, QSound HLE, vidéo CPS2) reproduit MAME à l'identique
+sur la RAM de jeu et l'image (4800 images testées avec entrées). Le code du jeu est encore
+interprété ; la recompilation vers du Rust natif est l'étape suivante (docs/architecture.md).
