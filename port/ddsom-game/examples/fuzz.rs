@@ -6,7 +6,8 @@
 //!   fuzz <groupe> <roms> <eeprom> <scénario> <images de chauffe> <tours>
 //!
 //! Groupes : son (0x68c, 0xe0836-0xee000), u1 (RNG et files d'événements 0x19a80-0x1a000),
-//! c1 (monnayeurs 0x13c00-0x14e50), m2 (EEPROM et configuration 0x2d300-0x2ede0).
+//! c1 (monnayeurs 0x13c00-0x14e50), m2 (EEPROM et configuration 0x2d300-0x2ede0),
+//! video (primitives vidéo, palettes et fondus : natives `video_*` et `palette_*`).
 
 use std::path::Path;
 
@@ -195,6 +196,91 @@ fn alea_m2(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     registres(c, b, alea);
 }
 
+/// Routine tirée au sort (pour les états qui dépendent de l'entrée appelée).
+static ENTREE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Couleur de palette : luminosité souvent aux butées, composantes quelconques ou proches de 0 / 0xf.
+fn couleur(alea: &mut Alea) -> u16 {
+    let lum = match alea.next() % 4 {
+        0 => 0,
+        1 => 0xf000,
+        _ => (alea.next() as u16 & 0xf) << 12,
+    };
+    let compo = |a: &mut Alea| match a.next() % 4 {
+        0 => 0,
+        1 => 0xf,
+        _ => (a.next() & 0xf) as u16,
+    };
+    lum | compo(alea) << 8 | compo(alea) << 4 | compo(alea)
+}
+
+/// Primitives vidéo, palettes et fondus : palettes, état de fondu, scène et caméras quelconques.
+fn alea_video(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    let entree = ENTREE.load(std::sync::atomic::Ordering::Relaxed);
+    for i in 0..0x800u32 {
+        let v = if alea.next() % 5 == 0 { couleur(alea) } else { couleur(alea) & 0xf0ff | (i as u16 & 0xf00) };
+        wr16(b, 0x91c000 + 2 * i, v);
+    }
+    // palettes cibles en RAM (0xff1190, 512 couleurs)
+    for i in 0..512u32 {
+        wr16(b, 0xff1190 + 2 * i, couleur(alea));
+    }
+    wr8(b, A5 + 0x48e, alea.next() as u8 & 0xf);
+    for k in 0..4u32 {
+        let cible = match alea.next() % 3 {
+            0 => 0xff1190,
+            1 => 0x253000 + 0x20 * (alea.next() % 0x1000),
+            _ => 0x91c000 + 0x400 * k,
+        };
+        // 0x1cdd6 lit un mot (couleur) : mêmes octets, interprétés autrement
+        wr32(b, A5 + 0x492 + 4 * k, if entree == 0x1cdd6 { couleur(alea) as u32 } else if entree == 0x158e || entree == 0x15c8 { 0x91c000 + 0x400 * k } else { cible });
+    }
+    if entree == 0x15c8 {
+        wr32(b, A5 + 0x492, 0x91c3a0);
+    }
+    wr8(b, A5 + 0x34, [2, 0x14, 0x2f, 0x42, 0x44, 0x45, 0x59, 0x5a, 0x3, 0x8][alea.next() as usize % 10]);
+    if alea.next() % 3 == 0 {
+        wr8(b, A5 + 0x34, alea.next() as u8 % 0x60);
+    }
+    wr8(b, A5 + 0x36, alea.une_chance_sur(2) as u8);
+    for off in [0x506u32, 0x50a, 0x556, 0x55a] {
+        wr16(b, A5 + off, alea.next() as u16);
+    }
+    for i in 0..0x2000u32 {
+        wr16(b, 0x914000 + 2 * i, alea.next() as u16);
+    }
+    wr16(b, A5 + 0x7fd0, if alea.next() & 1 == 0 { 0x400 } else { 0 });
+    wr8(b, 0xff0eab, alea.une_chance_sur(3) as u8);
+    wr8(b, A5 + 0x18, alea.next() as u8);
+    registres(c, b, alea);
+    c.a[4] = A5 + 0x48e;
+    // numéros de scène / d'ensemble valides (les tables de la ROM s'arrêtent à la scène 0x5a)
+    c.d[0] = if alea.next() % 3 == 0 { alea.next() % 0x5b } else { alea.next() % 12 };
+    c.d[1] = if alea.next() & 1 == 0 { 0x1000 } else { 0xffff_f000 };
+    if entree == 0x1a60a {
+        c.d[0] %= 3; // la table de la page 1 n'a que trois entrées
+    }
+    let page = 0x91c000 + 0x400 * (alea.next() % 4);
+    c.a[0] = page;
+    c.a[1] = match entree {
+        0x1602 | 0x164e => page,
+        0x1cfc8 => [0xff1190, 0x253000 + 0x20 * (alea.next() % 0x1000)][alea.next() as usize % 2],
+        _ => 0x916000 + 0x400 * (alea.next() % 8),
+    };
+    if entree == 0x164e {
+        c.a[1] = 0x91c3a0;
+    }
+    if matches!(entree, 0x24a8) {
+        let obj = 0xff85de + 0x200 * (alea.next() % 4);
+        wr16(b, obj + 8, alea.next() as u16);
+        wr16(b, obj + 0x10, alea.next() as u16);
+        c.a[0] = obj;
+    }
+    if entree == 0x1d042 {
+        c.d[1] = couleur(alea) as u32;
+    }
+}
+
 fn b_prog16(b: &mut Bus, a: u32) -> u16 {
     m68k::Bus::read_prog16(b, a)
 }
@@ -210,6 +296,7 @@ fn main() {
         "u1" => (alea_u1, 0x19a80..0x1a000),
         "c1" => (alea_c1, 0x13c00..0x14e50),
         "m2" => (alea_m2, 0x2d300..0x2ede0),
+        "video" => (alea_video, 0xb40..0x1d100),
         _ => {
             eprintln!("groupe inconnu : {groupe}");
             std::process::exit(2);
@@ -228,12 +315,14 @@ fn main() {
     let entrees: Vec<u32> = ddsom_game::all_natives()
         .map(|n| n.entry)
         .filter(|e| plage.contains(e) && (*groupe != "son" || *e == 0x68c || *e >= 0xe0836))
+        .filter(|e| *groupe != "video" || matches!(*e, 0xb40 | 0xb46 | 0xb96 | 0xbac | 0xbc6 | 0xbfc | 0xc58 | 0xca8 | 0xcc8 | 0xce8 | 0x158e | 0x15c8 | 0x1602 | 0x164e | 0x1a296 | 0x1a350 | 0x1a360 | 0x1a366 | 0x1a3d4 | 0x1a608 | 0x1a60a | 0x1a678 | 0x1a67e | 0x1a8ac | 0x1a8b2 | 0x1cd32 | 0x1cd7c | 0x1cdd6 | 0x1cf3c | 0x1cfb8 | 0x1cfc8 | 0x1d00e | 0x1d042 | 0x24a8 | 0x24b0 | 0x260c | 0x26d4 | 0x2766))
         .collect();
     let (c, b) = (&mut m.cpu, &mut m.bus);
     b.irq_horizon = u64::MAX;
     let mut affiches = 0;
     for _ in 0..tours.parse::<u32>().unwrap() {
         for &entree in &entrees {
+            ENTREE.store(entree, std::sync::atomic::Ordering::Relaxed);
             alea_etat(c, b, &mut alea);
             let (d0, a0) = (c.d[0], c.a[0]);
             let contexte = if entree == 0x2d662 {
