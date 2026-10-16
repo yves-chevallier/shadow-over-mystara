@@ -9,6 +9,8 @@
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
 pub mod chemin;
+pub mod credits;
+pub mod eeprom;
 pub mod evenements;
 pub mod inputs;
 pub mod mem;
@@ -93,6 +95,18 @@ pub const NATIVES: &[Native] = &[
     evenements::CREER_POPUP,
     evenements::CREDITER_POINTS,
     evenements::CREDITER_COMPTEUR,
+    credits::LIRE_MONNAYEURS,
+    credits::LIRE_DEPARTS,
+    credits::VERROUILLER_COMPTEURS,
+    eeprom::LIRE,
+    eeprom::ECRIRE,
+    eeprom::ECRIRE_VERIFIER,
+    eeprom::LIRE_VERIFIER,
+    eeprom::COMPTER_PIECES,
+    eeprom::COMPTER_DEPARTS,
+    eeprom::COMPTER_CONTINUES,
+    eeprom::COMPTER_PARTIES,
+    eeprom::VBLANK_COMPTA,
 ];
 
 /// Index des routines natives par adresse d'entrée : `NATIVES` et les wrappers son (décrits par une

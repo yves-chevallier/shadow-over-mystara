@@ -45,7 +45,14 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
             out.push(format!("{name}[{:06x}]={:04x} au lieu de {:04x}", base + 2 * i as u32, x[i], y[i]));
         }
     }
-    let live = |i: usize| !dead_stack.contains(&(0xff0000 + 2 * i as u32));
+    // pile privée des wrappers son (pointeur en FF2A1A) : les registres qu'ils y sauvegardent restent
+    // en RAM sous le pointeur, sans signification (voir docs/son-68000.md)
+    let prive = (a.ram[0x2a1a / 2] as u32) << 16 | a.ram[0x2a1c / 2] as u32;
+    let dead_prive = (prive & 0xff_ffff).saturating_sub(0x400)..prive & 0xff_ffff;
+    let live = |i: usize| {
+        let adresse = 0xff0000 + 2 * i as u32;
+        !dead_stack.contains(&adresse) && !dead_prive.contains(&adresse)
+    };
     if let Some(i) = (0..a.ram.len()).find(|&i| a.ram[i] != b.ram[i] && live(i)) {
         out.push(format!("ram[{:06x}]={:04x} au lieu de {:04x}", 0xff0000 + 2 * i as u32, a.ram[i], b.ram[i]));
     }

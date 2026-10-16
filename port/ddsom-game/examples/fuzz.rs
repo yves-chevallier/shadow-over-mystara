@@ -5,7 +5,8 @@
 //!
 //!   fuzz <groupe> <roms> <eeprom> <scénario> <images de chauffe> <tours>
 //!
-//! Groupes : son (0x68c, 0xe0836-0xee000), u1 (RNG et files d'événements 0x19a80-0x1a000).
+//! Groupes : son (0x68c, 0xe0836-0xee000), u1 (RNG et files d'événements 0x19a80-0x1a000),
+//! c1 (monnayeurs 0x13c00-0x14e50), m2 (EEPROM et configuration 0x2d300-0x2ede0).
 
 use std::path::Path;
 
@@ -109,6 +110,70 @@ fn alea_u1(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     registres(c, b, alea);
 }
 
+/// Monnayeurs : réglages, enregistrements et lignes d'entrée quelconques.
+fn alea_c1(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    wr16(b, A5 + 0x7fcc, alea.une_chance_sur(8) as u16);
+    wr8(b, A5 + 0x1e, 1 + alea.next() as u8 % 4);
+    wr8(b, A5 + 0x1f, 1 + alea.next() as u8 % 4);
+    wr8(b, A5 + 0x20, alea.une_chance_sur(2) as u8);
+    let monnayeurs = [0u8, 1, 2, 3, 0xff, 7];
+    wr8(b, A5 + 0x21, monnayeurs[alea.next() as usize % 6]);
+    wr8(b, A5 + 0x22, alea.une_chance_sur(2) as u8);
+    wr8(b, A5 + 0x25, alea.une_chance_sur(4) as u8);
+    wr8(b, A5 + 0x30, alea.une_chance_sur(2) as u8);
+    wr8(b, 0xff8ec4, alea.une_chance_sur(2) as u8);
+    for k in 0..4 {
+        let base = A5 + 0x44e + 0x10 * k;
+        let antirebond = [0u8, 1, 2, 3, 49, 50, 51, 255];
+        wr8(b, base, if alea.next() & 1 == 0 { antirebond[alea.next() as usize % 8] } else { alea.next() as u8 });
+        wr8(b, base + 1, alea.next() as u8 % 6);
+        wr8(b, base + 2, [0u8, 4, 8, 9, 10, 12, 0x80, 255][alea.next() as usize % 8]);
+        wr8(b, base + 3, alea.next() as u8);
+        wr8(b, base + 7, alea.une_chance_sur(2) as u8);
+    }
+    b.inputs.in2 = alea.next() as u16;
+    registres(c, b, alea);
+}
+
+/// EEPROM et comptabilité : contenu de l'EEPROM, copies en RAM, paramètres de transfert, compteurs.
+fn alea_m2(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    let mut donnees = [0u16; 64];
+    for d in donnees.iter_mut() {
+        *d = alea.next() as u16;
+    }
+    if alea.next() & 1 == 0 {
+        // les deux exemplaires de la configuration concordent
+        for i in 0..24 {
+            donnees[24 + i] = donnees[i];
+        }
+    }
+    b.eeprom = cps2::eeprom::Eeprom93c46::new(donnees);
+    let mots = [0u16, 1, 2, 5, 23, 47, 63][alea.next() as usize % 7];
+    let debut = 2 * (alea.next() as u16 % (64 - mots));
+    wr16(b, A5 - 0x616e, mots);
+    wr16(b, A5 - 0x616a, debut);
+    wr16(b, A5 - 0x616c, mots);
+    wr16(b, A5 - 0x6168, debut);
+    wr32(b, A5 - 0x6172, if alea.next() & 1 == 0 { 0xff1d8e } else { 0xff1e0e });
+    for i in 0..64 {
+        let v = if alea.next() % 4 == 0 { donnees[i] ^ 1 } else { donnees[i] };
+        wr16(b, 0xff1d8e + 2 * i as u32, if alea.next() % 3 == 0 { alea.next() as u16 } else { v });
+        wr16(b, 0xff1e0e + 2 * i as u32, alea.next() as u16);
+    }
+    for (valeur, image) in [(0x76u32, 0xffff_9deeu32), (0x7a, 0xffff_9df2), (0x7e, 0xffff_9df6), (0x7fd4, 0xffff_9dfa)] {
+        let v = alea.next() % 1000;
+        wr32(b, A5 + valeur, v);
+        wr32(b, A5.wrapping_add(image), if alea.next() & 1 == 0 { v + 1 } else { alea.next() % 1000 });
+    }
+    wr8(b, A5 + 0x82, alea.une_chance_sur(4) as u8);
+    wr8(b, A5 + 0x25, alea.une_chance_sur(2) as u8);
+    wr8(b, A5 + 0x74, 0);
+    wr16(b, A5 + 0x16, alea.next() as u16 & 0x8f88);
+    wr8(b, A5 + 0x18, alea.next() as u8 & 6);
+    wr16(b, 0x664000, alea.next() as u16);
+    registres(c, b, alea);
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, groupe, roms, eeprom, scenario, chauffe, tours] = &a[..] else {
@@ -118,6 +183,8 @@ fn main() {
     let (alea_etat, plage): (fn(&mut Cpu, &mut Bus, &mut Alea), std::ops::Range<u32>) = match groupe.as_str() {
         "son" => (alea_son, 0x68c..0xee000),
         "u1" => (alea_u1, 0x19a80..0x1a000),
+        "c1" => (alea_c1, 0x13c00..0x14e50),
+        "m2" => (alea_m2, 0x2d300..0x2ede0),
         _ => {
             eprintln!("groupe inconnu : {groupe}");
             std::process::exit(2);
@@ -143,13 +210,14 @@ fn main() {
     for _ in 0..tours.parse::<u32>().unwrap() {
         for &entree in &entrees {
             alea_etat(c, b, &mut alea);
+            let (d0, a0) = (c.d[0], c.a[0]);
             let avant = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
             ddsom_game::call(c, b, entree);
             let apres = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
             if apres > avant && affiches < 12 {
                 affiches += 1;
                 let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                println!("écart en {entree:06x} : {}", dernier.unwrap_or_default());
+                println!("écart en {entree:06x} (d0={d0:08x} a0={a0:06x}) : {}", dernier.unwrap_or_default());
             }
         }
     }

@@ -176,22 +176,29 @@ fn parcourir(v: &mut Vue, c: &mut Cpu, mut ligne: impl FnMut(&mut Vue, &mut Cpu,
 fn traiter_ligne(v: &mut Vue, c: &mut Cpu, separes: bool, l: Ligne, niveau: u8) {
     let a0 = enregistrement(c, l.k);
     let compteurs = if separes { a0 } else { enregistrement(c, 0) };
+    // D0 : l'original y garde le niveau lu, puis l'antirebond ; une ligne haute le remet à zéro (moveq)
+    set_low_byte(&mut c.d[0], niveau);
     let antirebond = v.rd8(a0);
     if !v.pris(niveau != 0) {
         // ligne basse : l'antirebond compte les images, plafonné
         let n = antirebond.wrapping_add(1);
         let sous_le_plafond = v.pris(n < ANTIREBOND_MAX);
-        v.wr8(a0, if sous_le_plafond { n } else { ANTIREBOND_MAX });
+        let valeur = if sous_le_plafond { n } else { ANTIREBOND_MAX };
+        set_low_byte(&mut c.d[0], valeur);
+        v.wr8(a0, valeur);
         return;
     }
     // ligne haute : la pièce est comptée si la ligne était restée basse assez longtemps, sans saturer
+    set_low_byte(&mut c.d[0], antirebond);
     if v.pris(antirebond < ANTIREBOND_MIN) || v.pris(antirebond == ANTIREBOND_MAX) {
+        c.d[0] = 0;
         v.wr8(a0, 0);
         return;
     }
     let total = v.rd8(compteurs + 3).wrapping_add(1);
     v.wr8(compteurs + 3, total);
-    if !v.pris(v.rd8(compteurs + 2) as i8 >= CREDITS_MAX as i8) {
+    let credits = v.rd8(compteurs + 2);
+    if !v.pris(credits as i8 >= CREDITS_MAX as i8) {
         let pieces = v.rd8(compteurs + 1).wrapping_add(1);
         v.wr8(compteurs + 1, pieces);
     }
@@ -212,6 +219,7 @@ fn traiter_ligne(v: &mut Vue, c: &mut Cpu, separes: bool, l: Ligne, niveau: u8) 
         v.appeler(c, ext::BRUIT_PIECE);
     }
     v.appeler(c, ext::COMPTABILITE_PIECE);
+    c.d[0] = 0;
     v.wr8(a0, 0);
 }
 
@@ -259,10 +267,12 @@ fn depart_ligne(v: &mut Vue, c: &mut Cpu, a0: u32, service: u8) {
         v.wr8(a0 + 7, 0);
         return;
     }
-    if v.pris(v.rd8(a0 + 7) != 0) {
+    let pris_en_compte = v.rd8(a0 + 7) != 0;
+    if v.pris(pris_en_compte) {
         return;
     }
-    if !v.pris(v.rd8(a5(c, ram::MONNAYEURS)) != 0) && v.pris(a0 != PREMIER_ABSOLU) {
+    let plusieurs = v.rd8(a5(c, ram::MONNAYEURS)) != 0;
+    if !v.pris(plusieurs) && v.pris(a0 != PREMIER_ABSOLU) {
         return;
     }
     c.d[0] = 1;
@@ -324,7 +334,8 @@ fn cout_lire_departs(c: &Cpu, b: &mut Cps2Bus) -> u64 {
 /// Décide du verrou pour un monnayeur d'enregistrement `a0` (0x14322) : verrouillé (vrai) si le jeu
 /// n'est pas gratuit et que les crédits plus le gain d'un seuil restent sous 10. Laisse la somme dans D1.
 fn verrou_simple(v: &mut Vue, c: &mut Cpu, a0: u32) -> bool {
-    if v.pris(v.rd8(a5(c, ram::GRATUIT)) != 0) {
+    let gratuit = v.rd8(a5(c, ram::GRATUIT)) != 0;
+    if v.pris(gratuit) {
         return false;
     }
     let somme = v.rd8(a0 + 2).wrapping_add(v.rd8(a5(c, ram::CREDITS_PAR_SEUIL)));
@@ -334,13 +345,18 @@ fn verrou_simple(v: &mut Vue, c: &mut Cpu, a0: u32) -> bool {
 
 /// Idem pour les monnayeurs 2 à 4 (0x14300) : `rang` est leur numéro (D2).
 fn verrou_rang(v: &mut Vue, c: &mut Cpu, a0: u32, rang: u8) -> bool {
-    if v.pris(v.rd8(a5(c, ram::GRATUIT)) != 0) {
+    let gratuit = v.rd8(a5(c, ram::GRATUIT)) != 0;
+    if v.pris(gratuit) {
         return false;
     }
     let monnayeurs = v.rd8(a5(c, ram::MONNAYEURS));
     if v.pris(rang as i8 > monnayeurs as i8) {
         // monnayeur absent : verrouillé seulement s'il partage les pièces du premier (hors rang 3)
-        if v.pris(monnayeurs != 1) || v.pris(v.rd8(a5(c, ram::MODE_PARTAGE)) == 0) || v.pris(rang == 3) {
+        if v.pris(monnayeurs != 1) {
+            return false;
+        }
+        let partage = v.rd8(a5(c, ram::MODE_PARTAGE)) != 0;
+        if v.pris(!partage) || v.pris(rang == 3) {
             return false;
         }
         let somme = v.rd8(a0 + 2).wrapping_add(v.rd8(a5(c, ram::CREDITS_PAR_SEUIL)));
@@ -349,7 +365,8 @@ fn verrou_rang(v: &mut Vue, c: &mut Cpu, a0: u32, rang: u8) -> bool {
     }
     if !v.pris(monnayeurs != 1) {
         // un seul monnayeur supplémentaire en mode partagé : pas de verrou propre
-        if v.pris(v.rd8(a5(c, ram::MODE_PARTAGE)) != 0) {
+        let partage = v.rd8(a5(c, ram::MODE_PARTAGE)) != 0;
+        if v.pris(partage) {
             return false;
         }
     }
@@ -395,7 +412,7 @@ pub const LIRE_MONNAYEURS: Native = Native {
     run: natif_lire_monnayeurs,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
+    exact_cost: false, // durée propre exacte ; les sous-routines appelées ajoutent la leur
 };
 
 pub const LIRE_DEPARTS: Native = Native {
@@ -405,7 +422,7 @@ pub const LIRE_DEPARTS: Native = Native {
     run: natif_lire_departs,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
+    exact_cost: false, // durée propre exacte ; les sous-routines appelées ajoutent la leur
 };
 
 pub const VERROUILLER_COMPTEURS: Native = Native {
@@ -415,7 +432,7 @@ pub const VERROUILLER_COMPTEURS: Native = Native {
     run: natif_verrouiller_compteurs,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
+    exact_cost: false, // durée propre exacte ; les sous-routines appelées ajoutent la leur
 };
 
 /// Quels registres sont rendus : voir `regs`.

@@ -92,6 +92,10 @@ fn marche(b: &mut Cps2Bus, mut pc: u32, arret: Option<u32>, suite: &mut Suite, e
         match ins.op {
             Op::Rts => return cycles,
             Op::Bra(t) => {
+                // saut vers une routine exécutée à part (appel de queue) : le parcours s'arrête
+                if externes.contains(&t) {
+                    return cycles;
+                }
                 pc = t;
                 continue;
             }
