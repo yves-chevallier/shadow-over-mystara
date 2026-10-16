@@ -13,13 +13,14 @@ pub mod mem;
 pub mod palette;
 pub mod physics;
 pub mod scenario;
+pub mod sound;
 pub mod sprites;
 pub mod text;
 pub mod timing;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -73,10 +74,39 @@ pub const NATIVES: &[Native] = &[
     palette::NO_BRIGHTNESS,
     palette::OR_BRIGHTNESS,
     palette::SET_BRIGHTNESS,
+    sound::ENFILER_SI_SON,
+    sound::ENFILER_DIRECT,
+    sound::ENVOYER_AU_Z80,
 ];
 
+/// Index des routines natives par adresse d'entrée : `NATIVES` et les wrappers son (décrits par une
+/// table). Un tamis binaire évite la recherche pour la grande majorité des blocs exécutés.
+struct Index {
+    tamis: Vec<u64>,
+    par_adresse: std::collections::HashMap<u32, &'static Native>,
+}
+
 fn lookup(pc: u32) -> Option<&'static Native> {
-    NATIVES.iter().find(|n| n.entry == pc)
+    static INDEX: OnceLock<Index> = OnceLock::new();
+    let index = INDEX.get_or_init(|| {
+        let par_adresse: std::collections::HashMap<_, _> =
+            all_natives().map(|n| (n.entry, n)).collect();
+        let mut tamis = vec![0u64; 0x100000 / 2 / 64];
+        for &a in par_adresse.keys() {
+            tamis[(a >> 7) as usize] |= 1 << (a >> 1 & 63);
+        }
+        Index { tamis, par_adresse }
+    });
+    let case = index.tamis.get((pc >> 7) as usize)?;
+    if case >> (pc >> 1 & 63) & 1 == 0 {
+        return None;
+    }
+    index.par_adresse.get(&pc).copied()
+}
+
+/// Toutes les routines natives, wrappers son compris (outils de couverture).
+pub fn all_natives() -> impl Iterator<Item = &'static Native> {
+    NATIVES.iter().chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -138,6 +168,8 @@ pub struct Stats {
     pub calls: u64,
     pub mismatches: u64,
     pub first: Option<String>,
+    /// Dernier écart (outils de diagnostic).
+    pub last: Option<String>,
 }
 
 static STATS: Mutex<BTreeMap<&'static str, Stats>> = Mutex::new(BTreeMap::new());
@@ -202,6 +234,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
         if s.first.is_none() {
             s.first = Some(diffs.join(", "));
         }
+        s.last = Some(diffs.join(", "));
         // on garde l'état d'origine pour ne pas propager l'écart
         *c = c2;
         *b = b2;
