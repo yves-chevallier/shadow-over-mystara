@@ -101,7 +101,7 @@ morceau réécrit est exécuté en parallèle de l'original et comparé.
    de palettes (PNG RGBA), 290 échantillons (WAV avec boucle et note), tous vérifiés sans perte
    (`cargo test -p ddsom-assets`). À venir : définitions des sprites (assemblage des cellules,
    animations), cartes des niveaux, palettes d'interface, données de jeu, musiques.
-4. **Son** : séquenceur réécrit à partir du pilote Z80, mixeur QSound en Rust pur.
+4. **Son** : séquenceur réécrit à partir du pilote Z80 (fait : crate `ddsom-sound`, voir [son.md](son.md)), mixeur QSound en Rust pur (à faire).
 5. **Critère final** : sur des scénarios d'entrées enregistrés, le moteur autonome produit les mêmes
    images (au pixel près) et les mêmes commandes son que l'original émulé.
 
