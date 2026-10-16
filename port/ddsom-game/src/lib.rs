@@ -22,11 +22,13 @@ pub mod ops;
 pub mod palette;
 pub mod popups;
 pub mod rng;
+pub mod scroll;
 pub mod scenario;
 pub mod sound;
 pub mod sprites;
 pub mod text;
 pub mod timing;
+pub mod video;
 pub mod vue;
 
 use std::collections::{BTreeMap, HashMap};
@@ -163,7 +165,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
