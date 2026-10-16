@@ -53,7 +53,8 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
         let adresse = 0xff0000 + 2 * i as u32;
         !dead_stack.contains(&adresse) && !dead_prive.contains(&adresse)
     };
-    if let Some(i) = (0..a.ram.len()).find(|&i| a.ram[i] != b.ram[i] && live(i)) {
+    let verbose = std::env::var("DDSOM_VERBOSE").is_ok();
+    for i in (0..a.ram.len()).filter(|&i| a.ram[i] != b.ram[i] && live(i)).take(if verbose { 12 } else { 1 }) {
         out.push(format!("ram[{:06x}]={:04x} au lieu de {:04x}", 0xff0000 + 2 * i as u32, a.ram[i], b.ram[i]));
     }
     first_diff("gfxram", 0x900000, &a.gfxram, &b.gfxram, out);
