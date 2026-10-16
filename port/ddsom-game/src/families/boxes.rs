@@ -5,7 +5,7 @@
 use crate::objects::pools;
 use crate::objects::Obj;
 
-use super::{ajoute_u8, gestionnaire, Ctx};
+use super::{ajoute_u8, gestionnaire, pointeur, Ctx};
 
 /// Valeurs de l'octet d'état `+4`.
 mod etat {
@@ -27,6 +27,7 @@ mod sous {
 mod champ {
     pub const SOUS_ETAT: u32 = 0x05;
     pub const SOUS_SOUS_ETAT: u32 = 0x06;
+    pub const MODE: u32 = 0x2f;
     pub const JEU_OMBRES: u32 = 0x2e;
     /// Coup reçu, posé par le code des joueurs (+0x33 : seconde marque de coup).
     pub const COUP: u32 = 0x33;
@@ -282,4 +283,192 @@ fn box_0(ctx: &mut Ctx) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 2 : décor inerte (0xda7ac)
+
+/// Type 2 : élément de décor sans comportement (animation 5 du jeu des BOX) ; l'objet s'initialise,
+/// puis se contente de se trier chaque image jusqu'à sa libération. Non exercé par les scénarios.
+mod decor {
+    pub const ENTREE: u32 = 0xda7ac;
+    pub const TABLE_ETATS: u32 = 0xda7c2;
+    pub const ANIMATION: u16 = 5;
+}
+
+fn box_2(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
+    if ctx.pris(cache) {
+        return;
+    }
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(decor::TABLE_ETATS, etat as u32);
+    match etat {
+        etat::INIT => {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, Obj::ACTIVE, 2);
+            o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+            ctx.anim_start(rom::ANIMATIONS, decor::ANIMATION);
+            ctx.reinsert();
+        }
+        etat::ACTIF => ctx.reinsert(),
+        etat::LIBERE => ctx.free(&pools::FREE_BOX),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 1 : barrière à ouvrir (0xda578)
+
+/// Type 1 : élément de décor interactif frappé par les joueurs (`+0x6e`, posé par leur code de coup) :
+/// variante 0, grille qui crée un objet SET (`0x8b`, d'où sort une porte) puis attend sa fin ; variante
+/// 1, mécanisme à deux temps dont l'animation fait changer d'état l'objet frappeur (`+0x6c`) ;
+/// variante 3 comme la 0 à l'initialisation. L'objet disparaît quand la caméra l'a dépassé de 0x200.
+/// Non exercé.
+mod barriere {
+    pub const ENTREE: u32 = 0xda578;
+    pub const ETATS: u32 = 0xda58e;
+    pub const INITS: u32 = 0xda5a6;
+    pub const ACTIFS: u32 = 0xda5f4;
+    pub const SOUS_ETATS_0: u32 = 0xda624;
+    pub const SOUS_ETATS_1: u32 = 0xda65e;
+    pub const ANIMATIONS_0: u32 = 0x1bed06;
+    pub const ANIMATIONS_1: u32 = 0x1712d4;
+    pub const POSITIONS: u32 = 0xda72c;
+    pub const EFFET_INITIAL: u32 = 0xa5f38;
+    pub const SON: u32 = 0xeae86;
+    pub const CREER_SET: u32 = 0xc8312;
+    pub const FRAPPEUR: u32 = 0x6c;
+    pub const SET_CREE: u32 = 0x7c;
+}
+
+/// `0xda6f4` : crée l'objet SET de la barrière et le rattache.
+fn barriere_cree_set(ctx: &mut Ctx, o: Obj) {
+    ctx.c.d[0] = ctx.c.d[0] & 0xffff_ff00 | 0x8b;
+    ctx.jsr(barriere::CREER_SET);
+    let echec = ctx.c.cond(5);
+    if ctx.pris(echec) {
+        return;
+    }
+    let nouveau = Obj(ctx.c.a[1]);
+    let frappeur = pointeur(ctx, o, barriere::FRAPPEUR);
+    let mode = (o.u8(ctx.b, champ::MODE) as u32) << 3;
+    let classe = ((frappeur.u8(ctx.b, 3) & 0xf) >> 1) as u32;
+    let position = ctx.prog8(barriere::POSITIONS + ((mode + classe) & 0xffff));
+    nouveau.set_u8(ctx.b, 0x42, position);
+    let personnage = frappeur.u8(ctx.b, 2);
+    nouveau.set_u8(ctx.b, 0x43, personnage);
+    o.set_u16(ctx.b, barriere::SET_CREE, nouveau.0 as u16);
+}
+
+fn barriere_init(ctx: &mut Ctx, o: Obj) {
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let cible = ctx.saut_table(barriere::INITS, 2 * variante as u32);
+    match variante {
+        0 | 3 => {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+            o.set_u32(ctx.b, 0x78, 0);
+            ctx.anim_start(barriere::ANIMATIONS_0, 0);
+        }
+        1 => {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+            ctx.jsr(barriere::EFFET_INITIAL);
+            ctx.anim_start(barriere::ANIMATIONS_1, 4);
+        }
+        _ => ctx.deleguer(cible),
+    }
+}
+
+/// Variante 0, actif : sous-état 0 attend le coup, sous-état 2 attend la fin du SET ; puis disparaît
+/// quand elle sort de l'écran.
+fn barriere_actif_0(ctx: &mut Ctx, o: Obj) {
+    let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+    ctx.jsr_indirect(0xda602, |ctx| {
+        let cible = ctx.saut_table(barriere::SOUS_ETATS_0, sous_etat as u32);
+        match sous_etat {
+            0 => {
+                let coup = o.u8(ctx.b, champ::COUP_B);
+                if !ctx.pris(coup == 0) {
+                    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                    barriere_cree_set(ctx, o);
+                }
+                ctx.reinsert();
+            }
+            2 => {
+                let set = pointeur(ctx, o, barriere::SET_CREE);
+                let fini = set.u8(ctx.b, 0x22) != 0;
+                if !ctx.pris(!fini) {
+                    o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
+                    o.set_u8(ctx.b, champ::COUP_B, 0);
+                }
+            }
+            _ => ctx.deleguer(cible),
+        }
+    });
+    let (cam_x, _) = ctx.camera();
+    let ecart = cam_x.wrapping_sub(o.u16(ctx.b, Obj::X));
+    if !ctx.pris((ecart as i16) < 0x200) {
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+    }
+}
+
+fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
+    let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+    let cible = ctx.saut_table(barriere::SOUS_ETATS_1, sous_etat as u32);
+    match sous_etat {
+        0 | 4 => {
+            let coup = o.u8(ctx.b, champ::COUP_B);
+            if ctx.pris(coup == 0) {
+                return ctx.reinsert();
+            }
+            ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+            let frappeur = pointeur(ctx, o, barriere::FRAPPEUR);
+            frappeur.set_u32(ctx.b, Obj::STATE, 0x0200_3000);
+            let animation = if sous_etat == 0 { 5 } else { 6 };
+            ctx.anim_start(barriere::ANIMATIONS_1, animation);
+        }
+        2 | 6 => {
+            let fin = ctx.anim_step();
+            if ctx.pris(!fin) {
+                return;
+            }
+            if sous_etat == 2 {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+            } else {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 0xfa);
+            }
+            o.set_u8(ctx.b, champ::COUP_B, 0);
+            ctx.jsr(barriere::SON);
+        }
+        _ => ctx.deleguer(cible),
+    }
+}
+
+fn barriere_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
+    if ctx.pris(cache) {
+        return;
+    }
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(barriere::ETATS, etat as u32);
+    match etat {
+        etat::INIT => barriere_init(ctx, o),
+        etat::ACTIF => {
+            let variante = o.u8(ctx.b, Obj::VARIANT);
+            let cible = ctx.saut_table(barriere::ACTIFS, 2 * variante as u32);
+            match variante {
+                0 => barriere_actif_0(ctx, o),
+                1 => barriere_actif_1(ctx, o),
+                _ => ctx.deleguer(cible),
+            }
+        }
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_BOX),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+gestionnaire!(BOX_1, barriere::ENTREE, "box_barriere", barriere_gestionnaire);
 gestionnaire!(BOX_0, rom::ENTREE, "box_caisse", box_0);
+gestionnaire!(BOX_2, decor::ENTREE, "box_decor", box_2);

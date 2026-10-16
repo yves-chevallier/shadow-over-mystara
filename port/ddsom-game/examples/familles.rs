@@ -21,6 +21,10 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         return ddsom_game::run(pc, c, b, dl);
     };
     let cout = (n.cost)(c, b);
+    if cout >= ddsom_game::families::COUT_HORS_CONTRAT {
+        // chemin hors contrat : la machine lance le code d'origine
+        return ddsom_game::run(pc, c, b, dl);
+    }
     let obj = c.a[0];
     let avant: Vec<u8> = (0..0x60).map(|i| ddsom_game::mem::rd8(b, obj + i)).collect();
     let mut c1 = c.clone();
@@ -62,9 +66,9 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             v > 0
         });
     if afficher {
-        std::env::set_var("FAMILLES_DEBUG", "1");
+        ddsom_game::families::activer_diagnostic(true);
         (n.cost)(&c0, &mut b0);
-        std::env::remove_var("FAMILLES_DEBUG");
+        ddsom_game::families::activer_diagnostic(false);
         if std::env::var_os("FAMILLES_TRACE").is_some() {
             // trace de l'original, instruction par instruction (pc et cycles cumulés)
             let (mut ct, mut bt) = (c0.clone(), b0.clone());

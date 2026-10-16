@@ -1106,6 +1106,7 @@ mod decompte {
     pub const ETATS_4: u32 = 0xb1ec4;
     pub const ETATS_5: u32 = 0xb1f1a;
     pub const ETATS_6: u32 = 0xb2262;
+    pub const ETATS_8: u32 = 0xb2812;
     pub const DECALAGES_5: u32 = 0xb1f6a;
     pub const CHIFFRES: u32 = 0xb2334;
     pub const ANIMATIONS_6: u32 = 0xb2af0;
@@ -1309,6 +1310,59 @@ fn decompte_6(ctx: &mut Ctx, o: Obj) {
     }
 }
 
+/// Variante 8 : ligne de l'écran de décompte propre au joueur `+0x2f` ; naît seulement si ce joueur est
+/// présent, en vie et que ses deux compteurs `+0x118` / `+0x11c` valent -1 ; se libère quand le compteur
+/// de scène `A5-0x55c7` atteint 10.
+fn decompte_8(ctx: &mut Ctx, o: Obj) {
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(decompte::ETATS_8, etat as u32);
+    match etat {
+        etat::INIT => {
+            let mode = o.u8(ctx.b, champ::MODE) as u32;
+            for _ in 0..mode {
+                ctx.pris(false); // boucle de recherche du joueur
+            }
+            ctx.pris(true);
+            let joueur = Obj(JOUEURS + mode * PAS_JOUEUR);
+            let absent = joueur.u8(ctx.b, Obj::ACTIVE) == 0;
+            if ctx.pris(absent) {
+                return decompte_fin(ctx, o);
+            }
+            let mort = joueur.u8(ctx.b, Obj::STATE) as i8 >= 4;
+            if ctx.pris(mort) {
+                return decompte_fin(ctx, o);
+            }
+            let compteur_a = joueur.u32(ctx.b, 0x118) != 0xffff_ffff;
+            if ctx.pris(compteur_a) {
+                return decompte_fin(ctx, o);
+            }
+            let compteur_b = joueur.u32(ctx.b, 0x11c) != 0xffff_ffff;
+            if ctx.pris(compteur_b) {
+                return decompte_fin(ctx, o);
+            }
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            let (cam_x, cam_y) = (lit_ram16(ctx, 0x506), lit_ram16(ctx, 0x50a));
+            o.set_u16(ctx.b, Obj::X, cam_x);
+            o.set_u16(ctx.b, Obj::Z, cam_y);
+            o.set_u32(ctx.b, Obj::Y, 0);
+            decale_u16(ctx, o, Obj::X, 0x10);
+            decale_u16(ctx, o, Obj::Z, 0xb8);
+            decale_u16(ctx, o, Obj::Z, ((mode as u16) << 5).wrapping_neg());
+            ctx.anim_start(ANIMATIONS_INTERFACE, 0x173 + mode as u16);
+            ctx.reinsert();
+        }
+        etat::ACTIF => {
+            let compteur = ctx.ram8(-0x55c7) as i8;
+            if ctx.pris(compteur >= 10) {
+                decompte_fin(ctx, o);
+            }
+        }
+        etat::LIBERE => decompte_fin(ctx, o),
+        6 => ctx.free(&pools::FREE_EFFCT),
+        _ => ctx.deleguer(cible),
+    }
+}
+
 fn decompte_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let variante = o.u8(ctx.b, Obj::VARIANT);
@@ -1318,10 +1372,1291 @@ fn decompte_gestionnaire(ctx: &mut Ctx) {
         4 => decompte_4(ctx, o),
         5 => decompte_5(ctx, o),
         6 => decompte_6(ctx, o),
+        8 => decompte_8(ctx, o),
         _ => ctx.deleguer(cible),
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 6 : gerbe de débris (0xab7fa)
+
+/// Type 6 : débris projetés depuis un propriétaire (`+0x50`). Le premier objet (`+0x42` nul) crée
+/// autant de frères qu'indiqué par une table (selon la variante) puis devient lui-même un débris ;
+/// chaque débris reprend la position du propriétaire, lit sa vitesse, son orientation, son décalage et
+/// son animation dans une fiche (variante, mode `+0x2f`) de la ROM, monte et retombe en clignotant,
+/// puis disparaît.
+mod debris {
+    pub const ENTREE: u32 = 0xab7fa;
+    pub const TABLE: u32 = 0xab808;
+    /// Nombre de frères par variante (espace programme) ; fiches de la ROM (données).
+    pub const NOMBRES: u32 = 0xab95e;
+    pub const FICHES: u32 = 0xab8a2;
+    pub const ANIMATIONS: u32 = 0x18e664;
+    pub const ENFANT: u32 = 0x42;
+    pub const CLIGNOTEMENT: u32 = 0x53;
+}
+
+/// `0xab7d8` : crée un débris (type 6, variante `variante`) rattaché à l'objet courant.
+fn cree_debris(ctx: &mut Ctx, o: Obj, variante: u8) -> Option<Obj> {
+    let nouveau = ctx.alloc(&pools::ALLOC_EFFCT);
+    // deux `bcs` successifs : dans `0xab7d8`, puis chez l'appelant (la retenue est restée levée)
+    ctx.pris(nouveau.is_none());
+    ctx.pris(nouveau.is_none());
+    let n = nouveau?;
+    n.set_u8(ctx.b, Obj::ACTIVE, 1);
+    n.set_u8(ctx.b, Obj::KIND, 6);
+    n.set_u8(ctx.b, Obj::VARIANT, variante);
+    n.set_u8(ctx.b, debris::ENFANT, 0);
+    n.set_u16(ctx.b, champ::PROPRIETAIRE, o.0 as u16);
+    Some(n)
+}
+
+/// Premier débris : crée ses frères, puis passe à l'initialisation commune.
+fn debris_parent(ctx: &mut Ctx, o: Obj) {
+    o.set_u8(ctx.b, debris::ENFANT, 1);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let nombre = ctx.prog8(debris::NOMBRES + variante as u32);
+    o.set_u8(ctx.b, champ::MODE, nombre.wrapping_add(1));
+    let proprietaire = o.u16(ctx.b, champ::PROPRIETAIRE);
+    for restant in (0..=nombre as u16).rev() {
+        let Some(frere) = cree_debris(ctx, o, variante) else {
+            break;
+        };
+        frere.set_u16(ctx.b, champ::PROPRIETAIRE, proprietaire);
+        frere.set_u8(ctx.b, debris::ENFANT, 1);
+        frere.set_u8(ctx.b, champ::MODE, restant as u8);
+        ctx.pris(restant > 0); // dbf
+    }
+    debris_init(ctx, o);
+}
+
+fn debris_init(ctx: &mut Ctx, o: Obj) {
+    let enfant = o.u8(ctx.b, debris::ENFANT);
+    if ctx.pris(enfant == 0) {
+        return debris_parent(ctx, o);
+    }
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let v = proprietaire.u32(ctx.b, off);
+        o.set_u32(ctx.b, off, v);
+    }
+    o.set_u8(ctx.b, debris::CLIGNOTEMENT, 0);
+    o.set_u16(ctx.b, 0x16, 0);
+    let variante = o.u8(ctx.b, Obj::VARIANT) as u32;
+    let decalage = ctx.rom16(debris::FICHES + 2 * variante) as i16 as i32 as u32;
+    let mode = (o.u8(ctx.b, champ::MODE) as u32) << 4;
+    let mut fiche = debris::FICHES.wrapping_add(decalage).wrapping_add(mode);
+    let vx = ctx.rom16(fiche);
+    o.set_u16(ctx.b, Obj::VX, vx);
+    let vz_az = ctx.rom32(fiche + 2);
+    o.set_u32(ctx.b, Obj::VZ, vz_az);
+    let flip = ctx.rom8(fiche + 6);
+    o.set_u8(ctx.b, champ::FLIP, flip);
+    let animation = ctx.rom8(fiche + 7);
+    let (mut dx, dz, dy) = (ctx.rom16(fiche + 8), ctx.rom16(fiche + 10), ctx.rom16(fiche + 12));
+    fiche += 14;
+    let _ = fiche;
+    let retourne = proprietaire.u8(ctx.b, champ::FLIP) != 0;
+    if !ctx.pris(!retourne) {
+        let flip = o.u8(ctx.b, champ::FLIP) ^ 0x20;
+        o.set_u8(ctx.b, champ::FLIP, flip);
+        let vx = o.u16(ctx.b, Obj::VX).wrapping_neg();
+        o.set_u16(ctx.b, Obj::VX, vx);
+        dx = dx.wrapping_neg();
+        o.set_u8(ctx.b, debris::CLIGNOTEMENT, 1);
+    }
+    decale_u16(ctx, o, Obj::X, dx);
+    decale_u16(ctx, o, Obj::Z, dz);
+    decale_u16(ctx, o, 0x12, dy);
+    ctx.anim_start(debris::ANIMATIONS, animation as u16);
+}
+
+fn debris_actif(ctx: &mut Ctx, o: Obj) {
+    ctx.jsr(rom::MOVE_XZ);
+    ctx.anim_step();
+    let flags = o.u8(ctx.b, Obj::FLAGS);
+    o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
+    let clignote = o.u8(ctx.b, debris::CLIGNOTEMENT) ^ 1;
+    o.set_u8(ctx.b, debris::CLIGNOTEMENT, clignote);
+    if !ctx.pris(clignote == 0) {
+        let flags = o.u8(ctx.b, Obj::FLAGS);
+        o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
+    }
+    let z = o.u16(ctx.b, Obj::Z);
+    if !ctx.pris(z as i16 > 0) {
+        o.set_u32(ctx.b, Obj::Z, 0);
+        o.set_u8(ctx.b, debris::CLIGNOTEMENT, 6);
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+        let variante = o.u8(ctx.b, Obj::VARIANT);
+        if !ctx.pris(variante == 0) {
+            ajoute_u8(ctx, o, debris::CLIGNOTEMENT, 0xff);
+        }
+    }
+    ctx.reinsert();
+}
+
+fn debris_fin(ctx: &mut Ctx, o: Obj) {
+    let flags = o.u8(ctx.b, Obj::FLAGS);
+    o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
+    let reste = o.u8(ctx.b, debris::CLIGNOTEMENT).wrapping_sub(1);
+    o.set_u8(ctx.b, debris::CLIGNOTEMENT, reste);
+    if ctx.pris(reste == 0) {
+        return ctx.free(&pools::FREE_EFFCT);
+    }
+    if !ctx.pris(reste & 1 == 0) {
+        let flags = o.u8(ctx.b, Obj::FLAGS);
+        o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
+    }
+    ctx.reinsert();
+}
+
+fn debris_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(debris::TABLE, etat as u32);
+    match etat {
+        etat::INIT => debris_init(ctx, o),
+        etat::ACTIF => debris_actif(ctx, o),
+        etat::LIBERE => debris_fin(ctx, o),
+        6 => ctx.free(&pools::FREE_EFFCT),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 1 : effet supprimé (0xa8758)
+
+/// Type 1 : emplacement de table inutilisé dans cette version du jeu : le gestionnaire libère
+/// l'objet aussitôt (`bra` vers `jmp 0x2218`).
+fn supprime(ctx: &mut Ctx) {
+    ctx.free(&pools::FREE_EFFCT);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 7 : éclat à animation unique (0xaba4e)
+
+/// Type 7 : joue l'animation (tirée selon le mode `+0x2f`) ; à la fin de l'animation il monte de deux
+/// unités en profondeur puis clignote 0x1e images avant de disparaître. Non exercé.
+mod eclat_unique {
+    pub const ENTREE: u32 = 0xaba4e;
+    pub const TABLE: u32 = 0xaba5c;
+    pub const ANIMATIONS_MODE: u32 = 0xaba84;
+    pub const COMPTE: u32 = 0x53;
+}
+
+fn eclat_unique_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let mode = o.u8(ctx.b, champ::MODE) as u32;
+    let animation = ctx.prog8(eclat_unique::ANIMATIONS_MODE + mode);
+    ctx.anim_start(0x1bf8fe, animation as u16);
+    ctx.reinsert();
+}
+
+fn eclat_unique_actif(ctx: &mut Ctx, o: Obj) {
+    let fin = o.u8(ctx.b, 0x32);
+    if !ctx.pris(fin == 0) {
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+        o.set_u8(ctx.b, eclat_unique::COMPTE, 0x1e);
+        let y = o.u32(ctx.b, Obj::Y).wrapping_add(2);
+        o.set_u32(ctx.b, Obj::Y, y);
+    }
+    ctx.jsr(rom::ANIM_STEP);
+}
+
+fn eclat_unique_clignote(ctx: &mut Ctx, o: Obj) {
+    let reste = o.u8(ctx.b, eclat_unique::COMPTE).wrapping_sub(1);
+    o.set_u8(ctx.b, eclat_unique::COMPTE, reste);
+    if ctx.pris(reste == 0) {
+        return ctx.free(&pools::FREE_EFFCT);
+    }
+    let flags = o.u8(ctx.b, Obj::FLAGS);
+    o.set_u8(ctx.b, Obj::FLAGS, flags ^ 2);
+}
+
+fn eclat_unique_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(eclat_unique::TABLE, etat as u32);
+    match etat {
+        etat::INIT => eclat_unique_init(ctx, o),
+        etat::ACTIF => eclat_unique_actif(ctx, o),
+        etat::LIBERE => eclat_unique_clignote(ctx, o),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 19 : balayage d'écran (0xaecce)
+
+/// Type 19 : objet qui entre par la gauche de l'écran (x = -0x80, y = 0x150), attend 0x70 images en
+/// avançant de deux pixels par image, puis ralentit (accélération -0x10) jusqu'à repartir en arrière.
+/// Non exercé.
+mod balayage {
+    pub const ENTREE: u32 = 0xaecce;
+    pub const TABLE: u32 = 0xaecdc;
+    pub const DELAI: u32 = 0x54;
+}
+
+fn balayage_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    o.set_u8(ctx.b, balayage::DELAI, 0x70);
+    o.set_u16(ctx.b, Obj::X, 0xff80);
+    o.set_u16(ctx.b, Obj::Y, 0x150);
+    o.set_u16(ctx.b, Obj::VX, 0x200);
+    o.set_u16(ctx.b, Obj::AX, 0xfff0);
+    ctx.anim_start(ANIMATIONS_INTERFACE, 0);
+}
+
+fn balayage_actif(ctx: &mut Ctx, o: Obj) {
+    let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+    if !ctx.pris(sous_etat != 0) {
+        let delai = o.u8(ctx.b, balayage::DELAI);
+        if ctx.pris(delai != 0) {
+            o.set_u8(ctx.b, balayage::DELAI, delai - 1);
+            decale_u16(ctx, o, Obj::X, 2);
+        } else {
+            ctx.jsr(rom::MOVE_X);
+            let vx = o.u16(ctx.b, Obj::VX);
+            if !ctx.pris(vx as i16 >= 0) {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 1);
+            }
+        }
+    }
+    ctx.jsr(rom::ANIM_STEP);
+    ctx.reinsert();
+}
+
+fn balayage_gestionnaire(ctx: &mut Ctx) {
+    trois_etats(ctx, balayage::TABLE, balayage_init, balayage_actif)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 27 : effet de ramassage qui monte (0xb12e6)
+
+/// Type 27 : effet posé sur l'objet propriétaire (`+0x50`, créé par `0xb12c0` : ramassage) qui monte de 0x8000 (un demi
+/// pixel) par image pendant 0x1c images. Non exercé.
+mod fumee {
+    pub const ENTREE: u32 = 0xb12e6;
+    pub const TABLE: u32 = 0xb12f4;
+    pub const ANIMATIONS: u32 = 0x19046c;
+    pub const DUREE: u32 = 0x57;
+}
+
+fn fumee_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    o.set_u8(ctx.b, fumee::DUREE, 0x1c);
+    let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let x = proprietaire.u16(ctx.b, Obj::X);
+    o.set_u16(ctx.b, Obj::X, x);
+    let y = proprietaire.u16(ctx.b, Obj::Y).wrapping_sub(1);
+    o.set_u16(ctx.b, Obj::Y, y);
+    o.set_u16(ctx.b, Obj::Z, 0x10);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    ctx.anim_start(fumee::ANIMATIONS, variante as u16);
+    ctx.reinsert();
+}
+
+fn fumee_actif(ctx: &mut Ctx, o: Obj) {
+    let reste = o.u8(ctx.b, fumee::DUREE).wrapping_sub(1);
+    o.set_u8(ctx.b, fumee::DUREE, reste);
+    if !ctx.pris(reste != 0) {
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+    }
+    let z = o.u32(ctx.b, Obj::Z).wrapping_add(0x8000);
+    o.set_u32(ctx.b, Obj::Z, z);
+}
+
+fn fumee_gestionnaire(ctx: &mut Ctx) {
+    trois_etats(ctx, fumee::TABLE, fumee_init, fumee_actif)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 28 : étincelle posée sur un objet (0xb136e)
+
+/// Type 28 : étincelle collée à un objet (`+0x5c`), 0x20 au-dessus de lui ; l'animation dépend de la
+/// variante et de `A5+0x70`. À la fin de l'animation, elle prévient son objet (`+0x77` ← 1, sauf
+/// variante 6) puis disparaît. Non exercé.
+mod etincelle {
+    pub const ENTREE: u32 = 0xb136e;
+    pub const TABLE: u32 = 0xb137c;
+    pub const ANIMATIONS: u32 = 0x190534;
+    pub const PORTEUR: u32 = 0x5c;
+}
+
+fn etincelle_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let porteur = pointeur(ctx, o, etincelle::PORTEUR);
+    copie_position(ctx, o, porteur);
+    let y = o.u16(ctx.b, Obj::Y).wrapping_sub(1);
+    o.set_u16(ctx.b, Obj::Y, y);
+    decale_u16(ctx, o, Obj::Z, 0x20);
+    let variante = o.u8(ctx.b, Obj::VARIANT) as u16;
+    let mot = ctx.ram16(0x70);
+    let animation = variante.wrapping_add((mot & 0xf) >> 1 << 3);
+    ctx.anim_start(etincelle::ANIMATIONS, animation);
+    ctx.reinsert();
+}
+
+fn etincelle_actif(ctx: &mut Ctx, o: Obj) {
+    let fin = ctx.anim_step();
+    if ctx.pris(!fin) {
+        return;
+    }
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    if ctx.pris(variante == 6) {
+        return;
+    }
+    let porteur = pointeur(ctx, o, etincelle::PORTEUR);
+    porteur.set_u8(ctx.b, 0x77, 1);
+}
+
+fn etincelle_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(etincelle::TABLE, etat as u32);
+    match etat {
+        etat::INIT => etincelle_init(ctx, o),
+        etat::ACTIF => etincelle_actif(ctx, o),
+        etat::LIBERE => ajoute_u8(ctx, o, Obj::STATE, 2),
+        6 => ctx.free(&pools::FREE_EFFCT),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 57 : marque attachée à un joueur (0xb6bca)
+
+/// Type 57 : marque posée 0x18 à droite et 0x2d au-dessus du propriétaire (`+0x50`) tant qu'il reste
+/// dans l'état `0x0204` / `+6 = 0x2c` ; sinon elle disparaît. Non exercé.
+mod marque {
+    pub const ENTREE: u32 = 0xb6bca;
+    pub const TABLE: u32 = 0xb6bd8;
+    pub const ANIMATIONS: u32 = 0x196b62;
+}
+
+fn marque_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
+    for off in [Obj::X, Obj::Z] {
+        let v = proprietaire.u16(ctx.b, off);
+        o.set_u16(ctx.b, off, v);
+    }
+    let y = proprietaire.u32(ctx.b, Obj::Y).wrapping_sub(1);
+    o.set_u32(ctx.b, Obj::Y, y);
+    decale_u16(ctx, o, Obj::X, 0x18);
+    decale_u16(ctx, o, Obj::Z, 0x2d);
+    ctx.anim_start(marque::ANIMATIONS, 0);
+    ctx.reinsert();
+}
+
+fn marque_actif(ctx: &mut Ctx, o: Obj) {
+    let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let etat = proprietaire.u16(ctx.b, 4);
+    if ctx.pris(etat != 0x204) {
+        return ctx.free(&pools::FREE_EFFCT);
+    }
+    let sous = proprietaire.u8(ctx.b, 6);
+    if ctx.pris(sous != 0x2c) {
+        return ctx.free(&pools::FREE_EFFCT);
+    }
+    ctx.jsr(rom::ANIM_STEP);
+}
+
+fn marque_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(marque::TABLE, etat as u32);
+    match etat {
+        etat::INIT => marque_init(ctx, o),
+        etat::ACTIF => marque_actif(ctx, o),
+        etat::LIBERE => ctx.free(&pools::FREE_EFFCT),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 62 : gerbe d'éclats (0xb77ac)
+
+/// Type 62 : reprend variante et mode de l'objet qu'il suit (`+0x5c`), se place 0x48 à gauche de lui et
+/// attend qu'il soit touché (`+0x33` non nul) ; il explose alors en neuf objets EFFCT 0x40 (et un dixième
+/// décrit par le mode) puis disparaît. Non exercé.
+mod gerbe {
+    pub const ENTREE: u32 = 0xb77ac;
+    pub const TABLE: u32 = 0xb77ba;
+    pub const ANIMATIONS: u32 = 0x197a5c;
+    pub const PORTEUR: u32 = 0x5c;
+}
+
+fn gerbe_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let porteur = pointeur(ctx, o, gerbe::PORTEUR);
+    let variante = porteur.u8(ctx.b, Obj::VARIANT);
+    o.set_u8(ctx.b, Obj::VARIANT, variante);
+    let mode = porteur.u8(ctx.b, champ::MODE);
+    o.set_u8(ctx.b, champ::MODE, mode);
+    for off in [Obj::X, Obj::Y] {
+        let v = porteur.u16(ctx.b, off);
+        o.set_u16(ctx.b, off, v);
+    }
+    let x = o.u16(ctx.b, Obj::X).wrapping_sub(0x48);
+    o.set_u16(ctx.b, Obj::X, x);
+    o.set_u16(ctx.b, Obj::Z, 0x40);
+    ctx.anim_start(gerbe::ANIMATIONS, 0);
+    o.set_u8(ctx.b, 0x3b, 0);
+    ctx.reinsert();
+}
+
+/// `0xb7810` : l'explosion.
+fn gerbe_explose(ctx: &mut Ctx, o: Obj) {
+    let mut dernier = None;
+    for restant in (0..=8u32).rev() {
+        let nouveau = ctx.alloc(&pools::ALLOC_EFFCT);
+        if ctx.pris(nouveau.is_none()) {
+            return ctx.free(&pools::FREE_EFFCT);
+        }
+        let n = nouveau.unwrap();
+        n.set_u8(ctx.b, Obj::ACTIVE, 1);
+        n.set_u8(ctx.b, Obj::KIND, 0x40);
+        for off in [Obj::X, Obj::Y] {
+            let v = o.u16(ctx.b, off);
+            n.set_u16(ctx.b, off, v);
+        }
+        dernier = Some(n);
+        ctx.pris(restant > 0); // dbf
+    }
+    let mode = o.u8(ctx.b, champ::MODE);
+    if !ctx.pris(mode == 0) {
+        // le dernier objet créé est repris pour porter le mode
+        let n = dernier.unwrap();
+        n.set_u8(ctx.b, Obj::ACTIVE, 1);
+        n.set_u8(ctx.b, Obj::KIND, 0x40);
+        n.set_u8(ctx.b, Obj::VARIANT, 1);
+        let variante = o.u8(ctx.b, Obj::VARIANT);
+        n.set_u8(ctx.b, champ::MODE, variante);
+        for off in [Obj::X, Obj::Y] {
+            let v = o.u16(ctx.b, off);
+            n.set_u16(ctx.b, off, v);
+        }
+    }
+    ctx.free(&pools::FREE_EFFCT);
+}
+
+fn gerbe_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(gerbe::TABLE, etat as u32);
+    match etat {
+        etat::INIT => gerbe_init(ctx, o),
+        etat::ACTIF => {
+            let porteur = pointeur(ctx, o, gerbe::PORTEUR);
+            let touche = porteur.u8(ctx.b, 0x33);
+            if ctx.pris(touche == 0) {
+                return;
+            }
+            gerbe_explose(ctx, o);
+        }
+        etat::LIBERE => gerbe_explose(ctx, o),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 56 : éclats de débris (0xb6c6e)
+
+/// Type 56 : éclat lancé en l'air depuis sa position (dispersion aléatoire de ±128 en X et ±32 en
+/// profondeur, vitesses tirées dans deux tables, animation 0x164 à 0x167) ; disparaît quand il
+/// retombe sous le sol. Non exercé.
+mod eclats_debris {
+    pub const ENTREE: u32 = 0xb6c6e;
+    pub const TABLE: u32 = 0xb6c7c;
+    pub const VITESSES_X: u32 = 0xb6d18;
+    pub const VITESSES_Y: u32 = 0xb6d28;
+}
+
+/// Tirage aléatoire masqué.
+fn tirage(ctx: &mut Ctx, masque: u16) -> u16 {
+    ctx.jsr(rom::RNG);
+    ctx.c.d[0] as u16 & masque
+}
+
+fn eclats_debris_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    o.set_u16(ctx.b, 0x42, 0x40);
+    o.set_u8(ctx.b, 0x2a, 1);
+    o.set_u8(ctx.b, 0x2b, 0x1d);
+    let flip = tirage(ctx, 0x20);
+    o.set_u8(ctx.b, champ::FLIP, flip as u8);
+    let dx = tirage(ctx, 0xff).wrapping_sub(0x80);
+    decale_u16(ctx, o, Obj::X, dx);
+    let dy = tirage(ctx, 0x3f).wrapping_sub(0x20);
+    decale_u16(ctx, o, Obj::Y, dy);
+    o.set_u16(ctx.b, Obj::VZ, 0x400);
+    o.set_u16(ctx.b, Obj::AZ, 0xffc0);
+    let r = tirage(ctx, 0x1c) as u32;
+    let vx = ctx.prog16(eclats_debris::VITESSES_X + r);
+    o.set_u16(ctx.b, Obj::VX, vx);
+    let r = tirage(ctx, 0x1c) as u32;
+    let vy = ctx.prog16(eclats_debris::VITESSES_Y + r);
+    o.set_u16(ctx.b, Obj::VY, vy);
+    let animation = tirage(ctx, 3).wrapping_add(0x164);
+    ctx.anim_start(ANIMATIONS_INTERFACE, animation);
+    ctx.reinsert();
+}
+
+fn eclats_debris_actif(ctx: &mut Ctx, _o: Obj) {
+    ctx.jsr(rom::MOVE_XYZ);
+    let positif = ctx.c.cond(10); // bpl
+    if ctx.pris(positif) {
+        return;
+    }
+    ctx.free(&pools::FREE_EFFCT);
+}
+
+fn eclats_debris_fin(ctx: &mut Ctx, _o: Obj) {
+    ctx.free(&pools::FREE_EFFCT);
+}
+
+fn eclats_debris_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(eclats_debris::TABLE, etat as u32);
+    match etat {
+        etat::INIT => eclats_debris_init(ctx, o),
+        etat::ACTIF => eclats_debris_actif(ctx, o),
+        etat::LIBERE => eclats_debris_fin(ctx, o),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 51 : projectile lancé d'un objet (0xb64c8)
+
+/// Type 51 : naît sur l'objet `+0x5c` (si cet objet disparaît, il passe à l'état 6), décalé de 0x84
+/// pixels vers l'avant et 0x16 en profondeur, puis part en arc (vitesses 0x140 et 0x3c0, gravité 0x38)
+/// jusqu'à toucher le sol. Non exercé.
+mod projectile {
+    pub const ENTREE: u32 = 0xb64c8;
+    pub const TABLE: u32 = 0xb64de;
+    pub const SOUS_ETATS: u32 = 0xb6572;
+    pub const ANIMATIONS: u32 = 0x1733ac;
+    pub const CIBLE: u32 = 0x5c;
+}
+
+fn projectile_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let pointeur_cible = o.u16(ctx.b, projectile::CIBLE);
+    if ctx.pris(pointeur_cible == 0) {
+        return;
+    }
+    let cible = pointeur(ctx, o, projectile::CIBLE);
+    for off in [Obj::X, Obj::Y, Obj::Z] {
+        let v = cible.u32(ctx.b, off);
+        o.set_u32(ctx.b, off, v);
+    }
+    let flip = cible.u8(ctx.b, champ::FLIP);
+    o.set_u8(ctx.b, champ::FLIP, flip);
+    decale_u16(ctx, o, Obj::Y, 1);
+    let (mut dx, dy) = (0x84u16, 0xffeau16);
+    o.set_u16(ctx.b, Obj::VX, 0x140);
+    o.set_u16(ctx.b, Obj::VZ, 0x3c0);
+    o.set_u16(ctx.b, Obj::AZ, 0xffc8);
+    if !ctx.pris(flip == 0) {
+        dx = dx.wrapping_neg();
+        let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
+        o.set_u16(ctx.b, Obj::VX, v);
+    }
+    decale_u16(ctx, o, Obj::X, dx);
+    decale_u16(ctx, o, Obj::Y, dy);
+    let orientation = o.u8(ctx.b, champ::FLIP) ^ 0x20;
+    o.set_u8(ctx.b, champ::FLIP, orientation);
+    ctx.anim_start(projectile::ANIMATIONS, 0x19);
+    ctx.reinsert();
+}
+
+fn projectile_actif(ctx: &mut Ctx, o: Obj) {
+    let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+    let cible = ctx.saut_table(projectile::SOUS_ETATS, sous_etat as u32);
+    match sous_etat {
+        0 => {
+            ctx.jsr(rom::MOVE_XZ);
+            let en_vol = ctx.gt();
+            if !ctx.pris(en_vol) {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                o.set_u16(ctx.b, Obj::Z, 0);
+            }
+            ctx.jsr(rom::ANIM_STEP);
+        }
+        2 => {}
+        _ => ctx.deleguer(cible),
+    }
+}
+
+fn projectile_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let pointeur_cible = o.u16(ctx.b, projectile::CIBLE);
+    if ctx.pris(pointeur_cible == 0) {
+        o.set_u32(ctx.b, Obj::STATE, 0x0600_0000);
+        return;
+    }
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(projectile::TABLE, etat as u32);
+    match etat {
+        etat::INIT => projectile_init(ctx, o),
+        etat::ACTIF => projectile_actif(ctx, o),
+        etat::LIBERE | 6 => ctx.free(&pools::FREE_EFFCT),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 52 : scintillement d'un personnage (0xb65e0)
+
+/// Type 52 : variante du scintillement (type 15) qui guette seulement les joueurs de la classe 5 encore
+/// en vie (points de vie `+0x62` non nuls) ; une fois déclenché il clignote huit fois, caché tant que
+/// son objet (`+0x5c`) l'est. Non exercé.
+mod scintille_classe {
+    pub const ENTREE: u32 = 0xb65e0;
+    pub const TABLE: u32 = 0xb65ee;
+    pub const ANIMATIONS: u32 = 0x1bc77c;
+    pub const REPETITIONS: u32 = 0x57;
+    pub const DELAI: u32 = 0x58;
+    pub const BASCULE: u32 = 0x5a;
+    pub const DECLENCHE: u32 = 0x5b;
+    pub const PORTEUR: u32 = 0x5c;
+}
+
+fn scintille_classe_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let flags = o.u8(ctx.b, Obj::FLAGS);
+    o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
+    o.set_u8(ctx.b, scintille_classe::REPETITIONS, 8);
+    let t = tirage(ctx, 0x1f);
+    o.set_u16(ctx.b, scintille_classe::DELAI, t);
+    ctx.anim_start(scintille_classe::ANIMATIONS, 0);
+    ctx.reinsert();
+}
+
+/// `0xb668a` : un joueur de la classe 5 en vie est-il passé près de l'objet ?
+fn scintille_classe_joueur(ctx: &mut Ctx, o: Obj) {
+    for i in 0..4u32 {
+        let joueur = Obj(JOUEURS + i * PAS_JOUEUR);
+        let absent = joueur.u8(ctx.b, Obj::ACTIVE) == 0;
+        if !ctx.pris(absent) {
+            let mort = joueur.u16(ctx.b, 0x62) == 0;
+            if !ctx.pris(mort) {
+                let classe = joueur.u8(ctx.b, 3) >> 1;
+                if !ctx.pris(classe != 5) {
+                    let dy = o.u16(ctx.b, Obj::Y).wrapping_sub(joueur.u16(ctx.b, Obj::Y)).wrapping_add(0x20);
+                    if !ctx.pris(dy > 0x40) {
+                        let dx = o.u16(ctx.b, Obj::X).wrapping_sub(joueur.u16(ctx.b, Obj::X)).wrapping_add(0x60);
+                        if !ctx.pris(dx > 0xc0) {
+                            o.set_u8(ctx.b, scintille_classe::DECLENCHE, 1);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        ctx.pris(i < 3); // dbf
+    }
+}
+
+fn scintille_classe_actif(ctx: &mut Ctx, o: Obj) {
+    let porteur = pointeur(ctx, o, scintille_classe::PORTEUR);
+    let etat_porteur = porteur.u16(ctx.b, 4);
+    if !ctx.pris(etat_porteur == 0x200) {
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+    }
+    let declenche = o.u8(ctx.b, scintille_classe::DECLENCHE);
+    if !ctx.pris(declenche != 0) {
+        return scintille_classe_joueur(ctx, o);
+    }
+    let cache = porteur.u8(ctx.b, Obj::HIDDEN);
+    if !ctx.pris(cache == 0) {
+        let flags = o.u8(ctx.b, Obj::FLAGS);
+        o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
+        return;
+    }
+    let reste = o.u16(ctx.b, scintille_classe::DELAI).wrapping_sub(1);
+    o.set_u16(ctx.b, scintille_classe::DELAI, reste);
+    if ctx.pris(reste != 0) {
+        return;
+    }
+    o.set_u16(ctx.b, scintille_classe::DELAI, 0x30);
+    let bascule = o.u8(ctx.b, scintille_classe::BASCULE) ^ 1;
+    o.set_u8(ctx.b, scintille_classe::BASCULE, bascule);
+    let flags = o.u8(ctx.b, Obj::FLAGS);
+    o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
+    if ctx.pris(bascule != 0) {
+        return;
+    }
+    let flags = o.u8(ctx.b, Obj::FLAGS);
+    o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
+    let reste = o.u8(ctx.b, scintille_classe::REPETITIONS).wrapping_sub(1);
+    o.set_u8(ctx.b, scintille_classe::REPETITIONS, reste);
+    if ctx.pris(reste != 0) {
+        return;
+    }
+    o.set_u32(ctx.b, Obj::STATE, 0x0400_0000);
+}
+
+fn scintille_classe_gestionnaire(ctx: &mut Ctx) {
+    trois_etats(ctx, scintille_classe::TABLE, scintille_classe_init, scintille_classe_actif)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 24 : accessoire de personnage (0xb0ff2)
+
+/// Type 24 : accessoire collé à son propriétaire (`+0x50`) à un décalage (dx, dy, dz) lu selon la
+/// variante ; actif seulement quand la scène n'est pas figée (`A5+0x3d`). Si le propriétaire a disparu
+/// il passe à l'état 6. Non exercé.
+mod accessoire {
+    pub const ENTREE: u32 = 0xb0ff2;
+    pub const TABLE: u32 = 0xb1000;
+    pub const DECALAGES: u32 = 0xb10c0;
+    pub const ANIMATIONS: u32 = 0x16e752;
+    pub const FIN_ANIMATION: u32 = 0x43;
+}
+
+/// `0xb1052` : recolle l'objet au propriétaire.
+fn accessoire_suit(ctx: &mut Ctx, o: Obj) {
+    let pointeur_proprietaire = o.u16(ctx.b, champ::PROPRIETAIRE);
+    if !ctx.pris(pointeur_proprietaire != 0) {
+        o.set_u32(ctx.b, Obj::STATE, 0x0600_0000);
+        return;
+    }
+    let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
+    for off in [Obj::X, Obj::Y, Obj::Z] {
+        let v = proprietaire.u32(ctx.b, off);
+        o.set_u32(ctx.b, off, v);
+    }
+    let flip = proprietaire.u8(ctx.b, champ::FLIP);
+    o.set_u8(ctx.b, champ::FLIP, flip);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let rang = (variante << 3) as u32; // décalage sur un octet, comme l'original
+    let mut dx = ctx.prog16(accessoire::DECALAGES + rang);
+    let dy = ctx.prog16(accessoire::DECALAGES + rang + 2);
+    let dprofondeur = ctx.prog16(accessoire::DECALAGES + rang + 4) as i16 as i32;
+    let dz = ctx.prog16(accessoire::DECALAGES + rang + 6);
+    if !ctx.pris(flip == 0) {
+        dx = dx.wrapping_neg();
+    }
+    decale_u16(ctx, o, Obj::X, dx);
+    decale_u16(ctx, o, Obj::Y, dy);
+    let y = o.u32(ctx.b, Obj::Y).wrapping_add(dprofondeur as u32);
+    o.set_u32(ctx.b, Obj::Y, y);
+    decale_u16(ctx, o, Obj::Z, dz);
+}
+
+fn accessoire_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(accessoire::TABLE, etat as u32);
+    match etat {
+        etat::INIT => {
+            let figee = ctx.ram8(0x3d) != 0;
+            if ctx.pris(figee) {
+                return;
+            }
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, accessoire::FIN_ANIMATION, 0);
+            accessoire_suit(ctx, o);
+            ctx.anim_start(accessoire::ANIMATIONS, 3);
+        }
+        etat::ACTIF => {
+            let figee = ctx.ram8(0x3d) != 0;
+            if ctx.pris(figee) {
+                return;
+            }
+            let fin = o.u8(ctx.b, accessoire::FIN_ANIMATION);
+            if !ctx.pris(fin == 0) {
+                ajoute_u8(ctx, o, Obj::STATE, 2);
+            }
+            accessoire_suit(ctx, o);
+            ctx.jsr(rom::ANIM_STEP);
+            ctx.reinsert();
+        }
+        etat::LIBERE => ctx.free(&pools::FREE_EFFCT),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 45 : déclencheur de proximité (0xb5340)
+
+/// Type 45 : objet posé dans le décor qui attend que le joueur principal (`A5+0x46`) passe sur lui : il
+/// donne alors un événement à chaque joueur présent (`0x19b08`, décalé par joueur) puis disparaît ; il
+/// disparaît aussi s'il reste en arrière de la caméra. Non exercé.
+mod declencheur {
+    pub const ENTREE: u32 = 0xb5340;
+    pub const TABLE: u32 = 0xb534e;
+    pub const ANIMATIONS: u32 = 0x1bf5c2;
+    pub const PRINCIPAL: i32 = 0x46;
+    pub const EFFET: u32 = 0xea50c;
+    pub const EVENEMENT: u32 = 0x19b08;
+    pub const DECALAGES: u32 = 0xb53ec;
+}
+
+/// `0xb53b0` : déclenchement.
+fn declencheur_effet(ctx: &mut Ctx, o: Obj) {
+    ctx.jsr(declencheur::EFFET);
+    let niveau = ctx.ram8(0x35) as u32;
+    let mut decalage = ctx.prog8(declencheur::DECALAGES + niveau) as u16;
+    for i in 0..4u32 {
+        let joueur = Obj(JOUEURS + i * PAS_JOUEUR);
+        let absent = joueur.u8(ctx.b, Obj::ACTIVE) == 0;
+        if !ctx.pris(absent) {
+            let variante = o.u8(ctx.b, Obj::VARIANT) as u32;
+            ctx.c.d[1] = decalage as u32;
+            ctx.c.d[0] = variante + decalage as u32;
+            ctx.jsr(declencheur::EVENEMENT);
+        }
+        decalage = decalage.wrapping_add(0x100);
+        ctx.pris(i < 3); // dbf
+    }
+    ctx.free(&pools::FREE_EFFCT);
+}
+
+fn declencheur_actif(ctx: &mut Ctx, o: Obj) {
+    let limite = ctx.ram16(0x506).wrapping_sub(0x60);
+    let x = o.u16(ctx.b, Obj::X);
+    if ctx.pris(limite as i16 > x as i16) {
+        return ctx.free(&pools::FREE_EFFCT);
+    }
+    let principal = Obj(ctx.ram16(declencheur::PRINCIPAL) as i16 as i32 as u32 & 0xff_ffff);
+    let dx = principal.u16(ctx.b, Obj::X).wrapping_sub(x).wrapping_add(0x44);
+    if ctx.pris(dx > 0x74) {
+        return;
+    }
+    let dy = principal.u16(ctx.b, Obj::Y).wrapping_sub(o.u16(ctx.b, Obj::Y)).wrapping_sub(9);
+    if !ctx.pris(dy <= 0x1c) {
+        return;
+    }
+    declencheur_effet(ctx, o);
+}
+
+fn declencheur_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    ctx.anim_start(declencheur::ANIMATIONS, variante as u16);
+    ctx.reinsert();
+}
+
+fn declencheur_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(declencheur::TABLE, etat as u32);
+    match etat {
+        etat::INIT => declencheur_init(ctx, o),
+        etat::ACTIF => declencheur_actif(ctx, o),
+        etat::LIBERE => declencheur_effet(ctx, o),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 4 : bulle d'action d'un personnage (0xaaac0)
+
+/// Type 4 : bulle (icône animée) liée à un joueur (`+0x50`) ou à l'objet qu'il manipule (`+0x54`).
+/// L'animation est choisie d'après l'action en cours du porteur (`+0x3d` du joueur, `+0x10d/0x10e`,
+/// personnage `+3`) dans de petites tables de la ROM ; huit variantes :
+///
+/// - 0 : action du joueur (dix cas selon `+0x3d`) ;
+/// - 1, 2, 5, 6 : action de l'objet porté (`+0x54`) ou fixe (`0x10`, `0x25` à `0x27`) ;
+/// - 3 : bulle secondaire qui se pose sur l'objet porté (`0xaadba`) ;
+/// - 4, 7 : animations fixes (`0x23`, `4`).
+///
+/// L'état 2 anime la bulle (variante 3 : la fait clignoter et la recolle à son porteur) ; l'état 4
+/// libère ; un code de table valant `0x29` fait naître une bulle de variante 3.
+mod bulle {
+    pub const ENTREE: u32 = 0xaaac0;
+    pub const ETATS: u32 = 0xaaace;
+    pub const VARIANTES: u32 = 0xaaaee;
+    pub const ANIMATIONS: u32 = 0x18d53e;
+    // tables de sauts selon l'action (`+0x3d`)
+    pub const ACTIONS_0: u32 = 0xaab0e;
+    pub const ACTIONS_1: u32 = 0xaab40;
+    pub const ACTIONS_2: u32 = 0xaab5e;
+    pub const ACTIONS_5: u32 = 0xaab84;
+    pub const ACTIONS_6: u32 = 0xaab9c;
+    // tables d'animations (données)
+    pub const TABLE_77: u32 = 0xab4de;
+    pub const TABLE_COUP: u32 = 0xab4f6;
+    pub const TABLE_PERSONNAGE: u32 = 0xab4f0;
+    pub const TABLE_OBJET_A: u32 = 0xab4e4;
+    pub const TABLE_OBJET_B: u32 = 0xab4ea;
+    pub const TABLE_10D_A: u32 = 0xab676;
+    pub const TABLE_10D_B: u32 = 0xab6a6;
+    pub const TABLE_10D_C: u32 = 0xab6d6;
+    /// Décalages de la variante 3 (selon la classe du porteur, `+0x43` et `+0x86` du joueur).
+    pub const DECALAGES_3: u32 = 0xaae2a;
+    pub const PROPRIETAIRE: u32 = 0x50;
+    pub const PORTE: u32 = 0x54;
+    pub const FIN_ANIMATION: u32 = 0x43;
+    pub const COUP: u32 = 0x33;
+    pub const MINUTEUR: u32 = 0x42;
+    pub const PALETTE_JAUGE: u32 = 0x91c41c;
+    /// Création d'une bulle de variante 0x1d (suite de la bulle d'un joueur). Quand le personnage vaut 1,
+    /// l'original saute dans l'épilogue `0xaa9fe` d'une autre routine (voir `Ctx::epilogue_etranger`).
+    pub const CREER_SUITE: u32 = 0xb13fa;
+}
+
+/// `0xaac00` : affiche l'animation `numero` du jeu des bulles, puis trie l'objet.
+fn bulle_affiche(ctx: &mut Ctx, o: Obj, numero: u8) {
+    if !ctx.pris(numero != 0x2b) {
+        o.set_u16(ctx.b, 0x2a, 0x115);
+    }
+    ctx.anim_start(bulle::ANIMATIONS, numero as u16);
+    ctx.reinsert();
+}
+
+/// `0xab26a` : un code `0x29` fait naître une bulle de variante 3 (ou, si le porteur est une BOX, joue
+/// l'animation 4).
+fn bulle_cree_suite(ctx: &mut Ctx, o: Obj) {
+    let porte = pointeur(ctx, o, bulle::PORTE);
+    let classe = porte.u8(ctx.b, Obj::CLASS);
+    if !ctx.pris(classe != 0xa) {
+        return bulle_affiche(ctx, o, 4);
+    }
+    o.set_u32(ctx.b, Obj::STATE, 0);
+    o.set_u8(ctx.b, Obj::VARIANT, 3);
+    o.set_u8(ctx.b, bulle::FIN_ANIMATION, 0);
+    let nouveau = ctx.alloc(&pools::ALLOC_EFFCT);
+    if ctx.pris(nouveau.is_none()) {
+        return;
+    }
+    let n = nouveau.unwrap();
+    n.set_u8(ctx.b, Obj::ACTIVE, 1);
+    n.set_u8(ctx.b, Obj::KIND, 4);
+    let p = o.u16(ctx.b, bulle::PORTE);
+    n.set_u16(ctx.b, bulle::PORTE, p);
+    n.set_u8(ctx.b, Obj::VARIANT, 3);
+    n.set_u8(ctx.b, bulle::FIN_ANIMATION, 1);
+}
+
+/// `0xaabf4` : lit le code d'animation dans la table `table` (donnée) à l'indice `indice` ; le code
+/// `0x29` crée la suite, les autres sont affichés.
+fn bulle_lit(ctx: &mut Ctx, o: Obj, table: u32, indice: u16) {
+    let code = ctx.rom8(table + indice as u32);
+    if ctx.pris(code == 0x29) {
+        return bulle_cree_suite(ctx, o);
+    }
+    bulle_affiche(ctx, o, code);
+}
+
+/// `0xaace8` : suite commune. Pour le personnage 1 l'original saute dans l'épilogue d'une autre
+/// routine (`movem.l (SP)+,{A1-A4} ; rts`) : on reproduit l'effet sur la pile.
+fn bulle_suite(ctx: &mut Ctx, o: Obj) {
+    let proprietaire = pointeur(ctx, o, bulle::PROPRIETAIRE);
+    let personnage = (proprietaire.u8(ctx.b, 3) >> 1).wrapping_sub(1);
+    if ctx.pris(personnage == 0) {
+        return ctx.epilogue_etranger();
+    }
+    ctx.jsr(bulle::CREER_SUITE);
+}
+
+/// `0xaacfe` : une fois sur seize environ, tire au hasard si on poursuit (`0x5555` : bits pairs).
+fn bulle_hasard(ctx: &mut Ctx, o: Obj) {
+    ctx.jsr(rom::RNG);
+    let tirage = ctx.c.d[0] as u16 & 0xf;
+    if ctx.pris(0x5555u16 >> tirage & 1 != 0) {
+        bulle_suite(ctx, o);
+    }
+}
+
+/// Cas communs de la variante 0 : `0xaabc4` (octet `+0x10d` ou `+0x10e` du joueur dans D0).
+fn bulle_0_commun(ctx: &mut Ctx, o: Obj, joueur: Obj, d0: u8) {
+    let classe = joueur.u8(ctx.b, 3) >> 1;
+    let marque = joueur.u8(ctx.b, 0x77);
+    if !ctx.pris(marque == 0) {
+        joueur.set_u8(ctx.b, 0x77, 0);
+        bulle_lit(ctx, o, bulle::TABLE_77, classe as u16);
+        return bulle_hasard(ctx, o);
+    }
+    let indice = ((d0 as u16) << 3).wrapping_add(classe as u16);
+    bulle_lit(ctx, o, bulle::TABLE_COUP, indice);
+    bulle_hasard(ctx, o);
+}
+
+/// `0xaabac` : animation selon `+0x10d` (ou `+0x10e` pour le personnage 4).
+fn bulle_0_action_10d(ctx: &mut Ctx, o: Obj, joueur: Obj) {
+    let mut d0 = joueur.u8(ctx.b, 0x10d);
+    let classe = joueur.u8(ctx.b, 3) >> 1;
+    if !ctx.pris(classe != 4) {
+        d0 = joueur.u8(ctx.b, 0x10e);
+    }
+    bulle_0_commun(ctx, o, joueur, d0);
+}
+
+/// Tables de la variante 0 : l'action `0x3d` du joueur mène à l'une des dix routines.
+fn bulle_0(ctx: &mut Ctx, o: Obj) {
+    let joueur = pointeur(ctx, o, bulle::PROPRIETAIRE);
+    let action = joueur.u8(ctx.b, 0x3d);
+    ctx.c.a[1] = o.u16(ctx.b, bulle::PROPRIETAIRE) as i16 as i32 as u32;
+    let cible = ctx.saut_table(bulle::ACTIONS_0, action as u32);
+    let octet = |ctx: &mut Ctx, off: u32| joueur.u8(ctx.b, off) as u16;
+    let classe = joueur.u8(ctx.b, 3) >> 1;
+    match action {
+        0 => bulle_0_action_10d(ctx, o, joueur),
+        2 => {
+            let d0 = joueur.u8(ctx.b, 0x10e);
+            bulle_0_commun(ctx, o, joueur, d0);
+        }
+        4 => {
+            let indice = octet(ctx, 0x10d);
+            bulle_lit(ctx, o, bulle::TABLE_10D_A, indice);
+        }
+        6 => {
+            let indice = octet(ctx, 0x10e);
+            bulle_lit(ctx, o, bulle::TABLE_10D_A, indice);
+        }
+        8 => {
+            let indice = octet(ctx, 0x10d);
+            bulle_lit(ctx, o, bulle::TABLE_10D_C, indice);
+        }
+        10 => {
+            let indice = octet(ctx, 0x10e);
+            bulle_lit(ctx, o, bulle::TABLE_10D_C, indice);
+        }
+        12 => {
+            let mut indice = octet(ctx, 0x10d);
+            if !ctx.pris(classe != 4) {
+                indice = octet(ctx, 0x10e);
+            }
+            bulle_lit(ctx, o, bulle::TABLE_10D_B, indice);
+        }
+        14 => bulle_lit(ctx, o, bulle::TABLE_PERSONNAGE, classe as u16),
+        16 => {
+            let porte = pointeur(ctx, o, bulle::PORTE);
+            let est_box = porte.u8(ctx.b, Obj::CLASS) == 0xa;
+            if ctx.pris(est_box) {
+                return bulle_0_action_10d(ctx, o, joueur);
+            }
+            let jauge_inactive = ctx.ram16(0x4be) != 0;
+            if !ctx.pris(jauge_inactive) {
+                crate::mem::wr16(ctx.b, bulle::PALETTE_JAUGE, 0xf0ff);
+            }
+            bulle_lit(ctx, o, bulle::TABLE_OBJET_A, classe as u16);
+            bulle_suite(ctx, o);
+        }
+        18 => {
+            let porte = pointeur(ctx, o, bulle::PORTE);
+            let est_box = porte.u8(ctx.b, Obj::CLASS) == 0xa;
+            if ctx.pris(est_box) {
+                return bulle_0_action_10d(ctx, o, joueur);
+            }
+            let jauge_inactive = ctx.ram16(0x4be) != 0;
+            if !ctx.pris(jauge_inactive) {
+                crate::mem::wr16(ctx.b, bulle::PALETTE_JAUGE, 0xf0ff);
+            }
+            bulle_lit(ctx, o, bulle::TABLE_OBJET_B, classe as u16);
+            bulle_suite(ctx, o);
+        }
+        _ => ctx.deleguer(cible),
+    }
+}
+
+/// Variantes 1, 2, 5 et 6 : l'action `0x3d` de l'objet porté (`+0x54` ; joueur pour la variante 1) choisit
+/// une animation fixe.
+fn bulle_selon_action(ctx: &mut Ctx, o: Obj, offset_pointeur: u32, doubler: bool, table: u32, nombre: u32) {
+    let source = pointeur(ctx, o, offset_pointeur);
+    let action = source.u8(ctx.b, 0x3d) as u32;
+    ctx.c.a[1] = o.u16(ctx.b, offset_pointeur) as i16 as i32 as u32;
+    let indice = if doubler { action * 2 } else { action };
+    let cible = ctx.saut_table(table, indice);
+    if indice >= nombre || (!doubler && indice & 1 != 0) {
+        return ctx.deleguer(cible);
+    }
+    let code = match (table, indice / if doubler { 2 } else { 1 }) {
+        (bulle::ACTIONS_1, _) => 0x10,
+        (_, 0) => 0x25,
+        (_, 1) => 0x26,
+        _ => 0x27,
+    };
+    bulle_affiche(ctx, o, code);
+}
+
+/// Variante 3 (`0xaadba`) : recolle la bulle à son porteur.
+fn bulle_3_recolle(ctx: &mut Ctx, o: Obj) {
+    let porte = pointeur(ctx, o, bulle::PORTE);
+    let mut d0: u8 = 0;
+    let classe = porte.u8(ctx.b, Obj::CLASS);
+    if !ctx.pris(classe == 2) {
+        d0 = 0x20;
+    }
+    d0 = d0.wrapping_add(porte.u8(ctx.b, Obj::KIND));
+    let flip = porte.u8(ctx.b, champ::FLIP) ^ 0x20;
+    o.set_u8(ctx.b, champ::FLIP, flip);
+    for off in [Obj::X, Obj::Z] {
+        let v = porte.u16(ctx.b, off);
+        o.set_u16(ctx.b, off, v);
+    }
+    let y = porte.u32(ctx.b, Obj::Y).wrapping_sub(1);
+    o.set_u32(ctx.b, Obj::Y, y);
+    let suite = (o.u8(ctx.b, bulle::FIN_ANIMATION) & 1) as u16;
+    let base = bulle::DECALAGES_3 + (((d0 as u16) << 4).wrapping_add(suite << 3)) as u32;
+    let index = ((porte.u8(ctx.b, 0x86) as u32) << 2) & 0xffff;
+    let mut dx = ctx.rom16(base + index);
+    let dz = ctx.rom16(base + index + 2);
+    decale_u16(ctx, o, Obj::Z, dz);
+    if !ctx.pris(flip != 0) {
+        dx = dx.wrapping_neg();
+    }
+    decale_u16(ctx, o, Obj::X, dx);
+}
+
+fn bulle_3_init(ctx: &mut Ctx, o: Obj) {
+    let fin = o.u8(ctx.b, bulle::FIN_ANIMATION);
+    let numero = if ctx.pris(fin == 0) { 0x29 } else { 0x2a };
+    ctx.anim_start(bulle::ANIMATIONS, numero);
+    o.set_u8(ctx.b, bulle::MINUTEUR, 0x1e);
+    bulle_3_recolle(ctx, o);
+}
+
+fn bulle_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    o.set_u8(ctx.b, champ::MODE, 0);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let cible = ctx.saut_table(bulle::VARIANTES, 2 * variante as u32);
+    match variante {
+        0 => bulle_0(ctx, o),
+        1 => bulle_selon_action(ctx, o, bulle::PROPRIETAIRE, false, bulle::ACTIONS_1, 6),
+        2 => bulle_selon_action(ctx, o, bulle::PORTE, true, bulle::ACTIONS_2, 20),
+        3 => bulle_3_init(ctx, o),
+        4 => bulle_affiche(ctx, o, 0x23),
+        5 => bulle_selon_action(ctx, o, bulle::PORTE, true, bulle::ACTIONS_5, 6),
+        6 => bulle_selon_action(ctx, o, bulle::PORTE, true, bulle::ACTIONS_6, 6),
+        7 => bulle_affiche(ctx, o, 4),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+fn bulle_actif(ctx: &mut Ctx, o: Obj) {
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    if ctx.pris(variante == 3) {
+        // variante 3 : clignote, se recolle, et passe à l'état suivant au bout de `MINUTEUR` images
+        let flags = o.u8(ctx.b, Obj::FLAGS);
+        o.set_u8(ctx.b, Obj::FLAGS, flags ^ 2);
+        ctx.jsr(rom::ANIM_STEP);
+        bulle_3_recolle(ctx, o);
+        let reste = o.u8(ctx.b, bulle::MINUTEUR).wrapping_sub(1);
+        o.set_u8(ctx.b, bulle::MINUTEUR, reste);
+        if !ctx.pris(reste != 0) {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+        }
+        return ctx.reinsert();
+    }
+    let fin = ctx.anim_step();
+    if !ctx.pris(!fin) {
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+        return;
+    }
+    // la jauge de scroll du fond suit l'appui du bouton lié au coup (`+0x33`)
+    let mut valeur = 0u16;
+    let coup = o.u8(ctx.b, bulle::COUP);
+    if !ctx.pris(coup == 0) {
+        let jauge = ctx.ram16(0x4be) != 0;
+        if !ctx.pris(jauge) {
+            let bloque = ctx.ram8(0x4f) != 0;
+            if !ctx.pris(bloque) {
+                valeur = 0x100;
+            }
+        }
+    }
+    let adresse = crate::mem::A5.wrapping_add(0x4ba);
+    crate::mem::wr16(ctx.b, adresse, valeur);
+    ctx.reinsert();
+}
+
+/// Libération (`0xab24c`) : rend la palette de la jauge si la bulle l'avait modifiée.
+fn bulle_fin(ctx: &mut Ctx, o: Obj) {
+    let modifiee = o.u8(ctx.b, champ::MODE);
+    if !ctx.pris(modifiee == 0) {
+        let jauge = ctx.ram16(0x4be) != 0;
+        if !ctx.pris(jauge) {
+            crate::mem::wr16(ctx.b, bulle::PALETTE_JAUGE, 0xffff);
+        }
+    }
+    ctx.free(&pools::FREE_EFFCT);
+}
+
+fn bulle_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(bulle::ETATS, etat as u32);
+    match etat {
+        etat::INIT => bulle_init(ctx, o),
+        etat::ACTIF => bulle_actif(ctx, o),
+        etat::LIBERE => bulle_fin(ctx, o),
+        6 => ctx.free(&pools::FREE_EFFCT),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+gestionnaire!(EFFCT_4, bulle::ENTREE, "effct_bulle", bulle_gestionnaire);
+gestionnaire!(EFFCT_24, accessoire::ENTREE, "effct_accessoire", accessoire_gestionnaire);
+gestionnaire!(EFFCT_45, declencheur::ENTREE, "effct_declencheur", declencheur_gestionnaire);
+gestionnaire!(EFFCT_51, projectile::ENTREE, "effct_projectile", projectile_gestionnaire);
+gestionnaire!(EFFCT_52, scintille_classe::ENTREE, "effct_scintille_classe", scintille_classe_gestionnaire);
+gestionnaire!(EFFCT_56, eclats_debris::ENTREE, "effct_eclats_debris", eclats_debris_gestionnaire);
+// ---------------------------------------------------------------------------------------------
+// Type 8 : trace sur un objet (0xababa)
+
+/// Type 8 : trace collée à un objet (`+0x5c`), un sous-pixel devant ou derrière selon la variante ; son
+/// animation dépend du type de l'objet (et de sa classe : BOX) ; elle disparaît à la fin de l'animation.
+/// Non exercé.
+mod trace {
+    pub const ENTREE: u32 = 0xababa;
+    pub const TABLE: u32 = 0xabac8;
+    pub const ANIMATIONS_TYPE: u32 = 0xabb26;
+    pub const ANIMATIONS: u32 = 0x18e872;
+    pub const PORTEUR: u32 = 0x5c;
+}
+
+fn trace_init(ctx: &mut Ctx, o: Obj) {
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    let porteur = pointeur(ctx, o, trace::PORTEUR);
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let v = porteur.u32(ctx.b, off);
+        o.set_u32(ctx.b, off, v);
+    }
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let decalage: u32 = if ctx.pris(variante == 0) { 0xffff_ffff } else { 1 };
+    let y = o.u32(ctx.b, Obj::Y).wrapping_add(decalage);
+    o.set_u32(ctx.b, Obj::Y, y);
+    let mut d0: u8 = 0;
+    let classe = porteur.u8(ctx.b, Obj::CLASS);
+    if !ctx.pris(classe != 4) {
+        d0 = 0x20;
+    }
+    d0 = d0.wrapping_add(porteur.u8(ctx.b, Obj::KIND));
+    let animation = ctx.prog8(trace::ANIMATIONS_TYPE + d0 as u32).wrapping_add(variante);
+    ctx.anim_start(trace::ANIMATIONS, animation as u16);
+    ctx.reinsert();
+}
+
+fn trace_actif(ctx: &mut Ctx, _o: Obj) {
+    let fin = ctx.anim_step();
+    if ctx.pris(fin) {
+        ctx.free(&pools::FREE_EFFCT);
+    }
+}
+
+fn trace_gestionnaire(ctx: &mut Ctx) {
+    trois_etats(ctx, trace::TABLE, trace_init, trace_actif)
+}
+
+gestionnaire!(EFFCT_8, trace::ENTREE, "effct_trace", trace_gestionnaire);
+gestionnaire!(EFFCT_28, etincelle::ENTREE, "effct_etincelle", etincelle_gestionnaire);
+gestionnaire!(EFFCT_57, marque::ENTREE, "effct_marque", marque_gestionnaire);
+gestionnaire!(EFFCT_62, gerbe::ENTREE, "effct_gerbe", gerbe_gestionnaire);
+gestionnaire!(EFFCT_7, eclat_unique::ENTREE, "effct_eclat_unique", eclat_unique_gestionnaire);
+gestionnaire!(EFFCT_19, balayage::ENTREE, "effct_balayage", balayage_gestionnaire);
+gestionnaire!(EFFCT_27, fumee::ENTREE, "effct_fumee", fumee_gestionnaire);
+gestionnaire!(EFFCT_1, 0xa8758, "effct_supprime", supprime);
+gestionnaire!(EFFCT_6, debris::ENTREE, "effct_debris", debris_gestionnaire);
 gestionnaire!(EFFCT_31, decompte::ENTREE, "effct_decompte", decompte_gestionnaire);
 gestionnaire!(EFFCT_29, impact::ENTREE, "effct_impact", impact_gestionnaire);
 gestionnaire!(EFFCT_17, interface::ENTREE, "effct_interface", interface_gestionnaire);

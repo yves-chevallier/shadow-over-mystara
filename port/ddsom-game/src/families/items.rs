@@ -31,6 +31,7 @@ mod sous {
 mod champ {
     pub const SOUS_ETAT: u32 = 0x05;
     pub const SOUS_SOUS_ETAT: u32 = 0x06;
+    pub const FLIP: u32 = 0x2c;
     pub const JEU_OMBRES: u32 = 0x2e;
     pub const MODE: u32 = 0x2f;
     pub const DUREE: u32 = 0x42;
@@ -349,6 +350,9 @@ fn effet_potion(ctx: &mut Ctx, o: Obj, adresse: u32, octets: &[(u32, u8)]) {
 fn conso_effet(ctx: &mut Ctx, o: Obj) {
     let variante = o.u8(ctx.b, Obj::VARIANT) as u32;
     let cible = ctx.prog32(conso::EFFETS + 4 * variante);
+    // registres de l'original au moment du `jsr (A1)` (utiles si la variante est hors table)
+    ctx.c.d[0] = variante << 2;
+    ctx.c.a[1] = cible;
     ctx.jsr_indirect(conso::APPEL_EFFET, |ctx| match cible {
         conso::NOURRITURE => effet_nourriture(ctx, o),
         conso::POTION_B => effet_potion(ctx, o, cible, &[(1, 1), (0x183, 1), (0x184, 0), (0x182, 0)]),
@@ -826,6 +830,8 @@ mod scene {
     pub const ICONE_SOUS_ETATS: u32 = 0xdc6ac;
     pub const ICONE_ANIMATIONS: u32 = 0xdc69c;
     pub const ICONE_SONS: u32 = 0xdc6b2;
+    pub const ICONE_ENVOL: u32 = 0xdc7a0;
+    pub const PROPRIETAIRE_2: u32 = 0x46;
     pub const DECALAGES_X: u32 = 0xdcdd8;
     pub const DELAI_SON: u8 = 0x3c;
     // guide
@@ -890,13 +896,9 @@ fn icone_init(ctx: &mut Ctx, o: Obj) {
     ctx.anim_start(scene::ANIMATIONS, animation as u16);
 }
 
-/// Sous-état 0 de l'icône : suit le joueur, anime, trie, et joue le son tiré toutes les 0x3c images.
-fn icone_suivi(ctx: &mut Ctx, o: Obj) {
-    suit_proprietaire(ctx, o);
-    ctx.anim_step();
-    o.set_u8(ctx.b, 0x3b, 0);
-    ctx.reinsert();
-    // 0xdc6e8
+/// `0xdc6e8` : toutes les 0x3c images (hors pause), joue le son de l'icône tiré dans la table
+/// (`base` : 0 ou 0x10 selon l'appelant, première ou seconde série de sons).
+fn icone_son(ctx: &mut Ctx, o: Obj, base: u32) {
     let en_pause = ctx.ram8(scene::PAUSE) != 0;
     if ctx.pris(en_pause) {
         return;
@@ -908,8 +910,108 @@ fn icone_suivi(ctx: &mut Ctx, o: Obj) {
     }
     o.set_u8(ctx.b, scene::DELAI, scene::DELAI_SON);
     let tirage = o.u8(ctx.b, champ::MODE) as u32;
-    let son = ctx.prog32(scene::ICONE_SONS + tirage * 4);
+    let son = ctx.prog32(scene::ICONE_SONS + base + tirage * 4);
     ctx.jsr(son);
+}
+
+/// Sous-état 0 de l'icône : suit le joueur, anime, trie, et joue le son tiré toutes les 0x3c images.
+fn icone_suivi(ctx: &mut Ctx, o: Obj) {
+    suit_proprietaire(ctx, o);
+    ctx.anim_step();
+    o.set_u8(ctx.b, 0x3b, 0);
+    ctx.reinsert();
+    icone_son(ctx, o, 0);
+}
+
+/// Vitesses de l'envol (`0xdc7c2`) : retournées avec l'orientation, puis pas d'animation.
+fn icone_envol_vitesse(ctx: &mut Ctx, o: Obj) {
+    let flip = o.u8(ctx.b, champ::FLIP) != 0;
+    if !ctx.pris(!flip) {
+        let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
+        o.set_u16(ctx.b, Obj::VX, v);
+    }
+    ctx.jsr(rom::ANIM_STEP);
+}
+
+/// Sous-état 2 de l'icône : l'icône s'envole en arc (quatre temps, selon `+6`).
+fn icone_envol(ctx: &mut Ctx, o: Obj) {
+    let temps = o.u8(ctx.b, champ::SOUS_SOUS_ETAT);
+    let cible = ctx.saut_table(scene::ICONE_ENVOL, temps as u32);
+    match temps {
+        0 | 4 => {
+            ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
+            o.set_u16(ctx.b, Obj::VX, 0x200);
+            o.set_u16(ctx.b, Obj::VZ, if temps == 0 { 0x400 } else { 0x200 });
+            o.set_u16(ctx.b, Obj::AZ, 0xff80);
+            o.set_u16(ctx.b, Obj::AX, 0);
+            icone_envol_vitesse(ctx, o);
+        }
+        2 => {
+            ctx.jsr(rom::MOVE_XZ);
+            let z = o.u16(ctx.b, Obj::Z);
+            if !ctx.pris(z as i16 > 0) {
+                ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
+                o.set_u32(ctx.b, Obj::Z, 0);
+            }
+            ctx.jsr(rom::ANIM_STEP);
+        }
+        6 => {
+            ctx.jsr(rom::MOVE_XZ);
+            let z = o.u16(ctx.b, Obj::Z);
+            if !ctx.pris(z as i16 > 0) {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+                o.set_u8(ctx.b, champ::SOUS_SOUS_ETAT, 0);
+                o.set_u32(ctx.b, Obj::Z, 0);
+                o.set_u8(ctx.b, Obj::ACTIVE, 1);
+                o.set_u16(ctx.b, scene::MINUTEUR, 0x12c);
+            }
+            ctx.jsr(rom::ANIM_STEP);
+        }
+        _ => ctx.deleguer(cible),
+    }
+}
+
+/// Sous-état 4 de l'icône : attend `+0x58`, rejoue son son, puis disparaît quand le délai `+0x56` est
+/// écoulé (ou revient au suivi si le propriétaire reprend).
+fn icone_attente(ctx: &mut Ctx, o: Obj) {
+    let ramasse = o.u8(ctx.b, champ::RAMASSE);
+    if ctx.pris(ramasse == 1) {
+        let pause = ctx.ram8(scene::PAUSE) != 0;
+        if ctx.pris(pause) {
+            o.set_u8(ctx.b, champ::RAMASSE, 0);
+        } else {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
+            let proprietaire = pointeur(ctx, o, scene::PROPRIETAIRE_2);
+            let variante = o.u8(ctx.b, Obj::VARIANT);
+            if !ctx.pris(variante != 2) {
+                let reserve = proprietaire.u8(ctx.b, 0x31);
+                if !ctx.pris(reserve == 0) {
+                    o.set_u8(ctx.b, Obj::VARIANT, 0);
+                }
+            }
+            ajoute_u8(ctx, proprietaire, 0x31, 1);
+            return;
+        }
+    }
+    icone_son(ctx, o, 0x10);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    if !ctx.pris(variante != 2) {
+        let proprietaire = pointeur(ctx, o, scene::PROPRIETAIRE_2);
+        let reserve = proprietaire.u8(ctx.b, 0x31);
+        if !ctx.pris(reserve == 0) {
+            o.set_u16(ctx.b, scene::MINUTEUR, 1);
+        }
+    }
+    let reste = o.u16(ctx.b, scene::MINUTEUR).wrapping_sub(1);
+    o.set_u16(ctx.b, scene::MINUTEUR, reste);
+    if !ctx.pris(reste != 0) {
+        o.set_u8(ctx.b, Obj::VARIANT, 0);
+        o.set_u32(ctx.b, Obj::STATE, 0x0400_0000);
+    }
+    ctx.anim_step();
+    ctx.reinsert();
 }
 
 fn icone(ctx: &mut Ctx, o: Obj) {
@@ -922,6 +1024,8 @@ fn icone(ctx: &mut Ctx, o: Obj) {
             let cible = ctx.saut_table(scene::ICONE_SOUS_ETATS, sous_etat as u32);
             match sous_etat {
                 sous::CHUTE => icone_suivi(ctx, o),
+                2 => icone_envol(ctx, o),
+                4 => icone_attente(ctx, o),
                 _ => ctx.deleguer(cible),
             }
         }
@@ -1136,8 +1240,897 @@ fn scene_gestionnaire(ctx: &mut Ctx) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 7 : réserve du joueur (0xdce6e)
+
+/// Type 7, objets qui alimentent une réserve du joueur (compteurs `+0x150 + variante`, plafonnés à 9)
+/// pour les personnages autorisés (table par personnage, puis par classe). Même cycle que le type 4 :
+/// chute, attente (0x4b0 images, clignotement), ramassage (refusé : rejet en arc), mode 1 : objet jeté.
+mod reserve {
+    pub const ENTREE: u32 = 0xdce6e;
+    pub const TABLE_ETATS: u32 = 0xdce84;
+    pub const TABLE_SOUS_ETATS: u32 = 0xdcf38;
+    pub const ANIMATIONS: u32 = 0x1c001e;
+    pub const DUREE_AU_SOL: u16 = 0x4b0;
+    /// Par personnage (espace programme) : l'objet est-il utilisable ?
+    pub const PERSONNAGES: u32 = 0xdd01e;
+    /// Par classe (données) : réserve acceptée ?
+    pub const CLASSES: u32 = 0xdd122;
+    pub const COMPTEURS: u32 = 0x150;
+}
+
+fn reserve_init(ctx: &mut Ctx, o: Obj) {
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let mode = o.u8(ctx.b, champ::MODE);
+    if ctx.pris(mode != 0) {
+        let delai = o.u8(ctx.b, inventaire::DELAI);
+        if !ctx.pris(delai == 0) {
+            o.set_u8(ctx.b, inventaire::DELAI, delai - 1);
+            return;
+        }
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+        o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+        return anime_et_trie(ctx, reserve::ANIMATIONS, variante.wrapping_add(0xa));
+    }
+    if en_l_air(ctx, o) {
+        etat_suivant(ctx, o, sous::CHUTE);
+        o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+    } else {
+        etat_suivant(ctx, o, sous::ATTENTE);
+        o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+        o.set_u16(ctx.b, champ::DUREE, reserve::DUREE_AU_SOL);
+    }
+    anime_et_trie(ctx, reserve::ANIMATIONS, variante);
+}
+
+/// Sous-état d'attente : le joueur qui touche l'objet (`RAMASSE`) le fait passer au ramassage.
+fn reserve_attente(ctx: &mut Ctx, o: Obj) {
+    let ramasse = o.u8(ctx.b, champ::RAMASSE);
+    if !ctx.pris(ramasse == 0) {
+        ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+    }
+    expire_et_clignote(ctx, o);
+}
+
+/// `0xdd0da` : ajoute l'objet à la réserve du propriétaire. Vrai si le ramassage est refusé.
+fn reserve_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
+    let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let classe = (joueur.u8(ctx.b, 3) >> 1) as u32;
+    let accepte = ctx.rom8(reserve::CLASSES + classe);
+    if !ctx.pris(accepte != 0) {
+        o.set_u8(ctx.b, champ::SOUS_ETAT, 6);
+        o.set_u8(ctx.b, champ::SOUS_SOUS_ETAT, 0);
+        o.set_u8(ctx.b, inventaire::DELAI, 0xc);
+        return true;
+    }
+    let variante = o.u8(ctx.b, Obj::VARIANT) as u32;
+    let compteur = joueur.0 + reserve::COMPTEURS + variante;
+    let n = crate::mem::rd8(ctx.b, compteur).wrapping_add(1);
+    crate::mem::wr8(ctx.b, compteur, n);
+    if !ctx.pris(n <= 9) {
+        crate::mem::wr8(ctx.b, compteur, 9);
+    }
+    false
+}
+
+fn reserve_ramasse(ctx: &mut Ctx, o: Obj) {
+    let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let ramasse = o.u8(ctx.b, champ::RAMASSE);
+    if !ctx.pris(ramasse == 2) {
+        let pret = joueur.u8(ctx.b, 0x33) != 0;
+        if ctx.pris(!pret) {
+            return;
+        }
+    }
+    let personnage = joueur.u8(ctx.b, 3) as u32;
+    let autorise = ctx.prog8(reserve::PERSONNAGES + personnage);
+    if !ctx.pris(autorise != 0) {
+        ajoute_u8(ctx, o, champ::SOUS_ETAT, 0xfe);
+        o.set_u8(ctx.b, champ::RAMASSE, 0);
+        return;
+    }
+    let refuse = reserve_ajoute(ctx, o);
+    if !ctx.pris(refuse) {
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+    }
+}
+
+fn reserve_actif(ctx: &mut Ctx, o: Obj) {
+    let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+    let cible = ctx.saut_table(reserve::TABLE_SOUS_ETATS, sous_etat as u32);
+    match sous_etat {
+        sous::CHUTE => {
+            let pose = o.u8(ctx.b, champ::SOUS_SOUS_ETAT);
+            if !ctx.pris(pose != 0) {
+                ctx.jsr(rom::MOVE_XYZ);
+                let en_vol = ctx.gt();
+                if !ctx.pris(en_vol) {
+                    ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
+                    o.set_u16(ctx.b, champ::DUREE, reserve::DUREE_AU_SOL);
+                    o.set_u32(ctx.b, Obj::Z, 0);
+                    let mode = o.u8(ctx.b, champ::MODE);
+                    if !ctx.pris(mode != 0) {
+                        dans_la_vue(ctx, o);
+                    }
+                }
+                return fin_de_chute(ctx);
+            }
+            let mode = o.u8(ctx.b, champ::MODE);
+            if !ctx.pris(mode == 0) {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                return reserve_attente(ctx, o);
+            }
+            let fin = ctx.anim_step();
+            if !ctx.pris(!fin) {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+            }
+        }
+        sous::ATTENTE => reserve_attente(ctx, o),
+        sous::RAMASSE => reserve_ramasse(ctx, o),
+        6 => inventaire_rejet(ctx, o),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+fn reserve_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
+    if ctx.pris(cache) {
+        return;
+    }
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(reserve::TABLE_ETATS, etat as u32);
+    match etat {
+        etat::INIT => reserve_init(ctx, o),
+        etat::ACTIF => reserve_actif(ctx, o),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 9 : icône qui accompagne un objet (0xdd5a2)
+
+/// Type 9 : étincelle d'interface qui suit un objet (`+0x5c`), un pixel devant lui, pendant `+0x14`
+/// images (le compte est préparé par le créateur), puis disparaît. Palette selon la variante.
+mod accompagnement {
+    pub const ENTREE: u32 = 0xdd5a2;
+    pub const PALETTES: u32 = 0xdd5de;
+    pub const ANIMATIONS: u32 = 0x1c03a6;
+    pub const CIBLE: u32 = 0x5c;
+    pub const DUREE: u32 = 0x14;
+}
+
+fn accompagnement_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let etat = o.u8(ctx.b, Obj::STATE);
+    if !ctx.pris(etat != 0) {
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+        o.set_u8(ctx.b, 0x2a, 1);
+        let variante = o.u8(ctx.b, Obj::VARIANT);
+        let palette = ctx.prog8(accompagnement::PALETTES + variante as u32);
+        o.set_u8(ctx.b, 0x2b, palette);
+        o.set_u16(ctx.b, accompagnement::DUREE, 0x100);
+        ctx.anim_start(accompagnement::ANIMATIONS, 0x8e + variante as u16);
+        return ctx.reinsert();
+    }
+    let cible = pointeur(ctx, o, accompagnement::CIBLE);
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let v = cible.u16(ctx.b, off);
+        o.set_u16(ctx.b, off, v);
+    }
+    let y = o.u16(ctx.b, Obj::Y).wrapping_sub(1);
+    o.set_u16(ctx.b, Obj::Y, y);
+    ctx.anim_step();
+    let reste = o.u16(ctx.b, accompagnement::DUREE).wrapping_sub(1);
+    o.set_u16(ctx.b, accompagnement::DUREE, reste);
+    if ctx.pris(reste as i16 >= 0) {
+        return;
+    }
+    ctx.free(&pools::FREE_ITEM);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 8 : objets à contact (0xdd132)
+
+/// Type 8, objets ramassés par simple contact (test de boîtes avec les quatre joueurs, `0xdd470`) qui
+/// déclenchent un effet de scène par un objet SET (`0xc8312`) : trois variantes.
+///
+/// - 0 : bonus posé qui attend `+0x58` (touché par un joueur), crée un SET (`+0x42`) et le suit ;
+/// - 1 : bonus qui oscille horizontalement (vitesse `+0x14`, demi-tour toutes les 0x3c images) jusqu'au
+///   contact d'un joueur ;
+/// - 2 : même principe que la 0, sans oscillation.
+///
+/// `A5-0x5ac4` est non nul tant qu'un joueur est en train d'en ramasser un : un seul à la fois.
+mod contact {
+    pub const ENTREE: u32 = 0xdd132;
+    pub const TABLE_VARIANTES: u32 = 0xdd142;
+    pub const ANIMATIONS: u32 = 0x1bf8fe;
+    // variante 0
+    pub const V0_ETATS: u32 = 0xdd156;
+    pub const V0_SOUS_ETATS: u32 = 0xdd190;
+    pub const V0_ANIMATIONS: u32 = 0xdd180;
+    pub const V0_ANIMATIONS_TOUCHE: u32 = 0xdd1d2;
+    pub const V0_ANIMATIONS_SET: u32 = 0xdd22a;
+    pub const V0_ANIMATIONS_FIN: u32 = 0xdd246;
+    // variante 1
+    pub const V1_ETATS: u32 = 0xdd280;
+    pub const V1_SOUS_ETATS: u32 = 0xdd2d4;
+    // variante 2
+    pub const V2_ETATS: u32 = 0xdd3ca;
+    pub const V2_SOUS_ETATS: u32 = 0xdd400;
+    /// Verrou : un joueur est en train de ramasser (A5-0x5ac4) et l'événement posé en `A5+0x5e`.
+    pub const OCCUPE: i32 = -0x5ac4;
+    pub const SET_CREE: u32 = 0x42;
+    pub const DELAI: u32 = 0x4c;
+    pub const CREER_SET: u32 = 0xc8312;
+    pub const CREER_ETINCELLE: u32 = 0xaba16;
+    /// Boîtes de contact : une par type (`+0x39`) pour l'objet, une par personnage et par `+0x38` pour le joueur.
+    pub const BOITES_OBJET: u32 = 0xdd590;
+    pub const BOITES_JOUEUR: u32 = 0xdd578;
+    pub const JOUEURS: u32 = 0xff85de;
+}
+
+/// `0xdd470` : un joueur touche-t-il l'objet ? Si oui, le sous-état avance, le verrou se lève et le
+/// joueur devient le propriétaire.
+fn contact_joueur(ctx: &mut Ctx, o: Obj) -> bool {
+    let occupe = ctx.ram8(contact::OCCUPE) != 0;
+    if ctx.pris(occupe) {
+        return false;
+    }
+    let boite = o.u8(ctx.b, 0x39) as u32;
+    if ctx.pris(boite == 0) {
+        return false;
+    }
+    let ma_boite = contact::BOITES_OBJET + (boite << 3);
+    for i in 0..4u32 {
+        let joueur = Obj(contact::JOUEURS + i * 0x200);
+        if joueur_touche(ctx, o, joueur, ma_boite) {
+            ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+            ctx.set_ram8(contact::OCCUPE, 1);
+            o.set_u16(ctx.b, champ::PROPRIETAIRE, joueur.0 as u16);
+            return true;
+        }
+        ctx.pris(i < 3); // dbf
+    }
+    false
+}
+
+/// Le joueur est-il présent, en vie, libre, et sa boîte recouvre-t-elle celle de l'objet ?
+fn joueur_touche(ctx: &mut Ctx, o: Obj, joueur: Obj, ma_boite: u32) -> bool {
+    let absent = joueur.u8(ctx.b, Obj::ACTIVE) != 1;
+    if ctx.pris(absent) {
+        return false;
+    }
+    let mort = joueur.u8(ctx.b, Obj::STATE) as i8 >= 4;
+    if ctx.pris(mort) {
+        return false;
+    }
+    let occupe = joueur.u8(ctx.b, 0x182) != 0;
+    if ctx.pris(occupe) {
+        return false;
+    }
+    let numero = joueur.u8(ctx.b, 0x38) as u32;
+    if ctx.pris(numero == 0) {
+        return false;
+    }
+    let classe = (joueur.u8(ctx.b, 3) >> 1) as u32;
+    let table = ctx.rom32(contact::BOITES_JOUEUR + (classe << 2));
+    let sa_boite = table + (numero << 3);
+    chevauche(ctx, o, joueur, ma_boite, sa_boite)
+}
+
+/// Les trois recouvrements de boîtes (X, Y puis Z) entre l'objet `o` (boîte `a`) et le joueur (boîte `b`).
+fn chevauche(ctx: &mut Ctx, o: Obj, joueur: Obj, a: u32, b: u32) -> bool {
+    let octet = |ctx: &mut Ctx, adresse: u32| ctx.rom8(adresse) as i8 as i16 as u16;
+    // X : les décalages s'inversent avec l'orientation de chacun
+    let mut da = octet(ctx, a);
+    let retourne = o.u8(ctx.b, champ::FLIP) != 0;
+    if !ctx.pris(!retourne) {
+        da = da.wrapping_neg();
+    }
+    let mut db = octet(ctx, b);
+    let joueur_retourne = joueur.u8(ctx.b, champ::FLIP) != 0;
+    if !ctx.pris(!joueur_retourne) {
+        db = db.wrapping_neg();
+    }
+    let ecart = da.wrapping_add(o.u16(ctx.b, Obj::X)).wrapping_sub(db).wrapping_sub(joueur.u16(ctx.b, Obj::X));
+    let demi = ctx.rom8(a + 1).wrapping_add(ctx.rom8(b + 1)) as u16;
+    if ctx.pris(ecart.wrapping_add(demi) > demi.wrapping_mul(2)) {
+        return false;
+    }
+    // Y puis Z : décalages fixes
+    for (decalage, taille, position) in [(4u32, 5u32, Obj::Y), (2, 3, Obj::Z)] {
+        let da = octet(ctx, a + decalage);
+        let db = octet(ctx, b + decalage);
+        let ecart = da.wrapping_add(o.u16(ctx.b, position)).wrapping_sub(db.wrapping_add(joueur.u16(ctx.b, position)));
+        let demi = ctx.rom8(a + taille).wrapping_add(ctx.rom8(b + taille)) as u16;
+        if ctx.pris(ecart.wrapping_add(demi) > demi.wrapping_mul(2)) {
+            return false;
+        }
+    }
+    true
+}
+
+/// `0xdd16e` : démarre l'animation `animation`, puis trie l'objet.
+fn contact_anime(ctx: &mut Ctx, animation: u8) {
+    ctx.anim_start(contact::ANIMATIONS, animation as u16);
+    ctx.reinsert();
+}
+
+/// Animation tirée d'une table indexée par le mode (`+0x2f`).
+fn contact_anime_mode(ctx: &mut Ctx, o: Obj, table: u32) {
+    let mode = o.u8(ctx.b, champ::MODE) as u32;
+    let animation = ctx.prog8(table + mode);
+    contact_anime(ctx, animation);
+}
+
+/// Crée l'objet SET de la scène de ramassage (type `+0x42`, mot) et le rattache à l'objet. Faux si le
+/// type est négatif (pas de scène) ou si le pool est plein.
+fn contact_cree_set(ctx: &mut Ctx, o: Obj) -> bool {
+    let mot = o.u16(ctx.b, contact::SET_CREE);
+    if ctx.pris(mot as i16 <= -1) {
+        return false;
+    }
+    ctx.c.d[0] = mot as u32;
+    ctx.jsr(contact::CREER_SET);
+    let echec = ctx.c.cond(5);
+    if ctx.pris(echec) {
+        return false;
+    }
+    let nouveau = Obj(ctx.c.a[1]);
+    o.set_u16(ctx.b, contact::SET_CREE, nouveau.0 as u16);
+    let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let personnage = proprietaire.u8(ctx.b, 2);
+    nouveau.set_u8(ctx.b, 0x37, personnage);
+    true
+}
+
+/// Oriente l'objet vers le côté où se trouve le propriétaire (retenue de `x_proprietaire - x`).
+fn contact_oriente(ctx: &mut Ctx, o: Obj) {
+    let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let (x_proprietaire, x) = (proprietaire.u16(ctx.b, Obj::X), o.u16(ctx.b, Obj::X));
+    let sens = if ctx.pris(x_proprietaire < x) { 0 } else { 0x20 };
+    o.set_u8(ctx.b, champ::FLIP, sens);
+}
+
+/// L'objet SET a-t-il fini ? (`+0x22` de l'objet SET non nul.)
+fn contact_set_fini(ctx: &mut Ctx, o: Obj) -> bool {
+    let set = pointeur(ctx, o, contact::SET_CREE);
+    let fini = set.u8(ctx.b, 0x22) != 0;
+    ctx.pris(fini)
+}
+
+/// Variante 0, fin de la scène (`0xdd22e`) : lève le verrou et passe au sous-état de fuite.
+fn contact_0_fin(ctx: &mut Ctx, o: Obj) {
+    ctx.set_ram8(contact::OCCUPE, 0);
+    o.set_u8(ctx.b, champ::SOUS_ETAT, 6);
+    contact_anime_mode(ctx, o, contact::V0_ANIMATIONS_FIN);
+}
+
+fn decale_x(ctx: &mut Ctx, o: Obj, pas: u16) {
+    let x = o.u16(ctx.b, Obj::X).wrapping_add(pas);
+    o.set_u16(ctx.b, Obj::X, x);
+}
+
+fn contact_0(ctx: &mut Ctx, o: Obj) {
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(contact::V0_ETATS, etat as u32);
+    match etat {
+        etat::INIT => {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            let mode = o.u8(ctx.b, champ::MODE) as u32;
+            let animation = ctx.prog8(contact::V0_ANIMATIONS + mode);
+            o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
+            contact_anime(ctx, animation);
+        }
+        etat::ACTIF => {
+            let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+            let cible = ctx.saut_table(contact::V0_SOUS_ETATS, sous_etat as u32);
+            match sous_etat {
+                0 => {
+                    ctx.anim_step();
+                    let ramasse = o.u8(ctx.b, champ::RAMASSE);
+                    if ctx.pris(ramasse == 0) {
+                        return;
+                    }
+                    let occupe = ctx.ram8(contact::OCCUPE) != 0;
+                    if !ctx.pris(!occupe) {
+                        o.set_u8(ctx.b, champ::RAMASSE, 0);
+                        return;
+                    }
+                    ctx.set_ram8(contact::OCCUPE, 1);
+                    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                    ctx.jsr(contact::CREER_ETINCELLE);
+                    contact_anime_mode(ctx, o, contact::V0_ANIMATIONS_TOUCHE);
+                }
+                2 => {
+                    ctx.anim_step();
+                    let touche = o.u8(ctx.b, 0x33);
+                    if ctx.pris(touche == 1) {
+                        return;
+                    }
+                    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                    if !contact_cree_set(ctx, o) {
+                        return contact_0_fin(ctx, o);
+                    }
+                    contact_oriente(ctx, o);
+                    contact_anime_mode(ctx, o, contact::V0_ANIMATIONS_SET);
+                }
+                4 => {
+                    if contact_set_fini(ctx, o) {
+                        contact_0_fin(ctx, o);
+                    }
+                }
+                6 => {
+                    let flip = o.u8(ctx.b, champ::FLIP) != 0;
+                    let pas: u16 = if ctx.pris(flip) { 3 } else { 3u16.wrapping_neg() };
+                    decale_x(ctx, o, pas);
+                    ctx.anim_step();
+                    ctx.jsr(rom::CULL_OFFSCREEN);
+                }
+                _ => ctx.deleguer(cible),
+            }
+        }
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+/// Variante 1 : animation de balancement (`0xdd2a8`), tri et mise au point des bords.
+fn contact_1_anime(ctx: &mut Ctx) {
+    contact_anime(ctx, 0x18);
+    ctx.jsr(rom::DANS_LA_ZONE);
+    ctx.jsr(rom::OMBRE);
+}
+
+/// Variante 1 : déplacement horizontal `X += VX << 8`.
+fn contact_1_avance(ctx: &mut Ctx, o: Obj) {
+    let vx = o.u16(ctx.b, Obj::VX) as i16 as i32;
+    let x = o.u32(ctx.b, Obj::X).wrapping_add((vx << 8) as u32);
+    o.set_u32(ctx.b, Obj::X, x);
+}
+
+/// Variante 1 : vitesse 0x200 dans le sens de l'orientation (`0xdd296`).
+fn contact_1_vitesse(ctx: &mut Ctx, o: Obj) {
+    o.set_u16(ctx.b, Obj::VX, 0x200);
+    let flip = o.u8(ctx.b, champ::FLIP) != 0;
+    if !ctx.pris(flip) {
+        let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
+        o.set_u16(ctx.b, Obj::VX, v);
+    }
+}
+
+/// Variante 1, sortie de scène (`0xdd37c`) : le verrou se lève, le bonus s'éloigne.
+fn contact_1_sortie(ctx: &mut Ctx, o: Obj) {
+    contact_1_vitesse(ctx, o);
+    ctx.set_ram8(contact::OCCUPE, 0);
+    o.set_u8(ctx.b, champ::SOUS_ETAT, 6);
+    contact_1_anime(ctx);
+}
+
+fn contact_1(ctx: &mut Ctx, o: Obj) {
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(contact::V1_ETATS, etat as u32);
+    match etat {
+        etat::INIT => {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
+            o.set_u8(ctx.b, contact::DELAI, 0x3c);
+            contact_1_vitesse(ctx, o);
+            contact_1_anime(ctx);
+        }
+        etat::ACTIF => {
+            let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+            let cible = ctx.saut_table(contact::V1_SOUS_ETATS, sous_etat as u32);
+            match sous_etat {
+                0 => {
+                    let touche = contact_joueur(ctx, o);
+                    if ctx.pris(touche) {
+                        // pas de contact suivant : les sous-états avancent d'eux-mêmes
+                        ctx.set_ram8(0x5e, 1);
+                        return ctx.anim_start(contact::ANIMATIONS, 0x19);
+                    }
+                    contact_1_avance(ctx, o);
+                    let reste = o.u8(ctx.b, contact::DELAI).wrapping_sub(1);
+                    o.set_u8(ctx.b, contact::DELAI, reste);
+                    if !ctx.pris(reste != 0) {
+                        o.set_u8(ctx.b, contact::DELAI, 0x3c);
+                        let flip = o.u8(ctx.b, champ::FLIP) ^ 0x20;
+                        o.set_u8(ctx.b, champ::FLIP, flip);
+                        let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
+                        o.set_u16(ctx.b, Obj::VX, v);
+                    }
+                    ctx.anim_step();
+                    ctx.reinsert();
+                    ctx.jsr(rom::DANS_LA_ZONE);
+                    ctx.jsr(rom::OMBRE);
+                }
+                2 => {
+                    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                    if !contact_cree_set(ctx, o) {
+                        return contact_1_sortie(ctx, o);
+                    }
+                    contact_oriente(ctx, o);
+                }
+                4 => {
+                    let set = pointeur(ctx, o, contact::SET_CREE);
+                    let en_cours = set.u8(ctx.b, 0x22) == 0;
+                    if !ctx.pris(en_cours) {
+                        contact_1_sortie(ctx, o);
+                    }
+                }
+                6 => {
+                    contact_1_avance(ctx, o);
+                    ctx.anim_step();
+                    ctx.reinsert();
+                    ctx.jsr(rom::CULL_OFFSCREEN);
+                }
+                _ => ctx.deleguer(cible),
+            }
+        }
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+/// Variante 2, fin de la scène (`0xdd44e`).
+fn contact_2_fin(ctx: &mut Ctx, o: Obj) {
+    ctx.set_ram8(contact::OCCUPE, 0);
+    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+}
+
+fn contact_2(ctx: &mut Ctx, o: Obj) {
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(contact::V2_ETATS, etat as u32);
+    match etat {
+        etat::INIT => {
+            ajoute_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
+            let mode = o.u8(ctx.b, champ::MODE);
+            contact_anime(ctx, mode.wrapping_add(0x14));
+        }
+        etat::ACTIF => {
+            let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+            let cible = ctx.saut_table(contact::V2_SOUS_ETATS, sous_etat as u32);
+            match sous_etat {
+                0 => {
+                    ctx.anim_step();
+                    let ramasse = o.u8(ctx.b, champ::RAMASSE);
+                    if ctx.pris(ramasse == 0) {
+                        return;
+                    }
+                    let occupe = ctx.ram8(contact::OCCUPE) != 0;
+                    if !ctx.pris(!occupe) {
+                        o.set_u8(ctx.b, champ::RAMASSE, 0);
+                        return;
+                    }
+                    ctx.set_ram8(contact::OCCUPE, 1);
+                    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                    if !contact_cree_set(ctx, o) {
+                        contact_2_fin(ctx, o);
+                    }
+                }
+                2 => {
+                    if contact_set_fini(ctx, o) {
+                        contact_2_fin(ctx, o);
+                    }
+                }
+                4 => ctx.jsr(rom::ANIM_STEP),
+                _ => ctx.deleguer(cible),
+            }
+        }
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+fn contact_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let cible = ctx.saut_table_d1(contact::TABLE_VARIANTES, 2 * variante as u32);
+    match variante {
+        0 => contact_0(ctx, o),
+        1 => contact_1(ctx, o),
+        2 => contact_2(ctx, o),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 3 : équipement (0xdb7de)
+
+/// Type 3, équipement (armes, protections et accessoires, identifiants `0x2e` et plus ; en dessous,
+/// objets d'inventaire). Une fiche de huit octets par variante (`0xdbc8c`) donne six drapeaux « utilisable
+/// par la classe » puis l'identifiant d'équipement et son groupe. Ramassage : l'équipement s'ajoute aux
+/// six emplacements (`+0x140`) du joueur, remplace un équipement du même groupe s'il est meilleur, ou
+/// prend un emplacement libre ; refusé si la classe ne peut pas le porter ou si le premier emplacement
+/// est verrouillé (rejet en arc). Les variantes 0x24 à 0x27 donnent aussi un bonus temporaire au joueur
+/// (`+0x18b..0x191`).
+mod equipement {
+    pub const ENTREE: u32 = 0xdb7de;
+    pub const ETATS: u32 = 0xdb7f4;
+    pub const SOUS_ETATS: u32 = 0xdb88c;
+    pub const ANIMATIONS: u32 = 0x1bf156;
+    /// Indice de ramassage par variante.
+    pub const INDICES: u32 = 0xdbdcc;
+    /// Fiches (données) ; octets 0 à 5 : classes autorisées, 6 : identifiant, 7 : groupe.
+    pub const FICHES: u32 = 0xdbc8c;
+    /// Par classe, 8 identifiants que le premier emplacement ne peut pas remplacer.
+    pub const VERROUILLES: u32 = 0xdbc5c;
+    pub const PREMIER_EQUIPE: u32 = 0x10d;
+    pub const SECOND_EQUIPE: u32 = 0x10e;
+}
+
+/// `0xdba96` : bonus temporaire donné par les variantes 0x24 à 0x27.
+fn equipement_bonus(ctx: &mut Ctx, o: Obj) {
+    let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    if !ctx.pris(variante != 0x24) {
+        return joueur.set_u8(ctx.b, 0x18c, 0x14);
+    }
+    if !ctx.pris(variante != 0x25) {
+        return joueur.set_u8(ctx.b, 0x18b, 0x14);
+    }
+    if !ctx.pris(variante != 0x26) {
+        joueur.set_u8(ctx.b, 0x18d, 0x14);
+    }
+    if !ctx.pris(variante != 0x27) {
+        joueur.set_u8(ctx.b, 0x191, 0x14);
+    }
+}
+
+/// `0xdbb0e` : ramassage réussi : bonus, événement de score et son. Renvoie faux (accepté).
+fn equipement_accepte(ctx: &mut Ctx, o: Obj, joueur: Obj) -> bool {
+    equipement_bonus(ctx, o);
+    ctx.c.d[1] = (joueur.u8(ctx.b, 2) as u32) << 8;
+    ctx.c.d[0] = 0x11 + ctx.c.d[1];
+    ctx.jsr(appel::EVENEMENT);
+    ctx.c.d[0] = 5;
+    ctx.jsr(appel::SON_RAMASSAGE);
+    false
+}
+
+/// `0xdbafa` : ramassage refusé : l'objet sera rejeté.
+fn equipement_refuse(ctx: &mut Ctx, o: Obj) -> bool {
+    o.set_u8(ctx.b, champ::SOUS_ETAT, 6);
+    o.set_u8(ctx.b, champ::SOUS_SOUS_ETAT, 0);
+    o.set_u8(ctx.b, inventaire::DELAI, 0xc);
+    true
+}
+
+/// Groupe d'un équipement (octet 7 de sa fiche).
+fn equipement_groupe(ctx: &mut Ctx, identifiant: u8) -> u8 {
+    let rang = ((identifiant.wrapping_sub(0x2e) as u32) << 3) & 0xffff;
+    ctx.rom8(equipement::FICHES + 7 + rang)
+}
+
+/// `0xdbad8` : range l'équipement dans l'inventaire du propriétaire. Renvoie vrai si refusé.
+fn equipement_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
+    let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let ligne = ((o.u8(ctx.b, Obj::VARIANT) as u32) << 3) & 0xffff;
+    let classe = (joueur.u8(ctx.b, 3) >> 1) as u32;
+    let autorise = ctx.rom8(equipement::FICHES + ligne + classe);
+    if !ctx.pris(autorise != 0) {
+        return equipement_refuse(ctx, o);
+    }
+    let mut id = ctx.rom8(equipement::FICHES + 6 + ligne);
+    // déjà équipé ?
+    for off in [equipement::PREMIER_EQUIPE, equipement::SECOND_EQUIPE] {
+        let equipe = joueur.u8(ctx.b, off).wrapping_add(0x2e);
+        if ctx.pris(equipe == id) {
+            return equipement_accepte(ctx, o, joueur);
+        }
+    }
+    // l'identifiant est-il déjà dans l'inventaire ?
+    for i in 0..6u32 {
+        let slot = joueur.u8(ctx.b, inventaire::IDENTIFIANTS + i);
+        let vide = slot == inventaire::VIDE;
+        if !ctx.pris(vide) {
+            let objet = slot <= 0x2d;
+            if ctx.pris(objet) {
+                // objet d'inventaire : seulement s'il est identique
+                if ctx.pris(slot == id) {
+                    return equipement_accepte(ctx, o, joueur);
+                }
+            } else {
+                let (g_slot, g_nouveau) = (equipement_groupe(ctx, slot), equipement_groupe(ctx, id));
+                if !ctx.pris(g_nouveau != g_slot) {
+                    // même groupe : on garde le meilleur
+                    if !ctx.pris(id as i8 > slot as i8) {
+                        id = slot;
+                    }
+                    joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS + i, id);
+                    return equipement_accepte(ctx, o, joueur);
+                }
+            }
+        }
+        ctx.pris(i < 5); // dbf
+    }
+    // équipement porté en main (octet 0x10d, ou 0x10e pour la classe 4)
+    let mut porte = joueur.u8(ctx.b, equipement::PREMIER_EQUIPE);
+    let classe_main = joueur.u8(ctx.b, 3) >> 1;
+    if !ctx.pris(classe_main != 4) {
+        porte = joueur.u8(ctx.b, equipement::SECOND_EQUIPE);
+    }
+    let groupe_porte = ctx.rom8(equipement::FICHES + 7 + ((porte as u32) << 3));
+    let groupe_nouveau = equipement_groupe(ctx, id);
+    if !ctx.pris(groupe_nouveau != groupe_porte) {
+        let nouveau = id.wrapping_sub(0x2e);
+        if !ctx.pris(porte as i8 > nouveau as i8) {
+            joueur.set_u8(ctx.b, equipement::PREMIER_EQUIPE, nouveau);
+        }
+        return equipement_accepte(ctx, o, joueur);
+    }
+    // un emplacement libre
+    for i in 0..6u32 {
+        let slot = joueur.u8(ctx.b, inventaire::IDENTIFIANTS + i);
+        if !ctx.pris(slot != inventaire::VIDE) {
+            joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS + i, id);
+            equipement_bonus(ctx, o);
+            return false;
+        }
+        ctx.pris(i < 5); // dbf
+    }
+    // échange avec le premier emplacement, sauf s'il est verrouillé pour cette classe
+    let premier = joueur.u8(ctx.b, inventaire::IDENTIFIANTS);
+    for k in 0..8u32 {
+        let verrou = ctx.rom8(equipement::VERROUILLES + (classe << 3) + k);
+        if ctx.pris(premier == verrou) {
+            return equipement_refuse(ctx, o);
+        }
+        ctx.pris(k < 7);
+    }
+    let ancienne_quantite = joueur.u8(ctx.b, inventaire::QUANTITES);
+    objet_expulse(ctx, o, joueur, premier, ancienne_quantite);
+    joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS, id);
+    joueur.set_u8(ctx.b, inventaire::QUANTITES, 0);
+    equipement_bonus(ctx, o);
+    false
+}
+
+fn equipement_init(ctx: &mut Ctx, o: Obj) {
+    let mode = o.u8(ctx.b, champ::MODE);
+    if ctx.pris(mode != 0) {
+        let delai = o.u8(ctx.b, inventaire::DELAI);
+        if !ctx.pris(delai == 0) {
+            o.set_u8(ctx.b, inventaire::DELAI, delai - 1);
+            return;
+        }
+        ajoute_u8(ctx, o, Obj::STATE, 2);
+        o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+    } else if en_l_air(ctx, o) {
+        etat_suivant(ctx, o, sous::CHUTE);
+        o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+    } else {
+        etat_suivant(ctx, o, sous::ATTENTE);
+        o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
+        o.set_u16(ctx.b, champ::DUREE, 0x4b0);
+    }
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    let indice = ctx.rom8(equipement::INDICES + variante as u32);
+    o.set_u8(ctx.b, champ::INDICE, indice);
+    anime_et_trie(ctx, equipement::ANIMATIONS, variante);
+}
+
+/// Sous-état 6 : rejet en arc de l'équipement refusé ; à l'atterrissage, une variante 0x0f ramassée
+/// par la classe 1 plus de sept fois déclenche une scène.
+fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
+    let lance = o.u8(ctx.b, champ::SOUS_SOUS_ETAT) != 0;
+    if !ctx.pris(lance) {
+        let delai = o.u8(ctx.b, inventaire::DELAI).wrapping_sub(1);
+        o.set_u8(ctx.b, inventaire::DELAI, delai);
+        if ctx.pris(delai != 0) {
+            return;
+        }
+        ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
+        let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+        let y = joueur.u16(ctx.b, Obj::Y).wrapping_sub(1);
+        o.set_u16(ctx.b, Obj::Y, y);
+        o.set_u16(ctx.b, Obj::Z, 0x10);
+        o.set_u16(ctx.b, Obj::VZ, 0x200);
+        o.set_u16(ctx.b, Obj::AZ, 0xffc0);
+        o.set_u32(ctx.b, Obj::VX, 0x0280_0000);
+        let (cam_x, _) = ctx.camera();
+        let limite = cam_x.wrapping_add(0xc0);
+        let x = o.u16(ctx.b, Obj::X);
+        if !ctx.pris(limite as i16 > x as i16) {
+            let v = o.u32(ctx.b, Obj::VX).wrapping_neg();
+            o.set_u32(ctx.b, Obj::VX, v);
+        }
+        return ctx.reinsert();
+    }
+    ctx.jsr(rom::MOVE_XZ);
+    let z = o.u16(ctx.b, Obj::Z);
+    if ctx.pris(z as i16 >= 0) {
+        return;
+    }
+    o.set_u8(ctx.b, champ::SOUS_ETAT, sous::ATTENTE);
+    o.set_u8(ctx.b, champ::SOUS_SOUS_ETAT, 0);
+    o.set_u32(ctx.b, Obj::Z, 0);
+    o.set_u8(ctx.b, champ::RAMASSE, 0);
+    let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+    let classe = joueur.u8(ctx.b, 3) >> 1;
+    if ctx.pris(classe != 1) {
+        return;
+    }
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    if ctx.pris(variante != 0xf) {
+        return;
+    }
+    let n = ctx.ram8(0x57).wrapping_add(1);
+    ctx.set_ram8(0x57, n);
+    if ctx.pris(n <= 7) {
+        return;
+    }
+    o.set_u16(ctx.b, champ::DUREE, 0x4b0);
+    o.set_u8(ctx.b, Obj::FLAGS, 1);
+    o.set_u8(ctx.b, Obj::VARIANT, 0xc);
+    ctx.anim_start(equipement::ANIMATIONS, 0xc);
+    ctx.jsr(0xb97a2);
+    ctx.set_ram8(-0x5b83, 1);
+    ctx.c.d[0] = 0x29;
+    ctx.jsr(0xc8312);
+}
+
+fn equipement_actif(ctx: &mut Ctx, o: Obj) {
+    let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+    let cible = ctx.saut_table(equipement::SOUS_ETATS, sous_etat as u32);
+    match sous_etat {
+        sous::CHUTE => {
+            ctx.jsr(rom::MOVE_XYZ);
+            let en_vol = ctx.gt();
+            if !ctx.pris(en_vol) {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                o.set_u16(ctx.b, champ::DUREE, 0x4b0);
+                o.set_u32(ctx.b, Obj::Z, 0);
+                let mode = o.u8(ctx.b, champ::MODE);
+                if !ctx.pris(mode != 0) {
+                    dans_la_vue(ctx, o);
+                }
+            }
+            fin_de_chute(ctx);
+        }
+        sous::ATTENTE => reserve_attente(ctx, o),
+        sous::RAMASSE => {
+            let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+            let pret = joueur.u8(ctx.b, 0x33) != 0;
+            if ctx.pris(!pret) {
+                return;
+            }
+            let refuse = equipement_ajoute(ctx, o);
+            if !ctx.pris(refuse) {
+                ajoute_u8(ctx, o, Obj::STATE, 2);
+            }
+            marque_ramasse(ctx, o);
+        }
+        6 => equipement_rejet(ctx, o),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+fn equipement_gestionnaire(ctx: &mut Ctx) {
+    let o = ctx.obj();
+    let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
+    if ctx.pris(cache) {
+        return;
+    }
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(equipement::ETATS, etat as u32);
+    match etat {
+        etat::INIT => equipement_init(ctx, o),
+        etat::ACTIF => equipement_actif(ctx, o),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        _ => ctx.deleguer(cible),
+    }
+}
+
+gestionnaire!(ITEM_3, equipement::ENTREE, "item_equipement", equipement_gestionnaire);
 gestionnaire!(ITEM_0, tresor::ENTREE, "item_tresor", tresor);
 gestionnaire!(ITEM_1, conso::ENTREE, "item_conso", conso_gestionnaire);
 gestionnaire!(ITEM_4, inventaire::ENTREE, "item_inventaire", inventaire_gestionnaire);
 gestionnaire!(ITEM_5, bonus::ENTREE, "item_bonus", bonus_gestionnaire);
 gestionnaire!(ITEM_6, scene::ENTREE, "item_scene", scene_gestionnaire);
+gestionnaire!(ITEM_7, reserve::ENTREE, "item_reserve", reserve_gestionnaire);
+gestionnaire!(ITEM_8, contact::ENTREE, "item_contact", contact_gestionnaire);
+gestionnaire!(ITEM_9, accompagnement::ENTREE, "item_accompagnement", accompagnement_gestionnaire);

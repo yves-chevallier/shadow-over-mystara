@@ -7,7 +7,12 @@
 //! cycles). Cela exerce des branches que les scénarios n'atteignent pas. Les états absurdes sont
 //! sans danger : les parties non réécrites s'exécutent en code d'origine dans les deux versions.
 //!
-//!   fuzz_familles <roms> <eeprom> <scénario> <images> [période [essais [graine]]]
+//! Les types que les scénarios n'exercent jamais se testent en les *forçant* : le dernier argument
+//! (`ITEM:2,ITEM:3,EFFCT:7`) liste des types dont la routine native est essayée sur des copies d'objets
+//! réels de la même famille dont l'octet de type (`+2`) est remplacé, avec variante et états tirés au
+//! hasard.
+//!
+//!   fuzz_familles <roms> <eeprom> <scénario> <images> [période [essais [graine [FAMILLE:type,...]]]]
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -15,6 +20,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 
 use cps2::Cps2Bus;
+use m68k::Bus;
 use m68k::Cpu;
 
 use ddsom_game::mem::{rd16, rd32, rd8, wr16, wr8};
@@ -28,7 +34,15 @@ struct Bilan {
     exemples: Vec<String>,
 }
 
+/// (nom de la famille, table de sauts, nombre de types)
+const FAMILLES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 64)];
+
 thread_local! {
+    /// adresse d'entrée d'un gestionnaire -> famille
+    static ENTREES: RefCell<BTreeMap<u32, usize>> = RefCell::new(BTreeMap::new());
+    /// types forcés : (famille, type, adresse d'entrée)
+    static FORCES: RefCell<Vec<(usize, u32, u32)>> = const { RefCell::new(Vec::new()) };
+    static APPELS_FAMILLE: RefCell<BTreeMap<usize, u64>> = RefCell::new(BTreeMap::new());
     static BILAN: RefCell<BTreeMap<&'static str, Bilan>> = RefCell::new(BTreeMap::new());
     static APPELS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
     static ALEA: RefCell<u64> = const { RefCell::new(0x9e37_79b9_7f4a_7c15) };
@@ -65,6 +79,7 @@ const OBJET_OCTETS: &[(u32, &[u8])] = &[
     (0x2d, &[0, 1, 2]),
     (0x2f, &[0, 1, 2, 3, 4]),
     (0x33, &[0, 1]),
+    (0x39, &[0, 1, 2, 3, 4, 5, 6, 7]),
     (0x40, &[0, 1]),
     (0x43, &[0, 1]),
     (0x53, &[0, 1, 0x80]),
@@ -96,9 +111,13 @@ const OBJET_MOTS: &[(u32, &[u16])] = &[
     (0x0c, &[0, 0x10, 0xfff0]),
     (0x0e, &[0, 0x8000]),
     (0x42, &[0, 1, 2, 0x3c, 0x3d, 0x100, 0x4b0, 0xffff]),
+    (0x50, &[0x85de, 0x87de, 0x89de, 0x8bde]),
+    (0x54, &[0x85de, 0x87de, 0x89de, 0x8bde]),
+    (0x46, &[0x85de, 0x87de]),
+    (0x1e, &[0x85de, 0x87de]),
     (0x56, &[0, 1, 2, 0x3c]),
     (0x58, &[0, 1, 2, 0x30]),
-    (0x5c, &[0, 1, 2]),
+    (0x5c, &[0, 1, 2, 0x85de, 0x87de]),
     (0x14, &[0, 0x100, 0xff00, 0x380]),
     (0x18, &[0, 0x300, 0xfd00]),
     (0x1a, &[0, 0xffd8, 0xffc0]),
@@ -111,7 +130,10 @@ const OBJET_MOTS: &[(u32, &[u16])] = &[
 
 /// Octets du joueur propriétaire.
 const JOUEUR_OCTETS: &[(u32, &[u8])] = &[
+    (0x00, &[0, 1, 1, 1, 2]),
     (0x02, &[0, 1, 2, 3, 4, 5]),
+    (0x38, &[0, 1, 2, 3, 4, 5]),
+    (0x182, &[0, 1]),
     (0x03, &[0, 2, 4, 6, 8, 0x0a, 0x0b]),
     (0x04, &[0, 2, 4, 6]),
     (0x22, &[0, 1]),
@@ -176,6 +198,16 @@ fn perturbe(b: &mut Cps2Bus, obj: u32) -> String {
                     notes.push(format!("joueur+{off:02x}={v:02x}"));
                 }
             }
+            9 if alea() % 2 == 0 => {
+                // l'objet se place sur un joueur (recouvrement de boîtes, proximité...)
+                let joueur = 0xff_85de + 0x200 * (alea() % 4) as u32;
+                let delta = choisit(&[0u16, 0, 4, 0xfffc, 0x10, 0xfff0, 0x40, 0xffc0]);
+                for off in [0x08u32, 0x0c, 0x10] {
+                    let v = rd16(b, joueur + off).wrapping_add(if alea() % 3 == 0 { delta } else { 0 });
+                    wr16(b, obj + off, v);
+                }
+                notes.push(format!("pos=joueur@{joueur:06x}{delta:+#x}"));
+            }
             _ => {
                 let (off, vals) = choisit(SCENE_OCTETS);
                 let v = choisit(vals);
@@ -204,11 +236,36 @@ fn execute_origine(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     true
 }
 
-fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool) {
+fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool, force: Option<u32>) {
     let mut c1 = c.clone();
     let mut b1 = b.clone();
-    let notes = if perturbation { perturbe(&mut b1, c.a[0]) } else { String::new() };
+    let mut notes = String::new();
+    if let Some(t) = force {
+        // objet synthétique : le même objet réel, d'un autre type
+        let obj = c.a[0];
+        wr8(&mut b1, obj + 2, t as u8);
+        wr8(&mut b1, obj + 3, choisit(&[0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x0a, 0x0c, 0x10, 0x11, 0x14]));
+        wr8(&mut b1, obj + 4, choisit(&[0, 0, 2, 2, 4, 6]));
+        wr8(&mut b1, obj + 5, choisit(&[0, 0, 2, 4, 6, 8, 0x0a]));
+        wr8(&mut b1, obj + 6, choisit(&[0, 0, 2, 4]));
+        c1.pc = n.entry;
+        wr16(&mut b1, obj + 0x50, choisit(&[0x85de, 0x87de, 0x89de, 0x8bde]));
+        wr16(&mut b1, obj + 0x54, choisit(&[0x85de, 0x87de, 0x89de, 0x8bde, obj as u16]));
+        wr16(&mut b1, obj + 0x5c, choisit(&[0x85de, 0x87de, obj as u16]));
+        notes = format!(
+            "type {t} variante {:02x} états {:02x} {:02x} {:02x} ; ",
+            rd8(&mut b1, obj + 3),
+            rd8(&mut b1, obj + 4),
+            rd8(&mut b1, obj + 5),
+            rd8(&mut b1, obj + 6)
+        );
+    }
+    if perturbation {
+        notes += &perturbe(&mut b1, c.a[0]);
+    }
     let (mut c2, mut b2) = (c1.clone(), b1.clone());
+    let (c_depart, b_depart) =
+        if std::env::var_os("FUZZ_TRACE").is_some() { (Some(c1.clone()), Some(b1.clone())) } else { (None, None) };
     let obj = c.a[0];
     let avant: Vec<u8> = (0..0x60).map(|i| rd8(&mut b2, obj + i)).collect();
     if !execute_origine(&mut c2, &mut b2) {
@@ -218,12 +275,23 @@ fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: boo
     // routine native sur la copie perturbée (même état de départ que l'original)
     let resultat = catch_unwind(AssertUnwindSafe(|| {
         let cout = (n.cost)(&c1, &mut b1);
-        (n.run)(&mut c1, &mut b1);
-        c1.cycles += cout;
+        if cout < ddsom_game::families::COUT_HORS_CONTRAT {
+            (n.run)(&mut c1, &mut b1);
+            c1.cycles += cout;
+        } else {
+            // chemin hors contrat : l'original s'exécute seul, rien à comparer
+            c1 = c2.clone();
+            b1 = b2.clone();
+        }
     }));
     let mut diffs = Vec::new();
     match resultat {
         Err(e) => {
+            if let (true, Some(cd), Some(mut bd)) = (std::env::var_os("FUZZ_TRACE").is_some(), c_depart.clone(), b_depart.clone()) {
+                ddsom_game::families::activer_diagnostic(true);
+                let _ = catch_unwind(AssertUnwindSafe(|| (n.cost)(&cd, &mut bd)));
+                ddsom_game::families::activer_diagnostic(false);
+            }
             let msg = e
                 .downcast_ref::<String>()
                 .cloned()
@@ -260,6 +328,20 @@ fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: boo
         if !diffs.is_empty() {
             bilan.ecarts += 1;
             if bilan.exemples.len() < 3 {
+                if let (Some(mut ct), Some(mut bt)) = (c_depart, b_depart) {
+                    // trace de l'original (pc et durée de chaque instruction) pour le diagnostic
+                    let ret = rd32(&mut bt, ct.a[7]);
+                    let sp_apres = ct.a[7].wrapping_add(4);
+                    let mut trace = String::new();
+                    let mut n = 0;
+                    while !(ct.pc == ret && ct.a[7] == sp_apres) && n < 3000 {
+                        let (pc, avant) = (ct.pc, ct.cycles);
+                        ct.step(&mut bt);
+                        trace += &format!(" {pc:06x}+{}", ct.cycles - avant);
+                        n += 1;
+                    }
+                    bilan.exemples.push(format!("TRACE{trace}"));
+                }
                 bilan.exemples.push(format!("{} ; {notes} ; objet {obj:06x} {}", diffs.join(", "), dump(&avant)));
             }
         }
@@ -271,6 +353,27 @@ fn dump(octets: &[u8]) -> String {
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
+    // types forcés : essais sur des objets synthétiques à chaque appel (périodique) d'un gestionnaire
+    // de la même famille
+    if let Some(famille) = ENTREES.with(|e| e.borrow().get(&pc).copied()) {
+        let (periode, essais) = PARAMETRES.with(|p| *p.borrow());
+        let k = APPELS_FAMILLE.with(|m| {
+            let mut m = m.borrow_mut();
+            let e = m.entry(famille).or_insert(0);
+            *e += 1;
+            *e
+        });
+        if k % periode == 1 {
+            let forces: Vec<_> = FORCES.with(|f| f.borrow().iter().filter(|x| x.0 == famille).copied().collect());
+            for (_, type_force, entree) in forces {
+                if let Some(n) = ddsom_game::families::NATIVES.iter().find(|n| n.entry == entree) {
+                    for _ in 0..essais * 2 {
+                        essai(n, c, b, true, Some(type_force));
+                    }
+                }
+            }
+        }
+    }
     if let Some(n) = ddsom_game::families::NATIVES.iter().find(|n| n.entry == pc) {
         let (periode, essais) = PARAMETRES.with(|p| *p.borrow());
         let k = APPELS.with(|m| {
@@ -281,9 +384,9 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         });
         if k % periode == 1 {
             // l'état réel d'abord (sans perturbation), puis des variantes perturbées
-            essai(n, c, b, false);
+            essai(n, c, b, false, None);
             for _ in 0..essais {
-                essai(n, c, b, true);
+                essai(n, c, b, true, None);
             }
         }
     }
@@ -306,6 +409,17 @@ fn main() {
     ddsom_game::families::activer_couverture();
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    let voulus = a.get(8).cloned().unwrap_or_default();
+    for (i, &(nom, table, n)) in FAMILLES.iter().enumerate() {
+        for t in 0..n {
+            let adresse = table + 4 * t;
+            let entree = (m.bus.read_prog16(adresse) as u32) << 16 | m.bus.read_prog16(adresse + 2) as u32;
+            ENTREES.with(|e| e.borrow_mut().insert(entree, i));
+            if voulus.split(',').any(|x| x == format!("{nom}:{t}")) {
+                FORCES.with(|f| f.borrow_mut().push((i, t, entree)));
+            }
+        }
+    }
     m.executor = Some(run);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
     for f in 0..frames.parse().unwrap() {

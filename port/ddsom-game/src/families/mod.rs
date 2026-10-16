@@ -24,43 +24,60 @@ use m68k::Cpu;
 use crate::chemin::Chemin;
 use crate::mem::{rd8, rts, A5};
 use crate::objects::{anim, lists, pools, Obj};
-use crate::{regs, Native};
+use crate::Native;
 
 /// Toutes les routines natives des familles.
 pub const NATIVES: &[Native] = &[
     items::ITEM_0,
     items::ITEM_1,
+    items::ITEM_3,
     items::ITEM_4,
     items::ITEM_5,
     items::ITEM_6,
+    items::ITEM_7,
+    items::ITEM_8,
+    items::ITEM_9,
     boxes::BOX_0,
+    boxes::BOX_1,
+    boxes::BOX_2,
+    effects::EFFCT_1,
+    effects::EFFCT_4,
     effects::EFFCT_5,
-    effects::EFFCT_17,
+    effects::EFFCT_6,
+    effects::EFFCT_7,
+    effects::EFFCT_8,
     effects::EFFCT_9,
     effects::EFFCT_15,
+    effects::EFFCT_17,
+    effects::EFFCT_19,
     effects::EFFCT_21,
+    effects::EFFCT_24,
     effects::EFFCT_25,
     effects::EFFCT_26,
+    effects::EFFCT_27,
+    effects::EFFCT_28,
     effects::EFFCT_29,
     effects::EFFCT_31,
     effects::EFFCT_32,
     effects::EFFCT_33,
-
+    effects::EFFCT_45,
+    effects::EFFCT_51,
+    effects::EFFCT_52,
+    effects::EFFCT_56,
+    effects::EFFCT_57,
+    effects::EFFCT_62,
 ];
 
 /// Routines du jeu appelées par les gestionnaires (adresses d'origine).
 pub mod rom {
-    pub const ANIM_START_INDEXED: u32 = 0x1a32;
     pub const ANIM_STEP: u32 = 0x1a56;
     pub const REINSERT_ACTORS: u32 = 0x1ee1a;
-    pub const FREE_ITEM: u32 = 0x2242;
-    pub const FREE_BOX: u32 = 0x2226;
-    pub const FREE_EFFCT: u32 = 0x2218;
-    pub const ALLOC_ITEM: u32 = 0x23d8;
     pub const MOVE_X: u32 = 0x1d78;
     pub const MOVE_XYZ: u32 = 0x1d90;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const CULL_OFFSCREEN: u32 = 0x1e1a;
+    pub const DANS_LA_ZONE: u32 = 0xfbae;
+    pub const OMBRE: u32 = 0x33fe4;
     pub const RNG: u32 = 0x19a88;
 }
 
@@ -69,6 +86,13 @@ pub mod rom {
 static COUVERTURE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static COUVERTURE: std::sync::Mutex<std::collections::BTreeSet<(&'static str, u32, bool)>> =
     std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Affiche, pour chaque calcul de durée, les tronçons du code d'origine parcourus (outil de diagnostic).
+static DIAGNOSTIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn activer_diagnostic(actif: bool) {
+    DIAGNOSTIC.store(actif, std::sync::atomic::Ordering::Relaxed);
+}
 
 pub fn activer_couverture() {
     COUVERTURE_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -84,6 +108,8 @@ pub struct Ctx<'a> {
     pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
     rec: Option<Rec>,
+    /// Le gestionnaire a déjà dépilé son adresse de retour (voir `epilogue_etranger`).
+    retour_deja: bool,
 }
 
 /// Un tronçon de code d'origine parcouru, avec les décisions de ses branchements.
@@ -107,12 +133,12 @@ struct Rec {
 impl<'a> Ctx<'a> {
     /// Exécution réelle.
     pub fn reel(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        Ctx { c, b, rec: None }
+        Ctx { c, b, rec: None, retour_deja: false }
     }
 
     /// Exécution à blanc (sur une copie) : relève le chemin suivi par l'original.
     fn a_blanc(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        Ctx { c, b, rec: Some(Rec::default()) }
+        Ctx { c, b, rec: Some(Rec::default()), retour_deja: false }
     }
 
     /// L'objet traité (registre A0).
@@ -160,6 +186,30 @@ impl<'a> Ctx<'a> {
         self.c.d[1] = self.c.d[1] & 0xffff_0000 | mot as u16 as u32;
         self.at(cible);
         cible
+    }
+
+    /// Variante de `saut_table` pour les sauts qui passent par D1 seul (`moveq 0,D1 ... move.w (t,PC,D1.w),D1.w`).
+    pub fn saut_table_d1(&mut self, table: u32, index: u32) -> u32 {
+        let mot = self.prog16(table.wrapping_add(index)) as i16;
+        let cible = table.wrapping_add(mot as i32 as u32);
+        self.c.d[1] = mot as u16 as u32;
+        self.at(cible);
+        cible
+    }
+
+    /// Saut de l'original dans l'épilogue d'une autre routine (`movem.l (SP)+,{A1-A4} ; rts`) : les
+    /// quatre registres sont rechargés depuis la pile, puis le retour se fait à l'adresse suivante.
+    /// Comportement hors contrat de l'original : la routine native le signale par un coût démesuré
+    /// (`COUT_HORS_CONTRAT`), ce qui fait exécuter le code d'origine.
+    pub fn epilogue_etranger(&mut self) {
+        let sp = self.c.a[7];
+        for (i, r) in [1usize, 2, 3, 4].into_iter().enumerate() {
+            self.c.a[r] = crate::mem::rd32(self.b, sp.wrapping_add(4 * i as u32));
+        }
+        self.c.a[7] = sp.wrapping_add(16);
+        self.c.pc = crate::mem::rd32(self.b, self.c.a[7]);
+        self.c.a[7] = self.c.a[7].wrapping_add(4);
+        self.retour_deja = true;
     }
 
     /// Exécute le code d'origine à partir de `adresse` (jusqu'à son `rts`) : états non réécrits.
@@ -337,12 +387,18 @@ impl<'a> Ctx<'a> {
     /// Durée de l'exécution à blanc : le code d'origine parcouru + les cycles des sous-routines.
     fn cout(self, b_rom: &mut Cps2Bus, cycles_sous_routines: u64) -> u64 {
         let rec = self.rec.expect("exécution à blanc");
+        if DIAGNOSTIC.load(std::sync::atomic::Ordering::Relaxed) {
+            // diagnostic : décrit chaque tronçon avant le calcul (qui peut échouer)
+            for t in &rec.troncons {
+                eprintln!("   tronçon {:06x}..{:?} : {} décisions {:?}", t.depart, t.arret, t.decisions, t.chemin);
+            }
+        }
         let propres: u64 = rec
             .troncons
             .iter()
             .map(|t| t.chemin.duree_hors(b_rom, t.depart, t.arret, &rec.externes))
             .sum();
-        if std::env::var_os("FAMILLES_DEBUG").is_some() {
+        if DIAGNOSTIC.load(std::sync::atomic::Ordering::Relaxed) {
             for t in &rec.troncons {
                 let d = t.chemin.duree_hors(b_rom, t.depart, t.arret, &rec.externes);
                 eprintln!("   tronçon {:06x}..{:?} : {} cycles, {} décisions", t.depart, t.arret, d, t.decisions);
@@ -372,16 +428,30 @@ pub fn cout(c: &Cpu, b: &mut Cps2Bus, entree: u32, logique: fn(&mut Ctx)) -> u64
     let mut ctx = Ctx::a_blanc(&mut c2, &mut b2);
     ctx.at(entree);
     logique(&mut ctx);
+    if ctx.retour_deja {
+        // le gestionnaire quitte par un chemin hors contrat (voir `epilogue_etranger`) : la durée annoncée
+        // dépasse toute échéance, donc l'exécuteur lance le code d'origine à sa place
+        return COUT_HORS_CONTRAT;
+    }
     let sous_routines = ctx.c.cycles - debut;
     ctx.cout(b, sous_routines)
 }
 
+/// Durée annoncée pour un appel que la routine native ne sait pas faire (l'original s'exécute alors).
+pub const COUT_HORS_CONTRAT: u64 = u64::MAX / 4;
+
 /// Exécute un gestionnaire (RTS compris). Les cycles des sous-routines sont comptés dans `cout`.
 pub fn executer(c: &mut Cpu, b: &mut Cps2Bus, logique: fn(&mut Ctx)) {
     let debut = c.cycles;
-    logique(&mut Ctx::reel(c, b));
+    let retour_deja = {
+        let mut ctx = Ctx::reel(c, b);
+        logique(&mut ctx);
+        ctx.retour_deja
+    };
     c.cycles = debut;
-    rts(c, b);
+    if !retour_deja {
+        rts(c, b);
+    }
 }
 
 /// Déclare la routine native d'un gestionnaire : adresse d'entrée, nom, logique.
@@ -399,8 +469,3 @@ macro_rules! gestionnaire {
     };
 }
 pub(crate) use gestionnaire;
-
-#[allow(dead_code)]
-fn _regs_used() -> u32 {
-    regs::ALL
-}
