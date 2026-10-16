@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cps2-gfx", "vrender"]
+members = ["cps2-gfx", "m68k", "vrender"]
 
 [profile.release]
 debug = 1
