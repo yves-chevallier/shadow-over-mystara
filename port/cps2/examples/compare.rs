@@ -18,13 +18,45 @@ fn main() {
         })
         .collect();
     let n = (dump.len() / 0x10000).min(a.get(4).map(|s| s.parse().unwrap()).unwrap_or(usize::MAX));
+    // SCENARIO=fichier (format mame/scenario.lua) : mêmes entrées, appliquées après l'image indiquée
+    let mut actions: Vec<(usize, String, u32)> = Vec::new();
+    if let Ok(path) = std::env::var("SCENARIO") {
+        for line in std::fs::read_to_string(path).unwrap().lines() {
+            let mut it = line.trim().splitn(2, ' ');
+            let (Some(f), Some(rest)) = (it.next(), it.next()) else { continue };
+            let Ok(f) = f.parse::<usize>() else { continue };
+            if let Some((name, v)) = rest.rsplit_once(' ') {
+                if let Ok(v) = v.parse() {
+                    actions.push((f, name.to_string(), v));
+                }
+            }
+        }
+    }
+    // SNAP="f1,f2" SNAPDIR=dossier : écrit le rendu de ces images en PNG
+    let snaps: Vec<usize> = std::env::var("SNAP").unwrap_or_default().split(',').filter_map(|v| v.parse().ok()).collect();
+    let snapdir = std::env::var("SNAPDIR").unwrap_or_else(|_| ".".into());
     let mut first_bad = None;
     // divergences durables : octet différent pendant >= 30 images consécutives
     let mut run = vec![0u32; 0x10000];
     let mut reported = vec![false; 0x10000];
     let mut persistent = 0;
     for f in 0..n {
-        m.run_frame();
+        for (af, name, v) in &actions {
+            // MAME ne voit une valeur posée par set_value qu'à la mise à jour des ports de l'image suivante
+            if *af + 1 == f {
+                let (port, bit) = input_bit(name);
+                let reg = match port { 0 => &mut m.bus.inputs.in0, 1 => &mut m.bus.inputs.in1, _ => &mut m.bus.inputs.in2 };
+                if *v != 0 { *reg &= !bit } else { *reg |= bit }
+            }
+        }
+        let img = m.run_frame();
+        if snaps.contains(&(f + 1)) {
+            let file = std::fs::File::create(format!("{}/{}.png", snapdir, f + 1)).unwrap();
+            let mut enc = png::Encoder::new(file, 384, 224);
+            enc.set_color(png::ColorType::Rgb);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&img.concat()).unwrap();
+        }
         let mame = &dump[f * 0x10000..(f + 1) * 0x10000];
         let ours: Vec<u8> = m.bus.ram.iter().flat_map(|w| w.to_be_bytes()).collect();
         let ignored = |i: usize| ignore.iter().any(|&(a, b)| i >= a && i <= b);
@@ -62,5 +94,28 @@ fn main() {
     match first_bad {
         None => println!("{n} images identiques à MAME"),
         Some(f) => println!("première divergence à l'image {f}"),
+    }
+}
+
+/// Nom d'entrée MAME -> (port, bit) (cps2_4p4b, actif à 0).
+fn input_bit(name: &str) -> (u8, u16) {
+    let player = |p: &str| -> u16 { if p == "1" { 0 } else { 8 } };
+    if let Some(rest) = name.strip_prefix('P') {
+        let (p, what) = rest.split_once(' ').unwrap();
+        let shift = player(p);
+        let b = match what {
+            "Right" => 0x01, "Left" => 0x02, "Down" => 0x04, "Up" => 0x08,
+            "Button 1" => 0x10, "Button 2" => 0x20, "Button 3" => 0x40, "Button 4" => 0x80,
+            _ => panic!("entrée inconnue {name}"),
+        };
+        return (0, b << shift);
+    }
+    match name {
+        "Coin 1" => (2, 0x1000),
+        "Coin 2" => (2, 0x2000),
+        "1 Player Start" => (2, 0x0100),
+        "2 Players Start" => (2, 0x0200),
+        "Service 1" => (2, 0x0004),
+        _ => panic!("entrée inconnue {name}"),
     }
 }
