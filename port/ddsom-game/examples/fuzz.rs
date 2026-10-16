@@ -333,12 +333,209 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
     m68k::Bus::read_prog16(b, a)
 }
 
+/// Familles d'objets (ESHL, SET, SOBJ) : pour chaque gestionnaire, des trajectoires complètes. Un
+/// objet neuf du type est créé à l'état 0 (propriétaire et variante tirés au sort) puis le
+/// gestionnaire est appelé image après image, avec des perturbations aléatoires des entrées que le
+/// moteur de collisions ou le créateur modifient (drapeaux de touche, propriétaire, positions).
+/// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
+/// `DDSOM_ENTREE=<adresse hexa>` restreint à un gestionnaire.
+fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, filtre: Option<u32>) {
+    use ddsom_game::mem::{rd16, rd8};
+    use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
+    use m68k::decode::Fetch;
+    let ee = std::fs::read(eeprom).ok();
+    let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    ddsom_game::install(&mut m);
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    for f in 0..chauffe as usize {
+        script.apply(f, &mut m);
+        m.run_frame();
+    }
+    ddsom_game::set_check(true);
+    std::panic::set_hook(Box::new(|_| {}));
+    let mut alea = Alea(0x1234_5678_9abc_def1);
+    let tables: [(&Pool, u32, u32); 3] = [(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16)];
+    let mut entrees: Vec<(u32, &Pool, u8)> = Vec::new();
+    for (pool, table, n) in tables {
+        for k in 0..n {
+            let a = (m.bus.fetch16(table + 4 * k) as u32) << 16 | m.bus.fetch16(table + 4 * k + 2) as u32;
+            if ddsom_game::all_natives().any(|nat| nat.entry == a) && filtre.map_or(true, |f| f == a) {
+                entrees.push((a, pool, k as u8));
+            }
+        }
+    }
+    let (c0, b0) = (m.cpu.clone(), m.bus.clone());
+    if std::env::var("DDSOM_VERBOSE").is_ok() {
+        let mut b = b0.clone();
+        println!("places libres : ESHL {} SET {} SOBJ {}", rd16(&mut b, A5 + ESHL.free), rd16(&mut b, A5 + SET.free), rd16(&mut b, A5 + SOBJ.free));
+    }
+    // nombre de variantes tirées (3 par défaut : au-delà, beaucoup de types sortent de leurs tables)
+    let variantes: u32 = std::env::var("DDSOM_VARIANTES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    let mut affiches = 0;
+    let mut essais = 0;
+    // couverture du code d'origine des gestionnaires (DDSOM_COUVERTURE=fichier : écrit les adresses vues)
+    let couverture = std::env::var("DDSOM_COUVERTURE").is_ok();
+    let mut vus: std::collections::BTreeSet<u32> = Default::default();
+    for _ in 0..tours {
+        for &(entree, pool, kind) in &entrees {
+            let (mut c, mut b) = (c0.clone(), b0.clone());
+            b.irq_horizon = u64::MAX;
+            // propriétaires possibles : ennemis actifs, sinon joueurs
+            let mut proprietaires: Vec<u32> = ENEMY.iter().filter(|o| rd8(&mut b, o.0) != 0).map(|o| o.0).collect();
+            proprietaires.extend((0..4).map(|j| 0xff85de + 0x200 * j));
+            let obj = pool.slot(alea.next() % pool.slots);
+            for off in (0..pool.stride).step_by(2) {
+                wr16(&mut b, obj.0 + off, 0);
+            }
+            let owner = proprietaires[alea.next() as usize % proprietaires.len()];
+            wr8(&mut b, obj.0, 1);
+            wr8(&mut b, obj.0 + 2, kind);
+            wr8(&mut b, obj.0 + 3, (alea.next() % variantes) as u8);
+            wr8(&mut b, obj.0 + 0x28, pool.class);
+            wr8(&mut b, obj.0 + 0x2c, (alea.next() & 1) as u8);
+            wr8(&mut b, obj.0 + 0x2f, if alea.next() % 4 == 0 { alea.next() as u8 % 3 } else { 0 });
+            wr16(&mut b, obj.0 + 0x50, owner as u16);
+            wr16(&mut b, obj.0 + 0x46, owner as u16);
+            wr16(&mut b, obj.0 + 0x5a, owner as u16);
+            for off in [0x8u32, 0xc, 0x10] {
+                let v = (rd16(&mut b, owner + off) as u32) << 16 | (alea.next() & 0xffff);
+                wr32(&mut b, obj.0 + off, v);
+            }
+            wr16(&mut b, obj.0 + 0xc, (alea.next() % 0x60) as u16);
+            // décompte des places libres cohérent
+            // (au moment du chauffage le pool peut être plein : les gestionnaires testent ce compteur)
+            wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
+            for pas in 0..60 {
+                if rd8(&mut b, obj.0) == 0 {
+                    break;
+                }
+                if pas > 0 {
+                    if alea.next() % 6 == 0 {
+                        wr8(&mut b, obj.0 + 0x57, [0x08, 0x20, 0x28, 0x10, 0x02, 0x40][alea.next() as usize % 6]);
+                    }
+                    if alea.next() % 8 == 0 {
+                        wr8(&mut b, obj.0 + 0x33, alea.next() as u8 & 1);
+                    }
+                    if alea.next() % 10 == 0 {
+                        wr8(&mut b, owner + 4, (alea.next() % 8) as u8);
+                    }
+                    // le propriétaire change d'état : états de l'automate, drapeaux d'attaque, compteurs
+                    if alea.next() % 3 == 0 {
+                        for off in [4u32, 5, 6, 7] {
+                            if alea.next() % 2 == 0 {
+                                wr8(&mut b, owner + off, 2 * (alea.next() % 6) as u8);
+                            }
+                        }
+                        for off in [0x53u32, 0xa0, 0xa1, 0xa8, 0xa9, 0xb0, 0xbd, 0x3e, 0x2f, 0x42, 0x5d] {
+                            if alea.next() % 3 == 0 {
+                                let v = match alea.next() % 4 {
+                                    0 => 0,
+                                    1 => 1,
+                                    2 => (alea.next() % 4) as u8,
+                                    _ => alea.next() as u8,
+                                };
+                                wr8(&mut b, owner + off, v);
+                            }
+                        }
+                    }
+                    // sa propre variante / drapeaux de contrôle
+                    if alea.next() % 12 == 0 {
+                        wr8(&mut b, obj.0 + 0x3e, alea.next() as u8 % 6);
+                    }
+                    if alea.next() % 10 == 0 {
+                        wr8(&mut b, obj.0 + 0x53, (alea.next() % 5) as u8);
+                    }
+                }
+                // jeu en pause (rare) ou non ; objet suspendu (octet +0x40) très rarement
+                wr8(&mut b, A5 + 0x3d, (alea.next() % 10 == 0) as u8);
+                wr8(&mut b, obj.0 + 0x40, (alea.next() % 40 == 0) as u8);
+                c.a[0] = obj.0;
+                c.a[5] = A5;
+                c.d[7] = pas;
+                // registres de la boucle de dispatch : D0 = type * 4 (octet 0 haut vide), A1 = gestionnaire
+                c.d[0] = 4 * kind as u32;
+                c.a[1] = entree;
+                essais += 1;
+                let avant = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
+                let (cs, bs) = (c.clone(), b.clone());
+                if couverture {
+                    // adresses des instructions que l'original exécute à cet appel (interpréteur)
+                    let (mut c2, mut b2) = (cs.clone(), bs.clone());
+                    c2.pc = entree;
+                    c2.a[7] = cs.a[7].wrapping_sub(4);
+                    ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                    for _ in 0..20_000 {
+                        if c2.pc == 0xfffe {
+                            break;
+                        }
+                        vus.insert(c2.pc);
+                        c2.step(&mut b2);
+                    }
+                }
+                let avant_obj: Vec<u8> = (0..pool.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
+                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
+                if r.is_err() {
+                    // l'original est sorti des rails (entrée incohérente) : on abandonne la trajectoire
+                    let _ = (cs, bs);
+                    break;
+                }
+                let apres = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
+                if apres > avant && affiches < 12 {
+                    affiches += 1;
+                    let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
+                    println!("écart en {entree:06x} type {kind} pas {pas} : {}", dernier.unwrap_or_default());
+                    println!("  objet avant : {:02x?}", avant_obj);
+                    if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
+                        // exécution pas à pas du code d'origine seul depuis l'état d'avant
+                        let (mut c2, mut b2) = (cs.clone(), bs.clone());
+                        let sp = c2.a[7];
+                        c2.pc = entree;
+                        c2.a[7] = sp.wrapping_sub(4);
+                        ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
+                        for _ in 0..400 {
+                            if c2.pc == 0xfffe {
+                                break;
+                            }
+                            let ins = m68k::decode(&mut b2, c2.pc);
+                            println!("    {:06x} {:?}", c2.pc, ins.op);
+                            c2.step(&mut b2);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut total = 0;
+    for (name, st) in ddsom_game::report() {
+        total += st.mismatches;
+        println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
+            st.first.map(|f| format!(" — {f}")).unwrap_or_default());
+    }
+    // calibrage des durées estimées des gestionnaires : écart moyen original - native par appel
+    for (name, st) in ddsom_game::report() {
+        if st.calls > 0 && (name.starts_with("eshl_") || name.starts_with("set_") || name.starts_with("sobj_")) {
+            let ecart = (st.original_cycles as i64 - st.native_cycles as i64) as f64 / st.calls as f64;
+            println!("  durée {name}: original {:.0} cycles/appel, écart à corriger de la durée estimée {ecart:+.0}", st.original_cycles as f64 / st.calls as f64);
+        }
+    }
+    println!("{essais} appels de gestionnaires");
+    if let Ok(fichier) = std::env::var("DDSOM_COUVERTURE") {
+        let texte: Vec<String> = vus.iter().map(|a| format!("{a:06x}")).collect();
+        std::fs::write(fichier, texte.join("\n")).expect("écriture couverture");
+    }
+    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, groupe, roms, eeprom, scenario, chauffe, tours] = &a[..] else {
         eprintln!("usage : fuzz <groupe> <roms> <eeprom> <scénario> <images de chauffe> <tours>");
         std::process::exit(2);
     };
+    if groupe == "familles" {
+        familles(roms, eeprom, scenario, chauffe.parse().unwrap(), tours.parse().unwrap(), std::env::var("DDSOM_ENTREE").ok().and_then(|v| u32::from_str_radix(&v, 16).ok()));
+        return;
+    }
     let (alea_etat, plage): (fn(&mut Cpu, &mut Bus, &mut Alea), std::ops::Range<u32>) = match groupe.as_str() {
         "son" => (alea_son, 0x68c..0xee000),
         "u1" => (alea_u1, 0x19a80..0x1a000),
