@@ -5,90 +5,13 @@
 //!
 //! compare <roms> <eeprom> <scenario> <images>
 
+#[path = "support/mod.rs"]
+mod support;
+
 use cps2::sound::Event;
 use ddsom_sound::{Driver, Rom, Write};
-use std::collections::VecDeque;
 use std::path::Path;
-
-/// Écritures d'un côté, avec le numéro d'interruption où elles ont eu lieu.
-#[derive(Default)]
-struct Side {
-    /// Écritures de la boucle principale (QSound et rapport de pan en C005).
-    main: VecDeque<(usize, Write)>,
-    /// Acquittements de commande (C00F <- FF) de la routine d'interruption.
-    acks: VecDeque<(usize, Write)>,
-    total: usize,
-    qsound: usize,
-}
-
-/// Résultats de la comparaison.
-#[derive(Default)]
-struct Report {
-    real: Side,
-    drv: Side,
-    matched_main: usize,
-    matched_acks: usize,
-    first_divergence: Option<String>,
-    intervals: usize,
-    /// Interruptions où les écritures de la boucle principale coïncident exactement.
-    exact_intervals: usize,
-    /// Interruptions où le travail déborde sur la suivante dans l'un des deux côtés.
-    spill_intervals: usize,
-    /// Interruptions sans aucune écriture des deux côtés.
-    idle_intervals: usize,
-}
-
-fn is_ack(w: &Write) -> bool {
-    matches!(w, Write::Shared { offset: 0xf, value: 0xff })
-}
-
-impl Side {
-    fn push(&mut self, irq: usize, writes: Vec<Write>) {
-        self.total += writes.len();
-        for w in writes {
-            if matches!(w, Write::Qsound { .. }) {
-                self.qsound += 1;
-            }
-            let q = if is_ack(&w) { &mut self.acks } else { &mut self.main };
-            q.push_back((irq, w));
-        }
-    }
-}
-
-impl Report {
-    /// Compare les écritures en attente des deux côtés, dans l'ordre.
-    fn drain(&mut self) {
-        for acks in [false, true] {
-            loop {
-                let (r, d) = if acks {
-                    (self.real.acks.front().copied(), self.drv.acks.front().copied())
-                } else {
-                    (self.real.main.front().copied(), self.drv.main.front().copied())
-                };
-                let (Some((ri, r)), Some((di, d))) = (r, d) else { break };
-                if r != d && self.first_divergence.is_none() {
-                    let n = if acks { self.matched_acks } else { self.matched_main };
-                    self.first_divergence = Some(format!(
-                        "{} n°{n} : Z80 {r:?} (interruption {ri}) / pilote {d:?} (interruption {di})",
-                        if acks { "acquittement" } else { "écriture" }
-                    ));
-                }
-                if self.first_divergence.is_some() {
-                    return;
-                }
-                if acks {
-                    self.matched_acks += 1;
-                    self.real.acks.pop_front();
-                    self.drv.acks.pop_front();
-                } else {
-                    self.matched_main += 1;
-                    self.real.main.pop_front();
-                    self.drv.main.pop_front();
-                }
-            }
-        }
-    }
-}
+use support::Report;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -143,7 +66,7 @@ fn main() {
         report.exact_intervals, report.spill_intervals, report.idle_intervals
     );
     match &report.first_divergence {
-        None if report.real.total == report.drv.total => println!("RÉSULTAT : identité exacte des suites d'écritures"),
+        None if report.identical() => println!("RÉSULTAT : identité exacte des suites d'écritures"),
         None => println!("RÉSULTAT : préfixe identique, longueurs différentes"),
         Some(d) => println!("RÉSULTAT : première divergence : {d}"),
     }
@@ -182,17 +105,5 @@ fn run_interval(
     } else if irq > 0 {
         driver.interrupt(shared, &mut drv);
     }
-    let main = |v: &[Write]| v.iter().filter(|w| !is_ack(w)).copied().collect::<Vec<_>>();
-    report.intervals += 1;
-    if real.is_empty() && drv.is_empty() {
-        report.idle_intervals += 1;
-    } else if main(&real) == main(&drv) {
-        report.exact_intervals += 1;
-    }
-    report.real.push(irq, real);
-    report.drv.push(irq, drv);
-    if report.real.main.len() != report.drv.main.len() {
-        report.spill_intervals += 1;
-    }
-    report.drain();
+    report.add_interval(irq, real, drv);
 }

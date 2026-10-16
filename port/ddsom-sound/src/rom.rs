@@ -12,6 +12,7 @@ use std::path::Path;
 /// Taille de la région audiocpu de MAME.
 const REGION_SIZE: usize = 0x50000;
 
+#[derive(Clone)]
 pub struct Rom {
     region: Vec<u8>,
 }
@@ -32,6 +33,11 @@ impl Rom {
     /// Construit la ROM depuis une région audiocpu déjà assemblée.
     pub fn from_region(region: Vec<u8>) -> Self {
         Rom { region }
+    }
+
+    /// Région audiocpu complète (outils de test : Z80 de référence).
+    pub fn region(&self) -> &[u8] {
+        &self.region
     }
 
     /// Octet à l'adresse linéaire `p` (0xFF hors ROM, comme le bus ouvert du Z80).

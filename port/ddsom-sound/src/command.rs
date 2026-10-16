@@ -127,6 +127,8 @@ impl Driver {
         v.fresh = 0xff;
         v.priority = priority;
         v.continuous = flags & 0x80;
+        // Une fois la voie acceptée, le Z80 ne garde que la priorité (sans le bit « continue »).
+        self.priority = priority;
         self.setup_pan(&mut v, cmd);
         self.sfx[slot] = v;
     }

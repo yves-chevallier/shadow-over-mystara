@@ -354,6 +354,9 @@ impl Driver {
                 self.update_sequenced(&mut m);
             }
             self.music[usize::from(ch)] = m;
+            if self.hung {
+                return;
+            }
         }
         self.update_master_fade();
         self.update_music_ramp();

@@ -116,6 +116,7 @@ dependencies = [
  "cps2",
  "ddsom-game",
  "ddsom-rc",
+ "z80",
 ]
 
 [[package]]

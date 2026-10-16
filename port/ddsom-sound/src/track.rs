@@ -34,6 +34,9 @@ mod op {
     pub const SET_INSTRUMENT_BANK: u8 = 31;
 }
 
+/// Nombre d'instructions de piste consécutives au-delà duquel on considère le séquenceur bloqué.
+const MAX_INSTRUCTIONS: u32 = 100_000;
+
 impl Driver {
     // -------------------------------------------------------- notes simples
 
@@ -211,7 +214,8 @@ impl Driver {
     /// Exécute les instructions jusqu'à la prochaine note (renvoyée), ou la fin de la piste.
     fn run_instructions(&mut self, v: &mut Voice, first: u8) -> Option<u8> {
         let mut instr = first;
-        loop {
+        // Garde-fou : le pilote d'origine ne sort jamais d'une boucle d'instructions sans note.
+        for _ in 0..MAX_INSTRUCTIONS {
             let rom = &self.rom;
             match instr {
                 op::FLIP_TRIPLET => v.flags ^= 0x20,
@@ -305,6 +309,8 @@ impl Driver {
                 return Some(instr);
             }
         }
+        self.hung = true;
+        None
     }
 
     /// Saut relatif : le déplacement (mot signé grand-boutiste) part de l'adresse qui le suit.

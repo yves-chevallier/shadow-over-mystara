@@ -13,6 +13,7 @@
 
 mod adpcm;
 mod command;
+pub mod image;
 mod math;
 mod pan;
 mod rom;
@@ -154,6 +155,9 @@ pub struct Driver {
     /// Voie en cours de traitement : indice, et `true` si c'est une voie de musique.
     cur: u8,
     is_music: bool,
+    /// Le pilote d'origine boucle indéfiniment sur une piste sans note qui se rappelle elle-même :
+    /// le séquenceur est alors gelé (les interruptions continuent de s'accumuler).
+    hung: bool,
     /// Une voie d'effet occupe le canal en cours : la voie de musique ne touche pas à la QSound.
     sfx_override: bool,
     /// Voies d'effets sonores puis voies de musique, une par canal QSound.
@@ -183,6 +187,7 @@ impl Driver {
             cur: 0,
             is_music: false,
             sfx_override: false,
+            hung: false,
             sfx: Default::default(),
             music: Default::default(),
             adpcm: Default::default(),
@@ -246,7 +251,7 @@ impl Driver {
         if self.boot == Boot::WaitHandshake && self.shared[shared::HANDSHAKE] == 0xff {
             self.boot = Boot::Running;
         }
-        if self.boot != Boot::Running {
+        if self.boot != Boot::Running || self.hung {
             return;
         }
         // Une passe : une commande, un tic ADPCM, un tic du séquenceur, dans cet ordre.
@@ -262,6 +267,9 @@ impl Driver {
             if self.pending.ticks != 0 {
                 self.pending.ticks -= 1;
                 self.sequencer_tick();
+            }
+            if self.hung {
+                return;
             }
         }
     }
