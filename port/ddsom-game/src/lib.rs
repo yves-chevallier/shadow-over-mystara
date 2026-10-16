@@ -8,14 +8,24 @@
 //! Mode contrôle (`set_check(true)`) : chaque appel exécute aussi la routine d'origine sur une copie
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
+pub mod chemin;
+pub mod config;
+pub mod credits;
+pub mod eeprom;
+pub mod evenements;
 pub mod inputs;
 pub mod mem;
 pub mod objects;
+pub mod ops;
 pub mod palette;
+pub mod popups;
+pub mod rng;
 pub mod scenario;
+pub mod sound;
 pub mod sprites;
 pub mod text;
 pub mod timing;
+pub mod vue;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -71,15 +81,71 @@ pub const NATIVES: &[Native] = &[
     palette::NO_BRIGHTNESS,
     palette::OR_BRIGHTNESS,
     palette::SET_BRIGHTNESS,
+    sound::ENFILER_SI_SON,
+    sound::ENFILER_DIRECT,
+    sound::ENVOYER_AU_Z80,
+    rng::SEED,
+    rng::NEXT,
+    evenements::VIDER_POINTS,
+    evenements::VIDER_COMPTEUR,
+    evenements::VIDER_POPUPS,
+    evenements::EFFACER_POPUP,
+    evenements::ENFILER_POINTS,
+    evenements::ENFILER_COMPTEUR,
+    evenements::EVENEMENT_OBJET,
+    evenements::CREER_POPUP,
+    evenements::CREDITER_POINTS,
+    evenements::CREDITER_COMPTEUR,
+    credits::LIRE_MONNAYEURS,
+    credits::LIRE_DEPARTS,
+    credits::VERROUILLER_COMPTEURS,
+    eeprom::LIRE,
+    eeprom::ECRIRE,
+    eeprom::ECRIRE_VERIFIER,
+    eeprom::LIRE_VERIFIER,
+    eeprom::COMPTER_PIECES,
+    eeprom::COMPTER_DEPARTS,
+    eeprom::COMPTER_CONTINUES,
+    eeprom::COMPTER_PARTIES,
+    eeprom::VBLANK_COMPTA,
+    config::VARIANTE,
+    config::DEFAUTS,
+    config::VALIDER,
+    config::VARIABLES,
+    popups::ANIMER,
+    credits::ECRIRE_CHIFFRE,
+    eeprom::COMPLET_PIECES_NATIF,
+    eeprom::COMPLET_DEPARTS_NATIF,
 ];
 
-/// Routines natives indexées par adresse d'entrée (NATIVES et modèle d'objets).
+/// Index des routines natives par adresse d'entrée : `NATIVES`, le modèle d'objets et les wrappers
+/// son (décrits par une table). Un tamis binaire évite la recherche pour la grande majorité des blocs.
+struct Index {
+    tamis: Vec<u64>,
+    par_adresse: HashMap<u32, &'static Native>,
+}
+
 fn lookup(pc: u32) -> Option<&'static Native> {
-    static INDEX: OnceLock<HashMap<u32, &'static Native>> = OnceLock::new();
-    INDEX
-        .get_or_init(|| NATIVES.iter().chain(objects::NATIVES).map(|n| (n.entry, n)).collect())
-        .get(&pc)
-        .copied()
+    static INDEX: OnceLock<Index> = OnceLock::new();
+    let index = INDEX.get_or_init(|| {
+        let par_adresse: HashMap<_, _> =
+            all_natives().map(|n| (n.entry, n)).collect();
+        let mut tamis = vec![0u64; 0x100000 / 2 / 64];
+        for &a in par_adresse.keys() {
+            tamis[(a >> 7) as usize] |= 1 << (a >> 1 & 63);
+        }
+        Index { tamis, par_adresse }
+    });
+    let case = index.tamis.get((pc >> 7) as usize)?;
+    if case >> (pc >> 1 & 63) & 1 == 0 {
+        return None;
+    }
+    index.par_adresse.get(&pc).copied()
+}
+
+/// Toutes les routines natives, wrappers son compris (outils de couverture).
+pub fn all_natives() -> impl Iterator<Item = &'static Native> {
+    NATIVES.iter().chain(objects::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -141,6 +207,8 @@ pub struct Stats {
     pub calls: u64,
     pub mismatches: u64,
     pub first: Option<String>,
+    /// Dernier écart (outils de diagnostic).
+    pub last: Option<String>,
 }
 
 static STATS: Mutex<BTreeMap<&'static str, Stats>> = Mutex::new(BTreeMap::new());
@@ -205,8 +273,20 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
         if s.first.is_none() {
             s.first = Some(diffs.join(", "));
         }
+        s.last = Some(diffs.join(", "));
         // on garde l'état d'origine pour ne pas propager l'écart
         *c = c2;
         *b = b2;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn entrees_uniques() {
+        let mut vues = std::collections::HashSet::new();
+        for n in super::all_natives() {
+            assert!(vues.insert(n.entry), "{:06x} ({}) remplacée deux fois", n.entry, n.name);
+        }
     }
 }
