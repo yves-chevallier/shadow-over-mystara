@@ -3,10 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 frames=${1:-30000}
+# Depuis un worktree : DDSOM_ROMS et DDSOM_EEPROM pointent vers le dépôt principal.
+roms=${DDSOM_ROMS:-rom}
+eeprom=${DDSOM_EEPROM:-testdata/eeprom_ddsom.bin}
 cargo build --release -q --manifest-path port/Cargo.toml -p ddsom-game --examples
 out=$(mktemp -d)
 for s in scenarios/*.txt; do
-	./port/target/release/examples/validate rom testdata/eeprom_ddsom.bin "$s" "$frames" > "$out/$(basename "$s" .txt).log" 2>&1 &
+	./port/target/release/examples/validate "$roms" "$eeprom" "$s" "$frames" > "$out/$(basename "$s" .txt).log" 2>&1 &
 done
 wait
 status=0

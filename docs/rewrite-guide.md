@@ -58,6 +58,12 @@ Règles :
   à la frontière (`run`), et disparaîtra quand l'appelant sera lui-même réécrit.
 - Documenter les structures découvertes dans `docs/` (format, unités, signification des drapeaux).
 
+## Travailler dans un worktree
+
+Les ROMs et `testdata/` ne sont pas versionnés : depuis un worktree, exporter
+`DDSOM_ROMS=/home/ycr/som/rom DDSOM_EEPROM=/home/ycr/som/testdata/eeprom_ddsom.bin` (compilation de
+`ddsom-rc` et `tools/validate_all.sh`), et passer ces chemins à `validate`.
+
 ## Validation (obligatoire avant tout commit)
 
 ```
