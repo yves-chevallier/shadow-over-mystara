@@ -27,3 +27,6 @@ decomp/
 
 # Projet Ghidra du Z80 (dérivé des ROMs)
 ghidra_z80/
+
+# Espaces de travail des agents
+.claude/
