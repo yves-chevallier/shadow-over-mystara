@@ -1,0 +1,8 @@
+[package]
+name = "vrender"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cps2-gfx = { path = "../cps2-gfx" }
+png = "0.17"

@@ -1,0 +1,42 @@
+# Symboles connus, appliqués à chaque build par ghidra_scripts/ApplySymbols.java.
+# Format : adresse  nom  [commentaire libre]
+# Les adresses ROM nomment des fonctions (créées si absentes) ; les adresses RAM/E-S des labels.
+
+# --- Démarrage / système
+000350 reset                 Init CPS, test RAM sans pile, attente Z80
+000492 boot_init             Init RAM de travail, création de la tâche 0 (0x11b16)
+000574 irq2_vblank
+000928 task_scheduler        Boucle de l'ordonnanceur coopératif (16 tâches)
+0009b6 task_create           d0 = slot, a0 = point d'entrée ; via trap #0
+00080c read_inputs           FF8000-5 courant, FF8006-B précédent, FF800C-F fronts
+001912 ram_test_block        Appel sans pile (retour par jmp (a6))
+011b16 task0_main            Première tâche créée au boot
+
+# --- Joueurs
+002aec copy_inputs_to_players  Copie entrées masquées par (0x43,A5) vers +0x6c/+0x6d/+0x6e de chaque joueur
+002bfe get_player_input      a0 = objet, (2,a0) = n° joueur ; d0 = maintenu, d1 = fronts
+01d584 charsel_cursor        Curseur de l'écran de sélection des personnages
+039260 player_walk_speed     Choisit la table de vitesses puis vx/vy = table[(+0x6c)&0xF]
+
+# --- Physique
+001d62 obj_move_xy           vy+=ay ; y+=vy<<8 ; vx+=ax ; x+=vx<<8 (8.8 -> 16.16)
+001d90 obj_move_xyz          Variante avec troisième axe
+
+# --- Données ROM (en clair, hors zone chiffrée)
+10493e tbl_walk_slow_a       Vitesses (vx,vy) par direction, 8 persos ; 1.0 px/f
+104ffe tbl_walk_slow_b       1.0 px/f
+1045de tbl_walk_normal       2.0 px/f (mesuré en jeu)
+104c9e tbl_walk_fast         3.0 px/f
+104aee tbl_run               4.5 px/f
+104e4e tbl_walk_crawl        0.2 px/f
+
+# --- RAM
+ff8000 in_cur                P1,P2,P3,P4,IN2 lo,hi (actif à 1)
+ff8006 in_prev
+ff800c in_new                fronts montants P1..P4
+ff8043 in_mask               masque d'entrées des joueurs (0x3f en jeu, 0 en cinématique)
+ff0064 task_table            16 x 16 octets
+ff85de player1               enregistrements joueurs de 0x200 octets
+ff87de player2
+ff89de player3
+ff8bde player4

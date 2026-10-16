@@ -1,0 +1,17 @@
+# ROMs et données dérivées des ROMs (protégées par le droit d'auteur, à fournir soi-même)
+*.zip
+rom/
+prog_*.bin
+testdata/
+mame/snaps/
+
+# Générés par build.sh
+ghidra_proj/
+ghidra_run.log
+listing.txt
+
+# Sources MAME de référence (retéléchargeables, voir README)
+ref/
+
+# Rust
+target/
