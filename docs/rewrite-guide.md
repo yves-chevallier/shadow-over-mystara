@@ -62,8 +62,11 @@ Règles :
 
 ```
 cd port && cargo build --release -p ddsom-game --examples
-cd .. && ./port/target/release/examples/validate rom testdata/eeprom_ddsom.bin testdata/scenarios/bot30k.txt 30000
+cd .. && ./port/target/release/examples/validate rom testdata/eeprom_ddsom.bin scenarios/bot30k.txt 30000
 ```
+
+Pour tous les scénarios (`scenarios/`, générés par `tools/make_bot.py` : six personnages, deux
+joueurs) : `tools/validate_all.sh` (parallèle, ~4 minutes).
 
 Deux machines tournent en parallèle : l'une avec les routines natives en mode contrôle (chaque appel
 est aussi exécuté par l'original sur une copie et comparé), l'autre avec le code d'origine seul. Le
@@ -72,7 +75,7 @@ Outils de diagnostic (`port/ddsom-game/examples`) : `watch` (qui écrit telle ad
 `tasks` (table des tâches), `profile` (cycles par fonction).
 
 Une routine non appelée par le scénario n'est pas validée : le signaler (et si possible ajouter un
-scénario qui l'exerce dans `testdata/scenarios/`).
+scénario qui l'exerce dans `scenarios/`).
 
 Commits : un commit par sous-système validé, message en français décrivant ce qui est compris et
 réécrit, terminé par la ligne `Co-Authored-By` habituelle.
