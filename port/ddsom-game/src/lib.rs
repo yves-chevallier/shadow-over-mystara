@@ -10,16 +10,16 @@
 
 pub mod inputs;
 pub mod mem;
+pub mod objects;
 pub mod palette;
-pub mod physics;
 pub mod scenario;
 pub mod sprites;
 pub mod text;
 pub mod timing;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -57,8 +57,6 @@ pub mod regs {
 
 /// Toutes les routines natives.
 pub const NATIVES: &[Native] = &[
-    physics::OBJ_MOVE_XY,
-    physics::OBJ_MOVE_X,
     inputs::READ_INPUTS,
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
@@ -75,8 +73,13 @@ pub const NATIVES: &[Native] = &[
     palette::SET_BRIGHTNESS,
 ];
 
+/// Routines natives indexées par adresse d'entrée (NATIVES et modèle d'objets).
 fn lookup(pc: u32) -> Option<&'static Native> {
-    NATIVES.iter().find(|n| n.entry == pc)
+    static INDEX: OnceLock<HashMap<u32, &'static Native>> = OnceLock::new();
+    INDEX
+        .get_or_init(|| NATIVES.iter().chain(objects::NATIVES).map(|n| (n.entry, n)).collect())
+        .get(&pc)
+        .copied()
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
