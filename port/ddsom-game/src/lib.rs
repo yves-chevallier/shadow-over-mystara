@@ -13,6 +13,7 @@ pub mod mem;
 pub mod physics;
 pub mod scenario;
 pub mod sprites;
+pub mod text;
 pub mod timing;
 
 use std::collections::BTreeMap;
@@ -61,6 +62,12 @@ pub const NATIVES: &[Native] = &[
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
     sprites::BUILD_SPRITE_LIST,
+    text::PRINT,
+    text::PRINT_OVER,
+    text::PRINT_TALL,
+    text::PRINT_TALL_AT,
+    text::CLEAR_BLOCKS,
+    text::CLEAR_BOX,
 ];
 
 fn lookup(pc: u32) -> Option<&'static Native> {
