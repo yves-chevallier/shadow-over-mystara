@@ -15,13 +15,31 @@ use crate::math::*;
 use crate::pan::PanFade;
 use crate::{shared, Driver};
 
+/// Drapeaux d'une piste (`Voice::flags`).
+pub mod flag {
+    /// Index dans la table des octaves : bits 0-2 octave 0-7, bit 3 deux octaves de plus.
+    pub const OCTAVE_MASK: u8 = 0x0f;
+    pub const OCTAVE_INDEX: u8 = 0x07;
+    pub const OCTAVE_UP: u8 = 0x08;
+    /// La prochaine note est pointée (durée x 1,5) ; effacé après usage.
+    pub const DOTTED: u8 = 0x10;
+    /// Triolet (durée x 2/3).
+    pub const TRIPLET: u8 = 0x20;
+    /// La note qui vient est liée à la suivante.
+    pub const TIE: u8 = 0x40;
+    /// La note qui vient suit une note liée : elle se contente de changer la hauteur.
+    pub const SLUR: u8 = 0x80;
+    /// Bits conservés par l'instruction « mode » : octave bas, pointé et coulé.
+    pub const KEEP_ON_MODE: u8 = 0x97;
+}
+
 #[derive(Clone, Default)]
 pub struct Voice {
     /// 0 libre, 1 note simple, 0xFF piste séquencée.
     pub state: u8,
     /// Adresse de lecture dans la piste.
     pub seq: u32,
-    /// Drapeaux de piste : bits 0-2 octave, 3 et 7 : voir `play_note`, 4-5 mode de durée.
+    /// Drapeaux de piste : voir [`flag`].
     pub flags: u8,
     /// Temps restant avant le prochain évènement (virgule fixe 8.8).
     pub wait: u16,
@@ -78,7 +96,7 @@ pub struct Voice {
     pub continuous: u8,
     /// Panoramique et son évolution.
     pub pan: PanFade,
-    /// Délai avant que la voie ne démarre (jamais armé par le programme d'origine).
+    /// Tics à attendre avant de démarrer (copie sur le canal voisin, pan de type 7).
     pub delay: u8,
 }
 

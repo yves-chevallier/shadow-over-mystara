@@ -25,6 +25,14 @@ pub use rom::Rom;
 use adpcm::AdpcmChannel;
 use voice::Voice;
 
+/// Durée de l'interruption à 250 Hz, en cycles du Z80 (8 MHz).
+pub const IRQ_PERIOD_CYCLES: u64 = 32_000;
+
+/// Interruptions de 250 Hz que le Z80 d'origine perd au démarrage : il masque les interruptions
+/// pendant l'initialisation de la QSound et la remise à zéro de sa RAM (environ 128 000 cycles,
+/// mesurés dans la machine complète), et n'en prend qu'une seule en les réactivant.
+const INIT_MASKED_PERIODS: u32 = 3;
+
 /// Taille de la RAM partagée avec le 68000 (côté Z80 : C000-CFFF).
 pub const SHARED_SIZE: usize = 0x1000;
 
@@ -56,7 +64,7 @@ pub enum Write {
 /// Où en est le démarrage du pilote.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Boot {
-    /// Attente du premier « tic » (4 interruptions), réglage de la banque.
+    /// Attente du premier « tic » (4 interruptions).
     WaitFirstTick,
     /// Attente du deuxième tic, puis initialisation de la QSound.
     WaitSecondTick,
@@ -78,6 +86,7 @@ struct Pending {
 }
 
 /// Réglages globaux (musique et effets).
+#[derive(Default)]
 pub(crate) struct Globals {
     /// Volume de base des effets (table indexée par l'en-tête des musiques).
     pub sfx_volume: u16,
@@ -104,28 +113,6 @@ pub(crate) struct Globals {
     pub ramp_step: u16,
     pub ramp_level: u16,
     pub ramp_target: u16,
-}
-
-impl Default for Globals {
-    fn default() -> Self {
-        Globals {
-            sfx_volume: 0,
-            music_factor: 0,
-            music_volume: 0,
-            music_step: 0,
-            tempo_adjust: 0,
-            music_transpose: 0,
-            pitch_bend: 0,
-            step: 0,
-            fade_dir: 0,
-            fade_step: 0,
-            fade_level: 0,
-            ramp_dir: 0,
-            ramp_step: 0,
-            ramp_level: 0,
-            ramp_target: 0,
-        }
-    }
 }
 
 /// Le pilote son.
@@ -158,6 +145,8 @@ pub struct Driver {
     /// Le pilote d'origine boucle indéfiniment sur une piste sans note qui se rappelle elle-même :
     /// le séquenceur est alors gelé (les interruptions continuent de s'accumuler).
     hung: bool,
+    /// Périodes de 250 Hz à ignorer encore (initialisation en cours dans le Z80 d'origine).
+    masked_periods: u32,
     /// Une voie d'effet occupe le canal en cours : la voie de musique ne touche pas à la QSound.
     sfx_override: bool,
     /// Voies d'effets sonores puis voies de musique, une par canal QSound.
@@ -188,6 +177,7 @@ impl Driver {
             is_music: false,
             sfx_override: false,
             hung: false,
+            masked_periods: 0,
             sfx: Default::default(),
             music: Default::default(),
             adpcm: Default::default(),
@@ -203,13 +193,24 @@ impl Driver {
         self.finish(shared, out);
     }
 
-    /// Une interruption à 250 Hz : ce que fait la routine d'interruption, puis ce que fait la
-    /// boucle principale du Z80 avant l'interruption suivante.
+    /// Une interruption à 250 Hz prise par le Z80 : ce que fait la routine d'interruption, puis ce
+    /// que fait la boucle principale avant l'interruption suivante. Les écritures dans la QSound
+    /// sont rendues dans `out`, celles dans la RAM partagée sont aussi faites dans `shared`.
     pub fn interrupt(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
         self.shared.copy_from_slice(shared);
         self.irq_handler();
         self.main_loop();
         self.finish(shared, out);
+    }
+
+    /// Une période de 250 Hz s'est écoulée (toutes les [`IRQ_PERIOD_CYCLES`] du Z80). Équivaut à
+    /// [`Driver::interrupt`], sauf pendant l'initialisation où le Z80 d'origine ne répond pas.
+    pub fn irq_request(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
+        if self.masked_periods > 0 {
+            self.masked_periods -= 1;
+        } else {
+            self.interrupt(shared, out);
+        }
     }
 
     /// Rend la RAM partagée à l'appelant et lui remet les écritures produites.
@@ -291,6 +292,7 @@ impl Driver {
         for ch in 0..3 {
             self.silence_adpcm(ch);
         }
+        self.masked_periods = INIT_MASKED_PERIODS;
         // La RAM du Z80 est remise à zéro (compteurs d'interruption compris).
         self.irq_count = 0;
         self.pending = Pending::default();
@@ -309,7 +311,7 @@ impl Driver {
         self.sfx_override = false;
         // En-tête des musiques : adresse de l'en-tête, puis [nombre de musiques (2 octets,
         // grand-boutiste), index du facteur de musique, index du volume des effets].
-        let header = u32::from(self.rom.word(0x39e1));
+        let header = u32::from(self.rom.word(math::HEADER_PTR));
         self.song_count = u16::from(self.rom.byte(header)) << 8 | u16::from(self.rom.byte(header + 1));
         self.g.music_factor = self.rom.table(math::TABLE_LEVELS, self.rom.byte(header + 2));
         self.g.sfx_volume = self.rom.table(math::TABLE_LEVELS, self.rom.byte(header + 3));

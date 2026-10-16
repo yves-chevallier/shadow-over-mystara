@@ -1,6 +1,6 @@
 //! Exploration du pilote Z80 : couverture des instructions exécutées et journal d'événements.
 //!
-//! explore <roms> <eeprom> <scenario> <images> <sortie>
+//! son_explore <roms> <eeprom> <scenario> <images> <sortie>
 //! Produit <sortie>.cov (octets 0/1 par adresse Z80 0-0x7FFF, un octet = instruction exécutée)
 //! et <sortie>.log (texte : événements du Z80 regroupés par interruption).
 
@@ -13,7 +13,7 @@ use std::rc::Rc;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames, out] = &a[..] else {
-        eprintln!("usage : explore <roms> <eeprom> <scenario> <images> <sortie>");
+        eprintln!("usage : son_explore <roms> <eeprom> <scenario> <images> <sortie>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

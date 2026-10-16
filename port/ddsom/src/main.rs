@@ -31,6 +31,10 @@ fn main() {
     if std::env::var_os("DDSOM_INTERP").is_none() {
         ddsom_rc::install(&mut m);
     }
+    // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1
+    if std::env::var_os("DDSOM_SON_RUST").is_some() {
+        m.sound.use_rust_driver();
+    }
 
     let mut win = Window::new(
         "Dungeons & Dragons: Shadow over Mystara (port Rust)",

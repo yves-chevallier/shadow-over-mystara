@@ -47,6 +47,7 @@ name = "cps2"
 version = "0.1.0"
 dependencies = [
  "cps2-gfx",
+ "ddsom-sound",
  "m68k",
  "png",
  "qsound",

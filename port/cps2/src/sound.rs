@@ -2,6 +2,11 @@
 //!
 //! Z80 : 0000-7FFF ROM, 8000-BFFF banque de ROM, C000-CFFF RAM partagée avec le 68000,
 //! D000-D002 écritures QSound, D003 banque, D007 état QSound, F000-FFFF RAM.
+//!
+//! Option : le programme du Z80 peut être remplacé par le pilote Rust de la crate `ddsom-sound`
+//! (`Sound::use_rust_driver`). Il reçoit une interruption par période de 250 Hz, lit et écrit la
+//! RAM partagée et écrit dans la QSound exactement comme le Z80, sans que le 68000 y voie de
+//! différence.
 
 use qsound::QSound;
 
@@ -38,6 +43,10 @@ pub struct Sound {
     /// Le 68000 maintient le Z80 en reset (bit 3 de 804041 à 0).
     pub in_reset: bool,
     pub next_irq: u64,
+    /// Pilote Rust qui remplace le programme du Z80, si activé.
+    pub driver: Option<ddsom_sound::Driver>,
+    /// Le pilote doit (re)démarrer : activation, ou reset du Z80 relâché par le 68000.
+    driver_restart: bool,
     /// Échantillons stéréo produits (à vider par l'application).
     pub audio: Vec<[i16; 2]>,
     sample_acc: f64,
@@ -64,6 +73,8 @@ impl Sound {
             qsound,
             in_reset: false,
             next_irq: Z80_IRQ_PERIOD,
+            driver: None,
+            driver_restart: false,
             audio: Vec::new(),
             sample_acc: 0.0,
             irq_acked: false,
@@ -74,7 +85,46 @@ impl Sound {
         if asserted && !self.in_reset {
             self.z80.reset();
         }
+        if !asserted && self.in_reset {
+            self.driver_restart = true;
+        }
         self.in_reset = asserted;
+    }
+
+    /// Remplace le programme du Z80 par le pilote Rust. À appeler avant la première image.
+    pub fn use_rust_driver(&mut self) {
+        self.driver = Some(ddsom_sound::Driver::new(ddsom_sound::Rom::from_region(self.rom.clone())));
+        self.driver_restart = true;
+    }
+
+    /// Une période de 250 Hz du pilote Rust : le temps passe, le pilote répond aux interruptions.
+    fn run_driver(&mut self, qram: &mut [u8], target: u64) {
+        let Some(driver) = self.driver.as_mut() else { return };
+        let mut writes = Vec::new();
+        if self.driver_restart && !self.in_reset {
+            self.driver_restart = false;
+            driver.reset(qram, &mut writes);
+        }
+        self.z80.cycles = self.z80.cycles.max(target);
+        // Une interruption qui tombe exactement sur la fin de la tranche est prise par le Z80 au
+        // début de la suivante, c'est-à-dire après les écritures du 68000 sur la ligne suivante.
+        while self.next_irq < target {
+            self.next_irq += Z80_IRQ_PERIOD;
+            if !self.in_reset {
+                if let (Some(t), 0x88) = (self.trace.as_mut(), qram[0xffd]) {
+                    t.push(Event::Irq);
+                    t.push(Event::Read(0xf, qram[0xf]));
+                }
+                driver.irq_request(qram, &mut writes);
+            }
+        }
+        for w in writes {
+            if let ddsom_sound::Write::Qsound { reg, data } = w {
+                self.qsound.write(0, (data >> 8) as u8);
+                self.qsound.write(1, data as u8);
+                self.qsound.write(2, reg);
+            }
+        }
     }
 
     /// Exécute le Z80 jusqu'au cycle absolu `target`, puis produit les échantillons QSound
@@ -89,9 +139,12 @@ impl Sound {
                 self.next_irq += Z80_IRQ_PERIOD;
             }
         }
+        if self.driver.is_some() {
+            self.run_driver(qram, target);
+        }
         // le Z80 est sorti de Sound le temps de l'exécution (le bus emprunte Sound)
         let mut cpu = std::mem::take(&mut self.z80);
-        while cpu.cycles < target {
+        while self.driver.is_none() && cpu.cycles < target {
             if cpu.cycles >= self.next_irq {
                 cpu.irq_line = true;
                 self.next_irq += Z80_IRQ_PERIOD;

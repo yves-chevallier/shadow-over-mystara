@@ -14,12 +14,12 @@ pub const TABLE_LFO_RATE: u32 = 0x36e1;
 pub const TABLE_VIBRATO: u32 = 0x37e1;
 /// Table de mots : profondeurs de trémolo.
 pub const TABLE_TREMOLO: u32 = 0x38e1;
-/// Adresse de l'en-tête des musiques.
+/// Adresse (mot) de l'en-tête des musiques.
 pub const HEADER_PTR: u32 = 0x39e1;
-/// Adresse de la table des échantillons (décalée d'un octet : on saute la note de référence
-/// de l'entrée précédente, voir `start_sample`).
+/// Adresse (mot) de la table des échantillons : fiches de 8 octets [banque, début, début de
+/// boucle, fin, note de référence].
 pub const SAMPLE_PTR: u32 = 0x39e3;
-/// Adresse de la table des bancs d'instruments.
+/// Adresse (mot) de la table des bancs d'instruments.
 pub const INSTRUMENT_BANKS_PTR: u32 = 0x39e5;
 
 /// Octave de chaque demi-ton (0-107), puis début d'octave en demi-tons.
@@ -43,11 +43,6 @@ pub fn hi16(a: u16, b: u16) -> u16 {
 /// Octet étendu en mot signé.
 pub fn sext(b: u8) -> u16 {
     i16::from(b as i8) as u16
-}
-
-/// Addition 16 bits avec retenue de sortie.
-pub fn add_carry(a: u16, b: u16) -> (u16, bool) {
-    a.overflowing_add(b)
 }
 
 /// Borne un pan à 0x20.

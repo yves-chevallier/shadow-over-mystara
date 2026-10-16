@@ -1,57 +1,45 @@
-//! Validation différentielle sans le jeu : le Z80 d'origine seul et le pilote Rust reçoivent les
-//! mêmes commandes synthétiques dans la RAM partagée, et on compare leurs écritures. Cela exerce
-//! toute la ROM (toutes les musiques et tous les effets, toutes les commandes système) et pas
-//! seulement ce que le scénario du jeu envoie.
-//!
-//! fuzz <roms> songs <premier> <dernier> <interruptions>   un essai par numéro de musique/effet
-//! fuzz <roms> random <graine> <essais> <interruptions>    suites aléatoires de commandes
-//! fuzz <roms> synth <graine> <essais> <interruptions>    musiques et effets synthétiques (ajoutés à la ROM)
-//! fuzz <roms> one <numéro> <graine> <interruptions> [de a]  un essai, avec détail des écritures
+//! Essais de validation : commandes du 68000 simulées, exécution du Z80 d'origine et du pilote Rust
+//! côte à côte, comparaison des écritures et de l'état interne.
 
-#[path = "support/mod.rs"]
-mod support;
-
+use super::{reference::RefZ80, Report};
 use ddsom_sound::{Driver, Rom, Write, SHARED_SIZE};
-use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use support::{reference::RefZ80, Report};
 
 /// Générateur pseudo-aléatoire (xorshift64*).
-struct Rng(u64);
+pub struct Rng(pub u64);
 
 impl Rng {
-    fn next(&mut self) -> u64 {
+    pub fn next(&mut self) -> u64 {
         self.0 ^= self.0 >> 12;
         self.0 ^= self.0 << 25;
         self.0 ^= self.0 >> 27;
         self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
     }
-    fn below(&mut self, n: u64) -> u64 {
+    pub fn below(&mut self, n: u64) -> u64 {
         self.next() % n
     }
-    fn byte(&mut self) -> u8 {
+    pub fn byte(&mut self) -> u8 {
         (self.next() >> 24) as u8
     }
 }
 
 /// Nombre d'interruptions consécutives pendant lesquelles le Z80 peut rester occupé avant qu'on
 /// abandonne l'essai (un tic normal n'en demande que deux ou trois).
-const MAX_BUSY: usize = 10;
+pub const MAX_BUSY: usize = 10;
 
 /// Ce que fait le 68000 pendant un essai.
-struct Session {
+pub struct Session {
     /// Modifications de la ROM : (offset dans la région audiocpu, octets). Elles ajoutent des
     /// musiques et des effets synthétiques que le jeu n'utilise pas.
-    patches: Vec<(usize, Vec<u8>)>,
+    pub patches: Vec<(usize, Vec<u8>)>,
     /// Réglage stéréo (0 = mono).
-    stereo: u8,
+    pub stereo: u8,
     /// Commandes (interruption à partir de laquelle on tente de les poster).
-    commands: Vec<(usize, [u8; 16])>,
-    irqs: usize,
+    pub commands: Vec<(usize, [u8; 16])>,
+    pub irqs: usize,
 }
 
 /// Commande « musique ou effet » avec des paramètres de pan plausibles.
-fn play_command(rng: &mut Rng, number: u16) -> [u8; 16] {
+pub fn play_command(rng: &mut Rng, number: u16) -> [u8; 16] {
     let mut c = [0u8; 16];
     c[0] = (number >> 8) as u8;
     c[1] = number as u8;
@@ -70,7 +58,7 @@ fn play_command(rng: &mut Rng, number: u16) -> [u8; 16] {
 }
 
 /// Commande système avec des paramètres plausibles.
-fn system_command(rng: &mut Rng) -> [u8; 16] {
+pub fn system_command(rng: &mut Rng) -> [u8; 16] {
     let mut c = [0u8; 16];
     c[0] = 0xff;
     c[1] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13][rng.below(12) as usize];
@@ -84,12 +72,12 @@ fn system_command(rng: &mut Rng) -> [u8; 16] {
     c
 }
 
-fn song_count(rom: &Rom) -> u16 {
+pub fn song_count(rom: &Rom) -> u16 {
     let header = u32::from(rom.word(0x39e1));
     u16::from(rom.byte(header)) << 8 | u16::from(rom.byte(header + 1))
 }
 
-fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverage: Option<&mut [bool]>) -> Report {
+pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverage: Option<&mut [bool]>) -> Report {
     let patched;
     let rom = if s.patches.is_empty() {
         rom
@@ -183,7 +171,7 @@ fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverage: O
 
 /// Octets de la RAM du Z80 que le pilote ne modélise pas (banque courante, variables
 /// temporaires, pile, octets inutilisés des voies).
-fn ignored(i: usize) -> bool {
+pub fn ignored(i: usize) -> bool {
     let a = 0xf000 + i;
     matches!(a, 0xf005 | 0xf006 | 0xf007 | 0xf00d | 0xf01a) || (0xf050..0xf200).contains(&a) || (0xff00..0x10000).contains(&a)
         || (0xf200..0xfc00).contains(&a) && matches!((a - 0xf200) % 0x50, 0x21..=0x24 | 0x32 | 0x45)
@@ -191,7 +179,7 @@ fn ignored(i: usize) -> bool {
 
 /// Octets différents entre la RAM du Z80 et l'image du pilote. Une voie libre n'a de sens que par
 /// son état et sa priorité : le reste est périmé et n'est pas comparé.
-fn differences(z: &[u8], r: &[u8]) -> Vec<usize> {
+pub fn differences(z: &[u8], r: &[u8]) -> Vec<usize> {
     (0..0x1000)
         .filter(|&i| {
             if z[i] == r[i] || ignored(i) {
@@ -216,7 +204,7 @@ fn differences(z: &[u8], r: &[u8]) -> Vec<usize> {
 }
 
 /// Nom d'un octet de la RAM du Z80.
-fn describe(i: usize) -> String {
+pub fn describe(i: usize) -> String {
     let a = 0xf000 + i;
     match a {
         0xf200..=0xf6ff => format!("voie d'effet {}, +{:#04x}", (a - 0xf200) / 0x50, (a - 0xf200) % 0x50),
@@ -226,62 +214,14 @@ fn describe(i: usize) -> String {
     }
 }
 
-fn print_writes(who: &str, w: &[Write]) {
+pub fn print_writes(who: &str, w: &[Write]) {
     for x in w {
         println!("{who} {x:?}");
     }
 }
 
-fn main() {
-    let a: Vec<String> = std::env::args().collect();
-    if a.len() < 4 {
-        eprintln!("usage : fuzz <roms> songs|random|one ... (voir l'en-tête du fichier)");
-        std::process::exit(2);
-    }
-    let rom = Rom::load(Path::new(&a[1])).expect("rom son");
-    let num = |i: usize| a[i].parse::<usize>().expect("nombre");
-    match a[2].as_str() {
-        "songs" => {
-            let (first, last, irqs) = (num(3), num(4), num(5));
-            run_many(&rom, first..=last, |n| song_session(&rom, n, irqs));
-        }
-        "random" => {
-            let (seed, count, irqs) = (num(3), num(4), num(5));
-            run_many(&rom, 0..=count.saturating_sub(1), |i| random_session(&rom, seed, i, irqs));
-        }
-        "synth" => {
-            let (seed, count, irqs) = (num(3), num(4), num(5));
-            run_many(&rom, 0..=count.saturating_sub(1), |i| synth_session(&rom, seed, i, irqs));
-        }
-        "short" => {
-            let (seed, count, irqs) = (num(3), num(4), num(5));
-            run_many(&rom, 0..=count.saturating_sub(1), |i| synth_short_session(&rom, seed, i, irqs));
-        }
-        "one" => {
-            // one songs <numéro> <interruptions> [de a] | one random <graine> <essai> <interruptions> [de a]
-            let dump_at = |i| (a.len() > i + 1).then(|| (num(i), num(i + 1)));
-            let (s, dump) = match a[3].as_str() {
-                "songs" => (song_session(&rom, num(4), num(5)), dump_at(6)),
-                "synth" => (synth_session(&rom, num(4), num(5), num(6)), dump_at(7)),
-                "short" => (synth_short_session(&rom, num(4), num(5), num(6)), dump_at(7)),
-                _ => (random_session(&rom, num(4), num(5), num(6)), dump_at(7)),
-            };
-            for (at, c) in &s.commands {
-                println!("interruption {at} : commande {c:02x?}");
-            }
-            if std::env::var("FUZZ_SHOW").is_ok() {
-                for (at, bytes) in s.patches.iter().filter(|p| p.0 >= 0x48000) {
-                    println!("données à la région {at:#x} (adresse linéaire {:#x}) : {}", at - 0x8000, bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "));
-                }
-            }
-            summary(&run_session(&rom, &s, dump, None));
-        }
-        _ => eprintln!("mode inconnu"),
-    }
-}
-
 /// Essai « une musique » : la commande, puis un deuxième son et une commande système.
-fn song_session(rom: &Rom, n: usize, irqs: usize) -> Session {
+pub fn song_session(rom: &Rom, n: usize, irqs: usize) -> Session {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ (n as u64 + 1) * 0x1234_5679);
     let mut commands = vec![(12, play_command(&mut rng, n as u16))];
     let other = rng.below(u64::from(song_count(rom))) as u16;
@@ -291,7 +231,7 @@ fn song_session(rom: &Rom, n: usize, irqs: usize) -> Session {
 }
 
 /// Essai aléatoire : une suite de commandes de tous types.
-fn random_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
+pub fn random_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
     let mut rng = Rng(0x2545_f491 ^ (seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0x85eb_ca6b);
     let mut commands = Vec::new();
     let mut at = 12;
@@ -306,16 +246,16 @@ fn random_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
 
 /// Essai avec des musiques et effets synthétiques (octets aléatoires mais bien formés), ajoutés
 /// dans une zone libre de la ROM et référencés par les numéros 1100 et suivants.
-fn synth_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
+pub fn synth_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
     synth_session_with(rom, seed, i, irqs, 160)
 }
 
 /// Pistes courtes : une divergence est alors plus facile à localiser.
-fn synth_short_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
+pub fn synth_short_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
     synth_session_with(rom, seed, i, irqs, 8)
 }
 
-fn synth_session_with(rom: &Rom, seed: usize, i: usize, irqs: usize, track_len: u64) -> Session {
+pub fn synth_session_with(rom: &Rom, seed: usize, i: usize, irqs: usize, track_len: u64) -> Session {
     let mut rng = Rng(0x3c6e_f372 ^ (seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0xc2b2_ae35);
     let mut patches = Vec::new();
     let mut numbers = Vec::new();
@@ -348,7 +288,7 @@ fn synth_session_with(rom: &Rom, seed: usize, i: usize, irqs: usize, track_len: 
 }
 
 /// Définition d'un son synthétique : musique, effet à plusieurs voies, note simple ou ADPCM.
-fn synth_song(rng: &mut Rng, track_len: u64) -> Vec<u8> {
+pub fn synth_song(rng: &mut Rng, track_len: u64) -> Vec<u8> {
     let multi = |rng: &mut Rng, kind: u8| {
         let mut d = vec![kind];
         d.extend([0u8; 32]);
@@ -401,7 +341,7 @@ fn synth_song(rng: &mut Rng, track_len: u64) -> Vec<u8> {
 /// contiennent toujours une note : le Z80 d'origine met un temps réel à parcourir une boucle sans
 /// note (une boucle de 20 000 tours le bloque pendant des dizaines de tics), ce que le pilote Rust,
 /// qui n'a pas de notion de durée d'exécution, fait instantanément.
-fn synth_track(rng: &mut Rng, track_len: u64) -> Vec<u8> {
+pub fn synth_track(rng: &mut Rng, track_len: u64) -> Vec<u8> {
     let mut d = Vec::new();
     // Un instrument d'abord, pour que les notes sonnent.
     d.extend([8, rng.byte()]);
@@ -456,58 +396,3 @@ fn synth_track(rng: &mut Rng, track_len: u64) -> Vec<u8> {
     d
 }
 
-fn summary(r: &Report) {
-    println!(
-        "Z80 {} écritures, Rust {}, identiques {} (+{} acquittements), débordements {}",
-        r.real.total, r.drv.total, r.matched_main, r.matched_acks, r.spill_intervals
-    );
-    match &r.first_divergence {
-        None if r.identical() => println!("IDENTIQUE"),
-        None => println!("préfixe identique, longueurs différentes"),
-        Some(d) => println!("DIVERGENCE : {d}"),
-    }
-}
-
-/// Exécute les essais `range` en parallèle et résume.
-fn run_many(rom: &Rom, range: std::ops::RangeInclusive<usize>, make: impl Fn(usize) -> Session + Sync) {
-    let next = AtomicUsize::new(*range.start());
-    let last = *range.end();
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
-    let results = std::sync::Mutex::new(Vec::new());
-    let coverage = std::sync::Mutex::new(vec![false; 0x10000]);
-    std::thread::scope(|sc| {
-        for _ in 0..threads {
-            sc.spawn(|| loop {
-                let i = next.fetch_add(1, Ordering::Relaxed);
-                if i > last {
-                    break;
-                }
-                let s = make(i);
-                let mut cov = vec![false; 0x10000];
-                let r = run_session(rom, &s, None, Some(&mut cov));
-                for (c, x) in coverage.lock().unwrap().iter_mut().zip(&cov) {
-                    *c |= x;
-                }
-                results.lock().unwrap().push((i, r.identical(), r.matched_main + r.matched_acks, r.first_divergence, r.slow));
-            });
-        }
-    });
-    if let Ok(path) = std::env::var("FUZZ_COVERAGE") {
-        let bytes: Vec<u8> = coverage.into_inner().unwrap().iter().map(|&c| c as u8).collect();
-        std::fs::write(path, bytes).unwrap();
-    }
-    let mut results = results.into_inner().unwrap();
-    results.sort_by_key(|r| r.0);
-    let slow = results.iter().filter(|r| r.4 && r.3.is_none()).count();
-    let ok = results.iter().filter(|r| r.1 || (r.4 && r.3.is_none())).count() - slow;
-    let writes: usize = results.iter().map(|r| r.2).sum();
-    for (i, identical, _, div, slow) in &results {
-        if !identical && !(*slow && div.is_none()) {
-            println!("essai {i} : {}", div.as_deref().unwrap_or("longueurs différentes"));
-        }
-    }
-    println!(
-        "{ok} essais identiques sur {} ({writes} écritures comparées) ; {slow} abandonnés : le Z80 est resté occupé plus de {MAX_BUSY} interruptions (durée d'exécution non modélisée)",
-        results.len()
-    );
-}

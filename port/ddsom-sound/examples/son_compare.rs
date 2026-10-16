@@ -3,7 +3,7 @@
 //! QSound et dans la RAM partagée, et on les compare à celles du pilote Rust nourri des mêmes
 //! commandes (c'est-à-dire de ce que le Z80 a lu dans la RAM partagée).
 //!
-//! compare <roms> <eeprom> <scenario> <images>
+//! son_compare <roms> <eeprom> <scenario> <images>
 
 #[path = "support/mod.rs"]
 mod support;
@@ -16,7 +16,7 @@ use support::Report;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : compare <roms> <eeprom> <scenario> <images>");
+        eprintln!("usage : son_compare <roms> <eeprom> <scenario> <images>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
@@ -64,6 +64,11 @@ fn main() {
     println!(
         "interruptions : {} exactes, {} avec débordement du travail sur la suivante, {} sans écriture",
         report.exact_intervals, report.spill_intervals, report.idle_intervals
+    );
+    println!(
+        "registres QSound identiques en fin d'interruption : {} sur {}",
+        report.same_state_intervals,
+        irq + 1
     );
     match &report.first_divergence {
         None if report.identical() => println!("RÉSULTAT : identité exacte des suites d'écritures"),

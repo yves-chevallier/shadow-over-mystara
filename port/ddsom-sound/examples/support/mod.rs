@@ -2,6 +2,8 @@
 //! Outils communs aux exemples : comparaison de suites d'écritures et Z80 de référence.
 
 use ddsom_sound::Write;
+
+pub mod session;
 use std::collections::VecDeque;
 
 /// Écritures d'un côté, avec le numéro d'interruption où elles ont eu lieu.
@@ -32,6 +34,11 @@ pub struct Report {
     /// Le Z80 a été occupé trop longtemps pour que le pilote Rust, qui ne modélise pas la durée
     /// d'exécution, puisse l'être comparé (essai abandonné).
     pub slow: bool,
+    /// Registres QSound de chaque côté, et nombre d'interruptions où ils coïncident en fin
+    /// d'interruption.
+    regs_real: Vec<Option<u16>>,
+    regs_drv: Vec<Option<u16>>,
+    pub same_state_intervals: usize,
 }
 
 /// L'acquittement de commande est écrit par la routine d'interruption, à l'instant de
@@ -62,6 +69,17 @@ impl Report {
             self.idle_intervals += 1;
         } else if main(&real) == main(&drv) {
             self.exact_intervals += 1;
+        }
+        for (regs, writes) in [(&mut self.regs_real, &real), (&mut self.regs_drv, &drv)] {
+            regs.resize(256, None);
+            for w in writes {
+                if let Write::Qsound { reg, data } = w {
+                    regs[usize::from(*reg)] = Some(*data);
+                }
+            }
+        }
+        if self.regs_real == self.regs_drv {
+            self.same_state_intervals += 1;
         }
         self.real.push(irq, real);
         self.drv.push(irq, drv);

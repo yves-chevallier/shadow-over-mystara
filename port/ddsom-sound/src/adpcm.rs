@@ -140,9 +140,9 @@ impl Driver {
         if program {
             self.program_adpcm(a, ch);
         }
-        if std::mem::take(&mut a.fresh) {
-            self.write_pan(0x90 + ch, a.pan.pan, true);
-        } else if a.pan.step() {
+        // Le premier tic écrit le pan de départ ; ensuite il évolue.
+        let first = std::mem::take(&mut a.fresh);
+        if first || a.pan.step() {
             self.write_pan(0x90 + ch, a.pan.pan, true);
         }
     }

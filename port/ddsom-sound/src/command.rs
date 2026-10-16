@@ -75,7 +75,7 @@ impl Driver {
 
     /// Banc d'instruments par défaut des pistes.
     fn inst_bank0(&self) -> u16 {
-        self.rom.word(u32::from(INSTRUMENT_BANKS_PTR))
+        self.rom.word(INSTRUMENT_BANKS_PTR)
     }
 
     /// Effet à plusieurs pistes : même format que la musique, mais une piste ne démarre que si la
@@ -116,17 +116,19 @@ impl Driver {
         if duration == 0 {
             return;
         }
-        let mut v = Voice::default();
-        v.wait = duration;
-        v.gate = self.rom.word(p).swap_bytes();
-        v.amplitude = self.rom.table(TABLE_AMPLITUDE, self.rom.byte(p + 2));
-        v.instrument = u16::from(self.rom.byte(p + 3)) << 8 | u16::from(self.rom.byte(p + 4));
         let note = u16::from(self.rom.byte(p + 5).wrapping_add(1)) << 8;
-        v.pitch = clamp_pitch(note.wrapping_add(sext(self.rom.byte(p + 6))));
-        v.state = 1;
-        v.fresh = 0xff;
-        v.priority = priority;
-        v.continuous = flags & 0x80;
+        let mut v = Voice {
+            state: 1,
+            fresh: 0xff,
+            wait: duration,
+            gate: self.rom.word(p).swap_bytes(),
+            amplitude: self.rom.table(TABLE_AMPLITUDE, self.rom.byte(p + 2)),
+            instrument: u16::from(self.rom.byte(p + 3)) << 8 | u16::from(self.rom.byte(p + 4)),
+            pitch: clamp_pitch(note.wrapping_add(sext(self.rom.byte(p + 6)))),
+            priority,
+            continuous: flags & 0x80,
+            ..Voice::default()
+        };
         // Une fois la voie acceptée, le Z80 ne garde que la priorité (sans le bit « continue »).
         self.priority = priority;
         self.setup_pan(&mut v, cmd);
@@ -246,7 +248,7 @@ impl Driver {
 
     /// Ajustement du tempo de la musique : octet 4 = valeur, octet 3 = 0xFF si négatif.
     fn set_tempo(&mut self, cmd: &[u8; 16]) {
-        let value = (u32::from(cmd[4]) * 0x369 >> 8) as u16;
+        let value = ((u32::from(cmd[4]) * 0x369) >> 8) as u16;
         self.g.tempo_adjust = if cmd[3] == 0xff { 0u16.wrapping_sub(value) } else { value };
     }
 
