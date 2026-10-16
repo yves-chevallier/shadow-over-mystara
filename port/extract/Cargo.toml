@@ -1,0 +1,10 @@
+[package]
+name = "extract"
+version = "0.1.0"
+edition = "2021"
+description = "Extrait les ressources de ddsom (graphismes, palettes, sons) depuis les ROMs de l'utilisateur"
+
+[dependencies]
+cps2-gfx = { path = "../cps2-gfx" }
+cps2 = { path = "../cps2" }
+png = "0.17"

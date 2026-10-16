@@ -1,0 +1,12 @@
+[package]
+name = "ddsom-assets"
+version = "0.1.0"
+edition = "2021"
+description = "Chargement des ressources extraites (graphismes, palettes, sons)"
+
+[dependencies]
+png = "0.17"
+
+[dev-dependencies]
+cps2 = { path = "../cps2" }
+cps2-gfx = { path = "../cps2-gfx" }

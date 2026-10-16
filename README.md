@@ -100,3 +100,10 @@ Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`M
 État actuel : la machine (68000 interprété, Z80, QSound HLE, vidéo CPS2) reproduit MAME à l'identique
 sur la RAM de jeu et l'image (4800 images testées avec entrées). Le code 68000 du jeu est recompilé en
 Rust à la compilation (crate `ddsom-rc`, à partir des ROMs locales) ; voir docs/architecture.md.
+
+## Extraire les ressources
+
+    cargo run --release --manifest-path port/Cargo.toml -p extract -- rom assets
+
+Produit `assets/` (graphismes PNG, palettes, sons WAV ; formats décrits dans `assets/README.md`),
+sans perte : `cargo test --release --manifest-path port/Cargo.toml -p ddsom-assets` le vérifie.

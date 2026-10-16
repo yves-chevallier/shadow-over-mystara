@@ -238,6 +238,8 @@ pub struct QSound {
     delay_update: u16,
     state_counter: i32,
     ready_flag: u8,
+    /// Journal des écritures de registres (adresse, valeur), si activé (outils d'analyse).
+    pub log: Option<Vec<(u8, u16)>>,
 }
 
 impl QSound {
@@ -267,6 +269,7 @@ impl QSound {
             delay_update: 0,
             state_counter: 0,
             ready_flag: 0,
+            log: None,
         };
         q.reset();
         q
@@ -305,6 +308,9 @@ impl QSound {
     }
 
     fn write_data(&mut self, address: u8, d: u16) {
+        if let Some(log) = self.log.as_mut() {
+            log.push((address, d));
+        }
         if let Some(r) = self.regs[address as usize] {
             let s = d as i16;
             match r {
