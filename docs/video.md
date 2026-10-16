@@ -40,6 +40,9 @@ miroirs en 5 et 6...). Les cases sont rangées par colonnes pour la couche de te
   (`0x3f8e9c`, `0x3f9c9c`, mots, y corrigé de -/+ 0x10). Sinon : case de la couche scroll 2
   (`0x914000 + 0x3000 - (y & 0x300)*16 + 0x3c - ((y>>2) & 0x3c) + ((4 x) & 0xfc0)`), avec x et y corrigés de
   la différence des deux caméras (`A5+0x506/50a` moins `A5+0x556/55a`) quand `A5+0x36` ≠ 0. Z = numéro nul.
+* **0x255a / 0x25e8** : chiffres dans la couche de caractères (une colonne `0x80` octets plus loin par
+  chiffre, tuile = valeur, attribut 0). 0x255a : D0 (saturé à 99) en dizaines (A1) et unités ; 0x25e8 : D0 en
+  quatre chiffres hexadécimaux. Non exercées par les scénarios (validées par le fuzz).
 * **0x260c, 0x26d4, 0x2766** : chargeurs de blocs. D0 choisit une grille d'indices (mots, en ROM) ; chaque
   indice désigne un bloc de cases en ROM. Le long de chaque case reçoit un décalage de tuile.
 
@@ -91,3 +94,59 @@ Deux familles, toutes pas à pas (une image par pas, `A5+0x48f` pas restants, `A
    `0x1d00e` (vers le blanc) ; `0x1cd7c`, `0x1cdd6`, `0x1cd32` les appliquent aux pages cochées de `A5+0x48e` (la
    source de la page k est en `A5+0x492 + 4 k`). `0x1cf3c` remplit les pages cochées de blanc (`0xffffffff`) par
    `0x1cfb8` (recopie D0-D6,A1 sur 32 palettes).
+
+## B1 : caméras et défilement du décor (`scroll.rs`)
+
+Deux caméras sont des enregistrements de la RAM de travail : caméra 1 en `A5+0x4fe` (couche scroll 2,
+cases de 16 pixels), caméra 2 en `A5+0x54e` (couche scroll 3, cases de 32 pixels). Le code d'origine les
+adresse par A0. La boucle monde `0x33e20` copie la position de la caméra 1 en `+0x26/+0x2a` puis appelle
+`0x2ede0` (caméra 1) et `0x32108` (caméra 2).
+
+| Offset | Rôle |
+|---|---|
+| `+0x00` | actif (0 : première image de la scène, initialisation propre à la scène) |
+| `+0x01` | sous-état du script de mode |
+| `+0x08`, `+0x0c` | position cible x, y (le script de mode la déplace) |
+| `+0x10`, `+0x14` | position déjà dessinée ; `+0x1c`, `+0x1e` : écart cible - dessiné |
+| `+0x20` | mode : décalage dans la table de sauts `0x2f780` (caméra 1) / `0x3281c` (caméra 2), ~31 scripts |
+| `+0x22`, `+0x24` | curseur dans la carte : décalage dans la bande, numéro de bande |
+| `+0x2e`, `+0x34` | butée gauche (suit `x - 0x60` tant que `+0x3d` est nul) et butée droite de la cible |
+| `+0x3c` | drapeau remis à zéro à chaque image ; `+0x3e` : défilement gelé |
+| `+0x40` | pas de bande par 256 pixels de y (mot lu dans une table par scène) |
+
+Chaque image : script de mode (code d'origine, par `jsr` calculé) puis **suite native** `0x2f81c` (caméra 1 :
+gel, butées de la cible, puis `0x2f86e`) ou `0x328a8` (caméra 2). `0x2f86e` calcule les écarts et, tant qu'il
+dépasse un pas (16 pixels, 32 pour la caméra 2), recopie une colonne (19 / 11 cases) ou une ligne (35 / 15
+cases) de la carte du décor dans la couche. Ordre des tests : droite, gauche, bas, haut ; après un pas,
+l'original reprend au test du même sens. Quirks conservés : le pas à gauche / en haut s'arrête si la position
+dessinée devient négative (caméra 1) ou ne dépasse plus un pas (caméra 2, `bls`) ; la caméra 2 ignore une
+ligne vers le haut quand `y <= 0`.
+
+### Carte du décor
+
+* Caméra 1 : table d'indices de blocs en ROM `0x1f9ba0` ; chaque indice choisit un bloc de 2x2 cases (16
+  octets, quatre cases `(tuile, attribut)`) dans l'une de 4 banques (`0x320f6`, quatre longs lus en espace
+  données). La position `p = adresse - 0x1f9ba0` donne : banque `(p >> 16) & 0xc` (octet), indice à
+  `0x1f9ba0 + (c & 0xe) + ((c >> 1) & 0x3fff0)` avec `c = p >> 2`, case du bloc `((p >> 3) & 8) + (p & 4)`.
+  Les bandes de la carte (1 Ko d'indices) sont désignées par une table propre à la scène : `0x2ff94 + 4 s`
+  (espace programme) donne l'adresse d'un tableau de mots ; `bande = mot[curseur]`, adresse `0x1f9ba0 + (bande << 10)`.
+* Caméra 2 : mêmes principes avec la carte `0x2459c0`, 16 banques (`0x33a9c`), `c & 6`, `(c >> 1) & ~7`,
+  `((p >> 2) & 8) + (p & 4)`, bandes de 256 octets (`0x32d7c + 4 s`).
+* Cases écrites : `case + 0x18000000` (caméra 1) / `case + 0x1f000000` (caméra 2) : décalage de tuile. Si
+  `A5+0x37` est non nul (vue « terrain » de débogage), la case de la caméra 1 est remplacée par la tuile
+  `0x1bc0` ou `0x1d80` (bit 13 de l'attribut) plus le numéro de terrain.
+* Écriture en colonnes de la couche : cases consécutives de 4 octets, pages de 0x40 (scroll 2) ou 0x20
+  octets (scroll 3) ; en fin de page la destination passe à la colonne suivante (`+0xfc0` / `+0x7e0` modulo la couche)
+  et le curseur à la bande suivante (`+0x40`).
+
+### Décors à parallaxe
+
+`0x33178`, `0x33196` : position (x, y en virgule fixe 16.16, `+8`, `+0xc`) augmentée d'une fraction du
+défilement de l'image (`A5+0x506/0x50a` moins `A5+0x524/0x528`) : 1/4 et 1/2, ou 1/2 et 3/4. `0x331e8`, `0x3326c` :
+avance de 6 ou 3 pixels par image.
+
+### Non réécrit
+
+Initialisation propre à chaque scène (`0x2ede0` première image, `0x32108` idem), les ~31 scripts de mode de la caméra 1
+(table `0x2f780`, suivis par `0x309e0`, `0x30300`, `0x30308`, `0x305fc`, `0x30fc8`, `0x31018`, `0x3147c`,
+`0x31616`...), ceux de la caméra 2, `0x2a52`, `0x33062`/`0x33290`/`0x332c0` (parallaxe avec saut calculé par scène).

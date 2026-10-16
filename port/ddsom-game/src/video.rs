@@ -456,6 +456,70 @@ pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocs_4x4", |_, b| LOAD
 pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocs_scroll2", |_, b| LOAD_SCROLL2.path().duree(b, 0x26d4), |c, b| load_blocks(c, b, &LOAD_SCROLL2), LOAD_OUT);
 pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocs_petits", |_, b| LOAD_SMALL.path().duree(b, 0x2766), |c, b| load_blocks(c, b, &LOAD_SMALL), LOAD_OUT);
 
+// ---------------------------------------------------------------------------------------------
+// V2 : chiffres dans la couche de caractères
+// ---------------------------------------------------------------------------------------------
+
+/// Écrit un chiffre (numéro de tuile = valeur, attribut 0) en `at` ; la case suivante de la ligne est
+/// `COLUMN` plus loin dans la couche de caractères.
+fn put_digit(b: &mut Cps2Bus, at: u32, digit: u16) {
+    wr16(b, at, digit);
+    wr16(b, at + 2, 0);
+}
+
+/// Colonne suivante de la couche de caractères (voir `text.rs`).
+const COLUMN: u32 = 0x80;
+
+/// 0x255a : D0 (0 à 99, saturé) en deux chiffres décimaux : dizaines en A1, unités une colonne plus loin.
+/// Rend D0 = unités, D1 = dizaines, A1 = case des unités + 2.
+fn decimal_digits(c: &mut Cpu, b: &mut Cps2Bus) {
+    let mut value = c.d[0] as u16;
+    if value >= 100 {
+        value = 99;
+    }
+    let (tens, units) = (value / 10, value % 10);
+    put_digit(b, c.a[1], tens);
+    put_digit(b, c.a[1] + COLUMN, units);
+    c.d[1] = tens as u32;
+    set_low_word(&mut c.d[0], units);
+    c.a[1] += COLUMN + 2;
+    crate::ops::logique(c, 0, m68k::decode::Size::Word);
+    rts(c, b);
+}
+
+fn decimal_digits_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
+    let value = (c.d[0] as u16).min(99);
+    let mut p = Chemin::default();
+    p.pris((c.d[0] as u16) < 100);
+    p.repete(value as u32 / 10, false);
+    p.pris(true);
+    p.duree(b, 0x255a)
+}
+
+/// 0x25e8 : D0 en quatre chiffres hexadécimaux (quartet fort en premier), un par colonne à partir de A1.
+/// Rend A1 = A1 + 4 colonnes.
+fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
+    for i in 0..4 {
+        put_digit(b, c.a[1] + COLUMN * i, (c.d[0] as u16) >> (12 - 4 * i) & 0xf);
+    }
+    c.a[1] += 4 * COLUMN;
+    crate::ops::logique(c, 0, m68k::decode::Size::Word);
+    rts(c, b);
+}
+
+pub const DECIMAL_DIGITS: Native = fixed(0x255a, "video_chiffres_decimaux", decimal_digits_cost, decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
+pub const HEX_DIGITS: Native = fixed(
+    0x25e8,
+    "video_chiffres_hexa",
+    |_, b| {
+        let mut p = Chemin::default();
+        tours(&mut p, 4);
+        p.duree(b, 0x25e8)
+    },
+    hex_digits,
+    regs::a(1) | regs::CCR,
+);
+
 /// Routines natives de ce module.
 pub const NATIVES: &[Native] = &[
     GAUGE_NATIVE,
@@ -473,4 +537,6 @@ pub const NATIVES: &[Native] = &[
     LOAD_BLOCKS_4X4,
     LOAD_BLOCKS_SCROLL2,
     LOAD_BLOCKS_SMALL,
+    DECIMAL_DIGITS,
+    HEX_DIGITS,
 ];
