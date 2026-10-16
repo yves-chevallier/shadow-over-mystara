@@ -20,14 +20,15 @@
 //! sous-routines non réécrites (bruit de pièce, comptabilité EEPROM, verrous 0xb96/0xbac). La durée
 //! exacte vient du parcours du code d'origine selon les décisions prises (`chemin`).
 
-use std::collections::HashMap;
-
 use cps2::Cps2Bus;
+use m68k::decode::Size;
 use m68k::Cpu;
 
 use crate::chemin::Chemin;
-use crate::mem::{rd16, rd8, rts, set_low_byte, wr8};
-use crate::{call, regs, Native};
+use crate::mem::{rd16, rd8, rts, set_low_byte};
+use crate::ops;
+use crate::vue::Vue;
+use crate::{regs, Native};
 
 /// Port des monnayeurs et port des boutons de service.
 const PORT_PIECES: u32 = 0x804020;
@@ -79,54 +80,6 @@ mod ext {
 /// Appels dont la durée est ajoutée par `call` et non par le parcours du code d'origine.
 const EXTERNES: [u32; 5] =
     [ext::BRUIT_PIECE, ext::COMPTABILITE_PIECE, ext::COMPTABILITE_DEPART, ext::VERROUILLER, ext::DEVERROUILLER];
-
-/// Accès à la mémoire de la routine : réel, ou simulé (calcul de la durée sans effet de bord). Les
-/// décisions de branchement rencontrées sont enregistrées dans les deux cas.
-struct Vue<'a> {
-    b: &'a mut Cps2Bus,
-    /// Écritures simulées (mode durée) ; `None` : écritures réelles.
-    simule: Option<HashMap<u32, u8>>,
-    chemin: Chemin,
-}
-
-impl<'a> Vue<'a> {
-    fn reelle(b: &'a mut Cps2Bus) -> Self {
-        Vue { b, simule: None, chemin: Chemin::default() }
-    }
-
-    fn simulee(b: &'a mut Cps2Bus) -> Self {
-        Vue { b, simule: Some(HashMap::new()), chemin: Chemin::default() }
-    }
-
-    fn rd8(&mut self, a: u32) -> u8 {
-        match self.simule.as_ref().and_then(|m| m.get(&(a & 0xff_ffff))) {
-            Some(&v) => v,
-            None => rd8(self.b, a),
-        }
-    }
-
-    fn wr8(&mut self, a: u32, v: u8) {
-        match &mut self.simule {
-            Some(m) => {
-                m.insert(a & 0xff_ffff, v);
-            }
-            None => wr8(self.b, a, v),
-        }
-    }
-
-    /// Enregistre la décision d'un branchement conditionnel de l'original.
-    fn pris(&mut self, pris: bool) -> bool {
-        self.chemin.pris(pris);
-        pris
-    }
-
-    /// Appelle une sous-routine non réécrite (sauf en mode simulé).
-    fn appeler(&mut self, c: &mut Cpu, adresse: u32) {
-        if self.simule.is_none() {
-            call(c, self.b, adresse);
-        }
-    }
-}
 
 fn a5(c: &Cpu, off: u32) -> u32 {
     c.a[5].wrapping_add(off)
@@ -435,6 +388,30 @@ pub const VERROUILLER_COMPTEURS: Native = Native {
     exact_cost: false, // durée propre exacte ; les sous-routines appelées ajoutent la leur
 };
 
-/// Quels registres sont rendus : voir `regs`.
-#[allow(dead_code)]
-const _CONTRAT: u32 = regs::ALL;
+// ---------------------------------------------------------------------------------------------
+// Chiffre de l'affichage des crédits (0x14e46)
+
+/// 0x14e46 : écrit le chiffre `D0 & 15` (tuile) puis l'attribut D1 dans la couche de caractères en (A4).
+/// Rend D0 (mot bas), A4 avancé d'un mot et les drapeaux de l'addition d'origine.
+fn ecrire_chiffre(c: &mut Cpu, b: &mut Cps2Bus) {
+    let chiffre = (c.d[0] & 15) as u16;
+    ops::logique(c, chiffre as u32, Size::Word);
+    // addi.w #0,D0 : décalage de la tuile de base des chiffres, nul dans cette ROM
+    let tuile = ops::add(c, 0, chiffre as u32, Size::Word) as u16;
+    c.d[0] = c.d[0] & 0xffff_0000 | tuile as u32;
+    crate::mem::wr16(b, c.a[4], tuile);
+    crate::mem::wr16(b, c.a[4].wrapping_add(2), c.d[1] as u16);
+    c.a[4] = c.a[4].wrapping_add(2);
+    ops::logique(c, c.d[1], Size::Word); // le dernier move.w donne N et Z
+    rts(c, b);
+}
+
+pub const ECRIRE_CHIFFRE: Native = Native {
+    entry: 0x14e46,
+    name: "credits_chiffre",
+    cost: |_, b| Chemin::default().duree(b, 0x14e46),
+    run: ecrire_chiffre,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::a(4) | regs::CCR,
+    exact_cost: true,
+};

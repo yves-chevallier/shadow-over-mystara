@@ -101,8 +101,20 @@ fn alea_u1(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     wr8(b, A5 + 0x20c, (alea.next() as u8 & 0x1f) * 8);
     wr8(b, A5 + 0x20d, (alea.next() as u8 & 0x1f) * 8);
     for i in 0..32 {
-        wr16(b, A5 + 0x20e + 8 * i, if alea.next() % 3 == 0 { alea.next() as u16 } else { 0xffff });
+        // entrées plausibles : type (octet haut 0-3), code < 0x18, petits paramètres
+        let plausible = (alea.next() % 4) as u16 * 0x100 | (alea.next() % 0x18) as u16;
+        let base = A5 + 0x20e + 8 * i;
+        wr16(b, base, if alea.next() % 3 == 0 { plausible } else { 0xffff });
+        wr16(b, base + 2, alea.next() as u16 % 0x100);
+        wr16(b, base + 4, if alea.next() & 1 == 0 { 0 } else { alea.next() as u16 % 0x100 });
+        wr16(b, base + 6, 0x80);
     }
+    // pop-up courant : durée restante 0, 1, 2, 3, 4, 5 ou longue
+    let duree = [0u16, 1, 2, 3, 4, 5, 0x60][alea.next() as usize % 7];
+    wr16(b, 0xff9180, (alea.next() % 4) as u16 * 0x100 | (alea.next() % 0x18) as u16);
+    wr16(b, 0xff9182, alea.next() as u16 % 0x100);
+    wr16(b, 0xff9184, alea.next() as u16 % 0x100);
+    wr16(b, 0xff9186, duree);
     for j in 0..4 {
         wr32(b, 0xff85de + 0x200 * j + 0x110, bcd(alea));
         wr32(b, 0xff85de + 0x200 * j + 0x114, bcd(alea) & 0x000f_ffff);

@@ -391,6 +391,46 @@ fn cout_compteur(c: &Cpu, b: &mut Cps2Bus, k: &Compteur) -> u64 {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Comptabilité complète : EEPROM puis compteurs de la RAM supplémentaire
+
+/// Compteur de comptabilité complet (0x2e448 pièces, 0x2e49a départs) : le compteur de l'EEPROM,
+/// puis, si la RAM supplémentaire est utilisée (`SANS_COMPTA` ≠ 0, carte de développement), les trois
+/// exemplaires du compteur dans cette RAM, traités par la fin du code d'origine (`suite`).
+struct Complet {
+    entree: u32,
+    compteur: u32,
+    suite: u32,
+}
+
+const COMPLET_PIECES: Complet = Complet { entree: 0x2e448, compteur: 0x2daca, suite: 0x2e456 };
+const COMPLET_DEPARTS: Complet = Complet { entree: 0x2e49a, compteur: 0x2daf4, suite: 0x2e4a8 };
+
+fn compta_complete(c: &mut Cpu, b: &mut Cps2Bus, k: &Complet) {
+    call(c, b, k.compteur);
+    let actif = rd8(b, a5(c, ram::SANS_COMPTA)) != 0;
+    c.flags_logic(actif as u32, Size::Byte);
+    if actif {
+        call(c, b, k.suite);
+    }
+    rts(c, b);
+}
+
+fn cout_compta_complete(c: &Cpu, b: &mut Cps2Bus, k: &Complet) -> u64 {
+    let mut p = Chemin::default();
+    let actif = rd8(b, a5(c, ram::SANS_COMPTA)) != 0;
+    p.pris(!actif);
+    p.duree_hors(b, k.entree, if actif { Some(k.suite) } else { None }, &[k.compteur])
+}
+
+fn natif_compta_pieces(c: &mut Cpu, b: &mut Cps2Bus) {
+    compta_complete(c, b, &COMPLET_PIECES);
+}
+
+fn natif_compta_departs(c: &mut Cpu, b: &mut Cps2Bus) {
+    compta_complete(c, b, &COMPLET_DEPARTS);
+}
+
+// ---------------------------------------------------------------------------------------------
 // VBLANK
 
 /// 0x2dcf6 (VBLANK) : lève le bit 0 du mot 0x664000 de la RAM supplémentaire (si la comptabilité est active).
@@ -586,3 +626,21 @@ natif!(
 );
 natif!(COMPTER_PARTIES, 0x2db4e, "compta_parties", compter_parties, |c, b| cout_compteur(c, b, &PARTIES), regs::d(0), false);
 natif!(VBLANK_COMPTA, 0x2dcf6, "compta_vblank", vblank_compta, cout_vblank_compta, regs::d(0), true);
+natif!(
+    COMPLET_PIECES_NATIF,
+    0x2e448,
+    "compta_complete_pieces",
+    natif_compta_pieces,
+    |c, b| cout_compta_complete(c, b, &COMPLET_PIECES),
+    regs::CCR,
+    false
+);
+natif!(
+    COMPLET_DEPARTS_NATIF,
+    0x2e49a,
+    "compta_complete_departs",
+    natif_compta_departs,
+    |c, b| cout_compta_complete(c, b, &COMPLET_DEPARTS),
+    regs::CCR,
+    false
+);

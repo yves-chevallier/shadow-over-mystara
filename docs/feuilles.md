@@ -45,7 +45,8 @@ chiffres, plafond 99 999). `0x19dce` crée un pop-up. Remises à vide : `0x19aa2
 `0x19e10`. Contrat : tous les registres et drapeaux de l'original sont reproduits (centaines
 d'appelants). Durées exactes.
 
-Non réécrites : `0x19e20-0x1a294` (animation et dessin des pop-ups, appels aux routines de texte).
+`0x19e20` (`popups.rs`) : machine à états des pop-ups (durée, effacement, passage au suivant, durée 0x60 par
+défaut) ; le dessin (`0x19ee0`, `0x19f24`, `0x19fd2`, `0x1a20e`) reste en code d'origine, appelé par `call`.
 
 ## C1 : pièces et crédits (`credits.rs`)
 
@@ -62,6 +63,8 @@ nombre de monnayeurs moins un, `A5+0x22` compteurs séparés, `A5+0x25` jeu grat
 * `0x14290` : verrouillage des compteurs de pièces (`0x14300`, `0x14322`) : appelle `0xb96`/`0xbac`.
 
 Durée : exacte pour la part propre à la routine ; les sous-routines appelées (`call`) ajoutent la leur.
+
+* `0x14e46` : écrit un chiffre de l'affichage des crédits (tuile `D0 & 15`, attribut D1 en (A4)) ; D0, A4 et CCR reproduits.
 
 Non réécrits : `0x13c2c` (démarrage/continue, attentes de tâche), `0x140b4`, `0x1436e`/`0x143a6`
 (attentes), `0x14652`/`0x148be` (affichage des crédits).
@@ -83,6 +86,8 @@ posé sur DI puis validé par une impulsion d'horloge (deux écritures du port).
 * Compteurs de comptabilité `0x2daca` (pièces), `0x2daf4` (départs), `0x2db1e` (continues),
   `0x2db4e` (parties) : le compteur long en RAM est incrémenté ; s'il diffère de son image dans la copie,
   l'image est mise à jour et les deux mots de l'EEPROM réécrits (`0x2d8aa`).
+* `0x2e448` / `0x2e49a` : compteur d'EEPROM puis, en mode carte de développement (`A5+0x82`), la suite d'origine par `call`.
+* Configuration (`config.rs`) : `0x2d648` (bloc de valeurs par défaut de la variante : D0, A6), `0x2d7aa` (valeurs par défaut en deux exemplaires), `0x2d662` (validation et réparation des réglages, bornes par octet), `0x2d358` (copie en RAM -> variables de monnayage `A5+0x1c..0x2b`, `0x73`, `0x84`, `0x85`, compteurs). L'initialisation `0x2d30a` reste en code d'origine.
 * `0x2dcf6` (VBLANK) : lève le bit 0 du mot `0x664000` (RAM supplémentaire) si la comptabilité est active.
 
 L'EEPROM émulée (`cps2/src/eeprom.rs`) termine les écritures instantanément : l'attente de fin

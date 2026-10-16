@@ -18,6 +18,7 @@ pub mod mem;
 pub mod ops;
 pub mod palette;
 pub mod physics;
+pub mod popups;
 pub mod rng;
 pub mod scenario;
 pub mod sound;
@@ -113,6 +114,10 @@ pub const NATIVES: &[Native] = &[
     config::DEFAUTS,
     config::VALIDER,
     config::VARIABLES,
+    popups::ANIMER,
+    credits::ECRIRE_CHIFFRE,
+    eeprom::COMPLET_PIECES_NATIF,
+    eeprom::COMPLET_DEPARTS_NATIF,
 ];
 
 /// Index des routines natives par adresse d'entrée : `NATIVES` et les wrappers son (décrits par une
