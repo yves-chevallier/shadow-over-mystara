@@ -12,6 +12,7 @@ pub mod inputs;
 pub mod mem;
 pub mod physics;
 pub mod scenario;
+pub mod sprites;
 pub mod timing;
 
 use std::collections::BTreeMap;
@@ -59,6 +60,7 @@ pub const NATIVES: &[Native] = &[
     inputs::READ_INPUTS,
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
+    sprites::BUILD_SPRITE_LIST,
 ];
 
 fn lookup(pc: u32) -> Option<&'static Native> {
@@ -97,6 +99,19 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         }
     }
     ddsom_rc::run_block(pc, c, b, dl)
+}
+
+/// Exécuteur : routines natives seulement (le reste est laissé à l'interpréteur). Outils de diagnostic.
+pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
+    let n = lookup(pc)?;
+    let cost = (n.cost)(c, b);
+    let limit = if n.touches_sound { dl } else { b.irq_horizon };
+    if c.cycles + cost > limit {
+        return None;
+    }
+    (n.run)(c, b);
+    c.cycles += cost;
+    Some(c.pc)
 }
 
 /// Active les routines natives (et le code recompilé) sur la machine.
@@ -161,21 +176,11 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     if c.pc != c2.pc {
         diffs.push(format!("pc={:06x} au lieu de {:06x}", c.pc, c2.pc));
     }
-    mem::diff_bus(b, &b2, &mut diffs);
-    // Hors contrat, on reprend l'état de l'original (registres libres, durée réelle) : le reste de
-    // l'exécution suit exactement le même timing que le code d'origine, et seule la mémoire
-    // produite par la routine native peut encore différer.
-    for i in 0..8 {
-        if n.outputs & regs::d(i as u32) == 0 {
-            c.d[i] = c2.d[i];
-        }
-        if n.outputs & regs::a(i as u32) == 0 {
-            c.a[i] = c2.a[i];
-        }
-    }
-    if n.outputs & regs::CCR == 0 {
-        c.sr = c2.sr;
-    }
+    let sp = c2.a[7] & 0xff_ffff;
+    mem::diff_bus(b, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
+    // On reprend la durée réelle de l'original : le reste de l'exécution suit exactement le timing
+    // du code d'origine. Les registres hors contrat gardent les valeurs de la routine native : si un
+    // appelant en dépendait (contrat incomplet), la suite divergera et la validation le verra.
     c.cycles = c2.cycles;
     let mut st = STATS.lock().unwrap();
     let s = st.entry(n.name).or_default();

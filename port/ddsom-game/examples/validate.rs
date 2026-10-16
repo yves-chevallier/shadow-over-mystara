@@ -21,7 +21,15 @@ fn main() {
     ddsom_rc::install(&mut mb);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
     let frames: usize = frames.parse().unwrap();
-    let stacks = 0x0c00..0x1000; // piles des tâches (FF0C00-FF0FFF) : contenu mort sous SP
+    // Zones de sauvegarde de registres : piles des tâches (FF0A00-FF0FFF) et pile logicielle de
+    // l'interruption VBLANK (sous FF2A1A). Un registre laissé libre par une routine native n'y
+    // est qu'une copie ; s'il était réellement utilisé, l'écart apparaîtrait ailleurs.
+    // + le SR sauvegardé de chaque tâche (mot +2 des entrées de 16 octets en FF0064).
+    let saved = |a: usize| {
+        (0x0a00..0x1000).contains(&a)
+            || (0x2900..0x2a1a).contains(&a)
+            || ((0x0064..0x0164).contains(&a) && (a - 0x64) % 16 == 2)
+    };
     let t0 = std::time::Instant::now();
     let mut first = None;
     for f in 0..frames {
@@ -30,7 +38,7 @@ fn main() {
         ma.run_frame();
         mb.run_frame();
         let diff: Vec<usize> = (0..0x8000)
-            .filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !stacks.contains(&(2 * i)))
+            .filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !saved(2 * i))
             .collect();
         if !diff.is_empty() && first.is_none() {
             first = Some(f + 1);
@@ -45,8 +53,10 @@ fn main() {
         println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    match first {
-        None => println!("RAM identique sur {frames} images"),
-        Some(f) => println!("première différence de RAM à l'image {f}"),
+    let errors: u64 = ddsom_game::report().values().map(|s| s.mismatches).sum();
+    match (first, errors) {
+        (None, 0) => println!("VALIDE : RAM identique sur {frames} images, aucun écart"),
+        (None, n) => println!("ÉCHEC : {n} appels natifs en écart (état rétabli depuis l'original à chaque fois)"),
+        (Some(f), _) => println!("ÉCHEC : première différence de RAM à l'image {f}"),
     }
 }

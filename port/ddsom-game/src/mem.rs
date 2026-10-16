@@ -37,14 +37,18 @@ pub fn set_low_byte(r: &mut u32, v: u8) {
     *r = (*r & !0xff) | v as u32;
 }
 
-/// Écarts entre deux bus (mode contrôle).
-pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, out: &mut Vec<String>) {
+/// Écarts entre deux bus (mode contrôle). `dead_stack` : zone de pile sous le pointeur de pile au
+/// retour, dont le contenu (restes des appels internes) n'a plus de sens.
+pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out: &mut Vec<String>) {
     fn first_diff(name: &str, base: u32, x: &[u16], y: &[u16], out: &mut Vec<String>) {
         if let Some(i) = x.iter().zip(y).position(|(p, q)| p != q) {
             out.push(format!("{name}[{:06x}]={:04x} au lieu de {:04x}", base + 2 * i as u32, x[i], y[i]));
         }
     }
-    first_diff("ram", 0xff0000, &a.ram, &b.ram, out);
+    let live = |i: usize| !dead_stack.contains(&(0xff0000 + 2 * i as u32));
+    if let Some(i) = (0..a.ram.len()).find(|&i| a.ram[i] != b.ram[i] && live(i)) {
+        out.push(format!("ram[{:06x}]={:04x} au lieu de {:04x}", 0xff0000 + 2 * i as u32, a.ram[i], b.ram[i]));
+    }
     first_diff("gfxram", 0x900000, &a.gfxram, &b.gfxram, out);
     first_diff("objram0", 0, &a.objram[0], &b.objram[0], out);
     first_diff("objram1", 0, &a.objram[1], &b.objram[1], out);

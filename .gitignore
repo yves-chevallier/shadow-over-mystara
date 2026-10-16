@@ -21,3 +21,6 @@ nvram/
 
 # Ressources extraites des ROMs (outil extract)
 assets/
+
+# Pseudo-C décompilé (dérivé des ROMs)
+decomp/

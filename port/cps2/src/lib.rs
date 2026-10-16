@@ -36,6 +36,8 @@ pub struct Machine {
     pub misses: std::collections::BTreeMap<u32, u64>,
     /// Instructions 68000 exécutées par l'interpréteur (le reste l'est par le code recompilé).
     pub interp_steps: u64,
+    /// Rappel après chaque instruction interprétée (outils de diagnostic) : (cpu, bus, pc).
+    pub step_hook: Option<Box<dyn FnMut(&Cpu, &Cps2Bus, u32)>>,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -93,6 +95,7 @@ impl Machine {
             executor: None,
             misses: Default::default(),
             interp_steps: 0,
+            step_hook: None,
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -131,8 +134,12 @@ impl Machine {
                     *self.misses.entry(self.cpu.pc).or_default() += 1;
                 }
             }
+            let pc = self.cpu.pc;
             self.cpu.step(&mut self.bus);
             self.interp_steps += 1;
+            if let Some(h) = self.step_hook.as_mut() {
+                h(&self.cpu, &self.bus, pc);
+            }
         }
         // puis le Z80 sur la même tranche de temps (512 cycles à 8 MHz par ligne)
         self.sound.set_reset(!self.bus.z80_running);
