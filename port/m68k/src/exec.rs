@@ -152,416 +152,817 @@ impl Cpu {
     }
 
     /// Exécute `ins` (PC déjà avancé). Renvoie vrai si une exception a été prise.
+    /// Chaque variante est une fonction `op_*` publique, utilisée aussi par le code recompilé :
+    /// appelée avec une instruction constante, elle se spécialise à l'inlining.
     pub(crate) fn exec<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         match ins.op {
-            Op::Add(sz, s, d) | Op::Sub(sz, s, d) => {
-                let sub = matches!(ins.op, Op::Sub(..));
-                let sv = self.read_ea(bus, s, sz);
-                let dl = self.resolve(d, sz);
-                let dv = self.read(bus, dl, sz);
-                let r = self.addsub(sub, sv, dv, false, sz, false);
-                self.write(bus, dl, sz, r);
-            }
-            Op::Addx(sz, s, d) | Op::Subx(sz, s, d) => {
-                let sub = matches!(ins.op, Op::Subx(..));
-                let sv = self.read_ea(bus, s, sz);
-                let dl = self.resolve(d, sz);
-                let dv = self.read(bus, dl, sz);
-                let x = self.sr & SR_X != 0;
-                let r = self.addsub(sub, sv, dv, x, sz, true);
-                self.write(bus, dl, sz, r);
-            }
-            Op::Cmp(sz, s, d) => {
-                let sv = self.read_ea(bus, s, sz);
-                let dv = self.read_ea(bus, d, sz);
-                let x = self.sr & SR_X;
-                self.addsub(true, sv, dv, false, sz, false);
-                self.sr = (self.sr & !SR_X) | x;
-            }
-            Op::Adda(sz, s, n) | Op::Suba(sz, s, n) => {
-                let sv = sext(self.read_ea(bus, s, sz), sz);
-                let a = &mut self.a[n as usize];
-                *a = if matches!(ins.op, Op::Adda(..)) { a.wrapping_add(sv) } else { a.wrapping_sub(sv) };
-            }
-            Op::Cmpa(sz, s, n) => {
-                let sv = sext(self.read_ea(bus, s, sz), sz);
-                let dv = self.a[n as usize];
-                let x = self.sr & SR_X;
-                self.addsub(true, sv, dv, false, Size::Long, false);
-                self.sr = (self.sr & !SR_X) | x;
-            }
-            Op::And(sz, s, d) | Op::Or(sz, s, d) | Op::Eor(sz, s, d) => {
-                let sv = self.read_ea(bus, s, sz);
-                let dl = self.resolve(d, sz);
-                let dv = self.read(bus, dl, sz);
-                let r = match ins.op {
-                    Op::And(..) => sv & dv,
-                    Op::Or(..) => sv | dv,
-                    _ => sv ^ dv,
-                };
-                self.flags_logic(r, sz);
-                self.write(bus, dl, sz, r);
-            }
-            Op::AndiCcr(v) => self.set_ccr(self.ccr() & v as u16),
-            Op::OriCcr(v) => self.set_ccr(self.ccr() | v as u16),
-            Op::EoriCcr(v) => self.set_ccr(self.ccr() ^ v as u16),
-            Op::AndiSr(v) | Op::OriSr(v) | Op::EoriSr(v) => {
-                if !self.privileged(bus, ins) {
-                    return true;
-                }
-                let r = match ins.op {
-                    Op::AndiSr(_) => self.sr & v,
-                    Op::OriSr(_) => self.sr | v,
-                    _ => self.sr ^ v,
-                };
-                self.set_sr(r);
-            }
-            Op::Neg(sz, d) | Op::Negx(sz, d) => {
-                let dl = self.resolve(d, sz);
-                let dv = self.read(bus, dl, sz);
-                let negx = matches!(ins.op, Op::Negx(..));
-                let x = negx && self.sr & SR_X != 0;
-                let r = self.addsub(true, dv, 0, x, sz, negx);
-                self.write(bus, dl, sz, r);
-            }
-            Op::Not(sz, d) => {
-                let dl = self.resolve(d, sz);
-                let r = !self.read(bus, dl, sz) & sz.mask();
-                self.flags_logic(r, sz);
-                self.write(bus, dl, sz, r);
-            }
-            Op::Clr(sz, d) => {
-                let dl = self.resolve(d, sz);
-                if let Loc::Mem(_) = dl {
-                    // le 68000 lit l'opérande avant de l'effacer
-                    self.read(bus, dl, sz);
-                }
-                self.set_flags(SR_N | SR_Z | SR_V | SR_C, SR_Z);
-                self.write(bus, dl, sz, 0);
-            }
-            Op::Tst(sz, d) => {
-                let v = self.read_ea(bus, d, sz);
-                self.flags_logic(v, sz);
-            }
-            Op::Tas(d) => {
-                let dl = self.resolve(d, Size::Byte);
-                let v = self.read(bus, dl, Size::Byte);
-                self.flags_logic(v, Size::Byte);
-                self.write(bus, dl, Size::Byte, v | 0x80);
-            }
-            Op::Ext(sz, n) => {
-                let r = &mut self.d[n as usize];
-                let v = if sz == Size::Word {
-                    *r = (*r & 0xffff_0000) | (*r as u8 as i8 as i16 as u16 as u32);
-                    *r & 0xffff
-                } else {
-                    *r = *r as u16 as i16 as i32 as u32;
-                    *r
-                };
-                self.flags_logic(v, sz);
-            }
-            Op::Swap(n) => {
-                let r = self.d[n as usize].rotate_left(16);
-                self.d[n as usize] = r;
-                self.flags_logic(r, Size::Long);
-            }
-            Op::Exg(mode, x, y) => {
-                let (x, y) = (x as usize, y as usize);
-                match mode {
-                    0x08 => self.d.swap(x, y),
-                    0x09 => self.a.swap(x, y),
-                    _ => std::mem::swap(&mut self.d[x], &mut self.a[y]),
-                }
-            }
-            Op::Mulu(s, n) | Op::Muls(s, n) => {
-                let sv = self.read_ea(bus, s, Size::Word);
-                let dv = self.d[n as usize];
-                let r = if matches!(ins.op, Op::Mulu(..)) {
-                    self.cycles += 2 * (sv & 0xffff).count_ones() as u64;
-                    (sv & 0xffff) * (dv & 0xffff)
-                } else {
-                    self.cycles += 2 * (((sv << 1) ^ sv) & 0xffff).count_ones() as u64;
-                    ((sv as i16 as i32) * (dv as i16 as i32)) as u32
-                };
-                self.d[n as usize] = r;
-                self.flags_logic(r, Size::Long);
-            }
-            Op::Divu(s, n) | Op::Divs(s, n) => {
-                let sv = self.read_ea(bus, s, Size::Word) & 0xffff;
-                if sv == 0 {
-                    self.cycles += 38;
-                    self.div_zero_flags(ins, n);
-                    self.exception(bus, 5, self.pc);
-                    return true;
-                }
-                let dv = self.d[n as usize];
-                self.cycles += if matches!(ins.op, Op::Divu(..)) {
-                    divu_cycles(dv, sv as u16)
-                } else {
-                    divs_cycles(dv as i32, sv as u16 as i16)
-                } as u64;
-                if matches!(ins.op, Op::Divu(..)) {
-                    let q = dv / sv;
-                    let r = dv % sv;
-                    if q > 0xffff {
-                        self.set_flags(SR_N | SR_Z | SR_V | SR_C, SR_V | SR_N);
-                    } else {
-                        self.d[n as usize] = (r << 16) | q;
-                        self.flags_logic(q, Size::Word);
-                    }
-                } else {
-                    let (dv, sv) = (dv as i32 as i64, sv as i16 as i64);
-                    let q = dv / sv;
-                    let r = dv % sv;
-                    if q > i16::MAX as i64 || q < i16::MIN as i64 {
-                        self.set_flags(SR_N | SR_Z | SR_V | SR_C, SR_V | SR_N);
-                    } else {
-                        self.d[n as usize] = ((r as u32 & 0xffff) << 16) | (q as u32 & 0xffff);
-                        self.flags_logic(q as u32, Size::Word);
-                    }
-                }
-            }
-            Op::Abcd(s, d) | Op::Sbcd(s, d) => {
-                let sv = self.read_ea(bus, s, Size::Byte);
-                let dl = self.resolve(d, Size::Byte);
-                let dv = self.read(bus, dl, Size::Byte);
-                let r = if matches!(ins.op, Op::Abcd(..)) { self.abcd(sv, dv) } else { self.sbcd(sv, dv) };
-                self.write(bus, dl, Size::Byte, r);
-            }
-            Op::Nbcd(d) => {
-                let dl = self.resolve(d, Size::Byte);
-                let dv = self.read(bus, dl, Size::Byte);
-                let r = self.sbcd(dv, 0);
-                self.write(bus, dl, Size::Byte, r);
-            }
-            Op::Chk(s, n) => {
-                let bound = self.read_ea(bus, s, Size::Word) as u16 as i16;
-                let v = self.d[n as usize] as u16 as i16;
-                self.chk_flags(v, bound);
-                if v < 0 || v > bound {
-                    // MAME : 38 cycles si Dn > borne ; si Dn < 0, 38 ou 40 selon le signe de (borne - Dn) sur 16 bits
-                    self.cycles += if v > bound || (bound as u16).wrapping_sub(v as u16) & 0x8000 != 0 { 28 } else { 30 };
-                    self.exception(bus, 6, self.pc);
-                    return true;
-                }
-            }
-            Op::Move(sz, s, d) => {
-                let v = self.read_ea(bus, s, sz);
-                let dl = self.resolve(d, sz);
-                self.flags_logic(v, sz);
-                self.write(bus, dl, sz, v);
-            }
-            Op::Movea(sz, s, n) => {
-                let v = sext(self.read_ea(bus, s, sz), sz);
-                self.a[n as usize] = v;
-            }
-            Op::Moveq(v, n) => {
-                let v = v as i32 as u32;
-                self.d[n as usize] = v;
-                self.flags_logic(v, Size::Long);
-            }
-            Op::Movem { size, to_mem, mask, ea } => self.movem(bus, size, to_mem, mask, ea),
-            Op::Movep { size, to_mem, dn, an, disp } => {
-                let mut a = self.a[an as usize].wrapping_add(disp as i32 as u32);
-                let n = size.bytes();
-                if to_mem {
-                    let v = self.d[dn as usize];
-                    for i in (0..n).rev() {
-                        bus.write8(a & ADDR_MASK, (v >> (8 * i)) as u8);
-                        a = a.wrapping_add(2);
-                    }
-                } else {
-                    let mut v = 0u32;
-                    for _ in 0..n {
-                        v = (v << 8) | bus.read8(a & ADDR_MASK) as u32;
-                        a = a.wrapping_add(2);
-                    }
-                    let m = size.mask();
-                    let r = &mut self.d[dn as usize];
-                    *r = (*r & !m) | v;
-                }
-            }
-            Op::MoveFromSr(d) => {
-                let dl = self.resolve(d, Size::Word);
-                if let Loc::Mem(_) = dl {
-                    self.read(bus, dl, Size::Word);
-                }
-                self.write(bus, dl, Size::Word, self.sr as u32);
-            }
-            Op::MoveToCcr(s) => {
-                let v = self.read_ea(bus, s, Size::Word);
-                self.set_ccr(v as u16);
-            }
-            Op::MoveToSr(s) => {
-                if !self.privileged(bus, ins) {
-                    return true;
-                }
-                let v = self.read_ea(bus, s, Size::Word);
-                self.set_sr(v as u16);
-            }
-            Op::MoveUsp { to_usp, an } => {
-                if !self.privileged(bus, ins) {
-                    return true;
-                }
-                if to_usp {
-                    self.other_sp = self.a[an as usize];
-                } else {
-                    self.a[an as usize] = self.other_sp;
-                }
-            }
-            Op::Lea(ea, n) => self.a[n as usize] = self.ea_address(ea),
-            Op::Pea(ea) => {
-                let a = self.ea_address(ea);
-                self.push32(bus, a);
-            }
-            Op::Link(n, disp) => {
-                // LINK A7 empile l'ancienne valeur de A7
-                let v = self.a[n as usize];
-                self.push32(bus, v);
-                self.a[n as usize] = self.a[7];
-                self.a[7] = self.a[7].wrapping_add(disp as i32 as u32);
-            }
-            Op::Unlk(n) => {
-                self.a[7] = self.a[n as usize];
-                let v = self.pop32(bus);
-                self.a[n as usize] = v;
-            }
-            Op::Bit(kind, count, d) => {
-                let bitn = match count {
-                    ShiftCount::Imm(v) => v as u32,
-                    ShiftCount::Reg(r) => self.d[r as usize],
-                };
-                let sz = if matches!(d, Ea::Dn(_)) { Size::Long } else { Size::Byte };
-                let bitn = bitn % (sz.bytes() * 8);
-                if sz == Size::Long && kind != BitOp::Btst && bitn >= 16 {
-                    self.cycles += 2;
-                }
-                let dl = self.resolve(d, sz);
-                let v = self.read(bus, dl, sz);
-                let set = v >> bitn & 1 != 0;
-                self.set_flags(SR_Z, if set { 0 } else { SR_Z });
-                let r = match kind {
-                    BitOp::Btst => return false,
-                    BitOp::Bchg => v ^ (1 << bitn),
-                    BitOp::Bclr => v & !(1 << bitn),
-                    BitOp::Bset => v | (1 << bitn),
-                };
-                self.write(bus, dl, sz, r);
-            }
-            Op::Shift { kind, left, size, count, dn } => {
-                let c = match count {
-                    ShiftCount::Imm(v) => v as u32,
-                    ShiftCount::Reg(r) => self.d[r as usize] & 63,
-                };
-                let v = self.d[dn as usize] & size.mask();
-                let r = self.shift(kind, left, size, v, c);
-                let m = size.mask();
-                let reg = &mut self.d[dn as usize];
-                *reg = (*reg & !m) | (r & m);
-                self.cycles += 2 * c as u64;
-            }
-            Op::ShiftMem { kind, left, ea } => {
-                let dl = self.resolve(ea, Size::Word);
-                let v = self.read(bus, dl, Size::Word);
-                let r = self.shift(kind, left, Size::Word, v, 1);
-                self.write(bus, dl, Size::Word, r);
-            }
-            Op::Bra(t) => self.pc = t,
-            Op::Bsr(t) => {
-                self.push32(bus, self.pc);
-                self.pc = t;
-            }
-            Op::Bcc(c, t) => {
-                if self.cond(c) {
-                    self.pc = t;
-                    self.cycles += 2;
-                } else if ins.opcode & 0xff == 0 {
-                    self.cycles += 4;
-                }
-            }
-            Op::Dbcc(c, n, t) => {
-                if !self.cond(c) {
-                    let r = &mut self.d[n as usize];
-                    let w = (*r as u16).wrapping_sub(1);
-                    *r = (*r & 0xffff_0000) | w as u32;
-                    if w != 0xffff {
-                        self.pc = t;
-                        self.cycles -= 2;
-                    } else {
-                        self.cycles += 2;
-                    }
-                }
-            }
-            Op::Scc(c, d) => {
-                let dl = self.resolve(d, Size::Byte);
-                if let Loc::Mem(_) = dl {
-                    self.read(bus, dl, Size::Byte);
-                }
-                let v = if self.cond(c) { 0xff } else { 0 };
-                if v != 0 && matches!(dl, Loc::D(_)) {
-                    self.cycles += 2;
-                }
-                self.write(bus, dl, Size::Byte, v);
-            }
-            Op::Jmp(ea) => self.pc = self.ea_address(ea),
-            Op::Jsr(ea) => {
-                let t = self.ea_address(ea);
-                self.push32(bus, self.pc);
-                self.pc = t;
-            }
-            Op::Rts => self.pc = self.pop32(bus),
-            Op::Rtr => {
-                let ccr = self.pop16(bus);
-                self.set_ccr(ccr);
-                self.pc = self.pop32(bus);
-            }
-            Op::Rte => {
-                if !self.privileged(bus, ins) {
-                    return true;
-                }
-                let sr = self.pop16(bus);
-                let pc = self.pop32(bus);
-                self.set_sr(sr);
-                self.pc = pc;
-            }
-            Op::Trap(n) => {
-                self.exception(bus, 32 + n as u32, self.pc);
-                return true;
-            }
-            Op::Trapv => {
-                if self.sr & SR_V != 0 {
-                    self.cycles = self.op_start_cycles + 34;
-                    self.exception(bus, 7, self.pc);
-                    return true;
-                }
-            }
-            Op::Nop => {}
-            Op::Reset => {
-                if !self.privileged(bus, ins) {
-                    return true;
-                }
-                bus.reset_devices();
-            }
-            Op::Stop(v) => {
-                if !self.privileged(bus, ins) {
-                    return true;
-                }
-                self.set_sr(v);
-                self.stopped = true;
-            }
-            Op::Illegal => {
-                self.exception(bus, 4, ins.pc);
-                return true;
-            }
-            Op::LineA => {
-                self.exception(bus, 10, ins.pc);
-                return true;
-            }
-            Op::LineF => {
-                self.exception(bus, 11, ins.pc);
-                return true;
-            }
+            Op::Add(sz, s, d) | Op::Sub(sz, s, d) => self.op_00_add(bus, ins),
+            Op::Addx(sz, s, d) | Op::Subx(sz, s, d) => self.op_01_addx(bus, ins),
+            Op::Cmp(sz, s, d) => self.op_02_cmp(bus, ins),
+            Op::Adda(sz, s, n) | Op::Suba(sz, s, n) => self.op_03_adda(bus, ins),
+            Op::Cmpa(sz, s, n) => self.op_04_cmpa(bus, ins),
+            Op::And(sz, s, d) | Op::Or(sz, s, d) | Op::Eor(sz, s, d) => self.op_05_and(bus, ins),
+            Op::AndiCcr(v) => self.op_06_andiccr(bus, ins),
+            Op::OriCcr(v) => self.op_07_oriccr(bus, ins),
+            Op::EoriCcr(v) => self.op_08_eoriccr(bus, ins),
+            Op::AndiSr(v) | Op::OriSr(v) | Op::EoriSr(v) => self.op_09_andisr(bus, ins),
+            Op::Neg(sz, d) | Op::Negx(sz, d) => self.op_10_neg(bus, ins),
+            Op::Not(sz, d) => self.op_11_not(bus, ins),
+            Op::Clr(sz, d) => self.op_12_clr(bus, ins),
+            Op::Tst(sz, d) => self.op_13_tst(bus, ins),
+            Op::Tas(d) => self.op_14_tas(bus, ins),
+            Op::Ext(sz, n) => self.op_15_ext(bus, ins),
+            Op::Swap(n) => self.op_16_swap(bus, ins),
+            Op::Exg(mode, x, y) => self.op_17_exg(bus, ins),
+            Op::Mulu(s, n) | Op::Muls(s, n) => self.op_18_mulu(bus, ins),
+            Op::Divu(s, n) | Op::Divs(s, n) => self.op_19_divu(bus, ins),
+            Op::Abcd(s, d) | Op::Sbcd(s, d) => self.op_20_abcd(bus, ins),
+            Op::Nbcd(d) => self.op_21_nbcd(bus, ins),
+            Op::Chk(s, n) => self.op_22_chk(bus, ins),
+            Op::Move(sz, s, d) => self.op_23_move(bus, ins),
+            Op::Movea(sz, s, n) => self.op_24_movea(bus, ins),
+            Op::Moveq(v, n) => self.op_25_moveq(bus, ins),
+            Op::Movem { size, to_mem, mask, ea } => self.op_26_movem(bus, ins),
+            Op::Movep { size, to_mem, dn, an, disp } => self.op_27_movep(bus, ins),
+            Op::MoveFromSr(d) => self.op_28_movefromsr(bus, ins),
+            Op::MoveToCcr(s) => self.op_29_movetoccr(bus, ins),
+            Op::MoveToSr(s) => self.op_30_movetosr(bus, ins),
+            Op::MoveUsp { to_usp, an } => self.op_31_moveusp(bus, ins),
+            Op::Lea(ea, n) => self.op_32_lea(bus, ins),
+            Op::Pea(ea) => self.op_33_pea(bus, ins),
+            Op::Link(n, disp) => self.op_34_link(bus, ins),
+            Op::Unlk(n) => self.op_35_unlk(bus, ins),
+            Op::Bit(kind, count, d) => self.op_36_bit(bus, ins),
+            Op::Shift { kind, left, size, count, dn } => self.op_37_shift(bus, ins),
+            Op::ShiftMem { kind, left, ea } => self.op_38_shiftmem(bus, ins),
+            Op::Bra(t) => self.op_39_bra(bus, ins),
+            Op::Bsr(t) => self.op_40_bsr(bus, ins),
+            Op::Bcc(c, t) => self.op_41_bcc(bus, ins),
+            Op::Dbcc(c, n, t) => self.op_42_dbcc(bus, ins),
+            Op::Scc(c, d) => self.op_43_scc(bus, ins),
+            Op::Jmp(ea) => self.op_44_jmp(bus, ins),
+            Op::Jsr(ea) => self.op_45_jsr(bus, ins),
+            Op::Rts => self.op_46_rts(bus, ins),
+            Op::Rtr => self.op_47_rtr(bus, ins),
+            Op::Rte => self.op_48_rte(bus, ins),
+            Op::Trap(n) => self.op_49_trap(bus, ins),
+            Op::Trapv => self.op_50_trapv(bus, ins),
+            Op::Nop => self.op_51_nop(bus, ins),
+            Op::Reset => self.op_52_reset(bus, ins),
+            Op::Stop(v) => self.op_53_stop(bus, ins),
+            Op::Illegal => self.op_54_illegal(bus, ins),
+            Op::LineA => self.op_55_linea(bus, ins),
+            Op::LineF => self.op_56_linef(bus, ins),
         }
+    }
+
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_00_add<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Add(sz, s, d) | Op::Sub(sz, s, d)) = ins.op else { unreachable!() };
+        {
+            let sub = matches!(ins.op, Op::Sub(..));
+            let sv = self.read_ea(bus, s, sz);
+            let dl = self.resolve(d, sz);
+            let dv = self.read(bus, dl, sz);
+            let r = self.addsub(sub, sv, dv, false, sz, false);
+            self.write(bus, dl, sz, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_01_addx<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Addx(sz, s, d) | Op::Subx(sz, s, d)) = ins.op else { unreachable!() };
+        {
+            let sub = matches!(ins.op, Op::Subx(..));
+            let sv = self.read_ea(bus, s, sz);
+            let dl = self.resolve(d, sz);
+            let dv = self.read(bus, dl, sz);
+            let x = self.sr & SR_X != 0;
+            let r = self.addsub(sub, sv, dv, x, sz, true);
+            self.write(bus, dl, sz, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_02_cmp<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Cmp(sz, s, d)) = ins.op else { unreachable!() };
+        {
+            let sv = self.read_ea(bus, s, sz);
+            let dv = self.read_ea(bus, d, sz);
+            let x = self.sr & SR_X;
+            self.addsub(true, sv, dv, false, sz, false);
+            self.sr = (self.sr & !SR_X) | x;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_03_adda<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Adda(sz, s, n) | Op::Suba(sz, s, n)) = ins.op else { unreachable!() };
+        {
+            let sv = sext(self.read_ea(bus, s, sz), sz);
+            let a = &mut self.a[n as usize];
+            *a = if matches!(ins.op, Op::Adda(..)) { a.wrapping_add(sv) } else { a.wrapping_sub(sv) };
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_04_cmpa<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Cmpa(sz, s, n)) = ins.op else { unreachable!() };
+        {
+            let sv = sext(self.read_ea(bus, s, sz), sz);
+            let dv = self.a[n as usize];
+            let x = self.sr & SR_X;
+            self.addsub(true, sv, dv, false, Size::Long, false);
+            self.sr = (self.sr & !SR_X) | x;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_05_and<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::And(sz, s, d) | Op::Or(sz, s, d) | Op::Eor(sz, s, d)) = ins.op else { unreachable!() };
+        {
+            let sv = self.read_ea(bus, s, sz);
+            let dl = self.resolve(d, sz);
+            let dv = self.read(bus, dl, sz);
+            let r = match ins.op {
+                Op::And(..) => sv & dv,
+                Op::Or(..) => sv | dv,
+                _ => sv ^ dv,
+            };
+            self.flags_logic(r, sz);
+            self.write(bus, dl, sz, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_06_andiccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::AndiCcr(v)) = ins.op else { unreachable!() };
+        self.set_ccr(self.ccr() & v as u16);
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_07_oriccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::OriCcr(v)) = ins.op else { unreachable!() };
+        self.set_ccr(self.ccr() | v as u16);
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_08_eoriccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::EoriCcr(v)) = ins.op else { unreachable!() };
+        self.set_ccr(self.ccr() ^ v as u16);
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_09_andisr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::AndiSr(v) | Op::OriSr(v) | Op::EoriSr(v)) = ins.op else { unreachable!() };
+        {
+            if !self.privileged(bus, ins) {
+                return true;
+            }
+            let r = match ins.op {
+                Op::AndiSr(_) => self.sr & v,
+                Op::OriSr(_) => self.sr | v,
+                _ => self.sr ^ v,
+            };
+            self.set_sr(r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_10_neg<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Neg(sz, d) | Op::Negx(sz, d)) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(d, sz);
+            let dv = self.read(bus, dl, sz);
+            let negx = matches!(ins.op, Op::Negx(..));
+            let x = negx && self.sr & SR_X != 0;
+            let r = self.addsub(true, dv, 0, x, sz, negx);
+            self.write(bus, dl, sz, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_11_not<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Not(sz, d)) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(d, sz);
+            let r = !self.read(bus, dl, sz) & sz.mask();
+            self.flags_logic(r, sz);
+            self.write(bus, dl, sz, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_12_clr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Clr(sz, d)) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(d, sz);
+            if let Loc::Mem(_) = dl {
+                // le 68000 lit l'opérande avant de l'effacer
+                self.read(bus, dl, sz);
+            }
+            self.set_flags(SR_N | SR_Z | SR_V | SR_C, SR_Z);
+            self.write(bus, dl, sz, 0);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_13_tst<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Tst(sz, d)) = ins.op else { unreachable!() };
+        {
+            let v = self.read_ea(bus, d, sz);
+            self.flags_logic(v, sz);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_14_tas<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Tas(d)) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(d, Size::Byte);
+            let v = self.read(bus, dl, Size::Byte);
+            self.flags_logic(v, Size::Byte);
+            self.write(bus, dl, Size::Byte, v | 0x80);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_15_ext<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Ext(sz, n)) = ins.op else { unreachable!() };
+        {
+            let r = &mut self.d[n as usize];
+            let v = if sz == Size::Word {
+                *r = (*r & 0xffff_0000) | (*r as u8 as i8 as i16 as u16 as u32);
+                *r & 0xffff
+            } else {
+                *r = *r as u16 as i16 as i32 as u32;
+                *r
+            };
+            self.flags_logic(v, sz);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_16_swap<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Swap(n)) = ins.op else { unreachable!() };
+        {
+            let r = self.d[n as usize].rotate_left(16);
+            self.d[n as usize] = r;
+            self.flags_logic(r, Size::Long);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_17_exg<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Exg(mode, x, y)) = ins.op else { unreachable!() };
+        {
+            let (x, y) = (x as usize, y as usize);
+            match mode {
+                0x08 => self.d.swap(x, y),
+                0x09 => self.a.swap(x, y),
+                _ => std::mem::swap(&mut self.d[x], &mut self.a[y]),
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_18_mulu<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Mulu(s, n) | Op::Muls(s, n)) = ins.op else { unreachable!() };
+        {
+            let sv = self.read_ea(bus, s, Size::Word);
+            let dv = self.d[n as usize];
+            let r = if matches!(ins.op, Op::Mulu(..)) {
+                self.cycles += 2 * (sv & 0xffff).count_ones() as u64;
+                (sv & 0xffff) * (dv & 0xffff)
+            } else {
+                self.cycles += 2 * (((sv << 1) ^ sv) & 0xffff).count_ones() as u64;
+                ((sv as i16 as i32) * (dv as i16 as i32)) as u32
+            };
+            self.d[n as usize] = r;
+            self.flags_logic(r, Size::Long);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_19_divu<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Divu(s, n) | Op::Divs(s, n)) = ins.op else { unreachable!() };
+        {
+            let sv = self.read_ea(bus, s, Size::Word) & 0xffff;
+            if sv == 0 {
+                self.cycles += 38;
+                self.div_zero_flags(ins, n);
+                self.exception(bus, 5, self.pc);
+                return true;
+            }
+            let dv = self.d[n as usize];
+            self.cycles += if matches!(ins.op, Op::Divu(..)) {
+                divu_cycles(dv, sv as u16)
+            } else {
+                divs_cycles(dv as i32, sv as u16 as i16)
+            } as u64;
+            if matches!(ins.op, Op::Divu(..)) {
+                let q = dv / sv;
+                let r = dv % sv;
+                if q > 0xffff {
+                    self.set_flags(SR_N | SR_Z | SR_V | SR_C, SR_V | SR_N);
+                } else {
+                    self.d[n as usize] = (r << 16) | q;
+                    self.flags_logic(q, Size::Word);
+                }
+            } else {
+                let (dv, sv) = (dv as i32 as i64, sv as i16 as i64);
+                let q = dv / sv;
+                let r = dv % sv;
+                if q > i16::MAX as i64 || q < i16::MIN as i64 {
+                    self.set_flags(SR_N | SR_Z | SR_V | SR_C, SR_V | SR_N);
+                } else {
+                    self.d[n as usize] = ((r as u32 & 0xffff) << 16) | (q as u32 & 0xffff);
+                    self.flags_logic(q as u32, Size::Word);
+                }
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_20_abcd<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Abcd(s, d) | Op::Sbcd(s, d)) = ins.op else { unreachable!() };
+        {
+            let sv = self.read_ea(bus, s, Size::Byte);
+            let dl = self.resolve(d, Size::Byte);
+            let dv = self.read(bus, dl, Size::Byte);
+            let r = if matches!(ins.op, Op::Abcd(..)) { self.abcd(sv, dv) } else { self.sbcd(sv, dv) };
+            self.write(bus, dl, Size::Byte, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_21_nbcd<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Nbcd(d)) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(d, Size::Byte);
+            let dv = self.read(bus, dl, Size::Byte);
+            let r = self.sbcd(dv, 0);
+            self.write(bus, dl, Size::Byte, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_22_chk<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Chk(s, n)) = ins.op else { unreachable!() };
+        {
+            let bound = self.read_ea(bus, s, Size::Word) as u16 as i16;
+            let v = self.d[n as usize] as u16 as i16;
+            self.chk_flags(v, bound);
+            if v < 0 || v > bound {
+                // MAME : 38 cycles si Dn > borne ; si Dn < 0, 38 ou 40 selon le signe de (borne - Dn) sur 16 bits
+                self.cycles += if v > bound || (bound as u16).wrapping_sub(v as u16) & 0x8000 != 0 { 28 } else { 30 };
+                self.exception(bus, 6, self.pc);
+                return true;
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_23_move<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Move(sz, s, d)) = ins.op else { unreachable!() };
+        {
+            let v = self.read_ea(bus, s, sz);
+            let dl = self.resolve(d, sz);
+            self.flags_logic(v, sz);
+            self.write(bus, dl, sz, v);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_24_movea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Movea(sz, s, n)) = ins.op else { unreachable!() };
+        {
+            let v = sext(self.read_ea(bus, s, sz), sz);
+            self.a[n as usize] = v;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_25_moveq<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Moveq(v, n)) = ins.op else { unreachable!() };
+        {
+            let v = v as i32 as u32;
+            self.d[n as usize] = v;
+            self.flags_logic(v, Size::Long);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_26_movem<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Movem { size, to_mem, mask, ea }) = ins.op else { unreachable!() };
+        self.movem(bus, size, to_mem, mask, ea);
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_27_movep<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Movep { size, to_mem, dn, an, disp }) = ins.op else { unreachable!() };
+        {
+            let mut a = self.a[an as usize].wrapping_add(disp as i32 as u32);
+            let n = size.bytes();
+            if to_mem {
+                let v = self.d[dn as usize];
+                for i in (0..n).rev() {
+                    bus.write8(a & ADDR_MASK, (v >> (8 * i)) as u8);
+                    a = a.wrapping_add(2);
+                }
+            } else {
+                let mut v = 0u32;
+                for _ in 0..n {
+                    v = (v << 8) | bus.read8(a & ADDR_MASK) as u32;
+                    a = a.wrapping_add(2);
+                }
+                let m = size.mask();
+                let r = &mut self.d[dn as usize];
+                *r = (*r & !m) | v;
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_28_movefromsr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::MoveFromSr(d)) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(d, Size::Word);
+            if let Loc::Mem(_) = dl {
+                self.read(bus, dl, Size::Word);
+            }
+            self.write(bus, dl, Size::Word, self.sr as u32);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_29_movetoccr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::MoveToCcr(s)) = ins.op else { unreachable!() };
+        {
+            let v = self.read_ea(bus, s, Size::Word);
+            self.set_ccr(v as u16);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_30_movetosr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::MoveToSr(s)) = ins.op else { unreachable!() };
+        {
+            if !self.privileged(bus, ins) {
+                return true;
+            }
+            let v = self.read_ea(bus, s, Size::Word);
+            self.set_sr(v as u16);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_31_moveusp<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::MoveUsp { to_usp, an }) = ins.op else { unreachable!() };
+        {
+            if !self.privileged(bus, ins) {
+                return true;
+            }
+            if to_usp {
+                self.other_sp = self.a[an as usize];
+            } else {
+                self.a[an as usize] = self.other_sp;
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_32_lea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Lea(ea, n)) = ins.op else { unreachable!() };
+        self.a[n as usize] = self.ea_address(ea);
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_33_pea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Pea(ea)) = ins.op else { unreachable!() };
+        {
+            let a = self.ea_address(ea);
+            self.push32(bus, a);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_34_link<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Link(n, disp)) = ins.op else { unreachable!() };
+        {
+            // LINK A7 empile l'ancienne valeur de A7
+            let v = self.a[n as usize];
+            self.push32(bus, v);
+            self.a[n as usize] = self.a[7];
+            self.a[7] = self.a[7].wrapping_add(disp as i32 as u32);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_35_unlk<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Unlk(n)) = ins.op else { unreachable!() };
+        {
+            self.a[7] = self.a[n as usize];
+            let v = self.pop32(bus);
+            self.a[n as usize] = v;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_36_bit<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Bit(kind, count, d)) = ins.op else { unreachable!() };
+        {
+            let bitn = match count {
+                ShiftCount::Imm(v) => v as u32,
+                ShiftCount::Reg(r) => self.d[r as usize],
+            };
+            let sz = if matches!(d, Ea::Dn(_)) { Size::Long } else { Size::Byte };
+            let bitn = bitn % (sz.bytes() * 8);
+            if sz == Size::Long && kind != BitOp::Btst && bitn >= 16 {
+                self.cycles += 2;
+            }
+            let dl = self.resolve(d, sz);
+            let v = self.read(bus, dl, sz);
+            let set = v >> bitn & 1 != 0;
+            self.set_flags(SR_Z, if set { 0 } else { SR_Z });
+            let r = match kind {
+                BitOp::Btst => return false,
+                BitOp::Bchg => v ^ (1 << bitn),
+                BitOp::Bclr => v & !(1 << bitn),
+                BitOp::Bset => v | (1 << bitn),
+            };
+            self.write(bus, dl, sz, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_37_shift<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Shift { kind, left, size, count, dn }) = ins.op else { unreachable!() };
+        {
+            let c = match count {
+                ShiftCount::Imm(v) => v as u32,
+                ShiftCount::Reg(r) => self.d[r as usize] & 63,
+            };
+            let v = self.d[dn as usize] & size.mask();
+            let r = self.shift(kind, left, size, v, c);
+            let m = size.mask();
+            let reg = &mut self.d[dn as usize];
+            *reg = (*reg & !m) | (r & m);
+            self.cycles += 2 * c as u64;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_38_shiftmem<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::ShiftMem { kind, left, ea }) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(ea, Size::Word);
+            let v = self.read(bus, dl, Size::Word);
+            let r = self.shift(kind, left, Size::Word, v, 1);
+            self.write(bus, dl, Size::Word, r);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_39_bra<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Bra(t)) = ins.op else { unreachable!() };
+        self.pc = t;
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_40_bsr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Bsr(t)) = ins.op else { unreachable!() };
+        {
+            self.push32(bus, self.pc);
+            self.pc = t;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_41_bcc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Bcc(c, t)) = ins.op else { unreachable!() };
+        {
+            if self.cond(c) {
+                self.pc = t;
+                self.cycles += 2;
+            } else if ins.opcode & 0xff == 0 {
+                self.cycles += 4;
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_42_dbcc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Dbcc(c, n, t)) = ins.op else { unreachable!() };
+        {
+            if !self.cond(c) {
+                let r = &mut self.d[n as usize];
+                let w = (*r as u16).wrapping_sub(1);
+                *r = (*r & 0xffff_0000) | w as u32;
+                if w != 0xffff {
+                    self.pc = t;
+                    self.cycles -= 2;
+                } else {
+                    self.cycles += 2;
+                }
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_43_scc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Scc(c, d)) = ins.op else { unreachable!() };
+        {
+            let dl = self.resolve(d, Size::Byte);
+            if let Loc::Mem(_) = dl {
+                self.read(bus, dl, Size::Byte);
+            }
+            let v = if self.cond(c) { 0xff } else { 0 };
+            if v != 0 && matches!(dl, Loc::D(_)) {
+                self.cycles += 2;
+            }
+            self.write(bus, dl, Size::Byte, v);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_44_jmp<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Jmp(ea)) = ins.op else { unreachable!() };
+        self.pc = self.ea_address(ea);
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_45_jsr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Jsr(ea)) = ins.op else { unreachable!() };
+        {
+            let t = self.ea_address(ea);
+            self.push32(bus, self.pc);
+            self.pc = t;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_46_rts<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Rts) = ins.op else { unreachable!() };
+        self.pc = self.pop32(bus);
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_47_rtr<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Rtr) = ins.op else { unreachable!() };
+        {
+            let ccr = self.pop16(bus);
+            self.set_ccr(ccr);
+            self.pc = self.pop32(bus);
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_48_rte<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Rte) = ins.op else { unreachable!() };
+        {
+            if !self.privileged(bus, ins) {
+                return true;
+            }
+            let sr = self.pop16(bus);
+            let pc = self.pop32(bus);
+            self.set_sr(sr);
+            self.pc = pc;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_49_trap<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Trap(n)) = ins.op else { unreachable!() };
+        {
+            self.exception(bus, 32 + n as u32, self.pc);
+            return true;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_50_trapv<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Trapv) = ins.op else { unreachable!() };
+        {
+            if self.sr & SR_V != 0 {
+                self.cycles = self.op_start_cycles + 34;
+                self.exception(bus, 7, self.pc);
+                return true;
+            }
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_51_nop<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Nop) = ins.op else { unreachable!() };
+        {};
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_52_reset<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Reset) = ins.op else { unreachable!() };
+        {
+            if !self.privileged(bus, ins) {
+                return true;
+            }
+            bus.reset_devices();
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_53_stop<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Stop(v)) = ins.op else { unreachable!() };
+        {
+            if !self.privileged(bus, ins) {
+                return true;
+            }
+            self.set_sr(v);
+            self.stopped = true;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_54_illegal<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::Illegal) = ins.op else { unreachable!() };
+        {
+            self.exception(bus, 4, ins.pc);
+            return true;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_55_linea<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::LineA) = ins.op else { unreachable!() };
+        {
+            self.exception(bus, 10, ins.pc);
+            return true;
+        };
+        false
+    }
+    #[inline(always)]
+    #[allow(unused_variables, clippy::needless_return)]
+    pub fn op_56_linef<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let (Op::LineF) = ins.op else { unreachable!() };
+        {
+            self.exception(bus, 11, ins.pc);
+            return true;
+        };
         false
     }
 
