@@ -45,8 +45,13 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
             out.push(format!("{name}[{:06x}]={:04x} au lieu de {:04x}", base + 2 * i as u32, x[i], y[i]));
         }
     }
-    let live = |i: usize| !dead_stack.contains(&(0xff0000 + 2 * i as u32));
-    if let Some(i) = (0..a.ram.len()).find(|&i| a.ram[i] != b.ram[i] && live(i)) {
+    // pile privée des wrappers de son (FF2900-FF2A1A) : elle ne garde que des copies de registres
+    let live = |i: usize| {
+        let a = 0xff0000 + 2 * i as u32;
+        !dead_stack.contains(&a) && !(0xff2900..0xff2a1a).contains(&a)
+    };
+    let verbose = std::env::var("DDSOM_VERBOSE").is_ok();
+    for i in (0..a.ram.len()).filter(|&i| a.ram[i] != b.ram[i] && live(i)).take(if verbose { 12 } else { 1 }) {
         out.push(format!("ram[{:06x}]={:04x} au lieu de {:04x}", 0xff0000 + 2 * i as u32, a.ram[i], b.ram[i]));
     }
     first_diff("gfxram", 0x900000, &a.gfxram, &b.gfxram, out);
