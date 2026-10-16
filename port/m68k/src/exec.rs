@@ -35,7 +35,7 @@ impl Cpu {
             Ea::Ind(n) => self.a[n as usize],
             Ea::Disp(n, d) => self.a[n as usize].wrapping_add(d as i32 as u32),
             Ea::Idx(n, ext) => self.a[n as usize].wrapping_add(self.index(ext)),
-            Ea::Abs(a) => a,
+            Ea::AbsW(a) | Ea::AbsL(a) => a,
             Ea::PcDisp(a) => a,
             Ea::PcIdx(base, ext) => base.wrapping_add(self.index(ext) - (ext as i8 as i32 as u32)),
             _ => unreachable!("mode sans adresse : {ea:?}"),
@@ -145,6 +145,7 @@ impl Cpu {
     fn privileged<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         if self.sr & SR_S == 0 {
             self.exception(bus, 8, ins.pc);
+            self.cycles = self.op_start_cycles + 34;
             return false;
         }
         true
@@ -276,8 +277,10 @@ impl Cpu {
                 let sv = self.read_ea(bus, s, Size::Word);
                 let dv = self.d[n as usize];
                 let r = if matches!(ins.op, Op::Mulu(..)) {
+                    self.cycles += 2 * (sv & 0xffff).count_ones() as u64;
                     (sv & 0xffff) * (dv & 0xffff)
                 } else {
+                    self.cycles += 2 * (((sv << 1) ^ sv) & 0xffff).count_ones() as u64;
                     ((sv as i16 as i32) * (dv as i16 as i32)) as u32
                 };
                 self.d[n as usize] = r;
@@ -286,11 +289,17 @@ impl Cpu {
             Op::Divu(s, n) | Op::Divs(s, n) => {
                 let sv = self.read_ea(bus, s, Size::Word) & 0xffff;
                 if sv == 0 {
+                    self.cycles += 38;
                     self.div_zero_flags(ins, n);
                     self.exception(bus, 5, self.pc);
                     return true;
                 }
                 let dv = self.d[n as usize];
+                self.cycles += if matches!(ins.op, Op::Divu(..)) {
+                    divu_cycles(dv, sv as u16)
+                } else {
+                    divs_cycles(dv as i32, sv as u16 as i16)
+                } as u64;
                 if matches!(ins.op, Op::Divu(..)) {
                     let q = dv / sv;
                     let r = dv % sv;
@@ -330,6 +339,8 @@ impl Cpu {
                 let v = self.d[n as usize] as u16 as i16;
                 self.chk_flags(v, bound);
                 if v < 0 || v > bound {
+                    // MAME : 38 cycles si Dn > borne ; si Dn < 0, 38 ou 40 selon le signe de (borne - Dn) sur 16 bits
+                    self.cycles += if v > bound || (bound as u16).wrapping_sub(v as u16) & 0x8000 != 0 { 28 } else { 30 };
                     self.exception(bus, 6, self.pc);
                     return true;
                 }
@@ -422,6 +433,9 @@ impl Cpu {
                 };
                 let sz = if matches!(d, Ea::Dn(_)) { Size::Long } else { Size::Byte };
                 let bitn = bitn % (sz.bytes() * 8);
+                if sz == Size::Long && kind != BitOp::Btst && bitn >= 16 {
+                    self.cycles += 2;
+                }
                 let dl = self.resolve(d, sz);
                 let v = self.read(bus, dl, sz);
                 let set = v >> bitn & 1 != 0;
@@ -461,6 +475,8 @@ impl Cpu {
                 if self.cond(c) {
                     self.pc = t;
                     self.cycles += 2;
+                } else if ins.opcode & 0xff == 0 {
+                    self.cycles += 4;
                 }
             }
             Op::Dbcc(c, n, t) => {
@@ -482,6 +498,9 @@ impl Cpu {
                     self.read(bus, dl, Size::Byte);
                 }
                 let v = if self.cond(c) { 0xff } else { 0 };
+                if v != 0 && matches!(dl, Loc::D(_)) {
+                    self.cycles += 2;
+                }
                 self.write(bus, dl, Size::Byte, v);
             }
             Op::Jmp(ea) => self.pc = self.ea_address(ea),
@@ -511,6 +530,7 @@ impl Cpu {
             }
             Op::Trapv => {
                 if self.sr & SR_V != 0 {
+                    self.cycles = self.op_start_cycles + 34;
                     self.exception(bus, 7, self.pc);
                     return true;
                 }
@@ -799,4 +819,63 @@ pub(crate) fn write_mem<B: Bus>(bus: &mut B, a: u32, size: Size, v: u32) {
             bus.write16((a + 2) & ADDR_MASK, v as u16);
         }
     }
+}
+
+/// Durée de DIVU (sans calcul d'adresse), algorithme de Jorge Cwik.
+fn divu_cycles(dividend: u32, divisor: u16) -> u32 {
+    if divisor == 0 {
+        return 0;
+    }
+    if (dividend >> 16) >= divisor as u32 {
+        return 10;
+    }
+    let mut mcycles = 38u32;
+    let hdivisor = (divisor as u32) << 16;
+    let mut d = dividend;
+    for _ in 0..15 {
+        let temp = d;
+        d <<= 1;
+        if (temp as i32) < 0 {
+            d = d.wrapping_sub(hdivisor);
+        } else {
+            mcycles += 2;
+            if d >= hdivisor {
+                d -= hdivisor;
+                mcycles -= 1;
+            }
+        }
+    }
+    mcycles * 2
+}
+
+/// Durée de DIVS (sans calcul d'adresse), algorithme de Jorge Cwik.
+fn divs_cycles(dividend: i32, divisor: i16) -> u32 {
+    if divisor == 0 {
+        return 0;
+    }
+    let mut mcycles = 6u32;
+    if dividend < 0 {
+        mcycles += 1;
+    }
+    let ad = dividend.unsigned_abs();
+    let av = (divisor as i32).unsigned_abs();
+    if (ad >> 16) >= av {
+        return (mcycles + 2) * 2;
+    }
+    mcycles += 55;
+    if divisor >= 0 {
+        if dividend >= 0 {
+            mcycles -= 1;
+        } else {
+            mcycles += 1;
+        }
+    }
+    let mut aquot = ad / av;
+    for _ in 0..15 {
+        if (aquot as i16) >= 0 {
+            mcycles += 1;
+        }
+        aquot <<= 1;
+    }
+    mcycles * 2
 }

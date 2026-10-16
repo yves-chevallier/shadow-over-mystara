@@ -57,17 +57,17 @@ impl Eeprom93c46 {
         }
     }
 
-    /// Contenu au format du fichier nvram de MAME (mots big-endian).
+    /// Contenu au format du fichier nvram de MAME (mots petit-boutistes, ordre natif x86).
     pub fn from_bytes(b: &[u8]) -> Self {
         let mut d = [0xffffu16; 64];
         for (i, w) in b.chunks_exact(2).take(64).enumerate() {
-            d[i] = u16::from_be_bytes([w[0], w[1]]);
+            d[i] = u16::from_le_bytes([w[0], w[1]]);
         }
         Self::new(d)
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.data.iter().flat_map(|w| w.to_be_bytes()).collect()
+        self.data.iter().flat_map(|w| w.to_le_bytes()).collect()
     }
 
     /// Ligne DO (1 par défaut : sortie en haute impédance avec tirage).

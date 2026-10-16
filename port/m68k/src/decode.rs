@@ -43,7 +43,10 @@ pub enum Ea {
     Disp(u8, i16),
     /// (d8,An,Xn) : mot d'extension brut
     Idx(u8, u16),
-    Abs(u32),
+    /// (xxx).w : adresse étendue en signe.
+    AbsW(u32),
+    /// (xxx).l
+    AbsL(u32),
     /// (d16,PC) : adresse cible calculée au décodage. Lu en espace programme.
     PcDisp(u32),
     /// (d8,PC,Xn) : base (adresse du mot d'extension + d8) et mot d'extension. Espace programme.
@@ -162,6 +165,8 @@ pub struct Instr {
     pub pc: u32,
     /// Longueur en octets (opcode + extensions).
     pub len: u32,
+    /// Mot d'opcode brut (distingue par ex. ADDQ d'ADDI pour le timing).
+    pub opcode: u16,
 }
 
 /// Source des mots d'instruction (espace programme).
@@ -197,8 +202,8 @@ impl<F: Fetch> Reader<'_, F> {
             5 => Ea::Disp(r, self.w() as i16),
             6 => Ea::Idx(r, self.w()),
             7 => match reg {
-                0 => Ea::Abs(self.w() as i16 as i32 as u32),
-                1 => Ea::Abs(self.l()),
+                0 => Ea::AbsW(self.w() as i16 as i32 as u32),
+                1 => Ea::AbsL(self.l()),
                 2 => {
                     let at = self.pc;
                     Ea::PcDisp(at.wrapping_add(self.w() as i16 as i32 as u32))
@@ -234,7 +239,7 @@ fn is_mem_alt(ea: Ea) -> bool {
     ea.is_mem() && is_alterable(ea)
 }
 fn is_control(ea: Ea) -> bool {
-    matches!(ea, Ea::Ind(_) | Ea::Disp(..) | Ea::Idx(..) | Ea::Abs(_) | Ea::PcDisp(_) | Ea::PcIdx(..))
+    matches!(ea, Ea::Ind(_) | Ea::Disp(..) | Ea::Idx(..) | Ea::AbsW(_) | Ea::AbsL(_) | Ea::PcDisp(_) | Ea::PcIdx(..))
 }
 
 fn size2(bits: u16) -> Option<Size> {
@@ -254,7 +259,7 @@ pub fn decode<F: Fetch>(f: &mut F, pc: u32) -> Instr {
     let len = r.pc.wrapping_sub(pc);
     // Une instruction invalide n'a que son opcode
     let len = if matches!(o, Op::Illegal | Op::LineA | Op::LineF) { 2 } else { len };
-    Instr { op: o, pc, len }
+    Instr { op: o, pc, len, opcode: op }
 }
 
 fn decode_op<F: Fetch>(r: &mut Reader<F>, op: u16) -> Option<Op> {

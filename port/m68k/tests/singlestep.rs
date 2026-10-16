@@ -1,5 +1,6 @@
 //! Tests SingleStepTests/m68000 (générés avec le cœur 68000 microcodé de MAME, licence MIT).
 //! Fichiers attendus dans $M68K_TESTS (défaut ~/tools/m68000-tests/*.json.bin) ; ignoré s'ils manquent.
+//! Vérifie l'état final ET le nombre de cycles de chaque instruction.
 //! Les cas déclenchant une erreur d'adresse (accès mot impair) sont ignorés : non modélisé.
 //!
 //! cargo test --release -p m68k --test singlestep -- --nocapture
@@ -49,6 +50,7 @@ struct Case {
     initial: State,
     fin: State,
     address_error: bool,
+    cycles: u32,
 }
 
 struct Rd<'a> {
@@ -105,7 +107,7 @@ fn parse(b: &[u8]) -> Vec<Case> {
         let fin = r.state();
         r.u32();
         assert_eq!(r.u32(), 0x456789AB);
-        let _cycles = r.u32();
+        let cycles = r.u32();
         let ntr = r.u32();
         let mut address_error = false;
         for _ in 0..ntr {
@@ -118,7 +120,7 @@ fn parse(b: &[u8]) -> Vec<Case> {
                 }
             }
         }
-        out.push(Case { name, initial, fin, address_error });
+        out.push(Case { name, initial, fin, address_error, cycles });
     }
     out
 }
@@ -128,8 +130,8 @@ const NAMES: [&str; 19] = [
     "sr", "pc",
 ];
 
-/// Exécute un cas ; renvoie la liste des écarts.
-fn run(mem: &mut Mem, c: &Case) -> Vec<String> {
+/// Exécute un cas ; renvoie la liste des écarts et les cycles comptés.
+fn run(mem: &mut Mem, c: &Case) -> (Vec<String>, u64) {
     for &a in &mem.touched {
         mem.ram[a as usize] = 0;
     }
@@ -176,7 +178,7 @@ fn run(mem: &mut Mem, c: &Case) -> Vec<String> {
             errs.push(format!("ram[{a:06x}]={g:02x} attendu {v:02x}"));
         }
     }
-    errs
+    (errs, cpu.cycles)
 }
 
 #[test]
@@ -203,12 +205,25 @@ fn singlestep() {
         let cases = parse(&std::fs::read(f).unwrap());
         let (mut ok, mut fail, mut skip) = (0, 0, 0);
         let mut first = None;
+        let (mut cyc_ok, mut cyc_bad) = (0, 0);
+        let mut cyc_first = None;
         for c in &cases {
             if c.address_error {
                 skip += 1;
                 continue;
             }
-            let errs = run(&mut mem, c);
+            let (errs, cycles) = run(&mut mem, c);
+            if cycles == c.cycles as u64 {
+                cyc_ok += 1;
+            } else {
+                cyc_bad += 1;
+                if cyc_first.is_none() {
+                    cyc_first = Some(format!("{} : {} cycles, attendu {}", c.name, cycles, c.cycles));
+                }
+                if std::env::var_os("M68K_CYCLES_ALL").is_some() && cyc_bad <= 12 {
+                    println!("  {} : {} cycles, attendu {} (d={:08x?} sr={:04x})", c.name, cycles, c.cycles, &c.initial.regs[0..8], c.initial.regs[17]);
+                }
+            }
             if errs.is_empty() {
                 ok += 1;
             } else {
@@ -222,7 +237,10 @@ fn singlestep() {
         if fail > 0 {
             println!("ÉCHEC {name:14} {ok} ok, {fail} faux, {skip} ignorés — ex. {}", first.unwrap());
         }
-        total_fail += fail;
+        if cyc_bad > 0 {
+            println!("CYCLES {name:14} {cyc_ok} ok, {cyc_bad} faux — ex. {}", cyc_first.unwrap());
+        }
+        total_fail += fail + cyc_bad;
         summary.insert(name, (ok, fail, skip));
     }
     let ok: usize = summary.values().map(|v| v.0).sum();

@@ -34,6 +34,7 @@ pub struct Machine {
     pub obj_buffer: Vec<u16>,
     pub pri_ctrl_buffer: [u16; 6],
     line_cycles: f64,
+    /// Cycle CPU absolu de fin de la ligne en cours.
     cycle_debt: f64,
 }
 
@@ -75,18 +76,20 @@ impl Machine {
         self.bus.qram[0xfff] = 0x77;
     }
 
-    /// Exécute le CPU pendant une ligne de balayage.
+    /// Exécute le CPU pendant une ligne de balayage. La cible est absolue (le dépassement d'une
+    /// ligne est retranché de la suivante) pour garder exactement 755,2 cycles par ligne en moyenne.
     fn run_line(&mut self) {
         self.cycle_debt += self.line_cycles;
-        let target = self.cpu.cycles + self.cycle_debt as u64;
-        self.cycle_debt -= self.cycle_debt.floor();
+        let target = self.cycle_debt as u64;
         while self.cpu.cycles < target {
             self.cpu.irq_level = self.bus.irq_level();
             self.cpu.step(&mut self.bus);
         }
     }
 
-    /// Avance d'une image. Renvoie l'image rendue au début du vblank (384x224 RGB).
+    /// Exécute une trame complète (lignes 0 à 261), comme une image MAME : la notification
+    /// d'image de MAME tombe en fin de trame. À la ligne 240 (début du vblank) : rendu de l'écran,
+    /// verrouillage de la table d'objets, IRQ2. Renvoie l'image 384x224 RGB.
     pub fn run_frame(&mut self) -> Vec<[u8; 3]> {
         let mut image = Vec::new();
         for line in 0..LINES {

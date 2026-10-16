@@ -2,13 +2,7 @@
 //! Les parts dynamiques (branchement pris, nombre de décalages, registres MOVEM) sont ajoutées
 //! à l'exécution.
 
-use crate::decode::{Ea, Op, Size};
-
-/// Le décodeur ne garde pas la forme abs.w/abs.l : une adresse représentable sur 16 bits signés
-/// est supposée codée en abs.w (écart de 4 cycles sinon, sans conséquence fonctionnelle).
-fn short_abs(a: u32) -> bool {
-    (a as i32) >= -0x8000 && (a as i32) < 0x8000
-}
+use crate::decode::{Ea, Instr, Op, Size};
 
 /// Temps de calcul d'adresse effective (octet/mot, long).
 fn ea_time(ea: Ea, size: Size) -> u32 {
@@ -18,8 +12,8 @@ fn ea_time(ea: Ea, size: Size) -> u32 {
         Ea::Ind(_) | Ea::PostInc(_) => (4, 8),
         Ea::PreDec(_) => (6, 10),
         Ea::Disp(..) | Ea::PcDisp(_) => (8, 12),
-        Ea::Abs(a) if short_abs(a) => (8, 12),
-        Ea::Abs(_) => (12, 16),
+        Ea::AbsW(_) => (8, 12),
+        Ea::AbsL(_) => (12, 16),
         Ea::Idx(..) | Ea::PcIdx(..) => (10, 14),
         Ea::Imm(_) => (4, 8),
     };
@@ -40,18 +34,23 @@ fn ctrl_index(ea: Ea) -> usize {
         Ea::Ind(_) => 0,
         Ea::Disp(..) | Ea::PcDisp(_) => 1,
         Ea::Idx(..) | Ea::PcIdx(..) => 2,
-        Ea::Abs(a) if short_abs(a) => 3,
+        Ea::AbsW(_) => 3,
         _ => 4,
     }
 }
 
-pub fn base_cycles(op: &Op) -> u32 {
+/// Durée de base ; les parts dépendant des données sont ajoutées par l'exécuteur.
+pub fn base_cycles(ins: &Instr) -> u32 {
     use Op::*;
     let reg = |ea: Ea| matches!(ea, Ea::Dn(_) | Ea::An(_));
-    match *op {
+    let quick = ins.opcode >> 12 == 5;
+    match ins.op {
         Move(sz, s, d) => 4 + ea_time(s, sz) + move_dst_time(d, sz),
         Movea(sz, s, _) => 4 + ea_time(s, sz),
         Moveq(..) => 4,
+        Add(sz, _, d) | Sub(sz, _, d) if quick => {
+            if reg(d) { if sz == Size::Long { 8 } else { 4 } } else { (if sz == Size::Long { 12 } else { 8 }) + ea_time(d, sz) }
+        }
         Add(sz, s, d) | Sub(sz, s, d) | And(sz, s, d) | Or(sz, s, d) | Eor(sz, s, d) => {
             match (s, d) {
                 (Ea::Imm(_), Ea::Dn(_)) => if sz == Size::Long { 16 } else { 8 },
@@ -66,9 +65,8 @@ pub fn base_cycles(op: &Op) -> u32 {
                 _ => (if sz == Size::Long { 12 } else { 8 }) + ea_time(d, sz),
             }
         }
+        Adda(..) | Suba(..) if quick => 8,
         Adda(sz, s, _) | Suba(sz, s, _) => match s {
-            // ADDQ/SUBQ vers An
-            Ea::Imm(v) if v <= 8 && sz == Size::Long => 8,
             _ => if sz == Size::Long { (if reg(s) || matches!(s, Ea::Imm(_)) { 8 } else { 6 }) + ea_time(s, sz) } else { 8 + ea_time(s, sz) },
         },
         Cmp(sz, s, d) => match d {
@@ -87,19 +85,19 @@ pub fn base_cycles(op: &Op) -> u32 {
             if reg(d) { if sz == Size::Long { 6 } else { 4 } } else { (if sz == Size::Long { 12 } else { 8 }) + ea_time(d, sz) }
         }
         Tst(sz, d) => 4 + ea_time(d, sz),
-        Tas(d) => if reg(d) { 4 } else { 14 + ea_time(d, Size::Byte) },
+        Tas(d) => if reg(d) { 4 } else { 10 + ea_time(d, Size::Byte) },
         Ext(..) | Swap(_) | Nop => 4,
         Exg(..) => 6,
+        // + 2 par bit (MULU) / transition (MULS), + durée de division : ajoutés à l'exécution
         Mulu(s, _) | Muls(s, _) => 38 + ea_time(s, Size::Word),
-        Divu(s, _) => 140 + ea_time(s, Size::Word),
-        Divs(s, _) => 158 + ea_time(s, Size::Word),
+        Divu(s, _) | Divs(s, _) => ea_time(s, Size::Word),
         Chk(s, _) => 10 + ea_time(s, Size::Word),
         AndiCcr(_) | OriCcr(_) | EoriCcr(_) | AndiSr(_) | OriSr(_) | EoriSr(_) => 20,
         MoveFromSr(d) => if reg(d) { 6 } else { 8 + ea_time(d, Size::Word) },
         MoveToSr(s) | MoveToCcr(s) => 12 + ea_time(s, Size::Word),
         MoveUsp { .. } => 4,
         Movem { to_mem, ea, .. } => {
-            let i = ctrl_index(ea);
+            let i = if matches!(ea, Ea::PostInc(_) | Ea::PreDec(_)) { 0 } else { ctrl_index(ea) };
             if to_mem { [8, 12, 14, 12, 16][i] } else { [12, 16, 18, 16, 20][i] }
         }
         Movep { size, .. } => if size == Size::Long { 24 } else { 16 },
@@ -113,15 +111,17 @@ pub fn base_cycles(op: &Op) -> u32 {
             use crate::decode::{BitOp, ShiftCount};
             let imm = matches!(count, ShiftCount::Imm(_));
             if matches!(d, Ea::Dn(_)) {
+                // BCHG/BSET/BCLR : +2 si le numéro de bit >= 16 (ajouté à l'exécution)
                 let base = match kind {
                     BitOp::Btst => 6,
-                    BitOp::Bclr => 10,
-                    _ => 8,
+                    BitOp::Bclr => 8,
+                    _ => 6,
                 };
                 base + if imm { 4 } else { 0 }
             } else {
                 let base = if kind == BitOp::Btst { 4 } else { 8 };
-                base + if imm { 4 } else { 0 } + ea_time(d, Size::Byte)
+                // BTST Dn,#imm : l'immédiat compte comme une lecture d'extension
+                base + if imm { 4 } else { 0 } + if matches!(d, Ea::Imm(_)) { 6 } else { ea_time(d, Size::Byte) }
             }
         }
         Shift { size, .. } => if size == Size::Long { 8 } else { 6 },

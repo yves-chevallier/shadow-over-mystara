@@ -52,6 +52,8 @@ pub struct Cpu {
     pub cycles: u64,
     /// Exception de trace due : prise au début de l'instruction suivante.
     pub trace_pending: bool,
+    /// Compteur de cycles au début de l'instruction en cours (pour fixer la durée des exceptions).
+    pub(crate) op_start_cycles: u64,
 }
 
 pub(crate) const ADDR_MASK: u32 = 0x00ff_ffff;
@@ -67,6 +69,8 @@ impl Cpu {
         self.stopped = false;
         self.a[7] = (bus.fetch16(0) as u32) << 16 | bus.fetch16(2) as u32;
         self.pc = (bus.fetch16(4) as u32) << 16 | bus.fetch16(6) as u32;
+        // séquence de reset : lectures des vecteurs et préchargement (~40 cycles)
+        self.cycles += 40;
     }
 
     pub fn supervisor(&self) -> bool {
@@ -127,7 +131,8 @@ impl Cpu {
         let trace = self.sr & SR_T != 0;
         let ins = decode::decode(bus, self.pc);
         self.pc = self.pc.wrapping_add(ins.len);
-        self.cycles += timing::base_cycles(&ins.op) as u64;
+        self.cycles += timing::base_cycles(&ins) as u64;
+        self.op_start_cycles = self.cycles - timing::base_cycles(&ins) as u64;
         let excepted = self.exec(bus, &ins);
         self.trace_pending = trace && !excepted;
         Some(ins)
