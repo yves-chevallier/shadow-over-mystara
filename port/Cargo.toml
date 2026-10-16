@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cps2","cps2-gfx", "ddsom", "ddsom-assets", "ddsom-game", "ddsom-rc", "extract", "m68k", "qsound", "recomp", "vrender", "z80"]
+members = ["cps2","cps2-gfx", "ddsom", "ddsom-assets", "ddsom-game", "ddsom-rc", "ddsom-sound", "extract", "m68k", "qsound", "recomp", "vrender", "z80"]
 
 [profile.release]
 debug = 1

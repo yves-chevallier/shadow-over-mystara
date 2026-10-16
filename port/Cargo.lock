@@ -110,6 +110,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ddsom-sound"
+version = "0.1.0"
+dependencies = [
+ "cps2",
+ "ddsom-game",
+ "ddsom-rc",
+]
+
+[[package]]
 name = "extract"
 version = "0.1.0"
 dependencies = [

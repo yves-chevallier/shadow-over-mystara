@@ -10,7 +10,25 @@ pub const Z80_HZ: f64 = 8_000_000.0;
 /// Interruption périodique : 8 MHz / 32000 = 250 Hz (irq0_line_hold).
 pub const Z80_IRQ_PERIOD: u64 = 32_000;
 
+/// Événement observable du Z80 (outils d'analyse et de validation du pilote son).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Event {
+    /// Interruption acceptée.
+    Irq,
+    /// Lecture du Z80 dans la RAM partagée (adresse 0-0xFFF, valeur lue).
+    Read(u16, u8),
+    /// Écriture du Z80 dans la RAM partagée.
+    Write(u16, u8),
+    /// Écriture du Z80 en D000-D003 : (décalage, octet). D000/D001 chargent le verrou de données,
+    /// D002 écrit le registre QSound, D003 choisit la banque de ROM.
+    Port(u8, u8),
+}
+
 pub struct Sound {
+    /// Journal des événements, si activé.
+    pub trace: Option<Vec<Event>>,
+    /// Rappel avant chaque instruction du Z80 (couverture), si activé.
+    pub pc_hook: Option<Box<dyn FnMut(&z80::Z80)>>,
     pub z80: z80::Z80,
     /// Région audiocpu (0x50000) : 0-7FFF fixe, banques de 0x4000 à partir de 0x10000.
     pub rom: Vec<u8>,
@@ -37,6 +55,8 @@ impl Sound {
         let mut z80 = z80::Z80::new();
         z80.reset();
         Sound {
+            trace: None,
+            pc_hook: None,
             z80,
             rom,
             bank: 0,
@@ -76,6 +96,9 @@ impl Sound {
                 cpu.irq_line = true;
                 self.next_irq += Z80_IRQ_PERIOD;
             }
+            if let Some(h) = self.pc_hook.as_mut() {
+                h(&cpu);
+            }
             let mut bus = Z80Bus { s: self, qram };
             cpu.step(&mut bus);
             if self.irq_acked {
@@ -101,15 +124,29 @@ impl z80::Bus for Z80Bus<'_> {
                 let i = 0x10000 + self.s.bank * 0x4000 + (a as usize - 0x8000);
                 *self.s.rom.get(i).unwrap_or(&0xff)
             }
-            0xc000..=0xcfff => self.qram[(a - 0xc000) as usize],
+            0xc000..=0xcfff => {
+                let v = self.qram[(a - 0xc000) as usize];
+                if let Some(t) = self.s.trace.as_mut() {
+                    t.push(Event::Read(a - 0xc000, v));
+                }
+                v
+            }
             0xd007 => self.s.qsound.read(),
             0xf000..=0xffff => self.s.ram[(a - 0xf000) as usize],
             _ => 0xff,
         }
     }
     fn write(&mut self, a: u16, v: u8) {
+        if let (Some(t), 0xd000..=0xd003) = (self.s.trace.as_mut(), a) {
+            t.push(Event::Port((a - 0xd000) as u8, v));
+        }
         match a {
-            0xc000..=0xcfff => self.qram[(a - 0xc000) as usize] = v,
+            0xc000..=0xcfff => {
+                self.qram[(a - 0xc000) as usize] = v;
+                if let Some(t) = self.s.trace.as_mut() {
+                    t.push(Event::Write(a - 0xc000, v));
+                }
+            }
             0xd000..=0xd002 => self.s.qsound.write((a - 0xd000) as u8, v),
             0xd003 => {
                 let bank = (v & 0x0f) as usize;
@@ -126,6 +163,9 @@ impl z80::Bus for Z80Bus<'_> {
     fn irq_ack(&mut self) -> u8 {
         // irq0_line_hold : la ligne retombe à l'acquittement
         self.s.irq_acked = true;
+        if let Some(t) = self.s.trace.as_mut() {
+            t.push(Event::Irq);
+        }
         0xff
     }
 }
