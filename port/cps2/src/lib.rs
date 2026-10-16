@@ -1,10 +1,11 @@
 //! Machine CPS2 : 68000 + bus + vidéo, cadencée ligne par ligne comme dans MAME.
-//! Le Z80 / QSound n'est pas encore émulé : la RAM partagée est simulée au minimum.
+//! Son : Z80 + QSound (HLE), exécutés ligne par ligne en alternance avec le 68000.
 
 pub mod bus;
 pub mod crypt;
 pub mod eeprom;
 mod sboxes;
+pub mod sound;
 
 use std::io;
 use std::path::Path;
@@ -28,6 +29,7 @@ pub const DDSOM_PROG: [&str; 8] = [
 pub struct Machine {
     pub cpu: Cpu,
     pub bus: Cps2Bus,
+    pub sound: sound::Sound,
     pub gfx: Vec<u8>,
     pub frame: u64,
     /// Table d'objets verrouillée au dernier vblank (affichée à l'image suivante).
@@ -36,6 +38,8 @@ pub struct Machine {
     line_cycles: f64,
     /// Cycle CPU absolu de fin de la ligne en cours.
     cycle_debt: f64,
+    /// Idem pour le Z80.
+    z80_debt: f64,
 }
 
 impl Machine {
@@ -51,6 +55,21 @@ impl Machine {
         let (k, lower, upper) = crypt::parse_key(&key);
         let rom_dec = crypt::decrypt(&rom, k, lower, upper);
         let gfx = cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?;
+        // Z80 : dd2.01 = 0x8000 en 0, puis 0x18000 en 0x10000 (ROM_CONTINUE) ; dd2.02 en 0x28000
+        let mut zrom = vec![0u8; 0x50000];
+        let d1 = std::fs::read(romdir.join("dd2.01"))?;
+        zrom[..0x8000].copy_from_slice(&d1[..0x8000]);
+        zrom[0x10000..0x28000].copy_from_slice(&d1[0x8000..0x20000]);
+        let d2 = std::fs::read(romdir.join("dd2.02"))?;
+        zrom[0x28000..0x48000].copy_from_slice(&d2);
+        // échantillons QSound : ROM_LOAD16_WORD_SWAP
+        let mut samples = Vec::with_capacity(0x400000);
+        for name in ["dd2.11m", "dd2.12m"] {
+            let d = std::fs::read(romdir.join(name))?;
+            samples.extend(d.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
+        }
+        let dsp = std::fs::read(romdir.join("dl-1425.bin"))?;
+        let snd = sound::Sound::new(zrom, qsound::QSound::new(&dsp, samples));
         let ee = match eeprom {
             Some(b) => Eeprom93c46::from_bytes(b),
             None => Eeprom93c46::new([0xffff; 64]),
@@ -58,12 +77,14 @@ impl Machine {
         let mut m = Machine {
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
+            sound: snd,
             gfx,
             frame: 0,
             obj_buffer: vec![0; 0x1000],
             pri_ctrl_buffer: [0; 6],
             line_cycles: CPU_HZ / LINE_HZ,
             cycle_debt: 0.0,
+            z80_debt: 0.0,
         };
         m.reset();
         Ok(m)
@@ -72,8 +93,6 @@ impl Machine {
     pub fn reset(&mut self) {
         self.cpu = Cpu::new();
         self.cpu.reset(&mut self.bus);
-        // Z80 non émulé : il signale qu'il est prêt (le 68000 attend 0x77 en 619FFF au boot)
-        self.bus.qram[0xfff] = 0x77;
     }
 
     /// Exécute le CPU pendant une ligne de balayage. La cible est absolue (le dépassement d'une
@@ -85,26 +104,29 @@ impl Machine {
             self.cpu.irq_level = self.bus.irq_level();
             self.cpu.step(&mut self.bus);
         }
+        // puis le Z80 sur la même tranche de temps (512 cycles à 8 MHz par ligne)
+        self.sound.set_reset(!self.bus.z80_running);
+        self.z80_debt += sound::Z80_HZ / LINE_HZ;
+        self.sound.run(&mut self.bus.qram, self.z80_debt as u64, 1.0 / LINE_HZ);
     }
 
-    /// Exécute une trame complète (lignes 0 à 261), comme une image MAME : la notification
-    /// d'image de MAME tombe en fin de trame. À la ligne 240 (début du vblank) : rendu de l'écran,
-    /// verrouillage de la table d'objets, IRQ2. Renvoie l'image 384x224 RGB.
+    /// Exécute une image comme MAME : au reset le faisceau est en début de vblank (ligne 240) et
+    /// la notification d'image de MAME tombe au début de chaque vblank. Une image exécute donc les
+    /// lignes 240..261 puis 0..239 ; elle se termine sur l'événement de vblank (rendu de l'écran,
+    /// verrouillage de la table d'objets, IRQ2), traité au début de l'image suivante.
+    /// Renvoie l'image 384x224 RGB.
     pub fn run_frame(&mut self) -> Vec<[u8; 3]> {
-        let mut image = Vec::new();
-        for line in 0..LINES {
+        for i in 0..LINES {
+            let line = (VBLANK_LINE + i) % LINES;
             self.bus.scanline = line;
             self.raster_tick(line);
-            if line == VBLANK_LINE {
-                image = self.render();
-                // verrouillage de la table d'objets et des priorités (cps2_objram_latch)
-                let bank = self.bus.objram_bank as usize & 1;
-                self.obj_buffer.copy_from_slice(&self.bus.objram[bank]);
-                self.pri_ctrl_buffer = self.bus.output;
-                self.bus.irq_vblank = true;
-            }
             self.run_line();
         }
+        let image = self.render();
+        let bank = self.bus.objram_bank as usize & 1;
+        self.obj_buffer.copy_from_slice(&self.bus.objram[bank]);
+        self.pri_ctrl_buffer = self.bus.output;
+        self.bus.irq_vblank = true;
         self.frame += 1;
         image
     }

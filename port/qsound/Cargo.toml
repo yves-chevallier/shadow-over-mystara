@@ -1,0 +1,8 @@
+[package]
+name = "qsound"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+description = "Capcom QSound DL-1425 (HLE), port de MAME qsoundhle.cpp (superctr, Valley Bell)"
+
+[dependencies]

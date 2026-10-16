@@ -8,6 +8,8 @@ description = "Machine CPS2 : bus 68000, EEPROM, interruptions, chargement des R
 [dependencies]
 m68k = { path = "../m68k" }
 cps2-gfx = { path = "../cps2-gfx" }
+z80 = { path = "../z80" }
+qsound = { path = "../qsound" }
 
 [dev-dependencies]
 png = "0.17"

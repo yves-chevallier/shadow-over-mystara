@@ -9,6 +9,14 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
     let dump = std::fs::read(&a[3]).expect("dump MAME");
+    // IGNORE="debut-fin,..." (adresses hex) : zones exclues (ex. piles des tâches)
+    let ignore: Vec<(usize, usize)> = std::env::var("IGNORE").unwrap_or_default().split(',')
+        .filter(|s| !s.is_empty())
+        .map(|r| {
+            let (a, b) = r.split_once('-').unwrap();
+            (usize::from_str_radix(a, 16).unwrap() - 0xff0000, usize::from_str_radix(b, 16).unwrap() - 0xff0000)
+        })
+        .collect();
     let n = (dump.len() / 0x10000).min(a.get(4).map(|s| s.parse().unwrap()).unwrap_or(usize::MAX));
     let mut first_bad = None;
     // divergences durables : octet différent pendant >= 30 images consécutives
@@ -19,9 +27,10 @@ fn main() {
         m.run_frame();
         let mame = &dump[f * 0x10000..(f + 1) * 0x10000];
         let ours: Vec<u8> = m.bus.ram.iter().flat_map(|w| w.to_be_bytes()).collect();
-        let diffs: Vec<usize> = (0..0x10000).filter(|&i| mame[i] != ours[i]).collect();
+        let ignored = |i: usize| ignore.iter().any(|&(a, b)| i >= a && i <= b);
+        let diffs: Vec<usize> = (0..0x10000).filter(|&i| mame[i] != ours[i] && !ignored(i)).collect();
         for i in 0..0x10000 {
-            if mame[i] != ours[i] {
+            if mame[i] != ours[i] && !ignored(i) {
                 run[i] += 1;
                 if run[i] == 30 && !reported[i] && persistent < 12 {
                     reported[i] = true;

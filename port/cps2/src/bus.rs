@@ -74,7 +74,8 @@ impl Cps2Bus {
             raster_counter: [0; 3],
             raster_reload: [0x1ff, 0x1ff, 0],
             scanline: 0,
-            z80_running: false,
+            // le Z80 démarre à la mise sous tension ; le 68000 le met en reset au boot
+            z80_running: true,
         }
     }
 
