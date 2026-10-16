@@ -1,0 +1,13 @@
+[package]
+name = "cps2"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+description = "Machine CPS2 : bus 68000, EEPROM, interruptions, chargement des ROMs (d'après MAME)"
+
+[dependencies]
+m68k = { path = "../m68k" }
+cps2-gfx = { path = "../cps2-gfx" }
+
+[dev-dependencies]
+png = "0.17"

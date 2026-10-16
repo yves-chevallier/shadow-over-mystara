@@ -282,7 +282,6 @@ impl Cpu {
                 };
                 self.d[n as usize] = r;
                 self.flags_logic(r, Size::Long);
-                self.cycles += 34;
             }
             Op::Divu(s, n) | Op::Divs(s, n) => {
                 let sv = self.read_ea(bus, s, Size::Word) & 0xffff;
@@ -312,7 +311,6 @@ impl Cpu {
                         self.flags_logic(q as u32, Size::Word);
                     }
                 }
-                self.cycles += 140;
             }
             Op::Abcd(s, d) | Op::Sbcd(s, d) => {
                 let sv = self.read_ea(bus, s, Size::Byte);
@@ -462,6 +460,7 @@ impl Cpu {
             Op::Bcc(c, t) => {
                 if self.cond(c) {
                     self.pc = t;
+                    self.cycles += 2;
                 }
             }
             Op::Dbcc(c, n, t) => {
@@ -471,6 +470,9 @@ impl Cpu {
                     *r = (*r & 0xffff_0000) | w as u32;
                     if w != 0xffff {
                         self.pc = t;
+                        self.cycles -= 2;
+                    } else {
+                        self.cycles += 2;
                     }
                 }
             }
@@ -726,6 +728,7 @@ impl Cpu {
 
     fn movem<B: Bus>(&mut self, bus: &mut B, size: Size, to_mem: bool, mask: u16, ea: Ea) {
         let n = size.bytes();
+        self.cycles += (mask.count_ones() * if size == Size::Long { 8 } else { 4 }) as u64;
         if to_mem {
             if let Ea::PreDec(an) = ea {
                 // masque inversé : bit 0 = A7 ... bit 15 = D0 ; on écrit de A7 vers D0

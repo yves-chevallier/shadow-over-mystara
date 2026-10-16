@@ -6,6 +6,7 @@
 
 pub mod decode;
 mod exec;
+pub mod timing;
 
 pub use decode::{decode, Ea, Instr, Op, Size};
 
@@ -126,6 +127,7 @@ impl Cpu {
         let trace = self.sr & SR_T != 0;
         let ins = decode::decode(bus, self.pc);
         self.pc = self.pc.wrapping_add(ins.len);
+        self.cycles += timing::base_cycles(&ins.op) as u64;
         let excepted = self.exec(bus, &ins);
         self.trace_pending = trace && !excepted;
         Some(ins)
