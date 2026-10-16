@@ -171,7 +171,20 @@ fn alea_m2(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     wr16(b, A5 + 0x16, alea.next() as u16 & 0x8f88);
     wr8(b, A5 + 0x18, alea.next() as u8 & 6);
     wr16(b, 0x664000, alea.next() as u16);
+    // configuration : variante, copie en RAM (valeurs valides ou non), bloc par défaut dans A6
+    let variante = 2 * (alea.next() as u16 % 6);
+    wr16(b, A5 + 0x70, variante);
+    for i in 0..0x80u32 {
+        let petit = if alea.next() % 3 == 0 { alea.next() as u8 } else { (alea.next() % 20) as u8 };
+        wr8(b, 0xff1d8e + i, petit);
+    }
+    let bloc = 0x2d656 + b_prog16(b, 0x2d656 + variante as u32) as i16 as u32;
+    c.a[6] = if alea.next() & 3 == 0 { bloc + 0x30 } else { bloc };
     registres(c, b, alea);
+}
+
+fn b_prog16(b: &mut Bus, a: u32) -> u16 {
+    m68k::Bus::read_prog16(b, a)
 }
 
 fn main() {
@@ -211,13 +224,21 @@ fn main() {
         for &entree in &entrees {
             alea_etat(c, b, &mut alea);
             let (d0, a0) = (c.d[0], c.a[0]);
+            let contexte = if entree == 0x2d662 {
+                let var = ddsom_game::mem::rd16(b, A5 + 0x70);
+                let copie: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, 0xff1d8e + i)).collect();
+                let bloc: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, c.a[6] + i)).collect();
+                format!(" var={var} copie={copie:02x?} defauts={bloc:02x?}")
+            } else {
+                String::new()
+            };
             let avant = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
             ddsom_game::call(c, b, entree);
             let apres = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
             if apres > avant && affiches < 12 {
                 affiches += 1;
                 let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                println!("écart en {entree:06x} (d0={d0:08x} a0={a0:06x}) : {}", dernier.unwrap_or_default());
+                println!("écart en {entree:06x} (d0={d0:08x} a0={a0:06x}){contexte} : {}", dernier.unwrap_or_default());
             }
         }
     }

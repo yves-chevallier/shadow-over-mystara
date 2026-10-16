@@ -9,6 +9,7 @@
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
 pub mod chemin;
+pub mod config;
 pub mod credits;
 pub mod eeprom;
 pub mod evenements;
@@ -23,6 +24,7 @@ pub mod sound;
 pub mod sprites;
 pub mod text;
 pub mod timing;
+pub mod vue;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -107,6 +109,10 @@ pub const NATIVES: &[Native] = &[
     eeprom::COMPTER_CONTINUES,
     eeprom::COMPTER_PARTIES,
     eeprom::VBLANK_COMPTA,
+    config::VARIANTE,
+    config::DEFAUTS,
+    config::VALIDER,
+    config::VARIABLES,
 ];
 
 /// Index des routines natives par adresse d'entrée : `NATIVES` et les wrappers son (décrits par une
