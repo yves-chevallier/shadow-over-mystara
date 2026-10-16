@@ -8,10 +8,14 @@
 //! Mode contrôle (`set_check(true)`) : chaque appel exécute aussi la routine d'origine sur une copie
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
+pub mod chemin;
+pub mod evenements;
 pub mod inputs;
 pub mod mem;
+pub mod ops;
 pub mod palette;
 pub mod physics;
+pub mod rng;
 pub mod scenario;
 pub mod sound;
 pub mod sprites;
@@ -77,6 +81,18 @@ pub const NATIVES: &[Native] = &[
     sound::ENFILER_SI_SON,
     sound::ENFILER_DIRECT,
     sound::ENVOYER_AU_Z80,
+    rng::SEED,
+    rng::NEXT,
+    evenements::VIDER_POINTS,
+    evenements::VIDER_COMPTEUR,
+    evenements::VIDER_POPUPS,
+    evenements::EFFACER_POPUP,
+    evenements::ENFILER_POINTS,
+    evenements::ENFILER_COMPTEUR,
+    evenements::EVENEMENT_OBJET,
+    evenements::CREER_POPUP,
+    evenements::CREDITER_POINTS,
+    evenements::CREDITER_COMPTEUR,
 ];
 
 /// Index des routines natives par adresse d'entrée : `NATIVES` et les wrappers son (décrits par une

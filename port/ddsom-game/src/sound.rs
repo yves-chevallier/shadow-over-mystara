@@ -10,14 +10,13 @@
 //! registres sont rendus intacts ; seule la mémoire change : la file, et les registres sauvegardés
 //! restent écrits sous le pointeur de pile privée (copie morte, reproduite à l'identique).
 
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use cps2::Cps2Bus;
-use m68k::decode::{Ea, Size};
+use m68k::decode::Size;
 use m68k::{Cpu, SR_C};
 
+use crate::chemin::Chemin;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::{regs, Native};
 
@@ -196,14 +195,6 @@ impl Chemin {
         let pleine = file_pleine(c, b);
         self.pris(pleine);
     }
-
-    /// Durée du code d'origine depuis `entree` en suivant ces décisions.
-    fn duree(&self, b: &mut Cps2Bus, entree: u32) -> u64 {
-        let mut m = Marche { decisions: self.bits, restantes: self.n };
-        let v = marche(b, entree, &mut m);
-        assert_eq!(m.restantes, 0, "{entree:06x} : décisions non consommées");
-        v
-    }
 }
 
 fn enfiler_cout(c: &Cpu, b: &mut Cps2Bus, entree: u32, avec_test: bool) -> u64 {
@@ -295,21 +286,6 @@ fn panoramique(c: &Cpu, b: &mut Cps2Bus, chemin: &mut Chemin) -> u8 {
     rd8(b, TABLE_PAN + ((ecart & 0x1ff) >> 3) as u32)
 }
 
-/// Suite des décisions des branchements conditionnels rencontrés, dans l'ordre d'exécution : sert à
-/// calculer la durée exacte du chemin dans le code d'origine.
-#[derive(Default)]
-struct Chemin {
-    bits: u64,
-    n: u32,
-}
-
-impl Chemin {
-    fn pris(&mut self, pris: bool) {
-        self.bits |= (pris as u64) << self.n;
-        self.n += 1;
-    }
-}
-
 /// Résultat de l'évaluation d'un wrapper (sans effet sur la mémoire).
 struct Plan {
     /// Commande à enfiler, ou `None` si le wrapper est gardé (rien n'est émis).
@@ -389,72 +365,10 @@ fn run_wrapper(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-thread_local! {
-    static COUTS: RefCell<HashMap<(u32, u64, u32), u64>> = RefCell::new(HashMap::new());
-}
-
 /// Durée du wrapper d'origine sur le chemin choisi.
 fn cout_wrapper(c: &Cpu, b: &mut Cps2Bus) -> u64 {
     let w = wrapper_en(c.pc);
-    let plan = planifier(w, c, b);
-    let cle = (w.entry, plan.chemin.bits, plan.chemin.n);
-    if let Some(v) = COUTS.with(|m| m.borrow().get(&cle).copied()) {
-        return v;
-    }
-    let v = plan.chemin.duree(b, w.entry);
-    COUTS.with(|m| m.borrow_mut().insert(cle, v));
-    v
-}
-
-/// Décisions restant à consommer lors du parcours du code d'origine.
-struct Marche {
-    decisions: u64,
-    restantes: u32,
-}
-
-/// Parcourt le code d'origine depuis `pc` jusqu'au RTS (ou au JMP final, compté) en additionnant les
-/// durées, les branchements conditionnels suivant les décisions de `chemin` (dans l'ordre).
-fn marche(b: &mut Cps2Bus, mut pc: u32, chemin: &mut Marche) -> u64 {
-    use m68k::decode::{Op, ShiftCount};
-    let mut cycles = 0u64;
-    for _ in 0..10_000 {
-        let ins = m68k::decode(b, pc);
-        cycles += m68k::timing::base_cycles(&ins) as u64;
-        let suite = pc.wrapping_add(ins.len);
-        match ins.op {
-            Op::Rts => return cycles,
-            Op::Bra(t) => {
-                pc = t;
-                continue;
-            }
-            Op::Bcc(_, t) => {
-                assert!(chemin.restantes > 0, "marche : branchement sans décision en {pc:06x}");
-                chemin.restantes -= 1;
-                let pris = chemin.decisions & 1 != 0;
-                chemin.decisions >>= 1;
-                if pris {
-                    cycles += 2;
-                    pc = t;
-                    continue;
-                } else if ins.opcode & 0xff == 0 {
-                    cycles += 4;
-                }
-            }
-            Op::Bsr(t) | Op::Jsr(Ea::AbsL(t) | Ea::AbsW(t) | Ea::PcDisp(t)) => cycles += marche(b, t, chemin),
-            Op::Jsr(_) => panic!("marche : JSR non statique en {pc:06x}"),
-            Op::Jmp(_) => return cycles,
-            Op::Movem { size, mask, .. } => {
-                cycles += mask.count_ones() as u64 * if size == Size::Long { 8 } else { 4 }
-            }
-            Op::Shift { count: ShiftCount::Imm(n), .. } => cycles += 2 * n as u64,
-            Op::Shift { .. } | Op::Dbcc(..) | Op::Mulu(..) | Op::Muls(..) | Op::Divu(..) | Op::Divs(..) => {
-                panic!("marche : durée dépendant des données en {pc:06x}")
-            }
-            _ => {}
-        }
-        pc = suite;
-    }
-    panic!("marche : pas de RTS depuis {pc:06x}");
+    planifier(w, c, b).chemin.duree(b, w.entry)
 }
 
 fn wrapper_natif(w: &Wrapper) -> Native {
