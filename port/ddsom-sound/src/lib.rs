@@ -184,10 +184,13 @@ impl Driver {
         }
     }
 
-    /// Mise sous tension : le Z80 annonce sa présence au 68000.
+    /// Mise en route (ou reset relâché par le 68000) : le Z80 annonce sa présence. Sa RAM n'est
+    /// pas effacée par le reset : le compteur d'interruptions, qui cadence le démarrage, subsiste.
     pub fn reset(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
         let rom = std::mem::replace(&mut self.rom, Rom::from_region(Vec::new()));
+        let irq_count = self.irq_count;
         *self = Driver::new(rom);
+        self.irq_count = irq_count;
         self.shared.copy_from_slice(shared);
         self.write_shared(shared::HANDSHAKE, 0x77);
         self.finish(shared, out);

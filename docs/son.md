@@ -373,7 +373,7 @@ D007, les multiplications se font par décalages). Conséquences mesurées sur `
 - les **suites** d'écritures (QSound, rapport de pan, acquittements) sont identiques, mais on ne peut
   pas comparer en bloc, interruption par interruption : l'acquittement de commande (écrit par la routine
   d'interruption) est comparé séparément des écritures de la boucle principale ;
-- à la fin d'une interruption, l'état des registres QSound est identique dans environ 94 % des cas ;
+- à la fin d'une interruption, l'état des registres QSound est identique dans 97 % des cas (121 425 sur 125 389) ;
   les autres sont des tics que le Z80 n'a pas fini d'écrire ;
 - quand le Z80 est occupé plus d'une période de plus que prévu par le séquenceur (piste synthétique qui
   boucle longtemps sans note), l'ordre entre une commande et le travail en attente dépend de la durée
