@@ -81,6 +81,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ddsom-game"
+version = "0.1.0"
+dependencies = [
+ "cps2",
+ "ddsom-rc",
+ "m68k",
+ "png",
+]
+
+[[package]]
 name = "ddsom-rc"
 version = "0.1.0"
 dependencies = [

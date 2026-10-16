@@ -68,3 +68,43 @@ C'est l'approche des projets N64Recomp / XenonRecomp, adaptée au 68000.
 - Toute adresse sans bloc (reprise en milieu de bloc, code non découvert) est exécutée par
   l'interpréteur : le résultat ne dépend jamais de la qualité de la découverte, seulement la vitesse.
 - Le code généré dérive des ROMs : il n'est produit que localement (`build.rs`), jamais versionné.
+
+## Destination finale : un moteur Rust autonome
+
+Le but n'est pas d'émuler mais de **réimplémenter** : un moteur Rust lisible et minimaliste, sans ROM,
+sans 68000 ni Z80, au comportement strictement identique à l'original.
+
+```
+assets/              extraits localement depuis les ROMs de l'utilisateur (jamais versionnés)
+  sprites/*.png      planches de sprites et tuiles, avec leurs palettes
+  sounds/*.wav       échantillons QSound
+  data/*.ron         niveaux, animations, tables (vitesses, IA, objets...)
+engine/              le jeu : état en structures Rust, une image = une fonction update()
+  world.rs           joueurs, ennemis, objets, collisions
+  render.rs          liste de sprites + décors -> image
+  audio.rs           mixeur façon QSound + séquenceur de musique
+```
+
+### Comment on y va sans perdre l'exactitude
+
+L'émulateur (m68k, z80, cps2, recomp) ne disparaît pas : il devient **l'oracle de test**. Chaque
+morceau réécrit est exécuté en parallèle de l'original et comparé.
+
+1. **Routines natives** (en cours) : remplacer des routines 68000 une à une, à l'adresse d'entrée,
+   avec contrôle différentiel. Les adaptateurs registres/drapeaux sont un échafaudage temporaire : ils
+   disparaissent quand l'appelant est lui-même réécrit.
+2. **Remonter la frontière** : réécrire des tâches entières de l'ordonnanceur (joueur, ennemis,
+   décor, menus) puis la boucle de jeu. L'état passe de la RAM émulée à des structures Rust ; tant que
+   les deux mondes coexistent, une projection RAM <-> structures sert de pont et de point de comparaison.
+3. **Extraction des données** : un outil lit les ROMs de l'utilisateur et produit `assets/`. Le
+   moteur ne lit plus que ces fichiers.
+4. **Son** : séquenceur réécrit à partir du pilote Z80, mixeur QSound en Rust pur.
+5. **Critère final** : sur des scénarios d'entrées enregistrés, le moteur autonome produit les mêmes
+   images (au pixel près) et les mêmes commandes son que l'original émulé.
+
+### Ordre de grandeur
+
+Le programme compte ~2 500 fonctions 68000 (~630 Ko de code) : IA de chaque ennemi et boss, objets,
+magies, collisions, scripts de niveaux, menus, 4 joueurs. Beaucoup se ressemblent (machines à états
+par objet, tables de données), ce qui rend la version Rust nettement plus compacte, mais c'est un
+travail progressif, piloté par les tests de non-régression contre l'original.

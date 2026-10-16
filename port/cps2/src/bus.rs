@@ -1,5 +1,7 @@
 //! Carte mémoire du 68000 CPS2 (cps2_state::cps2_map de MAME).
 
+use std::sync::Arc;
+
 use m68k::decode::Fetch;
 
 use crate::eeprom::Eeprom93c46;
@@ -19,11 +21,12 @@ impl Default for Inputs {
     }
 }
 
+#[derive(Clone)]
 pub struct Cps2Bus {
-    /// ROM programme, vue données (en clair), mots big-endian.
-    pub rom: Vec<u16>,
+    /// ROM programme, vue données (en clair), mots big-endian. Partagée entre copies du bus.
+    pub rom: Arc<Vec<u16>>,
     /// ROM programme, vue espace programme (opcodes et lectures relatives au PC déchiffrés).
-    pub rom_dec: Vec<u16>,
+    pub rom_dec: Arc<Vec<u16>>,
     pub ram: Vec<u16>,       // FF0000-FFFFFF
     pub extra_ram: Vec<u16>, // 660000-664001
     pub gfxram: Vec<u16>,    // 900000-92FFFF
@@ -49,13 +52,16 @@ pub struct Cps2Bus {
     pub scanline: u32,
     /// Le Z80 est maintenu en reset tant que le bit 3 de 804041 vaut 0.
     pub z80_running: bool,
+    /// Premier cycle CPU où une interruption peut être levée (fin d'image, ou fin de ligne si les
+    /// compteurs raster sont armés). Un traitement atomique qui s'achève avant reste exact.
+    pub irq_horizon: u64,
 }
 
 impl Cps2Bus {
     pub fn new(rom: Vec<u16>, rom_dec: Vec<u16>, eeprom: Eeprom93c46) -> Self {
         Cps2Bus {
-            rom,
-            rom_dec,
+            rom: Arc::new(rom),
+            rom_dec: Arc::new(rom_dec),
             ram: vec![0; 0x8000],
             extra_ram: vec![0; 0x2001],
             gfxram: vec![0; 0x18000],
@@ -76,6 +82,7 @@ impl Cps2Bus {
             scanline: 0,
             // le Z80 démarre à la mise sous tension ; le 68000 le met en reset au boot
             z80_running: true,
+            irq_horizon: 0,
         }
     }
 

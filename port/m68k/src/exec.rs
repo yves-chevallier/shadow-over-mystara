@@ -103,7 +103,7 @@ impl Cpu {
         self.read(bus, l, size)
     }
 
-    fn cond(&self, c: u8) -> bool {
+    pub fn cond(&self, c: u8) -> bool {
         let sr = self.sr;
         let (n, z, v, cf) = (sr & SR_N != 0, sr & SR_Z != 0, sr & SR_V != 0, sr & SR_C != 0);
         match c {
@@ -131,7 +131,7 @@ impl Cpu {
     }
 
     /// N et Z selon le résultat, V et C à zéro (opérations logiques, MOVE...).
-    fn flags_logic(&mut self, r: u32, size: Size) {
+    pub fn flags_logic(&mut self, r: u32, size: Size) {
         let mut f = 0;
         if r & size.mask() == 0 {
             f |= SR_Z;
@@ -968,7 +968,7 @@ impl Cpu {
 
     /// Addition/soustraction avec tous les flags. `dv - sv` pour une soustraction.
     /// `ext` : variante X (ADDX/SUBX/NEGX) où Z n'est effacé que si le résultat est non nul.
-    fn addsub(&mut self, sub: bool, sv: u32, dv: u32, x: bool, sz: Size, ext: bool) -> u32 {
+    pub fn addsub(&mut self, sub: bool, sv: u32, dv: u32, x: bool, sz: Size, ext: bool) -> u32 {
         let m = sz.mask();
         let msb = sz.msb();
         let (sv, dv) = (sv & m, dv & m);

@@ -25,7 +25,7 @@ enum Command {
 const ADDRESS_BITS: u32 = 6;
 const DATA_BITS: u32 = 16;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Eeprom93c46 {
     pub data: [u16; 64],
     state: State,

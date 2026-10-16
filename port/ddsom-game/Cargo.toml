@@ -1,0 +1,13 @@
+[package]
+name = "ddsom-game"
+version = "0.1.0"
+edition = "2021"
+description = "Logique de jeu de ddsom réécrite en Rust idiomatique (routines natives remplaçant le code 68000)"
+
+[dependencies]
+m68k = { path = "../m68k" }
+cps2 = { path = "../cps2" }
+ddsom-rc = { path = "../ddsom-rc" }
+
+[dev-dependencies]
+png = "0.17"

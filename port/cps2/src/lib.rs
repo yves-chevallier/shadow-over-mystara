@@ -146,10 +146,15 @@ impl Machine {
     /// verrouillage de la table d'objets, IRQ2), traité au début de l'image suivante.
     /// Renvoie l'image 384x224 RGB.
     pub fn run_frame(&mut self) -> Vec<[u8; 3]> {
+        let frame_end = (self.cycle_debt + self.line_cycles * LINES as f64) as u64;
         for i in 0..LINES {
             let line = (VBLANK_LINE + i) % LINES;
             self.bus.scanline = line;
             self.raster_tick(line);
+            // compteurs raster armés (rechargement < nombre de lignes) : une IRQ peut tomber à
+            // chaque ligne ; sinon la prochaine interruption possible est le vblank de fin d'image
+            let raster = self.bus.raster_reload[..2].iter().any(|&r| (r as u32) < LINES);
+            self.bus.irq_horizon = if raster { (self.cycle_debt + self.line_cycles) as u64 } else { frame_end };
             self.run_line();
         }
         let image = self.render();
