@@ -109,4 +109,16 @@ Joueur ciblable : actif (`+0`), non masqué (bit 1 de `+1`), `+4` < 4, `+0x182` 
 
 ## 7. Validation
 
-Voir le compte rendu du dernier commit : appels et écarts par routine, routines non exercées.
+`tools/validate_all.sh 30000` : 8 scénarios VALIDE, 0 écart (59 222 appels de `combat_update`, durée des
+natives d'IA exacte au cycle près, `exact_cost`). Les routines internes de `combat` sont comptées par
+`examples/combat_coverage` (même protocole que `validate`, plus le détail des appels internes).
+Exercées : tous les parcours de listes, coups des joueurs (dégâts, critiques, magicien, élément,
+bonus de groupe, jauge), attaques et tirs ennemis, poussées d'ennemis et de caisses, ramassage,
+parade contre un ennemi. **Jamais exercées par les scénarios** (non validées) : comportements de
+tirs joueur (`shots.rs`, types 0..24), butin du voleur (`steal_loot`), parade d'un tir ennemi, caisses
+qui blessent (`box_hits_*`), saisie de caisse / tonneau (`grab_crate`, `shove_*`, `push_barrel`), coup
+paré (`0xb048`), et côté IA `0x103d6`, `0x1040c`, `0x1059e`, `0x1050c`, `0x10560`.
+
+Particularité reproduite : dans `player_hits_enemies`, `0x19dce` écrase A2 (la boîte d'attaque du
+joueur) et l'original ne la rétablit pas ; les ennemis suivants sont testés contre FF820E
+(`World::a2`).
