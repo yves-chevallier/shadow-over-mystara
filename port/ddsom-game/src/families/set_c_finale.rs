@@ -13,7 +13,6 @@ use crate::objects::Obj;
 use m68k::SR_C;
 
 /// Table (espace programme) des déplacements des machines, un mot relatif par variante.
-const VARIANT_TABLE: u32 = 0xce034;
 const VARIANTS: u32 = 25;
 
 /// Routines du moteur appelées.
@@ -47,11 +46,10 @@ pub fn run(x: &mut Cx) {
     if variant >= VARIANTS {
         return;
     }
-    let target = VARIANT_TABLE.wrapping_add(x.rom16(VARIANT_TABLE + 2 * variant) as i16 as i32 as u32);
-    // Les tables d'états de toutes les variantes (sauf 7, 19 et 20, sans table) finissent pareil :
+    // Les tables d'états de toutes les variantes (sauf 19 et 20, sans table) finissent pareil :
     // état 4 = passer à 6 (0xce0e8) ou, pour 0 et 1, libérer ; état 6 = libérer (0xce0e2) ; pour 24
     // l'état 4 est propre à la variante.
-    if !matches!(variant, 7 | 19 | 20) {
+    if !matches!(variant, 19 | 20) {
         match (variant, x.u8(0x4)) {
             (0 | 1, 4 | 6) | (_, 6) => return free(x),
             (24, 4) => {}
@@ -67,7 +65,7 @@ pub fn run(x: &mut Cx) {
         4 => scene_scroll(x),
         5 => block_loader(x),
         6 => scene_scroll_follow(x),
-        7 => x.call(target), // saisie/affichage de texte : pas encore réécrite
+        7 => status::status_window(x),
         8 => later::hp_refill_a(x),
         9 => later::spawn_player_effects(x),
         10 => later::shaking_intro(x),
@@ -482,3 +480,5 @@ fn block_loader_for(x: &mut Cx, index: u32) {
 
 #[path = "set_c_finale_b.rs"]
 mod later;
+#[path = "set_c_finale_c.rs"]
+mod status;

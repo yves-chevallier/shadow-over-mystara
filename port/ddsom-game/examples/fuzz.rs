@@ -647,7 +647,7 @@ fn etat_scene(b: &mut Bus, alea: &mut Alea, obj: u32, kind: u8, depart: bool) {
         for j in 0..4u32 {
             let p = 0xff85de + 0x200 * j;
             wr8(b, p + 0x18a, (alea.next() % 2) as u8);
-            wr8(b, p + 3, (alea.next() % 12) as u8);
+            wr8(b, p + 3, (alea.next() % 6) as u8);
             wr8(b, p + 0x22, (alea.next() % 2) as u8);
             wr16(b, p + 0x60, [50, 100, 160][alea.next() as usize % 3]);
             wr16(b, p + 0x64, (alea.next() % 20) as u16);
@@ -676,7 +676,7 @@ fn etat_scene(b: &mut Bus, alea: &mut Alea, obj: u32, kind: u8, depart: bool) {
         let sous_etats = match variante {
             1 => 5,
             9 | 10 | 11 | 17 => 3,
-            14 | 16 => 2,
+            7 | 14 | 16 => 2,
             18 | 22 => 9,
             _ => 1,
         };
@@ -686,6 +686,12 @@ fn etat_scene(b: &mut Bus, alea: &mut Alea, obj: u32, kind: u8, depart: bool) {
         wr16(b, obj + 0x20, joueur as u16);
         wr16(b, obj + 0x26, joueur as u16);
         wr16(b, obj + 0x46, joueur as u16);
+        // fenêtre de dialogue (variante 7) : joueur visé, message à composer, tampon de texte
+        wr16(b, obj + 0x34, joueur as u16);
+        wr32(b, obj + 8, 0xcec00 + 2 * (alea.next() % 0x400));
+        wr32(b, obj + 0xc, 0xff2072);
+        wr8(b, A5 + 0x73, [2, 1, 0][alea.next() as usize % 3]);
+        wr16(b, A5 + 0x72, 2 + (alea.next() % 3) as u16);
         let chef = if obj == 0xffca9e { 0xffcaee } else { 0xffca9e };
         wr32(b, obj + 0x4c, chef);
         wr8(b, chef + 8, [0xff, 0, 1, 2, 3][alea.next() as usize % 5]);
