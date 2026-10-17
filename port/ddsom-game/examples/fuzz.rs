@@ -339,6 +339,93 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
 /// moteur de collisions ou le créateur modifient (drapeaux de touche, propriétaire, positions).
 /// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
 /// `DDSOM_ENTREE=<adresse hexa>` restreint à un gestionnaire.
+/// Mode `DDSOM_SCENE` du fuzz des familles : perturbe des variables de scène (A5), les joueurs et
+/// les champs libres de l'objet, avec des valeurs « intéressantes » (0, 1, seuils du jeu, hasard).
+fn perturber_scene(b: &mut Bus, alea: &mut Alea, obj: u32, stride: u32) {
+    let proche = std::env::var("DDSOM_PROCHE").is_ok();
+    let choisir = |alea: &mut Alea, special: &[u32]| -> u32 {
+        match alea.next() % 4 {
+            0 => 0,
+            1 => 1,
+            2 => special[alea.next() as usize % special.len()],
+            _ => alea.next() as u32,
+        }
+    };
+    // variables d'octet de A5 : partie en cours, pause, drapeaux de fin de scène...
+    for off in [0x35u32, 0x36, 0x42, 0x43, 0x4a, 0x50, 0x51, 0x34] {
+        if alea.next() % 4 == 0 {
+            let v = choisir(alea, &[2, 4]) as u8;
+            wr8(b, A5 + off, v);
+        }
+    }
+    // entrées des joueurs : touches maintenues (A5+0..3), pressées (A5+0xc..0xf), états des boutons (A5+4, A5+0xa)
+    for off in [0x0u32, 1, 2, 3, 4, 0xa, 0xc, 0xd, 0xe, 0xf] {
+        if alea.next() % 3 == 0 {
+            let v = match alea.next() % 4 {
+                0 => 0,
+                1 => 1 << (alea.next() % 8),
+                2 => [0x10u8, 0x20, 0x70, 0x80, 0x90][alea.next() as usize % 5],
+                _ => alea.next() as u8,
+            };
+            wr8(b, A5 + off, v);
+        }
+    }
+    // variables de mot : progression, caméra, mode de jeu, compteurs de places libres
+    for (off, special) in [(0x556u32, &[0x320u32, 0x321, 0x400][..]), (0x506, &[0x1c80, 0x1c7f, 0x2000]), (0x70, &[1]), (0x52, &[0]), (0x7e62, &[2, 3, 4])] {
+        if alea.next() % 4 == 0 {
+            let v = choisir(alea, special) as u16;
+            wr16(b, A5 + off, v);
+        }
+    }
+    // joueurs : présence, vie, états
+    for j in 0..4u32 {
+        let p = 0xff85de + 0x200 * j;
+        if !proche && alea.next() % 3 == 0 {
+            let present = alea.next() % 4 != 0;
+            wr8(b, p, present as u8);
+            wr16(b, p + 0x62, if alea.next() % 4 != 0 { 1 + (alea.next() % 99) as u16 } else { 0 });
+            let st = [0x200u16, 0x0, 0x402, 0x400, 0x600, alea.next() as u16][alea.next() as usize % 6];
+            wr16(b, p + 4, st);
+            wr8(b, p + 6, (alea.next() % 3 == 0) as u8 * 2);
+        }
+    }
+    // un joueur se pose sur l'objet, libre de ses mouvements (portes de sortie, déclencheurs de proximité)
+    // (DDSOM_PROCHE=1 : à chaque image, pour les mesures de séjour)
+    if proche || alea.next() % 4 != 0 {
+        let p = 0xff85de + 0x200 * (alea.next() % 4);
+        for off in [0x8u32, 0x10] {
+            let v = ddsom_game::mem::rd16(b, obj + off);
+            wr16(b, p + off, v);
+        }
+        wr16(b, p + 0xc, 0);
+        wr8(b, p, 1);
+        wr16(b, p + 0x62, 1 + (alea.next() % 50) as u16);
+        wr32(b, p + 4, [0x2000000u32, 0x2000600, 0x2002010][alea.next() as usize % 3]);
+        wr8(b, p + 0x6c, 0xff);
+        wr8(b, A5 - 0x5ac4, 0);
+        for off in [0x66u32, 0x15c, 0x8a] {
+            wr8(b, p + off, 0);
+        }
+    }
+    // champs libres de l'objet (au-delà des champs communs)
+    // (DDSOM_CHAMPS=début-fin[,début-fin...] en hexadécimal borne les décalages perturbés, 14-50 par défaut)
+    let plages: Vec<(u32, u32)> = std::env::var("DDSOM_CHAMPS")
+        .ok()
+        .map(|v| v.split(',').filter_map(|p| p.split_once('-').and_then(|(d, f)| Some((u32::from_str_radix(d, 16).ok()?, u32::from_str_radix(f, 16).ok()?)))).collect())
+        .unwrap_or_else(|| vec![(0x14, 0x50)]);
+    for off in plages.iter().flat_map(|&(d, f)| d..f.min(stride)) {
+        if alea.next() % 24 == 0 {
+            // états de l'automate (octets 4 à 7) : valeurs paires, indices de tables de sauts
+            let v = if off == 4 {
+                2 * (alea.next() % 4) as u8
+            } else if (5..8).contains(&off) {
+                2 * (alea.next() % 8) as u8
+            } else { choisir(alea, &[2, 8, 0x10, 0xff]) as u8 };
+            wr8(b, obj + off, v);
+        }
+    }
+}
+
 fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, filtre: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
@@ -371,6 +458,8 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     }
     // nombre de variantes tirées (3 par défaut : au-delà, beaucoup de types sortent de leurs tables)
     let variantes: u32 = std::env::var("DDSOM_VARIANTES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    let scene = std::env::var("DDSOM_SCENE").is_ok();
+    let progres = std::env::var("DDSOM_PROGRES").is_ok();
     let mut affiches = 0;
     let mut essais = 0;
     // couverture du code d'origine des gestionnaires (DDSOM_COUVERTURE=fichier : écrit les adresses vues)
@@ -383,7 +472,8 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             // propriétaires possibles : ennemis actifs, sinon joueurs
             let mut proprietaires: Vec<u32> = ENEMY.iter().filter(|o| rd8(&mut b, o.0) != 0).map(|o| o.0).collect();
             proprietaires.extend((0..4).map(|j| 0xff85de + 0x200 * j));
-            let obj = pool.slot(alea.next() % pool.slots);
+            let obj_index = alea.next() % pool.slots;
+            let obj = pool.slot(obj_index);
             for off in (0..pool.stride).step_by(2) {
                 wr16(&mut b, obj.0 + off, 0);
             }
@@ -397,6 +487,32 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             wr16(&mut b, obj.0 + 0x50, owner as u16);
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
+            // DDSOM_SCENE : le tableau de saisie des noms (SET 5, variante 0) a besoin de ses quatre curseurs,
+            // et un curseur de son joueur (+0x22) et de son numéro (+0x2f)
+            let mut esclaves: Vec<u32> = Vec::new();
+            if scene && pool.class == SET.class && kind == 5 {
+                let joueur = |j: u32| 0xff85de + 0x200 * j;
+                if rd8(&mut b, obj.0 + 3) == 0 {
+                    for j in 0..4u32 {
+                        let e = pool.slot((obj_index + 1 + j) % pool.slots);
+                        for off in (0..pool.stride).step_by(2) {
+                            wr16(&mut b, e.0 + off, 0);
+                        }
+                        wr8(&mut b, e.0, 1);
+                        wr8(&mut b, e.0 + 2, 5);
+                        wr8(&mut b, e.0 + 3, 1);
+                        wr8(&mut b, e.0 + 0x28, pool.class);
+                        wr16(&mut b, e.0 + 0x22, joueur(j) as u16);
+                        wr8(&mut b, e.0 + 0x2f, j as u8);
+                        wr16(&mut b, obj.0 + 0x18 + 2 * j, e.0 as u16);
+                        esclaves.push(e.0);
+                    }
+                } else {
+                    let j = alea.next() as u32 % 4;
+                    wr16(&mut b, obj.0 + 0x22, joueur(j) as u16);
+                    wr8(&mut b, obj.0 + 0x2f, j as u8);
+                }
+            }
             for off in [0x8u32, 0xc, 0x10] {
                 let v = (rd16(&mut b, owner + off) as u32) << 16 | (alea.next() & 0xffff);
                 wr32(&mut b, obj.0 + off, v);
@@ -446,6 +562,11 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         wr8(&mut b, obj.0 + 0x53, (alea.next() % 5) as u8);
                     }
                 }
+                // DDSOM_SCENE=1 : variables de scène (A5), joueurs et champs libres de l'objet tirés au hasard
+                // (types SET qui lisent la caméra, la progression, les joueurs...)
+                if scene && (std::env::var("DDSOM_PROCHE").is_ok() || alea.next() % 2 == 0) {
+                    perturber_scene(&mut b, &mut alea, obj.0, pool.stride);
+                }
                 // jeu en pause (rare) ou non ; objet suspendu (octet +0x40) très rarement
                 wr8(&mut b, A5 + 0x3d, (alea.next() % 10 == 0) as u8);
                 wr8(&mut b, obj.0 + 0x40, (alea.next() % 40 == 0) as u8);
@@ -473,7 +594,23 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     }
                 }
                 let avant_obj: Vec<u8> = (0..pool.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
-                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
+                if progres {
+                    eprintln!("appel {entree:06x} variante {} pas {pas} objet {:02x?}", avant_obj[3], &avant_obj[..8]);
+                }
+                // coût « hors contrat » : l'exécuteur lancerait le code d'origine (qui peut céder la main) ; rien à comparer
+                if ddsom_game::all_natives().any(|n| n.entry == entree && (n.cost)(&c, &mut b) > u64::MAX / 8) {
+                    continue;
+                }
+                let mut r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
+                // les curseurs du tableau de saisie tournent aussi (même gestionnaire, A0 = le curseur)
+                let apres_maitre = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
+                for &e in &esclaves {
+                    if r.is_ok() {
+                        c.a[0] = e;
+                        c.d[0] = 4 * kind as u32;
+                        r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
+                    }
+                }
                 if r.is_err() {
                     // l'original est sorti des rails (entrée incohérente) : on abandonne la trajectoire
                     let _ = (cs, bs);
@@ -484,7 +621,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     affiches += 1;
                     let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
                     println!("écart en {entree:06x} type {kind} pas {pas} : {}", dernier.unwrap_or_default());
-                    println!("  objet avant : {:02x?}", avant_obj);
+                    println!("  objet avant : {:02x?}{}", avant_obj, if apres_maitre > avant { " (écart dès l'objet principal)" } else { "" });
                     if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
                         // exécution pas à pas du code d'origine seul depuis l'état d'avant
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
