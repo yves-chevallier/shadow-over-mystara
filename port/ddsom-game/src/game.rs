@@ -1,25 +1,18 @@
-//! Boucle de partie (W1) : mise à jour du monde (`0x1c86e`), fin d'image (`0x1c4c4`) et phase 0
-//! (`0x1c522`, initialisation de la partie). Voir `docs/boucle.md`.
+//! Boucle de partie (W1) : mise à jour du monde (`0x1c86e`), fin d'image (`0x1c4c4`), phase 0
+//! (`0x1c522`, initialisation de la partie) et phase 12 (`0x1c6a0`, le jeu). Voir `docs/boucle.md`.
 //!
 //! La tâche de partie (`0x1c45a`) boucle à l'infini : une image = un appel de la phase courante
 //! (`A5+0x2c`), puis la remise à vide des files de collision, puis une cession (`0xa40`). Les phases
 //! ne cèdent pas elles-mêmes : chacune fait un pas par image et revient. Seule la boucle principale
-//! (qui cède) reste en 68000 ; les routines ci-dessous sont celles qui s'exécutent d'une traite.
-//!
-//! Durée : ces routines appellent des sous-routines par `call` (qui ajoutent la leur) ; leur durée
-//! propre est celle du code d'origine le long du chemin pris, retrouvée avec `Chemin`.
+//! (qui cède) reste en 68000.
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::chemin::Chemin;
 use crate::dispatch::{self, Class};
-use crate::garde::Garde;
 use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::pools::{self, Queue};
 use crate::objects::Obj;
-use crate::timing::path_cycles;
 use crate::{call, Native};
 
 /// Variables de la RAM de travail (offsets depuis A5).
@@ -27,25 +20,25 @@ mod ram {
     /// Phase de partie (octet, pas de 4), étape, sous-étape.
     pub const PHASE: u32 = 0x2c;
     pub const STEP: u32 = 0x2d;
+    pub const SUBSTEP: u32 = 0x2e;
     /// Mode « continue » : la phase 0 saute à sa dernière étape.
     pub const CONTINUE: u32 = 0x25;
-    /// Cinématique en cours (≠ 0).
-    pub const CINEMATIC: u32 = 0x44;
-    /// Numéro de scène.
-    pub const SCENE: u32 = 0x34;
-    /// Compte à rebours de l'étape (mot).
-    pub const TIMER: u32 = 0x38;
     /// Partie active.
     pub const ACTIVE: u32 = 0x30;
-    /// Décalage vertical du plan 2 (mot), utilisé pendant l'initialisation.
+    /// Numéro de scène (octet signé).
+    pub const SCENE: u32 = 0x34;
+    /// Cinématique en cours (≠ 0).
+    pub const CINEMATIC: u32 = 0x44;
+    /// Compte à rebours de l'étape (mot) ; en jeu, horloge BCD sur trois octets.
+    pub const TIMER: u32 = 0x38;
+    /// Défilement vertical du plan 2 (mot).
     pub const SCROLL2_Y: u32 = 0x4ba;
 }
 
-/// Sous-routines non réécrites ou déjà natives, appelées par `call`.
+/// Sous-routines 68000 (ou déjà natives) appelées par `call`.
 mod ext {
     /// Jauge de charge : D1 = marqueur écrit dans la première ligne du plan 2.
     pub const GAUGE: u32 = 0xb3e;
-    /// Mise à jour des quatre joueurs.
     pub const PLAYERS: u32 = 0x35292;
     /// Sous-objets des joueurs (armes avant et arrière).
     pub const PLAYER_PARTS: u32 = 0x392e4;
@@ -65,6 +58,12 @@ mod ext {
     pub const RANK_LOAD: u32 = 0x1f1b8;
     pub const CLEAR_STATUS: u32 = 0xdabba;
     pub const TASK_CREATE: u32 = 0x9b6;
+    pub const INPUT_HOOK: u32 = 0x2aec;
+    pub const COLLISIONS: u32 = 0x260ee;
+    pub const WORLD_EXTRA: u32 = 0x19e20;
+    pub const WORLD_EXTRA_2: u32 = 0xf2e5c;
+    pub const RANK_TICK: u32 = 0x1f27c;
+    pub const END_OF_FRAME: u32 = 0x28d8;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -75,12 +74,10 @@ mod ext {
 enum Step {
     /// Jauge de charge, avec son marqueur (D1).
     Gauge(u32),
-    /// Les quatre joueurs, puis leurs sous-objets.
     Players,
     PlayerParts,
     /// Dispatch d'une classe d'objets.
     Objs(&'static Class),
-    /// Caméras et défilement.
     Cameras,
 }
 use Step::{Cameras, Gauge, Objs, PlayerParts, Players};
@@ -107,7 +104,7 @@ const ORDER_CINEMATIC: &[Step] = &[
     Objs(&dispatch::SOBJ),
 ];
 
-/// Scènes 0x45 à 0x52 : ni joueurs, ni ennemis ; effets, décors, caméras, effets joueur, objets système.
+/// Scènes 0x45 à 0x52 : ni joueurs, ni ennemis.
 const ORDER_REDUCED: &[Step] = &[
     Gauge(G_ENEMY), Objs(&dispatch::EFFCT), Objs(&dispatch::SET), Cameras, Objs(&dispatch::PEFF),
     Objs(&dispatch::SOBJ),
@@ -121,94 +118,75 @@ const ORDER_SCENE_8: &[Step] = &[
     Objs(&dispatch::EFFCT), Objs(&dispatch::SOBJ),
 ];
 
-/// Choix de l'ordre ; `taken` note les décisions des branchements de l'original, dans l'ordre.
-fn world_order(b: &mut Cps2Bus, mut taken: impl FnMut(bool) -> bool) -> &'static [Step] {
-    // les comparaisons de l'original sont signées sur un octet
+/// Ordre de mise à jour selon la cinématique et la scène (comparaisons signées sur un octet).
+fn world_order(b: &mut Cps2Bus) -> &'static [Step] {
     let scene = rd8(b, A5 + ram::SCENE) as i8;
-    if taken(rd8(b, A5 + ram::CINEMATIC) != 0) {
+    if rd8(b, A5 + ram::CINEMATIC) != 0 {
         ORDER_CINEMATIC
-    } else if taken(scene >= 0x53) {
+    } else if scene >= 0x53 {
         ORDER_NORMAL
-    } else if taken(scene >= 0x45) {
+    } else if scene >= 0x45 {
         ORDER_REDUCED
-    } else if taken(scene == 8) {
+    } else if scene == 8 {
         ORDER_SCENE_8
     } else {
         ORDER_NORMAL
     }
 }
 
-/// Les sous-routines appelées par `Step`, pour ignorer leur durée dans le parcours du code d'origine.
-const WORLD_EXTERNALS: [u32; 14] = [
-    ext::GAUGE, ext::PLAYERS, ext::PLAYER_PARTS, ext::CAMERAS,
-    0x398e2, 0x3996c, 0x39a52, 0x39aec, 0x39b70, 0x39cba, 0x39e50, 0x39e86, 0x39f34, 0x39f82,
-];
-
-/// Met à jour tous les objets : joueurs, puis dix classes d'objets dans l'ordre de la scène.
-fn world_update(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.cycles += world_own_cycles(b);
-    for &step in world_order(b, |t| t) {
+/// Met à jour tous les objets : joueurs, puis les dix classes dans l'ordre de la scène.
+pub fn update_world(c: &mut Cpu, b: &mut Cps2Bus) {
+    for &step in world_order(b) {
         match step {
-            Gauge(marker) => {
-                c.d[1] = marker;
-                call(c, b, ext::GAUGE);
-            }
+            Gauge(marker) => gauge(c, b, marker),
             Players => call(c, b, ext::PLAYERS),
             PlayerParts => call(c, b, ext::PLAYER_PARTS),
-            Objs(class) => dispatch::run_class(c, b, class),
+            Objs(class) => class.update(c, b),
             Cameras => call(c, b, ext::CAMERAS),
         }
     }
-    rts(c, b);
 }
 
-/// Durée propre de la routine d'origine (choix de l'ordre et appels, sans leur contenu).
-fn world_own_cycles(b: &mut Cps2Bus) -> u64 {
-    let mut chemin = Chemin::default();
-    world_order(b, |t| {
-        chemin.pris(t);
-        t
-    });
-    chemin.duree_hors(b, 0x1c86e, None, &WORLD_EXTERNALS)
+fn gauge(c: &mut Cpu, b: &mut Cps2Bus, marker: u32) {
+    c.d[1] = marker;
+    call(c, b, ext::GAUGE);
 }
-
-static GARDE_WORLD: Garde = Garde::new();
 
 pub const WORLD_UPDATE: Native = Native {
     entry: 0x1c86e,
     name: "world_update",
-    cost: |c, b| GARDE_WORLD.cout(c, b, world_update),
-    run: |c, b| GARDE_WORLD.executer(c, b, world_update),
+    cost: |_, _| 100,
+    run: |c, b| {
+        update_world(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: 0, // les appelants enchaînent sur d'autres appels
-    exact_cost: true,
+    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
 // Fin d'image (0x1c4c4)
 
-/// Files de candidats aux collisions, dans l'ordre où l'original les remet à vide.
+/// Files de candidats aux collisions, remises à vide à chaque image.
 const QUEUES: [&Queue; 5] =
     [&pools::QUEUE_PSHL, &pools::QUEUE_ESHL, &pools::QUEUE_ENEMY_BOSS, &pools::QUEUE_BOX, &pools::QUEUE_ITEM];
 
-/// Fin de l'image, quand la phase revient : les files de collision repartent à vide. L'adresse de
-/// retour dépilée par le `rts` est celle du début de la boucle de partie (`0x1c468`).
-fn frame_end(c: &mut Cpu, b: &mut Cps2Bus) {
-    for q in QUEUES {
-        q.reset(b);
-    }
-    c.a[0] = A5 + pools::QUEUE_ITEM.array;
-    rts(c, b);
-}
-
+/// Fin de l'image, quand la phase revient : les files de collision repartent à vide. Le `rts`
+/// dépile l'adresse du début de la boucle de partie (`0x1c468`).
 pub const FRAME_END: Native = Native {
     entry: 0x1c4c4,
     name: "game_frame_end",
-    cost: |_, b| path_cycles(b, 0x1c4c4, 0, |_| false),
-    run: frame_end,
+    cost: |_, _| 100,
+    run: |c, b| {
+        for queue in QUEUES {
+            queue.reset(b);
+        }
+        rts(c, b);
+    },
     touches_sound: false,
-    outputs: crate::regs::a(0),
-    exact_cost: true,
+    outputs: 0,
+    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -221,25 +199,16 @@ const PALETTE_SCRIPTS: [u32; 3] = [0x1c546, 0x1c54a, 0x1c54e];
 const SET_PALETTES: [(u8, u8); 3] = [(0x3e, 0), (0x3f, 1), (0x40, 2)];
 const SET_PALETTE_INDEX: u32 = 0x2f;
 
-/// Octets de la RAM hors de la page A5+-0x7fff, remis à zéro par la phase.
+/// Octets de la RAM hors de la page A5±0x7fff, remis à zéro par la phase.
 const CLEARED_A: u32 = 0xff_2472; // A5 - 0x5b8e
 const CLEARED_B: u32 = 0xff_19f0; // A5 - 0x6610
-
-/// Table des étapes de la phase 0 : un `bra.w` de 4 octets par étape.
-const PHASE0_STEPS: u32 = 0x1c532;
 
 /// Tâche d'interface des joueurs créée à la fin de la phase.
 const PLAYER_UI_SLOT: u32 = 0x30;
 const PLAYER_UI_TASK: u32 = 0x150ac;
 
-/// Octets de `A5` remis à zéro par la sortie de phase : drapeau, score.
+/// Octets de `A5` remis à zéro en sortie : drapeau et score.
 const EXIT_CLEARED_BYTES: [u32; 2] = [0x37, 0x5d];
-
-const PHASE0_EXTERNALS: [u32; 14] = [
-    ext::POOLS_INIT_SET, ext::ALLOC_SET, ext::PLAYERS_PREPARE_A, ext::PLAYERS_PREPARE_B, ext::PALETTE_SCRIPT,
-    0x39f82, 0x39e86, ext::SPRITES, ext::PHASE0_END_FADE, ext::SPRITES_RESET, ext::POOLS_INIT_SOBJ,
-    ext::RANK_LOAD, ext::CLEAR_STATUS, ext::TASK_CREATE,
-];
 
 fn next_step(b: &mut Cps2Bus) {
     let step = rd8(b, A5 + ram::STEP).wrapping_add(4);
@@ -251,6 +220,12 @@ fn run_script(c: &mut Cpu, b: &mut Cps2Bus, script: u32) {
     call(c, b, ext::PALETTE_SCRIPT);
 }
 
+/// Alloue un objet SET ; `None` si le pool est plein (retenue positionnée par l'allocation).
+fn alloc_set(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+    call(c, b, ext::ALLOC_SET);
+    (c.sr & 1 == 0).then(|| Obj(c.a[1]))
+}
+
 /// Étape 0 : trois objets SET (animations de palette), prépare les joueurs.
 fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     next_step(b);
@@ -259,9 +234,8 @@ fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, CLEARED_A, 0);
     call(c, b, ext::POOLS_INIT_SET);
     for (variant, index) in SET_PALETTES {
-        // l'original n'examine pas la retenue : le pool vient d'être vidé
-        call(c, b, ext::ALLOC_SET);
-        let set = Obj(c.a[1]);
+        // le pool vient d'être vidé : l'allocation réussit
+        let set = alloc_set(c, b).expect("pool SET vide");
         set.set_u8(b, Obj::ACTIVE, 1);
         set.set_u8(b, Obj::KIND, 0);
         set.set_u8(b, Obj::VARIANT, variant);
@@ -273,7 +247,7 @@ fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + ram::SCROLL2_Y, y);
 }
 
-/// Étape 4 : lance les deux premières animations de palette (puis tombe dans l'étape 8).
+/// Étape 4 : lance les deux premières animations de palette (puis passe à l'étape 8).
 fn start_palette_scripts(c: &mut Cpu, b: &mut Cps2Bus) {
     next_step(b);
     run_script(c, b, PALETTE_SCRIPTS[0]);
@@ -282,41 +256,32 @@ fn start_palette_scripts(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + ram::SCROLL2_Y, y);
 }
 
-/// Début des étapes 8 et 12 : objets système et décors animés, sprites, puis décompte (mot `TIMER`).
-/// Renvoie vrai quand le décompte est écoulé ; sinon l'original revient aussitôt (`bpl`).
-fn animate(c: &mut Cpu, b: &mut Cps2Bus, chemin: &mut Chemin) -> bool {
-    dispatch::run_class(c, b, &dispatch::SOBJ);
-    dispatch::run_class(c, b, &dispatch::SET);
+/// Début des étapes 8 et 12 : objets système et décors animés, sprites, puis décompte.
+/// Renvoie vrai quand le décompte est écoulé.
+fn animate(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+    dispatch::SOBJ.update(c, b);
+    dispatch::SET.update(c, b);
     call(c, b, ext::SPRITES);
     let left = rd16(b, A5 + ram::TIMER).wrapping_sub(1);
     wr16(b, A5 + ram::TIMER, left);
-    let running = left as i16 >= 0;
-    chemin.pris(running);
-    !running
+    (left as i16) < 0
 }
 
-/// Étape 8 : quand le décompte est écoulé, un objet SET (type 0xc) apparaît et l'étape suivante commence.
-fn wait_then_spawn(c: &mut Cpu, b: &mut Cps2Bus, chemin: &mut Chemin) {
-    if !animate(c, b, chemin) {
+/// Étape 8 : décompte écoulé, un objet SET (type 0xc) apparaît et l'étape 12 commence.
+fn wait_then_spawn(c: &mut Cpu, b: &mut Cps2Bus) {
+    if !animate(c, b) {
         return;
     }
-    call(c, b, ext::ALLOC_SET);
-    let failed = c.sr & 1 != 0;
-    chemin.pris(failed);
-    if failed {
-        return;
-    }
-    let set = Obj(c.a[1]);
+    let Some(set) = alloc_set(c, b) else { return };
     set.set_u8(b, Obj::ACTIVE, 1);
     set.set_u8(b, Obj::KIND, 0xc);
     next_step(b);
     wr16(b, A5 + ram::TIMER, 0x20);
 }
 
-/// Étape 12 : quand le décompte est écoulé, fondu de fin et troisième animation de palette, puis
-/// l'étape 16.
-fn wait_then_fade(c: &mut Cpu, b: &mut Cps2Bus, chemin: &mut Chemin) {
-    if !animate(c, b, chemin) {
+/// Étape 12 : décompte écoulé, fondu de fin et troisième animation de palette, puis étape 16.
+fn wait_then_fade(c: &mut Cpu, b: &mut Cps2Bus) {
+    if !animate(c, b) {
         return;
     }
     call(c, b, ext::PHASE0_END_FADE);
@@ -346,200 +311,163 @@ fn leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + ram::TIMER + 2, 0);
     wr8(b, A5 + EXIT_CLEARED_BYTES[1], 0);
     call(c, b, ext::CLEAR_STATUS);
-    // move.w #slot,D0w : les drapeaux, sauvegardés par la création de tâche (trap), en dépendent
     c.d[0] = c.d[0] & 0xffff_0000 | PLAYER_UI_SLOT;
-    c.flags_logic(PLAYER_UI_SLOT, Size::Word);
     c.a[0] = PLAYER_UI_TASK;
     call(c, b, ext::TASK_CREATE);
 }
 
-/// Phase 0 : un pas par image. L'étape (`A5+0x2d` : 0, 4, 8, 12, 16) choisit la suite ; les étapes
-/// 4, 12 et 16 tombent dans la suivante.
-fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
-    // première partie du code d'origine : de l'entrée au saut de table ; seconde : de l'étape choisie au retour
-    let (mut entry, mut body) = (Chemin::default(), Chemin::default());
-    let continued = rd8(b, A5 + ram::CONTINUE) != 0;
-    entry.pris(continued);
-    let mut step_address = None;
-    if continued {
-        leave(c, b);
-    } else {
-        let step = rd8(b, A5 + ram::STEP);
-        c.d[0] = c.d[0] & 0xffff_ff00 | step as u32;
-        step_address = Some(PHASE0_STEPS + step as u32);
-        match step {
-            0 => create_palette_objects(c, b),
-            4 => {
-                start_palette_scripts(c, b);
-                wait_then_spawn(c, b, &mut body);
-            }
-            8 => wait_then_spawn(c, b, &mut body),
-            12 => wait_then_fade(c, b, &mut body),
-            16 => reset_pools_and_leave(c, b),
-            _ => panic!("phase 0 : étape {step} inconnue"),
+/// Phase 0 : un pas par image. L'étape (`A5+0x2d` : 0, 4, 8, 12, 16) choisit la suite.
+pub fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
+    if rd8(b, A5 + ram::CONTINUE) != 0 {
+        return leave(c, b);
+    }
+    match rd8(b, A5 + ram::STEP) {
+        0 => create_palette_objects(c, b),
+        4 => {
+            start_palette_scripts(c, b);
+            wait_then_spawn(c, b);
         }
+        8 => wait_then_spawn(c, b),
+        12 => wait_then_fade(c, b),
+        16 => reset_pools_and_leave(c, b),
+        step => panic!("phase 0 : étape {step} inconnue"),
     }
-    c.cycles += entry.duree_hors(b, 0x1c522, None, &PHASE0_EXTERNALS);
-    if let Some(address) = step_address {
-        c.cycles += body.duree_hors(b, address, None, &PHASE0_EXTERNALS);
-    }
-    rts(c, b);
 }
-
-static GARDE_PHASE0: Garde = Garde::new();
 
 pub const PHASE_0: Native = Native {
     entry: 0x1c522,
     name: "game_phase0",
-    cost: |c, b| GARDE_PHASE0.cout(c, b, phase0),
-    run: |c, b| GARDE_PHASE0.executer(c, b, phase0),
+    cost: |_, _| 100,
+    run: |c, b| {
+        phase0(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: 0,
-    exact_cost: true,
+    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
 // Phase 12 : le jeu proprement dit (0x1c6a0)
 
-/// Compte à rebours de la partie en BCD : minutes (`+0x38`), secondes, images (0 à 59).
+/// Horloge de la partie en BCD : minutes (`+0x38`), secondes, images (0 à 59).
 const CLOCK: u32 = 0x38;
-/// Compteur de la partie (mot, plafonné à 0xffff).
+/// Compteur d'images de la partie (mot, plafonné à 0xffff).
 const GAME_FRAMES: u32 = 0x54;
 /// Boutons pressés à cette image (+1) et à la précédente (+7), pour le saut de niveau de débogage.
 const BUTTONS_NOW: u32 = 0x01;
 const BUTTONS_BEFORE: u32 = 0x07;
-/// Octets joueur remis à zéro lors d'un saut de niveau : `+2` du statut de chaque joueur et de chaque
-/// arme (deux mots par joueur).
+/// Mots remis à zéro par un saut de niveau (statut de chaque joueur et de ses armes).
 const PLAYER_RESET: [u32; 8] = [0x5e2, 0x7e2, 0x9e2, 0xbe2, 0x602, 0x802, 0xa02, 0xc02];
-const BIT_X: u16 = 0x10;
+/// Indicateur X du registre d'état (retenue de `sbcd`).
+const SR_X: u16 = 0x10;
 /// Mot de la ROM dont le bit 15 active le saut de niveau de débogage.
 const DEBUG_SWITCH: u32 = 0xc0;
 /// Dernier numéro de scène.
 const LAST_SCENE: i8 = 0x6c;
-
-const PHASE12_EXTERNALS: [u32; 9] = [
-    0x2aec, 0x1c86e, ext::GAUGE, ext::SPRITES, 0x260ee, 0x19e20, 0xf2e5c, 0x1f27c, 0x28d8,
-];
+/// Boutons du saut de niveau : scène suivante, scène précédente.
+const BUTTONS_NEXT: u8 = 0x90;
+const BUTTONS_PREVIOUS: u8 = 0x60;
 
 /// `d - s - X` en BCD sur un octet : résultat et retenue (celle de `sbcd`).
 fn sbcd(d: u8, s: u8, x: bool) -> (u8, bool) {
     let (d, s, x) = (d as i32, s as i32, x as i32);
-    let unadj = d - s - x;
-    let mut adj = 0;
+    let unadjusted = d - s - x;
+    let mut adjust = 0;
     if (d & 0x0f) - (s & 0x0f) - x < 0 {
-        adj |= 0x06;
+        adjust |= 0x06;
     }
-    let borrow = unadj < 0 || unadj - adj < 0;
-    if unadj < 0 {
-        adj |= 0x60;
+    let borrow = unadjusted < 0 || unadjusted - adjust < 0;
+    if unadjusted < 0 {
+        adjust |= 0x60;
     }
-    ((unadj - adj) as u8, borrow)
+    ((unadjusted - adjust) as u8, borrow)
 }
 
-/// Retire une image au compte à rebours (secondes et minutes en cascade, de 59 à 00) : la
-/// cascade s'arrête dès qu'un octet reste positif.
-fn tick_clock(c: &mut Cpu, b: &mut Cps2Bus, chemin: &mut Chemin) {
-    let mut x = c.sr & BIT_X != 0;
-    for (i, off) in [CLOCK + 2, CLOCK + 1, CLOCK].into_iter().enumerate() {
-        let (value, borrow) = sbcd(rd8(b, A5 + off), 1, x);
-        x = borrow;
-        c.sr = c.sr & !BIT_X | if x { BIT_X } else { 0 };
-        wr8(b, A5 + off, value);
-        let positive = value as i8 >= 0;
-        chemin.pris(positive);
-        if positive {
+/// Retire une image à l'horloge (images, secondes, minutes en cascade, de 59 à 00) : la cascade
+/// s'arrête dès qu'un octet reste positif. La retenue part de l'indicateur X laissé par le code
+/// précédent, d'où la lecture de `SR`.
+fn tick_clock(c: &mut Cpu, b: &mut Cps2Bus) {
+    let mut borrow = c.sr & SR_X != 0;
+    for (i, offset) in [CLOCK + 2, CLOCK + 1, CLOCK].into_iter().enumerate() {
+        let (value, next_borrow) = sbcd(rd8(b, A5 + offset), 1, borrow);
+        borrow = next_borrow;
+        c.sr = c.sr & !SR_X | if borrow { SR_X } else { 0 };
+        wr8(b, A5 + offset, value);
+        if value as i8 >= 0 {
             return;
         }
         if i < 2 {
-            wr8(b, A5 + off, 0x59);
+            wr8(b, A5 + offset, 0x59);
         } else {
+            // temps écoulé : horloge à zéro
             wr16(b, A5 + CLOCK, 0);
             wr16(b, A5 + CLOCK + 2, 0);
         }
     }
 }
 
-/// Saut de niveau de débogage : tous les joueurs remis à zéro, retour à la phase 8 (entrée de scène).
-fn change_scene(b: &mut Cps2Bus, next: bool, chemin: &mut Chemin) {
-    for off in PLAYER_RESET {
-        wr16(b, A5 + off, 0);
-        wr16(b, A5 + off + 2, 0);
+/// Saut de niveau de débogage : joueurs remis à zéro, retour à la phase 8 (entrée de scène).
+fn change_scene(b: &mut Cps2Bus, forward: bool) {
+    for offset in PLAYER_RESET {
+        wr16(b, A5 + offset, 0);
+        wr16(b, A5 + offset + 2, 0);
     }
     wr8(b, A5 + 0x50, 0);
     let scene = rd8(b, A5 + ram::SCENE);
-    let scene = if next {
-        let scene = scene.wrapping_add(1);
-        chemin.pris(scene as i8 <= LAST_SCENE);
-        if scene as i8 <= LAST_SCENE { scene } else { 1 }
+    let scene = if forward {
+        let next = scene.wrapping_add(1);
+        if next as i8 <= LAST_SCENE { next } else { 1 }
     } else {
-        let scene = scene.wrapping_sub(1);
-        chemin.pris(scene as i8 > 0);
-        if scene as i8 > 0 { scene } else { LAST_SCENE as u8 }
+        let previous = scene.wrapping_sub(1);
+        if previous as i8 > 0 { previous } else { LAST_SCENE as u8 }
     };
     wr8(b, A5 + ram::SCENE, scene);
     wr8(b, A5 + ram::PHASE, 8);
     wr8(b, A5 + ram::STEP, 0);
-    wr16(b, A5 + 0x2e, 0);
+    wr16(b, A5 + ram::SUBSTEP, 0);
 }
 
-fn phase12(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut chemin = Chemin::default();
-    // compteur de la partie, jusqu'à 0xffff
-    let saturated = rd16(b, A5 + GAME_FRAMES) == 0xffff;
-    chemin.pris(saturated);
-    if !saturated {
+/// Phase 12 : une image de jeu.
+pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) {
+    if rd16(b, A5 + GAME_FRAMES) != 0xffff {
         let frames = rd16(b, A5 + GAME_FRAMES) + 1;
         wr16(b, A5 + GAME_FRAMES, frames);
-        c.sr &= !BIT_X; // addq.w : pas de retenue
+        c.sr &= !SR_X; // l'addition n'a pas de retenue
     }
-    // compte à rebours
-    let running = rd16(b, A5 + CLOCK) != 0;
-    chemin.pris(!running);
-    if running {
-        tick_clock(c, b, &mut chemin);
+    if rd16(b, A5 + CLOCK) != 0 {
+        tick_clock(c, b);
     }
-    // le monde
-    call(c, b, 0x2aec);
-    call(c, b, 0x1c86e);
-    for (marker, routine) in [(0x54_0000, ext::SPRITES), (0x48_0002, 0x260ee), (0x4f_001e, 0x19e20)] {
-        c.d[1] = marker;
-        call(c, b, ext::GAUGE);
+    call(c, b, ext::INPUT_HOOK);
+    update_world(c, b);
+    for (marker, routine) in [(0x54_0000, ext::SPRITES), (0x48_0002, ext::COLLISIONS), (0x4f_001e, ext::WORLD_EXTRA)] {
+        gauge(c, b, marker);
         call(c, b, routine);
     }
-    for routine in [0xf2e5c, 0x1f27c, 0x28d8] {
+    for routine in [ext::WORLD_EXTRA_2, ext::RANK_TICK, ext::END_OF_FRAME] {
         call(c, b, routine);
     }
-    // saut de niveau de débogage : actif si le bit 15 d'un mot de la ROM est levé
-    let debug = rd16(b, DEBUG_SWITCH) & 0x8000 != 0;
-    chemin.pris(!debug);
-    if debug {
+    if rd16(b, DEBUG_SWITCH) & 0x8000 != 0 {
         let pressed = !rd8(b, A5 + BUTTONS_BEFORE) & rd8(b, A5 + BUTTONS_NOW);
-        let next = pressed & 0x90 == 0x90;
-        chemin.pris(!next);
-        if next {
-            change_scene(b, true, &mut chemin);
-        } else {
-            let previous = pressed & 0x60 == 0x60;
-            chemin.pris(!previous);
-            if previous {
-                change_scene(b, false, &mut chemin);
-            }
+        if pressed & BUTTONS_NEXT == BUTTONS_NEXT {
+            change_scene(b, true);
+        } else if pressed & BUTTONS_PREVIOUS == BUTTONS_PREVIOUS {
+            change_scene(b, false);
         }
     }
-    c.cycles += chemin.duree_hors(b, 0x1c6a0, None, &PHASE12_EXTERNALS);
-    rts(c, b);
 }
-
-static GARDE_PHASE12: Garde = Garde::new();
 
 pub const PHASE_12: Native = Native {
     entry: 0x1c6a0,
     name: "game_phase12",
-    cost: |c, b| GARDE_PHASE12.cout(c, b, phase12),
-    run: |c, b| GARDE_PHASE12.executer(c, b, phase12),
+    cost: |_, _| 100,
+    run: |c, b| {
+        phase12(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: 0,
-    exact_cost: true,
+    exact_cost: false,
 };
 
 /// Routines natives de la boucle de partie.

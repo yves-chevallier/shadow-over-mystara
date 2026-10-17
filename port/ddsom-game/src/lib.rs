@@ -15,7 +15,9 @@ pub mod dispatch;
 pub mod eeprom;
 pub mod evenements;
 pub mod game;
-pub mod garde;
+pub mod ai;
+pub mod combat;
+pub mod families;
 pub mod inputs;
 pub mod mem;
 pub mod objects;
@@ -23,11 +25,13 @@ pub mod ops;
 pub mod palette;
 pub mod popups;
 pub mod rng;
+pub mod scroll;
 pub mod scenario;
 pub mod sound;
 pub mod sprites;
 pub mod text;
 pub mod timing;
+pub mod video;
 pub mod vue;
 
 use std::collections::{BTreeMap, HashMap};
@@ -70,6 +74,22 @@ pub mod regs {
 
 /// Toutes les routines natives.
 pub const NATIVES: &[Native] = &[
+    combat::COMBAT_UPDATE,
+    ai::PICK_TARGET,
+    ai::PICK_TARGET_ANY,
+    ai::RANDOM_PLAYER,
+    ai::INITIAL_HP_A,
+    ai::INITIAL_HP_B,
+    ai::DECISION_A,
+    ai::DECISION_B,
+    ai::PICK_BYTE,
+    ai::IMMUNITIES,
+    ai::SPREAD_INDEX,
+    ai::TARGET_IN_FRONT,
+    ai::START_ANIMATION,
+    ai::STEP_ANIMATION,
+    ai::FACING_TARGET,
+    ai::MOVING_FORWARD,
     inputs::READ_INPUTS,
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
@@ -148,12 +168,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES
-        .iter()
-        .chain(objects::NATIVES)
-        .chain(dispatch::NATIVES)
-        .chain(game::NATIVES)
-        .chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(dispatch::NATIVES).chain(game::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -178,11 +193,14 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
         if c.cycles + cost <= limit {
-            if CHECK.load(Ordering::Relaxed) && !A_BLANC.get() {
+            if CHECK.load(Ordering::Relaxed) {
                 check(n, c, b, cost);
             } else {
                 (n.run)(c, b);
                 c.cycles += cost;
+                if COUNT.load(Ordering::Relaxed) {
+                    STATS.lock().unwrap().entry(n.name).or_default().calls += 1;
+                }
             }
             return Some(c.pc);
         }
@@ -206,21 +224,24 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
 /// Active les routines natives (et le code recompilé) sur la machine.
 pub fn install(m: &mut cps2::Machine) {
     m.executor = Some(run);
+    m.idle = Some(idle);
+}
+
+/// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image.
+pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
+    const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
+    const NEW_FRAME: usize = 0x8164 / 2; // FF8164 (octet haut) : posé par le VBLANK
+    (0x932..0x960).contains(&c.pc)
+        && b.ram[NEW_FRAME] >> 8 == 0
+        && (0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4)
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
+/// Compte les appels des routines natives hors mode contrôle (couverture).
+static COUNT: AtomicBool = AtomicBool::new(false);
 
-thread_local! {
-    static A_BLANC: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Exécute `f` « à blanc » (sur une copie de l'état, pour mesurer une durée) : le mode contrôle et
-/// ses statistiques sont suspendus.
-pub fn a_blanc<R>(f: impl FnOnce() -> R) -> R {
-    let avant = A_BLANC.replace(true);
-    let r = f();
-    A_BLANC.set(avant);
-    r
+pub fn set_count(on: bool) {
+    COUNT.store(on, Ordering::Relaxed);
 }
 
 #[derive(Default, Clone)]
@@ -261,9 +282,8 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     (n.run)(c, b);
     c.cycles += cost;
     let mut diffs = Vec::new();
-    // durée totale : celle que `run` a ajoutée elle-même (routines qui comptent leurs cycles au fil
-    // de l'exécution) plus la durée déclarée
-    if n.exact_cost && c2.cycles - start != c.cycles - start {
+    // durée totale de la native, sous-routines d'origine appelées comprises
+    if n.exact_cost && c.cycles - start != c2.cycles - start {
         diffs.push(format!("cycles {} au lieu de {}", c.cycles - start, c2.cycles - start));
     }
     for i in 0..8 {
@@ -292,6 +312,9 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let s = st.entry(n.name).or_default();
     s.calls += 1;
     if !diffs.is_empty() {
+        if std::env::var("DDSOM_VERBOSE").is_ok() {
+            eprintln!("[{}] pc entry {:06x}: {}", n.name, n.entry, diffs.join(", "));
+        }
         s.mismatches += 1;
         if s.first.is_none() {
             s.first = Some(diffs.join(", "));

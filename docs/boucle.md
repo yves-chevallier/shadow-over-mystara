@@ -146,27 +146,22 @@ pour la boucle, mais le gestionnaire doit les laisser dans l'état attendu par s
 
 ## 6. Découpage et contraintes de réécriture
 
-- Les natives de ce module appellent d'autres routines par `call`, qui exécute aussi les natives
-  imbriquées. Les routines ne cèdent pas pendant leur exécution (aucun `trap`/`0xa40` dans les
-  gestionnaires appelés, vérifié par la validation).
-- Durée : `Native::cost` ne peut pas connaître la durée d'une boucle dont le chemin change en cours
-  de route (un gestionnaire peut modifier les emplacements à venir). Ces natives ajoutent donc leur
-  durée propre à `c.cycles` en s'exécutant ; `lib.rs::check` compare la durée totale (propre et
-  imbriquée) à celle de l'original (`exact_cost`).
-- **Horizon d'interruption** (`garde.rs`) : la machine ne sert une interruption (fin d'image, ligne
-  raster) qu'entre deux blocs. Une native de plusieurs milliers de cycles qui franchirait cet horizon
-  retarderait l'interruption par rapport à l'original (dérive observée dès la première image chargée,
-  quand la mise à jour du monde déborde la fin d'image). `Native::cost` renvoie donc 0 si la routine
-  se termine avant `Cps2Bus::irq_horizon`, `garde::REFUSEE` sinon (le code d'origine s'exécute). La
-  durée est mesurée : loin de l'horizon (60 000 cycles ou le double de la plus longue durée
-  observée) on ne fait rien de plus, plus près la routine est d'abord jouée à blanc sur une copie
-  (`lib::a_blanc` suspend le mode contrôle pendant ce temps).
-- Les drapeaux (`SR`) ne sont pas tous reproduits ; seuls comptent ceux qu'une création de tâche
-  (`trap #0` sauvegarde `SR` en mémoire) ou une instruction `sbcd` (retenue X) observe.
+- Le Rust pilote : `game::update_world` et `Class::update` sont des fonctions Rust ordinaires, sans
+  contrat de registres ; seuls les gestionnaires restent du 68000 (`call`, objet en `A0`). Les
+  natives (`world_update`, `dispatch_*`, phases) ne servent plus que d'adaptateurs pour les
+  appelants 68000 qui subsistent (autres phases, scènes).
+- Aucune durée n'est calculée : le 68000 est surcadencé, seul l'état du jeu à chaque image compte.
+- Les routines ne cèdent pas pendant leur exécution (aucun `0xa40` dans les gestionnaires).
+- Deux détails de registres subsistent : la retenue X de `sbcd` (horloge de la phase 12) vient de
+  `SR`, et l'allocation SET renvoie sa réussite dans la retenue.
+- **Pistes** : la boucle principale (`0x1c45a`) et la phase 20 peuvent devenir une machine à états
+  Rust, la tâche étant « une image = un appel » ; la phase 20 ne revient pas (`jmp 0xae4`, remplace
+  la tâche par la machine à modes) et demande donc de réécrire le planificateur ou la machine
+  à modes (`0x133fe`) en même temps.
 
 ## 7. Couverture par les scénarios
 
-Exercés (30 000 images, 8 scénarios, 0 écart) : les dix boucles de dispatch (dont six seulement par
+Exercés (30 000 images, 8 scénarios) : les dix boucles de dispatch (dont six seulement par
 l'appel direct de `world_update`), `world_update` (ordre normal), phase 0 (étapes 0 à 16 ; le mode « continue » peut ne pas l'être), phase 12
 (hors saut de niveau de débogage), `game_frame_end`.
 
