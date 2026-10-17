@@ -10,6 +10,9 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).unwrap();
+    // comme validate : 68000 surcadencé (DDSOM_OC, défaut 16 ; 1 = vitesse arcade)
+    m.set_overclock(std::env::var("DDSOM_OC").ok().and_then(|v| v.parse().ok()).unwrap_or(16.0));
+    m.idle = Some(ddsom_game::idle);
     let s = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
     let bits = Rc::new(RefCell::new(vec![0u8; 0x100000 / 2 / 8]));

@@ -8,6 +8,8 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).unwrap();
     ddsom_rc::install(&mut m);
+    // comme validate : 68000 surcadencé (DDSOM_OC, défaut 16 ; 1 = vitesse arcade)
+    m.set_overclock(std::env::var("DDSOM_OC").ok().and_then(|v| v.parse().ok()).unwrap_or(16.0));
     let s = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
     let extra: Vec<(u32, u32)> = a[5..]
@@ -35,6 +37,18 @@ fn main() {
             rd(&m, 0xff8030, 1), rd(&m, 0xff8031, 1), rd(&m, 0xff8034, 1), rd(&m, 0xff8035, 1));
         for &(ad, n) in &extra {
             st += &format!(" [{ad:x}]={:0w$x}", rd(&m, ad, n), w = 2 * n as usize);
+        }
+        // DUMP=adresse_hex:longueur:image,image,... : hexdump de la RAM à ces images
+        if let Ok(d) = std::env::var("DUMP") {
+            let p: Vec<&str> = d.split(':').collect();
+            let ad = u32::from_str_radix(p[0], 16).unwrap();
+            let len: u32 = p[1].parse().unwrap();
+            if p[2].split(',').any(|x| x.parse::<usize>().ok() == Some(f + 1)) {
+                for o in (0..len).step_by(16) {
+                    let row: Vec<String> = (0..16.min(len - o)).map(|k| format!("{:02x}", rd(&m, ad + o + k, 1))).collect();
+                    println!("{f:6} {:06x}: {}", ad + o, row.join(" "));
+                }
+            }
         }
         if st != last {
             println!("{:6} {st}", f + 1);

@@ -56,24 +56,44 @@ impl Scenario {
     pub fn apply(&self, f: usize, m: &mut cps2::Machine) {
         for &(af, addr, val, size) in &self.pokes {
             if af + 1 == f {
-                for k in 0..size as u32 {
-                    let a = (addr + k - 0xff0000) as usize;
-                    let byte = (val >> (8 * (size as u32 - 1 - k))) as u8;
-                    let w = &mut m.bus.ram[a / 2];
-                    *w = if a % 2 == 0 { *w & 0x00ff | (byte as u16) << 8 } else { *w & 0xff00 | byte as u16 };
-                }
+                poke(m, addr, val, size);
             }
         }
         for &(af, port, bit, down) in &self.actions {
             if af + 1 == f {
-                let reg = match port {
-                    0 => &mut m.bus.inputs.in0,
-                    1 => &mut m.bus.inputs.in1,
-                    _ => &mut m.bus.inputs.in2,
-                };
-                if down { *reg &= !bit } else { *reg |= bit }
+                set_bit(m, port, bit, down);
             }
         }
+    }
+}
+
+/// Écrit `valeur` (big-endian, `taille` octets) en RAM de travail (FF0000-FFFFFF).
+pub fn poke(m: &mut cps2::Machine, addr: u32, val: u32, size: u8) {
+    for k in 0..size as u32 {
+        let a = (addr + k - 0xff0000) as usize;
+        let byte = (val >> (8 * (size as u32 - 1 - k))) as u8;
+        let w = &mut m.bus.ram[a / 2];
+        *w = if a % 2 == 0 { *w & 0x00ff | (byte as u16) << 8 } else { *w & 0xff00 | byte as u16 };
+    }
+}
+
+fn set_bit(m: &mut cps2::Machine, port: u8, bit: u16, down: bool) {
+    let reg = match port {
+        0 => &mut m.bus.inputs.in0,
+        1 => &mut m.bus.inputs.in1,
+        _ => &mut m.bus.inputs.in2,
+    };
+    if down { *reg &= !bit } else { *reg |= bit }
+}
+
+/// Appuie (`down`) ou relâche l'entrée MAME `name` (ex. « P1 Button 2 ») ; faux si le nom est inconnu.
+pub fn set_input(m: &mut cps2::Machine, name: &str, down: bool) -> bool {
+    match input_bit(name) {
+        Some((port, bit)) => {
+            set_bit(m, port, bit, down);
+            true
+        }
+        None => false,
     }
 }
 
@@ -105,6 +125,7 @@ fn input_bit(name: &str) -> Option<(u8, u16)> {
         "3 Players Start" => (2, 0x0400),
         "4 Players Start" => (2, 0x0800),
         "Service 1" => (2, 0x0004),
+        "Service Mode" => (2, 0x0002),
         _ => return None,
     })
 }
