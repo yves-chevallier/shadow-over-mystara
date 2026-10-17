@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Valide les routines natives sur tous les scénarios (en parallèle) : tools/validate_all.sh [images]
+# Valide la réécriture sur tous les scénarios (en parallèle), image par image : tools/validate_all.sh [images]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 frames=${1:-30000}
@@ -20,6 +20,6 @@ for log in "$out"/*.log; do
 	[[ $verdict == VALIDE* ]] || status=1
 done
 echo "--- appels par routine (cumul) ---"
-grep -h -E '^  \S+ +[0-9]+ appels' "$out"/*.log | awk '{c[$1]+=$2; e[$1]+=$4} END {for (k in c) printf "  %-28s %8d appels %5d écarts\n", k, c[k], e[k]}' | sort
+grep -h -E '^  \S+ +[0-9]+ appels' "$out"/*.log | awk '{c[$1]+=$2} END {for (k in c) printf "  %-28s %8d appels\n", k, c[k]}' | sort
 rm -rf "$out"
 exit $status
