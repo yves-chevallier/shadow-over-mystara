@@ -38,6 +38,9 @@ pub struct Machine {
     pub interp_steps: u64,
     /// Rappel après chaque instruction interprétée (outils de diagnostic) : (cpu, bus, pc).
     pub step_hook: Option<Box<dyn FnMut(&Cpu, &Cps2Bus, u32)>>,
+    /// Le programme attend-il seulement une interruption ? (boucle d'attente du jeu) Le temps
+    /// restant de la ligne est alors sauté.
+    pub idle: Option<fn(&Cpu, &Cps2Bus) -> bool>,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -96,6 +99,7 @@ impl Machine {
             misses: Default::default(),
             interp_steps: 0,
             step_hook: None,
+            idle: None,
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -111,6 +115,12 @@ impl Machine {
         Ok(m)
     }
 
+    /// Multiplie la fréquence du 68000 (1.0 = arcade). Surcadencé, le jeu finit toujours son travail
+    /// avant la fin d'image : plus de ralentissements, comportement déterminé image par image.
+    pub fn set_overclock(&mut self, k: f64) {
+        self.line_cycles = k * CPU_HZ / LINE_HZ;
+    }
+
     pub fn reset(&mut self) {
         self.cpu = Cpu::new();
         self.cpu.reset(&mut self.bus);
@@ -123,6 +133,10 @@ impl Machine {
         let target = self.cycle_debt as u64;
         while self.cpu.cycles < target {
             self.cpu.irq_level = self.bus.irq_level();
+            if self.idle.is_some_and(|idle| idle(&self.cpu, &self.bus)) && self.cpu.irq_level == 0 {
+                self.cpu.cycles = target;
+                break;
+            }
             if let Some(run) = self.executor {
                 let mask = ((self.cpu.sr >> 8) & 7) as u8;
                 let plain = self.cpu.irq_level <= mask && !self.cpu.stopped && !self.cpu.trace_pending

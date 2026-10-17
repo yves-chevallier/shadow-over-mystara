@@ -27,9 +27,14 @@ fn main() {
         }
     };
 
-    // code 68000 recompilé en Rust ; DDSOM_INTERP=1 pour tout interpréter
-    if std::env::var_os("DDSOM_INTERP").is_none() {
+    // jeu réécrit en Rust (le reste en code 68000 recompilé), 68000 surcadencé : pas de
+    // ralentissements. DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ;
+    // DDSOM_INTERP=1 : tout interprété.
+    if std::env::var_os("DDSOM_ORIGINE").is_some() {
         ddsom_rc::install(&mut m);
+    } else if std::env::var_os("DDSOM_INTERP").is_none() {
+        ddsom_game::install(&mut m);
+        m.set_overclock(16.0);
     }
     // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1
     if std::env::var_os("DDSOM_SON_RUST").is_some() {
