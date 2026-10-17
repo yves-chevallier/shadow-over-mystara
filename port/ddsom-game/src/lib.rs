@@ -196,6 +196,9 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             } else {
                 (n.run)(c, b);
                 c.cycles += cost;
+                if COUNT.load(Ordering::Relaxed) {
+                    STATS.lock().unwrap().entry(n.name).or_default().calls += 1;
+                }
             }
             return Some(c.pc);
         }
@@ -219,9 +222,25 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
 /// Active les routines natives (et le code recompilé) sur la machine.
 pub fn install(m: &mut cps2::Machine) {
     m.executor = Some(run);
+    m.idle = Some(idle);
+}
+
+/// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image.
+pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
+    const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
+    const NEW_FRAME: usize = 0x8164 / 2; // FF8164 (octet haut) : posé par le VBLANK
+    (0x932..0x960).contains(&c.pc)
+        && b.ram[NEW_FRAME] >> 8 == 0
+        && (0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4)
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
+/// Compte les appels des routines natives hors mode contrôle (couverture).
+static COUNT: AtomicBool = AtomicBool::new(false);
+
+pub fn set_count(on: bool) {
+    COUNT.store(on, Ordering::Relaxed);
+}
 
 #[derive(Default, Clone)]
 pub struct Stats {

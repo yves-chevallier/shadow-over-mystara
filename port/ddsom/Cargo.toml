@@ -7,6 +7,7 @@ description = "Dungeons & Dragons: Shadow over Mystara — port Rust jouable"
 [dependencies]
 cps2 = { path = "../cps2" }
 ddsom-rc = { path = "../ddsom-rc" }
+ddsom-game = { path = "../ddsom-game" }
 minifb = { version = "0.27", default-features = false, features = ["x11"] }
 libloading = "0.8"
 qsound = { path = "../qsound" }
