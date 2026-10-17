@@ -86,3 +86,18 @@ sur la caméra secondaire ; 19 pastille de palette ; 20/22 débris qui tombent ;
 
 Voir la section « Couverture » en bas : fuzz `familles` (essais sur objets synthétiques), scénarios
 (types 0, 6, 11, 14), `tools/validate_all.sh`.
+
+## Couverture
+
+* Scénarios (`tools/validate_all.sh 30000`, 8 scénarios VALIDE) : types 0 (273 311 appels), 6 (23 140), 11 (12 492)
+  et 14 (1 917). Tous les autres types sont validés par `fuzz familles` seulement (0 écart sur plusieurs
+  milliers d'appels par type, variantes 0 à 24 ou plus).
+* Le fuzz crée un objet générique, perturbe les entrées des gestionnaires et, pour SET et SOBJ, les variables
+  globales (mode de jeu, nombre de joueurs, caméras, rang, joueurs : `perturber_globales` dans `examples/fuzz.rs`).
+* Instructions jamais atteintes (`tools/familles_non_vus.py`, avant l'ajout de `perturber_globales`) : type 6,
+  348 instructions sur 941 (sous-états tardifs de plusieurs variantes, échecs d'allocation) ; type 7 : fin de
+  l'aide (0xdf5a2-0xdf63c) ; type 13 : libération des quatre joueurs (0xdfdd0-0xdfe3a) ; type 14 : niveaux 7 et
+  0x2b (0xdff98, 0xe0078-0xe0120) ; type 15 : chemin des coups (0xe030a-0xe03fc). Une partie des « non vus »
+  du type 0 correspond à des tables de la ROM décodées en instructions.
+* Dépendance à un registre laissé par le gestionnaire précédent : type 2 (marge D2 lue sans l'avoir posée). Les
+  registres de sortie ne sont pas restitués (contrat A0 et D7 seulement).

@@ -122,3 +122,16 @@ la sorte `k` saute à la `k`-ième entrée de la table (0xd7466).
 (vagues) ; 0xd61b2, 0xd6232 (barre de vie) ; 0xd6464 (continuation) ; 0xd6aa0 (rang) ; 0xd84e8, 0xd8e5e,
 0xd8824, 0xd896e, 0xd89be, 0xd9052 (portes) ; 0x1d78d0, 0xd7218, 0xd7a48, 0xd7e8a, 0xd7604, 0xd7db6, 0xd7d96,
 0xd7da6, 0xd7988 (dialogue) ; 0xd80fe, 0xd8186, 0xd8448 (tirs et poursuivants).
+
+## Couverture
+
+* Scénarios (8 VALIDE sur 30 000 images) : types 21 (60 410 appels), 22 (20) et 24 (2 320). Le type 20 n'est pas
+  appelé par ces scénarios (0 appel avec le code d'origine) ; il n'est validé que par le fuzz (6 728 appels,
+  0 écart, joueur réel en `+0x20`).
+* `fuzz familles` : 0 écart pour 16 à 23, 25 à 32 (variantes jusqu'à 24) et pour le type 24 sur ses 256
+  variantes (17 097 appels).
+* Peu ou pas atteint (relevé avant `perturber_globales`) : type 16 lancers hors présence de joueurs au sol ;
+  type 17 étapes 2 à 24 ; type 19 au-delà du démarrage (création des ennemis, fin) ; types 23, 27, 29 :
+  passage des joueurs et changement de zone (états 4 et 0x400 ; appels à 0x33b24, 0xf2e56, 0x1a360...). Ces
+  chemins ont été relus sur le listing mais ne sont pas validés.
+* Les gestionnaires ne restituent que A0 et D7 ; D0-D2 et A1-A4 ne sont pas reconstitués.
