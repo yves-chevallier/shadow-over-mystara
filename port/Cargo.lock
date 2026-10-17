@@ -75,6 +75,7 @@ name = "ddsom"
 version = "0.1.0"
 dependencies = [
  "cps2",
+ "ddsom-game",
  "ddsom-rc",
  "libloading",
  "minifb",
