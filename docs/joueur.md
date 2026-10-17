@@ -185,22 +185,25 @@ pas examinés.
 
 ## 9. Validation et couverture
 
-`tools/validate_all.sh 30000` : 8 scénarios (6 personnages, 2 joueurs) VALIDE, 0 écart par routine :
-`players_update` (0x35292), `player_overlays_update` (0x392e4), `player_clamp_to_screen` (0x35c0),
-`player_init_1` (0x2e58), `players_clear`, `players_clear_overlays`, `enemy_reacts_to_player_hit`
-(0xf232e). Toutes les fonctions Rust appelées depuis `players_update` sont vérifiées par la comparaison de
-la RAM entière avec l'original à chaque appel.
+`tools/validate_all.sh 30000` : les 8 scénarios sont VALIDE (état identique image par image) ; les
+tests unitaires passent. Natives du module : `players_update` (0x35292), `player_overlays_update`
+(0x392e4), `player_clamp_to_screen` (0x35c0), `player_init_1..4` (0x2e58..), `players_clear`,
+`players_clear_overlays`, `enemy_reacts_to_player_hit` (0xf232e). Plus aucune durée exacte : `cost`
+est indicatif.
 
-Durées : `exact_cost` pour `players_clear`, `players_clear_overlays` et `player_clamp_to_screen`
-(`Chemin`) ; estimation pour les autres (routines qui appellent du code d'origine par `call`).
+Scénarios supplémentaires `scenarios/extra/mash_*.txt` (générés par `tools/make_bot.py --mash` :
+directions et boutons tirés au hasard, ils exercent coups spéciaux, course, bas + saut, bouton 4...) :
+`mash_c4`, `mash_c2`, `mash_2p` VALIDE sur 12 000 images. `mash_c5` diverge à l'image 6525 (positions
+d'un effet joueur d'une famille d'objets) **même avec toutes les natives du module désactivées** : écart
+hors périmètre (natives d'autres sous-systèmes), à examiner par leurs auteurs.
 
-Fonctions réécrites **jamais appelées** par les scénarios (non validées) : voir la liste produite par
-`examples/player_coverage` ; état actuel : `slow_switch`, `curse_fall`, `team_score_reached`, `all_ready`,
-`clear_recognizers`, `set_stun_time`, `launch_a`, `sparkle`, `walk::crawl_speed`, `walk::run_speed`,
-`scripted::{scene1_start, wait_start, wait_delay, wait_pose, wait_inputs, substep_table}`. Les
-routines d'origine restant appelées par le noyau : collision avec le décor 0x33fe4, code des 6
-personnages (P5), effets (0xe2100, 0xdb6c0, 0xe21a0, 0xe7a12, 0xb10c8), actions rares (courses, sorts,
-portage) et les routines de coups spéciaux 0x3733c..0x374aa (jamais déclenchées).
+Fonctions réécrites jamais appelées par les 8 scénarios (voir `examples/player_coverage`) :
+`curse_fall`, `team_score_reached`, `all_ready`, `clear_recognizers`, `set_stun_time`, `launch_a`,
+`sparkle`, `walk::crawl_speed`, `walk::run_speed`, plusieurs pas de `scripted` ; les mash exercent en
+plus `slow_switch` et les coups spéciaux (appelés en ROM). Restent en ROM : collision avec le décor
+0x33fe4, code des 6 personnages (P5), course (action 6) et actions 0x14..0x34 hors saisie, parade
+(sous-état 8), routines de coups spéciaux 0x3733c..0x374aa, effets 0xe2100, 0xdb6c0, 0xe21a0,
+0xe7a12, 0xb10c8.
 
 ## 10. Méthode
 
