@@ -405,11 +405,17 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             // décompte des places libres cohérent
             // (au moment du chauffage le pool peut être plein : les gestionnaires testent ce compteur)
             wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
+            if pool.class == SET.class && matches!(kind, 2 | 15) {
+                etat_scene(&mut b, &mut alea, obj.0, kind, true);
+            }
             for pas in 0..60 {
                 if rd8(&mut b, obj.0) == 0 {
                     break;
                 }
                 if pas > 0 {
+                    if pool.class == SET.class && matches!(kind, 2 | 15) && alea.next() % 6 == 0 {
+                        etat_scene(&mut b, &mut alea, obj.0, kind, false);
+                    }
                     if alea.next() % 6 == 0 {
                         wr8(&mut b, obj.0 + 0x57, [0x08, 0x20, 0x28, 0x10, 0x02, 0x40][alea.next() as usize % 6]);
                     }
@@ -604,4 +610,43 @@ fn main() {
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
     println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+}
+
+/// Contrôleur de scène (SET 2) et écrans de fin de niveau (SET 15) : ils dépendent de variables de
+/// partie (niveau, difficulté, scène figée...), de la variante (script) et de l'état des joueurs,
+/// que le fuzz générique ne fait pas varier. `depart` : état initial de l'objet (variante, état).
+fn etat_scene(b: &mut Bus, alea: &mut Alea, obj: u32, kind: u8, depart: bool) {
+    use ddsom_game::mem::{rd16, rd32};
+    wr8(b, A5 + 0x34, if alea.next() % 3 == 0 { 4 } else { 1 + (alea.next() % 7) as u8 });
+    wr8(b, A5 + 0x35, if alea.next() % 10 == 0 { 0 } else { 1 + (alea.next() % 4) as u8 });
+    wr8(b, A5 + 0x2c, [0xc, 4, 8, 0, 0x18][alea.next() as usize % 5]);
+    wr8(b, A5 + 0x42, (alea.next() % 8 == 0) as u8);
+    wr8(b, A5 + 0x36, (alea.next() % 4 == 0) as u8);
+    wr8(b, A5 + 0x50, (alea.next() % 2) as u8);
+    wr8(b, A5 + 0x66, (alea.next() % 2) as u8);
+    wr16(b, A5 + 0x7f92, (alea.next() % 6) as u16);
+    for j in 0..4u32 {
+        let p = 0xff85de + 0x200 * j;
+        if alea.next() % 3 == 0 {
+            wr16(b, p + 4, [0x200, 0x200, 0, 0x600, 0x204][alea.next() as usize % 5]);
+            wr8(b, p + 6, (alea.next() % 3 == 0) as u8);
+            wr16(b, p + 0x62, [0, 5, 100][alea.next() as usize % 3]);
+        }
+    }
+    if !depart || kind != 2 {
+        return;
+    }
+    let variante = alea.next() % 0x78;
+    wr8(b, obj + 3, variante as u8);
+    let script = rd32(b, 0xbd276 + 4 * variante);
+    let etat = [0u8, 0, 2, 2, 2, 4, 4, 6][alea.next() as usize % 8];
+    wr8(b, obj + 4, etat);
+    if etat == 2 {
+        wr16(b, obj + 0x18, 0xffff);
+        wr16(b, obj + 0x24, rd16(b, script));
+        wr32(b, obj + 0x20, script + 2);
+    } else if etat == 4 {
+        wr16(b, obj + 0x24, (alea.next() % 4) as u16);
+        wr16(b, obj + 0x2a, (alea.next() % 4 == 0) as u16);
+    }
 }
