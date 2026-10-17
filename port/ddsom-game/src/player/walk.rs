@@ -1,11 +1,9 @@
 //! Déplacements des joueurs : vitesses de marche, intégration du mouvement, limites de l'écran.
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_X};
+use m68k::Cpu;
 
 use super::{ram, Ctx, Player};
-use crate::chemin::Chemin;
 use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::motion::{advance, AXIS_X, AXIS_Y, AXIS_Z};
 use crate::objects::Obj;
@@ -111,91 +109,49 @@ fn camera(b: &mut Cps2Bus) -> u32 {
 /// Dernier bord touché : octet `+0x5a` (1 gauche, 2 droite).
 const EDGE_HIT: u32 = 0x5a;
 
-/// Ce que la mise à l'écran du joueur va changer : nouvelle profondeur, nouvelle abscisse et bord touché.
-struct Plan {
-    y: Option<i16>,
-    x: Option<(i16, u8)>,
-    /// Décisions des branchements de l'original, dans l'ordre.
-    path: Chemin,
-}
-
-/// Décide, sans rien modifier, comment ramener le joueur dans la zone visible : la profondeur reste
-/// entre camera.y + 0x28 et camera.y + 0xa4, l'abscisse entre camera.x + 0x20 et camera.x + 0x160.
-fn plan_clamp(b: &mut Cps2Bus, p: Player) -> Plan {
+/// Maintient le joueur dans la zone visible : la profondeur reste entre camera.y + 0x28 et
+/// camera.y + 0xa4, l'abscisse entre camera.x + 0x20 et camera.x + 0x160 (le bord touché est
+/// mémorisé). Renvoie vrai si l'abscisse a été corrigée.
+pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
+    cov!();
     let cam = camera(b);
     let (cam_x, cam_y) = (rd16(b, cam + 8) as i16, rd16(b, cam + 0xc) as i16);
     let (x, y) = (rd16(b, p.at(0x08)) as i16, rd16(b, p.at(0x10)) as i16);
-    let mut path = Chemin::default();
-    path.pris(rd8(b, A5 + ram::USE_ALT_CAMERA) == 0);
-    let top = cam_y.wrapping_add(0xa4);
-    path.pris(top >= y);
-    let mut new_y = None;
-    if top < y {
-        new_y = Some(top);
-        path.pris(true);
+    let (top, bottom) = (cam_y.wrapping_add(0xa4), cam_y.wrapping_add(0x28));
+    if y > top {
+        wr16(b, p.at(0x10), top as u16);
+    } else if y < bottom {
+        wr16(b, p.at(0x10), bottom as u16);
+    }
+    let (right, left) = (cam_x.wrapping_add(0x160), cam_x.wrapping_add(0x20));
+    let edge = if x > right {
+        Some((right, 2))
+    } else if x < left {
+        Some((left, 1))
     } else {
-        path.pris(false);
-        let bottom = cam_y.wrapping_add(0x28);
-        path.pris(bottom <= y);
-        if bottom > y {
-            new_y = Some(bottom);
-        }
+        None
+    };
+    if let Some((nx, side)) = edge {
+        wr8(b, p.at(EDGE_HIT), side);
+        wr16(b, p.at(0x08), nx as u16);
     }
-    let right = cam_x.wrapping_add(0x160);
-    path.pris(right >= x);
-    let mut new_x = None;
-    if right < x {
-        new_x = Some((right, 2));
-        path.pris(true);
-    } else {
-        path.pris(false);
-        let left = cam_x.wrapping_add(0x20);
-        path.pris(left <= x);
-        if left > x {
-            new_x = Some((left, 1));
-        }
-    }
-    Plan { y: new_y, x: new_x, path }
+    edge.is_some()
 }
 
-fn apply_clamp(b: &mut Cps2Bus, p: Player, plan: &Plan) {
-    if let Some(y) = plan.y {
-        wr16(b, p.at(0x10), y as u16);
-    }
-    if let Some((x, edge)) = plan.x {
-        wr8(b, p.at(EDGE_HIT), edge);
-        wr16(b, p.at(0x08), x as u16);
-    }
-}
-
-/// 0x35c0 : maintient le joueur dans la zone visible. Renvoie vrai si l'abscisse a été corrigée.
-pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
-    let plan = plan_clamp(b, p);
-    apply_clamp(b, p, &plan);
-    plan.x.is_some()
-}
-
+/// Entrée 68000 (0x35c0) : D0 = 1 si l'abscisse a été corrigée, A1 = caméra.
 fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let cam = camera(b);
-    let cam_x = rd16(b, cam + 8) as u32;
-    let plan = plan_clamp(b, Player(c.a[0]));
-    apply_clamp(b, Player(c.a[0]), &plan);
+    c.d[0] = clamp_to_screen(b, Player(c.a[0])) as u32;
     c.a[1] = cam;
-    c.d[0] = plan.x.is_some() as u32;
-    // X : retenue de la dernière addition de l'original (bord droit 0x160, sinon bord gauche 0x20)
-    let last = if matches!(plan.x, Some((_, 2))) { 0x160 } else { 0x20 };
-    let carry = cam_x + last > 0xffff;
-    c.flags_logic(c.d[0], Size::Long);
-    c.sr = c.sr & !SR_X | if carry { SR_X } else { 0 };
     rts(c, b);
 }
 
 pub const CLAMP: Native = Native {
     entry: 0x35c0,
     name: "player_clamp_to_screen",
-    cost: |c, b| plan_clamp(b, Player(c.a[0])).path.duree(b, 0x35c0),
+    cost: |_, _| 200,
     run: clamp_native,
     touches_sound: false,
-    outputs: regs::ALL,
-    exact_cost: true,
+    outputs: regs::d(0) | regs::a(1),
+    exact_cost: false,
 };

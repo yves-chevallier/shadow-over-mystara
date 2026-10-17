@@ -12,7 +12,6 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use super::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
-use crate::chemin::Chemin;
 use crate::mem::{rts, wr32, A5};
 use crate::{regs, Native};
 
@@ -84,35 +83,21 @@ fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CLEAR_PLAYERS: Native = Native {
     entry: 0x2d9e,
     name: "players_clear",
-    cost: |_, b| {
-        let mut p = Chemin::default();
-        for _ in 0..PLAYER_COUNT {
-            p.repete(15, true);
-            p.pris(false);
-        }
-        p.duree(b, 0x2d9e)
-    },
+    cost: |_, _| 3_000,
     run: clear_players,
     touches_sound: false,
     outputs: 0,
-    exact_cost: true,
+    exact_cost: false,
 };
 
 pub const CLEAR_OVERLAYS: Native = Native {
     entry: 0x2df8,
     name: "players_clear_overlays",
-    cost: |_, b| {
-        let mut p = Chemin::default();
-        for _ in 0..2 * PLAYER_COUNT {
-            p.repete(2, true);
-            p.pris(false);
-        }
-        p.duree(b, 0x2df8)
-    },
+    cost: |_, _| 3_000,
     run: clear_overlays,
     touches_sound: false,
     outputs: 0,
-    exact_cost: true,
+    exact_cost: false,
 };
 
 /// Pointeur de la table du personnage de `p` dans la table de pointeurs `table`.

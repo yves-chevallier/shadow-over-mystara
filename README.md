@@ -82,6 +82,9 @@ Architecture et jalons : [docs/architecture.md](docs/architecture.md).
   palettes). **Jalon 1 atteint** : identique au pixel près à MAME sur les 11 instantanés de
   `testdata/vsnap` (`cd port && cargo test --release`).
 - `vrender` : rend un instantané et le compare à la capture MAME.
+- `ddsom-sound` : pilote son (séquenceur, voies, enveloppes) réécrit à partir du programme du Z80, identique
+  écriture par écriture ; format et protocole dans [docs/son.md](docs/son.md). Option `Sound::use_rust_driver`
+  de `cps2` pour jouer sans Z80.
 
 Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=...` avec
 `mame/session.lua` (voir `mame/vsnap.lua`). Points de fidélité appris en route :
@@ -96,6 +99,8 @@ Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=..
 Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`Maj` (ou `W` `X` `C` `V`)
 = boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
 `Tab` avance rapide, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
+
+Son : `DDSOM_SON_RUST=1 ./jouer.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
 
 État actuel : la machine (68000 interprété, Z80, QSound HLE, vidéo CPS2) reproduit MAME à l'identique
 sur la RAM de jeu et l'image (4800 images testées avec entrées). Le code 68000 du jeu est recompilé en
