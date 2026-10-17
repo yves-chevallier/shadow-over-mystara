@@ -53,6 +53,13 @@ fn main() {
         println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
+    // calibrage des durées estimées des gestionnaires de familles (ESHL, SET, SOBJ)
+    for (name, st) in ddsom_game::report() {
+        if st.calls > 0 && (name.starts_with("eshl_") || name.starts_with("set_") || name.starts_with("sobj_")) {
+            let ecart = (st.original_cycles as i64 - st.native_cycles as i64) as f64 / st.calls as f64;
+            println!("durée {name}: {} appels, original {:.0} cycles/appel, correction de la durée estimée {ecart:+.0}", st.calls, st.original_cycles as f64 / st.calls as f64);
+        }
+    }
     let errors: u64 = ddsom_game::report().values().map(|s| s.mismatches).sum();
     match (first, errors) {
         (None, 0) => println!("VALIDE : RAM identique sur {frames} images, aucun écart"),
