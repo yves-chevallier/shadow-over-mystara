@@ -20,6 +20,7 @@ pub mod mem;
 pub mod objects;
 pub mod ops;
 pub mod palette;
+pub mod player;
 pub mod popups;
 pub mod rng;
 pub mod scenario;
@@ -163,7 +164,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :

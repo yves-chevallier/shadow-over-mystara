@@ -14,6 +14,7 @@ p.add_argument("--frames", type=int, default=30000)
 p.add_argument("--seed", type=int, default=1)
 p.add_argument("--char", type=int, default=0)
 p.add_argument("--players", type=int, default=1)
+p.add_argument("--mash", action="store_true", help="écrase les boutons et les directions au hasard (exerce les actions rares)")
 p.add_argument("--dir", default="Right", choices=["Right", "Left", "Up", "Down"], help="sens de déplacement du curseur")
 a = p.parse_args()
 random.seed(a.seed)
@@ -24,6 +25,22 @@ ev = []
 def press(f, name, dur=4):
     ev.append((f, name, 1))
     ev.append((f + dur, name, 0))
+
+
+def mash(f, q, frames):
+    """Directions et boutons tirés au hasard toutes les 3 images pendant `frames` images."""
+    names = ["Right", "Left", "Down", "Up", "Button 1", "Button 2", "Button 3", "Button 4"]
+    weights = [0.35, 0.2, 0.15, 0.15, 0.35, 0.2, 0.08, 0.12]
+    state = {n: 0 for n in names}
+    for t in range(0, frames, 3):
+        for n, w in zip(names, weights):
+            want = 1 if random.random() < w else 0
+            if want != state[n]:
+                ev.append((f + t, f"{q} {n}", want))
+                state[n] = want
+    for n in names:
+        if state[n]:
+            ev.append((f + frames, f"{q} {n}", 0))
 
 
 players = range(1, a.players + 1)
@@ -46,7 +63,9 @@ while f < a.frames:
     for pl in players:
         seg = random.choice(["walk", "fight", "fight", "jump", "magic", "up", "down", "back"])
         q = f"P{pl}"
-        if seg == "walk":
+        if a.mash and random.random() < 0.6:
+            mash(f, q, 90)
+        elif seg == "walk":
             ev.append((f, f"{q} Right", 1)); ev.append((f + 90, f"{q} Right", 0))
         elif seg == "back":
             ev.append((f, f"{q} Left", 1)); ev.append((f + 40, f"{q} Left", 0))
