@@ -8,18 +8,33 @@
 //! Mode contrôle (`set_check(true)`) : chaque appel exécute aussi la routine d'origine sur une copie
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
+pub mod chemin;
+pub mod config;
+pub mod credits;
+pub mod eeprom;
+pub mod evenements;
+pub mod ai;
+pub mod combat;
+pub mod families;
 pub mod inputs;
 pub mod mem;
+pub mod objects;
+pub mod ops;
 pub mod palette;
-pub mod physics;
+pub mod popups;
+pub mod rng;
+pub mod scroll;
 pub mod scenario;
+pub mod sound;
 pub mod sprites;
 pub mod text;
 pub mod timing;
+pub mod video;
+pub mod vue;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -57,8 +72,22 @@ pub mod regs {
 
 /// Toutes les routines natives.
 pub const NATIVES: &[Native] = &[
-    physics::OBJ_MOVE_XY,
-    physics::OBJ_MOVE_X,
+    combat::COMBAT_UPDATE,
+    ai::PICK_TARGET,
+    ai::PICK_TARGET_ANY,
+    ai::RANDOM_PLAYER,
+    ai::INITIAL_HP_A,
+    ai::INITIAL_HP_B,
+    ai::DECISION_A,
+    ai::DECISION_B,
+    ai::PICK_BYTE,
+    ai::IMMUNITIES,
+    ai::SPREAD_INDEX,
+    ai::TARGET_IN_FRONT,
+    ai::START_ANIMATION,
+    ai::STEP_ANIMATION,
+    ai::FACING_TARGET,
+    ai::MOVING_FORWARD,
     inputs::READ_INPUTS,
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
@@ -73,10 +102,71 @@ pub const NATIVES: &[Native] = &[
     palette::NO_BRIGHTNESS,
     palette::OR_BRIGHTNESS,
     palette::SET_BRIGHTNESS,
+    sound::ENFILER_SI_SON,
+    sound::ENFILER_DIRECT,
+    sound::ENVOYER_AU_Z80,
+    rng::SEED,
+    rng::NEXT,
+    evenements::VIDER_POINTS,
+    evenements::VIDER_COMPTEUR,
+    evenements::VIDER_POPUPS,
+    evenements::EFFACER_POPUP,
+    evenements::ENFILER_POINTS,
+    evenements::ENFILER_COMPTEUR,
+    evenements::EVENEMENT_OBJET,
+    evenements::CREER_POPUP,
+    evenements::CREDITER_POINTS,
+    evenements::CREDITER_COMPTEUR,
+    credits::LIRE_MONNAYEURS,
+    credits::LIRE_DEPARTS,
+    credits::VERROUILLER_COMPTEURS,
+    eeprom::LIRE,
+    eeprom::ECRIRE,
+    eeprom::ECRIRE_VERIFIER,
+    eeprom::LIRE_VERIFIER,
+    eeprom::COMPTER_PIECES,
+    eeprom::COMPTER_DEPARTS,
+    eeprom::COMPTER_CONTINUES,
+    eeprom::COMPTER_PARTIES,
+    eeprom::VBLANK_COMPTA,
+    config::VARIANTE,
+    config::DEFAUTS,
+    config::VALIDER,
+    config::VARIABLES,
+    popups::ANIMER,
+    credits::ECRIRE_CHIFFRE,
+    eeprom::COMPLET_PIECES_NATIF,
+    eeprom::COMPLET_DEPARTS_NATIF,
 ];
 
+/// Index des routines natives par adresse d'entrée : `NATIVES`, le modèle d'objets et les wrappers
+/// son (décrits par une table). Un tamis binaire évite la recherche pour la grande majorité des blocs.
+struct Index {
+    tamis: Vec<u64>,
+    par_adresse: HashMap<u32, &'static Native>,
+}
+
 fn lookup(pc: u32) -> Option<&'static Native> {
-    NATIVES.iter().find(|n| n.entry == pc)
+    static INDEX: OnceLock<Index> = OnceLock::new();
+    let index = INDEX.get_or_init(|| {
+        let par_adresse: HashMap<_, _> =
+            all_natives().map(|n| (n.entry, n)).collect();
+        let mut tamis = vec![0u64; 0x100000 / 2 / 64];
+        for &a in par_adresse.keys() {
+            tamis[(a >> 7) as usize] |= 1 << (a >> 1 & 63);
+        }
+        Index { tamis, par_adresse }
+    });
+    let case = index.tamis.get((pc >> 7) as usize)?;
+    if case >> (pc >> 1 & 63) & 1 == 0 {
+        return None;
+    }
+    index.par_adresse.get(&pc).copied()
+}
+
+/// Toutes les routines natives, wrappers son compris (outils de couverture).
+pub fn all_natives() -> impl Iterator<Item = &'static Native> {
+    NATIVES.iter().chain(objects::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -106,6 +196,9 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             } else {
                 (n.run)(c, b);
                 c.cycles += cost;
+                if COUNT.load(Ordering::Relaxed) {
+                    STATS.lock().unwrap().entry(n.name).or_default().calls += 1;
+                }
             }
             return Some(c.pc);
         }
@@ -129,15 +222,33 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
 /// Active les routines natives (et le code recompilé) sur la machine.
 pub fn install(m: &mut cps2::Machine) {
     m.executor = Some(run);
+    m.idle = Some(idle);
+}
+
+/// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image.
+pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
+    const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
+    const NEW_FRAME: usize = 0x8164 / 2; // FF8164 (octet haut) : posé par le VBLANK
+    (0x932..0x960).contains(&c.pc)
+        && b.ram[NEW_FRAME] >> 8 == 0
+        && (0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4)
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
+/// Compte les appels des routines natives hors mode contrôle (couverture).
+static COUNT: AtomicBool = AtomicBool::new(false);
+
+pub fn set_count(on: bool) {
+    COUNT.store(on, Ordering::Relaxed);
+}
 
 #[derive(Default, Clone)]
 pub struct Stats {
     pub calls: u64,
     pub mismatches: u64,
     pub first: Option<String>,
+    /// Dernier écart (outils de diagnostic).
+    pub last: Option<String>,
 }
 
 static STATS: Mutex<BTreeMap<&'static str, Stats>> = Mutex::new(BTreeMap::new());
@@ -169,8 +280,9 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     (n.run)(c, b);
     c.cycles += cost;
     let mut diffs = Vec::new();
-    if n.exact_cost && c2.cycles - start != cost {
-        diffs.push(format!("cycles {} au lieu de {}", cost, c2.cycles - start));
+    // durée totale de la native, sous-routines d'origine appelées comprises
+    if n.exact_cost && c.cycles - start != c2.cycles - start {
+        diffs.push(format!("cycles {} au lieu de {}", c.cycles - start, c2.cycles - start));
     }
     for i in 0..8 {
         if n.outputs & regs::d(i as u32) != 0 && c.d[i] != c2.d[i] {
@@ -198,12 +310,27 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let s = st.entry(n.name).or_default();
     s.calls += 1;
     if !diffs.is_empty() {
+        if std::env::var("DDSOM_VERBOSE").is_ok() {
+            eprintln!("[{}] pc entry {:06x}: {}", n.name, n.entry, diffs.join(", "));
+        }
         s.mismatches += 1;
         if s.first.is_none() {
             s.first = Some(diffs.join(", "));
         }
+        s.last = Some(diffs.join(", "));
         // on garde l'état d'origine pour ne pas propager l'écart
         *c = c2;
         *b = b2;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn entrees_uniques() {
+        let mut vues = std::collections::HashSet::new();
+        for n in super::all_natives() {
+            assert!(vues.insert(n.entry), "{:06x} ({}) remplacée deux fois", n.entry, n.name);
+        }
     }
 }

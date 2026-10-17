@@ -1,0 +1,13 @@
+[package]
+name = "ddsom-sound"
+version = "0.1.0"
+edition = "2021"
+description = "Pilote son de ddsom (séquenceur QSound du Z80) réécrit en Rust"
+
+[dependencies]
+
+[dev-dependencies]
+cps2 = { path = "../cps2" }
+z80 = { path = "../z80" }
+ddsom-rc = { path = "../ddsom-rc" }
+ddsom-game = { path = "../ddsom-game" }

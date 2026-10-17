@@ -47,6 +47,7 @@ name = "cps2"
 version = "0.1.0"
 dependencies = [
  "cps2-gfx",
+ "ddsom-sound",
  "m68k",
  "png",
  "qsound",
@@ -74,6 +75,7 @@ name = "ddsom"
 version = "0.1.0"
 dependencies = [
  "cps2",
+ "ddsom-game",
  "ddsom-rc",
  "libloading",
  "minifb",
@@ -107,6 +109,16 @@ dependencies = [
  "m68k",
  "png",
  "recomp",
+]
+
+[[package]]
+name = "ddsom-sound"
+version = "0.1.0"
+dependencies = [
+ "cps2",
+ "ddsom-game",
+ "ddsom-rc",
+ "z80",
 ]
 
 [[package]]
