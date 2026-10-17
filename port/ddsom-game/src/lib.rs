@@ -11,8 +11,11 @@
 pub mod chemin;
 pub mod config;
 pub mod credits;
+pub mod dispatch;
 pub mod eeprom;
 pub mod evenements;
+pub mod game;
+pub mod garde;
 pub mod inputs;
 pub mod mem;
 pub mod objects;
@@ -145,7 +148,12 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(sound::wrappers_natifs())
+    NATIVES
+        .iter()
+        .chain(objects::NATIVES)
+        .chain(dispatch::NATIVES)
+        .chain(game::NATIVES)
+        .chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -170,7 +178,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
         if c.cycles + cost <= limit {
-            if CHECK.load(Ordering::Relaxed) {
+            if CHECK.load(Ordering::Relaxed) && !A_BLANC.get() {
                 check(n, c, b, cost);
             } else {
                 (n.run)(c, b);
@@ -201,6 +209,19 @@ pub fn install(m: &mut cps2::Machine) {
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
+
+thread_local! {
+    static A_BLANC: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Exécute `f` « à blanc » (sur une copie de l'état, pour mesurer une durée) : le mode contrôle et
+/// ses statistiques sont suspendus.
+pub fn a_blanc<R>(f: impl FnOnce() -> R) -> R {
+    let avant = A_BLANC.replace(true);
+    let r = f();
+    A_BLANC.set(avant);
+    r
+}
 
 #[derive(Default, Clone)]
 pub struct Stats {
@@ -240,8 +261,10 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     (n.run)(c, b);
     c.cycles += cost;
     let mut diffs = Vec::new();
-    if n.exact_cost && c2.cycles - start != cost {
-        diffs.push(format!("cycles {} au lieu de {}", cost, c2.cycles - start));
+    // durée totale : celle que `run` a ajoutée elle-même (routines qui comptent leurs cycles au fil
+    // de l'exécution) plus la durée déclarée
+    if n.exact_cost && c2.cycles - start != c.cycles - start {
+        diffs.push(format!("cycles {} au lieu de {}", c.cycles - start, c2.cycles - start));
     }
     for i in 0..8 {
         if n.outputs & regs::d(i as u32) != 0 && c.d[i] != c2.d[i] {
