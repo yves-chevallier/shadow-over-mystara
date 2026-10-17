@@ -339,6 +339,83 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
 /// moteur de collisions ou le créateur modifient (drapeaux de touche, propriétaire, positions).
 /// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
 /// `DDSOM_ENTREE=<adresse hexa>` restreint à un gestionnaire.
+/// Perturbe les variables globales que lisent les contrôleurs SET / SOBJ : mode de jeu, nombre de
+/// joueurs, caméras, rang, et pour chaque joueur son état, sa vie, ses touches et sa position
+/// autour de l'objet `obj`.
+fn perturber_globales(b: &mut cps2::Cps2Bus, alea: &mut Alea, pas: u32, obj: u32) {
+    use ddsom_game::mem::{rd16, wr8};
+    if pas != 0 && alea.next() % 4 != 0 {
+        return;
+    }
+    // octets de la RAM de travail (A5+) et valeurs possibles
+    let octets: [(u32, &[u8]); 16] = [
+        (0x2c, &[0xc, 0xc, 0xc, 0, 8]),
+        (0x30, &[0, 1, 1, 1]),
+        (0x34, &[0, 1, 4, 6, 7, 0x1c, 0x1f, 0x2b, 0x45, 0x50]),
+        (0x35, &[0, 1, 2, 3, 4]),
+        (0x36, &[0, 0, 1]),
+        (0x42, &[0, 0, 0, 1]),
+        (0x4e, &[0, 1, 4]),
+        (0x50, &[0, 0, 0, 1]),
+        (0x51, &[0, 1, 2]),
+        (0x58, &[0, 0, 1]),
+        (0x59, &[0, 1]),
+        (0x6f, &[0, 1, 7, 8, 0x10]),
+        (0x48e, &[0, 1, 0xc, 0xf]),
+        (0x48f, &[0, 1, 7]),
+        (0x53a, &[0, 0, 0, 1]),
+        (0x70, &[0, 0, 1]),
+    ];
+    for (off, valeurs) in octets {
+        if alea.next() % 3 == 0 {
+            wr8(b, A5 + off, valeurs[alea.next() as usize % valeurs.len()]);
+        }
+    }
+    // caméras, rang
+    for off in [0x506u32, 0x556] {
+        if alea.next() % 2 == 0 {
+            wr16(b, A5 + off, [0, 0x100, 0x180, 0x1c0, 0x200, 0x2b0, 0x300, 0xa00][alea.next() as usize % 8]);
+        }
+    }
+    for off in [0x50au32, 0x55a] {
+        if alea.next() % 2 == 0 {
+            wr16(b, A5 + off, (alea.next() % 0x200) as u16);
+        }
+    }
+    if alea.next() % 3 == 0 {
+        wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+    }
+    // joueurs : actif, état, vie, touches, position proche de l'objet
+    for j in 0..4u32 {
+        let p = 0xff85de + 0x200 * j;
+        if alea.next() % 3 == 0 {
+            wr8(b, p, [0, 1, 1, 1, 2][alea.next() as usize % 5]);
+        }
+        if alea.next() % 4 == 0 {
+            wr8(b, p + 4, [0, 1, 2, 2, 3, 4][alea.next() as usize % 6]);
+            wr8(b, p + 5, 0);
+            wr8(b, p + 6, 0);
+        }
+        if alea.next() % 3 == 0 {
+            wr16(b, p + 0x62, [0, 0x08, 0x20, 0x40, 0x80][alea.next() as usize % 5]);
+        }
+        if alea.next() % 3 == 0 {
+            wr8(b, p + 0x6c, alea.next() as u8);
+            wr8(b, 0xff800c + j, alea.next() as u8 & 0xf0);
+        }
+        if alea.next() % 3 == 0 {
+            let x = rd16(b, obj + 8).wrapping_add((alea.next() % 0x60) as u16).wrapping_sub(0x30);
+            let y = rd16(b, obj + 0x10).wrapping_add((alea.next() % 0x30) as u16).wrapping_sub(0x18);
+            wr16(b, p + 8, x);
+            wr16(b, p + 0x10, y);
+            wr16(b, p + 0xc, if alea.next() % 4 == 0 { 0x30 } else { 0 });
+        }
+        if alea.next() % 4 == 0 {
+            wr8(b, p + 3, (alea.next() % 12) as u8);
+        }
+    }
+}
+
 fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, filtre: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
@@ -397,6 +474,11 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             wr16(&mut b, obj.0 + 0x50, owner as u16);
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
+            if entree == 0xd5f5a {
+                // barre de vie (SET 20) : joueur suivi en +0x20, second joueur en +0x34
+                wr16(&mut b, obj.0 + 0x20, 0x85de + 0x200 * (alea.next() % 4) as u16);
+                wr16(&mut b, obj.0 + 0x34, 0x85de + 0x200 * (alea.next() % 4) as u16);
+            }
             for off in [0x8u32, 0xc, 0x10] {
                 let v = (rd16(&mut b, owner + off) as u32) << 16 | (alea.next() & 0xffff);
                 wr32(&mut b, obj.0 + off, v);
@@ -445,6 +527,11 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     if alea.next() % 10 == 0 {
                         wr8(&mut b, obj.0 + 0x53, (alea.next() % 5) as u8);
                     }
+                }
+                // SET et SOBJ : contrôleurs de scène et d'interface, qui lisent des variables globales
+                // (mode de jeu, nombre de joueurs, caméras, joueurs) : on les tire aussi
+                if pool.class == 0x10 || pool.class == 0x14 {
+                    perturber_globales(&mut b, &mut alea, pas, obj.0);
                 }
                 // jeu en pause (rare) ou non ; objet suspendu (octet +0x40) très rarement
                 wr8(&mut b, A5 + 0x3d, (alea.next() % 10 == 0) as u8);
