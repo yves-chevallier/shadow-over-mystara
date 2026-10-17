@@ -162,4 +162,25 @@ routines de scène de plusieurs kilo-octets).
 
 ## 5. Résultats de la validation
 
-(voir le compte rendu de fin de mission : appels et écarts par routine, couverture des décisions)
+- `tools/validate_all.sh 30000` : les huit scénarios sont `VALIDE`, 0 écart pour toutes les routines de
+  famille (durées exactes comprises) : `item_tresor` 1 248 appels, `item_conso` 16 180, `item_inventaire`
+  21 775, `item_bonus` 50 180, `item_scene` 10 387, `box_caisse` 22 216, `effct_interface` 52 540,
+  `effct_trainee` 32 080, `effct_poussiere` 19 162, `effct_decompte` 11 418, `effct_bulle` 4 453 (17 appels
+  du chemin hors contrat passent par le code d'origine), `effct_scintillement` 4 944, `effct_aura` 4 663,
+  `effct_nuage` 1 849, `effct_bandeau` 1 794, `effct_impact` 572, `effct_halo` 450, `effct_eclat` 257,
+  `effct_debris` 164, `effct_supprime` 9.
+- `examples/familles` (contrôle appel par appel, 30 000 images, huit scénarios) : 0 écart.
+- `examples/fuzz_familles` (huit scénarios, 8 000 images, 38 types forcés, 750 000 essais sur la dernière
+  série, plusieurs centaines de milliers d'autres lors de la mise au point) : 3 écarts, tous sur ITEM 1 avec
+  une variante hors table (12) où l'original saute dans des données ; aucune panique.
+- **Couverture des décisions** (`COUV`, scénarios + fuzz) : sur environ 350 sites de décision, 108 n'ont vu
+  qu'une seule issue. Les principales issues jamais observées : pool plein à la création d'un objet (butins,
+  bulle, éclats), nourriture (soins, PV pleins) et potions de ITEM 1 (variantes 2 à 5), échange ou fusion
+  d'équipement de ITEM 3 (bonus `+0x18b..`, groupes identiques), recouvrement des boîtes de ITEM 8
+  (variantes autres que 0), bulle d'action d'un joueur portant un objet (EFFCT 4 variante 0, actions 16 et 18),
+  jauge de l'interface (EFFCT 17 variante 2, sortie de clignotement), variantes 3 et 6 de la scène de ITEM 6 (SET créé
+  hors scénario). Ce sont des branches courtes et lues sur le listing, mais **non validées** : un défaut
+  éventuel s'y cacherait.
+- Limites connues : une variante ou un état hors table fait sauter l'original dans des données ; la
+  réécriture délègue au code d'origine avec D0, D1 et A1 posés comme lui, ce qui est exact dans tous les cas
+  rencontrés sauf ITEM 1 pour une variante >= 6 (objets qui n'existent pas dans le jeu).
