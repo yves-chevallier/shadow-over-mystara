@@ -1,87 +1,106 @@
 # Guide de réécriture en Rust
 
-Objectif : remplacer, sous-système par sous-système, le code 68000 de ddsom par du Rust **idiomatique,
-minimal et lisible**, au comportement **strictement identique**. Le code vit dans `port/ddsom-game`.
+Objectif : remplacer tout le code 68000 de ddsom par du Rust **idiomatique, minimal et lisible**, au
+comportement **identique image par image**. Le code vit dans `port/ddsom-game`.
+
+## Principe
+
+Le 68000 de la machine est **surcadencé** (×16, `Machine::set_overclock`) : le jeu finit toujours son
+travail avant la fin de l'image, il n'y a plus de ralentissements, et l'état du jeu à chaque image ne
+dépend plus de la durée des routines. On l'a vérifié : à ×8 et ×16, la RAM est identique sur 30 000
+images (`examples/determinisme.rs`). Conséquences :
+
+- **aucune exactitude au cycle** : une routine Rust n'a pas à reproduire la durée de l'original ;
+- la validation compare l'état du jeu **à chaque image** avec le code d'origine surcadencé ;
+- la seule différence assumée avec l'arcade : les ralentissements quand l'écran est chargé.
+
+La réécriture se fait **de haut en bas** : le Rust pilote (boucle de partie, phases, mise à jour du
+monde, dispatch des objets, handlers...) et appelle le code 68000 restant comme une boîte noire
+(`ddsom_game::call`). Une fonction Rust appelée par du Rust n'a aucun contrat de registres : elle
+prend et rend des valeurs Rust. Les registres n'existent qu'à la frontière avec le code 68000 restant.
 
 ## Ressources
 
 | Quoi | Où |
-|---|---|
+| --- | --- |
 | Pseudo-C de chaque fonction (Ghidra) | `/home/ycr/som/decomp/XXXXXX.c` |
 | Index : adresse, nom, taille, appelants, appelés | `/home/ycr/som/decomp/index.tsv` |
-| Listing assembleur complet | `/home/ycr/som/listing.txt` |
+| Listing assembleur complet (trous par endroits : désassembler `prog_dec.bin`) | `/home/ycr/som/listing.txt` |
 | Programme 68000 (données en clair / opcodes déchiffrés) | `/home/ycr/som/prog_plain.bin`, `prog_dec.bin` |
-| Carte mémoire, structures déjà comprises | `docs/joueur.md`, `symbols.txt`, modules de `ddsom-game` |
+| Carte du code, ordre de réécriture | `docs/atlas.md` |
+| Structures déjà comprises | `docs/*.md`, `symbols.txt`, modules de `ddsom-game` |
 | ROMs | `/home/ycr/som/rom` (variable `DDSOM_ROMS` pour `cargo` hors du dépôt principal) |
 
 Le pseudo-C de Ghidra est un point de départ, pas une vérité : les registres implicites
 (`unaff_A5`, `in_A0`, `extraout_A0`) et les pointeurs relatifs à A5 (= 0xFF8000) sont à retraduire.
-En cas de doute, l'assembleur du listing fait foi.
+En cas de doute, l'assembleur fait foi. Les lectures relatives au PC lisent le programme déchiffré
+(`prog_dec`), les autres lectures les données en clair.
 
 ## Routine native
 
-Une routine native remplace une routine 68000 à son adresse d'entrée (voir `src/inputs.rs`,
-`src/physics.rs`) :
+Une routine native remplace une routine 68000 à son adresse d'entrée, partout où elle est appelée :
 
 ```rust
 pub const NOM: Native = Native {
     entry: 0x1d62,           // adresse d'entrée de la routine d'origine
     name: "obj_move_xy",
-    cost: |c, b| ...,        // durée en cycles 68000
+    cost: |_, _| 100,        // durée indicative (cycles) ; aucune exactitude requise
     run: obj_move_xy,        // exécute la routine, RTS compris (mem::rts)
     touches_sound: false,    // accède à la RAM partagée Z80 (0x618000-0x619fff) ?
-    outputs: regs::d(0),     // registres/drapeaux que les appelants lisent au retour
-    exact_cost: false,       // true seulement si la durée est celle de l'original au cycle près
+    outputs: regs::d(0),     // registres/drapeaux que les appelants 68000 lisent au retour
+    exact_cost: false,       // obsolète : laisser à false
 };
 ```
 
-Règles :
-- **Mémoire** : les écritures (RAM, GFX RAM, Object RAM, registres d'E/S) doivent être identiques à
-  l'original, dans le même ordre pour les ports d'E/S.
-- **Registres** : seuls ceux de `outputs` doivent correspondre. Vérifier dans les appelants (index,
-  listing) quels registres sont lus après l'appel. Une routine appelée depuis une tâche dont
-  l'appelant enchaîne sur d'autres appels a souvent un contrat vide (`outputs: 0`) : la validation
-  globale ignore les zones où le jeu ne fait que *sauvegarder* des registres (piles des tâches,
-  pile logicielle du VBLANK, SR sauvegardé des tâches) et détecte tout registre réellement utilisé.
-- **Durée** : `timing::path_cycles` donne la durée exacte d'un chemin sans boucle ; sinon une estimation
-  raisonnable (somme des instructions du chemin le plus courant) avec `exact_cost: false`.
-- **Sous-routines non réécrites** : `ddsom_game::call(c, b, adresse)` les exécute comme un JSR.
-  Réécrire de **haut en bas** : remplacer un sous-système entier, pas une fonction feuille isolée.
-- Ajouter la routine à la liste `NATIVES` de `src/lib.rs`.
+- **Mémoire** : les écritures doivent laisser le même état que l'original (RAM, GFX RAM, Object RAM,
+  registres d'E/S ; même ordre pour les ports d'E/S comme le son).
+- **Registres** (`outputs`) : seulement tant que des appelants 68000 subsistent. Vérifier dans les
+  appelants (index, listing) ce qui est lu après l'appel ; en cas de doute, l'inclure. Quand tous
+  les appelants sont réécrits, la routine devient une simple fonction Rust.
+- **Pas de calcul de cycles**, pas d'exécution « à blanc », pas de reproduction des drapeaux qu'aucun
+  appelant ne lit. Si du code existant le fait encore, c'est un reste de l'ancienne méthode : on peut
+  le simplifier.
+- **Sous-routines non réécrites** : `ddsom_game::call(c, b, adresse)` (comme un JSR).
+- Une routine qui **cède la main** à l'ordonnanceur (0xa40 attend l'image suivante, 0xa86 cède sans
+  attendre) ne peut pas être une native d'un seul tenant : la découper aux points de cession, ou
+  réécrire la tâche entière comme une machine à états Rust.
+- Ajouter la routine à la liste `NATIVES` de son module, chaînée dans `all_natives()` de `src/lib.rs`
+  (le test `entrees_uniques` vérifie qu'aucune adresse n'est remplacée deux fois).
 
 ## Style
 
-- Un module par sous-système (`sprites.rs`, `player.rs`...), commentaires en français, brefs.
-- Nommer les champs : constantes de décalage regroupées (`impl Obj { const X: u32 = 0x08; ... }`),
-  vues typées sur la RAM (`mem::rd16`, `mem::wr16`...), pas de nombres magiques dispersés.
+- Un module par sous-système, commentaires en français, brefs. Le code doit être beau et lisible :
+  c'est le produit final, pas un outil.
+- Nommer les champs : vues typées (`objects::Obj`, `player::Player`...), constantes de décalage
+  regroupées, pas de nombres magiques dispersés. Machines à états en `enum`.
 - Le cœur de la logique s'exprime sur les structures du jeu ; l'adaptation aux registres 68000 reste
-  à la frontière (`run`), et disparaîtra quand l'appelant sera lui-même réécrit.
+  à la frontière (`run`) et disparaît quand l'appelant est lui-même réécrit.
 - Documenter les structures découvertes dans `docs/` (format, unités, signification des drapeaux).
-
-## Travailler dans un worktree
-
-Les ROMs et `testdata/` ne sont pas versionnés : depuis un worktree, exporter
-`DDSOM_ROMS=/home/ycr/som/rom DDSOM_EEPROM=/home/ycr/som/testdata/eeprom_ddsom.bin` (compilation de
-`ddsom-rc` et `tools/validate_all.sh`), et passer ces chemins à `validate`.
 
 ## Validation (obligatoire avant tout commit)
 
+```sh
+export DDSOM_ROMS=/home/ycr/som/rom DDSOM_EEPROM=/home/ycr/som/testdata/eeprom_ddsom.bin
+tools/validate_all.sh 30000      # tous les scénarios de scenarios/, en parallèle
+cd port && cargo test --release -p ddsom-game --lib
 ```
-cd port && cargo build --release -p ddsom-game --examples
-cd .. && ./port/target/release/examples/validate rom testdata/eeprom_ddsom.bin scenarios/bot30k.txt 30000
-```
 
-Pour tous les scénarios (`scenarios/`, générés par `tools/make_bot.py` : six personnages, deux
-joueurs) : `tools/validate_all.sh` (parallèle, ~4 minutes).
+Chaque scénario rejoue des entrées sur deux machines surcadencées, jeu réécrit et code d'origine, et
+compare à chaque image la RAM de travail (hors piles), la GFX RAM, la table de sprites et la palette.
+Résultat attendu : **« VALIDE »** pour chaque scénario. En cas d'écart, `validate` donne l'image et les
+adresses ; `DDSOM_CHECK=1 validate ...` compare en plus chaque appel natif à l'original (registres et
+mémoire, sur une copie) pour trouver la routine fautive. Outils (`port/ddsom-game/examples`) : `watch`
+(qui écrit telle adresse à telle image), `tasks` (table des tâches), `profile`, `fuzz`.
 
-Deux machines tournent en parallèle : l'une avec les routines natives en mode contrôle (chaque appel
-est aussi exécuté par l'original sur une copie et comparé), l'autre avec le code d'origine seul. Le
-résultat doit afficher **« VALIDE »** (0 écart pour chaque routine, RAM identique).
-Outils de diagnostic (`port/ddsom-game/examples`) : `watch` (qui écrit telle adresse à telle image),
-`tasks` (table des tâches), `profile` (cycles par fonction).
+Une routine jamais appelée par les scénarios n'est pas validée : le signaler (la liste des appels
+est affichée) et si possible ajouter un scénario qui l'exerce.
 
-Une routine non appelée par le scénario n'est pas validée : le signaler (et si possible ajouter un
-scénario qui l'exerce dans `scenarios/`).
+## Travailler dans un worktree
+
+Les ROMs et `testdata/` ne sont pas versionnés : depuis un worktree, exporter `DDSOM_ROMS` et
+`DDSOM_EEPROM` comme ci-dessus, **dans la même commande que `cargo`** (sinon `ddsom-rc` se recompile,
+~8 minutes). Les commandes git passent par `/usr/bin/git -C <worktree>`. La machine est partagée
+avec d'autres agents : ne jamais tuer de processus (`pkill`, `kill`) qui ne sont pas les siens.
 
 Commits : un commit par sous-système validé, message en français décrivant ce qui est compris et
 réécrit, terminé par la ligne `Co-Authored-By` habituelle.
