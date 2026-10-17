@@ -65,22 +65,38 @@ impl Class {
     /// Appelle le gestionnaire de chaque objet actif, dans l'ordre des emplacements. L'état d'un
     /// emplacement est lu au moment où la boucle y arrive : un objet créé par un gestionnaire dans
     /// un emplacement suivant est traité dans la même image.
+    ///
+    /// Les registres circulent d'un gestionnaire à l'autre comme dans la boucle d'origine (A0 =
+    /// objet, D7.w = compteur, D0 = type × 4, A1 = gestionnaire) : le jeu en dépend (un gestionnaire
+    /// lit le D0 laissé par le précédent) et un gestionnaire peut modifier A0 et D7.
     pub fn update(&self, c: &mut Cpu, b: &mut Cps2Bus) {
-        for obj in self.pool.iter() {
-            if !obj.is_active(b) {
-                continue;
-            }
-            let kind = obj.u8(b, Obj::KIND);
-            match self.handler(b, kind) {
-                Handler::Rust(f) => f(c, b, obj),
-                Handler::Rom(address) => {
-                    // les gestionnaires 68000 attendent l'objet en A0
-                    c.a[0] = obj.0;
-                    call(c, b, address);
+        c.a[0] = self.pool.slot(0).0;
+        set_low_word(&mut c.d[7], (self.pool.slots - 1) as u16);
+        loop {
+            let obj = Obj(c.a[0]);
+            if obj.is_active(b) {
+                let kind = obj.u8(b, Obj::KIND);
+                c.d[0] = ((kind as u16) << 2) as u32;
+                match self.handler(b, kind) {
+                    Handler::Rust(f) => f(c, b, obj),
+                    Handler::Rom(address) => {
+                        c.a[1] = address;
+                        call(c, b, address);
+                    }
                 }
+            }
+            c.a[0] = c.a[0].wrapping_add(self.pool.stride);
+            let counter = (c.d[7] as u16).wrapping_sub(1);
+            set_low_word(&mut c.d[7], counter);
+            if counter == 0xffff {
+                break;
             }
         }
     }
+}
+
+fn set_low_word(r: &mut u32, v: u16) {
+    *r = *r & 0xffff_0000 | v as u32;
 }
 
 macro_rules! natives {
