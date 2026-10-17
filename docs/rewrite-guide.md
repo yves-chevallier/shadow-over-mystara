@@ -95,6 +95,36 @@ mémoire, sur une copie) pour trouver la routine fautive. Outils (`port/ddsom-ga
 Une routine jamais appelée par les scénarios n'est pas validée : le signaler (la liste des appels
 est affichée) et si possible ajouter un scénario qui l'exerce.
 
+## Format des scénarios (`scenarios/*.txt`)
+
+Une action par ligne, `image champ valeur` (voir l'en-tête de `port/ddsom-game/src/scenario.rs`) :
+
+| Ligne | Effet |
+|---|---|
+| `900 Coin 1 1` / `906 Coin 1 0` | entrée MAME (1 = appuyée, 0 = relâchée) : `P1..P4 Right/Left/Up/Down/Button 1..4`, `Coin 1..4`, `1..4 Players Start`, `Service 1`, `Service Mode` (menu TEST) |
+| `2400 poke8 ff8034 24` | **écrit en RAM de travail** (`poke8`, `poke16`, `poke32` ; adresse hexadécimale `ff0000-ffffff`, valeur décimale ou `0x…`, big-endian) juste avant l'image `n + 1`, comme une entrée. Appliquée à l'identique par les deux machines de `validate` |
+| `30001 quit` | fin (ignorée par `validate`, utilisée par `mame/scenario.lua`, qui gère aussi `poke`) |
+
+Les scénarios ne contiennent que des entrées et des adresses/valeurs de RAM (aucune donnée de ROM).
+
+### Atteindre un stage ou un boss directement
+
+`FF8034` est le numéro de scène (1-114 : 1-89 jeu, dont 69-82 boutiques ; 83-89 graphismes non initialisés quand on y
+entre directement ; 90-114 scènes de démonstration de l'attract). Écrire une scène pendant la sélection du personnage
+(`poke8 ff8034 N` vers l'image 2400) lance la partie directement dans cette scène. En cours de partie, un saut propre
+s'obtient avec `ff8034 ← N`, `ff802c ← 8`, `ff802d ← 0`, `ff802e ← 0` (phase 8 : entrée de scène ; la phase 0x10 de
+fin de scène attend parfois indéfiniment). Les PV d'un joueur sont au mot `+0x62` de son enregistrement
+(`FF85DE + 0x200 k`), ceux d'un boss au mot `+0x62` de l'objet BOSS (`FFBA1E + 0xC0 k`) : ramener ces PV à 1 fait mourir
+le boss à la prochaine touche (séquences de mort et de fin de scène), les remettre au maximum rend le joueur invincible.
+Trois ou quatre joueurs : l'EEPROM d'origine déclare deux monnayeurs ; `poke8 ff8021 3` et `poke8 ff8020 2` (à l'image 800,
+après le chargement des réglages) donnent un monnayeur par joueur et la partie à quatre.
+
+### Générer les scénarios de couverture
+
+`tools/gen_scenarios.py` (bot réactif `port/ddsom-game/examples/autobot.rs`, qui joue en lisant la RAM puis écrit un
+scénario d'entrées et de `poke`) produit `scenarios/cov_*.txt` ; `tools/run_cov.py` + `tools/cov_report.py` mesurent la
+couverture d'instructions 68000 (exemple `cov`). Résultats et zones non atteintes : `docs/couverture.md`.
+
 ## Travailler dans un worktree
 
 Les ROMs et `testdata/` ne sont pas versionnés : depuis un worktree, exporter `DDSOM_ROMS` et

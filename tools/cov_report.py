@@ -44,7 +44,8 @@ def main():
         for l in open(a.listing, errors="replace"):
             m = pat.match(l)
             if m:
-                listing.add(int(m.group(1), 16))
+                if int(m.group(1), 16) < 0x100000:
+                    listing.add(int(m.group(1), 16))
 
     maps = [(os.path.basename(f), load(f)) for f in a.files]
     union = bytearray(len(maps[0][1]))
