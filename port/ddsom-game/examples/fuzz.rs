@@ -371,6 +371,10 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     }
     // nombre de variantes tirées (3 par défaut : au-delà, beaucoup de types sortent de leurs tables)
     let variantes: u32 = std::env::var("DDSOM_VARIANTES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    // DDSOM_LIEN=1 : renseigne aussi +0x5c (créateur) et perturbe les liens du propriétaire
+    let lien = std::env::var("DDSOM_LIEN").is_ok();
+    // DDSOM_PAS=n : appels par trajectoire (60 par défaut)
+    let pas_max: u32 = std::env::var("DDSOM_PAS").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
     let mut affiches = 0;
     let mut essais = 0;
     // couverture du code d'origine des gestionnaires (DDSOM_COUVERTURE=fichier : écrit les adresses vues)
@@ -397,6 +401,19 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             wr16(&mut b, obj.0 + 0x50, owner as u16);
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
+            if lien {
+                // types dont le créateur est en +0x5c (et qui ont des compteurs en +0x42 / +0x4c)
+                wr16(&mut b, obj.0 + 0x5c, owner as u16);
+                wr16(&mut b, obj.0 + 0x42, (alea.next() % 4) as u16);
+                wr16(&mut b, obj.0 + 0x4c, (alea.next() % 4) as u16);
+                wr8(&mut b, owner + 3, (alea.next() % 3) as u8);
+                if alea.next() % 2 == 0 {
+                    wr16(&mut b, owner + 0xa0, [0x201u16, 0x214, 0x215, 0x204][alea.next() as usize % 4]);
+                }
+                // étage de jeu et drapeaux de zone lus par les types de boss
+                wr8(&mut b, A5 + 0x34, [0x2e, 0x69, 0x2d, 0x19, 0x10][alea.next() as usize % 5]);
+                wr8(&mut b, 0xff2064, (alea.next() & 3) as u8);
+            }
             for off in [0x8u32, 0xc, 0x10] {
                 let v = (rd16(&mut b, owner + off) as u32) << 16 | (alea.next() & 0xffff);
                 wr32(&mut b, obj.0 + off, v);
@@ -405,7 +422,21 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             // décompte des places libres cohérent
             // (au moment du chauffage le pool peut être plein : les gestionnaires testent ce compteur)
             wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
-            for pas in 0..60 {
+            if lien {
+                // chaînes de liens non nulles pour les types qui remontent « créateur du créateur »
+                for &p in &proprietaires {
+                    if alea.next() % 5 != 0 {
+                        wr16(&mut b, p + 0x5c, proprietaires[alea.next() as usize % proprietaires.len()] as u16);
+                    }
+                    if alea.next() % 5 != 0 {
+                        wr16(&mut b, p + 0x50, proprietaires[alea.next() as usize % proprietaires.len()] as u16);
+                    }
+                    if alea.next() % 5 != 0 {
+                        wr16(&mut b, p + 0x46, proprietaires[alea.next() as usize % proprietaires.len()] as u16);
+                    }
+                }
+            }
+            for pas in 0..pas_max {
                 if rd8(&mut b, obj.0) == 0 {
                     break;
                 }
@@ -436,6 +467,37 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                                 };
                                 wr8(&mut b, owner + off, v);
                             }
+                        }
+                    }
+                    if lien && alea.next() % 4 == 0 {
+                        // drapeaux d'attaque que le créateur pose dans le tir, états d'attaque d'un boss
+                        for off in [0x58u32, 0x59, 0x5a] {
+                            if alea.next() % 3 == 0 {
+                                wr8(&mut b, obj.0 + off, (alea.next() % 3) as u8);
+                            }
+                        }
+                        if alea.next() % 3 == 0 {
+                            wr16(&mut b, owner + 0xa0, [0x201u16, 0x214, 0x215, 0x204, 0, 1][alea.next() as usize % 6]);
+                        }
+                    }
+                    if lien && alea.next() % 3 == 0 {
+                        // liens et champs de boss lus par les types attachés à un créateur
+                        for off in [0x50u32, 0x5c, 0x46] {
+                            if alea.next() % 2 == 0 {
+                                let p = if alea.next() % 5 == 0 { 0 } else { proprietaires[alea.next() as usize % proprietaires.len()] };
+                                wr16(&mut b, owner + off, p as u16);
+                            }
+                        }
+                        if alea.next() % 3 == 0 {
+                            wr8(&mut b, owner + 3, (alea.next() % 3) as u8);
+                        }
+                        for off in [0xacu32, 0xa4, 0x1c, 0xae, 0x33, 0x38, 0x7e, 0x10f] {
+                            if alea.next() % 3 == 0 {
+                                wr8(&mut b, owner + off, (alea.next() % 4) as u8);
+                            }
+                        }
+                        if alea.next() % 4 == 0 {
+                            wr16(&mut b, owner + 0x62, (alea.next() % 3) as u16);
                         }
                     }
                     // sa propre variante / drapeaux de contrôle
