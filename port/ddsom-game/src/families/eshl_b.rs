@@ -343,7 +343,6 @@ mod shot16 {
 
     const ANIMS: u32 = 0x16e146;
     const HELD: u8 = 0;
-    const THROWN: u8 = 2;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1245,7 +1244,6 @@ mod shot23 {
 
     const ANIMS: u32 = 0x1c03a6;
     const WAIT: u8 = 0;
-    const GO: u8 = 2;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1335,13 +1333,6 @@ mod shot24 {
             2 => active(x),
             4 => x.add8(0x4, 2),
             _ => x.free_eshl(),
-        }
-    }
-
-    fn copy_position16(x: &mut Cx, from: Obj) {
-        for off in [0x8, 0xc, 0x10] {
-            let v = from.u16(x.b, off);
-            x.set16(off, v);
         }
     }
 
@@ -1688,7 +1679,7 @@ mod shot27 {
             }
             x.anim_step();
             if x.u16(0x58) == ROW_AT {
-                spawn_row(x);
+                start_row(x);
                 x.call(SOUND_ROW);
             }
             return;
@@ -1721,55 +1712,17 @@ mod shot27 {
 
     /// Crée la rangée d'éléments (variante 1) de part et d'autre, depuis le créateur de l'épicentre
     /// ou le bord de la caméra, jusqu'aux limites de l'écran.
-    fn spawn_row(x: &mut Cx) {
-        let mut label: u16 = 1;
-        let camera_x = |x: &mut Cx| if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
-        let mut px = x.u16(0x8);
-        let rightwards;
-        if x.u8(0x56) == 0 {
+    fn start_row(x: &mut Cx) {
+        let px = x.u16(0x8);
+        let limit = if x.u8(0x56) == 0 {
             let target = x.linked(f::OWNER);
-            if px <= target.u16(x.b, 0x8) {
-                rightwards = true;
-                px = px.wrapping_add(0x20);
-            } else {
-                rightwards = false;
-                px = px.wrapping_sub(0x20);
-            }
+            target.u16(x.b, 0x8)
         } else {
-            let limit = camera_x(x).wrapping_add(0xc0);
-            if px <= limit {
-                rightwards = true;
-                px = px.wrapping_add(0x20);
-            } else {
-                rightwards = false;
-                px = px.wrapping_sub(0x20);
-            }
-        }
-        loop {
-            let Some(e) = alloc(x, sub::ALLOC_ESHL) else { return };
-            e.set_u8(x.b, 0, 1);
-            e.set_u8(x.b, 2, 0x1b);
-            e.set_u8(x.b, 3, 1);
-            e.set_u16(x.b, 0x8, px);
-            let (z, y) = (x.u16(0xc), x.u16(0x10));
-            e.set_u16(x.b, 0xc, z.wrapping_sub(1));
-            e.set_u16(x.b, 0x10, y.wrapping_add(1));
-            e.set_u16(x.b, 0x58, label);
-            label = label.wrapping_add(1);
-            e.set_u16(x.b, 0x5c, low16(x.o));
-            let camera = camera_x(x);
-            if rightwards {
-                px = px.wrapping_add(0x38);
-                if px > camera.wrapping_add(0x1c0) {
-                    return;
-                }
-            } else {
-                px = px.wrapping_sub(0x38);
-                if camera > px {
-                    return;
-                }
-            }
-        }
+            camera_x(x).wrapping_add(0xc0)
+        };
+        let rightwards = px <= limit;
+        let start = if rightwards { px.wrapping_add(0x20) } else { px.wrapping_sub(0x20) };
+        spawn_row(x, 0x1b, start, rightwards);
     }
 }
 
@@ -1822,6 +1775,1320 @@ mod shot28 {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Aides des types 29 à 39
+// ---------------------------------------------------------------------------------------------
+
+/// Démarrage d'animation de l'IA (`0x103d6` : `anim_start_indexed` puis `+0x44 = +0x3e`).
+fn ai_start(x: &mut Cx, set: u32, n: u32) {
+    x.c.a[4] = set;
+    x.c.d[0] = n;
+    x.call(0x103d6);
+}
+
+/// Pas d'animation de l'IA (`0x1040c`) ; vrai en fin de script.
+fn ai_step(x: &mut Cx) -> bool {
+    x.call(0x1040c);
+    x.c.sr & SR_C != 0
+}
+
+/// Abscisse gauche de la caméra courante (`A5+0x506`, ou `0x556` si la caméra alternative est active).
+fn camera_x(x: &mut Cx) -> u16 {
+    if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) }
+}
+
+/// Recopie la position (X, Z, Y : parties entières) d'un objet.
+fn copy_position16(x: &mut Cx, from: Obj) {
+    for off in [0x8, 0xc, 0x10] {
+        let v = from.u16(x.b, off);
+        x.set16(off, v);
+    }
+}
+
+/// Crée une rangée de tirs de type `kind` (variante 1) en partant de `px`, de 0x38 en 0x38 vers la
+/// droite ou vers la gauche jusqu'aux limites de l'écran (`+0x58` numérote les éléments).
+fn spawn_row(x: &mut Cx, kind: u8, mut px: u16, rightwards: bool) {
+    let mut label: u16 = 1;
+    loop {
+        let Some(e) = alloc(x, sub::ALLOC_ESHL) else { return };
+        e.set_u8(x.b, 0, 1);
+        e.set_u8(x.b, 2, kind);
+        e.set_u8(x.b, 3, 1);
+        e.set_u16(x.b, 0x8, px);
+        let (z, y) = (x.u16(0xc), x.u16(0x10));
+        e.set_u16(x.b, 0xc, z.wrapping_sub(1));
+        e.set_u16(x.b, 0x10, y.wrapping_add(1));
+        e.set_u16(x.b, 0x58, label);
+        label = label.wrapping_add(1);
+        e.set_u16(x.b, 0x5c, low16(x.o));
+        let camera = camera_x(x);
+        if rightwards {
+            px = px.wrapping_add(0x38);
+            if px > camera.wrapping_add(0x1c0) {
+                return;
+            }
+        } else {
+            px = px.wrapping_sub(0x38);
+            if camera > px {
+                return;
+            }
+        }
+    }
+}
+
+/// Clignotement selon la parité de `A5+0x6e` et de la variante : caché quand elles diffèrent.
+fn blink_by_parity(x: &mut Cx) {
+    let hidden = (x.u8(0x3) ^ x.a5_u16(0x6e) as u8) & 1 != 0;
+    x.set_bit(0x1, 1, hidden);
+}
+
+/// Gabarit des types 32, 33, 35, 36 et 38 : pause (objet suspendu), état, puis, si l'objet existe
+/// encore, remise en place dans la liste.
+fn guarded(x: &mut Cx, state: fn(&mut Cx)) {
+    if suspended(x) {
+        return;
+    }
+    state(x);
+    if x.u8(0x0) != 0 {
+        x.reinsert();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 29 (0xa1d70) : flamme / onde d'une rangée créée par un créateur (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Trois variantes : 0 = élément central posé sur le créateur (`+0x5c`), qui attend que le créateur
+/// arme son attaque (`+0xaf`) puis crée une rangée d'éléments de variante 1 (de part et d'autre,
+/// `spawn_row`) ; 1 = élément de la rangée, clignotant, qui s'éteint avec l'épicentre ; 2 = la
+/// version à retardement (30 images). Tous disparaissent avec le créateur (état >= 4 ou 0x20a).
+mod shot29 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16eec2;
+    const ATTACH_SHIFT: u32 = 0xa1fac;
+    const SOUND_START: u32 = 0xed40a;
+    const SOUND_END: u32 = 0xed90a;
+    const SOURCE_ARMED: u32 = 0xaf;
+    const WAIT: u8 = 0;
+    const HOLD: u8 = 2;
+
+    pub fn run(x: &mut Cx) {
+        match x.u8(0x4) {
+            0 => init(x),
+            2 => active(x),
+            4 => stop(x),
+            _ => x.free_eshl(),
+        }
+    }
+
+    fn init(x: &mut Cx) {
+        x.set8(f::ATTACK_ID, 6);
+        x.set8(f::ATTACK_POWER, 5);
+        x.set8(f::BOX_SET, 7);
+        match x.u8(0x3) {
+            2 => {
+                x.add8(0x4, 2);
+                follow(x);
+                x.set16(0x58, 0x1e);
+                x.anim_start(ANIMS, 3);
+            }
+            0 => {
+                x.add8(0x4, 2);
+                follow(x);
+                x.anim_start(ANIMS, 0);
+            }
+            _ => {
+                x.add16(0x58, 0xffff);
+                if x.u16(0x58) != 0 {
+                    return;
+                }
+                x.add8(0x4, 2);
+                x.anim_start(ANIMS, 1);
+            }
+        }
+        x.reinsert();
+    }
+
+    /// Fin : le créateur est mort ou dans l'état 0x20a.
+    fn stop(x: &mut Cx) {
+        x.call(SOUND_END);
+        x.add8(0x4, 2);
+    }
+
+    fn active(x: &mut Cx) {
+        let source = x.linked(0x5c);
+        if (source.u8(x.b, 0x4) as i8) >= 4 || source.u16(x.b, 0x4) == 0x20a {
+            return stop(x);
+        }
+        match x.u8(0x3) {
+            2 => {
+                follow(x);
+                x.add16(0x58, 0xffff);
+                if (x.u16(0x58) as i16) < 0 {
+                    x.add8(0x4, 2);
+                }
+                x.anim_step();
+            }
+            0 => centre(x),
+            _ => satellite(x, source),
+        }
+    }
+
+    /// Élément central : attend le signal du créateur puis déclenche la rangée.
+    fn centre(x: &mut Cx) {
+        match x.u8(0x5) {
+            WAIT => {
+                let source = x.linked(0x5c);
+                if source.u8(x.b, SOURCE_ARMED) != 0 {
+                    x.call(SOUND_START);
+                    x.add8(0x5, 2);
+                    x.set16(0x58, 0x50);
+                    let px = source.u16(x.b, 0x8);
+                    let rightwards = source.u8(x.b, f::FLIP) != 0;
+                    let start = if rightwards { px.wrapping_add(0x4d) } else { px.wrapping_sub(0x4d) };
+                    spawn_row(x, 0x1d, start, rightwards);
+                } else {
+                    follow(x);
+                    x.anim_step();
+                    x.reinsert();
+                }
+            }
+            HOLD => {
+                x.add16(0x58, 0xffff);
+                if x.u16(0x58) == 0 {
+                    x.add8(0x4, 2);
+                    x.set8(0x5, 0);
+                    x.set8(0x0, 2);
+                    let source = x.linked(0x5c);
+                    source.set_u8(x.b, SOURCE_ARMED, 0);
+                }
+                follow(x);
+                x.anim_step();
+                x.reinsert();
+            }
+            _ => {}
+        }
+    }
+
+    /// Élément de la rangée : clignote selon `A5+0x6f`, change d'animation quand l'épicentre s'éteint.
+    fn satellite(x: &mut Cx, source: Obj) {
+        let flicker = |x: &mut Cx| {
+            let hidden = x.a5_u8(0x6f) & 1 == 0;
+            x.set_bit(0x1, 1, hidden);
+        };
+        match x.u8(0x5) {
+            WAIT => {
+                x.anim_step();
+                if source.u16(x.b, 0x58) <= 0x30 {
+                    x.add8(0x5, 2);
+                    x.anim_start(ANIMS, 2);
+                }
+                flicker(x);
+            }
+            HOLD => {
+                if x.anim_step() {
+                    x.add8(0x4, 2);
+                }
+                flicker(x);
+            }
+            _ => {}
+        }
+    }
+
+    /// Se colle au créateur ; le décalage dépend de son état d'attaque (`+7`).
+    fn follow(x: &mut Cx) {
+        let source = x.linked(0x5c);
+        copy_position16(x, source);
+        let flip = source.u8(x.b, f::FLIP);
+        x.set8(f::FLIP, flip);
+        let attack = source.u8(x.b, 0x7);
+        if attack == 0x16 || attack == 0x18 {
+            let index = source.u8(x.b, 0x33) as u32;
+            let mut dx = x.rom16(ATTACH_SHIFT + index);
+            if flip != 0 {
+                dx = dx.wrapping_neg();
+            }
+            x.add16(0x8, dx);
+            x.set16(0xc, 0x1e);
+        } else {
+            let mut dx = -0x2di16 as u16;
+            if flip != 0 {
+                dx = dx.wrapping_neg();
+            }
+            x.add16(0x8, dx);
+            x.set16(0xc, 0x27);
+        }
+        x.add16(0x10, 0xffff);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 30 (0xa2060) : coup porté par un ennemi, avec son (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Colle un coup au propriétaire (orientation inversée) : attend que le propriétaire arme son attaque
+/// (`+0xaf`), joue le coup (animation 1, 48 images), le retour (animation 2), puis rend la main.
+mod shot30 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16f174;
+    const SOUND_START: u32 = 0xed474;
+    const SOUND_END: u32 = 0xed90a;
+    const OWNER_ARMED: u32 = 0xaf;
+
+    pub fn run(x: &mut Cx) {
+        match x.u8(0x4) {
+            0 => init(x),
+            2 => active(x),
+            4 => {
+                x.call(SOUND_END);
+                x.free_eshl()
+            }
+            _ => x.free_eshl(),
+        }
+    }
+
+    fn init(x: &mut Cx) {
+        if x.u16(f::OWNER) == 0 {
+            return;
+        }
+        x.add8(0x4, 2);
+        let owner = x.linked(f::OWNER);
+        copy_position16(x, owner);
+        let flip = owner.u8(x.b, f::FLIP) ^ 0x20;
+        x.set8(f::FLIP, flip);
+        x.set8(f::ATTACK_ID, 5);
+        x.set8(f::ATTACK_POWER, 0xc);
+        x.set8(f::BOX_SET, 7);
+        x.add16(0xc, 0x27);
+        let dx = if flip != 0 { -0x2di16 } else { 0x2d };
+        x.add16(0x8, dx as u16);
+        x.anim_start(ANIMS, 0);
+    }
+
+    fn active(x: &mut Cx) {
+        if x.u16(f::OWNER) == 0 {
+            return;
+        }
+        let owner = x.linked(f::OWNER);
+        if (owner.u8(x.b, 0x4) as i8) >= 4 || owner.u16(x.b, 0x4) == 0x20a {
+            x.call(SOUND_END);
+            return x.free_eshl();
+        }
+        match x.u8(0x5) {
+            0 => {
+                if owner.u8(x.b, OWNER_ARMED) != 0 {
+                    x.add8(0x5, 2);
+                }
+                x.anim_step();
+                x.reinsert();
+            }
+            2 => {
+                x.add8(0x5, 2);
+                x.call(SOUND_START);
+                x.set16(0x58, 0x30);
+                x.anim_start(ANIMS, 1);
+            }
+            4 => {
+                x.add16(0x58, 0xffff);
+                if (x.u16(0x58) as i16) < 0 {
+                    x.add8(0x5, 2);
+                    x.anim_start(ANIMS, 2);
+                } else {
+                    x.anim_step();
+                    x.reinsert();
+                }
+            }
+            6 => {
+                if x.anim_step() {
+                    x.call(SOUND_END);
+                    x.add8(0x4, 4);
+                    x.set8(0x5, 0);
+                    let owner = x.linked(f::OWNER);
+                    owner.set_u8(x.b, OWNER_ARMED, 0);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 31 (0xa21b6) : boule à tête chercheuse d'un créateur (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Boule qui part du créateur (`+0x5c`, côté regardé) avec la table de vitesses 0x30. Elle attend
+/// 48 images (`+0x42`), puis toutes les 10 images oriente sa direction (`+0x2d`) vers lui (angle +
+/// `+0x58`, signe selon la hauteur de sa cible) et explose au contact (boîte de 0x20 autour du
+/// créateur). Quand le créateur passe à l'état >= 0x406, elle file droit et sort de l'écran.
+mod shot31 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16f504;
+    const SOUND_SPAWN: u32 = 0xedaa6;
+    const SOUND_HIT: u32 = 0xedb18;
+    const SEARCH: u8 = 0;
+    const HUNT: u8 = 2;
+
+    pub fn run(x: &mut Cx) {
+        if x.u16(0x5c) == 0 {
+            return kill(x);
+        }
+        match x.u8(0x4) {
+            0 => init(x),
+            2 => active(x),
+            4 => fly_away(x),
+            _ => x.free_eshl(),
+        }
+    }
+
+    fn init(x: &mut Cx) {
+        x.add8(0x4, 2);
+        x.set8(f::BOX_SET, 7);
+        x.set8(f::ATTACK_ID, 7);
+        x.set8(f::ATTACK_POWER, 5);
+        let source = x.linked(0x5c);
+        copy_position16(x, source);
+        let flip = source.u8(x.b, f::FLIP);
+        x.set8(f::FLIP, flip);
+        x.add16(0x10, 0xffff);
+        x.set8(0x42, 0x30);
+        let (dx, angle) = if flip != 0 { (0x4a, 8) } else { (-0x4ai16 as u16, 0x18) };
+        x.set8(0x2d, angle);
+        x.add16(0x8, dx);
+        x.add16(0xc, 0x32);
+        x.anim_start(ANIMS, 0);
+        speed_table(x, 0x30);
+    }
+
+    fn fly_away(x: &mut Cx) {
+        x.call(sub::MOVE_TABLE_XY);
+        x.anim_step();
+        x.call(sub::CULL_OFFSCREEN);
+    }
+
+    /// Son de rebond quand l'animation lève son drapeau (`+0x33`).
+    fn animation_cue(x: &mut Cx) {
+        if x.u8(0x33) != 0 {
+            x.set8(0x33, 0);
+            x.call(SOUND_SPAWN);
+        }
+    }
+
+    fn active(x: &mut Cx) {
+        let source = x.linked(0x5c);
+        if (source.u16(x.b, 0x4) as i16) >= 0x406 {
+            return fly_away(x);
+        }
+        match x.u8(0x5) {
+            SEARCH => {
+                animation_cue(x);
+                x.add8(0x42, 0xff);
+                if (x.u8(0x42) as i8) < 0 {
+                    x.add8(0x5, 2);
+                    x.set8(0x58, 0xfc);
+                    if source.u16(x.b, f::OWNER) != 0 {
+                        let target = link_of(x, source, f::OWNER);
+                        let d = x.u16(0x10).wrapping_sub(target.u16(x.b, 0x10));
+                        if (d as i16) < 0 {
+                            x.set8(0x58, 4);
+                        }
+                    }
+                }
+                x.anim_step();
+                x.call(sub::MOVE_TABLE_XY);
+            }
+            HUNT => {
+                animation_cue(x);
+                x.add8(0x42, 0xff);
+                if (x.u8(0x42) as i8) < 0 {
+                    x.set8(0x42, 0xa);
+                    x.c.d[1] = source.u16(x.b, 0x8) as u32;
+                    x.c.d[2] = source.u16(x.b, 0x10) as u32;
+                    x.call(0x137e);
+                    let angle = (x.c.d[0] as u8).wrapping_add(x.u8(0x58)) & 0x1f;
+                    x.set8(0x2d, angle);
+                }
+                let touching = |x: &mut Cx, a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x20 && x.a5_u8(GAME_PAUSED) == 0;
+                let (sx, sy) = (source.u16(x.b, 0x8), source.u16(x.b, 0x10));
+                let (mx, my) = (x.u16(0x8), x.u16(0x10));
+                let hit = source.u8(x.b, 0x4) != 4 && touching(x, sx, mx) && touching(x, sy, my);
+                if hit {
+                    x.call(SOUND_HIT);
+                    x.set8(0x4, st::FREE);
+                    source.set_u8(x.b, 0xb5, 0);
+                } else {
+                    x.call(sub::MOVE_TABLE_XY);
+                    x.anim_step();
+                }
+            }
+            _ => {}
+        }
+        x.reinsert();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Types 32 et 33 : tirs d'un hôte (+0x42), animations de l'IA (0x103d6 / 0x1040c)
+// ---------------------------------------------------------------------------------------------
+
+/// Vrai quand l'hôte (`+0x42`) de l'objet est dans l'état 4 : le tir doit disparaître (0xa2510).
+fn host_dead(x: &mut Cx) -> bool {
+    let host = x.linked(0x42);
+    host.u8(x.b, 0x4) == 4
+}
+
+/// Type 32 (0xa239a) : projectile à tête chercheuse tiré sur la position de l'hôte (h)
+///
+/// Au départ (état 0) il vise le propriétaire (`+0x50`, variante 0) ou la position (`+0xbc/+0xbe`)
+/// de l'hôte (`+0x42`, autres variantes) : direction `+0x2d` d'après l'angle, vitesse verticale
+/// calculée pour atteindre la cible en un nombre de pas proportionnel à la distance. Puis il vole
+/// (état 2 sous-état 0 : attend le drapeau `+0x58`), retombe (sous-état 2) en jouant un son si
+/// sa chute croise la zone visible, et se termine par son animation (sous-état 4).
+mod shot32 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16f58c;
+    const SOUND_FLYING: u32 = 0xed4de;
+    const SOUND_LANDING: u32 = 0xed548;
+    const SET_TRAJECTORY: u32 = 0x3af8;
+    const SCREEN_LEFT: u32 = 0x5a6;
+    const FLY: u8 = 0;
+    const FALL: u8 = 2;
+    const END: u8 = 4;
+
+    pub fn run(x: &mut Cx) {
+        guarded(x, state)
+    }
+
+    fn state(x: &mut Cx) {
+        match x.u8(0x4) {
+            0 => init(x),
+            2 => match x.u8(0x5) {
+                FLY => {
+                    if host_dead(x) {
+                        return x.free_eshl();
+                    }
+                    if x.u8(0x58) != 0 {
+                        x.add8(0x5, 2);
+                        x.call(SOUND_FLYING);
+                    }
+                    ai_step(x);
+                }
+                FALL => {
+                    if host_dead(x) {
+                        return x.free_eshl();
+                    }
+                    x.call(sub::MOVE_XYZ);
+                    if (x.u16(0xc) as i16) > 0 {
+                        ai_step(x);
+                        return;
+                    }
+                    x.add8(0x5, 2);
+                    x.set16(0xc, 0);
+                    x.set8(0x5a, 1);
+                    let left = x.a5_u16(SCREEN_LEFT);
+                    let x_pos = x.u16(0x8);
+                    let inside = (left.wrapping_sub(0x30) as i16) < x_pos as i16 && (left.wrapping_add(0x1b0) as i16) > x_pos as i16;
+                    if inside {
+                        x.call(SOUND_LANDING);
+                    }
+                    ai_start(x, ANIMS, 2);
+                }
+                END => {
+                    if ai_step(x) {
+                        x.add8(0x4, 2);
+                    }
+                }
+                _ => {}
+            },
+            _ => x.free_eshl(),
+        }
+    }
+
+    fn init(x: &mut Cx) {
+        x.add8(0x4, 2);
+        x.set8(f::BOX_SET, 7);
+        x.set8(f::ATTACK_POWER, 0x14);
+        x.call(SET_TRAJECTORY);
+        let variant = x.u8(0x3);
+        let target;
+        if variant == 0 {
+            target = x.linked(f::OWNER);
+            x.c.a[1] = target.0;
+            x.call(0x1376);
+        } else {
+            target = x.linked(0x42);
+            x.c.d[1] = target.u16(x.b, 0xbc) as u32;
+            x.c.d[2] = target.u16(x.b, 0xbe) as u32;
+            x.call(0x137e);
+        }
+        let angle = x.c.d[0] as u8;
+        x.set8(0x2d, angle);
+        speed_table(x, 0x41);
+        // distance horizontale à la cible
+        let reference = if variant == 0 { target.u32(x.b, 0x8) } else { target.u32(x.b, 0xbc) };
+        let mut distance = x.u32(0x8).wrapping_sub(reference);
+        if (distance as i32) < 0 {
+            distance = distance.wrapping_neg();
+        }
+        distance &= 0x7fff_0000;
+        // nombre de pas de 9 pixels pour la couvrir
+        let step = 0x0009_0000u32;
+        let mut steps: u32 = 0;
+        let mut rest = distance as i32;
+        loop {
+            rest = rest.wrapping_sub(step as i32);
+            if rest <= 0 {
+                break;
+            }
+            steps = (steps + 1) & 0xffff;
+        }
+        x.c.d[0] = x.u16(0xc) as u32;
+        x.c.d[1] = steps;
+        x.call(0x17ea);
+        let slope = (x.c.d[0] as i32).wrapping_neg() as u32;
+        let slope = (slope.rotate_left(16) as i32 >> 8) as u16;
+        x.set16(0x18, slope);
+        ai_start(x, ANIMS, 0);
+    }
+}
+
+/// Type 33 (0xa2524) : tir en trois temps lié à son hôte (h)
+///
+/// Même gabarit que le type 32 (suspension, hôte mort = l'état 4 de l'hôte). Animation 0 puis, quand
+/// l'animation lève `+0x58`, son et animation 1 ; quand elle lève `+0x59`, animation 2 jusqu'à
+/// ce que `+0x32` se vide (`+0x5a` = 1), puis fin à la fin du script.
+mod shot33 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16f8ea;
+    const SOUND_FIRE: u32 = 0xed474;
+    const SOUND_END: u32 = 0xed90a;
+
+    pub fn run(x: &mut Cx) {
+        if suspended(x) {
+            return;
+        }
+        if host_dead(x) {
+            x.call(SOUND_END);
+            return x.free_eshl();
+        }
+        match x.u8(0x4) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(f::BOX_SET, 7);
+                x.set8(f::ATTACK_POWER, 0xf);
+                ai_start(x, ANIMS, 0);
+            }
+            2 => match x.u8(0x5) {
+                0 => {
+                    if x.u8(0x58) == 0 {
+                        ai_step(x);
+                    } else {
+                        x.add8(0x5, 2);
+                        x.call(SOUND_FIRE);
+                        ai_start(x, ANIMS, 1);
+                    }
+                }
+                2 => {
+                    if x.u8(0x59) == 0 {
+                        ai_step(x);
+                    } else {
+                        x.add8(0x5, 2);
+                        x.set8(0x6, 0);
+                        ai_start(x, ANIMS, 2);
+                    }
+                }
+                4 => match x.u8(0x6) {
+                    0 => {
+                        ai_step(x);
+                        if x.u16(0x32) != 0 {
+                            x.add8(0x6, 2);
+                            x.set8(0x5a, 1);
+                        }
+                    }
+                    2 => {
+                        if ai_step(x) {
+                            x.add8(0x4, 2);
+                        }
+                    }
+                    _ => {}
+                },
+                _ => {}
+            },
+            _ => {
+                x.call(SOUND_END);
+                return x.free_eshl();
+            }
+        }
+        if x.u8(0x0) != 0 {
+            x.reinsert();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 34 (0xa2630) : mise en scène d'une attaque de boss, trois variantes (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Objet de mise en scène lié à son créateur (`+0x5c`). Variante 0 : voile plein écran (position de
+/// la caméra, 600 images) avec un décor SET (type 0 variante 0x47) rattaché dans les deux sens ;
+/// variante 1 : même idée à côté du créateur (400 images, un seul décor, animation de sortie) ;
+/// variante 2 : posée sur le créateur. Au premier passage la variante 0 charge quatre palettes
+/// (0x91c2e0...) de la ROM, teintées par 0xf000f000.
+mod shot34 {
+    use super::*;
+
+    const ANIMS_SCREEN: u32 = 0x1c03a6;
+    const ANIMS: u32 = 0x17e03a;
+    const ALLOC_SET: u32 = 0x2348;
+    /// (destination dans la palette, source dans la ROM), 8 longs chacun.
+    const PALETTES: [(u32, u32); 4] = [(0x91c2e0, 0x2538c0), (0x91c300, 0x2538e0), (0x91c360, 0x253900), (0x91c3e0, 0x253920)];
+    const TINT: u32 = 0xf000_f000;
+    const SOURCE_BUSY: u32 = 0xa0;
+
+    pub fn run(x: &mut Cx) {
+        if x.u16(0x5c) == 0 {
+            return kill(x);
+        }
+        match x.u8(0x4) {
+            0 => init(x),
+            2 => active(x),
+            _ => x.free_eshl(),
+        }
+    }
+
+    fn load_palettes(x: &mut Cx) {
+        for (dst, src) in PALETTES {
+            for i in 0..8 {
+                let v = x.data32(src + 4 * i);
+                wr32(x.b, dst + 4 * i, v);
+            }
+            for i in 0..8 {
+                let v = rd32(x.b, dst + 4 * i) | TINT;
+                wr32(x.b, dst + 4 * i, v);
+            }
+        }
+    }
+
+    /// Décor SET (type 0, variante 0x47) ; `None` si le pool est plein.
+    fn spawn_scenery(x: &mut Cx) -> Option<Obj> {
+        let s = alloc(x, ALLOC_SET)?;
+        s.set_u8(x.b, 0, 1);
+        s.set_u8(x.b, 2, 0);
+        s.set_u8(x.b, 3, 0x47);
+        Some(s)
+    }
+
+    /// Se place sur le créateur (position, orientation, un pixel plus près).
+    fn place_on_source(x: &mut Cx) -> Obj {
+        let source = x.linked(0x5c);
+        copy_position16(x, source);
+        let flip = source.u8(x.b, f::FLIP);
+        x.set8(f::FLIP, flip);
+        x.add16(0x10, 0xffff);
+        source
+    }
+
+    fn init(x: &mut Cx) {
+        let variant = x.u8(0x3);
+        if variant == 0 && x.u8(0x5) == 0 {
+            x.add8(0x5, 2);
+            return load_palettes(x);
+        }
+        if x.a5_u8(GAME_PAUSED) != 0 {
+            return;
+        }
+        x.add8(0x4, 2);
+        x.set8(0x5, 0);
+        if variant == 2 {
+            place_on_source(x);
+            x.add16(0x8, 0x9c);
+            x.add16(0x10, -0x62i16 as u16);
+            return x.anim_start(ANIMS, 8);
+        }
+        if let Some(s) = spawn_scenery(x) {
+            s.set_u8(x.b, 0x2f, 0);
+            x.set16(f::OWNER, low16(s));
+        }
+        let source = place_on_source(x);
+        if variant == 0 {
+            if let Some(s) = spawn_scenery(x) {
+                x.set8(0x2f, 0);
+                s.set_u16(x.b, f::OWNER, low16(x.o));
+            }
+            let camera_x = x.a5_u16(0x506);
+            x.set16(0x8, camera_x);
+            let camera_y = x.a5_u16(0x50a);
+            x.set16(0xc, camera_y.wrapping_add(0xda));
+            x.set16(0x10, 0);
+            x.set16(0x42, 0x258);
+            x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0xf0;
+            let anim = x.c.d[0];
+            x.anim_start(ANIMS_SCREEN, anim);
+        } else {
+            let dx = if source.u8(x.b, f::FLIP) != 0 { 8 } else { -8i16 as u16 };
+            x.add16(0x8, dx);
+            x.add16(0xc, 0x20);
+            x.set16(0x42, 0x190);
+            x.anim_start(ANIMS, 2);
+        }
+    }
+
+    fn active(x: &mut Cx) {
+        if x.a5_u8(GAME_PAUSED) != 0 {
+            return;
+        }
+        let source = x.linked(0x5c);
+        if (source.u8(x.b, 0x4) as i8) >= 4 {
+            return x.free_eshl();
+        }
+        match x.u8(0x3) {
+            0 => {
+                x.add16(0x42, 0xffff);
+                if (x.u16(0x42) as i16) < 0 {
+                    let scenery = x.linked(f::OWNER);
+                    scenery.set_u8(x.b, 0x4, 4);
+                    kill(x);
+                    source.set_u8(x.b, SOURCE_BUSY, 0);
+                }
+                x.anim_step();
+            }
+            1 => match x.u8(0x5) {
+                0 => {
+                    x.add16(0x42, 0xffff);
+                    if (x.u16(0x42) as i16) < 0 {
+                        x.add8(0x5, 2);
+                        source.set_u8(x.b, SOURCE_BUSY, 0);
+                        x.anim_start(ANIMS, 7);
+                    } else {
+                        x.anim_step();
+                    }
+                }
+                2 => {
+                    if x.anim_step() {
+                        let scenery = x.linked(f::OWNER);
+                        scenery.set_u8(x.b, 0x4, 4);
+                        kill(x);
+                    }
+                }
+                _ => {}
+            },
+            _ => {
+                x.anim_step();
+            }
+        }
+        x.reinsert();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 35 (0xa28d2) : éclat tombant avec ombre, 16 variantes (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Éclat décoratif : table de vitesses 0xb avec direction `+0x2d` selon la variante (0, 2, ... 30),
+/// vole 90 images (`+0x58`), puis anime sa fin. Son ombre est tracée par 0x33fe4 ; il clignote
+/// selon la parité de `A5+0x6e` et de la variante.
+mod shot35 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16fafa;
+    const DIRECTIONS: u32 = 0xa2934;
+    const SHADOW: u32 = 0x33fe4;
+    const FLY: u8 = 0;
+    const FADE: u8 = 2;
+
+    pub fn run(x: &mut Cx) {
+        guarded(x, state)
+    }
+
+    fn state(x: &mut Cx) {
+        match x.u8(0x4) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(f::BOX_SET, 7);
+                x.set8(f::ATTACK_POWER, 0xc);
+                x.set16(0x58, 0x5a);
+                let variant = x.u8(0x3) as u32;
+                let direction = x.rom8(DIRECTIONS + variant);
+                x.set8(0x2d, direction);
+                speed_table(x, 0xb);
+                ai_start(x, ANIMS, 0);
+            }
+            2 => {
+                match x.u8(0x5) {
+                    FLY => {
+                        x.add16(0x58, 0xffff);
+                        if (x.u16(0x58) as i16) <= 0 {
+                            x.add8(0x5, 2);
+                            ai_start(x, ANIMS, 1);
+                        } else {
+                            ai_step(x);
+                            if (x.u16(0x58) as i16) > 0x38 {
+                                x.call(sub::MOVE_TABLE_XY);
+                            }
+                        }
+                    }
+                    FADE => {
+                        if ai_step(x) {
+                            x.add8(0x4, 2);
+                        } else {
+                            x.call(sub::MOVE_TABLE_XY);
+                        }
+                    }
+                    _ => {}
+                }
+                blink_by_parity(x);
+                x.call(SHADOW);
+            }
+            _ => x.free_eshl(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 36 (0xa29cc) : débris lancé en l'air, retombe sur la scène (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Apparaît à une position aléatoire de l'écran (tables 0xa2b0a / 0xa2b2a) en hauteur 0x100 - Y,
+/// avec une vitesse verticale tirée au hasard ; retombe (Z <= 0), joue un son d'impact puis anime
+/// sa fin.
+mod shot36 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16fbf4;
+    const SPEEDS: u32 = 0xa2aa4;
+    const X_OFFSETS: u32 = 0xa2b0a;
+    const Y_OFFSETS: u32 = 0xa2b2a;
+    const SOUND_LAND: u32 = 0xed548;
+    const SOUND_THUD: u32 = 0x2860;
+
+    pub fn run(x: &mut Cx) {
+        guarded(x, state)
+    }
+
+    fn state(x: &mut Cx) {
+        match x.u8(0x4) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(f::BOX_SET, 7);
+                x.set8(f::ATTACK_POWER, 0x1e);
+                launch(x);
+                place(x);
+                ai_start(x, ANIMS, 0);
+            }
+            2 => match x.u8(0x5) {
+                0 => {
+                    x.call(sub::MOVE_XYZ);
+                    if (x.u16(0xc) as i16) > 0 {
+                        ai_step(x);
+                        return;
+                    }
+                    x.add8(0x5, 2);
+                    x.set16(0xc, 0);
+                    x.call(SOUND_LAND);
+                    x.c.d[0] = 0x20;
+                    x.call(SOUND_THUD);
+                    ai_start(x, ANIMS, 1);
+                }
+                2 => {
+                    if ai_step(x) {
+                        x.add8(0x4, 2);
+                    }
+                }
+                _ => {}
+            },
+            _ => x.free_eshl(),
+        }
+    }
+
+    /// Direction selon l'orientation, table de vitesses 0x17 et vitesse verticale tirée au hasard.
+    fn launch(x: &mut Cx) {
+        let direction = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
+        x.set8(0x2d, direction);
+        speed_table(x, 0x17);
+        x.call(RNG);
+        let r = x.c.d[0] & 0xf;
+        let vz = x.rom16(SPEEDS + 2 * r);
+        x.set16(0x18, vz);
+    }
+
+    /// Position aléatoire autour de la caméra (écran de gauche : décalage de -0xc0).
+    fn place(x: &mut Cx) {
+        x.call(RNG);
+        let r = x.c.d[0] & 0xf;
+        let mut dx = x.rom16(X_OFFSETS + 2 * r);
+        x.call(RNG);
+        let r = x.c.d[0] & 0xf;
+        let dy = x.rom16(Y_OFFSETS + 2 * r);
+        if x.u8(f::FLIP) == 0 {
+            dx = dx.wrapping_sub(0xc0);
+        }
+        let z = 0x100u16.wrapping_sub(dy);
+        let px = dx.wrapping_add(x.a5_u16(0x5a6));
+        let py = dy.wrapping_add(x.a5_u16(0x5aa));
+        x.set16(0x8, px);
+        x.set16(0x10, py);
+        x.set16(0xc, z);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 37 (0xa2b62) : météorite lancée par un créateur, retombe et explose (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Tombe du ciel à une position aléatoire de l'écran (tables 0xa2ce0 / 0xa2d00), vitesse verticale
+/// aléatoire (0xa2c7e) et animation de départ aléatoire (0xa2c9e). Au sol (Z <= 0) elle déclenche
+/// l'effet 0xb10c8 / 0xb4bcc, clignote 25 images et disparaît ; elle disparaît avec le créateur.
+mod shot37 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16fe3e;
+    const SPEEDS: u32 = 0xa2c7e;
+    const START_ANIMS: u32 = 0xa2c9e;
+    const X_OFFSETS: u32 = 0xa2ce0;
+    const Y_OFFSETS: u32 = 0xa2d00;
+    const IMPACT: u32 = 0xb10c8;
+    const IMPACT_PIECE: u32 = 0xb4bcc;
+    const FALL: u8 = 0;
+    const BLINK: u8 = 2;
+
+    pub fn run(x: &mut Cx) {
+        if x.u16(0x5c) == 0 {
+            return kill(x);
+        }
+        match x.u8(0x4) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(f::BOX_SET, 7);
+                x.set8(f::ATTACK_POWER, 5);
+                x.set8(f::ATTACK_ID, 0x17);
+                x.set8(0x50, 0x14);
+                launch(x);
+                place(x);
+            }
+            2 => active(x),
+            _ => x.free_eshl(),
+        }
+    }
+
+    fn launch(x: &mut Cx) {
+        x.c.d[0] = 0;
+        x.call(RNG);
+        let r = x.c.d[0] & 0xf;
+        let vz = x.rom16(SPEEDS + 2 * r);
+        x.set16(0x18, vz);
+        x.call(RNG);
+        let r = x.c.d[0] & 7;
+        let anim = x.rom8(START_ANIMS + r) as u32;
+        x.anim_start(ANIMS, anim);
+    }
+
+    fn place(x: &mut Cx) {
+        x.call(RNG);
+        let r = x.c.d[0] & 0xf;
+        let dx = x.rom16(X_OFFSETS + 2 * r);
+        x.call(RNG);
+        let r = x.c.d[0] & 0xf;
+        let dy = x.rom16(Y_OFFSETS + 2 * r);
+        let px = dx.wrapping_add(x.a5_u16(0x506));
+        let py = dy.wrapping_add(x.a5_u16(0x50a));
+        x.set16(0x8, px);
+        x.set16(0x10, py);
+        x.set16(0xc, 0x100);
+    }
+
+    fn active(x: &mut Cx) {
+        let source = x.linked(0x5c);
+        if (source.u8(x.b, 0x4) as i8) >= 4 {
+            return x.free_eshl();
+        }
+        match x.u8(0x5) {
+            FALL => {
+                x.call(sub::MOVE_Z);
+                if (x.u16(0xc) as i16) > 0 {
+                    x.anim_step();
+                } else {
+                    x.add8(0x5, 2);
+                    x.set16(0xc, 0);
+                    x.set8(0x42, 0x19);
+                    x.c.d[0] = 0;
+                    x.c.d[1] = x.c.d[1] & 0xffff_0000 | 0x201;
+                    x.c.d[2] &= 0xffff_0000;
+                    x.c.d[3] &= 0xffff_0000;
+                    x.call(IMPACT);
+                    for _ in 0..2 {
+                        x.c.d[2] = 1;
+                        x.call(IMPACT_PIECE);
+                    }
+                }
+            }
+            BLINK => {
+                x.add8(0x42, 0xff);
+                if (x.u8(0x42) as i8) < 0 {
+                    x.add8(0x4, 2);
+                    x.set_bit(0x1, 1, true);
+                    x.set8(0x0, 2);
+                } else {
+                    let hidden = x.u8(0x42) & 3 != 0;
+                    x.set_bit(0x1, 1, hidden);
+                }
+            }
+            _ => {}
+        }
+        x.reinsert();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 38 (0xa2d48) : projectile orienté vers sa cible (16 sprites), lancé par un effet (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Créé avec le pointeur de son créateur dans `+0x46` (mot négatif = adresse RAM). Prend sa position
+/// (+0x30 en altitude), des vitesses de la ligne `+0x2f` de la table 0xa2ed4 (ou 0xa2f32 pour les
+/// variantes non nulles), et son sprite d'après l'angle vers la cible du créateur, borné à 0x14..0x16
+/// (miroir si retourné). Puis il vole (table de vitesses + gravité) jusqu'au sol.
+mod shot38 {
+    use super::*;
+
+    const ANIMS: u32 = 0x174776;
+    const SPEED_ROWS: u32 = 0xa2ed4;
+    const SPEED_ROWS_VARIANT: u32 = 0xa2f34;
+    const SPRITES: u32 = 0xa2e10;
+    const ZONE_CHECK: u32 = 0xfbb0;
+    const SHADOW: u32 = 0x33fe4;
+
+    pub fn run(x: &mut Cx) {
+        if suspended(x) {
+            return;
+        }
+        state(x)
+    }
+
+    /// Miroir d'un angle (0x20 - angle) pour les objets retournés.
+    fn mirror(a: u16) -> u16 {
+        a.wrapping_sub(0x10).wrapping_neg().wrapping_add(0x10)
+    }
+
+    fn state(x: &mut Cx) {
+        match x.u8(0x4) {
+            0 => init(x),
+            2 => {
+                fall(x);
+                x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0x10;
+                x.call(ZONE_CHECK);
+                x.call(SHADOW);
+                x.reinsert();
+            }
+            4 => x.add8(0x4, 2),
+            _ => x.free_eshl(),
+        }
+    }
+
+    /// Déplacement tant que Z > 0 ; au sol, passe à l'état suivant.
+    fn fall(x: &mut Cx) {
+        if x.u8(0x29) == 0 {
+            x.call(sub::MOVE_TABLE_XZ);
+            x.call(sub::MOVE_Y);
+            if (x.u16(0xc) as i16) >= 0 {
+                return;
+            }
+            x.set16(0xc, 0);
+        }
+        x.add8(0x4, 2);
+        x.set8(0x5, 0);
+    }
+
+    fn init(x: &mut Cx) {
+        x.add8(0x4, 2);
+        let creator = x.u16(0x46);
+        if (creator as i16) >= 0 {
+            return x.set8(0x4, st::FREE);
+        }
+        let host = Obj(creator as i16 as i32 as u32 & 0xff_ffff);
+        copy_position16(x, host);
+        let flip = host.u8(x.b, f::FLIP);
+        x.set8(f::FLIP, flip);
+        x.add16(0xc, 0x30);
+        speeds(x);
+        let mut angle = host.u16(x.b, 0x50);
+        if (angle as i16) < 0 {
+            let target = Obj(angle as i16 as i32 as u32 & 0xff_ffff);
+            x.c.d[1] = target.u16(x.b, 0x8) as u32;
+            x.c.d[2] = target.u16(x.b, 0xc).wrapping_add(0x30) as u32;
+            x.c.d[3] = x.u16(0x8) as u32;
+            x.c.d[4] = x.u16(0xc) as u32;
+            x.call(ANGLE);
+            angle = x.c.d[0] as u16;
+        }
+        let flipped = flip != 0;
+        let mapped = |a: u16| if flipped { mirror(a) } else { a };
+        let seen = mapped(angle) as i16;
+        let chosen = if seen < 0x14 {
+            mapped(0x14)
+        } else if seen > 0x16 {
+            mapped(0x16)
+        } else {
+            angle
+        };
+        x.set8(0x2d, chosen as u8);
+        let sprite = x.rom8(SPRITES + ((mapped(chosen) >> 1) & 0xf) as u32) as u32;
+        ai_start(x, ANIMS, sprite);
+        x.set8(f::BOX_SET, 7);
+        x.set8(f::ATTACK_POWER, 8);
+    }
+
+    /// Table de vitesses et vitesses initiales de la ligne `+0x2f`.
+    fn speeds(x: &mut Cx) {
+        let base = if x.u8(0x3) != 0 { SPEED_ROWS_VARIANT } else { SPEED_ROWS };
+        let row = base + ((x.u8(0x2f) as u32) << 4);
+        let table = x.data32(row);
+        x.set32(0x4c, table);
+        let mut vx = x.data16(row + 4);
+        let mut ax = x.data16(row + 6);
+        if x.u8(f::FLIP) == 0 {
+            vx = vx.wrapping_neg();
+            ax = ax.wrapping_neg();
+        }
+        x.set16(0x14, vx);
+        x.set16(0x16, ax);
+        for i in 0..4 {
+            let v = x.data16(row + 8 + 2 * i);
+            x.set16(0x18 + 2 * i, v);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Type 39 (0xa2fb8) : boule de feu lancée en l'air par un créateur, 8 variantes (h)
+// ---------------------------------------------------------------------------------------------
+
+/// Part du créateur (`+0x5c`) vers le haut (VZ = -5, table de vitesses 0x13), retombe en tournant
+/// (`+0x2d` varie), s'enflamme au sol (animation de fin) puis signale au créateur (`+0xae`).
+/// Disparaît avec le créateur (état 0x406).
+mod shot39 {
+    use super::*;
+
+    const ANIMS: u32 = 0x16ff22;
+    const DIRECTIONS: u32 = 0xa3148;
+    const START_ANIMS: u32 = 0xa3158;
+    const FRAMES: u32 = 0xa31ba;
+    const SOUND_THUD: u32 = 0x2860;
+    const SOUND_IMPACT: u32 = 0xecb98;
+    const FLY: u8 = 0;
+    const SETTLE: u8 = 2;
+    const BURN: u8 = 4;
+
+    pub fn run(x: &mut Cx) {
+        if x.u16(0x5c) == 0 {
+            return kill(x);
+        }
+        match x.u8(0x4) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(f::BOX_SET, 7);
+                x.set8(f::ATTACK_POWER, 5);
+                x.set8(f::ATTACK_ID, 0x1d);
+                x.set8(0x46, 4);
+                launch(x);
+                speed_table(x, 0x13);
+            }
+            2 => active(x),
+            _ => x.free_eshl(),
+        }
+    }
+
+    fn launch(x: &mut Cx) {
+        if x.u16(0x5c) == 0 {
+            return;
+        }
+        let source = x.linked(0x5c);
+        copy_position32(x, source);
+        let flip = source.u8(x.b, f::FLIP);
+        x.set8(f::FLIP, flip);
+        x.add16(0x10, 0xffff);
+        x.add16(0xc, 0x100);
+        x.set16(0x18, -0x500i16 as u16);
+        x.set16(0x1a, -0x38i16 as u16);
+        let variant = x.u8(0x3) as u32;
+        let direction = x.rom8(DIRECTIONS + variant);
+        x.set8(0x2d, direction);
+        let anim = x.rom8(START_ANIMS + variant) as u32;
+        x.anim_start(ANIMS, anim);
+    }
+
+    /// Fait tourner les 8 images de flamme toutes les 4 images.
+    fn spin(x: &mut Cx) {
+        x.add8(0x46, 0xff);
+        if (x.u8(0x46) as i8) >= 0 {
+            return;
+        }
+        x.set8(0x46, 4);
+        x.set8(0x2a, 1);
+        let n = x.u8(0x47).wrapping_add(1) & 7;
+        x.set8(0x47, n);
+        let frame = x.rom8(FRAMES + n as u32);
+        x.set8(0x2b, frame);
+    }
+
+    fn active(x: &mut Cx) {
+        spin(x);
+        let source = x.linked(0x5c);
+        if source.u16(x.b, 0x4) == 0x406 {
+            return x.free_eshl();
+        }
+        match x.u8(0x5) {
+            FLY => {
+                x.call(sub::MOVE_TABLE_XY);
+                x.call(sub::MOVE_Z);
+                if (x.u16(0xc) as i16) <= 0 {
+                    x.c.d[0] = 0x30;
+                    x.call(SOUND_THUD);
+                    x.call(SOUND_IMPACT);
+                    x.add8(0x5, 2);
+                    x.set16(0xc, 0);
+                    x.set8(0x42, 0x30);
+                }
+                x.anim_step();
+            }
+            SETTLE => {
+                x.add8(0x42, 0xff);
+                if (x.u8(0x42) as i8) < 0 {
+                    x.add8(0x5, 2);
+                    x.set8(0x42, 0x1e);
+                    let d = x.u8(0x2d).wrapping_sub(6) & 0x1f;
+                    x.set8(0x2d, d);
+                    x.set8(0x43, 3);
+                }
+                x.anim_step();
+            }
+            BURN => {
+                x.anim_step();
+                if (x.u8(0x42) as i8) < 0x14 {
+                    x.set8(0x3a, 0);
+                }
+                x.add8(0x42, 0xff);
+                if (x.u8(0x42) as i8) < 0 {
+                    x.add8(0x4, 2);
+                    source.set_u8(x.b, 0xae, 1);
+                } else {
+                    x.add8(0x43, 0xff);
+                    if (x.u8(0x43) as i8) < 0 {
+                        x.set8(0x43, 3);
+                        let d = x.u8(0x2d).wrapping_add(1) & 0x1f;
+                        x.set8(0x2d, d);
+                    }
+                    x.call(sub::MOVE_TABLE_XY);
+                }
+            }
+            _ => {}
+        }
+        blink_by_parity(x);
+        x.reinsert();
+    }
+}
 handlers! {
     0x9fe0a "eshl_15" 600 shot15::run,
     0xa03e0 "eshl_16" 600 shot16::run,
@@ -1837,4 +3104,15 @@ handlers! {
     0xa18dc "eshl_26" 600 shot26::run,
     0xa1a64 "eshl_27" 600 shot27::run,
     0xa1c96 "eshl_28" 600 shot28::run,
+    0xa1d70 "eshl_29" 600 shot29::run,
+    0xa2060 "eshl_30" 600 shot30::run,
+    0xa21b6 "eshl_31" 600 shot31::run,
+    0xa239a "eshl_32" 600 shot32::run,
+    0xa2524 "eshl_33" 600 shot33::run,
+    0xa2630 "eshl_34" 600 shot34::run,
+    0xa28d2 "eshl_35" 600 shot35::run,
+    0xa29cc "eshl_36" 600 shot36::run,
+    0xa2b62 "eshl_37" 600 shot37::run,
+    0xa2d48 "eshl_38" 600 shot38::run,
+    0xa2fb8 "eshl_39" 600 shot39::run,
 }
