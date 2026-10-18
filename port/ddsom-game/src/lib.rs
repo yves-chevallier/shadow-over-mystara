@@ -21,6 +21,7 @@ pub mod mem;
 pub mod objects;
 pub mod ops;
 pub mod palette;
+pub mod player;
 pub mod popups;
 pub mod rng;
 pub mod scroll;
@@ -149,8 +150,14 @@ struct Index {
 fn lookup(pc: u32) -> Option<&'static Native> {
     static INDEX: OnceLock<Index> = OnceLock::new();
     let index = INDEX.get_or_init(|| {
-        let par_adresse: HashMap<_, _> =
-            all_natives().map(|n| (n.entry, n)).collect();
+        // DDSOM_SANS=préfixe,... : routines natives désactivées (recherche d'une routine fautive)
+        let sans: Vec<String> = std::env::var("DDSOM_SANS")
+            .map(|v| v.split(',').map(str::to_owned).collect())
+            .unwrap_or_default();
+        let par_adresse: HashMap<_, _> = all_natives()
+            .filter(|n| !sans.iter().any(|p| n.name.starts_with(p.as_str())))
+            .map(|n| (n.entry, n))
+            .collect();
         let mut tamis = vec![0u64; 0x100000 / 2 / 64];
         for &a in par_adresse.keys() {
             tamis[(a >> 7) as usize] |= 1 << (a >> 1 & 63);
@@ -166,7 +173,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -238,6 +245,14 @@ static CHECK: AtomicBool = AtomicBool::new(false);
 /// Compte les appels des routines natives hors mode contrôle (couverture).
 static COUNT: AtomicBool = AtomicBool::new(false);
 
+/// Mode contrôle : comparer tous les registres, pas seulement le contrat (diagnostic d'un contrat
+/// incomplet ; beaucoup d'écarts sont alors sans conséquence).
+static CHECK_ALL: AtomicBool = AtomicBool::new(false);
+
+pub fn set_check_all(on: bool) {
+    CHECK_ALL.store(on, Ordering::Relaxed);
+}
+
 pub fn set_count(on: bool) {
     COUNT.store(on, Ordering::Relaxed);
 }
@@ -284,16 +299,17 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     if n.exact_cost && c.cycles - start != c2.cycles - start {
         diffs.push(format!("cycles {} au lieu de {}", c.cycles - start, c2.cycles - start));
     }
+    let outputs = if CHECK_ALL.load(Ordering::Relaxed) { regs::ALL } else { n.outputs };
     for i in 0..8 {
-        if n.outputs & regs::d(i as u32) != 0 && c.d[i] != c2.d[i] {
+        if outputs & regs::d(i as u32) != 0 && c.d[i] != c2.d[i] {
             diffs.push(format!("d{i}={:08x} au lieu de {:08x}", c.d[i], c2.d[i]));
         }
         // A7 (pile) doit toujours être rétabli
-        if (n.outputs & regs::a(i as u32) != 0 || i == 7) && c.a[i] != c2.a[i] {
+        if (outputs & regs::a(i as u32) != 0 || i == 7) && c.a[i] != c2.a[i] {
             diffs.push(format!("a{i}={:08x} au lieu de {:08x}", c.a[i], c2.a[i]));
         }
     }
-    let sr_mask = if n.outputs & regs::CCR != 0 { 0xffff } else { 0xff00 };
+    let sr_mask = if outputs & regs::CCR != 0 { 0xffff } else { 0xff00 };
     if c.sr & sr_mask != c2.sr & sr_mask {
         diffs.push(format!("sr={:04x} au lieu de {:04x}", c.sr, c2.sr));
     }

@@ -11,6 +11,10 @@ out=$(mktemp -d)
 for s in scenarios/*.txt; do
 	./port/target/release/examples/validate "$roms" "$eeprom" "$s" "$frames" > "$out/$(basename "$s" .txt).log" 2>&1 &
 done
+# entrées aléatoires (make_bot.py --mash) : courts, mais révèlent les cas rares
+for s in scenarios/extra/*.txt; do
+	./port/target/release/examples/validate "$roms" "$eeprom" "$s" 12000 > "$out/$(basename "$s" .txt).log" 2>&1 &
+done
 wait
 status=0
 for log in "$out"/*.log; do

@@ -7,8 +7,14 @@
 //! de leur liste (1 : acteurs, 2 : premier plan).
 //!
 //! Chaque handler d'objet termine par `reinsert` : l'objet est inséré s'il n'est dans aucune liste,
-//! sinon déplacé seulement si sa profondeur ne respecte plus l'ordre. Les gestionnaires natifs
-//! reproduisent aussi la durée de l'original, qui dépend du nombre de voisins parcourus.
+//! sinon déplacé seulement si sa profondeur ne respecte plus l'ordre.
+//!
+//! Piège du jeu d'origine : les handlers finissent souvent par `jmp 0x1ee1a`, et le dispatch passe
+//! à l'objet suivant sans remettre les registres à zéro. Certains handlers lisent alors un registre
+//! laissé par le précédent : 0x4bd32 fait `andi.b #$f,D0` puis indexe une table avec tout D0.w, dont
+//! l'octet haut est le lien de liste laissé par `reinsert`. Les routines natives 0x1ee1a/0x1ef6c ne
+//! sont donc pas installées tant que des handlers 68000 les appellent (le Rust les appelle
+//! directement) ; un dispatch réécrit en Rust devra transmettre ces restes d'un objet au suivant.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;

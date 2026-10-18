@@ -15,7 +15,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(__file__))
-import make_bot  # noqa: E402
+import bot_lib as make_bot  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 AUTOBOT = os.path.join(ROOT, "port/target/release/examples/autobot")

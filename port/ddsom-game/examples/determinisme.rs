@@ -29,7 +29,7 @@ fn main() {
     let mut shown = 0;
     let mut freq = std::collections::BTreeMap::<usize, usize>::new();
     for f in 0..frames {
-        if f == 1000 {
+        if f == 2000 {
             mb.set_overclock(k2);
         }
         script.apply(f, &mut ma);

@@ -6,6 +6,8 @@ fn main() {
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     let natives = a.get(6).map(|s| s == "1").unwrap_or(true);
     if natives { ddsom_game::install(&mut m) } else { ddsom_rc::install(&mut m) }
+    m.set_overclock(16.0);
+    m.idle = Some(ddsom_game::idle);
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     let addr = u32::from_str_radix(&a[5], 16).unwrap();
