@@ -340,6 +340,19 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
 /// moteur de collisions ou le créateur modifient (drapeaux de touche, propriétaire, positions).
 /// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
 /// `DDSOM_ENTREE=<adresse hexa>` restreint à un gestionnaire.
+/// Nombre de variantes (octet `+3`) que la table de sauts de l'original couvre (0xcc25a, ESHL 5, 9, 15). Au-delà, l'original
+/// lit du code ou des données comme un décalage et saute n'importe où : ces cas sont hors contrat
+/// (aucun objet du jeu n'a ces variantes) et ne sont pas tirés. 0xcc25a : une entrée de table (la
+/// variante 1 retombe sur la même cible), la variante 2 saute au milieu d'un `jsr`.
+fn variantes_en_table(entree: u32) -> u32 {
+    match entree {
+        0xcc25a => 2,
+        0x9e458 | 0x9ef46 => 3,
+        0x9fe0a => 2,
+        _ => u32::MAX,
+    }
+}
+
 fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, filtre: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
@@ -395,7 +408,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             let owner = proprietaires[alea.next() as usize % proprietaires.len()];
             wr8(&mut b, obj.0, 1);
             wr8(&mut b, obj.0 + 2, kind);
-            wr8(&mut b, obj.0 + 3, (alea.next() % variantes) as u8);
+            wr8(&mut b, obj.0 + 3, (alea.next() % variantes.min(variantes_en_table(entree))) as u8);
             wr8(&mut b, obj.0 + 0x28, pool.class);
             wr8(&mut b, obj.0 + 0x2c, (alea.next() & 1) as u8);
             wr8(&mut b, obj.0 + 0x2f, if alea.next() % 4 == 0 { alea.next() as u8 % 3 } else { 0 });

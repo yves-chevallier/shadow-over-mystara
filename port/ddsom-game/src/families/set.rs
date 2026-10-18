@@ -9,6 +9,10 @@ use m68k::SR_C;
 /// contrôleur de scène. À la première image il attend ; à la suivante il crée un objet SET de
 /// type 2 (le contrôleur, de variante `+0x2f`) puis passe à l'état 6. Dans les états 4 et 6 il se
 /// libère dans le pool de sa classe (EFFCT, SET ou SOBJ selon `+0x28`).
+///
+/// Variante `+3` : la table de sauts de l'original n'a qu'une entrée (la variante 1 retombe sur la même
+/// cible), la variante 2 saute au milieu d'un `jsr` et au-delà dans des données : hors contrat, la
+/// réécriture traite toute variante comme 0 (le fuzz ne tire que 0 et 1).
 mod scene_spawner {
     use super::*;
 

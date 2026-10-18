@@ -153,3 +153,49 @@ Les noms de rôle marqués (h) sont des hypothèses tirées du comportement.
 Appels par type dans les 8 scénarios (30 000 images, code d'origine seul) : ESHL 1 (1372), 2 (186),
 11 (9324), 13 (5648), 14 (22592), 23 (3006) ; SET 0, 1, 2, 4, 5, 7, 11, 12, 13, 20, 21, 22, 24 ;
 SOBJ 0, 6, 11, 14. Tous les autres types ne sont validés que par le fuzz.
+
+## 7. Registres hérités d'un gestionnaire à l'autre
+
+La boucle de dispatch ne fixe que A0, A5, D7, D0 (type × 4) et A1 (adresse du gestionnaire) ; D1-D6 et A2-A4
+sont ceux que le gestionnaire précédent (ou, pour le premier, la boucle précédente) a laissés. Les natives ne
+garantissent que A0 et D7.
+
+Outils :
+
+* `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 validate ...` (et `DDSOM_CHECK_ALL=1 fuzz familles ...`) : une ligne
+  `REGS routine appels : d2:n ...` par routine native, avec le nombre d'appels où chaque registre de sortie
+  diffère de l'original (tous les gestionnaires natifs diffèrent sur beaucoup de registres : seul compte
+  ce qu'un successeur lit) ;
+* `DDSOM_RESTES=1 fuzz familles ...` : lecteurs de restes **dynamiques**. Le code d'origine de chaque
+  gestionnaire des six tables est exécuté depuis la même mémoire en changeant un seul registre de reste
+  (D1-D6, A2-A4, mot haut de D0) ; si la mémoire finale change (piles ignorées), le gestionnaire lit ce
+  registre. `DDSOM_RESTES_SITE=1` donne l'instruction qui le lit et le chemin parcouru ;
+* `restes_statique <roms>` : analyse statique grossière (registre lu avant écrit, suit branchements et
+  tables) ; bruyante (tables de données décodées en code), à n'utiliser que pour orienter ;
+* lecture du code des natives : `grep "c\.d\[[1-6]\]\|c\.a\[[2-4]\]"` donne les endroits où le Rust lit lui-même un
+  registre hérité.
+
+Résultat (scénarios, 149 gestionnaires des six tables, plusieurs milliers d'essais chacun) : seuls trois
+gestionnaires lisent un reste dans un état licite :
+
+| Gestionnaire | Registre | Usage | Prédécesseurs |
+|---|---|---|---|
+| ESHL 10 (0x9f376) | D5 | ligne de la table 0x9f3c8 (Z, décalage X) à la création ; le seul créateur (0x6ca82, ennemi) fait `moveq 0,D5` avant `jsr 0x9f346`, mais l'objet n'est traité qu'à la boucle ESHL suivante : D5 vaut ce qu'ont laissé les autres gestionnaires (mesuré : 0 dans 35 % des cas, sinon 4, 0xe0, 0x100...) | tout gestionnaire ESHL ou ENEMY précédent |
+| SOBJ 2 (0xdddb2) | D2 | marge d'écran passée à 0xddbfc, sans que le gestionnaire la pose | SOBJ précédent ; `cull_beyond` laisse maintenant D0/D1/D2 comme 0xddbfc |
+| ITEM 6 variante 1 (0xdcddc) | A2 | joueur « choisi » quand aucun joueur n'est vivant (cas rare, non vu par le fuzz) | tout gestionnaire ITEM précédent |
+
+Aucun des trois n'est appelé par les douze scénarios. Ils ne sont fidèles que si les gestionnaires qui les
+précèdent laissent le même registre que l'original, ce que les natives ne font pas en général (SOBJ 0, 6, 14
+diffèrent sur D2, 25 % des appels pour SOBJ 0). Pour ESHL 10 la valeur de l'original est de toute façon un reste
+quelconque ; un dispatch réécrit en Rust devra soit transmettre ces trois registres d'un objet au suivant, soit
+fixer la valeur voulue (D5 = 0 pour ESHL 10). Les autres trouvailles des outils sont hors contrat
+(ESHL 61 et 63 dans des sous-états absents de leurs tables, EFFCT 4 quand l'action `+0x3d` de l'hôte dépasse la
+table à dix entrées 0xaab5e) ou le résultat d'une sous-routine (D2 après 0xfbae...).
+
+## 8. Cas hors contrat du fuzz
+
+Variante `+3` au-delà de la table de sauts de l'original (l'original saute dans du code ou des données ;
+`examples/fuzz*.rs` ne les tire plus, voir `variantes_en_table`) : 0xcc25a (2 variantes ; 71 « écarts » sur 600 appels
+quand on tirait la variante 2 : saut au milieu d'un `jsr`), ESHL 5 et 9 (3 variantes), ESHL 15 (2). ESHL 14
+(8 variantes) est conforme avec toutes ses variantes ; ESHL 5, 9, 14, 15 et 0xcc25a sont à 0 écart avec les trois
+outils de fuzz (`fuzz`, `fuzz_eshl_c`, `fuzz_set_a`, `DDSOM_VARIANTES=8 DDSOM_ETATS=1`).

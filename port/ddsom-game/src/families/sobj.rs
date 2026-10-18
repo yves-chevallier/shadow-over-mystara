@@ -47,6 +47,11 @@ fn cull_beyond(x: &mut Cx, margin: u16) {
     }
     let screen_x = x.u16(0x8).wrapping_sub(camera).wrapping_add(margin);
     let limit = margin.wrapping_mul(2).wrapping_add(0x180);
+    // restes laissés par 0xddbfc, que le gestionnaire suivant peut lire (D2 pour SOBJ 2)
+    let low = |r: u32, v: u16| r & 0xffff_0000 | v as u32;
+    x.c.d[0] = low(x.c.d[0], screen_x);
+    x.c.d[1] = low(x.c.d[1], camera);
+    x.c.d[2] = low(x.c.d[2], limit);
     if screen_x > limit {
         x.set8(0x4, 4);
     }
