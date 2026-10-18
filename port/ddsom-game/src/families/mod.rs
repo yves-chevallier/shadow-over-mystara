@@ -23,7 +23,7 @@ use m68k::Cpu;
 
 use crate::chemin::Chemin;
 use crate::mem::{rd8, rts, A5};
-use crate::objects::{anim, lists, pools, Obj};
+use crate::objects::{anim, pools, Obj};
 use crate::Native;
 
 /// Toutes les routines natives des familles.
