@@ -23,7 +23,7 @@ use m68k::Cpu;
 
 use crate::chemin::Chemin;
 use crate::mem::{rd8, rts, A5};
-use crate::objects::{anim, lists, pools, Obj};
+use crate::objects::{anim, pools, Obj};
 use crate::Native;
 
 /// Toutes les routines natives des familles.
@@ -72,6 +72,7 @@ pub const NATIVES: &[Native] = &[
 pub mod rom {
     pub const ANIM_STEP: u32 = 0x1a56;
     pub const REINSERT_ACTORS: u32 = 0x1ee1a;
+    pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
     pub const MOVE_X: u32 = 0x1d78;
     pub const MOVE_XYZ: u32 = 0x1d90;
     pub const MOVE_XZ: u32 = 0x1da6;
@@ -303,14 +304,15 @@ impl<'a> Ctx<'a> {
         self.c.cond(5) // C
     }
 
-    /// Réinsère l'objet dans la liste triée des acteurs (tri par profondeur).
+    /// Réinsère l'objet dans la liste triée des acteurs (tri par profondeur). Code d'origine : le
+    /// handler suivant hérite de ses registres (voir `objects::lists`).
     pub fn reinsert(&mut self) {
-        self.natif(&lists::REINSERT_ACTORS);
+        self.jsr_origine(rom::REINSERT_ACTORS);
     }
 
     /// Réinsère l'objet dans la liste triée du premier plan.
     pub fn reinsert_foreground(&mut self) {
-        self.natif(&lists::REINSERT_FOREGROUND);
+        self.jsr_origine(rom::REINSERT_FOREGROUND);
     }
 
     /// Libère l'emplacement de l'objet dans son pool.

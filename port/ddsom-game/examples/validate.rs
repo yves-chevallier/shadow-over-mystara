@@ -44,14 +44,25 @@ fn main() {
     ddsom_game::install(&mut ma);
     ddsom_rc::install(&mut mb);
     mb.idle = Some(ddsom_game::idle);
+    if std::env::var("DDSOM_NOIDLE").is_ok() {
+        ma.idle = None;
+        mb.idle = None;
+    }
     let check = std::env::var("DDSOM_CHECK").is_ok();
     ddsom_game::set_check(check);
+    ddsom_game::set_check_all(std::env::var("DDSOM_CHECK_ALL").is_ok());
     ddsom_game::set_count(true);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
     let frames: usize = frames.parse().unwrap();
     let t0 = std::time::Instant::now();
     let mut failure = None;
+    // DDSOM_CHECK_FRAME=n : contrôle de tous les registres de chaque appel natif pendant l'image n
+    let check_frame: Option<usize> = std::env::var("DDSOM_CHECK_FRAME").ok().and_then(|v| v.parse().ok());
     for f in 0..frames {
+        if check_frame == Some(f + 1) {
+            ddsom_game::set_check(true);
+            ddsom_game::set_check_all(true);
+        }
         script.apply(f, &mut ma);
         script.apply(f, &mut mb);
         ma.run_frame();
