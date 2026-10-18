@@ -9,7 +9,7 @@ use std::path::Path;
 use m68k::Bus;
 
 /// (nom de la famille, table de sauts, nombre de types)
-const FAMILLES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 64)];
+const FAMILLES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 64), ("ENEMY", 0x39a78, 29)];
 
 thread_local! {
     static APPELS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
