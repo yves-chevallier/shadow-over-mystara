@@ -188,8 +188,28 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     mem::wr32(b, c.a[7], RETURN);
     c.pc = addr;
     while !(c.pc == RETURN && c.a[7] == sp) {
+        if c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
+            // le code 68000 a dépilé plus que son adresse de retour et poursuit ailleurs
+            std::panic::resume_unwind(Box::new(Unwound));
+        }
         if run(c.pc, c, b, u64::MAX).is_none() {
             c.step(b);
+        }
+    }
+}
+
+/// Fin anormale d'un appel : une routine d'origine a quitté en dépilant les adresses de retour de ses
+/// appelants (par exemple en revenant directement à la boucle de partie). Les fonctions Rust qui
+/// l'appelaient sont abandonnées ; l'exécution reprend au PC atteint, comme dans l'original.
+pub struct Unwound;
+
+/// Exécute une native ; renvoie normalement, ou après abandon des fonctions Rust si le code 68000
+/// appelé a quitté par un autre chemin que son retour (voir `Unwound`).
+fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (n.run)(c, b)));
+    if let Err(payload) = r {
+        if !payload.is::<Unwound>() {
+            std::panic::resume_unwind(payload);
         }
     }
 }
@@ -203,7 +223,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             if CHECK.load(Ordering::Relaxed) {
                 check(n, c, b, cost);
             } else {
-                (n.run)(c, b);
+                exec(n, c, b);
                 c.cycles += cost;
                 if COUNT.load(Ordering::Relaxed) {
                     STATS.lock().unwrap().entry(n.name).or_default().calls += 1;

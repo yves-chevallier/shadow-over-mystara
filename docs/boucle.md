@@ -169,3 +169,14 @@ Non exercés : les ordres cinématique, réduit (scènes ≥ 0x45) et scène 8 d
 (`ORDER_CINEMATIC`, `ORDER_REDUCED`, `ORDER_SCENE_8`, relus dans l'assembleur mais non vérifiés au
 cycle près), le saut de niveau de débogage de la phase 12, la phase 20 (laissée en 68000) et la
 tâche principale (`0x1c45a-0x1c4b2`, qui cède).
+
+## 8. Pile et registres fidèles
+
+- `Class::update` reproduit les registres de la boucle d'origine (A0, D7.w, D0 = type × 4, A1, drapeaux
+  du `lsl`) : les gestionnaires s'en servent d'un objet au suivant.
+- Certains gestionnaires quittent en dépilant les adresses de retour de leurs appelants (bulle de joueur
+  de personnage 1 : `movem (SP)+,A1-A4 ; rts` revient à `0x1c468`, début de la boucle de partie, en
+  abandonnant la fin de l'image). Pour que la pile Rust ressemble à celle de l'original, `update` et la
+  phase 12 réservent la place des adresses de retour de la boucle et de `0x1c86e`, et `lib::call` lève
+  `Unwound` quand le code 68000 dépile au-delà de son retour (hors exception : le `trap` change de
+  pile) ; `lib::exec` abandonne alors les fonctions Rust et reprend au PC atteint.

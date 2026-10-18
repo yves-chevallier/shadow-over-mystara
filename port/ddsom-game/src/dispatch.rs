@@ -10,12 +10,16 @@
 //! à la place. Un gestionnaire Rust ne reçoit que l'objet.
 
 use cps2::Cps2Bus;
+use m68k::decode::Size;
 use m68k::{Bus, Cpu};
 
 use crate::mem::rts;
 use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
 use crate::{call, Native};
+
+/// Indicateur X du registre d'état.
+const SR_X: u16 = 0x10;
 
 /// Une classe d'objets : son pool et sa table de gestionnaires.
 pub struct Class {
@@ -70,6 +74,8 @@ impl Class {
     /// objet, D7.w = compteur, D0 = type × 4, A1 = gestionnaire) : le jeu en dépend (un gestionnaire
     /// lit le D0 laissé par le précédent) et un gestionnaire peut modifier A0 et D7.
     pub fn update(&self, c: &mut Cpu, b: &mut Cps2Bus) {
+        // place de l'adresse de retour de la boucle d'origine (un gestionnaire peut la dépiler)
+        c.a[7] = c.a[7].wrapping_sub(4);
         c.a[0] = self.pool.slot(0).0;
         set_low_word(&mut c.d[7], (self.pool.slots - 1) as u16);
         loop {
@@ -77,6 +83,9 @@ impl Class {
             if obj.is_active(b) {
                 let kind = obj.u8(b, Obj::KIND);
                 c.d[0] = ((kind as u16) << 2) as u32;
+                // drapeaux du `lsl.w #2,D0` qui précède le saut : N et Z du résultat, V, C et X nuls
+                c.flags_logic(c.d[0], Size::Word);
+                c.sr &= !SR_X;
                 match self.handler(b, kind) {
                     Handler::Rust(f) => f(c, b, obj),
                     Handler::Rom(address) => {
@@ -92,6 +101,7 @@ impl Class {
                 break;
             }
         }
+        c.a[7] = c.a[7].wrapping_add(4);
     }
 }
 

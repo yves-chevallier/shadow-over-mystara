@@ -439,7 +439,10 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) {
         tick_clock(c, b);
     }
     call(c, b, ext::INPUT_HOOK);
+    // place de l'adresse de retour de `0x1c86e` dans l'original (voir `Class::update`)
+    c.a[7] = c.a[7].wrapping_sub(4);
     update_world(c, b);
+    c.a[7] = c.a[7].wrapping_add(4);
     for (marker, routine) in [(0x54_0000, ext::SPRITES), (0x48_0002, ext::COLLISIONS), (0x4f_001e, ext::WORLD_EXTRA)] {
         gauge(c, b, marker);
         call(c, b, routine);
