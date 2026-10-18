@@ -392,8 +392,156 @@ fn etats_enemy(kind: u8, variante: u8) -> &'static [(&'static [u8], &'static [u8
         ],
         28 => &[(&[0], Z, Z), (&[2], &[0, 2, 4, 6], Z), (&[4, 6], Z, Z)],
         20 => &[(&[0], Z, Z), (&[2], &[0, 2], Z), (&[4], &[0], &[0, 2]), (&[4], &[2], &[0, 2, 4, 6, 8, 10]), (&[6], Z, Z)],
+        // Harpy : états que les tables de sauts de l'original acceptent
+        21 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6]),
+            (&[2], &[2], &[0, 2, 4, 6]),
+            (&[2], &[4], Z),
+            (&[2], &[6], Z),
+            (&[2], &[8], &[0, 2, 4]),
+            (&[4], &[0], &[0, 2, 4]),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4], &[0, 2]),
+            (&[6], Z, Z),
+        ],
+        // Owlbear : même charpente que le Riyakaa
+        4 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], Z),
+            (&[2], &[2], &[0, 2, 4, 6, 8]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18]),
+            (&[2], &[6], &[0, 2, 4]),
+            (&[2], &[8], &[0, 2, 4, 6]),
+            (&[2], &[10], Z),
+            (&[4], &[0], Z),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[6], Z),
+            (&[4], &[8], &[0, 2, 4]),
+            (&[6], Z, Z),
+        ],
+        // Displacer Beast : un groupe de comportements (+5) par état actif, ses étapes (+6)
+        19 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]),
+            (&[2], &[2], &[0, 2, 4, 6]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36]),
+            (&[2], &[6], &[0, 2, 4, 6, 8, 10, 12]),
+            (&[2], &[8], &[0, 2, 4, 6]),
+            (&[2], &[10], &[0, 2, 4]),
+            (&[2], &[12], &[0, 2, 4, 6, 8]),
+            (&[4], &[0], Z),
+            (&[4], &[2], &[0, 2]),
+            (&[4], &[4], &[0, 2, 4, 6]),
+            (&[4], &[6], Z),
+            (&[4], &[8], &[0, 2, 4, 6, 8, 10, 12, 14]),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide de l'Owlbear (type 4) pour un état `(+4, +5, +6)`.
+fn etape_owlbear(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n = match (s4, s5, s6) {
+        (2, 0, _) => 4,
+        (2, 2, _) => 2,
+        (2, 4, 0) => 6,
+        (2, 4, 2 | 4 | 12) => 12,
+        (2, 4, 6) => 18,
+        (2, 4, 8) => 6,
+        (2, 4, 10) => 8,
+        (2, 4, 14) => 16,
+        (2, 4, 16 | 18) => 10,
+        (2, 6, 2) => 12,
+        (2, 6, 4) => 6,
+        (2, 8, _) => 2,
+        (2, 10, _) => 4,
+        _ => 0,
+    };
+    2 * (alea.next() % (n / 2 + 1)) as u8
+}
+
+/// Champs de la Harpy (type 21) à des valeurs que ses tables acceptent.
+fn prep_harpy(b: &mut cps2::Cps2Bus, alea: &mut Alea, obj: u32) {
+    use ddsom_game::mem::{wr16, wr32, wr8};
+    wr8(b, obj + 0x43, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x42, [0u8, 4, 2, 6][alea.next() as usize % 4]);
+    for off in [0xa0u32, 0xa1, 0xa2, 0xa3, 0xa4, 0x77] {
+        wr8(b, obj + off, (alea.next() % 5) as u8);
+    }
+    wr8(b, obj + 0xa2, (alea.next() % 2) as u8);
+    // l'angle de vol reste sous 0x40 (le dispatch par variante lit D0 laissé par la table de vitesses)
+    wr8(b, obj + 0x2d, (alea.next() % 0x20) as u8);
+    wr16(b, obj + 0xb0, (alea.next() % 0x200) as u16);
+    wr8(b, obj + 0xb1, [0u8, 2, 6][alea.next() as usize % 3]);
+    wr8(b, obj + 0xa5, (alea.next() % 2) as u8);
+    wr16(b, obj + 0xae, [0x100u16, 0x280, 0xff00][alea.next() as usize % 3]);
+    // le compagnon est un objet existant ; le tir (+0xa6) un autre
+    wr16(b, obj + 0xaa, 0x85de + 0x200 * (alea.next() % 4) as u16);
+    wr32(b, obj + 0xa6, 0xff0000 | (0x85de + 0x200 * (alea.next() % 4)));
+    wr8(b, obj + 0x49, 4 * (alea.next() % 43) as u8);
+}
+
+/// Champs de l'Owlbear à des valeurs que ses tables acceptent.
+fn prep_owlbear(b: &mut cps2::Cps2Bus, alea: &mut Alea, obj: u32) {
+    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    if s4 == 2 {
+        let etape = etape_owlbear(alea, s4, s5, s6);
+        wr8(b, obj + 7, etape);
+    }
+    wr8(b, obj + 0x49, 4 * (alea.next() % 43) as u8);
+    wr8(b, obj + 0x4a, 0x20 * (alea.next() % 2) as u8);
+    // souvent au ras du sol, en train de retomber : les réceptions de bonds
+    if alea.next() % 2 == 0 {
+        wr16(b, obj + 0xc, (alea.next() % 3) as u16);
+        wr16(b, obj + 0x18, 0xff00);
+        wr16(b, obj + 0x1a, 0xffc8);
+    }
+    for off in [0x6b, 0x6e, 0x71, 0x77, 0xa0, 0xac, 0xad, 0xaa] {
+        wr8(b, obj + off, (alea.next() % 5) as u8);
+    }
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0xa5, (alea.next() % 2) as u8);
+    // animations voulue et en cours : souvent identiques (répétitions des coups)
+    const ANIMS: [u8; 14] = [0, 2, 4, 6, 8, 0xa, 0xc, 0xe, 0x15, 0x16, 0x1a, 0x1c, 0x7f, 0xff];
+    let anim = ANIMS[alea.next() as usize % ANIMS.len()];
+    wr8(b, obj + 0xa1, anim);
+    wr8(b, obj + 0xa2, if alea.next() % 2 == 0 { anim } else { ANIMS[alea.next() as usize % ANIMS.len()] });
+    // état à reprendre après un demi-tour
+    let reprises: [u32; 3] = [0x0202_0000, 0x0204_0000, 0x0206_0000];
+    wr32(b, obj + 0xa6, reprises[alea.next() as usize % 3]);
+    wr8(b, obj + 0xa4, 2 * (alea.next() % 3) as u8);
+    wr16(b, obj + 0x50, 0x85de + 0x200 * (alea.next() % 4) as u16);
+    // un hôte éventuel : orientation
+    let hote = rd16(b, obj + 0x46) as u32 | 0xff0000;
+    wr8(b, hote + 0x2c, 0x20 * (alea.next() % 2) as u8);
+}
+
+/// Étape `+7` valide du Displacer Beast (type 19) pour un état `(+4, +5, +6)` : celles que les tables
+/// de sauts de l'original acceptent.
+fn etape_dbeast(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n = match (s4, s5, s6) {
+        (2, 0, 4 | 10 | 12 | 14 | 16 | 20 | 22) => 4,
+        (2, 0, 6 | 18) | (2, 0, 0) => 2,
+        (2, 2, _) => 2,
+        (2, 4, 4 | 8) => 8,
+        (2, 4, 10 | 18 | 20) => 10,
+        (2, 4, 12) => 12,
+        (2, 4, 16 | 30 | 36) => 14,
+        (2, 4, _) => 6,
+        (2, 6, 0) => 8,
+        (2, 6, 2) => 6,
+        (2, 6, 4 | 6 | 10) => 10,
+        (2, 6, 8) => 12,
+        (2, 6, 12) => 2,
+        (2, 8, 0 | 6) => 4,
+        (2, 8, _) => 8,
+        _ => 0,
+    };
+    2 * (alea.next() % (n / 2 + 1)) as u8
 }
 
 /// Champs d'IA d'un ennemi à comportement complexe (type 16) à des valeurs que ses tables acceptent :
@@ -430,6 +578,52 @@ fn prep_ennemi_ia(b: &mut cps2::Cps2Bus, alea: &mut Alea, obj: u32) {
     wr8(b, hote + 0x2c, 0x20 * (alea.next() % 2) as u8);
     // la cible (+0x50) est un des joueurs
     wr16(b, obj + 0x50, 0x85de + 0x200 * (alea.next() % 4) as u16);
+}
+
+/// Champs du Displacer Beast (type 19) à des valeurs que ses tables acceptent : étape `+7`, code de
+/// réaction, compteurs courts, animation en cours, état à reprendre après un demi-tour.
+fn prep_dbeast(b: &mut cps2::Cps2Bus, alea: &mut Alea, obj: u32) {
+    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    if s4 == 2 {
+        let etape = etape_dbeast(alea, s4, s5, s6);
+        wr8(b, obj + 7, etape);
+    }
+    wr8(b, obj + 0x49, 4 * (alea.next() % 43) as u8);
+    wr8(b, obj + 0x4a, 0x20 * (alea.next() % 2) as u8);
+    // souvent au ras du sol, en train de retomber : les réceptions de bonds
+    if alea.next() % 2 == 0 {
+        wr16(b, obj + 0xc, (alea.next() % 3) as u16);
+        wr16(b, obj + 0x18, 0xff00);
+        wr16(b, obj + 0x1a, 0xffc8);
+    }
+    for off in [0x6b, 0x6e, 0x71, 0x77, 0x90, 0xa0, 0xab, 0xae, 0xb5] {
+        wr8(b, obj + off, (alea.next() % 5) as u8);
+    }
+    wr8(b, obj + 0xbf, (alea.next() % 16) as u8);
+    // pièce rattachée (variante 0 à 3 : rang) ou lâchée
+    wr8(b, obj + 0xbc, if alea.next() % 3 == 0 { 0xff } else { (alea.next() % 8) as u8 });
+    // état à reprendre après un demi-tour : un état actif valide
+    let reprises: [u32; 4] = [0x0202_0000, 0x0204_0000, 0x0206_0000, 0x0208_0004];
+    wr32(b, obj + 0xa6, reprises[alea.next() as usize % 4]);
+    wr8(b, obj + 0xa4, 2 * (alea.next() % 3) as u8);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    // animation en cours : souvent celle que l'étape voudra lancer (répétitions des coups)
+    const ANIMS: [u8; 22] = [0, 5, 6, 7, 0xc, 0xd, 0xe, 0xf, 0x16, 0x18, 0x19, 0x1c, 0x1d, 0x1e, 0x28, 0x2a, 0x2b, 0x2d, 0x2e, 0x2f, 0x7f, 0xff];
+    wr8(b, obj + 0xa2, ANIMS[alea.next() as usize % ANIMS.len()]);
+    wr8(b, obj + 0xaf, ANIMS[alea.next() as usize % ANIMS.len()]);
+    // la cible est un joueur
+    wr16(b, obj + 0x50, 0x85de + 0x200 * (alea.next() % 4) as u16);
+    // le parent (+0x42) : état, variante, indice d'animation, compteur de bras
+    let parent = rd16(b, obj + 0x42) as u32 | 0xff0000;
+    if rd16(b, obj + 0x42) != 0 {
+        const ETATS: [u32; 6] = [0x0402_0000, 0x0402_0c00, 0x0200_0600, 0x0202_0000, 0x0402_0200, 0x0408_0000];
+        wr32(b, parent + 4, ETATS[alea.next() as usize % 6]);
+        wr8(b, parent + 3, (alea.next() % 3) as u8);
+        wr8(b, parent + 0xa1, (alea.next() % 0x20) as u8);
+        wr8(b, parent + 0xaa, (alea.next() % 3) as u8);
+        wr8(b, parent + 0x2c, 0x20 * (alea.next() % 2) as u8);
+    }
 }
 
 /// États du maître d'un ennemi de type 26 (+0xb8 à +0xbb, plus +4/+5 et le code de réaction +0x49) que
@@ -624,7 +818,8 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     }
     ddsom_game::set_check(true);
     std::panic::set_hook(Box::new(|_| {}));
-    let mut alea = Alea(0x1234_5678_9abc_def1);
+    let graine: u64 = std::env::var("DDSOM_GRAINE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let mut alea = Alea(0x1234_5678_9abc_def1 ^ graine.wrapping_mul(0x9e37_79b9_7f4a_7c15));
     let tables: [(&Pool, u32, u32); 4] = [(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16), (&ENEMY, 0x39a78, 29)];
     let mut entrees: Vec<(u32, &Pool, u8)> = Vec::new();
     for (pool, table, n) in tables {
@@ -659,6 +854,10 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             for off in (0..pool.stride).step_by(2) {
                 wr16(&mut b, obj.0 + off, 0);
             }
+            if pool.class == 2 && matches!(kind, 4 | 19 | 21) {
+                // un propriétaire distinct de l'objet : ses états sont réécrits au hasard par la suite
+                proprietaires.retain(|&o| o != obj.0);
+            }
             let mut owner = proprietaires[alea.next() as usize % proprietaires.len()];
             if pool.class == 2 {
                 // le maître n'est pas l'objet lui-même : on prend un autre ennemi, sinon un joueur
@@ -687,6 +886,16 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             wr8(&mut b, obj.0 + 0x28, pool.class);
             wr8(&mut b, obj.0 + 0x2c, (alea.next() & 1) as u8);
             wr8(&mut b, obj.0 + 0x2f, if alea.next() % 4 == 0 { alea.next() as u8 % 3 } else { 0 });
+            if pool.class == 2 && kind == 21 {
+                // la série d'attaque indexe des tables de mots : 0, 2 ou 4
+                let serie = 2 * (rd8(&mut b, obj.0 + 0x2f) % 3);
+                wr8(&mut b, obj.0 + 0x2f, serie);
+            }
+            if pool.class == 2 && kind == 19 {
+                // le profil d'IA n'a que deux valeurs (la table de sauts de l'original n'en a pas d'autre)
+                let profil = rd8(&mut b, obj.0 + 0x2f) % 2;
+                wr8(&mut b, obj.0 + 0x2f, profil);
+            }
             wr16(&mut b, obj.0 + 0x50, owner as u16);
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
@@ -763,6 +972,15 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                 }
                 if kind == 16 {
                     prep_ennemi_ia(&mut b, &mut alea, obj.0);
+                }
+                if kind == 19 {
+                    prep_dbeast(&mut b, &mut alea, obj.0);
+                }
+                if kind == 4 {
+                    prep_owlbear(&mut b, &mut alea, obj.0);
+                }
+                if kind == 21 {
+                    prep_harpy(&mut b, &mut alea, obj.0);
                 }
                 if alea.next() % 4 != 0 {
                     let (cx, cy) = (rd16(&mut b, A5 + 0x506), rd16(&mut b, A5 + 0x50a));
@@ -867,6 +1085,36 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         wr16(&mut b, q + 0xc, (alea.next() % 0x30) as u16);
                     }
                 }
+                if pool.class == 2 && matches!(kind, 4 | 19 | 21) && pas > 0 && alea.next() % 3 == 0 {
+                    // nouvel état valide à chaque fois : visite beaucoup plus d'étapes que la seule trajectoire
+                    let boites = etats_enemy(kind, rd8(&mut b, obj.0 + 3));
+                    let (s4, s5, s6) = boites[alea.next() as usize % boites.len()];
+                    wr8(&mut b, obj.0 + 4, s4[alea.next() as usize % s4.len()]);
+                    wr8(&mut b, obj.0 + 5, s5[alea.next() as usize % s5.len()]);
+                    wr8(&mut b, obj.0 + 6, s6[alea.next() as usize % s6.len()]);
+                    if kind == 21 {
+                        prep_harpy(&mut b, &mut alea, obj.0);
+                    } else if kind == 4 {
+                        prep_owlbear(&mut b, &mut alea, obj.0);
+                    } else {
+                        prep_dbeast(&mut b, &mut alea, obj.0);
+                    }
+                }
+                if pool.class == 2 && matches!(kind, 4 | 19) && alea.next() % 2 == 0 {
+                    // des joueurs dans les boîtes de portée de la bête (largeur étroite, profondeur ±8)
+                    for j in 0..4u32 {
+                        let q = 0xff85de + 0x200 * j;
+                        if alea.next() % 4 != 0 {
+                            wr8(&mut b, q, 1);
+                        }
+                        let dx = (alea.next() % 0x180) as u16;
+                        let dy = (alea.next() % 0x12) as u16;
+                        let (ox, oy) = (rd16(&mut b, obj.0 + 8), rd16(&mut b, obj.0 + 0x10));
+                        wr16(&mut b, q + 8, ox.wrapping_add(dx).wrapping_sub(0x100));
+                        wr16(&mut b, q + 0x10, oy.wrapping_add(dy).wrapping_sub(9));
+                        wr16(&mut b, q + 0xc, (alea.next() % 4) as u16);
+                    }
+                }
                 if pool.class == 2 && kind == 7 && alea.next() % 4 == 0 {
                     wr8(&mut b, owner + 0xa2, (alea.next() % 7) as u8);
                     wr8(&mut b, owner + 0x3e, if alea.next() % 3 == 0 { 0xff } else { 0 });
@@ -879,7 +1127,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     for off in [0x33u32, 0x53, 0x56, 0x57, 0xa2, 0xa3, 0xa4, 0xb0, 0xb2, 0xb6, 0x20, 0x21, 0x24, 0x26, 0x30, 0x32, 0x3e] {
                         // +0x24 et +0x26 sont les liens des listes triées : seul le type 20 les
                         // utilise comme compteurs (parent de type 19), on ne les corrompt que pour lui
-                        let liens = matches!(off, 0x20 | 0x24 | 0x26) || (kind == 16 && matches!(off, 0xa2 | 0xa3));
+                        let liens = matches!(off, 0x20 | 0x24 | 0x26) || (kind == 16 && matches!(off, 0xa2 | 0xa3)) || (kind == 19 && off == 0xa4) || (kind == 4 && matches!(off, 0xa4 | 0xa3)) || (kind == 21 && off == 0xa2);
                         if alea.next() % 9 == 0 && !(matches!(kind, 22..=24 | 26) && matches!(off, 0xb0 | 0xb2)) && !(liens && (kind != 20 || off == 0xa3)) {
                             let v = match alea.next() % 4 {
                                 0 => 0,
@@ -942,7 +1190,14 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     println!("pas {pas} maître {m:06x} : {o:02x?} obj {:06x}", obj.0);
                 }
                 let avant_obj: Vec<u8> = (0..pool.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
+                if std::env::var("DDSOM_PAS_ETAT").is_ok() {
+                    println!("pas {pas} variante {:02x} états {:02x?} +2f {:02x}", avant_obj[3], &avant_obj[4..8], avant_obj[0x2f]);
+                }
                 let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
+                if std::env::var("DDSOM_PAS_ETAT").is_ok() {
+                    let apres: Vec<u8> = (4..8).map(|i| rd8(&mut b, obj.0 + i)).collect();
+                    println!("   après : {apres:02x?}");
+                }
                 if r.is_err() {
                     // l'original est sorti des rails (entrée incohérente) : on abandonne la trajectoire
                     let _ = (cs, bs);

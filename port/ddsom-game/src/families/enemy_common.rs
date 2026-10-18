@@ -25,6 +25,7 @@ pub mod f {
     pub const HOST: u32 = 0x46;
     /// Parent ou propriétaire (mot, adresse RAM) ; `+0x42` : créateur d'un sous-objet.
     pub const OWNER: u32 = 0x50;
+    pub const TARGET: u32 = 0x50;
     pub const CREATOR: u32 = 0x42;
     /// Compteur de gel après un coup (décompté par `0xf1bfc`).
     pub const FREEZE: u32 = 0x53;
@@ -130,13 +131,18 @@ pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
 
 /// Boucle commune de l'état « touché » : même gel ; la zone n'est testée que si `+0xae` est nul.
 pub fn hit_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx)) {
+    hit_loop_at(x, 0xae, sub)
+}
+
+/// `hit_loop` avec l'octet « pas de test de zone » à un autre décalage (`+0xa5` pour le type 4).
+pub fn hit_loop_at(x: &mut Cx, no_zone: u32, sub: impl FnOnce(&mut Cx)) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
         sub(x);
     }
-    if x.u8(0xae) == 0 {
+    if x.u8(no_zone) == 0 {
         x.call(IN_ZONE);
         x.call(SHADOW);
     }
@@ -178,4 +184,56 @@ pub fn add16(x: &mut Cx, o: Obj, off: u32, v: u16) {
 /// Démarre le script `n` du jeu d'animations `set` (`movea.l set,A4 ; moveq n,D0 ; jsr 0x1a32`).
 pub fn anim(x: &mut Cx, set: u32, n: u32) {
     x.anim_start(set, n);
+}
+
+// --- aides d'IA communes ------------------------------------------------------------------------
+
+/// Un joueur est-il dans cette boîte devant l'ennemi ? (0xb5e0 : décalage, portée, profondeur.)
+pub fn target_in_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+    set_dw(x, 0, d0 as u16);
+    set_dw(x, 1, d1);
+    set_dw(x, 2, d2);
+    x.call(0xb5e0);
+    !x.c.cond(7)
+}
+
+/// Variante de `target_in_box` pour la routine 0x7f0c (même convention).
+pub fn target_in_box_far(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+    set_dw(x, 0, d0 as u16);
+    set_dw(x, 1, d1);
+    set_dw(x, 2, d2);
+    x.call(0x7f0c);
+    !x.c.cond(7)
+}
+
+/// Choisit un joueur comme cible (0x424e) ; faux si aucun n'est vivant.
+pub fn pick_target(x: &mut Cx) -> bool {
+    x.call(0x424e);
+    !x.c.cond(7)
+}
+
+/// L'ennemi est saisi par un joueur (0x2810).
+pub fn grabbed(x: &mut Cx) -> bool {
+    x.call(0x2810);
+    !x.c.cond(7)
+}
+
+/// La cible de l'ennemi (joueur désigné par `+0x50`), ou `None` s'il n'en a pas.
+pub fn target(x: &mut Cx) -> Option<Obj> {
+    if x.u16(f::TARGET) == 0 {
+        return None;
+    }
+    Some(x.linked(f::TARGET))
+}
+
+/// L'ennemi ne regarde pas vers sa cible (0x74eac, 0x5f710) : faux sans animation en cours
+/// (`+0xa2` nul) ou sans cible.
+pub fn needs_turn(x: &mut Cx) -> bool {
+    if x.u8(0xa2) == 0 {
+        return false;
+    }
+    let Some(t) = target(x) else { return false };
+    let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16;
+    let facing = if dx > 0 { 0x20 } else { 0 };
+    facing != x.u8(f::FLIP)
 }
