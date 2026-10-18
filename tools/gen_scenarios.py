@@ -1,4 +1,4 @@
-"""Génère le jeu de scénarios de couverture (scenarios/cov_*.txt) avec le bot réactif autobot.
+"""Génère le jeu de scénarios de couverture (scenarios/cov/*.txt) avec le bot réactif autobot.
 
     python3 tools/gen_scenarios.py [nom ...]        (tous si aucun nom)
 
@@ -99,7 +99,7 @@ def gen_script(name):
         for k in range(40):
             press(21000 + 100 * k, "P1 Button 1", 4)
     lines.sort(key=lambda e: e[0])
-    out = os.path.join(ROOT, "scenarios", name + ".txt")
+    out = os.path.join(ROOT, "scenarios", "cov", name + ".txt")
     with open(out, "w") as fh:
         fh.write("".join(f"{f} {t}\n" for f, t in lines) + f"{FRAMES + 1} quit\n")
     return name, 0
@@ -126,7 +126,7 @@ def generate(name):
     lines = make_bot.build(frames=sp["frames"], players=n, chars=tuple(ks), coin_period=sp["coin_period"], base_only=True)
     with open(base, "w") as f:
         f.write("\n".join(lines) + "\n")
-    out = os.path.join(ROOT, "scenarios", name + ".txt")
+    out = os.path.join(ROOT, "scenarios", "cov", name + ".txt")
     cmd = [AUTOBOT, ROMS, EEPROM, base, str(sp["frames"]), out, "--players", str(n), "--seed", str(sp["seed"]),
            "--weaken", str(sp["weaken"])]
     if sp["god"] != "0":

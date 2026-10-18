@@ -15,6 +15,13 @@ done
 for s in scenarios/extra/*.txt; do
 	./port/target/release/examples/validate "$roms" "$eeprom" "$s" 12000 > "$out/$(basename "$s" .txt).log" 2>&1 &
 done
+# scénarios de couverture de tout le jeu (docs/couverture.md) : longs (jusqu'à 30000 images à 1-4 joueurs, plus d'une
+# heure sous charge) ; activés par DDSOM_COV=1, nombre d'images par COV_FRAMES (30000 par défaut)
+if [[ ${DDSOM_COV:-0} == 1 ]]; then
+	for s in scenarios/cov/*.txt; do
+		./port/target/release/examples/validate "$roms" "$eeprom" "$s" "${COV_FRAMES:-30000}" > "$out/$(basename "$s" .txt).log" 2>&1 &
+	done
+fi
 wait
 status=0
 for log in "$out"/*.log; do

@@ -96,7 +96,7 @@ fn main() {
     for f in 0..frames {
         b.f = f;
         base.apply(f, &mut b.m);
-        let (scene, phase) = (b.rd8(0xff8034), b.rd8(0xff802c));
+        let (scene, mut phase) = (b.rd8(0xff8034), b.rd8(0xff802c));
         if scene != last_scene {
             eprintln!("image {f} : scène {scene:#x}, phase {phase:#x}");
             last_scene = scene;
@@ -107,7 +107,13 @@ fn main() {
             b.poke(0xff8034, plan[0].0, 1);
         }
         let active = b.rd8(0xff8030) != 0;
-        if f > 2600 && (!active || phase == 0x04) {
+        let select_end = phase == 0x04 && b.rd8(0xff802d) > 0x0c;
+        if f > 2600 && select_end {
+            // fin de la sélection (compte à rebours) : aucune touche
+            for pl in 0..players {
+                apply_keys(&mut b, pl, [false; 8]);
+            }
+        } else if f > 2600 && (!active || phase == 0x04) && phase != 0x08 {
             // hors partie (nom du classement, écrans) ou sélection du personnage (après un continue / une
             // nouvelle partie) : tapes sur Button 1 et déplacements du curseur
             for pl in 0..players {
@@ -152,10 +158,17 @@ fn main() {
                     b.poke(0xff802c, 0x08, 1);
                     b.poke(0xff802d, 0, 1);
                     b.poke(0xff802e, 0, 1);
+                    phase = 0x08;
                 }
             }
             for pl in 0..players {
-                policy(&mut b, pl, &mut rnd, god);
+                if phase == 0x08 {
+                    // entrée de scène : aucune touche (une entrée pendant cette phase fait diverger
+                    // les deux machines de validate, voir docs/couverture.md)
+                    apply_keys(&mut b, pl, [false; 8]);
+                } else {
+                    policy(&mut b, pl, &mut rnd, god);
+                }
             }
         }
         b.m.run_frame();
