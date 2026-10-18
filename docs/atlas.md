@@ -396,7 +396,7 @@ cette règle au sein de chaque phase mais commence par les sous-systèmes **sans
 | **Étape 4. Monde** (le gros du volume) | | | | | |
 | 4.1 | projectiles et effets : C08 ESHL, C0e EFFCT, C10 SET, C14 SOBJ | 124 Ko | ~11 000 | **parallélisable par type** (≈ 175 types) ; dépend de 2.1-2.2 ; C0e et C08 sont des dépendances des ennemis | taille |
 | 4.2 | C0c ITEM, C0a BOX | 12 Ko | ~1 000 | indépendants | création de BOX inconnue |
-| 4.3 | C02 ENEMY (28 types) | 97,7 Ko | ~8 900 | **par type** après 4.1 et 2.4 ; ≈ 3,5 Ko/type | tables de décision, variantes par scène |
+| 4.3 | C02 ENEMY (28 types) | 97,7 Ko | ~8 900 | **par type** après 4.1 et 2.4 ; ≈ 3,5 Ko/type | tables de décision, variantes par scène ; réécrits : types 7, 16, 20, 22, 23, 24, 26, 28 (`docs/familles/enemy.md`) |
 | 4.4 | C04 BOSS (20 handlers) | 115,6 Ko | ~10 500 | par boss, après 4.3 (ils créent des ENEMY) ; ≈ 5,8 Ko/boss | plus complexes (phases) |
 | **Étape 5. Scénarios et flux** | | | | | |
 | 5.1 | W2 + W3 + F3 + F5 + F6 | 44 Ko | ~4 000 | après l'étape 4 ; scriptés → candidats à un format de données | beaucoup de cas particuliers par scène ; non atteint à compléter |

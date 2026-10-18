@@ -342,6 +342,175 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
 const DDSOM_TRACE_LEN: u32 = 200000;
 /// États de départ (`+4`, `+5`, `+6`) que la table de sauts de chaque type ESHL 15..39 accepte
 /// (au-delà, l'original sort du code) : listes de valeurs possibles par octet.
+/// États (`+4`, `+5`, `+6`) valides d'un type ENEMY : ceux que les tables de sauts de l'original couvrent.
+fn etats_enemy(kind: u8, variante: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8])] {
+    const Z: &[u8] = &[0];
+    match kind {
+        // Riyakaa : sous-états et sous-sous-états que les tables de sauts acceptent (l'arrivée dépend
+        // de la variante)
+        16 => match variante {
+            8 | 10 => &[
+                (&[0], Z, Z),
+                (&[2], &[0], &[0, 2, 4, 6]),
+                (&[2], &[2], &[0, 2, 4]),
+                (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14]),
+                (&[2], &[6], &[0, 2, 4, 6, 8, 10]),
+                (&[2], &[8], &[0, 2, 4, 6]),
+                (&[2], &[10], &[0, 2]),
+                (&[4], &[0], &[0]),
+                (&[4], &[2], &[0, 2]),
+                (&[4], &[4], &[0, 2, 4]),
+                (&[4], &[6], &[0]),
+                (&[4], &[8], &[0, 2, 4]),
+                (&[6], Z, Z),
+            ],
+            _ => &[
+                (&[0], Z, Z),
+                (&[2], &[0], &[0, 2, 4]),
+                (&[2], &[2], &[0, 2, 4]),
+                (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14]),
+                (&[2], &[6], &[0, 2, 4, 6, 8, 10]),
+                (&[2], &[8], &[0, 2, 4, 6]),
+                (&[2], &[10], &[0, 2]),
+                (&[4], &[0], &[0]),
+                (&[4], &[2], &[0, 2]),
+                (&[4], &[4], &[0, 2, 4]),
+                (&[4], &[6], &[0]),
+                (&[4], &[8], &[0, 2, 4]),
+                (&[6], Z, Z),
+            ],
+        },
+        22..=24 => &[(&[0, 2, 4, 6], Z, Z)],
+        26 => &[(&[0, 2, 4, 6], Z, Z)],
+        7 => &[
+            (&[0], Z, Z),
+            (&[2], &[0, 6, 10], &[0, 2]),
+            (&[2], &[2], &[0, 2, 4]),
+            (&[2], &[4, 8], &[0, 2, 4, 6, 8]),
+            (&[4, 6], Z, Z),
+        ],
+        28 => &[(&[0], Z, Z), (&[2], &[0, 2, 4, 6], Z), (&[4, 6], Z, Z)],
+        20 => &[(&[0], Z, Z), (&[2], &[0, 2], Z), (&[4], &[0], &[0, 2]), (&[4], &[2], &[0, 2, 4, 6, 8, 10]), (&[6], Z, Z)],
+        _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
+    }
+}
+
+/// Champs d'IA d'un ennemi à comportement complexe (type 16) à des valeurs que ses tables acceptent :
+/// compteurs courts, sous-état à reprendre, état de repli, réaction au dernier coup, cible = un joueur.
+fn prep_ennemi_ia(b: &mut cps2::Cps2Bus, alea: &mut Alea, obj: u32) {
+    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    for off in [0x6b, 0x6e, 0x71, 0x77, 0xa2, 0x90] {
+        wr8(b, obj + off, (alea.next() % 5) as u8);
+    }
+    // compteur de coups de patte restants : 1 au plus, et seulement au sous-sous-état 4
+    if rd8(b, obj + 5) == 4 {
+        let n = if rd8(b, obj + 6) == 4 { (alea.next() % 2) as u8 } else { 0 };
+        wr8(b, obj + 0xa2, n);
+    }
+    wr8(b, obj + 0xa3, 2 * (alea.next() % 8) as u8);
+    wr8(b, obj + 0xa0, alea.next() as u8);
+    wr8(b, obj + 0xa1, (alea.next() % 0x20) as u8);
+    wr8(b, obj + 0xac, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xad, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xae, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x7, 2 * (alea.next() % 3) as u8);
+    wr32(b, obj + 0xa8, if alea.next() % 2 == 0 { 0x0204_0200 } else { 0x0202_0000 });
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x49, 4 * (alea.next() % 41) as u8);
+    wr8(b, obj + 0x4a, 0x20 * (alea.next() % 2) as u8);
+    // paramètres d'IA de l'initialisation du type 16 (masques de décision, durées)
+    for (off, v) in [(0x68, 2), (0x69, 2), (0x70, 0), (0x6a, 1), (0x6c, 2), (0x6d, 4), (0x72, 2), (0x73, 2), (0x74, 2), (0x75, 0), (0x76, 3), (0x79, 6), (0x80, 7), (0x81, 6)] {
+        wr8(b, obj + off, v);
+    }
+    wr8(b, obj + 0x72, (alea.next() % 4) as u8);
+    wr8(b, obj + 0x73, (alea.next() % 4) as u8);
+    // un hôte qui regarde dans un sens ou l'autre (saisie par un joueur)
+    let hote = rd16(b, obj + 0x46) as u32 | 0xff0000;
+    wr8(b, hote + 0x2c, 0x20 * (alea.next() % 2) as u8);
+    // la cible (+0x50) est un des joueurs
+    wr16(b, obj + 0x50, 0x85de + 0x200 * (alea.next() % 4) as u16);
+}
+
+/// États du maître d'un ennemi de type 26 (+0xb8 à +0xbb, plus +4/+5 et le code de réaction +0x49) que
+/// les tables de sauts de l'original couvrent.
+fn etat_maitre_26(b: &mut cps2::Cps2Bus, alea: &mut Alea, maitre: u32) {
+    use ddsom_game::mem::{wr16, wr32, wr8};
+    let pair = |alea: &mut Alea, n: u32| 2 * (alea.next() % n) as u8;
+    let groupe = pair(alea, 4);
+    let (mode, phase, etape);
+    if groupe == 4 {
+        mode = pair(alea, 6);
+        (phase, etape) = match mode {
+            // les routines de réaction ne sont sûres qu'en leur état de départ
+            0 => (0, 0),
+            2 => (pair(alea, 3), 0),
+            4 => (pair(alea, 5), 0),
+            _ => (pair(alea, 4), 0),
+        };
+    } else {
+        mode = pair(alea, 8);
+        (phase, etape) = match mode {
+            0 => (pair(alea, 8), 0),
+            2 => {
+                let ph = pair(alea, 6);
+                (ph, if ph >= 4 { pair(alea, 5) } else { 0 })
+            }
+            4 => {
+                let ph = pair(alea, 6);
+                (ph, if ph == 8 { pair(alea, 3) } else if ph == 10 { pair(alea, 5) } else { 0 })
+            }
+            _ => (0, 0),
+        };
+    }
+    wr8(b, maitre + 0xb8, groupe);
+    wr8(b, maitre + 0xb9, mode);
+    wr8(b, maitre + 0xba, phase);
+    wr8(b, maitre + 0xbb, etape);
+    wr8(b, maitre + 0x33, (alea.next() % 2) as u8);
+    // code de réaction : multiple de 4 dans la table (45 entrées)
+    wr8(b, maitre + 0x49, 4 * (alea.next() % 45) as u8);
+    for off in [0x14u32, 0x18, 0x1c] {
+        wr32(b, maitre + off, (alea.next() % 0x400) as u32);
+    }
+    wr16(b, maitre + 0x16, (alea.next() % 0x40) as u16);
+    // état du maître : 0x406 (en cours de coup) déclenche la disparition du double
+    wr16(b, maitre + 4, if alea.next() % 12 == 0 { 0x406 } else { 0x200 });
+}
+
+/// États du maître d'un ennemi de type 24 (octets +4 à +7) que les tables de sauts de l'original couvrent.
+fn etat_maitre_24(b: &mut cps2::Cps2Bus, alea: &mut Alea, maitre: u32) {
+    use ddsom_game::mem::wr8;
+    let pair = |alea: &mut Alea, n: u32| 2 * (alea.next() % n) as u8;
+    let etat = pair(alea, 4);
+    let (sub, s6, s7);
+    if etat == 4 {
+        sub = pair(alea, 6);
+        s6 = pair(alea, 3);
+        s7 = pair(alea, 3);
+    } else {
+        sub = pair(alea, 7);
+        s6 = match sub {
+            0 => pair(alea, 3),
+            2 => pair(alea, 6),
+            _ => pair(alea, 7),
+        };
+        s7 = match (sub, s6) {
+            (4, 0) => pair(alea, 2),
+            (4, 8) => pair(alea, 7),
+            (4, 2 | 4 | 6) | (2, 10) => pair(alea, 5),
+            (2, 8) => pair(alea, 3),
+            (4, 10) => pair(alea, 5),
+            (4, 12) => pair(alea, 6),
+            _ => pair(alea, 3),
+        };
+    }
+    wr8(b, maitre + 4, etat);
+    wr8(b, maitre + 5, sub);
+    wr8(b, maitre + 6, s6);
+    wr8(b, maitre + 7, s7);
+    wr8(b, maitre + 0xad, (alea.next() % 3 == 0) as u8);
+}
+
 fn etats_eshl(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8])] {
     const T: &[u8] = &[2];
     const TQ: &[u8] = &[2, 4];
@@ -455,7 +624,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     ddsom_game::set_check(true);
     std::panic::set_hook(Box::new(|_| {}));
     let mut alea = Alea(0x1234_5678_9abc_def1);
-    let tables: [(&Pool, u32, u32); 3] = [(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16)];
+    let tables: [(&Pool, u32, u32); 4] = [(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16), (&ENEMY, 0x39a78, 29)];
     let mut entrees: Vec<(u32, &Pool, u8)> = Vec::new();
     for (pool, table, n) in tables {
         for k in 0..n {
@@ -489,10 +658,31 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             for off in (0..pool.stride).step_by(2) {
                 wr16(&mut b, obj.0 + off, 0);
             }
-            let owner = proprietaires[alea.next() as usize % proprietaires.len()];
+            let mut owner = proprietaires[alea.next() as usize % proprietaires.len()];
+            if pool.class == 2 {
+                // le maître n'est pas l'objet lui-même : on prend un autre ennemi, sinon un joueur
+                proprietaires.retain(|&o| o != obj.0 && o >= ENEMY.slot(0).0 && o < ENEMY.slot(ENEMY.slots).0);
+                if proprietaires.is_empty() {
+                    // aucun autre ennemi en scène : on en fabrique un, inactif à tous égards
+                    let autre = ENEMY.slot((alea.next() % ENEMY.slots).min(ENEMY.slots - 1));
+                    let autre = if autre.0 == obj.0 { ENEMY.slot(0) } else { autre };
+                    let autre = if autre.0 == obj.0 { ENEMY.slot(1) } else { autre };
+                    for off in (0..ENEMY.stride).step_by(2) {
+                        wr16(&mut b, autre.0 + off, 0);
+                    }
+                    wr8(&mut b, autre.0, 1);
+                    wr8(&mut b, autre.0 + 2, 25);
+                    wr8(&mut b, autre.0 + 0x28, 2);
+                    proprietaires.push(autre.0);
+                }
+                owner = proprietaires[alea.next() as usize % proprietaires.len()];
+            }
             wr8(&mut b, obj.0, 1);
             wr8(&mut b, obj.0 + 2, kind);
             wr8(&mut b, obj.0 + 3, (alea.next() % variantes) as u8);
+            if pool.class == 2 && kind == 16 {
+                wr8(&mut b, obj.0 + 3, 2 * (alea.next() % 6) as u8);
+            }
             wr8(&mut b, obj.0 + 0x28, pool.class);
             wr8(&mut b, obj.0 + 0x2c, (alea.next() & 1) as u8);
             wr8(&mut b, obj.0 + 0x2f, if alea.next() % 4 == 0 { alea.next() as u8 % 3 } else { 0 });
@@ -530,6 +720,57 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                 wr8(&mut b, A5 + 0x35, (alea.next() % 5) as u8);
                 wr8(&mut b, A5 + 0x36, (alea.next() % 2) as u8);
             }
+            // ENEMY : hôte en +0x42, PV, états tirés (DDSOM_ETATS), joueurs proches
+            if pool.class == 2 {
+                wr16(&mut b, obj.0 + 0xb2, owner as u16);
+                if kind == 26 {
+                    wr16(&mut b, obj.0 + 0xb0, owner as u16);
+                    etat_maitre_26(&mut b, &mut alea, owner);
+                } else if matches!(kind, 22..=24) {
+                    etat_maitre_24(&mut b, &mut alea, owner);
+                }
+                if alea.next() % 2 == 0 {
+                    wr16(&mut b, obj.0 + 0x42, owner as u16);
+                }
+                wr16(&mut b, obj.0 + 0x62, (alea.next() % 40) as u16);
+                // hôte d'une partie composite (type 7) : son type, ses états et son dernier coup
+                if kind == 7 {
+                    wr8(&mut b, owner + 2, [0xe, 0x13, 5][alea.next() as usize % 3]);
+                    wr8(&mut b, owner + 0xa2, (alea.next() % 7) as u8);
+                    wr8(&mut b, owner + 0x3e, if alea.next() % 3 == 0 { 0xff } else { 0 });
+                    wr8(&mut b, owner + 0x2c, (alea.next() % 2) as u8 * 0x20);
+                }
+                // suivi de vie des doubles (type 23) : PV minimum connu, délai, drapeau « blessé »
+                wr16(&mut b, obj.0 + 0x64, (alea.next() % 50) as u16);
+                wr16(&mut b, obj.0 + 0xb4, (alea.next() % 3) as u16);
+                wr8(&mut b, obj.0 + 0xaf, (alea.next() % 3 == 0) as u8);
+                wr8(&mut b, obj.0 + 0xb6, (alea.next() % 3 == 0) as u8);
+                // parties liées (halos, flammes, bras, ombre) : objets existants tirés au hasard
+                if kind == 20 && alea.next() % 4 != 0 {
+                    for off in [0xa4u32, 0xa6, 0xa8, 0xaa, 0xac, 0xae, 0xb4] {
+                        wr16(&mut b, obj.0 + off, proprietaires[alea.next() as usize % proprietaires.len()] as u16);
+                    }
+                    wr8(&mut b, obj.0 + 0xb0, (alea.next() % 4) as u8);
+                }
+                wr16(&mut b, obj.0 + 0x60, 40);
+                if std::env::var("DDSOM_ETATS").is_ok() && alea.next() % 2 == 0 {
+                    let boites = etats_enemy(kind, rd8(&mut b, obj.0 + 3));
+                    let (s4, s5, s6) = boites[alea.next() as usize % boites.len()];
+                    wr8(&mut b, obj.0 + 4, s4[alea.next() as usize % s4.len()]);
+                    wr8(&mut b, obj.0 + 5, s5[alea.next() as usize % s5.len()]);
+                    wr8(&mut b, obj.0 + 6, s6[alea.next() as usize % s6.len()]);
+                }
+                if kind == 16 {
+                    prep_ennemi_ia(&mut b, &mut alea, obj.0);
+                }
+                if alea.next() % 4 != 0 {
+                    let (cx, cy) = (rd16(&mut b, A5 + 0x506), rd16(&mut b, A5 + 0x50a));
+                    wr16(&mut b, obj.0 + 8, cx.wrapping_add(0x60 + (alea.next() % 0x80) as u16));
+                    wr16(&mut b, obj.0 + 0x10, cy.wrapping_add(0x60 + (alea.next() % 0x40) as u16));
+                    wr16(&mut b, owner + 8, cx.wrapping_add(0x60 + (alea.next() % 0x80) as u16));
+                    wr16(&mut b, owner + 0x10, cy.wrapping_add(0x60 + (alea.next() % 0x40) as u16));
+                }
+            }
             if entree == 0xd5f5a {
                 // barre de vie (SET 20) : joueur suivi en +0x20, second joueur en +0x34
                 wr16(&mut b, obj.0 + 0x20, 0x85de + 0x200 * (alea.next() % 4) as u16);
@@ -560,11 +801,18 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     if alea.next() % 8 == 0 {
                         wr8(&mut b, obj.0 + 0x33, alea.next() as u8 & 1);
                     }
-                    if alea.next() % 10 == 0 {
+                    if alea.next() % 10 == 0 && !(pool.class == 2 && matches!(kind, 22..=24 | 26)) {
                         wr8(&mut b, owner + 4, (alea.next() % 8) as u8);
                     }
+                    if pool.class == 2 && matches!(kind, 22..=24 | 26) && alea.next() % 3 == 0 {
+                        if kind == 26 {
+                            etat_maitre_26(&mut b, &mut alea, owner);
+                        } else {
+                            etat_maitre_24(&mut b, &mut alea, owner);
+                        }
+                    }
                     // le propriétaire change d'état : états de l'automate, drapeaux d'attaque, compteurs
-                    if alea.next() % 3 == 0 {
+                    if alea.next() % 3 == 0 && !(pool.class == 2 && matches!(kind, 22..=24 | 26)) {
                         for off in [4u32, 5, 6, 7] {
                             if alea.next() % 2 == 0 {
                                 wr8(&mut b, owner + off, 2 * (alea.next() % 6) as u8);
@@ -588,6 +836,66 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     }
                     if alea.next() % 10 == 0 {
                         wr8(&mut b, obj.0 + 0x53, (alea.next() % 5) as u8);
+                    }
+                }
+                if pool.class == 2 {
+                    // compteurs de places libres de tous les pools, cohérents avec leur contenu (les ennemis
+                    // composites les lisent pour savoir s'ils peuvent créer leurs parties)
+                    for q in ddsom_game::objects::pools::POOLS {
+                        let libres = (0..q.slots).filter(|&i| rd8(&mut b, q.slot(i).0) == 0).count();
+                        wr16(&mut b, A5 + q.free, libres as u16);
+                    }
+                }
+                if pool.class == 2 && alea.next() % 5 == 0 {
+                    // difficulté, scène et joueurs en vie lus par les tables de décision
+                    wr16(&mut b, A5 + 0x7f92, (alea.next() % 8) as u16);
+                    wr8(&mut b, A5 + 0x34, if alea.next() % 4 == 0 { 4 } else { (alea.next() % 12) as u8 });
+                    wr8(&mut b, A5 + 0x35, (alea.next() % 5) as u8);
+                }
+                if pool.class == 2 && alea.next() % 2 == 0 {
+                    // joueurs actifs, tantôt près de l'ennemi tantôt loin
+                    for j in 0..4u32 {
+                        let q = 0xff85de + 0x200 * j;
+                        if alea.next() % 3 != 0 {
+                            wr8(&mut b, q, 1);
+                        }
+                        let x = rd16(&mut b, obj.0 + 8).wrapping_add((alea.next() % 0x90) as u16).wrapping_sub(0x48);
+                        let y = rd16(&mut b, obj.0 + 0x10).wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20);
+                        wr16(&mut b, q + 8, x);
+                        wr16(&mut b, q + 0x10, y);
+                        wr16(&mut b, q + 0xc, (alea.next() % 0x30) as u16);
+                    }
+                }
+                if pool.class == 2 && kind == 7 && alea.next() % 4 == 0 {
+                    wr8(&mut b, owner + 0xa2, (alea.next() % 7) as u8);
+                    wr8(&mut b, owner + 0x3e, if alea.next() % 3 == 0 { 0xff } else { 0 });
+                    wr8(&mut b, owner + 0xa3, (alea.next() % 2) as u8);
+                    if alea.next() % 5 == 0 {
+                        wr8(&mut b, owner, 0);
+                    }
+                }
+                if pool.class == 2 && pas > 0 {
+                    for off in [0x33u32, 0x53, 0x56, 0x57, 0xa2, 0xa3, 0xa4, 0xb0, 0xb2, 0xb6, 0x20, 0x21, 0x24, 0x26, 0x30, 0x32, 0x3e] {
+                        // +0x24 et +0x26 sont les liens des listes triées : seul le type 20 les
+                        // utilise comme compteurs (parent de type 19), on ne les corrompt que pour lui
+                        let liens = matches!(off, 0x20 | 0x24 | 0x26) || (kind == 16 && matches!(off, 0xa2 | 0xa3));
+                        if alea.next() % 9 == 0 && !(matches!(kind, 22..=24 | 26) && matches!(off, 0xb0 | 0xb2)) && !(liens && (kind != 20 || off == 0xa3)) {
+                            let v = match alea.next() % 4 {
+                                0 => 0,
+                                1 => 1,
+                                2 => (alea.next() % 4) as u8,
+                                _ => alea.next() as u8,
+                            };
+                            wr8(&mut b, obj.0 + off, v);
+                            // l'état de l'hôte d'une partie (type 7) reste dans la table de la ROM
+                            if alea.next() % 3 == 0 && !(kind == 7 && matches!(off, 0xa2 | 0xa3)) {
+                                wr8(&mut b, owner + off, v);
+                            }
+                        }
+                    }
+                    if alea.next() % 15 == 0 {
+                        wr16(&mut b, obj.0 + 0x62, (alea.next() % 5) as u16);
+                        wr16(&mut b, obj.0 + 0x64, (alea.next() % 50) as u16);
                     }
                 }
                 // SET et SOBJ : contrôleurs de scène et d'interface, qui lisent des variables globales
@@ -627,6 +935,11 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         c2.step(&mut b2);
                     }
                 }
+                if std::env::var("DDSOM_MAITRE").is_ok() && pool.class == 2 {
+                    let m = rd16(&mut b, obj.0 + 0xb2) as u32 | 0xff0000;
+                    let o: Vec<u8> = (0..8).map(|i| rd8(&mut b, m + i)).collect();
+                    println!("pas {pas} maître {m:06x} : {o:02x?} obj {:06x}", obj.0);
+                }
                 let avant_obj: Vec<u8> = (0..pool.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
                 let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
                 if r.is_err() {
@@ -634,12 +947,22 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     let _ = (cs, bs);
                     break;
                 }
+                if std::env::var("DDSOM_MAITRE").is_ok() && pool.class == 2 {
+                    let m = rd16(&mut b, obj.0 + 0xb2) as u32 | 0xff0000;
+                    let o: Vec<u8> = (0..8).map(|i| rd8(&mut b, m + i)).collect();
+                    println!("   après : {o:02x?}");
+                }
                 let apres = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
                 if apres > avant && affiches < 12 {
                     affiches += 1;
                     let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
                     println!("écart en {entree:06x} type {kind} pas {pas} : {}", dernier.unwrap_or_default());
                     println!("  objet avant : {:02x?}", avant_obj);
+                    if pool.class == 2 {
+                        let m = ((avant_obj[0xb2] as u32) << 8 | avant_obj[0xb3] as u32) | 0xff0000;
+                        let octets: Vec<u8> = (0..8).map(|i| rd8(&mut bs.clone(), m + i)).collect();
+                        println!("  maître {m:06x} avant : {octets:02x?}");
+                    }
                     if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
                         // exécution pas à pas du code d'origine seul depuis l'état d'avant
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
