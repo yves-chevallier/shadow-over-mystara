@@ -69,6 +69,14 @@ pub const NATIVES: &[Native] = &[
     overlays::UPDATE,
     walk::CLAMP,
     hit_reactions::ENEMY_REACTS,
+    characters::fighter::JUMP,
+    characters::fighter::ATTACK,
+    characters::fighter::SPECIAL,
+    characters::fighter::DASH,
+    characters::cleric::JUMP,
+    characters::cleric::ATTACK,
+    characters::cleric::SPECIAL,
+    characters::cleric::DASH,
 ];
 
 /// Premier enregistrement joueur (offset depuis A5) et pas entre deux joueurs.

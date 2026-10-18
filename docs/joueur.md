@@ -168,6 +168,8 @@ pas examinés.
 
 ## 8. Interface pour les personnages (P5) et les tirs (C06/C12)
 
+- Le combattant et le clerc sont réécrits (`docs/personnages.md`) : leurs actions sont des `Native` déclarées aux adresses d'origine
+  (macro `action_native!`), le reste de ce paragraphe décrit le mécanisme général.
 - Le code propre à chaque personnage est atteint par `characters::run(g, p, Slot)` : table d'origine
   `Slot::table()` (12 adresses, indexées par `CHARACTER`), ou une fonction Rust ajoutée à
   `characters::OVERRIDES` (`(personnage, slot, fn(&mut Ctx, Player))`), ou une `Native` déclarée à
@@ -201,7 +203,7 @@ Fonctions réécrites jamais appelées par les 8 scénarios (voir `examples/play
 `curse_fall`, `team_score_reached`, `all_ready`, `clear_recognizers`, `set_stun_time`, `launch_a`,
 `sparkle`, `walk::crawl_speed`, `walk::run_speed`, plusieurs pas de `scripted` ; les mash exercent en
 plus `slow_switch` et les coups spéciaux (appelés en ROM). Restent en ROM : collision avec le décor
-0x33fe4, code des 6 personnages (P5), course (action 6) et actions 0x14..0x34 hors saisie, parade
+0x33fe4, code des quatre derniers personnages (P5 ; combattant et clerc : `docs/personnages.md`), course (action 6) et actions 0x14..0x34 hors saisie, parade
 (sous-état 8), routines de coups spéciaux 0x3733c..0x374aa, effets 0xe2100, 0xdb6c0, 0xe21a0,
 0xe7a12, 0xb10c8.
 

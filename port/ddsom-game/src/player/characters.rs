@@ -16,6 +16,32 @@
 //! `attack_button`, `jump_button`, `actions::to_stand`, `walk::walk_speed`, `walk::move_xy`,
 //! `animation::start`, `animation::step`, `hurt::hurt_animation`...
 
+/// Déclare une `Native` à l'adresse d'origine d'une action de personnage : la fonction Rust reçoit le
+/// joueur (A0) ; aucun registre n'est lu par les appelants. Passer par une native (plutôt que par
+/// `OVERRIDES`) permet la validation différentielle de chaque action (`DDSOM_CHECK=1`, `fuzz_player`).
+macro_rules! action_native {
+    ($name:ident, $entry:expr, $label:expr, $f:path) => {
+        pub const $name: crate::Native = crate::Native {
+            entry: $entry,
+            name: $label,
+            cost: |_, _| 100,
+            run: |c, b| {
+                let p = $crate::player::Player(c.a[0]);
+                $f(&mut $crate::player::Ctx::new(c, b), p);
+                $crate::mem::rts(c, b)
+            },
+            touches_sound: false,
+            outputs: 0,
+            exact_cost: false,
+        };
+    };
+}
+
+pub mod cleric;
+pub mod common;
+pub mod fighter;
+pub mod items;
+
 use super::{Ctx, Player};
 
 /// Une routine Rust d'un personnage : s'exécute pour une image du joueur.

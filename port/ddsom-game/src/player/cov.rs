@@ -42,6 +42,10 @@ pub fn report() -> Vec<(&'static str, u64)> {
 /// Sources du noyau joueur, pour lister aussi les fonctions jamais appelées.
 pub const SOURCES: &[(&str, &str)] = &[
     ("actions", include_str!("actions.rs")),
+    ("characters::cleric", include_str!("characters/cleric.rs")),
+    ("characters::common", include_str!("characters/common.rs")),
+    ("characters::fighter", include_str!("characters/fighter.rs")),
+    ("characters::items", include_str!("characters/items.rs")),
     ("checks", include_str!("checks.rs")),
     ("combos", include_str!("combos.rs")),
     ("effects", include_str!("effects.rs")),
