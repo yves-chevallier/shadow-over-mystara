@@ -36,7 +36,37 @@ impl Alea {
 fn max_step(name: &str, sub: u8, which: u8) -> u8 {
     match name {
         "fighter_jump" | "cleric_jump" => 8,
-        "fighter_dash" | "cleric_dash" => 6,
+        "fighter_dash" | "cleric_dash" | "elf_dash" => 6,
+        "elf_jump" => 0xc,
+        "mage_jump" => 0xa,
+        "mage_dash" => 8,
+        "mage_attack" => match sub {
+            0 | 2 | 4 | 6 | 0xc | 0xe | 0x14 | 0x16 | 0x18 | 0x1a => 4,
+            _ => 2,
+        },
+        "mage_special" => match which {
+            9 => 6,
+            0xa | 0xd..=0x14 | 0x1f => 4,
+            0x18 | 0x1b | 0x1d | 0x1e | 0x20..=0x24 => 8,
+            0x19 => 0xa,
+            0x1a => 0xc,
+            0x1c => 0x10,
+            _ => 2,
+        },
+        "elf_attack" => match sub {
+            0 => 6,
+            6 | 0xc | 0xe | 0x1a | 0x1c => 4,
+            0x16 => 8,
+            _ => 2,
+        },
+        "elf_special" => match which {
+            9 => 6,
+            0xa | 0xd..=0x14 | 0x17 | 0x1b => 4,
+            0x15 | 0x16 | 0x1a => 8,
+            0x18 | 0x19 => 6,
+            0x1c => 0xc,
+            _ => 2,
+        },
         "fighter_attack" => match sub {
             0 | 6 | 0xc | 0xe => 4,
             0x16 => 0x12,
@@ -123,9 +153,16 @@ fn main() {
             c.a[0] = p;
             c.a[5] = A5;
             // état aléatoire du joueur
-            let sub = alea.pick(&[0u8, 2, 4, 6, 8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c]);
+            let mut sub = alea.pick(&[0u8, 2, 4, 6, 8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c]);
+            if who == "elf" && alea.below(15) == 0 {
+                sub = 0x1e;
+            }
             let which = if who == "fighter" {
                 alea.pick(&[0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+            } else if who == "elf" {
+                alea.below(0x1d) as u8
+            } else if who == "mage" {
+                alea.below(0x25) as u8
             } else {
                 alea.pick(&[
                     0u8, 1, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29,
@@ -198,7 +235,38 @@ fn main() {
             wr8(b, A5 + 0x3d, alea.pick(&[0u8, 0, 1]));
             wr8(b, A5 + 0x56, alea.pick(&[0u8, 0x80, 0x4f]));
             // personnage joué : classe et variante
-            wr8(b, p + 3, if who == "fighter" { alea.below(2) } else { 2 + alea.below(2) } as u8);
+            let base = match who.as_str() {
+                "fighter" => 0,
+                "cleric" => 2,
+                "elf" => 4,
+                _ => 8,
+            };
+            wr8(b, p + 3, base + alea.below(2) as u8);
+            // champs des classes elfe et magicien : accessoires, cibles, états de saut et de sort
+            wr8(b, p + 0x59, alea.below(4) as u8);
+            wr8(b, p + 0x15d, alea.pick(&[0u8, 2, 2]));
+            wr8(b, p + 0x166, alea.pick(&[0u8, 4]));
+            wr8(b, p + 0x165, alea.pick(&[0u8, 3, 4, 5]));
+            wr8(b, p + 0x1ea, alea.below(5) as u8);
+            wr8(b, p + 0x1eb, alea.below(4) as u8);
+            wr8(b, p + 0x1ef, alea.below(2) as u8);
+            wr8(b, p + 0x151, alea.pick(&[0u8, 1, 2, 3]));
+            wr8(b, p + 0x156, alea.pick(&[0u8, 1, 2, 3]));
+            wr8(b, p + 0x158, alea.pick(&[0u8, 1, 2, 3]));
+            wr8(b, p + 0x159, alea.pick(&[0u8, 1, 2, 3]));
+            wr8(b, A5 + 0x48f, alea.pick(&[0u8, 1]));
+            wr8(b, p + 0x18a, 0);
+            // cible mémorisée (foudre, mur, bénédiction) : un monstre ou un joueur
+            let target = if alea.below(2) == 0 && which != 0x15 {
+                0x299e + 0xc0 * alea.below(5) as u16
+            } else {
+                0x5de + 0x200 * alea.below(4) as u16
+            } | 0x8000;
+            if who == "elf" {
+                wr16(b, p + 0x1ec, target);
+            } else if who == "mage" && (which == 9 || which == 10) {
+                wr16(b, p + 0x1e8, target);
+            }
             // autres joueurs : parfois en jeu, devant ou derrière
             for k in 1..4u32 {
                 let q = p + 0x200 * k;
@@ -237,7 +305,9 @@ fn main() {
                 }
             }
             // la cible de la foudre et du mur : un objet quelconque
-            wr16(b, p + 0x1ea, 0x299e + 0xc0 * alea.below(5) as u16 | 0x8000);
+            if who == "fighter" || who == "cleric" {
+                wr16(b, p + 0x1ea, 0x299e + 0xc0 * alea.below(5) as u16 | 0x8000);
+            }
             let before = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
             let snapshot = (rd8(b, p + 7), rd8(b, p + 0x6a));
             let context: String = [0x10du32, 0x10e, 0x6c, 0x6d, 0x6e, 0x67, 0x6b, 0x73, 0x33, 0x46, 0x70, 0x2c, 0x189, 0x140, 0x148]

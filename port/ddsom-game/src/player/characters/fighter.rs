@@ -84,6 +84,7 @@ const JUMP_KIT: common::JumpKit = common::JumpKit {
     air_attack,
     after_recover: common::curse_check,
     finish: common::flush_pending_effect,
+    ..common::JumpKit::PLAIN
 };
 
 /// 0x3e578 : saut.
@@ -194,7 +195,9 @@ fn combo(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
         0 => combo_begin(g, p),
-        2 => common::combo_follow(g, p, 0x1a),
+        2 => {
+            common::combo_follow(g, p, 0x1a);
+        }
         4 => common::wait_then_stand(g, p),
         _ => {}
     }
@@ -333,7 +336,9 @@ fn run_strike(g: &mut Ctx, p: Player) {
             g.rom(rom::SOUND_CHARGE_A, p);
             clear_recognizers(g, p);
         }
-        2 => common::run_strike_slide(g, p),
+        2 => {
+            common::run_strike_slide(g, p, 0xf);
+        }
         4 => common::wait_then_stand(g, p),
         _ => {}
     }
@@ -555,7 +560,7 @@ fn whirl(g: &mut Ctx, p: Player) {
 // ---- attaque spéciale (0x3f0ae) --------------------------------------------------------------
 
 /// Animations du combattant pour les magies lancées (voir `items::Style`).
-const STYLE: items::Style = items::Style { cast_anim: 0x25, bolt_anim: 0x24, spark: 0 };
+const STYLE: items::Style = items::Style { cast_anim: 0x25, bolt_anim: 0x24, spark: 0, ..items::Style::CLASSIC };
 
 /// 0x3f0ae : l'objet ou la magie choisie (`field::SPECIAL_KIND`, 0..20) ; les numéros 3 et 11 ne font
 /// rien. 0..8 : objets lancés ; 12 : échange d'équipement ; 9, 10 et 13..20 : voir `items`.
