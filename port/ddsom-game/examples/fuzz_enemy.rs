@@ -392,6 +392,8 @@ fn etats_enemy(kind: u8, variante: u8) -> &'static [(&'static [u8], &'static [u8
         ],
         28 => &[(&[0], Z, Z), (&[2], &[0, 2, 4, 6], Z), (&[4, 6], Z, Z)],
         20 => &[(&[0], Z, Z), (&[2], &[0, 2], Z), (&[4], &[0], &[0, 2]), (&[4], &[2], &[0, 2, 4, 6, 8, 10]), (&[6], Z, Z)],
+        // DarkWarrior 1 : bras liés à un hôte, l'étape `+5` dépend de l'état de l'hôte
+        25 => &[(&[0], Z, Z), (&[2], &[0, 2, 4, 6], Z), (&[4], Z, Z), (&[6], Z, Z)],
         // Harpy : états que les tables de sauts de l'original acceptent
         21 => &[
             (&[0], Z, Z),
@@ -461,6 +463,43 @@ fn etape_owlbear(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
         _ => 0,
     };
     2 * (alea.next() % (n / 2 + 1)) as u8
+}
+
+/// Champs du bras (type 25) et de son hôte à des valeurs que les tables de l'original acceptent :
+/// état de l'hôte `+0xa2` (0 à 8), sous-état `+5` valide pour le chemin choisi, positions proches.
+fn prep_warrior(b: &mut cps2::Cps2Bus, alea: &mut Alea, obj: u32) {
+    use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
+    let host = rd16(b, obj + 0x46) as u32 | 0xff0000;
+    let hs = (alea.next() % 9) as u8;
+    wr8(b, host + 0xa2, hs);
+    wr8(b, host + 0x5, 2 * (alea.next() % 4) as u8);
+    wr8(b, host + 0x2, if alea.next() % 2 == 0 { 0xf } else { 0x19 });
+    wr8(b, host + 0x42, (alea.next() % 2) as u8);
+    for off in [0xa8u32, 0xaa, 0xac] {
+        wr16(b, host + off, (0x100 + alea.next() % 0x80) as u16);
+    }
+    wr16(b, host + 0xa6, (alea.next() % 3) as u16);
+    wr16(b, host + 0x62, (alea.next() % 40) as u16);
+    if alea.next() % 4 != 0 {
+        wr8(b, obj + 0xa2, hs);
+    }
+    let variant = rd8(b, obj + 3);
+    let swings = (hs == 4 && variant == 0) || (hs == 5 && variant != 0);
+    let drifts = (hs == 4 && variant != 0) || (hs == 5 && variant == 0) || ((hs == 6 && variant != 0) || (hs == 7 && variant == 0));
+    let rises = matches!(hs, 6..=8) && !drifts;
+    let sub = if swings || rises { 2 * (alea.next() % 4) as u8 } else if drifts { 2 * (alea.next() % 2) as u8 } else { (alea.next() % 3) as u8 * 2 };
+    wr8(b, obj + 5, sub);
+    wr16(b, obj + 0xae, (alea.next() % 6) as u16);
+    for off in [0xb4u32, 0xb6, 0xb8] {
+        wr16(b, obj + off, (alea.next() % 0x40) as u16);
+    }
+    wr32(b, obj + 0xb0, if alea.next() % 2 == 0 { 0x0200_0000 } else { 0 });
+    wr16(b, obj + 0xc, (alea.next() % 3) as u16);
+    wr16(b, obj + 0x16, (alea.next() % 0x200) as u16);
+    wr16(b, obj + 0x1a, 0xffc8);
+    wr8(b, obj + 0xa4, (alea.next() % 2) as u8);
+    wr16(b, obj + 0x60, (alea.next() % 40) as u16);
+    wr8(b, obj + 0x34, 0);
 }
 
 /// Champs de la Harpy (type 21) à des valeurs que ses tables acceptent.
@@ -854,7 +893,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             for off in (0..pool.stride).step_by(2) {
                 wr16(&mut b, obj.0 + off, 0);
             }
-            if pool.class == 2 && matches!(kind, 4 | 19 | 21) {
+            if pool.class == 2 && matches!(kind, 4 | 19 | 21 | 25) {
                 // un propriétaire distinct de l'objet : ses états sont réécrits au hasard par la suite
                 proprietaires.retain(|&o| o != obj.0);
             }
@@ -982,6 +1021,9 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                 if kind == 21 {
                     prep_harpy(&mut b, &mut alea, obj.0);
                 }
+                if kind == 25 {
+                    prep_warrior(&mut b, &mut alea, obj.0);
+                }
                 if alea.next() % 4 != 0 {
                     let (cx, cy) = (rd16(&mut b, A5 + 0x506), rd16(&mut b, A5 + 0x50a));
                     wr16(&mut b, obj.0 + 8, cx.wrapping_add(0x60 + (alea.next() % 0x80) as u16));
@@ -1085,14 +1127,16 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         wr16(&mut b, q + 0xc, (alea.next() % 0x30) as u16);
                     }
                 }
-                if pool.class == 2 && matches!(kind, 4 | 19 | 21) && pas > 0 && alea.next() % 3 == 0 {
+                if pool.class == 2 && matches!(kind, 4 | 19 | 21 | 25) && pas > 0 && alea.next() % 3 == 0 {
                     // nouvel état valide à chaque fois : visite beaucoup plus d'étapes que la seule trajectoire
                     let boites = etats_enemy(kind, rd8(&mut b, obj.0 + 3));
                     let (s4, s5, s6) = boites[alea.next() as usize % boites.len()];
                     wr8(&mut b, obj.0 + 4, s4[alea.next() as usize % s4.len()]);
                     wr8(&mut b, obj.0 + 5, s5[alea.next() as usize % s5.len()]);
                     wr8(&mut b, obj.0 + 6, s6[alea.next() as usize % s6.len()]);
-                    if kind == 21 {
+                    if kind == 25 {
+                        prep_warrior(&mut b, &mut alea, obj.0);
+                    } else if kind == 21 {
                         prep_harpy(&mut b, &mut alea, obj.0);
                     } else if kind == 4 {
                         prep_owlbear(&mut b, &mut alea, obj.0);
@@ -1137,7 +1181,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                             };
                             wr8(&mut b, obj.0 + off, v);
                             // l'état de l'hôte d'une partie (type 7) reste dans la table de la ROM
-                            if alea.next() % 3 == 0 && !(kind == 7 && matches!(off, 0xa2 | 0xa3)) {
+                            if alea.next() % 3 == 0 && !(kind == 7 && matches!(off, 0xa2 | 0xa3)) && !(kind == 25 && off == 0xa2) {
                                 wr8(&mut b, owner + off, v);
                             }
                         }

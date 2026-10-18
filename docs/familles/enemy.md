@@ -17,6 +17,7 @@ Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms d
 | `enemy_dbeast/` | type 19 (Displacer Beast et ses pièces), un sous-module par groupe de comportements : `parts`, `stance`, `attacks`, `attacks_b`, `moves`, `hit` |
 | `enemy_owlbear/` | type 4 (Owlbear) : `stance`, `attacks`, `moves`, `hit` |
 | `enemy_harpy.rs` | type 21 (créature volante « Harpy ») |
+| `enemy_warrior.rs` | type 25 (bras du DarkWarrior 1) |
 
 ## 2. Charpente commune
 
@@ -139,6 +140,18 @@ tirage de la « chance d'attaquer » `0x5f2c6`), 2 debout (poursuite, demi-tour,
 0 à 18), 6 bonds de l'après-arrivée, 8 charges (`+6` = 0 à 6), 10 repos. L'état touché a un octet `+0xa5` qui
 supprime le test de zone (`hit_loop_at`). Couverture : scénarios (4 474 appels), fuzz.
 
+### Type 25 (0x76f0e) « DarkWarrior 1 » (h) — `enemy_warrior.rs`
+
+Bras du guerrier sombre : le créateur (0x76ec4, non réécrit) en engendre deux, variante 0 (gauche) et 1 (droite), liés
+à l'hôte `+0x46` ; si l'hôte n'est plus actif le bras passe à l'état 6. Sans IA : il se place à 0x82 pixels de l'hôte
+(`+0xa8..+0xac` de l'hôte) et joue ce que l'état `+0xa2` de l'hôte (0 à 8 seulement : la table 0x76fd4 n'a que neuf
+entrées) lui commande : 0 à 3 repos (ondulation de la table 0x7759e), 4 et 5 coup (`swing`, pour un seul des deux
+bras, l'autre dérive), 6 à 8 sortie en scène par scénarios de déplacement (table 0x77626, `script_step`). La position
+se calcule en ajoutant à la position des décalages `+0xb4/+0xb6/+0xb8` (que les vitesses `+0x14..+0x1e` intègrent,
+`integrate`) ; les états de l'hôte 4 à 8 les ajoutent deux fois (une dans le sous-état, une dans `apply_motion`), comme
+l'original. Les types 22, 23, 24 et 26 sont ses doubles graphiques. Couverture : fuzz seulement (507 instructions sur
+515).
+
 ### Type 21 (0x756c4) « Harpy » (h) — `enemy_harpy.rs`
 
 Créature volante à neuf variantes (ligne de huit octets par variante en 0x756e6 : orientation, durées, décalage) qui
@@ -150,8 +163,7 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
 ## 4. Non réécrit (types encore en 68000)
 
 0 Kobold, 1 Skeleton, 2 Troglodyte, 3 Bow Gnoll, 5 Ghoul, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle,
-10 GiantScorpion, 11 mud golem, 12 Shadow Elf, 13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 25 DarkWarrior 1,
-27 WarMachine. Aucun n'apparaît dans les scénarios (seuls 4, 19 et 16, réécrits, y figurent).
+10 GiantScorpion, 11 mud golem, 12 Shadow Elf, 13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 27 WarMachine. Aucun n'apparaît dans les scénarios (seuls 4, 19 et 16, réécrits, y figurent).
 
 ## 5. Validation
 
@@ -166,10 +178,10 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
   fuzz) ; les routines de réaction communes exigent des sous-états de départ valides ; un gestionnaire qui crée
   des objets (`alloc`) doit respecter l'ordre des allocations (l'emplacement obtenu dépend de l'ordre).
 
-### Fuzz des types du deuxième lot (4, 19, 21)
+### Fuzz des types du deuxième lot (4, 19, 21, 25)
 
 `fuzz_enemy.rs` a pour ces types : `etats_enemy` (états `+4/+5/+6` valides), `etape_dbeast` / `etape_owlbear`
-(étape `+7` valide selon l'état), `prep_dbeast` / `prep_owlbear` / `prep_harpy` (compteurs courts, animation en cours
+(étape `+7` valide selon l'état), `prep_dbeast` / `prep_owlbear` / `prep_harpy` / `prep_warrior` (compteurs courts, animation en cours
 souvent égale à l'animation voulue, état à reprendre après un demi-tour, code de réaction `+0x49` < 43 entrées,
 parent dans un état connu, objet au ras du sol pour les réceptions de bonds), joueurs placés dans les boîtes de portée,
 redessin d'un état valide à un pas sur trois. Variables : `DDSOM_GRAINE=n` (graine), `DDSOM_PAS_ETAT=1` (trace des états
