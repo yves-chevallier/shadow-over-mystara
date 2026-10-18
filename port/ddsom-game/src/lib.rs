@@ -173,7 +173,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -264,6 +264,9 @@ pub struct Stats {
     pub first: Option<String>,
     /// Dernier écart (outils de diagnostic).
     pub last: Option<String>,
+    /// Cycles cumulés de l'original et de la native (sous-routines comprises) : calibrage des durées.
+    pub original_cycles: u64,
+    pub native_cycles: u64,
 }
 
 static STATS: Mutex<BTreeMap<&'static str, Stats>> = Mutex::new(BTreeMap::new());
@@ -294,6 +297,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let start = c.cycles;
     (n.run)(c, b);
     c.cycles += cost;
+    let native_cycles = c.cycles - start;
     let mut diffs = Vec::new();
     // durée totale de la native, sous-routines d'origine appelées comprises
     if n.exact_cost && c.cycles - start != c2.cycles - start {
@@ -325,6 +329,8 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let mut st = STATS.lock().unwrap();
     let s = st.entry(n.name).or_default();
     s.calls += 1;
+    s.original_cycles += c2.cycles - start;
+    s.native_cycles += native_cycles;
     if !diffs.is_empty() {
         if std::env::var("DDSOM_VERBOSE").is_ok() {
             eprintln!("[{}] pc entry {:06x}: {}", n.name, n.entry, diffs.join(", "));

@@ -15,8 +15,17 @@
 //! Voir `docs/familles.md` pour la description de chaque type.
 
 pub mod boxes;
+pub mod cx;
 pub mod effects;
+pub mod eshl;
+pub mod eshl_b;
+pub mod eshl_c;
 pub mod items;
+pub mod set;
+pub mod set_b;
+pub mod set_c;
+pub mod shell;
+pub mod sobj;
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -471,3 +480,11 @@ macro_rules! gestionnaire {
     };
 }
 pub(crate) use gestionnaire;
+
+/// Routines natives des familles ESHL, SET et SOBJ (voir `docs/familles-eshl-set-sobj.md`) : un
+/// gestionnaire par type, écrit sur [`cx::Cx`] (durée indicative, pas d'exécution à blanc).
+pub fn natives() -> impl Iterator<Item = &'static Native> {
+    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES]
+        .into_iter()
+        .flatten()
+}
