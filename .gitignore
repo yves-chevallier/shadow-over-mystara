@@ -31,3 +31,4 @@ ghidra_z80/
 # Espaces de travail des agents
 .claude/
 work/
+__pycache__/
