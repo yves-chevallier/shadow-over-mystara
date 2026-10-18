@@ -267,6 +267,8 @@ pub struct Stats {
     /// Cycles cumulés de l'original et de la native (sous-routines comprises) : calibrage des durées.
     pub original_cycles: u64,
     pub native_cycles: u64,
+    /// Mode `CHECK_ALL` : nombre d'appels où chaque registre (D0-D7, A0-A7) diffère de l'original.
+    pub regs: [u64; 16],
 }
 
 static STATS: Mutex<BTreeMap<&'static str, Stats>> = Mutex::new(BTreeMap::new());
@@ -303,14 +305,17 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     if n.exact_cost && c.cycles - start != c2.cycles - start {
         diffs.push(format!("cycles {} au lieu de {}", c.cycles - start, c2.cycles - start));
     }
+    let mut reg_diffs = [false; 16];
     let outputs = if CHECK_ALL.load(Ordering::Relaxed) { regs::ALL } else { n.outputs };
     for i in 0..8 {
         if outputs & regs::d(i as u32) != 0 && c.d[i] != c2.d[i] {
             diffs.push(format!("d{i}={:08x} au lieu de {:08x}", c.d[i], c2.d[i]));
+            reg_diffs[i] = true;
         }
         // A7 (pile) doit toujours être rétabli
         if (outputs & regs::a(i as u32) != 0 || i == 7) && c.a[i] != c2.a[i] {
             diffs.push(format!("a{i}={:08x} au lieu de {:08x}", c.a[i], c2.a[i]));
+            reg_diffs[8 + i] = true;
         }
     }
     let sr_mask = if outputs & regs::CCR != 0 { 0xffff } else { 0xff00 };
@@ -331,6 +336,9 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     s.calls += 1;
     s.original_cycles += c2.cycles - start;
     s.native_cycles += native_cycles;
+    for (n, &d) in reg_diffs.iter().enumerate() {
+        s.regs[n] += d as u64;
+    }
     if !diffs.is_empty() {
         if std::env::var("DDSOM_VERBOSE").is_ok() {
             eprintln!("[{}] pc entry {:06x}: {}", n.name, n.entry, diffs.join(", "));

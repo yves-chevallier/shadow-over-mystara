@@ -96,6 +96,21 @@ fn main() {
         let errors = if check { format!(" {:>5} écarts", st.mismatches) } else { String::new() };
         println!("  {name:28} {:>8} appels{errors}{}", st.calls, st.first.as_ref().map(|f| format!(" — {f}")).unwrap_or_default());
     }
+    if std::env::var("DDSOM_CHECK_ALL").is_ok() {
+        // registres de sortie qui diffèrent de l'original, par routine native
+        for (name, st) in &report {
+            let liste: Vec<String> = st
+                .regs
+                .iter()
+                .enumerate()
+                .filter(|(_, &n)| n > 0)
+                .map(|(i, n)| format!("{}{}:{n}", if i < 8 { 'd' } else { 'a' }, i % 8))
+                .collect();
+            if !liste.is_empty() {
+                println!("REGS {name} {} appels : {}", st.calls, liste.join(" "));
+            }
+        }
+    }
     match failure {
         None => println!("VALIDE : état identique sur {frames} images"),
         Some(f) => println!("ÉCHEC : première différence à l'image {f}"),

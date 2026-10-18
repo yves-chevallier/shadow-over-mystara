@@ -440,9 +440,165 @@ fn perturber_globales(b: &mut cps2::Cps2Bus, alea: &mut Alea, pas: u32, obj: u32
     }
 }
 
+/// Nombre de variantes (octet `+3`) que la table de sauts de l'original couvre (0xcc25a, ESHL 5, 9, 15). Au-delà, l'original
+/// lit du code ou des données comme un décalage et saute n'importe où : ces cas sont hors contrat
+/// (aucun objet du jeu n'a ces variantes) et ne sont pas tirés. 0xcc25a : une entrée de table (la
+/// variante 1 retombe sur la même cible), la variante 2 saute au milieu d'un `jsr`.
+fn variantes_en_table(entree: u32) -> u32 {
+    match entree {
+        0xcc25a => 2,
+        0x9e458 | 0x9ef46 => 3,
+        0x9fe0a => 2,
+        _ => u32::MAX,
+    }
+}
+
+/// Registres que la boucle de dispatch ne fixe pas (elle pose A0, D7, A5, D0 = type × 4 et A1 =
+/// gestionnaire) : ce sont les restes du gestionnaire précédent.
+const NOMS_RESTES: [&str; 10] = ["d1", "d2", "d3", "d4", "d5", "d6", "a2", "a3", "a4", "d0h"];
+
+/// Exécute le code d'origine seul de `entree` jusqu'au `rts` (au plus 50 000 instructions).
+fn executer_original(c0: &Cpu, b0: &Bus, entree: u32, patch: &dyn Fn(&mut Cpu)) -> Option<(Cpu, Bus)> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let (mut c, mut b) = (c0.clone(), b0.clone());
+        patch(&mut c);
+        c.pc = entree;
+        c.a[7] = c.a[7].wrapping_sub(4);
+        wr32(&mut b, c.a[7], 0xfffe);
+        for _ in 0..50_000 {
+            if c.pc == 0xfffe {
+                c.a[7] = c.a[7].wrapping_add(4);
+                return Some((c, b));
+            }
+            c.step(&mut b);
+        }
+        None
+    }))
+    .ok()
+    .flatten()
+}
+
+/// Rejoue l'original deux fois en parallèle (registre de reste `r` de `NOMS_RESTES` différent) et rend
+/// l'adresse de la première instruction après laquelle l'état diverge (autre chose que le registre
+/// lui-même) : c'est l'instruction qui lit le reste.
+fn site_de_lecture(c: &Cpu, b: &Bus, entree: u32, r: usize, v1: &[u32; 10], v2: &[u32; 10], poser: fn(&mut Cpu, &[u32; 10])) -> Option<String> {
+    let (mut c1, mut b1) = (c.clone(), b.clone());
+    let (mut c2, mut b2) = (c.clone(), b.clone());
+    poser(&mut c1, v1);
+    poser(&mut c2, v2);
+    for (c, b) in [(&mut c1, &mut b1), (&mut c2, &mut b2)] {
+        c.pc = entree;
+        c.a[7] = c.a[7].wrapping_sub(4);
+        wr32(b, c.a[7], 0xfffe);
+    }
+    let mut histoire: Vec<u32> = Vec::new();
+    for pas in 0..20_000 {
+        if c1.pc == 0xfffe && c2.pc == 0xfffe {
+            return None;
+        }
+        let pc = c1.pc;
+        histoire.push(pc);
+        let ins = m68k::decode(&mut b1, pc);
+        c1.step(&mut b1);
+        c2.step(&mut b2);
+        let mut d1 = c1.d;
+        let mut d2 = c2.d;
+        let (mut a1, mut a2) = (c1.a, c2.a);
+        match r {
+            0..=5 => {
+                d1[r + 1] = 0;
+                d2[r + 1] = 0;
+            }
+            6..=8 => {
+                a1[r - 4] = 0;
+                a2[r - 4] = 0;
+            }
+            _ => {
+                d1[0] &= 0xffff;
+                d2[0] &= 0xffff;
+            }
+        }
+        let pile = |i: usize| {
+            let a = 2 * i;
+            (0x0a00..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a)
+        };
+        let ram = (0..b1.ram.len()).find(|&i| b1.ram[i] != b2.ram[i] && !pile(i));
+        if c1.pc != c2.pc || d1 != d2 || a1[..7] != a2[..7] || ram.is_some() || b1.gfxram != b2.gfxram {
+            let fin = histoire.len().saturating_sub(400);
+            let h: Vec<String> = histoire[fin..].iter().map(|p| format!("{p:x}")).collect();
+            return Some(format!("pas {pas} en {pc:06x} {:?}{} après {}", ins.op, ram.map_or(String::new(), |i| format!(" (ram {:06x})", 0xff0000 + 2 * i)), h.join(" ")));
+        }
+    }
+    None
+}
+
+/// Cherche les registres que le gestionnaire lit avant de les écrire : le code d'origine est exécuté
+/// plusieurs fois depuis le même état de mémoire, en changeant un seul registre de reste à la fois
+/// (D1-D6, A2-A4, octet haut de D0 que le dispatch met à zéro) ; si la mémoire finale change, le
+/// gestionnaire dépend de ce registre. Rend un drapeau par registre de `NOMS_RESTES` et l'état à la
+/// fin de l'exécution de référence (pour poursuivre la trajectoire).
+fn restes(c: &Cpu, b: &Bus, entree: u32, alea: &mut Alea) -> ([bool; 10], Option<(Cpu, Bus)>) {
+    let tirage = |alea: &mut Alea| -> [u32; 10] {
+        let mut v = [0u32; 10];
+        for (i, x) in v.iter_mut().enumerate() {
+            *x = match i {
+                0..=5 => if alea.next() & 3 == 0 { alea.next() & 0xff } else { alea.next() },
+                6..=8 => 0xff0000 | (alea.next() & 0xfffe),
+                _ => alea.next() & 0xff00,
+            };
+        }
+        v
+    };
+    fn poser(c: &mut Cpu, v: &[u32; 10]) {
+        for i in 0..6 {
+            c.d[i + 1] = v[i];
+        }
+        for i in 0..3 {
+            c.a[i + 2] = v[6 + i];
+        }
+        c.d[0] = (c.d[0] & 0xffff) | (v[9] << 16);
+    }
+    let base = tirage(alea);
+    let Some((cr, br)) = executer_original(c, b, entree, &|c| poser(c, &base)) else {
+        return ([false; 10], None);
+    };
+    let mut res = [false; 10];
+    for r in 0..10 {
+        for _ in 0..2 {
+            let mut v = base;
+            v[r] = tirage(alea)[r];
+            if v[r] == base[r] {
+                continue;
+            }
+            if let Some((_, b2)) = executer_original(c, b, entree, &|c| poser(c, &v)) {
+                // les piles (registres sauvegardés par movem : pile du 68000 et pile du pilote de son à
+                // 0xff2900-0xff2a1a) gardent les restes : comme `validate`, on les ignore
+                let pile = |i: usize| {
+                    let a = 2 * i;
+                    (0x0a00..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
+                };
+                let ram_diff = (0..b2.ram.len()).any(|i| b2.ram[i] != br.ram[i] && !pile(i));
+                if ram_diff || b2.gfxram != br.gfxram {
+                    if std::env::var("DDSOM_RESTES_SITE").is_ok() {
+                        if let Some(site) = site_de_lecture(c, b, entree, r, &base, &v, poser) {
+                            eprintln!("RESTES_SITE {entree:06x} {} {site}", NOMS_RESTES[r]);
+                        }
+                    }
+                    if std::env::var("DDSOM_RESTES_TRACE").is_ok() {
+                        let i = (0..b2.ram.len()).find(|&i| b2.ram[i] != br.ram[i] && !pile(i));
+                        eprintln!("RESTES_TRACE {entree:06x} {} ram {:?} sp {:06x}", NOMS_RESTES[r], i.map(|i| format!("{:06x} {:04x}/{:04x}", 0xff0000 + 2 * i, b2.ram[i], br.ram[i])), c.a[7]);
+                    }
+                    res[r] = true;
+                }
+            }
+        }
+    }
+    (res, Some((cr, br)))
+}
+
 fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, filtre: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
-    use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
+    use ddsom_game::objects::pools::{Pool, BOX, EFFCT, ENEMY, ESHL, ITEM, SET, SOBJ};
     use m68k::decode::Fetch;
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
@@ -453,9 +609,18 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
         m.run_frame();
     }
     ddsom_game::set_check(true);
+    // DDSOM_CHECK_ALL=1 : compare aussi tous les registres de sortie (lignes REGS du bilan)
+    ddsom_game::set_check_all(std::env::var("DDSOM_CHECK_ALL").is_ok());
     std::panic::set_hook(Box::new(|_| {}));
     let mut alea = Alea(0x1234_5678_9abc_def1);
-    let tables: [(&Pool, u32, u32); 3] = [(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16)];
+    // DDSOM_RESTES=1 : cherche les gestionnaires qui lisent un registre laissé par le précédent (voir
+    // `restes`), dans les six tables ; sinon, contrôle de la native contre l'original
+    let restes_actif = std::env::var("DDSOM_RESTES").is_ok();
+    let mut tables: Vec<(&Pool, u32, u32)> = vec![(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16)];
+    if restes_actif {
+        tables.extend([(&ITEM, 0x39f5a, 10), (&BOX, 0x39e76, 4), (&EFFCT, 0x39ce0, 64)]);
+    }
+    let mut bilan_restes: std::collections::BTreeMap<u32, (u64, [u64; 10])> = Default::default();
     let mut entrees: Vec<(u32, &Pool, u8)> = Vec::new();
     for (pool, table, n) in tables {
         for k in 0..n {
@@ -492,7 +657,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             let owner = proprietaires[alea.next() as usize % proprietaires.len()];
             wr8(&mut b, obj.0, 1);
             wr8(&mut b, obj.0 + 2, kind);
-            wr8(&mut b, obj.0 + 3, (alea.next() % variantes) as u8);
+            wr8(&mut b, obj.0 + 3, (alea.next() % variantes.min(variantes_en_table(entree))) as u8);
             wr8(&mut b, obj.0 + 0x28, pool.class);
             wr8(&mut b, obj.0 + 0x2c, (alea.next() & 1) as u8);
             wr8(&mut b, obj.0 + 0x2f, if alea.next() % 4 == 0 { alea.next() as u8 % 3 } else { 0 });
@@ -627,6 +792,19 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         c2.step(&mut b2);
                     }
                 }
+                if restes_actif {
+                    let (res, suite) = restes(&cs, &bs, entree, &mut alea);
+                    let e = bilan_restes.entry(entree).or_default();
+                    e.0 += 1;
+                    for (t, r) in e.1.iter_mut().zip(res) {
+                        *t += r as u64;
+                    }
+                    match suite {
+                        Some((c2, b2)) => (c, b) = (c2, b2),
+                        None => break,
+                    }
+                    continue;
+                }
                 let avant_obj: Vec<u8> = (0..pool.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
                 let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
                 if r.is_err() {
@@ -657,6 +835,26 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         }
                     }
                 }
+            }
+        }
+    }
+    for (entree, (appels, regs)) in &bilan_restes {
+        let nom = ddsom_game::all_natives().find(|n| n.entry == *entree).map_or("?", |n| n.name);
+        let liste: Vec<String> =
+            regs.iter().enumerate().filter(|(_, &n)| n > 0).map(|(i, n)| format!("{}:{n}", NOMS_RESTES[i])).collect();
+        println!("RESTES {entree:06x} {nom} {appels} appels : {}", if liste.is_empty() { "aucun".into() } else { liste.join(" ") });
+    }
+    if std::env::var("DDSOM_CHECK_ALL").is_ok() {
+        for (name, st) in ddsom_game::report() {
+            let liste: Vec<String> = st
+                .regs
+                .iter()
+                .enumerate()
+                .filter(|(_, &n)| n > 0)
+                .map(|(i, n)| format!("{}{}:{n}", if i < 8 { 'd' } else { 'a' }, i % 8))
+                .collect();
+            if !liste.is_empty() {
+                println!("REGS {name} {} appels : {}", st.calls, liste.join(" "));
             }
         }
     }
