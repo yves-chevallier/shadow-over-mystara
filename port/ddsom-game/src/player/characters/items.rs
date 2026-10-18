@@ -1,0 +1,385 @@
+//! Objets et magies utilisables par l'attaque spéciale (bouton 4) : le combattant et le clerc partagent
+//! le même code pour les objets lancés, la foudre, le mur, les magies lancées devant l'écran assombri
+//! (13..20) et les météores ; seules les animations changent (`Style`).
+//!
+//! L'attaque spéciale démarre quand `checks::special_attack` pose `field::SPECIAL_KIND` (numéro de
+//! l'animation de lancement, tiré d'une table du code selon l'identifiant de la ligne choisie). Le
+//! lanceur est un automate à pas (`Player::STEP`) ; au geste porté (`field::EVENT`) il appelle la
+//! routine d'origine qui crée le tir ou l'effet (voir `rom`). Une charge est consommée à la fin
+//! (`common::consume_charge`).
+//!
+//! Les magies lancées assombrissent l'écran, figent les autres joueurs et mettent le jeu en pause
+//! (`common::begin_spell`) jusqu'à `common::end_spell`. Si `field::SPELL_CANCELLED` est non nul (une
+//! protection annule le sort), seule une étincelle est jouée.
+
+use super::common::{self, call, field, next_step};
+use super::super::actions::to_stand;
+use super::super::{animation, Ctx, Player};
+
+/// Routines d'origine appelées par ces automates : tirs, effets, sons, éclairs d'écran.
+pub mod rom {
+    /// Création d'un tir d'objet lancé (pool PSHL) : Z levé au retour si rien n'a été créé.
+    pub const THROW_A: u32 = 0x51d02;
+    pub const THROW_B: u32 = 0x51d54;
+    pub const THROW_C: u32 = 0x51f6a;
+    pub const THROW_D: u32 = 0x51fb6;
+    pub const THROW_E: u32 = 0x52002;
+    pub const THROW_F: u32 = 0x52204;
+    pub const THROW_G: u32 = 0x5308c;
+    pub const THROW_H: u32 = 0x52394;
+    /// Son d'un objet utilisé.
+    pub const SOUND_ITEM: u32 = 0xe2430;
+    /// Foudre : choix de la cible (A1 en retour, Z levé si aucune), éclair, son de fin.
+    pub const LIGHTNING_TARGET: u32 = 0x4f004;
+    pub const LIGHTNING_STRIKE: u32 = 0x4cdd0;
+    pub const LIGHTNING_END_SOUND: u32 = 0x474c4;
+    /// Mur : choix de la cible.
+    pub const WALL_TARGET: u32 = 0x50324;
+    /// Éclairs de l'écran (palettes) : foudre, fin, feu.
+    pub const FLASH_LIGHTNING: u32 = 0x1ab56;
+    pub const FLASH_END: u32 = 0x1abe0;
+    pub const FLASH_FIRE: u32 = 0x1ab3c;
+    /// Effets des magies lancées (13..20).
+    pub const CAST_13: u32 = 0x4dcda;
+    pub const CAST_FIRE: u32 = 0x54522;
+    pub const CAST_ICE: [u32; 5] = [0x52b54, 0x4bb68, 0x4bbbe, 0x4bbf6, 0x4bc42];
+    pub const CAST_RING: u32 = 0x4e2f4;
+    pub const CAST_BEAM: u32 = 0x4b196;
+    pub const CAST_STORM: u32 = 0x4ec66;
+    pub const CAST_HEAL: u32 = 0x4ab64;
+    pub const CAST_METEOR: u32 = 0x5012e;
+    pub const METEOR_SOUND: u32 = 0x4414c;
+    /// Palettes du joueur : lumière, normale, rouge.
+    pub const PALETTE_LIGHT: u32 = 0x3af8;
+    pub const PALETTE_NORMAL: u32 = 0x3afe;
+    pub const PALETTE_RED: u32 = 0x3b14;
+    /// Fin des auras après la magie rouge.
+    pub const SPELL_RESET_AURA: u32 = 0x37882;
+}
+
+/// Animations propres au personnage.
+#[derive(Clone, Copy)]
+pub struct Style {
+    /// Geste des magies lancées (13..20).
+    pub cast_anim: u16,
+    /// Geste de la foudre (9) et du mur (10).
+    pub bolt_anim: u16,
+    /// Genre de l'étincelle jouée quand le sort est annulé (ligne de la table `common::item_spark`).
+    pub spark: u16,
+}
+
+/// Objet lancé : l'animation `anim` ; au geste porté, la routine `launcher` crée le tir (Z levé : rien
+/// n'a été créé) ; une charge est consommée.
+pub fn throw_item(g: &mut Ctx, p: Player, anim: u16, launcher: u32) {
+    cov!();
+    if p.u8(g, Player::STEP) == 0 {
+        next_step(g, p);
+        animation::start_plain(g, p, anim);
+        return;
+    }
+    if animation::step(g, p) {
+        to_stand(g, p);
+        return;
+    }
+    if p.u8(g, field::EVENT) != 0 {
+        p.set_u8(g, field::EVENT, 0);
+        let nothing_created = g.rom(launcher, p);
+        if !nothing_created {
+            common::consume_charge(g, p);
+        }
+    }
+}
+
+/// Adresse d'objet lue dans un mot de l'enregistrement (extension de signe de `movea.w`).
+fn target_of(g: &mut Ctx, p: Player, off: u32) -> u32 {
+    p.u16(g, off) as i16 as i32 as u32 & 0xff_ffff
+}
+
+/// Les magies 9..10 et 13..20, communes au combattant et au clerc. Renvoie faux pour un autre numéro.
+pub fn run_shared(g: &mut Ctx, p: Player, which: u8, style: Style) -> bool {
+    cov!();
+    match which {
+        9 => lightning(g, p, style),
+        10 => wall(g, p, style),
+        13 => cast(g, p, &CAST_13, style),
+        14 => cast(g, p, &CAST_14, style),
+        15 => cast(g, p, &CAST_15, style),
+        16 => cast(g, p, &CAST_16, style),
+        17 => cast(g, p, &CAST_17, style),
+        18 => cast(g, p, &CAST_18, style),
+        19 => cast(g, p, &CAST_19, style),
+        20 => meteor(g, p, style),
+        _ => return false,
+    }
+    true
+}
+
+/// Foudre (n° 9) : cible choisie au geste, éclair, puis fin du sort 192 images plus tard.
+fn lightning(g: &mut Ctx, p: Player, style: Style) {
+    cov!();
+    match p.u8(g, Player::STEP) {
+        0 => {
+            common::begin_spell(g, p, None);
+            common::freeze_others(g, p);
+            common::dim_screen(g, p);
+            animation::start_plain(g, p, style.bolt_anim);
+        }
+        2 => {
+            // la variante de l'effet créé est D0.b, que le pas d'animation d'origine laisse
+            let step = p.u8(g, Player::STEP);
+            common::step_keeping_regs(g, p, step);
+            if p.u8(g, field::EVENT) != 0 {
+                next_step(g, p);
+                p.set_u8(g, field::EVENT, 0);
+                let target_found = !g.rom(rom::LIGHTNING_TARGET, p);
+                if target_found {
+                    p.set_u16(g, field::SPELL_TARGET, g.c.a[1] as u16);
+                } else {
+                    to_stand(g, p);
+                }
+            }
+        }
+        4 => {
+            animation::step(g, p);
+            let target = target_of(g, p, field::SPELL_TARGET);
+            if crate::mem::rd16(g.b, target + 0x0c) == 0 {
+                // l'éclair naît à la position de la cible (A2)
+                g.c.a[2] = target;
+                next_step(g, p);
+                p.set_u16(g, field::TIMER, 0xc0);
+                g.rom(rom::LIGHTNING_STRIKE, p);
+                g.rom(rom::FLASH_LIGHTNING, p);
+                animation::start(g, p, 0);
+            }
+        }
+        6 => {
+            if p.u16(g, field::TIMER) == 0x60 {
+                g.rom(rom::LIGHTNING_END_SOUND, p);
+            }
+            let left = p.u16(g, field::TIMER).wrapping_sub(1);
+            p.set_u16(g, field::TIMER, left);
+            if left == 0 {
+                g.rom(rom::FLASH_END, p);
+                common::consume_charge(g, p);
+                common::end_spell(g, p);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Mur (n° 10) : sans assombrissement ; le sort se termine quand sa cible a disparu.
+fn wall(g: &mut Ctx, p: Player, style: Style) {
+    cov!();
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            animation::start_plain(g, p, style.bolt_anim);
+        }
+        2 => {
+            animation::step(g, p);
+            if p.u8(g, field::EVENT) != 0 {
+                next_step(g, p);
+                p.set_u8(g, field::EVENT, 0);
+                let target_found = !g.rom(rom::WALL_TARGET, p);
+                if target_found {
+                    p.set_u16(g, field::SPELL_TARGET, g.c.a[1] as u16);
+                } else {
+                    to_stand(g, p);
+                }
+            }
+        }
+        4 => {
+            animation::step(g, p);
+            let target = target_of(g, p, field::SPELL_TARGET);
+            if crate::mem::rd16(g.b, target + 0x0c) == 0 {
+                common::consume_charge(g, p);
+                to_stand(g, p);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Description d'une magie lancée sur l'écran assombri (n° 13..19).
+struct Cast {
+    /// Durée du sort en images (`field::TIMER`).
+    frames: u16,
+    /// Initialisation propre au sort, avant l'orientation et le gel des autres joueurs.
+    prepare: fn(&mut Ctx, Player),
+    /// Après le gel des autres joueurs, avant l'assombrissement.
+    after_freeze: fn(&mut Ctx, Player),
+    /// À chaque image après le premier pas.
+    every_frame: fn(&mut Ctx, Player),
+    /// Au geste (événement) quand le sort n'est pas annulé.
+    fire: fn(&mut Ctx, Player),
+}
+
+/// Magie lancée : assombrit l'écran, joue le geste ; l'événement déclenche `fire` (ou l'étincelle
+/// d'échec si le sort est annulé) ; le compteur `field::TIMER` règle la durée.
+fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
+    cov!();
+    if p.u8(g, Player::STEP) == 0 {
+        common::begin_spell(g, p, Some(spell.frames));
+        (spell.prepare)(g, p);
+        common::face_held_direction(g, p);
+        common::freeze_others(g, p);
+        (spell.after_freeze)(g, p);
+        common::dim_screen(g, p);
+        animation::start_plain(g, p, style.cast_anim);
+        return;
+    }
+    // l'effet de la magie 13 lit D0.b : deux fois le numéro d'attaque, ou les drapeaux de l'animation
+    let kind = p.u8(g, field::SPECIAL_KIND);
+    common::step_keeping_regs(g, p, kind.wrapping_mul(2));
+    (spell.every_frame)(g, p);
+    if p.u8(g, field::EVENT) != 0 {
+        p.set_u8(g, field::EVENT, 0);
+        g.rom(rom::SOUND_ITEM, p);
+        if p.u8(g, field::SPELL_CANCELLED) != 0 {
+            common::item_spark(g, p, style.spark);
+            p.set_u16(g, field::TIMER, 0xa);
+        } else {
+            (spell.fire)(g, p);
+        }
+    }
+    cast_timer(g, p);
+}
+
+/// 0x3f4b6 : le sort dure `frames` images ; à la fin une charge est consommée, l'effet de soin des
+/// potions est appliqué et l'écran est rétabli.
+fn cast_timer(g: &mut Ctx, p: Player) {
+    cov!();
+    let left = p.u16(g, field::TIMER).wrapping_sub(1);
+    p.set_u16(g, field::TIMER, left);
+    if left != 0 {
+        return;
+    }
+    common::consume_charge(g, p);
+    if p.u8(g, field::SPECIAL_KIND) == 0x13 {
+        common::apply_heal(g, p);
+    }
+    common::end_spell(g, p);
+}
+
+const CAST_13: Cast = Cast {
+    frames: 0x28,
+    prepare: common::nothing,
+    after_freeze: common::nothing,
+    every_frame: common::nothing,
+    fire: |g, p| {
+        g.rom(rom::CAST_13, p);
+    },
+};
+
+const CAST_14: Cast = Cast {
+    frames: 0x3c,
+    prepare: common::nothing,
+    after_freeze: common::nothing,
+    every_frame: common::nothing,
+    fire: |g, p| {
+        g.rom(rom::CAST_FIRE, p);
+        g.rom(rom::PALETTE_LIGHT, p);
+    },
+};
+
+const CAST_15: Cast = Cast {
+    frames: 0x78,
+    prepare: |g, p| p.set_u8(g, 0x1e9, 2),
+    after_freeze: common::nothing,
+    every_frame: common::nothing,
+    fire: |g, p| {
+        for addr in rom::CAST_ICE {
+            g.rom(addr, p);
+        }
+    },
+};
+
+const CAST_16: Cast = Cast {
+    frames: 0x28,
+    prepare: common::nothing,
+    after_freeze: common::nothing,
+    every_frame: common::nothing,
+    fire: |g, p| {
+        call(g, p, rom::CAST_RING, &[(0, 1)]);
+        g.rom(rom::PALETTE_RED, p);
+        p.set_u16(g, Player::AURA_TIMER, 0x8000);
+        p.set_u8(g, Player::AURA, 1);
+        if p.u8(g, 0x167) == 2 {
+            p.set_u8(g, Player::AURA, 3);
+            p.set_u8(g, 0x167, 0xff);
+        }
+        p.set_u8(g, Player::AURA_B, 0);
+        p.set_u8(g, Player::AURA_C, 0);
+        g.rom(rom::SPELL_RESET_AURA, p);
+    },
+};
+
+const CAST_17: Cast = Cast {
+    frames: 0x28,
+    prepare: common::nothing,
+    after_freeze: common::nothing,
+    every_frame: common::nothing,
+    fire: |g, p| {
+        call(g, p, rom::CAST_BEAM, &[(0, 1)]);
+        g.rom(rom::PALETTE_LIGHT, p);
+    },
+};
+
+const CAST_18: Cast = Cast {
+    frames: 0x78,
+    prepare: common::nothing,
+    after_freeze: common::nothing,
+    every_frame: common::nothing,
+    fire: |g, p| {
+        call(g, p, rom::CAST_STORM, &[(0, 0)]);
+    },
+};
+
+/// Potion de soin (n° 19) : les alliés proches sont soignés comme par le sort du clerc.
+const CAST_19: Cast = Cast {
+    frames: 0x78,
+    prepare: |g, p| p.set_u8(g, 0x1ed, 0),
+    after_freeze: common::heal_scan,
+    every_frame: common::heal_flicker,
+    fire: |g, p| {
+        g.rom(rom::CAST_HEAL, p);
+        g.rom(rom::PALETTE_NORMAL, p);
+    },
+};
+
+/// Météores (n° 20) : le sort dure 176 images ; 96 images avant la fin, un son est joué.
+fn meteor(g: &mut Ctx, p: Player, style: Style) {
+    cov!();
+    if p.u8(g, Player::STEP) == 0 {
+        common::begin_spell(g, p, Some(0xb0));
+        common::face_held_direction(g, p);
+        common::freeze_others(g, p);
+        common::dim_screen(g, p);
+        animation::start_plain(g, p, style.cast_anim);
+        return;
+    }
+    animation::step(g, p);
+    if p.u8(g, field::EVENT) != 0 {
+        p.set_u8(g, field::EVENT, 0);
+        g.rom(rom::SOUND_ITEM, p);
+        if p.u8(g, field::SPELL_CANCELLED) != 0 {
+            common::item_spark(g, p, style.spark);
+            p.set_u16(g, field::TIMER, 0xa);
+        } else {
+            g.rom(rom::CAST_METEOR, p);
+            g.rom(rom::FLASH_FIRE, p);
+        }
+    }
+    let left = p.u16(g, field::TIMER).wrapping_sub(1);
+    p.set_u16(g, field::TIMER, left);
+    if left == 0 {
+        common::consume_charge(g, p);
+        if p.u8(g, field::SPELL_CANCELLED) == 0 {
+            g.rom(rom::FLASH_END, p);
+        }
+        common::end_spell(g, p);
+    } else if left == 0x60 {
+        g.rom(rom::METEOR_SOUND, p);
+    }
+}
