@@ -339,6 +339,7 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
 /// moteur de collisions ou le créateur modifient (drapeaux de touche, propriétaire, positions).
 /// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
 /// `DDSOM_ENTREE=<adresse hexa>` restreint à un gestionnaire.
+const DDSOM_TRACE_LEN: u32 = 200000;
 fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, filtre: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
@@ -405,11 +406,17 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             // décompte des places libres cohérent
             // (au moment du chauffage le pool peut être plein : les gestionnaires testent ce compteur)
             wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
+            if pool.class == SET.class && matches!(kind, 2 | 15) {
+                etat_scene(&mut b, &mut alea, obj.0, kind, true);
+            }
             for pas in 0..60 {
                 if rd8(&mut b, obj.0) == 0 {
                     break;
                 }
                 if pas > 0 {
+                    if pool.class == SET.class && matches!(kind, 2 | 15) && alea.next() % 6 == 0 {
+                        etat_scene(&mut b, &mut alea, obj.0, kind, false);
+                    }
                     if alea.next() % 6 == 0 {
                         wr8(&mut b, obj.0 + 0x57, [0x08, 0x20, 0x28, 0x10, 0x02, 0x40][alea.next() as usize % 6]);
                     }
@@ -492,7 +499,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         c2.pc = entree;
                         c2.a[7] = sp.wrapping_sub(4);
                         ddsom_game::mem::wr32(&mut b2, c2.a[7], 0xfffe);
-                        for _ in 0..400 {
+                        for _ in 0..DDSOM_TRACE_LEN {
                             if c2.pc == 0xfffe {
                                 break;
                             }
@@ -604,4 +611,117 @@ fn main() {
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
     println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+}
+
+/// Contrôleur de scène (SET 2) et écrans de fin de niveau (SET 15) : ils dépendent de variables de
+/// partie (niveau, difficulté, scène figée...), de la variante (script) et de l'état des joueurs,
+/// que le fuzz générique ne fait pas varier. `depart` : état initial de l'objet (variante, état).
+fn etat_scene(b: &mut Bus, alea: &mut Alea, obj: u32, kind: u8, depart: bool) {
+    use ddsom_game::mem::{rd16, rd32, rd8};
+    wr8(b, A5 + 0x34, if alea.next() % 3 == 0 { 4 } else { 1 + (alea.next() % 7) as u8 });
+    wr8(b, A5 + 0x35, if alea.next() % 10 == 0 { 0 } else { 1 + (alea.next() % 4) as u8 });
+    wr8(b, A5 + 0x2c, [0xc, 4, 8, 0, 0x18][alea.next() as usize % 5]);
+    wr8(b, A5 + 0x42, (alea.next() % 8 == 0) as u8);
+    wr8(b, A5 + 0x36, (alea.next() % 4 == 0) as u8);
+    wr8(b, A5 + 0x50, (alea.next() % 2) as u8);
+    wr8(b, A5 + 0x66, (alea.next() % 2) as u8);
+    wr16(b, A5 + 0x7f92, (alea.next() % 6) as u16);
+    for j in 0..4u32 {
+        let p = 0xff85de + 0x200 * j;
+        if alea.next() % 3 == 0 {
+            wr16(b, p + 4, [0x200, 0x200, 0, 0x600, 0x204][alea.next() as usize % 5]);
+            wr8(b, p + 6, (alea.next() % 3 == 0) as u8);
+            wr16(b, p + 0x62, [0, 5, 100][alea.next() as usize % 3]);
+        }
+    }
+    if kind == 15 {
+        // variables lues par les écrans de fin : fondu terminé, caméras, score, rng, objets du joueur
+        wr8(b, A5 + 0x48f, (alea.next() % 3 == 0) as u8);
+        wr8(b, A5 + 0x6d, alea.next() as u8);
+        wr16(b, A5 + 0x6e, alea.next() as u16 & [0xf, 0xff, 0][alea.next() as usize % 3]);
+        for off in [0x506u32, 0x50a, 0x556, 0x55a] {
+            wr16(b, A5 + off, [0, 0, 1, 0x70, alea.next() as u16 & 0x1ff][alea.next() as usize % 5]);
+        }
+        wr16(b, A5 + 0x38, [0x80, 0x120, 0x1f0, 0x220, 0x300][alea.next() as usize % 5]);
+        wr8(b, A5 + 0x5d, (alea.next() % 2) as u8);
+        for j in 0..4u32 {
+            let p = 0xff85de + 0x200 * j;
+            wr8(b, p + 0x18a, (alea.next() % 2) as u8);
+            wr8(b, p + 3, (alea.next() % 6) as u8);
+            wr8(b, p + 0x22, (alea.next() % 2) as u8);
+            wr16(b, p + 0x60, [50, 100, 160][alea.next() as usize % 3]);
+            wr16(b, p + 0x64, (alea.next() % 20) as u16);
+            if alea.next() % 4 == 0 {
+                wr8(b, p + 0x118, [0xff, 0xf9, 0xfa, 0x10, 0][alea.next() as usize % 5]);
+            }
+        }
+        if depart {
+            if alea.next() % 4 == 0 {
+                wr8(b, obj + 0x29, 0x1f);
+                wr16(b, obj + 0x24, 1 + (alea.next() % 2) as u16);
+            }
+            for off in [0x14u32, 0x18, 0x22, 0x23, 0x24, 0x2a, 0x2b, 0x30, 0x31, 0x42, 0x43] {
+                if alea.next() % 3 == 0 {
+                    wr8(b, obj + off, [0, 1, 2, 3, alea.next() as u8][alea.next() as usize % 5]);
+                }
+            }
+        }
+    }
+    if depart && kind == 15 {
+        // écrans de fin : variante, états, chef d'orchestre (+0x4c, un autre objet SET)
+        wr8(b, obj + 3, (alea.next() % 25) as u8);
+        wr8(b, obj + 4, [0u8, 0, 2, 2, 4, 6][alea.next() as usize % 6]);
+        // sous-états valides de chaque variante (les autres font sauter l'original dans des données)
+        let variante = rd8(b, obj + 3);
+        let sous_etats = match variante {
+            1 => 5,
+            9 | 10 | 11 | 17 => 3,
+            7 | 14 | 16 => 2,
+            18 | 22 => 9,
+            _ => 1,
+        };
+        wr8(b, obj + 5, 2 * (alea.next() % sous_etats) as u8);
+        // joueur visé par les variantes 18 et 22, objet cible de la 17
+        let joueur = 0xff85de + 0x200 * (alea.next() % 4);
+        wr16(b, obj + 0x20, joueur as u16);
+        wr16(b, obj + 0x26, joueur as u16);
+        wr16(b, obj + 0x46, joueur as u16);
+        // fenêtre de dialogue (variante 7) : joueur visé, message à composer, tampon de texte
+        wr16(b, obj + 0x34, joueur as u16);
+        wr32(b, obj + 8, 0xcec00 + 2 * (alea.next() % 0x400));
+        wr32(b, obj + 0xc, 0xff2072);
+        wr8(b, A5 + 0x73, [2, 1, 0][alea.next() as usize % 3]);
+        wr16(b, A5 + 0x72, 2 + (alea.next() % 3) as u16);
+        let chef = if obj == 0xffca9e { 0xffcaee } else { 0xffca9e };
+        wr32(b, obj + 0x4c, chef);
+        wr8(b, chef + 8, [0xff, 0, 1, 2, 3][alea.next() as usize % 5]);
+        wr8(b, chef + 3, [0, 2, 3, 1][alea.next() as usize % 4]);
+        wr8(b, chef + 0x3f, (alea.next() % 4) as u8);
+        wr8(b, chef + 0xc, (alea.next() % 2) as u8);
+        wr8(b, obj + 0x2f, (alea.next() % 8) as u8);
+        return;
+    }
+    if !depart || kind != 2 {
+        return;
+    }
+    let variante = alea.next() % 0x78;
+    wr8(b, obj + 3, variante as u8);
+    let script = rd32(b, 0xbd276 + 4 * variante);
+    let etat = [0u8, 0, 2, 2, 2, 4, 4, 6][alea.next() as usize % 8];
+    wr8(b, obj + 4, etat);
+    if etat == 2 {
+        wr16(b, obj + 0x18, 0xffff);
+        let premier = rd16(b, script);
+        wr16(b, obj + 0x24, premier);
+        wr32(b, obj + 0x20, script + 2);
+    } else if etat == 4 {
+        wr16(b, obj + 0x24, (alea.next() % 4) as u16);
+        wr16(b, obj + 0x2a, (alea.next() % 4 == 0) as u16);
+        if alea.next() % 2 == 0 {
+            // rideau (action de fin 6) : déjà armé, décompte court, curseur dans la table
+            wr8(b, obj + 5, 2);
+            wr16(b, obj + 0x14, (alea.next() % 3) as u16);
+            wr16(b, obj + 0x26, 6 * (alea.next() % 9) as u16);
+        }
+    }
 }
