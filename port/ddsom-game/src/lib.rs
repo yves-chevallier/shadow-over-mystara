@@ -11,8 +11,10 @@
 pub mod chemin;
 pub mod config;
 pub mod credits;
+pub mod dispatch;
 pub mod eeprom;
 pub mod evenements;
+pub mod game;
 pub mod ai;
 pub mod combat;
 pub mod families;
@@ -173,7 +175,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -186,8 +188,28 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     mem::wr32(b, c.a[7], RETURN);
     c.pc = addr;
     while !(c.pc == RETURN && c.a[7] == sp) {
+        if c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
+            // le code 68000 a dépilé plus que son adresse de retour et poursuit ailleurs
+            std::panic::resume_unwind(Box::new(Unwound));
+        }
         if run(c.pc, c, b, u64::MAX).is_none() {
             c.step(b);
+        }
+    }
+}
+
+/// Fin anormale d'un appel : une routine d'origine a quitté en dépilant les adresses de retour de ses
+/// appelants (par exemple en revenant directement à la boucle de partie). Les fonctions Rust qui
+/// l'appelaient sont abandonnées ; l'exécution reprend au PC atteint, comme dans l'original.
+pub struct Unwound;
+
+/// Exécute une native ; renvoie normalement, ou après abandon des fonctions Rust si le code 68000
+/// appelé a quitté par un autre chemin que son retour (voir `Unwound`).
+fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (n.run)(c, b)));
+    if let Err(payload) = r {
+        if !payload.is::<Unwound>() {
+            std::panic::resume_unwind(payload);
         }
     }
 }
@@ -201,7 +223,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             if CHECK.load(Ordering::Relaxed) {
                 check(n, c, b, cost);
             } else {
-                (n.run)(c, b);
+                exec(n, c, b);
                 c.cycles += cost;
                 if COUNT.load(Ordering::Relaxed) {
                     STATS.lock().unwrap().entry(n.name).or_default().calls += 1;
