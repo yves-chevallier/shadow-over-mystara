@@ -1,0 +1,832 @@
+600 Service Mode 1
+900 P1 Button 2 1
+904 P1 Button 2 0
+960 P1 Down 1
+964 P1 Down 0
+1080 P1 Down 1
+1084 P1 Down 0
+1200 P1 Down 1
+1220 P1 Down 0
+1240 P1 Down 1
+1244 P1 Down 0
+1300 P1 Right 1
+1304 P1 Right 0
+1340 P1 Down 1
+1360 P1 Down 0
+1400 P1 Down 1
+1420 P1 Down 0
+1440 P1 Button 1 1
+1460 P1 Button 1 0
+1560 Service 1 1
+1564 Service 1 0
+1680 Service 1 1
+1684 Service 1 0
+1720 P1 Button 1 1
+1724 P1 Button 1 0
+1840 P1 Up 1
+1844 P1 Up 0
+1900 P1 Up 1
+1920 P1 Up 0
+1940 Service 1 1
+1944 Service 1 0
+2060 P1 Up 1
+2064 P1 Up 0
+2180 Service 1 1
+2200 Service 1 0
+2220 P1 Button 2 1
+2224 P1 Button 2 0
+2340 P1 Down 1
+2360 P1 Down 0
+2380 Service 1 1
+2384 Service 1 0
+2440 P2 Button 1 1
+2444 P2 Button 1 0
+2500 P1 Left 1
+2520 P1 Left 0
+2560 P1 Button 2 1
+2564 P1 Button 2 0
+2600 P1 Up 1
+2620 P1 Up 0
+2640 P1 Down 1
+2660 P1 Down 0
+2700 P2 Button 1 1
+2704 P2 Button 1 0
+2760 P1 Left 1
+2764 P1 Left 0
+2880 P1 Down 1
+2884 P1 Down 0
+3000 P1 Right 1
+3004 P1 Right 0
+3060 P1 Up 1
+3064 P1 Up 0
+3120 P1 Down 1
+3140 P1 Down 0
+3160 P2 Button 1 1
+3180 P2 Button 1 0
+3220 P1 Button 2 1
+3240 P1 Button 2 0
+3280 Service 1 1
+3284 Service 1 0
+3400 P1 Left 1
+3404 P1 Left 0
+3440 P1 Button 1 1
+3444 P1 Button 1 0
+3560 P1 Down 1
+3564 P1 Down 0
+3680 P1 Button 1 1
+3700 P1 Button 1 0
+3800 P1 Left 1
+3804 P1 Left 0
+3920 P1 Right 1
+3940 P1 Right 0
+3980 P1 Down 1
+3984 P1 Down 0
+4040 P1 Up 1
+4060 P1 Up 0
+4080 P1 Left 1
+4084 P1 Left 0
+4120 P1 Button 1 1
+4124 P1 Button 1 0
+4240 P1 Button 1 1
+4244 P1 Button 1 0
+4300 P1 Left 1
+4304 P1 Left 0
+4340 P1 Left 1
+4344 P1 Left 0
+4460 P1 Button 1 1
+4464 P1 Button 1 0
+4520 P2 Button 1 1
+4524 P2 Button 1 0
+4640 P1 Right 1
+4644 P1 Right 0
+4760 P1 Right 1
+4764 P1 Right 0
+4800 P1 Down 1
+4804 P1 Down 0
+4840 P1 Button 1 1
+4860 P1 Button 1 0
+4880 P1 Down 1
+4884 P1 Down 0
+5000 P1 Up 1
+5004 P1 Up 0
+5060 P1 Down 1
+5064 P1 Down 0
+5120 P2 Button 1 1
+5124 P2 Button 1 0
+5240 Service 1 1
+5244 Service 1 0
+5280 P2 Button 1 1
+5300 P2 Button 1 0
+5400 P1 Down 1
+5404 P1 Down 0
+5520 P2 Button 1 1
+5524 P2 Button 1 0
+5580 P1 Right 1
+5584 P1 Right 0
+5620 P1 Left 1
+5640 P1 Left 0
+5680 P1 Down 1
+5684 P1 Down 0
+5720 P1 Button 1 1
+5724 P1 Button 1 0
+5760 P1 Down 1
+5764 P1 Down 0
+5880 P1 Down 1
+5884 P1 Down 0
+5920 Service 1 1
+5924 Service 1 0
+6040 P1 Down 1
+6044 P1 Down 0
+6160 P1 Down 1
+6164 P1 Down 0
+6200 Service 1 1
+6204 Service 1 0
+6240 P1 Button 1 1
+6244 P1 Button 1 0
+6360 P1 Button 2 1
+6364 P1 Button 2 0
+6400 P1 Down 1
+6404 P1 Down 0
+6460 P1 Left 1
+6464 P1 Left 0
+6520 P1 Down 1
+6524 P1 Down 0
+6560 P1 Button 2 1
+6580 P1 Button 2 0
+6620 P1 Left 1
+6640 P1 Left 0
+6660 P2 Button 1 1
+6664 P2 Button 1 0
+6700 P2 Button 1 1
+6704 P2 Button 1 0
+6740 P2 Button 1 1
+6744 P2 Button 1 0
+6860 P1 Button 1 1
+6880 P1 Button 1 0
+6900 P1 Button 1 1
+6920 P1 Button 1 0
+6960 P1 Up 1
+6964 P1 Up 0
+7000 P2 Button 1 1
+7020 P2 Button 1 0
+7120 P1 Button 2 1
+7140 P1 Button 2 0
+7160 Service 1 1
+7164 Service 1 0
+7200 P1 Right 1
+7220 P1 Right 0
+7240 P1 Button 1 1
+7260 P1 Button 1 0
+7300 P1 Button 2 1
+7320 P1 Button 2 0
+7340 P1 Down 1
+7344 P1 Down 0
+7400 P1 Button 1 1
+7404 P1 Button 1 0
+7520 Service 1 1
+7524 Service 1 0
+7580 P1 Button 2 1
+7584 P1 Button 2 0
+7620 P1 Button 1 1
+7624 P1 Button 1 0
+7660 P1 Left 1
+7664 P1 Left 0
+7720 P1 Button 1 1
+7724 P1 Button 1 0
+7840 Service 1 1
+7844 Service 1 0
+7900 P1 Button 2 1
+7920 P1 Button 2 0
+7940 P1 Down 1
+7944 P1 Down 0
+8060 P1 Button 1 1
+8064 P1 Button 1 0
+8100 P1 Right 1
+8120 P1 Right 0
+8160 P1 Down 1
+8180 P1 Down 0
+8220 P1 Left 1
+8224 P1 Left 0
+8340 P1 Down 1
+8360 P1 Down 0
+8380 P1 Up 1
+8384 P1 Up 0
+8420 P1 Up 1
+8440 P1 Up 0
+8480 P1 Up 1
+8500 P1 Up 0
+8600 P1 Left 1
+8620 P1 Left 0
+8660 P1 Up 1
+8680 P1 Up 0
+8780 P1 Up 1
+8784 P1 Up 0
+8820 P1 Down 1
+8840 P1 Down 0
+8940 P1 Up 1
+8944 P1 Up 0
+8980 P1 Button 1 1
+8984 P1 Button 1 0
+9040 P1 Button 1 1
+9044 P1 Button 1 0
+9160 P1 Button 1 1
+9180 P1 Button 1 0
+9220 P1 Button 1 1
+9240 P1 Button 1 0
+9280 P1 Up 1
+9284 P1 Up 0
+9400 P1 Button 2 1
+9404 P1 Button 2 0
+9520 Service 1 1
+9540 Service 1 0
+9580 P2 Button 1 1
+9584 P2 Button 1 0
+9700 P1 Up 1
+9720 P1 Up 0
+9820 P1 Down 1
+9824 P1 Down 0
+9860 Service 1 1
+9864 Service 1 0
+9900 P1 Up 1
+9904 P1 Up 0
+9960 Service 1 1
+9980 Service 1 0
+10000 P2 Button 1 1
+10004 P2 Button 1 0
+10060 P2 Button 1 1
+10080 P2 Button 1 0
+10180 P1 Left 1
+10184 P1 Left 0
+10300 P1 Down 1
+10304 P1 Down 0
+10340 P1 Button 1 1
+10344 P1 Button 1 0
+10380 P2 Button 1 1
+10384 P2 Button 1 0
+10500 P1 Down 1
+10504 P1 Down 0
+10560 P1 Button 2 1
+10580 P1 Button 2 0
+10680 Service 1 1
+10700 Service 1 0
+10720 P1 Button 1 1
+10724 P1 Button 1 0
+10840 P2 Button 1 1
+10844 P2 Button 1 0
+10960 P1 Button 1 1
+10980 P1 Button 1 0
+11080 P1 Button 1 1
+11100 P1 Button 1 0
+11120 P1 Left 1
+11124 P1 Left 0
+11180 P1 Down 1
+11184 P1 Down 0
+11240 P1 Button 2 1
+11244 P1 Button 2 0
+11360 P1 Button 1 1
+11364 P1 Button 1 0
+11400 P1 Button 1 1
+11420 P1 Button 1 0
+11460 P1 Down 1
+11464 P1 Down 0
+11580 P1 Button 2 1
+11584 P1 Button 2 0
+11640 P1 Up 1
+11644 P1 Up 0
+11680 P1 Down 1
+11684 P1 Down 0
+11740 P1 Up 1
+11760 P1 Up 0
+11780 P1 Up 1
+11800 P1 Up 0
+11840 P2 Button 1 1
+11844 P2 Button 1 0
+11900 P1 Right 1
+11904 P1 Right 0
+11960 P1 Button 2 1
+11964 P1 Button 2 0
+12080 P1 Button 2 1
+12084 P1 Button 2 0
+12140 P2 Button 1 1
+12144 P2 Button 1 0
+12200 P1 Down 1
+12204 P1 Down 0
+12260 P2 Button 1 1
+12280 P2 Button 1 0
+12320 P2 Button 1 1
+12324 P2 Button 1 0
+12360 P1 Button 1 1
+12364 P1 Button 1 0
+12400 P1 Button 1 1
+12404 P1 Button 1 0
+12440 P1 Up 1
+12444 P1 Up 0
+12480 P1 Right 1
+12500 P1 Right 0
+12540 P1 Right 1
+12544 P1 Right 0
+12660 P2 Button 1 1
+12680 P2 Button 1 0
+12720 P1 Button 2 1
+12724 P1 Button 2 0
+12780 P1 Down 1
+12800 P1 Down 0
+12820 P1 Right 1
+12824 P1 Right 0
+12880 P1 Down 1
+12900 P1 Down 0
+12920 P1 Button 1 1
+12924 P1 Button 1 0
+13040 P1 Button 1 1
+13044 P1 Button 1 0
+13100 P1 Down 1
+13104 P1 Down 0
+13140 P1 Button 2 1
+13160 P1 Button 2 0
+13200 P1 Button 1 1
+13220 P1 Button 1 0
+13240 P1 Down 1
+13260 P1 Down 0
+13360 P1 Button 1 1
+13364 P1 Button 1 0
+13400 P1 Button 1 1
+13404 P1 Button 1 0
+13440 P1 Button 1 1
+13444 P1 Button 1 0
+13560 P1 Button 1 1
+13580 P1 Button 1 0
+13600 P1 Button 1 1
+13604 P1 Button 1 0
+13720 P1 Up 1
+13724 P1 Up 0
+13780 P1 Down 1
+13784 P1 Down 0
+13820 P1 Down 1
+13824 P1 Down 0
+13940 P2 Button 1 1
+13960 P2 Button 1 0
+13980 P2 Button 1 1
+13984 P2 Button 1 0
+14020 P1 Left 1
+14024 P1 Left 0
+14140 P1 Right 1
+14160 P1 Right 0
+14200 P2 Button 1 1
+14204 P2 Button 1 0
+14320 P1 Button 1 1
+14340 P1 Button 1 0
+14360 P1 Button 1 1
+14364 P1 Button 1 0
+14400 P1 Up 1
+14404 P1 Up 0
+14460 P1 Down 1
+14464 P1 Down 0
+14500 P1 Down 1
+14520 P1 Down 0
+14620 P1 Button 1 1
+14624 P1 Button 1 0
+14660 P1 Down 1
+14664 P1 Down 0
+14780 P1 Right 1
+14800 P1 Right 0
+14900 P1 Button 1 1
+14920 P1 Button 1 0
+14940 P1 Button 1 1
+14944 P1 Button 1 0
+15000 P1 Up 1
+15004 P1 Up 0
+15060 P1 Left 1
+15064 P1 Left 0
+15120 P1 Button 2 1
+15124 P1 Button 2 0
+15240 P1 Button 2 1
+15244 P1 Button 2 0
+15280 P1 Button 1 1
+15284 P1 Button 1 0
+15340 P1 Up 1
+15344 P1 Up 0
+15400 P1 Right 1
+15404 P1 Right 0
+15460 P1 Button 1 1
+15480 P1 Button 1 0
+15580 P1 Button 1 1
+15584 P1 Button 1 0
+15700 P1 Down 1
+15704 P1 Down 0
+15760 P1 Down 1
+15764 P1 Down 0
+15820 Service 1 1
+15824 Service 1 0
+15880 P1 Down 1
+15884 P1 Down 0
+15940 P1 Button 1 1
+15944 P1 Button 1 0
+16060 P2 Button 1 1
+16064 P2 Button 1 0
+16180 Service 1 1
+16184 Service 1 0
+16240 P1 Left 1
+16244 P1 Left 0
+16300 Service 1 1
+16320 Service 1 0
+16340 P1 Down 1
+16360 P1 Down 0
+16460 P1 Right 1
+16480 P1 Right 0
+16580 P2 Button 1 1
+16584 P2 Button 1 0
+16700 P2 Button 1 1
+16720 P2 Button 1 0
+16740 Service 1 1
+16760 Service 1 0
+16860 P1 Button 1 1
+16864 P1 Button 1 0
+16900 P1 Down 1
+16904 P1 Down 0
+17020 P1 Button 2 1
+17024 P1 Button 2 0
+17080 P1 Left 1
+17100 P1 Left 0
+17120 P1 Down 1
+17140 P1 Down 0
+17240 P1 Button 1 1
+17244 P1 Button 1 0
+17300 P1 Down 1
+17304 P1 Down 0
+17340 P2 Button 1 1
+17360 P2 Button 1 0
+17380 P2 Button 1 1
+17384 P2 Button 1 0
+17500 P1 Left 1
+17504 P1 Left 0
+17540 P1 Button 1 1
+17544 P1 Button 1 0
+17660 P1 Button 1 1
+17664 P1 Button 1 0
+17780 P1 Left 1
+17784 P1 Left 0
+17840 P1 Down 1
+17844 P1 Down 0
+17960 P1 Button 1 1
+17964 P1 Button 1 0
+18080 P1 Button 1 1
+18084 P1 Button 1 0
+18200 P1 Up 1
+18204 P1 Up 0
+18260 P1 Button 1 1
+18280 P1 Button 1 0
+18380 P1 Up 1
+18384 P1 Up 0
+18440 P1 Down 1
+18444 P1 Down 0
+18500 P1 Down 1
+18520 P1 Down 0
+18540 P1 Left 1
+18544 P1 Left 0
+18660 P2 Button 1 1
+18664 P2 Button 1 0
+18720 P1 Left 1
+18724 P1 Left 0
+18760 P2 Button 1 1
+18764 P2 Button 1 0
+18820 P1 Down 1
+18824 P1 Down 0
+18860 P1 Button 1 1
+18864 P1 Button 1 0
+18900 P2 Button 1 1
+18904 P2 Button 1 0
+18960 P1 Right 1
+18964 P1 Right 0
+19000 P1 Down 1
+19020 P1 Down 0
+19040 P1 Up 1
+19060 P1 Up 0
+19160 P1 Button 1 1
+19164 P1 Button 1 0
+19200 Service 1 1
+19220 Service 1 0
+19320 P1 Button 1 1
+19324 P1 Button 1 0
+19440 P1 Button 2 1
+19444 P1 Button 2 0
+19500 P1 Left 1
+19504 P1 Left 0
+19540 P1 Up 1
+19544 P1 Up 0
+19600 P1 Left 1
+19604 P1 Left 0
+19660 P1 Up 1
+19664 P1 Up 0
+19720 P1 Right 1
+19724 P1 Right 0
+19760 P1 Button 2 1
+19764 P1 Button 2 0
+19820 P1 Button 2 1
+19824 P1 Button 2 0
+19860 P1 Button 1 1
+19880 P1 Button 1 0
+19900 P1 Button 1 1
+19904 P1 Button 1 0
+19960 P1 Down 1
+19964 P1 Down 0
+20020 Service 1 1
+20024 Service 1 0
+20080 P1 Right 1
+20084 P1 Right 0
+20120 P1 Button 1 1
+20124 P1 Button 1 0
+20160 P1 Button 1 1
+20180 P1 Button 1 0
+20200 P1 Button 1 1
+20204 P1 Button 1 0
+20260 P2 Button 1 1
+20264 P2 Button 1 0
+20300 P1 Button 2 1
+20304 P1 Button 2 0
+20340 P1 Right 1
+20360 P1 Right 0
+20460 P1 Button 1 1
+20480 P1 Button 1 0
+20500 P1 Down 1
+20520 P1 Down 0
+20560 P1 Left 1
+20580 P1 Left 0
+20600 P1 Button 1 1
+20604 P1 Button 1 0
+20640 P2 Button 1 1
+20644 P2 Button 1 0
+20680 P1 Left 1
+20684 P1 Left 0
+20740 P1 Button 1 1
+20744 P1 Button 1 0
+20800 P1 Button 1 1
+20804 P1 Button 1 0
+20920 P1 Button 1 1
+20924 P1 Button 1 0
+20980 P2 Button 1 1
+21000 P2 Button 1 0
+21040 P1 Down 1
+21044 P1 Down 0
+21160 P1 Up 1
+21164 P1 Up 0
+21200 P2 Button 1 1
+21204 P2 Button 1 0
+21320 P1 Button 1 1
+21324 P1 Button 1 0
+21380 P1 Left 1
+21384 P1 Left 0
+21420 P2 Button 1 1
+21424 P2 Button 1 0
+21460 P1 Down 1
+21464 P1 Down 0
+21520 P2 Button 1 1
+21524 P2 Button 1 0
+21580 P1 Button 1 1
+21584 P1 Button 1 0
+21640 Service 1 1
+21644 Service 1 0
+21680 P1 Right 1
+21684 P1 Right 0
+21740 P2 Button 1 1
+21744 P2 Button 1 0
+21800 P1 Button 1 1
+21804 P1 Button 1 0
+21840 P1 Left 1
+21844 P1 Left 0
+21960 P1 Button 2 1
+21964 P1 Button 2 0
+22080 P2 Button 1 1
+22100 P2 Button 1 0
+22200 P1 Button 1 1
+22204 P1 Button 1 0
+22260 P1 Button 1 1
+22264 P1 Button 1 0
+22320 P1 Left 1
+22324 P1 Left 0
+22380 P1 Down 1
+22384 P1 Down 0
+22420 P1 Right 1
+22440 P1 Right 0
+22480 Service 1 1
+22484 Service 1 0
+22520 P1 Down 1
+22524 P1 Down 0
+22640 P1 Left 1
+22644 P1 Left 0
+22680 P1 Down 1
+22684 P1 Down 0
+22720 P1 Up 1
+22740 P1 Up 0
+22840 P1 Down 1
+22860 P1 Down 0
+22960 P1 Left 1
+22964 P1 Left 0
+23080 P1 Down 1
+23084 P1 Down 0
+23120 P1 Button 1 1
+23140 P1 Button 1 0
+23160 P1 Button 1 1
+23164 P1 Button 1 0
+23280 P1 Button 1 1
+23300 P1 Button 1 0
+23400 P1 Right 1
+23420 P1 Right 0
+23440 P1 Down 1
+23444 P1 Down 0
+23500 P2 Button 1 1
+23520 P2 Button 1 0
+23540 P1 Right 1
+23544 P1 Right 0
+23580 Service 1 1
+23584 Service 1 0
+23620 P2 Button 1 1
+23624 P2 Button 1 0
+23680 P1 Button 1 1
+23684 P1 Button 1 0
+23800 P1 Button 1 1
+23804 P1 Button 1 0
+23920 P1 Button 1 1
+23940 P1 Button 1 0
+23960 P1 Down 1
+23964 P1 Down 0
+24080 P1 Button 1 1
+24084 P1 Button 1 0
+24120 P1 Button 1 1
+24124 P1 Button 1 0
+24240 P1 Right 1
+24244 P1 Right 0
+24300 P1 Button 1 1
+24320 P1 Button 1 0
+24360 P1 Button 2 1
+24364 P1 Button 2 0
+24420 P1 Down 1
+24440 P1 Down 0
+24480 P1 Right 1
+24484 P1 Right 0
+24600 P1 Right 1
+24604 P1 Right 0
+24640 P1 Button 1 1
+24660 P1 Button 1 0
+24760 P1 Down 1
+24764 P1 Down 0
+24820 P1 Button 1 1
+24824 P1 Button 1 0
+24860 P1 Button 1 1
+24864 P1 Button 1 0
+24900 P1 Button 1 1
+24904 P1 Button 1 0
+24940 Service 1 1
+24944 Service 1 0
+25060 P1 Up 1
+25064 P1 Up 0
+25120 P1 Right 1
+25140 P1 Right 0
+25160 Service 1 1
+25164 Service 1 0
+25220 P1 Down 1
+25224 P1 Down 0
+25260 Service 1 1
+25264 Service 1 0
+25320 P1 Down 1
+25340 P1 Down 0
+25360 P1 Up 1
+25364 P1 Up 0
+25420 P1 Button 2 1
+25440 P1 Button 2 0
+25460 P1 Down 1
+25464 P1 Down 0
+25520 P1 Button 1 1
+25524 P1 Button 1 0
+25640 P2 Button 1 1
+25660 P2 Button 1 0
+25700 P1 Down 1
+25704 P1 Down 0
+25820 P1 Right 1
+25824 P1 Right 0
+25880 P1 Left 1
+25884 P1 Left 0
+25920 P1 Down 1
+25924 P1 Down 0
+25980 P1 Down 1
+25984 P1 Down 0
+26040 P1 Down 1
+26060 P1 Down 0
+26080 P1 Right 1
+26084 P1 Right 0
+26140 P1 Right 1
+26144 P1 Right 0
+26180 P1 Left 1
+26184 P1 Left 0
+26240 P2 Button 1 1
+26244 P2 Button 1 0
+26280 P1 Button 2 1
+26284 P1 Button 2 0
+26400 P1 Left 1
+26404 P1 Left 0
+26520 P1 Right 1
+26524 P1 Right 0
+26640 P1 Right 1
+26644 P1 Right 0
+26700 P1 Down 1
+26704 P1 Down 0
+26740 P1 Down 1
+26744 P1 Down 0
+26780 P1 Down 1
+26800 P1 Down 0
+26840 P1 Button 2 1
+26844 P1 Button 2 0
+26900 Service 1 1
+26904 Service 1 0
+26960 P1 Button 2 1
+26964 P1 Button 2 0
+27020 P1 Down 1
+27040 P1 Down 0
+27140 P1 Down 1
+27144 P1 Down 0
+27180 P1 Down 1
+27184 P1 Down 0
+27300 P1 Left 1
+27304 P1 Left 0
+27360 P1 Right 1
+27364 P1 Right 0
+27400 P1 Left 1
+27404 P1 Left 0
+27440 P1 Button 1 1
+27460 P1 Button 1 0
+27480 Service 1 1
+27484 Service 1 0
+27540 P1 Button 2 1
+27544 P1 Button 2 0
+27600 Service 1 1
+27604 Service 1 0
+27720 P1 Button 1 1
+27724 P1 Button 1 0
+27760 P1 Button 1 1
+27764 P1 Button 1 0
+27800 P1 Down 1
+27804 P1 Down 0
+27920 P2 Button 1 1
+27924 P2 Button 1 0
+27960 P1 Right 1
+27964 P1 Right 0
+28000 P1 Button 1 1
+28020 P1 Button 1 0
+28040 P1 Button 1 1
+28044 P1 Button 1 0
+28100 P1 Left 1
+28120 P1 Left 0
+28160 P1 Up 1
+28164 P1 Up 0
+28200 P1 Right 1
+28204 P1 Right 0
+28320 P1 Button 1 1
+28340 P1 Button 1 0
+28440 P1 Down 1
+28444 P1 Down 0
+28500 P1 Button 1 1
+28520 P1 Button 1 0
+28560 P1 Button 2 1
+28564 P1 Button 2 0
+28680 P1 Button 1 1
+28684 P1 Button 1 0
+28740 P1 Button 1 1
+28744 P1 Button 1 0
+28780 P1 Button 1 1
+28784 P1 Button 1 0
+28840 Service 1 1
+28844 Service 1 0
+28900 P1 Down 1
+28904 P1 Down 0
+28960 P1 Button 1 1
+28980 P1 Button 1 0
+29080 P1 Button 1 1
+29100 P1 Button 1 0
+29120 P1 Left 1
+29124 P1 Left 0
+29160 P1 Down 1
+29164 P1 Down 0
+29200 P1 Left 1
+29204 P1 Left 0
+29240 P1 Button 1 1
+29244 P1 Button 1 0
+29280 P1 Down 1
+29284 P1 Down 0
+29400 Service 1 1
+29404 Service 1 0
+29440 P1 Button 2 1
+29460 P1 Button 2 0
+29480 P1 Left 1
+29500 P1 Left 0
+29540 P1 Down 1
+29544 P1 Down 0
+29660 Service 1 1
+29680 Service 1 0
+29780 P1 Button 2 1
+29784 P1 Button 2 0
+29820 P1 Button 2 1
+29824 P1 Button 2 0
+29860 P1 Down 1
+29864 P1 Down 0
+29920 P1 Down 1
+29940 P1 Down 0
+30001 quit

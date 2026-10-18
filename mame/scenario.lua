@@ -23,7 +23,11 @@ for line in io.lines(os.getenv("SCENARIO")) do
 	if frame then
 		local name, value = rest:match("^(.-)%s+(%d+)$")
 		local a = { frame = tonumber(frame) }
-		if rest == "snap" or rest == "quit" then a.kind = rest
+		local pk, addr, val = rest:match("^poke(%d+)%s+(%x+)%s+(%S+)$")
+		if pk then
+			-- "poke8|poke16|poke32 adresse valeur" : écriture en RAM de travail (voir scenario.rs)
+			a.kind = "poke"; a.size = tonumber(pk); a.addr = tonumber(addr, 16); a.value = tonumber(val)
+		elseif rest == "snap" or rest == "quit" then a.kind = rest
 		else a.kind = "input"; a.field = find_field(name); a.value = tonumber(value) end
 		table.insert(actions, a)
 	end
@@ -44,6 +48,10 @@ frame_sub = emu.add_machine_frame_notifier(function()
 	for _, a in ipairs(actions) do
 		if a.frame == frame then
 			if a.kind == "input" then a.field:set_value(a.value)
+			elseif a.kind == "poke" then
+				if a.size == 8 then space:write_u8(a.addr, a.value)
+				elseif a.size == 16 then space:write_u16(a.addr, a.value)
+				else space:write_u32(a.addr, a.value) end
 			elseif a.kind == "snap" then machine.video:snapshot(); print("snap", frame)
 			elseif a.kind == "quit" then machine:exit() end
 		end
