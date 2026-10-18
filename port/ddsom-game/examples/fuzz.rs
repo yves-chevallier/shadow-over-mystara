@@ -340,6 +340,29 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
 /// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
 /// `DDSOM_ENTREE=<adresse hexa>` restreint à un gestionnaire.
 const DDSOM_TRACE_LEN: u32 = 200000;
+/// États de départ (`+4`, `+5`, `+6`) que la table de sauts de chaque type ESHL 15..39 accepte
+/// (au-delà, l'original sort du code) : listes de valeurs possibles par octet.
+fn etats_eshl(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8])] {
+    const T: &[u8] = &[2];
+    const TQ: &[u8] = &[2, 4];
+    const Z: &[u8] = &[0];
+    const Z2: &[u8] = &[0, 2];
+    match kind {
+        15 => &[(T, &[0], &[0, 2, 4, 6, 8, 10]), (T, &[2], Z), (T, &[4], &[0, 2, 4]), (&[4], Z, Z)],
+        16 => &[(TQ, Z2, Z)],
+        17 => &[(T, Z, Z), (T, &[2], Z2), (T, &[4], Z), (&[4], Z, Z)],
+        18 | 24 | 25 | 28 | 38 => &[(TQ, Z, Z)],
+        19 => &[(TQ, Z, Z)],
+        20 => &[(T, Z, Z2), (T, &[2], &[0, 2, 4, 6])],
+        26 => &[(T, &[0, 2, 4], Z), (&[4], Z, Z)],
+        30 => &[(TQ, &[0, 2, 4, 6], Z)],
+        32 | 39 => &[(T, &[0, 2, 4], Z)],
+        33 => &[(T, Z2, Z), (T, &[4], Z2)],
+        21 | 22 | 34 | 37 => &[(T, Z2, Z)],
+        _ => &[(TQ, Z2, Z)],
+    }
+}
+
 fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, filtre: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
@@ -372,6 +395,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     }
     // nombre de variantes tirées (3 par défaut : au-delà, beaucoup de types sortent de leurs tables)
     let variantes: u32 = std::env::var("DDSOM_VARIANTES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    let duree: u32 = std::env::var("DDSOM_PAS").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
     let mut affiches = 0;
     let mut essais = 0;
     // couverture du code d'origine des gestionnaires (DDSOM_COUVERTURE=fichier : écrit les adresses vues)
@@ -398,6 +422,37 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             wr16(&mut b, obj.0 + 0x50, owner as u16);
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
+            // ESHL 15..39 : créateur en +0x5c, hôte en +0x42, pointeurs longs (types 17 et 19), délais,
+            // variables de niveau lues par les tirs
+            if pool.class == 8 && kind >= 15 {
+                wr16(&mut b, obj.0 + 0x5c, owner as u16);
+                if alea.next() % 2 == 0 {
+                    wr16(&mut b, obj.0 + 0x42, owner as u16);
+                }
+                wr16(&mut b, obj.0 + 0x58, (alea.next() % 6) as u16);
+                if kind == 17 || kind == 19 {
+                    wr32(&mut b, obj.0 + 0x50, owner);
+                    wr32(&mut b, obj.0 + 0x56, owner);
+                    wr8(&mut b, obj.0 + 0x43, [0, 1, 0xff][alea.next() as usize % 3]);
+                    wr8(&mut b, obj.0 + 0x42, 4 * (alea.next() % 2) as u8);
+                }
+                if std::env::var("DDSOM_ETATS").is_ok() && alea.next() % 2 == 0 {
+                    let boites = etats_eshl(kind);
+                    let (s4, s5, s6) = boites[alea.next() as usize % boites.len()];
+                    wr8(&mut b, obj.0 + 4, s4[alea.next() as usize % s4.len()]);
+                    wr8(&mut b, obj.0 + 5, s5[alea.next() as usize % s5.len()]);
+                    wr8(&mut b, obj.0 + 6, s6[alea.next() as usize % s6.len()]);
+                }
+                // le plus souvent, le propriétaire est à l'écran (sinon le tir est aussitôt retiré par le culling)
+                if alea.next() % 4 != 0 {
+                    let (cx, cy) = (rd16(&mut b, A5 + 0x506), rd16(&mut b, A5 + 0x50a));
+                    wr16(&mut b, owner + 8, cx.wrapping_add(0x60 + (alea.next() % 0x80) as u16));
+                    wr16(&mut b, owner + 0x10, cy.wrapping_add(0x60 + (alea.next() % 0x40) as u16));
+                }
+                wr16(&mut b, A5 + 0x7f92, (alea.next() % 8) as u16);
+                wr8(&mut b, A5 + 0x35, (alea.next() % 5) as u8);
+                wr8(&mut b, A5 + 0x36, (alea.next() % 2) as u8);
+            }
             for off in [0x8u32, 0xc, 0x10] {
                 let v = (rd16(&mut b, owner + off) as u32) << 16 | (alea.next() & 0xffff);
                 wr32(&mut b, obj.0 + off, v);
@@ -409,7 +464,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             if pool.class == SET.class && matches!(kind, 2 | 15) {
                 etat_scene(&mut b, &mut alea, obj.0, kind, true);
             }
-            for pas in 0..60 {
+            for pas in 0..duree {
                 if rd8(&mut b, obj.0) == 0 {
                     break;
                 }
@@ -455,6 +510,12 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                 }
                 // jeu en pause (rare) ou non ; objet suspendu (octet +0x40) très rarement
                 wr8(&mut b, A5 + 0x3d, (alea.next() % 10 == 0) as u8);
+                if pool.class == 8 && kind >= 15 {
+                    wr8(&mut b, A5 + 0x6f, pas as u8);
+                    wr16(&mut b, A5 + 0x6e, alea.next() as u16);
+                    wr8(&mut b, A5 + 0x42, (alea.next() % 2) as u8);
+                    wr8(&mut b, A5 + 0x4e, (alea.next() % 16 == 0) as u8);
+                }
                 wr8(&mut b, obj.0 + 0x40, (alea.next() % 40 == 0) as u8);
                 c.a[0] = obj.0;
                 c.a[5] = A5;
