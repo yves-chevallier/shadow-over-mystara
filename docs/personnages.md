@@ -15,6 +15,8 @@ d'origine contient deux fois la même adresse.
 |---|---|---|---|---|---|---|
 | combattant | 0, 1 | 0x3e578 | 0x3e7e4 | 0x3f0ae | 0x3f9bc | 0x35a78 (commune aux classes 0 à 2) |
 | clerc | 2, 3 | 0x3fd08 | 0x3ff2a | 0x406d4 | 0x41f22 | 0x35a78 |
+| elfe | 4, 5 | 0x42012 | 0x4241c | 0x42b0c | 0x444ca | 0x35a78 |
+| magicien | 8, 9 | 0x45a78 | 0x45cfc | 0x4619e | 0x4879a | 0x35b96 |
 
 Les actions réécrites sont des `Native` déclarées à l'adresse d'origine (macro `action_native!` de `characters.rs`) : le noyau les
 appelle par `Ctx::rom`, et la validation différentielle (`DDSOM_CHECK=1`, `examples/fuzz_player`) peut comparer chacune à l'original.
@@ -217,6 +219,44 @@ Les sons et les routines de palette (0x3af8...) ne lisent aucun registre.
 - Couverture : `examples/player_coverage` compte les appels de chaque fonction (les nouveaux modules y sont déclarés dans
   `player/cov.rs`).
 
+## 8 bis. Elfe et magicien (`elf.rs`, `magic_user.rs`)
+
+Adresses : elfe (`CHARACTER` 4, 5) saut 0x42012, attaque 0x4241c, spécial 0x42b0c, action 0x10 0x444ca ; magicien (8, 9) saut
+0x45a78, attaque 0x45cfc, spécial 0x4619e, action 0x10 0x4879a. Natives `elf_*` et `mage_*`. Scénarios : `bot_char5` (elfe),
+`bot_char1` (magicien), `extra/mash_c5*`, `extra/mash_c1*`.
+
+### Compléments au module commun
+
+- `JumpKit` s'enrichit de `steer_push` (poussée en l'air : 0x30, 0x20 pour l'elfe), `takeoff`, `busy` (un geste en l'air suspend
+  montée, sommet et descente), `apex_gravity` (le magicien change `AZ` au sommet) et `extra_step` (pas 0xa et 0xc des gestes en l'air :
+  coup, tir) ; `JumpKit::PLAIN` donne les valeurs par défaut. `common::land` (atterrissage), `air_steer(push)`.
+- `foes.rs` : les boucles « sort qui blesse les monstres » que le programme d'origine recopie huit fois (0x439fc, 0x44188, 0x44384,
+  0x47104, 0x47390, 0x474e4, 0x47770, 0x48012, 0x48392) sont une seule fonction `strike_foes` décrite par `Strike` (table de
+  dégâts par niveau ou valeur fixe, bit de protection de `+0x94`, réaction `+0x49`, majorations `Boost` dans l'ordre : chef de type
+  donné +50 %, arme `WEAPON_B` donnée, accessoire `+0x166` = 4 : +25 %, `+0x165` : +5). Les routines 0x474c4 (dégâts de la foudre,
+  `items::lightning_damage`) et 0x4414c (dégâts des météores, `items::meteor_damage`) que le combattant et le clerc appelaient en
+  ROM sont donc réécrites (leurs noms `LIGHTNING_END_SOUND`, `METEOR_SOUND` étaient des erreurs).
+- `items` : `Style` porte maintenant le champ de la cible de la foudre/mur (`+0x1ea` combattant/clerc, `+0x1ec` elfe, `+0x1e8`
+  magicien), l'instant des dégâts de la foudre (0x60, 1 pour l'elfe), la pose finale des magies (elfe 0x25, magicien 0x13 : la
+  magie se termine par un pas d'animation au lieu de finir avec le décompte), `d0_is_step` (D0.b hérité par la magie 13 : le pas
+  pour l'elfe et le magicien) et le mode de rétablissement de l'écran. `Cast` est public avec un crochet `on_end` (l'aura rouge de
+  la magie 16 est posée au geste chez le combattant, à la fin du décompte chez l'elfe — durée 0x708 — et le magicien — 0x8000, décompte
+  de 0x1e images).
+- `common` : `begin_cast`/`start_cast` (début de sort), `countdown`, `take_event`, `wind_down`, `cancel_cast`, `swap_weapon`
+  (échange d'équipement simple), `flash_screen`/`blink_screen`/`intensity_keys` (sorts de gel), `combo_window`, `weapon_voice_b`,
+  `end_spell_mode`/`undim_screen_mode`.
+
+### Particularités de l'original reproduites
+
+- Le code du magicien rétablit l'écran avec le mode 1 (0x48772 recopie 0x44474 en oubliant le mode 2 de 0x444a2).
+- Les sorts annulés (`SPELL_CANCELLED`) sautent parfois à un pas de sortie : selon les sorts le drapeau `+0x189` est remis à zéro ou
+  non à la fin ; chaque site suit l'original (`end_spell` contre `end_spell_keep_cancel`).
+- Le magicien n'initialise pas le clignotement `+0x1ed` pour la potion (n° 19) contrairement aux autres.
+- Table de vitesses de saut du magicien : 0x10459e (la table 0x10455e du listing est celle d'une routine jamais atteinte).
+- Le sort 0x24 du magicien (« sacrifice ») met à un point de vie tous les joueurs en vie, lanceur compris.
+- La magie 0x1c de l'elfe a deux variantes selon le regard (pas 0..6 ou 8..0xc) ; celle du magicien aussi (0..6 ou 8..0xe).
+- Armes du magicien : baguettes 0x24..0x27 en `WEAPON_B` ; au tir, une baguette épuisée redevient un bâton 0x22 (`rod_shot`).
+
 ## 9. Reste en ROM
 
 - Les créateurs de tirs et d'effets joueur (pools PSHL et PEFF) appelés par ces actions, et leurs gestionnaires (C06, C12) : 0x4a99a, 0x4c58e,
@@ -228,8 +268,9 @@ Les sons et les routines de palette (0x3af8...) ne lisent aucun registre.
 
 ## 10. Ce que les autres personnages réutilisent
 
-Les actions de l'elfe (saut 0x42012, attaque 0x4241c, spécial 0x42b0c, action 0x10 0x444ca), du nain (0x445ba, 0x4491a, 0x45148,
-0x45988), du magicien (0x45a78, 0x45cfc, 0x4619e, 0x4879a) et du voleur (0x488bc, 0x48d48, 0x49498, 0x49d46) appellent les mêmes
+(L'elfe et le magicien sont faits : voir §8 bis. Reste le nain et le voleur.)
+
+Les actions du nain (0x445ba, 0x4491a, 0x45148, 0x45988) et du voleur (0x488bc, 0x48d48, 0x49498, 0x49d46) appellent les mêmes
 sous-routines que celles qui sont passées dans `common` : prolongement d'un coup (0x3f036), orientation (0x3f8d2), gel des autres
 joueurs (0x3f8f0), poussières (0x3fa7c, 0x3fac4, 0x3fb1a), étincelle d'objet (0x3fb8c), fin de sort (0x3f97c). Leur saut a le même
 squelette que `common::jump` (il faut une autre `JumpKit`) ; leur action 0x10 est vraisemblablement la glissade `common::dash` pour

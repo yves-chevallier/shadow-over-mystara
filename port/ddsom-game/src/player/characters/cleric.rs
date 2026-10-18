@@ -99,8 +99,7 @@ mod kind {
 const JUMP_KIT: common::JumpKit = common::JumpKit {
     speeds: JUMP_SPEEDS,
     air_attack,
-    after_recover: common::nothing,
-    finish: common::nothing,
+    ..common::JumpKit::PLAIN
 };
 
 /// 0x3fd08 : saut.
@@ -182,7 +181,9 @@ fn combo(g: &mut Ctx, p: Player) {
             let rank = common::chain_rank(g, p, 1, 4);
             common::start_with_voice(g, p, rank as u16);
         }
-        2 => common::combo_follow(g, p, 0x17),
+        2 => {
+            common::combo_follow(g, p, 0x17);
+        }
         4 => common::wait_then_stand(g, p),
         _ => {}
     }
@@ -296,7 +297,9 @@ fn run_strike(g: &mut Ctx, p: Player) {
             common::weapon_voice(g, p);
             g.rom(rom::SOUND_CHARGE_A, p);
         }
-        2 => common::run_strike_slide(g, p),
+        2 => {
+            common::run_strike_slide(g, p, 0xf);
+        }
         4 => common::wait_then_stand(g, p),
         _ => {}
     }
@@ -473,7 +476,7 @@ fn turn_undead(g: &mut Ctx, p: Player) {
 // ---- attaque spéciale (0x406d4) --------------------------------------------------------------
 
 /// Animations du clerc pour les magies lancées (voir `items::Style`).
-const STYLE: items::Style = items::Style { cast_anim: 0x20, bolt_anim: 0x1f, spark: 1 };
+const STYLE: items::Style = items::Style { cast_anim: 0x20, bolt_anim: 0x1f, spark: 1, ..items::Style::CLASSIC };
 
 /// 0x406d4 : l'objet ou la prière choisie (`field::SPECIAL_KIND`). Les numéros 0..5, 11 et 21..35
 /// n'existent pas pour le clerc : retour à l'état immobile.

@@ -14,6 +14,7 @@
 
 use super::super::actions::to_stand;
 use super::super::combos::clear_recognizers;
+use super::super::init::init_weapon_stats;
 use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
@@ -84,6 +85,7 @@ pub mod rom {
     /// Lancement d'une tâche (A0 = programme, D0 = priorité) : trap 0.
     pub const START_TASK: u32 = 0x9b6;
     /// Programmes des tâches d'écran du sort : assombrir et rétablir.
+    pub const PALETTE_FADE: u32 = 0x173c;
     pub const DIM_TASK: u32 = 0x153e;
     pub const UNDIM_TASK: u32 = 0x1536;
 }
@@ -136,6 +138,20 @@ pub fn weapon_voice(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A) as u32;
     call(g, p, rom::WEAPON_VOICE, &[(4, weapon)]);
+}
+
+/// Joue la voix de l'arme tenue à la main gauche (D4 = `WEAPON_B`, magicien).
+pub fn weapon_voice_b(g: &mut Ctx, p: Player) {
+    cov!();
+    let weapon = p.u8(g, Player::WEAPON_B) as u32;
+    call(g, p, rom::WEAPON_VOICE, &[(4, weapon)]);
+}
+
+/// Démarre l'animation `n`, puis joue la voix de l'arme de la main gauche (`WEAPON_B`, magicien).
+pub fn start_with_voice_b(g: &mut Ctx, p: Player, n: u16) {
+    cov!();
+    animation::start_plain(g, p, n);
+    weapon_voice_b(g, p);
 }
 
 /// Démarre l'animation `n` de la table sans décalage d'arme, puis joue la voix de l'arme.
@@ -213,9 +229,9 @@ pub fn drift(g: &mut Ctx, p: Player) {
     move_x(g, p);
 }
 
-/// 0x3e712 / 0x3fe88 : en l'air, une direction opposée au regard retourne le personnage et donne une
-/// poussée horizontale (une seule fois par saut).
-pub fn air_steer(g: &mut Ctx, p: Player) {
+/// 0x3e712 / 0x3fe88 / 0x422f8 / 0x45c54 : en l'air, une direction opposée au regard retourne le
+/// personnage et donne une poussée horizontale de `push` (une seule fois par saut).
+pub fn air_steer(g: &mut Ctx, p: Player, push: i16) {
     cov!();
     if p.u8(g, field::AIR_STEERED) != 0 || (p.u16(g, 0x18) as i16) < 0 {
         return;
@@ -224,7 +240,7 @@ pub fn air_steer(g: &mut Ctx, p: Player) {
     if keys == 0 {
         return;
     }
-    let (facing, push): (u8, i16) = if keys & 1 != 0 { (0x20, 0x30) } else { (0, -0x30) };
+    let (facing, push): (u8, i16) = if keys & 1 != 0 { (0x20, push) } else { (0, -push) };
     if facing == p.u8(g, Player::FACING) {
         return;
     }
@@ -352,7 +368,13 @@ pub fn dim_screen(g: &mut Ctx, p: Player) {
 /// 0x3f954 : le sort est fini, l'écran est rétabli.
 pub fn undim_screen(g: &mut Ctx, p: Player) {
     cov!();
-    screen_task(g, p, 2, rom::UNDIM_TASK, false);
+    undim_screen_mode(g, p, 2);
+}
+
+/// Rétablit l'écran avec le mode `mode` : le code du magicien (0x48772) passe 1 au lieu de 2.
+pub fn undim_screen_mode(g: &mut Ctx, p: Player, mode: u16) {
+    cov!();
+    screen_task(g, p, mode, rom::UNDIM_TASK, false);
 }
 
 /// Début de sort (pas suivant de l'action) : pause du jeu (`A5+0x3d`), indicateur de sort (`A5+0x4a`),
@@ -371,17 +393,29 @@ pub fn begin_spell(g: &mut Ctx, p: Player, timer: Option<u16>) {
 /// Fin de sort : lève la pause et les gels, rétablit l'écran, retour à l'état immobile.
 pub fn end_spell(g: &mut Ctx, p: Player) {
     cov!();
+    end_spell_mode(g, p, 2);
+}
+
+/// `end_spell` avec le mode de rétablissement de l'écran du personnage (voir `undim_screen_mode`).
+pub fn end_spell_mode(g: &mut Ctx, p: Player, mode: u16) {
+    cov!();
     clear_spell_state(g);
     p.set_u8(g, field::SPELL_CANCELLED, 0);
-    undim_screen(g, p);
+    undim_screen_mode(g, p, mode);
     to_stand(g, p);
 }
 
 /// Fin de sort qui ne touche pas au drapeau d'annulation (le sort n'a pas été annulé).
 pub fn end_spell_keep_cancel(g: &mut Ctx, p: Player) {
     cov!();
+    end_spell_keep_cancel_mode(g, p, 2);
+}
+
+/// `end_spell_keep_cancel` avec le mode de rétablissement de l'écran du personnage.
+pub fn end_spell_keep_cancel_mode(g: &mut Ctx, p: Player, mode: u16) {
+    cov!();
     clear_spell_state(g);
-    undim_screen(g, p);
+    undim_screen_mode(g, p, mode);
     to_stand(g, p);
 }
 
@@ -568,12 +602,37 @@ pub fn apply_heal(g: &mut Ctx, p: Player) {
 pub struct JumpKit {
     /// Table de la ROM (données) : quatre mots (vx, ax, vz, az) par type de saut `Player::+0x67`.
     pub speeds: u32,
+    /// Poussée horizontale quand le joueur retourne le personnage en l'air.
+    pub steer_push: i16,
     /// Coup donné en l'air avec le bouton 1.
     pub air_attack: fn(&mut Ctx, Player),
     /// Appelé quand la récupération est finie et que le personnage est revenu à l'état immobile.
     pub after_recover: fn(&mut Ctx, Player),
     /// Appelé à la fin de chaque image de saut.
     pub finish: fn(&mut Ctx, Player),
+    /// Remises à zéro propres au personnage au décollage.
+    pub takeoff: fn(&mut Ctx, Player),
+    /// Un geste en l'air est en cours : le reste du pas (montée, sommet, descente) est sauté.
+    pub busy: fn(&mut Ctx, Player) -> bool,
+    /// Gravité (`AZ`) posée à la fin du sommet : (après une course, autre) ; inchangée si `None`.
+    pub apex_gravity: Option<(i16, i16)>,
+    /// Pas propres au personnage (gestes en l'air des pas 0xa, 0xc...).
+    pub extra_step: fn(&mut Ctx, Player, u8),
+}
+
+impl JumpKit {
+    /// Saut de base : aucun crochet.
+    pub const PLAIN: JumpKit = JumpKit {
+        speeds: 0,
+        steer_push: 0x30,
+        air_attack: nothing,
+        after_recover: nothing,
+        finish: nothing,
+        takeoff: nothing,
+        busy: |_, _| false,
+        apex_gravity: None,
+        extra_step: |_, _, _| {},
+    };
 }
 
 /// Ne fait rien (variante par défaut des crochets d'un `JumpKit`).
@@ -599,7 +658,7 @@ pub fn jump(g: &mut Ctx, p: Player, kit: &JumpKit) {
         4 => jump_apex(g, p, kit),
         6 => jump_fall(g, p, kit),
         8 => jump_recover(g, p, kit),
-        _ => {}
+        step => (kit.extra_step)(g, p, step),
     }
     (kit.finish)(g, p);
 }
@@ -613,6 +672,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     next_step(g, p);
     p.set_u8(g, field::AIR_STEERED, 0);
     p.set_u8(g, field::AIR_ATTACK_DONE, 0);
+    (kit.takeoff)(g, p);
     let x = p.u16(g, Obj::X);
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
@@ -628,9 +688,9 @@ fn jump_rise(g: &mut Ctx, p: Player, kit: &JumpKit) {
     animation::step(g, p);
     move_z(g, p);
     drift(g, p);
-    air_steer(g, p);
+    air_steer(g, p, kit.steer_push);
     (kit.air_attack)(g, p);
-    if p.u16(g, Obj::VZ) > 0x180 {
+    if (kit.busy)(g, p) || p.u16(g, Obj::VZ) > 0x180 {
         return;
     }
     next_step(g, p);
@@ -645,11 +705,18 @@ fn jump_apex(g: &mut Ctx, p: Player, kit: &JumpKit) {
     cov!();
     move_z(g, p);
     drift(g, p);
-    air_steer(g, p);
+    air_steer(g, p, kit.steer_push);
     (kit.air_attack)(g, p);
+    if (kit.busy)(g, p) {
+        return;
+    }
     if animation::step(g, p) {
         next_step(g, p);
         if p.u8(g, field::AIR_ATTACK_DONE) == 0 {
+            if let Some((after_run, other)) = kit.apex_gravity {
+                let az = if p.u8(g, 0x67) == 2 { after_run } else { other };
+                p.set_u16(g, Obj::AZ, az as u16);
+            }
             let anim = by_jump_kind(g, p, 0x17, 0x12, 0xd);
             animation::start(g, p, anim);
         }
@@ -662,10 +729,16 @@ fn jump_fall(g: &mut Ctx, p: Player, kit: &JumpKit) {
     animation::step(g, p);
     move_xz(g, p);
     (kit.air_attack)(g, p);
-    if (p.u16(g, Obj::Z) as i16) > 0 {
+    if (kit.busy)(g, p) || (p.u16(g, Obj::Z) as i16) > 0 {
         return;
     }
     next_step(g, p);
+    land(g, p);
+}
+
+/// Atterrissage : au sol (`Z` = 0), animation de récupération et son.
+pub fn land(g: &mut Ctx, p: Player) {
+    cov!();
     p.set_u32(g, Obj::Z, 0);
     let anim = by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
@@ -765,9 +838,9 @@ pub fn chain_rank(g: &mut Ctx, p: Player, hit_bit: u8, last: u8) -> u8 {
     rank
 }
 
-/// Second pas d'un coup de base (0x3e8de, 0x3ffea) : si le bouton 1 reste appuyé pendant la fenêtre et
-/// que le coup a porté, le geste `follow_anim` prolonge le coup ; sinon retour à l'état immobile.
-pub fn combo_follow(g: &mut Ctx, p: Player, follow_anim: u16) {
+/// La fenêtre de l'enchaînement diminue ; si le bouton 1 est relâché pendant ce temps, l'enchaînement
+/// est abandonné (`COMBO_RELEASED`).
+pub fn combo_window(g: &mut Ctx, p: Player) {
     cov!();
     let window = p.u8(g, field::COMBO_WINDOW);
     if window != 0 {
@@ -776,14 +849,24 @@ pub fn combo_follow(g: &mut Ctx, p: Player, follow_anim: u16) {
             p.set_u8(g, field::COMBO_RELEASED, 1);
         }
     }
+}
+
+/// Second pas d'un coup de base (0x3e8de, 0x3ffea) : si le bouton 1 reste appuyé pendant la fenêtre et
+/// que le coup a porté, le geste `follow_anim` prolonge le coup ; sinon retour à l'état immobile.
+/// Renvoie vrai si le coup est prolongé.
+pub fn combo_follow(g: &mut Ctx, p: Player, follow_anim: u16) -> bool {
+    cov!();
+    combo_window(g, p);
     if !animation::step(g, p) {
-        return;
+        return false;
     }
     if p.u8(g, field::COMBO_RELEASED) == 0 && p.u8(g, field::HITS) != 0 {
         next_step(g, p);
         animation::start_plain(g, p, follow_anim);
+        true
     } else {
         to_stand(g, p);
+        false
     }
 }
 
@@ -847,19 +930,21 @@ pub fn pose(g: &mut Ctx, p: Player, anim: u16) {
     }
 }
 
-/// Pas 2 du coup donné en courant (0x3ec84, 0x402d8) : l'élan s'épuise (nouvelle animation) ou le
+/// Pas 2 du coup donné en courant (0x3ec84, 0x402d8) : l'élan s'épuise (animation `stop_anim`) ou le
 /// personnage continue de glisser avec de la poussière.
-pub fn run_strike_slide(g: &mut Ctx, p: Player) {
+/// Renvoie vrai tant que le personnage glisse.
+pub fn run_strike_slide(g: &mut Ctx, p: Player, stop_anim: u16) -> bool {
     cov!();
     animation::step(g, p);
     if momentum_reversed(g, p) {
         next_step(g, p);
         p.set_u32(g, Obj::VX, 0);
-        animation::start_plain(g, p, 0xf);
-        return;
+        animation::start_plain(g, p, stop_anim);
+        return false;
     }
     dust_run(g, p);
     move_x(g, p);
+    true
 }
 
 /// Pas 4 de la charge (0x3ebbc, 0x4023a) : les coups portés créent des effets ; la glissade ralentit
@@ -900,4 +985,157 @@ pub fn find_ally(g: &mut Ctx, p: Player, reach: u16, mut visit: impl FnMut(&mut 
         return Some(q);
     }
     None
+}
+
+// ---- squelette des sorts ------------------------------------------------------------------------
+
+/// Le geste porté (`field::EVENT` non nul) vient d'être signalé : il est consommé.
+pub fn take_event(g: &mut Ctx, p: Player) -> bool {
+    cov!();
+    if p.u8(g, field::EVENT) == 0 {
+        return false;
+    }
+    p.set_u8(g, field::EVENT, 0);
+    true
+}
+
+/// Le sort est annulé par une protection (`field::SPELL_CANCELLED`).
+pub fn is_cancelled(g: &mut Ctx, p: Player) -> bool {
+    p.u8(g, field::SPELL_CANCELLED) != 0
+}
+
+/// Une image de décompte : `field::TIMER` diminue ; vrai quand il atteint zéro.
+pub fn countdown(g: &mut Ctx, p: Player) -> bool {
+    cov!();
+    let left = p.u16(g, field::TIMER).wrapping_sub(1);
+    p.set_u16(g, field::TIMER, left);
+    left == 0
+}
+
+/// Début d'un sort : pas suivant, pause, indicateur de sort, durée, une charge de la réserve
+/// (`reserve` : octet de `+0x151..+0x157`), orientation, gel des autres joueurs.
+pub fn begin_cast(g: &mut Ctx, p: Player, timer: Option<u16>, reserve: Option<u32>) {
+    cov!();
+    begin_spell(g, p, timer);
+    if let Some(reserve) = reserve {
+        let left = p.u8(g, reserve).wrapping_sub(1);
+        p.set_u8(g, reserve, left);
+    }
+    face_held_direction(g, p);
+    freeze_others(g, p);
+}
+
+/// Début complet d'un sort : `begin_cast`, écran assombri, geste `anim`.
+pub fn start_cast(g: &mut Ctx, p: Player, timer: u16, reserve: Option<u32>, anim: u16) {
+    cov!();
+    begin_cast(g, p, Some(timer), reserve);
+    dim_screen(g, p);
+    animation::start_plain(g, p, anim);
+}
+
+/// Annulation du sort (une protection) : l'étincelle `spark` est jouée et le décompte passe à 16 images.
+pub fn cancel_cast(g: &mut Ctx, p: Player, spark: u16) {
+    cov!();
+    p.set_u16(g, field::TIMER, 0x10);
+    item_spark(g, p, spark);
+}
+
+/// 0x43864 / 0x46f00 : l'écran change de teinte (D0 = 0xc000 ou 0x2000, une phase sur deux) tant que le
+/// dégradé précédent est fini.
+pub fn flash_screen(g: &mut Ctx, p: Player) {
+    cov!();
+    if g.a5u8(0x48f) != 0 {
+        return;
+    }
+    g.set_a5u8(0x48e, 0xc);
+    let phase = (p.u8(g, 0x1eb) + 1) & 3;
+    p.set_u8(g, 0x1eb, phase);
+    let color: u16 = if phase & 2 != 0 { 0x2000 } else { 0xc000 };
+    g.c.d[0] = g.c.d[0] & 0xffff_0000 | color as u32;
+    g.rom(rom::PALETTE_FADE, p);
+}
+
+/// Réglage de l'intensité des sorts de gel (haut et bas pendant la phase finale) : après une pause de
+/// `+0x1e8` images, la touche vers le haut (bit 3) diminue `+0x1e9`, vers le bas (bit 2) l'augmente (de
+/// 0 à 4), et le geste `base + intensité` est joué ; sinon l'animation avance.
+pub fn intensity_keys(g: &mut Ctx, p: Player, base: u16) {
+    cov!();
+    let wait = p.u8(g, 0x1e8);
+    if wait != 0 {
+        p.set_u8(g, 0x1e8, wait - 1);
+        animation::step(g, p);
+        return;
+    }
+    let keys = p.u8(g, Player::KEYS_HELD);
+    let forward = if p.u8(g, Player::FACING) != 0 { 1 } else { 0 };
+    let level = p.u8(g, 0x1e9);
+    if keys >> forward & 1 == 0 {
+        let next = if keys & 8 != 0 {
+            level.checked_sub(1)
+        } else if keys & 4 != 0 {
+            (level != 4).then_some(level + 1)
+        } else {
+            None
+        };
+        if let Some(next) = next {
+            p.set_u8(g, 0x1e8, 0x10);
+            p.set_u8(g, 0x1e9, next);
+            animation::start_plain(g, p, base + next as u16);
+            return;
+        }
+    }
+    animation::step(g, p);
+}
+
+/// Les quatre clignotements d'écran du sort de gel : `+0x4ba` vaut 0x100 trois fois sur quatre pas.
+pub fn blink_screen(g: &mut Ctx, p: Player) {
+    cov!();
+    g.set_a5u16(0x4ba, 0);
+    let blinks = p.u8(g, 0x1ea);
+    if blinks != 0 {
+        g.set_a5u16(0x4ba, 0x100);
+        p.set_u8(g, 0x1ea, blinks - 1);
+    }
+}
+
+/// Pas final des sorts qui laissent l'animation finir : le décompte diminue ; à zéro le sort s'achève
+/// (écran rétabli avec `undim_mode`), sinon l'animation avance.
+pub fn wind_down(g: &mut Ctx, p: Player, undim_mode: u16) {
+    cov!();
+    if countdown(g, p) {
+        end_spell_mode(g, p, undim_mode);
+    } else {
+        animation::step(g, p);
+    }
+}
+
+/// Échange d'équipement simple (elfe, magicien) : l'objet ramassé (`field::ITEM_NEW`) prend la place
+/// de l'arme `slot` (`WEAPON_A` ou `WEAPON_B`) et l'ancienne arme celle de l'objet de la liste. Avec
+/// `with_effect`, le geste 1 fait l'échange et le geste 2 crée l'effet d'échange (0x4fd2c) ; sinon tout
+/// geste fait l'échange.
+pub fn swap_weapon(g: &mut Ctx, p: Player, slot: u32, with_effect: bool) {
+    cov!();
+    if p.u8(g, Player::STEP) == 0 {
+        next_step(g, p);
+        animation::start(g, p, 0x32);
+        return;
+    }
+    if animation::step(g, p) {
+        to_stand(g, p);
+        return;
+    }
+    let event = p.u8(g, field::EVENT);
+    if event == 0 || (with_effect && event > 2) {
+        return;
+    }
+    p.set_u8(g, field::EVENT, 0);
+    if with_effect && event == 2 {
+        call(g, p, 0x4fd2c, &[(0, 0)]);
+        return;
+    }
+    let new = p.u8(g, field::ITEM_NEW).wrapping_sub(0x2e);
+    let held = p.u8(g, slot);
+    p.set_u8(g, field::ITEM, held.wrapping_add(0x2e));
+    p.set_u8(g, slot, new);
+    init_weapon_stats(g, p);
 }

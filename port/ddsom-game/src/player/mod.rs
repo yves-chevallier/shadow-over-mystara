@@ -77,6 +77,14 @@ pub const NATIVES: &[Native] = &[
     characters::cleric::ATTACK,
     characters::cleric::SPECIAL,
     characters::cleric::DASH,
+    characters::elf::JUMP,
+    characters::elf::ATTACK,
+    characters::elf::SPECIAL,
+    characters::elf::DASH,
+    characters::magic_user::JUMP,
+    characters::magic_user::ATTACK,
+    characters::magic_user::SPECIAL,
+    characters::magic_user::DASH,
 ];
 
 /// Premier enregistrement joueur (offset depuis A5) et pas entre deux joueurs.
