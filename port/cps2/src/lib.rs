@@ -29,6 +29,23 @@ pub const DDSOM_PROG: [&str; 8] = [
 /// Exécuteur de blocs recompilés : (pc, cpu, bus, échéance) -> Some(pc suivant) ou None si aucun bloc.
 pub type BlockExecutor = fn(u32, &mut Cpu, &mut Cps2Bus, u64) -> Option<u32>;
 
+/// Plafond de passages par image en un point du programme (voir `Machine::step_cap`).
+#[derive(Clone, Copy, Debug)]
+pub struct StepCap {
+    /// Adresse du point compté (début du pas de jeu).
+    pub pc: u32,
+    /// Nombre maximal de passages exécutés par image.
+    pub max: u32,
+    /// Passages exécutés depuis le début de l'image.
+    count: u32,
+}
+
+impl StepCap {
+    pub const fn new(pc: u32, max: u32) -> Self {
+        StepCap { pc, max, count: 0 }
+    }
+}
+
 pub struct Machine {
     /// Code recompilé (None = tout interprété).
     pub executor: Option<BlockExecutor>,
@@ -41,6 +58,12 @@ pub struct Machine {
     /// Le programme attend-il seulement une interruption ? (boucle d'attente du jeu) Le temps
     /// restant de la ligne est alors sauté.
     pub idle: Option<fn(&Cpu, &Cps2Bus) -> bool>,
+    /// Plafond de pas de jeu par image. Le jeu d'origine enchaîne parfois plusieurs pas dans une même image
+    /// (« avance rapide » : une tâche remet la tâche principale prête sans attendre l'image) ; leur nombre vaut
+    /// alors (durée de l'image) / (durée d'un pas) et dépend donc de la fréquence du 68000. Quand `max` passages
+    /// en `pc` ont eu lieu dans l'image, le suivant est retenu : le temps restant de l'image est sauté (comme
+    /// `idle`) et le pas s'exécute au début de l'image suivante, après l'interruption de vblank.
+    pub step_cap: Option<StepCap>,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -100,6 +123,7 @@ impl Machine {
             interp_steps: 0,
             step_hook: None,
             idle: None,
+            step_cap: None,
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -137,10 +161,18 @@ impl Machine {
                 self.cpu.cycles = target;
                 break;
             }
+            let mask = ((self.cpu.sr >> 8) & 7) as u8;
+            let plain = self.cpu.irq_level <= mask && !self.cpu.stopped && !self.cpu.trace_pending
+                && self.cpu.sr & m68k::SR_T == 0;
+            if let Some(cap) = self.step_cap.as_mut().filter(|cap| plain && cap.pc == self.cpu.pc) {
+                if cap.count >= cap.max {
+                    // pas retenu jusqu'à l'image suivante (le temps passe, l'interruption de vblank viendra)
+                    self.cpu.cycles = target;
+                    break;
+                }
+                cap.count += 1;
+            }
             if let Some(run) = self.executor {
-                let mask = ((self.cpu.sr >> 8) & 7) as u8;
-                let plain = self.cpu.irq_level <= mask && !self.cpu.stopped && !self.cpu.trace_pending
-                    && self.cpu.sr & m68k::SR_T == 0;
                 if plain {
                     if run(self.cpu.pc, &mut self.cpu, &mut self.bus, target).is_some() {
                         continue;
@@ -167,6 +199,9 @@ impl Machine {
     /// verrouillage de la table d'objets, IRQ2), traité au début de l'image suivante.
     /// Renvoie l'image 384x224 RGB.
     pub fn run_frame(&mut self) -> Vec<[u8; 3]> {
+        if let Some(cap) = self.step_cap.as_mut() {
+            cap.count = 0;
+        }
         let frame_end = (self.cycle_debt + self.line_cycles * LINES as f64) as u64;
         for i in 0..LINES {
             let line = (VBLANK_LINE + i) % LINES;

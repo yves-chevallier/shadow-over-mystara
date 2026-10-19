@@ -29,6 +29,37 @@ coopératives en Rust.
 
 Rust : `game::FRAME_END` (0x1c4c4).
 
+### Avance rapide et plafond de pas par image
+
+Le test de 0x1c48c lit l'octet FF19F2, que le VBLANK efface (0x5ea) et que la boucle repose en 0x1c4b0 : tant
+qu'il est posé, chaque pas cède une image (0xa40, D0 = 1 : état 1 = attente, compteur +1 décrémenté par le
+VBLANK). Quand un bouton est pressé (à l'attract, à l'entrée d'une scène, en jeu...), une tâche auxiliaire
+(entrée 13 de la table ; tâche 14 dans `tasks`, code 0xee080-0xee164) fait elle-même ce que fait le VBLANK pour
+la tâche principale : décrémenter son compteur d'attente et la remettre prête, puis cède par 0xa86 (trap #4 :
+reste prête) et recommence. L'ordonnanceur (0x928) la relance aussitôt : **un pas de jeu par passage de la tâche
+auxiliaire, sans attendre l'image** (« avance rapide » ; hors bouton, la même tâche tourne à vide, une soixantaine
+de fois par image à ×1, sans effet). Le nombre de pas par image vaut donc (cycles de l'image) / (cycles d'un
+pas) :
+
+| Mesure (`examples/passages`, `DDSOM_STEP_CAP=0`) | ×1 (arcade) | ×16 |
+|---|---|---|
+| `cov_attract_coin`, images 21302-21305 | 8, 7, 8, 7 | 136, 128, 129, 128 |
+| `cov_tour6_c5`, entrée de scène | 9-10 | 54-170 |
+| `cov_tour7_c0`, en jeu | 5-7 | 111-118 |
+
+Cet écart ne se mesure pas sur le code seul : il dépend de la durée de chaque routine (les natives n'ont pas
+celle de l'original), donc deux machines surcadencées, ou une native et son original, ne s'accordent plus.
+
+**Plafond** (`ddsom_game::MAX_STEPS_PER_FRAME` = 8 pas, `GAME_STEP` = 0x1c4b0, `cps2::Machine::step_cap`) : au plus 8
+passages en 0x1c4b0 par image ; le suivant est retenu, le reste de l'image est sauté (comme `idle`) et le pas
+s'exécute au début de l'image suivante, après l'IRQ du VBLANK. Huit est la médiane des mesures de l'arcade (5 à 10
+selon le coût du pas). Installé par `ddsom_game::install` (jeu et machine hybride de la validation) et par
+`ddsom_game::install_reference` (code d'origine de la validation, `determinisme`, `tasks`, `watch`...), donc
+identique des deux côtés ; `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade) n'est pas plafonné.
+C'est un écart volontaire avec le code d'origine **surcadencé** (qui ferait 130 pas), pas avec l'arcade. Un pas
+retenu ne change pas l'ordre des tâches : la tâche principale occupe le premier emplacement de l'ordonnanceur,
+elle reprend avant les tâches réveillées par le VBLANK, comme dans une image normale.
+
 ## 2. Phases (A5+0x2c, pas de 4, table 0x1c502)
 
 | A5+0x2c | Handler | Rôle | Rust |

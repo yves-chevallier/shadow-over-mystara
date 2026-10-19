@@ -132,4 +132,9 @@ d'une, mesurable avec `examples/passages`). Le nombre de pas par image vaut alor
 pas) : il dépend du coût en cycles des natives, donc diffère forcément du code d'origine (écart de `ff806e`, le
 compteur d'images, d'un pas à l'autre). Le code d'origine seul est déterministe. Ces états ne sont comparables que si
 la durée des natives est exacte ; le bot évite ces instants et les scénarios de couverture doivent aussi les éviter
-(aucun bouton en entrée de scène). Le moteur final devra fixer explicitement le nombre de pas de cette avance rapide.
+(aucun bouton en entrée de scène). **Résolu** : le nombre de pas par image est maintenant plafonné à 8 (valeur de
+l'arcade : 5 à 10, `ddsom_game::MAX_STEPS_PER_FRAME`) par un crochet de `cps2::Machine` appliqué à l'identique au jeu
+et à la machine de référence (`install`, `install_reference` ; `docs/boucle.md` §1). Les scénarios `cov_tour2/3/6/7`,
+`cov_mortal_late`, `cov_attract_coin` et `ko/boss13_dragon` sont VALIDES sur 30 000 images ; `examples/determinisme`
+(deux machines d'origine à ×16 et ×32) ne montre plus d'écart que sur les mots ignorés par `validate`. Les
+scénarios n'ont donc plus à éviter les boutons en entrée de scène.

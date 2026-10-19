@@ -44,7 +44,7 @@ fn main() {
     };
     let (mut ma, mut mb) = (load(), load());
     ddsom_game::install(&mut ma);
-    ddsom_rc::install(&mut mb);
+    ddsom_game::install_reference(&mut mb);
     mb.idle = Some(ddsom_game::idle);
     if std::env::var("DDSOM_NOIDLE").is_ok() {
         ma.idle = None;

@@ -14,10 +14,10 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let load = |k: &str| {
         let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-        ddsom_rc::install(&mut m);
+        ddsom_game::install_reference(&mut m);
         m.set_overclock(k.parse().unwrap());
-        if std::env::var("IDLE").is_ok() {
-            m.idle = Some(ddsom_game::idle);
+        if std::env::var("IDLE").is_err() {
+            m.idle = None;
         }
         m
     };

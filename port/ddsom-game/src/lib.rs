@@ -272,10 +272,41 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
     Some(c.pc)
 }
 
+/// Début d'un pas de jeu dans la boucle principale (0x1c4b0 : `st (-0x660e,A5)` juste avant l'appel de la phase).
+pub const GAME_STEP: u32 = 0x1c4b0;
+
+/// Pas de jeu maximal par image.
+///
+/// La boucle principale (0x1c48c) cède d'ordinaire une image par pas (0xa40, D0 = 1). Mais quand un bouton est
+/// pressé à l'entrée d'une scène ou à l'attract, une tâche auxiliaire (entrée 13 de la table, 0xee080) remet la
+/// tâche principale prête à chaque passage de l'ordonnanceur : le jeu enchaîne ses pas sans attendre l'image
+/// (« avance rapide »). Le nombre de pas par image vaut alors (durée de l'image) / (durée d'un pas) : 5 à 10 sur
+/// l'arcade (mesuré à l'attract : 7-8, `examples/passages` ; en jeu : 5-7 ; entrée de scène : 9-10) mais 128 à
+/// ×16, et il dépend de la durée des routines, donc diffère entre le code d'origine et les natives.
+///
+/// Écart volontaire avec le code d'origine surcadencé (pas avec l'arcade) : au plus `MAX_STEPS_PER_FRAME` pas
+/// par image, quelle que soit la fréquence du 68000 (`cps2::Machine::step_cap`). Appliqué à l'identique par le
+/// jeu (`install`) et par la machine de référence (`install_reference`), il rend ces phases déterministes.
+pub const MAX_STEPS_PER_FRAME: u32 = 8;
+
+/// Plafonne les pas de jeu par image (`DDSOM_STEP_CAP=n` : autre valeur, 0 = sans plafond, diagnostic).
+fn cap_steps(m: &mut cps2::Machine) {
+    let max = std::env::var("DDSOM_STEP_CAP").ok().and_then(|v| v.parse().ok()).unwrap_or(MAX_STEPS_PER_FRAME);
+    m.step_cap = (max > 0).then(|| cps2::StepCap::new(GAME_STEP, max));
+}
+
 /// Active les routines natives (et le code recompilé) sur la machine.
 pub fn install(m: &mut cps2::Machine) {
     m.executor = Some(run);
     m.idle = Some(idle);
+    cap_steps(m);
+}
+
+/// Machine de référence de la validation : code d'origine seul, avec le même plafond de pas que `install`.
+pub fn install_reference(m: &mut cps2::Machine) {
+    ddsom_rc::install(m);
+    m.idle = Some(idle);
+    cap_steps(m);
 }
 
 /// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image.

@@ -81,7 +81,7 @@ fn main() {
     }
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
     m.set_overclock(OVERCLOCK);
-    ddsom_rc::install(&mut m);
+    ddsom_game::install_reference(&mut m);
     m.idle = Some(ddsom_game::idle);
     let base = ddsom_game::scenario::Scenario::load(Path::new(base_path)).unwrap();
     let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new() };

@@ -12,7 +12,7 @@ fn main() {
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
     // NATIVES=0 : code recompilé seul (référence pour isoler l'effet des routines natives)
     if std::env::var("NATIVES").as_deref() == Ok("0") {
-        ddsom_rc::install(&mut m);
+        ddsom_game::install_reference(&mut m);
     } else {
         ddsom_game::install(&mut m);
     }
