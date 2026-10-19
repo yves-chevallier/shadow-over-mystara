@@ -133,3 +133,10 @@ pas) : il dépend du coût en cycles des natives, donc diffère forcément du co
 compteur d'images, d'un pas à l'autre). Le code d'origine seul est déterministe. Ces états ne sont comparables que si
 la durée des natives est exacte ; le bot évite ces instants et les scénarios de couverture doivent aussi les éviter
 (aucun bouton en entrée de scène). Le moteur final devra fixer explicitement le nombre de pas de cette avance rapide.
+
+Scénarios de boss : les écarts des variantes `_mort` (images 6211, 6652, 7111, 7741, 11040) étaient cette même tempête de
+pas, déclenchée par un bouton pressé ou **maintenu** (la troncature des entrées laissait des boutons enfoncés) quand le
+jeu change de scène après la mort du boss ; les écarts de `game_phase12` (FFD514, FFD574, FFD692), de `combat_update`
+(FF8664) et de l'effet du boss 8 avaient disparu avec les campagnes de registres résiduels. `tools/gen_boss.py` tronque
+désormais les entrées avant le bouton fautif et relâche les boutons restés enfoncés : `scenarios/boss/*_mort` et
+`boss12_scene40` (entier) sont VALIDES sur 12 000 images ; `boss18_scene26` est tronqué à l'image 10 900.

@@ -19,9 +19,20 @@ AUTOBOT = os.path.join(ROOT, "port/target/release/examples/autobot")
 ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
 FRAMES = 12000
-# scénarios tronqués : le bot tue le boss naturellement, et la fin de scène diverge (routines d'autres modules, voir
-# scenarios/ko/README.md) ; on garde les entrées jusqu'à l'image indiquée
-TRONQUE = {"boss18_scene26": 10300, "boss12_scene40": 10300}
+# scénarios tronqués : après la mort du boss, un bouton pressé ou maintenu pendant la fin de scène déclenche l'avance
+# rapide (« tempête de pas », voir docs/couverture.md), dont le nombre de pas dépend de la durée des routines natives ;
+# on garde les entrées jusqu'à l'image indiquée, avant que le bot ne touche aux boutons à ce moment
+TRONQUE = {
+    "boss18_scene26": 10900,
+    "boss18_scene26_mort": 7738,
+    "boss19_scene32_mort": 6208,
+    "boss15_scene46_mort": 7108,
+    "boss12_scene40_mort": 6208,
+    "boss11_scene42_mort": 6208,
+    "boss21_scene44_mort": 7738,
+    "boss5_scene58_mort": 6208,
+    "boss8_scene64_mort": 6649,
+}
 
 # nom -> (type de boss, scènes "scène:images,...", crans du curseur, PV du joueur remis à, affaiblissement, dossier)
 # dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/LISEZMOI.txt)
@@ -35,19 +46,37 @@ SPECS = {
     "boss19_scene32": (19, "32:11000", 0, "0x70", 0, "boss"),
     "boss19_scene32_mort": (19, "32:11000", 0, "0x70", 1500, "boss"),
     "boss12_scene40": (12, "40:11000", 0, "0x70", 0, "boss"),
-    "boss12_scene40_mort": (12, "40:11000", 0, "0x70", 1500, "ko"),
+    "boss12_scene40_mort": (12, "40:11000", 0, "0x70", 1500, "boss"),
     "boss11_scene42": (11, "42:11000", 0, "0x70", 0, "boss"),
-    "boss11_scene42_mort": (11, "42:11000", 0, "0x70", 1500, "ko"),
+    "boss11_scene42_mort": (11, "42:11000", 0, "0x70", 1500, "boss"),
     "boss21_scene44": (21, "44:11000", 0, "0x70", 0, "boss"),
-    "boss21_scene44_mort": (21, "44:11000", 0, "0x70", 1500, "ko"),
+    "boss21_scene44_mort": (21, "44:11000", 0, "0x70", 1500, "boss"),
     "boss15_scene46": (15, "46:11000", 0, "0x70", 0, "boss"),
     "boss15_scene46_mort": (15, "46:11000", 0, "0x70", 1500, "boss"),
     "boss5_scene58": (5, "58:11000", 0, "0x70", 0, "boss"),
-    "boss5_scene58_mort": (5, "58:11000", 0, "0x70", 1500, "ko"),
+    "boss5_scene58_mort": (5, "58:11000", 0, "0x70", 1500, "boss"),
     "boss8_scene64": (8, "64:11000", 0, "0x70", 0, "boss"),
-    "boss8_scene64_mort": (8, "64:11000", 0, "0x70", 1500, "ko"),
+    "boss8_scene64_mort": (8, "64:11000", 0, "0x70", 1500, "boss"),
     "boss13_dragon": (13, "7:3000,9:3000", 0, "0x70", 0, "ko"),
 }
+
+
+def tronquer(lines, fin):
+    """Garde les entrées jusqu'à l'image `fin`, puis relâche (image fin + 1) les boutons restés enfoncés : un bouton
+    maintenu à l'entrée de la scène suivante suffit à déclencher l'avance rapide."""
+    gardees, enfonces = [], {}
+    for l in lines:
+        mots = l.split()
+        if mots and mots[0].isnumeric():
+            if int(mots[0]) > fin:
+                continue
+            if mots[1] in ("P1", "P2", "P3", "P4", "Coin", "Service") and mots[-1] in ("0", "1"):
+                enfonces[" ".join(mots[1:-1])] = mots[-1]
+        gardees.append(l)
+    while gardees and not gardees[-1]:
+        gardees.pop()
+    gardees += [f"{fin + 1} {entree} 0" for entree, etat in enfonces.items() if etat == "1"]
+    return "\n".join(gardees) + "\n"
 
 
 def generate(name):
@@ -66,9 +95,9 @@ def generate(name):
     with open(os.path.join(ROOT, "work", name + ".log"), "w") as f:
         f.write(log.stderr)
     if name in TRONQUE:
-        gardees = [l for l in open(out).read().split("\n") if not (l.split()[:1] and l.split()[0].isnumeric() and int(l.split()[0]) > TRONQUE[name])]
+        texte = tronquer(open(out).read().split("\n"), TRONQUE[name])
         with open(out, "w") as f:
-            f.write("\n".join(gardees))
+            f.write(texte)
     return log.returncode
 
 
