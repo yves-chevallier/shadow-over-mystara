@@ -19,6 +19,9 @@ AUTOBOT = os.path.join(ROOT, "port/target/release/examples/autobot")
 ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
 FRAMES = 12000
+# scénarios tronqués : le bot tue le boss naturellement, et la fin de scène diverge (routines d'autres modules, voir
+# scenarios/ko/README.md) ; on garde les entrées jusqu'à l'image indiquée
+TRONQUE = {"boss18_scene26": 10300, "boss12_scene40": 10300}
 
 # nom -> (type de boss, scènes "scène:images,...", crans du curseur, PV du joueur remis à, affaiblissement, dossier)
 # dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/LISEZMOI.txt)
@@ -27,6 +30,22 @@ SPECS = {
     "boss6_scene24": (6, "24:11000", 0, "0x70", 0, "ko"),
     "boss10_scene65": (10, "65:11000", 0, "0x70", 0, "ko"),
     "boss10_scene66": (10, "66:11000", 2, "0x70", 0, "boss"),
+    "boss18_scene26": (18, "26:11000", 0, "0x70", 0, "boss"),
+    "boss18_scene26_mort": (18, "26:11000", 0, "0x70", 1500, "boss"),
+    "boss19_scene32": (19, "32:11000", 0, "0x70", 0, "boss"),
+    "boss19_scene32_mort": (19, "32:11000", 0, "0x70", 1500, "boss"),
+    "boss12_scene40": (12, "40:11000", 0, "0x70", 0, "boss"),
+    "boss12_scene40_mort": (12, "40:11000", 0, "0x70", 1500, "ko"),
+    "boss11_scene42": (11, "42:11000", 0, "0x70", 0, "boss"),
+    "boss11_scene42_mort": (11, "42:11000", 0, "0x70", 1500, "ko"),
+    "boss21_scene44": (21, "44:11000", 0, "0x70", 0, "boss"),
+    "boss21_scene44_mort": (21, "44:11000", 0, "0x70", 1500, "ko"),
+    "boss15_scene46": (15, "46:11000", 0, "0x70", 0, "boss"),
+    "boss15_scene46_mort": (15, "46:11000", 0, "0x70", 1500, "boss"),
+    "boss5_scene58": (5, "58:11000", 0, "0x70", 0, "boss"),
+    "boss5_scene58_mort": (5, "58:11000", 0, "0x70", 1500, "ko"),
+    "boss8_scene64": (8, "64:11000", 0, "0x70", 0, "boss"),
+    "boss8_scene64_mort": (8, "64:11000", 0, "0x70", 1500, "ko"),
     "boss13_dragon": (13, "7:3000,9:3000", 0, "0x70", 0, "ko"),
 }
 
@@ -46,6 +65,10 @@ def generate(name):
     log = subprocess.run(cmd, capture_output=True, text=True)
     with open(os.path.join(ROOT, "work", name + ".log"), "w") as f:
         f.write(log.stderr)
+    if name in TRONQUE:
+        gardees = [l for l in open(out).read().split("\n") if not (l.split()[:1] and l.split()[0].isnumeric() and int(l.split()[0]) > TRONQUE[name])]
+        with open(out, "w") as f:
+            f.write("\n".join(gardees))
     return log.returncode
 
 
