@@ -4,3 +4,10 @@ members = ["cps2","cps2-gfx", "ddsom", "ddsom-assets", "ddsom-game", "ddsom-rc",
 
 [profile.release]
 debug = 1
+
+# Code 68000 recompilé (transitoire, généré : des dizaines de Mo) : unités de compilation nombreuses et
+# sans débogage, sans quoi LLVM peut passer plus d'une heure sur la plus grosse.
+[profile.release.package.ddsom-rc]
+opt-level = 3
+codegen-units = 256
+debug = 0
