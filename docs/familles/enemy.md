@@ -21,6 +21,7 @@ Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms d
 | `enemy_skeleton/` | type 1 (Skeleton) : `stance`, `attacks`, `leaps`, `hit` |
 | `enemy_elf/` | type 12 (Shadow Elf) : `stance`, `attacks`, `hit` |
 | `enemy_trog/` | type 2 (Troglodyte) : `stance`, `attacks`, `hit` |
+| `enemy_ghoul/` | type 5 (Ghoul) : `stance`, `attacks`, `moves`, `hit` |
 
 ## 2. Charpente commune
 
@@ -83,6 +84,18 @@ compteurs, bit 1 de `+1`) ; la série 1 (armée) ne clignote pas. `+0xa0/+0xa1` 
 qui l'empêche (inversion par rapport aux autres types) ; la pause laisse malgré tout l'ombre et la remise en liste.
 Un bond des variantes 3 et 4 teste les drapeaux de 0x1dd4 (`bpl`) : `Cx::c.cond(10)`. Couverture : scénarios
 `trog_scene101/101b/104`, fuzz.
+
+### Type 5 (0x5f792) « Ghoul » (h) — `enemy_ghoul/`
+
+Charpente de `active_loop`. Animations 0x16191c (mouvements) et 0x161930 (coups) ; `+0xa0/+0xa1` aspect courant et
+précédent. Six variantes d'arrivée (marche, saut, chute, réveil quand un joueur approche, apparition, clignotement).
+Les sous-états 2, 4, 6 et 8 commencent par le préambule des drapeaux de coup `+0x8f` (0x60c88) : ici les drapeaux 1
+et 2 exécutent **immédiatement** la routine de l'état touché (0x6089a, qui se termine par sa propre remise en liste,
+puis la boucle de l'état actif refait zone, ombre et remise en liste) et le drapeau 3 saute dans le sous-état 6 avec
+l'état 4/8. Groupes : 2 debout (marche, demi-tour, attente), 4 coups de griffe et bonds (`+6` = 0 à 16), 6 pas de
+côté, bonds, deux coups, sortie d'écran, 8 demi-tours enchaînés sur une attaque, 10 patrouille. Tables par difficulté
+0x60d38, 0x60f38 (+0xa) et 0x61164. Couverture : scénarios `ghoul_scene26/95` (la 19 et la 97 divergent à cause de
+`combat_update` et `players_update`, voir `scenarios/ko/README.md`), fuzz.
 
 ### Type 20 (0x74fc0) « ManScorpion » (h) — `enemy.rs`
 
@@ -197,9 +210,9 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
 
 ## 4. Non réécrit (types encore en 68000)
 
-0 Kobold, 3 Bow Gnoll, 5 Ghoul, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion, 11 mud golem,
+0 Kobold, 3 Bow Gnoll, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion, 11 mud golem,
 13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 27 WarMachine. Fréquence dans `scenarios/cov/` (12 000 images, `examples/types`) :
-1, 12, 0, 2, 8, 5, 10, 6, 9 par ordre décroissant ; 3, 11, 13, 14, 15, 18 et 27 n'y apparaissent pas.
+1, 12, 0, 2, 8, 5, 10, 6, 9 par ordre décroissant (5 réécrit) ; 3, 11, 13, 14, 15, 18 et 27 n'y apparaissent pas.
 
 ## 5. Validation
 

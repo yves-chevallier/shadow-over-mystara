@@ -35,7 +35,8 @@ SPECS = {
     "trog_scene101b": ("101:20000", 4, "0x70", "enemy"),
     "ghoul_scene95": ("95:20000", 0, "0x70", "enemy"),
     "ghoul_scene26": ("26:20000", 2, "0x70", "enemy"),
-    "ghoul_scene97": ("97:20000", 3, "0x70", "enemy"),
+    "ghoul_scene97": ("97:20000", 3, "0x70", "ko"),
+    "ghoul_scene19": ("19:20000", 1, "0x70", "ko"),
 }
 
 

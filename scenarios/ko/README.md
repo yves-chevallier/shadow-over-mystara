@@ -17,6 +17,16 @@ boss10_scene65.txt (scène 65, boss de type 10 réécrit dans families/boss_10.r
   DDSOM_SANS=set_ (les natives set_0, set_12, set_13, set_14, set_ecrans_ce024) : VALIDE, mais aucune d'elles désactivée seule
   ne supprime l'écart (combinaison de natives, comme boss13_dragon). Contrôle appel par appel : VALIDE sur 12000 images.
   Le scénario boss10_scene66.txt (scenarios/boss/), qui entre directement dans la scène 66, est VALIDE.
+
+ghoul_scene97.txt (scène de démonstration 97, Ghoul de type 5 réécrit dans families/enemy_ghoul/)
+  validate : écart à l'image 5516 (181 mots, objets FFBE9E-FFBF56 : effets), identique avec DDSOM_SANS=enemy
+  (toutes les natives ENEMY désactivées) ; DDSOM_SANS=players_update : VALIDE. Contrôle appel par appel
+  (DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 DDSOM_SANS=game_phase12,world_update,dispatch) : VALIDE sur 12000 images,
+  aucun écart de l'ennemi. Cause : players_update (autre module).
+
+ghoul_scene19.txt (scène 19, Ghoul de type 5 réécrit dans families/enemy_ghoul/)
+  validate : écart à l'image 5483 (mot FF8664 : champ du joueur 1), identique avec DDSOM_SANS=enemy_5 ;
+  DDSOM_SANS=combat : VALIDE (combat_update, voir docs/couverture.md).
 ```
 
 Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
