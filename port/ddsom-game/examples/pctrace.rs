@@ -2,6 +2,7 @@
 //! comparer deux exécutions (par exemple avec et sans une routine native, via DDSOM_SANS).
 //!
 //! pctrace <roms> <eeprom> <scenario> <image> [début_exclu fin_exclue (hex)]
+//! `PCTRACE_SEUL=début-fin` limite la trace à une plage de PC, `PCTRACE_IMAGES=k` trace k images de suite.
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -19,11 +20,23 @@ fn main() {
     }
     s.apply(n - 1, &mut m);
     m.executor = Some(ddsom_game::run_native_only);
+    // PCTRACE_SEUL=début-fin (hexa) : ne montre que les PC de cette plage ; PCTRACE_IMAGES=k : trace k images de suite
+    let seul = std::env::var("PCTRACE_SEUL").ok().and_then(|v| {
+        let (a, b) = v.split_once('-')?;
+        Some(u32::from_str_radix(a, 16).ok()?..u32::from_str_radix(b, 16).ok()?)
+    });
     m.step_hook = Some(Box::new(move |c: &m68k::Cpu, _: &cps2::Cps2Bus, pc: u32| {
-        if !skip.contains(&pc) {
+        if !skip.contains(&pc) && seul.as_ref().map_or(true, |r| r.contains(&pc)) {
             let d: Vec<String> = c.d.iter().chain(&c.a[..7]).map(|r| format!("{r:08x}")).collect();
             println!("{pc:06x} {} sr={:02x}", d.join(" "), c.sr & 0x1f);
         }
     }));
-    m.run_frame();
+    let k: usize = std::env::var("PCTRACE_IMAGES").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
+    for i in 0..k {
+        if i > 0 {
+            println!("--- image {} (compteur FF806E : {})", n + i, m.bus.ram[(0xff806e - 0xff0000) / 2]);
+            s.apply(n - 1 + i, &mut m);
+        }
+        m.run_frame();
+    }
 }

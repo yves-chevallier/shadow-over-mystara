@@ -186,6 +186,38 @@ pub fn anim(x: &mut Cx, set: u32, n: u32) {
     x.anim_start(set, n);
 }
 
+// --- aides communes des types du troisième lot --------------------------------------------------
+
+/// Fin commune des sous-états actifs : test de zone (0xfbae, qui remet D5 à 0) puis ombre (0x33fe4).
+pub fn zone_shadow(x: &mut Cx) {
+    x.call(IN_ZONE);
+    x.call(SHADOW);
+}
+
+/// `neg.w (off,A0)`.
+pub fn negate(x: &mut Cx, off: u32) {
+    let v = x.u16(off).wrapping_neg();
+    x.set16(off, v);
+}
+
+/// `movea.w (0x50,A0),A1` : A1 = la cible (adresse étendue en signe), qui est rendue.
+pub fn load_target(x: &mut Cx) -> Obj {
+    x.c.a[1] = x.u16(f::TARGET) as i16 as i32 as u32;
+    x.linked(f::TARGET)
+}
+
+/// Tirage `rand & mask` sur le mot de D0 (`andi.w #mask,D0w` : le mot haut de D0 reste celui du tirage).
+pub fn rand_and(x: &mut Cx, mask: u32) -> u32 {
+    let r = random(x);
+    x.c.d[0] = x.c.d[0] & 0xffff_0000 | r & mask;
+    r & mask
+}
+
+/// Écrit le long d'état de l'objet courant (`move.l #v,(4,A0)`).
+pub fn set_state_long(x: &mut Cx, v: u32) {
+    x.set32(f::STATE, v);
+}
+
 // --- aides d'IA communes ------------------------------------------------------------------------
 
 /// Un joueur est-il dans cette boîte devant l'ennemi ? (0xb5e0 : décalage, portée, profondeur.)

@@ -1,6 +1,7 @@
 //! Couverture des types d'objets : nombre d'appels de chaque gestionnaire des tables de dispatch
 //! des familles ITEM, BOX et EFFCT sur un scénario (code d'origine seul).
 //!   types <roms> <eeprom> <scénario> <images>
+//! `TYPES_ETATS=1` : appels par état ; `TYPES_SCENES=1` : appels par scène (`FF8034`) de chaque gestionnaire.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -16,6 +17,8 @@ thread_local! {
     static IMAGE: RefCell<u32> = const { RefCell::new(0) };
     static PREMIERE: RefCell<BTreeMap<u32, u32>> = RefCell::new(BTreeMap::new());
     /// (gestionnaire, variante, états +4 +5 +6) -> appels
+    /// gestionnaire -> scène (`FF8034`) -> appels
+    static SCENES: RefCell<BTreeMap<u32, BTreeMap<u8, u64>>> = RefCell::new(BTreeMap::new());
     static ETATS: RefCell<BTreeMap<(u32, u8, u8, u8, u8), u64>> = RefCell::new(BTreeMap::new());
 }
 
@@ -26,6 +29,8 @@ fn run(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32
             let o = c.a[0];
             let k = (pc, ddsom_game::mem::rd8(b, o + 3), ddsom_game::mem::rd8(b, o + 4), ddsom_game::mem::rd8(b, o + 5), ddsom_game::mem::rd8(b, o + 6));
             ETATS.with(|e| *e.borrow_mut().entry(k).or_insert(0) += 1);
+            let scene = ddsom_game::mem::rd8(b, 0xff8034);
+            SCENES.with(|s| *s.borrow_mut().entry(pc).or_default().entry(scene).or_insert(0) += 1);
             PREMIERE.with(|p| { p.borrow_mut().entry(pc).or_insert(IMAGE.with(|i| *i.borrow())); });
         }
     });
@@ -60,6 +65,15 @@ fn main() {
         for ((h, variante, e4, e5, e6), n) in ETATS.with(|e| e.borrow().clone()) {
             let (nom, t, _) = entrees.iter().find(|x| x.2 == h).copied().unwrap();
             println!("ETAT {nom} {t} variante {variante:02x} états {e4:02x} {e5:02x} {e6:02x} : {n}");
+        }
+        return;
+    }
+    if std::env::var_os("TYPES_SCENES").is_some() {
+        for (nom, t, h) in entrees {
+            let scenes: Vec<String> = SCENES.with(|s| s.borrow().get(&h).map(|m| m.iter().map(|(sc, n)| format!("{sc:02x}:{n}")).collect()).unwrap_or_default());
+            if !scenes.is_empty() {
+                println!("{nom} {t} {h:06x} scènes {}", scenes.join(" "));
+            }
         }
         return;
     }

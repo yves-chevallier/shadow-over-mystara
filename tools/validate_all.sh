@@ -20,6 +20,11 @@ for s in scenarios/boss/*.txt; do
 	[[ -e $s ]] || continue
 	./port/target/release/examples/validate "$roms" "$eeprom" "$s" 12000 > "$out/$(basename "$s" .txt).log" 2>&1 &
 done
+# scénarios des ennemis (tools/gen_enemy.py) : entrée directe dans une scène où le type apparaît, joueur invincible
+for s in scenarios/enemy/*.txt; do
+	[[ -e $s ]] || continue
+	./port/target/release/examples/validate "$roms" "$eeprom" "$s" 12000 > "$out/$(basename "$s" .txt).log" 2>&1 &
+done
 # scénarios de couverture de tout le jeu (docs/couverture.md) : longs (jusqu'à 30000 images à 1-4 joueurs, plus d'une
 # heure sous charge) ; activés par DDSOM_COV=1, nombre d'images par COV_FRAMES (30000 par défaut)
 if [[ ${DDSOM_COV:-0} == 1 ]]; then

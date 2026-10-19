@@ -1,0 +1,486 @@
+//! Ennemi « Ghoul » (ENEMY type 5, 0x5f792). Voir `docs/familles/enemy.md`.
+//!
+//! Charpente commune (`active_loop` : gel, sous-état, zone et ombre, remise en liste). En état actif :
+//!
+//! | `+5` | Fichier | Rôle (h) |
+//! |---|---|---|
+//! | 0 | `mod` | arrivée selon la variante `+3` |
+//! | 2 | `stance` | debout : marche, demi-tour, attente, choix d'un coup |
+//! | 4 | `attacks` | coups et bonds (`+6` = le coup) |
+//! | 6 | `moves` | déplacements de repli, pas de côté, sortie d'écran |
+//! | 8 | `moves` | demi-tours et reprise |
+//! | 10 | `stance` | patrouille tant qu'aucun joueur n'est en vie |
+//! | état 4 | `hit` | réactions aux coups |
+//!
+//! Animations : 0x16191c (mouvements) et 0x161930 (coups). `+0xa0/+0xa1` sont des octets d'aspect.
+//! Les sous-états 2, 4, 6 et 8 commencent par la réaction aux drapeaux de coup `+0x8f` (0x60c88).
+
+use super::cx::{handlers, sub, Cx};
+use super::enemy_common::*;
+
+mod attacks;
+mod hit;
+mod moves;
+mod stance;
+
+pub(self) mod g {
+    pub const VARIANT: u32 = 0x3;
+    pub const STEP: u32 = 0x7;
+    pub const X: u32 = 0x8;
+    pub const HEIGHT: u32 = 0xc;
+    pub const DEPTH: u32 = 0x10;
+    pub const SPEED_X: u32 = 0x14;
+    pub const SPEED_Y: u32 = 0x16;
+    pub const SPEED_Z: u32 = 0x18;
+    pub const GRAVITY: u32 = 0x1a;
+    pub const ANGLE: u32 = 0x2d;
+    pub const KEY_FRAME: u32 = 0x33;
+    pub const STRIKE_KIND: u32 = 0x44;
+    pub const VULNERABLE: u32 = 0x67;
+    pub const AI_CHOICE: u32 = 0x6b;
+    pub const AI_WAIT: u32 = 0x6e;
+    pub const AI_WALK: u32 = 0x71;
+    pub const AI_SHOT: u32 = 0x79;
+    pub const SPECIAL_HIT: u32 = 0x8f;
+    /// Aspect courant et précédent.
+    pub const LOOK: u32 = 0xa0;
+    pub const LOOK_PREV: u32 = 0xa1;
+    /// Minuterie d'une étape.
+    pub const TIMER: u32 = 0xa2;
+    /// Position mémorisée (fuite).
+    pub const SAVED_X: u32 = 0xa8;
+}
+
+use g::*;
+
+const SET_BODY: u32 = 0x16191c;
+const SET_STRIKE: u32 = 0x161930;
+const STANCE: u32 = 0x0202_0000;
+const IDLE: u32 = 0x020a_0000;
+const KNOCKED: u32 = 0x0408_0000;
+/// Tables de la ROM : coups à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
+const CLOSE_ATTACKS: u32 = 0x60d38;
+const FAR_ATTACKS: u32 = 0x60f38;
+const FALLBACK_MOVES: u32 = 0x61164;
+
+mod call {
+    pub const FACE_TARGET: u32 = 0xa470;
+    pub const TURN_TO_TARGET: u32 = 0x788c;
+    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
+    pub const ANNOUNCE: u32 = 0xac3a;
+    pub const SPEED_TABLE: u32 = 0x1b64;
+    pub const WALK_STEP: u32 = 0xe76c;
+    pub const WALK_ASIDE: u32 = 0xeff2;
+    pub const SCREEN_CHECK: u32 = 0x1e90;
+    pub const REMOVE: u32 = 0x27ee;
+}
+
+pub fn run(x: &mut Cx) {
+    if suspended(x) {
+        return;
+    }
+    x.call(rom::TICK_COUNTERS);
+    match x.u8(f::STATE) {
+        st::INIT => init(x),
+        st::ACTIVE => active(x),
+        st::HIT => hit::run(x),
+        st::DEAD => dead(x),
+        _ => {}
+    }
+}
+
+// --- aides ------------------------------------------------------------------------------------
+
+fn body(x: &mut Cx, n: u32) {
+    x.anim_start(SET_BODY, n);
+}
+
+fn strike(x: &mut Cx, n: u32) {
+    x.anim_start(SET_STRIKE, n);
+}
+
+fn step(x: &mut Cx) -> bool {
+    x.anim_step()
+}
+
+fn move_xy(x: &mut Cx) {
+    x.call(sub::MOVE_TABLE_XY);
+}
+
+/// L'aspect voulu (`LOOK` et `LOOK_PREV` identiques).
+fn look(x: &mut Cx, v: u8) {
+    x.set8(LOOK, v);
+    x.set8(LOOK_PREV, v);
+}
+
+/// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
+fn set_angle(x: &mut Cx, flipped: u8, otherwise: u8) {
+    let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
+    x.set8(ANGLE, angle);
+}
+
+/// Table de vitesses 0xd puis marche : `ANGLE` puis 0x1b64 avec D0 = `speed`.
+fn set_speed(x: &mut Cx, speed: u32) {
+    x.c.d[0] = speed;
+    x.call(call::SPEED_TABLE);
+}
+
+/// Ligne de 32 octets de la difficulté (`A5+0x7f92`).
+fn difficulty_row(x: &mut Cx) -> u32 {
+    ((x.a5_u16(0x7f92) >> 1) << 5) as u32
+}
+
+/// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
+fn pick_byte(x: &mut Cx, table: u32) -> u8 {
+    let row = difficulty_row(x);
+    set_dw(x, 0, row as u16);
+    x.c.a[4] = table + row;
+    let n = rand_and(x, 0x1f);
+    x.data8(table + row + n)
+}
+
+/// 0x61138 : fin d'un coup, le suivant est tiré dans la ligne de la difficulté.
+fn end_attack(x: &mut Cx) {
+    let mv = pick_byte(x, FALLBACK_MOVES);
+    x.set8(f::SUB, 8);
+    x.set8(f::SUB2, mv);
+    x.set8(STEP, 0);
+}
+
+/// 0x60d04 / 0x60d0c : choisit le coup de l'attaque (`+6` = octet de la table + `bias`).
+fn pick_attack(x: &mut Cx, table: u32, bias: u8) {
+    x.c.d[2] = bias as u32;
+    let mv = pick_byte(x, table);
+    x.set8(f::SUB2, mv.wrapping_add(bias));
+    x.set8(STEP, 0);
+}
+
+/// 0x5fdf8 : la cible est de l'autre côté de l'orientation (D0 = 1 ou 0).
+fn needs_turn_around(x: &mut Cx) -> bool {
+    if x.u16(f::TARGET) == 0 {
+        x.c.d[0] = 0;
+        return false;
+    }
+    let target = load_target(x);
+    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    set_dw(x, 0, dx);
+    let want = if (dx as i16) < 0 { 0x20 } else { 0 };
+    x.c.d[1] = x.c.d[1] & !0xff | want;
+    let turn = want != x.u8(f::FLIP) as u32;
+    x.c.d[0] = turn as u32;
+    turn
+}
+
+/// Décision par masque (0xa4c2 de même orientation, 0xa4b4 sinon) pour la cible courante.
+fn decision(x: &mut Cx) -> bool {
+    let target = load_target(x);
+    let theirs = target.u8(x.b, f::FLIP);
+    x.c.d[0] = x.c.d[0] & !0xff | theirs as u32;
+    let same = theirs == x.u8(f::FLIP);
+    x.call(if same { 0xa4c2 } else { 0xa4b4 });
+    !x.c.cond(7)
+}
+
+/// 0x5fe22 / 0x5fe70 : un joueur dans la boîte et la décision l'accepte ; l'attaque est alors choisie.
+fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bool {
+    let ok = target_in_box(x, d0, d1, d2) && decision(x);
+    if ok {
+        set_state_long(x, 0x0204_0000);
+        pick_attack(x, table, bias);
+    }
+    x.c.d[0] = ok as u32;
+    ok
+}
+
+/// Réaction aux drapeaux de coup `+0x8f` (0x60c88) : vrai si elle a pris la main. `resume` est l'adresse
+/// que l'original reçoit en A6 pour poursuivre.
+fn special_hit(x: &mut Cx, resume: u32) -> bool {
+    x.c.a[6] = resume;
+    let flag = x.u8(SPECIAL_HIT);
+    x.c.d[6] = flag as u32;
+    if (1..=3).contains(&flag) {
+        x.c.d[6] = 2 * flag as u32;
+        let entry = x.rom16(0x60c9c + 2 * flag as u32);
+        set_dw(x, 1, entry);
+    }
+    match flag {
+        1 => {
+            if x.u16(HEIGHT) != 0 {
+                return false;
+            }
+            x.set8(SPECIAL_HIT, 0);
+            set_state_long(x, 0x0400_0000);
+            x.set8(0x49, 0x58);
+            hit::run(x);
+            true
+        }
+        2 => {
+            set_state_long(x, 0x0400_0000);
+            x.set8(SPECIAL_HIT, 0);
+            let code = if x.u16(HEIGHT) == 0 { 0xc } else { 0x38 };
+            x.set8(0x49, code);
+            hit::run(x);
+            true
+        }
+        3 => {
+            if x.u16(HEIGHT) != 0 || x.u8(0x86) != 0 {
+                return false;
+            }
+            x.set8(SPECIAL_HIT, 0);
+            set_state_long(x, KNOCKED);
+            moves::run_b(x);
+            true
+        }
+        _ => false,
+    }
+}
+
+// --- état 0 : création --------------------------------------------------------------------------
+
+fn init(x: &mut Cx) {
+    if paused(x) {
+        return;
+    }
+    x.add8(f::STATE, 2);
+    x.set8(0, 2);
+    x.set8(f::BOX_SET, 0x11);
+    x.call(rom::INITIAL_HP);
+    x.call(rom::IMMUNITIES);
+    for (off, v) in [
+        (0x68, 2),
+        (0x69, 2),
+        (0x70, 0),
+        (0x6a, 3),
+        (0x6c, 3),
+        (0x6d, 3),
+        (0x72, 3),
+        (0x73, 2),
+        (0x74, 3),
+        (0x75, 4),
+        (0x76, 3),
+        (TIMER, 0x20),
+        (LOOK, 6),
+        (VULNERABLE, 1),
+        (0x8e, 0),
+        (0x81, 8),
+        (0x80, 9),
+        (0xa6, 0),
+        (0xa7, 0),
+        (0x83, 1),
+        (0x7f, 0x44),
+        (0x78, 0xff),
+    ] {
+        x.set8(off, v);
+    }
+    // la création enchaîne directement sur l'état actif
+    active(x);
+}
+
+// --- état 2 : actif -----------------------------------------------------------------------------
+
+fn active(x: &mut Cx) {
+    active_loop(x, |x| {
+        x.c.d[0] = x.u8(f::SUB) as u32;
+        match x.u8(f::SUB) {
+            0 => arrival(x),
+            2 => stance::run(x),
+            4 => attacks::run(x),
+            6 => moves::run_b(x),
+            8 => moves::run_c(x),
+            10 => stance::patrol(x),
+            _ => {}
+        }
+        false
+    });
+}
+
+/// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 saut, 2 chute, 3 réveil, 4 apparition, 5 clignotement).
+fn arrival(x: &mut Cx) {
+    match x.u8(VARIANT) {
+        0 => {
+            if x.u8(f::SUB2) != 0 {
+                let t = x.u8(TIMER).wrapping_sub(1);
+                x.set8(TIMER, t);
+                if t == 0 {
+                    set_state_long(x, STANCE);
+                    x.set8(0, 1);
+                }
+                move_xy(x);
+                step(x);
+                return;
+            }
+            x.add8(f::SUB2, 2);
+            x.set8(VULNERABLE, 1);
+            look(x, 0xff);
+            x.set8(TIMER, 0x18);
+            set_angle(x, 8, 0x18);
+            set_speed(x, 0xd);
+            body(x, 2);
+        }
+        1 => match x.u8(f::SUB2) {
+            0 => {
+                x.add8(f::SUB2, 2);
+                x.set8(VULNERABLE, 1);
+                look(x, 0xff);
+                x.set8(TIMER, 4);
+                body(x, 3);
+            }
+            2 => {
+                let t = x.u8(TIMER).wrapping_sub(1);
+                x.set8(TIMER, t);
+                if t != 0 {
+                    return;
+                }
+                x.add8(f::SUB2, 2);
+                x.set16(SPEED_X, -0x500i16 as u16);
+                if x.u8(f::FLIP) != 0 {
+                    negate(x, SPEED_X);
+                }
+                x.set16(SPEED_Z, 0x380);
+                x.set16(GRAVITY, -0x38i16 as u16);
+                x.set16(SPEED_Y, 0);
+                body(x, 4);
+            }
+            4 => {
+                x.call(sub::MOVE_XZ);
+                if x.c.cond(14) {
+                    return;
+                }
+                x.add8(f::SUB2, 2);
+                x.set32(HEIGHT, 0);
+                body(x, 5);
+            }
+            6 => end_arrival(x),
+            _ => {}
+        },
+        2 => match x.u8(f::SUB2) {
+            0 => {
+                x.add8(f::SUB2, 2);
+                x.set8(VULNERABLE, 1);
+                look(x, 0xff);
+                x.set16(SPEED_Z, -0x300i16 as u16);
+                x.set16(GRAVITY, -0x80i16 as u16);
+                let h = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(DEPTH));
+                x.set16(HEIGHT, h);
+                body(x, 4);
+            }
+            2 => {
+                x.call(sub::MOVE_Z);
+                if (x.u16(HEIGHT) as i16) >= 0 {
+                    return;
+                }
+                x.add8(f::SUB2, 2);
+                x.set32(HEIGHT, 0);
+                body(x, 5);
+            }
+            4 => end_arrival(x),
+            _ => {}
+        },
+        3 => {
+            if special_hit(x, 0x5fa74) {
+                return;
+            }
+            match x.u8(f::SUB2) {
+                0 => {
+                    x.add8(f::SUB2, 2);
+                    x.set8(VULNERABLE, 1);
+                    look(x, 0xff);
+                    body(x, 5);
+                }
+                2 => {
+                    // un joueur assez près réveille le ghoul
+                    let mut near = 0;
+                    for k in 0..4u32 {
+                        let p = 0xff85de + 0x200 * k;
+                        let dx = x.u16(X).wrapping_sub(crate::mem::rd16(x.b, p + X)).wrapping_add(0x60);
+                        let dy = x.u16(DEPTH).wrapping_sub(crate::mem::rd16(x.b, p + DEPTH)).wrapping_add(0x30);
+                        if dx <= 0xc0 && dy <= 0x60 {
+                            near += 1;
+                        }
+                    }
+                    if near != 0 {
+                        x.add8(f::SUB2, 2);
+                    }
+                }
+                4 => end_arrival(x),
+                _ => {}
+            }
+        }
+        4 => {
+            if x.u8(f::SUB2) == 0 {
+                x.add8(f::SUB2, 2);
+                x.set8(VULNERABLE, 1);
+                look(x, 0xff);
+                body(x, 8);
+            } else if step(x) {
+                set_state_long(x, STANCE);
+                x.set8(0, 1);
+            }
+            zone_shadow(x);
+        }
+        5 => match x.u8(f::SUB2) {
+            0 => {
+                x.add8(f::SUB2, 2);
+                x.set8(0x81, 0);
+                x.set8(0x80, 0);
+                x.set8(0xa6, 1);
+                x.set8(VULNERABLE, 1);
+                look(x, 0xff);
+                x.set16(0x42, 0x703);
+                let d7 = x.c.d[7] as u8;
+                x.set8(TIMER, d7);
+                body(x, 0);
+            }
+            2 => blink(x, 0x307),
+            4 | 6 => blink(x, 0x110),
+            8 => {
+                set_state_long(x, STANCE);
+                x.set8(0, 1);
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+/// 0x5fa56 : l'animation finie, le ghoul se met debout.
+fn end_arrival(x: &mut Cx) {
+    if step(x) {
+        set_state_long(x, STANCE);
+        x.set8(0, 1);
+    }
+}
+
+/// Clignotement d'arrivée (0x5fbbe), `next` : valeur du mot `+0x42` quand une série est finie.
+fn blink(x: &mut Cx, next: u16) {
+    x.set_bit(1, 1, true);
+    let t = x.u8(TIMER).wrapping_sub(1);
+    x.set8(TIMER, t);
+    if t & x.u8(0x42) != 0 {
+        return;
+    }
+    x.set_bit(1, 1, false);
+    let n = x.u8(0x43).wrapping_sub(1);
+    x.set8(0x43, n);
+    if n != 0 {
+        return;
+    }
+    x.add8(f::SUB2, 2);
+    x.set16(0x42, next);
+}
+
+// --- état 6 : libération ------------------------------------------------------------------------
+
+fn dead(x: &mut Cx) {
+    if x.u8(0xa6) != 0 {
+        x.c.a[1] = x.u16(0xa4) as i16 as i32 as u32;
+        let parent = x.linked(0xa4);
+        let n = parent.u8(x.b, 0xaf).wrapping_sub(1);
+        parent.set_u8(x.b, 0xaf, n);
+    }
+    free(x);
+}
+
+handlers! {
+    0x5f792 "enemy_5" 800 run,
+}
