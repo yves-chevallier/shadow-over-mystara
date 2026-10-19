@@ -6,7 +6,7 @@
 //!
 //!   fuzz_player <personnage> <roms> <eeprom> <scénario> <images de chauffe> <tours>
 //!
-//! `personnage` : `fighter` ou `cleric` (préfixe du nom des natives). `DDSOM_ENTREE=<hexa>` limite le
+//! `personnage` : `fighter`, `cleric`, `elf`, `dwarf`... (préfixe du nom des natives). `DDSOM_ENTREE=<hexa>` limite le
 //! tir à une seule entrée.
 
 use std::path::Path;
@@ -36,6 +36,33 @@ impl Alea {
 fn max_step(name: &str, sub: u8, which: u8) -> u8 {
     match name {
         "fighter_jump" | "cleric_jump" => 8,
+        "dwarf_jump" => 0xc,
+        "dwarf_roll" | "thief_roll" => 2,
+        "thief_jump" => 0xe,
+        "thief_dash" => 6,
+        "thief_attack" => match sub {
+            0 | 6 | 0xc | 0xe | 0x16 => 4,
+            0x1a => 8,
+            _ => 2,
+        },
+        "thief_special" => match which {
+            9 => 6,
+            10 => 4,
+            _ => 2,
+        },
+        "dwarf_dash" => 6,
+        "dwarf_attack" => match sub {
+            0 => 6,
+            6 | 0xc | 0xe | 0x1a | 0x1c => 4,
+            0x16 => 8,
+            0x18 => 6,
+            _ => 2,
+        },
+        "dwarf_special" => match which {
+            9 => 6,
+            10 => 4,
+            _ => 2,
+        },
         "fighter_dash" | "cleric_dash" | "elf_dash" => 6,
         "elf_jump" => 0xc,
         "mage_jump" => 0xa,
@@ -154,10 +181,10 @@ fn main() {
             c.a[5] = A5;
             // état aléatoire du joueur
             let mut sub = alea.pick(&[0u8, 2, 4, 6, 8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c]);
-            if who == "elf" && alea.below(15) == 0 {
+            if matches!(who.as_str(), "elf" | "thief") && alea.below(15) == 0 {
                 sub = 0x1e;
             }
-            let which = if who == "fighter" {
+            let which = if matches!(who.as_str(), "fighter" | "dwarf" | "thief") {
                 alea.pick(&[0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
             } else if who == "elf" {
                 alea.below(0x1d) as u8
@@ -169,8 +196,12 @@ fn main() {
                     0x2a, 0x2b, 0x2c, 0x2d,
                 ])
             };
+            // DDSOM_WHICH / DDSOM_SUB / DDSOM_PAS : fixent le numéro d'attaque spéciale, la sous-action et le pas
+            let fixed = |var: &str| std::env::var(var).ok().and_then(|v| u8::from_str_radix(&v, 16).ok());
+            let which = fixed("DDSOM_WHICH").unwrap_or(which);
+            let sub = fixed("DDSOM_SUB").unwrap_or(sub);
             let max = max_step(name, sub, which);
-            let step = 2 * alea.below(max as u32 / 2 + 1) as u8;
+            let step = fixed("DDSOM_PAS").unwrap_or(2 * alea.below(max as u32 / 2 + 1) as u8);
             wr8(b, p + 4, 2);
             wr8(b, p + 5, 0);
             wr8(b, p + 6, 0);
@@ -239,6 +270,8 @@ fn main() {
                 "fighter" => 0,
                 "cleric" => 2,
                 "elf" => 4,
+                "dwarf" => 6,
+                "thief" => 10,
                 _ => 8,
             };
             wr8(b, p + 3, base + alea.below(2) as u8);
@@ -266,6 +299,12 @@ fn main() {
                 wr16(b, p + 0x1ec, target);
             } else if who == "mage" && (which == 9 || which == 10) {
                 wr16(b, p + 0x1e8, target);
+            }
+            // voleur : bord touché, saut double, objet lié (l'ombre du coup dans le dos)
+            if who == "thief" {
+                wr8(b, p + 0x5a, alea.pick(&[0u8, 0, 1, 2]));
+                wr8(b, p + 0x1ef, alea.below(2) as u8);
+                wr16(b, p + 0x50, 0x299e + 0xc0 * alea.below(5) as u16 | 0x8000);
             }
             // autres joueurs : parfois en jeu, devant ou derrière
             for k in 1..4u32 {
@@ -299,13 +338,13 @@ fn main() {
                     wr16(b, o + 0x60, 90);
                     wr16(b, o + 0x0c, alea.pick(&[0u16, 0, 0, 12]));
                     wr8(b, o + 0x40, alea.pick(&[0u8, 0, 0, 1]));
-                    wr8(b, o + 0x49, alea.pick(&[0u8, 0, 0x9c]));
+                    wr8(b, o + 0x49, alea.pick(&[0u8, 0, 0x9c, 0x64]));
                     wr8(b, o + 0x93, alea.pick(&[0u8, 1]));
                     wr32(b, o + 0x94, alea.next() & alea.next());
                 }
             }
             // la cible de la foudre et du mur : un objet quelconque
-            if who == "fighter" || who == "cleric" {
+            if matches!(who.as_str(), "fighter" | "cleric" | "dwarf" | "thief") {
                 wr16(b, p + 0x1ea, 0x299e + 0xc0 * alea.below(5) as u16 | 0x8000);
             }
             let before = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
@@ -317,6 +356,8 @@ fn main() {
             if std::env::var("DDSOM_TRACE").is_ok() {
                 eprintln!("{entry:06x} {name} pas {} sous-action {:#x} 15e={which:#x} {context}", snapshot.0, snapshot.1);
             }
+            // drapeaux initiaux nuls : le trap du lancement des tâches d'écran les empile sous la pile
+            c.sr &= !0x1f;
             ddsom_game::call(c, b, entry);
             let after = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
             if after > before && shown < 12 {
