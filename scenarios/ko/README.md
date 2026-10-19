@@ -62,6 +62,12 @@ boss12_scene40.txt (scenarios/boss/, tronqué à l'image 10 300 par `gen_boss.py
   (mot FF8664, joueur 1 +0x86 : 00ff au lieu de ffff) ; identique avec DDSOM_SANS=boss_11 et DDSOM_ADOPT_REGS=boss_11 ;
   disparaît avec DDSOM_SANS=combat : c'est `combat_update` (combat.rs), comme boss21_scene44_mort. Tronqué, VALIDE sur 12 000 images.
 
+scene_05.txt, scene_07.txt, scene_08.txt, scene_11.txt, scene_110.txt (entrée de scène, `tools/gen_scene.py`, 6 500 images) et
+end_01.txt (sortie de la scène 1, phase 16 forcée à l'image 3600, `tools/gen_scene_end.py`) : écarts aux images 4118 (ENEMY, ffaa8a),
+5671 (fin de scène après la grotte du boss), 3889 (gfxram 912414), 4951 (ENEMY, ffa9ca), 3355 et 3605 (tâche principale retardée de
+deux images dans l'original). **Mêmes écarts avec `DDSOM_SANS=scene_`** (aucune native du module `scene`) : ils viennent d'autres
+modules (ennemis, boss), pas du déroulement des scènes.
+
 Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
 mais qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...`
 fait rendre aux natives nommées les registres de l'original : chercher par dichotomie celle dont un

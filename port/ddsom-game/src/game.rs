@@ -452,6 +452,12 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) {
     for routine in [ext::WORLD_EXTRA_2, ext::RANK_TICK, ext::END_OF_FRAME] {
         call(c, b, routine);
     }
+    debug_scene_skip(b);
+}
+
+/// Saut de niveau de débogage (fin de la phase 12 et de la phase 8, `0x1c74a`) : inactif dans le jeu de
+/// production (le bit 15 du mot ROM `0xc0` est nul).
+pub fn debug_scene_skip(b: &mut Cps2Bus) {
     if rd16(b, DEBUG_SWITCH) & 0x8000 != 0 {
         let pressed = !rd8(b, A5 + BUTTONS_BEFORE) & rd8(b, A5 + BUTTONS_NOW);
         if pressed & BUTTONS_NEXT == BUTTONS_NEXT {

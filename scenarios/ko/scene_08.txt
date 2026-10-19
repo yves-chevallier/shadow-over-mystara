@@ -1,0 +1,226 @@
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1440 P1 Button 1 1
+1446 P1 Button 1 0
+2399 poke8 ff8034 8
+2988 P1 Right 1
+2999 P1 Up 1
+3000 P1 Button 2 1
+3001 P1 Button 2 0
+3002 P1 Up 0
+3059 P1 Button 1 1
+3063 P1 Button 1 0
+3149 P1 Down 1
+3149 P1 Button 1 1
+3152 P1 Down 0
+3153 P1 Button 1 0
+3239 P1 Button 1 1
+3243 P1 Button 1 0
+3299 P1 Up 1
+3299 P1 Button 4 1
+3302 P1 Up 0
+3303 P1 Button 4 0
+3319 P1 Button 3 1
+3323 P1 Button 3 0
+3329 P1 Button 1 1
+3333 P1 Button 1 0
+3419 P1 Button 1 1
+3423 P1 Button 1 0
+3449 P1 Down 1
+3452 P1 Down 0
+3464 P1 Button 2 1
+3465 P1 Button 2 0
+3499 P1 Button 2 1
+3503 P1 Button 2 0
+3509 P1 Button 1 1
+3513 P1 Button 1 0
+3592 P1 Button 2 1
+3593 P1 Button 2 0
+3599 P1 Up 1
+3599 P1 Button 1 1
+3602 P1 Up 0
+3603 P1 Button 1 0
+3689 P1 Button 1 1
+3693 P1 Button 1 0
+3749 P1 Down 1
+3752 P1 Down 0
+3779 P1 Button 1 1
+3783 P1 Button 1 0
+3805 P1 Button 2 1
+3806 P1 Button 2 0
+3869 P1 Button 1 1
+3873 P1 Button 1 0
+3899 P1 Up 1
+3902 P1 Up 0
+3959 P1 Button 1 1
+3963 P1 Button 1 0
+4024 P1 Button 2 1
+4025 P1 Button 2 0
+4049 P1 Down 1
+4049 P1 Button 1 1
+4052 P1 Down 0
+4053 P1 Button 1 0
+4077 P1 Right 0
+4226 P1 Right 1
+4229 P1 Button 1 1
+4233 P1 Button 1 0
+4319 P1 Button 1 1
+4323 P1 Button 1 0
+4349 P1 Down 1
+4352 P1 Down 0
+4384 P1 Button 2 1
+4385 P1 Button 2 0
+4399 P1 Button 4 1
+4403 P1 Button 4 0
+4409 P1 Button 1 1
+4413 P1 Button 1 0
+4419 P1 Button 3 1
+4423 P1 Button 3 0
+4499 P1 Up 1
+4499 P1 Button 1 1
+4502 P1 Up 0
+4503 P1 Button 1 0
+4510 Coin 1 1
+4516 Coin 1 0
+4540 1 Player Start 1
+4546 1 Player Start 0
+4589 P1 Button 1 1
+4593 P1 Button 1 0
+4628 P1 Button 2 1
+4629 P1 Button 2 0
+4632 P1 Button 2 1
+4633 P1 Button 2 0
+4649 P1 Down 1
+4652 P1 Down 0
+4679 P1 Button 1 1
+4683 P1 Button 1 0
+4769 P1 Button 1 1
+4773 P1 Button 1 0
+4797 P1 Button 2 1
+4798 P1 Button 2 0
+4799 P1 Up 1
+4802 P1 Up 0
+4822 P1 Button 2 1
+4823 P1 Button 2 0
+4859 P1 Button 1 1
+4863 P1 Button 1 0
+4899 P1 Button 2 1
+4903 P1 Button 2 0
+4949 P1 Down 1
+4949 P1 Button 1 1
+4952 P1 Down 0
+4953 P1 Button 1 0
+4967 P1 Up 1
+4974 P1 Up 0
+4983 P1 Button 1 1
+4987 P1 Button 1 0
+4991 P1 Button 1 1
+4995 P1 Button 1 0
+4999 P1 Button 1 1
+5002 P1 Button 1 0
+5032 P1 Button 1 1
+5035 P1 Button 1 0
+5066 P1 Button 1 1
+5067 P1 Button 1 0
+5071 P1 Button 1 1
+5075 P1 Button 1 0
+5079 P1 Button 1 1
+5083 P1 Button 1 0
+5087 P1 Button 1 1
+5091 P1 Button 1 0
+5095 P1 Button 1 1
+5099 P1 Button 1 0
+5103 P1 Button 1 1
+5107 P1 Button 1 0
+5111 P1 Button 1 1
+5115 P1 Button 1 0
+5119 P1 Button 1 1
+5119 P1 Button 2 1
+5120 P1 Button 2 0
+5123 P1 Button 1 0
+5127 P1 Button 1 1
+5131 P1 Button 1 0
+5135 P1 Button 1 1
+5139 P1 Button 1 0
+5143 P1 Button 1 1
+5147 P1 Button 1 0
+5151 P1 Button 1 1
+5155 P1 Button 1 0
+5159 P1 Button 1 1
+5163 P1 Button 1 0
+5167 P1 Button 1 1
+5171 P1 Button 1 0
+5175 P1 Button 1 1
+5179 P1 Button 1 0
+5183 P1 Button 1 1
+5187 P1 Button 1 0
+5191 P1 Button 1 1
+5195 P1 Button 1 0
+5199 P1 Button 1 1
+5203 P1 Button 1 0
+5207 P1 Button 1 1
+5211 P1 Button 1 0
+5215 P1 Button 1 1
+5219 P1 Button 1 0
+5223 P1 Button 1 1
+5227 P1 Button 1 0
+5231 P1 Button 1 1
+5235 P1 Button 1 0
+5239 P1 Button 1 1
+5243 P1 Button 1 0
+5247 P1 Button 1 1
+5248 P1 Button 1 0
+5292 poke16 ff8640 112
+5354 P1 Button 1 1
+5355 P1 Button 1 0
+5359 P1 Button 1 1
+5363 P1 Button 1 0
+5367 P1 Button 1 1
+5371 P1 Button 1 0
+5375 P1 Button 1 1
+5379 P1 Button 1 0
+5383 P1 Button 1 1
+5387 P1 Button 1 0
+5391 P1 Button 1 1
+5395 poke16 ff8640 112
+5395 P1 Button 1 0
+5399 P1 Button 1 1
+5403 P1 Button 1 0
+5408 P1 Button 1 1
+5409 P1 Button 1 0
+5410 P1 Button 1 1
+5411 P1 Button 1 0
+5433 P1 Button 1 1
+5435 P1 Button 1 0
+5439 P1 Button 1 1
+5443 P1 Button 1 0
+5482 P1 Button 1 1
+5483 P1 Button 1 0
+5487 P1 Button 1 1
+5491 P1 Button 1 0
+5495 P1 Button 1 1
+5499 P1 Button 1 0
+5499 P1 Button 4 1
+5503 P1 Button 1 1
+5503 P1 Button 4 0
+5507 P1 Button 1 0
+5519 P1 Button 3 1
+5523 P1 Button 3 0
+5661 P1 Button 2 1
+5662 P1 Button 2 0
+5666 poke16 ff8640 112
+5748 poke16 ff8640 112
+5901 poke16 ff8640 112
+6003 poke16 ff8640 112
+6010 Coin 1 1
+6016 Coin 1 0
+6040 1 Player Start 1
+6046 1 Player Start 0
+6111 poke16 ff8640 112
+6194 poke16 ff8640 112
+6264 P1 Button 2 1
+6265 P1 Button 2 0
+6311 poke16 ff8640 112
+6501 quit

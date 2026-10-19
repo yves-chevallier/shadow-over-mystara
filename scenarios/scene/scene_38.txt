@@ -1,0 +1,111 @@
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1440 P1 Button 1 1
+1446 P1 Button 1 0
+2399 poke8 ff8034 38
+3277 P1 Right 1
+3289 P1 Button 2 1
+3290 P1 Button 2 0
+3299 P1 Up 1
+3299 P1 Button 4 1
+3302 P1 Up 0
+3303 P1 Button 4 0
+3319 P1 Button 3 1
+3323 P1 Button 3 0
+3329 P1 Button 1 1
+3333 P1 Button 1 0
+3419 P1 Button 1 1
+3423 P1 Button 1 0
+3449 P1 Down 1
+3452 P1 Down 0
+3499 P1 Button 2 1
+3503 P1 Button 2 0
+3509 P1 Button 1 1
+3513 P1 Button 1 0
+3554 P1 Right 0
+3864 P1 Right 1
+3864 P1 Down 1
+3911 P1 Down 0
+3992 poke16 ff8640 112
+3995 P1 Down 1
+4063 P1 Button 2 1
+4064 P1 Button 2 0
+4132 P1 Down 0
+4158 poke16 ff8640 112
+4162 P1 Down 1
+4191 P1 Button 2 1
+4192 P1 Button 2 0
+4297 P1 Down 0
+4326 poke16 ff8640 112
+4329 P1 Down 1
+4399 P1 Button 4 1
+4403 P1 Button 4 0
+4404 P1 Button 2 1
+4405 P1 Button 2 0
+4419 P1 Button 3 1
+4423 P1 Button 3 0
+4466 P1 Down 0
+4492 poke16 ff8640 112
+4496 P1 Down 1
+4510 Coin 1 1
+4516 Coin 1 0
+4540 1 Player Start 1
+4546 1 Player Start 0
+4623 P1 Button 2 1
+4624 P1 Button 2 0
+4631 P1 Down 0
+4660 poke16 ff8640 112
+4663 P1 Down 1
+4799 P1 Down 0
+4829 P1 Down 1
+4834 P1 Button 2 1
+4835 P1 Button 2 0
+4966 P1 Down 0
+4994 poke16 ff8640 112
+4998 P1 Down 1
+5078 P1 Button 2 1
+5079 P1 Button 2 0
+5082 P1 Button 2 1
+5083 P1 Button 2 0
+5133 P1 Down 0
+5162 poke16 ff8640 112
+5165 P1 Down 1
+5247 P1 Button 2 1
+5248 P1 Button 2 0
+5272 P1 Button 2 1
+5273 P1 Button 2 0
+5302 P1 Down 0
+5328 poke16 ff8640 112
+5332 P1 Down 1
+5467 P1 Down 0
+5496 poke16 ff8640 112
+5499 P1 Down 1
+5499 P1 Button 4 1
+5503 P1 Button 4 0
+5519 P1 Button 3 1
+5523 P1 Button 3 0
+5636 P1 Down 0
+5662 poke16 ff8640 112
+5666 P1 Down 1
+5801 P1 Down 0
+5830 poke16 ff8640 112
+5833 P1 Down 1
+5970 P1 Down 0
+5996 poke16 ff8640 112
+6000 P1 Down 1
+6010 Coin 1 1
+6016 Coin 1 0
+6040 1 Player Start 1
+6046 1 Player Start 0
+6111 P1 Button 2 1
+6112 P1 Button 2 0
+6135 P1 Down 0
+6164 poke16 ff8640 112
+6167 P1 Down 1
+6304 P1 Down 0
+6336 P1 Down 1
+6471 P1 Down 0
+6498 poke16 ff8640 112
+6501 quit

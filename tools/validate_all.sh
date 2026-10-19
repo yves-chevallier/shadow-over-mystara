@@ -20,6 +20,18 @@ for s in scenarios/boss/*.txt; do
 	[[ -e $s ]] || continue
 	./port/target/release/examples/validate "$roms" "$eeprom" "$s" 12000 > "$out/$(basename "$s" .txt).log" 2>&1 &
 done
+# entrée et sortie de scène (docs/scenes.md) : scenarios/scene (6500 images) et scenarios/scene_end (9000 images), une
+# soixantaine de scénarios ; activés par DDSOM_SCENES=1
+if [[ ${DDSOM_SCENES:-0} == 1 ]]; then
+	for s in scenarios/scene/*.txt; do
+		[[ -e $s ]] || continue
+		./port/target/release/examples/validate "$roms" "$eeprom" "$s" 6500 > "$out/$(basename "$s" .txt).log" 2>&1 &
+	done
+	for s in scenarios/scene_end/*.txt; do
+		[[ -e $s ]] || continue
+		./port/target/release/examples/validate "$roms" "$eeprom" "$s" 9000 > "$out/$(basename "$s" .txt).log" 2>&1 &
+	done
+fi
 # scénarios de couverture de tout le jeu (docs/couverture.md) : longs (jusqu'à 30000 images à 1-4 joueurs, plus d'une
 # heure sous charge) ; activés par DDSOM_COV=1, nombre d'images par COV_FRAMES (30000 par défaut)
 if [[ ${DDSOM_COV:-0} == 1 ]]; then
