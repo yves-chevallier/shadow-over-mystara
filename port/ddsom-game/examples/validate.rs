@@ -95,7 +95,11 @@ fn main() {
     println!("{frames} images en {:.1?}", t0.elapsed());
     let report = ddsom_game::report();
     for (name, st) in &report {
-        let errors = if check { format!(" {:>5} écarts", st.mismatches) } else { String::new() };
+        let errors = if check {
+            format!(" {:>5} écarts, cycles {} (natif {})", st.mismatches, st.original_cycles, st.native_cycles)
+        } else {
+            String::new()
+        };
         println!("  {name:28} {:>8} appels{errors}{}", st.calls, st.first.as_ref().map(|f| format!(" — {f}")).unwrap_or_default());
     }
     if std::env::var("DDSOM_CHECK_ALL").is_ok() {

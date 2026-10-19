@@ -72,28 +72,31 @@ Par scénario (instructions) : tours 27 700-35 600, parties à 2-4 joueurs 30 80
 ## Validation (`DDSOM_COV=1 tools/validate_all.sh`) et écarts relevés
 
 Les scénarios `scenarios/cov/` sont longs (une heure et plus sous charge à 2-4 joueurs) : `validate_all.sh` ne les
-lance que si `DDSOM_COV=1` (images : `COV_FRAMES`, 30 000 par défaut). Les 8 scénarios historiques et les 4 `extra/`
-restent VALIDES. Résultat des scénarios de couverture (première différence de la RAM entre routines natives et
-code d'origine, image) :
+lance que si `DDSOM_COV=1` (images : `COV_FRAMES`, 30 000 par défaut). Les 8 scénarios historiques, les `extra/` et
+les `boss/` restent VALIDES. Résultat des scénarios de couverture après la campagne « registres hérités » (première
+différence de la RAM entre routines natives et code d'origine, image) :
 
-| Scénario | Résultat | Cause identifiée (désactivation par `DDSOM_SANS`) |
+| Scénario | Résultat | Cause identifiée |
 |---|---|---|
-| `cov_mortal_c1`, `cov_mortal_2p` | VALIDE sur 30 000 images | – |
-| `cov_attract_coin` | écart image 3362 (pile morte sous FF0A00 : faux positif de `ignored()`), puis 4014 | 4014 : `players_update` (démo de l'attract) |
-| `cov_3p`, `cov_4p_a`, `cov_4p_b`, `cov_2p_c` | images 2992, 3845, 3152, 3011 | `players_update` (supprime l'écart) |
-| `cov_tour4_c3`, `cov_2p_b` | images 3713, 4754 | `combat_update` (supprime l'écart) |
-| `cov_natural_c0` | image 18946 (stage 1) ; 6661 avec d'autres entrées | `combat_update` (mots FF1A6A, FF8648 : drapeaux de touche du joueur 1) |
-| `cov_tour1/2/3/5/6/7/8`, `cov_4p_c`, `cov_gameover_c4`, `cov_mortal_late` | images 7063, 19595, 9761, 7109, 4898, 10418, 4949, 4834, 3993, 4266 | écarts de plusieurs routines à la fois (aucune désactivation isolée ne suffit) ou à identifier |
-| `cov_2p_a` | n'a pas fini en plus d'une heure | – |
-| `cov_service` | écart image 1443 | non analysé (menu TEST) |
+| `cov_mortal_c1`, `cov_mortal_2p`, `cov_natural_c0`, `cov_service` | VALIDE sur 30 000 images | – |
+| `cov_tour1/4/5/8`, `cov_mortal_c1` | VALIDES sur 30 000 images avec `DDSOM_ADOPT_REGS=player_overlays_update,players_update` | `player_overlays_update` : D3 (et les autres registres) relu par le créateur d'effet 0xb141a (écarts aux images 5150, 4898, 4949, 10051, 10418, 3993, 20977 sans l'adoption : mots FFD5xx-FFD9xx des objets ESHL) |
+| `cov_2p_c`, `cov_3p`, `cov_attract_coin`, `cov_gameover_c4` (image 29927), `cov_2p_b`, `cov_4p_*` | écarts aux images 4192, 4326, 3362/4014 | `players_update` (DDSOM_SANS le supprime ; l'adoption des registres ne suffit pas : écarts de mémoire) |
+| `cov_tour2/3/6/7`, `cov_mortal_late`, `ko/boss13_dragon` (image 9991) | images 20611, 10523, 7201, 10921, 4267 | phase de jeu qui tourne sans attendre l'image (`0xa86`, cède sans attendre) : l'original surcadencé en exécute des dizaines par image (FF2A58/FF2A38, compteur de l'image FF8054) ; le nombre d'itérations dépend de la durée exacte de chaque routine, que les natives n'imitent pas (`build_sprite_list` coûte 30 000 cycles de moins que l'original sur 3 600 appels, etc.) |
 
-Les routines fautives sont à corriger par leurs auteurs : `players_update` (démo, 2 à 4 joueurs) et `combat_update`
-d'abord ; ensuite relancer les scénarios, qui feront apparaître les suivants (`DDSOM_SANS=nom` pour isoler, puis
-`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1` et `examples/pctrace`).
+Registres hérités corrigés par cette campagne (leurs lecteurs étaient des gestionnaires 68000) : `set_0` (D0-D6,
+A1-A3, A6 : D4 relu par 0xad7b0, qui additionne D4 à la position des joueurs quand `A5+0x51e` = 4),
+`build_sprite_list` (D4), caméras 1 et 2 (D4 = 0x3f/0x40, 0x1f/0xe0), chargeurs de palettes de scène (0x1a296,
+0x1a350-0x1a36c, 0x1a3d4, 0x1a608, 0x1a678, 0x1a8ac : D0-D6, A1-A4, A6, D7 ; relus par le menu TEST en 0x2bba0), et
+des écarts de mémoire révélés au passage : `set_30` (décompte de 0x80 images), adresse 32 bits des caisses saisies
+(`move.l A1,(0x86,A0)` écrit A1 étendu du signe), `eshl_52` (A1 = dernier élément créé, puis A1 = fin de la boucle des
+joueurs).
+
+Outils : `DDSOM_ADOPT_REGS=préfixe,...` (registres de l'original), `DDSOM_ADOPT_MASK=hex` (seuls les registres du
+masque : bit i = Di, bit 8+i = Ai, bit 16 = drapeaux), `DDSOM_ADOPT_TRACE=1` (valeurs rendues par la native et par
+l'original). Dichotomie : adopter tout, puis le masque registre par registre, puis les natives par groupes.
 
 Deux remarques sur `validate` : (1) la pile des tâches s'étend sous FF0A00 (mots FF09B0-FF09D2 vus en attract) : la zone
-ignorée devrait commencer plus bas (faux positif de `ignored()`) ; (2) une touche pressée pendant l'entrée de scène
-(phase 8) ou à la fin du compte à rebours de sélection (image où la phase 4 passe à 8) fait diverger les deux machines
-avec n'importe quelle routine native active (chaque groupe de natives appelé à chaque image suffit) alors que toutes
-natives désactivées donnent un état identique : sensibilité au découpage du temps, cause non élucidée. Le bot évite
-ces instants ; les scénarios existants n'y touchent pas.
+ignorée commence à FF09B0 ; FF0058 (dernière tâche lancée par l'ordonnanceur, écrit en 0x96c) est ignoré ; (2) une touche
+pressée pendant l'entrée de scène (phase 8) ou à la fin du compte à rebours de sélection (image où la phase 4 passe à 8)
+fait diverger les deux machines avec n'importe quelle routine native active (cause : même sensibilité à la durée que
+ci-dessus). Le bot évite ces instants ; les scénarios existants n'y touchent pas.
