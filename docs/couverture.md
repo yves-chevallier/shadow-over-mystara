@@ -79,21 +79,37 @@ code d'origine, image) :
 | Scénario | Résultat | Cause identifiée (désactivation par `DDSOM_SANS`) |
 |---|---|---|
 | `cov_mortal_c1`, `cov_mortal_2p` | VALIDE sur 30 000 images | – |
-| `cov_attract_coin` | écart image 3362 (pile morte sous FF0A00 : faux positif de `ignored()`), puis 4014 | 4014 : `players_update` (démo de l'attract) |
-| `cov_3p`, `cov_4p_a`, `cov_4p_b`, `cov_2p_c` | images 2992, 3845, 3152, 3011 | `players_update` (supprime l'écart) |
+| `cov_attract_coin` | image 21302 (3362 et 4014 corrigés) | 21302 : tempête de pas (voir plus bas), un bouton pressé à l'image 21300 |
+| `cov_3p`, `cov_4p_a`, `cov_4p_b`, `cov_2p_c` | images 9850, 4739, 4444, 6394 (2992, 3845, 3152, 3011 corrigés) | `combat_update` (supprimé par `DDSOM_SANS=combat`) ; ensuite, `cov_3p` 10652 : tempête de pas ; `cov_4p_a` 7305 : registres résiduels (`build_sprite_list`, `set_0`) ; `cov_4p_b` 12015 : `set_30` ; `cov_2p_c` 8370 : `enemy_16` (Riyakaa, ffad64), puis 15960 |
 | `cov_tour4_c3`, `cov_2p_b` | images 3713, 4754 | `combat_update` (supprime l'écart) |
 | `cov_natural_c0` | image 18946 (stage 1) ; 6661 avec d'autres entrées | `combat_update` (mots FF1A6A, FF8648 : drapeaux de touche du joueur 1) |
 | `cov_tour1/2/3/5/6/7/8`, `cov_4p_c`, `cov_gameover_c4`, `cov_mortal_late` | images 7063, 19595, 9761, 7109, 4898, 10418, 4949, 4834, 3993, 4266 | écarts de plusieurs routines à la fois (aucune désactivation isolée ne suffit) ou à identifier |
 | `cov_2p_a` | n'a pas fini en plus d'une heure | – |
 | `cov_service` | écart image 1443 | non analysé (menu TEST) |
 
-Les routines fautives sont à corriger par leurs auteurs : `players_update` (démo, 2 à 4 joueurs) et `combat_update`
-d'abord ; ensuite relancer les scénarios, qui feront apparaître les suivants (`DDSOM_SANS=nom` pour isoler, puis
-`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1` et `examples/pctrace`).
+Corrigés dans le noyau des joueurs : (1) les gestionnaires d'origine appelés par table (`actions`, `characters::run`,
+`update`, `hurt`, `scripted`) comptent sur D0 = indice d'aiguillage à octet haut nul (ils font `move.b (7,A0),D0b` puis
+indexent par le mot) : un D0 quelconque faisait sauter le saut du nain (0x445ba) en 0x4c1eb et écrire dans
+l'enregistrement du joueur 2 ; (2) `player_overlays_update` (0x392e4) et la jauge de chargement (0xb46) laissent
+maintenant les registres de l'original (D0-D6, A0-A4 / D2.w, A0) : la boucle de partie enchaîne ces routines et les
+boucles de dispatch d'objets sans rien réinitialiser, et des gestionnaires lisent ces registres (un effet recopiait D3
+ou D2). **Règle** : une native appelée avant une boucle de dispatch doit reproduire les registres que l'original
+laisse (`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1`, lignes `REGS`), pas seulement la mémoire. Diagnostic : `DDSOM_CHECK=1
+DDSOM_ADOPT=préfixe,...` (avec `DDSOM_SANS` pour les dispatch et `game_phase12`, que le mode contrôle ne sait pas
+rejouer) fait adopter par ces natives les registres de l'original ; si l'écart disparaît, la cause est un registre
+résiduel (`cov_4p_a` : `build_sprite_list` et `set_0`).
 
-Deux remarques sur `validate` : (1) la pile des tâches s'étend sous FF0A00 (mots FF09B0-FF09D2 vus en attract) : la zone
-ignorée devrait commencer plus bas (faux positif de `ignored()`) ; (2) une touche pressée pendant l'entrée de scène
-(phase 8) ou à la fin du compte à rebours de sélection (image où la phase 4 passe à 8) fait diverger les deux machines
-avec n'importe quelle routine native active (chaque groupe de natives appelé à chaque image suffit) alors que toutes
-natives désactivées donnent un état identique : sensibilité au découpage du temps, cause non élucidée. Le bot évite
-ces instants ; les scénarios existants n'y touchent pas.
+Routines fautives restantes (autres modules, à corriger par leurs auteurs) : `combat_update` d'abord ; puis
+`build_sprite_list` (sprites.rs) et `set_0` (registres résiduels, D4 lu par l'effet 0xad63e), `set_30`, `enemy_16`.
+Relancer ensuite les scénarios (`DDSOM_SANS=nom` pour isoler, `examples/pctrace`, `examples/watch`).
+
+Remarques sur `validate` : (1) la pile des tâches déborde sous FF0A00 (FF09B0-FF09D2 vus en attract) : la zone
+ignorée commence maintenant en FF0900 ; (2) **tempête de pas** (cause élucidée de « une touche pressée pendant l'entrée
+de scène fait diverger les machines ») : un bouton pressé en phase 8 (ou à l'attract) fait passer le jeu en
+avance rapide deux images plus tard : une tâche auxiliaire (table des tâches, entrée 13) remet aussitôt la tâche
+principale prête, qui enchaîne ses pas de jeu sans attendre l'IRQ (`world_update` 100 à 140 fois par image au lieu
+d'une, mesurable avec `examples/passages`). Le nombre de pas par image vaut alors (cycles de l'image) / (cycles d'un
+pas) : il dépend du coût en cycles des natives, donc diffère forcément du code d'origine (écart de `ff806e`, le
+compteur d'images, d'un pas à l'autre). Le code d'origine seul est déterministe. Ces états ne sont comparables que si
+la durée des natives est exacte ; le bot évite ces instants et les scénarios de couverture doivent aussi les éviter
+(aucun bouton en entrée de scène). Le moteur final devra fixer explicitement le nombre de pas de cette avance rapide.

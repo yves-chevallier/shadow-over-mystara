@@ -304,6 +304,13 @@ pub fn report() -> BTreeMap<&'static str, Stats> {
     STATS.lock().unwrap().clone()
 }
 
+/// Natives dont le mode contrôle adopte les registres de l'original (variable DDSOM_ADOPT, diagnostic).
+fn adopte(nom: &str) -> bool {
+    static PREFIXES: OnceLock<Option<Vec<String>>> = OnceLock::new();
+    let p = PREFIXES.get_or_init(|| std::env::var("DDSOM_ADOPT").ok().map(|v| v.split(',').map(str::to_owned).collect()));
+    p.as_ref().is_some_and(|p| p.iter().any(|x| nom.starts_with(x.as_str())))
+}
+
 /// Exécute la routine d'origine sur une copie et la native sur l'état réel, puis compare.
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let mut c2 = c.clone();
@@ -353,6 +360,13 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     // du code d'origine. Les registres hors contrat gardent les valeurs de la routine native : si un
     // appelant en dépendait (contrat incomplet), la suite divergera et la validation le verra.
     c.cycles = c2.cycles;
+    // DDSOM_ADOPT=préfixe,... (diagnostic) : ces natives laissent les registres de l'original ; si l'écart
+    // d'une scénario disparaît, les registres laissés par ces natives en sont la cause
+    if adopte(n.name) {
+        c.d = c2.d;
+        c.a = c2.a;
+        c.sr = c2.sr;
+    }
     let mut st = STATS.lock().unwrap();
     let s = st.entry(n.name).or_default();
     s.calls += 1;
