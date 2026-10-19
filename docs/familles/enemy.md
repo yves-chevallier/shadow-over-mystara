@@ -227,6 +227,30 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
   fuzz) ; les routines de réaction communes exigent des sous-états de départ valides ; un gestionnaire qui crée
   des objets (`alloc`) doit respecter l'ordre des allocations (l'emplacement obtenu dépend de l'ordre).
 
+### Méthode pour réécrire un type restant
+
+1. `SOM_ROOT=<dépôt principal> python3 tools/handler_listing.py <début> <fin>` (bornes : adresses des gestionnaires
+   voisins dans la table 0x39a78) donne le code atteignable et les tables de sauts ; lire le code de haut en bas
+   en notant pour chaque routine : étapes `+7`, minuteries (`+0xa2`...), animations, tables de données, appels.
+2. Écrire `families/enemy_<type>/{mod,stance,attacks,hit}.rs` sur le modèle d'`enemy_ghoul/` (le plus proche d'une
+   charpente classique) en s'appuyant sur `enemy_common` ; enregistrer le module dans `families/mod.rs`.
+3. Scène : `TYPES_SCENES=1 examples/types ...` sur `scenarios/cov/` (ou un parcours `autobot --plan 1:700,2:700,...` :
+   les scènes 1 à 66 sont faites, aucune ne contient les types 3, 11, 13, 14, 15 et 27 ; 18 n'apparaît qu'en
+   scène 66), puis une ligne dans `tools/gen_enemy.py`.
+4. `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 DDSOM_SANS=game_phase12,world_update,dispatch validate ...` : les lignes `REGS`
+   de l'ennemi doivent disparaître (A6/D6/D1 du préambule, A1 après `movea.w`, D0 après `andi.w`...). Hors mode
+   contrôle, un écart qui subsiste avec `DDSOM_SANS=<nom de la native>` n'est pas le sien : bisecter avec les autres
+   préfixes (`players_update`, `combat`...) et ranger le scénario dans `scenarios/ko/`.
+5. Fuzz : une entrée par type dans `fuzz_enemy/lot3.rs`, puis `DDSOM_ENTREE=<adresse> DDSOM_VARIANTES=1 fuzz_enemy
+   familles ... 3500 100` et `DDSOM_COUVERTURE=<fichier>` pour vérifier les instructions de l'original vues.
+   Les premiers écarts viennent presque toujours d'un `return` dans un bras de `match` qui saute la fin commune
+   du sous-état (zone, ombre) ou d'un appel oublié.
+
+Tailles du code restant (octets) : 0 Kobold 13 000 (quatorze variantes d'arrivée, une quarantaine de gestes),
+6 Hellhound 10 000, 3 Bow Gnoll 6 800, 13 Axe Gnoll 6 500, 18 Ogre 6 700, 8 Gargoyle 7 000, 11 golem 7 000, 15
+Goblin 6 000, 27 WarMachine 5 500, 14 Troll 5 400, 10 GiantScorpion 4 000 (données au milieu du code, listing
+désynchronisé), 9 GiantBeetle 3 300 (objet qui en engendre d'autres par une table de créations).
+
 ### Scénarios `scenarios/enemy/` et fuzz du troisième lot
 
 `tools/gen_enemy.py` (comme `gen_boss.py`) entre directement dans une scène où le type apparaît (décimal ; les scènes
