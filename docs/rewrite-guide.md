@@ -90,7 +90,7 @@ compare à chaque image la RAM de travail (hors piles), la GFX RAM, la table de 
 Résultat attendu : **« VALIDE »** pour chaque scénario. En cas d'écart, `validate` donne l'image et les
 adresses ; `DDSOM_CHECK=1 validate ...` compare en plus chaque appel natif à l'original (registres et
 mémoire, sur une copie) pour trouver la routine fautive. Les registres que l'original laisse comptent : la boucle de partie
-enchaîne les natives sans rien réinitialiser (`DDSOM_CHECK_ALL=1` les liste, `DDSOM_ADOPT=préfixe,...` fait adopter ceux
+enchaîne les natives sans rien réinitialiser (`DDSOM_CHECK_ALL=1` les liste, `DDSOM_ADOPT_REGS=préfixe,...` fait adopter ceux
 de l'original pour isoler une fuite de registre). Outils (`port/ddsom-game/examples`) : `watch`
 (qui écrit telle adresse à telle image), `tasks` (table des tâches), `profile`, `fuzz`.
 

@@ -95,7 +95,7 @@ maintenant les registres de l'original (D0-D6, A0-A4 / D2.w, A0) : la boucle de 
 boucles de dispatch d'objets sans rien réinitialiser, et des gestionnaires lisent ces registres (un effet recopiait D3
 ou D2). **Règle** : une native appelée avant une boucle de dispatch doit reproduire les registres que l'original
 laisse (`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1`, lignes `REGS`), pas seulement la mémoire. Diagnostic : `DDSOM_CHECK=1
-DDSOM_ADOPT=préfixe,...` (avec `DDSOM_SANS` pour les dispatch et `game_phase12`, que le mode contrôle ne sait pas
+DDSOM_ADOPT_REGS=préfixe,...` (avec `DDSOM_SANS` pour les dispatch et `game_phase12`, que le mode contrôle ne sait pas
 rejouer) fait adopter par ces natives les registres de l'original ; si l'écart disparaît, la cause est un registre
 résiduel (`cov_4p_a` : `build_sprite_list` et `set_0`).
 
