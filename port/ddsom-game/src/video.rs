@@ -110,10 +110,21 @@ fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
 /// sauf si les réglages la masquent.
 fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
     let hidden = rd16(b, a5(c, ram::DIP)) & 0x400 != 0;
-    if !hidden {
+    // Registres laissés pour les appelants (la mise à jour du monde les hérite) : D2 et les
+    // drapeaux du dernier calcul, A0 après la dernière écriture.
+    let flags_clear = !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
+    if hidden {
+        c.d[2] = c.d[2] & 0xffff_0000 | 0x400;
+        c.sr &= flags_clear;
+    } else {
         for i in 0..GAUGE_LONGS {
             wr32(b, hw::TEXT_LAYER + 4 * i, c.d[1]);
         }
+        c.d[2] |= 0xffff;
+        c.a[0] = hw::TEXT_LAYER + 4 * GAUGE_LONGS;
+        c.sr = c.sr & flags_clear
+            | if c.d[1] == 0 { m68k::SR_Z } else { 0 }
+            | if c.d[1] & 0x8000_0000 != 0 { m68k::SR_N } else { 0 };
     }
     rts(c, b);
 }
@@ -231,8 +242,8 @@ const fn fixed(entry: u32, name: &'static str, cost: fn(&Cpu, &mut Cps2Bus) -> u
     Native { entry, name, cost, run, touches_sound: false, outputs, exact_cost: true }
 }
 
-pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge_cost, gauge, 0);
-pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_jauge_d1", gauge_with_value_cost, gauge_with_value, regs::d(1));
+pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge_cost, gauge, regs::d(2) | regs::a(0) | regs::CCR);
+pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_jauge_d1", gauge_with_value_cost, gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
 pub const LOCK: Native = fixed(0xb96, "video_verrou", |_, b| ligne_droite(b, 0xb96), lock, regs::d(1));
 pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", |_, b| ligne_droite(b, 0xbac), unlock, regs::d(0) | regs::d(1));
 pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_couches_on", enable_layers_cost, enable_layers, 0);

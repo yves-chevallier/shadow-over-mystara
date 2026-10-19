@@ -2004,7 +2004,7 @@ mod stage_title {
     const STAGE_2B: u8 = 0x2b;
     /// Scripts d'animation directs du niveau 0x2b (normal, avec `A5+0x70`).
     const SCRIPT_2B: u32 = 0xe0152;
-    const SCRIPT_2B_ALT: u32 = 0xe01c6;
+    const SCRIPT_2B_ALT: u32 = 0xe01cc;
     /// `A5+0x70` : jeu à deux joueurs (h), décale le titre.
     const ALT: u32 = 0x70;
 

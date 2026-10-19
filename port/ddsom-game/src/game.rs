@@ -13,7 +13,7 @@ use crate::dispatch::{self, Class};
 use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::pools::{self, Queue};
 use crate::objects::Obj;
-use crate::{call, Native};
+use crate::{call, regs, Native};
 
 /// Variables de la RAM de travail (offsets depuis A5).
 mod ram {
@@ -182,10 +182,12 @@ pub const FRAME_END: Native = Native {
         for queue in QUEUES {
             queue.reset(b);
         }
+        // l'original laisse A0 sur la dernière file (le jeu en hérite à l'image suivante)
+        c.a[0] = A5 + pools::QUEUE_ITEM.array;
         rts(c, b);
     },
     touches_sound: false,
-    outputs: 0,
+    outputs: regs::a(0),
     exact_cost: false,
 };
 

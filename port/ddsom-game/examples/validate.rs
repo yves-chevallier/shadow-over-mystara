@@ -37,7 +37,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let load = || {
         let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-        m.set_overclock(OVERCLOCK);
+        m.set_overclock(std::env::var("DDSOM_OVERCLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(OVERCLOCK));
         m
     };
     let (mut ma, mut mb) = (load(), load());

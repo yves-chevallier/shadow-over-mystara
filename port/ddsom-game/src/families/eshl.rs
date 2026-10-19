@@ -1527,7 +1527,8 @@ mod shot5 {
             let row = (x.u8(0x42) as u32 >> 1 << 5) + 2 * (x.u8(0x43) as u32 >> 1);
             let flip = x.data8(MIRRORED + row + 1);
             x.set8(f::FLIP, flip);
-            let slot = 4 * x.data8(MIRRORED + row) as u32;
+            // l'original efface D0 avant cette lecture : le cadre vient toujours de la première ligne
+            let slot = 4 * x.data8(MIRRORED) as u32;
             let frames = table(x, FRAMES_ODD, set);
             let frame = x.data32(frames + slot);
             x.set32(0x34, frame);
