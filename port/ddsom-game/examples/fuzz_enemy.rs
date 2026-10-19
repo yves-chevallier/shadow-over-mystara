@@ -15,6 +15,9 @@ use std::path::Path;
 
 use ddsom_game::mem::{wr16, wr32, wr8, A5};
 
+#[path = "fuzz_enemy/lot3.rs"]
+mod lot3;
+
 struct Alea(u64);
 
 impl Alea {
@@ -893,7 +896,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
             for off in (0..pool.stride).step_by(2) {
                 wr16(&mut b, obj.0 + off, 0);
             }
-            if pool.class == 2 && matches!(kind, 4 | 19 | 21 | 25) {
+            if pool.class == 2 && (matches!(kind, 4 | 19 | 21 | 25) || lot3::gere(kind)) {
                 // un propriétaire distinct de l'objet : ses états sont réécrits au hasard par la suite
                 proprietaires.retain(|&o| o != obj.0);
             }
@@ -1002,7 +1005,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     wr8(&mut b, obj.0 + 0xb0, (alea.next() % 4) as u8);
                 }
                 wr16(&mut b, obj.0 + 0x60, 40);
-                if std::env::var("DDSOM_ETATS").is_ok() && alea.next() % 2 == 0 {
+                if std::env::var("DDSOM_ETATS").is_ok() && alea.next() % 2 == 0 && !lot3::gere(kind) {
                     let boites = etats_enemy(kind, rd8(&mut b, obj.0 + 3));
                     let (s4, s5, s6) = boites[alea.next() as usize % boites.len()];
                     wr8(&mut b, obj.0 + 4, s4[alea.next() as usize % s4.len()]);
@@ -1127,6 +1130,10 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         wr16(&mut b, q + 0xc, (alea.next() % 0x30) as u16);
                     }
                 }
+                if pool.class == 2 && lot3::gere(kind) && (pas == 0 || alea.next() % 3 == 0) {
+                    // état et champs valides du troisième lot, tirés à nouveau de temps en temps
+                    lot3::prep(&mut b, &mut alea, kind, obj.0, pas == 0);
+                }
                 if pool.class == 2 && matches!(kind, 4 | 19 | 21 | 25) && pas > 0 && alea.next() % 3 == 0 {
                     // nouvel état valide à chaque fois : visite beaucoup plus d'étapes que la seule trajectoire
                     let boites = etats_enemy(kind, rd8(&mut b, obj.0 + 3));
@@ -1144,7 +1151,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         prep_dbeast(&mut b, &mut alea, obj.0);
                     }
                 }
-                if pool.class == 2 && matches!(kind, 4 | 19) && alea.next() % 2 == 0 {
+                if pool.class == 2 && (matches!(kind, 4 | 19) || lot3::gere(kind)) && alea.next() % 2 == 0 {
                     // des joueurs dans les boîtes de portée de la bête (largeur étroite, profondeur ±8)
                     for j in 0..4u32 {
                         let q = 0xff85de + 0x200 * j;
@@ -1167,7 +1174,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                         wr8(&mut b, owner, 0);
                     }
                 }
-                if pool.class == 2 && pas > 0 {
+                if pool.class == 2 && pas > 0 && !lot3::gere(kind) {
                     for off in [0x33u32, 0x53, 0x56, 0x57, 0xa2, 0xa3, 0xa4, 0xb0, 0xb2, 0xb6, 0x20, 0x21, 0x24, 0x26, 0x30, 0x32, 0x3e] {
                         // +0x24 et +0x26 sont les liens des listes triées : seul le type 20 les
                         // utilise comme compteurs (parent de type 19), on ne les corrompt que pour lui

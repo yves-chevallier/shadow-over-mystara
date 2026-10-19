@@ -18,6 +18,9 @@ Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms d
 | `enemy_owlbear/` | type 4 (Owlbear) : `stance`, `attacks`, `moves`, `hit` |
 | `enemy_harpy.rs` | type 21 (créature volante « Harpy ») |
 | `enemy_warrior.rs` | type 25 (bras du DarkWarrior 1) |
+| `enemy_skeleton/` | type 1 (Skeleton) : `stance`, `attacks`, `leaps`, `hit` |
+| `enemy_elf/` | type 12 (Shadow Elf) : `stance`, `attacks`, `hit` |
+| `enemy_trog/` | type 2 (Troglodyte) : `stance`, `attacks`, `hit` |
 
 ## 2. Charpente commune
 
@@ -48,6 +51,38 @@ Tirage pseudo-aléatoire : `random` (0x19a88). Cibles : `0x424e` (choix aléatoi
 `0xb5e0` (joueur dans une boîte devant l'ennemi), `0xa4b4`/`0xa4c2` (décision par masque), voir `combat.md` §6.
 
 ## 3. Types réécrits
+
+### Type 1 (0x57cc4) « Skeleton » (h) — `enemy_skeleton/`
+
+Squelette à épée ; la série `+0x2f` (0 ou 1) donne un squelette armé qui garde (`+0x68 = 9` : un coup encaissé
+déclenche une riposte `+0xa9`). Animations 0x15eed8 (mouvements) et 0x15eef4 (coups). Variantes `+3` = 0 à 5
+(arrivée debout, en posture, en chute, clignotante), table par `+0x2f` en 0x57de6 (octets `+0x6d/+0x72/+0x73/+0x68`).
+Sous-états actifs : 0 arrivée, 2 debout (idée → marche → choix d'une attaque dans les tables par difficulté
+0x5932a / 0x5952a, annonce 0xac3a), 4 dix coups (estoc, enchaînement, double coup, bonds `+0x14`, glissade, garde
+de la série 1), 6 bonds et gardes, 8 esquives, 10 chute d'arrivée. Chaque sous-état exécute le test de zone (0xfbae,
+**qui n'est pas vide** : il remet D5 à 0, lu par `tst.b D5b` en 0x5808c) puis l'ombre 0x33fe4. La réaction aux
+drapeaux de coup `+0x8f` (0x59146) est un préambule des sous-états 2, 4, 6, 8 (`A6` = adresse de reprise).
+Couverture : scénarios `skeleton_scene13/58/64`, fuzz (`fuzz_enemy/lot3.rs`).
+
+### Type 12 (0x69384) « Shadow Elf » (h) — `enemy_elf/`
+
+Elfe sombre : il frappe à l'épée (`+0x44/+0x45` = type 0x1b à 0x1d, force 4 ou 5), disparaît (`+1` bit 1) et retombe
+sur sa cible. Animations 0x164174 (mouvements) et 0x164184 (coups). La création enchaîne sur l'état actif. L'état actif
+appelle toujours, hors gel, 0x81aa4 (test de proximité d'un objet de scène), 0xfbae, l'ombre et la remise en liste.
+**La variante `+3` est un indice de table déjà doublé** (0, 2, 4, 6). Groupes : 0 arrivée (marche, chute, bond, chute
+lente), 2 debout, 4 coups (`+6` = 0 approche, 2 demi-tour, 4 et 6 coup, 8 et 10 coups répétés, 12 et 16 à 20 chute
+sur la cible, 14 élan, 22 et 24 reprise de la marche), 6 coups d'après-bond, 8 coups de repli (tables 0x6a480,
+0x6a73c, 0x6a93c), 10 repos. Étapes mortes (jamais atteintes, absentes du fuzz) : 12 et 14 des coups 18 et 20.
+Couverture : scénarios `elf_scene92/94/96`, fuzz.
+
+### Type 2 (0x59baa) « Troglodyte » (h) — `enemy_trog/`
+
+Même charpente. La série 0 clignote après un coup encaissé (`flicker` : `+0xa5` phase, `+0xa6/+0xa7/+0xa8/+0xaa/+0xae`
+compteurs, bit 1 de `+1`) ; la série 1 (armée) ne clignote pas. `+0xa0/+0xa1` sont des octets d'aspect. Animations
+0x15faa0 et 0x15fabe. Piège : en état actif le gel `+0x53` positif **n'empêche pas** le comportement, c'est la pause
+qui l'empêche (inversion par rapport aux autres types) ; la pause laisse malgré tout l'ombre et la remise en liste.
+Un bond des variantes 3 et 4 teste les drapeaux de 0x1dd4 (`bpl`) : `Cx::c.cond(10)`. Couverture : scénarios
+`trog_scene101/101b/104`, fuzz.
 
 ### Type 20 (0x74fc0) « ManScorpion » (h) — `enemy.rs`
 
@@ -162,8 +197,9 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
 
 ## 4. Non réécrit (types encore en 68000)
 
-0 Kobold, 1 Skeleton, 2 Troglodyte, 3 Bow Gnoll, 5 Ghoul, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle,
-10 GiantScorpion, 11 mud golem, 12 Shadow Elf, 13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 27 WarMachine. Aucun n'apparaît dans les scénarios (seuls 4, 19 et 16, réécrits, y figurent).
+0 Kobold, 3 Bow Gnoll, 5 Ghoul, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion, 11 mud golem,
+13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 27 WarMachine. Fréquence dans `scenarios/cov/` (12 000 images, `examples/types`) :
+1, 12, 0, 2, 8, 5, 10, 6, 9 par ordre décroissant ; 3, 11, 13, 14, 15, 18 et 27 n'y apparaissent pas.
 
 ## 5. Validation
 
@@ -177,6 +213,25 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
   se lit dans l'espace des opcodes ; `+0x24/+0x26` sont les liens des listes triées (ne pas les corrompre dans le
   fuzz) ; les routines de réaction communes exigent des sous-états de départ valides ; un gestionnaire qui crée
   des objets (`alloc`) doit respecter l'ordre des allocations (l'emplacement obtenu dépend de l'ordre).
+
+### Scénarios `scenarios/enemy/` et fuzz du troisième lot
+
+`tools/gen_enemy.py` (comme `gen_boss.py`) entre directement dans une scène où le type apparaît (décimal ; les scènes
+se trouvent avec `TYPES_SCENES=1 examples/types <roms> <eeprom> scenarios/cov/<tour>.txt 30000`, qui donne les appels
+par scène `FF8034`) et fait combattre le bot, joueur invincible. **Un seul passage de scène par scénario** : un saut
+de scène (`--plan a:n,b:m`) provoque la « tempête de pas » (voir `couverture.md`). `validate_all.sh` les valide à
+12 000 images. Le fuzz du lot est `examples/fuzz_enemy/lot3.rs` (états `(+4,+5,+6,+7)` valides par type, décrits par
+des lignes `"s4 s5 s6,.. max7"`, champs tolérés) branché dans `fuzz_enemy.rs` : `DDSOM_ENTREE=<adresse du gestionnaire>
+DDSOM_VARIANTES=1 fuzz_enemy familles <roms> <eeprom> <scénario> 3500 <tours>`. Outils ajoutés : `pctrace`
+(`PCTRACE_SEUL`, `PCTRACE_IMAGES`), `DDSOM_TRACE_ORIG=<nom de la native>` dans `lib.rs` (trace du code d'origine pour
+les écarts d'une native en mode contrôle).
+Pièges rencontrés : **0xfbae n'est pas un `rts`** (test de zone, remet D5 à 0 ; l'index du pseudo-C le donne pour
+2 octets) ; les routines appelées par un sous-état reviennent à la boucle de l'état, qui exécute la suite (zone,
+ombre) : un `return` dans un bras du `match` d'un sous-état saute cette suite ; une variante `+3` indexe parfois
+directement une table de mots (valeurs paires) ; `bgt`/`bpl` après un `jsr` lisent les drapeaux de la routine
+appelée (`Cx::c.cond`) ; une table de sauts suivie de code (`jmp (table,PC,Dn)`) a pour longueur l'adresse du
+premier code moins la base ; les registres que le handler laisse (A6/D6 du préambule, A1 `movea.w (0x50,A0),A1`,
+D1 `moveq`...) se corrigent avec `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1` (lignes `REGS`).
 
 ### Fuzz des types du deuxième lot (4, 19, 21, 25)
 

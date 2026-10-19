@@ -343,6 +343,7 @@ fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
 }
 
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
+    let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();
     let ret = mem::rd32(&mut b2, c2.a[7]);
@@ -390,6 +391,17 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     // du code d'origine. Les registres hors contrat gardent les valeurs de la routine native : si un
     // appelant en dépendait (contrat incomplet), la suite divergera et la validation le verra.
     c.cycles = c2.cycles;
+    if let (Some((mut c3, mut b3)), false) = (pre, diffs.is_empty()) {
+        eprintln!("TRACE {} A0={:06x}: {}", n.name, c3.a[0], diffs.join(", "));
+        let ret = mem::rd32(&mut b3, c3.a[7]);
+        let sp_after = c3.a[7].wrapping_add(4);
+        let mut k = 0;
+        while !(c3.pc == ret && c3.a[7] == sp_after) && k < 3000 {
+            eprintln!("  {:06x} d0={:08x} d1={:08x} d2={:08x} d5={:08x} d6={:08x} a1={:08x}", c3.pc, c3.d[0], c3.d[1], c3.d[2], c3.d[5], c3.d[6], c3.a[1]);
+            c3.step(&mut b3);
+            k += 1;
+        }
+    }
     let mut st = STATS.lock().unwrap();
     let s = st.entry(n.name).or_default();
     s.calls += 1;
