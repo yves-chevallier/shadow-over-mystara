@@ -90,6 +90,7 @@ fn run_action(g: &mut Ctx, p: Player) {
         0x12 => characters::run(g, p, Slot::Action12),
         other => {
             let offset = g.prog16(ACTION_TABLE + other as u32) as i16 as i32;
+            g.c.d[0] = other as u32; // les gestionnaires comptent sur D0 = numéro d'action (octet haut nul)
             g.rom(ACTION_TABLE.wrapping_add(offset as u32), p);
         }
     }

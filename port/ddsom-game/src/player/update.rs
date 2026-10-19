@@ -95,6 +95,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
             sub::HURT => hurt::hurt(g, p),
             other => {
                 let handler = g.prog32(rom::SUB_HANDLERS + other as u32);
+                g.c.d[0] = other as u32;
                 g.rom(handler, p);
             }
         }
