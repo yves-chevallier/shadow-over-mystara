@@ -40,6 +40,12 @@ boss15_scene46_mort.txt (scène 46, dragon rouge 15 réécrit dans families/boss
   identique avec DDSOM_SANS=boss_15 ; DDSOM_CHECK=1 désigne `game_phase12` (entrée 0x1c6a0, game.rs) : ram[ffd574]=0000 au lieu
   de 002c (même routine que boss19_scene32_mort). VALIDE sur 4 236 images.
 
+boss18_scene26_mort.txt (scène 26, Lich 18 réécrit dans families/boss_18/, PV du boss ramenés à 1 après 1 500 images)
+  validate : écart à l'image 4939 (mot FFD692, 003c au lieu de 0400), à la mort du boss ; DDSOM_CHECK=1 désigne `game_phase12`
+  (entrée 0x1c6a0, game.rs) : ram[ffd692]=003c au lieu de 0400, ram[ffd694]=0000 au lieu de fffb. VALIDE sur 4 938 images.
+  Le scénario boss18_scene26 de scenarios/boss/ est tronqué à l'image 10 300 (le bot tue le Lich à l'image 10 541, et le même
+  game_phase12 diverge à 10 577) : VALIDE sur 12 000 images, le Lich vivant (28 PV).
+
 Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
 mais qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...`
 fait rendre aux natives nommées les registres de l'original : chercher par dichotomie celle dont un

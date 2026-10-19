@@ -19,6 +19,9 @@ AUTOBOT = os.path.join(ROOT, "port/target/release/examples/autobot")
 ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
 FRAMES = 12000
+# scénarios tronqués : le bot tue le boss naturellement, et la fin de scène diverge (routines d'autres modules, voir
+# scenarios/ko/README.md) ; on garde les entrées jusqu'à l'image indiquée
+TRONQUE = {"boss18_scene26": 10300}
 
 # nom -> (type de boss, scènes "scène:images,...", crans du curseur, PV du joueur remis à, affaiblissement, dossier)
 # dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/LISEZMOI.txt)
@@ -62,6 +65,10 @@ def generate(name):
     log = subprocess.run(cmd, capture_output=True, text=True)
     with open(os.path.join(ROOT, "work", name + ".log"), "w") as f:
         f.write(log.stderr)
+    if name in TRONQUE:
+        gardees = [l for l in open(out).read().split("\n") if not (l.split()[:1] and l.split()[0].isnumeric() and int(l.split()[0]) > TRONQUE[name])]
+        with open(out, "w") as f:
+            f.write("\n".join(gardees))
     return log.returncode
 
 

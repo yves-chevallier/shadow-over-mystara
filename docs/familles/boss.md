@@ -17,7 +17,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 13 | 0x8f59c | 1 352 | dragon noir en vol | 7, 9 (visible aussi pendant 6 et 12 : l'objet survit au changement de scène) |
 | 17 | 0x952b4 | 9 016 | Tel'Arin (h) | 13, 44 (variante 1) — réécrit |
 | 6 | 0x8430e | 5 866 | Manticore | 24 — réécrit |
-| 18 | 0x975ec | 7 822 | Lich (h) | 26 |
+| 18 | 0x975ec | 7 822 | Lich (h) | 26 — réécrit |
 | 14 / 19 | 0x8fae4 | 6 732 | dragons vert / noir (h) | 32 (19, variante 0), 65-66 (19, variante 1) — réécrit |
 | 12 / 11 | 0x8d59e | 8 190 | salamandres de feu / de glace | 40 / 42 |
 | 21 | 0x9947a | 6 704 | compagnon de Tel'Arin (h) | 44 — réécrit |
@@ -166,6 +166,21 @@ Particularités : `0xb3fb0` relit `D1b` laissé par `set_anim` (numéro du jeu d
 `A1`, chargé au début de la prise ; l'étape 4 de l'arrivée enchaîne sur le groupe 2 sans rendre la main. Couverture : fuzz 1 303
 instructions sur 1 369, VALIDE (les natives `ai_pick_target_any` et `son_enfiler_direct` désactivées : leurs écarts connus de durée et de
 drapeau X ne viennent pas du boss).
+
+### Type 18 (0x975ec) : Lich (h), scène 26 — `boss_18/`
+
+De la famille des boss 17 et 21 (même charpente, tirages à deux niveaux dans les tables de la ROM, `decide.rs`), sans ralenti ;
+particularité : l'état touché `hit.rs` a une routine de réaction par code de coup `+0x49` (table 0x986d6 de mots, neuf routines
+distinctes) : recul sur place (animations 0 et 1), projections selon une ligne de vitesses de 0x993ac (codes 4 à 0x54, `hit_c` à
+`hit_g`), soulevé avec bouffées d'effets (0x9c), rebonds jusqu'à la mort (0xa8) ; le recul `+5` = 2 interrompt la poursuite
+magique. Animations 0x181ae0 (mouvements), 0x181af2 (coups), 0x181b10 (réactions). `mod.rs` (boucle, création), `intro.rs`
+(quatre temps minutés avec sons), `fight.rs` (attente, demi-tour qui continue d'avancer, marche, charge, reprise), `decide.rs`,
+`attacks.rs` (onze attaques : coup, pas de côté, geste à suite tirée, poursuite magique, bond arrière, boule ESHL 0x20, rayon ESHL
+0x21, onde de choc qui renverse les joueurs, téléportation, pluie de 16 tirs 0x23, salve de tirs 0x24), `hit.rs`.
+Couverture : fuzz 1 538 instructions sur 1 642 (VALIDE, natives `ai_pick_target_any` et `son_enfiler` désactivées : écarts connus
+de durée et de drapeau X). Le scénario `boss18_scene26` (tronqué à l'image 10 300 par `gen_boss.py`) est VALIDE sur 12 000 images
+(7 125 appels) ; le bot tue le Lich à l'image 10 541 si on le laisse jouer, ce qui exerce toute la mort jusqu'à l'image 10 576
+(après quoi `game_phase12` diverge).
 
 ## 3. Validation
 
