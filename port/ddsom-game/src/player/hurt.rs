@@ -96,6 +96,7 @@ pub fn run_at(g: &mut Ctx, p: Player, addr: u32) {
     match HANDLERS.iter().find(|h| h.0 == addr) {
         Some(&(_, f)) => f(g, p),
         None => {
+            g.c.d[0] = 0; // les routines d'origine complètent l'octet bas de D0 : le reste doit être nul
             g.rom(addr, p);
         }
     }

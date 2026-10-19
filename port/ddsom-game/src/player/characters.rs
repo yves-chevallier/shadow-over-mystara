@@ -97,5 +97,6 @@ pub fn run(g: &mut Ctx, p: Player, slot: Slot) {
         return f(g, p);
     }
     let target = rom_address(g, slot, character);
+    g.c.d[0] = p.u8(g, Player::ACTION) as u32; // D0 = numéro d'action, octet haut nul (comme l'aiguillage d'origine)
     g.rom(target, p);
 }
