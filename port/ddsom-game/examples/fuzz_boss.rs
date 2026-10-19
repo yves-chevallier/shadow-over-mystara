@@ -146,6 +146,18 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[10], &[0, 2]),
             (&[6], Z, Z),
         ],
+        // boss 11 et 12 (serpents)
+        11 | 12 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6]),
+            (&[2], &[2, 8, 10, 12], Z),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14]),
+            (&[2], &[6], Z),
+            (&[4], &[0], &[0, 2, 4, 6]),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[2, 6, 8, 10], &[0, 2, 4]),
+            (&[6], Z, Z),
+        ],
         // boss 8 (guerrier noir 2)
         8 => &[
             (&[0], Z, Z),
@@ -166,6 +178,20 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
         ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide des boss 11 et 12.
+fn etape_11(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2 | 8 | 10 | 12 | 6, _) => 2,
+        (2, 4, 0) => 2,
+        (2, 4, 2 | 12) => 5,
+        (2, 4, 8) => 5,
+        (2, 4, _) => 3,
+        (4, 4, _) => 2,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
 }
 
 /// Étape `+7` valide du boss 8.
@@ -317,6 +343,9 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     }
     if kind == 8 {
         prep_8(b, alea, obj);
+    }
+    if kind == 11 || kind == 12 {
+        prep_11(b, alea, obj);
     }
     if kind == 13 {
         // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
@@ -554,6 +583,111 @@ fn prep_15(b: &mut Bus, alea: &mut Alea, obj: u32) {
         let scroll = rd16(b, A5 + 0x506);
         wr16(b, obj + 8, scroll.wrapping_add(edge));
     }
+}
+
+/// Boss 11 et 12 : douze anneaux autour de la tête, pose et rang suivis, codes de coup cohérents avec l'étape.
+fn prep_11(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 3, 0);
+    wr8(b, obj + 7, etape_11(alea, s.0, s.1, s.2));
+    // anneaux : rangs 0 à 11 dans les douze premiers emplacements ESHL, les autres vides
+    let esh = &ddsom_game::objects::pools::ESHL;
+    for i in 0..esh.slots {
+        let o = esh.slot(i).0;
+        if i < 12 && s.0 != 0 {
+            wr8(b, o, 1);
+            wr8(b, o + 2, 5);
+            wr8(b, o + 0x2f, i as u8);
+            wr16(b, o + 0x46, obj as u16);
+            let bx = rd16(b, obj + 8);
+            let by = rd16(b, obj + 0x10);
+            wr16(b, o + 8, bx.wrapping_add((alea.next() % 0x80) as u16).wrapping_sub(0x40));
+            wr16(b, o + 0xc, [0u16, 3, 0x0f, 0xfffd, 0xfff0, 0xffe0][alea.next() as usize % 6]);
+            wr16(b, o + 0x10, by.wrapping_add((alea.next() % 0x20) as u16).wrapping_sub(0x10));
+            wr8(b, o + 0x42, (alea.next() % 32) as u8);
+            wr8(b, o + 0x43, if alea.next() % 3 == 0 { (alea.next() % 32) as u8 } else { 0 });
+            wr8(b, o + 3, (alea.next() % 3) as u8);
+        } else {
+            wr8(b, o, 0);
+        }
+    }
+    match alea.next() % 24 {
+        0 => wr8(b, esh.slot(alea.next() % 12).0, 0),
+        1 => wr8(b, esh.slot(alea.next() % 12).0 + 0x2f, 0x40),
+        2 => wr8(b, esh.slot(12).0, 0), // pas de douzième anneau
+        _ => {}
+    }
+    // pose (ligne de 32 octets de 0x1069f8) et rang suivi, autour du seuil de la ligne
+    let aa = (alea.next() % 22) as u8;
+    wr8(b, obj + 0xaa, aa);
+    let thr = rd8(b, 0x1069f8 + 32 * aa as u32 + 2);
+    let seg = match alea.next() % 4 {
+        0 => thr,
+        1 => thr.wrapping_sub(1),
+        2 => thr.wrapping_add(1),
+        _ => (alea.next() % 12) as u8,
+    };
+    wr8(b, obj + 0xa8, if alea.next() % 10 == 0 { 0 } else { seg % 12 });
+    wr8(b, obj + 0x2d, (alea.next() % 32) as u8);
+    let (bx, by) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
+    wr16(b, obj + 0xa2, bx.wrapping_add((alea.next() % 8) as u16));
+    wr16(b, obj + 0xa4, [0u16, 1, 2, 3, 0x11, 0x40, 0x5f, 0x60, 0xfff0][alea.next() as usize % 9]);
+    wr16(b, obj + 0xa6, by.wrapping_add((alea.next() % 4) as u16));
+    wr16(b, obj + 0xa0, [0u16, 1, 8, 9, 0x0200, 0x0402, 0xffff][alea.next() as usize % 7]);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 0, 0, 2, 4]));
+    wr8(b, obj + 0xa1, pick(alea, &[0, 1, 8, 9, 7, 3, 0x24]));
+    wr32(b, obj + 0x4c, 0x1c6636);
+    wr8(b, obj + 0xb2, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xb6, (alea.next() % 4) as u8);
+    wr8(b, obj + 0xb7, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xb8, (alea.next() % 5) as u8);
+    wr8(b, obj + 0xb9, pick(alea, &[0, 0, 1, 2]));
+    wr16(b, obj + 0xb0, (alea.next() % 5) as u16);
+    if alea.next() % 2 == 0 {
+        wr8(b, obj + 0xb0, 1 + (alea.next() % 4) as u8);
+    }
+    wr8(b, obj + 0xb1, (alea.next() % 4) as u8);
+    wr8(b, obj + 0xb3, (alea.next() % 32) as u8);
+    wr8(b, obj + 0xb4, (alea.next() % 16) as u8);
+    wr8(b, obj + 0xb5, (alea.next() % 6) as u8);
+    wr8(b, obj + 0xac, pick(alea, &[0, 1, 0xff]));
+    wr8(b, obj + 0xad, (alea.next() % 2) as u8);
+    let tgt = ENEMY.slot(alea.next() % ENEMY.slots).0;
+    wr8(b, tgt, 1);
+    wr8(b, tgt + 2, if alea.next() % 2 == 0 { 0x47 } else { 2 });
+    wr16(b, obj + 0x5c, if alea.next() % 2 == 0 { 0 } else { tgt as u16 });
+    wr16(b, obj + 0x60, [0x40u16, 0x100, 0x300][alea.next() as usize % 3]);
+    wr16(b, obj + 0x62, [0u16, 1, 0x20, 0x60, 0x100, 0x2ff][alea.next() as usize % 6]);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x86, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x87, (alea.next() % 4) as u8);
+    wr8(b, obj + 0x90, (alea.next() % 4) as u8);
+    wr8(b, obj + 0x29, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0x81, 0xff]));
+    wr8(b, obj + 0x3e, (alea.next() % 22) as u8);
+    wr8(b, obj + 0x56, (alea.next() % 6) as u8);
+    wr8(b, obj + 0x53, pick(alea, &[0, 0, 0, 1]));
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0x400, 0xfc00][alea.next() as usize % 5]);
+    wr16(b, obj + 0x16, [0u16, 0x20, 0xffe0][alea.next() as usize % 3]);
+    wr16(b, obj + 0x18, [0u16, 0x80, 0x100, 0x600, 0xff00, 0xff80][alea.next() as usize % 6]);
+    wr16(b, obj + 0x1a, [0u16, 0xff80, 0xffc0, 0xffe0][alea.next() as usize % 4]);
+    wr16(b, obj + 0xc, [0u16, 1, 0x10, 0x11, 0x40, 0xfff0][alea.next() as usize % 6]);
+    wr8(b, A5 + 0x2c, pick(alea, &[0, 5, 0xb, 0xc, 0xd]));
+    wr16(b, A5 + 0x6e, (alea.next() % 8) as u16);
+    wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+    // code de coup cohérent avec l'étape de réaction
+    if s.0 == 4 && s.1 == 0 {
+        let codes: &[u8] = match s.2 {
+            0 => &[0, 4, 0x1c, 0x4c, 0x68, 0xa4, 0xa8, 0x78, 0x38],
+            2 => &[0, 4, 0x1c, 0x4c, 0x68, 0xa4, 0x78],
+            4 => &[4, 0xa4, 0x14],
+            _ => &[0xa4],
+        };
+        wr8(b, obj + 0x49, pick(alea, codes));
+    }
+    close_players(b, alea, obj);
 }
 
 /// Boss 8 : variables de scène du 17, paramètres propres.
@@ -876,7 +1010,7 @@ fn main() {
                 if apres > avant && affiches < 12 {
                     affiches += 1;
                     let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                    println!("écart en {entree:06x} type {kind} pas {pas} : {}", dernier.unwrap_or_default());
+                    println!("écart en {entree:06x} type {kind} pas {pas} objet {:06x} : {}", obj.0, dernier.unwrap_or_default());
                     println!("  objet avant : {:02x?}", avant_obj);
                     if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
@@ -888,8 +1022,19 @@ fn main() {
                                 break;
                             }
                             let ins = m68k::decode(&mut b2, c2.pc);
-                            println!("    {:06x} {:?}", c2.pc, ins.op);
+                            if std::env::var("DDSOM_SANS_TRACE").is_err() {
+                                println!("    {:06x} {:?}", c2.pc, ins.op);
+                            }
                             c2.step(&mut b2);
+                        }
+                        // octets de la RAM qui diffèrent entre la native (b) et l'original (b2)
+                        let mut n = 0;
+                        for a in 0xff8000u32..0x1000000 {
+                            let (u, v) = (rd8(&mut b, a), rd8(&mut b2, a));
+                            if u != v && n < 24 {
+                                println!("    DIFF {a:06x} (objet+{:x}) natif {u:02x} original {v:02x}", a.wrapping_sub(obj.0));
+                                n += 1;
+                            }
                         }
                     }
                 }

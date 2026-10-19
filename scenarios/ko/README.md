@@ -53,6 +53,20 @@ boss8_scene64_mort.txt (scène 64, DarkWarrior 2 réécrit dans families/boss_8/
   préfixes sauf b) le supprime, mais aucun préfixe seul : registres hérités par plusieurs natives d'autres modules, non isolées.
   VALIDE sur 6 137 images.
 
+boss12_scene40_mort.txt (scène 40, serpent 12 réécrit dans families/boss_11/, PV du boss ramenés à 1 après 1 500 images)
+  validate : écart à l'image 4463 (mot FFD514, 0000 au lieu de ffff), 4 images après le début de la mort du boss (image 4459) ;
+  identique avec DDSOM_SANS=boss_11 ; DDSOM_CHECK=1 désigne `game_phase12` (entrée 0x1c6a0, game.rs) : ram[ffd514]=0000 au lieu
+  de ffff (même routine que boss19_scene32_mort et boss15_scene46_mort). VALIDE sur 4 462 images.
+
+boss11_scene42_mort.txt (scène 42, serpent 11 réécrit dans families/boss_11/, PV du boss ramenés à 1 après 1 500 images)
+  validate : écart à l'image 6211 (mots FF8556, FF855E, FFCAF6 : 0040 au lieu de 0020), ~1 800 images après la mort du boss
+  (image 4443, libéré à l'image 5428) ; identique avec DDSOM_SANS=boss_11 ; aucun écart natif en mode contrôle ; même signature
+  que boss5_scene58_mort (décompte de fin de scène 0xf6658, image 6211 aussi). VALIDE sur 6 210 images (mort comprise).
+
+boss12_scene40.txt (scenarios/boss/, tronqué à l'image 10 300 par `gen_boss.py`) : entier, le scénario diverge à l'image 10 315
+  (mot FF8664, joueur 1 +0x86 : 00ff au lieu de ffff) ; identique avec DDSOM_SANS=boss_11 et DDSOM_ADOPT_REGS=boss_11 ;
+  disparaît avec DDSOM_SANS=combat : c'est `combat_update` (combat.rs), comme boss21_scene44_mort. Tronqué, VALIDE sur 12 000 images.
+
 Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
 mais qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...`
 fait rendre aux natives nommées les registres de l'original : chercher par dichotomie celle dont un

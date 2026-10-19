@@ -21,7 +21,7 @@ EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddso
 FRAMES = 12000
 # scénarios tronqués : le bot tue le boss naturellement, et la fin de scène diverge (routines d'autres modules, voir
 # scenarios/ko/README.md) ; on garde les entrées jusqu'à l'image indiquée
-TRONQUE = {"boss18_scene26": 10300}
+TRONQUE = {"boss18_scene26": 10300, "boss12_scene40": 10300}
 
 # nom -> (type de boss, scènes "scène:images,...", crans du curseur, PV du joueur remis à, affaiblissement, dossier)
 # dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/LISEZMOI.txt)
@@ -35,9 +35,9 @@ SPECS = {
     "boss19_scene32": (19, "32:11000", 0, "0x70", 0, "boss"),
     "boss19_scene32_mort": (19, "32:11000", 0, "0x70", 1500, "boss"),
     "boss12_scene40": (12, "40:11000", 0, "0x70", 0, "boss"),
-    "boss12_scene40_mort": (12, "40:11000", 0, "0x70", 1500, "boss"),
+    "boss12_scene40_mort": (12, "40:11000", 0, "0x70", 1500, "ko"),
     "boss11_scene42": (11, "42:11000", 0, "0x70", 0, "boss"),
-    "boss11_scene42_mort": (11, "42:11000", 0, "0x70", 1500, "boss"),
+    "boss11_scene42_mort": (11, "42:11000", 0, "0x70", 1500, "ko"),
     "boss21_scene44": (21, "44:11000", 0, "0x70", 0, "boss"),
     "boss21_scene44_mort": (21, "44:11000", 0, "0x70", 1500, "ko"),
     "boss15_scene46": (15, "46:11000", 0, "0x70", 0, "boss"),

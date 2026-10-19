@@ -19,7 +19,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 6 | 0x8430e | 5 866 | Manticore | 24 — réécrit |
 | 18 | 0x975ec | 7 822 | Lich (h) | 26 — réécrit |
 | 14 / 19 | 0x8fae4 | 6 732 | dragons vert / noir (h) | 32 (19, variante 0), 65-66 (19, variante 1) — réécrit |
-| 12 / 11 | 0x8d59e | 8 190 | salamandres de feu / de glace | 40 / 42 |
+| 12 / 11 | 0x8d59e | 8 190 | salamandres de feu / de glace | 40 / 42 — réécrits |
 | 21 | 0x9947a | 6 704 | compagnon de Tel'Arin (h) | 44 — réécrit |
 | 15 / 20 | 0x91530 | 7 470 | dragon rouge | 46 — réécrit |
 | 5 | 0x8341c | 3 826 | Ezerhorden | 58 — réécrit |
@@ -209,11 +209,40 @@ du tirage « loin » de 0x8a432 et le choix de la troisième attaque en ralenti)
 12 000 images (8 305 appels), le boss vivant (602 PV) ; le scénario de mort diverge à l'image 6138 à cause d'autres modules
 (`scenarios/ko/README.md`).
 
+### Types 11 et 12 (0x8d59e) : salamandres, scènes 42 et 40 — `boss_11/`
+
+Le boss est la tête d'un serpent de douze anneaux. Les anneaux sont des objets ESHL de type 5 (`eshl_05`, 0x9e458 : zone de
+contact qui recopie la visibilité de la tête et choisit son cadre de sprite) créés à l'initialisation par 0x9e426 (`+0x2f` = rang
+0 à 11, `+0x46` = la tête). Chaque image, `chain::update` replace tous les anneaux d'après les tables de la ROM (lignes de 32
+octets de 0x1069f8 choisies par la pose `+0xaa`, qui copie l'image courante `+0x3e` de l'animation ; trajectoires de
+0x106cb8), puis recopie la position de l'anneau suivi (rang `+0xa8`) dans la sauvegarde `+0xa2..+0xa6` que la tête reprend
+au début de l'image suivante. Les poses (`pose_0` à `pose_6`) règlent l'orientation `+0x42` et l'inclinaison `+0x43` de chaque
+anneau ; un anneau manquant (`find_prev`, `find_next`) met le boss en état 0x04060000 (mort). L'initialisation se prolonge dans
+l'état actif (pas de `rts`).
+
+| `+5` | Fichier | Rôle |
+|---|---|---|
+| 0 | `behave` | arrivée à droite de l'écran, chute, rebond, première marche |
+| 2, 8, 10, 12 | `behave` | poursuite (pas, cap, animation de marche), puis tests dans l'ordre : demi-tour, coup devant, attaque lointaine, attaque proche, hors écran |
+| 4 | `attacks` | huit attaques (`+6` = 0 à 14) : coup de queue, crachat (11 : trois tirs, 12 : deux), bond, élan, charge sur un joueur, approche suivant un tracé, crachat chercheur (12 seulement), grand bond |
+| 6 | `behave` | attente sans joueur |
+| état 4 | `hit` | six routines de réaction (table de longs 0x8e3dc), étourdi, relevé, mort |
+
+Particularités de l'original reproduites : l'initialisation tombe dans l'état actif ; `0x8d62e` compare à `(8,A2)` au lieu de `(8,A0)` ;
+la lecture de la table de tracé réutilise D0w=0 (`0x8e178`) ; `0x8e0b6` charge trois fois la même table. La lecture
+`move.w (-0x7f92,A0)` de l'étourdissement lit A0-0x7f92 (et non A5). Fuzz : 287 000 appels sans écart (couverture 2 060 - 64
+instructions ; restent la sous-routine 0x8ed7e, inutilisée car toutes les lignes de la ROM ont `+4` = 1, des signes d'écart rares et le
+second débordement du recadrage). Les registres de sortie A2, A4 sont reproduits (le 68000 les relit après le handler) ;
+D3, D4 et D5 restent différents (non lus).
+
+Un défaut de `eshl_05` (families/eshl.rs) a été corrigé en passant : pour les images impaires, l'original relit l'octet d'index 0
+de la table 0x9e6bc (D0 remis à zéro avant la lecture) et non celui de la ligne.
+
 ## 3. Validation
 
 * `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
-* `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt`, `boss15_scene46.txt`, `boss18_scene26.txt`, `boss8_scene64.txt` : VALIDES sur 12 000 images (2 460, 9 266, 9 044, 8 963, 7 125 et 8 305 appels ;
-  `boss18_scene26` est tronqué à l'image 10 300 par `gen_boss.py`).
+* `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt`, `boss15_scene46.txt`, `boss18_scene26.txt`, `boss8_scene64.txt`, `boss11_scene42.txt`, `boss12_scene40.txt` : VALIDES sur 12 000 images (2 460, 9 266, 9 044, 8 963, 7 125, 8 305, 9 123 et 9 139 appels ;
+  `boss18_scene26` et `boss12_scene40` sont tronqués à l'image 10 300 par `gen_boss.py` : la suite diverge par `combat_update`, voir `scenarios/ko/README.md`).
   Leurs variantes `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss mais divergent peu après sa mort,
   par des routines d'autres modules (décompte de fin de scène, `combat_update`, `game_phase12`) : `scenarios/ko/`, qui sont VALIDES jusqu'à l'image
   de l'écart.
