@@ -599,7 +599,7 @@ pub(super) fn grab_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
     w.set32(p, f::STATE, state::GRABBED);
     w.set8(p, 0x8a, 1);
     w.set8(p, 0x8b, 0);
-    w.set32(p, 0x86, bx.0);
+    w.set32(p, 0x86, bx.long_ref());
     w.set8(bx, f::ACTIVE, 2);
     w.set16(bx, 0x6c, p.word());
     w.set32(bx, f::STATE, state::PLAYER_HURT);
@@ -620,7 +620,7 @@ pub(super) fn shove_crate(w: &mut World, p: Obj, bx: Obj) -> bool {
     }
     w.set32(p, f::STATE, state::GRABBED);
     w.set8(p, 0x8b, 4);
-    w.set32(p, 0x86, bx.0);
+    w.set32(p, 0x86, bx.long_ref());
     w.set8(bx, f::ACTIVE, 2);
     w.set16(bx, 0x6c, p.word());
     true
@@ -719,7 +719,7 @@ pub(super) fn barrel_kick(w: &mut World, p: Obj, bx: Obj) -> bool {
         return false;
     }
     w.set32(p, f::STATE, state::GRABBING);
-    w.set32(p, 0x86, bx.0);
+    w.set32(p, 0x86, bx.long_ref());
     w.set8(bx, 0x66, 1);
     w.set16(bx, 0x6c, p.word());
     true

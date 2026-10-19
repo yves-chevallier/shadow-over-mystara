@@ -96,6 +96,15 @@ struct Painter<'a> {
     a5: u32,
     at: u32,
     cam: Camera,
+    /// D4 comme l'original le laisse (attributs du dernier morceau, couleur du dernier texte...) :
+    /// les gestionnaires qui suivent lisent ce reste (p. ex. 0xad7b0, qui additionne D4 à la position).
+    d4: u32,
+}
+
+impl Painter<'_> {
+    fn set_d4_low(&mut self, v: u16) {
+        self.d4 = self.d4 & 0xffff_0000 | v as u32;
+    }
 }
 
 impl Painter<'_> {
@@ -148,7 +157,7 @@ fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
     let a5 = c.a[5];
     if rd16(b, a5 + ram::BUILT) == 0 {
         let cam = camera(b, a5);
-        let mut p = Painter { b, a5, at: OBJECT_RAM, cam };
+        let mut p = Painter { b, a5, at: OBJECT_RAM, cam, d4: c.d[4] };
         for a in [ram::BUDGET_INIT, ram::BUDGET] {
             let a = p.ram(a);
             wr16(p.b, a, 0x36a);
@@ -169,6 +178,7 @@ fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
         let v = rd8(p.b, bank) ^ 0xff;
         wr8(p.b, bank, v);
         wr16(p.b, a5 + ram::BUILT, 1);
+        c.d[4] = p.d4;
     }
     rts(c, b);
 }
@@ -268,6 +278,7 @@ fn draw_ground_marks(p: &mut Painter) {
             let y = rd16(p.b, o + obj::Y).wrapping_sub(p.cam.y).wrapping_add(0xc);
             let y = 0x100u16.wrapping_sub(y).wrapping_sub(field(p, 5));
             let prio = field(p, 6);
+            p.set_d4_low(attr);
             p.sprite(x & 0x3ff | prio, y & 0x3ff | 0x2000, code, attr);
         }
         w = rd16(p.b, o + obj::NEXT);
@@ -384,6 +395,11 @@ fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style,
             common ^= 0x20;
         }
     }
+    if !fr.per_piece {
+        p.set_d4_low(common);
+    } else {
+        p.set_d4_low(fr.second);
+    }
     let mut off = fr.offsets;
     let mut piece = fr.pieces;
     for _ in 0..n {
@@ -393,6 +409,9 @@ fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style,
         let code = rd16(p.b, piece);
         let mut attr = if fr.per_piece { rd16(p.b, piece + 2) } else { common };
         let width = (attr & 0xf00) >> 4;
+        if fr.per_piece && st.flip {
+            p.set_d4_low(width);
+        }
         let px = if st.flip {
             x.wrapping_sub(dx).wrapping_sub(0x10).wrapping_add(0x40).wrapping_sub(width)
         } else {
@@ -484,6 +503,7 @@ fn draw_shadow_quad(p: &mut Painter, o: u32, e: u32) {
     let dy = rd8(p.b, e + 2).wrapping_add(rd8(p.b, e + 4)) as i8 as u16;
     let cy = screen_height(p, o).wrapping_add(dy);
     let (w, h) = (rd8(p.b, e + 1) as u16, rd8(p.b, e + 3) as u16);
+    p.d4 = w as u32;
     let quads = [
         (cx.wrapping_sub(w), cy.wrapping_add(h), 0x1893),
         (cx.wrapping_sub(w), cy.wrapping_sub(h).wrapping_add(0x10), 0x1895),
@@ -523,6 +543,7 @@ fn draw_text(p: &mut Painter, slot: u32) {
     let mut x = { let a = p.ram(slot + 4); rd16(p.b, a) }.wrapping_sub(0x4000);
     let mut y = { let a = p.ram(slot + 6); rd16(p.b, a) }.wrapping_add(0x2000);
     let mut color = 0xf;
+    p.d4 = 0xf;
     let words = { let a = p.ram(ram::TEXT_WORDS); rd16(p.b, a) } == 2;
     let mut at = s;
     loop {
@@ -538,6 +559,7 @@ fn draw_text(p: &mut Painter, slot: u32) {
                 }
                 0xfffe => {
                     color = rd16(p.b, at);
+                    p.set_d4_low(color);
                     at += 2;
                 }
                 code => {
@@ -556,6 +578,7 @@ fn draw_text(p: &mut Painter, slot: u32) {
                 }
                 0xfe => {
                     color = rd8(p.b, at) as u16;
+                    p.d4 = color as u32;
                     at += 1;
                 }
                 0xfd => return,

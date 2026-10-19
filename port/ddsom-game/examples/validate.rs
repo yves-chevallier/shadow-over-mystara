@@ -16,12 +16,14 @@ use std::path::Path;
 /// Fréquence du 68000, en multiple de celle de l'arcade.
 const OVERCLOCK: f64 = 16.0;
 
-/// Mots de RAM sans signification propre : piles des tâches (FF0A00-FF0FFF), pile logicielle de
+/// Mots de RAM sans signification propre : piles des tâches (FF09B0-FF0FFF : la pile de la première
+/// tâche déborde sous FF0A00), pile logicielle de
 /// l'interruption (FF2900-FF2A19), et le mot d'état de chaque tâche (FF0064 + 16 k), qui vaut
-/// « prête » ou « en cours » selon l'instant exact de la fin d'image pour une tâche de fond.
+/// « prête » ou « en cours » selon l'instant exact de la fin d'image pour une tâche de fond, et la
+/// dernière tâche lancée par l'ordonnanceur (FF0058, écrit en 0x96c : même raison).
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    (0x0a00..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
+    a == 0x58 || (0x09b0..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
 }
 
 fn first_diff(a: &[u16], b: &[u16]) -> Option<usize> {

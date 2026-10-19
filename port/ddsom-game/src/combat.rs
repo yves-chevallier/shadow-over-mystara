@@ -214,6 +214,11 @@ impl Obj {
     fn word(self) -> u16 {
         self.0 as u16
     }
+    /// L'adresse telle que le registre An la contient après `movea.w` (étendue du signe) : c'est
+    /// cette valeur que le jeu range quand il mémorise un objet sur 32 bits (`move.l A1,(0x86,A0)`).
+    fn long_ref(self) -> u32 {
+        self.0 as u16 as i16 as i32 as u32
+    }
 }
 
 /// Mémoire et registres, pour les routines qui doivent appeler du code d'origine.

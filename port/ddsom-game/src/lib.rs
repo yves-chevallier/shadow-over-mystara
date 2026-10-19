@@ -228,9 +228,23 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
                 exec(n, c, b);
                 c.cycles += cost;
                 if c.pc == c2.pc {
-                    c.d = c2.d;
-                    c.a[..7].copy_from_slice(&c2.a[..7]);
-                    c.sr = c2.sr;
+                    // DDSOM_ADOPT_MASK=hex : seuls les registres du masque (bits de `regs`) sont repris
+                    let mask = adopt_mask();
+                    if std::env::var_os("DDSOM_ADOPT_TRACE").is_some() {
+                        let d: Vec<String> = (0..8).filter(|&i| c.d[i] != c2.d[i]).map(|i| format!("d{i}={:08x}/{:08x}", c.d[i], c2.d[i])).chain((0..7).filter(|&i| c.a[i] != c2.a[i]).map(|i| format!("a{i}={:08x}/{:08x}", c.a[i], c2.a[i]))).collect();
+                        eprintln!("ADOPT {} {}", n.name, d.join(" "));
+                    }
+                    for i in 0..8 {
+                        if mask & regs::d(i) != 0 {
+                            c.d[i as usize] = c2.d[i as usize];
+                        }
+                        if i < 7 && mask & regs::a(i) != 0 {
+                            c.a[i as usize] = c2.a[i as usize];
+                        }
+                    }
+                    if mask & regs::CCR != 0 {
+                        c.sr = c2.sr;
+                    }
                 }
             } else {
                 exec(n, c, b);
@@ -324,6 +338,13 @@ fn adopt_regs(n: &Native) -> bool {
         std::env::var("DDSOM_ADOPT_REGS").map(|v| v.split(',').map(str::to_owned).collect()).unwrap_or_default()
     });
     !p.is_empty() && p.iter().any(|x| n.name.starts_with(x.as_str()))
+}
+
+fn adopt_mask() -> u32 {
+    static MASK: OnceLock<u32> = OnceLock::new();
+    *MASK.get_or_init(|| {
+        std::env::var("DDSOM_ADOPT_MASK").ok().and_then(|v| u32::from_str_radix(&v, 16).ok()).unwrap_or(regs::ALL)
+    })
 }
 
 /// Exécute la routine d'origine sur une copie de la machine jusqu'à son retour ; rend le CPU obtenu.

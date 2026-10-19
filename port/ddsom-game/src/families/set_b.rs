@@ -2518,21 +2518,25 @@ mod game_over {
                 x.add8(0x4, 2);
                 x.set16(0x4c, WAIT_FRAMES);
                 x.call(AFTER_MUSIC);
+                // l'original enchaîne sur le décompte (0xd9458) dès cette image : 0x80 devient 0x7f
+                countdown(x);
             }
-            4 => {
-                let n = x.u16(0x4c).wrapping_sub(1);
-                x.set16(0x4c, n);
-                if (n as i16) >= 0 {
-                    return;
-                }
-                x.set_a5_u16(0x490, 1);
-                x.set_a5_u8(0x48e, 0xd);
-                x.set_a5_u8(0x48f, 1);
-                call_on_list(x, MESSAGES);
-                x.call(sub::FREE_SET);
-            }
+            4 => countdown(x),
             _ => x.call(sub::FREE_SET),
         }
+    }
+
+    fn countdown(x: &mut Cx) {
+        let n = x.u16(0x4c).wrapping_sub(1);
+        x.set16(0x4c, n);
+        if (n as i16) >= 0 {
+            return;
+        }
+        x.set_a5_u16(0x490, 1);
+        x.set_a5_u8(0x48e, 0xd);
+        x.set_a5_u8(0x48f, 1);
+        call_on_list(x, MESSAGES);
+        x.call(sub::FREE_SET);
     }
 }
 
