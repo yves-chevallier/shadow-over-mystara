@@ -13,6 +13,7 @@
 
 use super::common::{self, call, field, next_step};
 use super::items;
+use super::super::spawn;
 use super::super::actions::{start_stand, to_stand};
 use super::super::combos::clear_recognizers;
 use super::super::init::init_weapon_stats;
@@ -24,8 +25,6 @@ use crate::objects::Obj;
 
 /// Routines d'origine appelées telles quelles : effets joueur, sons et palettes du clerc.
 mod rom {
-    /// Création d'un effet joueur (pool PEFF) : D0 = 1 ou 0 (+ D1) selon le geste.
-    pub const SLASH_EFFECT: u32 = 0x4a99a;
     /// Sons des coups.
     pub const SOUND_CHARGE_A: u32 = 0xe792e;
     pub const SOUND_CHARGE_B: u32 = 0xe1fc0;
@@ -42,27 +41,19 @@ mod rom {
     pub const PALETTE_NORMAL: u32 = 0x3afe;
     /// Prières : effets joueur (pool PEFF) créés au geste, avec leurs sons.
     pub const PRAYER_EVENT_SOUND: u32 = 0xe2aba;
-    pub const PRAYER_AURA: u32 = 0x4e6a8;
     pub const PRAYER_AURA_SOUND: u32 = 0xe96e0;
     pub const PRAYER_AURA_B_SOUND: u32 = 0xe9030;
-    pub const PRAYER_STORM: u32 = 0x4ec66;
     pub const PRAYER_STORM_SOUND: u32 = 0xe2afa;
-    pub const PRAYER_SWARM: u32 = 0x4f272;
     pub const PRAYER_SWARM_START_SOUND: u32 = 0xe2bba;
-    pub const PRAYER_CURE: u32 = 0x4b5ac;
     pub const PRAYER_CURE_SOUND: u32 = 0xe8db4;
     pub const SOUND_PRAYER: u32 = 0xe2c7a;
-    pub const PRAYER_BANISH: u32 = 0x4c26c;
     pub const PRAYER_BANISH_SOUND: u32 = 0xe9e34;
     pub const PRAYER_BANISH_START_SOUND: u32 = 0xe2cba;
-    pub const PRAYER_HOLY: u32 = 0x4aeb2;
     pub const PRAYER_HOLY_SOUND: u32 = 0xe2cfa;
-    pub const PRAYER_BLESS: u32 = 0x4c19a;
     pub const PRAYER_BLESS_SOUND: u32 = 0xe8e1e;
     pub const PRAYER_BLESS_SOUND_AREA: u32 = 0xe285c;
     pub const PRAYER_BLESS_SOUND_SELF: u32 = 0xe2b3a;
     pub const PRAYER_PROTECT_SOUND: u32 = 0xe2c3a;
-    pub const PRAYER_HEAL: u32 = 0x4ab48;
     pub const PRAYER_HEAL_SOUND_SELF_A: u32 = 0xe2b7a;
     pub const PRAYER_HEAL_SOUND_SELF_B: u32 = 0xe2bfa;
     /// Barre de vie d'un monstre frappé (D0 = joueur et type, D1 = PV max, D2 = PV, D3 = classe).
@@ -276,8 +267,8 @@ fn charge(g: &mut Ctx, p: Player) {
         4 => common::charge_slide(g, p, |g, p| {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 0), (1, 0)]);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 1)]);
+                spawn::slash(g, p, Some(0));
+                spawn::slash(g, p, None);
             }
         }),
         _ => {}
@@ -485,9 +476,9 @@ pub fn special(g: &mut Ctx, p: Player) {
     let which = p.u8(g, field::SPECIAL_KIND);
     g.set_a5u8(0x5b, which);
     match which {
-        6 => items::throw_item(g, p, 0x1e, items::rom::THROW_F),
-        7 => items::throw_item(g, p, 0x1e, items::rom::THROW_G),
-        8 => items::throw_item(g, p, 0x1d, items::rom::THROW_H),
+        6 => items::throw_item(g, p, 0x1e, spawn::Thrown::F),
+        7 => items::throw_item(g, p, 0x1e, spawn::Thrown::G),
+        8 => items::throw_item(g, p, 0x1d, spawn::Thrown::H),
         12 => swap_equipment(g, p),
         0x24 => prayer_hold(g, p),
         0x25 => prayer_storm(g, p),
@@ -627,7 +618,7 @@ fn prayer_hold(g: &mut Ctx, p: Player) {
             }
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::PRAYER_AURA, &[(0, 0)]);
+                spawn::aura(g, p, 0);
                 g.rom(rom::PALETTE_LIGHT, p);
                 g.rom(rom::PRAYER_AURA_SOUND, p);
             } else {
@@ -647,7 +638,7 @@ fn prayer_hold(g: &mut Ctx, p: Player) {
                     return;
                 }
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::PRAYER_AURA, &[(0, 1)]);
+                spawn::aura(g, p, 1);
                 g.rom(rom::PRAYER_AURA_B_SOUND, p);
                 hold_foes(g, p);
             }
@@ -717,7 +708,7 @@ fn prayer_storm(g: &mut Ctx, p: Player) {
             cancel_prayer(g, p, 0x16);
             return;
         }
-        call(g, p, rom::PRAYER_STORM, &[(0, 0)]);
+        spawn::storm(g, p, 0);
     }
     if p.u16(g, field::TIMER) == 0x20 {
         g.rom(rom::PRAYER_STORM_SOUND, p);
@@ -740,7 +731,7 @@ fn prayer_swarm(g: &mut Ctx, p: Player) {
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
                     let level = p.u8(g, Player::LEVEL) as u32;
                     let count = g.prog8(counts::CURE + level).wrapping_sub(1);
-                    call(g, p, rom::PRAYER_SWARM, &[(0, count as u32)]);
+                    spawn::swarm(g, p, count as u32 + 1);
                 }
                 animation::start_plain(g, p, 0x2d);
                 g.rom(rom::PRAYER_SWARM_START_SOUND, p);
@@ -748,7 +739,7 @@ fn prayer_swarm(g: &mut Ctx, p: Player) {
             }
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::PRAYER_CURE, &[(0, 0)]);
+                spawn::beam(g, p, false);
                 g.rom(rom::PALETTE_NORMAL, p);
                 g.rom(rom::PRAYER_CURE_SOUND, p);
             }
@@ -793,7 +784,7 @@ fn prayer_beam(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::PRAYER_CURE, &[(0, 0)]);
+                spawn::beam(g, p, false);
                 g.rom(rom::PALETTE_NORMAL, p);
                 g.rom(rom::PRAYER_CURE_SOUND, p);
             }
@@ -802,7 +793,7 @@ fn prayer_beam(g: &mut Ctx, p: Player) {
             }
             next_step(g, p);
             if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                call(g, p, rom::PRAYER_CURE, &[(0, 1)]);
+                spawn::beam(g, p, true);
                 p.set_u16(g, field::SPELL_TARGET, g.c.a[1] as u16);
             }
         }
@@ -849,7 +840,7 @@ fn prayer_banish(g: &mut Ctx, p: Player) {
             if !countdown(g, p) {
                 if p.u8(g, field::EVENT) != 0 {
                     p.set_u8(g, field::EVENT, 0);
-                    call(g, p, rom::PRAYER_BANISH, &[(0, 0)]);
+                    spawn::banish(g, p, None);
                     g.rom(rom::PALETTE_LIGHT, p);
                     g.rom(rom::PRAYER_BANISH_SOUND, p);
                 }
@@ -893,8 +884,7 @@ fn banish_foes(g: &mut Ctx, p: Player) -> u8 {
             {
                 continue;
             }
-            g.c.a[2] = o.0;
-            call(g, p, rom::PRAYER_BANISH, &[(0, 1)]);
+            spawn::banish(g, p, Some(o.0));
             found = found.wrapping_add(1);
             left = left.wrapping_sub(1);
             if left == 0 {
@@ -930,7 +920,7 @@ fn prayer_holy_light(g: &mut Ctx, p: Player) {
                 }
             } else if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                g.rom(rom::PRAYER_HOLY, p);
+                spawn::holy_light(g, p);
                 g.rom(rom::PALETTE_LIGHT, p);
             }
         }
@@ -1036,7 +1026,7 @@ fn prayer_protection(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::PRAYER_BLESS, &[(0, 2)]);
+                spawn::blessing(g, p, 2);
                 g.rom(rom::PALETTE_LIGHT, p);
                 g.rom(rom::PRAYER_BLESS_SOUND, p);
                 g.rom(rom::PRAYER_PROTECT_SOUND, p);
@@ -1101,7 +1091,7 @@ fn prayer_blessing(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if p.u8(g, field::EVENT) == 1 {
                 let area = p.u8(g, field::AREA);
-                call(g, p, rom::PRAYER_BLESS, &[(0, area as u32)]);
+                spawn::blessing(g, p, area);
                 g.rom(rom::PALETTE_LIGHT, p);
                 g.rom(rom::PRAYER_BLESS_SOUND, p);
                 g.rom(if area != 0 { rom::PRAYER_BLESS_SOUND_AREA } else { rom::PRAYER_BLESS_SOUND_SELF }, p);
@@ -1193,7 +1183,7 @@ fn prayer_heal(g: &mut Ctx, p: Player, variant: u32) {
             common::heal_flicker(g, p);
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::PRAYER_HEAL, &[(0, variant)]);
+                spawn::cure(g, p, variant as u8);
                 g.rom(rom::PALETTE_NORMAL, p);
                 let sound = if p.u8(g, field::AREA) != 0 {
                     rom::PRAYER_BLESS_SOUND_AREA

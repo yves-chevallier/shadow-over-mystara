@@ -12,6 +12,7 @@
 //!   l'action le lit puis l'efface ;
 //! - les sons et effets sont créés par des routines d'origine appelées à travers `call`.
 
+use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::combos::clear_recognizers;
 use super::super::init::init_weapon_stats;
@@ -178,7 +179,7 @@ pub fn flush_pending_effect(g: &mut Ctx, p: Player) {
     let kind = p.u8(g, field::PENDING_EFFECT) as u32;
     if kind != 0 {
         p.set_u8(g, field::PENDING_EFFECT, 0);
-        call(g, p, rom::SPAWN_EFFECT, &[(0, kind)]);
+        spawn::weapon_trail(g, p, kind as u8);
     }
 }
 
@@ -1143,7 +1144,7 @@ pub fn swap_weapon(g: &mut Ctx, p: Player, slot: u32, with_effect: bool) {
     }
     p.set_u8(g, field::EVENT, 0);
     if with_effect && event == 2 {
-        call(g, p, 0x4fd2c, &[(0, 0)]);
+        spawn::swap(g, p, 0);
         return;
     }
     let new = p.u8(g, field::ITEM_NEW).wrapping_sub(0x2e);

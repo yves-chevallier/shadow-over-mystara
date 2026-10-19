@@ -11,29 +11,20 @@
 //!
 //! Les routines d'origine qui créent tirs, effets et sons restent appelées telles quelles.
 
-use super::common::{self, call, field, next_step, rom as common_rom, set_forward_motion};
+use super::common::{self, field, next_step, rom as common_rom, set_forward_motion};
 use super::items;
+use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::checks::item_curse;
 use super::super::combos::clear_recognizers;
 use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, Ctx, Player};
-use crate::mem::{rd16, rd8, wr16, wr8};
+use crate::mem::{rd16, rd8, wr8};
 use crate::objects::Obj;
 
 /// Routines d'origine appelées telles quelles : effets joueur, objets créés et sons du voleur.
 mod rom {
-    /// Création d'un effet joueur (pool PEFF) : D0 = 1 ou 0 (+ D1) selon le geste.
-    pub const SLASH_EFFECT: u32 = 0x4a99a;
-    /// Effet du coup de pied sauté (D0 = 0).
-    pub const KICK_EFFECT: u32 = 0x4fbde;
-    /// Effet du coup de pied arrière.
-    pub const BACK_KICK_EFFECT: u32 = 0x52e20;
-    /// Lancer de couteau : crée le tir (Z levé si rien n'est créé) et son son.
-    pub const KNIFE: u32 = 0x54426;
     pub const KNIFE_SOUND: u32 = 0xeb8bc;
-    /// Réservation d'un objet du pool de 18 (retenue levée : pool plein), A1 = l'objet.
-    pub const ALLOC_OBJECT: u32 = 0x225e;
     /// Sons.
     pub const SOUND_SHADOW: u32 = 0xe2578;
     pub const SOUND_STRIKE: u32 = 0xe1f20;
@@ -252,7 +243,7 @@ fn air_knife(g: &mut Ctx, p: Player) {
         p.set_u8(g, Player::STEP, 8);
         land(g, p);
     } else if common::take_event(g, p) {
-        g.rom(rom::KNIFE, p);
+        spawn::knife(g, p);
         g.rom(rom::KNIFE_SOUND, p);
     }
 }
@@ -454,8 +445,8 @@ fn charge(g: &mut Ctx, p: Player) {
         4 => common::charge_slide(g, p, |g, p| {
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 0), (1, 0)]);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 1)]);
+                spawn::slash(g, p, Some(0));
+                spawn::slash(g, p, None);
                 g.rom(rom::SOUND_CHARGE_B, p);
                 common::weapon_voice(g, p);
             }
@@ -529,30 +520,16 @@ fn leap_kick(g: &mut Ctx, p: Player) {
             }
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::KICK_EFFECT, &[(0, 0)]);
+                spawn::leap(g, p, 0);
             }
             if p.u8(g, field::EVENT) == 2 {
                 p.set_u8(g, field::EVENT, 0);
                 g.rom(rom::SOUND_SHADOW, p);
-                spawn_shadow(g, p);
+                spawn::shadow(g, p);
             }
         }
         _ => {}
     }
-}
-
-/// Crée l'ombre du coup de pied (objet 1 de genre 8) rattachée au voleur ; sans effet si le pool est plein.
-fn spawn_shadow(g: &mut Ctx, p: Player) {
-    cov!();
-    g.rom(rom::ALLOC_OBJECT, p);
-    if g.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let shadow = g.c.a[1];
-    wr8(g.b, shadow, 1);
-    wr8(g.b, shadow + 2, 8);
-    wr8(g.b, shadow + 0x2f, 2);
-    wr16(g.b, shadow + 0x50, p.0 as u16);
 }
 
 /// Bond arrière avec coup de pied (0x49244).
@@ -577,7 +554,7 @@ fn back_kick(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u32(g, Obj::VX, 0);
                 p.set_u8(g, field::EVENT, 0);
-                g.rom(rom::BACK_KICK_EFFECT, p);
+                spawn::shadows(g, p);
                 g.rom(rom::SOUND_SPIN, p);
             }
             move_xz(g, p);
@@ -703,14 +680,14 @@ pub fn special(g: &mut Ctx, p: Player) {
     let which = p.u8(g, field::SPECIAL_KIND);
     g.set_a5u8(0x5b, which);
     match which {
-        0 => items::throw_item(g, p, 0x1a, items::rom::THROW_A),
-        1 => items::throw_item(g, p, 0x1a, items::rom::THROW_B),
-        2 => items::throw_item(g, p, 0x1b, items::rom::THROW_C),
-        4 => items::throw_item(g, p, 0x1b, items::rom::THROW_D),
-        5 => items::throw_item(g, p, 0x1b, items::rom::THROW_E),
-        6 => items::throw_item(g, p, 0x19, items::rom::THROW_F),
-        7 => items::throw_item(g, p, 0x19, items::rom::THROW_G),
-        8 => items::throw_item(g, p, 0x18, items::rom::THROW_H),
+        0 => items::throw_item(g, p, 0x1a, spawn::Thrown::A),
+        1 => items::throw_item(g, p, 0x1a, spawn::Thrown::B),
+        2 => items::throw_item(g, p, 0x1b, spawn::Thrown::C),
+        4 => items::throw_item(g, p, 0x1b, spawn::Thrown::D),
+        5 => items::throw_item(g, p, 0x1b, spawn::Thrown::E),
+        6 => items::throw_item(g, p, 0x19, spawn::Thrown::F),
+        7 => items::throw_item(g, p, 0x19, spawn::Thrown::G),
+        8 => items::throw_item(g, p, 0x18, spawn::Thrown::H),
         11 => throw_knife(g, p, 0x1e),
         12 => common::swap_weapon(g, p, Player::WEAPON_A, false),
         _ => {
@@ -733,8 +710,7 @@ fn throw_knife(g: &mut Ctx, p: Player, anim: u16) {
         return;
     }
     if common::take_event(g, p) {
-        let nothing_created = g.rom(rom::KNIFE, p);
-        if !nothing_created {
+        if spawn::knife(g, p) {
             g.rom(rom::KNIFE_SOUND, p);
         }
     }

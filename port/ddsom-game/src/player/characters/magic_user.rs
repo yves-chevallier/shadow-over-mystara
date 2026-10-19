@@ -14,6 +14,7 @@
 use super::common::{self, call, countdown, field, is_cancelled, next_step, take_event};
 use super::foes::{self, Boost, Damage, Live, Strike};
 use super::items;
+use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::combos::clear_recognizers;
 use super::super::walk::{move_x, move_xz, move_z};
@@ -40,10 +41,7 @@ mod rom {
     pub const SCREEN_SHATTER: u32 = 0x1ac86;
     /// Effets joueur (pool PEFF) des magies.
     pub const EFFECT_SPARKS: u32 = 0x4dc9a;
-    pub const EFFECT_SHOWER: u32 = 0x4dcda;
     pub const EFFECT_BOLT: u32 = 0x4b7a0;
-    pub const EFFECT_FROST: u32 = 0x4bc42;
-    pub const EFFECT_FROST_ALL: [u32; 4] = [0x52b54, 0x4bb68, 0x4bbbe, 0x4bbf6];
     pub const EFFECT_QUAKE: u32 = 0x4b340;
     pub const EFFECT_QUAKE_B: u32 = 0x4f132;
     pub const EFFECT_SUMMON: u32 = 0x4ccac;
@@ -435,10 +433,10 @@ pub fn special(g: &mut Ctx, p: Player) {
     let which = p.u8(g, field::SPECIAL_KIND);
     g.set_a5u8(0x5b, which);
     match which {
-        0 => items::throw_item(g, p, 0xf, items::rom::THROW_A),
-        1 => items::throw_item(g, p, 0xf, items::rom::THROW_B),
-        6 => items::throw_item(g, p, 0xe, items::rom::THROW_F),
-        7 => items::throw_item(g, p, 0xe, items::rom::THROW_G),
+        0 => items::throw_item(g, p, 0xf, spawn::Thrown::A),
+        1 => items::throw_item(g, p, 0xf, spawn::Thrown::B),
+        6 => items::throw_item(g, p, 0xe, spawn::Thrown::F),
+        7 => items::throw_item(g, p, 0xe, spawn::Thrown::G),
         0xc => common::swap_weapon(g, p, Player::WEAPON_B, false),
         16 => items::cast(g, p, &CAST_16, STYLE),
         19 => items::cast(g, p, &CAST_19, STYLE),
@@ -534,7 +532,7 @@ fn sparks(g: &mut Ctx, p: Player) {
                     common::cancel_cast(g, p, 0x1c);
                     return linger_quiet(g, p);
                 }
-                call(g, p, rom::EFFECT_SHOWER, &[(0, (side == 0) as u32)]);
+                spawn::shower(g, p, (side == 0) as u8);
                 p.set_u8(g, field::EVENT, 0);
             }
             if animation::step(g, p) {
@@ -625,7 +623,7 @@ fn frost(g: &mut Ctx, p: Player) {
         4 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_FROST, &[(0, 0)]);
+                spawn::ice_crown(g, p);
                 sounds(g, p, &[0xe2a34, 0xe860c]);
             }
             if countdown(g, p) {
@@ -653,9 +651,7 @@ fn frost(g: &mut Ctx, p: Player) {
                 common::cancel_cast(g, p, 0x1e);
                 return frost_wait(g, p);
             }
-            for effect in rom::EFFECT_FROST_ALL {
-                g.rom(effect, p);
-            }
+            spawn::ice_spell(g, p);
             g.rom(rom::SCREEN_SHATTER, p);
         }
         8 => {

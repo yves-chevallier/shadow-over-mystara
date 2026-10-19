@@ -13,42 +13,25 @@
 //! (`common::begin_spell`) jusqu'à `common::end_spell`. Si `field::SPELL_CANCELLED` est non nul (une
 //! protection annule le sort), seule une étincelle est jouée.
 
-use super::common::{self, call, field, next_step};
+use super::common::{self, field, next_step};
 use super::foes::{self, Boost, Damage, Live, Strike};
+use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::{animation, Ctx, Player};
 
-/// Routines d'origine appelées par ces automates : tirs, effets, sons, éclairs d'écran.
+/// Routines d'origine appelées par ces automates : sons, cibles, éclairs d'écran et palettes (les créateurs de tirs et
+/// d'effets sont dans `spawn`).
 pub mod rom {
-    /// Création d'un tir d'objet lancé (pool PSHL) : Z levé au retour si rien n'a été créé.
-    pub const THROW_A: u32 = 0x51d02;
-    pub const THROW_B: u32 = 0x51d54;
-    pub const THROW_C: u32 = 0x51f6a;
-    pub const THROW_D: u32 = 0x51fb6;
-    pub const THROW_E: u32 = 0x52002;
-    pub const THROW_F: u32 = 0x52204;
-    pub const THROW_G: u32 = 0x5308c;
-    pub const THROW_H: u32 = 0x52394;
     /// Son d'un objet utilisé.
     pub const SOUND_ITEM: u32 = 0xe2430;
-    /// Foudre : choix de la cible (A1 en retour, Z levé si aucune) et éclair.
+    /// Foudre : choix de la cible (A1 en retour, Z levé si aucune).
     pub const LIGHTNING_TARGET: u32 = 0x4f004;
-    pub const LIGHTNING_STRIKE: u32 = 0x4cdd0;
     /// Mur : choix de la cible.
     pub const WALL_TARGET: u32 = 0x50324;
     /// Éclairs de l'écran (palettes) : foudre, fin, feu.
     pub const FLASH_LIGHTNING: u32 = 0x1ab56;
     pub const FLASH_END: u32 = 0x1abe0;
     pub const FLASH_FIRE: u32 = 0x1ab3c;
-    /// Effets des magies lancées (13..20).
-    pub const CAST_13: u32 = 0x4dcda;
-    pub const CAST_FIRE: u32 = 0x54522;
-    pub const CAST_ICE: [u32; 5] = [0x52b54, 0x4bb68, 0x4bbbe, 0x4bbf6, 0x4bc42];
-    pub const CAST_RING: u32 = 0x4e2f4;
-    pub const CAST_BEAM: u32 = 0x4b196;
-    pub const CAST_STORM: u32 = 0x4ec66;
-    pub const CAST_HEAL: u32 = 0x4ab64;
-    pub const CAST_METEOR: u32 = 0x5012e;
     /// Palettes du joueur : lumière, normale, rouge.
     pub const PALETTE_LIGHT: u32 = 0x3af8;
     pub const PALETTE_NORMAL: u32 = 0x3afe;
@@ -96,7 +79,7 @@ impl Style {
 
 /// Objet lancé : l'animation `anim` ; au geste porté, la routine `launcher` crée le tir (Z levé : rien
 /// n'a été créé) ; une charge est consommée.
-pub fn throw_item(g: &mut Ctx, p: Player, anim: u16, launcher: u32) {
+pub fn throw_item(g: &mut Ctx, p: Player, anim: u16, launcher: spawn::Thrown) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
         next_step(g, p);
@@ -109,8 +92,7 @@ pub fn throw_item(g: &mut Ctx, p: Player, anim: u16, launcher: u32) {
     }
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        let nothing_created = g.rom(launcher, p);
-        if !nothing_created {
+        if spawn::thrown(g, p, launcher) {
             common::consume_charge(g, p);
         }
     }
@@ -173,7 +155,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
                 g.c.a[2] = target;
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0xc0);
-                g.rom(rom::LIGHTNING_STRIKE, p);
+                spawn::lightning(g, p, target);
                 g.rom(rom::FLASH_LIGHTNING, p);
                 animation::start(g, p, 0);
             }
@@ -347,7 +329,8 @@ const BASE: Cast = Cast {
 
 pub const CAST_13: Cast = Cast {
     fire: |g, p| {
-        g.rom(rom::CAST_13, p);
+        let side = g.c.d[0] as u8;
+        spawn::shower(g, p, side);
     },
     ..BASE
 };
@@ -355,7 +338,7 @@ pub const CAST_13: Cast = Cast {
 pub const CAST_14: Cast = Cast {
     frames: 0x3c,
     fire: |g, p| {
-        g.rom(rom::CAST_FIRE, p);
+        spawn::fireball(g, p);
         g.rom(rom::PALETTE_LIGHT, p);
     },
     ..BASE
@@ -365,9 +348,8 @@ pub const CAST_15: Cast = Cast {
     frames: 0x78,
     prepare: |g, p| p.set_u8(g, 0x1e9, 2),
     fire: |g, p| {
-        for addr in rom::CAST_ICE {
-            g.rom(addr, p);
-        }
+        spawn::ice_spell(g, p);
+        spawn::ice_crown(g, p);
     },
     ..BASE
 };
@@ -375,7 +357,7 @@ pub const CAST_15: Cast = Cast {
 /// Anneau rouge (n° 16) : le geste crée l'anneau et l'aura.
 pub fn ring_fire(g: &mut Ctx, p: Player) {
     cov!();
-    call(g, p, rom::CAST_RING, &[(0, 1)]);
+    spawn::ring(g, p, 1);
     g.rom(rom::PALETTE_RED, p);
 }
 
@@ -404,7 +386,7 @@ pub const CAST_16: Cast = Cast {
 
 pub const CAST_17: Cast = Cast {
     fire: |g, p| {
-        call(g, p, rom::CAST_BEAM, &[(0, 1)]);
+        spawn::beam_cast(g, p, 1);
         g.rom(rom::PALETTE_LIGHT, p);
     },
     ..BASE
@@ -413,7 +395,7 @@ pub const CAST_17: Cast = Cast {
 pub const CAST_18: Cast = Cast {
     frames: 0x78,
     fire: |g, p| {
-        call(g, p, rom::CAST_STORM, &[(0, 0)]);
+        spawn::storm(g, p, 0);
     },
     ..BASE
 };
@@ -425,7 +407,7 @@ pub const CAST_19: Cast = Cast {
     after_freeze: common::heal_scan,
     every_frame: common::heal_flicker,
     fire: |g, p| {
-        g.rom(rom::CAST_HEAL, p);
+        spawn::potion(g, p);
         g.rom(rom::PALETTE_NORMAL, p);
     },
     ..BASE
@@ -454,7 +436,7 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);
         } else {
-            g.rom(rom::CAST_METEOR, p);
+            spawn::meteors(g, p);
             g.rom(rom::FLASH_FIRE, p);
         }
     }

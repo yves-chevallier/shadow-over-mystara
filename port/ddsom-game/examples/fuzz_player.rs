@@ -177,6 +177,11 @@ fn main() {
                 c.d[r] = alea.next();
             }
             c.d[0] = 0;
+            if who == "spawn" {
+                // créateurs d'effets : paramètre D0 petit, A2 = un monstre
+                c.d[0] = alea.pick(&[0u32, 0, 1, 2, 3, 0x13, 0xff, 0x100]);
+                c.a[2] = A5 + 0x299e + 0xc0 * alea.below(5);
+            }
             c.a[0] = p;
             c.a[5] = A5;
             // état aléatoire du joueur
@@ -235,7 +240,7 @@ fn main() {
             }
             wr16(b, p + 0x80, alea.next() as u16 & 0x1ff);
             let e = alea.below(0x2f) as u8;
-            wr8(b, p + 0x10d, alea.pick(&[0u8, 1, 8, 0x18, 0xe, 0x1e, 0x10, 0x11, 0x14, 0x20, e]));
+            wr8(b, p + 0x10d, alea.pick(&[0u8, 1, 8, 0x18, 0xe, 0x1e, 0x10, 0x11, 0x12, 0x13, 0x14, 0x20, e]));
             let e = alea.below(0x2f) as u8;
             wr8(b, p + 0x10e, alea.pick(&[0u8, 4, 5, 0x20, 0x28, 0x29, 0x2c, e]));
             wr8(b, p + 0x10c, alea.below(20) as u8);
@@ -272,6 +277,7 @@ fn main() {
                 "elf" => 4,
                 "dwarf" => 6,
                 "thief" => 10,
+                "spawn" => alea.below(12) as u8 & !1,
                 _ => 8,
             };
             wr8(b, p + 3, base + alea.below(2) as u8);
@@ -299,6 +305,20 @@ fn main() {
                 wr16(b, p + 0x1ec, target);
             } else if who == "mage" && (which == 9 || which == 10) {
                 wr16(b, p + 0x1e8, target);
+            }
+            // créateurs d'effets : remplissage des pools PSHL (18) et PEFF (48), réserves de la scène
+            if who == "spawn" {
+                for (first, slots, free) in [(0x10deu32, 18u32, 0x7e5eu32), (0x179e, 48, 0x7e60)] {
+                    let used = alea.below(slots + 2);
+                    for k in 0..slots {
+                        wr8(b, A5 + first + 0x60 * k, (k < used) as u8);
+                    }
+                    let counter = alea.pick(&[slots.saturating_sub(used), slots.saturating_sub(used), 0, 1, 2, 5]);
+                    wr16(b, A5 + free, counter as u16);
+                }
+                wr16(b, A5.wrapping_sub(0x5fc0), alea.pick(&[0u16, 1, 2, 3, 7, 40]));
+                wr8(b, A5.wrapping_sub(0x5fbe), alea.pick(&[0u8, 1, 0x7f, 0xff]));
+                wr8(b, A5 + 0x34, alea.below(8) as u8);
             }
             // voleur : bord touché, saut double, objet lié (l'ombre du coup dans le dos)
             if who == "thief" {

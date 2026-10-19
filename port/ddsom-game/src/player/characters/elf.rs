@@ -13,6 +13,7 @@
 use super::common::{self, call, countdown, field, is_cancelled, next_step, take_event, wind_down};
 use super::foes::{self, Boost, Damage, Live, Strike};
 use super::items;
+use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::checks::item_curse;
 use super::super::combos::clear_recognizers;
@@ -22,8 +23,6 @@ use crate::objects::Obj;
 
 /// Routines d'origine appelées telles quelles : effets joueur, sons, palettes et effets d'écran.
 mod rom {
-    /// Création d'un effet joueur (pool PEFF) : D0 = 1 ou 0 (+ D1) selon le geste.
-    pub const SLASH_EFFECT: u32 = 0x4a99a;
     /// Sons des coups.
     pub const SOUND_STRIKE: u32 = 0xe1e80;
     pub const SOUND_STRIKE_B: u32 = 0xe1de0;
@@ -46,14 +45,8 @@ mod rom {
     pub const SCREEN_RIPPLE: u32 = 0x1aaa0;
     pub const SCREEN_FADE_A: u32 = 0x1aaee;
     pub const SCREEN_FADE_B: u32 = 0x1aad4;
-    /// Effets joueur (pool PEFF) des magies.
-    pub const EFFECT_RING: u32 = 0x4e2f4;
-    pub const EFFECT_BEAM: u32 = 0x4b196;
     pub const EFFECT_SPARKS: u32 = 0x4dc9a;
-    pub const EFFECT_SHOWER: u32 = 0x4dcda;
     pub const EFFECT_BOLT: u32 = 0x4b7a0;
-    pub const EFFECT_FROST: u32 = 0x4bc42;
-    pub const EFFECT_FROST_ALL: [u32; 4] = [0x52b54, 0x4bb68, 0x4bbbe, 0x4bbf6];
     pub const EFFECT_QUAKE: u32 = 0x4b340;
     pub const EFFECT_QUAKE_B: u32 = 0x4f132;
     pub const EFFECT_MOON: u32 = 0x4e4de;
@@ -183,9 +176,9 @@ fn extra_step(g: &mut Ctx, p: Player, step: u8) {
         0xc => {
             if !air_fall(g, p) && p.u8(g, field::AIR_ATTACK_DONE) == 2 && take_event(g, p) {
                 match p.u8(g, field::ITEM) {
-                    0x24 => g.rom(items::rom::THROW_C, p),
-                    0x25 => g.rom(items::rom::THROW_D, p),
-                    0x26 => g.rom(items::rom::THROW_E, p),
+                    0x24 => spawn::thrown(g, p, spawn::Thrown::C),
+                    0x25 => spawn::thrown(g, p, spawn::Thrown::D),
+                    0x26 => spawn::thrown(g, p, spawn::Thrown::E),
                     _ => false,
                 };
             }
@@ -381,8 +374,8 @@ fn charge(g: &mut Ctx, p: Player) {
         }
         4 => common::charge_slide(g, p, |g, p| {
             if take_event(g, p) {
-                call(g, p, rom::SLASH_EFFECT, &[(0, 0), (1, 0)]);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 1)]);
+                spawn::slash(g, p, Some(0));
+                spawn::slash(g, p, None);
                 g.rom(rom::SOUND_CHARGE_B, p);
             }
         }),
@@ -430,8 +423,8 @@ fn retreat_shot(g: &mut Ctx, p: Player) {
                 p.set_u8(g, field::EVENT, 0);
                 common::set_forward_motion(g, p, 0xa80, (-0x98i16) as u16);
                 move_x(g, p);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 0), (1, 0)]);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 1)]);
+                spawn::slash(g, p, Some(0));
+                spawn::slash(g, p, None);
             }
         }
         4 => {
@@ -570,7 +563,7 @@ fn volley(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
                 clear_recognizers(g, p);
             } else if take_event(g, p) {
-                g.rom(items::rom::THROW_C, p);
+                spawn::thrown(g, p, spawn::Thrown::C);
             }
         }
         _ => {}
@@ -605,12 +598,12 @@ pub fn special(g: &mut Ctx, p: Player) {
     let which = p.u8(g, field::SPECIAL_KIND);
     g.set_a5u8(0x5b, which);
     match which {
-        0 => items::throw_item(g, p, 0x20, items::rom::THROW_A),
-        1 | 0xb => items::throw_item(g, p, 0x20, items::rom::THROW_B),
+        0 => items::throw_item(g, p, 0x20, spawn::Thrown::A),
+        1 | 0xb => items::throw_item(g, p, 0x20, spawn::Thrown::B),
         2..=5 => timed_throw(g, p),
-        6 => items::throw_item(g, p, 0x1f, items::rom::THROW_F),
-        7 => items::throw_item(g, p, 0x1f, items::rom::THROW_G),
-        8 => items::throw_item(g, p, 0x1e, items::rom::THROW_H),
+        6 => items::throw_item(g, p, 0x1f, spawn::Thrown::F),
+        7 => items::throw_item(g, p, 0x1f, spawn::Thrown::G),
+        8 => items::throw_item(g, p, 0x1e, spawn::Thrown::H),
         0xc => common::swap_weapon(g, p, Player::WEAPON_A, true),
         16 => items::cast(g, p, &CAST_16, STYLE),
         0x15 => ward_ally(g, p),
@@ -647,12 +640,11 @@ fn timed_throw(g: &mut Ctx, p: Player) {
     }
     let which = p.u8(g, field::SPECIAL_KIND);
     let launcher = match which {
-        2 | 3 => items::rom::THROW_C,
-        4 => items::rom::THROW_D,
-        _ => items::rom::THROW_E,
+        2 | 3 => spawn::Thrown::C,
+        4 => spawn::Thrown::D,
+        _ => spawn::Thrown::E,
     };
-    let nothing_created = g.rom(launcher, p);
-    if !nothing_created && which != 3 {
+    if spawn::thrown(g, p, launcher) && which != 3 {
         common::consume_charge(g, p);
     }
 }
@@ -695,7 +687,7 @@ fn ward_ally(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_RING, &[(0, 0)]);
+                spawn::ring(g, p, 0);
                 g.rom(rom::PALETTE_RED, p);
                 pick_ally(g, p);
                 sounds(g, p, &rom::WARD_SOUNDS);
@@ -718,7 +710,7 @@ fn ward_ally(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, spark);
                     return wind_down(g, p, 2);
                 }
-                call(g, p, rom::EFFECT_RING, &[(0, 1)]);
+                spawn::ring(g, p, 1);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -768,7 +760,7 @@ fn ward_party(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_RING, &[(0, 0)]);
+                spawn::ring(g, p, 0);
                 g.rom(rom::PALETTE_B04, p);
                 sounds(g, p, &rom::SHIELD_SOUNDS);
             }
@@ -786,7 +778,7 @@ fn ward_party(g: &mut Ctx, p: Player) {
         4 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_RING, &[(0, 1)]);
+                spawn::ring(g, p, 1);
                 sounds(g, p, &rom::SHIELD_SECOND_SOUNDS);
             }
             if countdown(g, p) {
@@ -817,7 +809,7 @@ fn beam(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_BEAM, &[(0, 0)]);
+                spawn::beam_cast(g, p, 0);
                 g.rom(rom::PALETTE_LIGHT, p);
                 g.rom(rom::BEAM_SOUND, p);
             }
@@ -834,7 +826,7 @@ fn beam(g: &mut Ctx, p: Player) {
                     p.set_u16(g, field::TIMER, 0x10);
                     common::item_spark(g, p, 0xc);
                 } else {
-                    call(g, p, rom::EFFECT_BEAM, &[(0, 1)]);
+                    spawn::beam_cast(g, p, 1);
                     g.rom(rom::BEAM_SECOND_SOUND, p);
                 }
             }
@@ -879,7 +871,7 @@ fn sparks(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, 7);
                     return wind_down(g, p, 2);
                 }
-                call(g, p, rom::EFFECT_SHOWER, &[(0, (side == 0) as u32)]);
+                spawn::shower(g, p, (side == 0) as u8);
                 p.set_u8(g, field::EVENT, 0);
             }
             if animation::step(g, p) {
@@ -946,7 +938,7 @@ fn frost(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.rom(rom::EFFECT_FROST, p);
+                spawn::ice_crown(g, p);
                 sounds(g, p, &rom::FROST_SOUNDS);
             }
             if countdown(g, p) {
@@ -975,9 +967,7 @@ fn frost(g: &mut Ctx, p: Player) {
                 common::item_spark(g, p, 8);
                 return wind_down(g, p, 2);
             }
-            for effect in rom::EFFECT_FROST_ALL {
-                g.rom(effect, p);
-            }
+            spawn::ice_spell(g, p);
         }
         6 => frost_steer(g, p),
         8 => wind_down(g, p, 2),

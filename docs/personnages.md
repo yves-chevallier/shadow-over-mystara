@@ -29,6 +29,7 @@ celles du nain et du voleur (roulades de dix lignes) sont réécrites (`dwarf::r
 |---|---|
 | `common` | outils partagés par les six personnages : champs de l'enregistrement joueur (`field`), routines d'origine appelées (`rom`), saut (`JumpKit`), glissade (`dash`), prolongement d'un coup (`follow_up`), coups communs (`chain_rank`, `combo_follow`, `single_strike`, `back_hop`, `pose`, `charge_slide`, `run_strike_slide`), début et fin de sort, poussières, étincelles, soins |
 | `items` | objets lancés et magies partagés par le combattant et le clerc (foudre, mur, magies 13..20, météores) |
+| `spawn` (dans `player/`) | créateurs d'effets joueur (pool PEFF) et de tirs joueur (pool PSHL) : voir §8 quater |
 | `fighter` | combattant : saut, 15 coups, 17 objets et magies, glissade |
 | `cleric` | clerc : saut, 15 coups (dont le renvoi des morts-vivants), objets, dix prières |
 
@@ -320,14 +321,62 @@ chaque image ; le voleur seulement quand le script signale un événement (qui n
 - Non exercé par les scénarios (seulement par `fuzz_player`) : nain `dive`, `bounce`, `bounce_end`, `guard_break`, `long_dash` ; voleur
   `air_knife`.
 
+## 8 quater. Créateurs d'effets et de tirs (`player/spawn.rs`)
+
+Au geste porté, une action crée un objet lié au joueur (coup d'épée, souffle, ombre, couteau...) : il naît dans le pool PEFF (effets, 48
+emplacements) ou PSHL (tirs, 18 emplacements) avec son genre (`Obj::KIND`, qui choisit le **gestionnaire** en ROM chargé de le faire vivre),
+quelques paramètres propres au genre et le lien `+0x50` vers le joueur. Les 38 créateurs ci-dessous (un par adresse d'origine) sont réécrits : une fonction Rust par
+créateur, appelée par les actions, et une native à l'adresse d'origine (`spawn_*`) pour les appelants restés en ROM (0x35a90, 0x36218,
+0x23aaa, 0x24f90, 0x254e6, 0x25786...).
+
+| adresse | fonction | genre | contenu |
+|---|---|---|---|
+| 0x4a99a | `slash` | 3 | trace d'un coup : `Some(n)` (variante 0, paramètre `n`, rien avec les armes 0x10 à 0x13) ou `None` (variante 1) |
+| 0x4a860 | `blood` | 2 | sang du tourbillon du combattant |
+| 0x4ab48, 0x4ab64 | `cure`, `potion` | 4 | soin d'un allié (paramètre = prière) et de la potion (variante 2) |
+| 0x4aeb2 | `holy_light` | 5 | lumière sacrée |
+| 0x4b5ac | `beam` | 9 | rayon : deux effets (paramètres 0 et 1), ou un seul dirigé |
+| 0x4c19a | `blessing` | 0xd | bénédiction (variante 0, 1 ou 2) |
+| 0x4c26c | `banish` | 0xe | renvoi : un effet, ou quatre (paramètres 3 à 0) qui suivent le monstre visé |
+| 0x4c58e | `weapon_trail` | 0xf | traînée de l'arme (armes 0x10 à 0x13) ; l'effet en attente de `flush_pending_effect` |
+| 0x4cdd0 | `lightning` | 0x13 | éclair, à la position de la cible, 0x40 au-dessus |
+| 0x4dcda | `shower` | 0x19 | averse (magie 13, elfe, magicien) |
+| 0x4e6a8 | `aura` | 0x1d | aura de prière |
+| 0x4f004 | `lightning_target` | 0x20 | cible de la foudre ; D0 = 1 si créé, 0 sinon (drapeau Z) |
+| 0x4f272 | `swarm` | 0x22 | essaim de `count` objets (prière du clerc) tant que la réserve de la scène (`A5 − 0x5fc0`) n'est pas vide |
+| 0x4fbde | `leap` | 0x23 | effet du bond (rien avec les armes 0x10 à 0x12) |
+| 0x4fd2c | `swap` | 0x24 | échange d'équipement |
+| 0x4fe18 | `dash` | 0x25 | longue glissade du nain |
+| 0x50324 | `wall_target` | 0x29 | cible du mur ; compte les murs (`A5 − 0x5fbe`) |
+| 0x54426 | `knife` | PSHL 0x15 | couteau lancé (puissances 10 et 5) |
+| 0x52e20 | `shadows` | PSHL 8 | six ombres (variantes 5 à 0) du coup de pied arrière du voleur |
+| (en ligne) | `shadow` | PSHL 8 | l'ombre du coup de pied sauté du voleur (paramètre 2) |
+| 0x4e2f4 | `ring` | 0x1b | anneau (magie 16), variante donnée |
+| 0x4b196 | `beam_cast` | 6 | rayon (magie 17), variante donnée |
+| 0x4ec66 | `storm` | 0x1f | tempête (magie 18 ; prière du clerc) |
+| 0x5012e | `meteors` | 0x28 | météores (magie 20) |
+| 0x4bb68, 0x4bbbe, 0x4bbf6, 0x4bc42 | `ice_columns`, `ice_mist`, `ice_shards`, `ice_crown` | 0xc | le gel (magie 15 ; sorts de gel de l'elfe et du magicien) : colonnes (4 effets), brume, éclats (6 effets sans lien), dernier effet ; `ice_spell` enchaîne les quatre premiers avec `ice_ground` |
+| 0x52b54 | `ice_ground` | PSHL 7 | sol gelé : deux tirs (variantes 0 et 1) |
+| 0x54522 | `fireball` | PSHL 0x16 | boule de feu (magie 14) |
+| 0x51d02 .. 0x5308c | `thrown(Thrown::A..H)` | PSHL 1, 9, 2, 0xa, 0xb, 3, 0xc, 4 | les huit tirs d'objets lancés ; A et B (vitesse 0x700) choisissent la direction d'animation (`+0x2d` = 2 ou 6), C, D et E (vitesse 0xa00) copient l'orientation, F, G et H n'ont pas de vitesse |
+
+Les natives conservent les registres et drapeaux que lisent les appelants restés en ROM : A1 (l'objet créé) et le résultat de l'allocation
+(`0x225e`, `0x228e`, retenue levée si le pool est plein) ; les tirs lancés (`thrown`), `ice_ground`, `lightning_target`, `wall_target` et `knife` rendent aussi D0 et Z comme l'original
+(dont l'étrangeté : `wall_target` renvoie « trouvé » même quand le pool est plein, car l'allocation échouée laisse Z clair). Les actions
+qui lisent A1 ou D0 après l'appel (`prayer_beam`, `items::lightning`, la magie 13) le font encore : voir §7.
+
+Le fuzz `fuzz_player spawn ...` appelle les natives sur des états de pools variés (vides, pleins, compteurs incohérents), des armes 0x10 à
+0x13, une réserve de scène variable : 4 000 tours sans écart (`DDSOM_ENTREE` pour une seule native).
+
+Reste en ROM : les autres créateurs de l'elfe et du magicien (étincelles 0x4dc9a, foudre 0x4b7a0, séisme 0x4b340 et 0x4f132, lune 0x4e4de et
+0x4e782, éclair, tempête, pluie, sorcière, vague, portail, mur, invocation : voir les constantes `EFFECT_*` de `elf.rs` et `magic_user.rs`) et **tous
+les gestionnaires** (C06 pour les tirs, C12 pour les effets).
+
 ## 9. Reste en ROM
 
-- Les créateurs de tirs et d'effets joueur (pools PSHL et PEFF) appelés par ces actions, et leurs gestionnaires (C06, C12) : 0x4a99a, 0x4c58e,
-  0x4fbde, 0x4a860, 0x4fd2c, 0x4dcda, 0x4ab48, 0x4ab64, 0x4e6a8, 0x4b5ac, 0x4c19a, 0x4c26c, 0x4aeb2, 0x4f272, 0x4f004, 0x50324, 0x4cdd0 ; tirs
-  d'objets lancés 0x51d02..0x5308c, 0x54522 ; effets d'écran 0x1ab3c, 0x1ab56, 0x1abe0, 0x1ac86, 0x3b0c, 0x3b14, 0x3af8, 0x3afe,
-  0x37882 ; propres au nain et au voleur : 0x4fe18 (longue glissade), 0x2824 (secousse), 0x54426 (couteau), 0x52e20 (coup de pied arrière),
-  0x225e (réservation de l'ombre du voleur, dont le gestionnaire 0x49e36 est aussi en ROM).
-- Les sons (voix des armes 0xe7e10, 0xe7622, wrappers 0xe1xxx..0xe9xxx).
+- Les gestionnaires des effets et des tirs joueur (pools PEFF et PSHL, classes C12 et C06) et les créateurs listés à la fin du §8 quater.
+- Les sons (voix des armes 0xe7e10, 0xe7622, wrappers 0xe1xxx..0xe9xxx), les effets d'écran 0x1ab3c, 0x1ab56, 0x1abe0, 0x1ac86, 0x3b0c, 0x3b14,
+  0x3af8, 0x3afe, 0x37882.
 - L'action 0x12 (0x35a78), commune aux classes 0 à 2, et celle du magicien (0x35b96).
 
 ## 10. Pour brancher une nouvelle classe

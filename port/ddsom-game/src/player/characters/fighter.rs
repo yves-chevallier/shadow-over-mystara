@@ -10,9 +10,10 @@
 //! créent tirs, effets, sons et projectiles restent appelées telles quelles (voir `common::rom` et les
 //! constantes `rom` ci-dessous).
 
-use super::common::{self, call, field, next_step, rom as common_rom, set_forward_motion};
+use super::common::{self, field, next_step, rom as common_rom, set_forward_motion};
 use super::items;
 use crate::mem::rd32;
+use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::checks::item_curse;
 use super::super::combos::clear_recognizers;
@@ -23,14 +24,6 @@ use crate::objects::Obj;
 
 /// Routines d'origine appelées telles quelles : effets joueur et sons du combattant.
 mod rom {
-    /// Création d'un effet joueur (pool PEFF) : D0 = 1 ou 0 (+ D1) selon le geste.
-    pub const SLASH_EFFECT: u32 = 0x4a99a;
-    /// Effet du bond tournoyant (D0 = 0).
-    pub const LEAP_EFFECT: u32 = 0x4fbde;
-    /// Effet du tourbillon qui coûte des points de vie.
-    pub const BLOOD_EFFECT: u32 = 0x4a860;
-    /// Échange d'équipement : effet joueur (D0 = 0).
-    pub const SWAP_EFFECT: u32 = 0x4fd2c;
     /// Sons.
     pub const SOUND_CHARGE_A: u32 = 0xe792e;
     pub const SOUND_CHARGE_B: u32 = 0xe1fc0;
@@ -306,13 +299,13 @@ fn charge(g: &mut Ctx, p: Player) {
         4 => common::charge_slide(g, p, |g, p| match p.u8(g, field::EVENT) {
             1 => {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 1)]);
+                spawn::slash(g, p, None);
             }
             2 => {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 0), (1, 0)]);
+                spawn::slash(g, p, Some(0));
                 if !common::holds_heavy_second(g, p) {
-                    call(g, p, rom::SLASH_EFFECT, &[(0, 0), (1, 1)]);
+                    spawn::slash(g, p, Some(1));
                 }
             }
             _ => {}
@@ -435,7 +428,7 @@ fn leap_light_wait(g: &mut Ctx, p: Player) {
     if p.u8(g, field::EVENT) != 0 {
         next_step(g, p);
         p.set_u8(g, field::EVENT, 0);
-        call(g, p, rom::LEAP_EFFECT, &[(0, 0)]);
+        spawn::leap(g, p, 0);
         g.rom(rom::SOUND_LEAP, p);
     }
     animation::step(g, p);
@@ -480,7 +473,7 @@ fn leap_spin(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        call(g, p, rom::LEAP_EFFECT, &[(0, 0)]);
+        spawn::leap(g, p, 0);
         g.rom(rom::SOUND_LEAP, p);
         common::weapon_voice(g, p);
         g.rom(rom::SOUND_LEAP_END, p);
@@ -513,7 +506,7 @@ fn leap_fall(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        call(g, p, rom::LEAP_EFFECT, &[(0, 0)]);
+        spawn::leap(g, p, 0);
         common::weapon_voice(g, p);
     }
     animation::step(g, p);
@@ -544,7 +537,7 @@ fn whirl(g: &mut Ctx, p: Player) {
             }
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                g.rom(rom::BLOOD_EFFECT, p);
+                spawn::blood(g, p);
             }
             if p.u8(g, 0x1ec) == 0 && p.u8(g, 0x58) & 1 != 0 {
                 p.set_u8(g, 0x1ec, 1);
@@ -569,14 +562,14 @@ pub fn special(g: &mut Ctx, p: Player) {
     let which = p.u8(g, field::SPECIAL_KIND);
     g.set_a5u8(0x5b, which);
     match which {
-        0 => items::throw_item(g, p, 0x22, items::rom::THROW_A),
-        1 => items::throw_item(g, p, 0x22, items::rom::THROW_B),
-        2 => items::throw_item(g, p, 0x23, items::rom::THROW_C),
-        4 => items::throw_item(g, p, 0x23, items::rom::THROW_D),
-        5 => items::throw_item(g, p, 0x23, items::rom::THROW_E),
-        6 => items::throw_item(g, p, 0x21, items::rom::THROW_F),
-        7 => items::throw_item(g, p, 0x21, items::rom::THROW_G),
-        8 => items::throw_item(g, p, 0x20, items::rom::THROW_H),
+        0 => items::throw_item(g, p, 0x22, spawn::Thrown::A),
+        1 => items::throw_item(g, p, 0x22, spawn::Thrown::B),
+        2 => items::throw_item(g, p, 0x23, spawn::Thrown::C),
+        4 => items::throw_item(g, p, 0x23, spawn::Thrown::D),
+        5 => items::throw_item(g, p, 0x23, spawn::Thrown::E),
+        6 => items::throw_item(g, p, 0x21, spawn::Thrown::F),
+        7 => items::throw_item(g, p, 0x21, spawn::Thrown::G),
+        8 => items::throw_item(g, p, 0x20, spawn::Thrown::H),
         12 => swap_equipment(g, p),
         _ => {
             items::run_shared(g, p, which, STYLE);
@@ -623,7 +616,7 @@ fn swap_equipment(g: &mut Ctx, p: Player) {
         }
         2 => {
             p.set_u8(g, field::EVENT, 0);
-            call(g, p, rom::SWAP_EFFECT, &[(0, 0)]);
+            spawn::swap(g, p, 0);
         }
         _ => {}
     }

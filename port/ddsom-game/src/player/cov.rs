@@ -59,6 +59,7 @@ pub const SOURCES: &[(&str, &str)] = &[
     ("init", include_str!("init.rs")),
     ("overlays", include_str!("overlays.rs")),
     ("scripted", include_str!("scripted.rs")),
+    ("spawn", include_str!("spawn.rs")),
     ("update", include_str!("update.rs")),
     ("walk", include_str!("walk.rs")),
 ];

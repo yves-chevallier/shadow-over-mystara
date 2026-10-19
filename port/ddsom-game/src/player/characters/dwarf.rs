@@ -12,6 +12,7 @@
 
 use super::common::{self, call, field, next_step, rom as common_rom, set_forward_motion};
 use super::items;
+use super::super::spawn;
 use super::super::actions::{start_stand, to_stand};
 use super::super::checks::item_curse;
 use super::super::combos::clear_recognizers;
@@ -21,10 +22,6 @@ use crate::objects::Obj;
 
 /// Routines d'origine appelées telles quelles : effets joueur et sons du nain.
 mod rom {
-    /// Création d'un effet joueur (pool PEFF) : D0 = 1 ou 0 (+ D1) selon le geste.
-    pub const SLASH_EFFECT: u32 = 0x4a99a;
-    /// Effet de la longue glissade.
-    pub const DASH_EFFECT: u32 = 0x4fe18;
     /// Secousse de l'écran à l'impact de la plongée (D0 = 0x10).
     pub const SHAKE: u32 = 0x2824;
     /// Sons.
@@ -466,14 +463,14 @@ fn charge(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 1)]);
+                spawn::slash(g, p, None);
                 g.rom(rom::SOUND_CHARGE_A, p);
             }
         }
         4 => common::charge_slide(g, p, |g, p| {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                call(g, p, rom::SLASH_EFFECT, &[(0, 0), (1, 2)]);
+                spawn::slash(g, p, Some(2));
                 common::weapon_voice(g, p);
             }
         }),
@@ -658,7 +655,7 @@ fn long_dash(g: &mut Ctx, p: Player) {
                 common::negate_horizontal_speed(g, p);
             }
             animation::start_plain(g, p, 0x20);
-            g.rom(rom::DASH_EFFECT, p);
+            spawn::dash(g, p);
             g.rom(rom::SOUND_LEAP_B, p);
             g.rom(rom::SOUND_DASH, p);
             clear_recognizers(g, p);
@@ -717,14 +714,14 @@ pub fn special(g: &mut Ctx, p: Player) {
     let which = p.u8(g, field::SPECIAL_KIND);
     g.set_a5u8(0x5b, which);
     match which {
-        0 => items::throw_item(g, p, 0x1c, items::rom::THROW_A),
-        1 => items::throw_item(g, p, 0x1c, items::rom::THROW_B),
-        2 => items::throw_item(g, p, 0x1d, items::rom::THROW_C),
-        4 => items::throw_item(g, p, 0x1d, items::rom::THROW_D),
-        5 => items::throw_item(g, p, 0x1d, items::rom::THROW_E),
-        6 => items::throw_item(g, p, 0x1b, items::rom::THROW_F),
-        7 => items::throw_item(g, p, 0x1b, items::rom::THROW_G),
-        8 => items::throw_item(g, p, 0x1a, items::rom::THROW_H),
+        0 => items::throw_item(g, p, 0x1c, spawn::Thrown::A),
+        1 => items::throw_item(g, p, 0x1c, spawn::Thrown::B),
+        2 => items::throw_item(g, p, 0x1d, spawn::Thrown::C),
+        4 => items::throw_item(g, p, 0x1d, spawn::Thrown::D),
+        5 => items::throw_item(g, p, 0x1d, spawn::Thrown::E),
+        6 => items::throw_item(g, p, 0x1b, spawn::Thrown::F),
+        7 => items::throw_item(g, p, 0x1b, spawn::Thrown::G),
+        8 => items::throw_item(g, p, 0x1a, spawn::Thrown::H),
         12 => common::swap_weapon(g, p, Player::WEAPON_A, false),
         _ => {
             items::run_shared(g, p, which, STYLE);

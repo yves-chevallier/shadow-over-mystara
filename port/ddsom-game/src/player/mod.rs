@@ -45,6 +45,7 @@ pub mod hurt;
 pub mod init;
 pub mod overlays;
 pub mod scripted;
+pub mod spawn;
 pub mod states;
 pub mod update;
 pub mod walk;
@@ -95,6 +96,44 @@ pub const NATIVES: &[Native] = &[
     characters::thief::SPECIAL,
     characters::thief::DASH,
     characters::thief::ROLL,
+    spawn::SLASH,
+    spawn::BLOOD,
+    spawn::CURE,
+    spawn::POTION,
+    spawn::HOLY_LIGHT,
+    spawn::BEAM,
+    spawn::BLESSING,
+    spawn::BANISH,
+    spawn::WEAPON_TRAIL,
+    spawn::SHOWER,
+    spawn::AURA,
+    spawn::LIGHTNING_TARGET,
+    spawn::SWARM,
+    spawn::STORM,
+    spawn::RING,
+    spawn::BEAM_CAST,
+    spawn::METEORS,
+    spawn::ICE_COLUMNS,
+    spawn::ICE_MIST,
+    spawn::ICE_SHARDS,
+    spawn::ICE_CROWN,
+    spawn::FIREBALL,
+    spawn::ICE_GROUND,
+    spawn::THROWN_A,
+    spawn::THROWN_B,
+    spawn::THROWN_C,
+    spawn::THROWN_D,
+    spawn::THROWN_E,
+    spawn::THROWN_F,
+    spawn::THROWN_G,
+    spawn::THROWN_H,
+    spawn::LEAP,
+    spawn::SWAP,
+    spawn::DASH,
+    spawn::WALL_TARGET,
+    spawn::LIGHTNING,
+    spawn::KNIFE,
+    spawn::SHADOWS,
 ];
 
 /// Premier enregistrement joueur (offset depuis A5) et pas entre deux joueurs.
