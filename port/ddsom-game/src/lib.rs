@@ -222,6 +222,16 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         if c.cycles + cost <= limit {
             if CHECK.load(Ordering::Relaxed) {
                 check(n, c, b, cost);
+            } else if adopt_regs(n) {
+                // diagnostic : registres de sortie repris de l'original (registres hérités)
+                let c2 = original(n, c, b);
+                exec(n, c, b);
+                c.cycles += cost;
+                if c.pc == c2.pc {
+                    c.d = c2.d;
+                    c.a[..7].copy_from_slice(&c2.a[..7]);
+                    c.sr = c2.sr;
+                }
             } else {
                 exec(n, c, b);
                 c.cycles += cost;
@@ -305,6 +315,33 @@ pub fn report() -> BTreeMap<&'static str, Stats> {
 }
 
 /// Exécute la routine d'origine sur une copie et la native sur l'état réel, puis compare.
+/// DDSOM_ADOPT_REGS=préfixe,... : les routines natives nommées ainsi rendent les registres de
+/// l'original (exécuté sur une copie). Si un écart disparaît, l'une d'elles laisse un registre
+/// qu'un appelant 68000 (ou le handler suivant) relit.
+fn adopt_regs(n: &Native) -> bool {
+    static PREFIXES: OnceLock<Vec<String>> = OnceLock::new();
+    let p = PREFIXES.get_or_init(|| {
+        std::env::var("DDSOM_ADOPT_REGS").map(|v| v.split(',').map(str::to_owned).collect()).unwrap_or_default()
+    });
+    !p.is_empty() && p.iter().any(|x| n.name.starts_with(x.as_str()))
+}
+
+/// Exécute la routine d'origine sur une copie de la machine jusqu'à son retour ; rend le CPU obtenu.
+fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
+    let (mut c2, mut b2) = (c.clone(), b.clone());
+    let ret = mem::rd32(&mut b2, c2.a[7]);
+    let sp_after = c2.a[7].wrapping_add(4);
+    let mut guard = 0;
+    while !(c2.pc == ret && c2.a[7] == sp_after) {
+        if ddsom_rc::run_block(c2.pc, &mut c2, &mut b2, u64::MAX).is_none() {
+            c2.step(&mut b2);
+        }
+        guard += 1;
+        assert!(guard < 1_000_000, "{} : la routine d'origine ne revient pas", n.name);
+    }
+    c2
+}
+
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let mut c2 = c.clone();
     let mut b2 = b.clone();

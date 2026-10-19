@@ -1,0 +1,1203 @@
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1440 P1 Button 1 1
+1446 P1 Button 1 0
+2399 poke8 ff8034 24
+3374 P1 Right 1
+3374 P1 Down 1
+3378 P1 Down 0
+3386 P1 Button 2 1
+3387 P1 Button 2 0
+3396 P1 Up 1
+3411 P1 Right 0
+3465 P1 Button 1 1
+3467 P1 Button 1 0
+3471 P1 Right 1
+3471 P1 Button 1 1
+3473 P1 Right 0
+3475 P1 Button 1 0
+3479 P1 Button 1 1
+3483 P1 Button 1 0
+3487 P1 Right 1
+3487 P1 Button 1 1
+3489 P1 Right 0
+3491 P1 Button 1 0
+3495 P1 Button 1 1
+3499 P1 Button 1 0
+3503 P1 Right 1
+3503 P1 Button 1 1
+3505 P1 Right 0
+3507 P1 Button 1 0
+3511 P1 Button 1 1
+3515 P1 Button 1 0
+3519 P1 Right 1
+3519 P1 Button 1 1
+3521 P1 Right 0
+3523 P1 Button 1 0
+3527 P1 Button 1 1
+3531 P1 Button 1 0
+3535 P1 Right 1
+3535 P1 Up 0
+3535 P1 Button 1 1
+3537 P1 Right 0
+3539 P1 Button 1 0
+3543 P1 Button 1 1
+3547 P1 Button 1 0
+3551 P1 Right 1
+3551 P1 Button 1 1
+3553 P1 Right 0
+3555 poke16 ff8640 112
+3555 P1 Button 1 0
+3559 P1 Button 1 1
+3563 P1 Button 1 0
+3567 P1 Left 1
+3567 P1 Button 1 1
+3571 P1 Button 1 0
+3627 P1 Up 1
+3706 P1 Up 0
+3743 P1 Button 1 1
+3747 P1 Button 1 0
+3751 P1 Button 1 1
+3755 P1 Button 1 0
+3759 P1 Button 1 1
+3763 P1 Button 1 0
+3767 P1 Button 1 1
+3771 P1 Button 1 0
+3775 P1 Button 1 1
+3779 P1 Button 1 0
+3783 P1 Button 1 1
+3787 P1 Button 1 0
+3791 P1 Button 1 1
+3794 P1 Left 0
+3795 P1 Left 1
+3795 P1 Button 1 0
+3796 P1 Left 0
+3797 P1 Left 1
+3798 P1 Left 0
+3799 P1 Left 1
+3799 P1 Button 1 1
+3803 P1 Button 1 0
+3807 P1 Button 1 1
+3809 P1 Left 0
+3810 P1 Left 1
+3811 P1 Left 0
+3811 P1 Button 1 0
+3812 P1 Left 1
+3813 P1 Left 0
+3814 P1 Left 1
+3815 P1 Left 0
+3815 P1 Button 1 1
+3816 P1 Left 1
+3817 P1 Left 0
+3818 P1 Left 1
+3819 P1 Left 0
+3819 P1 Button 1 0
+3820 P1 Left 1
+3821 P1 Left 0
+3822 P1 Left 1
+3823 P1 Button 1 1
+3827 P1 Button 1 0
+3831 P1 Button 1 1
+3835 P1 Button 1 0
+3839 P1 Button 1 1
+3843 P1 Button 1 0
+3847 P1 Button 1 1
+3850 P1 Button 2 1
+3851 P1 Button 1 0
+3851 P1 Button 2 0
+3855 P1 Button 1 1
+3859 P1 Button 1 0
+3863 P1 Button 1 1
+3867 P1 Button 1 0
+3869 poke16 ff8640 112
+3871 P1 Button 1 1
+3875 P1 Button 1 0
+3879 P1 Button 1 1
+3883 P1 Button 1 0
+3887 P1 Button 1 1
+3891 P1 Button 1 0
+3895 P1 Button 1 1
+3899 P1 Button 1 0
+3903 P1 Button 1 1
+3907 P1 Button 1 0
+3911 P1 Button 1 1
+3915 P1 Button 1 0
+3919 P1 Button 1 1
+3923 P1 Button 1 0
+3927 P1 Button 1 1
+3931 P1 Button 1 0
+3935 P1 Button 1 1
+3939 P1 Button 1 0
+3943 P1 Button 1 1
+3947 P1 Button 1 0
+3951 P1 Button 1 1
+3955 P1 Button 1 0
+3959 P1 Button 1 1
+3963 P1 Button 1 0
+3967 P1 Button 1 1
+3969 P1 Left 0
+3971 P1 Button 1 0
+3971 P1 Button 3 1
+3975 P1 Button 1 1
+3975 P1 Button 3 0
+3978 P1 Button 2 1
+3979 P1 Button 1 0
+3979 P1 Button 2 0
+3983 P1 Left 1
+3983 P1 Button 1 1
+3985 P1 Left 0
+3987 P1 Button 1 0
+3991 P1 Button 1 1
+3995 P1 Button 1 0
+3996 poke16 ff8640 112
+3999 P1 Left 1
+3999 P1 Button 1 1
+4001 P1 Left 0
+4003 P1 Button 1 0
+4007 P1 Button 1 1
+4011 P1 Button 1 0
+4013 P1 Right 1
+4015 P1 Button 1 1
+4016 P1 Button 1 0
+4114 P1 Button 1 1
+4115 P1 Button 1 0
+4116 P1 Right 0
+4119 P1 Button 1 1
+4119 P1 Button 2 1
+4120 P1 Button 2 0
+4123 P1 Button 1 0
+4126 P1 Left 1
+4127 P1 Button 1 1
+4128 P1 Button 1 0
+4162 P1 Button 1 1
+4163 P1 Button 1 0
+4167 P1 Button 1 1
+4171 P1 Button 1 0
+4175 P1 Button 1 1
+4179 P1 Button 1 0
+4183 P1 Button 1 1
+4187 P1 Button 1 0
+4191 P1 Button 1 1
+4191 P1 Button 2 1
+4192 P1 Button 2 0
+4195 P1 Button 1 0
+4199 P1 Button 1 1
+4203 P1 Button 1 0
+4207 P1 Button 1 1
+4211 P1 Button 1 0
+4215 P1 Button 1 1
+4217 poke16 ff8640 112
+4219 P1 Button 1 0
+4223 P1 Button 1 1
+4227 P1 Button 1 0
+4231 P1 Button 1 1
+4235 P1 Button 1 0
+4239 P1 Button 1 1
+4243 P1 Button 1 0
+4247 P1 Button 1 1
+4251 P1 Button 1 0
+4255 P1 Button 1 1
+4259 P1 Button 1 0
+4262 P1 Down 1
+4263 P1 Button 1 1
+4267 P1 Button 1 0
+4271 P1 Button 1 1
+4275 P1 Button 1 0
+4279 P1 Button 1 1
+4283 P1 Button 1 0
+4284 P1 Left 0
+4285 P1 Left 1
+4286 P1 Left 0
+4287 P1 Left 1
+4287 P1 Button 1 1
+4289 P1 Left 0
+4291 P1 Button 1 0
+4295 P1 Button 1 1
+4299 P1 Button 1 0
+4302 P1 Down 0
+4302 P1 Button 3 1
+4303 P1 Left 1
+4303 P1 Button 1 1
+4305 P1 Left 0
+4306 P1 Button 3 0
+4307 P1 Button 1 0
+4311 P1 Button 1 1
+4315 P1 Button 1 0
+4319 P1 Left 1
+4319 P1 Button 1 1
+4321 P1 Left 0
+4323 P1 Button 1 0
+4327 P1 Button 1 1
+4330 poke16 ff8640 112
+4331 P1 Button 1 0
+4335 P1 Left 1
+4335 P1 Button 1 1
+4337 P1 Left 0
+4339 P1 Button 1 0
+4343 P1 Button 1 1
+4347 P1 Button 1 0
+4348 P1 Right 1
+4399 P1 Button 4 1
+4403 P1 Button 4 0
+4406 P1 Down 1
+4410 P1 Button 2 1
+4411 P1 Button 2 0
+4419 P1 Button 3 1
+4423 P1 Button 3 0
+4447 P1 Button 1 1
+4449 P1 Right 0
+4451 P1 Button 1 0
+4455 P1 Button 1 1
+4459 P1 Button 1 0
+4463 P1 Left 1
+4463 P1 Button 1 1
+4465 P1 Left 0
+4467 P1 Left 1
+4467 P1 Button 1 0
+4469 P1 Down 0
+4503 P1 Button 1 1
+4507 P1 Button 1 0
+4510 Coin 1 1
+4511 P1 Button 1 1
+4515 P1 Button 1 0
+4516 Coin 1 0
+4519 P1 Button 1 1
+4523 P1 Button 1 0
+4527 P1 Button 1 1
+4531 P1 Button 1 0
+4535 P1 Button 1 1
+4539 P1 Button 1 0
+4540 1 Player Start 1
+4543 P1 Button 1 1
+4546 1 Player Start 0
+4547 P1 Button 1 0
+4550 P1 Left 0
+4551 P1 Left 1
+4551 P1 Button 1 1
+4552 P1 Left 0
+4553 P1 Left 1
+4554 P1 Left 0
+4555 P1 Left 1
+4555 P1 Button 1 0
+4556 P1 Left 0
+4557 P1 Left 1
+4558 P1 Left 0
+4559 P1 Left 1
+4559 P1 Button 1 1
+4563 P1 Button 1 0
+4567 P1 Button 1 1
+4571 P1 Button 1 0
+4574 poke16 ff8640 112
+4574 P1 Left 0
+4575 P1 Left 1
+4575 P1 Button 1 1
+4577 P1 Left 0
+4579 P1 Button 1 0
+4583 P1 Button 1 1
+4587 P1 Button 1 0
+4591 P1 Right 1
+4591 P1 Button 1 1
+4594 P1 Button 1 0
+4621 P1 Button 2 1
+4622 P1 Button 2 0
+4652 P1 Down 1
+4719 P1 Down 0
+4829 P1 Right 0
+4831 P1 Left 1
+4831 P1 Button 1 1
+4833 P1 Left 0
+4835 P1 Button 1 0
+4839 P1 Button 1 1
+4843 P1 Button 1 0
+4847 P1 Left 1
+4847 P1 Button 1 1
+4849 P1 Left 0
+4851 P1 Button 1 0
+4855 P1 Button 1 1
+4859 P1 Button 1 0
+4860 poke16 ff8640 112
+4863 P1 Left 1
+4863 P1 Button 1 1
+4865 P1 Left 0
+4865 P1 Button 2 1
+4866 P1 Button 2 0
+4867 P1 Button 1 0
+4869 P1 Button 2 1
+4870 P1 Button 2 0
+4871 P1 Button 1 1
+4875 P1 Button 1 0
+4879 P1 Right 1
+4879 P1 Button 1 1
+4881 P1 Right 0
+4883 P1 Button 1 0
+4887 P1 Button 1 1
+4891 P1 Button 1 0
+4895 P1 Right 1
+4895 P1 Button 1 1
+4897 P1 Right 0
+4898 P1 Right 1
+4899 P1 Button 1 0
+4903 P1 Button 1 1
+4906 P1 Button 1 0
+5004 P1 Down 1
+5017 P1 Down 0
+5018 P1 Down 1
+5021 P1 Down 0
+5024 P1 Down 1
+5026 P1 Down 0
+5034 P1 Button 2 1
+5035 P1 Button 2 0
+5055 P1 Button 1 1
+5056 P1 Down 1
+5059 P1 Button 1 0
+5059 P1 Button 2 1
+5060 P1 Button 2 0
+5063 P1 Button 1 1
+5066 P1 Button 1 0
+5070 P1 Right 0
+5097 P1 Right 1
+5115 P1 Down 0
+5248 poke16 ff8640 112
+5361 P1 Down 1
+5363 P1 Down 0
+5364 P1 Down 1
+5365 P1 Down 0
+5368 P1 Down 1
+5369 P1 Down 0
+5370 P1 Down 1
+5371 P1 Down 0
+5375 P1 Down 1
+5376 P1 Down 0
+5378 P1 Down 1
+5379 P1 Down 0
+5380 P1 Down 1
+5381 P1 Down 0
+5382 P1 Down 1
+5383 P1 Down 0
+5384 P1 Down 1
+5385 P1 Down 0
+5386 P1 Down 1
+5388 P1 Down 0
+5389 P1 Down 1
+5390 P1 Down 0
+5392 P1 Down 1
+5394 P1 Down 0
+5395 P1 Down 1
+5399 P1 Down 0
+5402 P1 Down 1
+5403 P1 Down 0
+5404 P1 Down 1
+5405 P1 Down 0
+5422 poke16 ff8640 112
+5423 P1 Button 1 1
+5427 P1 Button 1 0
+5431 P1 Button 1 1
+5435 P1 Button 1 0
+5439 P1 Button 1 1
+5442 P1 Button 1 0
+5471 P1 Button 1 1
+5475 P1 Button 1 0
+5496 P1 Button 1 1
+5497 P1 Button 1 0
+5498 P1 Button 1 1
+5499 P1 Button 1 0
+5499 P1 Button 4 1
+5503 P1 Button 4 0
+5513 P1 Button 1 1
+5514 P1 Button 1 0
+5519 P1 Button 1 1
+5519 P1 Button 3 1
+5523 P1 Button 1 0
+5523 P1 Button 3 0
+5527 P1 Button 1 1
+5531 P1 Button 1 0
+5535 P1 Button 1 1
+5539 P1 Button 1 0
+5543 P1 Button 1 1
+5547 P1 Button 1 0
+5551 P1 Button 1 1
+5555 P1 Button 1 0
+5559 P1 Button 1 1
+5563 P1 Button 1 0
+5567 P1 Button 1 1
+5571 P1 Button 1 0
+5711 P1 Button 1 1
+5715 P1 Button 1 0
+5719 P1 Button 1 1
+5723 P1 Button 1 0
+5727 P1 Button 1 1
+5731 P1 Button 1 0
+5735 P1 Button 1 1
+5738 poke16 ff8640 112
+5738 P1 Right 0
+5739 P1 Button 1 0
+5743 P1 Right 1
+5743 P1 Button 1 1
+5745 P1 Right 0
+5747 P1 Button 1 0
+5751 P1 Button 1 1
+5755 P1 Button 1 0
+5756 P1 Left 1
+5898 P1 Button 2 1
+5899 P1 Button 2 0
+6010 Coin 1 1
+6016 Coin 1 0
+6040 1 Player Start 1
+6046 1 Player Start 0
+6074 poke16 ff8640 112
+6087 P1 Left 0
+6087 P1 Button 1 1
+6091 P1 Button 1 0
+6095 P1 Right 1
+6095 P1 Button 1 1
+6097 P1 Right 0
+6099 P1 Button 1 0
+6103 P1 Button 1 1
+6107 P1 Button 1 0
+6111 P1 Right 1
+6111 P1 Button 1 1
+6113 P1 Right 0
+6115 P1 Button 1 0
+6119 P1 Button 1 1
+6119 P1 Button 2 1
+6120 P1 Button 2 0
+6123 P1 Button 1 0
+6127 P1 Right 1
+6127 P1 Button 1 1
+6129 P1 Right 0
+6131 P1 Button 1 0
+6135 P1 Button 1 1
+6139 P1 Button 1 0
+6143 P1 Left 1
+6143 P1 Button 1 1
+6145 P1 Left 0
+6147 P1 Button 1 0
+6151 P1 Button 1 1
+6155 P1 Button 1 0
+6157 P1 Left 1
+6159 P1 Button 1 1
+6163 P1 Button 1 0
+6167 P1 Button 1 1
+6171 P1 Button 1 0
+6175 P1 Button 1 1
+6179 P1 Button 1 0
+6183 P1 Button 1 1
+6187 P1 Button 1 0
+6191 P1 Button 1 1
+6195 P1 Button 1 0
+6199 P1 Button 1 1
+6203 P1 Button 1 0
+6207 P1 Button 1 1
+6211 P1 Button 1 0
+6215 P1 Button 1 1
+6219 P1 Button 1 0
+6223 P1 Button 1 1
+6227 P1 Button 1 0
+6355 poke16 ff8640 112
+6463 P1 Button 1 1
+6467 P1 Button 1 0
+6471 P1 Button 1 1
+6474 P1 Button 1 0
+6501 P1 Button 2 1
+6502 P1 Button 2 0
+6511 P1 Button 1 1
+6515 P1 Button 1 0
+6518 poke16 ff8640 112
+6518 P1 Left 0
+6519 P1 Button 1 1
+6523 P1 Button 1 0
+6527 P1 Left 1
+6527 P1 Button 1 1
+6529 P1 Left 0
+6531 P1 Button 1 0
+6535 P1 Button 1 1
+6537 P1 Right 1
+6539 P1 Button 1 0
+6586 P1 Button 1 1
+6587 P1 Button 1 0
+6591 P1 Button 1 1
+6595 P1 Button 1 0
+6599 P1 Button 1 1
+6599 P1 Button 4 1
+6601 P1 Right 0
+6603 P1 Button 1 0
+6603 P1 Button 4 0
+6607 P1 Left 1
+6607 P1 Button 1 1
+6609 P1 Left 0
+6611 P1 Left 1
+6611 P1 Button 1 0
+6619 P1 Button 3 1
+6623 P1 Button 3 0
+6913 P1 Button 1 1
+6915 P1 Button 1 0
+6916 P1 Left 0
+6919 P1 Button 1 1
+6923 P1 Button 1 0
+6927 P1 Left 1
+6927 P1 Button 1 1
+6929 P1 Left 0
+6931 P1 Button 1 0
+6935 P1 Button 1 1
+6939 P1 Button 1 0
+6943 P1 Left 1
+6943 P1 Button 1 1
+6945 P1 Left 0
+6947 P1 Button 1 0
+6950 P1 Button 3 1
+6951 P1 Button 1 1
+6954 P1 Button 3 0
+6955 P1 Button 1 0
+6959 P1 Left 1
+6959 P1 Button 1 1
+6960 poke16 ff8640 112
+6961 P1 Left 0
+6963 P1 Button 1 0
+6967 P1 Button 1 1
+6971 P1 Button 1 0
+6975 P1 Right 1
+6975 P1 Button 1 1
+6978 P1 Button 1 0
+7057 P1 Up 1
+7111 P1 Button 1 1
+7115 P1 Button 1 0
+7119 P1 Button 1 1
+7119 P1 Button 2 1
+7120 P1 Button 2 0
+7123 P1 Button 1 0
+7127 P1 Button 1 1
+7131 P1 Button 1 0
+7135 P1 Button 1 1
+7139 P1 Button 1 0
+7143 P1 Button 1 1
+7145 poke16 ff8640 112
+7147 P1 Button 1 0
+7151 P1 Button 1 1
+7155 P1 Button 1 0
+7159 P1 Button 1 1
+7163 P1 Button 1 0
+7167 P1 Button 1 1
+7171 P1 Up 0
+7171 P1 Button 1 0
+7175 P1 Right 0
+7175 P1 Button 1 1
+7179 P1 Button 1 0
+7181 P1 Up 1
+7183 P1 Right 1
+7183 P1 Button 1 1
+7185 P1 Right 0
+7187 P1 Button 1 0
+7191 P1 Button 1 1
+7195 P1 Button 1 0
+7199 P1 Right 1
+7199 P1 Button 1 1
+7201 P1 Right 0
+7203 P1 Button 1 0
+7207 P1 Button 1 1
+7211 P1 Button 1 0
+7215 P1 Right 1
+7215 P1 Button 1 1
+7217 P1 Right 0
+7219 P1 Button 1 0
+7223 P1 Button 1 1
+7227 P1 Button 1 0
+7231 P1 Right 1
+7231 P1 Button 1 1
+7233 P1 Right 0
+7235 P1 Button 1 0
+7239 P1 Up 0
+7239 P1 Button 1 1
+7243 P1 Button 1 0
+7247 P1 Right 1
+7247 P1 Button 1 1
+7249 P1 Right 0
+7251 P1 Button 1 0
+7252 poke16 ff8640 112
+7255 P1 Button 1 1
+7259 P1 Button 1 0
+7263 P1 Right 1
+7263 P1 Button 1 1
+7264 P1 Right 0
+7264 P1 Left 1
+7265 P1 Left 0
+7267 P1 Button 1 0
+7269 P1 Left 1
+7271 P1 Button 1 1
+7272 P1 Button 1 0
+7326 P1 Up 1
+7402 P1 Up 0
+7510 Coin 1 1
+7516 Coin 1 0
+7540 1 Player Start 1
+7546 1 Player Start 0
+7560 poke16 ff8640 112
+7577 P1 Button 1 1
+7579 P1 Button 1 0
+7582 P1 Left 0
+7583 P1 Left 1
+7583 P1 Button 1 1
+7585 P1 Left 0
+7587 P1 Button 1 0
+7591 P1 Button 1 1
+7595 P1 Button 1 0
+7599 P1 Left 1
+7599 P1 Button 1 1
+7603 P1 Button 1 0
+7607 P1 Button 1 1
+7609 P1 Button 1 0
+7680 P1 Up 1
+7699 P1 Button 4 1
+7703 P1 Button 4 0
+7719 P1 Button 3 1
+7723 P1 Button 3 0
+7731 P1 Up 0
+7744 poke16 ff8640 112
+7791 P1 Button 1 1
+7795 P1 Button 1 0
+7799 P1 Button 1 1
+7803 P1 Button 1 0
+7807 P1 Button 1 1
+7811 P1 Button 1 0
+7815 P1 Button 1 1
+7819 P1 Button 1 0
+7823 P1 Button 1 1
+7827 P1 Button 1 0
+7831 P1 Button 1 1
+7835 P1 Button 1 0
+7839 P1 Button 1 1
+7843 P1 Button 1 0
+7847 P1 Button 1 1
+7851 P1 Button 1 0
+7855 P1 Button 1 1
+7859 P1 Button 1 0
+7863 P1 Left 0
+7863 P1 Button 1 1
+7867 P1 Button 1 0
+7871 P1 Left 1
+7871 P1 Button 1 1
+7875 P1 Button 1 0
+7879 P1 Button 1 1
+7883 P1 Button 1 0
+7887 poke16 ff8640 112
+7887 P1 Button 1 1
+7889 P1 Left 0
+7891 P1 Button 1 0
+7895 P1 Button 1 1
+7899 P1 Button 1 0
+7903 P1 Right 1
+7903 P1 Button 1 1
+7907 P1 Button 1 0
+7943 P1 Button 1 1
+7943 P1 Button 3 1
+7947 P1 Button 1 0
+7947 P1 Button 3 0
+7951 P1 Button 1 1
+7954 P1 Right 0
+7955 P1 Button 1 0
+7959 P1 Button 1 1
+7963 P1 Button 1 0
+7967 P1 Left 1
+7967 P1 Button 1 1
+7969 P1 Left 0
+7971 P1 Button 1 0
+7972 P1 Left 1
+8047 P1 Button 1 1
+8049 P1 Left 0
+8051 P1 Button 1 0
+8055 P1 Button 1 1
+8059 P1 Button 1 0
+8063 P1 Right 1
+8063 P1 Button 1 1
+8065 P1 Right 0
+8067 P1 Button 1 0
+8071 P1 Button 1 1
+8075 P1 Button 1 0
+8079 P1 Left 1
+8079 P1 Button 1 1
+8081 P1 Left 0
+8083 P1 Button 1 0
+8087 P1 Button 1 1
+8091 P1 Button 1 0
+8095 P1 Left 1
+8095 P1 Button 1 1
+8099 P1 Button 1 0
+8103 P1 Button 1 1
+8104 P1 Button 1 0
+8351 P1 Button 1 1
+8355 P1 Button 1 0
+8359 P1 Button 1 1
+8363 P1 Button 1 0
+8367 P1 Button 1 1
+8367 P1 Button 2 1
+8368 P1 Button 2 0
+8371 P1 Button 1 0
+8375 P1 Button 1 1
+8379 P1 Button 1 0
+8383 P1 Button 1 1
+8386 poke16 ff8640 112
+8387 P1 Button 1 0
+8498 P1 Button 1 1
+8499 P1 Button 1 0
+8503 P1 Button 1 1
+8507 P1 Button 1 0
+8507 P1 Button 2 1
+8508 P1 Button 2 0
+8529 P1 Up 1
+8570 P1 Left 0
+8575 P1 Left 1
+8575 P1 Button 1 1
+8576 poke16 ff8640 112
+8577 P1 Left 0
+8579 P1 Button 1 0
+8583 P1 Button 1 1
+8585 P1 Up 0
+8587 P1 Button 1 0
+8591 P1 Right 1
+8591 P1 Button 1 1
+8593 P1 Right 0
+8595 P1 Button 1 0
+8596 P1 Right 1
+8600 P1 Button 2 1
+8601 P1 Button 2 0
+8670 P1 Up 1
+8728 P1 Up 0
+8799 P1 Button 4 1
+8803 P1 Button 4 0
+8819 P1 Button 3 1
+8823 P1 Button 3 0
+8845 poke16 ff8640 112
+8863 P1 Button 1 1
+8866 P1 Right 0
+8867 P1 Button 1 0
+8871 P1 Button 1 1
+8875 P1 Button 1 0
+8879 P1 Right 1
+8879 P1 Button 1 1
+8881 P1 Right 0
+8883 P1 Button 1 0
+8887 P1 Button 1 1
+8891 P1 Button 1 0
+8895 P1 Right 1
+8895 P1 Button 1 1
+8899 P1 Button 1 0
+8903 P1 Button 1 1
+8907 P1 Button 1 0
+9010 Coin 1 1
+9016 Coin 1 0
+9033 poke16 ff8640 112
+9040 1 Player Start 1
+9046 1 Player Start 0
+9081 P1 Button 1 1
+9083 P1 Button 1 0
+9087 P1 Button 1 1
+9090 P1 Button 1 0
+9127 P1 Button 1 1
+9131 P1 Button 1 0
+9135 P1 Button 1 1
+9135 P1 Button 2 1
+9136 P1 Button 2 0
+9137 P1 Right 0
+9139 P1 Button 1 0
+9143 P1 Button 1 1
+9147 P1 Left 1
+9147 P1 Button 1 0
+9165 poke16 ff8640 112
+9191 P1 Button 1 1
+9195 P1 Left 0
+9195 P1 Button 1 0
+9199 P1 Left 1
+9199 P1 Button 1 1
+9201 P1 Left 0
+9203 P1 Button 1 0
+9207 P1 Button 1 1
+9211 P1 Button 1 0
+9215 P1 Left 1
+9215 P1 Button 1 1
+9217 P1 Left 0
+9219 P1 Button 1 0
+9223 P1 Button 1 1
+9227 P1 Button 1 0
+9228 P1 Left 1
+9231 P1 Button 1 1
+9235 P1 Button 1 0
+9239 P1 Button 1 1
+9243 P1 Button 1 0
+9295 P1 Button 1 1
+9298 P1 Button 1 0
+9314 P1 Button 1 1
+9315 P1 Button 1 0
+9319 P1 Button 1 1
+9323 P1 Button 1 0
+9327 P1 Button 1 1
+9331 P1 Button 1 0
+9335 P1 Button 1 1
+9339 P1 Button 1 0
+9343 P1 Button 1 1
+9347 P1 Button 1 0
+9351 P1 Button 1 1
+9355 P1 Button 1 0
+9359 P1 Button 1 1
+9363 P1 Button 1 0
+9367 P1 Button 1 1
+9371 P1 Button 1 0
+9375 P1 Button 1 1
+9377 P1 Left 0
+9379 P1 Button 1 0
+9383 poke16 ff8640 112
+9383 P1 Button 1 1
+9387 P1 Button 1 0
+9391 P1 Left 1
+9391 P1 Button 1 1
+9393 P1 Left 0
+9395 P1 Button 1 0
+9399 P1 Button 1 1
+9401 P1 Right 1
+9403 P1 Button 1 0
+9472 P1 Button 2 1
+9473 P1 Button 2 0
+9501 P1 Right 0
+9503 P1 Right 1
+9503 P1 Button 1 1
+9505 P1 Right 0
+9507 P1 Button 1 0
+9511 P1 Button 1 1
+9515 P1 Button 1 0
+9519 P1 Left 1
+9519 P1 Button 1 1
+9523 P1 Button 1 0
+9576 P1 Down 1
+9577 P1 Down 0
+9581 P1 Down 1
+9582 P1 Down 0
+9584 P1 Down 1
+9585 P1 Down 0
+9592 P1 Down 1
+9593 P1 Down 0
+9594 P1 Down 1
+9595 P1 Down 0
+9596 P1 Down 1
+9597 P1 Down 0
+9598 P1 Down 1
+9599 P1 Down 0
+9600 P1 Down 1
+9601 P1 Down 0
+9602 P1 Down 1
+9604 P1 Down 0
+9605 P1 Down 1
+9606 P1 Down 0
+9607 P1 Down 1
+9608 P1 Down 0
+9609 P1 Down 1
+9611 P1 Down 0
+9617 P1 Down 1
+9618 P1 Down 0
+9623 poke16 ff8640 112
+9653 P1 Down 1
+9666 P1 Down 0
+9669 P1 Down 1
+9674 P1 Down 0
+9675 P1 Down 1
+9676 P1 Down 0
+9679 P1 Down 1
+9683 P1 Down 0
+9684 P1 Down 1
+9685 P1 Down 0
+9686 P1 Down 1
+9689 P1 Down 0
+9690 P1 Down 1
+9692 P1 Down 0
+9695 P1 Down 1
+9697 P1 Down 0
+9697 P1 Button 1 1
+9698 P1 Down 1
+9698 P1 Button 1 0
+9725 P1 Down 0
+9735 P1 Button 1 1
+9739 P1 Button 1 0
+9743 P1 Button 1 1
+9747 P1 Button 1 0
+9751 P1 Button 1 1
+9755 P1 Button 1 0
+9759 P1 Button 1 1
+9763 P1 Button 1 0
+9767 P1 Left 0
+9767 P1 Button 1 1
+9771 P1 Button 1 0
+9775 P1 Left 1
+9775 P1 Button 1 1
+9777 P1 Left 0
+9779 P1 Button 1 0
+9783 P1 Button 1 1
+9787 P1 Button 1 0
+9791 P1 Left 1
+9791 P1 Button 1 1
+9793 P1 Left 0
+9795 P1 Button 1 0
+9799 P1 Button 1 1
+9803 P1 Button 1 0
+9807 P1 Left 1
+9807 P1 Button 1 1
+9809 P1 Left 0
+9811 P1 Button 1 0
+9814 P1 Button 2 1
+9815 P1 Button 1 1
+9815 P1 Button 2 0
+9818 P1 Down 1
+9819 P1 Button 1 0
+9823 P1 Left 1
+9823 P1 Button 1 1
+9825 P1 Left 0
+9827 P1 Button 1 0
+9831 P1 Button 1 1
+9835 P1 Button 1 0
+9839 P1 Left 1
+9839 P1 Button 1 1
+9841 P1 Left 0
+9843 P1 Button 1 0
+9847 P1 Button 1 1
+9851 P1 Button 1 0
+9855 P1 Left 1
+9855 P1 Button 1 1
+9857 P1 Left 0
+9859 P1 Button 1 0
+9863 P1 Button 1 1
+9867 P1 Button 1 0
+9871 P1 Left 1
+9871 P1 Button 1 1
+9873 P1 Left 0
+9875 P1 Button 1 0
+9879 P1 Button 1 1
+9883 P1 Button 1 0
+9887 P1 Left 1
+9887 P1 Button 1 1
+9888 P1 Right 1
+9888 P1 Left 0
+9889 P1 Right 0
+9891 P1 Button 1 0
+9893 P1 Right 1
+9899 P1 Button 4 1
+9903 P1 Button 4 0
+9919 P1 Button 3 1
+9923 P1 Button 3 0
+9928 P1 Down 0
+9996 P1 Up 1
+9997 P1 Up 0
+9999 P1 Up 1
+10001 P1 Up 0
+10002 P1 Up 1
+10004 P1 Up 0
+10008 P1 Up 1
+10009 P1 Up 0
+10010 P1 Up 1
+10012 P1 Up 0
+10013 P1 Up 1
+10021 P1 Up 0
+10023 P1 Up 1
+10027 P1 Up 0
+10028 P1 Up 1
+10030 P1 Up 0
+10040 poke16 ff8640 112
+10070 P1 Up 1
+10085 P1 Up 0
+10086 P1 Up 1
+10088 P1 Up 0
+10089 P1 Up 1
+10090 P1 Up 0
+10091 P1 Up 1
+10094 P1 Up 0
+10095 P1 Button 1 1
+10096 P1 Button 1 0
+10170 P1 Button 1 1
+10171 P1 Button 1 0
+10343 P1 Button 1 1
+10347 P1 Button 1 0
+10351 P1 Button 1 1
+10355 P1 Button 1 0
+10359 P1 Button 1 1
+10363 P1 Button 1 0
+10367 P1 Button 1 1
+10371 poke16 ff8640 112
+10371 P1 Right 0
+10371 P1 Button 1 0
+10375 P1 Button 1 1
+10379 P1 Button 1 0
+10383 P1 Right 1
+10383 P1 Button 1 1
+10384 P1 Right 0
+10384 P1 Left 1
+10385 P1 Left 0
+10387 P1 Button 1 0
+10389 P1 Left 1
+10391 P1 Button 1 1
+10392 P1 Button 1 0
+10449 P1 Up 1
+10466 P1 Button 2 1
+10467 P1 Button 2 0
+10510 Coin 1 1
+10516 Coin 1 0
+10521 P1 Up 0
+10540 1 Player Start 1
+10546 1 Player Start 0
+10638 P1 Button 2 1
+10639 P1 Button 2 0
+10640 poke16 ff8640 112
+10655 P1 Button 1 1
+10657 P1 Left 0
+10659 P1 Button 1 0
+10663 P1 Button 1 1
+10667 P1 Button 1 0
+10671 P1 Right 1
+10671 P1 Button 1 1
+10673 P1 Right 0
+10675 P1 Button 1 0
+10679 P1 Button 1 1
+10683 P1 Button 1 0
+10687 P1 Left 1
+10687 P1 Button 1 1
+10689 P1 Left 0
+10691 P1 Button 1 0
+10695 P1 Button 1 1
+10699 P1 Button 1 0
+10703 P1 Left 1
+10703 P1 Button 1 1
+10705 P1 Left 0
+10707 P1 Left 1
+10707 P1 Button 1 0
+10711 P1 Button 1 1
+10715 P1 Button 1 0
+10815 P1 Button 1 1
+10819 P1 Button 1 0
+10822 P1 Left 0
+10823 P1 Button 1 1
+10827 P1 Button 1 0
+10831 P1 Left 1
+10831 P1 Button 1 1
+10835 P1 Button 1 0
+10839 P1 Button 1 1
+10840 P1 Button 1 0
+10846 P1 Button 2 1
+10847 P1 Button 2 0
+10952 P1 Button 1 1
+10955 P1 Button 1 0
+10959 P1 Button 1 1
+10963 P1 Button 1 0
+10967 P1 Button 1 1
+10971 P1 Button 1 0
+10975 P1 Button 1 1
+10979 P1 Button 1 0
+10983 P1 Button 1 1
+10986 P1 Button 1 0
+10999 P1 Button 4 1
+11003 P1 Button 4 0
+11019 P1 Button 3 1
+11023 P1 Button 3 0
+11126 poke16 ff8640 112
+11253 P1 Button 3 1
+11255 P1 Button 1 1
+11257 P1 Button 3 0
+11259 P1 Button 1 0
+11263 P1 Button 1 1
+11267 P1 Button 1 0
+11271 P1 Button 1 1
+11275 P1 Button 1 0
+11279 P1 Button 1 1
+11283 P1 Button 1 0
+11287 P1 Button 1 1
+11291 P1 Button 1 0
+11295 P1 Button 1 1
+11299 P1 Button 1 0
+11303 P1 Button 1 1
+11307 P1 Button 1 0
+11311 P1 Button 1 1
+11315 P1 Button 1 0
+11319 P1 Button 1 1
+11323 P1 Button 1 0
+11327 P1 Button 1 1
+11330 P1 Button 1 0
+11441 P1 Button 1 1
+11443 P1 Button 1 0
+11447 P1 Button 1 1
+11451 P1 Button 1 0
+11455 P1 Button 1 1
+11459 P1 Button 1 0
+11463 P1 Button 1 1
+11467 P1 Button 1 0
+11471 P1 Button 1 1
+11475 P1 Button 1 0
+11478 poke16 ff8640 112
+11479 P1 Button 1 1
+11483 P1 Button 1 0
+11487 P1 Button 1 1
+11491 P1 Button 1 0
+11495 P1 Button 1 1
+11496 P1 Left 0
+11497 P1 Left 1
+11498 P1 Left 0
+11499 P1 Left 1
+11499 P1 Button 1 0
+11500 P1 Left 0
+11501 P1 Left 1
+11502 P1 Left 0
+11503 P1 Left 1
+11503 P1 Button 1 1
+11507 P1 Button 1 0
+11507 P1 Button 2 1
+11508 P1 Button 2 0
+11537 P1 Up 1
+11575 P1 Up 0
+11639 P1 Button 1 1
+11643 P1 Button 1 0
+11645 P1 Left 0
+11647 P1 Left 1
+11647 P1 Button 1 1
+11649 P1 Left 0
+11651 P1 Button 1 0
+11655 P1 Button 1 1
+11659 P1 Button 1 0
+11661 P1 Left 1
+11663 P1 Button 1 1
+11667 P1 Button 1 0
+11671 P1 Button 1 1
+11672 P1 Button 1 0
+11767 P1 Button 1 1
+11771 P1 Button 1 0
+11775 P1 Button 1 1
+11779 P1 Button 1 0
+11783 P1 Button 1 1
+11787 P1 Button 1 0
+11791 P1 Button 1 1
+11795 P1 Button 1 0
+11799 P1 Button 1 1
+11803 P1 Button 1 0
+11807 P1 Button 1 1
+11811 P1 Button 1 0
+11815 P1 Button 1 1
+11819 P1 Button 1 0
+11823 P1 Button 1 1
+11827 P1 Button 1 0
+11831 P1 Button 1 1
+11832 P1 Left 0
+11832 P1 Button 2 1
+11833 P1 Left 1
+11833 P1 Button 2 0
+11834 P1 Left 0
+11835 P1 Left 1
+11835 P1 Button 1 0
+11836 P1 Left 0
+11837 P1 Left 1
+11838 P1 Left 0
+11839 P1 Left 1
+11839 P1 Button 1 1
+11843 P1 Button 1 0
+11847 P1 Button 1 1
+11851 poke16 ff8640 112
+11851 P1 Button 1 0
+11855 P1 Button 1 1
+11857 P1 Button 1 0
+11983 P1 Button 1 1
+11987 P1 Button 1 0
+11991 P1 Button 1 1
+11995 P1 Button 1 0
+12001 quit
