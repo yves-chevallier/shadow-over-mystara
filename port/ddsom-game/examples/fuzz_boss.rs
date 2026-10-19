@@ -133,8 +133,37 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[6], &[0, 2, 4]),
             (&[6], Z, Z),
         ],
+        // boss 18 (Lich)
+        18 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6]),
+            (&[2], &[2], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]),
+            (&[2], &[6, 8, 10], &[0, 2]),
+            (&[4], &[0], &[0, 2, 4, 6]),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4, 6, 8], &[0, 2, 4]),
+            (&[4], &[10], &[0, 2]),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide du boss 18.
+fn etape_18(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2, 0 | 2 | 10) => 2,
+        (2, 2, 8) => 4,
+        (2, 4, 0 | 4) => 2,
+        (2, 4, 2 | 8 | 10) => 4,
+        (2, 4, 6) => 3,
+        (2, 4, 12) => 6,
+        (2, 4, 14 | 16 | 18) => 5,
+        (2, 4, 20) => 4,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
 }
 
 /// Étape `+7` valide des dragons 15 et 20.
@@ -246,6 +275,9 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     }
     if kind == 15 || kind == 20 {
         prep_15(b, alea, obj);
+    }
+    if kind == 18 {
+        prep_18(b, alea, obj);
     }
     if kind == 13 {
         // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
@@ -474,6 +506,62 @@ fn prep_15(b: &mut Bus, alea: &mut Alea, obj: u32) {
     wr32(b, obj + 0xb0, saved);
     wr8(b, obj + 0xb9, (alea.next() % 9) as u8);
     close_players(b, alea, obj);
+    // joueurs saisissables (+0x188) et 0x91f6c : à la position exacte d'attaque
+    for j in 0..4u32 {
+        wr8(b, 0xff85de + 0x200 * j + 0x188, (alea.next() % 2) as u8);
+    }
+    if (s.0, s.1, s.2) == (2, 4, 10) && alea.next() % 2 == 0 {
+        let edge = if rd8(b, obj + 0x2c) != 0 { 0x48u16 } else { 0x138 };
+        let scroll = rd16(b, A5 + 0x506);
+        wr16(b, obj + 8, scroll.wrapping_add(edge));
+    }
+}
+
+/// Boss 18 : phases, budgets, tir lié, codes de coup valides pour l'étape de réaction.
+fn prep_18(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_18(alea, s.0, s.1, s.2));
+    wr8(b, A5 + 0x30, (alea.next() % 5 != 0) as u8);
+    wr8(b, obj + 0xaa, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xab, 2);
+    for off in [0xb2u32, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xae, 0xaf] {
+        wr8(b, obj + off, pick(alea, &[0, 0, 1, 2, 5]));
+    }
+    wr16(b, obj + 0xa6, [0u16, 1, 2, 5, 0x14][alea.next() as usize % 5]);
+    wr16(b, obj + 0xa8, (alea.next() % 6) as u16);
+    wr16(b, obj + 0xb8, [0u16, 1, 5, 0x168][alea.next() as usize % 4]);
+    wr8(b, obj + 0xba, (alea.next() % 4) as u8);
+    wr8(b, obj + 0xbb, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0x81, 0xff]));
+    wr8(b, obj + 0x90, (alea.next() % 20) as u8);
+    wr8(b, obj + 0x4a, pick(alea, &[0, 0x20]));
+    wr8(b, obj + 0x56, (alea.next() % 6) as u8);
+    wr32(b, obj + 0xa2, [0x0202_0000u32, 0x0202_0400, 0x0202_0600, 0x0204_0400][alea.next() as usize % 4]);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 1, 2, 3, 4, 5, 0x10, 0x20]));
+    wr8(b, obj + 0xa1, pick(alea, &[0, 1, 2, 3, 5, 0xff]));
+    // code de coup : toutes les routines de réaction propres (les étapes avancées n'en acceptent que certaines)
+    let codes: &[u8] = if s.0 == 4 && s.1 == 0 && s.2 >= 4 {
+        &[0x20, 0x38, 0x44, 0x50, 0x5c, 0x9c, 0x8, 0x60]
+    } else if s.0 == 4 && s.1 == 0 && s.2 == 2 {
+        &[0, 0x1c, 0x20, 0x38, 0x44, 0x50, 0x5c, 0x9c, 0xa8]
+    } else {
+        &[0, 4, 0x1c, 0x20, 0x38, 0x44, 0x50, 0x5c, 0x9c, 0xa8]
+    };
+    wr8(b, obj + 0x49, pick(alea, codes));
+    let shot = ddsom_game::objects::pools::ESHL.slot(alea.next() % 4).0;
+    wr16(b, obj + 0xb0, shot as u16);
+    wr8(b, shot, (alea.next() % 4 != 0) as u8);
+    wr8(b, shot + 0x5a, (alea.next() % 2) as u8);
+    close_players(b, alea, obj);
+    for j in 0..4u32 {
+        let q = 0xff85de + 0x200 * j;
+        wr16(b, q + 0xc, [0u16, 0, 0x10][alea.next() as usize % 3]);
+        wr32(b, q + 4, [0x0202_0000u32, 0x0200_2200, 0x0200_1400, 0x0204_0e00][alea.next() as usize % 4]);
+        wr8(b, q + 0x66, (alea.next() % 3 == 0) as u8);
+        wr8(b, q + 0x8b, (alea.next() % 6) as u8);
+    }
 }
 
 /// Boss 21 : mêmes variables de scène que le 17 ; hôte (`+0x46`) parfois mort, tir lié.
@@ -660,6 +748,9 @@ fn main() {
                     wr16(&mut b, A5 + q.free, libres as u16);
                 }
                 wr8(&mut b, obj.0 + 0x40, (alea.next() % 40 == 0) as u8);
+                // le drapeau X n'a pas de sens pour un gestionnaire ; les routines sonores natives le conservent alors que
+                // l'original le recalcule : on l'abaisse pour que cet écart connu ne masque pas les autres
+                c.sr &= !0x10;
                 c.a[0] = obj.0;
                 c.a[5] = A5;
                 c.d[7] = pas;

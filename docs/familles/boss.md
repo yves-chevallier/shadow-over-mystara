@@ -21,7 +21,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 14 / 19 | 0x8fae4 | 6 732 | dragons vert / noir (h) | 32 (19, variante 0), 65-66 (19, variante 1) — réécrit |
 | 12 / 11 | 0x8d59e | 8 190 | salamandres de feu / de glace | 40 / 42 |
 | 21 | 0x9947a | 6 704 | compagnon de Tel'Arin (h) | 44 — réécrit |
-| 15 | 0x91530 | 7 470 | dragon rouge | 46 |
+| 15 / 20 | 0x91530 | 7 470 | dragon rouge | 46 — réécrit |
 | 5 | 0x8341c | 3 826 | Ezerhorden | 58 — réécrit |
 | 8 | 0x87fc0 | 10 140 | DarkWarrior 2 | 64 |
 | 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 — réécrit |
@@ -153,10 +153,24 @@ faux ; (5) `0x910b6` tire une attaque puis écrase l'état par « debout » ; (6
 0x90556) sont des lectures de données en clair, pas des lectures du programme déchiffré.
 Couverture : fuzz 1 366 instructions sur 1 398 (restes : code mort et branches improbables).
 
+### Types 15 et 20 (0x91530) : dragon rouge, scène 46 — `boss_15/`
+
+Même famille que les dragons de `boss_19` (mêmes tirages de cible 0x43ae, mêmes sondes `0xb5e0`, même boucle de relevé) avec
+d'autres tables ; le type 20 (jamais vu dans les scénarios) est une variante plus petite (PV, vitesses). `+0xa8/aa/ac` mémorise la
+position à la fin de chaque image et la rétablit au début : un coup ne déplace pas le dragon. Armure (`hit.rs`) : pendant les
+`+0xb5` (4) premiers coups de chaque période de 64 images (`+0xb4`), un coup reçu en état actif est ignoré (reprise de l'état de
+l'image précédente `+0xb0`). `mod.rs` (boucle, flottement par table de sinus 0x1c67b6, prise d'un joueur), `intro.rs` (chute du
+ciel, puis combat dans la même image), `fight.rs` (surveillance et tirage d'attaque selon la boîte de portée et le quart de PV,
+riposte spéciale, bond), `attacks.rs` (dix attaques sur des étapes communes de montée, descente et pause), `hit.rs`.
+Particularités : `0xb3fb0` relit `D1b` laissé par `set_anim` (numéro du jeu d'animations) ; `0xfd8c` relâche le joueur désigné par
+`A1`, chargé au début de la prise ; l'étape 4 de l'arrivée enchaîne sur le groupe 2 sans rendre la main. Couverture : fuzz 1 303
+instructions sur 1 369, VALIDE (les natives `ai_pick_target_any` et `son_enfiler_direct` désactivées : leurs écarts connus de durée et de
+drapeau X ne viennent pas du boss).
+
 ## 3. Validation
 
 * `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
-* `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt` : VALIDES sur 12 000 images (2 460, 9 266 et 9 044 appels).
+* `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt`, `boss15_scene46.txt` : VALIDES sur 12 000 images (2 460, 9 266, 9 044 et 8 963 appels).
   Leurs variantes `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss mais divergent peu après sa mort,
   par des routines d'autres modules (décompte de fin de scène, `combat_update`, `game_phase12`) : `scenarios/ko/`, qui sont VALIDES jusqu'à l'image
   de l'écart.

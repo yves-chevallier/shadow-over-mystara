@@ -21,6 +21,7 @@ pub mod boss_10;
 pub mod boss_5;
 pub mod boss_21;
 pub mod boss_19;
+pub mod boss_15;
 pub mod boss_dragon;
 pub mod boxes;
 pub mod cx;
@@ -501,7 +502,7 @@ pub(crate) use gestionnaire;
 /// Routines natives des familles ESHL, SET et SOBJ (voir `docs/familles-eshl-set-sobj.md`) : un
 /// gestionnaire par type, écrit sur [`cx::Cx`] (durée indicative, pas d'exécution à blanc).
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES]
+    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES]
         .into_iter()
         .flatten()
 }
