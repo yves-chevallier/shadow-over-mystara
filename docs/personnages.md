@@ -369,12 +369,13 @@ Le fuzz `fuzz_player spawn ...` appelle les natives sur des états de pools vari
 0x13, une réserve de scène variable : 4 000 tours sans écart (`DDSOM_ENTREE` pour une seule native).
 
 Reste en ROM : les autres créateurs de l'elfe et du magicien (étincelles 0x4dc9a, foudre 0x4b7a0, séisme 0x4b340 et 0x4f132, lune 0x4e4de et
-0x4e782, éclair, tempête, pluie, sorcière, vague, portail, mur, invocation : voir les constantes `EFFECT_*` de `elf.rs` et `magic_user.rs`) et **tous
-les gestionnaires** (C06 pour les tirs, C12 pour les effets).
+0x4e782, éclair, tempête, pluie, sorcière, vague, portail, mur, invocation : voir les constantes `EFFECT_*` de `elf.rs` et `magic_user.rs`).
+Les **gestionnaires** des tirs (C06) et des effets (C12) sont réécrits : `families/joueur/`, `docs/familles/joueur.md`.
 
 ## 9. Reste en ROM
 
-- Les gestionnaires des effets et des tirs joueur (pools PEFF et PSHL, classes C12 et C06) et les créateurs listés à la fin du §8 quater.
+- Les créateurs listés à la fin du §8 quater. Les gestionnaires des effets et des tirs joueur (pools PEFF et PSHL) sont réécrits
+  (`families/joueur/`), sauf PEFF 24, 42 et 43 (ramassage avec comptes BCD, boutique) : voir `docs/familles/joueur.md`.
 - Les sons (voix des armes 0xe7e10, 0xe7622, wrappers 0xe1xxx..0xe9xxx), les effets d'écran 0x1ab3c, 0x1ab56, 0x1abe0, 0x1ac86, 0x3b0c, 0x3b14,
   0x3af8, 0x3afe, 0x37882.
 - L'action 0x12 (0x35a78), commune aux classes 0 à 2, et celle du magicien (0x35b96).

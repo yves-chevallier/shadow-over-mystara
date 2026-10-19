@@ -46,6 +46,7 @@ pub mod eshl;
 pub mod eshl_b;
 pub mod eshl_c;
 pub mod items;
+pub mod joueur;
 pub mod set;
 pub mod set_b;
 pub mod set_c;
@@ -512,4 +513,5 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
     [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_8::NATIVES, boss_11::NATIVES]
         .into_iter()
         .flatten()
+        .chain(joueur::natives())
 }

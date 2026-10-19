@@ -10,7 +10,7 @@ use std::path::Path;
 use m68k::Bus;
 
 /// (nom de la famille, table de sauts, nombre de types)
-const FAMILLES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 64), ("ENEMY", 0x39a78, 29)];
+const FAMILLES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 64), ("ENEMY", 0x39a78, 29), ("PSHL", 0x39908, 25), ("PEFF", 0x39992, 48)];
 
 thread_local! {
     static APPELS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
@@ -45,6 +45,10 @@ fn main() {
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
+    // TYPES_OVERCLOCK=16 : même cadence que `validate` (pas de ralentissements)
+    if let Some(f) = std::env::var("TYPES_OVERCLOCK").ok().and_then(|v| v.parse().ok()) {
+        m.set_overclock(f);
+    }
     let mut entrees = Vec::new();
     for &(nom, table, n) in FAMILLES {
         for t in 0..n {
