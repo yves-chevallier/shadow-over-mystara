@@ -105,8 +105,65 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[10], Z),
             (&[6], Z, Z),
         ],
+        // dragons 14 et 19
+        14 | 19 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[2], &[0, 2, 4, 6, 8]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[6, 8, 10], Z),
+            (&[4], &[0, 4], &[0, 2]),
+            (&[4], &[2], &[0, 2]),
+            (&[4], &[6], &[0, 2, 4]),
+            (&[6], Z, Z),
+        ],
+        // dragons rouges 15 et 20
+        15 | 20 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4]),
+            (&[2], &[2], &[0, 2]),
+            (&[2], &[4], &[0, 2, 4]),
+            (&[2], &[6, 8, 10], Z),
+            (&[2], &[12], &[0, 2, 4]),
+            (&[2], &[4], &[6, 8, 10, 16, 18]),
+            (&[2], &[4], &[12, 14]),
+            (&[4], &[0], &[0, 2]),
+            (&[4], &[2], &[0, 2]),
+            (&[4], &[4], &[0, 2, 4, 6, 8]),
+            (&[4], &[6], &[0, 2, 4]),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide des dragons 15 et 20.
+fn etape_15(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2, 0 | 2) => 2,
+        (2, 4, 0) => 7,
+        (2, 4, 2) => 13,
+        (2, 4, 4) => 10,
+        (2, 4, 6 | 16) => 4,
+        (2, 4, 8 | 10 | 18) => 2,
+        (2, 4, 12) => 8,
+        (2, 4, 14) => 4,
+        (2, 12, _) => 3,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
+}
+
+/// Étape `+7` valide des dragons 14 et 19.
+fn etape_19(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2, 0 | 8) => 2,
+        (2, 4, 0) => 3,
+        (2, 4, 8 | 10) => 4,
+        (2, 4, _) => 2,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
 }
 
 /// Étape `+7` valide du boss 21 pour un état `(+4, +5, +6)`.
@@ -183,6 +240,12 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     }
     if kind == 21 {
         prep_21(b, alea, obj);
+    }
+    if kind == 14 || kind == 19 {
+        prep_19(b, alea, obj, kind);
+    }
+    if kind == 15 || kind == 20 {
+        prep_15(b, alea, obj);
     }
     if kind == 13 {
         // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
@@ -319,6 +382,98 @@ fn prep_5(b: &mut Bus, alea: &mut Alea, obj: u32) {
     wr8(b, obj + 0x56, (alea.next() % 6) as u8);
     wr8(b, A5 + 0x2e, pick(alea, &[0, 4]));
     wr8(b, A5 + 0x2c, pick(alea, &[0, 0xc, 4]));
+}
+
+/// Dragons 14 et 19 : variante, hôte (variante 1 de 19), réactions, état mémorisé.
+fn prep_19(b: &mut Bus, alea: &mut Alea, obj: u32, kind: u8) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    let variant = if kind == 19 { (alea.next() % 3 == 0) as u8 } else { 0 };
+    wr8(b, obj + 3, variant);
+    // la mort du dragon de Nagpa n'a que deux étapes
+    if variant != 0 && rd8(b, obj + 4) == 4 && rd8(b, obj + 5) == 6 && rd8(b, obj + 6) == 4 {
+        wr8(b, obj + 6, 2);
+    }
+    // l'arrivée du dragon de Nagpa n'a que trois étapes
+    if variant != 0 && rd8(b, obj + 4) == 2 && rd8(b, obj + 5) == 0 && rd8(b, obj + 6) >= 6 {
+        wr8(b, obj + 6, 4);
+    }
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_19(alea, s.0, s.1, s.2));
+    wr8(b, A5 + 0x30, (alea.next() % 4 != 0) as u8);
+    wr8(b, A5 + 0x2c, pick(alea, &[0, 4, 0xc, 0xd]));
+    wr16(b, obj + 0x60, [40u16, 100, 700][alea.next() as usize % 3]);
+    wr8(b, obj + 0x49, pick(alea, &[0, 4, 0x60, 0x68, 0x70, 0x78, 0x80, 0x90, 0x94, 0xa8, 0xa8]));
+    wr8(b, obj + 0x56, (alea.next() % 6) as u8);
+    wr8(b, obj + 0x87, (alea.next() % 4) as u8);
+    wr8(b, obj + 0x90, (alea.next() % 20) as u8);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 2, 4, 0xff]));
+    wr8(b, obj + 0xa1, pick(alea, &[0, 1, 2, 4, 5, 7, 0xff]));
+    wr8(b, obj + 0xa3, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xa4, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xa5, pick(alea, &[0, 0xff]));
+    wr16(b, obj + 0xa6, [0u16, 1, 2, 5, 0x20, 0x64, 0x65, 0x80][alea.next() as usize % 8]);
+    wr16(b, obj + 0xc, [0x1fu16, 0x20, 0x21, 0, 0x30, 0x60, 0x100, 0xff00][alea.next() as usize % 8]);
+    wr8(b, obj + 0xad, (alea.next() % 0x22) as u8);
+    wr8(b, obj + 0xac, (alea.next() % 6) as u8);
+    wr8(b, obj + 0xae, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xaf, (alea.next() % 5) as u8);
+    wr8(b, obj + 0xb2, pick(alea, &[0, 0, 1, 2, 0x30]));
+    wr8(b, obj + 0xb0, (alea.next() % 5) as u8);
+    wr8(b, obj + 0xb1, (alea.next() % 3) as u8);
+    // état mémorisé : le souffle (attaque 4) une fois sur trois
+    let saved = if alea.next() % 3 == 0 { 0x0204_0400 } else { 0x0202_0000 };
+    wr32(b, obj + 0xa8, saved);
+    // hôte : un ennemi vivant ou non, avec ou sans PV
+    let host = ENEMY.slot(alea.next() % ENEMY.slots).0;
+    wr16(b, obj + 0x46, if alea.next() % 4 == 0 { 0 } else { host as u16 });
+    wr8(b, host, (alea.next() % 4 != 0) as u8);
+    wr16(b, host + 0x62, [0u16, 1, 50][alea.next() as usize % 3]);
+    if s.0 == 4 && s.1 == 0 && (s.2 == 2) {
+        // l'étape 2 de la réaction ne sert qu'à la glissade (code 0x68, 0x80, 0xa8 ou ordinaire)
+    }
+    close_players(b, alea, obj);
+}
+
+/// Dragons rouges 15 et 20 : positions mémorisées, armure, état précédent, tables du script.
+fn prep_15(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_15(alea, s.0, s.1, s.2));
+    wr8(b, A5 + 0x2c, pick(alea, &[0, 4, 0xc, 0xd]));
+    wr16(b, obj + 0x60, [40u16, 100, 700][alea.next() as usize % 3]);
+    wr8(b, obj + 0x49, pick(alea, &[0, 4, 8, 0x60, 0xa8]));
+    wr8(b, obj + 0x56, (alea.next() % 6) as u8);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x90, (alea.next() % 20) as u8);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 2, 4, 0xff]));
+    wr8(b, obj + 0xa1, pick(alea, &[0, 1, 2, 4, 5, 0x13, 0x14, 0x15, 0x16, 0x22, 0xff]));
+    wr8(b, obj + 0xa4, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xa5, (alea.next() % 40) as u8);
+    wr16(b, obj + 0xa6, [0u16, 1, 2, 5, 0x20, 0x40, 0xf0][alea.next() as usize % 7]);
+    wr16(b, obj + 0xc, [0x1fu16, 0x20, 0x21, 0x30, 0x40, 0x60, 0x2c0, 0x300, 0x380, 0xff00][alea.next() as usize % 10]);
+    let (ox, oz, oy) = (rd16(b, obj + 8), rd16(b, obj + 0xc), rd16(b, obj + 0x10));
+    wr16(b, obj + 0xa8, ox);
+    wr16(b, obj + 0xaa, oz);
+    wr16(b, obj + 0xac, oy);
+    wr8(b, obj + 0xae, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xaf, (alea.next() % 4) as u8);
+    wr8(b, obj + 0xb4, (alea.next() % 0x42) as u8);
+    wr8(b, obj + 0xb5, (alea.next() % 5) as u8);
+    wr8(b, obj + 0xb7, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xb8, pick(alea, &[0, 0, 1, 2, 0x10]));
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0xff]));
+    wr8(b, obj + 0x43, (alea.next() % 4 == 0) as u8);
+    wr8(b, obj + 0x2d, (alea.next() % 32) as u8);
+    // table de vecteurs du souffle (+0x4c) : nulle ou la table des angles de la ROM
+    wr32(b, obj + 0x4c, if alea.next() % 2 == 0 { 0 } else { 0x1c6636 });
+    wr8(b, A5 + 0x42, (alea.next() % 4) as u8);
+    // état de l'image précédente : actif (02) ou autre
+    let saved = [0x0202_0000u32, 0x0202_0400, 0x0204_0200, 0x0000_0000][alea.next() as usize % 4];
+    wr32(b, obj + 0xb0, saved);
+    wr8(b, obj + 0xb9, (alea.next() % 9) as u8);
+    close_players(b, alea, obj);
 }
 
 /// Boss 21 : mêmes variables de scène que le 17 ; hôte (`+0x46`) parfois mort, tir lié.

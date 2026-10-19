@@ -18,7 +18,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 17 | 0x952b4 | 9 016 | Tel'Arin (h) | 13, 44 (variante 1) — réécrit |
 | 6 | 0x8430e | 5 866 | Manticore | 24 — réécrit |
 | 18 | 0x975ec | 7 822 | Lich (h) | 26 |
-| 19 | = 14 (0x8fae4) | 6 732 | dragon vert (h) | 32, 65-66 (variante 1) |
+| 14 / 19 | 0x8fae4 | 6 732 | dragons vert / noir (h) | 32 (19, variante 0), 65-66 (19, variante 1) — réécrit |
 | 12 / 11 | 0x8d59e | 8 190 | salamandres de feu / de glace | 40 / 42 |
 | 21 | 0x9947a | 6 704 | compagnon de Tel'Arin (h) | 44 — réécrit |
 | 15 | 0x91530 | 7 470 | dragon rouge | 46 |
@@ -132,11 +132,34 @@ attaques : coup simple, coup à effet, bond, saut sur la cible, rayon ESHL 0x20 
 cinématique (`+0xb3`), lâcher d'objets (`+0xb4`), tourbillon qui lance le ralenti), `hit.rs` (réactions, recul, relevé, mort).
 Couverture : fuzz 1 342 instructions sur 1 383 (les choix d'attaque à portée très courte et quelques cases des tables).
 
+### Types 14 et 19 (0x8fae4) : dragons, scènes 32, 65 et 66 — `boss_19/`
+
+Une seule routine pour deux types (noms de debug : 14 « Green Dragon », 19 « Black Dragon ») ; le type 14 n'apparaît dans aucun
+scénario (fuzz seulement). Le type 19 de variante 0 est le boss de la scène 32 ; celui de variante 1 est le dragon que Nagpa
+(`boss_10`) fait venir dans les scènes 65 et 66 (`+0x46` = Nagpa : il disparaît quand Nagpa n'a plus de PV). Trois jeux
+d'animations par type (`+0xa0` = 0, 2, 4 : `set_anim`, qui ne relance pas l'animation déjà en cours) ; le dragon flotte autour
+de l'altitude 0x20 quand `+0xa4` est levé (`hover`). `mod.rs` (boucle, flottement), `intro.rs` (arrivée selon type et variante :
+bulles de texte, entrée par la droite, attente de la caméra `A5+0x2c` = 0xc), `fight.rs` (marche par tirage et sondes de
+portée, demi-tour, riposte spéciale quand les PV passent un quart de `+0x60`), `attacks.rs` (six attaques : bond arrière, charge,
+souffle qui suit un joueur, saut périlleux, saut en avant, grand saut avec retombée de l'autre côté de l'écran), `hit.rs` (table
+de réactions 0x909a0 : coup ordinaire, couché, chancelant, tremblement 0xa8 qui mène à la mort ; reprise du souffle si on
+le touche pendant l'attaque 4 ; mort propre à chaque type).
+
+Particularités de l'original reproduites : (1) la boucle de choix de cible du souffle (0x904aa, 0x904ee, 0x90524) détruit son
+compteur `D0` en appelant 0x9059e et compare à -1 : seule 0x90524 trouve vraiment une cible ; (2) `move.w (-0x7f92,A0)` (0x90366,
+0x903f4) lit à A0 - 0x7f92 au lieu du compteur d'images `A5+0x6e` ; (3) les sondes 0x91348 et 0x91390 sans cible écrivent l'état
+« attente » et rendent vrai (Z levé par le `move.l`), ce qui envoie l'appelant vers un choix d'attaque ; (4) 0x9132e rend toujours
+faux ; (5) `0x910b6` tire une attaque puis écrase l'état par « debout » ; (6) les tables à registre d'adresse (0x91096, 0x9110c,
+0x90556) sont des lectures de données en clair, pas des lectures du programme déchiffré.
+Couverture : fuzz 1 366 instructions sur 1 398 (restes : code mort et branches improbables).
+
 ## 3. Validation
 
 * `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
-* `scenarios/boss/boss5_scene58.txt` et `boss21_scene44.txt` : VALIDES sur 12 000 images (2 460 et 9 266 appels). Leurs variantes
-  `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss mais divergent après sa mort : `scenarios/ko/`.
+* `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt` : VALIDES sur 12 000 images (2 460, 9 266 et 9 044 appels).
+  Leurs variantes `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss mais divergent peu après sa mort,
+  par des routines d'autres modules (décompte de fin de scène, `combat_update`, `game_phase12`) : `scenarios/ko/`, qui sont VALIDES jusqu'à l'image
+  de l'écart.
 * `scenarios/boss/` : un scénario par boss (entrée directe dans la scène par `poke8 ff8034`, bot `autobot`, PV du boss
   intacts), générés par `tools/gen_boss.py` ; `tools/validate_all.sh` les lance sur 12 000 images.
 * `scenarios/ko/boss13_dragon.txt` : le dragon diverge dès l'image 3100 (fraction de X du joueur 1), avec ou sans son natif

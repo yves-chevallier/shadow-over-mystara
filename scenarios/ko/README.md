@@ -30,6 +30,11 @@ boss21_scene44_mort.txt (scène 44, boss 21 réécrit dans families/boss_21/, PV
   avec DDSOM_SANS=combat : DDSOM_CHECK=1 désigne `combat_update` (entrée 0x260ee) : ram[ff8664]=00ff au lieu de ffff. Routine
   fautive : combat.rs. VALIDE sur 5 500 images.
 
+boss19_scene32_mort.txt (scène 32, dragon 19 réécrit dans families/boss_19/, PV du boss ramenés à 1 après 1 500 images)
+  validate : écart à l'image 4867 (mot FFD514, 0000 au lieu de fffb), 4 images après le début de la mort du boss (image 4863) ;
+  identique avec DDSOM_SANS=boss_19 ; DDSOM_CHECK=1 désigne `game_phase12` (entrée 0x1c6a0, game.rs) : ram[ffd514]=0000 au
+  lieu de fffb. VALIDE sur 4 866 images.
+
 Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
 mais qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...`
 fait rendre aux natives nommées les registres de l'original : chercher par dichotomie celle dont un
