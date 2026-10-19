@@ -39,11 +39,13 @@ macro_rules! action_native {
 
 pub mod cleric;
 pub mod common;
+pub mod dwarf;
 pub mod elf;
 pub mod fighter;
 pub mod foes;
 pub mod items;
 pub mod magic_user;
+pub mod thief;
 
 use super::{Ctx, Player};
 

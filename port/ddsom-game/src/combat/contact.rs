@@ -528,7 +528,7 @@ pub(super) fn push_enemy(w: &mut World, p: Obj, mine: HitBox, e: Obj, theirs: Hi
             || w.u8(p, 0x10f) != 0
             || w.u8(p, 0x6a) == 0x10
             || w.u8(p, f::KEYS_NEW) & 0x10 == 0
-            || !push.neg_y
+            || push.neg_y
         {
             return false;
         }

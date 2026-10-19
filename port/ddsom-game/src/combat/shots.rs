@@ -99,7 +99,8 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
         return;
     }
     let mut dmg = shot_damage(w, shot, e);
-    if w.u8(owner, f::GEAR_166) == 4 {
+    // 0x26774 : l'original teste `+0x166` du tir lui-même (A0), pas celui du lanceur
+    if w.u8(shot, f::GEAR_166) == 4 {
         dmg = dmg.wrapping_add(5);
     }
     enemy_loses_hp(w, e, dmg);
@@ -333,7 +334,9 @@ pub(super) enum Combo {
 /// Types 5, 22, 7, 17, 18 : coup enchaîné (+2 coups portés, +1 coup encaissé, bonus du lanceur).
 pub(super) fn shot_combo(w: &mut World, shot: Obj, e: Obj, owner: Obj, bit: u32, kind: Combo) -> bool {
     cov::hit("shot_combo");
-    if immune(w, e, bit) || already_down(w, e) {
+    // le type 7 (OwnerFlip) ne vérifie pas que la victime est déjà à terre
+    let down = !matches!(kind, Combo::OwnerFlip) && already_down(w, e);
+    if immune(w, e, bit) || down {
         return false;
     }
     owner_hits(w, owner, 2);

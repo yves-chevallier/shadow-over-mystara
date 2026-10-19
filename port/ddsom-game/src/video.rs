@@ -272,6 +272,9 @@ fn terrain_attribute(v: &mut Vue, c: &mut Cpu) {
         y = y.wrapping_add(dy);
         let row = 0x1e - ((y as u8 >> 3) & 0x1e) as u16;
         let column = x.wrapping_add(x) & 0xffe0;
+        // restes du calcul (D3 = index dans la carte, D4 = colonne) : lus par des appelants qui les prennent pour arguments
+        c.d[3] = row.wrapping_add(column) as u32;
+        set_low_word(&mut c.d[4], column);
         c.a[1] = map.wrapping_add(row.wrapping_add(column) as i16 as u32);
         v.rd16(c.a[1])
     } else {
@@ -283,6 +286,8 @@ fn terrain_attribute(v: &mut Vue, c: &mut Cpu) {
         let page = 0x3000u16.wrapping_sub((y & 0x300) << 4);
         let row = 0x3c - ((y as u8 >> 2) & 0x3c) as u16;
         let column = x.wrapping_shl(2) & 0xfc0;
+        set_low_word(&mut c.d[3], page.wrapping_add(row).wrapping_add(column));
+        set_low_word(&mut c.d[4], column);
         c.a[1] = hw::SCROLL2.wrapping_add(page.wrapping_add(row).wrapping_add(column) as i16 as u32);
         c.d[2] = 0;
         v.rd16(c.a[1] + 2)
@@ -322,7 +327,7 @@ fn terrain_of_object_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
     v.chemin.duree(b, 0x24a8)
 }
 
-const TERRAIN_OUT: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::CCR;
+const TERRAIN_OUT: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::a(1) | regs::CCR;
 
 pub const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_cost, terrain_native, TERRAIN_OUT);
 pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_objet", terrain_of_object_cost, terrain_of_object, TERRAIN_OUT);

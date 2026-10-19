@@ -9,11 +9,15 @@ Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms d
 
 | Fichier | Contenu |
 |---|---|
-| `enemy_common.rs` | champs `f::*`, états `st::*`, adresses `rom::*`, allocation de sous-objets (`alloc`), libération (`free`), tirage (`random`), pause (`paused`, `suspended`), boucles communes `active_loop` / `hit_loop`, réaction aux coups par table (`react`), aides `add8`/`add16`/`set_dw` |
+| `enemy_common.rs` | champs `f::*`, états `st::*`, adresses `rom::*`, allocation de sous-objets (`alloc`), libération (`free`), tirage (`random`), pause (`paused`, `suspended`), boucles communes `active_loop` / `hit_loop` / `hit_loop_at`, réaction aux coups par table (`react`), aides d'IA (`target_in_box`, `target_in_box_far`, `pick_target`, `grabbed`, `target`, `needs_turn`), aides `add8`/`add16`/`set_dw` |
 | `enemy.rs` | type 20 (ManScorpion), type 28 (Nagpa) |
 | `enemy_double.rs` | « doubles » qui recopient un maître : types 22 (Chimera), 23 (Spectre), 24 (Manticore), 26 (DarkWarrior 2) |
 | `enemy_part.rs` | partie attachée à un hôte : type 7 (Wyvern, tentacule) |
 | `enemy_riyakaa.rs` | type 16 (Riyakaa), ennemi à IA complète |
+| `enemy_dbeast/` | type 19 (Displacer Beast et ses pièces), un sous-module par groupe de comportements : `parts`, `stance`, `attacks`, `attacks_b`, `moves`, `hit` |
+| `enemy_owlbear/` | type 4 (Owlbear) : `stance`, `attacks`, `moves`, `hit` |
+| `enemy_harpy.rs` | type 21 (créature volante « Harpy ») |
+| `enemy_warrior.rs` | type 25 (bras du DarkWarrior 1) |
 
 ## 2. Charpente commune
 
@@ -103,12 +107,63 @@ décisions lisent les paramètres d'IA `+0x68..+0x81` posés à la création (ma
 Couverture : scénarios (jusqu'à 3 088 appels), fuzz ; non atteintes par le fuzz (examinées à la main) : l'attaque
 choisie dans `70178` quand un joueur est tout près, le cri quand `0x5cdc6` rend Z, le retour de saisie.
 
+### Type 19 (0x71e44) « Displacer Beast » (h) — `enemy_dbeast/`
+
+Un seul gestionnaire pour quatorze variantes (`+3`) : la bête (0 à 3, liées à leur parent `+0x42`) et des pièces
+lâchées (4 à 13 : projectiles, bonds, ombre). `+0x50` est la cible (un joueur), `+0x2f` le profil d'IA (0 ou 1 :
+la table de sauts de la création n'a que deux entrées), `+0xbf` un décalage de série d'animations tiré à la création
+(tables 0x74f56/0x74f7a/0x74f8a), `+0xbc` le rang de la pièce (−1 : pas une pièce). Animations 0x166fb6
+(mouvements) et 0x167054 (coups) ; `+0xa5` est l'animation voulue, `+0xa2` celle en cours (on ne relance pas la même,
+`Replay` dans `attacks.rs` décompte les répétitions `+0xae`). Groupes de l'état actif (`+5`) :
+
+| `+5` | Fichier | Rôle |
+|---|---|---|
+| 0 | `parts` | pièces : membres suivant le parent, projectiles, bonds en X ou en profondeur, glissades (`+6` = 0 à 22) |
+| 2 | `stance` | la bête debout : poursuite (0, 8), demi-tour (2), attente (4), approche (6) ; `engage` teste la portée (coup court, coup long, saisie) |
+| 4 | `attacks` | dix-sept coups (`+6` = 0 à 36) ; étapes communes `+7` = 0 (préparation) et 2 (regard) puis étapes propres |
+| 6 | `attacks_b` | seconde série : petits bonds, bond de côté, rugissement |
+| 8, 10, 12 | `moves` | charges et sauts vers un joueur, entrée en scène (chute), sortie par le haut |
+
+L'état touché (`hit`) : 0 et 6 réaction commune par table (`0x740c0`, `0x742fa`), 2 recul d'une pièce, 4 chute, 8 fuite
+ou mort. Piège : plusieurs tables de sauts ont du code **dans** la table (une entrée désigne le code qui la suit :
+`0x72efe`, `0x73cb8`) et `0x72bbc` (code après le `jsr` de la table de `stance`, absent du listing) ; les tables
+d'octets lues par `lea ...(PC)` se lisent en espace de données, celles lues par `(adresse,PC,Dn)` en espace
+des opcodes. Couverture : scénarios (jusqu'à 129 000 appels), fuzz (2 126 instructions, 43 non atteintes dont une
+dizaine de restes de tables).
+
+### Type 4 (0x5d87a) « Owlbear » (h) — `enemy_owlbear/`
+
+Même charpente que le Riyakaa. Animations 0x160e26 (mouvements) et 0x160e44 (coups). Variantes 0 (arrivée debout),
+1 (arrivée en marchant, `+0xa0` = durée), 2 (bond d'entrée). Sous-états actifs : 0 arrivée (compte à rebours `+0xaa`,
+tirage de la « chance d'attaquer » `0x5f2c6`), 2 debout (poursuite, demi-tour, attente, approche ; `engage` →
+`reach` tire un coup court ou une attaque dans les tables par difficulté `0x5eec6` / `0x5f0c6`), 4 coups (dix, `+6` =
+0 à 18), 6 bonds de l'après-arrivée, 8 charges (`+6` = 0 à 6), 10 repos. L'état touché a un octet `+0xa5` qui
+supprime le test de zone (`hit_loop_at`). Couverture : scénarios (4 474 appels), fuzz.
+
+### Type 25 (0x76f0e) « DarkWarrior 1 » (h) — `enemy_warrior.rs`
+
+Bras du guerrier sombre : le créateur (0x76ec4, non réécrit) en engendre deux, variante 0 (gauche) et 1 (droite), liés
+à l'hôte `+0x46` ; si l'hôte n'est plus actif le bras passe à l'état 6. Sans IA : il se place à 0x82 pixels de l'hôte
+(`+0xa8..+0xac` de l'hôte) et joue ce que l'état `+0xa2` de l'hôte (0 à 8 seulement : la table 0x76fd4 n'a que neuf
+entrées) lui commande : 0 à 3 repos (ondulation de la table 0x7759e), 4 et 5 coup (`swing`, pour un seul des deux
+bras, l'autre dérive), 6 à 8 sortie en scène par scénarios de déplacement (table 0x77626, `script_step`). La position
+se calcule en ajoutant à la position des décalages `+0xb4/+0xb6/+0xb8` (que les vitesses `+0x14..+0x1e` intègrent,
+`integrate`) ; les états de l'hôte 4 à 8 les ajoutent deux fois (une dans le sous-état, une dans `apply_motion`), comme
+l'original. Les types 22, 23, 24 et 26 sont ses doubles graphiques. Couverture : fuzz seulement (507 instructions sur
+515).
+
+### Type 21 (0x756c4) « Harpy » (h) — `enemy_harpy.rs`
+
+Créature volante à neuf variantes (ligne de huit octets par variante en 0x756e6 : orientation, durées, décalage) qui
+crée à sa naissance un compagnon (ESHL 0x10, `0xa036e`) dont `+0xaa` garde le lien. `+0x2f` (0, 2 ou 4 : indexe des
+tables de mots) choisit la série d'attaques, `+0x43` la forme. Sous-états : 0 vol (selon la variante), 2 attaque
+(projectile `0xa0566`, coups, tir), 4 pause, 6 sortie d'écran, 8 sortie du premier plan. Le dispatch de sortie lit
+D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Couverture : fuzz seulement.
+
 ## 4. Non réécrit (types encore en 68000)
 
-0 Kobold, 1 Skeleton, 2 Troglodyte, 3 Bow Gnoll, 4 Owlbear, 5 Ghoul, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle,
-10 GiantScorpion, 11 mud golem, 12 Shadow Elf, 13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 19 DisplacerBeast,
-21 Harpy, 25 DarkWarrior 1, 27 WarMachine. Parmi eux, seuls 4 (4 474 appels), 19 (76 491) et 16 (3 088, réécrit)
-apparaissent dans les scénarios.
+0 Kobold, 1 Skeleton, 2 Troglodyte, 3 Bow Gnoll, 5 Ghoul, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle,
+10 GiantScorpion, 11 mud golem, 12 Shadow Elf, 13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 27 WarMachine. Aucun n'apparaît dans les scénarios (seuls 4, 19 et 16, réécrits, y figurent).
 
 ## 5. Validation
 
@@ -122,3 +177,14 @@ apparaissent dans les scénarios.
   se lit dans l'espace des opcodes ; `+0x24/+0x26` sont les liens des listes triées (ne pas les corrompre dans le
   fuzz) ; les routines de réaction communes exigent des sous-états de départ valides ; un gestionnaire qui crée
   des objets (`alloc`) doit respecter l'ordre des allocations (l'emplacement obtenu dépend de l'ordre).
+
+### Fuzz des types du deuxième lot (4, 19, 21, 25)
+
+`fuzz_enemy.rs` a pour ces types : `etats_enemy` (états `+4/+5/+6` valides), `etape_dbeast` / `etape_owlbear`
+(étape `+7` valide selon l'état), `prep_dbeast` / `prep_owlbear` / `prep_harpy` / `prep_warrior` (compteurs courts, animation en cours
+souvent égale à l'animation voulue, état à reprendre après un demi-tour, code de réaction `+0x49` < 43 entrées,
+parent dans un état connu, objet au ras du sol pour les réceptions de bonds), joueurs placés dans les boîtes de portée,
+redessin d'un état valide à un pas sur trois. Variables : `DDSOM_GRAINE=n` (graine), `DDSOM_PAS_ETAT=1` (trace des états
+avant/après), `DDSOM_COUVERTURE=fichier`. Pièges des fuzz : `+0x2f` doit valoir 0/1 (type 19) ou 0/2/4 (type 21), le
+propriétaire ne doit pas être l'objet lui-même, `+0xa2` du type 21 et `+0xa4` des types 4 et 19 ne se corrompent pas
+(l'original saute alors dans des données).
