@@ -3,7 +3,7 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
-    ddsom_rc::install(&mut m);
+    ddsom_game::install_reference(&mut m);
     m.set_overclock(16.0);
     m.idle = Some(ddsom_game::idle);
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();

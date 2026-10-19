@@ -20,7 +20,7 @@ fn main() {
     ddsom_game::install(&mut ma);
     ddsom_game::set_check(true);
     ddsom_game::combat::enable_coverage();
-    ddsom_rc::install(&mut mb);
+    ddsom_game::install_reference(&mut mb);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
     let frames: usize = frames.parse().unwrap();
     // Zones de sauvegarde de registres : piles des tâches (FF0A00-FF0FFF) et pile logicielle de

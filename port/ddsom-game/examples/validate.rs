@@ -44,7 +44,7 @@ fn main() {
     };
     let (mut ma, mut mb) = (load(), load());
     ddsom_game::install(&mut ma);
-    ddsom_rc::install(&mut mb);
+    ddsom_game::install_reference(&mut mb);
     mb.idle = Some(ddsom_game::idle);
     if std::env::var("DDSOM_NOIDLE").is_ok() {
         ma.idle = None;
@@ -58,6 +58,7 @@ fn main() {
     let frames: usize = frames.parse().unwrap();
     let t0 = std::time::Instant::now();
     let mut failure = None;
+    let lent: Option<u128> = std::env::var("DDSOM_LENT").ok().and_then(|v| v.parse().ok());
     // DDSOM_CHECK_FRAME=n : contrôle de tous les registres de chaque appel natif pendant l'image n
     let check_frame: Option<usize> = std::env::var("DDSOM_CHECK_FRAME").ok().and_then(|v| v.parse().ok());
     for f in 0..frames {
@@ -67,8 +68,17 @@ fn main() {
         }
         script.apply(f, &mut ma);
         script.apply(f, &mut mb);
+        let t = std::time::Instant::now();
         ma.run_frame();
+        let ta = t.elapsed();
         mb.run_frame();
+        let tb = t.elapsed() - ta;
+        // DDSOM_LENT=ms : signale les images plus longues que ms millisecondes (par machine)
+        if let Some(seuil) = lent {
+            if ta.as_millis() > seuil || tb.as_millis() > seuil {
+                println!("image {} lente : réécrit {:.0?}, origine {:.0?}", f + 1, ta, tb);
+            }
+        }
         let ram: Vec<usize> = (0..0x8000).filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !ignored(i)).collect();
         let mut what = Vec::new();
         for &i in ram.iter().take(10) {

@@ -10,7 +10,7 @@ fn main() {
     if a[8] == "1" {
         ddsom_game::install(&mut m)
     } else {
-        ddsom_rc::install(&mut m)
+        ddsom_game::install_reference(&mut m)
     }
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let (from, to): (usize, usize) = (a[4].parse().unwrap(), a[5].parse().unwrap());

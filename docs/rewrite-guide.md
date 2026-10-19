@@ -12,7 +12,13 @@ images (`examples/determinisme.rs`). Conséquences :
 
 - **aucune exactitude au cycle** : une routine Rust n'a pas à reproduire la durée de l'original ;
 - la validation compare l'état du jeu **à chaque image** avec le code d'origine surcadencé ;
-- la seule différence assumée avec l'arcade : les ralentissements quand l'écran est chargé.
+- les différences assumées avec l'arcade : les ralentissements quand l'écran est chargé, et le nombre de pas de
+  jeu par image dans l'« avance rapide » (bouton pressé à l'attract ou à l'entrée de scène, où le jeu enchaîne
+  ses pas sans attendre l'image : 7-8 pas par image sur l'arcade, mais ×16 en ferait une centaine, dépendant de la
+  durée de chaque routine). Ce nombre est plafonné à `MAX_STEPS_PER_FRAME` (8, `cps2::Machine::step_cap`),
+  **à l'identique** dans `ddsom_game::install` (jeu, machine hybride) et `ddsom_game::install_reference` (code
+  d'origine) : toute machine d'origine créée par un outil doit passer par `install_reference`, jamais par
+  `ddsom_rc::install` seul. `DDSOM_STEP_CAP=n` change la valeur, 0 la supprime (mesures à ×1). Voir `docs/boucle.md` §1.
 
 La réécriture se fait **de haut en bas** : le Rust pilote (boucle de partie, phases, mise à jour du
 monde, dispatch des objets, handlers...) et appelle le code 68000 restant comme une boîte noire

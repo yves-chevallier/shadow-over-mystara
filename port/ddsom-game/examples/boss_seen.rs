@@ -8,7 +8,7 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
-    ddsom_rc::install(&mut m);
+    ddsom_game::install_reference(&mut m);
     m.idle = Some(ddsom_game::idle);
     let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
