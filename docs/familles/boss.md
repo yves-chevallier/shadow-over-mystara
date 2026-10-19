@@ -23,7 +23,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 21 | 0x9947a | 6 704 | compagnon de Tel'Arin (h) | 44 — réécrit |
 | 15 / 20 | 0x91530 | 7 470 | dragon rouge | 46 — réécrit |
 | 5 | 0x8341c | 3 826 | Ezerhorden | 58 — réécrit |
-| 8 | 0x87fc0 | 10 140 | DarkWarrior 2 | 64 |
+| 8 | 0x87fc0 | 10 140 | DarkWarrior 2 | 64 — réécrit |
 | 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 — réécrit |
 
 Les types 0 à 4 (Ogre, Displacer Beast, Man Scorpion, Harpy, Chimera) n'ont été vus dans aucune scène 1-68 ni dans les
@@ -182,10 +182,38 @@ de durée et de drapeau X). Le scénario `boss18_scene26` (tronqué à l'image 1
 (7 125 appels) ; le bot tue le Lich à l'image 10 541 si on le laisse jouer, ce qui exerce toute la mort jusqu'à l'image 10 576
 (après quoi `game_phase12` diverge).
 
+### Type 8 (0x87fc0) : DarkWarrior 2, scène 64 — `boss_8/`
+
+Même charpente que les 17, 18 et 21 (états posés d'un coup en longs, sauts par tables relatives au PC), avec trois
+particularités. 1) Un ralenti : quand ses PV passent sous le seuil `+0xb6` (moitié ou trois quarts des PV selon le nombre de
+joueurs, `+0xad`) il met `+0xb9` à 1 ; le compteur `+0xba` (2, 1, 0) fait alors rejouer le gestionnaire une image sur trois
+(`mod.rs`, boucle de `run`). 2) Ses réactions aux coups sont les routines communes des ennemis (table de longs 0x89330, indexée
+par `+0x49`, appelées par `jsr (A1)`) : `hit.rs` ne réécrit que les groupes autour (projeté, chute, mort). 3) Le choix de
+l'attaque suivante se fait dans des tables de 0x200 octets de la ROM (lignes de 32 octets selon la difficulté, 0x89866 à
+0x8a2c6 : devant, loin, ralenti, après une attaque), lues à l'exécution.
+
+| `+5` | Fichier | Rôle |
+|---|---|---|
+| 0 | `fight` | arrivée : attente, apparition, saut, atterrissage avec sept bouffées d'effets |
+| 2 | `fight` | combat : marche (`+6` = 0, 8) qui regarde à portée, demi-tour (2), arrêt (4), approche lente (6) |
+| 4 | `attacks` | dix attaques (`+6` = 0 à 18) : coup, fente (2 et 18), couteaux (4 et 6, `pick_new`), combo, charge, bond, pluie de couteaux (14), disparition (16) |
+| 6, 8 | `moves` | esquives après une attaque (`aids::after_attack`) ou un coup : disparition et réapparition, pas de côté, bond, repli |
+| 10, 12, 14 | `fight`, `mod` | attente sans joueur, debout, relevé |
+| état 4 | `hit` | réaction commune, projeté (rebonds puis riposte tirée par `0x894cc`), chute, mort (effets avant ou arrière, clignotement) |
+
+`aids.rs` regroupe les aides de l'original (0x8972e, 0x89760, 0x8a2c6, 0x8a368, 0x8a404, 0x8a432, 0x8a466, 0x8a49a, 0x8a4e4
+à 0x8a666, 0x89788, 0x89804). Les registres hérités (D6 et A2 de la boucle sur les quatre joueurs, D0, D1) sont reproduits.
+Animations : 0x1790f6 (mouvements), 0x179116 (coups). Fuzz : 257 000 appels sans écart (couverture 1 471 instructions sur
+1 493 ; restent un cas inatteignable de `fight` — le nombre de joueurs en vie qui devient nul pendant l'étape —, deux sorties
+du tirage « loin » de 0x8a432 et le choix de la troisième attaque en ralenti). Le scénario `boss8_scene64` est VALIDE sur
+12 000 images (8 305 appels), le boss vivant (602 PV) ; le scénario de mort diverge à l'image 6138 à cause d'autres modules
+(`scenarios/ko/README.md`).
+
 ## 3. Validation
 
 * `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
-* `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt`, `boss15_scene46.txt` : VALIDES sur 12 000 images (2 460, 9 266, 9 044 et 8 963 appels).
+* `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt`, `boss15_scene46.txt`, `boss18_scene26.txt`, `boss8_scene64.txt` : VALIDES sur 12 000 images (2 460, 9 266, 9 044, 8 963, 7 125 et 8 305 appels ;
+  `boss18_scene26` est tronqué à l'image 10 300 par `gen_boss.py`).
   Leurs variantes `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss mais divergent peu après sa mort,
   par des routines d'autres modules (décompte de fin de scène, `combat_update`, `game_phase12`) : `scenarios/ko/`, qui sont VALIDES jusqu'à l'image
   de l'écart.

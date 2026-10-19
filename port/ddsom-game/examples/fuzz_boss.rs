@@ -146,8 +146,44 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[10], &[0, 2]),
             (&[6], Z, Z),
         ],
+        // boss 8 (guerrier noir 2)
+        8 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6, 8]),
+            (&[2], &[2], &[0, 2, 4, 6, 8]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18]),
+            (&[2], &[6], &[0, 2, 4, 6]),
+            (&[2], &[8], &[0, 2, 4, 6, 8]),
+            (&[2], &[10], &[0, 2]),
+            (&[2], &[12], Z),
+            (&[2], &[14], &[0, 2, 4]),
+            (&[4], &[0], Z),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4], &[0, 2, 4, 6, 8]),
+            (&[4], &[6], &[0, 2, 4, 6, 8]),
+            (&[4], &[8, 10], Z),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide du boss 8.
+fn etape_8(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2, 6) => 3,
+        (2, 2, _) => 2,
+        (2, 4, 0) => 2,
+        (2, 4, 2 | 4 | 6 | 8 | 14 | 16 | 18) => 4,
+        (2, 4, 10) => 5,
+        (2, 4, 12) => 6,
+        (2, 6, _) => 4,
+        (2, 8, 0) => 3,
+        (2, 8, 2 | 4 | 8) => 4,
+        (2, 8, 6) => 6,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
 }
 
 /// Étape `+7` valide du boss 18.
@@ -278,6 +314,9 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     }
     if kind == 18 {
         prep_18(b, alea, obj);
+    }
+    if kind == 8 {
+        prep_8(b, alea, obj);
     }
     if kind == 13 {
         // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
@@ -515,6 +554,58 @@ fn prep_15(b: &mut Bus, alea: &mut Alea, obj: u32) {
         let scroll = rd16(b, A5 + 0x506);
         wr16(b, obj + 8, scroll.wrapping_add(edge));
     }
+}
+
+/// Boss 8 : variables de scène du 17, paramètres propres.
+fn prep_8(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 3, 0);
+    wr8(b, obj + 7, etape_8(alea, s.0, s.1, s.2));
+    wr8(b, A5 + 0x5a, (alea.next() % 4) as u8);
+    wr8(b, obj + 0xad, 1 + (alea.next() % 3) as u8);
+    wr8(b, obj + 0x42, (alea.next() % 4 == 0) as u8);
+    wr8(b, obj + 0x43, (alea.next() % 4 == 0) as u8);
+    wr16(b, obj + 0x62, [0u16, 1, 10, 40, 100, 0x160][alea.next() as usize % 6]);
+    wr16(b, obj + 0x18, [0u16, 0x100, 0xfd00, 0xfc00, 0x300][alea.next() as usize % 5]);
+    wr8(b, obj + 0x3e, (alea.next() % 3 == 0) as u8);
+    wr8(b, obj + 0x4a, pick(alea, &[0, 0x20]));
+    wr8(b, obj + 0x46, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x87, (alea.next() % 2) as u8);
+    wr16(b, obj + 0x60, [0x40u16, 0x100, 0x300][alea.next() as usize % 3]);
+    wr16(b, obj + 0xb6, [0u16, 0x20, 0x50, 0x90][alea.next() as usize % 4]);
+    wr16(b, obj + 0xb4, [0u16, 1, 0xf0, 0xffff][alea.next() as usize % 4]);
+    wr8(b, obj + 0xb8, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xb9, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xba, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xbb, (alea.next() % 4) as u8);
+    wr16(b, obj + 0xbc, [0u16, 1, 2, 0x12c][alea.next() as usize % 4]);
+    wr16(b, obj + 0xbe, [0u16, 0xffff, 0x3c, 1][alea.next() as usize % 4]);
+    wr8(b, obj + 0xab, pick(alea, &[0, 0, 1, 0x10]));
+    wr8(b, obj + 0xac, (alea.next() % 4) as u8);
+    wr8(b, obj + 0xaa, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xae, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xaf, 0);
+    wr8(b, obj + 0xa2, pick(alea, &[0, 1, 3, 4, 0x7f]));
+    wr8(b, obj + 0xa3, pick(alea, &[0, 1, 3, 4, 0x7f]));
+    wr8(b, obj + 0xa5, pick(alea, &[0, 2, 4, 6]));
+    wr32(b, obj + 0xa6, [0x0202_0000u32, 0x0202_0004, 0x0208_0004, 0x0204_0000][alea.next() as usize % 4]);
+    wr16(b, obj + 0xa0, [0u16, 1, 2, 5, 0x14, 0x32][alea.next() as usize % 6]);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x6b, (alea.next() % 4) as u8);
+    wr8(b, obj + 0x6e, (alea.next() % 4) as u8);
+    wr8(b, obj + 0x71, (alea.next() % 4) as u8);
+    wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+    wr16(b, A5 + 0x6e, (alea.next() % 8) as u16);
+    // les tirs de la rafale visent des joueurs distincts : tous en vie
+    if s.0 == 2 && s.1 == 4 && (s.2 == 4 || s.2 == 6 || s.2 == 14) {
+        for j in 0..4u32 {
+            wr8(b, 0xff85de + 0x200 * j, 1);
+        }
+        wr8(b, A5 + 0x35, 1 + (alea.next() % 3) as u8);
+    }
+    close_players(b, alea, obj);
 }
 
 /// Boss 18 : phases, budgets, tir lié, codes de coup valides pour l'étape de réaction.

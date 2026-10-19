@@ -46,6 +46,13 @@ boss18_scene26_mort.txt (scène 26, Lich 18 réécrit dans families/boss_18/, PV
   Le scénario boss18_scene26 de scenarios/boss/ est tronqué à l'image 10 300 (le bot tue le Lich à l'image 10 541, et le même
   game_phase12 diverge à 10 577) : VALIDE sur 12 000 images, le Lich vivant (28 PV).
 
+boss8_scene64_mort.txt (scène 64, DarkWarrior 2 réécrit dans families/boss_8/, PV du boss ramenés à 1 après 1 500 images)
+  validate : écart à l'image 6138 (mots FFD572/FFD574 : vitesse d'un effet EFFCT, 0001/0000 au lieu de 0400/0020), 4 images après
+  le début de la mort du boss (image 6134) ; identique avec DDSOM_SANS=boss ; DDSOM_CHECK=1 et DDSOM_CHECK_FRAME=6138 ne
+  signalent aucun écart ; aucune désactivation d'un seul préfixe ne le supprime. DDSOM_ADOPT_REGS=a,o,p,v,e,s,g (ou tous les
+  préfixes sauf b) le supprime, mais aucun préfixe seul : registres hérités par plusieurs natives d'autres modules, non isolées.
+  VALIDE sur 6 137 images.
+
 Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
 mais qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...`
 fait rendre aux natives nommées les registres de l'original : chercher par dichotomie celle dont un
