@@ -16,7 +16,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 |---|---|---|---|---|
 | 13 | 0x8f59c | 1 352 | dragon noir en vol | 7, 9 (visible aussi pendant 6 et 12 : l'objet survit au changement de scène) |
 | 17 | 0x952b4 | 9 016 | Tel'Arin (h) | 13, 44 (variante 1) — réécrit |
-| 6 | 0x8430e | 5 866 | Manticore | 24 |
+| 6 | 0x8430e | 5 866 | Manticore | 24 — réécrit |
 | 18 | 0x975ec | 7 822 | Lich (h) | 26 |
 | 19 | = 14 (0x8fae4) | 6 732 | dragon vert (h) | 32, 65-66 (variante 1) |
 | 12 / 11 | 0x8d59e | 8 190 | salamandres de feu / de glace | 40 / 42 |
@@ -71,6 +71,19 @@ nul) reste positif ; (2) la phase `+0xaa` (0 à 4) monte quand les PV passent so
 0x31/0x32/0x25/0x27/0x10/0x3b/0x3c et les bulles de dialogue (0xc8312, octet `+0x22` du message = terminé) sont créés
 par le boss ; (6) l'original passe D2/D3 (restes du calcul de terrain 0x24b0) comme vitesse à l'effet 0x1d créé par 0x103ba à la
 mort des variantes 1 et 2 : le natif `video_terrain` laisse donc D3 et D4 comme l'original.
+
+### Type 6 (0x8430e) : Manticore (h), scène 24 — `boss_6/`
+
+Même gabarit que le type 17 (états en longs, tables de décision de la ROM, bibliothèque d'IA 0x103d6..), sans ralenti ni
+phases de cinématique de fin. Animations 0x177874 (sol), 0x17788c (vol), 0x1778a4 (recul). Groupes (`+5`) :
+0 `intro` (bond d'arrivée depuis la droite, atterrissage, attente de la caméra `A5+0x2c` = 0xc), 2 `fight` (attente, demi-tour,
+marche, charge `+6` = 8 vers la caméra ou vers la position mémorisée de la cible si `+0xb2`, tir en bond `+6` = 10 avec un
+ESHL 0x2a), 4 `attacks` (rugissement, deux piqués avec battements d'ailes, bond sur la cible, vol bas avec tir variante 2),
+6 à 12 attente sans joueur, 14 reprise ; état touché dans `hit` (table de réactions 0x8527a dont la seule routine propre,
+0x85326, est l'étourdissement ; mort en cinq temps). Les variantes `+3` non nulles sont des parties liées à l'hôte `+0x46`
+qui meurent avec lui (`guard`, 0x859b2). La phase `+0xaa` (0 à 2) monte par 0x105b6 d'après la table de PV 0x10de2.
+Couverture : fuzz 1 183 instructions sur 1 247 (le reste : tables de choix d'attaque très improbables), contrôle appel par
+appel VALIDE sur le scénario ; `scenarios/ko/boss6_scene24.txt` est VALIDE sur 12 000 images avec `DDSOM_SANS=combat_update`.
 
 ## 3. Validation
 

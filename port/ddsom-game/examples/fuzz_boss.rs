@@ -47,8 +47,38 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[10], Z),
             (&[6], Z, Z),
         ],
+        // boss 6 (Manticore)
+        6 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6, 8, 10, 12, 14]),
+            (&[2], &[2], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[4], &[0, 2, 4, 6, 8]),
+            (&[2], &[6, 8, 10, 12], &[0, 2]),
+            (&[2], &[14], Z),
+            (&[4], &[0], Z),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[6, 8], &[0, 2, 4, 6, 8]),
+            (&[4], &[10], Z),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide du boss 6 pour un état actif `(+4, +5, +6)`.
+fn etape_6(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2, 8) => 3,
+        (2, 2, 10) => 5,
+        (2, 4, 0) => 2,
+        (2, 4, 2) => 5,
+        (2, 4, 4) => 5,
+        (2, 4, 6) => 5,
+        (2, 4, 8) => 7,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
 }
 
 /// Étape `+7` valide du boss 17 pour un état `(+4, +5, +6)` (états actifs ; les états touchés n'en ont pas besoin).
@@ -72,6 +102,9 @@ fn etape_17(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
 fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     if kind == 17 {
         prep_17(b, alea, obj);
+    }
+    if kind == 6 {
+        prep_6(b, alea, obj);
     }
     if kind == 13 {
         // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
@@ -156,6 +189,30 @@ fn prep_17(b: &mut Bus, alea: &mut Alea, obj: u32) {
         wr16(b, q + 0x10, oy.wrapping_add((alea.next() % 0x20) as u16).wrapping_sub(0x10));
         wr16(b, q + 0xc, (alea.next() % 4) as u16);
     }
+}
+
+/// Boss 6 : mêmes variables de scène que le 17 ; paramètres propres.
+fn prep_6(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    wr8(b, obj + 3, if alea.next() % 4 == 0 { 1 } else { 0 });
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_6(alea, s.0, s.1, s.2));
+    wr8(b, obj + 0xaa, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xab, 2);
+    wr8(b, obj + 0xb2, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xb3, (alea.next() % 2) as u8);
+    wr16(b, obj + 0xbc, (alea.next() % 0x400) as u16);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x90, (alea.next() % 20) as u8);
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 2, 3, 4, 0x81, 0x82, 0x84, 0xff]));
+    wr16(b, obj + 0x46, ENEMY.slot(alea.next() % ENEMY.slots).0 as u16);
+    wr8(b, obj + 0x32, (alea.next() % 2) as u8);
+    // un tir lié pour les attaques qui le pilotent
+    let shot = ddsom_game::objects::pools::ESHL.slot(alea.next() % 4).0;
+    wr16(b, obj + 0xb0, shot as u16);
+    wr8(b, shot, (alea.next() % 4 != 0) as u8);
+    wr8(b, shot + 0x5a, (alea.next() % 2) as u8);
 }
 
 /// Variables globales que la boucle de jeu modifie entre deux appels.

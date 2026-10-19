@@ -6,3 +6,8 @@ boss13_dragon.txt (scènes 7 et 9, boss de type 13 réécrit dans families/boss_
   groupe de natives (combat_update, players_*, player_overlays_update, camera1, game, dispatch...) ne supprime
   l'écart : plusieurs routines à la fois, comme les scénarios cov/ (docs/couverture.md).
   DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 : VALIDE sur 12000 images (chaque appel natif du boss comparé à l'original).
+
+boss6_scene24.txt (scène 24, boss de type 6 réécrit dans families/boss_6/)
+  validate : écart à l'image 4265 (mot FF1A6A : drapeaux de touche du joueur 1), identique avec DDSOM_SANS=boss_6.
+  DDSOM_SANS=combat_update : VALIDE sur 12000 images (boss_6 actif) ; c'est l'écart connu de combat_update
+  (docs/couverture.md). Contrôle appel par appel (DDSOM_CHECK=1 DDSOM_CHECK_ALL=1) : VALIDE.
