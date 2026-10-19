@@ -15,7 +15,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | Type | Handler | Octets | Nom (h) | Scènes |
 |---|---|---|---|---|
 | 13 | 0x8f59c | 1 352 | dragon noir en vol | 7, 9 (visible aussi pendant 6 et 12 : l'objet survit au changement de scène) |
-| 17 | 0x952b4 | 9 016 | Tel'Arin (h) | 13, 44 (variante 1) |
+| 17 | 0x952b4 | 9 016 | Tel'Arin (h) | 13, 44 (variante 1) — réécrit |
 | 6 | 0x8430e | 5 866 | Manticore | 24 |
 | 18 | 0x975ec | 7 822 | Lich (h) | 26 |
 | 19 | = 14 (0x8fae4) | 6 732 | dragon vert (h) | 32, 65-66 (variante 1) |
@@ -54,8 +54,27 @@ L'octet `0xff0ec6` (`A5-0x713a`) force le départ. Les états 4 et 6 de `+4` app
 ne libère pas le boss par `0x2234` : ils ne sont jamais atteints). Couverture : fuzz `fuzz_boss` (300 instructions sur 301 en
 300 tours, toutes en 600), `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1` sur le scénario (12 000 images : VALIDE).
 
+### Type 17 (0x952b4) : boss des scènes 13 et 44 — `boss_17/`
+
+Combattant à trois variantes (`+3`) : 0 est le boss de la scène 13, 1 et 2 des apparitions annexes (scène 44). Animations
+0x18076e (mouvements), 0x1807a2 (coups), 0x1807c0 (recul) ; `+0xa0` est le jeu courant (0x30 à 0x34 : séquences
+spéciales sans ombre ni test de zone). Fichiers : `mod.rs` (boucle, création, champs `g::*`), `intro.rs` (`+5` = 0 : arrivée,
+entrée, mort et cinématique de fin, variantes 1 et 2), `fight.rs` (`+5` = 2 : attente, demi-tour, marche, charge),
+`decide.rs` (changements d'état et tirages dans les tables de la ROM : choix d'attaque selon la distance, difficulté,
+nombre de joueurs), `attacks.rs` (`+5` = 4 : neuf attaques `+6` = 0 à 16), `hit.rs` (état touché : réactions par la table
+0x96a0c dont une seule, 0x96ab8, est propre au boss, recul, relevé, mort).
+
+Particularités : (1) la boucle `run` rejoue la logique dans la même image tant que le compte `+0xba` du ralenti (`+0xbb` non
+nul) reste positif ; (2) la phase `+0xaa` (0 à 4) monte quand les PV passent sous les seuils de 0x10ee2 (variante 0) / 0x110e2
+(105b6) et règle le choix des attaques ; (3) `+0xad` non nul rend invulnérable (`+0x38` remis à zéro) ; (4) le long d'état
+`+4..+7` est posé d'un coup (`0x0202_0400` = actif, combat, marche) ; (5) les tirs ESHL 0x20/0x21, les effets EFFCT
+0x31/0x32/0x25/0x27/0x10/0x3b/0x3c et les bulles de dialogue (0xc8312, octet `+0x22` du message = terminé) sont créés
+par le boss ; (6) l'original passe D2/D3 (restes du calcul de terrain 0x24b0) comme vitesse à l'effet 0x1d créé par 0x103ba à la
+mort des variantes 1 et 2 : le natif `video_terrain` laisse donc D3 et D4 comme l'original.
+
 ## 3. Validation
 
+* `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
 * `scenarios/boss/` : un scénario par boss (entrée directe dans la scène par `poke8 ff8034`, bot `autobot`, PV du boss
   intacts), générés par `tools/gen_boss.py` ; `tools/validate_all.sh` les lance sur 12 000 images.
 * `scenarios/ko/boss13_dragon.txt` : le dragon diverge dès l'image 3100 (fraction de X du joueur 1), avec ou sans son natif

@@ -23,6 +23,7 @@ FRAMES = 12000
 # nom -> (type de boss, scènes "scène:images,...", crans du curseur, PV du joueur remis à, affaiblissement, dossier)
 # dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/LISEZMOI.txt)
 SPECS = {
+    "boss17_scene13": (17, "13:11000", 0, "0x70", 0, "boss"),
     "boss13_dragon": (13, "7:3000,9:3000", 0, "0x70", 0, "ko"),
 }
 

@@ -17,6 +17,8 @@ use crate::objects::Obj;
 pub mod var {
     /// Abscisse de la caméra 1 (mot).
     pub const SCROLL_X: u32 = 0x506;
+    /// Ordonnée de la caméra 1 (mot ; long avec la fraction).
+    pub const SCROLL_Y: u32 = 0x50a;
     /// Objet suivi par la caméra (mot, adresse RAM ; 0 = aucun) : le « meneur » que certains boss accompagnent.
     pub const LEADER: u32 = 0x46;
     /// Octet non nul : tout est figé (le gestionnaire du boss ne fait rien).
