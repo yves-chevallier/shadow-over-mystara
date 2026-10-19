@@ -1580,6 +1580,7 @@ mod finale52 {
 
     /// Sous-type 0 : suit l'animation de lancement, puis lance trois éléments et colle à côté du boss.
     fn orb(x: &mut Cx, boss: Obj) {
+        let mut source = boss;
         if x.u8(0x5) == 0 {
             if !x.anim_step() {
                 return attach(x, boss);
@@ -1587,10 +1588,13 @@ mod finale52 {
             x.add8(0x5, 2);
             spawn_followers(x);
             x.anim_start(ANIMS, 0x1b);
+            // l'original recopie ensuite la position depuis A1, qui est alors le dernier élément créé
+            // (et non le boss) : l'objet prend les coordonnées de ce nouvel élément
+            source = Obj(x.c.a[1]);
         }
         x.call(sub::ANIM_STEP);
-        copy_xyz16(x, boss);
-        copy_flip(x, boss);
+        copy_xyz16(x, source);
+        copy_flip(x, source);
         let dx = if x.u8(f::FLIP) != 0 { 8 } else { neg(8) };
         x.add16(0x8, dx);
         x.add16(0xc, 0xe);
@@ -1732,7 +1736,9 @@ mod finale52 {
                     x.set_a5_u16(FLAG_4BA, 0);
                     x.call(sub::ANIM_STEP);
                     fall_check(x);
-                    cover_screen(x, Some(boss));
+                    // piège de l'original : la boucle des joueurs a laissé A1 après le quatrième joueur
+                    // (0xff8dde) et 0xa49fc incrémente le mot +0x12 de cet « objet », pas celui du boss
+                    cover_screen(x, Some(Obj(0xff_8000 + PLAYERS + 4 * PLAYER_SIZE)));
                 }
                 settle(x);
             }

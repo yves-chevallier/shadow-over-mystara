@@ -236,9 +236,21 @@ fn table_entry(v: &mut Vue, table: u32, n: u32, program: bool) -> u32 {
     }
 }
 
+/// Fin du chargeur de palettes de scène : de quoi reconstituer les registres de l'original.
+struct StageEnd {
+    /// Destination suivante (A4).
+    dst: u32,
+    /// Fin de la liste de déplacements lue (A6).
+    list: u32,
+    /// Dernière palette copiée (destination), dont les huit longs restent dans D1-D6, A1, A2.
+    last: Option<u32>,
+    /// Adresse des palettes supplémentaires (D1 si nulle, A3 = adresse + 96 sinon).
+    extra: u32,
+}
+
 /// 0x1a36c : palettes de la scène `d0` (octet bas) à partir de `dst`, puis palettes supplémentaires
-/// de la scène en cours (`A5 + 0x34`). Rend l'adresse suivante.
-fn load_stage_palettes(v: &mut Vue, a5: u32, d0: u32, mut dst: u32) -> u32 {
+/// de la scène en cours (`A5 + 0x34`).
+fn load_stage_palettes(v: &mut Vue, a5: u32, d0: u32, mut dst: u32) -> StageEnd {
     let stage = d0 as u8;
     let count = if v.pris((stage as i8) < FULL_RANGE.start as i8) {
         29
@@ -248,11 +260,13 @@ fn load_stage_palettes(v: &mut Vue, a5: u32, d0: u32, mut dst: u32) -> u32 {
         32
     };
     let mut list = STAGE_PALETTES + ((d0 as u16) << 6) as i16 as u32;
+    let mut last = None;
     for i in 0..count {
         let offset = v.rd16(list);
         list += 2;
         if !v.pris(offset & 0x8000 != 0) {
             copy_palette(v, LIBRARY + offset as i16 as u32, dst);
+            last = Some(dst);
         }
         dst += PALETTE_BYTES;
         v.pris(i + 1 < count);
@@ -262,11 +276,43 @@ fn load_stage_palettes(v: &mut Vue, a5: u32, d0: u32, mut dst: u32) -> u32 {
     if !v.pris(extra == 0) {
         for i in 0..EXTRA_PALETTES {
             copy_palette(v, extra + i * PALETTE_BYTES, dst);
+            last = Some(dst);
             dst += PALETTE_BYTES;
             v.pris(i + 1 < EXTRA_PALETTES);
         }
     }
-    dst
+    StageEnd { dst, list, last, extra }
+}
+
+/// Les huit longs d'une palette, tels que `movem.l (A),{D1-D6,A1,A2}` les charge.
+fn palette_longs(b: &mut Cps2Bus, at: u32) -> [u32; 8] {
+    std::array::from_fn(|i| rd32(b, at + 4 * i as u32))
+}
+
+fn set_low_word(r: &mut u32, v: u16) {
+    *r = *r & 0xffff_0000 | v as u32;
+}
+
+/// Registres que 0x1a36c laisse : D0 = scène en cours x 4, D1-D6/A1/A2 = dernière palette copiée
+/// (D1 = 0 s'il n'y a pas de palettes supplémentaires), A3, A4, A6, D7 = 0xffff.
+fn stage_regs(c: &mut Cpu, b: &mut Cps2Bus, end: &StageEnd) {
+    let current = rd8(b, c.a[5] + STAGE_VAR) as u32;
+    c.d[0] = (current << 2) & 0xffff;
+    if let Some(at) = end.last {
+        let l = palette_longs(b, at);
+        c.d[1..7].copy_from_slice(&l[..6]);
+        c.a[1] = l[6];
+        c.a[2] = l[7];
+    }
+    if end.extra == 0 {
+        c.d[1] = 0;
+        c.a[3] = STAGE_EXTRA;
+    } else {
+        c.a[3] = end.extra + EXTRA_PALETTES * PALETTE_BYTES;
+    }
+    c.d[7] = 0xffff;
+    c.a[4] = end.dst;
+    c.a[6] = end.list;
 }
 
 /// Arguments de 0x1a350 / 0x1a360 / 0x1a366 : numéro de scène chargé (D0) et destination.
@@ -283,8 +329,8 @@ fn stage_args(b: &mut Cps2Bus, c: &Cpu, entry: u32) -> (u32, u32) {
 
 fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
     let (d0, dst) = stage_args(b, c, entry);
-    c.a[4] = load_stage_palettes(&mut Vue::reelle(b), c.a[5], d0, dst);
-    c.d[0] = d0;
+    let end = load_stage_palettes(&mut Vue::reelle(b), c.a[5], d0, dst);
+    stage_regs(c, b, &end);
     rts(c, b);
 }
 
@@ -307,7 +353,8 @@ pub const STAGE_SCROLL1: Native = exact(0x1a350, "palette_scene_scroll1", |c, b|
 const SETS: u32 = 0x1a3fc;
 const PAGE_PALETTES: u32 = 32;
 
-fn load_set(v: &mut Vue, d0: u32) {
+/// Rend l'adresse source (0 : ensemble absent).
+fn load_set(v: &mut Vue, d0: u32) -> u32 {
     let source = table_entry(v, SETS, d0, false);
     if !v.pris(source == 0) {
         for i in 0..PAGE_PALETTES {
@@ -315,16 +362,33 @@ fn load_set(v: &mut Vue, d0: u32) {
             v.pris(i + 1 < PAGE_PALETTES);
         }
     }
+    source
 }
 
 fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
-    load_set(&mut Vue::reelle(b), c.d[0]);
+    let source = load_set(&mut Vue::reelle(b), c.d[0]);
+    // registres de l'original : D0.w décalé, A4 = fin de la page, A3 = fin de la source
+    let shifted = (c.d[0] as u16) << 2;
+    set_low_word(&mut c.d[0], shifted);
+    if source == 0 {
+        c.d[1] = 0;
+        c.a[3] = SETS;
+        c.a[4] = PALETTES;
+    } else {
+        let l = palette_longs(b, PALETTES + (PAGE_PALETTES - 1) * PALETTE_BYTES);
+        c.d[1..7].copy_from_slice(&l[..6]);
+        c.a[1] = l[6];
+        c.a[2] = l[7];
+        set_low_word(&mut c.d[7], 0xffff);
+        c.a[3] = source + PAGE_PALETTES * PALETTE_BYTES;
+        c.a[4] = PALETTES + PAGE_PALETTES * PALETTE_BYTES;
+    }
     rts(c, b);
 }
 
 fn set_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
     let mut v = Vue::simulee(b);
-    load_set(&mut v, c.d[0]);
+    let _ = load_set(&mut v, c.d[0]);
     v.chemin.duree(b, 0x1a3d4)
 }
 
@@ -334,13 +398,34 @@ pub const LOAD_SET: Native = exact(0x1a3d4, "palette_ensemble", set_cost, set_ru
 const PAGE_TABLES: [(u32, u32, u32); 3] = [(0x1a62c, 0x1a608, 0x1a60a), (0x1a6a0, 0x1a678, 0x1a67e), (0x1a8d4, 0x1a8ac, 0x1a8b2)];
 
 /// Les 32 palettes de la page `k + 1` d'après la table de la page, entrée `d0`.
-fn load_page(v: &mut Vue, k: usize, d0: u32) {
+fn load_page(v: &mut Vue, k: usize, d0: u32) -> u32 {
     let source = table_entry(v, PAGE_TABLES[k].0, d0, true);
     let page = PALETTES + PAGE_SIZE * (k as u32 + 1);
     for i in 0..PAGE_PALETTES {
         copy_palette(v, source + i * PALETTE_BYTES, page + i * PALETTE_BYTES);
         v.pris(i + 1 < PAGE_PALETTES);
     }
+    source
+}
+
+/// Registres que laisse un chargeur de page : D0-D6 = sept premiers longs de la dernière palette,
+/// le huitième dans A4 (pages 1 et 2) ou A2 (page 3) ; source et destination (fin) dans A2/A3
+/// (pages 1 et 2) ou A4/A1 (page 3) ; D7.w = -1.
+fn page_regs(c: &mut Cpu, b: &mut Cps2Bus, k: usize, source: u32) {
+    let page = PALETTES + PAGE_SIZE * (k as u32 + 1);
+    let l = palette_longs(b, page + (PAGE_PALETTES - 1) * PALETTE_BYTES);
+    c.d[..7].copy_from_slice(&l[..7]);
+    let (source_end, page_end) = (source + PAGE_PALETTES * PALETTE_BYTES, page + PAGE_PALETTES * PALETTE_BYTES);
+    if k < 2 {
+        c.a[4] = l[7];
+        c.a[2] = source_end;
+        c.a[3] = page_end;
+    } else {
+        c.a[2] = l[7];
+        c.a[4] = source_end;
+        c.a[1] = page_end;
+    }
+    set_low_word(&mut c.d[7], 0xffff);
 }
 
 /// D0 effectif d'un chargeur de page : celui de l'appelant pour l'entrée « D0 », sinon 0 (page 1)
@@ -357,8 +442,8 @@ fn page_d0(b: &mut Cps2Bus, c: &Cpu, k: usize, entry: u32) -> u32 {
 
 fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
     let d0 = page_d0(b, c, k, entry);
-    load_page(&mut Vue::reelle(b), k, d0);
-    c.d[0] = d0;
+    let source = load_page(&mut Vue::reelle(b), k, d0);
+    page_regs(c, b, k, source);
     rts(c, b);
 }
 
@@ -410,11 +495,14 @@ fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
     let entry = if special.is_some() { 0x1a350 } else { 0x1a360 };
     let (d0, dst) = stage_args(b, c, entry);
     // une vue par chargeur : chacun a ses propres décisions de boucle
-    load_stage_palettes(&mut Vue::reelle(b), c.a[5], d0, dst);
-    load_page(&mut Vue::reelle(b), 0, 0);
-    load_page(&mut Vue::reelle(b), 1, stage as u32);
-    load_page(&mut Vue::reelle(b), 2, stage as u32);
+    let end = load_stage_palettes(&mut Vue::reelle(b), c.a[5], d0, dst);
+    stage_regs(c, b, &end);
+    for (k, d0) in [(0, 0), (1, stage as u32), (2, stage as u32)] {
+        let source = load_page(&mut Vue::reelle(b), k, d0);
+        page_regs(c, b, k, source);
+    }
     wr16(b, CLEARED_WORD, 0);
+    c.flags_logic(0, m68k::decode::Size::Word);
     if let Some(sources) = special {
         for (k, source) in sources.into_iter().enumerate() {
             wr32(b, c.a[5] + FADE_SOURCES + 4 * k as u32, source);

@@ -10,7 +10,7 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     ddsom_game::install(&mut m);
-    m.set_overclock(16.0);
+    m.set_overclock(std::env::var("DDSOM_OVERCLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(16.0));
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let (from, to): (usize, usize) = (a[4].parse().unwrap(), a[5].parse().unwrap());
     let target = u32::from_str_radix(&a[6], 16).unwrap();

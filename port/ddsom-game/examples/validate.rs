@@ -19,10 +19,11 @@ const OVERCLOCK: f64 = 16.0;
 /// Mots de RAM sans signification propre : piles des tâches (FF0900-FF0FFF : la pile de la première tâche
 /// déborde sous FF0A00 quand les appels sont profonds), pile logicielle de
 /// l'interruption (FF2900-FF2A19), et le mot d'état de chaque tâche (FF0064 + 16 k), qui vaut
-/// « prête » ou « en cours » selon l'instant exact de la fin d'image pour une tâche de fond.
+/// « prête » ou « en cours » selon l'instant exact de la fin d'image pour une tâche de fond, et la
+/// dernière tâche lancée par l'ordonnanceur (FF0058, écrit en 0x96c : même raison).
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    (0x0900..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
+    a == 0x58 || (0x0900..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
 }
 
 fn first_diff(a: &[u16], b: &[u16]) -> Option<usize> {
@@ -94,7 +95,11 @@ fn main() {
     println!("{frames} images en {:.1?}", t0.elapsed());
     let report = ddsom_game::report();
     for (name, st) in &report {
-        let errors = if check { format!(" {:>5} écarts", st.mismatches) } else { String::new() };
+        let errors = if check {
+            format!(" {:>5} écarts, cycles {} (natif {})", st.mismatches, st.original_cycles, st.native_cycles)
+        } else {
+            String::new()
+        };
         println!("  {name:28} {:>8} appels{errors}{}", st.calls, st.first.as_ref().map(|f| format!(" — {f}")).unwrap_or_default());
     }
     if std::env::var("DDSOM_CHECK_ALL").is_ok() {

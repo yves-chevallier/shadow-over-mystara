@@ -160,6 +160,8 @@ struct Camera1<'a> {
     x: Exec<'a>,
     a5: u32,
     cam: u32,
+    /// D4 laissé par la dernière recopie (0x3f : colonne, 0x40 : ligne), relu par les routines suivantes.
+    d4: Option<u32>,
 }
 
 /// Ce qui suit un pas de recopie : reprendre les tests, ou quitter la routine.
@@ -382,6 +384,7 @@ impl Camera1<'_> {
         if !right && pris!(self, (drawn as i16) < 0) {
             return Step::Return;
         }
+        self.d4 = Some(0x3f);
         let d3 = self.row_offset_down();
         let d2 = if right { self.column_right() } else { self.column_left() };
         let mut a1 = hw::SCROLL2 + (d2 & 0xfc0) as u32;
@@ -420,6 +423,7 @@ impl Camera1<'_> {
         if !down && pris!(self, (drawn as i16) < 0) {
             return Step::Return;
         }
+        self.d4 = Some(0x40);
         let d3 = if down { self.row_offset_down() } else { self.row_offset_up() };
         let d2 = self.column_left();
         let mut column = d2 & 0xfc0;
@@ -454,11 +458,15 @@ fn layer_row_offset(page: u16, y: u16) -> u16 {
 }
 
 fn camera<'a>(x: Exec<'a>, c: &Cpu) -> Camera1<'a> {
-    Camera1 { x, a5: c.a[5], cam: c.a[0] }
+    Camera1 { x, a5: c.a[5], cam: c.a[0], d4: None }
 }
 
 fn after_mode_run(c: &mut Cpu, b: &mut Cps2Bus) {
-    camera(Exec::real(b), c).after_mode();
+    let mut cam = camera(Exec::real(b), c);
+    cam.after_mode();
+    if let Some(d4) = cam.d4 {
+        c.d[4] = d4;
+    }
     rts(c, b);
 }
 
@@ -469,7 +477,11 @@ fn after_mode_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
 }
 
 fn draw_run(c: &mut Cpu, b: &mut Cps2Bus) {
-    camera(Exec::real(b), c).draw();
+    let mut cam = camera(Exec::real(b), c);
+    cam.draw();
+    if let Some(d4) = cam.d4 {
+        c.d[4] = d4;
+    }
     rts(c, b);
 }
 
@@ -519,6 +531,8 @@ struct Camera2<'a> {
     x: Exec<'a>,
     a5: u32,
     cam: u32,
+    /// D4 laissé par la dernière recopie : 0x1f (long) pour une colonne, 0xe0 (mot bas) pour une ligne.
+    d4: Option<(u32, u32)>,
 }
 
 impl Camera2<'_> {
@@ -695,6 +709,7 @@ impl Camera2<'_> {
             return Step::Return;
         }
         let d3 = self.row_offset(true);
+        self.d4 = Some((0x1f, u32::MAX));
         let d2 = self.column_x(right);
         let mut a1 = hw::SCROLL3 + (d2 & 0x7e0) as u32;
         self.row_cursor(true);
@@ -743,6 +758,7 @@ impl Camera2<'_> {
             }
         }
         let d3 = self.row_offset(down);
+        self.d4 = Some((0xe0, 0xffff));
         let mut column = self.column_x(false) & 0x7e0;
         let a1 = hw::SCROLL3 + d3 as u32;
         self.row_cursor(down);
@@ -768,11 +784,15 @@ impl Camera2<'_> {
 }
 
 fn camera2<'a>(x: Exec<'a>, c: &Cpu) -> Camera2<'a> {
-    Camera2 { x, a5: c.a[5], cam: c.a[0] }
+    Camera2 { x, a5: c.a[5], cam: c.a[0], d4: None }
 }
 
 fn draw2_run(c: &mut Cpu, b: &mut Cps2Bus) {
-    camera2(Exec::real(b), c).draw();
+    let mut cam = camera2(Exec::real(b), c);
+    cam.draw();
+    if let Some((value, mask)) = cam.d4 {
+        c.d[4] = c.d[4] & !mask | value;
+    }
     rts(c, b);
 }
 
