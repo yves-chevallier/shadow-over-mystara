@@ -178,9 +178,8 @@ magique. Animations 0x181ae0 (mouvements), 0x181af2 (coups), 0x181b10 (réaction
 `attacks.rs` (onze attaques : coup, pas de côté, geste à suite tirée, poursuite magique, bond arrière, boule ESHL 0x20, rayon ESHL
 0x21, onde de choc qui renverse les joueurs, téléportation, pluie de 16 tirs 0x23, salve de tirs 0x24), `hit.rs`.
 Couverture : fuzz 1 538 instructions sur 1 642 (VALIDE, natives `ai_pick_target_any` et `son_enfiler` désactivées : écarts connus
-de durée et de drapeau X). Le scénario `boss18_scene26` (tronqué à l'image 10 300 par `gen_boss.py`) est VALIDE sur 12 000 images
-(7 125 appels) ; le bot tue le Lich à l'image 10 541 si on le laisse jouer, ce qui exerce toute la mort jusqu'à l'image 10 576
-(après quoi `game_phase12` diverge).
+de durée et de drapeau X). Le scénario `boss18_scene26` (tronqué à l'image 10 900 par `gen_boss.py`) est VALIDE sur 12 000 images
+(7 125 appels) ; le bot tue le Lich à l'image 10 541, la mort et la fin de scène sont donc exercées.
 
 ### Type 8 (0x87fc0) : DarkWarrior 2, scène 64 — `boss_8/`
 
@@ -206,8 +205,7 @@ l'attaque suivante se fait dans des tables de 0x200 octets de la ROM (lignes de 
 Animations : 0x1790f6 (mouvements), 0x179116 (coups). Fuzz : 257 000 appels sans écart (couverture 1 471 instructions sur
 1 493 ; restent un cas inatteignable de `fight` — le nombre de joueurs en vie qui devient nul pendant l'étape —, deux sorties
 du tirage « loin » de 0x8a432 et le choix de la troisième attaque en ralenti). Le scénario `boss8_scene64` est VALIDE sur
-12 000 images (8 305 appels), le boss vivant (602 PV) ; le scénario de mort diverge à l'image 6138 à cause d'autres modules
-(`scenarios/ko/README.md`).
+12 000 images (8 305 appels), le boss vivant (602 PV) ; `boss8_scene64_mort` (mort à l'image 6 134) est VALIDE sur 12 000 images.
 
 ### Types 11 et 12 (0x8d59e) : salamandres, scènes 42 et 40 — `boss_11/`
 
@@ -242,10 +240,9 @@ de la table 0x9e6bc (D0 remis à zéro avant la lecture) et non celui de la lign
 
 * `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
 * `scenarios/boss/boss5_scene58.txt`, `boss21_scene44.txt`, `boss19_scene32.txt`, `boss15_scene46.txt`, `boss18_scene26.txt`, `boss8_scene64.txt`, `boss11_scene42.txt`, `boss12_scene40.txt` : VALIDES sur 12 000 images (2 460, 9 266, 9 044, 8 963, 7 125, 8 305, 9 123 et 9 139 appels ;
-  `boss18_scene26` et `boss12_scene40` sont tronqués à l'image 10 300 par `gen_boss.py` : la suite diverge par `combat_update`, voir `scenarios/ko/README.md`).
-  Leurs variantes `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss mais divergent peu après sa mort,
-  par des routines d'autres modules (décompte de fin de scène, `combat_update`, `game_phase12`) : `scenarios/ko/`, qui sont VALIDES jusqu'à l'image
-  de l'écart.
+  `boss18_scene26` est tronqué à l'image 10 900 par `gen_boss.py`, voir `scenarios/ko/README.md`).
+  Leurs variantes `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss et exercent sa mort et la fin
+  de scène : VALIDES sur 12 000 images, tronquées par `gen_boss.py` avant les boutons qui déclenchent l'avance rapide.
 * `scenarios/boss/` : un scénario par boss (entrée directe dans la scène par `poke8 ff8034`, bot `autobot`, PV du boss
   intacts), générés par `tools/gen_boss.py` ; `tools/validate_all.sh` les lance sur 12 000 images.
 * `scenarios/ko/boss13_dragon.txt` : le dragon diverge dès l'image 3100 (fraction de X du joueur 1), avec ou sans son natif

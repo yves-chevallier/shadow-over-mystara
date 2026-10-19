@@ -1431,3 +1431,120 @@
 10292 P1 Left 0
 10295 P1 Button 1 1
 10299 P1 Button 1 0
+10303 P1 Left 1
+10303 P1 Button 1 1
+10305 P1 Left 0
+10307 P1 Button 1 0
+10311 P1 Button 1 1
+10315 P1 Button 1 0
+10319 P1 Left 1
+10319 P1 Button 1 1
+10321 P1 Left 0
+10323 P1 Button 1 0
+10324 P1 Down 0
+10327 P1 Button 1 1
+10331 P1 Button 1 0
+10334 P1 Left 1
+10335 P1 Button 1 1
+10339 P1 Button 1 0
+10343 P1 Button 1 1
+10347 P1 Button 1 0
+10351 P1 Button 1 1
+10355 P1 Button 1 0
+10359 P1 Button 1 1
+10363 P1 Button 1 0
+10367 P1 Button 1 1
+10371 P1 Button 1 0
+10375 P1 Button 1 1
+10379 P1 Button 1 0
+10400 P1 Down 1
+10402 P1 Left 0
+10407 P1 Button 1 1
+10411 P1 Button 1 0
+10415 P1 Left 1
+10415 P1 Button 1 1
+10417 P1 Left 0
+10419 P1 Button 1 0
+10423 P1 Button 1 1
+10427 P1 Button 1 0
+10431 P1 Left 1
+10431 P1 Button 1 1
+10433 P1 Left 0
+10435 P1 Button 1 0
+10439 P1 Down 0
+10439 P1 Button 1 1
+10443 P1 Left 1
+10443 P1 Button 1 0
+10445 P1 Left 0
+10447 P1 Left 1
+10447 P1 Button 1 1
+10449 P1 Left 0
+10451 P1 Button 1 0
+10455 P1 Button 1 1
+10459 P1 Button 1 0
+10463 poke16 ff8640 112
+10463 P1 Left 1
+10463 P1 Button 1 1
+10465 P1 Left 0
+10467 P1 Button 1 0
+10471 P1 Button 1 1
+10475 P1 Button 1 0
+10479 P1 Left 1
+10479 P1 Button 1 1
+10481 P1 Left 0
+10482 P1 Left 1
+10483 P1 Button 1 0
+10487 P1 Button 1 1
+10491 P1 Button 1 0
+10495 P1 Button 1 1
+10499 P1 Button 1 0
+10500 P1 Left 0
+10503 P1 Button 1 1
+10507 P1 Button 1 0
+10509 P1 Button 2 1
+10510 Coin 1 1
+10510 P1 Button 2 0
+10511 P1 Left 1
+10511 P1 Button 1 1
+10513 P1 Left 0
+10515 P1 Button 1 0
+10516 Coin 1 0
+10519 P1 Button 1 1
+10523 P1 Button 1 0
+10527 P1 Left 1
+10527 P1 Button 1 1
+10529 P1 Left 0
+10531 P1 Button 1 0
+10535 P1 Button 1 1
+10538 P1 Left 1
+10539 P1 Button 1 0
+10540 1 Player Start 1
+10541 poke16 ff8640 112
+10541 P1 Up 1
+10546 1 Player Start 0
+10656 P1 Up 0
+10681 P1 Button 2 1
+10682 P1 Button 2 0
+10796 P1 Down 1
+10802 P1 Down 0
+10834 P1 Button 1 1
+10835 P1 Button 1 0
+10839 P1 Button 1 1
+10843 P1 Button 1 0
+10847 P1 Button 1 1
+10851 P1 Button 1 0
+10855 P1 Button 1 1
+10859 P1 Button 1 0
+10863 P1 Button 1 1
+10867 P1 Button 1 0
+10871 P1 Button 1 1
+10875 P1 Button 1 0
+10879 P1 Button 1 1
+10883 P1 Button 1 0
+10887 P1 Button 1 1
+10889 P1 Button 2 1
+10890 P1 Button 2 0
+10891 P1 Button 1 0
+10895 P1 Button 1 1
+10899 P1 Button 1 0
+10901 P1 Left 0
