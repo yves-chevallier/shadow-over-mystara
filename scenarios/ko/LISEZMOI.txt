@@ -1,0 +1,8 @@
+Scénarios dont l'écart avec le code d'origine ne vient pas de la routine qu'ils exercent.
+
+boss13_dragon.txt (scènes 7 et 9, boss de type 13 réécrit dans families/boss_dragon.rs)
+  validate : écart à l'image 3100 (mot FF85E8 = fraction de X du joueur 1), identique avec DDSOM_SANS=boss
+  (natif du boss désactivé) ; toutes natives désactivées (DDSOM_SANS=,) : VALIDE. Aucune désactivation d'un seul
+  groupe de natives (combat_update, players_*, player_overlays_update, camera1, game, dispatch...) ne supprime
+  l'écart : plusieurs routines à la fois, comme les scénarios cov/ (docs/couverture.md).
+  DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 : VALIDE sur 12000 images (chaque appel natif du boss comparé à l'original).
