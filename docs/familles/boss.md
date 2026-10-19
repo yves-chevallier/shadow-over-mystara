@@ -24,7 +24,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 15 | 0x91530 | 7 470 | dragon rouge | 46 |
 | 5 | 0x8341c | 3 826 | Ezerhorden | 58 |
 | 8 | 0x87fc0 | 10 140 | DarkWarrior 2 | 64 |
-| 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 |
+| 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 — réécrit |
 
 Les types 0 à 4 (Ogre, Displacer Beast, Man Scorpion, Harpy, Chimera) n'ont été vus dans aucune scène 1-68 ni dans les
 scénarios `cov_*` : le jeu les joue comme ENEMY (types 4, 19, 20, 21, 22...). Les types 14 et 19, 15 et 20, 11 et 12 partagent un handler.
@@ -84,6 +84,17 @@ ESHL 0x2a), 4 `attacks` (rugissement, deux piqués avec battements d'ailes, bond
 qui meurent avec lui (`guard`, 0x859b2). La phase `+0xaa` (0 à 2) monte par 0x105b6 d'après la table de PV 0x10de2.
 Couverture : fuzz 1 183 instructions sur 1 247 (le reste : tables de choix d'attaque très improbables), contrôle appel par
 appel VALIDE sur le scénario ; `scenarios/ko/boss6_scene24.txt` est VALIDE sur 12 000 images avec `DDSOM_SANS=combat_update`.
+
+### Type 10 (0x8ca4a) : Nagpa (h), scènes 65 et 66 — `boss_10.rs`
+
+Le plus court des boss, même gabarit. À sa création il joue l'ouverture (`+5` = 0) quand la scène l'autorise (`A5+0x2e` = 6) :
+il crée un ennemi de type 18 (variante 0xff) et un boss de type 19 (variante 1) liés à lui par `+0x46`. Combat (`+5` = 2) :
+attente, demi-tour, marche vers un joueur, puis saut sur une position tirée autour de la caméra (`+6` = 6) ; selon la
+distance, tir (`+5` = 4) : ESHL 0x21 lâché en cinématique (`A5+0x51e` = 4). Choix de la suite (`next_action`, 0x8d526) :
+table de 32 octets (étapes 0, 4 ou 6). Touché : table 0x8d176 dont l'étourdissement 0x8d294 (compteur de coups `+0x84`),
+relevé, mort en cinq temps. Sources de piège : `0x43ae` reçoit D2 en entrée et le modifie (le saut ajoute le D2 qu'il rend si
+aucun joueur n'est trouvé) ; le natif `ai_pick_target_any` a une durée estimée qui diffère de l'original de 10 à 20 cycles
+(sans effet sur l'état). Couverture : fuzz 573 instructions sur 578.
 
 ## 3. Validation
 

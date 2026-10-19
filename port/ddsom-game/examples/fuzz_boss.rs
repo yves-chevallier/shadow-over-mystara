@@ -62,8 +62,34 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[10], Z),
             (&[6], Z, Z),
         ],
+        // boss 10 (Nagpa)
+        10 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6]),
+            (&[2], &[2], &[0, 2, 4, 6]),
+            (&[2], &[4], &[0]),
+            (&[2], &[4], &[2]),
+            (&[2], &[6], &[0, 2]),
+            (&[4], &[0], &[0, 2, 4]),
+            (&[4], &[2], Z),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[6, 8], &[0, 2, 4, 6, 8]),
+            (&[4], &[10], Z),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide du boss 10 pour un état actif `(+4, +5, +6)`.
+fn etape_10(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2, 6) => 3,
+        (2, 4, 0) => 2,
+        (2, 4, 2) => 6,
+        _ => 2,
+    };
+    2 * (alea.next() % n) as u8
 }
 
 /// Étape `+7` valide du boss 6 pour un état actif `(+4, +5, +6)`.
@@ -105,6 +131,9 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     }
     if kind == 6 {
         prep_6(b, alea, obj);
+    }
+    if kind == 10 {
+        prep_10(b, alea, obj);
     }
     if kind == 13 {
         // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
@@ -211,6 +240,31 @@ fn prep_6(b: &mut Bus, alea: &mut Alea, obj: u32) {
     // un tir lié pour les attaques qui le pilotent
     let shot = ddsom_game::objects::pools::ESHL.slot(alea.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
+    wr8(b, shot, (alea.next() % 4 != 0) as u8);
+    wr8(b, shot + 0x5a, (alea.next() % 2) as u8);
+}
+
+/// Boss 10 : mêmes variables de scène que le 17 ; paramètres propres.
+fn prep_10(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    wr8(b, obj + 3, 0);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_10(alea, s.0, s.1, s.2));
+    if s.0 == 4 && s.1 == 0 && s.2 != 0 {
+        // les étapes 2 et 4 de la réaction sont celles de l'étourdissement (code 0x4c)
+        wr8(b, obj + 0x49, 0x4c);
+    }
+    wr8(b, A5 + 0x2e, pick(alea, &[0, 6, 6]));
+    wr16(b, obj + 0x84, (alea.next() % 6) as u16);
+    wr8(b, obj + 0x90, (alea.next() % 20) as u8);
+    wr8(b, obj + 0xae, pick(alea, &[0, 1, 2, 0xfa]));
+    wr16(b, obj + 0xa6, (alea.next() % 5) as u16);
+    wr16(b, obj + 0xaa, (alea.next() % 0x400) as u16);
+    wr16(b, obj + 0xac, (alea.next() % 0x200) as u16);
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0xff]));
+    let shot = ddsom_game::objects::pools::ESHL.slot(alea.next() % 4).0;
+    wr16(b, obj + 0xa8, shot as u16);
     wr8(b, shot, (alea.next() % 4 != 0) as u8);
     wr8(b, shot + 0x5a, (alea.next() % 2) as u8);
 }

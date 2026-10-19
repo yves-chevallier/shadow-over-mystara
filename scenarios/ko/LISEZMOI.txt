@@ -11,3 +11,9 @@ boss6_scene24.txt (scène 24, boss de type 6 réécrit dans families/boss_6/)
   validate : écart à l'image 4265 (mot FF1A6A : drapeaux de touche du joueur 1), identique avec DDSOM_SANS=boss_6.
   DDSOM_SANS=combat_update : VALIDE sur 12000 images (boss_6 actif) ; c'est l'écart connu de combat_update
   (docs/couverture.md). Contrôle appel par appel (DDSOM_CHECK=1 DDSOM_CHECK_ALL=1) : VALIDE.
+
+boss10_scene65.txt (scène 65, boss de type 10 réécrit dans families/boss_10.rs)
+  validate : écart à l'image 3271 (mot FFCB3A) avant même l'apparition du boss (image 3501), identique avec DDSOM_SANS=boss_10 ;
+  DDSOM_SANS=set_ (les natives set_0, set_12, set_13, set_14, set_ecrans_ce024) : VALIDE, mais aucune d'elles désactivée seule
+  ne supprime l'écart (combinaison de natives, comme boss13_dragon). Contrôle appel par appel : VALIDE sur 12000 images.
+  Le scénario boss10_scene66.txt (scenarios/boss/), qui entre directement dans la scène 66, est VALIDE.
