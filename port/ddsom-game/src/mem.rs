@@ -37,6 +37,11 @@ pub fn set_low_byte(r: &mut u32, v: u8) {
     *r = (*r & !0xff) | v as u32;
 }
 
+/// Remplace le mot bas d'un registre de données (move.w vers Dn).
+pub fn set_low_word(r: &mut u32, v: u16) {
+    *r = (*r & !0xffff) | v as u32;
+}
+
 /// Écarts entre deux bus (mode contrôle). `dead_stack` : zone de pile sous le pointeur de pile au
 /// retour, dont le contenu (restes des appels internes) n'a plus de sens.
 pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out: &mut Vec<String>) {
