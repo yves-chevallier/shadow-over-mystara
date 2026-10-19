@@ -20,9 +20,9 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 18 | 0x975ec | 7 822 | Lich (h) | 26 |
 | 19 | = 14 (0x8fae4) | 6 732 | dragon vert (h) | 32, 65-66 (variante 1) |
 | 12 / 11 | 0x8d59e | 8 190 | salamandres de feu / de glace | 40 / 42 |
-| 21 | 0x9947a | 6 704 | ? | 44 |
+| 21 | 0x9947a | 6 704 | compagnon de Tel'Arin (h) | 44 — réécrit |
 | 15 | 0x91530 | 7 470 | dragon rouge | 46 |
-| 5 | 0x8341c | 3 826 | Ezerhorden | 58 |
+| 5 | 0x8341c | 3 826 | Ezerhorden | 58 — réécrit |
 | 8 | 0x87fc0 | 10 140 | DarkWarrior 2 | 64 |
 | 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 — réécrit |
 
@@ -96,15 +96,55 @@ relevé, mort en cinq temps. Sources de piège : `0x43ae` reçoit D2 en entrée 
 aucun joueur n'est trouvé) ; le natif `ai_pick_target_any` a une durée estimée qui diffère de l'original de 10 à 20 cycles
 (sans effet sur l'état). Couverture : fuzz 573 instructions sur 578.
 
+### Type 5 (0x8341c) : Ezerhorden, scène 58 — `boss_5.rs`
+
+Gabarit ancien : pas de hook de pause ni de longs d'état ; `+5` (multiples de 4) et `+6` sont posés champ par champ, et
+`+0xa8` mémorise l'état avant et après chaque passage. Animations 0x175da6 (corps), 0x175dc4 (attaques), 0x175e0c
+(chute, mort), mémorisées en `+0xa4` (numéro) et `+0xa5` (jeu) pour ne pas relancer la même. `next_action` (0x83e3e) choisit
+le groupe suivant d'après la position de la cible : une ligne de la table 0x83f4e (distance en Y, puis en X devant le
+boss, plus un tirage), deux octets par entrée (angle et groupe, durée et demi-tour).
+
+| `+5` | Rôle |
+|---|---|
+| 0 | arrivée : attend la scène (`A5+0x2e` = 4), cinématique (`A5+0x2c` = 0xc), crée un SET 0x73 |
+| 4 | marche lente (`+0xa0` images, selon la difficulté) |
+| 8, 0x14 | déplacement (tables de vitesses 0x8369c / 0x836fa), sens selon `+0x2c` |
+| 0xc | saisie d'un joueur (`+0x50`) par 0xfd64 : lui retire 1 PV tous les 4 images (0x10 à la prise), le relâche à 1 PV |
+| 0x10 | attaque simple |
+| 0x18 | poursuite par angle (`+0x2d`, 32 directions) puis saisie à portée |
+| état 4 | touché : recul puis reprise (ou poursuite), chute en tourbillon si `+0x49` = 0xa8 (`+6` = 0 à 0x10 : lancée, vol par la table de vecteurs 0x1c94b6, retombée, rebond), mort (`+5` = 6) |
+
+Particularités : la reprise après un coup sans effet (`+0x49` = 0x38) rappelle la boucle de l'état actif depuis l'état
+touché (et revient à la fin de l'état touché : zone et ombre) ; les `+6` hors tables (6 impair ou trop grand) sautent dans le
+code de l'original à des adresses sans sens, la porte `etats_boss` du fuzz s'en tient aux valeurs des tables.
+`addq8` (boss_common) reproduit les drapeaux de `addq.b` avant les appels sonores qui rendent les drapeaux reçus.
+Couverture : fuzz 585 instructions sur 594 (reste : l'appel 0x9b6 de l'ouverture, qui ne revient pas en fuzz).
+
+### Type 21 (0x9947a) : compagnon de Tel'Arin (h), scène 44 — `boss_21/`
+
+Cousin du type 17 (70 % d'instructions identiques) : mêmes groupes (`+5` = 0 intro, 2 combat, 4 attaques, 6 à 10 attente,
+état 4 touché), même ralenti (`+0xbb`), mêmes bibliothèques d'IA ; tables (marches, choix d'attaque, seuils de phase 0x112e2,
+budgets `+0xb2..4` initialisés à 8, 8, 3) et attaques propres. Il est lié à un hôte (`+0x46`, le Tel'Arin de la variante 1) :
+quand l'hôte est mort (état 0x0406) il quitte la scène. Animations 0x1836ec (mouvements), 0x18371c (coups), 0x18373a (recul).
+`mod.rs` (boucle, ralenti, création), `intro.rs` (arrivée par la droite, chute d'entrée), `fight.rs` (attente, demi-tour,
+marche, charge), `decide.rs` (changements d'état et tirages à deux niveaux dans les tables de la ROM), `attacks.rs` (huit
+attaques : coup simple, coup à effet, bond, saut sur la cible, rayon ESHL 0x20 (`+0xb2` restants), tir ESHL 0x21 en
+cinématique (`+0xb3`), lâcher d'objets (`+0xb4`), tourbillon qui lance le ralenti), `hit.rs` (réactions, recul, relevé, mort).
+Couverture : fuzz 1 342 instructions sur 1 383 (les choix d'attaque à portée très courte et quelques cases des tables).
+
 ## 3. Validation
 
 * `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
+* `scenarios/boss/boss5_scene58.txt` et `boss21_scene44.txt` : VALIDES sur 12 000 images (2 460 et 9 266 appels). Leurs variantes
+  `_mort` (PV ramenés à 1 après 1 500 images, `--weaken` d'`autobot`) tuent le boss mais divergent après sa mort : `scenarios/ko/`.
 * `scenarios/boss/` : un scénario par boss (entrée directe dans la scène par `poke8 ff8034`, bot `autobot`, PV du boss
   intacts), générés par `tools/gen_boss.py` ; `tools/validate_all.sh` les lance sur 12 000 images.
 * `scenarios/ko/boss13_dragon.txt` : le dragon diverge dès l'image 3100 (fraction de X du joueur 1), avec ou sans son natif
   (`DDSOM_SANS=boss_13`) ; chaque native seule, et toutes les paires, sont VALIDES ; toutes natives ensemble divergent. Hypothèse :
   la machine d'origine B finit en retard certaines images de cette scène chargée (tirs, sprites) alors que A, plus rapide,
   les finit à temps. Contrôle appel par appel (`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1`) : VALIDE.
+* `examples/boss_trace.rs <roms> <eeprom> <scénario> <images>` : trace les changements d'état et de PV de chaque boss (quelles phases,
+  dont la mort, un scénario exerce).
 * `examples/fuzz_boss.rs <roms> <eeprom> <scénario> <chauffe> <tours>` (modèle `fuzz_enemy.rs`) : objet neuf dans le pool BOSS,
   états tirés dans les tables de sauts (`DDSOM_ETATS=1`), meneur de la caméra, joueurs, caméra et drapeaux perturbés à chaque pas,
   chaque appel comparé à l'original ; `DDSOM_COUVERTURE=fichier` écrit les instructions vues (`DDSOM_GRAINE`, `DDSOM_ENTREE`, `DDSOM_PAS`).

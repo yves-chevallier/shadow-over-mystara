@@ -19,6 +19,17 @@ boss10_scene65.txt (scène 65, boss de type 10 réécrit dans families/boss_10.r
   Le scénario boss10_scene66.txt (scenarios/boss/), qui entre directement dans la scène 66, est VALIDE.
 ```
 
+boss5_scene58_mort.txt (scène 58, boss 5 réécrit dans families/boss_5.rs, PV du boss ramenés à 1 après 1 500 images)
+  validate : écart à l'image 6211, ~1 000 images après la libération du boss (image 5383 ; boss_trace montre la mort aux images
+  5038-5383), mots FF2A58 (minuterie du décompte 0xf6658), FF806E (compteur d'images, A en retard de 27), FF8556... :
+  identique avec DDSOM_SANS=boss_5 ; aucune désactivation d'un seul groupe ne le supprime (combinaison de natives, comme boss13) ;
+  toutes natives désactivées (DDSOM_SANS=,) : VALIDE. VALIDE sur 6 200 images (mort comprise).
+
+boss21_scene44_mort.txt (scène 44, boss 21 réécrit dans families/boss_21/, PV ramenés à 1 après 1 500 images)
+  validate : écart à l'image 5545, mot FF8664 (joueur 1 +0x86) 00ff au lieu de ffff ; identique avec DDSOM_SANS=boss ; disparaît
+  avec DDSOM_SANS=combat : DDSOM_CHECK=1 désigne `combat_update` (entrée 0x260ee) : ram[ff8664]=00ff au lieu de ffff. Routine
+  fautive : combat.rs. VALIDE sur 5 500 images.
+
 Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
 mais qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...`
 fait rendre aux natives nommées les registres de l'original : chercher par dichotomie celle dont un

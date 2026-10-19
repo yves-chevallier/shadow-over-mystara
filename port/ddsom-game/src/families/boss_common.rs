@@ -112,6 +112,18 @@ impl Fl {
     }
 }
 
+/// `addq.b #k,(off,A0)` : ajoute `k` à l'octet et fixe les drapeaux X N Z V C comme le 68000 (utile quand une
+/// routine appelée ensuite, sonore par exemple, rend les drapeaux qu'elle a reçus).
+pub fn addq8(x: &mut Cx, off: u32, k: u8) {
+    let old = x.u8(off);
+    let new = old.wrapping_add(k);
+    x.set8(off, new);
+    let c = old.checked_add(k).is_none();
+    let v = !(old ^ k) & (old ^ new) & 0x80 != 0;
+    let ccr = (c as u16) << 4 | ((new & 0x80 != 0) as u16) << 3 | ((new == 0) as u16) << 2 | (v as u16) << 1 | c as u16;
+    x.c.sr = x.c.sr & 0xffe0 | ccr;
+}
+
 /// `subq.b #k,(off,A0)` : retire `k` à l'octet et rend les drapeaux.
 pub fn sub8(x: &mut Cx, off: u32, k: u8) -> Fl {
     let old = x.u8(off);

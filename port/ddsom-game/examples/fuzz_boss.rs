@@ -77,8 +77,51 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[10], Z),
             (&[6], Z, Z),
         ],
+        // boss 5 (Ezerhorden)
+        5 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 4, 8, 12]),
+            (&[2], &[4], &[0, 4]),
+            (&[2], &[8, 20], &[0, 4]),
+            (&[2], &[12], &[0, 4, 8, 12]),
+            (&[2], &[16], &[0, 4]),
+            (&[2], &[24], &[0, 4, 8, 12]),
+            (&[4], &[0, 2, 4], &[0, 4]),
+            (&[4], &[0, 2, 4], &[0, 2, 4, 6, 8, 10, 12, 14, 16]),
+            (&[4], &[6], &[0, 2]),
+            (&[6], Z, Z),
+        ],
+        // boss 21
+        21 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2]),
+            (&[2], &[2], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16]),
+            (&[2], &[6, 8, 10], &[0, 2]),
+            (&[4], &[0], &[0, 2, 4]),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[6, 8], &[0, 2, 4, 6, 8, 10]),
+            (&[4], &[10], Z),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide du boss 21 pour un état `(+4, +5, +6)`.
+fn etape_21(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 0, 0) => 8,
+        (2, 0, 2) => 3,
+        (2, 2, 8 | 10) => 5,
+        (2, 2, _) => 2,
+        (2, 4, 0 | 2) => 2,
+        (2, 4, 12) => 6,
+        (2, 4, _) => 5,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
 }
 
 /// Étape `+7` valide du boss 10 pour un état actif `(+4, +5, +6)`.
@@ -134,6 +177,12 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     }
     if kind == 10 {
         prep_10(b, alea, obj);
+    }
+    if kind == 5 {
+        prep_5(b, alea, obj);
+    }
+    if kind == 21 {
+        prep_21(b, alea, obj);
     }
     if kind == 13 {
         // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
@@ -242,6 +291,76 @@ fn prep_6(b: &mut Bus, alea: &mut Alea, obj: u32) {
     wr16(b, obj + 0xb0, shot as u16);
     wr8(b, shot, (alea.next() % 4 != 0) as u8);
     wr8(b, shot + 0x5a, (alea.next() % 2) as u8);
+}
+
+/// Boss 5 : mêmes variables de scène que le 17 ; paramètres propres.
+fn prep_5(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    wr8(b, obj + 3, 0);
+    wr8(b, obj + 7, 2 * (alea.next() % 2) as u8);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    // hors du recul (+6 = 0 ou 4), seul le code 0xa8 (chute en tourbillon) a des étapes
+    let code = if s.0 == 4 && s.1 <= 4 && s.2 != 0 && s.2 != 4 { 0xa8 } else { pick(alea, &[0xa8, 0xa8, 0x38, 0x4c, 0]) };
+    wr8(b, obj + 0x49, code);
+    wr8(b, obj + 0x87, (alea.next() % 3) as u8);
+    // état mémorisé (+0xa8) : un état actif valide
+    wr32(b, obj + 0xa8, 0x0200_0000 | (pick(alea, &[0, 4, 8, 12, 16, 20, 24]) as u32) << 16);
+    wr8(b, obj + 0x90, (alea.next() % 20) as u8);
+    wr8(b, obj + 0x91, pick(alea, &[0, 0x80, 0x85, 3]));
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0xff]));
+    wr8(b, obj + 0xa2, pick(alea, &[0, 1, 2, 0x20]));
+    wr8(b, obj + 0xa3, (alea.next() % 6) as u8);
+    wr8(b, obj + 0xa4, pick(alea, &[0, 1, 2]));
+    wr8(b, obj + 0xa5, pick(alea, &[0, 1, 2]));
+    wr8(b, obj + 0xa6, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xa7, (alea.next() % 2) as u8);
+    wr16(b, obj + 0xa0, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x56, (alea.next() % 6) as u8);
+    wr8(b, A5 + 0x2e, pick(alea, &[0, 4]));
+    wr8(b, A5 + 0x2c, pick(alea, &[0, 0xc, 4]));
+}
+
+/// Boss 21 : mêmes variables de scène que le 17 ; hôte (`+0x46`) parfois mort, tir lié.
+fn prep_21(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    wr8(b, obj + 3, 0);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_21(alea, s.0, s.1, s.2));
+    if s.0 == 4 && s.1 == 0 && s.2 != 0 {
+        wr8(b, obj + 0x49, 0x4c);
+    }
+    let host = ENEMY.slot(alea.next() % ENEMY.slots).0;
+    wr16(b, obj + 0x46, host as u16);
+    wr16(b, host + 4, if alea.next() % 6 == 0 { 0x0406 } else { 0x0202 });
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0x81, 0xff]));
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x90, (alea.next() % 20) as u8);
+    wr16(b, obj + 0xa6, (alea.next() % 6) as u16);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 1, 2, 3, 5, 0x10, 0x20, 0x30, 0x31]));
+    wr8(b, obj + 0xaa, (alea.next() % 5) as u8);
+    wr8(b, obj + 0xab, 4);
+    wr8(b, A5 + 0x2e, pick(alea, &[0, 4]));
+    let shot = ddsom_game::objects::pools::ESHL.slot(alea.next() % 4).0;
+    wr16(b, obj + 0xb0, shot as u16);
+    wr8(b, shot, (alea.next() % 4 != 0) as u8);
+    wr8(b, shot + 0x5a, (alea.next() % 2) as u8);
+    close_players(b, alea, obj);
+}
+
+/// Joueurs tout près du boss (une fois sur deux) pour atteindre les choix d'attaque selon la portée.
+fn close_players(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    if alea.next() % 2 == 0 {
+        return;
+    }
+    let (ox, oy) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
+    for j in 0..4u32 {
+        let q = 0xff85de + 0x200 * j;
+        wr8(b, q, 1);
+        wr16(b, q + 8, ox.wrapping_add((alea.next() % 0x120) as u16).wrapping_sub(0x90));
+        wr16(b, q + 0x10, oy.wrapping_add((alea.next() % 0x10) as u16).wrapping_sub(8));
+    }
 }
 
 /// Boss 10 : mêmes variables de scène que le 17 ; paramètres propres.
