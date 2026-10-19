@@ -12,6 +12,7 @@
 //!   l'action le lit puis l'efface ;
 //! - les sons et effets sont créés par des routines d'origine appelées à travers `call`.
 
+use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::combos::clear_recognizers;
 use super::super::init::init_weapon_stats;
@@ -178,7 +179,7 @@ pub fn flush_pending_effect(g: &mut Ctx, p: Player) {
     let kind = p.u8(g, field::PENDING_EFFECT) as u32;
     if kind != 0 {
         p.set_u8(g, field::PENDING_EFFECT, 0);
-        call(g, p, rom::SPAWN_EFFECT, &[(0, kind)]);
+        spawn::weapon_trail(g, p, kind as u8);
     }
 }
 
@@ -355,6 +356,9 @@ fn screen_task(g: &mut Ctx, p: Player, mode: u16, program: u32, fade: bool) {
     g.c.a[1] = p.0;
     g.c.a[0] = program;
     g.c.d[0] = 0x10;
+    // le `move.w #0x10,D0w` d'origine efface N, Z, V, C (X est celui des instructions précédentes, presque
+    // toujours nul) : la routine de lancement empile ces drapeaux avec le trap, sous la pile
+    g.c.sr &= !0xf;
     crate::call(g.c, g.b, rom::START_TASK);
     g.c.a[0] = p.0;
 }
@@ -639,7 +643,7 @@ impl JumpKit {
 pub fn nothing(_: &mut Ctx, _: Player) {}
 
 /// Animation selon le type de saut `+0x67` : 2 après une course, 1 en avant, sinon sur place.
-fn by_jump_kind(g: &mut Ctx, p: Player, after_run: u16, forward: u16, standing: u16) -> u16 {
+pub fn by_jump_kind(g: &mut Ctx, p: Player, after_run: u16, forward: u16, standing: u16) -> u16 {
     match p.u8(g, 0x67) {
         2 => after_run,
         1 => forward,
@@ -752,6 +756,16 @@ fn jump_recover(g: &mut Ctx, p: Player, kit: &JumpKit) {
         to_stand(g, p);
         (kit.after_recover)(g, p);
     }
+}
+
+/// Début de la roulade (action 0x12 du nain et du voleur) : élan `speed` dans le sens du regard, sans
+/// accélération ni vitesse verticale, animation 0x1f.
+pub fn roll_start(g: &mut Ctx, p: Player, speed: u16) {
+    cov!();
+    let vx = if p.u8(g, Player::FACING) != 0 { speed.wrapping_neg() } else { speed };
+    p.set_u16(g, Obj::VX, vx);
+    p.set_u32(g, Obj::AX, 0);
+    animation::start(g, p, 0x1f);
 }
 
 // ---- action 0x10 : élan et glissade -------------------------------------------------------------
@@ -1130,7 +1144,7 @@ pub fn swap_weapon(g: &mut Ctx, p: Player, slot: u32, with_effect: bool) {
     }
     p.set_u8(g, field::EVENT, 0);
     if with_effect && event == 2 {
-        call(g, p, 0x4fd2c, &[(0, 0)]);
+        spawn::swap(g, p, 0);
         return;
     }
     let new = p.u8(g, field::ITEM_NEW).wrapping_sub(0x2e);
