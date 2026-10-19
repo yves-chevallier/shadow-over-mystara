@@ -652,6 +652,8 @@ mod riyakaa {
             0 | 10 => roar(x),
             2 | 8 => circle(x),
             4 | 6 => jump_strike(x),
+            12 => wait_target(x),
+            14 => turn_around(x),
             _ => {}
         }
     }
