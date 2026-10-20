@@ -17,7 +17,7 @@ l'attract). La boucle de partie (`docs/boucle.md`) appelle chaque image le gesti
 | 12 | `0x1c6a0` | le jeu ; le lecteur de script d'apparition (`0xf2e5c`) tourne à chaque image | `script.rs`, `game.rs` |
 | 16 | `0xf3142` | sortie de scène : écrans de fin, choix de la scène suivante | `exit.rs` |
 | 24 | `0x21c2a` | séquences scriptées (arrivée d'un boss, défilement forcé) | `intermission.rs` |
-| 28 | `0xfb292` | fin du jeu (générique) : **non réécrite** (états de 0xfb2aa à 0x100000) | – |
+| 28 | `0xfb292` | fin du jeu (générique) | `modes/ending.rs`, voir `docs/modes.md` |
 
 La phase 4 (sélection du personnage, F3/F5) et les phases 0, 12, 20 (W1) sont décrites ailleurs
 (`docs/boucle.md`, `docs/familles/set_c.md`).
@@ -157,5 +157,5 @@ Séquences réécrites : 0 à 5, 7 à 19, 21 à 26, 28, 30, 32, 34, 35. Cédées
 * Écarts connus, **indépendants de ce module** (identiques avec `DDSOM_SANS=scene_`) : voir
   `scenarios/ko/README.md` (scene_05, 07, 08, 11, 110 et end_01).
 * Non exercé : la phase 24 (aucun scénario n'y entre), les séquences cédées à l'original
-  (6, 20, 27, 29, 31, 33 : seul l'aiguillage est testé), la phase 28 (non réécrite) et la saisie du
+  (6, 20, 27, 29, 31, 33 : seul l'aiguillage est testé), la phase 28 (réécrite : `docs/modes.md`) et la saisie du
   nom et le générique de fin.

@@ -11,6 +11,7 @@
 pub mod attract;
 pub mod boot;
 pub mod demo;
+pub mod ending;
 pub mod gameover;
 pub mod ranking;
 pub mod select;
@@ -292,5 +293,5 @@ pub const AFTER_WAIT: Native = native(at::AFTER_WAIT, "mode_after_wait", after_w
 
 /// Routines natives de la machine à modes.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    [&LOOP, &AFTER_HANDLER, &AFTER_WAIT].into_iter().chain(attract::NATIVES).chain(title::NATIVES).chain(select::NATIVES).chain(ranking::NATIVES).chain(gameover::NATIVES).chain(boot::NATIVES).chain(demo::NATIVES)
+    [&LOOP, &AFTER_HANDLER, &AFTER_WAIT].into_iter().chain(attract::NATIVES).chain(title::NATIVES).chain(select::NATIVES).chain(ranking::NATIVES).chain(gameover::NATIVES).chain(boot::NATIVES).chain(demo::NATIVES).chain(ending::NATIVES)
 }
