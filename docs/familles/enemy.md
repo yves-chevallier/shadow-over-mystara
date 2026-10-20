@@ -58,8 +58,39 @@ test de zone `0xfbae` et ombre `0x33fe4` (dès que le sous-état n'est pas 0), p
 
 La réaction aux coups (état 4, sous-état 0 ou 6) est partagée par tous les ennemis : une table de longs indexée par
 `+0x49` (0x6fe22 et 0x70018 pour le type 16, mêmes routines `0x3bb9c`..`0x3dab0`) mène à des routines
-communes qui jouent le recul, la chute ou la mort. Ces routines ne sont pas encore réécrites : `react` les
-appelle (68000). Elles s'exécutent sur l'ennemi courant (`A0`) et modifient ses sous-états.
+communes qui jouent le recul, la chute ou la mort. Elles sont réécrites dans `families/reactions.rs` (O3, natives à
+leur adresse d'origine, que `react` et le code d'origine des boss appellent) ; elles s'exécutent sur l'objet courant
+(`A0`) et modifient ses sous-états.
+
+### Routines de réaction (O3, `0x3bb00-0x3e480`)
+
+Chacune est une machine à états sur `+6` (pas de 2, table de sauts relative au PC, souvent `+7` en sous-pas) dont les
+derniers pas sont partagés : attente de fin d'animation (`0x3bdf0`), chute jusqu'au sol (`0x3be02`, atterrissage
+`0x3e480`), rebond (`0x3be52` puis `0x3bea8` : quatre sous-pas), relevé (`0x3e0dc` : l'état principal reprend en
+`0x04040000`, ou le relevé propre au boss `0xf118`), mort clignotante de 40 images (`0x3dd9c`, puis `0x19ad6`).
+Animations et sons sont choisis par type et classe (`+2` + 32 hors ENEMY) : jeux d'animations `0x3de58` (mot haut
+nul : routine propre qui ajoute la variante `+0xbf`), sons de coup `0x3e2ac` et de mort `0x3e3a4`, relevé
+`0x3e000`. Champs : vitesses `+0x14` (X), `+0x16` (profondeur), `+0x18` (hauteur), `+0x1a` (gravité),
+`+0x1c/+0x1e` ; compteur `+0x90` ; gel `+0x53` ← étourdissement `+0x56` ; liaison en attente `+0x91` (bit 7)
+qui devient `+0x2b`/`+0x2a` ; à terre `+0x86`, saisi `+0x87` (au sol, un objet saisi peut rester à terre :
+code 104, ou 108 s'il y était déjà).
+
+| Entrées | Réaction |
+|---|---|
+| `0x3bb9c`, `0x3bf76`, `0x3d74e` | recul sur place (16 ou 60 images de tremblement), glissade, relevé |
+| `0x3bc24`..`0x3bd42`, `0x3bfc0`..`0x3c0d4` | projections de plus en plus fortes (animation 2 ou 3) |
+| `0x3bf56`, `0x3c12e`, `0x3c1c2`, `0x3c1e2` | coup qui fait décoller (rebond haut, glissade au sol avec poussière `0xb10c8`) |
+| `0x3c2ee`, `0x3c35a`, `0x3c954` | coup bas, projections rasantes (vol plané jusqu'au bord de l'écran) |
+| `0x3c570`, `0x3c70c`, `0x3c784`, `0x3ca76` | projections verticales (hauteur selon le code, saut jusqu'au haut de l'écran) |
+| `0x3c63a`, `0x3d350`, `0x3d250`, `0x3cfea` | saisies par un joueur (compteur `+0x84`, coups du personnage 5, lâcher) |
+| `0x3c8b8`, `0x3d3a8` | étourdi, tremblement (délais tirés au hasard, étoiles `0xabec8`) |
+| `0x3cb4c`..`0x3cfd0`, `0x3d488`, `0x3d504`, `0x3d6d8` | culbutes et renversements (animations 13, 17, 18) |
+| `0x3d932`, `0x3da86`, `0x3dab0` | tourbillons (position sur le cercle `0x1c94b6`) |
+| `0x3c828`, `0x3d590`, `0x3d618`, `0x3d86e` | désintégration, électrocution, pétrification, brûlure |
+| `0x3dd72`, `0x3ddf6` | mort en l'air |
+
+`0x3bb16` (animation de réaction du joueur, jeux par personnage `0x3bb52`) est aussi native pour les états du joueur
+restés en 68000. Un pas inconnu d'une routine laisse le code d'origine s'exécuter (coût démesuré de la native).
 
 Tirage pseudo-aléatoire : `random` (0x19a88). Cibles : `0x424e` (choix aléatoire d'un joueur, Z = aucun),
 `0xb5e0` (joueur dans une boîte devant l'ennemi), `0xa4b4`/`0xa4c2` (décision par masque), voir `combat.md` §6.

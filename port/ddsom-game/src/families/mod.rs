@@ -51,6 +51,7 @@ pub mod enemy_harpy;
 pub mod enemy_hellhound;
 pub mod enemy_owlbear;
 pub mod enemy_part;
+pub mod reactions;
 pub mod enemy_warrior;
 pub mod enemy_riyakaa;
 pub mod enemy_scorpion;
@@ -531,4 +532,6 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .into_iter()
         .flatten()
         .chain(joueur::natives())
+        .chain(reactions::NATIVES)
+        .chain([&reactions::PLAYER_HURT_ANIMATION])
 }
