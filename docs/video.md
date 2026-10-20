@@ -145,6 +145,15 @@ ligne vers le haut quand `y <= 0`.
 défilement de l'image (`A5+0x506/0x50a` moins `A5+0x524/0x528`) : 1/4 et 1/2, ou 1/2 et 3/4. `0x331e8`, `0x3326c` :
 avance de 6 ou 3 pixels par image.
 
+### Suivi vertical des joueurs (0x31616) et mise à jour des caméras (0x33e20)
+
+`0x33e20` (`scroll::UPDATE_CAMERAS`) est un simple enchaînement : A0 = caméra 1, cible précédente copiée
+(`+0x26`, `+0x2a`), script de mode `0x2ede0`, A0 = caméra 2, `0x32108`. `0x31616` (`FOLLOW_PLAYERS_Y`, appelé
+en `bsr` en `0x30476`, dans un script de mode de la caméra 1) garde l'étendue verticale des joueurs vivants (octet présent +
+PV non nuls, `A5 + 0x5de + 0x200 k`) dans la fenêtre `[caméra + 0x30, caméra + 0x70]` : la caméra A0 monte
+(trop haut) ou descend (trop bas) de 6 pixels par image au plus. Transcrite avec ses registres (D2, D4-D6 et
+drapeaux sont relus par les scripts de mode).
+
 ### Non réécrit
 
 Initialisation propre à chaque scène (`0x2ede0` première image, `0x32108` idem), les ~31 scripts de mode de la caméra 1

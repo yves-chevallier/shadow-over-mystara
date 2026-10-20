@@ -9,20 +9,23 @@
 //! Chaque handler d'objet termine par `reinsert` : l'objet est inséré s'il n'est dans aucune liste,
 //! sinon déplacé seulement si sa profondeur ne respecte plus l'ordre.
 //!
-//! Piège du jeu d'origine : les handlers finissent souvent par `jmp 0x1ee1a`, et le dispatch passe
-//! à l'objet suivant sans remettre les registres à zéro. Certains handlers lisent alors un registre
-//! laissé par le précédent : 0x4bd32 fait `andi.b #$f,D0` puis indexe une table avec tout D0.w, dont
-//! l'octet haut est le lien de liste laissé par `reinsert`. Les routines natives 0x1ee1a/0x1ef6c ne
-//! sont donc pas installées tant que des handlers 68000 les appellent (le Rust les appelle
-//! directement) ; un dispatch réécrit en Rust devra transmettre ces restes d'un objet au suivant.
+//! Piège du jeu d'origine : les handlers finissent souvent par `jmp 0x1ee1a`, et le dispatch
+//! passe à l'objet suivant sans remettre les registres à zéro. Certains handlers lisent alors un
+//! registre laissé par le précédent : 0x4bd32 fait `andi.b #$f,D0` puis indexe une table avec tout
+//! D0.w, dont l'octet haut est le lien de liste laissé par `reinsert`. Les natives 0x1ee1a et
+//! 0x1ef6c (`Reinsert`) transcrivent donc l'original instruction par instruction et rendent
+//! D0-D2, A1-A4 et les drapeaux tels que lui, selon le chemin suivi. Les appelants Rust
+//! (`SortedList::reinsert`) n'ont pas ce contrat et utilisent l'algorithme en clair
+//! (`plan_reinsert`).
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use super::cost::{walk_cycles, Trace};
 use super::{Link, Obj};
-use crate::mem::{rd16, rts, wr16, A5};
-use crate::{regs, Native};
+use crate::mem::{rd16, rd32, rts, set_low_word, wr16, A5};
+use crate::{ops, regs, Native};
+use m68k::decode::Size;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SortedList {
@@ -70,84 +73,76 @@ impl SortedList {
 
     /// Insère `obj` s'il n'est dans aucune liste, sinon le replace si l'ordre est rompu.
     pub fn reinsert(self, b: &mut Cps2Bus, obj: Obj) {
-        let place = self.plan_reinsert(b, obj, &mut Trace::new());
+        let place = self.plan_reinsert(b, obj);
         self.apply(b, obj, place);
     }
 
-    /// Cherche la nouvelle place de `obj` sans rien modifier. `t` reçoit les décisions des
-    /// branchements de l'original, dans l'ordre (pour la durée).
-    fn plan_reinsert(self, b: &mut Cps2Bus, obj: Obj, t: &mut Trace) -> Place {
+    /// Cherche la nouvelle place de `obj` sans rien modifier.
+    fn plan_reinsert(self, b: &mut Cps2Bus, obj: Obj) -> Place {
         let (prev, next) = (obj.prev(b), obj.next(b));
         let y = obj.depth(b);
-        if t.take(prev.0.wrapping_add(next.0) == 0) {
-            return self.plan_insert(b, y, t);
+        if prev.0.wrapping_add(next.0) == 0 {
+            return self.plan_insert(b, y);
         }
         // trop loin de la tête ? alors on remonte vers la tête
-        if !t.take(is_sentinel_or_none(prev)) {
+        if !is_sentinel_or_none(prev) {
             let p = prev.target();
-            if !t.take(y <= p.depth(b)) {
+            if y > p.depth(b) {
                 let mut a1 = p;
                 loop {
                     let before = a1.prev(b);
-                    if t.take(is_sentinel_or_none(before)) {
+                    if is_sentinel_or_none(before) {
                         break;
                     }
                     let a2 = before.target();
-                    if t.take(y <= a2.depth(b)) {
+                    if y <= a2.depth(b) {
                         break;
                     }
                     a1 = a2;
                 }
-                // retrait (voisin suivant : objet ou fin) puis insertion devant a1
-                t.take(is_sentinel_or_none(next));
-                t.take(!is_sentinel_or_none(next));
-                t.take(is_sentinel_or_none(a1.prev(b)));
                 return Place::Before(a1);
             }
         }
         // trop près de la tête ? alors on descend vers la queue
-        if t.take(is_sentinel_or_none(next)) {
+        if is_sentinel_or_none(next) {
             return Place::Keep;
         }
         let n = next.target();
-        if t.take(y >= n.depth(b)) {
+        if y >= n.depth(b) {
             return Place::Keep;
         }
         let mut a1 = n;
         loop {
             let after = a1.next(b);
-            if t.take(is_sentinel_or_none(after)) {
+            if is_sentinel_or_none(after) {
                 break;
             }
             let a2 = after.target();
-            if t.take(y >= a2.depth(b)) {
+            if y >= a2.depth(b) {
                 break;
             }
             a1 = a2;
         }
-        t.take(is_sentinel_or_none(prev));
-        t.take(!is_sentinel_or_none(prev));
-        t.take(is_sentinel_or_none(a1.next(b)));
         Place::After(a1)
     }
 
     /// Place d'un objet absent de la liste, en partant de la queue.
-    fn plan_insert(self, b: &mut Cps2Bus, y: i32, t: &mut Trace) -> Place {
+    fn plan_insert(self, b: &mut Cps2Bus, y: i32) -> Place {
         let tail = self.tail(b);
-        if t.take(tail.is_none()) {
+        if tail.is_none() {
             return Place::Alone;
         }
         let mut a1 = tail.target();
-        if t.take(y <= a1.depth(b)) {
+        if y <= a1.depth(b) {
             return Place::After(a1);
         }
         loop {
             let before = a1.prev(b);
-            if t.take(is_sentinel_or_none(before)) {
+            if is_sentinel_or_none(before) {
                 return Place::Before(a1);
             }
             a1 = before.target();
-            if !t.take(y > a1.depth(b)) {
+            if y <= a1.depth(b) {
                 return Place::After(a1);
             }
         }
@@ -310,21 +305,194 @@ pub fn unlink_all(b: &mut Cps2Bus) -> Option<Obj> {
 
 // ---- adaptation aux registres du 68000 ----
 
-fn cost_reinsert(entry: u32, list: SortedList, c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut t = Trace::new();
-    list.plan_reinsert(b, Obj(c.a[0]), &mut t);
-    walk_cycles(b, entry, &t)
+/// Sens dans lequel un objet mal placé cherche sa nouvelle place.
+#[derive(Clone, Copy)]
+struct Way {
+    /// Lien suivi pour chercher (`Obj::PREV` vers la tête, `Obj::NEXT` vers la queue) et lien opposé.
+    ahead: u32,
+    behind: u32,
+    /// Extrémité de liste atteinte en suivant `ahead`, et extrémité opposée (adresses relatives à A5).
+    reach: u32,
+    far: u32,
+    /// Vers la tête (profondeurs décroissantes en tête) : on s'arrête dès que `y <= voisin`, sinon `y >= voisin`.
+    toward_head: bool,
 }
 
-/// 0x1ee1a : (ré)insère l'objet A0 dans la liste des acteurs.
-fn reinsert_actors(c: &mut Cpu, b: &mut Cps2Bus) {
-    ACTORS.reinsert(b, Obj(c.a[0]));
-    rts(c, b);
+impl Way {
+    fn toward_head(list: SortedList) -> Way {
+        Way { ahead: Obj::PREV, behind: Obj::NEXT, reach: list.head, far: list.tail, toward_head: true }
+    }
+    fn toward_tail(list: SortedList) -> Way {
+        Way { ahead: Obj::NEXT, behind: Obj::PREV, reach: list.tail, far: list.head, toward_head: false }
+    }
+    /// L'objet de profondeur `y` est-il déjà du bon côté de `neighbour` ?
+    fn settled(self, y: u32, neighbour: u32) -> bool {
+        if self.toward_head { y as i32 <= neighbour as i32 } else { y as i32 >= neighbour as i32 }
+    }
 }
 
-/// 0x1ef6c : (ré)insère l'objet A0 dans la liste du premier plan.
-fn reinsert_foreground(c: &mut Cpu, b: &mut Cps2Bus) {
-    FOREGROUND.reinsert(b, Obj(c.a[0]));
+/// Réinsertion de A0 dans `list` (0x1ee1a, 0x1ef6c), instruction par instruction : les handlers
+/// d'objets qui suivent relisent D0, D1, D2, A1-A4 et les drapeaux tels que l'original les laisse
+/// (voir l'en-tête du module), selon le chemin suivi. Les `move.w` vers la mémoire fixent N et Z
+/// (`store`), les `movea.w` étendent en signe et ne touchent aucun drapeau.
+struct Reinsert<'a> {
+    c: &'a mut Cpu,
+    b: &'a mut Cps2Bus,
+    list: SortedList,
+}
+
+impl Reinsert<'_> {
+    fn a0(&self) -> u32 {
+        self.c.a[0]
+    }
+    fn a0w(&self) -> u16 {
+        self.c.a[0] as u16
+    }
+    /// `movea.w src,An`.
+    fn movea(&mut self, n: usize, w: u16) -> u32 {
+        self.c.a[n] = w as i16 as i32 as u32;
+        self.c.a[n]
+    }
+    /// `movea.w (off,Am),An`.
+    fn movea_mem(&mut self, n: usize, base: u32, off: u32) -> u32 {
+        let w = rd16(self.b, base.wrapping_add(off));
+        self.movea(n, w)
+    }
+    /// `move.w (off,An),Dn` : mot bas de Dn et drapeaux.
+    fn load(&mut self, d: usize, base: u32, off: u32) -> u16 {
+        let v = rd16(self.b, base.wrapping_add(off));
+        set_low_word(&mut self.c.d[d], v);
+        ops::logique(self.c, v as u32, Size::Word);
+        v
+    }
+    /// `move.w src,(off,An)` : écrit et fixe les drapeaux.
+    fn store(&mut self, base: u32, off: u32, v: u16) {
+        wr16(self.b, base.wrapping_add(off), v);
+        ops::logique(self.c, v as u32, Size::Word);
+    }
+    /// `cmp.l (Y,An),Dn` : drapeaux ; renvoie la profondeur du voisin.
+    fn compare_depth(&mut self, d: usize, an: u32) -> u32 {
+        let y = rd32(self.b, an.wrapping_add(Obj::Y));
+        let dn = self.c.d[d];
+        ops::cmp(self.c, y, dn, Size::Long);
+        y
+    }
+
+    fn run(&mut self) {
+        let a0 = self.a0();
+        let prev = self.load(0, a0, Obj::PREV);
+        let sum = ops::add(self.c, rd16(self.b, a0 + Obj::NEXT) as u32, prev as u32, Size::Word);
+        set_low_word(&mut self.c.d[0], sum as u16);
+        if sum as u16 == 0 {
+            return self.insert();
+        }
+        if self.relocate(Way::toward_head(self.list)) {
+            return;
+        }
+        self.relocate(Way::toward_tail(self.list));
+    }
+
+    /// L'objet est déjà dans la liste : le déplace s'il est du mauvais côté d'un voisin dans le sens
+    /// `w`. Renvoie vrai quand la routine est terminée (déplacé, ou rien à faire en bout de liste).
+    fn relocate(&mut self, w: Way) -> bool {
+        let a0 = self.a0();
+        let link = self.load(0, a0, w.ahead);
+        if (link as i16) >= 0 {
+            return false;
+        }
+        let mut a1 = self.movea(1, link);
+        self.c.d[1] = rd32(self.b, a0 + Obj::Y);
+        let y1 = self.compare_depth(1, a1);
+        if w.settled(self.c.d[1], y1) {
+            return false;
+        }
+        // cherche le dernier voisin que l'objet doit encore dépasser
+        loop {
+            let link = self.load(0, a1, w.ahead);
+            if (link as i16) >= 0 {
+                self.store(A5, w.reach, self.a0w());
+                break;
+            }
+            let a2 = self.movea(2, link);
+            let y2 = self.compare_depth(1, a2);
+            if w.settled(self.c.d[1], y2) {
+                break;
+            }
+            a1 = self.movea(1, link);
+        }
+        // retrait : le voisin `behind` et celui de `ahead` se raccordent
+        let a3 = self.movea_mem(3, a0, w.ahead);
+        let d2 = self.load(2, a0, w.behind);
+        if (d2 as i16) < 0 {
+            let a4 = self.movea(4, d2);
+            self.store(a4, w.ahead, a3 as u16);
+        }
+        self.store(a3, w.behind, d2);
+        if (d2 as i16) >= 0 {
+            self.store(A5, w.far, a3 as u16);
+        }
+        // insertion devant A1 (dans le sens `ahead`)
+        let d0 = self.c.d[0] as u16;
+        self.store(a0, w.ahead, d0);
+        if (d0 as i16) < 0 {
+            let a2 = self.movea(2, d0);
+            self.store(a2, w.behind, self.a0w());
+        }
+        self.store(a1, w.ahead, self.a0w());
+        self.store(a0, w.behind, a1 as u16);
+        true
+    }
+
+    /// L'objet n'est dans aucune liste : insertion en partant de la queue (0x1eef2).
+    fn insert(&mut self) {
+        let (a0, list) = (self.a0(), self.list);
+        let y = rd32(self.b, a0 + Obj::Y);
+        self.c.d[0] = y;
+        let tail = self.load(1, A5, list.tail);
+        if tail == 0 {
+            self.store(a0, Obj::PREV, list.end.0);
+            self.store(a0, Obj::NEXT, list.end.0);
+            self.store(A5, list.head, self.a0w());
+            self.store(A5, list.tail, self.a0w());
+            return;
+        }
+        let mut a1 = self.movea(1, tail);
+        let y1 = self.compare_depth(0, a1);
+        if y as i32 <= y1 as i32 {
+            // plus profond que toute la liste : nouvelle queue
+            self.store(a1, Obj::NEXT, self.a0w());
+            self.store(a0, Obj::PREV, a1 as u16);
+            self.store(a0, Obj::NEXT, list.end.0);
+            self.store(A5, list.tail, self.a0w());
+            return;
+        }
+        loop {
+            let before = self.load(1, a1, Obj::PREV);
+            if (before as i16) >= 0 {
+                // devient la nouvelle tête
+                self.store(a1, Obj::PREV, self.a0w());
+                self.store(a0, Obj::NEXT, a1 as u16);
+                self.store(a0, Obj::PREV, list.end.0);
+                self.store(A5, list.head, self.a0w());
+                return;
+            }
+            a1 = self.movea(1, before);
+            let y1 = self.compare_depth(0, a1);
+            if y as i32 <= y1 as i32 {
+                break;
+            }
+        }
+        // entre A1 et son suivant
+        let a2 = self.movea_mem(2, a1, Obj::NEXT);
+        self.store(a1, Obj::NEXT, self.a0w());
+        self.store(a2, Obj::PREV, self.a0w());
+        self.store(a0, Obj::PREV, a1 as u16);
+        self.store(a0, Obj::NEXT, a2 as u16);
+    }
+}
+
+fn reinsert_native(list: SortedList, c: &mut Cpu, b: &mut Cps2Bus) {
+    Reinsert { c, b, list }.run();
     rts(c, b);
 }
 
@@ -345,21 +513,21 @@ fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const REINSERT_ACTORS: Native = Native {
     entry: 0x1ee1a,
     name: "list_reinsert_actors",
-    cost: |c, b| cost_reinsert(0x1ee1a, ACTORS, c, b),
-    run: reinsert_actors,
+    cost: |_, _| 200,
+    run: |c, b| reinsert_native(ACTORS, c, b),
     touches_sound: false,
-    outputs: regs::a(0),
-    exact_cost: true,
+    outputs: regs::ALL,
+    exact_cost: false,
 };
 
 pub const REINSERT_FOREGROUND: Native = Native {
     entry: 0x1ef6c,
     name: "list_reinsert_foreground",
-    cost: |c, b| cost_reinsert(0x1ef6c, FOREGROUND, c, b),
-    run: reinsert_foreground,
+    cost: |_, _| 200,
+    run: |c, b| reinsert_native(FOREGROUND, c, b),
     touches_sound: false,
-    outputs: regs::a(0),
-    exact_cost: true,
+    outputs: regs::ALL,
+    exact_cost: false,
 };
 
 pub const UNLINK: Native = Native {

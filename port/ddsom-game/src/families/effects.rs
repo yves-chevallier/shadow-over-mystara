@@ -2668,3 +2668,143 @@ gestionnaire!(EFFCT_25, poussiere::ENTREE, "effct_poussiere", poussiere);
 gestionnaire!(EFFCT_26, nuage::ENTREE, "effct_nuage", nuage);
 gestionnaire!(EFFCT_32, aura::ENTREE, "effct_aura", aura);
 gestionnaire!(EFFCT_33, eclat::ENTREE, "effct_eclat", eclat);
+
+// ---------------------------------------------------------------------------------------------
+// Aides de l'effet « barrière » (0xb9e40) : un joueur touche-t-il la boîte ? les fils ont-ils fini ?
+// ---------------------------------------------------------------------------------------------
+//
+// Routines feuilles appelées en `bsr` par du code d'origine non porté : elles sont transcrites
+// instruction par instruction (D0, D1, D2, A1, A2 et drapeaux relus par l'appelant).
+
+mod barriere {
+    use cps2::Cps2Bus;
+    use m68k::decode::Size;
+    use m68k::Cpu;
+
+    use crate::mem::{rd16, rd8, rts, set_low_byte, set_low_word, wr8};
+    use crate::ops::{self, cc};
+    use crate::{regs, Native};
+
+    use super::{JOUEURS, PAS_JOUEUR};
+
+    /// Boîte de contact (4 mots en ROM) : décalage x, demi-largeur, décalage y, demi-hauteur.
+    const BOITE: u32 = 0xb9f2c;
+    /// Octet de l'effet : posé quand un joueur touche la boîte ; octet des fils : fini.
+    const TOUCHE: u32 = 0x30;
+    /// Mot de l'enregistrement joueur : altitude (au sol quand elle n'est pas positive).
+    const ALTITUDE: u32 = 0x0c;
+    /// Effet : nombre de fils (mot) et leurs adresses (mots).
+    const FILS: u32 = 0x50;
+    const NB_FILS: u32 = 0x58;
+
+    /// 0xb9ee6 : l'objet A1 est-il dans la boîte de l'objet A0 ? D0 = 1 ou 0 (drapeaux de `moveq`).
+    pub fn dans_la_boite(c: &mut Cpu, b: &mut Cps2Bus) {
+        let (a0, a1) = (c.a[0], c.a[1]);
+        c.a[2] = BOITE;
+        let [dx, demi_l, dy, demi_h] = [0, 2, 4, 6].map(|i| rd16(b, BOITE + i));
+        let (x1, y1) = (rd16(b, a1 + 8), rd16(b, a1 + 0x10));
+        // add.w / sub.w / cmp.w sur des mots : les drapeaux (X compris) restent ceux de l'original
+        let add = |c: &mut Cpu, s: u16, d: u16| ops::add(c, s as u32, d as u32, Size::Word) as u16;
+        let sub = |c: &mut Cpu, s: u16, d: u16| ops::sub(c, s as u32, d as u32, Size::Word) as u16;
+        let mut d1 = demi_l;
+        let mut d0 = add(c, dx, rd16(b, a0 + 8));
+        d0 = sub(c, d1, d0);
+        ops::cmp(c, x1 as u32, d0 as u32, Size::Word);
+        let dedans = 'test: {
+            if c.cond(cc::HI) {
+                break 'test false;
+            }
+            d1 = add(c, d1, d1);
+            d0 = add(c, d1, d0);
+            ops::cmp(c, x1 as u32, d0 as u32, Size::Word);
+            if c.cond(cc::CS) {
+                break 'test false;
+            }
+            d0 = add(c, dy, rd16(b, a0 + 0x10));
+            d1 = demi_h;
+            d0 = add(c, d1, d0);
+            ops::cmp(c, y1 as u32, d0 as u32, Size::Word);
+            if c.cond(cc::CS) {
+                break 'test false;
+            }
+            d1 = add(c, d1, d1);
+            d0 = sub(c, d1, d0);
+            ops::cmp(c, y1 as u32, d0 as u32, Size::Word);
+            !c.cond(cc::HI)
+        };
+        set_low_word(&mut c.d[0], d0);
+        set_low_word(&mut c.d[1], d1);
+        c.d[0] = dedans as u32; // moveq #1/#0,D0
+        ops::logique(c, c.d[0], Size::Long);
+    }
+
+    fn dans_la_boite_native(c: &mut Cpu, b: &mut Cps2Bus) {
+        dans_la_boite(c, b);
+        rts(c, b);
+    }
+
+    /// 0xb9eba : un joueur vivant touche-t-il la boîte de A0 ? Le premier trouvé lève `TOUCHE`.
+    fn joueur_dans_la_boite(c: &mut Cpu, b: &mut Cps2Bus) {
+        c.a[1] = JOUEURS;
+        set_low_word(&mut c.d[1], 3);
+        loop {
+            let a1 = c.a[1];
+            if rd8(b, a1) != 0 && (rd16(b, a1 + ALTITUDE) as i16) <= 0 {
+                dans_la_boite(c, b);
+                if c.d[0] != 0 {
+                    wr8(b, c.a[0] + TOUCHE, 1);
+                    ops::logique(c, 1, Size::Byte);
+                    return rts(c, b);
+                }
+            }
+            c.a[1] = a1 + PAS_JOUEUR;
+            let d1 = c.d[1] as u16;
+            set_low_word(&mut c.d[1], d1.wrapping_sub(1));
+            if d1 == 0 {
+                break;
+            }
+        }
+        c.d[0] = 0;
+        ops::logique(c, 0, Size::Long);
+        rts(c, b);
+    }
+
+    /// 0xba094 : tous les fils de A0 ont-ils fini (octet `TOUCHE` non nul pour chacun) ? Drapeau Z
+    /// levé si non, ou s'il n'y en a aucun.
+    fn fils_finis(c: &mut Cpu, b: &mut Cps2Bus) {
+        c.a[1] = c.a[0] + FILS;
+        c.d[1] = 1;
+        let n = rd16(b, c.a[0] + NB_FILS);
+        set_low_word(&mut c.d[2], n);
+        ops::logique(c, n as u32, Size::Word);
+        if n != 0 {
+            ops::sub(c, 1, n as u32, Size::Word); // subq.w #1,D2w (seul X survit)
+            let mut restant = n - 1;
+            loop {
+                c.a[2] = rd16(b, c.a[1]) as i16 as u32; // movea.w (A1)+,A2
+                c.a[1] += 2;
+                let fini = rd8(b, c.a[2] + TOUCHE);
+                let d1 = c.d[1] as u8 & fini;
+                set_low_byte(&mut c.d[1], d1);
+                if restant == 0 {
+                    set_low_word(&mut c.d[2], 0xffff);
+                    break;
+                }
+                restant -= 1;
+                set_low_word(&mut c.d[2], restant);
+            }
+            ops::logique(c, c.d[1] & 0xff, Size::Byte);
+        }
+        rts(c, b);
+    }
+
+    const fn feuille(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+        Native { entry, name, cost: |_, _| 150, run, touches_sound: false, outputs: regs::ALL, exact_cost: false }
+    }
+
+    pub const BOITE_TOUCHEE: Native = feuille(0xb9ee6, "effct_dans_la_boite", dans_la_boite_native);
+    pub const JOUEUR_TOUCHE: Native = feuille(0xb9eba, "effct_joueur_dans_la_boite", joueur_dans_la_boite);
+    pub const FILS_FINIS: Native = feuille(0xba094, "effct_fils_finis", fils_finis);
+}
+
+pub use barriere::{BOITE_TOUCHEE, FILS_FINIS, JOUEUR_TOUCHE};

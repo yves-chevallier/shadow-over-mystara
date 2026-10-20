@@ -87,7 +87,7 @@ de l'action (0 : premier appel, l'action y prépare son animation).
 | 0x10, 0x12 | actions propres aux personnages (h) | 0x359fc, 0x35a3a | `characters::run(Action10/12)` |
 | 0x14..0x34 | portage, saisies, lancers, sorts... | table | ROM sauf 0x22 (`actions::grabbed`) |
 
-Après l'action : collision avec le décor (0x33fe4, ROM) sauf actions 0x20/0x24/0x2a, entrées figées ou
+Après l'action : collision avec le décor (0x33fe4, `terrain::SHADOW`) sauf actions 0x20/0x24/0x2a, entrées figées ou
 scène 4 pendant la saisie ; puis `walk::clamp_to_screen`.
 
 Sous-état 4 (touché) : `+6` indexe la table de réactions 0x3a0f4 (33 entrées) ; chaque réaction est un
@@ -213,3 +213,17 @@ Cartes de l'exécution : `examples/zones` (entrées de blocs du code d'origine p
 savoir quels états et actions un scénario exerce ; `examples/player_coverage` pour les fonctions Rust.
 Les tables d'aiguillage du code (décalages relatifs, longs) sont relues à l'exécution : une réaction non
 réécrite continue donc à fonctionner telle quelle.
+
+## Collision avec le décor (`terrain.rs`, 0x33fe4 et sa copie 0x3403c)
+
+Appelée à chaque image par les joueurs, les ennemis, les ombres et les tirs (A0 = objet). Si le bit 0x800 du mot
+`A5+0x7fd0` est levé, le numéro de terrain sous l'objet (`video::terrain`, 0x24b0 : attribut de la case de la
+couche de défilement 2, ou carte fixe en ROM aux scènes 2 et 0x14) est écrit en `+0x29` et indexe une table de
+types en ROM (entrées de 16 octets : genre, sous-programme, sens, échelle, bord, arrêt). Genre 0 : libre
+(`A5+0x64/0x60/0x62` remis à zéro, D2 = 0) ; genre 1 : obstacle plein, l'objet est repoussé (X ou Y corrigé
+selon que le bord est en dessous, au-dessus, à gauche ou à droite) puis **tout recommence** (`beq 0x33fe4`) tant
+que le champ « arrêt » est nul ; genre > 1 : pente, un seul passage, profil linéaire dont l'échelle est un
+décalage. D5 = 1 dès que l'objet a été déplacé (la copie `0x3403c` le pose avant de tester le bord, et sa
+table de types est en `0x34a5c`). Dernière position testée en `A5+0x60` (x), `+0x62` (y), `+0x64` (objet).
+Les sous-programmes de l'original sont atteints par des tables de sauts : A1 vaut l'adresse du sous-programme
+(`0x340b6...` : obstacles de la copie 1, `0x34120...` : copie 2, `0x341a4...` : pentes), que le Rust reproduit.

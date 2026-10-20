@@ -114,6 +114,9 @@ pub const NATIVES: &[Native] = &[
     effects::EFFCT_56,
     effects::EFFCT_57,
     effects::EFFCT_62,
+    effects::BOITE_TOUCHEE,
+    effects::JOUEUR_TOUCHE,
+    effects::FILS_FINIS,
 ];
 
 /// Routines du jeu appelées par les gestionnaires (adresses d'origine).
