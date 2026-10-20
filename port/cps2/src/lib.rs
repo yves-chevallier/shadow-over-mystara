@@ -46,6 +46,15 @@ impl StepCap {
     }
 }
 
+/// Correctif d'un comportement indéfini du jeu d'origine (voir `Machine::patches`).
+#[derive(Clone, Copy)]
+pub struct Patch {
+    /// Adresse (début de bloc) où il s'applique.
+    pub entry: u32,
+    /// Modifie l'état et renvoie vrai pour remplacer l'exécution de l'instruction à `entry`.
+    pub apply: fn(&mut Cpu, &mut Cps2Bus) -> bool,
+}
+
 pub struct Machine {
     /// Code recompilé (None = tout interprété).
     pub executor: Option<BlockExecutor>,
@@ -64,6 +73,9 @@ pub struct Machine {
     /// en `pc` ont eu lieu dans l'image, le suivant est retenu : le temps restant de l'image est sauté (comme
     /// `idle`) et le pas s'exécute au début de l'image suivante, après l'interruption de vblank.
     pub step_cap: Option<StepCap>,
+    /// Correctifs de comportements que le jeu d'origine laisse au hasard (registres ou mémoire non initialisés) et
+    /// qu'aucune réécriture ne peut reproduire : appliqués à l'identique par le jeu et par la machine de référence.
+    pub patches: Vec<Patch>,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -124,6 +136,7 @@ impl Machine {
             step_hook: None,
             idle: None,
             step_cap: None,
+            patches: Vec::new(),
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -171,6 +184,9 @@ impl Machine {
                     break;
                 }
                 cap.count += 1;
+            }
+            if plain && self.patches.iter().any(|p| p.entry == self.cpu.pc && (p.apply)(&mut self.cpu, &mut self.bus)) {
+                continue;
             }
             if let Some(run) = self.executor {
                 if plain {

@@ -1,5 +1,5 @@
 //! Affiche des octets de RAM à la fin de chaque image d'une plage, avec ou sans natives.
-//!   dumpram <roms> <eeprom> <scénario> <image début> <image fin> <adresse hex> <longueur> <natives 0|1>
+//!   dumpram <roms> <eeprom> <scénario> <image début> <image fin> <adresse hex (RAM ff0000-ffffff ou GFX RAM 900000-afffff)> <longueur> <natives 0|1>
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -20,8 +20,9 @@ fn main() {
         s.apply(f, &mut m);
         m.run_frame();
         if f + 1 >= from {
-            let base = ((addr - 0xff0000) / 2) as usize;
-            let words: Vec<String> = (0..len / 2).map(|i| format!("{:04x}", m.bus.ram[base + i])).collect();
+            let gfx = (0x900000..0xb00000).contains(&addr);
+            let base = if gfx { ((addr - 0x900000) / 2) as usize } else { ((addr - 0xff0000) / 2) as usize };
+            let words: Vec<String> = (0..len / 2).map(|i| format!("{:04x}", if gfx { m.bus.gfxram[base + i] } else { m.bus.ram[base + i] })).collect();
             println!("{:5} {}", f + 1, words.join(" "));
         }
     }

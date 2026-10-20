@@ -109,13 +109,17 @@ fn move_xz_table(x: &mut Cx) {
     x.call(call::MOVE_TABLE_XZ);
 }
 
-/// Un tour de l'angle de vol : toutes les `reload` images, `+0xa2` s'ajoute à la direction.
-fn bank(x: &mut Cx, reload: u8) {
+/// Un tour de l'angle de vol : toutes les `reload` images, `+0xa2` s'ajoute à la direction. En vol libre
+/// (`clamp`, 0x758aa) un angle devenu négatif est remis à zéro.
+fn bank(x: &mut Cx, reload: u8, clamp: bool) {
     let t = x.u8(TIMER_A).wrapping_sub(1);
     x.set8(TIMER_A, t);
     if (t as i8) < 0 {
         x.set8(TIMER_A, reload);
-        let angle = x.u8(ANGLE).wrapping_add(x.u8(STEP));
+        let mut angle = x.u8(ANGLE).wrapping_add(x.u8(STEP));
+        if clamp && (angle as i8) < 0 {
+            angle = 0;
+        }
         x.set8(ANGLE, angle);
     }
 }
@@ -215,7 +219,7 @@ fn fly(x: &mut Cx) {
 fn fly_loop(x: &mut Cx, reload: u8) {
     move_xz_table(x);
     step(x);
-    bank(x, reload);
+    bank(x, reload, false);
     let t = x.u8(TIMER_B).wrapping_sub(1);
     x.set8(TIMER_B, t);
     if (t as i8) < 0 {
@@ -237,7 +241,7 @@ fn fly_loop(x: &mut Cx, reload: u8) {
 fn fly_loop_b(x: &mut Cx) {
     move_xz_table(x);
     step(x);
-    bank(x, 0x10);
+    bank(x, 0x10, false);
     let t = x.u8(TIMER_B).wrapping_sub(1);
     x.set8(TIMER_B, t);
     if (t as i8) < 0 {
@@ -256,7 +260,7 @@ fn fly_loop_b(x: &mut Cx) {
 fn fly_front(x: &mut Cx) {
     move_xz_table(x);
     step(x);
-    bank(x, 0xc);
+    bank(x, 0xc, false);
     let t = x.u8(TIMER_B).wrapping_sub(1);
     x.set8(TIMER_B, t);
     if (t as i8) < 0 {
@@ -336,7 +340,7 @@ fn exit_flight(x: &mut Cx) {
     step(x);
     match x.u8(VARIANT) >> 1 {
         0 => {
-            bank(x, 0x14);
+            bank(x, 0x14, true);
             if x.u16(0xc) > x.u16(EXIT_LIMIT) {
                 leave(x);
             }

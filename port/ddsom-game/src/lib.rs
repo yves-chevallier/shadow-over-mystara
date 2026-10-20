@@ -311,6 +311,17 @@ pub const MAX_STEPS_PER_FRAME: u32 = 8;
 fn cap_steps(m: &mut cps2::Machine) {
     let max = std::env::var("DDSOM_STEP_CAP").ok().and_then(|v| v.parse().ok()).unwrap_or(MAX_STEPS_PER_FRAME);
     m.step_cap = (max > 0).then(|| cps2::StepCap::new(GAME_STEP, max));
+    m.patches = patches();
+}
+
+/// Correctifs communs au jeu et à la machine de référence (`cps2::Machine::patches`).
+fn patches() -> Vec<cps2::Patch> {
+    let mut v = vec![
+        cps2::Patch { entry: player::scripted::END_BY_SCENE_ENTRY, apply: player::scripted::patch_end_by_scene },
+        cps2::Patch { entry: scene::exit::SHARED_NEXT_ENTRY, apply: scene::exit::patch_shared_next },
+    ];
+    v.extend(sprites::EMPTY_FRAME_PATCHES);
+    v
 }
 
 /// Active les routines natives (et le code recompilé) sur la machine.

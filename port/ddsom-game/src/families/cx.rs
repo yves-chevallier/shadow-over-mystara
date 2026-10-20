@@ -15,7 +15,7 @@ use m68k::{Cpu, SR_C};
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use crate::{call, regs, Native};
+use crate::{call, call_at, regs, Native};
 
 /// Contexte d'un gestionnaire : l'objet courant (A0) et la machine.
 pub struct Cx<'a> {
@@ -167,6 +167,14 @@ impl<'a> Cx<'a> {
         self.c.a[0] = self.o.0;
         self.c.a[5] = A5;
         call(self.c, self.b, addr);
+    }
+
+    /// Comme `call`, pour une sous-routine qui peut céder la main (0xa40) : `ret` est l'adresse qui suit le
+    /// `jsr` dans le gestionnaire d'origine, par où la tâche reprendra, réveillée plus tard.
+    pub fn call_at(&mut self, addr: u32, ret: u32) {
+        self.c.a[0] = self.o.0;
+        self.c.a[5] = A5;
+        call_at(self.c, self.b, addr, ret);
     }
 
     /// `lea set,A4 ; moveq #n,D0 ; jsr 0x1a32` : démarre le script `n` du jeu d'animations `set`.

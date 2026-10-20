@@ -211,3 +211,23 @@ tâche principale (`0x1c45a-0x1c4b2`, qui cède).
   phase 12 réservent la place des adresses de retour de la boucle et de `0x1c86e`, et `lib::call` lève
   `Unwound` quand le code 68000 dépile au-delà de son retour (hors exception : le `trap` change de
   pile) ; `lib::exec` abandonne alors les fonctions Rust et reprend au PC atteint.
+
+## 9. Comportements indéfinis de l'original : correctifs communs (`cps2::Machine::patches`)
+
+Quelques chemins du jeu d'origine lisent des registres ou des tables hors limites et se comportent au hasard : aucune
+réécriture ne peut les reproduire (le résultat dépend des registres laissés par la routine précédente, de la durée
+exacte de chaque routine, ou du code pris pour des adresses). Le jeu (`install`) et la machine de référence
+(`install_reference`) y appliquent le **même correctif** (`ddsom_game::patches`, liste de `cps2::Patch` : une adresse
+d'entrée de bloc et une fonction qui modifie l'état et dit si elle remplace l'instruction), de sorte que la validation
+reste possible. Aucun de ces chemins n'est atteint par une partie normale :
+
+| Adresse | Cas | Correctif |
+|---|---|---|
+| `0x23f40` | cinématique de fin des joueurs : table 0x23f4e (une adresse par scène) lue au-delà des scènes 0 à 108 ; la scène 110 saute dans un « thunk » vers l'animation 0x1a32 avec les registres laissés par le code précédent (A4 : un bloc de la RAM ou la table d'objets) | scènes 109 à 114 : routine inactive 0x24102 (`player::scripted::patch_end_by_scene`) |
+| `0xf7b62` | écran de fin de niveau (état partagé 0xf792e) : table de 20 octets (0xf7b88) indexée par l'octet `+0xc` du bloc ; hors table, l'original saute dans du code lu comme des adresses, plante et redémarre (scène 110 jouée jusqu'au bout) | aucune suite (`scene::exit::patch_shared_next`) |
+| `0x1e22a`, `0x1e1aa`, `0x1e110`, `0x1e2aa` | image d'objet sans morceau (compte nul) : la boucle `dbf` démarre à -1 et écrit 65 536 entrées de sprite en faisant plusieurs fois le tour de la RAM d'objets, sur plusieurs images (interrompue par les IRQ à des cycles que seules des routines exactes au cycle près reproduiraient). Produit par des états que le jeu ne crée pas (phase 16 forcée en cours de partie, scénarios de couverture) | `rts` sans rien dessiner (`sprites::EMPTY_FRAME_PATCHES`) |
+
+Lecture : un scénario en écart dont la machine de référence « fait une pause de deux images » (compteur FF806E qui avance
+par à-coups, `examples/cyc` montre la dernière routine native atteinte avant la fin de l'image) rencontre ce genre
+de boucle ; `examples/watch` accepte aussi les adresses de la GFX RAM (0x900000-0xafffff) et `examples/cyc` donne
+les cycles à l'entrée de chaque native pour les deux machines.

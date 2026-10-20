@@ -1,50 +1,24 @@
-# Scénarios en écart, gardés pour le diagnostic
+# Scénarios en écart
 
-Ces scénarios ne sont pas dans la validation courante : leur écart avec le code d'origine ne vient pas
-(ou pas seulement) de la routine qu'ils exercent. `boss13_dragon` est le dernier.
+Ce dossier garde les scénarios dont l'écart avec le code d'origine n'est pas (encore) expliqué par la routine qu'ils
+exercent. **Il est vide** : tous les scénarios ont été ramenés à « VALIDE » et rangés dans leur dossier
+(`boss/`, `enemy/`, `scene/`, `scene_end/`, `cov/`). Historique des causes trouvées (méthode : `DDSOM_SANS=préfixe`, puis
+`DDSOM_ADOPT_REGS` / `DDSOM_ADOPT_MASK` / `DDSOM_ADOPT_TRACE`, `examples/watch` (RAM et GFX RAM), `examples/pctrace`,
+`examples/cyc` (cycles à l'entrée des natives, hybride contre original)) :
 
-Les scénarios `_mort` (boss 5, 8, 11, 12, 15, 18, 19, 21 : PV du boss ramenés à 1 après 1 500 images) et les grands
-`boss12_scene40`, `boss18_scene26` sont passés dans `scenarios/boss/`. Les écarts d'origine (FFD514/FFD574/FFD692 de
-`game_phase12`, FF8664 de `combat_update`, vitesse d'effet du boss 8) avaient été corrigés par les campagnes de registres
-résiduels. Ceux qui restaient (images 6211, 6652, 7111, 7741, 11040 ; mots FF8556, FF855E, FFCAF6, FF806E, FF2A38/58) ne
-viennent d'aucune native : c'est la « tempête de pas » (`docs/couverture.md`), l'avance rapide du jeu d'origine (la tâche
-principale enchaîne 100 à 140 pas par image, `examples/passages` avec `DDSOM_SANS=` le montre : 0 puis 113 passages en 0x1c86e).
-Elle est déclenchée par un bouton **pressé ou maintenu** à l'entrée de la scène suivante ou pendant la fin de scène ; la
-troncature d'un scénario laissait justement des boutons enfoncés. `gen_boss.py` (`tronquer`) coupe donc les entrées
-après la mort du boss et relâche les boutons restés enfoncés : les scénarios `_mort` sont VALIDES sur 12 000 images (le
-décompte 0xf6658 des boss 5 et 11 : aucune native en cause, seul le nombre de pas de la tempête diffère). `boss18_scene26` reste tronqué (image 10 900, mort du Lich à 10 541) ; `boss12_scene40` ne l'est plus.
+| Scénario | Image | Cause | Correction |
+|---|---|---|---|
+| `scene/scene_67` | 3546 | régression de la fusion : la porte de passage `set_29` (`set_b.rs`, `door_b`) appelait le fondu `0x1460`, qui cède la main (`0xa40`), avec l'adresse de retour sentinelle de `call` ; au réveil, la tâche revenait à `0xfffe` | `Cx::call_at(addr, ret)` : le fondu est appelé avec l'adresse de retour de l'original (`0xd8f06`) |
+| `boss/boss13_dragon`, `scene/scene_07`, `enemy/ghoul_scene19` | – | VALIDES sans autre changement (plafond de pas de jeu par image, registres résiduels déjà corrigés) | – |
+| `scene/scene_05`, `scene/scene_11` | 4118, 4951 | harpie (`enemy_harpy`, sortie de vol 0x75884) : l'angle de vol `+0x2d` devenu négatif est remis à zéro (`clr.b` en 0x758c0), ce que les autres variantes de vol ne font pas | `bank(x, reload, clamp)` |
+| `scene/scene_08` | 3889 | fenêtre de dialogue (`set_24`, `set_b.rs`, `dialog`) : à la fermeture, la définition suivante est rechargée par `0xd7124` ; pour la sorte 13 elle copie la palette par `movem` dans D0-D6/A3, et l'original relit D6 (nombre de lignes à effacer) *écrasé* par la palette | `copy_palette` laisse D0-D6/A3 ; `shrink` relit D6 |
+| `scene/scene_110` | 3355, 3365, 3725, 4668 | (1) `build_sprite_list` laissait A4 (pointeur d'écriture) et A6 (caméra) : la cinématique de fin des joueurs saute pour la scène 110 hors de sa table (0x23f4e, scènes 0 à 108) et lit une animation avec A4 laissé par le constructeur de sprites ; (2) image d'objet sans morceau (boucle `dbf` à -1, 65 536 sprites sur plusieurs images) ; (3) l'écran de fin de niveau lit son aiguillage hors de sa table et plante | A4/A6 rendus par `build_sprite_list` ; trois correctifs communs aux deux machines (`docs/boucle.md` §9) |
+| `scene_end/end_01` | 3605 | image d'objet sans morceau (voir ci-dessus) : la machine de référence passait deux images dans la boucle de 65 536 sprites | `sprites::EMPTY_FRAME_PATCHES` |
+| `enemy/ghoul_scene97` | 5516 | `players_update` ne laissait pas D5 : le reconnaisseur de combos (`0xf186e`/`0xf187c`) y laisse 0 ou 0x20, relu par une routine suivante ; ses autres registres (D0-D3, D7.b) sont aussi relus (position du sang des boss, ci-dessous) | `combos::recognize_*` et `combos::step` rendent D0-D5, D7.b |
+| `cov/cov_tour5_c4` | 24147 | mort du Lich (boss 18) : `0x103ba` crée le sang en `0xb141a` avec D2/D3 laissés par le code précédent (D3 par le reconnaisseur de combos du joueur, voir ci-dessus) | `combos::step` rend D3 |
 
-```text
-boss13_dragon.txt (scènes 7 et 9, boss de type 13 réécrit dans families/boss_dragon.rs)
-  validate : VALIDE jusqu'à l'image 9990 ; écart à l'image 9991 (fin de scène : FF8032, FF8050, FF8054 et FF806E,
-  la fin survient 23 images plus tôt que dans l'original), aucune désactivation d'un seul groupe de natives ne
-  le supprime. Les écarts précédents (images 3100 et 7241 : FF85E8, FF85E6) venaient des registres hérités :
-  set_0, build_sprite_list et camera1/2 laissaient un D4 différent, relu par 0xad7b0 (ajoute D4 à la position
-  des joueurs quand A5+0x51e vaut 4). DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 : VALIDE sur 12000 images.
-  validate : écart à l'image 3100 (mot FF85E8 = fraction de X du joueur 1), identique avec DDSOM_SANS=boss
-  (natif du boss désactivé) ; toutes natives désactivées (DDSOM_SANS=,) : VALIDE. Aucune désactivation d'un seul
-  groupe de natives (combat_update, players_*, player_overlays_update, camera1, game, dispatch...) ne supprime
-  l'écart : plusieurs routines à la fois, comme les scénarios cov/ (docs/couverture.md).
-  DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 : VALIDE sur 12000 images (chaque appel natif du boss comparé à l'original).
-
-ghoul_scene97.txt (scène de démonstration 97, Ghoul de type 5 réécrit dans families/enemy_ghoul/)
-  validate : écart à l'image 5516 (181 mots, objets FFBE9E-FFBF56 : effets), identique avec DDSOM_SANS=enemy
-  (toutes les natives ENEMY désactivées) ; DDSOM_SANS=players_update : VALIDE. Contrôle appel par appel
-  (DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 DDSOM_SANS=game_phase12,world_update,dispatch) : VALIDE sur 12000 images,
-  aucun écart de l'ennemi. Cause : players_update (autre module).
-
-ghoul_scene19.txt (scène 19, Ghoul de type 5 réécrit dans families/enemy_ghoul/)
-  validate : écart à l'image 5483 (mot FF8664 : champ du joueur 1), identique avec DDSOM_SANS=enemy_5 ;
-  DDSOM_SANS=combat : VALIDE (combat_update, voir docs/couverture.md).
-```
-
-scene_05.txt, scene_07.txt, scene_08.txt, scene_11.txt, scene_110.txt (entrée de scène, `tools/gen_scene.py`, 6 500 images) et
-end_01.txt (sortie de la scène 1, phase 16 forcée à l'image 3600, `tools/gen_scene_end.py`) : écarts aux images 4118 (ENEMY, ffaa8a),
-5671 (fin de scène après la grotte du boss), 3889 (gfxram 912414), 4951 (ENEMY, ffa9ca), 3355 et 3605 (tâche principale retardée de
-deux images dans l'original). **Mêmes écarts avec `DDSOM_SANS=scene_`** (aucune native du module `scene`) : ils viennent d'autres
-modules (ennemis, boss), pas du déroulement des scènes.
-
-Piste : écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel)
-mais qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...`
-fait rendre aux natives nommées les registres de l'original : chercher par dichotomie celle dont un
-registre de sortie est relu.
+Piste générale : un écart qui disparaît en mode contrôle (l'état de l'original est réadopté après chaque appel) mais
+qu'aucune désactivation isolée ne supprime = registres hérités. `DDSOM_ADOPT_REGS=préfixe,...` fait rendre aux natives
+nommées les registres de l'original ; `DDSOM_ADOPT_MASK` limite l'adoption à quelques registres (bit i = Di, bit 8+i = Ai) :
+chercher par dichotomie le registre, puis la native, puis le lecteur du registre dans l'original (`examples/pctrace` avec
+`DDSOM_SANS=,` donne tous les registres instruction par instruction).

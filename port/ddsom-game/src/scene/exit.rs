@@ -1285,3 +1285,22 @@ mod tests {
         }
     }
 }
+
+/// État partagé 0xf792e (écran de fin de niveau) : après le message, 0xf7b62 choisit la suite d'après l'octet `+0xc` de
+/// son bloc (A6) par une table de 20 octets (0xf7b88). Pour les scènes de démonstration 109 à 114, l'octet est hors
+/// de la table et l'original saute à une adresse lue dans du code : il plante et redémarre. Hors table : aucune suite
+/// (octet de la table nul, branchement en 0xf792c). Même correctif dans le code d'origine (machine de référence).
+pub const SHARED_NEXT_ENTRY: u32 = 0xf7b62;
+const SHARED_NEXT_TABLE_LEN: u8 = 20;
+const SHARED_NEXT_NONE: u32 = 0xf792c;
+
+pub fn patch_shared_next(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+    if rd8(b, c.a[6] + 0xc) < SHARED_NEXT_TABLE_LEN {
+        return false;
+    }
+    wr16(b, c.a[6] + 0x12, 0x65);
+    c.d[0] &= 0xffff_0000;
+    c.a[1] = 0xf7b88;
+    c.pc = SHARED_NEXT_NONE;
+    true
+}

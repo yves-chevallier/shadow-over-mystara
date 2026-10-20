@@ -141,11 +141,50 @@ pub fn update(g: &mut Ctx, p: Player) {
         }
         0xc => {
             let scene = g.a5u8(ram::SCENE) as u32;
-            let routine = g.prog32(tables::END_BY_SCENE + 4 * scene);
-            run_at(g, p, routine);
+            let routine = end_routine(g, scene);
+            // l'aiguillage d'origine (0x23f40) saute avec D0 = 4 × scène et A1 = routine
+            g.c.d[0] = scene << 2;
+            g.c.a[1] = routine;
+            match HANDLERS.iter().find(|h| h.0 == routine) {
+                Some(&(_, f)) => f(g, p),
+                None => {
+                    g.rom(routine, p);
+                }
+            }
         }
         _ => {}
     }
+}
+
+// ---- cinématique de fin ------------------------------------------------------------------------
+
+/// Début de l'aiguillage d'origine de la cinématique de fin (indexé par la scène).
+pub const END_BY_SCENE_ENTRY: u32 = 0x23f40;
+/// Dernière scène de la table 0x23f4e ; au-delà (scènes de démonstration 109 à 114), l'original lit du code comme
+/// des adresses et saute au hasard (la scène 110 aboutit à l'animation 0x1a32 avec les registres laissés par la
+/// routine précédente, d'où des morceaux de sprite écrits par dizaines de milliers). Ces scènes n'ont pas de
+/// cinématique : la routine inactive 0x24102.
+const LAST_END_SCENE: u32 = 108;
+const NO_END: u32 = 0x24102;
+
+fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
+    if scene > LAST_END_SCENE {
+        NO_END
+    } else {
+        g.prog32(tables::END_BY_SCENE + 4 * scene)
+    }
+}
+
+/// Même correctif dans le code d'origine (machine de référence de la validation) : à l'entrée de l'aiguillage.
+pub fn patch_end_by_scene(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) -> bool {
+    let scene = crate::mem::rd8(b, crate::mem::A5 + 0x34) as u32;
+    if scene <= LAST_END_SCENE {
+        return false;
+    }
+    c.d[0] = scene << 2 & 0xffff;
+    c.a[1] = NO_END;
+    c.pc = NO_END;
+    true
 }
 
 // ---- outils -----------------------------------------------------------------------------------

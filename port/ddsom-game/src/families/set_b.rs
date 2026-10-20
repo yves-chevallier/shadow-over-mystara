@@ -2404,7 +2404,8 @@ mod door_b {
         x.set_a5_u8(0x43, 0xff);
         x.set_a5_u16(0x490, 2);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(0x1460);
+        // fondu de sortie : cède la main, la tâche reprend en 0xd8f06
+        x.call_at(0x1460, 0xd8f06);
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
         match x.u8(0x48) as i8 {
@@ -2926,8 +2927,14 @@ mod dialog {
         name_tail(x, o);
     }
 
+    /// `movem.l (A2)+,D0-D6/A3 ; movem.l D0-D6/A3,(A1)` : les huit longs restent dans D0-D6 et A3 (le moteur de
+    /// fenêtres relit D6 : la fermeture d'une fenêtre y lit le nombre de lignes).
     fn copy_palette(x: &mut Cx, src: u32, dst: u32) {
         copy_longs(x, src, dst, 8);
+        for i in 0..7 {
+            x.c.d[i] = x.data32(src + 4 * i as u32);
+        }
+        x.c.a[3] = x.data32(src + 28);
     }
 
     fn copy_longs(x: &mut Cx, from: u32, to: u32, n: u32) {
@@ -3566,7 +3573,8 @@ mod dialog {
         let v = x.u8(0x36);
         x.set8(0x1b, v);
         let mut a6;
-        let rows: u8;
+        // D6 : nombre de lignes de la fenêtre (octet), que le chargement d'une définition peut écraser
+        let d6;
         if x.u8(0x21) != 0 {
             x.add8(0x21, 0xff);
             let a1 = x.u32(0x14);
@@ -3578,10 +3586,11 @@ mod dialog {
         if (x.u8(0x1a) as i8) >= 0 {
             x.set8(0x5, 0);
             a6 = x.u32(0x14).wrapping_sub(8);
-            rows = x.u8(0x20);
+            x.c.d[6] = x.u8(0x20) as u32;
             let def = x.u32(0x1c);
             let a1 = load(x, def);
-            if x.u8(0x20) == rows && a1 == a6 {
+            d6 = x.c.d[6];
+            if x.u8(0x20) == d6 as u8 && a1 == a6 {
                 return;
             }
         } else {
@@ -3589,12 +3598,12 @@ mod dialog {
             x.set8(0x22, 1);
             x.set32(0x4, 0x0600_0000);
             a6 = x.u32(0x14).wrapping_sub(8);
-            rows = x.u8(0x20);
+            d6 = x.u8(0x20) as u32;
         }
-        if (rows as i8) < 0 {
+        if (d6 as u8 as i8) < 0 {
             return;
         }
-        let count = (rows as u16).wrapping_mul(2).wrapping_add(1);
+        let count = (d6 as u16).wrapping_mul(2).wrapping_add(1);
         for _ in 0..=count {
             for k in 0..3 {
                 wr32(x.b, a6 + 4 * k, 0x20_0000);

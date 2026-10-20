@@ -154,8 +154,9 @@ Séquences réécrites : 0 à 5, 7 à 19, 21 à 26, 28, 30, 32, 34, 35. Cédées
   lancés par `tools/validate_all.sh` que si `DDSOM_SCENES=1`.
 * Les scénarios de `scenarios/boss/` et `bot*` atteignent des fins de scène naturelles (4 388 appels de
   la phase 16, 26 741 de la phase 8, 273 737 du lecteur de script sur les 8 scénarios historiques).
-* Écarts connus, **indépendants de ce module** (identiques avec `DDSOM_SANS=scene_`) : voir
-  `scenarios/ko/README.md` (scene_05, 07, 08, 11, 110 et end_01).
+* Les scénarios `scene_05`, `07`, `08`, `11`, `67`, `110` et `end_01`, longtemps en écart (`scenarios/ko/README.md`),
+  sont VALIDES : leurs écarts venaient d'autres modules (harpie, fenêtres de dialogue, appel de fondu de la porte 29,
+  registres du constructeur de sprites) et de comportements indéfinis de l'original (`docs/boucle.md` §9).
 * Non exercé : la phase 24 (aucun scénario n'y entre), les séquences cédées à l'original
   (6, 20, 27, 29, 31, 33 : seul l'aiguillage est testé), la phase 28 (non réécrite) et la saisie du
   nom et le générique de fin.

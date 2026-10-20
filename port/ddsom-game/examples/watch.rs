@@ -11,7 +11,8 @@ fn main() {
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
     let addr = u32::from_str_radix(&a[5], 16).unwrap();
-    let i = ((addr - 0xff0000) / 2) as usize;
+    let gfx = (0x900000..0xb00000).contains(&addr);
+    let i = if gfx { ((addr - 0x900000) / 2) as usize } else { ((addr - 0xff0000) / 2) as usize };
     for f in 0..n - 1 {
         s.apply(f, &mut m);
         m.run_frame();
@@ -20,20 +21,24 @@ fn main() {
     // dernière image : les natives restent actives, mais le reste est interprété pas à pas
     let exec = m.executor;
     m.executor = Some(|pc, c, b, dl| {
-        let before = b.ram[WATCH.with(|w| w.get())];
+        let k = WATCH.with(|w| w.get());
+        let get = |b: &cps2::Cps2Bus| if GFX.with(|g| g.get()) { b.gfxram[k] } else { b.ram[k] };
+        let before = get(b);
         let r = ddsom_game::run_native_only(pc, c, b, dl);
-        if b.ram[WATCH.with(|w| w.get())] != before {
-            println!("écrit par une routine native en {pc:06x} : {:04x}", b.ram[WATCH.with(|w| w.get())]);
+        if get(b) != before {
+            println!("écrit par une routine native en {pc:06x} : {:04x}", get(b));
         }
         r
     });
     WATCH.with(|w| w.set(i));
+    GFX.with(|g| g.set(gfx));
     let _ = exec;
-    let mut last = m.bus.ram[i];
+    let mut last = if gfx { m.bus.gfxram[i] } else { m.bus.ram[i] };
     m.step_hook = Some(Box::new(move |c: &m68k::Cpu, b: &cps2::Cps2Bus, pc: u32| {
-        if b.ram[i] != last {
-            println!("pc {pc:06x} -> {:04x}  d0={:08x} a0={:08x} a1={:08x} a4={:08x} a6={:08x}", b.ram[i], c.d[0], c.a[0], c.a[1], c.a[4], c.a[6]);
-            last = b.ram[i];
+        let now = if gfx { b.gfxram[i] } else { b.ram[i] };
+        if now != last {
+            println!("pc {pc:06x} -> {now:04x}  d0={:08x} a0={:08x} a1={:08x} a4={:08x} a6={:08x} a7={:08x}", c.d[0], c.a[0], c.a[1], c.a[4], c.a[6], c.a[7]);
+            last = now;
         }
     }));
     m.run_frame();
@@ -41,4 +46,5 @@ fn main() {
 
 thread_local! {
     static WATCH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static GFX: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
