@@ -69,8 +69,10 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 2. **`reset` 0x350 et `boot_init` 0x492 (K1)** : remises à zéro et registres CPS ; même remarque pour la durée.
 3. **Pools d'objets (O2, 9 %)** : `0x1ee1a`/`0x1ef6c`, insertion dans les listes triées par profondeur
    (la plus chaude du jeu, appelée par les natives des familles).
-4. **Interface joueurs (F3, 9,5 %)** : `0x15216`, `0x156fa`, `0x17814`, `0x175a8`, `0x1728e`, `0x16c1a`
-   (panneaux d'état : PV, score, magies) ; tâche `0x150ac` créée en fin de phase 0.
+4. **Interface joueurs (F3)** : fait, `hud/` (`docs/hud.md`). Avec le texte V2, les pop-ups U1 et l'éclair U2
+   (`0x28d8`, `0x1386`, `0x2810`, `0xd32`, `popups.rs`, `palette.rs`) : environ 50 instructions 68000 par image de
+   moins (F3 46, V2 4, U1 0,2, U2 0,25 sur l'échantillon de 40 scénarios), soit 10 % du reste ;
+   `0x1de96` n'a jamais été du 68000 (l'`rts` en `0x1df12` est partagé avec `0x1ee1a`).
 5. **Défilement et caméras (B1, 7,4 %)** : `0x33fe4`, `0x31616`, `0x33e20`, `0x30308`, `0x309e0`, `0x2ede0`.
 6. **EFFCT (C0e, 2,7 %)** : `0xb9eba`, `0xb9ee6` (3 scénarios seulement), puis IA E1 (`0xfbb0`, `0xe76c`),
    texte V2 (`0x28d8`, `0x1386`), liste de sprites V4 (`0x1de96`), FIFO son S1 (`0xedf80`).

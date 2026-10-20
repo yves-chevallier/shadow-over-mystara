@@ -872,14 +872,15 @@ fn copy_flash_palettes(b: &mut Cps2Bus, restore: bool) {
     }
 }
 
-/// Couleur de l'éclair : la moyenne arrondie des trois composantes donne le niveau de gris, rendu comme
-/// l'original (le décalage `-0xd00` fait déborder le quartet de luminosité).
+/// Niveau de gris d'une couleur : la moyenne arrondie de ses trois composantes (0 à 12).
 fn flash_level(color: u16) -> u16 {
     ((color >> 8 & 0xf) + (color >> 4 & 0xf) + (color & 0xf) + 4) >> 2
 }
 
-fn flash_color(level: u16) -> u16 {
-    0xf300u16.wrapping_add(level).wrapping_add(level << 4).wrapping_add(level << 8) & 0xff00
+/// Couleur d'un niveau : `base` + niveau à chaque quartet, puis masque. Le décalage de `base` fait déborder
+/// le quartet de luminosité (voir les huit variantes ci-dessous).
+fn flash_color(level: u16, base: u16, mask: u16) -> u16 {
+    base.wrapping_add(level).wrapping_add(level << 4).wrapping_add(level << 8) & mask
 }
 
 /// 0x1ac24 : réserve des palettes de l'éclair.
@@ -900,27 +901,28 @@ fn restore_flash_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x1ab56 : réserve les palettes puis les remplace par des gris.
-fn flash_gray(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Éclair : met les palettes en réserve puis les remplace par des gris teintés (`BASE` et `MASK` dans
+/// D5 et D4 de l'original, `0x1ab6c`).
+fn flash_gray<const BASE: u16, const MASK: u16>(c: &mut Cpu, b: &mut Cps2Bus) {
     copy_flash_palettes(b, false);
     let mut last = 0;
     for (start, colors) in [(flash::PAGE, flash::PAGE_COLORS), (flash::SPARE, flash::SPARE_COLORS)] {
         for i in 0..colors {
             last = rd16(b, start + 2 * i);
-            let gray = flash_color(flash_level(last));
-            wr16(b, start + 2 * i, gray);
+            let tinted = flash_color(flash_level(last), BASE, MASK);
+            wr16(b, start + 2 * i, tinted);
         }
     }
     // registres de travail comme l'original les laisse (dernière couleur traitée)
     let level = flash_level(last);
     let (red, green) = (last >> 8 & 0xf, last >> 4 & 0xf);
     c.a[1] = flash::SPARE + 2 * flash::SPARE_COLORS;
-    set_low_word(&mut c.d[0], flash_color(level));
+    set_low_word(&mut c.d[0], flash_color(level, BASE, MASK));
     set_low_word(&mut c.d[1], red);
     set_low_word(&mut c.d[2], red + green);
     set_low_word(&mut c.d[3], level << 8);
-    set_low_word(&mut c.d[4], 0xff00);
-    set_low_word(&mut c.d[5], 0xf300);
+    set_low_word(&mut c.d[4], MASK);
+    set_low_word(&mut c.d[5], BASE);
     set_low_word(&mut c.d[6], 0xffff);
     rts(c, b);
 }
@@ -929,7 +931,14 @@ const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps
     Native { entry, name, cost: |_, _| 3000, run, touches_sound: false, outputs: regs::ALL, exact_cost: false }
 }
 
-pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", flash_gray);
+pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", flash_gray::<0xf300, 0xff00>);
+pub const FLASH_A: Native = flash_native(0x1aaa0, "palette_eclair_a", flash_gray::<0xf002, 0xffff>);
+pub const FLASH_B: Native = flash_native(0x1aaba, "palette_eclair_b", flash_gray::<0xf000, 0xf00f>);
+pub const FLASH_C: Native = flash_native(0x1aad4, "palette_eclair_c", flash_gray::<0xf320, 0xffff>);
+pub const FLASH_D: Native = flash_native(0x1aaee, "palette_eclair_d", flash_gray::<0xf033, 0xffff>);
+pub const FLASH_E: Native = flash_native(0x1ab08, "palette_eclair_e", flash_gray::<0xf030, 0xffff>);
+pub const FLASH_F: Native = flash_native(0x1ab22, "palette_eclair_f", flash_gray::<0xf004, 0xffff>);
+pub const FLASH_G: Native = flash_native(0x1ab3c, "palette_eclair_g", flash_gray::<0xf040, 0xf0ff>);
 pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_eclair_remet", restore_flash_palettes);
 pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_eclair_reserve", save_flash_palettes);
 
@@ -959,6 +968,13 @@ pub const NATIVES: &[Native] = &[
     APPROACH_CONSTANT,
     BRIGHTEN_PAGE,
     FLASH_GRAY,
+    FLASH_A,
+    FLASH_B,
+    FLASH_C,
+    FLASH_D,
+    FLASH_E,
+    FLASH_F,
+    FLASH_G,
     FLASH_RESTORE,
     FLASH_SAVE,
 ];

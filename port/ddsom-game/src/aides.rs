@@ -85,6 +85,42 @@ fn direction(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0x137e : direction de l'objet A0 (D3, D4 = son x et son z) vers (D1, D2).
+fn direction_from_object(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (x, z) = (rd16(b, c.a[0] + 8), rd16(b, c.a[0] + 0x10));
+    set_low_word(&mut c.d[3], x);
+    set_low_word(&mut c.d[4], z);
+    direction(c, b);
+}
+
+/// 0x1376 : direction de l'objet A0 vers l'objet A1.
+fn direction_to_object(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (x, z) = (rd16(b, c.a[1] + 8), rd16(b, c.a[1] + 0x10));
+    set_low_word(&mut c.d[1], x);
+    set_low_word(&mut c.d[2], z);
+    direction_from_object(c, b);
+}
+
+pub const DIRECTION_FROM_OBJECT: Native = Native {
+    entry: 0x137e,
+    name: "direction_objet",
+    cost: |_, _| 220,
+    run: direction_from_object,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::CCR,
+    exact_cost: false,
+};
+
+pub const DIRECTION_TO_OBJECT: Native = Native {
+    entry: 0x1376,
+    name: "direction_vers_objet",
+    cost: |_, _| 240,
+    run: direction_to_object,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::CCR,
+    exact_cost: false,
+};
+
 pub const DIRECTION: Native = Native {
     entry: 0x1386,
     name: "direction",
@@ -240,7 +276,7 @@ pub const GAME_OVER: Native = Native {
     exact_cost: false,
 };
 
-pub const NATIVES: &[Native] = &[DIRECTION, GRABBED, GAME_OVER];
+pub const NATIVES: &[Native] = &[DIRECTION, DIRECTION_FROM_OBJECT, DIRECTION_TO_OBJECT, GRABBED, GAME_OVER];
 
 #[cfg(test)]
 mod tests {
