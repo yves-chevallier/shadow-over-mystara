@@ -1263,7 +1263,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                 if apres > avant && affiches < 12 {
                     affiches += 1;
                     let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                    println!("écart en {entree:06x} type {kind} pas {pas} : {}", dernier.unwrap_or_default());
+                    println!("écart en {entree:06x} type {kind} pas {pas} obj {:06x} : {}", obj.0, dernier.unwrap_or_default());
                     println!("  objet avant : {:02x?}", avant_obj);
                     if pool.class == 2 {
                         let m = ((avant_obj[0xb2] as u32) << 8 | avant_obj[0xb3] as u32) | 0xff0000;
