@@ -11,3 +11,4 @@ ddsom-rc = { path = "../ddsom-rc" }
 
 [dev-dependencies]
 png = "0.17"
+cps2-gfx = { path = "../cps2-gfx" }
