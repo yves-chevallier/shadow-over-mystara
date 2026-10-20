@@ -9,19 +9,20 @@
 //! état de la séquence (pas de 4), `+4` minuterie, `+0x10`, `+0x12`, `+0x16` objets (messages, effets).
 //!
 //! Chaque séquence est un tableau d'états ([`St`]) exécuté un par image, puis un « sillage » de fin
-//! d'image ([`Update`]) qui met le monde à jour sauf à l'état final. Les états propres à la séquence
-//! sont réécrits ; les cinq *états partagés* (0xf590e, 0xf5938, 0xf6492, 0xf792e, 0xf7ecc : décompte
-//! des points, écrans de bonus, changement de zone) restent en 68000, certains cédant la main à
-//! l'ordonnanceur au milieu : lorsqu'une séquence atteint l'un d'eux, la phase entière cède la place
-//! à la séquence d'origine (`delegate`), qui continue exactement au même endroit.
+//! d'image ([`Update`]) qui met le monde à jour sauf à l'état final. Les cinq *états partagés* (0xf590e,
+//! 0xf5938, 0xf6492, 0xf792e, 0xf7ecc : décompte, bonus, intermède des personnages, boutique, fondu au noir)
+//! sont dans leurs propres modules ([`super::tally`], [`super::bonus`], [`super::characters`],
+//! [`super::shop`], [`super::blackout`]) ; ils sont appelés comme par l'aiguillage d'origine (`jsr (A1)`, son
+//! adresse de retour empilée) et cèdent souvent la main à l'ordonnanceur : la suite est alors une native posée
+//! à l'adresse de reprise d'origine, qui finit par revenir à l'aiguillage (`entrée + 10`, [`DISPATCH_TAILS`]).
 //!
 //! L'état final d'une séquence (`Leave`) prépare la scène suivante puis cède la main une fois
 //! (`0xa40`, quelques images) avant de finir par des appels sons (`0xc0c`, `0xe0882`) : la native
 //! s'interrompt à ce point en empilant l'adresse de reprise d'origine, où une autre native finit le
 //! travail (`RESUME_*`).
 //!
-//! Non réécrites (cédées à l'original) : les séquences 20, 27, 29, 31 et 33 (dont l'aiguillage saute
-//! au lieu d'appeler).
+//! Les séquences 0, 6, 20, 29, 31 et 33 n'ont pas d'aiguillage par `jsr` : leurs états finissent eux-mêmes
+//! l'image (`Update::Nothing`). La séquence 27 devient la 29 quand `A5+0x66` est posé.
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -53,9 +54,6 @@ const SEQUENCE_JUMPS: u32 = 0xf31ea;
 mod call {
     pub const PLAYER_INPUT: u32 = 0x2bdc;
     pub const WAIT: u32 = 0xa40;
-    pub const CLEAR_WORLD: u32 = 0xf7ee0;
-    pub const SCENE_PICTURE: u32 = 0xf7916;
-    pub const FADE_SCRIPT: u32 = 0xf683c;
     pub const SOUND_C0C: u32 = 0xc0c;
     pub const SOUND_E0882: u32 = 0xe0882;
     pub const COLLISIONS: u32 = 0x260ee;
@@ -201,6 +199,20 @@ impl<'a> Ex<'a> {
         })
     }
 
+    /// 0xf7ee0 : variables des scripts de transition remises à zéro.
+    fn reset_transition(&mut self) {
+        super::screen::clear_longs(self.x.b, super::screen::blocks::TRANSITION, 4);
+    }
+    /// 0xf7916 : bloc de la boutique remis à zéro (D0 = 0, comme l'original).
+    fn reset_shop(&mut self) {
+        super::screen::clear_longs(self.x.b, super::screen::blocks::SHOP, 5);
+        self.x.c.d[0] = 0;
+    }
+    /// 0xf683c : zone de texte des écrans de fin effacée.
+    fn clear_text(&mut self) {
+        super::screen::clear_text(self.x.c, self.x.b);
+    }
+
     /// Cède la main à l'original à l'adresse `pc` (aucun retour de la native).
     fn delegate(&mut self, pc: u32) {
         self.x.c.a[0] = BASE;
@@ -238,6 +250,8 @@ enum Tail {
     Command,
     /// `0xc0c`, deux images de plus, puis `0xe0882`.
     Twice,
+    /// Aucun : `jmp 0xa40`, la cession revient directement à l'appelant de la phase.
+    Jump,
 }
 
 /// Changement de scène à la sortie.
@@ -267,6 +281,8 @@ enum WaitFade {
 #[derive(Clone, Copy)]
 struct Leave {
     wait_fade: WaitFade,
+    /// Palettes au noir avant de partir (`A5+0x48e` = 15, `0x168c`).
+    black: bool,
     /// Mot de la RAM remis à zéro (séquence 1).
     clear_word: Option<u32>,
     clear_flags: bool,
@@ -281,6 +297,7 @@ struct Leave {
 /// Sortie ordinaire : scène suivante inchangée, 4 images, `0xc0c` puis `0xe0882`.
 const LEAVE: Leave = Leave {
     wait_fade: WaitFade::No,
+    black: true,
     clear_word: None,
     clear_flags: true,
     next_scene: NextScene::Same,
@@ -298,15 +315,16 @@ const fn leave_to(scene: u8) -> St {
 enum St {
     /// Ne fait rien (attend un événement extérieur).
     Idle,
-    /// État partagé, resté en 68000 : la séquence d'origine reprend la main.
-    Shared,
-    /// Efface le monde (`0xf7ee0`) et dessine l'image de la scène (`0xf7916`) ; minuterie `+4` à `timer`.
+    /// État partagé par plusieurs séquences (écrans de fin de niveau).
+    Shared(Shared),
+    /// Remet à zéro les variables de transition (`0xf7ee0`) et le bloc de la boutique (`0xf7916`) ; minuterie
+    /// `+4` à `timer`.
     Clear { timer: Option<u16> },
     /// Attend la fin de la minuterie, puis fait sortir les joueurs ; `timer` : nouvelle minuterie.
     WalkWait { timer: Option<u16> },
     /// Attend la fin de la minuterie, puis passe à l'état suivant.
     TimerWait,
-    /// Fondu `0x14ba` (délai 2) et script de fondu `0xf683c`, minuterie `timer`.
+    /// Fondu `0x14ba` (délai 2) et zone de texte effacée (`0xf683c`), minuterie `timer`.
     FadeScript { timer: u16 },
     /// Attend que tous les joueurs soient dans l'état `state`, puis passe à l'état suivant avec `timer`.
     PlayersThen { state: u8, timer: Option<u16> },
@@ -339,7 +357,27 @@ struct Sequence {
 }
 
 use Update::{Full, NoCollisions, Nothing, Reduced, World};
-use St::{Idle, Shared};
+use St::Idle;
+
+/// Les états partagés des séquences de sortie, à leur adresse d'origine.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shared {
+    /// 0xf590e : décompte de fin de niveau ([`super::tally`]).
+    Tally,
+    /// 0xf5938 : écran de bonus.
+    Bonus,
+    /// 0xf6492 : scène propre à certains personnages.
+    Characters,
+    /// 0xf792e : boutique.
+    Shop,
+    /// 0xf7ecc : fondu au noir et remise à zéro de l'écran.
+    Blackout,
+}
+const TALLY: St = St::Shared(Shared::Tally);
+const BONUS: St = St::Shared(Shared::Bonus);
+const CHARACTERS: St = St::Shared(Shared::Characters);
+const SHOP: St = St::Shared(Shared::Shop);
+const BLACKOUT: St = St::Shared(Shared::Blackout);
 
 const CLEAR: St = St::Clear { timer: None };
 const WALK: St = St::WalkWait { timer: None };
@@ -377,17 +415,50 @@ fn run_sequence(ex: &mut Ex) {
     let jump = ex.x.prog16(SEQUENCE_JUMPS + number);
     ex.x.c.d[1] = jump as u32;
     ex.entry = SEQUENCE_JUMPS + jump as u32;
-    // l'aiguillage d'origine (10 octets) appelle l'état par `jsr (A1)` : sa pile en garde le retour
-    ex.dispatch_return = (number != 0).then(|| ex.entry + 10);
+    let (sequence, dispatcher) = match number as u8 / 2 {
+        // la séquence 27 devient la 29 quand `A5+0x66` est posé ; sinon son aiguillage suit ce test (10 octets)
+        27 if ex.x.v8(0x66) != 0 => (&SEQ_29, None),
+        27 => (&SEQ_27, Some(ex.entry + 20)),
+        index => {
+            let Some(s) = sequence(index) else { return ex.delegate(ex.entry) };
+            // l'aiguillage d'origine (10 octets) appelle l'état par `jsr (A1)` : sa pile en garde le retour ;
+            // les séquences dont les états finissent eux-mêmes l'image sautent à l'état (`jmp (A1)`)
+            (s, (s.update != Nothing).then(|| ex.entry + 10))
+        }
+    };
+    ex.dispatch_return = dispatcher;
     let step = ex.b8(blk::STEP);
-    let Some(sequence) = sequence(number as u8 / 2) else { return ex.delegate(ex.entry) };
     match sequence.states.get(step as usize / 4) {
-        None | Some(St::Shared) => return ex.delegate(ex.entry),
+        None => return ex.delegate(ex.entry),
+        Some(&St::Shared(shared)) => run_shared(ex, shared),
         Some(&state) => run_state(ex, state),
     }
     if !ex.handed_off {
         finish_frame(ex, sequence);
     }
+}
+
+/// Un état partagé, appelé comme par l'aiguillage d'origine (`jsr (A1)`, A0 sur le bloc) : s'il cède la main,
+/// la reprise finira par revenir à l'aiguillage d'origine ; sinon la fin d'image compare l'octet `+2` du bloc
+/// désigné par A0, que l'état peut avoir changé.
+fn run_shared(ex: &mut Ex, shared: Shared) {
+    use crate::modes::{Flow, Sequence};
+    let run: fn(&mut Ctx) -> Flow = match shared {
+        Shared::Tally => super::tally::run,
+        Shared::Bonus => super::bonus::run,
+        Shared::Characters => super::characters::run,
+        Shared::Shop => super::shop::run,
+        Shared::Blackout => super::blackout::run,
+    };
+    let Some(back) = ex.dispatch_return else { return ex.delegate(ex.entry) };
+    ex.x.c.a[0] = BASE;
+    ex.x.push_return(back);
+    if run(&mut ex.x) == Flow::Yield {
+        ex.handed_off = true;
+        return;
+    }
+    ex.x.c.a[7] = ex.x.c.a[7].wrapping_add(4);
+    ex.a0_clobbered = true;
 }
 
 /// Fin d'image : sauf à l'état final, mise à jour du monde.
@@ -439,14 +510,14 @@ fn walk_wait(ex: &mut Ex, timer: Option<u16>) {
 
 fn run_state(ex: &mut Ex, state: St) {
     match state {
-        St::Idle | St::Shared => {}
+        St::Idle | St::Shared(_) => {}
         St::Clear { timer } => {
             ex.next();
             if let Some(t) = timer {
                 ex.set_b16(blk::TIMER, t);
             }
-            ex.call(call::CLEAR_WORLD);
-            ex.call(call::SCENE_PICTURE);
+            ex.reset_transition();
+            ex.reset_shop();
         }
         St::WalkWait { timer } => walk_wait(ex, timer),
         St::TimerWait => {
@@ -458,7 +529,7 @@ fn run_state(ex: &mut Ex, state: St) {
             ex.next();
             ex.set_b16(blk::TIMER, timer);
             ex.fade(2, sub::FADE_TASK);
-            ex.call(call::FADE_SCRIPT);
+            ex.clear_text();
         }
         St::PlayersThen { state, timer } => {
             if ex.all_in_state(state) {
@@ -488,8 +559,10 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         return;
     }
     ex.x.set_v8(0x42, 0);
-    ex.x.set_v8(var::FADE_PAGES, 15);
-    ex.x.call(sub::PALETTES_BLACK);
+    if leave.black {
+        ex.x.set_v8(var::FADE_PAGES, 15);
+        ex.x.call(sub::PALETTES_BLACK);
+    }
     if let Some(w) = leave.clear_word {
         wr16(ex.x.b, w, 0);
     }
@@ -529,6 +602,7 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         Tail::Sound => RESUME_SOUND_ENTRY,
         Tail::Command => RESUME_COMMAND_ENTRY,
         Tail::Twice => RESUME_TWICE_ENTRY,
+        Tail::Jump => 0,
     };
     ex.wait_frames(leave.frames, resume);
 }
@@ -603,6 +677,39 @@ pub const PHASE_16: Native = Native {
     exact_cost: false,
 };
 
+/// Fin d'image de l'aiguillage d'origine d'une séquence (`entrée + 10` : `cmpi.b #dernier,2(A0)`, puis la mise à
+/// jour), où reviennent les reprises après une cession. A0 est celui que l'état a laissé.
+fn dispatch_tail(c: &mut Cpu, b: &mut Cps2Bus, index: u8) {
+    let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("séquence réécrite") };
+    let mut ex = Ex { x: Ctx::new(c, b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: true };
+    ex.x.c.a[5] = A5;
+    finish_frame(&mut ex, sequence);
+    rts(ex.x.c, ex.x.b);
+}
+
+macro_rules! dispatch_tails {
+    ($($index:expr => $entry:expr),* $(,)?) => {
+        &[$(Native {
+            entry: $entry + 10,
+            name: "scene_exit_dispatch_tail",
+            cost: |_, _| 100,
+            run: |c, b| dispatch_tail(c, b, $index),
+            touches_sound: false,
+            outputs: 0,
+            exact_cost: false,
+        }),*]
+    };
+}
+
+/// Les fins d'aiguillage des séquences à `jsr (A1)` (la 27 a son aiguillage après un test de 4 octets).
+pub const DISPATCH_TAILS: &[Native] = dispatch_tails![
+    1 => 0xf32d8, 2 => 0xf33fe, 3 => 0xf3594, 4 => 0xf3686, 5 => 0xf3812, 7 => 0xf39f4, 8 => 0xf3b18,
+    9 => 0xf3c0a, 10 => 0xf3d00, 11 => 0xf3e3c, 12 => 0xf3f2e, 13 => 0xf4020, 14 => 0xf4176, 15 => 0xf434a,
+    16 => 0xf4480, 17 => 0xf455e, 18 => 0xf464a, 19 => 0xf4738, 21 => 0xf493a, 22 => 0xf4a68, 23 => 0xf4b4e,
+    25 => 0xf4c6e, 26 => 0xf4da2, 27 => 0xf4ea4, 28 => 0xf4f9c, 30 => 0xf5390, 32 => 0xf565e, 34 => 0xf52a4,
+    35 => 0xf5782,
+];
+
 pub const NATIVES: &[Native] = &[PHASE_16, RESUME_BOTH, RESUME_SOUND, RESUME_COMMAND, RESUME_TWICE, RESUME_TWICE_END];
 
 // ---------------------------------------------------------------------------------------------
@@ -626,9 +733,9 @@ static SEQ_1: Sequence = Sequence {
         St::Custom(walk_out_now),
         St::Custom(seq1_clear),
         Idle,
-        Shared,
+        BONUS,
         Idle,
-        Shared,
+        BLACKOUT,
         St::Leave(Leave { clear_word: Some(scratch(0xa53a)), ..LEAVE }),
     ],
 };
@@ -642,16 +749,16 @@ static SEQ_2: Sequence = Sequence {
         St::Custom(seq2_boss_state),
         St::Custom(seq2_countdown),
         St::TimerWait,
-        Shared,
-        Shared,
-        Shared,
-        Shared,
+        TALLY,
+        BONUS,
+        CHARACTERS,
+        BLACKOUT,
         St::Leave(LEAVE),
     ],
 };
 /// Modèle commun (séquences 3, 8, 11, 12) : image, sortie, états partagés, départ.
 static SEQ_3: Sequence =
-    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, Shared, Shared, Shared, Shared, Shared, St::Leave(LEAVE)] };
+    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(LEAVE)] };
 static SEQ_4: Sequence = Sequence {
     update: Full,
     last: 40,
@@ -661,11 +768,11 @@ static SEQ_4: Sequence = Sequence {
         St::Custom(seq4_probe),
         St::Custom(seq4_effect),
         St::Custom(message_then_next),
-        Shared,
-        Shared,
-        Shared,
-        Shared,
-        Shared,
+        TALLY,
+        BONUS,
+        CHARACTERS,
+        SHOP,
+        BLACKOUT,
         St::Leave(LEAVE),
     ],
 };
@@ -676,6 +783,15 @@ static SEQ_5: Sequence = Sequence {
         St::Clear { timer: Some(32) },
         St::Custom(walk_with_effect),
         St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Plus1UnlessLate, ..LEAVE }),
+    ],
+};
+/// Séquence 6 (scène 7) : comme la séquence 0, avec la commande sonore 0xe0a82(4).
+static SEQ_6: Sequence = Sequence {
+    update: Nothing,
+    last: 0xff,
+    states: &[
+        St::Custom(seq6_start),
+        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Plus1, ..LEAVE }),
     ],
 };
 static SEQ_7: Sequence = Sequence {
@@ -690,7 +806,7 @@ static SEQ_7: Sequence = Sequence {
 static SEQ_9: Sequence = Sequence {
     update: Full,
     last: 24,
-    states: &[CLEAR, WALK, Shared, Shared, Shared, Shared, St::Leave(Leave { frames: 2, tail: Tail::Twice, ..LEAVE })],
+    states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, BLACKOUT, St::Leave(Leave { frames: 2, tail: Tail::Twice, ..LEAVE })],
 };
 static SEQ_10: Sequence = Sequence {
     update: NoCollisions,
@@ -701,10 +817,10 @@ static SEQ_10: Sequence = Sequence {
         St::PlayersThen { state: 10, timer: Some(112) },
         Idle,
         St::TimerWait,
-        Shared,
-        Shared,
-        Shared,
-        Shared,
+        TALLY,
+        BONUS,
+        CHARACTERS,
+        BLACKOUT,
         St::Leave(LEAVE),
     ],
 };
@@ -714,12 +830,12 @@ static SEQ_13: Sequence = Sequence {
     states: &[
         CLEAR,
         WALK,
-        Shared,
+        TALLY,
         St::FadeScript { timer: 60 },
         Idle,
         St::PlayersThen { state: 16, timer: None },
-        Shared,
-        Shared,
+        BONUS,
+        CHARACTERS,
         leave_to(106),
     ],
 };
@@ -729,15 +845,15 @@ static SEQ_14: Sequence = Sequence {
     states: &[
         CLEAR,
         St::WalkWait { timer: Some(96) },
-        Shared,
+        TALLY,
         St::FadeScript { timer: 60 },
         St::Custom(seq14_wait_players),
         St::Custom(seq14_message_done),
         St::Custom(seq14_countdown),
         St::Custom(seq14_message_done_wait),
         St::TimerWait,
-        Shared,
-        Shared,
+        BONUS,
+        CHARACTERS,
         leave_to(27),
     ],
 };
@@ -747,32 +863,42 @@ static SEQ_15: Sequence = Sequence {
     states: &[
         St::Custom(seq15_clear),
         WALK,
-        Shared,
+        TALLY,
         St::Custom(seq15_fade),
         Idle,
-        Shared,
-        Shared,
-        Shared,
-        Shared,
+        BLACKOUT,
+        BONUS,
+        CHARACTERS,
+        SHOP,
         St::Leave(LEAVE),
     ],
 };
 static SEQ_16: Sequence = Sequence {
     update: NoCollisions,
     last: 24,
-    states: &[St::Custom(seq16_start), Shared, Shared, Shared, Shared, Shared, St::Leave(LEAVE)],
+    states: &[St::Custom(seq16_start), BLACKOUT, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(LEAVE)],
 };
 static SEQ_17: Sequence = Sequence {
     update: Full,
     last: 28,
-    states: &[CLEAR, WALK, Shared, Shared, Shared, Shared, Shared, St::Leave(Leave { tail: Tail::Sound, ..LEAVE })],
+    states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(Leave { tail: Tail::Sound, ..LEAVE })],
 };
 static SEQ_18: Sequence =
-    Sequence { update: Full, last: 24, states: &[CLEAR, WALK, Shared, Shared, Shared, Shared, St::Leave(LEAVE)] };
+    Sequence { update: Full, last: 24, states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, BLACKOUT, St::Leave(LEAVE)] };
 static SEQ_19: Sequence = Sequence {
     update: NoCollisions,
     last: 24,
-    states: &[St::Clear { timer: Some(32) }, WALK, Shared, Shared, Shared, Shared, St::Leave(Leave { tail: Tail::Sound, ..LEAVE })],
+    states: &[St::Clear { timer: Some(32) }, WALK, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(Leave { tail: Tail::Sound, ..LEAVE })],
+};
+/// Séquence 20 (scènes 35 et 111) : sortie des joueurs après 48 images de plus, fondu, scène 33.
+static SEQ_20: Sequence = Sequence {
+    update: Nothing,
+    last: 0xff,
+    states: &[
+        St::Custom(seq20_walk),
+        St::Custom(fade_out_world),
+        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Fixed(33), ..LEAVE }),
+    ],
 };
 static SEQ_21: Sequence = Sequence {
     update: NoCollisions,
@@ -784,7 +910,7 @@ static SEQ_21: Sequence = Sequence {
     ],
 };
 static SEQ_22: Sequence =
-    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, Shared, Shared, Shared, Shared, Shared, St::Leave(L_SILENT)] };
+    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(L_SILENT)] };
 static SEQ_23: Sequence = Sequence {
     update: NoCollisions,
     last: 8,
@@ -797,19 +923,32 @@ static SEQ_23: Sequence = Sequence {
 static SEQ_25: Sequence = Sequence {
     update: Full,
     last: 36,
-    states: &[CLEAR, WALK, Shared, St::Custom(seq25_route), St::TimerWait, Shared, Shared, Shared, Shared, St::Leave(L_SILENT)],
+    states: &[CLEAR, WALK, TALLY, St::Custom(seq25_route), St::TimerWait, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(L_SILENT)],
 };
 static SEQ_26: Sequence =
-    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, Shared, Shared, Shared, Shared, Shared, leave_to(38)] };
+    Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BLACKOUT, BONUS, CHARACTERS, SHOP, leave_to(38)] };
+/// Séquence 27 (scène 54), quand `A5+0x66` est nul : décompte, bonus, scène 55.
+static SEQ_27: Sequence =
+    Sequence { update: Full, last: 16, states: &[St::Custom(seq27_clear), WALK, TALLY, BONUS, leave_to(55)] };
 static SEQ_28: Sequence =
-    Sequence { update: Full, last: 24, states: &[St::Custom(seq28_clear), WALK, Shared, Shared, Shared, Shared, leave_to(59)] };
+    Sequence { update: Full, last: 24, states: &[St::Custom(seq28_clear), WALK, TALLY, BONUS, CHARACTERS, SHOP, leave_to(59)] };
+/// Séquence 29 (scène 59, et 54 quand `A5+0x66` est posé) : sortie et fondu, scène suivante.
+static SEQ_29: Sequence = Sequence {
+    update: Nothing,
+    last: 0xff,
+    states: &[
+        St::Custom(seq29_start),
+        St::Custom(seq29_walk),
+        St::Leave(Leave { wait_fade: WaitFade::InputsWorld, next_scene: NextScene::Plus1, ..LEAVE }),
+    ],
+};
 static SEQ_30: Sequence = Sequence {
     update: Full,
     last: 52,
     states: &[
         CLEAR,
         St::WalkWait { timer: Some(96) },
-        Shared,
+        TALLY,
         St::FadeScript { timer: 60 },
         St::PlayersThen { state: 12, timer: Some(64) },
         St::Custom(seq30_message_79),
@@ -817,16 +956,43 @@ static SEQ_30: Sequence = Sequence {
         St::Custom(seq30_effect),
         St::Custom(seq30_players_wait),
         St::TimerWait,
-        Shared,
-        Shared,
-        Shared,
+        BONUS,
+        CHARACTERS,
+        SHOP,
         leave_to(65),
+    ],
+};
+/// Séquence 31 (scène 65) : fondu après 192 images, scène suivante sans palettes au noir ni son.
+static SEQ_31: Sequence = Sequence {
+    update: Nothing,
+    last: 0xff,
+    states: &[
+        St::Custom(seq31_start),
+        St::Custom(fade_out_world),
+        St::Leave(Leave {
+            wait_fade: WaitFade::World,
+            black: false,
+            clear_flags: false,
+            next_scene: NextScene::Plus1,
+            tail: Tail::Jump,
+            ..LEAVE
+        }),
     ],
 };
 static SEQ_32: Sequence = Sequence {
     update: Full,
     last: 24,
-    states: &[St::Custom(seq32_clear), WALK, Shared, Shared, St::Custom(seq32_route), Shared, leave_to(105)],
+    states: &[St::Custom(seq32_clear), WALK, TALLY, BONUS, St::Custom(seq32_route), CHARACTERS, leave_to(105)],
+};
+/// Séquence 33 (scène 67) : sortie des joueurs et fondu, scène 38.
+static SEQ_33: Sequence = Sequence {
+    update: Nothing,
+    last: 0xff,
+    states: &[
+        St::Custom(seq33_start),
+        St::Custom(seq33_walk),
+        St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Fixed(38), tail: Tail::Sound, ..LEAVE }),
+    ],
 };
 static SEQ_34: Sequence = Sequence {
     update: NoCollisions,
@@ -834,11 +1000,11 @@ static SEQ_34: Sequence = Sequence {
     states: &[
         St::Clear { timer: Some(4) },
         WALK,
-        Shared,
-        Shared,
-        Shared,
-        Shared,
-        Shared,
+        SHOP,
+        BONUS,
+        CHARACTERS,
+        SHOP,
+        BLACKOUT,
         St::Leave(Leave { tail: Tail::Sound, ..LEAVE }),
     ],
 };
@@ -848,8 +1014,8 @@ static SEQ_35: Sequence = Sequence {
     states: &[
         St::Custom(seq35_clear),
         St::Custom(seq35_walk),
-        Shared,
-        Shared,
+        BLACKOUT,
+        TALLY,
         St::Custom(seq35_fade),
         St::Custom(seq35_message),
         St::Custom(seq35_boss),
@@ -866,6 +1032,7 @@ fn sequence(index: u8) -> Option<&'static Sequence> {
         3 | 8 | 11 | 12 => &SEQ_3,
         4 => &SEQ_4,
         5 => &SEQ_5,
+        6 => &SEQ_6,
         7 => &SEQ_7,
         9 => &SEQ_9,
         10 => &SEQ_10,
@@ -876,14 +1043,18 @@ fn sequence(index: u8) -> Option<&'static Sequence> {
         17 => &SEQ_17,
         18 => &SEQ_18,
         19 => &SEQ_19,
+        20 => &SEQ_20,
         21 => &SEQ_21,
         22 | 24 => &SEQ_22,
         23 => &SEQ_23,
         25 => &SEQ_25,
         26 => &SEQ_26,
         28 => &SEQ_28,
+        29 => &SEQ_29,
         30 => &SEQ_30,
+        31 => &SEQ_31,
         32 => &SEQ_32,
+        33 => &SEQ_33,
         34 => &SEQ_34,
         35 => &SEQ_35,
         _ => return None,
@@ -902,11 +1073,96 @@ fn seq0_start(ex: &mut Ex) {
     ex.x.world();
 }
 
-/// Séquence 10 : efface le monde (sans dessiner), minuterie 128.
+/// Séquence 6 : comme `seq0_start`, avec la commande sonore 0xe0a82(4).
+fn seq6_start(ex: &mut Ex) {
+    ex.next();
+    ex.fade(2, 0x14d0);
+    ex.x.set_v8(var::INPUT_LOCK, 0);
+    ex.call(call::PLAYER_INPUT);
+    ex.x.c.d[0] = ex.x.c.d[0] & !0xffff | 4;
+    ex.call(0xe0a82);
+    ex.x.world();
+}
+
+/// Séquence 20 : les joueurs sortent à la fin de la minuterie (48 images de plus) ; mise à jour complète.
+fn seq20_walk(ex: &mut Ex) {
+    walk_wait(ex, Some(48));
+    run_update(ex, Update::Full);
+}
+
+/// Séquences 20 et 31 : fondu de sortie à la fin de la minuterie ; le monde continue.
+fn fade_out_world(ex: &mut Ex) {
+    if ex.countdown() {
+        ex.next();
+        ex.fade(2, 0x14d0);
+    }
+    ex.x.world();
+}
+
+/// Séquence 27 : caméra, minuterie + 90, variables de transition et bloc de la boutique remis à zéro.
+fn seq27_clear(ex: &mut Ex) {
+    ex.next();
+    ex.x.set_v16(0x51e, 4);
+    let t = ex.b16(blk::TIMER).wrapping_add(90);
+    ex.set_b16(blk::TIMER, t);
+    ex.reset_transition();
+    ex.reset_shop();
+}
+
+/// Séquence 29 : minuterie + 80, variables de transition remises à zéro, puis l'attente dans la même image.
+fn seq29_start(ex: &mut Ex) {
+    ex.next();
+    let t = ex.b16(blk::TIMER).wrapping_add(80);
+    ex.set_b16(blk::TIMER, t);
+    ex.reset_transition();
+    seq29_walk(ex);
+}
+
+/// Séquence 29 : à la fin de la minuterie, les joueurs sortent et le fondu commence ; mise à jour complète.
+fn seq29_walk(ex: &mut Ex) {
+    if ex.countdown() {
+        ex.next();
+        ex.start_walk_out(false);
+        ex.fade(2, 0x14d0);
+    }
+    run_update(ex, Update::Full);
+}
+
+/// Séquence 31 : minuterie 192, entrées libérées.
+fn seq31_start(ex: &mut Ex) {
+    ex.next();
+    ex.set_b16(blk::TIMER, 192);
+    ex.x.set_v8(var::INPUT_LOCK, 0);
+    ex.call(call::PLAYER_INPUT);
+    ex.x.world();
+}
+
+/// Séquence 33 : variables de transition et bloc de la boutique remis à zéro, puis l'attente dans la même image.
+fn seq33_start(ex: &mut Ex) {
+    ex.next();
+    ex.reset_transition();
+    ex.reset_shop();
+    seq33_walk(ex);
+}
+
+/// Séquence 33 : à la fin de la minuterie, fondu de sortie puis les joueurs sortent.
+fn seq33_walk(ex: &mut Ex) {
+    if ex.countdown() {
+        ex.next();
+        ex.x.set_v8(PAUSE, 0);
+        ex.x.set_v8(var::INPUT_LOCK, 0);
+        ex.call(call::PLAYER_INPUT);
+        ex.fade(2, 0x14d0);
+        ex.release_players(false);
+    }
+    ex.x.world();
+}
+
+/// Séquence 10 : variables de transition remises à zéro, minuterie 128.
 fn seq10_clear(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 128);
-    ex.call(call::CLEAR_WORLD);
+    ex.reset_transition();
 }
 
 /// Séquence 32 : selon la route (`A5+0x5c`), la sortie ou l'écran de bonus 0xf6492.
@@ -928,10 +1184,10 @@ fn walk_out_now(ex: &mut Ex) {
     ex.start_walk_out(false);
 }
 
-/// Séquence 1 : efface le monde puis lance l'événement 0xdc5fe(1).
+/// Séquence 1 : variables de transition remises à zéro, puis l'événement 0xdc5fe(1).
 fn seq1_clear(ex: &mut Ex) {
     ex.next();
-    ex.call(call::CLEAR_WORLD);
+    ex.reset_transition();
     ex.x.c.d[0] = 1;
     ex.call(0xdc5fe);
 }
@@ -950,7 +1206,7 @@ fn seq2_start(ex: &mut Ex) {
 
 /// Séquence 2 : attend que tous les joueurs soient à l'état de sortie 0xc0300, puis dialogue 7.
 fn seq2_wait_exit(ex: &mut Ex) {
-    ex.call(call::CLEAR_WORLD);
+    ex.reset_transition();
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
         if rd8(ex.x.b, p) != 0 && rd16(ex.x.b, p + player::HEALTH) != 0 && crate::mem::rd32(ex.x.b, p + P_STATE_LONG) != 0x000c_0300 {
@@ -1081,28 +1337,28 @@ fn seq14_message_done_wait(ex: &mut Ex) {
     }
 }
 
-/// Séquence 15 : annule la variable temporaire A5-0x65ac, efface le monde, dessine.
+/// Séquence 15 : annule la variable temporaire A5-0x65ac, remet à zéro transition et boutique.
 fn seq15_clear(ex: &mut Ex) {
     ex.next();
     ex.x.wr16(scratch(0x9a54), 0);
-    ex.call(call::CLEAR_WORLD);
-    ex.call(call::SCENE_PICTURE);
+    ex.reset_transition();
+    ex.reset_shop();
 }
 
 /// Séquence 15 : fondu, script de fondu, événement 0xdc5fe(3).
 fn seq15_fade(ex: &mut Ex) {
     ex.next();
     ex.fade(2, sub::FADE_TASK);
-    ex.call(call::FADE_SCRIPT);
+    ex.clear_text();
     ex.x.c.d[0] = 3;
     ex.call(0xdc5fe);
 }
 
-/// Séquence 16 : efface le monde, dessine, les joueurs sortent.
+/// Séquence 16 : transition et boutique remises à zéro, les joueurs sortent.
 fn seq16_start(ex: &mut Ex) {
     ex.next();
-    ex.call(call::CLEAR_WORLD);
-    ex.call(call::SCENE_PICTURE);
+    ex.reset_transition();
+    ex.reset_shop();
     ex.start_walk_out(false);
 }
 
@@ -1112,8 +1368,8 @@ fn seq21_start(ex: &mut Ex) {
     ex.x.set_v8(PAUSE, 0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
     ex.call(call::PLAYER_INPUT);
-    ex.call(call::CLEAR_WORLD);
-    ex.call(call::SCENE_PICTURE);
+    ex.reset_transition();
+    ex.reset_shop();
     ex.message(70);
     ex.release_players(false);
 }
@@ -1152,7 +1408,7 @@ fn seq25_route(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 128);
     ex.fade(2, sub::FADE_TASK);
-    ex.call(call::FADE_SCRIPT);
+    ex.clear_text();
 }
 
 /// Séquence 28 : comme `Clear`, la minuterie augmente de 90.
@@ -1160,8 +1416,8 @@ fn seq28_clear(ex: &mut Ex) {
     ex.next();
     let t = ex.b16(blk::TIMER).wrapping_add(90);
     ex.set_b16(blk::TIMER, t);
-    ex.call(call::CLEAR_WORLD);
-    ex.call(call::SCENE_PICTURE);
+    ex.reset_transition();
+    ex.reset_shop();
 }
 
 /// Séquence 30 : suite de dialogues (79, 80) autour d'un effet 75 et de la sortie.
@@ -1203,8 +1459,8 @@ fn seq30_players_wait(ex: &mut Ex) {
 /// Séquence 32 : efface, dessine ; si la route est prise (`A5+0x5c`) saute à l'état 12.
 fn seq32_clear(ex: &mut Ex) {
     ex.next();
-    ex.call(call::CLEAR_WORLD);
-    ex.call(call::SCENE_PICTURE);
+    ex.reset_transition();
+    ex.reset_shop();
     if ex.x.v8(0x5c) != 0 {
         ex.set_step(12);
         ex.delegate(ex.entry);
@@ -1213,10 +1469,10 @@ fn seq32_clear(ex: &mut Ex) {
     walk_wait(ex, None);
 }
 
-/// Séquence 35 : efface le monde, puis les joueurs sortent après l'attente.
+/// Séquence 35 : variables de transition remises à zéro, puis les joueurs sortent après l'attente.
 fn seq35_clear(ex: &mut Ex) {
     ex.next();
-    ex.call(call::CLEAR_WORLD);
+    ex.reset_transition();
     seq35_walk(ex);
 }
 
@@ -1236,7 +1492,7 @@ fn seq35_fade(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 64);
     ex.fade(2, sub::FADE_TASK);
-    ex.call(call::FADE_SCRIPT);
+    ex.clear_text();
     ex.x.c.d[0] = 4;
     ex.call(0xe0a82);
 }
