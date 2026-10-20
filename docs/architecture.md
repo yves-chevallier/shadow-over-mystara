@@ -124,8 +124,11 @@ réécrite (`resume!`). `tools/reste68k.sh` mesure ce qui tourne encore en 68000
 
 Plan pour supprimer la machine 68000 :
 
-1. **Découper chaque tâche aux points de cession** (déjà fait pour la machine à modes, la fin de partie, les
-   crédits ; reste la tâche de partie `0x1c45a`, les tâches de fondu, d'interface joueurs, du gel `0xee080`).
+1. **Découper chaque tâche aux points de cession** (fait pour la machine à modes, la fin de partie, les crédits,
+   la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `taches/`, voir [noyau.md](noyau.md) ; restent, en
+   68000 : les tâches de fondu `0x14ba`/`0x14c8`/`0x14d0`/`0x14de`/`0x1ced4`/`0x1ccf8`, d'atténuation `0x1536`/`0x153e`,
+   l'écran fixe `0x1835e`, l'interface/menu TEST `0x29162`, les listes de bulles des boss (`0x9b6`), et les tâches
+   d'interface joueurs `0x150ac`/`0x15620`/`0x15f9e`, laissées à la réécriture de l'affichage F3).
    Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
    `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.
 2. **Remplacer l'enregistrement de tâche** : les champs SR/PC/USP/pile disparaissent au profit de

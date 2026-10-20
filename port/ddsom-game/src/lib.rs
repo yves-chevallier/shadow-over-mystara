@@ -40,6 +40,7 @@ pub mod sound;
 pub mod terrain;
 pub mod sprites;
 pub mod tache_credits;
+pub mod taches;
 pub mod text;
 pub mod timing;
 pub mod video;
@@ -190,7 +191,32 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(palette_tints::NATIVES.iter()).chain(scroll::NATIVES).chain(camera_modes::NATIVES).chain(terrain::NATIVES).chain(ai_aids::NATIVES).chain(effects_aids::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs()).chain(kernel::NATIVES).chain(vblank::NATIVES).chain(tache_credits::NATIVES).chain(ecran_credits::NATIVES)
+    // une source par ligne (les branches parallèles ajoutent chacune la leur)
+    std::iter::empty()
+        .chain(NATIVES)
+        .chain(objects::NATIVES)
+        .chain(player::NATIVES)
+        .chain(video::NATIVES)
+        .chain(palette::NATIVES)
+        .chain(palette_tints::NATIVES.iter())
+        .chain(scroll::NATIVES)
+        .chain(camera_modes::NATIVES)
+        .chain(terrain::NATIVES)
+        .chain(ai_aids::NATIVES)
+        .chain(effects_aids::NATIVES)
+        .chain(families::NATIVES)
+        .chain(families::natives())
+        .chain(dispatch::NATIVES)
+        .chain(game::NATIVES)
+        .chain(scene::NATIVES)
+        .chain(scene::exit::NATIVES)
+        .chain(modes::natives())
+        .chain(sound::wrappers_natifs())
+        .chain(kernel::NATIVES)
+        .chain(vblank::NATIVES)
+        .chain(taches::natives())
+        .chain(tache_credits::NATIVES)
+        .chain(ecran_credits::NATIVES)
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -378,13 +404,14 @@ pub fn install_reference(m: &mut cps2::Machine) {
     cap_steps(m);
 }
 
-/// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image.
+/// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image, ou seule la tâche
+/// du gel est prête et son prochain pas ne ferait rien (`taches::gel::attente_vide`).
 pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
     const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
-    const NEW_FRAME: usize = 0x8164 / 2; // FF8164 (octet haut) : posé par le VBLANK
+    const NEW_FRAME: usize = 0x164 / 2; // FF0164 (octet haut) : posé par le VBLANK, effacé au début d'un parcours
     (0x932..0x960).contains(&c.pc)
         && b.ram[NEW_FRAME] >> 8 == 0
-        && (0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4)
+        && ((0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || taches::gel::attente_vide(&b.ram))
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
