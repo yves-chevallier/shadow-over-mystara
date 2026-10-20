@@ -111,3 +111,36 @@ Le programme compte ~2 500 fonctions 68000 (~630 Ko de code) : IA de chaque enne
 magies, collisions, scripts de niveaux, menus, 4 joueurs. Beaucoup se ressemblent (machines à états
 par objet, tables de données), ce qui rend la version Rust nettement plus compacte, mais c'est un
 travail progressif, piloté par les tests de non-régression contre l'original.
+
+## Dernière étape : des tâches Rust, puis plus de 68000
+
+État : l'ordonnanceur (0x928), les traps 0 à 7 et 12, leurs enveloppes (0x9b6, 0xa14, 0xa40, 0xa86,
+0xb64...) et le VBLANK (0x574) sont des routines natives (`kernel.rs`, `vblank.rs`, [noyau.md](noyau.md)) ;
+la tâche des crédits est du Rust (`tache_credits.rs`, `ecran_credits.rs`). Le noyau natif garde la
+structure de l'original : table FF0064, piles utilisateur de 0xFF0xxx, pile de l'ordonnanceur FF0E66,
+reprise d'une tâche par `rte` vers le PC et le SR sauvegardés. Une tâche est donc encore « un morceau de
+68000 qui reprend à une adresse » ; c'est l'adresse de reprise qui devient une native quand la tâche est
+réécrite (`resume!`). `tools/reste68k.sh` mesure ce qui tourne encore en 68000 ([reste68k.md](reste68k.md)).
+
+Plan pour supprimer la machine 68000 :
+
+1. **Découper chaque tâche aux points de cession** (déjà fait pour la machine à modes, la fin de partie, les
+   crédits ; reste la tâche de partie `0x1c45a`, les tâches de fondu, d'interface joueurs, du gel `0xee080`).
+   Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
+   `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.
+2. **Remplacer l'enregistrement de tâche** : les champs SR/PC/USP/pile disparaissent au profit de
+   `Option<Box<dyn Tache>>`. La table garde ses 16 emplacements (les numéros d'emplacement servent encore :
+   `kill(0x30)`), l'état (libre, attend, suspendue, prête) et le compte d'attente décrémenté par le VBLANK.
+   Un test différentiel compare à chaque image la table Rust à la table du noyau natif tant que les deux
+   existent. Les piles de tâches (FF005A, tas de piles) et la pile de l'ordonnanceur disparaissent.
+3. **Appels des anciens sous-programmes** : `ddsom_game::call` n'a plus d'appelant quand toutes les
+   routines appelées sont natives ; alors plus aucune instruction 68000 ne s'exécute
+   (`tools/reste68k.sh` : zéro sur tous les scénarios). Les fonctions « jamais atteintes » du rapport
+   sont soit du code mort à supprimer, soit des chemins à couvrir par de nouveaux scénarios avant leur
+   réécriture.
+4. **Supprimer la machine** : la boucle d'image devient `vblank(); ordonnanceur()` appelés directement
+   (plus d'interruption, plus de `STOP`, plus de surcadencement : l'« avance rapide » reste plafonnée à
+   `MAX_STEPS_PER_FRAME` pas par image) ; le CPU 68000 et le recompilateur (`ddsom-rc`) quittent le
+   chemin du jeu et ne restent que comme oracle de test (validation différentielle, crate `m68k`).
+   L'état du jeu passe de la RAM émulée à des structures Rust, projection par projection, avec la même
+   comparaison par image.

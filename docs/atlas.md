@@ -266,7 +266,7 @@ RAM Z80/QSound 0x618000-0x619FFF (commandes 0x618001…0x618019, poignée de mai
 
 | ID | Racines et fonctions clés (adresses) | RAM / matériel | Remarques |
 |---|---|---|---|
-| K1 | `reset` 0x350, `boot_init` 0x492, `irq2_vblank` 0x574 (+0x65e, 0x68c, 0x722, 0x902), `read_inputs` 0x80c, `task_scheduler` 0x928, `task_create` 0x9b6, traps 0x9c2-0xae6, `0xa40/0xa86/0xb64` (attentes), gel `0xee080` | table tâches FF0064, FF0E66 (pile), `A5+0x4f` | à remplacer par une boucle Rust, pas à traduire ligne à ligne ; le seul contrat est le **comptage d'images** des attentes |
+| K1 | `reset` 0x350, `boot_init` 0x492, `irq2_vblank` 0x574 (+0x65e, 0x68c, 0x722, 0x902), `read_inputs` 0x80c, `task_scheduler` 0x928, `task_create` 0x9b6, traps 0x9c2-0xae6, `0xa40/0xa86/0xb64` (attentes), gel `0xee080` | table tâches FF0064, FF0E66 (pile), `A5+0x4f` | à remplacer par une boucle Rust, pas à traduire ligne à ligne ; le seul contrat est le **comptage d'images** des attentes. **Fait en natif fidèle** : VBLANK 0x574, ordonnanceur 0x928, traps et enveloppes (`kernel.rs`, `vblank.rs`, `docs/noyau.md`) ; reste le démarrage (0x350, 0x492, test RAM 0x182a) |
 | K2 | `0x182a`, `ram_test_block` 0x1912 (appelé sans pile par `a6`) | RAM de travail | texte « RAM ERROR !! » (0x19e2) ; inutile dans un moteur sans ROM |
 | K3 | `copy_inputs_to_players` 0x2aec, `get_player_input` 0x2bfe, `0x2bdc` | FF8000-F, `A5+0x43` | déjà réécrit (`port/ddsom-game/src/inputs.rs`) |
 | K4 | vecteurs d'erreur 0x28612-0x28666 (BUS ERROR, ADDRESS ERROR, ILLEGAL INST… 0x28e95-0x28f68), dump `0x28800-0x28c38`, libellés de pools | – | **hors périmètre** de la réécriture |
