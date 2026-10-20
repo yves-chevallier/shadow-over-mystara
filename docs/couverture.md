@@ -146,3 +146,12 @@ et à la machine de référence (`install`, `install_reference` ; `docs/boucle.m
 `cov_mortal_late`, `cov_attract_coin` et `ko/boss13_dragon` sont VALIDES sur 30 000 images ; `examples/determinisme`
 (deux machines d'origine à ×16 et ×32) ne montre plus d'écart que sur les mots ignorés par `validate`. Les
 scénarios n'ont donc plus à éviter les boutons en entrée de scène.
+
+## Scénarios de la machine à modes (`scenarios/modes/`)
+
+Lancés par `tools/validate_all.sh` (12 000 images) : `attract.txt` (aucune entrée : démarrage, titres, démonstrations,
+présentations de personnages, droits), `screens.txt` (écrans de droits rares, sous-modes 16 et 18 forcés par `poke`),
+`gameover.txt` (sélection, partie, mort, classement), `ending.txt` et `ending_end.txt` (saut dans la scène 105, boss final
+affaibli : générique de fin, phase 28 ; la seconde moitié par `poke` de l'état). Les natives réécrites de ces écrans
+(`modes/`, `docs/modes.md`) y sont toutes exercées sauf les chemins d'échec d'allocation d'objets (pool plein).
+

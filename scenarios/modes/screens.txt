@@ -1,0 +1,4 @@
+# Écrans de droits rarement vus : à l'image 6100 (sous-mode 8) on force le sous-mode 16 (seconde image, réglage A5+0x70 = 2), qui enchaîne le sous-mode 18 (mention), puis le titre.
+6100 poke8 ff0e71 16
+6100 poke8 ff0e72 0
+6100 poke16 ff8070 2

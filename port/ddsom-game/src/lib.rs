@@ -20,6 +20,7 @@ pub mod combat;
 pub mod families;
 pub mod inputs;
 pub mod mem;
+pub mod modes;
 pub mod objects;
 pub mod ops;
 pub mod palette;
@@ -176,7 +177,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :

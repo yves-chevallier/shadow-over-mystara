@@ -65,12 +65,12 @@ elle reprend avant les tâches réveillées par le VBLANK, comme dans une image 
 | A5+0x2c | Handler | Rôle | Rust |
 |---|---|---|---|
 | 0 | 0x1c522 | initialisation de la partie (étapes `A5+0x2d` = 0, 4, 8, 12, 16) | `game::PHASE_0` |
-| 4 | 0x1ca20 | sélection des personnages (h) | non |
+| 4 | 0x1ca20 | sélection des personnages | `modes::select::PHASE_4` (`docs/modes.md`) |
 | 8 | 0x20c38 | transition/entrée de stage | non |
 | **12** | 0x1c6a0 | **le jeu proprement dit** (le compte à rebours BCD est le temps de la partie) | `game::PHASE_12` |
 | 16 | 0xf3142 | séquences de fin/transition de stage | non |
-| 20 | 0x1c80c | fin de partie | non (voir plus bas) |
-| 24, 28 | 0x21c2a, 0xfb292 | scènes spéciales | non |
+| 20 | 0x1c80c | fin de partie | `modes::gameover::PHASE_20` |
+| 24, 28 | 0x21c2a, 0xfb292 | scènes spéciales (24), générique de fin (28) | `scene::intermission`, `modes::ending` |
 
 ### Phase 0 (initialisation, un pas par image)
 
@@ -101,8 +101,9 @@ Par image, dans l'ordre :
 ### Phase 20 (0x1c80c)
 
 Fin de partie : tue la tâche 0x30, fondu, vide tout, puis `jmp 0xae4` avec A0 = 0x133fe (remplace la
-tâche courante par la machine à modes). Ce saut ne revient jamais : le mode contrôle de la validation
-(qui attend un `rts`) ne peut pas le vérifier, la phase est laissée en 68000.
+tâche courante par la machine à modes). Ce saut ne revient jamais (le mode contrôle de la validation, qui attend un `rts`,
+ne peut pas la vérifier) : la phase est réécrite en Rust (`modes::gameover`, `docs/modes.md`) et validée par la
+comparaison image par image, la tâche gardant la pile qu'elle avait à sa dernière cession.
 
 ## 3. Mise à jour du monde (0x1c86e)
 

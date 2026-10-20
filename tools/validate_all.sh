@@ -6,6 +6,7 @@
 #   scenarios/extra/        entrées aléatoires (make_bot.py --mash), révèlent les cas rares (12000)
 #   scenarios/boss/         entrée directe dans la scène d'un boss (gen_boss.py) (12000)
 #   scenarios/enemy/        entrée directe dans une scène où un type d'ennemi apparaît (gen_enemy.py) (12000)
+#   scenarios/modes/        attract, fin de partie et classement, générique de fin (machine à modes, docs/modes.md) (12000)
 #   scenarios/scene/        entrée de scène, DDSOM_SCENES=1 (6500)
 #   scenarios/scene_end/    sortie de scène, DDSOM_SCENES=1 (9000)
 #   scenarios/cov/          couverture de tout le jeu, DDSOM_COV=1 (COV_FRAMES, 30000 par défaut)
@@ -33,6 +34,7 @@ list() {
 	list scenarios/extra 12000
 	list scenarios/boss 12000
 	list scenarios/enemy 12000
+	list scenarios/modes 12000
 	if [[ ${DDSOM_SCENES:-0} == 1 ]]; then
 		list scenarios/scene 6500
 		list scenarios/scene_end 9000
