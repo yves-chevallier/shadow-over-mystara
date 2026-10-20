@@ -77,6 +77,7 @@ Démo seule, sans fenêtre : ajouter `-video none -sound none -nothrottle -secon
 ## Port Rust (`port/`)
 
 Architecture et jalons : [docs/architecture.md](docs/architecture.md).
+Images des créatures (ennemis, boss, personnages) régénérables depuis les ROMs : [docs/creatures.md](docs/creatures.md).
 
 - `cps2-gfx` : chargement des ROMs graphiques et rendu vidéo CPS2 (tilemaps, sprites, priorités,
   palettes). **Jalon 1 atteint** : identique au pixel près à MAME sur les 11 instantanés de

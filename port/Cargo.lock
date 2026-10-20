@@ -96,6 +96,7 @@ name = "ddsom-game"
 version = "0.1.0"
 dependencies = [
  "cps2",
+ "cps2-gfx",
  "ddsom-rc",
  "m68k",
  "png",
