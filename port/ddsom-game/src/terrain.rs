@@ -46,10 +46,10 @@ mod kind {
     pub const STOP: u32 = 10;
 }
 
-/// Les deux copies de la routine : seule la table des types et les adresses des sous-programmes
+/// Les deux copies de la routine (`Variant`) : seule la table des types et les adresses des sous-programmes
 /// (visibles dans A1) changent.
 #[derive(Clone, Copy)]
-struct Copy {
+struct Variant {
     entry: u32,
     /// La seconde copie pose D5 avant de savoir si l'objet touche l'obstacle plein.
     early_flag: bool,
@@ -57,15 +57,15 @@ struct Copy {
     solid: [u32; 4],
 }
 
-const FIRST: Copy = Copy { entry: 0x33fe4, early_flag: false, types: 0x3425c, solid: [0x340b6, 0x340d4, 0x340f2, 0x34108] };
-const SECOND: Copy = Copy { entry: 0x3403c, early_flag: true, types: 0x34a5c, solid: [0x34120, 0x3413e, 0x3415c, 0x34172] };
+const FIRST: Variant = Variant { entry: 0x33fe4, early_flag: false, types: 0x3425c, solid: [0x340b6, 0x340d4, 0x340f2, 0x34108] };
+const SECOND: Variant = Variant { entry: 0x3403c, early_flag: true, types: 0x34a5c, solid: [0x34120, 0x3413e, 0x3415c, 0x34172] };
 /// Sous-programmes des pentes, communs aux deux copies.
 const SLOPES: [u32; 4] = [0x341a4, 0x341d0, 0x341fe, 0x3422e];
 
 struct Push<'a> {
     c: &'a mut Cpu,
     b: &'a mut Cps2Bus,
-    copy: Copy,
+    variant: Variant,
 }
 
 impl Push<'_> {
@@ -101,7 +101,7 @@ impl Push<'_> {
         self.c.d[5] = 1;
     }
 
-    /// Entrée de la routine ; vrai quand il faut la recommencer (`beq entry` des obstacles pleins).
+    /// Répète les passages tant qu'un obstacle plein relance la routine (`beq entry`).
     fn run(&mut self) {
         while self.pass() {}
     }
@@ -109,7 +109,7 @@ impl Push<'_> {
     /// Un passage ; vrai pour recommencer.
     fn pass(&mut self) -> bool {
         let a0 = self.c.a[0];
-        if self.copy.entry == FIRST.entry {
+        if self.variant.entry == FIRST.entry {
             wr16(self.b, A5 + LAST_OBJECT, a0 as u16);
             let (x, y) = (rd16(self.b, a0 + 8), rd16(self.b, a0 + 0x10));
             wr16(self.b, A5 + LAST_X, x);
@@ -137,7 +137,7 @@ impl Push<'_> {
         let carry = d2 >> 12 & 1 != 0;
         ops::logique(self.c, (d2 << 4) as u32, Size::Word);
         ops::drapeaux(self.c, SR_C | SR_X, if carry { SR_C | SR_X } else { 0 });
-        let a2 = self.copy.types.wrapping_add((d2 << 4) as i16 as u32);
+        let a2 = self.variant.types.wrapping_add((d2 << 4) as i16 as u32);
         self.c.a[2] = a2;
         let genre = self.field(a2, kind::GENRE);
         ops::cmp(self.c, 1, genre as u32, Size::Word);
@@ -166,12 +166,12 @@ impl Push<'_> {
     fn solid(&mut self, a2: u32) -> bool {
         let routine = self.field(a2, kind::ROUTINE);
         self.set_d(2, routine);
-        self.c.a[1] = self.copy.solid[routine as usize / 4];
+        self.c.a[1] = self.variant.solid[routine as usize / 4];
         let edge = self.field(a2, kind::EDGE);
         match routine {
             // en dessous / au dessus du bord : corrige y
             0 | 4 => {
-                if self.copy.early_flag {
+                if self.variant.early_flag {
                     self.collided();
                 }
                 let y = if routine == 0 { self.d(1) } else { !self.d(1) };
@@ -248,8 +248,8 @@ impl Push<'_> {
     }
 }
 
-fn run(copy: Copy, c: &mut Cpu, b: &mut Cps2Bus) {
-    Push { c, b, copy }.run();
+fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
+    Push { c, b, variant }.run();
     rts(c, b);
 }
 

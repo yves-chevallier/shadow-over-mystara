@@ -67,15 +67,35 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
    comparant à partir de la fin du démarrage de l'original, ou en faisant attendre à la native le même nombre
    d'images).
 2. **`reset` 0x350 et `boot_init` 0x492 (K1)** : remises à zéro et registres CPS ; même remarque pour la durée.
-3. **Pools d'objets (O2, 9 %)** : `0x1ee1a`/`0x1ef6c`, insertion dans les listes triées par profondeur
-   (la plus chaude du jeu, appelée par les natives des familles).
+3. ~~**Pools d'objets (O2, 9 %)**~~ : fait. `0x1ee1a`/`0x1ef6c` (insertion dans les listes triées par profondeur,
+   la plus chaude du jeu) sont installées avec les registres exacts de l'original (`objects::lists::Reinsert`,
+   `docs/objets.md`) : D0-D2, A1-A4 et drapeaux sont relus par le handler suivant.
 4. **Interface joueurs (F3, 9,5 %)** : `0x15216`, `0x156fa`, `0x17814`, `0x175a8`, `0x1728e`, `0x16c1a`
    (panneaux d'état : PV, score, magies) ; tâche `0x150ac` créée en fin de phase 0.
-5. **Défilement et caméras (B1, 7,4 %)** : `0x33fe4`, `0x31616`, `0x33e20`, `0x30308`, `0x309e0`, `0x2ede0`.
-6. **EFFCT (C0e, 2,7 %)** : `0xb9eba`, `0xb9ee6` (3 scénarios seulement), puis IA E1 (`0xfbb0`, `0xe76c`),
-   texte V2 (`0x28d8`, `0x1386`), liste de sprites V4 (`0x1de96`), FIFO son S1 (`0xedf80`).
+5. **Défilement et caméras (B1, 4,2 %)** : fait pour `0x33fe4`/`0x3403c` (`terrain.rs`, `docs/joueur.md`),
+   `0x31616` et `0x33e20` (`scroll.rs`, `docs/video.md`). Reste `0x30308`, `0x309e0`, `0x2ede0`, `0x32108` et les
+   scripts de mode des caméras : une centaine d'adresses à 1-3 % chacune du 68000 restant du sous-système.
+6. **EFFCT et IA** : faits `0xb9eba`, `0xb9ee6`, `0xba094` (`families/effects.rs`) et `0xfbae`, `0xfbb0`, `0xe76c`,
+   `0xf0e8` (`ai.rs`). Reste le texte V2 (`0x28d8`, `0x1386`), la liste de sprites V4 (`0x1de96`), la FIFO son
+   S1 (`0xedf80`) et, hors de toute fonction de l'index (`tools/reste68k.sh` les compte à part : la ligne « hors de toute fonction
+   de l'index » de `docs/reste68k.md`, plus de la moitié du reste), les tâches d'interface F3 (`0x15620`, `0x150ac`, `0x15f9e`...), la
+   cession de la boucle de partie (`0x1c48c`) et le gestionnaire d'effet de barrière (`0xb9e78`).
 7. **Les tâches elles-mêmes** : tâche de partie `0x1c45a`, tâche du gel `0xee080`, tâches de fondu
    (`0x1460` et suivantes), tâches d'interface. Le noyau natif les fait encore reprendre en 68000 ; voir le plan dans
    `architecture.md`.
 8. Les 1 294 fonctions jamais atteintes (88 Ko) : à classer en code mort (menu TEST, écrans de debug, K4 : hors
    périmètre) ou à couvrir par des scénarios (boss et ennemis rares, ESHL, SET) avant de les réécrire.
+
+## Mesure : routines du monde réécrites avec leurs registres
+
+Instructions 68000 exécutées hors natives (hors attente active) sur 10 scénarios (`bot30k`, `bot_2p`, `bot_char0`,
+`bot_char3`, `cov_tour1_c0`, `cov_tour6_c5`, `cov_service`, `cov_mortal_2p` à 30 000 images, `modes/ending` et
+`modes/gameover` à 12 000 ; mêmes scénarios et mêmes nombres d'images des deux côtés, `tools/reste68k.sh`) :
+
+| | Instructions | Par image |
+|---|---:|---:|
+| avant (main a33691e) | 97 846 065 | 370,6 |
+| après | 80 722 543 | 305,8 (-17,5 %) |
+
+Gain par routine : `0x1ee1a`/`0x1ef6c` (-10 M), `0x33fe4` (-2,7 M), `0xfbae`/`0xfbb0` (-1,9 M), `0x33e20` (-0,7 M),
+`0x31616` (-0,6 M), `0xe76c` (-0,4 M).

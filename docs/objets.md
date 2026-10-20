@@ -120,8 +120,14 @@ tous les gestionnaires (587 sites) :
   tête (`Y` plus grande que celle du précédent) ou en descendant vers la queue (plus petite que celle du
   suivant) jusqu'à la bonne place ; sinon rien.
 
-La durée dépend du nombre de voisins parcourus ; la routine native la reconstitue à partir de la suite
-des décisions de branchement de l'original (`objects::cost`).
+Les registres que l'original laisse après son `rts` sont **relus** par le handler suivant (le dispatch ne
+les remet pas à zéro : `0x4bd32` indexe une table avec tout D0.w, dont l'octet haut est un lien de liste).
+Les natives installées (`lists::Reinsert`) transcrivent donc l'original instruction par instruction
+(`move.w` vers la mémoire qui fixe N et Z, `movea.w` qui étend en signe sans toucher aux drapeaux, `add.w` et
+`cmp.w` à drapeaux exacts) et rendent D0, D1, D2, A1-A4 et les drapeaux comme lui, selon le chemin suivi
+(`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1` : aucun écart sur 75 000 appels de `mash_c5` et 2 000 tirages de
+`fuzz_monde`). Les appelants Rust qui n'ont pas ce contrat (`SortedList::reinsert`) gardent l'algorithme en
+clair (`plan_reinsert` / `apply`).
 
 `list_unlink` (0x1f0be) retire l'objet (cinq cas : seul, premier, dernier, au milieu, absent) et met ses
 liens à 0 ; `list_unlink_all` (0x1f184) vide les acteurs puis, **seulement si les acteurs n'étaient pas

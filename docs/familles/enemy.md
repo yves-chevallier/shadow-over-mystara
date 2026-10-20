@@ -262,7 +262,7 @@ des lignes `"s4 s5 s6,.. max7"`, champs tolérés) branché dans `fuzz_enemy.rs`
 DDSOM_VARIANTES=1 fuzz_enemy familles <roms> <eeprom> <scénario> 3500 <tours>`. Outils ajoutés : `pctrace`
 (`PCTRACE_SEUL`, `PCTRACE_IMAGES`), `DDSOM_TRACE_ORIG=<nom de la native>` dans `lib.rs` (trace du code d'origine pour
 les écarts d'une native en mode contrôle).
-Pièges rencontrés : **0xfbae n'est pas un `rts`** (test de zone, remet D5 à 0 ; l'index du pseudo-C le donne pour
+Pièges rencontrés : **0xfbae n'est pas un `rts`** (test de zone, natif `ai::IN_ZONE`, remet D5 à 0 ; l'index du pseudo-C le donne pour
 2 octets) ; les routines appelées par un sous-état reviennent à la boucle de l'état, qui exécute la suite (zone,
 ombre) : un `return` dans un bras du `match` d'un sous-état saute cette suite ; une variante `+3` indexe parfois
 directement une table de mots (valeurs paires) ; `bgt`/`bpl` après un `jsr` lisent les drapeaux de la routine
