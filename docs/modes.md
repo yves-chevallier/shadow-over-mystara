@@ -41,7 +41,7 @@ de fin de partie (`0x133f0`).
 
 | Sous-mode | Écran | Rust |
 |---|---|---|
-| 0, 6 | image fixe (tâche `0x1835e`, objets EFFCT et SET), puis fondu | `attract::fixed_screen` |
+| 0, 6 | tableau des meilleurs scores (tâche `0x1835e`, objets EFFCT et SET), puis fondu | `attract::fixed_screen`, `taches/ecran_fixe.rs` |
 | 2, 12 | titres (Capcom, « Dungeons & Dragons », droits) | `title.rs` |
 | 4, 14 | démonstrations scénarisées (interpréteur `0x1f32e`) | `demo.rs` |
 | 8, 16 | image de deux blocs de tuiles, 300 images (16 : seulement si `A5+0x70` = 2) | `attract::legal_screen`, `second_legal_screen` |
@@ -78,6 +78,12 @@ logo à intervalles lus dans une table (2), fondus (4, 12, 14), éclairs blancs 
 caméra (22), palette du logo (24), texte de droits selon la région `A5+0x70` (28) et sortie (30). Sous-mode 12 : second
 titre, 5 étapes, qui réutilise le texte de droits et la sortie. Les objets lisent et écrivent le bloc d'état par le
 pointeur `+0x4c` de leur enregistrement.
+
+**Tableau des scores** (`taches/ecran_fixe.rs`, sous-modes 0 et 6) : la machine à modes crée la tâche `0x1835e`
+(emplacement 0xf0) et attend son indicateur `FF0F53`. La tâche (bloc d'état `FF0F50`) pose le décor et les rangs 5 à 10,
+attend 0x40 images, dessine les rangs 1 à 4 et le titre, fait monter la couche 2 pendant 0xe0 images, attend 0x90 images,
+lève l'indicateur et se termine. Lignes du tableau : 14 octets (niveau, personnage, nom de six lettres, score BCD,
+emblème), `FF0FD0` (premier), `FF0FDE` (2 à 4), `FF104E` vers le bas (5 à 10).
 
 **Démonstrations** (`demo.rs`) : un *script* de la ROM (pointeur long à `FF0EA2`, deux scripts alternés pour le sous-mode
 4/14, un seul pour le 10) est une suite d'entrées de 32 octets : opération (`0` scène, `2` commande son puis scène,

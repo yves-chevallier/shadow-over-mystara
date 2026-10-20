@@ -68,7 +68,7 @@ Dans la réécriture, chaque tâche devient une machine d'états / coroutine ; s
 | 0x00 (remplace) | `0x1c45a` | 0x1400a / 0x140ae (début de partie) | **boucle de partie** : par image, saute à la *phase* `(A5+0x2c)` (table 0x1c502), réinitialise les 5 compteurs de listes de collision (`FFFE72-7A`) et leurs tableaux (`FFFE7C-84`) | §2.4 |
 | 0x00 (remplace) | `0x29162` | 0x14e3a | **menu TEST** (« T E S T M E N U ») : cf. M1 | chaînes 0x29f22+ |
 | 0x30 | `0x150ac` | 0x1c69a (fin de la phase 0, après `A5+0x34 ← 1`), 0x1f8a2 | **interface joueurs : sélection de personnage / panneaux d'état (h)** : efface `A5+0x30e…` (4 × 0x50 octets par joueur), boucle `0x16c86` (clear tilemap 0x912008, `15216`/`17814`/`175a8`) | listing |
-| 0xF0 | `0x1835e` | 0x13740 (mode 0/6) | **exécuteur d'objets pour écrans fixes** : appelle seulement les dispatch des classes EFFCT et SET + `0x1de96` (sprites) – logos/titre (h) | listing 0x1835e-0x18384 |
+| 0xF0 | `0x1835e` | 0x13740 (mode 0/6) | **tableau des meilleurs scores de l'attract** (Rust : `taches/ecran_fixe.rs`) : étape de l'écran, puis dispatch des classes EFFCT et SET + `0x1de96` (sprites) | listing 0x1835e-0x18384 |
 | 0xD0 | `0xe03fe` | 0xe03e4 | messages « INSERT n COINS / CONTINUE REQUIRES ONLY 1 » (0xe04e8) | chaîne + code |
 | 0xC0 | `0xf7dfe` | 0xf798a | écrit 4 emplacements par joueur dans une table (A6) – rôle inconnu (h : curseurs/portraits) | listing |
 | 0x10 | `0x14ba`, `0x14c8`, `0x14d0`, `0x14de`, `0x1536`, `0x153e` | ~80 sites (fondus) | **fondu de palette** (paramètres `A5+0x48e` masque de pages, `+0x48f` nombre, `+0x490` délai, `+0x492…` pointeurs cibles) | listing 0x14ba-0x1560 |

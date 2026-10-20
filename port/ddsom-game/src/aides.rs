@@ -1,5 +1,6 @@
-//! Petites routines communes (V2) : direction entre deux points (0x1386), objet saisi (0x2810) et
-//! fin de partie quand tous les joueurs sont à terre (0x28d8, dernière étape de la phase 12).
+//! Petites routines communes (V2) : direction entre deux points (0x1386), objet saisi (0x2810),
+//! fin de partie quand tous les joueurs sont à terre (0x28d8, dernière étape de la phase 12) et division
+//! entière (0x17ea).
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -276,7 +277,43 @@ pub const GAME_OVER: Native = Native {
     exact_cost: false,
 };
 
-pub const NATIVES: &[Native] = &[DIRECTION, DIRECTION_FROM_OBJECT, DIRECTION_TO_OBJECT, GRABBED, GAME_OVER];
+/// `0x17ea` : division non signée de 32 bits par décalages et soustractions (32 tours). Rend le quotient et
+/// le reste ; avec un diviseur de plus de 2^31 le reste déborde comme dans l'original (diviseur nul :
+/// quotient 0xffffffff, reste le dividende).
+pub fn divide(mut n: u32, d: u32) -> (u32, u32) {
+    let mut r = 0u32;
+    for _ in 0..32 {
+        let carry = n >> 31;
+        n <<= 1;
+        r = r.wrapping_shl(1) | carry;
+        if r >= d {
+            r = r.wrapping_sub(d);
+            n += 1;
+        }
+    }
+    (n, r)
+}
+
+/// D0 / D1 : quotient dans D0, reste dans D2 ; D3 = 0xffff (compteur de la boucle).
+fn divide_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (q, r) = divide(c.d[0], c.d[1]);
+    c.d[0] = q;
+    c.d[2] = r;
+    c.d[3] = 0xffff;
+    rts(c, b);
+}
+
+pub const DIVIDE: Native = Native {
+    entry: 0x17ea,
+    name: "division",
+    cost: |_, _| 600,
+    run: divide_native,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::d(2) | regs::d(3),
+    exact_cost: false,
+};
+
+pub const NATIVES: &[Native] = &[DIRECTION, DIRECTION_FROM_OBJECT, DIRECTION_TO_OBJECT, GRABBED, GAME_OVER, DIVIDE];
 
 #[cfg(test)]
 mod tests {
