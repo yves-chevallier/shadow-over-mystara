@@ -64,6 +64,9 @@ mod var {
     pub const FADE_STEPS: u32 = A5 + 0x48f;
     pub const FADE_PAGES: u32 = A5 + 0x48e;
     pub const FADE_DELAY: u32 = A5 + 0x490;
+    /// Partie en cours ; mot de réglages.
+    pub const GAME: u32 = A5 + 0x30;
+    pub const DSW: u32 = A5 + 0x7fd0;
 }
 
 mod ext {
@@ -97,7 +100,6 @@ mod ext {
     pub const FADE_TASK_OUT: u32 = 0x14d0;
     /// Gestionnaire de la phase 12 de la démonstration, et ses étapes.
     pub const INPUTS: u32 = 0x2aec;
-    pub const DEMO_AI: u32 = 0xe05ec;
     pub const WORLD_UPDATE: u32 = 0x1c86e;
     pub const GAUGE: u32 = 0xb3e;
     pub const COLLISIONS: u32 = 0x260ee;
@@ -860,6 +862,85 @@ resume!(R_ENDING_SHOW, ENDING_SHOW, |x| {
 });
 
 // ---------------------------------------------------------------------------------------------
+// Entrées enregistrées (`0xe05ec`)
+
+/// Enregistreur d'entrées des démonstrations (A5 - 0x5ab2...) : pointeur vers l'entrée courante (long), images
+/// restantes de l'entrée (mot), et trois drapeaux : enregistrement, relecture, actif.
+mod rec {
+    use crate::mem::A5;
+    pub const POINTER: u32 = A5 - 0x5ab2;
+    pub const LEFT: u32 = A5 - 0x5aae;
+    pub const PLAYING: u32 = A5 - 0x5aac;
+    pub const RECORDING: u32 = A5 - 0x5aab;
+    pub const ACTIVE: u32 = A5 - 0x5aaa;
+    /// Une entrée : durée (mot), puis les trois octets d'entrée de chaque joueur.
+    pub const ENTRY: u32 = 0xe;
+    /// Dernière entrée possible.
+    pub const LAST: u32 = 0x93fff2;
+}
+
+/// Les douze octets d'entrée des joueurs (`A5 + 0x64a + 0x200 k`, trois octets chacun), dans l'ordre d'une entrée.
+fn input_byte(i: u32) -> u32 {
+    A5 + 0x64a + 0x200 * (i / 3) + i % 3
+}
+
+/// `0xe05ec` : enregistre les entrées des joueurs (une entrée par changement, avec sa durée) ou les relit (une
+/// partie en cours avec le bit 15 des réglages suspend la relecture).
+fn demo_inputs(x: &mut Ctx) {
+    if rd8(x.b, rec::ACTIVE) == 0 {
+        return;
+    }
+    if rd8(x.b, rec::RECORDING) != 0 {
+        record_inputs(x);
+    } else if rd8(x.b, rec::PLAYING) != 0 {
+        if rd8(x.b, var::GAME) != 0 && rd16(x.b, var::DSW) & 0x8000 != 0 {
+            return;
+        }
+        let at = rd32(x.b, rec::POINTER);
+        if at > rec::LAST {
+            wr8(x.b, rec::PLAYING, 0);
+            return;
+        }
+        for i in 0..12 {
+            let v = rd8(x.b, at + 2 + i);
+            wr8(x.b, input_byte(i), v);
+        }
+        let left = rd16(x.b, rec::LEFT);
+        if left != 0 {
+            wr16(x.b, rec::LEFT, left - 1);
+        } else {
+            let next = at + rec::ENTRY;
+            wr32(x.b, rec::POINTER, next);
+            let length = rd16(x.b, next);
+            wr16(x.b, rec::LEFT, length);
+        }
+    }
+}
+
+/// Enregistrement : l'entrée courante dure une image de plus tant que les entrées ne changent pas (et que sa durée
+/// tient sur 16 bits) ; sinon sa durée est écrite et une nouvelle entrée commence.
+fn record_inputs(x: &mut Ctx) {
+    let length = rd16(x.b, rec::LEFT);
+    let at = rd32(x.b, rec::POINTER);
+    if length != 0xffff && (0..12).all(|i| rd8(x.b, input_byte(i)) == rd8(x.b, at + 2 + i)) {
+        wr16(x.b, rec::LEFT, length + 1);
+        return;
+    }
+    wr16(x.b, at, length);
+    wr16(x.b, rec::LEFT, 0);
+    let next = at + rec::ENTRY;
+    wr32(x.b, rec::POINTER, next);
+    if next > rec::LAST {
+        wr8(x.b, rec::RECORDING, 0);
+        return;
+    }
+    for i in 0..12 {
+        let v = rd8(x.b, input_byte(i));
+        wr8(x.b, next + 2 + i, v);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Phase 12 de la démonstration (`0x1fa38`)
 
 /// Le jeu de la démonstration : entrées de l'IA, monde, jauges, collisions, script d'apparition.
@@ -870,9 +951,9 @@ pub const DEMO_PHASE_12: Native = Native {
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         x.c.a[5] = A5;
-        for f in [ext::INPUTS, ext::DEMO_AI, ext::WORLD_UPDATE] {
-            x.call(f);
-        }
+        x.call(ext::INPUTS);
+        demo_inputs(&mut x);
+        x.call(ext::WORLD_UPDATE);
         x.c.d[1] = 0x54_0000;
         x.call(ext::GAUGE);
         x.call(ext::SPRITES);
