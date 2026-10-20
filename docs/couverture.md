@@ -81,7 +81,7 @@ différence de la RAM entre routines natives et code d'origine, image) :
 | `cov_mortal_c1`, `cov_mortal_2p`, `cov_natural_c0`, `cov_service` | VALIDE sur 30 000 images | – |
 | `cov_tour1/4/5/8`, `cov_mortal_c1` | VALIDES sur 30 000 images avec `DDSOM_ADOPT_REGS=player_overlays_update,players_update` | `player_overlays_update` : D3 (et les autres registres) relu par le créateur d'effet 0xb141a (écarts aux images 5150, 4898, 4949, 10051, 10418, 3993, 20977 sans l'adoption : mots FFD5xx-FFD9xx des objets ESHL) |
 | `cov_2p_c`, `cov_3p`, `cov_attract_coin`, `cov_gameover_c4` (image 29927), `cov_2p_b`, `cov_4p_*` | écarts aux images 4192, 4326, 3362/4014 | `players_update` (DDSOM_SANS le supprime ; l'adoption des registres ne suffit pas : écarts de mémoire) |
-| `cov_tour2/3/6/7`, `cov_mortal_late`, `ko/boss13_dragon` (image 9991) | images 20611, 10523, 7201, 10921, 4267 | phase de jeu qui tourne sans attendre l'image (`0xa86`, cède sans attendre) : l'original surcadencé en exécute des dizaines par image (FF2A58/FF2A38, compteur de l'image FF8054) ; le nombre d'itérations dépend de la durée exacte de chaque routine, que les natives n'imitent pas (`build_sprite_list` coûte 30 000 cycles de moins que l'original sur 3 600 appels, etc.) |
+| `cov_tour2/3/6/7`, `cov_mortal_late`, `boss/boss13_dragon` (image 9991) | images 20611, 10523, 7201, 10921, 4267 | phase de jeu qui tourne sans attendre l'image (`0xa86`, cède sans attendre) : l'original surcadencé en exécute des dizaines par image (FF2A58/FF2A38, compteur de l'image FF8054) ; le nombre d'itérations dépend de la durée exacte de chaque routine, que les natives n'imitent pas (`build_sprite_list` coûte 30 000 cycles de moins que l'original sur 3 600 appels, etc.) |
 | `cov_mortal_c1`, `cov_mortal_2p` | VALIDE sur 30 000 images | – |
 | `cov_attract_coin` | image 21302 (3362 et 4014 corrigés) | 21302 : tempête de pas (voir plus bas), un bouton pressé à l'image 21300 |
 | `cov_3p`, `cov_4p_a`, `cov_4p_b`, `cov_2p_c` | images 9850, 4739, 4444, 6394 (2992, 3845, 3152, 3011 corrigés) | `combat_update` (supprimé par `DDSOM_SANS=combat`) ; ensuite, `cov_3p` 10652 : tempête de pas ; `cov_4p_a` 7305 : registres résiduels (`build_sprite_list`, `set_0`) ; `cov_4p_b` 12015 : `set_30` ; `cov_2p_c` 8370 : `enemy_16` (Riyakaa, ffad64), puis 15960 |
@@ -143,7 +143,7 @@ désormais les entrées avant le bouton fautif et relâche les boutons restés e
 (aucun bouton en entrée de scène). **Résolu** : le nombre de pas par image est maintenant plafonné à 8 (valeur de
 l'arcade : 5 à 10, `ddsom_game::MAX_STEPS_PER_FRAME`) par un crochet de `cps2::Machine` appliqué à l'identique au jeu
 et à la machine de référence (`install`, `install_reference` ; `docs/boucle.md` §1). Les scénarios `cov_tour2/3/6/7`,
-`cov_mortal_late`, `cov_attract_coin` et `ko/boss13_dragon` sont VALIDES sur 30 000 images ; `examples/determinisme`
+`cov_mortal_late`, `cov_attract_coin` et `boss/boss13_dragon` sont VALIDES sur 30 000 images ; `examples/determinisme`
 (deux machines d'origine à ×16 et ×32) ne montre plus d'écart que sur les mots ignorés par `validate`. Les
 scénarios n'ont donc plus à éviter les boutons en entrée de scène.
 
@@ -155,3 +155,24 @@ présentations de personnages, droits), `screens.txt` (écrans de droits rares, 
 affaibli : générique de fin, phase 28 ; la seconde moitié par `poke` de l'état). Les natives réécrites de ces écrans
 (`modes/`, `docs/modes.md`) y sont toutes exercées sauf les chemins d'échec d'allocation d'objets (pool plein).
 
+## Campagne « scénarios en écart restants » (`scenarios/ko/` vidé)
+
+Les 22 scénarios de `scenarios/cov/` sont VALIDES sur 30 000 images (`DDSOM_COV=1`), ainsi que les 132 scénarios de
+`tools/validate_all.sh 30000` avec `DDSOM_SCENES=1`. Tous ceux qui restaient dans `scenarios/ko/` sont VALIDES et rangés dans `boss/` (`boss13_dragon`), `enemy/`
+(`ghoul_scene19`, `ghoul_scene97`), `scene/` (`scene_05`, `07`, `08`, `11`, `110`) et `scene_end/` (`end_01`) ;
+`scene/scene_67` (régression de la fusion) est corrigé. Les causes, une par une, sont dans `scenarios/ko/README.md` ;
+trois enseignements généraux :
+
+* **Appeler du 68000 qui cède la main** : une native qui appelle par `call` une routine d'origine pouvant atteindre
+  `0xa40` (fondu `0x1460`, chargeurs de scène) doit utiliser `call_at(adresse, retour d'origine)` (`Cx::call_at` pour les
+  gestionnaires d'objets), sinon la tâche réveillée revient à l'adresse sentinelle (`docs/boucle.md`).
+* **Registres relus par du code qui n'initialise rien** : en plus de D4 et A4 déjà rendus par le constructeur de sprites,
+  les registres laissés par le reconnaisseur de combos (D0-D5, D7.b) et la copie de palette par `movem` des fenêtres de
+  dialogue (D0-D6/A3) sont relus plus loin (position du sang à la mort d'un boss, nombre de lignes d'une fenêtre).
+* **Comportements indéfinis de l'original** (tables lues hors limites, images de sprite sans morceau) : correctifs
+  communs aux deux machines, `cps2::Machine::patches`, `docs/boucle.md` §9. `validate` compare aussi les deux banques de la
+  RAM d'objets et affiche les valeurs des écarts de la GFX RAM.
+
+Les natives sont toujours dispensées d'imiter la durée de l'original : un état où la machine de référence passe plusieurs
+images dans une boucle (compteur FF806E qui avance par à-coups) est un comportement indéfini à corriger, pas à reproduire
+(`examples/cyc` compare les dates des natives des deux machines).

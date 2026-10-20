@@ -94,9 +94,18 @@ pub fn clear_recognizers(g: &mut Ctx, p: Player) {
     }
 }
 
+/// Remplace l'octet bas d'un registre.
+fn low8(reg: &mut u32, v: u8) {
+    *reg = *reg & !0xff | v as u32;
+}
+
 /// 0xf1884 : fait avancer un automate (octet d'avancement `state`, délai `state+1`) d'un pas.
 /// `mirror` : masque de miroir des directions (0 ou 3), `side` : valeur écrite à l'achèvement.
 /// Renvoie vrai quand la séquence est terminée.
+///
+/// Laisse les registres de l'original (relus par le code qui suit, p. ex. D3 puis D2 par la mort d'un boss :
+/// le sang créé en 0xb141a y prend sa position) : D0 = indice, D1 = touches précédentes (puis haut de l'attendu),
+/// D2 = touches tenues, D3 = masque (puis attendu), D7.b = attendu & miroir.
 fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, mirror: u8, side: u8) -> bool {
     cov!();
     let mut held = p.u8(g, Player::KEYS_HELD);
@@ -111,15 +120,28 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
     let mask = g.data8(table + at);
     held &= mask;
     prev &= mask;
+    g.c.d[0] = at;
+    low8(&mut g.c.d[1], prev);
+    low8(&mut g.c.d[2], held);
+    low8(&mut g.c.d[3], mask);
     if (mask as i8) < 0 && prev == held {
         return false;
     }
     let mut expected = g.data8(table + at + 1);
+    low8(&mut g.c.d[3], expected);
+    low8(&mut g.c.d[7], expected & mirror);
     if expected & mirror != 0 {
         expected ^= mirror;
+        low8(&mut g.c.d[3], expected);
     }
-    let matched = prev == expected || (expected & 0xf0 != 0 && held == expected);
+    let matched = if prev == expected {
+        true
+    } else {
+        low8(&mut g.c.d[1], expected & 0xf0);
+        expected & 0xf0 != 0 && held == expected
+    };
     if !matched {
+        g.c.d[0] = 0;
         return false;
     }
     if rd16(g.b, table + at + 2) == 0xffff {
@@ -134,14 +156,22 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
 }
 
 /// 0xf186e : essaie l'orientation normale puis l'orientation miroir.
+/// Laisse D4 (masque de miroir) et D5 (valeur écrite à l'achèvement) du dernier automate essayé, relus plus loin.
 fn recognize_both(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> bool {
     cov!();
-    step(g, p, rec, rec, table, timeout, 0, 0x20) || step(g, p, rec, rec + 2, table, timeout, 3, 0)
+    g.c.d[4] = 0;
+    g.c.d[5] = 0x20;
+    if step(g, p, rec, rec, table, timeout, 0, 0x20) {
+        return true;
+    }
+    recognize_mirror(g, p, rec, table, timeout)
 }
 
 /// 0xf187c : essaie seulement l'orientation miroir.
 fn recognize_mirror(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> bool {
     cov!();
+    g.c.d[4] = 3;
+    g.c.d[5] = 0;
     step(g, p, rec, rec + 2, table, timeout, 3, 0)
 }
 

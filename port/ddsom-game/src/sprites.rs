@@ -179,6 +179,9 @@ fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
         wr8(p.b, bank, v);
         wr16(p.b, a5 + ram::BUILT, 1);
         c.d[4] = p.d4;
+        // A4 : pointeur d'écriture à la fin de la table ; A6 : bloc de la caméra courante
+        c.a[4] = p.at;
+        c.a[6] = a5 + if rd8(p.b, a5 + ram::USE_ALT_CAMERA) != 0 { ram::ALT_CAMERA } else { ram::CAMERA };
     }
     rts(c, b);
 }
@@ -596,6 +599,30 @@ fn draw_text(p: &mut Painter, slot: u32) {
             }
         }
     }
+}
+
+/// Image d'objet sans morceau (compte nul). L'original boucle alors par `dbf` sur un compteur de -1 : 65 536 entrées
+/// écrites à la suite, en faisant plusieurs fois le tour de la RAM d'objets, le temps de plusieurs images (la tâche est
+/// interrompue par les IRQ au milieu de la boucle, à des cycles que seules des routines exactes au cycle près
+/// reproduiraient). Cela n'arrive que dans des états que le jeu ne produit pas (sortie de scène forcée à un instant
+/// quelconque, scénarios de couverture) : aucun morceau n'est dessiné, comme ici (`emit_frame`). Même correctif dans le
+/// code d'origine (machine de référence), aux quatre entrées de la boucle d'émission.
+pub const EMPTY_FRAME_PATCHES: [cps2::Patch; 4] = [
+    // objet : compte lu dans D6 (0x1e22a), objet rattaché (0x1e1aa) ; pièces individuelles : compte dans D4 (0x1e110) ;
+    // objet à pièces individuelles : D6 déjà décrémenté (0x1e2aa)
+    cps2::Patch { entry: 0x1e22a, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0) },
+    cps2::Patch { entry: 0x1e1aa, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0) },
+    cps2::Patch { entry: 0x1e110, apply: |c, b| return_if(c, b, c.d[4] as u16 == 0) },
+    cps2::Patch { entry: 0x1e2aa, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0xffff) },
+];
+
+/// `rts` si `empty`.
+fn return_if(c: &mut Cpu, b: &mut Cps2Bus, empty: bool) -> bool {
+    if empty {
+        c.pc = crate::mem::rd32(b, c.a[7]);
+        c.a[7] = c.a[7].wrapping_add(4);
+    }
+    empty
 }
 
 pub const BUILD_SPRITE_LIST: Native = Native {
