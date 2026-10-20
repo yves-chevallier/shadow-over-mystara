@@ -122,7 +122,7 @@ coffres), sous-sous-état 4 de l'état « touché ». Dans le type 1 : variantes
 
 ## 4. EFFCT (classe 0xE) : effets visuels
 
-Pool de 38 emplacements de 0x60 octets (`0xFFD49E`), 64 types. Les gestionnaires n'ont pas de test
+Pool de 38 emplacements de 0x60 octets (`0xFFD49E`), 92 types (la table `0x39ce0` va jusqu'à `0x39e50`, début du dispatch BOX). Les gestionnaires n'ont pas de test
 `HIDDEN` : l'état choisit directement init / actif / libération.
 
 | Type | Entrée | Nom | Comportement | Appels | Validation |
@@ -153,6 +153,11 @@ Pool de 38 emplacements de 0x60 octets (`0xFFD49E`), 64 types. Les gestionnaires
 | 56 | 0xb6c6e | éclats de débris | | 0 | fuzz |
 | 57 | 0xb6bca | marque | collée à un joueur dans un état donné | 0 | fuzz |
 | 62 | 0xb77ac | gerbe d'éclats | explose en neuf objets quand l'objet suivi est touché | 0 | fuzz |
+| 72 | 0xb841c | détecteur de ramassage | un joueur marche dessus (6 en profondeur, 8 en x) : crée l'éclat ESHL 55 (`0xa532e`) ; variante : crée le clignotement 79 | 6 409 | scénarios (`families/effects_b.rs`) |
+| 73 | 0xb84c6 | écran de victoire | sprite qui tombe, clignote, change d'animation selon l'état de son créateur | 180 | scénarios |
+| 74 | 0xb85fa | bulle du créateur | posée à côté de lui, monte, clignote, disparaît | 277 | scénarios |
+| 75 | 0xb871a | bouton de menu | machine à sept sous-états pilotée par `A5+0x2e` et `0xff2a38` | 3 582 | scénarios |
+| 79 | 0xb8df2 | clignotement | clignote tant que son créateur vit ; détecte un joueur de classe 5 voisin | 1 032 | scénarios |
 
 Exercé par les scénarios et laissé en code d'origine (dans un type par ailleurs réécrit) : type 31
 variante 5 état 2 (dessin des lignes de score, 3 583 appels). Types jamais exercés et non réécrits : 0, 2,

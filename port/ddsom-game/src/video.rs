@@ -223,6 +223,21 @@ fn fill_run(c: &mut Cpu, b: &mut Cps2Bus, from: u32, to: u32, tile: u16) {
 fn clear_scroll1(c: &mut Cpu, b: &mut Cps2Bus) {
     fill_run(c, b, hw::SCROLL1, hw::SCROLL2, 0x20);
 }
+/// 0x3525c : efface les 8 Ko du début de la couche 1 avec la tuile vide 0x1f. Le code d'origine laisse
+/// la case dans D0-D5, A2 et A3, D6 = -1 et A1 à la fin de la zone.
+fn clear_scroll1_start(c: &mut Cpu, b: &mut Cps2Bus) {
+    const SIZE: u32 = 0x2000;
+    fill_layer(b, hw::SCROLL1, hw::SCROLL1 + SIZE, 0x1f);
+    for n in 0..6 {
+        c.d[n] = 0x1f_0000;
+    }
+    c.a[2] = 0x1f_0000;
+    c.a[3] = 0x1f_0000;
+    c.a[1] = hw::SCROLL1 + SIZE;
+    set_low_word(&mut c.d[6], 0xffff);
+    c.sr &= !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
+    rts(c, b);
+}
 fn clear_scroll2(c: &mut Cpu, b: &mut Cps2Bus) {
     fill_run(c, b, hw::SCROLL2, hw::SCROLL3, 0x1800);
 }
@@ -252,6 +267,7 @@ pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_couches_on", enable_layers
 pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_couches_off", |_, b| ligne_droite(b, 0xbfc), disable_layers, regs::d(0));
 pub const CLEAR_OBJECTS: Native = fixed(0xc58, "video_effacer_objets", |_, b| ligne_droite(b, 0xc58), clear_objects, 0);
 pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_effacer_scroll1", |_, b| fill_cost(b, 0xca8, 0x4000 / 4), clear_scroll1, regs::d(0) | regs::d(1));
+pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_effacer_debut_scroll1", |_, _| 0, clear_scroll1_start, regs::ALL);
 pub const CLEAR_SCROLL2: Native = fixed(0xcc8, "video_effacer_scroll2", |_, b| fill_cost(b, 0xcc8, 0x4000 / 4), clear_scroll2, regs::d(0) | regs::d(1));
 pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_effacer_scroll3", |_, b| fill_cost(b, 0xce8, 0x4000 / 4), clear_scroll3, regs::d(0) | regs::d(1));
 
@@ -574,6 +590,7 @@ pub const NATIVES: &[Native] = &[
     DISABLE_LAYERS,
     CLEAR_OBJECTS,
     CLEAR_SCROLL1,
+    CLEAR_SCROLL1_START,
     CLEAR_SCROLL2,
     CLEAR_SCROLL3,
     TERRAIN,

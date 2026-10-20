@@ -8,17 +8,20 @@
 //! Mode contrôle (`set_check(true)`) : chaque appel exécute aussi la routine d'origine sur une copie
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
+pub mod camera_modes;
 pub mod chemin;
 pub mod config;
 pub mod credits;
 pub mod dispatch;
 pub mod ecran_credits;
+pub mod effects_aids;
 pub mod eeprom;
 pub mod evenements;
 pub mod game;
 pub mod hud;
 pub mod aides;
 pub mod ai;
+pub mod ai_aids;
 pub mod combat;
 pub mod families;
 pub mod inputs;
@@ -199,7 +202,10 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(video::NATIVES)
         .chain(palette::NATIVES)
         .chain(scroll::NATIVES)
+        .chain(camera_modes::NATIVES)
         .chain(terrain::NATIVES)
+        .chain(ai_aids::NATIVES)
+        .chain(effects_aids::NATIVES)
         .chain(families::NATIVES)
         .chain(families::natives())
         .chain(dispatch::NATIVES)
