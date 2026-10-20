@@ -1,4 +1,4 @@
-//! Pop-ups (U1) : machine à états qui sort les textes flottants de leur file, un à la fois.
+//! Pop-ups (U1) : machine à états qui sort les textes flottants de leur file, un à la fois, et les dessine.
 //!
 //! `A5-0x6e80` : pop-up courant (4 mots : identifiant, deux paramètres, durée restante en images).
 //! La file (`A5+0x20e`, entrées de 8 octets, lecture en `A5+0x20d`) est remplie par `creer_popup`
@@ -9,14 +9,18 @@
 //! * pop-up courant : sa durée diminue ; à zéro il est effacé (0x19ee0) puis remplacé par le suivant ;
 //!   si un autre attend et que la durée restante est d'au moins 4 images, elle est ramenée à 4.
 //!
-//! Le dessin (0x19ee0 effacement, 0x19f24 affichage, 0x19fd2 et 0x1a20e cadres) reste en code
-//! d'origine : il est appelé par `call`.
+//! ## Dessin
+//!
+//! L'identifiant (mot) donne dans son octet haut l'emplacement de la bulle sur la couche de texte
+//! (bit 1 : décalage d'une case) et dans son octet bas le numéro du texte. Une bulle est un cadre
+//! de tuiles 8x8 (largeur et hauteur en pixels : 2e et 3e mots) avec le texte en haut ; en jeu à deux
+//! joueurs (`A5+0x20` bit 0) la bulle est réduite de moitié.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::mem::rts;
-use crate::vue::Vue;
+use crate::mem::{prog16, rd16, rd8, rts, wr16, wr32, wr8};
+use crate::text::clear_cells;
 use crate::Native;
 
 const VIDE: u16 = 0xffff;
@@ -25,87 +29,207 @@ const COURANT: u32 = 0xffff_9180;
 const DUREE: u32 = 6;
 const ENTREES: u32 = 0x20e;
 const LECTURE: u32 = 0x20d;
-const ENTREE_TAILLE: u32 = 8;
+const ENTREE_TAILLE: u8 = 8;
 /// Durée par défaut d'un pop-up sans second paramètre (images), et durée raccourcie.
 const DUREE_DEFAUT: u16 = 0x60;
 const DUREE_RACCOURCIE: u16 = 4;
+/// Bit 0 : bulles réduites.
+const REDUIT: u32 = 0x20;
 
-mod ext {
-    pub const EFFACER: u32 = 0x19ee0;
-    pub const DESSINER: u32 = 0x19f24;
+/// Données de la ROM programme.
+mod rom {
+    /// Rectangles à effacer (colonne, ligne, largeur, hauteur), un par emplacement : grands, puis réduits.
+    pub const EFFACEMENTS: [u32; 2] = [0x19f02, 0x19f12];
+    /// Origine de la bulle dans la couche de texte, par emplacement (4 grands, puis 4 réduits) : lue
+    /// comme une table relative au PC, donc dans le programme déchiffré.
+    pub const ORIGINES: u32 = 0x19f6c;
+    /// Déplacements des textes (par numéro) vers des chaînes d'indices de tuiles terminées par `/`.
+    pub const TEXTES: u32 = 0x1a01a;
+    /// Tuiles du bord bas du cadre (par reste de hauteur de 1 à 8 pixels).
+    pub const BORDS: u32 = 0x1a25e;
 }
 
-fn a5(c: &Cpu, off: u32) -> u32 {
-    c.a[5].wrapping_add(off)
+const COUCHE_TEXTE: u32 = 0x912000;
+const COLONNE: u32 = 0x80;
+/// Fin de chaîne d'un texte.
+const FIN_TEXTE: u8 = 0x2f;
+/// Cases du cadre (tuile, attribut 0xd) : bord de la dernière colonne, bord plein, et base de la case d'angle.
+const BORD_COURANT: u32 = 0x1318_000d;
+const BORD_PLEIN: u32 = 0x1310_000d;
+const BORD_COIN: u16 = 0x1310;
+const ATTRIBUT_CADRE: u16 = 0xd;
+const ATTRIBUT_TEXTE: u16 = 2;
+
+fn reduit(b: &mut Cps2Bus, a5: u32) -> bool {
+    rd8(b, a5 + REDUIT) & 1 != 0
+}
+
+/// 0x19ee0 : efface la bulle du pop-up `entree`.
+fn effacer(b: &mut Cps2Bus, a5: u32, entree: u32) {
+    let table = rom::EFFACEMENTS[reduit(b, a5) as usize];
+    let case = table + 4 * rd8(b, entree) as u32;
+    let (col, row, largeur, hauteur) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
+    clear_cells(b, col, row, largeur, hauteur);
+}
+
+/// 0x19f24 : dessine la bulle du pop-up `entree`.
+fn dessiner(b: &mut Cps2Bus, a5: u32, entree: u32) {
+    let id = rd16(b, entree);
+    let mut largeur = rd16(b, entree + 2);
+    let mut hauteur = rd16(b, entree + 4);
+    if (hauteur as i16) < 0 {
+        // paramètre absent
+        hauteur = 0;
+    }
+    let mut emplacement = (id >> 8) << 1;
+    if largeur as i16 > 0xa8 {
+        largeur >>= 1;
+        hauteur >>= 1;
+    }
+    let petit = reduit(b, a5);
+    if petit {
+        emplacement += 8;
+        largeur >>= 1;
+        hauteur >>= 1;
+    }
+    let origine = prog16(b, rom::ORIGINES + emplacement as u32) as i16 as i32 as u32;
+    let a4 = COUCHE_TEXTE.wrapping_add(origine);
+    texte(b, a4, id, petit);
+    cadre(b, a4, id, petit, largeur as i16, hauteur as i16);
+}
+
+/// Colonne du texte et du cadre : décalée d'une case quand le bit 9 de l'identifiant est posé.
+fn decale(id: u16, petit: bool) -> bool {
+    !petit && id & 0x200 != 0
+}
+
+/// 0x19fd2 : le texte, une tuile par case, en colonne.
+fn texte(b: &mut Cps2Bus, a4: u32, id: u16, petit: bool) {
+    let mut case = a4 + 0x100 + if decale(id, petit) { 4 } else { 0 };
+    let depart = prog16(b, rom::TEXTES + 2 * (id & 0xff) as u32) as i16 as i32 as u32;
+    let mut s = rom::TEXTES.wrapping_add(depart);
+    loop {
+        let tuile = rd8(b, s);
+        s += 1;
+        if tuile == FIN_TEXTE {
+            return;
+        }
+        wr16(b, case, tuile as u16);
+        wr16(b, case + 2, ATTRIBUT_TEXTE);
+        case += COLONNE;
+    }
+}
+
+/// 0x1a20e : le cadre sous le texte. `largeur` et `hauteur` en pixels : des colonnes entières de bord, puis
+/// la colonne du reste (une tuile choisie par le nombre de pixels restants).
+fn cadre(b: &mut Cps2Bus, a4: u32, id: u16, petit: bool, mut d1: i16, mut d2: i16) {
+    let mut case = a4 + 0x104 - if decale(id, petit) { 4 } else { 0 };
+    loop {
+        d1 = d1.wrapping_sub(8);
+        d2 = d2.wrapping_sub(8);
+        if d2 < 0 {
+            break;
+        }
+        wr32(b, case, BORD_COURANT);
+        case += COLONNE;
+    }
+    loop {
+        d2 = d2.wrapping_add(8);
+        d1 = d1.wrapping_add(8);
+        if d1 == 0 {
+            return;
+        }
+        if d1 <= 8 {
+            let bord = prog16(b, rom::BORDS.wrapping_add_signed(2 * d1 as i32));
+            wr16(b, case, bord.wrapping_add(d2 as u16));
+            wr16(b, case + 2, ATTRIBUT_CADRE);
+            return;
+        }
+        wr16(b, case, BORD_COIN.wrapping_add(d2 as u16));
+        wr16(b, case + 2, ATTRIBUT_CADRE);
+        case += COLONNE;
+        d1 = d1.wrapping_sub(8);
+        d2 = -8;
+        loop {
+            d1 = d1.wrapping_sub(8);
+            if d1 < 0 {
+                break;
+            }
+            wr32(b, case, BORD_PLEIN);
+            case += COLONNE;
+        }
+    }
 }
 
 /// Fait du prochain pop-up de la file le pop-up courant (s'il y en a un) et lance son dessin.
-fn suivant(v: &mut Vue, c: &mut Cpu, courant: u32) {
-    let index = v.rd8(a5(c, LECTURE));
+fn suivant(c: &mut Cpu, b: &mut Cps2Bus, courant: u32) {
+    let a5 = c.a[5];
+    let index = rd8(b, a5 + LECTURE);
     c.d[0] = index as u32;
-    let case = a5(c, ENTREES) + index as u32;
-    let vide = v.rd16(case) == VIDE;
-    if v.pris(vide) {
+    let case = a5 + ENTREES + index as u32;
+    if rd16(b, case) == VIDE {
         return;
     }
     for decalage in [0, 2, 4, 6] {
-        let mot = v.rd16(case + decalage);
-        v.wr16(courant + decalage, mot);
-        v.wr16(case + decalage, VIDE);
+        let mot = rd16(b, case + decalage);
+        wr16(b, courant + decalage, mot);
+        wr16(b, case + decalage, VIDE);
     }
-    let second_parametre = v.rd16(courant + 4);
-    if !v.pris(second_parametre != 0) {
-        v.wr16(courant + DUREE, DUREE_DEFAUT);
+    if rd16(b, courant + 4) == 0 {
+        wr16(b, courant + DUREE, DUREE_DEFAUT);
     }
-    v.appeler(c, ext::DESSINER);
-    v.wr8(a5(c, LECTURE), index.wrapping_add(ENTREE_TAILLE as u8));
+    dessiner(b, a5, courant);
+    wr8(b, a5 + LECTURE, index.wrapping_add(ENTREE_TAILLE));
 }
 
-fn animer(v: &mut Vue, c: &mut Cpu) {
-    let courant = a5(c, COURANT);
+/// 0x19e20 : un pas de la machine à états des pop-ups.
+fn animer(c: &mut Cpu, b: &mut Cps2Bus) {
+    let a5 = c.a[5];
+    let courant = a5.wrapping_add(COURANT);
     c.a[0] = courant;
-    c.a[2] = a5(c, ENTREES);
-    let duree = v.rd16(courant + DUREE);
-    if !v.pris(duree == 0) {
-        let duree = duree.wrapping_sub(1);
-        v.wr16(courant + DUREE, duree);
-        if !v.pris(duree == 0) {
+    c.a[2] = a5 + ENTREES;
+    let duree = rd16(b, courant + DUREE);
+    if duree != 0 {
+        let duree = duree - 1;
+        wr16(b, courant + DUREE, duree);
+        if duree != 0 {
             // le pop-up courant continue ; s'il y en a un autre en attente, on abrège
-            if v.pris(duree < DUREE_RACCOURCIE) {
+            if duree < DUREE_RACCOURCIE {
                 return;
             }
-            let index = v.rd8(a5(c, LECTURE));
+            let index = rd8(b, a5 + LECTURE);
             c.d[0] = index as u32;
-            let vide = v.rd16(a5(c, ENTREES) + index as u32) == VIDE;
-            if !v.pris(vide) {
-                v.wr16(courant + DUREE, DUREE_RACCOURCIE);
+            if rd16(b, a5 + ENTREES + index as u32) != VIDE {
+                wr16(b, courant + DUREE, DUREE_RACCOURCIE);
             }
             return;
         }
-        v.appeler(c, ext::EFFACER);
+        effacer(b, a5, courant);
     }
-    suivant(v, c, courant);
-}
-
-fn natif_animer(c: &mut Cpu, b: &mut Cps2Bus) {
-    animer(&mut Vue::reelle(b), c);
-    rts(c, b);
-}
-
-fn cout_animer(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut c2 = c.clone();
-    let mut v = Vue::simulee(b);
-    animer(&mut v, &mut c2);
-    let chemin = v.chemin;
-    chemin.duree_hors(b, 0x19e20, None, &[ext::EFFACER, ext::DESSINER])
+    suivant(c, b, courant);
 }
 
 pub const ANIMER: Native = Native {
     entry: 0x19e20,
     name: "popups_animer",
-    cost: cout_animer,
-    run: natif_animer,
+    cost: |_, _| 300,
+    run: |c, b| {
+        animer(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: 0,
     exact_cost: false,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decalage_des_bulles() {
+        assert!(decale(0x0200, false));
+        assert!(!decale(0x0200, true));
+        assert!(!decale(0x0100, false));
+    }
+}

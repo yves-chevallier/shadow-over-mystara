@@ -395,7 +395,7 @@ const BUTTONS_NEXT: u8 = 0x90;
 const BUTTONS_PREVIOUS: u8 = 0x60;
 
 /// `d - s - X` en BCD sur un octet : résultat et retenue (celle de `sbcd`).
-fn sbcd(d: u8, s: u8, x: bool) -> (u8, bool) {
+pub(crate) fn sbcd(d: u8, s: u8, x: bool) -> (u8, bool) {
     let (d, s, x) = (d as i32, s as i32, x as i32);
     let unadjusted = d - s - x;
     let mut adjust = 0;

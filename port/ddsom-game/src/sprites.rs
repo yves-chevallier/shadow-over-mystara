@@ -8,7 +8,7 @@
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr8};
+use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::Native;
 
 /// Variables de A5 (RAM FF8000) utilisées par le rendu.
@@ -624,6 +624,27 @@ fn return_if(c: &mut Cpu, b: &mut Cps2Bus, empty: bool) -> bool {
     }
     empty
 }
+/// 0x1de7c : vide les têtes de listes d'objets, les marqueurs de joueurs et les trois textes.
+fn reset_lists(c: &mut Cpu, b: &mut Cps2Bus) {
+    let a5 = c.a[5];
+    wr32(b, a5 + ram::ACTORS, 0);
+    wr32(b, a5 + ram::FOREGROUND, 0);
+    wr8(b, a5 + ram::PLAYER_MARKERS, 0);
+    for text in ram::TEXTS {
+        wr32(b, a5 + text, 0);
+    }
+    rts(c, b);
+}
+
+pub const RESET_LISTS: Native = Native {
+    entry: 0x1de7c,
+    name: "sprites_vide_les_listes",
+    cost: |_, _| 100,
+    run: reset_lists,
+    touches_sound: false,
+    outputs: 0,
+    exact_cost: false,
+};
 
 pub const BUILD_SPRITE_LIST: Native = Native {
     entry: 0x1de96,

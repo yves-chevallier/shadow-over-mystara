@@ -159,3 +159,16 @@ drapeaux sont relus par les scripts de mode).
 Initialisation propre à chaque scène (`0x2ede0` première image, `0x32108` idem), les ~31 scripts de mode de la caméra 1
 (table `0x2f780`, suivis par `0x309e0`, `0x30300`, `0x30308`, `0x305fc`, `0x30fc8`, `0x31018`, `0x3147c`,
 `0x31616`...), ceux de la caméra 2, `0x2a52`, `0x33062`/`0x33290`/`0x332c0` (parallaxe avec saut calculé par scène).
+
+## Ajouts (F3, U1, U2, F4)
+
+* `text.rs` : `0xd32` (`text_erase`) efface un texte (mêmes descripteurs que `0xd5e`). `video.rs` : `0x19038` recopie
+  la table des écrans fixes (120 octets de `0x19a1a`) en `0xff111c`.
+* `palette.rs` : l'éclair (`0x1ab56` grise les palettes `0x91c800` et `0x91c3a0` après les avoir mises en
+  réserve en `0xff1190`, `0x1ac24` la réserve, `0x1abe0` la remet).
+* `popups.rs` : dessin des bulles (`0x19ee0` effacement, `0x19f24` cadre, `0x19fd2` texte, `0x1a20e` bord) en Rust.
+* `aides.rs` : `0x1386` (direction 0 à 31 entre deux points), `0x2810` (objet saisi), `0x28d8` (tous les joueurs à
+  terre : fin de partie).
+* `sprites.rs` : `0x1de7c` vide les têtes de listes. **`0x1de96` n'est pas exécuté en 68000** : l'inventaire le lui attribuait à
+  cause de l'`rts` en `0x1df12`, partagé par `0x1ee1a` (listes triées) comme sortie.
+* Interface des joueurs : `docs/hud.md`.

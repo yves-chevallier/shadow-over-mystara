@@ -538,8 +538,33 @@ pub const HEX_DIGITS: Native = fixed(
     regs::a(1) | regs::CCR,
 );
 
+/// Table des écrans fixes (logos et classements) : 10 entrées de 12 octets de la ROM, recopiées en RAM de
+/// travail au démarrage (0x19038).
+const FIXED_SCREENS_ROM: u32 = 0x19a1a;
+const FIXED_SCREENS_RAM: u32 = 0xff111c;
+const FIXED_SCREENS_LEN: u32 = 120;
+
+fn copy_fixed_screens(c: &mut Cpu, b: &mut Cps2Bus) {
+    for offset in (0..FIXED_SCREENS_LEN).step_by(2) {
+        let word = rd16(b, FIXED_SCREENS_ROM + offset);
+        wr16(b, FIXED_SCREENS_RAM + offset, word);
+    }
+    rts(c, b);
+}
+
+pub const COPY_FIXED_SCREENS: Native = Native {
+    entry: 0x19038,
+    name: "video_copie_ecrans_fixes",
+    cost: |_, _| 600,
+    run: copy_fixed_screens,
+    touches_sound: false,
+    outputs: 0,
+    exact_cost: false,
+};
+
 /// Routines natives de ce module.
 pub const NATIVES: &[Native] = &[
+    COPY_FIXED_SCREENS,
     GAUGE_NATIVE,
     GAUGE_THUNK_NATIVE,
     GAUGE_VALUE_NATIVE,

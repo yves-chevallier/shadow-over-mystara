@@ -16,6 +16,8 @@ pub mod ecran_credits;
 pub mod eeprom;
 pub mod evenements;
 pub mod game;
+pub mod hud;
+pub mod aides;
 pub mod ai;
 pub mod combat;
 pub mod families;
@@ -107,7 +109,9 @@ pub const NATIVES: &[Native] = &[
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
     sprites::BUILD_SPRITE_LIST,
+    sprites::RESET_LISTS,
     text::PRINT,
+    text::ERASE,
     text::PRINT_OVER,
     text::PRINT_TALL,
     text::PRINT_TALL_AT,
@@ -209,6 +213,8 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(taches::natives())
         .chain(tache_credits::NATIVES)
         .chain(ecran_credits::NATIVES)
+        .chain(aides::NATIVES)
+        .chain(hud::NATIVES)
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
