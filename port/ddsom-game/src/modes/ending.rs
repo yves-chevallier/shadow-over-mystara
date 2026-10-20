@@ -49,7 +49,6 @@ mod var {
 mod ext {
     pub const KILL_TASK: u32 = 0xa14;
     pub const POOLS: u32 = 0x2062;
-    pub const POOLS_SET: u32 = 0x2134;
     pub const POOLS_EFFCT: u32 = 0x2150;
     pub const POOLS_SOBJ: u32 = 0x21bc;
     pub const SOUND_C0C: u32 = 0xc0c;
@@ -101,7 +100,6 @@ mod ext {
 
 mod at {
     pub const RETURN: u32 = 0xfb2a4;
-    pub const TABLE: u32 = 0xfb2aa;
 }
 
 const FADE_ALL: u8 = 0xf;
