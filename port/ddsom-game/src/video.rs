@@ -243,6 +243,8 @@ const fn fixed(entry: u32, name: &'static str, cost: fn(&Cpu, &mut Cps2Bus) -> u
 }
 
 pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge_cost, gauge, regs::d(2) | regs::a(0) | regs::CCR);
+/// 0xb3e : `bra.b 0xb46`, appelé par la mise à jour du monde (D1 = marqueur de la classe).
+pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_jauge_b3e", gauge_cost, gauge, regs::d(2) | regs::a(0) | regs::CCR);
 pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_jauge_d1", gauge_with_value_cost, gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
 pub const LOCK: Native = fixed(0xb96, "video_verrou", |_, b| ligne_droite(b, 0xb96), lock, regs::d(1));
 pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", |_, b| ligne_droite(b, 0xbac), unlock, regs::d(0) | regs::d(1));
@@ -539,6 +541,7 @@ pub const HEX_DIGITS: Native = fixed(
 /// Routines natives de ce module.
 pub const NATIVES: &[Native] = &[
     GAUGE_NATIVE,
+    GAUGE_THUNK_NATIVE,
     GAUGE_VALUE_NATIVE,
     LOCK,
     UNLOCK,

@@ -12,6 +12,7 @@ pub mod chemin;
 pub mod config;
 pub mod credits;
 pub mod dispatch;
+pub mod ecran_credits;
 pub mod eeprom;
 pub mod evenements;
 pub mod game;
@@ -19,6 +20,7 @@ pub mod ai;
 pub mod combat;
 pub mod families;
 pub mod inputs;
+pub mod kernel;
 pub mod mem;
 pub mod modes;
 pub mod objects;
@@ -32,9 +34,11 @@ pub mod scroll;
 pub mod scenario;
 pub mod sound;
 pub mod sprites;
+pub mod tache_credits;
 pub mod text;
 pub mod timing;
 pub mod video;
+pub mod vblank;
 pub mod vue;
 
 use std::collections::{BTreeMap, HashMap};
@@ -177,7 +181,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs()).chain(kernel::NATIVES).chain(vblank::NATIVES).chain(tache_credits::NATIVES).chain(ecran_credits::NATIVES)
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -210,10 +214,36 @@ pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
             // poursuit ailleurs
             std::panic::resume_unwind(Box::new(Unwound));
         }
-        if run(c.pc, c, b, u64::MAX).is_none() {
+        if TRACE.get().is_some() {
+            run_traced(c.pc, c, b, u64::MAX);
+        } else if run(c.pc, c, b, u64::MAX).is_none() {
             c.step(b);
         }
     }
+}
+
+/// Inventaire du 68000 restant (`examples/reste68k`) : fonction appelée avec l'adresse de chaque
+/// instruction 68000 exécutée hors routine native.
+static TRACE: OnceLock<fn(u32)> = OnceLock::new();
+
+pub fn set_trace(f: fn(u32)) {
+    let _ = TRACE.set(f);
+}
+
+/// Exécuteur d'inventaire : routines natives, sinon une instruction 68000 à la fois, signalée à
+/// `set_trace`. Les durées ne sont pas contrôlées (le 68000 est surcadencé).
+pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32> {
+    if let Some(n) = lookup(pc) {
+        let cost = (n.cost)(c, b);
+        exec(n, c, b);
+        c.cycles += cost;
+    } else {
+        if let Some(t) = TRACE.get() {
+            t(pc);
+        }
+        c.step(b);
+    }
+    Some(c.pc)
 }
 
 /// Fin anormale d'un appel : une routine d'origine a quitté en dépilant les adresses de retour de ses
