@@ -262,7 +262,7 @@ mod chain {
                             let mut d = 0u32;
                             for off in [0x8, 0xc, 0x10] {
                                 let diff = o.u32(x.b, off).wrapping_sub(x.u32(off));
-                                d = d.wrapping_add(if (o.u32(x.b, off) < x.u32(off)) { diff.wrapping_neg() } else { diff });
+                                d = d.wrapping_add(if o.u32(x.b, off) < x.u32(off) { diff.wrapping_neg() } else { diff });
                             }
                             if d < best_distance {
                                 best_distance = d;

@@ -74,6 +74,9 @@ fn main() {
         mb.run_frame();
         let tb = t.elapsed() - ta;
         // DDSOM_LENT=ms : signale les images plus longues que ms millisecondes (par machine)
+        if lent.is_some() && (f + 1) % 1000 == 0 {
+            println!("image {} : {:.1?}", f + 1, t0.elapsed());
+        }
         if let Some(seuil) = lent {
             if ta.as_millis() > seuil || tb.as_millis() > seuil {
                 println!("image {} lente : réécrit {:.0?}, origine {:.0?}", f + 1, ta, tb);

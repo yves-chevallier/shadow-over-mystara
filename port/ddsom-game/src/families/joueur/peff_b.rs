@@ -2,7 +2,6 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::objects::Obj;
 
 const ANIM_START: u32 = 0x1a32;
 const REINSERT: u32 = 0x1ee1a;

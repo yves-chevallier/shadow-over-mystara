@@ -1,0 +1,61 @@
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1440 P1 Button 1 1
+1446 P1 Button 1 0
+2399 poke8 ff8034 14
+2733 P1 Left 1
+2733 P1 Up 1
+2745 P1 Button 2 1
+2746 P1 Button 2 0
+2972 P1 Right 1
+2972 P1 Left 0
+3209 P1 Button 2 1
+3210 P1 Button 2 0
+3272 P1 Right 0
+3299 P1 Button 4 1
+3303 P1 Button 4 0
+3319 P1 Button 3 1
+3323 P1 Button 3 0
+3337 P1 Button 2 1
+3338 P1 Button 2 0
+3550 P1 Button 2 1
+3551 P1 Button 2 0
+3769 P1 Button 2 1
+3770 P1 Button 2 0
+3980 P1 Button 2 1
+3981 P1 Button 2 0
+4224 P1 Button 2 1
+4225 P1 Button 2 0
+4228 P1 Button 2 1
+4229 P1 Button 2 0
+4230 P1 Right 1
+4238 P1 Up 0
+4271 P1 Up 1
+4286 P1 Right 0
+4393 P1 Button 2 1
+4394 P1 Button 2 0
+4399 P1 Button 4 1
+4403 P1 Button 4 0
+4418 P1 Button 2 1
+4419 P1 Button 2 0
+4419 P1 Button 3 1
+4423 P1 Button 3 0
+4510 Coin 1 1
+4516 Coin 1 0
+4540 1 Player Start 1
+4546 1 Player Start 0
+5257 P1 Button 2 1
+5258 P1 Button 2 0
+5499 P1 Button 4 1
+5503 P1 Button 4 0
+5519 P1 Button 3 1
+5523 P1 Button 3 0
+5860 P1 Button 2 1
+5861 P1 Button 2 0
+6010 Coin 1 1
+6016 Coin 1 0
+6040 1 Player Start 1
+6046 1 Player Start 0
+6501 quit

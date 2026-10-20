@@ -26,6 +26,7 @@ pub mod palette;
 pub mod player;
 pub mod popups;
 pub mod rng;
+pub mod scene;
 pub mod scroll;
 pub mod scenario;
 pub mod sound;
@@ -175,21 +176,37 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(sound::wrappers_natifs())
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(sound::wrappers_natifs())
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
 /// exécution jusqu'au retour, natives et blocs recompilés compris. Les cycles s'accumulent.
+/// L'adresse de retour empilée est une sentinelle : préférer `call_at` quand l'appelant d'origine
+/// est connu.
 pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
-    // adresse de retour sentinelle : jamais exécutée par le jeu
+    // jamais exécutée par le jeu
     const RETURN: u32 = 0x00_fffe;
+    call_at(c, b, addr, RETURN);
+}
+
+/// Point de bascule de l'ordonnanceur : une tâche qui cède la main (0xa40, 0xa86) ou se termine y
+/// passe, sa pile et son PC sauvegardés.
+const TASK_SWITCH: u32 = 0x984;
+
+/// Comme `call`, en empilant `ret`, l'adresse de retour de l'appel d'origine (instruction qui suit
+/// son `jsr`). Si la routine cède la main à l'ordonnanceur, les fonctions Rust en cours sont
+/// abandonnées (`Unwound`) : la tâche, réveillée plus tard, reviendra par les adresses de retour de
+/// sa pile dans le code d'origine, qui finit le travail comme l'original. Les appelants Rust doivent
+/// donc empiler les mêmes adresses de retour que le code qu'ils remplacent.
+pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
-    mem::wr32(b, c.a[7], RETURN);
+    mem::wr32(b, c.a[7], ret);
     c.pc = addr;
-    while !(c.pc == RETURN && c.a[7] == sp) {
-        if c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
-            // le code 68000 a dépilé plus que son adresse de retour et poursuit ailleurs
+    while !(c.pc == ret && c.a[7] == sp) {
+        if c.pc == TASK_SWITCH || c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
+            // la tâche cède la main, ou le code 68000 a dépilé plus que son adresse de retour et
+            // poursuit ailleurs
             std::panic::resume_unwind(Box::new(Unwound));
         }
         if run(c.pc, c, b, u64::MAX).is_none() {
@@ -199,8 +216,9 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
 }
 
 /// Fin anormale d'un appel : une routine d'origine a quitté en dépilant les adresses de retour de ses
-/// appelants (par exemple en revenant directement à la boucle de partie). Les fonctions Rust qui
-/// l'appelaient sont abandonnées ; l'exécution reprend au PC atteint, comme dans l'original.
+/// appelants (par exemple en revenant directement à la boucle de partie), ou a cédé la main à
+/// l'ordonnanceur. Les fonctions Rust qui l'appelaient sont abandonnées ; l'exécution reprend au PC
+/// atteint, comme dans l'original.
 pub struct Unwound;
 
 /// Exécute une native ; renvoie normalement, ou après abandon des fonctions Rust si le code 68000

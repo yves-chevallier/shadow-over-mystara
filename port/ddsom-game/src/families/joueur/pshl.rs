@@ -7,7 +7,6 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
-use crate::objects::Obj;
 
 const REINSERT: u32 = 0x1ee1a;
 const TERRAIN_OF_OBJECT: u32 = 0x24a8;

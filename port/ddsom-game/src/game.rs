@@ -10,10 +10,10 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::dispatch::{self, Class};
-use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
+use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::pools::{self, Queue};
 use crate::objects::Obj;
-use crate::{call, regs, Native};
+use crate::{call, call_at, regs, Native};
 
 /// Variables de la RAM de travail (offsets depuis A5).
 mod ram {
@@ -86,40 +86,55 @@ const G_PLAYER: u32 = 0x50_0001;
 const G_ENEMY: u32 = 0x45_0002;
 const G_DECOR: u32 = 0x53_0003;
 
-/// Ordre normal : joueurs et leurs tirs, puis boss, ennemis, tirs ennemis, effets, puis décors,
-/// caisses, objets, caméras, objets système.
-const ORDER_NORMAL: &[Step] = &[
-    Gauge(G_PLAYER), Players, PlayerParts, Objs(&dispatch::PSHL), Objs(&dispatch::PEFF),
-    Gauge(G_ENEMY), Objs(&dispatch::BOSS), Objs(&dispatch::ENEMY), Objs(&dispatch::ESHL), Objs(&dispatch::EFFCT),
-    Gauge(G_DECOR), Objs(&dispatch::SET), Objs(&dispatch::BOX), Objs(&dispatch::ITEM), Cameras,
-    Objs(&dispatch::SOBJ),
+/// Une étape et l'adresse de son appel dans le code d'origine (`jsr`, 6 octets ; le dernier appel de
+/// chaque ordre est un `jmp`). Les appels Rust empilent les mêmes adresses de retour que l'original
+/// (voir `call_at`).
+type Order = &'static [(u32, Step)];
+
+/// Ordre normal (0x1c894) : joueurs et leurs tirs, puis boss, ennemis, tirs ennemis, effets, puis
+/// décors, caisses, objets, caméras, objets système.
+const ORDER_NORMAL: Order = &[
+    (0x1c89a, Gauge(G_PLAYER)), (0x1c8a0, Players), (0x1c8a6, PlayerParts),
+    (0x1c8ac, Objs(&dispatch::PSHL)), (0x1c8b2, Objs(&dispatch::PEFF)),
+    (0x1c8be, Gauge(G_ENEMY)), (0x1c8c4, Objs(&dispatch::BOSS)), (0x1c8ca, Objs(&dispatch::ENEMY)),
+    (0x1c8d0, Objs(&dispatch::ESHL)), (0x1c8d6, Objs(&dispatch::EFFCT)),
+    (0x1c8e2, Gauge(G_DECOR)), (0x1c8e8, Objs(&dispatch::SET)), (0x1c8ee, Objs(&dispatch::BOX)),
+    (0x1c8f4, Objs(&dispatch::ITEM)), (0x1c8fa, Cameras),
+    (0x1c900, Objs(&dispatch::SOBJ)),
 ];
 
-/// Cinématique (`A5+0x44` ≠ 0) : les effets passent en premier.
-const ORDER_CINEMATIC: &[Step] = &[
-    Gauge(G_ENEMY), Objs(&dispatch::EFFCT),
-    Gauge(G_PLAYER), Players, PlayerParts, Objs(&dispatch::PSHL), Objs(&dispatch::PEFF),
-    Gauge(G_ENEMY), Objs(&dispatch::BOSS), Objs(&dispatch::ENEMY), Objs(&dispatch::ESHL),
-    Gauge(G_DECOR), Objs(&dispatch::SET), Objs(&dispatch::BOX), Objs(&dispatch::ITEM), Cameras,
-    Objs(&dispatch::SOBJ),
+/// Cinématique (`A5+0x44` ≠ 0, 0x1c906) : les effets passent en premier.
+const ORDER_CINEMATIC: Order = &[
+    (0x1c90c, Gauge(G_ENEMY)), (0x1c912, Objs(&dispatch::EFFCT)),
+    (0x1c91e, Gauge(G_PLAYER)), (0x1c924, Players), (0x1c92a, PlayerParts),
+    (0x1c930, Objs(&dispatch::PSHL)), (0x1c936, Objs(&dispatch::PEFF)),
+    (0x1c942, Gauge(G_ENEMY)), (0x1c948, Objs(&dispatch::BOSS)), (0x1c94e, Objs(&dispatch::ENEMY)),
+    (0x1c954, Objs(&dispatch::ESHL)),
+    (0x1c960, Gauge(G_DECOR)), (0x1c966, Objs(&dispatch::SET)), (0x1c96c, Objs(&dispatch::BOX)),
+    (0x1c972, Objs(&dispatch::ITEM)), (0x1c978, Cameras),
+    (0x1c97e, Objs(&dispatch::SOBJ)),
 ];
 
-/// Scènes 0x45 à 0x52 : ni joueurs, ni ennemis.
-const ORDER_REDUCED: &[Step] = &[
-    Gauge(G_ENEMY), Objs(&dispatch::EFFCT), Objs(&dispatch::SET), Cameras, Objs(&dispatch::PEFF),
-    Objs(&dispatch::SOBJ),
+/// Scènes 0x45 à 0x52 (0x1c984) : ni joueurs, ni ennemis.
+const ORDER_REDUCED: Order = &[
+    (0x1c98a, Gauge(G_ENEMY)), (0x1c990, Objs(&dispatch::EFFCT)), (0x1c996, Objs(&dispatch::SET)),
+    (0x1c99c, Cameras), (0x1c9a2, Objs(&dispatch::PEFF)),
+    (0x1c9a8, Objs(&dispatch::SOBJ)),
 ];
 
-/// Scène 8 : comme l'ordre normal, mais les effets passent après les caméras.
-const ORDER_SCENE_8: &[Step] = &[
-    Gauge(G_PLAYER), Players, PlayerParts, Objs(&dispatch::PSHL), Objs(&dispatch::PEFF),
-    Gauge(G_ENEMY), Objs(&dispatch::BOSS), Objs(&dispatch::ENEMY), Objs(&dispatch::ESHL),
-    Gauge(G_DECOR), Objs(&dispatch::SET), Objs(&dispatch::BOX), Objs(&dispatch::ITEM), Cameras,
-    Objs(&dispatch::EFFCT), Objs(&dispatch::SOBJ),
+/// Scène 8 (0x1c9ae) : comme l'ordre normal, mais les effets passent après les caméras.
+const ORDER_SCENE_8: Order = &[
+    (0x1c9b4, Gauge(G_PLAYER)), (0x1c9ba, Players), (0x1c9c0, PlayerParts),
+    (0x1c9c6, Objs(&dispatch::PSHL)), (0x1c9cc, Objs(&dispatch::PEFF)),
+    (0x1c9d8, Gauge(G_ENEMY)), (0x1c9de, Objs(&dispatch::BOSS)), (0x1c9e4, Objs(&dispatch::ENEMY)),
+    (0x1c9ea, Objs(&dispatch::ESHL)),
+    (0x1c9f6, Gauge(G_DECOR)), (0x1c9fc, Objs(&dispatch::SET)), (0x1ca02, Objs(&dispatch::BOX)),
+    (0x1ca08, Objs(&dispatch::ITEM)), (0x1ca0e, Cameras), (0x1ca14, Objs(&dispatch::EFFCT)),
+    (0x1ca1a, Objs(&dispatch::SOBJ)),
 ];
 
 /// Ordre de mise à jour selon la cinématique et la scène (comparaisons signées sur un octet).
-fn world_order(b: &mut Cps2Bus) -> &'static [Step] {
+fn world_order(b: &mut Cps2Bus) -> Order {
     let scene = rd8(b, A5 + ram::SCENE) as i8;
     if rd8(b, A5 + ram::CINEMATIC) != 0 {
         ORDER_CINEMATIC
@@ -136,20 +151,27 @@ fn world_order(b: &mut Cps2Bus) -> &'static [Step] {
 
 /// Met à jour tous les objets : joueurs, puis les dix classes dans l'ordre de la scène.
 pub fn update_world(c: &mut Cpu, b: &mut Cps2Bus) {
-    for &step in world_order(b) {
+    let order = world_order(b);
+    for (i, &(site, step)) in order.iter().enumerate() {
+        let ret = site + JSR;
         match step {
-            Gauge(marker) => gauge(c, b, marker),
-            Players => call(c, b, ext::PLAYERS),
-            PlayerParts => call(c, b, ext::PLAYER_PARTS),
-            Objs(class) => class.update(c, b),
-            Cameras => call(c, b, ext::CAMERAS),
+            Gauge(marker) => gauge_at(c, b, marker, ret),
+            Players => call_at(c, b, ext::PLAYERS, ret),
+            PlayerParts => call_at(c, b, ext::PLAYER_PARTS, ret),
+            // dernier appel : un `jmp`, l'adresse de retour de l'appelant est déjà sur la pile
+            Objs(class) => class.update(c, b, (i + 1 < order.len()).then_some(ret)),
+            Cameras => call_at(c, b, ext::CAMERAS, ret),
         }
     }
 }
 
-fn gauge(c: &mut Cpu, b: &mut Cps2Bus, marker: u32) {
+/// Longueur d'un `jsr` absolu : l'adresse de retour est celle du site d'appel + 6.
+const JSR: u32 = 6;
+
+/// Jauge de charge appelée depuis un site d'origine connu (`ret` : adresse de retour).
+fn gauge_at(c: &mut Cpu, b: &mut Cps2Bus, marker: u32, ret: u32) {
     c.d[1] = marker;
-    call(c, b, ext::GAUGE);
+    call_at(c, b, ext::GAUGE, ret);
 }
 
 pub const WORLD_UPDATE: Native = Native {
@@ -259,11 +281,12 @@ fn start_palette_scripts(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Début des étapes 8 et 12 : objets système et décors animés, sprites, puis décompte.
+/// `site` : adresse du premier des trois `jsr` d'origine (retours empilés comme l'original).
 /// Renvoie vrai quand le décompte est écoulé.
-fn animate(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    dispatch::SOBJ.update(c, b);
-    dispatch::SET.update(c, b);
-    call(c, b, ext::SPRITES);
+fn animate(c: &mut Cpu, b: &mut Cps2Bus, site: u32) -> bool {
+    dispatch::SOBJ.update(c, b, Some(site + JSR));
+    dispatch::SET.update(c, b, Some(site + 2 * JSR));
+    call_at(c, b, ext::SPRITES, site + 3 * JSR);
     let left = rd16(b, A5 + ram::TIMER).wrapping_sub(1);
     wr16(b, A5 + ram::TIMER, left);
     (left as i16) < 0
@@ -271,7 +294,7 @@ fn animate(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
 
 /// Étape 8 : décompte écoulé, un objet SET (type 0xc) apparaît et l'étape 12 commence.
 fn wait_then_spawn(c: &mut Cpu, b: &mut Cps2Bus) {
-    if !animate(c, b) {
+    if !animate(c, b, 0x1c5ea) {
         return;
     }
     let Some(set) = alloc_set(c, b) else { return };
@@ -283,7 +306,7 @@ fn wait_then_spawn(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Étape 12 : décompte écoulé, fondu de fin et troisième animation de palette, puis étape 16.
 fn wait_then_fade(c: &mut Cpu, b: &mut Cps2Bus) {
-    if !animate(c, b) {
+    if !animate(c, b, 0x1c624) {
         return;
     }
     call(c, b, ext::PHASE0_END_FADE);
@@ -440,18 +463,27 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) {
     if rd16(b, A5 + CLOCK) != 0 {
         tick_clock(c, b);
     }
-    call(c, b, ext::INPUT_HOOK);
-    // place de l'adresse de retour de `0x1c86e` dans l'original (voir `Class::update`)
+    // sites des appels d'origine (0x1c6f6...) : retours empilés comme l'original (voir `call_at`)
+    call_at(c, b, ext::INPUT_HOOK, 0x1c6f6 + JSR);
     c.a[7] = c.a[7].wrapping_sub(4);
+    wr32(b, c.a[7], 0x1c6fc + JSR); // retour de `jsr 0x1c86e`
     update_world(c, b);
     c.a[7] = c.a[7].wrapping_add(4);
-    for (marker, routine) in [(0x54_0000, ext::SPRITES), (0x48_0002, ext::COLLISIONS), (0x4f_001e, ext::WORLD_EXTRA)] {
-        gauge(c, b, marker);
-        call(c, b, routine);
+    for (gauge_site, marker, routine) in
+        [(0x1c708, 0x54_0000, ext::SPRITES), (0x1c71a, 0x48_0002, ext::COLLISIONS), (0x1c72c, 0x4f_001e, ext::WORLD_EXTRA)]
+    {
+        gauge_at(c, b, marker, gauge_site + JSR);
+        call_at(c, b, routine, gauge_site + 2 * JSR);
     }
-    for routine in [ext::WORLD_EXTRA_2, ext::RANK_TICK, ext::END_OF_FRAME] {
-        call(c, b, routine);
+    for (site, routine) in [(0x1c738, ext::WORLD_EXTRA_2), (0x1c73e, ext::RANK_TICK), (0x1c744, ext::END_OF_FRAME)] {
+        call_at(c, b, routine, site + JSR);
     }
+    debug_scene_skip(b);
+}
+
+/// Saut de niveau de débogage (fin de la phase 12 et de la phase 8, `0x1c74a`) : inactif dans le jeu de
+/// production (le bit 15 du mot ROM `0xc0` est nul).
+pub fn debug_scene_skip(b: &mut Cps2Bus) {
     if rd16(b, DEBUG_SWITCH) & 0x8000 != 0 {
         let pressed = !rd8(b, A5 + BUTTONS_BEFORE) & rd8(b, A5 + BUTTONS_NOW);
         if pressed & BUTTONS_NEXT == BUTTONS_NEXT {
@@ -487,10 +519,22 @@ mod tests {
     fn ordres_complets_sans_doublon() {
         for order in [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_SCENE_8] {
             let mut entries: Vec<u32> =
-                order.iter().filter_map(|s| if let Objs(class) = s { Some(class.entry) } else { None }).collect();
+                order.iter().filter_map(|(_, s)| if let Objs(class) = s { Some(class.entry) } else { None }).collect();
             entries.sort();
             entries.dedup();
             assert_eq!(entries.len(), 10);
+        }
+    }
+
+    /// Les sites d'appel se suivent : un `jsr` (6 octets), ou un `move.l #,D1` (6 octets) puis le
+    /// `jsr` de la jauge.
+    #[test]
+    fn sites_croissants() {
+        for order in [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_REDUCED, ORDER_SCENE_8] {
+            for w in order.windows(2) {
+                let ecart = w[1].0 - w[0].0;
+                assert!(ecart == JSR || ecart == 2 * JSR && matches!(w[1].1, Gauge(_)), "{:x}", w[1].0);
+            }
         }
     }
 }

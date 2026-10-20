@@ -13,10 +13,10 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Bus, Cpu};
 
-use crate::mem::rts;
+use crate::mem::{rts, wr32};
 use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
-use crate::{call, Native};
+use crate::{call_at, Native};
 
 /// Indicateur X du registre d'état.
 const SR_X: u16 = 0x10;
@@ -73,9 +73,16 @@ impl Class {
     /// Les registres circulent d'un gestionnaire à l'autre comme dans la boucle d'origine (A0 =
     /// objet, D7.w = compteur, D0 = type × 4, A1 = gestionnaire) : le jeu en dépend (un gestionnaire
     /// lit le D0 laissé par le précédent) et un gestionnaire peut modifier A0 et D7.
-    pub fn update(&self, c: &mut Cpu, b: &mut Cps2Bus) {
-        // place de l'adresse de retour de la boucle d'origine (un gestionnaire peut la dépiler)
-        c.a[7] = c.a[7].wrapping_sub(4);
+    ///
+    /// `ret` : adresse de retour empilée par l'appel d'origine de la boucle (`jsr`), ou `None` pour
+    /// un appel terminal (`jmp` : l'adresse de retour de l'appelant est déjà sur la pile). La pile
+    /// est ainsi celle de l'original : un gestionnaire peut la dépiler, ou céder la main (voir
+    /// `call_at`), et la tâche reprend alors dans le code d'origine.
+    pub fn update(&self, c: &mut Cpu, b: &mut Cps2Bus, ret: Option<u32>) {
+        if let Some(ret) = ret {
+            c.a[7] = c.a[7].wrapping_sub(4);
+            wr32(b, c.a[7], ret);
+        }
         c.a[0] = self.pool.slot(0).0;
         set_low_word(&mut c.d[7], (self.pool.slots - 1) as u16);
         loop {
@@ -90,7 +97,7 @@ impl Class {
                     Handler::Rust(f) => f(c, b, obj),
                     Handler::Rom(address) => {
                         c.a[1] = address;
-                        call(c, b, address);
+                        call_at(c, b, address, self.entry + HANDLER_RETURN);
                     }
                 }
             }
@@ -101,9 +108,15 @@ impl Class {
                 break;
             }
         }
-        c.a[7] = c.a[7].wrapping_add(4);
+        if ret.is_some() {
+            c.a[7] = c.a[7].wrapping_add(4);
+        }
     }
 }
+
+/// Décalage de l'adresse de retour du `jsr (A1)` qui appelle le gestionnaire, dans chacune des dix
+/// boucles d'origine (`entry + 0x1a`).
+const HANDLER_RETURN: u32 = 0x1c;
 
 fn set_low_word(r: &mut u32, v: u16) {
     *r = *r & 0xffff_0000 | v as u32;
@@ -116,7 +129,8 @@ macro_rules! natives {
             name: $name,
             cost: |_, _| 100,
             run: |c, b| {
-                $class.update(c, b);
+                // appelée par un `jsr` d'origine : son adresse de retour est déjà sur la pile
+                $class.update(c, b, None);
                 rts(c, b);
             },
             touches_sound: false,
