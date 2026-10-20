@@ -51,6 +51,14 @@ l'ordonnanceur ne les distingue pas. Une tâche reste libre de passer par du cod
 |---|---|---|
 | partie (`taches/partie.rs`) | `0x1c45a` entrée, `0x1c468` tour, `0x1c48c` cession, `0x1c4b0` pas de jeu | boucle de jeu, voir `boucle.md` §1 |
 | gel (`taches/gel.rs`) | `0xee080` entrée, `0xee0fa` et `0xee16a` après cession | avance rapide : décompte la tâche principale quand un joueur presse un bouton |
+| fondus de luminosité (`taches/fondu.rs`) | tâches `0x14ba`, `0x14c8`, `0x14d0`, `0x14de`, `0x1536`, `0x153e` ; reprises `0x152c`, `0x158c` | un pas de ±0x1000 par cession, puis fin de la tâche (`0x9f8`) ; voir `video.md`, « Fondus » |
+| fondus par composante (`taches/fondu.rs`) | tâches `0x1ccf8`, `0x1ce64`, `0x1ced4` (et `0x1cf12`) ; reprises `0x1cd1e`, `0x1ce8a`, `0x1cefe` | vers le blanc, une couleur ou une palette par page |
+| écran des scores (`taches/ecran_fixe.rs`) | `0x1835e` entrée, `0x18384` après cession | tableau des meilleurs scores de l'attract (F4), voir `modes.md` §4 |
+
+Les **sous-programmes** qui cèdent la main sont traités de même : entrée et adresse qui suit chaque cession sont des
+natives, et le `rts` final rend la main à l'appelant (68000, ou native de reprise d'un appelant Rust, qui l'a appelé par
+`Sequence::tail`). Fondus de luminosité `0x144c`, `0x1460`, `0x146c` (reprise `0x14b4`) et par composante `0x1ccc2`,
+`0x1ce30`, `0x1ce9e` (reprises `0x1cce8`, `0x1ce54`, `0x1cec4`).
 
 Le pas de jeu s'arrête *sur* `0x1c4b0` (`GAME_STEP`) au lieu d'enchaîner : c'est là que la machine plafonne les pas par
 image.
@@ -65,8 +73,9 @@ machines d'origine, que sauter l'attente ne change pas l'état (RAM hors zones i
 sur 12 000 images de six scénarios (attract, crédits, entrée de scène, jeu à deux, fin).
 
 Prochaine étape : remplacer l'enregistrement (SR/PC/USP/pile) par une `Option<Box<dyn Tache>>` suppose que les routines
-appelées par un pas ne cèdent plus par le 68000 (`call`/`Unwound`) : il faut d'abord réécrire les tâches qui cèdent au
-milieu d'appels 68000 (fondus `0x14ba...`, interface joueurs, `0x29162`, `0x1835e`).
+appelées par un pas ne cèdent plus par le 68000 (`call`/`Unwound`). Les fondus et l'écran des scores sont faits ; restent
+l'interface/menu TEST `0x29162` et les listes de bulles des boss (`0x9b6`). Les tâches Rust gardent encore leur état
+dans la RAM et les registres sauvés par la cession (le sens d'un fondu de luminosité est dans D1).
 
 ## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
 
@@ -127,7 +136,7 @@ Mesure sur 40 scénarios (`scenarios/cov/`, `scenarios/modes/`, quatre bots ; 89
 |---|---|---|
 | instructions 68000 (hors attente active) | 654,6 M (603 par image) | 433,8 M (485 par image) |
 | K1 noyau, VBLANK, ordonnanceur | 107,0 M | 2,0 M (reste `reset` 0x350 et `boot_init`, réécrits depuis : voir « Démarrage ») |
-| C1 crédits | 70,6 M | 0,14 M (tâche « INSERT COIN » 0xe05ec) |
+| C1 crédits | 70,6 M | 0,14 M (relecture des entrées des démonstrations 0xe05ec, réécrite depuis : `modes/demo.rs`) |
 | ordonnanceur et traps | 68000 | natifs (`kernel.rs`) |
 | tâche du gel 0xee080, boucle de partie 0x1c45a | 68000 | Rust (`taches/`) |
 
@@ -157,7 +166,6 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
    S1 (`0xedf80`) et, hors de toute fonction de l'index (`tools/reste68k.sh` les compte à part : la ligne « hors de toute fonction
    de l'index » de `docs/reste68k.md`, plus de la moitié du reste), les tâches d'interface F3 (`0x15620`, `0x150ac`, `0x15f9e`...), la
    cession de la boucle de partie (`0x1c48c`) et le gestionnaire d'effet de barrière (`0xb9e78`).
-7. **Les tâches elles-mêmes** : tâche de partie `0x1c45a`, tâche du gel `0xee080`, tâches de fondu
 3. **Pools d'objets (O2, 9 %)** : `0x1ee1a`/`0x1ef6c`, insertion dans les listes triées par profondeur
    (la plus chaude du jeu, appelée par les natives des familles).
 4. **Interface joueurs (F3)** : fait, `hud/` (`docs/hud.md`). Avec le texte V2, les pop-ups U1 et l'éclair U2
@@ -167,9 +175,9 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 5. **Défilement et caméras (B1, 7,4 %)** : `0x33fe4`, `0x31616`, `0x33e20`, `0x30308`, `0x309e0`, `0x2ede0`.
 6. **EFFCT (C0e, 2,7 %)** : `0xb9eba`, `0xb9ee6` (3 scénarios seulement), puis IA E1 (`0xfbb0`, `0xe76c`),
    texte V2 (`0x28d8`, `0x1386`), liste de sprites V4 (`0x1de96`), FIFO son S1 (`0xedf80`).
-7. **Les tâches restantes** (la partie et le gel sont en Rust) : tâches de fondu
-   (`0x1460` et suivantes), tâches d'interface. Le noyau natif les fait encore reprendre en 68000 ; voir le plan dans
-   `architecture.md`.
+7. **Les tâches restantes** (la partie, le gel, les fondus, l'écran des scores et l'interface joueurs sont en Rust) :
+   menu TEST `0x29162`, listes de bulles des boss. Le noyau natif reprend encore chaque tâche par son enregistrement
+   (PC, pile) ; voir le plan dans `architecture.md`.
 8. Les 1 294 fonctions jamais atteintes (88 Ko) : à classer en code mort (menu TEST, écrans de debug, K4 : hors
    périmètre) ou à couvrir par des scénarios (boss et ennemis rares, ESHL, SET) avant de les réécrire.
 

@@ -6,8 +6,11 @@
 //! de la tâche restent celles de l'original (état, compte, PC `0xa4c`/`0xa8c`, USP, 15 registres sauvés, adresse de
 //! reprise) : une tâche Rust et une tâche en 68000 cohabitent, et l'ordonnanceur ne les distingue pas.
 //!
-//! Tâches : [`partie`] (la partie, `0x1c45a`) et [`gel`] (avance rapide, `0xee080`).
+//! Tâches : [`partie`] (la partie, `0x1c45a`), [`gel`] (avance rapide, `0xee080`) [`fondu`] (fondus de palette,
+//! tâches et sous-programmes qui cèdent la main) et [`ecran_fixe`] (tableau des scores de l'attract, `0x1835e`).
 
+pub mod ecran_fixe;
+pub mod fondu;
 pub mod gel;
 pub mod partie;
 
@@ -34,5 +37,5 @@ pub fn ceder(x: &mut Ctx, attente: Attente, reprise: u32) -> Flow {
 
 /// Natives des tâches Rust.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    partie::NATIVES.iter().chain(gel::NATIVES)
+    partie::NATIVES.iter().chain(gel::NATIVES).chain(fondu::NATIVES).chain(ecran_fixe::NATIVES)
 }

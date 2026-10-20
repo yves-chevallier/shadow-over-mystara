@@ -73,11 +73,11 @@ pub const OR_BRIGHTNESS: Native = native(0x168e, "palette_or_brightness", or_bri
 pub const SET_BRIGHTNESS: Native = native(0x173c, "palette_set_brightness", set_brightness);
 
 // ---------------------------------------------------------------------------------------------
-// Fondus de luminosité (V3) : un pas par appel, répété par les lanceurs (0x146c, 0x14de, 0x1544)
+// Fondus de luminosité (V3) : un pas, répété par les tâches et sous-programmes de `taches::fondu`
 // ---------------------------------------------------------------------------------------------
 
-/// État d'un fondu, à `A4` (= A5 + 0x48e) : octet des pages concernées (bit k : page k), nombre de pas
-/// restants, délai entre deux pas (mots) et adresses des quatre pages à traiter.
+/// État d'un fondu (A5 + 0x48e) : octet des pages concernées (bit k : page k), nombre de pas restants,
+/// délai entre deux pas (mot) et adresses des quatre pages à traiter.
 mod fade {
     pub const PAGES: u32 = 0;
     pub const PAGE_PTR: u32 = 4;
@@ -86,51 +86,41 @@ mod fade {
 /// Nombre de couleurs d'une page.
 const COLORS: u32 = 512;
 /// Couleurs de la première page traitées par le fondu partiel (0x15c8) : les 48 dernières palettes
-/// `0x91c3a0` à `0x91c400` (lues comme 3 tours de 16 mots).
+/// `0x91c3a0` à `0x91c400`.
 const PARTIAL_WORDS: u32 = 48;
 const BRIGHTNESS: u16 = 0xf000;
 
-/// 0x1602 : ajoute le pas D1 (±0x1000) à la luminosité des 512 couleurs de la page A1, sauf si la
-/// première couleur est déjà au bout (0 en descente, 0xf000 en montée) ou si elle atteindrait 0.
-fn fade_page(v: &mut Vue, page: u32, delta: u32) {
-    let first = v.rd16(page) & BRIGHTNESS;
-    let negative = (delta as i32) < 0;
-    if v.pris(!negative) {
-        if v.pris(first == BRIGHTNESS) {
-            return;
-        }
-    } else if v.pris(first == 0) {
+/// 0x1602 : ajoute le pas (±0x1000) à la luminosité des 512 couleurs de la page, sauf si la première
+/// couleur est déjà au bout (0 en descente, 0xf000 en montée) ou si elle atteindrait 0.
+fn fade_page(b: &mut Cps2Bus, page: u32, delta: u32) {
+    let first = rd16(b, page) & BRIGHTNESS;
+    let at_end = if (delta as i32) < 0 { first == 0 } else { first == BRIGHTNESS };
+    if at_end || first.wrapping_add(delta as u16) & BRIGHTNESS == 0 {
         return;
     }
-    if v.pris(first.wrapping_add(delta as u16) & BRIGHTNESS == 0) {
-        return;
-    }
-    add_to_colors(v, page, COLORS, delta as u16);
+    add_to_colors(b, page, COLORS, delta as u16);
 }
 
-/// 0x164e : comme `fade_page` sur les 48 couleurs de la fin de la première page ; la première couleur
-/// ne sert qu'à tester la luminosité (en descente seulement : aucun test de butée).
-fn fade_partial_page(v: &mut Vue, page: u32, delta: u32) {
-    let mut first = v.rd16(page);
-    if !v.pris((delta as i32) < 0) {
+/// 0x164e : comme `fade_page` sur les 48 couleurs de la fin de la première page, sans test de butée ; en
+/// descente, la luminosité de la première couleur est testée avant le pas.
+fn fade_partial_page(b: &mut Cps2Bus, page: u32, delta: u32) {
+    let mut first = rd16(b, page);
+    if (delta as i32) >= 0 {
         first = first.wrapping_add(delta as u16);
     }
-    if v.pris(first & BRIGHTNESS == 0) {
+    if first & BRIGHTNESS == 0 {
         return;
     }
-    add_to_colors(v, page, PARTIAL_WORDS, delta as u16);
+    add_to_colors(b, page, PARTIAL_WORDS, delta as u16);
 }
 
-/// Ajoute `delta` (modulo 2^16) aux `n` couleurs à partir de `page` (n multiple de 16).
-fn add_to_colors(v: &mut Vue, page: u32, n: u32, delta: u16) {
-    if v.reel() {
-        for i in 0..n {
-            let a = page + 2 * i;
-            let color = v.rd16(a).wrapping_add(delta);
-            v.wr16(a, color);
-        }
+/// Ajoute `delta` (modulo 2^16) aux `n` couleurs à partir de `page`.
+fn add_to_colors(b: &mut Cps2Bus, page: u32, n: u32, delta: u16) {
+    for i in 0..n {
+        let a = page + 2 * i;
+        let color = rd16(b, a).wrapping_add(delta);
+        wr16(b, a, color);
     }
-    tours(&mut v.chemin, n / 16);
 }
 
 /// Pages cochées dans l'état de fondu, avec leur adresse.
@@ -139,59 +129,17 @@ fn selected_pages(b: &mut Cps2Bus, state: u32) -> Vec<(usize, u32)> {
     (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, rd32(b, state + fade::PAGE_PTR + 4 * k as u32))).collect()
 }
 
-/// 0x158e / 0x15c8 : un pas de fondu sur les pages de l'état A4 avec le pas D1. `partial` : la première
-/// page est la fin de page du fondu partiel.
-fn fade_step(c: &mut Cpu, b: &mut Cps2Bus, partial: bool) {
-    for (k, page) in selected_pages(b, c.a[4]) {
-        let mut v = Vue::reelle(b);
-        if partial && k == 0 {
-            fade_partial_page(&mut v, page, c.d[1]);
+/// Un pas de fondu de luminosité (`0x158e`, ou `0x15c8` si `partiel`) sur les pages de l'état du fondu
+/// (`A5 + 0x48e`), avec le pas `delta` (±0x1000).
+pub fn brightness_step(b: &mut Cps2Bus, delta: u32, partiel: bool) {
+    for (k, page) in selected_pages(b, crate::mem::A5 + PAGES) {
+        if partiel && k == 0 {
+            fade_partial_page(b, page, delta);
         } else {
-            fade_page(&mut v, page, c.d[1]);
+            fade_page(b, page, delta);
         }
     }
-    rts(c, b);
 }
-
-/// Durée de `fade_page` / `fade_partial_page` depuis leur entrée.
-fn fade_page_cost(b: &mut Cps2Bus, page: u32, delta: u32, partial: bool) -> u64 {
-    let mut v = Vue::simulee(b);
-    if partial {
-        fade_partial_page(&mut v, page, delta);
-    } else {
-        fade_page(&mut v, page, delta);
-    }
-    v.chemin.duree(b, if partial { 0x164e } else { 0x1602 })
-}
-
-fn fade_step_cost(c: &Cpu, b: &mut Cps2Bus, partial: bool) -> u64 {
-    let mut skeleton = Chemin::default();
-    let flags = rd8(b, c.a[4] + fade::PAGES);
-    for k in 0..4 {
-        skeleton.pris(flags >> k & 1 == 0);
-    }
-    let entry = if partial { 0x15c8 } else { 0x158e };
-    let mut total = skeleton.duree_hors(b, entry, None, &[0x1602, 0x164e]);
-    for (k, page) in selected_pages(b, c.a[4]) {
-        total += fade_page_cost(b, page, c.d[1], partial && k == 0);
-    }
-    total
-}
-
-fn fade_page_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    fade_page(&mut Vue::reelle(b), c.a[1], c.d[1]);
-    rts(c, b);
-}
-
-fn fade_partial_page_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    fade_partial_page(&mut Vue::reelle(b), c.a[1], c.d[1]);
-    rts(c, b);
-}
-
-pub const FADE_PAGE: Native = exact(0x1602, "palette_fondu_page", |c, b| fade_page_cost(b, c.a[1], c.d[1], false), fade_page_native);
-pub const FADE_PARTIAL_PAGE: Native = exact(0x164e, "palette_fondu_page_partielle", |c, b| fade_page_cost(b, c.a[1], c.d[1], true), fade_partial_page_native);
-pub const FADE_STEP: Native = exact(0x158e, "palette_fondu_pas", |c, b| fade_step_cost(c, b, false), |c, b| fade_step(c, b, false));
-pub const FADE_STEP_PARTIAL: Native = exact(0x15c8, "palette_fondu_pas_partiel", |c, b| fade_step_cost(c, b, true), |c, b| fade_step(c, b, true));
 
 const fn exact(entry: u32, name: &'static str, cost: fn(&Cpu, &mut Cps2Bus) -> u64, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
     Native { entry, name, cost, run, touches_sound: false, outputs: 0, exact_cost: true }
@@ -769,6 +717,42 @@ fn fade_to_white_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
     total
 }
 
+/// Cible d'un fondu par composante.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Cible {
+    /// Le blanc (`0x1cd32`).
+    Blanc,
+    /// Une couleur par page, le mot `A5 + 0x492 + 4 k` (`0x1cdd6`).
+    Couleurs,
+    /// Une palette complète par page, à l'adresse `A5 + 0x492 + 4 k` (`0x1cd7c`).
+    Palettes,
+}
+
+/// Un pas de fondu par composante des pages cochées (`A5 + 0x48e`) vers `cible`.
+pub fn component_step(b: &mut Cps2Bus, cible: Cible) {
+    for (k, page) in flagged_pages(b, crate::mem::A5) {
+        let source = crate::mem::A5 + SOURCES + 4 * k as u32;
+        match cible {
+            Cible::Blanc => brighten_page(b, page),
+            Cible::Couleurs => {
+                let goal = rd16(b, source);
+                approach_constant(b, page, goal);
+            }
+            Cible::Palettes => {
+                let target = rd32(b, source);
+                approach_page(b, page, target);
+            }
+        }
+    }
+}
+
+/// `0x1cf3c` : les pages cochées toutes blanches.
+pub fn white_out(b: &mut Cps2Bus) {
+    for (_, page) in flagged_pages(b, crate::mem::A5) {
+        fill_page(b, page, [u32::MAX; 8]);
+    }
+}
+
 /// Recopie 8 longs (D0 à D6 et A1) sur toute la page (32 palettes) : 0x1cfb8.
 fn fill_page(b: &mut Cps2Bus, page: u32, values: [u32; 8]) {
     for row in 0..32 {
@@ -944,10 +928,6 @@ pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_eclair_reserve", s
 
 /// Routines natives de ce module (les réglages de luminosité sont déclarés dans `lib.rs`).
 pub const NATIVES: &[Native] = &[
-    FADE_PAGE,
-    FADE_PARTIAL_PAGE,
-    FADE_STEP,
-    FADE_STEP_PARTIAL,
     STAGE_FREE,
     STAGE_PAGE0,
     STAGE_SCROLL1,
