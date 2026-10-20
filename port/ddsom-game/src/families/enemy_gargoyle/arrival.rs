@@ -1,0 +1,158 @@
+//! Type 8, sous-état 0 : arrivée. `+6` = 0 : vol d'entrée par un bord, atterrissage, premier combat ;
+//! `+6` = 2 : arrivée posée (crée une ombre, attend un joueur à portée).
+
+use super::*;
+
+pub(super) fn run(x: &mut Cx) {
+    x.c.d[0] = x.u8(f::SUB2) as u32;
+    match x.u8(f::SUB2) {
+        0 => flight(x),
+        2 => landed(x),
+        _ => {}
+    }
+}
+
+/// Signe de l'orientation appliqué à `v` : négatif quand l'ennemi regarde à gauche.
+fn signed_by_facing(x: &mut Cx, v: i16) -> u16 {
+    if x.u8(f::FLIP) != 0 { v.wrapping_neg() as u16 } else { v as u16 }
+}
+
+fn flight(x: &mut Cx) {
+    x.c.d[0] = x.u8(STEP) as u32;
+    match x.u8(STEP) {
+        0 => {
+            x.add8(STEP, 2);
+            x.set_bit(1, 1, false);
+            let right = camera_x(x).wrapping_add(0xc0);
+            set_dw(x, 2, right);
+            x.set8(f::FLIP, 0);
+            let mut angle = 0x18;
+            if (right as i16) > (x.u16(X) as i16) {
+                x.set8(f::FLIP, 0x20);
+                angle = 8;
+            }
+            x.set8(ANGLE, angle);
+            set_speed(x, 0x21);
+            x.set16(HEIGHT, 0x28);
+            look(x, 0x30);
+            x.set8(INVULNERABLE, 0);
+            x.call(rom::IMMUNITIES);
+            x.call(0xe3776);
+            fly(x, 5);
+        }
+        2 => {
+            x.call(sub::MOVE_X);
+            let cam = camera_x(x);
+            let rightward = (x.u16(SPEED_X) as i16) >= 0;
+            let mut d0 = cam.wrapping_add(if rightward { 0x90 } else { 0xf0 });
+            let mut d1 = x.u16(X);
+            if !rightward {
+                std::mem::swap(&mut d0, &mut d1);
+            }
+            if (d1 as i16) < (d0 as i16) {
+                return;
+            }
+            x.add8(STEP, 2);
+            let vy = signed_by_facing(x, 0x10);
+            x.set16(SPEED_Y, vy);
+            x.set16(SPEED_Z, 0);
+            x.set16(GRAVITY, -0x40i16 as u16);
+        }
+        4 => {
+            x.call(sub::MOVE_XZ);
+            if (x.u16(HEIGHT) as i16) > 0 {
+                return;
+            }
+            x.add8(STEP, 2);
+            x.set16(TIMER, 0x14);
+            x.set16(TIMER2, 0);
+            x.set16(HEIGHT, 0);
+            let vy = signed_by_facing(x, 0x10);
+            x.set16(SPEED_Y, vy);
+            fly(x, 6);
+        }
+        6 => {
+            if !count_down(x, TIMER2) {
+                x.set16(TIMER2, 4);
+                spark(x, 8);
+            }
+            x.call(sub::MOVE_X);
+            if count_down(x, TIMER) {
+                lib::step(x);
+            } else if lib::players_alive(x) {
+                go::wander(x);
+            } else {
+                go::retire(x);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// `+6` = 2 : l'ombre est créée (EFFCT 0x32), puis la créature attend un joueur dans sa boîte.
+fn landed(x: &mut Cx) {
+    x.c.d[0] = x.u8(STEP) as u32;
+    match x.u8(STEP) {
+        0 => {
+            x.add8(STEP, 2);
+            x.set_bit(1, 1, false);
+            x.set8(NO_GRAB, 1);
+            let shadow = alloc(x, rom::ALLOC_EFFCT);
+            if !alloc_failed(x) {
+                shadow.set_u8(x.b, 0, 1);
+                shadow.set_u8(x.b, 2, 0x32);
+                shadow.set_u8(x.b, 3, 0xe);
+                let px = x.u16(X);
+                shadow.set_u16(x.b, X, px);
+                let depth = x.u32(DEPTH);
+                shadow.set_u32(x.b, DEPTH, depth);
+                let n = shadow.u16(x.b, 0x12).wrapping_add(1);
+                shadow.set_u16(x.b, 0x12, n);
+                shadow.set_u16(x.b, 0x42, x.o.0 as u16);
+                x.set16(HEIGHT, 0x28);
+            }
+            look(x, 0x31);
+            fly(x, 0x13);
+        }
+        2 => {
+            pick_target(x);
+            if target_in_box(x, 0, 0x20, 0x40) {
+                x.add8(STEP, 2);
+                x.set16(TIMER, 0x18);
+            }
+        }
+        4 => {
+            if count_down(x, TIMER) {
+                return;
+            }
+            x.add8(STEP, 2);
+            x.set16(TIMER, 0x32);
+            let mut flip = 0;
+            if (x.u16(f::TARGET) as i16) < 0 {
+                let target = x.linked(f::TARGET);
+                x.c.a[1] = target.0 | 0xff00_0000;
+                if (target.u16(x.b, X) as i16) > (x.u16(X) as i16) {
+                    flip = 0x20;
+                }
+            }
+            x.set8(f::FLIP, flip);
+            lib::step(x);
+        }
+        6 => {
+            if count_down(x, TIMER) {
+                lib::step(x);
+                return;
+            }
+            x.set8(NO_GRAB, 0);
+            x.set8(INVULNERABLE, 0);
+            x.call(rom::IMMUNITIES);
+            spark(x, 0xa);
+            if (x.u16(f::TARGET) as i16) >= 0 {
+                go::dive(x);
+            } else {
+                go::strike_12(x);
+            }
+        }
+        _ => {}
+    }
+}

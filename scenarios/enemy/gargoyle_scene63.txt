@@ -1,0 +1,114 @@
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1400 P1 Right 1
+1406 P1 Right 0
+1480 P1 Button 1 1
+1486 P1 Button 1 0
+2399 poke8 ff8034 63
+2772 poke16 ff8640 112
+2772 P1 Right 1
+2772 P1 Down 1
+2784 P1 Button 2 1
+2785 P1 Button 2 0
+2962 P1 Right 0
+3248 P1 Button 2 1
+3249 P1 Button 2 0
+3299 P1 Button 4 1
+3303 P1 Button 4 0
+3319 P1 Button 3 1
+3323 P1 Button 3 0
+3376 P1 Button 2 1
+3377 P1 Button 2 0
+3589 P1 Button 2 1
+3590 P1 Button 2 0
+3808 P1 Button 2 1
+3809 P1 Button 2 0
+4019 P1 Button 2 1
+4020 P1 Button 2 0
+4263 P1 Button 2 1
+4264 P1 Button 2 0
+4267 P1 Button 2 1
+4268 P1 Button 2 0
+4276 P1 Right 1
+4371 P1 Right 0
+4399 P1 Button 4 1
+4403 P1 Button 4 0
+4419 P1 Button 3 1
+4423 P1 Button 3 0
+4432 P1 Button 2 1
+4433 P1 Button 2 0
+4457 P1 Button 2 1
+4458 P1 Button 2 0
+4510 Coin 1 1
+4516 Coin 1 0
+4540 1 Player Start 1
+4546 1 Player Start 0
+5296 P1 Button 2 1
+5297 P1 Button 2 0
+5499 P1 Button 4 1
+5503 P1 Button 4 0
+5519 P1 Button 3 1
+5523 P1 Button 3 0
+5899 P1 Button 2 1
+5900 P1 Button 2 0
+6010 Coin 1 1
+6016 Coin 1 0
+6040 1 Player Start 1
+6046 1 Player Start 0
+6599 P1 Button 4 1
+6603 P1 Button 4 0
+6619 P1 Button 3 1
+6623 P1 Button 3 0
+7510 Coin 1 1
+7516 Coin 1 0
+7540 1 Player Start 1
+7546 1 Player Start 0
+7699 P1 Button 4 1
+7703 P1 Button 4 0
+7719 P1 Button 3 1
+7723 P1 Button 3 0
+7765 P1 Button 2 1
+7766 P1 Button 2 0
+7905 P1 Button 2 1
+7906 P1 Button 2 0
+7998 P1 Button 2 1
+7999 P1 Button 2 0
+8533 P1 Button 2 1
+8534 P1 Button 2 0
+8799 P1 Button 4 1
+8803 P1 Button 4 0
+8819 P1 Button 3 1
+8823 P1 Button 3 0
+8870 P1 Button 2 1
+8871 P1 Button 2 0
+9010 Coin 1 1
+9016 Coin 1 0
+9040 1 Player Start 1
+9046 1 Player Start 0
+9212 P1 Button 2 1
+9213 P1 Button 2 0
+9864 P1 Button 2 1
+9865 P1 Button 2 0
+9899 P1 Button 4 1
+9903 P1 Button 4 0
+9919 P1 Button 3 1
+9923 P1 Button 3 0
+10036 P1 Button 2 1
+10037 P1 Button 2 0
+10244 P1 Button 2 1
+10245 P1 Button 2 0
+10510 Coin 1 1
+10516 Coin 1 0
+10540 1 Player Start 1
+10546 1 Player Start 0
+10905 P1 Button 2 1
+10906 P1 Button 2 0
+10999 P1 Button 4 1
+11003 P1 Button 4 0
+11019 P1 Button 3 1
+11023 P1 Button 3 0
+11230 P1 Button 2 1
+11231 P1 Button 2 0
+12001 quit

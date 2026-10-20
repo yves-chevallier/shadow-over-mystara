@@ -30,16 +30,27 @@ pub mod boxes;
 pub mod cx;
 pub mod effects;
 pub mod enemy;
+pub mod enemy_beetle;
 pub mod enemy_common;
 pub mod enemy_dbeast;
 pub mod enemy_double;
+pub mod enemy_gargoyle;
+pub mod enemy_kobold;
+pub mod enemy_goblin;
+pub mod enemy_troll;
+pub mod enemy_gnoll;
+pub mod enemy_bow;
+pub mod enemy_lib;
+pub mod enemy_ogre;
 pub mod enemy_elf;
 pub mod enemy_ghoul;
 pub mod enemy_harpy;
+pub mod enemy_hellhound;
 pub mod enemy_owlbear;
 pub mod enemy_part;
 pub mod enemy_warrior;
 pub mod enemy_riyakaa;
+pub mod enemy_scorpion;
 pub mod enemy_trog;
 pub mod enemy_skeleton;
 pub mod eshl;
@@ -510,7 +521,7 @@ pub(crate) use gestionnaire;
 /// Routines natives des familles ESHL, SET et SOBJ (voir `docs/familles-eshl-set-sobj.md`) : un
 /// gestionnaire par type, écrit sur [`cx::Cx`] (durée indicative, pas d'exécution à blanc).
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_8::NATIVES, boss_11::NATIVES]
+    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_8::NATIVES, boss_11::NATIVES]
         .into_iter()
         .flatten()
         .chain(joueur::natives())

@@ -22,6 +22,17 @@ Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms d
 | `enemy_elf/` | type 12 (Shadow Elf) : `stance`, `attacks`, `hit` |
 | `enemy_trog/` | type 2 (Troglodyte) : `stance`, `attacks`, `hit` |
 | `enemy_ghoul/` | type 5 (Ghoul) : `stance`, `attacks`, `moves`, `hit` |
+| `enemy_lib.rs` | bibliothèque commune 0x103d6-0x105b6 (animation + type de coup `+0x44`, tests de côté, portes de décision `ai_gate`), utilisée par les types 8 et 18 |
+| `enemy_beetle.rs` | type 9 (GiantBeetle) |
+| `enemy_scorpion.rs` | type 10 (GiantScorpion) |
+| `enemy_gargoyle/` | type 8 (Gargoyle) : `arrival`, `stance`, `attacks`, `hit` |
+| `enemy_hellhound/` | type 6 (Hellhound) : `arrival`, `stance`, `attacks`, `hit` |
+| `enemy_ogre/` | type 18 (Ogre) : `arrival`, `stance`, `attacks`, `hit` |
+| `enemy_kobold/` | type 0 (Kobold) : `arrival`, `stance`, `attacks`, `moves`, `hit` |
+| `enemy_goblin/` | type 15 (Goblin) : `arrival`, `stance`, `attacks`, `hit` |
+| `enemy_troll/` | type 14 (Troll) : même charpente que le Goblin, avec un lancer d'objet et des sauts |
+| `enemy_gnoll/` | type 13 (Axe Gnoll) : `arrival`, `stance`, `attacks`, `hit` ; mêmes familles de gestes, hache et sauts sur la cible |
+| `enemy_bow/` | type 3 (Bow Gnoll, archer) : `arrival`, `stance`, `shoot`, `spawned`, `hit` |
 
 ## 2. Charpente commune
 
@@ -188,6 +199,116 @@ tirage de la « chance d'attaquer » `0x5f2c6`), 2 debout (poursuite, demi-tour,
 0 à 18), 6 bonds de l'après-arrivée, 8 charges (`+6` = 0 à 6), 10 repos. L'état touché a un octet `+0xa5` qui
 supprime le test de zone (`hit_loop_at`). Couverture : scénarios (4 474 appels), fuzz.
 
+### Type 9 (0x65ae8) « GiantBeetle » (h) — `enemy_beetle.rs`
+
+Insecte qui défile sur le bord de l'écran. Variantes `+3` : 0, 1 et 3 marchent (angle 8 ou 0x18 selon la parité de
+`+0x2f`), 2 entre par un bord, 4 est un nid qui engendre des pièces (ESHL 0x38, listes 0x65c78 par `+0x42`) puis dort
+(sous-état 8) jusqu'à être visible. Le groupe `+0x2f` (0 à 7) choisit la trajectoire du sous-état 4 : 0-1 traversée avec
+virage, 2-3 dérive latérale (`+0xb4`), 4-5 vol arrêté devant un joueur (abscisses d'arrêt `+0xb6`), 6-7 comme 4-5 avec la
+morsure ; avec `+6` non nul le sous-état 4 se retourne vers un joueur (0x1376) et remonte. La morsure (0x661ce) est
+déclenchée par un tirage (masques 0x6623a par difficulté) quand le joueur ciblé est dans l'état 0x200, étape 0xc. Le
+sous-état 6 est le bond de la morsure, l'état touché une secousse (code `0x5c`), un recul, une chute puis un clignotement.
+La recherche du joueur le plus proche dans une boîte (0x67452) est devenue `enemy_common::find_player`, la création d'une
+liste d'objets de la ROM `spawn_list`. Piège : `movea.w (0x50,A0),A1` doit laisser A1 (`load_target`) : 0x1376 le lit.
+Couverture : scénarios `beetle_scene16/18/43/61/112`, fuzz (code d'origine vu hors deux restes).
+
+### Type 10 (0x6681c) « GiantScorpion » (h) — `enemy_scorpion.rs`
+
+Variantes : 0 debout, 1 et 4 tombent d'en haut, 2 et 3 entrent en volant par un bord, 5 est le nid (liste `+0x2f`, table
+0x669d6). Le `+6` d'arrivée (2, 4, 6, 8) choisit l'entrée du sous-état 0. États actifs : 2 debout (`+6` = 0 libre, 2 enfant
+dont le parent `+0x5c` est surveillé, 4 enfant libre ; marche d'aller-retour animation 1/4 ; tirage d'une attaque dans la
+table 0x674fa), 4 et 10 coups tirés (tables par difficulté 0x66e48 / 0x67146, geste `+0xa6` par 0x6773c, durées
+0x677f8 en espace des opcodes), 6 attente, 8 charge avec retournement (animation 0x163db8, `+0x44 = 0x1f`). L'état touché
+a son propre recul (pas de table de réactions) et une fuite hors de l'écran quand un joueur le saisit. Les données au
+milieu du code (tables en espace de données lues par `lea (PC)` puis `(An,Dn)`, en espace des opcodes pour `(table,PC,Dn)`)
+sont lues à l'exécution dans la ROM. Couverture : scénarios `scorpion_scene36-39/53`, fuzz (tout le code vu).
+
+### Type 8 (0x63fb0) « Gargoyle » (h) — `enemy_gargoyle/`
+
+Créature volante (variantes 0 et 1 ; la 2 saute dans des données dans l'original et n'apparaît pas). Utilise la
+bibliothèque `enemy_lib` (0x103d6 : démarre une animation et copie `+0x3e` en `+0x44`, 0x1040c : pas d'animation avec
+la même copie, 0x10474 : joueur en vie, 0x104a2 : zone, 0x1050c/0x10560 : sens, 0x1047a : décision d'attaque). Sous-états
+actifs : 0 arrivée (vol d'entrée `+6` = 0, posé `+6` = 2 qui crée une ombre EFFCT 0x32), 2 déplacements (0 poursuite,
+2 demi-tour, 4 et 6 vol de poursuite avec choix d'un geste dans les tables 0x65792.. / 0x65822.. / 0x658a2.., 8 plongeon,
+10 saut), 4 coups (0 et 2 griffes avec saisie éventuelle, 4 coup bref, 6 charge latérale, 8 saut en arrière, 10 plongeon
+sur la cible, 12 la créature fond sur sa cible), 6/8/10 repos, 12 saisie d'un joueur (la victime `+0x54` perd de la vie),
+14 reprise du combat. Les transitions (`go::*` dans `mod.rs`) posent le long d'état et quelques drapeaux. L'état touché
+utilise une table de réactions (0x6518a), un recul, une chute et une mort en plusieurs temps. `A5+0x6e`, compteur d'images,
+est masqué en place par plusieurs ennemis (`andi.w #3,(0x6e,A5)`). Couverture : scénarios `gargoyle_scene42/55/63`, fuzz.
+
+### Type 6 (0x61364) « Hellhound » (h) — `enemy_hellhound/`
+
+Chien à huit variantes d'arrivée (`+3`) et deux profils d'IA (`+0x2f`). Charpente de `active_loop`. Sous-états : 0 arrivée
+(0 hurlement, 2 demi-tour, 4 et 6 bond d'entrée, 8 chute d'en haut, 10 apparition), 2 debout (0 et 8 approche avec choix
+d'un coup, 2 demi-tour, 4 attente, 6 crachat, 10 saut), 4 coups (morsures, patte, souffle de feu 16), 6 gestes d'affût,
+8 gestes de repli, 10 promenade sans joueur, 12 morsure d'un joueur terrassé (`+0x50`, `+0x188`). Les tables de coups
+sont celles de la ROM (0x62f80/0x62f88 par profil, 0x637fe, 0x61a00, 0x62284). Un coup fini rejoue l'approche par
+`reach_boxes` (0x61aa4) ou `after_strike` (0x63790). Piège : le geste `+6` = 12 du sous-état 6 ne remet pas `+0xa1` à zéro.
+Couverture : scénarios `hellhound_scene*`, fuzz (code d'origine vu hors deux restes).
+
+### Type 18 (0x703dc) « Ogre » (h) — `enemy_ogre/`
+
+Même cadre que le Gargoyle (bibliothèque `enemy_lib`, sous-états 0 arrivée, 2 déplacements, 4 coups, 6/8/10 repos). Le même
+gestionnaire sert l'ogre (variantes 0 à 2) et sa variante négative `0xff`, seule présente dans les scènes 65 et 66 : elle
+n'est pas saisissable, calcule ses PV comme un type 6 (0x453c) et meurt avec l'objet `+0x46` (0x71dde). Les gestes
+« bras » créent un objet ESHL de type 0x2a (lié par `+0x42`/`+0xb0`) : `+6` = 2 et 4 le lancent variante 1 (l'ogre monte
+hors de l'écran, `+0x58` prévient le bras, puis redescend sur la cible), `+6` = 8 variante 2, `leap` du sous-état 2 variante 0.
+La table de choix 0x71b44 n'a que des zéros (toujours le plongeon de côté), les gestes de palier sont dans 0x71ba4/0x71c32.
+L'état touché a sa table de réactions (0x715d4), une mort en cinq temps et une fuite hors de l'écran. Couverture : scénarios
+`ogre_scene65/66`, fuzz.
+
+### Type 0 (0x54914) « Kobold » (h) — `enemy_kobold/`
+
+Charpente du Hellhound (squelette-like) à quatorze variantes d'arrivée (`+3`, états de départ 0x02000000.. posés à la
+création) et quatre profils d'IA (`+0x2f`). L'aspect courant est `+0xa2` (précédent `+0xa3`), le geste à reprendre après un
+demi-tour `+0xa5`/`+0xa6`. Sous-états : 0 arrivée (11 entrées `+6`), 2 debout (approche, demi-tour, attente, course), 4 coups
+(19 gestes : massue, double coup, bonds, patte, souffle, pas de côté, séries), 6 et 8 gestes d'affût et de repli, 10 promenade,
+état touché 0 à 8 (recul, chute, fuite). Particularités : le gel `+0x53` négatif est remis à zéro puis le sous-état s'exécute ;
+`zone_shadow` est sauté quand `+6 = 0xe` ; la plupart des gestes commencent par `begin_wait` (0x557bc) et `hold` (0x5590e,
+poursuite en place avec demi-tour) ; plusieurs tables de sauts ont du code juste après leur fin, que le listing omet
+(0x55940, 0x55c30, 0x55c44, 0x560d2, 0x56034). Couverture : scénarios `kobold_scene*`, fuzz.
+
+### Type 15 (0x6da20) « Goblin » (h) — `enemy_goblin/`
+
+Combattant à l'épée de la même famille que le Troll et l'Axe Gnoll (même code de départ : paramètres d'IA `+0x68..+0x76`,
+variantes d'arrivée paires, gestes choisis dans des rangées de 32 octets par niveau de difficulté `A5+0x7f92 / 2`).
+Sous-états : 0 arrivée (variante `+3` = 0 marche, 2 et 4 chute, 6 course d'entrée puis coups jusqu'à être saisi), 2 debout
+(approche avec boîtes de portée 0x6eb2a/0x6eb1c, demi-tour, attente, sortie d'écran), 4 gestes (provocation, séries de
+coups `+6` = 4, pas de côté, charge, repos, retour à la marche), 6 (pas en profondeur, esquives, téléportation près de la
+cible), 8 (suite d'une série : pause, pas en arrière, bond, rechoix), 10 promenade. L'état d'initialisation enchaîne sur le
+corps de l'état actif dans la même image. Le geste choisi est mémorisé en `+0xaa` (tables 0x6ebc0 proche, 0x6edc0 loin,
+0x6e904 suite). `walk_off` rejoue les remises en liste (`jmp 0x1ee1a`) de l'original. Les tables de données lues par
+`lea (x,PC),A4` sont dans l'espace des données (`row_byte`), celles lues par `(x,PC,Dn)` dans l'espace des opcodes
+(`react`, positions de téléportation). Couverture : fuzz seulement (aucune scène du jeu ne contient le type).
+
+### Type 14 (0x6c4d6) « Troll » (h) — `enemy_troll/`
+
+Le Goblin avec : trois variantes d'arrivée (0, 2, 4), un coup immédiat quand le joueur est au contact (boîte −0x20..0x20),
+un test « plus aucun joueur en vie » fait sur les octets d'état des quatre joueurs (`A5+0x5de/0x7de/0x9de/0xbde`) après le
+geste, des sauts à la place des esquives accroupies, un lancer d'objet (`+6` = 4, `+0xab` charges, objet créé par 0x9f346
+et gardé en `+0xa6`) et une fuite à pied quand un joueur le saisit. Couverture : fuzz seulement.
+
+### Type 13 (0x6ab52) « Axe Gnoll » (h) — `enemy_gnoll/`
+
+Même départ de code que le Goblin et le Troll (paramètres d'IA, rangées de 32 octets 0x6c0d6 proche / 0x6c2d6 loin /
+0x6be1a suite) mais armé d'une hache : six variantes d'arrivée (0 marche, 2 et 6 chute, 4 bond latéral, 8 et 10 arrivée
+armée où la hache est lâchée par la clé d'animation 9 et reprise par la clé 0xb, 0xa114a), chaque coup fixe `+0x44`
+(type) et `+0x45` (force), les sauts sur la cible (`+6` = 12, 16, 18, 20) recopient sa position et retombent d'en haut.
+La routine 0x81aa4 est appelée à chaque image après le sous-état, avant la zone et l'ombre (toujours testées). Les
+étapes 12 et plus des tables des gestes 18 et 20 n'ont pas d'appelant dans le jeu mais sont réécrites. Couverture : fuzz
+seulement.
+
+### Type 3 (0x5bda6) « Bow Gnoll » (h) — `enemy_bow/`
+
+Archer indépendant des trois précédents. `run` appelle toujours les compteurs (0xf1bfc) et choisit une cible si `+0x50`
+est nul. Sous-états : 0 arrivée (variantes 0 et 2 marche, 4 chute, 6 apparition, 8 course), 2 debout (approche, marche
+latérale, boîtes de portée 0x5cdf6/0x5ce06/0x5ce14 qui lisent A1 et D5 laissés par `0xb5e0`), 4 tirs (premier geste
+tiré dans la rangée 0x5d47a, second dans 0x5d67a, nombre de tirs dans 0x5d07a), 6 pas de côté et sauts, 8 repos,
+10 attente, 12 demi-tour, état touché (réactions par table, chute, saisie : demi-tour vers le bord le plus proche). Un
+Bow Gnoll créé par un autre objet (`+0x42`) tire en place (`spawned.rs`), sans zone ni ombre, et sort de l'écran quand
+sa durée de vie `+0xa8` est écoulée. L'état à reprendre après un demi-tour est le long `+0xa0` (dont l'octet `+0xa2` est
+l'étape `+6`, remis à 0). Couverture : fuzz seulement.
+
 ### Type 25 (0x76f0e) « DarkWarrior 1 » (h) — `enemy_warrior.rs`
 
 Bras du guerrier sombre : le créateur (0x76ec4, non réécrit) en engendre deux, variante 0 (gauche) et 1 (droite), liés
@@ -210,9 +331,11 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
 
 ## 4. Non réécrit (types encore en 68000)
 
-0 Kobold, 3 Bow Gnoll, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion, 11 mud golem,
-13 Axe Gnoll, 14 Troll, 15 Goblin, 18 Ogre, 27 WarMachine. Fréquence dans `scenarios/cov/` (12 000 images, `examples/types`) :
-1, 12, 0, 2, 8, 5, 10, 6, 9 par ordre décroissant (5 réécrit) ; 3, 11, 13, 14, 15, 18 et 27 n'y apparaissent pas.
+11 mud golem et 27 WarMachine. Aucun type restant n'apparaît dans les scènes 1 à 66 du parcours (`scenarios/cov/`,
+`enemy_scan`) : ils ne sont donc pas exercés par les scénarios, seulement par le fuzz une fois réécrits. Les types 0
+Kobold, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion et 18 Ogre sont réécrits avec scénarios
+(`scenarios/enemy/{kobold,hellhound,gargoyle,beetle,scorpion,ogre}_scene*.txt`) ; les types 3 Bow Gnoll, 13 Axe Gnoll,
+14 Troll et 15 Goblin sont réécrits et validés par le fuzz seul.
 
 ## 5. Validation
 
@@ -246,10 +369,7 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
    Les premiers écarts viennent presque toujours d'un `return` dans un bras de `match` qui saute la fin commune
    du sous-état (zone, ombre) ou d'un appel oublié.
 
-Tailles du code restant (octets) : 0 Kobold 13 000 (quatorze variantes d'arrivée, une quarantaine de gestes),
-6 Hellhound 10 000, 3 Bow Gnoll 6 800, 13 Axe Gnoll 6 500, 18 Ogre 6 700, 8 Gargoyle 7 000, 11 golem 7 000, 15
-Goblin 6 000, 27 WarMachine 5 500, 14 Troll 5 400, 10 GiantScorpion 4 000 (données au milieu du code, listing
-désynchronisé), 9 GiantBeetle 3 300 (objet qui en engendre d'autres par une table de créations).
+Tailles du code restant (octets) : 11 golem 7 000, 27 WarMachine 5 500.
 
 ### Scénarios `scenarios/enemy/` et fuzz du troisième lot
 

@@ -269,3 +269,77 @@ pub fn needs_turn(x: &mut Cx) -> bool {
     let facing = if dx > 0 { 0x20 } else { 0 };
     facing != x.u8(f::FLIP)
 }
+
+// --- aides des types du quatrième lot -----------------------------------------------------------
+
+/// 0x67452 : cherche le joueur le plus proche dans une boîte devant l'ennemi (décalage `d0`, demi-largeur
+/// `d1`, demi-profondeur `d2`) et le range en `+0x50` ; faux si aucun. La boîte suit l'orientation de l'ennemi.
+/// Les registres de travail sont ceux de l'original (D1 = meilleure distance, D4 = doubles largeurs...).
+pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+    x.set16(f::TARGET, 0);
+    let d0 = if x.u8(f::FLIP) != 0 { d0.wrapping_neg() } else { d0 } as u16;
+    let mut best = 0xffffu16;
+    let mut d3 = 0u16;
+    let mut d5 = x.c.d[5] as u16;
+    for k in 0..4u32 {
+        let p = 0xff85de + 0x200 * k;
+        if crate::mem::rd8(x.b, p) == 0 {
+            continue;
+        }
+        let dy = x.u16(0x10).wrapping_sub(crate::mem::rd16(x.b, p + 0x10)).wrapping_add(d2);
+        d5 = dy;
+        if dy > d2.wrapping_mul(2) {
+            continue;
+        }
+        d3 = dy;
+        let dx = x.u16(0x8).wrapping_add(d0).wrapping_sub(crate::mem::rd16(x.b, p + 0x8)).wrapping_add(d1);
+        d5 = dx;
+        if dx > d1.wrapping_mul(2) {
+            continue;
+        }
+        d3 = dx.wrapping_add(dy);
+        if d3 <= best {
+            best = d3;
+            x.set16(f::TARGET, p as u16);
+        }
+    }
+    x.c.d[0] = x.c.d[0] & !0xffff | d0 as u32;
+    x.c.d[1] = 0xffff_0000 | best as u32;
+    x.c.d[2] = (d1 as u32) << 16 | d2 as u32;
+    x.c.d[3] = d3 as u32;
+    x.c.d[4] = (d1.wrapping_mul(2) as u32) << 16 | d2.wrapping_mul(2) as u32;
+    x.c.d[5] = x.c.d[5] & !0xffff | d5 as u32;
+    x.c.d[6] = 0xffff;
+    x.c.a[1] = 0xff8dde;
+    x.u16(f::TARGET) != 0
+}
+
+/// Crée les objets d'une liste de la ROM : `lists` (pointeurs, espace des opcodes) donne la liste `index`, dont
+/// chaque entrée est `routine d'allocation (octet), type, variante, +0x2f, X, hauteur, profondeur` ; le créateur
+/// est rangé en `+0x5c` de chaque objet. Les allocations qui échouent sautent leur entrée.
+pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
+    let mut at = rom32(x, lists + 4 * index);
+    x.c.a[2] = at;
+    let count = x.data16(at);
+    at += 2;
+    for _ in 0..=count {
+        let routine_index = x.data8(at) as u32;
+        at += 1;
+        let routine = rom32(x, allocs + 4 * routine_index);
+        let o = alloc(x, routine);
+        if !alloc_failed(x) {
+            let (kind, variant, group) = (x.data8(at), x.data8(at + 1), x.data8(at + 2));
+            let (px, ph, pz) = (x.data16(at + 3), x.data16(at + 5), x.data16(at + 7));
+            o.set_u8(x.b, 0, 1);
+            o.set_u8(x.b, 2, kind);
+            o.set_u8(x.b, 3, variant);
+            o.set_u8(x.b, 0x2f, group);
+            o.set_u16(x.b, 0x8, px);
+            o.set_u16(x.b, 0xc, ph);
+            o.set_u16(x.b, 0x10, pz);
+            o.set_u16(x.b, 0x5c, x.o.0 as u16);
+        }
+        at += 9;
+    }
+    x.c.a[2] = at;
+}

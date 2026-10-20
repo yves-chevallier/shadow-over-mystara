@@ -21,6 +21,9 @@ import struct
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from dis_fmt import fmt  # noqa: E402
+
 root = os.environ.get("SOM_ROOT", ".")
 roms = os.environ.get("DDSOM_ROMS", "rom")
 here = os.path.dirname(os.path.abspath(__file__))
@@ -58,15 +61,17 @@ for line in out.splitlines():
     m = re.match(r"([0-9a-f]{6})  ([0-9a-f]{4})  (.*)", line)
     if m:
         addrs[m.group(1)] = m.group(3)
+text = {}
 for a in sorted(addrs):
     if a in listing:
-        print(a, listing[a])
+        text[a] = listing[a]
     else:
-        print(a, "?? " + re.sub(r"\b\d+\b", lambda m: hex(int(m.group(0))), addrs[a]))
+        text[a] = fmt(re.sub(r"\b\d+\b", lambda m: hex(int(m.group(0))), addrs[a])) + "   ; (hors listing)"
+    print(a, text[a])
 print("---- tables (jmp/jsr (x,PC,Dn))")
 bases = set()
 for a in sorted(addrs):
-    m = re.match(r"j(?:mp|sr) \(0x([0-9a-f]+),PC,", listing.get(a, ""))
+    m = re.match(r"(?:j(?:mp|sr)|move\.w) \(0x([0-9a-f]+),PC,", text.get(a, ""))
     if m:
         bases.add(int(m.group(1), 16))
 for base in sorted(bases):
@@ -75,7 +80,7 @@ for base in sorted(bases):
     end = 1 << 30
     while at < end and at < base + 0x100:
         target = base + struct.unpack(">h", dec[at:at + 2])[0]
-        ok = target % 2 == 0 and target >= base and ("%06x" % target in listing or "%06x" % target in addrs)
+        ok = target % 2 == 0 and target >= base and "%06x" % target in addrs
         if ok and at < target < end:
             end = target
         ents.append("%d:%x%s" % (len(ents) * 2, target, "" if ok else "!"))
