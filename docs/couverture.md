@@ -149,7 +149,8 @@ scénarios n'ont donc plus à éviter les boutons en entrée de scène.
 
 ## Campagne « scénarios en écart restants » (`scenarios/ko/` vidé)
 
-Tous les scénarios qui restaient dans `scenarios/ko/` sont VALIDES et rangés dans `boss/` (`boss13_dragon`), `enemy/`
+Les 22 scénarios de `scenarios/cov/` sont VALIDES sur 30 000 images (`DDSOM_COV=1`), ainsi que les 132 scénarios de
+`tools/validate_all.sh 30000` avec `DDSOM_SCENES=1`. Tous ceux qui restaient dans `scenarios/ko/` sont VALIDES et rangés dans `boss/` (`boss13_dragon`), `enemy/`
 (`ghoul_scene19`, `ghoul_scene97`), `scene/` (`scene_05`, `07`, `08`, `11`, `110`) et `scene_end/` (`end_01`) ;
 `scene/scene_67` (régression de la fusion) est corrigé. Les causes, une par une, sont dans `scenarios/ko/README.md` ;
 trois enseignements généraux :
