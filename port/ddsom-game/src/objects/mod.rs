@@ -53,7 +53,8 @@ pub const NATIVES: &[Native] = &[
     pools::FREE_BOSS,
     pools::FREE_ITEM,
     pools::FREE_SOBJ,
-    // lists::REINSERT_ACTORS et REINSERT_FOREGROUND : non installées, voir objects::lists
+    lists::REINSERT_ACTORS,
+    lists::REINSERT_FOREGROUND,
     lists::UNLINK,
     lists::UNLINK_ALL,
     anim::ANIM_START_INDEXED,

@@ -28,6 +28,9 @@ mod cam {
     /// Position cible.
     pub const X: u32 = 0x08;
     pub const Y: u32 = 0x0c;
+    /// Cible de l'image précédente.
+    pub const PREVIOUS_X: u32 = 0x26;
+    pub const PREVIOUS_Y: u32 = 0x2a;
     /// Position déjà dessinée.
     pub const DRAWN_X: u32 = 0x10;
     pub const DRAWN_Y: u32 = 0x14;
@@ -49,6 +52,9 @@ mod cam {
     pub const ROW_STEP: u32 = 0x40;
 }
 
+/// Enregistrements des caméras 1 et 2 (offsets depuis A5).
+const CAMERA_1: u32 = 0x4fe;
+const CAMERA_2: u32 = 0x54e;
 const STAGE: u32 = 0x34;
 const TERRAIN_VIEW: u32 = 0x37;
 const MAP: u32 = 0x1f9ba0;
@@ -886,4 +892,141 @@ pub const CREEP_3: Native = Native {
     ..leaf(0x3326c, "decor_avance_3", |c, b| creep(c, b, 3))
 };
 
-pub const NATIVES: &[Native] = &[CAMERA1_AFTER_MODE, CAMERA1_DRAW, CAMERA2_DRAW, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
+pub const NATIVES: &[Native] = &[FOLLOW_PLAYERS_Y, UPDATE_CAMERAS, CAMERA1_AFTER_MODE, CAMERA1_DRAW, CAMERA2_DRAW, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
+
+// ---------------------------------------------------------------------------------------------
+// Suivi vertical des joueurs et mise à jour des deux caméras
+// ---------------------------------------------------------------------------------------------
+
+/// Enregistrements des joueurs (RAM de travail, A5 + 0x200 k) : octet « présent », PV (mot) et
+/// profondeur (mot) ; la caméra suit l'étendue verticale des joueurs vivants.
+const PLAYER_RECORD: [u32; 4] = [0x5de, 0x7de, 0x9de, 0xbde];
+const PLAYER_HP: u32 = 0x62;
+const PLAYER_Y: u32 = 0x10;
+/// Marges (pixels) entre la caméra et le joueur le plus haut / le plus bas avant de la déplacer,
+/// et pas maximal par image.
+const FOLLOW_ABOVE: u32 = 0x30;
+const FOLLOW_BELOW: u32 = 0x70;
+const FOLLOW_STEP: u32 = 6;
+
+/// 0x31616 : déplace la position verticale de la caméra A0 pour garder les joueurs vivants dans
+/// la fenêtre `[caméra + 0x30, caméra + 0x70]` (6 pixels par image au plus). Transcrite
+/// instruction par instruction : les routines qui suivent relisent D2, D4-D6 et les drapeaux.
+fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
+    use crate::mem::{rd16, rd8, set_low_word, wr16, A5};
+    use crate::ops::{self, cc};
+    c.d[6] = 0; // profondeur maximale des joueurs
+    c.d[5] = u32::MAX; // minimale
+    for (k, &record) in PLAYER_RECORD.iter().enumerate() {
+        let alive = rd8(b, A5 + record) != 0 && rd16(b, A5 + record + PLAYER_HP) != 0;
+        if !alive {
+            continue;
+        }
+        let y = rd16(b, A5 + record + PLAYER_Y);
+        if k == 0 {
+            set_low_word(&mut c.d[6], y);
+            set_low_word(&mut c.d[5], y);
+            continue;
+        }
+        if (c.d[6] as u16) < y {
+            set_low_word(&mut c.d[6], y);
+        }
+        if (c.d[5] as u16) > y {
+            set_low_word(&mut c.d[5], y);
+        }
+    }
+    let cam_y = |c: &Cpu, b: &mut Cps2Bus| rd16(b, c.a[0] + cam::Y) as u32;
+    // sub.w src,Dn
+    let sub_to = |c: &mut Cpu, n: usize, src: u32| {
+        let dst = c.d[n];
+        let r = ops::sub(c, src, dst, Size::Word);
+        set_low_word(&mut c.d[n], r as u16);
+    };
+    { let v = c.d[6] as u16; set_low_word(&mut c.d[4], v); }
+    let y = cam_y(c, b);
+    sub_to(c, 6, y);
+    sub_to(c, 6, FOLLOW_BELOW);
+    let step_down; // 0x316ca : D2 = D6 ; sinon D2 = D5 est déjà posé
+    if c.cond(cc::LE) {
+        // les joueurs ne sont pas trop bas : remonte la caméra s'ils sont trop haut
+        let y = cam_y(c, b);
+        sub_to(c, 5, y);
+        sub_to(c, 5, FOLLOW_ABOVE);
+        if c.cond(cc::PL) {
+            return rts(c, b);
+        }
+        let d5 = c.d[5];
+        ops::cmp(c, 0xfffa, d5, Size::Word);
+        if !c.cond(cc::GE) {
+            c.d[5] = (-(FOLLOW_STEP as i32)) as u32;
+        }
+        let (d5, y) = (c.d[5] & 0xffff, cam_y(c, b));
+        let y = ops::add(c, d5, y, Size::Word) as u16;
+        wr16(b, c.a[0] + cam::Y, y);
+        { let v = c.d[4] as u16; set_low_word(&mut c.d[6], v); }
+        let y = cam_y(c, b);
+        sub_to(c, 6, y);
+        sub_to(c, 6, FOLLOW_BELOW);
+        if !c.cond(cc::GT) {
+            return rts(c, b);
+        }
+        step_down = true;
+    } else {
+        let y = cam_y(c, b);
+        sub_to(c, 5, y);
+        sub_to(c, 5, FOLLOW_ABOVE);
+        if c.cond(cc::LE) {
+            return rts(c, b);
+        }
+        { let v = c.d[5] as u16; set_low_word(&mut c.d[2], v); }
+        let (d6, d5) = (c.d[6] & 0xffff, c.d[5]);
+        ops::cmp(c, d6, d5, Size::Word);
+        step_down = !c.cond(cc::LE);
+    }
+    if step_down {
+        { let v = c.d[6] as u16; set_low_word(&mut c.d[2], v); }
+    }
+    let d2 = c.d[2];
+    ops::cmp(c, FOLLOW_STEP, d2, Size::Word);
+    if !c.cond(cc::LE) {
+        c.d[2] = FOLLOW_STEP;
+    }
+    let (d2, y) = (c.d[2] & 0xffff, cam_y(c, b));
+    let y = ops::add(c, d2, y, Size::Word) as u16;
+    wr16(b, c.a[0] + cam::Y, y);
+    rts(c, b);
+}
+
+pub const FOLLOW_PLAYERS_Y: Native = Native {
+    entry: 0x31616,
+    name: "camera_suit_joueurs_y",
+    cost: |_, _| 200,
+    run: follow_players_y,
+    touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: false,
+};
+
+/// 0x33e20 : met à jour les deux caméras. La première mémorise sa cible précédente (+0x26, +0x2a)
+/// avant que son script de mode (0x2ede0) la déplace ; la seconde est traitée par 0x32108.
+fn update_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+    use crate::mem::{rd32, wr32, A5};
+    c.a[0] = A5 + CAMERA_1;
+    let (x, y) = (rd32(b, c.a[0] + cam::X), rd32(b, c.a[0] + cam::Y));
+    wr32(b, c.a[0] + cam::PREVIOUS_X, x);
+    wr32(b, c.a[0] + cam::PREVIOUS_Y, y);
+    crate::call(c, b, 0x2ede0);
+    c.a[0] = A5 + CAMERA_2;
+    crate::call(c, b, 0x32108);
+    rts(c, b);
+}
+
+pub const UPDATE_CAMERAS: Native = Native {
+    entry: 0x33e20,
+    name: "cameras_mise_a_jour",
+    cost: |_, _| 100,
+    run: update_cameras,
+    touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: false,
+};

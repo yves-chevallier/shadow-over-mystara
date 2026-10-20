@@ -16,6 +16,27 @@ pub fn add(c: &mut Cpu, src: u32, dst: u32, size: Size) -> u32 {
     c.addsub(false, src, dst, false, size, false)
 }
 
+/// SUB / SUBQ / SUBI : `dst - src`, résultat et drapeaux (X compris).
+pub fn sub(c: &mut Cpu, src: u32, dst: u32, size: Size) -> u32 {
+    c.addsub(true, src, dst, false, size, false)
+}
+
+/// Codes de condition de `Cpu::cond` (Bcc / Scc).
+pub mod cc {
+    pub const HI: u8 = 2;
+    pub const LS: u8 = 3;
+    pub const CC: u8 = 4;
+    pub const CS: u8 = 5;
+    pub const NE: u8 = 6;
+    pub const EQ: u8 = 7;
+    pub const PL: u8 = 10;
+    pub const MI: u8 = 11;
+    pub const GE: u8 = 12;
+    pub const LT: u8 = 13;
+    pub const GT: u8 = 14;
+    pub const LE: u8 = 15;
+}
+
 /// MOVE / TST / AND / OR... : N et Z selon la valeur, V et C à zéro, X conservé.
 pub fn logique(c: &mut Cpu, v: u32, size: Size) {
     c.flags_logic(v, size);

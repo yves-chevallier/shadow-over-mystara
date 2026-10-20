@@ -18,6 +18,7 @@ use m68k::decode::{BitOp, Fetch, Op, ShiftCount, Size};
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::ops::cc;
 use crate::{call, regs, Native};
 
 // ---------------------------------------------------------------------------------------------
@@ -839,3 +840,244 @@ native!(START_ANIMATION, 0x103d6, "ai_start_animation", start_animation);
 native!(STEP_ANIMATION, 0x1040c, "ai_step_animation", step_animation);
 native!(FACING_TARGET, 0x1050c, "ai_facing_target", facing_target);
 native!(MOVING_FORWARD, 0x10560, "ai_moving_forward", moving_forward);
+
+// ---------------------------------------------------------------------------------------------
+// Rester dans l'écran (0xfbae, 0xfbb0) et s'approcher d'un point d'une cible (0xe76c, 0xf0e8)
+//
+// Transcrites instruction par instruction (opérations à drapeaux exacts) : les handlers qui suivent
+// relisent D0-D6, A1, A2 et les drapeaux.
+// ---------------------------------------------------------------------------------------------
+
+/// Scroll courant (x, y) de la caméra 1 et de la caméra 2, octet « caméra 2 courante ».
+const SCROLL_1: (u32, u32) = (A5 + 0x506, A5 + 0x50a);
+const SCROLL_2: (u32, u32) = (A5 + 0x556, A5 + 0x55a);
+const USE_CAMERA_2: u32 = A5 + 0x36;
+/// Champs de l'objet : abscisse, profondeur.
+const OBJ_X: u32 = 8;
+const OBJ_Y: u32 = 0x10;
+/// Marge par défaut de `in_zone` (0xfbae), en pixels.
+const ZONE_MARGIN: u32 = 0x30;
+
+/// `move.w src,Dn` (drapeaux N Z).
+fn move_w(c: &mut Cpu, n: usize, v: u16) {
+    set_w(&mut c.d[n], v);
+    logic(c, v as u32, Size::Word);
+}
+
+/// Ramène un axe de l'objet A0 dans la fenêtre de l'écran : `off` est le champ de l'objet,
+/// `origin` le registre qui porte le scroll de l'axe, `span` la taille de la fenêtre. La position
+/// négative est remise à 0 ; hors de `[scroll - D0, scroll + span + D0]` (D0 = marge), elle est
+/// ramenée au bord. D5 = 1 si l'objet a été déplacé.
+fn pull_inside(c: &mut Cpu, b: &mut Cps2Bus, off: u32, origin: usize, span: u16) {
+    let a0 = c.a[0];
+    let pos = rd16(b, a0 + off);
+    move_w(c, 2, pos);
+    if (pos as i16) < 0 {
+        wr16(b, a0 + off, 0);
+        c.d[5] = 1;
+        logic(c, 1, Size::Long);
+        return;
+    }
+    let margin = c.d[0] as u16;
+    let d2 = sub_w(c, c.d[origin] as u16, pos);
+    let d2 = add_w(c, margin, d2);
+    set_w(&mut c.d[2], d2);
+    move_w(c, 4, span);
+    let d4 = add_w(c, margin, span);
+    let d4 = add_w(c, margin, d4);
+    set_w(&mut c.d[4], d4);
+    cmp(c, d4 as u32, d2 as u32, Size::Word);
+    if c.cond(cc::LS) {
+        return;
+    }
+    move_w(c, 3, margin);
+    let d3 = neg_w(c, margin);
+    set_w(&mut c.d[3], d3);
+    logic(c, d2 as u32, Size::Word);
+    let d3 = if d2 as i16 >= 0 {
+        move_w(c, 3, span);
+        add_w(c, margin, span)
+    } else {
+        d3
+    };
+    set_w(&mut c.d[3], d3);
+    let o = add_w(c, d3, c.d[origin] as u16);
+    set_w(&mut c.d[origin], o);
+    wr16(b, a0 + off, o);
+    logic(c, o as u32, Size::Word);
+    c.d[5] = 1;
+    logic(c, 1, Size::Long);
+}
+
+/// 0xfbb0 : garde l'objet A0 dans l'écran (D0 = marge en pixels). D5 = 1 s'il a bougé.
+fn keep_on_screen(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (sx, sy) = if rd8(b, USE_CAMERA_2) != 0 { SCROLL_2 } else { SCROLL_1 };
+    let (x, y) = (rd16(b, sx), rd16(b, sy));
+    move_w(c, 1, x);
+    move_w(c, 6, y);
+    c.d[5] = 0;
+    pull_inside(c, b, OBJ_X, 1, 0x180);
+    c.d[0] = (-0x10i32) as u32; // moveq #-16,D0 : marge verticale
+    pull_inside(c, b, OBJ_Y, 6, 0x100);
+    rts(c, b);
+}
+
+/// 0xfbae : comme 0xfbb0 avec la marge de 0x30 pixels (c'est le test de zone, qui remet D5 à 0).
+fn in_zone(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.d[0] = ZONE_MARGIN;
+    keep_on_screen(c, b);
+}
+
+pub const IN_ZONE: Native = Native {
+    entry: 0xfbae,
+    name: "ai_zone",
+    cost: |_, _| 150,
+    run: in_zone,
+    touches_sound: false,
+    outputs: regs::ALL,
+    exact_cost: false,
+};
+
+pub const KEEP_ON_SCREEN: Native = Native {
+    entry: 0xfbb0,
+    name: "ai_garde_a_l_ecran",
+    cost: |_, _| 150,
+    run: keep_on_screen,
+    touches_sound: false,
+    outputs: regs::ALL,
+    exact_cost: false,
+};
+
+/// Offsets de l'ennemi A0 : cible (mot), orientation (octet, 0-31), type de trajectoire, point visé.
+const OBJ_TARGET: u32 = 0x50;
+const OBJ_FACING: u32 = 0x2d;
+const OBJ_PATH: u32 = 0x79;
+const OBJ_AIM_X: u32 = 0x7a;
+const OBJ_AIM_Y: u32 = 0x7c;
+/// Table (en ROM) des tables de points d'approche par type : mot n, puis n + 1 couples (dx, dy).
+const APPROACH_TABLES: u32 = 0xe93e;
+
+/// 0xf0e8 : tourne d'un cran l'orientation de A0 vers le point (D1, D2) (angle de 0x137e).
+fn turn_toward(c: &mut Cpu, b: &mut Cps2Bus) {
+    call(c, b, 0x137e);
+    let a0 = c.a[0];
+    let facing = rd8(b, a0 + OBJ_FACING);
+    set_b(&mut c.d[1], facing);
+    let diff = sub_b(c, facing, c.d[0] as u8);
+    set_b(&mut c.d[0], diff);
+    let d0 = (c.d[0] as u16) & 0x1f;
+    set_w(&mut c.d[0], d0);
+    logic(c, d0 as u32, Size::Word);
+    if d0 == 0 {
+        return rts(c, b);
+    }
+    // btst #4,D0 : le plus court est dans le sens positif ou négatif
+    let turned = if d0 & 0x10 == 0 { add_b(c, 1, facing) } else { sub_b(c, 1, facing) };
+    set_b(&mut c.d[1], turned);
+    let d1 = (c.d[1] as u16) & 0x1f;
+    set_w(&mut c.d[1], d1);
+    logic(c, d1 as u32, Size::Word);
+    wr8(b, a0 + OBJ_FACING, d1 as u8);
+    logic(c, d1 as u32 & 0xff, Size::Byte);
+    rts(c, b);
+}
+
+/// 0xe76c : choisit parmi les points d'approche de la cible (`OBJ_TARGET`) celui qui est le plus
+/// proche de l'ennemi A0 (de loin : le plus éloigné), le mémorise en `OBJ_AIM_X/Y` et tourne vers lui.
+fn approach_target(c: &mut Cpu, b: &mut Cps2Bus) {
+    let a0 = c.a[0];
+    let target = rd16(b, a0 + OBJ_TARGET);
+    logic(c, target as u32, Size::Word);
+    if target == 0 {
+        return rts(c, b);
+    }
+    let x = rd16(b, a0 + OBJ_X);
+    move_w(c, 0, x);
+    let scroll = if rd8(b, USE_CAMERA_2) != 0 { SCROLL_2.0 } else { SCROLL_1.0 };
+    let scroll_x = rd16(b, scroll);
+    move_w(c, 1, scroll_x);
+    let d0 = sub_w(c, scroll_x, x);
+    set_w(&mut c.d[0], d0);
+    cmp(c, 0x180, d0 as u32, Size::Word);
+    // loin de l'écran (D0 > 0x180) : on vise le point le plus éloigné, sinon le plus proche
+    let far = c.cond(cc::HI);
+    c.a[1] = sext(target);
+    let a1 = c.a[1];
+    c.d[0] = 0;
+    set_b(&mut c.d[0], rd8(b, a0 + OBJ_PATH));
+    let index = lsl_w(c, c.d[0] as u16, 2);
+    set_w(&mut c.d[0], index);
+    c.a[2] = rd32(b, APPROACH_TABLES + sext(index));
+    let count = rd16(b, c.a[2]);
+    c.a[2] += 2;
+    move_w(c, 6, count);
+    let (tx, ty) = (rd16(b, a1 + OBJ_X), rd16(b, a1 + OBJ_Y));
+    wr16(b, a0 + OBJ_AIM_X, tx);
+    wr16(b, a0 + OBJ_AIM_Y, ty);
+    if far {
+        c.d[4] = 0;
+    } else {
+        move_w(c, 4, 0x7fff);
+    }
+    loop {
+        let (dx, dy) = (rd16(b, c.a[2]), rd16(b, c.a[2] + 2));
+        c.a[2] += 4;
+        move_w(c, 0, dx);
+        move_w(c, 1, dy);
+        let px = add_w(c, tx, dx);
+        set_w(&mut c.d[0], px);
+        let py = add_w(c, ty, dy);
+        set_w(&mut c.d[1], py);
+        move_w(c, 2, px);
+        move_w(c, 3, py);
+        let mut d2 = sub_w(c, rd16(b, a0 + OBJ_X), px);
+        if c.cond(cc::MI) {
+            d2 = neg_w(c, d2);
+        }
+        set_w(&mut c.d[2], d2);
+        let mut d3 = sub_w(c, rd16(b, a0 + OBJ_Y), py);
+        if c.cond(cc::MI) {
+            d3 = neg_w(c, d3);
+        }
+        set_w(&mut c.d[3], d3);
+        let d2 = add_w(c, d3, d2);
+        set_w(&mut c.d[2], d2);
+        cmp(c, c.d[4] as u16 as u32, d2 as u32, Size::Word);
+        if c.cond(if far { cc::HI } else { cc::LS }) {
+            move_w(c, 4, d2);
+            wr16(b, a0 + OBJ_AIM_X, px);
+            logic(c, px as u32, Size::Word);
+            wr16(b, a0 + OBJ_AIM_Y, py);
+            logic(c, py as u32, Size::Word);
+        }
+        let left = (c.d[6] as u16).wrapping_sub(1);
+        set_w(&mut c.d[6], left);
+        if left == 0xffff {
+            break;
+        }
+    }
+    let (ax, ay) = (rd16(b, a0 + OBJ_AIM_X), rd16(b, a0 + OBJ_AIM_Y));
+    move_w(c, 1, ax);
+    move_w(c, 2, ay);
+    turn_toward(c, b);
+}
+
+pub const APPROACH_TARGET: Native = Native {
+    entry: 0xe76c,
+    name: "ai_approche_cible",
+    cost: |_, _| 400,
+    run: approach_target,
+    touches_sound: false,
+    outputs: regs::ALL,
+    exact_cost: false,
+};
+
+pub const TURN_TOWARD: Native = Native {
+    entry: 0xf0e8,
+    name: "ai_tourne_vers",
+    cost: |_, _| 150,
+    run: turn_toward,
+    touches_sound: false,
+    outputs: regs::ALL,
+    exact_cost: false,
+};

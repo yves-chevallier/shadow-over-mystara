@@ -33,6 +33,7 @@ pub mod scene;
 pub mod scroll;
 pub mod scenario;
 pub mod sound;
+pub mod terrain;
 pub mod sprites;
 pub mod tache_credits;
 pub mod text;
@@ -91,6 +92,10 @@ pub const NATIVES: &[Native] = &[
     ai::DECISION_B,
     ai::PICK_BYTE,
     ai::IMMUNITIES,
+    ai::IN_ZONE,
+    ai::KEEP_ON_SCREEN,
+    ai::APPROACH_TARGET,
+    ai::TURN_TOWARD,
     ai::SPREAD_INDEX,
     ai::TARGET_IN_FRONT,
     ai::START_ANIMATION,
@@ -181,7 +186,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs()).chain(kernel::NATIVES).chain(vblank::NATIVES).chain(tache_credits::NATIVES).chain(ecran_credits::NATIVES)
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(terrain::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs()).chain(kernel::NATIVES).chain(vblank::NATIVES).chain(tache_credits::NATIVES).chain(ecran_credits::NATIVES)
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -269,7 +274,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
         if c.cycles + cost <= limit {
-            if CHECK.load(Ordering::Relaxed) {
+            if CHECK.load(Ordering::Relaxed) && checked(n) {
                 check(n, c, b, cost);
             } else if adopt_regs(n) {
                 // diagnostic : registres de sortie repris de l'original (registres hérités)
@@ -441,6 +446,14 @@ fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
         assert!(guard < 1_000_000, "{} : la routine d'origine ne revient pas", n.name);
     }
     c2
+}
+
+/// `DDSOM_CHECK_ONLY=préfixe,...` : seules les natives nommées sont contrôlées (les autres, dont celles
+/// du noyau qui ne reviennent jamais à leur appelant, s'exécutent sans contrôle).
+fn checked(n: &Native) -> bool {
+    static ONLY: OnceLock<Option<Vec<String>>> = OnceLock::new();
+    let only = ONLY.get_or_init(|| std::env::var("DDSOM_CHECK_ONLY").ok().map(|v| v.split(',').map(str::to_owned).collect()));
+    only.as_ref().map_or(true, |p| p.iter().any(|p| n.name.starts_with(p.as_str())))
 }
 
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
