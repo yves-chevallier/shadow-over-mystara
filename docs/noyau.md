@@ -37,6 +37,37 @@ joueur (0x140b4) : bouton de départ (IN2) et assez de crédits (1 ou 2 selon `m
 crée la tâche de partie (0x1c45a) au lieu de l'écran des crédits. Les cessions d'origine coupent le code : chaque
 morceau reprend à l'adresse de retour de l'original (macro `resume!`).
 
+## Tâches Rust (`taches/`)
+
+Une tâche Rust est une machine à états dont chaque *pas* tient dans une native posée à l'adresse que l'original
+reprend après une cession (adresse empilée par le `jsr 0xa40`/`0xa86`). Le pas rend une `Attente`
+(`Images(n)` : trap 3, `Prete` : trap 4), traduite par `taches::ceder`. Le noyau ne change pas : la table
+FF0064, la pile de la tâche (15 registres sauvés, adresse de reprise) et les champs PC (`0xa4c`/`0xa8c`) et USP
+sont ceux de l'original, donc `validate` les compare sans exception supplémentaire (la pile reste dans la zone
+FF0900-FF0FFF ignorée, les octets +0..+3 de chaque enregistrement aussi) et une tâche Rust cohabite avec une tâche 68000 :
+l'ordonnanceur ne les distingue pas. Une tâche reste libre de passer par du code 68000 (`call`, `tail`).
+
+| Tâche | Natives | Rôle |
+|---|---|---|
+| partie (`taches/partie.rs`) | `0x1c45a` entrée, `0x1c468` tour, `0x1c48c` cession, `0x1c4b0` pas de jeu | boucle de jeu, voir `boucle.md` §1 |
+| gel (`taches/gel.rs`) | `0xee080` entrée, `0xee0fa` et `0xee16a` après cession | avance rapide : décompte la tâche principale quand un joueur presse un bouton |
+
+Le pas de jeu s'arrête *sur* `0x1c4b0` (`GAME_STEP`) au lieu d'enchaîner : c'est là que la machine plafonne les pas par
+image.
+
+**Attente active sautée.** La tâche du gel est toujours prête : sans autre travail, l'ordonnanceur la relançait
+~1 000 fois par image à ×16 (16 000 instructions 68000 par image, 95 % de tout le 68000 exécuté). `idle` (`lib.rs`)
+avance maintenant jusqu'à l'interruption quand `taches::gel::attente_vide` reconnaît que son prochain pas ne ferait
+rien (seule tâche prête, cédée par `0xa86` depuis l'une de ses deux cessions, dernière lancée, pas de bouton qui
+réveillerait la tâche principale). `idle` testait l'indicateur de nouvelle image à FF8164 au lieu de FF0164 (il valait
+presque toujours vrai : l'attente active n'était jamais sautée) ; corrigé. `examples/idle_check.rs` vérifie, sur deux
+machines d'origine, que sauter l'attente ne change pas l'état (RAM hors zones ignorées, GFX, sprites, palette) : identique
+sur 12 000 images de six scénarios (attract, crédits, entrée de scène, jeu à deux, fin).
+
+Prochaine étape : remplacer l'enregistrement (SR/PC/USP/pile) par une `Option<Box<dyn Tache>>` suppose que les routines
+appelées par un pas ne cèdent plus par le 68000 (`call`/`Unwound`) : il faut d'abord réécrire les tâches qui cèdent au
+milieu d'appels 68000 (fondus `0x14ba...`, interface joueurs, `0x29162`, `0x1835e`).
+
 ## Bilan de l'inventaire (`tools/reste68k.sh`, `docs/reste68k.md`)
 
 `examples/reste68k.rs` rejoue des scénarios sur la machine hybride (natives Rust, 68000 interprété pour le
@@ -52,7 +83,14 @@ Mesure sur 40 scénarios (`scenarios/cov/`, `scenarios/modes/`, quatre bots ; 89
 | instructions 68000 (hors attente active) | 654,6 M (603 par image) | 433,8 M (485 par image) |
 | K1 noyau, VBLANK, ordonnanceur | 107,0 M | 2,0 M (reste `reset` 0x350 et `boot_init`) |
 | C1 crédits | 70,6 M | 0,14 M (tâche « INSERT COIN » 0xe05ec) |
-| ordonnanceur et traps | 68000 | natifs (`kernel.rs`) ; la tâche du gel 0xee080 reste du 68000 |
+| ordonnanceur et traps | 68000 | natifs (`kernel.rs`) |
+| tâche du gel 0xee080, boucle de partie 0x1c45a | 68000 | Rust (`taches/`) |
+
+Gain des tâches Rust (8 scénarios de 8 000 images, avant/après) : attente active 1 031,6 M instructions (16 100 par
+image) à **0** ; hors attente 658 à 650 par image (la boucle de partie : ~9 par image). Attente comprise : 16 760 à
+650 instructions 68000 par image. Sur les 121 scénarios de `reste68k.sh` (2,15 M d'images) : 526 par image, attente
+nulle (avant, sur 40 scénarios : 485 hors attente et 14 500 d'attente). Temps de la machine de référence de `idle_check`
+divisé par 2 à 3 (12 000 images).
 
 Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'instructions (711 par image),
 710 fonctions encore exécutées, 609 entièrement natives, 1 240 jamais atteintes (86 Ko).
@@ -74,7 +112,7 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 5. **Défilement et caméras (B1, 7,4 %)** : `0x33fe4`, `0x31616`, `0x33e20`, `0x30308`, `0x309e0`, `0x2ede0`.
 6. **EFFCT (C0e, 2,7 %)** : `0xb9eba`, `0xb9ee6` (3 scénarios seulement), puis IA E1 (`0xfbb0`, `0xe76c`),
    texte V2 (`0x28d8`, `0x1386`), liste de sprites V4 (`0x1de96`), FIFO son S1 (`0xedf80`).
-7. **Les tâches elles-mêmes** : tâche de partie `0x1c45a`, tâche du gel `0xee080`, tâches de fondu
+7. **Les tâches restantes** (la partie et le gel sont en Rust) : tâches de fondu
    (`0x1460` et suivantes), tâches d'interface. Le noyau natif les fait encore reprendre en 68000 ; voir le plan dans
    `architecture.md`.
 8. Les 1 294 fonctions jamais atteintes (88 Ko) : à classer en code mort (menu TEST, écrans de debug, K4 : hors

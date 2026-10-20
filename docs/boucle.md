@@ -22,10 +22,9 @@ rend jamais la main par un `rts` : c'est une boucle infinie qui cède une fois p
 ```
 
 Les phases ne cèdent donc jamais elles-mêmes : chacune est un pas par image. C'est ce qui permet de
-les réécrire en routines natives (une routine native ne peut pas céder). Seule la boucle principale,
-qui contient le `jsr 0xa40`, reste en 68000 (on ne peut pas céder au milieu d'une routine native) ; la
-réécrire en Rust demandera de la découper aux points de cession ou d'avoir des tâches
-coopératives en Rust.
+les réécrire en routines natives (une routine native ne peut pas céder). La boucle principale est elle aussi
+du Rust (`taches/partie.rs`, découpée aux points de cession : `0x1c45a`, `0x1c468`, `0x1c48c`, `0x1c4b0`) ;
+la tâche du gel qui l'accompagne aussi (`taches/gel.rs`, voir `noyau.md`).
 
 Rust : `game::FRAME_END` (0x1c4c4).
 
