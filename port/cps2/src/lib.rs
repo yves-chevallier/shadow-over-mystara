@@ -218,6 +218,7 @@ impl Machine {
         if let Some(cap) = self.step_cap.as_mut() {
             cap.count = 0;
         }
+        self.bus.frame = self.frame;
         let frame_end = (self.cycle_debt + self.line_cycles * LINES as f64) as u64;
         for i in 0..LINES {
             let line = (VBLANK_LINE + i) % LINES;
