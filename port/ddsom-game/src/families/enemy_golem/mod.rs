@@ -43,11 +43,8 @@ pub(self) mod g {
     pub const KEY: u32 = 0x33;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_CHARGE: u32 = 0x71;
     pub const AI_WAIT: u32 = 0x77;
     pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
     pub const HIT_FLAG: u32 = 0x8f;
     pub const TIMER: u32 = 0xa2;
     pub const TIMER2: u32 = 0xa4;
@@ -61,15 +58,8 @@ pub(self) const SET_STRIKE: u32 = 0x15eef4;
 pub(self) const STANCE: u32 = 0x0202_0000;
 
 pub(self) mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
     pub const REMOVE: u32 = 0x27ee;
     pub const SCREEN_CHECK: u32 = 0x1e90;
-    pub const AI_GATE_A: u32 = 0xa4b4;
-    pub const AI_GATE_B: u32 = 0xa4c2;
 }
 
 pub fn run(x: &mut Cx) {
@@ -204,15 +194,6 @@ pub(self) fn hit_gate(x: &mut Cx) -> bool {
     }
 }
 
-/// Rangées de 32 octets par niveau de difficulté `A5+0x7f92 / 2` : choisit le geste (`+6`) et passe en `+5 = 4`
-/// (0x68ac6) ; `table` = 0x68aee (cible devant) ou 0x68cee (cible derrière).
-pub(self) fn pick_from(x: &mut Cx, table: u32) {
-    let b = row_byte(x, table);
-    x.set8(f::SUB2, b);
-    x.set16(f::STATE, 0x0204);
-    x.set8(STEP, 0);
-}
-
 /// Octet tiré au hasard dans la rangée de difficulté de `table`.
 pub(self) fn row_byte(x: &mut Cx, table: u32) -> u8 {
     let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
@@ -220,44 +201,6 @@ pub(self) fn row_byte(x: &mut Cx, table: u32) -> u8 {
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
     x.data8(at + r)
-}
-
-/// Boîte de portée `(d0, d1, d2)` puis portes d'IA (0xa4c2 si les orientations coïncident, sinon 0xa4b4) ; en cas de
-/// succès choisit un geste dans `table`. `+0xa6` reçoit le résultat de la boîte (D0).
-fn aim(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0xb5e0);
-    if x.c.cond(7) {
-        return false;
-    }
-    let d0 = x.c.d[0] as u8;
-    x.set8(SIDE, d0);
-    if x.u16(f::TARGET) == 0 {
-        return false;
-    }
-    let target = load_target(x);
-    let facing = target.u8(x.b, 0x2c);
-    x.c.d[0] = x.c.d[0] & !0xff | facing as u32;
-    let gate = if facing == x.u8(f::FLIP) { call::AI_GATE_B } else { call::AI_GATE_A };
-    x.call(gate);
-    if x.c.cond(7) {
-        return false;
-    }
-    pick_from(x, table);
-    x.c.d[0] = 1;
-    true
-}
-
-/// 0x68a18 : cible tout près, devant (gestes de la table 0x68aee).
-pub(self) fn aim_close(x: &mut Cx) -> bool {
-    aim(x, -8, 0x68, 8, 0x68aee)
-}
-
-/// 0x68a68 : cible plus loin (gestes de la table 0x68cee).
-pub(self) fn aim_far(x: &mut Cx) -> bool {
-    aim(x, -0xa0, 0x30, 8, 0x68cee)
 }
 
 /// 0x690ce : choisit le geste suivant (`+5` = 8) d'après la distance de la cible, ou se remet debout.

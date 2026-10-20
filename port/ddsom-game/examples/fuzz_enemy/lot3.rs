@@ -268,6 +268,32 @@ fn etats(kind: u8) -> Option<&'static [&'static str]> {
             "4 4 0,2,4 0",
             "6 0 0 0",
         ],
+        27 => &[
+            "0 0 0 0",
+            // arrivée, roule vers le joueur, gestes de l'arme (4), tourne sur place (6, 8, 10), touché
+            "2 0 0 6",
+            "2 0 2,4 4",
+            "2 2 0,2,4,6 2",
+            "2 2 6 2",
+            "2 2 6 2",
+            "2 2 8 6",
+            "2 4 0,2,4 2",
+            "2 4 6 6",
+            "2 4 8 8",
+            "2 4 10 6",
+            "2 4 12 4",
+            "2 6 0,2 0",
+            "2 8 0,2 0",
+            "2 10 0,2 0",
+            "4 0 0 0",
+            "4 0 2 0",
+            "4 2 0,2,4 0",
+            "4 4 0,2,4 0",
+            "4 6 0,2,4,6,8 0",
+            "4 8 0,2 0",
+            "4 10 0,2 0",
+            "6 0 0 0",
+        ],
         11 => &[
             "0 0 0 0",
             // debout piloté par les touches, coups (4), gestes de repli (6, 8), touché
@@ -461,6 +487,7 @@ pub fn prep(b: &mut Bus, alea: &mut Alea, kind: u8, obj: u32, fresh: bool) {
         13 => gnoll(b, alea, obj, fresh),
         3 => archer(b, alea, obj, fresh),
         11 => golem(b, alea, obj, fresh),
+        27 => machine(b, alea, obj, fresh),
         _ => {}
     }
 }
@@ -1302,4 +1329,80 @@ fn golem(b: &mut Bus, alea: &mut Alea, obj: u32, _fresh: bool) {
     wr16(b, A5 + 0x50a, oy);
     wr16(b, A5 + 0x55a, oy);
     wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+}
+
+fn machine(b: &mut Bus, alea: &mut Alea, obj: u32, fresh: bool) {
+    if fresh {
+        wr8(b, obj + 3, (alea.next() % 3) as u8);
+    }
+    wr8(b, obj + 0x2f, (alea.next() % 3 != 0) as u8);
+    wr8(b, obj, 1);
+    wr8(b, obj + 0xaa, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xab, 2);
+    wr8(b, obj + 0xac, 2 * (alea.next() % 16) as u8);
+    for off in [0x6bu32, 0x6e, 0x71] {
+        wr8(b, obj + off, (alea.next() % 4) as u8);
+    }
+    wr8(b, obj + 0x6d, (alea.next() % 9) as u8);
+    // aspect courant et précédent (valeurs prises par la machine)
+    let aspects = [0u8, 1, 2, 3, 4, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x20, 0x30, 0x31, 0x32, 0x40, 0xff];
+    wr8(b, obj + 0xa0, aspects[alea.next() as usize % aspects.len()]);
+    wr8(b, obj + 0xa1, aspects[alea.next() as usize % aspects.len()]);
+    // état à reprendre après un demi-tour
+    let valides = [0x0202_0000u32, 0x0202_0400, 0x0202_0600, 0x0202_0800, 0x0204_0000, 0x020a_0000];
+    wr32(b, obj + 0xa2, valides[alea.next() as usize % valides.len()]);
+    for off in [0xa6u32, 0xa8] {
+        wr16(b, obj + off, [0u16, 1, 2, 3, 0x14, 0x1e][alea.next() as usize % 6]);
+    }
+    wr8(b, obj + 0xad, (alea.next() % 4 == 0) as u8);
+    wr8(b, obj + 0xae, [0u8, 1, 2, 5][alea.next() as usize % 4]);
+    wr8(b, obj + 0xb2, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x33, [0u8, 0, 1, 2, 0x80][alea.next() as usize % 5]);
+    wr8(b, obj + 0x32, alea.next() as u8);
+    wr16(b, obj + 0x62, [0u16, 5, 30][alea.next() as usize % 3]);
+    wr16(b, obj + 0x84, (alea.next() % 3) as u16);
+    wr8(b, obj + 0x86, (alea.next() % 4 == 0) as u8);
+    wr8(b, obj + 0x53, [0u8, 0, 0, 1, 0xff][alea.next() as usize % 5]);
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0x300, 0xfd00][alea.next() as usize % 5]);
+    wr16(b, obj + 0x16, [0u16, 0x20, 0xffe0][alea.next() as usize % 3]);
+    wr16(b, obj + 0x18, [0u16, 0x400, 0xff00, 0x80, 0x500][alea.next() as usize % 5]);
+    wr16(b, obj + 0x1a, 0xffc0);
+    wr8(b, obj + 0x67, (alea.next() % 2) as u8);
+    for off in [0x72u32, 0x73] {
+        wr8(b, obj + off, (alea.next() % 3) as u8);
+    }
+    if alea.next() % 8 == 0 {
+        wr16(b, obj + 0x50, 0);
+    }
+    let (ox, oy) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
+    if alea.next() % 2 == 0 {
+        let offsets = [-0xe0i16, -0x80, -0x50, -0x30, -0x10, 0, 0x30, 0x60, 0x100];
+        for j in 0..4u32 {
+            let q = 0xff85de + 0x200 * j;
+            let off = offsets[alea.next() as usize % offsets.len()] + (alea.next() % 0x12) as i16 - 9;
+            wr8(b, q, (alea.next() % 5 != 0) as u8);
+            wr16(b, q + 8, ox.wrapping_add(off as u16));
+            wr16(b, q + 0x10, oy.wrapping_add((alea.next() % 0x30) as u16).wrapping_sub(0x18));
+            wr8(b, q + 0x2c, 0x20 * (alea.next() % 2) as u8);
+            wr8(b, q + 6, [0u8, 0xc, 0xc, 0xe][alea.next() as usize % 4]);
+            wr16(b, q + 0xc, 0);
+        }
+    }
+    wr8(b, A5 + 0x30, (alea.next() % 3 == 0) as u8);
+    // saisie : `A5+0x42` et le lien `+0x46` (2810)
+    wr8(b, A5 + 0x42, (alea.next() % 8 == 0) as u8);
+    wr16(b, obj + 0x46, if alea.next() % 4 == 0 { 0x85de } else { 0 });
+    wr8(b, A5 + 0x35, (alea.next() % 5) as u8);
+    wr8(b, A5 + 0x36, (alea.next() % 4 == 0) as u8);
+    wr8(b, A5 + 0x48, (alea.next() % 9) as u8);
+    let cam = if alea.next() % 4 == 0 {
+        ox.wrapping_add((alea.next() % 0x100) as u16)
+    } else {
+        ox.wrapping_sub(0x80 + (alea.next() % 0x180) as u16)
+    };
+    for off in [0x5a6u32, 0x5ae, 0x506, 0x556] {
+        wr16(b, A5 + off, cam);
+    }
+    wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+    wr8(b, A5 + 0x7f93, (alea.next() % 32) as u8);
 }

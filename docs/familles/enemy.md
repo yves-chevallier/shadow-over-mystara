@@ -34,6 +34,7 @@ Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms d
 | `enemy_gnoll/` | type 13 (Axe Gnoll) : `arrival`, `stance`, `attacks`, `hit` ; mêmes familles de gestes, hache et sauts sur la cible |
 | `enemy_bow/` | type 3 (Bow Gnoll, archer) : `arrival`, `stance`, `shoot`, `spawned`, `hit` |
 | `enemy_golem/` | type 11 (Mud Golem) : `control`, `attacks`, `moves`, `hit` |
+| `enemy_warmachine/` | type 27 (WarMachine) : `arrival`, `stance`, `attacks`, `decide`, `hit` |
 
 ## 2. Charpente commune
 
@@ -321,6 +322,18 @@ après l'animation, qui l'écrase ; le test `cmpi.b #0x12,(0x7,A0)` de 0x68016 p
 `+0x8f` (`hit_gate`, 0x68910) redirige les sous-états 6 et 8 et l'état touché. Plusieurs états de repli (0x2020600,
 0x1ed2a0) mènent à des tables trop courtes : ils sont réécrits tels quels. Couverture : fuzz seulement.
 
+### Type 27 (0x77d12) « WarMachine » (h) — `enemy_warmachine/`
+
+Machine de siège roulante qui s'appuie sur `enemy_lib` comme le Gargoyle et l'Ogre. `run` appelle toujours les compteurs
+(0xf1bfc) puis, après le gestionnaire d'état, efface `+0x38` si `+0xad` et remet l'objet en liste si l'octet `+0` est non
+nul ; l'état 0 n'enchaîne pas sur l'état actif (la variante `+3` = 0, 1 ou 2 donne `+6` = 0, 2 ou 4 par un talon). Sous-états :
+0 arrivée (roule depuis le bord, ou attend un joueur dans une boîte), 2 roule vers le joueur (attente `+6` = 0, demi-tour 2, marche 4
+et 6 avec délais de charge, charge 8), 4 gestes de l'arme (0 à 4 canon, 6 charge en ligne, 8 bond d'écrasement, 10 salve, 12 lancer),
+6, 8 et 10 tourne sur place sans joueur, état touché 0 à 10 (mort en cinq temps `+5` = 6, fuite 8). Les décisions d'IA
+(`decide.rs`) enchaînent des tirages dans des tables d'octets puis de mots (saut relatif) et aboutissent à l'un des « talons »
+d'état de l'original (0x7924a à 0x792be, `go::*`) ; on relit les mêmes tables (espace des opcodes) et on exécute le talon
+visé, y compris ceux qui n'entrent qu'au milieu d'un talon (0x7928e saute le `+0xad`). Couverture : fuzz seulement.
+
 ### Type 25 (0x76f0e) « DarkWarrior 1 » (h) — `enemy_warrior.rs`
 
 Bras du guerrier sombre : le créateur (0x76ec4, non réécrit) en engendre deux, variante 0 (gauche) et 1 (droite), liés
@@ -343,11 +356,10 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
 
 ## 4. Non réécrit (types encore en 68000)
 
-27 WarMachine. Aucun type restant n'apparaît dans les scènes 1 à 66 du parcours (`scenarios/cov/`,
-`enemy_scan`) : ils ne sont donc pas exercés par les scénarios, seulement par le fuzz une fois réécrits. Les types 0
-Kobold, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion et 18 Ogre sont réécrits avec scénarios
-(`scenarios/enemy/{kobold,hellhound,gargoyle,beetle,scorpion,ogre}_scene*.txt`) ; les types 3 Bow Gnoll, 13 Axe Gnoll,
-11 Mud Golem, 14 Troll et 15 Goblin sont réécrits et validés par le fuzz seul.
+Aucun : les 29 types de la table 0x39a78 sont réécrits (le 17 est nul). Les types 0 Kobold, 6 Hellhound, 8 Gargoyle,
+9 GiantBeetle, 10 GiantScorpion et 18 Ogre ont des scénarios (`scenarios/enemy/{kobold,hellhound,gargoyle,beetle,scorpion,ogre}_scene*.txt`) ;
+les types 3 Bow Gnoll, 11 Mud Golem, 13 Axe Gnoll, 14 Troll, 15 Goblin et 27 WarMachine n'apparaissent dans aucune scène des
+niveaux 1 à 66 (`scenarios/cov/`, `enemy_scan`) : ils sont validés par le fuzz seul.
 
 ## 5. Validation
 
@@ -380,8 +392,6 @@ Kobold, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion et 18 Ogre sont
    familles ... 3500 100` et `DDSOM_COUVERTURE=<fichier>` pour vérifier les instructions de l'original vues.
    Les premiers écarts viennent presque toujours d'un `return` dans un bras de `match` qui saute la fin commune
    du sous-état (zone, ombre) ou d'un appel oublié.
-
-Taille du code restant (octets) : 27 WarMachine 5 500.
 
 ### Scénarios `scenarios/enemy/` et fuzz du troisième lot
 
