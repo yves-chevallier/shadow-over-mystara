@@ -33,6 +33,7 @@ Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms d
 | `enemy_troll/` | type 14 (Troll) : même charpente que le Goblin, avec un lancer d'objet et des sauts |
 | `enemy_gnoll/` | type 13 (Axe Gnoll) : `arrival`, `stance`, `attacks`, `hit` ; mêmes familles de gestes, hache et sauts sur la cible |
 | `enemy_bow/` | type 3 (Bow Gnoll, archer) : `arrival`, `stance`, `shoot`, `spawned`, `hit` |
+| `enemy_golem/` | type 11 (Mud Golem) : `control`, `attacks`, `moves`, `hit` |
 
 ## 2. Charpente commune
 
@@ -309,6 +310,17 @@ Bow Gnoll créé par un autre objet (`+0x42`) tire en place (`spawned.rs`), sans
 sa durée de vie `+0xa8` est écoulée. L'état à reprendre après un demi-tour est le long `+0xa0` (dont l'octet `+0xa2` est
 l'étape `+6`, remis à 0). Couverture : fuzz seulement.
 
+### Type 11 (0x67854) « Mud Golem » (h) — `enemy_golem/`
+
+Colosse dont le code est un amas de gestes. Créé près du bord droit de la caméra (`init` n'enchaîne pas sur l'état actif),
+il se tient debout (`+5` = 0 ou 2) en étant piloté par les touches du quatrième joueur (`A5+3` : croix, bouton 4 = coup,
+bouton 5 = saut) ; l'IA part des sous-états 4 (coups, 11 gestes `+6`), 6 et 8 (repli : bonds, accroupi, sortie d'écran), que
+la routine 0x690ce choisit dans la table 0x69146 d'après deux boîtes de portée. Étapes communes à plusieurs gestes :
+`next_anim` (0x6935c), `wait` (0x69346), `turn` (0x6899a, selon `+0xa6`). Particularités : les boutons sont relus dans D0
+après l'animation, qui l'écrase ; le test `cmpi.b #0x12,(0x7,A0)` de 0x68016 porte sur l'étape `+7` ; le drapeau de coup
+`+0x8f` (`hit_gate`, 0x68910) redirige les sous-états 6 et 8 et l'état touché. Plusieurs états de repli (0x2020600,
+0x1ed2a0) mènent à des tables trop courtes : ils sont réécrits tels quels. Couverture : fuzz seulement.
+
 ### Type 25 (0x76f0e) « DarkWarrior 1 » (h) — `enemy_warrior.rs`
 
 Bras du guerrier sombre : le créateur (0x76ec4, non réécrit) en engendre deux, variante 0 (gauche) et 1 (droite), liés
@@ -331,11 +343,11 @@ D0 laissé par la table de vitesses : l'angle `+0x2d` doit rester sous 0x40. Cou
 
 ## 4. Non réécrit (types encore en 68000)
 
-11 mud golem et 27 WarMachine. Aucun type restant n'apparaît dans les scènes 1 à 66 du parcours (`scenarios/cov/`,
+27 WarMachine. Aucun type restant n'apparaît dans les scènes 1 à 66 du parcours (`scenarios/cov/`,
 `enemy_scan`) : ils ne sont donc pas exercés par les scénarios, seulement par le fuzz une fois réécrits. Les types 0
 Kobold, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion et 18 Ogre sont réécrits avec scénarios
 (`scenarios/enemy/{kobold,hellhound,gargoyle,beetle,scorpion,ogre}_scene*.txt`) ; les types 3 Bow Gnoll, 13 Axe Gnoll,
-14 Troll et 15 Goblin sont réécrits et validés par le fuzz seul.
+11 Mud Golem, 14 Troll et 15 Goblin sont réécrits et validés par le fuzz seul.
 
 ## 5. Validation
 
@@ -369,7 +381,7 @@ Kobold, 6 Hellhound, 8 Gargoyle, 9 GiantBeetle, 10 GiantScorpion et 18 Ogre sont
    Les premiers écarts viennent presque toujours d'un `return` dans un bras de `match` qui saute la fin commune
    du sous-état (zone, ombre) ou d'un appel oublié.
 
-Tailles du code restant (octets) : 11 golem 7 000, 27 WarMachine 5 500.
+Taille du code restant (octets) : 27 WarMachine 5 500.
 
 ### Scénarios `scenarios/enemy/` et fuzz du troisième lot
 

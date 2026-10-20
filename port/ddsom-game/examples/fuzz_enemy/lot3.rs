@@ -268,6 +268,35 @@ fn etats(kind: u8) -> Option<&'static [&'static str]> {
             "4 4 0,2,4 0",
             "6 0 0 0",
         ],
+        11 => &[
+            "0 0 0 0",
+            // debout piloté par les touches, coups (4), gestes de repli (6, 8), touché
+            "2 0 0 0",
+            "2 0 2 2",
+            "2 2 0 0",
+            "2 2 2 2",
+            "2 4 0 2",
+            "2 4 2,4,6 10",
+            "2 4 8,12 12",
+            "2 4 10 6",
+            "2 4 14 18",
+            "2 4 16 20",
+            "2 4 18,20 8",
+            "2 6 0 2",
+            "2 6 2,4,6 12",
+            "2 6 8 8",
+            "2 6 10 2",
+            "2 8 0,6 2",
+            "2 8 2 2",
+            "2 8 4 10",
+            "4 0 0 0",
+            "4 2 0,2 0",
+            "4 4 0,2,4 0",
+            "4 6 0 0",
+            "4 8 0,2,4,6 0",
+            "4 10 0 0",
+            "6 0 0 0",
+        ],
         3 => &[
             "0 0 0 0",
             // arrivée (toutes variantes), debout, tirs (4 : +6 = 0 premier geste, 2 second geste), pas et sauts (6),
@@ -431,6 +460,7 @@ pub fn prep(b: &mut Bus, alea: &mut Alea, kind: u8, obj: u32, fresh: bool) {
         14 => troll(b, alea, obj, fresh),
         13 => gnoll(b, alea, obj, fresh),
         3 => archer(b, alea, obj, fresh),
+        11 => golem(b, alea, obj, fresh),
         _ => {}
     }
 }
@@ -1215,5 +1245,61 @@ fn archer(b: &mut Bus, alea: &mut Alea, obj: u32, _fresh: bool) {
     for off in [0x506u32, 0x556, 0x50e, 0x55e, 0x5a6, 0x5ae] {
         wr16(b, A5 + off, cam);
     }
+    wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+}
+
+fn golem(b: &mut Bus, alea: &mut Alea, obj: u32, _fresh: bool) {
+    wr8(b, obj + 0x2f, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x77, (alea.next() % 4) as u8);
+    // drapeau de coup reçu : presque toujours nul
+    wr8(b, obj + 0x8f, [0u8, 0, 0, 0, 1, 2, 3][alea.next() as usize % 7]);
+    wr8(b, obj + 0xa6, [0u8, 1, 2, 3][alea.next() as usize % 4]);
+    wr16(b, obj + 0xa2, [0u16, 1, 2, 5, 0x10][alea.next() as usize % 5]);
+    wr16(b, obj + 0xa4, alea.next() as u16);
+    wr8(b, obj + 0xa7, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x29, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x33, [0u8, 1, 4, 0x80][alea.next() as usize % 4]);
+    wr16(b, obj + 0x30, [1u16, 2, 5][alea.next() as usize % 3]);
+    wr16(b, obj + 0x32, [0u16, 0, 1, 0xffff][alea.next() as usize % 4]);
+    wr16(b, obj + 0x84, (alea.next() % 3) as u16);
+    wr8(b, obj + 0x86, (alea.next() % 4 == 0) as u8);
+    wr8(b, obj + 0x53, [0u8, 0, 0, 1, 0xff][alea.next() as usize % 5]);
+    for off in [0x6bu32, 0x6e, 0x71] {
+        wr8(b, obj + off, (alea.next() % 4) as u8);
+    }
+    for off in [0x72u32, 0x73] {
+        wr8(b, obj + off, (alea.next() % 5) as u8);
+    }
+    if alea.next() % 8 == 0 {
+        wr16(b, obj + 0x50, 0);
+    }
+    // l'objet qui l'a touché (+0x54) : un joueur existant, dont l'octet +0x57 donne le gel
+    let touche = 0x85de + 0x200 * (alea.next() % 4) as u16;
+    wr16(b, obj + 0x54, touche);
+    wr8(b, 0xff0000 | touche as u32 + 0x57, [0u8, 4, 8, 0x20][alea.next() as usize % 4]);
+    let (ox, oy) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
+    if alea.next() % 2 == 0 {
+        let offsets = [-0xd0i16, -0xa0, -0x68, -0x20, -8, 0, 0x30, 0x68, 0x100];
+        for j in 0..4u32 {
+            let q = 0xff85de + 0x200 * j;
+            let off = offsets[alea.next() as usize % offsets.len()] + (alea.next() % 0x12) as i16 - 9;
+            wr8(b, q, (alea.next() % 5 != 0) as u8);
+            wr16(b, q + 8, ox.wrapping_add(off as u16));
+            wr16(b, q + 0x10, oy.wrapping_add((alea.next() % 0x20) as u16).wrapping_sub(0x10));
+            wr8(b, q + 0x2c, 0x20 * (alea.next() % 2) as u8);
+            wr16(b, q + 0xc, 0);
+        }
+    }
+    // touches du quatrième joueur
+    wr8(b, A5 + 3, alea.next() as u8);
+    wr8(b, A5 + 0xf, alea.next() as u8);
+    wr8(b, A5 + 0x35, (alea.next() % 5) as u8);
+    wr8(b, A5 + 0x36, (alea.next() % 4 == 0) as u8);
+    let cam = ox.wrapping_sub(0x80 + (alea.next() % 0x180) as u16);
+    for off in [0x506u32, 0x556, 0x5a6, 0x5ae] {
+        wr16(b, A5 + off, cam);
+    }
+    wr16(b, A5 + 0x50a, oy);
+    wr16(b, A5 + 0x55a, oy);
     wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
 }

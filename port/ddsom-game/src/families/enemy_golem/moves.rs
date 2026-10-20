@@ -1,0 +1,373 @@
+//! Type 11, sous-états 6 (gestes de repli : bonds, accroupi, sortie d'écran) et 8 (attente, bond latéral).
+//! Chacun commence par le drapeau de coup `+0x8f` (`hit_gate`).
+
+use super::attacks::squat_begin;
+use super::*;
+
+pub(super) fn run_c(x: &mut Cx) {
+    if !hit_gate(x) {
+        return;
+    }
+    x.c.d[0] = x.u8(f::SUB2) as u32;
+    let step = x.u8(STEP);
+    match x.u8(f::SUB2) {
+        0 => {
+            if step == 0 {
+                x.add8(STEP, 2);
+                x.set16(TIMER, 0x10);
+                return mv(x, 0);
+            }
+            countdown_stance(x);
+        }
+        2 => back_hop(x, step),
+        4 => forward_hop(x, step),
+        6 => punch_hop(x, step),
+        8 => squat_again(x, step),
+        10 => leave(x),
+        _ => {}
+    }
+}
+
+/// 0x68080 : minuterie `+0xa2` puis debout.
+fn countdown_stance(x: &mut Cx) {
+    let n = x.u16(TIMER).wrapping_sub(1);
+    x.set16(TIMER, n);
+    if n == 0 {
+        set_state_long(x, STANCE);
+    }
+}
+
+/// 0x680ee : attend la clé d'animation.
+fn wait_key(x: &mut Cx) {
+    x.anim_step();
+    if x.u8(KEY) == 0 {
+        return;
+    }
+    x.add8(STEP, 2);
+}
+
+/// 0x68146 : attend la fin de l'animation, puis debout.
+fn end_stance(x: &mut Cx) {
+    x.anim_step();
+    if (x.u16(ANIM_END) as i16) < 0 {
+        set_state_long(x, STANCE);
+    }
+}
+
+/// +6 = 2 : bond en arrière (vitesses latérales ±0x200).
+fn back_hop(x: &mut Cx, step: u8) {
+    match step {
+        0 => next_anim(x),
+        2 => wait(x),
+        4 => {
+            if x.u8(GROUP) != 0 {
+                x.set16(0xa8, 0);
+                x.set8(f::SUB2, 8);
+                return squat_begin(x);
+            }
+            x.add8(STEP, 2);
+            x.set16(SPEED_X2, 0x200);
+            if rand_and(x, 1) != 0 {
+                negate(x, SPEED_X2);
+            }
+            x.set16(SPEED_Y2, 0);
+            x.set16(SPEED_Z, 0x400);
+            x.set16(GRAVITY, -0x80i16 as u16);
+            mv(x, 3);
+        }
+        6 => wait_key(x),
+        8 => {
+            x.anim_step();
+            x.call(sub::MOVE_YZ);
+            if (x.u16(SPEED_Z) as i16) < 0 {
+                x.add8(STEP, 2);
+                x.set16(ANIM_TIME, 1);
+            }
+        }
+        10 => {
+            x.anim_step();
+            x.call(sub::MOVE_YZ);
+            if x.u32(HEIGHT) as i32 > 0 {
+                return;
+            }
+            x.add8(STEP, 2);
+            x.set32(HEIGHT, 0);
+            x.set16(ANIM_TIME, 1);
+        }
+        12 => end_stance(x),
+        _ => {}
+    }
+}
+
+/// +6 = 4 : bond en avant (vitesse ±0x200).
+fn forward_hop(x: &mut Cx, step: u8) {
+    match step {
+        0 => next_anim(x),
+        2 => wait(x),
+        4 => {
+            if x.u8(GROUP) != 0 {
+                x.set8(f::SUB2, 8);
+                let r = rand_and(x, 1);
+                x.set8(0xa9, (r * 2) as u8);
+                x.set8(0xa8, 0xff);
+                return squat_begin(x);
+            }
+            x.add8(STEP, 2);
+            x.set16(SPEED_X, 0x200);
+            if x.u8(f::FLIP) != 0 {
+                negate(x, SPEED_X);
+            }
+            x.set16(SPEED_Y, 0);
+            x.set16(SPEED_Z, 0x800);
+            x.set16(GRAVITY, -0x80i16 as u16);
+            mv(x, 3);
+        }
+        6 => wait_key(x),
+        8 => {
+            x.anim_step();
+            x.call(sub::MOVE_XZ);
+            if (x.u16(SPEED_Z) as i16) < 0 {
+                x.add8(STEP, 2);
+                x.set16(ANIM_TIME, 1);
+            }
+        }
+        10 => {
+            x.anim_step();
+            x.call(sub::MOVE_XZ);
+            if x.u32(HEIGHT) as i32 > 0 {
+                return;
+            }
+            x.add8(STEP, 2);
+            x.set32(HEIGHT, 0);
+            x.set16(ANIM_TIME, 1);
+        }
+        12 => end_stance(x),
+        _ => {}
+    }
+}
+
+/// +6 = 6 : bond avec coup de poing en l'air.
+fn punch_hop(x: &mut Cx, step: u8) {
+    match step {
+        0 => next_anim(x),
+        2 => wait(x),
+        4 => {
+            x.add8(STEP, 2);
+            x.set16(SPEED_X, 0x200);
+            if x.u8(f::FLIP) != 0 {
+                negate(x, SPEED_X);
+            }
+            x.set16(SPEED_Y, 0);
+            x.set16(SPEED_Z, 0x800);
+            x.set16(GRAVITY, -0x80i16 as u16);
+            strike(x, 2);
+        }
+        6 => {
+            x.anim_step();
+            if x.u8(KEY) == 0 {
+                return;
+            }
+            x.add8(STEP, 2);
+        }
+        8 => {
+            x.call(sub::MOVE_XZ);
+            x.anim_step();
+            if (x.u16(SPEED_Z) as i16) < 0 {
+                x.add8(STEP, 2);
+                x.set16(ANIM_TIME, 1);
+                x.set8(KEY, 0);
+            }
+        }
+        10 => {
+            x.call(sub::MOVE_XZ);
+            x.anim_step();
+            if x.u32(HEIGHT) as i32 > 0 {
+                return;
+            }
+            x.set32(HEIGHT, 0);
+            x.set16(ANIM_TIME, 1);
+            x.add8(STEP, 2);
+        }
+        12 => {
+            x.anim_step();
+            if (x.u8(ANIM_END) as i8) < 0 {
+                set_state_long(x, 0x1ed2a0);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// +6 = 8 : accroupi (tirage ou profil), puis retour debout.
+fn squat_again(x: &mut Cx, step: u8) {
+    match step {
+        0 => next_anim(x),
+        2 => wait(x),
+        4 => {
+            let r = rand_and(x, 1);
+            x.set8(0xa9, (r * 2) as u8);
+            x.set8(0xa8, 0xff);
+            squat_begin(x);
+        }
+        6 => {
+            if x.u8(KEY) != 0 {
+                let n = x.u16(TIMER).wrapping_sub(1);
+                x.set16(TIMER, n);
+                if (n as i16) >= 0 {
+                    return;
+                }
+                x.add8(STEP, 2);
+                x.set16(ANIM_TIME, 1);
+                let group = x.u8(GROUP) as i8 as i32 as u32;
+                x.c.d[0] = group;
+                let v = x.rom8(0x682e8u32.wrapping_add(group));
+                x.set8(0x68, v);
+            }
+            x.anim_step();
+        }
+        8 => end_stance(x),
+        _ => {}
+    }
+}
+
+/// +6 = 10 : sortie d'écran à pied (vitesse −0x230 vers le bord le plus proche), puis disparition.
+fn leave(x: &mut Cx) {
+    if x.u8(STEP) == 0 {
+        x.set16(SPEED_X, -0x230i16 as u16);
+        x.set8(f::FLIP, 0);
+        let d = x.a5_u16(0x506).wrapping_sub(x.u16(X));
+        if (d as i16) >= 0xc0 {
+            // `blt` non pris : à droite du bord, il part dans l'autre sens
+            negate(x, SPEED_X);
+            x.set8(f::FLIP, 0x20);
+        }
+        x.add8(STEP, 2);
+        return mv(x, 0);
+    }
+    if (x.u8(KEY) as i8) >= 0 {
+        x.call(sub::MOVE_X);
+    }
+    x.anim_step();
+    let d = x.u16(X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);
+    if d > 0x1a0 {
+        x.call(call::REMOVE);
+        set_state_long(x, st::DEAD_LONG);
+    }
+}
+
+// --- sous-état 8 --------------------------------------------------------------------------------------
+
+pub(super) fn run_d(x: &mut Cx) {
+    if !hit_gate(x) {
+        return;
+    }
+    x.c.d[0] = x.u8(f::SUB2) as u32;
+    let step = x.u8(STEP);
+    match x.u8(f::SUB2) {
+        0 | 6 => {
+            if step == 0 {
+                x.add8(STEP, 2);
+                x.set16(TIMER, 0x1e);
+                return mv(x, 0);
+            }
+            countdown_stance(x);
+        }
+        2 => match step {
+            0 => {
+                x.add8(STEP, 2);
+                restart_walk(x);
+                x.set16(TIMER, 0x20);
+            }
+            2 => {
+                x.anim_step();
+                if (x.u8(KEY) as i8) < 0 {
+                    return;
+                }
+                let n = x.u16(TIMER).wrapping_sub(1);
+                x.set16(TIMER, n);
+                if n != 0 {
+                    x.call(sub::MOVE_TABLE_XY);
+                    let d = x.u16(TIMER2).wrapping_sub(x.u16(X)).wrapping_add(0x30);
+                    if d < 0x60 {
+                        return;
+                    }
+                }
+                set_state_long(x, STANCE);
+            }
+            _ => {}
+        },
+        4 => sidestep(x, step),
+        _ => {}
+    }
+}
+
+/// +6 = 4 : pas latéral en profondeur ou bond latéral (au hasard).
+fn sidestep(x: &mut Cx, step: u8) {
+    match step {
+        0 => {
+            x.add8(STEP, 2);
+            let mut angle = 0u8;
+            if x.u16(f::TARGET) != 0 {
+                let target = load_target(x);
+                if x.u16(DEPTH) < target.u16(x.b, DEPTH) {
+                    angle = 0x10;
+                }
+            }
+            x.set8(ANGLE, angle);
+            if rand_and(x, 1) != 0 {
+                // bond latéral
+                x.set8(STEP, 4);
+                x.set16(SPEED_X2, 0x300);
+                if x.u8(ANGLE) != 0 {
+                    negate(x, SPEED_X2);
+                }
+                x.set16(SPEED_Y2, 0);
+                x.set16(SPEED_Z, 0x400);
+                x.set16(GRAVITY, -0x80i16 as u16);
+                return mv(x, 3);
+            }
+            x.set16(TIMER, 0x16);
+            let depth = x.u16(DEPTH);
+            x.set16(TIMER2, depth);
+            x.set32(0x4c, 0x1c74b6);
+            mv(x, 0);
+        }
+        2 => {
+            x.anim_step();
+            if (x.u8(KEY) as i8) < 0 {
+                return;
+            }
+            let n = x.u16(TIMER).wrapping_sub(1);
+            x.set16(TIMER, n);
+            if n != 0 {
+                x.call(sub::MOVE_TABLE_XY);
+                let d = x.u16(TIMER2).wrapping_sub(x.u16(DEPTH)).wrapping_add(0x20);
+                if d < 0x40 {
+                    return;
+                }
+            }
+            set_state_long(x, STANCE);
+        }
+        4 => wait_key(x),
+        6 => {
+            x.anim_step();
+            x.call(sub::MOVE_YZ);
+            if (x.u16(SPEED_Z) as i16) < 0 {
+                x.add8(STEP, 2);
+                x.set16(ANIM_TIME, 1);
+            }
+        }
+        8 => {
+            x.anim_step();
+            x.call(sub::MOVE_YZ);
+            if x.u32(HEIGHT) as i32 > 0 {
+                return;
+            }
+            x.add8(STEP, 2);
+            x.set32(HEIGHT, 0);
+            x.set16(ANIM_TIME, 1);
+        }
+        10 => end_stance(x),
+        _ => {}
+    }
+}
