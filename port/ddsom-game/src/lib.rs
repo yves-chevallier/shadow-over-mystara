@@ -12,6 +12,7 @@ pub mod camera_modes;
 pub mod chemin;
 pub mod config;
 pub mod credits;
+pub mod demarrage;
 pub mod dispatch;
 pub mod ecran_credits;
 pub mod effects_aids;
@@ -214,6 +215,7 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(scene::exit::NATIVES)
         .chain(modes::natives())
         .chain(sound::wrappers_natifs())
+        .chain(demarrage::NATIVES)
         .chain(kernel::NATIVES)
         .chain(vblank::NATIVES)
         .chain(taches::natives())

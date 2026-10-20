@@ -26,6 +26,12 @@ fn ignored(word: usize) -> bool {
     a == 0x58 || (0x0900..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
 }
 
+/// Images du démarrage (1 à 5) : le code d'origine y teste encore la RAM (`ddsom_game::demarrage`). Ce test est non
+/// destructif mais, à la fin d'une image, le mot en cours de test peut porter un motif (0x8888, 0x4444...) au lieu de sa
+/// valeur ; la version native n'a pas d'état intermédiaire. Pendant ces images, un mot de différence au plus est toléré,
+/// en RAM de travail ou en GFX RAM ; tout le reste est comparé. En pratique seules les images 1 et 2 (GFX RAM) en ont un.
+const DEMARRAGE: usize = 5;
+
 fn first_diff(a: &[u16], b: &[u16]) -> Option<usize> {
     a.iter().zip(b).position(|(x, y)| x != y)
 }
@@ -83,11 +89,13 @@ fn main() {
             }
         }
         let ram: Vec<usize> = (0..0x8000).filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !ignored(i)).collect();
+        let gfx = ma.bus.gfxram.iter().zip(&mb.bus.gfxram).filter(|(x, y)| x != y).count();
+        let mot_en_test = f < DEMARRAGE && ram.len() + gfx <= 1;
         let mut what = Vec::new();
-        for &i in ram.iter().take(10) {
+        for &i in ram.iter().take(10).filter(|_| !mot_en_test) {
             what.push(format!("ram {:06x} : {:04x} au lieu de {:04x}", 0xff0000 + 2 * i, ma.bus.ram[i], mb.bus.ram[i]));
         }
-        if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram) {
+        if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram).filter(|_| !mot_en_test) {
             what.push(format!("gfxram {:06x} : {:04x} au lieu de {:04x}", 0x900000 + 2 * i, ma.bus.gfxram[i], mb.bus.gfxram[i]));
         }
         if let Some(i) = first_diff(&ma.obj_buffer, &mb.obj_buffer) {

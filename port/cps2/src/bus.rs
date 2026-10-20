@@ -50,6 +50,8 @@ pub struct Cps2Bus {
     pub raster_reload: [u16; 3],
     /// Ligne courante (pour la lecture des compteurs raster).
     pub scanline: u32,
+    /// Image en cours depuis la mise sous tension (`Machine::frame`) : avec `scanline`, position du faisceau.
+    pub frame: u64,
     /// Le Z80 est maintenu en reset tant que le bit 3 de 804041 vaut 0.
     pub z80_running: bool,
     /// Premier cycle CPU où une interruption peut être levée (fin d'image, ou fin de ligne si les
@@ -80,6 +82,7 @@ impl Cps2Bus {
             raster_counter: [0; 3],
             raster_reload: [0x1ff, 0x1ff, 0],
             scanline: 0,
+            frame: 0,
             // le Z80 démarre à la mise sous tension ; le 68000 le met en reset au boot
             z80_running: true,
             irq_horizon: 0,
