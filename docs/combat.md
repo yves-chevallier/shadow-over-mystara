@@ -107,6 +107,20 @@ Contrat exact (registres, drapeaux, durée), écrites en double mode (réel / à
 Joueur ciblable : actif (`+0`), non masqué (bit 1 de `+1`), `+4` < 4, `+0x182` nul (0x43ae : un
 `+0x182` non nul dispense du test « masqué »).
 
+Aides réécrites ensuite dans `ai_aids.rs` (simples natives, registres de sortie limités à ce que les
+appelants relisent) :
+
+| adresse | rôle |
+|---|---|
+| 0x43bc | cible selon le critère D0 imposé par l'appelant (0 proche, 2 PV bas, 4 éloignée), règle de 0x43ae |
+| 0x788c, 0x79f6, 0x79ce | tirages d'attitude : `+0x6b` (ligne `+0x6a`), `+0x6e` (ligne `+0x6d`, ou 1 hors de l'écran), précédé pour 0x79ce d'un bit tiré dans le masque de la ligne `+0x6c` (indexé par FFFF92) |
+| 0xb048 / 0xb068 | parade de la victime A1 (sait parer `+0x67`, au sol, face à l'agresseur ; bit du masque `+0x68` / `+0x69`) |
+| 0xf118 | `+0x84/+0x85` : 1 hors de l'écran, sinon octet tiré dans la ligne `+0x8e` (bloc par paire d'images) |
+| 0x10112 | `+0x68` = 8, ou selon `A5+0x5a` et le nombre de joueurs |
+| 0x1172e, 0x11a36 | jeux de débris (EFFCT 0x32 variante 0xc) ; une ligne de table n'est consommée que si l'effet a pu être créé |
+| 0xb648, 0xb780, 0xe2f6 | butin : objet unique (`+0x9d`), butin et trésor (ligne `+0x80`, un ou deux tirages selon le nombre de joueurs) |
+| 0xe7fa | point de marche le plus proche autour de la cible, numéro mémorisé en `+0x99` |
+
 ## 7. Validation
 
 `tools/validate_all.sh 30000` : 8 scénarios VALIDE, 0 écart (59 222 appels de `combat_update`, durée des
