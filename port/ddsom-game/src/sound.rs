@@ -84,8 +84,47 @@ mod z80 {
     pub const VERROU: u32 = BASE + 0x1ffd;
 }
 
-/// Affichage des verrous (menu de test) : routine d'origine appelée en queue du VBLANK.
-const AFFICHAGE_VERROUS: u32 = 0xedf80;
+/// Affichage des verrous du Z80 (écran de débogage), en queue du VBLANK : actif seulement si le mot de la
+/// ROM en 0xc0 (drapeau de débogage) et le mot `A5+0x7fc6` sont non nuls ; chaque octet des verrous
+/// 0x618001... s'écrit en hexadécimal (0x29d78, deux chiffres) à une adresse de la couche de texte.
+const DEBUG_FLAG: u32 = 0xc0;
+const DEBUG_DISPLAY: u32 = 0x7fc6;
+const HEX_BYTE: u32 = 0x29d78;
+/// (adresse de la couche de texte si elle change, verrou lu), dans l'ordre d'affichage.
+const LATCH_DISPLAY: [(Option<u32>, u32); 11] = [
+    (Some(0x9135cc), 0x618001),
+    (None, 0x618003),
+    (Some(0x9135d0), 0x618007),
+    (None, 0x618009),
+    (Some(0x9136d4), 0x61800d),
+    (Some(0x9136d8), 0x61800f),
+    (Some(0x9136dc), 0x618011),
+    (Some(0x9135e0), 0x618013),
+    (None, 0x618015),
+    (Some(0x9135e4), 0x618017),
+    (None, 0x618019),
+];
+
+fn afficher_verrous(c: &mut Cpu, b: &mut Cps2Bus) {
+    let flag = rd16(b, DEBUG_FLAG);
+    c.flags_logic(flag as u32, Size::Word);
+    if flag == 0 {
+        return;
+    }
+    let shown = rd16(b, a5(c, DEBUG_DISPLAY));
+    c.flags_logic(shown as u32, Size::Word);
+    if shown == 0 {
+        return;
+    }
+    c.d[1] = 2;
+    for (at, latch) in LATCH_DISPLAY {
+        if let Some(at) = at {
+            c.a[1] = at;
+        }
+        c.d[0] = c.d[0] & !0xff | rd8(b, latch) as u32;
+        crate::call(c, b, HEX_BYTE);
+    }
+}
 
 fn a5(c: &Cpu, off: u32) -> u32 {
     c.a[5].wrapping_add(off)
@@ -434,7 +473,7 @@ fn envoyer_au_z80(c: &mut Cpu, b: &mut Cps2Bus) {
         c.d[0] = c.d[0] & 0xffff_0000 | lecture as u32;
     }
     // l'original se termine par un JMP vers l'affichage des verrous
-    crate::call(c, b, AFFICHAGE_VERROUS);
+    afficher_verrous(c, b);
     rts(c, b);
 }
 

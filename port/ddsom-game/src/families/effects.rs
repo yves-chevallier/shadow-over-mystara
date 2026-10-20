@@ -1,5 +1,5 @@
 //! Famille EFFCT (classe 0xE) : effets visuels (étincelles, éclats, bannières, éléments d'interface
-//! animés). Dispatch `0x39cba`, table des types `0x39ce0` (64 types, 38 emplacements de 0x60 octets).
+//! animés). Dispatch `0x39cba`, table des types `0x39ce0` (92 types, 38 emplacements de 0x60 octets).
 //!
 //! Tous les gestionnaires ont la même charpente : l'octet d'état `+4` choisit, par une table de mots
 //! relatifs, l'initialisation (0), l'état actif (2) ou la libération (4). Les types portés ici sont

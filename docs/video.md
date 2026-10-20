@@ -114,13 +114,25 @@ adresse par A0. La boucle monde `0x33e20` copie la position de la caméra 1 en `
 | `+0x3c` | drapeau remis à zéro à chaque image ; `+0x3e` : défilement gelé |
 | `+0x40` | pas de bande par 256 pixels de y (mot lu dans une table par scène) |
 
-Chaque image : script de mode (code d'origine, par `jsr` calculé) puis **suite native** `0x2f81c` (caméra 1 :
-gel, butées de la cible, puis `0x2f86e`) ou `0x328a8` (caméra 2). `0x2f86e` calcule les écarts et, tant qu'il
+Chaque image (`camera_modes.rs`, natives `0x2ede0` et `0x32108`) : au premier appel d'une scène,
+initialisation propre à la scène (tables en ROM `0x2f0ee`, `0x2f008`, `0x2ef22`, `0x2f332`, `0x2f1d4`,
+`0x2f3aa`, `0x2f2ba` ; `0x32650`, `0x32484` ; chargement de blocs de tuiles pour quelques scènes) ; ensuite le
+**script du mode** (`+0x20`, écrit en Rust : suivi des joueurs par fenêtre `follow`, aiguillage par scène
+`stage_script` = `0x309e0` / `0x332c0`, défilements par ligne, secousses, portails...), puis la **suite
+native** (`scroll::after_mode` : gel, butées de la cible ; `0x2f86e` / `0x328a8` : recopie du décor).
+`0x2f86e` calcule les écarts et, tant qu'il
 dépasse un pas (16 pixels, 32 pour la caméra 2), recopie une colonne (19 / 11 cases) ou une ligne (35 / 15
 cases) de la carte du décor dans la couche. Ordre des tests : droite, gauche, bas, haut ; après un pas,
 l'original reprend au test du même sens. Quirks conservés : le pas à gauche / en haut s'arrête si la position
 dessinée devient négative (caméra 1) ou ne dépasse plus un pas (caméra 2, `bls`) ; la caméra 2 ignore une
 ligne vers le haut quand `y <= 0`.
+
+Suivi des joueurs : une fenêtre `(far, near, back)` autour de l'étendue (plus grande, plus petite valeur) d'une
+grandeur des joueurs retenus ; la caméra avance de 6 pixels au plus quand le plus avancé sort de la fenêtre
+(sans perdre le moins avancé) et recule quand le moins avancé est trop en arrière. Fenêtres : x joueurs
+`(0xf0, 0x20, 0x70)` ou étroite `(0xf0, 0x5c, 0x5c)`, x objets `(0x160, 0x1c, 0x1c)`, profondeur
+`(0x70, 0x30, 0x30)` ou basse `(0x90, 0x38, 0x38)`, objet suivi `(0x88, 0x78, 0x78)` (x : variante « à
+saccades » `0x30f6a`, pas de 16 au plus).
 
 ### Carte du décor
 
@@ -156,6 +168,6 @@ drapeaux sont relus par les scripts de mode).
 
 ### Non réécrit
 
-Initialisation propre à chaque scène (`0x2ede0` première image, `0x32108` idem), les ~31 scripts de mode de la caméra 1
-(table `0x2f780`, suivis par `0x309e0`, `0x30300`, `0x30308`, `0x305fc`, `0x30fc8`, `0x31018`, `0x3147c`,
-`0x31616`...), ceux de la caméra 2, `0x2a52`, `0x33062`/`0x33290`/`0x332c0` (parallaxe avec saut calculé par scène).
+Plus rien dans B1 pour les deux caméras. Restent en code d'origine, hors caméras : les routines de parallaxe
+`0x33062`... (inutilisées depuis la table de la caméra 2, qui est maintenant en Rust) sauf celles que des décors
+appellent encore (`0x33178`, `0x33196`, `0x331e8`, `0x3326c`, natives).

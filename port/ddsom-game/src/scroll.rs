@@ -24,7 +24,7 @@ use crate::vue::Vue;
 use crate::Native;
 
 /// Champs de l'enregistrement caméra (offsets depuis son adresse).
-mod cam {
+pub(crate) mod cam {
     /// Position cible.
     pub const X: u32 = 0x08;
     pub const Y: u32 = 0x0c;
@@ -53,8 +53,8 @@ mod cam {
 }
 
 /// Enregistrements des caméras 1 et 2 (offsets depuis A5).
-const CAMERA_1: u32 = 0x4fe;
-const CAMERA_2: u32 = 0x54e;
+pub(crate) const CAMERA_1: u32 = 0x4fe;
+pub(crate) const CAMERA_2: u32 = 0x54e;
 const STAGE: u32 = 0x34;
 const TERRAIN_VIEW: u32 = 0x37;
 const MAP: u32 = 0x1f9ba0;
@@ -467,54 +467,24 @@ fn camera<'a>(x: Exec<'a>, c: &Cpu) -> Camera1<'a> {
     Camera1 { x, a5: c.a[5], cam: c.a[0], d4: None }
 }
 
-fn after_mode_run(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2f81c : suite du script de mode de la caméra 1 (A0), après le script.
+pub(crate) fn after_mode(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut cam = camera(Exec::real(b), c);
     cam.after_mode();
     if let Some(d4) = cam.d4 {
         c.d[4] = d4;
     }
-    rts(c, b);
 }
 
-fn after_mode_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut cam = camera(Exec::simulated(b, 0x2f81c, HELPERS), c);
-    cam.after_mode();
-    cam.x.finish()
-}
-
-fn draw_run(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2f86e : écarts cible - dessiné de la caméra 1 (A0), puis recopie des colonnes et lignes manquantes.
+pub(crate) fn draw1(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut cam = camera(Exec::real(b), c);
     cam.draw();
     if let Some(d4) = cam.d4 {
         c.d[4] = d4;
     }
-    rts(c, b);
 }
 
-fn draw_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut cam = camera(Exec::simulated(b, 0x2f86e, HELPERS), c);
-    cam.draw();
-    cam.x.finish()
-}
-
-pub const CAMERA1_AFTER_MODE: Native = Native {
-    entry: 0x2f81c,
-    name: "camera1_suite_mode",
-    cost: after_mode_cost,
-    run: after_mode_run,
-    touches_sound: false,
-    outputs: 0,
-    exact_cost: true,
-};
-pub const CAMERA1_DRAW: Native = Native {
-    entry: 0x2f86e,
-    name: "camera1_decor",
-    cost: draw_cost,
-    run: draw_run,
-    touches_sound: false,
-    outputs: 0,
-    exact_cost: true,
-};
 
 // ---------------------------------------------------------------------------------------------
 // Caméra 2 : décor de la couche de défilement 3 (cases de 32x32 pixels, pas de 32 pixels)
@@ -793,30 +763,15 @@ fn camera2<'a>(x: Exec<'a>, c: &Cpu) -> Camera2<'a> {
     Camera2 { x, a5: c.a[5], cam: c.a[0], d4: None }
 }
 
-fn draw2_run(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x328a8 : écarts cible - dessiné de la caméra 2 (A0), puis recopie des colonnes et lignes manquantes.
+pub(crate) fn draw2(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut cam = camera2(Exec::real(b), c);
     cam.draw();
     if let Some((value, mask)) = cam.d4 {
         c.d[4] = c.d[4] & !mask | value;
     }
-    rts(c, b);
 }
 
-fn draw2_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut cam = camera2(Exec::simulated(b, 0x328a8, HELPERS_3), c);
-    cam.draw();
-    cam.x.finish()
-}
-
-pub const CAMERA2_DRAW: Native = Native {
-    entry: 0x328a8,
-    name: "camera2_decor",
-    cost: draw2_cost,
-    run: draw2_run,
-    touches_sound: false,
-    outputs: 0,
-    exact_cost: true,
-};
 
 
 // ---------------------------------------------------------------------------------------------
@@ -833,7 +788,7 @@ const OBJECT_Y: u32 = 0x0c;
 const OBJECT_DRAWN_X: u32 = 0x10;
 
 /// Défilement de l'image sur l'axe 0 (x) ou 1 (y).
-fn scroll_delta(b: &mut Cps2Bus, a5: u32, axis: usize) -> i32 {
+pub(crate) fn scroll_delta(b: &mut Cps2Bus, a5: u32, axis: usize) -> i32 {
     crate::mem::rd32(b, a5 + SCROLL[axis]).wrapping_sub(crate::mem::rd32(b, a5 + PREVIOUS_SCROLL[axis])) as i32
 }
 
@@ -846,29 +801,26 @@ fn move_object(c: &mut Cpu, b: &mut Cps2Bus, field: u32, d: i32) {
 }
 
 /// 0x33178 : le décor suit le quart du défilement en x et la moitié en y.
-fn parallax_quarter(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn parallax_quarter(c: &mut Cpu, b: &mut Cps2Bus) {
     let (dx, dy) = (scroll_delta(b, c.a[5], 0), scroll_delta(b, c.a[5], 1));
     move_object(c, b, OBJECT_X, dx >> 2);
     move_object(c, b, OBJECT_Y, dy >> 1);
-    rts(c, b);
 }
 
 /// 0x33196 : le décor suit la moitié du défilement en x et les trois quarts en y.
-fn parallax_three_quarters(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn parallax_three_quarters(c: &mut Cpu, b: &mut Cps2Bus) {
     let (dx, dy) = (scroll_delta(b, c.a[5], 0), scroll_delta(b, c.a[5], 1));
     move_object(c, b, OBJECT_X, dx >> 1);
     move_object(c, b, OBJECT_Y, (dy >> 1) + (dy >> 2));
-    rts(c, b);
 }
 
 /// 0x331e8 / 0x3326c : le décor avance de 6 / 3 pixels par image, sa position dessinée suit.
-fn creep(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
+pub(crate) fn creep(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
     let old = crate::mem::rd16(b, c.a[0] + OBJECT_X);
     let x = crate::ops::add(c, pixels as u32, old as u32, Size::Word) as u16;
     crate::mem::wr16(b, c.a[0] + OBJECT_X, x);
     crate::mem::wr16(b, c.a[0] + OBJECT_DRAWN_X, x);
     crate::ops::logique(c, x as u32, Size::Word);
-    rts(c, b);
 }
 
 const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
@@ -877,22 +829,34 @@ const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -
 
 pub const PARALLAX_QUARTER: Native = Native {
     cost: |_, b| crate::video::ligne_droite(b, 0x33178),
-    ..leaf(0x33178, "decor_parallaxe_quart", parallax_quarter)
+    ..leaf(0x33178, "decor_parallaxe_quart", |c, b| {
+        parallax_quarter(c, b);
+        rts(c, b)
+    })
 };
 pub const PARALLAX_THREE_QUARTERS: Native = Native {
     cost: |_, b| crate::video::ligne_droite(b, 0x33196),
-    ..leaf(0x33196, "decor_parallaxe_trois_quarts", parallax_three_quarters)
+    ..leaf(0x33196, "decor_parallaxe_trois_quarts", |c, b| {
+        parallax_three_quarters(c, b);
+        rts(c, b)
+    })
 };
 pub const CREEP_6: Native = Native {
     cost: |_, b| crate::video::ligne_droite(b, 0x331e8),
-    ..leaf(0x331e8, "decor_avance_6", |c, b| creep(c, b, 6))
+    ..leaf(0x331e8, "decor_avance_6", |c, b| {
+        creep(c, b, 6);
+        rts(c, b)
+    })
 };
 pub const CREEP_3: Native = Native {
     cost: |_, b| crate::video::ligne_droite(b, 0x3326c),
-    ..leaf(0x3326c, "decor_avance_3", |c, b| creep(c, b, 3))
+    ..leaf(0x3326c, "decor_avance_3", |c, b| {
+        creep(c, b, 3);
+        rts(c, b)
+    })
 };
 
-pub const NATIVES: &[Native] = &[FOLLOW_PLAYERS_Y, UPDATE_CAMERAS, CAMERA1_AFTER_MODE, CAMERA1_DRAW, CAMERA2_DRAW, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
+pub const NATIVES: &[Native] = &[FOLLOW_PLAYERS_Y, UPDATE_CAMERAS, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
 
 // ---------------------------------------------------------------------------------------------
 // Suivi vertical des joueurs et mise à jour des deux caméras
