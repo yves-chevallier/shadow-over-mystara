@@ -1,6 +1,7 @@
 //! Accès typés à la mémoire du jeu.
 
 use cps2::Cps2Bus;
+use m68k::decode::Fetch;
 use m68k::Bus;
 
 /// Base de la RAM de travail adressée par A5 dans tout le jeu.
@@ -79,4 +80,20 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
     if a.objram_bank != b.objram_bank {
         out.push("objram_bank".into());
     }
+}
+
+/// Mot de l'espace programme (lecture relative au PC : le programme déchiffré, pas les données).
+pub fn prog16(b: &mut Cps2Bus, a: u32) -> u16 {
+    b.fetch16(a)
+}
+
+/// Long de l'espace programme (voir `prog16`).
+pub fn prog32(b: &mut Cps2Bus, a: u32) -> u32 {
+    (prog16(b, a) as u32) << 16 | prog16(b, a + 2) as u32
+}
+
+/// Octet de l'espace programme (voir `prog16`).
+pub fn prog8(b: &mut Cps2Bus, a: u32) -> u8 {
+    let word = b.fetch16(a & !1);
+    if a & 1 == 0 { (word >> 8) as u8 } else { word as u8 }
 }

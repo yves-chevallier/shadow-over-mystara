@@ -97,6 +97,38 @@ fn print(c: &mut Cpu, b: &mut Cps2Bus) {
     finish(c, b, end, x);
 }
 
+/// 0x0d32 : efface un texte (mêmes descripteurs que `print`) : chaque caractère devient un espace.
+fn erase(c: &mut Cpu, b: &mut Cps2Bus) {
+    let mut s = Script { b, at: c.a[4] };
+    let (col, row) = (s.byte(), s.byte());
+    let _ = s.word(); // attributs : sans effet
+    let (mut line, mut x) = cell_signed(col, row);
+    let mut at = line;
+    loop {
+        match s.byte() {
+            b'@' => break,
+            0xff => {
+                let n = s.byte();
+                x = n == 0; // subq.b #1
+                for _ in 0..n.wrapping_sub(1) as u16 + 1 {
+                    put(s.b, at, BLANK, 0);
+                    at += COLUMN;
+                }
+            }
+            b'/' => {
+                line += ROW;
+                at = line;
+            }
+            _ => {
+                put(s.b, at, BLANK, 0);
+                at += COLUMN;
+            }
+        }
+    }
+    let end = s.at;
+    finish(c, b, end, x);
+}
+
 /// 0x0dca : comme `print`, mais '_' passe à la ligne et les espaces laissent le fond intact.
 fn print_over(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut s = Script { b, at: c.a[4] };
@@ -221,24 +253,28 @@ fn clear_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
     finish(c, b, end, x);
 }
 
+/// Efface un rectangle de la couche (colonne, ligne, largeur, hauteur) avec des espaces. Une ligne
+/// d'au moins 0x20 est ramenée dans la couche.
+pub fn clear_cells(b: &mut Cps2Bus, col: u8, row: u8, width: u8, height: u8) {
+    let row = if row >= 0x20 { row - 0x20 } else { row };
+    let origin = LAYER + ((col as u32) << 7) + ((row as u32) << 2);
+    for x in 0..width.wrapping_sub(1) as u32 + 1 {
+        for y in 0..height.wrapping_sub(1) as u32 + 1 {
+            put(b, origin + x * COLUMN + y * ROW, BLANK, 0);
+        }
+    }
+}
+
 /// 0x1324 : efface un rectangle (colonne, ligne, largeur, hauteur) avec des espaces.
 /// A4 n'avance que de 3 octets (la hauteur est lue sans post-incrément).
 fn clear_box(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut s = Script { b, at: c.a[4] };
     let col = s.byte();
-    let mut row = s.byte();
-    if row >= 0x20 {
-        row -= 0x20;
-    }
+    let row = s.byte();
     let width = s.byte();
     let height = rd8(s.b, s.at);
     let end = s.at;
-    let origin = LAYER + ((col as u32) << 7) + ((row as u32) << 2);
-    for x in 0..width.wrapping_sub(1) as u32 + 1 {
-        for y in 0..height.wrapping_sub(1) as u32 + 1 {
-            put(s.b, origin + x * COLUMN + y * ROW, BLANK, 0);
-        }
-    }
+    clear_cells(b, col, row, width, height);
     c.a[4] = end;
     // drapeaux : dernier move.w #0 (Z) ; X = retenue de « hauteur - 1 »
     let x = if height == 0 { SR_X } else { 0 };
@@ -260,6 +296,7 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus))
 }
 
 pub const PRINT: Native = native(0x0d5e, "text_print", print);
+pub const ERASE: Native = native(0x0d32, "text_erase", erase);
 pub const PRINT_OVER: Native = native(0x0dca, "text_print_over", print_over);
 pub const PRINT_TALL: Native = native(0x1136, "text_print_tall", print_tall);
 pub const PRINT_TALL_AT: Native = native(0x1234, "text_print_tall_at", print_tall_at);

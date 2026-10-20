@@ -11,7 +11,7 @@ use crate::chemin::Chemin;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32};
 use crate::video::{hw, tours};
 use crate::vue::Vue;
-use crate::Native;
+use crate::{regs, Native};
 
 /// Pages de palettes concernées (bit k : page 0x91c000 + 0x400 k).
 const PAGES: u32 = 0x48e;
@@ -837,6 +837,102 @@ pub const BRIGHTEN_PAGE: Native = exact(
     },
 );
 
+// ---------------------------------------------------------------------------------------------
+// Éclair : palettes grisées (U2)
+// ---------------------------------------------------------------------------------------------
+
+/// Palettes mises en réserve par l'éclair : une page de 0x400 couleurs et 48 couleurs de la page 0.
+mod flash {
+    pub const PAGE: u32 = 0x91c800;
+    pub const PAGE_COLORS: u32 = 0x400;
+    pub const SPARE: u32 = 0x91c3a0;
+    pub const SPARE_COLORS: u32 = 0x30;
+    /// Copie de réserve (RAM de travail) : la page, puis les 48 couleurs.
+    pub const BACKUP: u32 = 0xff1190;
+    pub const BACKUP_SPARE: u32 = BACKUP + 2 * PAGE_COLORS;
+}
+
+fn copy_words(b: &mut Cps2Bus, from: u32, to: u32, words: u32) {
+    for i in 0..words {
+        let v = rd16(b, from + 2 * i);
+        wr16(b, to + 2 * i, v);
+    }
+}
+
+/// Met les palettes de l'éclair en réserve (0x1ac24) ou les remet (0x1abe0).
+fn copy_flash_palettes(b: &mut Cps2Bus, restore: bool) {
+    for (live, backup, colors) in
+        [(flash::PAGE, flash::BACKUP, flash::PAGE_COLORS), (flash::SPARE, flash::BACKUP_SPARE, flash::SPARE_COLORS)]
+    {
+        if restore {
+            copy_words(b, backup, live, colors);
+        } else {
+            copy_words(b, live, backup, colors);
+        }
+    }
+}
+
+/// Couleur de l'éclair : la moyenne arrondie des trois composantes donne le niveau de gris, rendu comme
+/// l'original (le décalage `-0xd00` fait déborder le quartet de luminosité).
+fn flash_level(color: u16) -> u16 {
+    ((color >> 8 & 0xf) + (color >> 4 & 0xf) + (color & 0xf) + 4) >> 2
+}
+
+fn flash_color(level: u16) -> u16 {
+    0xf300u16.wrapping_add(level).wrapping_add(level << 4).wrapping_add(level << 8) & 0xff00
+}
+
+/// 0x1ac24 : réserve des palettes de l'éclair.
+fn save_flash_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
+    copy_flash_palettes(b, false);
+    c.a[1] = flash::SPARE + 2 * flash::SPARE_COLORS;
+    c.a[2] = flash::BACKUP_SPARE + 2 * flash::SPARE_COLORS;
+    set_low_word(&mut c.d[6], 0xffff);
+    rts(c, b);
+}
+
+/// 0x1abe0 : remise des palettes de l'éclair.
+fn restore_flash_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
+    copy_flash_palettes(b, true);
+    c.a[1] = flash::BACKUP_SPARE + 2 * flash::SPARE_COLORS;
+    c.a[2] = flash::SPARE + 2 * flash::SPARE_COLORS;
+    set_low_word(&mut c.d[6], 0xffff);
+    rts(c, b);
+}
+
+/// 0x1ab56 : réserve les palettes puis les remplace par des gris.
+fn flash_gray(c: &mut Cpu, b: &mut Cps2Bus) {
+    copy_flash_palettes(b, false);
+    let mut last = 0;
+    for (start, colors) in [(flash::PAGE, flash::PAGE_COLORS), (flash::SPARE, flash::SPARE_COLORS)] {
+        for i in 0..colors {
+            last = rd16(b, start + 2 * i);
+            let gray = flash_color(flash_level(last));
+            wr16(b, start + 2 * i, gray);
+        }
+    }
+    // registres de travail comme l'original les laisse (dernière couleur traitée)
+    let level = flash_level(last);
+    let (red, green) = (last >> 8 & 0xf, last >> 4 & 0xf);
+    c.a[1] = flash::SPARE + 2 * flash::SPARE_COLORS;
+    set_low_word(&mut c.d[0], flash_color(level));
+    set_low_word(&mut c.d[1], red);
+    set_low_word(&mut c.d[2], red + green);
+    set_low_word(&mut c.d[3], level << 8);
+    set_low_word(&mut c.d[4], 0xff00);
+    set_low_word(&mut c.d[5], 0xf300);
+    set_low_word(&mut c.d[6], 0xffff);
+    rts(c, b);
+}
+
+const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+    Native { entry, name, cost: |_, _| 3000, run, touches_sound: false, outputs: regs::ALL, exact_cost: false }
+}
+
+pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", flash_gray);
+pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_eclair_remet", restore_flash_palettes);
+pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_eclair_reserve", save_flash_palettes);
+
 /// Routines natives de ce module (les réglages de luminosité sont déclarés dans `lib.rs`).
 pub const NATIVES: &[Native] = &[
     FADE_PAGE,
@@ -862,4 +958,7 @@ pub const NATIVES: &[Native] = &[
     APPROACH_PAGE,
     APPROACH_CONSTANT,
     BRIGHTEN_PAGE,
+    FLASH_GRAY,
+    FLASH_RESTORE,
+    FLASH_SAVE,
 ];

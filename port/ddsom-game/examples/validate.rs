@@ -88,7 +88,7 @@ fn main() {
             what.push(format!("ram {:06x} : {:04x} au lieu de {:04x}", 0xff0000 + 2 * i, ma.bus.ram[i], mb.bus.ram[i]));
         }
         if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram) {
-            what.push(format!("gfxram {:06x}", 0x900000 + 2 * i));
+            what.push(format!("gfxram {:06x} : {:04x} au lieu de {:04x}", 0x900000 + 2 * i, ma.bus.gfxram[i], mb.bus.gfxram[i]));
         }
         if let Some(i) = first_diff(&ma.obj_buffer, &mb.obj_buffer) {
             what.push(format!("sprites, mot {i}"));

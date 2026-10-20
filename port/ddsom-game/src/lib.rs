@@ -16,6 +16,8 @@ pub mod ecran_credits;
 pub mod eeprom;
 pub mod evenements;
 pub mod game;
+pub mod hud;
+pub mod aides;
 pub mod ai;
 pub mod combat;
 pub mod families;
@@ -101,7 +103,9 @@ pub const NATIVES: &[Native] = &[
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
     sprites::BUILD_SPRITE_LIST,
+    sprites::RESET_LISTS,
     text::PRINT,
+    text::ERASE,
     text::PRINT_OVER,
     text::PRINT_TALL,
     text::PRINT_TALL_AT,
@@ -181,7 +185,7 @@ fn lookup(pc: u32) -> Option<&'static Native> {
 
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs()).chain(kernel::NATIVES).chain(vblank::NATIVES).chain(tache_credits::NATIVES).chain(ecran_credits::NATIVES)
+    NATIVES.iter().chain(objects::NATIVES).chain(player::NATIVES).chain(video::NATIVES).chain(palette::NATIVES).chain(scroll::NATIVES).chain(families::NATIVES).chain(families::natives()).chain(dispatch::NATIVES).chain(game::NATIVES).chain(scene::NATIVES).chain(scene::exit::NATIVES).chain(modes::natives()).chain(sound::wrappers_natifs()).chain(kernel::NATIVES).chain(vblank::NATIVES).chain(tache_credits::NATIVES).chain(ecran_credits::NATIVES).chain(aides::NATIVES).chain(hud::NATIVES)
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
