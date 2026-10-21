@@ -26,6 +26,7 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Palettes des scènes | `scene_palettes.json` | `palettes_des_scenes_sans_perte` |
 | Terrain (cartes fixes, types) | `terrain.json` | `terrain_sans_perte` |
 | Boîtes, marques au sol, listes d'images | `sprites/tables.json` | `tables_des_objets_sans_perte` |
+| Textes (couche 8x8, bulles, noms) | `texts.json` | `textes_sans_perte` |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
@@ -238,6 +239,59 @@ champ `data` de `anims.json`) et listes d'images lues directement par le code.
   programme), et (image, retournement) des images impaires par `(+0x42 / 2) * 16 + +0x43 / 2`
   (`mirrored`, espace données).
 
+## Textes : `texts.json`
+
+Textes écrits dans la couche de caractères 8x8 (scroll 1, fenêtre `0x912000`) par les routines V2
+(`text.rs`, [video.md](video.md)), noms des bulles (`popups.rs`) et noms terminés par `@`.
+
+```json
+{"texts":[
+  {"rom":"0x13b52","kind":"text","col":2,"row":25,"attr":2,"text":"           Parental Advisory           /..."},
+  {"rom":"0x14f1a","kind":"text","col":4,"row":24,"attr":2,"text":"{fc}1996 TSR, Inc. All Rights Reserved. /..."},
+  {"rom":"0x1b1ec","kind":"tall","col":14,"row":14,"attr":0,"words":[506,511,532, ...]},
+  {"rom":"0x1bd32","kind":"tall_at","attr":0,"words":[...]},
+  {"rom":"0x19f02","kind":"box","col":3,"row":5,"size":[21,2]},
+  {"rom":"0x13550","kind":"text","col":13,"row":11,"attr":0,"text":"shuukyaku demo 1 ","scanned":true}, ...],
+ "tables":[{"rom":"0x11cba","program":false,"offsets":false,"entries":["0x124ca", ...]}, ...],
+ "popups":{"table":"0x1a01a","offsets":[106,114, ...],"strings_rom":"0x1a084","strings":["Kobold ", ...]},
+ "names":[{"table":"0xd6232","program":false,"entries":[...],"rom":"0xd6286","names":["Ogre ", ...]}, ...]}
+```
+
+Un descripteur par ligne, par adresse croissante (`Texts::by_rom`) ; `TextDesc::bytes` redonne ses octets.
+Sortes (`kind`) et codes de contrôle :
+
+| Sorte | Routines | Octets en ROM | Contrôles |
+|---|---|---|---|
+| `text` | `0xd5e` écrit, `0xd32` efface, `0xdca` écrit sans effacer le fond | colonne, ligne, attributs (mot), octets, `@` | `/` ligne suivante (`0xdca` : `_`, et l'espace laisse le fond) ; `0xff n` : n espaces |
+| `tall` | `0x1136` | colonne, ligne, attributs, mots, `@@` | mot `t` : tuile `t` et `t + 0x10` en dessous ; `##` (0x2323) colonne sautée, `/@` ligne suivante, `//` deux lignes |
+| `tall_at` | `0x1234` | attributs, mots, `@@` (position en D5, D6) | comme `tall` |
+| `blocks` | `0xf38` dessine, `0xf4a` efface | colonne, ligne, attributs, mots, `@@` | bloc 2x2 `t, t+1 / t+0x10, t+0x11` ; `##` deux colonnes, `//` deux lignes, `0xffff n` n blocs vides |
+| `box` | `0x1324` | colonne, ligne, largeur, hauteur | rectangle d'espaces (A4 n'avance que de 3) |
+
+* **Texte d'octets** (`text`) : les octets sont des tuiles 8x8 dont la police suit l'ASCII (0x20 à 0x7e),
+  0xfc est ©. Dans le JSON, chaque caractère ASCII imprimable s'écrit tel quel sauf `{` et `}` ; tout
+  autre octet s'écrit `{xx}` en hexadécimal, de même que l'octet qui suit `0xff` (nombre d'espaces). Le `@`
+  final n'est pas écrit (`texts::encode` / `texts::decode`). Ligne < 0x20 et colonne < 0x40 en
+  cases ; attributs : palette de la couche 1 (bits 0-4).
+* **Mots** (`tall`, `tall_at`, `blocks`) : numéros de tuiles de la grande police (p. ex. 506 = 0x1fa), les
+  mots de contrôle restent dans `words`, sans le `@@` final.
+* **Origine** : 219 descripteurs sont trouvés en suivant le code (adresses chargées dans A4 avant un appel
+  aux routines ci-dessus, et les 20 tables de `tables` : longs, ou mots de déplacement depuis la table pour
+  `0xf2968` ; `program` : lue en relatif au PC). Chaque descripteur trouvé est suivi de ceux qui lui
+  succèdent en mémoire tant qu'ils sont plausibles (les appelants enchaînent les textes avec A4). 27 autres
+  (`"scanned": true`) viennent d'une recherche de motifs dans toute la ROM (adresse paire, colonne < 0x40,
+  ligne < 0x20, attributs < 0x20, au moins 6 caractères puis `@`) : libellés de débogage de l'attract
+  (`shuukyaku demo`...), écrans de test, « INSERT 2 COINS », menu de test secret. Les descripteurs ne se
+  chevauchent pas.
+* **Bulles** (`popups`, 0x19fd2) : `offsets[n]` (mots, espace programme) mène depuis `table` au nom n ;
+  noms à la suite à partir de `strings_rom`, terminés par `/` (non écrit), un octet par tuile (ASCII).
+  53 numéros, 39 noms (ennemis : Kobold, Skeleton...).
+* **Noms terminés par `@`** (`names`) : noms des boss de la barre de vie (table `0xd6232`, 21 entrées,
+  région `0xd6286`, « Ogre Master Bros » n'est désigné par aucune entrée) et des personnages (`0xb20e8`,
+  espace programme, 6 noms : Fighter... ; écrits une tuile par caractère par 0xb20b8).
+
+Le test réencode chaque descripteur, chaque table, les noms des bulles et les groupes de noms.
+
 ## Palettes des scènes : `scene_palettes.json`
 
 Les palettes ne sont pas construites par le code : chaque scène désigne des palettes de la
@@ -298,4 +352,20 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
   variante 1.
 * Décors : dessins écrits dynamiquement par les scripts de scène (blocs chargés par 0x26d4/0x2766 dans
   la couche, décors animés), choix des palettes de fondu (code).
-* Données de jeu (vitesses, IA, vagues d'ennemis), textes, musiques (séquences du pilote Z80).
+* Textes non extraits :
+  * **Dialogues et messages** (fenêtres de dialogue SET 24, `0xd7056` ; bulles SET 10 ; messages numérotés
+    créés par `0xc8312`) : le texte est une liste de jetons mots (tuiles de la grande police, négatifs =
+    commandes, `0x7000-0x7009` = substitutions : nombre de joueurs, noms, objets) composée dans le tampon
+    `0xff2072` et affichée par le moteur de texte (cases `A5+0x5c6`). Définitions des fenêtres : table
+    `0x1d78d0` (18 octets : colonne, ligne, indicateurs, texte, position, sorte `+0x2f`) ; tables
+    `0xd7218`, `0xd7a48`, `0xd7e8a`, `0xd7604`, `0xd7db6`, `0xd7d96`, `0xd7da6`, `0xd7988` ; messages de
+    SET C 7 : `0xceaa2` ; bulles SET 10 : `0xcc438`. Le moteur de texte et la table des messages restent à
+    décoder (format des jetons, police) avant extraction.
+  * **Boutique** (PEFF 43, interprète `0x514ac` / `0x514cc`) : scripts d'instructions de 4 octets
+    (opération multiple de 4, paramètre, mot `D1`), 11 opérations par la table de sauts `0x514ec`
+    (0 : ouvrir le message `D1` ; 8 : saut relatif de `D1` octets si `A5+0x5e` ; achats, paiement BCD,
+    inventaire...). Scripts désignés par les zones de comptoir (`0x51306` / `0x51376`, champs `+0x1c` /
+    `+0x58`) ; les textes eux-mêmes sont des messages du moteur de texte.
+  * **Générique de fin** (`0xd01e0-0xd0692`, noms du staff, lignes séparées par `/`, `0xff n` = couleur
+    ou retrait) : format de la routine non relevé.
+* Données de jeu (vitesses, IA, vagues d'ennemis), musiques (séquences du pilote Z80).

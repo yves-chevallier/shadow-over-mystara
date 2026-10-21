@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample, ScenePalettes, SpriteTables, Terrain};
+use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample, ScenePalettes, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -427,4 +427,66 @@ fn tables_des_objets_sans_perte() {
     assert_eq!(at(s5.mirrored_rom, bytes.len()), &bytes[..], "tir 5 : retournements");
     // les retournements sont suivis de la première liste d'images
     assert_eq!(s5.mirrored_rom + bytes.len() as u32, t.frame_lists[0].rom);
+}
+
+#[test]
+fn textes_sans_perte() {
+    if !has("texts.json") {
+        return;
+    }
+    let t = Texts::load(&root().join("assets/texts.json")).unwrap();
+    let (rom, prog) = program();
+    let mut end = 0;
+    for d in &t.texts {
+        assert!(d.rom >= end, "texte {:#x} : chevauche le précédent", d.rom);
+        let bytes = d.bytes();
+        assert_eq!(&rom[d.rom as usize..d.rom as usize + bytes.len()], &bytes[..], "texte {:#x}", d.rom);
+        end = d.rom + bytes.len() as u32;
+    }
+    for tb in &t.tables {
+        let m = if tb.program { &prog } else { &rom };
+        for (i, &e) in tb.entries.iter().enumerate() {
+            let a = tb.rom as usize + i * if tb.offsets { 2 } else { 4 };
+            let v = if tb.offsets {
+                tb.rom.wrapping_add(i16::from_be_bytes(m[a..a + 2].try_into().unwrap()) as u32)
+            } else {
+                u32::from_be_bytes(m[a..a + 4].try_into().unwrap())
+            };
+            assert_eq!(v, e, "table {:#x}, entrée {i}", tb.rom);
+            assert!(t.by_rom(e).is_some(), "table {:#x} : {e:#x} sans texte", tb.rom);
+        }
+    }
+    // noms des bulles : déplacements (espace programme), chaînes à la suite terminées par '/'
+    let p = &t.popups;
+    for (i, &o) in p.offsets.iter().enumerate() {
+        let a = p.table as usize + 2 * i;
+        assert_eq!(i16::from_be_bytes(prog[a..a + 2].try_into().unwrap()), o, "bulle {i}");
+    }
+    let mut bytes = Vec::new();
+    let mut starts = Vec::new();
+    for s in &p.strings {
+        starts.push(p.strings_rom + bytes.len() as u32);
+        bytes.extend(ddsom_assets::texts::decode(s));
+        bytes.push(b'/');
+    }
+    assert_eq!(&rom[p.strings_rom as usize..p.strings_rom as usize + bytes.len()], &bytes[..], "noms des bulles");
+    for &o in &p.offsets {
+        assert!(starts.contains(&p.table.wrapping_add(o as u32)), "bulle : déplacement {o}");
+    }
+    // noms terminés par '@'
+    for g in &t.names {
+        let m = if g.program { &prog } else { &rom };
+        for (i, &e) in g.entries.iter().enumerate() {
+            let a = g.table as usize + 4 * i;
+            assert_eq!(u32::from_be_bytes(m[a..a + 4].try_into().unwrap()), e, "noms {:#x}, entrée {i}", g.table);
+        }
+        let bytes: Vec<u8> = g.names.iter().flat_map(|n| {
+            let mut b = ddsom_assets::texts::decode(n);
+            b.push(b'@');
+            b
+        }).collect();
+        assert_eq!(&rom[g.rom as usize..g.rom as usize + bytes.len()], &bytes[..], "noms {:#x}", g.table);
+        let starts = g.starts();
+        assert!(g.entries.iter().all(|e| starts.contains(e)), "noms {:#x} : entrée hors des noms", g.table);
+    }
 }
