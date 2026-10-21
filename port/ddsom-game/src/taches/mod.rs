@@ -18,7 +18,7 @@ pub mod partie;
 pub mod service;
 pub mod table;
 
-use crate::modes::{Flow, Sequence};
+use crate::modes::Flow;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -31,12 +31,17 @@ pub enum Attente {
     Prete,
 }
 
-/// Cède la main ; la tâche reprendra dans la native posée à l'adresse `reprise`.
+/// Cède la main : le noyau range l'attente et le contexte de la tâche dans la table ; elle reprendra dans la native
+/// posée à l'adresse `reprise`, avec ses registres et sa pile actuels.
 pub fn ceder(x: &mut Ctx, attente: Attente, reprise: u32) -> Flow {
     match attente {
-        Attente::Images(n) => x.wait(n, reprise),
-        Attente::Prete => x.tail(0xa86, reprise),
+        Attente::Images(n) => {
+            x.c.d[0] = n;
+            crate::kernel::attendre(x.c, x.b, reprise);
+        }
+        Attente::Prete => crate::kernel::ceder_prete(x.c, x.b, reprise),
     }
+    Flow::Yield
 }
 
 /// Natives des tâches Rust.

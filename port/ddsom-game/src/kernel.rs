@@ -187,56 +187,54 @@ fn vers_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Cessions
+// Cessions : la tâche courante rend la main ; elle reprendra en `reprise` avec ses registres, son SR et sa pile
+// (A7) actuels. Les tâches Rust cèdent directement (`taches::ceder`) ; les enveloppes de l'original dépilent d'abord
+// leur adresse de retour.
 
-/// Contexte de la tâche qui appelle une enveloppe de cession : registres, SR, et retour de l'enveloppe dépilé.
-fn contexte(c: &Cpu, b: &mut Cps2Bus) -> Contexte {
+/// Range le contexte de la tâche courante dans la table, puis rend la main à l'ordonnanceur. A1 reçoit la pile de la
+/// tâche telle que l'original l'avait laissée (adresse de retour et 15 registres empilés).
+fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: u32) {
     let mut a = [0; 7];
     a.copy_from_slice(&c.a[..7]);
-    Contexte { pc: rd32(b, c.a[7]), sr: c.sr, usp: c.a[7].wrapping_add(4), d: c.d, a }
-}
-
-/// Cède la main avec ce contexte ; A1 reçoit la pile de la tâche telle que l'original l'avait laissée (registres
-/// sauvés).
-fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, ctx: Contexte) {
+    let ctx = Contexte { pc: reprise, sr: c.sr, usp: c.a[7], d: c.d, a };
     table(b).ceder(etat, compte, ctx);
     c.a[1] = ctx.usp.wrapping_sub(64);
     vers_ordonnanceur(c, b);
 }
 
-/// 0xa40 : cède D0.b images (plus le retard des réglages DSW), 0 : suspendue. L'original appelle d'abord 0xb40,
-/// qui selon DSW remplit un bloc de la GFX RAM de la jauge de charge (jamais, dans ce jeu : bit 0x400 de DSW) ; les
-/// drapeaux sauvés sont ceux de son test de DSW. Le trap laisse D0.w = état et compte, D1.w = 0x100 ou 0x200.
-fn attendre(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Trap 3 : cède D0.b images (plus le retard des réglages DSW), 0 : suspendue. L'enveloppe 0xa40 appelle d'abord
+/// 0xb40, qui selon DSW remplit un bloc de la GFX RAM de la jauge de charge (jamais, dans ce jeu : bit 0x400 de DSW) ;
+/// les drapeaux sauvés sont ceux de son test de DSW. Le trap laisse D0.w = état et compte, D1.w = 0x100 ou 0x200.
+pub fn attendre(c: &mut Cpu, b: &mut Cps2Bus, reprise: u32) {
     c.sr &= !0x0f;
-    let ctx = contexte(c, b);
     let reglage = !rd16(b, ram::DSW) & 7;
     let compte = (c.d[0] as u8).wrapping_add(reglage as u8);
-    set_low_word(&mut c.d[1], if compte == 0 { 0x200 } else { 0x100 });
-    let mot = (c.d[0] as u16 & 0xff00) | compte as u16 | c.d[1] as u16;
-    set_low_word(&mut c.d[0], mot);
-    let etat = Etat::depuis_octet((mot >> 8) as u8).unwrap_or_else(|| panic!("cession de {:x} : état {mot:#06x}", ctx.pc));
-    ceder(c, b, etat, Some(compte), ctx);
+    let (mut d0, mut d1) = (c.d[0], c.d[1]);
+    set_low_word(&mut d1, if compte == 0 { 0x200 } else { 0x100 });
+    let mot = (d0 as u16 & 0xff00) | compte as u16 | d1 as u16;
+    set_low_word(&mut d0, mot);
+    let etat = Etat::depuis_octet((mot >> 8) as u8).unwrap_or_else(|| panic!("cession vers {reprise:x} : état {mot:#06x}"));
+    ceder(c, b, etat, Some(compte), reprise);
+    (c.d[0], c.d[1]) = (d0, d1);
 }
 
-/// 0xb64 : cède une image.
-fn attendre_une_image(c: &mut Cpu, b: &mut Cps2Bus) {
-    set_low_word(&mut c.d[0], 1);
-    attendre(c, b);
+/// Trap 4 : cède en restant prête.
+pub fn ceder_prete(c: &mut Cpu, b: &mut Cps2Bus, reprise: u32) {
+    ceder(c, b, Etat::Prete, None, reprise);
 }
 
-/// 0xa86 : cède en restant prête.
-fn ceder_pret(c: &mut Cpu, b: &mut Cps2Bus) {
-    let ctx = contexte(c, b);
-    ceder(c, b, Etat::Prete, None, ctx);
-}
-
-/// 0x9f8 : la tâche courante se termine et rend sa pile.
-fn terminer(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Trap 1 : la tâche courante se termine et rend sa pile.
+pub fn terminer(c: &mut Cpu, b: &mut Cps2Bus) {
     let t = table(b);
     let k = t.courante;
     t.liberer(k);
     vers_ordonnanceur(c, b);
+}
+
+/// Enveloppe de cession appelée par `jsr` : son adresse de retour est la reprise.
+fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, u32)) {
+    let reprise = depiler32(c, b);
+    cession(c, b, reprise);
 }
 
 /// 0xae4 (et `trap #7`, 0xae6) : la tâche courante repart de zéro en A0, même pile.
@@ -323,13 +321,16 @@ natif!(RETOUR, at::RETOUR, retour_ordonnanceur);
 natif!(CREER_TACHE, 0x9b6, creer);
 natif!(TERMINER_TACHE, 0x9f8, terminer);
 natif!(TUER_TACHE, 0xa14, tuer);
-natif!(ATTENDRE, 0xa40, attendre);
-natif!(CEDER, 0xa86, ceder_pret);
+natif!(ATTENDRE, 0xa40, |c, b| enveloppe(c, b, attendre));
+natif!(CEDER, 0xa86, |c, b| enveloppe(c, b, ceder_prete));
 natif!(SUSPENDRE_TACHE, 0xaac, suspendre);
 natif!(REVEILLER_TACHE, 0xac8, reveiller);
 natif!(RECOMMENCER_TACHE, 0xae4, recommencer);
 natif!(MASQUER, 0xaf6, |c, b| prendre_trap(c, b, at::TRAP_MASQUE, 0xaf8));
-natif!(ATTENDRE_UNE_IMAGE, 0xb64, attendre_une_image);
+natif!(ATTENDRE_UNE_IMAGE, 0xb64, |c, b| {
+    set_low_word(&mut c.d[0], 1);
+    enveloppe(c, b, attendre)
+});
 // handlers des traps
 natif!(TRAP_CREER, 0x9c2, trap_direct);
 natif!(TRAP_FINIR, 0x9fa, trap_direct);

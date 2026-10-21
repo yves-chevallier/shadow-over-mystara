@@ -34,7 +34,7 @@ fn main() {
             Reprise::Entree(pc) => format!("entrée {pc:x}"),
             Reprise::Cession(c) => format!("reprise {:x} usp {:x}", c.pc, c.usp),
         };
-        println!("  tâche {k:2} : {:?} {} pile {:x} {reprise}", e.etat, e.compte, e.pile);
+        println!("  tâche {k:2} : {:?} {:?} {} pile {:x} {reprise}", e.tache, e.etat, e.compte, e.pile);
     }
     for e in ecarts(table, &origine.bus.ram, true) {
         println!("écart : {e}");

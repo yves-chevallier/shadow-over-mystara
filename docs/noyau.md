@@ -87,10 +87,14 @@ morceau reprend à l'adresse de retour de l'original (macro `resume!`).
 ## Tâches Rust (`taches/`)
 
 Une tâche Rust est une machine à états dont chaque *pas* tient dans une native posée à l'adresse que l'original
-reprend après une cession (adresse empilée par le `jsr 0xa40`/`0xa86`). Le pas rend une `Attente`
-(`Images(n)` : trap 3, `Prete` : trap 4), traduite par `taches::ceder`. La table des tâches (voir plus haut) range
-l'adresse de reprise avec le contexte de la tâche ; une tâche Rust cohabite avec une tâche 68000 : l'ordonnanceur ne
-les distingue pas. Une tâche reste libre de passer par du code 68000 (`call`, `tail`).
+reprend après une cession (adresse qui suit le `jsr 0xa40`/`0xa86`). Le pas rend une `Attente` (`Images(n)` : trap 3,
+`Prete` : trap 4) que `taches::ceder` remet directement au noyau (`kernel::attendre`, `kernel::ceder_prete`) : la table
+range l'état, le compte, l'adresse de reprise et le contexte de la tâche, sans appel de l'enveloppe d'origine ni
+adresse empilée. Les attentes des séquences d'écran (`Sequence::wait`) et des fondus, et la fin d'une tâche de fondu
+(`kernel::terminer`), passent aussi directement par le noyau ; les autres cessions (`tail(0xb64, ...)`, code
+d'origine) passent par les enveloppes natives, qui dépilent leur adresse de retour. Chaque emplacement porte aussi le
+nom de sa tâche (`table::Tache`, d'après son entrée : `Partie`, `Gel`, `Credits`...). Une tâche Rust cohabite avec une
+tâche 68000 : l'ordonnanceur ne les distingue pas. Une tâche reste libre de passer par du code 68000 (`call`, `tail`).
 
 | Tâche | Natives | Rôle |
 |---|---|---|

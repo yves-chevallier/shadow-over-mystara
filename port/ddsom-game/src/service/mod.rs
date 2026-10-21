@@ -163,6 +163,7 @@ pub fn pressed(x: &mut Ctx) -> u8 {
 }
 
 /// Appelle une routine d'origine avec D0 (mot bas) chargé.
+#[track_caller]
 pub fn call_d0(x: &mut Ctx, addr: u32, d0: u16) {
     set_low_word(&mut x.c.d[0], d0);
     x.call(addr);

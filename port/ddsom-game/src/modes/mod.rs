@@ -105,8 +105,7 @@ fn push(c: &mut Cpu, b: &mut Cps2Bus, v: u32) {
 
 impl Sequence for Ctx<'_> {
     fn wait(&mut self, frames: u32, resume: u32) -> Flow {
-        self.c.d[0] = frames;
-        self.tail(sub::WAIT, resume)
+        crate::taches::ceder(self, crate::taches::Attente::Images(frames), resume)
     }
     fn tail(&mut self, addr: u32, resume: u32) -> Flow {
         push(self.c, self.b, resume);

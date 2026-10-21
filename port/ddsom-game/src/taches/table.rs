@@ -70,6 +70,57 @@ impl Etat {
     }
 }
 
+/// Les tâches du jeu, reconnues à leur entrée. Toutes sont en Rust (natives à leur entrée et à leurs adresses de
+/// reprise) sauf l'écran `0x19068`, jamais atteint par les scénarios.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Tache {
+    /// `0x11b16` (emplacement 0) : initialisation, avertissements, création des crédits et du gel (`modes/boot.rs`),
+    /// puis la machine à modes (`modes/`), dans laquelle elle continue sans changer d'entrée.
+    Demarrage,
+    /// `0x133fe` (emplacement 0) : la machine à modes relancée après une partie (`modes/gameover.rs`).
+    Modes,
+    /// `0x1c45a` (emplacement 0) : la partie (`taches/partie.rs`).
+    Partie,
+    /// `0x29162` (emplacement 0) : menu TEST (`taches/service.rs`).
+    Service,
+    /// `0x14ba`... `0x1ced4` (emplacement 1) : fondus de palette (`taches/fondu.rs`).
+    Fondu,
+    /// `0x13c0a` (emplacement 2) : crédits et départs (`tache_credits.rs`).
+    Credits,
+    /// `0x150ac` (emplacement 3) : interface des joueurs (`hud/`).
+    Interface,
+    /// `0xf7dfe` (emplacement 12) : portraits de la boutique (`scene/shop.rs`).
+    Portraits,
+    /// `0xe03fe` (emplacement 13) : « INSERT COIN » clignotant (`taches/invite.rs`).
+    Invite,
+    /// `0xee080` (emplacement 14) : attente active et avance rapide (`taches/gel.rs`).
+    Gel,
+    /// `0x1835e` (emplacement 15) : tableau des scores de l'attract (`taches/ecran_fixe.rs`).
+    Scores,
+    /// Autre entrée : code d'origine (l'écran `0x19068`, emplacement 15).
+    #[default]
+    Origine,
+}
+
+impl Tache {
+    pub fn depuis_entree(entree: u32) -> Tache {
+        match entree {
+            0x11b16 => Tache::Demarrage,
+            0x133fe => Tache::Modes,
+            0x1c45a => Tache::Partie,
+            0x29162 => Tache::Service,
+            0x14ba | 0x14c8 | 0x14d0 | 0x14de | 0x1536 | 0x153e | 0x1ccf8 | 0x1ce64 | 0x1ced4 | 0x1cf12 => Tache::Fondu,
+            0x13c0a => Tache::Credits,
+            0x150ac => Tache::Interface,
+            0xf7dfe => Tache::Portraits,
+            0xe03fe => Tache::Invite,
+            0xee080 => Tache::Gel,
+            0x1835e => Tache::Scores,
+            _ => Tache::Origine,
+        }
+    }
+}
+
 /// Contexte du 68000 d'une tâche qui a cédé la main.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Contexte {
@@ -93,6 +144,8 @@ pub enum Reprise {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Emplacement {
+    /// La tâche qui occupe l'emplacement (d'après sa dernière entrée).
+    pub tache: Tache,
     pub etat: Etat,
     /// Images d'attente restantes (gardé tel quel par les états qui ne s'en servent pas, comme l'original).
     pub compte: u8,
@@ -103,7 +156,7 @@ pub struct Emplacement {
 
 impl Default for Emplacement {
     fn default() -> Self {
-        Emplacement { etat: Etat::Libre, compte: 0, pile: 0, reprise: Reprise::Entree(0) }
+        Emplacement { tache: Tache::Origine, etat: Etat::Libre, compte: 0, pile: 0, reprise: Reprise::Entree(0) }
     }
 }
 
@@ -123,7 +176,8 @@ impl Table {
             self.rendre_pile(k);
         }
         let pile = self.piles.pop().expect("plus de pile libre pour une tâche");
-        self.emplacements[k] = Emplacement { etat: Etat::Neuve, compte: 0, pile, reprise: Reprise::Entree(entree) };
+        let tache = Tache::depuis_entree(entree);
+        self.emplacements[k] = Emplacement { tache, etat: Etat::Neuve, compte: 0, pile, reprise: Reprise::Entree(entree) };
     }
 
     /// Trap 1 (la tâche se termine) et trap 2 sur une tâche vivante.
@@ -160,6 +214,7 @@ impl Table {
     /// Trap 7 : la tâche courante repart de `entree` (même pile).
     pub fn recommencer(&mut self, entree: u32) {
         let e = &mut self.emplacements[self.courante];
+        e.tache = Tache::depuis_entree(entree);
         e.etat = Etat::Neuve;
         e.compte = 0;
         e.reprise = Reprise::Entree(entree);
@@ -344,6 +399,17 @@ mod tests {
         t.tuer(3);
         t.tuer(3);
         assert_eq!(t.piles, vec![3, 2]);
+    }
+
+    #[test]
+    fn une_image_decomptee_par_le_gel_est_admise() {
+        assert!(un_decompte_d_ecart((Etat::Attend, 1), (4, 0)));
+        assert!(!un_decompte_d_ecart((Etat::Attend, 2), (8, 0)));
+        assert!(un_decompte_d_ecart((Etat::Attend, 2), (1, 3)));
+        assert!(un_decompte_d_ecart((Etat::Prete, 0), (1, 1)));
+        assert!(!un_decompte_d_ecart((Etat::Attend, 3), (1, 1)));
+        assert!(un_decompte_d_ecart((Etat::Attend, 1), (1, 0)));
+        assert!(un_decompte_d_ecart((Etat::Prete, 0), (1, 0)));
     }
 
     #[test]

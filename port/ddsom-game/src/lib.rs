@@ -246,6 +246,7 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
 /// exécution jusqu'au retour, natives et blocs recompilés compris. Les cycles s'accumulent.
 /// L'adresse de retour empilée est une sentinelle : préférer `call_at` quand l'appelant d'origine
 /// est connu.
+#[track_caller]
 pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     // jamais exécutée par le jeu
     const RETURN: u32 = 0x00_fffe;
@@ -261,7 +262,9 @@ const TASK_SWITCH: u32 = 0x984;
 /// abandonnées (`Unwound`) : la tâche, réveillée plus tard, reviendra par les adresses de retour de
 /// sa pile dans le code d'origine, qui finit le travail comme l'original. Les appelants Rust doivent
 /// donc empiler les mêmes adresses de retour que le code qu'ils remplacent.
+#[track_caller]
 pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
+    let _site = TRACE.get().map(|_| SiteDAppel::entrer(std::panic::Location::caller(), addr));
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], ret);
@@ -286,6 +289,33 @@ static TRACE: OnceLock<fn(u32)> = OnceLock::new();
 
 pub fn set_trace(f: fn(u32)) {
     let _ = TRACE.set(f);
+}
+
+thread_local! {
+    /// Appels de code d'origine en cours pendant l'inventaire : site de l'appel en Rust et routine appelée.
+    static APPELS: std::cell::RefCell<Vec<(&'static std::panic::Location<'static>, u32)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Appel en cours (rendu à la fin de l'appel, même abandonné par `Unwound`).
+struct SiteDAppel;
+
+impl SiteDAppel {
+    fn entrer(site: &'static std::panic::Location<'static>, routine: u32) -> Self {
+        APPELS.with(|a| a.borrow_mut().push((site, routine)));
+        SiteDAppel
+    }
+}
+
+impl Drop for SiteDAppel {
+    fn drop(&mut self) {
+        APPELS.with(|a| a.borrow_mut().pop());
+    }
+}
+
+/// Inventaire : l'appel Rust le plus intérieur en cours (site et routine appelée), s'il y en a un. Le site est
+/// l'appel de `call`/`call_at` ou d'une de leurs enveloppes (`Ctx::call`, `Cx::call`...).
+pub fn site_d_appel() -> Option<(&'static std::panic::Location<'static>, u32)> {
+    APPELS.with(|a| a.borrow().last().copied())
 }
 
 /// Exécuteur d'inventaire : routines natives, sinon une instruction 68000 à la fois, signalée à
