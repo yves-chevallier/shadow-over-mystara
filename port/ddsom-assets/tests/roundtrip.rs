@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use ddsom_assets::data::{Cell, DataFile, Kind};
 use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
@@ -581,4 +582,115 @@ fn apparitions_sans_perte() {
         assert_eq!(&rom[sc.rom as usize..sc.rom as usize + b.len()], &b[..], "script {:#x}", sc.rom);
         next = sc.rom + b.len() as u32;
     }
+}
+
+/// Tables de données (`data/*.json`) : chaque table réencodée est identique à la ROM (dans son espace) ;
+/// chaque région est couverte exactement par ses tables ; toute adresse d'une colonne `addr` qui tombe
+/// dans une région désigne le début d'une ligne d'une table.
+fn check_data(rel: &str) {
+    if !has(rel) {
+        return;
+    }
+    let file = DataFile::load(&root().join("assets").join(rel)).unwrap();
+    let (data, prog) = program();
+    let mut names = std::collections::HashSet::new();
+    for t in &file.tables {
+        assert!(names.insert(&t.name), "{rel} : nom {} en double", t.name);
+        let b = t.bytes().unwrap_or_else(|e| panic!("{rel} : {e}"));
+        let rom = if t.program { &prog } else { &data };
+        let at = t.rom as usize;
+        assert_eq!(&rom[at..at + b.len()], &b[..], "{rel} : table {} ({:#x})", t.name, t.rom);
+    }
+    for t in &file.texts {
+        let b = t.bytes();
+        let at = t.rom as usize;
+        assert_eq!(&data[at..at + b.len()], &b[..], "{rel} : texte {}", t.name);
+    }
+    for r in &file.regions {
+        let mut inside: Vec<(u32, u32, &str)> = file
+            .tables
+            .iter()
+            .filter(|t| t.program == r.program)
+            .map(|t| (t.rom, t.end(), t.name.as_str()))
+            .chain(file.texts.iter().filter(|_| !r.program).map(|t| (t.rom, t.end(), t.name.as_str())))
+            .filter(|&(start, _, _)| start >= r.start && start < r.end)
+            .collect();
+        inside.sort();
+        let mut at = r.start;
+        for (start, end, name) in inside {
+            assert_eq!(start, at, "{rel} : région {}, {name}", r.name);
+            at = end;
+        }
+        assert_eq!(at, r.end, "{rel} : fin de la région {}", r.name);
+    }
+    for t in &file.tables {
+        let kinds = t.kinds();
+        for (i, row) in t.rows.iter().enumerate() {
+            for (c, k) in row.cells().iter().zip(&kinds) {
+                if let (Cell::Addr(a), Kind::Addr) = (*c, k) {
+                    if file.regions.iter().any(|r| !r.program && a >= r.start && a < r.end) {
+                        let text = file.texts.iter().any(|x| x.rom == a);
+                        assert!(
+                            text || file.row_at(a).is_some(),
+                            "{rel} : {} ligne {i} : {a:#x} n'est ni un début de ligne ni un texte",
+                            t.name
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn joueurs_sans_perte() {
+    check_data("data/players.json");
+    if !has("data/players.json") {
+        return;
+    }
+    // accès par personnage, comme init.rs : points de vie du clerc (personnage 3) au niveau 13
+    let f = DataFile::load(&root().join("assets/data/players.json")).unwrap();
+    let hp = f.via("hp_by_level", 3).unwrap();
+    let (rom, prog) = program();
+    let t = u32::from_be_bytes(prog[0x325e + 12..0x325e + 16].try_into().unwrap()) as usize;
+    assert_eq!(hp.value(13), u16::from_be_bytes([rom[t + 26], rom[t + 27]]) as i64);
+}
+
+#[test]
+fn combat_sans_perte() {
+    check_data("data/combat.json");
+}
+
+#[test]
+fn ennemis_sans_perte() {
+    check_data("data/enemies.json");
+    if !has("data/enemies.json") {
+        return;
+    }
+    // PV initiaux comme 0x4548 : type 3, difficulté normale, 2 joueurs, rang 5
+    let f = DataFile::load(&root().join("assets/data/enemies.json")).unwrap();
+    let hp = f.table("hp_enemy").unwrap();
+    let (rom, _) = program();
+    let at = 0x5c8c + (3 << 8) + (1 << 5) + 2 * 5;
+    assert_eq!(hp.get(3 * 8 + 1, 5), u16::from_be_bytes([rom[at], rom[at + 1]]) as i64);
+}
+
+#[test]
+fn caisses_sans_perte() {
+    check_data("data/boxes.json");
+}
+
+#[test]
+fn scenes_sans_perte() {
+    check_data("data/scenes.json");
+}
+
+#[test]
+fn divers_sans_perte() {
+    check_data("data/misc.json");
+}
+
+#[test]
+fn dialogues_sans_perte() {
+    check_data("data/dialogs.json");
 }

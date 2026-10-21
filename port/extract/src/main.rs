@@ -6,12 +6,18 @@
 //! exactement les données d'origine (`cargo test -p ddsom-assets`, voir docs/assets.md).
 //! Les fichiers produits dérivent des ROMs : ils restent locaux, jamais versionnés.
 
+mod combat;
+mod data;
+mod dialogs;
 mod gfx;
 mod levels;
+mod misc;
 mod music;
 mod palettes;
+mod players;
 mod rom;
 mod scene_palettes;
+mod scenes;
 mod sounds;
 mod spawns;
 mod sprites;
@@ -61,6 +67,7 @@ fn main() {
         }
         if wanted("data") {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
+            data::extract(roms, &out.join("data"))?;
         }
         std::fs::write(out.join("README.md"), README)?;
         Ok(())
@@ -130,6 +137,12 @@ d'instruments, fiches d'échantillons et tables du pilote (volumes, enveloppes, 
 ## data/spawns.json
 
 Scripts d'apparition des scènes (ennemis, décors, objets qui entrent au fil du défilement).
+
+## data/players.json, combat.json, enemies.json, boxes.json, scenes.json, misc.json, dialogs.json
+
+Tables de données du jeu (personnages, réactions aux coups, ennemis, caisses, scènes, démonstrations)
+et textes (générique, dialogues et bulles des trois langues) : une table par entrée, lignes rangées
+comme en ROM ; sens des tables et des champs dans docs/assets.md.
 
 ## texts.json
 
