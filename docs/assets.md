@@ -7,7 +7,7 @@ L'outil `extract` (`port/extract`) lit les ROMs de l'utilisateur et écrit `asse
 ```sh
 # depuis port/
 cargo run --release -p extract -- ../rom ../assets            # tout
-cargo run --release -p extract -- ../rom ../assets sprites levels
+cargo run --release -p extract -- ../rom ../assets sprites levels terrain
 DDSOM_ROMS=$PWD/../rom cargo test --release -p ddsom-assets   # vérification sans perte
 ```
 
@@ -22,9 +22,12 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Images de sprites | `sprites/frames.json` | `images_de_sprites_sans_perte` |
 | Scripts d'animation | `sprites/anims.json` | `animations_sans_perte` |
 | Cartes des décors | `levels.json` | `decors_sans_perte` |
+| Images du scroll 1 | `levels.json` (`scroll1`) | `scroll1_sans_perte` |
+| Palettes des scènes | `scene_palettes.json` | `palettes_des_scenes_sans_perte` |
+| Terrain (cartes fixes, types) | `terrain.json` | `terrain_sans_perte` |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
-document décrit les définitions de sprites et les cartes.
+document décrit les autres.
 
 ## Conventions des fichiers JSON
 
@@ -55,6 +58,14 @@ document décrit les définitions de sprites et les cartes.
 | Scroll 3 : tables de bandes | `0x33564-0x33a9c` | 65 tables | idem, sans sentinelle |
 | Scroll 3 : banques de blocs | `0x33a9c` | 2 longs | `0x2499c0` (1 299 blocs), `0x24eaf0` (1 037) |
 | Scroll 3 : bandes | `0x2459c0` | 512 x 32 octets | 4x4 numéros de blocs |
+| Scroll 1 : grilles d'images | `0x1f1b60-0x1f3b60` | 64 x 128 octets (15 non nulles) | 8x8 numéros de blocs (mots) |
+| Scroll 1 : blocs | `0x1f3b60-0x1f9ba0` | 385 x 64 octets | 4x4 cases (code, attributs) |
+| Palettes de la page 0 par scène | `0x2ae81e` | 115 x 32 mots | déplacement dans la bibliothèque, `0xffff` = laissée |
+| Palettes ajoutées par scène | `0x1a41c` | 115 longs | adresse de 3 palettes ou 0 |
+| Ensembles de palettes | `0x1a3fc` | 8 longs | adresse de 32 palettes (page 0) |
+| Pages 1, 2, 3 | `0x1a62c`, `0x1a6a0`, `0x1a8d4` (programme) | 3, 115, 115 longs | adresse de 32 palettes |
+| Cartes de terrain fixes | `0x3f8e9c`, `0x3f9c9c` | 112 et 96 colonnes de 16 mots | mot d'attributs, terrain = bits 7-15 |
+| Types de terrain | `0x3425c`, `0x34a5c` | 2 x 128 x 16 octets | 8 mots : genre, routine, sens, échelle, bord, arrêt, 0, 0 |
 
 Les régions des images et des décalages sont lues d'un bout à l'autre et entièrement couvertes (pas
 de trou ni de chevauchement) ; la table des adresses donne exactement la même suite d'images. Les tables
@@ -155,6 +166,73 @@ Mêmes tables que les caméras (`scroll.rs`, [video.md](video.md) §B1) et [nive
 Le test vérifie aussi que `Layer::case_at` redonne, pour chaque case de chaque bande, la case que lit la
 caméra du jeu (`map_cell`).
 
+### Scroll 1 : `scroll1` de `levels.json`
+
+Images fixes de 256x256 pixels que 0x260c recopie dans la couche de cases 8x8 (écran titre, fonds de
+menus, avant-plans de quelques scènes : D0 = 5 et 6 en 0x13dba, 7 et 8 en 0xfa7d6...).
+
+```json
+"scroll1": {"tile_offset":63488,"grids_rom":"0x1f1b60","grids":[[...64 numéros de blocs...], ...],
+            "blocks_rom":"0x1f3b60","blocks":[[...16 x (code, attributs)...], ...]}
+```
+
+* `grids[D0]` : 8x8 numéros de blocs, colonne par colonne (`(cx / 4) * 8 + cy / 4`). Seules les 15
+  premières grilles de la région sont non nulles ; le test vérifie que le reste est nul.
+* `blocks` : 4x4 cases `(code, attributs)` colonne par colonne. Tuile 8x8 = `code + 0xf800` (modulo
+  0x10000 : l'original ajoute `0xf8000000` au long de la case) ; attributs comme les autres couches.
+* `Scroll1::case_at(image, cx, cy)` donne la case (cx, cy), 0 à 31 ; le test la compare à une
+  réécriture de 0x260c (destination en colonnes de 0x80 octets). Les blocs finissent exactement là
+  où commencent les bandes du scroll 2 (`0x1f9ba0`).
+
+Le texte de la couche 1 (chiffres, chaînes, bulles) est écrit par le code depuis des descripteurs, voir
+la section des textes.
+
+## Palettes des scènes : `scene_palettes.json`
+
+Les palettes ne sont pas construites par le code : chaque scène désigne des palettes de la
+bibliothèque (`palettes.png`, ROM `0x253000`), par tables (`palette.rs`, [video.md](video.md) §V3).
+
+```json
+{"library":"0x253000","stages_rom":"0x2ae81e","stages":[[0,1,2, ...,-1,-1], ...],
+ "extra":{"rom":"0x1a41c","program":false,"count":3,"entries":["0x0","0x28d7c0", ...]},
+ "sets":{"rom":"0x1a3fc","program":false,"count":32,"entries":[...]},
+ "pages":[{"rom":"0x1a62c","program":true,"count":32,"entries":[...]}, ...]}
+```
+
+* `stages[s]` : les 32 palettes de la page 0 de la scène `s` (0 à 114), en numéros de palettes de la
+  bibliothèque (déplacement / 32) ; -1 : palette laissée en place (`0xffff` en ROM). 0x1a36c n'en charge
+  que 29, sauf aux scènes 0x45 à 0x59 ; les entrées 29 à 31 des autres scènes sont gardées telles quelles.
+* `extra` : par scène, adresse de 3 palettes copiées à la suite (0 : aucune).
+* `sets` : 8 ensembles de 32 palettes (0x1a3d4, D0 = 0 à 7).
+* `pages` : pages 1 (D0 = 0 à 2), 2 et 3 (par scène) : adresse de 32 palettes consécutives. Ces tables
+  sont lues en adressage relatif au PC, donc dans l'espace programme déchiffré (`program`). Deux entrées
+  de la page 3 valent 0 (scènes 0x58 et 0x59 : le jeu copie alors l'adresse 0 de la ROM).
+* Toute adresse non nulle est dans la bibliothèque, alignée : palette `(adresse - 0x253000) / 32`
+  (`ScenePalettes::library_index`).
+
+Restent dans le code : le choix des pages et des sources de fondu (scènes 0x2f et 0x42, `0x1a296`), les
+palettes d'effet (`0x3af8`, données `0x25a640`, dans la bibliothèque), l'éclair (`0x1ab56`).
+
+## Terrain : `terrain.json`
+
+Le numéro de terrain sous un point est `attributs >> 7` de la case du scroll 2 (donc déjà dans
+`levels.json` : bits 7 à 15 des attributs des blocs), sauf aux scènes 2 et 0x14, qui lisent une carte
+fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
+
+```json
+{"maps":[{"rom":"0x3f8e9c","stage":2,"dy":-16,"columns":[[768,8963, ...16 mots...], ...]}, ...],
+ "kinds":[{"rom":"0x3425c","routine":"0x33fe4","kinds":[{"genre":0,"routine":0,"flip":0,"shift":0,"edge":0,"stop":1,"unused":[0,0]}, ...]}, ...]}
+```
+
+* `maps` : colonnes de 16 pixels de large ; dans une colonne, le mot `k` couvre `(y + dy) / 16 % 16 =
+  15 - k`. `FixedMap::word(x, y)` refait le calcul de 0x24b0 (colonne `(2 x) & 0xffe0` étendue en signe,
+  rang `0x1e - ((y >> 3) & 0x1e)`). Carte de la scène 2 : 112 colonnes (les 16 dernières nulles, jusqu'à la
+  seconde carte) ; scène 0x14 : 96 colonnes, suivies du remplissage `0xff` de la fin de la ROM.
+* `kinds` : 128 types par table (la seconde suit la première ; du code suit la seconde). Les deux tables
+  ne diffèrent qu'aux types 3, 4, 7, 8 et 67, 68, 71, 72 (obstacles pleins dans la première, libres
+  dans la seconde) ; les types 64 à 127 répètent les types 0 à 63. Champs : voir
+  `Kind` et [joueur.md](joueur.md) (collision avec le décor).
+
 ## Ce qui reste à extraire
 
 * Sprites : les tables de cadres lues directement par le code (listes d'adresses d'images, p. ex.
@@ -166,7 +244,6 @@ caméra du jeu (`map_cell`).
   paire d'entrées isolées se chevauche (`0x174c70`/`0x174c78`, l'une est un faux positif). Jeux vides :
   `bs16` (ses trois tableaux sont des copies de ceux de `bs02`, décalages relatifs à `bs02`) et `em09`
   variante 1.
-* Décors : scroll 1 (cases 8x8, texte et avant-plans), dessins écrits dynamiquement par les scripts de
-  scène, palettes des scènes (relevées en jeu par `examples/cartes.rs`), cartes de terrain et de collision
-  (`0x3f8e9c`, `0x3f9c9c`).
+* Décors : dessins écrits dynamiquement par les scripts de scène (blocs chargés par 0x26d4/0x2766 dans
+  la couche, décors animés), choix des palettes de fondu (code).
 * Données de jeu (vitesses, IA, vagues d'ennemis), textes, musiques (séquences du pilote Z80).

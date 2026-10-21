@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample};
+use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample, ScenePalettes, Terrain};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -249,6 +249,113 @@ fn decors_sans_perte() {
         // pointeurs des scènes (espace programme)
         for (s, &t) in l.scenes.iter().enumerate() {
             assert_eq!(be32(&prog, l.scenes_rom + 4 * s as u32), l.tables[t].pointer(), "{} scène {s}", l.name);
+        }
+    }
+}
+
+#[test]
+fn scroll1_sans_perte() {
+    if !has("levels.json") {
+        return;
+    }
+    let s1 = Levels::load(&root().join("assets/levels.json")).unwrap().scroll1;
+    let (rom, _) = program();
+    let words = |v: &[u16]| v.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<u8>>();
+    // grilles, puis zéros jusqu'aux blocs
+    let mut bytes: Vec<u8> = s1.grids.iter().flat_map(|g| {
+        assert_eq!(g.len(), 64);
+        words(g)
+    }).collect();
+    bytes.resize((s1.blocks_rom - s1.grids_rom) as usize, 0);
+    assert_eq!(&rom[s1.grids_rom as usize..s1.blocks_rom as usize], &bytes[..], "grilles du scroll 1");
+    // blocs, à la suite : ils finissent où commencent les bandes du scroll 2
+    let bytes: Vec<u8> = s1.blocks.iter().flat_map(|b| {
+        assert_eq!(b.len(), 32);
+        words(b)
+    }).collect();
+    let end = s1.blocks_rom as usize + bytes.len();
+    assert_eq!(&rom[s1.blocks_rom as usize..end], &bytes[..], "blocs du scroll 1");
+    assert_eq!(end, 0x1f9ba0, "les blocs du scroll 1 précèdent les bandes du scroll 2");
+    // cases : même calcul que 0x260c (destination A1 en colonnes de 0x80 octets, cases de 4 octets)
+    let be32 = |a: usize| u32::from_be_bytes(rom[a..a + 4].try_into().unwrap());
+    for g in 0..s1.grids.len() {
+        let mut layer = vec![0u32; 32 * 32];
+        let mut a2 = s1.grids_rom as usize + 0x80 * g;
+        let mut a1 = 0usize;
+        for _ in 0..8 {
+            for _ in 0..8 {
+                let mut a3 = s1.blocks_rom as usize + 64 * u16::from_be_bytes(rom[a2..a2 + 2].try_into().unwrap()) as usize;
+                a2 += 2;
+                for col in 0..4 {
+                    for row in 0..4 {
+                        layer[(a1 + 0x80 * col + 4 * row) / 4] = be32(a3).wrapping_add(0xf800_0000);
+                        a3 += 4;
+                    }
+                }
+                a1 += 0x10;
+            }
+            a1 += 0x180;
+        }
+        for cx in 0..32 {
+            for cy in 0..32 {
+                let v = layer[cx * 32 + cy];
+                assert_eq!(s1.case_at(g, cx, cy), ((v >> 16) as u16, v as u16), "image {g} case ({cx}, {cy})");
+            }
+        }
+    }
+}
+
+#[test]
+fn terrain_sans_perte() {
+    if !has("terrain.json") {
+        return;
+    }
+    let t = Terrain::load(&root().join("assets/terrain.json")).unwrap();
+    let (rom, _) = program();
+    let at = |a: u32, n: usize| &rom[a as usize..a as usize + n];
+    let words = |v: &[u16]| v.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<u8>>();
+    for m in &t.maps {
+        let bytes: Vec<u8> = m.columns.iter().flat_map(|c| words(c)).collect();
+        assert_eq!(at(m.rom, bytes.len()), &bytes[..], "carte {:#x}", m.rom);
+        // lecture de 0x24b0 : rang 0x1e - ((y >> 3) & 0x1e), colonne (2 x) & 0xffe0
+        for x in (0..32 * m.columns.len() as u16 / 2).step_by(5) {
+            for y in (0..0x200u16).step_by(7) {
+                let y2 = y.wrapping_add(m.dy as u16);
+                let off = (0x1e - ((y2 as u8 >> 3) & 0x1e) as u16).wrapping_add(x.wrapping_add(x) & 0xffe0);
+                let a = m.rom.wrapping_add(off as i16 as u32);
+                let w = u16::from_be_bytes(at(a, 2).try_into().unwrap());
+                assert_eq!(m.word(x, y), Some(w), "carte {:#x} ({x}, {y})", m.rom);
+            }
+        }
+    }
+    // les deux cartes se suivent ; la seconde est suivie du remplissage de fin de ROM
+    let end = t.maps[1].rom as usize + 32 * t.maps[1].columns.len();
+    assert_eq!(t.maps[0].rom as usize + 32 * t.maps[0].columns.len(), t.maps[1].rom as usize);
+    assert!(rom[end..end + 64].iter().all(|&b| b == 0xff));
+    for k in &t.kinds {
+        let bytes: Vec<u8> = k.kinds.iter().flat_map(|e| words(&e.words())).collect();
+        assert_eq!(at(k.rom, bytes.len()), &bytes[..], "types de terrain {:#x}", k.rom);
+    }
+    assert_eq!(t.kinds[0].rom + 16 * t.kinds[0].kinds.len() as u32, t.kinds[1].rom);
+}
+
+#[test]
+fn palettes_des_scenes_sans_perte() {
+    if !has("scene_palettes.json") {
+        return;
+    }
+    let p = ScenePalettes::load(&root().join("assets/scene_palettes.json")).unwrap();
+    let (rom, prog) = program();
+    let bytes: Vec<u8> = p.stages.iter().flatten().flat_map(|&v| ScenePalettes::stage_word(v).to_be_bytes()).collect();
+    assert_eq!(&rom[p.stages_rom as usize..p.stages_rom as usize + bytes.len()], &bytes[..], "palettes de la page 0");
+    for t in [&p.extra, &p.sets].into_iter().chain(p.pages.iter()) {
+        let m = if t.program { &prog } else { &rom };
+        let bytes: Vec<u8> = t.entries.iter().flat_map(|a| a.to_be_bytes()).collect();
+        assert_eq!(&m[t.rom as usize..t.rom as usize + bytes.len()], &bytes[..], "table {:#x}", t.rom);
+        // toutes les palettes désignées sont dans la bibliothèque (sauf les entrées nulles)
+        for &a in t.entries.iter().filter(|&&a| a != 0) {
+            let i = p.library_index(a).unwrap_or_else(|| panic!("table {:#x} : {a:#x} hors bibliothèque", t.rom));
+            assert!(i + t.count as usize <= 8192, "table {:#x} : {a:#x}", t.rom);
         }
     }
 }

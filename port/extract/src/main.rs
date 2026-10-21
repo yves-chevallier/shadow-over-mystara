@@ -1,6 +1,6 @@
 //! Extrait les ressources de Shadow over Mystara depuis les ROMs de l'utilisateur.
 //!
-//!     extract <dossier_roms> <dossier_assets> [gfx|palettes|sounds|sprites|levels...]
+//!     extract <dossier_roms> <dossier_assets> [gfx|palettes|sounds|sprites|levels|terrain...]
 //!
 //! Sans catégorie, tout est extrait. Tous les formats sont sans perte : le moteur peut retrouver
 //! exactement les données d'origine (`cargo test -p ddsom-assets`, voir docs/assets.md).
@@ -10,12 +10,14 @@ mod gfx;
 mod levels;
 mod palettes;
 mod rom;
+mod scene_palettes;
 mod sounds;
 mod sprites;
+mod terrain;
 
 use std::path::Path;
 
-const CATEGORIES: [&str; 5] = ["gfx", "palettes", "sounds", "sprites", "levels"];
+const CATEGORIES: [&str; 6] = ["gfx", "palettes", "sounds", "sprites", "levels", "terrain"];
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -32,6 +34,7 @@ fn main() {
         }
         if wanted("palettes") {
             palettes::extract(roms, &out.join("palettes.png"))?;
+            scene_palettes::extract(roms, &out.join("scene_palettes.json"))?;
         }
         if wanted("sounds") {
             sounds::extract(roms, &out.join("sounds"))?;
@@ -41,6 +44,9 @@ fn main() {
         }
         if wanted("levels") {
             levels::extract(roms, &out.join("levels.json"))?;
+        }
+        if wanted("terrain") {
+            terrain::extract(roms, &out.join("terrain.json"))?;
         }
         std::fs::write(out.join("README.md"), README)?;
         Ok(())
@@ -84,8 +90,16 @@ lecture 1.0 de la puce). Le bloc `smpl` donne la boucle et la note de référenc
 Définitions des sprites : les 21 887 images (assemblages de cellules, table ROM 0x293000) et les scripts
 d'animation (jeux et entrées). JSON, adresses ROM en hexadécimal ; format détaillé dans docs/assets.md.
 
+## scene_palettes.json
+
+Palettes chargées par chaque scène (numéros ou adresses dans la bibliothèque `palettes.png`).
+
 ## levels.json
 
 Cartes des décors (scroll 2 et scroll 3) : blocs de 2x2 cases, bandes de 256x256 pixels et tables de
-bandes des 115 scènes. Format détaillé dans docs/assets.md.
+bandes des 115 scènes ; images fixes du scroll 1 (cases 8x8). Format détaillé dans docs/assets.md.
+
+## terrain.json
+
+Cartes de terrain fixes (scènes 2 et 0x14) et tables des types de terrain (collision avec le décor).
 ";

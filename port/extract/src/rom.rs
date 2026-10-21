@@ -35,9 +35,22 @@ impl Program {
         (self.rd16(a) as u32) << 16 | self.rd16(a.wrapping_add(2)) as u32
     }
 
-    /// Long lu en espace programme (tables lues par le code en adressage relatif au PC).
+    /// Mot lu en espace programme (tables lues par le code en adressage relatif au PC).
+    pub fn prog16(&self, a: u32) -> u16 {
+        self.prog.get((a >> 1) as usize).copied().unwrap_or(0)
+    }
+
+    /// Long lu en espace programme.
     pub fn prog32(&self, a: u32) -> u32 {
-        let w = |a: u32| self.prog.get((a >> 1) as usize).copied().unwrap_or(0) as u32;
-        w(a) << 16 | w(a + 2)
+        (self.prog16(a) as u32) << 16 | self.prog16(a + 2) as u32
+    }
+
+    /// Lecture d'un long dans l'espace choisi.
+    pub fn long(&self, a: u32, program: bool) -> u32 {
+        if program {
+            self.prog32(a)
+        } else {
+            self.rd32(a)
+        }
     }
 }

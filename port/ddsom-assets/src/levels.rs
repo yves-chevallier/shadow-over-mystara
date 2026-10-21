@@ -1,4 +1,5 @@
-//! Cartes des décors : `assets/levels.json`, voir docs/assets.md.
+//! Cartes des décors : `assets/levels.json`, voir docs/assets.md (scroll 2 et 3, plus les images fixes du
+//! scroll 1, `Scroll1`).
 //!
 //! Chaque couche (scroll 2 : cases de 16 pixels ; scroll 3 : cases de 32 pixels) est faite de *bandes*
 //! de 256x256 pixels. Une bande est une grille de *blocs* de 2x2 cases ; un bloc donne le code de tuile
@@ -94,9 +95,36 @@ impl Layer {
     }
 }
 
+/// Scroll 1 (cases de 8 pixels) : images fixes de 256x256 pixels que 0x260c recopie dans la couche
+/// (écran titre, avant-plans...). Une image est une grille de 8x8 blocs de 4x4 cases.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Scroll1 {
+    /// Ajouté (modulo 0x10000) au code d'une case pour obtenir la tuile 8x8.
+    pub tile_offset: u16,
+    /// Grilles d'images : 64 numéros de blocs, colonne par colonne (`(cx / 4) * 8 + cy / 4`), pour
+    /// D0 = 0, 1... ; les grilles suivantes de la région (jusqu'à `blocks_rom`) sont nulles.
+    #[serde(with = "hex")]
+    pub grids_rom: u32,
+    pub grids: Vec<Vec<u16>>,
+    /// Blocs : 16 cases (code, attributs), colonne par colonne (`(cx % 4) * 4 + cy % 4`).
+    #[serde(with = "hex")]
+    pub blocks_rom: u32,
+    pub blocks: Vec<Vec<u16>>,
+}
+
+impl Scroll1 {
+    /// Case (cx, cy), 0 à 31, de l'image `grid` : (tuile, attributs).
+    pub fn case_at(&self, grid: usize, cx: usize, cy: usize) -> (u16, u16) {
+        let block = &self.blocks[self.grids[grid][(cx / 4) * 8 + cy / 4] as usize];
+        let k = 2 * ((cx % 4) * 4 + cy % 4);
+        (block[k].wrapping_add(self.tile_offset), block[k + 1])
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Levels {
     pub layers: Vec<Layer>,
+    pub scroll1: Scroll1,
 }
 
 impl Levels {
