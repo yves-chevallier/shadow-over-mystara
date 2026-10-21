@@ -16,6 +16,7 @@ pub mod gel;
 pub mod invite;
 pub mod partie;
 pub mod service;
+pub mod table;
 
 use crate::modes::{Flow, Sequence};
 use crate::scene::Ctx;

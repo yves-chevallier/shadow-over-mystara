@@ -326,7 +326,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
-        if c.cycles + cost <= limit {
+        if c.cycles + cost <= limit || tient_la_table(n) {
             if CHECK.load(Ordering::Relaxed) && checked(n) {
                 check(n, c, b, cost);
             } else if adopt_regs(n) {
@@ -364,6 +364,13 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         }
     }
     ddsom_rc::run_block(pc, c, b, dl)
+}
+
+/// Natives qui tiennent leur état dans la table des tâches Rust (noyau, VBLANK, tâche du gel, démarrage) : le code
+/// d'origine, qui le chercherait en RAM, ne doit jamais s'exécuter à leur place, même quand elles débordent sur
+/// l'interruption suivante (ce qui n'arrive que dans un appel de code d'origine qui dure).
+fn tient_la_table(n: &Native) -> bool {
+    kernel::NATIVES.iter().chain(vblank::NATIVES).chain(taches::gel::NATIVES).chain(demarrage::NATIVES).any(|k| k.entry == n.entry)
 }
 
 /// Exécuteur : routines natives seulement (le reste est laissé à l'interpréteur). Outils de diagnostic.
@@ -429,13 +436,20 @@ pub fn install_reference(m: &mut cps2::Machine) {
 }
 
 /// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image, ou seule la tâche
-/// du gel est prête et son prochain pas ne ferait rien (`taches::gel::attente_vide`).
+/// du gel est prête et son prochain pas ne ferait rien (`taches::gel::attente_vide`). La machine du jeu a sa table des
+/// tâches en Rust ; une machine d'origine, en RAM.
 pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
-    const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
     const NEW_FRAME: usize = 0x164 / 2; // FF0164 (octet haut) : posé par le VBLANK, effacé au début d'un parcours
-    (0x932..0x960).contains(&c.pc)
-        && b.ram[NEW_FRAME] >> 8 == 0
-        && ((0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || taches::gel::attente_vide(&b.ram))
+    if !(0x932..0x960).contains(&c.pc) || b.ram[NEW_FRAME] >> 8 != 0 {
+        return false;
+    }
+    match taches::table::lire(b) {
+        Some(t) => t.emplacements.iter().all(|e| !e.etat.lancable()) || taches::gel::attente_vide(t, &b.ram),
+        None => {
+            const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
+            (0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || taches::gel::attente_vide_origine(&b.ram)
+        }
+    }
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);

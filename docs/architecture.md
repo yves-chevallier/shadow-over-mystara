@@ -122,10 +122,10 @@ travail progressif, piloté par les tests de non-régression contre l'original.
 
 État : l'ordonnanceur (0x928), les traps 0 à 7 et 12, leurs enveloppes (0x9b6, 0xa14, 0xa40, 0xa86,
 0xb64...) et le VBLANK (0x574) sont des routines natives (`kernel.rs`, `vblank.rs`, [noyau.md](noyau.md)) ;
-la tâche des crédits est du Rust (`tache_credits.rs`, `ecran_credits.rs`). Le noyau natif garde la
-structure de l'original : table FF0064, piles utilisateur de 0xFF0xxx, pile de l'ordonnanceur FF0E66,
-reprise d'une tâche par `rte` vers le PC et le SR sauvegardés. Une tâche est donc encore « un morceau de
-68000 qui reprend à une adresse » ; c'est l'adresse de reprise qui devient une native quand la tâche est
+la tâche des crédits est du Rust (`tache_credits.rs`, `ecran_credits.rs`). La table des tâches est une structure Rust
+(`taches/table.rs`) : plus d'enregistrements FF0064, de tas des piles ni de pile de l'ordonnanceur en RAM, et les
+registres d'une tâche qui cède sont rangés dans la table au lieu de sa pile. Une tâche est encore « du code qui reprend
+à une adresse avec le contexte du 68000 sauvé » ; c'est l'adresse de reprise qui devient une native quand la tâche est
 réécrite (`resume!`). `tools/reste68k.sh` mesure ce qui tourne encore en 68000 ([reste68k.md](reste68k.md)).
 
 Plan pour supprimer la machine 68000 :
@@ -139,11 +139,13 @@ Plan pour supprimer la machine 68000 :
    tâches de fondu, déjà en Rust).
    Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
    `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.
-2. **Remplacer l'enregistrement de tâche** : les champs SR/PC/USP/pile disparaissent au profit de
-   `Option<Box<dyn Tache>>`. La table garde ses 16 emplacements (les numéros d'emplacement servent encore :
-   `kill(0x30)`), l'état (libre, attend, suspendue, prête) et le compte d'attente décrémenté par le VBLANK.
-   Un test différentiel compare à chaque image la table Rust à la table du noyau natif tant que les deux
-   existent. Les piles de tâches (FF005A, tas de piles) et la pile de l'ordonnanceur disparaissent.
+2. **Remplacer l'enregistrement de tâche** (fait, `taches/table.rs`, [noyau.md](noyau.md) « Table des tâches en
+   Rust ») : 16 emplacements (les numéros d'emplacement servent encore : `kill(0x30)`), l'état (libre, attend,
+   suspendue, prête, en cours, neuve), le compte d'attente décrémenté par le VBLANK, la pile 68000 donnée à la tâche et
+   sa reprise (entrée, ou contexte du 68000 sauvé à la cession). `validate` compare à chaque image la table Rust à la
+   table FF0064 de la machine d'origine (états, comptes, piles, entrées, tas). Le tas des piles, la pile de
+   l'ordonnanceur et les registres sauvés sur la pile des tâches ne servent plus au noyau. Restent sur la pile 68000 des
+   tâches leurs appels en cours (adresses de retour, sous-programmes qui cèdent) : c'est le point 4.
 3. **Appels des anciens sous-programmes** : `ddsom_game::call` n'a plus d'appelant quand toutes les
    routines appelées sont natives ; alors plus aucune instruction 68000 ne s'exécute
    (`tools/reste68k.sh` : zéro sur tous les scénarios). Les fonctions « jamais atteintes » du rapport

@@ -26,12 +26,8 @@ fn main() {
     // Zones de sauvegarde de registres : piles des tâches (FF0A00-FF0FFF) et pile logicielle de
     // l'interruption VBLANK (sous FF2A1A). Un registre laissé libre par une routine native n'y
     // est qu'une copie ; s'il était réellement utilisé, l'écart apparaîtrait ailleurs.
-    // + le SR sauvegardé de chaque tâche (mot +2 des entrées de 16 octets en FF0064).
-    let saved = |a: usize| {
-        (0x0a00..0x1000).contains(&a)
-            || (0x2900..0x2a1a).contains(&a)
-            || ((0x0064..0x0164).contains(&a) && (a - 0x64) % 16 == 2)
-    };
+    // + la RAM du noyau, que le jeu tient dans sa table des tâches en Rust.
+    let saved = |a: usize| ddsom_game::taches::table::ram_du_noyau(a as u32) || (0x2900..0x2a1a).contains(&a);
     let t0 = std::time::Instant::now();
     let mut first = None;
     for f in 0..frames {
