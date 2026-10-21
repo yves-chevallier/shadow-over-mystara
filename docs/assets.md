@@ -624,9 +624,22 @@ Fenêtres de dialogue (SET 24, `0xd7056`, `families/set_b.rs` module `dialog`) e
   d'objets terminées par 0xff), `item_texts` (0xd7a48, prog, 5 adresses) et `item_text@…`. Région `build`
   0xd7d96-0xd801c.
 
+* Passage de niveau (SET C 7, `families/set_c_finale_c.rs`) : `levelup_tables` (0xceaa2, prog : une
+  table par classe), `levelup_range` (0xce728, prog : niveaux min et max de la classe, un
+  enregistrement par niveau), `levelup/<classe>.lists` (3 listes de messages : anglais, français,
+  allemand), `levelup/<classe>` (20 octets par niveau atteint : PV max `+0x60`, déplacement du message
+  dans la liste pour la variante paire et impaire du personnage, octet `stats` (négatif : rien) puis 9
+  minimums de `+0x151..`, nouvel et ancien objet `+0x10d`, nouvel et ancien objet d'une case `+0x140..`
+  (0xff : rien)), `levelup/<classe>/<langue>` (adresses des messages) ; région `levelup`
+  0xcebba-0xcf15a. Messages `levelup_text@…` (région `levelup_texts` 0xd0b90-0xd40e6 : anglais en
+  tuiles, français et allemand en octets ; dans ceux-ci `~` est l'octet 0xfe, commande suivie d'un
+  octet ; `0xff n m` fin de page). Cadre : `levelup_frame_offsets` et `levelup_frame_by_step` (0xce7ac,
+  prog : cadre par palier), `levelup_frames` (0xce7e4, prog : adresse dans la couche, largeur),
+  `levelup_names` et `levelup_name@…` (0xce9a4 : noms prédéfinis, comme `names`).
+
 Restent à extraire ou à décoder : la sémantique complète des commandes du moteur de texte (cases
-`A5+0x5c6`), la table des tuiles latines `0xc9216` et les messages de SET C 7 (`0xceaa2`, en-têtes
-`0xce9a4`, fenêtres de niveau `0xce728`...).
+`A5+0x5c6`) et la table des tuiles latines `0xc9216` (déplacements vers des suites d'octets, noms des
+joueurs en langue européenne).
 
 ## Inventaire des données de jeu restantes
 
@@ -639,7 +652,6 @@ relevées mais non extraites :
 |---|---|---|---|
 | Chef 11 (chaîne) | `0x1069f8`, `0x106cb8`... | lignes de 32 octets par pose `+0xaa`, trajectoires (pointeurs puis tables de 0x100 octets par orientation) ; suit la région `reactions` de `combat.json`, fin non mesurée | `families/boss_11/chain.rs` |
 | Démonstrations | `0x1f348` (prog), `0x1f3c2`, `0x1f59e`, `0x1f756` | scripts d'entrées de 32 octets et plus (opération, scène, durée, 4 joueurs, entrées enregistrées) | `modes/demo.rs` |
-| Fenêtres de niveau | `0xceaa2` (prog), `0xce9a4`, `0xce728`, `0xce7ac`, `0xce7e4`, `0xc9216` | messages de SET C 7, en-têtes, paliers et cadres par classe, tuiles latines | `families/set_c_finale_c.rs` |
 | Objets | `0xda398` | 12 adresses par personnage (suit la table `loot`) | `families/items.rs` |
 
 ## Palettes des scènes : `scene_palettes.json`

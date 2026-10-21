@@ -331,6 +331,102 @@ fn construction(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>
     vec![region("names", 0xd7604, 0xd764a), region("build", 0xd7d96, end)]
 }
 
+/// Fin d'un message de passage de niveau (0xce9ea) : mots comme les dialogues, ou octets jusqu'à 0xfd
+/// (0xfe : un octet de paramètre, 0xff : deux, octet <= 0xf : lettre accentuée sur deux octets), puis
+/// un octet nul si la longueur est impaire.
+fn level_text_end(rom: &Program, at: u32, tiles: bool) -> u32 {
+    if tiles {
+        return text_end(rom, at, true, 0x100000).expect("message de niveau");
+    }
+    let mut p = at;
+    loop {
+        let c = rom.rd8(p);
+        p += 1;
+        match c {
+            0xfd => break,
+            0xfe | 0..=0xf => p += 1,
+            0xff => p += 2,
+            _ => {}
+        }
+    }
+    if p & 1 == 1 && rom.rd8(p) == 0 {
+        p += 1;
+    }
+    p
+}
+
+/// Passage de niveau (SET C 7, `families/set_c_finale_c.rs`) : par classe, trois listes de messages (une
+/// par langue : anglais en tuiles, français, allemand), puis un enregistrement de 20 octets par niveau
+/// atteint ; les listes de messages suivent.
+fn levelup(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> Vec<Region> {
+    const TABLES: u32 = 0xceaa2;
+    const RANGE: u32 = 0xce728;
+    const RECORD: &str = "u16*3 i8*10 u8*4";
+    const FIELDS: &[&str] = &[
+        "hp", "message_a", "message_b", "stats", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "new_a",
+        "old_a", "new_b", "old_b",
+    ];
+    const LANGS: [(&str, bool); 3] = [("en", true), ("fr", false), ("de", false)];
+    specs.push(prog("levelup_tables", TABLES, "addr", &[], 6));
+    specs.push(prog("levelup_range", RANGE, "u8*2", &["min", "max"], 6));
+    specs.push(prog("levelup_frame_offsets", 0xce7ac, "u16", &[], 6));
+    specs.push(span("levelup_frame_by_step", 0xce7b8, 0xce7e4, true, "u8", &[]));
+    specs.push(prog("levelup_frames", 0xce7e4, "x32 u16 u16", &["at", "width", "unused"], 3));
+    specs.push(data("levelup_names", 0xce9a4, "addr", &[], 5));
+    for i in 0..5u32 {
+        let at = rom.rd32(0xce9a4 + 4 * i);
+        specs.push(data(&format!("levelup_name@{at:#x}"), at, "u16 u8*8", &[], 1));
+    }
+    let mut messages: BTreeMap<u32, bool> = BTreeMap::new();
+    let mut end = 0;
+    let first = rom.prog32(TABLES);
+    for c in 0..6u32 {
+        let class = ["fighter", "cleric", "elf", "dwarf", "magic_user", "thief"][c as usize];
+        let t = rom.prog32(TABLES + 4 * c);
+        let n = (rom.prog8(RANGE + 2 * c + 1) - rom.prog8(RANGE + 2 * c) + 1) as u32;
+        specs.push(data(&format!("levelup/{class}.lists"), t, "addr", &[], 3));
+        specs.push(data(&format!("levelup/{class}"), t + 12, RECORD, FIELDS, n as usize));
+        let choices = (0..n).flat_map(|k| [rom.rd16(t + 14 + 20 * k), rom.rd16(t + 16 + 20 * k)]).max().unwrap();
+        let count = choices as u32 / 4 + 1;
+        for (k, &(lang, tiles)) in LANGS.iter().enumerate() {
+            let list = rom.rd32(t + 4 * k as u32);
+            specs.push(data(&format!("levelup/{class}/{lang}"), list, "addr", &[], count as usize));
+            for i in 0..count {
+                messages.insert(rom.rd32(list + 4 * i), tiles);
+            }
+            end = end.max(list + 4 * count);
+        }
+    }
+    // messages : jointifs, chacun jusqu'au début du suivant (un message désigné en son milieu coupe le
+    // précédent)
+    let starts: Vec<(u32, bool)> = messages.into_iter().collect();
+    let mut text_end_max = 0;
+    for (i, &(a, tiles)) in starts.iter().enumerate() {
+        let full = level_text_end(rom, a, tiles);
+        let e = starts.get(i + 1).map(|&(b, _)| b.min(full)).unwrap_or(full);
+        if let Some(&(b, _)) = starts.get(i + 1) {
+            assert!(b >= e, "messages de niveau : trou avant {b:#x}");
+        }
+        text_end_max = e;
+        let (units, enc): (Vec<u16>, &str) = if tiles {
+            ((a..e).step_by(2).map(|p| rom.rd16(p)).collect(), "tiles")
+        } else {
+            ((a..e).map(|p| rom.rd8(p) as u16).collect(), "high")
+        };
+        texts.push(TextBlock {
+            name: format!("levelup_text@{a:#x}"),
+            rom: a,
+            encoding: Some(enc.into()),
+            lines: vec![encode_units(&units, tiles)],
+        });
+    }
+    vec![
+        region("levelup", first, end),
+        region("levelup_names", 0xce9a4, 0xce9ea),
+        region("levelup_texts", starts[0].0, text_end_max),
+    ]
+}
+
 pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
     let mut specs = vec![
         prog("message_lists", 0xf2dc4, "addr", &[], 7),
@@ -410,5 +506,6 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
     }
     regions.extend(bubbles(rom, &mut specs, &mut texts));
     regions.extend(construction(rom, &mut specs, &mut texts));
+    regions.extend(levelup(rom, &mut specs, &mut texts));
     (regions, specs, texts)
 }
