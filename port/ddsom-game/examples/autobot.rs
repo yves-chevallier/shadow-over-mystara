@@ -15,6 +15,8 @@
 //! * `--plan` : parcours de scènes. La première est écrite en FF8034 pendant la sélection du
 //!   personnage ; ensuite, après `durée` images de jeu dans la scène (ou 400 images après une
 //!   progression naturelle), le bot saute à la suivante (FF8034 ← scène, phase FF802C ← 8 : entrée de scène du jeu).
+//! * `--offset N` : la partie commence N images plus tard (attract d'abord) : la scène du plan est écrite à
+//!   l'image 2400 + N et le bot ne joue qu'après 2600 + N (base produite avec `bot_lib.build(offset=N)`).
 //! Il tourne comme `validate` (68000 surcadencé ×16, machine B) : le scénario est donc reproduit à l'identique.
 use std::path::Path;
 
@@ -59,6 +61,7 @@ fn main() {
     let frames: usize = a[4].parse().unwrap();
     let out_path = &a[5];
     let (mut players, mut god, mut plan, mut seed, mut weaken) = (1usize, 0u32, Vec::<(u32, usize)>::new(), 1u64, 0usize);
+    let mut offset = 0usize;
     let mut i = 6;
     while i < a.len() {
         match a[i].as_str() {
@@ -66,6 +69,7 @@ fn main() {
             "--god" => god = u32::from_str_radix(a[i + 1].trim_start_matches("0x"), 16).unwrap(),
             "--weaken" => weaken = a[i + 1].parse().unwrap(),
             "--seed" => seed = a[i + 1].parse().unwrap(),
+            "--offset" => offset = a[i + 1].parse().unwrap(),
             "--plan" => {
                 plan = a[i + 1]
                     .split(',')
@@ -103,17 +107,17 @@ fn main() {
             since = 0;
             visited.insert(scene);
         }
-        if f == 2400 && !plan.is_empty() {
+        if f == 2400 + offset && !plan.is_empty() {
             b.poke(0xff8034, plan[0].0, 1);
         }
         let active = b.rd8(0xff8030) != 0;
         let select_end = phase == 0x04 && b.rd8(0xff802d) > 0x0c;
-        if f > 2600 && select_end {
+        if f > 2600 + offset && select_end {
             // fin de la sélection (compte à rebours) : aucune touche
             for pl in 0..players {
                 apply_keys(&mut b, pl, [false; 8]);
             }
-        } else if f > 2600 && (!active || phase == 0x04) && phase != 0x08 {
+        } else if f > 2600 + offset && (!active || phase == 0x04) && phase != 0x08 {
             // hors partie (nom du classement, écrans) ou sélection du personnage (après un continue / une
             // nouvelle partie) : tapes sur Button 1 et déplacements du curseur
             for pl in 0..players {
@@ -128,7 +132,7 @@ fn main() {
                 ];
                 apply_keys(&mut b, pl, keys);
             }
-        } else if f > 2600 && active && b.rd8(0xff8031) != 0 {
+        } else if f > 2600 + offset && active && b.rd8(0xff8031) != 0 {
             // --- parcours de scènes ; `since` = images écoulées dans la scène courante, hors transitions (phases 8 et 0x10)
             if phase != 0x08 && phase != 0x10 {
                 since += 1;
