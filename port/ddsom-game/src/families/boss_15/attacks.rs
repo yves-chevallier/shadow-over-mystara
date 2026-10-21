@@ -12,7 +12,11 @@
 //! | 14 | plonge sur un joueur et le saisit |
 
 use super::*;
+use crate::mem::{rd16, rts};
 use crate::objects::Obj;
+use crate::{regs, Native};
+use cps2::Cps2Bus;
+use m68k::Cpu;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -611,15 +615,54 @@ fn push_players(x: &mut Cx) {
         x.c.d[2] = x.u16(0x10) as u32;
         x.c.d[3] = p.u16(x.b, 0x8) as u32;
         x.c.d[4] = p.u16(x.b, 0x10) as u32;
-        x.call(0x1386);
-        let a = (x.c.d[0] as u16 & 0x1f) as u32 * 4;
-        let sy = x.data16(0x1c6636 + 2 + a);
-        let sx = x.data16(0x1c6636 + a);
-        let ddx = ((sx as u32) << 16) as i32 >> 8;
-        let ddy = ((sy as u32) << 16) as i32 >> 8;
-        let nx = p.u32(x.b, 0x8).wrapping_add(ddx as u32);
-        p.set_u32(x.b, 0x8, nx);
-        let ny = p.u32(x.b, 0x10).wrapping_add(ddy as u32);
-        p.set_u32(x.b, 0x10, ny);
+        shove(x.c, x.b, p);
     }
 }
+
+/// Pente (en 1/256 de pixel) des pas de `shove` : 32 directions, (dx, dy) en mots.
+const SHOVE_STEPS: u32 = 0x1c6636;
+
+/// 0x93158 puis l'ajout à la position : déplace `o` d'un pas dans la direction de (D3, D4) vers (D1, D2) (0x1386).
+/// D0 et D1 rendent le pas (longs, 8 bits de fraction), A2 la table.
+fn shove(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
+    crate::call(c, b, 0x1386);
+    let a = (c.d[0] as u16 & 0x1f) * 4;
+    c.d[0] = c.d[0] & 0xffff_0000 | a as u32;
+    c.a[2] = SHOVE_STEPS;
+    let dy = ((rd16(b, SHOVE_STEPS + 2 + a as u32) as i16 as i32) << 8) as u32;
+    let dx = ((rd16(b, SHOVE_STEPS + a as u32) as i16 as i32) << 8) as u32;
+    c.d[0] = dx;
+    c.d[1] = dy;
+    let nx = o.u32(b, 0x8).wrapping_add(dx);
+    o.set_u32(b, 0x8, nx);
+    let ny = o.u32(b, 0x10).wrapping_add(dy);
+    o.set_u32(b, 0x10, ny);
+}
+
+/// 0x930a4 (appelé par un effet, 0xb482e) : l'objet A0 se rapproche de l'objet A1 d'un pas tant qu'il en est à
+/// plus de 0x10 pixels (X + Y).
+fn approach(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (me, other) = (Obj(c.a[0] & 0xff_ffff), Obj(c.a[1] & 0xff_ffff));
+    let dx = (me.u16(b, 0x8).wrapping_sub(other.u16(b, 0x8)) as i16).wrapping_abs() as u16;
+    let dy = (me.u16(b, 0x10).wrapping_sub(other.u16(b, 0x10)) as i16).wrapping_abs() as u16;
+    let sum = dx.wrapping_add(dy);
+    c.d[0] = c.d[0] & 0xffff_0000 | sum as u32;
+    c.d[1] = c.d[1] & 0xffff_0000 | dy as u32;
+    if (sum as i16) > 0x10 {
+        for (n, v) in [(1, other.u16(b, 0x8)), (2, other.u16(b, 0x10)), (3, me.u16(b, 0x8)), (4, me.u16(b, 0x10))] {
+            c.d[n] = c.d[n] & 0xffff_0000 | v as u32;
+        }
+        shove(c, b, me);
+    }
+    rts(c, b);
+}
+
+pub(super) const APPROACH: Native = Native {
+    entry: 0x930a4,
+    name: "boss_15_rapprochement",
+    cost: |_, _| 300,
+    run: approach,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::a(2),
+    exact_cost: false,
+};

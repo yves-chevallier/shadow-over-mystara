@@ -26,9 +26,10 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 8 | 0x87fc0 | 10 140 | DarkWarrior 2 | 64 — réécrit |
 | 7 | 0x859f8 | 9 672 | DarkWarrior 1 | démonstration de l'attract (pose), et en partie dans `cov_2p_c`, `cov_tour4_c3` — réécrit |
 | 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 — réécrit |
+| 4 | 0x81b3a | 6 370 | Chimera | scénarios `trog_scene104`, `cov_2p_c`, `cov_tour4_c3` — réécrit |
 
-Les types 0 à 4 (Ogre, Displacer Beast, Man Scorpion, Harpy, Chimera) n'ont été vus dans aucune scène 1-68 ni dans les
-scénarios `cov_*` : le jeu les joue comme ENEMY (types 4, 19, 20, 21, 22...). Les types 14 et 19, 15 et 20, 11 et 12 partagent un handler.
+Les types 0 à 3 (Ogre, Displacer Beast, Man Scorpion, Harpy) n'ont été vus dans aucune scène 1-68 ni dans les
+scénarios `cov_*` (le 3 paraît une fois, dans `scene_11`, et reste en 68000) : le jeu les joue comme ENEMY (types 4, 19, 20, 21, 22...). Les types 14 et 19, 15 et 20, 11 et 12 partagent un handler.
 
 ## 2. Réécrits
 
@@ -220,6 +221,24 @@ bout de 0xf0 images ; l'aire de jeu est absolue (x de 0x45f à 0x68f, y de 0x168
 arrière (qui finit sur le combat, 0x86a7c, et non sur le choix d'une attaque). Animations 0x17809c (mouvements), 0x1780ba
 (coups). Validation : `cov_2p_c`, `cov_tour4_c3` (1 326 appels, contrôle appel par appel sans écart), fuzz `fuzz_boss`
 (`DDSOM_ENTREE=859f8 DDSOM_ETATS=1`, 3 × 300 tours : seuls les écarts connus du drapeau X, communs avec le type 8).
+
+### Type 4 (0x81b3a) : Chimère — `boss_4/`
+
+Charpente des boss à IA (bibliothèque 0x103d6..0x105b6, états posés en longs par `decide.rs`, 0x8328e..0x833ac). À la
+création, trois doubles ENEMY (types 22, 23, 24 de `enemy_double`) liés par `+0xb4`, `+0xb6`, `+0xb8` ; les deux premiers ont
+leurs propres PV (ceux du boss moins 0xfa ou 0x12c). Le premier double rejoue un geste quand le boss pose son `+0xb6`, et son
+`+0x33` dit au boss quand souffler ; son `+0xaf` (occupé) fait remplacer les souffles par une autre attaque. Hors partie
+(`A5+0x30` nul), le boss attend (groupe 10). Groupes : arrivée par le haut de l'écran (`fight::intro`), combat (`fight` :
+debout, demi-tour, marches rapide et lente, charge vers le milieu de l'écran ou vers la cible, bond en arrière), attente sans
+joueur, retour au combat (0x82ea0, aussi appelé par les réactions communes, table 0x3e000). Pendant la marche, quatre boîtes
+devant le boss (0x83094 et 0x830b2 avec le geste de l'IA 0x1047a, 0xb5e0, 0x7ef4) mènent à `decide` : tirage de 0 à 15 dans une
+table d'octets de la ROM choisie par la phase `+0xaa` (et le geste), puis saut vers un état. Sept attaques (`attacks.rs`) : cri,
+envol puis piqué sur la cible, envol puis traversée de l'écran, bond par-dessus la cible (élan selon la distance), souffle en
+vol (ESHL 0x32 en éventail, table d'angles 0x8295c), geste du double, souffle au sol (ESHL 0x32/1). En vol, battements d'ailes
+(0x11a36, sur les marques `+0x33` à bit 7), vent des ailes (0x115e2), oscillation (0x833b6). État 4 (`hit.rs`) : réactions
+(table de longs 0x82c8a ; le code 0x4c, 0x82d36, tremblement sur place, est propre au boss), recul puis traversée en riposte,
+à terre, mort. Animations 0x17557e (corps), 0x175596 (vol, attaques), 0x1755ae (coups reçus). Validation : `trog_scene104`,
+`cov_2p_c`, `cov_tour4_c3` (contrôle appel par appel), fuzz `fuzz_boss` (`DDSOM_ENTREE=81b3a DDSOM_ETATS=1`).
 
 ### Types 11 et 12 (0x8d59e) : salamandres, scènes 42 et 40 — `boss_11/`
 

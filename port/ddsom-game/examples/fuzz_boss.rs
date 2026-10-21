@@ -158,6 +158,20 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[2, 6, 8, 10], &[0, 2, 4]),
             (&[6], Z, Z),
         ],
+        // boss 4 (Chimère)
+        4 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4]),
+            (&[2], &[2], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12]),
+            (&[2], &[6, 8, 10, 12], &[0, 2]),
+            (&[2], &[14], Z),
+            (&[4], &[0], &[0, 2]),
+            (&[4], &[2, 4], &[0, 2, 4]),
+            (&[4], &[6, 8], &[0, 2, 4, 6]),
+            (&[4], &[10], Z),
+            (&[6], Z, Z),
+        ],
         // boss 8 (guerrier noir 2)
         7 => &[
             (&[0], Z, Z),
@@ -247,6 +261,54 @@ fn etape_7(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
         _ => 1,
     };
     2 * (alea.next() % n) as u8
+}
+
+/// Étape `+7` valide du boss 4.
+fn etape_4(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 2, 8) => 3,
+        (2, 2, 10) => 5,
+        (2, 2, _) => 2,
+        (2, 4, 0) => 2,
+        (2, 4, 8) => 7,
+        (2, 4, 12) => 6,
+        (2, 4, _) => 5,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
+}
+
+/// Boss 4 : paramètres communs du 17, puis ses doubles (ENEMY) et ses champs propres.
+fn prep_4(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    prep_17(b, alea, obj);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 3, 0);
+    wr8(b, obj + 7, etape_4(alea, s.0, s.1, s.2));
+    wr8(b, obj + 0xaa, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xab, 2);
+    for l in [0xb4u32, 0xb6, 0xb8] {
+        let d = ENEMY.slot(alea.next() % ENEMY.slots).0;
+        wr16(b, obj + l, d as u16);
+        wr8(b, d + 0x33, pick(alea, &[0, 0, 1]));
+        wr8(b, d + 0xaf, pick(alea, &[0, 0, 1]));
+    }
+    wr8(b, obj + 0xb2, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xb3, (alea.next() % 2) as u8);
+    let mark = rd16(b, obj + 8).wrapping_add((alea.next() % 0x100) as u16).wrapping_sub(0x80);
+    wr16(b, obj + 0xbc, mark);
+    wr8(b, obj + 0x90, (alea.next() % 4) as u8);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x42, (alea.next() % 16) as u8);
+    wr8(b, obj + 0xaf, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xad, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x30, (alea.next() % 2) as u8);
+    wr8(b, A5 + 0x30, (alea.next() % 6 != 0) as u8);
+    wr16(b, obj + 0x60, [0x40u16, 0x100, 0x300][alea.next() as usize % 3]);
+    wr32(b, obj + 0xa2, [0x0202_0000u32, 0x0202_0400, 0x0202_0600][alea.next() as usize % 3]);
+    wr8(b, obj + 0x33, pick(alea, &[0, 1, 3, 4, 0x80, 0x81, 0x84]));
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0x900, 0xf700][alea.next() as usize % 5]);
+    wr16(b, obj + 0x1a, [0u16, 0xffc0, 0xfff0, 0xffd0][alea.next() as usize % 4]);
 }
 
 /// Étape `+7` valide du boss 18.
@@ -377,6 +439,9 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     }
     if kind == 18 {
         prep_18(b, alea, obj);
+    }
+    if kind == 4 {
+        prep_4(b, alea, obj);
     }
     if kind == 8 || kind == 7 {
         prep_8(b, alea, obj);
