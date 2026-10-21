@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use ddsom_assets::data::{encode_units, Region, TextBlock};
 
-use crate::data::{data, prog, region, Spec};
+use crate::data::{data, prog, region, span, Spec};
 use crate::rom::Program;
 
 /// Définition de fenêtre (0xd7124) : colonne, ligne, petit cadre (`+0x18`), lignes (`+0x19`), texte
@@ -281,6 +281,56 @@ fn bubbles(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> 
     [region("bubble_lists", BUBBLES, BUBBLES + 4 * BUBBLE_COUNT * 3), region("bubbles", first, end)]
 }
 
+/// Texte en tuiles (mots jusqu'au 0 compris) de `a` à `e`.
+fn tile_text(rom: &Program, name: String, a: u32, e: u32) -> TextBlock {
+    let units: Vec<u16> = (a..e).step_by(2).map(|p| rom.rd16(p)).collect();
+    TextBlock { name, rom: a, encoding: Some("tiles".into()), lines: vec![encode_units(&units, true)] }
+}
+
+/// Tables de la construction des textes (module `dialog`) : noms prédéfinis, textes selon le nombre de
+/// joueurs, titres des classes, tuiles des caractères des noms, objets et leurs textes.
+fn construction(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> Vec<Region> {
+    // noms prédéfinis (0xd7604) : mot n, puis n + 1 caractères au plus (0xff termine), 10 octets chacun
+    specs.push(data("names", 0xd7604, "addr", &[], 5));
+    for i in 0..5u32 {
+        let at = rom.rd32(0xd7604 + 4 * i);
+        specs.push(data(&format!("name@{at:#x}"), at, "u16 u8*8", &[], 1));
+    }
+    specs.push(data("players_one_two", 0xd7d96, "addr", &[], 4));
+    specs.push(data("players_one_two_b", 0xd7da6, "addr", &[], 4));
+    specs.push(data("class_titles", 0xd7db6, "addr", &[], 6));
+    // textes jusqu'à la table des caractères
+    const CHARS: u32 = 0xd7e8a;
+    // (un texte désigné en son milieu coupe celui qui le contient)
+    let targets: Vec<u32> = (0..14).map(|i| rom.rd32(0xd7d96 + 4 * i)).collect();
+    let mut p = 0xd7dce;
+    while p < CHARS {
+        let start = p;
+        p += 2;
+        while rom.rd16(p - 2) != 0 && !targets.contains(&p) {
+            p += 2;
+        }
+        texts.push(tile_text(rom, format!("build_text@{start:#x}"), start, p));
+    }
+    assert_eq!(p, CHARS);
+    // tuile de chaque code de caractère des noms (0xd75a6...), jusqu'aux textes des objets
+    let items: Vec<u32> = (0..5).map(|i| rom.prog32(0xd7a48 + 4 * i)).collect();
+    specs.push(span("name_chars", CHARS, items[0], false, "u16", &[]));
+    specs.push(prog("item_texts", 0xd7a48, "addr", &[], 5));
+    specs.push(data("item_lists", 0xd7a20, "u8*6", &[], 4));
+    let mut end = items[0];
+    for &at in &items {
+        assert_eq!(at, end, "textes des objets non jointifs");
+        let mut e = at;
+        while rom.rd16(e) != 0 {
+            e += 2;
+        }
+        end = e + 2;
+        texts.push(tile_text(rom, format!("item_text@{at:#x}"), at, end));
+    }
+    vec![region("names", 0xd7604, 0xd764a), region("build", 0xd7d96, end)]
+}
+
 pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
     let mut specs = vec![
         prog("message_lists", 0xf2dc4, "addr", &[], 7),
@@ -359,5 +409,6 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
         regions.push(region(lang.code, start, end));
     }
     regions.extend(bubbles(rom, &mut specs, &mut texts));
+    regions.extend(construction(rom, &mut specs, &mut texts));
     (regions, specs, texts)
 }

@@ -615,10 +615,18 @@ Fenêtres de dialogue (SET 24, `0xd7056`, `families/set_b.rs` module `dialog`) e
   par langue, région `bubble_lists` 0xcc444-0xcc6a8), puis pour chaque bulle `xx/bubble@…` (largeur,
   taille) et son texte `xx/bubble_text@…` (région `bubbles` 0xcc6d2-0xcdca8 ; du code sépare les deux).
 
+* Construction des textes (module `dialog`) : `names` (0xd7604, 5 adresses) et `name@…` (noms prédéfinis :
+  mot n, puis au plus n + 1 codes de caractères, `0xff` termine ; région `names` 0xd7604-0xd764a) ;
+  `players_one_two`, `players_one_two_b` (0xd7d96, 0xd7da6 : texte selon le nombre de joueurs - 1,
+  jetons 0x7001/0x7002), `class_titles` (0xd7db6 : titre par classe), textes `build_text@…` (tuiles :
+  séparateur `0xd7e26`, titres « Fighter »..., quelques textes en tuiles japonaises) ; `name_chars`
+  (0xd7e8a, 133 mots : tuile de chaque code de caractère des noms) ; `item_lists` (0xd7a20, 4 listes
+  d'objets terminées par 0xff), `item_texts` (0xd7a48, prog, 5 adresses) et `item_text@…`. Région `build`
+  0xd7d96-0xd801c.
+
 Restent à extraire ou à décoder : la sémantique complète des commandes du moteur de texte (cases
-`A5+0x5c6`), les tables de noms et de caractères de la construction (`0xd7604`, `0xd7e8a`, `0xd7db6`,
-`0xd7d96`/`0xd7da6`, `0xd7a20`..., `0xd7a48`, `0xd7e26`), la table des tuiles latines `0xc9216` et les
-messages de SET C 7 (`0xceaa2`, en-têtes `0xce9a4`, fenêtres de niveau `0xce728`...).
+`A5+0x5c6`), la table des tuiles latines `0xc9216` et les messages de SET C 7 (`0xceaa2`, en-têtes
+`0xce9a4`, fenêtres de niveau `0xce728`...).
 
 ## Inventaire des données de jeu restantes
 
@@ -631,7 +639,6 @@ relevées mais non extraites :
 |---|---|---|---|
 | Chef 11 (chaîne) | `0x1069f8`, `0x106cb8`... | lignes de 32 octets par pose `+0xaa`, trajectoires (pointeurs puis tables de 0x100 octets par orientation) ; suit la région `reactions` de `combat.json`, fin non mesurée | `families/boss_11/chain.rs` |
 | Démonstrations | `0x1f348` (prog), `0x1f3c2`, `0x1f59e`, `0x1f756` | scripts d'entrées de 32 octets et plus (opération, scène, durée, 4 joueurs, entrées enregistrées) | `modes/demo.rs` |
-| Dialogues | `0xd7604`, `0xd7e8a`, `0xd7db6`, `0xd7d96`/`0xd7da6`, `0xd7a20`..., `0xd7a48` (prog), `0xd7e26` | noms prédéfinis, tuiles des caractères des noms, titres des joueurs, textes selon le nombre de joueurs, listes d'objets et leurs textes, séparateur | `families/set_b.rs` (`dialog`) |
 | Fenêtres de niveau | `0xceaa2` (prog), `0xce9a4`, `0xce728`, `0xce7ac`, `0xce7e4`, `0xc9216` | messages de SET C 7, en-têtes, paliers et cadres par classe, tuiles latines | `families/set_c_finale_c.rs` |
 | Objets | `0xda398` | 12 adresses par personnage (suit la table `loot`) | `families/items.rs` |
 
