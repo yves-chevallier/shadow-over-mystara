@@ -24,6 +24,7 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 15 / 20 | 0x91530 | 7 470 | dragon rouge | 46 — réécrit |
 | 5 | 0x8341c | 3 826 | Ezerhorden | 58 — réécrit |
 | 8 | 0x87fc0 | 10 140 | DarkWarrior 2 | 64 — réécrit |
+| 7 | 0x859f8 | 9 672 | DarkWarrior 1 | démonstration de l'attract (pose), et en partie dans `cov_2p_c`, `cov_tour4_c3` — réécrit |
 | 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 — réécrit |
 
 Les types 0 à 4 (Ogre, Displacer Beast, Man Scorpion, Harpy, Chimera) n'ont été vus dans aucune scène 1-68 ni dans les
@@ -206,6 +207,19 @@ Animations : 0x1790f6 (mouvements), 0x179116 (coups). Fuzz : 257 000 appels sans
 1 493 ; restent un cas inatteignable de `fight` — le nombre de joueurs en vie qui devient nul pendant l'étape —, deux sorties
 du tirage « loin » de 0x8a432 et le choix de la troisième attaque en ralenti). Le scénario `boss8_scene64` est VALIDE sur
 12 000 images (8 305 appels), le boss vivant (602 PV) ; `boss8_scene64_mort` (mort à l'image 6 134) est VALIDE sur 12 000 images.
+
+### Type 7 (0x859f8) : DarkWarrior 1 — `boss_7/`
+
+Le frère du type 8 : même charpente, mêmes champs (`g::*`), mêmes aides (`aids.rs` : 0x86fee, 0x87020, 0x870a2, 0x870b4,
+0x87926, 0x87b86, 0x87c6c, 0x87c9a, 0x87ccc, 0x87cfe, 0x87d48, 0x87da2, 0x87e20, 0x87e9e, 0x87eca), tables et constantes
+propres. Différences : hors partie (`A5+0x30` nul, démonstration de l'attract) il garde la pose (état `0x02000200`, groupe 0
+étape 2) ; son arrivée est une simple chute ; le ralenti compte 3, 2, 1, 0 ; une créature d'appoint (SET 2/0x3f) paraît au
+bout de 0xf0 images ; l'aire de jeu est absolue (x de 0x45f à 0x68f, y de 0x168 à 0x19f) ; le seuil des PV est la routine commune
+0x87048. Neuf attaques (`+6` = 0 à 16) : coup, combo, couteaux (4 et 8), coup plongeant (6, sur la position retenue
+`+0xb0/+0xb2`), charge, bond, pluie de couteaux (14), disparition. Groupe 8 : marche courte, repli, saut ailleurs, bond en
+arrière (qui finit sur le combat, 0x86a7c, et non sur le choix d'une attaque). Animations 0x17809c (mouvements), 0x1780ba
+(coups). Validation : `cov_2p_c`, `cov_tour4_c3` (1 326 appels, contrôle appel par appel sans écart), fuzz `fuzz_boss`
+(`DDSOM_ENTREE=859f8 DDSOM_ETATS=1`, 3 × 300 tours : seuls les écarts connus du drapeau X, communs avec le type 8).
 
 ### Types 11 et 12 (0x8d59e) : salamandres, scènes 42 et 40 — `boss_11/`
 
