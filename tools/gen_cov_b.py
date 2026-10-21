@@ -76,6 +76,14 @@ for c in (0, 4):  # les quatre autres n'apportaient presque rien (moins de 20 in
 for sc, c in ((10, 1), (14, 2), (39, 3), (43, 4)):
     add(f"rang_{sc}", chars=(c,), seed=60 + sc, pokes=((2400, "ffff93", 0x1c, 1),), patience=400, plan=f"{sc}:99999",
         frames=12000)
+# 9. baguettes du magicien (arme B 0x24..0x27, trésors du jeu : tir à chaque coup porté en saut, 0x46044) : arme
+#    du joueur 1 (FF85DE + 0x10e) et drapeau de réserve (+0x18b..+0x191) posés par poke, une baguette par tranche
+#    de 3 000 images ; la dernière s'épuise (drapeau remis à zéro) et redevient un bâton
+WANDS = []
+for k, (w, flag) in enumerate(((0x24, 0x18c), (0x25, 0x18b), (0x26, 0x18d), (0x27, 0x191))):
+    f = 4500 + 3000 * k
+    WANDS += [(f, "ff86ec", w, 1), (f, f"{0xff85de + flag:x}", 1, 1)]
+add("baguettes_c4", chars=(4,), seed=99, pokes=tuple(WANDS), patience=400, plan="21:5000,29:5000,36:5000,49:5000")
 
 
 def generate(name):
