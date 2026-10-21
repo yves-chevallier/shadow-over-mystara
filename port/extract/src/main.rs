@@ -138,10 +138,11 @@ d'instruments, fiches d'échantillons et tables du pilote (volumes, enveloppes, 
 
 Scripts d'apparition des scènes (ennemis, décors, objets qui entrent au fil du défilement).
 
-## data/players.json, combat.json, enemies.json, boxes.json, scenes.json
+## data/players.json, combat.json, enemies.json, boxes.json, scenes.json, misc.json, dialogs.json
 
-Tables de données du jeu (personnages, réactions aux coups, ennemis, caisses, scènes) : une table par
-entrée, lignes rangées comme en ROM ; sens des tables et des champs dans docs/assets.md.
+Tables de données du jeu (personnages, réactions aux coups, ennemis, caisses, scènes, démonstrations)
+et textes (générique, dialogues et bulles des trois langues) : une table par entrée, lignes rangées
+comme en ROM ; sens des tables et des champs dans docs/assets.md.
 
 ## texts.json
 
