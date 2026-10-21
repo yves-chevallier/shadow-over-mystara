@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample};
+use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -250,5 +250,335 @@ fn decors_sans_perte() {
         for (s, &t) in l.scenes.iter().enumerate() {
             assert_eq!(be32(&prog, l.scenes_rom + 4 * s as u32), l.tables[t].pointer(), "{} scène {s}", l.name);
         }
+    }
+}
+
+#[test]
+fn scroll1_sans_perte() {
+    if !has("levels.json") {
+        return;
+    }
+    let s1 = Levels::load(&root().join("assets/levels.json")).unwrap().scroll1;
+    let (rom, _) = program();
+    let words = |v: &[u16]| v.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<u8>>();
+    // grilles, puis zéros jusqu'aux blocs
+    let mut bytes: Vec<u8> = s1.grids.iter().flat_map(|g| {
+        assert_eq!(g.len(), 64);
+        words(g)
+    }).collect();
+    bytes.resize((s1.blocks_rom - s1.grids_rom) as usize, 0);
+    assert_eq!(&rom[s1.grids_rom as usize..s1.blocks_rom as usize], &bytes[..], "grilles du scroll 1");
+    // blocs, à la suite : ils finissent où commencent les bandes du scroll 2
+    let bytes: Vec<u8> = s1.blocks.iter().flat_map(|b| {
+        assert_eq!(b.len(), 32);
+        words(b)
+    }).collect();
+    let end = s1.blocks_rom as usize + bytes.len();
+    assert_eq!(&rom[s1.blocks_rom as usize..end], &bytes[..], "blocs du scroll 1");
+    assert_eq!(end, 0x1f9ba0, "les blocs du scroll 1 précèdent les bandes du scroll 2");
+    // cases : même calcul que 0x260c (destination A1 en colonnes de 0x80 octets, cases de 4 octets)
+    let be32 = |a: usize| u32::from_be_bytes(rom[a..a + 4].try_into().unwrap());
+    for g in 0..s1.grids.len() {
+        let mut layer = vec![0u32; 32 * 32];
+        let mut a2 = s1.grids_rom as usize + 0x80 * g;
+        let mut a1 = 0usize;
+        for _ in 0..8 {
+            for _ in 0..8 {
+                let mut a3 = s1.blocks_rom as usize + 64 * u16::from_be_bytes(rom[a2..a2 + 2].try_into().unwrap()) as usize;
+                a2 += 2;
+                for col in 0..4 {
+                    for row in 0..4 {
+                        layer[(a1 + 0x80 * col + 4 * row) / 4] = be32(a3).wrapping_add(0xf800_0000);
+                        a3 += 4;
+                    }
+                }
+                a1 += 0x10;
+            }
+            a1 += 0x180;
+        }
+        for cx in 0..32 {
+            for cy in 0..32 {
+                let v = layer[cx * 32 + cy];
+                assert_eq!(s1.case_at(g, cx, cy), ((v >> 16) as u16, v as u16), "image {g} case ({cx}, {cy})");
+            }
+        }
+    }
+}
+
+#[test]
+fn terrain_sans_perte() {
+    if !has("terrain.json") {
+        return;
+    }
+    let t = Terrain::load(&root().join("assets/terrain.json")).unwrap();
+    let (rom, _) = program();
+    let at = |a: u32, n: usize| &rom[a as usize..a as usize + n];
+    let words = |v: &[u16]| v.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<u8>>();
+    for m in &t.maps {
+        let bytes: Vec<u8> = m.columns.iter().flat_map(|c| words(c)).collect();
+        assert_eq!(at(m.rom, bytes.len()), &bytes[..], "carte {:#x}", m.rom);
+        // lecture de 0x24b0 : rang 0x1e - ((y >> 3) & 0x1e), colonne (2 x) & 0xffe0
+        for x in (0..32 * m.columns.len() as u16 / 2).step_by(5) {
+            for y in (0..0x200u16).step_by(7) {
+                let y2 = y.wrapping_add(m.dy as u16);
+                let off = (0x1e - ((y2 as u8 >> 3) & 0x1e) as u16).wrapping_add(x.wrapping_add(x) & 0xffe0);
+                let a = m.rom.wrapping_add(off as i16 as u32);
+                let w = u16::from_be_bytes(at(a, 2).try_into().unwrap());
+                assert_eq!(m.word(x, y), Some(w), "carte {:#x} ({x}, {y})", m.rom);
+            }
+        }
+    }
+    // les deux cartes se suivent ; la seconde est suivie du remplissage de fin de ROM
+    let end = t.maps[1].rom as usize + 32 * t.maps[1].columns.len();
+    assert_eq!(t.maps[0].rom as usize + 32 * t.maps[0].columns.len(), t.maps[1].rom as usize);
+    assert!(rom[end..end + 64].iter().all(|&b| b == 0xff));
+    for k in &t.kinds {
+        let bytes: Vec<u8> = k.kinds.iter().flat_map(|e| words(&e.words())).collect();
+        assert_eq!(at(k.rom, bytes.len()), &bytes[..], "types de terrain {:#x}", k.rom);
+    }
+    assert_eq!(t.kinds[0].rom + 16 * t.kinds[0].kinds.len() as u32, t.kinds[1].rom);
+}
+
+#[test]
+fn palettes_des_scenes_sans_perte() {
+    if !has("scene_palettes.json") {
+        return;
+    }
+    let p = ScenePalettes::load(&root().join("assets/scene_palettes.json")).unwrap();
+    let (rom, prog) = program();
+    let bytes: Vec<u8> = p.stages.iter().flatten().flat_map(|&v| ScenePalettes::stage_word(v).to_be_bytes()).collect();
+    assert_eq!(&rom[p.stages_rom as usize..p.stages_rom as usize + bytes.len()], &bytes[..], "palettes de la page 0");
+    for t in [&p.extra, &p.sets].into_iter().chain(p.pages.iter()) {
+        let m = if t.program { &prog } else { &rom };
+        let bytes: Vec<u8> = t.entries.iter().flat_map(|a| a.to_be_bytes()).collect();
+        assert_eq!(&m[t.rom as usize..t.rom as usize + bytes.len()], &bytes[..], "table {:#x}", t.rom);
+        // toutes les palettes désignées sont dans la bibliothèque (sauf les entrées nulles)
+        for &a in t.entries.iter().filter(|&&a| a != 0) {
+            let i = p.library_index(a).unwrap_or_else(|| panic!("table {:#x} : {a:#x} hors bibliothèque", t.rom));
+            assert!(i + t.count as usize <= 8192, "table {:#x} : {a:#x}", t.rom);
+        }
+    }
+}
+
+#[test]
+fn tables_des_objets_sans_perte() {
+    if !has("sprites/tables.json") || !has("sprites/frames.json") {
+        return;
+    }
+    let t = SpriteTables::load(&root().join("assets/sprites/tables.json")).unwrap();
+    let frames = Frames::load(&root().join("assets/sprites/frames.json")).unwrap();
+    let (rom, prog) = program();
+    let at = |a: u32, n: usize| &rom[a as usize..a as usize + n];
+    // tables de jeux de boîtes, à la suite, puis les blocs de boîtes jointifs jusqu'à `box_end`
+    let mut next = t.box_tables[0].rom;
+    for bt in &t.box_tables {
+        assert_eq!(bt.rom, next, "table de boîtes {}", bt.name);
+        let bytes: Vec<u8> = bt.sets.iter().flat_map(|a| a.to_be_bytes()).collect();
+        assert_eq!(at(bt.rom, bytes.len()), &bytes[..], "table de boîtes {}", bt.name);
+        next = bt.rom + bytes.len() as u32;
+        for &s in &bt.sets {
+            assert!(t.box_blocks.iter().any(|b| b.rom == s), "jeu {s:#x} sans bloc");
+        }
+    }
+    for b in &t.box_blocks {
+        assert_eq!(b.rom, next, "bloc de boîtes {:#x} : position", b.rom);
+        let mut bytes: Vec<u8> = b.boxes.iter().flat_map(|x| x.bytes()).collect();
+        bytes.extend(&b.tail);
+        assert!(b.tail.len() < 8);
+        assert_eq!(at(b.rom, bytes.len()), &bytes[..], "bloc de boîtes {:#x}", b.rom);
+        next = b.rom + bytes.len() as u32;
+    }
+    assert_eq!(next, t.box_end, "fin des boîtes");
+    // lecture du jeu : adresse du jeu + 8 n
+    for (k, bt) in t.box_tables.iter().enumerate() {
+        for (s, &a) in bt.sets.iter().enumerate() {
+            for n in 1..4 {
+                let r = a + 8 * n as u32;
+                if r + 8 <= t.box_end {
+                    assert_eq!(t.hit_box(k, s, n).unwrap().bytes(), at(r, 8), "{} jeu {s} boîte {n}", bt.name);
+                }
+            }
+        }
+    }
+    // boîtes de visibilité et marques au sol
+    let bytes: Vec<u8> = t.bounds.iter().flat_map(|b| [b.0 as u16, b.1, b.2 as u16, b.3]).flat_map(|w| w.to_be_bytes()).collect();
+    assert_eq!(at(t.bounds_rom, bytes.len()), &bytes[..], "boîtes de visibilité");
+    let bytes: Vec<u8> = t.marks.iter().flat_map(|m| m.words()).flat_map(|w| w.to_be_bytes()).collect();
+    assert_eq!(at(t.marks_rom, bytes.len()), &bytes[..], "marques au sol");
+    // listes d'images
+    for l in &t.frame_lists {
+        let bytes: Vec<u8> = l.frames.iter().flat_map(|&f| frames.frames[f as usize].rom.to_be_bytes()).collect();
+        assert_eq!(at(l.rom, bytes.len()), &bytes[..], "liste d'images {:#x}", l.rom);
+    }
+    // tir ESHL 5 : boîtes et déplacements en espace programme, retournements en espace données
+    let s5 = &t.shot5;
+    let pat = |a: u32, n: usize| &prog[a as usize..a as usize + n];
+    let bytes: Vec<u8> = s5.boxes.iter().flatten().copied().collect();
+    assert_eq!(pat(s5.boxes_rom, bytes.len()), &bytes[..], "tir 5 : boîtes");
+    for (base, offs) in [(s5.even_rom, &s5.even), (s5.odd_rom, &s5.odd)] {
+        let bytes: Vec<u8> = offs.iter().flat_map(|d| d.to_be_bytes()).collect();
+        assert_eq!(pat(base, bytes.len()), &bytes[..], "tir 5 : déplacements {base:#x}");
+        for &d in offs.iter() {
+            let target = base.wrapping_add(d as i32 as u32);
+            assert!(t.frame_lists.iter().any(|l| l.rom == target), "tir 5 : liste {target:#x}");
+        }
+    }
+    let bytes: Vec<u8> = s5.mirrored.iter().flatten().copied().collect();
+    assert_eq!(at(s5.mirrored_rom, bytes.len()), &bytes[..], "tir 5 : retournements");
+    // les retournements sont suivis de la première liste d'images
+    assert_eq!(s5.mirrored_rom + bytes.len() as u32, t.frame_lists[0].rom);
+}
+
+#[test]
+fn textes_sans_perte() {
+    if !has("texts.json") {
+        return;
+    }
+    let t = Texts::load(&root().join("assets/texts.json")).unwrap();
+    let (rom, prog) = program();
+    let mut end = 0;
+    for d in &t.texts {
+        assert!(d.rom >= end, "texte {:#x} : chevauche le précédent", d.rom);
+        let bytes = d.bytes();
+        assert_eq!(&rom[d.rom as usize..d.rom as usize + bytes.len()], &bytes[..], "texte {:#x}", d.rom);
+        end = d.rom + bytes.len() as u32;
+    }
+    for tb in &t.tables {
+        let m = if tb.program { &prog } else { &rom };
+        for (i, &e) in tb.entries.iter().enumerate() {
+            let a = tb.rom as usize + i * if tb.offsets { 2 } else { 4 };
+            let v = if tb.offsets {
+                tb.rom.wrapping_add(i16::from_be_bytes(m[a..a + 2].try_into().unwrap()) as u32)
+            } else {
+                u32::from_be_bytes(m[a..a + 4].try_into().unwrap())
+            };
+            assert_eq!(v, e, "table {:#x}, entrée {i}", tb.rom);
+            assert!(t.by_rom(e).is_some(), "table {:#x} : {e:#x} sans texte", tb.rom);
+        }
+    }
+    // noms des bulles : déplacements (espace programme), chaînes à la suite terminées par '/'
+    let p = &t.popups;
+    for (i, &o) in p.offsets.iter().enumerate() {
+        let a = p.table as usize + 2 * i;
+        assert_eq!(i16::from_be_bytes(prog[a..a + 2].try_into().unwrap()), o, "bulle {i}");
+    }
+    let mut bytes = Vec::new();
+    let mut starts = Vec::new();
+    for s in &p.strings {
+        starts.push(p.strings_rom + bytes.len() as u32);
+        bytes.extend(ddsom_assets::texts::decode(s));
+        bytes.push(b'/');
+    }
+    assert_eq!(&rom[p.strings_rom as usize..p.strings_rom as usize + bytes.len()], &bytes[..], "noms des bulles");
+    for &o in &p.offsets {
+        assert!(starts.contains(&p.table.wrapping_add(o as u32)), "bulle : déplacement {o}");
+    }
+    // noms terminés par '@'
+    for g in &t.names {
+        let m = if g.program { &prog } else { &rom };
+        for (i, &e) in g.entries.iter().enumerate() {
+            let a = g.table as usize + 4 * i;
+            assert_eq!(u32::from_be_bytes(m[a..a + 4].try_into().unwrap()), e, "noms {:#x}, entrée {i}", g.table);
+        }
+        let bytes: Vec<u8> = g.names.iter().flat_map(|n| {
+            let mut b = ddsom_assets::texts::decode(n);
+            b.push(b'@');
+            b
+        }).collect();
+        assert_eq!(&rom[g.rom as usize..g.rom as usize + bytes.len()], &bytes[..], "noms {:#x}", g.table);
+        let starts = g.starts();
+        assert!(g.entries.iter().all(|e| starts.contains(e)), "noms {:#x} : entrée hors des noms", g.table);
+    }
+}
+
+#[test]
+fn musique_sans_perte() {
+    if !has("sound/music.json") {
+        return;
+    }
+    let m = Music::load(&root().join("assets/sound/music.json")).unwrap();
+    // même lecture que le pilote : adresses linéaires de ddsom_sound::Rom
+    let rom = ddsom_sound::Rom::load(&roms()).unwrap();
+    let at = |a: u32, n: usize| (0..n as u32).map(|k| rom.byte(a + k)).collect::<Vec<u8>>();
+    assert_eq!(u32::from(rom.word(m.header_ptr)), m.header);
+    let mut head = m.count.to_be_bytes().to_vec();
+    head.extend([m.music_factor, m.sfx_volume]);
+    head.extend(m.header_rest);
+    assert_eq!(at(m.header, 6), head, "en-tête des sons");
+    assert_eq!(m.songs.len(), m.count as usize);
+    // table des sons, définitions
+    for (i, s) in m.songs.iter().enumerate() {
+        let a = s.as_ref().map_or(0, |s| s.rom);
+        assert_eq!(at(m.header + 6 + 4 * i as u32, 4), [(a >> 16) as u8, (a >> 8) as u8, a as u8, 0], "son {i} : entrée");
+        if let Some(s) = s {
+            let b = s.bytes();
+            assert_eq!(at(s.rom, b.len()), b, "son {i} : définition");
+        }
+    }
+    // pistes : blocs jointifs réencodés ; chaque piste et chaque cible de saut tombe sur une instruction
+    let mut starts = std::collections::BTreeSet::new();
+    let mut targets = Vec::new();
+    let mut end = 0;
+    for b in &m.code {
+        assert!(b.rom >= end, "bloc {:#x} : chevauchement", b.rom);
+        let bytes = b.bytes().unwrap_or_else(|| panic!("bloc {:#x} : jeton illisible", b.rom));
+        assert_eq!(at(b.rom, bytes.len()), bytes, "bloc {:#x}", b.rom);
+        let mut a = b.rom;
+        for t in b.ops.split(' ') {
+            starts.insert(a);
+            let n = ddsom_assets::music::encode_op(t).unwrap().len() as u32;
+            if let Some((name, args)) = t.split_once('=') {
+                if name == "jump" || name.starts_with("loop") || name.starts_with("exit") {
+                    let off: i32 = args.rsplit(',').next().unwrap().parse().unwrap();
+                    targets.push((a, (a + n).wrapping_add(off as u32)));
+                }
+            }
+            a += n;
+        }
+        end = a;
+    }
+    for (a, t) in targets {
+        assert!(starts.contains(&t), "saut en {a:#x} vers {t:#x} : pas une instruction");
+    }
+    for s in m.songs.iter().flatten() {
+        for (c, a) in s.track_starts() {
+            assert!(starts.contains(&a), "son {:#x} canal {c} : piste {a:#x}", s.rom);
+            assert!(m.track(a).is_some());
+        }
+    }
+    // bancs d'instruments, échantillons, tables du pilote
+    for (k, b) in m.banks.iter().enumerate() {
+        assert_eq!(u32::from(rom.word(m.banks_table + 2 * k as u32)), b.rom, "banc {k}");
+        let bytes: Vec<u8> = b.instruments.iter().flatten().copied().collect();
+        assert_eq!(at(b.rom, bytes.len()), bytes, "banc {k}");
+    }
+    assert_eq!(u32::from(rom.word(m.samples_ptr)), m.samples_rom);
+    let bytes: Vec<u8> = m.samples.iter().flatten().copied().collect();
+    assert_eq!(at(m.samples_rom, bytes.len()), bytes, "fiches d'échantillons");
+    for t in &m.tables {
+        let b = t.bytes();
+        assert_eq!(at(t.rom, b.len()), b, "table {}", t.name);
+    }
+}
+
+#[test]
+fn apparitions_sans_perte() {
+    if !has("data/spawns.json") {
+        return;
+    }
+    let sp = Spawns::load(&root().join("assets/data/spawns.json")).unwrap();
+    let (rom, _) = program();
+    for (s, &a) in sp.scenes.iter().enumerate() {
+        let t = sp.table as usize + 4 * s;
+        assert_eq!(u32::from_be_bytes(rom[t..t + 4].try_into().unwrap()), a, "scène {s}");
+        assert!(sp.of_scene(s).is_some(), "scène {s} : script {a:#x} absent");
+    }
+    // scripts : réencodés, à la suite les uns des autres
+    let mut next = sp.scripts[0].rom;
+    for sc in &sp.scripts {
+        assert_eq!(sc.rom, next, "script {:#x} : position", sc.rom);
+        let b = sc.bytes();
+        assert_eq!(&rom[sc.rom as usize..sc.rom as usize + b.len()], &b[..], "script {:#x}", sc.rom);
+        next = sc.rom + b.len() as u32;
     }
 }

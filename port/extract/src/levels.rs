@@ -5,7 +5,7 @@ use std::io;
 use std::path::Path;
 
 use ddsom_assets::json;
-use ddsom_assets::levels::{Bank, Layer, Levels, StripTable};
+use ddsom_assets::levels::{Bank, Layer, Levels, Scroll1, StripTable};
 
 use crate::rom::Program;
 
@@ -53,7 +53,8 @@ const LAYERS: [Geometry; 2] = [
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     let rom = Program::load(roms)?;
     let layers = LAYERS.iter().map(|g| layer(&rom, g)).collect::<io::Result<Vec<_>>>()?;
-    json::save(path, &Levels { layers }, 6)
+    let scroll1 = scroll1(&rom);
+    json::save(path, &Levels { layers, scroll1 }, 6)
 }
 
 fn bad(msg: String) -> io::Error {
@@ -138,4 +139,20 @@ fn layer(rom: &Program, g: &Geometry) -> io::Result<Layer> {
         .collect();
     eprintln!("{} : {} tables de bandes, {} bandes, blocs par banque {:?}", g.name, layer.tables.len(), layer.strips.len(), counts);
     Ok(layer)
+}
+
+/// Scroll 1 : grilles d'images (0x260c, `0x1f1b60 + 0x80 D0`) et blocs de 4x4 cases (`0x1f3b60 + 64 i`),
+/// qui finissent là où commencent les bandes du scroll 2.
+const SCROLL1_GRIDS: u32 = 0x1f1b60;
+const SCROLL1_BLOCKS: u32 = 0x1f3b60;
+
+fn scroll1(rom: &Program) -> Scroll1 {
+    let grid = |g: u32| (0..64).map(|k| rom.rd16(SCROLL1_GRIDS + 0x80 * g + 2 * k)).collect::<Vec<u16>>();
+    // grilles jusqu'à la dernière non nulle
+    let count = (0..(SCROLL1_BLOCKS - SCROLL1_GRIDS) / 0x80).filter(|&g| grid(g).iter().any(|&v| v != 0)).max().map_or(0, |g| g + 1);
+    let grids: Vec<Vec<u16>> = (0..count).map(grid).collect();
+    let used = grids.iter().flatten().copied().max().unwrap_or(0) as u32;
+    let blocks = (0..=used).map(|i| (0..32).map(|k| rom.rd16(SCROLL1_BLOCKS + 64 * i + 2 * k)).collect()).collect();
+    eprintln!("scroll1 : {} images, {} blocs", grids.len(), used + 1);
+    Scroll1 { tile_offset: 0xf800, grids_rom: SCROLL1_GRIDS, grids, blocks_rom: SCROLL1_BLOCKS, blocks }
 }

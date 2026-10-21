@@ -103,7 +103,12 @@ fn layout(json: &str, depth: usize) -> String {
             '{' | '[' => {
                 let next = b.get(i + 1).copied();
                 let empty = matches!(next, Some(b'}' | b']'));
-                let nested = c == '{' || matches!(next, Some(b'{' | b'['));
+                // liste dont les premiers éléments sont `null` : imbriquée si le premier élément non nul l'est
+                let mut k = i + 1;
+                while b[k..].starts_with(b"null,") {
+                    k += 5;
+                }
+                let nested = c == '{' || matches!(b.get(k), Some(b'{' | b'['));
                 let expand = open.len() < depth && nested && !empty;
                 open.push(expand);
                 out.push(c);

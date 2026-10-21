@@ -12,3 +12,4 @@ serde_json = "1"
 [dev-dependencies]
 cps2 = { path = "../cps2" }
 cps2-gfx = { path = "../cps2-gfx" }
+ddsom-sound = { path = "../ddsom-sound" }
