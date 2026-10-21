@@ -89,6 +89,8 @@ dependencies = [
  "cps2",
  "cps2-gfx",
  "png",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -128,6 +130,7 @@ version = "0.1.0"
 dependencies = [
  "cps2",
  "cps2-gfx",
+ "ddsom-assets",
  "png",
 ]
 

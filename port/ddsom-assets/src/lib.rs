@@ -1,4 +1,11 @@
-//! Chargement des ressources produites par `extract` (voir assets/README.md).
+//! Chargement des ressources produites par `extract` (voir docs/assets.md).
+
+pub mod json;
+pub mod levels;
+pub mod sprites;
+
+pub use levels::Levels;
+pub use sprites::{Anims, Frames};
 
 use std::io;
 use std::path::Path;
