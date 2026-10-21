@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use ddsom_assets::data::{Cell, DataFile};
 use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
@@ -581,4 +582,59 @@ fn apparitions_sans_perte() {
         assert_eq!(&rom[sc.rom as usize..sc.rom as usize + b.len()], &b[..], "script {:#x}", sc.rom);
         next = sc.rom + b.len() as u32;
     }
+}
+
+/// Tables de données (`data/*.json`) : chaque table réencodée est identique à la ROM (dans son espace) ;
+/// chaque région est couverte exactement par ses tables ; toute adresse d'une colonne `addr` qui tombe
+/// dans une région désigne le début d'une table.
+fn check_data(rel: &str) {
+    if !has(rel) {
+        return;
+    }
+    let file = DataFile::load(&root().join("assets").join(rel)).unwrap();
+    let (data, prog) = program();
+    let mut names = std::collections::HashSet::new();
+    for t in &file.tables {
+        assert!(names.insert(&t.name), "{rel} : nom {} en double", t.name);
+        let b = t.bytes().unwrap_or_else(|e| panic!("{rel} : {e}"));
+        let rom = if t.program { &prog } else { &data };
+        let at = t.rom as usize;
+        assert_eq!(&rom[at..at + b.len()], &b[..], "{rel} : table {} ({:#x})", t.name, t.rom);
+    }
+    for r in &file.regions {
+        let mut inside: Vec<_> =
+            file.tables.iter().filter(|t| t.program == r.program && t.rom >= r.start && t.rom < r.end).collect();
+        inside.sort_by_key(|t| t.rom);
+        let mut at = r.start;
+        for t in inside {
+            assert_eq!(t.rom, at, "{rel} : région {}, table {}", r.name, t.name);
+            at = t.end();
+        }
+        assert_eq!(at, r.end, "{rel} : fin de la région {}", r.name);
+    }
+    for t in &file.tables {
+        for (i, row) in t.rows.iter().enumerate() {
+            for c in row.cells() {
+                if let Cell::Addr(a) = *c {
+                    if file.regions.iter().any(|r| !r.program && a >= r.start && a < r.end) {
+                        assert!(file.at(a).is_some(), "{rel} : {} ligne {i} : {a:#x} n'est pas un début de table", t.name);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn joueurs_sans_perte() {
+    check_data("data/players.json");
+    if !has("data/players.json") {
+        return;
+    }
+    // accès par personnage, comme init.rs : points de vie du clerc (personnage 3) au niveau 13
+    let f = DataFile::load(&root().join("assets/data/players.json")).unwrap();
+    let hp = f.via("hp_by_level", 3).unwrap();
+    let (rom, prog) = program();
+    let t = u32::from_be_bytes(prog[0x325e + 12..0x325e + 16].try_into().unwrap()) as usize;
+    assert_eq!(hp.value(13), u16::from_be_bytes([rom[t + 26], rom[t + 27]]) as i64);
 }

@@ -13,7 +13,8 @@ DDSOM_ROMS=$PWD/../rom cargo test --release -p ddsom-assets   # vérification sa
 
 Catégories de l'outil (sans argument : toutes) : `gfx`, `palettes` (`palettes.png`,
 `scene_palettes.json`), `sounds`, `sprites` (`sprites/frames.json`, `anims.json`, `tables.json`), `levels`,
-`terrain`, `texts`, `music` (`sound/music.json`), `data` (`data/spawns.json`).
+`terrain`, `texts`, `music` (`sound/music.json`), `data` (`data/spawns.json` et les tables de données
+`data/players.json`...).
 
 Les tests relisent les fichiers et réencodent chaque table au format de la ROM : ils échouent au premier
 octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test ignoré si un fichier manque).
@@ -33,6 +34,7 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Textes (couche 8x8, bulles, noms) | `texts.json` | `textes_sans_perte` |
 | Musiques et effets (pilote Z80) | `sound/music.json` | `musique_sans_perte` |
 | Scripts d'apparition (vagues) | `data/spawns.json` | `apparitions_sans_perte` |
+| Tables des joueurs | `data/players.json` | `joueurs_sans_perte` |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
@@ -382,6 +384,87 @@ Les « vagues d'ennemis » : un script par scène fait entrer ennemis, décors e
   `call` avec D0 = `arg`. Le mot 0xffff final n'est pas écrit ; `pad` : mot de bourrage `0x4e71` entre
   certains scripts. Les scripts sont jointifs de `0x10cde4` à `0x114788`.
 
+## Tables de données : `data/*.json`
+
+Les tables de règles du jeu (personnages, réactions aux coups, ennemis, caisses, scènes) partagent un
+même format générique (`ddsom_assets::data`, extraction `extract/src/data.rs`) : une table est une suite
+de lignes de même forme, rangées telles quelles en ROM.
+
+```json
+{"regions":[{"name":"players","start":"0x101166","end":"0x1051ae"}],
+ "tables":[
+   {"name":"hp_by_level","rom":"0x325e","program":true,"format":"addr","rows":["0x101436", ...12...]},
+   {"name":"hp_by_level/fighter","rom":"0x101436","format":"u16","rows":[112,112, ...]},
+   {"name":"jump_speeds/fighter","rom":"0x1044fe","format":"i16*4","fields":["vx","ax","vz","az"],
+    "rows":[[0,0,1280,-56], ...]}, ...]}
+```
+
+* `format` : types des colonnes, grand-boutistes : `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `addr` (long
+  qui désigne une adresse de la ROM, écrit en hexadécimal) ; `T*n` répète `n` fois `T`. `fields` nomme
+  les colonnes quand leur sens est connu. Une table d'une colonne écrit ses lignes comme des nombres.
+* `program` : table lue par le code en adressage relatif au PC, donc dans l'espace programme déchiffré
+  (tables rangées au milieu du code) ; sinon espace données.
+* `regions` : plages que les tables couvrent exactement, sans trou ni chevauchement (la taille de chaque
+  table y est l'écart jusqu'à la suivante).
+* Accès : `DataFile::table(nom)`, `Table::value(ligne)`, `Table::get(ligne, colonne)`,
+  `Table::field(ligne, "vx")` ; `DataFile::via("hp_by_level", personnage)` suit une table d'adresses par
+  personnage comme le code (`table_of` de `init.rs`).
+
+Le test de chaque fichier (`joueurs_sans_perte`, ...) réencode toutes les tables et les compare à la ROM
+octet par octet, vérifie la couverture des régions et que toute adresse `addr` qui tombe dans une région
+est le début d'une table du fichier.
+
+### Joueurs : `data/players.json`
+
+Personnages (`+3` de l'enregistrement joueur, 0 à 11) : classe = personnage / 2 (0 combattant `fighter`,
+1 clerc `cleric`, 2 elfe `elf`, 3 nain `dwarf`, 4 magicien `magic_user`, 5 voleur `thief`), deux
+variantes par classe. Une table par personnage est nommée `rôle/propriétaires` : la classe si ses deux
+variantes la partagent, `classe.0` / `classe.1` sinon, `+` entre plusieurs classes.
+
+**Région 0x101166-0x1051ae** (entièrement couverte), lue par les tables d'adresses (12 longs) :
+
+| Rôle | Adresses (espace) | Lignes | Format | Sens (consommateur) |
+|---|---|---|---|---|
+| `level_by_scene` | `0x3208` (prog) | 120 par classe | `u8` | niveau initial selon la scène (`ram::SCENE`, 0x31f0, `init_level`) ; 115 scènes, 5 octets de plus jamais relevés |
+| `hp_by_level` | `0x325e` (prog) | 24 | `u16` | PV max au niveau (0x3238) |
+| `weapons_by_level` | `0x3522` (prog) | 22, 23, 11, 13, 22, 24 | `u8*4` | armes de départ `WEAPON_A`, `WEAPON_B`, deux drapeaux débloqués (0x34e4) |
+| `random_stats` | `0x32d8` (prog) | 8 | `u8*8` | jeux de caractéristiques tirés au hasard, copiés en `+0x100..+0x106`, `+0x108` (0x328e) |
+| `weapon_power` | `0x3590` (prog) | 40 | `u8*2` | par numéro d'arme (≤ 0x27) : puissance (`+0x109`/`+0x10a`), plafond de dégâts `+0x16e` (0x3552) |
+| `unlocked_by_level` | `0x345e` (prog) | comme les armes | `u8*8` | drapeaux d'objets débloqués (liste terminée par 0, `0xff2478 + n`) (0x3432) |
+| `gear_by_level` | `0x3402` (données) | 22, 23, 23, 11, 13, 24, 22, 24 | `u8*48` | équipement copié en `+0x120` : trois listes de 16 octets (8 identifiants, 8 charges ; 0x56 = rien) ; huit tables distinctes (0x3308) |
+| `spells_by_level` | `0x34b4` (prog) | 24, 23, 11, 22 | `u8*16` | 10 premiers octets copiés en `+0x150` (réserve de sorts, 0x348e) ; une table nulle commune au combattant, au nain et au voleur |
+| `magic_damage/0..14` | `0x10417a` + 60 n | 2 x 30 | `u8*30` | dégâts par niveau du lanceur : ligne 0 contre les ennemis, ligne 1 contre les chefs (`Damage::Table(chefs, ennemis)` de `foes.rs` ; consommateurs : `pshl_b`, `pshl_d`, `peff_e`, `peff_h`, `cleric`, `magic_user`, `elf`, `items`) |
+| `jump_speeds/<classe>` | `0x1044fe`… | 4 (nain : 8) | `i16*4` | (vx, ax, vz, az) de décollage par type de saut `+0x67`, 8.8 pixels par image (`common::launch_jump`) ; le nain lit aussi `ligne + 1` |
+| `walk_*` | `0x1045de`, `0x10478e`, `0x10493e`, `0x104aee`, `0x104c9e`, `0x104e4e`, `0x104ffe` (données) | 16 | `i16*2` | vitesses (vx, vy) 8.8 par combinaison des directions (bits 0-3 des touches) : normale, inutilisée (aucune lecture trouvée), lente forcée, course, rapide, accroupie, lente (`walk.rs`) |
+
+**Tables rangées dans le code** (taille mesurée jusqu'à l'instruction suivante) :
+
+| Nom | Adresse | Lignes x format | Sens |
+|---|---|---|---|
+| `shock_damage` | `0x10108` (données) | 5 x `u16` | dégâts du choc de l'arrivée d'un joueur, par nombre de joueurs vivants (masqués à 63) |
+| `throw_kind` | `0x371b2` | 12 x `u8` | type de l'effet de lancer par personnage (`checks::throw_button`) |
+| `special_anim` | `0x372e4` | 88 x `u8` | animation de l'attaque spéciale par identifiant de sort/objet (jusqu'à 0x3733c) |
+| `ungrabbable` | `0x37588` | 32 x `u8` | non nul : type d'ennemi qui ne se laisse pas saisir (`moves::backstab`) |
+| `dust_stand`, `dust_run`, `dust_jump` | `0x3faac`, `0x3fb02`, `0x3fb48` | 6 x `i16*2` | poussières (vx, vy) par classe |
+| `item_sparks` | `0x3fbb8` | 42 x `i16*4` | étincelle d'objet : D0, D1, D2 de l'effet 0xb10c8, hauteur (`common::item_spark`) |
+| `undead_counts` | `0x4054e` | 30 x `u8*2` | renvoi des morts-vivants : nombre de types 1 et 5 renvoyés, par niveau |
+| `cure_counts`, `hold_counts`, `banish_counts` | `0x40ece`, `0x4131e`, `0x41afe` | 30, 40, 40 x `u8` | monstres touchés au plus par prière, par niveau |
+| `blessing_durations`, `protection_durations` | `0x410a6`, `0x41e4c` | 25 x `u16` | durées (images) par niveau |
+| `heal_amounts` | `0x416cc` (données) | 3 x `u16*24` | PV rendus par niveau (ligne 0 lue par le soin ; les deux autres suivent sans lecture relevée) |
+| `heal_flicker` | `0x41792` (données) | 3 x `u16*8` | couleurs du scintillement de soin |
+| `portal_speeds`, `regroup_speeds` | `0x47e78`, `0x4851c` | 12 x `u16` | vitesse par tranche de 16 pixels de distance (magicien) ; l'index n'est pas borné par le code |
+| `backstab_offsets` | `0x4935a` | 23 x `i16*2` | décalage (dx, dz) du voleur derrière l'ombre, par type de l'objet lié |
+
+Tailles incertaines : `level_by_scene` (5 octets au-delà de la scène 114), les tables du code dont l'index
+n'est pas borné (`special_anim`, `portal_speeds`, `regroup_speeds`, `backstab_offsets`) s'arrêtent à
+l'instruction suivante. Les nombres de lignes inégaux des tables par niveau suivent l'écart entre tables
+(niveaux maximaux différents selon la classe).
+
+Ne sont pas des données (adresses de code, restent dans le moteur) : tables de gestionnaires des actions
+`0x35586` (prog), des réactions `0x3a0f4` et `0x3b820`, des sous-états `0x3541c`, des sous-actions du
+combattant `0x3e806` (15 mots de déplacement vers le code, 16 pour le voleur), comportements au contact
+des tirs joueur `0x267c4`.
+
 ## Inventaire des données de jeu restantes
 
 Tables lues par le code réécrit (consommateur Rust entre parenthèses, chemins relatifs à
@@ -390,13 +473,6 @@ sinon espace données. Tailles « ? » : à mesurer (fin non relevée).
 
 | Domaine | Adresse | Taille | Structure | Consommateur |
 |---|---|---|---|---|
-| Joueurs | `0x3208`, `0x325e`, `0x32d8`, `0x3402`, `0x345e`, `0x34b4`, `0x3522` (prog) | 12 longs chacune | un pointeur par personnage vers sa table (données) : niveau par scène (octets), PV par niveau (mots), 8 jeux de caractéristiques (8 octets), équipement par niveau (12 longs, 0x30 octets ; `0x3402` lue en données), drapeaux débloqués (8 octets par niveau), sorts (10 octets par niveau), armes de départ (4 octets par niveau) | `player/init.rs` |
-| Joueurs | `0x3590` | 2 octets par arme | puissance d'attaque par numéro d'arme | `player/init.rs` |
-| Joueurs | `0x1044fe`, `0x10451e`, `0x10455e`, `0x10459e`, `0x1045be` | ? | vitesses de saut, une ligne par profil (vx, ax, vz, az) ; une table par classe ([personnages.md](personnages.md)) | `player/characters/*.rs` (`JUMP_SPEEDS`), `common::launch_jump` |
-| Joueurs | `0x35586` (prog), `0x3a0f4`, `0x3b820`, `0x3541c` | 33 entrées... | tables de sauts d'actions, de réactions et de sous-états (adresses de code) | `player/actions.rs`, `hurt.rs`, `update.rs` |
-| Joueurs | `0x3e806` | 15 entrées | sous-actions du combattant (16 pour le voleur) | `player/characters/` |
-| Joueurs | `0x4054e`, `0x4131e`, `0x40ece`, `0x41afe`, `0x433c`/`0x431e`, `0x41e4c`, `0x410a6`, `0x416cc` | par niveau | renvoi des morts-vivants, prières (nombre, durée, dégâts, soins) | `player/characters/cleric.rs` |
-| Joueurs | `0x3fbb8`, `0x4935a`, `0x37588`, `0x371b2` | ? | étincelle d'objet, décalage de l'attaque dans le dos, types insaisissables, type de l'arme par personnage | `characters/common.rs`, `thief.rs`, `checks.rs` |
 | Combat | `0x1067a4`, `0x106912` | 4 octets par identifiant d'attaque | réaction du joueur (action au sol, en l'air, puissance, puissance en difficulté > 5) aux coups et aux tirs ennemis | `combat.rs` |
 | Combat | `0x27690` | 1 octet par type de tir ennemi | garde (1 parable, 2 magie) | `combat.rs` |
 | Combat | `0x267c4` | longs | comportements au contact des tirs joueur (adresses de code) | `combat.rs` |
@@ -418,8 +494,7 @@ sinon espace données. Tailles « ? » : à mesurer (fin non relevée).
 | SET 24 | `0x1d78d0`, `0xd7218`, `0xd7a48`, `0xd7604`... | 18 octets par définition | fenêtres de dialogue (voir les textes) | `families/set_b.rs` |
 | Vagues SET B | `0xd4c5e`, `0xd4a0e`, `0xd4bdc`, `0xd4b92`, `0xd84e8`, `0xd8e5e` | lignes de 16 octets | vagues et portes des familles SET B | `families/set_b.rs` |
 
-Prochaine étape conseillée : les tables par personnage (`player/init.rs`) et les vitesses de saut (tailles
-mesurables par l'écart entre tables), puis les tables par type d'ennemi de `reactions.rs`.
+Les tables des joueurs sont extraites (`data/players.json`, ci-dessus).
 
 ## Palettes des scènes : `scene_palettes.json`
 
