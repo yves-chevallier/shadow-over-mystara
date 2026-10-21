@@ -1,8 +1,17 @@
 # Scénarios en écart
 
 Ce dossier garde les scénarios dont l'écart avec le code d'origine n'est pas (encore) expliqué par la routine qu'ils
-exercent. **Il est vide** : tous les scénarios ont été ramenés à « VALIDE » et rangés dans leur dossier
-(`boss/`, `enemy/`, `scene/`, `scene_end/`, `cov/`). Historique des causes trouvées (méthode : `DDSOM_SANS=préfixe`, puis
+exercent. Les scénarios `covb_*` (campagne de couverture, `tools/gen_cov_b.py`, `docs/couverture.md`) qui s'y trouvent
+révèlent une routine Rust fausse, décrite ci-dessous, sur un chemin qu'aucun autre scénario n'exerçait ; ils
+redeviendront VALIDES une fois la routine corrigée (puis à ranger dans `cov/`). Les anciens scénarios en écart ont tous
+été ramenés à « VALIDE » et rangés dans leur dossier (`boss/`, `enemy/`, `scene/`, `scene_end/`, `cov/`).
+
+| Scénario | Image | Écart | Cause |
+|---|---|---|---|
+| `covb_long3p_02` | 10279 | RAM FF2A38 0400 au lieu de 0800 (état de la séquence de sortie), FF8050 0 au lieu de 1, FFCB8E-FFCBA2 (SET 24 variante 7 non créé : dialogue 7), FF2A48, FF2472 | `scene/exit.rs`, `seq2_wait_exit` (séquence de sortie 2, état 4, original `0xf34a8`) : l'original attend que chaque joueur vivant ait l'état long `0x000c0c00` (`cmpi.l #0xc0c00,(4,A1)` en `0xf34be`), le Rust compare à `0x000c0300` ; il n'avance donc jamais. Chemin atteint ici après la phase 24 (fin de la partie à bonus de la scène 2 par le SET 11, image 9292, phase 24 elle-même VALIDE) puis la sortie de scène (phase 16 à l'image 9881) |
+| `covb_long3p_27`, `covb_long3p_59` | 17474, 24939 | GFX RAM 912014 09f3 au lieu de 0020 (et 912018 09f6) | `hud/status.rs`, `status_line` (original `0x17814`) : la valeur `A5+0x45` passe à 1, le clignotement démarre (minuterie `A5-0x70f6` = 0x60, puis 0x5f) ; l'original efface la ligne quand le bit 3 de la minuterie est **levé** (`andi.b #8,D1 ; bne 0x178d4` en `0x1787e`) et la dessine sinon (y compris minuterie nulle : affichage fixe), le Rust fait l'inverse (`timer & 8 == 0` → effacement) |
+
+Historique des causes trouvées (méthode : `DDSOM_SANS=préfixe`, puis
 `DDSOM_ADOPT_REGS` / `DDSOM_ADOPT_MASK` / `DDSOM_ADOPT_TRACE`, `examples/watch` (RAM et GFX RAM), `examples/pctrace`,
 `examples/cyc` (cycles à l'entrée des natives, hybride contre original)) :
 

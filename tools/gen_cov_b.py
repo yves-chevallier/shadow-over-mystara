@@ -24,7 +24,8 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 AUTOBOT = os.path.join(ROOT, "port/target/release/examples/autobot")
 ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
-OUT = os.path.join(ROOT, "scenarios", "cov")
+# scénarios en écart (routine Rust fausse sur leur chemin, docs/couverture.md) : rangés dans scenarios/ko/
+KO = {"long3p_02", "long3p_27", "long3p_59"}
 WORK = os.environ.get("DDSOM_WORK", os.path.join(ROOT, "work"))
 FRAMES = 20000  # images enregistrées par le bot (le scénario est rejoué sur 30 000 images)
 # crans du curseur de sélection pour chaque personnage seul (voir gen_scenarios.SOLO_K)
@@ -34,10 +35,11 @@ SPECS = {}
 
 
 def add(name, chars=(0,), players=1, plan="", god="0x70", frames=FRAMES, weaken=450, coin_period=1500, seed=1,
-        offset=0, pokes=(), cut=None):
+        offset=0, pokes=(), cut=None, cast=0, charges=0, patience=0):
     """`pokes` : (image, adresse, valeur, octets) ajoutés à la base ; `cut` : entrées gardées jusqu'à cette image."""
     SPECS[name] = dict(chars=chars, players=players, plan=plan, god=god, frames=frames, weaken=weaken,
-                       coin_period=coin_period, seed=seed, offset=offset, pokes=pokes, cut=cut)
+                       coin_period=coin_period, seed=seed, offset=offset, pokes=pokes, cut=cut, cast=cast,
+                       charges=charges, patience=patience)
 
 
 # 1. régions : attract propre à la région, puis une partie (stage 1 naturel, puis quelques scènes)
@@ -58,10 +60,22 @@ add("mortal_4p", chars=(0, 3, 5, 4), players=4, god="0", seed=45, plan="40:99999
 for sc, c in ((5, 0), (59, 1), (31, 2), (43, 3), (11, 4), (27, 5), (14, 0), (20, 1), (2, 2), (10, 3)):
     add(f"long_{sc:02d}", chars=(c,), seed=50 + sc, plan=f"{sc}:99999", frames=16000)
 # 6. mêmes scènes à trois joueurs, plus longtemps : les vagues tombent plus vite et les entrées réservées à trois
-#    joueurs ou plus (« joueurs >= 3 » des scripts) apparaissent
+#    joueurs ou plus (« joueurs >= 3 » des scripts) apparaissent ; `patience` : le bot abandonne un objet hors
+#    d'atteinte (sans cela il reste bloqué et la scène n'avance plus, comme dans les séjours de la section 5)
 for sc, cs in ((5, (0, 1, 2)), (59, (3, 4, 5)), (14, (1, 2, 3)), (20, (4, 5, 0)), (11, (2, 3, 4)), (27, (5, 0, 1)),
-               (2, (0, 2, 4))):
-    add(f"long3p_{sc:02d}", chars=cs, players=3, seed=70 + sc, plan=f"{sc}:99999", frames=29000)
+               (2, (0, 2, 4)), (10, (3, 5, 1))):
+    add(f"long3p_{sc:02d}", chars=cs, players=3, seed=70 + sc, plan=f"{sc}:99999", frames=29000, patience=400)
+# 7. magies et objets : chaque personnage commence dans une scène tardive (niveau élevé, tous ses sorts), choisit
+#    et lance sans cesse ses sorts et objets (autobot --cast), charges entretenues (--charges)
+for c in (0, 4):  # les quatre autres n'apportaient presque rien (moins de 20 instructions chacun)
+    add(f"magie_c{c}", chars=(c,), seed=90 + c, cast=90, charges=3,
+        plan="61:3500,63:3500,65:4500,52:3000,57:3000", patience=400)
+# 8. rang élevé (octet FFFF93, qui monte avec le temps de jeu) : entrées de script réservées à un rang >= 21..26
+#    (SET 25 et 26 de la scène 10, contrôleur de la scène 14, ENEMY 6 et contrôleur de la 39, vagues des 43 et 112)
+# le rang est recalculé à chaque entrée de scène : un scénario par scène, rang posé pendant la sélection
+for sc, c in ((10, 1), (14, 2), (39, 3), (43, 4)):
+    add(f"rang_{sc}", chars=(c,), seed=60 + sc, pokes=((2400, "ffff93", 0x1c, 1),), patience=400, plan=f"{sc}:99999",
+        frames=12000)
 
 
 def generate(name):
@@ -75,14 +89,17 @@ def generate(name):
     base = os.path.join(WORK, f"{name}.base")
     with open(base, "w") as f:
         f.write("\n".join(lines) + "\n")
-    os.makedirs(OUT, exist_ok=True)
-    out = os.path.join(OUT, "covb_" + name + ".txt")
+    out = os.path.join(ROOT, "scenarios", "ko" if name in KO else "cov", "covb_" + name + ".txt")
     cmd = [AUTOBOT, ROMS, EEPROM, base, str(sp["frames"]), out, "--players", str(n), "--seed", str(sp["seed"]),
            "--weaken", str(sp["weaken"]), "--offset", str(sp["offset"])]
     if sp["god"] != "0":
         cmd += ["--god", sp["god"]]
     if sp["plan"]:
         cmd += ["--plan", sp["plan"]]
+    if sp["patience"]:
+        cmd += ["--patience", str(sp["patience"])]
+    if sp["cast"]:
+        cmd += ["--cast", str(sp["cast"]), "--charges", str(sp["charges"])]
     log = subprocess.run(cmd, capture_output=True, text=True)
     with open(os.path.join(WORK, name + ".log"), "w") as f:
         f.write(log.stderr)

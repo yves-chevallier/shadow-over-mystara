@@ -15,6 +15,9 @@
 //! * `--plan` : parcours de scènes. La première est écrite en FF8034 pendant la sélection du
 //!   personnage ; ensuite, après `durée` images de jeu dans la scène (ou 400 images après une
 //!   progression naturelle), le bot saute à la suivante (FF8034 ← scène, phase FF802C ← 8 : entrée de scène du jeu).
+//! * `--patience N` : un objet ou une caisse poursuivi plus de N images est ignorée 2 000 images
+//!   (sinon le bot reste bloqué devant un objet hors d'atteinte et la scène n'avance plus).
+//! * `--cast N`, `--charges V` : magies et objets fréquents (voir `Magic`).
 //! * `--offset N` : la partie commence N images plus tard (attract d'abord) : la scène du plan est écrite à
 //!   l'image 2400 + N et le bot ne joue qu'après 2600 + N (base produite avec `bot_lib.build(offset=N)`).
 //! Il tourne comme `validate` (68000 surcadencé ×16, machine B) : le scénario est donc reproduit à l'identique.
@@ -28,6 +31,10 @@ struct Bot {
     f: usize,
     held: std::collections::HashMap<String, bool>,
     out: Vec<(usize, String)>,
+    /// `--patience N` : objet poursuivi par chaque joueur et depuis combien d'images ; objets ignorés jusqu'à une image
+    patience: usize,
+    chase: [(u32, usize); 4],
+    ignore: std::collections::HashMap<u32, usize>,
 }
 
 impl Bot {
@@ -62,6 +69,8 @@ fn main() {
     let out_path = &a[5];
     let (mut players, mut god, mut plan, mut seed, mut weaken) = (1usize, 0u32, Vec::<(u32, usize)>::new(), 1u64, 0usize);
     let mut offset = 0usize;
+    let mut magic = Magic::default();
+    let mut patience = 0usize;
     let mut i = 6;
     while i < a.len() {
         match a[i].as_str() {
@@ -70,6 +79,9 @@ fn main() {
             "--weaken" => weaken = a[i + 1].parse().unwrap(),
             "--seed" => seed = a[i + 1].parse().unwrap(),
             "--offset" => offset = a[i + 1].parse().unwrap(),
+            "--patience" => patience = a[i + 1].parse().unwrap(),
+            "--cast" => magic.period = a[i + 1].parse().unwrap(),
+            "--charges" => magic.charges = a[i + 1].parse().unwrap(),
             "--plan" => {
                 plan = a[i + 1]
                     .split(',')
@@ -88,7 +100,7 @@ fn main() {
     ddsom_game::install_reference(&mut m);
     m.idle = Some(ddsom_game::idle);
     let base = ddsom_game::scenario::Scenario::load(Path::new(base_path)).unwrap();
-    let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new() };
+    let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new(), patience, chase: [(0, 0); 4], ignore: Default::default() };
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut rnd = move |n: u32| {
         rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
@@ -171,7 +183,7 @@ fn main() {
                     // les deux machines de validate, voir docs/couverture.md)
                     apply_keys(&mut b, pl, [false; 8]);
                 } else {
-                    policy(&mut b, pl, &mut rnd, god);
+                    policy(&mut b, pl, &mut rnd, god, magic);
                 }
             }
         }
@@ -191,30 +203,49 @@ fn main() {
     eprintln!("scènes visitées : {:x?}", visited);
 }
 
-fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32) {
+/// Magies et objets : `--cast N` choisit la ligne suivante (Button 4) puis l'utilise (Button 3) toutes les N images
+/// devant un ennemi ; `--charges V` remet à V les charges (réserve `+0x150`) des lignes d'équipement occupées.
+#[derive(Clone, Copy, Default)]
+struct Magic {
+    period: usize,
+    charges: u32,
+}
+
+fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, magic: Magic) {
     let base = P0 + 0x200 * pl as u32;
     if b.rd8(base) == 0 {
         apply_keys(b, pl, [false; 8]);
         return;
     }
     let f = b.f + 7 * pl;
+    if magic.charges != 0 && f % 50 == 0 {
+        // trois lignes de 16 octets à +0x120 : identifiant (0x56 : vide), octet +8 = indice de la réserve
+        for line in 0..3 {
+            let row = base + 0x120 + 16 * line;
+            let slot = base + 0x150 + b.rd8(row + 8);
+            if b.rd8(row) != 0x56 && b.rd8(row + 8) < 9 && b.rd8(slot) < magic.charges {
+                b.poke(slot, magic.charges, 1);
+            }
+        }
+    }
     let hp = b.rd16(base + 0x62);
     if god != 0 && hp < god - 8 && hp > 0 && b.rd8(base + 4) < 4 {
         b.poke(base + 0x62, god, 2);
     }
     let (px, py) = (b.rd16(base + 8) as i32, b.rd16(base + 0x10) as i32);
     // cible : ennemi / boss vivants, sinon objets et caisses
-    let mut best: Option<(i32, i32, i32, bool)> = None; // (distance, x, y, ennemi)
-    let scan = |b: &Bot, start: u32, n: u32, size: u32, hostile: bool, best: &mut Option<(i32, i32, i32, bool)>| {
+    let mut best: Option<(i32, i32, i32, bool, u32)> = None; // (distance, x, y, ennemi, objet)
+    let now = b.f;
+    let scan = |b: &Bot, start: u32, n: u32, size: u32, hostile: bool, best: &mut Option<(i32, i32, i32, bool, u32)>| {
         for i in 0..n {
             let o = start + i * size;
-            if b.rd8(o) == 0 || (hostile && b.rd16(o + 0x62) == 0) {
+            if b.rd8(o) == 0 || (hostile && b.rd16(o + 0x62) == 0) || b.ignore.get(&o).is_some_and(|&u| u > now) {
                 continue;
             }
             let (x, y) = (b.rd16(o + 8) as i32, b.rd16(o + 0x10) as i32);
             let d = (x - px).abs() + 2 * (y - py).abs();
             if best.is_none_or(|t| (hostile, -d) > (t.3, -t.0)) {
-                *best = Some((d, x, y, hostile));
+                *best = Some((d, x, y, hostile, o));
             }
         }
     };
@@ -224,12 +255,25 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32) {
         scan(b, 0xffe2de, 32, 0x60, false, &mut best);
         scan(b, 0xffeede, 21, 0x80, false, &mut best);
     }
+    // objet ou caisse poursuivi trop longtemps (hors d'atteinte : derrière un mur, décor) : ignoré 2 000 images
+    if b.patience != 0 {
+        let o = best.filter(|t| !t.3).map_or(0, |t| t.4);
+        if b.chase[pl].0 != o {
+            b.chase[pl] = (o, 0);
+        }
+        b.chase[pl].1 += 1;
+        if o != 0 && b.chase[pl].1 > b.patience {
+            b.ignore.insert(o, now + 2000);
+            b.chase[pl] = (0, 0);
+            best = None;
+        }
+    }
     if pl == 0 && b.f % 200 == 0 && std::env::var("BOTDEBUG").is_ok() {
         eprintln!("f {} pos {px},{py} hp {hp} cible {best:?}", b.f);
     }
     let (mut right, mut left, mut up, mut down, mut b1, mut b2, mut b3, mut b4) = (false, false, false, false, false, false, false, false);
     match best {
-        Some((_, tx, ty, hostile)) => {
+        Some((_, tx, ty, hostile, _)) => {
             let (dx, dy) = (tx - px, ty - py);
             let range = if hostile { 40 } else { 6 };
             if dx > range { right = true } else if dx < -range { left = true }
@@ -240,6 +284,8 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32) {
                 if f % 16 < 2 { if dx > 0 { right = true } else { left = true } }
                 if f % 500 == 120 { b2 = true } // saut
                 if f % 331 < 4 { b3 = true } // magie / objet
+                if magic.period != 0 && f % magic.period < 4 { b4 = true }
+                if magic.period != 0 && f % magic.period >= 12 && f % magic.period < 16 { b3 = true }
             }
         }
         None => {
