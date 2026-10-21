@@ -102,7 +102,7 @@ pub fn parse_format(format: &str) -> Result<Vec<Kind>, String> {
             None => (tok, 1),
         };
         let k = Kind::parse(t).ok_or_else(|| format!("type inconnu : {t}"))?;
-        kinds.extend(std::iter::repeat(k).take(n));
+        kinds.extend(std::iter::repeat_n(k, n));
     }
     if kinds.is_empty() {
         return Err("format vide".into());
@@ -376,7 +376,7 @@ impl DataFile {
     pub fn row_at(&self, rom: u32) -> Option<(&Table, usize)> {
         self.tables.iter().filter(|t| !t.program && rom >= t.rom && rom < t.end()).find_map(|t| {
             let d = (rom - t.rom) as usize;
-            (d % t.row_size() == 0).then_some((t, d / t.row_size()))
+            d.is_multiple_of(t.row_size()).then_some((t, d / t.row_size()))
         })
     }
 
