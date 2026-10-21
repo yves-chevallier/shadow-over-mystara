@@ -311,7 +311,7 @@ fn box_2(ctx: &mut Ctx) {
             ctx.reinsert();
         }
         etat::ACTIF => ctx.reinsert(),
-        etat::LIBERE => ctx.free(&pools::FREE_BOX),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_BOX),
         _ => ctx.deleguer(cible),
     }
 }
@@ -472,3 +472,236 @@ fn barriere_gestionnaire(ctx: &mut Ctx) {
 gestionnaire!(BOX_1, barriere::ENTREE, "box_barriere", barriere_gestionnaire);
 gestionnaire!(BOX_0, rom::ENTREE, "box_caisse", box_0);
 gestionnaire!(BOX_2, decor::ENTREE, "box_decor", box_2);
+
+// ---------------------------------------------------------------------------------------------
+// Type 3 : bloc poussable (0xda7f2)
+
+/// Type 3 : bloc qu'un joueur pousse (action 0x2e, enregistré par le joueur en `+0x6c`). Variante 0 : glisse
+/// en X entre deux bornes, accompagné d'un SET (type 7, variante 0xc) ; sorti des bornes, il s'arrête (sous-état
+/// 2) et prévient son SET. Variante 1 : glisse en hauteur (`+0x10`) et se recale sur le décor à chaque pas.
+/// Le joueur poussant est replacé contre le bloc (décalage par personnage et direction).
+pub mod pousse {
+    use crate::families::cx::{handlers, sub, Cx};
+    use crate::objects::Obj;
+
+    const ETATS: u32 = 0xda808;
+    const INITS: u32 = 0xda826;
+    const ACTIFS: u32 = 0xda8d0;
+    const ANIMATIONS: u32 = 0x1bebc2;
+    const FREE_BOX: u32 = 0x2226;
+    /// Collision avec le décor (0x33fe4) puis recalage de l'objet (0x35c0).
+    const TERRAIN: u32 = 0x33fe4;
+    const RECALE: u32 = 0x35c0;
+    /// Décalage du joueur contre le bloc, par personnage (mots, en clair) : selon la direction de poussée.
+    const CONTRE_HAUT: u32 = 0xdab52;
+    const CONTRE_BAS: u32 = 0xdab62;
+    const CONTRE_GAUCHE_1: u32 = 0xdab72;
+    const CONTRE_DROITE_1: u32 = 0xdab82;
+    const CONTRE_GAUCHE_0: u32 = 0xdab92;
+    const CONTRE_DROITE_0: u32 = 0xdaba2;
+
+    mod f {
+        /// Non nul : objet suspendu.
+        pub const HIDDEN: u32 = 0x40;
+        pub const SET: u32 = 0x5c;
+        /// Bornes de la variante 0 (X minimal exclu, X maximal).
+        pub const X_MIN: u32 = 0x60;
+        pub const X_MAX: u32 = 0x62;
+        pub const ARRETE: u32 = 0x64;
+        pub const MOBILE: u32 = 0x65;
+        pub const POUSSE: u32 = 0x66;
+        /// Personnage du joueur poussant × 2.
+        pub const PERSONNAGE: u32 = 0x68;
+        /// Joueur poussant (mot, 0 = aucun).
+        pub const JOUEUR: u32 = 0x6c;
+    }
+    /// Champs du joueur poussant.
+    mod j {
+        /// États `+4..+6` (le long `+4` masqué) du joueur en train de pousser.
+        pub const ETATS: u32 = 0x4;
+        pub const EN_POUSSEE: u32 = 0x0200_2e00;
+        pub const PERSONNAGE: u32 = 0x3;
+        pub const DIRECTION: u32 = 0x7;
+        /// Bit 4 de `+0x6e` : pas de deux pixels ; `+0x33` non nul : un pixel de plus.
+        pub const ELAN: u32 = 0x6e;
+        pub const FORCE: u32 = 0x33;
+    }
+    /// Directions de poussée (`+7` du joueur).
+    mod dir {
+        pub const HAUT: u8 = 2;
+        pub const BAS: u8 = 4;
+        pub const GAUCHE: u8 = 6;
+        pub const DROITE: u8 = 8;
+    }
+
+    fn run(x: &mut Cx) {
+        if x.u8(f::HIDDEN) != 0 {
+            return;
+        }
+        let etat = x.u8(0x4);
+        saut(x, ETATS, etat as u32);
+        match etat {
+            0 => {
+                let v = 2 * x.u8(0x3) as u32;
+                saut(x, INITS, v);
+                if v == 0 { init_0(x) } else { init_1(x) }
+                x.reinsert();
+            }
+            2 => {
+                if x.a5_u8(0x3d) == 0 {
+                    let v = 2 * x.u8(0x3) as u32;
+                    saut(x, ACTIFS, v);
+                    if x.u8(0x5) == 0 {
+                        if v == 0 { actif_0(x) } else { actif_1(x) }
+                    }
+                }
+                x.reinsert();
+            }
+            _ => x.call(FREE_BOX),
+        }
+    }
+
+    /// `move.w (table,PC,D0.w),D1.w` : D0 = indice, D1.w = mot de la table (restes lus après le saut).
+    fn saut(x: &mut Cx, table: u32, i: u32) {
+        x.c.d[0] = i;
+        let w = x.rom16(table + i);
+        x.c.d[1] = x.c.d[1] & 0xffff_0000 | w as u32;
+    }
+
+    fn init_commun(x: &mut Cx, mobile: u8) {
+        x.add8(0x4, 2);
+        x.set8(0x0, 1);
+        x.set8(0x2e, 0x35);
+        x.set8(f::MOBILE, mobile);
+    }
+
+    fn init_0(x: &mut Cx) {
+        init_commun(x, 1);
+        x.set16(0x8, 0x234);
+        x.set16(0x10, 0x290);
+        x.set16(f::X_MAX, 0x290);
+        x.set16(f::X_MIN, 0x1d8);
+        x.anim_start(ANIMATIONS, 7);
+        x.call(sub::ALLOC_SET);
+        if x.c.cond(5) {
+            return;
+        }
+        let set = Obj(x.c.a[1]);
+        set.set_u8(x.b, 0x0, 1);
+        set.set_u8(x.b, 0x2, 7);
+        set.set_u8(x.b, 0x3, 0xc);
+        set.set_u8(x.b, 0x2f, 1);
+        x.set16(f::SET, set.0 as u16);
+    }
+
+    fn init_1(x: &mut Cx) {
+        init_commun(x, 0);
+        x.anim_start(ANIMATIONS, 6);
+    }
+
+    /// Le joueur poussant (A1), s'il est toujours en train de pousser ; sinon le bloc l'oublie.
+    fn pousseur(x: &mut Cx) -> Option<Obj> {
+        if x.u16(f::JOUEUR) == 0 {
+            return None;
+        }
+        let joueur = x.linked(f::JOUEUR);
+        x.c.a[1] = x.u16(f::JOUEUR) as i16 as i32 as u32;
+        let etats = joueur.u32(x.b, j::ETATS) & 0xffff_ff00;
+        x.c.d[0] = etats;
+        if etats != j::EN_POUSSEE {
+            x.set8(f::POUSSE, 0);
+            x.set16(f::JOUEUR, 0);
+            return None;
+        }
+        let personnage = (joueur.u8(x.b, j::PERSONNAGE) & 0xfe) as u32;
+        x.c.d[0] = personnage;
+        x.set16(f::PERSONNAGE, personnage as u16);
+        Some(joueur)
+    }
+
+    /// Replace le joueur contre le bloc sur l'axe `axe` (+8 ou +0x10).
+    fn recale_joueur(x: &mut Cx, axe: u32, table: u32) {
+        let joueur = x.linked(f::JOUEUR);
+        x.c.a[1] = x.u16(f::JOUEUR) as i16 as i32 as u32;
+        let v = x.u16(axe);
+        joueur.set_u16(x.b, axe, v);
+        let i = x.u16(f::PERSONNAGE) as i16 as i32 as u32;
+        let d = x.data16(table.wrapping_add(i));
+        x.c.a[2] = table;
+        x.set_d0w(d);
+        joueur.set_u16(x.b, axe, v.wrapping_add(d));
+    }
+
+    /// Variante 0 : glissement en X entre les bornes.
+    fn actif_0(x: &mut Cx) {
+        let px = x.u16(0x8);
+        x.set_d0w(px);
+        if px > x.u16(f::X_MAX) || px <= x.u16(f::X_MIN) {
+            x.add8(0x5, 2);
+            x.set8(f::ARRETE, 1);
+            let set = x.linked(f::SET);
+            x.c.a[1] = x.u16(f::SET) as i16 as i32 as u32;
+            set.set_u8(x.b, 0x2f, 0);
+            return;
+        }
+        let Some(joueur) = pousseur(x) else { return };
+        let (signe, table) = match joueur.u8(x.b, j::DIRECTION) {
+            dir::GAUCHE => (-1i16, CONTRE_GAUCHE_0),
+            dir::DROITE => (1, CONTRE_DROITE_0),
+            _ => return,
+        };
+        if joueur.u8(x.b, j::ELAN) & 0x10 != 0 {
+            x.add16(0x8, (2 * signe) as u16);
+        }
+        if joueur.u8(x.b, j::FORCE) != 0 {
+            x.add16(0x8, signe as u16);
+        }
+        recale_joueur(x, 0x8, table);
+    }
+
+    /// Un pas de la variante 1 : le bloc avance puis se recale sur le décor.
+    fn pas(x: &mut Cx, axe: u32, d: i16) {
+        x.add16(axe, d as u16);
+        recale_decor(x);
+    }
+
+    fn recale_decor(x: &mut Cx) {
+        x.call(TERRAIN);
+        x.call(RECALE);
+    }
+
+    /// Variante 1 : glissement en hauteur (directions 2 et 4) ou en X (6 et 8).
+    fn actif_1(x: &mut Cx) {
+        let Some(joueur) = pousseur(x) else { return };
+        let direction = joueur.u8(x.b, j::DIRECTION);
+        let (axe, signe, table) = match direction {
+            dir::HAUT => (0x10, 1i16, CONTRE_HAUT),
+            dir::BAS => (0x10, -1, CONTRE_BAS),
+            dir::GAUCHE => (0x8, -1, CONTRE_GAUCHE_1),
+            dir::DROITE => (0x8, 1, CONTRE_DROITE_1),
+            _ => return,
+        };
+        let horizontal = axe == 0x8;
+        let pas_long = if horizontal { 2 * signe } else { signe };
+        if joueur.u8(x.b, j::ELAN) & 0x10 != 0 {
+            pas(x, axe, pas_long);
+        }
+        // le joueur est relu après chaque appel
+        let joueur = x.linked(f::JOUEUR);
+        if joueur.u8(x.b, j::FORCE) != 0 {
+            if horizontal {
+                x.add16(axe, signe as u16);
+            } else {
+                pas(x, axe, signe);
+            }
+        }
+        if horizontal {
+            recale_decor(x);
+        }
+        recale_joueur(x, axe, table);
+    }
+
+    handlers! {
+        0xda7f2 "box_pousse" 120 run,
+    }
+}

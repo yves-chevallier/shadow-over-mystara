@@ -100,8 +100,9 @@ mod ext {
     pub const ALLOC_BOX: u32 = 0x23a8;
     pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const MOVE_Z: u32 = 0x1dbc;
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const SOUND_TRACK: u32 = 0x289c;
+    /// Secousses de la caméra (modes 0x54, 0x5c), voir `start_shake`.
+    pub const SHAKE_54: u32 = 0x2824;
+    pub const SHAKE_5C: u32 = 0x289c;
     pub const SOUND_BIG: u32 = 0xa8ae8;
 }
 
@@ -435,7 +436,7 @@ fn scripted_scroll(x: &mut Cx) {
                 x.set16(cam::MODE, mode::STAGE);
                 sync_previous(x);
                 x.c.d[0] = 30;
-                x.call(ext::SOUND_EVENT);
+                x.call(ext::SHAKE_54);
             }
         }
         0x20 => {
@@ -759,7 +760,7 @@ fn gate_far(x: &mut Cx) {
             shift_players(x, 0x2c0);
             stage_script(x);
             x.c.d[0] = 0x20;
-            x.call(ext::SOUND_TRACK);
+            x.call(ext::SHAKE_5C);
         }
         _ => {}
     }
@@ -1547,4 +1548,35 @@ const fn camera(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus))
     Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs: regs::a(0), exact_cost: false }
 }
 
-pub const NATIVES: &[Native] = &[CAMERA1_UPDATE, CAMERA2_UPDATE];
+/// 0x2824, 0x2860, 0x289c : lance une secousse de la caméra en service (1, ou 2 si `A5+0x36`) dans le
+/// mode `mode` pour D0 images. Si aucune secousse n'est en cours, la position de repos et le mode
+/// courant sont retenus pour la fin de la secousse. Rend A1 = la caméra.
+fn start_shake(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
+    let camera = A5 + if rd8(b, A5 + 0x36) != 0 { CAMERA_2 } else { CAMERA_1 };
+    c.a[1] = camera;
+    let cam = Obj(camera);
+    if cam.u8(b, f::SHAKING) == 0 {
+        cam.set_u8(b, f::SHAKING, 1);
+        let current = cam.u16(b, cam::MODE);
+        cam.set_u16(b, f::SHAKE_MODE, current);
+        let x = cam.u16(b, 0x8);
+        cam.set_u16(b, f::SHAKE_X, x);
+        let y = cam.u16(b, 0xc);
+        cam.set_u16(b, f::SHAKE_Y, y);
+    }
+    cam.set_u16(b, cam::MODE, mode);
+    let count = c.d[0] as u16;
+    cam.set_u16(b, f::SHAKE_COUNT, count);
+    c.flags_logic(count as u32, m68k::decode::Size::Word);
+    rts(c, b);
+}
+
+const fn shake_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+    Native { entry, name, cost: |_, _| 60, run, touches_sound: false, outputs: regs::a(1) | regs::CCR, exact_cost: false }
+}
+
+pub const SHAKE_A: Native = shake_native(0x2824, "camera_secousse_54", |c, b| start_shake(c, b, 0x54));
+pub const SHAKE_B: Native = shake_native(0x2860, "camera_secousse_58", |c, b| start_shake(c, b, 0x58));
+pub const SHAKE_C: Native = shake_native(0x289c, "camera_secousse_5c", |c, b| start_shake(c, b, 0x5c));
+
+pub const NATIVES: &[Native] = &[CAMERA1_UPDATE, CAMERA2_UPDATE, SHAKE_A, SHAKE_B, SHAKE_C];

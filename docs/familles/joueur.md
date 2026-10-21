@@ -86,11 +86,19 @@ regard (0 ou 0x20 ; copié du joueur), `+0x2e` jeu de boîtes de collision, `+0x
 | 35–39 | 0x4fc1a … 0x4ffd0 | `peff_j.rs` | bond, échange, glissade, éclat du coup, éclats d'un monstre touché | 36 : scénarios ; autres : fuzz |
 | 40 | 0x50148 | `peff_k.rs` | météores (palette de l'écran recopiée par `movem`) | fuzz |
 | 41 | 0x50348 | `peff_n.rs` | gardien invoqué (palette recopiée par `movem`) | fuzz |
+| 43 | 0x51076 | `peff.rs` | comptoir de boutique : deux zones (par scène, tables 0x51306 / 0x51376) guettent les quatre joueurs ; un joueur dans une zone avec `+0x58` positif lance le dialogue de la zone (scripts `+0x1c` / `+0x58`) ; l'objet suit le défilement à demi-vitesse | scénarios (états 0 et 2) ; interprète du dialogue : code d'origine |
 | 44 | 0x517dc | `peff.rs` | pastille posée sur la caméra secondaire | scénarios |
 | 45 | 0x518b4 | `peff_k.rs` | voyant de l'écran de choix (effets de palette) | fuzz |
 | 46, 47 | 0x51ad6, 0x51bcc | `peff_j.rs` | pluie de pièces et minuterie de l'écran de gain | fuzz |
 
-Restent en code d'origine : PEFF 42 et 43 (boutique, 0x50b9c et 0x51076), gros automates non exercés par les scénarios.
+Restent en code d'origine : PEFF 42 (0x50b9c, second comptoir de boutique, jamais exercé par les 121 scénarios) et
+l'interprète des dialogues de PEFF 43 (0x514ac / 0x514cc, table de 0x514ec : achats, paiement BCD, inventaire),
+qu'aucun scénario n'atteint (aucun joueur n'a `+0x58` positif dans une zone). PEFF 43 l'appelle tel quel (A1 = case
+de la liste des joueurs, A2 = le joueur, D6 = compteur de boucle, relus après l'appel comme dans l'original).
+
+Créateurs appelés par le code des personnages (`families/creators.rs`) : 0x51c06 (tir PSHL 0 qui accompagne l'arme,
+si le genre `+2` est dans le masque 0x51c5c), 0x4b7a0 (éclair PEFF 10), 0x4dc9a (deux étincelles PEFF 25). Contrat :
+A1 = l'objet créé, retenue levée si le pool est plein (ou, pour 0x51c06, si le genre n'a pas de tir).
 
 ## Validation
 

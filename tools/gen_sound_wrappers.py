@@ -2,8 +2,8 @@
 """Génère port/ddsom-game/src/sound_table.rs : description compacte des « wrappers » son du 68000.
 
 Chaque wrapper (0xe0be2-0xede08) enfile une commande dans la file son en suivant un des schémas
-reconnus ci-dessous ; les wrappers qui n'en suivent aucun (aiguillages par table de sauts) restent
-exécutés par le code d'origine. Le listing (`listing.txt`, non versionné) est la seule entrée :
+reconnus ci-dessous ; les wrappers qui n'en suivent aucun (aiguillages par table de sauts) sont
+décrits à la main dans `sound.rs` (`AIGUILLAGES`). Le listing (`listing.txt`, non versionné) est la seule entrée :
     tools/gen_sound_wrappers.py /home/ycr/som/listing.txt > port/ddsom-game/src/sound_table.rs
 """
 import re
@@ -110,7 +110,7 @@ out = ["// Fichier généré par tools/gen_sound_wrappers.py : ne pas modifier �
        "use super::{Cmd::*, Wrapper, DIRECT, GARDE, MEMO, PAN};", "",
        "const fn w(entry: u32, cmd: super::Cmd, d2: u32, d3: u32, opts: u8) -> Wrapper {",
        "    Wrapper { entry, cmd, d2, d3, opts }", "}", "",
-       f"/// {len(rows)} wrappers décrits ; les autres ({len(excluded)}) restent en code 68000.",
+       f"/// {len(rows)} wrappers décrits ; les autres ({len(excluded)}) sont des aiguillages (`sound::AIGUILLAGES`).",
        "pub const WRAPPERS: &[Wrapper] = &["]
 names = [(PAN_F, "PAN"), (GUARD_F, "GARDE"), (MEMO_F, "MEMO"), (DIRECT_F, "DIRECT")]
 for s, c, d2, d3, f in rows:

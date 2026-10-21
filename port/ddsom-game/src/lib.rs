@@ -120,6 +120,7 @@ pub const NATIVES: &[Native] = &[
     text::PRINT_TALL,
     text::PRINT_TALL_AT,
     text::CLEAR_BLOCKS,
+    text::DRAW_BLOCKS,
     text::CLEAR_BOX,
     palette::FULL_BRIGHTNESS,
     palette::NO_BRIGHTNESS,

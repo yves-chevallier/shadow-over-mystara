@@ -422,10 +422,170 @@ fn wrapper_natif(w: &Wrapper) -> Native {
     }
 }
 
-/// Les routines natives de chaque wrapper décrit (construites une fois, puis conservées).
+/// Les routines natives de chaque wrapper décrit et des aiguillages (construites une fois, puis conservées).
 pub fn wrappers_natifs() -> &'static [Native] {
     static LISTE: OnceLock<Vec<Native>> = OnceLock::new();
-    LISTE.get_or_init(|| table::WRAPPERS.iter().map(wrapper_natif).collect())
+    LISTE.get_or_init(|| {
+        let aiguillages = AIGUILLAGES.iter().map(|&(entry, _)| Native {
+            entry,
+            name: "son_aiguillage",
+            cost: |_, _| 300,
+            run: run_aiguillage,
+            touches_sound: false,
+            outputs: 0, // tous les registres sont rendus intacts
+            exact_cost: false,
+        });
+        table::WRAPPERS.iter().map(wrapper_natif).chain(aiguillages).collect()
+    })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Les aiguillages
+
+/// Wrappers qui ne composent pas eux-mêmes leur commande : ils choisissent dans une table, d'après un
+/// registre ou l'objet, un autre wrapper qu'ils appellent (après leur propre sauvegarde sur la pile
+/// privée, D0-D3 mis à zéro), ou bien une commande de musique.
+#[derive(Clone, Copy, Debug)]
+enum Aiguillage {
+    /// `tst.b D4 ; bmi` puis D4.w = 2 × D4.b, D0.w = table[D4], cible = table + D0 (rien si D4 < 0).
+    ParD4(u32),
+    /// D1.w = table[A0[3] & 0xe], cible = table + D1.
+    ParVariante(u32),
+    /// A1 = long table[2 × (A0[3] & 0xe)], cible = A1.
+    ParVarianteLong(u32),
+    /// A1 = long table[2 × (A0[3] & 0xe)], puis D1.b = A0[0x47], A1 = long (en clair) en A1 + D1.w.
+    ParVarianteEtGenre(u32),
+    /// D1 = 4 × A1[0x44], A1 = long table[D1], cible = A1.
+    ParA1(u32),
+    /// Musique de la scène : D1.w = table[2 × scène] (rien si gardé, ou si D1 <= 0 / D1 < 0 selon
+    /// `strict`), recopiée en mémo puis enfilée si le son est autorisé.
+    Musique { table: u32, strict: bool },
+    /// Musique D4.w (rien si gardé).
+    MusiqueD4,
+}
+
+const AIGUILLAGES: &[(u32, Aiguillage)] = {
+    use Aiguillage::*;
+    &[
+        (0xe0c5c, Musique { table: 0xe0ca6, strict: true }),
+        (0xe0d8c, Musique { table: 0xe0dd6, strict: false }),
+        (0xe17a4, MusiqueD4),
+        (0xe662a, ParVarianteEtGenre(0xe666c)),
+        (0xe6910, ParD4(0xe694a)),
+        (0xe7622, ParVariante(0xe765c)),
+        (0xe774c, ParVariante(0xe7786)),
+        (0xe78e8, ParVariante(0xe7922)),
+        (0xe7a12, ParVariante(0xe7a4c)),
+        (0xe7c20, ParD4(0xe7c5a)),
+        (0xe7e10, ParD4(0xe7e4a)),
+        (0xe823a, ParVarianteLong(0xe8274)),
+        (0xec046, ParA1(0xec080)),
+        (0xec200, ParA1(0xec23a)),
+    ]
+};
+
+/// Long de l'espace programme (tables lues relativement au PC).
+fn lecture_programme32(b: &mut Cps2Bus, adresse: u32) -> u32 {
+    (lecture_programme(b, adresse) as u32) << 16 | lecture_programme(b, adresse + 2) as u32
+}
+
+fn mot_bas(r: u32, v: u16) -> u32 {
+    r & 0xffff_0000 | v as u32
+}
+
+/// Exécute l'aiguillage dont l'entrée est le PC courant.
+fn run_aiguillage(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (_, sorte) = *AIGUILLAGES.iter().find(|(e, _)| *e == c.pc).expect("aiguillage son inconnu");
+    let a6 = c.a[6];
+    // prologue : sauvegarde de D0-D7/A0-A4 sous le pointeur de pile privée, D0-D3 à zéro
+    sauvegarde_fantome(c, b);
+    let sommet = rd32(b, a5(c, ram::PILE_PRIVEE)).wrapping_sub(52);
+    wr32(b, a5(c, ram::PILE_PRIVEE), sommet);
+    c.a[6] = sommet;
+    c.d[..4].fill(0);
+    let cible = match sorte {
+        Aiguillage::ParD4(table) => {
+            let d4 = c.d[4] as u8 as i8;
+            (d4 >= 0).then(|| {
+                let i = (d4 as i16 * 2) as u16;
+                c.d[4] = mot_bas(c.d[4], i);
+                let d = lecture_programme(b, table.wrapping_add(i as i16 as u32));
+                c.d[0] = d as u32;
+                table.wrapping_add(d as i16 as u32)
+            })
+        }
+        Aiguillage::ParVariante(table) => {
+            let i = (rd8(b, c.a[0] + 3) & 0xe) as u32;
+            let d = lecture_programme(b, table + i);
+            c.d[1] = d as u32;
+            Some(table.wrapping_add(d as i16 as u32))
+        }
+        Aiguillage::ParVarianteLong(table) => {
+            let i = 2 * (rd8(b, c.a[0] + 3) & 0xe) as u32;
+            c.d[1] = i;
+            c.a[1] = lecture_programme32(b, table + i);
+            Some(c.a[1])
+        }
+        Aiguillage::ParVarianteEtGenre(table) => {
+            let i = 2 * (rd8(b, c.a[0] + 3) & 0xe) as u32;
+            let liste = lecture_programme32(b, table + i);
+            let genre = rd8(b, c.a[0] + 0x47) as u32;
+            c.d[1] = genre;
+            c.a[1] = rd32(b, liste.wrapping_add(genre));
+            Some(c.a[1])
+        }
+        Aiguillage::ParA1(table) => {
+            let i = 4 * rd8(b, c.a[1] + 0x44) as u32;
+            c.d[1] = i;
+            c.a[1] = lecture_programme32(b, table + i);
+            Some(c.a[1])
+        }
+        Aiguillage::Musique { table, strict } => {
+            if rd8(b, a5(c, ram::MUET_GARDE)) == 0 {
+                let scene = rd8(b, a5(c, 0x34)) as i8 as i16;
+                let i = (scene * 2) as u16;
+                c.d[0] = i as u32;
+                let d1 = lecture_programme(b, table.wrapping_add(i as i16 as u32));
+                c.d[1] = d1 as u32;
+                if !strict {
+                    wr16(b, a5(c, ram::MEMO_COMMANDE), d1);
+                }
+                let joue = if strict { d1 as i16 > 0 } else { d1 as i16 >= 0 };
+                if joue {
+                    if strict {
+                        wr16(b, a5(c, ram::MEMO_COMMANDE), d1);
+                    }
+                    crate::call(c, b, ENFILER_SI_SON.entry);
+                }
+            }
+            None
+        }
+        Aiguillage::MusiqueD4 => {
+            if rd8(b, a5(c, ram::MUET_GARDE)) == 0 {
+                let d1 = c.d[4] as u16;
+                c.d[1] = d1 as u32;
+                wr16(b, a5(c, ram::MEMO_COMMANDE), d1);
+                crate::call(c, b, ENFILER_SI_SON.entry);
+            }
+            None
+        }
+    };
+    if let Some(cible) = cible {
+        crate::call(c, b, cible);
+    }
+    // épilogue : registres relus sur la pile privée, pointeur remonté
+    let p = rd32(b, a5(c, ram::PILE_PRIVEE));
+    for k in 0..8 {
+        c.d[k] = rd32(b, p + 4 * k as u32);
+    }
+    for k in 0..5 {
+        c.a[k] = rd32(b, p + 32 + 4 * k as u32);
+    }
+    let p = p.wrapping_add(52);
+    wr32(b, a5(c, ram::PILE_PRIVEE), p);
+    c.a[6] = a6;
+    c.flags_logic(p, Size::Long);
+    rts(c, b);
 }
 
 // ---------------------------------------------------------------------------------------------

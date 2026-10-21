@@ -208,49 +208,61 @@ fn print_tall_at(c: &mut Cpu, b: &mut Cps2Bus) {
     finish(c, b, end, false);
 }
 
-/// 0x0f4a : efface des blocs de 2x2 cases (tuile 0x2fc) : '@@' fin, '##' saute deux colonnes,
-/// '//' deux lignes plus bas, 0xffff n : n blocs vides. Attributs négatifs : palette de l'objet A0.
-fn clear_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
-    let a0 = c.a[0];
+/// Blocs de 2x2 cases : '@@' fin, '##' saute deux colonnes, '//' deux lignes plus bas, 0xffff n : n
+/// blocs vides (tuile 0x20). Un autre mot `t` dessine un bloc : tuiles `t, t+1` puis `t+0x10, t+0x11` en
+/// dessous avec les attributs du descripteur (négatifs : palette `+0x2b` de l'objet A0) pour 0x0f38 ;
+/// bloc vide (tuile 0x2fc, attributs 0) pour 0x0f4a.
+fn blocks(c: &mut Cpu, b: &mut Cps2Bus, drawn: bool) {
+    let attr = rd16(b, c.a[4] + 2);
+    let attr = if attr & 0x8000 != 0 { rd8(b, c.a[0] + 0x2b) as u16 } else { attr };
     let mut s = Script { b, at: c.a[4] };
     let (col, row) = (s.byte(), s.byte());
-    let _ = s.word(); // attributs : sans effet (l'original écrit toujours 0)
-    let _ = a0;
+    s.word();
     let mut line = cell(col, row);
     let mut at = line;
     let mut x = false;
-    let block = |b: &mut Cps2Bus, at: u32, code: u16| {
-        put(b, at, code, 0);
-        put(b, at + ROW, code.wrapping_add(0x10), 0);
-        put(b, at + COLUMN, code.wrapping_add(1), 0);
-        put(b, at + COLUMN + ROW, code.wrapping_add(0x11), 0);
-    };
     loop {
         match s.word() {
             0x2323 => at += 2 * COLUMN,
             0x4040 => break,
             0xffff => {
                 let n = s.word();
-                x = n == 0; // subq.w #1
                 for _ in 0..n.wrapping_sub(1) as u32 + 1 {
                     for (dc, dr) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
                         put(s.b, at + dc * COLUMN + dr * ROW, BLANK, 0);
                     }
                     at += 2 * COLUMN;
                 }
+                x = false; // add.w D4,D1 (D4 = 0)
             }
             0x2f2f => {
                 line += 2 * ROW;
                 at = line;
             }
-            _ => {
-                block(s.b, at, 0x2fc);
+            tile => {
+                let (code, attr) = if drawn { (tile, attr) } else { (0x2fc, 0) };
+                put(s.b, at, code, attr);
+                put(s.b, at + ROW, code.wrapping_add(0x10), attr);
+                put(s.b, at + COLUMN, code.wrapping_add(1), attr);
+                put(s.b, at + COLUMN + ROW, code.wrapping_add(0x11), attr);
+                // retenue du dernier addi.w #0x10
+                x = code.wrapping_add(1).checked_add(0x10).is_none();
                 at += 2 * COLUMN;
             }
         }
     }
     let end = s.at;
     finish(c, b, end, x);
+}
+
+/// 0x0f4a : efface des blocs de 2x2 cases.
+fn clear_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
+    blocks(c, b, false);
+}
+
+/// 0x0f38 : dessine des blocs de 2x2 cases.
+fn draw_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
+    blocks(c, b, true);
 }
 
 /// Efface un rectangle de la couche (colonne, ligne, largeur, hauteur) avec des espaces. Une ligne
@@ -301,4 +313,5 @@ pub const PRINT_OVER: Native = native(0x0dca, "text_print_over", print_over);
 pub const PRINT_TALL: Native = native(0x1136, "text_print_tall", print_tall);
 pub const PRINT_TALL_AT: Native = native(0x1234, "text_print_tall_at", print_tall_at);
 pub const CLEAR_BLOCKS: Native = native(0x0f4a, "text_clear_blocks", clear_blocks);
+pub const DRAW_BLOCKS: Native = native(0x0f38, "text_draw_blocks", draw_blocks);
 pub const CLEAR_BOX: Native = native(0x1324, "text_clear_box", clear_box);
