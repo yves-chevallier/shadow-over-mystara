@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample, ScenePalettes, Terrain};
+use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample, ScenePalettes, SpriteTables, Terrain};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -358,4 +358,73 @@ fn palettes_des_scenes_sans_perte() {
             assert!(i + t.count as usize <= 8192, "table {:#x} : {a:#x}", t.rom);
         }
     }
+}
+
+#[test]
+fn tables_des_objets_sans_perte() {
+    if !has("sprites/tables.json") || !has("sprites/frames.json") {
+        return;
+    }
+    let t = SpriteTables::load(&root().join("assets/sprites/tables.json")).unwrap();
+    let frames = Frames::load(&root().join("assets/sprites/frames.json")).unwrap();
+    let (rom, prog) = program();
+    let at = |a: u32, n: usize| &rom[a as usize..a as usize + n];
+    // tables de jeux de boîtes, à la suite, puis les blocs de boîtes jointifs jusqu'à `box_end`
+    let mut next = t.box_tables[0].rom;
+    for bt in &t.box_tables {
+        assert_eq!(bt.rom, next, "table de boîtes {}", bt.name);
+        let bytes: Vec<u8> = bt.sets.iter().flat_map(|a| a.to_be_bytes()).collect();
+        assert_eq!(at(bt.rom, bytes.len()), &bytes[..], "table de boîtes {}", bt.name);
+        next = bt.rom + bytes.len() as u32;
+        for &s in &bt.sets {
+            assert!(t.box_blocks.iter().any(|b| b.rom == s), "jeu {s:#x} sans bloc");
+        }
+    }
+    for b in &t.box_blocks {
+        assert_eq!(b.rom, next, "bloc de boîtes {:#x} : position", b.rom);
+        let mut bytes: Vec<u8> = b.boxes.iter().flat_map(|x| x.bytes()).collect();
+        bytes.extend(&b.tail);
+        assert!(b.tail.len() < 8);
+        assert_eq!(at(b.rom, bytes.len()), &bytes[..], "bloc de boîtes {:#x}", b.rom);
+        next = b.rom + bytes.len() as u32;
+    }
+    assert_eq!(next, t.box_end, "fin des boîtes");
+    // lecture du jeu : adresse du jeu + 8 n
+    for (k, bt) in t.box_tables.iter().enumerate() {
+        for (s, &a) in bt.sets.iter().enumerate() {
+            for n in 1..4 {
+                let r = a + 8 * n as u32;
+                if r + 8 <= t.box_end {
+                    assert_eq!(t.hit_box(k, s, n).unwrap().bytes(), at(r, 8), "{} jeu {s} boîte {n}", bt.name);
+                }
+            }
+        }
+    }
+    // boîtes de visibilité et marques au sol
+    let bytes: Vec<u8> = t.bounds.iter().flat_map(|b| [b.0 as u16, b.1, b.2 as u16, b.3]).flat_map(|w| w.to_be_bytes()).collect();
+    assert_eq!(at(t.bounds_rom, bytes.len()), &bytes[..], "boîtes de visibilité");
+    let bytes: Vec<u8> = t.marks.iter().flat_map(|m| m.words()).flat_map(|w| w.to_be_bytes()).collect();
+    assert_eq!(at(t.marks_rom, bytes.len()), &bytes[..], "marques au sol");
+    // listes d'images
+    for l in &t.frame_lists {
+        let bytes: Vec<u8> = l.frames.iter().flat_map(|&f| frames.frames[f as usize].rom.to_be_bytes()).collect();
+        assert_eq!(at(l.rom, bytes.len()), &bytes[..], "liste d'images {:#x}", l.rom);
+    }
+    // tir ESHL 5 : boîtes et déplacements en espace programme, retournements en espace données
+    let s5 = &t.shot5;
+    let pat = |a: u32, n: usize| &prog[a as usize..a as usize + n];
+    let bytes: Vec<u8> = s5.boxes.iter().flatten().copied().collect();
+    assert_eq!(pat(s5.boxes_rom, bytes.len()), &bytes[..], "tir 5 : boîtes");
+    for (base, offs) in [(s5.even_rom, &s5.even), (s5.odd_rom, &s5.odd)] {
+        let bytes: Vec<u8> = offs.iter().flat_map(|d| d.to_be_bytes()).collect();
+        assert_eq!(pat(base, bytes.len()), &bytes[..], "tir 5 : déplacements {base:#x}");
+        for &d in offs.iter() {
+            let target = base.wrapping_add(d as i32 as u32);
+            assert!(t.frame_lists.iter().any(|l| l.rom == target), "tir 5 : liste {target:#x}");
+        }
+    }
+    let bytes: Vec<u8> = s5.mirrored.iter().flatten().copied().collect();
+    assert_eq!(at(s5.mirrored_rom, bytes.len()), &bytes[..], "tir 5 : retournements");
+    // les retournements sont suivis de la première liste d'images
+    assert_eq!(s5.mirrored_rom + bytes.len() as u32, t.frame_lists[0].rom);
 }

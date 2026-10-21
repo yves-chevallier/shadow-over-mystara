@@ -40,6 +40,16 @@ impl Program {
         self.prog.get((a >> 1) as usize).copied().unwrap_or(0)
     }
 
+    /// Octet lu en espace programme.
+    pub fn prog8(&self, a: u32) -> u8 {
+        let w = self.prog16(a & !1);
+        if a & 1 == 0 {
+            (w >> 8) as u8
+        } else {
+            w as u8
+        }
+    }
+
     /// Long lu en espace programme.
     pub fn prog32(&self, a: u32) -> u32 {
         (self.prog16(a) as u32) << 16 | self.prog16(a + 2) as u32

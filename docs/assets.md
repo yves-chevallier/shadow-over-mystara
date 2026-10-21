@@ -25,6 +25,7 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Images du scroll 1 | `levels.json` (`scroll1`) | `scroll1_sans_perte` |
 | Palettes des scènes | `scene_palettes.json` | `palettes_des_scenes_sans_perte` |
 | Terrain (cartes fixes, types) | `terrain.json` | `terrain_sans_perte` |
+| Boîtes, marques au sol, listes d'images | `sprites/tables.json` | `tables_des_objets_sans_perte` |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
@@ -66,6 +67,13 @@ document décrit les autres.
 | Pages 1, 2, 3 | `0x1a62c`, `0x1a6a0`, `0x1a8d4` (programme) | 3, 115, 115 longs | adresse de 32 palettes |
 | Cartes de terrain fixes | `0x3f8e9c`, `0x3f9c9c` | 112 et 96 colonnes de 16 mots | mot d'attributs, terrain = bits 7-15 |
 | Types de terrain | `0x3425c`, `0x34a5c` | 2 x 128 x 16 octets | 8 mots : genre, routine, sens, échelle, bord, arrêt, 0, 0 |
+| Jeux de boîtes (corps, poussée, attaque) | `0x11bffa`, `0x11c11a`, `0x11c23a` | 3 x 72 longs | adresse de la boîte 0 du jeu |
+| Boîtes de collision | `0x11c35a-0x123600` | 201 blocs, 3 654 boîtes | 8 octets : X, demi-largeur, Z, demi-hauteur, Y, demi-profondeur, 0, 0 |
+| Boîtes de visibilité | `0x1ca538` | 128 x 8 octets | mots : dx, largeur, dy, hauteur |
+| Marques au sol | `0x1e45c` | 97 x 16 octets | 8 mots : coût, code, x, attributs, dx, dy, priorité, 0 |
+| Listes d'images du tir ESHL 5 | `0x9e8bc-0x9eba4` | 3 x 53 + 3 x 9 longs | adresses d'images |
+| Liste d'images de 0xb48c0 | `0x17efca` | 7 longs | adresses d'images |
+| Tir ESHL 5 : boîtes, listes, retournements | `0x9e55c`, `0x9e638`, `0x9e6a4` (programme), `0x9e6bc` | 15 x 4 octets, 2 x 12 mots, 256 x 2 octets | indices de boîtes ; déplacements ; (image, retournement) |
 
 Les régions des images et des décalages sont lues d'un bout à l'autre et entièrement couvertes (pas
 de trou ni de chevauchement) ; la table des adresses donne exactement la même suite d'images. Les tables
@@ -187,6 +195,49 @@ menus, avant-plans de quelques scènes : D0 = 5 et 6 en 0x13dba, 7 et 8 en 0xfa7
 Le texte de la couche 1 (chiffres, chaînes, bulles) est écrit par le code depuis des descripteurs, voir
 la section des textes.
 
+## Tables des objets : `sprites/tables.json`
+
+Tables que le code indexe avec les octets `+0x38..+0x3c` d'un objet (recopiés des entrées d'animation,
+champ `data` de `anims.json`) et listes d'images lues directement par le code.
+
+```json
+{"box_tables":[{"name":"body","rom":"0x11bffa","sets":["0x11c35a", ...72...]}, ...],
+ "box_blocks":[{"rom":"0x11c35a","boxes":[[0,0,0,0,0,0,0,0],[0,16,32,32,2,6,0,0], ...],"tail":[]}, ...],
+ "box_end":"0x123600",
+ "bounds_rom":"0x1ca538","bounds":[[256,960,512,1024], ...],
+ "marks_rom":"0x1e45c","marks":[{"cost":3,"code":8137,"x":-24,"attr":528,"dx":0,"dy":0,"priority":32768,"unused":0}, ...],
+ "frame_lists":[{"rom":"0x9e8bc","frames":[...numéros d'images...]}, ...],
+ "shot5":{"boxes_rom":"0x9e55c","boxes":[[0,2,71,44], ...],"even_rom":"0x9e638","even":[1280, ...],
+          "odd_rom":"0x9e6a4","odd":[536, ...],"mirrored_rom":"0x9e6bc","mirrored":[[32,0], ...]}}
+```
+
+* **Boîtes de collision** ([combat.md](combat.md) §3). Un objet porte un jeu (`+0x2e`) et trois
+  index : corps `+0x38`, poussée `+0x39`, attaque `+0x3a` (0 : aucune boîte). `box_tables[k].sets[jeu]`
+  est l'adresse de la boîte 0 du jeu ; la boîte `n` est 8 octets plus loin par index
+  (`SpriteTables::hit_box`). Boîte : X (signé), demi-largeur, Z (hauteur), demi-hauteur, Y (profondeur),
+  demi-profondeur, deux octets nuls. Toutes les boîtes forment une région jointive, découpée en blocs
+  à chaque adresse désignée par un jeu ; un bloc s'étend jusqu'au suivant (`tail` : les 2 octets de
+  bourrage `0x4e71` qui terminent 59 blocs d'attaque). Le tableau des boîtes d'attaque des tirs joueur
+  (`0x121fc8`), celui des tirs ennemis (`0x1221e2`) et celui du ramassage (`0x1233c8`), indexés sans jeu,
+  sont des blocs de cette région. Ces mêmes tables servent à dessiner les « ombres détaillées »
+  (`sprites.rs`, 0x1ec4e : quatre quarts autour du centre de la boîte `+0x38` et `+0x3a`).
+* **Boîtes de visibilité** (index `+0x3c`, 0x1ed2, [objets.md](objets.md) §7) : `(dx, largeur, dy,
+  hauteur)`, l'objet est visible si `x écran + dx <= largeur` et `hauteur écran + dy <= hauteur` en non
+  signé. 128 entrées (la suite de la ROM est d'une autre nature) ; les index au-delà de 65 valent tous
+  `(0, 384, 0, 256)`.
+* **Marques au sol** (index `+0x3b`, 0x1e3a6, `sprites.rs`) : un sprite matériel par marque ;
+  97 entrées, du code suit.
+* **Listes d'images** : les seules suites d'adresses d'images de la ROM hors table principale et
+  entrées d'animation (recherche exhaustive dans les deux espaces). `0x9e8bc` : six listes du tir
+  ESHL 5 (anneaux du serpent, zones de contact des grands ennemis, `eshl.rs` `shot5`) ; `0x17efca` :
+  7 images choisies par `+0x33` du porteur (0xb48c0). Les autres images que le code impose directement
+  (`move.l #image,(0x34,A0)`) sont des immédiats dans le code, pas des tables.
+* **Tir ESHL 5** (`shot5`) : par `+0x2f` (rang), indices des trois boîtes et de la marque au sol
+  (`boxes`, espace programme ; 15 entrées jusqu'au code, seules les 7 premières non nulles), déplacement
+  de la liste des images paires et impaires (`even`, `odd`, mots relatifs à leur table, espace
+  programme), et (image, retournement) des images impaires par `(+0x42 / 2) * 16 + +0x43 / 2`
+  (`mirrored`, espace données).
+
 ## Palettes des scènes : `scene_palettes.json`
 
 Les palettes ne sont pas construites par le code : chaque scène désigne des palettes de la
@@ -235,11 +286,12 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
 
 ## Ce qui reste à extraire
 
-* Sprites : les tables de cadres lues directement par le code (listes d'adresses d'images, p. ex.
-  `0x9e8b8`, décors SET), les octets entre la table des images et les images (`0x2a85fc-0x2b45d8`, rôle
-  inconnu), les boîtes de collision et de visibilité (`0x1ca538`), les ombres (`0x11bffa`, `0x11c23a`), les
-  marques au sol (`0x1e45c`). Les jeux d'animations que seul le code désigne (sans nom) ne sont pas
-  listés comme jeux : leurs entrées sont dans `entries` (isolées).
+* Sprites : entre la table des images et les images, `0x2a85fc-0x2a8fcc` (octets, rôle inconnu) puis
+  `0x2a8fcc-0x2ae81e` : 2 462 noms de scripts du visualiseur (`pl00_000`, 8 caractères terminés par
+  `0xff`), puis les palettes des scènes et `0x2b04de-0x2b45d8` (inconnu). Les jeux d'animations que seul
+  le code désigne (sans nom) ne sont pas listés comme jeux : leurs entrées sont dans `entries` (isolées).
+  Les boîtes propres à certaines familles (données qui suivent `0x1ca938`, tables `0x121fc8`... déjà
+  couvertes) et les décalages de tirs (`0xd4198`...) restent dans le code ou à inventorier.
 * Animations : 35 débuts d'entrées plausibles dont la chaîne est incohérente ne sont pas extraits ; une
   paire d'entrées isolées se chevauche (`0x174c70`/`0x174c78`, l'une est un faux positif). Jeux vides :
   `bs16` (ses trois tableaux sont des copies de ceux de `bs02`, décalages relatifs à `bs02`) et `em09`

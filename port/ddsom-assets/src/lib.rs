@@ -4,11 +4,13 @@ pub mod json;
 pub mod levels;
 pub mod scene_palettes;
 pub mod sprites;
+pub mod tables;
 pub mod terrain;
 
 pub use levels::Levels;
 pub use scene_palettes::ScenePalettes;
 pub use sprites::{Anims, Frames};
+pub use tables::SpriteTables;
 pub use terrain::Terrain;
 
 use std::io;

@@ -13,6 +13,7 @@ mod rom;
 mod scene_palettes;
 mod sounds;
 mod sprites;
+mod tables;
 mod terrain;
 
 use std::path::Path;
@@ -41,6 +42,7 @@ fn main() {
         }
         if wanted("sprites") {
             sprites::extract(roms, &out.join("sprites"))?;
+            tables::extract(roms, &out.join("sprites/tables.json"))?;
         }
         if wanted("levels") {
             levels::extract(roms, &out.join("levels.json"))?;
@@ -89,6 +91,11 @@ lecture 1.0 de la puce). Le bloc `smpl` donne la boucle et la note de référenc
 
 Définitions des sprites : les 21 887 images (assemblages de cellules, table ROM 0x293000) et les scripts
 d'animation (jeux et entrées). JSON, adresses ROM en hexadécimal ; format détaillé dans docs/assets.md.
+
+## sprites/tables.json
+
+Tables des objets liées aux sprites : boîtes de collision, boîtes de visibilité, marques au sol, listes
+d'images lues directement par le code.
 
 ## scene_palettes.json
 
