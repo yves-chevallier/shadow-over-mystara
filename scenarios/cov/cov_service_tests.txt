@@ -1,0 +1,150 @@
+600 Service Mode 1
+900 P1 Button 1 1
+904 P1 Button 1 0
+1004 P1 Up 1
+1012 P1 Up 0
+1032 P1 Down 1
+1040 P1 Down 0
+1060 P1 Left 1
+1068 P1 Left 0
+1088 P1 Right 1
+1096 P1 Right 0
+1116 P1 Button 1 1
+1124 P1 Button 1 0
+1144 P1 Button 2 1
+1152 P1 Button 2 0
+1172 P1 Button 3 1
+1180 P1 Button 3 0
+1200 P1 Button 4 1
+1208 P1 Button 4 0
+1228 P2 Up 1
+1236 P2 Up 0
+1256 P2 Down 1
+1264 P2 Down 0
+1284 P2 Left 1
+1292 P2 Left 0
+1312 P2 Right 1
+1320 P2 Right 0
+1340 P2 Button 1 1
+1348 P2 Button 1 0
+1368 P2 Button 2 1
+1376 P2 Button 2 0
+1396 P2 Button 3 1
+1404 P2 Button 3 0
+1424 P2 Button 4 1
+1432 P2 Button 4 0
+1452 P3 Up 1
+1460 P3 Up 0
+1480 P3 Down 1
+1488 P3 Down 0
+1508 P3 Left 1
+1516 P3 Left 0
+1536 P3 Right 1
+1544 P3 Right 0
+1564 P3 Button 1 1
+1572 P3 Button 1 0
+1592 P3 Button 2 1
+1600 P3 Button 2 0
+1620 P3 Button 3 1
+1628 P3 Button 3 0
+1648 P3 Button 4 1
+1656 P3 Button 4 0
+1676 P4 Up 1
+1684 P4 Up 0
+1704 P4 Down 1
+1712 P4 Down 0
+1732 P4 Left 1
+1740 P4 Left 0
+1760 P4 Right 1
+1768 P4 Right 0
+1788 P4 Button 1 1
+1796 P4 Button 1 0
+1816 P4 Button 2 1
+1824 P4 Button 2 0
+1844 P4 Button 3 1
+1852 P4 Button 3 0
+1872 P4 Button 4 1
+1880 P4 Button 4 0
+1900 Coin 1 1
+1908 Coin 1 0
+1928 Coin 2 1
+1936 Coin 2 0
+1956 Coin 3 1
+1964 Coin 3 0
+1984 Coin 4 1
+1992 Coin 4 0
+2012 3 Players Start 1
+2020 3 Players Start 0
+2040 4 Players Start 1
+2048 4 Players Start 0
+2068 1 Player Start 1
+2076 1 Player Start 0
+2096 2 Players Start 1
+2104 2 Players Start 0
+2124 Service 1 1
+2132 Service 1 0
+2152 1 Player Start 1
+2156 P1 Button 1 1
+2162 P1 Button 1 0
+2166 1 Player Start 0
+2226 P1 Down 1
+2230 P1 Down 0
+2270 P1 Button 1 1
+2274 P1 Button 1 0
+2374 P1 Button 1 1
+2404 P1 Button 1 0
+2464 P2 Button 1 1
+2494 P2 Button 1 0
+2554 P1 Button 2 1
+2584 P1 Button 2 0
+2644 P2 Button 2 1
+2674 P2 Button 2 0
+2734 P1 Button 1 1
+2764 P1 Button 1 0
+2824 P2 Button 1 1
+2854 P2 Button 1 0
+2914 1 Player Start 1
+2918 P1 Button 1 1
+2924 P1 Button 1 0
+2928 1 Player Start 0
+2988 P1 Down 1
+2992 P1 Down 0
+3032 P1 Button 1 1
+3036 P1 Button 1 0
+3136 P1 Up 1
+3140 P1 Up 0
+3180 P1 Up 1
+3184 P1 Up 0
+3224 P1 Right 1
+3228 P1 Right 0
+3268 P1 Down 1
+3272 P1 Down 0
+3312 P1 Left 1
+3316 P1 Left 0
+3356 P1 Left 1
+3360 P1 Left 0
+3400 P1 Down 1
+3404 P1 Down 0
+3444 P1 Button 1 1
+3448 P1 Button 1 0
+3648 P1 Button 2 1
+3652 P1 Button 2 0
+3712 P1 Up 1
+3716 P1 Up 0
+3756 P1 Up 1
+3760 P1 Up 0
+3800 P1 Up 1
+3804 P1 Up 0
+3844 P1 Button 1 1
+3848 P1 Button 1 0
+4148 P1 Button 2 1
+4152 P1 Button 2 0
+4212 P1 Right 1
+4272 P1 Right 0
+4312 P1 Down 1
+4372 P1 Down 0
+4412 1 Player Start 1
+4416 P1 Button 1 1
+4422 P1 Button 1 0
+4426 1 Player Start 0
+30001 quit

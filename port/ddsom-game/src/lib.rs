@@ -41,6 +41,7 @@ pub mod scroll;
 pub mod scenario;
 pub mod sound;
 pub mod terrain;
+pub mod service;
 pub mod sprites;
 pub mod tache_credits;
 pub mod taches;
@@ -153,10 +154,13 @@ pub const NATIVES: &[Native] = &[
     eeprom::COMPTER_CONTINUES,
     eeprom::COMPTER_PARTIES,
     eeprom::VBLANK_COMPTA,
+    eeprom::COMPTA_PARTIES,
+    eeprom::COMPTA_INIT,
     config::VARIANTE,
     config::DEFAUTS,
     config::VALIDER,
     config::VARIABLES,
+    config::INIT,
     popups::ANIMER,
     credits::ECRIRE_CHIFFRE,
     eeprom::COMPLET_PIECES_NATIF,
@@ -225,6 +229,7 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
         .chain(hud::NATIVES)
+        .chain(service::NATIVES)
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -393,6 +398,7 @@ fn patches() -> Vec<cps2::Patch> {
     let mut v = vec![
         cps2::Patch { entry: player::scripted::END_BY_SCENE_ENTRY, apply: player::scripted::patch_end_by_scene },
         cps2::Patch { entry: scene::exit::SHARED_NEXT_ENTRY, apply: scene::exit::patch_shared_next },
+        cps2::Patch { entry: service::memoire::CHECK, apply: service::memoire::patch_instant_check },
     ];
     v.extend(sprites::EMPTY_FRAME_PATCHES);
     v
