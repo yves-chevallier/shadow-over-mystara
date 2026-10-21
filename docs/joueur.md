@@ -84,8 +84,15 @@ de l'action (0 : premier appel, l'action y prépare son animation).
 | 0x0a | `JUMP` saut | 0x3590a | `characters::run(Slot::Jump)` |
 | 0x0c | `ATTACK` attaque du bouton 1 | 0x35948 | `characters::run(Slot::Attack)` |
 | 0x0e | `SPECIAL` attaque spéciale | 0x359a2 | `characters::run(Slot::Special)` |
-| 0x10, 0x12 | actions propres aux personnages (h) | 0x359fc, 0x35a3a | `characters::run(Action10/12)` |
-| 0x14..0x34 | portage, saisies, lancers, sorts... | table | ROM sauf 0x22 (`actions::grabbed`) |
+| 0x10, 0x12 | actions propres aux personnages (h) | 0x359fc, 0x35a3a | `characters::run(Action10/12)` ; 0x12 : bond d'attaque 0x35a78 et petit saut arrière du magicien 0x35b96 (`moves`) |
+| 0x06 | course | 0x3573e | `moves::run` (dérapages d'arrêt et de demi-tour) |
+| 0x14 | prendre / lâcher l'objet porté (`+0x8b`) | 0x35c26 | `moves::carry` |
+| 0x16, 0x18 | garde au bouclier (bouton 4 / bouton 1 maintenu) | 0x35d52, 0x35dca | `moves::guard` |
+| 0x22 | saisi | 0x36abe | `actions::grabbed` |
+| 0x2a | saut sur place (h) | 0x36c12 | `moves::hop` |
+| 0x2e | pousser l'objet lié | 0x36d68 | `moves::push` |
+| 0x32 | sort sans charge | 0x36f48 | `moves::spell_fizzle` |
+| autres (0x1a..0x30) | portage, lancers, sorts... | table | ROM |
 
 Après l'action : collision avec le décor (0x33fe4, `terrain::SHADOW`) sauf actions 0x20/0x24/0x2a, entrées figées ou
 scène 4 pendant la saisie ; puis `walk::clamp_to_screen`.
@@ -147,9 +154,13 @@ variantes lues dans le code (`gates::*`, 3 longs à +0x16 du début de chaque va
 une dizaine de reconnaisseurs. Un reconnaisseur lit une table de la ROM : paires (masque, valeur) suivies
 d'un mot, -1 terminant la séquence ; le masque négatif demande « touches inchangées » ; `step`
 (0xf1884) gère délai et avancement, `recognize_both` (0xf186e) essaie l'orientation normale puis
-miroir, `recognize_mirror` (0xf187c) seulement le miroir. Séquence complète et porte ouverte : la
-routine d'action d'origine est lancée (ROM, `rom::ACTION_*`) ; si elle change l'état, les suivants ne sont
-pas examinés.
+miroir, `recognize_mirror` (0xf187c) seulement le miroir. Séquence complète et porte ouverte : l'action
+du coup est lancée (`moves::combo`, routines d'origine 0x3733c..0x374aa) ; si elle change l'état, les
+suivants ne sont pas examinés. Ces actions mettent presque toutes le joueur en attaque (action 0xc) avec
+une sous-action (`+0x6a` : 10, 12, 22, 24, 26, 30) et le sens mémorisé par la séquence (`+0x1b7`,
+`+0x1bd`...) ; 0x37386 lance la course (vrai seulement vers la gauche : Z accidentel de l'original),
+0x373a8 l'action 0x10, 0x373cc l'action 0x12 (0x1a avec la classe de vitesse 2), 0x374aa la saisie d'un
+ennemi de dos par le voleur (ennemi au sol, même sens, assez proche ; table 0x37588 des types insaisissables).
 
 ## 7. Réactions aux coups (P4/P6)
 
@@ -163,8 +174,18 @@ pas examinés.
   coups relit.
 - `scripted.rs` (P3) : résurrection (sous-état 4 : chute, atterrissage, 150 images d'invulnérabilité),
   attente d'ouverture des commandes (sous-état 8), cinématique de la scène 1 (entrée en marchant, pose,
-  course finale), marche d'entrée des scènes 2/15/16.... Les cinématiques des autres scènes (tables de
-  0x23826 : ~25 routines distinctes) restent en ROM.
+  course finale), marche d'entrée des scènes 2/15/16....
+- `cinematics.rs` (P3) : les ~25 autres entrées en scène (table 0x23826 : apparition, attente de l'étape
+  `A5+0x2e` du script d'entrée, marche, pose, arme en main, commandes en phase 12 ; chutes du haut de
+  l'écran, joueur posé sur l'objet suivi par la caméra `A5+0x46`) et les 16 cinématiques de fin de scène
+  (table 0x23f4e : pose de victoire 35/36 et son, marche vers une place par rang `+0x7d`, attente de
+  l'étape `A5-0x55c8` du script de fin, sortie à droite, disparition par trois palettes). Chaque routine
+  est un automate à table de décalages (`+6`) ; comme l'original, D0 = pas et D1 = décalage à l'entrée du
+  pas (0xb378a, appelée par un pas, lit son réglage dans D1). Les cinématiques de fin réinsèrent le joueur
+  dans la liste des acteurs sauf à leur dernier pas.
+- Réactions (`hurt.rs`) : les réactions à table de pas (26, `STEP_TABLES`) sont aiguillées en Rust, ce
+  qui fait passer leurs pas partagés par les versions Rust ; en plus des précédentes : prise (0x3ad96,
+  projection puis secousses, `+0x1f0`), étourdissement (0x3ae8a), assis à se débattre (0x3b1e4).
 
 ## 8. Interface pour les personnages (P5) et les tirs (C06/C12)
 
@@ -202,10 +223,13 @@ hors périmètre (natives d'autres sous-systèmes), à examiner par leurs auteur
 Fonctions réécrites jamais appelées par les 8 scénarios (voir `examples/player_coverage`) :
 `curse_fall`, `team_score_reached`, `all_ready`, `clear_recognizers`, `set_stun_time`, `launch_a`,
 `sparkle`, `walk::crawl_speed`, `walk::run_speed`, plusieurs pas de `scripted` ; les mash exercent en
-plus `slow_switch` et les coups spéciaux (appelés en ROM). Restent en ROM : collision avec le décor
-0x33fe4, code des quatre derniers personnages (P5 ; combattant et clerc : `docs/personnages.md`), course (action 6) et actions 0x14..0x34 hors saisie, parade
-(sous-état 8), routines de coups spéciaux 0x3733c..0x374aa, effets 0xe2100, 0xdb6c0, 0xe21a0,
-0xe7a12, 0xb10c8.
+plus `slow_switch` et les coups spéciaux. Restent en ROM : actions 0x1a..0x30 hors 0x22/0x2a/0x2e
+(peu exercées), la chute 0x3b960 (pas `+7` propres, utilisée par la cinématique 0x2447e), les pas de
+réaction rares (`hurt::STEP_TABLES`, ceux absents de `HANDLERS`), 0x37882, effets 0xe2100, 0xdb6c0,
+0xe21a0, 0xe7a12, 0xb10c8.
+
+Mesure (`examples/reste68k`, bot30k + cov_tour1_c0 + cov_4p_a, 90 000 images) : P3 470 849 → 0
+instructions 68000, P4 47 157 → 4 531, P1 190 → 14, P5 1 722 → 0 (aiguillage 0x3e480), X2 2 322 → 0.
 
 ## 10. Méthode
 
@@ -213,6 +237,16 @@ Cartes de l'exécution : `examples/zones` (entrées de blocs du code d'origine p
 savoir quels états et actions un scénario exerce ; `examples/player_coverage` pour les fonctions Rust.
 Les tables d'aiguillage du code (décalages relatifs, longs) sont relues à l'exécution : une réaction non
 réécrite continue donc à fonctionner telle quelle.
+
+## Placement (X2, `placement.rs`)
+
+`0x3668` place un joueur qui ressuscite (et des décors) : depuis un point de départ par joueur (tables
+0x3658/0x3660 relatives à la caméra), cherche un terrain libre (`video::terrain` < 4). Particularité
+reproduite : le point n'est décalé qu'une fois (+16 en profondeur, puis +16 en x), les essais suivants
+répètent le même point ; à défaut, le centre de l'écran (+192, +80). La hauteur est caméra + 256 -
+profondeur (le joueur tombe du haut de l'écran). `0x3af8..0x3b14` copient une des cinq palettes d'effet
+(données 0x25a640) dans la palette 0x91c1e0. `0x35dc` (recadrage en x seulement) n'est plus appelé :
+l'action 0x2a qui l'utilisait est en Rust (`walk::clamp_x`).
 
 ## Collision avec le décor (`terrain.rs`, 0x33fe4 et sa copie 0x3403c)
 

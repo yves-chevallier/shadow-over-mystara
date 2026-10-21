@@ -120,6 +120,7 @@ appelants relisent) :
 | 0x1172e, 0x11a36 | jeux de débris (EFFCT 0x32 variante 0xc) ; une ligne de table n'est consommée que si l'effet a pu être créé |
 | 0xb648, 0xb780, 0xe2f6 | butin : objet unique (`+0x9d`), butin et trésor (ligne `+0x80`, un ou deux tirages selon le nombre de joueurs) |
 | 0xe7fa | point de marche le plus proche autour de la cible, numéro mémorisé en `+0x99` |
+| 0x3e480 | aiguillage vers la routine d'atterrissage par type (ennemis 0..31, boss ensuite ; table 0x3e49c), appelé par les réactions communes (O3) |
 
 ## 7. Validation
 

@@ -1184,7 +1184,7 @@ fn drop_loot(c: &mut Cpu, b: &mut Cps2Bus) {
         c.d[5] = left as u32;
         let roll = (random(b) & 15).wrapping_add(row << 4);
         let variant = crate::mem::prog8(b, 0xb806_u32.wrapping_add(offset(roll)));
-        c.d[0] = variant as u32;
+        set_w(&mut c.d[0], roll & 0xff00 | variant as u16);
         if (variant as i8) < 0 {
             return;
         }
@@ -1208,9 +1208,9 @@ fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
     for left in (0..loot_rolls(b)).rev() {
         c.d[5] = left as u32;
         let roll = (random(b) & 15).wrapping_add(row << 4);
-        c.d[0] = roll as u32;
+        set_w(&mut c.d[0], roll);
         let list = crate::mem::prog8(b, 0xe372_u32.wrapping_add(offset(roll)));
-        c.d[1] = list as u32;
+        c.d[1] = (list as u32) << 2 & 0xffff;
         if (list as i8) < 0 {
             return;
         }
@@ -1276,6 +1276,20 @@ fn choose_near_walk_point(c: &mut Cpu, b: &mut Cps2Bus) {
     set_w(&mut c.d[6], 0xffff);
 }
 
+/// Routines d'atterrissage par type (longs du code) : ennemis (classe 2) aux indices 0..31, boss ensuite.
+const LANDING_BY_KIND: u32 = 0x3e49c;
+
+/// 0x3e480 : saute à la routine d'atterrissage propre au type (`+2`) de l'ennemi ou du boss A0, appelée par
+/// les réactions communes aux coups (`families::reactions`). D0 = index × 4, A1 = routine, comme l'original.
+fn landing_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let base: u8 = if rd8(b, me + 0x28) == 2 { 0 } else { 32 };
+    let index = base.wrapping_add(rd8(b, me + 2)) as u16 * 4;
+    c.d[0] = index as u32;
+    c.a[1] = crate::mem::prog32(b, LANDING_BY_KIND.wrapping_add(offset(index)));
+    c.pc = c.a[1];
+}
+
 /// Native d'une fonction « corps » (sans RTS) : le RTS est ajouté.
 macro_rules! leaf {
     ($entry:literal, $name:literal, $body:path) => {
@@ -1327,5 +1341,6 @@ pub const NATIVES: &[Native] = &[
     Native { outputs: regs::d(0) | regs::d(2) | regs::d(5) | regs::a(1), ..leaf!(0xb780, "butin", drop_loot) },
     Native { outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(4) | regs::d(5) | regs::a(1) | regs::a(4), ..leaf!(0xe2f6, "tresor", drop_treasure) },
     Native { outputs: regs::a(1) | regs::a(2), ..leaf!(0xe7fa, "ia_point_proche_numerote", choose_near_walk_point) },
+    Native { outputs: regs::d(0) | regs::a(1), ..aid(0x3e480, "ia_atterrissage_par_type", landing_by_kind) },
 ];
 

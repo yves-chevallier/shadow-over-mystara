@@ -32,6 +32,7 @@ pub mod modes;
 pub mod objects;
 pub mod ops;
 pub mod palette;
+pub mod placement;
 pub mod player;
 pub mod popups;
 pub mod rng;
@@ -200,11 +201,13 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(NATIVES)
         .chain(objects::NATIVES)
         .chain(player::NATIVES)
+        .chain(player::init::JOIN)
         .chain(video::NATIVES)
         .chain(palette::NATIVES)
         .chain(scroll::NATIVES)
         .chain(camera_modes::NATIVES)
         .chain(terrain::NATIVES)
+        .chain(placement::NATIVES)
         .chain(ai_aids::NATIVES)
         .chain(effects_aids::NATIVES)
         .chain(families::NATIVES)

@@ -10,6 +10,7 @@
 //! lit leur adresse dans une table indexée par `Player::CHARACTER`.
 
 use super::characters::{self, Slot};
+use super::moves;
 use super::checks::{attack_button, jump_button, turn_check};
 use super::states::{action, state};
 use super::walk::{clamp_to_screen, move_xy, walk_speed};
@@ -28,6 +29,46 @@ mod rom {
 /// 0x35620 : animation d'immobilité selon les modes (marche lente, monture, arme).
 pub fn start_stand(g: &mut Ctx, p: Player) {
     cov!();
+    let anim = stand_animation(g, p);
+    animation::start(g, p, anim);
+}
+
+/// Entrées 68000 de `to_stand` (0x35614) et `start_stand` (0x35620), encore appelées par le code
+/// d'origine des personnages et des cinématiques : l'animation passe par l'entrée d'origine 0x2c16
+/// (D6 = numéro), qui laisse les registres que ces appelants peuvent relire.
+fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
+    let p = Player(c.a[0]);
+    let mut g = Ctx::new(c, b);
+    if reset {
+        p.set_state(&mut g, state::STAND.0);
+        p.set_u8(&mut g, Player::SUBACTION, 0);
+    }
+    g.c.d[6] = stand_animation(&mut g, p) as u32;
+    crate::call(c, b, 0x2c16);
+    crate::mem::rts(c, b);
+}
+
+pub const TO_STAND: crate::Native = crate::Native {
+    entry: 0x35614,
+    name: "player_to_stand",
+    cost: |_, _| 100,
+    run: |c, b| stand_native(c, b, true),
+    touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: false,
+};
+
+pub const START_STAND: crate::Native = crate::Native {
+    entry: 0x35620,
+    name: "player_start_stand",
+    cost: |_, _| 100,
+    run: |c, b| stand_native(c, b, false),
+    touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: false,
+};
+
+fn stand_animation(g: &mut Ctx, p: Player) -> u16 {
     let mut anim = 1;
     if p.u8(g, Player::SLOW) == 0 {
         anim = 0x2e;
@@ -38,7 +79,7 @@ pub fn start_stand(g: &mut Ctx, p: Player) {
     if g.a5u8(ram::SLOW_MODE) != 0 {
         anim = 0x35;
     }
-    animation::start(g, p, anim);
+    anim
 }
 
 /// 0x35614 : retour à l'état immobile. Renvoie vrai (Z = 0 après l'animation).
@@ -88,6 +129,13 @@ fn run_action(g: &mut Ctx, p: Player) {
         }
         0x10 => characters::run(g, p, Slot::Action10),
         0x12 => characters::run(g, p, Slot::Action12),
+        action::RUN => moves::run(g, p),
+        action::RELEASE => moves::carry(g, p),
+        action::SPECIAL_ALT => moves::guard(g, p, 0x80),
+        action::TURN_ATTACK => moves::guard(g, p, 0x10),
+        action::NO_TERRAIN_B => moves::hop(g, p),
+        action::PUSH => moves::push(g, p),
+        action::SPELL_FIZZLE => moves::spell_fizzle(g, p),
         other => {
             let offset = g.prog16(ACTION_TABLE + other as u32) as i16 as i32;
             g.c.d[0] = other as u32; // les gestionnaires comptent sur D0 = numéro d'action (octet haut nul)
