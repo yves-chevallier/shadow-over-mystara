@@ -385,3 +385,34 @@ impl DataFile {
         self.at(self.table(pointers)?.value(index) as u32)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_et_lignes() {
+        assert_eq!(parse_format("u8 i16*2 addr").unwrap(), vec![Kind::U8, Kind::I16, Kind::I16, Kind::Addr]);
+        assert!(parse_format("u7").is_err());
+        let bytes = [0x01, 0xff, 0xfe, 0x00, 0x10, 0x00, 0x12, 0x34, 0x56];
+        let t = Table::read("t", 0x1000, false, "u8 i16*2 addr", &["a", "b", "c", "d"], &bytes, 1);
+        assert_eq!(t.get(0, 1), -2);
+        assert_eq!(t.field(0, "d"), Some(0x0012_3456));
+        assert_eq!(t.bytes().unwrap(), bytes);
+        let json = serde_json::to_string(&t).unwrap();
+        let back: Table = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.bytes().unwrap(), bytes);
+    }
+
+    #[test]
+    fn textes_tuiles_et_octets() {
+        let words = [0x18c8, 0x18e9, 0x1800, 0xfffe, 0x000c, 0x18fb, 0x0000];
+        let s = encode_units(&words, true);
+        assert_eq!(s, "Hi {fffe}{000c}{18fb}{0000}");
+        assert_eq!(decode_units(&s, true), words);
+        let bytes = [0xc1, 0x80, 0xfe, 0x0f, 0xfd, 0x00];
+        let s = encode_units(&bytes, false);
+        assert_eq!(s, "A ~{0f}{fd}{00}");
+        assert_eq!(decode_units(&s, false), bytes);
+    }
+}

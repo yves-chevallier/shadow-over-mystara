@@ -14,7 +14,8 @@ DDSOM_ROMS=$PWD/../rom cargo test --release -p ddsom-assets   # vérification sa
 Catégories de l'outil (sans argument : toutes) : `gfx`, `palettes` (`palettes.png`,
 `scene_palettes.json`), `sounds`, `sprites` (`sprites/frames.json`, `anims.json`, `tables.json`), `levels`,
 `terrain`, `texts`, `music` (`sound/music.json`), `data` (`data/spawns.json` et les tables de données
-`data/players.json`...).
+`data/players.json`, `combat.json`, `enemies.json`, `boxes.json`, `scenes.json`, `misc.json`,
+`dialogs.json`).
 
 Les tests relisent les fichiers et réencodent chaque table au format de la ROM : ils échouent au premier
 octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test ignoré si un fichier manque).
