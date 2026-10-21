@@ -35,6 +35,8 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Musiques et effets (pilote Z80) | `sound/music.json` | `musique_sans_perte` |
 | Scripts d'apparition (vagues) | `data/spawns.json` | `apparitions_sans_perte` |
 | Tables des joueurs | `data/players.json` | `joueurs_sans_perte` |
+| Réactions aux coups | `data/combat.json` | `combat_sans_perte` |
+| Tables des ennemis | `data/enemies.json` | `ennemis_sans_perte` |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
@@ -400,7 +402,8 @@ de lignes de même forme, rangées telles quelles en ROM.
 ```
 
 * `format` : types des colonnes, grand-boutistes : `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `addr` (long
-  qui désigne une adresse de la ROM, écrit en hexadécimal) ; `T*n` répète `n` fois `T`. `fields` nomme
+  qui désigne une adresse de la ROM), `x8`, `x16`, `x32` (masques de bits) ; ces quatre derniers s'écrivent
+  en hexadécimal. `T*n` répète `n` fois `T`. `fields` nomme
   les colonnes quand leur sens est connu. Une table d'une colonne écrit ses lignes comme des nombres.
 * `program` : table lue par le code en adressage relatif au PC, donc dans l'espace programme déchiffré
   (tables rangées au milieu du code) ; sinon espace données.
@@ -412,7 +415,7 @@ de lignes de même forme, rangées telles quelles en ROM.
 
 Le test de chaque fichier (`joueurs_sans_perte`, ...) réencode toutes les tables et les compare à la ROM
 octet par octet, vérifie la couverture des régions et que toute adresse `addr` qui tombe dans une région
-est le début d'une table du fichier.
+est le début d'une ligne d'une table du fichier.
 
 ### Joueurs : `data/players.json`
 
@@ -465,6 +468,50 @@ Ne sont pas des données (adresses de code, restent dans le moteur) : tables de 
 combattant `0x3e806` (15 mots de déplacement vers le code, 16 pour le voleur), comportements au contact
 des tirs joueur `0x267c4`.
 
+### Combat : `data/combat.json`
+
+Réaction d'un joueur touché (`combat/contact.rs`, 0x2749e et 0x2756c). **Région 0x1067a2-0x1069f8** (après
+les fiches des caisses), avec trois mots de bourrage `0x4e71` (`pad/…`).
+
+| Nom | Adresse | Lignes x format | Sens |
+|---|---|---|---|
+| `enemy_attack_reactions` | `0x1067a4` | 91 x `u8*4` | par identifiant d'attaque de l'ennemi (`+0x44`) : action du joueur au sol (`ground`), en l'air (`air`), puissance (`power`), puissance en difficulté > 5 (`power_hell`) |
+| `enemy_shot_reactions` | `0x106912` | 57 x `u8*4` | idem pour les tirs ennemis |
+| `shot_guard` | `0x27690` (données) | 80 x `u8` | par type de tir ennemi : 1 parable par certains équipements, 2 magie, 0 rien (jusqu'au code 0x276e0) |
+
+Code, pas des données : comportements au contact des tirs joueur `0x267c4` (adresses de routines).
+
+### Ennemis : `data/enemies.json`
+
+Indice « par type » des tables de `reactions.rs` et des immunités : `+2` (type), plus 32 hors de la classe
+ENEMY (chefs), soit 55 entrées (32 ennemis, 23 chefs).
+
+| Nom | Adresse | Lignes x format | Sens |
+|---|---|---|---|
+| `anim_sets` | `0x3de58` (données) | 55 x `addr` | jeu d'animations de réaction par type ; une valeur < 0x10000 est le déplacement (depuis la table) d'une petite routine qui ajoute la variante `anim_variants[+0xbf]` puis prend le jeu dans son immédiat (`movea.l #jeu,A4` à `+6`) : types 13, 19, 34 et 54 |
+| `anim_variants` | `0x3e28a` | 4 x `u8` | ajout au numéro d'animation selon `+0xbf` |
+| `no_grab_down` | `0x3e1ee` | 64 x `u8` | non nul : le type ne reste pas au sol quand il est saisi |
+| `launch_speeds`, `launch_counters` | `0x3bdcc`, `0x3bdec` | 4 x `i16*4`, 4 x `u8` | projections prédéfinies : (vx, vy, vz, gravité) 8.8 et compteur `+0x90` (0x3bda2) |
+| `player_hurt_anims` | `0x3bb52` (données) | 12 x `addr` | jeu d'animations des réactions du joueur, par personnage (0x3bb16) |
+| `immunities` | `0xfe78` (prog) | 55 x `x32` | masque d'immunités rangé en `+0x94` à la création (0xfe5a) ; `0xffffffff` : insensible à tout |
+| `hp_boss`, `hp_enemy` | `0x458c`, `0x5c8c` (données) | 184, 224 x `u16*16` | PV initiaux (`+0x60`, `+0x62`, `+0x64`) : ligne `type x 8 + 4 x (difficulté > 5) + (joueurs - 1)`, colonne `(A5+0x7f92 >> 1) & 15` (rang) ; 23 types de chefs (0x453c), 28 types d'ennemis (0x4544). Région `hp` 0x458c-0x788c |
+| `approach_tables` | `0xe93e` (données) | 65 x `addr` | par type de trajectoire `+0x79` : liste de points d'approche (0xe76c, `ai.rs`) |
+| `approach/k.count`, `approach/k` | `0xea42`… | 1 x `u16`, n + 1 x `i16*2` | une liste (k = première trajectoire qui la désigne) : mot n, puis n + 1 décalages (dx, dy) autour de la cible ; région `approach` 0xe93e-0xeff2, 52 listes |
+
+Code, pas des données : sons de coup et de mort par type `0x3e2ac` / `0x3e3a4` (62 adresses de routines
+chacune, `rts` 0x3e2aa = rien), relevé par type `0x3e000`.
+
+### Caisses : `data/boxes.json`
+
+| Nom | Adresse | Lignes x format | Sens |
+|---|---|---|---|
+| `fiches` | `0x1051ae` | 122 x `addr` | fiche de chaque variété de caisse (`+3`) |
+| `fiches/a`, `fiches/b` | `0x105396`, `0x1059da` | 38, 84 x `u8*10 u8*16 u8*16` | fiche de 0x2a octets (0xda082) : 10 octets copiés en `+0x60` (sorte : 0-2 caisse, 3+ coffre), `+0x61`, `+0x62` (butin du centre), `+0x69`, `+0x63..+0x68` (butin par classe de joueur) ; 16 butins tirés au hasard pour `+0x6a` ; 16 effets spéciaux tirés au hasard pour `+0x6b`. 8 octets nuls inutilisés (`pad/fiches`) suivent la fiche `0x1059a8`. Région 0x1051ae-0x1067a2 |
+| `loot` | `0xda28a` (données) | 135 x `u8*2` | par numéro de butin : (type, variante) de l'ITEM créé ; s'arrête à la table d'adresses par personnage `0xda398` (taille déduite, aucun index plus grand relevé) |
+| `wear_chances` | `0xdb7b8` (données) | 3 x `x16*6` | arme spéciale, bouclier, anneau (`items.rs`, `Porte`) : un masque par valeur du compteur de coups restant (0 à 5) ; l'objet tombe si le bit `rng & 15` du masque est levé |
+
+Code, pas des données : effets spéciaux des caisses `0xda06a` (6 adresses de routines, prog).
+
 ## Inventaire des données de jeu restantes
 
 Tables lues par le code réécrit (consommateur Rust entre parenthèses, chemins relatifs à
@@ -473,13 +520,6 @@ sinon espace données. Tailles « ? » : à mesurer (fin non relevée).
 
 | Domaine | Adresse | Taille | Structure | Consommateur |
 |---|---|---|---|---|
-| Combat | `0x1067a4`, `0x106912` | 4 octets par identifiant d'attaque | réaction du joueur (action au sol, en l'air, puissance, puissance en difficulté > 5) aux coups et aux tirs ennemis | `combat.rs` |
-| Combat | `0x27690` | 1 octet par type de tir ennemi | garde (1 parable, 2 magie) | `combat.rs` |
-| Combat | `0x267c4` | longs | comportements au contact des tirs joueur (adresses de code) | `combat.rs` |
-| Ennemis | `0x3de58`, `0x3e28a` (prog), `0x3e2ac`/`0x3e3a4` (prog), `0x3e1ee` (prog), `0x3bdec`/`0x3bdcc`, `0x3bb52` | par type | jeux d'animations de réaction, variantes, sons de coup et de mort, types qui ne restent pas au sol, projections (compteur, 4 mots de vitesses), réactions du joueur | `families/reactions.rs` |
-| Ennemis | `0xe93e` | longs | tables d'approche (mot de compte puis points) de l'IA | `ai.rs` |
-| Ennemis | `0x4544`, `0xfe5a` | code | PV initiaux (type, difficulté, joueurs) et immunités : routines avec leurs tables | `families/enemy_common.rs` (appel) |
-| Caisses | `0x1051ae`, `0xda28a`, `0xda06a`, `0xdb7c4` | par variété | fiche de 0x2a octets (caractéristiques, butins), butin -> (type, variante) d'ITEM, effets spéciaux (code), chances par coup | `families/boxes.rs`, `items.rs` |
 | Scènes | `0x21b38`, `0x21bb0`, `0x2123c`, `0x2196c` | par scène | octets de palette, 4 couples (X, Y) de départ des joueurs, états de départ | `scene/entry.rs` |
 | Scènes | `0xf2f38` (prog) | mots | allocateurs par classe d'objet (script d'apparition) | `scene/script.rs` |
 | Scènes | `0xf3170`, `0xf31ea`, `0xf4a0c` | par scène | séquence de sortie de scène, choix de route (dialogue 70) | `scene/` (phase 16) |
@@ -494,7 +534,7 @@ sinon espace données. Tailles « ? » : à mesurer (fin non relevée).
 | SET 24 | `0x1d78d0`, `0xd7218`, `0xd7a48`, `0xd7604`... | 18 octets par définition | fenêtres de dialogue (voir les textes) | `families/set_b.rs` |
 | Vagues SET B | `0xd4c5e`, `0xd4a0e`, `0xd4bdc`, `0xd4b92`, `0xd84e8`, `0xd8e5e` | lignes de 16 octets | vagues et portes des familles SET B | `families/set_b.rs` |
 
-Les tables des joueurs sont extraites (`data/players.json`, ci-dessus).
+Les tables des joueurs, du combat, des ennemis et des caisses sont extraites (`data/*.json`, ci-dessus).
 
 ## Palettes des scènes : `scene_palettes.json`
 

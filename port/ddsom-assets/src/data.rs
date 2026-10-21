@@ -6,7 +6,8 @@
 //! colonne écrit ses lignes comme des nombres, les autres comme des listes. Les colonnes `addr` (longs qui
 //! désignent une adresse de la ROM) s'écrivent en hexadécimal, les autres en décimal.
 //!
-//! Types : `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `addr` ; `T*n` répète `n` fois le type `T`.
+//! Types : `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `addr`, et `x8`, `x16`, `x32` (masques de bits, écrits
+//! en hexadécimal comme les adresses) ; `T*n` répète `n` fois le type `T`.
 
 use std::io;
 use std::path::Path;
@@ -26,6 +27,10 @@ pub enum Kind {
     I32,
     /// Long : adresse de la ROM.
     Addr,
+    /// Masques de bits (écrits en hexadécimal).
+    X8,
+    X16,
+    X32,
 }
 
 impl Kind {
@@ -38,15 +43,23 @@ impl Kind {
             "u32" => Kind::U32,
             "i32" => Kind::I32,
             "addr" => Kind::Addr,
+            "x8" => Kind::X8,
+            "x16" => Kind::X16,
+            "x32" => Kind::X32,
             _ => return None,
         })
     }
 
+    /// Écrit en hexadécimal dans le JSON.
+    pub fn is_hex(self) -> bool {
+        matches!(self, Kind::Addr | Kind::X8 | Kind::X16 | Kind::X32)
+    }
+
     pub fn size(self) -> usize {
         match self {
-            Kind::U8 | Kind::I8 => 1,
-            Kind::U16 | Kind::I16 => 2,
-            Kind::U32 | Kind::I32 | Kind::Addr => 4,
+            Kind::U8 | Kind::I8 | Kind::X8 => 1,
+            Kind::U16 | Kind::I16 | Kind::X16 => 2,
+            Kind::U32 | Kind::I32 | Kind::Addr | Kind::X32 => 4,
         }
     }
 
@@ -64,11 +77,11 @@ impl Kind {
     /// Octets de `v` (la valeur doit tenir dans le type).
     pub fn write(self, v: i64, out: &mut Vec<u8>) -> Result<(), String> {
         let (lo, hi) = match self {
-            Kind::U8 => (0, 0xff),
+            Kind::U8 | Kind::X8 => (0, 0xff),
             Kind::I8 => (-0x80, 0x7f),
-            Kind::U16 => (0, 0xffff),
+            Kind::U16 | Kind::X16 => (0, 0xffff),
             Kind::I16 => (-0x8000, 0x7fff),
-            Kind::U32 | Kind::Addr => (0, 0xffff_ffff),
+            Kind::U32 | Kind::Addr | Kind::X32 => (0, 0xffff_ffff),
             Kind::I32 => (-0x8000_0000, 0x7fff_ffff),
         };
         if v < lo || v > hi {
@@ -97,7 +110,7 @@ pub fn parse_format(format: &str) -> Result<Vec<Kind>, String> {
     Ok(kinds)
 }
 
-/// Valeur d'une case : nombre, ou adresse écrite en hexadécimal.
+/// Valeur d'une case : nombre, ou adresse (ou masque) écrite en hexadécimal.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Cell {
@@ -161,7 +174,7 @@ impl Table {
                     .map(|&k| {
                         let v = k.read(&bytes[at..]);
                         at += k.size();
-                        if k == Kind::Addr {
+                        if k.is_hex() {
                             Cell::Addr(v as u32)
                         } else {
                             Cell::Int(v)
@@ -279,6 +292,14 @@ impl DataFile {
     /// Table qui commence à l'adresse `rom` (espace données).
     pub fn at(&self, rom: u32) -> Option<&Table> {
         self.tables.iter().find(|t| t.rom == rom && !t.program)
+    }
+
+    /// Table et ligne qui commencent à l'adresse `rom` (espace données).
+    pub fn row_at(&self, rom: u32) -> Option<(&Table, usize)> {
+        self.tables.iter().filter(|t| !t.program && rom >= t.rom && rom < t.end()).find_map(|t| {
+            let d = (rom - t.rom) as usize;
+            (d % t.row_size() == 0).then_some((t, d / t.row_size()))
+        })
     }
 
     /// Table désignée par l'entrée `index` de la table d'adresses `pointers` (tables par personnage...).

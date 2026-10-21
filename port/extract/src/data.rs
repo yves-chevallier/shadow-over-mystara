@@ -77,5 +77,11 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     let rom = Program::load(roms)?;
     let (regions, specs) = crate::players::specs(&rom);
     save(&rom, &dir.join("players.json"), regions, &specs)?;
+    let (regions, specs) = crate::combat::combat();
+    save(&rom, &dir.join("combat.json"), regions, &specs)?;
+    let (regions, specs) = crate::combat::enemies(&rom);
+    save(&rom, &dir.join("enemies.json"), regions, &specs)?;
+    let (regions, specs) = crate::combat::boxes(&rom);
+    save(&rom, &dir.join("boxes.json"), regions, &specs)?;
     Ok(())
 }

@@ -6,6 +6,7 @@
 //! exactement les données d'origine (`cargo test -p ddsom-assets`, voir docs/assets.md).
 //! Les fichiers produits dérivent des ROMs : ils restent locaux, jamais versionnés.
 
+mod combat;
 mod data;
 mod gfx;
 mod levels;

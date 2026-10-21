@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::data::{Cell, DataFile};
+use ddsom_assets::data::{Cell, DataFile, Kind};
 use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
@@ -586,7 +586,7 @@ fn apparitions_sans_perte() {
 
 /// Tables de données (`data/*.json`) : chaque table réencodée est identique à la ROM (dans son espace) ;
 /// chaque région est couverte exactement par ses tables ; toute adresse d'une colonne `addr` qui tombe
-/// dans une région désigne le début d'une table.
+/// dans une région désigne le début d'une ligne d'une table.
 fn check_data(rel: &str) {
     if !has(rel) {
         return;
@@ -613,11 +613,12 @@ fn check_data(rel: &str) {
         assert_eq!(at, r.end, "{rel} : fin de la région {}", r.name);
     }
     for t in &file.tables {
+        let kinds = t.kinds();
         for (i, row) in t.rows.iter().enumerate() {
-            for c in row.cells() {
-                if let Cell::Addr(a) = *c {
+            for (c, k) in row.cells().iter().zip(&kinds) {
+                if let (Cell::Addr(a), Kind::Addr) = (*c, k) {
                     if file.regions.iter().any(|r| !r.program && a >= r.start && a < r.end) {
-                        assert!(file.at(a).is_some(), "{rel} : {} ligne {i} : {a:#x} n'est pas un début de table", t.name);
+                        assert!(file.row_at(a).is_some(), "{rel} : {} ligne {i} : {a:#x} n'est pas un début de ligne", t.name);
                     }
                 }
             }
@@ -637,4 +638,28 @@ fn joueurs_sans_perte() {
     let (rom, prog) = program();
     let t = u32::from_be_bytes(prog[0x325e + 12..0x325e + 16].try_into().unwrap()) as usize;
     assert_eq!(hp.value(13), u16::from_be_bytes([rom[t + 26], rom[t + 27]]) as i64);
+}
+
+#[test]
+fn combat_sans_perte() {
+    check_data("data/combat.json");
+}
+
+#[test]
+fn ennemis_sans_perte() {
+    check_data("data/enemies.json");
+    if !has("data/enemies.json") {
+        return;
+    }
+    // PV initiaux comme 0x4548 : type 3, difficulté normale, 2 joueurs, rang 5
+    let f = DataFile::load(&root().join("assets/data/enemies.json")).unwrap();
+    let hp = f.table("hp_enemy").unwrap();
+    let (rom, _) = program();
+    let at = 0x5c8c + (3 << 8) + (1 << 5) + 2 * 5;
+    assert_eq!(hp.get(3 * 8 + 1, 5), u16::from_be_bytes([rom[at], rom[at + 1]]) as i64);
+}
+
+#[test]
+fn caisses_sans_perte() {
+    check_data("data/boxes.json");
 }
