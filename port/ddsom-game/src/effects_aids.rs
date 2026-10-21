@@ -78,6 +78,36 @@ fn spark(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0xaaa04 (`owner_first`) / 0xaaa84 : étincelle (type 4, variante D1) entre l'objet courant (A0) et
+/// l'objet touché (A1), posée par 0xab2b4 ; `+0x50` / `+0x54` désignent l'un ou l'autre selon la
+/// routine. A1 à A4 sont rendus ; les drapeaux sont ceux de la dernière écriture (ou la retenue d'un
+/// pool plein).
+fn spark_between(c: &mut Cpu, b: &mut Cps2Bus, owner_first: bool) {
+    let saved = [c.a[1], c.a[2], c.a[3], c.a[4]];
+    let me = c.a[0];
+    c.a[2] = c.a[1];
+    call(c, b, ALLOC_EFFECT);
+    if c.sr & SR_C == 0 {
+        let (fx, other) = (c.a[1], c.a[2]);
+        wr8(b, fx, 1);
+        wr8(b, fx + 2, SPARK_KIND);
+        wr8(b, fx + 3, c.d[1] as u8);
+        let facing = rd8(b, me + 0x2c) ^ 32;
+        wr8(b, fx + 0x2c, facing);
+        let (first, second) = if owner_first { (me, other) } else { (other, me) };
+        wr16(b, fx + 0x50, first as u16);
+        wr16(b, fx + 0x54, second as u16);
+        let (d0, d1, d2, d3) = place_between(b, me, fx, other);
+        c.d[0] = d0 as u32;
+        c.d[1] = d1 as u32;
+        crate::mem::set_low_word(&mut c.d[2], d2);
+        crate::mem::set_low_word(&mut c.d[3], d3);
+        logique(c, d1 as u32, Size::Word);
+    }
+    [c.a[1], c.a[2], c.a[3], c.a[4]] = saved;
+    rts(c, b);
+}
+
 /// Boîtes de collision : par jeu (`+0x2e`), adresse d'un tableau de boîtes de 8 octets (dx, _, dz...),
 /// choisies par `+0x38` (boîte de frappe) ou `+0x3a` (boîte de corps).
 const HIT_BOXES: u32 = 0x11bffa;
@@ -222,4 +252,6 @@ pub const NATIVES: &[Native] = &[
     leaf!(0x25260, "joueur_scripte_place", place_scripted_player, regs::a(1)),
     aid(0xb10c8, "effet_choc", shock, regs::a(1) | regs::d(1) | regs::CCR),
     aid(0xaa96c, "effet_etincelle", spark, regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4)),
+    aid(0xaaa04, "effet_etincelle_entre", |c, b| spark_between(c, b, true), regs::ALL),
+    aid(0xaaa84, "effet_etincelle_entre_b", |c, b| spark_between(c, b, false), regs::ALL),
 ];

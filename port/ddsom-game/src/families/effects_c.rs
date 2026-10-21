@@ -26,6 +26,7 @@
 //! - 60 : second double d'un porteur (comme le 16, avec éclats et morceau projeté) ;
 //! - 61 : créature de la scène d'introduction qui sort de l'eau, ondule et s'en va ;
 //! - 64 : éclat projeté qui retombe sous l'horizon ;
+//! - 65 : objet qui suit un trajet puis fait naître un autre objet ;
 //! - 66 : quatre gros caractères animés dans le fond 2 ;
 //! - 67 : colonne qui s'élève sous un objet, puis relâche les joueurs ;
 //! - 69 : silhouette qui fait les cent pas en haut de l'écran ;
@@ -4540,6 +4541,87 @@ fn floor_tile_watch(x: &mut Cx, v: u8) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 65 : objet qui suit un trajet (directions et durées lues dans une liste), puis fait naître
+// un autre objet décrit par une fiche
+// ---------------------------------------------------------------------------------------------
+
+mod courier {
+    pub const ANIM_SET: u32 = 0x197afe;
+    /// Trajet : couples (direction, durée) terminés par une direction négative (données).
+    pub const PATH: u32 = 0xb7b1e;
+    /// Fiches de 8 octets par variante : animation, type, variante, mode, x, z (données).
+    pub const CARDS: u32 = 0xb7bec;
+}
+
+fn courier(x: &mut Cx) {
+    match x.u8(f::STATE) {
+        0 => {
+            x.add8(f::STATE, 2);
+            x.set32(0x5c, courier::PATH);
+            x.set8(0x42, 1);
+            x.c.d[0] = 0x15;
+            x.call(super::cx::sub::SPEED_TABLE_B);
+            let card = courier::CARDS + 8 * x.u8(f::VARIANT) as u32;
+            let anim = x.data8(card) as u32;
+            x.anim_start(courier::ANIM_SET, anim);
+            x.call(super::cx::sub::REINSERT_FOREGROUND);
+        }
+        2 => {
+            x.call(super::cx::sub::MOVE_TABLE_XY);
+            x.anim_step();
+            let t = x.u8(0x42).wrapping_sub(1);
+            x.set8(0x42, t);
+            if t != 0 {
+                return;
+            }
+            let p = x.u32(0x5c);
+            let dir = x.data8(p);
+            x.set8(Obj::SPEED_INDEX, dir);
+            if (dir as i8) < 0 {
+                x.add8(f::STATE, 2);
+                x.set16(0x42, 0x20);
+                return x.call(0x1f0be);
+            }
+            let len = x.data8(p + 1);
+            x.set8(0x42, len);
+            x.set32(0x5c, p + 2);
+        }
+        4 => {
+            if x.u8(f::SUB_STATE) == 0 {
+                let t = x.u16(0x42).wrapping_sub(1);
+                x.set16(0x42, t);
+                if (t as i16) < 0 {
+                    x.add8(f::SUB_STATE, 1);
+                }
+                return;
+            }
+            x.call(0x22bc);
+            if x.c.sr & m68k::SR_C != 0 {
+                return;
+            }
+            let o = x.c.a[1];
+            x.add8(f::STATE, 2);
+            let card = courier::CARDS + 8 * x.u8(f::VARIANT) as u32;
+            let link = x.u16(0x46);
+            wr16(x.b, o + 0x46, link);
+            wr8(x.b, o, 1);
+            for (k, off) in [(1, 2), (2, 3), (3, 0x2f)] {
+                let v = x.data8(card + k);
+                wr8(x.b, o + off, v);
+            }
+            wr8(x.b, o + 0x2c, 0x20);
+            let cam = x.a5_u16(0x506);
+            let (px, pz) = (x.data16(card + 4), x.data16(card + 6));
+            wr16(x.b, o + Obj::X, px.wrapping_add(cam));
+            wr16(x.b, o + Obj::Z, pz);
+            let r = random_nibble16(x) & 0x1f;
+            wr16(x.b, o + Obj::Y, r + 0x50);
+        }
+        _ => free(x),
+    }
+}
+
 handlers! {
     0xaa8e8 "effct_ecran_fixe" 150 screen_piece,
     0xabccc "effct_dalle" 200 floor_tile,
@@ -4566,6 +4648,7 @@ handlers! {
     0xb7248 "effct_double_b" 200 double2,
     0xb751e "effct_nageur" 200 swimmer,
     0xb7a14 "effct_eclat_tombant" 200 spark_fall,
+    0xb7ac8 "effct_messager" 200 courier,
     0xb7c40 "effct_lettres" 200 big_letters,
     0xb7e26 "effct_colonne" 200 pillar,
     0xb802a "effct_silhouette" 150 pacer,
