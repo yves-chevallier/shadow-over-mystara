@@ -2,6 +2,7 @@
 
 pub mod json;
 pub mod levels;
+pub mod music;
 pub mod scene_palettes;
 pub mod sprites;
 pub mod tables;
@@ -9,6 +10,7 @@ pub mod terrain;
 pub mod texts;
 
 pub use levels::Levels;
+pub use music::Music;
 pub use scene_palettes::ScenePalettes;
 pub use sprites::{Anims, Frames};
 pub use tables::SpriteTables;

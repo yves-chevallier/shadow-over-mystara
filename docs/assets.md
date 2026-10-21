@@ -27,6 +27,7 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Terrain (cartes fixes, types) | `terrain.json` | `terrain_sans_perte` |
 | Boîtes, marques au sol, listes d'images | `sprites/tables.json` | `tables_des_objets_sans_perte` |
 | Textes (couche 8x8, bulles, noms) | `texts.json` | `textes_sans_perte` |
+| Musiques et effets (pilote Z80) | `sound/music.json` | `musique_sans_perte` |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
@@ -292,6 +293,68 @@ Sortes (`kind`) et codes de contrôle :
 
 Le test réencode chaque descripteur, chaque table, les noms des bulles et les groupes de noms.
 
+## Musiques et effets : `sound/music.json`
+
+Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors échantillons PCM
+(`sounds/`) : l'extraction lit la ROM Z80 avec `ddsom_sound::Rom` (adresses « linéaires » : décalage dans
+`dd2.01` puis `dd2.02`), et le test aussi.
+
+```json
+{"header_ptr":"0x39e1","header":"0x9000","count":1168,"music_factor":122,"sfx_volume":127,"header_rest":[0,0],
+ "songs":[null,
+   {"rom":"0xa245","kind":0,"tracks":[33,201,346, ...16 déplacements...]}, ...],
+ "code":[{"rom":"0xa266","ops":"step=307 vol=100 5:0 dot tie 5:0 tie 3:0 oct=5 gate=180 inst=31 ..."}, ...],
+ "banks_table":"0x39e5","banks":[{"rom":"0x39e9","instruments":[[...8 octets...], ...256]}, ...],
+ "samples_ptr":"0x39e3","samples_rom":"0x49e9","samples":[[...8 octets...], ...290],
+ "tables":[{"name":"amplitudes","rom":"0x33e1","words":true,"values":[...]}, ...]}
+```
+
+* **Table des sons** : l'en-tête (`header`, adresse lue dans le mot `0x39e1`) donne le nombre de sons, les
+  index du facteur de volume de la musique et du volume des effets (table `levels`) et 2 octets non lus ;
+  suit une entrée de 4 octets par son (adresse sur 3 octets grand-boutiste, 0). `songs[n]` : définition du
+  son `n` (`null` : entrée vide, 245 sur 1 168). `kind` : 0 musique (53), 1 à 0x7f effet de cette priorité
+  (868), 0x80-0x8f note simple (aucune), 0x90-0x92 ADPCM (2). Musique et effet : `tracks`, 16 déplacements
+  (mots grand-boutistes depuis `rom`, 0 = canal sans piste) ; note simple (10 octets) et ADPCM (7 octets) :
+  `body`, voir [son.md](son.md) §5. La première définition (`0xa245`) commence sur le dernier octet nul de
+  la table.
+* **Pistes** (`code`) : toutes les instructions qu'atteignent les pistes des sons, en suivant les sauts
+  (`jump`, débuts et sorties de boucles), regroupées en blocs d'instructions jointives (1 612 blocs,
+  123 659 instructions, aucun chevauchement). `Music::track(adresse)` rend les jetons d'une piste jusqu'à
+  sa fin ou son premier saut. Jetons (`music::decode_op` / `encode_op`) :
+
+  | Jeton | Octets | Sens |
+  |---|---|---|
+  | `d:n` | `d << 5 \| n` (>= 0x20) | note : durée d (1-7, table `durations`), note n (1-31 + octave ; 0 silence) |
+  | `triplet`, `tie`, `dot`, `up2` | 0, 1, 2, 3 | bascule triolet, bascule liaison, note pointée suivante, bascule +2 octaves |
+  | `mode=f` | 4, f | drapeaux 6, 5 et 3 de la voie |
+  | `step=w` | 5, mot | pas de temps (de la voie, ou de toute la musique) |
+  | `gate=`, `amp=`, `inst=`, `oct=` | 6, 7, 8, 9 | tenue, amplitude (table `amplitudes`), instrument du banc, octave |
+  | `mtrans=`, `trans=`, `detune=`, `glide=` | 10, 11, 12, 13 | transposition (musique, voie), accord fin, glissando |
+  | `loopK=n,d` | 14 + K, n, mot | début de boucle K (0-3) : n tours, saut de d octets |
+  | `exitK=f,d` | 18 + K, f, mot | sortie de la boucle K au dernier tour : drapeaux f, saut de d |
+  | `jump=d` | 22, mot | saut relatif |
+  | `end` | 23 | fin de piste |
+  | `pan=`, `echo=`, `vol=`, `vib=`, `trem=`, `lfo=`, `lfomode=`, `bank=` | 24 à 31 | pan, écho, volume de la musique, vibrato, trémolo, vitesse et mode du LFO, banc d'instruments |
+
+  Les déplacements des sauts sont des mots signés relatifs à l'adresse qui suit le déplacement (comme en
+  ROM) ; le test vérifie que chaque cible est le début d'une instruction. Les octets de la région des sons
+  (`0x9000-0x3bf2b`) non couverts par l'en-tête, les définitions et les pistes : 742 (738 trous, surtout un
+  `end` isolé que rien n'atteint après un `jump`) ; la suite de la ROM est nulle.
+* **Instruments** : la table `0x39e5` donne l'adresse de 2 bancs (`0x39e9`, `0x41e9`, juste après elle) de
+  256 fiches de 8 octets (échantillon en mot petit-boutiste dont le bit 15 suit la variation de hauteur
+  globale, accord fin, 5 index d'enveloppe : attaque, decay, tenue, chute lente, relâchement).
+* **Échantillons** : 290 fiches de 8 octets à l'adresse du mot `0x39e3` (`0x49e9`) : banque, début,
+  boucle, fin (mots petit-boutistes), note de référence ; les données PCM sont dans `sounds/`.
+* **Tables du pilote** (`tables`, ROM fixe ; `words` : mots petit-boutistes) : `qsound_init_regs` (0xd5,
+  12 octets) et `qsound_init_values` (0xe1, 12 mots), `durations` (0x1119, 24 mots), `octave_offsets`
+  (0x1149, 16 octets), `semitone_octave` (0x1fc6, 108), `octave_start` (0x2032, 9), `rates` (0x203b, 108
+  mots), `fine` (0x2113, 12 x 256 octets), `amplitudes` (0x33e1, 128 mots), `levels` (0x34e1, 128), `attack`
+  (0x35e1, 64), `decay` (0x3661, 64), `lfo_rates` (0x36e1, 128), `vibrato` (0x37e1, 128), `tremolo`
+  (0x38e1, 128).
+
+Reste dans le code du pilote (et `ddsom-sound`) : le tableau de saut des instructions (0x1179), la
+logique d'enveloppe, de LFO et de pan.
+
 ## Palettes des scènes : `scene_palettes.json`
 
 Les palettes ne sont pas construites par le code : chaque scène désigne des palettes de la
@@ -366,6 +429,6 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
     (0 : ouvrir le message `D1` ; 8 : saut relatif de `D1` octets si `A5+0x5e` ; achats, paiement BCD,
     inventaire...). Scripts désignés par les zones de comptoir (`0x51306` / `0x51376`, champs `+0x1c` /
     `+0x58`) ; les textes eux-mêmes sont des messages du moteur de texte.
-  * **Générique de fin** (`0xd01e0-0xd0692`, noms du staff, lignes séparées par `/`, `0xff n` = couleur
-    ou retrait) : format de la routine non relevé.
-* Données de jeu (vitesses, IA, vagues d'ennemis), musiques (séquences du pilote Z80).
+  * **Générique de fin** (`0xd01e0-0xd0692`, noms du staff, lignes séparées par `/`, codes `0xff n`) :
+    routine d'affichage non relevée.
+* Données de jeu (vitesses, IA, vagues d'ennemis) : voir l'inventaire ci-dessous.

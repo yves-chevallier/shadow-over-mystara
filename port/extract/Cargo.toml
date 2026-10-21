@@ -8,4 +8,5 @@ description = "Extrait les ressources de ddsom (graphismes, palettes, sons, spri
 cps2-gfx = { path = "../cps2-gfx" }
 cps2 = { path = "../cps2" }
 ddsom-assets = { path = "../ddsom-assets" }
+ddsom-sound = { path = "../ddsom-sound" }
 png = "0.17"

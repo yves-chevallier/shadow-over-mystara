@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::{Anims, Cells, Frames, Levels, Palettes, Sample, ScenePalettes, SpriteTables, Terrain, Texts};
+use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -488,5 +488,75 @@ fn textes_sans_perte() {
         assert_eq!(&rom[g.rom as usize..g.rom as usize + bytes.len()], &bytes[..], "noms {:#x}", g.table);
         let starts = g.starts();
         assert!(g.entries.iter().all(|e| starts.contains(e)), "noms {:#x} : entrée hors des noms", g.table);
+    }
+}
+
+#[test]
+fn musique_sans_perte() {
+    if !has("sound/music.json") {
+        return;
+    }
+    let m = Music::load(&root().join("assets/sound/music.json")).unwrap();
+    // même lecture que le pilote : adresses linéaires de ddsom_sound::Rom
+    let rom = ddsom_sound::Rom::load(&roms()).unwrap();
+    let at = |a: u32, n: usize| (0..n as u32).map(|k| rom.byte(a + k)).collect::<Vec<u8>>();
+    assert_eq!(u32::from(rom.word(m.header_ptr)), m.header);
+    let mut head = m.count.to_be_bytes().to_vec();
+    head.extend([m.music_factor, m.sfx_volume]);
+    head.extend(m.header_rest);
+    assert_eq!(at(m.header, 6), head, "en-tête des sons");
+    assert_eq!(m.songs.len(), m.count as usize);
+    // table des sons, définitions
+    for (i, s) in m.songs.iter().enumerate() {
+        let a = s.as_ref().map_or(0, |s| s.rom);
+        assert_eq!(at(m.header + 6 + 4 * i as u32, 4), [(a >> 16) as u8, (a >> 8) as u8, a as u8, 0], "son {i} : entrée");
+        if let Some(s) = s {
+            let b = s.bytes();
+            assert_eq!(at(s.rom, b.len()), b, "son {i} : définition");
+        }
+    }
+    // pistes : blocs jointifs réencodés ; chaque piste et chaque cible de saut tombe sur une instruction
+    let mut starts = std::collections::BTreeSet::new();
+    let mut targets = Vec::new();
+    let mut end = 0;
+    for b in &m.code {
+        assert!(b.rom >= end, "bloc {:#x} : chevauchement", b.rom);
+        let bytes = b.bytes().unwrap_or_else(|| panic!("bloc {:#x} : jeton illisible", b.rom));
+        assert_eq!(at(b.rom, bytes.len()), bytes, "bloc {:#x}", b.rom);
+        let mut a = b.rom;
+        for t in b.ops.split(' ') {
+            starts.insert(a);
+            let n = ddsom_assets::music::encode_op(t).unwrap().len() as u32;
+            if let Some((name, args)) = t.split_once('=') {
+                if name == "jump" || name.starts_with("loop") || name.starts_with("exit") {
+                    let off: i32 = args.rsplit(',').next().unwrap().parse().unwrap();
+                    targets.push((a, (a + n).wrapping_add(off as u32)));
+                }
+            }
+            a += n;
+        }
+        end = a;
+    }
+    for (a, t) in targets {
+        assert!(starts.contains(&t), "saut en {a:#x} vers {t:#x} : pas une instruction");
+    }
+    for s in m.songs.iter().flatten() {
+        for (c, a) in s.track_starts() {
+            assert!(starts.contains(&a), "son {:#x} canal {c} : piste {a:#x}", s.rom);
+            assert!(m.track(a).is_some());
+        }
+    }
+    // bancs d'instruments, échantillons, tables du pilote
+    for (k, b) in m.banks.iter().enumerate() {
+        assert_eq!(u32::from(rom.word(m.banks_table + 2 * k as u32)), b.rom, "banc {k}");
+        let bytes: Vec<u8> = b.instruments.iter().flatten().copied().collect();
+        assert_eq!(at(b.rom, bytes.len()), bytes, "banc {k}");
+    }
+    assert_eq!(u32::from(rom.word(m.samples_ptr)), m.samples_rom);
+    let bytes: Vec<u8> = m.samples.iter().flatten().copied().collect();
+    assert_eq!(at(m.samples_rom, bytes.len()), bytes, "fiches d'échantillons");
+    for t in &m.tables {
+        let b = t.bytes();
+        assert_eq!(at(t.rom, b.len()), b, "table {}", t.name);
     }
 }
