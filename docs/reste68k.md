@@ -6,62 +6,109 @@ Mesure : la machine hybride du jeu (routines natives Rust, 68000 pour le reste, 
 
 * **337381646 instructions 68000 exécutées** (hors attente active), soit 156.6 par image ;
 * attente active, non comptée : 0 instructions (ordonnanceur et traps 0x928-0xb00, tâche du gel 0xee080 : voir `SPIN`) ;
-* 2559 fonctions dans `decomp/index.tsv` : 497 exécutent encore du 68000, 693 sont entièrement natives, **1369 jamais atteintes** (95196 octets : code mort, ou à exercer par de nouveaux scénarios) ;
-* instructions hors de toute fonction de l'index : 94144500.
+* 2559 fonctions dans `decomp/index.tsv` : 497 exécutent encore du 68000, 691 sont entièrement natives, **1371 jamais atteintes** (95338 octets : code mort, ou à exercer par de nouveaux scénarios) ;
+* instructions hors de toute fonction de l'index : 94144500 (comptées par sous-système ci-dessous, colonne « Hors index », et par plage plus bas).
 
 ## Par sous-système (atlas)
 
-| ID | Sous-système | Instr. 68000 | % | Fonctions | Touchées | Natives seules | Jamais atteintes | Principales fonctions restantes |
-|---|---|---:|---:|---:|---:|---:|---:|---|
-| K2 | Auto-test RAM (« RAM ERROR !! ») | 231450010 | 68.60 | 2 | 2 | 0 | 0 | 1912 (98.9 %), 182a (1.1 %) |
-| K1 | Noyau : reset, boot, VBLANK, ordonnanceur, traps, entrées, gel | 5961428 | 1.77 | 17 | 2 | 12 | 3 | 350 (99.9 %), 492 (0.1 %) |
-| W3 | Scripts de scène (phases 16/28) | 1447745 | 0.43 | 82 | 58 | 3 | 21 | f71fa (25.8 %), f7d86 (23.9 %), f68c8 (15.8 %) |
-| C0e | EFFCT : effets | 1189957 | 0.35 | 170 | 107 | 5 | 58 | b46a2 (26.3 %), b46cc (22.2 %), b03c6 (4.8 %) |
-| O3 | Aides communes aux types (animations par type) | 872757 | 0.26 | 25 | 24 | 0 | 1 | 3bb9c (31.5 %), 3be02 (26.9 %), 3bb16 (7.9 %) |
-| M1 | Menu TEST (service) | 521903 | 0.15 | 76 | 23 | 0 | 53 | 29948 (29.7 %), 2bb0a (21.6 %), 2ca5e (17.4 %) |
-| S1 | Son : wrappers de commandes + FIFO | 364454 | 0.11 | 410 | 24 | 379 | 7 | e7e10 (45.5 %), e662a (23.9 %), e7a12 (6.9 %) |
-| P4 | Noyau joueur (états, 26 actions génériques) | 296058 | 0.09 | 59 | 33 | 3 | 23 | 3769c (15.6 %), 35620 (11.4 %), 3733c (8.7 %) |
-| E1 | Aides d'IA (cible, portées, décisions aléatoires) | 289845 | 0.09 | 69 | 16 | 43 | 10 | 11a36 (17.7 %), 788c (15.2 %), 1172e (15.1 %) |
-| C04 | BOSS : boss | 193641 | 0.06 | 353 | 35 | 2 | 316 | 81aa4 (51.4 %), 833b6 (15.5 %), 87048 (6.9 %) |
-| C1 | Crédits, pièces, start/continue | 180220 | 0.05 | 22 | 4 | 13 | 5 | e05ec (96.1 %), 14cb8 (3.0 %), e0538 (0.8 %) |
-| V3 | Palettes et fondus | 98352 | 0.03 | 38 | 6 | 27 | 5 | 146c (65.9 %), 17ea (18.3 %), 1ced4 (14.2 %) |
-| V2 | Texte, rectangles et blocs de tuiles | 67832 | 0.02 | 33 | 9 | 19 | 5 | f4a (73.5 %), 2860 (10.6 %), 2824 (8.1 %) |
-| C08 | ESHL : tirs/attaques ennemis | 48678 | 0.01 | 127 | 35 | 1 | 91 | 9ef20 (27.5 %), a71c2 (13.6 %), a731c (13.4 %) |
-| X2 | Dégâts, terrain, placement | 38118 | 0.01 | 19 | 12 | 0 | 7 | 3796 (43.4 %), 3618 (20.6 %), 3636 (18.4 %) |
-| C0a | BOX : caisses/coffres (h) | 34174 | 0.01 | 7 | 4 | 0 | 3 | dabba (77.8 %), d9cea (20.1 %), da152 (2.0 %) |
-| M2 | EEPROM, configuration, comptabilité | 29430 | 0.01 | 60 | 11 | 13 | 36 | 2d30a (92.5 %), 2e4ec (2.2 %), 2dc9a (1.2 %) |
-| C10 | SET : décors/animations de palette | 24513 | 0.01 | 131 | 19 | 4 | 108 | d981a (23.3 %), cdedc (18.9 %), c8312 (15.6 %) |
-| P5 | Code par personnage (6 × 2 variantes) | 19791 | 0.01 | 73 | 1 | 0 | 72 | 3e480 (100.0 %) |
-| B1 | Scrolling / caméras par scène | 15965 | 0.00 | 42 | 1 | 10 | 31 | 33aa6 (100.0 %) |
-| F3 | Interface joueurs : sélection / panneaux d'état (h) | 15524 | 0.00 | 49 | 4 | 0 | 45 | 18082 (52.2 %), 1507a (38.8 %), 180c8 (8.9 %) |
-| C0c | ITEM : objets ramassables | 14989 | 0.00 | 14 | 5 | 0 | 9 | db6c0 (97.1 %), dcddc (2.3 %), dc5fe (0.3 %) |
-| W1 | Boucle de partie et phases 0/4/12/20 | 14796 | 0.00 | 3 | 1 | 1 | 1 | 1c44a (100.0 %) |
-| F4 | Exécuteur d'écrans fixes (logos) | 8046 | 0.00 | 5 | 3 | 1 | 1 | 18b8e (66.4 %), 18a3e (32.1 %), 18a0e (1.5 %) |
-| P1 | Initialisation des joueurs | 6157 | 0.00 | 23 | 9 | 4 | 10 | 35c0 (53.9 %), 3432 (13.0 %), 3308 (10.8 %) |
-| P3 | Comportement scénarisé des joueurs par scène | 5346 | 0.00 | 3 | 1 | 2 | 0 | 25b20 (100.0 %) |
-| V1 | Primitives vidéo (attente, couches, effacements) | 4620 | 0.00 | 13 | 2 | 11 | 0 | c32 (64.1 %), c0c (35.9 %) |
-| F1 | Tâche de boot, avertissements région | 4472 | 0.00 | 5 | 3 | 2 | 0 | 133dc (97.4 %), 133f6 (1.3 %), 133f0 (1.3 %) |
-| U1 | RNG et files d'affichage (pop-ups) | 3570 | 0.00 | 18 | 1 | 13 | 4 | 19eb0 (100.0 %) |
-| C12 | PEFF : effets du joueur | 3450 | 0.00 | 107 | 10 | 27 | 70 | 51c06 (44.6 %), 4b7a0 (19.6 %), 4dc9a (13.0 %) |
-| C02 | ENEMY : ennemis | 3007 | 0.00 | 205 | 10 | 1 | 194 | 5cdc6 (43.5 %), 57c66 (21.4 %), 57c8c (13.8 %) |
-| C06 | PSHL : tirs du joueur | 2967 | 0.00 | 39 | 6 | 12 | 21 | 53e48 (47.6 %), 52578 (18.9 %), 54872 (14.5 %) |
-| U2 | Petites routines / tables (rôle inconnu) | 2004 | 0.00 | 17 | 6 | 10 | 1 | 1ad2a (65.9 %), 1ac68 (17.1 %), 1ac86 (15.8 %) |
-| C14 | SOBJ : objets système/UI | 1699 | 0.00 | 25 | 7 | 2 | 16 | dfe26 (36.8 %), e03c6 (20.2 %), e03e4 (17.3 %) |
-| K3 | Entrées vers enregistrements joueur | 792 | 0.00 | 3 | 1 | 2 | 0 | 2bdc (100.0 %) |
-| F6 | Interpréteur de scripts de scène (démos) | 700 | 0.00 | 18 | 1 | 6 | 11 | 20de6 (100.0 %) |
-| P6 | Réactions aux coups, saisie des coups spéciaux | 136 | 0.00 | 9 | 1 | 2 | 6 | f18fa (100.0 %) |
-| K4 | Exceptions et écran de dump debug | 0 | 0.00 | 16 | 0 | 0 | 16 |  |
-| V4 | Construction de la liste de sprites (OBJ RAM) | 0 | 0.00 | 15 | 0 | 2 | 13 |  |
-| O1 | Animation, tables de vitesse, physique, culling | 0 | 0.00 | 22 | 0 | 22 | 0 |  |
-| O2 | Pools d'objets et listes triées | 0 | 0.00 | 41 | 0 | 28 | 13 |  |
-| X1 | Collisions (boîtes, coups, poussée) | 0 | 0.00 | 39 | 0 | 0 | 39 |  |
-| W0 | Dispatch des 10 classes d'objets | 0 | 0.00 | 10 | 0 | 10 | 0 |  |
-| W2 | Sous-scènes de transition à fondus (phases 8/24) | 0 | 0.00 | 1 | 0 | 0 | 1 |  |
-| M3 | « Secret Test » (debug) et Block Test | 0 | 0.00 | 29 | 0 | 0 | 29 |  |
-| F2 | Machine à modes (attract) | 0 | 0.00 | 0 | 0 | 0 | 0 |  |
-| F5 | Curseur de sélection de personnage | 0 | 0.00 | 10 | 0 | 0 | 10 |  |
-| F7 | Écrans titre / copyright | 0 | 0.00 | 5 | 0 | 1 | 4 |  |
-| - | hors atlas | 0 | 0.00 | 0 | 0 | 0 | 0 |  |
+| ID | Sous-système | Instr. 68000 | % | Hors index | Fonctions | Touchées | Natives seules | Jamais atteintes | Principales fonctions restantes |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| K2 | Auto-test RAM (« RAM ERROR !! ») | 234018235 | 69.36 | 2568225 | 2 | 2 | 0 | 0 | 1912 (98.9 %), 182a (1.1 %) |
+| C0e | EFFCT : effets | 75948005 | 22.51 | 74758048 | 170 | 107 | 5 | 58 | b46a2 (26.3 %), b46cc (22.2 %), b03c6 (4.8 %) |
+| K1 | Noyau : reset, boot, VBLANK, ordonnanceur, traps, entrées, gel | 5961428 | 1.77 | 0 | 17 | 2 | 12 | 3 | 350 (99.9 %), 492 (0.1 %) |
+| C12 | PEFF : effets du joueur | 4377739 | 1.30 | 4374289 | 107 | 10 | 27 | 70 | 51c06 (44.6 %), 4b7a0 (19.6 %), 4dc9a (13.0 %) |
+| W3 | Scripts de scène (phases 16/28) | 3377822 | 1.00 | 1930077 | 82 | 58 | 3 | 21 | f71fa (25.8 %), f7d86 (23.9 %), f68c8 (15.8 %) |
+| O3 | Aides communes aux types (animations par type) | 2106747 | 0.62 | 1233990 | 25 | 24 | 0 | 1 | 3bb9c (31.5 %), 3be02 (26.9 %), 3bb16 (7.9 %) |
+| P3 | Comportement scénarisé des joueurs par scène | 1721428 | 0.51 | 1716082 | 3 | 1 | 2 | 0 | 25b20 (100.0 %) |
+| C0a | BOX : caisses/coffres (h) | 1683940 | 0.50 | 1649766 | 7 | 4 | 0 | 3 | dabba (77.8 %), d9cea (20.1 %), da152 (2.0 %) |
+| M1 | Menu TEST (service) | 1581662 | 0.47 | 1059759 | 76 | 23 | 0 | 53 | 29948 (29.7 %), 2bb0a (21.6 %), 2ca5e (17.4 %) |
+| P4 | Noyau joueur (états, 26 actions génériques) | 1521399 | 0.45 | 1225341 | 59 | 33 | 3 | 23 | 3769c (15.6 %), 35620 (11.4 %), 3733c (8.7 %) |
+| C08 | ESHL : tirs/attaques ennemis | 1511835 | 0.45 | 1463157 | 127 | 35 | 1 | 91 | 9ef20 (27.5 %), a71c2 (13.6 %), a731c (13.4 %) |
+| C04 | BOSS : boss | 930776 | 0.28 | 737135 | 353 | 35 | 2 | 316 | 81aa4 (51.4 %), 833b6 (15.5 %), 87048 (6.9 %) |
+| E1 | Aides d'IA (cible, portées, décisions aléatoires) | 927463 | 0.27 | 637618 | 69 | 16 | 43 | 10 | 11a36 (17.7 %), 788c (15.2 %), 1172e (15.1 %) |
+| C0c | ITEM : objets ramassables | 615949 | 0.18 | 600960 | 14 | 5 | 0 | 9 | db6c0 (97.1 %), dcddc (2.3 %), dc5fe (0.3 %) |
+| S1 | Son : wrappers de commandes + FIFO | 444302 | 0.13 | 79848 | 410 | 24 | 379 | 7 | e7e10 (45.5 %), e662a (23.9 %), e7a12 (6.9 %) |
+| C1 | Crédits, pièces, start/continue | 189681 | 0.06 | 9461 | 22 | 4 | 13 | 5 | e05ec (96.1 %), 14cb8 (3.0 %), e0538 (0.8 %) |
+| V3 | Palettes et fondus | 171283 | 0.05 | 72931 | 38 | 6 | 25 | 7 | 146c (65.9 %), 17ea (18.3 %), 1ced4 (14.2 %) |
+| V2 | Texte, rectangles et blocs de tuiles | 68831 | 0.02 | 999 | 33 | 9 | 19 | 5 | f4a (73.5 %), 2860 (10.6 %), 2824 (8.1 %) |
+| X2 | Dégâts, terrain, placement | 38118 | 0.01 | 0 | 19 | 12 | 0 | 7 | 3796 (43.4 %), 3618 (20.6 %), 3636 (18.4 %) |
+| M2 | EEPROM, configuration, comptabilité | 29436 | 0.01 | 6 | 60 | 11 | 13 | 36 | 2d30a (92.5 %), 2e4ec (2.2 %), 2dc9a (1.2 %) |
+| C10 | SET : décors/animations de palette | 24889 | 0.01 | 376 | 131 | 19 | 4 | 108 | d981a (23.3 %), cdedc (18.9 %), c8312 (15.6 %) |
+| F4 | Exécuteur d'écrans fixes (logos) | 24146 | 0.01 | 16100 | 5 | 3 | 1 | 1 | 18b8e (66.4 %), 18a3e (32.1 %), 18a0e (1.5 %) |
+| F3 | Interface joueurs : sélection / panneaux d'état (h) | 22286 | 0.01 | 6762 | 49 | 4 | 0 | 45 | 18082 (52.2 %), 1507a (38.8 %), 180c8 (8.9 %) |
+| P5 | Code par personnage (6 × 2 variantes) | 19791 | 0.01 | 0 | 73 | 1 | 0 | 72 | 3e480 (100.0 %) |
+| B1 | Scrolling / caméras par scène | 15965 | 0.00 | 0 | 42 | 1 | 10 | 31 | 33aa6 (100.0 %) |
+| W1 | Boucle de partie et phases 0/4/12/20 | 14796 | 0.00 | 0 | 3 | 1 | 1 | 1 | 1c44a (100.0 %) |
+| P1 | Initialisation des joueurs | 7146 | 0.00 | 989 | 23 | 9 | 4 | 10 | 35c0 (53.9 %), 3432 (13.0 %), 3308 (10.8 %) |
+| C02 | ENEMY : ennemis | 4915 | 0.00 | 1908 | 205 | 10 | 1 | 194 | 5cdc6 (43.5 %), 57c66 (21.4 %), 57c8c (13.8 %) |
+| V1 | Primitives vidéo (attente, couches, effacements) | 4620 | 0.00 | 0 | 13 | 2 | 11 | 0 | c32 (64.1 %), c0c (35.9 %) |
+| F1 | Tâche de boot, avertissements région | 4472 | 0.00 | 0 | 5 | 3 | 2 | 0 | 133dc (97.4 %), 133f6 (1.3 %), 133f0 (1.3 %) |
+| U1 | RNG et files d'affichage (pop-ups) | 3570 | 0.00 | 0 | 18 | 1 | 13 | 4 | 19eb0 (100.0 %) |
+| C06 | PSHL : tirs du joueur | 2967 | 0.00 | 0 | 39 | 6 | 12 | 21 | 53e48 (47.6 %), 52578 (18.9 %), 54872 (14.5 %) |
+| U2 | Petites routines / tables (rôle inconnu) | 2628 | 0.00 | 624 | 17 | 6 | 10 | 1 | 1ad2a (65.9 %), 1ac68 (17.1 %), 1ac86 (15.8 %) |
+| C14 | SOBJ : objets système/UI | 1748 | 0.00 | 49 | 25 | 7 | 2 | 16 | dfe26 (36.8 %), e03c6 (20.2 %), e03e4 (17.3 %) |
+| K3 | Entrées vers enregistrements joueur | 792 | 0.00 | 0 | 3 | 1 | 2 | 0 | 2bdc (100.0 %) |
+| F6 | Interpréteur de scripts de scène (démos) | 700 | 0.00 | 0 | 18 | 1 | 6 | 11 | 20de6 (100.0 %) |
+| P6 | Réactions aux coups, saisie des coups spéciaux | 136 | 0.00 | 0 | 9 | 1 | 2 | 6 | f18fa (100.0 %) |
+| K4 | Exceptions et écran de dump debug | 0 | 0.00 | 0 | 16 | 0 | 0 | 16 |  |
+| V4 | Construction de la liste de sprites (OBJ RAM) | 0 | 0.00 | 0 | 15 | 0 | 2 | 13 |  |
+| O1 | Animation, tables de vitesse, physique, culling | 0 | 0.00 | 0 | 22 | 0 | 22 | 0 |  |
+| O2 | Pools d'objets et listes triées | 0 | 0.00 | 0 | 41 | 0 | 28 | 13 |  |
+| X1 | Collisions (boîtes, coups, poussée) | 0 | 0.00 | 0 | 39 | 0 | 0 | 39 |  |
+| W0 | Dispatch des 10 classes d'objets | 0 | 0.00 | 0 | 10 | 0 | 10 | 0 |  |
+| W2 | Sous-scènes de transition à fondus (phases 8/24) | 0 | 0.00 | 0 | 1 | 0 | 0 | 1 |  |
+| M3 | « Secret Test » (debug) et Block Test | 0 | 0.00 | 0 | 29 | 0 | 0 | 29 |  |
+| F2 | Machine à modes (attract) | 0 | 0.00 | 0 | 0 | 0 | 0 | 0 |  |
+| F5 | Curseur de sélection de personnage | 0 | 0.00 | 0 | 10 | 0 | 0 | 10 |  |
+| F7 | Écrans titre / copyright | 0 | 0.00 | 0 | 5 | 0 | 1 | 4 |  |
+| - | hors atlas | 0 | 0.00 | 0 | 0 | 0 | 0 | 0 |  |
+
+## Hors de toute fonction de l'index (les 40 plages les plus gourmandes)
+
+Code que Ghidra n'a pas découpé en fonctions (gestionnaires atteints par table, par exemple) : à désassembler depuis le listing. Plages contiguës à moins de 0x40 octets.
+
+| Plage | Sous-système | Instr. 68000 | % |
+|---|---|---:|---:|
+| 0b9d7e-0b9eb8 | C0e | 35643838 | 10.56 |
+| 0afa46-0afac8 | C0e | 12857236 | 3.81 |
+| 0aeff0-0af2b6 | C0e | 6436209 | 1.91 |
+| 0513e6-0514a6 | C12 | 4074987 | 1.21 |
+| 0b6212-0b64aa | C0e | 2488339 | 0.74 |
+| 00197c-001998 | K2 | 2476991 | 0.73 |
+| 0af3f2-0af4be | C0e | 1845162 | 0.55 |
+| 0b9f36-0b9fe2 | C0e | 1626696 | 0.48 |
+| 0b1bb6-0b1c02 | C0e | 1497776 | 0.44 |
+| 0b5fb6-0b615a | C0e | 1362089 | 0.40 |
+| 0b3050-0b372e | C0e | 1238843 | 0.37 |
+| 0a801a-0a8174 | C0e | 1060612 | 0.31 |
+| 0da7ec-0da904 | C0a | 849738 | 0.25 |
+| 024fe2-025ffe | P3 | 842188 | 0.25 |
+| 0b46ec-0b492e | C0e | 836353 | 0.25 |
+| 0b6d48-0b7790 | C0e | 789091 | 0.23 |
+| 0da9a8-0dab50 | C0a | 753457 | 0.22 |
+| 0ad600-0ad7f6 | C0e | 713518 | 0.21 |
+| 0043ca-004486 | E1 | 601118 | 0.18 |
+| 02bb1e-02c006 | M1 | 543412 | 0.16 |
+| 0b1abc-0b1b60 | C0e | 490944 | 0.15 |
+| 0ad866-0adaca | C0e | 484019 | 0.14 |
+| 02447e-024b82 | P3 | 475657 | 0.14 |
+| 0b5dbe-0b5f60 | C0e | 468623 | 0.14 |
+| 0b9a6a-0b9c62 | C0e | 461950 | 0.14 |
+| 03bdf0-03bfca | O3 | 449085 | 0.13 |
+| 03a17e-03a576 | P4 | 438389 | 0.13 |
+| 0a7b76-0a7d4a | C08 | 406783 | 0.12 |
+| 029162-0292e4 | M1 | 337661 | 0.10 |
+| 0ab414-0ab4dc | C0e | 329706 | 0.10 |
+| 081b3a-0820b0 | C04 | 316473 | 0.09 |
+| 0b40f8-0b4104 | C0e | 307785 | 0.09 |
+| 0ae52a-0ae6fa | C0e | 307178 | 0.09 |
+| 051076-051100 | C12 | 299302 | 0.09 |
+| 0b45da-0b4682 | C0e | 289053 | 0.09 |
+| 0a7234-0a7316 | C08 | 282872 | 0.08 |
+| 0a75c6-0a7832 | C08 | 280228 | 0.08 |
+| 0ad476-0ad530 | C0e | 277968 | 0.08 |
+| 0b1818-0b1a74 | C0e | 262009 | 0.08 |
+| 0abccc-0abdfa | C0e | 260362 | 0.08 |
 
 ## Par fonction (les 80 plus gourmandes)
 
@@ -181,8 +228,8 @@ Concentration : 0 fonctions pour 90 % des instructions restantes, 0 pour 99 %, 4
 | E1 | Aides d'IA (cible, portées, décisions aléatoires) | 10 | 508 |
 | X2 | Dégâts, terrain, placement | 7 | 506 |
 | C1 | Crédits, pièces, start/continue | 5 | 476 |
+| V3 | Palettes et fondus | 7 | 472 |
 | O2 | Pools d'objets et listes triées | 13 | 342 |
-| V3 | Palettes et fondus | 5 | 330 |
 | S1 | Son : wrappers de commandes + FIFO | 7 | 328 |
 | K1 | Noyau : reset, boot, VBLANK, ordonnanceur, traps, entrées, gel | 3 | 318 |
 | U1 | RNG et files d'affichage (pop-ups) | 4 | 296 |

@@ -68,6 +68,8 @@ struct Sub {
     native: u32,
     never: u32,
     never_bytes: u32,
+    /// Instructions exécutées dans la plage du sous-système, hors de toute fonction de l'index.
+    orphan: u64,
 }
 
 /// Sous-systèmes de l'atlas : (id, nom, plages d'adresses), lus dans le tableau de la section 4.1.
@@ -121,6 +123,7 @@ fn report(a: &[String]) {
     }
     let mut frames = 0usize;
     let (mut orphan, mut spin) = (0u64, 0u64);
+    let mut orphans: BTreeMap<u32, u64> = BTreeMap::new();
     let mut per_scenario: Vec<(String, usize, u64)> = Vec::new();
     for c in cnts {
         let text = std::fs::read_to_string(c).unwrap();
@@ -144,6 +147,7 @@ fn report(a: &[String]) {
                 seen[i - 1] = true;
             } else {
                 orphan += k;
+                *orphans.entry(pc).or_default() += k;
             }
         }
         for (f, s) in funcs.iter_mut().zip(&seen) {
@@ -169,6 +173,21 @@ fn report(a: &[String]) {
             s.never_bytes += f.size;
         }
     }
+    for (&pc, &k) in &orphans {
+        subs[sub(pc)].orphan += k;
+    }
+    // Plages contiguës (trous < 0x40) de code hors index : (début, fin, instructions).
+    let mut plages: Vec<(u32, u32, u64)> = Vec::new();
+    for (&pc, &k) in &orphans {
+        match plages.last_mut() {
+            Some(p) if pc - p.1 < 0x40 => {
+                p.1 = pc;
+                p.2 += k;
+            }
+            _ => plages.push((pc, pc, k)),
+        }
+    }
+    plages.sort_by_key(|p| std::cmp::Reverse(p.2));
     let touched: Vec<&Func> = {
         let mut v: Vec<&Func> = funcs.iter().filter(|f| f.instr > 0).collect();
         v.sort_by_key(|f| std::cmp::Reverse(f.instr));
@@ -185,16 +204,23 @@ fn report(a: &[String]) {
     writeln!(md, "* **{total} instructions 68000 exécutées** (hors attente active), soit {:.1} par image ;", total as f64 / frames.max(1) as f64).unwrap();
     writeln!(md, "* attente active, non comptée : {spin} instructions (ordonnanceur et traps 0x928-0xb00, tâche du gel 0xee080 : voir `SPIN`) ;").unwrap();
     writeln!(md, "* {} fonctions dans `decomp/index.tsv` : {} exécutent encore du 68000, {only_native} sont entièrement natives, **{} jamais atteintes** ({} octets : code mort, ou à exercer par de nouveaux scénarios) ;", funcs.len(), touched.len(), never.len(), never.iter().map(|f| f.size).sum::<u32>()).unwrap();
-    writeln!(md, "* instructions hors de toute fonction de l'index : {orphan}.\n").unwrap();
+    writeln!(md, "* instructions hors de toute fonction de l'index : {orphan} (comptées par sous-système ci-dessous, colonne « Hors index », et par plage plus bas).\n").unwrap();
 
     writeln!(md, "## Par sous-système (atlas)\n").unwrap();
-    writeln!(md, "| ID | Sous-système | Instr. 68000 | % | Fonctions | Touchées | Natives seules | Jamais atteintes | Principales fonctions restantes |\n|---|---|---:|---:|---:|---:|---:|---:|---|").unwrap();
+    writeln!(md, "| ID | Sous-système | Instr. 68000 | % | Hors index | Fonctions | Touchées | Natives seules | Jamais atteintes | Principales fonctions restantes |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---|").unwrap();
     let mut order: Vec<usize> = (0..subs.len()).collect();
-    order.sort_by_key(|&i| std::cmp::Reverse(subs[i].instr));
+    order.sort_by_key(|&i| std::cmp::Reverse(subs[i].instr + subs[i].orphan));
     for i in order {
         let (s, (id, name)) = (&subs[i], label(i));
         let top: Vec<String> = touched.iter().filter(|f| sub(f.addr) == i).take(3).map(|f| format!("{:x} ({:.1} %)", f.addr, 100.0 * f.instr as f64 / s.instr.max(1) as f64)).collect();
-        writeln!(md, "| {id} | {name} | {} | {:.2} | {} | {} | {} | {} | {} |", s.instr, pct(s.instr), s.funcs, s.touched, s.native, s.never, top.join(", ")).unwrap();
+        writeln!(md, "| {id} | {name} | {} | {:.2} | {} | {} | {} | {} | {} | {} |", s.instr + s.orphan, pct(s.instr + s.orphan), s.orphan, s.funcs, s.touched, s.native, s.never, top.join(", ")).unwrap();
+    }
+
+    writeln!(md, "\n## Hors de toute fonction de l'index (les 40 plages les plus gourmandes)\n").unwrap();
+    writeln!(md, "Code que Ghidra n'a pas découpé en fonctions (gestionnaires atteints par table, par exemple) : à désassembler depuis le listing. Plages contiguës à moins de 0x40 octets.\n").unwrap();
+    writeln!(md, "| Plage | Sous-système | Instr. 68000 | % |\n|---|---|---:|---:|").unwrap();
+    for &(a, b, k) in plages.iter().take(40) {
+        writeln!(md, "| {a:06x}-{b:06x} | {} | {k} | {:.2} |", label(sub(a)).0, pct(k)).unwrap();
     }
 
     writeln!(md, "\n## Par fonction (les 80 plus gourmandes)\n").unwrap();
