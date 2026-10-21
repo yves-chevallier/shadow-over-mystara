@@ -992,7 +992,7 @@ fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xe2f6)
+// Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
 // ---------------------------------------------------------------------------------------------
 
 /// Allocation d'un objet ramassable (ITEM) : A1, retenue levée si le pool est plein.
@@ -1235,6 +1235,299 @@ fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
     set_w(&mut c.d[5], 0xffff);
 }
 
+/// Objet spécial tiré par 0xbad6 : genre et variante.
+const DRAWN_KIND: u32 = A5 - 0x7196;
+const DRAWN_VARIANT: u32 = A5 - 0x7195;
+
+/// Tables de 0xbad6 (lues comme données, A1 = `lea` de la table) : ligne `+0x80` (paires genre, variante), puis par difficulté (`A5+0x49`).
+mod special {
+    pub const ROWS: u32 = 0xbf26;
+    pub const COMMON: u32 = 0xc4c6;
+    pub const PAIRS: u32 = 0xca86;
+    pub const KIND_2: u32 = 0xd606;
+    pub const BY_CLASS: u32 = 0xd046;
+    pub const CLERIC_OR_MAGE: u32 = 0xd776;
+    pub const MAGES: u32 = 0xda56;
+    pub const CLERICS: u32 = 0xdbc6;
+    pub const MAGE_OR_CLERIC: u32 = 0xdd36;
+}
+
+/// Classes de personnage (`+3` / 2 d'un joueur) qui comptent pour le butin spécial.
+const CLERIC: u8 = 1;
+const ELF: u8 = 2;
+const MAGE: u8 = 4;
+
+/// Étapes du tirage de 0xbad6 (les étiquettes de l'original).
+#[derive(Clone, Copy)]
+enum Draw {
+    /// 0xbaf2 : ligne de l'objet.
+    Row,
+    /// 0xbb20 : objet commun, ou de genre 7 si un clerc, un elfe ou un magicien est en jeu.
+    Common,
+    /// 0xbba8 : paire (genre, variante) tirée.
+    Pair,
+    /// 0xbbda : genre 2.
+    Kind2,
+    /// 0xbc02 : selon les classes en jeu.
+    ByClass,
+    /// 0xbcb4 : certains objets sont réservés à des classes ; sinon l'objet est lâché.
+    Restrict,
+    Spawn,
+    /// 0xbf20 : tirage suivant.
+    Next,
+}
+
+/// Parcourt les joueurs en jeu et en vie (`+0`, PV `+0x62`) comme les boucles de 0xbad6 (A1 sur le joueur, D6
+/// décompte ; la classe dans D`class_reg`) ; `visit` rend vrai pour arrêter. Vrai si la boucle a été arrêtée.
+fn scan_party(c: &mut Cpu, b: &mut Cps2Bus, class_reg: usize, mut visit: impl FnMut(&mut Cpu, u8) -> bool) -> bool {
+    for k in 0..4u32 {
+        let p = A5 + 0x5de + 0x200 * k;
+        c.a[1] = p;
+        c.d[6] = 3 - k;
+        if rd8(b, p) == 0 || rd16(b, p + 0x62) == 0 {
+            continue;
+        }
+        let class = rd8(b, p + 3) >> 1;
+        c.d[class_reg] = class as u32;
+        if visit(c, class) {
+            return true;
+        }
+    }
+    c.a[1] = A5 + 0x5de + 0x800;
+    c.d[6] = 0xffff;
+    false
+}
+
+/// Tire une entrée de `table` : D0 = `base` + (tirage & `mask`) × `scale` ; A1 = la table.
+fn special_roll(c: &mut Cpu, b: &mut Cps2Bus, table: u32, base: u16, mask: u16, scale: u16) -> u32 {
+    let roll = (random(b) & mask).wrapping_mul(scale).wrapping_add(base);
+    c.d[0] = c.d[0] & 0xffff_0000 | roll as u32;
+    c.a[1] = table;
+    table.wrapping_add(offset(roll))
+}
+
+/// Début de la ligne de difficulté (`A5+0x49`) de `size` octets, gardé dans D3.
+fn difficulty_row(c: &mut Cpu, b: &mut Cps2Bus, size: u16) -> u16 {
+    let row = rd8(b, A5 + 0x49) as u16 * size;
+    c.d[3] = row as u32;
+    row
+}
+
+fn drawn(b: &mut Cps2Bus) -> (u8, u8) {
+    (rd8(b, DRAWN_KIND), rd8(b, DRAWN_VARIANT))
+}
+fn set_drawn(b: &mut Cps2Bus, kind: u8, variant: u8) {
+    wr8(b, DRAWN_KIND, kind);
+    wr8(b, DRAWN_VARIANT, variant);
+}
+/// Nouvelle variante de genre 4 tirée dans `at` : 0 annule le tirage, 1 et 2 renvoient aux tirages `on_1`, `on_2`.
+fn redraw(b: &mut Cps2Bus, at: u32, on_1: Draw, on_2: Draw) -> Draw {
+    let variant = rd8(b, at);
+    set_drawn(b, 4, variant);
+    match variant {
+        0 => Draw::Next,
+        1 => on_1,
+        2 => on_2,
+        _ => Draw::Restrict,
+    }
+}
+
+/// 0xbad6 : objet spécial lâché par l'objet A0 (ligne `+0x80` de la table 0xbf26, paires genre et variante, 16
+/// tirages possibles ; genre négatif : rien), un ou deux tirages selon le nombre de joueurs. Une variante 0 à 3 de
+/// genre 0 renvoie à des tables par difficulté (`A5+0x49`), certaines selon les classes des personnages en jeu
+/// (clerc, elfe, magicien) ; certains objets sont réservés à un groupe d'un seul genre de lanceurs de sorts et
+/// retirés sinon. L'objet ITEM est lancé en l'air comme le butin (0xb780). Registres de l'original.
+fn drop_special(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    c.d[0] = 0;
+    c.d[1] = 0;
+    let row = rd8(b, me + 0x80) as u16;
+    c.d[2] = row as u32;
+    if row == 0 {
+        return;
+    }
+    set_w(&mut c.d[2], row << 5);
+    c.d[5] = (rd8(b, A5 + 0x35) > 3) as u32;
+    let mut step = Draw::Row;
+    loop {
+        step = match step {
+            Draw::Row => {
+                let at = special_roll(c, b, special::ROWS, row << 5, 15, 2);
+                let (kind, variant) = (rd8(b, at), rd8(b, at + 1));
+                set_drawn(b, kind, variant);
+                match (kind as i8, variant) {
+                    (k, _) if k < 0 => return,
+                    (0, 0) => Draw::Common,
+                    (0, 1) => Draw::Pair,
+                    (0, 2) => Draw::Kind2,
+                    (0, _) => Draw::ByClass,
+                    _ => Draw::Restrict,
+                }
+            }
+            Draw::Common => {
+                let row = difficulty_row(c, b, 64);
+                let at = special_roll(c, b, special::COMMON, row, 31, 1);
+                let caster = scan_party(c, b, 1, |_, class| matches!(class, CLERIC | ELF | MAGE));
+                c.a[1] = special::COMMON;
+                if caster {
+                    let variant = rd8(b, at);
+                    set_drawn(b, 7, variant);
+                    Draw::Restrict
+                } else {
+                    let k = (c.d[0] as u16).wrapping_add(32);
+                    set_w(&mut c.d[0], k);
+                    redraw(b, at + 32, Draw::Pair, Draw::Restrict)
+                }
+            }
+            Draw::Pair => {
+                let row = difficulty_row(c, b, 64);
+                let at = special_roll(c, b, special::PAIRS, row, 31, 2);
+                let (kind, variant) = (rd8(b, at), rd8(b, at + 1));
+                set_drawn(b, kind, variant);
+                Draw::Restrict
+            }
+            Draw::Kind2 => {
+                let row = difficulty_row(c, b, 16);
+                let at = special_roll(c, b, special::KIND_2, row, 15, 1);
+                let variant = rd8(b, at);
+                set_drawn(b, 2, variant);
+                Draw::Restrict
+            }
+            Draw::ByClass => {
+                let row = difficulty_row(c, b, 64);
+                let at = special_roll(c, b, special::BY_CLASS, row, 15, 1);
+                c.d[3] = 0;
+                scan_party(c, b, 1, |c, class| {
+                    let bit = match class {
+                        CLERIC => 1,
+                        ELF => 2,
+                        MAGE => 4,
+                        _ => 0,
+                    };
+                    c.d[3] |= bit;
+                    false
+                });
+                c.a[1] = special::BY_CLASS;
+                let classes = c.d[3] as u8;
+                if classes == 4 {
+                    let variant = rd8(b, at);
+                    set_drawn(b, 3, variant);
+                    Draw::Restrict
+                } else {
+                    let shift = match classes {
+                        0 => 48,
+                        1 => 16,
+                        _ => 32,
+                    };
+                    set_w(&mut c.d[1], shift);
+                    let k = (c.d[0] as u16).wrapping_add(shift);
+                    set_w(&mut c.d[0], k);
+                    redraw(b, at + shift as u32, Draw::Common, Draw::Pair)
+                }
+            }
+            Draw::Restrict => restrict(c, b),
+            Draw::Spawn => {
+                let (kind, variant) = drawn(b);
+                let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+                tossed_item(b, me, item, kind, variant, 0x40, c.d[5] as u8 == 0);
+                Draw::Next
+            }
+            Draw::Next => {
+                let left = (c.d[5] as u16).wrapping_sub(1);
+                set_w(&mut c.d[5], left);
+                if left == 0xffff {
+                    return;
+                }
+                Draw::Row
+            }
+        }
+    }
+}
+
+/// 0xbcb4 : objets réservés. Genre 3 variante 5 : clercs et magiciens seulement (table 0xd776) ; genre 4 variante 15 :
+/// magiciens seulement (0xda56) ; genre 4 variantes 8 et 9 : clercs seulement (0xdbc6) ; genre 4 variantes 10 et 11 :
+/// selon les magiciens et les clercs en jeu (0xdd36). Un groupe qui ne convient pas garde l'objet tiré.
+fn restrict(c: &mut Cpu, b: &mut Cps2Bus) -> Draw {
+    let (kind, variant) = drawn(b);
+    match (kind, variant) {
+        (3, 5) => {
+            c.d[1] = 0;
+            let other = scan_party(c, b, 0, |c, class| match class {
+                CLERIC => {
+                    c.d[1] |= 1;
+                    false
+                }
+                MAGE => {
+                    c.d[1] |= 2;
+                    false
+                }
+                _ => true,
+            });
+            if other || c.d[1] as u8 == 0 {
+                return Draw::Spawn;
+            }
+            let shift = if c.d[1] as u8 == 1 { 0 } else { 16 };
+            let row = difficulty_row(c, b, 32);
+            let at = special_roll(c, b, special::CLERIC_OR_MAGE, row, 15, 1);
+            let k = (c.d[0] as u16).wrapping_add(shift);
+            set_w(&mut c.d[0], k);
+            let variant = rd8(b, at + shift as u32);
+            wr8(b, DRAWN_VARIANT, variant);
+            match variant {
+                0 => Draw::Next,
+                1 => Draw::Common,
+                2 => Draw::Pair,
+                3 => Draw::ByClass,
+                _ => Draw::Spawn,
+            }
+        }
+        (4, 15) => only_class(c, b, MAGE, special::MAGES),
+        (4, 8 | 9) => only_class(c, b, CLERIC, special::CLERICS),
+        (4, 10 | 11) => {
+            c.d[1] = 0;
+            scan_party(c, b, 0, |c, class| {
+                if class == MAGE {
+                    c.d[1] |= 1;
+                }
+                if class == CLERIC {
+                    c.d[1] |= 2;
+                }
+                false
+            });
+            let shift = match c.d[1] as u8 {
+                0 => return Draw::Spawn,
+                1 => {
+                    c.d[0] = 0;
+                    0
+                }
+                2 => 16,
+                _ => 32,
+            };
+            set_w(&mut c.d[0], shift);
+            let row = difficulty_row(c, b, 16) + shift;
+            c.d[3] = row as u32;
+            let at = special_roll(c, b, special::MAGE_OR_CLERIC, row, 15, 1);
+            reroll_or_none(b, at)
+        }
+        _ => Draw::Spawn,
+    }
+}
+
+/// Tous les joueurs en jeu sont de la classe `class` : nouvelle variante de genre 4 tirée dans `table`.
+fn only_class(c: &mut Cpu, b: &mut Cps2Bus, class: u8, table: u32) -> Draw {
+    if scan_party(c, b, 0, |_, k| k != class) {
+        return Draw::Spawn;
+    }
+    let row = difficulty_row(c, b, 16);
+    let at = special_roll(c, b, table, row, 15, 1);
+    reroll_or_none(b, at)
+}
+fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
+    let variant = rd8(b, at);
+    set_drawn(b, 4, variant);
+    if variant == 0 { Draw::Next } else { Draw::Spawn }
+}
+
 /// 0xe7fa : comme 0xe886, choisit le point de marche le plus proche autour de la cible et mémorise son
 /// numéro (`+0x99`, -1 si aucun) ; loin de la caméra, marche vers un point lointain (0xf084).
 fn choose_near_walk_point(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -1339,6 +1632,7 @@ pub const NATIVES: &[Native] = &[
     Native { outputs: regs::ALL, ..leaf!(0x11a36, "debris_au_sol", ground_debris) },
     Native { outputs: regs::d(0) | regs::d(1) | regs::a(1), ..leaf!(0xb648, "butin_unique", drop_once) },
     Native { outputs: regs::d(0) | regs::d(2) | regs::d(5) | regs::a(1), ..leaf!(0xb780, "butin", drop_loot) },
+    Native { outputs: regs::ALL & !regs::CCR, ..leaf!(0xbad6, "butin_special", drop_special) },
     Native { outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(4) | regs::d(5) | regs::a(1) | regs::a(4), ..leaf!(0xe2f6, "tresor", drop_treasure) },
     Native { outputs: regs::a(1) | regs::a(2), ..leaf!(0xe7fa, "ia_point_proche_numerote", choose_near_walk_point) },
     Native { outputs: regs::d(0) | regs::a(1), ..aid(0x3e480, "ia_atterrissage_par_type", landing_by_kind) },
