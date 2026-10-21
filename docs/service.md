@@ -5,7 +5,7 @@ Code : `port/ddsom-game/src/taches/service.rs` (la tâche), `src/service/` (`mod
 CONFIGURATION ; `memoire.rs` : MEMORY CHECK), `src/config.rs` et `src/eeprom.rs` (M2). `A5` = 0xFF8000. Les
 textes et les tables restent dans la ROM et sont lus à l'exécution.
 
-Tout est validé image par image par quatre scénarios (`scenarios/cov/cov_service*.txt`, voir §6).
+Tout est validé image par image par cinq scénarios (`scenarios/cov/cov_service*.txt`, voir §6).
 
 ## 1. Entrée et tâche (`0x29162`)
 
@@ -129,12 +129,31 @@ en code d'origine : la fin de GAME DATA (`0x2b842`), les suites de `0x2e4ec` (`0
 | `cov_service.txt` | CONFIGURATION (variante 8) : tous les réglages, SAVE & EXIT |
 | `cov_service_tests.txt` | INPUT (toutes les entrées), OUTPUT, SOUND & VOICE (codes, répétition, requêtes) |
 | `cov_service_ecrans.txt` | COLOR, DOT CROSS HATCH, GAME DATA, MEMORY CHECK (×4), EXIT et redémarrage |
-| `cov_service_variante.txt` | `poke` de la variante (4, puis 10, puis 8) et de quatre joueurs : INPUT et OUTPUT à quatre joueurs, distributeur et compteur de cartes, CONFIGURATION à 9 lignes, DEFAULT, départ gratuit (ligne CONTINUE sautée), redémarrage avec une signature d'EEPROM qui ne correspond pas (valeurs par défaut écrites par `0x2d30a`) |
+| `cov_service_variante.txt` | `poke` de la variante (4, puis 10, puis 8) et de quatre joueurs : INPUT et OUTPUT à quatre joueurs, distributeur et compteur de cartes, CONFIGURATION à 9 lignes, DEFAULT, redémarrage avec une signature d'EEPROM qui ne correspond pas (valeurs par défaut écrites par `0x2d30a`) |
+| `cov_service_reglages.txt` | répétition automatique (touches tenues dans le menu et les réglages), départ gratuit (mode 17 par `poke` : ligne CONTINUE sautée, CONTINUE forcé), jeu gratuit (18), variante 0 (7-1 sans langue ni cartes), modes hors de la liste réduite de la variante 4 |
 
 Générateur : les scénarios sont des suites d'appuis (4 images, 40 d'intervalle) ; l'interrupteur TEST (`Service Mode`)
 reste actionné de l'image 600 jusqu'au EXIT final.
 
 ## 7. Ce qui reste en 68000
 
-Rien dans les quatre scénarios hors des routines de la carte de développement (§5). Code jamais atteint (non validé) :
-voir le rapport du travail (liste des chemins Rust non exercés ci-dessous).
+Mesure (`examples/reste68k`, `cov_service.txt`, 30 000 images) : M1 et M2 passent de 1 582 438 instructions 68000 à
+**0** (le scénario passe de 3 566 149 à 1 983 867 instructions : le reste est le test de RAM du démarrage, K2). Sur les
+cinq scénarios, aucune instruction de M1 ni de M2 n'est plus exécutée.
+
+Restent en code d'origine, jamais exécutés par une borne :
+
+* les suites de la carte de développement (`A5+0x82` non nul) : fin de GAME DATA (`0x2b842`), compteurs de la RAM
+  supplémentaire de `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et de `0x2dc9a` (`0x2dca6`, `0x2dcd2`) ;
+* les blocages : « NG » du MEMORY CHECK (boucle `0x2d112`), « EEPROM ERROR » (boucle `0x2d7fa`) ; les messages sont
+  affichés en Rust, puis le PC est posé sur la boucle de l'original ;
+* le « Secret Test » (M3, `0xee16e`) et la version à 13 lignes du menu (`0x295a0-0x29946` : OBJECT, SCROLL 1-3),
+  inaccessibles (mot 0xc0 nul) ;
+* du code mort (jamais appelé) : `0x2bbfa-0x2bc1c` et ses aides `0x299ee`, `0x29a24`, `0x29a36` ; `0x2d592`
+  (comparaison des deux exemplaires) ; les variantes inutilisées de l'affichage des chiffres (`0x29cfe-0x29d2e`,
+  `0x29d46`).
+
+Chemins Rust que le code d'origine n'a jamais parcourus dans les scénarios (non validés) : les blocages ci-dessus, et
+dans SOUND & VOICE les volumes autres que le maximum (le port 0x804030 émulé vaut toujours 0xe021 : jauge pleine).
+`0x2e4ec` n'est pas appelé par le menu : il est validé par les scénarios de partie (`cov_credits_gratuit` pour le jeu
+gratuit, contrôle `DDSOM_CHECK` sans écart).
