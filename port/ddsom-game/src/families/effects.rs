@@ -1092,292 +1092,6 @@ fn impact_gestionnaire(ctx: &mut Ctx) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 31 : éléments de l'écran de fin de niveau (0xb1a98)
-
-/// Type 31 : objets de l'écran de décompte (11 variantes, posées sur la caméra du fond 2). Réécrits :
-/// variante 3 (indicateur de rang, animation `0xe3 - +0x42`), variante 4 (plaque, animation `0x168` ou
-/// `0x169` selon `A5+0x70`), variante 5 état 0 (lignes de score), variante 6 (compteurs `A5-0x5b21` /
-/// `-0x5b20` en décimal sur 3 chiffres dessinés dans le fond 2, effacés quand l'objet atteint le bas
-/// de l'écran). Le reste (variantes 0, 1, 2, 7 à 10, variante 5 état 2) reste en code d'origine.
-mod decompte {
-    pub const ENTREE: u32 = 0xb1a98;
-    pub const TABLE: u32 = 0xb1aa8;
-    pub const ETATS_3: u32 = 0xb1e58;
-    pub const ETATS_4: u32 = 0xb1ec4;
-    pub const ETATS_5: u32 = 0xb1f1a;
-    pub const ETATS_6: u32 = 0xb2262;
-    pub const ETATS_8: u32 = 0xb2812;
-    pub const DECALAGES_5: u32 = 0xb1f6a;
-    pub const CHIFFRES: u32 = 0xb2334;
-    pub const ANIMATIONS_6: u32 = 0xb2af0;
-    pub const ANIMATIONS_6_B: u32 = 0xb2b6a;
-    pub const FOND_CENTAINES: u32 = 0x910f6c;
-    pub const FOND_UNITES: u32 = 0x910f74;
-    pub const COMPTEURS: i32 = -0x5b21;
-    pub const VALEUR: u32 = 0x42;
-    pub const VALEUR_AFFICHEE: u32 = 0x43;
-}
-
-fn decompte_3(ctx: &mut Ctx, o: Obj) {
-    let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(decompte::ETATS_3, etat as u32);
-    match etat {
-        etat::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
-            place_sur_camera(ctx, o);
-            decale_u16(ctx, o, Obj::X, 0x13c);
-            decale_u16(ctx, o, Obj::Z, 0xcc);
-            let valeur = o.u8(ctx.b, decompte::VALEUR);
-            o.set_u8(ctx.b, decompte::VALEUR_AFFICHEE, valeur);
-            decompte_3_animation(ctx, valeur);
-        }
-        etat::ACTIF => {
-            let valeur = o.u8(ctx.b, decompte::VALEUR);
-            let affichee = o.u8(ctx.b, decompte::VALEUR_AFFICHEE);
-            if ctx.pris(valeur == affichee) {
-                return;
-            }
-            o.set_u8(ctx.b, decompte::VALEUR_AFFICHEE, valeur);
-            decompte_3_animation(ctx, valeur);
-        }
-        etat::LIBERE => decompte_fin(ctx, o),
-        _ => ctx.deleguer(cible),
-    }
-}
-
-/// `0xb1e8c` : animation `0xe3 - valeur` puis tri.
-fn decompte_3_animation(ctx: &mut Ctx, valeur: u8) {
-    ctx.anim_start(ANIMATIONS_INTERFACE, 0xe3u16.wrapping_sub(valeur as u16));
-    ctx.reinsert();
-}
-
-/// `0xb2916` : fin des variantes (état 4).
-fn decompte_fin(ctx: &mut Ctx, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    ctx.free(&pools::FREE_EFFCT);
-}
-
-fn decompte_4(ctx: &mut Ctx, o: Obj) {
-    let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(decompte::ETATS_4, etat as u32);
-    match etat {
-        etat::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
-            let cam = lit_ram16(ctx, 0x556);
-            o.set_u16(ctx.b, Obj::X, cam);
-            o.set_u32(ctx.b, Obj::Y, 0);
-            o.set_u16(ctx.b, Obj::Z, 0x460);
-            decale_u16(ctx, o, Obj::X, 0x80);
-            let mut animation = 0x168;
-            let mot = ctx.ram16(0x70);
-            if !ctx.pris(mot == 0) {
-                animation = 0x169;
-            }
-            ctx.anim_start(ANIMATIONS_INTERFACE, animation);
-            ctx.reinsert();
-        }
-        etat::ACTIF => {}
-        etat::LIBERE => decompte_fin(ctx, o),
-        _ => ctx.deleguer(cible),
-    }
-}
-
-fn decompte_5(ctx: &mut Ctx, o: Obj) {
-    let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(decompte::ETATS_5, etat as u32);
-    match etat {
-        etat::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
-            let (cam_x, cam_y) = (lit_ram16(ctx, 0x556), lit_ram16(ctx, 0x55a));
-            o.set_u16(ctx.b, Obj::Z, cam_y);
-            o.set_u16(ctx.b, Obj::X, cam_x);
-            o.set_u32(ctx.b, Obj::Y, 0);
-            decale_u16(ctx, o, Obj::X, 0x20);
-            let rang = (o.u8(ctx.b, decompte::VALEUR) as u32) << 1;
-            let dz = ctx.prog16(decompte::DECALAGES_5 + rang);
-            decale_u16(ctx, o, Obj::Z, dz);
-            let mode = o.u8(ctx.b, champ::MODE) ^ 3;
-            o.set_u8(ctx.b, champ::MODE, mode);
-            ctx.anim_start(ANIMATIONS_INTERFACE, 0x16a);
-            ctx.reinsert();
-        }
-        etat::LIBERE => decompte_fin(ctx, o),
-        _ => ctx.deleguer(cible),
-    }
-}
-
-/// `0xb2348` : valeur binaire (< 1000) en décimal codé binaire sur trois quartets.
-fn en_bcd(ctx: &mut Ctx, valeur: u16) -> u16 {
-    let (mut reste, mut bcd) = (valeur, 0u16);
-    loop {
-        reste = reste.wrapping_sub(0x64);
-        if ctx.pris(reste as i16 <= -1) {
-            break;
-        }
-        bcd += 0x100;
-    }
-    reste = reste.wrapping_add(0x64);
-    loop {
-        reste = reste.wrapping_sub(0xa);
-        if ctx.pris(reste as i16 <= -1) {
-            break;
-        }
-        bcd += 0x10;
-    }
-    reste.wrapping_add(0xa).wrapping_add(bcd)
-}
-
-/// `0xb22f2` : dessine un chiffre (quartet) à l'adresse `a1` du fond 2 (tuile 2 × 2) ; les zéros de tête
-/// (`imprime` faux) font seulement avancer `a1`.
-fn dessine_chiffre(ctx: &mut Ctx, a1: &mut u32, quartet: u16, attribut: u16, imprime: &mut bool) {
-    let chiffre = quartet & 0xf;
-    if ctx.pris(chiffre != 0) {
-        *imprime = true;
-    } else {
-        let deja = *imprime;
-        if !ctx.pris(deja) {
-            *a1 += 0x100;
-            return;
-        }
-    }
-    let mut tuile = ctx.prog16(decompte::CHIFFRES + 2 * chiffre as u32);
-    // 0xb230e : deux rangées de deux tuiles
-    for _ in 0..2 {
-        crate::mem::wr16(ctx.b, *a1, tuile);
-        crate::mem::wr16(ctx.b, *a1 + 2, attribut);
-        crate::mem::wr16(ctx.b, *a1 + 4, tuile.wrapping_add(0x10));
-        crate::mem::wr16(ctx.b, *a1 + 6, attribut);
-        *a1 += 8 + 0x78;
-        tuile = tuile.wrapping_add(1);
-    }
-}
-
-/// `0xb22d0` : dessine un nombre BCD de trois chiffres (et un quartet de tête nul).
-fn dessine_nombre(ctx: &mut Ctx, mut a1: u32, bcd: u16, attribut: u16) {
-    let mut imprime = false;
-    for i in 0..4 {
-        let tourne = bcd.rotate_left(4 * (i + 1));
-        if i == 3 {
-            imprime = true;
-        }
-        dessine_chiffre(ctx, &mut a1, tourne, attribut, &mut imprime);
-    }
-}
-
-fn decompte_6_init(ctx: &mut Ctx, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    let cam = lit_ram16(ctx, 0x556);
-    o.set_u16(ctx.b, Obj::X, cam);
-    o.set_u32(ctx.b, Obj::Y, 0);
-    o.set_u16(ctx.b, Obj::Z, 0x448);
-    decale_u16(ctx, o, Obj::X, 0x50);
-    let mot = ctx.ram16(0x70);
-    ctx.c.a[4] = if ctx.pris(mot == 0) { decompte::ANIMATIONS_6 } else { decompte::ANIMATIONS_6_B };
-    ctx.natif(&crate::objects::anim::ANIM_START);
-    ctx.reinsert();
-    let centaines = ctx.ram8(decompte::COMPTEURS) as u16;
-    let bcd = en_bcd(ctx, centaines);
-    dessine_nombre(ctx, decompte::FOND_CENTAINES, bcd, 3);
-    let unites = ctx.ram8(decompte::COMPTEURS + 1) as u16;
-    let bcd = en_bcd(ctx, unites);
-    dessine_nombre(ctx, decompte::FOND_UNITES, bcd, 3);
-}
-
-/// `0xb2392` : efface trois rangées de deux longs.
-fn efface_nombre(ctx: &mut Ctx, mut a1: u32) {
-    for _ in 0..3 {
-        crate::mem::wr32(ctx.b, a1, 0x20_0000);
-        crate::mem::wr32(ctx.b, a1 + 4, 0x20_0000);
-        a1 += 8 + 0x78;
-    }
-}
-
-fn decompte_6(ctx: &mut Ctx, o: Obj) {
-    let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(decompte::ETATS_6, etat as u32);
-    match etat {
-        etat::INIT => decompte_6_init(ctx, o),
-        etat::ACTIF => {
-            let ecart = o.u16(ctx.b, Obj::Z).wrapping_sub(lit_ram16(ctx, 0x55a));
-            if ctx.pris((ecart as i16) < 0x100) {
-                return;
-            }
-            efface_nombre(ctx, decompte::FOND_CENTAINES);
-            efface_nombre(ctx, decompte::FOND_UNITES);
-        }
-        etat::LIBERE => decompte_fin(ctx, o),
-        _ => ctx.deleguer(cible),
-    }
-}
-
-/// Variante 8 : ligne de l'écran de décompte propre au joueur `+0x2f` ; naît seulement si ce joueur est
-/// présent, en vie et que ses deux compteurs `+0x118` / `+0x11c` valent -1 ; se libère quand le compteur
-/// de scène `A5-0x55c7` atteint 10.
-fn decompte_8(ctx: &mut Ctx, o: Obj) {
-    let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(decompte::ETATS_8, etat as u32);
-    match etat {
-        etat::INIT => {
-            let mode = o.u8(ctx.b, champ::MODE) as u32;
-            for _ in 0..mode {
-                ctx.pris(false); // boucle de recherche du joueur
-            }
-            ctx.pris(true);
-            let joueur = Obj(JOUEURS + mode * PAS_JOUEUR);
-            let absent = joueur.u8(ctx.b, Obj::ACTIVE) == 0;
-            if ctx.pris(absent) {
-                return decompte_fin(ctx, o);
-            }
-            let mort = joueur.u8(ctx.b, Obj::STATE) as i8 >= 4;
-            if ctx.pris(mort) {
-                return decompte_fin(ctx, o);
-            }
-            let compteur_a = joueur.u32(ctx.b, 0x118) != 0xffff_ffff;
-            if ctx.pris(compteur_a) {
-                return decompte_fin(ctx, o);
-            }
-            let compteur_b = joueur.u32(ctx.b, 0x11c) != 0xffff_ffff;
-            if ctx.pris(compteur_b) {
-                return decompte_fin(ctx, o);
-            }
-            ajoute_u8(ctx, o, Obj::STATE, 2);
-            let (cam_x, cam_y) = (lit_ram16(ctx, 0x506), lit_ram16(ctx, 0x50a));
-            o.set_u16(ctx.b, Obj::X, cam_x);
-            o.set_u16(ctx.b, Obj::Z, cam_y);
-            o.set_u32(ctx.b, Obj::Y, 0);
-            decale_u16(ctx, o, Obj::X, 0x10);
-            decale_u16(ctx, o, Obj::Z, 0xb8);
-            decale_u16(ctx, o, Obj::Z, ((mode as u16) << 5).wrapping_neg());
-            ctx.anim_start(ANIMATIONS_INTERFACE, 0x173 + mode as u16);
-            ctx.reinsert();
-        }
-        etat::ACTIF => {
-            let compteur = ctx.ram8(-0x55c7) as i8;
-            if ctx.pris(compteur >= 10) {
-                decompte_fin(ctx, o);
-            }
-        }
-        etat::LIBERE => decompte_fin(ctx, o),
-        6 => ctx.free(&pools::FREE_EFFCT),
-        _ => ctx.deleguer(cible),
-    }
-}
-
-fn decompte_gestionnaire(ctx: &mut Ctx) {
-    let o = ctx.obj();
-    let variante = o.u8(ctx.b, Obj::VARIANT);
-    let cible = ctx.saut_table(decompte::TABLE, 2 * variante as u32);
-    match variante {
-        3 => decompte_3(ctx, o),
-        4 => decompte_4(ctx, o),
-        5 => decompte_5(ctx, o),
-        6 => decompte_6(ctx, o),
-        8 => decompte_8(ctx, o),
-        _ => ctx.deleguer(cible),
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
 // Type 6 : gerbe de débris (0xab7fa)
 
 /// Type 6 : débris projetés depuis un propriétaire (`+0x50`). Le premier objet (`+0x42` nul) crée
@@ -2298,9 +2012,6 @@ mod bulle {
     pub const COUP: u32 = 0x33;
     pub const MINUTEUR: u32 = 0x42;
     pub const PALETTE_JAUGE: u32 = 0x91c41c;
-    /// Création d'une bulle de variante 0x1d (suite de la bulle d'un joueur). Quand le personnage vaut 1,
-    /// l'original saute dans l'épilogue `0xaa9fe` d'une autre routine (voir `Ctx::epilogue_etranger`).
-    pub const CREER_SUITE: u32 = 0xb13fa;
 }
 
 /// `0xaac00` : affiche l'animation `numero` du jeu des bulles, puis trie l'objet.
@@ -2354,7 +2065,19 @@ fn bulle_suite(ctx: &mut Ctx, o: Obj) {
     if ctx.pris(personnage == 0) {
         return ctx.epilogue_etranger();
     }
-    ctx.jsr(bulle::CREER_SUITE);
+    creer_impact(ctx, o);
+}
+
+/// `0xb13fa` : crée l'étincelle d'impact (type 29, variante 0) sur l'objet porté (`+0x54`). Pour le personnage 1,
+/// l'appelant saute dans l'épilogue `0xaa9fe` d'une autre routine (voir `Ctx::epilogue_etranger`).
+fn creer_impact(ctx: &mut Ctx, o: Obj) {
+    if let Some(n) = ctx.alloc(&pools::ALLOC_EFFCT) {
+        n.set_u8(ctx.b, Obj::ACTIVE, 1);
+        n.set_u8(ctx.b, Obj::KIND, 0x1d);
+        n.set_u8(ctx.b, Obj::VARIANT, 0);
+        let porte = o.u16(ctx.b, bulle::PORTE);
+        n.set_u16(ctx.b, 0x5c, porte);
+    }
 }
 
 /// `0xaacfe` : une fois sur seize environ, tire au hasard si on poursuit (`0x5555` : bits pairs).
@@ -2453,6 +2176,19 @@ fn bulle_0(ctx: &mut Ctx, o: Obj) {
             }
             bulle_lit(ctx, o, bulle::TABLE_OBJET_B, classe as u16);
             bulle_suite(ctx, o);
+        }
+        // 0xaac82
+        22 => bulle_affiche(ctx, o, 0x23),
+        // 0xaad12 : la jauge du joueur (`+0x77`) vient d'être remplie
+        24 | 26 | 28 | 30 | 32 => {
+            let jauge = joueur.u8(ctx.b, 0x77) != 0;
+            if !ctx.pris(!jauge) {
+                joueur.set_u8(ctx.b, 0x77, 0);
+                o.set_u8(ctx.b, champ::MODE, 1);
+                crate::mem::wr16(ctx.b, bulle::PALETTE_JAUGE, 0xff00);
+                return bulle_affiche(ctx, o, 0x24);
+            }
+            bulle_affiche(ctx, o, 0x10);
         }
         _ => ctx.deleguer(cible),
     }
@@ -2657,7 +2393,6 @@ gestionnaire!(EFFCT_19, balayage::ENTREE, "effct_balayage", balayage_gestionnair
 gestionnaire!(EFFCT_27, fumee::ENTREE, "effct_fumee", fumee_gestionnaire);
 gestionnaire!(EFFCT_1, 0xa8758, "effct_supprime", supprime);
 gestionnaire!(EFFCT_6, debris::ENTREE, "effct_debris", debris_gestionnaire);
-gestionnaire!(EFFCT_31, decompte::ENTREE, "effct_decompte", decompte_gestionnaire);
 gestionnaire!(EFFCT_29, impact::ENTREE, "effct_impact", impact_gestionnaire);
 gestionnaire!(EFFCT_17, interface::ENTREE, "effct_interface", interface_gestionnaire);
 gestionnaire!(EFFCT_5, halo::ENTREE, "effct_halo", halo);

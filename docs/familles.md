@@ -131,47 +131,132 @@ de coups (`+0x16d`, `+0x16c`, `+0x16b`) et une table de chances par coup (bit `r
 Pool de 38 emplacements de 0x60 octets (`0xFFD49E`), 92 types (la table `0x39ce0` va jusqu'à `0x39e50`, début du dispatch BOX). Les gestionnaires n'ont pas de test
 `HIDDEN` : l'état choisit directement init / actif / libération.
 
+Les types de la première série sont écrits sur `Ctx` (`effects.rs`, ancienne méthode à durée exacte) ;
+les suivants sur `Cx` (`effects_b.rs` : 72 à 79 ; `effects_c.rs` : types de scène et d'ennemis ;
+`effects_d.rs` : type 31 ; `effects_e.rs` : types 11, 13, 14). Les ESHL 70 à 72 (`0xa801a`, `0xa81ca`,
+`0xa838e`), derniers types de la table ESHL `0x39b96` rangés dans la zone des EFFCT, sont dans `eshl_d.rs`. « Appels » : appels de la routine native sur les
+121 scénarios de `scenarios/` (validate_all, 90 scénarios) et `scenarios/cov` (31 scénarios). Les variantes
+ou états qu'aucun scénario n'exerce sont, selon les cas, réécrits (sans validation : voir §5) ou
+laissés au code d'origine (`Cx::call` sur leur adresse, avec D0/D1 comme l'original), indiqué dans la
+colonne « validation ».
+
+Points délicats rencontrés :
+
+- **fonctions sœurs qui tombent l'une dans l'autre** : beaucoup d'états enchaînent l'état suivant dans la
+  même image sans `rts` (types 50, 59, 61, 84) ; pour le type 61, l'étape 8 achevée tombe *toujours* dans
+  le code de l'étape 12 de la variante 0, quelle que soit la variante ;
+- **registres laissés par l'original** : `0xab2b4` (étincelle posée entre deux boîtes, appelée par
+  `effects_aids::spark`) laisse D2/D3 que des appelants relisent (impact créé par `0x103ba` → `0xb141a`) ;
+  la réécriture les rend comme l'original. Les types 13 (radeau) et 83 (pluie) lisent D4 / A1 laissés à
+  l'entrée (A1 = adresse du gestionnaire, posée par la boucle de dispatch) ;
+- adresses `lea (d16,PC)` : à prendre dans `examples/dis` (`PcDisp`), pas à recalculer de tête (une erreur
+  d'addition sur le type 23 a coûté une itération).
+
 | Type | Entrée | Nom | Comportement | Appels | Validation |
 |---|---|---|---|---|---|
-| 1 | 0xa8758 | supprimé | libère l'objet aussitôt | 9 | scénarios |
-| 4 | 0xaaac0 | bulle d'action | icône animée liée à un joueur ou à l'objet qu'il manipule, animation choisie d'après l'action `+0x3d` du porteur (huit variantes) ; code `0x29` : crée une bulle de variante 3 | 4 470 | scénarios (variantes 0, 2, 5 ; autres : fuzz) |
-| 5 | 0xab726 | halo | position du joueur + décalage (variante, orientation), délai selon `+0x7d` du joueur, vit 0x28 images | 450 | scénarios |
-| 6 | 0xab7fa | gerbe de débris | le premier crée ses frères, chacun lit sa vitesse dans une fiche (variante, mode) | 164 | scénarios |
-| 7 | 0xaba4e | éclat à animation unique | | 0 | fuzz |
-| 8 | 0xababa | trace | collée à un objet, animation selon son type, disparaît en fin d'animation | 0 | fuzz |
-| 9 | 0xabbee | traînée | naît sur une position d'écran de la table, avance en X, attend 0x120 images puis 0x200 | 32 080 | scénarios |
-| 15 | 0xae428 | scintillement | posé sur un ITEM, suit l'objet, attend le passage d'un joueur puis clignote 8 fois | 4 944 | scénarios |
-| 17 | 0xae78c | éléments d'interface | 5 variantes (curseurs, fenêtres de jauge avec recopie de palettes, indicateurs) posées sur la caméra | 52 540 | scénarios |
-| 19 | 0xaecce | balayage d'écran | | 0 | fuzz |
-| 21 | 0xaf360 | bandeau | glisse en Z jusqu'à une cible puis décrémente le compteur de son créateur | 1 794 | scénarios |
-| 24 | 0xb0ff2 | accessoire de personnage | collé au propriétaire à un décalage selon la variante | 0 | fuzz |
-| 25 | 0xb111a | poussière | éclats projetés au hasard puis dérive en clignotant | 19 163 | scénarios |
-| 26 | 0xb11f4 | nuage | traverse l'écran de droite à gauche (lit D0 après un tri : `jsr_origine`) | 1 849 | scénarios |
-| 27 | 0xb12e6 | effet de ramassage | monte au-dessus du propriétaire 0x1c images | 0 | fuzz |
-| 28 | 0xb136e | étincelle posée | collée à un objet, le prévient en fin d'animation | 0 | fuzz |
-| 29 | 0xb1440 | étincelle d'impact | collée à une cible (ennemi ou boss), animation tirée au hasard | 572 | scénarios |
-| 31 | 0xb1a98 | écran de décompte | variantes 3 (rang), 4 (plaque), 5 état 0 (lignes), 6 (compteurs sur 3 chiffres dessinés dans le fond 2), 8 (ligne par joueur) | 11 418 | scénarios (variantes 3 à 6 et 8 ; variante 5 état 2 : code d'origine) |
-| 32 | 0xb2c56 | aura | suit son propriétaire | 4 663 | scénarios |
-| 33 | 0xb2cca | éclat | retombe ; variante 0 : crée deux tirs ennemis à l'atterrissage | 257 | scénarios |
-| 45 | 0xb5340 | déclencheur de proximité | attend le joueur principal, donne un événement à chaque joueur | 0 | fuzz |
-| 51 | 0xb64c8 | projectile | part en arc d'un objet | 0 | fuzz |
-| 52 | 0xb65e0 | scintillement de personnage | variante du 15 pour la classe 5 | 0 | fuzz |
-| 56 | 0xb6c6e | éclats de débris | | 0 | fuzz |
-| 57 | 0xb6bca | marque | collée à un joueur dans un état donné | 0 | fuzz |
-| 62 | 0xb77ac | gerbe d'éclats | explose en neuf objets quand l'objet suivi est touché | 0 | fuzz |
-| 72 | 0xb841c | détecteur de ramassage | un joueur marche dessus (6 en profondeur, 8 en x) : crée l'éclat ESHL 55 (`0xa532e`) ; variante : crée le clignotement 79 | 6 409 | scénarios (`families/effects_b.rs`) |
-| 73 | 0xb84c6 | écran de victoire | sprite qui tombe, clignote, change d'animation selon l'état de son créateur | 180 | scénarios |
-| 74 | 0xb85fa | bulle du créateur | posée à côté de lui, monte, clignote, disparaît | 277 | scénarios |
-| 75 | 0xb871a | bouton de menu | machine à sept sous-états pilotée par `A5+0x2e` et `0xff2a38` | 3 582 | scénarios |
-| 79 | 0xb8df2 | clignotement | clignote tant que son créateur vit ; détecte un joueur de classe 5 voisin | 1 032 | scénarios |
+| 1 | 0xa8758 | supprimé | libère l'objet aussitôt | 499 | scénarios |
+| 3 | 0xaa8e8 | élément d'écran | fixé à la caméra, hauteur suivant le tremblement `A5+0x4ba` | 13 284 | scénarios |
+| 4 | 0xaaac0 | bulle d'action | icône animée liée à un joueur ou à l'objet qu'il manipule, animation selon l'action `+0x3d` du porteur (huit variantes) ; code `0x29` : bulle de variante 3 et étincelle d'impact (`0xb13fa`) ; actions 22 à 32 de la variante 0 (jauge `+0x77`) | 175 021 | scénarios ; autres actions : code d'origine |
+| 5 | 0xab726 | halo | position du joueur + décalage, délai selon `+0x7d`, vit 0x28 images | 6 172 | scénarios |
+| 6 | 0xab7fa | gerbe de débris | le premier crée ses frères, vitesses lues dans une fiche | 39 486 | scénarios |
+| 7 | 0xaba4e | éclat à animation unique |  | 499 | scénarios |
+| 8 | 0xababa | trace | collée à un objet, animation selon son type | 657 | scénarios |
+| 9 | 0xabbee | traînée | naît sur une position d'écran, avance en X | 153 984 | scénarios |
+| 10 | 0xabccc | dalles | rangée en diagonale de dix dalles (chacune crée la suivante) qui s'enfoncent sous un joueur au sol (décor SET 6) | 14 314 | scénarios |
+| 11 | 0xabeea | effets d'attaque | dix variantes : éclat lancé depuis l'attaquant (1), reflet (3), colonne montante (4), pièces d'un objet brisé (6), gerbe d'étincelles (7) | 23 406 | scénarios ; variantes 0, 2, 5, 8, 9 : code d'origine (jamais exercées) |
+| 12 | 0xad476 | maillon d'une chaîne | rejoue avec retard l'historique des directions du maillon précédent | 14 180 | scénarios ; rupture (`0xad53a`) : code d'origine |
+| 13 | 0xad63e | radeau | défile et emporte les joueurs, piloté par leurs directions | 26 597 | scénarios |
+| 14 | 0xad866 | passage | oscille, attend un joueur vivant, ferme puis ouvre un rideau de tuiles | 40 108 | scénarios ; transition (`0xada96`, `0xae11a` sous-état 0) : code d'origine |
+| 15 | 0xae428 | scintillement | posé sur un ITEM, clignote au passage d'un joueur | 200 044 | scénarios |
+| 16 | 0xae52a | double d'un porteur | glisse à sa place puis suit les étapes du porteur, crée un morceau (type 39) | 19 254 | scénarios |
+| 17 | 0xae78c | éléments d'interface | 5 variantes posées sur la caméra | 914 180 | scénarios |
+| 19 | 0xaecce | balayage d'écran |  | 2 168 | scénarios |
+| 20 | 0xaed4c | curseur de don d'or | boutique : déplacé par le joueur, donne 10 ou 100 pièces (BCD) au joueur visé ; dessine la jauge de vie et l'or dans la couche de texte | 55 209 | scénarios |
+| 21 | 0xaf360 | bandeau | glisse en Z jusqu'à une cible | 24 768 | scénarios |
+| 22 | 0xaf3f2 | comptoir de boutique | zone de vente : annonce l'article au premier acheteur qui entre | 550 750 | scénarios ; achat (`0xafad0`) : code d'origine (jamais exercé) |
+| 23 | 0xafe20 | vote du chemin | scrutin (curseur par joueur, compte à rebours, dépouillement au hasard parmi les ex æquo, clignotement du texte gagnant) | 8 094 | scénarios ; texte en octets (`A5+0x72` ≠ 2) : code d'origine |
+| 24 | 0xb0ff2 | accessoire de personnage |  | 6 072 | scénarios |
+| 25 | 0xb111a | poussière |  | 753 125 | scénarios |
+| 26 | 0xb11f4 | nuage |  | 10 057 | scénarios |
+| 27 | 0xb12e6 | effet de ramassage |  | 1 020 | scénarios |
+| 28 | 0xb136e | étincelle posée |  | 1 731 | scénarios |
+| 29 | 0xb1440 | étincelle d'impact |  | 31 025 | scénarios |
+| 30 | 0xb1818 | poissons | banc qui traverse en ondulant ; poisson qui nage, saute quand l'écran tremble | 19 480 | scénarios |
+| 31 | 0xb1a98 | écran de décompte | dix variantes : pièce projetée (0), récompense (2), rang (3), plaque (4), ligne de résultat dessinée dans le fond 2 (5), compteurs (6), personnage qui marche (7), ligne par joueur (8) | 200 664 | scénarios ; variantes 1 et 9 : code d'origine |
+| 32 | 0xb2c56 | aura |  | 21 890 | scénarios |
+| 33 | 0xb2cca | éclat |  | 0 | scénarios du lot précédent (8 scénarios) |
+| 34 | 0xb2dea | plateau | avance en emportant les joueurs jusqu'à ce que son décor l'arrête | 2 424 | scénarios |
+| 36 | 0xb3050 | objet flottant | scène d'introduction : ondule, est touché (secousse), s'efface ; son reflet | 61 009 | scénarios |
+| 37 | 0xb33ba | titre d'épreuve | descend puis attend son créateur | 305 | scénarios |
+| 38 | 0xb3454 | message d'épreuve | tombe, clignote, change avec son créateur | 3 274 | scénarios |
+| 39 | 0xb3570 | morceau projeté | vole vers un point de l'écran (durée = distance / vitesse), éclate au sol (type 50) | 14 202 | scénarios |
+| 40 | 0xb37ac | effets d'un coup | éclat qui suit l'attaquant (0), débris projeté (4) | 6 688 | scénarios ; variantes 1 à 3 : code d'origine |
+| 41 | 0xb3c48 | objet lancé | quatre sortes tirées au hasard, retombe puis glisse ou rebondit | 579 | scénarios |
+| 42 | 0xb40f8 | effets de scène | débris, éclats, caméra alternative avec 8 images de retard, étincelles, lueur, bouffées, poussière | 81 110 | scénarios ; variantes 0, 1, 2, 9 : code d'origine |
+| 44 | 0xb4f88 | sorts d'un magicien | six modes liés à `+0x5c` | 3 545 | scénarios |
+| 45 | 0xb5340 | déclencheur de proximité |  | 35 669 | scénarios |
+| 47 | 0xb5764 | repère | clignote lentement | 1 810 | scénarios |
+| 49 | 0xb5dbe | accessoire porté | tombe quand le porteur passe dans un état donné | 34 198 | scénarios |
+| 50 | 0xb5fb6 | effets attachés | seize variantes (reflets, éclats, tremblement) | 211 697 | scénarios |
+| 51 | 0xb64c8 | projectile |  | 0 | fuzz (lot précédent) |
+| 52 | 0xb65e0 | scintillement de personnage |  | 205 132 | scénarios |
+| 56 | 0xb6c6e | éclats de débris |  | 0 | fuzz (lot précédent) |
+| 57 | 0xb6bca | marque |  | 0 | fuzz (lot précédent) |
+| 58 | 0xb6d48 | machine d'introduction | même séquence que le type 36, et son reflet | 53 545 | scénarios |
+| 59 | 0xb6ef2 | créature surgissante | s'élève avec la caméra, tire, bondit hors de l'écran | 5 244 | scénarios |
+| 60 | 0xb7248 | second double | comme le 16, avec éclats et morceau projeté | 9 234 | scénarios |
+| 61 | 0xb751e | créature nageuse | sort de l'eau, ondule, s'en va | 10 909 | scénarios |
+| 62 | 0xb77ac | gerbe d'éclats |  | 9 683 | scénarios |
+| 64 | 0xb7a14 | éclat tombant | projeté, retombe sous l'horizon | 3 490 | scénarios |
+| 65 | 0xb7ac8 | messager | suit un trajet (directions et durées) puis fait naître un ENEMY décrit par une fiche | 19 | scénarios |
+| 66 | 0xb7c40 | gros caractères | quatre blocs animés dans le fond 2 | 1 366 | scénarios |
+| 67 | 0xb7e26 | colonne | s'élève sous un objet, relâche les joueurs | 6 080 | scénarios |
+| 69 | 0xb802a | silhouette | fait les cent pas en haut de l'écran | 4 562 | scénarios |
+| 70 | 0xb80bc | comptoir de scène | zone de vente du type 22 | 4 188 | scénarios ; vente (`0xb81d6`, `0xb83d8`) : code d'origine (jamais exercée) |
+| 72 | 0xb841c | détecteur de ramassage |  | 365 616 | scénarios |
+| 73 | 0xb84c6 | écran de victoire |  | 1 156 | scénarios |
+| 74 | 0xb85fa | bulle du créateur |  | 1 382 | scénarios |
+| 75 | 0xb871a | bouton de menu |  | 36 572 | scénarios |
+| 76 | 0xb88a8 | minuteur de scène | joue un son, lance une transition après un délai | 2 528 | scénarios |
+| 79 | 0xb8df2 | clignotement |  | 46 429 | scénarios |
+| 82 | 0xb97d8 | éclat posé | à côté de son créateur, clignote | 0 | **non validé** (fuzz non concluant, §5) |
+| 83 | 0xb997c | pluie d'éclats | gouttes en arc depuis le haut de l'écran | 58 498 | scénarios |
+| 84 | 0xb9aba | séquence de fin | fondu, caméra, tâches de script (`0x9b6`) | 2 198 | scénarios |
+| 85 | 0xb9bbc | pièce de la fin |  | 20 426 | scénarios |
+| 86 | 0xb9ca6 | flammèche | s'éloigne de son créateur | 3 982 | scénarios |
+| 87 | 0xb9db8 | interrupteur | signale un joueur ou un tonneau (BOX 3 variante 1) au sol dessus | 366 780 | scénarios |
+| 88 | 0xb9f36 | barrière | crée ses interrupteurs, s'ouvre quand tous sont appuyés | 127 098 | scénarios |
+| 90 | 0xba1aa | poussière haute |  | 1 625 | scénarios |
+| 91 | 0xba244 | élément d'écran | comme le type 3 | 3 321 | scénarios |
 
-Exercé par les scénarios et laissé en code d'origine (dans un type par ailleurs réécrit) : type 31
-variante 5 état 2 (dessin des lignes de score, 3 583 appels). Types jamais exercés et non réécrits : 0, 2,
-3, 10 à 14, 16, 18, 20, 22, 23, 30, 34 à 44, 46 à 50, 53 à 55, 58 à 61, 63
-(pour 18, la table renvoie à `0xcc25a`, un gestionnaire commun ; 22, 23, 42, 14 et 11 sont de grosses
-routines de scène de plusieurs kilo-octets).
+Encore en code d'origine :
+
+- **types sans routine native**, qu'aucun des 121 scénarios n'appelle : 0, 2, 35, 43, 46, 48, 53, 54, 55,
+  63, 68, 71 (`0xb841a`, un simple `rts`), 77, 78, 80, 81, 89 ; 18 renvoie au gestionnaire commun des SET
+  `0xcc25a` (natif, `families/set.rs`) ;
+- **variantes et états délégués** (colonne « validation ») : jamais exercés par les scénarios, exécutés tels
+  quels par le code d'origine ;
+- reste mesuré (`examples/reste68k run` sur les 121 scénarios, adresses `0xa8000-0xba310`) : 75,9 millions
+  d'instructions 68000 avant ce lot, 70 510 après (dont 530 dans les ESHL 70 à 72) ; le reste vient surtout
+  de sous-routines de la zone appelées par d'autres familles ou par la bulle (`0xae776`, `0xb3f40`,
+  `0xae298`, `0xae3ec`, `0xb1a7a`, `0xabb70`...), chacune moins de 12 000 instructions sur les 121 scénarios.
 
 ## 5. Résultats de la validation
+
+Lot EFFCT sur `Cx` (types 3 à 91 ci-dessus) :
+
+- `tools/validate_all.sh 30000` (90 scénarios) et les 31 scénarios de `scenarios/cov` : tous `VALIDE` ;
+  `cargo test --release -p ddsom-game --lib` vert ;
+- `examples/fuzz_familles` (types forcés, 6 scénarios × 8 000 images, 3,3 millions d'essais) : il essaie
+  désormais aussi les gestionnaires écrits sur `Cx` (`families::natives()`) et ne compare plus les durées des
+  routines sans durée exacte. Il relève de nombreux écarts, mais ceux examinés viennent tous de combinaisons
+  (variante, état, sous-état) **hors des tables** de l'original, où le code d'origine saute dans des données :
+  le tirage des variantes et sous-états du fuzz (0 à 0x14) ne connaît pas les bornes de chaque type. Le fuzz
+  n'est donc pas concluant pour ces types : les chemins que les scénarios n'exercent pas (marqués « non
+  exercé » ou délégués ci-dessus, et les branches rares des types exercés) **ne sont pas validés**. Pour le
+  rendre utile, il faudrait lui donner, par type, les variantes et états valides.
+
+Lots précédents :
 
 - `tools/validate_all.sh 30000` : les huit scénarios sont `VALIDE`, 0 écart pour toutes les routines de
   famille (durées exactes comprises) : `item_tresor` 1 248 appels, `item_conso` 16 180, `item_inventaire`

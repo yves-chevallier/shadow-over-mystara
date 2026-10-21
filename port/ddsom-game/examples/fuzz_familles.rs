@@ -310,7 +310,8 @@ fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: boo
         }
         Ok(()) => {}
     }
-    if c1.cycles != c2.cycles {
+    // durée comparée seulement pour les gestionnaires à durée exacte (ancienne méthode)
+    if n.exact_cost && c1.cycles != c2.cycles {
         diffs.push(format!("cycles {} au lieu de {}", c1.cycles - c.cycles, c2.cycles - c.cycles));
     }
     if c1.d[7] != c2.d[7] {
@@ -352,6 +353,11 @@ fn dump(octets: &[u8]) -> String {
     octets.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join("")
 }
 
+/// Routine native d'un gestionnaire de famille (écrite sur `Ctx` ou sur `Cx`).
+fn gestionnaire(entree: u32) -> Option<&'static ddsom_game::Native> {
+    ddsom_game::families::NATIVES.iter().chain(ddsom_game::families::natives()).find(|n| n.entry == entree)
+}
+
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     // types forcés : essais sur des objets synthétiques à chaque appel (périodique) d'un gestionnaire
     // de la même famille
@@ -366,7 +372,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         if k % periode == 1 {
             let forces: Vec<_> = FORCES.with(|f| f.borrow().iter().filter(|x| x.0 == famille).copied().collect());
             for (_, type_force, entree) in forces {
-                if let Some(n) = ddsom_game::families::NATIVES.iter().find(|n| n.entry == entree) {
+                if let Some(n) = gestionnaire(entree) {
                     for _ in 0..essais * 2 {
                         essai(n, c, b, true, Some(type_force));
                     }
@@ -374,7 +380,8 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             }
         }
     }
-    if let Some(n) = ddsom_game::families::NATIVES.iter().find(|n| n.entry == pc) {
+    let famille = ENTREES.with(|e| e.borrow().contains_key(&pc));
+    if let Some(n) = gestionnaire(pc).filter(|_| famille) {
         let (periode, essais) = PARAMETRES.with(|p| *p.borrow());
         let k = APPELS.with(|m| {
             let mut m = m.borrow_mut();
