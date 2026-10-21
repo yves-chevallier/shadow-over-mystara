@@ -8,6 +8,7 @@
 
 mod combat;
 mod data;
+mod dialogs;
 mod gfx;
 mod levels;
 mod misc;

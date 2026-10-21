@@ -629,7 +629,12 @@ fn check_data(rel: &str) {
             for (c, k) in row.cells().iter().zip(&kinds) {
                 if let (Cell::Addr(a), Kind::Addr) = (*c, k) {
                     if file.regions.iter().any(|r| !r.program && a >= r.start && a < r.end) {
-                        assert!(file.row_at(a).is_some(), "{rel} : {} ligne {i} : {a:#x} n'est pas un début de ligne", t.name);
+                        let text = file.texts.iter().any(|x| x.rom == a);
+                        assert!(
+                            text || file.row_at(a).is_some(),
+                            "{rel} : {} ligne {i} : {a:#x} n'est ni un début de ligne ni un texte",
+                            t.name
+                        );
                     }
                 }
             }
@@ -683,4 +688,9 @@ fn scenes_sans_perte() {
 #[test]
 fn divers_sans_perte() {
     check_data("data/misc.json");
+}
+
+#[test]
+fn dialogues_sans_perte() {
+    check_data("data/dialogs.json");
 }

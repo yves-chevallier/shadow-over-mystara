@@ -577,18 +577,63 @@ textes de `texts.json`, `{xx}` pour les autres octets ; `TextBlock::bytes` les r
 Restent à décoder : les scripts de démonstration eux-mêmes (entrées de 32 octets et plus, 0x1f3c2,
 0x1f59e, 0x1f756 ; `modes/demo.rs`) et le lecteur des entrées enregistrées.
 
+### Dialogues : `data/dialogs.json`
+
+Fenêtres de dialogue (SET 24, `0xd7056`, `families/set_b.rs` module `dialog`) et bulles (SET 10,
+`families/set.rs` module `dialogue`) des trois langues de la ROM européenne : français (`fr`), anglais
+(`en`), allemand (`de`). Le jeu choisit la langue par la table (le code réécrit ne lit que l'anglais).
+
+| Langue | Région | Définitions (256) | Messages (menu de test) | Textes |
+|---|---|---|---|---|
+| `fr` | `0x1cd000-0x1d78d0` | `0x1cd000` | `0x1cefae` (444) | octets (`high`) |
+| `en` | `0x1d78d0-0x1e78da` | `0x1d78d0` | `0x1d986c` (466) | tuiles (`tiles`) |
+| `de` | `0x1e78da-0x1f1b5e` | `0x1e78da` | `0x1e9876` (444) | octets (`high`) |
+
+* `xx/definitions` : 256 adresses, une par variante de SET 24 (0xd7056 : `+3`).
+* `xx/defs@…` : définitions de 18 octets jointives (0xd7124), format `u8*4 addr i16*2 u8 i8 u16 u16` :
+  colonne et ligne de la fenêtre (cases 8x8 de la couche 1), petit cadre (`+0x18` : hauteur 0xb au lieu
+  de 0xf), lignes (`+0x19`), `text` (`+0x24`), X, Z (`+8`, `+0xc`), sorte (`kind`, `+0x2f`, 24 valeurs),
+  `next` (`+0x1a` : positif, la fenêtre suivante est la définition qui suit, à la fermeture), attente
+  (`+0x32`, 0xffff : jusqu'à une touche), paramètre (`+0x34`). Le sens de `text` dépend de la sorte
+  (0xd7196, construction 0xd7466) : texte (sortes 0, 3, 6-9, 13, 14, 16-18, 21-23) ; liste de 2
+  définitions, une ou plusieurs joueurs (1) ; liste de définitions indexée par `+0x23` (11) ; liste de 2
+  textes (10 : texte relié, texte ; 15 : un ou plusieurs joueurs) ; base de définitions voisines (5 :
+  décalage `kind5_steps` 0xd7218 ; 19 : `+0x42` x 18 ; 20 : 0 ou 36) ; rien (2, 4, 12 : textes
+  construits depuis les joueurs).
+* `xx/list@…` : listes d'adresses (définitions ou textes) ; `xx/messages` : tous les textes, pour le
+  visualiseur de messages du menu de test (table `message_lists` 0xf2dc4, prog : français, anglais).
+* Textes (`texts`, `xx/text@…`) : `tiles` = mots de la grande police (`0x1800` espace, `0x1880 +` ASCII ;
+  commandes négatives suivies de deux mots, `0xfffe` d'un seul ; `0x7000-0x7009` substitutions : nombre
+  de joueurs, noms...) jusqu'au mot 0 ; `high` = octets ASCII + 0x80 (`0x80` espace, `0xff n m` saut de
+  ligne, `0x04 n` lettre accentuée, `0xfe n`) jusqu'à `0xfd`, puis un octet nul si la longueur est impaire.
+  Un texte désigné en son milieu (suite après un saut de page) coupe celui qui le contient : chaque
+  morceau va jusqu'au début du suivant.
+* Couverture : les régions sont parcourues depuis les tables comme le fait le jeu ; les trous restants
+  sont classés (définitions plausibles, textes, listes) ; il ne reste que deux mots de bourrage `0x4e71`
+  (`xx/raw@…`).
+* Bulles : `bubble_tables` (0xcc438, prog : 3 adresses, par langue `A5+0x72`), `xx/bubbles` (51 adresses
+  par langue, région `bubble_lists` 0xcc444-0xcc6a8), puis pour chaque bulle `xx/bubble@…` (largeur,
+  taille) et son texte `xx/bubble_text@…` (région `bubbles` 0xcc6d2-0xcdca8 ; du code sépare les deux).
+
+Restent à extraire ou à décoder : la sémantique complète des commandes du moteur de texte (cases
+`A5+0x5c6`), les tables de noms et de caractères de la construction (`0xd7604`, `0xd7e8a`, `0xd7db6`,
+`0xd7d96`/`0xd7da6`, `0xd7a20`..., `0xd7a48`, `0xd7e26`), la table des tuiles latines `0xc9216` et les
+messages de SET C 7 (`0xceaa2`, en-têtes `0xce9a4`, fenêtres de niveau `0xce728`...).
+
 ## Inventaire des données de jeu restantes
 
-Tables lues par le code réécrit (consommateur Rust entre parenthèses, chemins relatifs à
-`port/ddsom-game/src`) et non extraites. Espace : `prog` = lu en relatif au PC (programme déchiffré),
-sinon espace données. Tailles « ? » : à mesurer (fin non relevée).
+Toutes les tables de l'inventaire du deuxième tour sont extraites (`data/players.json`, `combat.json`,
+`enemies.json`, `boxes.json`, `scenes.json`, `misc.json`, `dialogs.json`). Les tables d'adresses de code
+restent dans le moteur (listées dans le paragraphe « Code, pas des données » de chaque section). Données
+relevées mais non extraites :
 
-| Domaine | Adresse | Taille | Structure | Consommateur |
-|---|---|---|---|---|
-| SET 24 | `0x1d78d0`, `0xd7218`, `0xd7a48`, `0xd7604`... | 18 octets par définition | fenêtres de dialogue (voir les textes) | `families/set_b.rs` |
-
-Les tables des joueurs, du combat, des ennemis, des caisses et des scènes sont extraites (`data/*.json`,
-ci-dessus).
+| Domaine | Adresse | Structure | Consommateur |
+|---|---|---|---|
+| Chef 11 (chaîne) | `0x1069f8`, `0x106cb8`... | lignes de 32 octets par pose `+0xaa`, trajectoires (pointeurs puis tables de 0x100 octets par orientation) ; suit la région `reactions` de `combat.json`, fin non mesurée | `families/boss_11/chain.rs` |
+| Démonstrations | `0x1f348` (prog), `0x1f3c2`, `0x1f59e`, `0x1f756` | scripts d'entrées de 32 octets et plus (opération, scène, durée, 4 joueurs, entrées enregistrées) | `modes/demo.rs` |
+| Dialogues | `0xd7604`, `0xd7e8a`, `0xd7db6`, `0xd7d96`/`0xd7da6`, `0xd7a20`..., `0xd7a48` (prog), `0xd7e26` | noms prédéfinis, tuiles des caractères des noms, titres des joueurs, textes selon le nombre de joueurs, listes d'objets et leurs textes, séparateur | `families/set_b.rs` (`dialog`) |
+| Fenêtres de niveau | `0xceaa2` (prog), `0xce9a4`, `0xce728`, `0xce7ac`, `0xce7e4`, `0xc9216` | messages de SET C 7, en-têtes, paliers et cadres par classe, tuiles latines | `families/set_c_finale_c.rs` |
+| Objets | `0xda398` | 12 adresses par personnage (suit la table `loot`) | `families/items.rs` |
 
 ## Palettes des scènes : `scene_palettes.json`
 
@@ -650,15 +695,10 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
   variante 1.
 * Décors : dessins écrits dynamiquement par les scripts de scène (blocs chargés par 0x26d4/0x2766 dans
   la couche, décors animés), choix des palettes de fondu (code).
-* Textes non extraits :
-  * **Dialogues et messages** (fenêtres de dialogue SET 24, `0xd7056` ; bulles SET 10 ; messages numérotés
-    créés par `0xc8312`) : le texte est une liste de jetons mots (tuiles de la grande police, négatifs =
-    commandes, `0x7000-0x7009` = substitutions : nombre de joueurs, noms, objets) composée dans le tampon
-    `0xff2072` et affichée par le moteur de texte (cases `A5+0x5c6`). Définitions des fenêtres : table
-    `0x1d78d0` (18 octets : colonne, ligne, indicateurs, texte, position, sorte `+0x2f`) ; tables
-    `0xd7218`, `0xd7a48`, `0xd7e8a`, `0xd7604`, `0xd7db6`, `0xd7d96`, `0xd7da6`, `0xd7988` ; messages de
-    SET C 7 : `0xceaa2` ; bulles SET 10 : `0xcc438`. Le moteur de texte et la table des messages restent à
-    décoder (format des jetons, police) avant extraction.
+* Textes :
+  * **Dialogues et bulles** : extraits (`data/dialogs.json`, trois langues). Restent les tables de la
+    construction des textes (noms, caractères), les messages de SET C 7 (`0xceaa2`) et la sémantique des
+    commandes du moteur de texte (voir la section des dialogues).
   * **Boutique** (PEFF 43) : les scripts des comptoirs sont extraits (`counter_scripts` de
     `data/scenes.json`) ; leurs textes sont des messages du moteur de texte.
   * **Générique de fin** : extrait (`credits` de `data/misc.json`, 0xd01de-0xd06e5, routine 0xd0108).

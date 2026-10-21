@@ -273,19 +273,74 @@ pub struct Region {
     pub program: bool,
 }
 
-/// Texte d'octets (chaînes de tuiles), découpé en lignes pour la lecture ; chaque ligne est écrite comme
-/// les textes de `texts.json` (`texts::encode` : ASCII tel quel, autres octets `{xx}`).
+/// Texte (chaîne de caractères ou de tuiles) découpé en lignes pour la lecture. `encoding` :
+/// * absent : octets ASCII, écrits comme les textes de `texts.json` (`texts::encode` : ASCII tel quel,
+///   autres octets `{xx}`) ;
+/// * `"high"` : octets ASCII + 0x80 (textes des dialogues français et allemands) : `0x80` est l'espace,
+///   `0xa1..0xfe` le caractère ASCII correspondant, tout autre octet `{xx}` ;
+/// * `"tiles"` : mots, tuiles de la grande police (textes des dialogues anglais) : `0x1800` est l'espace,
+///   `0x18a1..0x18fe` le caractère ASCII, tout autre mot `{xxxx}` (commandes négatives, 0 final compris).
+///
+/// `{` et `}` sont toujours écrits en hexadécimal.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TextBlock {
     pub name: String,
     #[serde(with = "hex")]
     pub rom: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoding: Option<String>,
     pub lines: Vec<String>,
+}
+
+/// Caractère ASCII imprimable écrit tel quel dans les textes.
+fn plain_char(c: u32) -> Option<char> {
+    let c = char::from_u32(c)?;
+    (c.is_ascii_graphic() && c != '{' && c != '}').then_some(c)
+}
+
+/// Texte « high » ou « tiles » -> chaîne (voir `TextBlock`).
+pub fn encode_units(units: &[u16], tiles: bool) -> String {
+    let (space, base) = if tiles { (0x1800, 0x1880) } else { (0x80, 0x80) };
+    let mut s = String::new();
+    for &u in units {
+        let u = u as u32;
+        match u.checked_sub(base).and_then(plain_char) {
+            _ if u == space => s.push(' '),
+            Some(c) if u - base < 0x80 => s.push(c),
+            _ if tiles => s.push_str(&format!("{{{u:04x}}}")),
+            _ => s.push_str(&format!("{{{u:02x}}}")),
+        }
+    }
+    s
+}
+
+/// Chaîne -> mots ou octets (inverse de `encode_units`).
+pub fn decode_units(s: &str, tiles: bool) -> Vec<u16> {
+    let (space, base) = if tiles { (0x1800u16, 0x1880u16) } else { (0x80, 0x80) };
+    let mut out = Vec::new();
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' => {
+                let h: String = chars.by_ref().take_while(|&c| c != '}').collect();
+                out.push(u16::from_str_radix(&h, 16).unwrap_or(0));
+            }
+            ' ' => out.push(space),
+            c => out.push(base + c as u16),
+        }
+    }
+    out
 }
 
 impl TextBlock {
     pub fn bytes(&self) -> Vec<u8> {
-        self.lines.iter().flat_map(|l| crate::texts::decode(l)).collect()
+        match self.encoding.as_deref() {
+            Some("tiles") => {
+                self.lines.iter().flat_map(|l| decode_units(l, true)).flat_map(|w| w.to_be_bytes()).collect()
+            }
+            Some("high") => self.lines.iter().flat_map(|l| decode_units(l, false)).map(|b| b as u8).collect(),
+            _ => self.lines.iter().flat_map(|l| crate::texts::decode(l)).collect(),
+        }
     }
 
     pub fn end(&self) -> u32 {

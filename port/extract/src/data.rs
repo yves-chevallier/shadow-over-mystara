@@ -59,7 +59,7 @@ pub fn region(name: &str, start: u32, end: u32) -> Region {
 pub fn text(rom: &Program, name: &str, start: u32, end: u32, cut: u8) -> TextBlock {
     let bytes: Vec<u8> = (start..end).map(|a| rom.rd8(a)).collect();
     let lines = bytes.split_inclusive(|&b| b == cut).map(ddsom_assets::texts::encode).collect();
-    TextBlock { name: name.into(), rom: start, lines }
+    TextBlock { name: name.into(), rom: start, encoding: None, lines }
 }
 
 pub fn save(rom: &Program, path: &Path, regions: Vec<Region>, specs: &[Spec], texts: Vec<TextBlock>) -> io::Result<()> {
@@ -99,5 +99,7 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     save(&rom, &dir.join("scenes.json"), regions, &specs, Vec::new())?;
     let (regions, specs, texts) = crate::misc::specs(&rom);
     save(&rom, &dir.join("misc.json"), regions, &specs, texts)?;
+    let (regions, specs, texts) = crate::dialogs::specs(&rom);
+    save(&rom, &dir.join("dialogs.json"), regions, &specs, texts)?;
     Ok(())
 }
