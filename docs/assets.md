@@ -28,6 +28,7 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Boîtes, marques au sol, listes d'images | `sprites/tables.json` | `tables_des_objets_sans_perte` |
 | Textes (couche 8x8, bulles, noms) | `texts.json` | `textes_sans_perte` |
 | Musiques et effets (pilote Z80) | `sound/music.json` | `musique_sans_perte` |
+| Scripts d'apparition (vagues) | `data/spawns.json` | `apparitions_sans_perte` |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
@@ -354,6 +355,67 @@ Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors �
 
 Reste dans le code du pilote (et `ddsom-sound`) : le tableau de saut des instructions (0x1179), la
 logique d'enveloppe, de LFO et de pan.
+
+## Scripts d'apparition : `data/spawns.json`
+
+Les « vagues d'ennemis » : un script par scène fait entrer ennemis, décors et objets au fil du défilement
+(lecteur 0xf2e5c, `scene/script.rs`, [scenes.md](scenes.md) §2).
+
+```json
+{"table":"0xf2f62","scenes":["0x10cde4","0x10cde6", ...115...],
+ "scripts":[{"rom":"0x10cde6","entries":[
+    {"x":0,"dx":0,"z":0,"y":0,"rank":0,"players":1,"unused":0,"class":4,"f2c":0,"kind":1,"variant":0,"f2f":0,"f42":0},
+    {"x":299,"call":"0x2a24","arg":299}, ...],"pad":[78,113]}, ...]}
+```
+
+* `scenes[s]` : adresse du script de la scène s (table de longs, espace données) ; 108 scripts distincts
+  (les scènes 0x52 à 0x59 partagent le même), 1 706 apparitions et 18 appels.
+* Apparition (0x12 octets) : abscisse de caméra de déclenchement `x`, objet créé en X = `x + dx`, Z, Y ;
+  sautée si le rang du jeu (`A5+0x7f93`) dépasse `rank` ou s'il y a moins de `players` joueurs ; `class`
+  (octet pair) choisit l'allocateur (table de mots `0xf2f38` : ENEMY, SET, EFFCT, BOX, SOBJ, BOSS, ITEM,
+  ESHL...), `kind` et `variant` vont en `+2` et `+3` de l'objet, `f2c`, `f2f`, `f42` en `+0x2c`, `+0x2f`,
+  `+0x42` (mot) ; l'octet `unused` (`+0xa`) n'est pas lu. Appel (10 octets, mot `+2` = 0xffff) : routine
+  `call` avec D0 = `arg`. Le mot 0xffff final n'est pas écrit ; `pad` : mot de bourrage `0x4e71` entre
+  certains scripts. Les scripts sont jointifs de `0x10cde4` à `0x114788`.
+
+## Inventaire des données de jeu restantes
+
+Tables lues par le code réécrit (consommateur Rust entre parenthèses, chemins relatifs à
+`port/ddsom-game/src`) et non extraites. Espace : `prog` = lu en relatif au PC (programme déchiffré),
+sinon espace données. Tailles « ? » : à mesurer (fin non relevée).
+
+| Domaine | Adresse | Taille | Structure | Consommateur |
+|---|---|---|---|---|
+| Joueurs | `0x3208`, `0x325e`, `0x32d8`, `0x3402`, `0x345e`, `0x34b4`, `0x3522` (prog) | 12 longs chacune | un pointeur par personnage vers sa table (données) : niveau par scène (octets), PV par niveau (mots), 8 jeux de caractéristiques (8 octets), équipement par niveau (12 longs, 0x30 octets ; `0x3402` lue en données), drapeaux débloqués (8 octets par niveau), sorts (10 octets par niveau), armes de départ (4 octets par niveau) | `player/init.rs` |
+| Joueurs | `0x3590` | 2 octets par arme | puissance d'attaque par numéro d'arme | `player/init.rs` |
+| Joueurs | `0x1044fe`, `0x10451e`, `0x10455e`, `0x10459e`, `0x1045be` | ? | vitesses de saut, une ligne par profil (vx, ax, vz, az) ; une table par classe ([personnages.md](personnages.md)) | `player/characters/*.rs` (`JUMP_SPEEDS`), `common::launch_jump` |
+| Joueurs | `0x35586` (prog), `0x3a0f4`, `0x3b820`, `0x3541c` | 33 entrées... | tables de sauts d'actions, de réactions et de sous-états (adresses de code) | `player/actions.rs`, `hurt.rs`, `update.rs` |
+| Joueurs | `0x3e806` | 15 entrées | sous-actions du combattant (16 pour le voleur) | `player/characters/` |
+| Joueurs | `0x4054e`, `0x4131e`, `0x40ece`, `0x41afe`, `0x433c`/`0x431e`, `0x41e4c`, `0x410a6`, `0x416cc` | par niveau | renvoi des morts-vivants, prières (nombre, durée, dégâts, soins) | `player/characters/cleric.rs` |
+| Joueurs | `0x3fbb8`, `0x4935a`, `0x37588`, `0x371b2` | ? | étincelle d'objet, décalage de l'attaque dans le dos, types insaisissables, type de l'arme par personnage | `characters/common.rs`, `thief.rs`, `checks.rs` |
+| Combat | `0x1067a4`, `0x106912` | 4 octets par identifiant d'attaque | réaction du joueur (action au sol, en l'air, puissance, puissance en difficulté > 5) aux coups et aux tirs ennemis | `combat.rs` |
+| Combat | `0x27690` | 1 octet par type de tir ennemi | garde (1 parable, 2 magie) | `combat.rs` |
+| Combat | `0x267c4` | longs | comportements au contact des tirs joueur (adresses de code) | `combat.rs` |
+| Ennemis | `0x3de58`, `0x3e28a` (prog), `0x3e2ac`/`0x3e3a4` (prog), `0x3e1ee` (prog), `0x3bdec`/`0x3bdcc`, `0x3bb52` | par type | jeux d'animations de réaction, variantes, sons de coup et de mort, types qui ne restent pas au sol, projections (compteur, 4 mots de vitesses), réactions du joueur | `families/reactions.rs` |
+| Ennemis | `0xe93e` | longs | tables d'approche (mot de compte puis points) de l'IA | `ai.rs` |
+| Ennemis | `0x4544`, `0xfe5a` | code | PV initiaux (type, difficulté, joueurs) et immunités : routines avec leurs tables | `families/enemy_common.rs` (appel) |
+| Caisses | `0x1051ae`, `0xda28a`, `0xda06a`, `0xdb7c4` | par variété | fiche de 0x2a octets (caractéristiques, butins), butin -> (type, variante) d'ITEM, effets spéciaux (code), chances par coup | `families/boxes.rs`, `items.rs` |
+| Scènes | `0x21b38`, `0x21bb0`, `0x2123c`, `0x2196c` | par scène | octets de palette, 4 couples (X, Y) de départ des joueurs, états de départ | `scene/entry.rs` |
+| Scènes | `0xf2f38` (prog) | mots | allocateurs par classe d'objet (script d'apparition) | `scene/script.rs` |
+| Scènes | `0xf3170`, `0xf31ea`, `0xf4a0c` | par scène | séquence de sortie de scène, choix de route (dialogue 70) | `scene/` (phase 16) |
+| Scènes | `0xf80c4`, `0xf81fa` | par scène | palettes et scripts de transition du fondu au noir | `scene/blackout.rs` |
+| Scènes | `0xf6ba0`, `0xf6c1c`, `0x19c0e`, `0xf5a62`, `0xf5b06`, positions `0xf5c08`... | 31 longs BCD... | primes de fin de niveau (temps, coups, trésor), positions des panneaux | `scene/tally.rs` |
+| Scènes | `0xf6ed2` (prog) | par scène | noms des scènes et « STAGE CLEAR » (textes 0x1136) | `scene/tally.rs` |
+| Boutique | `0xf7ad0`, `0xf7ab0`/`0xf7ac4`, `0xf7b88`/`0xf7b9c`, `0xf7c14`/`0xf7c28`, `0xf7d72`, `0xf7d5e`, `0xf7e92`/`0xf7eb2` | par scène / 20 boutiques | boutique de la scène, musique, accueil, messages de sortie, boutique suivante, scène suivante, portraits | `scene/shop.rs` |
+| Boutique | `0x51306`, `0x51376`, `0x514ec` | par scène | zones de comptoir et scripts de dialogue (voir les textes) | `families/joueur/peff.rs` (+ 68000) |
+| Bonus | `0x3f7e0e`, `0x3f6c08` | rectangles | décors de la partie bonus selon la région | `scene/bonus.rs` |
+| Caméras | `0x2f0ee`, `0x2f008`, `0x2ef22`, `0x2f332`, `0x2f1d4`, `0x2f3aa`, `0x2f2ba`, `0x32650`, `0x32484` | par scène | initialisation propre à la scène (butées, pas de bande, blocs à charger) | `camera_modes.rs` |
+| Interface | `0x19f6c` (prog), `0x1a25e`, `0x1eb48`/`0x1eb58` | 8 mots, 8 tuiles, 2 x 4 positions | origines et bords des bulles, marqueurs des joueurs | `popups.rs`, `sprites.rs` |
+| SET 24 | `0x1d78d0`, `0xd7218`, `0xd7a48`, `0xd7604`... | 18 octets par définition | fenêtres de dialogue (voir les textes) | `families/set_b.rs` |
+| Vagues SET B | `0xd4c5e`, `0xd4a0e`, `0xd4bdc`, `0xd4b92`, `0xd84e8`, `0xd8e5e` | lignes de 16 octets | vagues et portes des familles SET B | `families/set_b.rs` |
+
+Prochaine étape conseillée : les tables par personnage (`player/init.rs`) et les vitesses de saut (tailles
+mesurables par l'écart entre tables), puis les tables par type d'ennemi de `reactions.rs`.
 
 ## Palettes des scènes : `scene_palettes.json`
 

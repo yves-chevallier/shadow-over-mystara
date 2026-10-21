@@ -1,6 +1,6 @@
 //! Extrait les ressources de Shadow over Mystara depuis les ROMs de l'utilisateur.
 //!
-//!     extract <dossier_roms> <dossier_assets> [gfx|palettes|sounds|sprites|levels|terrain|texts|music...]
+//!     extract <dossier_roms> <dossier_assets> [gfx|palettes|sounds|sprites|levels|terrain|texts|music|data...]
 //!
 //! Sans catégorie, tout est extrait. Tous les formats sont sans perte : le moteur peut retrouver
 //! exactement les données d'origine (`cargo test -p ddsom-assets`, voir docs/assets.md).
@@ -13,6 +13,7 @@ mod palettes;
 mod rom;
 mod scene_palettes;
 mod sounds;
+mod spawns;
 mod sprites;
 mod tables;
 mod terrain;
@@ -20,7 +21,7 @@ mod texts;
 
 use std::path::Path;
 
-const CATEGORIES: [&str; 8] = ["gfx", "palettes", "sounds", "sprites", "levels", "terrain", "texts", "music"];
+const CATEGORIES: [&str; 9] = ["gfx", "palettes", "sounds", "sprites", "levels", "terrain", "texts", "music", "data"];
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -57,6 +58,9 @@ fn main() {
         }
         if wanted("music") {
             music::extract(roms, &out.join("sound/music.json"))?;
+        }
+        if wanted("data") {
+            spawns::extract(roms, &out.join("data/spawns.json"))?;
         }
         std::fs::write(out.join("README.md"), README)?;
         Ok(())
@@ -122,6 +126,10 @@ Cartes de terrain fixes (scènes 2 et 0x14) et tables des types de terrain (coll
 
 Musiques et effets du pilote son : table des sons, pistes (instructions en jetons), bancs
 d'instruments, fiches d'échantillons et tables du pilote (volumes, enveloppes, hauteurs).
+
+## data/spawns.json
+
+Scripts d'apparition des scènes (ennemis, décors, objets qui entrent au fil du défilement).
 
 ## texts.json
 

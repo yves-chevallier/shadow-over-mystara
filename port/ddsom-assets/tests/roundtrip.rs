@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, SpriteTables, Terrain, Texts};
+use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -558,5 +558,27 @@ fn musique_sans_perte() {
     for t in &m.tables {
         let b = t.bytes();
         assert_eq!(at(t.rom, b.len()), b, "table {}", t.name);
+    }
+}
+
+#[test]
+fn apparitions_sans_perte() {
+    if !has("data/spawns.json") {
+        return;
+    }
+    let sp = Spawns::load(&root().join("assets/data/spawns.json")).unwrap();
+    let (rom, _) = program();
+    for (s, &a) in sp.scenes.iter().enumerate() {
+        let t = sp.table as usize + 4 * s;
+        assert_eq!(u32::from_be_bytes(rom[t..t + 4].try_into().unwrap()), a, "scène {s}");
+        assert!(sp.of_scene(s).is_some(), "scène {s} : script {a:#x} absent");
+    }
+    // scripts : réencodés, à la suite les uns des autres
+    let mut next = sp.scripts[0].rom;
+    for sc in &sp.scripts {
+        assert_eq!(sc.rom, next, "script {:#x} : position", sc.rom);
+        let b = sc.bytes();
+        assert_eq!(&rom[sc.rom as usize..sc.rom as usize + b.len()], &b[..], "script {:#x}", sc.rom);
+        next = sc.rom + b.len() as u32;
     }
 }
