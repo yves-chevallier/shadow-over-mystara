@@ -601,14 +601,25 @@ fn check_data(rel: &str) {
         let at = t.rom as usize;
         assert_eq!(&rom[at..at + b.len()], &b[..], "{rel} : table {} ({:#x})", t.name, t.rom);
     }
+    for t in &file.texts {
+        let b = t.bytes();
+        let at = t.rom as usize;
+        assert_eq!(&data[at..at + b.len()], &b[..], "{rel} : texte {}", t.name);
+    }
     for r in &file.regions {
-        let mut inside: Vec<_> =
-            file.tables.iter().filter(|t| t.program == r.program && t.rom >= r.start && t.rom < r.end).collect();
-        inside.sort_by_key(|t| t.rom);
+        let mut inside: Vec<(u32, u32, &str)> = file
+            .tables
+            .iter()
+            .filter(|t| t.program == r.program)
+            .map(|t| (t.rom, t.end(), t.name.as_str()))
+            .chain(file.texts.iter().filter(|_| !r.program).map(|t| (t.rom, t.end(), t.name.as_str())))
+            .filter(|&(start, _, _)| start >= r.start && start < r.end)
+            .collect();
+        inside.sort();
         let mut at = r.start;
-        for t in inside {
-            assert_eq!(t.rom, at, "{rel} : région {}, table {}", r.name, t.name);
-            at = t.end();
+        for (start, end, name) in inside {
+            assert_eq!(start, at, "{rel} : région {}, {name}", r.name);
+            at = end;
         }
         assert_eq!(at, r.end, "{rel} : fin de la région {}", r.name);
     }
@@ -667,4 +678,9 @@ fn caisses_sans_perte() {
 #[test]
 fn scenes_sans_perte() {
     check_data("data/scenes.json");
+}
+
+#[test]
+fn divers_sans_perte() {
+    check_data("data/misc.json");
 }

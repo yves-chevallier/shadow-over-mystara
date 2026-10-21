@@ -7,7 +7,7 @@
 use std::io;
 use std::path::Path;
 
-use ddsom_assets::data::{parse_format, DataFile, Region, Table};
+use ddsom_assets::data::{parse_format, DataFile, Region, Table, TextBlock};
 use ddsom_assets::json;
 
 use crate::rom::Program;
@@ -55,35 +55,49 @@ pub fn region(name: &str, start: u32, end: u32) -> Region {
     Region { name: name.into(), start, end, program: false }
 }
 
-pub fn save(rom: &Program, path: &Path, regions: Vec<Region>, specs: &[Spec]) -> io::Result<()> {
+/// Texte d'octets de `start` à `end`, coupé en lignes après chaque octet `cut`.
+pub fn text(rom: &Program, name: &str, start: u32, end: u32, cut: u8) -> TextBlock {
+    let bytes: Vec<u8> = (start..end).map(|a| rom.rd8(a)).collect();
+    let lines = bytes.split_inclusive(|&b| b == cut).map(ddsom_assets::texts::encode).collect();
+    TextBlock { name: name.into(), rom: start, lines }
+}
+
+pub fn save(rom: &Program, path: &Path, regions: Vec<Region>, specs: &[Spec], texts: Vec<TextBlock>) -> io::Result<()> {
     let tables: Vec<Table> = specs.iter().map(|s| read(rom, s)).collect();
     for r in &regions {
-        let mut inside: Vec<&Table> =
-            tables.iter().filter(|t| t.program == r.program && t.rom >= r.start && t.rom < r.end).collect();
-        inside.sort_by_key(|t| t.rom);
+        let mut inside: Vec<(u32, u32, &str)> = tables
+            .iter()
+            .filter(|t| t.program == r.program)
+            .map(|t| (t.rom, t.end(), t.name.as_str()))
+            .chain(texts.iter().filter(|_| !r.program).map(|t| (t.rom, t.end(), t.name.as_str())))
+            .filter(|&(start, _, _)| start >= r.start && start < r.end)
+            .collect();
+        inside.sort();
         let mut at = r.start;
-        for t in inside {
-            assert_eq!(t.rom, at, "région {} : trou ou chevauchement avant {}", r.name, t.name);
-            at = t.end();
+        for (start, end, name) in inside {
+            assert_eq!(start, at, "région {} : trou ou chevauchement avant {name}", r.name);
+            at = end;
         }
         assert_eq!(at, r.end, "région {} : fin", r.name);
     }
-    eprintln!("{} : {} tables", path.display(), tables.len());
+    eprintln!("{} : {} tables, {} textes", path.display(), tables.len(), texts.len());
     std::fs::create_dir_all(path.parent().unwrap())?;
-    json::save(path, &DataFile { regions, tables }, 4)
+    json::save(path, &DataFile { regions, tables, texts }, 4)
 }
 
 pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     let rom = Program::load(roms)?;
     let (regions, specs) = crate::players::specs(&rom);
-    save(&rom, &dir.join("players.json"), regions, &specs)?;
+    save(&rom, &dir.join("players.json"), regions, &specs, Vec::new())?;
     let (regions, specs) = crate::combat::combat();
-    save(&rom, &dir.join("combat.json"), regions, &specs)?;
+    save(&rom, &dir.join("combat.json"), regions, &specs, Vec::new())?;
     let (regions, specs) = crate::combat::enemies(&rom);
-    save(&rom, &dir.join("enemies.json"), regions, &specs)?;
+    save(&rom, &dir.join("enemies.json"), regions, &specs, Vec::new())?;
     let (regions, specs) = crate::combat::boxes(&rom);
-    save(&rom, &dir.join("boxes.json"), regions, &specs)?;
+    save(&rom, &dir.join("boxes.json"), regions, &specs, Vec::new())?;
     let (regions, specs) = crate::scenes::specs(&rom);
-    save(&rom, &dir.join("scenes.json"), regions, &specs)?;
+    save(&rom, &dir.join("scenes.json"), regions, &specs, Vec::new())?;
+    let (regions, specs, texts) = crate::misc::specs(&rom);
+    save(&rom, &dir.join("misc.json"), regions, &specs, texts)?;
     Ok(())
 }

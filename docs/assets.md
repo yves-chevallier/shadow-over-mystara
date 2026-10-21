@@ -562,6 +562,21 @@ Code, pas des données (documentés, restent dans le moteur) : allocateurs des c
 `0xf81fa`, routines de musique `0xf7ac4` et d'accueil `0xf7b9c` des boutiques, table de sauts de
 l'interprète des comptoirs `0x514ec`, routines de création des vagues `0xd4b92`.
 
+### Divers : `data/misc.json`
+
+`texts` : textes d'octets découpés en lignes pour la lecture (`TextBlock`, chaque ligne écrite comme les
+textes de `texts.json`, `{xx}` pour les autres octets ; `TextBlock::bytes` les recolle).
+
+| Nom | Adresse | Contenu | Sens |
+|---|---|---|---|
+| `viewer_counts` | `0x2a85fc` | 2 512 x `u8` | un octet par script du visualiseur de sprites du menu de test caché, affiché plus un (0xee952, D6 = `+0x66`) ; même ordre que les noms. Région `viewer` 0x2a85fc-0x2ae81e |
+| `viewer_names` (texte) | `0x2a8fcc` | 2 512 lignes | noms des scripts du visualiseur (`pl00_000`, 8 caractères puis `0xff`), puis `0xff 0xff` |
+| `demo/0..29` | `0x2b04de`… | `u16 x8*12` | entrées enregistrées des démonstrations de l'attract : en-tête (0, `0xff` x 12), enregistrements (durée en images, 3 octets d'entrées par joueur `+0x64a..+0x64c`, voir l'enregistreur 0xe05c2-0xe0700), fin (durée `0xffff`). Désignées par le long `+28` des entrées des scripts de démonstration (`modes/demo.rs`, tables 0x1f3c2...). Entre les suites : `pad/…` (`0x4e71`, une fois 0) et un enregistrement de remplissage (`filler/0x2b0850`). Région `demo` 0x2b04de-0x2b45d8 |
+| `credits` (texte) | `0xd01de` | 82 lignes | générique de fin (0xd0108, pointeur posé en 0xd00ee) : octets = tuiles ASCII écrites en colonne, `/` fin de ligne (défilement), `0xff n` attributs n, `0xfe` fin |
+
+Restent à décoder : les scripts de démonstration eux-mêmes (entrées de 32 octets et plus, 0x1f3c2,
+0x1f59e, 0x1f756 ; `modes/demo.rs`) et le lecteur des entrées enregistrées.
+
 ## Inventaire des données de jeu restantes
 
 Tables lues par le code réécrit (consommateur Rust entre parenthèses, chemins relatifs à
@@ -623,10 +638,10 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
 
 ## Ce qui reste à extraire
 
-* Sprites : entre la table des images et les images, `0x2a85fc-0x2a8fcc` (octets, rôle inconnu) puis
-  `0x2a8fcc-0x2ae81e` : 2 462 noms de scripts du visualiseur (`pl00_000`, 8 caractères terminés par
-  `0xff`), puis les palettes des scènes et `0x2b04de-0x2b45d8` (inconnu). Les jeux d'animations que seul
-  le code désigne (sans nom) ne sont pas listés comme jeux : leurs entrées sont dans `entries` (isolées).
+* Sprites : entre la table des images et les images, `0x2a85fc-0x2ae81e` (octets et noms des 2 512 scripts
+  du visualiseur), les palettes des scènes et `0x2b04de-0x2b45d8` (entrées des démonstrations) sont
+  extraits (`data/misc.json`). Les jeux d'animations que seul le code désigne (sans nom) ne sont pas
+  listés comme jeux : leurs entrées sont dans `entries` (isolées).
   Les boîtes propres à certaines familles (données qui suivent `0x1ca938`, tables `0x121fc8`... déjà
   couvertes) et les décalages de tirs (`0xd4198`...) restent dans le code ou à inventorier.
 * Animations : 35 débuts d'entrées plausibles dont la chaîne est incohérente ne sont pas extraits ; une
@@ -644,11 +659,9 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
     `0xd7218`, `0xd7a48`, `0xd7e8a`, `0xd7604`, `0xd7db6`, `0xd7d96`, `0xd7da6`, `0xd7988` ; messages de
     SET C 7 : `0xceaa2` ; bulles SET 10 : `0xcc438`. Le moteur de texte et la table des messages restent à
     décoder (format des jetons, police) avant extraction.
-  * **Boutique** (PEFF 43, interprète `0x514ac` / `0x514cc`) : scripts d'instructions de 4 octets
-    (opération multiple de 4, paramètre, mot `D1`), 11 opérations par la table de sauts `0x514ec`
-    (0 : ouvrir le message `D1` ; 8 : saut relatif de `D1` octets si `A5+0x5e` ; achats, paiement BCD,
-    inventaire...). Scripts désignés par les zones de comptoir (`0x51306` / `0x51376`, champs `+0x1c` /
-    `+0x58`) ; les textes eux-mêmes sont des messages du moteur de texte.
-  * **Générique de fin** (`0xd01e0-0xd0692`, noms du staff, lignes séparées par `/`, codes `0xff n`) :
-    routine d'affichage non relevée.
-* Données de jeu : scripts d'apparition extraits ; le reste (vitesses, IA, tables par personnage et par type d'ennemi, boutiques...) est inventorié plus haut (« Inventaire des données de jeu restantes »).
+  * **Boutique** (PEFF 43) : les scripts des comptoirs sont extraits (`counter_scripts` de
+    `data/scenes.json`) ; leurs textes sont des messages du moteur de texte.
+  * **Générique de fin** : extrait (`credits` de `data/misc.json`, 0xd01de-0xd06e5, routine 0xd0108).
+* Données de jeu : scripts d'apparition, tables des joueurs, du combat, des ennemis, des caisses, des scènes
+  extraits (`data/*.json`) ; ce qui reste est listé dans « Inventaire des données de jeu restantes »
+  et, pour chaque fichier, dans le paragraphe « Code, pas des données » ou « Restent » de sa section.

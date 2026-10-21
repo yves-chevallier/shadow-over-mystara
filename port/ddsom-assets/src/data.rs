@@ -273,11 +273,34 @@ pub struct Region {
     pub program: bool,
 }
 
+/// Texte d'octets (chaînes de tuiles), découpé en lignes pour la lecture ; chaque ligne est écrite comme
+/// les textes de `texts.json` (`texts::encode` : ASCII tel quel, autres octets `{xx}`).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TextBlock {
+    pub name: String,
+    #[serde(with = "hex")]
+    pub rom: u32,
+    pub lines: Vec<String>,
+}
+
+impl TextBlock {
+    pub fn bytes(&self) -> Vec<u8> {
+        self.lines.iter().flat_map(|l| crate::texts::decode(l)).collect()
+    }
+
+    pub fn end(&self) -> u32 {
+        self.rom + self.bytes().len() as u32
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct DataFile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regions: Vec<Region>,
     pub tables: Vec<Table>,
+    /// Textes d'octets (espace données).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub texts: Vec<TextBlock>,
 }
 
 impl DataFile {

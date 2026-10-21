@@ -10,6 +10,7 @@ mod combat;
 mod data;
 mod gfx;
 mod levels;
+mod misc;
 mod music;
 mod palettes;
 mod players;
