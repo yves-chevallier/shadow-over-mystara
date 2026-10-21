@@ -728,6 +728,36 @@ fn compta_init(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0x2e630 (personnage choisi, D0) et 0x2e696 (durée de partie) : statistiques de la RAM de la carte de
+/// développement ; sur une borne, rien.
+fn statistique(c: &mut Cpu, b: &mut Cps2Bus, suite: u32) {
+    if carte_de_developpement(c, b) {
+        c.pc = suite;
+        return;
+    }
+    rts(c, b);
+}
+
+pub const STAT_PERSONNAGE: Native = Native {
+    entry: 0x2e630,
+    name: "compta_stat_personnage",
+    cost: |_, _| 40,
+    run: |c, b| statistique(c, b, 0x2e638),
+    touches_sound: false,
+    outputs: regs::CCR,
+    exact_cost: false,
+};
+
+pub const STAT_DUREE: Native = Native {
+    entry: 0x2e696,
+    name: "compta_stat_duree",
+    cost: |_, _| 40,
+    run: |c, b| statistique(c, b, 0x2e69e),
+    touches_sound: false,
+    outputs: regs::CCR,
+    exact_cost: false,
+};
+
 pub const COMPTA_PARTIES: Native = Native {
     entry: 0x2e4ec,
     name: "compta_parties",

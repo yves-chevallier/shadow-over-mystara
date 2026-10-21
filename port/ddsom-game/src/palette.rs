@@ -926,6 +926,67 @@ pub const FLASH_G: Native = flash_native(0x1ab3c, "palette_eclair_g", flash_gray
 pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_eclair_remet", restore_flash_palettes);
 pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_eclair_reserve", save_flash_palettes);
 
+/// Couleur de l'éclair d'écran (couleur 14 de la page 1 de l'interface, `0x91c41c`) : 0x1ac68 la pose à
+/// 0xff00, 0x1ac86 et 0x35288 à 0xffff (blanc). Drapeaux du `move.w`.
+fn set_flash_color<const COLOR: u16>(c: &mut Cpu, b: &mut Cps2Bus) {
+    wr16(b, FLASH_COLOR, COLOR);
+    c.flags_logic(COLOR as u32, m68k::decode::Size::Word);
+    rts(c, b);
+}
+
+const FLASH_COLOR: u32 = 0x91c41c;
+
+const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+    Native { entry, name, cost: |_, _| 40, run, touches_sound: false, outputs: regs::CCR, exact_cost: false }
+}
+
+pub const FLASH_COLOR_ON: Native = flash_color_native(0x1ac68, "palette_eclair_couleur", set_flash_color::<0xff00>);
+pub const FLASH_COLOR_WHITE: Native = flash_color_native(0x1ac86, "palette_eclair_blanc", set_flash_color::<0xffff>);
+pub const FLASH_COLOR_WHITE_B: Native = flash_color_native(0x35288, "palette_eclair_blanc_b", set_flash_color::<0xffff>);
+
+/// Copie `longs` × 8 longs de `from` vers `to` par `movem.l` de huit registres (D0-D5, A3, A4 gardent le
+/// dernier bloc) ; rend les adresses de fin.
+fn movem_copy(c: &mut Cpu, b: &mut Cps2Bus, from: u32, to: u32, blocks: u32, step: u32) -> (u32, u32) {
+    let (mut from, mut to) = (from, to);
+    for _ in 0..blocks {
+        let v: [u32; 8] = std::array::from_fn(|i| rd32(b, from + 4 * i as u32));
+        for (i, &x) in v.iter().enumerate() {
+            wr32(b, to + 4 * i as u32, x);
+        }
+        c.d[..6].copy_from_slice(&v[..6]);
+        c.a[3] = v[6];
+        c.a[4] = v[7];
+        from += 0x20;
+        to += step;
+    }
+    (from, to)
+}
+
+/// 0x1ad2a : sauvegarde de la page de palettes 1 (0x91c400, 1 Ko) en FF1190.
+fn save_page1(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (from, to) = movem_copy(c, b, 0x91c400, 0xff1190, 32, 0x20);
+    c.a[2] = from;
+    c.a[1] = to;
+    c.d[6] = 0xffff;
+    rts(c, b);
+}
+
+/// 0x37882 : palette du personnage (`+3`) : 8 longs copiés de la table en clair 0x390c2 vers la page 0, au
+/// même décalage (table de décalages 0x378aa).
+fn character_palette(c: &mut Cpu, b: &mut Cps2Bus) {
+    let character = rd8(b, c.a[0] + 3) as u32;
+    let offset = crate::mem::prog16(b, 0x378aa + 2 * character) as i16 as i32 as u32;
+    c.d[0] = offset & 0xffff;
+    let (from, to) = (0x390c2u32.wrapping_add(offset), 0x91c000u32.wrapping_add(offset));
+    let (end, _) = movem_copy(c, b, from, to, 1, 0);
+    c.a[1] = end;
+    c.a[2] = to;
+    rts(c, b);
+}
+
+pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_sauve_page1", cost: |_, _| 2000, run: save_page1, touches_sound: false, outputs: regs::ALL, exact_cost: false };
+pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", cost: |_, _| 200, run: character_palette, touches_sound: false, outputs: regs::ALL, exact_cost: false };
+
 /// Routines natives de ce module (les réglages de luminosité sont déclarés dans `lib.rs`).
 pub const NATIVES: &[Native] = &[
     STAGE_FREE,
@@ -957,4 +1018,9 @@ pub const NATIVES: &[Native] = &[
     FLASH_G,
     FLASH_RESTORE,
     FLASH_SAVE,
+    FLASH_COLOR_ON,
+    FLASH_COLOR_WHITE,
+    FLASH_COLOR_WHITE_B,
+    SAVE_PAGE1,
+    CHARACTER_PALETTE,
 ];

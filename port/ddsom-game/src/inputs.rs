@@ -218,3 +218,24 @@ pub const GET_PLAYER_INPUT: Native = Native {
     outputs: crate::regs::ALL,
     exact_cost: true,
 };
+
+/// 0x2bdc : entrées des quatre joueurs effacées (mot des touches maintenues `+0x6c`, octet `+0x6e`).
+fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
+    for k in 0..4 {
+        let player = 0xff85de + 0x200 * k;
+        crate::mem::wr16(b, player + 0x6c, 0);
+        crate::mem::wr8(b, player + 0x6e, 0);
+    }
+    c.sr = c.sr & !0xf | m68k::SR_Z;
+    rts(c, b);
+}
+
+pub const CLEAR_PLAYER_INPUTS: Native = Native {
+    entry: 0x2bdc,
+    name: "clear_player_inputs",
+    cost: |_, _| 100,
+    run: clear_player_inputs,
+    touches_sound: false,
+    outputs: crate::regs::CCR,
+    exact_cost: false,
+};

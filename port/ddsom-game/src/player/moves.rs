@@ -256,6 +256,409 @@ fn put_down(g: &mut Ctx, p: Player, held: u32) {
     wr16(g.b, held + Obj::Y, y.wrapping_sub(8));
 }
 
+// ---- grimper (action 0x1a, 0x35e56) (h) ---------------------------------------------------------
+
+/// Champs de l'escalade.
+mod climb_field {
+    /// Phase du pas (0 : à préparer).
+    pub const PHASE: u32 = 0x1e0;
+    /// Images avant le pas d'oscillation suivant (modulo 4).
+    pub const SWAY_TIMER: u32 = 0x1e1;
+    /// Orientation au début du déplacement latéral.
+    pub const SIDE: u32 = 0x1e2;
+    /// Rang dans la table d'oscillation (`+0x4c`), modulo 32.
+    pub const SWAY: u32 = 0x2d;
+    pub const SPEED_TABLE: u32 = 0x4c;
+    /// Objet en main (`+0x140`) et nombre d'utilisations (`+0x15d`) du coup spécial de l'elfe.
+    pub const HELD_ITEM: u32 = 0x140;
+}
+
+/// Animation de l'attaque depuis l'escalade, par personnage (seconde table).
+const CLIMB_ATTACKS: u32 = 0x35eee;
+
+/// Action 0x1a (0x35e56) : grimper (h). Le joueur monte en Z par une table d'oscillation, se déplace
+/// selon les directions (haut : monte, bas : descend jusqu'au sol, côtés : marche ou course), et peut
+/// attaquer (bouton 1) ou, elfe muni d'une baguette, lancer un sort (bouton 4).
+pub fn climb(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => climb_start(g, p),
+        2 => climb_hold(g, p),
+        4 => climb_up(g, p),
+        6 => climb_down(g, p),
+        n @ (8 | 0xa | 0xc | 0xe) => climb_side(g, p, n),
+        0x10 => climb_attack(g, p),
+        0x12 => climb_spell(g, p),
+        _ => {
+            g.rom(0x35e56, p);
+            return;
+        }
+    }
+    if matches!(p.u8(g, Player::STEP), 0 | 0x10 | 0x12) {
+        return;
+    }
+    let pressed = p.u8(g, Player::KEYS_NEW);
+    if pressed & 0x10 != 0 {
+        p.set_u8(g, Player::STEP, 0x10);
+        let character = p.u8(g, Player::CHARACTER) as u32;
+        let anim = g.prog8(CLIMB_ATTACKS + character);
+        animation::start_plain(g, p, anim as u16);
+    } else if pressed & 0x80 != 0
+        && p.class(g) == 2
+        && p.u8(g, Player::SPECIAL_COUNT) == 2
+        && (0x24..=0x26).contains(&p.u8(g, climb_field::HELD_ITEM))
+    {
+        p.set_u8(g, Player::STEP, 0x12);
+        p.set_u8(g, Player::TIMER_6F, 0x1e);
+        animation::start_plain(g, p, 0x22);
+    }
+}
+
+/// Retour au maintien (pas 2), phase à préparer.
+fn climb_to_hold(g: &mut Ctx, p: Player) {
+    p.set_u8(g, Player::STEP, 2);
+    p.set_u8(g, climb_field::PHASE, 0);
+}
+
+/// Pas 0 : départ (vitesse de montée, table d'oscillation 1), puis montée jusqu'à 0x18 de hauteur.
+fn climb_start(g: &mut Ctx, p: Player) {
+    if p.u8(g, climb_field::PHASE) == 0 {
+        p.set_u8(g, climb_field::PHASE, 2);
+        p.set_u32(g, Obj::VZ, 0x0100_0000);
+        p.set_u8(g, climb_field::SWAY_TIMER, 4);
+        p.set_u8(g, climb_field::SWAY, 0);
+        g.c.d[0] = 1;
+        g.rom(0x1b64, p);
+        return animation::start(g, p, 0x3c);
+    }
+    move_z(g, p);
+    if p.u16(g, Obj::Z) > 0x18 {
+        next_step(g, p);
+        p.set_u8(g, climb_field::PHASE, 0);
+    }
+    animation::step(g, p);
+}
+
+/// Pas 2 : maintien : le joueur oscille en hauteur (table `+0x4c`) ; au sol, il reprend la pose.
+fn climb_hold(g: &mut Ctx, p: Player) {
+    if p.u8(g, climb_field::PHASE) == 0 {
+        p.set_u8(g, climb_field::PHASE, 2);
+        return animation::start(g, p, 0x3b);
+    }
+    let sway = p.u8(g, climb_field::SWAY) as u32;
+    let table = p.u32(g, climb_field::SPEED_TABLE);
+    let vz = g.data16(table + 4 * sway + 2);
+    p.set_u16(g, Obj::VZ, vz);
+    let z = (p.u32(g, Obj::Z) as i32).wrapping_add(((vz as u32) << 16) as i32 >> 8);
+    p.set_u32(g, Obj::Z, z as u32);
+    if z < 0 {
+        p.set_u32(g, Obj::Z, 0);
+        to_stand(g, p);
+        return;
+    }
+    let timer = p.u8(g, climb_field::SWAY_TIMER).wrapping_sub(1) & 3;
+    p.set_u8(g, climb_field::SWAY_TIMER, timer);
+    if timer == 0 {
+        p.set_u8(g, climb_field::SWAY_TIMER, 4);
+        let sway = (p.u8(g, climb_field::SWAY) + 1) & 0x1f;
+        p.set_u8(g, climb_field::SWAY, sway);
+    }
+    climb_directions(g, p);
+}
+
+/// `0x35f92` : choix du pas selon les directions maintenues (jeu gelé : descendre).
+fn climb_directions(g: &mut Ctx, p: Player) {
+    if g.a5u8(ram::FROZEN) != 0 {
+        p.set_u8(g, Player::STEP, 6);
+        return animation::start(g, p, 0x3d);
+    }
+    let dir = p.u8(g, Player::KEYS_HELD) & 0xf;
+    if dir == 0 {
+        animation::step(g, p);
+        return;
+    }
+    p.set_u8(g, climb_field::PHASE, 0);
+    if dir & 3 == 0 {
+        // vertical : bit 3 monte, sinon descend
+        let (step, anim) = if dir & 8 != 0 { (4, 0x3c) } else { (6, 0x3d) };
+        p.set_u8(g, Player::STEP, step);
+        return animation::start(g, p, anim);
+    }
+    let facing = if dir & 1 != 0 { 0x20 } else { 0 };
+    let (step, anim) = if facing == p.u8(g, Player::FACING) { (8, 0x3e) } else { (0xa, 0x3f) };
+    p.set_u8(g, Player::STEP, step);
+    let f = p.u8(g, Player::FACING);
+    p.set_u8(g, climb_field::SIDE, f);
+    animation::start(g, p, anim);
+}
+
+/// Pas 4 : monter tant que haut est maintenu (jusqu'à 0x80 au-dessus du haut de la caméra).
+fn climb_up(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::KEYS_HELD) & 0xf {
+        0 => {
+            climb_to_hold(g, p);
+            animation::step(g, p);
+        }
+        8 => {
+            let cam = if g.a5u8(ram::USE_ALT_CAMERA) != 0 { g.a5u16(0x55a) } else { g.a5u16(0x50a) };
+            let top = cam.wrapping_add(0x80);
+            let height = p.u16(g, Obj::Y).wrapping_add(p.u16(g, Obj::Z));
+            if height as i16 <= top as i16 {
+                let z = p.u16(g, Obj::Z).wrapping_add(2);
+                p.set_u16(g, Obj::Z, z);
+            }
+            animation::step(g, p);
+        }
+        _ => climb_directions(g, p),
+    }
+}
+
+/// Pas 6 : descendre tant que bas est maintenu (ou jeu gelé) ; au sol, la pose.
+fn climb_down(g: &mut Ctx, p: Player) {
+    if g.a5u8(ram::FROZEN) == 0 {
+        match p.u8(g, Player::KEYS_HELD) & 0xf {
+            0 => {
+                climb_to_hold(g, p);
+                animation::step(g, p);
+                return;
+            }
+            4 => {}
+            _ => return climb_directions(g, p),
+        }
+    }
+    let z = p.u16(g, Obj::Z).wrapping_sub(2);
+    p.set_u16(g, Obj::Z, z);
+    if (z as i16) < 0 {
+        p.set_u32(g, Obj::Z, 0);
+        to_stand(g, p);
+        return;
+    }
+    animation::step(g, p);
+}
+
+/// Pas 8 et 0xa (marche), 0xc et 0xe (course, limitée par `+0x69`) : déplacement latéral tant que la
+/// direction de départ (8, 0xc) ou l'opposée (0xa, 0xe) est maintenue ; sinon changement de sens.
+fn climb_side(g: &mut Ctx, p: Player, step: u8) {
+    let run = step >= 0xc;
+    if run {
+        let left = p.u8(g, Player::PARAM).wrapping_sub(1);
+        p.set_u8(g, Player::PARAM, left);
+        if left == 0 {
+            climb_to_hold(g, p);
+            animation::step(g, p);
+            return;
+        }
+    }
+    let dir = p.u8(g, Player::KEYS_HELD) & 0xf;
+    if dir == 0 {
+        climb_to_hold(g, p);
+        animation::step(g, p);
+        return;
+    }
+    if dir & 3 == 0 {
+        return climb_directions(g, p);
+    }
+    let first = step & 2 == 0;
+    let side = p.u8(g, climb_field::SIDE) != 0;
+    let bit = if side == first { 0 } else { 1 };
+    if dir & 3 & (1 << bit) == 0 {
+        let (next, anim) = if first { (0xa, 0x3f) } else { (8, 0x3e) };
+        p.set_u8(g, Player::STEP, next);
+        return animation::start(g, p, anim);
+    }
+    if run {
+        run_speed(g, p);
+    } else {
+        walk_speed(g, p);
+    }
+    move_xy(g, p);
+    animation::step(g, p);
+}
+
+/// Pas 0x10 : attaque depuis l'escalade ; l'événement d'animation lance son effet.
+fn climb_attack(g: &mut Ctx, p: Player) {
+    if animation::step(g, p) {
+        climb_to_hold(g, p);
+        animation::step(g, p);
+        return;
+    }
+    let event = p.u8(g, field::ANIM_EVENT);
+    if event != 0 {
+        p.set_u8(g, field::ANIM_EVENT, 0);
+        g.c.d[0] = event as u32;
+        g.rom(rom::ANIM_EVENT, p);
+    }
+}
+
+/// Pas 0x12 : sort de la baguette de l'elfe (`+0x140` = 0x24 à 0x26), lancé au geste.
+fn climb_spell(g: &mut Ctx, p: Player) {
+    animation::step(g, p);
+    let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    if (left as i8) < 0 {
+        climb_to_hold(g, p);
+    }
+    if p.u8(g, field::GESTURE) == 0 {
+        return;
+    }
+    p.set_u8(g, field::GESTURE, 0);
+    let spell = match p.u8(g, climb_field::HELD_ITEM) {
+        0x24 => 0x51f6a,
+        0x25 => 0x51fb6,
+        0x26 => 0x52002,
+        _ => return,
+    };
+    g.rom(spell, p);
+}
+
+// ---- sortie (action 0x20, 0x3632c) (h) ----------------------------------------------------------
+
+/// Champs de la sortie.
+mod exit_field {
+    /// Images restantes avant que le joueur soit masqué.
+    pub const TIMER: u32 = 0x1e8;
+    /// Étape du fondu de sa palette (0 à 3) et images avant l'étape suivante.
+    pub const FADE: u32 = 0x1e9;
+    pub const FADE_TIMER: u32 = 0x1ea;
+    /// Objet vers lequel le joueur saute (mot, `+0x86`).
+    pub const TARGET: u32 = 0x86;
+}
+
+/// Palettes du fondu : par étape (0x180 octets), par personnage (32 octets) ; destination par personnage.
+const EXIT_PALETTES: u32 = 0x3663e;
+const EXIT_PALETTE_SLOTS: u32 = 0x36626;
+
+/// Action 0x20 (0x3632c) : le joueur quitte la scène (h). Le pas de départ choisit la sortie : marche vers
+/// le bas, le haut, la gauche, la droite ou sur place (0 à 8), enfoncement (0xa) ou saut vers l'objet
+/// `+0x86` (0xc) ; le joueur est masqué au bout du délai, pendant que sa palette s'éteint en trois étapes.
+pub fn exit_scene(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => exit_walk(g, p, 0x1e, 0, 0x0001_0000, None, 0x25),
+        2 => exit_walk(g, p, 0x1e, 0, 0xffff_0000, None, 0x26),
+        4 => exit_walk(g, p, 0x28, 0xfe00_0000, 0, Some(0), 2),
+        6 => exit_walk(g, p, 0x28, 0x0200_0000, 0, Some(0x20), 2),
+        8 => {
+            exit_start(g, p, 0xe, 0x1e);
+            p.set_u8(g, Player::FACING, 0x20);
+            p.set_u32(g, Obj::VX, 0);
+            p.set_u32(g, Obj::VY, 0);
+            animation::start(g, p, 2);
+        }
+        0xa => {
+            p.set_u8(g, Player::STEP, 0x12);
+            p.set_u8(g, Obj::ACTIVE, 2);
+            p.set_u8(g, exit_field::TIMER, 0x30);
+            animation::start(g, p, 0x38);
+            p.set_u8(g, 0x3b, 0);
+        }
+        0xc => {
+            exit_start(g, p, 0x14, 0x1e);
+            p.set_u16(g, Obj::VX, 0xff00);
+            p.set_u16(g, Obj::AX, 0);
+            p.set_u16(g, Obj::VZ, 0x500);
+            p.set_u16(g, Obj::AZ, 0xffc8);
+            let target = p.u16(g, exit_field::TARGET) as i16 as i32 as u32;
+            p.set_u8(g, Player::FACING, 0);
+            if (p.u16(g, Obj::X).wrapping_sub(rd16(g.b, target + Obj::X)) as i16) < 0 {
+                p.set_u8(g, Player::FACING, 0x20);
+                let v = p.u16(g, Obj::VX).wrapping_neg();
+                p.set_u16(g, Obj::VX, v);
+            }
+            g.rom_d6(0x2cf0, p, 2);
+        }
+        0xe => {
+            move_xy(g, p);
+            animation::step(g, p);
+            if exit_countdown(g, p) {
+                next_step(g, p);
+                p.set_u8(g, 0x3b, 0);
+            }
+            exit_fade(g, p);
+        }
+        0x10 => {}
+        0x12 => {
+            let z = p.u16(g, Obj::Z).wrapping_sub(4);
+            p.set_u16(g, Obj::Z, z);
+            animation::step(g, p);
+            if exit_countdown(g, p) {
+                p.set_u8(g, Player::STEP, 0x10);
+            }
+            p.set_u8(g, 0x3b, 0);
+        }
+        0x14 => {
+            move_z(g, p);
+            let target = p.u16(g, exit_field::TARGET) as i16 as i32 as u32;
+            if p.u16(g, Obj::X) != rd16(g.b, target + Obj::X) {
+                move_x(g, p);
+            }
+            animation::step(g, p);
+            if exit_countdown(g, p) {
+                p.set_u8(g, Player::STEP, 0x10);
+            }
+            p.set_u8(g, 0x3b, 0);
+            exit_fade(g, p);
+        }
+        _ => {
+            g.rom(0x3632c, p);
+        }
+    }
+}
+
+/// Début d'une sortie : pas suivant `step`, joueur affiché sans ombre, délai, fondu prêt.
+fn exit_start(g: &mut Ctx, p: Player, step: u8, timer: u8) {
+    p.set_u8(g, Player::STEP, step);
+    p.set_u8(g, Obj::ACTIVE, 2);
+    p.set_u8(g, exit_field::TIMER, timer);
+    p.set_u8(g, exit_field::FADE, 0);
+    p.set_u8(g, exit_field::FADE_TIMER, 1);
+}
+
+/// Sortie en marchant (vitesses X et Y en longs, orientation éventuelle) ; en mode ralenti, animation 0x35.
+fn exit_walk(g: &mut Ctx, p: Player, timer: u8, vx: u32, vy: u32, facing: Option<u8>, anim: u16) {
+    exit_start(g, p, 0xe, timer);
+    if let Some(f) = facing {
+        p.set_u8(g, Player::FACING, f);
+    }
+    p.set_u32(g, Obj::VX, vx);
+    p.set_u32(g, Obj::VY, vy);
+    let anim = if g.a5u8(ram::SLOW_MODE) != 0 { 0x35 } else { anim };
+    animation::start(g, p, anim);
+}
+
+/// Le délai s'écoule ; à zéro, le joueur est masqué (vrai).
+fn exit_countdown(g: &mut Ctx, p: Player) -> bool {
+    let left = p.u8(g, exit_field::TIMER).wrapping_sub(1);
+    p.set_u8(g, exit_field::TIMER, left);
+    if left != 0 {
+        return false;
+    }
+    let flags = p.u8(g, Player::FLAGS) | 2;
+    p.set_u8(g, Player::FLAGS, flags);
+    true
+}
+
+/// Une étape du fondu toutes les 12 images (trois étapes) : palette du personnage recopiée de la table.
+fn exit_fade(g: &mut Ctx, p: Player) {
+    let stage = p.u8(g, exit_field::FADE);
+    if stage > 2 {
+        return;
+    }
+    let left = p.u8(g, exit_field::FADE_TIMER).wrapping_sub(1);
+    p.set_u8(g, exit_field::FADE_TIMER, left);
+    if left != 0 {
+        return;
+    }
+    let character = p.u8(g, Player::CHARACTER) as u32;
+    let from = EXIT_PALETTES + (0x180 * stage as u32 + (character << 5)) as u16 as i16 as i32 as u32;
+    let slot = g.data16(EXIT_PALETTE_SLOTS + 2 * character) as i16 as i32 as u32;
+    let to = 0x91c000u32.wrapping_add(slot);
+    for i in 0..8 {
+        let v = rd32(g.b, from + 4 * i);
+        wr32(g.b, to + 4 * i, v);
+    }
+    p.set_u8(g, exit_field::FADE_TIMER, 0xc);
+    p.set_u8(g, exit_field::FADE, stage + 1);
+}
+
 // ---- garde (actions 0x16 et 0x18, 0x35d52 et 0x35dca) ---------------------------------------------
 
 /// Garde au bouclier tant que le bouton `held` (bit 7 : spécial, bit 4 : attaque) est maintenu : le

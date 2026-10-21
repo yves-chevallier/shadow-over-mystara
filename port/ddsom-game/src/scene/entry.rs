@@ -154,11 +154,13 @@ fn clear_player(x: &mut Ctx, p: u32) {
 
 /// Place chaque joueur en jeu devant la caméra, d'après les tables de la scène (consommées dans
 /// l'ordre des joueurs en jeu).
-fn place_players(x: &mut Ctx) {
+pub fn place_players(x: &mut Ctx) {
     let scene = x.v8(var::SCENE) as u32;
     let mut positions = table::START_POSITIONS + (scene << 4);
     let mut states = table::START_STATES + (scene << 2);
     let camera = if x.v8(var::USE_ALT_CAMERA) != 0 { 0x556 } else { 0x506 };
+    // registres de l'original : D0/D1 = caméra (ou scène décalée), D2 = rang, D6 = -1, A1-A3 = fins
+    let (mut d0, mut d1) = (scene << 4, scene << 2);
     let mut rank = 0u8;
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
@@ -166,6 +168,7 @@ fn place_players(x: &mut Ctx) {
             continue;
         }
         let (dx, dy) = (x.v16(camera), x.v16(camera + 4));
+        (d0, d1) = (dx as u32, dy as u32);
         let (px, py) = (x.rd16(positions), x.rd16(positions + 2));
         positions += 4;
         wr16(x.b, p + 8, px.wrapping_add(dx));
@@ -177,7 +180,28 @@ fn place_players(x: &mut Ctx) {
         wr8(x.b, p + 0x7d, rank);
         rank += 1;
     }
+    x.c.d[0] = d0;
+    x.c.d[1] = d1;
+    x.c.d[2] = rank as u32;
+    x.c.d[6] = 0xffff;
+    x.c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
+    x.c.a[2] = positions;
+    x.c.a[3] = states;
 }
+
+/// 0x20de6 appelée par le code d'origine (sortie de scène) : `place_players`.
+pub const PLACE_PLAYERS: Native = Native {
+    entry: 0x20de6,
+    name: "scene_place_joueurs",
+    cost: |_, _| 200,
+    run: |c, b| {
+        place_players(&mut Ctx::new(c, b));
+        crate::mem::rts(c, b);
+    },
+    touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: false,
+};
 
 // ---------------------------------------------------------------------------------------------
 // Étape 2 : séquences d'ouverture

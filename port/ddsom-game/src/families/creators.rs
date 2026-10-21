@@ -18,6 +18,7 @@ const ALLOC_PEFF: u32 = 0x228e;
 const ALLOC_ESHL: u32 = 0x22ea;
 const ALLOC_SET: u32 = 0x2348;
 const ALLOC_ITEM: u32 = 0x23d8;
+const ALLOC_SOBJ: u32 = 0x2408;
 
 /// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
 fn alloc(c: &mut Cpu, b: &mut Cps2Bus, routine: u32) -> Option<Obj> {
@@ -228,6 +229,454 @@ fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0xd9778 : musique propre à la variante de la scène (`+3`, table d'indices 0xd9798, routines 0xd978c :
+/// rien (0xd99f8) ou la musique de la scène 0xe0c5c). D0 = décalage dans la table, A1 = la routine.
+fn scene_music(c: &mut Cpu, b: &mut Cps2Bus) {
+    let variant = rd8(b, c.a[0] + 3) as u32;
+    let i = 4 * prog8(b, 0xd9798 + variant) as u32;
+    c.d[0] = i;
+    c.a[1] = prog32(b, 0xd978c + i);
+    let target = c.a[1];
+    call(c, b, target);
+    rts(c, b);
+}
+
+/// 0xd99f8 : routine vide des tables de scène.
+fn nothing(c: &mut Cpu, b: &mut Cps2Bus) {
+    rts(c, b);
+}
+
+/// 0xce00a : objet SET 15 de variante D0.
+fn set_15(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(set) = alloc(c, b, ALLOC_SET) {
+        set.set_u8(b, 0x0, 1);
+        set.set_u8(b, 0x2, 0xf);
+        let v = c.d[0] as u8;
+        set.set_u8(b, 0x3, v);
+        moved(c, v as u32, Size::Byte);
+    }
+    rts(c, b);
+}
+
+/// 0xdfe26 : objet SOBJ 14.
+fn sobj_14(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(o) = alloc(c, b, ALLOC_SOBJ) {
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 0xe);
+        moved(c, 0xe, Size::Byte);
+    }
+    rts(c, b);
+}
+
+/// 0xdfc78 : objet SOBJ 12 de variante D0, vitesse nulle ; drapeaux de D0.b.
+fn sobj_12(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(o) = alloc(c, b, ALLOC_SOBJ) {
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 0xc);
+        let v = c.d[0] as u8;
+        o.set_u8(b, 0x3, v);
+        o.set_u16(b, 0x14, 0);
+        moved(c, v as u32, Size::Byte);
+    }
+    rts(c, b);
+}
+
+/// 0xdf688 : objet SOBJ 8 lié au créateur (`+0x14`), variante 1 si le créateur a lui-même un lien.
+fn sobj_8(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    if let Some(o) = alloc(c, b, ALLOC_SOBJ) {
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 8);
+        o.set_u16(b, 0x14, me as u16);
+        let linked = rd16(b, me + 0x14);
+        moved(c, linked as u32, Size::Word);
+        if linked != 0 {
+            o.set_u8(b, 0x3, 1);
+            moved(c, 1, Size::Byte);
+        }
+    }
+    rts(c, b);
+}
+
+/// 0xd5f30 : en partie, objet SET 0x14 (variante 0) lié au créateur (`+0x20`), retenu en `A5-0x5b8a`.
+fn set_20(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let game = rd8(b, A5 + 0x30);
+    moved(c, game as u32, Size::Byte);
+    if game != 0 {
+        if let Some(set) = alloc(c, b, ALLOC_SET) {
+            set.set_u8(b, 0x0, 1);
+            set.set_u8(b, 0x2, 0x14);
+            set.set_u16(b, 0x20, me as u16);
+            set.set_u8(b, 0x3, 0);
+            wr16(b, A5 - 0x5b8a, set.0 as u16);
+            moved(c, set.0 & 0xffff, Size::Word);
+        }
+    }
+    rts(c, b);
+}
+
+/// 0xd6952 : objet SET 0x15 (variante 2) dont `+0x42` vient de la table 0xd697c selon le type du créateur.
+fn set_21(c: &mut Cpu, b: &mut Cps2Bus) {
+    let kind = rd8(b, c.a[0] + 2) as u32;
+    if let Some(set) = alloc(c, b, ALLOC_SET) {
+        set.set_u8(b, 0x0, 1);
+        set.set_u8(b, 0x2, 0x15);
+        set.set_u8(b, 0x3, 2);
+        c.d[0] = 2 * kind;
+        let v = crate::mem::prog16(b, 0xd697c + 2 * kind);
+        set.set_u16(b, 0x42, v);
+        moved(c, v as u32, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// 0xc9760 : objet SET 5 (variante 1), `+0x24` nul.
+fn set_5(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(set) = alloc(c, b, ALLOC_SET) {
+        set.set_u8(b, 0x0, 1);
+        set.set_u8(b, 0x2, 5);
+        set.set_u8(b, 0x3, 1);
+        set.set_u8(b, 0x24, 0);
+        moved(c, 0, Size::Byte);
+    }
+    rts(c, b);
+}
+
+/// 0xd6182 : 44 cases d'une colonne de tuiles (A1, pas de 0x80) remplies de 0x00200000 (tuile vide).
+fn blank_column(c: &mut Cpu, b: &mut Cps2Bus) {
+    for _ in 0..0x2c {
+        crate::mem::wr32(b, c.a[1], 0x20_0000);
+        c.a[1] = c.a[1].wrapping_add(0x80);
+    }
+    c.d[0] = 0xffff;
+    c.d[4] = 0x20_0000;
+    rts(c, b);
+}
+
+/// 0xceb46 : fiche de bonus en A4 (octet de garde, puis 9 octets) : si la garde est positive, chaque
+/// caractéristique `+0x151..` du joueur A0 prend le maximum ; A4 passe la fiche.
+fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
+    let guard = rd8(b, c.a[4]);
+    c.a[4] = c.a[4].wrapping_add(1);
+    if (guard as i8) < 0 {
+        c.a[4] = c.a[4].wrapping_add(9);
+        return rts(c, b);
+    }
+    let mut at = c.a[0] + 0x151;
+    for _ in 0..9 {
+        let v = rd8(b, c.a[4]);
+        c.a[4] = c.a[4].wrapping_add(1);
+        c.d[1] = c.d[1] & !0xff | v as u32;
+        if v as i8 > rd8(b, at) as i8 {
+            wr8(b, at, v);
+        }
+        at += 1;
+    }
+    c.a[1] = at;
+    c.d[0] = 0xffff;
+    rts(c, b);
+}
+
+/// 0xcc0ca : la scène repart de son début (h) : caméras (0x33aa6), décor et palettes (0xf2e56, 0x1a360,
+/// 0x1a678, 0x1a8ac), luminosité pleine (0x1686) ; chaque joueur vivant revient en jeu normal (masqué et
+/// en entrée scénarisée s'il était à terre ou mort), est replacé (0x20de6) puis trié. A0 et D7 conservés.
+fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (a0, d7) = (c.a[0], c.d[7]);
+    call(c, b, 0x33aa6);
+    (c.a[0], c.d[7]) = (a0, d7);
+    call(c, b, 0xf2e56);
+    let (a0, d7) = (c.a[0], c.d[7]);
+    for routine in [0x1a360, 0x1a678, 0x1a8ac] {
+        call(c, b, routine);
+    }
+    (c.a[0], c.d[7]) = (a0, d7);
+    wr8(b, A5 + 0x48e, 0xf);
+    call(c, b, 0x1686);
+    wr16(b, A5 + 0x52, 0);
+    let alive = |b: &mut Cps2Bus, p: u32| rd8(b, p) != 0 && rd16(b, p + 0x62) != 0;
+    for k in 0..4 {
+        let p = A5 + 0x5de + 0x200 * k;
+        if !alive(b, p) {
+            continue;
+        }
+        wr8(b, p, 1);
+        let state = rd8(b, p + 4);
+        c.d[0] = c.d[0] & !0xff | state as u32;
+        crate::mem::wr32(b, p + 4, 0);
+        let flags = rd8(b, p + 1) & !2;
+        wr8(b, p + 1, flags);
+        for off in [0x66, 0x15c, 0x8a, 0x10f] {
+            wr8(b, p + off, 0);
+        }
+        if state as i8 > 2 {
+            wr8(b, p + 1, flags | 2);
+            wr16(b, p + 4, 0x402);
+        }
+    }
+    c.a[1] = A5 + 0x5de + 0x800;
+    call(c, b, 0x20de6);
+    let a0 = c.a[0];
+    for k in 0..4 {
+        let p = A5 + 0x5de + 0x200 * k;
+        if alive(b, p) {
+            c.a[0] = p;
+            call(c, b, 0x1ee1a);
+        }
+    }
+    c.a[0] = a0;
+    c.d[6] = 0xffff;
+    rts(c, b);
+}
+
+/// Tir de joueur créé : actif, type `kind`, résistances `+0x45`/`+0x46` lues dans deux tables (en clair)
+/// selon le niveau `+0x10c` du joueur (A4 garde la seconde table).
+fn shot_strength(c: &mut Cpu, b: &mut Cps2Bus, shot: Obj, level: u8, tables: (u32, u32)) {
+    let (a, d) = (rd8(b, tables.0 + level as u32), rd8(b, tables.1 + level as u32));
+    shot.set_u8(b, 0x45, a);
+    shot.set_u8(b, 0x46, d);
+    c.a[4] = tables.1;
+    moved(c, d as u32, Size::Byte);
+}
+
+/// 0x53e48 : éclair du joueur (PSHL 0x13), vitesses D0.w et D1.w, tant qu'il en reste (`A5-0x5fb4`).
+fn bolt_shot(c: &mut Cpu, b: &mut Cps2Bus) {
+    let left = rd16(b, A5 - 0x5fb4);
+    moved(c, left as u32, Size::Word);
+    if left == 0 {
+        return rts(c, b);
+    }
+    wr16(b, A5 - 0x5fb4, left - 1);
+    let me = Obj(c.a[0]);
+    if let Some(shot) = alloc(c, b, ALLOC_PSHL) {
+        shot.set_u8(b, 0x0, 1);
+        shot.set_u8(b, 0x2, 0x13);
+        shot.set_u16(b, 0x50, me.0 as u16);
+        shot.set_u16(b, 0x14, c.d[0] as u16);
+        shot.set_u16(b, 0x18, c.d[1] as u16);
+        let level = me.u8(b, 0x10c);
+        c.d[6] = level as u32;
+        shot_strength(c, b, shot, level, (0x1042a6, 0x1042c4));
+    }
+    rts(c, b);
+}
+
+/// 0x52578 : tir de type 5 à la position et dans l'orientation du créateur, même joueur ; pool plein : D0 = 0.
+fn shot_5(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    let Some(shot) = alloc(c, b, ALLOC_PSHL) else {
+        c.d[0] = 0;
+        moved(c, 0, Size::Long);
+        return rts(c, b);
+    };
+    shot.set_u8(b, 0x0, 1);
+    shot.set_u8(b, 0x2, 5);
+    for off in [0x8, 0xc, 0x10] {
+        let v = me.u16(b, off);
+        shot.set_u16(b, off, v);
+    }
+    let flip = me.u8(b, 0x2c);
+    shot.set_u8(b, 0x2c, flip);
+    let owner = me.u16(b, 0x50);
+    shot.set_u16(b, 0x50, owner);
+    let level = me.u8(b, 0x10c);
+    c.d[1] = level as u32;
+    shot_strength(c, b, shot, level, (0x10426a, 0x104288));
+    rts(c, b);
+}
+
+/// 0x54842 : tir de type 0x18 (variante 1, résistances 0x10) lié par `+0x5c` ; D0 = 1, ou 0 si le pool est plein.
+fn shot_18(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    c.d[0] = match alloc(c, b, ALLOC_PSHL) {
+        Some(shot) => {
+            shot.set_u8(b, 0x0, 1);
+            shot.set_u8(b, 0x2, 0x18);
+            shot.set_u8(b, 0x3, 1);
+            shot.set_u8(b, 0x45, 0x10);
+            shot.set_u8(b, 0x46, 0x10);
+            shot.set_u16(b, 0x5c, me as u16);
+            1
+        }
+        None => 0,
+    };
+    moved(c, c.d[0], Size::Long);
+    rts(c, b);
+}
+
+/// Effet de joueur (PEFF) de type `kind`, variante `variant`, lié au joueur (`+0x50`).
+fn peff(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: Option<u8>) -> Option<Obj> {
+    let me = c.a[0];
+    let fx = alloc(c, b, ALLOC_PEFF)?;
+    fx.set_u8(b, 0x0, 1);
+    fx.set_u8(b, 0x2, kind);
+    if let Some(v) = variant {
+        fx.set_u8(b, 0x3, v);
+    }
+    fx.set_u16(b, 0x50, me as u16);
+    moved(c, me & 0xffff, Size::Word);
+    Some(fx)
+}
+
+/// 0x4b8d0 : effet 0xb (variante 0).
+fn peff_b(c: &mut Cpu, b: &mut Cps2Bus) {
+    peff(c, b, 0xb, Some(0));
+    rts(c, b);
+}
+
+/// 0x4b518 : effet 8.
+fn peff_8(c: &mut Cpu, b: &mut Cps2Bus) {
+    peff(c, b, 8, None);
+    rts(c, b);
+}
+
+/// 0x51bb6 : effet 0x2f (sans lien).
+fn peff_2f(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(fx) = alloc(c, b, ALLOC_PEFF) {
+        fx.set_u8(b, 0x0, 1);
+        fx.set_u8(b, 0x2, 0x2f);
+        moved(c, 0x2f, Size::Byte);
+    }
+    rts(c, b);
+}
+
+/// 0x4cfbc : quatre effets 0x13 (variante 1, `+0x2f` = 3 à 0, `+0x5a` = 2), puis l'éclair d'écran (0x1ac68).
+fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    c.d[5] = 3;
+    loop {
+        let Some(fx) = alloc(c, b, ALLOC_PEFF) else { break };
+        fx.set_u8(b, 0x0, 1);
+        fx.set_u8(b, 0x2, 0x13);
+        fx.set_u8(b, 0x3, 1);
+        fx.set_u8(b, 0x2f, c.d[5] as u8);
+        fx.set_u8(b, 0x5a, 2);
+        fx.set_u16(b, 0x50, me as u16);
+        let n = (c.d[5] as u16).wrapping_sub(1);
+        c.d[5] = c.d[5] & !0xffff | n as u32;
+        if n == 0xffff {
+            break;
+        }
+    }
+    call(c, b, 0x1ac68);
+    rts(c, b);
+}
+
+/// 0x4b340 : D0.b nul, deux effets 7 (variante 0, `+0x2f` = 0 et 1) ; sinon un effet 7 de variante 1. Le
+/// pas `+7` du joueur est recopié en `+0x5d`.
+fn peff_7(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    let step = me.u8(b, 7);
+    if c.d[0] as u8 == 0 {
+        for index in [0, 1] {
+            let Some(fx) = alloc(c, b, ALLOC_PEFF) else { return rts(c, b) };
+            fx.set_u8(b, 0x0, 1);
+            fx.set_u8(b, 0x2, 7);
+            fx.set_u8(b, 0x3, 0);
+            fx.set_u8(b, 0x2f, index);
+            fx.set_u8(b, 0x5d, step);
+            fx.set_u16(b, 0x50, me.0 as u16);
+            moved(c, me.0 & 0xffff, Size::Word);
+        }
+    } else if let Some(fx) = alloc(c, b, ALLOC_PEFF) {
+        fx.set_u8(b, 0x0, 1);
+        fx.set_u8(b, 0x2, 7);
+        fx.set_u8(b, 0x3, 1);
+        fx.set_u8(b, 0x5d, step);
+        fx.set_u16(b, 0x50, me.0 as u16);
+        moved(c, me.0 & 0xffff, Size::Word);
+    }
+    rts(c, b);
+}
+
+const ALLOC_ENEMY: u32 = 0x22bc;
+
+/// 0x63ae0 : s'il reste plus de deux places d'ennemis (`A5+0x7e62`), deux ennemis de type 7 (variantes 0
+/// et 1) liés au créateur par `+0x46` ; D0 = 1, sinon 0 (l'allocation n'est pas vérifiée).
+fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    if rd16(b, A5 + 0x7e62) as i16 <= 2 {
+        c.d[0] = 0;
+        moved(c, 0, Size::Long);
+        return rts(c, b);
+    }
+    for variant in [0, 1] {
+        call(c, b, ALLOC_ENEMY);
+        let o = Obj(c.a[1]);
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 7);
+        o.set_u8(b, 0x3, variant);
+        o.set_u8(b, 0x2f, 0);
+        o.set_u16(b, 0x46, me as u16);
+    }
+    c.d[0] = 1;
+    moved(c, 1, Size::Long);
+    rts(c, b);
+}
+
+/// Ennemi de type `kind` (variante 5) placé en (D0, D1, D2) = (x, z, y), lié au créateur par `link` ;
+/// drapeaux de D0.b (`or.b D0b,D0b`).
+fn enemy_at(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, link: u32, extra: &[(u32, u8)]) {
+    let me = c.a[0];
+    if let Some(o) = alloc(c, b, ALLOC_ENEMY) {
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, kind);
+        o.set_u16(b, 0x8, c.d[0] as u16);
+        o.set_u16(b, 0xc, c.d[1] as u16);
+        o.set_u16(b, 0x10, c.d[2] as u16);
+        o.set_u16(b, link, me as u16);
+        o.set_u8(b, 0x3, 5);
+        for &(off, v) in extra {
+            o.set_u8(b, off, v);
+        }
+        moved(c, c.d[0] & 0xff, Size::Byte);
+    }
+    rts(c, b);
+}
+
+/// 0x5f764 : ennemi de type 5 en (D0, D1, D2), lié par `+0xa4`.
+fn enemy_5_at(c: &mut Cpu, b: &mut Cps2Bus) {
+    enemy_at(c, b, 5, 0xa4, &[]);
+}
+
+/// 0x57c8c : ennemi de type 1 en (D0, D1, D2), lié par `+0xaa` (`+0xac` = 1, `+0x2f` = 0).
+fn enemy_1_at(c: &mut Cpu, b: &mut Cps2Bus) {
+    enemy_at(c, b, 1, 0xaa, &[(0xac, 1), (0x2f, 0)]);
+}
+
+/// 0x57c66 : D0 = 1 si l'objet est à droite du milieu de l'écran (x >= caméra + 0xc0), sinon 0 ; D1.w =
+/// l'écart.
+fn right_half(c: &mut Cpu, b: &mut Cps2Bus) {
+    let alt = rd8(b, A5 + 0x36) != 0;
+    let cam = rd16(b, A5 + if alt { 0x556 } else { 0x506 });
+    let x = rd16(b, c.a[0] + 8);
+    let gap = cam.wrapping_add(0xc0).wrapping_sub(x);
+    c.d[1] = c.d[1] & !0xffff | gap as u32;
+    c.d[0] = if gap as i16 > 0 { 0 } else { 1 };
+    moved(c, c.d[0], Size::Long);
+    rts(c, b);
+}
+
+/// 0x5cdc6 : tirage au sort : D0 = 1 si le bit (hasard & 0xf) du masque 0x03ff est levé (10 chances sur 16).
+fn chance_10_16(c: &mut Cpu, b: &mut Cps2Bus) {
+    call(c, b, 0x19a88);
+    let bit = c.d[0] as u16 & 0xf;
+    c.d[1] = c.d[1] & !0xffff | 0x03ff;
+    c.d[0] = (0x03ff >> bit & 1) as u32;
+    moved(c, c.d[0], Size::Long);
+    rts(c, b);
+}
+
+/// 0x97218 : boss : `+0x67` = 1, `+0x79` = 0x31, état 0x02020400.
+fn boss_state_0202(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    me.set_u8(b, 0x67, 1);
+    me.set_u8(b, 0x79, 0x31);
+    me.set_u32(b, 0x4, 0x0202_0400);
+    moved(c, 0x0202_0400, Size::Long);
+    rts(c, b);
+}
+
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
     Native { entry, name, cost: |_, _| 100, run, touches_sound: false, outputs, exact_cost: false }
 }
@@ -244,5 +693,31 @@ pub const NATIVES: &[Native] = &[
     native(0xd981a, "fin_de_scene_variante", scene_exit, regs::d(0) | regs::a(1)),
     native(0xcc352, "cree_set_a", set_a_createur, CREATED),
     native(0xdc5fe, "cree_item_scene", scene_item, CREATED),
+    native(0xd9778, "musique_variante", scene_music, regs::d(0) | regs::a(1)),
+    native(0xd99f8, "scene_rien", nothing, regs::ALL),
+    native(0xce00a, "cree_set_15", set_15, CREATED),
+    native(0xd5f30, "cree_set_14", set_20, CREATED),
+    native(0xcc0ca, "scene_repart", restart_scene, regs::a(0) | regs::d(7)),
+    native(0x53e48, "cree_eclair_joueur", bolt_shot, CREATED | regs::d(6) | regs::a(4)),
+    native(0x52578, "cree_tir_5", shot_5, CREATED | regs::d(0) | regs::d(1) | regs::a(4)),
+    native(0x54842, "cree_tir_18", shot_18, CREATED | regs::d(0)),
+    native(0x4b8d0, "cree_effet_b", peff_b, CREATED),
+    native(0x4b518, "cree_effet_8", peff_8, CREATED),
+    native(0x51bb6, "cree_effet_2f", peff_2f, CREATED),
+    native(0x4cfbc, "cree_effets_13", peff_13_x4, CREATED | regs::d(5)),
+    native(0x4b340, "cree_effets_7", peff_7, CREATED),
+    native(0x63ae0, "cree_ennemis_7", enemy_7_pair, CREATED | regs::d(0)),
+    native(0x5f764, "cree_ennemi_5", enemy_5_at, CREATED),
+    native(0x57c8c, "cree_ennemi_1", enemy_1_at, CREATED),
+    native(0x57c66, "ennemi_moitie_droite", right_half, regs::d(0) | regs::d(1) | regs::CCR),
+    native(0x5cdc6, "hasard_10_16", chance_10_16, regs::d(0) | regs::d(1) | regs::CCR),
+    native(0x97218, "boss_etat_0202", boss_state_0202, regs::CCR),
+    native(0xd6952, "cree_set_15_b", set_21, CREATED | regs::d(0)),
+    native(0xc9760, "cree_set_5", set_5, CREATED),
+    native(0xd6182, "colonne_vide", blank_column, regs::a(1) | regs::d(0) | regs::d(4)),
+    native(0xceb46, "fiche_bonus", bonus_sheet, regs::a(1) | regs::a(4) | regs::d(0) | regs::d(1)),
+    native(0xdfe26, "cree_sobj_14", sobj_14, CREATED),
+    native(0xdfc78, "cree_sobj_12", sobj_12, CREATED),
+    native(0xdf688, "cree_sobj_8", sobj_8, CREATED),
     native(0xcc38e, "cree_set_a_joueur", set_a_joueur, CREATED | regs::a(4)),
 ];

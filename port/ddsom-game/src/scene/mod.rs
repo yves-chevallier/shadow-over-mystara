@@ -288,7 +288,7 @@ impl<'a> Ctx<'a> {
 }
 
 /// Routines natives du déroulement des scènes.
-pub const NATIVES: &[Native] = &[entry::PHASE_8, intermission::PHASE_24, script::SPAWN_SCRIPT, script::SCRIPT_RESET];
+pub const NATIVES: &[Native] = &[entry::PHASE_8, entry::PLACE_PLAYERS, intermission::PHASE_24, script::SPAWN_SCRIPT, script::SCRIPT_RESET];
 
 /// Routines natives de tous les modules des scènes.
 pub fn natives() -> impl Iterator<Item = &'static Native> {

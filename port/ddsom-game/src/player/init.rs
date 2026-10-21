@@ -456,3 +456,26 @@ pub const JOIN: &[Native] = &[
     join_entry!(0x3168, "player_join_refill_3", 2, Join::Refill),
     join_entry!(0x317c, "player_join_refill_4", 3, Join::Refill),
 ];
+
+/// 0x3552 appelée par le code d'origine (fin de partie, boutique) : registres laissés comme l'original
+/// (A4 = table du personnage, D0 = dernier numéro d'arme lu, doublé s'il est dans la table).
+fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let p = Player(c.a[0]);
+    let mut g = Ctx::new(c, b);
+    init_weapon_stats(&mut g, p);
+    let table = table_of(&mut g, p, tables::WEAPON_STATS);
+    let w = p.u8(&mut g, Player::WEAPON_B);
+    g.c.a[4] = table;
+    g.c.d[0] = if w <= 0x27 { (2 * w) as u32 } else { w as u32 };
+    rts(c, b);
+}
+
+pub const NATIVES: &[Native] = &[Native {
+    entry: 0x3552,
+    name: "player_weapon_stats",
+    cost: |_, _| 100,
+    run: weapon_stats_native,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::a(4),
+    exact_cost: false,
+}];

@@ -1290,6 +1290,28 @@ fn landing_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
     c.pc = c.a[1];
 }
 
+/// 0xfffc : `+0x98` (paramètre de comportement) lu dans la table 0x1000a selon le type `+2`.
+fn behaviour_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
+    let kind = rd8(b, c.a[0] + 2) as u32;
+    c.d[0] = kind;
+    let v = crate::mem::prog8(b, 0x1000a + kind);
+    wr8(b, c.a[0] + 0x98, v);
+    c.flags_logic(v as u32, Size::Byte);
+}
+
+/// 0x103ba : éclair d'écran (0x1ac68), secousse de 8 images (`A5+0x4be`) et effet 0xb141a, dont la
+/// variante `+3` est remise à zéro ; rien de plus si l'effet n'a pas pu être créé (retenue).
+fn flash_and_shake(c: &mut Cpu, b: &mut Cps2Bus) {
+    call(c, b, 0x1ac68);
+    wr16(b, A5 + 0x4be, 8);
+    call(c, b, 0xb141a);
+    if c.sr & SR_C != 0 {
+        return;
+    }
+    wr8(b, c.a[1] + 3, 0);
+    c.sr = c.sr & !0xf | SR_Z;
+}
+
 /// Native d'une fonction « corps » (sans RTS) : le RTS est ajouté.
 macro_rules! leaf {
     ($entry:literal, $name:literal, $body:path) => {
@@ -1301,6 +1323,8 @@ macro_rules! leaf {
 }
 
 pub const NATIVES: &[Native] = &[
+    Native { outputs: regs::d(0) | regs::CCR, ..leaf!(0xfffc, "ia_comportement_par_type", behaviour_by_kind) },
+    Native { outputs: regs::a(1) | regs::CCR, ..leaf!(0x103ba, "ia_eclair_secousse", flash_and_shake) },
     Native { outputs: regs::a(0) | regs::d(1) | regs::d(2), ..leaf!(0xe886, "ia_point_de_marche", choose_walk_point) },
     Native { outputs: regs::a(0) | regs::d(1) | regs::d(2), ..leaf!(0xe914, "ia_point_atteint", walk_point_reached) },
     Native { outputs: regs::a(0) | regs::d(1) | regs::d(2), ..leaf!(0xeff2, "ia_point_proche", walk_near_point) },

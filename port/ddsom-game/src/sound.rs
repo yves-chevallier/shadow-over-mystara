@@ -1,7 +1,7 @@
 //! Son côté 68000 : file de commandes envoyées au Z80 (format : `docs/son-68000.md`).
 //!
 //! Le jeu enfile ses commandes dans une file circulaire en RAM de travail (64 entrées de 16 octets) ;
-//! chaque image, le VBLANK en transmet **une** au Z80 par la RAM partagée 0x618000. Les quelque 430
+//! chaque image, le VBLANK en transmet **une** au Z80 par la RAM partagée 0x618000. Les quelque 520
 //! « wrappers » `sfx_*` (0xe0be2-0xede08) ne diffèrent que par leurs paramètres : ils sont décrits
 //! par la table `sound_table::WRAPPERS` et exécutés par une seule routine (`run_wrapper`).
 //!
@@ -282,6 +282,10 @@ pub enum Cmd {
     ParObjet(u32),
     /// Indice = 2 × octet 2 de l'objet.
     ParOctet2(u32),
+    /// La dernière commande gardée (`MEMO_COMMANDE`), rejouée.
+    Memo,
+    /// Commande passée par l'appelant dans D4.w (musique).
+    DuD4,
 }
 
 // Options d'un wrapper.
@@ -350,10 +354,13 @@ fn planifier(w: &Wrapper, c: &Cpu, b: &mut Cps2Bus) -> Plan {
             octet2 * 2 + ((octet3 & 0xe) << 2)
         }
         Cmd::ParOctet2(_) => rd8(b, c.a[0] + 2) as u16 * 2,
+        Cmd::Memo | Cmd::DuD4 => 0,
     };
     let d1 = match w.cmd {
         Cmd::Fixe(v) => v,
         Cmd::Alternee(t) | Cmd::ParObjet(t) | Cmd::ParOctet2(t) => lecture_programme(b, t + indice as i16 as u32),
+        Cmd::Memo => rd16(b, a5(c, ram::MEMO_COMMANDE)),
+        Cmd::DuD4 => c.d[4] as u16,
     };
     if w.opts & GARDE != 0 {
         let muet = rd8(b, a5(c, ram::MUET_GARDE)) != 0;
@@ -460,8 +467,6 @@ enum Aiguillage {
     /// Musique de la scène : D1.w = table[2 × scène] (rien si gardé, ou si D1 <= 0 / D1 < 0 selon
     /// `strict`), recopiée en mémo puis enfilée si le son est autorisé.
     Musique { table: u32, strict: bool },
-    /// Musique D4.w (rien si gardé).
-    MusiqueD4,
 }
 
 const AIGUILLAGES: &[(u32, Aiguillage)] = {
@@ -469,7 +474,6 @@ const AIGUILLAGES: &[(u32, Aiguillage)] = {
     &[
         (0xe0c5c, Musique { table: 0xe0ca6, strict: true }),
         (0xe0d8c, Musique { table: 0xe0dd6, strict: false }),
-        (0xe17a4, MusiqueD4),
         (0xe662a, ParVarianteEtGenre(0xe666c)),
         (0xe6910, ParD4(0xe694a)),
         (0xe7622, ParVariante(0xe765c)),
@@ -557,15 +561,6 @@ fn run_aiguillage(c: &mut Cpu, b: &mut Cps2Bus) {
                     }
                     crate::call(c, b, ENFILER_SI_SON.entry);
                 }
-            }
-            None
-        }
-        Aiguillage::MusiqueD4 => {
-            if rd8(b, a5(c, ram::MUET_GARDE)) == 0 {
-                let d1 = c.d[4] as u16;
-                c.d[1] = d1 as u32;
-                wr16(b, a5(c, ram::MEMO_COMMANDE), d1);
-                crate::call(c, b, ENFILER_SI_SON.entry);
             }
             None
         }
@@ -730,6 +725,17 @@ pub const INIT_PILE_PRIVEE: Native = Native {
     exact_cost: false,
 };
 
+/// 0xec238 : son vide (un simple `rts`), cible de l'aiguillage 0xec200 pour les objets sans son.
+pub const AUCUN: Native = Native {
+    entry: 0xec238,
+    name: "son_aucun",
+    cost: |_, _| 16,
+    run: rts,
+    touches_sound: false,
+    outputs: regs::ALL,
+    exact_cost: false,
+};
+
 /// Routines natives du son, hors wrappers (listées une à une dans `lib.rs::NATIVES`).
 pub const NATIVES: &[Native] = &[
     ENFILER_SI_SON,
@@ -744,4 +750,5 @@ pub const NATIVES: &[Native] = &[
     SELON_VERSION_A,
     SELON_VERSION_B,
     INIT_PILE_PRIVEE,
+    AUCUN,
 ];

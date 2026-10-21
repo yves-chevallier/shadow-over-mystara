@@ -135,6 +135,8 @@ fn run_action(g: &mut Ctx, p: Player) {
         action::TURN_ATTACK => moves::guard(g, p, 0x10),
         action::NO_TERRAIN_B => moves::hop(g, p),
         action::PUSH => moves::push(g, p),
+        action::CLIMB => moves::climb(g, p),
+        action::NO_TERRAIN_A => moves::exit_scene(g, p),
         action::SPELL_FIZZLE => moves::spell_fizzle(g, p),
         other => {
             let offset = g.prog16(ACTION_TABLE + other as u32) as i16 as i32;

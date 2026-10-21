@@ -114,6 +114,7 @@ pub const NATIVES: &[Native] = &[
     inputs::READ_INPUTS,
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
+    inputs::CLEAR_PLAYER_INPUTS,
     sprites::BUILD_SPRITE_LIST,
     sprites::RESET_LISTS,
     text::PRINT,
@@ -140,6 +141,7 @@ pub const NATIVES: &[Native] = &[
     sound::SELON_VERSION_A,
     sound::SELON_VERSION_B,
     sound::INIT_PILE_PRIVEE,
+    sound::AUCUN,
     rng::SEED,
     rng::NEXT,
     evenements::VIDER_POINTS,
@@ -166,6 +168,8 @@ pub const NATIVES: &[Native] = &[
     eeprom::VBLANK_COMPTA,
     eeprom::COMPTA_PARTIES,
     eeprom::COMPTA_INIT,
+    eeprom::STAT_PERSONNAGE,
+    eeprom::STAT_DUREE,
     config::VARIANTE,
     config::DEFAUTS,
     config::VALIDER,
@@ -217,6 +221,7 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(objects::NATIVES)
         .chain(player::NATIVES)
         .chain(player::init::JOIN)
+        .chain(player::init::NATIVES)
         .chain(video::NATIVES)
         .chain(palette::NATIVES)
         .chain(scroll::NATIVES)

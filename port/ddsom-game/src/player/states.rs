@@ -51,6 +51,8 @@ pub mod action {
     pub const SPECIAL_ALT: u8 = 0x16;
     /// Garde au bouclier tant que le bouton 1 est maintenu, prise pendant un demi-tour (`moves::guard`).
     pub const TURN_ATTACK: u8 = 0x18;
+    /// Grimper (h) (`moves::climb`).
+    pub const CLIMB: u8 = 0x1a;
     /// Pousse l'objet lié dans une direction (`moves::push`).
     pub const PUSH: u8 = 0x2e;
     /// Saisi par un adversaire (le joueur est tenu).
