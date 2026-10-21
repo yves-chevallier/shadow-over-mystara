@@ -70,8 +70,9 @@ mod var {
 }
 
 mod ext {
-    pub const SOUND_E03C6: u32 = 0xe03c6;
-    pub const SOUND_E03E4: u32 = 0xe03e4;
+    /// Arrête (et lance) la tâche du texte « INSERT COIN » clignotant (`taches/invite.rs`).
+    pub const INVITE_STOP: u32 = 0xe03c6;
+    pub const INVITE_START: u32 = 0xe03e4;
     pub const SOUND_E05D6: u32 = 0xe05d6;
     pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const SOUND_E0A10: u32 = 0xe0a10;
@@ -173,7 +174,7 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
     match step {
         0 => start_a(x),
         2 => {
-            x.call(ext::SOUND_E03E4);
+            x.call(ext::INVITE_START);
             loop_a(x)
         }
         6 => presentation_step(x),
@@ -187,7 +188,7 @@ resume!(R_RETURN_A, at::RETURN_A, |x| {
 
 /// Étape 0 : choisit l'un des deux scripts (alternativement), garde l'horloge de démonstration.
 fn start_a(x: &mut Ctx) -> Flow {
-    x.call(ext::SOUND_E03C6);
+    x.call(ext::INVITE_STOP);
     x.next_step();
     let which = rd_state(x, f::ALTERNATE);
     wr8(x.b, mode::BASE + f::ALTERNATE, which ^ 4);
@@ -470,7 +471,7 @@ resume!(R_END_SHOW, END_SHOW, |x| {
 /// `0x1fbd6` : mémorise les trois paramètres de la présentation et prépare l'affichage.
 fn presentation(x: &mut Ctx) -> Flow {
     let mut a1 = x.c.a[1];
-    x.call(ext::SOUND_E03C6);
+    x.call(ext::INVITE_STOP);
     wr8(x.b, mode::BASE + f::STEP, 6);
     wr16(x.b, mode::BASE + f::TIMER, 0);
     let b = rd8(x.b, a1);
@@ -719,7 +720,7 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
     x.push_return(at::RETURN_B);
     match step {
         0 => {
-            x.call(ext::SOUND_E03C6);
+            x.call(ext::INVITE_STOP);
             x.next_step();
             wr32(x.b, mode::BASE + f::SCRIPT, table::SCRIPT_B);
             let t = rd16(x.b, var::DEMO_TIME);
@@ -730,7 +731,7 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
             next_operation_b(x)
         }
         2 => {
-            x.call(ext::SOUND_E03E4);
+            x.call(ext::INVITE_START);
             loop_b(x)
         }
         4 => scene_next_b(x),

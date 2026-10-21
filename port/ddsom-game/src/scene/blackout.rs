@@ -3,19 +3,19 @@
 //! Trois sous-états (octet `+3` du bloc, pas de 2) : (0) fondu au noir, joueurs et objets remis à zéro, couches
 //! effacées, caméras à l'origine (la scène 105, fin du jeu, garde une caméra placée) ; (1) palettes de la scène
 //! suivante (table `0xf80c4`, quatre octets par scène) ; (2) script de transition propre à la scène (table de
-//! sauts `0xf81fa`, variables `A5-0x5520`), resté en 68000 : il cède la main à l'ordonnanceur à chaque pas.
+//! sauts `0xf81fa`, variables `A5-0x5520`, module [`super::transition`]).
 
 use super::bonus::{call_keep_a0, dispatch};
 use super::screen;
 use super::Ctx;
-use crate::mem::{prog16, rd8, wr16, wr8, A5};
+use crate::mem::{prog16, rd8, wr16, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::{resume, Native};
 
 const DISPATCH: u32 = 0xf7eda;
 /// Palettes de la scène suivante : ensemble de la page 0 (négatif : aucun), puis D0 de 0x1a60a, 0x1a67e, 0x1a8b2.
 const PALETTES: u32 = 0xf80c4;
-/// Scripts de transition, par scène (mots relatifs à la table).
+/// Scripts de transition, par scène (mots relatifs à la table) : D1 de l'aiguillage d'origine.
 const SCRIPTS: u32 = 0xf81fa;
 /// La scène 105 (fin du jeu) prend les palettes et le script de la scène 69.
 const FINALE: u8 = 105;
@@ -134,14 +134,15 @@ fn palettes(x: &mut Ctx) {
     x.call(0x168c);
 }
 
-/// Sous-état 2 : le script de transition de la scène, dans le code d'origine (il revient lui-même à l'appelant).
+/// Sous-état 2 : le script de transition de la scène (`transition`), avec les registres de l'aiguillage d'origine.
 fn script(x: &mut Ctx) -> Flow {
-    let index = 2 * table_scene(x);
+    let scene = table_scene(x);
+    let index = 2 * scene;
     x.c.d[0] = index;
-    x.c.a[6] = A5 - 0x5520;
+    x.c.a[6] = super::transition::VARS;
     let off = prog16(x.b, SCRIPTS + index);
     x.c.d[1] = x.c.d[1] & !0xffff | off as u32;
-    x.jump_to(SCRIPTS.wrapping_add(off as i16 as i32 as u32))
+    super::transition::run(x, scene)
 }
 
 pub const BLACKOUT: Native = Native {

@@ -127,8 +127,10 @@ Plan pour supprimer la machine 68000 :
 1. **Découper chaque tâche aux points de cession** (fait pour la machine à modes, la fin de partie, les crédits,
    la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `taches/`, voir [noyau.md](noyau.md), les tâches et
    sous-programmes de fondu (`taches/fondu.rs`), l'écran des scores `0x1835e` (`taches/ecran_fixe.rs`) et l'interface
-   joueurs `0x150ac` (`hud/`) ; restent, en 68000 : l'interface/menu TEST `0x29162` et les listes de bulles des boss
-   (`0x9b6`)).
+   joueurs `0x150ac` (`hud/`), les invites `0xe03fe` (`taches/invite.rs`) et les scripts de transition de la sortie de
+   scène, qui cédaient à presque chaque pas (`scene/transition/`) ; restent, en 68000 : le menu TEST `0x29162` et
+   l'écran `0x19068`, jamais atteint par les scénarios. Les « listes de bulles des boss » créées par `0x9b6` sont des
+   tâches de fondu, déjà en Rust).
    Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
    `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.
 2. **Remplacer l'enregistrement de tâche** : les champs SR/PC/USP/pile disparaissent au profit de

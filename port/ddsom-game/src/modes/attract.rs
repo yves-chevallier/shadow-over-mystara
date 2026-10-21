@@ -35,7 +35,8 @@ const TEXT_PALETTE: u32 = 0x53;
 const TILE_PLANE_3: u32 = 0x917000;
 const SOUND_SCREEN_A: u32 = 0xe0be2;
 const SOUND_SCREEN_B: u32 = 0xe0c16;
-const SOUND_E03C6: u32 = 0xe03c6;
+/// Arrête (et lance) la tâche du texte « INSERT COIN » clignotant (`taches/invite.rs`).
+const INVITE_STOP: u32 = 0xe03c6;
 
 /// Écran du sous-mode `sub`, s'il est réécrit.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
@@ -180,7 +181,7 @@ resume!(R_SECOND_SETUP, SECOND_SETUP, |x| {
     x.call(sub::CLEAR_SCROLL_3);
     x.set_v32(var::CAMERA, 0);
     x.set_v32(var::CAMERA_2, 0);
-    x.call(SOUND_E03C6);
+    x.call(INVITE_STOP);
     x.wait(1, SECOND_TILES)
 });
 const SECOND_TILES: u32 = 0x1389e;
