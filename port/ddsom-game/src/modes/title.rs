@@ -61,8 +61,9 @@ mod ext {
     pub const SOBJ_VARIANT: u32 = 0xddeaa;
     pub const SET_VARIANT: u32 = 0xce00a;
     pub const SOUND_E0EBC: u32 = 0xe0ebc;
-    pub const SOUND_E03C6: u32 = 0xe03c6;
-    pub const SOUND_E03E4: u32 = 0xe03e4;
+    /// Arrête (et lance) la tâche du texte « INSERT COIN » clignotant (`taches/invite.rs`).
+    pub const INVITE_STOP: u32 = 0xe03c6;
+    pub const INVITE_START: u32 = 0xe03e4;
     pub const SOUND_E185C: u32 = 0xe185c;
     pub const PALETTE_SET: u32 = 0x1a67e;
     pub const PALETTE_FADE: u32 = 0x1a8b2;
@@ -638,7 +639,7 @@ pub fn title_text(x: &mut Ctx) -> Flow {
 const T1C_TEXT: u32 = 0xfa88e;
 resume!(R_T1C_TEXT, T1C_TEXT, |x| {
     x.render();
-    x.call(ext::SOUND_E03E4);
+    x.call(ext::INVITE_START);
     x.set_m16(f::TIMER, 300);
     x.c.a[4] = 0xfacc4;
     x.call(ext::PRINT);
@@ -703,7 +704,7 @@ fn leave_wait(x: &mut Ctx, loop_resume: u32, cleared: u32, second_title: bool) -
 resume!(R_T1E_WAIT, T1E_FADED, |x| leave_wait(x, T1E_FADED, T1E_CLEARED, false));
 const T1E_CLEARED: u32 = 0xfa94e;
 resume!(R_T1E_CLEARED, T1E_CLEARED, |x| {
-    x.call(ext::SOUND_E03C6);
+    x.call(ext::INVITE_STOP);
     x.call(sub::CLEAR_SCROLL_1);
     x.call(sub::CLEAR_SCROLL_2);
     x.or16(var::LAYERS, LAYER_BITS);
@@ -722,7 +723,7 @@ resume!(R_T1E_DONE, T1E_DONE, |x| {
 fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
     match step {
         0 => {
-            x.call(ext::SOUND_E03C6);
+            x.call(ext::INVITE_STOP);
             x.next_step();
             reset_objects(x);
             Flow::Done

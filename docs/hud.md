@@ -3,14 +3,16 @@
 Code : `port/ddsom-game/src/hud/` (`mod.rs` la tâche et les structures, `slot.rs` la machine à états d'un
 emplacement, `draw.rs` et `choice.rs` le dessin, `select.rs` le choix du personnage, `status.rs` la ligne d'état
 et la fin de partie, `layer.rs` la couche de caractères). `A5` = 0xFF8000. Toutes les routines de `0x15000` à
-`0x18300` (sauf les initialisations de la tâche, `0x150ac` à `0x15170`, qui ne tournent qu'une fois) sont
-réécrites ; validé par la comparaison image par image (`tools/validate_all.sh`).
+`0x18300`, initialisations de la tâche comprises, sont réécrites ; validé par la comparaison image par image (`tools/validate_all.sh`).
 
 ## La tâche (`0x150ac`)
 
-Créée en fin de phase 0 de la partie (slot 0x30 de l'ordonnanceur). Après son initialisation elle boucle sur
-`0x15178` et cède une image à chaque tour (`jsr 0xb64`, reprise en `0x15212`). Les deux adresses sont des
-natives de reprise (`resume!`, voir `tache_credits.rs`) : un tour entier est un appel Rust.
+Créée en fin de phase 0 de la partie (slot 0x30 de l'ordonnanceur). Son entrée (`0x150ac`, native `ENTRY`) remet
+les panneaux à zéro (numéro de joueur en `+0`) et les variables de la tâche, puis cède une image à la fois (reprise
+`0x15146`, native `STARTING`) : la disposition `A5+0x344` vient du type de borne (`A5+0x20`, table `0x15164`) ; hors
+partie, mode 1 et disposition 0 ; en partie, elle attend la phase 4. Elle boucle ensuite sur `0x15178` et cède une
+image à chaque tour (`jsr 0xb64`, reprise en `0x15212`). Toutes ces adresses sont des natives de reprise (`resume!`,
+voir `tache_credits.rs`) : un tour entier est un appel Rust, et la tâche n'exécute plus de 68000.
 
 Un tour (`hud::tour`) :
 

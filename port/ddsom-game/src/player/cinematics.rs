@@ -29,8 +29,6 @@ mod rom {
     pub const INTRO_SOUND: u32 = 0xab708;
     /// Étincelles de la sortie (D0 = variante).
     pub const SPARKLES: u32 = 0xb378a;
-    /// Réaction de chute (pas propres, `+7`).
-    pub const FALL: u32 = 0x3b960;
 }
 
 /// Étape du script de la scène (octet), attendue par les joueurs.
@@ -466,7 +464,7 @@ const END_2447E: Steps = &[
         anim_step(g, p);
     }),
     (0x245b8, |g, p| {
-        g.rom(rom::FALL, p);
+        super::hurt::fall(g, p);
         clamp_to_screen(g.b, p);
     }),
     (0x245c4, |g, p| {

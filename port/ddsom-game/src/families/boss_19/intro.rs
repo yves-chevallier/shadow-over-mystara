@@ -133,7 +133,7 @@ fn green_land(x: &mut Cx) {
 
 // --- type 19, variante 0 -----------------------------------------------------------------------------
 
-/// Ouvre une liste de bulles de texte (0x9b6 avec A0 = la liste `list`).
+/// Lance la tâche de fondu `list` (0x9b6 avec A0 = l'entrée, emplacement 0x10 ; `taches/fondu.rs`).
 fn open_list(x: &mut Cx, list: u32) {
     let me = x.o.0;
     x.c.a[0] = list;
