@@ -50,13 +50,11 @@ mod table {
 
 /// Sous-routines d'initialisation de scène appelées à l'étape 0.
 mod init {
-    pub const SCENE_RESET_A: u32 = 0xe0538;
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const SCENE_LOAD: u32 = 0x33aa6;
     pub const POOLS_INIT: u32 = 0x2062;
     pub const PALETTES: u32 = 0x1a296;
     pub const HOOKS: [u32; 5] = [0x19aa2, 0x19abc, 0x19db4, 0x19e10, 0xf3130];
-    pub const PLAYER_UI: u32 = 0x1507a;
 }
 
 /// Variables de RAM de travail hors de la page A5 ± 0x7fff, remises à zéro à l'entrée.
@@ -110,13 +108,14 @@ fn init_scene(x: &mut Ctx) {
     let (pa, pb) = (x.rd8(table::PALETTE_A + scene), x.rd8(table::PALETTE_B + scene));
     x.set_v8(0x48, pa);
     x.set_v8(0x49, pb);
-    for routine in [init::SCENE_RESET_A, init::SPRITES_RESET, init::SCENE_LOAD, script::RESET_ENTRY, init::POOLS_INIT, init::PALETTES]
+    crate::modes::demo::reset_recorder(x.c, x.b);
+    for routine in [init::SPRITES_RESET, init::SCENE_LOAD, script::RESET_ENTRY, init::POOLS_INIT, init::PALETTES]
         .into_iter()
         .chain(init::HOOKS)
-        .chain([init::PLAYER_UI])
     {
         x.call(routine);
     }
+    crate::hud::forget_displayed(x.b);
     for k in 0..4 {
         clear_player(x, PLAYERS + k * PLAYER_STRIDE);
     }

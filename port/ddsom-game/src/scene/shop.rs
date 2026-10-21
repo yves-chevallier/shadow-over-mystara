@@ -176,7 +176,7 @@ resume!(SHOP_OPEN_FADED, at::OPEN_FADED, |x| {
     set_b16(x, 0x20, 0);
     x.set_v8(0x3d, 0);
     x.call(0xca8);
-    x.call(0x1507a);
+    crate::hud::forget_displayed(x.b);
     x.call(sub::ALLOC_SOBJ);
     if x.c.sr & m68k::SR_C != 0 {
         return x.jump_to(sub::FULL);

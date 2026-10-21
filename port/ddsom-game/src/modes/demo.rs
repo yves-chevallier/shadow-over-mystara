@@ -15,6 +15,9 @@
 //! gestionnaire de la phase courante (8 : entrée de scène ; 12 : le jeu, mené par l'IA) jusqu'à la fin de la
 //! durée. Étapes de l'écran (`FF0E72`) : 0 début de script, 2 scène en cours, 6 présentation d'un personnage.
 
+use cps2::Cps2Bus;
+use m68k::Cpu;
+
 use super::{mode, Block, Flow, Sequence};
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::pools;
@@ -72,7 +75,7 @@ mod var {
 mod ext {
     pub const SOUND_E03C6: u32 = 0xe03c6;
     pub const SOUND_E03E4: u32 = 0xe03e4;
-    pub const SOUND_E05D6: u32 = 0xe05d6;
+    pub const RNG_SEED: u32 = 0x19a80;
     pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const SOUND_E0A10: u32 = 0xe0a10;
     pub const KILL_TASK: u32 = 0xa14;
@@ -398,7 +401,7 @@ fn scene_end_a(x: &mut Ctx) -> Flow {
 }
 /// Enchaîne le nettoyage commun puis la cession d'une image dont la reprise est `resume`.
 fn scene_end_common(x: &mut Ctx, resume: u32) -> Flow {
-    x.call(ext::SOUND_E05D6);
+    stop_recorder(x.b);
     wr8(x.b, var::PHASE, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     set_low_word(&mut x.c.d[0], 0x30);
@@ -430,7 +433,7 @@ fn end_of_script(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::BASE + f::SUB, s);
     restore_clock(x);
     scene_cleanup_1(x);
-    x.call(ext::SOUND_E05D6);
+    stop_recorder(x.b);
     wr8(x.b, var::PHASE, 0);
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
@@ -825,7 +828,7 @@ fn ending_b(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::BASE + f::SUB, s);
     restore_clock(x);
     scene_cleanup_1(x);
-    x.call(ext::SOUND_E05D6);
+    stop_recorder(x.b);
     wr8(x.b, var::PHASE, 0);
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
@@ -917,6 +920,79 @@ fn demo_inputs(x: &mut Ctx) {
     }
 }
 
+/// `0xe0538` (entrée de scène, hors partie) : prépare l'enregistreur. Réglage bit 13 : graine du hasard et
+/// compteurs d'images à zéro, puis relecture active ; bit 15 : enregistrement en 0x930000 ; sinon relecture
+/// (inactive) de la démonstration pointée par `A5-0x5aa8`.
+pub fn reset_recorder(c: &mut Cpu, b: &mut Cps2Bus) {
+    const DEMO: u32 = A5 - 0x5aa8;
+    const RECORD_AREA: u32 = 0x93_0000;
+    if rd8(b, var::GAME) != 0 {
+        return;
+    }
+    wr16(b, rec::LEFT, 0);
+    wr8(b, rec::RECORDING, 0);
+    wr8(b, rec::PLAYING, 0);
+    wr8(b, rec::ACTIVE, 0);
+    let dsw = rd16(b, var::DSW);
+    c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
+    if dsw & 0x2000 != 0 {
+        crate::call(c, b, ext::RNG_SEED);
+        wr16(b, A5 + 0x6c, 0);
+        wr16(b, A5 + 0x6e, 0);
+        wr16(b, A5 + 0x7f92, 0xe);
+        wr8(b, rec::ACTIVE, 1);
+    } else if dsw & 0x8000 != 0 {
+        wr32(b, rec::POINTER, RECORD_AREA);
+        for off in [0, 4, 8] {
+            wr32(b, RECORD_AREA + off, 0xffff_ffff);
+        }
+        wr16(b, RECORD_AREA + 0xc, 0xffff);
+        wr8(b, rec::RECORDING, 1);
+        return;
+    }
+    let demo = rd32(b, DEMO);
+    c.a[0] = demo;
+    wr32(b, rec::POINTER, demo);
+    let length = rd16(b, demo);
+    wr16(b, rec::LEFT, length);
+    wr8(b, rec::PLAYING, 1);
+}
+
+/// `0xe05d6` : arrête l'enregistreur.
+pub fn stop_recorder(b: &mut Cps2Bus) {
+    wr16(b, rec::LEFT, 0);
+    for flag in [rec::RECORDING, rec::PLAYING, rec::ACTIVE] {
+        wr8(b, flag, 0);
+    }
+    wr32(b, A5 - 0x5aa8, 0);
+}
+
+pub const RECORDER_RESET: Native = Native {
+    entry: 0xe0538,
+    name: "demo_enregistreur_depart",
+    cost: |_, _| 100,
+    run: |c, b| {
+        reset_recorder(c, b);
+        crate::mem::rts(c, b);
+    },
+    touches_sound: false,
+    outputs: crate::regs::d(5) | crate::regs::a(0),
+    exact_cost: false,
+};
+
+pub const RECORDER_STOP: Native = Native {
+    entry: 0xe05d6,
+    name: "demo_enregistreur_arret",
+    cost: |_, _| 50,
+    run: |c, b| {
+        stop_recorder(b);
+        crate::mem::rts(c, b);
+    },
+    touches_sound: false,
+    outputs: 0,
+    exact_cost: false,
+};
+
 /// Enregistrement : l'entrée courante dure une image de plus tant que les entrées ne changent pas (et que sa durée
 /// tient sur 16 bits) ; sinon sa durée est écrite et une nouvelle entrée commence.
 fn record_inputs(x: &mut Ctx) {
@@ -974,6 +1050,8 @@ pub const DEMO_PHASE_12: Native = Native {
 
 pub const NATIVES: &[Native] = &[
     DEMO_PHASE_12,
+    RECORDER_RESET,
+    RECORDER_STOP,
     R_RETURN_A,
     R_LOOP_A,
     R_AFTER_YIELD_A,

@@ -17,6 +17,7 @@ const ALLOC_PSHL: u32 = 0x225e;
 const ALLOC_PEFF: u32 = 0x228e;
 const ALLOC_ESHL: u32 = 0x22ea;
 const ALLOC_SET: u32 = 0x2348;
+const ALLOC_ITEM: u32 = 0x23d8;
 
 /// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
 fn alloc(c: &mut Cpu, b: &mut Cps2Bus, routine: u32) -> Option<Obj> {
@@ -173,6 +174,60 @@ fn scene_exit(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// Un seul objet SET 0xa à la fois (`A5-0x5b8c`), et aucun pendant `A5-0x5fbe`.
+const SET_A_ACTIF: u32 = A5 - 0x5b8c;
+const SET_A_BLOQUE: u32 = A5 - 0x5fbe;
+
+/// 0xcc352 / 0xcc38e : objet SET 0xa de variante D0 (effet d'un objet utilisé), qui retient la classe de
+/// `classe` (`+0x2f`) ; refusé (retenue seule, `move #1,CCR`) s'il en existe déjà un ou si le pool est plein.
+fn set_a(c: &mut Cpu, b: &mut Cps2Bus, classe: fn(&mut Cpu, &mut Cps2Bus) -> u8) {
+    let cree = (rd8(b, SET_A_ACTIF) == 0 && rd8(b, SET_A_BLOQUE) == 0).then(|| alloc(c, b, ALLOC_SET)).flatten();
+    match cree {
+        Some(set) => {
+            wr8(b, SET_A_ACTIF, 1);
+            set.set_u8(b, 0x0, 1);
+            set.set_u8(b, 0x2, 0xa);
+            set.set_u8(b, 0x3, c.d[0] as u8);
+            let v = classe(c, b);
+            set.set_u8(b, 0x2f, v);
+            moved(c, v as u32, Size::Byte);
+        }
+        None => c.sr = c.sr & 0xff00 | SR_C,
+    }
+    rts(c, b);
+}
+
+/// 0xcc352 : la classe est celle du créateur (A0).
+fn set_a_createur(c: &mut Cpu, b: &mut Cps2Bus) {
+    set_a(c, b, |c, b| rd8(b, c.a[0] + 3));
+}
+
+/// 0xcc38e : la classe est celle du joueur lié au créateur (`+0x50`, laissé dans A4).
+fn set_a_joueur(c: &mut Cpu, b: &mut Cps2Bus) {
+    set_a(c, b, |c, b| {
+        c.a[4] = rd16(b, c.a[0] + 0x50) as i16 as i32 as u32;
+        rd8(b, c.a[4] + 3)
+    });
+}
+
+/// 0xdc5fe : objet ITEM 6 (objet de scène) de variante D0, sauf quand `A5-0x5ac6` est négatif (le
+/// drapeau N du test reste alors levé) ; retenue si le pool est plein.
+fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
+    let niveau = rd8(b, A5 - 0x5ac6);
+    if (niveau as i8) < 0 {
+        moved(c, niveau as u32, Size::Byte);
+        return rts(c, b);
+    }
+    if let Some(item) = alloc(c, b, ALLOC_ITEM) {
+        item.set_u8(b, 0x0, 1);
+        item.set_u8(b, 0x2, 6);
+        item.set_u8(b, 0x3, c.d[0] as u8);
+        item.set_u8(b, 0x2f, 0);
+        moved(c, 0, Size::Byte);
+    }
+    rts(c, b);
+}
+
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
     Native { entry, name, cost: |_, _| 100, run, touches_sound: false, outputs, exact_cost: false }
 }
@@ -187,4 +242,7 @@ pub const NATIVES: &[Native] = &[
     native(0xcdedc, "cree_set_13", set_13, CREATED),
     native(0xc8312, "cree_set_scene", scene_set, regs::d(0) | CREATED),
     native(0xd981a, "fin_de_scene_variante", scene_exit, regs::d(0) | regs::a(1)),
+    native(0xcc352, "cree_set_a", set_a_createur, CREATED),
+    native(0xdc5fe, "cree_item_scene", scene_item, CREATED),
+    native(0xcc38e, "cree_set_a_joueur", set_a_joueur, CREATED | regs::a(4)),
 ];

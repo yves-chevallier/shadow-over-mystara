@@ -21,7 +21,7 @@ use m68k::Cpu;
 
 use crate::mem::{prog16, rd16, rd8, rts, wr16, wr32, wr8};
 use crate::text::clear_cells;
-use crate::Native;
+use crate::{regs, Native};
 
 const VIDE: u16 = 0xffff;
 /// Pop-up courant (4 mots) ; la durée restante est le dernier.
@@ -208,6 +208,35 @@ fn animer(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     suivant(c, b, courant);
 }
+
+/// 0x19eb0 : efface les bulles de tous les emplacements (4, ou 3 réduits), du dernier au premier.
+fn effacer_tout(c: &mut Cpu, b: &mut Cps2Bus) {
+    let petit = reduit(b, c.a[5]);
+    let table = rom::EFFACEMENTS[petit as usize];
+    let dernier = if petit { 2 } else { 3 };
+    for emplacement in (0..=dernier).rev() {
+        let case = table + 4 * emplacement;
+        let (col, row, largeur, hauteur) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
+        clear_cells(b, col, row, largeur, hauteur);
+    }
+    // registres de la boucle d'origine : D6 = -1 (dbf), A2 = la table, A4 = hauteur de sa première case
+    c.d[6] |= 0xffff;
+    c.a[2] = table;
+    c.a[4] = table + 3;
+}
+
+pub const EFFACER_TOUT: Native = Native {
+    entry: 0x19eb0,
+    name: "popups_effacer_tout",
+    cost: |_, _| 300,
+    run: |c, b| {
+        effacer_tout(c, b);
+        rts(c, b);
+    },
+    touches_sound: false,
+    outputs: regs::d(6) | regs::a(2) | regs::a(4),
+    exact_cost: false,
+};
 
 pub const ANIMER: Native = Native {
     entry: 0x19e20,

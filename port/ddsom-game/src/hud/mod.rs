@@ -38,6 +38,8 @@ mod select;
 mod slot;
 mod status;
 
+pub use slot::forget_displayed;
+
 use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
@@ -223,9 +225,57 @@ mod at {
     pub const LOOP: u32 = 0x15178;
     pub const AFTER_WAIT: u32 = 0x15212;
     pub const WAIT_ONE_FRAME: u32 = 0xb64;
+    /// Attente du début de la partie, après la création de la tâche.
+    pub const START_WAIT: u32 = 0x15146;
     /// Services de l'interface appelés à chaque tour (entrées des pièces, sons...).
     pub const SERVICES: [u32; 2] = [0x19b2a, 0x19b9c];
 }
+
+// `0x150ac` : création de la tâche. Panneaux remis à zéro (champs d'état et numéros des joueurs), variables
+// de la tâche initialisées, puis attente d'une image.
+resume!(ENTRY, 0x150ac, |x| {
+    for k in 0..4 {
+        let s = Slot::new(k);
+        s.set_p32(x.b, panel::INDEX, 0);
+        s.set_p32(x.b, panel::STATE, 0);
+        s.set_p8(x.b, panel::STEP, 0);
+        s.set_p8(x.b, panel::SUBSTEP, 0);
+        s.set_p8(x.b, 0x30, 0);
+        s.set_p32(x.b, panel::FRAMES, 0);
+    }
+    wr32(x.b, A5 - 0x7136, 0);
+    wr8(x.b, A5 - 0x713a, 0);
+    wr8(x.b, var::SEEN_DISPLAY, 0x80);
+    wr8(x.b, A5 - 0x70f8, 0);
+    wr8(x.b, A5 + 0x5f, 1);
+    let pause = x.v8(var::PAUSE);
+    wr8(x.b, var::SEEN_PAUSE, pause);
+    for k in 1..4 {
+        Slot::new(k).set_p8(x.b, panel::INDEX, k as u8);
+    }
+    x.c.d[0] = 0;
+    x.tail(at::WAIT_ONE_FRAME, at::START_WAIT)
+});
+
+// `0x15146` : la disposition suit le mode des monnayeurs ; pendant une partie, la tâche attend la phase 4
+// avant de boucler ; hors partie, elle affiche le mode 1 et redessine les panneaux.
+resume!(START_WAIT, at::START_WAIT, |x| {
+    const LAYOUTS: u32 = 0x15164;
+    let mode = x.v8(0x20) as u32;
+    x.c.d[0] = mode;
+    let layout = crate::mem::prog8(x.b, LAYOUTS + mode);
+    wr8(x.b, A5 + var::LAYOUT, layout);
+    if x.v8(var::GAME_ON) != 0 {
+        if (x.v8(var::PHASE) as i8) < 4 {
+            return x.tail(at::WAIT_ONE_FRAME, at::START_WAIT);
+        }
+    } else {
+        wr8(x.b, A5 + var::DISPLAY, 1);
+        wr8(x.b, A5 + var::LAYOUT, 0);
+        slot::forget_displayed(x.b);
+    }
+    tour(x)
+});
 
 resume!(LOOP, at::LOOP, |x| tour(x));
 resume!(AFTER_WAIT, at::AFTER_WAIT, |x| tour(x));
@@ -259,4 +309,4 @@ fn tour(x: &mut Ctx) -> Flow {
 }
 
 /// Routines natives de l'interface des joueurs.
-pub const NATIVES: &[Native] = &[LOOP, AFTER_WAIT];
+pub const NATIVES: &[Native] = &[ENTRY, START_WAIT, LOOP, AFTER_WAIT];

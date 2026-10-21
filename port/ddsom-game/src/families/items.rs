@@ -1019,6 +1019,140 @@ fn icone_attente(ctx: &mut Ctx, o: Obj) {
     ctx.reinsert();
 }
 
+/// État 4 de l'icône (`0xdc9b8`) : l'icône quitte la scène. Elle part (étincelle, son, routine propre à son
+/// mode), marche en X jusqu'à sortir de l'écran, ou s'arrête près du joueur, crée un SET et attend comme le
+/// guide (`0xdcc5a`, `0xdcc82`).
+mod depart {
+    pub const SOUS_ETATS: u32 = 0xdc9c4;
+    /// Par mode : routine appelée au départ (longs, 0 = aucune), animation de départ, son et animation
+    /// d'arrêt.
+    pub const ROUTINES: u32 = 0xdca50;
+    pub const ANIMATIONS: u32 = 0xdca60;
+    pub const SONS_ARRET: u32 = 0xdcaa0;
+    pub const ANIMATIONS_ARRET: u32 = 0xdca9c;
+    pub const ETINCELLE: u32 = 0xaba16;
+    pub const SON: u32 = 0xb12c0;
+    pub const SON_ARRET: u32 = 0xe1d60;
+    pub const MOVE_X: u32 = 0x1d78;
+    /// Compteur d'icônes de l'objet `+0x46`.
+    pub const ICONES: u32 = 0x30;
+    /// Arrêt demandé (`+0x33`).
+    pub const ARRET: u32 = 0x33;
+}
+
+fn depart_lance(ctx: &mut Ctx, o: Obj) {
+    ctx.jsr(depart::ETINCELLE);
+    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+    let variante = o.u8(ctx.b, Obj::VARIANT);
+    ctx.c.d[0] = ctx.c.d[0] & !0xff | variante as u32;
+    ajoute_u8(ctx, o, champ::SOUS_ETAT, variante);
+    o.set_u16(ctx.b, Obj::VX, 0x380);
+    if o.u8(ctx.b, champ::RAMASSE) != 0 {
+        o.set_u16(ctx.b, Obj::VX, 0x200);
+        let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+        ctx.c.a[2] = joueur.0 | 0xff00_0000;
+        // le son se joue sur l'icône si le joueur n'est pas devant elle
+        if joueur.u16(ctx.b, Obj::Y) as i16 >= o.u16(ctx.b, Obj::Y) as i16 {
+            o.set_u16(ctx.b, champ::PROPRIETAIRE, o.0 as u16);
+        }
+        ctx.c.d[0] = 0xa;
+        ctx.jsr(depart::SON);
+        o.set_u16(ctx.b, champ::PROPRIETAIRE, joueur.0 as u16);
+        let mode = o.u8(ctx.b, champ::MODE) as u32;
+        let routine = ctx.prog32(depart::ROUTINES + 4 * mode);
+        ctx.c.d[0] = routine;
+        if routine != 0 {
+            ctx.c.a[4] = routine;
+            ctx.jsr(routine);
+        }
+    }
+    if o.u8(ctx.b, 0x2c) == 0 {
+        let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
+        o.set_u16(ctx.b, Obj::VX, v);
+    }
+    let mode = o.u8(ctx.b, champ::MODE) as u32;
+    let animation = ctx.prog8(depart::ANIMATIONS + mode);
+    ctx.anim_start(scene::ANIMATIONS, animation as u16);
+}
+
+/// Un objet de scène de moins pour l'objet `+0x46`.
+fn depart_decompte(ctx: &mut Ctx, o: Obj) {
+    let porteur = pointeur(ctx, o, scene::PROPRIETAIRE_2);
+    ctx.c.a[1] = porteur.0 | 0xff00_0000;
+    let n = porteur.u8(ctx.b, depart::ICONES).wrapping_sub(1);
+    porteur.set_u8(ctx.b, depart::ICONES, n);
+}
+
+/// Sous-état 2 : marche en X ; sortie de l'écran, l'icône est libérée.
+fn depart_marche(ctx: &mut Ctx, o: Obj) {
+    if o.u8(ctx.b, depart::ARRET) == 0 {
+        ctx.jsr(depart::MOVE_X);
+        let ecart = o.u16(ctx.b, Obj::X).wrapping_sub(ctx.ram16(0x506)).wrapping_add(0x20);
+        ctx.c.d[0] = ctx.c.d[0] & 0xffff_0000 | ecart as u32;
+        if ecart > 0x1c0 {
+            o.set_u32(ctx.b, Obj::STATE, 0x0600_0000);
+            depart_decompte(ctx, o);
+        }
+    }
+    ctx.jsr(rom::ANIM_STEP);
+}
+
+/// Sous-état 4 : arrêt demandé : son et animation d'arrêt, SET créé, l'icône se tourne vers le joueur.
+fn depart_arret(ctx: &mut Ctx, o: Obj) {
+    if o.u8(ctx.b, depart::ARRET) != 0 {
+        return ctx.jsr(rom::ANIM_STEP);
+    }
+    let mode = o.u8(ctx.b, champ::MODE) as u32;
+    ctx.c.d[0] = mode;
+    let son = ctx.prog8(depart::SONS_ARRET + mode);
+    ctx.c.d[1] = ctx.c.d[1] & !0xff | son as u32;
+    if son != 0 {
+        ctx.jsr(depart::SON_ARRET);
+    }
+    let animation = ctx.prog8(depart::ANIMATIONS_ARRET + mode);
+    ctx.anim_start(scene::ANIMATIONS, animation as u16);
+    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+    depart_decompte(ctx, o);
+    o.set_u16(ctx.b, scene::CREE, 0);
+    if let Some(n) = cree_set(ctx, 1) {
+        o.set_u16(ctx.b, scene::CREE, n.0 as u16);
+    }
+    let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
+    ctx.c.a[1] = joueur.0 | 0xff00_0000;
+    if o.u16(ctx.b, Obj::X) <= joueur.u16(ctx.b, Obj::X) {
+        o.set_u8(ctx.b, 0x2c, 0x20);
+    }
+    if o.u8(ctx.b, 0x2c) == joueur.u8(ctx.b, 0x2c) {
+        let v = joueur.u8(ctx.b, 0x2c) ^ 0x20;
+        joueur.set_u8(ctx.b, 0x2c, v);
+    }
+    ctx.jsr(rom::ANIM_STEP);
+}
+
+fn icone_depart(ctx: &mut Ctx, o: Obj) {
+    let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+    let cible = ctx.saut_table(depart::SOUS_ETATS, sous_etat as u32);
+    match sous_etat {
+        0 => depart_lance(ctx, o),
+        2 => depart_marche(ctx, o),
+        4 => depart_arret(ctx, o),
+        6 => guide_attente(ctx, o),
+        8 => guide_second_objet(ctx, o),
+        0xa => {
+            let set = pointeur(ctx, o, scene::CREE);
+            ctx.c.a[1] = set.0 | 0xff00_0000;
+            if set.u8(ctx.b, 0x22) != 0 {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+            }
+        }
+        0xc => {
+            let n = ctx.ram8(scene::COMPTEUR).wrapping_add(4);
+            ctx.set_ram8(scene::COMPTEUR, n);
+        }
+        _ => ctx.deleguer(cible),
+    }
+}
+
 fn icone(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
     let cible = ctx.saut_table(scene::ICONE_ETATS, etat as u32);
@@ -1034,6 +1168,7 @@ fn icone(ctx: &mut Ctx, o: Obj) {
                 _ => ctx.deleguer(cible),
             }
         }
+        4 => ctx.sans_chemin(cible, |ctx| icone_depart(ctx, o)),
         6 => ctx.free(&pools::FREE_ITEM),
         _ => ctx.deleguer(cible),
     }
@@ -1230,6 +1365,88 @@ fn guide(ctx: &mut Ctx, o: Obj) {
     }
 }
 
+/// Variante 3 (`0xdccd6`), le « guide » d'une scène d'attract (h) : charge une palette, puis marche comme
+/// le guide de la variante 1 et attend la fin de son objet SET (type 0x26), dont il recopie le résultat
+/// (`+0x23`) dans `A5-0x551c`.
+mod guide_3 {
+    pub const ETATS: u32 = 0xdcce4;
+    pub const SOUS_ETATS: u32 = 0xdcd76;
+    /// Palette de 16 couleurs (données en clair) et sa destination.
+    pub const PALETTE: u32 = 0xdccec;
+    pub const PALETTE_DEST: u32 = 0x91c300;
+    /// Première couleur de la palette 0 : ses bits de luminosité (0xf000f000) sont recopiés.
+    pub const REFERENCE: u32 = 0x91c000;
+    pub const ANIMATION: u16 = 0x13;
+    pub const RESULTAT: i32 = -0x551c;
+}
+
+fn guide_3_init(ctx: &mut Ctx, o: Obj) {
+    let lumiere = crate::mem::rd32(ctx.b, guide_3::REFERENCE) & 0xf000_f000;
+    for i in 0..8 {
+        let couleur = crate::mem::rd32(ctx.b, guide_3::PALETTE + 4 * i);
+        // registres du `movem` de l'original (D1-D6, A3) ; D0 reçoit le masque
+        match i {
+            0 => {}
+            7 => ctx.c.a[3] = couleur,
+            _ => ctx.c.d[i as usize] = couleur,
+        }
+        crate::mem::wr32(ctx.b, guide_3::PALETTE_DEST + 4 * i, couleur | lumiere);
+    }
+    ctx.c.d[0] = lumiere;
+    ctx.c.a[1] = guide_3::PALETTE;
+    ctx.c.a[2] = guide_3::PALETTE_DEST + 0x20;
+    ajoute_u8(ctx, o, Obj::STATE, 2);
+    guide_cible(ctx, o);
+    o.set_u32(ctx.b, Obj::SPEED_TABLE, scene::TABLE_VITESSES);
+    o.set_u8(ctx.b, 0x2a, 1);
+    o.set_u8(ctx.b, 0x2b, 0x18);
+    ctx.anim_start(scene::ANIMATIONS, guide_3::ANIMATION);
+    ctx.reinsert();
+}
+
+/// Sous-état 2 : attend la fin de l'objet SET (dont il garde le résultat) ou de la minuterie.
+fn guide_3_attente(ctx: &mut Ctx, o: Obj) {
+    if o.u16(ctx.b, scene::CREE) != 0 {
+        let set = pointeur(ctx, o, scene::CREE);
+        ctx.c.a[1] = set.0 | 0xff00_0000;
+        if set.u8(ctx.b, 0x22) == 0 {
+            return;
+        }
+        let resultat = set.u8(ctx.b, 0x23);
+        ctx.set_ram8(guide_3::RESULTAT, resultat);
+    } else {
+        let reste = o.u16(ctx.b, scene::MINUTEUR).wrapping_sub(1);
+        o.set_u16(ctx.b, scene::MINUTEUR, reste);
+        if reste != 0 {
+            return;
+        }
+    }
+    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+    let n = ctx.ram8(scene::COMPTEUR).wrapping_add(4);
+    ctx.set_ram8(scene::COMPTEUR, n);
+}
+
+fn guide_3(ctx: &mut Ctx, o: Obj) {
+    let etat = o.u8(ctx.b, Obj::STATE);
+    let cible = ctx.saut_table(guide_3::ETATS, etat as u32);
+    match etat {
+        etat::INIT => guide_3_init(ctx, o),
+        etat::ACTIF => {
+            let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
+            let cible = ctx.saut_table(guide_3::SOUS_ETATS, sous_etat as u32);
+            match sous_etat {
+                0 => guide_marche(ctx, o),
+                2 => guide_3_attente(ctx, o),
+                4 => {}
+                _ => ctx.deleguer(cible),
+            }
+        }
+        etat::LIBERE => {}
+        etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        _ => ctx.deleguer(cible),
+    }
+}
+
 fn scene_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
@@ -1241,6 +1458,7 @@ fn scene_gestionnaire(ctx: &mut Ctx) {
     match variante {
         0 | 2 => icone(ctx, o),
         1 => guide(ctx, o),
+        3 => ctx.sans_chemin(cible, |ctx| guide_3(ctx, o)),
         _ => ctx.deleguer(cible),
     }
 }

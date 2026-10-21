@@ -856,7 +856,7 @@ pub const CREEP_3: Native = Native {
     })
 };
 
-pub const NATIVES: &[Native] = &[FOLLOW_PLAYERS_Y, UPDATE_CAMERAS, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
+pub const NATIVES: &[Native] = &[FOLLOW_PLAYERS_Y, UPDATE_CAMERAS, RESET_CAMERAS, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
 
 // ---------------------------------------------------------------------------------------------
 // Suivi vertical des joueurs et mise à jour des deux caméras
@@ -984,6 +984,47 @@ fn update_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     crate::call(c, b, 0x32108);
     rts(c, b);
 }
+
+/// 0x33aa6 : caméras de la scène à leur position de départ. Les deux caméras (`A5+0x4fe`, `A5+0x54e`)
+/// sont remises à zéro, le début de la couche 1 effacé (0x3525c) ; la scène (`A5+0x34`) choisit la caméra
+/// en service (`A5+0x36`, table 0x33bdc) et la position de départ de la première (table 0x33c54 : x, y),
+/// puis les caméras sont mises à jour (0x33e20).
+fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+    use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+    const SERVICE: u32 = 0x33bdc;
+    const STARTS: u32 = 0x33c54;
+    for off in [0x54e, 0x556, 0x55a, 0x55e, 0x562, 0x56a, 0x4fe, 0x506, 0x50a, 0x50e, 0x512, 0x51a] {
+        wr32(b, A5 + off, 0);
+    }
+    wr16(b, A5 + 0x566, 0);
+    wr8(b, 0xff858b, 0);
+    wr8(b, A5 + 0x53a, 0);
+    crate::call(c, b, 0x3525c);
+    let stage = rd8(b, A5 + 0x34) as u32;
+    let service = rd8(b, SERVICE + stage);
+    wr8(b, A5 + 0x36, service);
+    for off in [0x508, 0x50c, 0x52e] {
+        wr16(b, A5 + off, 0);
+    }
+    let start = STARTS + 4 * stage;
+    let (x, y) = (rd16(b, start), rd16(b, start + 2));
+    wr16(b, A5 + 0x506, x);
+    wr16(b, A5 + 0x50a, y);
+    wr32(b, A5 + 0x50e, 0);
+    c.d[0] = 4 * stage;
+    c.a[1] = STARTS;
+    update_cameras(c, b);
+}
+
+pub const RESET_CAMERAS: Native = Native {
+    entry: 0x33aa6,
+    name: "cameras_depart",
+    cost: |_, _| 300,
+    run: reset_cameras,
+    touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: false,
+};
 
 pub const UPDATE_CAMERAS: Native = Native {
     entry: 0x33e20,

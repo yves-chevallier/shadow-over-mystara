@@ -50,7 +50,6 @@ mod ext {
     pub const UNLOCK: u32 = 0xbac;
     pub const DISPLAY_CREDITS: u32 = 0x148be;
     pub const DISPLAY_COUNTS: u32 = 0x14652;
-    pub const GAME_VARS: u32 = 0x1c44a;
     pub const PLAYERS_INIT: u32 = 0x2d9e;
     pub const PLAYERS_RESET: u32 = 0x1de7c;
     pub const PLAYERS_PANELS: u32 = 0x21bc;
@@ -278,7 +277,7 @@ resume!(R_AFTER_INIT_CLEAR, at::AFTER_INIT_CLEAR, |x| {
     set16(x, var::FLAGS, flags);
     set8(x, var::CLEAR_FLAG, 0);
     set8(x, var::SCREEN_FLAG, 1);
-    x.call(ext::GAME_VARS);
+    crate::taches::partie::effacer_variables(x.c, x.b);
     x.call(ext::PLAYERS_INIT);
     x.call(ext::PLAYERS_RESET);
     wr16(x.b, OUTPUT_4, OUTPUT_ON);
@@ -584,7 +583,7 @@ resume!(R_START_AFTER_CLEAR, at::START_AFTER_CLEAR, |x| {
     video_on(x);
     let flags = rd16(x.b, a5(var::FLAGS)) & !1;
     set16(x, var::FLAGS, flags);
-    x.call(ext::GAME_VARS);
+    crate::taches::partie::effacer_variables(x.c, x.b);
     x.call(ext::PLAYERS_INIT);
     set8(x, var::SCROLL_MODE, 0);
     x.call(ext::PLAYERS_RESET);
@@ -600,7 +599,7 @@ fn join(x: &mut Ctx) -> Flow {
     let (a1, a3, player, cost) = (x.c.a[1], x.c.a[3], x.c.d[2], x.c.d[3] as u8);
     let credits = rd8(x.b, a1 + 2).wrapping_sub(cost);
     wr8(x.b, a1 + 2, credits);
-    x.call(ext::GAME_VARS);
+    crate::taches::partie::effacer_variables(x.c, x.b);
     wr8(x.b, a3, 1);
     wr8(x.b, a3 + 2, player as u8);
     let started = rd8(x.b, a5(var::STARTED)) | 1 << (player & 7);

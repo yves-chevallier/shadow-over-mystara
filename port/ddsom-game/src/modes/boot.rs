@@ -15,10 +15,10 @@ mod ext {
     pub const PALETTES: u32 = 0x1a296;
     pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const SERVICE_CHECK: u32 = 0x2d30a;
-    pub const INIT_STEPS: [u32; 11] =
-        [0x14cb8, 0x19aa2, 0x19abc, 0x19db4, 0xee044, 0x2d9e, 0x2df8, 0x133dc, 0x19a80, 0x18082, 0x19038];
+    pub const INIT_STEPS_A: [u32; 6] = [0x19aa2, 0x19abc, 0x19db4, 0xee044, 0x2d9e, 0x2df8];
+    pub const INIT_RNG: u32 = 0x19a80;
+    pub const INIT_STEP_LAST: u32 = 0x19038;
     pub const CLEAR_STATUS: u32 = 0xdabba;
-    pub const PHASE_VARS_CLEAR: u32 = 0x1c44a;
     pub const PRINT: u32 = 0xd5e;
     pub const CLEAR_SCROLL_1: u32 = 0xca8;
     pub const CONFIG_2DC9A: u32 = 0x2dc9a;
@@ -70,11 +70,16 @@ resume!(R_INIT, INIT, |x| {
     wr8(x.b, A5 + 0x48e, 0xf);
     x.call(ext::BRIGHTNESS_WHITE);
     x.call(ext::SERVICE_CHECK);
-    for f in ext::INIT_STEPS {
+    crate::credits::initialiser(x.c, x.b);
+    for f in ext::INIT_STEPS_A {
         x.call(f);
     }
+    clear_mode_state(x);
+    x.call(ext::INIT_RNG);
+    default_high_scores(x);
+    x.call(ext::INIT_STEP_LAST);
     x.call(ext::CLEAR_STATUS);
-    x.call(ext::PHASE_VARS_CLEAR);
+    crate::taches::partie::effacer_variables(x.c, x.b);
     wr8(x.b, A5 - 0x713c, 0);
     set_low_word(&mut x.c.d[0], 0xe);
     wr16(x.b, CPS_REG_VIDEO, 0xe);
@@ -92,6 +97,38 @@ resume!(R_INIT, INIT, |x| {
     wr16(x.b, COUNTDOWN, WARNING_FRAMES);
     x.wait(1, WARNING_TICK)
 });
+
+/// État de la machine à modes (16 longs en `A5-0x7190`) et `A5-0x54f0..` (4 longs) à zéro (`0x133dc`, puis
+/// `0xfc562`).
+fn clear_mode_state(x: &mut Ctx) {
+    const MODES: u32 = A5 - 0x7190;
+    const SCENE_SCRIPT: u32 = A5 - 0x54f0;
+    for i in 0..16 {
+        wr32(x.b, MODES + 4 * i, 0);
+    }
+    for i in 0..4 {
+        wr32(x.b, SCENE_SCRIPT + 4 * i, 0);
+    }
+    x.c.d[0] = 0;
+    x.c.d[6] |= 0xffff;
+    x.c.a[6] = MODES + 0x40;
+}
+
+/// Tableau des meilleurs scores par défaut (`0x18082`) : dix entrées de 14 octets copiées de la ROM vers
+/// FF0FD0 ; une autre table pour la version à palette alternative (`A5+0x70`).
+fn default_high_scores(x: &mut Ctx) {
+    const TABLES: [u32; 2] = [0x18f1e, 0x18faa];
+    const SCORES: u32 = 0xff0fd0;
+    const SIZE: u32 = 10 * 14;
+    let src = TABLES[(rd16(x.b, A5 + 0x70) != 0) as usize];
+    for i in (0..SIZE).step_by(2) {
+        let w = rd16(x.b, src + i);
+        wr16(x.b, SCORES + i, w);
+    }
+    x.c.a[1] = src + SIZE;
+    x.c.a[2] = SCORES + SIZE;
+    x.c.d[6] |= 0xffff;
+}
 
 /// Affiche le texte de la région courante : mot `A5+0x70` (modulo 16) indexe la table de pointeurs.
 fn print_region_text(x: &mut Ctx, table: u32) {

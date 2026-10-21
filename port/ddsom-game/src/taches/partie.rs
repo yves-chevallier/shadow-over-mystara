@@ -68,6 +68,17 @@ fn flags(x: &mut Ctx, value: u8) {
     x.c.sr = (x.c.sr & !0x0f) | (value == 0) as u16 * 4 | (value >> 7) as u16 * 8;
 }
 
+/// `0x1c44a` : les variables de partie `A5+0x2c..0x6b` (phase, étape...) à zéro ; registres de la boucle
+/// d'origine (D0 = 0, D6.w = -1, A0 = fin de la zone).
+pub fn effacer_variables(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+    for i in 0..16 {
+        wr32(b, A5 + var::PHASE + 4 * i, 0);
+    }
+    c.d[0] = 0;
+    c.d[6] |= 0xffff;
+    c.a[0] = A5 + var::PHASE + 0x40;
+}
+
 /// `0x1c45a` : phase et étape à zéro.
 fn entry(x: &mut Ctx) -> Flow {
     wr32(x.b, A5 + var::PHASE, 0);

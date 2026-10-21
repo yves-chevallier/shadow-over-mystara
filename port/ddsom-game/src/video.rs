@@ -8,7 +8,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::chemin::Chemin;
-use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, wr32, wr8};
+use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, wr32, wr8, A5};
 use crate::vue::Vue;
 use crate::{regs, Native};
 
@@ -193,15 +193,65 @@ fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xc58 : écrit l'entrée de fin de liste (0x8000, 0x18000000) en tête de l'Object RAM, deux fois,
 /// avec bascule de la banque entre les deux : la liste est vide dans les deux banques.
-fn clear_objects(c: &mut Cpu, b: &mut Cps2Bus) {
+fn empty_objects(b: &mut Cps2Bus) {
     for _ in 0..2 {
         wr32(b, hw::OBJECTS, 0x8000);
         wr32(b, hw::OBJECTS + 4, 0x1800_0000);
-        let bank = rd8(b, a5(c, ram::OBJ_BANK)) ^ 0xff;
-        wr8(b, a5(c, ram::OBJ_BANK), bank);
+        let bank = rd8(b, A5 + ram::OBJ_BANK) ^ 0xff;
+        wr8(b, A5 + ram::OBJ_BANK, bank);
         wr8(b, hw::OBJ_BANK, bank);
     }
+}
+
+fn clear_objects(c: &mut Cpu, b: &mut Cps2Bus) {
+    empty_objects(b);
     rts(c, b);
+}
+
+/// Écran noir, première moitié (0xc0c, 0xc32) : toutes les couches éteintes (`0xbfc` avec D0 = 0x12ce,
+/// après la remise à zéro de `A5+0x14`).
+fn blank_layers(c: &mut Cpu, b: &mut Cps2Bus) {
+    wr16(b, A5 + ram::LAYER_ENABLE, 0);
+    set_low_word(&mut c.d[0], !0x12ce);
+    wr16(b, hw::LAYER_ENABLE, 0);
+}
+
+/// Écran noir, seconde moitié : liste d'objets vide et les trois couches effacées (D0.w = 0x1f00, D1 = 0
+/// comme après `0xce8`).
+fn blank_planes(c: &mut Cpu, b: &mut Cps2Bus) {
+    empty_objects(b);
+    fill_layer(b, hw::SCROLL1, hw::SCROLL2, 0x20);
+    fill_layer(b, hw::SCROLL2, hw::SCROLL3, 0x1800);
+    fill_layer(b, hw::SCROLL3, hw::PALETTES, 0x1f00);
+    set_low_word(&mut c.d[0], 0x1f00);
+    c.d[1] = 0;
+}
+
+/// 0xc0c : écran noir d'un coup.
+fn blank_screen(c: &mut Cpu, b: &mut Cps2Bus) {
+    blank_layers(c, b);
+    blank_planes(c, b);
+    rts(c, b);
+}
+
+/// 0xc32 : écran noir en trois images (sous-programme qui cède, `0xb64`, avant et après l'effacement) ;
+/// chaque reprise est une native (0xc42, puis le `rts` en 0xc56).
+mod ecran_noir {
+    use crate::modes::{Flow, Sequence};
+    use crate::resume;
+
+    const UNE_IMAGE: u32 = 0xb64;
+    const EFFACEMENT: u32 = 0xc42;
+    const FIN: u32 = 0xc56;
+    resume!(DEBUT, 0xc32, |x| {
+        super::blank_layers(x.c, x.b);
+        x.tail(UNE_IMAGE, EFFACEMENT)
+    });
+    resume!(SUITE, EFFACEMENT, |x| {
+        super::blank_planes(x.c, x.b);
+        x.tail(UNE_IMAGE, FIN)
+    });
+    resume!(RETOUR, FIN, |_| Flow::Done);
 }
 
 /// Remplit [debut, fin) de cases (tuile, 0) : 0xca8 (scroll 1), 0xcc8 (scroll 2), 0xce8 (scroll 3).
@@ -265,6 +315,15 @@ pub const LOCK: Native = fixed(0xb96, "video_verrou", |_, b| ligne_droite(b, 0xb
 pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", |_, b| ligne_droite(b, 0xbac), unlock, regs::d(0) | regs::d(1));
 pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_couches_on", enable_layers_cost, enable_layers, 0);
 pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_couches_off", |_, b| ligne_droite(b, 0xbfc), disable_layers, regs::d(0));
+pub const BLANK_SCREEN: Native = Native {
+    entry: 0xc0c,
+    name: "video_ecran_noir",
+    cost: |_, _| 300,
+    run: blank_screen,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::d(1),
+    exact_cost: false,
+};
 pub const CLEAR_OBJECTS: Native = fixed(0xc58, "video_effacer_objets", |_, b| ligne_droite(b, 0xc58), clear_objects, 0);
 pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_effacer_scroll1", |_, b| fill_cost(b, 0xca8, 0x4000 / 4), clear_scroll1, regs::d(0) | regs::d(1));
 pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_effacer_debut_scroll1", |_, _| 0, clear_scroll1_start, regs::ALL);
@@ -589,6 +648,10 @@ pub const NATIVES: &[Native] = &[
     ENABLE_LAYERS,
     DISABLE_LAYERS,
     CLEAR_OBJECTS,
+    BLANK_SCREEN,
+    ecran_noir::DEBUT,
+    ecran_noir::SUITE,
+    ecran_noir::RETOUR,
     CLEAR_SCROLL1,
     CLEAR_SCROLL1_START,
     CLEAR_SCROLL2,

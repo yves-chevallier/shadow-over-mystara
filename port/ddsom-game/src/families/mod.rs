@@ -31,6 +31,8 @@ pub mod creators;
 pub mod cx;
 pub mod effects;
 pub mod effects_b;
+pub mod items_b;
+pub mod eshl_creators;
 pub mod enemy;
 pub mod enemy_beetle;
 pub mod enemy_common;
@@ -75,7 +77,7 @@ use m68k::Cpu;
 
 use crate::chemin::Chemin;
 use crate::mem::{rd8, rts, A5};
-use crate::objects::{anim, pools, Obj};
+use crate::objects::{anim, lists, pools, Obj};
 use crate::Native;
 
 /// Toutes les routines natives des familles.
@@ -91,7 +93,6 @@ pub const NATIVES: &[Native] = &[
     items::ITEM_9,
     items::EFFACE_RAMASSES,
     items::CHUTE_EQUIPEMENT,
-    boxes::BOX_0,
     boxes::BOX_1,
     boxes::BOX_2,
     effects::EFFCT_1,
@@ -281,6 +282,18 @@ impl<'a> Ctx<'a> {
         crate::call(self.c, self.b, adresse);
     }
 
+    /// État réécrit sans relevé de chemin, à la place de l'état d'origine `adresse` ouvert par
+    /// `saut_table` : comme `deleguer`, mais `corps` (Rust) s'exécute au lieu du code d'origine. Sa durée
+    /// est celle de ses sous-routines ; ses `pris` ne relèvent rien.
+    pub fn sans_chemin(&mut self, adresse: u32, corps: impl FnOnce(&mut Ctx)) {
+        if let Some(r) = &mut self.rec {
+            if r.troncons.last().is_some_and(|t| t.depart == adresse && t.decisions == 0) {
+                r.troncons.pop();
+            }
+        }
+        corps(&mut Ctx::reel(&mut *self.c, &mut *self.b));
+    }
+
     // ---- appels ----
 
     /// `jsr adresse` d'une routine non réécrite (ou déjà native), registres tels que préparés.
@@ -361,15 +374,15 @@ impl<'a> Ctx<'a> {
         self.c.cond(5) // C
     }
 
-    /// Réinsère l'objet dans la liste triée des acteurs (tri par profondeur). Code d'origine : le
-    /// handler suivant hérite de ses registres (voir `objects::lists`).
+    /// Réinsère l'objet dans la liste triée des acteurs (tri par profondeur). Le handler suivant hérite
+    /// des registres : la native les rend comme l'original (voir `objects::lists`).
     pub fn reinsert(&mut self) {
-        self.jsr_origine(rom::REINSERT_ACTORS);
+        self.natif(&lists::REINSERT_ACTORS);
     }
 
     /// Réinsère l'objet dans la liste triée du premier plan.
     pub fn reinsert_foreground(&mut self) {
-        self.jsr_origine(rom::REINSERT_FOREGROUND);
+        self.natif(&lists::REINSERT_FOREGROUND);
     }
 
     /// Libère l'emplacement de l'objet dans son pool.
@@ -523,7 +536,7 @@ macro_rules! gestionnaire {
             run: |c, b| crate::families::executer(c, b, $logique),
             touches_sound: false,
             outputs: crate::regs::a(0) | crate::regs::d(7),
-            exact_cost: true,
+            exact_cost: false,
         };
     };
 }
@@ -532,9 +545,12 @@ pub(crate) use gestionnaire;
 /// Routines natives des familles ESHL, SET et SOBJ (voir `docs/familles-eshl-set-sobj.md`) : un
 /// gestionnaire par type, écrit sur [`cx::Cx`] (durée indicative, pas d'exécution à blanc).
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, eshl_d::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, effects_b::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, enemy_golem::NATIVES, enemy_warmachine::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_8::NATIVES, boss_11::NATIVES]
+    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, eshl_d::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, effects_b::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_common::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, enemy_golem::NATIVES, enemy_warmachine::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_8::NATIVES, boss_11::NATIVES]
         .into_iter()
         .flatten()
+        .chain(items_b::NATIVES)
+        .chain(eshl_creators::NATIVES)
+        .chain(boxes::caisse::NATIVES)
         .chain(boxes::pousse::NATIVES)
         .chain(boss_common::NATIVES)
         .chain(creators::NATIVES)

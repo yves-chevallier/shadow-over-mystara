@@ -343,3 +343,32 @@ pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
     }
     x.c.a[2] = at;
 }
+
+/// 0x27ee : l'ennemi se détache de son hôte (`HOST`) : si l'hôte est actif et compte encore des parties
+/// (`+0x2a`), le compte diminue et le lien est effacé. D0 et A1 gardent le lien et l'hôte, comme l'original.
+fn detach_from_host(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+    use crate::mem::{rd16, rd8, rts, wr16};
+    const PARTS: u32 = 0x2a;
+    let me = c.a[0];
+    let host = rd16(b, me + f::HOST);
+    c.d[0] = c.d[0] & 0xffff_0000 | host as u32;
+    if host != 0 {
+        c.a[1] = host as i16 as i32 as u32;
+        let parts = rd16(b, c.a[1] + PARTS);
+        if rd8(b, c.a[1]) != 0 && parts != 0 {
+            wr16(b, c.a[1] + PARTS, parts - 1);
+            wr16(b, me + f::HOST, 0);
+        }
+    }
+    rts(c, b);
+}
+
+pub const NATIVES: &[crate::Native] = &[crate::Native {
+    entry: 0x27ee,
+    name: "ennemi_detacher_hote",
+    cost: |_, _| 60,
+    run: detach_from_host,
+    touches_sound: false,
+    outputs: crate::regs::d(0) | crate::regs::a(1),
+    exact_cost: false,
+}];

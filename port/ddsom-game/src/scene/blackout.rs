@@ -129,7 +129,7 @@ fn palettes(x: &mut Ctx) {
         x.call(routine);
     }
     x.c.a[6] = at + 4;
-    x.call(0x1507a);
+    crate::hud::forget_displayed(x.b);
     x.set_v8(0x48e, 12);
     x.call(0x168c);
 }

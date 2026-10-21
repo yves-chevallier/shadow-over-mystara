@@ -59,6 +59,33 @@ mod ram {
     pub const PAS: u32 = 0x10;
 }
 
+/// 0x14cb8 : les quatre enregistrements de monnayeur à zéro, puis leurs réglages : `+0xb` = 0xff, `+8` =
+/// « plus d'une pièce par crédit », `+9` = 4 et `+0xf` = « départ gratuit » (`A5+0x24`) en mode de
+/// monnayage 17 ; jeu gratuit (`A5+0x25`) en mode 18. D0 garde la dernière valeur écrite.
+pub fn initialiser(c: &mut Cpu, b: &mut Cps2Bus) {
+    use crate::mem::{wr32, wr8, A5};
+    const MODE_MONNAYAGE: u32 = 0x1c;
+    const DEPART_GRATUIT: u32 = 0x24;
+    let monnayeur = |k: u32| A5 + ram::MONNAYEUR_1 + ram::PAS * k;
+    for i in 0..16 {
+        wr32(b, A5 + ram::MONNAYEUR_1 + 4 * i, 0);
+    }
+    for k in 0..4 {
+        wr8(b, monnayeur(k) + 0xb, 0xff);
+    }
+    let mode = rd8(b, A5 + MODE_MONNAYAGE);
+    wr8(b, A5 + ram::GRATUIT, (mode == 18) as u8);
+    let plusieurs = (rd8(b, A5 + ram::PIECES_PAR_CREDIT) as i8 > 1) as u8;
+    let reglage_9 = if mode == 17 { 4 } else { 0 };
+    let depart_gratuit = rd8(b, A5 + DEPART_GRATUIT);
+    for k in 0..4 {
+        wr8(b, monnayeur(k) + 8, plusieurs);
+        wr8(b, monnayeur(k) + 9, reglage_9);
+        wr8(b, monnayeur(k) + 0xf, depart_gratuit);
+    }
+    c.d[0] = depart_gratuit as u32;
+}
+
 /// Antirebond : saturation, et durée minimale d'une pièce valide (en images).
 const ANTIREBOND_MAX: u8 = 50;
 const ANTIREBOND_MIN: u8 = 2;
