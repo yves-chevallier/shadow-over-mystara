@@ -51,6 +51,15 @@ l'ordonnanceur ne les distingue pas. Une tâche reste libre de passer par du cod
 |---|---|---|
 | partie (`taches/partie.rs`) | `0x1c45a` entrée, `0x1c468` tour, `0x1c48c` cession, `0x1c4b0` pas de jeu | boucle de jeu, voir `boucle.md` §1 |
 | gel (`taches/gel.rs`) | `0xee080` entrée, `0xee0fa` et `0xee16a` après cession | avance rapide : décompte la tâche principale quand un joueur presse un bouton |
+| fondus de luminosité (`taches/fondu.rs`) | tâches `0x14ba`, `0x14c8`, `0x14d0`, `0x14de`, `0x1536`, `0x153e` ; reprises `0x152c`, `0x158c` | un pas de ±0x1000 par cession, puis fin de la tâche (`0x9f8`) ; voir `video.md`, « Fondus » |
+| fondus par composante (`taches/fondu.rs`) | tâches `0x1ccf8`, `0x1ce64`, `0x1ced4` (et `0x1cf12`) ; reprises `0x1cd1e`, `0x1ce8a`, `0x1cefe` | vers le blanc, une couleur ou une palette par page |
+| écran des scores (`taches/ecran_fixe.rs`) | `0x1835e` entrée, `0x18384` après cession | tableau des meilleurs scores de l'attract (F4), voir `modes.md` §4 |
+| menu TEST (`taches/service.rs`) | `0x29162` entrée, `0x29190` tour, `0x2918a` retour du gestionnaire, `0x291ec` reprise du menu | menu de service et ses écrans, tout en Rust (`service/`, `docs/service.md`) |
+
+Les **sous-programmes** qui cèdent la main sont traités de même : entrée et adresse qui suit chaque cession sont des
+natives, et le `rts` final rend la main à l'appelant (68000, ou native de reprise d'un appelant Rust, qui l'a appelé par
+`Sequence::tail`). Fondus de luminosité `0x144c`, `0x1460`, `0x146c` (reprise `0x14b4`) et par composante `0x1ccc2`,
+`0x1ce30`, `0x1ce9e` (reprises `0x1cce8`, `0x1ce54`, `0x1cec4`).
 
 Le pas de jeu s'arrête *sur* `0x1c4b0` (`GAME_STEP`) au lieu d'enchaîner : c'est là que la machine plafonne les pas par
 image.
@@ -65,8 +74,56 @@ machines d'origine, que sauter l'attente ne change pas l'état (RAM hors zones i
 sur 12 000 images de six scénarios (attract, crédits, entrée de scène, jeu à deux, fin).
 
 Prochaine étape : remplacer l'enregistrement (SR/PC/USP/pile) par une `Option<Box<dyn Tache>>` suppose que les routines
-appelées par un pas ne cèdent plus par le 68000 (`call`/`Unwound`) : il faut d'abord réécrire les tâches qui cèdent au
-milieu d'appels 68000 (fondus `0x14ba...`, interface joueurs, `0x29162`, `0x1835e`).
+appelées par un pas ne cèdent plus par le 68000 (`call`/`Unwound`). Les fondus, l'écran des scores et le menu TEST
+`0x29162` sont faits (le menu : écrans en fonctions Rust, une seule cession au milieu d'un écran, reprise dans la native
+`0x291ec` ; seules les suites de la carte de développement, `A5+0x82`, jamais sur une borne, passent encore par du 68000,
+`docs/service.md` §5) ; restent les listes de bulles des boss (`0x9b6`). Les tâches Rust gardent encore leur état dans
+la RAM et les registres sauvés par la cession (le sens d'un fondu de luminosité est dans D1).
+
+## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
+
+Interruptions masquées, pile du superviseur en FF0E66 (zone de piles ignorée par `validate`) :
+
+| Étape | Effets utiles |
+|---|---|
+| `reset` 0x350 | sorties 0x400000-0x40000A, CPS-A (bases 0x9100/0x9140/0x9180, défilements nuls), 0x804040 ← 0x0F00 (Z80 au reset), RAM de travail effacée, `A5+0x70` ← mot 0xC2 du programme, contrôle vidéo, effacement des objets et des trois plans (0xc58, 0xca8, 0xcc8, 0xce8). Si le bit 14 de 0x804030 est nul (jamais : il vaut 0xe021), `A5+0x82` ← 1 et lecture de la configuration (0x2dc9a, puis 0x2e8e4 si la combinaison 0x3304 de IN2 est pressée) |
+| 0x182a | 8 longs du programme (0x19f0) en 0x91C400, 0x804170 ← 0xF, base de palette 0x91C0 (la palette est verrouillée à cet instant), cases (0x20, 0) dans 0x910000-0x913FFF |
+| `ram_test_block` 0x1912 | GFX RAM 0x910000-0x91BFFF puis RAM de travail : chaque mot reçoit 0x8888, 0x4444, 0x2222, 0x1111 et **retrouve sa valeur** (aucun effet). Appelé sans pile (`lea ret(pc),a6 ; bra`) |
+| 0x18cc | 0x804040 ← 0x0F08 (Z80 relâché), `A5+0x18` ← 8, CFFD ← 0, attente de 0x77 en CFFF (le Z80 l'écrit dans la ligne même de son relâchement) |
+| 0x1950 | octets impairs de la RAM partagée : 0 puis 0x55 partout, puis 0xFF jusqu'à 0x619FF9 (CFFD-CFFF gardent 0x55) |
+| `boot_init` 0x492 | CFFD ← 0x88, CFFE et CFFF ← 0xFF (le Z80 sort de son attente), `A5+0x16..0x18` (image du port 0x804040), DSW, tas des piles des 16 tâches (16 longs de 0x534 empilés sous FF01A6, sommet en FF005A), réglages 0x2d30a, `move #0x2000,SR` (le VBLANK en attente est pris aussitôt), tâche de démarrage 0x11b16 dans l'emplacement 0, ordonnanceur 0x928 |
+
+La branche d'erreur (« RAM ERROR !! » écrit en GFX RAM par 0x19ae, puis boucle infinie en 0x1948 ou 0x19a2) n'est jamais
+prise sur la machine émulée : elle n'est pas réécrite. La remise à zéro logicielle 0x28cd0 (`jmp 0x350` après une
+exception du processeur, K4) est hors périmètre.
+
+**Durée.** Mesurée par `examples/demarrage` (code d'origine à ×16 ; identique sur tous les scénarios : aucun ne donne
+d'entrée avant l'image 600, et l'EEPROM est la même) :
+
+| Jalon | Image (0 = première), ligne |
+|---|---|
+| reset | 0, 240 (début de l'image) |
+| test de la GFX RAM, puis de la RAM de travail | 0, 73 à 5, 108 |
+| Z80 relâché (0x18cc), 0x77 reçu | 5, 108 ; 5, 109 |
+| `boot_init` (0x492) | 5, 173 |
+| premier VBLANK (après les réglages 0x2d30a), ordonnanceur | 5, 222 ; 5, 223 |
+
+La version native fait tous les effets d'un coup au reset, puis **attend la même position du faisceau** (image et
+ligne, champ `Cps2Bus::frame` ajouté pour cela) avant de relâcher le Z80 et avant `boot_init` : ce sont les deux
+instants que le Z80, qui démarre en parallèle, peut observer (son relâchement, puis 0xFF en CFFF qui le fait entrer
+dans sa boucle principale). Entre les deux, la RAM partagée reçoit son état final dès la poignée de main au lieu
+de passer par 0 et 0x55 : le Z80, à son initialisation, ne lit que CFFF (en attente de 0xFF) et sa routine
+d'interruption ne touche à la boîte aux lettres que si CFFD vaut 0x88. Le calendrier est celui de la référence à ×16,
+quelle que soit la fréquence du 68000. Les registres que le test laisse (longs de la palette, motif 0x5555, adresses
+de fin de bloc) sont rendus à `boot_init` (`registres_du_test`). Contrôle : `demarrage <roms> <eeprom> 40 compare`
+compare les deux machines image par image, son compris (RAM partagée, RAM et registres du Z80, que `validate` ne
+regarde pas) : tout est identique dès l'image 3, le son dès la première.
+
+**Validation.** Pendant les images 1 à 5 (`DEMARRAGE` dans `examples/validate.rs`), celles qui finissent pendant le
+test de l'original, le mot en cours de test peut porter un motif à la fin de l'image (0x1111 au lieu de 0x0020 en
+0x910B34 à l'image 1). `validate` y tolère **un mot** de différence au plus, en RAM de travail ou en GFX RAM ; tout le
+reste (autres mots, objets, palette) est comparé dès l'image 1, et tout dès l'image 6. Seules les images 1 et 2 ont
+ce mot (test de la GFX RAM) ; aux images 3 à 5, la fin d'image tombe entre deux mots du test de la RAM de travail.
 
 ## Bilan de l'inventaire (`tools/reste68k.sh`, `docs/reste68k.md`)
 
@@ -81,8 +138,8 @@ Mesure sur 40 scénarios (`scenarios/cov/`, `scenarios/modes/`, quatre bots ; 89
 | | Avant (base 5f04d32) | Après |
 |---|---|---|
 | instructions 68000 (hors attente active) | 654,6 M (603 par image) | 433,8 M (485 par image) |
-| K1 noyau, VBLANK, ordonnanceur | 107,0 M | 2,0 M (reste `reset` 0x350 et `boot_init`) |
-| C1 crédits | 70,6 M | 0,14 M (tâche « INSERT COIN » 0xe05ec) |
+| K1 noyau, VBLANK, ordonnanceur | 107,0 M | 2,0 M (reste `reset` 0x350 et `boot_init`, réécrits depuis : voir « Démarrage ») |
+| C1 crédits | 70,6 M | 0,14 M (relecture des entrées des démonstrations 0xe05ec, réécrite depuis : `modes/demo.rs`) |
 | ordonnanceur et traps | 68000 | natifs (`kernel.rs`) |
 | tâche du gel 0xee080, boucle de partie 0x1c45a | 68000 | Rust (`taches/`) |
 
@@ -97,14 +154,8 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 
 ## Ce qui reste avant « zéro instruction 68000 », par ordre de volume
 
-1. **Test de RAM au démarrage (K2, 18 %)** : `0x182a`/`0x1912` testent la GFX RAM, la RAM de travail et la RAM
-   partagée du Z80 (poignée de main : attente de `0x77` en `0x619fff`). Effets utiles : GFX RAM `0x910000-0x913fff`
-   remplie de paires (0x0020, 0), copie de 8 longs en `0x91c400`, octets impairs de `0x618001-0x619ff9` à 0xff.
-   À remplacer par ces écritures ; **attention** à la validation différentielle : le test dure quelques images à ×16,
-   un démarrage natif plus court décale d'autant tout le jeu ; il faut aligner les deux machines (par exemple en
-   comparant à partir de la fin du démarrage de l'original, ou en faisant attendre à la native le même nombre
-   d'images).
-2. **`reset` 0x350 et `boot_init` 0x492 (K1)** : remises à zéro et registres CPS ; même remarque pour la durée.
+1. ~~**Test de RAM au démarrage (K2, 18 %)**~~ et 2. ~~**`reset` 0x350 et `boot_init` 0x492 (K1)**~~ : faits, plus
+   aucune instruction 68000 au démarrage (`demarrage.rs`, section « Démarrage » ci-dessous).
 3. ~~**Pools d'objets (O2, 9 %)**~~ : fait. `0x1ee1a`/`0x1ef6c` (insertion dans les listes triées par profondeur,
    la plus chaude du jeu) sont installées avec les registres exacts de l'original (`objects::lists::Reinsert`,
    `docs/objets.md`) : D0-D2, A1-A4 et drapeaux sont relus par le handler suivant.
@@ -118,7 +169,6 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
    S1 (`0xedf80`) et, hors de toute fonction de l'index (`tools/reste68k.sh` les compte à part : la ligne « hors de toute fonction
    de l'index » de `docs/reste68k.md`, plus de la moitié du reste), les tâches d'interface F3 (`0x15620`, `0x150ac`, `0x15f9e`...), la
    cession de la boucle de partie (`0x1c48c`) et le gestionnaire d'effet de barrière (`0xb9e78`).
-7. **Les tâches elles-mêmes** : tâche de partie `0x1c45a`, tâche du gel `0xee080`, tâches de fondu
 3. **Pools d'objets (O2, 9 %)** : `0x1ee1a`/`0x1ef6c`, insertion dans les listes triées par profondeur
    (la plus chaude du jeu, appelée par les natives des familles).
 4. **Interface joueurs (F3)** : fait, `hud/` (`docs/hud.md`). Avec le texte V2, les pop-ups U1 et l'éclair U2
@@ -128,9 +178,9 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 5. **Défilement et caméras (B1, 7,4 %)** : `0x33fe4`, `0x31616`, `0x33e20`, `0x30308`, `0x309e0`, `0x2ede0`.
 6. **EFFCT (C0e, 2,7 %)** : `0xb9eba`, `0xb9ee6` (3 scénarios seulement), puis IA E1 (`0xfbb0`, `0xe76c`),
    texte V2 (`0x28d8`, `0x1386`), liste de sprites V4 (`0x1de96`), FIFO son S1 (`0xedf80`).
-7. **Les tâches restantes** (la partie et le gel sont en Rust) : tâches de fondu
-   (`0x1460` et suivantes), tâches d'interface. Le noyau natif les fait encore reprendre en 68000 ; voir le plan dans
-   `architecture.md`.
+7. **Les tâches restantes** (la partie, le gel, les fondus, l'écran des scores et l'interface joueurs sont en Rust) :
+   menu TEST `0x29162`, listes de bulles des boss. Le noyau natif reprend encore chaque tâche par son enregistrement
+   (PC, pile) ; voir le plan dans `architecture.md`.
 8. Les 1 294 fonctions jamais atteintes (88 Ko) : à classer en code mort (menu TEST, écrans de debug, K4 : hors
    périmètre) ou à couvrir par des scénarios (boss et ennemis rares, ESHL, SET) avant de les réécrire.
 

@@ -45,12 +45,14 @@ pub mod action {
     pub const ATTACK: u8 = 0x0c;
     /// Attaque spéciale du bouton 4 (propre au personnage).
     pub const SPECIAL: u8 = 0x0e;
-    /// Relâche l'objet tenu (le joueur porte une caisse ou un adversaire) (h).
+    /// Prend (`+0x8b` = 0) ou lâche (2) l'objet porté (`moves::carry`).
     pub const RELEASE: u8 = 0x14;
-    /// Attaque spéciale n° 0x2d (arme 0x28..0x30) (h).
+    /// Garde au bouclier (armes 0x28..0x30) tant que le bouton 4 est maintenu (`moves::guard`).
     pub const SPECIAL_ALT: u8 = 0x16;
-    /// Attaque pendant un demi-tour, avec les armes 0x28..0x30 (h).
+    /// Garde au bouclier tant que le bouton 1 est maintenu, prise pendant un demi-tour (`moves::guard`).
     pub const TURN_ATTACK: u8 = 0x18;
+    /// Pousse l'objet lié dans une direction (`moves::push`).
+    pub const PUSH: u8 = 0x2e;
     /// Saisi par un adversaire (le joueur est tenu).
     pub const GRAB: u8 = 0x22;
     /// Sort sans charge restante : animation d'échec (h).

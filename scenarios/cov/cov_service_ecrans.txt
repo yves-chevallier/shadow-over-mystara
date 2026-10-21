@@ -1,0 +1,79 @@
+600 Service Mode 1
+900 P1 Down 1
+904 P1 Down 0
+944 P1 Down 1
+948 P1 Down 0
+988 P1 Down 1
+992 P1 Down 0
+1032 P1 Button 1 1
+1036 P1 Button 1 0
+1276 P1 Button 1 1
+1280 P1 Button 1 0
+1360 P1 Button 2 1
+1364 P1 Button 2 0
+1444 P1 Up 1
+1448 P1 Up 0
+1528 P1 Down 1
+1532 P1 Down 0
+1612 1 Player Start 1
+1616 P1 Button 1 1
+1622 P1 Button 1 0
+1626 1 Player Start 0
+1746 P1 Down 1
+1750 P1 Down 0
+1790 P1 Button 1 1
+1794 P1 Button 1 0
+2034 P1 Button 1 1
+2038 P1 Button 1 0
+2078 1 Player Start 1
+2078 2 Players Start 1
+2086 1 Player Start 0
+2086 2 Players Start 0
+2286 1 Player Start 1
+2290 P1 Button 1 1
+2296 P1 Button 1 0
+2300 1 Player Start 0
+2420 P1 Down 1
+2424 P1 Down 0
+2464 P1 Button 1 1
+2468 P1 Button 1 0
+2708 P1 Down 1
+2712 P1 Down 0
+2792 P1 Up 1
+2796 P1 Up 0
+2876 P1 Button 1 1
+2880 P1 Button 1 0
+2960 P1 Button 2 1
+2964 P1 Button 2 0
+3044 P1 Right 1
+3048 P1 Right 0
+3128 P1 Left 1
+3132 P1 Left 0
+3212 1 Player Start 1
+3216 P1 Button 1 1
+3222 P1 Button 1 0
+3226 1 Player Start 0
+3346 P1 Down 1
+3350 P1 Down 0
+3390 P1 Down 1
+3394 P1 Down 0
+3434 P1 Button 1 1
+3438 P1 Button 1 0
+6478 1 Player Start 1
+6482 P1 Button 1 1
+6488 P1 Button 1 0
+6492 1 Player Start 0
+6752 P1 Button 1 1
+6756 P1 Button 1 0
+9796 P1 Button 1 1
+9800 P1 Button 1 0
+10040 1 Player Start 1
+10044 P1 Button 1 1
+10050 P1 Button 1 0
+10054 1 Player Start 0
+10314 P1 Down 1
+10318 P1 Down 0
+10358 Service Mode 0
+10378 P1 Button 1 1
+10382 P1 Button 1 0
+30001 quit

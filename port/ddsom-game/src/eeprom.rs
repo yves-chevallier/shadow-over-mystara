@@ -259,7 +259,7 @@ fn natif_ecrire(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x2d8aa : écrit la copie en RAM dans l'EEPROM, relit dans `COPIE` et compare ; 10 essais.
-fn ecrire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
+pub(crate) fn ecrire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
     wr8(b, a5(c, ram::ESSAIS), ESSAIS);
     loop {
         poser_transfert(c, b, a5(c, ram::CONFIG));
@@ -288,7 +288,7 @@ fn natif_ecrire_verifier(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x2d808 : lit l'EEPROM dans la copie en RAM jusqu'à ce que ses deux exemplaires de la
 /// configuration (mots 0-23 et 24-47) concordent ; 10 essais.
-fn lire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
+pub(crate) fn lire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
     wr8(b, a5(c, ram::ESSAIS), ESSAIS);
     loop {
         poser_transfert(c, b, a5(c, ram::CONFIG));
@@ -308,6 +308,48 @@ fn lire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
 fn natif_lire_verifier(c: &mut Cpu, b: &mut Cps2Bus) {
     let ok = lire_verifier(c, b);
     rendre(c, b, ok);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Test de l'EEPROM (menu TEST, 8. MEMORY CHECK)
+
+/// Mots de l'EEPROM.
+const MOTS_EEPROM: u16 = 0x40;
+/// Motifs écrits dans toute l'EEPROM.
+const MOTIFS: [u16; 4] = [0xffff, 0xaaaa, 0x5555, 0];
+
+/// Pose le transfert de toute l'EEPROM (`MOTS`, `DEBUT`).
+pub(crate) fn toute_eeprom(c: &Cpu, b: &mut Cps2Bus) {
+    wr16(b, a5(c, ram::MOTS), MOTS_EEPROM - 1);
+    wr16(b, a5(c, ram::DEBUT), 0);
+}
+
+/// 0x2da90 : écrit `motif` dans les 64 mots de l'EEPROM (depuis `COPIE`), relit et compare.
+fn tester_motif(c: &Cpu, b: &mut Cps2Bus, motif: u16) -> bool {
+    let copie = a5(c, ram::COPIE);
+    for i in 0..MOTS_EEPROM as u32 {
+        wr16(b, copie + 2 * i, motif);
+    }
+    wr32(b, a5(c, ram::TAMPON), copie);
+    wr16(b, a5(c, ram::MOTS_COURANT), MOTS_EEPROM - 1);
+    wr16(b, a5(c, ram::DEBUT_COURANT), 0);
+    ecrire(c, b);
+    lire(c, b);
+    (0..MOTS_EEPROM as u32).all(|i| rd16(b, copie + 2 * i) == motif)
+}
+
+/// 0x2da4a : lit l'EEPROM dans la copie en RAM, la teste avec quatre motifs, puis y réécrit la copie
+/// (validée par `config::valider_copie`). Faux si un motif n'a pas été relu.
+pub fn tester(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+    toute_eeprom(c, b);
+    lire_verifier(c, b);
+    if !MOTIFS.iter().all(|&m| tester_motif(c, b, m)) {
+        return false;
+    }
+    crate::config::valider_copie(c, b);
+    toute_eeprom(c, b);
+    ecrire_verifier(c, b);
+    true
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -644,3 +686,64 @@ natif!(
     regs::CCR,
     false
 );
+
+// ---------------------------------------------------------------------------------------------
+// Parties gratuites et RAM de la carte de développement
+
+/// Compteur des parties gratuites (A5+0x25 non nul : jeu gratuit) et suites en code d'origine qui tiennent
+/// les compteurs de la RAM supplémentaire (carte de développement, `SANS_COMPTA` non nul : jamais sur une
+/// borne).
+const COMPTEUR_GRATUIT: u32 = 0x2db1e;
+const SUITE_GRATUIT: u32 = 0x2e59a;
+const SUITE_PAYANT: u32 = 0x2e4fc;
+const JEU_GRATUIT: u32 = 0x25;
+
+/// `tst.b (SANS_COMPTA,A5)` : rend vrai si la RAM supplémentaire est utilisée (drapeaux comme l'original).
+fn carte_de_developpement(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+    let v = rd8(b, a5(c, ram::SANS_COMPTA));
+    c.flags_logic(v as u32, Size::Byte);
+    v != 0
+}
+
+/// 0x2e4ec (départ d'un joueur) : en jeu gratuit, le compteur des parties gratuites.
+fn compta_parties(c: &mut Cpu, b: &mut Cps2Bus) {
+    let gratuit = rd8(b, a5(c, JEU_GRATUIT)) != 0;
+    if gratuit {
+        call(c, b, COMPTEUR_GRATUIT);
+    }
+    if carte_de_developpement(c, b) {
+        c.pc = if gratuit { SUITE_GRATUIT } else { SUITE_PAYANT };
+        return;
+    }
+    rts(c, b);
+}
+
+/// 0x2dc9a (démarrage) : vérification de la RAM supplémentaire, seulement sur la carte de développement.
+fn compta_init(c: &mut Cpu, b: &mut Cps2Bus) {
+    if carte_de_developpement(c, b) {
+        call(c, b, 0x2dca6);
+        c.pc = 0x2dcd2;
+        return;
+    }
+    rts(c, b);
+}
+
+pub const COMPTA_PARTIES: Native = Native {
+    entry: 0x2e4ec,
+    name: "compta_parties",
+    cost: |_, _| 100,
+    run: compta_parties,
+    touches_sound: false,
+    outputs: regs::CCR,
+    exact_cost: false,
+};
+
+pub const COMPTA_INIT: Native = Native {
+    entry: 0x2dc9a,
+    name: "compta_init",
+    cost: |_, _| 100,
+    run: compta_init,
+    touches_sound: false,
+    outputs: regs::CCR,
+    exact_cost: false,
+};

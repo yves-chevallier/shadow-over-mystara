@@ -6,7 +6,7 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::{Fetch, Size};
-use m68k::{Cpu, SR_Z};
+use m68k::{Cpu, SR_C, SR_Z};
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::ops::logique;
@@ -808,6 +808,488 @@ fn countdown_then_state(c: &mut Cpu, b: &mut Cps2Bus) {
     wr32(b, me + 4, 0x020e_0000);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Choix d'une cible selon un critère imposé (0x43bc)
+// ---------------------------------------------------------------------------------------------
+
+/// Critère de choix d'un joueur.
+#[derive(Clone, Copy, PartialEq)]
+enum Criterion {
+    Nearest,
+    LowestHp,
+    Farthest,
+}
+
+/// Joueur ciblable au sens de 0x43ca : présent, d'état principal < 4, et visible sauf s'il porte
+/// le drapeau `+0x182` (qui dispense du test de visibilité).
+fn targetable(b: &mut Cps2Bus, player: u32) -> bool {
+    rd8(b, player) != 0
+        && (rd8(b, player + 0x182) != 0 || rd8(b, player + 1) & 2 == 0)
+        && (rd8(b, player + 4) as i8) < 4
+}
+
+/// 0x43bc : choisit un joueur selon le critère D0 (0 le plus proche, 2 le moins de PV, 4 le plus
+/// éloigné ; distance = |dx| + |dy|, à égalité le dernier l'emporte sauf pour le plus proche). A1 =
+/// joueur (0 si aucun), copié en `+0x50` ; D5 = 2 si trouvé ; Z levé si aucun.
+fn target_by_criterion(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let criterion = match c.d[0] as u16 {
+        0 => Criterion::Nearest,
+        2 => Criterion::LowestHp,
+        _ => Criterion::Farthest,
+    };
+    let (x, depth) = (rd16(b, me + f::X), rd16(b, me + f::DEPTH));
+    let mut best: u16 = match criterion {
+        Criterion::Nearest => 0xffff,
+        Criterion::LowestHp => 0x7fff,
+        Criterion::Farthest => 0,
+    };
+    let mut found = 0;
+    for k in 0..4 {
+        let player = PLAYERS + k * PLAYER_STRIDE;
+        if !targetable(b, player) {
+            continue;
+        }
+        let (value, better) = match criterion {
+            Criterion::LowestHp => {
+                let hp = rd16(b, player + 0x62);
+                (hp, hp as i16 <= best as i16)
+            }
+            _ => {
+                let dx = (rd16(b, player + f::X).wrapping_sub(x) as i16).wrapping_abs() as u16;
+                let dy = (rd16(b, player + f::DEPTH).wrapping_sub(depth) as i16).wrapping_abs() as u16;
+                let distance = dx.wrapping_add(dy);
+                (distance, if criterion == Criterion::Nearest { distance < best } else { distance >= best })
+            }
+        };
+        if better {
+            best = value;
+            found = player;
+        }
+    }
+    c.a[1] = found;
+    wr16(b, me + f::TARGET, found as u16);
+    c.d[5] = if found != 0 { 2 } else { 0 };
+    logique(c, c.d[5], Size::Word);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tirages par tables : attitude, riposte, esquive (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118,
+// 0x10112). Une table de pointeurs (longs) est indexée par un octet de l'objet ; la ligne choisie est
+// lue au hasard (octets) ou par le compteur d'images (masques de 32 bits, un bit tiré au hasard).
+// ---------------------------------------------------------------------------------------------
+
+/// Masque de 32 bits de la ligne `number` de la table `pointers`, choisi par le compteur d'images, et
+/// tirage d'un de ses bits : vrai si le bit est levé. D0 = bit tiré, D2 = masque, A4 = ligne.
+fn tick_mask_roll(c: &mut Cpu, b: &mut Cps2Bus, pointers: u32, number_at: u32) -> bool {
+    let number = rd8(b, number_at);
+    c.a[4] = rd32(b, pointers + 4 * number as u32);
+    let tick = rd16(b, TICK);
+    c.d[2] = rd32(b, c.a[4].wrapping_add(offset(tick << 2)));
+    let roll = random(b) as u32 & 31;
+    c.d[0] = roll;
+    c.d[2] >> roll & 1 != 0
+}
+
+/// Octet tiré au hasard (32 choix) dans la ligne `number` de la table `pointers`. D0 = tirage, A4 = ligne.
+fn random_entry(c: &mut Cpu, b: &mut Cps2Bus, pointers: u32, number_at: u32) -> u8 {
+    let number = rd8(b, number_at);
+    c.a[4] = rd32(b, pointers + 4 * number as u32);
+    let roll = random(b) as u32 & 31;
+    c.d[0] = roll;
+    rd8(b, c.a[4] + roll)
+}
+
+/// 0x788c : `+0x6b` tiré dans la table de la ligne `+0x6a`.
+fn draw_6b(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let v = random_entry(c, b, 0x78ae, me + 0x6a);
+    wr8(b, me + 0x6b, v);
+    logique(c, v as u32, Size::Byte);
+}
+
+/// Test d'écran de l'objet (marge D0) : retenue levée s'il est dans l'écran.
+const ON_SCREEN: u32 = 0x1e92;
+
+/// 0x79f6 : dans l'écran, `+0x6e` est tiré dans la table de la ligne `+0x6d`, sinon il vaut 1. D0 = 1.
+fn draw_6e(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    c.d[0] = 0;
+    call(c, b, ON_SCREEN);
+    let v = if c.sr & SR_C != 0 { random_entry(c, b, 0x7a50, me + 0x6d) } else { 1 };
+    wr8(b, me + 0x6e, v);
+    moveq(c, 1);
+}
+
+/// 0x79ce : si le bit tiré dans le masque de la ligne `+0x6c` est levé, comme 0x79f6 ; sinon D0 = 0.
+fn maybe_draw_6e(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    if tick_mask_roll(c, b, 0x7a34, me + 0x6c) {
+        draw_6e(c, b);
+    } else {
+        moveq(c, 0);
+    }
+}
+
+/// 0xb048 et 0xb068 : la victime A1 pare-t-elle le coup de l'agresseur A0 (résolution des coups, `combat`) ?
+/// Il faut qu'elle sache parer (`+0x67`), soit au sol (`+0xc` nul) et face à l'agresseur ; un bit est alors
+/// tiré dans le masque de sa ligne `+0x68` (`+0x69` pour 0xb068). D0 = 1 si le coup est paré.
+fn parries(c: &mut Cpu, b: &mut Cps2Bus, field: u32) {
+    let (attacker, victim) = (c.a[0], c.a[1]);
+    let facing = rd8(b, attacker + f::FACING);
+    if rd8(b, victim + 0x67) == 0 || rd16(b, victim + 0x0c) != 0 || facing == rd8(b, victim + f::FACING) {
+        return moveq(c, 0);
+    }
+    let parried = tick_mask_roll(c, b, 0xb0b0, victim + field);
+    moveq(c, parried as i32);
+}
+
+fn parries_68(c: &mut Cpu, b: &mut Cps2Bus) {
+    parries(c, b, 0x68)
+}
+
+fn parries_69(c: &mut Cpu, b: &mut Cps2Bus) {
+    parries(c, b, 0x69)
+}
+
+/// 0xf118 : hors de l'écran, `+0x84` = 1 ; sinon `+0x84` = 0 et `+0x85` tiré dans la ligne `+0x8e`, bloc choisi
+/// par le compteur d'images (32 octets par paire d'images).
+fn draw_84(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    c.d[0] = 0;
+    call(c, b, ON_SCREEN);
+    if c.sr & SR_C == 0 {
+        wr16(b, me + 0x84, 1);
+        return;
+    }
+    let number = rd8(b, me + 0x8e) as u32;
+    let block = (rd16(b, TICK) >> 1) << 5;
+    c.a[4] = rd32(b, 0xf160 + 4 * number).wrapping_add(offset(block));
+    let roll = random(b) as u32 & 31;
+    c.d[0] = roll;
+    let v = rd8(b, c.a[4] + roll);
+    wr8(b, me + 0x85, v);
+    wr8(b, me + 0x84, 0);
+    logique(c, v as u32, Size::Word);
+}
+
+/// 0x10112 : `+0x68` = 8, ou, si `A5+0x5a` est posé, une valeur selon lui (plafonné à 4) et le nombre de
+/// joueurs en vie.
+fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let level = rd8(b, A5 + 0x5a);
+    c.d[0] = level as u32;
+    let v = if level == 0 {
+        8
+    } else {
+        c.d[1] = rd8(b, A5 + 0x35).wrapping_mul(4) as u32;
+        let row = ((level.wrapping_sub(1) as i8).min(3) as u8).wrapping_add(c.d[1] as u8);
+        c.d[0] = row as u32;
+        crate::mem::prog8(b, 0x10144 + row as u32)
+    };
+    wr8(b, me + 0x68, v);
+    logique(c, v as u32, Size::Byte);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xe2f6)
+// ---------------------------------------------------------------------------------------------
+
+/// Allocation d'un objet ramassable (ITEM) : A1, retenue levée si le pool est plein.
+const ALLOC_ITEM: u32 = 0x23d8;
+const ALLOC_EFFECT: u32 = 0x2318;
+
+/// Alloue par `alloc` (0x2318, 0x23d8) : l'objet dans A1, ou `None` si le pool est plein.
+fn alloc(c: &mut Cpu, b: &mut Cps2Bus, alloc: u32) -> Option<u32> {
+    call(c, b, alloc);
+    (c.sr & SR_C == 0).then_some(c.a[1])
+}
+
+/// Mot suivant de la table A2 (espace de données).
+fn next_word(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
+    let v = rd16(b, c.a[2]);
+    c.a[2] += 2;
+    v
+}
+
+/// Copie la position de `from` dans `to`, posée 16 pixels plus haut et juste devant.
+fn place_above(b: &mut Cps2Bus, from: u32, to: u32) {
+    for field in [0x08, 0x0c, 0x10] {
+        let v = rd16(b, from + field);
+        wr16(b, to + field, v);
+    }
+    let z = rd16(b, to + 0x0c).wrapping_add(0x10);
+    wr16(b, to + 0x0c, z);
+    let depth = rd16(b, to + 0x10).wrapping_sub(1);
+    wr16(b, to + 0x10, depth);
+}
+
+/// Débris (EFFCT de type 0x32, variante 0xc) : `+0x58`/`+0x18` puis vitesses lus dans la table A2,
+/// décalage et vitesse en x retournés si l'objet regarde à gauche. Une ligne n'est consommée que si
+/// l'effet a pu être créé.
+fn debris(b: &mut Cps2Bus, fx: u32, me: u32) {
+    wr8(b, fx, 1);
+    wr8(b, fx + 2, 0x32);
+    wr8(b, fx + 3, 0xc);
+    let x = rd16(b, me + 0x08);
+    wr16(b, fx + 0x08, x);
+}
+
+/// 0x1172e : D5 + 1-ème jeu de débris (table 0x1178a : nombre - 1, puis lignes de 4 mots : décalage x,
+/// vitesse x, `+0x18`, `+0x58`), partant de la position de l'objet.
+fn debris_set(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let index = (c.d[5] as u16).wrapping_mul(4);
+    c.a[2] = crate::mem::prog32(b, 0x1178a_u32.wrapping_add(offset(index)));
+    let count = next_word(c, b);
+    let mirrored = rd8(b, me + f::FACING) != 0;
+    for left in (0..=count).rev() {
+        set_w(&mut c.d[5], left);
+        let Some(fx) = alloc(c, b, ALLOC_EFFECT) else { continue };
+        debris(b, fx, me);
+        let z = rd16(b, me + 0x0c);
+        wr16(b, fx + 0x0c, z);
+        let depth = rd32(b, me + 0x10).wrapping_sub(1);
+        wr32(b, fx + 0x10, depth);
+        let (mut dx, mut vx) = (next_word(c, b), next_word(c, b));
+        let v18 = next_word(c, b);
+        wr16(b, fx + 0x18, v18);
+        let v58 = next_word(c, b);
+        wr16(b, fx + 0x58, v58);
+        if mirrored {
+            dx = dx.wrapping_neg();
+            vx = vx.wrapping_neg();
+        }
+        set_w(&mut c.d[1], dx);
+        set_w(&mut c.d[2], vx);
+        let x = rd16(b, fx + 0x08).wrapping_add(dx);
+        wr16(b, fx + 0x08, x);
+        wr16(b, fx + 0x14, vx);
+    }
+    set_w(&mut c.d[5], 0xffff);
+}
+
+/// 0x11a36 : cinq débris au sol (profondeur `A5+0x5aa`) ; table 0x11a9e, ou 0x11ada si D0.b est non nul
+/// (lignes de 6 mots : décalage x, vitesse x, vitesse z, `+0x18`, décalage en profondeur, `+0x1c`).
+/// Puis 0xede08.
+fn ground_debris(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    c.a[2] = if c.d[0] as u8 == 0 { 0x11a9e } else { 0x11ada };
+    let mirrored = rd8(b, me + f::FACING) != 0;
+    for left in (0..=4u16).rev() {
+        set_w(&mut c.d[5], left);
+        let Some(fx) = alloc(c, b, ALLOC_EFFECT) else { continue };
+        debris(b, fx, me);
+        let ground = rd16(b, A5 + 0x5aa);
+        wr16(b, fx + 0x10, ground);
+        let (mut dx, mut vx, mut vz) = (next_word(c, b), next_word(c, b), next_word(c, b));
+        let v18 = next_word(c, b);
+        wr16(b, fx + 0x18, v18);
+        let ddepth = next_word(c, b);
+        let v1c = next_word(c, b);
+        wr16(b, fx + 0x1c, v1c);
+        if mirrored {
+            dx = dx.wrapping_neg();
+            vx = vx.wrapping_neg();
+            vz = vz.wrapping_neg();
+        }
+        set_w(&mut c.d[1], dx);
+        set_w(&mut c.d[2], vx);
+        set_w(&mut c.d[3], vz);
+        set_w(&mut c.d[4], ddepth);
+        let x = rd16(b, fx + 0x08).wrapping_add(dx);
+        wr16(b, fx + 0x08, x);
+        let v14 = rd16(b, fx + 0x14).wrapping_add(vx);
+        wr16(b, fx + 0x14, v14);
+        wr16(b, fx + 0x16, vz);
+        let depth = rd16(b, fx + 0x10).wrapping_add(ddepth);
+        wr16(b, fx + 0x10, depth);
+    }
+    set_w(&mut c.d[5], 0xffff);
+    call(c, b, 0xede08);
+}
+
+/// Butin lancé en l'air (ITEM de genre `kind`, variante `variant`) : vitesses (±0x140, -0x28 en z...),
+/// retournées si `mirrored`.
+fn tossed_item(b: &mut Cps2Bus, me: u32, item: u32, kind: u8, variant: u8, vy: u16, mirrored: bool) {
+    wr8(b, item, 1);
+    wr8(b, item + 2, kind);
+    wr8(b, item + 3, variant);
+    place_above(b, me, item);
+    wr16(b, item + 0x18, 0x300);
+    wr16(b, item + 0x1a, (-0x28i16) as u16);
+    wr16(b, item + 0x14, 0x140);
+    wr16(b, item + 0x1c, vy);
+    if mirrored {
+        for field in [0x14, 0x1c] {
+            let v = rd16(b, item + field).wrapping_neg();
+            wr16(b, item + field, v);
+        }
+    }
+}
+
+/// 0xb648 : une seule fois par objet (`+0x9d`), selon un bit tiré dans le masque `+0x9c` (table 0xb6fc), lâche
+/// l'objet de genre 2 propre à son type (`+2`, table 0xb6e4 ; 0 : rien).
+fn drop_once(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    if rd8(b, me + 0x9d) != 0 {
+        return;
+    }
+    let roll = random(b) as u32 & 31;
+    c.d[0] = roll;
+    c.a[1] = 0xb6fc;
+    let mask = rd8(b, me + 0x9c) as u32;
+    c.d[1] = rd32(b, 0xb6fc + 4 * mask);
+    if c.d[1] >> roll & 1 == 0 {
+        return;
+    }
+    let kind = rd8(b, me + 2) as u32;
+    let variant = crate::mem::prog8(b, 0xb6e4 + kind);
+    c.d[0] = variant as u32;
+    if variant == 0 {
+        return;
+    }
+    let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+    wr8(b, me + 0x9d, 1);
+    tossed_item(b, me, item, 2, variant, (-0x40i16) as u16, false);
+    let flip = random(b) & 1 != 0;
+    c.d[0] = flip as u32;
+    if flip {
+        for field in [0x14, 0x1c] {
+            let v = rd16(b, item + field).wrapping_neg();
+            wr16(b, item + field, v);
+        }
+    }
+}
+
+/// Nombre de tirages de butin : deux à plus de trois joueurs en vie, sinon un.
+fn loot_rolls(b: &mut Cps2Bus) -> u16 {
+    if rd8(b, A5 + 0x35) > 3 {
+        2
+    } else {
+        1
+    }
+}
+
+/// 0xb780 : butin de l'objet (ligne `+0x80` de la table 0xb806, 16 tirages possibles ; négatif : rien).
+fn drop_loot(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let row = rd8(b, me + 0x80) as u16;
+    c.d[2] = row as u32;
+    if row == 0 {
+        return;
+    }
+    c.d[2] = (row << 4) as u32;
+    for left in (0..loot_rolls(b)).rev() {
+        c.d[5] = left as u32;
+        let roll = (random(b) & 15).wrapping_add(row << 4);
+        let variant = crate::mem::prog8(b, 0xb806_u32.wrapping_add(offset(roll)));
+        set_w(&mut c.d[0], roll & 0xff00 | variant as u16);
+        if (variant as i8) < 0 {
+            return;
+        }
+        let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+        tossed_item(b, me, item, 0, variant, 0x40, left != 0);
+    }
+    set_w(&mut c.d[5], 0xffff);
+}
+
+/// 0xe2f6 : trésor de l'objet (ligne `+0x80` de la table 0xe372 ; chaque tirage désigne une liste d'objets
+/// de genre 5 terminée par un octet négatif, numérotés à partir de 1 dans `+0x2f`).
+fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let row = rd8(b, me + 0x80) as u16;
+    c.d[2] = row as u32;
+    if row == 0 {
+        return;
+    }
+    c.d[2] = (row << 4) as u32;
+    c.d[4] = 1;
+    for left in (0..loot_rolls(b)).rev() {
+        c.d[5] = left as u32;
+        let roll = (random(b) & 15).wrapping_add(row << 4);
+        set_w(&mut c.d[0], roll);
+        let list = crate::mem::prog8(b, 0xe372_u32.wrapping_add(offset(roll)));
+        c.d[1] = (list as u32) << 2 & 0xffff;
+        if (list as i8) < 0 {
+            return;
+        }
+        c.a[4] = rd32(b, 0xe642 + 4 * list as u32);
+        loop {
+            let variant = rd8(b, c.a[4]);
+            c.a[4] += 1;
+            set_b(&mut c.d[0], variant);
+            if (variant as i8) < 0 {
+                break;
+            }
+            let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+            wr8(b, item, 1);
+            wr8(b, item + 2, 5);
+            wr8(b, item + 3, variant);
+            wr8(b, item + 0x2f, c.d[4] as u8);
+            let rank = (c.d[4] as u8).wrapping_add(1);
+            set_b(&mut c.d[4], rank);
+            place_above(b, me, item);
+        }
+    }
+    set_w(&mut c.d[5], 0xffff);
+}
+
+/// 0xe7fa : comme 0xe886, choisit le point de marche le plus proche autour de la cible et mémorise son
+/// numéro (`+0x99`, -1 si aucun) ; loin de la caméra, marche vers un point lointain (0xf084).
+fn choose_near_walk_point(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    if rd16(b, me + f::TARGET) == 0 {
+        return;
+    }
+    let camera = if rd8(b, A5 + 0x36) != 0 { rd16(b, A5 + 0x556) } else { rd16(b, A5 + 0x506) };
+    c.d[1] = c.d[1] & !0xffff | camera as u32;
+    if rd16(b, me + f::X).wrapping_sub(camera) > 384 {
+        return walk_far_point(c, b);
+    }
+    wr8(b, me + LAST_POINT, 0xff);
+    let target = object(rd16(b, me + f::TARGET));
+    c.a[1] = target;
+    let set = rd8(b, me + POINT_SET) as u32;
+    let mut at = rd32(b, WALK_POINTS + 4 * set);
+    let last = rd16(b, at);
+    at += 2;
+    let (target_x, target_depth) = (rd16(b, target + f::X), rd16(b, target + f::DEPTH));
+    wr16(b, me + GOAL_X, target_x);
+    wr16(b, me + GOAL_DEPTH, target_depth);
+    let mut best: u16 = 0x7fff;
+    for point in (0..=last).rev() {
+        let (x, depth) = (rd16(b, at).wrapping_add(target_x), rd16(b, at + 2).wrapping_add(target_depth));
+        at += 4;
+        let distance = manhattan(b, me, x, depth);
+        if distance <= best {
+            best = distance;
+            wr16(b, me + GOAL_X, x);
+            wr16(b, me + GOAL_DEPTH, depth);
+            wr8(b, me + LAST_POINT, point as u8);
+        }
+        set_w(&mut c.d[0], x);
+        set_w(&mut c.d[1], depth);
+    }
+    c.a[2] = at;
+    set_w(&mut c.d[4], best);
+    set_w(&mut c.d[6], 0xffff);
+}
+
+/// Routines d'atterrissage par type (longs du code) : ennemis (classe 2) aux indices 0..31, boss ensuite.
+const LANDING_BY_KIND: u32 = 0x3e49c;
+
+/// 0x3e480 : saute à la routine d'atterrissage propre au type (`+2`) de l'ennemi ou du boss A0, appelée par
+/// les réactions communes aux coups (`families::reactions`). D0 = index × 4, A1 = routine, comme l'original.
+fn landing_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    let base: u8 = if rd8(b, me + 0x28) == 2 { 0 } else { 32 };
+    let index = base.wrapping_add(rd8(b, me + 2)) as u16 * 4;
+    c.d[0] = index as u32;
+    c.a[1] = crate::mem::prog32(b, LANDING_BY_KIND.wrapping_add(offset(index)));
+    c.pc = c.a[1];
+}
+
 /// Native d'une fonction « corps » (sans RTS) : le RTS est ajouté.
 macro_rules! leaf {
     ($entry:literal, $name:literal, $body:path) => {
@@ -845,5 +1327,20 @@ pub const NATIVES: &[Native] = &[
     aid(0x1161c, "boss_pousse_joueur", push_player),
     Native { outputs: 0, ..aid(0x115e2, "boss_pousse_joueurs", push_players) },
     Native { outputs: regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR, ..aid(0x67452, "ia_joueur_proche", nearest_player_in_box) },
+    Native { outputs: regs::a(1) | regs::d(5) | regs::CCR, ..leaf!(0x43bc, "ia_cible_par_critere", target_by_criterion) },
+    Native { outputs: regs::d(0) | regs::a(4) | regs::CCR, ..leaf!(0x788c, "ia_tirage_6b", draw_6b) },
+    Native { outputs: regs::d(0) | regs::d(2) | regs::a(4) | regs::CCR, ..leaf!(0x79ce, "ia_tirage_6e_masque", maybe_draw_6e) },
+    Native { outputs: regs::d(0) | regs::a(4) | regs::CCR, ..leaf!(0x79f6, "ia_tirage_6e", draw_6e) },
+    Native { outputs: regs::d(0) | regs::d(2) | regs::a(4) | regs::CCR, ..leaf!(0xb048, "ia_parade", parries_68) },
+    Native { outputs: regs::d(0) | regs::d(2) | regs::a(4) | regs::CCR, ..leaf!(0xb068, "ia_parade_b", parries_69) },
+    Native { outputs: regs::d(0) | regs::a(4) | regs::CCR, ..leaf!(0xf118, "ia_tirage_84", draw_84) },
+    Native { outputs: regs::d(0) | regs::d(1) | regs::CCR, ..leaf!(0x10112, "ia_valeur_68", set_68) },
+    Native { outputs: regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2), ..leaf!(0x1172e, "debris_jeu", debris_set) },
+    Native { outputs: regs::ALL, ..leaf!(0x11a36, "debris_au_sol", ground_debris) },
+    Native { outputs: regs::d(0) | regs::d(1) | regs::a(1), ..leaf!(0xb648, "butin_unique", drop_once) },
+    Native { outputs: regs::d(0) | regs::d(2) | regs::d(5) | regs::a(1), ..leaf!(0xb780, "butin", drop_loot) },
+    Native { outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(4) | regs::d(5) | regs::a(1) | regs::a(4), ..leaf!(0xe2f6, "tresor", drop_treasure) },
+    Native { outputs: regs::a(1) | regs::a(2), ..leaf!(0xe7fa, "ia_point_proche_numerote", choose_near_walk_point) },
+    Native { outputs: regs::d(0) | regs::a(1), ..aid(0x3e480, "ia_atterrissage_par_type", landing_by_kind) },
 ];
 

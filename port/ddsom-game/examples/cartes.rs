@@ -526,6 +526,8 @@ fn index(dossier: &Path, doc: &Path, vues: &[u32]) {
     md += "refaire que quelques-unes ; `DDSOM_ROUTES=1` relève aussi la scène suivante en forçant la sortie de scène,\n";
     md += "`DDSOM_REF=1` enregistre une capture du jeu `ref_NN.png` pour comparaison). La seconde recrée la planche\n";
     md += "et réécrit ce fichier.\n\n";
+    md += "Les tables elles-mêmes (blocs, bandes, tables de bandes des scènes) sont extraites sans perte dans\n";
+    md += "`assets/levels.json` par l'outil `extract` : voir [assets.md](assets.md).\n\n";
     md += "## Méthode\n\n";
     md += "Le décor n'est pas reconstitué par des captures d'écran : il est relu dans la ROM, comme le font les\n";
     md += "caméras du jeu (`port/ddsom-game/src/scroll.rs`, `docs/video.md` §B1).\n\n";

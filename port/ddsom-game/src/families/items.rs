@@ -6,8 +6,13 @@
 //! produit son effet quand un joueur le ramasse (le code du joueur pose `RAMASSE` et `PROPRIETAIRE`).
 //! Voir `docs/familles.md` pour la description de chaque type.
 
+use cps2::Cps2Bus;
+use m68k::Cpu;
+
+use crate::mem::{rd16, rts, wr16, wr32, A5};
 use crate::objects::pools;
 use crate::objects::Obj;
+use crate::{regs, Native};
 
 use super::{ajoute_u8, gestionnaire, pointeur, rom, Ctx};
 
@@ -2134,3 +2139,118 @@ gestionnaire!(ITEM_6, scene::ENTREE, "item_scene", scene_gestionnaire);
 gestionnaire!(ITEM_7, reserve::ENTREE, "item_reserve", reserve_gestionnaire);
 gestionnaire!(ITEM_8, contact::ENTREE, "item_contact", contact_gestionnaire);
 gestionnaire!(ITEM_9, accompagnement::ENTREE, "item_accompagnement", accompagnement_gestionnaire);
+
+// ---------------------------------------------------------------------------------------------
+// Sous-routines appelées hors des gestionnaires
+
+/// `0xdabba` : efface le tableau des objets de collection ramassés (48 longs en `A5 - 0x5b88`).
+/// Registres laissés comme l'original : D0 = 0, D6.w = 0xffff, A0 = fin du tableau.
+fn efface_ramasses(c: &mut Cpu, b: &mut Cps2Bus) {
+    let debut = A5.wrapping_add(RAMASSES as u32);
+    for k in 0..48 {
+        wr32(b, debut + 4 * k, 0);
+    }
+    c.d[0] = 0;
+    c.d[6] = c.d[6] & 0xffff_0000 | 0xffff;
+    c.a[0] = debut + 4 * 48;
+    rts(c, b);
+}
+
+pub const EFFACE_RAMASSES: Native = Native {
+    entry: 0xdabba,
+    name: "item_efface_ramasses",
+    cost: |_, _| 1000,
+    run: efface_ramasses,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::d(6) | regs::a(0),
+    exact_cost: false,
+};
+
+/// Un équipement du joueur qui peut tomber quand il est touché : (octet de l'objet porté, compteur de
+/// coups, table des chances par coup).
+struct Porte {
+    objet: u32,
+    coups: u32,
+    chances: u32,
+}
+
+/// Le joueur touché perd au plus un objet par coup : bouclier (`+0x165`, 0 à 3), arme spéciale (`+0x163`)
+/// puis anneau (`+0x162`, sauf 1). Chaque coup décrémente un compteur ; tant qu'il reste positif, la chute
+/// dépend d'un tirage (bit `rng & 0xf` du mot de la table pour ce compteur, en clair) ; l'objet tombe par
+/// `0xcc352` (D0.b = son numéro d'objet).
+const BOUCLIER: Porte = Porte { objet: 0x165, coups: 0x16d, chances: 0xdb7c4 };
+const ARME: Porte = Porte { objet: 0x163, coups: 0x16c, chances: 0xdb7b8 };
+const ANNEAU: Porte = Porte { objet: 0x162, coups: 0x16b, chances: 0xdb7d0 };
+/// Nombre d'objets lâchés à ce coup (mot).
+const LACHES: u32 = A5 - 0x5ac8;
+const LACHE_OBJET: u32 = 0xcc352;
+
+/// Le compteur de coups de `p` est épuisé, ou le tirage fait tomber l'objet.
+fn tombe(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte) -> bool {
+    let n = o.u8(b, p.coups).wrapping_sub(1);
+    o.set_u8(b, p.coups, n);
+    if (n as i8) < 0 {
+        return true;
+    }
+    c.a[4] = p.chances;
+    let i = 2 * n as u32;
+    c.d[0] = i;
+    let masque = rd16(b, p.chances + i);
+    c.d[2] = c.d[2] & 0xffff_0000 | masque as u32;
+    crate::call(c, b, rom::RNG);
+    let bit = c.d[0] as u16 & 0xf;
+    c.d[0] = c.d[0] & 0xffff_0000 | bit as u32;
+    c.d[2] >> bit & 1 != 0
+}
+
+fn lache(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte, numero: u8) {
+    c.d[0] = c.d[0] & !0xff | numero as u32;
+    crate::call(c, b, LACHE_OBJET);
+    o.set_u8(b, p.objet, 0xff);
+    o.set_u8(b, p.coups, 0);
+}
+
+fn compte_lache(b: &mut Cps2Bus) {
+    let n = rd16(b, LACHES).wrapping_add(1);
+    wr16(b, LACHES, n);
+}
+
+/// `0xdb6c0` : chute d'équipement du joueur A0 touché.
+fn chute_equipement(c: &mut Cpu, b: &mut Cps2Bus) {
+    let o = Obj(c.a[0]);
+    wr16(b, LACHES, 0);
+    let bouclier = o.u8(b, BOUCLIER.objet);
+    if bouclier <= 3 && tombe(c, b, o, &BOUCLIER) {
+        lache(c, b, o, &BOUCLIER, bouclier + 4);
+        compte_lache(b);
+    }
+    if (o.u8(b, ARME.objet) as i8) >= 0 && tombe(c, b, o, &ARME) && rd16(b, LACHES) == 0 {
+        c.d[0] = 0;
+        lache(c, b, o, &ARME, 3);
+        compte_lache(b);
+    }
+    let anneau = o.u8(b, ANNEAU.objet);
+    if (anneau as i8) >= 0 && anneau != 1 && tombe(c, b, o, &ANNEAU) && rd16(b, LACHES) == 0 {
+        c.d[0] = c.d[0] & !0xff | anneau as u32;
+        crate::call(c, b, LACHE_OBJET);
+        o.set_u8(b, ANNEAU.objet, 0xff);
+        // le personnage 5 garde son anneau d'origine (1)
+        let personnage = o.u8(b, 0x3) >> 1;
+        c.d[0] = personnage as u32;
+        if personnage == 5 {
+            o.set_u8(b, ANNEAU.objet, 1);
+        }
+        o.set_u8(b, ANNEAU.coups, 0);
+    }
+    rts(c, b);
+}
+
+pub const CHUTE_EQUIPEMENT: Native = Native {
+    entry: 0xdb6c0,
+    name: "item_chute_equipement",
+    cost: |_, _| 200,
+    run: chute_equipement,
+    touches_sound: false,
+    outputs: regs::d(0) | regs::d(2) | regs::a(4),
+    exact_cost: false,
+};

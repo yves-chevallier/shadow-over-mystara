@@ -5,7 +5,7 @@ chaque *type* est une fonction d'état appelée par la boucle de dispatch de la 
 
 | Classe | Pool | Table des gestionnaires | Boucle de dispatch | Types |
 |---|---|---|---|---|
-| ESHL (8) | 38 × 0x60 octets, A5+0x3c5e | 0x39b96 | 0x39b70 | 64 |
+| ESHL (8) | 38 × 0x60 octets, A5+0x3c5e | 0x39b96 | 0x39b70 | 73 (64 à 72 : `eshl_d.rs`) |
 | SET (0x10) | 32 × 0x50 octets, A5+0x4a9e | 0x39eac | 0x39e86 | 34 (le type 33 réutilise le 3) |
 | SOBJ (0x14) | 16 × 0x50 octets, A5+0x795e | 0x39fa8 | 0x39f82 | 16 (le type 4 réutilise le 8 de SET) |
 
@@ -32,7 +32,7 @@ le code d'origine ; leur durée s'ajoute d'elle-même.
   absolus ou par registre : les deux espaces diffèrent sur CPS2, le programme étant chiffré).
   Macro `handlers!` : table `NATIVES` d'un fichier, `adresse "nom" coût chemin`.
 * `shell.rs` : champs et aides propres à ESHL (`f::OWNER`, `place_in_front`, `blink`...).
-* `eshl.rs`, `eshl_b.rs`, `eshl_c.rs` : types ESHL ; `set.rs`, `set_b.rs`, `set_c.rs` : types SET ;
+* `eshl.rs`, `eshl_b.rs`, `eshl_c.rs`, `eshl_d.rs` : types ESHL (`creators.rs` : petites routines de création appelées par le code d'origine) ; `set.rs`, `set_b.rs`, `set_c.rs` : types SET ;
   `sobj.rs` : types SOBJ. Un type = un `mod` avec une fonction `run`, des constantes nommées pour ses
   états et ses tables, et un commentaire décrivant son rôle. Les tables de données restent dans la ROM
   (lues par `rom16`/`data16`), seules leurs adresses sont des constantes.

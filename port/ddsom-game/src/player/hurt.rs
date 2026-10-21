@@ -13,7 +13,7 @@
 use super::actions::to_stand;
 use super::walk::{clamp_to_screen, move_x, move_xyz, move_xz};
 use super::{animation, ram, Ctx, Player};
-use crate::mem::{wr16, wr8};
+use crate::mem::{wr16, wr8, A5};
 use crate::objects::anim::{load_entry, script_of};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
@@ -88,25 +88,177 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x3aae8, fall_b),
     (0x3ad4c, launch_c),
     (0x3ad66, fall_c),
+    (0x3adbe, shock_start),
+    (0x3ae0e, shock_fall),
+    (0x3ae32, shock_struggle),
+    (0x3ae7a, shock_release),
+    (0x3aeaa, dizzy_start),
+    (0x3aeca, dizzy),
+    (0x3b1fa, sit_start),
+    (0x3b264, sit_fall),
+    (0x3b27e, |g, p| {
+        if animation::step(g, p) {
+            sit_down(g, p);
+        }
+    }),
+    (0x3b28a, sit_struggle),
+    (0x3b44c, held),
+    (0x3a204, |g, p| {
+        if is_dead(g, p) {
+            knock_down(g, p);
+            return downed(g, p);
+        }
+        next_step(g, p);
+        set_launch(g, p, 0x200, 0x200);
+        face_attacker(g, p);
+        hurt_animation(g, p, 3);
+    }),
+    (0x3a238, |g, p| {
+        animation::step(g, p);
+        if p.u8(g, 0x33) != 0 {
+            next_step(g, p);
+        }
+    }),
+    (0x3a24c, |g, p| {
+        move_xz(g, p);
+        if altitude(g, p) < 0 {
+            p.set_u32(g, Obj::Z, 0);
+            p.set_u16(g, Obj::ANIM_TIMER, 1);
+            next_step(g, p);
+        }
+    }),
+    (0x3a268, finish_get_up),
+    (0x3a2a4, |g, p| {
+        hurt_animation(g, p, 6);
+        launch_common(g, p);
+    }),
+    (0x3b040, |g, p| {
+        let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+        p.set_u8(g, Player::TIMER_6F, left);
+        if left == 0 {
+            next_step(g, p);
+            hurt_animation(g, p, 16);
+        }
+    }),
+    (0x3b074, |g, p| {
+        next_step(g, p);
+        hurt_animation(g, p, 30);
+    }),
+    (0x3b07e, |g, p| {
+        if animation::step(g, p) {
+            p.set_u8(g, Player::ACTIVE, 1);
+            p.set_u8(g, Player::INVULN, 0);
+            next_step(g, p);
+            p.set_u8(g, Player::TIMER_6F, 96);
+        }
+    }),
+    (0x3b0a0, |g, p| {
+        if struggle_out(g, p) {
+            next_step(g, p);
+            hurt_animation(g, p, 32);
+        }
+    }),
+    (0x3b054, |g, p| {
+        let ended = animation::step(g, p);
+        if ended || (p.u8(g, Player::SLOW) != 0 && p.u8(g, 0x33) != 0) {
+            next_step(g, p);
+        }
+    }),
+    (0x3a656, |g, p| hurl(g, p, 0x200, 6)),
+    (0x3b4e0, |g, p| {
+        next_step(g, p);
+        p.set_u32(g, Obj::VX, 0);
+        p.set_u8(g, Player::INVULN, 50);
+        p.set_u16(g, Obj::VZ, 0x200);
+        p.set_u16(g, Obj::AZ, (-64i16) as u16);
+        hurt_animation(g, p, 22);
+        knock_down_if_dead(g, p);
+    }),
+    (0x3b504, crash_landing),
+    (0x3a68a, |g, p| hurled(g, p, 8, 16)),
+    (0x3a706, |g, p| hurled_landing(g, p, 9, false)),
+    (0x3a75a, |g, p| hurled_slide(g, p, 26)),
+    (0x3ab7c, |g, p| hurl(g, p, 0x100, 24)),
+    (0x3a8de, |g, p| hurl(g, p, 0x200, 10)),
+    (0x3a912, |g, p| hurled(g, p, 12, 16)),
+    (0x3abb0, |g, p| hurled(g, p, 12, 14)),
+    (0x3ac2c, |g, p| hurled_landing(g, p, 13, true)),
+    (0x3ac86, |g, p| start_slide(g, p, 0x400)),
+    (0x3acba, |g, p| hurled_slide(g, p, 24)),
+    (0x3acfe, |g, p| {
+        if p.u8(g, 0x33) == 0 {
+            move_xz(g, p);
+            if altitude(g, p) <= 0 {
+                p.set_u32(g, Obj::Z, 0);
+                next_step(g, p);
+                hurt_animation(g, p, 9);
+                g.rom(rom::LANDING_EFFECT, p);
+                return;
+            }
+        }
+        animation::step(g, p);
+    }),
+    (0x3b150, |g, p| {
+        if animation::step(g, p) {
+            next_step(g, p);
+        }
+    }),
 ];
+
+/// Réactions qui aiguillent leurs pas par une table (`+7` -> décalage relatif à la table) : adresse de la
+/// réaction, adresse de sa table. Les pas partagés entre réactions sont ainsi atteints par `HANDLERS`.
+const STEP_TABLES: &[(u32, u32)] = &[
+    (0x3a1f0, 0x3a1fc),
+    (0x3a274, 0x3a280),
+    (0x3a578, 0x3a584),
+    (0x3a62a, 0x3a636),
+    (0x3a7f6, 0x3a802),
+    (0x3a86e, 0x3a87a),
+    (0x3a890, 0x3a89c),
+    (0x3a8b2, 0x3a8be),
+    (0x3a9da, 0x3a9e6),
+    (0x3a9f8, 0x3aa04),
+    (0x3ab16, 0x3ab22),
+    (0x3ab52, 0x3ab5e),
+    (0x3ad96, 0x3ada2),
+    (0x3ae8a, 0x3ae96),
+    (0x3af44, 0x3af50),
+    (0x3b0cc, 0x3b0d8),
+    (0x3b160, 0x3b16c),
+    (0x3b1e4, 0x3b1f0),
+    (0x3b30e, 0x3b31a),
+    (0x3b4c4, 0x3b4d0),
+    (0x3b570, 0x3b57c),
+    (0x3b66e, 0x3b67a),
+    (0x3b72c, 0x3b738),
+    (0x3b7ba, 0x3b7c6),
+    (0x3b8a6, 0x3b8b2),
+    (0x3b8c4, 0x3b8d0),
+];
+
+/// Pas vide (un simple RTS), partagé par plusieurs réactions.
+const IDLE_STEP: u32 = 0x3a1a6;
 
 /// Exécute la routine d'origine à `addr`, réécrite si possible.
 pub fn run_at(g: &mut Ctx, p: Player, addr: u32) {
     cov!();
-    match HANDLERS.iter().find(|h| h.0 == addr) {
-        Some(&(_, f)) => f(g, p),
-        None => {
-            g.c.d[0] = 0; // les routines d'origine complètent l'octet bas de D0 : le reste doit être nul
-            g.rom(addr, p);
-        }
+    if let Some(&(_, f)) = HANDLERS.iter().find(|h| h.0 == addr) {
+        f(g, p);
+    } else if let Some(&(_, table)) = STEP_TABLES.iter().find(|t| t.0 == addr) {
+        jump(g, p, table);
+    } else if addr != IDLE_STEP {
+        g.rom(addr, p);
     }
 }
 
-/// Saut par table de décalages : l'entrée `index` de la table `base` donne l'adresse de la suite.
+/// Saut par table de décalages : l'entrée `index` de la table `base` donne l'adresse de la suite. Comme
+/// l'original, D0 = `index` et D1 = décalage à l'entrée de la suite.
 fn jump_table(g: &mut Ctx, p: Player, base: u32, index: u8) {
     cov!();
-    let offset = g.prog16(base + index as u32) as i16 as i32 as u32;
-    run_at(g, p, base.wrapping_add(offset));
+    let offset = g.prog16(base + index as u32);
+    g.c.d[0] = index as u32;
+    g.c.d[1] = g.c.d[1] & 0xffff_0000 | offset as u32;
+    run_at(g, p, base.wrapping_add(offset as i16 as i32 as u32));
 }
 
 /// Réaction à pas : aiguille selon `+7`.
@@ -528,6 +680,386 @@ fn fall_b(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     next_step(g, p);
     hurt_animation(g, p, 9);
+}
+
+// ---- réaction 0x34 (0x3b4c4) : chute violente ------------------------------------------------------
+
+/// 0x3b504 : à l'atterrissage, l'écran tremble (0x2824, D0 = 10) et le joueur perd `+0x6f` PV (hors
+/// cinématique) ; à zéro il meurt.
+fn crash_landing(g: &mut Ctx, p: Player) {
+    cov!();
+    animation::step(g, p);
+    move_xz(g, p);
+    stop_at_wall(g, p);
+    if altitude(g, p) > 0 {
+        return;
+    }
+    g.c.d[0] = g.c.d[0] & 0xffff_0000 | 10;
+    g.rom(0x2824, p);
+    p.set_u32(g, Obj::Z, 0);
+    if g.a5u8(ram::FROZEN) == 0 {
+        let hp = p.u16(g, Player::HP).wrapping_sub(p.u8(g, Player::TIMER_6F) as u16);
+        p.set_u16(g, Player::HP, hp);
+        if (hp as i16) <= 0 {
+            p.set_u8(g, Player::ACTIVE, 2);
+            p.set_u16(g, Player::HP, 0);
+            p.set_u16(g, Player::MAIN, 0x0400);
+            g.rom(rom::DEATH_EFFECT, p);
+            let alive = g.a5u8(ram::PLAYERS_ALIVE).wrapping_sub(1);
+            g.set_a5u8(ram::PLAYERS_ALIVE, alive);
+        }
+    }
+    next_step(g, p);
+    hurt_animation(g, p, 9);
+    g.rom(rom::LANDING_EFFECT, p);
+}
+
+// ---- réaction 0x3e (0x3a62a) : projeté au loin -------------------------------------------------------
+
+/// Le joueur, projeté, a quitté la zone de l'écran (plus de 320 pixels après le bord gauche + 32) ou
+/// heurté un obstacle.
+fn hurled_out(g: &mut Ctx, p: Player) -> bool {
+    cov!();
+    if p.u8(g, Player::BLOCKED) != 0 {
+        return true;
+    }
+    let camera = A5 + if g.a5u8(ram::USE_ALT_CAMERA) != 0 { 0x54e } else { 0x4fe };
+    let gap = p.u16(g, Obj::X).wrapping_sub(crate::mem::rd16(g.b, camera + 8)).wrapping_sub(32);
+    gap > 320
+}
+
+/// 0x3a656, 0x3ab7c : projection au ras du sol (vx 0x800, vitesse verticale `vz`, 18 images), animation `anim`.
+fn hurl(g: &mut Ctx, p: Player, vz: u16, anim: u16) {
+    cov!();
+    next_step(g, p);
+    p.set_u16(g, Obj::VX, 0x800);
+    p.set_u16(g, Obj::AX, 0);
+    p.set_u16(g, Obj::VZ, vz);
+    p.set_u16(g, Obj::AZ, (-4i16) as u16);
+    let freeze = p.u8(g, 0x57);
+    p.set_u8(g, Player::HITSTOP, freeze);
+    face_attacker(g, p);
+    p.set_u8(g, Player::TIMER_6F, 18);
+    hurt_animation(g, p, anim);
+    knock_down_if_dead(g, p);
+}
+
+/// 0x3a68a, 0x3abb0 : vol bas (18 images), puis freinage (animation `brake`) ; un obstacle ou le bord de
+/// l'écran arrêtent net le vol (chute au pas `out`, animation 25).
+fn hurled(g: &mut Ctx, p: Player, brake: u16, out: u8) {
+    cov!();
+    animation::step(g, p);
+    move_xz(g, p);
+    let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    if left == 0 {
+        next_step(g, p);
+        p.set_u16(g, Obj::AZ, (-64i16) as u16);
+        let ax: u16 = if p.faces_left(g) { 32 } else { (-32i16) as u16 };
+        p.set_u16(g, Obj::AX, ax);
+        return hurt_animation(g, p, brake);
+    }
+    if !hurled_out(g, p) {
+        return;
+    }
+    p.set_u32(g, Obj::VX, 0);
+    p.set_u16(g, Obj::VZ, 0);
+    p.set_u16(g, Obj::AZ, (-64i16) as u16);
+    p.set_u8(g, Player::STEP, out);
+    hurt_animation(g, p, 25);
+}
+
+/// 0x3a706, 0x3ac2c : retombe ; au sol, animation `anim` (et poussière si `effect`) ; un obstacle ou le bord
+/// arrêtent le glissement.
+fn hurled_landing(g: &mut Ctx, p: Player, anim: u16, effect: bool) {
+    cov!();
+    animation::step(g, p);
+    move_xz(g, p);
+    if altitude(g, p) <= 0 {
+        p.set_u32(g, Obj::Z, 0);
+        next_step(g, p);
+        hurt_animation(g, p, anim);
+        if effect {
+            g.rom(rom::LANDING_EFFECT, p);
+        }
+        return;
+    }
+    if hurled_out(g, p) {
+        p.set_u32(g, Obj::VX, 0);
+    }
+}
+
+/// 0x3a75a, 0x3acba : glissade au sol (poussière une image sur deux) ; à l'arrêt, pas `stop`.
+fn hurled_slide(g: &mut Ctx, p: Player, stop: u8) {
+    cov!();
+    move_x(g, p);
+    if p.u16(g, Obj::VX) != 0 && g.a5u8(ram::FRAME_COUNTER) & 1 != 0 {
+        g.c.d[0] = 0;
+        g.c.d[1] = 0;
+        g.c.d[2] = 0;
+        g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
+        g.rom(rom::SLIDE_DUST, p);
+    }
+    stop_at_wall(g, p);
+    if p.u8(g, Obj::VX) == 0 {
+        p.set_u8(g, Player::STEP, stop);
+    }
+}
+
+// ---- réaction 0x22 (0x3ad96) : pris (h) — projeté, puis il se débat --------------------------------
+
+/// Changement des directions maintenues depuis l'image précédente (le joueur « se débat »).
+fn struggling(g: &mut Ctx, p: Player) -> bool {
+    p.u8(g, Player::KEYS_HELD) & 15 != p.u8(g, Player::KEYS_PREV) & 15
+}
+
+/// Durée de la prise, décomptée par les secousses.
+const HOLD: u32 = 0x1f0;
+/// Son de la prise et de la libération (D0 = 1).
+const HOLD_SOUND: u32 = 0xab7d8;
+
+/// 0x3adbe : petite projection, palette 1/19, 30 images ; s'il n'a plus de PV, à terre.
+fn shock_start(g: &mut Ctx, p: Player) {
+    cov!();
+    if is_dead(g, p) {
+        knock_down(g, p);
+        return downed(g, p);
+    }
+    next_step(g, p);
+    p.set_u8(g, HOLD, 8);
+    p.set_u16(g, Obj::VX, 0x200);
+    p.set_u16(g, Obj::AX, 0);
+    p.set_u16(g, Obj::VZ, 0x400);
+    p.set_u16(g, Obj::AZ, (-128i16) as u16);
+    face_attacker(g, p);
+    p.set_u8(g, Player::PALETTE_GROUP, 1);
+    p.set_u8(g, Player::PALETTE, 19);
+    p.set_u8(g, Player::TIMER_6F, 30);
+    p.set_u8(g, Player::HITSTOP, 1);
+    hurt_animation(g, p, 27);
+    g.rom(0xebbda, p);
+}
+
+/// 0x3ae0e : retombe (sans animation).
+fn shock_fall(g: &mut Ctx, p: Player) {
+    cov!();
+    move_xz(g, p);
+    stop_at_wall(g, p);
+    if altitude(g, p) > 0 {
+        return;
+    }
+    p.set_u32(g, Obj::Z, 0);
+    next_step(g, p);
+}
+
+/// 0x3ae32 : chaque secousse avance l'animation et use la prise ; prise usée : libéré. Au bout de
+/// `+0x6f` images, la suite (`shock_release`).
+fn shock_struggle(g: &mut Ctx, p: Player) {
+    cov!();
+    if struggling(g, p) {
+        animation::step(g, p);
+        let left = p.u8(g, HOLD).wrapping_sub(1);
+        p.set_u8(g, HOLD, left);
+        if left == 0 {
+            g.c.d[0] = 1;
+            g.rom(HOLD_SOUND, p);
+            p.set_u16(g, Player::PALETTE_GROUP, 0);
+            return recover(g, p);
+        }
+    }
+    let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    if left != 0 {
+        return;
+    }
+    next_step(g, p);
+    g.c.d[0] = 1;
+    g.rom(HOLD_SOUND, p);
+}
+
+/// 0x3ae7a : palette rétablie, projection.
+fn shock_release(g: &mut Ctx, p: Player) {
+    cov!();
+    p.set_u16(g, Player::PALETTE_GROUP, 0);
+    launch_a(g, p);
+    p.set_u8(g, Player::HITSTOP, 1);
+}
+
+// ---- réaction 0x24 (0x3ae8a) : étourdi -----------------------------------------------------------
+
+/// Étoiles de l'étourdissement (D0, D1 = réglages).
+const STARS: u32 = 0xb378a;
+
+/// 0x3aeaa : étoiles, 40 images d'étourdissement.
+fn dizzy_start(g: &mut Ctx, p: Player) {
+    cov!();
+    g.c.d[0] = 0;
+    g.c.d[1] = 0;
+    g.rom(STARS, p);
+    next_step(g, p);
+    p.set_u8(g, Player::TIMER_6F, 40);
+    p.set_u8(g, Player::HITSTOP, 1);
+    hurt_animation(g, p, 0);
+}
+
+/// 0x3aeca : le joueur vacille d'un pixel à gauche et à droite (parfois de nouvelles étoiles), puis tombe
+/// en arrière (animation 22 ou 23 une image sur deux).
+fn dizzy(g: &mut Ctx, p: Player) {
+    cov!();
+    let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    if left != 0 {
+        if g.random() & 127 == 0 {
+            g.c.d[0] = 0;
+            g.c.d[1] = 1;
+            g.rom(STARS, p);
+        }
+        let mut dx: u16 = 1;
+        if left & 1 != 0 {
+            dx = dx.wrapping_neg();
+        }
+        if p.faces_left(g) {
+            dx = dx.wrapping_neg();
+        }
+        g.c.d[0] = dx as u32;
+        let x = p.u16(g, Obj::X).wrapping_add(dx);
+        p.set_u16(g, Obj::X, x);
+        return;
+    }
+    next_step(g, p);
+    p.set_u16(g, Obj::VX, 0x180);
+    p.set_u16(g, Obj::AX, 0);
+    p.set_u32(g, Obj::VY, 0);
+    p.set_u16(g, Obj::VZ, 0x400);
+    p.set_u16(g, Obj::AZ, (-64i16) as u16);
+    if p.faces_left(g) {
+        // 0x3b952 : `neg.l` du couple (vitesse, accélération)
+        let pair = p.u32(g, Obj::VX).wrapping_neg();
+        p.set_u32(g, Obj::VX, pair);
+    }
+    let anim = if g.a5u8(ram::FRAME_COUNTER) & 1 != 0 { 23 } else { 22 };
+    hurt_animation(g, p, anim);
+    p.set_u8(g, Player::HITSTOP, 0);
+    knock_down_if_dead(g, p);
+}
+
+// ---- réaction 0x28 (0x3b1e4) : assis par terre, il se débat pour se relever ------------------------------
+
+/// 0x3b1fa.
+fn sit_start(g: &mut Ctx, p: Player) {
+    cov!();
+    if is_dead(g, p) {
+        p.set_u16(g, Player::MAIN, 0x0400);
+        p.set_u8(g, Player::ACTIVE, 2);
+        p.set_u8(g, Player::HITSTOP, 1);
+        return jump(g, p, steps::DOWN_6);
+    }
+    p.set_u8(g, Player::TIMER_6F, 120);
+    next_step(g, p);
+    if p.u16(g, Obj::Z) != 0 {
+        p.set_u32(g, Obj::VX, 0);
+        p.set_u16(g, Obj::VZ, 0);
+        p.set_u16(g, Obj::AZ, (-64i16) as u16);
+        return hurt_animation(g, p, 3);
+    }
+    sit(g, p);
+}
+
+/// 0x3b23c : assis (animation 35), ou en marche lente directement relevé (0x3b24e).
+fn sit(g: &mut Ctx, p: Player) {
+    cov!();
+    next_step(g, p);
+    if p.u8(g, Player::SLOW) == 0 {
+        return hurt_animation(g, p, 35);
+    }
+    sit_down(g, p);
+}
+
+/// 0x3b24e : la lutte commence (animation 34), plus d'invulnérabilité.
+fn sit_down(g: &mut Ctx, p: Player) {
+    cov!();
+    p.set_u8(g, Player::ACTIVE, 1);
+    p.set_u8(g, Player::INVULN, 0);
+    next_step(g, p);
+    hurt_animation(g, p, 34);
+}
+
+/// 0x3b264 : retombe, puis s'assied.
+fn sit_fall(g: &mut Ctx, p: Player) {
+    cov!();
+    animation::step(g, p);
+    move_xz(g, p);
+    if altitude(g, p) > 0 {
+        return;
+    }
+    p.set_u16(g, Obj::Z, 0);
+    sit(g, p);
+}
+
+/// 0x3b28a : chaque secousse use deux images de `+0x6f` (une sinon) ; au bout, il se relève (animation 32,
+/// 48 images d'invulnérabilité).
+fn sit_struggle(g: &mut Ctx, p: Player) {
+    cov!();
+    animation::step(g, p);
+    if !struggle_out(g, p) {
+        return;
+    }
+    next_step(g, p);
+    p.set_u8(g, Player::INVULN, 48);
+    hurt_animation(g, p, 32);
+}
+
+/// `+0x6f` baisse d'une image, de deux si le joueur se débat ; vrai quand il est épuisé.
+fn struggle_out(g: &mut Ctx, p: Player) -> bool {
+    cov!();
+    let mut left = p.u8(g, Player::TIMER_6F);
+    if struggling(g, p) {
+        left = left.wrapping_sub(1);
+    }
+    left = left.wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    (left as i8) <= 0
+}
+
+// ---- réaction 0x32 (0x3b44c) : tenu par un ennemi ----------------------------------------------------
+
+/// Ennemi qui tient le joueur (pointeur de 16 bits) et drapeau « tenu ».
+const HOLDER: u32 = 0x186;
+const HELD: u32 = 0x188;
+/// État de l'ennemi qui tient sa prise.
+const HOLDING: u16 = 0x020c;
+
+/// 0x3b44c : le joueur, tenu, se débat : 20 nouvelles directions le libèrent ; il est aussi libéré si
+/// l'ennemi lâche prise (son état n'est plus 0x020c).
+fn held(g: &mut Ctx, p: Player) {
+    cov!();
+    if p.u8(g, Player::STEP) == 0 {
+        next_step(g, p);
+        p.set_u8(g, Player::TIMER_6F, 20);
+        return hurt_animation(g, p, 31);
+    }
+    animation::step(g, p);
+    let pressed = p.u8(g, Player::KEYS_HELD) & 15 & !(p.u8(g, Player::KEYS_PREV) & 15);
+    if pressed != 0 {
+        let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+        p.set_u8(g, Player::TIMER_6F, left);
+        if left == 0 {
+            return break_free(g, p);
+        }
+    }
+    let holder = p.u16(g, HOLDER) as i16 as i32 as u32;
+    if crate::mem::rd16(g.b, holder + 4) != HOLDING {
+        break_free(g, p);
+    }
+}
+
+/// Libéré : réaction 0x34 (relâché).
+fn break_free(g: &mut Ctx, p: Player) {
+    cov!();
+    p.set_u8(g, HELD, 0);
+    p.set_u8(g, Player::ACTIVE, 1);
+    p.set_state(g, 0x0204_3400);
+    p.set_u8(g, Player::TIMER_6F, 0);
 }
 
 // ---- gestionnaires par sous-état ---------------------------------------------------------------

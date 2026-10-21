@@ -1,7 +1,9 @@
 # Déroulement des scènes (W2, W3, F6)
 
 Code : `port/ddsom-game/src/scene/` (`mod.rs` : contexte et variables communes, `script.rs` : lecteur de
-script d'apparition, `entry.rs` : phase 8, `intermission.rs` : phase 24, `exit.rs` : phase 16). Les
+script d'apparition, `entry.rs` : phase 8, `intermission.rs` : phase 24, `exit.rs` : phase 16, ses états partagés
+`tally.rs`, `bonus.rs`, `characters.rs`, `shop.rs`, `blackout.rs`, et leurs aides `tiles.rs` (couche de caractères),
+`screen.rs`). Les
 tables restent dans la ROM et sont lues à l'exécution. `A5` = 0xFF8000. Les rôles marqués (h) sont des
 hypothèses.
 
@@ -97,40 +99,62 @@ effets), `+0x14` scène suivante (séquence 21). 36 séquences, une par fin de s
 est commun :
 
 ```
-état 0       efface le monde (0xf7ee0), dessine l'image de fin (0xf7916)         Clear
-état 4       attend la minuterie, fait sortir les joueurs (état 0x000c0000)      WalkWait
-états suivants  écrans partagés (decompte, bonus, changement de zone)            Shared
-dernier état prépare la scène suivante et cède la main                           Leave
+état 0       variables de transition (0xf7ee0) et bloc de la boutique (0xf7916) à zéro   Clear
+état 4       attend la minuterie, fait sortir les joueurs (état 0x000c0000)             WalkWait
+états suivants  états partagés (décompte, bonus, intermède, boutique, fondu au noir)    Shared
+dernier état prépare la scène suivante et cède la main                                  Leave
 ```
 
 Chaque image la séquence exécute l'état courant puis une fin d'image (`Update`) qui met le monde à jour,
-sauf à l'état final. **États partagés** (restés en 68000) : `0xf590e` (décompte des points, sans
-cession), `0xf5938` et `0xf6492` (écrans de bonus, avec cessions), `0xf792e`, `0xf7ecc` (changement
-de zone : plusieurs cessions) ; quand une séquence atteint l'un d'eux, la native cède la main à la
-séquence d'origine (`Ex::delegate` : `PC` ← début de la séquence, sans `rts`), qui continue exactement
-au même endroit. **États finaux** (`Leave`) : `A5+0x42` ← 0, fondu (`0x168c`), joueurs et sprites remis
+sauf à l'état final. L'aiguillage d'origine appelle l'état par `jsr (A1)` (entrée + 4) puis compare
+`(2,A0)` au dernier état (entrée + 10) ; les séquences 0, 6, 20, 29, 31 et 33 sautent à l'état (`jmp (A1)`)
+et leurs états finissent eux-mêmes l'image (`Update::Nothing`, pas d'adresse de retour empilée). La
+séquence 27 devient la 29 quand `A5+0x66` est posé (son aiguillage suit ce test, entrée + 10).
+
+**États partagés** (modules `tally`, `bonus`, `characters`, `shop`, `blackout`) : appelés comme par
+l'aiguillage (son adresse de retour, entrée + 10, empilée), ils cèdent souvent la main à l'ordonnanceur
+(attentes `0xa40`, fondus `0x1460`/`0x144c`, `0xb64`) ; la suite est une native posée à l'adresse de
+reprise d'origine, qui finit par revenir à l'aiguillage, où une native (`DISPATCH_TAILS`, entrée + 10)
+fait la fin d'image. Les registres qui servent d'entrée implicite sont reproduits (D1 de l'aiguillage
+relu comme `+0x2f` d'un effet par 0xb1a7a, A6 et D1 gardés à travers les cessions de l'intermède).
+
+| Adresse | Module | Rôle | Sous-états (octet `+3`, pas de 2) |
+|---|---|---|---|
+| `0xf590e` | `tally` | décompte de fin de niveau | 0 fondu (tâche 0x14de) puis bandeau « STAGE CLEAR » + nom dessiné hors champ (`0x910020`) ; 2 le bandeau glisse depuis la colonne 48 ; 4 temps restant (ou « TIME OVER » et prime du trésor en grands chiffres) ; 8 prime de temps : de 5:00 au temps restant par pas de dix secondes, prime du pas en table `0xf6ba0` ; 10 prime des secondes (unités × taux BCD `0xf5b06`) ; 12 total ; 14 total par joueur ; 16-18 trésor (`+0x18a`, prime `0x19c0e`, objet SET 19 qui l'emporte) ; 20-22 meilleur nombre de coups (`+0x190`, prime `0xf6c1c`) ; 24 versement chiffre par chiffre (0x19ae6) ; 26 fin |
+| `0xf5938` | `bonus` | écran de bonus (joueurs aux longs `+0x118`/`+0x11c` à -1) | 0 fondu au noir, caméras de côté ; 2 décor chargé, effets ; 4 cinq SET triés par adresse, le dernier mène le jeu, compte à rebours 90 s ; 6 compte à rebours (repart de 20 s quand le score du meneur change) ; 8 fondu ; 10 caméras rendues ; 12 fondu d'ouverture |
+| `0xf6492` | `characters` | intermède propre à certains personnages (masque par scène `0xf672e`, bit = octet `+3` / 2) | 0 fondu, écran vidé ; 2 joueur suivant concerné ; 4 trois SET (types 5, 6, 7) créés dès qu'il y a de la place ; 6 ; 8 240 images ; 10 fin |
+| `0xf792e` | `shop` | boutique (scène 69 + numéro, table `0xf7ad0`) ; bloc `A5-0x5560` (voir le module) | 0 ouverture, tâche des portraits `0xf7dfe` ; 2 attente ; 4 fondu, accueil (`0xf7b88`, correctif des scènes 109-114) ; 6 messages ; 8 messages de sortie, retour à la scène de retour ou boutique enchaînée |
+| `0xf7ecc` | `blackout` | fondu au noir et préparation de la scène suivante | 0 noir, remises à zéro (la scène 105 garde une caméra) ; 2 palettes (table `0xf80c4`) ; 4 script de transition de la scène (table `0xf81fa`, variables `A5-0x5520`) **resté en 68000** |
+
+**États finaux** (`Leave`) : `A5+0x42` ← 0, fondu (`0x168c`, sauf séquence 31), joueurs et sprites remis
 à zéro (`0x1de7c`), éventuellement la scène suivante (`A5+0x34`), `A5+0x2c` ← 0x08000000 (phase 8),
 puis cession de quelques images à l'ordonnanceur (`0xa40`) ; la native s'arrête là en empilant
 l'adresse de reprise d'origine, où d'autres natives (`RESUME_*`) finissent par `0xc0c` et `0xe0882`.
 C'est la technique générale pour une routine qui cède : **découper aux points de cession** et rendre
 chaque morceau accessible à l'adresse de reprise du code d'origine.
 
-Séquences réécrites : 0 à 5, 7 à 19, 21 à 26, 28, 30, 32, 34, 35. Cédées à l'original : 6, 20, 27, 29,
-31, 33 (aiguillage par saut), correspondant aux scènes 7, 35 et 111, 54, 59, 65, 67.
+Toutes les séquences sont réécrites ; seuls les scripts de transition par scène (`0xf8200-0xfa300`, une
+vingtaine, dialogues entre deux niveaux, cessions à presque chaque pas) restent en 68000.
 
 | Scènes | Séquence | Scène suivante |
 |---|---|---|
 | 0 et ~80 autres (défaut) | 0 | scène + 1 |
+| 7 | 6 | scène + 1 |
 | 6 / 9 | 5 / 7 | scène + 1 (la 6 : 10 si le compteur d'images `A5+0x54` dépasse 0x1500) |
 | 24 | 13 | 106 |
 | 26 | 14 | 27 |
+| 35, 111 | 20 | 33 |
 | 38 (choix de route) | 21 | 39, 41 ou 43 selon le dialogue 70 (table `0xf4a0c`) |
 | 41 | 23 | 44 |
 | 46 | 26 | 38 |
+| 54 | 27 | 55 (si `A5+0x66` : comme la 29) |
 | 58 | 28 | 59 |
+| 59 | 29 | scène + 1 |
 | 64 | 30 | 65 |
+| 65 | 31 | scène + 1 |
 | 66 | 32 | 105 |
-| 1, 2, 4, 5, 10, 11, 14, 20, 31-34, 40, 42, 44, 68, 105 | 1-4, 8-12, 15-19, 22, 25, 34, 35 | choisie par les états partagés (changement de zone) |
+| 67 | 33 | 38 |
+| 1, 2, 4, 5, 10, 11, 14, 20, 31-34, 40, 42, 44, 68, 105 | 1-4, 8-12, 15-19, 22, 25, 34, 35 | choisie par les états partagés (script de transition) |
 
 ### Particularités fidèlement reproduites
 
@@ -140,7 +164,7 @@ Séquences réécrites : 0 à 5, 7 à 19, 21 à 26, 28, 30, 32, 34, 35. Cédées
   (`Ex::a0_clobbered`). Sans cela, la mise à jour du monde est omise et les deux machines divergent.
 * L'état final de la phase 16 empile, sous l'adresse de reprise, l'adresse de retour de l'aiguillage
   (`entrée + 10`) : le mot de pile de la tâche principale (table des tâches, comparé par `validate`) en
-  dépend, et la reprise finit par le code d'origine de l'aiguillage.
+  dépend ; la reprise finit par la native de fin d'aiguillage (`DISPATCH_TAILS`).
 * La séquence 2 commence par décrémenter sa minuterie (mot qui part de 0) : un état d'origine commence au
   milieu d'une instruction pour le désassembleur linéaire ; vérifier chaque état par un désassemblage
   depuis son adresse exacte (`objdump --start-address`).
@@ -157,6 +181,6 @@ Séquences réécrites : 0 à 5, 7 à 19, 21 à 26, 28, 30, 32, 34, 35. Cédées
 * Les scénarios `scene_05`, `07`, `08`, `11`, `67`, `110` et `end_01`, longtemps en écart (`scenarios/ko/README.md`),
   sont VALIDES : leurs écarts venaient d'autres modules (harpie, fenêtres de dialogue, appel de fondu de la porte 29,
   registres du constructeur de sprites) et de comportements indéfinis de l'original (`docs/boucle.md` §9).
-* Non exercé : la phase 24 (aucun scénario n'y entre), les séquences cédées à l'original
-  (6, 20, 27, 29, 31, 33 : seul l'aiguillage est testé), la phase 28 (réécrite : `docs/modes.md`) et la saisie du
-  nom et le générique de fin.
+* Non exercé : la phase 24 (aucun scénario n'y entre), la phase 28 (réécrite : `docs/modes.md`), la saisie du nom et le
+  générique de fin, et quelques reprises des états partagés (boutique enchaînée, retentatives de création d'objets de
+  l'intermède, fin de l'écran de bonus de la scène 1).

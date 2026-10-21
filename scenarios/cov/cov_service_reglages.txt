@@ -1,0 +1,122 @@
+600 Service Mode 1
+900 P1 Down 1
+1000 P1 Down 0
+1040 P1 Up 1
+1140 P1 Up 0
+1180 P1 Down 1
+1184 P1 Down 0
+1224 P1 Down 1
+1228 P1 Down 0
+1268 P1 Down 1
+1272 P1 Down 0
+1312 P1 Down 1
+1316 P1 Down 0
+1356 P1 Down 1
+1360 P1 Down 0
+1400 P1 Down 1
+1404 P1 Down 0
+1444 poke8 ff801c 17
+1454 P1 Button 1 1
+1458 P1 Button 1 0
+1558 P1 Button 1 1
+1562 P1 Button 1 0
+1632 P1 Right 1
+1636 P1 Right 0
+1676 P1 Left 1
+1680 P1 Left 0
+1720 P1 Down 1
+1724 P1 Down 0
+1764 P1 Down 1
+1768 P1 Down 0
+1808 P1 Down 1
+1812 P1 Down 0
+1852 P1 Up 1
+1856 P1 Up 0
+1896 P1 Up 1
+1900 P1 Up 0
+1940 P1 Up 1
+1944 P1 Up 0
+1984 P1 Down 1
+1988 P1 Down 0
+2028 P1 Right 1
+2128 P1 Right 0
+2168 P1 Left 1
+2268 P1 Left 0
+2308 P1 Button 1 1
+2408 P1 Button 1 0
+2448 P1 Button 2 1
+2548 P1 Button 2 0
+2588 P1 Up 1
+2592 P1 Up 0
+2632 P1 Up 1
+2636 P1 Up 0
+2676 P1 Button 1 1
+2680 P1 Button 1 0
+2750 P1 Down 1
+2754 P1 Down 0
+2794 P1 Down 1
+2798 P1 Down 0
+2838 P1 Down 1
+2842 P1 Down 0
+2882 P1 Button 1 1
+2886 P1 Button 1 0
+3046 poke16 ff8070 0
+3046 poke8 ff801c 18
+3056 P1 Button 1 1
+3060 P1 Button 1 0
+3160 P1 Button 1 1
+3164 P1 Button 1 0
+3234 P1 Right 1
+3238 P1 Right 0
+3278 P1 Left 1
+3282 P1 Left 0
+3322 P1 Down 1
+3326 P1 Down 0
+3366 P1 Down 1
+3370 P1 Down 0
+3410 P1 Down 1
+3414 P1 Down 0
+3454 P1 Down 1
+3458 P1 Down 0
+3498 P1 Down 1
+3502 P1 Down 0
+3542 P1 Down 1
+3546 P1 Down 0
+3586 P1 Down 1
+3590 P1 Down 0
+3630 P1 Up 1
+3634 P1 Up 0
+3674 P1 Button 1 1
+3678 P1 Button 1 0
+3748 P1 Down 1
+3752 P1 Down 0
+3792 P1 Down 1
+3796 P1 Down 0
+3836 P1 Down 1
+3840 P1 Down 0
+3880 P1 Button 1 1
+3884 P1 Button 1 0
+4044 poke16 ff8070 4
+4054 P1 Button 1 1
+4058 P1 Button 1 0
+4158 P1 Button 1 1
+4162 P1 Button 1 0
+4232 P1 Left 1
+4236 P1 Left 0
+4276 P1 Right 1
+4280 P1 Right 0
+4320 P1 Left 1
+4324 P1 Left 0
+4364 P1 Up 1
+4368 P1 Up 0
+4408 P1 Button 1 1
+4412 P1 Button 1 0
+4482 P1 Down 1
+4486 P1 Down 0
+4526 P1 Down 1
+4530 P1 Down 0
+4570 P1 Down 1
+4574 P1 Down 0
+4614 P1 Button 1 1
+4618 P1 Button 1 0
+30001 quit

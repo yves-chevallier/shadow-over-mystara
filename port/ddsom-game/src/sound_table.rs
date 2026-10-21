@@ -6,7 +6,7 @@ const fn w(entry: u32, cmd: super::Cmd, d2: u32, d3: u32, opts: u8) -> Wrapper {
     Wrapper { entry, cmd, d2, d3, opts }
 }
 
-/// 429 wrappers décrits ; les autres (14) restent en code 68000.
+/// 429 wrappers décrits ; les autres (14) sont des aiguillages (`sound::AIGUILLAGES`).
 pub const WRAPPERS: &[Wrapper] = &[
     w(0xe0be2, Fixe(0x3a), 0x00000000, 0x00000000, 0),
     w(0xe0c16, Fixe(0x3b), 0x00010000, 0x00500000, 0),

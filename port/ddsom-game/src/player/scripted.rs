@@ -18,7 +18,7 @@ use super::checks::{special_attack, throw_button};
 use super::effects::restore_palette;
 use super::states::State;
 use super::walk::{move_x, move_z};
-use super::{animation, ram, Ctx, Player};
+use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 
@@ -89,10 +89,15 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x23df2, wait_inputs),
 ];
 
+/// Version Rust de la routine d'origine `addr`, si elle est réécrite.
+fn handler(addr: u32) -> Option<Handler> {
+    HANDLERS.iter().chain(cinematics::HANDLERS).chain(cinematics::INTRO_HANDLERS).find(|h| h.0 == addr).map(|h| h.1)
+}
+
 fn run_at(g: &mut Ctx, p: Player, addr: u32) {
     cov!();
-    match HANDLERS.iter().find(|h| h.0 == addr) {
-        Some(&(_, f)) => f(g, p),
+    match handler(addr) {
+        Some(f) => f(g, p),
         None => {
             g.c.d[0] = 0; // les routines d'origine complètent l'octet bas de D0 : le reste doit être nul
             g.rom(addr, p);
@@ -145,8 +150,8 @@ pub fn update(g: &mut Ctx, p: Player) {
             // l'aiguillage d'origine (0x23f40) saute avec D0 = 4 × scène et A1 = routine
             g.c.d[0] = scene << 2;
             g.c.a[1] = routine;
-            match HANDLERS.iter().find(|h| h.0 == routine) {
-                Some(&(_, f)) => f(g, p),
+            match handler(routine) {
+                Some(f) => f(g, p),
                 None => {
                     g.rom(routine, p);
                 }
@@ -392,7 +397,7 @@ fn walk_in_end(g: &mut Ctx, p: Player) {
 }
 
 /// 0x24102 : cinématique vide : une pose immobile.
-fn idle(g: &mut Ctx, p: Player) {
+pub fn idle(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::ACTION) == 0 {
         next_action(g, p);

@@ -140,14 +140,15 @@ fn init_random_stats(g: &mut Ctx, p: Player) {
 
 /// 0x3308 : équipement de départ (douze longs en `+0x120`) ; les magiciens (personnages 8 et 9)
 /// reçoivent un bonus de 0x14 pour chacun de leurs trois sorts (codes 0x52, 0x53, 0x54).
-fn init_gear(g: &mut Ctx, p: Player) {
+/// (0x33b0 : seulement les huit premiers longs, à la reprise après « continue ».)
+fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
     cov!();
     // seule table de pointeurs lue en espace données (`lea` puis indexation par registre)
     let character = p.u8(g, Player::CHARACTER) as u32;
     let t = g.data32(tables::GEAR_BY_LEVEL + 4 * character);
     let level = p.u8(g, Player::LEVEL) as u32;
     let row = t + 0x30 * level;
-    for i in 0..12 {
+    for i in 0..longs {
         let v = g.data32(row + 4 * i);
         p.set_u32(g, Player::SLOT_TABLE + 4 * i, v);
     }
@@ -238,7 +239,7 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     init_hp(g, p);
     init_random_stats(g, p);
     init_spells(g, p);
-    init_gear(g, p);
+    init_gear(g, p, 12);
     init_unlocked(g, p);
     init_weapons(g, p);
     init_weapon_stats(g, p);
@@ -296,3 +297,162 @@ pub const INIT_P1: Native = init_native(0x2e58, "player_init_1", init_p1);
 pub const INIT_P2: Native = init_native(0x2e6e, "player_init_2", init_p2);
 pub const INIT_P3: Native = init_native(0x2e86, "player_init_3", init_p3);
 pub const INIT_P4: Native = init_native(0x2e9e, "player_init_4", init_p4);
+
+// ---- arrivée d'un joueur en cours de partie ---------------------------------------------------------
+
+/// Trois façons d'entrer en cours de partie (une entrée par joueur pour chacune).
+#[derive(Clone, Copy, PartialEq)]
+enum Join {
+    /// 0x2f46.. : nouveau joueur (score remis à zéro).
+    New,
+    /// 0x3048.. : reprise après « continue » (le score est gardé).
+    Continue,
+    /// 0x3142.. : reprise sans nouveau tirage : PV, équipement (huit longs) et drapeaux seulement.
+    Refill,
+}
+
+/// Le joueur `k` arrive en cours de partie : il tombe du ciel (état scénarisé de résurrection, `0x00040000` ;
+/// `0x00040800` entrées figées, `0x00040c00` marche lente globale), puis tous les ennemis et boss reçoivent
+/// un choc (`join_shockwave`).
+fn join(g: &mut Ctx, k: u8, how: Join) {
+    let p = Player::nth(k as u32);
+    p.set_u8(g, Player::INDEX, k);
+    let mask = g.a5u8(ram::PLAYERS_MASK) | 1 << k;
+    g.set_a5u8(ram::PLAYERS_MASK, mask);
+    let state = if g.a5u8(ram::INPUT_RAW) != 0 {
+        0x0004_0800
+    } else if g.a5u8(ram::SLOW_MODE) != 0 {
+        0x0004_0c00
+    } else {
+        0x0004_0000
+    };
+    p.set_state(g, state);
+    p.set_u16(g, Player::ACTIVE, 0x101);
+    p.set_u8(g, Player::PALETTE_GROUP, 2);
+    p.set_u8(g, Player::PALETTE, k);
+    p.set_u8(g, Player::SLOW_8A, 0);
+    p.set_u8(g, Player::POWER_10F, 0);
+    p.set_u8(g, 0x18a, 0);
+    if how == Join::Refill {
+        init_hp(g, p);
+        init_gear(g, p, 8);
+        init_unlocked(g, p);
+        g.rom(0xcf182, p);
+    } else {
+        if how == Join::New {
+            p.set_u32(g, Player::SCORE_BCD, 0);
+        }
+        init_level(g, p);
+        init_hp(g, p);
+        init_random_stats(g, p);
+        init_spells(g, p);
+        init_gear(g, p, 12);
+        init_unlocked(g, p);
+        init_weapons(g, p);
+        init_weapon_stats(g, p);
+        if how == Join::New {
+            p.set_u32(g, 0x114, 0x200);
+        }
+        p.set_u32(g, 0x160, !0);
+        p.set_u32(g, 0x164, !0);
+        p.set_u32(g, 0x118, !0);
+        p.set_u32(g, 0x11c, !0);
+        let class = p.class(g);
+        p.set_u8(g, Player::BOX_SET, class);
+        p.set_u8(g, 0x161, class);
+        let spare = p.u8(g, Player::WEAPON_B).wrapping_sub(0x28);
+        if (spare as i8) >= 0 {
+            p.set_u8(g, 0x164, spare);
+        }
+    }
+    let alive = g.a5u8(ram::PLAYERS_ALIVE).wrapping_add(1);
+    g.set_a5u8(ram::PLAYERS_ALIVE, alive);
+    let strength = if how == Join::New { 0 } else { alive };
+    g.c.a[0] = p.0;
+    join_shockwave(g, p, strength);
+}
+
+/// Dégâts du choc par nombre de joueurs (mots, lus en espace de données par `lea` puis registre ; masqués à
+/// 63) ; mot de RAM qui les garde.
+const SHOCK_DAMAGE: u32 = 0x10108;
+const SHOCK_DAMAGE_RAM: u32 = A5 - 0x7194;
+/// Jauge de vie d'un ennemi touché (D0 = joueur << 8 | type, D1 = PV max, D2 = PV, D3 = classe).
+const SHOW_GAUGE: u32 = 0x19dce;
+
+/// 0x10022 : choc de l'arrivée du joueur `p` : chaque boss puis chaque ennemi vivant, visible, non protégé
+/// (`+0x40`, bit 31 de `+0x94`) est projeté (état `0x04000000`, réaction 12, sens opposé au sien) et perd
+/// des PV (les boss à 32 PV ou moins sont épargnés, et gardent au moins 1 PV).
+fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
+    let damage = g.data16(SHOCK_DAMAGE + 2 * strength as u32) & 63;
+    crate::mem::wr16(g.b, SHOCK_DAMAGE_RAM, damage);
+    for pool in [&crate::objects::pools::BOSS, &crate::objects::pools::ENEMY] {
+        for o in pool.iter() {
+            let e = o.0;
+            let b = &mut *g.b;
+            let hp = crate::mem::rd16(b, e + 0x62);
+            if crate::mem::rd8(b, e) == 0
+                || crate::mem::rd8(b, e + 1) & 1 == 0
+                || hp == 0
+                || crate::mem::rd8(b, e + 0x40) != 0
+                || (crate::mem::rd32(b, e + 0x94) as i32) < 0
+            {
+                continue;
+            }
+            wr32(b, e + 4, 0x0400_0000);
+            crate::mem::wr8(b, e + 1, 1);
+            let (index, character) = (crate::mem::rd8(b, p.at(2)), crate::mem::rd8(b, p.at(3)));
+            crate::mem::wr8(b, e + 0x48, index);
+            crate::mem::wr8(b, e + 0x4b, character);
+            crate::mem::wr16(b, e + 0x54, p.0 as u16);
+            wr32(b, e + 0x8a, 0x0400_0000);
+            crate::mem::wr8(b, e + 0x49, 12);
+            let facing = crate::mem::rd8(b, e + 0x2c) ^ 0x20;
+            crate::mem::wr8(b, e + 0x4a, facing);
+            let boss = crate::mem::rd8(b, e + 0x28) == 4;
+            if !(boss && hp <= 32) {
+                let left = hp.wrapping_sub(damage);
+                let left = if (left as i16) > 0 { left } else if boss { 1 } else { 0 };
+                crate::mem::wr16(b, e + 0x62, left);
+            }
+            let kind = crate::mem::rd8(b, e + 2);
+            g.c.d[0] = (index as u32) << 8 | kind as u32;
+            g.c.d[1] = g.c.d[1] & 0xffff_0000 | crate::mem::rd16(g.b, e + 0x60) as u32;
+            g.c.d[2] = g.c.d[2] & 0xffff_0000 | crate::mem::rd16(g.b, e + 0x62) as u32;
+            g.c.d[3] = g.c.d[3] & 0xffff_ff00 | crate::mem::rd8(g.b, e + 0x28) as u32;
+            g.c.a[1] = e;
+            g.c.a[0] = p.0;
+            crate::call(g.c, g.b, SHOW_GAUGE);
+        }
+        if g.a5u16(0x4ba) != 0 {
+            g.set_a5u16(0x4ba, 0);
+        }
+    }
+}
+
+const fn join_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+    Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs: 0, exact_cost: false }
+}
+
+macro_rules! join_entry {
+    ($entry:literal, $name:literal, $k:literal, $how:expr) => {
+        join_native($entry, $name, |c, b| {
+            join(&mut Ctx::new(c, b), $k, $how);
+            rts(c, b);
+        })
+    };
+}
+
+pub const JOIN: &[Native] = &[
+    join_entry!(0x2f46, "player_join_new_1", 0, Join::New),
+    join_entry!(0x2f58, "player_join_new_2", 1, Join::New),
+    join_entry!(0x2f6c, "player_join_new_3", 2, Join::New),
+    join_entry!(0x2f80, "player_join_new_4", 3, Join::New),
+    join_entry!(0x3048, "player_join_continue_1", 0, Join::Continue),
+    join_entry!(0x305a, "player_join_continue_2", 1, Join::Continue),
+    join_entry!(0x306e, "player_join_continue_3", 2, Join::Continue),
+    join_entry!(0x3082, "player_join_continue_4", 3, Join::Continue),
+    join_entry!(0x3142, "player_join_refill_1", 0, Join::Refill),
+    join_entry!(0x3154, "player_join_refill_2", 1, Join::Refill),
+    join_entry!(0x3168, "player_join_refill_3", 2, Join::Refill),
+    join_entry!(0x317c, "player_join_refill_4", 3, Join::Refill),
+];

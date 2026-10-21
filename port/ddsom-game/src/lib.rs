@@ -12,6 +12,7 @@ pub mod camera_modes;
 pub mod chemin;
 pub mod config;
 pub mod credits;
+pub mod demarrage;
 pub mod dispatch;
 pub mod ecran_credits;
 pub mod effects_aids;
@@ -31,6 +32,7 @@ pub mod modes;
 pub mod objects;
 pub mod ops;
 pub mod palette;
+pub mod placement;
 pub mod player;
 pub mod popups;
 pub mod rng;
@@ -39,6 +41,7 @@ pub mod scroll;
 pub mod scenario;
 pub mod sound;
 pub mod terrain;
+pub mod service;
 pub mod sprites;
 pub mod tache_credits;
 pub mod taches;
@@ -119,6 +122,7 @@ pub const NATIVES: &[Native] = &[
     text::PRINT_TALL,
     text::PRINT_TALL_AT,
     text::CLEAR_BLOCKS,
+    text::DRAW_BLOCKS,
     text::CLEAR_BOX,
     palette::FULL_BRIGHTNESS,
     palette::NO_BRIGHTNESS,
@@ -127,6 +131,15 @@ pub const NATIVES: &[Native] = &[
     sound::ENFILER_SI_SON,
     sound::ENFILER_DIRECT,
     sound::ENVOYER_AU_Z80,
+    sound::SERVICE_FF00,
+    sound::SERVICE_FF05,
+    sound::SERVICE_FF06_D1,
+    sound::SERVICE_FF06,
+    sound::SERVICE_FF07_D1,
+    sound::SERVICE_FF07,
+    sound::SELON_VERSION_A,
+    sound::SELON_VERSION_B,
+    sound::INIT_PILE_PRIVEE,
     rng::SEED,
     rng::NEXT,
     evenements::VIDER_POINTS,
@@ -151,10 +164,13 @@ pub const NATIVES: &[Native] = &[
     eeprom::COMPTER_CONTINUES,
     eeprom::COMPTER_PARTIES,
     eeprom::VBLANK_COMPTA,
+    eeprom::COMPTA_PARTIES,
+    eeprom::COMPTA_INIT,
     config::VARIANTE,
     config::DEFAUTS,
     config::VALIDER,
     config::VARIABLES,
+    config::INIT,
     popups::ANIMER,
     credits::ECRIRE_CHIFFRE,
     eeprom::COMPLET_PIECES_NATIF,
@@ -199,21 +215,23 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(NATIVES)
         .chain(objects::NATIVES)
         .chain(player::NATIVES)
+        .chain(player::init::JOIN)
         .chain(video::NATIVES)
         .chain(palette::NATIVES)
         .chain(scroll::NATIVES)
         .chain(camera_modes::NATIVES)
         .chain(terrain::NATIVES)
+        .chain(placement::NATIVES)
         .chain(ai_aids::NATIVES)
         .chain(effects_aids::NATIVES)
         .chain(families::NATIVES)
         .chain(families::natives())
         .chain(dispatch::NATIVES)
         .chain(game::NATIVES)
-        .chain(scene::NATIVES)
-        .chain(scene::exit::NATIVES)
+        .chain(scene::natives())
         .chain(modes::natives())
         .chain(sound::wrappers_natifs())
+        .chain(demarrage::NATIVES)
         .chain(kernel::NATIVES)
         .chain(vblank::NATIVES)
         .chain(taches::natives())
@@ -221,6 +239,7 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
         .chain(hud::NATIVES)
+        .chain(service::NATIVES)
 }
 
 /// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
@@ -389,6 +408,7 @@ fn patches() -> Vec<cps2::Patch> {
     let mut v = vec![
         cps2::Patch { entry: player::scripted::END_BY_SCENE_ENTRY, apply: player::scripted::patch_end_by_scene },
         cps2::Patch { entry: scene::exit::SHARED_NEXT_ENTRY, apply: scene::exit::patch_shared_next },
+        cps2::Patch { entry: service::memoire::CHECK, apply: service::memoire::patch_instant_check },
     ];
     v.extend(sprites::EMPTY_FRAME_PATCHES);
     v

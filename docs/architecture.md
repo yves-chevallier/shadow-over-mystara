@@ -98,9 +98,11 @@ morceau réécrit est exécuté en parallèle de l'original et comparé.
    les deux mondes coexistent, une projection RAM <-> structures sert de pont et de point de comparaison.
 3. **Extraction des données** : un outil lit les ROMs de l'utilisateur et produit `assets/`. Le
    moteur ne lit plus que ces fichiers. Fait : graphismes (cellules 16x16 en PNG indexé), bibliothèque
-   de palettes (PNG RGBA), 290 échantillons (WAV avec boucle et note), tous vérifiés sans perte
-   (`cargo test -p ddsom-assets`). À venir : définitions des sprites (assemblage des cellules,
-   animations), cartes des niveaux, palettes d'interface, données de jeu, musiques.
+   de palettes (PNG RGBA), 290 échantillons (WAV avec boucle et note), définitions des sprites (21 887
+   images, 31 610 entrées d'animation, JSON) et cartes des décors des scènes (scroll 2 et 3, JSON), tous
+   vérifiés sans perte (`cargo test -p ddsom-assets`, voir [assets.md](assets.md)). À venir : tables de
+   cadres et de collisions propres au code, scroll 1, palettes des scènes et d'interface, données de jeu,
+   musiques.
 4. **Son** : séquenceur réécrit à partir du pilote Z80 (fait : crate `ddsom-sound`, voir [son.md](son.md)), mixeur QSound en Rust pur (à faire).
 5. **Critère final** : sur des scénarios d'entrées enregistrés, le moteur autonome produit les mêmes
    images (au pixel près) et les mêmes commandes son que l'original émulé.
@@ -125,10 +127,10 @@ réécrite (`resume!`). `tools/reste68k.sh` mesure ce qui tourne encore en 68000
 Plan pour supprimer la machine 68000 :
 
 1. **Découper chaque tâche aux points de cession** (fait pour la machine à modes, la fin de partie, les crédits,
-   la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `taches/`, voir [noyau.md](noyau.md) ; restent, en
-   68000 : les tâches de fondu `0x14ba`/`0x14c8`/`0x14d0`/`0x14de`/`0x1ced4`/`0x1ccf8`, d'atténuation `0x1536`/`0x153e`,
-   l'écran fixe `0x1835e`, l'interface/menu TEST `0x29162`, les listes de bulles des boss (`0x9b6`), et les tâches
-   d'interface joueurs `0x150ac`/`0x15620`/`0x15f9e`, laissées à la réécriture de l'affichage F3).
+   la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `taches/`, voir [noyau.md](noyau.md), les tâches et
+   sous-programmes de fondu (`taches/fondu.rs`), l'écran des scores `0x1835e` (`taches/ecran_fixe.rs`) et l'interface
+   joueurs `0x150ac` (`hud/`) ; restent, en 68000 : l'interface/menu TEST `0x29162` et les listes de bulles des boss
+   (`0x9b6`)).
    Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
    `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.
 2. **Remplacer l'enregistrement de tâche** : les champs SR/PC/USP/pile disparaissent au profit de

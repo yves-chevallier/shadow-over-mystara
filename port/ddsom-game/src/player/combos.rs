@@ -4,12 +4,13 @@
 //! (dérouler, double appui...) rangés dans l'enregistrement du joueur à `+0x1a0` (6 octets chacun).
 //! Un reconnaisseur lit sa séquence dans une table de la ROM : des paires (masque, valeur attendue)
 //! suivies d'un mot, -1 marquant la fin de la séquence. Quand une séquence est complète, l'action
-//! associée est lancée (`rom::*`), sauf si l'état courant l'interdit : les *portes* (neuf octets en
+//! associée est lancée (`moves::combo`), sauf si l'état courant l'interdit : les *portes* (neuf octets en
 //! `A5-0x55e0`, un par action) sont posées au début de chaque image selon l'état du joueur.
 //!
 //! Reconnaisseur (6 octets) : deux automates (octet d'avancement, octet de délai) pour l'orientation
 //! normale (`+0`) et miroir (`+2`) ; `+4` : séquence terminée ; `+5` : orientation à l'achèvement.
 
+use super::moves::{combo, Combo};
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, wr8, A5};
 
@@ -20,19 +21,6 @@ const GATES: u32 = A5 - 0x55e0;
 /// Début des reconnaisseurs dans l'enregistrement joueur.
 const RECOGNIZERS: u32 = 0x1a0;
 
-/// Routines d'origine lancées par un coup spécial reconnu (et non interdit) ; Z = rien changé.
-mod rom {
-    pub const ACTION_1A0: u32 = 0x37386;
-    pub const ACTION_1C4: u32 = 0x3740e;
-    pub const ACTION_1BE: u32 = 0x373f4;
-    pub const ACTION_1B8: u32 = 0x37366;
-    pub const ACTION_1B2: u32 = 0x3733c;
-    pub const ACTION_1A6: u32 = 0x373a8;
-    pub const ACTION_1AC: u32 = 0x373cc;
-    pub const ACTION_1CA: u32 = 0x374aa;
-    pub const ACTION_1D6_DWARF: u32 = 0x3743e;
-    pub const ACTION_1D6_OTHER: u32 = 0x3746a;
-}
 
 /// Variantes de portes : adresse du premier des trois `move.l PC@(..),(A5-...)` du code d'origine ;
 /// les trois longs de données sont 0x16, 0x1a et 0x1e octets plus loin.
@@ -229,7 +217,7 @@ fn select_gates(g: &mut Ctx, p: Player) {
 fn run_recognizers(g: &mut Ctx, p: Player) {
     cov!();
     // (reconnaisseur, table, délai, deux orientations, porte, action)
-    if recognized(g, p, 0x1a0, tables::R1A0, 0xc, true, 0, rom::ACTION_1A0) {
+    if recognized(g, p, 0x1a0, tables::R1A0, 0xc, true, 0, Combo::Dash) {
         return;
     }
     // le magicien (classe 4) n'a pas les trois reconnaisseurs suivants
@@ -238,34 +226,34 @@ fn run_recognizers(g: &mut Ctx, p: Player) {
         let pressed = !p.u8(g, Player::KEYS_PREV) & p.u8(g, Player::KEYS_HELD) & 0x30;
         if !gate(g, 1) {
             let fire = pressed == 0x30 || recognize_mirror(g, p, 0x1c4, tables::R1C4, 6);
-            if fire && !g.rom(rom::ACTION_1C4, p) {
+            if fire && combo(g, p, Combo::Attack24) {
                 return;
             }
         }
-        if recognized(g, p, 0x1be, tables::R1BE, 0xc, false, 2, rom::ACTION_1BE) {
+        if recognized(g, p, 0x1be, tables::R1BE, 0xc, false, 2, Combo::Attack22) {
             return;
         }
-        if recognized(g, p, 0x1b8, tables::R1B8, 0xc, true, 3, rom::ACTION_1B8) {
+        if recognized(g, p, 0x1b8, tables::R1B8, 0xc, true, 3, Combo::Attack12) {
             return;
         }
     }
-    if recognized(g, p, 0x1b2, tables::R1B2, 0xc, true, 4, rom::ACTION_1B2) {
+    if recognized(g, p, 0x1b2, tables::R1B2, 0xc, true, 4, Combo::Attack10) {
         return;
     }
-    if recognized(g, p, 0x1a6, tables::R1A6, 0xc, true, 5, rom::ACTION_1A6) {
+    if recognized(g, p, 0x1a6, tables::R1A6, 0xc, true, 5, Combo::Action10) {
         return;
     }
-    if recognized(g, p, 0x1ac, tables::R1AC, 0xc, false, 6, rom::ACTION_1AC) {
+    if recognized(g, p, 0x1ac, tables::R1AC, 0xc, false, 6, Combo::Action12) {
         return;
     }
     let kind = p.u8(g, Player::CHARACTER) & 0xe;
-    if kind == 0xa && recognized(g, p, 0x1ca, tables::R1CA, 0xc, true, 7, rom::ACTION_1CA) {
+    if kind == 0xa && recognized(g, p, 0x1ca, tables::R1CA, 0xc, true, 7, Combo::Backstab) {
         return;
     }
-    if kind == 6 && recognized(g, p, 0x1d6, tables::R1D6_DWARF, 6, false, 8, rom::ACTION_1D6_DWARF) {
+    if kind == 6 && recognized(g, p, 0x1d6, tables::R1D6_DWARF, 6, false, 8, Combo::DwarfAttack26) {
         return;
     }
-    if (kind == 0xa || kind == 4) && recognized(g, p, 0x1d6, tables::R1D6_OTHER, 0x10, false, 8, rom::ACTION_1D6_OTHER) {
+    if (kind == 0xa || kind == 4) && recognized(g, p, 0x1d6, tables::R1D6_OTHER, 0x10, false, 8, Combo::Attack30) {
         return;
     }
     recognize_both(g, p, 0x1d0, tables::R1D0, 0xc);
@@ -302,11 +290,11 @@ pub fn all_ready(g: &mut Ctx) -> bool {
 
 /// Un reconnaisseur : vrai si sa séquence est terminée, que sa porte est ouverte et que l'action
 /// lancée a changé l'état du joueur (arrêt des examens).
-fn recognized(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8, both: bool, gate_n: u32, action: u32) -> bool {
+fn recognized(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8, both: bool, gate_n: u32, action: Combo) -> bool {
     cov!();
     let done = if both { recognize_both(g, p, rec, table, timeout) } else { recognize_mirror(g, p, rec, table, timeout) };
     if !done || gate(g, gate_n) {
         return false;
     }
-    !g.rom(action, p)
+    combo(g, p, action)
 }

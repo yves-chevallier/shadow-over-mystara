@@ -255,3 +255,18 @@ de la table 0x9e6bc (D0 remis à zéro avant la lecture) et non celui de la lign
   états tirés dans les tables de sauts (`DDSOM_ETATS=1`), meneur de la caméra, joueurs, caméra et drapeaux perturbés à chaque pas,
   chaque appel comparé à l'original ; `DDSOM_COUVERTURE=fichier` écrit les instructions vues (`DDSOM_GRAINE`, `DDSOM_ENTREE`, `DDSOM_PAS`).
   Exemple : `DDSOM_ETATS=1 fuzz_boss $DDSOM_ROMS $DDSOM_EEPROM scenarios/bot_char0.txt 4500 300`.
+
+
+## Sous-routines communes appelées par le code d'origine des boss (`boss_common.rs`)
+
+* `0x81aa4` (`boss_repousse`) : repousse l'objet A0 (ennemi, effet) hors du corps du boss enregistré en `A5-0x5fb2`
+  (mot négatif = adresse), si ce boss est actif, de classe 3 et a une forme `+0xa4` non nulle ; la routine de la forme
+  (table 0x81ad4 : 1 = 0x818e6, 2 = 0x819e2, restées en code d'origine) déplace l'objet en X. Rend D0 = 1 (Z = 0) si
+  l'objet a été déplacé, A0 intact, A1 = A6 = l'objet. Appelée chaque image par les ennemis (elfe, gnoll...).
+* `0x833b6` (`boss_oscillation`) : oscillation verticale (`+0xc` += long de la table 0x833e4 par `+0x33 & 0x7f`,
+  négatif quand le compte à rebours `+0xa8` est sous 36 ; période 72).
+* `0x87048` (`boss_seuil_pv`) : selon `A5+0x5a` (0 : rien, 3 : toujours) et la forme `+0xad` (2 ou 3), pose `+0x43`
+  ou, si la moitié des PV `+0x62` dépasse 72, retient ce seuil en `+0xb6` et pose `+0x42`.
+
+Validées par les scénarios (`boss_repousse` dans presque tous les scénarios d'ennemis, `boss_oscillation` dans
+`enemy/trog_scene104`, `boss_seuil_pv` dans les scénarios de boss) ; les deux formes du corps n'y sont jamais atteintes.

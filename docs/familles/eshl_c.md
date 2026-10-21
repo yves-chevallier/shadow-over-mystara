@@ -148,3 +148,26 @@ appelées d'ailleurs :
 
 Registres : chaque gestionnaire ne garantit que A0 et D7 (contrat de la boucle de dispatch). D0-D2 et
 A1-A4 en sortie ne sont pas reconstitués comme dans l'original.
+
+# ESHL 64 à 72 (`families/eshl_d.rs`)
+
+La table des gestionnaires ESHL (0x39b96) a **73** entrées, et non 64 : les neuf dernières (0x39c96-0x39cb8,
+juste avant la boucle de dispatch EFFCT 0x39cba) étaient restées en code d'origine. Même cadre que les types 40 à 63.
+
+| Type | Entrée | `mod` | Rôle (h) | Validation |
+|---|---|---|---|---|
+| 64 | 0xa6efa | `flame64` | flammes du guerrier : la variante 0 compte ses générations (`+0x2f`), la quatrième retombe en arc et fait des dégâts de zone (0x2860) ; chaque flamme crée en fin de vie une flamme de variante 0 et deux colonnes (variantes 1 et 2, ±8 pixels en hauteur, son toutes les trois) | scénarios (boss15) + fuzz |
+| 65 | 0xa72c4 | `rocks65` | pluie de pierres : position tirée au hasard dans l'écran, attente par rang (tables 0xa739a / 0xa74b6), dégâts de zone au sol ; variante 0 : éclat 0xab7d8, variante 1 : animation d'impact | scénarios (boss15, fins de partie) + fuzz |
+| 66 | 0xa75c6 | `shard66` | éclat collé à son porteur (`+0x46`) à un décalage par variante et rang (tables en clair 0xa7834...), projeté vers le haut au bout de 8 images, retombe (0x2824), attend, clignote | scénarios (boss11) + fuzz |
+| 67 | 0xa78c2 | `barrel67` | objet lancé en arc vers le propriétaire (vitesse verticale calculée sur la distance), tourne, glisse au sol, rebondit trois fois s'il est touché | fuzz seulement |
+| 68 | 0xa7b76 | `stone68` | pierre soulevée du sol (premier plan), tenue tant que le porteur est dans l'état 0x0204/0x0200 sous le sous-état 6, puis lancée (table de vitesses 31) avec une animation selon sa hauteur (0xa7d50) | scénarios (boss12, hellhound40) + fuzz |
+| 69 | 0xa7e30 | `bouncer69` | pierre qui rebondit devant le créateur jusqu'à sortir de l'écran | scénarios (boss12) + fuzz |
+| 70 | 0xa801a | `gate70` | décor dangereux lié à un SET 7 qui disparaît quand l'écran atteint X = 0x500 (variante 0) ou 0x650 (variante 1, animée) | scénarios (cov_mortal_2p, cov_3p) + fuzz |
+| 71 | 0xa81ca | `ball71` | boule tenue puis lancée (table 33), roule ; touchée, crée une boule de variante 1 devant elle | scénarios (boss12, hellhound40) + fuzz |
+| 72 | 0xa838e | `splinter72` | éclat posé sur son créateur (fiche de 18 octets par rang et variante, 0xa84f4), part en arc, dégâts de zone de force 40 | scénarios (fins de partie, cov_2p_c) + fuzz |
+
+Particularités : ESHL 66 teste à l'expiration de son attente son **propre** mot `+4` (0x204) et `+6`, toujours faux
+dans ce sous-état : il est donc toujours lâché ; ESHL 68 compare le long `+4..+6` du porteur (octet `+7` effacé) à
+0x02040200. Fuzz (`fuzz_eshl_c familles`, `DDSOM_LIEN=1`, 300 trajectoires par type, `DDSOM_ENTREE=<entrée>`) : 0 écart
+sur les neuf types, les variantes hors table de 65, 68, 70, 71 exclues (`variantes_en_table`). Restent en code
+d'origine les fonctions de création appelées par les ennemis (0xa6e6a, 0xa7234, 0xa727c, 0xa7b0a, 0xa836c).

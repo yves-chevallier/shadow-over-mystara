@@ -14,10 +14,17 @@
 //! sous-étape (`A5+0x2e`, pas de 2) ; elle vit dans la RAM de travail, jamais dans la pile, de sorte
 //! que chaque phase fait un pas par image et revient (aucune cession à l'ordonnanceur).
 
+pub mod blackout;
+pub mod bonus;
+pub mod characters;
 pub mod entry;
 pub mod exit;
 pub mod intermission;
+pub mod screen;
 pub mod script;
+pub mod shop;
+pub mod tally;
+pub mod tiles;
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -282,3 +289,17 @@ impl<'a> Ctx<'a> {
 
 /// Routines natives du déroulement des scènes.
 pub const NATIVES: &[Native] = &[entry::PHASE_8, intermission::PHASE_24, script::SPAWN_SCRIPT, script::SCRIPT_RESET];
+
+/// Routines natives de tous les modules des scènes.
+pub fn natives() -> impl Iterator<Item = &'static Native> {
+    NATIVES
+        .iter()
+        .chain(exit::NATIVES)
+        .chain(exit::DISPATCH_TAILS)
+        .chain(tally::NATIVES)
+        .chain(bonus::NATIVES)
+        .chain(characters::NATIVES)
+        .chain(shop::NATIVES)
+        .chain(blackout::NATIVES)
+        .chain(screen::NATIVES)
+}

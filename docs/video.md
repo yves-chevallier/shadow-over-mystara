@@ -82,18 +82,41 @@ bibliothèque ; un déplacement négatif laisse la palette en place.
 
 ### Fondus
 
-Deux familles, toutes pas à pas (une image par pas, `A5+0x48f` pas restants, `A5+0x490` délai) :
+Code : `taches/fondu.rs` (tâches et sous-programmes), `palette.rs` (un pas). Deux familles, toutes pas à pas : un
+pas, puis une cession de `A5+0x490` images (D0.w, `jsr 0xa40`) tant que le compte `A5+0x48f` n'est pas épuisé.
+Chacune existe sous deux formes : une **tâche** (créée par `0x9b6`, emplacement 0x10 le plus souvent, elle se
+termine par `jsr 0x9f8`) et un **sous-programme** appelé par `jsr`, qui ne revient qu'à la fin du fondu (l'appelant
+attend). Chaque adresse qui suit une cession porte la native du pas suivant ; un appelant Rust d'un sous-programme
+passe par `Sequence::tail(entrée, reprise)`.
 
-1. **Fondu de luminosité** (lanceurs 0x144c/0x1460/0x146c, 0x14ba...0x1544, qui attendent par 0xa40 et ne sont
-   donc pas natifs) : chaque pas ajoute D1 = ±0x1000 à toutes les couleurs des pages cochées
-   (adresses dans `A5+0x492 + 4 k`). `0x1602` traite une page (512 couleurs) ; refuse si la première couleur est
-   déjà à la butée (0 ou 0xf000) ou atteindrait 0. `0x164e` : 48 couleurs seulement (fin de la page 0, pour
-   le fondu partiel 0x1544/0x15c8). `0x158e`/`0x15c8` parcourent les pages cochées.
-2. **Fondu par composante** (lanceurs 0x1ccc2, 0x1ce30, 0x1ce9e, 0x1ced4, non natifs) : chaque pas rapproche
-   d'un cran chaque composante RGB. `0x1cfc8` (page A0 vers la palette A1), `0x1d042` (vers la couleur D1),
-   `0x1d00e` (vers le blanc) ; `0x1cd7c`, `0x1cdd6`, `0x1cd32` les appliquent aux pages cochées de `A5+0x48e` (la
-   source de la page k est en `A5+0x492 + 4 k`). `0x1cf3c` remplit les pages cochées de blanc (`0xffffffff`) par
-   `0x1cfb8` (recopie D0-D6,A1 sur 32 palettes).
+1. **Luminosité** : chaque pas ajoute ±0x1000 à toutes les couleurs des pages cochées (`A5+0x48e`), dont les
+   adresses sont écrites à `A5+0x492 + 4 k`. Une page est sautée si sa première couleur est déjà à la butée (0 ou
+   0xf000) ou atteindrait 0 ; le fondu partiel ne traite de la page 0 que les 48 dernières couleurs (`0x91c3a0`),
+   sans test de butée. À la fin, `A5+0x48e` ← 0. Le sens n'est que dans D1, sauvé par la cession.
+
+   | Entrée | Forme | Sens | Pas | Reprise |
+   |---|---|---|---|---|
+   | `0x144c`, `0x1460` | sous-programme (D0.b ← 16) | +, − | 16 | `0x14b4` |
+   | `0x146c` | sous-programme | − | D0.b | `0x14b4` |
+   | `0x14ba`, `0x14d0` | tâche | +, − | 16 | `0x152c` |
+   | `0x14c8`, `0x14de` | tâche | +, − | `A5+0x48f` | `0x152c` |
+   | `0x1536`, `0x153e` | tâche, partiel (rétablit / atténue l'écran) | +, − | `A5+0x48f` | `0x158c` |
+
+   Un sous-programme ne fait rien si aucune page n'est cochée ; une tâche, si les pages, le délai ou le compte sont
+   nuls. Les pas d'origine (`0x158e`/`0x15c8`, pages `0x1602`/`0x164e`) n'ont plus d'appelant.
+2. **Par composante** : chaque pas rapproche d'un cran chaque composante RGB, 16 pas ; `A5-0x65ec` vaut 1 pendant
+   le fondu, et les 15 registres sont sauvés à l'entrée (`movem`) et rendus à la fin. Cibles : le blanc (`0x1cd32` :
+   `0x1d00e` par page), une couleur par page (`0x1cdd6` : `0x1d042` vers le mot `A5+0x492 + 4 k`), une palette par
+   page (`0x1cd7c` : `0x1cfc8` vers la palette à l'adresse `A5+0x492 + 4 k`).
+
+   | Cible | Sous-programme (reprise) | Tâche (reprise) |
+   |---|---|---|
+   | blanc | `0x1ccc2` (`0x1cce8`) | `0x1ccf8` (`0x1cd1e`) |
+   | couleur | `0x1ce30` (`0x1ce54`) | `0x1ce64` (`0x1ce8a`) |
+   | palette | `0x1ce9e` (`0x1cec4`) | `0x1ced4` (`0x1cefe`) : blanchit d'abord les pages (`0x1cf3c`) |
+
+   `0x1cf3c` remplit les pages cochées de blanc (`0xffffffff`) par `0x1cfb8` (recopie D0-D6,A1 sur 32 palettes) ;
+   il est aussi appelé par `0x1c63e`.
 
 ## B1 : caméras et défilement du décor (`scroll.rs`)
 
