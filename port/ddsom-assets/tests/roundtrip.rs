@@ -663,3 +663,8 @@ fn ennemis_sans_perte() {
 fn caisses_sans_perte() {
     check_data("data/boxes.json");
 }
+
+#[test]
+fn scenes_sans_perte() {
+    check_data("data/scenes.json");
+}

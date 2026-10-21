@@ -15,6 +15,7 @@ mod palettes;
 mod players;
 mod rom;
 mod scene_palettes;
+mod scenes;
 mod sounds;
 mod spawns;
 mod sprites;

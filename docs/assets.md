@@ -512,6 +512,56 @@ chacune, `rts` 0x3e2aa = rien), relevé par type `0x3e000`.
 
 Code, pas des données : effets spéciaux des caisses `0xda06a` (6 adresses de routines, prog).
 
+### Scènes : `data/scenes.json`
+
+Tables par scène (0 à 114) ou par boutique, lues par les sorties de scène, les caméras et l'interface.
+Espace données sauf mention (prog). Régions couvertes : `entry` 0x21156-0x21c28, `camera1`
+0x2ef22-0x2f576, `camera2` 0x32484-0x3281c, `counters` 0x51176-0x513e6, `banner` 0xf6fec-0xf71fa,
+`bonus` 0x3f6c08-0x3f8e9c, `waves` 0xd4c5e-0xd5ef6.
+
+| Nom | Adresse | Lignes x format | Sens (consommateur) |
+|---|---|---|---|
+| `scene_marker` | `0x21156` | 115 x `u8*2` | octet copié en `A5+0x3e` / `A5+0x40` (le second octet n'est pas lu) (`entry.rs`) |
+| `start_positions` | `0x2123c` | 115 x `i16*8` | (X, Y) d'entrée des quatre joueurs |
+| `start_states` | `0x2196c` | 115 x `u8*4` | octet `+0x2c` (orientation) de chaque joueur à l'entrée |
+| `palette_a`, `palette_b` | `0x21b38`, `0x21bb0` | 120 x `u8` | paramètres de palette copiés en `A5+0x48` / `A5+0x49` (5 octets au-delà de la scène 114, non relevés) |
+| `scene_38_durations` | `0x22c28` (prog) | 5 x `u16` | durée (images) de la scène 38 par nombre de joueurs |
+| `exit_sequence` | `0xf3170` (prog) | 110 x `u8` | séquence de sortie de la scène (deux fois son numéro ; `exit.rs`) ; le code suit : les scènes ≥ 110 liraient du code (aucune relevée) |
+| `route_scenes` | `0xf4a0c` (prog) | 4 x `u8` | scène suivante selon la réponse au dialogue 70 (séquence 21) |
+| `blackout_palettes` | `0xf80c4` | 70 x `i8 u8*3` | fondu au noir (`blackout.rs`) : ensemble de la page 0 (négatif : aucun), puis D0 des pages 1, 2, 3 ; la scène 105 prend la ligne 69 |
+| `time_step` | `0xf5a62` | 1 x `x16*2` | décréments BCD du temps : dix secondes, minute (`tally.rs`) |
+| `second_bonus` | `0xf5b06` | 4 x `x8` | prime d'une seconde (BCD, seul le premier octet est lu) |
+| `total_at`, `label_at`, `payout_at` (prog), `panel_at`, `panel_value_at` | `0xf5c08`, `0xf5c18`, `0xf5f0a`, `0xf5d82`, `0xf5d92` | 8 x `i16` | positions dans la couche de texte (relatives à 0x912000) par joueur (0-3), puis la disposition alternative (+4) |
+| `time_bonus` | `0xf6ba0` | 31 x `x32` | prime BCD par pas de temps restant (au plus 30) |
+| `hits_bonus`, `treasure_bonus` | `0xf6c1c`, `0x19c0e` | 81, 105 x `x32` | primes BCD des coups et du trésor, par indice de prime (`A5-0x557a`) ; taille jusqu'au code, la fin des tables semble porter d'autres suites de valeurs (lecture non relevée) |
+| `stage_names` (prog), `lead_name_first`, `lead_clear_first` (prog) | `0xf6ed2`, `0xf6f48`, `0xf6f6a` | 22 x `addr` / `u8` | bandeau « STAGE CLEAR » : liste de tuiles du nom, colonnes vides avant le texte selon l'ordre |
+| `clear_before`, `clear_after`, `stage_name/n`, `glyphs/…` | `0xf6fec`… | `u16` jusqu'au 0 final | listes de tuiles (0xf6f90) : attributs, tuiles ; `0xfffe` colonne vide ; `0xffff` puis attributs ; 0 fin. `glyphs/0xf7010` et `glyphs/0xf71d0` ne sont désignées par aucune table |
+| `player_label` | `0xf7320` | 11 x `u16` | étiquette du joueur : paires (tuile haute, tuile basse), `0xffff` final |
+| `shop_music`, `shop_welcome` | `0xf7ab0`, `0xf7b88` | 20 x `u8` | par boutique : déplacement dans la table des routines de musique `0xf7ac4` / indice des sons d'accueil `0xf7b9c` (routines : code) |
+| `shop_of_scene` | `0xf7ad0` | 90 x `u8` | boutique de la scène (0 : aucune) ; taille jusqu'aux octets suivants, incertaine |
+| `shop_exit_list` (prog), `shop_exit_lists` (prog), `shop_exit_messages/0..1` | `0xf7c14`, `0xf7c28`, `0xf7c30` | 20 x `u8`, 2 x `addr`, 2 x `u16` | messages dits en quittant la boutique (listes de numéros terminées par 0) |
+| `shop_next_scene`, `shop_chained` | `0xf7d5e`, `0xf7d72` | 20 x `u8` | scène imposée après la boutique (0 : retour), boutique suivie d'une autre |
+| `portraits`, `portraits_wide` | `0xf7e92`, `0xf7eb2` | 4, 3 x `x32 u16 u16` | portrait de chaque joueur : adresse dans la couche, tuile, attributs (la disposition alternative n'a que 3 entrées, du code suit) |
+| `counter_scripts_a`, `counter_scripts_b` (prog) | `0x51106`, `0x5113e` | 14 x `addr` | comptoirs des scènes 0x45 à 0x52 : script de dialogue de chaque zone (`peff.rs`) |
+| `counter_scripts` | `0x51176` | 100 x `u8 u8 i16` | instructions des scripts (interprète 0x514ac/0x514cc) : opération (multiple de 4, 11 opérations par la table de sauts `0x514ec`), paramètre, mot D1 (0 : ouvrir le message D1 ; 8 : saut relatif si `A5+0x5e`...) |
+| `counter_zones_a`, `counter_zones_b` | `0x51306`, `0x51376` | 14 x `i16*4` | zones de comptoir : décalage X, largeur, décalage en profondeur, étendue |
+| `camera_layers`, `camera_output`, `camera_max_x`, `camera_min_x` | `0x2ef22`… | 115 x `x16` / `u16` | caméra 1 : couches activées (0xbc6), valeur du port 0x400004, butées droite et gauche |
+| `camera_frozen`, `camera_hold_min` | `0x2f2ba`, `0x2f332` | 120 x `u8` | caméra figée, « ne recule pas » |
+| `camera_row_step`, `camera2_row_step` | `0x2f3aa`, `0x32650` | 115 x `addr` | table de bandes de la scène (son premier mot, la largeur, est le pas de bande ; tables de `levels.json`) |
+| `camera2_start` | `0x32484` | 115 x `i16*2` | position de départ de la caméra 2 |
+| `popup_origins` (prog), `popup_bottoms` (prog) | `0x19f6c`, `0x1a25e` | 8 x `i16`, 9 x `u16` | origine des bulles par emplacement (4 grands, 4 réduits) ; tuiles du bord bas par reste de hauteur |
+| `markers`, `markers_alt` | `0x1eb48`, `0x1eb58` | 4, 3 x `x16 u16` | (x, y) des marqueurs « 1P »... ; la disposition alternative (bit 1 de `FOUR_PLAYERS`) n'a que 3 entrées |
+| `door_a`, `door_b` (prog) | `0xd84e8`, `0xd8e5e` | 3 x `i16*3 u8*10` | portes de passage SET B 27 et 29 par variante : X, Z, Y, `+0x48`, `+0x46`, scène d'arrivée `+0x4f`, `+0x1b`, 6 octets non lus |
+| `wave_start_kind`, `wave_end_kind` (prog) | `0xd4a0e`, `0xd4bdc` | 20 x `u8` | forme du démarrage et de la fin des générateurs de vagues, par variante (15 employées) |
+| `wave_scripts` | `0xd4c5e` | 15 x `addr` | script de chaque variante du générateur de vagues SET B |
+| `wave/k.timer`, `wave/k`, `wave/k.end` | `0xd4c9a`… | `u16` ; n x `i16 u16 i16*3 u8*6 u16 u16` ; `x16` | délai initial ; entrées (délai > 0 ou attente du nombre de vivants si < 0, rang minimal, X, Z, Y, joueurs minimum, routine de création, type, variante, deux paramètres, `+0x42`, position absolue) ; mot `0x8000` |
+| `bonus_backdrop_alt`, `bonus_backdrop` (`.size`, `.end`) | `0x3f6c08`, `0x3f7e0e` | (lignes, colonnes), puis cases `u16*2` (code, attributs) par colonnes, puis `0xffff` | décors de la partie bonus selon `A5+0x70` (`bonus.rs`, 0xf67fa) |
+
+Code, pas des données (documentés, restent dans le moteur) : allocateurs des classes d'apparition
+`0xf2f38` (mots de déplacement vers le code), sauts des séquences de sortie `0xf31ea`, scripts de transition
+`0xf81fa`, routines de musique `0xf7ac4` et d'accueil `0xf7b9c` des boutiques, table de sauts de
+l'interprète des comptoirs `0x514ec`, routines de création des vagues `0xd4b92`.
+
 ## Inventaire des données de jeu restantes
 
 Tables lues par le code réécrit (consommateur Rust entre parenthèses, chemins relatifs à
@@ -520,21 +570,10 @@ sinon espace données. Tailles « ? » : à mesurer (fin non relevée).
 
 | Domaine | Adresse | Taille | Structure | Consommateur |
 |---|---|---|---|---|
-| Scènes | `0x21b38`, `0x21bb0`, `0x2123c`, `0x2196c` | par scène | octets de palette, 4 couples (X, Y) de départ des joueurs, états de départ | `scene/entry.rs` |
-| Scènes | `0xf2f38` (prog) | mots | allocateurs par classe d'objet (script d'apparition) | `scene/script.rs` |
-| Scènes | `0xf3170`, `0xf31ea`, `0xf4a0c` | par scène | séquence de sortie de scène, choix de route (dialogue 70) | `scene/` (phase 16) |
-| Scènes | `0xf80c4`, `0xf81fa` | par scène | palettes et scripts de transition du fondu au noir | `scene/blackout.rs` |
-| Scènes | `0xf6ba0`, `0xf6c1c`, `0x19c0e`, `0xf5a62`, `0xf5b06`, positions `0xf5c08`... | 31 longs BCD... | primes de fin de niveau (temps, coups, trésor), positions des panneaux | `scene/tally.rs` |
-| Scènes | `0xf6ed2` (prog) | par scène | noms des scènes et « STAGE CLEAR » (textes 0x1136) | `scene/tally.rs` |
-| Boutique | `0xf7ad0`, `0xf7ab0`/`0xf7ac4`, `0xf7b88`/`0xf7b9c`, `0xf7c14`/`0xf7c28`, `0xf7d72`, `0xf7d5e`, `0xf7e92`/`0xf7eb2` | par scène / 20 boutiques | boutique de la scène, musique, accueil, messages de sortie, boutique suivante, scène suivante, portraits | `scene/shop.rs` |
-| Boutique | `0x51306`, `0x51376`, `0x514ec` | par scène | zones de comptoir et scripts de dialogue (voir les textes) | `families/joueur/peff.rs` (+ 68000) |
-| Bonus | `0x3f7e0e`, `0x3f6c08` | rectangles | décors de la partie bonus selon la région | `scene/bonus.rs` |
-| Caméras | `0x2f0ee`, `0x2f008`, `0x2ef22`, `0x2f332`, `0x2f1d4`, `0x2f3aa`, `0x2f2ba`, `0x32650`, `0x32484` | par scène | initialisation propre à la scène (butées, pas de bande, blocs à charger) | `camera_modes.rs` |
-| Interface | `0x19f6c` (prog), `0x1a25e`, `0x1eb48`/`0x1eb58` | 8 mots, 8 tuiles, 2 x 4 positions | origines et bords des bulles, marqueurs des joueurs | `popups.rs`, `sprites.rs` |
 | SET 24 | `0x1d78d0`, `0xd7218`, `0xd7a48`, `0xd7604`... | 18 octets par définition | fenêtres de dialogue (voir les textes) | `families/set_b.rs` |
-| Vagues SET B | `0xd4c5e`, `0xd4a0e`, `0xd4bdc`, `0xd4b92`, `0xd84e8`, `0xd8e5e` | lignes de 16 octets | vagues et portes des familles SET B | `families/set_b.rs` |
 
-Les tables des joueurs, du combat, des ennemis et des caisses sont extraites (`data/*.json`, ci-dessus).
+Les tables des joueurs, du combat, des ennemis, des caisses et des scènes sont extraites (`data/*.json`,
+ci-dessus).
 
 ## Palettes des scènes : `scene_palettes.json`
 
