@@ -186,6 +186,48 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 8. Les 1 294 fonctions jamais atteintes (88 Ko) : à classer en code mort (menu TEST, écrans de debug, K4 : hors
    périmètre) ou à couvrir par des scénarios (boss et ennemis rares, ESHL, SET) avant de les réécrire.
 
+## Mesure : lot « miettes » (tout sauf EFFCT et scripts de transition)
+
+Mêmes 200 scénarios et mêmes nombres d'images des deux côtés (`DDSOM_SCENES=1 tools/reste68k.sh 30000`, 2 851 500 images ;
+avant : main e29fa6b, rapport conservé dans l'historique de `docs/reste68k.md`, commit 72e3a40). Zones réservées à
+d'autres travaux et exclues du lot : EFFCT (0xa8000-0xba000, `families/effects*.rs`), scripts de transition
+(0xf8200-0xfa300), listes de bulles des boss (0x9b6), chute 0x3b960, 0xbad6.
+
+| | Avant | Après |
+|---|---:|---:|
+| instructions 68000 (total) | 92 987 040 (32,6 par image) | 91 232 723 (32,0 par image) |
+| hors zones réservées | 1 829 009 | 76 734 (-95,8 %) |
+| fonctions encore exécutées / entièrement natives | 316 / 774 | 203 / 842 |
+| C0c ITEM | 782 747 | 22 |
+| C04 BOSS | 749 598 | 23 692 |
+| C0a BOX | 67 603 | 0 |
+| F3 interface joueurs | 32 920 | 1 738 |
+| C08 ESHL | 26 134 | 5 985 |
+| W1 boucle de partie | 23 059 | 1 063 |
+| P4 noyau joueur | 22 863 | 9 374 |
+| B1 caméras | 19 561 | 0 |
+| C10 SET | 15 190 | 1 927 |
+| C1 crédits | 13 944 | 0 |
+| F1, V1, C02, V2, U1, U2, C06, C14, S1, F6, K3, M2, C12, P1 | 46 519 | 4 654 |
+
+Restent hors zones réservées (76 734 instructions sur 2,85 M d'images) :
+
+* gestionnaires EFFCT au-delà de 0xba000 (0xba00a, 0xba03c, 0xba18a et voisins, environ 22 000) : famille EFFCT, laissée au
+  travail sur les effets ;
+* boss 3 (Harpie, 0x7f41a, 10 Ko de code, environ 20 000 instructions dans le seul `scene_11`) : à réécrire comme les boss
+  4 et 7 quand d'autres scénarios le feront paraître ;
+* ESHL 0xa7200, 0xa66c0, 0xa31c2, 0xa036e (environ 5 500, 2 à 9 scénarios) ; P4 0x35c00-0x35d00 et 0x3b900-0x3ba00 hors
+  0x3b960 (environ 7 000) ; HUD 0x1507a (1 728), boucle de partie 0x1c44a (1 044), et une traîne de routines à moins de
+  1 000 instructions chacune (SET 0xd4000, 0xd90b0 ; PSHL 0x54818, 0x54872 ; SOBJ 0xe03c6 ; ENEMY 0x76ec4, 0x78a00 ; U2 0x1ad00).
+
+Fonctions jamais atteintes par les 200 scénarios (1 514, 104 Ko), par sous-système, et avis : M1/M3/K4 (menu TEST,
+Secret Test, écrans d'exception : 121) sont hors du jeu normal, à réécrire seulement si le menu de service est voulu ;
+C04 (331) et C02 (196) sont surtout les boss 0 à 3 et des ennemis de scènes que les scénarios ne visitent pas (scènes 69 et
+au-delà) : à couvrir par des scénarios (`gen_enemy.py`) avant réécriture ; C08 (98), C10 (105), C12 (70), P5 (72) sont des
+variantes d'attaques et de décors des mêmes scènes rares, même remarque ; X1 (39) et X2 (13) sont des variantes de
+collision que les natives remplacent déjà par leurs appelants (probablement mortes) ; le reste (moins de 50 par
+sous-système) est à trier au cas par cas.
+
 ## Mesure : routines du monde réécrites avec leurs registres
 
 Instructions 68000 exécutées hors natives (hors attente active) sur 10 scénarios (`bot30k`, `bot_2p`, `bot_char0`,
