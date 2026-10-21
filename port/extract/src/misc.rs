@@ -3,7 +3,7 @@
 
 use ddsom_assets::data::{Region, TextBlock};
 
-use crate::data::{data, region, text, Spec};
+use crate::data::{data, prog, region, text, Spec};
 use crate::rom::Program;
 
 /// Entrées des démonstrations : 30 suites d'enregistrements de 14 octets (durée en images, puis 3 octets
@@ -41,6 +41,51 @@ fn demo(rom: &Program, s: &mut Vec<Spec>) {
     assert_eq!(p, DEMO.1);
 }
 
+/// Scripts des démonstrations (`modes/demo.rs`) : interpréteur A (deux scripts alternés, table 0x1f348)
+/// et B (0x1f756). Opération : octet négatif = fin ; 0 = scène (scène, durée, quatre joueurs de 6 octets,
+/// adresse des entrées enregistrées) ; 2 = commande son (index, octet sauté) puis scène ; autre =
+/// présentation d'un personnage (3 octets). B ne connaît que les scènes. Un octet 0xff sépare les scripts.
+const SCENE_FIELDS: &[&str] = &[
+    "op", "scene", "frames", "c1", "s1", "w1", "h1", "i1", "u1", "c2", "s2", "w2", "h2", "i2", "u2", "c3", "s3", "w3",
+    "h3", "i3", "u3", "c4", "s4", "w4", "h4", "i4", "u4", "inputs",
+];
+const SOUND_FIELDS: &[&str] = &[
+    "op", "sound", "skipped", "scene", "frames", "c1", "s1", "w1", "h1", "i1", "u1", "c2", "s2", "w2", "h2", "i2",
+    "u2", "c3", "s3", "w3", "h3", "i3", "u3", "c4", "s4", "w4", "h4", "i4", "u4", "inputs",
+];
+
+fn demo_scripts(rom: &Program, s: &mut Vec<Spec>) -> Region {
+    s.push(prog("demo_scripts", 0x1f348, "addr", &[], 2));
+    let mut p = 0x1f3c2;
+    for (k, b_mode) in [(0, false), (1, false), (2, true)] {
+        let mut n = 0;
+        loop {
+            let op = rom.rd8(p);
+            let name = format!("demo_script/{k}.{n}");
+            n += 1;
+            if op & 0x80 != 0 {
+                s.push(data(&name, p, "x8", &[], 1));
+                p += 1;
+                break;
+            }
+            if b_mode || op == 0 {
+                s.push(data(&name, p, "u8 u8 u16 u8*24 addr", SCENE_FIELDS, 1));
+                p += 32;
+            } else if op == 2 {
+                s.push(data(&name, p, "u8 u8 u8 u8 u16 u8*24 addr", SOUND_FIELDS, 1));
+                p += 34;
+            } else {
+                s.push(data(&name, p, "u8*4", &["op", "present", "kind", "character"], 1));
+                p += 4;
+            }
+        }
+        // octet de bourrage avant le script suivant
+        s.push(data(&format!("pad/{p:#x}"), p, "x8", &[], 1));
+        p += 1;
+    }
+    region("demo_scripts", 0x1f3c2, p)
+}
+
 pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
     let mut s = vec![data("viewer_counts", 0x2a85fc, "u8", &[], 2512)];
     demo(rom, &mut s);
@@ -48,6 +93,7 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
         text(rom, "viewer_names", 0x2a8fcc, 0x2ae81e, 0xff),
         text(rom, "credits", 0xd01de, 0xd06e5, b'/'),
     ];
-    let regions = vec![region("viewer", 0x2a85fc, 0x2ae81e), region("demo", DEMO.0, DEMO.1)];
+    let mut regions = vec![region("viewer", 0x2a85fc, 0x2ae81e), region("demo", DEMO.0, DEMO.1)];
+    regions.push(demo_scripts(rom, &mut s));
     (regions, s, texts)
 }

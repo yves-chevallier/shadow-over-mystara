@@ -574,8 +574,18 @@ textes de `texts.json`, `{xx}` pour les autres octets ; `TextBlock::bytes` les r
 | `demo/0..29` | `0x2b04de`… | `u16 x8*12` | entrées enregistrées des démonstrations de l'attract : en-tête (0, `0xff` x 12), enregistrements (durée en images, 3 octets d'entrées par joueur `+0x64a..+0x64c`, voir l'enregistreur 0xe05c2-0xe0700), fin (durée `0xffff`). Désignées par le long `+28` des entrées des scripts de démonstration (`modes/demo.rs`, tables 0x1f3c2...). Entre les suites : `pad/…` (`0x4e71`, une fois 0) et un enregistrement de remplissage (`filler/0x2b0850`). Région `demo` 0x2b04de-0x2b45d8 |
 | `credits` (texte) | `0xd01de` | 82 lignes | générique de fin (0xd0108, pointeur posé en 0xd00ee) : octets = tuiles ASCII écrites en colonne, `/` fin de ligne (défilement), `0xff n` attributs n, `0xfe` fin |
 
-Restent à décoder : les scripts de démonstration eux-mêmes (entrées de 32 octets et plus, 0x1f3c2,
-0x1f59e, 0x1f756 ; `modes/demo.rs`) et le lecteur des entrées enregistrées.
+Scripts des démonstrations (`modes/demo.rs`) : `demo_scripts` (0x1f348, prog : les deux scripts de
+l'interpréteur A, alternés), puis `demo_script/k.n` (entrée n du script k ; k = 2 : interpréteur B,
+0x1f756), région `demo_scripts` 0x1f3c2-0x1f818 :
+
+| Opération | Format | Champs |
+|---|---|---|
+| scène (0 ; toute valeur positive pour B) | `u8 u8 u16 u8*24 addr` (32 octets) | `op`, `scene` (`A5+0x34`), `frames` (durée), 4 x (personnage `c` (négatif : absent), case `s` (`+0x15d`), `w` (`+0x10d`), `h` (`+0x10e`), objet `i` (case `+0x120 + 16 s`), `u` non lu), `inputs` (entrées enregistrées, `demo/k`) |
+| son puis scène (2) | `u8 u8 u8` puis la scène sans `op` (34 octets) | `sound` (index de la table de routines 0x1f3aa), `skipped` |
+| présentation (autre) | `u8*4` | `op`, `present`, `kind`, `character` |
+| fin (négatif) | `x8` | suivie d'un octet de bourrage `0xff` |
+
+Reste à relever le lecteur des entrées enregistrées (seul l'enregistreur est identifié).
 
 ### Dialogues : `data/dialogs.json`
 
@@ -651,7 +661,6 @@ relevées mais non extraites :
 | Domaine | Adresse | Structure | Consommateur |
 |---|---|---|---|
 | Chef 11 (chaîne) | `0x1069f8`, `0x106cb8`... | lignes de 32 octets par pose `+0xaa`, trajectoires (pointeurs puis tables de 0x100 octets par orientation) ; suit la région `reactions` de `combat.json`, fin non mesurée | `families/boss_11/chain.rs` |
-| Démonstrations | `0x1f348` (prog), `0x1f3c2`, `0x1f59e`, `0x1f756` | scripts d'entrées de 32 octets et plus (opération, scène, durée, 4 joueurs, entrées enregistrées) | `modes/demo.rs` |
 | Objets | `0xda398` | 12 adresses par personnage (suit la table `loot`) | `families/items.rs` |
 
 ## Palettes des scènes : `scene_palettes.json`
