@@ -235,7 +235,7 @@ fn back_on_feet(x: &mut Cx) {
 }
 
 /// 0x96ce0 : le boss est debout ; choisit sa suite d'après sa phase.
-fn recovered_tail(x: &mut Cx) {
+pub(super) fn recovered_tail(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {

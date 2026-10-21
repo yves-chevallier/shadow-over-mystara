@@ -120,7 +120,7 @@ fn get_up(x: &mut Cx) {
 }
 
 /// 0x717ea : le combat reprend : cible choisie, palier de PV franchi, nouveau geste.
-fn regroup(x: &mut Cx) {
+pub(super) fn regroup(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);
     if !pick_target(x) {

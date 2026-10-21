@@ -349,4 +349,6 @@ fn active(x: &mut Cx) {
 
 handlers! {
     0x703dc "enemy_18" 800 run,
+    // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
+    0x717ea "enemy_18_releve" 300 hit::regroup,
 }

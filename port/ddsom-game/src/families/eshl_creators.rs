@@ -394,6 +394,95 @@ fn twelve_5(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// Rangée d'éclats (types 0x19 et 0x1a) : D5 + 1 objets numérotés D3 = 0, 1..., `+0x58` = 1, 9, 17... (D4),
+/// avec le `+0x5c` du créateur ; `directions` : octet `+0x2d` de chacun (type 0x1a).
+fn row(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, mut directions: Option<u32>) {
+    let me = Obj(c.a[0]);
+    c.d[3] = 0;
+    c.d[4] = 1;
+    loop {
+        let Some(o) = spawn(c, b, kind) else { return };
+        o.set_u8(b, f::VARIANT, c.d[3] as u8);
+        if let Some(at) = directions.as_mut() {
+            let d = crate::mem::rd8(b, *at);
+            *at += 1;
+            c.a[2] = *at;
+            o.set_u8(b, f::DIRECTION, d);
+        }
+        o.set_u16(b, 0x58, c.d[4] as u16);
+        let (v3, v4) = ((c.d[3] as u8).wrapping_add(1), (c.d[4] as u16).wrapping_add(8));
+        set_low_byte(&mut c.d[3], v3);
+        set_low_word(&mut c.d[4], v4);
+        let link = me.u16(b, f::LINK);
+        o.set_u16(b, f::LINK, link);
+        moved(c, link as u32, Size::Word);
+        let n = (c.d[5] as u16).wrapping_sub(1);
+        set_low_word(&mut c.d[5], n);
+        if n == 0xffff {
+            return;
+        }
+    }
+}
+
+/// Nombre d'éclats moins un, lu dans une table (programme) indexée par le compteur `A5+0x7f92` / 2.
+fn count_by_tick(c: &mut Cpu, b: &mut Cps2Bus, table: u32) {
+    let i = rd16(b, crate::mem::A5 + 0x7f92) >> 1;
+    set_low_word(&mut c.d[0], i);
+    c.d[5] = prog8(b, table.wrapping_add(i as i16 as i32 as u32)) as u32;
+}
+
+/// 0xa1670 : rangée d'éclats de type 0x19 (nombre tiré de la table 0xa16ac).
+fn row_19(c: &mut Cpu, b: &mut Cps2Bus) {
+    count_by_tick(c, b, 0xa16ac);
+    row(c, b, 0x19, None);
+    rts(c, b);
+}
+
+/// 0xa17d0 : rangée d'éclats de type 0x1a (D1 = sorte, mémorisée en `+0x56`) ; leurs directions viennent
+/// d'une table (en clair) choisie par la sorte, ou par la position de la cible `+0x6c`, puis par le hasard.
+fn row_1a(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    me.set_u16(b, 0x56, c.d[1] as u16);
+    count_by_tick(c, b, 0xa184c);
+    let table = match c.d[1] as u8 {
+        1 => 0xa185c,
+        2 => 0xa187c,
+        _ => {
+            c.a[1] = me.u16(b, 0x6c) as i16 as i32 as u32;
+            let tx = rd16(b, c.a[1] + f::X);
+            set_low_word(&mut c.d[1], tx);
+            if tx <= me.u16(b, f::X) { 0xa189c } else { 0xa18bc }
+        }
+    };
+    call(c, b, RNG);
+    let r = (c.d[0] as u16 & 3) << 3;
+    set_low_word(&mut c.d[0], r);
+    row(c, b, 0x1a, Some(table + r as u32));
+    rts(c, b);
+}
+
+/// 0xa1c6a : quatre objets de type 0x1c (variantes 0 à 3, `+0x5c` du créateur), puis le son 0xebef8.
+fn four_1c(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    c.d[4] = 0;
+    c.d[5] = 3;
+    loop {
+        let Some(o) = spawn(c, b, 0x1c) else { break };
+        o.set_u8(b, f::VARIANT, c.d[4] as u8);
+        let v4 = (c.d[4] as u8).wrapping_add(1);
+        set_low_byte(&mut c.d[4], v4);
+        let link = me.u16(b, f::LINK);
+        o.set_u16(b, f::LINK, link);
+        let n = (c.d[5] as u16).wrapping_sub(1);
+        set_low_word(&mut c.d[5], n);
+        if n == 0xffff {
+            break;
+        }
+    }
+    call(c, b, 0xebef8);
+    rts(c, b);
+}
+
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
     Native { entry, name, cost: |_, _| 150, run, touches_sound: false, outputs, exact_cost: false }
 }
@@ -417,4 +506,7 @@ pub const NATIVES: &[Native] = &[
     native(0x9eede, "eshl_paire_9", pair_9, CREATED | regs::d(0) | regs::a(2)),
     native(0x9dbd6, "eshl_tir_0", shot_0, CREATED),
     native(0x9e426, "eshl_douze_5", twelve_5, CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
+    native(0xa1670, "eshl_rangee_19", row_19, CREATED | regs::d(0) | regs::d(3) | regs::d(4) | regs::d(5)),
+    native(0xa17d0, "eshl_rangee_1a", row_1a, CREATED | regs::d(0) | regs::d(1) | regs::d(3) | regs::d(4) | regs::d(5) | regs::a(2)),
+    native(0xa1c6a, "eshl_quatre_1c", four_1c, 0),
 ];

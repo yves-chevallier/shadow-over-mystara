@@ -178,4 +178,6 @@ fn recovered(x: &mut Cx) {
 
 handlers! {
     0x8430e "boss_6" 1000 run,
+    // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
+    0x85490 "boss_6_releve" 300 hit::recovered_tail,
 }

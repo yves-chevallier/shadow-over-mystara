@@ -8,11 +8,12 @@
 //!
 //! Tâches : [`partie`] (la partie, `0x1c45a`), [`gel`] (avance rapide, `0xee080`), [`fondu`] (fondus de palette,
 //! tâches et sous-programmes qui cèdent la main), [`ecran_fixe`] (tableau des scores de l'attract, `0x1835e`) et
-//! [`service`] (menu TEST, `0x29162`).
+//! [`service`] (menu TEST, `0x29162`), [`messages`] (message du prix qui clignote, `0xe03fe`).
 
 pub mod ecran_fixe;
 pub mod fondu;
 pub mod gel;
+pub mod messages;
 pub mod partie;
 pub mod service;
 
@@ -39,5 +40,5 @@ pub fn ceder(x: &mut Ctx, attente: Attente, reprise: u32) -> Flow {
 
 /// Natives des tâches Rust.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    partie::NATIVES.iter().chain(gel::NATIVES).chain(fondu::NATIVES).chain(ecran_fixe::NATIVES).chain(service::NATIVES)
+    partie::NATIVES.iter().chain(gel::NATIVES).chain(fondu::NATIVES).chain(ecran_fixe::NATIVES).chain(service::NATIVES).chain(messages::NATIVES)
 }

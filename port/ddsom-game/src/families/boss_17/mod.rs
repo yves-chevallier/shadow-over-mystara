@@ -229,4 +229,6 @@ fn wait_for_players(x: &mut Cx) {
 
 handlers! {
     0x952b4 "boss_17" 1200 run,
+    // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
+    0x96ce0 "boss_17_releve" 300 hit::recovered_tail,
 }

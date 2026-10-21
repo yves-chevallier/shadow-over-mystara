@@ -294,12 +294,27 @@ pub fn set_trace(f: fn(u32)) {
     let _ = TRACE.set(f);
 }
 
+/// Diagnostic (`examples/qui`) : appelée à l'entrée (vrai) et à la sortie (faux) de chaque native exécutée
+/// par `run_traced`.
+static NATIVE_HOOK: OnceLock<fn(u32, bool)> = OnceLock::new();
+
+pub fn set_native_hook(f: fn(u32, bool)) {
+    let _ = NATIVE_HOOK.set(f);
+}
+
 /// Exécuteur d'inventaire : routines natives, sinon une instruction 68000 à la fois, signalée à
 /// `set_trace`. Les durées ne sont pas contrôlées (le 68000 est surcadencé).
 pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let cost = (n.cost)(c, b);
+        let hook = NATIVE_HOOK.get();
+        if let Some(h) = hook {
+            h(pc, true);
+        }
         exec(n, c, b);
+        if let Some(h) = hook {
+            h(pc, false);
+        }
         c.cycles += cost;
     } else {
         if let Some(t) = TRACE.get() {

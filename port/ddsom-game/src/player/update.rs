@@ -23,7 +23,6 @@ use crate::Native;
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
     pub const SCENE_29_HOOK: u32 = 0xb9c6a;
-    pub const HIGH_SCORE: u32 = 0x180c8;
     /// Table (adresses de 4 octets, dans le code) des gestionnaires de sous-état `+5`.
     pub const SUB_HANDLERS: u32 = 0x3541c;
 }
@@ -175,7 +174,7 @@ fn remove(g: &mut Ctx, p: Player) {
     cov!();
     lists::unlink(g.b, p.obj());
     let k = p.u8(g, Player::INDEX) as u32 & 3;
-    g.rom(rom::HIGH_SCORE, p);
+    record_high_score(g, p);
     let saved = UNLOCKED_FLAGS + 0x70 + 0x10 * k;
     let (a, b, c) = (p.u32(g, 0x118), p.u32(g, 0x11c), p.u32(g, Player::SCORE_BCD));
     wr32(g.b, saved, a);
@@ -204,3 +203,76 @@ pub const UPDATE_PLAYERS: Native = Native {
     outputs: 0,
     exact_cost: false,
 };
+
+/// Tableau des meilleurs scores : dix entrées de 14 octets en FF0FD0, du meilleur au moins bon.
+mod scores {
+    pub const TABLE: u32 = 0xff_0fd0;
+    pub const ENTRY: u32 = 0xe;
+    pub const COUNT: u32 = 10;
+    /// Champs : niveau, personnage, nom (6 octets), score (long), magie (`+0xd`).
+    pub const LEVEL: u32 = 0x0;
+    pub const CHARACTER: u32 = 0x1;
+    pub const NAME: u32 = 0x2;
+    pub const SCORE: u32 = 0x8;
+    pub const MAGIC: u32 = 0xd;
+    /// Noms prédéfinis (en clair) : par personnage (8 octets, seconde série à partir de 12 pour la version
+    /// `A5+0x71`), ou désignés par un premier octet négatif.
+    pub const NAMES: u32 = 0x1829e;
+}
+
+/// 0x180c8 : le score du joueur qui quitte la partie (`+0x110`) prend sa place dans le tableau, les moins bons
+/// descendant d'un rang. Un nom commençant par -1 à -7 est remplacé par un nom prédéfini.
+fn record_high_score(g: &mut Ctx, p: Player) {
+    let score = p.u32(g, Player::SCORE_BCD) as i32;
+    let entry = |rank: u32| scores::TABLE + scores::ENTRY * rank;
+    let score_of = |g: &mut Ctx, rank: u32| crate::mem::rd32(g.b, entry(rank) + scores::SCORE) as i32;
+    let last = scores::COUNT - 1;
+    if score < score_of(g, last) {
+        return;
+    }
+    let (level, character, magic) = (p.u8(g, 0x10c), p.u8(g, Player::CHARACTER), p.u8(g, 0x193));
+    let (name_a, name_b) = (p.u32(g, 0x118), p.u16(g, 0x11c));
+    let write = |g: &mut Ctx, at: u32| {
+        wr8(g.b, at + scores::LEVEL, level);
+        wr8(g.b, at + scores::CHARACTER, character);
+        wr8(g.b, at + scores::MAGIC, magic);
+        wr32(g.b, at + scores::SCORE, score as u32);
+    };
+    write(g, entry(last));
+    wr32(g.b, entry(last) + scores::NAME, name_a);
+    crate::mem::wr16(g.b, entry(last) + scores::NAME + 4, name_b);
+    for rank in (0..last).rev() {
+        if score < score_of(g, rank) {
+            return;
+        }
+        let (from, to) = (entry(rank), entry(rank + 1));
+        for off in [0u32, 1, 0xd] {
+            let v = crate::mem::rd8(g.b, from + off);
+            wr8(g.b, to + off, v);
+        }
+        for off in [2u32, 8] {
+            let v = crate::mem::rd32(g.b, from + off);
+            wr32(g.b, to + off, v);
+        }
+        let v = crate::mem::rd16(g.b, from + 6);
+        crate::mem::wr16(g.b, to + 6, v);
+        write(g, from);
+        let preset = match (name_a >> 24) as u8 {
+            0xff if g.a5u8(0x71) == 0 => Some(8 * character as u32),
+            0xff => Some(8 * (0xc + character as u32)),
+            0xfe => Some(0x30),
+            0xfd => Some(0x60),
+            0xfc => Some(0x70),
+            0xfb => Some(0x90),
+            0xfa => Some(0xa8),
+            0xf9 => Some(0xb8),
+            _ => None,
+        };
+        let (a, b) = match preset {
+            Some(off) => (g.data32(scores::NAMES + off), g.data16(scores::NAMES + off + 4)),
+            None => (name_a, name_b),
+        };
+        wr32(g.b, from + scores::NAME, a);
+        crate::mem::wr16(g.b, from + scores::NAME + 4, b);
+    }
+}
