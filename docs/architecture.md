@@ -98,9 +98,11 @@ morceau réécrit est exécuté en parallèle de l'original et comparé.
    les deux mondes coexistent, une projection RAM <-> structures sert de pont et de point de comparaison.
 3. **Extraction des données** : un outil lit les ROMs de l'utilisateur et produit `assets/`. Le
    moteur ne lit plus que ces fichiers. Fait : graphismes (cellules 16x16 en PNG indexé), bibliothèque
-   de palettes (PNG RGBA), 290 échantillons (WAV avec boucle et note), tous vérifiés sans perte
-   (`cargo test -p ddsom-assets`). À venir : définitions des sprites (assemblage des cellules,
-   animations), cartes des niveaux, palettes d'interface, données de jeu, musiques.
+   de palettes (PNG RGBA), 290 échantillons (WAV avec boucle et note), définitions des sprites (21 887
+   images, 31 610 entrées d'animation, JSON) et cartes des décors des scènes (scroll 2 et 3, JSON), tous
+   vérifiés sans perte (`cargo test -p ddsom-assets`, voir [assets.md](assets.md)). À venir : tables de
+   cadres et de collisions propres au code, scroll 1, palettes des scènes et d'interface, données de jeu,
+   musiques.
 4. **Son** : séquenceur réécrit à partir du pilote Z80 (fait : crate `ddsom-sound`, voir [son.md](son.md)), mixeur QSound en Rust pur (à faire).
 5. **Critère final** : sur des scénarios d'entrées enregistrés, le moteur autonome produit les mêmes
    images (au pixel près) et les mêmes commandes son que l'original émulé.

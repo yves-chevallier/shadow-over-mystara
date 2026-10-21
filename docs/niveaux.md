@@ -23,6 +23,9 @@ refaire que quelques-unes ; `DDSOM_ROUTES=1` relève aussi la scène suivante en
 `DDSOM_REF=1` enregistre une capture du jeu `ref_NN.png` pour comparaison). La seconde recrée la planche
 et réécrit ce fichier.
 
+Les tables elles-mêmes (blocs, bandes, tables de bandes des scènes) sont extraites sans perte dans
+`assets/levels.json` par l'outil `extract` : voir [assets.md](assets.md).
+
 ## Méthode
 
 Le décor n'est pas reconstitué par des captures d'écran : il est relu dans la ROM, comme le font les
