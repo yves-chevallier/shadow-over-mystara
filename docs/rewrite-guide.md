@@ -19,6 +19,9 @@ images (`examples/determinisme.rs`). Conséquences :
   **à l'identique** dans `ddsom_game::install` (jeu, machine hybride) et `ddsom_game::install_reference` (code
   d'origine) : toute machine d'origine créée par un outil doit passer par `install_reference`, jamais par
   `ddsom_rc::install` seul. `DDSOM_STEP_CAP=n` change la valeur, 0 la supprime (mesures à ×1). Voir `docs/boucle.md` §1.
+- le test de mémoire du menu TEST (8. MEMORY CHECK) : il dure une vingtaine d'images interruptions masquées et sa durée
+  dépend de la fréquence du 68000 ; il est instantané dans les deux machines (correctif `service::memoire::patch_instant_check`
+  de la liste `patches` de `lib.rs`, qui exécute le code d'origine sans faire avancer le temps). Voir `docs/service.md` §4.
 
 La réécriture se fait **de haut en bas** : le Rust pilote (boucle de partie, phases, mise à jour du
 monde, dispatch des objets, handlers...) et appelle le code 68000 restant comme une boîte noire

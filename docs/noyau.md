@@ -51,6 +51,7 @@ l'ordonnanceur ne les distingue pas. Une tâche reste libre de passer par du cod
 |---|---|---|
 | partie (`taches/partie.rs`) | `0x1c45a` entrée, `0x1c468` tour, `0x1c48c` cession, `0x1c4b0` pas de jeu | boucle de jeu, voir `boucle.md` §1 |
 | gel (`taches/gel.rs`) | `0xee080` entrée, `0xee0fa` et `0xee16a` après cession | avance rapide : décompte la tâche principale quand un joueur presse un bouton |
+| menu TEST (`taches/service.rs`) | `0x29162` entrée, `0x29190` tour, `0x2918a` retour du gestionnaire, `0x291ec` reprise du menu | menu de service et ses écrans, tout en Rust (`service/`, `docs/service.md`) |
 
 Le pas de jeu s'arrête *sur* `0x1c4b0` (`GAME_STEP`) au lieu d'enchaîner : c'est là que la machine plafonne les pas par
 image.
@@ -66,7 +67,10 @@ sur 12 000 images de six scénarios (attract, crédits, entrée de scène, jeu �
 
 Prochaine étape : remplacer l'enregistrement (SR/PC/USP/pile) par une `Option<Box<dyn Tache>>` suppose que les routines
 appelées par un pas ne cèdent plus par le 68000 (`call`/`Unwound`) : il faut d'abord réécrire les tâches qui cèdent au
-milieu d'appels 68000 (fondus `0x14ba...`, interface joueurs, `0x29162`, `0x1835e`).
+milieu d'appels 68000 (fondus `0x14ba...`, interface joueurs, `0x1835e`). Le menu TEST (`0x29162`) est fait : ses
+écrans sont des fonctions Rust et sa seule cession au milieu d'un écran (le dessin du menu) reprend dans une native
+(`0x291ec`) ; seules les suites de la carte de développement (`A5+0x82`, jamais sur une borne) passent encore par du
+68000 (`docs/service.md` §5).
 
 ## Bilan de l'inventaire (`tools/reste68k.sh`, `docs/reste68k.md`)
 
