@@ -11,6 +11,10 @@ cargo run --release -p extract -- ../rom ../assets sprites levels terrain
 DDSOM_ROMS=$PWD/../rom cargo test --release -p ddsom-assets   # vérification sans perte
 ```
 
+Catégories de l'outil (sans argument : toutes) : `gfx`, `palettes` (`palettes.png`,
+`scene_palettes.json`), `sounds`, `sprites` (`sprites/frames.json`, `anims.json`, `tables.json`), `levels`,
+`terrain`, `texts`, `music` (`sound/music.json`), `data` (`data/spawns.json`).
+
 Les tests relisent les fichiers et réencodent chaque table au format de la ROM : ils échouent au premier
 octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test ignoré si un fichier manque).
 
@@ -493,4 +497,4 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
     `+0x58`) ; les textes eux-mêmes sont des messages du moteur de texte.
   * **Générique de fin** (`0xd01e0-0xd0692`, noms du staff, lignes séparées par `/`, codes `0xff n`) :
     routine d'affichage non relevée.
-* Données de jeu (vitesses, IA, vagues d'ennemis) : voir l'inventaire ci-dessous.
+* Données de jeu : scripts d'apparition extraits ; le reste (vitesses, IA, tables par personnage et par type d'ennemi, boutiques...) est inventorié plus haut (« Inventaire des données de jeu restantes »).
