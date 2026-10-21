@@ -422,10 +422,170 @@ fn wrapper_natif(w: &Wrapper) -> Native {
     }
 }
 
-/// Les routines natives de chaque wrapper décrit (construites une fois, puis conservées).
+/// Les routines natives de chaque wrapper décrit et des aiguillages (construites une fois, puis conservées).
 pub fn wrappers_natifs() -> &'static [Native] {
     static LISTE: OnceLock<Vec<Native>> = OnceLock::new();
-    LISTE.get_or_init(|| table::WRAPPERS.iter().map(wrapper_natif).collect())
+    LISTE.get_or_init(|| {
+        let aiguillages = AIGUILLAGES.iter().map(|&(entry, _)| Native {
+            entry,
+            name: "son_aiguillage",
+            cost: |_, _| 300,
+            run: run_aiguillage,
+            touches_sound: false,
+            outputs: 0, // tous les registres sont rendus intacts
+            exact_cost: false,
+        });
+        table::WRAPPERS.iter().map(wrapper_natif).chain(aiguillages).collect()
+    })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Les aiguillages
+
+/// Wrappers qui ne composent pas eux-mêmes leur commande : ils choisissent dans une table, d'après un
+/// registre ou l'objet, un autre wrapper qu'ils appellent (après leur propre sauvegarde sur la pile
+/// privée, D0-D3 mis à zéro), ou bien une commande de musique.
+#[derive(Clone, Copy, Debug)]
+enum Aiguillage {
+    /// `tst.b D4 ; bmi` puis D4.w = 2 × D4.b, D0.w = table[D4], cible = table + D0 (rien si D4 < 0).
+    ParD4(u32),
+    /// D1.w = table[A0[3] & 0xe], cible = table + D1.
+    ParVariante(u32),
+    /// A1 = long table[2 × (A0[3] & 0xe)], cible = A1.
+    ParVarianteLong(u32),
+    /// A1 = long table[2 × (A0[3] & 0xe)], puis D1.b = A0[0x47], A1 = long (en clair) en A1 + D1.w.
+    ParVarianteEtGenre(u32),
+    /// D1 = 4 × A1[0x44], A1 = long table[D1], cible = A1.
+    ParA1(u32),
+    /// Musique de la scène : D1.w = table[2 × scène] (rien si gardé, ou si D1 <= 0 / D1 < 0 selon
+    /// `strict`), recopiée en mémo puis enfilée si le son est autorisé.
+    Musique { table: u32, strict: bool },
+    /// Musique D4.w (rien si gardé).
+    MusiqueD4,
+}
+
+const AIGUILLAGES: &[(u32, Aiguillage)] = {
+    use Aiguillage::*;
+    &[
+        (0xe0c5c, Musique { table: 0xe0ca6, strict: true }),
+        (0xe0d8c, Musique { table: 0xe0dd6, strict: false }),
+        (0xe17a4, MusiqueD4),
+        (0xe662a, ParVarianteEtGenre(0xe666c)),
+        (0xe6910, ParD4(0xe694a)),
+        (0xe7622, ParVariante(0xe765c)),
+        (0xe774c, ParVariante(0xe7786)),
+        (0xe78e8, ParVariante(0xe7922)),
+        (0xe7a12, ParVariante(0xe7a4c)),
+        (0xe7c20, ParD4(0xe7c5a)),
+        (0xe7e10, ParD4(0xe7e4a)),
+        (0xe823a, ParVarianteLong(0xe8274)),
+        (0xec046, ParA1(0xec080)),
+        (0xec200, ParA1(0xec23a)),
+    ]
+};
+
+/// Long de l'espace programme (tables lues relativement au PC).
+fn lecture_programme32(b: &mut Cps2Bus, adresse: u32) -> u32 {
+    (lecture_programme(b, adresse) as u32) << 16 | lecture_programme(b, adresse + 2) as u32
+}
+
+fn mot_bas(r: u32, v: u16) -> u32 {
+    r & 0xffff_0000 | v as u32
+}
+
+/// Exécute l'aiguillage dont l'entrée est le PC courant.
+fn run_aiguillage(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (_, sorte) = *AIGUILLAGES.iter().find(|(e, _)| *e == c.pc).expect("aiguillage son inconnu");
+    let a6 = c.a[6];
+    // prologue : sauvegarde de D0-D7/A0-A4 sous le pointeur de pile privée, D0-D3 à zéro
+    sauvegarde_fantome(c, b);
+    let sommet = rd32(b, a5(c, ram::PILE_PRIVEE)).wrapping_sub(52);
+    wr32(b, a5(c, ram::PILE_PRIVEE), sommet);
+    c.a[6] = sommet;
+    c.d[..4].fill(0);
+    let cible = match sorte {
+        Aiguillage::ParD4(table) => {
+            let d4 = c.d[4] as u8 as i8;
+            (d4 >= 0).then(|| {
+                let i = (d4 as i16 * 2) as u16;
+                c.d[4] = mot_bas(c.d[4], i);
+                let d = lecture_programme(b, table.wrapping_add(i as i16 as u32));
+                c.d[0] = d as u32;
+                table.wrapping_add(d as i16 as u32)
+            })
+        }
+        Aiguillage::ParVariante(table) => {
+            let i = (rd8(b, c.a[0] + 3) & 0xe) as u32;
+            let d = lecture_programme(b, table + i);
+            c.d[1] = d as u32;
+            Some(table.wrapping_add(d as i16 as u32))
+        }
+        Aiguillage::ParVarianteLong(table) => {
+            let i = 2 * (rd8(b, c.a[0] + 3) & 0xe) as u32;
+            c.d[1] = i;
+            c.a[1] = lecture_programme32(b, table + i);
+            Some(c.a[1])
+        }
+        Aiguillage::ParVarianteEtGenre(table) => {
+            let i = 2 * (rd8(b, c.a[0] + 3) & 0xe) as u32;
+            let liste = lecture_programme32(b, table + i);
+            let genre = rd8(b, c.a[0] + 0x47) as u32;
+            c.d[1] = genre;
+            c.a[1] = rd32(b, liste.wrapping_add(genre));
+            Some(c.a[1])
+        }
+        Aiguillage::ParA1(table) => {
+            let i = 4 * rd8(b, c.a[1] + 0x44) as u32;
+            c.d[1] = i;
+            c.a[1] = lecture_programme32(b, table + i);
+            Some(c.a[1])
+        }
+        Aiguillage::Musique { table, strict } => {
+            if rd8(b, a5(c, ram::MUET_GARDE)) == 0 {
+                let scene = rd8(b, a5(c, 0x34)) as i8 as i16;
+                let i = (scene * 2) as u16;
+                c.d[0] = i as u32;
+                let d1 = lecture_programme(b, table.wrapping_add(i as i16 as u32));
+                c.d[1] = d1 as u32;
+                if !strict {
+                    wr16(b, a5(c, ram::MEMO_COMMANDE), d1);
+                }
+                let joue = if strict { d1 as i16 > 0 } else { d1 as i16 >= 0 };
+                if joue {
+                    if strict {
+                        wr16(b, a5(c, ram::MEMO_COMMANDE), d1);
+                    }
+                    crate::call(c, b, ENFILER_SI_SON.entry);
+                }
+            }
+            None
+        }
+        Aiguillage::MusiqueD4 => {
+            if rd8(b, a5(c, ram::MUET_GARDE)) == 0 {
+                let d1 = c.d[4] as u16;
+                c.d[1] = d1 as u32;
+                wr16(b, a5(c, ram::MEMO_COMMANDE), d1);
+                crate::call(c, b, ENFILER_SI_SON.entry);
+            }
+            None
+        }
+    };
+    if let Some(cible) = cible {
+        crate::call(c, b, cible);
+    }
+    // épilogue : registres relus sur la pile privée, pointeur remonté
+    let p = rd32(b, a5(c, ram::PILE_PRIVEE));
+    for k in 0..8 {
+        c.d[k] = rd32(b, p + 4 * k as u32);
+    }
+    for k in 0..5 {
+        c.a[k] = rd32(b, p + 32 + 4 * k as u32);
+    }
+    let p = p.wrapping_add(52);
+    wr32(b, a5(c, ram::PILE_PRIVEE), p);
+    c.a[6] = a6;
+    c.flags_logic(p, Size::Long);
+    rts(c, b);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -492,5 +652,96 @@ pub const ENVOYER_AU_Z80: Native = Native {
     exact_cost: false,
 };
 
-/// Routines natives du son, hors wrappers.
-pub const NATIVES: &[Native] = &[ENFILER_SI_SON, ENFILER_DIRECT, ENVOYER_AU_Z80];
+// ---------------------------------------------------------------------------------------------
+// Commandes de service (0xe0882, 0xe0a10, 0xe0a2e-0xe0aae)
+
+/// Octet de la RAM partagée écrit par les commandes à délai (lu par le Z80).
+const VERROU_SERVICE: u32 = z80::BASE + 0x05;
+/// Par indice D0.w (en octets) : (délai `A5+0x7fc2`, mot haut de D1), mots en clair.
+const DELAIS: u32 = 0xe0ab0;
+
+/// Enfile (sans test d'autorisation) une commande de service ; tous les registres sont rendus (movem
+/// sur la pile), seuls les drapeaux de 0xe0848 restent.
+fn service(c: &mut Cpu, b: &mut Cps2Bus, cmd: Commande) {
+    let (d0, a1) = (c.d[0], c.a[1]);
+    let e = enfiler(c, b, cmd);
+    conclure_enfilage(c, &e);
+    c.d[0] = d0;
+    c.a[1] = a1;
+    rts(c, b);
+}
+
+/// Commande à délai (0xff06 / 0xff07) : le délai et le mot haut de D1 viennent de la table, en D0.w.
+fn service_delai(c: &mut Cpu, b: &mut Cps2Bus, commande: u16, verrou: u8) {
+    wr8(b, VERROU_SERVICE, verrou);
+    let ligne = DELAIS.wrapping_add(c.d[0] as u16 as i16 as u32);
+    let delai = rd16(b, ligne);
+    wr16(b, a5(c, ram::DELAI), delai);
+    let haut = rd16(b, ligne + 2) as u32;
+    service(c, b, Commande { d1: haut << 16 | commande as u32, d2: 0, d3: 0 });
+}
+
+const fn service_natif(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), touches_sound: bool) -> Native {
+    Native { entry, name, cost: |_, _| 200, run, touches_sound, outputs: regs::CCR, exact_cost: false }
+}
+
+/// 0xe0882 : commande 0xff00 (arrêt général).
+pub const SERVICE_FF00: Native =
+    service_natif(0xe0882, "son_service_ff00", |c, b| service(c, b, Commande { d1: 0xff00, d2: 0, d3: 0 }), false);
+/// 0xe0a10 : commande 0xff05.
+pub const SERVICE_FF05: Native =
+    service_natif(0xe0a10, "son_service_ff05", |c, b| service(c, b, Commande { d1: 0xff05, d2: 0, d3: 0 }), false);
+/// 0xe0a2e / 0xe0a40 : commande 0xff06 (verrou D1.b ou 0xff).
+pub const SERVICE_FF06_D1: Native =
+    service_natif(0xe0a2e, "son_service_ff06", |c, b| service_delai(c, b, 0xff06, c.d[1] as u8), true);
+pub const SERVICE_FF06: Native = service_natif(0xe0a40, "son_service_ff06", |c, b| service_delai(c, b, 0xff06, 0xff), true);
+/// 0xe0a70 / 0xe0a82 : commande 0xff07 (verrou D1.b ou 0).
+pub const SERVICE_FF07_D1: Native =
+    service_natif(0xe0a70, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, c.d[1] as u8), true);
+pub const SERVICE_FF07: Native = service_natif(0xe0a82, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, 0), true);
+
+/// 0xe2240 / 0xe22e8 : bruit du personnage, ou celui de 0xe2390 dans la version à palette alternative
+/// (`A5+0x70` non nul).
+fn selon_version(c: &mut Cpu, b: &mut Cps2Bus, normal: u32) {
+    let cible = if rd16(b, a5(c, 0x70)) != 0 { 0xe2390 } else { normal };
+    crate::call(c, b, cible);
+    rts(c, b);
+}
+
+pub const SELON_VERSION_A: Native = service_natif(0xe2240, "son_selon_version", |c, b| selon_version(c, b, 0xe2248), false);
+pub const SELON_VERSION_B: Native = service_natif(0xe22e8, "son_selon_version", |c, b| selon_version(c, b, 0xe22f0), false);
+
+/// 0xee044 : pile privée des wrappers vide (pointeur = sa propre adresse) ; A0 = le pointeur.
+fn init_pile_privee(c: &mut Cpu, b: &mut Cps2Bus) {
+    let p = a5(c, ram::PILE_PRIVEE);
+    c.a[0] = p;
+    wr32(b, p, p);
+    c.flags_logic(p, Size::Long);
+    rts(c, b);
+}
+
+pub const INIT_PILE_PRIVEE: Native = Native {
+    entry: 0xee044,
+    name: "son_init_pile",
+    cost: |_, _| 40,
+    run: init_pile_privee,
+    touches_sound: false,
+    outputs: regs::a(0) | regs::CCR,
+    exact_cost: false,
+};
+
+/// Routines natives du son, hors wrappers (listées une à une dans `lib.rs::NATIVES`).
+pub const NATIVES: &[Native] = &[
+    ENFILER_SI_SON,
+    ENFILER_DIRECT,
+    ENVOYER_AU_Z80,
+    SERVICE_FF00,
+    SERVICE_FF05,
+    SERVICE_FF06_D1,
+    SERVICE_FF06,
+    SERVICE_FF07_D1,
+    SERVICE_FF07,
+    SELON_VERSION_A,
+    SELON_VERSION_B,
+    INIT_PILE_PRIVEE,
+];

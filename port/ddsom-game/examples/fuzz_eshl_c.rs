@@ -349,6 +349,9 @@ fn variantes_en_table(entree: u32) -> u32 {
         0xcc25a => 2,
         0x9e458 | 0x9ef46 => 3,
         0x9fe0a => 2,
+        // ESHL 65, 68, 70, 71 (tables de variantes de 2, 1, 2, 2 entrées)
+        0xa72c4 | 0xa801a | 0xa81ca => 2,
+        0xa7b76 => 1,
         _ => u32::MAX,
     }
 }
@@ -368,7 +371,7 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     ddsom_game::set_check(true);
     std::panic::set_hook(Box::new(|_| {}));
     let mut alea = Alea(0x1234_5678_9abc_def1);
-    let tables: [(&Pool, u32, u32); 3] = [(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16)];
+    let tables: [(&Pool, u32, u32); 3] = [(&ESHL, 0x39b96, 73), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16)];
     let mut entrees: Vec<(u32, &Pool, u8)> = Vec::new();
     for (pool, table, n) in tables {
         for k in 0..n {

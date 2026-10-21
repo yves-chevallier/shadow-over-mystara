@@ -7,11 +7,15 @@
 //! variables du jeu propres aux scènes de boss, les drapeaux du 68000 pour les comparaisons qui dépendent
 //! du débordement (`Fl`) et les aides de la bibliothèque d'IA (0x103d6..0x105b6, encore en 68000).
 
-use m68k::SR_C;
+use cps2::Cps2Bus;
+use m68k::decode::Size;
+use m68k::{Cpu, SR_C};
 
 pub use super::cx::Cx;
 pub use super::enemy_common::*;
+use crate::mem::{prog16, prog32, rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
+use crate::{call, regs, Native};
 
 /// Variables de la RAM de travail (décalages de A5) lues par les boss.
 pub mod var {
@@ -236,3 +240,119 @@ pub fn try_alloc(x: &mut Cx, routine: u32) -> Option<Obj> {
 pub fn set_abs8(x: &mut Cx, addr: u32, v: u8) {
     crate::mem::wr8(x.b, addr, v);
 }
+
+// --- sous-routines communes appelées par le code d'origine des boss -------------------------
+
+/// Boss enregistré comme obstacle pour les autres objets (mot, 0 / positif = aucun).
+const BODY: u32 = A5 - 0x5fb2;
+/// Formes du corps (`+0xa4` du boss) : table de sauts relatifs (1 = 0x818e6, 2 = 0x819e2).
+const BODY_SHAPES: u32 = 0x81ad4;
+
+/// 0x81aa4 : repousse l'objet A0 hors du corps du boss enregistré, si ce boss est actif, de classe 3 et
+/// a une forme non nulle (la routine de la forme, restée en code d'origine, déplace l'objet en X).
+/// Rend D0 = 1 (Z = 0) si l'objet a été déplacé, 0 sinon ; A0 intact, A1 = A6 = l'objet.
+fn push_out_of_boss(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    c.a[6] = me;
+    c.a[1] = me;
+    let body = rd16(b, BODY);
+    let mut moved = false;
+    if (body as i16) < 0 {
+        c.a[0] = body as i16 as i32 as u32;
+        let boss = c.a[0] & 0xff_ffff;
+        if rd8(b, boss) != 0 && rd8(b, boss + 2) == 3 {
+            let shape = rd8(b, boss + 0xa4) as u16;
+            if shape != 0 {
+                let off = prog16(b, BODY_SHAPES + 2 * shape as u32);
+                c.d[0] = off as u32;
+                call(c, b, BODY_SHAPES.wrapping_add(off as i16 as u32));
+                moved = !c.cond(7);
+            }
+        }
+    }
+    c.d[0] = moved as u32;
+    c.flags_logic(c.d[0], Size::Long);
+    c.a[0] = c.a[6];
+    rts(c, b);
+}
+
+/// Oscillation verticale (par `+0x33`) : décalages longs ajoutés à la hauteur `+0xc`, dans un sens
+/// puis dans l'autre selon le compte à rebours `+0xa8` (période 72 images, retournement à 36).
+const BOB_OFFSETS: u32 = 0x833e4;
+
+/// 0x833b6 : un pas de l'oscillation verticale d'un boss (D0 = décalage appliqué).
+fn bob(c: &mut Cpu, b: &mut Cps2Bus) {
+    let o = c.a[0];
+    let i = (rd8(b, o + 0x33) & 0x7f) as u32 * 4;
+    let mut d = prog32(b, BOB_OFFSETS + i);
+    if rd16(b, o + 0xa8) as i16 <= 36 {
+        d = d.wrapping_neg();
+    }
+    c.d[0] = d;
+    let z = rd32(b, o + 0xc).wrapping_add(d);
+    wr32(b, o + 0xc, z);
+    let t = rd16(b, o + 0xa8).wrapping_sub(1);
+    wr16(b, o + 0xa8, t);
+    if t as i16 <= 0 {
+        wr16(b, o + 0xa8, 72);
+    }
+    rts(c, b);
+}
+
+/// 0x87048 : selon la difficulté de la scène (`A5+0x5a` : 0 rien, 3 toujours) et la forme `+0xad`
+/// (2 ou 3 : selon les PV), pose `+0x43` (pas de seuil) ou, si la moitié des PV `+0x62` dépasse 72,
+/// retient ce seuil en `+0xb6` et pose `+0x42`. D0, D1 comme l'original.
+fn hp_threshold(c: &mut Cpu, b: &mut Cps2Bus) {
+    let o = c.a[0];
+    let level = rd8(b, A5 + 0x5a);
+    c.d[0] = level as u32;
+    let by_hp = level != 0 && level != 3 && matches!(rd8(b, o + 0xad), 2 | 3);
+    if level != 0 {
+        if by_hp {
+            if rd8(b, o + 0x42) != 0 {
+                return rts(c, b);
+            }
+            let half = rd16(b, o + 0x62) >> 1;
+            c.d[1] = c.d[1] & 0xffff_0000 | half as u32;
+            if half as i16 > 72 {
+                wr8(b, o + 0xb9, 0);
+                wr16(b, o + 0xb6, half);
+                wr8(b, o + 0x42, 1);
+                return rts(c, b);
+            }
+        }
+        wr8(b, o + 0x43, 1);
+        wr8(b, o + 0xb9, 0);
+    }
+    rts(c, b);
+}
+
+pub const NATIVES: &[Native] = &[
+    Native {
+        entry: 0x81aa4,
+        name: "boss_repousse",
+        cost: |_, _| 60,
+        run: push_out_of_boss,
+        touches_sound: false,
+        outputs: regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR,
+        exact_cost: false,
+    },
+    Native {
+        entry: 0x833b6,
+        name: "boss_oscillation",
+        cost: |_, _| 80,
+        run: bob,
+        touches_sound: false,
+        outputs: regs::d(0),
+        exact_cost: false,
+    },
+    Native {
+        entry: 0x87048,
+        name: "boss_seuil_pv",
+        cost: |_, _| 70,
+        run: hp_threshold,
+        touches_sound: false,
+        outputs: regs::d(0) | regs::d(1),
+        exact_cost: false,
+    },
+];

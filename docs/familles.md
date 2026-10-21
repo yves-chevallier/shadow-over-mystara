@@ -115,10 +115,16 @@ Pool de 21 emplacements de 0x80 octets (`0xFFEEDE`), 4 types.
 | 0 | 0xd99fa | caisse / tonneau / coffre | une fiche de la ROM (`0x1051ae`, par variante 0 à 3) donne la sorte (`+0x60` : < 3 se brise d'un coup, ≥ 3 coffre), les butins (`+0x62`, par classe de joueur `+0x63..`, aléatoires `+0x6a`) et un effet spécial éventuel (`+0x6b`) ; frappée (`+0x6e` ou `+0x33`), elle joue sa casse, lâche jusqu'à 3 ITEM (centre, droite, gauche) puis clignote et disparaît | 22 216 | scénarios (casse d'une caisse < 3 ; coffres et effets spéciaux : fuzz) |
 | 1 | 0xda578 | barrière | variantes 0 et 1 ; frappée (`+0x6e`), crée un SET (`0x8b`) ou change l'état de l'objet frappeur | 0 | fuzz |
 | 2 | 0xda7ac | décor | s'initialise, se trie chaque image | 0 | fuzz |
-| 3 | 0xda7f2 | plateforme poussable (h) | | 0 | code d'origine |
+| 3 | 0xda7f2 | bloc poussable | poussé par un joueur dans l'action 0x2e (le joueur s'enregistre en `+0x6c`) : variante 0 glisse en X entre `+0x60` et `+0x62` (pas de 2 si le bit 4 de `+0x6e` du joueur, 1 de plus si `+0x33`), accompagnée d'un SET 7 qu'elle prévient en s'arrêtant ; variante 1 glisse en hauteur (directions 2/4) ou en X (6/8) et se recale sur le décor (0x33fe4, 0x35c0) à chaque pas ; le joueur est replacé contre le bloc (décalages par personnage, tables en clair 0xdab52...) | 18 294 | scénarios (`families/boxes.rs`, `pousse`, cadre `Cx`) |
 
 États délégués dans le type 0 : sous-états 2, 4, 6 et 8 de l'état actif (éclats projetés, tremblement des
 coffres), sous-sous-état 4 de l'état « touché ». Dans le type 1 : variantes 2 et 3.
+
+Sous-routines de la famille appelées hors des gestionnaires (natives de `items.rs`) : `0xdabba` efface le tableau des
+objets de collection (48 longs en `A5-0x5b88`, appelé par la boucle de partie et les modes) ; `0xdb6c0` fait tomber au
+plus un équipement du joueur touché (bouclier `+0x165`, arme spéciale `+0x163`, anneau `+0x162`), chacun avec un compteur
+de coups (`+0x16d`, `+0x16c`, `+0x16b`) et une table de chances par coup (bit `rng & 0xf`, tables en clair 0xdb7c4,
+0xdb7b8, 0xdb7d0), par `0xcc352` (resté en code d'origine) ; le personnage 5 garde son anneau d'origine (1).
 
 ## 4. EFFCT (classe 0xE) : effets visuels
 
