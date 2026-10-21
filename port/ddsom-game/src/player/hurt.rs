@@ -35,8 +35,6 @@ mod rom {
     /// Sons de relevé.
     pub const GET_UP_SOUND_A: u32 = 0xe22e8;
     pub const GET_UP_SOUND_B: u32 = 0xe2240;
-    /// Réaction avec la marche lente forcée (non exercée).
-    pub const HURT_SLOW: u32 = 0x3a98e;
 }
 
 /// Tables de pas (mots : décalages relatifs à la table, indexés par `+7`).
@@ -203,7 +201,161 @@ const HANDLERS: &[(u32, Handler)] = &[
             next_step(g, p);
         }
     }),
+    (0x3a98e, hurt_slow),
+    (0x3b2c2, hurt_short),
+    (0x3a80a, |g, p| {
+        if is_dead(g, p) {
+            p.set_u16(g, Player::MAIN, 0x0400);
+            p.set_u8(g, Player::ACTIVE, 2);
+            return run_at(g, p, 0x3b884);
+        }
+        next_step(g, p);
+        set_launch(g, p, 0x200, 0x200);
+        face_attacker(g, p);
+        hurt_animation(g, p, 4);
+    }),
+    (0x3ab34, |g, p| {
+        next_step(g, p);
+        set_launch(g, p, 0x180, 0x400);
+        face_attacker(g, p);
+        let anim = 0x16 + (g.a5u8(ram::FRAME_COUNTER) & 1) as u16;
+        hurt_animation(g, p, anim);
+        knock_down_if_dead(g, p);
+    }),
+    (0x3af68, |g, p| {
+        if rehit(g, p, 4, 0x3a274) {
+            return;
+        }
+        if p.u16(g, Obj::Z) as i16 > 0 {
+            next_step(g, p);
+            set_launch_keep(g, p, 0x180, 0x400);
+            let anim = 0x16 + (g.a5u8(ram::FRAME_COUNTER) & 1) as u16;
+            hurt_animation(g, p, anim);
+            return face_attacker(g, p);
+        }
+        p.set_u8(g, Player::STEP, 0x10);
+        let freeze = p.u8(g, 0x57);
+        p.set_u8(g, Player::HITSTOP, freeze);
+        face_attacker(g, p);
+        let anim = if p.u8(g, Player::SLOW) != 0 { 2 } else { 0 };
+        hurt_animation(g, p, anim);
+    }),
+    (0x3b0e8, |g, p| {
+        if rehit(g, p, 4, 0x3a274) {
+            return;
+        }
+        next_step(g, p);
+        set_launch_keep(g, p, 0x200, 0x200);
+        let anim = 3 + (g.a5u8(ram::FRAME_COUNTER) & 1) as u16;
+        hurt_animation(g, p, anim);
+        face_attacker(g, p);
+    }),
+    (0x3b188, |g, p| {
+        if rehit(g, p, 8, 0x3a578) {
+            return;
+        }
+        next_step(g, p);
+        set_launch_keep(g, p, 0x280, 0x500);
+        hurt_animation(g, p, 6);
+        face_attacker(g, p);
+    }),
+    (0x3a5d4, |g, p| {
+        if animation::step(g, p) {
+            next_step(g, p);
+            p.set_u16(g, Obj::VZ, 0x280);
+            p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
+            hurt_animation(g, p, 8);
+        }
+    }),
+    (0x3a5f6, |g, p| {
+        if animation::step(g, p) {
+            next_step(g, p);
+            p.set_u8(g, Player::TIMER_6F, 0x14);
+            p.set_u16(g, Obj::VX, 0x400);
+            p.set_u16(g, Obj::AX, (-0x40i16) as u16);
+            if p.faces_left(g) {
+                let v = p.u32(g, Obj::VX).wrapping_neg();
+                p.set_u32(g, Obj::VX, v);
+            }
+            hurt_animation(g, p, 0xf);
+        }
+    }),
 ];
+
+/// Pas 0 des réactions 0x26, 0x2e et 0x30 : touché de nouveau pendant la réaction (`+0x185`), la réaction
+/// `action` reprend à son début (vrai) ; sinon la marque est posée, et sans PV le joueur tombe (vrai).
+fn rehit(g: &mut Ctx, p: Player, action: u8, reaction: u32) -> bool {
+    if p.u8(g, REHIT) != 0 {
+        p.set_u8(g, REHIT, 0);
+        p.set_u8(g, Player::ACTION, action);
+        run_at(g, p, reaction);
+        return true;
+    }
+    p.set_u8(g, REHIT, 1);
+    if is_dead(g, p) {
+        p.set_u16(g, Player::MAIN, 0x0400);
+        p.set_u8(g, Player::ACTIVE, 2);
+        p.set_u8(g, Player::HITSTOP, 1);
+        run_at(g, p, 0x3b862);
+        return true;
+    }
+    false
+}
+
+/// Marque « touché pendant la réaction » (effacée à la fin de la réaction, `recover`).
+const REHIT: u32 = 0x185;
+
+/// Vitesses d'une projection sans toucher au gel du coup (`+0x53`).
+fn set_launch_keep(g: &mut Ctx, p: Player, vx: u16, vz: u16) {
+    p.set_u16(g, Obj::VX, vx);
+    p.set_u16(g, Obj::AX, 0);
+    p.set_u16(g, Obj::VZ, vz);
+    p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
+}
+
+/// 0x3a98e (réaction 0x14, aussi prise par les réactions 0 et 10 en marche lente) : recul en tremblant
+/// (`flinch`) ; sans PV, chute (0x3b8a6).
+fn hurt_slow(g: &mut Ctx, p: Player) {
+    if p.u8(g, Player::STEP) != 0 {
+        return flinch(g, p);
+    }
+    if is_dead(g, p) {
+        p.set_u16(g, Player::MAIN, 0x0400);
+        p.set_u8(g, Player::ACTIVE, 2);
+        g.rom(rom::DEATH_EFFECT, p);
+        return run_at(g, p, 0x3b8a6);
+    }
+    next_step(g, p);
+    p.set_u16(g, Obj::VX, 0x280);
+    p.set_u16(g, Obj::AX, (-0x50i16) as u16);
+    let freeze = p.u8(g, 0x57);
+    p.set_u8(g, Player::HITSTOP, freeze);
+    p.set_u8(g, Player::TIMER_6F, 8);
+    face_attacker(g, p);
+    hurt_animation(g, p, 2);
+}
+
+/// 0x3b2c2 (réaction 0x2a) : courte secousse sur place, puis retour à la pose ; sans PV, chute (0x3b8c4).
+fn hurt_short(g: &mut Ctx, p: Player) {
+    if p.u8(g, Player::STEP) != 0 {
+        if animation::step(g, p) {
+            recover(g, p);
+        }
+        return;
+    }
+    if is_dead(g, p) {
+        p.set_u16(g, Player::MAIN, 0x0400);
+        p.set_u8(g, Player::ACTIVE, 2);
+        p.set_u8(g, Player::HITSTOP, 1);
+        return run_at(g, p, 0x3b8c4);
+    }
+    next_step(g, p);
+    let freeze = p.u8(g, 0x57);
+    p.set_u8(g, Player::HITSTOP, freeze);
+    p.set_u8(g, Player::TIMER_6F, 8);
+    face_attacker(g, p);
+    hurt_animation(g, p, 0);
+}
 
 /// Réactions qui aiguillent leurs pas par une table (`+7` -> décalage relatif à la table) : adresse de la
 /// réaction, adresse de sa table. Les pas partagés entre réactions sont ainsi atteints par `HANDLERS`.
@@ -317,7 +469,7 @@ fn knock_down(g: &mut Ctx, p: Player) {
 fn recover(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::ACTIVE, 1);
-    p.set_u8(g, 0x185, 0);
+    p.set_u8(g, REHIT, 0);
     to_stand(g, p);
 }
 
@@ -387,8 +539,7 @@ fn reaction_0(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, Player::SLOW) != 0 {
         p.set_u8(g, Player::ACTION, 0x14);
-        g.rom(rom::HURT_SLOW, p);
-        return;
+        return hurt_slow(g, p);
     }
     if is_dead(g, p) {
         // 0x3b8f6 : à terre tout de suite, et le gestionnaire « à terre » s'exécute dans la foulée
@@ -406,8 +557,7 @@ fn reaction_10(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, Player::SLOW) != 0 {
         p.set_u8(g, Player::ACTION, 0x14);
-        g.rom(rom::HURT_SLOW, p);
-        return;
+        return hurt_slow(g, p);
     }
     if is_dead(g, p) {
         p.set_u16(g, Player::MAIN, 0x0400);

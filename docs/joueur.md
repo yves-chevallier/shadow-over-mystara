@@ -92,7 +92,9 @@ de l'action (0 : premier appel, l'action y prépare son animation).
 | 0x2a | saut sur place (h) | 0x36c12 | `moves::hop` |
 | 0x2e | pousser l'objet lié | 0x36d68 | `moves::push` |
 | 0x32 | sort sans charge | 0x36f48 | `moves::spell_fizzle` |
-| autres (0x1a..0x30) | portage, lancers, sorts... | table | ROM |
+| 0x1a | grimper (h) : montée par table d'oscillation, déplacements, attaque, sort de la baguette de l'elfe | 0x35e56 | `moves::climb` |
+| 0x20 | sortie de scène : marche, enfoncement ou saut vers `+0x86`, masqué en fin de délai, palette éteinte en trois étapes | 0x3632c | `moves::exit_scene` |
+| autres (0x1c, 0x1e, 0x24..0x28, 0x2c, 0x30) | portage, lancers, sorts... (jamais exercés par les scénarios) | table | ROM |
 
 Après l'action : collision avec le décor (0x33fe4, `terrain::SHADOW`) sauf actions 0x20/0x24/0x2a, entrées figées ou
 scène 4 pendant la saisie ; puis `walk::clamp_to_screen`.
@@ -100,7 +102,10 @@ scène 4 pendant la saisie ; puis `walk::clamp_to_screen`.
 Sous-état 4 (touché) : `+6` indexe la table de réactions 0x3a0f4 (33 entrées) ; chaque réaction est un
 automate dont `+7` indexe sa propre table de pas. États principal 4 : table 0x3b820 (33 entrées),
 qui partage la plupart de ses pas avec les réactions. Voir `hurt.rs` (`HANDLERS` : adresse d'origine ->
-Rust ; toute adresse absente est exécutée par `Ctx::rom`).
+Rust ; toute adresse absente est exécutée par `Ctx::rom`). Tous les pas que les scénarios atteignent sont écrits
+(dont la réaction lente 0x3a98e, la secousse 0x3b2c2 et la marque « touché pendant la réaction » `+0x185` des
+réactions 0x26, 0x2e et 0x30) ; restent en code d'origine des pas jamais atteints (réactions 0x2c, 0x36 à 0x3c) et
+la chute 0x3b960.
 
 ## 3. Une image de joueur (`update::update_playing`, 0x352f4)
 

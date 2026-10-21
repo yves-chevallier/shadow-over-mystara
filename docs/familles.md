@@ -45,6 +45,9 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
 - les routines du modèle d'objets sont appelées directement (`Ctx::natif`, `anim_start`, `anim_step`,
   `reinsert`, `alloc`, `free`) sans passer par l'index des adresses ; les autres par `Ctx::jsr` (sons,
   événements de score, création d'objets non réécrits...) ;
+- `Ctx::reinsert` passe par la native des listes triées (`objects::lists::REINSERT_ACTORS`, registres exacts) ;
+- `Ctx::sans_chemin(cible, corps)` exécute en Rust, sans relevé de chemin, un état ouvert par `saut_table` : sa durée
+  est celle de ses sous-routines (les durées exactes sont obsolètes) ;
 - `Ctx::jsr_origine` exécute le code d'origine seul : à utiliser quand le gestionnaire lit des registres
   laissés en reste par la sous-routine (le modèle d'objets ne les reproduit pas : voir EFFCT 26) ;
 - **états non exercés ou non réécrits** : un état que le gestionnaire ne gère pas est délégué au code
@@ -95,7 +98,7 @@ scintillement (EFFCT 15) créé par `0xae3ec`, `+0x58` ramassé (1 : ramassage, 
 |---|---|---|---|---|---|
 | 0 | 0xdabca | trésor | variantes 0 à 5 ; chute puis attente 0x4b0 images ; ramassé : son + événement de score `0x19ae6` | 1 248 | scénarios |
 | 1 | 0xdae26 | consommable | 0-1 nourriture (+20/+40 PV, ou score si PV pleins), 2-3 potions (0x2d0 images), 4 sans effet, 5 compteur `A5+0x45` ; durée 0x960 | 16 180 | scénarios |
-| 2 | 0xdb0c2 | arme ramassable (h) | cousin du type 3 (cinq gestionnaires de ramassage par emplacement) | 0 | code d'origine |
+| 2 | 0xdb0c2 | pièce d'équipement à emplacement | fiche par variante (table en clair `0xdb522`) : emplacement du joueur (`+0x5b`, huit gestionnaires `0xdb392` : `+0x160`, rien, anneau `+0x162`, arme spéciale `+0x163`, `+0x164`, bouclier `+0x165`, `+0x166`, `+0x167`), identifiant, scintillement, coups, indice de collection, SET 0xa d'annonce ; ramassée, elle remplace la pièce portée, rejetée en arc (ITEM 2 de mode 1) ; déjà portée : événement de score | 3 000 | scénarios (`items_b.rs`, sur `Cx`) |
 | 3 | 0xdb7de | équipement | six emplacements du joueur (`+0x140`) ; remplacement d'un équipement du même groupe, emplacement libre, échange, refus (rejet en arc) ; bonus `+0x18b..0x191` pour les variantes 0x24-0x27 | 0 | fuzz |
 | 4 | 0xdbdf6 | objet d'inventaire | quantité + `+0x5a` (plafonnée à 9), emplacement vide, échange avec le premier emplacement (l'objet remplacé est recréé), refus selon la classe (rejet en arc) ; mode 1 : objet jeté | 21 775 | scénarios (refus exercé ; échange et quantités : fuzz) |
 | 5 | 0xdc382 | bonus animé | mode de création → vitesses initiales ; ramassé : événement `0x19b08` | 50 180 | scénarios |
@@ -104,7 +107,10 @@ scintillement (EFFCT 15) créé par `0xae3ec`, `+0x58` ramassé (1 : ramassage, 
 | 8 | 0xdd132 | objet à contact | test de boîtes avec les quatre joueurs (`0xdd470`), crée un SET ; 3 variantes | 0 | fuzz |
 | 9 | 0xdd5a2 | accompagnement | étincelle qui suit un objet pendant `+0x14` images | 0 | fuzz |
 
-Délégués au code d'origine : type 2 entier ; type 6 variante 3 et état 4 de l'icône (variantes 0 et 2).
+Plus rien n'est délégué au code d'origine dans les types exercés : type 6 variante 3 (guide de l'attract, palette
+puis marche et SET 0x26) et état 4 de l'icône (départ : marche hors de l'écran ou arrêt avec SET) sont écrits sur un
+`Ctx` sans relevé de chemin (`Ctx::sans_chemin`, à la place du `deleguer` de l'état). Seuls les indices hors table
+restent confiés au code d'origine (sauts dans des données).
 
 ## 3. BOX (classe 0xA) : caisses et coffres
 
@@ -112,19 +118,19 @@ Pool de 21 emplacements de 0x80 octets (`0xFFEEDE`), 4 types.
 
 | Type | Entrée | Nom | Comportement | Appels | Validation |
 |---|---|---|---|---|---|
-| 0 | 0xd99fa | caisse / tonneau / coffre | une fiche de la ROM (`0x1051ae`, par variante 0 à 3) donne la sorte (`+0x60` : < 3 se brise d'un coup, ≥ 3 coffre), les butins (`+0x62`, par classe de joueur `+0x63..`, aléatoires `+0x6a`) et un effet spécial éventuel (`+0x6b`) ; frappée (`+0x6e` ou `+0x33`), elle joue sa casse, lâche jusqu'à 3 ITEM (centre, droite, gauche) puis clignote et disparaît | 22 216 | scénarios (casse d'une caisse < 3 ; coffres et effets spéciaux : fuzz) |
+| 0 | 0xd99fa | caisse / tonneau / coffre | une fiche de la ROM (`0x1051ae`, par variante 0 à 3) donne la sorte (`+0x60` : < 3 se brise d'un coup, ≥ 3 coffre), le verrou (`+0x61`), les butins (`+0x62`, par classe de joueur `+0x63..`, bonus `+0x69`, aléatoires `+0x6a`) et un effet spécial éventuel (`+0x6b`) ; frappée (`+0x6e` ou `+0x33`), elle joue sa casse, lâche jusqu'à 3 ITEM (centre, droite, gauche) puis clignote et disparaît ; un coffre tremble ; ouvert par un joueur (sous-état 2), il consomme une clé `A5+0x45` s'il est verrouillé (sauf classe 5) ; portée (4), lancée (6 : vol, rebond sur le décor, casse au sol) ou lâchée (8) | 22 216 | scénarios (`boxes::caisse`, sur `Cx` ; tous les sous-états exercés sauf les variantes de lancer de coffre) |
 | 1 | 0xda578 | barrière | variantes 0 et 1 ; frappée (`+0x6e`), crée un SET (`0x8b`) ou change l'état de l'objet frappeur | 0 | fuzz |
 | 2 | 0xda7ac | décor | s'initialise, se trie chaque image | 0 | fuzz |
 | 3 | 0xda7f2 | bloc poussable | poussé par un joueur dans l'action 0x2e (le joueur s'enregistre en `+0x6c`) : variante 0 glisse en X entre `+0x60` et `+0x62` (pas de 2 si le bit 4 de `+0x6e` du joueur, 1 de plus si `+0x33`), accompagnée d'un SET 7 qu'elle prévient en s'arrêtant ; variante 1 glisse en hauteur (directions 2/4) ou en X (6/8) et se recale sur le décor (0x33fe4, 0x35c0) à chaque pas ; le joueur est replacé contre le bloc (décalages par personnage, tables en clair 0xdab52...) | 18 294 | scénarios (`families/boxes.rs`, `pousse`, cadre `Cx`) |
 
-États délégués dans le type 0 : sous-états 2, 4, 6 et 8 de l'état actif (éclats projetés, tremblement des
-coffres), sous-sous-état 4 de l'état « touché ». Dans le type 1 : variantes 2 et 3.
+Le type 0 n'a plus d'état délégué (anciennement : sous-états 2, 4, 6 et 8 de l'état actif et tremblement des
+coffres). Encore délégués dans le type 1 (jamais exercés) : variantes 2 et 3.
 
 Sous-routines de la famille appelées hors des gestionnaires (natives de `items.rs`) : `0xdabba` efface le tableau des
 objets de collection (48 longs en `A5-0x5b88`, appelé par la boucle de partie et les modes) ; `0xdb6c0` fait tomber au
 plus un équipement du joueur touché (bouclier `+0x165`, arme spéciale `+0x163`, anneau `+0x162`), chacun avec un compteur
 de coups (`+0x16d`, `+0x16c`, `+0x16b`) et une table de chances par coup (bit `rng & 0xf`, tables en clair 0xdb7c4,
-0xdb7b8, 0xdb7d0), par `0xcc352` (resté en code d'origine) ; le personnage 5 garde son anneau d'origine (1).
+0xdb7b8, 0xdb7d0), par `0xcc352` (SET 0xa, native de `creators.rs`) ; le personnage 5 garde son anneau d'origine (1).
 
 ## 4. EFFCT (classe 0xE) : effets visuels
 

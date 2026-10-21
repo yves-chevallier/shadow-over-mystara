@@ -55,6 +55,8 @@ l'ordonnanceur ne les distingue pas. Une tâche reste libre de passer par du cod
 | fondus par composante (`taches/fondu.rs`) | tâches `0x1ccf8`, `0x1ce64`, `0x1ced4` (et `0x1cf12`) ; reprises `0x1cd1e`, `0x1ce8a`, `0x1cefe` | vers le blanc, une couleur ou une palette par page |
 | écran des scores (`taches/ecran_fixe.rs`) | `0x1835e` entrée, `0x18384` après cession | tableau des meilleurs scores de l'attract (F4), voir `modes.md` §4 |
 | menu TEST (`taches/service.rs`) | `0x29162` entrée, `0x29190` tour, `0x2918a` retour du gestionnaire, `0x291ec` reprise du menu | menu de service et ses écrans, tout en Rust (`service/`, `docs/service.md`) |
+| messages de pièces (`taches/messages.rs`) | `0xe03e4` création, `0xe03fe` entrée, reprises `0xe0440`, `0xe0452` (blocs) et `0xe0478`, `0xe048a` (texte) | le message du prix clignote sur l'écran des crédits (40 images affiché, 20 effacé) |
+| écran noir (`video.rs`, sous-programme) | `0xc32` entrée, reprises `0xc42` et `0xc56` | couches éteintes, une image, objets et couches effacés, une image |
 
 Les **sous-programmes** qui cèdent la main sont traités de même : entrée et adresse qui suit chaque cession sont des
 natives, et le `rts` final rend la main à l'appelant (68000, ou native de reprise d'un appelant Rust, qui l'a appelé par
