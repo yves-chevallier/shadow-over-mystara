@@ -221,6 +221,10 @@ la prime de la scène 31 est commune (le même long est décompté pour chaque j
   script de la scène joue jusqu'au bout puis la scène suivante commence. `trans_13_tard` met l'horloge à zéro (branche
   « temps écoulé » de la scène 13). Les scripts 1, 31, 27, 33 et 69 sont exercés par `end_01`, `end_31`, `cov_tour5_c4`,
   `cov_tour6_c5` et `modes/ending`.
+* Mesure (`examples/reste68k`, 66 scénarios : `scene_end/` dont `trans_*`, `cov_tour1` à `8`, `cov_service`,
+  `modes/ending`) : 288 979 instructions 68000 dans les scripts de transition (`0xf8200-0xfa300`) avant, **0** après ;
+  tout W3 (`0xf2e00-0xfa300`, `0xfb200-0x100000`) : 288 986 → 3 (l'aiguillage d'origine de la séquence 32, relancé une
+  fois par `seq32_route`/`seq32_clear` dans `cov_tour3_c2`).
 * Les scénarios de `scenarios/boss/` et `bot*` atteignent des fins de scène naturelles (4 388 appels de
   la phase 16, 26 741 de la phase 8, 273 737 du lecteur de script sur les 8 scénarios historiques).
 * Les scénarios `scene_05`, `07`, `08`, `11`, `67`, `110` et `end_01`, longtemps en écart (`scenarios/ko/README.md`),

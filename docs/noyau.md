@@ -54,6 +54,7 @@ l'ordonnanceur ne les distingue pas. Une tâche reste libre de passer par du cod
 | fondus de luminosité (`taches/fondu.rs`) | tâches `0x14ba`, `0x14c8`, `0x14d0`, `0x14de`, `0x1536`, `0x153e` ; reprises `0x152c`, `0x158c` | un pas de ±0x1000 par cession, puis fin de la tâche (`0x9f8`) ; voir `video.md`, « Fondus » |
 | fondus par composante (`taches/fondu.rs`) | tâches `0x1ccf8`, `0x1ce64`, `0x1ced4` (et `0x1cf12`) ; reprises `0x1cd1e`, `0x1ce8a`, `0x1cefe` | vers le blanc, une couleur ou une palette par page |
 | écran des scores (`taches/ecran_fixe.rs`) | `0x1835e` entrée, `0x18384` après cession | tableau des meilleurs scores de l'attract (F4), voir `modes.md` §4 |
+| interface joueurs (`hud/`) | `0x150ac` entrée, `0x15146` attente du début de partie, `0x15178` tour, `0x15212` après cession | emplacement 0x30 : panneaux, bannières, choix du personnage (`hud.md`) |
 | invites (`taches/invite.rs`) | `0xe03fe` entrée, `0xe0440`/`0xe0452`, `0xe0478`/`0xe048a` après cession ; `0xe03c6` arrêt, `0xe03e4` création | emplacement 0xd0 : « INSERT COIN(S) » / « CONTINUE » clignote (40 images affiché, 20 effacé), texte selon le réglage des pièces |
 
 Les **sous-programmes** qui cèdent la main sont traités de même : entrée et adresse qui suit chaque cession sont des
@@ -77,10 +78,17 @@ Prochaine étape : remplacer l'enregistrement (SR/PC/USP/pile) par une `Option<B
 appelées par un pas ne cèdent plus par le 68000 (`call`/`Unwound`). Les fondus, l'écran des scores, les invites et les
 scripts de transition de la sortie de scène (`scene/transition/`, `docs/scenes.md` §5) sont faits. Les « listes de
 bulles des boss » n'existent pas : les boss et les objets SET qui appellent `0x9b6` (A0 = `0x14de`, `0x14c8`, `0x1ccf8`...)
-lancent une tâche de fondu, déjà en Rust (`taches/fondu.rs`). Tâches encore en 68000 : le menu TEST `0x29162` (M1) et
+lancent une tâche de fondu, déjà en Rust (`taches/fondu.rs`). Tâches encore en 68000 : le menu TEST `0x29162` (M1 ; il cède par `0xb64` en `0x2918a`, 29 394 fois dans
+`cov_service`) et
 l'écran `0x19068` (emplacement 0xf0, créé en `0x13aa0` par un sous-mode de l'attract propre à une région, jamais atteint
 par les scénarios). Les tâches Rust gardent encore leur état dans la RAM et les registres sauvés par la cession (le sens
 d'un fondu de luminosité est dans D1).
+
+Mesure (`examples/reste68k`, 66 scénarios : `scene_end/`, `cov_tour1` à `8`, `cov_service`, `modes/ending`), avant et
+après la réécriture des scripts de transition, de l'entrée de la tâche d'interface, de la chute `0x3b960` et du butin
+`0xbad6` : 37,61 M → 37,32 M instructions 68000 (scripts 288 979 → 0, interface 6 060 → 0, butin 1 916 → 0, chute
+1 383 → 0). Les seules cessions encore faites par du code 68000 dans ces scénarios sont celles du menu TEST
+(`jsr 0xb64` en `0x2918a`, `0x291e6`).
 
 ## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
 
