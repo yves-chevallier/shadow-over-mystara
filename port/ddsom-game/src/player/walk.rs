@@ -115,14 +115,23 @@ const EDGE_HIT: u32 = 0x5a;
 pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
     cov!();
     let cam = camera(b);
-    let (cam_x, cam_y) = (rd16(b, cam + 8) as i16, rd16(b, cam + 0xc) as i16);
-    let (x, y) = (rd16(b, p.at(0x08)) as i16, rd16(b, p.at(0x10)) as i16);
+    let cam_y = rd16(b, cam + 0xc) as i16;
+    let y = rd16(b, p.at(0x10)) as i16;
     let (top, bottom) = (cam_y.wrapping_add(0xa4), cam_y.wrapping_add(0x28));
     if y > top {
         wr16(b, p.at(0x10), top as u16);
     } else if y < bottom {
         wr16(b, p.at(0x10), bottom as u16);
     }
+    clamp_x(b, p)
+}
+
+/// 0x35dc : seulement l'abscisse (entre camera.x + 0x20 et camera.x + 0x160). Vrai si corrigée.
+pub fn clamp_x(b: &mut Cps2Bus, p: Player) -> bool {
+    cov!();
+    let cam = camera(b);
+    let cam_x = rd16(b, cam + 8) as i16;
+    let x = rd16(b, p.at(0x08)) as i16;
     let (right, left) = (cam_x.wrapping_add(0x160), cam_x.wrapping_add(0x20));
     let edge = if x > right {
         Some((right, 2))

@@ -37,12 +37,14 @@ pub mod actions;
 pub mod animation;
 pub mod cov;
 pub mod characters;
+pub mod cinematics;
 pub mod combos;
 pub mod checks;
 pub mod effects;
 pub mod hit_reactions;
 pub mod hurt;
 pub mod init;
+pub mod moves;
 pub mod overlays;
 pub mod scripted;
 pub mod spawn;
@@ -96,6 +98,10 @@ pub const NATIVES: &[Native] = &[
     characters::thief::SPECIAL,
     characters::thief::DASH,
     characters::thief::ROLL,
+    actions::TO_STAND,
+    actions::START_STAND,
+    moves::LEAP,
+    moves::HOP_BACK,
     spawn::SLASH,
     spawn::BLOOD,
     spawn::CURE,

@@ -93,6 +93,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
         match p.u8(g, Player::SUB) {
             sub::ACTING => actions::act(g, p),
             sub::HURT => hurt::hurt(g, p),
+            sub::PARRY => super::moves::parry(g, p),
             other => {
                 let handler = g.prog32(rom::SUB_HANDLERS + other as u32);
                 g.c.d[0] = other as u32;
