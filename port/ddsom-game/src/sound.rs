@@ -652,5 +652,96 @@ pub const ENVOYER_AU_Z80: Native = Native {
     exact_cost: false,
 };
 
-/// Routines natives du son, hors wrappers.
-pub const NATIVES: &[Native] = &[ENFILER_SI_SON, ENFILER_DIRECT, ENVOYER_AU_Z80];
+// ---------------------------------------------------------------------------------------------
+// Commandes de service (0xe0882, 0xe0a10, 0xe0a2e-0xe0aae)
+
+/// Octet de la RAM partagée écrit par les commandes à délai (lu par le Z80).
+const VERROU_SERVICE: u32 = z80::BASE + 0x05;
+/// Par indice D0.w (en octets) : (délai `A5+0x7fc2`, mot haut de D1), mots en clair.
+const DELAIS: u32 = 0xe0ab0;
+
+/// Enfile (sans test d'autorisation) une commande de service ; tous les registres sont rendus (movem
+/// sur la pile), seuls les drapeaux de 0xe0848 restent.
+fn service(c: &mut Cpu, b: &mut Cps2Bus, cmd: Commande) {
+    let (d0, a1) = (c.d[0], c.a[1]);
+    let e = enfiler(c, b, cmd);
+    conclure_enfilage(c, &e);
+    c.d[0] = d0;
+    c.a[1] = a1;
+    rts(c, b);
+}
+
+/// Commande à délai (0xff06 / 0xff07) : le délai et le mot haut de D1 viennent de la table, en D0.w.
+fn service_delai(c: &mut Cpu, b: &mut Cps2Bus, commande: u16, verrou: u8) {
+    wr8(b, VERROU_SERVICE, verrou);
+    let ligne = DELAIS.wrapping_add(c.d[0] as u16 as i16 as u32);
+    let delai = rd16(b, ligne);
+    wr16(b, a5(c, ram::DELAI), delai);
+    let haut = rd16(b, ligne + 2) as u32;
+    service(c, b, Commande { d1: haut << 16 | commande as u32, d2: 0, d3: 0 });
+}
+
+const fn service_natif(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), touches_sound: bool) -> Native {
+    Native { entry, name, cost: |_, _| 200, run, touches_sound, outputs: regs::CCR, exact_cost: false }
+}
+
+/// 0xe0882 : commande 0xff00 (arrêt général).
+pub const SERVICE_FF00: Native =
+    service_natif(0xe0882, "son_service_ff00", |c, b| service(c, b, Commande { d1: 0xff00, d2: 0, d3: 0 }), false);
+/// 0xe0a10 : commande 0xff05.
+pub const SERVICE_FF05: Native =
+    service_natif(0xe0a10, "son_service_ff05", |c, b| service(c, b, Commande { d1: 0xff05, d2: 0, d3: 0 }), false);
+/// 0xe0a2e / 0xe0a40 : commande 0xff06 (verrou D1.b ou 0xff).
+pub const SERVICE_FF06_D1: Native =
+    service_natif(0xe0a2e, "son_service_ff06", |c, b| service_delai(c, b, 0xff06, c.d[1] as u8), true);
+pub const SERVICE_FF06: Native = service_natif(0xe0a40, "son_service_ff06", |c, b| service_delai(c, b, 0xff06, 0xff), true);
+/// 0xe0a70 / 0xe0a82 : commande 0xff07 (verrou D1.b ou 0).
+pub const SERVICE_FF07_D1: Native =
+    service_natif(0xe0a70, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, c.d[1] as u8), true);
+pub const SERVICE_FF07: Native = service_natif(0xe0a82, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, 0), true);
+
+/// 0xe2240 / 0xe22e8 : bruit du personnage, ou celui de 0xe2390 dans la version à palette alternative
+/// (`A5+0x70` non nul).
+fn selon_version(c: &mut Cpu, b: &mut Cps2Bus, normal: u32) {
+    let cible = if rd16(b, a5(c, 0x70)) != 0 { 0xe2390 } else { normal };
+    crate::call(c, b, cible);
+    rts(c, b);
+}
+
+pub const SELON_VERSION_A: Native = service_natif(0xe2240, "son_selon_version", |c, b| selon_version(c, b, 0xe2248), false);
+pub const SELON_VERSION_B: Native = service_natif(0xe22e8, "son_selon_version", |c, b| selon_version(c, b, 0xe22f0), false);
+
+/// 0xee044 : pile privée des wrappers vide (pointeur = sa propre adresse) ; A0 = le pointeur.
+fn init_pile_privee(c: &mut Cpu, b: &mut Cps2Bus) {
+    let p = a5(c, ram::PILE_PRIVEE);
+    c.a[0] = p;
+    wr32(b, p, p);
+    c.flags_logic(p, Size::Long);
+    rts(c, b);
+}
+
+pub const INIT_PILE_PRIVEE: Native = Native {
+    entry: 0xee044,
+    name: "son_init_pile",
+    cost: |_, _| 40,
+    run: init_pile_privee,
+    touches_sound: false,
+    outputs: regs::a(0) | regs::CCR,
+    exact_cost: false,
+};
+
+/// Routines natives du son, hors wrappers (listées une à une dans `lib.rs::NATIVES`).
+pub const NATIVES: &[Native] = &[
+    ENFILER_SI_SON,
+    ENFILER_DIRECT,
+    ENVOYER_AU_Z80,
+    SERVICE_FF00,
+    SERVICE_FF05,
+    SERVICE_FF06_D1,
+    SERVICE_FF06,
+    SERVICE_FF07_D1,
+    SERVICE_FF07,
+    SELON_VERSION_A,
+    SELON_VERSION_B,
+    INIT_PILE_PRIVEE,
+];

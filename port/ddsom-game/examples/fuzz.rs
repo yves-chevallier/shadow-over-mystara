@@ -911,7 +911,10 @@ fn main() {
     }
     ddsom_game::set_check(true);
     let mut alea = Alea(0x9e37_79b9_7f4a_7c15);
+    // les aiguillages du son choisissent leur cible dans une table selon un registre ou l'objet : tirés au
+    // hasard, ces sélecteurs sortent des tables (hors contrat) ; ils sont validés par les scénarios
     let entrees: Vec<u32> = ddsom_game::all_natives()
+        .filter(|n| n.name != "son_aiguillage")
         .map(|n| n.entry)
         .filter(|e| plage.contains(e) && (*groupe != "son" || *e == 0x68c || *e >= 0xe0836))
         .filter(|e| *groupe != "camera" || matches!(*e, 0x2f81c | 0x2f86e | 0x328a8 | 0x33178 | 0x33196 | 0x331e8 | 0x3326c))
