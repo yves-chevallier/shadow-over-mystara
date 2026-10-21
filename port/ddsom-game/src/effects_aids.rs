@@ -66,11 +66,70 @@ fn spark(c: &mut Cpu, b: &mut Cps2Bus) {
             wr8(b, fx + 0x2c, facing);
             wr16(b, fx + 0x50, me as u16);
             wr16(b, fx + 0x54, c.a[2] as u16);
-            call(c, b, 0xab2b4);
+            // registres laissés par l'original, relus par certains appelants (D2, D3 : mots bas)
+            let (d0, d1, d2, d3) = place_between(b, me, fx, c.a[2]);
+            c.d[0] = d0 as u32;
+            c.d[1] = d1 as u32;
+            crate::mem::set_low_word(&mut c.d[2], d2);
+            crate::mem::set_low_word(&mut c.d[3], d3);
         }
     }
     [c.a[1], c.a[2], c.a[3], c.a[4]] = saved;
     rts(c, b);
+}
+
+/// Boîtes de collision : par jeu (`+0x2e`), adresse d'un tableau de boîtes de 8 octets (dx, _, dz...),
+/// choisies par `+0x38` (boîte de frappe) ou `+0x3a` (boîte de corps).
+const HIT_BOXES: u32 = 0x11bffa;
+const BODY_BOXES: u32 = 0x11c23a;
+
+/// Boîte de l'objet `o` (frappe ou corps).
+fn hit_box(b: &mut Cps2Bus, o: u32, hit: bool) -> u32 {
+    let (table, index) = if hit { (HIT_BOXES, 0x38) } else { (BODY_BOXES, 0x3a) };
+    let set = rd8(b, o + 0x2e) as u32;
+    let boxes = rd32(b, table + 4 * set);
+    let k = rd8(b, o + index) as u32;
+    boxes + 8 * k
+}
+
+/// 0xab2b4 : pose l'étincelle `fx` à mi-chemin entre une boîte de l'attaquant `me` et une boîte de la
+/// cible `victim`, selon la variante (variantes 0, 1, 3 : corps de l'un contre frappe de l'autre...),
+/// en profondeur à mi-chemin, juste devant la plus proche. Rend D0 à D3 tels que l'original les laisse.
+fn place_between(b: &mut Cps2Bus, me: u32, fx: u32, victim: u32) -> (u16, u16, u16, u16) {
+    let (me_hit, victim_hit) = match rd8(b, fx + 3) {
+        0 | 1 | 3 => (false, true),
+        4 | 6 => (false, false),
+        _ => (true, false),
+    };
+    let (mine, theirs) = (hit_box(b, me, me_hit), hit_box(b, victim, victim_hit));
+    // milieu des deux bords, sur un axe : x (décalage 0 de la boîte, retourné selon l'orientation) ou z
+    let middle = |b: &mut Cps2Bus, off: u32, field: u32, flip: bool| -> (u16, u16) {
+        let mut d0 = rd8(b, mine + off) as i8 as i16 as u16;
+        let mut d1 = rd8(b, theirs + off) as i8 as i16 as u16;
+        if flip && rd8(b, me + 0x2c) != 0 {
+            d0 = d0.wrapping_neg();
+        }
+        if flip && rd8(b, victim + 0x2c) != 0 {
+            d1 = d1.wrapping_neg();
+        }
+        let a = d0.wrapping_add(rd16(b, me + field));
+        let c = d1.wrapping_add(rd16(b, victim + field));
+        let mut half = ((c.wrapping_sub(a) as i16).wrapping_abs() >> 1) as u16;
+        if c as i16 <= a as i16 {
+            half = half.wrapping_neg();
+        }
+        wr16(b, fx + field, a.wrapping_add(half));
+        (a, c)
+    };
+    middle(b, 0, 0x08, true);
+    let (z, their_z) = middle(b, 2, 0x0c, false);
+    let (my_depth, their_depth) = (rd16(b, me + 0x10), rd16(b, victim + 0x10));
+    let gap = my_depth.wrapping_sub(their_depth);
+    let (front, gap) = if (gap as i16) < 0 { (my_depth, gap.wrapping_neg()) } else { (their_depth, gap) };
+    let z = z.wrapping_add(gap >> 1);
+    wr16(b, fx + 0x0c, z);
+    wr16(b, fx + 0x10, front.wrapping_sub(1));
+    (z, front.wrapping_sub(1), gap >> 1, their_z)
 }
 
 /// Allocation d'un objet de décor (SOBJ) et d'un effet de joueur (PEFF).
