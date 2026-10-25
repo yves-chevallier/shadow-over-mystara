@@ -57,11 +57,13 @@ mod kind {
     pub const TYPE_54: u8 = 54;
     pub const LAUNCHER: u8 = 55;
     pub const SHARDS: u8 = 56;
+    pub const TYPE_57: u8 = 57;
     pub const PILLAR: u8 = 67;
     pub const TYPE_68: u8 = 68;
     pub const VICTORY: u8 = 73;
     pub const BUBBLE: u8 = 74;
     pub const TIMER: u8 = 76;
+    pub const SOUND_FADE: u8 = 77;
     pub const RAIN: u8 = 83;
     pub const FINALE: u8 = 84;
     pub const WISP: u8 = 86;
@@ -306,6 +308,17 @@ fn mirrored_pair(c: &mut Cpu, b: &mut Cps2Bus) {
         o.set_u8(b, Obj::VARIANT, variant);
         o.set_u8(b, 0x2f, 0);
         link(c, b, o, 0x46, me.0);
+    }
+}
+
+/// 0xb6ba8 : effet de type 57 lié au créateur par `+0x50` : variante D0, réglage D1.
+fn type_57(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(o) = alloc(c, b, ALLOC_EFFECT) {
+        o.set_u8(b, Obj::ACTIVE, 1);
+        o.set_u16(b, 0x50, c.a[0] as u16);
+        o.set_u8(b, Obj::KIND, kind::TYPE_57);
+        o.set_u8(b, Obj::VARIANT, d0b(c));
+        put8(c, b, o, 0x2f, d1b(c));
     }
 }
 
@@ -833,6 +846,8 @@ creators! {
     0xb6a5c "cree_lanceur" launcher, CREATED;
     0xb6c42 "cree_eclat_camera" camera_shard, CREATED;
     0xb2ef6 "cree_silhouette_reflet" mirrored_pair, CREATED;
+    0xb6ba8 "cree_type_57" type_57, CREATED;
+    0xb8a0a "cree_fondu_sonore" |c, b| { spawn(c, b, kind::SOUND_FADE); }, CREATED;
     0xb68b0 "cree_types_54" type_54_trio, CREATED;
     0xae3ec "cree_scintillement" twinkle, CREATED;
     0xb6596 "cree_scintillement_perso" shimmer, CREATED | D(0);
