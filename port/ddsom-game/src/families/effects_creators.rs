@@ -451,6 +451,20 @@ fn scenery_burst(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, last: u16, setting_i
     }
 }
 
+/// 0xb3df6 : deux éclats brefs (variante 0, réglages 0 et 1) posés sur le créateur (x et profondeur).
+fn scenery_0_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+    for setting in 0..2u8 {
+        let Some(o) = spawn(c, b, kind::SCENERY) else { return };
+        let from = me(c);
+        o.set_u8(b, Obj::VARIANT, 0);
+        o.set_u8(b, 0x2f, setting);
+        let (x, y) = (from.u16(b, Obj::X), from.u16(b, Obj::Y));
+        o.set_u16(b, Obj::X, x);
+        o.set_u16(b, Obj::Y, y);
+        link(c, b, o, 0x46, from.0);
+    }
+}
+
 /// 0xb3f40 : sept éclats (variante 3, réglages 6 à 0).
 fn scenery_3(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[1] = 6;
@@ -826,6 +840,7 @@ creators! {
     0xb3c14 "cree_lance" toss, CREATED;
     0xaba16 "cree_eclat_unique" flash, CREATED;
     0xaaa40 "cree_etincelle_en" spark_at, regs::CCR;
+    0xb3df6 "cree_decor_0" scenery_0_pair, CREATED;
     0xb3f40 "cree_decor_3" scenery_3, CREATED | D(1);
     0xb3f6a "cree_decor_4" scenery_4, CREATED | D(0) | D(1);
     0xb3fb0 "cree_decor_5" scenery_5, CREATED;
