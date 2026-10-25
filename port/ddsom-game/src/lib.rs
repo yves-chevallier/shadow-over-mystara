@@ -270,7 +270,8 @@ const TASK_SWITCH: u32 = 0x984;
 /// donc empiler les mêmes adresses de retour que le code qu'ils remplacent.
 #[track_caller]
 pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
-    let _site = TRACE.get().map(|_| SiteDAppel::entrer(std::panic::Location::caller(), addr));
+    let site = std::panic::Location::caller();
+    let _site = TRACE.get().map(|_| SiteDAppel::entrer(site, addr));
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], ret);
