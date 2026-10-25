@@ -1204,12 +1204,12 @@ fn seq2_start(ex: &mut Ex) {
     ex.start_walk_out(false);
 }
 
-/// Séquence 2 : attend que tous les joueurs soient à l'état de sortie 0xc0300, puis dialogue 7.
+/// Séquence 2 : attend que tous les joueurs soient à l'état de sortie 0xc0c00, puis dialogue 7.
 fn seq2_wait_exit(ex: &mut Ex) {
     ex.reset_transition();
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
-        if rd8(ex.x.b, p) != 0 && rd16(ex.x.b, p + player::HEALTH) != 0 && crate::mem::rd32(ex.x.b, p + P_STATE_LONG) != 0x000c_0300 {
+        if rd8(ex.x.b, p) != 0 && rd16(ex.x.b, p + player::HEALTH) != 0 && crate::mem::rd32(ex.x.b, p + P_STATE_LONG) != 0x000c_0c00 {
             return;
         }
     }

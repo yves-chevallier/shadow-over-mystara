@@ -18,13 +18,18 @@ import random
 
 
 def build(frames=30000, seed=1, chars=(0,), players=1, scene=None, pokes=(), item_rate=1,
-          coin_period=3000, poke_frame=2400, start_frame=4300, god=0, base_only=False):
-    """Retourne la liste des lignes du scénario."""
+          coin_period=3000, poke_frame=2400, start_frame=4300, god=0, base_only=False, offset=0):
+    """Retourne la liste des lignes du scénario. `offset` : pièces, départ et sélection décalés d'autant
+    d'images (l'attract tourne d'abord ; autobot --offset), les `pokes` restent à leur image."""
     rnd = random.Random(seed)
     ev = []  # (image, nom, valeur) ; l'ordre relatif des lignes de même image est conservé
     pk = []
+    poke_frame += offset
+    start_frame += offset
 
     def press(f, name, dur=4):
+        if f < 2000 + offset:
+            f += offset
         ev.append((f, name, 1))
         ev.append((f + dur, name, 0))
 
@@ -34,8 +39,8 @@ def build(frames=30000, seed=1, chars=(0,), players=1, scene=None, pokes=(), ite
         return f"Coin {pl}"
     if players > 2:
         # réglage monnayeur chargé de l'EEPROM (FF8021 = 1 : deux monnayeurs) : il en faut un par joueur
-        pk.append((800, "poke8 ff8021", 3))
-        pk.append((800, "poke8 ff8020", 2))  # FF8020 = joueurs - 2 (1 : trois joueurs)
+        pk.append((800 + offset, "poke8 ff8021", 3))
+        pk.append((800 + offset, "poke8 ff8020", 2))  # FF8020 = joueurs - 2 (1 : trois joueurs)
     for pl in pls:
         press(900 + 20 * pl, coin(pl), 6)
     press(1000 if players == 1 else 1100, "1 Player Start", 6)

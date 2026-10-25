@@ -5,7 +5,8 @@
 //!       à la fois) et écrit « adresse nombre » (hexadécimal) pour chaque instruction 68000 exécutée ;
 //!   reste68k report <index.tsv> <atlas.md> <sortie.md> <fichier.cnt>...
 //!       fusionne les comptes, les regroupe par fonction (decomp/index.tsv) et par sous-système (atlas)
-//!       et écrit le tableau de `docs/reste68k.md`.
+//!       et écrit le tableau de `docs/reste68k.md` ; `DDSOM_JAMAIS=fichier` y écrit en plus la liste des
+//!       fonctions jamais atteintes (« adresse taille sous-système »).
 //! Orchestration : `tools/reste68k.sh`.
 
 use std::collections::BTreeMap;
@@ -195,6 +196,11 @@ fn report(a: &[String]) {
     };
     let only_native = funcs.iter().filter(|f| f.instr == 0 && f.native).count();
     let never: Vec<&Func> = funcs.iter().filter(|f| f.instr == 0 && !f.native).collect();
+    // DDSOM_JAMAIS=fichier : liste « adresse taille sous-système » des fonctions jamais atteintes (classement, docs/couverture.md)
+    if let Ok(path) = std::env::var("DDSOM_JAMAIS") {
+        let text: String = never.iter().map(|f| format!("{:06x} {} {}\n", f.addr, f.size, label(sub(f.addr)).0)).collect();
+        std::fs::write(path, text).unwrap();
+    }
     let pct = |n: u64| 100.0 * n as f64 / total.max(1) as f64;
 
     let mut md = String::new();

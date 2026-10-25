@@ -1,13 +1,23 @@
 # Scénarios en écart
 
 Ce dossier garde les scénarios dont l'écart avec le code d'origine n'est pas (encore) expliqué par la routine qu'ils
-exercent. **Il est vide** : tous les scénarios ont été ramenés à « VALIDE » et rangés dans leur dossier
-(`boss/`, `enemy/`, `scene/`, `scene_end/`, `cov/`). Historique des causes trouvées (méthode : `DDSOM_SANS=préfixe`, puis
+exercent. Les scénarios `covb_*` (campagne de couverture, `tools/gen_cov_b.py`, `docs/couverture.md`) qui s'y trouvent
+révèlent une routine Rust fausse, décrite ci-dessous, sur un chemin qu'aucun autre scénario n'exerçait ; ils
+redeviendront VALIDES une fois la routine corrigée (puis à ranger dans `cov/`). Les anciens scénarios en écart ont tous
+été ramenés à « VALIDE » et rangés dans leur dossier (`boss/`, `enemy/`, `scene/`, `scene_end/`, `cov/`).
+
+| Scénario | Image | Écart | Cause |
+|---|---|---|---|
+| (aucun) | | | |
+
+Historique des causes trouvées (méthode : `DDSOM_SANS=préfixe`, puis
 `DDSOM_ADOPT_REGS` / `DDSOM_ADOPT_MASK` / `DDSOM_ADOPT_TRACE`, `examples/watch` (RAM et GFX RAM), `examples/pctrace`,
 `examples/cyc` (cycles à l'entrée des natives, hybride contre original)) :
 
 | Scénario | Image | Cause | Correction |
 |---|---|---|---|
+| `cov/covb_long3p_02` | 10279 | `scene/exit.rs`, séquence de sortie 2 (`0xf34a8`) : état long attendu `0x000c0300` au lieu de `0x000c0c00` (`cmpi.l` en `0xf34be`) | constante corrigée |
+| `cov/covb_long3p_27`, `cov/covb_long3p_59` | 17474, 24939 | `hud/status.rs`, ligne d'état (`0x17814`) : test du bit 3 de la minuterie de clignotement inversé (l'original efface quand il est levé) | test inversé |
 | `scene/scene_67` | 3546 | régression de la fusion : la porte de passage `set_29` (`set_b.rs`, `door_b`) appelait le fondu `0x1460`, qui cède la main (`0xa40`), avec l'adresse de retour sentinelle de `call` ; au réveil, la tâche revenait à `0xfffe` | `Cx::call_at(addr, ret)` : le fondu est appelé avec l'adresse de retour de l'original (`0xd8f06`) |
 | `boss/boss13_dragon`, `scene/scene_07`, `enemy/ghoul_scene19` | – | VALIDES sans autre changement (plafond de pas de jeu par image, registres résiduels déjà corrigés) | – |
 | `scene/scene_05`, `scene/scene_11` | 4118, 4951 | harpie (`enemy_harpy`, sortie de vol 0x75884) : l'angle de vol `+0x2d` devenu négatif est remis à zéro (`clr.b` en 0x758c0), ce que les autres variantes de vol ne font pas | `bank(x, reload, clamp)` |
