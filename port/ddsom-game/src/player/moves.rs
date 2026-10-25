@@ -291,7 +291,8 @@ const PAUSE_TIMER: u32 = 0x1e8;
 /// actif, invulnérable 16 images, et immobile.
 pub fn pause(g: &mut Ctx, p: Player, last: u16) {
     match p.u8(g, Player::STEP) {
-        0 => {
+        // la table de 0x3626c répète les pas 0 et 4 aux pas 6 et 8 (celle de 0x362d0 s'arrête au pas 4)
+        0 | 6 => {
             next_step(g, p);
             p.set_u8(g, PAUSE_TIMER, 0x1a);
             animation::start(g, p, 0);
@@ -306,7 +307,7 @@ pub fn pause(g: &mut Ctx, p: Player, last: u16) {
                 animation::start(g, p, last);
             }
         }
-        4 => {
+        4 | 8 => {
             if g.a5u8(0x3d) != 0 {
                 animation::step(g, p);
                 return;

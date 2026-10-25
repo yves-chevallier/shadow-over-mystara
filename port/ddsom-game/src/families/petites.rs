@@ -536,7 +536,7 @@ pub const NATIVES: &[Native] = &[
     native(0x133f6, "demarrage_leve", booted_set, regs::CCR),
     native(0x133f0, "demarrage_baisse", booted_clear, regs::CCR),
     native(0xdd12c, "verrou_item_baisse", item_lock_clear, regs::CCR),
-    native(0x3baea, "octet_table_joueur", player_table_byte, regs::d(0) | regs::CCR),
+    native(0x3baea, "octet_table_joueur", player_table_byte, regs::d(0)),
     native(0x1c44a, "variables_partie_a_zero", game_vars_clear, regs::ALL),
     native(0x180ac, "ecran_fixe_remise", fixed_screen_reset, regs::CCR),
 ];
