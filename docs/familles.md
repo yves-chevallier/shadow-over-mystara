@@ -253,10 +253,9 @@ Encore en code d'origine :
   (`effects_creators.rs`) ;
 - **variantes et états délégués** (colonne « validation ») : jamais exercés par les scénarios, exécutés tels
   quels par le code d'origine ;
-- reste mesuré (`examples/reste68k run` sur les 121 scénarios, adresses `0xa8000-0xba310`) : 75,9 millions
-  d'instructions 68000 avant ce lot, 70 510 après (dont 530 dans les ESHL 70 à 72) ; le reste vient surtout
-  de sous-routines de la zone appelées par d'autres familles ou par la bulle (`0xae776`, `0xb3f40`,
-  `0xae298`, `0xae3ec`, `0xb1a7a`, `0xabb70`...), chacune moins de 12 000 instructions sur les 121 scénarios.
+- reste mesuré (`tools/reste68k.sh`, 255 scénarios) : 443 506 instructions 68000 dans la zone EFFCT
+  (`0xa8000-0xba310`) avant les lots `effects_f.rs` / `effects_creators.rs`, 51 après (trois créateurs
+  rencontrés ensuite, `0xb3df6`, `0xb6ba8`, `0xb8a0a`, désormais natifs : plus aucune instruction attendue).
 
 ## 5. Résultats de la validation
 
