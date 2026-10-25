@@ -1,7 +1,7 @@
-# SET 2 (contrôleur de scène) et SET 15 (écrans de fin de niveau)
+# SET 2 (contrôleur de scène), SET 3 (fenêtre de texte) et SET 15 (écrans de fin de niveau)
 
 Code : `port/ddsom-game/src/families/set_c.rs` (table `handlers!`), `set_c_scene.rs` (type 2),
-`set_c_finale.rs`, `set_c_finale_b.rs`, `set_c_finale_c.rs` (type 15). Les tables restent dans la ROM
+`set_c_fenetre.rs` (type 3), `set_c_finale.rs`, `set_c_finale_b.rs`, `set_c_finale_c.rs` (type 15). Les tables restent dans la ROM
 et sont lues à l'exécution ; les rôles marqués (h) sont des hypothèses.
 
 Ces « 48 Ko » et « 25 Ko » sont en grande partie des **données** : le type 2 n'a que 2,6 Ko de code
@@ -45,6 +45,35 @@ Couverture : 43 083 appels dans les 8 scénarios (VALIDE) ; fuzz `familles` sur 
 119, états 0/2/4/6, variables de partie et joueurs tirés ; 128 000 appels) : 0 écart. Non vus par le
 fuzz : actions de départ 5 (jamais choisie par la table), échecs d'allocation, parcours de pools remplis
 d'objets de chaque classe (le balayage du rideau est identique d'un pool à l'autre).
+
+## SET 3 : fenêtre de texte (0xc8352, aussi type 33)
+
+Créée par 0xc8312 (variante = n° de fenêtre). La variante indexe une table de pointeurs (0x1cd000 si le
+mot `A5+0x72` vaut 4, sinon 0x1e78da) vers des enregistrements de 18 octets : colonne et ligne dans la
+tilemap du scroll 1 (0x912000 + colonne × 0x80 + ligne × 4), cadre « grand » (`+0x18`), nombre de lignes
+(`+0x19`), texte ou paramètre (`+0x24`), position du texte (`+8`, `+0xc`), **style** (`+0x2f`), fin de
+chaîne (`+0x1a` négatif), durée (`+0x32`, 0xffff : sans fin), paramètre (`+0x34`) ; la fenêtre
+suivante suit l'enregistrement (`+0x1c`).
+
+| `+4`/`+5` | rôle |
+|---|---|
+| 0 | charge l'enregistrement (certains styles le remplacent selon les joueurs ou le nombre de joueurs), pose la palette 0x292260 (assombrie comme l'écran si `A5+0x48f` et `A5+0x48e` bit 0) |
+| 2/0, 2/2 | dessine le bord haut puis une ligne par délai (`+0x1b`, recharge `+0x36`) |
+| 2/2 fin | confie le texte au moteur de texte : entrée 0xff85c6 + `+0x38` (pointeur, x, y) ; style 0 : le texte tel quel, sinon composé dans 0xff2072 |
+| 2/4 | attend la durée ; un bouton nouvellement pressé (`A5+0xc+k`, quartet haut) d'un joueur concerné (`+0x37`, ou `+0x43` pour la variante 0x8b) l'écourte ; efface l'entrée du moteur de texte |
+| 2/6 | efface une ligne par délai, puis enchaîne la fenêtre suivante (le bord haut n'est effacé que si sa place ou sa largeur change) ou passe en `+4 = 6` |
+| 4/6 | libération (compteurs `A5+0x51` et 0xff2472) |
+
+Styles de composition : 1/5/9/11/14/19/20/22 texte tel quel ; 2 titre de classe et nom de chaque joueur ;
+3 et 15 texte et effet EFFCT 23 lié (`+0x50`) ; 4 noms des joueurs séparés ; 6/7 texte en mots ; 8
+caractères sur un mot ; 10 et 13 nom inséré (code 7 suivi de 4 ou 5) ; 12 sans texte ; 16 texte tel quel
+sans composition ; 17 message sur l'objet lié `+0x46` (nom, équipement : listes 0xc8e0c-0xc8e1e,
+messages 0xc8e34/0xc8e48) puis SET 15 variante 17 lié ; 18 texte et SOBJ 6 variante 19 lié ; 21 nom
+enregistré (0xff0fd2) avec une commande de couleur ; 23 efface l'entrée du moteur de texte. Les noms
+sont 6 caractères codés à partir de 0x51 (glyphes 0xc9216), ou un nom par défaut (0xc8948).
+
+Les scénarios n'exercent que les fenêtres des scénarios de langue (`covb_langue4`, `covb_langue6`) ;
+`fuzz familles` (`DDSOM_ENTREE=c8352`) compare les autres variantes à l'original.
 
 ## SET 15 : écrans de fin de niveau (0xce024)
 

@@ -30,6 +30,36 @@ fn players() -> impl Iterator<Item = Obj> {
 // Type 16 (0xd4110) : tremplin (h)
 // ---------------------------------------------------------------------------------------------
 
+/// 0xd40e8, routine des scripts d'apparition (scènes 14 et 109) : libère le verrou des tremplins
+/// (`A5+0x46`) et crée les treize tremplins de la scène, SET 16 de variantes 13 à 1 ; s'arrête si le
+/// pool est plein. Laisse comme l'original D5 (compteur de boucle), A1 et D6 (de l'allocation).
+pub const SPAWN_BUMPERS: crate::Native = crate::Native {
+    entry: 0xd40e8,
+    name: "set_tremplins_d40e8",
+    cost: |_, _| 400,
+    run: spawn_bumpers,
+    touches_sound: false,
+    outputs: crate::regs::d(5) | crate::regs::d(6) | crate::regs::a(1),
+    exact_cost: false,
+};
+
+fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+    crate::mem::wr16(b, A5 + 0x46, 0);
+    for counter in (0..13u32).rev() {
+        c.d[5] = c.d[5] & !0xffff | counter;
+        crate::call(c, b, sub::ALLOC_SET);
+        if c.sr & m68k::SR_C != 0 {
+            return crate::mem::rts(c, b);
+        }
+        let o = Obj(c.a[1]);
+        o.set_u8(b, Obj::ACTIVE, 1);
+        o.set_u8(b, Obj::KIND, 0x10);
+        o.set_u8(b, Obj::VARIANT, counter as u8 + 1);
+    }
+    c.d[5] |= 0xffff;
+    crate::mem::rts(c, b);
+}
+
 /// Tremplin / pare-chocs (h) : une zone de contact (boîtes lues dans la ROM d'après `+0x2e` et les
 /// octets `+0x38..+0x3a`) qui, quand un joueur la touche en appuyant la bonne touche, le lance
 /// dans les airs (vitesses en dur par type de tremplin `+0x42`, état du joueur 0x2002400 ou

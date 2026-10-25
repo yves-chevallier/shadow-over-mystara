@@ -17,7 +17,7 @@ use super::actions::start_stand;
 use super::checks::{special_attack, throw_button};
 use super::effects::restore_palette;
 use super::states::State;
-use super::walk::{move_x, move_z};
+use super::walk::{move_x, move_xz, move_z};
 use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
@@ -36,6 +36,8 @@ mod rom {
     pub const INTRO_SOUND: u32 = 0xab708;
     pub const INTRO_ACTION: u32 = 0xe1330;
     pub const SPECIAL_VOICE: u32 = 0x4fd2c;
+    /// Animation du jeu C des personnages (D6 = numéro).
+    pub const ANIM_START_C: u32 = 0x2cf0;
 }
 
 /// Tables du code.
@@ -58,7 +60,19 @@ mod tables {
     pub const WALK_IN_WAIT: u32 = 0x23a56;
     pub const SCENE1_WAIT: u32 = 0x24f38;
     pub const WAIT_DELAYS: u32 = 0x23dac;
+    /// Attente des commandes, pas 4 (`+7`) : marche jusqu'à la place, puis projeté par le boss.
+    pub const THROWN_SUBSTEPS: u32 = 0x23e0e;
+    /// Profondeur visée (mots) selon le joueur.
+    pub const THROWN_ROWS: u32 = 0x23e58;
 }
+
+/// Signal de la cinématique partagé avec le boss 21 (mot `A5+0x51e`) : 0x5c quand il projette les
+/// joueurs, 4 une fois le premier retombé.
+const BOSS_SIGNAL: u32 = 0x51e;
+const SIGNAL_THROW: u16 = 0x5c;
+const SIGNAL_LANDED: u16 = 4;
+/// Profondeur visée par le joueur (mot).
+const TARGET_ROW: u32 = 0x1e2;
 
 /// Réécrit : adresse d'origine -> routine Rust.
 const HANDLERS: &[(u32, Handler)] = &[
@@ -87,6 +101,18 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x23db4, wait_delay),
     (0x23dde, wait_pose),
     (0x23df2, wait_inputs),
+    (0x23e02, |g, p| substep_table(g, p, tables::THROWN_SUBSTEPS)),
+    (0x23e20, thrown_turn),
+    (0x23e60, thrown_turned),
+    (0x23e76, thrown_align),
+    (0x23e98, thrown_walk),
+    (0x23eb4, thrown_wait_signal),
+    (0x23ee4, thrown_first_fall),
+    (0x23ede, |g, p| {
+        animation::step(g, p);
+    }),
+    (0x23f0a, thrown_fall),
+    (0x23f2a, thrown_end),
 ];
 
 /// Version Rust de la routine d'origine `addr`, si elle est réécrite.
@@ -518,4 +544,111 @@ fn wait_inputs(g: &mut Ctx, p: Player) {
     if g.a5u8(ram::INPUT_MASK) != 0 {
         give_control(g, p);
     }
+}
+
+// ---- attente des commandes, pas 4 : entrée projetée par le boss (0x23e02) -----------------------
+
+/// 0x23e20 : vise sa profondeur et se tourne vers la droite (demi-tour si besoin), puis marche.
+fn thrown_turn(g: &mut Ctx, p: Player) {
+    cov!();
+    next_step(g, p);
+    let flags = p.u8(g, Player::FLAGS) & !1;
+    p.set_u8(g, Player::FLAGS, flags);
+    let row = per_player(g, p, tables::THROWN_ROWS);
+    p.set_u16(g, TARGET_ROW, row);
+    if p.u8(g, Player::FACING) == 0 {
+        p.set_u8(g, Player::FACING, 0x20);
+        animation::start(g, p, 5);
+    } else {
+        next_step(g, p);
+        animation::start(g, p, 2);
+    }
+}
+
+/// 0x23e60 : fin du demi-tour, puis la marche.
+fn thrown_turned(g: &mut Ctx, p: Player) {
+    cov!();
+    if animation::step(g, p) {
+        next_step(g, p);
+        animation::start(g, p, 2);
+    }
+}
+
+/// 0x23e76 : rejoint sa profondeur, un pixel par image.
+fn thrown_align(g: &mut Ctx, p: Player) {
+    cov!();
+    let (y, row) = (p.u16(g, Obj::Y), p.u16(g, TARGET_ROW));
+    if y == row {
+        next_step(g, p);
+        return;
+    }
+    let dy = if (y.wrapping_sub(row) as i16) < 0 { 1 } else { 0xffff };
+    p.set_u16(g, Obj::Y, y.wrapping_add(dy));
+    animation::step(g, p);
+}
+
+/// 0x23e98 : avance de 2 pixels par image jusqu'à buter sur le décor, puis immobile.
+fn thrown_walk(g: &mut Ctx, p: Player) {
+    cov!();
+    let x = p.u16(g, Obj::X).wrapping_add(2);
+    p.set_u16(g, Obj::X, x);
+    if g.rom(rom::TERRAIN, p) {
+        animation::step(g, p);
+    } else {
+        next_step(g, p);
+        start_stand(g, p);
+    }
+}
+
+/// 0x23eb4 : attend le signal du boss, puis est projeté en l'air (vitesses x et z, gravité).
+fn thrown_wait_signal(g: &mut Ctx, p: Player) {
+    cov!();
+    if g.a5u16(BOSS_SIGNAL) != SIGNAL_THROW {
+        animation::step(g, p);
+        return;
+    }
+    next_step(g, p);
+    p.set_u16(g, Obj::VX, 0x200);
+    p.set_u16(g, Obj::AX, 0);
+    p.set_u16(g, Obj::VZ, 0x580);
+    p.set_u16(g, Obj::AZ, 0xffc8);
+    g.rom_d6(rom::ANIM_START_C, p, 2);
+}
+
+/// Vol plané : vrai à l'atterrissage (altitude repassée sous zéro, remise à zéro).
+fn thrown_flight(g: &mut Ctx, p: Player) -> bool {
+    move_xz(g, p);
+    if (p.u16(g, Obj::Z) as i16) >= 0 {
+        animation::step(g, p);
+        return false;
+    }
+    next_step(g, p);
+    p.set_u16(g, Obj::Z, 0);
+    true
+}
+
+/// 0x23ee4 : vol ; à l'atterrissage, prévient le boss (`SIGNAL_LANDED`) et reprend la pose immobile.
+fn thrown_first_fall(g: &mut Ctx, p: Player) {
+    cov!();
+    if thrown_flight(g, p) {
+        g.set_a5u16(BOSS_SIGNAL, SIGNAL_LANDED);
+        start_stand(g, p);
+    }
+}
+
+/// 0x23f0a : idem, sans signal.
+fn thrown_fall(g: &mut Ctx, p: Player) {
+    cov!();
+    if thrown_flight(g, p) {
+        start_stand(g, p);
+    }
+}
+
+/// 0x23f2a : en phase de jeu, le joueur reprend la main.
+fn thrown_end(g: &mut Ctx, p: Player) {
+    cov!();
+    if g.a5u8(ram::PHASE) == 0xc {
+        give_control(g, p);
+    }
+    animation::step(g, p);
 }

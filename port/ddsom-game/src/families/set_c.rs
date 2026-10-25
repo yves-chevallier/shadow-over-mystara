@@ -1,4 +1,5 @@
-//! Types SET 2 (contrôleur de scène, 0xbc814) et 15 (0xce024) : voir `docs/familles/set_c.md`.
+//! Types SET 2 (contrôleur de scène, 0xbc814), 3 (fenêtre de texte, 0xc8352) et 15 (0xce024) : voir
+//! `docs/familles/set_c.md`.
 //! Les tables (scripts d'événements, adresses de jeux d'animation...) restent dans la ROM.
 
 use super::cx::handlers;
@@ -7,8 +8,11 @@ use super::cx::handlers;
 mod scene;
 #[path = "set_c_finale.rs"]
 mod finale;
+#[path = "set_c_fenetre.rs"]
+mod fenetre;
 
 handlers! {
     0xbc814 "set_scene_bc814" 300 scene::run,
+    0xc8352 "set_fenetre_c8352" 400 fenetre::run,
     0xce024 "set_ecrans_ce024" 600 finale::run,
 }
