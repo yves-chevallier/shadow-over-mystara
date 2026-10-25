@@ -56,7 +56,7 @@ fn executeur(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Opti
 
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    a == 0x58 || (0x0900..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
+    ddsom_game::taches::table::ram_du_noyau(a as u32) || (0x2900..0x2a1a).contains(&a)
 }
 
 fn differents(x: &[u16], y: &[u16]) -> usize {

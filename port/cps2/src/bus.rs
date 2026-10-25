@@ -21,6 +21,32 @@ impl Default for Inputs {
     }
 }
 
+/// État d'un jeu porté gardé hors de la RAM émulée (par exemple la table des tâches en Rust de ddsom) : opaque pour
+/// la machine, copié avec le bus.
+pub trait Extension: std::any::Any + Send {
+    fn clone_box(&self) -> Box<dyn Extension>;
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+}
+
+impl<T: std::any::Any + Send + Clone> Extension for T {
+    fn clone_box(&self) -> Box<dyn Extension> {
+        Box::new(self.clone())
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+impl Clone for Box<dyn Extension> {
+    fn clone(&self) -> Self {
+        (**self).clone_box()
+    }
+}
+
 #[derive(Clone)]
 pub struct Cps2Bus {
     /// ROM programme, vue données (en clair), mots big-endian. Partagée entre copies du bus.
@@ -57,6 +83,8 @@ pub struct Cps2Bus {
     /// Premier cycle CPU où une interruption peut être levée (fin d'image, ou fin de ligne si les
     /// compteurs raster sont armés). Un traitement atomique qui s'achève avant reste exact.
     pub irq_horizon: u64,
+    /// État du jeu porté hors de la RAM émulée (voir [`Extension`]).
+    pub ext: Option<Box<dyn Extension>>,
 }
 
 impl Cps2Bus {
@@ -86,6 +114,7 @@ impl Cps2Bus {
             // le Z80 démarre à la mise sous tension ; le 68000 le met en reset au boot
             z80_running: true,
             irq_horizon: 0,
+            ext: None,
         }
     }
 

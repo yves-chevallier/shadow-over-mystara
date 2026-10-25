@@ -163,6 +163,7 @@ impl<'a> Cx<'a> {
     // --- sous-routines -------------------------------------------------------------------------
 
     /// JSR `addr` avec A0 = l'objet et A5 = base de la RAM de travail.
+    #[track_caller]
     pub fn call(&mut self, addr: u32) {
         self.c.a[0] = self.o.0;
         self.c.a[5] = A5;
@@ -171,6 +172,7 @@ impl<'a> Cx<'a> {
 
     /// Comme `call`, pour une sous-routine qui peut céder la main (0xa40) : `ret` est l'adresse qui suit le
     /// `jsr` dans le gestionnaire d'origine, par où la tâche reprendra, réveillée plus tard.
+    #[track_caller]
     pub fn call_at(&mut self, addr: u32, ret: u32) {
         self.c.a[0] = self.o.0;
         self.c.a[5] = A5;

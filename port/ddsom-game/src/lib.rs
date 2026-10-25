@@ -252,6 +252,7 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
 /// exécution jusqu'au retour, natives et blocs recompilés compris. Les cycles s'accumulent.
 /// L'adresse de retour empilée est une sentinelle : préférer `call_at` quand l'appelant d'origine
 /// est connu.
+#[track_caller]
 pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     // jamais exécutée par le jeu
     const RETURN: u32 = 0x00_fffe;
@@ -267,7 +268,9 @@ const TASK_SWITCH: u32 = 0x984;
 /// abandonnées (`Unwound`) : la tâche, réveillée plus tard, reviendra par les adresses de retour de
 /// sa pile dans le code d'origine, qui finit le travail comme l'original. Les appelants Rust doivent
 /// donc empiler les mêmes adresses de retour que le code qu'ils remplacent.
+#[track_caller]
 pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
+    let _site = TRACE.get().map(|_| SiteDAppel::entrer(std::panic::Location::caller(), addr));
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], ret);
@@ -300,6 +303,33 @@ static NATIVE_HOOK: OnceLock<fn(u32, bool)> = OnceLock::new();
 
 pub fn set_native_hook(f: fn(u32, bool)) {
     let _ = NATIVE_HOOK.set(f);
+}
+
+thread_local! {
+    /// Appels de code d'origine en cours pendant l'inventaire : site de l'appel en Rust et routine appelée.
+    static APPELS: std::cell::RefCell<Vec<(&'static std::panic::Location<'static>, u32)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Appel en cours (rendu à la fin de l'appel, même abandonné par `Unwound`).
+struct SiteDAppel;
+
+impl SiteDAppel {
+    fn entrer(site: &'static std::panic::Location<'static>, routine: u32) -> Self {
+        APPELS.with(|a| a.borrow_mut().push((site, routine)));
+        SiteDAppel
+    }
+}
+
+impl Drop for SiteDAppel {
+    fn drop(&mut self) {
+        APPELS.with(|a| a.borrow_mut().pop());
+    }
+}
+
+/// Inventaire : l'appel Rust le plus intérieur en cours (site et routine appelée), s'il y en a un. Le site est
+/// l'appel de `call`/`call_at` ou d'une de leurs enveloppes (`Ctx::call`, `Cx::call`...).
+pub fn site_d_appel() -> Option<(&'static std::panic::Location<'static>, u32)> {
+    APPELS.with(|a| a.borrow().last().copied())
 }
 
 /// Exécuteur d'inventaire : routines natives, sinon une instruction 68000 à la fois, signalée à
@@ -347,7 +377,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
-        if c.cycles + cost <= limit {
+        if c.cycles + cost <= limit || tient_la_table(n) {
             if CHECK.load(Ordering::Relaxed) && checked(n) {
                 check(n, c, b, cost);
             } else if adopt_regs(n) {
@@ -385,6 +415,13 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         }
     }
     ddsom_rc::run_block(pc, c, b, dl)
+}
+
+/// Natives qui tiennent leur état dans la table des tâches Rust (noyau, VBLANK, tâche du gel, démarrage) : le code
+/// d'origine, qui le chercherait en RAM, ne doit jamais s'exécuter à leur place, même quand elles débordent sur
+/// l'interruption suivante (ce qui n'arrive que dans un appel de code d'origine qui dure).
+fn tient_la_table(n: &Native) -> bool {
+    kernel::NATIVES.iter().chain(vblank::NATIVES).chain(taches::gel::NATIVES).chain(demarrage::NATIVES).any(|k| k.entry == n.entry)
 }
 
 /// Exécuteur : routines natives seulement (le reste est laissé à l'interpréteur). Outils de diagnostic.
@@ -450,13 +487,20 @@ pub fn install_reference(m: &mut cps2::Machine) {
 }
 
 /// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image, ou seule la tâche
-/// du gel est prête et son prochain pas ne ferait rien (`taches::gel::attente_vide`).
+/// du gel est prête et son prochain pas ne ferait rien (`taches::gel::attente_vide`). La machine du jeu a sa table des
+/// tâches en Rust ; une machine d'origine, en RAM.
 pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
-    const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
     const NEW_FRAME: usize = 0x164 / 2; // FF0164 (octet haut) : posé par le VBLANK, effacé au début d'un parcours
-    (0x932..0x960).contains(&c.pc)
-        && b.ram[NEW_FRAME] >> 8 == 0
-        && ((0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || taches::gel::attente_vide(&b.ram))
+    if !(0x932..0x960).contains(&c.pc) || b.ram[NEW_FRAME] >> 8 != 0 {
+        return false;
+    }
+    match taches::table::lire(b) {
+        Some(t) => t.emplacements.iter().all(|e| !e.etat.lancable()) || taches::gel::attente_vide(t, &b.ram),
+        None => {
+            const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
+            (0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || taches::gel::attente_vide_origine(&b.ram)
+        }
+    }
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);

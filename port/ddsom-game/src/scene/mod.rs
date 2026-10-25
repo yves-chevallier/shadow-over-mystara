@@ -164,6 +164,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// Sous-routine d'origine (JSR) avec A5 en place.
+    #[track_caller]
     pub fn call(&mut self, addr: u32) {
         self.c.a[5] = A5;
         call(self.c, self.b, addr);

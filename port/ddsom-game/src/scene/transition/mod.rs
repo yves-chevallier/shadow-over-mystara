@@ -161,6 +161,7 @@ fn set_d0_byte(x: &mut Ctx, v: u8) {
 fn set_d0_word(x: &mut Ctx, v: u16) {
     x.c.d[0] = x.c.d[0] & !0xffff | v as u32;
 }
+#[track_caller]
 fn call_d0(x: &mut Ctx, routine: u32, d0: u32) {
     x.c.d[0] = d0;
     x.call(routine);

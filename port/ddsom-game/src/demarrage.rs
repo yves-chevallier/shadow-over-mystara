@@ -30,6 +30,7 @@ use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
 use crate::{call_at, Native};
+use crate::taches::table::{table, Table};
 
 /// Position du faisceau : lignes écoulées depuis la mise sous tension (une image commence au vblank).
 const fn faisceau(image: u64, ligne: u32) -> u64 {
@@ -120,8 +121,7 @@ const GFX_TEST: u32 = 0x910000;
 const GFX_REMPLIE: u32 = 0x914000;
 const PALETTE_DEPART: u32 = 0x91c400;
 const RAM_DEBUT: u32 = 0xff0000;
-/// Tas des piles des tâches : pointeur en FF005A, piles empilées sous FF01A6.
-const TAS_PILES: u32 = A5 - 0x7fa6;
+/// Fond du tas des piles des tâches de l'original (pointeur en FF005A, piles empilées sous FF01A6).
 const PILES_FIN: u32 = A5 - 0x7e5a;
 /// Indicateur posé quand le bouton 1 du joueur 1 est pressé au démarrage (cartes de développement).
 const BOUTON_AU_DEMARRAGE: u32 = A5 - 0x55e2;
@@ -161,6 +161,7 @@ fn reset(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, io::COMMANDES, io::Z80_AU_RESET);
     c.a[5] = A5;
     b.ram.fill(0);
+    *table(b) = Table::default();
     let region = rd16(b, rom::REGION);
     wr16(b, a5(var::REGION), region);
     wr16(b, io::VIDEO, 0xe);
@@ -264,17 +265,13 @@ fn boot_init(c: &mut Cpu, b: &mut Cps2Bus) {
         wr8(b, a5(off), v);
     }
     wr16(b, a5(var::DSW), 0xffff);
-    // 16 piles, empilées (`move.l (A0)+,-(A1)`) : la première de la table au sommet
-    let mut pile = PILES_FIN;
-    for i in 0..16 {
-        pile -= 4;
-        let v = rd32(b, rom::PILES + 4 * i);
-        wr32(b, pile, v);
-    }
-    wr32(b, TAS_PILES, pile);
+    // 16 piles, empilées (`move.l (A0)+,-(A1)` sous FF01A6) : la dernière de la table au sommet. Le tas est celui de
+    // la table des tâches Rust ; A1 garde le sommet de celui de l'original.
+    let piles = (0..16).map(|i| rd32(b, rom::PILES + 4 * i)).collect();
+    table(b).piles = piles;
     set_low_word(&mut c.d[0], 0xffff);
     c.a[0] = rom::PILES + 0x40;
-    c.a[1] = pile;
+    c.a[1] = PILES_FIN - 0x40;
     jsr(c, b, ext::REGLAGES);
     c.set_sr(0x2000);
     c.pc = at::LANCEMENT;

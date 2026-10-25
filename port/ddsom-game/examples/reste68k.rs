@@ -5,8 +5,9 @@
 //!       à la fois) et écrit « adresse nombre » (hexadécimal) pour chaque instruction 68000 exécutée ;
 //!   reste68k report <index.tsv> <atlas.md> <sortie.md> <fichier.cnt>...
 //!       fusionne les comptes, les regroupe par fonction (decomp/index.tsv) et par sous-système (atlas)
-//!       et écrit le tableau de `docs/reste68k.md` ; `DDSOM_JAMAIS=fichier` y écrit en plus la liste des
-//!       fonctions jamais atteintes (« adresse taille sous-système »).
+//!       et écrit le tableau de `docs/reste68k.md`, avec les appels Rust (`call`, `call_at` et leurs enveloppes)
+//!       qui exécutent encore du 68000, par module et par site d'appel ; `DDSOM_JAMAIS=fichier` y écrit en plus
+//!       la liste des fonctions jamais atteintes (« adresse taille sous-système »).
 //! Orchestration : `tools/reste68k.sh`.
 
 use std::collections::BTreeMap;
@@ -17,8 +18,15 @@ use std::sync::Mutex;
 /// Compteur d'exécutions par mot de programme (0x000000-0x0FFFFF).
 static COUNTS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
+/// Instructions 68000 par appel Rust en cours (fichier, ligne, routine appelée) ; hors appel : clé `("", 0, 0)`.
+static SITES: Mutex<BTreeMap<(&'static str, u32, u32), u64>> = Mutex::new(BTreeMap::new());
+
 fn trace(pc: u32) {
     COUNTS.lock().unwrap()[(pc as usize & 0xfffff) >> 1] += 1;
+    if !SPIN.iter().any(|r| r.contains(&pc)) {
+        let site = ddsom_game::site_d_appel().map_or(("", 0, 0), |(l, routine)| (l.file(), l.line(), routine));
+        *SITES.lock().unwrap().entry(site).or_default() += 1;
+    }
 }
 
 fn run(a: &[String]) {
@@ -43,6 +51,9 @@ fn run(a: &[String]) {
     let mut s = format!("# {scenario} {frames}\n");
     for (w, &n) in COUNTS.lock().unwrap().iter().enumerate().filter(|(_, &n)| n > 0) {
         writeln!(s, "{:06x} {n}", 2 * w).unwrap();
+    }
+    for (&(file, line, routine), &n) in SITES.lock().unwrap().iter() {
+        writeln!(s, "@ {file}:{line} {routine:x} {n}").unwrap();
     }
     std::fs::write(out, s).unwrap();
 }
@@ -126,6 +137,8 @@ fn report(a: &[String]) {
     let (mut orphan, mut spin) = (0u64, 0u64);
     let mut orphans: BTreeMap<u32, u64> = BTreeMap::new();
     let mut per_scenario: Vec<(String, usize, u64)> = Vec::new();
+    // instructions par (site d'appel Rust « fichier:ligne », routine appelée) ; « : » seul = hors appel
+    let mut sites: BTreeMap<(String, u32), u64> = BTreeMap::new();
     for c in cnts {
         let text = std::fs::read_to_string(c).unwrap();
         let mut lines = text.lines();
@@ -135,6 +148,12 @@ fn report(a: &[String]) {
         let mut seen = vec![false; funcs.len()];
         let mut total = 0;
         for l in lines {
+            if let Some(site) = l.strip_prefix("@ ") {
+                let v: Vec<&str> = site.split(' ').collect();
+                let (lieu, routine, k) = (v[0].to_string(), u32::from_str_radix(v[1], 16).unwrap(), v[2].parse::<u64>().unwrap());
+                *sites.entry((lieu, routine)).or_default() += k;
+                continue;
+            }
             let (pc, k) = l.split_once(' ').unwrap();
             let (pc, k) = (u32::from_str_radix(pc, 16).unwrap(), k.parse::<u64>().unwrap());
             total += k;
@@ -250,6 +269,47 @@ fn report(a: &[String]) {
     for i in o2 {
         let (id, name) = label(i);
         writeln!(md, "| {id} | {name} | {} | {} |", subs[i].never, subs[i].never_bytes).unwrap();
+    }
+
+    writeln!(md, "\n## Appels Rust qui exécutent encore du 68000\n").unwrap();
+    writeln!(md, "Instructions 68000 exécutées pendant un appel `call`/`call_at` (ou une de leurs enveloppes : `Ctx::call`, `Cx::call`, `call_d0`...), attribuées à l'appel le plus intérieur. **Hors appel** : code d'origine où une tâche reprend (adresse de reprise sans native), où une native continue par `tail`/`jump`, ou appelé par du 68000 lui-même hors de tout appel Rust. C'est la liste de ce qui empêche encore la boucle d'image sans 68000 (`docs/architecture.md`, point 4).\n").unwrap();
+    let module = |lieu: &str| -> String {
+        let chemin = lieu.split_once(':').map_or(lieu, |(f, _)| f);
+        let chemin = chemin.rsplit_once("src/").map_or(chemin, |(_, c)| c);
+        match chemin.rsplit_once('/') {
+            Some((dossier, _)) => dossier.to_string(),
+            None => chemin.trim_end_matches(".rs").to_string(),
+        }
+    };
+    let mut par_module: BTreeMap<String, (u64, BTreeMap<u32, u64>, std::collections::BTreeSet<String>)> = BTreeMap::new();
+    let mut hors_appel = 0;
+    for ((lieu, routine), &k) in &sites {
+        if lieu == ":0" {
+            hors_appel += k;
+            continue;
+        }
+        let m = par_module.entry(module(lieu)).or_default();
+        m.0 += k;
+        *m.1.entry(*routine).or_default() += k;
+        m.2.insert(lieu.clone());
+    }
+    writeln!(md, "Hors appel : {hors_appel} instructions ({:.2} %).\n", pct(hors_appel)).unwrap();
+    writeln!(md, "| Module | Instr. 68000 | % | Sites | Routines appelées (les plus gourmandes) |\n|---|---:|---:|---:|---|").unwrap();
+    let mut modules: Vec<_> = par_module.iter().collect();
+    modules.sort_by_key(|(_, m)| std::cmp::Reverse(m.0));
+    for (nom, (k, routines, lieux)) in modules {
+        let mut r: Vec<(&u32, &u64)> = routines.iter().collect();
+        r.sort_by_key(|(_, &n)| std::cmp::Reverse(n));
+        let top: Vec<String> = r.iter().take(6).map(|(a, n)| format!("{a:x} ({n})")).collect();
+        let suite = if r.len() > 6 { format!(" + {} autres", r.len() - 6) } else { String::new() };
+        writeln!(md, "| {nom} | {k} | {:.2} | {} | {}{suite} |", pct(*k), lieux.len(), top.join(", ")).unwrap();
+    }
+    writeln!(md, "\n### Sites d'appel (les 60 plus gourmands)\n\n| Site | Routine | Instr. 68000 |\n|---|---|---:|").unwrap();
+    let mut tous: Vec<_> = sites.iter().filter(|((l, _), _)| l != ":0").collect();
+    tous.sort_by_key(|(_, &k)| std::cmp::Reverse(k));
+    for ((lieu, routine), k) in tous.into_iter().take(60) {
+        let lieu = lieu.rsplit_once("src/").map_or(lieu.as_str(), |(_, c)| c);
+        writeln!(md, "| {lieu} | {routine:x} | {k} |").unwrap();
     }
 
     writeln!(md, "\n## Scénarios\n\n| Scénario | Images | Instr. 68000 | par image |\n|---|---:|---:|---:|").unwrap();

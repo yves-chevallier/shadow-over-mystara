@@ -12,7 +12,7 @@
 //!   16 pas, `A5-0x65ec` levé pendant le fondu, registres sauvés à l'entrée (`movem`) et rendus à la fin.
 
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr32, wr8, A5};
-use crate::modes::{Flow, Sequence};
+use crate::modes::Flow;
 use crate::palette::{brightness_step, component_step, white_out, Cible};
 use crate::resume;
 use crate::scene::Ctx;
@@ -35,10 +35,6 @@ mod etat {
 /// « Fondu par composante en cours » (octet, A5 - 0x65ec).
 const COMPOSANTE_EN_COURS: u32 = A5 - 0x65ec;
 
-/// Sous-programmes du noyau.
-const ATTENDRE: u32 = 0xa40;
-const TERMINER: u32 = 0x9f8;
-
 /// Pas de luminosité : monter (vers la pleine luminosité) ou descendre.
 const MONTE: u32 = 0x1000;
 const DESCEND: u32 = 0xffff_f000;
@@ -52,12 +48,14 @@ const DEBUT_PARTIEL: u32 = 0x91c3a0;
 /// Cède `delai` images (D0.w, le mot haut de D0 est gardé) ; la suite est la native posée à `reprise`.
 fn attendre(x: &mut Ctx, delai: u16, reprise: u32) -> Flow {
     set_low_word(&mut x.c.d[0], delai);
-    x.tail(ATTENDRE, reprise)
+    crate::kernel::attendre(x.c, x.b, reprise);
+    Flow::Yield
 }
 
-/// La tâche se termine (`jsr 0x9f8`, dont l'adresse de retour reste sur la pile).
-fn terminer(x: &mut Ctx, retour: u32) -> Flow {
-    x.tail(TERMINER, retour)
+/// La tâche se termine (`jsr 0x9f8`).
+fn terminer(x: &mut Ctx) -> Flow {
+    crate::kernel::terminer(x.c, x.b);
+    Flow::Yield
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -135,7 +133,7 @@ impl Luminosite {
     fn fin(self, x: &mut Ctx) -> Flow {
         wr8(x.b, etat::PAGES, 0);
         if self.tache {
-            terminer(x, 0x1536)
+            terminer(x)
         } else {
             Flow::Done
         }
@@ -182,19 +180,18 @@ struct Composante {
     reprise: u32,
 }
 
-/// Les six fondus par composante, par adresse d'entrée, et l'adresse de retour du `jsr 0x9f8` des tâches.
-const COMPOSANTES: [(u32, Composante, u32); 6] = [
-    (0x1ccc2, Composante { cible: Cible::Blanc, tache: false, reprise: 0x1cce8 }, 0),
-    (0x1ce30, Composante { cible: Cible::Couleurs, tache: false, reprise: 0x1ce54 }, 0),
-    (0x1ce9e, Composante { cible: Cible::Palettes, tache: false, reprise: 0x1cec4 }, 0),
-    (0x1ccf8, Composante { cible: Cible::Blanc, tache: true, reprise: 0x1cd1e }, 0x1cd32),
-    (0x1ce64, Composante { cible: Cible::Couleurs, tache: true, reprise: 0x1ce8a }, 0x1ce9e),
-    (0x1ced4, Composante { cible: Cible::Palettes, tache: true, reprise: 0x1cefe }, 0x1cf12),
+/// Les six fondus par composante, par adresse d'entrée.
+const COMPOSANTES: [(u32, Composante); 6] = [
+    (0x1ccc2, Composante { cible: Cible::Blanc, tache: false, reprise: 0x1cce8 }),
+    (0x1ce30, Composante { cible: Cible::Couleurs, tache: false, reprise: 0x1ce54 }),
+    (0x1ce9e, Composante { cible: Cible::Palettes, tache: false, reprise: 0x1cec4 }),
+    (0x1ccf8, Composante { cible: Cible::Blanc, tache: true, reprise: 0x1cd1e }),
+    (0x1ce64, Composante { cible: Cible::Couleurs, tache: true, reprise: 0x1ce8a }),
+    (0x1ced4, Composante { cible: Cible::Palettes, tache: true, reprise: 0x1cefe }),
 ];
 
-fn composante(adresse: u32) -> (Composante, u32) {
-    let (_, f, retour) = COMPOSANTES.into_iter().find(|&(entree, f, _)| entree == adresse || f.reprise == adresse).unwrap();
-    (f, retour)
+fn composante(adresse: u32) -> Composante {
+    COMPOSANTES.into_iter().find(|&(entree, f)| entree == adresse || f.reprise == adresse).unwrap().1
 }
 
 /// Registres sauvés à l'entrée (`movem.l D0-D7/A0-A6,-(SP)`) et rendus à la fin.
@@ -245,8 +242,7 @@ impl Composante {
         wr8(x.b, COMPOSANTE_EN_COURS, 0);
         rendre_registres(x);
         if self.tache {
-            let (_, retour) = composante(self.reprise);
-            terminer(x, retour)
+            terminer(x)
         } else {
             Flow::Done
         }
@@ -255,8 +251,8 @@ impl Composante {
 
 macro_rules! composante {
     ($entree:ident, $reprise:ident, $adresse:expr) => {
-        resume!($entree, $adresse, |x| composante($adresse).0.debut(x, $adresse == 0x1ced4));
-        resume!($reprise, composante_reprise($adresse), |x| composante($adresse).0.pas(x));
+        resume!($entree, $adresse, |x| composante($adresse).debut(x, $adresse == 0x1ced4));
+        resume!($reprise, composante_reprise($adresse), |x| composante($adresse).pas(x));
     };
 }
 
@@ -277,7 +273,7 @@ composante!(FONDU_PALETTES, FONDU_PALETTES_PAS, 0x1ce9e);
 composante!(FONDU_TACHE_BLANC, FONDU_TACHE_BLANC_PAS, 0x1ccf8);
 composante!(FONDU_TACHE_COULEURS, FONDU_TACHE_COULEURS_PAS, 0x1ce64);
 composante!(FONDU_TACHE_PALETTES, FONDU_TACHE_PALETTES_PAS, 0x1ced4);
-resume!(FONDU_TACHE_PALETTES_B, 0x1cf12, |x| composante(0x1ced4).0.debut(x, false));
+resume!(FONDU_TACHE_PALETTES_B, 0x1cf12, |x| composante(0x1ced4).debut(x, false));
 
 pub const NATIVES: &[Native] = &[
     FONDU_MONTEE,

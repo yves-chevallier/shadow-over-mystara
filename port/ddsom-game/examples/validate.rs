@@ -6,24 +6,30 @@
 //!   A : jeu réécrit (routines Rust, code d'origine pour le reste) ;
 //!   B : code d'origine seul.
 //! À chaque image, l'état du jeu (RAM de travail hors piles, GFX RAM, table de sprites, palette)
-//! doit être identique. `DDSOM_CHECK=1` active en plus le contrôle appel par appel des routines
+//! doit être identique, et la table des tâches Rust du jeu doit valoir celle de la RAM de l'original. `DDSOM_CHECK=1` active en plus le contrôle appel par appel des routines
 //! natives (diagnostic : registres et mémoire comparés à l'original sur une copie).
 //!
 //! validate <roms> <eeprom> <scenario> <images>
 
 use std::path::Path;
 
+use ddsom_game::taches::table::{ecarts, lire, ram_du_noyau};
+
 /// Fréquence du 68000, en multiple de celle de l'arcade.
 const OVERCLOCK: f64 = 16.0;
 
-/// Mots de RAM sans signification propre : piles des tâches (FF0900-FF0FFF : la pile de la première tâche
-/// déborde sous FF0A00 quand les appels sont profonds), pile logicielle de
-/// l'interruption (FF2900-FF2A19), et le mot d'état de chaque tâche (FF0064 + 16 k), qui vaut
-/// « prête » ou « en cours » selon l'instant exact de la fin d'image pour une tâche de fond, et la
-/// dernière tâche lancée par l'ordonnanceur (FF0058, écrit en 0x96c : même raison).
+/// Mots de RAM sans signification propre, ou que le jeu réécrit ne tient plus en RAM :
+/// - le noyau (`ram_du_noyau`) : pile de l'ordonnanceur, tâche courante, tas des piles, enregistrements des tâches. Le
+///   jeu les garde dans sa table des tâches en Rust, comparée à part à celle de la RAM de la machine d'origine
+///   (`ecarts`) ;
+/// - les piles des tâches (FF01A6-FF0DA5) et celle du superviseur (jusqu'à FF0E66), dans la même zone : le jeu n'y
+///   sauve plus les registres des tâches qui cèdent la main (ils sont dans la table) et le reste n'est qu'adresses de
+///   retour et sauvegardes de registres ; FF0E66-FF0FFF était déjà ignoré (débordement de la pile de la première
+///   tâche) ;
+/// - la pile logicielle de l'interruption (FF2900-FF2A19).
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    a == 0x58 || (0x0900..0x1000).contains(&a) || (0x2900..0x2a1a).contains(&a) || ((0x64..0x164).contains(&a) && (a - 0x64) % 16 < 4)
+    ram_du_noyau(a as u32) || (0x2900..0x2a1a).contains(&a)
 }
 
 /// Images du démarrage (1 à 5) : le code d'origine y teste encore la RAM (`ddsom_game::demarrage`). Ce test est non
@@ -57,6 +63,7 @@ fn main() {
         mb.idle = None;
     }
     let check = std::env::var("DDSOM_CHECK").is_ok();
+    let taches_tout = std::env::var("DDSOM_TACHES_TOUT").is_ok();
     ddsom_game::set_check(check);
     ddsom_game::set_check_all(std::env::var("DDSOM_CHECK_ALL").is_ok());
     ddsom_game::set_count(true);
@@ -109,6 +116,10 @@ fn main() {
         }
         if let Some(i) = first_diff(&ma.bus.palette, &mb.bus.palette) {
             what.push(format!("palette, mot {i}"));
+        }
+        // test différentiel de la table des tâches (DDSOM_TACHES_TOUT=1 : SR et registres sauvés aussi)
+        if let Some(t) = lire(&ma.bus) {
+            what.extend(ecarts(t, &mb.bus.ram, taches_tout).into_iter().take(10));
         }
         if !what.is_empty() {
             println!("image {} : {} mots de RAM différents", f + 1, ram.len());

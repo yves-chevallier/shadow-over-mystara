@@ -2,8 +2,8 @@
 //!
 //! Dans l'ordre : registres d'affichage CPS-A (défilement des trois plans, 0x722), lecture des
 //! entrées (0x80c), registre de contrôle vidéo (0x902), envoi des commandes au Z80 (0x68c), lecture
-//! des monnayeurs (0x143da), comptabilité (0x2dcf6), puis réveil des tâches qui attendent (compteur
-//! en +1 de leur enregistrement, voir `kernel.rs`). Tous les registres sont sauvés et rendus.
+//! des monnayeurs (0x143da), comptabilité (0x2dcf6), puis réveil des tâches qui attendent (table des
+//! tâches, `taches/table.rs`). Tous les registres sont sauvés et rendus.
 //!
 //! Le code d'origine teste trois octets de la ROM (0xc4, 0xc5, 0xc7), drapeaux de mise au point : tous
 //! nuls dans ce jeu (pas d'attente de l'entrée de test, pas de combinaison de dump, réglages DSW
@@ -53,7 +53,7 @@ mod var {
     pub const RAZ: u32 = 0x7fce;
     /// Mot de réglages (DSW).
     pub const DSW: u32 = 0x7fd0;
-    /// Décompte de ralentissement des tâches (octet) : une image sur quatre pour la dernière tâche.
+    /// Décompte de ralentissement des tâches (octet) : une image sur quatre pour la première examinée.
     pub const RALENTI: u32 = 0x4f;
     /// Contrôle vidéo et ombres.
     pub const CONTROLE: u32 = 0x12;
@@ -86,8 +86,6 @@ const Y_1: Plan = Plan { voulu: 0x4ba, copie: 0x5a2, registre: cps_a::PLAN1_Y };
 const Y_2: Plan = Plan { voulu: 0x50a, copie: 0x5aa, registre: cps_a::PLAN2_Y };
 const Y_3: Plan = Plan { voulu: 0x55a, copie: 0x5b2, registre: cps_a::PLAN3_Y };
 
-/// Les enregistrements de tâches (voir `kernel.rs`).
-const TACHES: u32 = 0xff0064;
 const NOUVELLE_IMAGE: u32 = 0xff0164;
 /// Octet remis à zéro par le VBLANK, relu par la boucle de partie (avance rapide, `docs/boucle.md` §1).
 const AVANCE_RAPIDE: u32 = A5 - 0x660e;
@@ -164,27 +162,11 @@ fn controle_video(b: &mut Cps2Bus) {
     wr16(b, port::OUTPUT, sortie);
 }
 
-/// Réveille les tâches dont le compte d'attente tombe à zéro. La dernière tâche de la table (la
-/// première examinée) ne décompte qu'une image sur quatre tant que `A5+0x4f` n'est pas épuisé.
+/// Réveille les tâches dont le compte d'attente tombe à zéro (table Rust, `taches::table`).
 fn reveiller_taches(b: &mut Cps2Bus) {
-    for k in 0..16u32 {
-        let t = TACHES + 0x10 * k;
-        if rd8(b, t) != 1 {
-            continue;
-        }
-        let ralenti = rd8(b, a5(var::RALENTI));
-        if ralenti != 0 && k == 0 {
-            wr8(b, a5(var::RALENTI), ralenti - 1);
-            if (ralenti - 1) & 3 != 0 {
-                continue;
-            }
-        }
-        let reste = rd8(b, t + 1).wrapping_sub(1);
-        wr8(b, t + 1, reste);
-        if reste == 0 {
-            wr8(b, t, 4);
-        }
-    }
+    let mut ralenti = rd8(b, a5(var::RALENTI));
+    crate::taches::table::table(b).decompter_image(&mut ralenti);
+    wr8(b, a5(var::RALENTI), ralenti);
 }
 
 fn vblank(c: &mut Cpu, b: &mut Cps2Bus) {
