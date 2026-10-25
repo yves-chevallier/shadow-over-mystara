@@ -99,10 +99,14 @@ morceau réécrit est exécuté en parallèle de l'original et comparé.
 3. **Extraction des données** : un outil lit les ROMs de l'utilisateur et produit `assets/`. Le
    moteur ne lit plus que ces fichiers. Fait : graphismes (cellules 16x16 en PNG indexé), bibliothèque
    de palettes (PNG RGBA), 290 échantillons (WAV avec boucle et note), définitions des sprites (21 887
-   images, 31 610 entrées d'animation, JSON) et cartes des décors des scènes (scroll 2 et 3, JSON), tous
-   vérifiés sans perte (`cargo test -p ddsom-assets`, voir [assets.md](assets.md)). À venir : tables de
-   cadres et de collisions propres au code, scroll 1, palettes des scènes et d'interface, données de jeu,
-   musiques.
+   images, 31 610 entrées d'animation, JSON), cartes des décors des scènes (scroll 2 et 3) et images
+   du scroll 1, palettes des scènes, terrain (cartes fixes, types), boîtes de collision et de
+   visibilité, marques au sol, textes de la couche 8x8 et noms, musiques et effets (sons, pistes,
+   instruments, tables du pilote Z80), scripts d'apparition des scènes, tables de jeu (personnages,
+   réactions aux coups, ennemis, caisses, scènes, boutiques, caméras, interface), entrées des
+   démonstrations, générique, dialogues et bulles des trois langues, tous vérifiés sans perte
+   (`cargo test -p ddsom-assets`, voir [assets.md](assets.md)). À venir : quelques tables encore
+   rangées avec le code (inventaire dans assets.md) et la sémantique des commandes du moteur de texte.
 4. **Son** : séquenceur réécrit à partir du pilote Z80 (fait : crate `ddsom-sound`, voir [son.md](son.md)), mixeur QSound en Rust pur (à faire).
 5. **Critère final** : sur des scénarios d'entrées enregistrés, le moteur autonome produit les mêmes
    images (au pixel près) et les mêmes commandes son que l'original émulé.
@@ -129,8 +133,10 @@ Plan pour supprimer la machine 68000 :
 1. **Découper chaque tâche aux points de cession** (fait pour la machine à modes, la fin de partie, les crédits,
    la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `taches/`, voir [noyau.md](noyau.md), les tâches et
    sous-programmes de fondu (`taches/fondu.rs`), l'écran des scores `0x1835e` (`taches/ecran_fixe.rs`) et l'interface
-   joueurs `0x150ac` (`hud/`) ; restent, en 68000 : l'interface/menu TEST `0x29162` et les listes de bulles des boss
-   (`0x9b6`)).
+   joueurs `0x150ac` (`hud/`), les invites `0xe03fe` (`taches/invite.rs`) et les scripts de transition de la sortie de
+   scène, qui cédaient à presque chaque pas (`scene/transition/`) ; restent, en 68000 : le menu TEST `0x29162` et
+   l'écran `0x19068`, jamais atteint par les scénarios. Les « listes de bulles des boss » créées par `0x9b6` sont des
+   tâches de fondu, déjà en Rust).
    Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
    `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.
 2. **Remplacer l'enregistrement de tâche** : les champs SR/PC/USP/pile disparaissent au profit de

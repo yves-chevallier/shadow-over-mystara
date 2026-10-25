@@ -749,6 +749,102 @@ fn slide(g: &mut Ctx, p: Player) {
     }
 }
 
+/// 0x3b960 : chute scénarisée (cinématique 0x2447e) : le joueur est projeté sans perdre de vie (PV gardés en
+/// `+0x64`, ramenés à 1), monte, retombe, rebondit, atterrit puis glisse ; à l'arrêt, action suivante (`+6`).
+/// Les variantes impaires du personnage (`+2`) prennent les animations de la seconde série (+4).
+pub fn fall(g: &mut Ctx, p: Player) {
+    cov!();
+    let second = p.u8(g, Player::INDEX) & 1 != 0;
+    let anim = |n: u16| if second { n + 4 } else { n };
+    match p.u8(g, Player::STEP) {
+        0 => {
+            hurt_animation(g, p, anim(6));
+            let hp = p.u16(g, Player::HP);
+            p.set_u16(g, Player::HP_PREV, hp);
+            p.set_u16(g, Player::HP, 1);
+            next_step(g, p);
+            for (field, v) in [(Obj::VX, 0x180), (Obj::AX, 0), (Obj::VZ, 0x400), (Obj::AZ, 0xffc0), (Obj::VY, 0xffc0), (Obj::AY, 0)] {
+                p.set_u16(g, field, v);
+            }
+            p.set_u8(g, 0x53, 0);
+            if p.faces_left(g) {
+                let both = p.u32(g, Obj::VX).wrapping_neg();
+                p.set_u32(g, Obj::VX, both);
+            }
+            g.rom(rom::BEFORE_HURT_A, p);
+        }
+        2 => next_animation(g, p, anim(7)),
+        4 => fall_to_apex_xyz(g, p, anim(8)),
+        6 => fall_to_apex_xyz(g, p, anim(9)),
+        8 => {
+            if animation::step(g, p) {
+                next_step(g, p);
+                p.set_u16(g, Obj::VZ, 0x1c0);
+                p.set_u16(g, Obj::AZ, 0xffc0);
+                hurt_animation(g, p, 8);
+            }
+        }
+        10 => {
+            animation::step(g, p);
+            move_xyz(g, p);
+            if altitude(g, p) < 0 {
+                p.set_u32(g, Obj::Z, 0);
+                next_step(g, p);
+                hurt_animation(g, p, 9);
+                g.rom(rom::LANDING_EFFECT, p);
+            }
+        }
+        12 => {
+            if animation::step(g, p) {
+                next_step(g, p);
+                p.set_u16(g, Obj::VX, 0x280);
+                p.set_u16(g, Obj::AX, 0xffc0);
+                if p.faces_left(g) {
+                    let both = p.u32(g, Obj::VX).wrapping_neg();
+                    p.set_u32(g, Obj::VX, both);
+                }
+                hurt_animation(g, p, 15);
+            }
+        }
+        _ => {
+            move_x(g, p);
+            if p.u16(g, Obj::VX) != 0 && g.a5u8(ram::FRAME_COUNTER) & 1 != 0 {
+                g.c.d[0] = 0;
+                g.c.d[1] = 0;
+                g.c.d[2] = 0;
+                g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
+                g.rom(rom::SLIDE_DUST, p);
+            }
+            stop_xy_at_wall(g, p);
+            if p.u8(g, Obj::VX) == 0 {
+                let action = p.u8(g, Player::ACTION).wrapping_add(2);
+                p.set_u8(g, Player::ACTION, action);
+                p.set_u8(g, Player::STEP, 0);
+            }
+        }
+    }
+}
+
+/// 0x3b9ec : en l'air (déplacement sur les trois axes), jusqu'au sommet.
+fn fall_to_apex_xyz(g: &mut Ctx, p: Player, anim: u16) {
+    cov!();
+    animation::step(g, p);
+    move_xyz(g, p);
+    stop_xy_at_wall(g, p);
+    if (p.u16(g, Obj::VZ) as i16) < 0 {
+        next_step(g, p);
+        hurt_animation(g, p, anim);
+    }
+}
+
+/// Contre un mur (`+0x29`), plus de vitesse en x ni en profondeur.
+fn stop_xy_at_wall(g: &mut Ctx, p: Player) {
+    if p.u8(g, Player::BLOCKED) != 0 {
+        p.set_u32(g, Obj::VX, 0);
+        p.set_u32(g, Obj::VY, 0);
+    }
+}
+
 /// 0x3a424 : attend `+0x6f` images à terre puis se relève (animation 0x10 et son).
 fn get_up(g: &mut Ctx, p: Player) {
     cov!();

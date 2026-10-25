@@ -228,8 +228,10 @@ hors périmètre (natives d'autres sous-systèmes), à examiner par leurs auteur
 Fonctions réécrites jamais appelées par les 8 scénarios (voir `examples/player_coverage`) :
 `curse_fall`, `team_score_reached`, `all_ready`, `clear_recognizers`, `set_stun_time`, `launch_a`,
 `sparkle`, `walk::crawl_speed`, `walk::run_speed`, plusieurs pas de `scripted` ; les mash exercent en
-plus `slow_switch` et les coups spéciaux. Restent en ROM : actions 0x1a..0x30 hors 0x22/0x2a/0x2e
-(peu exercées), la chute 0x3b960 (pas `+7` propres, utilisée par la cinématique 0x2447e), les pas de
+plus `slow_switch` et les coups spéciaux. La chute scénarisée 0x3b960 (pas `+7` propres, appelée par la cinématique 0x2447e) est en Rust
+(`hurt::fall` : projection sans perte de vie, sommet, retombée, rebond, glissement, puis action suivante).
+Restent en ROM : actions 0x1a..0x30 hors 0x22/0x2a/0x2e
+(peu exercées), les pas de
 réaction rares (`hurt::STEP_TABLES`, ceux absents de `HANDLERS`), 0x37882, effets 0xe2100, 0xdb6c0,
 0xe21a0, 0xe7a12, 0xb10c8.
 

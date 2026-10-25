@@ -119,6 +119,7 @@ appelants relisent) :
 | 0x10112 | `+0x68` = 8, ou selon `A5+0x5a` et le nombre de joueurs |
 | 0x1172e, 0x11a36 | jeux de débris (EFFCT 0x32 variante 0xc) ; une ligne de table n'est consommée que si l'effet a pu être créé |
 | 0xb648, 0xb780, 0xe2f6 | butin : objet unique (`+0x9d`), butin et trésor (ligne `+0x80`, un ou deux tirages selon le nombre de joueurs) |
+| 0xbad6 | objet spécial (ligne `+0x80` de la table 0xbf26 : paires genre, variante ; genre négatif : rien) : une variante 0 à 3 de genre 0 renvoie à des tables par difficulté (`A5+0x49`), certaines selon les classes en jeu (clerc 1, elfe 2, magicien 4 : `+3` / 2 des joueurs) ; quelques objets sont réservés aux groupes de clercs et de magiciens et retirés sinon (0xd776, 0xda56, 0xdbc6, 0xdd36). Genre et variante tirés en FF0E6A/FF0E6B. Tables lues comme données (A1 = `lea` de la table), pas relatives au PC |
 | 0xe7fa | point de marche le plus proche autour de la cible, numéro mémorisé en `+0x99` |
 | 0x3e480 | aiguillage vers la routine d'atterrissage par type (ennemis 0..31, boss ensuite ; table 0x3e49c), appelé par les réactions communes (O3) |
 

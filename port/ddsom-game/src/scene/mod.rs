@@ -25,6 +25,7 @@ pub mod script;
 pub mod shop;
 pub mod tally;
 pub mod tiles;
+pub mod transition;
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -302,4 +303,5 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(shop::NATIVES)
         .chain(blackout::NATIVES)
         .chain(screen::NATIVES)
+        .chain(transition::natives())
 }

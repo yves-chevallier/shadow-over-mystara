@@ -221,61 +221,78 @@ fn slot_count(b: &mut Cps2Bus) -> u32 {
 
 /// Adresses de l'original (reprise de la tâche).
 mod at {
+    /// Entrée de la tâche, et reprise de l'attente du début de la partie.
+    pub const ENTRY: u32 = 0x150ac;
+    pub const STARTING: u32 = 0x15146;
+    /// Disposition par type de borne (`A5+0x20`), table d'octets relative au PC.
+    pub const LAYOUTS: u32 = 0x15164;
     /// Haut de la boucle, et reprise après la cession.
     pub const LOOP: u32 = 0x15178;
     pub const AFTER_WAIT: u32 = 0x15212;
     pub const WAIT_ONE_FRAME: u32 = 0xb64;
-    /// Attente du début de la partie, après la création de la tâche.
-    pub const START_WAIT: u32 = 0x15146;
     /// Services de l'interface appelés à chaque tour (entrées des pièces, sons...).
     pub const SERVICES: [u32; 2] = [0x19b2a, 0x19b9c];
 }
 
-// `0x150ac` : création de la tâche. Panneaux remis à zéro (champs d'état et numéros des joueurs), variables
-// de la tâche initialisées, puis attente d'une image.
-resume!(ENTRY, 0x150ac, |x| {
+/// Type de borne (nombre de joueurs, h) : choisit la disposition.
+const CABINET: u32 = 0x20;
+
+// 0x150ac : entrée de la tâche. Panneaux remis à zéro (numéro de joueur en `+0`), variables de la tâche, puis
+// attente du début de la partie.
+resume!(ENTRY, at::ENTRY, |x| {
+    x.c.d[0] = 0;
     for k in 0..4 {
-        let s = Slot::new(k);
-        s.set_p32(x.b, panel::INDEX, 0);
-        s.set_p32(x.b, panel::STATE, 0);
-        s.set_p8(x.b, panel::STEP, 0);
-        s.set_p8(x.b, panel::SUBSTEP, 0);
-        s.set_p8(x.b, 0x30, 0);
-        s.set_p32(x.b, panel::FRAMES, 0);
+        let at = A5 + var::PANELS + k * panel::SIZE;
+        wr32(x.b, at, 0);
+        wr32(x.b, at + 4, 0);
+        for off in [panel::STEP, panel::SUBSTEP, 0x30] {
+            wr8(x.b, at + off, 0);
+        }
+        wr32(x.b, at + panel::FRAMES, 0);
     }
-    wr32(x.b, A5 - 0x7136, 0);
-    wr8(x.b, A5 - 0x713a, 0);
+    wr32(x.b, 0xff_0eca, 0);
+    wr8(x.b, 0xff_0ec6, 0);
     wr8(x.b, var::SEEN_DISPLAY, 0x80);
-    wr8(x.b, A5 - 0x70f8, 0);
-    wr8(x.b, A5 + 0x5f, 1);
+    wr8(x.b, 0xff_0f08, 0);
+    x.set_v8(0x5f, 1);
     let pause = x.v8(var::PAUSE);
     wr8(x.b, var::SEEN_PAUSE, pause);
     for k in 1..4 {
-        Slot::new(k).set_p8(x.b, panel::INDEX, k as u8);
+        x.set_v8(var::PANELS + k * panel::SIZE + panel::INDEX, k as u8);
     }
-    x.c.d[0] = 0;
-    x.tail(at::WAIT_ONE_FRAME, at::START_WAIT)
+    x.tail(at::WAIT_ONE_FRAME, at::STARTING)
 });
 
-// `0x15146` : la disposition suit le mode des monnayeurs ; pendant une partie, la tâche attend la phase 4
-// avant de boucler ; hors partie, elle affiche le mode 1 et redessine les panneaux.
-resume!(START_WAIT, at::START_WAIT, |x| {
-    const LAYOUTS: u32 = 0x15164;
-    let mode = x.v8(0x20) as u32;
-    x.c.d[0] = mode;
-    let layout = crate::mem::prog8(x.b, LAYOUTS + mode);
-    wr8(x.b, A5 + var::LAYOUT, layout);
-    if x.v8(var::GAME_ON) != 0 {
-        if (x.v8(var::PHASE) as i8) < 4 {
-            return x.tail(at::WAIT_ONE_FRAME, at::START_WAIT);
-        }
-    } else {
-        wr8(x.b, A5 + var::DISPLAY, 1);
-        wr8(x.b, A5 + var::LAYOUT, 0);
+// 0x15146 : disposition selon la borne ; hors partie, panneaux affichés en disposition 0 ; en partie, attente de
+// la phase 4 (choix des personnages) avant la première mise à jour.
+resume!(STARTING, at::STARTING, |x| {
+    let cabinet = x.v8(CABINET);
+    x.c.d[0] = x.c.d[0] & !0xff | cabinet as u32;
+    let layout = x.prog8(at::LAYOUTS + cabinet as u32);
+    x.set_v8(var::LAYOUT, layout);
+    if x.v8(var::GAME_ON) == 0 {
+        x.set_v8(var::DISPLAY, 1);
+        x.set_v8(var::LAYOUT, 0);
         slot::forget_displayed(x.b);
+    } else if (x.v8(var::PHASE) as i8) < 4 {
+        return x.tail(at::WAIT_ONE_FRAME, at::STARTING);
     }
     tour(x)
 });
+
+/// 0x1507a, appelée par d'autres modules.
+pub const FORGET_DISPLAYED: Native = Native {
+    entry: 0x1507a,
+    name: "hud_forget_displayed",
+    cost: |_, _| 100,
+    run: |c, b| {
+        slot::forget_displayed(b);
+        crate::mem::rts(c, b);
+    },
+    touches_sound: false,
+    outputs: 0,
+    exact_cost: false,
+};
 
 resume!(LOOP, at::LOOP, |x| tour(x));
 resume!(AFTER_WAIT, at::AFTER_WAIT, |x| tour(x));
@@ -309,4 +326,4 @@ fn tour(x: &mut Ctx) -> Flow {
 }
 
 /// Routines natives de l'interface des joueurs.
-pub const NATIVES: &[Native] = &[ENTRY, START_WAIT, LOOP, AFTER_WAIT];
+pub const NATIVES: &[Native] = &[ENTRY, STARTING, FORGET_DISPLAYED, LOOP, AFTER_WAIT];

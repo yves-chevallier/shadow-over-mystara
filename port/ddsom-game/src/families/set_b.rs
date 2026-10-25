@@ -258,8 +258,8 @@ mod ram {
 /// Générateur de nombres aléatoires (D0 en retour).
 const RANDOM: u32 = 0x19a88;
 
-/// Fige la partie et affiche la liste de messages 0x14de : `A5+0x490` = 1, `A5+0x48e` = 0xc,
-/// `A5+0x48f` = `flag`, fondu 0x1686 puis routine 0x9b6 (A0 = liste, D0 = 0x10).
+/// Fige la partie et assombrit l'écran : `A5+0x490` = 1, `A5+0x48e` = 0xc, `A5+0x48f` = `flag` pas, palettes
+/// blanchies (0x1686) puis tâche de fondu 0x14de (0x9b6, A0 = l'entrée, D0 = 0x10 ; `taches/fondu.rs`).
 fn show_message(x: &mut Cx, flag: u8) {
     x.set_a5_u16(0x490, 1);
     x.set_a5_u8(0x48e, 0xc);
@@ -420,7 +420,7 @@ mod boss_intro {
     }
 
     /// Étape 0 : fige la partie (`A5+0x48e` = 0xc, `A5+0x48f` = 7), lance le fondu 0x1686 et la
-    /// routine 0x9b6 sur la liste 0x14de.
+    /// tâche de fondu 0x14de (0x9b6).
     fn freeze_and_show(x: &mut Cx) {
         show_message(x, 7);
     }
@@ -2500,7 +2500,7 @@ mod door_b {
 // ---------------------------------------------------------------------------------------------
 
 /// Quand `A5+0x42` (fin de partie) est levé, joue la musique de fin (routine 0xa8ae8, D0 = 7),
-/// attend 0x80 images puis affiche la liste de messages 0x1ccf8 et se libère.
+/// attend 0x80 images puis lance la tâche de fondu par composante 0x1ccf8 et se libère.
 mod game_over {
     use super::*;
 
