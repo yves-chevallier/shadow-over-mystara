@@ -238,15 +238,16 @@ fn wreck(x: &mut Cx) {
             set_dw(x, 1, cam);
             if cam != 0x500 {
                 anim(x);
-                return x.set8(0x3b, 9);
-            }
-            x.call(0xb8a0a);
-            x.set16(TIMER, 0xc0);
-            x.c.d[0] = 8;
-            x.call(call::MESSAGE);
-            if !carry(x) {
-                next6(x);
-                x.set16(MESSAGE, x.c.a[1] as u16);
+                x.set8(0x3b, 9);
+            } else {
+                x.call(0xb8a0a);
+                x.set16(TIMER, 0xc0);
+                x.c.d[0] = 8;
+                x.call(call::MESSAGE);
+                if !carry(x) {
+                    next6(x);
+                    x.set16(MESSAGE, x.c.a[1] as u16);
+                }
             }
         }
         18 => {
