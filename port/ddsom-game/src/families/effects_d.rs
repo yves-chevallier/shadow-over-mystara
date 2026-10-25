@@ -5,7 +5,8 @@
 //! - 3 : rang affiché ; 4 : plaque ; 5 : ligne de résultat d'un joueur, qui se dessine dans le fond 2
 //!   quand elle arrive à l'écran ; 6 : compteurs sur trois chiffres ; 8 : ligne par joueur ;
 //! - 7 : personnage de l'écran de fin qui marche vers sa place, saute, se retourne ;
-//! - 1 et 9 : jamais exercées par les scénarios, code d'origine.
+//! - 1 : trophée du tableau de fin, qui attend le signal de son contrôleur, s'anime après un délai tiré
+//!   au hasard puis se décompte auprès du contrôleur ; 9 : enseigne posée sur la caméra alternative.
 
 use super::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
@@ -29,8 +30,6 @@ mod f {
 
 const ANIM_SET: u32 = 0x1c03a6;
 const FREE_EFFECT: u32 = 0x2218;
-/// Variantes laissées au code d'origine.
-const VARIANTS_ORIGINAL: [(u8, u32); 2] = [(1, 0xb1c1a), (9, 0xb28aa)];
 
 fn free(x: &mut Cx) {
     x.call(FREE_EFFECT);
@@ -56,17 +55,12 @@ fn sequence_step(x: &mut Cx) -> u8 {
 
 fn countdown_screen(x: &mut Cx) {
     let v = x.u8(f::VARIANT);
-    if let Some(&(_, original)) = VARIANTS_ORIGINAL.iter().find(|(w, _)| *w == v) {
-        // registres de l'original à l'entrée de la variante : D0 = 2 × variante, D1 = mot de la table
-        x.c.d[0] = 2 * v as u32;
-        let word = x.rom16(0xb1aa8 + 2 * v as u32);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | word as u32;
-        return x.call(original);
-    }
     match (v, x.u8(f::STATE)) {
         (_, 4 | 6) => finish(x),
         (0, 0) => coin_init(x),
         (0, 2) => coin_active(x),
+        (1, 0) => trophy_init(x),
+        (1, 2) => trophy_active(x),
         (2, 0) => reward_init(x),
         (2, 2) => reward_active(x),
         (3, 0) => rank_init(x),
@@ -79,6 +73,10 @@ fn countdown_screen(x: &mut Cx) {
         (7, 0) => walker_init(x),
         (7, 2) => walker_active(x),
         (8, 0) => player_line_init(x),
+        (9, 0) => sign_init(x),
+        (9, 2) => {
+            x.anim_step();
+        }
         (8, 2) => {
             if rd8(x.b, 0xff2a39) as i8 >= 10 {
                 finish_from_active(x);
@@ -151,6 +149,124 @@ fn coin_active(x: &mut Cx) {
     // sortie par le bas de l'écran
     x.add8(f::STATE, 2);
     x.set8(f::HIDDEN, 1);
+}
+
+// ---------------------------------------------------------------------------------------------
+// variante 1 : trophée du tableau de fin
+// ---------------------------------------------------------------------------------------------
+
+mod trophy {
+    /// Contrôleur du tableau (pointeur de 16 bits) : `+0x30` = phase (1 : s'animer, 2 : fin),
+    /// `+0x31` = trophées qui ne se sont pas encore animés.
+    pub const CONTROLLER: u32 = 0x5c;
+    pub const PHASE: u32 = 0x30;
+    pub const PENDING: u32 = 0x31;
+    /// Objet dont la variante choisit l'animation (pointeur négatif), sinon `+0x50` est le rang lui-même.
+    pub const SOURCE: u32 = 0x50;
+    /// Places (x, profondeur, orientation : 8 octets) par mode `+0x2f`, décalées de 6 places pour
+    /// un contrôleur de variante 11 (données).
+    pub const PLACES: u32 = 0xb1cb4;
+    /// Délais avant l'animation, tirés au hasard (octets, espace programme).
+    pub const DELAYS: u32 = 0xb1d4e;
+    pub const DELAY: u32 = 0x42;
+    /// Décor créé quand il ne reste que cinq trophées, et qui doit avoir fini (`+0x22`).
+    pub const SCENERY: u32 = 0x58;
+    pub const SCENERY_KIND: u32 = 0x1d;
+}
+
+fn trophy_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    let source = x.u16(trophy::SOURCE);
+    let rank = if (source as i16) < 0 { x.linked(trophy::SOURCE).u8(x.b, f::VARIANT) as u16 } else { source };
+    let mut place = (x.u8(f::MODE) as u32) << 3;
+    let controller = x.linked(trophy::CONTROLLER);
+    if controller.u8(x.b, f::VARIANT) == 0xb {
+        place += 0x30;
+    }
+    let at = trophy::PLACES + place;
+    let (px, py, facing) = (x.data16(at), x.data16(at + 2), x.data8(at + 4));
+    x.set16(Obj::X, px);
+    x.set16(Obj::Y, py);
+    x.set8(f::FACING, facing);
+    x.set32(Obj::Z, 0);
+    let mut anim = x.data16(REWARD_ANIMS + 2 * rank as u32);
+    if x.u8(f::MODE) & 1 != 0 {
+        anim = anim & 0xff00 | (anim as u8).wrapping_add(1) as u16;
+    }
+    x.anim_start(REWARD_SET, anim as u32);
+    x.reinsert();
+}
+
+fn trophy_active(x: &mut Cx) {
+    let controller = x.linked(trophy::CONTROLLER);
+    match x.u8(f::SUB_STATE) {
+        0 => {
+            if controller.u8(x.b, trophy::PHASE) != 1 {
+                return;
+            }
+            x.add8(f::SUB_STATE, 2);
+            let r = random(x) & 7;
+            let delay = x.rom8(trophy::DELAYS + r);
+            x.set8(trophy::DELAY, delay);
+        }
+        2 => {
+            let n = x.u8(trophy::DELAY).wrapping_sub(1);
+            x.set8(trophy::DELAY, n);
+            if n == 0 {
+                x.add8(f::SUB_STATE, 2);
+            }
+        }
+        4 => {
+            if !x.anim_step() {
+                return;
+            }
+            x.add8(f::SUB_STATE, 2);
+            let pending = controller.u8(x.b, trophy::PENDING).wrapping_sub(1);
+            controller.set_u8(x.b, trophy::PENDING, pending);
+            if pending != 5 {
+                return x.add8(f::SUB_STATE, 2);
+            }
+            x.c.d[0] = trophy::SCENERY_KIND;
+            x.call(0xc8312);
+            if x.c.sr & m68k::SR_C == 0 {
+                x.set16(trophy::SCENERY, x.c.a[1] as u16);
+            }
+        }
+        6 => {
+            if x.linked(trophy::SCENERY).u8(x.b, 0x22) == 0 {
+                return;
+            }
+            x.add8(f::SUB_STATE, 2);
+            let pending = controller.u8(x.b, trophy::PENDING).wrapping_sub(1);
+            controller.set_u8(x.b, trophy::PENDING, pending);
+        }
+        _ => {
+            if controller.u8(x.b, trophy::PHASE) == 2 {
+                finish_from_active(x);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// variante 9 : enseigne posée sur la caméra alternative
+// ---------------------------------------------------------------------------------------------
+
+/// Hauteurs par valeur `+0x42` (mots, espace programme).
+const SIGN_HEIGHTS: u32 = 0xb2908;
+
+fn sign_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    let (cy, cx) = (x.a5_u16(0x55a), x.a5_u16(0x556));
+    x.set16(Obj::Z, cy);
+    x.set16(Obj::X, cx);
+    x.set32(Obj::Y, 0xffff_ffff);
+    x.add16(Obj::X, 0x110);
+    let k = 2 * x.u8(f::VALUE) as u32;
+    let lift = x.rom16(SIGN_HEIGHTS + k);
+    x.add16(Obj::Z, lift);
+    x.anim_start(ANIM_SET, 0x1b7);
+    x.reinsert();
 }
 
 // ---------------------------------------------------------------------------------------------

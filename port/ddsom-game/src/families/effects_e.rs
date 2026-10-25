@@ -4,8 +4,8 @@
 //!   2, 5, 8 et 9 jamais exercées : code d'origine ;
 //! - 13 : radeau qui défile et emporte les joueurs (les directions des joueurs le pilotent) ;
 //! - 14 : passage vers une sous-scène, qui oscille, attend un joueur, puis lance la transition
-//!   (rideau de tuiles dans le fond 2) ; la transition elle-même (`0xada96`, `0xae11a` sous-état 0, une
-//!   dizaine d'appels par scénario) reste en code d'origine.
+//!   (rideau de tuiles dans le fond 2) : entrée dans la sous-scène (`0xada96` : contexte de la scène
+//!   sauvé dans l'objet, objets gelés), puis retour (`0xae11a` : contexte rendu, joueurs replacés).
 
 use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
@@ -153,9 +153,28 @@ mod gate {
     /// Rideau : (décalage dans les tuiles, adresse) par étape, 6 octets (données) ; tuiles (données).
     pub const CURTAIN_STEPS: u32 = 0xadad0;
     pub const CURTAIN_TILES: u32 = 0xadbf2;
-    /// Suite de la transition (code d'origine).
-    pub const ENTER: u32 = 0xada96;
-    pub const LEAVE: u32 = 0xae11a;
+    /// Contexte de la scène sauvé dans l'objet : caméras (longs `+0x44`, `+0x48`, mots `+0x4c`,
+    /// `+0x4e`), état du défilement (`+0x54`, `+0x5a`) et musique (`+0x16`).
+    pub const CAMERA_X: u32 = 0x44;
+    pub const CAMERA_Y: u32 = 0x48;
+    pub const ALT_X: u32 = 0x4c;
+    pub const ALT_Y: u32 = 0x4e;
+    pub const SCROLL: u32 = 0x54;
+    pub const SCROLL_STEP: u32 = 0x5a;
+    pub const MUSIC: u32 = 0x16;
+    /// État du défilement de la scène (`A5-0x55d0` long, `A5-0x55cc` octet) et musique (`A5+0x7fc4`).
+    pub const SCENE_SCROLL: u32 = 0xff2a30;
+    pub const SCENE_SCROLL_STEP: u32 = 0xff2a34;
+    pub const SCENE_MUSIC: u32 = 0xffffc4;
+    /// Pools dont les objets sont gelés pendant la sous-scène (`+0x40` incrémenté, `+0x41` effacé) :
+    /// (décalage de `A5`, emplacements, taille).
+    pub const FROZEN: [(u32, u32, u32); 6] =
+        [(0x4a9e, 32, 0x50), (0x549e, 38, 0x60), (0x795e, 16, 0x50), (0x3a1e, 3, 0xc0), (0x3c5e, 38, 0x60), (0x179e, 48, 0x60)];
+    /// Décalage en x des joueurs, par personnage, au retour (mots, espace programme).
+    pub const RETURN_OFFSETS: u32 = 0xae3b4;
+    pub const MUSIC_OF_SCENE: u32 = 0xe0d8c;
+    pub const RESTART_SCENE: u32 = 0xcc0ca;
+    pub const PLAY_MUSIC: u32 = 0xe17a4;
 }
 
 fn gate(x: &mut Cx) {
@@ -172,7 +191,7 @@ fn gate(x: &mut Cx) {
         }
         4 => {
             if x.u8(f::SUB_STATE) == 0 {
-                return x.call(gate::LEAVE);
+                return gate_leave(x);
             }
             gate_open(x);
         }
@@ -264,11 +283,8 @@ fn gate_curtain(x: &mut Cx) {
         let entry = gate::CURTAIN_STEPS.wrapping_add(step as i16 as i32 as u32);
         let offset = x.data16(entry);
         if (offset as i16) < 0 {
-            // fin du rideau : la transition continue en code d'origine (registres de l'original)
-            x.c.d[0] = x.c.d[0] & 0xffff_0000 | step as u32;
-            x.c.d[1] = x.c.d[1] & 0xffff_0000 | offset as u32;
-            x.c.a[4] = gate::CURTAIN_STEPS;
-            return x.call(gate::ENTER);
+            // fin du rideau : entrée dans la sous-scène
+            return gate_enter(x);
         }
         let mut at = x.data32(entry + 2);
         x.add16(gate::CURTAIN, 6);
@@ -281,6 +297,121 @@ fn gate_curtain(x: &mut Cx) {
             at += 4;
         }
     }
+}
+
+/// 0xada96 : entrée dans la sous-scène (scène 7 → 6, sinon 12). Le contexte de la scène est sauvé dans
+/// l'objet, les objets des pools sont gelés, le décor de la variante est créé, puis la scène repart.
+fn gate_enter(x: &mut Cx) {
+    let scene = if x.a5_u8(0x34) == 7 { 6 } else { 0xc };
+    x.set_a5_u8(0x34, scene);
+    x.set16(f::STATE, 0x400);
+    x.set16(gate::CURTAIN, 0);
+    x.set_a5_u8(0x44, 0);
+    x.call(0x1f0be);
+    // 0xae298 : sauvegarde du contexte
+    let (cam_x, cam_y) = (x.a5_u32(0x506), x.a5_u32(0x50a));
+    x.set32(gate::CAMERA_X, cam_x);
+    x.set32(gate::CAMERA_Y, cam_y);
+    let (alt_x, alt_y) = (x.a5_u16(0x556), x.a5_u16(0x55a));
+    x.set16(gate::ALT_X, alt_x);
+    x.set16(gate::ALT_Y, alt_y);
+    let scroll = crate::mem::rd32(x.b, gate::SCENE_SCROLL);
+    x.set32(gate::SCROLL, scroll);
+    let step = rd8(x.b, gate::SCENE_SCROLL_STEP);
+    x.set8(gate::SCROLL_STEP, step);
+    let music = rd16(x.b, gate::SCENE_MUSIC);
+    x.set16(gate::MUSIC, music);
+    for (base, slots, size) in gate::FROZEN {
+        for k in 0..slots {
+            let o = A5 + base + size * k;
+            if rd8(x.b, o) != 0 {
+                let frozen = rd8(x.b, o + 0x40).wrapping_add(1);
+                wr8(x.b, o + 0x40, frozen);
+                wr8(x.b, o + 0x41, 0);
+            }
+        }
+    }
+    // 0xae37c : décor de la variante (D0 = 0, D1 = variante)
+    x.c.d[0] = 0;
+    let v = x.u8(f::VARIANT);
+    x.c.d[1] = x.c.d[1] & !0xff | v as u32;
+    scene_prop(x);
+    x.call(gate::MUSIC_OF_SCENE);
+    x.call(gate::RESTART_SCENE);
+}
+
+/// 0xcc200 : décor (SET 8) de variante D0 et de réglage D1 ; à défaut un SOBJ 4, à défaut un EFFCT 18.
+fn scene_prop(x: &mut Cx) {
+    for (alloc, kind) in [(0x2348, 8), (0x2408, 4), (0x2318, 0x12)] {
+        x.call(alloc);
+        if x.c.sr & m68k::SR_C == 0 {
+            let o = Obj(x.c.a[1]);
+            o.set_u8(x.b, 0, 1);
+            o.set_u8(x.b, 2, kind);
+            o.set_u8(x.b, f::VARIANT, x.c.d[0] as u8);
+            o.set_u8(x.b, 0x2f, x.c.d[1] as u8);
+            return;
+        }
+    }
+}
+
+/// 0xae11a, sous-état 0 : retour de la sous-scène (scène 6 → 7, sinon 9). La scène repart avec le
+/// contexte sauvé par `gate_enter`, les joueurs vivants sont replacés devant l'objet suivi.
+fn gate_leave(x: &mut Cx) {
+    let scene = if x.a5_u8(0x34) == 6 { 7 } else { 9 };
+    x.set_a5_u8(0x34, scene);
+    x.set_a5_u8(0x44, 1);
+    let (a0, d7) = (x.c.a[0], x.c.d[7]);
+    crate::call(x.c, x.b, 0x33aa6);
+    (x.c.a[0], x.c.d[7]) = (a0, d7);
+    crate::call(x.c, x.b, 0xf2e56);
+    let (a0, d7) = (x.c.a[0], x.c.d[7]);
+    for routine in [0x1a360, 0x1a678, 0x1a8ac] {
+        crate::call(x.c, x.b, routine);
+    }
+    (x.c.a[0], x.c.d[7]) = (a0, d7);
+    x.set_a5_u8(0x48e, 0xf);
+    crate::call(x.c, x.b, 0x1686);
+    for p in players() {
+        if p.u8(x.b, 0) == 0 || p.u16(x.b, 0x62) == 0 {
+            continue;
+        }
+        p.set_u8(x.b, 0, 1);
+        p.set_u32(x.b, f::STATE, 0x0200_0000);
+        p.set_u8(x.b, 0x66, 0);
+        p.set_u8(x.b, 0x15c, 0);
+        p.set_u8(x.b, 0x7e, 0x50);
+        // 0xae388 : devant l'objet suivi, décalé selon le personnage
+        let leader = Obj(x.a5_u16(0x46) as i16 as i32 as u32 & 0xff_ffff);
+        let (lx, ly) = (leader.u16(x.b, Obj::X), leader.u16(x.b, Obj::Y));
+        p.set_u16(x.b, Obj::X, lx);
+        p.set_u16(x.b, Obj::Y, ly);
+        p.set_u16(x.b, Obj::Z, 0);
+        let k = 2 * p.u8(x.b, 2) as u32;
+        let dx = x.rom16(gate::RETURN_OFFSETS + k);
+        p.set_u16(x.b, Obj::X, lx.wrapping_add(dx));
+        p.set_u16(x.b, Obj::Y, ly.wrapping_sub(0x12));
+    }
+    x.set_a5_u16(0x51e, 4);
+    let (cam_x, cam_y) = (x.u32(gate::CAMERA_X), x.u32(gate::CAMERA_Y));
+    x.set_a5_u32(0x506, cam_x);
+    x.set_a5_u32(0x50a, cam_y);
+    let (alt_x, alt_y) = (x.u16(gate::ALT_X), x.u16(gate::ALT_Y));
+    x.set_a5_u16(0x556, alt_x);
+    x.set_a5_u16(0x55a, alt_y);
+    // cibles des caméras : alignées sur 32 pixels en x, 0x160 plus haut
+    x.set_a5_u32(0x50e, cam_x & !0x1f_0000);
+    x.set_a5_u32(0x512, cam_y.wrapping_sub(0x160_0000));
+    x.set_a5_u16(0x55e, alt_x & 0xffe0);
+    x.set_a5_u16(0x562, alt_y.wrapping_sub(0x160));
+    let scroll = x.u32(gate::SCROLL);
+    crate::mem::wr32(x.b, gate::SCENE_SCROLL, scroll);
+    let step = x.u8(gate::SCROLL_STEP);
+    wr8(x.b, gate::SCENE_SCROLL_STEP, step);
+    let music = x.u16(gate::MUSIC);
+    x.c.d[4] = x.c.d[4] & 0xffff_0000 | music as u32;
+    x.add8(f::SUB_STATE, 2);
+    x.call(gate::PLAY_MUSIC);
 }
 
 /// État 4, sous-état 2 : le rideau s'ouvre (deux colonnes effacées par image depuis le centre).

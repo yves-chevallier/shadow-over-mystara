@@ -138,6 +138,8 @@ pub const NATIVES: &[Native] = &[
     sound::SERVICE_FF06,
     sound::SERVICE_FF07_D1,
     sound::SERVICE_FF07,
+    sound::SERVICE_FF08,
+    sound::SERVICE_FF09,
     sound::SELON_VERSION_A,
     sound::SELON_VERSION_B,
     sound::INIT_PILE_PRIVEE,

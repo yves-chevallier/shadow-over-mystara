@@ -46,6 +46,7 @@ mod kind {
     pub const IMPACT: u8 = 29;
     pub const FISH: u8 = 30;
     pub const COUNTDOWN: u8 = 31;
+    pub const MIRRORED: u8 = 35;
     pub const BLOW: u8 = 40;
     pub const TOSS: u8 = 41;
     pub const SCENERY: u8 = 42;
@@ -54,6 +55,8 @@ mod kind {
     pub const SHIMMER: u8 = 52;
     pub const TYPE_53: u8 = 53;
     pub const TYPE_54: u8 = 54;
+    pub const LAUNCHER: u8 = 55;
+    pub const SHARDS: u8 = 56;
     pub const PILLAR: u8 = 67;
     pub const TYPE_68: u8 = 68;
     pub const VICTORY: u8 = 73;
@@ -268,6 +271,42 @@ fn type_53(c: &mut Cpu, b: &mut Cps2Bus) {
 fn bump_active(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
     let v = add(c, 1, o.u8(b, Obj::ACTIVE) as u32, Size::Byte);
     o.set_u8(b, Obj::ACTIVE, v as u8);
+}
+
+/// 0xb6a5c : machine (type 55) liée au créateur par `+0x5c` ; activité incrémentée.
+fn launcher(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(o) = alloc(c, b, ALLOC_EFFECT) {
+        bump_active(c, b, o);
+        o.set_u8(b, Obj::KIND, kind::LAUNCHER);
+        link(c, b, o, 0x5c, c.a[0]);
+    }
+}
+
+/// 0xb6c42 : éclat (type 56) posé à (0xc0, 0x50) de la caméra ; activité incrémentée.
+fn camera_shard(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(o) = alloc(c, b, ALLOC_EFFECT) {
+        bump_active(c, b, o);
+        o.set_u8(b, Obj::KIND, kind::SHARDS);
+        let (x, y) = (rd16(b, A5 + 0x506), rd16(b, A5 + 0x50a));
+        o.set_u16(b, Obj::X, x);
+        o.set_u16(b, Obj::Y, y);
+        o.set_u16(b, Obj::X, x.wrapping_add(0xc0));
+        let y = add(c, 0x50, y as u32, Size::Word);
+        o.set_u16(b, Obj::Y, y as u16);
+    }
+}
+
+/// 0xb2ef6 : silhouette et reflet (type 35, variantes 0 et 1) du créateur, dont l'image transmise
+/// (`+0xa0`) est remise à zéro.
+fn mirrored_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = me(c);
+    me.set_u8(b, 0xa0, 0);
+    for variant in 0..2u8 {
+        let Some(o) = spawn(c, b, kind::MIRRORED) else { return };
+        o.set_u8(b, Obj::VARIANT, variant);
+        o.set_u8(b, 0x2f, 0);
+        link(c, b, o, 0x46, me.0);
+    }
 }
 
 /// 0xb68b0 : trois effets de type 54, variantes 0 (laissée telle quelle), 1 et 2.
@@ -777,6 +816,9 @@ creators! {
     0xb8956 "cree_minuteur" timer, CREATED;
     0xba18a "cree_derive" drift, CREATED;
     0xb66e4 "cree_type_53" type_53, CREATED;
+    0xb6a5c "cree_lanceur" launcher, CREATED;
+    0xb6c42 "cree_eclat_camera" camera_shard, CREATED;
+    0xb2ef6 "cree_silhouette_reflet" mirrored_pair, CREATED;
     0xb68b0 "cree_types_54" type_54_trio, CREATED;
     0xae3ec "cree_scintillement" twinkle, CREATED;
     0xb6596 "cree_scintillement_perso" shimmer, CREATED | D(0);
