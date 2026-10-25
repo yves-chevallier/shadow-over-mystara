@@ -695,16 +695,37 @@ pub const SERVICE_FF07_D1: Native =
     service_natif(0xe0a70, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, c.d[1] as u8), true);
 pub const SERVICE_FF07: Native = service_natif(0xe0a82, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, 0), true);
 
-/// 0xe2240 / 0xe22e8 : bruit du personnage, ou celui de 0xe2390 dans la version à palette alternative
-/// (`A5+0x70` non nul).
-fn selon_version(c: &mut Cpu, b: &mut Cps2Bus, normal: u32) {
-    let cible = if rd16(b, a5(c, 0x70)) != 0 { 0xe2390 } else { normal };
+/// 0xe0ad8 / 0xe0af8 : commandes 0xff08 / 0xff09 dont le mot haut de D1 est D0.w.
+pub const SERVICE_FF08: Native = service_natif(
+    0xe0ad8,
+    "son_service_ff08",
+    |c, b| service(c, b, Commande { d1: (c.d[0] as u16 as u32) << 16 | 0xff08, d2: 0, d3: 0 }),
+    false,
+);
+pub const SERVICE_FF09: Native = service_natif(
+    0xe0af8,
+    "son_service_ff09",
+    |c, b| service(c, b, Commande { d1: (c.d[0] as u16 as u32) << 16 | 0xff09, d2: 0, d3: 0 }),
+    false,
+);
+
+/// Entrées qui testent la version à palette alternative (`A5+0x70` non nul) avant d'appeler le wrapper
+/// `normal` ou, dans cette version, le wrapper `alternatif` : 0xe2240 / 0xe22e8 (bruit du personnage),
+/// 0xe2430 (bruit par objet), 0xe27da (bruit par genre).
+fn selon_version(c: &mut Cpu, b: &mut Cps2Bus, normal: u32, alternatif: u32) {
+    let cible = if rd16(b, a5(c, 0x70)) != 0 { alternatif } else { normal };
     crate::call(c, b, cible);
     rts(c, b);
 }
 
-pub const SELON_VERSION_A: Native = service_natif(0xe2240, "son_selon_version", |c, b| selon_version(c, b, 0xe2248), false);
-pub const SELON_VERSION_B: Native = service_natif(0xe22e8, "son_selon_version", |c, b| selon_version(c, b, 0xe22f0), false);
+pub const SELON_VERSION_A: Native =
+    service_natif(0xe2240, "son_selon_version", |c, b| selon_version(c, b, 0xe2248, 0xe2390), false);
+pub const SELON_VERSION_B: Native =
+    service_natif(0xe22e8, "son_selon_version", |c, b| selon_version(c, b, 0xe22f0, 0xe2390), false);
+pub const SELON_VERSION_C: Native =
+    service_natif(0xe2430, "son_selon_version", |c, b| selon_version(c, b, 0xe2438, 0xe24d8), false);
+pub const SELON_VERSION_D: Native =
+    service_natif(0xe27da, "son_selon_version", |c, b| selon_version(c, b, 0xe27e2, 0xe28a4), false);
 
 /// 0xee044 : pile privée des wrappers vide (pointeur = sa propre adresse) ; A0 = le pointeur.
 fn init_pile_privee(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -749,6 +770,10 @@ pub const NATIVES: &[Native] = &[
     SERVICE_FF07,
     SELON_VERSION_A,
     SELON_VERSION_B,
+    SELON_VERSION_C,
+    SELON_VERSION_D,
+    SERVICE_FF08,
+    SERVICE_FF09,
     INIT_PILE_PRIVEE,
     AUCUN,
 ];

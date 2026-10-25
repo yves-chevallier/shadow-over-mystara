@@ -201,6 +201,7 @@ pub fn carry(g: &mut Ctx, p: Player) {
             }
             return;
         }
+        4 => return throw(g, p),
         _ => {
             g.rom(0x35c26, p);
             return;
@@ -243,6 +244,30 @@ pub fn carry(g: &mut Ctx, p: Player) {
     }
 }
 
+/// 0x35d08 : (`+0x8b` = 4) lance l'objet porté. Pas 0 : animation 41 (42 en marche lente). Pas 2 : au geste
+/// (`field::GESTURE`) l'objet repasse à l'état 2, puis l'animation se termine sur l'immobilité.
+fn throw(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            let anim = if p.u8(g, Player::SLOW) != 0 { 42 } else { 41 };
+            animation::start(g, p, anim);
+        }
+        2 => {
+            if p.u8(g, field::GESTURE) != 0 {
+                p.set_u8(g, field::GESTURE, 0);
+                let held = p.u32(g, HELD);
+                wr8(g.b, held + 5, 2);
+                wr16(g.b, held + 6, 0);
+            }
+            if animation::step(g, p) {
+                to_stand(g, p);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// 0x35ca8 : pose l'objet devant le joueur (décalages par classe, table 0x35ce2).
 fn put_down(g: &mut Ctx, p: Player, held: u32) {
     let at = 0x35ce2 + 4 * p.class(g) as u32;
@@ -254,6 +279,47 @@ fn put_down(g: &mut Ctx, p: Player, held: u32) {
     wr16(g.b, held + Obj::X, x.wrapping_add(dx));
     wr16(g.b, held + Obj::Z, z.wrapping_add(dz));
     wr16(g.b, held + Obj::Y, y.wrapping_sub(8));
+}
+
+// ---- pauses de 0x1a images (actions 0x1c et 0x1e, 0x3626c et 0x362d0) -------------------------------
+
+/// Compteur d'images de la pause.
+const PAUSE_TIMER: u32 = 0x1e8;
+
+/// Actions 0x1c (0x3626c, `last` = 34) et 0x1e (0x362d0, `last` = 33) : animation 0, pause de 0x1a images
+/// puis animation `last` jusqu'à sa fin (retenue par l'arrêt du jeu `A5+0x3d`) ; le joueur redevient alors
+/// actif, invulnérable 16 images, et immobile.
+pub fn pause(g: &mut Ctx, p: Player, last: u16) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            p.set_u8(g, PAUSE_TIMER, 0x1a);
+            animation::start(g, p, 0);
+        }
+        2 => {
+            let left = p.u8(g, PAUSE_TIMER).wrapping_sub(1);
+            p.set_u8(g, PAUSE_TIMER, left);
+            if left != 0 {
+                animation::step(g, p);
+            } else {
+                next_step(g, p);
+                animation::start(g, p, last);
+            }
+        }
+        4 => {
+            if g.a5u8(0x3d) != 0 {
+                animation::step(g, p);
+                return;
+            }
+            p.set_u8(g, Player::ACTIVE, 1);
+            p.set_u8(g, 0x7e, 0x10);
+            p.set_u8(g, Player::SLOW, 0);
+            let flags = p.u8(g, 1) & !2;
+            p.set_u8(g, 1, flags);
+            to_stand(g, p);
+        }
+        _ => {}
+    }
 }
 
 // ---- grimper (action 0x1a, 0x35e56) (h) ---------------------------------------------------------
