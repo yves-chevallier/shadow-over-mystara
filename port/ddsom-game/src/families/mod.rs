@@ -36,6 +36,7 @@ pub mod effects_b;
 pub mod effects_c;
 pub mod effects_d;
 pub mod effects_e;
+pub mod effects_creators;
 pub mod items_b;
 pub mod eshl_creators;
 pub mod enemy;
@@ -558,6 +559,7 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(boxes::pousse::NATIVES)
         .chain(boss_common::NATIVES)
         .chain(creators::NATIVES)
+        .chain(effects_creators::NATIVES)
         .chain(joueur::natives())
         .chain(reactions::NATIVES)
         .chain([&reactions::PLAYER_HURT_ANIMATION])
