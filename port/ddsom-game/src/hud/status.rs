@@ -70,7 +70,7 @@ pub fn status_line(b: &mut Cps2Bus) {
             }
         }
     }
-    if v8(b, line::VALUE) == 0 || rd8(b, line::BLINK_TIMER) & 8 == 0 {
+    if v8(b, line::VALUE) == 0 || rd8(b, line::BLINK_TIMER) & 8 != 0 {
         return clear_status_line(b);
     }
     let mut brush = Brush::new(b, line::AT);
