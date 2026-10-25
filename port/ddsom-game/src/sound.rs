@@ -694,20 +694,11 @@ pub const SERVICE_FF06: Native = service_natif(0xe0a40, "son_service_ff06", |c, 
 pub const SERVICE_FF07_D1: Native =
     service_natif(0xe0a70, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, c.d[1] as u8), true);
 pub const SERVICE_FF07: Native = service_natif(0xe0a82, "son_service_ff07", |c, b| service_delai(c, b, 0xff07, 0), true);
-
-/// 0xe0ad8 / 0xe0af8 : commandes 0xff08 / 0xff09 dont le mot haut de D1 est D0.w.
-pub const SERVICE_FF08: Native = service_natif(
-    0xe0ad8,
-    "son_service_ff08",
-    |c, b| service(c, b, Commande { d1: (c.d[0] as u16 as u32) << 16 | 0xff08, d2: 0, d3: 0 }),
-    false,
-);
-pub const SERVICE_FF09: Native = service_natif(
-    0xe0af8,
-    "son_service_ff09",
-    |c, b| service(c, b, Commande { d1: (c.d[0] as u16 as u32) << 16 | 0xff09, d2: 0, d3: 0 }),
-    false,
-);
+/// 0xe0ad8 / 0xe0af8 : commandes 0xff08 et 0xff09, de paramètre D0.w (mot haut de D1).
+pub const SERVICE_FF08: Native =
+    service_natif(0xe0ad8, "son_service_ff08", |c, b| service(c, b, Commande { d1: (c.d[0] & 0xffff) << 16 | 0xff08, d2: 0, d3: 0 }), false);
+pub const SERVICE_FF09: Native =
+    service_natif(0xe0af8, "son_service_ff09", |c, b| service(c, b, Commande { d1: (c.d[0] & 0xffff) << 16 | 0xff09, d2: 0, d3: 0 }), false);
 
 /// Entrées qui testent la version à palette alternative (`A5+0x70` non nul) avant d'appeler le wrapper
 /// `normal` ou, dans cette version, le wrapper `alternatif` : 0xe2240 / 0xe22e8 (bruit du personnage),
@@ -768,6 +759,8 @@ pub const NATIVES: &[Native] = &[
     SERVICE_FF06,
     SERVICE_FF07_D1,
     SERVICE_FF07,
+    SERVICE_FF08,
+    SERVICE_FF09,
     SELON_VERSION_A,
     SELON_VERSION_B,
     SELON_VERSION_C,

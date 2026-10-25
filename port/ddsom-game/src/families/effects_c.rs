@@ -883,8 +883,10 @@ fn attached_shake(x: &mut Cx, sub: u8) {
 // ---------------------------------------------------------------------------------------------
 
 mod scenery {
-    /// Variantes 0, 1, 2 et 9, qu'aucun scénario n'exerce : code d'origine.
-    pub const VARIANTS_ORIGINAL: [(u8, u32); 4] = [(0, 0xb411e), (1, 0xb417e), (2, 0xb432c), (9, 0xb49ae)];
+    /// Variantes 1, 2 et 9, qu'aucun scénario n'exerce : code d'origine.
+    pub const VARIANTS_ORIGINAL: [(u8, u32); 3] = [(1, 0xb417e), (2, 0xb432c), (9, 0xb49ae)];
+    /// Variante 0 : éclat bref (animation 0xf, ou 0x10 retournée), jeu d'animations 0x174776.
+    pub const ANIM_FLASH: u32 = 0x174776;
     /// Objet suivi (pointeur de 16 bits, négatif quand il existe).
     pub const TARGET: u32 = 0x46;
     pub const ANIM_DEBRIS: u32 = 0x1948ea;
@@ -938,6 +940,7 @@ fn scenery(x: &mut Cx) {
     }
     match x.u8(f::STATE) {
         0 => match v {
+            0 => flash_init(x),
             3 => debris_init(x),
             4 => shard_init(x),
             5 => follow_init(x),
@@ -948,6 +951,7 @@ fn scenery(x: &mut Cx) {
             _ => {}
         },
         2 => match v {
+            0 => flash_active(x),
             3 => debris_active(x),
             4 => shard_active(x),
             5 => follow_active(x),
@@ -961,6 +965,28 @@ fn scenery(x: &mut Cx) {
         6 => free(x),
         _ => {}
     }
+}
+
+/// Variante 0 (0xb411e) : un pixel devant, juste au-dessus du sol (ou au-dessous si `+0x2f`).
+fn flash_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    x.add16(Obj::Y, 0xffff);
+    x.set16(Obj::Z, 1);
+    let anim = if x.u8(0x2f) != 0 {
+        x.add16(Obj::Z, 0xfffe);
+        x.add16(Obj::Y, 2);
+        0x10
+    } else {
+        0xf
+    };
+    x.anim_start(scenery::ANIM_FLASH, anim);
+}
+
+fn flash_active(x: &mut Cx) {
+    if !paused(x) && x.anim_step() {
+        return scenery_done(x);
+    }
+    x.reinsert();
 }
 
 /// 0xb4bb2 : position et orientation de l'objet suivi.
@@ -2664,21 +2690,12 @@ fn ballot_count(x: &mut Cx) {
             let count = x.data16(zone);
             let size = x.data16(zone + 2);
             x.set16(0x34, size);
-            if x.a5_u16(0x72) != 2 {
-                // texte en octets (jamais exercé) : code d'origine
-                x.c.d[0] = x.c.d[0] & !0xffff | count as u32;
-                x.call(0xb0102);
-            } else {
-                ballot_save_text(x, count);
-            }
+            ballot_save_text(x, count);
             x.set8(0x36, 8);
             x.set8(0x37, 3);
             x.set8(0x38, 1);
         }
         4 => {
-            if x.a5_u16(0x72) != 2 {
-                return x.call(0xaffca);
-            }
             let t = x.u8(0x37).wrapping_sub(1);
             x.set8(0x37, t);
             if t != 0 {
@@ -2693,7 +2710,8 @@ fn ballot_count(x: &mut Cx) {
                 return ballot_erase_text(x, at, n);
             }
             x.set8(0x37, 3);
-            text_copy(x, vote::SAVE, at, n);
+            let format = text_format(x);
+            text_copy(x, format, vote::SAVE, at, n);
             let left = x.u8(0x36).wrapping_sub(1);
             x.set8(0x36, left);
             if left == 0 {
@@ -2714,72 +2732,90 @@ fn ballot_count(x: &mut Cx) {
     }
 }
 
-/// Texte de la couche (mots) : 0xffff introduit 4 octets de commande, 0xfffe 2, les autres mots sont
-/// des caractères. Recopie `n + 1` caractères (commandes comprises) de `from` vers `to`.
-fn text_copy(x: &mut Cx, mut from: u32, mut to: u32, n: u16) {
+/// Texte de la couche de texte, en mots (`A5+0x72` = 2) ou en octets (autres langues).
+/// En mots : 0xffff introduit une commande de 6 octets, 0xfffe de 4, les autres mots sont des
+/// caractères. En octets : 0xff introduit une commande de 3 octets, 0xfe de 2, un octet ≤ 0x0f un
+/// caractère de 2 octets, les autres octets sont des caractères.
+#[derive(Clone, Copy, PartialEq)]
+enum TextFormat {
+    Words,
+    Bytes,
+}
+
+fn text_format(x: &mut Cx) -> TextFormat {
+    if x.a5_u16(0x72) == 2 { TextFormat::Words } else { TextFormat::Bytes }
+}
+
+/// Longueur de l'élément de texte en `at`, et s'il s'agit d'un caractère.
+fn text_token(x: &mut Cx, format: TextFormat, at: u32) -> (u32, bool) {
+    match format {
+        TextFormat::Words => match rd16(x.b, at) {
+            0xffff => (6, false),
+            0xfffe => (4, false),
+            _ => (2, true),
+        },
+        TextFormat::Bytes => match rd8(x.b, at) {
+            0xff => (3, false),
+            0xfe => (2, false),
+            c if c <= 0xf => (2, true),
+            _ => (1, true),
+        },
+    }
+}
+
+/// Avance de `n + 1` caractères (commandes comprises) depuis `at`, en appelant `each` sur chaque
+/// élément (adresse, longueur, caractère ?). Rend l'adresse qui suit.
+fn text_walk(x: &mut Cx, format: TextFormat, mut at: u32, n: u16, mut each: impl FnMut(&mut Cx, u32, u32, bool)) -> u32 {
     let mut n = n;
     loop {
-        let w = rd16(x.b, from);
-        let len = match w {
-            0xffff => 6,
-            0xfffe => 4,
-            _ => 2,
-        };
-        for k in (0..len).step_by(2) {
-            let v = rd16(x.b, from + k);
-            wr16(x.b, to + k, v);
-        }
-        from += len;
-        to += len;
-        if len == 2 {
+        let (len, is_char) = text_token(x, format, at);
+        each(x, at, len, is_char);
+        at += len;
+        if is_char {
             n = n.wrapping_sub(1);
             if n == 0xffff {
-                return;
+                return at;
             }
         }
     }
 }
 
-/// 0xb0102 (texte en mots) : saute `count + 1` caractères, note l'adresse et sauvegarde le texte du
-/// choix gagnant.
-fn ballot_save_text(x: &mut Cx, count: u16) {
-    let mut at = vote::TEXT;
-    let mut n = count;
-    loop {
-        match rd16(x.b, at) {
-            0xffff => at += 6,
-            0xfffe => at += 4,
-            _ => {
-                at += 2;
-                n = n.wrapping_sub(1);
-                if n == 0xffff {
-                    break;
-                }
-            }
+/// Recopie `n + 1` caractères (commandes comprises) de `from` vers `to`.
+fn text_copy(x: &mut Cx, format: TextFormat, from: u32, to: u32, n: u16) {
+    text_walk(x, format, from, n, |x, at, len, _| {
+        for k in 0..len {
+            let v = rd8(x.b, at + k);
+            wr8(x.b, to + (at - from) + k, v);
         }
-    }
+    });
+}
+
+/// 0xb0102 : saute `count + 1` caractères, note l'adresse et sauvegarde le texte du choix gagnant.
+fn ballot_save_text(x: &mut Cx, count: u16) {
+    let format = text_format(x);
+    let at = text_walk(x, format, vote::TEXT, count, |_, _, _, _| {});
     x.set32(0x30, at);
     let size = x.u16(0x34);
-    text_copy(x, at, vote::SAVE, size);
+    text_copy(x, format, at, vote::SAVE, size);
 }
 
-/// 0xb0076 : efface le texte (caractère 0x1800), commandes conservées.
-fn ballot_erase_text(x: &mut Cx, mut at: u32, n: u16) {
-    let mut n = n;
-    loop {
-        match rd16(x.b, at) {
-            0xffff => at += 6,
-            0xfffe => at += 4,
-            _ => {
-                wr16(x.b, at, 0x1800);
-                at += 2;
-                n = n.wrapping_sub(1);
-                if n == 0xffff {
-                    return;
-                }
-            }
+/// 0xb0076 : efface le texte (caractère blanc : 0x1800 en mots ; 0x80, ou 1 puis 0 pour un
+/// caractère de 2 octets), commandes conservées.
+fn ballot_erase_text(x: &mut Cx, at: u32, n: u16) {
+    let format = text_format(x);
+    text_walk(x, format, at, n, |x, at, len, is_char| {
+        if !is_char {
+            return;
         }
-    }
+        match (format, len) {
+            (TextFormat::Words, _) => wr16(x.b, at, 0x1800),
+            (TextFormat::Bytes, 2) => {
+                wr8(x.b, at, 1);
+                wr8(x.b, at + 1, 0);
+            }
+            _ => wr8(x.b, at, 0x80),
+        }
+    });
 }
 
 /// 0xb03c6 : place le curseur sur son choix (`+0x42`), selon le mode du scrutin et le joueur.
