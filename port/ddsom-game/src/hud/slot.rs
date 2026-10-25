@@ -4,7 +4,7 @@ use cps2::Cps2Bus;
 
 use super::{choice, draw, panel, player, select, v8, var, Slot};
 use crate::game::sbcd;
-use crate::mem::{prog16, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{prog16, prog8, rd32, rd8, wr32, wr8, A5};
 use crate::scene::Ctx;
 
 /// Routines d'origine appelées par l'interface (comptabilité, sons, démarrage de joueur...).

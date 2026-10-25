@@ -7,7 +7,7 @@ use cps2::Cps2Bus;
 
 use super::layer::{columns, origin, Brush, COLUMN, EMPTY};
 use super::{panel, player, v8, var, Slot};
-use crate::mem::{prog16, prog8, rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32};
 
 /// Zones d'un panneau (index de ligne de la table des origines).
 pub mod zone {
@@ -128,7 +128,7 @@ pub fn countdown_digits(b: &mut Cps2Bus, s: Slot) {
 pub fn continue_digits(b: &mut Cps2Bus, s: Slot) {
     let value = s.p8(b, panel::COUNTDOWN);
     let narrow = narrow(b);
-    let mut brush = zone_brush(b, s, zone::CONTINUE_DIGITS);
+    let brush = zone_brush(b, s, zone::CONTINUE_DIGITS);
     let (tens, units) = ((value >> 4) as u16, (value & 0xf) as u16);
     let at = brush.at;
     let (tens_tile, units_tile) = if narrow { (0x641u16.wrapping_sub(tens), 0x642 + units) } else { (0x621u16.wrapping_sub(tens), 0x622 + units) };
