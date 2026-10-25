@@ -134,6 +134,8 @@ fn run_action(g: &mut Ctx, p: Player) {
         action::SPECIAL_ALT => moves::guard(g, p, 0x80),
         action::TURN_ATTACK => moves::guard(g, p, 0x10),
         action::NO_TERRAIN_B => moves::hop(g, p),
+        0x1c => moves::pause(g, p, 34),
+        0x1e => moves::pause(g, p, 33),
         action::PUSH => moves::push(g, p),
         action::CLIMB => moves::climb(g, p),
         action::NO_TERRAIN_A => moves::exit_scene(g, p),

@@ -101,6 +101,11 @@ const HANDLERS: &[(u32, Handler)] = &[
     }),
     (0x3b28a, sit_struggle),
     (0x3b44c, held),
+    (0x3b326, frozen_start),
+    (0x3b3aa, frozen_fall),
+    (0x3b3d8, |g, p| frozen_wait(g, p, 20)),
+    (0x3b3de, |g, p| frozen_wait(g, p, 21)),
+    (0x3b420, frozen_end),
     (0x3a204, |g, p| {
         if is_dead(g, p) {
             knock_down(g, p);
@@ -1265,6 +1270,108 @@ fn struggle_out(g: &mut Ctx, p: Player) -> bool {
     left = left.wrapping_sub(1);
     p.set_u8(g, Player::TIMER_6F, left);
     (left as i8) <= 0
+}
+
+// ---- réaction à pas 0x3b30e (0x3b326..0x3b44a) -------------------------------------------------------
+
+/// Sons et effets de la réaction : 0xe21a0 (mort), 0xe7b3c (touché) ; 0xb6ba8 crée l'effet de fin de pas.
+const FROZEN_DEATH_SOUND: u32 = 0xe21a0;
+const FROZEN_SOUND: u32 = 0xe7b3c;
+const FROZEN_EFFECT: u32 = 0xb6ba8;
+/// Octets de comparaison des pas d'attente (`+0x6c`, `+0x6d`) et compteur d'animation (`+0x1f0`).
+const WAIT_LEFT: u32 = 0x6c;
+const WAIT_RIGHT: u32 = 0x6d;
+const WAIT_ANIMATIONS: u32 = 0x1f0;
+
+/// Vitesses nulles (X et Z) et accélération verticale de -0x80 : fin commune de l'entrée.
+fn frozen_drift(g: &mut Ctx, p: Player) {
+    p.set_u16(g, Obj::VZ, 0);
+    p.set_u16(g, Obj::AZ, (-0x80i16) as u16);
+    p.set_u32(g, Obj::VX, 0);
+}
+
+/// 0x3b326 : pas 0. Avec des points de vie, entrée normale (animation 19, 60 images) ; sinon mort sur place
+/// (animation 21) avec un son.
+fn frozen_start(g: &mut Ctx, p: Player) {
+    cov!();
+    if (p.u16(g, Player::HP) as i16) > 0 {
+        next_step(g, p);
+        p.set_u8(g, Player::TIMER_6F, 60);
+        g.rom(0x3baea, p);
+        hurt_animation(g, p, 19);
+        g.rom(FROZEN_SOUND, p);
+        if p.u16(g, Obj::Z) == 0 {
+            next_step(g, p);
+            g.rom(FROZEN_EFFECT, p);
+        } else {
+            frozen_drift(g, p);
+        }
+        return;
+    }
+    p.set_state(g, 0x0400_2c0a);
+    p.set_u8(g, 0x53, 1);
+    g.rom(FROZEN_DEATH_SOUND, p);
+    p.set_u8(g, Player::TIMER_6F, 60);
+    hurt_animation(g, p, 21);
+    if (p.u16(g, Obj::Z) as i16) <= 0 {
+        return;
+    }
+    p.set_state(g, 0x0400_2c02);
+    frozen_drift(g, p);
+}
+
+/// 0x3b3aa : pas 2, chute ; au sol, pas 10 si le joueur est à terre (état principal 4), sinon pas suivant et effet.
+fn frozen_fall(g: &mut Ctx, p: Player) {
+    cov!();
+    move_xz(g, p);
+    if (p.u16(g, Obj::Z) as i16) > 0 {
+        return;
+    }
+    p.set_u32(g, Obj::Z, 0);
+    if p.u8(g, Player::MAIN) == 4 {
+        p.set_u8(g, Player::STEP, 10);
+        return;
+    }
+    next_step(g, p);
+    g.rom(FROZEN_EFFECT, p);
+}
+
+/// 0x3b3d8 / 0x3b3de : pas 4 / 6, attente. Tant que les deux octets de comparaison diffèrent, l'animation
+/// avance et décompte `+0x1f0` (à zéro : fin de la réaction) ; puis 60 images de pause avant l'animation
+/// `next` du pas suivant.
+fn frozen_wait(g: &mut Ctx, p: Player, next: u16) {
+    cov!();
+    if p.u8(g, WAIT_LEFT) & 15 != p.u8(g, WAIT_RIGHT) & 15 {
+        animation::step(g, p);
+        let left = p.u8(g, WAIT_ANIMATIONS).wrapping_sub(1);
+        p.set_u8(g, WAIT_ANIMATIONS, left);
+        if left == 0 {
+            return recover(g, p);
+        }
+    }
+    let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    if left == 0 {
+        next_step(g, p);
+        p.set_u8(g, Player::TIMER_6F, 60);
+        hurt_animation(g, p, next);
+    }
+}
+
+/// 0x3b420 : pas 8. Jeu à l'arrêt (`A5+0x42`) : fin de la réaction ; sinon un compteur (`A5+0x35`) baisse et
+/// le joueur passe à l'état principal 4.
+fn frozen_end(g: &mut Ctx, p: Player) {
+    cov!();
+    if g.a5u8(0x42) != 0 {
+        p.set_u8(g, 0x7e, 0x20);
+        return recover(g, p);
+    }
+    let left = g.a5u8(0x35).wrapping_sub(1);
+    wr8(g.b, A5 + 0x35, left);
+    p.set_u16(g, Player::MAIN, 0x0400);
+    p.set_u8(g, Player::TIMER_6F, 60);
+    next_step(g, p);
+    p.set_u16(g, Player::HP, 0);
 }
 
 // ---- réaction 0x32 (0x3b44c) : tenu par un ennemi ----------------------------------------------------
