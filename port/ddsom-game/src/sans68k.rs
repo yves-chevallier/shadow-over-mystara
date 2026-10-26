@@ -20,7 +20,8 @@
 //!    atteigne le plafond de l'image (`MAX_STEPS_PER_FRAME` passages en `0x1c4b0`, `cps2::StepCap` : le pas retenu
 //!    s'exécute au début de l'image suivante, juste après le VBLANK) ;
 //! 3. au démarrage, une native qui attend une position du faisceau (relâchement du Z80, `boot_init` :
-//!    `demarrage.rs`) rend la main sans rien changer : la ligne s'arrête là et elle réessaie à la suivante.
+//!    `demarrage.rs`) rend la main sans rien changer (PC et registres) : la ligne s'arrête là et elle réessaie à la
+//!    suivante.
 //!
 //! Tout le travail de l'image se fait donc au début de sa première ligne (240), avant le Z80, comme à ×16 où il finit
 //! en quelques lignes : seuls le VBLANK et l'envoi des commandes au Z80 (`0x68c`, qu'il appelle) touchent la RAM
@@ -86,7 +87,8 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, mut plafond: Option<&mut St
         let niveau = b.irq_level();
         if niveau > (c.sr >> 8 & 7) as u8 {
             interruption(c, b, niveau);
-        } else if crate::idle(c, b) {
+        } else if niveau == 0 && crate::idle(c, b) {
+            // (une interruption masquée attend que l'ordonnanceur rouvre sa fenêtre)
             break;
         }
         if let Some(cap) = plafond.as_deref_mut().filter(|cap| cap.pc == c.pc) {
@@ -94,10 +96,10 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, mut plafond: Option<&mut St
                 break;
             }
         }
-        let avant = (c.pc, c.sr, c.a[7]);
+        let avant = (c.pc, c.sr, c.d, c.a);
         pas(c, b);
-        if (c.pc, c.sr, c.a[7]) == avant {
-            // une native du démarrage attend sa position du faisceau
+        if (c.pc, c.sr, c.d, c.a) == avant {
+            // rien n'a bougé : une native du démarrage attend sa position du faisceau
             break;
         }
         if !compter(b) {
@@ -147,7 +149,16 @@ pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
         }
         d.push_back(n);
     });
+    if trace(b) {
+        eprintln!("{}:{} {:06x} {} sr={:04x} sp={:x}", b.frame, b.scanline, c.pc, n.name, c.sr, c.a[7]);
+    }
     crate::executer(n, c, b, cout);
+}
+
+/// Diagnostic : `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n.
+fn trace(b: &Cps2Bus) -> bool {
+    static IMAGE: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *IMAGE.get_or_init(|| std::env::var("DDSOM_SANS_TRACE").ok().and_then(|v| v.parse().ok())) == Some(b.frame)
 }
 
 /// Début du message d'un arrêt (panique) du jeu sans 68000.
