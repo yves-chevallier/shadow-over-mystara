@@ -286,6 +286,8 @@ et dans l'application (`ddsom`) ; le mode normal (`install`) ne change pas.
   plafond »). Avant l'instantané, une vingtaine de scénarios atteignaient le plafond (4 à 20 images chacun, 100 ms
   par image) ; aucun depuis.
 * **Diagnostic.** `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n (ligne, PC, SR, pile).
+* **Sans ROM.** Sans 68000, le code d'origine n'est plus lu du tout (les durées des natives et des chemins ne sont
+  plus calculées) : avec `ddsom --assets`, la machine est faite des seuls assets ([sans-rom.md](sans-rom.md)).
 
 ## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
 

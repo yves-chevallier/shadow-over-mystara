@@ -838,10 +838,15 @@ code des gestionnaires : décalages vers des routines (des adresses de code : el
 Rust) et quelques tables de données (vitesses des coquilles, positions, tables de décision des chefs 17 et 21).
 Les lectures de `sound.rs` en espace programme (0xe0ca8-0xede06) sont des octets de code des wrappers de son lus pour les évaluer ; elles disparaîtront avec eux.
 
+**Sans 68000** ([sans-rom.md](sans-rom.md)) : `lectures_rom` a un mode `DDSOM_SANS_68K=1` ; plus aucune lecture de
+code pour des durées, et les zones lues non couvertes, mesurées sur les 269 scénarios, sont dans `data/natives.json`
+(brutes, par lecteur) : le jeu sans 68000 tourne avec les seuls assets.
+
 ## Ce qui reste à extraire
 
-* Lectures de la ROM programme par le Rust non couvertes (18 964 octets de l'espace données en 532 zones,
-  mesure sur 15 scénarios) : voir « Lectures de la ROM programme par le Rust » (tableau par sous-système).
+* Lectures de la ROM programme par le Rust non couvertes : extraites brutes dans `data/natives.json` (2 792 zones,
+  84 Ko en espace données, 28 Ko en espace programme, mesure sans 68000 sur 269 scénarios, [sans-rom.md](sans-rom.md)) ;
+  reste à les décrire table par table (tableau par sous-système ci-dessus).
 * Sprites : entre la table des images et les images, `0x2a85fc-0x2ae81e` (octets et noms des 2 512 scripts
   du visualiseur), les palettes des scènes et `0x2b04de-0x2b45d8` (entrées des démonstrations) sont
   extraits (`data/misc.json`). Les jeux d'animations que seul le code désigne (sans nom) ne sont pas

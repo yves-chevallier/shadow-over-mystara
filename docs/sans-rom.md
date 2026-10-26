@@ -64,14 +64,32 @@ le code d'origine avec `m68k::decode`). Sans 68000 les cycles ne servent plus (l
 boucle du noyau) : ces fonctions rendent 0 sans rien lire quand `sans68k::actif()`, et l'exécuteur ne calcule plus
 le coût. Validation sans 68000 inchangée.
 
-**Résultat** (RÉSULTATS_MESURE).
+**Résultat** (269 scénarios, 3,7 millions d'images, aucun arrêt faute de native) :
+
+| Espace | Octets lus | Déjà décrits par les assets | Non décrits | Zones de `data/natives.json` |
+|---|---:|---:|---:|---:|
+| Données | 1 650 068 | 1 581 688 (95,9 %) | 68 380 | 1 494 zones, 84 Ko |
+| Programme (déchiffré, lectures relatives au PC) | 26 026 | 3 700 (14,2 %) | 22 326 | 1 298 zones, 28 Ko |
+
+Une zone réunit les octets lus non décrits séparés de moins de 16 octets. Par lecteur (octets ; `d` données, `p`
+programme) : `families/cx.rs` (lectures des familles d'objets, `Cx::rd*`/`rom16`) 31 742 d + 16 242 p ;
+`sprites.rs` 10 228 d (textes en sprites, listes de morceaux) ; `families/boss_11/chain.rs` 8 332 d ;
+`player/mod.rs` 6 056 d + 2 566 p ; `ai_aids.rs` 5 342 d + 1 264 p ; `objects/anim.rs` 3 940 d ;
+`objects/motion.rs` 3 488 d ; `hud/layer.rs` 2 850 d ; `sound.rs` 636 d + 2 088 p (octets des enveloppes lus dans
+le code des appels de son) ; `scene/mod.rs` 1 972 d + 586 p ; `dispatch.rs` 1 392 p (tables d'adresses de
+routines des pools d'objets) ; le reste en petites zones (moins de 1,7 Ko par lecteur). Deux cas particuliers :
+`palette.rs` lit 0x000-0x400 (la page 3 des palettes des scènes 0x58 et 0x59 a une entrée nulle : le jeu copie
+32 palettes depuis l'adresse 0, vecteurs compris, comme l'original), et `vecteurs` (0-7 en espace programme : pile
+et PC du reset, lus par `Cpu::reset` à la construction de la machine). Quatre petites zones lues par des accès
+génériques (`Vue`, `mem.rs`) à plus de trois niveaux d'appel sont nommées `inconnu`.
 
 ## Vérifications
 
 * **`sans_rom`** (exemple de `ddsom-game`) : `sans_rom <roms> <eeprom> <assets> <scénario>:<images> ...` fait tourner
   deux machines sans 68000 avec le pilote son Rust, l'une sur les ROMs, l'autre sur les seuls assets, et compare
   à chaque image l'image affichée, les échantillons audio, la RAM de travail, la GFX RAM, la RAM d'objets, la
-  palette et la RAM partagée. RÉSULTATS_SANS_ROM
+  palette et la RAM partagée. Sur `bot_2p`, `boss/boss13_dragon`, `cov/cov_4p_a`, `modes/ending` (12 000 images
+  chacun), `scene_end/end_02` (9 000), `cov/cov_service_tests` et `modes/attract` (6 000) : identique.
 * **`validate` avec `DDSOM_ASSETS=<assets>`** (et `DDSOM_SANS_68K=1`) : la machine testée est faite des seuls assets
   (pilote son Rust), la référence garde les ROMs, le 68000 surcadencé et le Z80. `tools/validate_all.sh` s'en sert
   tel quel (la variable entre dans l'empreinte des résultats). RÉSULTATS_VALIDATE

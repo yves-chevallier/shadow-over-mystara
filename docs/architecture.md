@@ -105,7 +105,8 @@ morceau réécrit est exécuté en parallèle de l'original et comparé.
    instruments, tables du pilote Z80), scripts d'apparition des scènes, tables de jeu (personnages,
    réactions aux coups, ennemis, caisses, scènes, boutiques, caméras, interface), entrées des
    démonstrations, générique, dialogues et bulles des trois langues, tous vérifiés sans perte
-   (`cargo test -p ddsom-assets`, voir [assets.md](assets.md)). À venir : quelques tables encore
+   (`cargo test -p ddsom-assets`, voir [assets.md](assets.md)). Le jeu sans 68000 se joue avec les seuls assets, sans
+   aucune ROM ([sans-rom.md](sans-rom.md)). À venir : quelques tables encore
    rangées avec le code (inventaire dans assets.md) et la sémantique des commandes du moteur de texte.
 4. **Son** : séquenceur réécrit à partir du pilote Z80 (fait : crate `ddsom-sound`, voir [son.md](son.md)), mixeur QSound en Rust pur (à faire).
 5. **Critère final** : sur des scénarios d'entrées enregistrés, le moteur autonome produit les mêmes
