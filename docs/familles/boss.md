@@ -40,7 +40,7 @@ les seules routines de réaction propres à un boss sont réécrites avec lui (0
 
 Appels qui exécutaient du 68000 depuis les gestionnaires de BOSS et d'ENEMY (docs/reste68k.md) : les six petits créateurs d'ESHL
 0xa6824 (boss 5), 0xa2f96 (boss 7), 0xa460a, 0xa464e, 0xa4676 (boss 15) et 0x9ddee (ennemi dbeast) sont désormais des fonctions
-Rust (`enemy_common.rs`, `eshl_pair_3f`, `eshl_burst_27`, `eshl_shot_34`, `eshl_thrown_by_beast`) ; plus aucune instruction
+Rust (`enemy_common.rs`, et l'ennemi 0x667f4 des explosions de l'arrivée du boss 2 : `enemy_blast_at`; `eshl_pair_3f`, `eshl_burst_27`, `eshl_shot_34`, `eshl_thrown_by_beast`) ; plus aucune instruction
 d'origine n'est exécutée dans ces modules. Les bibliothèques d'IA et les sous-routines d'effets qu'ils appellent encore par
 adresse (0x10112, 0xe3d32, 0xed836, 0xb59a6...) sont comptées avec leur famille (EFFCT, ESHL, SET).
 
