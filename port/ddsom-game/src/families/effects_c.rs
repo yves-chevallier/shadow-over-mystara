@@ -30,7 +30,7 @@
 //! - 66 : quatre gros caractères animés dans le fond 2 ;
 //! - 67 : colonne qui s'élève sous un objet, puis relâche les joueurs ;
 //! - 69 : silhouette qui fait les cent pas en haut de l'écran ;
-//! - 70 : comptoir d'une boutique de scène (vente elle-même : code d'origine, jamais exercée) ;
+//! - 70 : comptoir d'une boutique de scène (vente : vendeur, enseigne et articles, jamais exercée) ;
 //! - 76 : minuteur de scène qui lance une transition ;
 //! - 82 : éclat posé à côté de son créateur ; 83 : pluie d'éclats depuis le haut de l'écran ;
 //! - 84 : déclencheur de la séquence de fin (fondu, caméra, tâches de script) ;
@@ -100,8 +100,28 @@ mod shop {
     /// Stock par difficulté (`A5+0x35`, octets, espace programme).
     pub const STOCK: u32 = 0xaf4c4;
     pub const ANIM_SET: u32 = 0x1c40c6;
-    /// Achat par un joueur (A2) : code d'origine, jamais exercé par les scénarios.
-    pub const BUY: u32 = 0xafad0;
+    /// Achat (`0xafad0`) : par variante, un `bra.w` vers la sorte d'achat (78 entrées).
+    pub const PURCHASES: u32 = 0xafade;
+    pub const PURCHASE_COUNT: u32 = 78;
+    /// Sortes d'achat (cibles des `bra.w`).
+    pub const EXIT: u32 = 0xafc16;
+    pub const MEAL_BIG: u32 = 0xafc34;
+    pub const MEAL: u32 = 0xafc3a;
+    pub const NOT_CLASS_4: u32 = 0xafcb4;
+    pub const NOT_CLASSES_2_4_1: u32 = 0xafcd0;
+    pub const NOT_CLASSES_4_1: u32 = 0xafce8;
+    pub const NOT_CLASS_1: u32 = 0xafd00;
+    /// Messages de la boutique (`A5-0x554e`) : or insuffisant, refus de la classe, vie pleine,
+    /// objet au maximum, inventaire plein.
+    pub const NO_GOLD: u16 = 0x82;
+    pub const WRONG_CLASS: u16 = 0x84;
+    pub const FULL_LIFE: u16 = 0x85;
+    pub const TOO_MANY: u16 = 0x86;
+    pub const NO_ROOM: u16 = 0x87;
+    pub const SOUND_REFUSED: u32 = 0xea5f0;
+    pub const SOUND_BOUGHT: u32 = 0xea57e;
+    /// Sortie de la boutique : palette pleine (`0x1686`, couches `A5+0x48e`).
+    pub const FULL_BRIGHTNESS: u32 = 0x1686;
     /// Pointeurs (mots) des quatre acheteurs possibles.
     pub const BUYERS: u32 = 0xff2aa4;
     /// Annonce en cours (`A5-0x554e`).
@@ -118,7 +138,7 @@ mod shop {
 fn shop(x: &mut Cx) {
     match x.u8(f::STATE) {
         0 => shop_init(x),
-        2 => shop_watch(x, shop::BUY),
+        2 => shop_watch(x, shop_buy),
         _ => free(x),
     }
 }
@@ -151,7 +171,7 @@ fn shop_init(x: &mut Cx) {
 }
 
 /// Cherche un acheteur dans la zone ; annonce l'article au premier qui entre.
-fn shop_watch(x: &mut Cx, buy: u32) {
+fn shop_watch(x: &mut Cx, buy: fn(&mut Cx, Obj)) {
     x.set8(shop::OCCUPIED, 0);
     // la boucle de l'original tient dans A1 (pointeur) et D6 (compteur), que l'achat peut modifier
     x.c.a[1] = shop::BUYERS;
@@ -169,7 +189,7 @@ fn shop_watch(x: &mut Cx, buy: u32) {
                 }
                 if (buyer.u8(x.b, 0x58) as i8) > 0 {
                     x.c.a[2] = buyer.0;
-                    x.call(buy);
+                    buy(x, buyer);
                 }
             }
         }
@@ -183,6 +203,154 @@ fn shop_watch(x: &mut Cx, buy: u32) {
     if x.u8(shop::OCCUPIED) == 0 {
         x.set8(shop::ANNOUNCED, 0);
     }
+}
+
+/// Joueur d'un acheteur (`+0x50`).
+fn buyer_player(x: &mut Cx, buyer: Obj) -> Obj {
+    let p = buyer.u16(x.b, 0x50);
+    Obj(p as i16 as i32 as u32 & 0xff_ffff)
+}
+
+/// Refus : son, puis message.
+fn shop_refuse(x: &mut Cx, message: u16) {
+    x.call(shop::SOUND_REFUSED);
+    crate::mem::wr16(x.b, shop::MESSAGE, message);
+}
+
+/// `0xafad0` : achat par l'acheteur `buyer` (A2), selon la sorte d'achat de la variante. A1 et D6 (la boucle
+/// de `shop_watch`) sont rendus comme l'original les laisse.
+fn shop_buy(x: &mut Cx, buyer: Obj) {
+    let v = x.u8(f::VARIANT) as u32;
+    if v >= shop::PURCHASE_COUNT {
+        return;
+    }
+    let at = shop::PURCHASES + 4 * v;
+    let kind = (at + 2).wrapping_add(x.rom16(at + 2) as i16 as i32 as u32);
+    match kind {
+        shop::EXIT => {
+            // la sortie : l'acheteur quitte la liste et passe à l'état 4, la palette revient
+            crate::mem::wr16(x.b, x.c.a[1], 0);
+            buyer.set_u16(x.b, Obj::STATE, 0x400);
+            let (a1, d6) = (x.c.a[1], x.c.d[6]);
+            x.set_a5_u8(0x48e, 0xf);
+            x.call(shop::FULL_BRIGHTNESS);
+            (x.c.a[1], x.c.d[6]) = (a1, d6);
+        }
+        shop::MEAL_BIG => shop_meal(x, buyer, 0x30),
+        shop::MEAL => shop_meal(x, buyer, 0x20),
+        _ => {
+            buyer.set_u8(x.b, 0x58, 0xff);
+            let class = buyer_player(x, buyer).u8(x.b, 3) >> 1;
+            let refused: &[(u8, u16)] = match kind {
+                shop::NOT_CLASS_4 => &[(4, shop::WRONG_CLASS)],
+                shop::NOT_CLASSES_2_4_1 => &[(2, shop::TOO_MANY), (4, shop::WRONG_CLASS), (1, shop::WRONG_CLASS)],
+                shop::NOT_CLASSES_4_1 => &[(4, shop::WRONG_CLASS), (1, shop::WRONG_CLASS)],
+                shop::NOT_CLASS_1 => &[(1, shop::WRONG_CLASS)],
+                _ => &[],
+            };
+            if let Some(&(_, message)) = refused.iter().find(|&&(c, _)| c == class) {
+                if message == shop::TOO_MANY {
+                    crate::mem::wr16(x.b, shop::MESSAGE, message);
+                    return x.call(shop::SOUND_REFUSED);
+                }
+                return shop_refuse(x, message);
+            }
+            shop_take(x, buyer);
+        }
+    }
+}
+
+/// Or du joueur suffisant (ou objet gratuit : `+0x167` = 9) ? Sinon refus.
+fn shop_can_pay(x: &mut Cx, player: Obj) -> bool {
+    if player.u8(x.b, 0x167) == 9 || player.u32(x.b, GOLD) as i32 >= x.u32(shop::PRICE) as i32 {
+        return true;
+    }
+    shop_refuse(x, shop::NO_GOLD);
+    false
+}
+
+/// `0xafd18` : l'article rejoint l'inventaire (six emplacements `+0x140`, quantités `+0x148`) : même
+/// article, ou emplacement vide (0x56) ; au plus 9.
+fn shop_take(x: &mut Cx, buyer: Obj) {
+    buyer.set_u8(x.b, 0x58, 0xff);
+    let player = buyer_player(x, buyer);
+    if !shop_can_pay(x, player) {
+        return;
+    }
+    let item = x.u16(shop::ITEM) as u8;
+    let slot = match (0..6).find(|&k| player.u8(x.b, 0x140 + k) == item) {
+        Some(k) => k,
+        None => match (0..6).find(|&k| player.u8(x.b, 0x140 + k) == 0x56) {
+            Some(k) => {
+                player.set_u8(x.b, 0x148 + k, 0);
+                k
+            }
+            None => {
+                crate::mem::wr16(x.b, shop::MESSAGE, shop::NO_ROOM);
+                return x.call(shop::SOUND_REFUSED);
+            }
+        },
+    };
+    if player.u8(x.b, 0x148 + slot) as i8 >= 9 {
+        crate::mem::wr16(x.b, shop::MESSAGE, shop::TOO_MANY);
+        return x.call(shop::SOUND_REFUSED);
+    }
+    let id = x.u8(shop::ITEM + 1);
+    player.set_u8(x.b, 0x140 + slot, id);
+    let n = player.u8(x.b, 0x148 + slot).wrapping_add(1);
+    player.set_u8(x.b, 0x148 + slot, n);
+    let collected = x.u8(shop::ITEM) as u32;
+    crate::mem::wr8(x.b, A5.wrapping_sub(0x5b88).wrapping_add(collected), 1);
+    shop_pay(x, player);
+}
+
+/// `0xafdaa` : le prix (six octets BCD finissant en `+0x53`) est retiré de l'or du joueur (six octets
+/// finissant en `+0x117`), sauf pour un objet gratuit (`+0x167` = 9, remis à 0xff).
+fn shop_pay(x: &mut Cx, player: Obj) {
+    if player.u8(x.b, 0x167) == 9 {
+        player.set_u8(x.b, 0x167, 0xff);
+    } else {
+        let mut borrow = false;
+        for k in 1..=6 {
+            let (v, b) = crate::game::sbcd(player.u8(x.b, 0x118 - k), x.u8(0x54 - k), borrow);
+            player.set_u8(x.b, 0x118 - k, v);
+            borrow = b;
+        }
+        x.c.sr = x.c.sr & !m68k::SR_X | if borrow { m68k::SR_X } else { 0 };
+    }
+    x.call(shop::SOUND_BOUGHT);
+}
+
+/// `0xafc3c` : repas (soin de `heal`) : refusé si la vie est pleine ; le dernier du stock fait reculer
+/// l'étal et efface son annonce.
+fn shop_meal(x: &mut Cx, buyer: Obj, heal: u16) {
+    buyer.set_u8(x.b, 0x58, 0xff);
+    if x.u8(shop::STOCK_LEFT) == 0 {
+        return;
+    }
+    let player = buyer_player(x, buyer);
+    let full = player.u16(x.b, 0x60);
+    if full as i16 <= player.u16(x.b, 0x62) as i16 {
+        crate::mem::wr16(x.b, shop::MESSAGE, shop::FULL_LIFE);
+        return x.call(shop::SOUND_REFUSED);
+    }
+    if !shop_can_pay(x, player) {
+        return;
+    }
+    let left = x.u8(shop::STOCK_LEFT).wrapping_sub(1);
+    x.set8(shop::STOCK_LEFT, left);
+    if left == 0 {
+        x.add16(Obj::X, 0xfff0);
+        x.add16(Obj::Z, 0xffe8);
+        x.anim_step();
+        x.set16(shop::MESSAGE_ID, 0);
+    }
+    let life = player.u16(x.b, 0x62).wrapping_add(heal);
+    player.set_u16(x.b, 0x62, life);
+    if (full as i16) < life as i16 {
+        player.set_u16(x.b, 0x62, full);
+    }
+    shop_pay(x, player);
 }
 
 fn shop_in_zone(x: &mut Cx, buyer: Obj) -> bool {
@@ -3408,9 +3576,133 @@ mod counter {
     pub const ZONE: u32 = 0xb8132;
     pub const MESSAGES: u32 = 0xb8126;
     pub const ANIMATIONS: u32 = 0xb812c;
-    pub const BUY: u32 = 0xb83d8;
-    /// Sous-états de la vente (jamais exercés par les scénarios) : code d'origine.
-    pub const SALE: u32 = 0xb81d6;
+    /// Le comptoir qui tient la vente en cours (`A5-0x5542`).
+    pub const ACTIVE: u32 = 0xff2abe;
+    /// Décor de scène 0x64 (le vendeur) créé à l'achat, gardé en `+0x1a`.
+    pub const SELLER: u32 = 0x1a;
+    pub const TIMER: u32 = 0x18;
+    pub const STEP: u32 = 0x06;
+    /// Message de la vente, tuiles de l'enseigne (20 longs dans le fond 1), listes d'objets à poser (par
+    /// variante : longs vers des fiches de 8 octets, octet négatif en fin).
+    pub const SALE_MESSAGE: u16 = 0x8e;
+    pub const SIGN: u32 = 0x912ad4;
+    pub const SIGN_TILES: [(u32, u32); 20] = [
+        (0, 0x1b780005), (4, 0x1b880005), (0x80, 0x1b790005), (0x84, 0x1b890005),
+        (0x100, 0x1b9a0005), (0x104, 0x1baa0005), (0x180, 0x1b9b0005), (0x184, 0x1bab0005),
+        (0x200, 0x1bb00005), (0x204, 0x1bc00005), (0x280, 0x1bb10005), (0x284, 0x1bc10005),
+        (0x300, 0x1bb80005), (0x304, 0x1bc80005), (0x380, 0x1bb90005), (0x384, 0x1bc90005),
+        (0x400, 0x1b7c0005), (0x404, 0x1b8c0005), (0x480, 0x1b7d0005), (0x484, 0x1b8d0005),
+    ];
+    pub const GOODS: u32 = 0xb82e0;
+    pub const SCENE_SET: u32 = 0xc8312;
+    pub const ALLOC_PEFF: u32 = 0x228e;
+}
+
+/// `0xb83d8` : premier acheteur dans la zone : le comptoir prend la vente (s'il n'y en a pas d'autre) et
+/// fait venir le vendeur (décor 0x64) ; A1 et D6 gardés comme l'original.
+fn counter_buy(x: &mut Cx, _buyer: Obj) {
+    let active = rd16(x.b, counter::ACTIVE);
+    if active != 0 && active != x.o.0 as u16 {
+        return;
+    }
+    crate::mem::wr16(x.b, counter::ACTIVE, x.o.0 as u16);
+    let (a1, d6) = (x.c.a[1], x.c.d[6]);
+    x.c.d[0] = 0x64;
+    x.call(counter::SCENE_SET);
+    let failed = x.c.sr & m68k::SR_C != 0;
+    let seller = x.c.a[1];
+    (x.c.a[1], x.c.d[6]) = (a1, d6);
+    if failed {
+        return crate::mem::wr16(x.b, counter::ACTIVE, 0);
+    }
+    x.set16(counter::SELLER, seller as u16);
+    x.add8(f::SUB_STATE, 2);
+    x.set16(counter::TIMER, 0x18);
+}
+
+/// `0xb81d6` : la vente. Après un délai, l'enseigne s'affiche, le message est annoncé et les articles sont
+/// posés (PEFF 0x2a) ; puis on attend un acheteur devant le vendeur, qui fait accélérer le vendeur ; enfin
+/// la vente se termine.
+fn counter_sale(x: &mut Cx) {
+    let step = x.u8(counter::STEP) as i8;
+    if step > 2 {
+        if countdown_word(x, counter::TIMER) {
+            x.set8(f::SUB_STATE, 0);
+            x.set8(counter::STEP, 0);
+            crate::mem::wr16(x.b, counter::ACTIVE, 0);
+        }
+        return;
+    }
+    if step == 2 {
+        // la boucle de l'original tient dans A1 (pointeur) et D6 (compteur)
+        for k in 0..4u32 {
+            x.c.a[1] = shop::BUYERS + 2 * (k + 1);
+            x.c.d[6] = x.c.d[6] & 0xffff_0000 | (3 - k);
+            let p = rd16(x.b, shop::BUYERS + 2 * k);
+            if p == 0 {
+                continue;
+            }
+            let buyer = Obj(p as i16 as i32 as u32 & 0xff_ffff);
+            if buyer.u8(x.b, 0x58) as i8 <= 0 {
+                continue;
+            }
+            let across = buyer.u16(x.b, Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_sub(0xa8);
+            if across > 0x50 {
+                continue;
+            }
+            let depth = buyer.u16(x.b, Obj::Z).wrapping_add(buyer.u16(x.b, Obj::Y)).wrapping_sub(x.a5_u16(0x50a)).wrapping_sub(0x48);
+            if depth <= 0x10 {
+                let seller = x.linked(counter::SELLER);
+                if seller.u16(x.b, 0x32) > 1 {
+                    seller.set_u16(x.b, 0x32, 1);
+                }
+                x.add8(counter::STEP, 2);
+                x.set16(counter::TIMER, 0x18);
+                return;
+            }
+        }
+        x.c.d[6] |= 0xffff;
+        return;
+    }
+    if !countdown_word(x, counter::TIMER) {
+        return;
+    }
+    x.add8(counter::STEP, 2);
+    crate::mem::wr16(x.b, shop::MESSAGE, counter::SALE_MESSAGE);
+    for (off, tile) in counter::SIGN_TILES {
+        wr32(x.b, counter::SIGN + off, tile);
+    }
+    let v = x.u8(f::VARIANT) as u32;
+    let mut at = crate::mem::prog32(x.b, counter::GOODS + 4 * v);
+    loop {
+        let setting = x.data8(at);
+        at += 1;
+        x.c.a[2] = at;
+        if (setting as i8) < 0 {
+            return;
+        }
+        let Some(o) = alloc(x, counter::ALLOC_PEFF) else { return };
+        wr8(x.b, o.0, 1);
+        wr8(x.b, o.0 + 2, 0x2a);
+        wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
+        wr8(x.b, o.0 + 0x2f, setting);
+        let variant = x.data8(at);
+        wr8(x.b, o.0 + 3, variant);
+        let px = x.a5_u16(0x506).wrapping_add(x.data16(at + 1));
+        wr16(x.b, o.0 + Obj::X, px);
+        let (z, y) = (x.data16(at + 3), x.data16(at + 5));
+        wr16(x.b, o.0 + Obj::Z, z);
+        wr16(x.b, o.0 + Obj::Y, y);
+        at += 7;
+        x.c.a[2] = at;
+    }
+}
+
+/// `sub.w #1,(off,A0) ; bpl` : vrai quand le décompte passe sous zéro.
+fn countdown_word(x: &mut Cx, off: u32) -> bool {
+    let t = x.u16(off).wrapping_sub(1);
+    x.set16(off, t);
+    (t as i16) < 0
 }
 
 fn counter(x: &mut Cx) {
@@ -3428,8 +3720,8 @@ fn counter(x: &mut Cx) {
             x.anim_start(shop::ANIM_SET, anim);
             x.reinsert();
         }
-        2 if x.u8(f::SUB_STATE) != 0 => x.call(counter::SALE),
-        2 => shop_watch(x, counter::BUY),
+        2 if x.u8(f::SUB_STATE) != 0 => counter_sale(x),
+        2 => shop_watch(x, counter_buy),
         _ => free(x),
     }
 }

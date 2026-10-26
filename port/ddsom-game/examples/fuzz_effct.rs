@@ -164,7 +164,7 @@ fn sous_etats(t: u32, v: u32) -> &'static [u8] {
 fn sous_etats_type(t: u32) -> &'static [u8] {
     match t {
         63 | 43 => &[0, 2, 4],
-        46 | 48 => &[0, 2],
+        46 | 48 | 70 => &[0, 2],
         40 => &[0, 2, 4],
         _ => &[0],
     }
@@ -244,6 +244,50 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
             }
             wr8(b, j + 0x77, alea.pick(&[0, 1]));
             wr8(b, j + 3, 2 * (1 + alea.next() % 6) as u8);
+        }
+        // boutiques : acheteurs (liste A5-0x555c) dans la zone, prêts à acheter (+0x58), joueur (+0x50) avec de
+        // l'or, une vie, un inventaire ; comptoir de scène : vente en cours, vendeur (+0x1a)
+        22 | 70 => {
+            for k in 0..4u32 {
+                let acheteur = JOUEURS + 0x200 * k;
+                wr16(b, 0xff2aa4 + 2 * k, if alea.une_sur(3) { 0 } else { acheteur as u16 });
+                wr8(b, acheteur + 0x58, alea.pick(&[0, 1, 1, 0x80]));
+                wr16(b, acheteur + 0x50, acheteur as u16);
+                let x0 = rd16(b, obj + 8);
+                wr16(b, acheteur + 8, x0.wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20));
+                let y0 = rd16(b, obj + 0x10);
+                wr16(b, acheteur + 0x10, y0.wrapping_sub((alea.next() % 0x40) as u16));
+                wr16(b, acheteur + 0xc, 0);
+                wr32(b, acheteur + 0x114, alea.pick(&[0, 0x10, 0x100, 0x9999, 0x0099_9999]));
+                wr8(b, acheteur + 0x167, alea.pick(&[0, 9]));
+                wr16(b, acheteur + 0x60, 0x80);
+                wr16(b, acheteur + 0x62, alea.pick(&[0x10, 0x70, 0x80]));
+                wr8(b, acheteur + 3, 2 * (1 + alea.next() % 6) as u8);
+                for slot in 0..6u32 {
+                    wr8(b, acheteur + 0x140 + slot, alea.pick(&[0x56, 0x56, 1, 2, 0x23]));
+                    wr8(b, acheteur + 0x148 + slot, alea.pick(&[0, 1, 9]));
+                }
+            }
+            wr8(b, obj + 0x18, alea.pick(&[0, 1, 2]));
+            // zone et prix d'un étal déjà ouvert (la naissance les remplace)
+            for (off, v) in [(0x14u32, 0x40u16), (0x16, 0x40), (0x54, 0xfff0), (0x56, 0x1c), (0x52, 0x100)] {
+                wr16(b, obj + off, v);
+            }
+            wr16(b, obj + 0x58, alea.pick(&[0x0102, 0x0523, 0x0001]));
+            wr8(b, A5 + 0x35, (alea.next() % 6) as u8);
+            wr16(b, 0xff2abe, alea.pick(&[0, 0, obj as u16, owner as u16]));
+            wr16(b, obj + 0x1a, owner as u16);
+            wr16(b, owner + 0x32, alea.pick(&[0, 1, 5]));
+            wr8(b, obj + 6, alea.pick(&[0, 2, 4]));
+            if alea.une_sur(2) {
+                // l'objet est posé à l'écran, devant la zone des acheteurs du comptoir de scène
+                let (cx, cy) = (rd16(b, A5 + 0x506), rd16(b, A5 + 0x50a));
+                for k in 0..4u32 {
+                    let acheteur = JOUEURS + 0x200 * k;
+                    wr16(b, acheteur + 8, cx.wrapping_add(0xa8 + (alea.next() % 0x58) as u16));
+                    wr16(b, acheteur + 0x10, cy.wrapping_add(0x48 + (alea.next() % 0x14) as u16));
+                }
+            }
         }
         // maillon de chaîne : précédent (+0x5c), tête (+0x46) dont l'octet +0x58 annonce la fin ou la rupture,
         // porteur de la tête (+0x54), rang
@@ -466,6 +510,10 @@ fn principal() {
                     c.d[7] = k;
                     c.d[0] = 4 * t;
                     c.a[1] = entree;
+                    if std::env::var_os("FUZZ_DEBUG").is_some() {
+                        let o: Vec<String> = (0..0x60).step_by(2).map(|i| format!("{:04x}", rd16(&mut b, obj + i))).collect();
+                        println!("pas {k} : {}", o.join(" "));
+                    }
                     let orig = couverture(&c, &b, entree, &plage, &mut vus);
                     appels += 1;
                     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
