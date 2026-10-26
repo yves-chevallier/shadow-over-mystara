@@ -1,0 +1,94 @@
+600 Service Mode 1
+650 poke8 ff8082 1
+900 P1 Down 1
+904 P1 Down 0
+944 P1 Down 1
+948 P1 Down 0
+988 P1 Down 1
+992 P1 Down 0
+1032 P1 Down 1
+1036 P1 Down 0
+1076 P1 Down 1
+1080 P1 Down 0
+1120 P1 Button 1 1
+1124 P1 Button 1 0
+1300 1 Player Start 1
+1304 P1 Button 1 1
+1310 P1 Button 1 0
+1314 1 Player Start 0
+1500 poke32 ff1ea4 0x12345
+1500 poke32 ff1ea8 0x6789
+1520 P1 Down 1
+1524 P1 Down 0
+1530 P1 Up 1
+1534 P1 Up 0
+1560 P1 Button 1 1
+1564 P1 Button 1 0
+1800 1 Player Start 1
+1804 P1 Button 1 1
+1810 P1 Button 1 0
+1814 1 Player Start 0
+2000 poke32 ff1ea8 0
+2020 P1 Down 1
+2024 P1 Down 0
+2030 P1 Up 1
+2034 P1 Up 0
+2050 P1 Button 1 1
+2054 P1 Button 1 0
+2300 1 Player Start 1
+2304 P1 Button 1 1
+2310 P1 Button 1 0
+2314 1 Player Start 0
+2330 poke32 ff1ea4 0x7fffffff
+2330 poke32 ff1ea8 1
+2340 P1 Down 1
+2344 P1 Down 0
+2350 P1 Up 1
+2354 P1 Up 0
+2380 P1 Button 1 1
+2384 P1 Button 1 0
+2640 1 Player Start 1
+2644 P1 Button 1 1
+2650 P1 Button 1 0
+2654 1 Player Start 0
+2670 poke32 ff1ea4 0xfffff000
+2670 poke32 ff1ea8 7
+2680 P1 Down 1
+2684 P1 Down 0
+2690 P1 Up 1
+2694 P1 Up 0
+2720 P1 Button 1 1
+2724 P1 Button 1 0
+2980 1 Player Start 1
+2984 P1 Button 1 1
+2990 P1 Button 1 0
+2994 1 Player Start 0
+3010 poke32 ff1ea4 0xfffff000
+3010 poke32 ff1ea8 0xfffffff0
+3020 P1 Down 1
+3024 P1 Down 0
+3030 P1 Up 1
+3034 P1 Up 0
+3060 P1 Button 1 1
+3064 P1 Button 1 0
+3320 1 Player Start 1
+3324 P1 Button 1 1
+3330 P1 Button 1 0
+3334 1 Player Start 0
+3400 P1 Down 1
+3404 P1 Down 0
+3440 P1 Down 1
+3444 P1 Down 0
+3480 P1 Down 1
+3484 P1 Down 0
+3520 P1 Down 1
+3524 P1 Down 0
+3560 P1 Down 1
+3564 P1 Down 0
+3600 P1 Down 1
+3604 P1 Down 0
+3640 P1 Down 1
+3644 P1 Down 0
+3680 P1 Button 1 1
+3684 P1 Button 1 0
+5000 quit
