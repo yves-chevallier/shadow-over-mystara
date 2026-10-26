@@ -386,7 +386,7 @@ const SIGNATURE_LEN: u32 = 16;
 /// échoue, et boucle sans fin de l'original.
 const MESSAGE_ERREUR: u32 = 0x2d7fc;
 const CASE_ERREUR: u32 = 0x912938;
-const BLOQUE: u32 = 0x2d7fa;
+pub const BLOQUE: u32 = 0x2d7fa;
 
 /// Compare la signature de la copie en RAM à celle de la variante, comme la boucle de l'original (registres
 /// compris : D0 dernier octet attendu, D7 compteur, A1 et A6 après le dernier octet examiné).
