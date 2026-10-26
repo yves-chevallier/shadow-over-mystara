@@ -459,6 +459,22 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
     ex.a0_clobbered = true;
 }
 
+/// Un état saute au début de l'aiguillage d'origine (`bra entrée`) après avoir changé d'étape : l'état de la
+/// nouvelle étape s'exécute dans la même image, appelé comme par l'aiguillage (D0.b = étape, A1 = état).
+fn redispatch(ex: &mut Ex, sequence: &Sequence) {
+    const TABLE: u32 = 0x2c; // table des états de l'aiguillage, après son code
+    let step = ex.b8(blk::STEP);
+    crate::mem::set_low_byte(&mut ex.x.c.d[0], step);
+    let table = ex.entry + TABLE + step as u32;
+    ex.x.c.a[1] = (ex.x.prog16(table) as u32) << 16 | ex.x.prog16(table + 2) as u32;
+    ex.x.c.a[0] = BASE;
+    match sequence.states.get(step as usize / 4) {
+        None => ex.delegate(ex.entry),
+        Some(&St::Shared(shared)) => run_shared(ex, shared),
+        Some(&state) => run_state(ex, state),
+    }
+}
+
 /// Fin d'image : sauf à l'état final, mise à jour du monde.
 fn finish_frame(ex: &mut Ex, sequence: &Sequence) {
     let step = if ex.a0_clobbered { rd8(ex.x.b, ex.x.c.a[0].wrapping_add(blk::STEP)) } else { ex.b8(blk::STEP) };
@@ -1171,7 +1187,7 @@ fn seq32_route(ex: &mut Ex) {
         }
     } else {
         ex.set_step(20);
-        ex.delegate(ex.entry);
+        redispatch(ex, &SEQ_32);
     }
 }
 
@@ -1399,8 +1415,7 @@ fn seq23_walk(ex: &mut Ex) {
 fn seq25_route(ex: &mut Ex) {
     if ex.x.v8(0x5c) == 0 {
         ex.set_step(20);
-        ex.delegate(ex.entry);
-        return;
+        return redispatch(ex, &SEQ_25);
     }
     ex.next();
     ex.set_b16(blk::TIMER, 128);
@@ -1460,8 +1475,7 @@ fn seq32_clear(ex: &mut Ex) {
     ex.reset_shop();
     if ex.x.v8(0x5c) != 0 {
         ex.set_step(12);
-        ex.delegate(ex.entry);
-        return;
+        return redispatch(ex, &SEQ_32);
     }
     walk_wait(ex, None);
 }

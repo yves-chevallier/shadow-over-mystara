@@ -583,6 +583,12 @@ pub fn verifier_68000(c: &Cpu, b: &mut Cps2Bus) {
         return;
     }
     noter(c.pc, c.a[7]);
+    // DDSOM_ARRET=pc (hexadécimal) : arrêt, avec la trace, quand le 68000 atteint cette adresse
+    static ARRET: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    if *ARRET.get_or_init(|| std::env::var("DDSOM_ARRET").ok().and_then(|v| u32::from_str_radix(&v, 16).ok())) == Some(c.pc) {
+        let trace = TRACE.with(|t| t.borrow().iter().map(|(pc, sp)| format!("{pc:x}/{sp:x}")).collect::<Vec<_>>().join(" "));
+        panic!("arrêt en {:x} (pile {:x}) ; avant : {trace}", c.pc, c.a[7]);
+    }
     let Some(t) = lire(b) else { return };
     let k = t.courante;
     let Some(cadre) = t.emplacements[k].cadres.sommet() else { return };
