@@ -289,6 +289,11 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
                 }
             }
         }
+        // sorts d'un magicien : six modes
+        44 => {
+            wr8(b, obj + 0x2f, (alea.next() % 6) as u8);
+            wr16(b, obj + 0x5c, owner as u16);
+        }
         // vote : réglage (scrutin) restreint
         23 => {
             wr8(b, obj + 0x2f, alea.pick(&[0, 1, 2]));
@@ -470,6 +475,7 @@ fn principal() {
             Err(_) => entree..table.iter().copied().filter(|&e| e > entree).min().unwrap_or(entree + 0x400),
         };
         let mut vus = BTreeSet::new();
+        let mut ecarts_type = 0u64;
         for &v in &variantes {
             for tour in 0..tours {
                 let (mut c, mut b) = (c0.clone(), b0.clone());
@@ -521,6 +527,7 @@ fn principal() {
                         let o: Vec<String> = (0..0x60).step_by(2).map(|i| format!("{:04x}", rd16(&mut b, obj + i))).collect();
                         println!("pas {k} : {}", o.join(" "));
                     }
+                    let etat_avant = format!("{:02x}/{:02x}/{:02x}", rd8(&mut b, obj + 4), rd8(&mut b, obj + 5), rd8(&mut b, obj + 6));
                     let orig = couverture(&c, &b, entree, &plage, &mut vus);
                     appels += 1;
                     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
@@ -532,8 +539,9 @@ fn principal() {
                         let d = compare(&orig, &c, &b);
                         if !d.is_empty() {
                             ecarts_propres += 1;
-                            if ecarts_propres <= 5 {
-                                println!("  écart type {t} variante {v} pas {k} : {}", d.join(", "));
+                            ecarts_type += 1;
+                            if ecarts_type <= 3 {
+                                println!("  écart type {t} variante {v} pas {k} état {etat_avant} : {}", d.join(", "));
                             }
                             // on repart de l'état de l'original
                             (c, b) = orig;
@@ -553,7 +561,7 @@ fn principal() {
             }
         }
         println!(
-            "TYPE {t} {entree:06x} : {} instructions atteignables, {} exécutées par l'original, non vues : {}",
+            "TYPE {t} {entree:06x} : {ecarts_type} écarts, {} instructions atteignables, {} exécutées par l'original, non vues : {}",
             tout.len(),
             tout.intersection(&vus).count(),
             plages.iter().map(|(a, b)| format!("{a:06x}-{b:06x}")).collect::<Vec<_>>().join(" ")
