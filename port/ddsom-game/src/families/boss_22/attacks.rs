@@ -4,15 +4,18 @@ use super::moves::step_anim;
 use super::*;
 
 pub(super) fn run(x: &mut Cx) {
-    match x.u8(f::SUB2) {
-        0 | 6 => shot(x),
-        2 | 8 => breath(x),
-        4 => bite(x),
-        10 | 16 => second_form_strike(x),
-        12 | 18 => charge_strike(x),
-        14 => stomp(x),
-        20 => dive(x),
-        22 => dive_down(x),
+    let step = x.u8(f::SUB2);
+    match (two(x), step) {
+        (_, 0 | 6) => shot(x),
+        (_, 2 | 8) => breath(x),
+        (_, 4) => bite(x),
+        (true, 10) => two::slam(x),
+        (true, 12) => two::spin_roar(x),
+        (true, 16) | (false, 10 | 16) => second_form_strike(x),
+        (true, 18) | (false, 12 | 18) => charge_strike(x),
+        (_, 14) => stomp(x),
+        (_, 20) => dive(x),
+        (_, 22) => dive_down(x),
         _ => {}
     }
 }
@@ -38,7 +41,7 @@ fn shot(x: &mut Cx) {
             sounds(x, 0x28, 5);
             x.set8(ANIM_LAST, 0xa);
             x.c.d[0] = 0;
-            x.anim_start(SET_B, 0);
+            start(x, Set::B, 0);
         }
         2 => finish_attack(x),
         _ => {}
@@ -50,10 +53,13 @@ fn breath(x: &mut Cx) {
     match x.u8(0x7) {
         0 => {
             next7(x);
+            if two(x) {
+                x.set8(VULNERABLE, 1);
+            }
             x.set8(ANIM_ID, 0xe);
             sounds(x, 0x29, 6);
             x.set8(ANIM_LAST, 0xe);
-            x.anim_start(SET_B, 4);
+            start(x, Set::B, 4);
         }
         2 => finish_attack(x),
         _ => {}
@@ -83,7 +89,7 @@ fn bite(x: &mut Cx) {
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_ID, 0xc);
             x.set8(ANIM_LAST, 0xc);
-            x.anim_start(SET_B, 3);
+            start(x, Set::B, 3);
         }
         2 => grab_on_key(x),
         _ => {}
@@ -112,7 +118,7 @@ fn second_form_strike(x: &mut Cx) {
             x.set8(ANIM_ID, 0x11);
             x.set8(ANIM_LAST, 0x11);
             sounds(x, 0x27, 5);
-            x.anim_start(SET_B, 7);
+            start(x, Set::B, 7);
         }
         2 => {
             if x.u8(KEY) != 0 {
@@ -135,7 +141,7 @@ fn second_form_strike(x: &mut Cx) {
             x.set8(ANIM_ID, 5);
             if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
                 x.set8(ANIM_LAST, 5);
-                x.anim_start(SET_A, 0xc);
+                start(x, Set::A, 0xc);
             }
             speed(x, 0x15);
         }
@@ -177,7 +183,7 @@ fn second_form_strike(x: &mut Cx) {
             x.set8(0x2d, angle);
             if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
                 x.set8(ANIM_LAST, 5);
-                x.anim_start(SET_A, 0xc);
+                start(x, Set::A, 0xc);
             }
             speed(x, 0x15);
         }
@@ -192,7 +198,7 @@ fn second_form_strike(x: &mut Cx) {
             }
             next7(x);
             x.set8(VULNERABLE, 1);
-            x.anim_start(SET_A, 0xf);
+            start(x, Set::A, 0xf);
         }
         12 => {
             if !second_form(x) {
@@ -205,7 +211,7 @@ fn second_form_strike(x: &mut Cx) {
                 x.set8(f::FLIP, side);
                 x.set8(ANIM_ID, 5);
                 x.set8(ANIM_LAST, 5);
-                x.anim_start(SET_A, 0xc);
+                start(x, Set::A, 0xc);
             }
         }
         _ => {}
@@ -245,7 +251,7 @@ fn charge_strike(x: &mut Cx) {
             if target_in_box(x, -0x50, 0x30, 0x10) {
                 next7(x);
                 sounds(x, 0x29, 6);
-                return x.anim_start(SET_B, 4);
+                return start(x, Set::B, 4);
             }
             if target_in_box(x, -0x10, 0x10, 0x10) || sub16(x, TIMER, 1).mi() {
                 return next_attack(x);
@@ -269,7 +275,7 @@ fn charge_start(x: &mut Cx) {
     x.set8(ANIM_ID, 0xf);
     x.set8(ANIM_LAST, 0xf);
     sounds(x, 0x27, 5);
-    x.anim_start(SET_A, 2);
+    start(x, Set::A, 2);
     speed(x, 0x15);
 }
 
@@ -291,7 +297,7 @@ fn stomp(x: &mut Cx) {
             x.call(call::ASK_TARGET);
             if player_within_reach(x) {
                 next7(x);
-                return x.anim_start(SET_B, 3);
+                return start(x, Set::B, 3);
             }
             if sub16(x, TIMER, 1).mi() {
                 return next_attack(x);
@@ -314,7 +320,7 @@ fn stomp_start(x: &mut Cx) {
     x.set8(VULNERABLE, 1);
     x.set8(ANIM_ID, 0xd);
     x.set8(ANIM_LAST, 0xd);
-    x.anim_start(SET_A, 9);
+    start(x, Set::A, 9);
     speed(x, 0x15);
 }
 
@@ -340,7 +346,7 @@ fn dive(x: &mut Cx) {
             x.set8(ANIM_ID, 0x11);
             x.set8(ANIM_LAST, 0x11);
             sounds(x, 0x2a, 6);
-            x.anim_start(SET_B, 8);
+            start(x, Set::B, 8);
         }
         2 => rise_wait(x),
         4 => climb(x, true),
@@ -393,7 +399,7 @@ fn land(x: &mut Cx, down: bool) {
     } else {
         x.set8(VULNERABLE, 1);
     }
-    x.anim_start(SET_A, 6);
+    start(x, Set::A, 6);
 }
 
 /// 0x9c3ee : saut sur place avec retombée en poussière.
@@ -409,7 +415,7 @@ fn dive_down(x: &mut Cx) {
             sounds(x, 0x2a, 5);
             x.set8(ANIM_ID, 0x13);
             x.set8(ANIM_LAST, 0x13);
-            x.anim_start(SET_B, 0xa);
+            start(x, Set::B, 0xa);
         }
         2 => {
             if x.u8(KEY) != 0 {

@@ -10,15 +10,14 @@
 
 use super::*;
 
-/// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
-const REACTIONS: u32 = 0x9ce66;
-/// Lignes de 16 octets, une par nombre de joueurs : chances (un bit par tirage) de riposter après le recul.
-const COUNTER_CHANCES: u32 = 0x9d012;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(HIT_TICK) == 0 {
         x.set_a5_u16(0x51e, 0);
         x.set_a5_u8(0x43, 0xff);
+        if two(x) {
+            x.set8(VULNERABLE, 0);
+        }
         x.set8(HIT_TICK, 1);
     }
     x.set8(0xaf, 0);
@@ -56,7 +55,17 @@ fn reaction(x: &mut Cx) {
     }
     x.add16(GUARD, 0xffff);
     x.set8(ANIM_LAST, 0x7f);
-    react(x, REACTIONS);
+    let table = kit(x).reactions;
+    react(x, table);
+}
+
+/// Une poussière (0xb10c8) sans le compteur de huit : le type 2 en lâche une quand il est repoussé vers la droite.
+fn rubble_once(x: &mut Cx) {
+    x.c.d[0] = 0;
+    set_dw(x, 1, 0x201);
+    set_dw(x, 2, 0x20);
+    set_dw(x, 3, 0x20);
+    x.call(call::DUST);
 }
 
 /// 0x9cf12 : recul en glissant, puis retour au combat ou riposte.
@@ -72,11 +81,17 @@ fn pushed_back(x: &mut Cx) {
             x.set8(f::FLIP, side);
             let side = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, side);
-            let (vx, vz) = if x.u8(f::FLIP) == 0 { (0x400u16, (-0x28i16) as u16) } else { ((-0x400i16) as u16, 0x28) };
-            x.set16(0x14, vx);
-            x.set16(0x16, vz);
+            x.set16(0x14, 0x400);
+            x.set16(0x16, (-0x28i16) as u16);
+            if x.u8(f::FLIP) != 0 {
+                if two(x) {
+                    rubble_once(x);
+                }
+                x.set16(0x14, 0xfc00);
+                x.set16(0x16, 0x28);
+            }
             let n = if second_form(x) { 0x12 } else { 0xe };
-            x.anim_start(SET_A, n);
+            start(x, Set::A, n);
         }
         2 => {
             // `andi.w #3,(0x6e,A5)` réduit aussi le compteur de la RAM de travail
@@ -104,11 +119,13 @@ fn pushed_back(x: &mut Cx) {
             }
             x.set8(SECOND_FX, 0);
             let alive = x.a5_u8(var::PLAYERS_ALIVE) as u32;
-            let chances = rom32(x, COUNTER_CHANCES + (alive << 4));
+            let k = kit(x);
+            let chances = rom32(x, k.chances + (alive << k.chances_shift));
             x.c.d[5] = chances;
             let r = rand_and(x, 0x1f);
             if chances >> r & 1 != 0 {
-                x.set8(ARM_TIMER, 0x46);
+                let fuse = if two(x) { 0x50 } else { 0x46 };
+                x.set8(ARM_TIMER, fuse);
                 return x.set32(f::STATE, 0x0204_1600);
             }
             x.set8(0, 1);
@@ -125,7 +142,7 @@ fn down(x: &mut Cx) {
             next6(x);
             x.call(0xfffc);
             let n = if second_form(x) { 0x10 } else { 0xd };
-            x.anim_start(SET_A, n);
+            start(x, Set::A, n);
         }
         2 => {
             if x.a5_u8(var::PAUSE) != 0 || sub16(x, 0x84, 1).gt() {
@@ -147,11 +164,14 @@ fn down(x: &mut Cx) {
                 x.set8(ANIM_LAST, 0x7f);
                 return;
             }
+            if two(x) {
+                x.set8(SECOND_FX, 0);
+            }
             x.set32(f::STATE, state::STAND);
             x.set8(ANIM_ID, 0);
             x.set8(ANIM_LAST, 0);
             x.c.d[0] = 0;
-            x.anim_start(SET_A, 0);
+            start(x, Set::A, 0);
         }
         _ => {}
     }
@@ -169,11 +189,13 @@ fn death(x: &mut Cx) {
             x.set8(f::FREEZE, freeze);
             let host = x.linked(HOST);
             let mut last = true;
-            if host.u32(x.b, f::STATE) == x.u32(f::STATE) {
-                x.set8(0x7f, 1);
-                last = false;
-            } else if host.u8(x.b, 0x7f) == 0 && host.u16(x.b, f::STATE) != 0x406 {
-                last = false;
+            if !two(x) || x.u8(0xac) != 0 {
+                if host.u32(x.b, f::STATE) == x.u32(f::STATE) {
+                    x.set8(0x7f, 1);
+                    last = false;
+                } else if host.u8(x.b, 0x7f) == 0 && host.u16(x.b, f::STATE) != 0x406 {
+                    last = false;
+                }
             }
             if last {
                 x.set_a5_u8(0x42, 1);
@@ -205,7 +227,7 @@ fn death(x: &mut Cx) {
             x.call(call::MOVE_XZ);
             next6(x);
             let n = if second_form(x) { 0x17 } else { 0x16 };
-            x.anim_start(SET_A, n);
+            start(x, Set::A, n);
         }
         2 => {
             x.call(call::MOVE_XZ);
@@ -214,13 +236,13 @@ fn death(x: &mut Cx) {
             }
             next6(x);
             x.set16(0xc, 0);
-            let effect = if x.u8(f::FLIP) != 0 { 0x7f328 } else { 0x7f3a0 };
-            x.call(effect);
+            let right = x.u8(f::FLIP) != 0;
+            dust_trail(x, right);
             x.call(0xec9e8);
             if !second_form(x) {
                 x.call(0xb64b0);
             }
-            x.anim_start(SET_A, 0x18);
+            start(x, Set::A, 0x18);
         }
         4 => {
             if x.anim_step() {

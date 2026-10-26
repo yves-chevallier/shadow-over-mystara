@@ -23,6 +23,7 @@ use super::cx::handlers;
 mod attacks;
 mod hit;
 mod moves;
+mod two;
 
 /// Champs propres à ce type.
 pub(self) mod g {
@@ -61,8 +62,72 @@ pub(self) mod g {
 }
 use g::*;
 
-pub(self) const SET_A: u32 = 0x18492a;
-pub(self) const SET_B: u32 = 0x184964;
+/// Jeux d'animations d'un boss.
+#[derive(Clone, Copy)]
+pub(self) enum Set {
+    A,
+    B,
+}
+
+/// Ce qui distingue le boss de type 2 de celui de type 22 : le code est celui d'une même famille, copié avec d'autres
+/// jeux d'animations et d'autres tables de la ROM.
+pub(self) struct Kit {
+    set_a: u32,
+    set_b: u32,
+    /// Tables d'attaque (32 octets par couple de niveaux) : portée courte, portée longue, fin d'attaque.
+    close: u32,
+    far: u32,
+    next: u32,
+    /// Points d'arrivée de la course (lignes de 6 octets : X, Z, angle, sens) et chances de riposte (lignes de
+    /// `1 << chances_shift` octets).
+    spot: u32,
+    chances: u32,
+    chances_shift: u32,
+    /// Table de tirage de l'élan, table des réactions aux coups.
+    dash: u32,
+    reactions: u32,
+}
+
+const TWO_KIT: Kit = Kit {
+    set_a: 0x1733ac,
+    set_b: 0x1733e6,
+    close: 0x7ea1e,
+    far: 0x7ec1e,
+    next: 0x7ee7c,
+    spot: 0x7f25a,
+    chances: 0x7e7a2,
+    chances_shift: 2,
+    dash: 0x7cd3e,
+    reactions: 0x7e5e2,
+};
+
+const PART_KIT: Kit = Kit {
+    set_a: 0x18492a,
+    set_b: 0x184964,
+    close: 0x9d280,
+    far: 0x9d480,
+    next: 0x9d6e0,
+    spot: 0x9dabe,
+    chances: 0x9d012,
+    chances_shift: 4,
+    dash: 0x9b5a0,
+    reactions: 0x9ce66,
+};
+
+/// Le boss est-il le type 2 (et non le type 22) ?
+pub(self) fn two(x: &mut Cx) -> bool {
+    x.u8(2) == 2
+}
+
+pub(self) fn kit(x: &mut Cx) -> &'static Kit {
+    if two(x) { &TWO_KIT } else { &PART_KIT }
+}
+
+/// Lance l'animation `n` du jeu `set` (0x1a32).
+pub(self) fn start(x: &mut Cx, set: Set, n: u32) {
+    let k = kit(x);
+    x.anim_start(if matches!(set, Set::A) { k.set_a } else { k.set_b }, n);
+}
 
 /// États posés d'un coup (`+4..+7`).
 pub(self) mod state {
@@ -95,27 +160,26 @@ pub(self) mod call {
     pub const SPLASH: u32 = 0xaaa40;
     pub const DUST: u32 = 0xb10c8;
     pub const MESSAGE: u32 = 0x289c;
-    pub const NEAR_PLAYER: u32 = 0x7f19c;
     pub const FAR_BOX: u32 = 0x7f0c;
 }
 
 // --- animations --------------------------------------------------------------------------------
 
 /// Numéro d'animation `id` (+0xa2) ; lance l'animation `n` du jeu `set` si ce n'est pas la dernière lancée (+0xa3).
-pub(self) fn pose(x: &mut Cx, set: u32, id: u8, n: u32) {
+pub(self) fn pose(x: &mut Cx, set: Set, id: u8, n: u32) {
     x.set8(ANIM_ID, id);
     if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
         let id = x.u8(ANIM_ID);
         x.set8(ANIM_LAST, id);
-        x.anim_start(set, n);
+        start(x, set, n);
     }
 }
 
 /// Idem sans test : l'animation est toujours relancée, le numéro mémorisé.
-pub(self) fn pose_always(x: &mut Cx, set: u32, id: u8, n: u32) {
+pub(self) fn pose_always(x: &mut Cx, set: Set, id: u8, n: u32) {
     x.set8(ANIM_ID, id);
     x.set8(ANIM_LAST, id);
-    x.anim_start(set, n);
+    start(x, set, n);
 }
 
 /// Réglages sonores `+0x44` et `+0x45` posés avec l'animation.
@@ -200,10 +264,12 @@ fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
 }
 
 pub(self) fn hunt_close(x: &mut Cx) -> bool {
-    hunt_box(x, -0x40, 0x40, 8, 0x9d280)
+    let table = kit(x).close;
+    hunt_box(x, -0x40, 0x40, 8, table)
 }
 pub(self) fn hunt_far(x: &mut Cx) -> bool {
-    hunt_box(x, -0xd0, 0x50, 0x50, 0x9d480)
+    let table = kit(x).far;
+    hunt_box(x, -0xd0, 0x50, 0x50, table)
 }
 
 /// 0x9d24e et 0x9d254 : attaque tirée dans la ligne de la difficulté de `table` (32 octets par couple de niveaux).
@@ -216,22 +282,22 @@ pub(self) fn attack_from_table(x: &mut Cx, table: u32) {
     x.set8(0x7, 0);
 }
 
-/// 0x9d680 : fin d'une attaque : debout, ou une nouvelle attaque (table 0x9d6e0) si un joueur est tout près.
+/// 0x9d680 (0x7ee1e pour le type 2) : fin d'une attaque : debout, ou une nouvelle attaque si un joueur est tout près.
 pub(self) fn next_attack(x: &mut Cx) {
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
+            // le type 22 s'arrête au premier joueur absent, le type 2 passe au suivant
+            if two(x) {
+                continue;
+            }
             break;
         }
-        x.c.a[2] = p.0;
-        set_dw(x, 0, (-0x38i16) as u16);
-        set_dw(x, 1, 0x38);
-        set_dw(x, 2, 0x18);
-        x.call(call::NEAR_PLAYER);
-        if !zero(x) {
+        if reach(x, p, -0x38, 0x38, 0x18) {
             let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;
             let r = rand_and(x, 0x1f);
-            let step = x.data8(0x9d6e0 + row + r);
+            let table = kit(x).next;
+            let step = x.data8(table + row + r);
             x.set8(f::SUB2, step);
             x.set16(f::STATE, 0x0208);
             x.set8(0x7, 0);
@@ -256,7 +322,7 @@ pub(self) fn player_within_reach(x: &mut Cx) -> bool {
 }
 
 /// 0x9da00 : `p` est-il dans la boîte (décalage `d0`, demi-largeur `d1`, demi-profondeur `d2`) du boss, au sol ?
-fn reach(x: &mut Cx, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16) -> bool {
+pub(self) fn reach(x: &mut Cx, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16) -> bool {
     if p.u16(x.b, 0xc) != 0 {
         return false;
     }
@@ -284,19 +350,33 @@ pub(self) fn choose_spot(x: &mut Cx) {
     } else {
         0
     };
-    let sx = x.rom16(0x9dabe + row).wrapping_add(x.a5_u16(var::SCROLL_X));
+    let base = kit(x).spot;
+    let sx = x.rom16(base + row).wrapping_add(x.a5_u16(var::SCROLL_X));
     x.set16(SPOT_X, sx);
-    let sz = x.rom16(0x9dac0 + row).wrapping_add(x.a5_u16(var::SCROLL_Y));
+    let sz = x.rom16(base + 2 + row).wrapping_add(x.a5_u16(var::SCROLL_Y));
     x.set16(SPOT_Z, sz);
-    let angle = x.rom8(0x9dac2 + row);
+    let angle = x.rom8(base + 4 + row);
     x.set8(0x2d, angle);
-    let spin = x.rom8(0x9dac3 + row);
+    let spin = x.rom8(base + 5 + row);
     x.set8(SPIN, spin);
 }
 
 /// 0x9db72 : cinq poussières en ligne sous le boss qui retombe.
 pub(self) fn dust_line(x: &mut Cx) {
     for dz in [-0x30i16, -0x18, 0, 0x18, 0x30] {
+        x.c.d[0] = 1;
+        set_dw(x, 1, 0);
+        set_dw(x, 2, dz as u16);
+        set_dw(x, 3, 4);
+        x.call(call::DUST);
+    }
+}
+
+/// 0x7f328 et 0x7f3a0 : poussières en ligne, vers la droite (le boss regarde à gauche) ou vers la gauche.
+pub(self) fn dust_trail(x: &mut Cx, right: bool) {
+    const RIGHT: [i16; 6] = [-0x10, 8, 0x20, 0x38, 0x50, 0x68];
+    const LEFT: [i16; 6] = [-0x68, -0x58, -0x38, -0x20, -0x8, 0x10];
+    for dz in if right { RIGHT } else { LEFT } {
         x.c.d[0] = 1;
         set_dw(x, 1, 0);
         set_dw(x, 2, dz as u16);
@@ -330,12 +410,18 @@ pub fn run(x: &mut Cx) {
         return;
     }
     x.call(rom::TICK_COUNTERS);
+    if two(x) {
+        two::spawn_scene_controller(x);
+    }
     match x.u8(f::STATE) {
+        st::INIT if two(x) => two::init(x),
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
         _ => {
-            x.set_a5_u8(0x50, 0);
+            if !two(x) {
+                x.set_a5_u8(0x50, 0);
+            }
             x.tail(call::FREE_BOSS);
         }
     }
@@ -372,7 +458,7 @@ fn init(x: &mut Cx) {
     x.set16(SPOT_TIMER, 0x10);
     x.set8(0x93, 0);
     x.c.d[0] = 0;
-    x.c.a[4] = SET_A;
+    x.c.a[4] = kit(x).set_a;
     x.tail(0x1a32);
 }
 
@@ -400,7 +486,8 @@ fn active(x: &mut Cx) {
         x.set16(0x84, 0);
         x.set8(0x49, 0);
         x.set8(0, 1);
-        x.set8(ARM_TIMER, 0x50);
+        let fuse = if two(x) { 0x46 } else { 0x50 };
+        x.set8(ARM_TIMER, fuse);
         x.set32(f::STATE, 0x0204_1600);
     }
     if expired || fire {
@@ -415,6 +502,7 @@ fn active(x: &mut Cx) {
 
 fn group(x: &mut Cx) {
     match x.u8(f::SUB) {
+        0 if two(x) => two::arrive(x),
         0 => moves::arrive(x),
         2 => moves::fight(x),
         4 => attacks::run(x),
@@ -429,4 +517,5 @@ fn group(x: &mut Cx) {
 
 handlers! {
     0x9aeaa "boss_22" 1200 run,
+    0x7c5a8 "boss_2" 1200 run,
 }

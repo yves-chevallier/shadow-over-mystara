@@ -62,8 +62,8 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[8, 10], Z),
             (&[6], Z, Z),
         ],
-        // boss 22 : arrivée, combat, attaques, courses, pause, prise, transformation, état touché
-        22 => &[
+        // boss 2 et 22 : arrivée, combat, attaques, courses, pause, prise, transformation, état touché
+        2 | 22 => &[
             (&[0], Z, Z),
             (&[2], &[0], Z),
             (&[2], &[2], &[0, 2, 4, 6, 8]),
@@ -442,8 +442,13 @@ fn prep_16(b: &mut Bus, alea: &mut Alea, obj: u32) {
 }
 
 /// Étape `+7` valide du boss 22.
-fn etape_22(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+fn etape_22(alea: &mut Alea, two: bool, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
+        (2, 0, _) if two => 6,
+        (2, 4, 10) if two => 16,
+        (2, 4, 12) if two => 7,
+        (2, 4, 16) if two => 7,
+        (2, 4, 18) if two => 4,
         (2, 0, _) => 3,
         (2, 2, 0 | 8) => 2,
         (2, 2, 2 | 6) => 3,
@@ -465,13 +470,18 @@ fn etape_22(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
 }
 
 /// Boss 22 : forme, hôte (autre boss), cible, points visés, minuteries et code de coup.
-fn prep_22(b: &mut Bus, alea: &mut Alea, obj: u32) {
+fn prep_22(b: &mut Bus, alea: &mut Alea, obj: u32, two: bool) {
     let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, 0);
     wr8(b, obj + 0x2c, if alea.next() % 2 == 0 { 0 } else { 0x20 });
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
-    wr8(b, obj + 7, etape_22(alea, s.0, s.1, s.2));
+    wr8(b, obj + 7, etape_22(alea, two, s.0, s.1, s.2));
     wr8(b, obj + 0xb5, pick(alea, &[0, 0, 1]));
+    wr8(b, obj + 0xac, pick(alea, &[0, 1]));
+    wr8(b, obj + 0xa4, pick(alea, &[0, 1]));
+    wr8(b, obj + 0xb6, pick(alea, &[4, 0xfc]));
+    wr8(b, obj + 0xb9, pick(alea, &[0, 1, 4]));
+    wr8(b, obj + 0xaf, pick(alea, &[0, 1]));
     wr8(b, obj + 0xbf, pick(alea, &[0, 1]));
     wr8(b, obj + 0xae, pick(alea, &[0xff, 0xff, 0, 1, 2]));
     wr8(b, obj + 0xb4, (alea.next() % 2) as u8);
@@ -484,7 +494,7 @@ fn prep_22(b: &mut Bus, alea: &mut Alea, obj: u32) {
     let k = BOSS.slot((alea.next() % BOSS.slots + 1) % BOSS.slots).0;
     if k != obj {
         wr8(b, k, 1);
-        wr8(b, k + 2, 2);
+        wr8(b, k + 2, if two { 0x16 } else { 2 });
         wr8(b, k + 0x7f, (alea.next() % 2) as u8);
         let mine = rd32(b, obj + 4);
         wr32(b, k + 4, [0x0406_0000u32, 0x0202_0400, 0x0200_0000, mine][alea.next() as usize % 4]);
@@ -902,7 +912,8 @@ fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     match kind {
         0 => prep_0(b, alea, obj),
         16 => prep_16(b, alea, obj),
-        22 => prep_22(b, alea, obj),
+        2 => prep_22(b, alea, obj, true),
+        22 => prep_22(b, alea, obj, false),
         1 => prep_1(b, alea, obj),
         3 => prep_3(b, alea, obj),
         9 => prep_9(b, alea, obj),

@@ -6,7 +6,7 @@ use super::*;
 /// Animation du corps `n` pour l'animation `id`, avec les réglages sonores `(0x27, 5)` et une vitesse `speed`.
 fn body_pose(x: &mut Cx, id: u8, n: u32, speed_n: u32) {
     sounds(x, 0x27, 5);
-    pose(x, SET_A, id, n);
+    pose(x, Set::A, id, n);
     speed(x, speed_n);
 }
 
@@ -39,7 +39,7 @@ pub(super) fn arrive(x: &mut Cx) {
             sounds(x, 0x2a, 5);
             x.set8(ANIM_ID, 7);
             x.set8(ANIM_LAST, 7);
-            x.anim_start(SET_A, 0x1c);
+            start(x, Set::A, 0x1c);
         }
         2 => {
             x.call(call::MOVE_XZ);
@@ -54,7 +54,7 @@ pub(super) fn arrive(x: &mut Cx) {
             next7(x);
             x.set16(0x30, 1);
             x.set8(VULNERABLE, 0);
-            x.anim_start(SET_A, 6);
+            start(x, Set::A, 6);
         }
         4 => {
             if x.anim_step() {
@@ -72,7 +72,9 @@ pub(super) fn arrive(x: &mut Cx) {
 /// 0x9b14e.
 pub(super) fn fight(x: &mut Cx) {
     x.set8(HIT_TICK, 0);
-    x.set8(0xad, 0);
+    if !two(x) {
+        x.set8(0xad, 0);
+    }
     match x.u8(f::SUB2) {
         0 | 8 => stand(x),
         2 => turn(x),
@@ -104,7 +106,7 @@ fn stand(x: &mut Cx) {
         next7(x);
         x.set8(VULNERABLE, 1);
         sounds(x, 0x27, 5);
-        pose(x, SET_A, 1, 2);
+        pose(x, Set::A, 1, 2);
         speed(x, 0x15);
         return x.tail(call::FACE_TARGET);
     }
@@ -156,7 +158,7 @@ fn turn(x: &mut Cx) {
             x.set8(VULNERABLE, 1);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(0x2d, angle);
-            pose(x, SET_A, 1, 2);
+            pose(x, Set::A, 1, 2);
             speed(x, 0x15);
         }
         2 => {
@@ -168,7 +170,7 @@ fn turn(x: &mut Cx) {
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_ID, 4);
             x.set8(ANIM_LAST, 4);
-            x.anim_start(SET_A, 1);
+            start(x, Set::A, 1);
         }
         4 => {
             if x.anim_step() {
@@ -181,7 +183,7 @@ fn turn(x: &mut Cx) {
                 x.set8(ANIM_ID, 0);
                 x.set8(ANIM_LAST, 0);
                 x.c.d[0] = 0;
-                x.anim_start(SET_A, 0);
+                start(x, Set::A, 0);
             }
         }
         _ => {}
@@ -217,7 +219,8 @@ fn dash(x: &mut Cx) {
     }
     if x.u8(RAGE) == 0xff {
         let r = rand_and(x, 0xf);
-        if x.rom8(0x9b5a0 + r) != 0 {
+        let dash = kit(x).dash;
+        if x.rom8(dash + r) != 0 {
             x.set32(f::STATE, 0x0400_0000);
             x.set8(RAGE, 2);
             return;
@@ -234,7 +237,7 @@ fn dash(x: &mut Cx) {
     if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
         x.set8(ANIM_LAST, 0);
         x.c.d[0] = 0;
-        x.anim_start(SET_A, 0);
+        start(x, Set::A, 0);
     }
 }
 
@@ -381,7 +384,7 @@ fn spot_wait(x: &mut Cx) {
             let id = x.u8(ANIM_ID);
             x.set8(ANIM_LAST, id);
             x.c.d[0] = 0;
-            x.anim_start(SET_A, 0);
+            start(x, Set::A, 0);
         }
         2 => {
             if sub16(x, TIMER, 1).mi() {
@@ -433,7 +436,7 @@ fn leap_land(x: &mut Cx, f_move: u32) {
     next7(x);
     x.set16(0x30, 1);
     x.set8(VULNERABLE, 1);
-    x.anim_start(SET_A, 6);
+    start(x, Set::A, 6);
 }
 
 fn leap_end(x: &mut Cx) {
@@ -451,13 +454,14 @@ fn spot_leap_a(x: &mut Cx) {
             x.set8(VULNERABLE, 1);
             let v = if x.u8(f::FLIP) != 0 { (-0x380i16) as u16 } else { 0x380 };
             x.set16(0x14, v);
-            x.set16(0x18, 0x700);
+            let rise = if two(x) { 0x500 } else { 0x700 };
+            x.set16(0x18, rise);
             x.set16(0x1a, (-0x50i16) as u16);
             x.set8(ARM_TIMER, 0x1e);
             x.set8(ANIM_ID, 0x28);
             x.set8(ANIM_LAST, 0x28);
             sounds(x, 0x2a, 6);
-            x.anim_start(SET_A, 5);
+            start(x, Set::A, 5);
         }
         2 => leap_rise_wait(x),
         4 => leap_climb(x, call::MOVE_XZ, true),
@@ -487,7 +491,7 @@ fn spot_leap_b(x: &mut Cx) {
             x.set8(ANIM_ID, 0x28);
             x.set8(ANIM_LAST, 0x28);
             sounds(x, 0x2a, 6);
-            x.anim_start(SET_A, 5);
+            start(x, Set::A, 5);
         }
         2 => leap_rise_wait(x),
         4 => leap_climb(x, call::MOVE_YZ, true),
@@ -516,7 +520,7 @@ pub(super) fn paused(x: &mut Cx) {
             x.set8(ANIM_ID, 6);
             if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
                 x.set8(ANIM_LAST, 6);
-                x.anim_start(SET_A, 0x14);
+                start(x, Set::A, 0x14);
             }
             step_anim(x);
         }
@@ -525,7 +529,7 @@ pub(super) fn paused(x: &mut Cx) {
         x.set8(ANIM_ID, 0);
         if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
             x.set8(ANIM_LAST, 0);
-            x.anim_start(SET_A, 0);
+            start(x, Set::A, 0);
         }
         step_anim(x);
     }
@@ -557,7 +561,7 @@ pub(super) fn holding(x: &mut Cx) {
             let h = prey.u16(x.b, 0xc);
             x.set16(0xc, h);
             x.set8(BITES, 8);
-            x.anim_start(SET_B, 9);
+            start(x, Set::B, 9);
             x.tail(call::HOLD);
         }
         2 => {
@@ -614,7 +618,9 @@ pub(super) fn transform(x: &mut Cx) {
     x.set8(SECOND_FX, 0);
     match x.u8(f::SUB2) {
         0 => {
-            x.set8(0, 2);
+            if !two(x) {
+                x.set8(0, 2);
+            }
             x.set8(0x86, 0);
             x.set16(0x84, 0);
             x.set8(0x49, 0);
@@ -639,7 +645,7 @@ pub(super) fn transform(x: &mut Cx) {
             sounds(x, 0x2a, 5);
             x.set8(ANIM_ID, 0x13);
             x.set8(ANIM_LAST, 0x13);
-            x.anim_start(SET_B, 0xa);
+            start(x, Set::B, 0xa);
         }
         4 => {
             if x.u8(KEY) != 0 {
@@ -663,13 +669,15 @@ pub(super) fn transform(x: &mut Cx) {
             next6(x);
             x.set16(0x30, 1);
             scatter(x);
-            x.anim_start(SET_A, 6);
+            start(x, Set::A, 6);
         }
         12 => {
             if x.anim_step() {
                 x.set32(f::STATE, state::STAND);
                 x.set8(VULNERABLE, 1);
-                x.set8(0, 1);
+                if !two(x) {
+                    x.set8(0, 1);
+                }
             }
         }
         _ => {}
