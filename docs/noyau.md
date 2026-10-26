@@ -199,15 +199,11 @@ distinctes, par tâche ; 8 scénarios : `cov_3p`, `covb_long3p_02`, `modes/gameo
 (il y a plus de reprises distinctes après : une même adresse de reprise est comptée une fois par contenu des cadres)
 
 Sur 100 autres scénarios passés au vérificateur (22 `cov_*` : service, les huit tours, fin de partie, crédits, morts,
-trois et quatre joueurs ; les 56 `scene_end/*`, les 21 `boss/*`, `modes/ending_end`), une seule reprise garde une pile
-68000 non vide, et c'est du code d'origine en cours : dans `cov_mortal_late`, un gestionnaire SET d'origine (`0xcb9c0`,
-appelé par l'aiguillage des décors) lance le fondu `0x1460` et cède au milieu de la mise à jour du monde (30 images,
-pile `cb9c0 39ea2 1c8ee 1c702 1c4c4 1c468`). Elle disparaîtra avec la réécriture de ce gestionnaire (familles C10, hors
-de ce travail) : sa native devra appeler le fondu par `Sequence::tail` et reprendre dans une native. Depuis, le même
-cas (gestionnaire SET natif qui cède au milieu de l'aiguillage, `scene/scene_67`) revient par des natives : la reprise de
-l'aiguillage (`0x39ea2`), puis les retours de la mise à jour du monde (site d'appel + 6, `game::world_resumes`) et de la
-phase 12 (`0x1c702`, `game_phase12_resume`) ; ce sont ces retours qui faisaient les dernières instructions 68000 de W1
-(`0x1c702`-`0x1c750`, `0x1c808`).
+trois et quatre joueurs ; les 56 `scene_end/*`, les 21 `boss/*`, `modes/ending_end`), une seule reprise gardait une pile
+68000 non vide, et c'était du code d'origine en cours : dans `cov_mortal_late`, la porte de sortie SET 7 (`0xcb29c`,
+alors hors contrat) lançait le fondu `0x1460` et cédait au milieu de la mise à jour du monde (30 images, pile
+`cb9c0 39ea2 1c8ee 1c702 1c4c4 1c468`). Elle est maintenant native et reprend dans des natives (`0xcb896`, `0xcb9c0`),
+comme la mise à jour du monde (`0x1c8xx`) et la phase 12 (`0x1c702`) : voir `docs/familles.md` § 6.
 
 L'image tourne pourtant encore sur la machine : interruption de VBLANK, parcours de l'ordonnanceur par natives
 successives, reprise d'une tâche en posant son contexte dans le processeur. Pour que la boucle d'image devienne
@@ -270,8 +266,9 @@ et dans l'application (`ddsom`) ; le mode normal (`install`) ne change pas.
   ligne, la tâche courante (nom, état, cadres), le SR et le sommet de la pile 68000 (les adresses de retour du code
   remplacé), les huit dernières natives exécutées et l'appel Rust en cours (`site_d_appel` : fichier et ligne du
   `call`). Les gestionnaires qui quittent par l'épilogue d'une autre routine (`Ctx::epilogue_etranger`, bulles
-  `0xaa9fe`) annoncent `COUT_EPILOGUE_ETRANGER` : la machine hybride les confie encore au code d'origine, mais leur native
-  reproduit ce chemin et s'exécute sans 68000.
+  `0xaa9fe`) sont hors contrat eux aussi : leur native sait pourtant reproduire ce chemin (essai : les 35 scénarios
+  arrêtés sur la bulle passent alors), mais la suppression de `COUT_HORS_CONTRAT` est un travail à part (branche
+  `wt-contrat`).
 * **Image.** La machine garde son calendrier ligne par ligne (`cps2::Machine::line_work`) ; à chaque ligne,
   `sans68k::ligne` fait le travail du processeur puis le Z80 joue sa ligne. Ce travail n'a pas de durée : l'interruption
   de VBLANK, levée en fin d'image, est prise (en Rust : SR et PC empilés, autovecteur, acquittement) dès que le SR

@@ -563,7 +563,10 @@ fn linked_34(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, copy_flip: bool) {
     rts(c, b);
 }
 
-/// 0xa460a, 0xa464e et 0xa4676 : le même objet 0x34, variantes 2, 1 (avec l'orientation) et 0.
+/// 0xa460a, 0xa464e, 0xa4676 et 0xa462c : le même objet 0x34, variantes 2, 1 (avec l'orientation), 0 et 3.
+fn linked_34_3(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked_34(c, b, 3, false);
+}
 fn linked_34_2(c: &mut Cpu, b: &mut Cps2Bus) {
     linked_34(c, b, 2, false);
 }
@@ -581,6 +584,16 @@ fn single_3c(c: &mut Cpu, b: &mut Cps2Bus) {
         o.set_u8(b, f::VARIANT, 2);
         let v = me.u8(b, f::INDEX);
         o.set_u8(b, f::INDEX, v);
+        o.set_u16(b, f::LINK, me.0 as u16);
+        moved(c, me.0 & 0xffff, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// 0xa2b4a : un objet de type 0x25 lié au créateur (`+0x5c`).
+fn single_25(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    if let Some(o) = spawn(c, b, 0x25) {
         o.set_u16(b, f::LINK, me.0 as u16);
         moved(c, me.0 & 0xffff, Size::Word);
     }
@@ -689,6 +702,8 @@ pub const NATIVES: &[Native] = &[
     native(0xa460a, "eshl_lie_34_2", linked_34_2, CREATED),
     native(0xa464e, "eshl_lie_34_1", linked_34_1, CREATED),
     native(0xa4676, "eshl_lie_34_0", linked_34_0, CREATED),
+    native(0xa462c, "eshl_lie_34_3", linked_34_3, CREATED),
+    native(0xa2b4a, "eshl_lie_25", single_25, CREATED),
     native(0xa5f38, "eshl_lie_3c", single_3c, CREATED),
     native(0xa1360, "eshl_lie_18", single_18, CREATED),
     native(0xa1a40, "eshl_lie_1b", single_1b, CREATED),

@@ -15,6 +15,9 @@
 //! Voir `docs/familles.md` pour la description de chaque type.
 
 pub mod boss_common;
+pub mod boss_0;
+pub mod boss_16;
+pub mod boss_22;
 pub mod boss_17;
 pub mod boss_6;
 pub mod boss_10;
@@ -572,6 +575,9 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(boxes::caisse::NATIVES)
         .chain(boxes::pousse::NATIVES)
         .chain(boss_common::NATIVES)
+        .chain(boss_0::NATIVES)
+        .chain(boss_16::NATIVES)
+        .chain(boss_22::NATIVES)
         .chain(creators::NATIVES)
         .chain([&set_b::SPAWN_BUMPERS, &set_b::DOOR_B_RESUME])
         .chain(set_residu::NATIVES)

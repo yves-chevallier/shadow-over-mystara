@@ -180,7 +180,7 @@ fn arm(x: &mut Cx) {
                 if (x.a5_u8(0x35) as i8) > 1 && x.u8(KEY_FRAME) != 0 {
                     x.set8(KEY_FRAME, 0);
                     x.c.d[1] = x.c.d[1] & !0xff | x.u8(SHOTS) as u32;
-                    x.call(0x9ddee);
+                    eshl_thrown_by_beast(x);
                     let s = x.u8(SHOTS).wrapping_sub(1);
                     x.set8(SHOTS, s);
                     if (s as i8) < 0 {

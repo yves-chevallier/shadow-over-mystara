@@ -879,6 +879,102 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
 }
 
+/// Petites routines appelées par les gestionnaires des familles (créateurs, palettes, cases de tuiles, caméras
+/// au retour de zone).
+const PETITES: [u32; 8] = [0x101da, 0x1ac90, 0x4aed0, 0x53746, 0xb230e, 0xa462c, 0xa2b4a, 0x33b24];
+
+fn alea_petites(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    use ddsom_game::objects::pools::{PEFF, PSHL, ESHL};
+    registres(c, b, alea);
+    let pool = [&PEFF, &PSHL, &ESHL][alea.next() as usize % 3];
+    c.a[0] = if alea.une_chance_sur(4) { 0xff85de + 0x200 * (alea.next() % 4) } else { pool.slot(alea.next() % pool.slots).0 };
+    c.a[1] = 0x910000 + 4 * (alea.next() % 0xf00);
+    c.a[5] = A5;
+    wr8(b, A5 + 0x36, (alea.next() % 2) as u8);
+    wr8(b, A5 + 0x34, (alea.next() % 0x6c) as u8);
+    for p in [&PEFF, &PSHL, &ESHL] {
+        // places libres : parfois aucune (la création échoue en cours de route)
+        let libres = if alea.une_chance_sur(5) { alea.next() % 3 } else { p.slots / 2 };
+        wr16(b, A5 + p.free, libres as u16);
+    }
+}
+
+/// Boutique : l'article en vitrine (PEFF 42) et l'interprète des dialogues du marchand, sur un client (objet
+/// PEFF dont `+0x50` désigne un joueur) à l'inventaire, à la bourse et à l'état de menu tirés ; le script de
+/// dialogue est écrit dans un emplacement ITEM (commandes valides, sauts vers l'avant, fin par un arrêt).
+fn alea_boutique(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    use ddsom_game::objects::pools::{ITEM, PEFF};
+    let entree = ENTREE.load(std::sync::atomic::Ordering::Relaxed);
+    registres(c, b, alea);
+    let me = PEFF.slot(alea.next() % 24).0;
+    let parent = PEFF.slot(24 + alea.next() % 12).0;
+    let client = PEFF.slot(36 + alea.next() % 12).0;
+    let joueur = 0xff85de + 0x200 * (alea.next() % 4);
+    c.a[0] = me;
+    c.a[2] = client;
+    c.a[5] = A5;
+    c.d[0] &= 0xff; // le comptoir laisse un petit écart de position dans D0.w
+    wr16(b, client + 0x50, joueur as u16);
+    wr8(b, client + 0x58, if alea.une_chance_sur(4) { 0 } else { 1 + alea.next() as u8 % 3 });
+    wr8(b, joueur + 0x3, (alea.next() % 12) as u8);
+    wr8(b, joueur + 0x10d, [0, 8, 9, 0x1d, 0x1e, 3][alea.next() as usize % 6]);
+    wr8(b, joueur + 0x167, [0, 1, 3, 4, 5, 8, 0xa, 0xff, 2][alea.next() as usize % 9]);
+    for k in 0..6 {
+        let item = [0x56, 0x56, 0x2b, 0x39, 0x4e, 0x51, 0x10, 0x20][alea.next() as usize % 8];
+        wr8(b, joueur + 0x140 + k, item);
+        wr8(b, joueur + 0x148 + k, (alea.next() % 11) as u8);
+    }
+    for k in 0..6 {
+        wr8(b, joueur + 0x112 + k, bcd(alea) as u8);
+    }
+    wr16(b, A5 - 0x554e, if alea.une_chance_sur(2) { 0 } else { 0x80 });
+    wr8(b, A5 + 0x5e, (alea.next() % 2) as u8);
+    if entree == 0x50b9c {
+        wr8(b, me, 1);
+        wr8(b, me + 2, 42);
+        wr8(b, me + 3, (alea.next() % 12) as u8);
+        wr8(b, me + 4, [0, 2, 2, 2][alea.next() as usize % 4]);
+        wr16(b, me + 0x5c, parent as u16);
+        wr8(b, parent + 6, if alea.une_chance_sur(6) { 0 } else { 2 });
+        wr8(b, A5 - 0x553f, (alea.next() % 2) as u8);
+        wr8(b, A5 - 0x5540, (alea.next() % 2) as u8);
+        wr8(b, me + 0x2f, [0, 0, 1, 2, 0xff][alea.next() as usize % 5]);
+        wr8(b, me + 0x1a, (alea.next() % 2) as u8);
+        for k in 0..6 {
+            wr8(b, me + 0x4e + k, bcd(alea) as u8 & if k < 3 { 0 } else { 0xff });
+        }
+        // clients : la liste des quatre joueurs, le nôtre souvent dans la zone
+        for k in 0..4u32 {
+            let w = if k == 0 || alea.une_chance_sur(3) { client as u16 } else { 0 };
+            wr16(b, 0xff2aa4 + 2 * k, w);
+        }
+        for off in [0x8u32, 0xc, 0x10] {
+            let v = ddsom_game::mem::rd16(b, me + off).wrapping_add((alea.next() % 0x20) as u16);
+            wr16(b, client + off, v);
+        }
+        for (off, v) in [(0x14u32, 0x20u16), (0x16, 0x40), (0x54, 0x20), (0x56, 0x40)] {
+            wr16(b, me + off, if alea.une_chance_sur(5) { alea.next() as u16 & 0xff } else { v });
+        }
+        wr16(b, me + 0x5a, if alea.une_chance_sur(2) { 0 } else { 0x90 });
+    } else {
+        let script = ITEM.slot(alea.next() % ITEM.slots).0;
+        let n = 1 + alea.next() % 12;
+        for k in 0..20u32 {
+            let at = script + 4 * k;
+            let (op, saut) = if k < n {
+                ([0u8, 0, 4, 8, 0xc, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28][alea.next() as usize % 13], 4 * (alea.next() % 3) as u16)
+            } else {
+                (4, 0)
+            };
+            wr8(b, at, op);
+            wr8(b, at + 1, (alea.next() % 2) as u8);
+            wr16(b, at + 2, if op == 0 { 0x80 + alea.next() as u16 % 0x20 } else { saut });
+        }
+        let champ = if entree == 0x514ac { 0x1c } else { 0x58 };
+        wr32(b, me + champ, script);
+    }
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, groupe, roms, eeprom, scenario, chauffe, tours] = &a[..] else {
@@ -896,6 +992,8 @@ fn main() {
         "m2" => (alea_m2, 0x2d300..0x2ede0),
         "video" => (alea_video, 0xb40..0x1d100),
         "camera" => (alea_camera, 0x2f000..0x33400),
+        "petites" => (alea_petites, 0x0..0x100000),
+        "boutique" => (alea_boutique, 0x50b9c..0x514d0),
         _ => {
             eprintln!("groupe inconnu : {groupe}");
             std::process::exit(2);
@@ -917,6 +1015,8 @@ fn main() {
         .filter(|n| n.name != "son_aiguillage")
         .map(|n| n.entry)
         .filter(|e| plage.contains(e) && (*groupe != "son" || *e == 0x68c || *e >= 0xe0836))
+        .filter(|e| *groupe != "petites" || PETITES.contains(e))
+        .filter(|e| *groupe != "boutique" || matches!(*e, 0x50b9c | 0x514ac | 0x514cc))
         .filter(|e| *groupe != "camera" || matches!(*e, 0x2f81c | 0x2f86e | 0x328a8 | 0x33178 | 0x33196 | 0x331e8 | 0x3326c))
         .filter(|e| *groupe != "video" || matches!(*e, 0xb40 | 0xb46 | 0xb96 | 0xbac | 0xbc6 | 0xbfc | 0xc58 | 0xca8 | 0xcc8 | 0xce8 | 0x158e | 0x15c8 | 0x1602 | 0x164e | 0x1a296 | 0x1a350 | 0x1a360 | 0x1a366 | 0x1a3d4 | 0x1a608 | 0x1a60a | 0x1a678 | 0x1a67e | 0x1a8ac | 0x1a8b2 | 0x1cd32 | 0x1cd7c | 0x1cdd6 | 0x1cf3c | 0x1cfb8 | 0x1cfc8 | 0x1d00e | 0x1d042 | 0x24a8 | 0x24b0 | 0x255a | 0x25e8 | 0x260c | 0x26d4 | 0x2766))
         .collect();
