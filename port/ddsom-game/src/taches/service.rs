@@ -35,7 +35,7 @@ fn turn(x: &mut Ctx) -> Flow {
     x.push_return(at::HANDLER_RETURN);
     match service::handler(x) {
         Flow::Done => {
-            x.c.a[7] = x.c.a[7].wrapping_add(4);
+            x.drop_return();
             wait(x)
         }
         Flow::Yield => Flow::Yield,

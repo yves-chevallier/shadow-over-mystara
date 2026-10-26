@@ -19,7 +19,7 @@
 
 use super::{ceder, Attente};
 use crate::mem::{rd8, wr32, wr8, A5};
-use crate::modes::Flow;
+use crate::modes::{Flow, Sequence};
 use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
@@ -58,9 +58,9 @@ mod at {
 /// Routine de service périodique.
 const SERVICE_ROUTINE: u32 = 0x2e540;
 
-fn push(x: &mut Ctx, value: u32) {
-    x.c.a[7] = x.c.a[7].wrapping_sub(4);
-    wr32(x.b, x.c.a[7], value);
+/// Appel en cours de la tâche : `suite` reprendra quand l'appelé reviendra (rien n'est empilé sur la pile 68000).
+fn push(x: &mut Ctx, suite: u32) {
+    super::table::appeler(x.c, x.b, suite);
 }
 
 /// Drapeaux N et Z d'un octet chargé (`move.b`), V et C à zéro.
@@ -124,8 +124,7 @@ fn step(x: &mut Ctx) -> Flow {
     let handler = (x.prog16(PHASES + phase as u32) as u32) << 16 | x.prog16(PHASES + phase as u32 + 2) as u32;
     x.c.a[0] = handler;
     push(x, at::FRAME_END);
-    x.c.pc = handler;
-    Flow::Yield
+    x.jump_to(handler)
 }
 
 resume!(R_ENTRY, at::ENTRY, entry);

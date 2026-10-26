@@ -30,6 +30,7 @@ use m68k::Cpu;
 
 use super::{player, scratch, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::modes::Sequence as _;
 use crate::objects::Obj;
 use crate::Native;
 
@@ -216,22 +217,19 @@ impl<'a> Ex<'a> {
     /// Cède la main à l'original à l'adresse `pc` (aucun retour de la native).
     fn delegate(&mut self, pc: u32) {
         self.x.c.a[0] = BASE;
-        self.x.c.pc = pc;
+        self.x.jump_to(pc);
         self.handed_off = true;
     }
     /// Cède la main à l'ordonnanceur pour `frames` images ; la reprise a lieu en `resume` (aucune si 0).
     fn wait_frames(&mut self, frames: u32, resume: u32) {
-        let c = &mut *self.x.c;
-        c.d[0] = frames;
+        self.x.c.d[0] = frames;
         if let Some(back) = self.dispatch_return {
-            c.a[7] = c.a[7].wrapping_sub(4);
-            wr32(self.x.b, c.a[7], back);
+            self.x.push_return(back);
         }
         if resume != 0 {
-            c.a[7] = c.a[7].wrapping_sub(4);
-            wr32(self.x.b, c.a[7], resume);
+            self.x.push_return(resume);
         }
-        c.pc = call::WAIT;
+        self.x.c.pc = call::WAIT;
         self.handed_off = true;
     }
 }
@@ -457,8 +455,24 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
         ex.handed_off = true;
         return;
     }
-    ex.x.c.a[7] = ex.x.c.a[7].wrapping_add(4);
+    ex.x.drop_return();
     ex.a0_clobbered = true;
+}
+
+/// Un état saute au début de l'aiguillage d'origine (`bra entrée`) après avoir changé d'étape : l'état de la
+/// nouvelle étape s'exécute dans la même image, appelé comme par l'aiguillage (D0.b = étape, A1 = état).
+fn redispatch(ex: &mut Ex, sequence: &Sequence) {
+    const TABLE: u32 = 0x2c; // table des états de l'aiguillage, après son code
+    let step = ex.b8(blk::STEP);
+    crate::mem::set_low_byte(&mut ex.x.c.d[0], step);
+    let table = ex.entry + TABLE + step as u32;
+    ex.x.c.a[1] = (ex.x.prog16(table) as u32) << 16 | ex.x.prog16(table + 2) as u32;
+    ex.x.c.a[0] = BASE;
+    match sequence.states.get(step as usize / 4) {
+        None => ex.delegate(ex.entry),
+        Some(&St::Shared(shared)) => run_shared(ex, shared),
+        Some(&state) => run_state(ex, state),
+    }
 }
 
 /// Fin d'image : sauf à l'état final, mise à jour du monde.
@@ -653,8 +667,7 @@ resume_native!(RESUME_TWICE, RESUME_TWICE_ENTRY, |c, b| {
     let mut x = Ctx::new(c, b);
     x.call(call::SOUND_C0C);
     x.c.d[0] = 2;
-    x.c.a[7] = x.c.a[7].wrapping_sub(4);
-    wr32(x.b, x.c.a[7], RESUME_TWICE_END_ENTRY);
+    x.push_return(RESUME_TWICE_END_ENTRY);
     x.c.pc = call::WAIT;
 });
 resume_native!(RESUME_TWICE_END, RESUME_TWICE_END_ENTRY, |c, b| {
@@ -1174,7 +1187,7 @@ fn seq32_route(ex: &mut Ex) {
         }
     } else {
         ex.set_step(20);
-        ex.delegate(ex.entry);
+        redispatch(ex, &SEQ_32);
     }
 }
 
@@ -1402,8 +1415,7 @@ fn seq23_walk(ex: &mut Ex) {
 fn seq25_route(ex: &mut Ex) {
     if ex.x.v8(0x5c) == 0 {
         ex.set_step(20);
-        ex.delegate(ex.entry);
-        return;
+        return redispatch(ex, &SEQ_25);
     }
     ex.next();
     ex.set_b16(blk::TIMER, 128);
@@ -1463,8 +1475,7 @@ fn seq32_clear(ex: &mut Ex) {
     ex.reset_shop();
     if ex.x.v8(0x5c) != 0 {
         ex.set_step(12);
-        ex.delegate(ex.entry);
-        return;
+        return redispatch(ex, &SEQ_32);
     }
     walk_wait(ex, None);
 }

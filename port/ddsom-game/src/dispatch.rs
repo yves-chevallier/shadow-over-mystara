@@ -13,7 +13,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Bus, Cpu};
 
-use crate::mem::{rts, wr32};
+use crate::mem::rts;
 use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
 use crate::{call_at, Native};
@@ -79,9 +79,9 @@ impl Class {
     /// est ainsi celle de l'original : un gestionnaire peut la dépiler, ou céder la main (voir
     /// `call_at`), et la tâche reprend alors dans le code d'origine.
     pub fn update(&self, c: &mut Cpu, b: &mut Cps2Bus, ret: Option<u32>) {
+        // appel en cours tenu en Rust ; un gestionnaire d'origine le trouve sur la pile 68000 (voir `call_at`)
         if let Some(ret) = ret {
-            c.a[7] = c.a[7].wrapping_sub(4);
-            wr32(b, c.a[7], ret);
+            crate::taches::table::appeler(c, b, ret);
         }
         c.a[0] = self.pool.slot(0).0;
         set_low_word(&mut c.d[7], (self.pool.slots - 1) as u16);
@@ -109,7 +109,7 @@ impl Class {
             }
         }
         if ret.is_some() {
-            c.a[7] = c.a[7].wrapping_add(4);
+            crate::taches::table::depiler_retour(c, b);
         }
     }
 }

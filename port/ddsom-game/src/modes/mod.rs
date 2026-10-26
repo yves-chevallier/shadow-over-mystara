@@ -20,7 +20,7 @@ pub mod title;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -91,16 +91,30 @@ pub trait Sequence {
     fn jump(&mut self, addr: u32) -> Flow;
     /// Comme `jump`, sans toucher à A0 (appel terminal `jmp` d'une routine d'origine).
     fn jump_to(&mut self, addr: u32) -> Flow;
-    /// Empile une adresse de retour (appel `bsr`/`jsr` dont la suite est une native de reprise).
+    /// Appel `bsr`/`jsr` dont la suite est une native de reprise : rangée dans les appels en cours de la tâche
+    /// (`taches::table::Cadre`), elle reprendra quand l'appelé reviendra.
     fn push_return(&mut self, addr: u32);
+    /// L'appelé est revenu sans passer par son `rts` (fonction Rust qui a rendu `Flow::Done`) : l'appel en cours
+    /// ouvert par `push_return` est abandonné.
+    fn drop_return(&mut self);
     /// Mots et octets de la RAM de travail, par décalage depuis A5.
     fn or16(&mut self, off: u32, v: u16);
     fn and16(&mut self, off: u32, v: u16);
 }
 
+/// Appel d'un sous-programme natif depuis un pas Rust : sa suite est un appel en cours de la tâche, pas une
+/// adresse empilée.
 fn push(c: &mut Cpu, b: &mut Cps2Bus, v: u32) {
-    c.a[7] = c.a[7].wrapping_sub(4);
-    wr32(b, c.a[7], v);
+    crate::taches::table::appeler(c, b, v);
+}
+
+/// Saut à `addr`. Si le code d'origine y prend la suite, il ne connaît que la pile 68000 : les appels en cours tenus en
+/// Rust à cette hauteur y passent.
+fn goto(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
+    if !crate::est_native(addr) {
+        crate::taches::table::vers_le_68000(c, b);
+    }
+    c.pc = addr;
 }
 
 impl Sequence for Ctx<'_> {
@@ -109,20 +123,23 @@ impl Sequence for Ctx<'_> {
     }
     fn tail(&mut self, addr: u32, resume: u32) -> Flow {
         push(self.c, self.b, resume);
-        self.c.pc = addr;
+        goto(self.c, self.b, addr);
         Flow::Yield
     }
     fn jump(&mut self, addr: u32) -> Flow {
         self.c.a[0] = mode::BASE;
-        self.c.pc = addr;
+        goto(self.c, self.b, addr);
         Flow::Yield
     }
     fn jump_to(&mut self, addr: u32) -> Flow {
-        self.c.pc = addr;
+        goto(self.c, self.b, addr);
         Flow::Yield
     }
     fn push_return(&mut self, addr: u32) {
         push(self.c, self.b, addr);
+    }
+    fn drop_return(&mut self) {
+        crate::taches::table::depiler_retour(self.c, self.b);
     }
     fn or16(&mut self, off: u32, v: u16) {
         let w = self.v16(off) | v;

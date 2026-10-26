@@ -23,6 +23,7 @@ use crate::modes::{Flow, Sequence};
 use crate::mem::{rd16, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
 use crate::resume;
 use crate::scene::Ctx;
+use crate::taches::table::{garder, reprendre, Contenu};
 use crate::Native;
 
 /// Sous-routines d'origine.
@@ -372,17 +373,16 @@ fn pulse(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     wr8(x.b, x.c.a[0] + 3, counter - 1);
-    let d0 = x.c.d[0];
-    x.c.a[7] = x.c.a[7].wrapping_sub(4);
-    wr32(x.b, x.c.a[7], d0);
+    // D0 est gardé pendant la cession (`move.l D0,-(SP)` de l'original)
+    garder(x.c, x.b, Contenu::Valeur(x.c.d[0]));
     x.call(ext::LOCK);
     set_low_word(&mut x.c.d[0], 0x10);
     x.tail(ext::WAIT_FRAMES, at::PULSE_AFTER_WAIT)
 }
 
 resume!(R_PULSE_AFTER_WAIT, at::PULSE_AFTER_WAIT, |x| {
-    x.c.d[0] = crate::mem::rd32(x.b, x.c.a[7]);
-    x.c.a[7] = x.c.a[7].wrapping_add(4);
+    let Contenu::Valeur(d0) = reprendre(x.c, x.b) else { panic!("impulsion de verrouillage : D0 gardé introuvable") };
+    x.c.d[0] = d0;
     x.call(ext::UNLOCK);
     set_low_word(&mut x.c.d[0], 0x10);
     x.jump_to(ext::WAIT_FRAMES)

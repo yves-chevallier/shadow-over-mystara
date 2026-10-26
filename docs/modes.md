@@ -56,14 +56,15 @@ désactive et reboucle.
 ## 3. Cessions : le découpage des écrans
 
 Un écran cède la main à l'ordonnanceur en plein milieu (attente d'une image, d'un fondu). Une native ne pouvant
-céder, chaque écran est découpé aux points de cession : la native empile l'adresse que l'original reprend (celle qui
-suit le `jsr 0xa40`), saute dans l'ordonnanceur (`Sequence::wait`), et une autre native, posée à cette adresse (macro
-`resume!`), continue. La pile de la tâche, comparée par la validation (pointeur de pile et registres sauvegardés),
-reste donc celle de l'original. Quand l'original appelle une routine qui peut céder (`0x1460` et `0x144c` : fondus
-avec attente ; `0xc32` : effacement vidéo), la native fait de même avec `Sequence::tail(adresse, reprise)`.
-Un appel `bsr` qui peut céder est un vrai appel : l'adresse de retour est empilée (`push_return`) et le retour a lui
-aussi sa native (`title::R_T18_AFTER`). Les états dont l'original quitte par un saut dans une autre routine (`jmp`,
-`bra` vers la fin d'un autre état) utilisent `Sequence::jump_to`.
+céder, chaque écran est découpé aux points de cession : la native saute dans l'ordonnanceur en donnant l'adresse que
+l'original reprend (celle qui suit le `jsr 0xa40`, `Sequence::wait`), et une autre native, posée à cette adresse (macro
+`resume!`), continue. Quand l'original appelle une routine qui peut céder (`0x1460` et `0x144c` : fondus avec
+attente ; `0xc32` : effacement vidéo), la native fait de même avec `Sequence::tail(adresse, reprise)`. Un appel `bsr`
+qui peut céder est un vrai appel (`push_return`) et le retour a lui aussi sa native (`title::R_T18_AFTER`). Ces appels
+ne sont plus empilés sur la pile 68000 : leur suite est rangée dans les *appels en cours* de la tâche
+(`taches::table::Cadre`, voir `noyau.md`, « Appels en cours ») et le `rts` d'une native (`mem::rts`) y revient ; la
+boucle de la machine à modes y range de même le retour de son gestionnaire (`0x1341a`). Les états dont l'original
+quitte par un saut dans une autre routine (`jmp`, `bra` vers la fin d'un autre état) utilisent `Sequence::jump_to`.
 
 Quelques pièges rencontrés : les tables lues relativement au PC par l'original (`lea (...,PC)` suivi d'un `move` du
 registre d'adresse est une lecture de **données**, en clair ; `move.w (table,PC,D0w)` est une lecture du programme

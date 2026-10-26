@@ -194,6 +194,7 @@ fn vers_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) {
 /// Range le contexte de la tâche courante dans la table, puis rend la main à l'ordonnanceur. A1 reçoit la pile de la
 /// tâche telle que l'original l'avait laissée (adresse de retour et 15 registres empilés).
 fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: u32) {
+    crate::taches::table::relever(c, b, reprise);
     let mut a = [0; 7];
     a.copy_from_slice(&c.a[..7]);
     let ctx = Contexte { pc: reprise, sr: c.sr, usp: c.a[7], d: c.d, a };
@@ -231,9 +232,10 @@ pub fn terminer(c: &mut Cpu, b: &mut Cps2Bus) {
     vers_ordonnanceur(c, b);
 }
 
-/// Enveloppe de cession appelée par `jsr` : son adresse de retour est la reprise.
+/// Enveloppe de cession appelée par `jsr` : son adresse de retour est la reprise (ou la suite de l'appel en cours,
+/// quand un pas Rust l'a appelée).
 fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, u32)) {
-    let reprise = depiler32(c, b);
+    let reprise = crate::taches::table::depiler_retour(c, b);
     cession(c, b, reprise);
 }
 
