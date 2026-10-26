@@ -42,7 +42,7 @@ fn origine(programme: bool, adresse: u32) {
                 let site = at[i + "ddsom-game/src/".len()..].trim_end_matches(|c: char| c.is_ascii_digit() || c == ':');
                 let ligne = at.rsplitn(3, ':').nth(1).unwrap_or("");
                 sites.push(format!("{site}:{ligne}"));
-                if sites.len() == 3 {
+                if sites.len() == 6 {
                     break;
                 }
             }
