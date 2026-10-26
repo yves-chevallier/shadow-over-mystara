@@ -844,7 +844,7 @@ code pour des durées, et les zones lues non couvertes, mesurées sur les 269 sc
 
 ## Ce qui reste à extraire
 
-* Lectures de la ROM programme par le Rust non couvertes : extraites brutes dans `data/natives.json` (2 792 zones,
+* Lectures de la ROM programme par le Rust non couvertes : extraites brutes dans `data/natives.json` (2 799 zones,
   84 Ko en espace données, 28 Ko en espace programme, mesure sans 68000 sur 269 scénarios, [sans-rom.md](sans-rom.md)) ;
   reste à les décrire table par table (tableau par sous-système ci-dessus).
 * Sprites : entre la table des images et les images, `0x2a85fc-0x2ae81e` (octets et noms des 2 512 scripts

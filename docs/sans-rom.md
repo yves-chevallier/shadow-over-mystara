@@ -46,7 +46,7 @@ contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit �
 Rust ») a un mode sans 68000 : `DDSOM_SANS_68K=1`. Toute lecture du bus dans 0x000000-0x3fffff y est comptée (il n'y
 a plus d'instruction 68000 à exclure), en espace données (`rd8`/`rd16`/`rd32`, `data16`...) et programme
 (`prog16`, `rom16` des familles, `Ctx::prog16`...). Lancement sur **tous les scénarios** (269, autant d'images que
-leur validation, plafonnées à leur ligne `quit`), en dix morceaux :
+leur validation : la ligne `quit` d'un scénario ne l'arrête pas, le jeu continue en démonstration), en dix morceaux :
 
 ```sh
 cd port
@@ -64,12 +64,12 @@ le code d'origine avec `m68k::decode`). Sans 68000 les cycles ne servent plus (l
 boucle du noyau) : ces fonctions rendent 0 sans rien lire quand `sans68k::actif()`, et l'exécuteur ne calcule plus
 le coût. Validation sans 68000 inchangée.
 
-**Résultat** (269 scénarios, 3,7 millions d'images, aucun arrêt faute de native) :
+**Résultat** (269 scénarios, 4,4 millions d'images, aucun arrêt faute de native) :
 
 | Espace | Octets lus | Déjà décrits par les assets | Non décrits | Zones de `data/natives.json` |
 |---|---:|---:|---:|---:|
-| Données | 1 650 068 | 1 581 688 (95,9 %) | 68 380 | 1 494 zones, 84 Ko |
-| Programme (déchiffré, lectures relatives au PC) | 26 026 | 3 700 (14,2 %) | 22 326 | 1 298 zones, 28 Ko |
+| Données | 1 652 622 | 1 583 952 (95,8 %) | 68 670 | 1 502 zones, 84 Ko |
+| Programme (déchiffré, lectures relatives au PC) | 26 066 | 3 706 (14,2 %) | 22 360 | 1 297 zones, 28 Ko |
 
 Une zone réunit les octets lus non décrits séparés de moins de 16 octets. Par lecteur (octets ; `d` données, `p`
 programme) : `families/cx.rs` (lectures des familles d'objets, `Cx::rd*`/`rom16`) 31 742 d + 16 242 p ;
