@@ -4,7 +4,7 @@
 //! Les objets SET ne figurent pas dans les listes triées de profondeur par construction (les
 //! appels à `reinsert` des créations les y inscrivent tout de même quand ils les rendent visibles).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{self, handlers, sub, Cx};
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
 
@@ -1449,7 +1449,6 @@ mod exit_gate {
 
     const GATE_LOCK: u32 = 0x52;
     const SCENE_HELPER: u32 = 0xcc18e;
-    const SCENE_END: u32 = 0xcc1c2;
     const ALLOC_EFFCT: u32 = 0x2318;
     const PLAY_SCRIPT: u32 = 0x1324;
     /// Script de son joué en quittant la zone.
@@ -1544,9 +1543,29 @@ mod exit_gate {
         if needed as i8 > x.u8(0x16) as i8 {
             return;
         }
-        x.call(SCENE_END);
+        scene_end(x);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set16(0x4, 0x400);
+    }
+
+    /// Fin de la zone (0xcc1c2) : le décompte des joueurs entrés s'ajoute à l'octet `A5-0x5b20`, le script de
+    /// son 0xcbc02 est joué et les joueurs morts qui restent à l'écran passent à l'état 0x04020000.
+    fn scene_end(x: &mut Cx) {
+        const COUNT: u32 = 0xff_24e0;
+        const SCRIPT: u32 = 0xcbc02;
+        const OUT: u32 = 0x0402_0000;
+        let entered = x.u8(0x24);
+        let n = rd8(x.b, COUNT).wrapping_add(entered);
+        wr8(x.b, COUNT, n);
+        x.c.a[4] = SCRIPT;
+        x.call(PLAY_SCRIPT);
+        for p in players() {
+            if p.u8(x.b, pl::ACTIVE) != 0 && p.u16(x.b, pl::HEALTH) == 0 {
+                let flags = p.u8(x.b, 1) | 2;
+                p.set_u8(x.b, 1, flags);
+                p.set_u32(x.b, pl::STATE, OUT);
+            }
+        }
     }
 
     /// Le joueur `p` (numéro `bit`) entre : il est mis à l'état « entré ».
@@ -2434,8 +2453,19 @@ mod door_b {
         x.set_a5_u8(0x43, 0xff);
         x.set_a5_u16(0x490, 2);
         x.set_a5_u8(0x48e, 0xf);
-        // fondu de sortie : cède la main, la tâche reprend en 0xd8f06
-        x.call_at(0x1460, 0xd8f06);
+        // fondu de sortie : cède la main, la tâche reprend en 0xd8f06 (native `RESUME`)
+        x.call_at(0x1460, RESUME_AT);
+        after_fade(x);
+    }
+
+    /// Reprise de la tâche après le fondu de sortie (adresse de retour de l'appel de 0x1460).
+    pub const RESUME_AT: u32 = 0xd8f06;
+
+    pub fn resume_after_fade(x: &mut Cx) {
+        after_fade(x);
+    }
+
+    fn after_fade(x: &mut Cx) {
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
         match x.u8(0x48) as i8 {
@@ -3717,6 +3747,13 @@ mod dialog {
         }
     }
 }
+
+/// Reprise de la porte de passage (type 29) après son fondu de sortie.
+pub const DOOR_B_RESUME: crate::Native = cx::handler(door_b::RESUME_AT, "set_29_reprise", |_, _| 600, |c, b| {
+    let mut x = Cx::new(c, b);
+    door_b::resume_after_fade(&mut x);
+    x.ret();
+});
 
 handlers! {
     0xd4110 "set_16" 400 bumper::run,

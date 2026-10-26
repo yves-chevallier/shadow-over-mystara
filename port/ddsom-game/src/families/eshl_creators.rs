@@ -9,7 +9,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C};
 
-use crate::mem::{prog8, rd16, rts, wr16, wr32};
+use crate::mem::{prog16, prog8, rd16, rts, wr16, wr32};
 use crate::objects::Obj;
 use crate::{call, regs, Native};
 
@@ -483,6 +483,178 @@ fn four_1c(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// Objets de type `kind` liés au créateur par `+0x5c`, variantes `count - 1` à 0 (D1) ; s'arrête si le pool
+/// est plein.
+fn linked_ring(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, count: u16) {
+    let me = c.a[0];
+    c.d[1] = count as u32 - 1;
+    loop {
+        let Some(o) = spawn(c, b, kind) else { break };
+        o.set_u8(b, f::VARIANT, c.d[1] as u8);
+        o.set_u16(b, f::LINK, me as u16);
+        moved(c, me & 0xffff, Size::Word);
+        let n = (c.d[1] as u16).wrapping_sub(1);
+        set_low_word(&mut c.d[1], n);
+        if n == 0xffff {
+            break;
+        }
+    }
+    rts(c, b);
+}
+
+/// 0xa31c2 : trois objets de type 0x28.
+fn ring_28(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked_ring(c, b, 0x28, 3);
+}
+
+/// 0xa2f96 : seize objets de type 0x27.
+fn ring_27(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked_ring(c, b, 0x27, 16);
+}
+
+/// 0xa6824 : deux objets de type 0x3f liés au créateur, tournés à droite puis à gauche (variante 0).
+fn pair_3f(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    for flip in [0, 0x20] {
+        let Some(o) = spawn(c, b, 0x3f) else { break };
+        o.set_u16(b, f::LINK, me as u16);
+        o.set_u8(b, f::FLIP, flip);
+        o.set_u8(b, f::VARIANT, 0);
+        moved(c, 0, Size::Byte);
+    }
+    rts(c, b);
+}
+
+/// 0xa3354 : un objet de type 0x29 lié au créateur.
+fn single_29(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    if let Some(o) = spawn(c, b, 0x29) {
+        o.set_u16(b, f::LINK, me as u16);
+        moved(c, me & 0xffff, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// 0x9ddee : un tir de type 1 (`+0x2f` = 1) de variante D1, lié au créateur par `+0x50`.
+fn single_1(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = c.a[0];
+    if let Some(o) = spawn(c, b, 1) {
+        o.set_u8(b, f::INDEX, 1);
+        o.set_u8(b, f::VARIANT, c.d[1] as u8);
+        o.set_u16(b, f::OWNER, me as u16);
+        moved(c, me & 0xffff, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// Objet de type 0x34 (`+0x2f` = 0) de variante `variant`, lié par `+0x46` ; `copy_flip` : orientation du créateur.
+fn linked_34(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, copy_flip: bool) {
+    let me = Obj(c.a[0]);
+    if let Some(o) = spawn(c, b, 0x34) {
+        o.set_u8(b, f::VARIANT, variant);
+        o.set_u8(b, f::INDEX, 0);
+        if copy_flip {
+            let flip = me.u8(b, f::FLIP);
+            o.set_u8(b, f::FLIP, flip);
+        }
+        o.set_u16(b, f::PARENT, me.0 as u16);
+        moved(c, me.0 & 0xffff, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// 0xa460a, 0xa464e et 0xa4676 : le même objet 0x34, variantes 2, 1 (avec l'orientation) et 0.
+fn linked_34_2(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked_34(c, b, 2, false);
+}
+fn linked_34_1(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked_34(c, b, 1, true);
+}
+fn linked_34_0(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked_34(c, b, 0, false);
+}
+
+/// 0xa5f38 : un objet de type 0x3c, variante 2, `+0x2f` et liens du créateur (`+0x2f` recopié, `+0x5c` = lui).
+fn single_3c(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    if let Some(o) = spawn(c, b, 0x3c) {
+        o.set_u8(b, f::VARIANT, 2);
+        let v = me.u8(b, f::INDEX);
+        o.set_u8(b, f::INDEX, v);
+        o.set_u16(b, f::LINK, me.0 as u16);
+        moved(c, me.0 & 0xffff, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// 0xa1360 : un objet de type 0x18 qui hérite du `+0x5c` du créateur, puis le son 0xebe14.
+fn single_18(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    if let Some(o) = spawn(c, b, 0x18) {
+        let link = me.u16(b, f::LINK);
+        o.set_u16(b, f::LINK, link);
+        moved(c, link as u32, Size::Word);
+    }
+    call(c, b, 0xebe14);
+    rts(c, b);
+}
+
+/// 0xa1a40 : un objet de type 0x1b ; le créateur garde D1 en `+0x56`, l'objet reprend son `+0x5c` et sa
+/// cible (`+0x6c` -> `+0x50`).
+fn single_1b(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    if let Some(o) = spawn(c, b, 0x1b) {
+        me.set_u16(b, 0x56, c.d[1] as u16);
+        let link = me.u16(b, f::LINK);
+        o.set_u16(b, f::LINK, link);
+        let target = me.u16(b, 0x6c);
+        o.set_u16(b, f::OWNER, target);
+        moved(c, target as u32, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// 0xa44bc : trois objets de type 0x33 (variante D0) autour de la position de A2, aux décalages de la table
+/// 0xa4516 (deux mots par objet) et numérotés 2 à 0 ; D0 = 1 s'ils sont tous créés, 0 sinon.
+fn chasers(c: &mut Cpu, b: &mut Cps2Bus) {
+    const OFFSETS: u32 = 0xa4516;
+    let (me, target) = (c.a[0], Obj(c.a[2]));
+    c.d[4] = 1;
+    c.d[5] = 2;
+    loop {
+        let variant = c.d[0] as u8;
+        let Some(o) = spawn(c, b, 0x33) else {
+            c.d[0] = 0;
+            moved(c, 0, Size::Long);
+            return rts(c, b);
+        };
+        o.set_u8(b, f::VARIANT, variant);
+        o.set_u8(b, f::INDEX, c.d[5] as u8);
+        let (x, y) = (target.u16(b, f::X), target.u16(b, f::Y));
+        let i = (c.d[5] as u16) << 2;
+        set_low_word(&mut c.d[3], i);
+        let (dx, dy) = (prog16(b, OFFSETS + i as u32), prog16(b, OFFSETS + 2 + i as u32));
+        set_low_word(&mut c.d[1], dx);
+        set_low_word(&mut c.d[2], dy);
+        o.set_u16(b, f::X, x.wrapping_add(dx));
+        o.set_u16(b, f::Y, y.wrapping_add(dy));
+        o.set_u16(b, f::CREATOR, c.d[4] as u16);
+        let d4 = (c.d[4] as u16).wrapping_add(8);
+        set_low_word(&mut c.d[4], d4);
+        o.set_u16(b, f::OWNER, c.a[2] as u16);
+        o.set_u16(b, f::LINK, me as u16);
+        moved(c, me & 0xffff, Size::Word);
+        let n = (c.d[5] as u16).wrapping_sub(1);
+        set_low_word(&mut c.d[5], n);
+        if n == 0xffff {
+            break;
+        }
+    }
+    c.d[0] = 1;
+    moved(c, 1, Size::Long);
+    rts(c, b);
+}
+
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
     Native { entry, name, cost: |_, _| 150, run, touches_sound: false, outputs, exact_cost: false }
 }
@@ -509,4 +681,16 @@ pub const NATIVES: &[Native] = &[
     native(0xa1670, "eshl_rangee_19", row_19, CREATED | regs::d(0) | regs::d(3) | regs::d(4) | regs::d(5)),
     native(0xa17d0, "eshl_rangee_1a", row_1a, CREATED | regs::d(0) | regs::d(1) | regs::d(3) | regs::d(4) | regs::d(5) | regs::a(2)),
     native(0xa1c6a, "eshl_quatre_1c", four_1c, 0),
+    native(0xa31c2, "eshl_anneau_28", ring_28, CREATED | regs::d(1)),
+    native(0xa2f96, "eshl_anneau_27", ring_27, CREATED | regs::d(1)),
+    native(0xa6824, "eshl_paire_3f", pair_3f, CREATED),
+    native(0xa3354, "eshl_lie_29", single_29, CREATED),
+    native(0x9ddee, "eshl_tir_1", single_1, CREATED),
+    native(0xa460a, "eshl_lie_34_2", linked_34_2, CREATED),
+    native(0xa464e, "eshl_lie_34_1", linked_34_1, CREATED),
+    native(0xa4676, "eshl_lie_34_0", linked_34_0, CREATED),
+    native(0xa5f38, "eshl_lie_3c", single_3c, CREATED),
+    native(0xa1360, "eshl_lie_18", single_18, CREATED),
+    native(0xa1a40, "eshl_lie_1b", single_1b, CREATED),
+    native(0xa44bc, "eshl_poursuivants_33", chasers, CREATED | regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::d(5)),
 ];
