@@ -104,9 +104,12 @@ sur la pile de la copie qui exécute l'original.
 `examples/cessions` liste, pour chaque tâche, ses reprises : profondeur de la pile 68000, contenu, et cadres tenus en Rust
 (`>suite`, `R` registres, `=v` valeur). Il exécute le 68000 restant pas à pas en vérifiant qu'aucune instruction ne dépile
 un cadre tenu en Rust (pile au-dessus du dernier cadre, ou `rts` à sa hauteur : `table::verifier_68000`, qui montre les
-dernières instructions et natives exécutées) ; c'est ainsi qu'ont été trouvés les retours directs décrits plus haut.
+dernières instructions et natives exécutées ; `DDSOM_ARRET=pc` l'arrête avec cette trace quand le 68000 atteint une
+adresse) ; c'est ainsi qu'ont été trouvés les retours directs décrits plus haut, et les états de sortie de scène
+(séquences 25 et 32) qui sautaient au début de l'aiguillage d'origine et le laissaient appeler l'état suivant par son
+`jsr (A1)` : ils exécutent maintenant cet état eux-mêmes (`exit.rs`, `redispatch`).
 
-## Tâche des crédits (0x13c0a)## Tâche des crédits (0x13c0a)
+## Tâche des crédits (0x13c0a)
 
 Boucle : départs (0x141e0), état des crédits (0x13c2c), verrous (0x14290), boutons de continue (0x1436e), une
 image de cession (0xb64) tant que l'interrupteur TEST n'est pas actionné (IN2+1 bit 1, actif bas), sinon démontage (0x14d8c) :
@@ -183,10 +186,24 @@ registres et SR, cadres). Mesure (`examples/cessions`, reprises distinctes avec 
 distinctes, par tâche ; 8 scénarios : `cov_3p`, `covb_long3p_02`, `modes/gameover`, `ending`, `attract`, `screens`,
 `scene_end/end_01`, `end_105`) :
 
-TABLEAU_MESURE
+| Tâche | Avant (main a47037e) | Après |
+|---|---:|---:|
+| Partie | 117 / 123 | 0 / 158 |
+| Démarrage (puis machine à modes) | 119 / 144 | 0 / 148 |
+| Modes (machine à modes relancée) | 9 / 11 | 0 / 11 |
+| Crédits | 28 / 36 | 0 / 40 |
+| Fondu | 11 / 22 | 0 / 22 |
+| Gel, Interface, Invite, Scores | 0 / 32 | 0 / 32 |
+| **total** | **284 / 368** | **0 / 411** |
 
-et aucune sur la centaine d'autres scénarios passés au vérificateur (les 22 `cov_*` de service, des huit tours, de fin de
-partie, de crédits, de mort, à trois et quatre joueurs, les 56 `scene_end/*`, les 21 `boss/*`, `modes/ending_end`).
+(il y a plus de reprises distinctes après : une même adresse de reprise est comptée une fois par contenu des cadres)
+
+Sur 100 autres scénarios passés au vérificateur (22 `cov_*` : service, les huit tours, fin de partie, crédits, morts,
+trois et quatre joueurs ; les 56 `scene_end/*`, les 21 `boss/*`, `modes/ending_end`), une seule reprise garde une pile
+68000 non vide, et c'est du code d'origine en cours : dans `cov_mortal_late`, un gestionnaire SET d'origine (`0xcb9c0`,
+appelé par l'aiguillage des décors) lance le fondu `0x1460` et cède au milieu de la mise à jour du monde (30 images,
+pile `cb9c0 39ea2 1c8ee 1c702 1c4c4 1c468`). Elle disparaîtra avec la réécriture de ce gestionnaire (familles C10, hors
+de ce travail) : sa native devra appeler le fondu par `Sequence::tail` et reprendre dans une native.
 
 L'image tourne pourtant encore sur la machine : interruption de VBLANK, parcours de l'ordonnanceur par natives
 successives, reprise d'une tâche en posant son contexte dans le processeur. Pour que la boucle d'image devienne
