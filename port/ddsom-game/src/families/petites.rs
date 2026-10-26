@@ -370,26 +370,6 @@ fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xb230e : deux paires de cases de tuiles (D0.w = code, D1.w = attribut) : codes `n`, `n + 0x10` sur une
-/// ligne, `n + 1`, `n + 0x11` sur la suivante (lignes de 0x80 octets) ; rend A1 après la seconde ligne et
-/// D0.w = `n + 0x11`.
-fn tile_pairs(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (code, attr) = (c.d[0] as u16, c.d[1] as u16);
-    let mut a1 = c.a[1];
-    for row in [code, code.wrapping_add(1)] {
-        for cell in [row, row.wrapping_add(0x10)] {
-            wr16(b, a1, cell);
-            wr16(b, a1 + 2, attr);
-            a1 += 4;
-        }
-        a1 += 0x78;
-    }
-    c.a[1] = a1;
-    set_low_word(&mut c.d[0], code.wrapping_add(0x11));
-    moved(c, attr as u32, Size::Word);
-    rts(c, b);
-}
-
 /// 0x1a5e8 : douze blocs de huit couleurs recopiés dans la palette 0x91c480.
 fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
     const MASK: u16 = 0x067e; // D1-D6, A1, A2
@@ -626,7 +606,6 @@ pub const NATIVES: &[Native] = &[
     native(0x1ac90, "eclair_palette_fin", flash_off, regs::CCR),
     native(0x4aed0, "cree_effets_5", peff_5_pair, CREATED),
     native(0x53746, "cree_pierres_11", pshl_stones, CREATED | regs::ALL),
-    native(0xb230e, "cases_deux_paires", tile_pairs, regs::ALL),
     native(0x1a5e8, "palette_douze_blocs", palette_blocks_copy, regs::ALL),
     native(0x1ad6a, "palette_page_restitue", palette_page_restore, regs::ALL),
     native(0x1ac9a, "eclair_palette_jaune", flash_a, regs::CCR),
