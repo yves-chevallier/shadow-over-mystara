@@ -1,7 +1,8 @@
 //! Famille EFFCT : objets de scène qui commandent les joueurs (table des types `0x39ce0`).
 //!
-//! - 11 : effets des attaques d'un ennemi (éclats, reflets, colonnes, pièces, étincelles) ; variantes 0,
-//!   2, 5, 8 et 9 jamais exercées : code d'origine ;
+//! - 11 : effets des attaques d'un ennemi (éclats, marques, reflets, colonnes, traînées, pièces, étincelles,
+//!   gerbes) ; les variantes 0, 2, 5, 8 et 9, qu'aucun scénario n'exerce, sont validées par
+//!   `examples/fuzz_effct.rs` ;
 //! - 13 : radeau qui défile et emporte les joueurs (les directions des joueurs le pilotent) ;
 //! - 14 : passage vers une sous-scène, qui oscille, attend un joueur, puis lance la transition
 //!   (rideau de tuiles dans le fond 2) : entrée dans la sous-scène (`0xada96` : contexte de la scène
@@ -439,9 +440,23 @@ fn gate_open(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 mod attack_fx {
-    /// Variantes qu'aucun scénario n'exerce : code d'origine (entrée de la variante).
-    pub const VARIANTS_ORIGINAL: [(u8, u32); 5] = [(0, 0xabf0e), (2, 0xac656), (5, 0xaca8e), (8, 0xad174), (9, 0xad174)];
-    pub const TABLE: u32 = 0xabefa;
+    /// Variante 0 : places autour de l'attaquant (mot de décalage par type d'attaquant, puis huit (dx, dz)).
+    pub const FLASH_PLACES: u32 = 0xabfbe;
+    pub const SOUND_FLASH: u32 = 0xe9ef4;
+    /// Variante 2 : décalages (dx, dz) et animation par type d'attaquant (espace programme).
+    pub const MARK_PLACES: u32 = 0xac6ea;
+    pub const MARK_ANIMS: u32 = 0xac6ca;
+    /// Action de l'attaquant (`+0x49`), notée par la variante 5 en `+0x42`.
+    pub const ACTION: u32 = 0x49;
+    pub const NOTED_ACTION: u32 = 0x42;
+    /// Variantes 8 et 9 : fiche de la gerbe par type d'attaquant (octet, espace programme : 0 = aucune),
+    /// fiches (données : décalages, puis nombre moins un et (vx, vz, réglage, bourrage) par éclat),
+    /// animation des éclats par réglage.
+    pub const SHOWER_SHEETS: u32 = 0xad1b4;
+    pub const SHOWER_DATA: u32 = 0xad232;
+    pub const SHOWER_ANIMS: u32 = 0xad354;
+    /// Créateur d'un effet 11 (`0xabec8`, natif).
+    pub const SPAWN: u32 = 0xabec8;
     pub const ANIM_A: u32 = 0x18f412;
     pub const ANIM_B: u32 = 0x15cdb6;
     pub const OWNER: u32 = 0x5c;
@@ -473,25 +488,31 @@ fn attacker_index(x: &mut Cx, a: Obj, class: u8, when_equal: bool) -> u32 {
 }
 
 fn attack_fx(x: &mut Cx) {
-    let v = x.u8(f::VARIANT);
-    if let Some(&(_, original)) = attack_fx::VARIANTS_ORIGINAL.iter().find(|(w, _)| *w == v) {
-        x.c.d[0] = 2 * v as u32;
-        let word = x.rom16(attack_fx::TABLE + 2 * v as u32);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | word as u32;
-        return x.call(original);
-    }
-    match v {
+    match x.u8(f::VARIANT) {
+        0 => attack_fx_flash(x),
         1 => attack_fx_burst(x),
+        2 => attack_fx_mark(x),
         3 => attack_fx_glint(x),
         4 => attack_fx_rise(x),
+        5 => attack_fx_trail(x),
         6 => attack_fx_parts(x),
         7 => attack_fx_sparks(x),
+        8 | 9 => attack_fx_shower(x),
         _ => {}
     }
 }
 
-/// Variante 1 : éclat lancé depuis l'attaquant, qui le suit puis disparaît.
-fn attack_fx_burst(x: &mut Cx) {
+/// Fin d'animation : retrait (état 6), sinon remise en liste.
+fn attack_fx_anim_or_leave(x: &mut Cx) {
+    if x.anim_step() {
+        return x.set32(f::STATE, 0x0600_0000);
+    }
+    x.reinsert();
+}
+
+/// Variante 0 : éclat posé au hasard autour de l'attaquant (huit places par type d'attaquant, retourné une
+/// image sur deux), animation tirée au hasard, son ; disparaît à la fin de l'animation.
+fn attack_fx_flash(x: &mut Cx) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -500,32 +521,224 @@ fn attack_fx_burst(x: &mut Cx) {
                 let v = owner.u32(x.b, off);
                 x.set32(off, v);
             }
+            x.add32(Obj::Y, 0xffff_ffff);
+            let k = attacker_index(x, owner, 2, false);
+            let offset = x.data16(attack_fx::FLASH_PLACES + 2 * k) as i16 as i32 as u32;
+            let places = attack_fx::FLASH_PLACES.wrapping_add(offset);
+            x.call(super::rom::RNG);
+            let pick = 4 * (x.c.d[0] & 7);
+            let (mut dx, dz) = (x.data16(places + pick), x.data16(places + pick + 2));
             let facing = owner.u8(x.b, 0x2c);
             x.set8(0x2c, facing);
-            let (anim, table, k) = match x.u8(0x2f) {
-                0 => {
-                    x.add32(Obj::Y, 0xffff_ffff);
-                    let k = attacker_index(x, owner, 4, true);
-                    (x.rom8(0xac38c + k) as u32, 0xac3cc, k)
-                }
-                1 => {
-                    x.add32(Obj::Y, 1);
-                    let base: u8 = if x.u8(0x28) == 4 { 0x20 } else { 0 };
-                    (4, 0xac526, base.wrapping_add(owner.u8(x.b, 2)) as u32)
-                }
-                _ => return,
-            };
-            let (mut vx, vz) = (x.data16(table + 4 * k), x.data16(table + 4 * k + 2));
-            if x.u8(0x2c) != 0 {
-                vx = vx.wrapping_neg();
+            if facing != 0 {
+                dx = dx.wrapping_neg();
             }
-            x.set16(Obj::VX, vx);
-            x.set16(Obj::VZ, vz);
-            x.add16(Obj::X, vx);
-            x.add16(Obj::Z, vz);
+            x.add16(Obj::X, dx);
+            x.add16(Obj::Z, dz);
+            if x.a5_u8(0x6f) & 1 != 0 {
+                x.set8(0x2c, facing ^ 0x20);
+            }
+            x.call(super::rom::RNG);
+            let anim = x.c.d[0] & 3;
             x.anim_start(attack_fx::ANIM_A, anim);
+            x.call(attack_fx::SOUND_FLASH);
+        }
+        2 => attack_fx_anim_or_leave(x),
+        _ => free(x),
+    }
+}
+
+/// Variante 2 : marque posée sur l'attaquant (décalage et animation par type) ; à la fin de son animation,
+/// elle fait avancer l'attaquant (`+6` += 2) et disparaît.
+fn attack_fx_mark(x: &mut Cx) {
+    match x.u8(f::STATE) {
+        0 => {
+            x.add8(f::STATE, 2);
+            let owner = x.linked(attack_fx::OWNER);
+            for off in [Obj::X, Obj::Z, Obj::Y] {
+                let v = owner.u32(x.b, off);
+                x.set32(off, v);
+            }
+            x.add32(Obj::Y, 0xffff_ffff);
+            let kind = owner.u8(x.b, Obj::KIND) as u32;
+            let mut dx = x.rom16(attack_fx::MARK_PLACES + 4 * kind);
+            let dz = x.rom16(attack_fx::MARK_PLACES + 4 * kind + 2);
+            x.add16(Obj::Z, dz);
+            let facing = owner.u8(x.b, 0x2c);
+            x.set8(0x2c, facing);
+            if facing != 0 {
+                dx = dx.wrapping_neg();
+            }
+            x.add16(Obj::X, dx);
+            let anim = x.rom8(attack_fx::MARK_ANIMS + kind);
+            x.anim_start(attack_fx::ANIM_A, anim as u32);
             x.reinsert();
         }
+        2 => {
+            if !x.anim_step() {
+                return;
+            }
+            let owner = x.linked(attack_fx::OWNER);
+            let step = owner.u8(x.b, 6).wrapping_add(2);
+            owner.set_u8(x.b, 6, step);
+            x.set32(f::STATE, 0x0600_0000);
+        }
+        _ => free(x),
+    }
+}
+
+/// Variante 5 : comme l'éclat (1), mais il ne suit l'attaquant que tant que celui-ci garde l'action notée à la
+/// naissance (`+0x49` → `+0x42`) et n'a pas passé l'étape 4.
+fn attack_fx_trail(x: &mut Cx) {
+    match x.u8(f::STATE) {
+        0 => {
+            let owner = x.linked(attack_fx::OWNER);
+            let action = owner.u8(x.b, attack_fx::ACTION);
+            x.set8(attack_fx::NOTED_ACTION, action);
+            burst_init(x);
+        }
+        2 => {
+            let owner = x.linked(attack_fx::OWNER);
+            if owner.u8(x.b, attack_fx::ACTION) != x.u8(attack_fx::NOTED_ACTION) || owner.u8(x.b, 6) as i8 >= 4 {
+                return free(x);
+            }
+            for off in [Obj::X, Obj::Z] {
+                let v = owner.u32(x.b, off);
+                x.set32(off, v);
+            }
+            let (vx, vz) = (x.u16(Obj::VX), x.u16(Obj::VZ));
+            x.add16(Obj::X, vx);
+            x.add16(Obj::Z, vz);
+            x.anim_step();
+            x.reinsert();
+        }
+        _ => free(x),
+    }
+}
+
+/// Variantes 8 et 9 : gerbe d'éclats de l'attaquant. Le premier (réglage 0) crée les éclats d'une fiche
+/// propre au type de l'attaquant (vitesses, réglage) puis disparaît ; chaque éclat suit l'attaquant tant
+/// qu'il est dans l'action prévue, puis se détache, retombe en clignotant et disparaît au sol.
+fn attack_fx_shower(x: &mut Cx) {
+    if x.u8(0x2f) == 0 {
+        return attack_fx_shower_spawn(x);
+    }
+    match x.u8(f::STATE) {
+        0 => {
+            let mode = x.u8(0x2f).wrapping_sub(1) as u32;
+            let anim = x.rom8(attack_fx::SHOWER_ANIMS + mode);
+            if x.u8(f::VARIANT) != 8 {
+                x.set16(0x2a, 0x110);
+            }
+            x.add8(f::STATE, 2);
+            x.anim_start(attack_fx::ANIM_A, anim as u32);
+            attack_fx_shard(x);
+        }
+        2 => attack_fx_shard(x),
+        _ => free(x),
+    }
+}
+
+fn attack_fx_shower_spawn(x: &mut Cx) {
+    let owner = x.linked(attack_fx::OWNER);
+    let k = attacker_index(x, owner, 4, true);
+    let sheet = x.rom8(attack_fx::SHOWER_SHEETS + k) as u16;
+    if sheet != 0 {
+        let offset = x.data16(attack_fx::SHOWER_DATA + sheet.wrapping_sub(2) as i16 as i32 as u32) as i16 as i32 as u32;
+        let mut at = attack_fx::SHOWER_DATA.wrapping_add(offset);
+        let mut n = x.data16(at);
+        at += 2;
+        loop {
+            let variant = x.u8(f::VARIANT);
+            x.c.d[0] = variant as u32;
+            x.c.d[1] = 0;
+            x.c.a[4] = at;
+            x.call(attack_fx::SPAWN);
+            if x.c.sr & m68k::SR_C != 0 {
+                break;
+            }
+            let o = Obj(x.c.a[1]);
+            let (vx, vz) = (x.data16(at), x.data16(at + 2));
+            o.set_u16(x.b, Obj::VX, vx);
+            o.set_u16(x.b, Obj::VZ, vz);
+            let mode = x.data8(at + 4);
+            o.set_u8(x.b, 0x2f, mode);
+            at += 6;
+            let link = x.u16(attack_fx::OWNER);
+            o.set_u16(x.b, attack_fx::OWNER, link);
+            n = n.wrapping_sub(1);
+            if n == 0xffff {
+                break;
+            }
+        }
+        x.c.a[4] = at;
+        x.c.d[5] = x.c.d[5] & 0xffff_0000 | n as u32;
+    }
+    free(x);
+}
+
+/// Un éclat de la gerbe (`0xad384`).
+fn attack_fx_shard(x: &mut Cx) {
+    let owner = x.linked(attack_fx::OWNER);
+    if x.u8(f::SUB_STATE) == 0 {
+        let first = x.u8(f::VARIANT) == 8;
+        let (a, b) = if first { (0x70, 0x90) } else { (0x94, 0x94) };
+        let action = owner.u8(x.b, attack_fx::ACTION);
+        let follows = if action == a || action == b || action != 0xa8 {
+            owner.u8(x.b, f::STATE) == 4 && (owner.u8(x.b, 6) as i8) < 6
+        } else {
+            // action 0xa8 : l'éclat suit l'attaquant pendant ses étapes 4 à 6, sinon disparaît
+            if owner.u8(x.b, 6).wrapping_sub(4) > 2 {
+                return free(x);
+            }
+            true
+        };
+        if follows {
+            let (px, pz, py) = (owner.u16(x.b, Obj::X), owner.u16(x.b, Obj::Z), owner.u32(x.b, Obj::Y));
+            x.set16(Obj::X, px);
+            x.set16(Obj::Z, pz);
+            x.set32(Obj::Y, py.wrapping_sub(1));
+            let vz = x.u16(Obj::VZ);
+            x.add16(Obj::Z, vz);
+            let mut vx = x.u16(Obj::VX);
+            let facing = owner.u8(x.b, 0x2c);
+            x.set8(0x2c, facing);
+            if facing != 0 {
+                vx = vx.wrapping_neg();
+            }
+            x.add16(Obj::X, vx);
+            return x.reinsert();
+        }
+        // détaché : il retombe, poussé vers l'extérieur
+        x.add8(f::SUB_STATE, 2);
+        x.set16(Obj::VZ, 0x200);
+        x.set16(Obj::AZ, 0xffc0);
+        x.set16(Obj::AX, 0);
+        let mut vx: u16 = 0x180;
+        if (x.u16(Obj::VX) as i16) < 0 {
+            vx = vx.wrapping_neg();
+        }
+        if x.u8(0x2c) != 0 {
+            vx = vx.wrapping_neg();
+        }
+        x.set16(Obj::VX, vx);
+        if x.c.d[7] & 1 != 0 {
+            let v = x.u8(0x01) ^ 2;
+            x.set8(0x01, v);
+        }
+    }
+    let v = x.u8(0x01) ^ 2;
+    x.set8(0x01, v);
+    x.call(super::cx::sub::MOVE_XZ);
+    if x.u16(Obj::Z) as i16 <= 0 {
+        free(x);
+    }
+}
+
+/// Variante 1 : éclat lancé depuis l'attaquant, qui le suit puis disparaît.
+fn attack_fx_burst(x: &mut Cx) {
+    match x.u8(f::STATE) {
+        0 => burst_init(x),
         2 => {
             let owner = x.linked(attack_fx::OWNER);
             for off in [Obj::X, Obj::Z] {
@@ -542,6 +755,41 @@ fn attack_fx_burst(x: &mut Cx) {
         }
         _ => free(x),
     }
+}
+
+/// Naissance de l'éclat (variantes 1 et 5) : posé sur l'attaquant, vitesse et animation selon son type.
+fn burst_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    let owner = x.linked(attack_fx::OWNER);
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let v = owner.u32(x.b, off);
+        x.set32(off, v);
+    }
+    let facing = owner.u8(x.b, 0x2c);
+    x.set8(0x2c, facing);
+    let (anim, table, k) = match x.u8(0x2f) {
+        0 => {
+            x.add32(Obj::Y, 0xffff_ffff);
+            let k = attacker_index(x, owner, 4, true);
+            (x.rom8(0xac38c + k) as u32, 0xac3cc, k)
+        }
+        1 => {
+            x.add32(Obj::Y, 1);
+            let base: u8 = if x.u8(0x28) == 4 { 0x20 } else { 0 };
+            (4, 0xac526, base.wrapping_add(owner.u8(x.b, 2)) as u32)
+        }
+        _ => return,
+    };
+    let (mut vx, vz) = (x.data16(table + 4 * k), x.data16(table + 4 * k + 2));
+    if x.u8(0x2c) != 0 {
+        vx = vx.wrapping_neg();
+    }
+    x.set16(Obj::VX, vx);
+    x.set16(Obj::VZ, vz);
+    x.add16(Obj::X, vx);
+    x.add16(Obj::Z, vz);
+    x.anim_start(attack_fx::ANIM_A, anim);
+    x.reinsert();
 }
 
 /// Variante 3 : reflet posé sur l'attaquant tant qu'il est dans l'action 0x68 ou 0x6c.

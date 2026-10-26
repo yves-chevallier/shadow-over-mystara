@@ -224,6 +224,25 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
             wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
             wr8(b, A5 + 0x36, alea.pick(&[0, 0, 1]));
         }
+        // effets d'attaque : attaquant en +0x5c (action +0x49, étape +6, type, classe), réglage
+        11 => {
+            wr16(b, obj + 0x5c, owner as u16);
+            wr8(b, owner + 0x49, alea.pick(&[0x70, 0x90, 0x94, 0xa8, 0xa8, 0x10]));
+            wr8(b, owner + 4, alea.pick(&[2, 4, 4, 6]));
+            wr8(b, owner + 6, (alea.next() % 9) as u8);
+            wr8(b, owner + 2, (alea.next() % 0x20) as u8);
+            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
+            wr8(b, owner + 0x28, alea.pick(&[2, 2, 4]));
+            wr8(b, A5 + 0x6f, alea.next() as u8);
+            let modes: &[u8] = match rd8(b, obj + 3) {
+                8 | 9 => &[0, 0, 1, 2, 3, 4],
+                _ => &[0, 1],
+            };
+            wr8(b, obj + 0x2f, alea.pick(modes));
+            let action = rd8(b, owner + 0x49);
+            wr8(b, obj + 0x42, alea.pick(&[0x70, 0x94, action]));
+            wr8(b, obj + 0x5, alea.pick(&[0, 0, 2]));
+        }
         // objet suivi en +0x5c (parfois aucun), réglage 0 ou 1
         43 => {
             wr16(b, obj + 0x5c, if alea.une_sur(10) { 0 } else { owner as u16 });
