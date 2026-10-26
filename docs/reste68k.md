@@ -4,17 +4,16 @@ Généré par `tools/reste68k.sh` (`port/ddsom-game/examples/reste68k.rs`) ; ne 
 
 Mesure : la machine hybride du jeu (routines natives Rust, 68000 pour le reste, ×16) rejoue 256 scénarios, soit 4111500 images. Chaque instruction 68000 exécutée **hors routine native** est comptée, y compris le code appelé par une native via `ddsom_game::call`. Les natives et le Z80 (son) ne comptent pas.
 
-* **31 instructions 68000 exécutées** (hors attente active), soit 0.0 par image ;
+* **19 instructions 68000 exécutées** (hors attente active), soit 0.0 par image ;
 * attente active, non comptée : 0 instructions (ordonnanceur et traps 0x928-0xb00, tâche du gel 0xee080 : voir `SPIN`) ;
 * 2559 fonctions dans `decomp/index.tsv` : 1 exécutent encore du 68000, 952 sont entièrement natives, **1606 jamais atteintes** (108994 octets : code mort, ou à exercer par de nouveaux scénarios) ;
-* instructions hors de toute fonction de l'index : 27 (comptées par sous-système ci-dessous, colonne « Hors index », et par plage plus bas).
+* instructions hors de toute fonction de l'index : 15 (comptées par sous-système ci-dessous, colonne « Hors index », et par plage plus bas).
 
 ## Par sous-système (atlas)
 
 | ID | Sous-système | Instr. 68000 | % | Hors index | Fonctions | Touchées | Natives seules | Jamais atteintes | Principales fonctions restantes |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| W1 | Boucle de partie et phases 0/4/12/20 | 19 | 61.29 | 15 | 3 | 1 | 1 | 1 | 1c86e (100.0 %) |
-| W3 | Scripts de scène (phases 16/28) | 12 | 38.71 | 12 | 82 | 0 | 11 | 71 |  |
+| W1 | Boucle de partie et phases 0/4/12/20 | 19 | 100.00 | 15 | 3 | 1 | 1 | 1 | 1c86e (100.0 %) |
 | K1 | Noyau : reset, boot, VBLANK, ordonnanceur, traps, entrées, gel | 0 | 0.00 | 0 | 17 | 0 | 14 | 3 |  |
 | K2 | Auto-test RAM (« RAM ERROR !! ») | 0 | 0.00 | 0 | 2 | 0 | 0 | 2 |  |
 | K3 | Entrées vers enregistrements joueur | 0 | 0.00 | 0 | 3 | 0 | 3 | 0 |  |
@@ -34,6 +33,7 @@ Mesure : la machine hybride du jeu (routines natives Rust, 68000 pour le reste, 
 | X2 | Dégâts, terrain, placement | 0 | 0.00 | 0 | 19 | 0 | 6 | 13 |  |
 | W0 | Dispatch des 10 classes d'objets | 0 | 0.00 | 0 | 10 | 0 | 10 | 0 |  |
 | W2 | Sous-scènes de transition à fondus (phases 8/24) | 0 | 0.00 | 0 | 1 | 0 | 0 | 1 |  |
+| W3 | Scripts de scène (phases 16/28) | 0 | 0.00 | 0 | 82 | 0 | 11 | 71 |  |
 | P1 | Initialisation des joueurs | 0 | 0.00 | 0 | 23 | 0 | 6 | 17 |  |
 | P3 | Comportement scénarisé des joueurs par scène | 0 | 0.00 | 0 | 3 | 0 | 2 | 1 |  |
 | P4 | Noyau joueur (états, 26 actions génériques) | 0 | 0.00 | 0 | 59 | 0 | 8 | 51 |  |
@@ -69,16 +69,14 @@ Code que Ghidra n'a pas découpé en fonctions (gestionnaires atteints par table
 
 | Plage | Sous-système | Instr. 68000 | % |
 |---|---|---:|---:|
-| 01c702-01c750 | W1 | 14 | 45.16 |
-| 0f4c6e-0f4c76 | W3 | 6 | 19.35 |
-| 0f565e-0f5666 | W3 | 6 | 19.35 |
-| 01c808-01c808 | W1 | 1 | 3.23 |
+| 01c702-01c750 | W1 | 14 | 73.68 |
+| 01c808-01c808 | W1 | 1 | 5.26 |
 
 ## Par fonction (les 80 plus gourmandes)
 
 | Adresse | Nom | Sous-système | Taille | Instr. 68000 | % | Scénarios |
 |---|---|---|---:|---:|---:|---:|
-| 01c86e | FUN_0001c86e | W1 | 434 | 4 | 12.90 | 1 |
+| 01c86e | FUN_0001c86e | W1 | 434 | 4 | 21.05 | 1 |
 
 Concentration : 0 fonctions pour 90 % des instructions restantes, 0 pour 99 %, 1 pour toutes les fonctions touchées.
 
@@ -134,7 +132,7 @@ Concentration : 0 fonctions pour 90 % des instructions restantes, 0 pour 99 %, 1
 
 Instructions 68000 exécutées pendant un appel `call`/`call_at` (ou une de leurs enveloppes : `Ctx::call`, `Cx::call`, `call_d0`...), attribuées à l'appel le plus intérieur. **Hors appel** : code d'origine où une tâche reprend (adresse de reprise sans native), où une native continue par `tail`/`jump`, ou appelé par du 68000 lui-même hors de tout appel Rust. C'est la liste de ce qui empêche encore la boucle d'image sans 68000 (`docs/architecture.md`, point 4).
 
-Hors appel : 31 instructions (100.00 %).
+Hors appel : 19 instructions (100.00 %).
 
 | Module | Instr. 68000 | % | Sites | Routines appelées (les plus gourmandes) |
 |---|---:|---:|---:|---|
@@ -163,7 +161,7 @@ Hors appel : 31 instructions (100.00 %).
 | scenarios/boss/boss19_scene32.txt | 12000 | 0 | 0.0 |
 | scenarios/boss/boss19_scene32_mort.txt | 12000 | 0 | 0.0 |
 | scenarios/boss/boss21_scene44.txt | 12000 | 0 | 0.0 |
-| scenarios/boss/boss21_scene44_mort.txt | 12000 | 3 | 0.0 |
+| scenarios/boss/boss21_scene44_mort.txt | 12000 | 0 | 0.0 |
 | scenarios/boss/boss5_scene58.txt | 12000 | 0 | 0.0 |
 | scenarios/boss/boss5_scene58_mort.txt | 12000 | 0 | 0.0 |
 | scenarios/boss/boss6_scene24.txt | 12000 | 0 | 0.0 |
@@ -177,10 +175,10 @@ Hors appel : 31 instructions (100.00 %).
 | scenarios/bot_char3.txt | 30000 | 0 | 0.0 |
 | scenarios/bot_char4.txt | 30000 | 0 | 0.0 |
 | scenarios/bot_char5.txt | 30000 | 0 | 0.0 |
-| scenarios/cov/cov_2p_a.txt | 30000 | 3 | 0.0 |
+| scenarios/cov/cov_2p_a.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_2p_b.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_2p_c.txt | 30000 | 0 | 0.0 |
-| scenarios/cov/cov_3p.txt | 30000 | 3 | 0.0 |
+| scenarios/cov/cov_3p.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_4p_a.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_4p_b.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_4p_c.txt | 30000 | 0 | 0.0 |
@@ -206,7 +204,7 @@ Hors appel : 31 instructions (100.00 %).
 | scenarios/cov/cov_service_variante.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_tour1_c0.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_tour2_c1.txt | 30000 | 0 | 0.0 |
-| scenarios/cov/cov_tour3_c2.txt | 30000 | 3 | 0.0 |
+| scenarios/cov/cov_tour3_c2.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_tour4_c3.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_tour5_c4.txt | 30000 | 0 | 0.0 |
 | scenarios/cov/cov_tour6_c5.txt | 30000 | 0 | 0.0 |
