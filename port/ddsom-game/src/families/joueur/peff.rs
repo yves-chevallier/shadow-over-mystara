@@ -62,7 +62,7 @@ mod badge {
 
 /// Type 43 (0x51076) : comptoir de boutique (scènes 0x45 et suivantes). Deux zones, posées d'après la scène,
 /// guettent les quatre joueurs ; un joueur dans une zone avec `+0x58` positif lance le script de dialogue de
-/// la zone (pointeurs `+0x1c` et `+0x58`, interprète 0x514ac / 0x514cc resté en code d'origine). L'objet suit
+/// la zone (pointeurs `+0x1c` et `+0x58`, interprète 0x514ac / 0x514cc : `peff_boutique.rs`). L'objet suit
 /// le défilement de l'écran à demi-vitesse.
 mod shop {
     use super::*;
