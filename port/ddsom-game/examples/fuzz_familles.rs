@@ -275,14 +275,8 @@ fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: boo
     // routine native sur la copie perturbée (même état de départ que l'original)
     let resultat = catch_unwind(AssertUnwindSafe(|| {
         let cout = (n.cost)(&c1, &mut b1);
-        if cout < ddsom_game::families::COUT_HORS_CONTRAT {
-            (n.run)(&mut c1, &mut b1);
-            c1.cycles += cout;
-        } else {
-            // chemin hors contrat : l'original s'exécute seul, rien à comparer
-            c1 = c2.clone();
-            b1 = b2.clone();
-        }
+        (n.run)(&mut c1, &mut b1);
+        c1.cycles += cout;
     }));
     let mut diffs = Vec::new();
     match resultat {

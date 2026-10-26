@@ -303,7 +303,7 @@ fn trajectoire(
         bilan.appels += 1;
         PROGRES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let cout = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (native.cost)(&c, &mut b)));
-        if cout.as_ref().map_or(true, |&k| k >= ddsom_game::families::COUT_HORS_CONTRAT) {
+        if cout.is_err() {
             bilan.hors_contrat += 1;
             break;
         }
