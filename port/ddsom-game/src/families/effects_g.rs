@@ -8,6 +8,9 @@
 //!   tombent quand sa vie passe sous leur seuil et se brisent en éclats (variante 1) qui rebondissent ;
 //! - 48 : machine volante d'un ennemi (`0xb59a6`, `0xb59c8`) : canon qui tourne autour de son porteur et
 //!   tire (1, avec son corps, variante 0), balayeur posé au bord de l'écran qui tire (2) ;
+//! - 80 : feu d'artifice de la scène d'un personnage (`0x23606`) : le héros (0) tire des fusées pendant un
+//!   fondu au noir, puis s'envole et termine la scène ; spectateurs et acolytes (1 à 6) attendent l'étape
+//!   0x12 de la scène pour réagir, et s'en vont avec le fondu ;
 //! - 63 : morceau projeté par un ennemi (ENEMY 22 et 23) : part en arc depuis son créateur (`+0x42`),
 //!   retombe, fait voler des débris, attend, clignote puis disparaît ;
 //! - 81 : éclat lancé par un personnage (`0xb96c0`) : part de la main du joueur (décalage par geste
@@ -797,7 +800,512 @@ fn flyer_sweep(x: &mut Cx, link: Obj) {
     x.c.d[6] = x.c.d[6] & 0xffff_0000 | 0x7fff;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 80 : feu d'artifice de la scène d'un personnage (créé par `0x23606`, variantes 2 et 3)
+// ---------------------------------------------------------------------------------------------
+
+mod fireworks {
+    /// Étape de la scène que les acteurs attendent pour partir (`A5+0x2e`), et retour au jeu (0xc).
+    pub const SCENE_STEP: u32 = 0x2e;
+    pub const GO: u8 = 0x12;
+    pub const BACK: u8 = 0xc;
+    /// Fondu en cours (`A5+0x48f`), ses réglages (`A5+0x48e`, `A5+0x490`) et ses palettes (`A5+0x492...`).
+    pub const FADING: u32 = 0x48f;
+    pub const FADE_SPEED: u32 = 0x48e;
+    pub const FADE_MODE: u32 = 0x490;
+    pub const FADE_SOURCES: u32 = 0x492;
+    /// Tâches de fondu (programmes de `0x9b6`) : vers le noir, puis retour.
+    pub const FADE_OUT: u32 = 0x1ccf8;
+    pub const FADE_IN: u32 = 0x1ced4;
+    /// Caméra du feu d'artifice (`A5+0x5a6`, `A5+0x5aa`).
+    pub const CAMERA_X: u32 = 0x5a6;
+    pub const CAMERA_Y: u32 = 0x5aa;
+    pub const TIMER: u32 = 0x58;
+    pub const DELAY: u32 = 0x5a;
+    pub const HOST: u32 = 0x56;
+    pub const DECOR: u32 = 0x42;
+    /// Fusées (type 50) : variante, délai et décalage (x, y) de chaque tir (espace programme).
+    pub const ROCKET_VARIANTS: u32 = 0xb9628;
+    pub const ROCKET_DELAYS: u32 = 0xb9638;
+    pub const ROCKET_PLACES: u32 = 0xb9658;
+    pub const ANIMS_HERO: u32 = 0x1836ec;
+    pub const ANIMS_FIRE: u32 = 0x1824d4;
+    pub const ANIMS_LAST: u32 = 0x18373a;
+    /// Adresse de retour du saut par la table des états (`jsr (table,PC)`), où l'objet est remis en liste.
+    pub const AFTER_STATE: u32 = 0xb8f04;
+    /// Reprise après l'attente de quatre images (`0xa40`) qui suit le dernier tir.
+    pub const AFTER_WAIT: u32 = 0xb91d0;
+    pub const WAIT: u32 = 0xa40;
+    pub const NEW_TASK: u32 = 0x9b6;
+    /// Décor de scène 0x55 (`0xc8312`).
+    pub const SCENE_SET: u32 = 0xc8312;
+}
+
+/// Sons de la scène.
+mod sfx {
+    pub const LAST_ROCKET: u32 = 0xe49ae;
+    pub const LIFT_OFF: u32 = 0xe580a;
+    pub const JUMP: u32 = 0xe3da6;
+    pub const CHEER: u32 = 0xe4e5a;
+    pub const LANDING: u32 = 0xec7ae;
+    /// Efface le début du scroll 1.
+    pub const CLEAR_SCROLL1: u32 = 0x3525c;
+}
+
+fn fireworks(x: &mut Cx) {
+    match x.u8(f::STATE) {
+        0 => fireworks_init(x),
+        2 => fireworks_active(x),
+        _ => free(x),
+    }
+    fireworks_tail(x);
+}
+
+/// `sub.w #1,(off,A0)` : rend la valeur exacte (sans repli sur 16 bits) que testent les `bgt`/`ble` qui suivent.
+fn countdown(x: &mut Cx, off: u32) -> i32 {
+    let v = x.u16(off);
+    x.set16(off, v.wrapping_sub(1));
+    v as i16 as i32 - 1
+}
+
+/// Fin commune (`0xb8f04`) : l'objet encore actif est remis en liste.
+fn fireworks_tail(x: &mut Cx) {
+    if x.u8(Obj::ACTIVE) != 0 {
+        x.reinsert();
+    }
+}
+
+fn scene_go(x: &mut Cx) -> bool {
+    x.a5_u8(fireworks::SCENE_STEP) == fireworks::GO
+}
+
+fn fading(x: &mut Cx) -> bool {
+    x.a5_u8(fireworks::FADING) != 0
+}
+
+/// Pose X et Y (et Z) en coordonnées d'écran.
+fn place(x: &mut Cx, px: u16, z: Option<u16>, py: u16) {
+    x.set16(Obj::X, px);
+    if let Some(z) = z {
+        x.set16(Obj::Z, z);
+    }
+    x.set16(Obj::Y, py);
+}
+
+/// Un acteur attaché à l'objet `+0x56` : X - `dx`, Z + 0x60, juste devant lui.
+fn follow_host(x: &mut Cx, dx: u16) {
+    let host = x.linked(fireworks::HOST);
+    let (hx, hz, hy) = (host.u16(x.b, Obj::X), host.u16(x.b, Obj::Z), host.u32(x.b, Obj::Y));
+    x.set16(Obj::X, hx);
+    x.set16(Obj::Z, hz);
+    x.set32(Obj::Y, hy);
+    x.add16(Obj::X, dx.wrapping_neg());
+    x.add16(Obj::Z, 0x60);
+    x.add16(Obj::Y + 2, 0xffff);
+}
+
+fn fireworks_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    match x.u8(f::VARIANT) {
+        0 => {
+            x.set8(f::FACING, 0x20);
+            place(x, 0x50, None, 0x160);
+            x.anim_start(fireworks::ANIMS_HERO, 0);
+        }
+        1 => {
+            x.set8(0x2a, 1);
+            x.set8(0x2b, 0x18);
+            place(x, 0x110, None, 0x161);
+            x.anim_start(0x17b14e, 0);
+        }
+        2 => {
+            place(x, 0x178, None, 0x154);
+            x.anim_start(0x177874, 0);
+        }
+        3 => {
+            place(x, 0x158, Some(0x18), 0x168);
+            x.set16(Obj::Y + 2, 0xffff);
+            // ses deux acolytes (variantes 4 et 5)
+            for (variant, dx) in [(4u8, 0x20u16), (5, 0x10)] {
+                let Some(o) = alloc(x) else { break };
+                o.set_u8(x.b, Obj::ACTIVE, 1);
+                o.set_u8(x.b, Obj::KIND, 80);
+                o.set_u8(x.b, Obj::VARIANT, variant);
+                let (px, pz, py) = (x.u16(Obj::X), x.u16(Obj::Z), x.u32(Obj::Y));
+                o.set_u16(x.b, Obj::X, px.wrapping_sub(dx));
+                o.set_u16(x.b, Obj::Z, pz.wrapping_add(0x60));
+                o.set_u32(x.b, Obj::Y, py);
+                let frac = o.u16(x.b, Obj::Y + 2).wrapping_sub(1);
+                o.set_u16(x.b, Obj::Y + 2, frac);
+                o.set_u16(x.b, fireworks::HOST, x.o.0 as u16);
+            }
+            x.anim_start(fireworks::ANIMS_FIRE, 0);
+        }
+        4 => x.anim_start(fireworks::ANIMS_FIRE, 2),
+        5 => x.anim_start(fireworks::ANIMS_FIRE, 3),
+        _ => {
+            load_colours(x, 0x253460, 0x91c2e0, 0x20);
+            x.set8(0x2a, 1);
+            x.set8(0x2b, 0x17);
+            place(x, 0x120, Some(0xe0), 0x160);
+            x.anim_start(fireworks::ANIMS_LAST, 3);
+        }
+    }
+}
+
+/// Copie `n` couleurs de la ROM (données) dans la palette, opaques (`| 0xf000`) ; D0 et D1 comme l'original.
+fn load_colours(x: &mut Cx, from: u32, to: u32, n: u32) {
+    let mut v = 0;
+    for k in 0..n {
+        v = x.data16(from + 2 * k) | 0xf000;
+        crate::mem::wr16(x.b, to + 2 * k, v);
+    }
+    set_low_word(&mut x.c.d[0], v);
+    set_low_word(&mut x.c.d[1], 0xffff);
+}
+
+/// `0xb95b8` : copie 0x400 octets de `from` vers `to` par blocs de huit longs (registres D1-D6, A3, A4
+/// laissés comme l'original).
+fn copy_block(x: &mut Cx, from: u32, to: u32) {
+    let mut last = [0u32; 8];
+    for k in 0..0x100 {
+        let v = crate::mem::rd32(x.b, from + 4 * k);
+        crate::mem::wr32(x.b, to + 4 * k, v);
+        last[(k % 8) as usize] = v;
+    }
+    for (r, v) in [1usize, 2, 3, 4, 5, 6].into_iter().zip(&last[..6]) {
+        x.c.d[r] = *v;
+    }
+    x.c.a[3] = last[6];
+    x.c.a[4] = last[7];
+    x.c.a[1] = from + 0x400;
+    x.c.a[2] = to + 0x400;
+    set_low_word(&mut x.c.d[0], 0xffff);
+}
+
+/// Lance la tâche de fondu `program` (`0x9b6`, D0.w = 0x10), A0 gardé.
+fn fade_task(x: &mut Cx, program: u32) {
+    x.c.a[0] = program;
+    set_low_word(&mut x.c.d[0], 0x10);
+    crate::call(x.c, x.b, fireworks::NEW_TASK);
+    x.c.a[0] = x.o.0;
+}
+
+fn fireworks_active(x: &mut Cx) {
+    let sub = x.u8(f::SUB_STATE);
+    match x.u8(f::VARIANT) {
+        0 => hero(x, sub),
+        1 => match sub {
+            0 if scene_go(x) => {
+                x.add8(f::SUB_STATE, 2);
+                x.anim_start(0x17b162, 1);
+            }
+            2 if !fading(x) => {
+                x.add8(f::SUB_STATE, 2);
+                x.anim_start(0x17b166, 7);
+            }
+            0 | 2 => {
+                x.anim_step();
+            }
+            _ => {}
+        },
+        2 => match sub {
+            0 if scene_go(x) => {
+                x.add8(f::SUB_STATE, 2);
+                x.set16(Obj::VX, 0xfe20);
+                x.set16(Obj::AX, 0);
+                x.set16(Obj::VZ, 0x340);
+                x.set16(Obj::AZ, 0xfff0);
+                x.call(sfx::JUMP);
+                x.anim_start(0x17788c, 7);
+            }
+            0 => {
+                x.anim_step();
+            }
+            _ => {
+                x.anim_step();
+                if x.u8(0x33) == 0 && !fading(x) {
+                    return free(x);
+                }
+                x.call(super::cx::sub::MOVE_XZ);
+            }
+        },
+        3 => match sub {
+            0 => {
+                if scene_go(x) {
+                    x.add8(f::SUB_STATE, 2);
+                    x.call(sfx::CHEER);
+                }
+                x.anim_step();
+            }
+            _ => {
+                x.add16(Obj::X, 0xfffe);
+                x.anim_step();
+                if !fading(x) {
+                    free(x);
+                }
+            }
+        },
+        4 => {
+            if sub != 0 && !fading(x) {
+                return free(x);
+            }
+            follow_host(x, 0x20);
+            if sub != 0 {
+                x.anim_step();
+            } else if scene_go(x) {
+                x.add8(f::SUB_STATE, 2);
+                x.anim_step();
+            }
+        }
+        5 => {
+            follow_host(x, 0x10);
+            if sub == 0 {
+                if scene_go(x) {
+                    x.add8(f::SUB_STATE, 2);
+                }
+            } else if !fading(x) {
+                free(x);
+            }
+        }
+        _ => last_actor(x, sub),
+    }
+}
+
+/// Variante 6 : tombe sur la scène, joue son animation, attend le retour au jeu puis clignote et s'en va.
+fn last_actor(x: &mut Cx, sub: u8) {
+    match sub {
+        0 => {
+            let z = x.u16(Obj::Z) as i16 as i32 - 6;
+            x.add16(Obj::Z, 0xfffa);
+            if z <= 0 {
+                x.add8(f::SUB_STATE, 2);
+                x.call(sfx::LANDING);
+                x.set16(Obj::Z, 0);
+                return x.anim_start(fireworks::ANIMS_LAST, 5);
+            }
+            if x.u8(0x33) == 0 {
+                x.anim_step();
+            }
+        }
+        2 => {
+            if x.anim_step() {
+                x.add8(f::SUB_STATE, 2);
+                x.set16(fireworks::TIMER, 0x40);
+            }
+        }
+        4 => {
+            if x.a5_u8(fireworks::SCENE_STEP) == fireworks::BACK {
+                x.add8(f::SUB_STATE, 2);
+                x.set16(fireworks::TIMER, 0x40);
+            }
+        }
+        _ => {
+            if countdown(x, fireworks::TIMER) <= 0 {
+                return free(x);
+            }
+            let v = x.u8(f::FLAGS) ^ 2;
+            x.set8(f::FLAGS, v);
+        }
+    }
+}
+
+/// Variante 0 : le personnage qui tire le feu d'artifice (neuf étapes).
+fn hero(x: &mut Cx, sub: u8) {
+    match sub {
+        0 => {
+            if !scene_go(x) {
+                x.anim_step();
+                return;
+            }
+            x.add8(f::SUB_STATE, 2);
+            x.set16(Obj::VX, 0x140);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x340);
+            x.set16(Obj::AZ, 0xfff0);
+            x.anim_start(fireworks::ANIMS_HERO, 4);
+            // la scène passe au noir : palettes sauvées, fondu
+            copy_block(x, 0x91c000, 0x910000);
+            copy_block(x, 0x91c800, 0x910400);
+            copy_block(x, 0x91cc00, 0x910800);
+            x.set_a5_u16(fireworks::FADE_MODE, 3);
+            x.set_a5_u8(fireworks::FADE_SPEED, 0xf);
+            x.set_a5_u8(fireworks::FADING, 1);
+            fade_task(x, fireworks::FADE_OUT);
+        }
+        2 => {
+            x.call(super::cx::sub::MOVE_XZ);
+            x.anim_step();
+            if fading(x) {
+                return;
+            }
+            x.add8(f::SUB_STATE, 2);
+            x.set16(Obj::X, 0xc0);
+            x.set16(Obj::Z, 0);
+            load_colours(x, 0x253260, 0x91c260, 0x10);
+            x.set16(fireworks::TIMER, 0x10);
+            x.set16(fireworks::DELAY, 0);
+            x.anim_start(fireworks::ANIMS_HERO, 0);
+        }
+        4 => hero_rockets(x),
+        6 => {
+            if !fading(x) {
+                x.add8(f::SUB_STATE, 2);
+                x.set16(fireworks::TIMER, 0x14);
+                x.call(sfx::CLEAR_SCROLL1);
+            }
+            x.anim_step();
+        }
+        8 => {
+            if countdown(x, fireworks::DELAY) <= 0 {
+                // le décor 0x55, quitte à attendre une place
+                let decor = loop {
+                    x.c.d[0] = 0x55;
+                    x.call(fireworks::SCENE_SET);
+                    if x.c.sr & m68k::SR_C == 0 {
+                        break x.c.a[1];
+                    }
+                };
+                x.set16(fireworks::DECOR, decor as u16);
+                x.add8(f::SUB_STATE, 2);
+            }
+            x.anim_step();
+        }
+        10 => {
+            let decor = x.linked(fireworks::DECOR);
+            if decor.u8(x.b, 0x22) != 0 {
+                x.add8(f::SUB_STATE, 2);
+                x.set16(fireworks::TIMER, 0xa);
+            }
+            x.anim_step();
+        }
+        12 => {
+            if countdown(x, fireworks::TIMER) > 0 {
+                x.anim_step();
+                return;
+            }
+            x.add8(f::SUB_STATE, 2);
+            x.set16(Obj::VZ, 0x700);
+            x.set16(Obj::AZ, 0);
+            x.set32(Obj::VX, 0);
+            x.c.d[0] = 0;
+            x.call(sfx::LIFT_OFF);
+            x.anim_start(fireworks::ANIMS_HERO, 6);
+        }
+        14 => hero_lift_off(x),
+        _ => {}
+    }
+}
+
+/// Étape 4 : une fusée à chaque délai écoulé, la dernière avec un son ; puis quatre images d'attente
+/// (la tâche cède la main) et le fondu de retour.
+fn hero_rockets(x: &mut Cx) {
+    if countdown(x, fireworks::DELAY) > 0 {
+        return;
+    }
+    let t = countdown(x, fireworks::TIMER);
+    if t >= 0 {
+        if t == 0 {
+            x.call(sfx::LAST_ROCKET);
+        }
+        return rocket(x);
+    }
+    x.add8(f::SUB_STATE, 2);
+    // l'attente cède la main : la tâche reprendra à `AFTER_WAIT` (native `fireworks_after_wait`), puis
+    // à `AFTER_STATE`, comme l'original ; si elle revient sans céder, la suite est faite ici
+    crate::taches::table::appeler(x.c, x.b, fireworks::AFTER_STATE);
+    x.c.d[0] = 4;
+    x.call_at(fireworks::WAIT, fireworks::AFTER_WAIT);
+    fireworks_fade_back(x);
+    crate::taches::table::depiler_retour(x.c, x.b);
+}
+
+/// Après l'attente : fondu de retour depuis les palettes sauvées.
+fn fireworks_fade_back(x: &mut Cx) {
+    x.set_a5_u16(fireworks::FADE_MODE, 1);
+    x.set_a5_u8(fireworks::FADE_SPEED, 0xf);
+    x.set_a5_u8(fireworks::FADING, 1);
+    for (k, v) in [0x910000u32, 0x25c0c0, 0x910400, 0x910800].into_iter().enumerate() {
+        x.set_a5_u32(fireworks::FADE_SOURCES + 4 * k as u32, v);
+    }
+    fade_task(x, fireworks::FADE_IN);
+}
+
+/// `0xb95e8` : une fusée (type 50) : variante, délai jusqu'à la suivante et place lus pour le tir `TIMER`.
+fn rocket(x: &mut Cx) {
+    let Some(o) = alloc(x) else { return };
+    o.set_u8(x.b, Obj::ACTIVE, 1);
+    o.set_u8(x.b, Obj::KIND, 0x32);
+    let n = x.u16(fireworks::TIMER) as i16 as i32 as u32;
+    let variant = x.rom8(fireworks::ROCKET_VARIANTS.wrapping_add(n));
+    o.set_u8(x.b, Obj::VARIANT, variant);
+    let delay = x.rom16(fireworks::ROCKET_DELAYS.wrapping_add(2 * n));
+    x.set16(fireworks::DELAY, delay);
+    let px = x.a5_u16(fireworks::CAMERA_X).wrapping_add(x.rom16(fireworks::ROCKET_PLACES.wrapping_add(4 * n)));
+    let pz = x.a5_u16(fireworks::CAMERA_Y).wrapping_add(x.rom16(fireworks::ROCKET_PLACES.wrapping_add(4 * n + 2)));
+    o.set_u16(x.b, Obj::X, px);
+    o.set_u16(x.b, Obj::Z, pz);
+}
+
+/// Étape 14 : s'envole en laissant une traînée (type 50, variante 7) toutes les cinq images, jusqu'en haut
+/// de l'écran : la scène se termine (`A5+0x2c` = 0x10000000).
+fn hero_lift_off(x: &mut Cx) {
+    if countdown(x, fireworks::TIMER) <= 0 {
+        x.set16(fireworks::TIMER, 5);
+        if let Some(o) = alloc(x) {
+            o.set_u8(x.b, Obj::ACTIVE, 1);
+            o.set_u8(x.b, Obj::KIND, 0x32);
+            o.set_u8(x.b, Obj::VARIANT, 7);
+            o.set_u16(x.b, fireworks::DECOR, x.o.0 as u16);
+            let facing = x.u8(f::FACING);
+            o.set_u8(x.b, f::FACING, facing);
+            for off in [Obj::X, Obj::Z, Obj::Y] {
+                let v = x.u16(off);
+                o.set_u16(x.b, off, v);
+            }
+            let y = o.u16(x.b, Obj::Y).wrapping_add(1);
+            o.set_u16(x.b, Obj::Y, y);
+            let frame = x.u32(0x34);
+            o.set_u32(x.b, 0x34, frame);
+            for off in [0x3cu32, 0x3f] {
+                let v = x.u8(off);
+                o.set_u8(x.b, off, v);
+            }
+            o.set_u16(x.b, 0x30, 0xe);
+        }
+    }
+    x.call(super::cx::sub::MOVE_XZ);
+    let top = x.a5_u16(fireworks::CAMERA_Y).wrapping_add(0x100);
+    let height = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
+    if height as i16 >= top as i16 {
+        x.add8(f::SUB_STATE, 2);
+        x.set_a5_u32(0x2c, 0x1000_0000);
+        set_hidden(x, true);
+    }
+}
+
+/// Reprise en `0xb91d0` (après l'attente de quatre images) : fondu de retour, puis retour en `AFTER_STATE`.
+fn fireworks_after_wait(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+    let mut x = Cx::new(c, b);
+    fireworks_fade_back(&mut x);
+    x.ret();
+}
+
+/// `0xb8f04` : fin du gestionnaire après la reprise.
+fn fireworks_after_state(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+    let mut x = Cx::new(c, b);
+    fireworks_tail(&mut x);
+    x.ret();
+}
+
+/// Points de reprise du type 80 (la tâche y revient après avoir cédé la main dans `hero_rockets`).
+pub const RESUMES: &[crate::Native] = &[
+    super::cx::handler(fireworks::AFTER_WAIT, "effct_feu_artifice_reprise", |_, _| 100, fireworks_after_wait),
+    super::cx::handler(fireworks::AFTER_STATE, "effct_feu_artifice_fin", |_, _| 100, fireworks_after_state),
+];
+
 handlers! {
+    0xb8ef6 "effct_feu_artifice" 300 fireworks,
     0xb59ea "effct_machine_volante" 200 flyer,
     0xb5454 "effct_armure" 200 armour,
     0xb4bec "effct_pluie_debris" 200 debris_rain,

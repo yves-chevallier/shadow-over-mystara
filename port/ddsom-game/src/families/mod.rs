@@ -573,6 +573,7 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(petites::SHAKES)
         .chain(effects_creators::NATIVES)
         .chain(effects_g::NATIVES)
+        .chain(effects_g::RESUMES)
         .chain(joueur::natives())
         .chain(reactions::NATIVES)
         .chain([&reactions::PLAYER_HURT_ANIMATION])

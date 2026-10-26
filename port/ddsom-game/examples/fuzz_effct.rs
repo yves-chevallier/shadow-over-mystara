@@ -96,31 +96,72 @@ fn atteignables(b: &mut Cps2Bus, entree: u32, plage: std::ops::Range<u32>) -> BT
 }
 
 /// Exécute le code d'origine seul sur une copie et rend les adresses exécutées dans `plage`.
-fn couverture(c: &Cpu, b: &Cps2Bus, entree: u32, plage: &std::ops::Range<u32>, vus: &mut BTreeSet<u32>) {
+fn couverture(c: &Cpu, b: &Cps2Bus, entree: u32, plage: &std::ops::Range<u32>, vus: &mut BTreeSet<u32>) -> Option<(Cpu, Cps2Bus)> {
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let (mut c, mut b) = (c.clone(), b.clone());
+        let sp = c.a[7];
         c.pc = entree;
         c.a[7] = c.a[7].wrapping_sub(4);
         wr32(&mut b, c.a[7], 0xfffe);
         let mut local = Vec::new();
         for _ in 0..200_000 {
-            if c.pc == 0xfffe {
-                break;
+            if c.pc == 0xfffe && c.a[7] == sp {
+                return (local, Some((c, b)));
             }
             if plage.contains(&c.pc) {
                 local.push(c.pc);
             }
             c.step(&mut b);
         }
-        local
+        (local, None)
     }));
-    if let Ok(l) = r {
-        vus.extend(l);
+    let (l, fin) = r.ok()?;
+    vus.extend(l);
+    fin
+}
+
+/// Comparaison faite ici (`FUZZ_PROPRE=1`, sans le mode contrôle) : A0, D7, RAM hors pile et hors table des tâches
+/// 68000 (`0xff0000-0xff0400`, que les natives du noyau tiennent en Rust) et hors pile privée des sons, GFX RAM,
+/// palette, OBJ RAM.
+fn compare(orig: &(Cpu, Cps2Bus), c: &Cpu, b: &Cps2Bus) -> Vec<String> {
+    let (co, bo) = orig;
+    let mut d = Vec::new();
+    if co.a[0] != c.a[0] {
+        d.push(format!("a0={:08x} au lieu de {:08x}", c.a[0], co.a[0]));
     }
+    if co.d[7] != c.d[7] {
+        d.push(format!("d7={:08x} au lieu de {:08x}", c.d[7], co.d[7]));
+    }
+    let sp = co.a[7] & 0xff_ffff;
+    // pile privée des wrappers son (pointeur en FF2A1A), comme `mem::diff_bus`
+    let prive = ((bo.ram[0x2a1a / 2] as u32) << 16 | bo.ram[0x2a1c / 2] as u32) & 0xff_ffff;
+    for i in 0..bo.ram.len() {
+        let a = 0xff0000 + 2 * i as u32;
+        let mort = (sp.saturating_sub(0x400)..sp).contains(&a) || (prive.saturating_sub(0x400)..prive).contains(&a) || a < 0xff0400;
+        if bo.ram[i] != b.ram[i] && !mort && d.len() < 8 {
+            d.push(format!("ram[{a:06x}]={:04x} au lieu de {:04x}", b.ram[i], bo.ram[i]));
+        }
+    }
+    for (nom, x, y) in [("gfxram", &b.gfxram, &bo.gfxram), ("palette", &b.palette, &bo.palette), ("objram0", &b.objram[0], &bo.objram[0])] {
+        if let Some(i) = x.iter().zip(y.iter()).position(|(p, q)| p != q) {
+            d.push(format!("{nom}[{i:x}]={:04x} au lieu de {:04x}", x[i], y[i]));
+        }
+    }
+    d
 }
 
 /// Sous-états (`+5`) de l'état actif que la table de l'original prévoit (au-delà, il saute dans des données).
-fn sous_etats(t: u32) -> &'static [u8] {
+fn sous_etats(t: u32, v: u32) -> &'static [u8] {
+    match (t, v) {
+        (80, 0) => &[0, 2, 4, 6, 8, 10, 12, 14, 16],
+        (80, 1) => &[0, 2, 4],
+        (80, 6) => &[0, 2, 4, 6],
+        (80, _) => &[0, 2],
+        _ => sous_etats_type(t),
+    }
+}
+
+fn sous_etats_type(t: u32) -> &'static [u8] {
     match t {
         63 | 43 => &[0, 2, 4],
         46 | 48 => &[0, 2],
@@ -132,8 +173,25 @@ fn sous_etats(t: u32) -> &'static [u8] {
 fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
     let joueur = JOUEURS + 0x200 * (alea.next() % 4);
     match t {
+        // feu d'artifice : étape de la scène, fondu, hôte (+0x56), décor (+0x42), délais
+        80 => {
+            wr8(b, A5 + 0x2e, alea.pick(&[0, 0x12, 0x12, 0xc]));
+            wr8(b, A5 + 0x48f, alea.pick(&[0, 1]));
+            wr16(b, obj + 0x56, owner as u16);
+            wr16(b, obj + 0x42, alea.pick(&[owner as u16, JOUEURS as u16]));
+            wr8(b, owner + 0x22, alea.pick(&[0, 1]));
+            wr16(b, obj + 0x58, (alea.next() % 18) as u16);
+            wr16(b, obj + 0x5a, (alea.next() % 4) as u16);
+            wr8(b, obj + 0x33, alea.pick(&[0, 0, 1]));
+            wr16(b, obj + 0xc, (alea.next() % 0x40) as u16);
+            if alea.une_sur(3) {
+                // presque en haut de l'écran
+                let haut = rd16(b, A5 + 0x5aa).wrapping_add(0x100).wrapping_sub(rd16(b, obj + 0x10));
+                wr16(b, obj + 0xc, haut.wrapping_sub((alea.next() % 8) as u16));
+            }
+        }
         // effets liés à un joueur : le propriétaire est un joueur
-        81 | 80 => {
+        81 => {
             wr16(b, obj + 0x50, joueur as u16);
             for off in [0x8u32, 0xc, 0x10] {
                 let w = rd16(b, joueur + off);
@@ -193,6 +251,11 @@ fn perturbe(b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
         wr16(b, j + 8, x.wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20));
         wr16(b, j + 0x10, y.wrapping_add((alea.next() % 0x20) as u16).wrapping_sub(0x10));
     }
+    // étape de la scène et fondu (feu d'artifice)
+    if alea.une_sur(10) {
+        wr8(b, A5 + 0x2e, alea.pick(&[0, 0x12, 0xc]));
+        wr8(b, A5 + 0x48f, alea.pick(&[0, 1]));
+    }
     // compteur d'images
     wr16(b, A5 + 0x6e, alea.next() as u16);
     // jeu en pause (rare)
@@ -225,7 +288,9 @@ fn principal() {
         script.apply(f, &mut m);
         m.run_frame();
     }
-    ddsom_game::set_check(true);
+    let propre = std::env::var("FUZZ_PROPRE").is_ok();
+    let mut ecarts_propres = 0u64;
+    ddsom_game::set_check(!propre);
     std::panic::set_hook(Box::new(|_| {}));
     let (c0, b0) = (m.cpu.clone(), m.bus.clone());
     let mut alea = Alea(0x9e37_79b9_7f4a_7c15 ^ (env("FUZZ_GRAINE", 1) as u64).wrapping_mul(0x1000_0000_01b3));
@@ -259,8 +324,19 @@ fn principal() {
             c.a[5] = A5;
             wr16(&mut b, A5 + EFFCT.free, alea.pick(&[0, 1, 2, 5, 19]));
             appels += 1;
+            let orig = couverture(&c, &b, entree, &(0..0), &mut BTreeSet::new());
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree))).is_err() {
                 abandons += 1;
+                continue;
+            }
+            if let (true, Some(orig)) = (propre, orig) {
+                let d = compare(&orig, &c, &b);
+                if !d.is_empty() {
+                    ecarts_propres += 1;
+                    if ecarts_propres <= 5 {
+                        println!("  écart {entree:06x} : {}", d.join(", "));
+                    }
+                }
             }
         }
     }
@@ -292,7 +368,7 @@ fn principal() {
                 // de temps en temps, l'état de libération (4) ou celui que pose le retrait hors écran (6)
                 let etat = if naissance { 0 } else if tour % 8 == 3 { 4 } else if tour % 8 == 7 { 6 } else { 2 };
                 wr8(&mut b, obj + 4, etat);
-                wr8(&mut b, obj + 5, if naissance { 0 } else { alea.pick(sous_etats(t)) });
+                wr8(&mut b, obj + 5, if naissance { 0 } else { alea.pick(sous_etats(t, v)) });
                 wr8(&mut b, obj + 0x28, EFFCT.class);
                 for off in [0x46u32, 0x50, 0x54, 0x5a, 0x5c, 0x1e] {
                     wr16(&mut b, obj + off, owner as u16);
@@ -321,12 +397,23 @@ fn principal() {
                     c.d[7] = k;
                     c.d[0] = 4 * t;
                     c.a[1] = entree;
-                    couverture(&c, &b, entree, &plage, &mut vus);
+                    let orig = couverture(&c, &b, entree, &plage, &mut vus);
                     appels += 1;
                     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
                     if r.is_err() {
                         abandons += 1;
                         break;
+                    }
+                    if let (true, Some(orig)) = (propre, orig) {
+                        let d = compare(&orig, &c, &b);
+                        if !d.is_empty() {
+                            ecarts_propres += 1;
+                            if ecarts_propres <= 5 {
+                                println!("  écart type {t} variante {v} pas {k} : {}", d.join(", "));
+                            }
+                            // on repart de l'état de l'original
+                            (c, b) = orig;
+                        }
                     }
                 }
             }
@@ -348,7 +435,10 @@ fn principal() {
             plages.iter().map(|(a, b)| format!("{a:06x}-{b:06x}")).collect::<Vec<_>>().join(" ")
         );
     }
-    let mut ecarts = 0;
+    let mut ecarts = ecarts_propres;
+    if propre {
+        println!("  comparaison propre : {ecarts_propres} écarts");
+    }
     for (nom, st) in ddsom_game::report() {
         if st.calls == 0 {
             continue;
