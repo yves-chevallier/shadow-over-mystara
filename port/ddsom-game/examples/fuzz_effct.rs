@@ -289,6 +289,13 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
                 }
             }
         }
+        // vote : réglage (scrutin) restreint
+        23 => {
+            wr8(b, obj + 0x2f, alea.pick(&[0, 1, 2]));
+            // texte du choix gagnant (pointeur `+0x30`, longueur `+0x34`) dans le tampon du scrutin
+            wr32(b, obj + 0x30, 0xff2072 + 2 * (alea.next() % 0x20));
+            wr16(b, obj + 0x34, (alea.next() % 8) as u16);
+        }
         // maillon de chaîne : précédent (+0x5c), tête (+0x46) dont l'octet +0x58 annonce la fin ou la rupture,
         // porteur de la tête (+0x54), rang
         12 => {

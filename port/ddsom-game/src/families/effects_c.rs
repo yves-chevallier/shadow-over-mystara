@@ -3286,8 +3286,16 @@ fn ballot_timer(x: &mut Cx) {
             timer_palette(x, 0x2531c0);
             free(x);
         }
-        // état 4 : jamais atteint par la table (code d'origine, A6 non défini)
-        4 => x.call(0xb0374),
+        // état 4 (0xb0374) : aucune étape n'y mène ; l'original efface le mot `+0x54` de l'objet désigné par
+        // A6, laissé par le code précédent, rend la palette et libère l'objet
+        4 => {
+            let a6 = x.c.a[6];
+            crate::mem::wr16(x.b, a6.wrapping_add(0x54), 0);
+            timer_palette(x, 0x2531c0);
+            free(x);
+        }
+        // état 6 (posé par le retrait hors écran) : libération (0xb02e8)
+        6 => free(x),
         _ => {}
     }
 }
