@@ -30,7 +30,7 @@ mod var {
     pub const PHASE: u32 = 0x2c;
     /// Compteur d'images de la partie.
     pub const FRAMES: u32 = 0x6e;
-    /// Service périodique actif.
+    /// Carte de développement : le temps de jeu est compté chaque seconde.
     pub const SERVICE: u32 = 0x82;
 }
 
@@ -54,9 +54,6 @@ mod at {
     /// Retour d'une phase : `game::FRAME_END`.
     pub const FRAME_END: u32 = 0x1c4c4;
 }
-
-/// Routine de service périodique.
-const SERVICE_ROUTINE: u32 = 0x2e540;
 
 /// Appel en cours de la tâche : `suite` reprendra quand l'appelé reviendra (rien n'est empilé sur la pile 68000).
 fn push(x: &mut Ctx, suite: u32) {
@@ -94,7 +91,7 @@ fn turn(x: &mut Ctx) -> Flow {
         let count = rd8(x.b, SERVICE_COUNT).wrapping_add(1);
         wr8(x.b, SERVICE_COUNT, if count < SERVICE_PERIOD { count } else { 0 });
         if count >= SERVICE_PERIOD {
-            crate::call_at(x.c, x.b, SERVICE_ROUTINE, at::YIELD);
+            crate::eeprom::carte_dev::temps_de_jeu(x.b);
         }
     }
     wait(x)

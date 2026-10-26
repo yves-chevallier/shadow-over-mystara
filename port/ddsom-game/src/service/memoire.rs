@@ -22,7 +22,7 @@ use m68k::Cpu;
 /// Entrée du test dans l'original (appelé par `bsr` depuis l'étape 2 de l'écran).
 pub const CHECK: u32 = 0x2cf26;
 /// Boucle sans fin de l'original après un « NG ».
-const STUCK: u32 = 0x2d112;
+pub const BLOQUE: u32 = 0x2d112;
 
 const TITLE: u32 = 0x2d184;
 const LABELS: u32 = 0x2d1a8;
@@ -68,7 +68,7 @@ pub fn memory(x: &mut Ctx) -> Flow {
         2 => {
             // l'original masque les interruptions autour du test (trap 12) : sans effet sur un test instantané
             if !check(x) {
-                x.c.pc = STUCK;
+                x.c.pc = BLOQUE;
                 return Flow::Yield;
             }
             next_step(x);

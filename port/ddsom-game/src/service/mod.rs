@@ -419,4 +419,21 @@ pub fn back_to_menu(x: &mut Ctx) -> Flow {
     show_menu(x)
 }
 
-pub const NATIVES: &[Native] = &[R_MENU_AFTER_CLEAR];
+/// Les deux blocages définitifs du menu TEST et des réglages : la tâche reste sur une boucle `bra.b *` de l'original,
+/// que la machine tient sans interpréteur en laissant passer le temps jusqu'à la fin de l'image. Aucune
+/// EEPROM ni aucune RAM de la machine émulée n'y mène (voir `docs/service.md` §7) : ils existent pour que
+/// l'adresse ait une native.
+fn tour_de_blocage(c: &m68k::Cpu, b: &mut cps2::Cps2Bus) -> u64 {
+    b.irq_horizon.saturating_sub(c.cycles).clamp(1, 4000)
+}
+
+const fn blocage(entry: u32, name: &'static str) -> Native {
+    Native { entry, name, cost: tour_de_blocage, run: |_, _| {}, touches_sound: false, outputs: 0, exact_cost: false }
+}
+
+/// « NG » du MEMORY CHECK (`0x2d112`).
+pub const BLOCAGE_MEMOIRE: Native = blocage(memoire::BLOQUE, "service_blocage_memoire");
+/// « EEPROM ERROR » (`0x2d7fa`).
+pub const BLOCAGE_EEPROM: Native = blocage(config::BLOQUE, "service_blocage_eeprom");
+
+pub const NATIVES: &[Native] = &[R_MENU_AFTER_CLEAR, BLOCAGE_MEMOIRE, BLOCAGE_EEPROM];

@@ -27,6 +27,8 @@ use crate::chemin::Chemin;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::{call, regs, Native};
 
+pub mod carte_dev;
+
 /// Port de sortie (lignes EEPROM) et d'entrée (DO sur le bit 0).
 const PORT_SORTIE: u32 = 0x804040;
 const PORT_ENTREE: u32 = 0x804020;
@@ -437,31 +439,24 @@ fn cout_compteur(c: &Cpu, b: &mut Cps2Bus, k: &Compteur) -> u64 {
 
 /// Compteur de comptabilité complet (0x2e448 pièces, 0x2e49a départs) : le compteur de l'EEPROM,
 /// puis, si la RAM supplémentaire est utilisée (`SANS_COMPTA` ≠ 0, carte de développement), les trois
-/// exemplaires du compteur dans cette RAM, traités par la fin du code d'origine (`suite`).
+/// exemplaires du compteur dans cette RAM (`carte_dev`).
 struct Complet {
-    entree: u32,
     compteur: u32,
-    suite: u32,
+    carte: fn(&mut Cps2Bus) -> u32,
 }
 
-const COMPLET_PIECES: Complet = Complet { entree: 0x2e448, compteur: 0x2daca, suite: 0x2e456 };
-const COMPLET_DEPARTS: Complet = Complet { entree: 0x2e49a, compteur: 0x2daf4, suite: 0x2e4a8 };
+const COMPLET_PIECES: Complet = Complet { compteur: 0x2daca, carte: carte_dev::pieces };
+const COMPLET_DEPARTS: Complet = Complet { compteur: 0x2daf4, carte: carte_dev::departs };
 
 fn compta_complete(c: &mut Cpu, b: &mut Cps2Bus, k: &Complet) {
     call(c, b, k.compteur);
     let actif = rd8(b, a5(c, ram::SANS_COMPTA)) != 0;
     c.flags_logic(actif as u32, Size::Byte);
     if actif {
-        call(c, b, k.suite);
+        let valeur = (k.carte)(b);
+        c.flags_logic(valeur, Size::Long);
     }
     rts(c, b);
-}
-
-fn cout_compta_complete(c: &Cpu, b: &mut Cps2Bus, k: &Complet) -> u64 {
-    let mut p = Chemin::default();
-    let actif = rd8(b, a5(c, ram::SANS_COMPTA)) != 0;
-    p.pris(!actif);
-    p.duree_hors(b, k.entree, if actif { Some(k.suite) } else { None }, &[k.compteur])
 }
 
 fn natif_compta_pieces(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -673,7 +668,7 @@ natif!(
     0x2e448,
     "compta_complete_pieces",
     natif_compta_pieces,
-    |c, b| cout_compta_complete(c, b, &COMPLET_PIECES),
+    |_, _| 300,
     regs::CCR,
     false
 );
@@ -682,7 +677,7 @@ natif!(
     0x2e49a,
     "compta_complete_departs",
     natif_compta_departs,
-    |c, b| cout_compta_complete(c, b, &COMPLET_DEPARTS),
+    |_, _| 300,
     regs::CCR,
     false
 );
@@ -690,12 +685,9 @@ natif!(
 // ---------------------------------------------------------------------------------------------
 // Parties gratuites et RAM de la carte de développement
 
-/// Compteur des parties gratuites (A5+0x25 non nul : jeu gratuit) et suites en code d'origine qui tiennent
-/// les compteurs de la RAM supplémentaire (carte de développement, `SANS_COMPTA` non nul : jamais sur une
-/// borne).
+/// Compteur des parties gratuites (A5+0x25 non nul : jeu gratuit) ; sur la carte de développement
+/// (`SANS_COMPTA` non nul : jamais sur une borne), le compteur correspondant de la RAM supplémentaire.
 const COMPTEUR_GRATUIT: u32 = 0x2db1e;
-const SUITE_GRATUIT: u32 = 0x2e59a;
-const SUITE_PAYANT: u32 = 0x2e4fc;
 const JEU_GRATUIT: u32 = 0x25;
 
 /// `tst.b (SANS_COMPTA,A5)` : rend vrai si la RAM supplémentaire est utilisée (drapeaux comme l'original).
@@ -712,8 +704,8 @@ fn compta_parties(c: &mut Cpu, b: &mut Cps2Bus) {
         call(c, b, COMPTEUR_GRATUIT);
     }
     if carte_de_developpement(c, b) {
-        c.pc = if gratuit { SUITE_GRATUIT } else { SUITE_PAYANT };
-        return;
+        let valeur = if gratuit { carte_dev::parties_gratuites(b) } else { carte_dev::parties_payantes(b) };
+        c.flags_logic(valeur, Size::Long);
     }
     rts(c, b);
 }
@@ -721,19 +713,30 @@ fn compta_parties(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x2dc9a (démarrage) : vérification de la RAM supplémentaire, seulement sur la carte de développement.
 fn compta_init(c: &mut Cpu, b: &mut Cps2Bus) {
     if carte_de_developpement(c, b) {
-        call(c, b, 0x2dca6);
-        c.pc = 0x2dcd2;
-        return;
+        carte_dev::demarrer(b);
     }
     rts(c, b);
 }
 
-/// 0x2e630 (personnage choisi, D0) et 0x2e696 (durée de partie) : statistiques de la RAM de la carte de
-/// développement ; sur une borne, rien.
-fn statistique(c: &mut Cpu, b: &mut Cps2Bus, suite: u32) {
+/// 0x2e8e4 (reset avec les boutons de réinitialisation tenus) : remise à zéro de la RAM supplémentaire.
+pub fn reinitialiser_carte(c: &mut Cpu, b: &mut Cps2Bus) {
     if carte_de_developpement(c, b) {
-        c.pc = suite;
-        return;
+        carte_dev::reinitialiser(b);
+    }
+}
+
+/// 0x2e630 (personnage choisi, D0) : statistique de la RAM de la carte de développement ; sur une borne, rien.
+fn stat_personnage(c: &mut Cpu, b: &mut Cps2Bus) {
+    if carte_de_developpement(c, b) {
+        carte_dev::partie_du_personnage(b, c.d[0] as u16);
+    }
+    rts(c, b);
+}
+
+/// 0x2e696 (durée de partie, D0, en images) : idem.
+fn stat_duree(c: &mut Cpu, b: &mut Cps2Bus) {
+    if carte_de_developpement(c, b) {
+        carte_dev::duree_de_partie(b, c.d[0]);
     }
     rts(c, b);
 }
@@ -742,7 +745,7 @@ pub const STAT_PERSONNAGE: Native = Native {
     entry: 0x2e630,
     name: "compta_stat_personnage",
     cost: |_, _| 40,
-    run: |c, b| statistique(c, b, 0x2e638),
+    run: stat_personnage,
     touches_sound: false,
     outputs: regs::CCR,
     exact_cost: false,
@@ -752,7 +755,7 @@ pub const STAT_DUREE: Native = Native {
     entry: 0x2e696,
     name: "compta_stat_duree",
     cost: |_, _| 40,
-    run: |c, b| statistique(c, b, 0x2e69e),
+    run: stat_duree,
     touches_sound: false,
     outputs: regs::CCR,
     exact_cost: false,

@@ -55,7 +55,7 @@ l'interruption suivante (`tient_la_table`, `lib.rs`) : le code d'origine, qui ch
 remplace jamais.
 
 Une tâche reste « du code qui reprend à une adresse » : les tâches réécrites ont des natives à leurs adresses de
-reprise (`resume!`), les autres (écran `0x19068`, suites de la carte de développement du menu TEST) reprennent dans le
+reprise (`resume!`), les autres (aucune aujourd'hui : l'écran `0x19068` est du code mort, la carte de développement est en Rust) reprendraient dans le
 code d'origine. Leurs appels en cours ne sont plus sur leur pile 68000 : voir ci-dessous.
 
 ### Appels en cours en Rust (`table::Cadre`)
@@ -167,9 +167,7 @@ sans 68000 »). Les fondus, l'écran des scores, les invites et les
 scripts de transition de la sortie de scène (`scene/transition/`, `docs/scenes.md` §5) sont faits. Les « listes de
 bulles des boss » n'existent pas : les boss et les objets SET qui appellent `0x9b6` (A0 = `0x14de`, `0x14c8`, `0x1ccf8`...)
 lancent une tâche de fondu, déjà en Rust (`taches/fondu.rs`). Le menu TEST `0x29162` est fait aussi (`taches/service.rs` : écrans en fonctions Rust, une seule cession au milieu d'un écran,
-reprise dans la native `0x291ec` ; seules les suites de la carte de développement, `A5+0x82`, jamais sur une borne, passent
-encore par du 68000, `docs/service.md` §5). Tâche encore en 68000 : l'écran `0x19068` (emplacement 0xf0, créé en `0x13aa0` par un sous-mode de l'attract propre à une région, jamais atteint
-par les scénarios). Les tâches Rust gardent encore leur état dans la RAM, les registres du contexte (le sens d'un fondu de luminosité est
+reprise dans la native `0x291ec` ; les suites de la carte de développement, `A5+0x82`, jamais sur une borne, sont en Rust aussi : `eeprom/carte_dev.rs`, `docs/service.md` §5). L'écran `0x19068` (emplacement 0xf0, créé en `0x13aa0`) est du code mort : voir « Code mort de la machine à modes » ci-dessous. Les tâches Rust gardent encore leur état dans la RAM, les registres du contexte (le sens d'un fondu de luminosité est
 dans D1) et leurs cadres.
 
 Mesure (`examples/reste68k`, 66 scénarios : `scene_end/`, `cov_tour1` à `8`, `cov_service`, `modes/ending`), avant et
@@ -211,7 +209,7 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
 
 1. **Plus aucune instruction 68000.** Les `call`/`call_at` vers du code d'origine (`docs/reste68k.md`, « Appels Rust qui
    exécutent encore du 68000 » ; surtout C10 SET, C04 boss, C0e EFFCT non exercés, P3, ESHL), le code d'origine où
-   reprennent encore des tâches (écran `0x19068`, suites de la carte de développement du menu TEST), et les natives que
+   reprennent encore des tâches (plus aucune), et les natives que
    la machine remplace par leur original : celles qui débordent sur l'interruption suivante (`run`, `lib.rs` :
    `c.cycles + cost > irq_horizon`) ; celles qui se déclaraient hors contrat (`families::COUT_HORS_CONTRAT` :
    épilogue étranger `0xaa9fe` des bulles, pas de réaction non réécrits) s'exécutent maintenant toujours. Sans processeur, une native s'exécute toujours en entier.
@@ -262,7 +260,12 @@ Interruptions masquées, pile du superviseur en FF0E66 (zone de piles ignorée p
 | `boot_init` 0x492 | CFFD ← 0x88, CFFE et CFFF ← 0xFF (le Z80 sort de son attente), `A5+0x16..0x18` (image du port 0x804040), DSW, tas des piles des 16 tâches (16 longs de 0x534 empilés sous FF01A6, sommet en FF005A), réglages 0x2d30a, `move #0x2000,SR` (le VBLANK en attente est pris aussitôt), tâche de démarrage 0x11b16 dans l'emplacement 0, ordonnanceur 0x928 |
 
 La branche d'erreur (« RAM ERROR !! » écrit en GFX RAM par 0x19ae, puis boucle infinie en 0x1948 ou 0x19a2) n'est jamais
-prise sur la machine émulée : elle n'est pas réécrite. La remise à zéro logicielle 0x28cd0 (`jmp 0x350` après une
+prise sur la machine émulée : elle n'est pas réécrite, et ne le sera pas. Le démarrage n'exécute **aucun** 68000 du test K2
+(`0x182a`, `0x1912` et la branche d'erreur sont remplacés d'un bloc par `reset`/`relacher_z80`/`poignee_de_main`, qui ne
+reproduisent que les effets : palette de départ, cases vides, RAM partagée, registres laissés à `boot_init`) ; mesuré par
+`examples/reste68k` : 0 instruction de K2, les deux fonctions sont comptées « jamais atteintes » parce que la native les
+couvre sans jamais les appeler. Un moteur sans processeur n'a pas de RAM à tester (la mémoire de Rust est toujours bonne) :
+le test n'a pas d'équivalent à écrire, seulement ses effets, déjà présents. La remise à zéro logicielle 0x28cd0 (`jmp 0x350` après une
 exception du processeur, K4) est hors périmètre.
 
 **Durée.** Mesurée par `examples/demarrage` (code d'origine à ×16 ; identique sur tous les scénarios : aucun ne donne
@@ -347,7 +350,7 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 6. **EFFCT (C0e, 2,7 %)** : `0xb9eba`, `0xb9ee6` (3 scénarios seulement), puis IA E1 (`0xfbb0`, `0xe76c`),
    texte V2 (`0x28d8`, `0x1386`), liste de sprites V4 (`0x1de96`), FIFO son S1 (`0xedf80`).
 7. **Les tâches restantes** (la partie, le gel, les fondus, l'écran des scores, les invites et l'interface joueurs sont en
-   Rust) : menu TEST `0x29162`, écran `0x19068` (jamais atteint). Le noyau natif reprend encore chaque tâche par son
+   Rust) : plus aucune (le menu TEST `0x29162` est en Rust ; l'écran `0x19068` est du code mort). Le noyau natif reprend encore chaque tâche par son
    enregistrement (PC, pile) ; voir le plan dans `architecture.md`.
 8. Les 1 294 fonctions jamais atteintes (88 Ko) : à classer en code mort (menu TEST, écrans de debug, K4 : hors
    périmètre) ou à couvrir par des scénarios (boss et ennemis rares, ESHL, SET) avant de les réécrire.
@@ -407,3 +410,19 @@ Instructions 68000 exécutées hors natives (hors attente active) sur 10 scénar
 
 Gain par routine : `0x1ee1a`/`0x1ef6c` (-10 M), `0x33fe4` (-2,7 M), `0xfbae`/`0xfbb0` (-1,9 M), `0x33e20` (-0,7 M),
 `0x31616` (-0,6 M), `0xe76c` (-0,4 M).
+
+## Code mort de la machine à modes (écran `0x19068`)
+
+La tâche `0x19068` (emplacement 0xf0) n'est créée que par `0x13a88`, en `0x13aa0` (`lea 0x19068,A0 ; jmp 0x9b6`, après
+`jsr 0x19052`). Ce gestionnaire, ses quatre voisins `0x139ac`, `0x139e2`, `0x13a1a`, `0x13a4e` (écrans de texte
+clignotant : `sub.w #1,8(A0)`, `lea texte,A4`, `bchg #0,10(A0)`, `jmp 0xd32`, chacun précédé de son bloc de texte) et le
+second gestionnaire `0x13aa6` (attente de `A5-0x6f61` puis fondu, comme `0x1371e` avec `FF0F53`) **ne sont référencés par
+rien** : le mode 2 aiguille par la table `0x1345c` (11 entrées : sous-modes 0 à 0x14, pas de 2), qui ne les contient pas ;
+aucun `jsr`/`jmp`/`bsr`/`bcc`, aucune adresse absolue ni aucun décalage relatif à une table de l'ensemble du programme ne
+les atteint (recherche exhaustive sur `prog_dec.bin` et `prog_plain.bin` : seul `0x13a9c` contient `0x19068`, seul
+`0x13a92` contient `0x19052`). `FF0E71` ne dépasse jamais 0x14 (au-delà, la lecture de la table sortirait de ses 11
+entrées). Reste de l'attract d'une autre version, comme les libellés de debug du même secteur. Mesure : les six valeurs
+de région (`A5+0x70` à 0, 2, 4, 6, 8, 10, posées à l'image 3) sur 12 000 images du code d'origine n'y mènent pas
+(la valeur 4 fait dérailler l'attract vers l'image 3165, état incohérent causé par le `poke` après le démarrage, où le
+PC passe par hasard dans ces octets). **Code mort : non réécrit.** Même statut pour la tâche `0x19068` elle-même (variante
+du tableau des scores `0x1835e` : pile `A5-0x7064`, table d'étapes `0x1908a`) et pour `0x19052`.
