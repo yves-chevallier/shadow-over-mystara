@@ -50,8 +50,12 @@ mod kind {
     pub const BLOW: u8 = 40;
     pub const TOSS: u8 = 41;
     pub const SCENERY: u8 = 42;
+    pub const DEBRIS_RAIN: u8 = 43;
     pub const SPELL: u8 = 44;
+    pub const TYPE_46: u8 = 46;
     pub const BEACON: u8 = 47;
+    pub const TYPE_48: u8 = 48;
+    pub const PROJECTILE: u8 = 51;
     pub const SHIMMER: u8 = 52;
     pub const TYPE_53: u8 = 53;
     pub const TYPE_54: u8 = 54;
@@ -68,6 +72,8 @@ mod kind {
     pub const FINALE: u8 = 84;
     pub const WISP: u8 = 86;
     pub const DRIFT: u8 = 90;
+    pub const THROWN_SHARD: u8 = 81;
+    pub const POSED_FLASH: u8 = 82;
     /// Tirs ennemis (ESHL) créés par deux routines de la famille.
     pub const ESHL_RISE: u8 = 0x47;
     pub const ESHL_SLASH: u8 = 0x48;
@@ -566,6 +572,85 @@ fn spell_ring(c: &mut Cpu, b: &mut Cps2Bus, setting: u8) {
     }
 }
 
+/// 0xb3e4e, 0xb3ec6 : cris d'un boss (effet de scène 42, variante `variant`) : une fiche tirée au hasard
+/// (`rng & 0x38`, octets en `table`) donne le nombre d'effets moins un, puis le réglage `+0x2f` de chacun ;
+/// liés au créateur par `+0x46`.
+fn shouts(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, table: u32) {
+    random(c, b);
+    let mut at = table + and_d0(c, 0x38) as u32;
+    c.d[1] = rd8(b, at) as u32;
+    at += 1;
+    loop {
+        c.a[2] = at;
+        let Some(o) = spawn(c, b, kind::SCENERY) else { return };
+        o.set_u8(b, Obj::VARIANT, variant);
+        let setting = rd8(b, at);
+        at += 1;
+        c.a[2] = at;
+        o.set_u8(b, 0x2f, setting);
+        link(c, b, o, 0x46, c.a[0]);
+        let n = (c.d[1] as u16).wrapping_sub(1);
+        set_low_word(&mut c.d[1], n);
+        if n == 0xffff {
+            return;
+        }
+    }
+}
+
+/// 0xb4bcc : pluie de débris (type 43) de variante D1, réglage D2, liée par `+0x5c`.
+fn debris_rain(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(o) = spawn(c, b, kind::DEBRIS_RAIN) {
+        o.set_u8(b, Obj::VARIANT, d1b(c));
+        o.set_u8(b, 0x2f, c.d[2] as u8);
+        link(c, b, o, 0x5c, c.a[0]);
+    }
+}
+
+/// 0xb53f4 : trois effets 46 (réglages 2, 1, 0) liés par `+0x46`.
+fn type_46_trio(c: &mut Cpu, b: &mut Cps2Bus) {
+    for setting in [2u8, 1, 0] {
+        let Some(o) = spawn(c, b, kind::TYPE_46) else { return };
+        o.set_u8(b, Obj::VARIANT, 0);
+        o.set_u8(b, 0x2f, setting);
+        link(c, b, o, 0x46, c.a[0]);
+    }
+}
+
+/// 0xb59a6, 0xb59c8 : effet 48 de variante `variant`, lié par `+0x46`.
+fn type_48(c: &mut Cpu, b: &mut Cps2Bus, variant: u8) {
+    if let Some(o) = spawn(c, b, kind::TYPE_48) {
+        o.set_u8(b, Obj::VARIANT, variant);
+        o.set_u8(b, 0x2f, 0);
+        link(c, b, o, 0x46, c.a[0]);
+    }
+}
+
+/// 0xb96c0 : éclat lancé (type 81) de variante D1, lié au joueur par `+0x50`.
+fn thrown_shard(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(o) = spawn(c, b, kind::THROWN_SHARD) {
+        put8(c, b, o, Obj::VARIANT, d1b(c));
+        link(c, b, o, 0x50, c.a[0]);
+    }
+}
+
+/// 0xb230e : bloc de 2 × 2 tuiles écrit en A1 (tuile D0, attribut D1 ; rangée suivante 0x80 plus loin) ;
+/// rend A1 après les deux rangées et D0 = tuile + 0x11.
+fn tile_block(c: &mut Cpu, b: &mut Cps2Bus) {
+    let attr = c.d[1] as u16;
+    let mut tile = c.d[0] as u16;
+    let mut at = c.a[1];
+    for _ in 0..2 {
+        wr16(b, at, tile);
+        wr16(b, at + 2, attr);
+        wr16(b, at + 4, tile.wrapping_add(0x10));
+        wr16(b, at + 6, attr);
+        at = at.wrapping_add(0x80);
+        tile = tile.wrapping_add(1);
+    }
+    c.a[1] = at;
+    set_low_word(&mut c.d[0], tile.wrapping_add(0xf));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Créateurs de scène
 
@@ -873,6 +958,18 @@ creators! {
     0xa8a42 "camera_mode_60" camera_mode_60, regs::CCR;
     0xa8ae8 "cree_liste_decors_d0" set_list_d0, CREATED | D(0) | D(1) | regs::a(4);
     0xa8af8 "cree_liste_decors" set_list, CREATED | D(0) | D(1) | regs::a(4);
+    0xb3e4e "cree_cris" |c, b| shouts(c, b, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
+    0xb3ec6 "cree_cris_b" |c, b| shouts(c, b, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);
+    0xb4bcc "cree_pluie_debris" debris_rain, CREATED;
+    0xb4f1c "cree_sorts_c" |c, b| spell_ring(c, b, 4), CREATED | D(1);
+    0xb53f4 "cree_type_46" type_46_trio, CREATED;
+    0xb59a6 "cree_type_48" |c, b| type_48(c, b, 1), CREATED;
+    0xb59c8 "cree_type_48_b" |c, b| type_48(c, b, 2), CREATED;
+    0xb64b0 "cree_projectile" |c, b| linked(c, b, kind::PROJECTILE, None), CREATED;
+    0xb96c0 "cree_eclat_lance" thrown_shard, CREATED;
+    0xb97a2 "cree_eclat_pose" |c, b| linked(c, b, kind::POSED_FLASH, None), CREATED;
+    0xb97ba "cree_eclat_pose_b" |c, b| linked(c, b, kind::POSED_FLASH, Some(1)), CREATED;
+    0xb230e "bloc_tuiles" tile_block, regs::d(0) | regs::a(1);
     0xa836c "cree_tir_coup" eshl_slash, CREATED;
     0xa817c "cree_tir_colonne" eshl_rise, CREATED | D(0);
 }

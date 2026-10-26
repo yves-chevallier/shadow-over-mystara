@@ -10,7 +10,8 @@
 //!
 //!   fuzz_effct <roms> <eeprom> <scénario> <images de chauffe> <types séparés par des virgules>
 //!
-//! Variables : `FUZZ_VARIANTES=0,2,5` (variantes tirées ; par défaut 0 à 15), `FUZZ_TOURS=n` (trajectoires par
+//! Variables : `FUZZ_CREATEURS=b4bcc,b96c0` (créateurs essayés depuis des registres tirés au hasard),
+//! `FUZZ_VARIANTES=0,2,5` (variantes tirées ; par défaut 0 à 15), `FUZZ_TOURS=n` (trajectoires par
 //! variante, 24), `FUZZ_PAS=n` (pas par trajectoire, 60), `FUZZ_GRAINE=n`, `FUZZ_PLAGE=début-fin` (plage du
 //! code d'origine dont on relève la couverture ; par défaut de l'entrée à l'entrée suivante de la table).
 
@@ -182,7 +183,7 @@ fn principal() {
         .unwrap_or_else(|_| (0..16).collect());
     let tours = env("FUZZ_TOURS", 24);
     let pas = env("FUZZ_PAS", 60);
-    let types: Vec<u32> = types.split(',').map(|x| x.parse().unwrap()).collect();
+    let types: Vec<u32> = types.split(',').filter(|x| !x.is_empty()).map(|x| x.parse().unwrap()).collect();
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
@@ -205,6 +206,32 @@ fn principal() {
     }
     let mut appels = 0u64;
     let mut abandons = 0u64;
+    // créateurs (FUZZ_CREATEURS=adresse,...) : appelés depuis des registres tirés au hasard, A0 sur un
+    // joueur, un ennemi ou un effet, A1 dans la RAM de travail ; le pool EFFCT plus ou moins rempli
+    let createurs: Vec<u32> = std::env::var("FUZZ_CREATEURS")
+        .map(|v| v.split(',').map(|x| u32::from_str_radix(x, 16).unwrap()).collect())
+        .unwrap_or_default();
+    for &entree in &createurs {
+        for _ in 0..tours * 50 {
+            let (mut c, mut b) = (c0.clone(), b0.clone());
+            b.irq_horizon = u64::MAX;
+            for r in 0..8 {
+                c.d[r] = if alea.une_sur(2) { alea.next() & 0xff } else { alea.next() << 8 | alea.next() & 0xff };
+            }
+            c.d[0] = alea.next() & 0xf;
+            c.d[1] = alea.next() & 0xf;
+            let (e, n) = (EFFCT.slot(alea.next() % EFFCT.slots).0, ENEMY.slot(alea.next() % ENEMY.slots).0);
+            c.a[0] = alea.pick(&[JOUEURS, JOUEURS + 0x200, e, n]);
+            c.a[1] = 0xff_9000 + 2 * (alea.next() % 0x800);
+            c.a[2] = alea.next();
+            c.a[5] = A5;
+            wr16(&mut b, A5 + EFFCT.free, alea.pick(&[0, 1, 2, 5, 19]));
+            appels += 1;
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree))).is_err() {
+                abandons += 1;
+            }
+        }
+    }
     for &t in &types {
         let entree = table[t as usize];
         let plage = match std::env::var("FUZZ_PLAGE") {
@@ -293,7 +320,7 @@ fn principal() {
             continue;
         }
         ecarts += st.mismatches;
-        if st.mismatches > 0 || nom.starts_with("effct") {
+        if st.mismatches > 0 || nom.starts_with("effct") || nom.starts_with("cree") || nom.starts_with("bloc") {
             println!("  {nom:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
         }
     }
