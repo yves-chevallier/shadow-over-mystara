@@ -6,7 +6,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::mem::{prog16, prog32, prog8, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{prog32, prog8, rd16, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::{call, regs, Native};
 
 /// Tampon de tuiles de la couche 3 : les colonnes de 44 mots longs effacées par 0xd5f12.
@@ -43,7 +43,7 @@ fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut a4 = GRIDS.wrapping_add((c.d[0] as u16).wrapping_mul(4) as u32);
     c.a[1] = DESTINATION;
     for _ in 0..2 {
-        set_low_word(&mut c.d[0], prog16(b, a4));
+        set_low_word(&mut c.d[0], rd16(b, a4)); // lecture par (A4)+ : espace données
         a4 += 2;
         c.a[4] = a4;
         call(c, b, LOAD_BLOCKS);
