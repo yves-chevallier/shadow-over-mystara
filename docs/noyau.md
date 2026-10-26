@@ -283,9 +283,16 @@ et dans l'application (`ddsom`) ; le mode normal (`install`) ne change pas.
   native qui attend une position du faisceau (`demarrage.rs`) rend la main sans changer PC ni registres : la ligne
   s'arrête et elle réessaie à la suivante, ce qui garde les deux instants que le Z80 observe. Durées des natives,
   `idle` de la machine, surcadencement et correctifs `patches` (qui visent le code d'origine) ne servent plus.
-  Plafond de sûreté : 1 000 000 natives par image (`PLAFOND_NATIVES`, une image en exécute quelques milliers) ;
-  au-delà l'image s'arrête comme une image de l'original finissant au milieu d'une attente active, et `validate`
-  compte ces images.
+* **Attente active.** Une tâche prête qui attend un événement amené par le VBLANK (l'écran des comptes de fin de
+  niveau attend la fin de son fondu, `TALLY_FADE_WAIT`, pendant que la tâche du gel décompte la tâche principale) fait
+  tourner l'ordonnanceur en rond ; l'original tourne ainsi jusqu'à l'interruption, et `idle` ne reconnaît que le cas
+  du gel seul. Au début de chaque parcours de l'ordonnanceur (`0x932`) à partir du troisième de l'image, un instantané
+  (RAM de travail et supplémentaire, GFX RAM, RAM d'objets, palette, RAM partagée, registres CPS, table des tâches,
+  registres du processeur) est comparé au précédent : identique, rien ne changera plus avant l'interruption et l'image
+  est finie. Plafond de sûreté : 1 000 000 natives par image (`PLAFOND_NATIVES`, une image en exécute quelques
+  milliers). `validate` compte les deux sortes d'images (« finies sur une attente active », « arrêtées par le
+  plafond »). Avant l'instantané, une vingtaine de scénarios atteignaient le plafond (4 à 20 images chacun, 100 ms
+  par image) ; aucun depuis.
 * **Diagnostic.** `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n (ligne, PC, SR, pile).
 
 ## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
