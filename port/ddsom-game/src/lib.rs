@@ -248,6 +248,7 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(families::natives())
         .chain(dispatch::NATIVES)
         .chain(game::NATIVES)
+        .chain(game::world_resumes())
         .chain(scene::natives())
         .chain(modes::natives())
         .chain(sound::wrappers_natifs())
