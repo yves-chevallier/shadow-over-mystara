@@ -27,9 +27,12 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 7 | 0x859f8 | 9 672 | DarkWarrior 1 | démonstration de l'attract (pose), et en partie dans `cov_2p_c`, `cov_tour4_c3` — réécrit |
 | 10 | 0x8ca4a | 2 900 | Nagpa | 65, 66 — réécrit |
 | 4 | 0x81b3a | 6 370 | Chimera | scénarios `trog_scene104`, `cov_2p_c`, `cov_tour4_c3` — réécrit |
+| 1 | 0x7acea | 6 334 | fauve bondissant (nom de debug « Displacer Beast ») | 27 (`covb_long_27`) — réécrit |
+| 3 | 0x7f41a | 10 016 | créature volante (« Harpy ») | 11 (`scene_11`, `covb_long_11`) — réécrit |
+| 9 | 0x8a75c | 8 942 | engin de guerre roulant et son équipage (h) | 2 (`covb_long3p_02`) — réécrit |
 
-Les types 0 à 3 (Ogre, Displacer Beast, Man Scorpion, Harpy) n'ont été vus dans aucune scène 1-68 ni dans les
-scénarios `cov_*` (le 3 paraît une fois, dans `scene_11`, et reste en 68000) : le jeu les joue comme ENEMY (types 4, 19, 20, 21, 22...). Les types 14 et 19, 15 et 20, 11 et 12 partagent un handler.
+Les types 0 et 2 (Ogre, Man Scorpion) n'ont été vus dans aucune scène 1-68 ni dans les scénarios `cov_*` ; restés en
+68000 (jamais exécutés). Les types 14 et 19, 15 et 20, 11 et 12 partagent un handler.
 
 ## 2. Réécrits
 
@@ -240,6 +243,62 @@ vol (ESHL 0x32 en éventail, table d'angles 0x8295c), geste du double, souffle a
 à terre, mort. Animations 0x17557e (corps), 0x175596 (vol, attaques), 0x1755ae (coups reçus). Validation : `trog_scene104`,
 `cov_2p_c`, `cov_tour4_c3` (contrôle appel par appel), fuzz `fuzz_boss` (`DDSOM_ENTREE=81b3a DDSOM_ETATS=1`).
 
+### Type 1 (0x7acea) : fauve bondissant, scène 27 — `boss_1/`
+
+Cousin de la Chimère (`boss_4`, même charpente et mêmes réglages) qui se déplace par bonds : une marche (`+6` = 4 ou 6) est une
+suite de sauts vers des points tirés près de la cible (tables 0x7c400 / 0x7c410, angle par 0x137e) dont la hauteur dépend de la
+distance (`hop_height`, 0x7c430 : la boucle relit le mot haut de D3 laissé par 0x137e, les registres sont donc reproduits). Les
+décisions sont des tirages dans des tables de la ROM qui désignent l'adresse de l'état à poser (`go` : 0x7c24a..0x7c372).
+
+| `+5` | Fichier | Rôle |
+|---|---|---|
+| 0 | `moves` | arrivée en cinématique : huit sauts d'un bord à l'autre (table de vitesses 0x7af94), chute du haut de l'écran |
+| 2 | `moves` | attente, demi-tour, marche par bonds, grand bond (vers la cible ou le milieu), bond en arrière et glissade |
+| 4 | `moves` | quatre coups (enchaînés `+0xae` fois si le coup porte), saisie (0xfc44/0xfd64), bond en ciseaux avec un double ENEMY 0x1a |
+| 6 à 10 | `moves` | attente sans joueur |
+| 12 | `moves` | joueur saisi (0xfda2) : morsures de 4 PV (jamais en dessous de 1), puis relâché (0xfd8c) |
+| 14, état 4 | `hit` | réactions (table 0x7bbbe, seule 0x7bc6a est propre : tremblement), recul, à terre et bond, mort, retour au combat 0x7bece (aussi appelé par les réactions communes, table 0x3e000) |
+
+### Type 3 (0x7f41a) : créature volante, scène 11 — `boss_3/`
+
+Le boss vole (`+0xc` = altitude) : il plane, s'approche, pique, et choisit ses attaques dans des tables de 32 octets par
+difficulté lues en données (0x80e62 cible proche, 0x81062 à distance, 0x81262 en vol, 0x814f8 après une attaque). `+0xa2` est le
+mode vol / sol, recalculé d'après les seizièmes de PV (0x81722, table 0x81712). Il s'enregistre comme obstacle (`A5-0x5fb2`) : son
+corps repousse joueurs et objets selon `+0xa4` (remis à zéro à chaque image) ; les deux formes 0x818e6 (devant) et 0x819e2 (de côté)
+sont des natives (`body.rs`) appelées par `boss_repousse` (0x81aa4) et par les attaques (cris, vol de côté). Les sous-routines qui
+« sautent » dans 0x7f5ae (`move.l #0x020a0000,(4,A0) ; rts`) rendent vrai à leur appelant : sans cible, l'état d'attente est posé
+puis souvent écrasé par l'appelant, comme dans l'original.
+
+| `+5` | Fichier | Rôle |
+|---|---|---|
+| 0 | `fight` | arrivée (variante 0) : descente du haut de l'écran en cinématique, puis combat dans la même image |
+| 2 | `fight` | vol stationnaire, demi-tour, approche (`+6` = 4, 8), ligne droite (6), montée (10), altitude tenue (12), descente (14), vol bas (16) |
+| 4 | `attacks` | seize attaques : griffes, bond et plongée, cris qui repoussent, rase-mottes, ruée, vol de côté, enlèvement d'un joueur |
+| 6, 8 | `fight` | ronde vers des points de passage par quart d'écran (0x81876), saut d'envol |
+| 10, 12, 14 | `fight` | attente sans joueur, joueur emporté et lâché de haut, riposte (0xffda) |
+| état 4 | `hit` | réactions communes (table 0x80b0a), recul en vol, à terre et riposte (0x80cf6), mort (0x300 en `A5-0x557c`) |
+
+La riposte 0x81ae0 (appelée par la réaction commune 0x3e22e) est aussi une native.
+
+### Type 9 (0x8a75c) : engin de guerre roulant, scène 2 — `boss_9/`
+
+Pas d'IA de combat : l'engin roule d'un bord à l'autre de l'écran (caméra `A5+0x556`), s'arrête à une abscisse tirée (0x8bcd2),
+et donne des ordres à ses parties (ESHL 0xd, 0xe créées à l'initialisation : `+0xa9` bit 0 tir, bits 3 et 4 bombardement ; les
+parties les effacent). Son équipage (ENEMY 0x13 : conducteur `+0xac`, quatre servants `+0xae..+0xb4`) est recompté chaque image
+(`+0xb6` bits, `+0xb7` nombre × 4) et remplacé au demi-tour ; la vitesse dépend de l'équipage (tables 0x8c092 / 0x8c0ba). Les coups
+ne font que le secouer et cumulent des avaries par huitièmes de PV (`+0xa8`, 0x8b9ea) qui interdisent certains tirs. Il attend
+d'avoir 10 places ESHL et 5 ENEMY libres pour se créer. Toutes les tables par difficulté sont lues en données.
+
+| État, `+5` | Fichier | Rôle |
+|---|---|---|
+| 2, 0 | `moves` | équipage, dialogue (0xc8312), traversée de l'écran, marche arrière |
+| 2, 2 et 4 | `moves` | passages (`+6` = 0), approche de l'arrêt (2), arrêts : tir (4, 16), tir en se déplaçant (6), bombardements (8, 20), bombardement puis tir (10, 22), pauses (12, 14, 24, 26 : l'original décompte l'octet fort du mot, elles finissent aussitôt), salves (18) |
+| 2, 6 | `moves` | attente sans joueur |
+| 4, 0 | `hit` | coup : secousse, recul, reprise de l'état mémorisé `+0x8a` |
+| 4, 2 | `hit` | détruit (0x900 en `A5-0x557c`) : sortie de l'écran, l'équipage saute, dialogue à la caméra 0x500, chute, libération |
+
+Le code 0x8b258..0x8b326 n'est référencé par aucune table (code mort, non réécrit).
+
 ### Types 11 et 12 (0x8d59e) : salamandres, scènes 42 et 40 — `boss_11/`
 
 Le boss est la tête d'un serpent de douze anneaux. Les anneaux sont des objets ESHL de type 5 (`eshl_05`, 0x9e458 : zone de
@@ -288,13 +347,19 @@ de la table 0x9e6bc (D0 remis à zéro avant la lecture) et non celui de la lign
   états tirés dans les tables de sauts (`DDSOM_ETATS=1`), meneur de la caméra, joueurs, caméra et drapeaux perturbés à chaque pas,
   chaque appel comparé à l'original ; `DDSOM_COUVERTURE=fichier` écrit les instructions vues (`DDSOM_GRAINE`, `DDSOM_ENTREE`, `DDSOM_PAS`).
   Exemple : `DDSOM_ETATS=1 fuzz_boss $DDSOM_ROMS $DDSOM_EEPROM scenarios/bot_char0.txt 4500 300`.
+  `DDSOM_SEULS=boss_` n'affiche que les écarts des routines dont le nom commence ainsi (les écarts connus du drapeau X des
+  natives d'IA ne masquent plus les autres) ; chaque écart nomme la routine fautive.
+* Types 1, 3 et 9 : `covb_long_27`, `scene_11` et `covb_long_11`, `covb_long3p_02` VALIDES ; fuzz (`boss5_scene58`, 3 000 images
+  de chauffe, 2 × 300 tours par type, `DDSOM_ETATS=1`) sans écart des gestionnaires. Instructions d'origine jamais vues (scénarios
+  et fuzz) : 78 sur 1 370 (type 1), 76 sur 1 732 (type 3), 29 sur 1 384 (type 9), dont les données mal désassemblées ; le reste
+  est relu à la main.
 
 
 ## Sous-routines communes appelées par le code d'origine des boss (`boss_common.rs`)
 
 * `0x81aa4` (`boss_repousse`) : repousse l'objet A0 (ennemi, effet) hors du corps du boss enregistré en `A5-0x5fb2`
   (mot négatif = adresse), si ce boss est actif, de classe 3 et a une forme `+0xa4` non nulle ; la routine de la forme
-  (table 0x81ad4 : 1 = 0x818e6, 2 = 0x819e2, restées en code d'origine) déplace l'objet en X. Rend D0 = 1 (Z = 0) si
+  (table 0x81ad4 : 1 = 0x818e6, 2 = 0x819e2, natives de `boss_3/body.rs`) déplace l'objet en X. Rend D0 = 1 (Z = 0) si
   l'objet a été déplacé, A0 intact, A1 = A6 = l'objet. Appelée chaque image par les ennemis (elfe, gnoll...).
 * `0x833b6` (`boss_oscillation`) : oscillation verticale (`+0xc` += long de la table 0x833e4 par `+0x33 & 0x7f`,
   négatif quand le compte à rebours `+0xa8` est sous 36 ; période 72).
@@ -302,4 +367,4 @@ de la table 0x9e6bc (D0 remis à zéro avant la lecture) et non celui de la lign
   ou, si la moitié des PV `+0x62` dépasse 72, retient ce seuil en `+0xb6` et pose `+0x42`.
 
 Validées par les scénarios (`boss_repousse` dans presque tous les scénarios d'ennemis, `boss_oscillation` dans
-`enemy/trog_scene104`, `boss_seuil_pv` dans les scénarios de boss) ; les deux formes du corps n'y sont jamais atteintes.
+`enemy/trog_scene104`, `boss_seuil_pv` dans les scénarios de boss) ; les deux formes du corps sont exercées par le fuzz du boss 3.
