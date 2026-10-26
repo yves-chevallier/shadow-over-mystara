@@ -15,6 +15,9 @@
 //! * `--plan` : parcours de scènes. La première est écrite en FF8034 pendant la sélection du
 //!   personnage ; ensuite, après `durée` images de jeu dans la scène (ou 400 images après une
 //!   progression naturelle), le bot saute à la suivante (FF8034 ← scène, phase FF802C ← 8 : entrée de scène du jeu).
+//! * `--spawn famille:type:variante:image` : à l'image indiquée, crée à la main un objet `enemy` ou `boss` du type
+//!   et de la variante donnés, à 0x60 pixels à droite du joueur 1 (comme `creatures spawn`), pour les types que les
+//!   parcours ne font jamais apparaître ; les écritures RAM font partie du scénario produit.
 //! * `--patience N` : un objet ou une caisse poursuivi plus de N images est ignorée 2 000 images
 //!   (sinon le bot reste bloqué devant un objet hors d'atteinte et la scène n'avance plus).
 //! * `--cast N`, `--charges V` : magies et objets fréquents (voir `Magic`).
@@ -71,6 +74,7 @@ fn main() {
     let mut offset = 0usize;
     let mut magic = Magic::default();
     let mut patience = 0usize;
+    let mut spawn: Option<(bool, u32, u32, usize)> = None;
     let mut i = 6;
     while i < a.len() {
         match a[i].as_str() {
@@ -82,6 +86,10 @@ fn main() {
             "--patience" => patience = a[i + 1].parse().unwrap(),
             "--cast" => magic.period = a[i + 1].parse().unwrap(),
             "--charges" => magic.charges = a[i + 1].parse().unwrap(),
+            "--spawn" => {
+                let t: Vec<&str> = a[i + 1].split(':').collect();
+                spawn = Some((t[0] == "boss", t[1].parse().unwrap(), t[2].parse().unwrap(), t[3].parse().unwrap()));
+            }
             "--plan" => {
                 plan = a[i + 1]
                     .split(',')
@@ -121,6 +129,24 @@ fn main() {
         }
         if f == 2400 + offset && !plan.is_empty() {
             b.poke(0xff8034, plan[0].0, 1);
+        }
+        if let Some((boss, kind, variant, at)) = spawn {
+            if f == at {
+                let (pool, n) = if boss { (0xffba1eu32, 3) } else { (0xffa99e, 22) };
+                if let Some(slot) = (0..n).map(|i| pool + 0xc0 * i).find(|&o| b.rd8(o) == 0) {
+                    let (px, py) = (b.rd16(P0 + 8), b.rd16(P0 + 0x10));
+                    b.poke(slot + 0x28, if boss { 4 } else { 2 }, 1);
+                    b.poke(slot + 2, kind, 1);
+                    b.poke(slot + 3, variant, 1);
+                    b.poke(slot + 8, (px + 0x60) & 0xffff, 2);
+                    b.poke(slot + 0x10, py, 2);
+                    if !boss {
+                        let free = b.rd16(0xff8000 + 0x7e62);
+                        b.poke(0xff8000 + 0x7e62, free.wrapping_sub(1) & 0xffff, 2);
+                    }
+                    b.poke(slot, 1, 1);
+                }
+            }
         }
         let active = b.rd8(0xff8030) != 0;
         let select_end = phase == 0x04 && b.rd8(0xff802d) > 0x0c;

@@ -334,7 +334,6 @@ mod boss_intro {
     const SMOKE: u32 = 0xb4bcc;
     const BOSS_ALLOC: u32 = 0x23a8;
     const FADE: u32 = 0x1686;
-    const BLAST_AT: u32 = 0x667f4;
     /// Tables de décalages (16 mots chacune) de l'explosion en X et en Y.
     const BLAST_DX: u32 = 0xd4910;
     const BLAST_DY: u32 = 0xd4930;
@@ -487,7 +486,7 @@ mod boss_intro {
         x.c.d[3] = (x.c.d[3] & 0xffff_0000) | py as u32;
         x.c.d[0] = (x.c.d[0] & 0xffff_0000) | px as u32;
         x.c.d[1] = (x.c.d[1] & 0xffff_0000) | py as u32;
-        x.call(BLAST_AT);
+        crate::families::enemy_common::enemy_blast_at(x);
     }
 
     /// Étape 22 : 30 fumées, puis le boss (BOSS type 2) apparaît.

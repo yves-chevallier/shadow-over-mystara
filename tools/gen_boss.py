@@ -35,6 +35,8 @@ TRONQUE = {
 }
 
 # nom -> (type de boss, scènes "scène:images,...", crans du curseur, PV du joueur remis à, affaiblissement, dossier)
+# 7e élément facultatif "type:variante:image[:joueurs]" : boss créé à la main (autobot --spawn) à cette image, pour un type que
+# les scènes du jeu ne font pas apparaître dans les durées jouées
 # dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/LISEZMOI.txt)
 SPECS = {
     "boss17_scene13": (17, "13:11000", 0, "0x70", 0, "boss"),
@@ -57,6 +59,13 @@ SPECS = {
     "boss5_scene58_mort": (5, "58:11000", 0, "0x70", 1500, "boss"),
     "boss8_scene64": (8, "64:11000", 0, "0x70", 0, "boss"),
     "boss8_scene64_mort": (8, "64:11000", 0, "0x70", 1500, "boss"),
+    "boss0_poke": (0, "20:11000", 0, "0x70", 0, "boss", "0:0:3000"),
+    "boss0_poke_mort": (0, "20:11000", 0, "0x70", 1500, "boss", "0:0:3000"),
+    "boss16_poke": (16, "14:11000", 0, "0x70", 0, "boss", "16:0:3000"),
+    "boss16_poke_mort": (16, "14:11000", 0, "0x70", 1500, "boss", "16:0:3000"),
+    "boss2_poke": (2, "10:11000", 0, "0x70", 0, "boss", "2:0:3000"),
+    "boss2_poke3p": (2, "10:11000", 0, "0x70", 0, "boss", "2:0:3000:3"),
+    "boss2_poke3p_mort": (2, "10:11000", 0, "0x70", 1500, "boss", "2:0:3000:3"),
     "boss13_dragon": (13, "7:3000,9:3000", 0, "0x70", 0, "ko"),
 }
 
@@ -80,17 +89,25 @@ def tronquer(lines, fin):
 
 
 def generate(name):
-    _, plan, k, god, weaken, folder = SPECS[name]
+    _, plan, k, god, weaken, folder, *apparition = SPECS[name]
     base = os.path.join(ROOT, "work", name + ".base")
     os.makedirs(os.path.dirname(base), exist_ok=True)
-    lines = make_bot.build(frames=FRAMES, players=1, chars=(k,), coin_period=1500, base_only=True)
+    joueurs = 1
+    if apparition:
+        champs = apparition[0].split(":")
+        joueurs = int(champs[3]) if len(champs) > 3 else 1
+    lines = make_bot.build(frames=FRAMES, players=joueurs, chars=(k,) * joueurs, coin_period=1500, base_only=True)
     with open(base, "w") as f:
         f.write("\n".join(lines) + "\n")
     out = os.path.join(ROOT, "scenarios", folder, name + ".txt")
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    cmd = [AUTOBOT, ROMS, EEPROM, base, str(FRAMES), out, "--players", "1", "--seed", "1", "--god", god, "--plan", plan]
+    cmd = [AUTOBOT, ROMS, EEPROM, base, str(FRAMES), out, "--players", str(joueurs), "--seed", "1", "--god", god, "--plan", plan]
     if weaken:
         cmd += ["--weaken", str(weaken)]
+    if apparition:
+        # objet créé à la main (type:variante:image) pour un boss que les scènes du jeu ne montrent pas
+        kind, variant, image = apparition[0].split(":")[:3]
+        cmd += ["--spawn", f"boss:{kind}:{variant}:{image}"]
     log = subprocess.run(cmd, capture_output=True, text=True)
     with open(os.path.join(ROOT, "work", name + ".log"), "w") as f:
         f.write(log.stderr)

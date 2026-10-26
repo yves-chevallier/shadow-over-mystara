@@ -236,7 +236,7 @@ fn intro_wait_scene(x: &mut Cx) {
         return;
     }
     x.add8(f::SUB2, 4);
-    x.call(0xa6824);
+    eshl_pair_3f(x);
     body(x, 1);
 }
 

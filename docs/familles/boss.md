@@ -7,6 +7,43 @@ octets pairs qui indexent des tables de sauts. `boss_common.rs` réexporte `enem
 `suspended`, `random`...) et ajoute les variables de scène des boss (`var::*`, `leader`, `scroll_x`).
 Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms de debug du jeu (atlas, annexe A).
 
+## 0. Recensement des tables et des entrées encore en 68000
+
+Les 23 entrées de la table BOSS 0x39b12 (index = type) et les 29 de la table ENEMY 0x39a78 sont toutes couvertes par une native
+Rust ; il ne reste plus aucun gestionnaire de ces deux classes en 68000.
+
+| Type BOSS | Entrée | Native | Type BOSS | Entrée | Native |
+|---|---|---|---|---|---|
+| 0 | 0x794ae | `boss_0/` | 12 | 0x8d59e | `boss_11/` (même routine que 11) |
+| 1 | 0x7acea | `boss_1/` | 13 | 0x8f59c | `boss_dragon.rs` |
+| 2 | 0x7c5a8 | `boss_22/` (avec `two.rs`) | 14 | 0x8fae4 | `boss_19/` (même routine que 19) |
+| 3 | 0x7f41a | `boss_3/` | 15 | 0x91530 | `boss_15/` |
+| 4 | 0x81b3a | `boss_4/` | 16 | 0x9325e | `boss_16/` |
+| 5 | 0x8341c | `boss_5.rs` | 17 | 0x952b4 | `boss_17/` |
+| 6 | 0x8430e | `boss_6/` | 18 | 0x975ec | `boss_18/` |
+| 7 | 0x859f8 | `boss_7/` | 19 | 0x8fae4 | `boss_19/` |
+| 8 | 0x87fc0 | `boss_8/` | 20 | 0x91530 | `boss_15/` (même routine que 15) |
+| 9 | 0x8a75c | `boss_9/` | 21 | 0x9947a | `boss_21/` |
+| 10 | 0x8ca4a | `boss_10.rs` | 22 | 0x9aeaa | `boss_22/` |
+| 11 | 0x8d59e | `boss_11/` | | | |
+
+Les types 0, 2, 16 et 22 étaient les derniers en 68000 : ils n'apparaissent dans aucune des scènes que les parcours atteignent
+(`boss_scan` ne reste que 500 images par scène) mais le script d'apparition de la scène 20 crée le type 0, celui de la scène 14 le
+type 16, et la fin de la scène 10 (action de fin 9 du contrôleur de scène, qui crée le SET 17 de l'arrivée du boss) le type 2, qui
+crée à son tour le type 22 : ce sont de vrais boss (aucun n'est du code mort). Ils sont exercés par des scénarios qui les créent
+à la main (`autobot --spawn`, `tools/gen_boss.py`, voir §3).
+
+ENEMY (0x39a78) : types 0 Kobold à 28 Nagpa, le 17 vaut 0x39aec (la boucle de dispatch BOSS : jamais créé) ; chaque type a sa
+native (`enemy_*`), sans table de variantes en 68000. Les sous-tables des gestionnaires (réactions aux coups par code `+0x49`, tables
+de décision, jeux d'animations) sont lues en ROM par le Rust ; les réactions communes (0x3bb9c-0x3dab0) sont dans `reactions.rs`,
+les seules routines de réaction propres à un boss sont réécrites avec lui (0x4c : tremblement, 0x7a442, 0x7bc6a...).
+
+Appels qui exécutaient du 68000 depuis les gestionnaires de BOSS et d'ENEMY (docs/reste68k.md) : les six petits créateurs d'ESHL
+0xa6824 (boss 5), 0xa2f96 (boss 7), 0xa460a, 0xa464e, 0xa4676 (boss 15) et 0x9ddee (ennemi dbeast) sont désormais des fonctions
+Rust (`enemy_common.rs`, et l'ennemi 0x667f4 des explosions de l'arrivée du boss 2 : `enemy_blast_at`; `eshl_pair_3f`, `eshl_burst_27`, `eshl_shot_34`, `eshl_thrown_by_beast`) ; plus aucune instruction
+d'origine n'est exécutée dans ces modules. Les bibliothèques d'IA et les sous-routines d'effets qu'ils appellent encore par
+adresse (0x10112, 0xe3d32, 0xed836, 0xb59a6...) sont comptées avec leur famille (EFFCT, ESHL, SET).
+
 ## 1. Qui apparaît où
 
 Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'origine) et `examples/boss_seen.rs`
@@ -31,8 +68,15 @@ Relevé par `examples/boss_scan.rs` (saute de scène en scène sur la machine d'
 | 3 | 0x7f41a | 10 016 | créature volante (« Harpy ») | 11 (`scene_11`, `covb_long_11`) — réécrit |
 | 9 | 0x8a75c | 8 942 | engin de guerre roulant et son équipage (h) | 2 (`covb_long3p_02`) — réécrit |
 
-Les types 0 et 2 (Ogre, Man Scorpion) n'ont été vus dans aucune scène 1-68 ni dans les scénarios `cov_*` ; restés en
-68000 (jamais exécutés). Les types 14 et 19, 15 et 20, 11 et 12 partagent un handler.
+Les types 14 et 19, 15 et 20, 11 et 12 partagent un handler. Les quatre derniers, vus seulement par les scénarios qui les créent à
+la main (les parcours de `boss_scan` ne durent pas assez pour déclencher leur apparition) :
+
+| Type | Handler | Octets | Nom (h) | Scène |
+|---|---|---|---|---|
+| 0 | 0x794ae | 6 100 | créature qui se dédouble (une seconde moitié, variante 1, lui est liée) | 20 (script d'apparition, `x` = 736) |
+| 16 | 0x9325e | 8 300 | boss à charges et prises | 14 (script d'apparition, `x` = 1024) |
+| 2 | 0x7c5a8 | 11 900 | boss de fin de la scène 10 (action de fin 9 : SET 17 d'arrivée du boss) | 10 |
+| 22 | 0x9aeaa | 9 000 | partenaire du type 2 (créé par lui à trois joueurs, ou à deux joueurs sur une difficulté d'au moins 0x17) | 10 |
 
 ## 2. Réécrits
 
@@ -328,6 +372,72 @@ D3, D4 et D5 restent différents (non lus).
 Un défaut de `eshl_05` (families/eshl.rs) a été corrigé en passant : pour les images impaires, l'original relit l'octet d'index 0
 de la table 0x9e6bc (D0 remis à zéro avant la lecture) et non celui de la ligne.
 
+### Type 0 (0x794ae) : créature qui se dédouble, scène 20 — `boss_0/`
+
+Même charpente que le fauve bondissant (`boss_1/`) : états en longs, tables de décision de la ROM, bibliothèque d'IA 0x103d6.
+Deux variantes (`+3`) : la moitié principale (0) et la seconde moitié (1), créée par la première quand ses PV passent sous la moitié
+(`transform`, 0x7aaf4) et liée à elle par `+0xba` ; elles ne meurent qu'ensemble (la première à tomber ne fait que 0x19ad6, la
+dernière prévient la scène). Jeux d'animations 0x171a52 (corps), 0x171a7e (entrées en scène, attaques), 0x171a94 (coups reçus).
+`mod.rs` (création, aiguillage, décisions posées d'un coup et leurs tables), `moves.rs`, `hit.rs`.
+
+| `+5` | Rôle |
+|---|---|
+| 0 | entrées en scène : arrivée par un bord (`+6` = 0), transformation avec création de la seconde moitié (2), arrivée de la seconde moitié (4) |
+| 2 | combat : attente (0), demi-tour (2), course (4 et 6), charge (8) |
+| 4 | sept attaques (`+6` = 0 à 12) : trois coups, bond sur la cible, saut en arc, trois coups enchaînés, projectile (ESHL 0x43) |
+| 6 à 10 | attente tant qu'aucun joueur n'est en vie |
+| état 4 | réactions (table 0x7a396, la seule routine propre est 0x7a442, tremblement), recul, à terre, relevé (0x7a5ac), mort |
+
+Les tirages de décision lisent les tables d'octets de la ROM (0x7a8e8, 0x7a932, 0x7a9ae.., 0x7aa88..) puis un saut par table de mots
+(0x7a8f8, 0x7a942, 0x7a9de, 0x7aac8) : `go` les exécute par adresse. Fuzz `fuzz_boss` (`DDSOM_ENTREE=794ae`) : 1 259 instructions
+sur 1 306 vues (les entrées de tables qu'aucun octet de la ROM ne sélectionne dans les tirages joués), sans écart du gestionnaire.
+
+### Type 16 (0x9325e) : boss de la scène 14 — `boss_16/`
+
+Gabarit ancien comme Ezerhorden : `+5`, `+6`, `+7` posés champ par champ, trois jeux d'animations (0x17efe8 mouvements, 0x17f002
+attaques, 0x17f046 coups reçus) lancés par `anim_a`, `anim_b`, `anim_c` qui mémorisent le jeu et le numéro (`+0xa0`, `+0xa1`). Variantes
+0 et 1 (la caméra choisit), les autres vont droit au combat. Le réveil est une pose accroupie qui se retourne vers le joueur le
+plus proche (`proximity`, 0x9351a, dont le test vertical compare la position du joueur avec elle-même : toujours nul).
+
+| `+5` | Rôle |
+|---|---|
+| 0 | réveil (variante 0 : tourne vers le joueur ; variante 1 : script de palette 0x10298 au rythme de l'animation) |
+| 2 | combat : attente, demi-tour, marche vers la cible (`+6` = 4 et 8), bond (6) ; les boîtes de portée choisissent une attaque (table 0x94a24) |
+| 4 | huit attaques (`+6` = 0 à 14) : ramper et bondir en saisissant, charge, flamme, deux souffles, rugissement, double saut |
+| 6, 8 | course vers un point de l'écran (table 0x951b0) puis saut sur place ; le groupe 8 y mène après une attaque |
+| 10 | pause |
+| 12 | joueur saisi (`+0x50`, `+0x188` levé) : morsures de 0x10 PV puis de 1 PV, relâché à 1 PV |
+| état 4 | réactions propres (0x9416e recul au sol, 0x941f8 projection, 0x942da gerbes d'effets, 0x94154 mort forcée), recul, à terre, mort (deux séquences, 0x946fc et 0x947c6 pour le code de coup 0x60) |
+
+Pièges : les routines de réaction sont des sous-états à part entière (la gerbe 0x942da enchaîne sur 0x9416e à ses étapes 4 et 6) ; la
+seconde table d'attaques (0x94c24) est écrasée avant d'être lue (deux `lea` à la suite en 0x949f0), donc jamais utilisée ; A1 doit
+désigner la proie quand `0xedd96` (qui sauve A1 sur sa pile privée) est appelé. Fuzz : 1 089 instructions sur 1 109 vues.
+
+### Types 2 et 22 (0x7c5a8, 0x9aeaa) : boss de la scène 10 et son partenaire — `boss_22/`
+
+Le type 22 est une copie modifiée du type 2 (74 % d'instructions identiques) : un seul module `boss_22/` sert les deux, le type
+étant lu dans `+2` (`two`) et les jeux d'animations, tables de la ROM et quelques constantes réunis dans `Kit` (`TWO_KIT`, `PART_KIT`).
+Seconde forme (`+0xb5`) après un rugissement (`+0xbf`), états posés d'un coup, mêmes groupes pour les deux types :
+
+| `+5` | Rôle |
+|---|---|
+| 0 | arrivée (type 22 : tombe du haut de l'écran ; type 2, `two.rs` : grand bond par la droite) |
+| 2 | combat : attente (0 et 8), demi-tour (2), élan (4), bond vers la cible (6) |
+| 4 | tir (0, 6), souffle (2, 8), morsure (4), attaque de la seconde forme, charge, piétinement (14), plongeon (20), plongeon vertical (22) ; le type 2 y ajoute `+6` = 10 (bond-écrasement, 16 étapes) et 12 (rotation et rugissement), `two.rs` |
+| 6, 8 | course vers un point de l'écran, pause, grands bonds (de face et de côté) |
+| 10, 12, 14 | pause, joueur saisi (morsures de 4 PV), transformation en seconde forme |
+| état 4 | réactions communes (`reactions.rs`), recul, à terre, mort : le type 22 passe le relais à son hôte (`+0x42`), la dernière moitié à tomber annonce la scène (type 2) |
+
+Le type 2 crée le contrôleur de scène SET 2 (variante 0x3e) quand son compte à rebours `+0xbc` s'écoule, et un type 22 à la
+création (3 joueurs, ou 2 joueurs et difficulté `A5+0x7f92` d'au moins 0x17) lié par `+0x42`/`+0xac`. Écarts du type 2 avec le 22 :
+création et arrivée, `+0xbb` (0x46/0x50 permutés), breath rendant vulnérable, vitesse verticale du grand bond (0x500 au lieu de 0x700),
+`next_attack` qui saute les joueurs absents au lieu de s'arrêter, rangées de chances de riposte de 4 octets, partenaire testé par `+0xac`,
+`+0xbf` remis à zéro au relevé, `(A0)` non réécrit à la transformation. Les trois routines de poussière 0x7f2c4, 0x7f328 et 0x7f3a0
+sont réécrites en Rust (`dust_line`, `dust_trail`), de même que les tests de portée 0x7f19c et 0x7f16c. Quirks conservés :
+`andi.w #3,(0x6e,A5)` réduit le compteur de la RAM de travail ; la vitesse de projection de la mort du 22 est la position de la
+caméra (+0xc0), 0x180 étant écrasé ; `subq.b #1,(0xa0)` agit sur l'octet haut du compteur (déjà nul). Fuzz : 2 035 instructions sur 2 140
+(type 2) et 1 474 sur 1 522 (type 22), sans écart du gestionnaire.
+
 ## 3. Validation
 
 * `scenarios/boss/boss17_scene13.txt` : VALIDE sur 12 000 images (9 259 appels du boss, qui reste en vie : variante 0, PV intacts).
@@ -341,6 +451,11 @@ de la table 0x9e6bc (D0 remis à zéro avant la lecture) et non celui de la lign
   (`DDSOM_SANS=boss_13`) ; chaque native seule, et toutes les paires, sont VALIDES ; toutes natives ensemble divergent. Hypothèse :
   la machine d'origine B finit en retard certaines images de cette scène chargée (tirs, sprites) alors que A, plus rapide,
   les finit à temps. Contrôle appel par appel (`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1`) : VALIDE.
+* Types 0, 16, 2 et 22 (jamais créés par les parcours) : `scenarios/boss/boss0_poke{,_mort}.txt`, `boss16_poke{,_mort}.txt`,
+  `boss2_poke.txt`, `boss2_poke3p{,_mort}.txt`. `tools/gen_boss.py` ajoute le 7e élément `type:variante:image[:joueurs]` des spécifications :
+  `autobot --spawn boss:type:variante:image` écrit en RAM (`poke`) un objet BOSS neuf à 0x60 pixels à droite du joueur 1 comme le fait
+  `creatures spawn`, et le bot le combat (variante `_mort` : PV ramenés à 1, séquences de mort et de fin de scène). Les scénarios à
+  trois joueurs exercent aussi le type 22 (créé par le type 2).
 * `examples/boss_trace.rs <roms> <eeprom> <scénario> <images>` : trace les changements d'état et de PV de chaque boss (quelles phases,
   dont la mort, un scénario exerce).
 * `examples/fuzz_boss.rs <roms> <eeprom> <scénario> <chauffe> <tours>` (modèle `fuzz_enemy.rs`) : objet neuf dans le pool BOSS,

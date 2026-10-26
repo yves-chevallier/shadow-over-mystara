@@ -64,7 +64,7 @@ fn combo(x: &mut Cx) {
                 x.set8(VULNERABLE, 0);
                 addq8(x, SUB3, 2);
                 x.set8(KEY, 0);
-                x.call(0xa2f96);
+                eshl_burst_27(x);
                 x.call(0xed1f0);
             }
             x.call(call::STEP);

@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use ddsom_game::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use ddsom_game::objects::pools::{BOSS, ENEMY, POOLS};
 
 struct Alea(u64);
@@ -31,6 +31,55 @@ const Z: &[u8] = &[0];
 /// États (`+4`, `+5`, `+6`) que les tables de sauts de l'original acceptent pour un type de boss.
 fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8])] {
     match kind {
+        // boss 0 : entrées en scène, combat, attaques, attente, état touché
+        0 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4]),
+            (&[2], &[2], &[0, 2, 4, 6, 8]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12]),
+            (&[2], &[6, 8, 10], &[0, 2]),
+            (&[4], &[0], &[0, 2]),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[6, 8], &[0, 2, 4, 6, 8]),
+            (&[4], &[10], &[0, 2]),
+            (&[6], Z, Z),
+        ],
+        // boss 16 : réveil, combat, attaques, bond, attente, pause, prise, état touché
+        16 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2]),
+            (&[2], &[2], &[0, 2, 4, 6, 8]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14]),
+            (&[2], &[6], &[0, 2, 4]),
+            (&[2], &[8], &[0, 2, 4]),
+            (&[2], &[10], &[0, 2]),
+            (&[2], &[12], Z),
+            (&[4], &[0], &[0, 2, 4, 6]),
+            (&[4], &[2], &[0, 2]),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[6], &[0, 2, 4, 6, 8]),
+            (&[4], &[8, 10], Z),
+            (&[6], Z, Z),
+        ],
+        // boss 2 et 22 : arrivée, combat, attaques, courses, pause, prise, transformation, état touché
+        2 | 22 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], Z),
+            (&[2], &[2], &[0, 2, 4, 6, 8]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]),
+            (&[2], &[6], &[0, 2, 4, 6]),
+            (&[2], &[8], &[0, 2, 4, 6, 8]),
+            (&[2], &[10], Z),
+            (&[2], &[12], &[0]),
+            (&[2], &[14], &[0, 2, 4, 6, 8, 10, 12]),
+            (&[4], &[0], &[0, 2]),
+            (&[4], &[2], &[0, 2]),
+            (&[4], &[4], &[0, 2, 4]),
+            (&[4], &[6], &[0, 2, 4]),
+            (&[4], &[8, 10], Z),
+            (&[6], Z, Z),
+        ],
         // dragon en vol : +5 = 0 (étapes +6 de 0 à 14) ou 2 (libération)
         13 => &[(&[0], Z, Z), (&[2], &[0], &[0, 2, 4, 6, 8, 10, 12, 14]), (&[2], &[2], Z), (&[4, 6], Z, Z)],
         // boss 17 : groupes (+5) et étapes (+6) des tables de sauts de l'original
@@ -247,6 +296,248 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
         ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
+}
+
+/// Étape `+7` valide du boss 0.
+fn etape_0(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 0, 0) => 4,
+        (2, 0, 2) => 5,
+        (2, 0, 4) => 6,
+        (2, 2, 8) => 4,
+        (2, 4, 6) => 4,
+        (2, 4, 8) => 5,
+        (2, 4, 10) => 4,
+        (2, 4, 12) => 3,
+        (2, 6 | 8 | 10, _) => 2,
+        (2, 2 | 4, _) => 2,
+        (4, 2 | 4, _) => 3,
+        (4, 6 | 8, _) => 5,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
+}
+
+/// Boss 0 : les deux moitiés (variante +3), l'autre moitié liée par `+0xba`, phase, drapeaux et minuteries.
+fn prep_0(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    wr8(b, obj + 3, (alea.next() % 2) as u8);
+    wr8(b, obj + 0x2c, if alea.next() % 2 == 0 { 0 } else { 0x20 });
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_0(alea, s.0, s.1, s.2));
+    wr8(b, obj + 0xaa, (alea.next() % 3) as u8);
+    for off in [0xadu32, 0xae, 0xaf, 0xb2, 0xb3, 0xb4] {
+        wr8(b, obj + off, pick(alea, &[0, 0, 1, 2, 5]));
+    }
+    // l'autre moitié : un autre emplacement de BOSS, dans l'un des états que l'original attend
+    wr16(b, obj + 0xba, 0);
+    if alea.next() % 4 != 0 {
+        let k = BOSS.slot((alea.next() % BOSS.slots + 1) % BOSS.slots).0;
+        if k != obj {
+            wr8(b, k, 1);
+            wr8(b, k + 2, 0);
+            wr8(b, k + 0xb4, (alea.next() % 2) as u8);
+            let mine = rd32(b, obj + 4);
+            wr32(b, k + 4, [0x0200_0408u32, 0x0200_040a, 0x0406_0000, 0x0202_0400, mine][alea.next() as usize % 5]);
+            wr16(b, obj + 0xba, k as u16);
+        }
+    }
+    let x = rd16(b, obj + 8).wrapping_add((alea.next() % 0x100) as u16).wrapping_sub(0x80);
+    wr16(b, obj + 0xbc, x);
+    wr8(b, obj + 0x90, (alea.next() % 4) as u8);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 1, 2, 3, 4, 0x10, 0x20]));
+    wr8(b, obj + 0xa1, pick(alea, &[0, 2, 3, 0xff]));
+    wr32(b, obj + 0xa2, [0x0202_0000u32, 0x0202_0400, 0x0202_0600][alea.next() as usize % 3]);
+    wr16(b, obj + 0xa6, (alea.next() % 4) as u16);
+    wr16(b, obj + 0xa8, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x6b, (alea.next() % 3) as u8);
+    wr8(b, obj + 0x6e, (alea.next() % 3) as u8);
+    wr8(b, obj + 0x71, (alea.next() % 3) as u8);
+    wr8(b, obj + 0x49, pick(alea, &[0, 4, 8, 0x4c, 0x4c]));
+    wr8(b, obj + 0x53, pick(alea, &[0, 0, 0, 1]));
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 2, 0x81]));
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0x20, 0xffe0][alea.next() as usize % 5]);
+    wr16(b, obj + 0x18, [0u16, 0x80, 0x100, 0x300, 0xff00, 0xfe00][alea.next() as usize % 6]);
+    wr16(b, obj + 0xc, [0u16, 1, 0x30, 0x80][alea.next() as usize % 4]);
+    wr16(b, obj + 0x62, [0u16, 1, 10, 40][alea.next() as usize % 4]);
+    wr16(b, obj + 0x60, [0x40u16, 0x100][alea.next() as usize % 2]);
+    wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+    wr16(b, A5 + 0x52, [0u16, 0, 0, 1][alea.next() as usize % 4]);
+    let t = 0xff85de + 0x200 * (alea.next() % 4);
+    wr16(b, obj + 0x50, t as u16);
+    wr8(b, t, 1);
+    wr8(b, t + 0x188, 1);
+    // le joueur près du boss, devant ou derrière, pour que les boîtes d'attaque se déclenchent
+    let (bx, by) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
+    let dx = [0u16, 0x20, 0x30, 0x50, 0xffe0, 0xffd0, 0xffb0, 0xff20, 0x100, 0xff00][alea.next() as usize % 10];
+    wr16(b, t + 8, bx.wrapping_add(dx));
+    wr16(b, t + 0x10, by.wrapping_add([0u16, 2, 4, 0xfffc, 8, 0x10][alea.next() as usize % 6]));
+}
+
+/// Étape `+7` valide du boss 16.
+fn etape_16(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 0, _) | (2, 2, _) | (2, 6, 0 | 2) | (2, 10, _) => 2,
+        (2, 4, 0) => 5,
+        (2, 4, 2 | 4 | 6 | 8 | 10) => 4,
+        (2, 4, 12 | 14) => 3,
+        (2, 6 | 8, _) => 3,
+        (2, 12, _) => 3,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
+}
+
+/// Boss 16 : variante, proie, point visé, minuteries, code de coup et vitesses.
+fn prep_16(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    wr8(b, obj + 3, pick(alea, &[0, 0, 1, 1, 2]));
+    wr8(b, obj + 0x2c, if alea.next() % 2 == 0 { 0 } else { 0x20 });
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_16(alea, s.0, s.1, s.2));
+    let t = 0xff85de + 0x200 * (alea.next() % 4);
+    wr16(b, obj + 0x50, if alea.next() % 10 == 0 { 0 } else { t as u16 });
+    wr8(b, t, 1);
+    wr8(b, t + 0x188, pick(alea, &[0, 1, 1]));
+    wr8(b, t + 0x6f, 0);
+    if alea.next() % 3 == 0 {
+        wr32(b, t + 4, 0x0200_0e00);
+    }
+    let (bx, by) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
+    let dx = [0u16, 0x20, 0x30, 0x50, 0xffe0, 0xffd0, 0xffb0, 0xff20, 0x100, 0xff00, 0xe0, 0xff40][alea.next() as usize % 12];
+    wr16(b, t + 8, bx.wrapping_add(dx));
+    wr16(b, t + 0x10, by.wrapping_add([0u16, 2, 4, 0xfffc, 8, 0x10, 0x30][alea.next() as usize % 7]));
+    wr16(b, t + 0x62, [1u16, 2, 0x40][alea.next() as usize % 3]);
+    wr16(b, obj + 0xae, bx.wrapping_add((alea.next() % 0x100) as u16).wrapping_sub(0x80));
+    wr16(b, obj + 0xb0, by.wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20));
+    wr8(b, obj + 0xb3, (alea.next() % 2) as u8);
+    wr32(b, obj + 0xa8, [0x0202_0000u32, 0x0202_0400, 0x0208_0004][alea.next() as usize % 3]);
+    wr16(b, obj + 0xa6, [0u16, 1, 2, 6, 0x1e, 0x4000][alea.next() as usize % 6]);
+    wr8(b, obj + 0x90, (alea.next() % 4) as u8);
+    for off in [0x6bu32, 0x6e, 0x71] {
+        wr8(b, obj + off, (alea.next() % 3) as u8);
+    }
+    wr8(b, obj + 0x49, pick(alea, &[0, 4, 8, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x60, 0x60, 0x70, 0x78, 0x90, 0x94, 0xa8]));
+    wr16(b, obj + 0x62, [0u16, 1, 10, 40][alea.next() as usize % 4]);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0xa5, pick(alea, &[1, 2, 5]));
+    wr8(b, obj + 0x3e, pick(alea, &[0, 0, 8, 0x81, 0x83, 1, 2]));
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0x81]));
+    wr8(b, obj + 0x53, pick(alea, &[0, 0, 0, 1]));
+    wr8(b, obj + 0x56, pick(alea, &[0, 2, 5]));
+    wr16(b, obj + 0xa0, [0xffffu16, 0, 7, 0x0210, 0x0405][alea.next() as usize % 5]);
+    wr8(b, obj + 0xa2, pick(alea, &[0, 1]));
+    wr8(b, obj + 0x42, pick(alea, &[0, 0, 0xff]));
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0x300, 0xfd00, 0x20, 0xffe0, 0x4000, 0xc000][alea.next() as usize % 9]);
+    wr16(b, obj + 0x16, [0u16, 0x20, 0xffe0][alea.next() as usize % 3]);
+    wr16(b, obj + 0x18, [0u16, 0x80, 0x100, 0x300, 0xff00, 0xfe00][alea.next() as usize % 6]);
+    wr16(b, obj + 0xc, [0u16, 1, 0x30, 0x80, 0xffff, 0xfff0][alea.next() as usize % 6]);
+    wr16(b, A5 + 0x6e, (alea.next() & 0xff) as u16);
+    wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+    wr8(b, A5 + 0xa, (alea.next() % 2) as u8);
+    let cam = rd16(b, A5 + 0x506);
+    wr16(b, A5 + 0x556, cam.wrapping_add((alea.next() % 0x200) as u16));
+    wr16(b, A5 + 0x50a, [0u16, 0x100, 0x200][alea.next() as usize % 3]);
+}
+
+/// Étape `+7` valide du boss 22.
+fn etape_22(alea: &mut Alea, two: bool, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (s4, s5, s6) {
+        (2, 0, _) if two => 6,
+        (2, 4, 10) if two => 16,
+        (2, 4, 12) if two => 7,
+        (2, 4, 16) if two => 7,
+        (2, 4, 18) if two => 4,
+        (2, 0, _) => 3,
+        (2, 2, 0 | 8) => 2,
+        (2, 2, 2 | 6) => 3,
+        (2, 2, 4) => 2,
+        (2, 4, 0 | 2 | 4 | 6 | 8) => 2,
+        (2, 4, 10 | 16) => 7,
+        (2, 4, 12 | 14 | 18) => 4,
+        (2, 4, 20 | 22) => 6,
+        (2, 6, 0 | 2) => 2,
+        (2, 6, 4 | 6) => 6,
+        (2, 8, 0) => 3,
+        (2, 8, 2) => 2,
+        (2, 8, 4) => 2,
+        (2, 8, 6 | 8) => 6,
+        (2, 10, _) => 2,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
+}
+
+/// Boss 22 : forme, hôte (autre boss), cible, points visés, minuteries et code de coup.
+fn prep_22(b: &mut Bus, alea: &mut Alea, obj: u32, two: bool) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    wr8(b, obj + 3, 0);
+    wr8(b, obj + 0x2c, if alea.next() % 2 == 0 { 0 } else { 0x20 });
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_22(alea, two, s.0, s.1, s.2));
+    wr8(b, obj + 0xb5, pick(alea, &[0, 0, 1]));
+    wr8(b, obj + 0xac, pick(alea, &[0, 1]));
+    wr8(b, obj + 0xa4, pick(alea, &[0, 1]));
+    wr8(b, obj + 0xb6, pick(alea, &[4, 0xfc]));
+    wr8(b, obj + 0xb9, pick(alea, &[0, 1, 4]));
+    wr8(b, obj + 0xaf, pick(alea, &[0, 1]));
+    wr8(b, obj + 0xbf, pick(alea, &[0, 1]));
+    wr8(b, obj + 0xae, pick(alea, &[0xff, 0xff, 0, 1, 2]));
+    wr8(b, obj + 0xb4, (alea.next() % 2) as u8);
+    wr8(b, obj + 0xb7, (alea.next() % 8) as u8);
+    wr8(b, obj + 0xbb, pick(alea, &[0, 0, 3]));
+    wr8(b, obj + 0xba, pick(alea, &[0, 1]));
+    wr8(b, obj + 0xbe, pick(alea, &[1, 2, 8]));
+    wr16(b, obj + 0xbc, (alea.next() % 3) as u16);
+    // l'hôte : un autre emplacement de BOSS, dans l'un des états que l'original attend
+    let k = BOSS.slot((alea.next() % BOSS.slots + 1) % BOSS.slots).0;
+    if k != obj {
+        wr8(b, k, 1);
+        wr8(b, k + 2, if two { 0x16 } else { 2 });
+        wr8(b, k + 0x7f, (alea.next() % 2) as u8);
+        let mine = rd32(b, obj + 4);
+        wr32(b, k + 4, [0x0406_0000u32, 0x0202_0400, 0x0200_0000, mine][alea.next() as usize % 4]);
+        wr16(b, obj + 0x42, k as u16);
+    }
+    let t = 0xff85de + 0x200 * (alea.next() % 4);
+    wr16(b, obj + 0x50, if alea.next() % 10 == 0 { 0 } else { t as u16 });
+    wr8(b, t, 1);
+    wr8(b, t + 0x188, pick(alea, &[0, 1, 1]));
+    wr8(b, t + 0x6f, 0);
+    let (bx, by) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
+    let dx = [0u16, 0x20, 0x30, 0x50, 0xffe0, 0xffd0, 0xffb0, 0xff20, 0x100, 0xff00, 0xe0, 0xff40][alea.next() as usize % 12];
+    wr16(b, t + 8, bx.wrapping_add(dx));
+    wr16(b, t + 0x10, by.wrapping_add([0u16, 2, 4, 0xfffc, 8, 0x10, 0x30][alea.next() as usize % 7]));
+    wr16(b, t + 0xc, [0u16, 0, 0, 0x10][alea.next() as usize % 4]);
+    wr16(b, t + 0x62, [1u16, 2, 0x40][alea.next() as usize % 3]);
+    wr16(b, obj + 0xb0, bx.wrapping_add((alea.next() % 0x100) as u16).wrapping_sub(0x80));
+    wr16(b, obj + 0xb2, by.wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20));
+    wr32(b, obj + 0xa6, [0x0202_0000u32, 0x0202_0400, 0x0208_0004][alea.next() as usize % 3]);
+    wr8(b, obj + 0xa5, pick(alea, &[0, 4]));
+    wr16(b, obj + 0xa0, [0u16, 1, 2, 6, 0x1e, 0x4000][alea.next() as usize % 6]);
+    wr16(b, obj + 0xaa, [0u16, 1, 6, 0x12c][alea.next() as usize % 4]);
+    wr8(b, obj + 0xa2, pick(alea, &[0, 1, 3, 5, 0x28]));
+    wr8(b, obj + 0xa3, pick(alea, &[0, 1, 3, 5, 0x7f]));
+    wr16(b, obj + 0x46, [0u16, 0xb4, 0xff00][alea.next() as usize % 3]);
+    wr16(b, obj + 0x5c, [0u16, 1, 2, 0xf0][alea.next() as usize % 4]);
+    for off in [0x6bu32, 0x6e, 0x71] {
+        wr8(b, obj + off, (alea.next() % 3) as u8);
+    }
+    wr8(b, obj + 0x49, pick(alea, &[0, 4, 8, 0x4c, 0x4c]));
+    wr16(b, obj + 0x62, [0u16, 1, 10, 40][alea.next() as usize % 4]);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0x81]));
+    wr8(b, obj + 0x29, pick(alea, &[0, 0, 1]));
+    wr8(b, obj + 0x53, pick(alea, &[0, 0, 0, 1]));
+    wr8(b, obj + 0x56, pick(alea, &[0, 2, 5]));
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0x300, 0xfd00, 0x20, 0xffe0][alea.next() as usize % 7]);
+    wr16(b, obj + 0x16, [0u16, 0x20, 0xffe0][alea.next() as usize % 3]);
+    wr16(b, obj + 0x18, [0u16, 0x80, 0x100, 0x300, 0xff00, 0xfe00, 0x101][alea.next() as usize % 7]);
+    wr16(b, obj + 0xc, [0u16, 1, 0x30, 0x80, 0xffff, 0xfff0][alea.next() as usize % 6]);
+    wr16(b, A5 + 0x6e, (alea.next() & 0xff) as u16);
+    wr16(b, A5 + 0x7f92, (alea.next() % 32) as u16);
+    wr16(b, A5 + 0x50a, [0u16, 0x100, 0x200][alea.next() as usize % 3]);
 }
 
 /// Étape `+7` valide des boss 11 et 12.
@@ -619,6 +910,10 @@ fn prep_9(b: &mut Bus, alea: &mut Alea, obj: u32) {
 
 fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
     match kind {
+        0 => prep_0(b, alea, obj),
+        16 => prep_16(b, alea, obj),
+        2 => prep_22(b, alea, obj, true),
+        22 => prep_22(b, alea, obj, false),
         1 => prep_1(b, alea, obj),
         3 => prep_3(b, alea, obj),
         9 => prep_9(b, alea, obj),
