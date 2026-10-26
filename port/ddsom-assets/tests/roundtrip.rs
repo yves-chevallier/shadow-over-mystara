@@ -558,3 +558,8 @@ fn divers_sans_perte() {
 fn dialogues_sans_perte() {
     check_data("data/dialogs.json");
 }
+
+#[test]
+fn restes_sans_perte() {
+    check_data("data/rest.json");
+}

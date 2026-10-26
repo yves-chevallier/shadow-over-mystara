@@ -103,10 +103,39 @@ impl Default for Program {
 impl Program {
     /// Reconstruit toutes les tables dont le fichier existe dans `dir`.
     pub fn load(dir: &Path) -> io::Result<Self> {
+        Self::load_files(dir, &|_| true)
+    }
+
+    /// Fichiers (chemins relatifs à `dir`) qui servent à reconstruire le programme.
+    pub const FILES: [&'static str; 17] = [
+        "palettes.png",
+        "sprites/frames.json",
+        "sprites/anims.json",
+        "sprites/tables.json",
+        "levels.json",
+        "terrain.json",
+        "scene_palettes.json",
+        "texts.json",
+        "data/spawns.json",
+        "data/players.json",
+        "data/combat.json",
+        "data/enemies.json",
+        "data/boxes.json",
+        "data/scenes.json",
+        "data/misc.json",
+        "data/dialogs.json",
+        "data/rest.json",
+    ];
+
+    /// Comme `load`, mais seuls les fichiers que `want` accepte sont écrits (les images de sprites sont lues
+    /// quand même : les animations et les listes y renvoient).
+    pub fn load_files(dir: &Path, want: &dyn Fn(&str) -> bool) -> io::Result<Self> {
         let mut p = Program::default();
-        let has = |rel: &str| dir.join(rel).exists();
         let need = |p: &mut Program, rel: &str| {
-            let ok = has(rel);
+            if !want(rel) {
+                return false;
+            }
+            let ok = dir.join(rel).exists();
             if !ok {
                 p.missing.push(rel.to_string());
             }
@@ -115,15 +144,21 @@ impl Program {
         if need(&mut p, "palettes.png") {
             p.put_palettes(&Palettes::load(&dir.join("palettes.png"))?);
         }
-        let frames = if need(&mut p, "sprites/frames.json") { Some(Frames::load(&dir.join("sprites/frames.json"))?) } else { None };
-        if let Some(f) = &frames {
-            p.put_frames(f);
-            if need(&mut p, "sprites/anims.json") {
-                p.put_anims(&Anims::load(&dir.join("sprites/anims.json"))?, f);
+        let frames_file = dir.join("sprites/frames.json");
+        let frames = if frames_file.exists() { Some(Frames::load(&frames_file)?) } else { None };
+        match &frames {
+            Some(f) => {
+                if need(&mut p, "sprites/frames.json") {
+                    p.put_frames(f);
+                }
+                if need(&mut p, "sprites/anims.json") {
+                    p.put_anims(&Anims::load(&dir.join("sprites/anims.json"))?, f);
+                }
+                if need(&mut p, "sprites/tables.json") {
+                    p.put_sprite_tables(&SpriteTables::load(&dir.join("sprites/tables.json"))?, f);
+                }
             }
-            if need(&mut p, "sprites/tables.json") {
-                p.put_sprite_tables(&SpriteTables::load(&dir.join("sprites/tables.json"))?, f);
-            }
+            None => p.missing.push("sprites/frames.json".to_string()),
         }
         if need(&mut p, "levels.json") {
             let l = Levels::load(&dir.join("levels.json"))?;
@@ -142,9 +177,8 @@ impl Program {
         if need(&mut p, "data/spawns.json") {
             p.put_spawns(&Spawns::load(&dir.join("data/spawns.json"))?);
         }
-        for name in ["players", "combat", "enemies", "boxes", "scenes", "misc", "dialogs"] {
-            let rel = format!("data/{name}.json");
-            if need(&mut p, &rel) {
+        for rel in &Self::FILES[9..] {
+            if need(&mut p, rel) {
                 p.put_data(&DataFile::load(&dir.join(rel))?).map_err(io::Error::other)?;
             }
         }

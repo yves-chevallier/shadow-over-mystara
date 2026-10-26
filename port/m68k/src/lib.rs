@@ -21,6 +21,12 @@ pub const SR_T: u16 = 0x8000;
 pub const SR_MASK: u16 = 0xa71f;
 
 /// Bus vu par le CPU. Les adresses reçues sont déjà réduites à 24 bits.
+#[cfg(feature = "rom-trace")]
+thread_local! {
+    /// Vrai pendant l'exécution d'une instruction 68000 (`Cpu::step`), faux dans le code Rust natif.
+    pub static IN_STEP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 pub trait Bus: decode::Fetch {
     fn read8(&mut self, addr: u32) -> u8;
     fn read16(&mut self, addr: u32) -> u16;
@@ -108,6 +114,18 @@ impl Cpu {
     /// Exécute une instruction (ou prend une interruption). Renvoie l'instruction exécutée, si
     /// une l'a été.
     pub fn step<B: Bus>(&mut self, bus: &mut B) -> Option<Instr> {
+        #[cfg(feature = "rom-trace")]
+        {
+            IN_STEP.set(true);
+            let r = self.step_inner(bus);
+            IN_STEP.set(false);
+            r
+        }
+        #[cfg(not(feature = "rom-trace"))]
+        self.step_inner(bus)
+    }
+
+    fn step_inner<B: Bus>(&mut self, bus: &mut B) -> Option<Instr> {
         let mask = ((self.sr >> 8) & 7) as u8;
         // Le niveau 7 (non masquable, sur front) n'est pas utilisé par le CPS2.
         if self.irq_level > mask {

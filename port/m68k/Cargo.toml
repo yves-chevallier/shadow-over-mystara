@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+
+[features]
+# Signale (thread-local `IN_STEP`) qu'une instruction 68000 s'exécute : mesures des lectures de ROM.
+rom-trace = []

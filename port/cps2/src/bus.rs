@@ -133,7 +133,11 @@ impl Cps2Bus {
 
     fn read_word(&mut self, a: u32) -> u16 {
         match a {
-            0x000000..=0x3fffff => self.rom[(a >> 1) as usize],
+            0x000000..=0x3fffff => {
+                #[cfg(feature = "rom-trace")]
+                rom_trace::note(false, a);
+                self.rom[(a >> 1) as usize]
+            }
             0x400000..=0x40000b => self.output[((a - 0x400000) >> 1) as usize],
             0x618000..=0x619fff => 0xff00 | self.qram[((a - 0x618000) >> 1) as usize] as u16,
             0x660000..=0x664001 => self.extra_ram[((a - 0x660000) >> 1) as usize],
@@ -247,6 +251,8 @@ impl Fetch for Cps2Bus {
     fn fetch16(&mut self, a: u32) -> u16 {
         let a = a & 0xff_ffff;
         if a < 0x400000 {
+            #[cfg(feature = "rom-trace")]
+            rom_trace::note(true, a);
             self.rom_dec[(a >> 1) as usize]
         } else {
             self.read_word(a & !1)
@@ -276,5 +282,48 @@ impl m68k::Bus for Cps2Bus {
         // l'acquittement efface IPL1 et IPL2 (cps_state::irqack_r)
         self.irq_vblank = false;
         self.irq_raster = false;
+    }
+}
+
+/// Lectures de la ROM programme par le code Rust : mots lus, par vue (données, programme). Les lectures des
+/// instructions 68000 (`m68k::IN_STEP`) ne sont pas comptées. Activé par la fonctionnalité `rom-trace`.
+#[cfg(feature = "rom-trace")]
+pub mod rom_trace {
+    use std::cell::RefCell;
+
+    /// Nombre de lectures de chaque mot de 0x000000 à 0x3fffff : `[données, programme]`.
+    pub struct Reads(pub [Vec<u32>; 2]);
+
+    thread_local! {
+        static READS: RefCell<Reads> = RefCell::new(Reads([vec![0; 0x200000], vec![0; 0x200000]]));
+    }
+
+    thread_local! {
+        static HOOK: std::cell::Cell<Option<fn(bool, u32)>> = const { std::cell::Cell::new(None) };
+    }
+
+    /// `hook(programme, adresse)` est appelé à la première lecture de chaque mot (pour en chercher l'origine).
+    pub fn set_hook(hook: fn(bool, u32)) {
+        HOOK.set(Some(hook));
+    }
+
+    pub fn note(program: bool, a: u32) {
+        if !m68k::IN_STEP.get() {
+            let first = READS.with(|r| {
+                let c = &mut r.borrow_mut().0[program as usize][(a >> 1) as usize & 0x1fffff];
+                *c += 1;
+                *c == 1
+            });
+            if first {
+                if let Some(h) = HOOK.get() {
+                    h(program, a & !1);
+                }
+            }
+        }
+    }
+
+    /// Compteurs actuels (remis à zéro).
+    pub fn take() -> Reads {
+        READS.with(|r| std::mem::replace(&mut *r.borrow_mut(), Reads([vec![0; 0x200000], vec![0; 0x200000]])))
     }
 }
