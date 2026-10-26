@@ -856,7 +856,7 @@ pub const CREEP_3: Native = Native {
     })
 };
 
-pub const NATIVES: &[Native] = &[FOLLOW_PLAYERS_Y, UPDATE_CAMERAS, RESET_CAMERAS, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
+pub const NATIVES: &[Native] = &[FOLLOW_PLAYERS_Y, UPDATE_CAMERAS, RESET_CAMERAS, RETURN_CAMERAS, PARALLAX_QUARTER, PARALLAX_THREE_QUARTERS, CREEP_6, CREEP_3];
 
 // ---------------------------------------------------------------------------------------------
 // Suivi vertical des joueurs et mise à jour des deux caméras
@@ -1021,6 +1021,70 @@ pub const RESET_CAMERAS: Native = Native {
     name: "cameras_depart",
     cost: |_, _| 300,
     run: reset_cameras,
+    touches_sound: false,
+    outputs: crate::regs::ALL,
+    exact_cost: false,
+};
+
+/// 0x33b24 : caméras au retour d'une zone annexe (porte de sortie SET 7 et portes 27, 29, avant qu'elles ne
+/// rétablissent la caméra mémorisée). La scène (`A5+0x34`) choisit la caméra en service (`A5+0x36`, table
+/// 0x33bdc), une limite (`A5+0x532`), le mot de contrôle vidéo 0x400004 et les couches affichées (0xbc6,
+/// D0), puis les caméras sont remises à leur position initiale (0x200) et leurs bornes rechargées (tables
+/// par scène, espace données), avant leur mise à jour (0x33e20).
+fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+    use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+    const SERVICE: u32 = 0x33bdc;
+    const LIMITS: u32 = 0x2f0ee;
+    const VIDEO_CONTROL: u32 = 0x2f008;
+    const VIDEO_CONTROL_PORT: u32 = 0x40_0004;
+    const LAYERS: u32 = 0x2ef22;
+    const LAYERS_ON: u32 = 0xbc6;
+    const PRIORITIES: u32 = 0x2f332;
+    const BOUNDS_A: u32 = 0x2f3aa;
+    const BOUNDS_B: u32 = 0x32650;
+    const MODES: u32 = 0x2f2ba;
+    let stage = rd8(b, A5 + STAGE) as u32;
+    let service = rd8(b, SERVICE + stage);
+    wr8(b, A5 + 0x36, service);
+    let limit = rd16(b, LIMITS + 2 * stage);
+    wr16(b, A5 + 0x532, limit);
+    let control = rd16(b, VIDEO_CONTROL + 2 * stage);
+    wr16(b, VIDEO_CONTROL_PORT, control);
+    c.d[0] = rd16(b, LAYERS + 2 * stage) as u32;
+    c.a[1] = VIDEO_CONTROL;
+    c.a[4] = LAYERS;
+    wr16(b, A5 + 0x14, 0);
+    crate::call(c, b, LAYERS_ON);
+    let priority = rd8(b, PRIORITIES + stage);
+    wr8(b, A5 + 0x53b, priority);
+    wr16(b, A5 + 0x4fe, 0x200);
+    wr16(b, A5 + 0x51e, 0);
+    wr32(b, A5 + 0x548, 0);
+    wr16(b, A5 + 0x54c, 0);
+    wr8(b, A5 + 0x53a, 0);
+    wr32(b, A5 + 0x7fb2, 0);
+    wr16(b, A5 + 0x54e, 0x200);
+    wr16(b, A5 + 0x56e, 0);
+    let x = rd16(b, A5 + 0x506);
+    wr16(b, A5 + 0x52c, x);
+    let bound = rd32(b, BOUNDS_A + 4 * stage);
+    let v = rd16(b, bound);
+    wr16(b, A5 + 0x53e, v);
+    let bound = rd32(b, BOUNDS_B + 4 * stage);
+    let v = rd16(b, bound);
+    wr16(b, A5 + 0x58e, v);
+    let mode = rd8(b, MODES + stage);
+    wr8(b, A5 + 0x53c, mode);
+    c.d[0] = stage;
+    c.a[4] = MODES;
+    update_cameras(c, b);
+}
+
+pub const RETURN_CAMERAS: Native = Native {
+    entry: 0x33b24,
+    name: "cameras_retour",
+    cost: |_, _| 300,
+    run: return_cameras,
     touches_sound: false,
     outputs: crate::regs::ALL,
     exact_cost: false,
