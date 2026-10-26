@@ -21,10 +21,6 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         return ddsom_game::run(pc, c, b, dl);
     };
     let cout = (n.cost)(c, b);
-    if cout >= ddsom_game::families::COUT_HORS_CONTRAT {
-        // chemin hors contrat : la machine lance le code d'origine
-        return ddsom_game::run(pc, c, b, dl);
-    }
     let obj = c.a[0];
     let avant: Vec<u8> = (0..0x60).map(|i| ddsom_game::mem::rd8(b, obj + i)).collect();
     let mut c1 = c.clone();

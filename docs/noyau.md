@@ -211,8 +211,8 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
    exécutent encore du 68000 » ; surtout C10 SET, C04 boss, C0e EFFCT non exercés, P3, ESHL), le code d'origine où
    reprennent encore des tâches (plus aucune), et les natives que
    la machine remplace par leur original : celles qui débordent sur l'interruption suivante (`run`, `lib.rs` :
-   `c.cycles + cost > irq_horizon`) et celles qui se déclarent hors contrat (`families::COUT_HORS_CONTRAT`, épilogue
-   étranger `0xaa9fe` des bulles). Sans processeur, une native s'exécute toujours en entier.
+   `c.cycles + cost > irq_horizon`) ; celles qui se déclaraient hors contrat (`families::COUT_HORS_CONTRAT` :
+   épilogue étranger `0xaa9fe` des bulles, pas de réaction non réécrits) s'exécutent maintenant toujours. Sans processeur, une native s'exécute toujours en entier.
 2. **Un exécuteur de natives sans interpréteur.** Un pas finit en posant `c.pc` sur la native suivante (reprise, suite
    d'un cadre, enveloppe de cession) et la machine la cherche (`lookup`) ; sans 68000, une boucle `while let Some(n) =
    lookup(c.pc) { (n.run)(c, b) }` jusqu'au retour à l'ordonnanceur (`0x984`) suffit, le `Cpu` ne servant plus que de banc
@@ -258,15 +258,12 @@ et dans l'application (`ddsom`) ; le mode normal (`install`) ne change pas.
   déborderait sur l'interruption (`run` n'est plus appelé), et `Ctx::jsr_origine` (familles) appelle la native au lieu
   du code d'origine. `Unwound` sert encore : une native qui cède, ou un épilogue qui revient plus haut, abandonne les
   fonctions Rust en cours comme avant.
-* **Arrêt net.** Une adresse sans native, ou une native qui se déclare hors contrat (`families::COUT_HORS_CONTRAT` :
-  réaction d'ennemi inconnue, décor qui recharge la scène), arrête le jeu (panique `sans 68000 : …`, que `validate`
-  rapporte en `ARRÊT …` puis « ÉCHEC : arrêt sans 68000 à l'image n »). Le diagnostic donne l'adresse, l'image et la
-  ligne, la tâche courante (nom, état, cadres), le SR et le sommet de la pile 68000 (les adresses de retour du code
-  remplacé), les huit dernières natives exécutées et l'appel Rust en cours (`site_d_appel` : fichier et ligne du
-  `call`). Les gestionnaires qui quittent par l'épilogue d'une autre routine (`Ctx::epilogue_etranger`, bulles
-  `0xaa9fe`) sont hors contrat eux aussi : leur native sait pourtant reproduire ce chemin (essai : les 35 scénarios
-  arrêtés sur la bulle passent alors), mais la suppression de `COUT_HORS_CONTRAT` est un travail à part (branche
-  `wt-contrat`).
+* **Arrêt net.** Une adresse sans native arrête le jeu (panique `sans 68000 : …`, que `validate` rapporte en
+  `ARRÊT …` puis « ÉCHEC : arrêt sans 68000 à l'image n ») : c'est le cas des replis de natives vers le code d'origine
+  sur des chemins non réécrits (`g.rom(...)`/`call` des joueurs, `_ =>` des boss qui appellent l'original, `x.call`
+  d'effets...). Le diagnostic donne l'adresse, l'image et la ligne, la tâche courante (nom, état, cadres), le SR et le
+  sommet de la pile 68000 (les adresses de retour du code remplacé), les huit dernières natives exécutées et l'appel
+  Rust en cours (`site_d_appel` : fichier et ligne du `call`), qui désigne le repli fautif.
 * **Image.** La machine garde son calendrier ligne par ligne (`cps2::Machine::line_work`) ; à chaque ligne,
   `sans68k::ligne` fait le travail du processeur puis le Z80 joue sa ligne. Ce travail n'a pas de durée : l'interruption
   de VBLANK, levée en fin d'image, est prise (en Rust : SR et PC empilés, autovecteur, acquittement) dès que le SR

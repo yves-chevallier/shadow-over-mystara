@@ -149,6 +149,7 @@ pub const NATIVES: &[Native] = &[
     sound::SELON_VERSION_C,
     sound::SELON_VERSION_D,
     sound::SELON_VERSION_E,
+    sound::SELON_VERSION_F,
     sound::INIT_PILE_PRIVEE,
     sound::AUCUN,
     rng::SEED,
@@ -356,8 +357,7 @@ pub fn site_d_appel() -> Option<(&'static std::panic::Location<'static>, u32)> {
 /// Exécuteur d'inventaire : routines natives, sinon une instruction 68000 à la fois, signalée à
 /// `set_trace`. Les durées ne sont pas contrôlées (le 68000 est surcadencé).
 pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32> {
-    // une native hors contrat laisse le code d'origine s'exécuter à sa place, comme dans `run` : il est compté
-    if let Some(n) = lookup(pc).filter(|n| (n.cost)(c, b) < families::COUT_HORS_CONTRAT) {
+    if let Some(n) = lookup(pc) {
         let cost = (n.cost)(c, b);
         let hook = NATIVE_HOOK.get();
         if let Some(h) = hook {

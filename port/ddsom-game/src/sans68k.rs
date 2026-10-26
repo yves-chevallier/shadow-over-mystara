@@ -4,8 +4,8 @@
 //! Le `Cpu` de la machine n'est plus qu'un banc de registres (D0-D7, A0-A7, SR, PC) et de pile : l'exécuteur cherche
 //! la native posée à l'adresse du PC et l'exécute, puis recommence (`while let Some(n) = lookup(c.pc)`). Une native
 //! s'exécute toujours en entier, même quand elle déborderait sur l'interruption suivante : aucune n'est remplacée par
-//! son original. Une adresse sans native, ou une native qui se déclare hors contrat (`families::COUT_HORS_CONTRAT`),
-//! arrête net le jeu avec un diagnostic ([`ARRET`]) au lieu d'exécuter du code d'origine.
+//! son original. Une adresse sans native (repli d'une native vers le code d'origine, par `call`, sur un chemin non
+//! réécrit) arrête net le jeu avec un diagnostic ([`ARRET`]) au lieu d'exécuter du code d'origine.
 //!
 //! ## L'image
 //!
@@ -211,9 +211,6 @@ pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
         arreter(c, b, format!("pas de native en {:06x}", c.pc));
     };
     let cout = (n.cost)(c, b);
-    if cout >= crate::families::COUT_HORS_CONTRAT {
-        arreter(c, b, format!("native {} hors contrat en {:06x}", n.name, c.pc));
-    }
     DERNIERES.with(|d| {
         let mut d = d.borrow_mut();
         if d.len() == 8 {

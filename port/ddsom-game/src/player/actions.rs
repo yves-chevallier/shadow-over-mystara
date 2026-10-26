@@ -136,6 +136,7 @@ fn run_action(g: &mut Ctx, p: Player) {
         action::NO_TERRAIN_B => moves::hop(g, p),
         0x1c => moves::pause(g, p, 34),
         0x1e => moves::pause(g, p, 33),
+        0x28 => moves::slow_end(g, p),
         action::PUSH => moves::push(g, p),
         action::CLIMB => moves::climb(g, p),
         action::NO_TERRAIN_A => moves::exit_scene(g, p),

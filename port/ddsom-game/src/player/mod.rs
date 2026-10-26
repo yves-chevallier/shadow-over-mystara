@@ -140,6 +140,12 @@ pub const NATIVES: &[Native] = &[
     spawn::LIGHTNING,
     spawn::KNIFE,
     spawn::SHADOWS,
+    spawn::FLARE,
+    spawn::SUMMON,
+    spawn::PORTAL,
+    spawn::WITCH,
+    spawn::WITCH_A,
+    spawn::WITCH_B,
 ];
 
 /// Premier enregistrement joueur (offset depuis A5) et pas entre deux joueurs.
@@ -238,6 +244,7 @@ impl<'a> Ctx<'a> {
 
     /// Appelle une routine d'origine (ou native) pour le joueur `p` : A0 = joueur, A5 = base de la
     /// RAM. Renvoie vrai si le drapeau Z est levé au retour.
+    #[track_caller]
     pub fn rom(&mut self, addr: u32, p: Player) -> bool {
         cov::rom_call(addr);
         self.c.a[0] = p.0;
@@ -247,6 +254,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// Idem avec le paramètre D6 (numéro d'animation, d'effet...).
+    #[track_caller]
     pub fn rom_d6(&mut self, addr: u32, p: Player, d6: u32) -> bool {
         self.c.d[6] = d6;
         self.rom(addr, p)

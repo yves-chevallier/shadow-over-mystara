@@ -44,21 +44,15 @@ mod rom {
     pub const EFFECT_BOLT: u32 = 0x4b7a0;
     pub const EFFECT_QUAKE: u32 = 0x4b340;
     pub const EFFECT_QUAKE_B: u32 = 0x4f132;
-    pub const EFFECT_SUMMON: u32 = 0x4ccac;
-    pub const EFFECT_FLARE: u32 = 0x4cd8e;
     pub const EFFECT_STORM: u32 = 0x4d020;
     pub const EFFECT_STORM_B: u32 = 0x51aa4;
     pub const EFFECT_RAIN: u32 = 0x4d660;
     pub const EFFECT_RAIN_B: u32 = 0x54274;
-    pub const EFFECT_PORTAL: u32 = 0x4d3c6;
     pub const EFFECT_PORTAL_B: u32 = 0x51872;
     pub const EFFECT_PORTAL_C: u32 = 0x4cfee;
     pub const EFFECT_PORTAL_TEST: u32 = 0x4d064;
     pub const EFFECT_WALL: u32 = 0x4d2c0;
     pub const EFFECT_WAVE: u32 = 0x4dfe2;
-    pub const EFFECT_WITCH: u32 = 0x53918;
-    pub const EFFECT_WITCH_A: u32 = 0x53954;
-    pub const EFFECT_WITCH_B: u32 = 0x539e4;
 }
 
 /// Table du magicien (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
@@ -831,7 +825,7 @@ fn storm(g: &mut Ctx, p: Player) {
                     return linger(g, p);
                 }
                 if step == 4 {
-                    call(g, p, rom::EFFECT_FLARE, &[(0, 1)]);
+                    spawn::flare(g, p);
                     g.rom(rom::SCREEN_FLASH_A, p);
                 } else {
                     call(g, p, rom::EFFECT_STORM, &[(0, 1)]);
@@ -924,7 +918,7 @@ fn witch(g: &mut Ctx, p: Player) {
                 return;
             }
             if p.u16(g, field::TIMER) == 0x13 && !is_cancelled(g, p) {
-                call(g, p, rom::EFFECT_WITCH, &[(0, 0)]);
+                spawn::witch(g, p);
             }
             animation::step(g, p);
         }
@@ -958,11 +952,11 @@ fn witch(g: &mut Ctx, p: Player) {
             match p.u8(g, field::EVENT) {
                 1 => {
                     p.set_u8(g, field::EVENT, 0);
-                    g.rom(rom::EFFECT_WITCH_A, p);
+                    spawn::witch_strike(g, p, 1);
                 }
                 2 => {
                     p.set_u8(g, field::EVENT, 0);
-                    g.rom(rom::EFFECT_WITCH_B, p);
+                    spawn::witch_strike(g, p, 4);
                 }
                 _ => {}
             }
@@ -1123,7 +1117,7 @@ fn portal(g: &mut Ctx, p: Player) {
             let duration = by_level(g, p, PORTAL_DURATIONS);
             p.set_u16(g, field::TIMER, duration);
             g.rom(rom::PALETTE_NORMAL, p);
-            call(g, p, rom::EFFECT_PORTAL, &[(0, 2)]);
+            spawn::portal(g, p, 2);
             animation::start_plain(g, p, 0x30);
             g.rom(0xe91d6, p);
             g.rom(0xe2a34, p);
@@ -1132,8 +1126,8 @@ fn portal(g: &mut Ctx, p: Player) {
             if !is_cancelled(g, p) {
                 animation::step(g, p);
                 if take_event(g, p) {
-                    call(g, p, rom::EFFECT_PORTAL, &[(0, 0)]);
-                    call(g, p, rom::EFFECT_PORTAL, &[(0, 1)]);
+                    spawn::portal(g, p, 0);
+                    spawn::portal(g, p, 1);
                     g.rom(rom::SCREEN_FLASH_B, p);
                     foes::strike_foes(g, p, &PORTAL_STRIKE);
                     g.rom(0xe307a, p);
@@ -1183,7 +1177,7 @@ fn summon(g: &mut Ctx, p: Player) {
                 p.set_u16(g, field::TIMER, 0x15);
             } else {
                 p.set_u16(g, field::TIMER, 0x168);
-                g.rom(rom::EFFECT_SUMMON, p);
+                spawn::summon(g, p);
                 g.rom(0xe9cd4, p);
             }
             g.rom(0xe30fa, p);
@@ -1288,7 +1282,7 @@ fn drain(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x120);
                 g.rom(rom::PALETTE_NORMAL, p);
-                call(g, p, rom::EFFECT_PORTAL, &[(0, 2)]);
+                spawn::portal(g, p, 2);
                 animation::start_plain(g, p, 0x30);
                 g.rom(0xe91d6, p);
             }
@@ -1297,7 +1291,7 @@ fn drain(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 g.rom(rom::EFFECT_PORTAL_B, p);
-                call(g, p, rom::EFFECT_PORTAL, &[(0, 0)]);
+                spawn::portal(g, p, 0);
                 g.rom(rom::EFFECT_PORTAL_C, p);
                 g.rom(0xe323a, p);
             }

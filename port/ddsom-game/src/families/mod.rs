@@ -272,9 +272,11 @@ impl<'a> Ctx<'a> {
     }
 
     /// Saut de l'original dans l'épilogue d'une autre routine (`movem.l (SP)+,{A1-A4} ; rts`) : les
-    /// quatre registres sont rechargés depuis la pile, puis le retour se fait à l'adresse suivante.
-    /// Comportement hors contrat de l'original : la routine native le signale par un coût démesuré
-    /// (`COUT_HORS_CONTRAT`), ce qui fait exécuter le code d'origine.
+    /// quatre registres sont rechargés depuis la pile, puis le retour se fait à l'adresse suivante. Ce
+    /// sont les retours des appelants : un effet de bulle (`0xaa9fe`) revient ainsi directement au début
+    /// du tour de la boucle de partie (`0x1c468`). Les appels en cours tenus en Rust à cette hauteur sont sur la
+    /// pile 68000 (`call_at` les y a remis, `taches::table::mettre_sur_la_pile`) : la native les dépile comme
+    /// l'original, et `call_at` abandonne les fonctions Rust dépassées (`Unwound`).
     pub fn epilogue_etranger(&mut self) {
         let sp = self.c.a[7];
         for (i, r) in [1usize, 2, 3, 4].into_iter().enumerate() {
@@ -522,17 +524,9 @@ pub fn cout(c: &Cpu, b: &mut Cps2Bus, entree: u32, logique: fn(&mut Ctx)) -> u64
     let mut ctx = Ctx::a_blanc(&mut c2, &mut b2);
     ctx.at(entree);
     logique(&mut ctx);
-    if ctx.retour_deja {
-        // le gestionnaire quitte par un chemin hors contrat (voir `epilogue_etranger`) : la durée annoncée
-        // dépasse toute échéance, donc l'exécuteur lance le code d'origine à sa place
-        return COUT_HORS_CONTRAT;
-    }
     let sous_routines = ctx.c.cycles - debut;
     ctx.cout(b, sous_routines)
 }
-
-/// Durée annoncée pour un appel que la routine native ne sait pas faire (l'original s'exécute alors).
-pub const COUT_HORS_CONTRAT: u64 = u64::MAX / 4;
 
 /// Exécute un gestionnaire (RTS compris). Les cycles des sous-routines sont comptés dans `cout`.
 pub fn executer(c: &mut Cpu, b: &mut Cps2Bus, logique: fn(&mut Ctx)) {
