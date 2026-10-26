@@ -10,7 +10,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::dispatch::{self, Class};
-use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::pools::{self, Queue};
 use crate::objects::Obj;
 use crate::{call, call_at, regs, Native};
@@ -465,10 +465,10 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     // sites des appels d'origine (0x1c6f6...) : retours empilés comme l'original (voir `call_at`)
     call_at(c, b, ext::INPUT_HOOK, 0x1c6f6 + JSR);
-    c.a[7] = c.a[7].wrapping_sub(4);
-    wr32(b, c.a[7], 0x1c6fc + JSR); // retour de `jsr 0x1c86e`
+    // retour de `jsr 0x1c86e`, appel en cours tenu en Rust (le code d'origine appelé le trouve sur la pile 68000)
+    crate::taches::table::appeler(c, b, 0x1c6fc + JSR);
     update_world(c, b);
-    c.a[7] = c.a[7].wrapping_add(4);
+    crate::taches::table::depiler_retour(c, b);
     for (gauge_site, marker, routine) in
         [(0x1c708, 0x54_0000, ext::SPRITES), (0x1c71a, 0x48_0002, ext::COLLISIONS), (0x1c72c, 0x4f_001e, ext::WORLD_EXTRA)]
     {

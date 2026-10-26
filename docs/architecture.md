@@ -144,8 +144,11 @@ Plan pour supprimer la machine 68000 :
    suspendue, prête, en cours, neuve), le compte d'attente décrémenté par le VBLANK, la pile 68000 donnée à la tâche et
    sa reprise (entrée, ou contexte du 68000 sauvé à la cession). `validate` compare à chaque image la table Rust à la
    table FF0064 de la machine d'origine (états, comptes, piles, entrées, tas). Le tas des piles, la pile de
-   l'ordonnanceur et les registres sauvés sur la pile des tâches ne servent plus au noyau. Les tâches Rust cèdent la main directement au noyau (`taches::ceder` → `kernel::attendre`/`ceder_prete`/`terminer`), sans enveloppe 68000 ni adresse de retour empilée ; chaque emplacement porte le nom de sa tâche (`table::Tache`). Restent sur la pile 68000 des
-   tâches leurs appels en cours (adresses de retour, sous-programmes qui cèdent) : c'est le point 4.
+   l'ordonnanceur et les registres sauvés sur la pile des tâches ne servent plus au noyau. Les tâches Rust cèdent la main directement au noyau (`taches::ceder` → `kernel::attendre`/`ceder_prete`/`terminer`), sans enveloppe 68000 ni adresse de retour empilée ; chaque emplacement porte le nom de sa tâche (`table::Tache`). Leurs appels en cours (adresses
+   de retour, registres sauvés par les sous-programmes qui cèdent) sont aussi dans la table (`table::Cadre`) : la pile
+   68000 d'une tâche est vide à chaque cession, et le code d'origine qui reste ne la retrouve remplie que le temps où il
+   s'exécute ([noyau.md](noyau.md), « Appels en cours en Rust »). Ce qui manque pour le point 4 : [noyau.md](noyau.md),
+   « Vers une boucle sans 68000 ».
 3. **Appels des anciens sous-programmes** : `ddsom_game::call` n'a plus d'appelant quand toutes les
    routines appelées sont natives ; alors plus aucune instruction 68000 ne s'exécute
    (`tools/reste68k.sh` : zéro sur tous les scénarios). Les fonctions « jamais atteintes » du rapport

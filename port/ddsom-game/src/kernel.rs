@@ -231,9 +231,10 @@ pub fn terminer(c: &mut Cpu, b: &mut Cps2Bus) {
     vers_ordonnanceur(c, b);
 }
 
-/// Enveloppe de cession appelée par `jsr` : son adresse de retour est la reprise.
+/// Enveloppe de cession appelée par `jsr` : son adresse de retour est la reprise (ou la suite de l'appel en cours,
+/// quand un pas Rust l'a appelée).
 fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, u32)) {
-    let reprise = depiler32(c, b);
+    let reprise = crate::taches::table::depiler_retour(c, b);
     cession(c, b, reprise);
 }
 

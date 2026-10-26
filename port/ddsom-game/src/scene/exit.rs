@@ -30,6 +30,7 @@ use m68k::Cpu;
 
 use super::{player, scratch, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::modes::Sequence as _;
 use crate::objects::Obj;
 use crate::Native;
 
@@ -216,22 +217,19 @@ impl<'a> Ex<'a> {
     /// Cède la main à l'original à l'adresse `pc` (aucun retour de la native).
     fn delegate(&mut self, pc: u32) {
         self.x.c.a[0] = BASE;
-        self.x.c.pc = pc;
+        self.x.jump_to(pc);
         self.handed_off = true;
     }
     /// Cède la main à l'ordonnanceur pour `frames` images ; la reprise a lieu en `resume` (aucune si 0).
     fn wait_frames(&mut self, frames: u32, resume: u32) {
-        let c = &mut *self.x.c;
-        c.d[0] = frames;
+        self.x.c.d[0] = frames;
         if let Some(back) = self.dispatch_return {
-            c.a[7] = c.a[7].wrapping_sub(4);
-            wr32(self.x.b, c.a[7], back);
+            self.x.push_return(back);
         }
         if resume != 0 {
-            c.a[7] = c.a[7].wrapping_sub(4);
-            wr32(self.x.b, c.a[7], resume);
+            self.x.push_return(resume);
         }
-        c.pc = call::WAIT;
+        self.x.c.pc = call::WAIT;
         self.handed_off = true;
     }
 }
@@ -457,7 +455,7 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
         ex.handed_off = true;
         return;
     }
-    ex.x.c.a[7] = ex.x.c.a[7].wrapping_add(4);
+    ex.x.drop_return();
     ex.a0_clobbered = true;
 }
 
@@ -653,8 +651,7 @@ resume_native!(RESUME_TWICE, RESUME_TWICE_ENTRY, |c, b| {
     let mut x = Ctx::new(c, b);
     x.call(call::SOUND_C0C);
     x.c.d[0] = 2;
-    x.c.a[7] = x.c.a[7].wrapping_sub(4);
-    wr32(x.b, x.c.a[7], RESUME_TWICE_END_ENTRY);
+    x.push_return(RESUME_TWICE_END_ENTRY);
     x.c.pc = call::WAIT;
 });
 resume_native!(RESUME_TWICE_END, RESUME_TWICE_END_ENTRY, |c, b| {

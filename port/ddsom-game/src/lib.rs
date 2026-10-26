@@ -217,6 +217,11 @@ fn lookup(pc: u32) -> Option<&'static Native> {
     index.par_adresse.get(&pc).copied()
 }
 
+/// Une routine native remplace le code d'origine à l'adresse `pc`.
+pub fn est_native(pc: u32) -> bool {
+    lookup(pc).is_some()
+}
+
 /// Toutes les routines natives, wrappers son compris (outils de couverture).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
     // une source par ligne (les branches parallèles ajoutent chacune la leur)
@@ -276,6 +281,8 @@ const TASK_SWITCH: u32 = 0x984;
 pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
     let site = std::panic::Location::caller();
     let _site = TRACE.get().map(|_| SiteDAppel::entrer(site, addr));
+    // le code appelé trouve sur la pile 68000 les appels en cours tenus en Rust à cette hauteur (`taches::table::Cadre`)
+    let remis = taches::table::mettre_sur_la_pile(c, b);
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], ret);
@@ -292,6 +299,7 @@ pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
             c.step(b);
         }
     }
+    taches::table::reprendre_de_la_pile(c, b, &remis);
 }
 
 /// Inventaire du 68000 restant (`examples/reste68k`) : fonction appelée avec l'adresse de chaque
@@ -360,6 +368,14 @@ pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32
     Some(c.pc)
 }
 
+/// Diagnostic (`examples/cessions`) : `run` exécute le code 68000 une instruction à la fois et vérifie qu'il ne dépile
+/// jamais un appel en cours tenu en Rust (`taches::table::verifier_68000`).
+static VERIFIER_APPELS: AtomicBool = AtomicBool::new(false);
+
+pub fn set_verifier_appels(on: bool) {
+    VERIFIER_APPELS.store(on, Ordering::Relaxed);
+}
+
 /// Fin anormale d'un appel : une routine d'origine a quitté en dépilant les adresses de retour de ses
 /// appelants (par exemple en revenant directement à la boucle de partie), ou a cédé la main à
 /// l'ordonnanceur. Les fonctions Rust qui l'appelaient sont abandonnées ; l'exécution reprend au PC
@@ -410,6 +426,9 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
                     }
                 }
             } else {
+                if VERIFIER_APPELS.load(Ordering::Relaxed) {
+                    taches::table::noter(pc, c.a[7]);
+                }
                 exec(n, c, b);
                 c.cycles += cost;
                 if COUNT.load(Ordering::Relaxed) {
@@ -418,6 +437,13 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             }
             return Some(c.pc);
         }
+        // l'original s'exécute à la place de la native : ses retours sont sur la pile 68000
+        taches::table::vers_le_68000(c, b);
+    }
+    if VERIFIER_APPELS.load(Ordering::Relaxed) {
+        taches::table::verifier_68000(c, b);
+        c.step(b);
+        return Some(c.pc);
     }
     ddsom_rc::run_block(pc, c, b, dl)
 }
@@ -571,6 +597,8 @@ fn adopt_mask() -> u32 {
 /// Exécute la routine d'origine sur une copie de la machine jusqu'à son retour ; rend le CPU obtenu.
 fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
     let (mut c2, mut b2) = (c.clone(), b.clone());
+    // appelée par un pas Rust : l'original trouve son adresse de retour sur la pile
+    taches::table::vers_le_68000(&mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
     let mut guard = 0;
@@ -596,6 +624,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();
+    taches::table::vers_le_68000(&mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
     let mut guard = 0;

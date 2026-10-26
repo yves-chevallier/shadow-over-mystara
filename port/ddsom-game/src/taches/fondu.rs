@@ -11,7 +11,8 @@
 //! * **Par composante** : chaque pas rapproche d'un cran chaque composante (`palette::component_step`) ;
 //!   16 pas, `A5-0x65ec` levé pendant le fondu, registres sauvés à l'entrée (`movem`) et rendus à la fin.
 
-use crate::mem::{rd16, rd32, rd8, set_low_word, wr32, wr8, A5};
+use super::table::{garder, reprendre, Contenu};
+use crate::mem::{rd16, rd8, set_low_word, wr32, wr8, A5};
 use crate::modes::Flow;
 use crate::palette::{brightness_step, component_step, white_out, Cible};
 use crate::resume;
@@ -194,27 +195,18 @@ fn composante(adresse: u32) -> Composante {
     COMPOSANTES.into_iter().find(|&(entree, f)| entree == adresse || f.reprise == adresse).unwrap().1
 }
 
-/// Registres sauvés à l'entrée (`movem.l D0-D7/A0-A6,-(SP)`) et rendus à la fin.
+/// Registres sauvés à l'entrée (`movem.l D0-D7/A0-A6,-(SP)`) et rendus à la fin : gardés dans les appels en cours
+/// de la tâche.
 fn sauver_registres(x: &mut Ctx) {
-    let sp = x.c.a[7].wrapping_sub(60);
-    for i in 0..15 {
-        let r = if i < 8 { x.c.d[i] } else { x.c.a[i - 8] };
-        wr32(x.b, sp + 4 * i as u32, r);
-    }
-    x.c.a[7] = sp;
+    let mut a = [0; 7];
+    a.copy_from_slice(&x.c.a[..7]);
+    garder(x.c, x.b, Contenu::Registres { d: x.c.d, a });
 }
 
 fn rendre_registres(x: &mut Ctx) {
-    let sp = x.c.a[7];
-    for i in 0..15 {
-        let r = rd32(x.b, sp + 4 * i as u32);
-        if i < 8 {
-            x.c.d[i] = r;
-        } else {
-            x.c.a[i - 8] = r;
-        }
-    }
-    x.c.a[7] = sp.wrapping_add(60);
+    let Contenu::Registres { d, a } = reprendre(x.c, x.b) else { panic!("fondu par composante : registres sauvés introuvables") };
+    x.c.d = d;
+    x.c.a[..7].copy_from_slice(&a);
 }
 
 impl Composante {

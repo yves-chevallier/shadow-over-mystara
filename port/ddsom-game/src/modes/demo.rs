@@ -339,6 +339,8 @@ fn after_yield_a(x: &mut Ctx) -> Flow {
 /// Appelle le gestionnaire de la phase courante (`jsr (A0)` précédé du `pea` de la boucle).
 fn run_phase(x: &mut Ctx, phases: u32, loop_top: u32, after: u32) -> Flow {
     wr8(x.b, var::YIELDED, 0xff);
+    // la phase peut revenir directement en haut de la boucle, en dépilant le retour de son appel : `call_at` remet
+    // alors cet appel en cours sur la pile 68000
     x.push_return(loop_top);
     let phase = rd8(x.b, var::PHASE) as u32;
     let handler = prog32(x, phases + phase);
