@@ -183,12 +183,41 @@ pub struct Music {
     #[serde(with = "hex")]
     pub samples_rom: u32,
     pub samples: Vec<[u8; 8]>,
+    /// Octets qui suivent la fin de chaque échantillon dans la ROM d'échantillons (hexadécimal, zéros finaux
+    /// omis), jusqu'au prochain échantillon de la banque ou à la fin de la banque (`sample_tail_end`) : une
+    /// voix qui ne boucle pas continue de lire après la fin tant que le Z80 ne l'arrête pas. Absents des
+    /// fichiers WAV, qui s'arrêtent à la fin déclarée.
+    #[serde(default)]
+    pub sample_tails: Vec<String>,
     pub tables: Vec<DriverTable>,
 }
 
 impl Music {
     pub fn load(path: &Path) -> io::Result<Self> {
         crate::json::load(path)
+    }
+
+    /// Début (adresse dans la ROM d'échantillons) et fin incluse de l'échantillon `i`.
+    pub fn sample_span(&self, i: usize) -> (usize, usize) {
+        let e = &self.samples[i];
+        let bank = (e[0] as usize) << 16;
+        (bank | u16::from_le_bytes([e[1], e[2]]) as usize, bank | u16::from_le_bytes([e[5], e[6]]) as usize)
+    }
+
+    /// Fiche valide : banque dans la ROM, début, boucle et fin dans l'ordre (sinon aucun fichier WAV).
+    pub fn sample_valid(&self, i: usize) -> bool {
+        let e = &self.samples[i];
+        let (start, end) = self.sample_span(i);
+        let lp = (e[0] as usize) << 16 | u16::from_le_bytes([e[3], e[4]]) as usize;
+        e[0] < 0x40 && start <= end && (start..=end).contains(&lp)
+    }
+
+    /// Fin (exclue) de la zone qui suit l'échantillon `i` : début du prochain échantillon de sa banque, sinon
+    /// fin de la banque.
+    pub fn sample_tail_end(&self, i: usize) -> usize {
+        let end = self.sample_span(i).1;
+        let limit = (end >> 16) + 1 << 16;
+        (0..self.samples.len()).filter(|&k| self.sample_valid(k)).map(|k| self.sample_span(k).0).filter(|&s| s > end && s < limit).min().unwrap_or(limit)
     }
 
     pub fn table(&self, name: &str) -> Option<&DriverTable> {

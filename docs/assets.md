@@ -9,13 +9,14 @@ L'outil `extract` (`port/extract`) lit les ROMs de l'utilisateur et écrit `asse
 cargo run --release -p extract -- ../rom ../assets            # tout
 cargo run --release -p extract -- ../rom ../assets sprites levels terrain
 DDSOM_ROMS=$PWD/../rom cargo test --release -p ddsom-assets   # vérification sans perte
+DDSOM_ASSETS=/autre/dossier DDSOM_ROMS=... cargo test ...     # ressources hors de assets/
 ```
 
 Catégories de l'outil (sans argument : toutes) : `gfx`, `palettes` (`palettes.png`,
 `scene_palettes.json`), `sounds`, `sprites` (`sprites/frames.json`, `anims.json`, `tables.json`), `levels`,
 `terrain`, `texts`, `music` (`sound/music.json`), `data` (`data/spawns.json` et les tables de données
 `data/players.json`, `combat.json`, `enemies.json`, `boxes.json`, `scenes.json`, `misc.json`,
-`dialogs.json`).
+`dialogs.json`, `rest.json`).
 
 Les tests relisent les fichiers et réencodent chaque table au format de la ROM : ils échouent au premier
 octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test ignoré si un fichier manque).
@@ -38,9 +39,48 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Tables des joueurs | `data/players.json` | `joueurs_sans_perte` |
 | Réactions aux coups | `data/combat.json` | `combat_sans_perte` |
 | Tables des ennemis | `data/enemies.json` | `ennemis_sans_perte` |
+| Tables lues par le Rust, hors des précédentes | `data/rest.json` | `restes_sans_perte` |
+| Tout le programme, graphismes, échantillons | tous | `programme_reconstruit`, `graphismes_reconstruits`, `echantillons_reconstruits` (`tests/rebuild.rs`) |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
+
+## Reconstruction des ROMs depuis les ressources
+
+Le but du projet est un jeu sans ROM : `ddsom_assets::rebuild` refait, à partir du dossier d'assets, les
+contenus que le moteur lit aujourd'hui dans les ROMs. Chaque fonction `put_*` de `Program` est l'inverse
+d'un chargement de fichier (les encodeurs des tests sans perte y sont réunis ; les tests les appellent).
+
+| Fonction | Reconstruit | Test |
+|---|---|---|
+| `gfx_region(assets/gfx)` | région graphique (0x1800000 octets, 4 plans par groupe de 8 pixels) | `graphismes_reconstruits` : identique à `cps2_gfx::rom::load_gfx` |
+| `qsound_samples(assets)` | ROM d'échantillons (4 Mo) : les 342 `sounds/NNN.wav` à leur adresse (fiches de `music.json`) et la suite de chacun (`sample_tails`) ; le reste à zéro | `echantillons_reconstruits` : octets couverts identiques à `dd2.11m` + `dd2.12m` |
+| `Program::load(assets)` | ROM programme, vue données et vue espace programme déchiffrée (`Image`), à leurs adresses : tous les fichiers du tableau ci-dessus | `programme_reconstruit` : octets couverts identiques à `cps2::load_program` ; aucune écriture contradictoire |
+
+`Image::covered()` donne les zones décrites par les fichiers ; les autres octets valent zéro. Sur la ROM
+programme (4 Mo, vue données), les ressources couvrent 3 084 046 octets (images, palettes, cartes de décors,
+textes, tables) ; le reste est du code 68000 et des tables non extraites (voir « Lectures de la ROM
+programme par le Rust »). Ne sont pas reconstruits : le code et les données du Z80 (`dd2.01`, `dd2.02` :
+seules les tables du pilote, `sound/music.json`, sont extraites), le programme du DSP QSound
+(`dl-1425.bin`) et le code 68000.
+
+Application : `ddsom [dossier_roms] --assets [dossier]` (`ddsom/src/main.rs`) charge les graphismes et
+les échantillons depuis les ressources (`Machine::load_ddsom_with` : `dd2.11m`...`dd2.20m` ne sont pas
+lues) ; le programme, le Z80 et le DSP viennent encore des ROMs. Vérification d'une partie :
+
+```sh
+cargo run --release -p ddsom-assets --example partie_assets -- ../rom ../testdata/eeprom_ddsom.bin \
+    <assets> ../scenarios/bot30k.txt 6000 partie.png
+```
+
+deux machines (jeu en Rust, 68000 surcadencé), l'une avec les ROMs, l'autre avec les ressources, rejouent le
+scénario : les images (RVB) et les échantillons audio sont identiques à chaque image (bots 30k, personnage 3 et
+deux joueurs : 6 000 images, 2 418 461 échantillons audio comparés).
+
+Deux écarts avec le premier extracteur, découverts par cette comparaison : la table des échantillons du
+pilote compte 345 fiches, pas 290 (les fiches 291 à 344 sont les voix des sons suivants ; 290, 293 et 305 sont
+invalides) ; et une voix QSound qui ne boucle pas lit au-delà de la fin déclarée jusqu'à son arrêt par le
+Z80 (`sample_tails`, voir « Musiques et effets »).
 
 ## Conventions des fichiers JSON
 
@@ -315,7 +355,8 @@ Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors �
    {"rom":"0xa245","kind":0,"tracks":[33,201,346, ...16 déplacements...]}, ...],
  "code":[{"rom":"0xa266","ops":"step=307 vol=100 5:0 dot tie 5:0 tie 3:0 oct=5 gate=180 inst=31 ..."}, ...],
  "banks_table":"0x39e5","banks":[{"rom":"0x39e9","instruments":[[...8 octets...], ...256]}, ...],
- "samples_ptr":"0x39e3","samples_rom":"0x49e9","samples":[[...8 octets...], ...290],
+ "samples_ptr":"0x39e3","samples_rom":"0x49e9","samples":[[...8 octets...], ...345],
+ "sample_tails":["", "", "0a1b...", ...345],
  "tables":[{"name":"amplitudes","rom":"0x33e1","words":true,"values":[...]}, ...]}
 ```
 
@@ -353,8 +394,12 @@ Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors �
 * **Instruments** : la table `0x39e5` donne l'adresse de 2 bancs (`0x39e9`, `0x41e9`, juste après elle) de
   256 fiches de 8 octets (échantillon en mot petit-boutiste dont le bit 15 suit la variation de hauteur
   globale, accord fin, 5 index d'enveloppe : attaque, decay, tenue, chute lente, relâchement).
-* **Échantillons** : 290 fiches de 8 octets à l'adresse du mot `0x39e3` (`0x49e9`) : banque, début,
-  boucle, fin (mots petit-boutistes), note de référence ; les données PCM sont dans `sounds/`.
+* **Échantillons** : 345 fiches de 8 octets à l'adresse du mot `0x39e3` (`0x49e9`) : banque, début,
+  boucle, fin (mots petit-boutistes), note de référence ; les données PCM sont dans `sounds/NNN.wav`
+  (342 fichiers : les fiches 290, 293 et 305 sont invalides, début après la fin, et n'ont pas de fichier).
+  `sample_tails` : la suite de chaque échantillon dans la ROM d'échantillons, en hexadécimal sans les zéros
+  finaux, jusqu'au prochain échantillon de la banque ou à la fin de la banque (`Music::sample_tail_end`) :
+  une voix QSound qui ne boucle pas continue de lire après la fin tant que le Z80 ne l'arrête pas.
 * **Tables du pilote** (`tables`, ROM fixe ; `words` : mots petit-boutistes) : `qsound_init_regs` (0xd5,
   12 octets) et `qsound_init_values` (0xe1, 12 mots), `durations` (0x1119, 24 mots), `octave_offsets`
   (0x1149, 16 octets), `semitone_octave` (0x1fc6, 108), `octave_start` (0x2032, 9), `rates` (0x203b, 108
@@ -710,8 +755,93 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
   dans la seconde) ; les types 64 à 127 répètent les types 0 à 63. Champs : voir
   `Kind` et [joueur.md](joueur.md) (collision avec le décor).
 
+## Lectures de la ROM programme par le Rust
+
+Mesure de ce que le code Rust (`ddsom-game`) lit comme données dans la ROM programme (0x000000-0x3fffff),
+et de la part que les ressources reconstruisent (`Program`).
+
+**Méthode.** La fonctionnalité `rom-trace` de `cps2` (et de `m68k`, qui signale dans `IN_STEP` qu'une
+instruction 68000 s'exécute) compte chaque mot lu par le bus : `Cps2Bus::read_word` pour les lectures
+en espace données (`rd8`, `rd16`, `rd32`, `data16`, `data32`...) et `fetch16`/`read_prog16` pour l'espace
+programme (`prog8`, `prog16`, `prog32`, `rom8`, `rom16`, `rom32`, `m68k::decode` des routines de durée). Les
+lectures faites par les instructions 68000 interprétées (`Cpu::step`, donc aussi les opcodes) sont ignorées.
+Hors de cette fonctionnalité, rien ne change (code absent). Le journal de première lecture donne, pour les mots
+non couverts, les trois premiers appelants dans `ddsom-game/src`.
+
+```sh
+cd port
+CARGO_TARGET_DIR=/tmp/cible cargo build --release -p ddsom-game --example lectures_rom --features rom-trace
+cargo build --release -p ddsom-assets --examples
+target/release/examples/couverture_rom <assets> --octets /tmp/couvert.bin          # couverture mot par mot
+DDSOM_COUVERT=/tmp/couvert.bin /tmp/cible/release/examples/lectures_rom <roms> <eeprom> lectures.txt \
+    ../scenarios/bot30k.txt:12000 ...                                              # machine hybride, natives Rust
+target/release/examples/couverture_rom <assets> lectures.txt [écart-hexa]          # zones non couvertes
+```
+
+**Scénarios** (15 x 12 000 images, machine hybride) : `bot30k` (guerrier), `bot_char1`, `bot_char4`, `bot_2p`,
+`boss/boss5_scene58`, `boss/boss13_dragon`, `boss/boss21_scene44`, `modes/attract`, `modes/ending`,
+`cov/cov_service_tests` (menu de test), `cov/cov_credits_gros`, `cov/cov_tour8_c1`, `enemy/elf_scene96`,
+`scene/scene_03`, `scene_end/end_02`. Les zones lues ne sont donc qu'une partie des tables : un scénario de plus
+peut en ajouter.
+
+**Résultat.**
+
+| Espace | Octets lus | Couverts | Non couverts |
+|---|---|---|---|
+| Données (lectures absolues) | 781 988 | 763 024 (97,6 %) | 18 964 en 532 zones |
+| Programme (lectures relatives au PC, déchiffrées) | 41 758 | 1 332 | 40 426 dont 32 316 de chronométrage |
+
+Octets lus et couverts, par fichier d'assets (données ; programme) : `sprites/frames.json` 380 128 ;
+`sprites/anims.json` 112 880 ; `levels.json` 125 042 ; 256 ; `palettes.png` 79 072 ; `data/rest.json` 26 070 ; 106 ;
+`data/misc.json` 16 466 ; `data/spawns.json` 7 482 ; `sprites/tables.json` 3 150 ; `texts.json` 2 838 ; 36 ;
+`data/dialogs.json` 2 594 ; `scene_palettes.json` 2 266 ; 324 ; `data/players.json` 1 680 ; 410 ; `data/scenes.json`
+1 498 ; 76 ; `data/boxes.json` 446 ; `data/enemies.json` 736 ; 116 ; `terrain.json` 508 ; `data/combat.json` 168.
+
+**Ajoutées par cette mesure** (`data/rest.json`, `extract/src/rest.rs`, 1 497 tables, test `restes_sans_perte`) :
+scripts de cases de tuiles des SET 4 et 6 (`tile_anim_entries/4` et `/6`, 53 + 32 entrées de 16 octets en
+espace programme ; `tile_anim/<script>.<n>` : durée, colonnes, lignes, puis un long par case ; 0x3ec70a-0x3f5448) ;
+scripts de palettes des SET 0 (`palette_script_table` 0xba57a, 79 entrées ; `palette_script/<script>.*` : en-tête,
+blocs, fin / relance / saut ; `palette_script_transition` 0xba44c et `palette_script_end` 0xba4ca, espace
+programme) ; sous-objets des joueurs (`overlay_body` 0x395d4, `overlay_shield` 0x39604, `overlay_anims` 0x396e8,
+`overlay_palettes` 0x397e0, et les 10 tables de lignes `overlay_rows/<adresse>` de 0x1147c6 à 0x11bffa : 1 407
+lignes de 8 octets, animation, dx, dz, retournement, derrière, plus un mot `nop` de bourrage) ; palettes d'aura
+(`aura_offsets` 0x378aa en espace programme, `aura_b` 0x378c2, `aura_c` 0x384c2, `aura_normal` 0x390c2) ; piles
+initiales des 16 tâches (`task_stacks` 0x534) ; panoramique du son (`sound_pan` 0xee04e, 48 octets).
+
+**Zones lues et non couvertes, par sous-système** (octets ; `d` : espace données, `p` : espace programme).
+
+| Sous-système | d | p | Rôle des zones |
+|---|---|---|---|
+| Chronométrage (`chemin.rs`, `timing.rs`, `objects/cost.rs`, `ai.rs`, `combat.rs`) | 0 | 32 316 | pas des données : les routines natives qui comptent encore les cycles du 68000 décodent le code d'origine (`m68k::decode`) ; disparaît avec le 68000 |
+| Joueurs (`player/`) | 782 | 902 | réactions aux coups (`hit_reactions.rs` 0xf1cc4-0x1010b2 : seuils, durées d'étourdissement, lignes de poussée), combos (`combos.rs` 0xf193a) ; en p : tables de décalages des états de blessure (`hurt.rs`), des scripts de cinématiques (`scripted.rs`, `cinematics.rs`) et des routines par personnage (`characters.rs`) (h) |
+| Tirs et effets des joueurs (`families/joueur/`) | 364 | 698 | trajectoires de l'anneau (`peff_ring.rs` 0x1c9db6-0x1ca034 : vitesses x, z) ; en p : déplacements des coquilles (`pshell.rs`) |
+| Ennemis (`families/enemy_*`, `reactions.rs`) | 1 136 | 1 294 | tables d'attitude par niveau (octets de déplacements : squelette 0x5942a, bête 0x7473e, trog 0x5af66, ghoul, elfe, kobold, hibou, guerrier 0x77634) ; cercle de réactions 0x1c94b6 ; en p : tables d'adresses de routines et de déplacements |
+| Boss (`families/boss_*`) | 240 | 694 | tables de décision (octets) des chefs 5, 7, 17, 21, vitesses du chef 15 (0x1c67b8), oscillation du dragon (0x8faa2) |
+| SET : décors, portes, rideaux (`families/set*`) | 1 986 | 664 | tables par variante des scènes de SET C (`set_c_scene.rs` 0xbcfc6-0xc821c : entrées de 0x14 octets rang, difficulté, positions), finales (0xce51a), positions (0xd4198) ; en p : table du rideau (0xbcea4) |
+| Effets, tirs ennemis, objets, caisses (`families/effects*`, `eshl*`, `sobj`, `items`) | 2 220 | 1 622 | rideau de la porte du SET E (`effects_e.rs` 0xadad0-0xae118 : pas du rideau puis tuiles), tables de pièces et de couleurs ; en p : types d'objets de SET (`sobj.rs`), vitesses de pièces |
+| Affichage (`hud/`, `text.rs`, `video.rs`, `taches/ecran_fixe.rs`) | 2 732 | 290 | séries de colonnes de tuiles du HUD (`hud/layer.rs` 0x3f54c2-0x3f6300, 3 mots par colonne), glyphes de la barre d'état (0x17bca), chaînes terminées par `@` lues par `text.rs` (0x14e58, 0x1c552, 0xd6926, 0xe04c8), écrans fixes (0x19a1a) ; en p : origines et lettres du HUD |
+| Modes, scènes, caméra, démarrage | 1 390 | 268 | scripts de démonstration (`modes/demo.rs` 0x20070), écran de démarrage (0x18faa, 0x133ba), tables de scrolls (`scroll.rs` 0x33bdc, `camera_modes.rs` 0x321fc), classement (0xfc6d8) ; en p : tables des scènes |
+| Son (`sound.rs`) | 206 | 720 | listes de genres de sons (0xe6684) ; en p : code des enveloppes lu par les wrappers de son (0xe0ca8-0xede06) |
+| Moteur d'objets (`sprites.rs`, `objects/`) | 4 534 | 100 | textes en sprites et listes de morceaux (`sprites.rs` 0x1d8be-0x1db32, 0x201e0), tables de vitesses des mouvements (`motion.rs` 0x1c67ce-0x1ca180 : vx, vy par indice), index d'entrées (`anim.rs` 0xb2b6a, 0x16cb10, 0x1b232c), rangs (0x1f208) |
+| IA, combat, boucles de dispatch (`ai.rs`, `ai_aids.rs`, `combat/`, `dispatch.rs`) | 1 680 | 792 | pointeurs et masques d'aides à la visée (`ai_aids.rs` 0x78ae-0x16c78c, `ai.rs` 0xa4f2), tables de dégâts (`combat/damage.rs` 0x3d94) ; en p : les 10 tables de dispatch des pools d'objets (`dispatch.rs` 0x39908-0x39fe4, adresses de code) |
+| Accès génériques (`vue.rs`, `mem.rs`) | 1 694 | 74 | lectures simulées (`Vue::rd8`) dont l'appelant n'est pas résolu à trois niveaux : bloc 0x000-0x400 (306 000 lectures : vecteurs ou code, (h)), 0x275a, 0x2dc3e ; pointeurs lus par `mem.rs` (0x4c6de-0x100706, nombreuses petites zones) |
+
+**Lecture des résultats.** Dans l'espace données, les zones non couvertes sont de petites tables disséminées
+(moins de 20 Ko au total, 97,6 % des octets lus sont couverts) : tables de vitesses, d'attitudes, de décisions, de
+positions par variante, chaînes, listes de pièces ; chacune se décrit comme les tables de `data/*.json` (une ligne
+de format et un nombre de lignes) mais demande de lire son consommateur pour en fixer les bornes. Les plus
+volumineuses sont les colonnes de tuiles du HUD (`hud/layer.rs`, 1,6 Ko), les listes de morceaux et les textes en
+sprites (`sprites.rs`, 1,9 Ko), les tables de vitesses des mouvements (`motion.rs`, 1,7 Ko) et les tables des
+scènes de SET C (1,7 Ko). Dans l'espace programme, presque tout (80 %) est du code lu pour compter les cycles
+(sans objet pour un moteur sans 68000) ; le reste (8 Ko) est fait de tables lues en relatif au PC, noyées dans le
+code des gestionnaires : décalages vers des routines (des adresses de code : elles deviennent des fonctions
+Rust) et quelques tables de données (vitesses des coquilles, positions, tables de décision des chefs 17 et 21).
+Les lectures de `sound.rs` en espace programme (0xe0ca8-0xede06) sont des octets de code des wrappers de son lus pour les évaluer ; elles disparaîtront avec eux.
+
 ## Ce qui reste à extraire
 
+* Lectures de la ROM programme par le Rust non couvertes (18 964 octets de l'espace données en 532 zones,
+  mesure sur 15 scénarios) : voir « Lectures de la ROM programme par le Rust » (tableau par sous-système).
 * Sprites : entre la table des images et les images, `0x2a85fc-0x2ae81e` (octets et noms des 2 512 scripts
   du visualiseur), les palettes des scènes et `0x2b04de-0x2b45d8` (entrées des démonstrations) sont
   extraits (`data/misc.json`). Les jeux d'animations que seul le code désigne (sans nom) ne sont pas

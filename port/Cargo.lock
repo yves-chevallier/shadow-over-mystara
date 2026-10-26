@@ -75,6 +75,7 @@ name = "ddsom"
 version = "0.1.0"
 dependencies = [
  "cps2",
+ "ddsom-assets",
  "ddsom-game",
  "ddsom-rc",
  "libloading",
@@ -88,6 +89,7 @@ version = "0.1.0"
 dependencies = [
  "cps2",
  "cps2-gfx",
+ "ddsom-game",
  "ddsom-sound",
  "png",
  "serde",

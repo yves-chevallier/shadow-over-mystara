@@ -15,6 +15,7 @@ mod misc;
 mod music;
 mod palettes;
 mod players;
+mod rest;
 mod rom;
 mod scene_palettes;
 mod scenes;
@@ -103,7 +104,7 @@ Couleur affichée : `composante * 0x11 * (0x0f + 2 * luminosité) / 0x2d`.
 
 ## sounds/NNN.wav
 
-Les échantillons QSound (table du pilote son, ROM Z80 0x49e8), PCM 8 bits à 24 038 Hz (vitesse de
+Les échantillons QSound valides (342 des 345 fiches de la table du pilote son, ROM Z80 0x49e8), PCM 8 bits à 24 038 Hz (vitesse de
 lecture 1.0 de la puce). Le bloc `smpl` donne la boucle et la note de référence (60 = do central).
 
 ## sprites/frames.json, sprites/anims.json
@@ -133,6 +134,11 @@ Cartes de terrain fixes (scènes 2 et 0x14) et tables des types de terrain (coll
 
 Musiques et effets du pilote son : table des sons, pistes (instructions en jetons), bancs
 d'instruments, fiches d'échantillons et tables du pilote (volumes, enveloppes, hauteurs).
+
+## data/rest.json
+
+Tables lues par le jeu en Rust que les autres fichiers ne couvrent pas : scripts de tuiles et de palettes
+des SET, sous-objets des joueurs (arme et bouclier), palettes d'aura, piles des tâches, panoramique du son.
 
 ## data/spawns.json
 

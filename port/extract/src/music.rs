@@ -15,8 +15,8 @@ const BANKS_TABLE: u32 = 0x39e5;
 /// Bancs : deux (le premier commence juste après la table, à 0x39e9), 256 fiches chacun.
 const BANKS: u32 = 2;
 const INSTRUMENTS: u32 = 256;
-/// Échantillons : 290 fiches (comme `sounds/`).
-const SAMPLES: u32 = 290;
+/// Échantillons : 345 fiches (comme `sounds/`, qui n'écrit que les fiches valides).
+const SAMPLES: u32 = 345;
 /// Tables du pilote dans la ROM fixe : (nom, adresse, mots petit-boutistes, nombre de valeurs).
 const TABLES: [(&str, u32, bool, u32); 14] = [
     ("qsound_init_regs", 0xd5, false, 12),
@@ -115,7 +115,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         })
         .collect();
     let samples_rom = u32::from(rom.word(SAMPLES_PTR));
-    let samples = (0..SAMPLES).map(|i| std::array::from_fn(|j| rom.byte(samples_rom + 8 * i + j as u32))).collect();
+    let samples: Vec<[u8; 8]> = (0..SAMPLES).map(|i| std::array::from_fn(|j| rom.byte(samples_rom + 8 * i + j as u32))).collect();
     let tables = TABLES
         .iter()
         .chain([&TREMOLO])
@@ -133,7 +133,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         ops.len(),
         code.len()
     );
-    let music = Music {
+    let mut music = Music {
         header_ptr: HEADER_PTR,
         header,
         count,
@@ -147,8 +147,21 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         samples_ptr: SAMPLES_PTR,
         samples_rom,
         samples,
+        sample_tails: Vec::new(),
         tables,
     };
+    // ROM d'échantillons (ROM_LOAD16_WORD_SWAP) : ce qui suit la fin de chaque échantillon
+    let mut pcm = Vec::new();
+    for name in ["dd2.11m", "dd2.12m"] {
+        pcm.extend(std::fs::read(roms.join(name))?.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
+    }
+    music.sample_tails = (0..music.samples.len())
+        .map(|i| {
+            let tail = &pcm[music.sample_span(i).1 + 1..music.sample_tail_end(i)];
+            let used = tail.iter().rposition(|&b| b != 0).map_or(0, |p| p + 1);
+            tail[..used].iter().map(|b| format!("{b:02x}")).collect()
+        })
+        .collect();
     std::fs::create_dir_all(path.parent().unwrap())?;
     json::save(path, &music, 2)
 }

@@ -14,3 +14,7 @@ ddsom-sound = { path = "../ddsom-sound" }
 
 [dev-dependencies]
 png = "0.17"
+
+[features]
+# Journal des lectures de la ROM programme faites par le code Rust (hors instructions 68000) : `rom_trace`.
+rom-trace = ["m68k/rom-trace"]
