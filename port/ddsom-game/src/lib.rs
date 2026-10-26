@@ -398,7 +398,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
-        if c.cycles + cost <= limit || tient_la_table(n) {
+        if c.cycles + cost <= limit || tient_la_table(n) || taches::table::appelee_par_un_cadre(c, b) {
             if CHECK.load(Ordering::Relaxed) && checked(n) {
                 check(n, c, b, cost);
             } else if adopt_regs(n) {
@@ -437,8 +437,6 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             }
             return Some(c.pc);
         }
-        // l'original s'exécute à la place de la native : ses retours sont sur la pile 68000
-        taches::table::vers_le_68000(c, b);
     }
     if VERIFIER_APPELS.load(Ordering::Relaxed) {
         taches::table::verifier_68000(c, b);

@@ -247,6 +247,20 @@ impl Cadres {
         self.liste[..self.n].iter().copied()
     }
 
+    /// Des cadres plus anciens que ceux ouverts à la hauteur `avant` sont repris de la pile 68000, qui remonte à
+    /// `apres` : ils passent sous ces cadres plus récents, qui suivent la pile.
+    fn glisser_dessous(&mut self, avant: u32, apres: u32, repris: &[Contenu]) {
+        let i = self.liste[..self.n].iter().position(|k| k.pile == avant).unwrap_or(self.n);
+        let recents: Vec<Cadre> = self.liste[i..self.n].to_vec();
+        self.n = i;
+        for &contenu in repris {
+            self.empiler(Cadre { pile: apres, contenu });
+        }
+        for k in recents {
+            self.empiler(Cadre { pile: apres, ..k });
+        }
+    }
+
     /// Retour d'un appelé dont la pile 68000 est `pile` : la suite de l'appel en cours, s'il lui correspond.
     fn retour(&mut self, pile: u32) -> Option<u32> {
         match self.sommet()? {
@@ -266,6 +280,9 @@ pub struct Table {
     pub courante: usize,
     /// Piles libres : la dernière est la prochaine donnée (le tas FF005A de l'original, rempli par `boot_init`).
     pub piles: Vec<u32>,
+    /// Cadres remis sur la pile 68000 pour du code d'origine et pas encore repris (voir [`relever`]) : emplacement,
+    /// adresse du plus récent sur la pile, contenus du plus ancien au plus récent.
+    remis: Vec<(usize, u32, Vec<Contenu>)>,
 }
 
 impl Table {
@@ -274,6 +291,7 @@ impl Table {
         if self.emplacements[k].etat != Etat::Libre {
             self.rendre_pile(k);
         }
+        self.remis.retain(|r| r.0 != k);
         let pile = self.piles.pop().expect("plus de pile libre pour une tâche");
         let tache = Tache::depuis_entree(entree);
         self.emplacements[k] = Emplacement { tache, etat: Etat::Neuve, pile, reprise: Reprise::Entree(entree), ..Emplacement::default() };
@@ -283,6 +301,7 @@ impl Table {
     pub fn liberer(&mut self, k: usize) {
         self.emplacements[k].etat = Etat::Libre;
         self.emplacements[k].cadres = Cadres::default();
+        self.remis.retain(|r| r.0 != k);
         self.rendre_pile(k);
     }
 
@@ -319,6 +338,8 @@ impl Table {
         e.compte = 0;
         e.reprise = Reprise::Entree(entree);
         e.cadres = Cadres::default();
+        let k = self.courante;
+        self.remis.retain(|r| r.0 != k);
     }
 
     /// Cession de la tâche courante : nouvel état, et son contexte pour la reprise.
@@ -427,6 +448,7 @@ pub fn mettre_sur_la_pile(c: &mut Cpu, b: &mut Cps2Bus) -> Vec<Contenu> {
         return Vec::new();
     }
     let Some(t) = table_si(b) else { return Vec::new() };
+    let k = t.courante;
     let cadres = t.cadres();
     let mut remis = Vec::new();
     while let Some(cadre) = cadres.sommet().filter(|k| k.pile == pile) {
@@ -440,23 +462,24 @@ pub fn mettre_sur_la_pile(c: &mut Cpu, b: &mut Cps2Bus) -> Vec<Contenu> {
             wr32(b, c.a[7], v);
         }
     }
+    if !remis.is_empty() {
+        table(b).remis.push((k, c.a[7], remis.clone()));
+    }
     remis
 }
 
-/// Le code d'origine appelé par `call_at` est revenu normalement : les cadres que [`mettre_sur_la_pile`] avait remis
-/// sur la pile 68000 en sont repris (relus, au cas où il les aurait modifiés).
-pub fn reprendre_de_la_pile(c: &mut Cpu, b: &mut Cps2Bus, remis: &[Contenu]) {
-    if remis.is_empty() {
-        return;
-    }
-    let mut relus = Vec::with_capacity(remis.len());
-    for contenu in remis.iter().rev() {
+/// Relit sur la pile 68000, à partir de `adresse` (le plus récent est le plus bas), des cadres de mêmes sortes que
+/// `modeles` (du plus ancien au plus récent). Rend leurs contenus, dans le même ordre, et l'adresse qui suit le plus
+/// ancien.
+fn relire(b: &mut Cps2Bus, mut adresse: u32, modeles: &[Contenu]) -> (Vec<Contenu>, u32) {
+    let mut relus = Vec::with_capacity(modeles.len());
+    for modele in modeles.iter().rev() {
         let mut long = || {
-            let v = rd32(b, c.a[7]);
-            c.a[7] = c.a[7].wrapping_add(4);
+            let v = rd32(b, adresse);
+            adresse = adresse.wrapping_add(4);
             v
         };
-        relus.push(match *contenu {
+        relus.push(match *modele {
             Contenu::Appel(_) => Contenu::Appel(long()),
             Contenu::Valeur(_) => Contenu::Valeur(long()),
             Contenu::Registres { .. } => {
@@ -466,17 +489,75 @@ pub fn reprendre_de_la_pile(c: &mut Cpu, b: &mut Cps2Bus, remis: &[Contenu]) {
             }
         });
     }
-    let pile = c.a[7];
-    let cadres = table(b).cadres();
-    for contenu in relus.into_iter().rev() {
-        cadres.empiler(Cadre { pile, contenu });
+    relus.reverse();
+    (relus, adresse)
+}
+
+/// Le code d'origine appelé par `call_at` est revenu normalement : les cadres que [`mettre_sur_la_pile`] avait remis
+/// sur la pile 68000 en sont repris (relus, au cas où il les aurait modifiés).
+pub fn reprendre_de_la_pile(c: &mut Cpu, b: &mut Cps2Bus, remis: &[Contenu]) {
+    if remis.is_empty() {
+        return;
     }
+    let (relus, haut) = relire(b, c.a[7], remis);
+    let (bas, t) = (c.a[7], table(b));
+    let k = t.courante;
+    if let Some(i) = t.remis.iter().rposition(|r| r.0 == k && r.1 == bas) {
+        t.remis.remove(i);
+    }
+    for contenu in relus {
+        t.cadres().empiler(Cadre { pile: haut, contenu });
+    }
+    c.a[7] = haut;
 }
 
 /// Le code d'origine prend la suite sans revenir à Rust : les cadres ouverts à la hauteur de pile actuelle passent
 /// sur la pile 68000 (voir [`mettre_sur_la_pile`]).
 pub fn vers_le_68000(c: &mut Cpu, b: &mut Cps2Bus) {
     mettre_sur_la_pile(c, b);
+}
+
+/// La native qui va s'exécuter a été appelée par un pas Rust (le dernier cadre de la tâche courante est à la hauteur
+/// de pile actuelle) : elle n'est jamais remplacée par son original, même quand elle déborderait sur l'interruption
+/// suivante (l'original ne trouverait pas ses retours sur la pile 68000, et le pas Rust qui l'a appelée attend sa
+/// suite dans les cadres).
+pub fn appelee_par_un_cadre(c: &Cpu, b: &Cps2Bus) -> bool {
+    c.sr & 0x2000 == 0
+        && lire(b).is_some_and(|t| t.emplacements[t.courante].cadres.sommet().is_some_and(|k| k.pile == c.a[7]))
+}
+
+/// La tâche courante cède la main et reprendra dans la native `reprise`. Des cadres remis sur la pile 68000 pour du
+/// code d'origine peuvent y être restés (l'appelé a cédé, ou est revenu plus haut en dépilant une partie d'entre eux) :
+/// ceux qui sont au sommet de la pile en sont repris, et la pile de la tâche redevient vide. Ceux que la pile a
+/// dépassés ont été consommés par le code d'origine ; ceux qu'elle n'atteint pas restent (du code d'origine les
+/// relira). Une reprise dans du code d'origine les laisse tous.
+pub fn relever(c: &mut Cpu, b: &mut Cps2Bus, reprise: u32) {
+    if !crate::est_native(reprise) {
+        return;
+    }
+    loop {
+        let pile = c.a[7];
+        let Some(t) = table_si(b) else { return };
+        let k = t.courante;
+        let Some(i) = t.remis.iter().rposition(|r| r.0 == k) else { return };
+        if pile < t.remis[i].1 {
+            return;
+        }
+        let (_, bas, contenus) = t.remis.remove(i);
+        // les plus récents, du bas de la zone jusqu'à la pile, ont été dépilés par le code d'origine
+        let mut adresse = bas;
+        let mut restants = contenus.len();
+        while adresse < pile && restants > 0 {
+            restants -= 1;
+            adresse += 4 * contenus[restants].longs().len() as u32;
+        }
+        if adresse != pile || restants == 0 {
+            continue;
+        }
+        let (repris, haut) = relire(b, pile, &contenus[..restants]);
+        table(b).cadres().glisser_dessous(pile, haut, &repris);
+        c.a[7] = haut;
+    }
 }
 
 thread_local! {

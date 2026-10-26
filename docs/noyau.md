@@ -86,7 +86,14 @@ ouverts à la hauteur de pile actuelle sont donc remis sur la pile 68000, comme 
 * `call_at`/`call` les y remet le temps de l'appel et les reprend (relus) quand l'appelé revient normalement ; s'il
   revient plus haut ou cède la main (`Unwound`), ils restent consommés ou empilés, comme dans l'original ;
 * `Sequence::jump`/`jump_to`/`tail` vers une adresse sans native, et `Ex::delegate` de la sortie de scène, les y laissent ;
-* de même quand une native est remplacée par son original parce qu'elle déborderait sur l'interruption suivante (`run`).
+* quand la tâche cède ensuite pour reprendre dans une native, ceux qui sont restés au sommet de la pile 68000 (l'appelé
+  a cédé, ou est revenu plus haut en dépilant une partie d'entre eux) en sont repris (`table::relever`, dans
+  `kernel::ceder`) ; ceux que la pile a dépassés ont été consommés par le code d'origine.
+
+Une native appelée par un cadre (le dernier cadre de la tâche est à la hauteur de pile actuelle) n'est jamais remplacée
+par son original quand elle déborderait sur l'interruption suivante (`run`, `table::appelee_par_un_cadre`), comme les
+natives du noyau : l'original ne trouverait pas ses retours, et le pas Rust qui l'a appelée attend sa suite dans les
+cadres.
 
 Pour que la pile vue par le code d'origine soit exactement celle de l'original, les appels en cours ouverts par du Rust
 pendant un pas sont tous des cadres, y compris ceux qui ne traversent jamais une cession : retour de la mise à jour du
