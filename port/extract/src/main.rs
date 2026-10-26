@@ -135,6 +135,11 @@ Cartes de terrain fixes (scènes 2 et 0x14) et tables des types de terrain (coll
 Musiques et effets du pilote son : table des sons, pistes (instructions en jetons), bancs
 d'instruments, fiches d'échantillons et tables du pilote (volumes, enveloppes, hauteurs).
 
+## data/rest.json
+
+Tables lues par le jeu en Rust que les autres fichiers ne couvrent pas : scripts de tuiles et de palettes
+des SET, sous-objets des joueurs (arme et bouclier), palettes d'aura, piles des tâches, panoramique du son.
+
 ## data/spawns.json
 
 Scripts d'apparition des scènes (ennemis, décors, objets qui entrent au fil du défilement).

@@ -98,7 +98,7 @@ morceau réécrit est exécuté en parallèle de l'original et comparé.
    les deux mondes coexistent, une projection RAM <-> structures sert de pont et de point de comparaison.
 3. **Extraction des données** : un outil lit les ROMs de l'utilisateur et produit `assets/`. Le
    moteur ne lit plus que ces fichiers. Fait : graphismes (cellules 16x16 en PNG indexé), bibliothèque
-   de palettes (PNG RGBA), 290 échantillons (WAV avec boucle et note), définitions des sprites (21 887
+   de palettes (PNG RGBA), 342 échantillons (WAV avec boucle et note), définitions des sprites (21 887
    images, 31 610 entrées d'animation, JSON), cartes des décors des scènes (scroll 2 et 3) et images
    du scroll 1, palettes des scènes, terrain (cartes fixes, types), boîtes de collision et de
    visibilité, marques au sol, textes de la couche 8x8 et noms, musiques et effets (sons, pistes,
