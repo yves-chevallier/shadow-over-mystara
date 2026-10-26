@@ -5,7 +5,7 @@ Code : `port/ddsom-game/src/taches/service.rs` (la tâche), `src/service/` (`mod
 CONFIGURATION ; `memoire.rs` : MEMORY CHECK), `src/config.rs` et `src/eeprom.rs` (M2). `A5` = 0xFF8000. Les
 textes et les tables restent dans la ROM et sont lus à l'exécution.
 
-Tout est validé image par image par cinq scénarios (`scenarios/cov/cov_service*.txt`, voir §6).
+Tout est validé image par image par six scénarios (`scenarios/cov/cov_service*.txt` et `covs_carte_dev.txt`, voir §6).
 
 ## 1. Entrée et tâche (`0x29162`)
 
@@ -120,7 +120,7 @@ La validation compare donc le test Rust à l'exécution du code d'origine.
 | `0x2dc9a` | `eeprom::COMPTA_INIT` (native) | démarrage : rien, sauf sur la carte de développement |
 
 Les variantes de la carte de développement (`A5+0x82` non nul : RAM supplémentaire 0x660000, temps de jeu) restent
-en code d'origine : la fin de GAME DATA (`0x2b842`), les suites de `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et `0x2dca6`/`0x2dcd2`.
+en code d'origine : les suites de `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et `0x2dca6`/`0x2dcd2`.
 
 ## 6. Scénarios
 
@@ -131,6 +131,7 @@ en code d'origine : la fin de GAME DATA (`0x2b842`), les suites de `0x2e4ec` (`0
 | `cov_service_ecrans.txt` | COLOR, DOT CROSS HATCH, GAME DATA, MEMORY CHECK (×4), EXIT et redémarrage |
 | `cov_service_variante.txt` | `poke` de la variante (4, puis 10, puis 8) et de quatre joueurs : INPUT et OUTPUT à quatre joueurs, distributeur et compteur de cartes, CONFIGURATION à 9 lignes, DEFAULT, redémarrage avec une signature d'EEPROM qui ne correspond pas (valeurs par défaut écrites par `0x2d30a`) |
 | `cov_service_reglages.txt` | répétition automatique (touches tenues dans le menu et les réglages), départ gratuit (mode 17 par `poke` : ligne CONTINUE sautée, CONTINUE forcé), jeu gratuit (18), variante 0 (7-1 sans langue ni cartes), modes hors de la liste réduite de la variante 4 |
+| `covs_carte_dev.txt` | carte de développement (`poke8 ff8082 1`) : GAME DATA avec temps de jeu (`hh:mm:ss`, indicateur nul, valeur négative, plafond à 99 heures) et compteurs lus en RAM supplémentaire |
 
 Générateur : les scénarios sont des suites d'appuis (4 images, 40 d'intervalle) ; l'interrupteur TEST (`Service Mode`)
 reste actionné de l'image 600 jusqu'au EXIT final.
@@ -141,10 +142,14 @@ Mesure (`examples/reste68k`, `cov_service.txt`, 30 000 images) : M1 et M2 passen
 **0** (le scénario passe de 3 566 149 à 1 983 867 instructions : le reste est le test de RAM du démarrage, K2). Sur les
 cinq scénarios, aucune instruction de M1 ni de M2 n'est plus exécutée.
 
+Les « 76 fonctions jamais atteintes » de M1 dans `docs/reste68k.md` sont les fonctions d'origine remplacées en ligne
+par le Rust (aucune n'exécute de 68000) et le code mort ci-dessous : aucune n'est à couvrir par un scénario.
+
 Restent en code d'origine, jamais exécutés par une borne :
 
-* les suites de la carte de développement (`A5+0x82` non nul) : fin de GAME DATA (`0x2b842`), compteurs de la RAM
-  supplémentaire de `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et de `0x2dc9a` (`0x2dca6`, `0x2dcd2`) ;
+* les suites de la carte de développement (`A5+0x82` non nul) hors du menu : compteurs de la RAM supplémentaire de
+  `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et de `0x2dc9a` (`0x2dca6`, `0x2dcd2`). La fin de GAME DATA (`0x2b842` : temps de
+  jeu, `0x29ca0`/`0x29cc4`) est en Rust (`mire::play_time`), validée par `covs_carte_dev.txt` ;
 * les blocages : « NG » du MEMORY CHECK (boucle `0x2d112`), « EEPROM ERROR » (boucle `0x2d7fa`) ; les messages sont
   affichés en Rust, puis le PC est posé sur la boucle de l'original ;
 * le « Secret Test » (M3, `0xee16e`) et la version à 13 lignes du menu (`0x295a0-0x29946` : OBJECT, SCROLL 1-3),

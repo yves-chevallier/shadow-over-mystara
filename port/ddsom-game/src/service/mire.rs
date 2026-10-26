@@ -132,15 +132,50 @@ mod data {
     pub const COUNTERS: u32 = 0x2b984;
     pub const FREEPLAY: u32 = 0x2b9b0;
     pub const CARDS: u32 = 0x2baf0;
-    /// Suite de l'écran avec la RAM de la carte de développement (temps de jeu, compteurs gardés en RAM).
-    pub const DEV_BOARD: u32 = 0x2b842;
+    /// Texte du temps de jeu (carte de développement).
+    pub const TIME: u32 = 0x2b96c;
+    /// Première case du temps de jeu (heures, minutes, secondes, un chiffre par ligne).
+    pub const TIME_CELL: u32 = 0x912f9c;
+    /// Temps de jeu (A5 - 0x615c) et son indicateur (A5 - 0x6158) : sans indicateur, 00:00:00.
+    pub const TIME_VALUE: u32 = 0xff_1ea4;
+    pub const TIME_FLAG: u32 = 0xff_1ea8;
+    /// Secondes puis minutes (mots, A5 - 0x62a0 et - 0x629e).
+    pub const SECONDS: u32 = 0xff_1d60;
     /// Cases des trois compteurs (8 chiffres).
     pub const CELLS: [u32; 3] = [0x912fa4, 0x912fac, 0x912fb4];
-    /// Compteurs de l'EEPROM (A5+) : pièces, services, parties gratuites / cartes.
-    pub const COINS: u32 = 0x76;
-    pub const SERVICES: u32 = 0x7a;
-    pub const FREEPLAYS: u32 = 0x7e;
-    pub const CARD_COUNT: u32 = 0x7fd4;
+    /// Compteurs : pièces, services, parties gratuites, cartes. En EEPROM (A5 + 0x76, 0x7a, 0x7e, 0x7fd4) ;
+    /// sur la carte de développement, copies en RAM supplémentaire (A5 - 0x6164, - 0x6160, - 0x6154, - 0x6150).
+    pub const EEPROM_COUNTERS: [u32; 4] = [crate::mem::A5 + 0x76, crate::mem::A5 + 0x7a, crate::mem::A5 + 0x7e, crate::mem::A5 + 0x7fd4];
+    pub const DEV_COUNTERS: [u32; 4] = [0xff_1e9c, 0xff_1ea0, 0xff_1eac, 0xff_1eb0];
+}
+
+/// `0x2b86e`, `0x29ca0`, `0x29cc4` : le temps de jeu (compteur divisé par l'indicateur, qui est la fréquence
+/// du compteur) en `hh:mm:ss` ; divisions signées ; heures plafonnées à 99 (minutes alors 0x3b3b, secondes 0).
+fn play_time(x: &mut Ctx) {
+    let value = x.rd32(data::TIME_VALUE) as i32;
+    let rate = x.rd32(data::TIME_FLAG) as i32;
+    let (hours, seconds, minutes);
+    if rate == 0 {
+        (hours, seconds, minutes) = (0, 0, 0);
+    } else {
+        let divide = |v: i32, d: i32| {
+            let q = (v.unsigned_abs() / d.unsigned_abs()) as i32;
+            (if (v < 0) != (d < 0) { -q } else { q }, v.unsigned_abs() % d.unsigned_abs())
+        };
+        let (q, _) = divide(value, rate);
+        let (q, s) = divide(q, 60);
+        let (q, m) = divide(q, 60);
+        (hours, seconds, minutes) = if q as u16 > 0x63 { (0x63, 0, 0x3b3b) } else { (q as u32, s, m) };
+    }
+    wr32(x.b, data::SECONDS, seconds << 16 | minutes);
+    let mut cell = data::TIME_CELL;
+    for (k, v) in [hours, minutes, seconds].into_iter().enumerate() {
+        cell = decimal(x, cell, v, 2, 0);
+        if k < 2 {
+            wr32(x.b, cell, 0x003a_0000);
+            cell += 0x80;
+        }
+    }
 }
 
 pub fn game_data(x: &mut Ctx) -> Flow {
@@ -151,23 +186,25 @@ pub fn game_data(x: &mut Ctx) -> Flow {
     layers_off(x);
     print(x, data::TITLE);
     print(x, data::HELP);
-    if x.v8(var::DEV_BOARD) != 0 {
-        // jamais sur une borne : le reste de l'écran en code d'origine
-        x.call(data::DEV_BOARD);
-        return Flow::Done;
+    // carte de développement (jamais sur une borne) : temps de jeu, compteurs gardés en RAM
+    let dev = x.v8(var::DEV_BOARD) != 0;
+    let counters = if dev { data::DEV_COUNTERS } else { data::EEPROM_COUNTERS };
+    if dev {
+        print(x, data::TIME);
+        play_time(x);
     }
     print(x, data::COUNTERS);
-    for (cell, counter) in [(data::CELLS[0], data::COINS), (data::CELLS[1], data::SERVICES)] {
-        let v = x.rd32(crate::mem::A5 + counter);
+    for (cell, counter) in [(data::CELLS[0], counters[0]), (data::CELLS[1], counters[1])] {
+        let v = x.rd32(counter);
         decimal(x, cell, v, 8, 0);
     }
     let (label, counter) = if matches!(x.v16(var::VARIANT), 4 | 10) {
-        (data::CARDS, data::CARD_COUNT)
+        (data::CARDS, counters[3])
     } else {
-        (data::FREEPLAY, data::FREEPLAYS)
+        (data::FREEPLAY, counters[2])
     };
     print(x, label);
-    let v = x.rd32(crate::mem::A5 + counter);
+    let v = x.rd32(counter);
     decimal(x, data::CELLS[2], v, 8, 0);
     layers_on(x);
     Flow::Done
