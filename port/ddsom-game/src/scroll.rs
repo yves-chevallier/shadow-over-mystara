@@ -1086,7 +1086,8 @@ pub const RETURN_CAMERAS: Native = Native {
     cost: |_, _| 300,
     run: return_cameras,
     touches_sound: false,
-    outputs: crate::regs::ALL,
+    // appelée par les portes (natives), qui ne relisent aucun registre
+    outputs: 0,
     exact_cost: false,
 };
 

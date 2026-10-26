@@ -879,6 +879,26 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
     println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
 }
 
+/// Petites routines appelées par les gestionnaires des familles (créateurs, palettes, cases de tuiles, caméras
+/// au retour de zone).
+const PETITES: [u32; 8] = [0x101da, 0x1ac90, 0x4aed0, 0x53746, 0xb230e, 0xa462c, 0xa2b4a, 0x33b24];
+
+fn alea_petites(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    use ddsom_game::objects::pools::{PEFF, PSHL, ESHL};
+    registres(c, b, alea);
+    let pool = [&PEFF, &PSHL, &ESHL][alea.next() as usize % 3];
+    c.a[0] = if alea.une_chance_sur(4) { 0xff85de + 0x200 * (alea.next() % 4) } else { pool.slot(alea.next() % pool.slots).0 };
+    c.a[1] = 0x910000 + 4 * (alea.next() % 0xf00);
+    c.a[5] = A5;
+    wr8(b, A5 + 0x36, (alea.next() % 2) as u8);
+    wr8(b, A5 + 0x34, (alea.next() % 0x6c) as u8);
+    for p in [&PEFF, &PSHL, &ESHL] {
+        // places libres : parfois aucune (la création échoue en cours de route)
+        let libres = if alea.une_chance_sur(5) { alea.next() % 3 } else { p.slots / 2 };
+        wr16(b, A5 + p.free, libres as u16);
+    }
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, groupe, roms, eeprom, scenario, chauffe, tours] = &a[..] else {
@@ -896,6 +916,7 @@ fn main() {
         "m2" => (alea_m2, 0x2d300..0x2ede0),
         "video" => (alea_video, 0xb40..0x1d100),
         "camera" => (alea_camera, 0x2f000..0x33400),
+        "petites" => (alea_petites, 0x0..0x100000),
         _ => {
             eprintln!("groupe inconnu : {groupe}");
             std::process::exit(2);
@@ -917,6 +938,7 @@ fn main() {
         .filter(|n| n.name != "son_aiguillage")
         .map(|n| n.entry)
         .filter(|e| plage.contains(e) && (*groupe != "son" || *e == 0x68c || *e >= 0xe0836))
+        .filter(|e| *groupe != "petites" || PETITES.contains(e))
         .filter(|e| *groupe != "camera" || matches!(*e, 0x2f81c | 0x2f86e | 0x328a8 | 0x33178 | 0x33196 | 0x331e8 | 0x3326c))
         .filter(|e| *groupe != "video" || matches!(*e, 0xb40 | 0xb46 | 0xb96 | 0xbac | 0xbc6 | 0xbfc | 0xc58 | 0xca8 | 0xcc8 | 0xce8 | 0x158e | 0x15c8 | 0x1602 | 0x164e | 0x1a296 | 0x1a350 | 0x1a360 | 0x1a366 | 0x1a3d4 | 0x1a608 | 0x1a60a | 0x1a678 | 0x1a67e | 0x1a8ac | 0x1a8b2 | 0x1cd32 | 0x1cd7c | 0x1cdd6 | 0x1cf3c | 0x1cfb8 | 0x1cfc8 | 0x1d00e | 0x1d042 | 0x24a8 | 0x24b0 | 0x255a | 0x25e8 | 0x260c | 0x26d4 | 0x2766))
         .collect();
