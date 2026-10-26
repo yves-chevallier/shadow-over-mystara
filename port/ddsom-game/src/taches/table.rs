@@ -145,7 +145,7 @@ pub enum Reprise {
     Cession(Contexte),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Emplacement {
     /// La tâche qui occupe l'emplacement (d'après sa dernière entrée).
     pub tache: Tache,
@@ -273,7 +273,7 @@ impl Cadres {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Table {
     pub emplacements: [Emplacement; EMPLACEMENTS],
     /// Dernière tâche lancée (celle qui cède quand une enveloppe de cession est appelée).

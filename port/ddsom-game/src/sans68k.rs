@@ -26,11 +26,14 @@
 //! Tout le travail de l'image se fait donc au début de sa première ligne (240), avant le Z80, comme à ×16 où il finit
 //! en quelques lignes : seuls le VBLANK et l'envoi des commandes au Z80 (`0x68c`, qu'il appelle) touchent la RAM
 //! partagée, et ils sont les premiers. Le surcadencement, `idle`, les durées des natives et les correctifs de la
-//! machine (`patches`, qui s'appliquent au code d'origine) ne servent plus. Plafond de sûreté : au plus
-//! [`PLAFOND_NATIVES`] natives par image ; au-delà, l'image s'arrête comme une image de l'original qui finit au milieu
-//! d'une attente active (compté dans [`bilan`]).
+//! machine (`patches`, qui s'appliquent au code d'origine) ne servent plus.
+//!
+//! Une tâche prête qui attend un événement amené par le VBLANK (fin d'un fondu...) fait tourner l'ordonnanceur en rond :
+//! l'original tourne ainsi jusqu'à l'interruption. Ici, quand l'état revient identique d'un parcours de
+//! l'ordonnanceur au suivant ([`Instantane`]), l'image est finie. Plafond de sûreté : au plus [`PLAFOND_NATIVES`]
+//! natives par image (compté dans [`bilan`]).
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -61,33 +64,88 @@ pub(crate) fn installer(m: &mut cps2::Machine) {
 /// Natives au plus par image : une image ordinaire en exécute quelques milliers.
 pub const PLAFOND_NATIVES: u32 = 1_000_000;
 
-/// Images arrêtées par [`PLAFOND_NATIVES`].
+/// Parcours de l'ordonnanceur dans une image à partir duquel on cherche une attente active (voir [`Instantane`]).
+const PARCOURS_ORDINAIRES: u32 = 3;
+
+/// Images finies sur une attente active reconnue, et images arrêtées par [`PLAFOND_NATIVES`].
+static IMAGES_A_VIDE: AtomicU64 = AtomicU64::new(0);
 static IMAGES_PLAFONNEES: AtomicU64 = AtomicU64::new(0);
 
-/// Bilan pour `validate` : images arrêtées par le plafond de natives.
-pub fn bilan() -> u64 {
-    IMAGES_PLAFONNEES.load(Ordering::Relaxed)
+/// Bilan pour `validate` : images finies sur une attente active, images arrêtées par le plafond de natives.
+pub fn bilan() -> (u64, u64) {
+    (IMAGES_A_VIDE.load(Ordering::Relaxed), IMAGES_PLAFONNEES.load(Ordering::Relaxed))
+}
+
+/// État de la machine au début d'un parcours de l'ordonnanceur (`0x932`) : mémoire que les natives écrivent, table des
+/// tâches, registres. S'il revient identique d'un parcours au suivant, les tâches tournent en rond (une tâche prête
+/// attend un événement que seul le VBLANK amènera, comme la fin d'un fondu) : rien ne changera plus avant
+/// l'interruption, l'image est finie. L'original, lui, tourne jusqu'à l'interruption.
+#[derive(PartialEq)]
+struct Instantane {
+    ram: Vec<u16>,
+    extra_ram: Vec<u16>,
+    gfxram: Vec<u16>,
+    objram: [Vec<u16>; 2],
+    palette: Vec<u16>,
+    qram: Vec<u8>,
+    registres: ([u16; 6], [u16; 32], [u16; 32], u16, u16),
+    table: Option<crate::taches::table::Table>,
+    cpu: ([u32; 8], [u32; 8], u16, u32),
+}
+
+impl Instantane {
+    fn prendre(c: &Cpu, b: &Cps2Bus) -> Self {
+        Instantane {
+            ram: b.ram.clone(),
+            extra_ram: b.extra_ram.clone(),
+            gfxram: b.gfxram.clone(),
+            objram: b.objram.clone(),
+            palette: b.palette.clone(),
+            qram: b.qram.clone(),
+            registres: (b.output, b.cps_a, b.cps_b, b.objram_bank, b.eeprom_out),
+            table: lire(b).cloned(),
+            cpu: (c.d, c.a, c.sr, c.other_sp),
+        }
+    }
+}
+
+/// Où en est l'image en cours.
+#[derive(Default)]
+struct Image {
+    numero: u64,
+    natives: u32,
+    parcours: u32,
+    /// Plus rien à faire avant l'interruption (attente active reconnue, ou plafond).
+    finie: bool,
+    instantane: Option<Instantane>,
 }
 
 thread_local! {
-    /// Image en cours et natives exécutées depuis son début.
-    static IMAGE: Cell<(u64, u32)> = const { Cell::new((u64::MAX, 0)) };
+    static IMAGE: RefCell<Image> = RefCell::new(Image { numero: u64::MAX, ..Image::default() });
     /// Dernières natives exécutées (diagnostic d'un arrêt).
     static DERNIERES: RefCell<VecDeque<&'static Native>> = const { RefCell::new(VecDeque::new()) };
 }
 
 const SR_S: u16 = 0x2000;
+/// Début d'un parcours de l'ordonnanceur.
+const PARCOURS: u32 = 0x932;
 
 /// Travail du processeur pendant une ligne (`cps2::Machine::line_work`).
 pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, mut plafond: Option<&mut StepCap>) {
     if b.irq_raster {
         arreter(c, b, "interruption raster (niveau 4) : jamais armée par le jeu".into());
     }
+    IMAGE.with(|i| {
+        let mut i = i.borrow_mut();
+        if i.numero != b.frame {
+            *i = Image { numero: b.frame, ..Image::default() };
+        }
+    });
     loop {
         let niveau = b.irq_level();
         if niveau > (c.sr >> 8 & 7) as u8 {
             interruption(c, b, niveau);
-        } else if niveau == 0 && crate::idle(c, b) {
+        } else if niveau == 0 && (crate::idle(c, b) || image_finie(c, b)) {
             // (une interruption masquée attend que l'ordonnanceur rouvre sa fenêtre)
             break;
         }
@@ -102,21 +160,35 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, mut plafond: Option<&mut St
             // rien n'a bougé : une native du démarrage attend sa position du faisceau
             break;
         }
-        if !compter(b) {
-            IMAGES_PLAFONNEES.fetch_add(1, Ordering::Relaxed);
-            break;
-        }
     }
     c.cycles = c.cycles.max(fin);
 }
 
-/// Une native de plus dans l'image ; faux quand le plafond est atteint.
-fn compter(b: &Cps2Bus) -> bool {
+/// L'image n'a plus rien à faire avant l'interruption : attente active reconnue au début d'un parcours de
+/// l'ordonnanceur (même [`Instantane`] qu'au parcours précédent), ou plafond de natives atteint.
+fn image_finie(c: &Cpu, b: &Cps2Bus) -> bool {
     IMAGE.with(|i| {
-        let (image, n) = i.get();
-        let n = if image == b.frame { n + 1 } else { 1 };
-        i.set((b.frame, n));
-        n < PLAFOND_NATIVES
+        let mut i = i.borrow_mut();
+        if i.finie {
+            return true;
+        }
+        i.natives += 1;
+        if i.natives >= PLAFOND_NATIVES {
+            IMAGES_PLAFONNEES.fetch_add(1, Ordering::Relaxed);
+            i.finie = true;
+        } else if c.pc == PARCOURS {
+            i.parcours += 1;
+            if i.parcours >= PARCOURS_ORDINAIRES {
+                let maintenant = Instantane::prendre(c, b);
+                if i.instantane.as_ref() == Some(&maintenant) {
+                    IMAGES_A_VIDE.fetch_add(1, Ordering::Relaxed);
+                    i.finie = true;
+                } else {
+                    i.instantane = Some(maintenant);
+                }
+            }
+        }
+        i.finie
     })
 }
 

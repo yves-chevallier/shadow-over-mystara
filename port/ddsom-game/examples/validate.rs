@@ -175,7 +175,8 @@ fn main() {
         }
     }
     if sans_68k {
-        println!("sans 68000 : {} images arrêtées par le plafond de natives", ddsom_game::sans68k::bilan());
+        let (a_vide, plafonnees) = ddsom_game::sans68k::bilan();
+        println!("sans 68000 : {a_vide} images finies sur une attente active, {plafonnees} arrêtées par le plafond de natives");
     }
     if let Some(m) = &arret {
         println!("ARRÊT {m}");
