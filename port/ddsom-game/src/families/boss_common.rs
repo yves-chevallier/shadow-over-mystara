@@ -217,6 +217,109 @@ pub fn zero(x: &Cx) -> bool {
     x.c.cond(7)
 }
 
+// --- aides partagées par les boss à tables de décision ------------------------------------------
+
+/// Routines du moteur et de l'IA que ces boss appellent.
+pub mod ia {
+    pub const MOVE_X: u32 = 0x1d78;
+    pub const MOVE_XYZ: u32 = 0x1d90;
+    pub const MOVE_XZ: u32 = 0x1da6;
+    pub const SOUND_EVENT: u32 = 0x2824;
+    pub const PLAYERS_ALIVE: u32 = 0x10474;
+    pub const AI_GESTURE: u32 = 0x1047a;
+    pub const OUTSIDE: u32 = 0x104a2;
+    pub const TURN_NEEDED: u32 = 0x1050c;
+    pub const FACING: u32 = 0x10560;
+    pub const PHASE_UP: u32 = 0x105b6;
+    pub const DUST: u32 = 0x1172e;
+    pub const WIDE_BOX: u32 = 0x7ef4;
+    pub const ALLOC_BOSS: u32 = 0x23a8;
+    pub const FREE_BOSS: u32 = 0x2234;
+}
+
+/// Au moins un joueur en vie (0x10474).
+pub fn alive(x: &mut Cx) -> bool {
+    x.call(ia::PLAYERS_ALIVE);
+    !zero(x)
+}
+
+/// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
+pub fn outside(x: &mut Cx, d0: i16, d1: u16) -> bool {
+    set_dw(x, 0, d0 as u16);
+    set_dw(x, 1, d1);
+    x.call(ia::OUTSIDE);
+    !zero(x)
+}
+
+/// Le boss doit-il se retourner vers sa cible (0x1050c) ?
+pub fn turn_needed(x: &mut Cx) -> bool {
+    x.call(ia::TURN_NEEDED);
+    !zero(x)
+}
+
+/// Le boss regarde-t-il vers sa cible (0x10560, Z levé) ?
+pub fn facing_target(x: &mut Cx) -> bool {
+    x.call(ia::FACING);
+    zero(x)
+}
+
+/// Boîte large devant le boss (0x7ef4).
+pub fn in_wide_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+    set_dw(x, 0, d0 as u16);
+    set_dw(x, 1, d1);
+    set_dw(x, 2, d2);
+    x.call(ia::WIDE_BOX);
+    !zero(x)
+}
+
+/// Cible dans la boîte (0xb5e0) puis geste choisi par l'IA (0x1047a) : `Some(D0)` si l'IA en a choisi un.
+pub fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
+    if !target_in_box(x, d0, d1, d2) {
+        return None;
+    }
+    x.call(ia::AI_GESTURE);
+    (!zero(x)).then_some(x.c.d[0])
+}
+
+/// Bouffée de poussière de sorte `k` (0x1172e).
+pub fn dust(x: &mut Cx, k: u32) {
+    x.c.d[5] = k;
+    x.call(ia::DUST);
+}
+
+/// Son ou message `n` (0x2824).
+pub fn sound(x: &mut Cx, n: u32) {
+    x.c.d[0] = n;
+    x.call(ia::SOUND_EVENT);
+}
+
+/// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)` : sorte d'animation `k` (champs `+0xa0` et `+0xa1`).
+pub fn anim_kind(x: &mut Cx, k: u8) {
+    x.c.d[0] = k as u32;
+    x.set8(0xa0, k);
+    x.set8(0xa1, k);
+}
+
+/// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
+pub fn expired(x: &mut Cx, off: u32) -> bool {
+    sub16(x, off, 1).le()
+}
+
+/// Mot de la table de sauts relative au PC `base` pour l'index d'octets `i` : adresse de la routine choisie
+/// (`move.w (base,PC,Di),Di ; jmp (base,PC,Di)`).
+pub fn jump_target(x: &mut Cx, base: u32, i: u32) -> u32 {
+    base.wrapping_add(x.rom16(base + i) as i16 as u32)
+}
+
+/// Ordonnée de la caméra en service.
+pub fn camera_y(x: &mut Cx) -> u16 {
+    let off = if x.a5_u8(var::CAMERA_SELECT) != 0 { var::CAMERA2_Y } else { var::CAMERA1_Y };
+    x.a5_u16(off)
+}
+
+/// Adresse du long « boss vaincu » (type, variante, score) lu par la fin de scène.
+pub const A5_DEATH: u32 = A5 - 0x557c;
+
 /// Alloue un objet de la classe `routine` (retenue levée = pool plein). Les gestionnaires qui insistent
 /// (`jsr alloc ; bcs retry`) bouclent ici ; le pool ne se vide qu'avec le temps, l'original resterait
 /// bloqué : on abandonne après 64 essais.

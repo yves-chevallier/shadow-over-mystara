@@ -179,6 +179,20 @@ impl<'a> Cx<'a> {
         call_at(self.c, self.b, addr, ret);
     }
 
+    /// `jmp addr` en fin de gestionnaire : la routine reprend l'adresse de retour du gestionnaire (elle tourne à la même
+    /// profondeur de pile que dans l'original, ce que les résidus de pile comparés par `validate` exigent parfois).
+    #[track_caller]
+    pub fn tail(&mut self, addr: u32) {
+        let sp = self.c.a[7];
+        let ret = rd32(self.b, sp);
+        self.c.a[7] = sp.wrapping_add(4);
+        self.c.a[0] = self.o.0;
+        self.c.a[5] = A5;
+        call_at(self.c, self.b, addr, ret);
+        self.c.a[7] = self.c.a[7].wrapping_sub(4);
+        wr32(self.b, self.c.a[7], ret);
+    }
+
     /// `lea set,A4 ; moveq #n,D0 ; jsr 0x1a32` : démarre le script `n` du jeu d'animations `set`.
     pub fn anim_start(&mut self, set: u32, n: u32) {
         self.c.a[4] = set;

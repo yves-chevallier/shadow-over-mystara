@@ -150,7 +150,7 @@ fn attack_0(x: &mut Cx) {
             x.set8(0x33, 0);
             x.add8(0x7, 2);
             x.call(0xe571a);
-            x.call(0xa4676);
+            eshl_shot_34(x, 0);
             x.call(0xe54dc);
             x.set16(TIMER, 0x100);
             flap(x);
@@ -306,7 +306,7 @@ fn sweep(x: &mut Cx) {
         return;
     }
     x.set8(0x33, 0);
-    x.call(0xa464e);
+    eshl_shot_34(x, 1);
     x.call(0xe54dc);
     x.set8(0x2d, 0);
     x.c.d[0] = 0x18;
@@ -401,7 +401,7 @@ fn dive_a(x: &mut Cx) {
         return;
     }
     x.set8(0x33, 0);
-    x.call(0xa460a);
+    eshl_shot_34(x, 2);
     x.call(0xe54dc);
 }
 

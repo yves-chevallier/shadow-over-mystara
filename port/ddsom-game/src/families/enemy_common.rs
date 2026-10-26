@@ -70,6 +70,59 @@ pub fn alloc(x: &mut Cx, alloc: u32) -> Obj {
     Obj(x.c.a[1])
 }
 
+/// Alloue un tir ESHL actif de type `kind`, avec la variante `variant`, lié à l'objet courant par le mot `link`
+/// (`None` si le pool est plein). Les créateurs ci-dessous sont les petites routines 0x9ddee..0xa6824 de l'original.
+fn spawn_eshl(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
+    let o = alloc(x, rom::ALLOC_ESHL);
+    if alloc_failed(x) {
+        return None;
+    }
+    o.set_u8(x.b, 0, 1);
+    o.set_u8(x.b, 2, kind);
+    o.set_u8(x.b, 3, variant);
+    o.set_u16(x.b, link, x.o.0 as u16);
+    Some(o)
+}
+
+/// 0x9ddee : un tir ESHL 1 de variante D1, indice `+0x2f` = 1, propriétaire `+0x50`.
+pub fn eshl_thrown_by_beast(x: &mut Cx) {
+    let variant = x.c.d[1] as u8;
+    if let Some(o) = spawn_eshl(x, 1, variant, 0x50) {
+        o.set_u8(x.b, 0x2f, 1);
+    }
+}
+
+/// 0xa2f96 : seize tirs ESHL 0x27 (variantes 15 à 0) liés par `+0x5c`.
+pub fn eshl_burst_27(x: &mut Cx) {
+    for variant in (0..16).rev() {
+        x.c.d[1] = x.c.d[1] & !0xffff | variant;
+        if spawn_eshl(x, 0x27, variant as u8, 0x5c).is_none() {
+            return;
+        }
+    }
+    x.c.d[1] |= 0xffff;
+}
+
+/// 0xa6824 : deux tirs ESHL 0x3f (orientation 0 puis 0x20) liés par `+0x5c`.
+pub fn eshl_pair_3f(x: &mut Cx) {
+    for flip in [0, 0x20] {
+        let Some(o) = spawn_eshl(x, 0x3f, 0, 0x5c) else { return };
+        o.set_u8(x.b, f::FLIP, flip);
+    }
+}
+
+/// 0xa460a, 0xa464e, 0xa4676 : un tir ESHL 0x34 de variante 2, 1 ou 0 lié par `+0x46` (la variante 1 copie
+/// l'orientation du créateur).
+pub fn eshl_shot_34(x: &mut Cx, variant: u8) {
+    let flip = x.u8(f::FLIP);
+    if let Some(o) = spawn_eshl(x, 0x34, variant, f::HOST) {
+        o.set_u8(x.b, 0x2f, 0);
+        if variant == 1 {
+            o.set_u8(x.b, f::FLIP, flip);
+        }
+    }
+}
+
 /// Vrai si l'allocation a échoué (retenue levée par la routine d'allocation).
 pub fn alloc_failed(x: &Cx) -> bool {
     x.c.sr & SR_C != 0
