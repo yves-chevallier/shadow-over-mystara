@@ -207,6 +207,44 @@ fn etats_boss(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8
             (&[4], &[8, 10], Z),
             (&[6], Z, Z),
         ],
+        // boss 1 (fauve bondissant)
+        1 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6, 8, 10, 12, 14]),
+            (&[2], &[2], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10]),
+            (&[2], &[6, 8, 10], &[0, 2]),
+            (&[2], &[12, 14], &[0]),
+            (&[4], &[0], &[0, 2]),
+            (&[4], &[2], &[0, 2, 4]),
+            (&[4], &[4], &[0, 2, 4, 6, 8]),
+            (&[4], &[6, 8], &[0, 2, 4, 6]),
+            (&[4], &[10], Z),
+            (&[6], Z, Z),
+        ],
+        // boss 3 (créature volante)
+        3 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[0, 2, 4, 6, 8]),
+            (&[2], &[2], &[0, 2, 4, 6, 8, 10, 12, 14, 16]),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]),
+            (&[2], &[6, 8], &[0, 2, 4, 6]),
+            (&[2], &[10, 12, 14], Z),
+            (&[4], &[0, 4, 6], &[0, 2, 4]),
+            (&[4], &[2], &[0, 2]),
+            (&[4], &[10], Z),
+            (&[6], Z, Z),
+        ],
+        // boss 9 (engin roulant)
+        9 => &[
+            (&[0], Z, Z),
+            (&[2], &[0], &[2, 4, 6, 8, 10, 14, 16, 18, 20, 22]),
+            (&[2], &[2, 6], Z),
+            (&[2], &[4], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]),
+            (&[4], &[0], &[0, 2, 4]),
+            (&[4], &[2], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]),
+            (&[6], Z, Z),
+        ],
         _ => &[(&[0, 2, 4, 6], &[0, 2, 4], &[0, 2, 4])],
     }
 }
@@ -415,7 +453,177 @@ fn etape_17(alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
 }
 
 /// Préparation propre à chaque type (champs que le créateur ou une autre routine pose).
+
+/// Étapes `+7` valides des boss 1, 3 et 9 (nombre d'entrées des tables de sauts).
+fn etape_139(kind: u8, alea: &mut Alea, s4: u8, s5: u8, s6: u8) -> u8 {
+    let n: u32 = match (kind, s4, s5, s6) {
+        (1, 2, 2, 0 | 2) => 2,
+        (1, 2, 2, 4 | 6 | 8) => 6,
+        (1, 2, 2, 10) => 5,
+        (1, 2, 4, 0..=6) => 2,
+        (1, 2, 4, 8) => 3,
+        (1, 2, 4, 10) => 5,
+        (1, 2, 12, _) => 3,
+        (3, 2, 2, 12) => 1,
+        (3, 2, 2, _) => 2,
+        (3, 2, 4, 4 | 18 | 22 | 26) => 3,
+        (3, 2, 4, 16 | 24) => 5,
+        (3, 2, 4, 20 | 28) => 4,
+        (3, 2, 4, 30) => 7,
+        (3, 2, 4, _) => 2,
+        (3, 2, 6, 4) => 3,
+        (3, 2, 6, _) => 2,
+        (3, 2, 8, 0 | 2) => 3,
+        (3, 2, 8, _) => 2,
+        (3, 2, 12, _) => 3,
+        (9, 2, 4, 2 | 18) => 3,
+        (9, 2, 4, 6 | 8 | 10 | 20 | 22) => 4,
+        (9, 2, 4, _) => 2,
+        _ => 1,
+    };
+    2 * (alea.next() % n) as u8
+}
+
+/// Champs des boss 1, 3 et 9 tirés dans des plages plausibles (étapes `+7` comprises).
+fn prep_1(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    wr8(b, obj + 3, 0);
+    wr8(b, obj + 0x2c, if alea.next() % 2 == 0 { 0 } else { 0x20 });
+    wr16(b, obj + 0x50, (0x85de + 0x200 * (alea.next() % 4)) as u16);
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_139(1, alea, s.0, s.1, s.2));
+    wr8(b, obj + 0xaa, (alea.next() % 3) as u8);
+    wr8(b, obj + 0xab, 2);
+    for off in [0xadu32, 0xae, 0xaf, 0xb2, 0xb3] {
+        wr8(b, obj + off, pick(alea, &[0, 0, 1, 2, 5]));
+    }
+    wr8(b, obj + 0xb4, pick(alea, &[7, 0xf]));
+    wr16(b, obj + 0xb0, if alea.next() % 3 == 0 { ENEMY.slot(alea.next() % ENEMY.slots).0 as u16 } else { 0 });
+    let x = rd16(b, obj + 8).wrapping_add((alea.next() % 0x100) as u16).wrapping_sub(0x80);
+    wr16(b, obj + 0xbc, x);
+    let v = rd16(b, obj + 0x10).wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20);
+    wr16(b, obj + 0xbe, v);
+    wr8(b, obj + 0x90, (alea.next() % 4) as u8);
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 1, 2, 3, 4, 5, 0x10]));
+    wr8(b, obj + 0xa1, pick(alea, &[0, 2, 3, 0xff]));
+    wr32(b, obj + 0xa2, [0x0202_0000u32, 0x0202_0400, 0x0202_0600][alea.next() as usize % 3]);
+    wr16(b, obj + 0xa6, (alea.next() % 4) as u16);
+    wr16(b, obj + 0xa8, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x6b, (alea.next() % 3) as u8);
+    wr8(b, obj + 0x6e, (alea.next() % 3) as u8);
+    wr8(b, obj + 0x49, pick(alea, &[0, 4, 8, 0x4c, 0x4c]));
+    wr8(b, obj + 0x57, pick(alea, &[0, 4]));
+    wr8(b, obj + 0x53, pick(alea, &[0, 0, 0, 1]));
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 0x81]));
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0xf000][alea.next() as usize % 4]);
+    wr16(b, obj + 0x18, [0u16, 0x80, 0x100, 0x300, 0xff00, 0xfe00][alea.next() as usize % 6]);
+    wr16(b, obj + 0xc, [0u16, 1, 0x30, 0x80][alea.next() as usize % 4]);
+    wr16(b, obj + 0x62, [0u16, 1, 10, 40][alea.next() as usize % 4]);
+    wr16(b, obj + 0x60, 0x100);
+    wr16(b, obj + 0x54, if alea.next() % 2 == 0 { 0 } else { (0x85de + 0x200 * (alea.next() % 4)) as u16 });
+    if alea.next() % 2 == 0 {
+        let t = 0xff85de + 0x200 * (alea.next() % 4);
+        wr16(b, obj + 0x50, t as u16);
+        wr8(b, t, 1);
+        wr8(b, t + 0x188, 1);
+    }
+}
+
+fn prep_3(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    wr8(b, obj + 3, pick(alea, &[0, 0, 1]));
+    wr8(b, obj + 0x2c, if alea.next() % 2 == 0 { 0 } else { 0x20 });
+    wr16(b, obj + 0x50, if alea.next() % 8 == 0 { 0 } else { (0x85de + 0x200 * (alea.next() % 4)) as u16 });
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_139(3, alea, s.0, s.1, s.2));
+    for off in [0xa2u32, 0xa5, 0xb5] {
+        wr8(b, obj + off, pick(alea, &[0, 0, 1, 2]));
+    }
+    wr8(b, obj + 0xa3, 2 * (alea.next() % 3) as u8);
+    wr16(b, obj + 0xa6, [0u16, 1, 2, 0x100, 0x2000][alea.next() as usize % 5]);
+    wr32(b, obj + 0xaa, [0x0202_0000u32, 0x0202_0400, 0x0208_0004][alea.next() as usize % 3]);
+    let x = rd16(b, obj + 8).wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20);
+    wr16(b, obj + 0xb0, x);
+    let v = rd16(b, obj + 0x10).wrapping_add((alea.next() % 0x20) as u16).wrapping_sub(0x10);
+    wr16(b, obj + 0xb2, v);
+    for off in [0x6bu32, 0x6e, 0x71] {
+        wr8(b, obj + off, (alea.next() % 3) as u8);
+    }
+    wr16(b, obj + 0x84, (alea.next() % 4) as u16);
+    wr8(b, obj + 0x49, pick(alea, &[0, 4, 8, 0x4c]));
+    wr8(b, obj + 0x57, pick(alea, &[0, 4]));
+    wr8(b, obj + 0x53, pick(alea, &[0, 0, 0, 1]));
+    wr8(b, obj + 0x33, pick(alea, &[0, 0, 1, 2, 0x81]));
+    wr16(b, obj + 0x14, [0u16, 0x200, 0xfe00, 0x900, 0xf600][alea.next() as usize % 5]);
+    wr16(b, obj + 0x18, [0u16, 0x80, 0x400, 0xff00, 0xfc00][alea.next() as usize % 5]);
+    wr16(b, obj + 0xc, [0u16, 8, 0x30, 0x50, 0x70, 0xc0, 0xff80][alea.next() as usize % 7]);
+    wr16(b, obj + 0x62, [0u16, 1, 10, 40, 0x100][alea.next() as usize % 5]);
+    wr16(b, obj + 0x60, 0x100);
+    if alea.next() % 2 == 0 {
+        let t = 0xff85de + 0x200 * (alea.next() % 4);
+        wr16(b, obj + 0x50, t as u16);
+        wr8(b, t, 1);
+        wr8(b, t + 0x188, 1);
+    }
+}
+
+fn prep_9(b: &mut Bus, alea: &mut Alea, obj: u32) {
+    let pick = |a: &mut Alea, v: &[u8]| v[a.next() as usize % v.len()];
+    wr8(b, obj + 0x2c, if alea.next() % 2 == 0 { 0 } else { 0x20 });
+    wr16(b, obj + 0x50, if alea.next() % 8 == 0 { 0 } else { (0x85de + 0x200 * (alea.next() % 4)) as u16 });
+    let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
+    wr8(b, obj + 7, etape_139(9, alea, s.0, s.1, s.2));
+    for l in [0xacu32, 0xae, 0xb0, 0xb2, 0xb4] {
+        let d = if alea.next() % 4 == 0 { 0 } else { ENEMY.slot(alea.next() % ENEMY.slots).0 };
+        wr16(b, obj + l, d as u16);
+        if d != 0 {
+            wr16(b, d + 4, [0x0200u16, 0x0200, 0x0400, 0][alea.next() as usize % 4]);
+        }
+    }
+    wr8(b, obj + 0xaa, pick(alea, &[0, 0, 0, 3, 4]));
+    wr8(b, obj + 0xa8, (alea.next() & 0xff) as u8);
+    wr8(b, obj + 0xa9, (alea.next() & 0xff) as u8);
+    wr8(b, obj + 0xa0, pick(alea, &[0, 0, 1, 5]));
+    wr8(b, obj + 0xa1, pick(alea, &[0, 1, 2]));
+    wr16(b, obj + 0xa2, [0u16, 1, 0x14, 0xffff][alea.next() as usize % 4]);
+    for off in [0xb9u32, 0xba, 0xbd, 0xbe, 0xbf, 0x6b, 0x6e, 0x43, 0x5c, 0x5d, 0xab] {
+        wr8(b, obj + off, pick(alea, &[0, 0, 1, 2, 0xff]));
+    }
+    wr16(b, obj + 0x78, [0u16, 1, 0x300][alea.next() as usize % 3]);
+    let v = rd16(b, obj + 8).wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20);
+    wr16(b, obj + 0xb8, v);
+    wr32(b, obj + 0x8a, [0u32, 0x0202_0000, 0x0204_0002, 0x0204_0400][alea.next() as usize % 4]);
+    wr16(b, obj + 0x68, 0);
+    wr8(b, obj + 0x53, pick(alea, &[0, 0, 0, 1, 0xff]));
+    wr16(b, obj + 0x14, [0u16, 0x80, 0x500, 0xfb00, 0x800, 0xf800][alea.next() as usize % 6]);
+    wr16(b, obj + 0x1c, [0x120u16, 0xfee0][alea.next() as usize % 2]);
+    wr16(b, obj + 0x10, [0x40u16, 0x48, 0x60, 0x78][alea.next() as usize % 4]);
+    wr16(b, obj + 0x62, [0u16, 1, 10, 40, 0x100][alea.next() as usize % 5]);
+    wr16(b, obj + 0x60, 0x100);
+    wr16(b, obj + 0x54, if alea.next() % 2 == 0 { 0 } else { (0x85de + 0x200 * (alea.next() % 4)) as u16 });
+    let v = rd16(b, obj + 8).wrapping_sub((alea.next() % 0x200) as u16);
+    wr16(b, A5 + 0x556, v);
+    wr16(b, A5 + 0x70, (alea.next() % 2) as u16);
+    wr16(b, obj + 0x62, (alea.next() % 0x110) as u16);
+    wr8(b, obj + 0xab, pick(alea, &[0, 1, 2]));
+    if alea.next() % 2 == 0 {
+        // équipage au complet
+        for k in 0..4u32 {
+            let d = ENEMY.slot(k).0;
+            wr16(b, obj + 0xae + 2 * k, d as u16);
+            wr16(b, d + 4, 0x0200);
+        }
+    }
+}
+
 fn prep(kind: u8, b: &mut Bus, alea: &mut Alea, obj: u32) {
+    match kind {
+        1 => prep_1(b, alea, obj),
+        3 => prep_3(b, alea, obj),
+        9 => prep_9(b, alea, obj),
+        _ => {}
+    }
     if kind == 17 {
         prep_17(b, alea, obj);
     }
@@ -1090,7 +1298,9 @@ fn main() {
                 c.d[0] = 4 * kind as u32;
                 c.a[1] = entree;
                 essais += 1;
-                let avant = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
+                let avant_noms: std::collections::BTreeMap<String, u64> =
+                    ddsom_game::report().iter().map(|(n, s)| (n.to_string(), s.mismatches)).collect();
+                let avant = avant_noms.values().sum::<u64>();
                 let (cs, bs) = (c.clone(), b.clone());
                 if couverture {
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
@@ -1115,10 +1325,22 @@ fn main() {
                     break;
                 }
                 let apres = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
-                if apres > avant && affiches < 12 {
+                // `DDSOM_SEULS=préfixe` : n'afficher que les écarts des routines dont le nom commence ainsi
+                let seuls = std::env::var("DDSOM_SEULS").ok();
+                let concerne = seuls.as_deref().map_or(true, |p| {
+                    ddsom_game::report().iter().any(|(n, s)| {
+                        n.starts_with(p) && s.mismatches > avant_noms.get(&n.to_string()).copied().unwrap_or(0)
+                    })
+                });
+                if apres > avant && concerne && affiches < 12 {
                     affiches += 1;
-                    let dernier = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                    println!("écart en {entree:06x} type {kind} pas {pas} objet {:06x} : {}", obj.0, dernier.unwrap_or_default());
+                    // routines dont le compte d'écarts a augmenté pendant cet appel
+                    let fautives: Vec<String> = ddsom_game::report()
+                        .iter()
+                        .filter(|(n, s)| s.mismatches > avant_noms.get(&n.to_string()).copied().unwrap_or(0))
+                        .map(|(n, s)| format!("{n} : {}", s.last.clone().unwrap_or_default()))
+                        .collect();
+                    println!("écart en {entree:06x} type {kind} pas {pas} objet {:06x} : {}", obj.0, fautives.join(" ; "));
                     println!("  objet avant : {:02x?}", avant_obj);
                     if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
