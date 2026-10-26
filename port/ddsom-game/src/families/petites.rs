@@ -8,7 +8,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C};
 
-use crate::mem::{prog8, rd16, rd32, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{prog16, prog8, rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use super::cx::{handler, Cx};
 use crate::{call, regs, Native};
@@ -297,6 +297,99 @@ fn palette_blocks_lit(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0x101da : comme 0x10158 pour la scène 0x69, sans éclaircir : quatre blocs de huit couleurs lus à la suite
+/// en 0x10218 (espace données).
+fn palette_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
+    let mut src = 0x10218;
+    for dst in [0x91c2e0, 0x91c300, 0x91c360, 0x91c3e0] {
+        src = movem_load(c, b, MASK_D0_D6_A3, src);
+        c.a[1] = dst;
+        movem_store(c, b, MASK_D0_D6_A3, dst);
+    }
+    c.a[2] = src;
+    rts(c, b);
+}
+
+/// 0x4aed0 : deux effets de type 5, variante 1, indices `+0x2f` 0 et 1, liés au créateur (`+0x50`).
+fn peff_5_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+    for index in [0, 1] {
+        let Some(o) = alloc(c, b, ALLOC_PEFF) else { break };
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 5);
+        o.set_u8(b, 0x3, 1);
+        o.set_u8(b, 0x2f, index);
+        let me = word(c);
+        o.set_u16(b, 0x50, me);
+        moved(c, me as u32, Size::Word);
+    }
+    rts(c, b);
+}
+
+/// 0x53746 : douze pierres (tirs de type 0x11, variantes 0 à 11) réparties autour de la caméra en service,
+/// décalages X, Y en table (0x537ca, espace programme), hauteur 0x100 au-dessus de leur point de chute, délai
+/// `+0x5c` de 0x40 à 0x148 par pas de 0x18 ; orientation et propriétaire du créateur.
+fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
+    const OFFSETS: u32 = 0x537ca;
+    const COUNT: u16 = 12;
+    let me = Obj(c.a[0]);
+    c.d[3] = 0;
+    set_low_word(&mut c.d[4], 0x40);
+    set_low_word(&mut c.d[5], COUNT - 1);
+    loop {
+        let Some(o) = alloc(c, b, ALLOC_PSHL) else { break };
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 0x11);
+        let v = me.u8(b, 0x2c);
+        o.set_u8(b, 0x2c, v);
+        let v = me.u16(b, 0x50);
+        o.set_u16(b, 0x50, v);
+        o.set_u8(b, 0x3, c.d[3] as u8);
+        o.set_u16(b, 0x5c, c.d[4] as u16);
+        let (cx, cy) = if rd8(b, A5 + 0x36) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
+        let (x, y) = (rd16(b, A5 + cx), rd16(b, A5 + cy));
+        let index = (c.d[3] as u16).wrapping_shl(2) as u32;
+        let (dx, dy) = (prog16(b, OFFSETS + index), prog16(b, OFFSETS + 2 + index));
+        let ground = y.wrapping_add(dy);
+        o.set_u16(b, 0x8, x.wrapping_add(dx));
+        o.set_u16(b, 0x10, ground);
+        o.set_u16(b, 0xc, y.wrapping_add(0x100).wrapping_sub(ground));
+        set_low_word(&mut c.d[0], ground);
+        set_low_word(&mut c.d[1], dx);
+        set_low_word(&mut c.d[2], dy);
+        let variant = (c.d[3] as u8).wrapping_add(1);
+        crate::mem::set_low_byte(&mut c.d[3], variant);
+        let d4 = c.d[4];
+        let delay = crate::ops::add(c, 0x18, d4, Size::Word);
+        set_low_word(&mut c.d[4], delay as u16);
+        let n = (c.d[5] as u16).wrapping_sub(1);
+        set_low_word(&mut c.d[5], n);
+        if n == 0xffff {
+            break;
+        }
+    }
+    rts(c, b);
+}
+
+/// 0xb230e : deux paires de cases de tuiles (D0.w = code, D1.w = attribut) : codes `n`, `n + 0x10` sur une
+/// ligne, `n + 1`, `n + 0x11` sur la suivante (lignes de 0x80 octets) ; rend A1 après la seconde ligne et
+/// D0.w = `n + 0x11`.
+fn tile_pairs(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (code, attr) = (c.d[0] as u16, c.d[1] as u16);
+    let mut a1 = c.a[1];
+    for row in [code, code.wrapping_add(1)] {
+        for cell in [row, row.wrapping_add(0x10)] {
+            wr16(b, a1, cell);
+            wr16(b, a1 + 2, attr);
+            a1 += 4;
+        }
+        a1 += 0x78;
+    }
+    c.a[1] = a1;
+    set_low_word(&mut c.d[0], code.wrapping_add(0x11));
+    moved(c, attr as u32, Size::Word);
+    rts(c, b);
+}
+
 /// 0x1a5e8 : douze blocs de huit couleurs recopiés dans la palette 0x91c480.
 fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
     const MASK: u16 = 0x067e; // D1-D6, A1, A2
@@ -334,6 +427,10 @@ fn flash(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
     wr16(b, 0x91c41c, v);
     moved(c, v as u32, Size::Word);
     rts(c, b);
+}
+/// 0x1ac90 : fin de l'éclair (couleur 0xff50).
+fn flash_off(c: &mut Cpu, b: &mut Cps2Bus) {
+    flash(c, b, 0xff50);
 }
 fn flash_a(c: &mut Cpu, b: &mut Cps2Bus) {
     flash(c, b, 0xfff0);
@@ -525,6 +622,11 @@ pub const NATIVES: &[Native] = &[
     native(0xa036e, "cree_compagnon_harpie", harpy_companion, CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
     native(0xa0566, "cree_tir_harpie", harpy_shot, CREATED),
     native(0x10158, "palette_quatre_blocs", palette_blocks_lit, regs::ALL),
+    native(0x101da, "palette_quatre_blocs_69", palette_blocks, regs::ALL),
+    native(0x1ac90, "eclair_palette_fin", flash_off, regs::CCR),
+    native(0x4aed0, "cree_effets_5", peff_5_pair, CREATED),
+    native(0x53746, "cree_pierres_11", pshl_stones, CREATED | regs::ALL),
+    native(0xb230e, "cases_deux_paires", tile_pairs, regs::ALL),
     native(0x1a5e8, "palette_douze_blocs", palette_blocks_copy, regs::ALL),
     native(0x1ad6a, "palette_page_restitue", palette_page_restore, regs::ALL),
     native(0x1ac9a, "eclair_palette_jaune", flash_a, regs::CCR),

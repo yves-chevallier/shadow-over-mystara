@@ -152,7 +152,12 @@ fn world_order(b: &mut Cps2Bus) -> Order {
 /// Met à jour tous les objets : joueurs, puis les dix classes dans l'ordre de la scène.
 pub fn update_world(c: &mut Cpu, b: &mut Cps2Bus) {
     let order = world_order(b);
-    for (i, &(site, step)) in order.iter().enumerate() {
+    run_steps(c, b, order, 0);
+}
+
+/// Les étapes `from..` d'un ordre de mise à jour.
+fn run_steps(c: &mut Cpu, b: &mut Cps2Bus, order: Order, from: usize) {
+    for (i, &(site, step)) in order.iter().enumerate().skip(from) {
         let ret = site + JSR;
         match step {
             Gauge(marker) => gauge_at(c, b, marker, ret),
@@ -173,6 +178,51 @@ fn gauge_at(c: &mut Cpu, b: &mut Cps2Bus, marker: u32, ret: u32) {
     c.d[1] = marker;
     call_at(c, b, ext::GAUGE, ret);
 }
+
+/// Les quatre ordres de mise à jour.
+const ORDERS: [Order; 4] = [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_REDUCED, ORDER_SCENE_8];
+
+/// Reprise de la mise à jour du monde dans une étape qui a cédé la main (un gestionnaire d'objet qui lance un
+/// fondu, par exemple) : la tâche revient à l'adresse de retour de l'étape (`c.pc`), et la mise à jour continue
+/// à l'étape suivante du même ordre, puis rend la main à son appelant.
+fn resume_world(c: &mut Cpu, b: &mut Cps2Bus) {
+    let back = c.pc;
+    let (order, i) = ORDERS
+        .iter()
+        .find_map(|&order| order.iter().position(|&(site, _)| site + JSR == back).map(|i| (order, i)))
+        .expect("retour d'une étape de la mise à jour du monde");
+    run_steps(c, b, order, i + 1);
+    rts(c, b);
+}
+
+/// Nombre d'étapes suivies d'une autre (le dernier appel de chaque ordre est un `jmp`, sans retour).
+const RESUMES: usize = ORDER_NORMAL.len() + ORDER_CINEMATIC.len() + ORDER_REDUCED.len() + ORDER_SCENE_8.len() - 4;
+
+/// Une native de reprise à l'adresse de retour de chaque étape, sauf la dernière de chaque ordre.
+const WORLD_RESUMES: [Native; RESUMES] = {
+    const MODEL: Native = Native {
+        entry: 0,
+        name: "world_update_reprise",
+        cost: |_, _| 100,
+        run: resume_world,
+        touches_sound: false,
+        outputs: 0,
+        exact_cost: false,
+    };
+    let mut out = [MODEL; RESUMES];
+    let (mut k, mut o) = (0, 0);
+    while o < ORDERS.len() {
+        let order = ORDERS[o];
+        let mut i = 0;
+        while i + 1 < order.len() {
+            out[k].entry = order[i].0 + JSR;
+            k += 1;
+            i += 1;
+        }
+        o += 1;
+    }
+    out
+};
 
 pub const WORLD_UPDATE: Native = Native {
     entry: 0x1c86e,
@@ -466,9 +516,18 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) {
     // sites des appels d'origine (0x1c6f6...) : retours empilés comme l'original (voir `call_at`)
     call_at(c, b, ext::INPUT_HOOK, 0x1c6f6 + JSR);
     // retour de `jsr 0x1c86e`, appel en cours tenu en Rust (le code d'origine appelé le trouve sur la pile 68000)
-    crate::taches::table::appeler(c, b, 0x1c6fc + JSR);
+    crate::taches::table::appeler(c, b, WORLD_RETURN);
     update_world(c, b);
     crate::taches::table::depiler_retour(c, b);
+    phase12_after_world(c, b);
+}
+
+/// Retour de la mise à jour du monde dans la phase 12 (`jsr 0x1c86e` en 0x1c6fc).
+const WORLD_RETURN: u32 = 0x1c6fc + JSR;
+
+/// Fin de la phase 12, après la mise à jour du monde : sprites, collisions, extras, rang, fin d'image, saut de
+/// niveau de débogage.
+fn phase12_after_world(c: &mut Cpu, b: &mut Cps2Bus) {
     for (gauge_site, marker, routine) in
         [(0x1c708, 0x54_0000, ext::SPRITES), (0x1c71a, 0x48_0002, ext::COLLISIONS), (0x1c72c, 0x4f_001e, ext::WORLD_EXTRA)]
     {
@@ -507,8 +566,25 @@ pub const PHASE_12: Native = Native {
     exact_cost: false,
 };
 
+/// Reprise de la phase 12 quand la mise à jour du monde a cédé la main : la tâche revient en 0x1c702.
+pub const PHASE_12_RESUME: Native = Native {
+    entry: WORLD_RETURN,
+    name: "game_phase12_reprise",
+    cost: |_, _| 100,
+    run: |c, b| {
+        phase12_after_world(c, b);
+        rts(c, b);
+    },
+    touches_sound: false,
+    outputs: 0,
+    exact_cost: false,
+};
+
 /// Routines natives de la boucle de partie.
-pub const NATIVES: &[Native] = &[WORLD_UPDATE, FRAME_END, PHASE_0, PHASE_12];
+pub const NATIVES: &[Native] = &[WORLD_UPDATE, FRAME_END, PHASE_0, PHASE_12, PHASE_12_RESUME];
+
+/// Reprises de la mise à jour du monde, une par étape.
+pub const RESUME_NATIVES: &[Native] = &WORLD_RESUMES;
 
 #[cfg(test)]
 mod tests {

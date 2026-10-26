@@ -1845,20 +1845,20 @@ mod idle_hunter {
 
 /// Pools d'objets suspendus ou libérés lors d'un passage de porte : début, taille d'un objet,
 /// nombre d'emplacements.
-struct Pool {
-    base: u32,
-    size: u32,
-    count: u32,
+pub(super) struct Pool {
+    pub(super) base: u32,
+    pub(super) size: u32,
+    pub(super) count: u32,
 }
 
-const SET_POOL: Pool = Pool { base: A5 + 0x4a9e, size: 0x50, count: 32 };
-const SOBJ_POOL: Pool = Pool { base: A5 + 0x795e, size: 0x50, count: 16 };
-const EFFCT_POOL: Pool = Pool { base: A5 + 0x549e, size: 0x60, count: 38 };
-const BOX_POOL: Pool = Pool { base: A5 + 0x6ede, size: 0x80, count: 21 };
-const ITEM_POOL: Pool = Pool { base: A5 + 0x62de, size: 0x60, count: 32 };
-const ENEMY_POOL: Pool = Pool { base: A5 + 0x299e, size: 0xc0, count: 22 };
-const BOSS_POOL: Pool = Pool { base: A5 + 0x3a1e, size: 0xc0, count: 3 };
-const ESHL_POOL: Pool = Pool { base: A5 + 0x3c5e, size: 0x60, count: 38 };
+pub(super) const SET_POOL: Pool = Pool { base: A5 + 0x4a9e, size: 0x50, count: 32 };
+pub(super) const SOBJ_POOL: Pool = Pool { base: A5 + 0x795e, size: 0x50, count: 16 };
+pub(super) const EFFCT_POOL: Pool = Pool { base: A5 + 0x549e, size: 0x60, count: 38 };
+pub(super) const BOX_POOL: Pool = Pool { base: A5 + 0x6ede, size: 0x80, count: 21 };
+pub(super) const ITEM_POOL: Pool = Pool { base: A5 + 0x62de, size: 0x60, count: 32 };
+pub(super) const ENEMY_POOL: Pool = Pool { base: A5 + 0x299e, size: 0xc0, count: 22 };
+pub(super) const BOSS_POOL: Pool = Pool { base: A5 + 0x3a1e, size: 0xc0, count: 3 };
+pub(super) const ESHL_POOL: Pool = Pool { base: A5 + 0x3c5e, size: 0x60, count: 38 };
 
 /// Champs d'un objet de la boucle de dispatch communs à tous les pools.
 mod obj {
@@ -1869,7 +1869,7 @@ mod obj {
 
 /// Exécute `run` du gestionnaire avec un autre objet comme objet courant (appel récursif
 /// `bsr` de l'original, qui met A0 sur l'autre objet).
-fn run_on(x: &mut Cx, other: Obj, run: fn(&mut Cx)) {
+pub(super) fn run_on(x: &mut Cx, other: Obj, run: fn(&mut Cx)) {
     let me = x.o;
     let d6 = x.c.d[6];
     let mut y = Cx { c: &mut *x.c, b: &mut *x.b, o: other };
@@ -1880,7 +1880,7 @@ fn run_on(x: &mut Cx, other: Obj, run: fn(&mut Cx)) {
 }
 
 /// Appel d'une routine du jeu qui peut modifier D7 : D7 est conservé (movem de l'original).
-fn call_keeping(x: &mut Cx, addrs: &[u32]) {
+pub(super) fn call_keeping(x: &mut Cx, addrs: &[u32]) {
     let d7 = x.c.d[7];
     for a in addrs {
         x.call(*a);
@@ -1890,7 +1890,7 @@ fn call_keeping(x: &mut Cx, addrs: &[u32]) {
 }
 
 /// Suspend les objets d'un pool (compteur `+0x40` + 1, phase remise à zéro).
-fn suspend(x: &mut Cx, pool: &Pool) {
+pub(super) fn suspend(x: &mut Cx, pool: &Pool) {
     for i in 0..pool.count {
         let o = Obj(pool.base + i * pool.size);
         if o.u8(x.b, 0) != 0 {
@@ -1903,11 +1903,11 @@ fn suspend(x: &mut Cx, pool: &Pool) {
 
 /// Réveille les objets d'un pool ; ceux dont le compteur de suspension devient négatif sont
 /// supprimés (état 6).
-fn resume(x: &mut Cx, pool: &Pool) {
+pub(super) fn resume(x: &mut Cx, pool: &Pool) {
     resume_with(x, pool, |_, _| ());
 }
 
-fn resume_with(x: &mut Cx, pool: &Pool, mut when_awake: impl FnMut(&mut Cx, Obj)) {
+pub(super) fn resume_with(x: &mut Cx, pool: &Pool, mut when_awake: impl FnMut(&mut Cx, Obj)) {
     for i in 0..pool.count {
         let o = Obj(pool.base + i * pool.size);
         if o.u8(x.b, 0) == 0 {
@@ -1930,7 +1930,7 @@ const SCROLL_STATE: u32 = 0xff_2a30;
 const STAGE_FLAG: u32 = 0xff_2a34;
 
 /// Mémorise dans la porte l'état de la caméra et du défilement (champs `+0x30..+0x4a`).
-fn save_camera(x: &mut Cx) {
+pub(super) fn save_camera(x: &mut Cx) {
     for (src, dst) in [(0x506, 0x30), (0x50a, 0x34), (0x556, 0x38), (0x55a, 0x3c)] {
         let v = x.a5_u32(src);
         x.set32(dst, v);
@@ -1948,7 +1948,7 @@ fn save_camera(x: &mut Cx) {
 }
 
 /// Rétablit la caméra et le défilement mémorisés par `save_camera`.
-fn restore_camera(x: &mut Cx) {
+pub(super) fn restore_camera(x: &mut Cx) {
     for (dst, src) in [(0x506, 0x30), (0x50a, 0x34), (0x556, 0x38), (0x55a, 0x3c)] {
         let v = x.u32(src);
         x.set_a5_u32(dst, v);
@@ -1981,7 +1981,7 @@ fn restore_camera(x: &mut Cx) {
 
 /// Remet les joueurs en jeu après un passage (état, drapeaux, délais) ; ceux qui étaient
 /// au-delà de l'état 2 sont marqués morts (0x402).
-fn reset_players_after_exit(x: &mut Cx) {
+pub(super) fn reset_players_after_exit(x: &mut Cx) {
     for p in players() {
         if p.u8(x.b, pl::ACTIVE) == 0 || p.u16(x.b, pl::HEALTH) == 0 {
             continue;
