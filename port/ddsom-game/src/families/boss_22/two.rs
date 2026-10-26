@@ -225,12 +225,12 @@ pub(super) fn slam(x: &mut Cx) {
                 x.set_a5_u16(0x51e, 4);
                 x.set8(KEY, 0);
                 x.c.d[1] = 2;
-                x.call(0xa1d54);
+                eshl_sweep_1d(x, 2);
             }
             if x.u8(KEY) == 2 {
                 x.set8(KEY, 0);
                 x.c.d[1] = 0;
-                x.call(0xa1d54);
+                eshl_sweep_1d(x, 0);
             }
             if !x.anim_step() {
                 return;
@@ -425,11 +425,11 @@ pub(super) fn spin_roar(x: &mut Cx) {
             if x.u8(KEY) == 1 {
                 x.set8(KEY, 0);
                 x.c.d[1] = 2;
-                x.call(0xa1d54);
+                eshl_sweep_1d(x, 2);
             }
             if x.u8(KEY) == 2 {
                 x.set8(KEY, 0);
-                x.call(0xa2048);
+                eshl_wave_1e(x);
                 x.call(0x1ac9a);
                 x.set8(0xb9, 4);
             }

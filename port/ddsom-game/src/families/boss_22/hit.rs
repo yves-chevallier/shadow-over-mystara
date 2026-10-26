@@ -240,7 +240,7 @@ fn death(x: &mut Cx) {
             dust_trail(x, right);
             x.call(0xec9e8);
             if !second_form(x) {
-                x.call(0xb64b0);
+                effct_33(x);
             }
             start(x, Set::A, 0x18);
         }

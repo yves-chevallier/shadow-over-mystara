@@ -123,7 +123,7 @@ fn second_form_strike(x: &mut Cx) {
         2 => {
             if x.u8(KEY) != 0 {
                 x.set8(KEY, 0);
-                x.call(0xa219e);
+                eshl_wave_1f(x);
                 x.set8(SECOND, 1);
                 x.set8(SECOND_FX, 1);
             }

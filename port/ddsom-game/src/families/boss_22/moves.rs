@@ -610,6 +610,16 @@ fn release_prey(x: &mut Cx) {
 
 // --- groupe 14 : transformation en seconde forme ----------------------------------------------------
 
+/// 0xffda : tirage dont les chances (un bit par résultat, mot de la table 0xfff4 choisi par la difficulté) décident si la
+/// transformation s'enchaîne sur une riposte.
+fn flee_roll(x: &mut Cx) -> bool {
+    let row = (((x.a5_u16(var::DIFFICULTY) >> 3) << 1)) as u32;
+    let chances = x.rom16(0xfff4 + row);
+    set_dw(x, 2, chances);
+    let r = rand_and(x, 0xf);
+    (chances >> r) & 1 != 0
+}
+
 /// 0x9cbe8.
 pub(super) fn transform(x: &mut Cx) {
     if second_form(x) {
@@ -624,8 +634,7 @@ pub(super) fn transform(x: &mut Cx) {
             x.set8(0x86, 0);
             x.set16(0x84, 0);
             x.set8(0x49, 0);
-            x.call(0xffda);
-            if zero(x) {
+            if !flee_roll(x) {
                 x.set8(ARM_TIMER, 0x46);
                 x.set8(0, 1);
                 x.set32(f::STATE, 0x0204_1400);

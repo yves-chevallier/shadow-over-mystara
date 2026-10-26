@@ -295,7 +295,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x74, 1), (0x75, 0x44), (0x76, 6), (0x7e, 0x4a), (0x7f, 0), (0x81, 0), (0x80, 0x1a), (0xbf, 0)] {
         x.set8(off, v);
     }
-    x.call(0xb53f4);
+    effct_trio_2e(x);
     x.set16(ANIM_SET, 0xffff);
     x.c.d[0] = 0;
     anim_a(x, 0);

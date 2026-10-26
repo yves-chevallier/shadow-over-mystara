@@ -139,7 +139,6 @@ pub(self) mod state {
 
 pub(self) mod call {
     pub const FREE_BOSS: u32 = 0x2234;
-    pub const SPEED: u32 = 0x1b64;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_YZ: u32 = 0x1dd4;
@@ -160,7 +159,6 @@ pub(self) mod call {
     pub const SPLASH: u32 = 0xaaa40;
     pub const DUST: u32 = 0xb10c8;
     pub const MESSAGE: u32 = 0x289c;
-    pub const FAR_BOX: u32 = 0x7f0c;
 }
 
 // --- animations --------------------------------------------------------------------------------
@@ -173,13 +171,6 @@ pub(self) fn pose(x: &mut Cx, set: Set, id: u8, n: u32) {
         x.set8(ANIM_LAST, id);
         start(x, set, n);
     }
-}
-
-/// Idem sans test : l'animation est toujours relancée, le numéro mémorisé.
-pub(self) fn pose_always(x: &mut Cx, set: Set, id: u8, n: u32) {
-    x.set8(ANIM_ID, id);
-    x.set8(ANIM_LAST, id);
-    start(x, set, n);
 }
 
 /// Réglages sonores `+0x44` et `+0x45` posés avec l'animation.
@@ -389,7 +380,7 @@ pub(self) fn dust_trail(x: &mut Cx, right: bool) {
 pub(self) fn scatter(x: &mut Cx) {
     for i in (0..5u32).rev() {
         x.c.d[5] = i;
-        x.call(0x9eca4);
+        eshl_debris(x, i as u8);
     }
     x.c.d[5] |= 0xffff;
 }
