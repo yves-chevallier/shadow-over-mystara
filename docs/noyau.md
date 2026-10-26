@@ -213,8 +213,8 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
    exécutent encore du 68000 » ; surtout C10 SET, C04 boss, C0e EFFCT non exercés, P3, ESHL), le code d'origine où
    reprennent encore des tâches (écran `0x19068`, suites de la carte de développement du menu TEST), et les natives que
    la machine remplace par leur original : celles qui débordent sur l'interruption suivante (`run`, `lib.rs` :
-   `c.cycles + cost > irq_horizon`) et celles qui se déclarent hors contrat (`families::COUT_HORS_CONTRAT`, épilogue
-   étranger `0xaa9fe` des bulles). Sans processeur, une native s'exécute toujours en entier.
+   `c.cycles + cost > irq_horizon`) ; celles qui se déclaraient hors contrat (`families::COUT_HORS_CONTRAT` :
+   épilogue étranger `0xaa9fe` des bulles, pas de réaction non réécrits) s'exécutent maintenant toujours. Sans processeur, une native s'exécute toujours en entier.
 2. **Un exécuteur de natives sans interpréteur.** Un pas finit en posant `c.pc` sur la native suivante (reprise, suite
    d'un cadre, enveloppe de cession) et la machine la cherche (`lookup`) ; sans 68000, une boucle `while let Some(n) =
    lookup(c.pc) { (n.run)(c, b) }` jusqu'au retour à l'ordonnanceur (`0x984`) suffit, le `Cpu` ne servant plus que de banc

@@ -60,6 +60,12 @@ mod kind {
     pub const DASH: u8 = 0x25;
     pub const METEORS: u8 = 0x28;
     pub const WALL_TARGET: u8 = 0x29;
+    /// Créature invoquée par le magicien (PEFF).
+    pub const SUMMON: u8 = 0x12;
+    /// Portail du magicien (PEFF ; même numéro que la boule de feu, qui est un tir PSHL).
+    pub const PORTAL: u8 = 0x16;
+    /// Sorcière invoquée par le magicien (tir PSHL).
+    pub const WITCH: u8 = 0x12;
 }
 
 /// Réserve un emplacement dans le pool dont `alloc` est l'allocateur et l'active avec le genre `kind`.
@@ -298,6 +304,40 @@ pub fn lightning(g: &mut Ctx, p: Player, target: u32) {
     o.set_u8(g.b, 0x5d, step);
 }
 
+/// 0x4cd8e : éclair de la tempête, à la position du joueur, 0x48 plus haut et juste devant lui.
+pub fn flare(g: &mut Ctx, p: Player) {
+    cov!();
+    let step = step_of(g, p);
+    let Some(o) = create(g, p, alloc::PEFF, kind::LIGHTNING) else { return };
+    o.set_u16(g.b, field::LINK, p.0 as u16);
+    let facing = p.u8(g, Player::FACING);
+    o.set_u8(g.b, Player::FACING, facing);
+    for axis in [Obj::X, Obj::Z, Obj::Y] {
+        let v = p.u16(g, axis);
+        o.set_u16(g.b, axis, v);
+    }
+    let z = o.u16(g.b, Obj::Z).wrapping_add(0x48);
+    o.set_u16(g.b, Obj::Z, z);
+    let y = o.u16(g.b, Obj::Y).wrapping_sub(1);
+    o.set_u16(g.b, Obj::Y, y);
+    o.set_u8(g.b, 0x5d, step);
+}
+
+/// 0x4ccac : créature invoquée, tournée comme le joueur.
+pub fn summon(g: &mut Ctx, p: Player) {
+    cov!();
+    let Some(o) = create(g, p, alloc::PEFF, kind::SUMMON) else { return };
+    let facing = p.u8(g, Player::FACING);
+    o.set_u8(g.b, Player::FACING, facing);
+    link(g, o, p);
+}
+
+/// 0x4d3c6 : portail, variante `v`.
+pub fn portal(g: &mut Ctx, p: Player, v: u8) {
+    cov!();
+    effect(g, p, kind::PORTAL, Some(v), |_, _| {});
+}
+
 // ---- effets des magies lancées ---------------------------------------------------------------------
 
 /// 0x4e2f4 : anneau (magie 16), variante `v` ; l'objet garde le pas de l'action.
@@ -515,6 +555,36 @@ pub fn shadow(g: &mut Ctx, p: Player) {
     link(g, o, p);
 }
 
+/// 0x53918 : la sorcière, cinq tirs (paramètres 0 à 4) ; l'octet `+0x2d` de chacun vient de la table 0x5394e.
+pub fn witch(g: &mut Ctx, p: Player) {
+    cov!();
+    const SLOTS: u32 = 0x5394e;
+    for n in 0..5u8 {
+        let Some(o) = create(g, p, alloc::PSHL, kind::WITCH) else { return };
+        let facing = p.u8(g, Player::FACING);
+        o.set_u8(g.b, Player::FACING, facing);
+        o.set_u16(g.b, field::LINK, p.0 as u16);
+        let slot = g.prog8(SLOTS + n as u32);
+        o.set_u8(g.b, 0x2d, slot);
+        o.set_u8(g.b, 0x5d, n);
+    }
+}
+
+/// 0x53954 (variante 1) et 0x539e4 (variante 4) : coups de la sorcière ; leurs puissances (contre les ennemis
+/// ordinaires et contre les boss) dépendent du niveau du joueur (`+0x10c`).
+pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
+    cov!();
+    const POWER: u32 = 0x10_41f2;
+    const POWER_BOSS: u32 = 0x10_4210;
+    let Some(o) = create(g, p, alloc::PSHL, kind::WITCH) else { return };
+    o.set_u8(g.b, Obj::VARIANT, v);
+    o.set_u16(g.b, field::LINK, p.0 as u16);
+    let level = p.u8(g, 0x10c) as u32;
+    let (power, boss) = (g.data8(POWER + level), g.data8(POWER_BOSS + level));
+    o.set_u8(g.b, 0x45, power);
+    o.set_u8(g.b, 0x46, boss);
+}
+
 // ---- natives --------------------------------------------------------------------------------------
 
 /// Exécute un créateur sur l'état des registres du 68000 (A0 = le joueur) puis rend la main.
@@ -652,3 +722,12 @@ creator!(KNIFE, 0x54426, "spawn_knife", regs::a(1) | regs::d(0) | regs::CCR, |g,
     knife(g, p);
 });
 creator!(SHADOWS, 0x52e20, "spawn_shadows", regs::a(1), |g, p| shadows(g, p));
+creator!(FLARE, 0x4cd8e, "spawn_flare", regs::a(1), |g, p| flare(g, p));
+creator!(SUMMON, 0x4ccac, "spawn_summon", regs::a(1), |g, p| summon(g, p));
+creator!(PORTAL, 0x4d3c6, "spawn_portal", regs::a(1), |g, p| {
+    let v = g.c.d[0] as u8;
+    portal(g, p, v)
+});
+creator!(WITCH, 0x53918, "spawn_witch", regs::a(1), |g, p| witch(g, p));
+creator!(WITCH_A, 0x53954, "spawn_witch_a", regs::a(1), |g, p| witch_strike(g, p, 1));
+creator!(WITCH_B, 0x539e4, "spawn_witch_b", regs::a(1), |g, p| witch_strike(g, p, 4));

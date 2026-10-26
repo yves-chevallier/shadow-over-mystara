@@ -106,6 +106,10 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x3b3d8, |g, p| frozen_wait(g, p, 20)),
     (0x3b3de, |g, p| frozen_wait(g, p, 21)),
     (0x3b420, frozen_end),
+    (0x3b684, fallen_start),
+    (0x3b6da, fallen_drop),
+    (0x3b6f4, fallen_lie),
+    (0x3b700, fallen_stars),
     (0x3a204, |g, p| {
         if is_dead(g, p) {
             knock_down(g, p);
@@ -1192,6 +1196,86 @@ fn dizzy(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, anim);
     p.set_u8(g, Player::HITSTOP, 0);
     knock_down_if_dead(g, p);
+}
+
+// ---- réaction 0x38 (0x3b66e) : renversé, étoiles, puis relevé ---------------------------------------
+
+/// 0x3b684 : sans PV, à terre tout de suite (0x3b8f6). Sinon 240 images d'étoiles (`+0x6f`) ; en l'air, le
+/// joueur retombe (animation 3), au sol il se couche aussitôt.
+fn fallen_start(g: &mut Ctx, p: Player) {
+    cov!();
+    if is_dead(g, p) {
+        knock_down(g, p);
+        return downed(g, p);
+    }
+    next_step(g, p);
+    p.set_u8(g, Player::TIMER_6F, 0xf0);
+    if p.u16(g, Obj::Z) == 0 {
+        return fallen_lie_down(g, p);
+    }
+    p.set_u32(g, Obj::VX, 0);
+    p.set_u16(g, Obj::VZ, 0);
+    p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
+    hurt_animation(g, p, 3);
+}
+
+/// 0x3b6b2 : couché (animation 0x23) ; ralenti (`+0x66`), il passe directement aux étoiles (0x3b6c4).
+fn fallen_lie_down(g: &mut Ctx, p: Player) {
+    cov!();
+    next_step(g, p);
+    if p.u8(g, Player::SLOW) != 0 {
+        return fallen_stars_start(g, p);
+    }
+    hurt_animation(g, p, 0x23);
+}
+
+/// 0x3b6c4 : étoiles au-dessus du joueur couché (animation 0x1c).
+fn fallen_stars_start(g: &mut Ctx, p: Player) {
+    cov!();
+    p.set_u8(g, Player::ACTIVE, 1);
+    p.set_u8(g, Player::INVULN, 0);
+    next_step(g, p);
+    hurt_animation(g, p, 0x1c);
+}
+
+/// 0x3b6da : la chute jusqu'au sol.
+fn fallen_drop(g: &mut Ctx, p: Player) {
+    cov!();
+    animation::step(g, p);
+    move_xz(g, p);
+    if p.u16(g, Obj::Z) as i16 > 0 {
+        return;
+    }
+    p.set_u16(g, Obj::Z, 0);
+    fallen_lie_down(g, p);
+}
+
+/// 0x3b6f4 : attend la fin de l'animation du joueur couché.
+fn fallen_lie(g: &mut Ctx, p: Player) {
+    cov!();
+    if animation::step(g, p) {
+        fallen_stars_start(g, p);
+    }
+}
+
+/// 0x3b700 : nouvelles étoiles toutes les 16 images (0xb378a, D0 = 3 ; D1, le réglage, est le décalage laissé
+/// par l'aiguillage) ; à la fin du compte, le joueur se relève (animation 0x21).
+fn fallen_stars(g: &mut Ctx, p: Player) {
+    cov!();
+    animation::step(g, p);
+    let left = p.u8(g, Player::TIMER_6F);
+    g.c.d[0] = g.c.d[0] & !0xff | (left & 0xf) as u32;
+    if left & 0xf == 0 {
+        g.c.d[0] = 3;
+        g.rom(STARS, p);
+    }
+    let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    if left != 0 {
+        return;
+    }
+    next_step(g, p);
+    hurt_animation(g, p, 0x21);
 }
 
 // ---- réaction 0x28 (0x3b1e4) : assis par terre, il se débat pour se relever ------------------------------

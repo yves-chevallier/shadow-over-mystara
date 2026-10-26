@@ -34,6 +34,26 @@ fn erase_columns(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// Barre de vie du boss (h) : drapeau d'affichage (FF8030) et objet SET de la barre (pointeur court en FF2476).
+const LIFE_BAR_SHOWN: u32 = 0x30;
+const LIFE_BAR_OBJECT: u32 = 0xff_2476;
+
+/// 0xd5ef8 : quand la barre de vie est affichée, la rattache au boss A0 (`+0x34`, variante 1, état remis à zéro)
+/// et efface les colonnes de tuiles de l'ancienne barre (0xd5f12).
+fn attach_life_bar(c: &mut Cpu, b: &mut Cps2Bus) {
+    let shown = rd8(b, A5 + LIFE_BAR_SHOWN);
+    c.flags_logic(shown as u32, Size::Byte);
+    if shown == 0 {
+        return rts(c, b);
+    }
+    let bar = rd16(b, LIFE_BAR_OBJECT) as i16 as i32 as u32 & 0xff_ffff;
+    c.a[1] = bar;
+    wr16(b, bar + 0x34, c.a[0] as u16);
+    wr8(b, bar + 3, 1);
+    wr32(b, bar + 4, 0);
+    erase_columns(c, b);
+}
+
 /// 0xce668 : charge deux grilles de blocs (0x26d4, destination 0x917000) dont les numéros sont lus, par
 /// paire de mots, dans la table 0xce686 à l'indice D0 (numéro de personnage).
 fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -114,6 +134,7 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus),
 }
 
 pub const NATIVES: &[Native] = &[
+    native(0xd5ef8, "set_barre_de_vie", attach_life_bar, regs::ALL),
     native(0xd5f12, "set_efface_colonnes", erase_columns, regs::ALL),
     native(0xce668, "set_deux_grilles", load_two_grids, regs::ALL),
     native(0xd98b8, "set_vague_debut", wave_start, regs::ALL),

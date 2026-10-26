@@ -102,6 +102,7 @@ mod tables {
 }
 
 /// Appelle une routine d'origine avec des registres de données (indice, valeur) ; renvoie Z.
+#[track_caller]
 pub fn call(g: &mut Ctx, p: Player, addr: u32, data: &[(usize, u32)]) -> bool {
     for &(r, v) in data {
         g.c.d[r] = v;

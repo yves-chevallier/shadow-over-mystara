@@ -758,6 +758,34 @@ pub fn guard(g: &mut Ctx, p: Player, held: u8) {
     animation::step(g, p);
 }
 
+// ---- action 0x28 (0x36be0) : fin du ralentissement (h) --------------------------------------------
+
+/// Compte à rebours de l'action 0x28 (`+0x1e8`).
+const SLOW_END_TIMER: u32 = 0x1e8;
+
+/// 0x36be0 : le joueur ralenti reste 64 images dans la pose 0x39, puis le ralentissement (`+0x66`) cesse et il se
+/// remet debout.
+pub fn slow_end(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            p.set_u8(g, SLOW_END_TIMER, 0x40);
+            animation::start(g, p, 0x39);
+        }
+        2 => {
+            let left = p.u8(g, SLOW_END_TIMER).wrapping_sub(1);
+            p.set_u8(g, SLOW_END_TIMER, left);
+            if left == 0 {
+                p.set_u8(g, Player::SLOW, 0);
+                to_stand(g, p);
+            }
+        }
+        _ => {
+            g.rom(0x36be0, p);
+        }
+    }
+}
+
 // ---- action 0x2a (0x36c12) : saut sur place avec rebond (h) ---------------------------------------
 
 /// 0x36c12 : décollage, retombée puis marche sur la hauteur ; la hauteur oscille de 2 pixels.

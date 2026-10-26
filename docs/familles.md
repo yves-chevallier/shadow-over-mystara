@@ -53,12 +53,14 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
 - **états non exercés ou non réécrits** : un état que le gestionnaire ne gère pas est délégué au code
   d'origine (`Ctx::deleguer(adresse)`, exécuté comme un `jmp` de la table, avec D0/D1 comme l'original) ;
   le comportement reste celui de l'original ; ces états sont listés ci-dessous ;
-- **chemins hors contrat** : EFFCT 4 saute, pour le personnage 1, dans l'épilogue d'une autre routine
+- **retour par-dessus l'appelant** : EFFCT 4 saute, pour le personnage 1, dans l'épilogue d'une autre routine
   (`movem.l (SP)+,{A1-A4} ; rts`, `beq.w 0xaa9fe`) : l'original ne revient donc pas à son appelant mais plus
-  haut dans la pile (c'est ce qui arrive dans le scénario `bot_char2`). La routine native ne sait pas
-  reproduire cela dans son contrat ; elle le détecte à blanc (`Ctx::epilogue_etranger`) et annonce un coût
-  démesuré (`COUT_HORS_CONTRAT`) : l'exécuteur lance alors le code d'origine à sa place, exactement comme
-  quand une routine ne tient pas avant l'échéance de la ligne.
+  haut dans la pile, au début du tour de la boucle de partie `0x1c468` (scénario `bot_char2`, entre autres). La
+  routine native fait de même (`Ctx::epilogue_etranger`) : les appels en cours tenus en Rust (aiguillage des
+  EFFCT, mise à jour du monde, fin d'image) sont sur la pile 68000, où `call_at` les a remis
+  (`docs/noyau.md`, « Appels en cours en Rust ») ; elle en dépile quatre longs, revient au cinquième, et `call_at`
+  abandonne les fonctions Rust dépassées (`Unwound`). Il n'y a plus de chemin « hors contrat » où le code
+  d'origine s'exécute à la place d'une native (l'ancien coût démesuré `COUT_HORS_CONTRAT` a disparu).
 
 ### Outils de validation
 
@@ -343,10 +345,10 @@ recensement <roms> <eeprom> scenarios/bot30k.txt 3000 20 [PSHL,PEFF,ESHL,SET,SOB
   DDSOM_SAUTER=a,b       gestionnaires non exercés (SET 4 et 6 : une animation de cases synthétique boucle)
 ```
 
-`examples/reste68k` (inventaire des scénarios) compte maintenant aussi le code d'origine que la machine exécute
-à la place d'une native qui se déclare hors contrat (`COUT_HORS_CONTRAT`), comme l'exécuteur du jeu : avant,
-la porte SET 7 de `cov_mortal_late` (96 instructions, et la reprise de la tâche en 68000 qui s'ensuivait)
-échappait à la mesure.
+`examples/reste68k` (inventaire des scénarios) comptait aussi le code d'origine que la machine exécutait à la
+place d'une native qui se déclarait hors contrat (l'ancien `COUT_HORS_CONTRAT`, supprimé depuis : bulle EFFCT 4,
+pas de réaction non réécrits) : avant, la porte SET 7 de `cov_mortal_late` (96 instructions, et la reprise de la
+tâche en 68000 qui s'ensuivait) échappait à la mesure.
 
 ### Tables de types
 

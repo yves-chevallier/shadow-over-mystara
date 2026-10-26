@@ -2209,7 +2209,11 @@ static REACTIONS: &[Reaction] = &[
         steps: &[tumble_18, fall, tumble_link, bounce_start, bounce, get_up, death],
     },
     Reaction { entry: 0x3cfd0, table: 0x3cfde, steps: &[tumble_18_stars, fall, bounce_start, bounce, get_up, death] },
-    Reaction { entry: 0x3cfea, table: 0x3cff8, steps: &[seized, seized_by, released, wait_anim] },
+    Reaction {
+        entry: 0x3cfea,
+        table: 0x3cff8,
+        steps: &[seized, seized_by, released, wait_anim, fall, bounce_start, bounce, get_up, death],
+    },
     Reaction { entry: 0x3d250, table: 0x3d25e, steps: &[grab_hit, fall, bounce_start, bounce, get_up, grab_down] },
     Reaction {
         entry: 0x3d3a8,
@@ -2268,7 +2272,7 @@ const DISINTEGRATE: u32 = 0x3c828;
 const GROUNDED_GRAB: u32 = 0x3d350;
 const BURNT: u32 = 0x3d86e;
 
-/// Exécute la routine de réaction d'origine `entry` ; faux si un pas inconnu doit être laissé à l'original.
+/// Exécute la routine de réaction d'origine `entry` ; faux si le pas est hors de sa table (voir `native_run`).
 fn run_entry_flag(x: &mut Cx, entry: u32) -> bool {
     match entry {
         RECOIL => {
@@ -2302,10 +2306,8 @@ fn run_entry_flag(x: &mut Cx, entry: u32) -> bool {
 
 /// Saut vers une autre routine de réaction (`bra`) depuis un pas.
 fn run_entry(x: &mut Cx, entry: u32) {
-    if !run_entry_flag(x, entry) {
-        // pas inconnu : le code d'origine, appelé comme un sous-programme
-        x.call(entry);
-    }
+    let step = x.u8(f::STEP);
+    assert!(run_entry_flag(x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
 }
 
 /// 0x3bb16 : animation de réaction `D6` du joueur (jeu par personnage `+3`, table 0x3bb52).
@@ -2322,23 +2324,15 @@ fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     rts(c, b);
 }
 
-/// Le pas courant de la routine `entry` est-il réécrit ? (Sinon le code d'origine s'exécute : coût démesuré.)
-fn known(c: &m68k::Cpu, b: &mut cps2::Cps2Bus, entry: u32) -> bool {
-    let step = rd8(b, c.a[0] + f::STEP);
-    let table_len = |n: usize| step & 1 == 0 && (step as usize) < 2 * n;
-    match entry {
-        RECOIL | RECOIL_1 | DISINTEGRATE | GROUNDED_GRAB => true,
-        HELD => table_len(4),
-        BURNT => c.d[0] & 0xff00 == 0 && table_len(4),
-        _ => REACTIONS.iter().find(|r| r.entry == entry).is_some_and(|r| table_len(r.steps.len())),
-    }
-}
-
+/// Exécute la routine de réaction `entry` (RTS compris). Tous les pas des tables d'origine sont réécrits : le pas
+/// (`+6`) part de 0 et n'avance que de 2 en 2 jusqu'au dernier pas de la table, qui ne l'avance plus (mort, fin de
+/// saisie...), et l'indice de `BURNT` (D0.w) est le code de réaction posé par `enemy_common::react` (octet haut
+/// nul). Un pas hors table ferait sauter l'original dans des données : il ne peut pas se produire.
 fn native_run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, entry: u32) {
     let mut x = Cx::new(c, b);
     x.c.a[5] = crate::mem::A5;
-    let done = run_entry_flag(&mut x, entry);
-    debug_assert!(done, "réaction {entry:#x} : pas inconnu malgré le contrôle du coût");
+    let step = x.u8(f::STEP);
+    assert!(run_entry_flag(&mut x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
     x.ret();
 }
 
@@ -2347,7 +2341,7 @@ macro_rules! reaction_natives {
         &[$(Native {
             entry: $entry,
             name: "enemy_reaction",
-            cost: |c, b| if known(c, b, $entry) { 100 } else { super::COUT_HORS_CONTRAT },
+            cost: |_, _| 100,
             run: |c, b| native_run(c, b, $entry),
             touches_sound: false,
             outputs: 0,
