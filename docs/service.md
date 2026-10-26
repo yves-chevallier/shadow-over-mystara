@@ -116,11 +116,28 @@ La validation compare donc le test Rust à l'exécution du code d'origine.
 | `0x2d546` | `config::reset_factory` | réglages d'usine de la variante dans les variables |
 | `0x2d5c6` | `config::is_factory` | les variables sont-elles les réglages d'usine ? |
 | `0x2da4a` | `eeprom::tester` | test de l'EEPROM du MEMORY CHECK |
-| `0x2e4ec` | `eeprom::COMPTA_PARTIES` (native) | au départ d'un joueur, en jeu gratuit (`A5+0x25`) : compteur des parties gratuites (`0x2db1e`) |
+| `0x2e4ec` | `eeprom::COMPTA_PARTIES` (native) | au départ d'un joueur, en jeu gratuit (`A5+0x25`) : compteur des parties gratuites (`0x2db1e`) ; sur la carte de développement, le compteur des parties payantes ou gratuites de sa RAM |
 | `0x2dc9a` | `eeprom::COMPTA_INIT` (native) | démarrage : rien, sauf sur la carte de développement |
 
-Les variantes de la carte de développement (`A5+0x82` non nul : RAM supplémentaire 0x660000, temps de jeu) restent
-en code d'origine : les suites de `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et `0x2dca6`/`0x2dcd2`.
+### Carte de développement (`eeprom/carte_dev.rs`)
+
+Quand `A5+0x82` est non nul (le reset le pose si le bit 14 du port 0x804030 est nul : jamais sur la machine émulée, où
+il vaut 0xe021 ; un `poke8 ff8082 1` le simule), le jeu tient une comptabilité plus fine dans une RAM de 16 Ko en 0x660000,
+**en trois exemplaires** par zone (0x661xxx, 0x662xxx, 0x663xxx). Tout est en Rust, validé par `fuzz_carte_dev` (voir §6) :
+
+| Original | Rust (`carte_dev`) | Rôle |
+|---|---|---|
+| `0x2dc9a` → `0x2dca6`, `0x2dcd2` | `demarrer` | au reset : signature de région (`0x2dd14`, 32 mots comparés à `0x2ebfc + 16 × région`), puis vote et réparation de chaque zone (`0x2dd94`... `0x2e204`), puis recopie vers les variables `A5-0x6164`... (`0x2e48a`...`0x2e77c`). Signature fausse : réinitialisation complète (`0x2e91a`) |
+| `0x2e8e4` (boutons `0x3304` tenus au reset) | `reinitialiser` (`eeprom::reinitialiser_carte`, appelée par `demarrage.rs`) | remise à zéro de toutes les zones (sauf les cartes distribuées, `0x2ea24` : l'original ne la remet à zéro que sur désaccord) |
+| `0x2e456`, `0x2e4a8`, `0x2e4fc`, `0x2e59a`, `0x2e540` | `pieces`, `departs`, `parties_payantes`, `parties_gratuites`, `temps_de_jeu` | +1 sur les trois exemplaires d'un compteur, vote, bornes, variable de travail (`0x2e540` : une fois par seconde de partie, appelé par `taches/partie.rs`) |
+| `0x2e638` | `partie_du_personnage` | +1 au compteur (8 octets) du personnage choisi (`0x1200 + 8 × D0`) |
+| `0x2e69e` | `duree_de_partie` | durée de la partie en secondes (D0 / 60), plus longue (`0x1260`) et plus courte (`0x1268`) |
+| `0x2e41c` | `vote` | octets bas des mots des trois exemplaires, drapeaux 2 (B≠A), 4 (C≠A), 8 (C≠B) cumulés ; arrêt si les trois diffèrent. 0 : bon ; 6 : A fautif (copié de C) ; 10 : B fautif (de A) ; 12 : C fautif (de B) ; autre : zone perdue, remise à zéro |
+
+Les zones, leurs bornes (pièces et départs > 999 999 : 0 ; temps total > 0x127a3980 et parties > 0x4f5880 : plafonnés)
+et leurs variables sont dans l'en-tête du module. Particularités de l'original conservées : la réparation ne recopie que
+les 8 premiers octets d'une zone (même celles de 48 et 16 octets) ; les compteurs sont des longs « movep » (un octet par
+mot, adresses impaires). La zone `0x1240` (un vote complet, `0x2e2b0`) n'a aucun appelant et n'est pas portée (code mort).
 
 ## 6. Scénarios
 
@@ -132,31 +149,48 @@ en code d'origine : les suites de `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et `0x2dca6`/
 | `cov_service_variante.txt` | `poke` de la variante (4, puis 10, puis 8) et de quatre joueurs : INPUT et OUTPUT à quatre joueurs, distributeur et compteur de cartes, CONFIGURATION à 9 lignes, DEFAULT, redémarrage avec une signature d'EEPROM qui ne correspond pas (valeurs par défaut écrites par `0x2d30a`) |
 | `cov_service_reglages.txt` | répétition automatique (touches tenues dans le menu et les réglages), départ gratuit (mode 17 par `poke` : ligne CONTINUE sautée, CONTINUE forcé), jeu gratuit (18), variante 0 (7-1 sans langue ni cartes), modes hors de la liste réduite de la variante 4 |
 | `covs_carte_dev.txt` | carte de développement (`poke8 ff8082 1`) : GAME DATA avec temps de jeu (`hh:mm:ss`, indicateur nul, valeur négative, plafond à 99 heures) et compteurs lus en RAM supplémentaire |
+| `covs_carte_dev_partie.txt` | `cov_mortal_c1` avec la carte de développement dès l'image 790 : pièces, départs, parties payantes, personnage choisi, durée de partie, temps de jeu à la seconde |
+| `covs_carte_dev_gratuit.txt` | `cov_credits_gratuit` avec la carte de développement : parties gratuites (`0x2e59a`), pièces, départs |
+
+**Fuzz différentiel** (`examples/fuzz_carte_dev.rs`, `fuzz_carte_dev <roms> <eeprom> [essais [graine]]`). Les scénarios ne
+peuvent pas poser la RAM supplémentaire (`poke` n'écrit que 0xff0000-0xffffff) ni déclencher le reset avec la carte : le
+fuzz tire des états de la RAM 0x660000 (zones valides, exemplaires corrompus, compteurs près de leurs bornes, RAM vierge ou
+aléatoire, signature d'une des régions 0 à 6) et compare, pour `0x2dc9a`, `0x2e8e4`, `0x2e540`, `0x2e448`, `0x2e49a`,
+`0x2e4ec`, `0x2e630` (D0 de 0 à 11, 0xffff, parasite dans le mot haut) et `0x2e696` (D0 de 0 à 0xffffffff), le code d'origine
+recompilé seul à la version Rust : RAM de travail, RAM supplémentaire, autres mémoires. Trois graines × 10 000 essais × 8
+points d'entrée : aucun écart (les registres de sortie ne sont pas comparés, `FUZZ_REGISTRES=1` les affiche : ce sont des
+restes de calcul de l'original).
 
 Générateur : les scénarios sont des suites d'appuis (4 images, 40 d'intervalle) ; l'interrupteur TEST (`Service Mode`)
 reste actionné de l'image 600 jusqu'au EXIT final.
 
 ## 7. Ce qui reste en 68000
 
-Mesure (`examples/reste68k`, `cov_service.txt`, 30 000 images) : M1 et M2 passent de 1 582 438 instructions 68000 à
-**0** (le scénario passe de 3 566 149 à 1 983 867 instructions : le reste est le test de RAM du démarrage, K2). Sur les
-cinq scénarios, aucune instruction de M1 ni de M2 n'est plus exécutée.
+Plus rien : M1 et M2 n'exécutent aucune instruction 68000 (mesure `examples/reste68k` sur `cov_service*.txt` et
+`covs_carte_dev*.txt`, 12 000 images chacun : 0 ; avant la réécriture de la carte de développement, les deux scénarios
+de partie de la carte en exécutaient 33 354, dont 30 212 pour le seul temps de jeu `0x2e540`, une fois par seconde de
+jeu). Historique : M1 et M2 étaient passés de 1 582 438 instructions à 0 sur `cov_service.txt` ; le reste de ce scénario
+était alors le test de RAM du démarrage (K2), réécrit depuis (`docs/noyau.md`).
 
-Les « 76 fonctions jamais atteintes » de M1 dans `docs/reste68k.md` sont les fonctions d'origine remplacées en ligne
-par le Rust (aucune n'exécute de 68000) et le code mort ci-dessous : aucune n'est à couvrir par un scénario.
+Blocages. « NG » du MEMORY CHECK (boucle `0x2d112`) et « EEPROM ERROR » (boucle `0x2d7fa`) : les messages sont affichés en
+Rust, puis le PC est posé sur la boucle de l'original, que `service::BLOCAGE_MEMOIRE` et `BLOCAGE_EEPROM` (natives sans
+effet, qui laissent passer le temps jusqu'à la fin de l'image) tiennent sans interpréteur. **Aucun scénario ne les
+atteint, et aucune EEPROM modifiée non plus** : l'EEPROM émulée (`cps2::eeprom`, 93C46) écrit toujours ce qu'on lui
+demande, donc l'écriture des valeurs par défaut réussit quel que soit le fichier. Essai : EEPROM toute à 0, toute à 0xff,
+aléatoire, tronquée à 20 octets, vide, signature effacée (octets 0x20-0x2f à 0) ; sur 11 000 images du code d'origine avec
+`cov_service_ecrans.txt`, chacune passe par les valeurs par défaut (`0x2d7aa` exécuté) et jamais par `0x2d7fa`. Le NG du
+MEMORY CHECK demanderait une RAM ou une ROM défaillante (les motifs relus, la somme du programme) ou un test de l'EEPROM
+raté, ce que la machine émulée ne produit pas. Corollaire connu : avec une EEPROM corrompue, la native `config_init` écrit
+les valeurs par défaut instantanément alors que l'original y passe quelques images (écriture bit à bit à ×16) ; `validate`
+signale alors un écart de temps dès l'image 6 (RAM des réglages), sans portée en jeu.
 
 Restent en code d'origine, jamais exécutés par une borne :
 
-* les suites de la carte de développement (`A5+0x82` non nul) hors du menu : compteurs de la RAM supplémentaire de
-  `0x2e4ec` (`0x2e4fc`, `0x2e59a`) et de `0x2dc9a` (`0x2dca6`, `0x2dcd2`). La fin de GAME DATA (`0x2b842` : temps de
-  jeu, `0x29ca0`/`0x29cc4`) est en Rust (`mire::play_time`), validée par `covs_carte_dev.txt` ;
-* les blocages : « NG » du MEMORY CHECK (boucle `0x2d112`), « EEPROM ERROR » (boucle `0x2d7fa`) ; les messages sont
-  affichés en Rust, puis le PC est posé sur la boucle de l'original ;
 * le « Secret Test » (M3, `0xee16e`) et la version à 13 lignes du menu (`0x295a0-0x29946` : OBJECT, SCROLL 1-3),
   inaccessibles (mot 0xc0 nul) ;
 * du code mort (jamais appelé) : `0x2bbfa-0x2bc1c` et ses aides `0x299ee`, `0x29a24`, `0x29a36` ; `0x2d592`
   (comparaison des deux exemplaires) ; les variantes inutilisées de l'affichage des chiffres (`0x29cfe-0x29d2e`,
-  `0x29d46`).
+  `0x29d46`) ; le vote de la zone `0x1240` de la carte de développement (`0x2e2b0-0x2e324`, `0x2eb0a`).
 
 Chemins Rust que le code d'origine n'a jamais parcourus dans les scénarios (non validés) : les blocages ci-dessus, et
 dans SOUND & VOICE les volumes autres que le maximum (le port 0x804030 émulé vaut toujours 0xe021 : jauge pleine).
