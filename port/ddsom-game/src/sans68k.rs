@@ -139,7 +139,7 @@ pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
         arreter(c, b, format!("pas de native en {:06x}", c.pc));
     };
     let cout = (n.cost)(c, b);
-    if cout >= crate::families::COUT_HORS_CONTRAT {
+    if cout >= crate::families::COUT_HORS_CONTRAT && cout != crate::families::COUT_EPILOGUE_ETRANGER {
         arreter(c, b, format!("native {} hors contrat en {:06x}", n.name, c.pc));
     }
     DERNIERES.with(|d| {

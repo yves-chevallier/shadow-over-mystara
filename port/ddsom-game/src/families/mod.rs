@@ -521,8 +521,9 @@ pub fn cout(c: &Cpu, b: &mut Cps2Bus, entree: u32, logique: fn(&mut Ctx)) -> u64
     logique(&mut ctx);
     if ctx.retour_deja {
         // le gestionnaire quitte par un chemin hors contrat (voir `epilogue_etranger`) : la durée annoncée
-        // dépasse toute échéance, donc l'exécuteur lance le code d'origine à sa place
-        return COUT_HORS_CONTRAT;
+        // dépasse toute échéance, donc l'exécuteur lance le code d'origine à sa place (sauf sans 68000 : la native
+        // sait le faire)
+        return COUT_EPILOGUE_ETRANGER;
     }
     let sous_routines = ctx.c.cycles - debut;
     ctx.cout(b, sous_routines)
@@ -530,6 +531,11 @@ pub fn cout(c: &Cpu, b: &mut Cps2Bus, entree: u32, logique: fn(&mut Ctx)) -> u64
 
 /// Durée annoncée pour un appel que la routine native ne sait pas faire (l'original s'exécute alors).
 pub const COUT_HORS_CONTRAT: u64 = u64::MAX / 4;
+
+/// Durée annoncée par un gestionnaire qui quitte par l'épilogue d'une autre routine (`Ctx::epilogue_etranger`) : hors
+/// contrat comme `COUT_HORS_CONTRAT` pour la machine hybride, mais la native reproduit ce chemin (le jeu sans 68000
+/// l'exécute).
+pub const COUT_EPILOGUE_ETRANGER: u64 = COUT_HORS_CONTRAT + 1;
 
 /// Exécute un gestionnaire (RTS compris). Les cycles des sous-routines sont comptés dans `cout`.
 pub fn executer(c: &mut Cpu, b: &mut Cps2Bus, logique: fn(&mut Ctx)) {
