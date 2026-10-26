@@ -44,7 +44,21 @@ impl StepCap {
     pub const fn new(pc: u32, max: u32) -> Self {
         StepCap { pc, max, count: 0 }
     }
+
+    /// Passage en `pc` : vrai s'il s'exécute dans cette image (il est compté), faux s'il est retenu jusqu'à la
+    /// suivante.
+    pub fn passage(&mut self) -> bool {
+        if self.count >= self.max {
+            return false;
+        }
+        self.count += 1;
+        true
+    }
 }
+
+/// Travail du processeur pendant une ligne, à la place du 68000 (voir `Machine::line_work`) : (registres, bus, cycle de
+/// fin de la ligne, plafond de pas de l'image).
+pub type LineWork = fn(&mut Cpu, &mut Cps2Bus, u64, Option<&mut StepCap>);
 
 /// Correctif d'un comportement indéfini du jeu d'origine (voir `Machine::patches`).
 #[derive(Clone, Copy)]
@@ -76,6 +90,10 @@ pub struct Machine {
     /// Correctifs de comportements que le jeu d'origine laisse au hasard (registres ou mémoire non initialisés) et
     /// qu'aucune réécriture ne peut reproduire : appliqués à l'identique par le jeu et par la machine de référence.
     pub patches: Vec<Patch>,
+    /// Remplace l'exécution du 68000 (exécuteur, interpréteur, `idle`, correctifs) : appelée une fois par ligne, elle
+    /// fait le travail du processeur jusqu'au cycle donné ; le Z80 suit, comme d'ordinaire. `cpu` n'est alors qu'un
+    /// banc de registres (jeu sans 68000, `ddsom_game::install_sans_68k`).
+    pub line_work: Option<LineWork>,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -158,6 +176,7 @@ impl Machine {
             idle: None,
             step_cap: None,
             patches: Vec::new(),
+            line_work: None,
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -184,11 +203,23 @@ impl Machine {
         self.cpu.reset(&mut self.bus);
     }
 
-    /// Exécute le CPU pendant une ligne de balayage. La cible est absolue (le dépassement d'une
+    /// Exécute le CPU pendant une ligne de balayage, puis le Z80. La cible est absolue (le dépassement d'une
     /// ligne est retranché de la suivante) pour garder exactement 755,2 cycles par ligne en moyenne.
     fn run_line(&mut self) {
         self.cycle_debt += self.line_cycles;
         let target = self.cycle_debt as u64;
+        match self.line_work {
+            Some(work) => work(&mut self.cpu, &mut self.bus, target, self.step_cap.as_mut()),
+            None => self.run_cpu(target),
+        }
+        // puis le Z80 sur la même tranche de temps (512 cycles à 8 MHz par ligne)
+        self.sound.set_reset(!self.bus.z80_running);
+        self.z80_debt += sound::Z80_HZ / LINE_HZ;
+        self.sound.run(&mut self.bus.qram, self.z80_debt as u64, 1.0 / LINE_HZ);
+    }
+
+    /// Exécute le 68000 jusqu'au cycle `target`.
+    fn run_cpu(&mut self, target: u64) {
         while self.cpu.cycles < target {
             self.cpu.irq_level = self.bus.irq_level();
             if self.idle.is_some_and(|idle| idle(&self.cpu, &self.bus)) && self.cpu.irq_level == 0 {
@@ -199,12 +230,11 @@ impl Machine {
             let plain = self.cpu.irq_level <= mask && !self.cpu.stopped && !self.cpu.trace_pending
                 && self.cpu.sr & m68k::SR_T == 0;
             if let Some(cap) = self.step_cap.as_mut().filter(|cap| plain && cap.pc == self.cpu.pc) {
-                if cap.count >= cap.max {
+                if !cap.passage() {
                     // pas retenu jusqu'à l'image suivante (le temps passe, l'interruption de vblank viendra)
                     self.cpu.cycles = target;
                     break;
                 }
-                cap.count += 1;
             }
             if plain && self.patches.iter().any(|p| p.entry == self.cpu.pc && (p.apply)(&mut self.cpu, &mut self.bus)) {
                 continue;
@@ -224,10 +254,6 @@ impl Machine {
                 h(&self.cpu, &self.bus, pc);
             }
         }
-        // puis le Z80 sur la même tranche de temps (512 cycles à 8 MHz par ligne)
-        self.sound.set_reset(!self.bus.z80_running);
-        self.z80_debt += sound::Z80_HZ / LINE_HZ;
-        self.sound.run(&mut self.bus.qram, self.z80_debt as u64, 1.0 / LINE_HZ);
     }
 
     /// Exécute une image comme MAME : au reset le faisceau est en début de vblank (ligne 240) et

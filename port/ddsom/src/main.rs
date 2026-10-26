@@ -7,6 +7,7 @@
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter.
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
+//! `DDSOM_SANS_68K=1` : jeu sans 68000, seulement les routines réécrites en Rust (`docs/noyau.md`).
 
 mod audio;
 
@@ -37,9 +38,13 @@ fn main() {
     };
 
     // jeu réécrit en Rust (le reste en code 68000 recompilé), 68000 surcadencé : pas de
-    // ralentissements. DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ;
+    // ralentissements. DDSOM_SANS_68K=1 : sans 68000, routines Rust seules (le jeu s'arrête sur une
+    // adresse qui n'en a pas) ; DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ;
     // DDSOM_INTERP=1 : tout interprété.
-    if std::env::var_os("DDSOM_ORIGINE").is_some() {
+    let sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    if sans_68k {
+        ddsom_game::install_sans_68k(&mut m);
+    } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
         ddsom_rc::install(&mut m);
     } else if std::env::var_os("DDSOM_INTERP").is_none() {
         ddsom_game::install(&mut m);
@@ -79,7 +84,16 @@ fn main() {
             continue;
         }
         set_inputs(&win, &mut m);
-        let img = m.run_frame();
+        let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
+            Ok(img) => img,
+            // sans 68000 : arrêt sur une adresse sans routine Rust (diagnostic déjà affiché par la panique)
+            Err(e) if sans_68k => {
+                let m = e.downcast_ref::<String>().cloned().unwrap_or_default();
+                eprintln!("Le jeu sans 68000 s'arrête : {}", m.trim_start_matches(ddsom_game::sans68k::ARRET));
+                break;
+            }
+            Err(e) => std::panic::resume_unwind(e),
+        };
         for (d, p) in buf.iter_mut().zip(&img) {
             *d = (p[0] as u32) << 16 | (p[1] as u32) << 8 | p[2] as u32;
         }

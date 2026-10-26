@@ -5,6 +5,9 @@
 //! `timing::path_cycles`. Si la routine ne tient pas avant l'échéance de la ligne, la version
 //! d'origine (recompilée) s'exécute à sa place : le moment des interruptions reste identique.
 //!
+//! Jeu sans 68000 (`install_sans_68k`, module `sans68k`) : natives seules, toujours exécutées en entier, et boucle
+//! d'image du noyau ; une adresse sans native arrête le jeu.
+//!
 //! Mode contrôle (`set_check(true)`) : chaque appel exécute aussi la routine d'origine sur une copie
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
@@ -36,6 +39,7 @@ pub mod placement;
 pub mod player;
 pub mod popups;
 pub mod rng;
+pub mod sans68k;
 pub mod scene;
 pub mod scroll;
 pub mod scenario;
@@ -280,7 +284,7 @@ const TASK_SWITCH: u32 = 0x984;
 #[track_caller]
 pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
     let site = std::panic::Location::caller();
-    let _site = TRACE.get().map(|_| SiteDAppel::entrer(site, addr));
+    let _site = (TRACE.get().is_some() || sans68k::actif()).then(|| SiteDAppel::entrer(site, addr));
     // le code appelé trouve sur la pile 68000 les appels en cours tenus en Rust à cette hauteur (`taches::table::Cadre`)
     let remis = taches::table::mettre_sur_la_pile(c, b);
     let sp = c.a[7];
@@ -293,7 +297,9 @@ pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
             // poursuit ailleurs
             std::panic::resume_unwind(Box::new(Unwound));
         }
-        if TRACE.get().is_some() {
+        if sans68k::actif() {
+            sans68k::pas(c, b);
+        } else if TRACE.get().is_some() {
             run_traced(c.pc, c, b, u64::MAX);
         } else if run(c.pc, c, b, u64::MAX).is_none() {
             c.step(b);
@@ -399,42 +405,7 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
         if c.cycles + cost <= limit || tient_la_table(n) || taches::table::appelee_par_un_cadre(c, b) {
-            if CHECK.load(Ordering::Relaxed) && checked(n) {
-                check(n, c, b, cost);
-            } else if adopt_regs(n) {
-                // diagnostic : registres de sortie repris de l'original (registres hérités)
-                let c2 = original(n, c, b);
-                exec(n, c, b);
-                c.cycles += cost;
-                if c.pc == c2.pc {
-                    // DDSOM_ADOPT_MASK=hex : seuls les registres du masque (bits de `regs`) sont repris
-                    let mask = adopt_mask();
-                    if std::env::var_os("DDSOM_ADOPT_TRACE").is_some() {
-                        let d: Vec<String> = (0..8).filter(|&i| c.d[i] != c2.d[i]).map(|i| format!("d{i}={:08x}/{:08x}", c.d[i], c2.d[i])).chain((0..7).filter(|&i| c.a[i] != c2.a[i]).map(|i| format!("a{i}={:08x}/{:08x}", c.a[i], c2.a[i]))).collect();
-                        eprintln!("ADOPT {} {}", n.name, d.join(" "));
-                    }
-                    for i in 0..8 {
-                        if mask & regs::d(i) != 0 {
-                            c.d[i as usize] = c2.d[i as usize];
-                        }
-                        if i < 7 && mask & regs::a(i) != 0 {
-                            c.a[i as usize] = c2.a[i as usize];
-                        }
-                    }
-                    if mask & regs::CCR != 0 {
-                        c.sr = c2.sr;
-                    }
-                }
-            } else {
-                if VERIFIER_APPELS.load(Ordering::Relaxed) {
-                    taches::table::noter(pc, c.a[7]);
-                }
-                exec(n, c, b);
-                c.cycles += cost;
-                if COUNT.load(Ordering::Relaxed) {
-                    STATS.lock().unwrap().entry(n.name).or_default().calls += 1;
-                }
-            }
+            executer(n, c, b, cost);
             return Some(c.pc);
         }
     }
@@ -444,6 +415,47 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         return Some(c.pc);
     }
     ddsom_rc::run_block(pc, c, b, dl)
+}
+
+/// Exécute la native `n` (durée annoncée `cost`), avec les diagnostics demandés : contrôle contre l'original
+/// (`DDSOM_CHECK`), registres repris de l'original (`DDSOM_ADOPT_REGS`), comptage des appels.
+fn executer(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
+    if CHECK.load(Ordering::Relaxed) && checked(n) {
+        check(n, c, b, cost);
+    } else if adopt_regs(n) {
+        // diagnostic : registres de sortie repris de l'original (registres hérités)
+        let c2 = original(n, c, b);
+        exec(n, c, b);
+        c.cycles += cost;
+        if c.pc == c2.pc {
+            // DDSOM_ADOPT_MASK=hex : seuls les registres du masque (bits de `regs`) sont repris
+            let mask = adopt_mask();
+            if std::env::var_os("DDSOM_ADOPT_TRACE").is_some() {
+                let d: Vec<String> = (0..8).filter(|&i| c.d[i] != c2.d[i]).map(|i| format!("d{i}={:08x}/{:08x}", c.d[i], c2.d[i])).chain((0..7).filter(|&i| c.a[i] != c2.a[i]).map(|i| format!("a{i}={:08x}/{:08x}", c.a[i], c2.a[i]))).collect();
+                eprintln!("ADOPT {} {}", n.name, d.join(" "));
+            }
+            for i in 0..8 {
+                if mask & regs::d(i) != 0 {
+                    c.d[i as usize] = c2.d[i as usize];
+                }
+                if i < 7 && mask & regs::a(i) != 0 {
+                    c.a[i as usize] = c2.a[i as usize];
+                }
+            }
+            if mask & regs::CCR != 0 {
+                c.sr = c2.sr;
+            }
+        }
+    } else {
+        if VERIFIER_APPELS.load(Ordering::Relaxed) {
+            taches::table::noter(c.pc, c.a[7]);
+        }
+        exec(n, c, b);
+        c.cycles += cost;
+        if COUNT.load(Ordering::Relaxed) {
+            STATS.lock().unwrap().entry(n.name).or_default().calls += 1;
+        }
+    }
 }
 
 /// Natives qui tiennent leur état dans la table des tâches Rust (noyau, VBLANK, tâche du gel, démarrage) : le code
@@ -506,6 +518,13 @@ pub fn install(m: &mut cps2::Machine) {
     m.executor = Some(run);
     m.idle = Some(idle);
     cap_steps(m);
+}
+
+/// Jeu sans 68000 : natives seules, boucle d'image du noyau (`sans68k`). Le `Cpu` de la machine n'est plus qu'un banc
+/// de registres ; une adresse sans native arrête le jeu avec un diagnostic.
+pub fn install_sans_68k(m: &mut cps2::Machine) {
+    install(m);
+    sans68k::installer(m);
 }
 
 /// Machine de référence de la validation : code d'origine seul, avec le même plafond de pas que `install`.

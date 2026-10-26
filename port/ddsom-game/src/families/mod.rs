@@ -343,6 +343,10 @@ impl<'a> Ctx<'a> {
                 r.externes.push(adresse);
             }
         }
+        if crate::sans68k::actif() {
+            // jeu sans 68000 : la native, qui rend les mêmes registres (`objects::lists::Reinsert`)
+            return crate::call(self.c, self.b, adresse);
+        }
         const RETOUR: u32 = 0x00_fffe;
         let sp = self.c.a[7];
         self.c.a[7] = sp.wrapping_sub(4);

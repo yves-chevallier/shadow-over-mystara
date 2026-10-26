@@ -9,6 +9,9 @@
 //! doit être identique, et la table des tâches Rust du jeu doit valoir celle de la RAM de l'original. `DDSOM_CHECK=1` active en plus le contrôle appel par appel des routines
 //! natives (diagnostic : registres et mémoire comparés à l'original sur une copie).
 //!
+//! `DDSOM_SANS_68K=1` : la machine A tourne sans 68000 (natives seules, boucle d'image du noyau,
+//! `ddsom_game::install_sans_68k`) ; une adresse sans native l'arrête (« ÉCHEC : arrêt sans 68000 »).
+//!
 //! validate <roms> <eeprom> <scenario> <images>
 
 use std::path::Path;
@@ -55,10 +58,15 @@ fn main() {
         m
     };
     let (mut ma, mut mb) = (load(), load());
-    ddsom_game::install(&mut ma);
+    let sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    if sans_68k {
+        ddsom_game::install_sans_68k(&mut ma);
+    } else {
+        ddsom_game::install(&mut ma);
+    }
     ddsom_game::install_reference(&mut mb);
     mb.idle = Some(ddsom_game::idle);
-    if std::env::var("DDSOM_NOIDLE").is_ok() {
+    if std::env::var("DDSOM_NOIDLE").is_ok() && !sans_68k {
         ma.idle = None;
         mb.idle = None;
     }
@@ -71,6 +79,7 @@ fn main() {
     let frames: usize = frames.parse().unwrap();
     let t0 = std::time::Instant::now();
     let mut failure = None;
+    let mut arret: Option<String> = None;
     let lent: Option<u128> = std::env::var("DDSOM_LENT").ok().and_then(|v| v.parse().ok());
     // DDSOM_CHECK_FRAME=n : contrôle de tous les registres de chaque appel natif pendant l'image n
     let check_frame: Option<usize> = std::env::var("DDSOM_CHECK_FRAME").ok().and_then(|v| v.parse().ok());
@@ -82,7 +91,17 @@ fn main() {
         script.apply(f, &mut ma);
         script.apply(f, &mut mb);
         let t = std::time::Instant::now();
-        ma.run_frame();
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ma.run_frame())) {
+            // arrêt du jeu sans 68000 (adresse sans native...) ; toute autre panique suit son cours
+            match e.downcast_ref::<String>().and_then(|m| m.strip_prefix(ddsom_game::sans68k::ARRET)) {
+                Some(m) => {
+                    arret = Some(m.to_owned());
+                    failure = Some(f + 1);
+                    break;
+                }
+                None => std::panic::resume_unwind(e),
+            }
+        }
         let ta = t.elapsed();
         mb.run_frame();
         let tb = t.elapsed() - ta;
@@ -155,8 +174,15 @@ fn main() {
             }
         }
     }
+    if sans_68k {
+        println!("sans 68000 : {} images arrêtées par le plafond de natives", ddsom_game::sans68k::bilan());
+    }
+    if let Some(m) = &arret {
+        println!("ARRÊT {m}");
+    }
     match failure {
         None => println!("VALIDE : état identique sur {frames} images"),
+        Some(f) if arret.is_some() => println!("ÉCHEC : arrêt sans 68000 à l'image {f}"),
         Some(f) => println!("ÉCHEC : première différence à l'image {f}"),
     }
 }
