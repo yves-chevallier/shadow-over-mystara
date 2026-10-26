@@ -702,7 +702,7 @@ pub const SERVICE_FF09: Native =
 
 /// Entrées qui testent la version à palette alternative (`A5+0x70` non nul) avant d'appeler le wrapper
 /// `normal` ou, dans cette version, le wrapper `alternatif` : 0xe2240 / 0xe22e8 (bruit du personnage),
-/// 0xe2430 (bruit par objet), 0xe27da (bruit par genre).
+/// 0xe2430 (bruit par objet), 0xe27da (bruit par genre), 0xe285c (commande 0xd5, ou 0xd6 dans cette version).
 fn selon_version(c: &mut Cpu, b: &mut Cps2Bus, normal: u32, alternatif: u32) {
     let cible = if rd16(b, a5(c, 0x70)) != 0 { alternatif } else { normal };
     crate::call(c, b, cible);
@@ -717,6 +717,8 @@ pub const SELON_VERSION_C: Native =
     service_natif(0xe2430, "son_selon_version", |c, b| selon_version(c, b, 0xe2438, 0xe24d8), false);
 pub const SELON_VERSION_D: Native =
     service_natif(0xe27da, "son_selon_version", |c, b| selon_version(c, b, 0xe27e2, 0xe28a4), false);
+pub const SELON_VERSION_E: Native =
+    service_natif(0xe285c, "son_selon_version", |c, b| selon_version(c, b, 0xe2864, 0xe28a4), false);
 
 /// 0xee044 : pile privée des wrappers vide (pointeur = sa propre adresse) ; A0 = le pointeur.
 fn init_pile_privee(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -765,6 +767,7 @@ pub const NATIVES: &[Native] = &[
     SELON_VERSION_B,
     SELON_VERSION_C,
     SELON_VERSION_D,
+    SELON_VERSION_E,
     SERVICE_FF08,
     SERVICE_FF09,
     INIT_PILE_PRIVEE,

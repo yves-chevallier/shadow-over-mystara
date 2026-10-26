@@ -248,6 +248,42 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
 8. **L'oracle reste.** `validate`, `DDSOM_CHECK` et les outils de diagnostic comparent à la machine d'origine
    (68000 surcadencé) : elle reste, hors du chemin du jeu.
 
+### Le jeu sans 68000 (`sans68k.rs`, `DDSOM_SANS_68K=1`)
+
+Les points 2, 6 et 7 sont faits, en mode à part : `ddsom_game::install_sans_68k` fait tourner le jeu sans interpréteur
+ni code recompilé. `DDSOM_SANS_68K=1` le choisit dans `validate` (machine du jeu sans 68000 contre la machine d'origine)
+et dans l'application (`ddsom`) ; le mode normal (`install`) ne change pas.
+
+* **Exécuteur.** `sans68k::pas` cherche la native posée au PC (`lookup`) et l'exécute ; la boucle d'image et
+  `call`/`call_at` ne font rien d'autre (plus de `c.step`, plus de `ddsom_rc`). Le `Cpu` ne sert plus que de banc de
+  registres et de pile. Une native s'exécute toujours en entier : aucune n'est remplacée par son original quand elle
+  déborderait sur l'interruption (`run` n'est plus appelé), et `Ctx::jsr_origine` (familles) appelle la native au lieu
+  du code d'origine. `Unwound` sert encore : une native qui cède, ou un épilogue qui revient plus haut, abandonne les
+  fonctions Rust en cours comme avant.
+* **Arrêt net.** Une adresse sans native, ou une native qui se déclare hors contrat (`families::COUT_HORS_CONTRAT` :
+  réaction d'ennemi inconnue, décor qui recharge la scène), arrête le jeu (panique `sans 68000 : …`, que `validate`
+  rapporte en `ARRÊT …` puis « ÉCHEC : arrêt sans 68000 à l'image n »). Le diagnostic donne l'adresse, l'image et la
+  ligne, la tâche courante (nom, état, cadres), le SR et le sommet de la pile 68000 (les adresses de retour du code
+  remplacé), les huit dernières natives exécutées et l'appel Rust en cours (`site_d_appel` : fichier et ligne du
+  `call`). Les gestionnaires qui quittent par l'épilogue d'une autre routine (`Ctx::epilogue_etranger`, bulles
+  `0xaa9fe`) annoncent `COUT_EPILOGUE_ETRANGER` : la machine hybride les confie encore au code d'origine, mais leur native
+  reproduit ce chemin et s'exécute sans 68000.
+* **Image.** La machine garde son calendrier ligne par ligne (`cps2::Machine::line_work`) ; à chaque ligne,
+  `sans68k::ligne` fait le travail du processeur puis le Z80 joue sa ligne. Ce travail n'a pas de durée : l'interruption
+  de VBLANK, levée en fin d'image, est prise (en Rust : SR et PC empilés, autovecteur, acquittement) dès que le SR
+  l'autorise, puis les natives s'enchaînent jusqu'à ce que l'ordonnanceur tourne à vide (`idle`, seulement quand aucune
+  interruption n'attend : si l'examen d'un emplacement l'a masquée, l'ordonnanceur rouvre d'abord sa fenêtre), ou que le
+  pas de jeu soit retenu par le plafond de l'image (`StepCap::passage` en `0x1c4b0`, compteur remis à zéro par
+  `run_frame` ; le pas retenu reprend juste après le VBLANK suivant). Tout le travail tombe donc au début de la ligne
+  240, avant le Z80 : seuls le VBLANK et `0x68c` touchent la RAM partagée, et ce sont les premiers. Au démarrage, une
+  native qui attend une position du faisceau (`demarrage.rs`) rend la main sans changer PC ni registres : la ligne
+  s'arrête et elle réessaie à la suivante, ce qui garde les deux instants que le Z80 observe. Durées des natives,
+  `idle` de la machine, surcadencement et correctifs `patches` (qui visent le code d'origine) ne servent plus.
+  Plafond de sûreté : 1 000 000 natives par image (`PLAFOND_NATIVES`, une image en exécute quelques milliers) ;
+  au-delà l'image s'arrête comme une image de l'original finissant au milieu d'une attente active, et `validate`
+  compte ces images.
+* **Diagnostic.** `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n (ligne, PC, SR, pile).
+
 ## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
 
 Interruptions masquées, pile du superviseur en FF0E66 (zone de piles ignorée par `validate`) :

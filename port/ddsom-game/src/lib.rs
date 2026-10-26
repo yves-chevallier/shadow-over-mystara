@@ -148,6 +148,7 @@ pub const NATIVES: &[Native] = &[
     sound::SELON_VERSION_B,
     sound::SELON_VERSION_C,
     sound::SELON_VERSION_D,
+    sound::SELON_VERSION_E,
     sound::INIT_PILE_PRIVEE,
     sound::AUCUN,
     rng::SEED,
