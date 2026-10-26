@@ -92,7 +92,10 @@ génériques (`Vue`, `mem.rs`) à plus de trois niveaux d'appel sont nommées `i
   chacun), `scene_end/end_02` (9 000), `cov/cov_service_tests` et `modes/attract` (6 000) : identique.
 * **`validate` avec `DDSOM_ASSETS=<assets>`** (et `DDSOM_SANS_68K=1`) : la machine testée est faite des seuls assets
   (pilote son Rust), la référence garde les ROMs, le 68000 surcadencé et le Z80. `tools/validate_all.sh` s'en sert
-  tel quel (la variable entre dans l'empreinte des résultats). RÉSULTATS_VALIDATE
+  tel quel (la variable entre dans l'empreinte des résultats) :
+  `DDSOM_SANS_68K=1 DDSOM_ASSETS=<assets> DDSOM_SCENES=1 DDSOM_COV=1 tools/validate_all.sh 30000` donne **269 VALIDE
+  sur 269** (avec les zones mesurées sur toute la durée des scénarios ; une première mesure arrêtée à la ligne `quit`
+  laissait 12 scénarios en échec, qui lisaient ensuite, en démonstration, des zones non mesurées).
 * **Sans ROM du tout** : une copie du dépôt (`git archive`) se construit sans dossier `rom/` (`ddsom-rc` vide, avec
   l'avertissement « ROMs introuvables ») et `ddsom --assets <assets>`, lancé d'un dossier sans `../rom`, démarre le
   jeu sans 68000 depuis les assets.
