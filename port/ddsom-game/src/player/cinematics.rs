@@ -90,6 +90,7 @@ fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
     match steps.iter().find(|s| s.0 == at) {
         Some(&(_, f)) => f(g, p),
         None if at == IDLE => {}
+        None if at == STRAY_HEX_DUMP => stray_hex_dump(g),
         None => {
             g.rom(at, p);
         }
@@ -98,6 +99,35 @@ fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
 
 /// Pas final commun (un simple RTS).
 const IDLE: u32 = 0x2434c;
+
+/// Pas hors table : la routine 0x24aba n'a que trois pas, mais un joueur qui arrive dans la cinématique avec l'action
+/// 0x10 (scénario `covb_region_2`) fait lire au saut le mot 0x6702 de son code, qui mène au milieu de la routine
+/// d'affichage hexadécimal du menu TEST (0x2b1d0), après le chargement de ses deux paramètres.
+const STRAY_HEX_DUMP: u32 = 0x2b1da;
+
+/// 0x2b1da : l'affichage hexadécimal de 0x2b1d0 (huit longs consécutifs à partir de D1, cinq chiffres chacun, une
+/// colonne de tuiles par long), tel que l'atteint le saut hors table : la destination A1 et la valeur D1 sont celles
+/// que les registres contiennent (D1.w = le décalage lu dans la table).
+fn stray_hex_dump(g: &mut Ctx) {
+    let (mut a1, mut d1) = (g.c.a[1], g.c.d[1]);
+    for _ in 0..8 {
+        for _ in 0..5 {
+            g.c.d[2] = d1 & 0xf;
+            d1 = d1.rotate_right(4);
+            crate::mem::wr16(g.b, a1, g.c.d[2] as u16);
+            crate::mem::wr16(g.b, a1.wrapping_add(2), 0x10);
+            a1 = a1.wrapping_sub(0x80);
+        }
+        d1 = d1.rotate_right(12).wrapping_add(0x10) & 0x3ffff;
+        a1 = a1.wrapping_add(0x288);
+    }
+    g.c.a[1] = a1;
+    g.c.d[1] = d1;
+    // compteurs des deux `dbf` épuisés
+    g.c.d[3] = 0xffff;
+    g.c.d[4] = 0xffff;
+    g.c.flags_logic(d1, m68k::decode::Size::Long);
+}
 
 // ---- outils ------------------------------------------------------------------------------------
 
