@@ -26,7 +26,7 @@ jobs=${DDSOM_JOBS:-$(nproc)}
 cargo build --release -q --manifest-path port/Cargo.toml -p ddsom-game --examples
 bin=port/target/release/examples/validate
 # empreinte : le binaire et les variables DDSOM_* qui changent son comportement (pas celles de ce script)
-reglages=$(env | grep '^DDSOM_' | grep -vE '^DDSOM_(JOBS|RESULTATS|SCENES|COV|ROMS|EEPROM)=' | sort)
+reglages=$(env | grep '^DDSOM_' | grep -vE '^DDSOM_(JOBS|RESULTATS|SCENES|COV|ROMS|EEPROM)=' | sort || true)
 empreinte=$({ sha256sum < "$bin"; echo "$reglages"; } | sha256sum | cut -c1-16)
 resultats=${DDSOM_RESULTATS:-$HOME/.cache/ddsom/validate}/$empreinte
 mkdir -p "$resultats"
