@@ -130,6 +130,21 @@ pub fn effct_trio_2e(x: &mut Cx) {
     }
 }
 
+/// 0x667f4 : un ennemi de type 10, variante 4, lié par `+0x5c`, en (D0.w, D1.w) (explosions de l'arrivée du boss 2, SET 17).
+pub fn enemy_blast_at(x: &mut Cx) {
+    let o = alloc(x, rom::ALLOC_ENEMY);
+    if alloc_failed(x) {
+        return;
+    }
+    o.set_u8(x.b, 0, 1);
+    o.set_u8(x.b, 2, 0xa);
+    o.set_u16(x.b, 0x5c, x.o.0 as u16);
+    o.set_u8(x.b, 3, 4);
+    let (px, py) = (x.c.d[0] as u16, x.c.d[1] as u16);
+    o.set_u16(x.b, 0x8, px);
+    o.set_u16(x.b, 0x10, py);
+}
+
 /// 0x9ddee : un tir ESHL 1 de variante D1, indice `+0x2f` = 1, propriétaire `+0x50`.
 pub fn eshl_thrown_by_beast(x: &mut Cx) {
     let variant = x.c.d[1] as u8;
