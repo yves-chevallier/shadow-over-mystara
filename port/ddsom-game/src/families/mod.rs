@@ -79,6 +79,7 @@ pub mod items;
 pub mod joueur;
 pub mod set;
 pub mod set_b;
+pub mod set_residu;
 pub mod set_c;
 pub mod shell;
 pub mod sobj;
@@ -568,6 +569,7 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(boss_common::NATIVES)
         .chain(creators::NATIVES)
         .chain([&set_b::SPAWN_BUMPERS, &set_b::DOOR_B_RESUME])
+        .chain(set_residu::NATIVES)
         .chain(petites::NATIVES)
         .chain(petites::SHAKES)
         .chain(effects_creators::NATIVES)

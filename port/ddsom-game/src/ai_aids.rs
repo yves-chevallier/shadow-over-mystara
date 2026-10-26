@@ -1580,6 +1580,10 @@ fn landing_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
     let index = base.wrapping_add(rd8(b, me + 2)) as u16 * 4;
     c.d[0] = index as u32;
     c.a[1] = crate::mem::prog32(b, LANDING_BY_KIND.wrapping_add(offset(index)));
+    // les types sans routine propre pointent sur un simple RTS (0x3e2aa, 0x3bb9a)
+    if c.a[1] == 0x3e2aa || c.a[1] == 0x3bb9a {
+        return crate::mem::rts(c, b);
+    }
     c.pc = c.a[1];
 }
 
