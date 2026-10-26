@@ -245,6 +245,12 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
             wr8(b, j + 0x77, alea.pick(&[0, 1]));
             wr8(b, j + 3, 2 * (1 + alea.next() % 6) as u8);
         }
+        // effets de scène : objet suivi (+0x46, parfois aucun), réglage
+        42 => {
+            wr16(b, obj + 0x46, if alea.une_sur(8) { 0 } else { owner as u16 });
+            wr8(b, obj + 0x2f, (alea.next() % 8) as u8);
+            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
+        }
         // effets d'un coup : attaquant en +0x5c dans l'état 0x204 et une étape de la table (+6), réglage
         40 => {
             wr16(b, obj + 0x5c, owner as u16);

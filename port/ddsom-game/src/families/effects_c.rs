@@ -15,7 +15,7 @@
 //! - 39 : morceau projeté vers un point de l'écran, qui éclate en touchant le sol ;
 //! - 40 : effets d'une attaque (éclats qui suivent l'attaquant, posés devant lui ou tombant du haut de l'écran, débris) ;
 //! - 41 : objet lancé au hasard (quatre sortes) qui retombe puis glisse ou rebondit ;
-//! - 42 : effets de scène, onze sous-types par variante (débris, éclats, caméra alternative qui suit un
+//! - 42 : effets de scène, onze sous-types par variante (débris lancés ou repoussés, éclats, caméra alternative qui suit un
 //!   objet avec retard, étincelles, lueur, bouffées, poussière) ;
 //! - 44 : effets des sorts d'un ennemi magicien (six modes) ;
 //! - 47 : repère qui clignote lentement ;
@@ -883,8 +883,14 @@ fn attached_shake(x: &mut Cx, sub: u8) {
 // ---------------------------------------------------------------------------------------------
 
 mod scenery {
-    /// Variantes 1, 2 et 9, qu'aucun scénario n'exerce : code d'origine.
-    pub const VARIANTS_ORIGINAL: [(u8, u32); 3] = [(1, 0xb417e), (2, 0xb432c), (9, 0xb49ae)];
+    /// Variante 1 : par réglage, fiche de 16 octets (dx, dy, vx, ax, vy, ay ; données).
+    pub const THROWS_1: u32 = 0xb4202;
+    /// Variante 2 : par réglage, décalage (dx, dy) (données) ; poussée avec les joueurs.
+    pub const PLACES_2: u32 = 0xb4394;
+    pub const PUSH_PLAYERS: u32 = 0x81aa4;
+    /// Variante 9 : par réglage (`& 7`), fiche de 8 octets (dx, dz en octets signés, puis vz, az ; programme).
+    pub const SPRAY: u32 = 0xb4a32;
+    pub const ANIM_SPRAY: u32 = 0x17b9d6;
     /// Variante 0 : éclat bref (animation 0xf, ou 0x10 retournée), jeu d'animations 0x174776.
     pub const ANIM_FLASH: u32 = 0x174776;
     /// Objet suivi (pointeur de 16 bits, négatif quand il existe).
@@ -935,12 +941,11 @@ fn reinsert_foreground(x: &mut Cx) {
 
 fn scenery(x: &mut Cx) {
     let v = x.u8(f::VARIANT);
-    if let Some(&(_, original)) = scenery::VARIANTS_ORIGINAL.iter().find(|(w, _)| *w == v) {
-        return x.call(original);
-    }
     match x.u8(f::STATE) {
         0 => match v {
             0 => flash_init(x),
+            1 | 2 => thrown_init(x, v),
+            9 => spray_init(x),
             3 => debris_init(x),
             4 => shard_init(x),
             5 => follow_init(x),
@@ -952,6 +957,8 @@ fn scenery(x: &mut Cx) {
         },
         2 => match v {
             0 => flash_active(x),
+            1 | 2 => thrown_active(x, v),
+            9 => spray_active(x),
             3 => debris_active(x),
             4 => shard_active(x),
             5 => follow_active(x),
@@ -965,6 +972,102 @@ fn scenery(x: &mut Cx) {
         6 => free(x),
         _ => {}
     }
+}
+
+/// Variantes 1 et 2 (0xb4194, 0xb4342) : posé sur l'objet suivi, décalé selon le réglage `+0x2f` ; la
+/// variante 1 est lancée (vitesses de la fiche, données en `THROWS_1`), la variante 2 posée au sol et
+/// repoussée avec les joueurs (`0x81aa4`). Disparaît à la fin de son animation.
+fn thrown_init(x: &mut Cx, v: u8) {
+    x.add8(f::STATE, 2);
+    let Some(target) = scenery_target(x) else { return x.set8(f::STATE, 6) };
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let w = target.u16(x.b, off);
+        x.set16(off, w);
+    }
+    let facing = target.u8(x.b, 0x2c);
+    x.set8(0x2c, facing);
+    let mode = x.u8(0x2f) as u32;
+    if v == 1 {
+        let at = scenery::THROWS_1.wrapping_add(((mode as u16) << 4) as i16 as i32 as u32);
+        let (mut dx, dy, mut vx, mut ax) = (x.data16(at), x.data16(at + 2), x.data16(at + 4), x.data16(at + 6));
+        if facing == 0 {
+            dx = dx.wrapping_neg();
+            vx = vx.wrapping_neg();
+            ax = ax.wrapping_neg();
+        }
+        x.add16(Obj::X, dx);
+        x.add16(Obj::Y, dy);
+        x.set16(Obj::Z, 0);
+        x.set16(Obj::VX, vx);
+        x.set16(Obj::AX, ax);
+        let (vy, ay) = (x.data16(at + 8), x.data16(at + 10));
+        x.set16(Obj::VY, vy);
+        x.set16(Obj::AY, ay);
+        x.set32(Obj::VZ, 0);
+    } else {
+        let at = scenery::PLACES_2.wrapping_add(((mode as u16) << 2) as i16 as i32 as u32);
+        let (mut dx, dy) = (x.data16(at), x.data16(at + 2));
+        if facing == 0 {
+            dx = dx.wrapping_neg();
+        }
+        x.add16(Obj::X, dx);
+        x.add16(Obj::Y, dy);
+        x.set16(Obj::Z, 0);
+    }
+    x.anim_start(scenery::ANIM_DUST, 0);
+}
+
+fn thrown_active(x: &mut Cx, v: u8) {
+    if !paused(x) {
+        if v == 1 {
+            x.call(super::cx::sub::MOVE_XY);
+        } else {
+            x.call(scenery::PUSH_PLAYERS);
+        }
+        if x.anim_step() {
+            return x.add8(f::STATE, 4);
+        }
+    }
+    x.call(super::rom::OMBRE);
+    x.reinsert();
+}
+
+/// Variante 9 (0xb49c4) : éclat projeté au hasard (vitesse x tirée, signe selon le réglage), qui retombe et
+/// disparaît au sol ; il clignote une image sur deux.
+fn spray_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::AY, 0);
+    let k = 8 * (x.u8(0x2f) & 7) as u32;
+    let dx = x.rom8(scenery::SPRAY + k) as i8 as i16 as u16;
+    x.add16(Obj::X, dx);
+    let dz = x.rom8(scenery::SPRAY + k + 1) as i8 as i16 as u16;
+    x.add16(Obj::Z, dz);
+    x.set32(Obj::VY, 0);
+    let (vz, az) = (x.rom16(scenery::SPRAY + k + 4), x.rom16(scenery::SPRAY + k + 6));
+    x.set16(Obj::VZ, vz);
+    x.set16(Obj::AZ, az);
+    x.call(super::rom::RNG);
+    let mut vx = x.c.d[0] as u16 & 0x3ff;
+    if x.u8(0x2f) & 1 != 0 {
+        vx = vx.wrapping_neg();
+    }
+    x.set16(Obj::VX, vx);
+    x.anim_start(scenery::ANIM_SPRAY, 0x19);
+}
+
+fn spray_active(x: &mut Cx) {
+    if !paused(x) {
+        x.anim_step();
+        x.call(super::cx::sub::MOVE_XYZ);
+        if (x.u16(Obj::Z) as i16) < 0 {
+            x.set16(Obj::Z, 0);
+            return x.add8(f::STATE, 4);
+        }
+        let blink = x.a5_u16(0x6e) & 1 != 0;
+        x.set_bit(0x01, 1, blink);
+    }
+    x.reinsert();
 }
 
 /// Variante 0 (0xb411e) : un pixel devant, juste au-dessus du sol (ou au-dessous si `+0x2f`).
