@@ -2207,8 +2207,8 @@ mod link {
     pub const HEAD: u32 = 0x46;
     /// Historique des directions (4 octets, le plus récent en premier).
     pub const HISTORY: u32 = 0x58;
-    /// Rupture de la chaîne : code d'origine (jamais exercé par les scénarios).
-    pub const BREAK: u32 = 0xad53a;
+    /// Rupture : fiches de 16 octets par type du porteur de la tête (données).
+    pub const BREAKS: u32 = 0xad5e2;
 }
 
 fn chain_link(x: &mut Cx) {
@@ -2244,6 +2244,47 @@ fn chain_link(x: &mut Cx) {
     }
 }
 
+/// `0xad53a` : la chaîne se rompt. Chaque maillon (rang `+0x2f` décrémenté) joue son animation de rupture ;
+/// le dernier disparaît. Une fiche par type du porteur de la tête (`+0x54` de la tête ; 0x20 pour un porteur
+/// qui n'est pas un ENEMY) dit si le maillon disparaît (octet négatif), reste en place (positif) ou se pose
+/// sur le porteur (nul). L'original relit toujours la première entrée de la fiche (son indice est remis à zéro).
+fn chain_break(x: &mut Cx, head: Obj) {
+    x.add8(f::SUB_STATE, 2);
+    let n = head.u8(x.b, 0x42).wrapping_sub(1);
+    head.set_u8(x.b, 0x42, n);
+    let rank = x.u8(0x2f).wrapping_sub(1);
+    x.set8(0x2f, rank);
+    if (rank as i8) < 0 {
+        x.add8(f::STATE, 2);
+        return free(x);
+    }
+    let p = head.u16(x.b, 0x54);
+    let carrier = Obj(p as i16 as i32 as u32 & 0xff_ffff);
+    let row = if carrier.u8(x.b, Obj::CLASS) == 2 { carrier.u8(x.b, Obj::KIND) as u16 } else { 0x20 };
+    let sheet = link::BREAKS.wrapping_add((row << 4) as i16 as i32 as u32);
+    let what = x.data8(sheet) as i8;
+    if what < 0 {
+        return free(x);
+    }
+    if what == 0 {
+        let (cx_, cz, cy) = (carrier.u16(x.b, Obj::X), carrier.u16(x.b, Obj::Z), carrier.u32(x.b, Obj::Y));
+        x.set16(Obj::X, cx_);
+        x.set16(Obj::Z, cz);
+        x.set32(Obj::Y, cy.wrapping_sub(1));
+        let mut d = x.data16(sheet + 4 + 2);
+        x.add16(Obj::Z, d);
+        let facing = carrier.u8(x.b, 0x2c);
+        x.set8(0x2c, facing);
+        if facing != 0 {
+            d = d.wrapping_neg();
+        }
+        x.add16(Obj::X, d);
+        x.set8(0x2c, facing ^ 0x20);
+    }
+    let anim = 5u8.wrapping_add(x.u8(0x2f));
+    x.anim_start(link::ANIM_SET, anim as u32);
+}
+
 fn chain_link_follow(x: &mut Cx) {
     let head = x.linked(link::HEAD);
     match head.u8(x.b, 0x58) {
@@ -2252,10 +2293,7 @@ fn chain_link_follow(x: &mut Cx) {
             head.set_u8(x.b, 0x42, n);
             return free(x);
         }
-        0xfe => {
-            x.c.a[1] = head.0;
-            return x.call(link::BREAK);
-        }
+        0xfe => return chain_break(x, head),
         _ => {}
     }
     for k in (0..3).rev() {

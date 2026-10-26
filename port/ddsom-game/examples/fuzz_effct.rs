@@ -245,6 +245,17 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
             wr8(b, j + 0x77, alea.pick(&[0, 1]));
             wr8(b, j + 3, 2 * (1 + alea.next() % 6) as u8);
         }
+        // maillon de chaîne : précédent (+0x5c), tête (+0x46) dont l'octet +0x58 annonce la fin ou la rupture,
+        // porteur de la tête (+0x54), rang
+        12 => {
+            let tete = JOUEURS + 0x200 * (alea.next() % 4);
+            wr16(b, obj + 0x5c, owner as u16);
+            wr16(b, obj + 0x46, tete as u16);
+            wr8(b, tete + 0x58, alea.pick(&[0, 0x80, 0xfe, 0xfe]));
+            wr16(b, tete + 0x54, owner as u16);
+            wr8(b, obj + 0x2f, (alea.next() % 4) as u8);
+            wr8(b, owner + 0x28, alea.pick(&[2, 2, 4]));
+        }
         // effets de scène : objet suivi (+0x46, parfois aucun), réglage
         42 => {
             wr16(b, obj + 0x46, if alea.une_sur(8) { 0 } else { owner as u16 });
