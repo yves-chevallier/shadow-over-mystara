@@ -11,6 +11,11 @@
 #   scenarios/scene_end/    sortie de scène, DDSOM_SCENES=1 (9000)
 #   scenarios/cov/          couverture de tout le jeu, DDSOM_COV=1 (COV_FRAMES, 30000 par défaut)
 # Au plus DDSOM_JOBS validations simultanées (par défaut : nombre de cœurs).
+#
+# Reprise : chaque résultat est rangé dans $DDSOM_RESULTATS (~/.cache/ddsom/validate par défaut), sous
+# l'empreinte du binaire `validate`, et un scénario déjà VALIDE pour ce binaire, ce fichier et ce nombre
+# d'images n'est pas rejoué. Une validation interrompue se relance donc sans perdre ce qui est fait. Le binaire
+# est copié sous son empreinte : on peut reconstruire pendant qu'une validation tourne.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 frames=${1:-30000}
@@ -19,6 +24,13 @@ roms=${DDSOM_ROMS:-rom}
 eeprom=${DDSOM_EEPROM:-testdata/eeprom_ddsom.bin}
 jobs=${DDSOM_JOBS:-$(nproc)}
 cargo build --release -q --manifest-path port/Cargo.toml -p ddsom-game --examples
+bin=port/target/release/examples/validate
+# empreinte : le binaire et les variables DDSOM_* qui changent son comportement (pas celles de ce script)
+reglages=$(env | grep '^DDSOM_' | grep -vE '^DDSOM_(JOBS|RESULTATS|SCENES|COV|ROMS|EEPROM)=' | sort)
+empreinte=$({ sha256sum < "$bin"; echo "$reglages"; } | sha256sum | cut -c1-16)
+resultats=${DDSOM_RESULTATS:-$HOME/.cache/ddsom/validate}/$empreinte
+mkdir -p "$resultats"
+[[ -x $resultats/validate ]] || { cp "$bin" "$resultats/validate.tmp" && mv "$resultats/validate.tmp" "$resultats/validate"; }
 out=$(mktemp -d)
 
 # liste « scénario images »
@@ -44,9 +56,16 @@ list() {
 	fi
 } > "$out/liste"
 
-export roms eeprom out
-xargs -P "$jobs" -L 1 sh -c \
-	'./port/target/release/examples/validate "$roms" "$eeprom" "$0" "$1" > "$out/$(basename "$0" .txt).log" 2>&1' \
+export roms eeprom out resultats
+# un scénario : résultat repris s'il est déjà VALIDE, sinon rejoué (journal écrit à part puis renommé)
+xargs -P "$jobs" -L 1 sh -c '
+	nom=$(basename "$0" .txt)
+	cle="$resultats/$nom-$(sha256sum "$0" | cut -c1-16)-$1.log"
+	if ! { [ -f "$cle" ] && tail -1 "$cle" | grep -q "^VALIDE"; }; then
+		"$resultats/validate" "$roms" "$eeprom" "$0" "$1" > "$cle.$$" 2>&1
+		mv "$cle.$$" "$cle"
+	fi
+	cp "$cle" "$out/$nom.log"' \
 	< "$out/liste" || true
 
 status=0
