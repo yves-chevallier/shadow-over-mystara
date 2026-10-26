@@ -474,7 +474,8 @@ mod purse {
     pub const ALLOC_PEFF: u32 = 0x228e;
     pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const PALETTE_PAGE: u32 = 0x1a608;
-    /// Suite du code d'origine quand un pool est plein.
+    /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)`, lecture d'un mot à une adresse
+    /// impaire (erreur d'adresse, le jeu s'arrête sur l'écran d'exception). Hors contrat, laissé à l'original.
     pub const POOL_FULL: u32 = 0xaf2bc;
     /// Nombre de curseurs encore ouverts (`A5-0x5553`).
     pub const OPEN: u32 = 0xff2aad;
@@ -3474,6 +3475,7 @@ fn swimmer(x: &mut Cx) {
                 wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
             }
             // deux décors SET 0x17 (variantes 0 et 1) ; un pool plein mène l'original dans des données
+            // (0xb778c, hors contrat : laissé à l'original)
             for (variant, flip) in [(0u8, 1u8), (1, 0)] {
                 let Some(o) = alloc(x, 0x2348) else { return x.call(0xb778c) };
                 wr8(x.b, o.0, 1);

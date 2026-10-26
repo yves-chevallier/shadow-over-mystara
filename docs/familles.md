@@ -223,7 +223,7 @@ Points délicats rencontrés :
 | 65 | 0xb7ac8 | messager | suit un trajet (directions et durées) puis fait naître un ENEMY décrit par une fiche | 19 | scénarios |
 | 66 | 0xb7c40 | gros caractères | quatre blocs animés dans le fond 2 | 1 366 | scénarios |
 | 67 | 0xb7e26 | colonne | s'élève sous un objet, relâche les joueurs | 6 080 | scénarios |
-| 68 | 0xb7f28 | enseigne de départ | posée sur la caméra, couleurs chargées (`0x28ff20`) ; à la fin de son animation, les joueurs vivants debout repartent (`0x02003000`) | — | scénarios (`effects_f.rs`) |
+| 68 | 0xb7f28 | enseigne de départ | posée sur la caméra, couleurs chargées (`0x28ff20`) ; à la fin de son animation, les joueurs vivants debout repartent (`0x02002c00`) | — | scénarios (`effects_f.rs`) |
 | 69 | 0xb802a | silhouette | fait les cent pas en haut de l'écran | 4 562 | scénarios |
 | 70 | 0xb80bc | comptoir de scène | zone de vente du type 22 | 4 188 | scénarios ; vente (`0xb81d6`, `0xb83d8`) : code d'origine (jamais exercée) |
 | 72 | 0xb841c | détecteur de ramassage |  | 365 616 | scénarios |
