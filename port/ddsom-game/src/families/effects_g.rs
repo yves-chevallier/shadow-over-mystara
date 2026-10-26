@@ -6,6 +6,8 @@
 //!   disparaît, ou disparaît avec le créateur ;
 //! - 46 : pièces d'armure d'un ennemi (`0xb53f4`) : elles suivent le porteur et rejouent ses coups reçus,
 //!   tombent quand sa vie passe sous leur seuil et se brisent en éclats (variante 1) qui rebondissent ;
+//! - 48 : machine volante d'un ennemi (`0xb59a6`, `0xb59c8`) : canon qui tourne autour de son porteur et
+//!   tire (1, avec son corps, variante 0), balayeur posé au bord de l'écran qui tire (2) ;
 //! - 63 : morceau projeté par un ennemi (ENEMY 22 et 23) : part en arc depuis son créateur (`+0x42`),
 //!   retombe, fait voler des débris, attend, clignote puis disparaît ;
 //! - 81 : éclat lancé par un personnage (`0xb96c0`) : part de la main du joueur (décalage par geste
@@ -567,7 +569,236 @@ fn armour_shard_active(x: &mut Cx) {
     on_screen(x);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 48 : machine volante d'un ennemi et ses canons (créés par `0xb59a6`, `0xb59c8`)
+// ---------------------------------------------------------------------------------------------
+
+mod flyer {
+    /// Objet suivi (`+0x46`) ; la variante 0 suit l'objet suivi par son objet suivi.
+    pub const LINK: u32 = 0x46;
+    /// Phase du suivi (`+0xa4` du porteur) : 1 pour la variante 1, 3 pour la variante 2.
+    pub const PHASE: u32 = 0xa4;
+    pub const ARMED: u32 = 0x42;
+    pub const COUNTDOWN: u32 = 0x43;
+    /// Variante 1 : trajet circulaire, table de (dx, dy) en `+0x4c`, angle en `+0x5c`, position relative
+    /// sauvée en `+0x18` / `+0x1a`.
+    pub const PATH: u32 = 0x4c;
+    pub const PATH_TABLE: u32 = 0x1ca4b6;
+    pub const ANGLE: u32 = 0x5c;
+    pub const REL_X: u32 = 0x18;
+    pub const REL_Y: u32 = 0x1a;
+    /// Variante 2 : un joueur sur la même profondeur (`+0x2f` = 1).
+    pub const PLAYER_IN_LINE: u32 = 0x2f;
+    pub const ANIMS: u32 = 0x17f002;
+    /// Tir ennemi (ESHL 0x2c) lâché une image sur quatre.
+    pub const SHOT: u8 = 0x2c;
+    /// Retenue dans l'écran avec une marge D0.
+    pub const KEEP_ON_SCREEN: u32 = 0xfbb0;
+}
+
+/// L'objet suivi, s'il existe et est actif (`0xb5bf0`).
+fn flyer_link(x: &mut Cx) -> Option<Obj> {
+    let p = x.u16(flyer::LINK);
+    let o = Obj(p as i16 as i32 as u32 & 0xff_ffff);
+    ((p as i16) < 0 && o.u8(x.b, Obj::ACTIVE) != 0).then_some(o)
+}
+
+fn flyer(x: &mut Cx) {
+    x.call(super::cx::sub::PAUSE_HOOK);
+    if x.c.sr & m68k::SR_Z == 0 {
+        return;
+    }
+    let state = x.u8(f::STATE);
+    match state {
+        4 => return x.add8(f::STATE, 2),
+        6 => return free(x),
+        _ => {}
+    }
+    match (x.u8(f::VARIANT), state) {
+        (0, 0) => {
+            x.add8(f::STATE, 2);
+            x.anim_start(flyer::ANIMS, 0xe);
+        }
+        (0, _) => flyer_body(x),
+        (1, 0) => flyer_gun_init(x),
+        (1, _) => flyer_gun(x),
+        (_, 0) => {
+            x.add8(f::STATE, 2);
+            let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
+            let facing = link.u8(x.b, f::FACING);
+            x.set8(f::FACING, facing);
+            x.set8(flyer::ARMED, 0);
+            x.anim_start(flyer::ANIMS, 8);
+        }
+        _ => flyer_sweeper(x),
+    }
+}
+
+/// Variante 0 : corps posé sur l'objet suivi par l'objet suivi, clignotant une image sur deux.
+fn flyer_body(x: &mut Cx) {
+    if x.a5_u8(0x3d) != 0 {
+        return x.reinsert();
+    }
+    let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
+    let p = link.u16(x.b, flyer::LINK);
+    let host = Obj(p as i16 as i32 as u32 & 0xff_ffff);
+    if (p as i16) >= 0 || host.u8(x.b, Obj::ACTIVE) == 0 {
+        return x.add8(f::STATE, 2);
+    }
+    for off in [Obj::X, Obj::Y, Obj::Z] {
+        let v = host.u16(x.b, off);
+        x.set16(off, v);
+    }
+    let facing = host.u8(x.b, f::FACING);
+    x.set8(f::FACING, facing);
+    x.add16(Obj::X, if facing != 0 { 0xfffa } else { 6 });
+    x.add16(Obj::Y, 0xffff);
+    x.add16(Obj::Z, 0x54);
+    if x.a5_u16(0x6e) & 1 != 0 {
+        x.set8(f::SUB_STATE, 0);
+        set_hidden(x, true);
+    } else {
+        x.anim_step();
+        set_hidden(x, false);
+    }
+    x.reinsert();
+}
+
+/// Tir ennemi (ESHL 0x2c) de variante `variant`, une image sur quatre (`0xb5d56`, `0xb5d82`).
+fn flyer_shoot(x: &mut Cx, variant: u8) {
+    if x.a5_u16(0x6e) & 3 != 0 {
+        return;
+    }
+    x.call(super::cx::sub::ALLOC_ESHL);
+    if x.c.sr & m68k::SR_C != 0 {
+        return;
+    }
+    let o = Obj(x.c.a[1]);
+    o.set_u8(x.b, Obj::ACTIVE, 1);
+    o.set_u8(x.b, Obj::KIND, flyer::SHOT);
+    o.set_u8(x.b, Obj::VARIANT, variant);
+    o.set_u8(x.b, flyer::PLAYER_IN_LINE, 0);
+    o.set_u16(x.b, flyer::LINK, x.o.0 as u16);
+}
+
+fn flyer_gun_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
+    let facing = link.u8(x.b, f::FACING);
+    x.set8(f::FACING, facing);
+    // son corps (variante 0)
+    if let Some(o) = alloc(x) {
+        o.set_u8(x.b, Obj::ACTIVE, 1);
+        o.set_u8(x.b, Obj::KIND, 48);
+        o.set_u8(x.b, Obj::VARIANT, 0);
+        o.set_u8(x.b, flyer::PLAYER_IN_LINE, 0);
+        o.set_u16(x.b, flyer::LINK, x.o.0 as u16);
+    }
+    x.set8(flyer::ARMED, 0);
+    x.set32(flyer::PATH, flyer::PATH_TABLE);
+    let rel = if x.u8(f::FACING) != 0 { 0xff40 } else { 0xc0 };
+    x.set16(flyer::REL_X, rel);
+    x.set16(flyer::ANGLE, 0x1000);
+    x.set16(flyer::REL_Y, 0);
+}
+
+/// Fin de la phase : désarmé, l'effet s'en va ; armé, il attend `COUNTDOWN` images.
+fn flyer_wind_down(x: &mut Cx, keep_while_positive: bool) -> bool {
+    if x.u8(flyer::ARMED) as i8 <= 0 {
+        x.add8(f::STATE, 2);
+        return false;
+    }
+    let t = x.u8(flyer::COUNTDOWN).wrapping_sub(1);
+    x.set8(flyer::COUNTDOWN, t);
+    if t as i8 > 0 {
+        return keep_while_positive;
+    }
+    x.add8(f::STATE, 2);
+    false
+}
+
+/// Variante 1 : canon qui tourne autour de l'objet suivi tant qu'il est dans la phase 1, et tire.
+fn flyer_gun(x: &mut Cx) {
+    if x.a5_u8(0x3d) != 0 {
+        return;
+    }
+    let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
+    if x.u8(f::SUB_STATE) != 0 {
+        flyer_wind_down(x, true);
+        return;
+    }
+    if link.u8(x.b, flyer::PHASE) != 1 {
+        x.set8(flyer::COUNTDOWN, 0x20);
+        return x.add8(f::SUB_STATE, 2);
+    }
+    // 0xb5c48 : un pas sur le cercle (table de 32 positions, angle en 1/256 dans l'octet haut)
+    let angle = ((x.u8(flyer::ANGLE) as u16 & 0x1f) << 2) as u32;
+    let path = x.u32(flyer::PATH);
+    for (pos, rel, step) in [(Obj::X, flyer::REL_X, 0u32), (Obj::Y, flyer::REL_Y, 2)] {
+        let r = x.u16(rel);
+        x.set16(pos, r);
+        let d = x.data16(path.wrapping_add(angle + step)) as i16 as i32 as u32;
+        x.add32(pos, d << 8);
+        let v = x.u16(pos);
+        x.set16(rel, v);
+        let base = link.u16(x.b, pos);
+        x.add16(pos, base);
+    }
+    let turn = if x.u8(f::FACING) != 0 { 0xff80 } else { 0x80 };
+    x.add16(flyer::ANGLE, turn);
+    flyer_shoot(x, 0);
+    set_low_word(&mut x.c.d[0], 0x10);
+    x.call(flyer::KEEP_ON_SCREEN);
+}
+
+/// Variante 2 : balayeur posé au bord de l'écran, sur la profondeur de l'objet suivi (phase 3), qui tire.
+fn flyer_sweeper(x: &mut Cx) {
+    if x.a5_u8(0x3d) != 0 {
+        return x.add8(f::STATE, 2);
+    }
+    let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
+    if x.u8(f::SUB_STATE) != 0 {
+        if flyer_wind_down(x, true) {
+            flyer_sweep(x, link);
+        }
+        return;
+    }
+    if link.u8(x.b, flyer::PHASE) != 3 {
+        x.set8(flyer::COUNTDOWN, 0x20);
+        return x.add8(f::SUB_STATE, 2);
+    }
+    flyer_sweep(x, link);
+    flyer_shoot(x, 1);
+}
+
+/// `0xb5cce` : au bord de l'écran (côté selon l'orientation), à la profondeur de l'objet suivi ; note si
+/// un joueur présent est sur la même ligne (à 8 pixels près).
+fn flyer_sweep(x: &mut Cx, link: Obj) {
+    x.set8(flyer::PLAYER_IN_LINE, 0);
+    let y = link.u16(x.b, Obj::Y);
+    x.set16(Obj::Y, y);
+    let camera = if x.a5_u8(0x36) != 0 { 0x556 } else { 0x506 };
+    let mut px = x.a5_u16(camera);
+    if x.u8(f::FACING) != 0 {
+        px = px.wrapping_add(0x1c0);
+    }
+    x.set16(Obj::X, px);
+    x.set16(Obj::Z, 0x20);
+    for k in 0..4 {
+        let p = Obj(crate::mem::A5 + 0x5de + 0x200 * k);
+        if p.u8(x.b, Obj::ACTIVE) == 0 {
+            continue;
+        }
+        let d = p.u16(x.b, Obj::Y).wrapping_sub(y).wrapping_add(8);
+        if d < 0x10 {
+            x.set8(flyer::PLAYER_IN_LINE, 1);
+        }
+    }
+    x.c.d[6] = x.c.d[6] & 0xffff_0000 | 0x7fff;
+}
+
 handlers! {
+    0xb59ea "effct_machine_volante" 200 flyer,
     0xb5454 "effct_armure" 200 armour,
     0xb4bec "effct_pluie_debris" 200 debris_rain,
     0xb7866 "effct_morceau_ennemi" 200 chunk,

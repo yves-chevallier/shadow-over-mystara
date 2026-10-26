@@ -123,7 +123,7 @@ fn couverture(c: &Cpu, b: &Cps2Bus, entree: u32, plage: &std::ops::Range<u32>, v
 fn sous_etats(t: u32) -> &'static [u8] {
     match t {
         63 | 43 => &[0, 2, 4],
-        46 => &[0, 2],
+        46 | 48 => &[0, 2],
         _ => &[0],
     }
 }
@@ -152,6 +152,19 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
             wr16(b, porteur + 0x62, (alea.next() % 0x140) as u16);
             wr8(b, porteur + 0x33, alea.pick(&[0, 0, 1, 2, 0x81, 5]));
             wr8(b, obj + 0x5c, (alea.next() % 4) as u8);
+        }
+        // porteur en +0x46 (lui-même suivant un objet), phase +0xa4 ; armement, décompte, angle
+        48 => {
+            wr16(b, obj + 0x46, if alea.une_sur(10) { 0 } else { owner as u16 });
+            let autre = JOUEURS + 0x200 * (alea.next() % 4);
+            wr16(b, owner + 0x46, alea.pick(&[0, owner as u16, autre as u16]));
+            wr8(b, owner + 0xa4, alea.pick(&[0, 1, 1, 3, 3, 2]));
+            wr8(b, obj + 0x42, alea.pick(&[0, 1, 0x80]));
+            wr8(b, obj + 0x43, alea.pick(&[0, 1, 2, 0x20]));
+            wr16(b, obj + 0x5c, alea.next() as u16);
+            wr32(b, obj + 0x4c, 0x1ca4b6);
+            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
+            wr8(b, A5 + 0x36, alea.pick(&[0, 0, 1]));
         }
         // objet suivi en +0x5c (parfois aucun), réglage 0 ou 1
         43 => {
