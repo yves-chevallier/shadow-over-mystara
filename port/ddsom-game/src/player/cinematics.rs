@@ -21,8 +21,6 @@ type Handler = fn(&mut Ctx, Player);
 mod rom {
     /// Son de la pose de victoire.
     pub const VICTORY_SOUND: u32 = 0xe24d8;
-    /// Effet propre à l'elfe à la fin de certaines scènes.
-    pub const ELF_EFFECT: u32 = 0xcf182;
     /// Animation du jeu C des personnages (D6 = numéro).
     pub const ANIM_START_C: u32 = 0x2cf0;
     pub const TERRAIN: u32 = 0x33fe4;
@@ -266,7 +264,7 @@ fn reset_speed_class(g: &mut Ctx, p: Player) {
 
 fn elf_effect(g: &mut Ctx, p: Player) {
     if p.class(g) == 2 {
-        g.rom(rom::ELF_EFFECT, p);
+        super::init::raise_spells(g, p);
     }
 }
 

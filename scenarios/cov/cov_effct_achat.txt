@@ -1,0 +1,34 @@
+# EFFCT 22 : achats dans la boutique de la scène 69 (articles, repas, sortie), acheteur posé par poke devant chaque étal
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1440 P1 Button 1 1
+1446 P1 Button 1 0
+2399 poke8 ff8034 10
+2924 P1 Left 1
+2399 poke8 ff8034 69
+3590 poke32 ff86f2 0x00009999
+3590 poke16 ff8640 0x0010
+3590 poke16 ff862e 0x85de
+3600 poke16 ff2aa4 0x85de
+3600 poke16 ff85e6 0x168
+3600 poke16 ff85ee 0x58
+3600 poke8 ff8636 1
+3700 poke16 ff2aa4 0x85de
+3700 poke16 ff85e6 0x138
+3700 poke16 ff85ee 0x50
+3700 poke8 ff8636 1
+3800 poke16 ff2aa4 0x85de
+3800 poke16 ff85e6 0x1a0
+3800 poke16 ff85ee 0x58
+3800 poke8 ff8636 1
+3900 poke16 ff2aa4 0x85de
+3900 poke16 ff85e6 0xf8
+3900 poke16 ff85ee 0x50
+3900 poke8 ff8636 1
+4000 poke16 ff2aa4 0x85de
+4000 poke16 ff85e6 0x1c0
+4000 poke16 ff85ee 0x68
+4000 poke8 ff8636 1
+4500 quit

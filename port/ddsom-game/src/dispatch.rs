@@ -85,9 +85,18 @@ impl Class {
         }
         c.a[0] = self.pool.slot(0).0;
         set_low_word(&mut c.d[7], (self.pool.slots - 1) as u16);
+        self.sweep(c, b, false);
+        if ret.is_some() {
+            crate::taches::table::depiler_retour(c, b);
+        }
+    }
+
+    /// Parcours des emplacements à partir de A0 / D7. `after_current` : on reprend juste après le
+    /// `jsr (A1)` du gestionnaire de l'emplacement courant (voir `resume`), qu'il ne faut pas rappeler.
+    fn sweep(&self, c: &mut Cpu, b: &mut Cps2Bus, mut after_current: bool) {
         loop {
             let obj = Obj(c.a[0]);
-            if obj.is_active(b) {
+            if !after_current && obj.is_active(b) {
                 let kind = obj.u8(b, Obj::KIND);
                 c.d[0] = ((kind as u16) << 2) as u32;
                 // drapeaux du `lsl.w #2,D0` qui précède le saut : N et Z du résultat, V, C et X nuls
@@ -101,6 +110,7 @@ impl Class {
                     }
                 }
             }
+            after_current = false;
             c.a[0] = c.a[0].wrapping_add(self.pool.stride);
             let counter = (c.d[7] as u16).wrapping_sub(1);
             set_low_word(&mut c.d[7], counter);
@@ -108,9 +118,14 @@ impl Class {
                 break;
             }
         }
-        if ret.is_some() {
-            crate::taches::table::depiler_retour(c, b);
-        }
+    }
+
+    /// Reprise de la boucle d'origine par une tâche dont un gestionnaire a cédé la main : elle revient
+    /// à l'adresse qui suit le `jsr (A1)` (A0 et D7 rendus par la tâche), finit le parcours et rend la
+    /// main à l'appelant de la boucle (adresse de retour déjà sur la pile).
+    fn resume(&self, c: &mut Cpu, b: &mut Cps2Bus) {
+        self.sweep(c, b, true);
+        rts(c, b);
     }
 }
 
@@ -123,7 +138,7 @@ fn set_low_word(r: &mut u32, v: u16) {
 }
 
 macro_rules! natives {
-    ($($nom:ident, $name:literal, $class:expr;)*) => {$(
+    ($($nom:ident, $reprise:ident, $name:literal, $class:expr;)*) => {$(
         pub const $nom: Native = Native {
             entry: $class.entry,
             name: $name,
@@ -137,24 +152,34 @@ macro_rules! natives {
             outputs: 0, // les appelants enchaînent sur d'autres appels
             exact_cost: false,
         };
+        pub const $reprise: Native = Native {
+            entry: $class.entry + HANDLER_RETURN,
+            name: concat!($name, "_reprise"),
+            cost: |_, _| 100,
+            run: |c, b| $class.resume(c, b),
+            touches_sound: false,
+            outputs: 0,
+            exact_cost: false,
+        };
     )*};
 }
 
 natives! {
-    UPDATE_PSHL, "dispatch_pshl", PSHL;
-    UPDATE_PEFF, "dispatch_peff", PEFF;
-    UPDATE_ENEMY, "dispatch_enemy", ENEMY;
-    UPDATE_BOSS, "dispatch_boss", BOSS;
-    UPDATE_ESHL, "dispatch_eshl", ESHL;
-    UPDATE_EFFCT, "dispatch_effct", EFFCT;
-    UPDATE_BOX, "dispatch_box", BOX;
-    UPDATE_SET, "dispatch_set", SET;
-    UPDATE_ITEM, "dispatch_item", ITEM;
-    UPDATE_SOBJ, "dispatch_sobj", SOBJ;
+    UPDATE_PSHL, RESUME_PSHL, "dispatch_pshl", PSHL;
+    UPDATE_PEFF, RESUME_PEFF, "dispatch_peff", PEFF;
+    UPDATE_ENEMY, RESUME_ENEMY, "dispatch_enemy", ENEMY;
+    UPDATE_BOSS, RESUME_BOSS, "dispatch_boss", BOSS;
+    UPDATE_ESHL, RESUME_ESHL, "dispatch_eshl", ESHL;
+    UPDATE_EFFCT, RESUME_EFFCT, "dispatch_effct", EFFCT;
+    UPDATE_BOX, RESUME_BOX, "dispatch_box", BOX;
+    UPDATE_SET, RESUME_SET, "dispatch_set", SET;
+    UPDATE_ITEM, RESUME_ITEM, "dispatch_item", ITEM;
+    UPDATE_SOBJ, RESUME_SOBJ, "dispatch_sobj", SOBJ;
 }
 
 /// Les dix boucles de dispatch, pour les appelants 68000 qui subsistent.
 pub const NATIVES: &[Native] = &[
     UPDATE_PSHL, UPDATE_PEFF, UPDATE_ENEMY, UPDATE_BOSS, UPDATE_ESHL, UPDATE_EFFCT, UPDATE_BOX, UPDATE_SET,
-    UPDATE_ITEM, UPDATE_SOBJ,
+    UPDATE_ITEM, UPDATE_SOBJ, RESUME_PSHL, RESUME_PEFF, RESUME_ENEMY, RESUME_BOSS, RESUME_ESHL, RESUME_EFFCT,
+    RESUME_BOX, RESUME_SET, RESUME_ITEM, RESUME_SOBJ,
 ];

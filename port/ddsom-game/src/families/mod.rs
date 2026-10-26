@@ -45,6 +45,7 @@ pub mod effects_d;
 pub mod effects_e;
 pub mod effects_creators;
 pub mod effects_f;
+pub mod effects_g;
 pub mod items_b;
 pub mod eshl_creators;
 pub mod enemy;
@@ -82,6 +83,7 @@ pub mod items;
 pub mod joueur;
 pub mod set;
 pub mod set_b;
+pub mod set_residu;
 pub mod set_c;
 pub mod shell;
 pub mod sobj;
@@ -573,10 +575,13 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(boss_16::NATIVES)
         .chain(boss_22::NATIVES)
         .chain(creators::NATIVES)
-        .chain([&set_b::SPAWN_BUMPERS])
+        .chain([&set_b::SPAWN_BUMPERS, &set_b::DOOR_B_RESUME])
+        .chain(set_residu::NATIVES)
         .chain(petites::NATIVES)
         .chain(petites::SHAKES)
         .chain(effects_creators::NATIVES)
+        .chain(effects_g::NATIVES)
+        .chain(effects_g::RESUMES)
         .chain(joueur::natives())
         .chain(reactions::NATIVES)
         .chain([&reactions::PLAYER_HURT_ANIMATION])

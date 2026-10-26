@@ -13,9 +13,9 @@
 //! - 36 : objet flottant d'une scène d'introduction (ondule, est touché, s'efface ; son reflet) ;
 //! - 37, 38 : panneaux d'un écran de fin d'épreuve (titre qui descend, message qui tombe et clignote) ;
 //! - 39 : morceau projeté vers un point de l'écran, qui éclate en touchant le sol ;
-//! - 40 : effets d'une attaque (éclat qui suit l'attaquant, débris) ; variantes 1 à 3 : code d'origine ;
+//! - 40 : effets d'une attaque (éclats qui suivent l'attaquant, posés devant lui ou tombant du haut de l'écran, débris) ;
 //! - 41 : objet lancé au hasard (quatre sortes) qui retombe puis glisse ou rebondit ;
-//! - 42 : effets de scène, onze sous-types par variante (débris, éclats, caméra alternative qui suit un
+//! - 42 : effets de scène, onze sous-types par variante (débris lancés ou repoussés, éclats, caméra alternative qui suit un
 //!   objet avec retard, étincelles, lueur, bouffées, poussière) ;
 //! - 44 : effets des sorts d'un ennemi magicien (six modes) ;
 //! - 47 : repère qui clignote lentement ;
@@ -30,7 +30,7 @@
 //! - 66 : quatre gros caractères animés dans le fond 2 ;
 //! - 67 : colonne qui s'élève sous un objet, puis relâche les joueurs ;
 //! - 69 : silhouette qui fait les cent pas en haut de l'écran ;
-//! - 70 : comptoir d'une boutique de scène (vente elle-même : code d'origine, jamais exercée) ;
+//! - 70 : comptoir d'une boutique de scène (vente : vendeur, enseigne et articles, jamais exercée) ;
 //! - 76 : minuteur de scène qui lance une transition ;
 //! - 82 : éclat posé à côté de son créateur ; 83 : pluie d'éclats depuis le haut de l'écran ;
 //! - 84 : déclencheur de la séquence de fin (fondu, caméra, tâches de script) ;
@@ -100,8 +100,28 @@ mod shop {
     /// Stock par difficulté (`A5+0x35`, octets, espace programme).
     pub const STOCK: u32 = 0xaf4c4;
     pub const ANIM_SET: u32 = 0x1c40c6;
-    /// Achat par un joueur (A2) : code d'origine, jamais exercé par les scénarios.
-    pub const BUY: u32 = 0xafad0;
+    /// Achat (`0xafad0`) : par variante, un `bra.w` vers la sorte d'achat (78 entrées).
+    pub const PURCHASES: u32 = 0xafade;
+    pub const PURCHASE_COUNT: u32 = 78;
+    /// Sortes d'achat (cibles des `bra.w`).
+    pub const EXIT: u32 = 0xafc16;
+    pub const MEAL_BIG: u32 = 0xafc34;
+    pub const MEAL: u32 = 0xafc3a;
+    pub const NOT_CLASS_4: u32 = 0xafcb4;
+    pub const NOT_CLASSES_2_4_1: u32 = 0xafcd0;
+    pub const NOT_CLASSES_4_1: u32 = 0xafce8;
+    pub const NOT_CLASS_1: u32 = 0xafd00;
+    /// Messages de la boutique (`A5-0x554e`) : or insuffisant, refus de la classe, vie pleine,
+    /// objet au maximum, inventaire plein.
+    pub const NO_GOLD: u16 = 0x82;
+    pub const WRONG_CLASS: u16 = 0x84;
+    pub const FULL_LIFE: u16 = 0x85;
+    pub const TOO_MANY: u16 = 0x86;
+    pub const NO_ROOM: u16 = 0x87;
+    pub const SOUND_REFUSED: u32 = 0xea5f0;
+    pub const SOUND_BOUGHT: u32 = 0xea57e;
+    /// Sortie de la boutique : palette pleine (`0x1686`, couches `A5+0x48e`).
+    pub const FULL_BRIGHTNESS: u32 = 0x1686;
     /// Pointeurs (mots) des quatre acheteurs possibles.
     pub const BUYERS: u32 = 0xff2aa4;
     /// Annonce en cours (`A5-0x554e`).
@@ -118,7 +138,7 @@ mod shop {
 fn shop(x: &mut Cx) {
     match x.u8(f::STATE) {
         0 => shop_init(x),
-        2 => shop_watch(x, shop::BUY),
+        2 => shop_watch(x, shop_buy),
         _ => free(x),
     }
 }
@@ -151,7 +171,7 @@ fn shop_init(x: &mut Cx) {
 }
 
 /// Cherche un acheteur dans la zone ; annonce l'article au premier qui entre.
-fn shop_watch(x: &mut Cx, buy: u32) {
+fn shop_watch(x: &mut Cx, buy: fn(&mut Cx, Obj)) {
     x.set8(shop::OCCUPIED, 0);
     // la boucle de l'original tient dans A1 (pointeur) et D6 (compteur), que l'achat peut modifier
     x.c.a[1] = shop::BUYERS;
@@ -169,7 +189,7 @@ fn shop_watch(x: &mut Cx, buy: u32) {
                 }
                 if (buyer.u8(x.b, 0x58) as i8) > 0 {
                     x.c.a[2] = buyer.0;
-                    x.call(buy);
+                    buy(x, buyer);
                 }
             }
         }
@@ -183,6 +203,154 @@ fn shop_watch(x: &mut Cx, buy: u32) {
     if x.u8(shop::OCCUPIED) == 0 {
         x.set8(shop::ANNOUNCED, 0);
     }
+}
+
+/// Joueur d'un acheteur (`+0x50`).
+fn buyer_player(x: &mut Cx, buyer: Obj) -> Obj {
+    let p = buyer.u16(x.b, 0x50);
+    Obj(p as i16 as i32 as u32 & 0xff_ffff)
+}
+
+/// Refus : son, puis message.
+fn shop_refuse(x: &mut Cx, message: u16) {
+    x.call(shop::SOUND_REFUSED);
+    crate::mem::wr16(x.b, shop::MESSAGE, message);
+}
+
+/// `0xafad0` : achat par l'acheteur `buyer` (A2), selon la sorte d'achat de la variante. A1 et D6 (la boucle
+/// de `shop_watch`) sont rendus comme l'original les laisse.
+fn shop_buy(x: &mut Cx, buyer: Obj) {
+    let v = x.u8(f::VARIANT) as u32;
+    if v >= shop::PURCHASE_COUNT {
+        return;
+    }
+    let at = shop::PURCHASES + 4 * v;
+    let kind = (at + 2).wrapping_add(x.rom16(at + 2) as i16 as i32 as u32);
+    match kind {
+        shop::EXIT => {
+            // la sortie : l'acheteur quitte la liste et passe à l'état 4, la palette revient
+            crate::mem::wr16(x.b, x.c.a[1], 0);
+            buyer.set_u16(x.b, Obj::STATE, 0x400);
+            let (a1, d6) = (x.c.a[1], x.c.d[6]);
+            x.set_a5_u8(0x48e, 0xf);
+            x.call(shop::FULL_BRIGHTNESS);
+            (x.c.a[1], x.c.d[6]) = (a1, d6);
+        }
+        shop::MEAL_BIG => shop_meal(x, buyer, 0x30),
+        shop::MEAL => shop_meal(x, buyer, 0x20),
+        _ => {
+            buyer.set_u8(x.b, 0x58, 0xff);
+            let class = buyer_player(x, buyer).u8(x.b, 3) >> 1;
+            let refused: &[(u8, u16)] = match kind {
+                shop::NOT_CLASS_4 => &[(4, shop::WRONG_CLASS)],
+                shop::NOT_CLASSES_2_4_1 => &[(2, shop::TOO_MANY), (4, shop::WRONG_CLASS), (1, shop::WRONG_CLASS)],
+                shop::NOT_CLASSES_4_1 => &[(4, shop::WRONG_CLASS), (1, shop::WRONG_CLASS)],
+                shop::NOT_CLASS_1 => &[(1, shop::WRONG_CLASS)],
+                _ => &[],
+            };
+            if let Some(&(_, message)) = refused.iter().find(|&&(c, _)| c == class) {
+                if message == shop::TOO_MANY {
+                    crate::mem::wr16(x.b, shop::MESSAGE, message);
+                    return x.call(shop::SOUND_REFUSED);
+                }
+                return shop_refuse(x, message);
+            }
+            shop_take(x, buyer);
+        }
+    }
+}
+
+/// Or du joueur suffisant (ou objet gratuit : `+0x167` = 9) ? Sinon refus.
+fn shop_can_pay(x: &mut Cx, player: Obj) -> bool {
+    if player.u8(x.b, 0x167) == 9 || player.u32(x.b, GOLD) as i32 >= x.u32(shop::PRICE) as i32 {
+        return true;
+    }
+    shop_refuse(x, shop::NO_GOLD);
+    false
+}
+
+/// `0xafd18` : l'article rejoint l'inventaire (six emplacements `+0x140`, quantités `+0x148`) : même
+/// article, ou emplacement vide (0x56) ; au plus 9.
+fn shop_take(x: &mut Cx, buyer: Obj) {
+    buyer.set_u8(x.b, 0x58, 0xff);
+    let player = buyer_player(x, buyer);
+    if !shop_can_pay(x, player) {
+        return;
+    }
+    let item = x.u16(shop::ITEM) as u8;
+    let slot = match (0..6).find(|&k| player.u8(x.b, 0x140 + k) == item) {
+        Some(k) => k,
+        None => match (0..6).find(|&k| player.u8(x.b, 0x140 + k) == 0x56) {
+            Some(k) => {
+                player.set_u8(x.b, 0x148 + k, 0);
+                k
+            }
+            None => {
+                crate::mem::wr16(x.b, shop::MESSAGE, shop::NO_ROOM);
+                return x.call(shop::SOUND_REFUSED);
+            }
+        },
+    };
+    if player.u8(x.b, 0x148 + slot) as i8 >= 9 {
+        crate::mem::wr16(x.b, shop::MESSAGE, shop::TOO_MANY);
+        return x.call(shop::SOUND_REFUSED);
+    }
+    let id = x.u8(shop::ITEM + 1);
+    player.set_u8(x.b, 0x140 + slot, id);
+    let n = player.u8(x.b, 0x148 + slot).wrapping_add(1);
+    player.set_u8(x.b, 0x148 + slot, n);
+    let collected = x.u8(shop::ITEM) as u32;
+    crate::mem::wr8(x.b, A5.wrapping_sub(0x5b88).wrapping_add(collected), 1);
+    shop_pay(x, player);
+}
+
+/// `0xafdaa` : le prix (six octets BCD finissant en `+0x53`) est retiré de l'or du joueur (six octets
+/// finissant en `+0x117`), sauf pour un objet gratuit (`+0x167` = 9, remis à 0xff).
+fn shop_pay(x: &mut Cx, player: Obj) {
+    if player.u8(x.b, 0x167) == 9 {
+        player.set_u8(x.b, 0x167, 0xff);
+    } else {
+        let mut borrow = false;
+        for k in 1..=6 {
+            let (v, b) = crate::game::sbcd(player.u8(x.b, 0x118 - k), x.u8(0x54 - k), borrow);
+            player.set_u8(x.b, 0x118 - k, v);
+            borrow = b;
+        }
+        x.c.sr = x.c.sr & !m68k::SR_X | if borrow { m68k::SR_X } else { 0 };
+    }
+    x.call(shop::SOUND_BOUGHT);
+}
+
+/// `0xafc3c` : repas (soin de `heal`) : refusé si la vie est pleine ; le dernier du stock fait reculer
+/// l'étal et efface son annonce.
+fn shop_meal(x: &mut Cx, buyer: Obj, heal: u16) {
+    buyer.set_u8(x.b, 0x58, 0xff);
+    if x.u8(shop::STOCK_LEFT) == 0 {
+        return;
+    }
+    let player = buyer_player(x, buyer);
+    let full = player.u16(x.b, 0x60);
+    if full as i16 <= player.u16(x.b, 0x62) as i16 {
+        crate::mem::wr16(x.b, shop::MESSAGE, shop::FULL_LIFE);
+        return x.call(shop::SOUND_REFUSED);
+    }
+    if !shop_can_pay(x, player) {
+        return;
+    }
+    let left = x.u8(shop::STOCK_LEFT).wrapping_sub(1);
+    x.set8(shop::STOCK_LEFT, left);
+    if left == 0 {
+        x.add16(Obj::X, 0xfff0);
+        x.add16(Obj::Z, 0xffe8);
+        x.anim_step();
+        x.set16(shop::MESSAGE_ID, 0);
+    }
+    let life = player.u16(x.b, 0x62).wrapping_add(heal);
+    player.set_u16(x.b, 0x62, life);
+    if (full as i16) < life as i16 {
+        player.set_u16(x.b, 0x62, full);
+    }
+    shop_pay(x, player);
 }
 
 fn shop_in_zone(x: &mut Cx, buyer: Obj) -> bool {
@@ -306,7 +474,8 @@ mod purse {
     pub const ALLOC_PEFF: u32 = 0x228e;
     pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const PALETTE_PAGE: u32 = 0x1a608;
-    /// Suite du code d'origine quand un pool est plein.
+    /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)`, lecture d'un mot à une adresse
+    /// impaire (erreur d'adresse, le jeu s'arrête sur l'écran d'exception). Hors contrat, laissé à l'original.
     pub const POOL_FULL: u32 = 0xaf2bc;
     /// Nombre de curseurs encore ouverts (`A5-0x5553`).
     pub const OPEN: u32 = 0xff2aad;
@@ -883,8 +1052,14 @@ fn attached_shake(x: &mut Cx, sub: u8) {
 // ---------------------------------------------------------------------------------------------
 
 mod scenery {
-    /// Variantes 1, 2 et 9, qu'aucun scénario n'exerce : code d'origine.
-    pub const VARIANTS_ORIGINAL: [(u8, u32); 3] = [(1, 0xb417e), (2, 0xb432c), (9, 0xb49ae)];
+    /// Variante 1 : par réglage, fiche de 16 octets (dx, dy, vx, ax, vy, ay ; données).
+    pub const THROWS_1: u32 = 0xb4202;
+    /// Variante 2 : par réglage, décalage (dx, dy) (données) ; poussée avec les joueurs.
+    pub const PLACES_2: u32 = 0xb4394;
+    pub const PUSH_PLAYERS: u32 = 0x81aa4;
+    /// Variante 9 : par réglage (`& 7`), fiche de 8 octets (dx, dz en octets signés, puis vz, az ; programme).
+    pub const SPRAY: u32 = 0xb4a32;
+    pub const ANIM_SPRAY: u32 = 0x17b9d6;
     /// Variante 0 : éclat bref (animation 0xf, ou 0x10 retournée), jeu d'animations 0x174776.
     pub const ANIM_FLASH: u32 = 0x174776;
     /// Objet suivi (pointeur de 16 bits, négatif quand il existe).
@@ -935,12 +1110,11 @@ fn reinsert_foreground(x: &mut Cx) {
 
 fn scenery(x: &mut Cx) {
     let v = x.u8(f::VARIANT);
-    if let Some(&(_, original)) = scenery::VARIANTS_ORIGINAL.iter().find(|(w, _)| *w == v) {
-        return x.call(original);
-    }
     match x.u8(f::STATE) {
         0 => match v {
             0 => flash_init(x),
+            1 | 2 => thrown_init(x, v),
+            9 => spray_init(x),
             3 => debris_init(x),
             4 => shard_init(x),
             5 => follow_init(x),
@@ -952,6 +1126,8 @@ fn scenery(x: &mut Cx) {
         },
         2 => match v {
             0 => flash_active(x),
+            1 | 2 => thrown_active(x, v),
+            9 => spray_active(x),
             3 => debris_active(x),
             4 => shard_active(x),
             5 => follow_active(x),
@@ -965,6 +1141,102 @@ fn scenery(x: &mut Cx) {
         6 => free(x),
         _ => {}
     }
+}
+
+/// Variantes 1 et 2 (0xb4194, 0xb4342) : posé sur l'objet suivi, décalé selon le réglage `+0x2f` ; la
+/// variante 1 est lancée (vitesses de la fiche, données en `THROWS_1`), la variante 2 posée au sol et
+/// repoussée avec les joueurs (`0x81aa4`). Disparaît à la fin de son animation.
+fn thrown_init(x: &mut Cx, v: u8) {
+    x.add8(f::STATE, 2);
+    let Some(target) = scenery_target(x) else { return x.set8(f::STATE, 6) };
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let w = target.u16(x.b, off);
+        x.set16(off, w);
+    }
+    let facing = target.u8(x.b, 0x2c);
+    x.set8(0x2c, facing);
+    let mode = x.u8(0x2f) as u32;
+    if v == 1 {
+        let at = scenery::THROWS_1.wrapping_add(((mode as u16) << 4) as i16 as i32 as u32);
+        let (mut dx, dy, mut vx, mut ax) = (x.data16(at), x.data16(at + 2), x.data16(at + 4), x.data16(at + 6));
+        if facing == 0 {
+            dx = dx.wrapping_neg();
+            vx = vx.wrapping_neg();
+            ax = ax.wrapping_neg();
+        }
+        x.add16(Obj::X, dx);
+        x.add16(Obj::Y, dy);
+        x.set16(Obj::Z, 0);
+        x.set16(Obj::VX, vx);
+        x.set16(Obj::AX, ax);
+        let (vy, ay) = (x.data16(at + 8), x.data16(at + 10));
+        x.set16(Obj::VY, vy);
+        x.set16(Obj::AY, ay);
+        x.set32(Obj::VZ, 0);
+    } else {
+        let at = scenery::PLACES_2.wrapping_add(((mode as u16) << 2) as i16 as i32 as u32);
+        let (mut dx, dy) = (x.data16(at), x.data16(at + 2));
+        if facing == 0 {
+            dx = dx.wrapping_neg();
+        }
+        x.add16(Obj::X, dx);
+        x.add16(Obj::Y, dy);
+        x.set16(Obj::Z, 0);
+    }
+    x.anim_start(scenery::ANIM_DUST, 0);
+}
+
+fn thrown_active(x: &mut Cx, v: u8) {
+    if !paused(x) {
+        if v == 1 {
+            x.call(super::cx::sub::MOVE_XY);
+        } else {
+            x.call(scenery::PUSH_PLAYERS);
+        }
+        if x.anim_step() {
+            return x.add8(f::STATE, 4);
+        }
+    }
+    x.call(super::rom::OMBRE);
+    x.reinsert();
+}
+
+/// Variante 9 (0xb49c4) : éclat projeté au hasard (vitesse x tirée, signe selon le réglage), qui retombe et
+/// disparaît au sol ; il clignote une image sur deux.
+fn spray_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::AY, 0);
+    let k = 8 * (x.u8(0x2f) & 7) as u32;
+    let dx = x.rom8(scenery::SPRAY + k) as i8 as i16 as u16;
+    x.add16(Obj::X, dx);
+    let dz = x.rom8(scenery::SPRAY + k + 1) as i8 as i16 as u16;
+    x.add16(Obj::Z, dz);
+    x.set32(Obj::VY, 0);
+    let (vz, az) = (x.rom16(scenery::SPRAY + k + 4), x.rom16(scenery::SPRAY + k + 6));
+    x.set16(Obj::VZ, vz);
+    x.set16(Obj::AZ, az);
+    x.call(super::rom::RNG);
+    let mut vx = x.c.d[0] as u16 & 0x3ff;
+    if x.u8(0x2f) & 1 != 0 {
+        vx = vx.wrapping_neg();
+    }
+    x.set16(Obj::VX, vx);
+    x.anim_start(scenery::ANIM_SPRAY, 0x19);
+}
+
+fn spray_active(x: &mut Cx) {
+    if !paused(x) {
+        x.anim_step();
+        x.call(super::cx::sub::MOVE_XYZ);
+        if (x.u16(Obj::Z) as i16) < 0 {
+            x.set16(Obj::Z, 0);
+            return x.add8(f::STATE, 4);
+        }
+        let blink = x.a5_u16(0x6e) & 1 != 0;
+        x.set_bit(0x01, 1, blink);
+    }
+    x.reinsert();
 }
 
 /// Variante 0 (0xb411e) : un pixel devant, juste au-dessus du sol (ou au-dessous si `+0x2f`).
@@ -2104,8 +2376,8 @@ mod link {
     pub const HEAD: u32 = 0x46;
     /// Historique des directions (4 octets, le plus récent en premier).
     pub const HISTORY: u32 = 0x58;
-    /// Rupture de la chaîne : code d'origine (jamais exercé par les scénarios).
-    pub const BREAK: u32 = 0xad53a;
+    /// Rupture : fiches de 16 octets par type du porteur de la tête (données).
+    pub const BREAKS: u32 = 0xad5e2;
 }
 
 fn chain_link(x: &mut Cx) {
@@ -2141,6 +2413,47 @@ fn chain_link(x: &mut Cx) {
     }
 }
 
+/// `0xad53a` : la chaîne se rompt. Chaque maillon (rang `+0x2f` décrémenté) joue son animation de rupture ;
+/// le dernier disparaît. Une fiche par type du porteur de la tête (`+0x54` de la tête ; 0x20 pour un porteur
+/// qui n'est pas un ENEMY) dit si le maillon disparaît (octet négatif), reste en place (positif) ou se pose
+/// sur le porteur (nul). L'original relit toujours la première entrée de la fiche (son indice est remis à zéro).
+fn chain_break(x: &mut Cx, head: Obj) {
+    x.add8(f::SUB_STATE, 2);
+    let n = head.u8(x.b, 0x42).wrapping_sub(1);
+    head.set_u8(x.b, 0x42, n);
+    let rank = x.u8(0x2f).wrapping_sub(1);
+    x.set8(0x2f, rank);
+    if (rank as i8) < 0 {
+        x.add8(f::STATE, 2);
+        return free(x);
+    }
+    let p = head.u16(x.b, 0x54);
+    let carrier = Obj(p as i16 as i32 as u32 & 0xff_ffff);
+    let row = if carrier.u8(x.b, Obj::CLASS) == 2 { carrier.u8(x.b, Obj::KIND) as u16 } else { 0x20 };
+    let sheet = link::BREAKS.wrapping_add((row << 4) as i16 as i32 as u32);
+    let what = x.data8(sheet) as i8;
+    if what < 0 {
+        return free(x);
+    }
+    if what == 0 {
+        let (cx_, cz, cy) = (carrier.u16(x.b, Obj::X), carrier.u16(x.b, Obj::Z), carrier.u32(x.b, Obj::Y));
+        x.set16(Obj::X, cx_);
+        x.set16(Obj::Z, cz);
+        x.set32(Obj::Y, cy.wrapping_sub(1));
+        let mut d = x.data16(sheet + 4 + 2);
+        x.add16(Obj::Z, d);
+        let facing = carrier.u8(x.b, 0x2c);
+        x.set8(0x2c, facing);
+        if facing != 0 {
+            d = d.wrapping_neg();
+        }
+        x.add16(Obj::X, d);
+        x.set8(0x2c, facing ^ 0x20);
+    }
+    let anim = 5u8.wrapping_add(x.u8(0x2f));
+    x.anim_start(link::ANIM_SET, anim as u32);
+}
+
 fn chain_link_follow(x: &mut Cx) {
     let head = x.linked(link::HEAD);
     match head.u8(x.b, 0x58) {
@@ -2149,10 +2462,7 @@ fn chain_link_follow(x: &mut Cx) {
             head.set_u8(x.b, 0x42, n);
             return free(x);
         }
-        0xfe => {
-            x.c.a[1] = head.0;
-            return x.call(link::BREAK);
-        }
+        0xfe => return chain_break(x, head),
         _ => {}
     }
     for k in (0..3).rev() {
@@ -2977,8 +3287,16 @@ fn ballot_timer(x: &mut Cx) {
             timer_palette(x, 0x2531c0);
             free(x);
         }
-        // état 4 : jamais atteint par la table (code d'origine, A6 non défini)
-        4 => x.call(0xb0374),
+        // état 4 (0xb0374) : aucune étape n'y mène ; l'original efface le mot `+0x54` de l'objet désigné par
+        // A6, laissé par le code précédent, rend la palette et libère l'objet
+        4 => {
+            let a6 = x.c.a[6];
+            crate::mem::wr16(x.b, a6.wrapping_add(0x54), 0);
+            timer_palette(x, 0x2531c0);
+            free(x);
+        }
+        // état 6 (posé par le retrait hors écran) : libération (0xb02e8)
+        6 => free(x),
         _ => {}
     }
 }
@@ -3157,6 +3475,7 @@ fn swimmer(x: &mut Cx) {
                 wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
             }
             // deux décors SET 0x17 (variantes 0 et 1) ; un pool plein mène l'original dans des données
+            // (0xb778c, hors contrat : laissé à l'original)
             for (variant, flip) in [(0u8, 1u8), (1, 0)] {
                 let Some(o) = alloc(x, 0x2348) else { return x.call(0xb778c) };
                 wr8(x.b, o.0, 1);
@@ -3267,9 +3586,133 @@ mod counter {
     pub const ZONE: u32 = 0xb8132;
     pub const MESSAGES: u32 = 0xb8126;
     pub const ANIMATIONS: u32 = 0xb812c;
-    pub const BUY: u32 = 0xb83d8;
-    /// Sous-états de la vente (jamais exercés par les scénarios) : code d'origine.
-    pub const SALE: u32 = 0xb81d6;
+    /// Le comptoir qui tient la vente en cours (`A5-0x5542`).
+    pub const ACTIVE: u32 = 0xff2abe;
+    /// Décor de scène 0x64 (le vendeur) créé à l'achat, gardé en `+0x1a`.
+    pub const SELLER: u32 = 0x1a;
+    pub const TIMER: u32 = 0x18;
+    pub const STEP: u32 = 0x06;
+    /// Message de la vente, tuiles de l'enseigne (20 longs dans le fond 1), listes d'objets à poser (par
+    /// variante : longs vers des fiches de 8 octets, octet négatif en fin).
+    pub const SALE_MESSAGE: u16 = 0x8e;
+    pub const SIGN: u32 = 0x912ad4;
+    pub const SIGN_TILES: [(u32, u32); 20] = [
+        (0, 0x1b780005), (4, 0x1b880005), (0x80, 0x1b790005), (0x84, 0x1b890005),
+        (0x100, 0x1b9a0005), (0x104, 0x1baa0005), (0x180, 0x1b9b0005), (0x184, 0x1bab0005),
+        (0x200, 0x1bb00005), (0x204, 0x1bc00005), (0x280, 0x1bb10005), (0x284, 0x1bc10005),
+        (0x300, 0x1bb80005), (0x304, 0x1bc80005), (0x380, 0x1bb90005), (0x384, 0x1bc90005),
+        (0x400, 0x1b7c0005), (0x404, 0x1b8c0005), (0x480, 0x1b7d0005), (0x484, 0x1b8d0005),
+    ];
+    pub const GOODS: u32 = 0xb82e0;
+    pub const SCENE_SET: u32 = 0xc8312;
+    pub const ALLOC_PEFF: u32 = 0x228e;
+}
+
+/// `0xb83d8` : premier acheteur dans la zone : le comptoir prend la vente (s'il n'y en a pas d'autre) et
+/// fait venir le vendeur (décor 0x64) ; A1 et D6 gardés comme l'original.
+fn counter_buy(x: &mut Cx, _buyer: Obj) {
+    let active = rd16(x.b, counter::ACTIVE);
+    if active != 0 && active != x.o.0 as u16 {
+        return;
+    }
+    crate::mem::wr16(x.b, counter::ACTIVE, x.o.0 as u16);
+    let (a1, d6) = (x.c.a[1], x.c.d[6]);
+    x.c.d[0] = 0x64;
+    x.call(counter::SCENE_SET);
+    let failed = x.c.sr & m68k::SR_C != 0;
+    let seller = x.c.a[1];
+    (x.c.a[1], x.c.d[6]) = (a1, d6);
+    if failed {
+        return crate::mem::wr16(x.b, counter::ACTIVE, 0);
+    }
+    x.set16(counter::SELLER, seller as u16);
+    x.add8(f::SUB_STATE, 2);
+    x.set16(counter::TIMER, 0x18);
+}
+
+/// `0xb81d6` : la vente. Après un délai, l'enseigne s'affiche, le message est annoncé et les articles sont
+/// posés (PEFF 0x2a) ; puis on attend un acheteur devant le vendeur, qui fait accélérer le vendeur ; enfin
+/// la vente se termine.
+fn counter_sale(x: &mut Cx) {
+    let step = x.u8(counter::STEP) as i8;
+    if step > 2 {
+        if countdown_word(x, counter::TIMER) {
+            x.set8(f::SUB_STATE, 0);
+            x.set8(counter::STEP, 0);
+            crate::mem::wr16(x.b, counter::ACTIVE, 0);
+        }
+        return;
+    }
+    if step == 2 {
+        // la boucle de l'original tient dans A1 (pointeur) et D6 (compteur)
+        for k in 0..4u32 {
+            x.c.a[1] = shop::BUYERS + 2 * (k + 1);
+            x.c.d[6] = x.c.d[6] & 0xffff_0000 | (3 - k);
+            let p = rd16(x.b, shop::BUYERS + 2 * k);
+            if p == 0 {
+                continue;
+            }
+            let buyer = Obj(p as i16 as i32 as u32 & 0xff_ffff);
+            if buyer.u8(x.b, 0x58) as i8 <= 0 {
+                continue;
+            }
+            let across = buyer.u16(x.b, Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_sub(0xa8);
+            if across > 0x50 {
+                continue;
+            }
+            let depth = buyer.u16(x.b, Obj::Z).wrapping_add(buyer.u16(x.b, Obj::Y)).wrapping_sub(x.a5_u16(0x50a)).wrapping_sub(0x48);
+            if depth <= 0x10 {
+                let seller = x.linked(counter::SELLER);
+                if seller.u16(x.b, 0x32) > 1 {
+                    seller.set_u16(x.b, 0x32, 1);
+                }
+                x.add8(counter::STEP, 2);
+                x.set16(counter::TIMER, 0x18);
+                return;
+            }
+        }
+        x.c.d[6] |= 0xffff;
+        return;
+    }
+    if !countdown_word(x, counter::TIMER) {
+        return;
+    }
+    x.add8(counter::STEP, 2);
+    crate::mem::wr16(x.b, shop::MESSAGE, counter::SALE_MESSAGE);
+    for (off, tile) in counter::SIGN_TILES {
+        wr32(x.b, counter::SIGN + off, tile);
+    }
+    let v = x.u8(f::VARIANT) as u32;
+    let mut at = crate::mem::prog32(x.b, counter::GOODS + 4 * v);
+    loop {
+        let setting = x.data8(at);
+        at += 1;
+        x.c.a[2] = at;
+        if (setting as i8) < 0 {
+            return;
+        }
+        let Some(o) = alloc(x, counter::ALLOC_PEFF) else { return };
+        wr8(x.b, o.0, 1);
+        wr8(x.b, o.0 + 2, 0x2a);
+        wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
+        wr8(x.b, o.0 + 0x2f, setting);
+        let variant = x.data8(at);
+        wr8(x.b, o.0 + 3, variant);
+        let px = x.a5_u16(0x506).wrapping_add(x.data16(at + 1));
+        wr16(x.b, o.0 + Obj::X, px);
+        let (z, y) = (x.data16(at + 3), x.data16(at + 5));
+        wr16(x.b, o.0 + Obj::Z, z);
+        wr16(x.b, o.0 + Obj::Y, y);
+        at += 7;
+        x.c.a[2] = at;
+    }
+}
+
+/// `sub.w #1,(off,A0) ; bpl` : vrai quand le décompte passe sous zéro.
+fn countdown_word(x: &mut Cx, off: u32) -> bool {
+    let t = x.u16(off).wrapping_sub(1);
+    x.set16(off, t);
+    (t as i16) < 0
 }
 
 fn counter(x: &mut Cx) {
@@ -3287,20 +3730,25 @@ fn counter(x: &mut Cx) {
             x.anim_start(shop::ANIM_SET, anim);
             x.reinsert();
         }
-        2 if x.u8(f::SUB_STATE) != 0 => x.call(counter::SALE),
-        2 => shop_watch(x, counter::BUY),
+        2 if x.u8(f::SUB_STATE) != 0 => counter_sale(x),
+        2 => shop_watch(x, counter_buy),
         _ => free(x),
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 40 : effets d'une attaque d'ennemi (variante 0 : éclat qui suit l'attaquant ; 4 : débris projeté)
+// Type 40 : effets d'une attaque d'ennemi (0 : éclat qui suit l'attaquant ; 1 : éclat posé devant lui ;
+// 2 : éclat qui tombe du haut de l'écran ; 3 et 4 : débris projeté, la variante 3 tant que l'attaque dure)
 // ---------------------------------------------------------------------------------------------
 
 mod blow {
-    /// Variantes 1 à 3, jamais exercées : code d'origine.
-    pub const VARIANTS_ORIGINAL: [(u8, u32); 3] = [(1, 0xb38f4), (2, 0xb399a), (3, 0xb3ac8)];
-    pub const TABLE: u32 = 0xb37bc;
+    /// Variante 1 : décalage (dx, dz) par paire de variantes de l'attaquant (programme).
+    pub const GLOW_PLACES: u32 = 0xb3968;
+    /// Variante 2 : décalage en x par paire de variantes, animation par réglage, hauteur d'arrêt par
+    /// réglage et paire de variantes (programme).
+    pub const FALL_PLACES: u32 = 0xb3a2a;
+    pub const FALL_ANIMS: u32 = 0xb3a36;
+    pub const FALL_FLOORS: u32 = 0xb3a98;
     pub const ANIM_SET: u32 = 0x18f412;
     /// Variante 0 : vitesses (x, z) par paire de variantes de l'attaquant, selon le mode (données).
     pub const SPEEDS_BEHIND: u32 = 0xb3862;
@@ -3309,16 +3757,94 @@ mod blow {
     pub const DEBRIS: u32 = 0xb3af8;
 }
 
+/// L'attaquant est-il encore dans l'étape `step` de son attaque (état `0x204`, `+6`) ? Sinon l'effet est
+/// retiré (état 6).
+fn blow_holds(x: &mut Cx, owner: Obj, step: u8) -> bool {
+    if owner.u16(x.b, f::STATE) == 0x204 && owner.u8(x.b, 6) == step {
+        return true;
+    }
+    x.set32(f::STATE, 0x0600_0000);
+    false
+}
+
 fn blow(x: &mut Cx) {
     let v = x.u8(f::VARIANT);
-    if let Some(&(_, original)) = blow::VARIANTS_ORIGINAL.iter().find(|(w, _)| *w == v) {
-        x.c.d[0] = 2 * v as u32;
-        let word = x.rom16(blow::TABLE + 2 * v as u32);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | word as u32;
-        return x.call(original);
-    }
     let owner = x.linked(0x5c);
     match (v, x.u8(f::STATE)) {
+        (1, 0) => {
+            // éclat posé devant l'attaquant (décalage par paire de variantes de l'attaquant)
+            x.add8(f::STATE, 2);
+            let (ox, oz, oy) = (owner.u16(x.b, Obj::X), owner.u16(x.b, Obj::Z), owner.u32(x.b, Obj::Y));
+            x.set16(Obj::X, ox);
+            x.set16(Obj::Z, oz);
+            x.set32(Obj::Y, oy.wrapping_sub(1));
+            let facing = owner.u8(x.b, 0x2c);
+            x.set8(0x2c, facing);
+            let k = 2 * (owner.u8(x.b, f::VARIANT) & !1) as u32;
+            let mut dx = x.rom16(blow::GLOW_PLACES + k);
+            let dz = x.rom16(blow::GLOW_PLACES + k + 2);
+            if facing != 0 {
+                dx = dx.wrapping_neg();
+            }
+            x.add16(Obj::X, dx);
+            x.add16(Obj::Z, dz);
+            x.anim_start(blow::ANIM_SET, 0xb);
+            x.reinsert();
+        }
+        (1, 2) => {
+            if blow_holds(x, owner, 0x3c) {
+                x.anim_step();
+            }
+        }
+        (2, 0) => {
+            // éclat qui tombe du haut de l'écran devant l'attaquant
+            x.add8(f::STATE, 2);
+            let (ox, oy) = (owner.u32(x.b, Obj::X), owner.u32(x.b, Obj::Y));
+            x.set32(Obj::X, ox);
+            x.set32(Obj::Y, oy);
+            let side = if x.u8(0x2f) & 1 != 0 { 1 } else { 0xffff_ffff };
+            x.add32(Obj::Y, side);
+            let camera = if x.a5_u8(0x36) != 0 { 0x55a } else { 0x50a };
+            let top = x.a5_u16(camera).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+            x.set16(Obj::Z, top);
+            let k = (owner.u8(x.b, f::VARIANT) & !1) as u32;
+            let mut dx = x.rom16(blow::FALL_PLACES + k);
+            let facing = owner.u8(x.b, 0x2c);
+            x.set8(0x2c, facing);
+            if facing != 0 {
+                dx = dx.wrapping_neg();
+            }
+            x.add16(Obj::X, dx);
+            let setting = x.u8(0x2f) as u32;
+            let anim = x.rom8(blow::FALL_ANIMS + setting);
+            x.anim_start(blow::ANIM_SET, anim as u32);
+            x.reinsert();
+        }
+        (2, 2) => {
+            if x.u8(f::SUB_STATE) == 0 {
+                // chute de 4 pixels par image jusqu'à la hauteur prévue ; le premier (réglage 0) arrivé
+                // fait avancer l'attaquant (`+7`)
+                x.add16(Obj::Z, 0xfffc);
+                let k = (x.u8(0x2f) & !1) as u32 + (((owner.u8(x.b, f::VARIANT) as u32) >> 1) << 3);
+                let floor = x.rom16(blow::FALL_FLOORS + k);
+                if floor as i16 >= x.u16(Obj::Z) as i16 {
+                    x.add8(f::SUB_STATE, 2);
+                    x.set16(Obj::Z, floor);
+                    if x.u8(0x2f) == 0 {
+                        let step = owner.u8(x.b, 7).wrapping_add(2);
+                        owner.set_u8(x.b, 7, step);
+                    }
+                }
+            }
+            if blow_holds(x, owner, 0x3a) {
+                x.anim_step();
+            }
+        }
+        (3, 2) => {
+            if blow_holds(x, owner, 0x38) {
+                blow_debris(x);
+            }
+        }
         (0, 0) => {
             x.add8(f::STATE, 2);
             for off in [Obj::X, Obj::Z, Obj::Y] {
@@ -3365,7 +3891,7 @@ fn blow(x: &mut Cx) {
                 x.set32(f::STATE, 0x0600_0000);
             }
         }
-        (4, 0) => {
+        (3 | 4, 0) => {
             x.add8(f::STATE, 2);
             x.set8(0x42, 0x3c);
             x.set16(Obj::VZ, 0x100);
@@ -3394,31 +3920,34 @@ fn blow(x: &mut Cx) {
             x.anim_start(blow::ANIM_SET, anim);
             x.reinsert();
         }
-        (4, 2) => {
-            x.call(super::cx::sub::MOVE_XZ);
-            match x.u8(f::SUB_STATE) {
-                0 => {
-                    if x.u16(Obj::VX) == 0 {
-                        x.set32(Obj::AX, 0);
-                        x.add8(f::SUB_STATE, 2);
-                    }
-                }
-                2 => {
-                    let n = x.u8(0x42).wrapping_sub(1);
-                    x.set8(0x42, n);
-                    if n != 0 {
-                        x.add8(f::SUB_STATE, 2);
-                    }
-                }
-                _ => {
-                    if x.anim_step() {
-                        x.add8(f::STATE, 2);
-                    }
-                }
-            }
-        }
+        (4, 2) => blow_debris(x),
         (_, 4 | 6) => free(x),
         _ => {}
+    }
+}
+
+/// Débris projeté (variantes 3 et 4) : glisse jusqu'à l'arrêt, attend, puis finit son animation.
+fn blow_debris(x: &mut Cx) {
+    x.call(super::cx::sub::MOVE_XZ);
+    match x.u8(f::SUB_STATE) {
+        0 => {
+            if x.u16(Obj::VX) == 0 {
+                x.set32(Obj::AX, 0);
+                x.add8(f::SUB_STATE, 2);
+            }
+        }
+        2 => {
+            let n = x.u8(0x42).wrapping_sub(1);
+            x.set8(0x42, n);
+            if n != 0 {
+                x.add8(f::SUB_STATE, 2);
+            }
+        }
+        _ => {
+            if x.anim_step() {
+                x.add8(f::STATE, 2);
+            }
+        }
     }
 }
 
