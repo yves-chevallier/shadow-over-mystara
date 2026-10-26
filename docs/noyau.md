@@ -203,7 +203,11 @@ trois et quatre joueurs ; les 56 `scene_end/*`, les 21 `boss/*`, `modes/ending_e
 68000 non vide, et c'est du code d'origine en cours : dans `cov_mortal_late`, un gestionnaire SET d'origine (`0xcb9c0`,
 appelé par l'aiguillage des décors) lance le fondu `0x1460` et cède au milieu de la mise à jour du monde (30 images,
 pile `cb9c0 39ea2 1c8ee 1c702 1c4c4 1c468`). Elle disparaîtra avec la réécriture de ce gestionnaire (familles C10, hors
-de ce travail) : sa native devra appeler le fondu par `Sequence::tail` et reprendre dans une native.
+de ce travail) : sa native devra appeler le fondu par `Sequence::tail` et reprendre dans une native. Depuis, le même
+cas (gestionnaire SET natif qui cède au milieu de l'aiguillage, `scene/scene_67`) revient par des natives : la reprise de
+l'aiguillage (`0x39ea2`), puis les retours de la mise à jour du monde (site d'appel + 6, `game::world_resumes`) et de la
+phase 12 (`0x1c702`, `game_phase12_resume`) ; ce sont ces retours qui faisaient les dernières instructions 68000 de W1
+(`0x1c702`-`0x1c750`, `0x1c808`).
 
 L'image tourne pourtant encore sur la machine : interruption de VBLANK, parcours de l'ordonnanceur par natives
 successives, reprise d'une tâche en posant son contexte dans le processeur. Pour que la boucle d'image devienne
