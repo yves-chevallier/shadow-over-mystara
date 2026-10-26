@@ -165,6 +165,7 @@ fn sous_etats_type(t: u32) -> &'static [u8] {
     match t {
         63 | 43 => &[0, 2, 4],
         46 | 48 => &[0, 2],
+        40 => &[0, 2, 4],
         _ => &[0],
     }
 }
@@ -243,6 +244,18 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
             }
             wr8(b, j + 0x77, alea.pick(&[0, 1]));
             wr8(b, j + 3, 2 * (1 + alea.next() % 6) as u8);
+        }
+        // effets d'un coup : attaquant en +0x5c dans l'état 0x204 et une étape de la table (+6), réglage
+        40 => {
+            wr16(b, obj + 0x5c, owner as u16);
+            wr16(b, owner + 4, alea.pick(&[0x204, 0x204, 0x202]));
+            wr8(b, owner + 6, alea.pick(&[0x38, 0x3a, 0x3c, 0x10]));
+            wr8(b, owner + 7, (alea.next() % 6) as u8);
+            wr8(b, owner + 3, (alea.next() % 8) as u8);
+            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
+            let reglages: &[u8] = if rd8(b, obj + 3) == 0 { &[0, 1] } else { &[0, 1, 2, 3] };
+            wr8(b, obj + 0x2f, alea.pick(reglages));
+            wr8(b, A5 + 0x36, alea.pick(&[0, 0, 1]));
         }
         // effets d'attaque : attaquant en +0x5c (action +0x49, étape +6, type, classe), réglage
         11 => {

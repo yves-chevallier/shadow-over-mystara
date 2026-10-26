@@ -13,7 +13,7 @@
 //! - 36 : objet flottant d'une scène d'introduction (ondule, est touché, s'efface ; son reflet) ;
 //! - 37, 38 : panneaux d'un écran de fin d'épreuve (titre qui descend, message qui tombe et clignote) ;
 //! - 39 : morceau projeté vers un point de l'écran, qui éclate en touchant le sol ;
-//! - 40 : effets d'une attaque (éclat qui suit l'attaquant, débris) ; variantes 1 à 3 : code d'origine ;
+//! - 40 : effets d'une attaque (éclats qui suivent l'attaquant, posés devant lui ou tombant du haut de l'écran, débris) ;
 //! - 41 : objet lancé au hasard (quatre sortes) qui retombe puis glisse ou rebondit ;
 //! - 42 : effets de scène, onze sous-types par variante (débris, éclats, caméra alternative qui suit un
 //!   objet avec retard, étincelles, lueur, bouffées, poussière) ;
@@ -3294,13 +3294,18 @@ fn counter(x: &mut Cx) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 40 : effets d'une attaque d'ennemi (variante 0 : éclat qui suit l'attaquant ; 4 : débris projeté)
+// Type 40 : effets d'une attaque d'ennemi (0 : éclat qui suit l'attaquant ; 1 : éclat posé devant lui ;
+// 2 : éclat qui tombe du haut de l'écran ; 3 et 4 : débris projeté, la variante 3 tant que l'attaque dure)
 // ---------------------------------------------------------------------------------------------
 
 mod blow {
-    /// Variantes 1 à 3, jamais exercées : code d'origine.
-    pub const VARIANTS_ORIGINAL: [(u8, u32); 3] = [(1, 0xb38f4), (2, 0xb399a), (3, 0xb3ac8)];
-    pub const TABLE: u32 = 0xb37bc;
+    /// Variante 1 : décalage (dx, dz) par paire de variantes de l'attaquant (programme).
+    pub const GLOW_PLACES: u32 = 0xb3968;
+    /// Variante 2 : décalage en x par paire de variantes, animation par réglage, hauteur d'arrêt par
+    /// réglage et paire de variantes (programme).
+    pub const FALL_PLACES: u32 = 0xb3a2a;
+    pub const FALL_ANIMS: u32 = 0xb3a36;
+    pub const FALL_FLOORS: u32 = 0xb3a98;
     pub const ANIM_SET: u32 = 0x18f412;
     /// Variante 0 : vitesses (x, z) par paire de variantes de l'attaquant, selon le mode (données).
     pub const SPEEDS_BEHIND: u32 = 0xb3862;
@@ -3309,16 +3314,94 @@ mod blow {
     pub const DEBRIS: u32 = 0xb3af8;
 }
 
+/// L'attaquant est-il encore dans l'étape `step` de son attaque (état `0x204`, `+6`) ? Sinon l'effet est
+/// retiré (état 6).
+fn blow_holds(x: &mut Cx, owner: Obj, step: u8) -> bool {
+    if owner.u16(x.b, f::STATE) == 0x204 && owner.u8(x.b, 6) == step {
+        return true;
+    }
+    x.set32(f::STATE, 0x0600_0000);
+    false
+}
+
 fn blow(x: &mut Cx) {
     let v = x.u8(f::VARIANT);
-    if let Some(&(_, original)) = blow::VARIANTS_ORIGINAL.iter().find(|(w, _)| *w == v) {
-        x.c.d[0] = 2 * v as u32;
-        let word = x.rom16(blow::TABLE + 2 * v as u32);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | word as u32;
-        return x.call(original);
-    }
     let owner = x.linked(0x5c);
     match (v, x.u8(f::STATE)) {
+        (1, 0) => {
+            // éclat posé devant l'attaquant (décalage par paire de variantes de l'attaquant)
+            x.add8(f::STATE, 2);
+            let (ox, oz, oy) = (owner.u16(x.b, Obj::X), owner.u16(x.b, Obj::Z), owner.u32(x.b, Obj::Y));
+            x.set16(Obj::X, ox);
+            x.set16(Obj::Z, oz);
+            x.set32(Obj::Y, oy.wrapping_sub(1));
+            let facing = owner.u8(x.b, 0x2c);
+            x.set8(0x2c, facing);
+            let k = 2 * (owner.u8(x.b, f::VARIANT) & !1) as u32;
+            let mut dx = x.rom16(blow::GLOW_PLACES + k);
+            let dz = x.rom16(blow::GLOW_PLACES + k + 2);
+            if facing != 0 {
+                dx = dx.wrapping_neg();
+            }
+            x.add16(Obj::X, dx);
+            x.add16(Obj::Z, dz);
+            x.anim_start(blow::ANIM_SET, 0xb);
+            x.reinsert();
+        }
+        (1, 2) => {
+            if blow_holds(x, owner, 0x3c) {
+                x.anim_step();
+            }
+        }
+        (2, 0) => {
+            // éclat qui tombe du haut de l'écran devant l'attaquant
+            x.add8(f::STATE, 2);
+            let (ox, oy) = (owner.u32(x.b, Obj::X), owner.u32(x.b, Obj::Y));
+            x.set32(Obj::X, ox);
+            x.set32(Obj::Y, oy);
+            let side = if x.u8(0x2f) & 1 != 0 { 1 } else { 0xffff_ffff };
+            x.add32(Obj::Y, side);
+            let camera = if x.a5_u8(0x36) != 0 { 0x55a } else { 0x50a };
+            let top = x.a5_u16(camera).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+            x.set16(Obj::Z, top);
+            let k = (owner.u8(x.b, f::VARIANT) & !1) as u32;
+            let mut dx = x.rom16(blow::FALL_PLACES + k);
+            let facing = owner.u8(x.b, 0x2c);
+            x.set8(0x2c, facing);
+            if facing != 0 {
+                dx = dx.wrapping_neg();
+            }
+            x.add16(Obj::X, dx);
+            let setting = x.u8(0x2f) as u32;
+            let anim = x.rom8(blow::FALL_ANIMS + setting);
+            x.anim_start(blow::ANIM_SET, anim as u32);
+            x.reinsert();
+        }
+        (2, 2) => {
+            if x.u8(f::SUB_STATE) == 0 {
+                // chute de 4 pixels par image jusqu'à la hauteur prévue ; le premier (réglage 0) arrivé
+                // fait avancer l'attaquant (`+7`)
+                x.add16(Obj::Z, 0xfffc);
+                let k = (x.u8(0x2f) & !1) as u32 + (((owner.u8(x.b, f::VARIANT) as u32) >> 1) << 3);
+                let floor = x.rom16(blow::FALL_FLOORS + k);
+                if floor as i16 >= x.u16(Obj::Z) as i16 {
+                    x.add8(f::SUB_STATE, 2);
+                    x.set16(Obj::Z, floor);
+                    if x.u8(0x2f) == 0 {
+                        let step = owner.u8(x.b, 7).wrapping_add(2);
+                        owner.set_u8(x.b, 7, step);
+                    }
+                }
+            }
+            if blow_holds(x, owner, 0x3a) {
+                x.anim_step();
+            }
+        }
+        (3, 2) => {
+            if blow_holds(x, owner, 0x38) {
+                blow_debris(x);
+            }
+        }
         (0, 0) => {
             x.add8(f::STATE, 2);
             for off in [Obj::X, Obj::Z, Obj::Y] {
@@ -3365,7 +3448,7 @@ fn blow(x: &mut Cx) {
                 x.set32(f::STATE, 0x0600_0000);
             }
         }
-        (4, 0) => {
+        (3 | 4, 0) => {
             x.add8(f::STATE, 2);
             x.set8(0x42, 0x3c);
             x.set16(Obj::VZ, 0x100);
@@ -3394,31 +3477,34 @@ fn blow(x: &mut Cx) {
             x.anim_start(blow::ANIM_SET, anim);
             x.reinsert();
         }
-        (4, 2) => {
-            x.call(super::cx::sub::MOVE_XZ);
-            match x.u8(f::SUB_STATE) {
-                0 => {
-                    if x.u16(Obj::VX) == 0 {
-                        x.set32(Obj::AX, 0);
-                        x.add8(f::SUB_STATE, 2);
-                    }
-                }
-                2 => {
-                    let n = x.u8(0x42).wrapping_sub(1);
-                    x.set8(0x42, n);
-                    if n != 0 {
-                        x.add8(f::SUB_STATE, 2);
-                    }
-                }
-                _ => {
-                    if x.anim_step() {
-                        x.add8(f::STATE, 2);
-                    }
-                }
-            }
-        }
+        (4, 2) => blow_debris(x),
         (_, 4 | 6) => free(x),
         _ => {}
+    }
+}
+
+/// Débris projeté (variantes 3 et 4) : glisse jusqu'à l'arrêt, attend, puis finit son animation.
+fn blow_debris(x: &mut Cx) {
+    x.call(super::cx::sub::MOVE_XZ);
+    match x.u8(f::SUB_STATE) {
+        0 => {
+            if x.u16(Obj::VX) == 0 {
+                x.set32(Obj::AX, 0);
+                x.add8(f::SUB_STATE, 2);
+            }
+        }
+        2 => {
+            let n = x.u8(0x42).wrapping_sub(1);
+            x.set8(0x42, n);
+            if n != 0 {
+                x.add8(f::SUB_STATE, 2);
+            }
+        }
+        _ => {
+            if x.anim_step() {
+                x.add8(f::STATE, 2);
+            }
+        }
     }
 }
 
