@@ -78,16 +78,14 @@ fn wave_end(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Réglages de la caméra posés par les entrées « appel » des scripts de scène (D0 = valeur) : limite de
-/// défilement en X (`A5+0x52c`), position verticale (`A5+0x57c`, `A5+0x548`), mode de la caméra
-/// (`A5+0x4ff`) et son délai (`A5+0x51e`).
+/// défilement en X (`A5+0x52c`), position verticale (`A5+0x57c`) et mode de la caméra (`A5+0x4ff`) ; les
+/// autres réglages (0x2a36, 0x2a42) sont dans `petites`.
 mod camera {
     use super::*;
 
     const LIMIT_X: u32 = 0x52c;
     const POSITION_Y: u32 = 0x57c;
-    const POSITION_B: u32 = 0x548;
     const MODE: u32 = 0x4ff;
-    const DELAY: u32 = 0x51e;
 
     /// 0x2a24
     pub fn set_limit_x(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -109,24 +107,6 @@ mod camera {
         c.flags_logic(c.d[0] as u8 as u32, Size::Byte);
         rts(c, b);
     }
-
-    /// 0x2a36 : mode 0 et délai 0x18.
-    pub fn reset_short(c: &mut Cpu, b: &mut Cps2Bus) {
-        reset(c, b, 0x18);
-    }
-
-    /// 0x2a42 : position B = D0, mode 0 et délai 0x34.
-    pub fn set_position_b(c: &mut Cpu, b: &mut Cps2Bus) {
-        wr16(b, A5 + POSITION_B, c.d[0] as u16);
-        reset(c, b, 0x34);
-    }
-
-    fn reset(c: &mut Cpu, b: &mut Cps2Bus, delay: u16) {
-        wr8(b, A5 + MODE, 0);
-        wr16(b, A5 + DELAY, delay);
-        c.flags_logic(delay as u32, Size::Word);
-        rts(c, b);
-    }
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
@@ -141,6 +121,4 @@ pub const NATIVES: &[Native] = &[
     native(0x2a24, "camera_limite_x", camera::set_limit_x, regs::CCR),
     native(0x2a2a, "camera_position_y", camera::set_position_y, regs::CCR),
     native(0x2a30, "camera_mode", camera::set_mode, regs::CCR),
-    native(0x2a36, "camera_mode_court", camera::reset_short, regs::CCR),
-    native(0x2a42, "camera_position_b", camera::set_position_b, regs::CCR),
 ];
