@@ -224,6 +224,26 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
             wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
             wr8(b, A5 + 0x36, alea.pick(&[0, 0, 1]));
         }
+        // bulle d'action : porteur (+0x50) joueur dont l'action (+0x3d) est dans la table (0 à 32), objet porté
+        4 => {
+            let j = JOUEURS + 0x200 * (alea.next() % 4);
+            wr16(b, obj + 0x50, j as u16);
+            // actions prévues par les tables de chaque variante (0 : 0 à 32 ; 2 : 0 à 18 ; 1, 5, 6 : 0 à 4)
+            let actions: &[u8] = match rd8(b, obj + 3) {
+                0 => &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32],
+                2 => &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                1 => &[0, 2, 4],
+                _ => &[0, 1, 2],
+            };
+            wr8(b, j + 0x3d, alea.pick(actions));
+            wr8(b, owner + 0x3d, alea.pick(actions));
+            wr16(b, obj + 0x54, alea.pick(&[owner as u16, j as u16]));
+            for off in [0x10du32, 0x10e] {
+                wr8(b, j + off, (alea.next() % 6) as u8);
+            }
+            wr8(b, j + 0x77, alea.pick(&[0, 1]));
+            wr8(b, j + 3, 2 * (1 + alea.next() % 6) as u8);
+        }
         // effets d'attaque : attaquant en +0x5c (action +0x49, étape +6, type, classe), réglage
         11 => {
             wr16(b, obj + 0x5c, owner as u16);
@@ -257,7 +277,7 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
 fn perturbe(b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
     if alea.une_sur(4) {
         wr8(b, owner + 4, alea.pick(&[0, 2, 4, 6]));
-        wr8(b, owner + 0x3d, 2 * (alea.next() % 0x1a) as u8);
+        wr8(b, owner + 0x3d, 2 * (alea.next() % 3) as u8);
     }
     if alea.une_sur(6) {
         wr8(b, obj + 0x33, alea.pick(&[0, 1]));

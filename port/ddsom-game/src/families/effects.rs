@@ -1977,7 +1977,7 @@ fn declencheur_gestionnaire(ctx: &mut Ctx) {
 /// L'animation est choisie d'après l'action en cours du porteur (`+0x3d` du joueur, `+0x10d/0x10e`,
 /// personnage `+3`) dans de petites tables de la ROM ; huit variantes :
 ///
-/// - 0 : action du joueur (dix cas selon `+0x3d`) ;
+/// - 0 : action du joueur (`+0x3d` de 0 à 32 ; au-delà, la table de l'original saute dans des données) ;
 /// - 1, 2, 5, 6 : action de l'objet porté (`+0x54`) ou fixe (`0x10`, `0x25` à `0x27`) ;
 /// - 3 : bulle secondaire qui se pose sur l'objet porté (`0xaadba`) ;
 /// - 4, 7 : animations fixes (`0x23`, `4`).
@@ -2164,7 +2164,8 @@ fn bulle_0(ctx: &mut Ctx, o: Obj) {
             bulle_lit(ctx, o, bulle::TABLE_OBJET_A, classe as u16);
             bulle_suite(ctx, o);
         }
-        18 => {
+        // 0xaacba (les actions 18 et 20 partagent le même code)
+        18 | 20 => {
             let porte = pointeur(ctx, o, bulle::PORTE);
             let est_box = porte.u8(ctx.b, Obj::CLASS) == 0xa;
             if ctx.pris(est_box) {
