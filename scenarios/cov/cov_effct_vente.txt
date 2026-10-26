@@ -1,0 +1,20 @@
+# EFFCT 70 : vente du comptoir de la scène 81 (vendeur, enseigne, articles, acheteur devant le vendeur), acheteur posé par poke
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1440 P1 Button 1 1
+1446 P1 Button 1 0
+2399 poke8 ff8034 10
+2924 P1 Left 1
+2399 poke8 ff8034 81
+3590 poke16 ff862e 0x85de
+3600 poke16 ff2aa4 0x85de
+3600 poke16 ff85e6 0x128
+3600 poke16 ff85ee 0x58
+3600 poke8 ff8636 1
+3700 poke16 ff2aa4 0x85de
+3700 poke16 ff85e6 0x150
+3700 poke16 ff85ee 0x50
+3700 poke8 ff8636 1
+4500 quit

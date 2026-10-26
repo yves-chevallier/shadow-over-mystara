@@ -140,12 +140,11 @@ Pool de 38 emplacements de 0x60 octets (`0xFFD49E`), 92 types (la table `0x39ce0
 Les types de la première série sont écrits sur `Ctx` (`effects.rs`, ancienne méthode à durée exacte) ;
 les suivants sur `Cx` (`effects_b.rs` : 72 à 79 ; `effects_c.rs` : types de scène et d'ennemis ;
 `effects_d.rs` : type 31 ; `effects_e.rs` : types 11, 13, 14 ; `effects_f.rs` : types 0, 35, 53, 54, 55, 68, 77,
-89 ; `effects_creators.rs` : créateurs d'effets). Les ESHL 70 à 72 (`0xa801a`, `0xa81ca`,
+89 ; `effects_g.rs` : types 43, 46, 48, 63, 80, 81 ; `effects_creators.rs` : créateurs d'effets). Les ESHL 70 à 72 (`0xa801a`, `0xa81ca`,
 `0xa838e`), derniers types de la table ESHL `0x39b96` rangés dans la zone des EFFCT, sont dans `eshl_d.rs`. « Appels » : appels de la routine native sur les
 121 scénarios de `scenarios/` (validate_all, 90 scénarios) et `scenarios/cov` (31 scénarios). Les variantes
-ou états qu'aucun scénario n'exerce sont, selon les cas, réécrits (sans validation : voir §5) ou
-laissés au code d'origine (`Cx::call` sur leur adresse, avec D0/D1 comme l'original), indiqué dans la
-colonne « validation ».
+ou états qu'aucun scénario n'exerce sont réécrits et validés par fuzz (voir « Recensement » ci-dessous),
+indiqué dans la colonne « validation ».
 
 Points délicats rencontrés :
 
@@ -164,15 +163,15 @@ Points délicats rencontrés :
 | 0 | 0xa8594 | décor d'ouverture | glisse vers sa place, puis met fin aux objets de deux pools (état 6 ; un objet marqué `+0x58` arrête le premier parcours, qui finit sans le second, comme l'original) ; variante 3 : attend, fait avancer la scène (`A5+0x4ff`), suit le défilement de la caméra | — | scénarios (`effects_f.rs`) |
 | 1 | 0xa8758 | supprimé | libère l'objet aussitôt | 499 | scénarios |
 | 3 | 0xaa8e8 | élément d'écran | fixé à la caméra, hauteur suivant le tremblement `A5+0x4ba` | 13 284 | scénarios |
-| 4 | 0xaaac0 | bulle d'action | icône animée liée à un joueur ou à l'objet qu'il manipule, animation selon l'action `+0x3d` du porteur (huit variantes) ; code `0x29` : bulle de variante 3 et étincelle d'impact (`0xb13fa`) ; actions 22 à 32 de la variante 0 (jauge `+0x77`) | 175 021 | scénarios ; autres actions : code d'origine |
+| 4 | 0xaaac0 | bulle d'action | icône animée liée à un joueur ou à l'objet qu'il manipule, animation selon l'action `+0x3d` du porteur (huit variantes) ; code `0x29` : bulle de variante 3 et étincelle d'impact (`0xb13fa`) ; actions 22 à 32 de la variante 0 (jauge `+0x77`) | 175 021 | scénarios ; action 20 (code de l'action 18) : fuzz ; actions > 32 hors table |
 | 5 | 0xab726 | halo | position du joueur + décalage, délai selon `+0x7d`, vit 0x28 images | 6 172 | scénarios |
 | 6 | 0xab7fa | gerbe de débris | le premier crée ses frères, vitesses lues dans une fiche | 39 486 | scénarios |
 | 7 | 0xaba4e | éclat à animation unique |  | 499 | scénarios |
 | 8 | 0xababa | trace | collée à un objet, animation selon son type | 657 | scénarios |
 | 9 | 0xabbee | traînée | naît sur une position d'écran, avance en X | 153 984 | scénarios |
 | 10 | 0xabccc | dalles | rangée en diagonale de dix dalles (chacune crée la suivante) qui s'enfoncent sous un joueur au sol (décor SET 6) | 14 314 | scénarios |
-| 11 | 0xabeea | effets d'attaque | dix variantes : éclat lancé depuis l'attaquant (1), reflet (3), colonne montante (4), pièces d'un objet brisé (6), gerbe d'étincelles (7) | 23 406 | scénarios ; variantes 0, 2, 5, 8, 9 : code d'origine (jamais exercées) |
-| 12 | 0xad476 | maillon d'une chaîne | rejoue avec retard l'historique des directions du maillon précédent | 14 180 | scénarios ; rupture (`0xad53a`) : code d'origine |
+| 11 | 0xabeea | effets d'attaque | dix variantes : éclat posé au hasard autour de l'attaquant (0), éclat lancé depuis l'attaquant (1), marque qui fait avancer l'attaquant (2), reflet (3), colonne montante (4), traînée liée à une action (5), pièces d'un objet brisé (6), gerbe d'étincelles (7), gerbes d'éclats qui suivent puis retombent (8, 9) | 23 406 | scénarios ; variantes 0, 2, 5, 8, 9 : fuzz et `cov_effct_rares` (0, 8) |
+| 12 | 0xad476 | maillon d'une chaîne | rejoue avec retard l'historique des directions du maillon précédent | 14 180 | scénarios ; rupture (`0xad53a`) : fuzz |
 | 13 | 0xad63e | radeau | défile et emporte les joueurs, piloté par leurs directions | 26 597 | scénarios |
 | 14 | 0xad866 | passage | oscille, attend un joueur vivant, ferme puis ouvre un rideau de tuiles ; entrée dans la sous-scène (`0xada96` : caméras, défilement et musique sauvés dans l'objet, objets des six pools gelés `+0x40`, décor `0xcc200`) puis retour (`0xae11a` : contexte rendu, joueurs replacés devant l'objet suivi) | 40 108 | scénarios |
 | 15 | 0xae428 | scintillement | posé sur un ITEM, clignote au passage d'un joueur | 200 044 | scénarios |
@@ -181,8 +180,8 @@ Points délicats rencontrés :
 | 19 | 0xaecce | balayage d'écran |  | 2 168 | scénarios |
 | 20 | 0xaed4c | curseur de don d'or | boutique : déplacé par le joueur, donne 10 ou 100 pièces (BCD) au joueur visé ; dessine la jauge de vie et l'or dans la couche de texte | 55 209 | scénarios |
 | 21 | 0xaf360 | bandeau | glisse en Z jusqu'à une cible | 24 768 | scénarios |
-| 22 | 0xaf3f2 | comptoir de boutique | zone de vente : annonce l'article au premier acheteur qui entre | 550 750 | scénarios ; achat (`0xafad0`) : code d'origine (jamais exercé) |
-| 23 | 0xafe20 | vote du chemin | scrutin (curseur par joueur, compte à rebours, dépouillement au hasard parmi les ex æquo, clignotement du texte gagnant) ; texte en mots (`A5+0x72` = 2) ou en octets (autres langues : 0xff commande de 3 octets, 0xfe de 2, octet ≤ 0x0f caractère de 2 octets) | 8 094 | scénarios |
+| 22 | 0xaf3f2 | comptoir de boutique | zone de vente : annonce l'article au premier acheteur qui entre | 550 750 | scénarios ; achat (`0xafad0` : 78 entrées `bra.w`, sortie, repas, articles avec refus par classe, paiement BCD) : fuzz et `cov_effct_achat` |
+| 23 | 0xafe20 | vote du chemin | scrutin (curseur par joueur, compte à rebours, dépouillement au hasard parmi les ex æquo, clignotement du texte gagnant) ; texte en mots (`A5+0x72` = 2) ou en octets (autres langues : 0xff commande de 3 octets, 0xfe de 2, octet ≤ 0x0f caractère de 2 octets) ; minuteur : états 4 (aucune étape n'y mène, relit A6) et 6 (retrait hors écran) | 8 094 | scénarios ; états 4 et 6 du minuteur : fuzz |
 | 24 | 0xb0ff2 | accessoire de personnage |  | 6 072 | scénarios |
 | 25 | 0xb111a | poussière |  | 753 125 | scénarios |
 | 26 | 0xb11f4 | nuage |  | 10 057 | scénarios |
@@ -199,12 +198,15 @@ Points délicats rencontrés :
 | 37 | 0xb33ba | titre d'épreuve | descend puis attend son créateur | 305 | scénarios |
 | 38 | 0xb3454 | message d'épreuve | tombe, clignote, change avec son créateur | 3 274 | scénarios |
 | 39 | 0xb3570 | morceau projeté | vole vers un point de l'écran (durée = distance / vitesse), éclate au sol (type 50) | 14 202 | scénarios |
-| 40 | 0xb37ac | effets d'un coup | éclat qui suit l'attaquant (0), débris projeté (4) | 6 688 | scénarios ; variantes 1 à 3 : code d'origine |
+| 40 | 0xb37ac | effets d'un coup | éclat qui suit l'attaquant (0), éclat posé devant lui (1), éclat qui tombe du haut de l'écran (2), débris projeté (4, et 3 tant que l'attaque dure) | 6 688 | scénarios ; variantes 1 à 3 : fuzz et `cov_effct_rares` (1, 2) |
 | 41 | 0xb3c48 | objet lancé | quatre sortes tirées au hasard, retombe puis glisse ou rebondit | 579 | scénarios |
-| 42 | 0xb40f8 | effets de scène | éclat bref (0), débris, éclats, caméra alternative avec 8 images de retard, étincelles, lueur, bouffées, poussière | 81 110 | scénarios ; variantes 1, 2, 9 : code d'origine |
+| 42 | 0xb40f8 | effets de scène | éclat bref (0), débris lancé (1) ou repoussé avec les joueurs (2), débris, éclats, caméra alternative avec 8 images de retard, étincelles, lueur, bouffées, éclat projeté au hasard (9), poussière | 81 110 | scénarios ; variantes 1, 2, 9 : fuzz et `cov_effct_rares` |
+| 43 | 0xb4bec | pluie de débris | en haut de l'écran avec une poussière au départ (réglage 0) ou depuis le créateur (`+0x5c`), vitesses et animation tirées au hasard ; tombe, clignote, disparaît (ou avec le créateur) | — | fuzz et `cov_effct_rares` (`effects_g.rs`) |
 | 44 | 0xb4f88 | sorts d'un magicien | six modes liés à `+0x5c` | 3 545 | scénarios |
 | 45 | 0xb5340 | déclencheur de proximité |  | 35 669 | scénarios |
+| 46 | 0xb5454 | pièces d'armure | suivent le porteur (ENEMY, `+0x46`) et rejouent ses coups reçus, tombent quand sa vie passe sous leur seuil, se brisent en éclats (variante 1) qui rebondissent | — | fuzz et `cov_effct_rares` (`effects_g.rs`) |
 | 47 | 0xb5764 | repère | clignote lentement | 1 810 | scénarios |
+| 48 | 0xb59ea | machine volante | canon qui tourne autour de son porteur et tire des ESHL 0x2c (1, avec son corps, 0), balayeur au bord de l'écran (2) | — | fuzz et `cov_effct_rares` (`effects_g.rs`) |
 | 49 | 0xb5dbe | accessoire porté | tombe quand le porteur passe dans un état donné | 34 198 | scénarios |
 | 50 | 0xb5fb6 | effets attachés | seize variantes (reflets, éclats, tremblement) | 211 697 | scénarios |
 | 51 | 0xb64c8 | projectile |  | 0 | fuzz (lot précédent) |
@@ -219,13 +221,14 @@ Points délicats rencontrés :
 | 60 | 0xb7248 | second double | comme le 16, avec éclats et morceau projeté | 9 234 | scénarios |
 | 61 | 0xb751e | créature nageuse | sort de l'eau, ondule, s'en va | 10 909 | scénarios |
 | 62 | 0xb77ac | gerbe d'éclats |  | 9 683 | scénarios |
+| 63 | 0xb7866 | morceau projeté par un ennemi | (ENEMY 22, 23) part en arc depuis le créateur (`+0x42`), retombe avec des débris, attend, clignote | — | fuzz et `cov_effct_rares` (`effects_g.rs`) |
 | 64 | 0xb7a14 | éclat tombant | projeté, retombe sous l'horizon | 3 490 | scénarios |
 | 65 | 0xb7ac8 | messager | suit un trajet (directions et durées) puis fait naître un ENEMY décrit par une fiche | 19 | scénarios |
 | 66 | 0xb7c40 | gros caractères | quatre blocs animés dans le fond 2 | 1 366 | scénarios |
 | 67 | 0xb7e26 | colonne | s'élève sous un objet, relâche les joueurs | 6 080 | scénarios |
-| 68 | 0xb7f28 | enseigne de départ | posée sur la caméra, couleurs chargées (`0x28ff20`) ; à la fin de son animation, les joueurs vivants debout repartent (`0x02003000`) | — | scénarios (`effects_f.rs`) |
+| 68 | 0xb7f28 | enseigne de départ | posée sur la caméra, couleurs chargées (`0x28ff20`) ; à la fin de son animation, les joueurs vivants debout repartent (`0x02002c00`) | — | scénarios (`effects_f.rs`) |
 | 69 | 0xb802a | silhouette | fait les cent pas en haut de l'écran | 4 562 | scénarios |
-| 70 | 0xb80bc | comptoir de scène | zone de vente du type 22 | 4 188 | scénarios ; vente (`0xb81d6`, `0xb83d8`) : code d'origine (jamais exercée) |
+| 70 | 0xb80bc | comptoir de scène | zone de vente du type 22 ; vente : vendeur (décor 0x64), enseigne, articles posés (PEFF 0x2a), acheteur devant le vendeur | 4 188 | scénarios ; vente (`0xb81d6`, `0xb83d8`) : fuzz et `cov_effct_vente` |
 | 72 | 0xb841c | détecteur de ramassage |  | 365 616 | scénarios |
 | 73 | 0xb84c6 | écran de victoire |  | 1 156 | scénarios |
 | 74 | 0xb85fa | bulle du créateur |  | 1 382 | scénarios |
@@ -233,7 +236,9 @@ Points délicats rencontrés :
 | 76 | 0xb88a8 | minuteur de scène | joue un son, lance une transition après un délai | 2 528 | scénarios |
 | 77 | 0xb896e | fondu sonore | deux niveaux (commandes 0xff08 / 0xff09) qui montent par paliers de 5 images, puis arrêt (0xff07) | — | scénarios (`effects_f.rs`) |
 | 79 | 0xb8df2 | clignotement |  | 46 429 | scénarios |
-| 82 | 0xb97d8 | éclat posé | à côté de son créateur, clignote | 0 | **non validé** (fuzz non concluant, §5) |
+| 80 | 0xb8ef6 | feu d'artifice | scène d'un personnage (`0x23606`) : le héros tire des fusées pendant un fondu au noir, cède la main quatre images (`0xa40`, reprises natives `0xb91d0` et `0xb8f04`), s'envole et termine la scène ; spectateurs et acolytes (1 à 6) | — | fuzz (reprises comprises) et `cov_effct_rares` (6) (`effects_g.rs`) |
+| 81 | 0xb96dc | éclat lancé | depuis la main d'un personnage (`+0x42` geste), glisse en arc, clignote | — | fuzz et `cov_effct_rares` (`effects_g.rs`) |
+| 82 | 0xb97d8 | éclat posé | à côté de son créateur, clignote | 0 | fuzz (`fuzz_effct`, 76 instructions atteignables sur 77 vues) |
 | 83 | 0xb997c | pluie d'éclats | gouttes en arc depuis le haut de l'écran | 58 498 | scénarios |
 | 84 | 0xb9aba | séquence de fin | fondu, caméra, tâches de script (`0x9b6`) | 2 198 | scénarios |
 | 85 | 0xb9bbc | pièce de la fin |  | 20 426 | scénarios |
@@ -244,18 +249,37 @@ Points délicats rencontrés :
 | 90 | 0xba1aa | poussière haute |  | 1 625 | scénarios |
 | 91 | 0xba244 | élément d'écran | comme le type 3 | 3 321 | scénarios |
 
-Encore en code d'origine :
+### Recensement de la table des types (`0x39ce0`, 92 entrées)
 
-- **types sans routine native**, qu'aucun scénario n'appelle : 2, 43, 46, 48, 63, 71 (`0xb841a`, un simple
-  `rts`), 78, 80, 81 ; 18 renvoie au gestionnaire commun des SET `0xcc25a` (natif, `families/set.rs`) ;
-- **créateurs** : les petites routines qui allouent un effet et le lient à leur créateur (`0xae776`, `0xae3ec`,
-  `0xb1a7a`, `0xab7d8`, `0xabec8`, `0xb3f40`-`0xb4088`, `0xabb70`, `0xa8ae8`...) sont natives
-  (`effects_creators.rs`) ;
-- **variantes et états délégués** (colonne « validation ») : jamais exercés par les scénarios, exécutés tels
-  quels par le code d'origine ;
-- reste mesuré (`tools/reste68k.sh`, 255 scénarios) : 443 506 instructions 68000 dans la zone EFFCT
-  (`0xa8000-0xba310`) avant les lots `effects_f.rs` / `effects_creators.rs`, 51 après (trois créateurs
-  rencontrés ensuite, `0xb3df6`, `0xb6ba8`, `0xb8a0a`, désormais natifs : plus aucune instruction attendue).
+Méthode : chaque entrée de la table et chaque table de sauts des gestionnaires (variante, état, sous-état,
+action, sorte d'achat), bornée par le premier code qu'elle désigne (au-delà, l'original saute dans des
+données : hors contrat) ; `examples/recensement_effct.rs` relève le code d'origine que les natives exécutent
+encore sur des trajectoires synthétiques ; les créateurs sont recherchés par les appels de l'allocation
+`0x2318`, les scripts d'apparition des scènes (classe EFFCT de `0xf2f38`) et les références aux routines de la
+zone depuis le reste du programme.
+
+- **Toutes les entrées atteignables sont natives** : 88 gestionnaires (dont 18 = gestionnaire commun des SET
+  `0xcc25a`, `set.rs`), leurs variantes et états, les 12 créateurs de la zone qui restaient en 68000 (`0xb3e4e`,
+  `0xb3ec6`, `0xb4bcc`, `0xb4f1c`, `0xb53f4`, `0xb59a6`, `0xb59c8`, `0xb64b0`, `0xb96c0`, `0xb97a2`,
+  `0xb97ba`, bloc de tuiles `0xb230e`, `effects_creators.rs`) et les deux points de reprise du type 80.
+- **Validation** : « scénarios » dans le tableau ci-dessus ; les chemins qu'aucun scénario n'exerçait sont
+  validés par `examples/fuzz_effct.rs` (trajectoires de 60 images depuis la naissance ou un état de la table,
+  propriétaire et liens réglés par type, comparaison à l'original sur une copie, couverture des instructions
+  atteignables du gestionnaire : toutes vues, aux artefacts de désassemblage près) et, quand c'est faisable, par
+  `scenarios/cov/cov_effct_rares.txt` (objets créés par poke pendant la scène 10), `cov_effct_achat.txt` (scène
+  69) et `cov_effct_vente.txt` (scène 81). Le fuzz a corrigé deux défauts de natives anciennes jamais exercés :
+  état 6 du minuteur du vote (23) ignoré, état des joueurs relancés par l'enseigne de départ (68 : `0x02002c00`).
+- **Code mort** (aucune création possible) : types 2 (`0xaa71a` ; son seul créateur `0x17626`, dans l'interface
+  joueurs, suit un `bra` et n'est référencé par rien), 71 (`0xb841a`, un `rts`) et 78 (`0xb8a1e`) : aucun appel de
+  `0x2318` ni script de scène ne crée ces types. Laissés en 68000, non réécrits.
+- **Hors contrat, laissés à l'original** : pool plein dans la naissance du curseur de don d'or (20 : `0xaf2bc`,
+  `tst.w (1,A5)`, erreur d'adresse) et dans la créature nageuse (61 : `0xb778c`, saut dans des données) ; texte du
+  vote dont le pointeur `+0x30` serait impair en mots (erreur d'adresse dans l'original, seul écart du fuzz sur le
+  type 23).
+- **Hors périmètre** : le type 44 appelle les créateurs de tirs ESHL `0xa31c2` et `0xa3354` (zone ESHL, encore en
+  68000) ; les articles posés par la vente du type 70 sont des PEFF 0x2a (`0x50b9c`, code d'origine).
+- Reste mesuré (`examples/reste68k`, scénarios `cov_effct_*`) : aucune instruction 68000 dans la zone EFFCT
+  (`0xa8594-0xba310`).
 
 ## 5. Résultats de la validation
 
@@ -271,6 +295,13 @@ Lot EFFCT sur `Cx` (types 3 à 91 ci-dessus) :
   n'est donc pas concluant pour ces types : les chemins que les scénarios n'exercent pas (marqués « non
   exercé » ou délégués ci-dessus, et les branches rares des types exercés) **ne sont pas validés**. Pour le
   rendre utile, il faudrait lui donner, par type, les variantes et états valides.
+
+Recensement des chemins non exercés (`examples/fuzz_effct.rs`, `FUZZ_PROPRE=1`) : variantes et sous-états
+bornés par type (les tables de l'original), liens réglés par type (`prepare`), comparaison faite par l'outil
+(RAM hors pile et hors table des tâches 68000 que le noyau tient en Rust, GFX RAM, palette, OBJ RAM, A0, D7) ;
+balayage des 88 types natifs (variantes 0 à 3) puis campagnes ciblées : aucun écart hors des cas hors contrat
+(variante hors table, texte du vote à une adresse impaire). Créateurs : `FUZZ_CREATEURS=...` depuis des registres
+tirés au hasard.
 
 Lots précédents :
 

@@ -688,7 +688,7 @@ fn start_sign(x: &mut Cx) {
                 x.set_a5_u8(0x59, 0);
                 for p in living_players(x) {
                     if p.u8(x.b, 6) <= 10 {
-                        p.set_u32(x.b, f::STATE, 0x0200_3000);
+                        p.set_u32(x.b, f::STATE, 0x0200_2c00);
                     }
                 }
             }
