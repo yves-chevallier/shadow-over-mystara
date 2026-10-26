@@ -6,7 +6,7 @@
 //!   recensement <roms> <eeprom> <scénario> <chauffe> <trajectoires> [CLASSE,...]
 //!
 //! Classes : PSHL PEFF ESHL SET SOBJ ITEM BOX (toutes par défaut). `DDSOM_ENTREE=adresse` : un seul
-//! gestionnaire. Une trajectoire crée un objet neuf (état 0, variante 0, ou tirée parmi les `DDSOM_VARIANTES` premières)
+//! gestionnaire ; `DDSOM_ETATS=1` : la moitié des trajectoires part d'états `+4..+7` tirés. Une trajectoire crée un objet neuf (état 0, variante 0, ou tirée parmi les `DDSOM_VARIANTES` premières)
 //! puis appelle le gestionnaire jusqu'à 120 fois en perturbant les entrées qu'il lit ; une sur deux
 //! tire en plus des variables de scène (partie, transition, mode de jeu ; marquée « tirée »).
 //! Sortie : une ligne par entrée, puis les plages de 68000 exécutées par entrée.
@@ -258,6 +258,12 @@ fn trajectoire(
     }
     wr16(&mut b, obj.0 + 0xc, (alea.next() % 0x60) as u16);
     wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
+    if std::env::var_os("DDSOM_ETATS").is_some() && alea.next() % 2 == 0 {
+        // états de départ tirés (paires) : atteint les sous-états délégués ; peut sortir des tables de l'original
+        for off in [4u32, 5, 6, 7] {
+            wr8(&mut b, obj.0 + off, alea.parmi(&[0, 0, 2, 4, 6, 8, 0xa]));
+        }
+    }
     if tires {
         // variables de scène que lisent les décors et objets système : partie, transition, mode, joueurs
         for (off, vals) in [(0x35u32, &[0u8, 1, 2, 4][..]), (0x36, &[0, 1]), (0x42, &[0, 1]), (0x44, &[0, 1]), (0x50, &[0, 1]), (0x4a, &[0, 1]), (0x2c, &[0, 4, 8, 12])] {
