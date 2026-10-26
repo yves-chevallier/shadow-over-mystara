@@ -8,7 +8,7 @@
 use super::actions::to_stand;
 use super::checks::{attack_button, item_curse, jump_button};
 use super::states::State;
-use super::walk::{clamp_x, crawl_speed, move_x, move_xy, move_xz, move_z, run_speed, walk_speed};
+use super::walk::{clamp_x, crawl_speed, move_x, move_xy, move_xyz, move_xz, move_z, run_speed, walk_speed};
 use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
@@ -802,6 +802,43 @@ pub fn hop(g: &mut Ctx, p: Player) {
     if phase == 0 {
         let z = p.u16(g, Obj::Z).wrapping_sub(4);
         p.set_u16(g, Obj::Z, z);
+    }
+}
+
+// ---- action 0x24 (0x36b26) : chute jusqu'au sol (h) -----------------------------------------------
+
+/// 0x36b26 : le joueur tombe (animation 13), la chute suit la vitesse en X, Y et Z jusqu'à ce que la hauteur
+/// ne soit plus positive ; il touche alors le sol (animation 14, son d'atterrissage) puis, l'animation finie,
+/// se remet debout. Le pas 2 (animation 18) n'est jamais atteint : le pas 0 avance de deux crans.
+pub fn fall_in(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            next_step(g, p);
+            animation::start(g, p, 13);
+        }
+        2 => {
+            next_step(g, p);
+            animation::start(g, p, 18);
+        }
+        4 => {
+            move_xyz(g, p);
+            if p.u16(g, Obj::Z) as i16 > 0 {
+                return;
+            }
+            next_step(g, p);
+            p.set_u32(g, Obj::Z, 0);
+            animation::start(g, p, 14);
+            g.rom(rom::LEAP_LANDING, p);
+        }
+        6 => {
+            if animation::step(g, p) {
+                to_stand(g, p);
+            }
+        }
+        _ => {
+            g.rom(0x36b26, p);
+        }
     }
 }
 

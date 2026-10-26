@@ -164,6 +164,25 @@ fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
     }
 }
 
+/// 0xcf182 : relève les compteurs de sorts (`+0x151..+0x159`, neuf octets signés) au minimum prévu pour
+/// le niveau du joueur. La table par classe (0xcf1b0) a une ligne de dix octets par niveau (à partir du
+/// niveau de base de la classe, octets 0xcf17c) : un premier octet négatif la désactive, puis les neuf minima.
+pub fn raise_spells(g: &mut Ctx, p: Player) {
+    const BASE_LEVEL: u32 = 0xcf17c;
+    const MINIMA: u32 = 0xcf1b0;
+    let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
+    let level = p.u8(g, Player::LEVEL).wrapping_sub(g.prog8(BASE_LEVEL + class)) as u32;
+    let row = g.prog32(MINIMA + 4 * class) + 10 * level;
+    if g.data8(row) as i8 >= 0 {
+        for i in 0..9 {
+            let minimum = g.data8(row + 1 + i) as i8;
+            if minimum > p.u8(g, 0x151 + i) as i8 {
+                p.set_u8(g, 0x151 + i, minimum as u8);
+            }
+        }
+    }
+}
+
 /// 0x3432 : débloque les drapeaux listés (octets non nuls) pour ce personnage et ce niveau.
 fn init_unlocked(g: &mut Ctx, p: Player) {
     cov!();
@@ -337,7 +356,7 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
         init_hp(g, p);
         init_gear(g, p, 8);
         init_unlocked(g, p);
-        g.rom(0xcf182, p);
+        raise_spells(g, p);
     } else {
         if how == Join::New {
             p.set_u32(g, Player::SCORE_BCD, 0);

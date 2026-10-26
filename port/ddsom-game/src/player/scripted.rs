@@ -96,6 +96,7 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x23c16, revive_fall),
     (0x23c3c, revive_land),
     (0x23c58, revive_end),
+    (0x23d0c, revive_in_place),
     (0x23d6e, |g, p| substep_table(g, p, tables::WAIT_SUBSTEPS)),
     (0x23d82, wait_start),
     (0x23db4, wait_delay),
@@ -494,6 +495,23 @@ fn revive_end(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::ACTIVE, 1);
     p.set_u8(g, Player::INVULN, 0x96);
     start_stand(g, p);
+}
+
+/// 0x23d0c (pas 12) : le joueur réapparaît directement à sa place, debout et sans arme en main : il
+/// reprend la main (état de jeu normal) avec l'animation 0x35.
+fn revive_in_place(g: &mut Ctx, p: Player) {
+    cov!();
+    p.set_state(g, State::pack(2, 0, 0, 0).0);
+    p.set_u8(g, Player::ACTIVE, 1);
+    let flags = p.u8(g, Player::FLAGS) & !2;
+    p.set_u8(g, Player::FLAGS, flags);
+    p.set_u8(g, Player::FACING, 0x20);
+    p.set_u8(g, 0x68, 0);
+    g.rom(rom::PLACE, p);
+    p.set_u32(g, Obj::Z, 0);
+    g.rom(rom::REVIVE_SETUP, p);
+    animation::start(g, p, 0x35);
+    g.rom(rom::RANK_RAISE, p);
 }
 
 // ---- attente d'ouverture des commandes (début de scène) ------------------------------------------
