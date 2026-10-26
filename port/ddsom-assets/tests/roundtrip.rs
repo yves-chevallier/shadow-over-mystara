@@ -563,3 +563,37 @@ fn dialogues_sans_perte() {
 fn restes_sans_perte() {
     check_data("data/rest.json");
 }
+
+#[test]
+fn natives_sans_perte() {
+    check_data("data/natives.json");
+}
+
+/// Tables du DSP QSound : les mots de `qsound_dsp.json` sont ceux de `dl-1425.bin`.
+#[test]
+fn dsp_sans_perte() {
+    if !has("sound/qsound_dsp.json") {
+        return;
+    }
+    let dsp = std::fs::read(roms().join("dl-1425.bin")).unwrap();
+    let rebuilt = ddsom_assets::rebuild::qsound_dsp(&assets()).unwrap();
+    let t = ddsom_assets::music::DspTables::load(&assets().join("sound/qsound_dsp.json")).unwrap();
+    for table in &t.tables {
+        let (a, n) = (2 * table.rom as usize, 2 * table.values.len());
+        assert_eq!(rebuilt[a..a + n], dsp[a..a + n], "table {}", table.name);
+    }
+}
+
+/// Région du Z80 reconstruite : chaque octet écrit vaut celui des ROMs `dd2.01`/`dd2.02`, sans conflit.
+#[test]
+fn region_audio_sans_perte() {
+    if !has("sound/music.json") {
+        return;
+    }
+    let img = ddsom_assets::rebuild::audio_region(&assets()).unwrap();
+    assert!(img.conflicts.is_empty(), "écritures contradictoires : {:x?}", &img.conflicts[..img.conflicts.len().min(8)]);
+    let rom = ddsom_sound::Rom::load(&roms()).unwrap();
+    let region = rom.region();
+    let first = ddsom_assets::rebuild::first_difference(&img, region);
+    assert!(first.is_none(), "région du Z80 : différence en {:#x}", first.unwrap());
+}

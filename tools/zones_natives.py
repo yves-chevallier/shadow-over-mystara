@@ -16,6 +16,11 @@ ECART = 0x10
 GENERIQUES = ('mem.rs', 'vue.rs')
 # lues avant toute mesure (Cpu::reset au chargement, espace programme) : pile et PC initiaux
 FIXES = [('p', 0x0, 0x8, 'vecteurs')]
+# lecteurs que trois niveaux d'appel ne résolvent pas (accès génériques) : début de zone -> fichier
+LECTEURS = {
+    # page 3 des palettes des scènes 0x58 et 0x59 : entrée nulle, le jeu copie 32 palettes depuis l'adresse 0
+    ('d', 0x0): 'palette.rs',
+}
 
 
 def lecteur(sites):
@@ -41,7 +46,7 @@ def main():
     for esp, a, b, nom in FIXES:
         lus[esp].update(range(a, b, 2))
         for m in range(a, b, 2):
-            qui.setdefault((esp, m), nom)
+            qui[(esp, m)] = nom
     for esp, base in (('d', 0), ('p', 0x200000)):
         mots = sorted(a for a in lus[esp] if not couvert[base + a // 2])
         for a in mots:
@@ -51,7 +56,7 @@ def main():
             else:
                 zones.append([esp, a, a + 2, collections.Counter([qui.get((esp, a), 'inconnu')])])
     for esp, a, b, c in zones:
-        print(f'{esp} {a:06x} {b:06x} {c.most_common(1)[0][0]}')
+        print(f'{esp} {a:06x} {b:06x} {LECTEURS.get((esp, a), c.most_common(1)[0][0])}')
 
 
 main()

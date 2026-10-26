@@ -1,5 +1,5 @@
 # espace début fin(exclue) lecteur — généré par tools/zones_natives.py, ne pas éditer
-d 000000 000400 inconnu
+d 000000 000400 palette.rs
 d 000ffe 001000 scene/mod.rs
 d 0014bc 0014be scene/exit.rs
 d 0019f0 001a10 demarrage.rs
@@ -1493,7 +1493,7 @@ d 3fcf82 3fcf84 scene/mod.rs
 d 3fdf82 3fdf84 scene/mod.rs
 d 3fef80 3fef82 scene/mod.rs
 d 3fff80 3fff82 scene/mod.rs
-p 000000 000008 inconnu
+p 000000 000008 vecteurs
 p 00140c 00144a aides.rs
 p 001b14 001b34 objects/motion.rs
 p 001b88 001c1c objects/motion.rs

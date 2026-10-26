@@ -5,7 +5,8 @@
 //! (`d` données, `p` programme déchiffré), le début, la fin exclue et le fichier Rust qui lit la zone. Ce sont de
 //! petites tables disséminées (vitesses, décisions, positions, chaînes, adresses de routines lues par les tables
 //! d'aiguillage, vecteurs d'interruption...) dont le format n'est pas encore décrit : elles sont rangées en mots
-//! (ou en octets si la zone est impaire), sous le nom `<fichier>/<adresse>`. Une zone qu'une table d'un autre
+//! (ou en octets si la zone est impaire), sous le nom `<fichier>/<adresse>` (`prog/<fichier>/<adresse>` en espace
+//! programme). Une zone qu'une table d'un autre
 //! fichier décrit déjà n'y est pas.
 
 use crate::data::{data, prog, Spec};
@@ -18,7 +19,8 @@ pub fn specs() -> Vec<Spec> {
         let t: Vec<&str> = l.split_whitespace().collect();
         let [espace, debut, fin, lecteur] = t[..] else { panic!("zones_natives.txt : ligne illisible « {l} »") };
         let (debut, fin) = (u32::from_str_radix(debut, 16).unwrap(), u32::from_str_radix(fin, 16).unwrap());
-        let name = format!("{lecteur}/{debut:#x}");
+        // l'espace programme a ses propres noms : une même adresse peut être lue dans les deux espaces
+        let name = if espace == "p" { format!("prog/{lecteur}/{debut:#x}") } else { format!("{lecteur}/{debut:#x}") };
         let (format, rows) = if debut % 2 == 0 && fin % 2 == 0 { ("x16", (fin - debut) / 2) } else { ("u8", fin - debut) };
         s.push(match espace {
             "d" => data(&name, debut, format, &[], rows as usize),
