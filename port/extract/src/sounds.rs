@@ -5,6 +5,9 @@ use std::path::Path;
 
 /// Table des échantillons du pilote son (ROM Z80, dd2.01).
 const TABLE: usize = 0x49e8;
+/// Nombre de fiches : la table finit après la dernière fiche non nulle (343 : `0xa2000` ; 344 : fiche nulle).
+/// Trois fiches (290, 293 et 305) sont invalides (début après la fin) : pas de fichier.
+const COUNT: usize = 345;
 /// Fréquence de sortie de la QSound : vitesse de lecture 1.0.
 const RATE: u32 = 24_038;
 
@@ -27,7 +30,7 @@ fn table(z80: &[u8]) -> Vec<Sample> {
             loop_start: u16::from_le_bytes([e[4], e[5]]),
             end: u16::from_le_bytes([e[6], e[7]]),
         })
-        .take_while(|s| s.bank < 0x40 && s.start <= s.end && (s.start..=s.end).contains(&s.loop_start))
+        .take(COUNT)
         .collect()
 }
 
@@ -40,6 +43,9 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
         pcm.extend(std::fs::read(roms.join(name))?.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
     }
     for (i, s) in table(&z80).iter().enumerate() {
+        if !(s.bank < 0x40 && s.start <= s.end && (s.start..=s.end).contains(&s.loop_start)) {
+            continue;
+        }
         let base = (s.bank as usize) << 16;
         let data = &pcm[base + s.start as usize..=base + s.end as usize];
         let looped = s.loop_start < s.end;

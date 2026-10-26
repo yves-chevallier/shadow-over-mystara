@@ -1,6 +1,9 @@
 //! Dungeons & Dragons: Shadow over Mystara — port Rust jouable.
 //!
-//! ddsom [dossier_roms] : ROMs extraites (ddsom.zip + dl-1425.bin de qsound.zip), défaut ../rom.
+//! ddsom [dossier_roms] [--assets dossier] : ROMs extraites (ddsom.zip + dl-1425.bin de qsound.zip), défaut
+//! ../rom. Avec `--assets`, les graphismes et les échantillons viennent du dossier produit par `extract`
+//! (PNG et WAV) au lieu des ROMs graphiques et sonores (`dd2.11m`...`dd2.20m` non lues) ; `--assets` seul
+//! (sans dossier) lit `../assets`.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter.
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
@@ -16,10 +19,16 @@ use minifb::{Key, KeyRepeat, Scale, Window, WindowOptions};
 const FRAME_HZ: f64 = 8_000_000.0 / 512.0 / 262.0;
 
 fn main() {
-    let romdir = PathBuf::from(std::env::args().nth(1).unwrap_or_else(|| "../rom".into()));
+    let (romdir, assets) = arguments(std::env::args().skip(1).collect());
     let nvram = PathBuf::from("nvram/ddsom.eeprom");
     let eeprom = std::fs::read(&nvram).ok();
-    let mut m = match Machine::load_ddsom(&romdir, eeprom.as_deref()) {
+    let loaded = match &assets {
+        Some(dir) => ddsom_assets::rebuild::gfx_region(&dir.join("gfx"))
+            .and_then(|gfx| Ok((gfx, ddsom_assets::rebuild::qsound_samples(dir)?.bytes)))
+            .and_then(|(gfx, pcm)| Machine::load_ddsom_with(&romdir, eeprom.as_deref(), Some(gfx), Some(pcm))),
+        None => Machine::load_ddsom(&romdir, eeprom.as_deref()),
+    };
+    let mut m = match loaded {
         Ok(m) => m,
         Err(e) => {
             eprintln!("Impossible de charger les ROMs depuis {} : {e}", romdir.display());
@@ -99,6 +108,21 @@ fn main() {
     if let Err(e) = std::fs::write(&nvram, m.bus.eeprom.to_bytes()) {
         eprintln!("Sauvegarde de l'EEPROM impossible : {e}");
     }
+}
+
+/// Dossier des ROMs (défaut `../rom`) et dossier des ressources si `--assets` est donné.
+fn arguments(args: Vec<String>) -> (PathBuf, Option<PathBuf>) {
+    let mut romdir = None;
+    let mut assets = None;
+    let mut it = args.into_iter().peekable();
+    while let Some(a) = it.next() {
+        if a == "--assets" {
+            assets = Some(PathBuf::from(it.next_if(|n| !n.starts_with("--")).unwrap_or_else(|| "../assets".into())));
+        } else {
+            romdir = Some(PathBuf::from(a));
+        }
+    }
+    (romdir.unwrap_or_else(|| "../rom".into()), assets)
 }
 
 /// Clavier -> ports d'entrée CPS2 (actifs à 0).

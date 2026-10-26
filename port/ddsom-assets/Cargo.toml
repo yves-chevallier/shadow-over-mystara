@@ -13,3 +13,4 @@ serde_json = "1"
 cps2 = { path = "../cps2" }
 cps2-gfx = { path = "../cps2-gfx" }
 ddsom-sound = { path = "../ddsom-sound" }
+ddsom-game = { path = "../ddsom-game" }

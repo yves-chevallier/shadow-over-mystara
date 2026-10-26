@@ -108,8 +108,23 @@ pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
 impl Machine {
     /// Charge ddsom depuis un dossier de ROMs extraites. `eeprom` : contenu nvram MAME (128 octets).
     pub fn load_ddsom(romdir: &Path, eeprom: Option<&[u8]>) -> io::Result<Self> {
+        Self::load_ddsom_with(romdir, eeprom, None, None)
+    }
+
+    /// Comme `load_ddsom`, mais `gfx` (région graphique) et `samples` (ROM d'échantillons QSound, 4 Mo)
+    /// remplacent, s'ils sont donnés, les ROMs `dd2.13m`... et `dd2.11m`/`dd2.12m`, qui ne sont alors pas lues
+    /// (voir `ddsom_assets::rebuild`).
+    pub fn load_ddsom_with(
+        romdir: &Path,
+        eeprom: Option<&[u8]>,
+        gfx: Option<Vec<u8>>,
+        samples: Option<Vec<u8>>,
+    ) -> io::Result<Self> {
         let (rom, rom_dec) = load_program(romdir)?;
-        let gfx = cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?;
+        let gfx = match gfx {
+            Some(g) => g,
+            None => cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?,
+        };
         // Z80 : dd2.01 = 0x8000 en 0, puis 0x18000 en 0x10000 (ROM_CONTINUE) ; dd2.02 en 0x28000
         let mut zrom = vec![0u8; 0x50000];
         let d1 = std::fs::read(romdir.join("dd2.01"))?;
@@ -118,11 +133,17 @@ impl Machine {
         let d2 = std::fs::read(romdir.join("dd2.02"))?;
         zrom[0x28000..0x48000].copy_from_slice(&d2);
         // échantillons QSound : ROM_LOAD16_WORD_SWAP
-        let mut samples = Vec::with_capacity(0x400000);
-        for name in ["dd2.11m", "dd2.12m"] {
-            let d = std::fs::read(romdir.join(name))?;
-            samples.extend(d.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
-        }
+        let samples = match samples {
+            Some(s) => s,
+            None => {
+                let mut samples = Vec::with_capacity(0x400000);
+                for name in ["dd2.11m", "dd2.12m"] {
+                    let d = std::fs::read(romdir.join(name))?;
+                    samples.extend(d.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
+                }
+                samples
+            }
+        };
         let dsp = std::fs::read(romdir.join("dl-1425.bin"))?;
         let snd = sound::Sound::new(zrom, qsound::QSound::new(&dsp, samples));
         let ee = match eeprom {
