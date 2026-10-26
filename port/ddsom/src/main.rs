@@ -4,10 +4,14 @@
 //! ../rom. Avec `--assets`, les graphismes et les échantillons viennent du dossier produit par `extract`
 //! (PNG et WAV) au lieu des ROMs graphiques et sonores (`dd2.11m`...`dd2.20m` non lues) ; `--assets` seul
 //! (sans dossier) lit `../assets`.
+//! `DDSOM_SANS_68K=1` : jeu sans 68000, seulement les routines réécrites en Rust (`docs/noyau.md`). Avec
+//! `--assets`, il se joue alors **sans aucune ROM** : tout vient du dossier d'assets (tables du programme,
+//! graphismes, données du pilote son, tables du DSP, échantillons ; `docs/sans-rom.md`), le pilote son est
+//! celui en Rust, et aucun fichier ROM n'est ouvert. Sans dossier de ROMs, `--assets` choisit ce mode de
+//! lui-même.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter.
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
-//! `DDSOM_SANS_68K=1` : jeu sans 68000, seulement les routines réécrites en Rust (`docs/noyau.md`).
 
 mod audio;
 
@@ -23,25 +27,41 @@ fn main() {
     let (romdir, assets) = arguments(std::env::args().skip(1).collect());
     let nvram = PathBuf::from("nvram/ddsom.eeprom");
     let eeprom = std::fs::read(&nvram).ok();
-    let loaded = match &assets {
-        Some(dir) => ddsom_assets::rebuild::gfx_region(&dir.join("gfx"))
-            .and_then(|gfx| Ok((gfx, ddsom_assets::rebuild::qsound_samples(dir)?.bytes)))
-            .and_then(|(gfx, pcm)| Machine::load_ddsom_with(&romdir, eeprom.as_deref(), Some(gfx), Some(pcm))),
-        None => Machine::load_ddsom(&romdir, eeprom.as_deref()),
-    };
-    let mut m = match loaded {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Impossible de charger les ROMs depuis {} : {e}", romdir.display());
-            std::process::exit(1);
-        }
-    };
-
     // jeu réécrit en Rust (le reste en code 68000 recompilé), 68000 surcadencé : pas de
     // ralentissements. DDSOM_SANS_68K=1 : sans 68000, routines Rust seules (le jeu s'arrête sur une
     // adresse qui n'en a pas) ; DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ;
     // DDSOM_INTERP=1 : tout interprété.
-    let sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    let mut sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    // sans ROM : assets seuls, ce qui demande le jeu sans 68000 (le programme 68000 n'est pas dans les assets)
+    let romdir = match (&assets, romdir) {
+        (Some(_), None) if !sans_68k && !PathBuf::from(DEFAULT_ROMS).is_dir() => {
+            eprintln!("Pas de dossier de ROMs : jeu sans ROM, depuis les assets seuls (sans 68000).");
+            sans_68k = true;
+            None
+        }
+        (Some(_), None) if sans_68k => None,
+        (_, r) => Some(r.unwrap_or_else(|| DEFAULT_ROMS.into())),
+    };
+    let loaded = match (&assets, &romdir) {
+        (Some(dir), None) => ddsom_assets::rebuild::contenus(dir).map(|c| Machine::ddsom(c, eeprom.as_deref())),
+        (Some(dir), Some(romdir)) => ddsom_assets::rebuild::gfx_region(&dir.join("gfx"))
+            .and_then(|gfx| Ok((gfx, ddsom_assets::rebuild::qsound_samples(dir)?.bytes)))
+            .and_then(|(gfx, pcm)| Machine::load_ddsom_with(romdir, eeprom.as_deref(), Some(gfx), Some(pcm))),
+        (None, Some(romdir)) => Machine::load_ddsom(romdir, eeprom.as_deref()),
+        (None, None) => unreachable!(),
+    };
+    let mut m = match loaded {
+        Ok(m) => m,
+        Err(e) => {
+            match (&assets, &romdir) {
+                (Some(dir), None) => eprintln!("Impossible de charger les assets depuis {} : {e}", dir.display()),
+                (_, Some(romdir)) => eprintln!("Impossible de charger les ROMs depuis {} : {e}", romdir.display()),
+                (None, None) => unreachable!(),
+            }
+            std::process::exit(1);
+        }
+    };
+
     if sans_68k {
         ddsom_game::install_sans_68k(&mut m);
     } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
@@ -50,8 +70,9 @@ fn main() {
         ddsom_game::install(&mut m);
         m.set_overclock(16.0);
     }
-    // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1
-    if std::env::var_os("DDSOM_SON_RUST").is_some() {
+    // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1, et toujours sans ROM (la région
+    // du Z80 reconstruite depuis les assets n'a que les données du pilote, pas son programme)
+    if std::env::var_os("DDSOM_SON_RUST").is_some() || romdir.is_none() {
         m.sound.use_rust_driver();
     }
 
@@ -124,8 +145,11 @@ fn main() {
     }
 }
 
-/// Dossier des ROMs (défaut `../rom`) et dossier des ressources si `--assets` est donné.
-fn arguments(args: Vec<String>) -> (PathBuf, Option<PathBuf>) {
+/// Dossier des ROMs par défaut.
+const DEFAULT_ROMS: &str = "../rom";
+
+/// Dossier des ROMs s'il est donné, et dossier des ressources si `--assets` est donné.
+fn arguments(args: Vec<String>) -> (Option<PathBuf>, Option<PathBuf>) {
     let mut romdir = None;
     let mut assets = None;
     let mut it = args.into_iter().peekable();
@@ -136,7 +160,7 @@ fn arguments(args: Vec<String>) -> (PathBuf, Option<PathBuf>) {
             romdir = Some(PathBuf::from(a));
         }
     }
-    (romdir.unwrap_or_else(|| "../rom".into()), assets)
+    (romdir, assets)
 }
 
 /// Clavier -> ports d'entrée CPS2 (actifs à 0).

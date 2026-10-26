@@ -12,6 +12,7 @@ ddsom-rc = { path = "../ddsom-rc" }
 [dev-dependencies]
 png = "0.17"
 cps2-gfx = { path = "../cps2-gfx" }
+ddsom-assets = { path = "../ddsom-assets" }
 
 [features]
 # Journal des lectures de la ROM programme par le code Rust (examples/lectures_rom.rs).

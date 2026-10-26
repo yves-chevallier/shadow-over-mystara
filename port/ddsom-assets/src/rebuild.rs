@@ -107,7 +107,7 @@ impl Program {
     }
 
     /// Fichiers (chemins relatifs à `dir`) qui servent à reconstruire le programme.
-    pub const FILES: [&'static str; 17] = [
+    pub const FILES: [&'static str; 18] = [
         "palettes.png",
         "sprites/frames.json",
         "sprites/anims.json",
@@ -125,6 +125,7 @@ impl Program {
         "data/misc.json",
         "data/dialogs.json",
         "data/rest.json",
+        "data/natives.json",
     ];
 
     /// Comme `load`, mais seuls les fichiers que `want` accepte sont écrits (les images de sprites sont lues
@@ -454,6 +455,89 @@ pub fn qsound_samples(dir: &Path) -> io::Result<Image> {
         img.put(end as u32 + 1, &tail);
     }
     Ok(img)
+}
+
+/// Taille de la région du Z80 (`cps2::sound::Sound::rom`).
+pub const AUDIO_SIZE: usize = 0x5_0000;
+
+/// Région du Z80 (0-7FFF fixe, banques à partir de 0x10000) avec tout ce que lit le pilote son réécrit
+/// (`ddsom_sound`, `sound/music.json`) : pointeurs de la ROM fixe, en-tête et table des sons, définitions,
+/// pistes, bancs d'instruments, fiches d'échantillons et tables du pilote. Le programme du Z80 n'y est pas :
+/// seul le pilote Rust (`cps2::sound::Sound::use_rust_driver`) peut la jouer. Adresses linéaires de
+/// `ddsom_sound::Rom` (décalage de 0x8000 à partir de 0x8000).
+pub fn audio_region(dir: &Path) -> io::Result<Image> {
+    let m = Music::load(&dir.join("sound/music.json"))?;
+    let mut img = Image::new(AUDIO_SIZE);
+    let mut put = |at: u32, bytes: &[u8]| {
+        for (k, &b) in bytes.iter().enumerate() {
+            let p = at + k as u32;
+            img.put(if p < 0x8000 { p } else { p + 0x8000 }, &[b]);
+        }
+    };
+    let le = |v: u32| (v as u16).to_le_bytes();
+    put(m.header_ptr, &le(m.header));
+    put(m.samples_ptr, &le(m.samples_rom));
+    let mut head = m.count.to_be_bytes().to_vec();
+    head.extend([m.music_factor, m.sfx_volume]);
+    head.extend(m.header_rest);
+    put(m.header, &head);
+    for (i, s) in m.songs.iter().enumerate() {
+        let a = s.as_ref().map_or(0, |s| s.rom);
+        put(m.header + 6 + 4 * i as u32, &[(a >> 16) as u8, (a >> 8) as u8, a as u8, 0]);
+    }
+    for s in m.songs.iter().flatten() {
+        put(s.rom, &s.bytes());
+    }
+    for b in &m.code {
+        let bytes = b.bytes().ok_or_else(|| io::Error::other(format!("music.json : piste {:#x} illisible", b.rom)))?;
+        put(b.rom, &bytes);
+    }
+    for (k, b) in m.banks.iter().enumerate() {
+        put(m.banks_table + 2 * k as u32, &le(b.rom));
+        put(b.rom, &b.instruments.concat());
+    }
+    put(m.samples_rom, &m.samples.concat());
+    for t in &m.tables {
+        put(t.rom, &t.bytes());
+    }
+    Ok(img)
+}
+
+/// Programme du DSP QSound tel que `qsound::QSound::new` le lit (0x2000 octets, mots petit-boutistes) : seules les
+/// tables de `sound/qsound_dsp.json` sont remplies, le code (que l'émulation haut niveau remplace) vaut zéro.
+pub fn qsound_dsp(dir: &Path) -> io::Result<Vec<u8>> {
+    let t = crate::music::DspTables::load(&dir.join("sound/qsound_dsp.json"))?;
+    let mut bytes = vec![0u8; 0x2000];
+    for table in &t.tables {
+        for (k, v) in table.values.iter().enumerate() {
+            let a = 2 * (table.rom as usize + k);
+            bytes[a..a + 2].copy_from_slice(&v.to_le_bytes());
+        }
+    }
+    Ok(bytes)
+}
+
+/// Mots grand-boutistes d'une image de la ROM programme (vue de `cps2::Cps2Bus`).
+fn words(img: &Image) -> Vec<u16> {
+    img.bytes.chunks_exact(2).map(|w| u16::from_be_bytes([w[0], w[1]])).collect()
+}
+
+/// Tout ce que la machine range dans ses puces, reconstruit depuis le dossier d'assets, sans aucune ROM : programme
+/// 68000 (seulement ses tables : le jeu doit tourner sans 68000, `ddsom_game::install_sans_68k`), graphismes,
+/// région du Z80 (sans son programme : pilote son Rust obligatoire), tables du DSP QSound, échantillons.
+pub fn contenus(dir: &Path) -> io::Result<cps2::Contenus> {
+    let p = Program::load(dir)?;
+    if !p.missing.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::NotFound, format!("assets incomplets : {}", p.missing.join(", "))));
+    }
+    Ok(cps2::Contenus {
+        programme: words(&p.data),
+        programme_dechiffre: words(&p.prog),
+        graphismes: gfx_region(&dir.join("gfx"))?,
+        audio: audio_region(dir)?.bytes,
+        dsp: qsound_dsp(dir)?,
+        echantillons: qsound_samples(dir)?.bytes,
+    })
 }
 
 /// Zones de `a` et `b` qui diffèrent sur les octets couverts de `img` (pour les tests et les mesures).

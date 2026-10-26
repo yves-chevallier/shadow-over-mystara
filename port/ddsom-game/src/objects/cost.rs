@@ -40,6 +40,10 @@ thread_local! {
 
 /// Durée de la routine d'origine depuis `entry` jusqu'à son RTS, en suivant `trace`.
 pub fn walk_cycles(b: &mut Cps2Bus, entry: u32, trace: &Trace) -> u64 {
+    // sans 68000, pas de durée : le code d'origine n'est pas lu (jeu sans ROM)
+    if crate::sans68k::actif() {
+        return 0;
+    }
     let key = (entry, trace.key());
     if let Some(v) = CACHE.with(|c| c.borrow().get(&key).copied()) {
         return v;
@@ -107,6 +111,10 @@ pub fn walk_cycles(b: &mut Cps2Bus, entry: u32, trace: &Trace) -> u64 {
 /// Somme des durées de base des instructions de `from` (inclus) à `to` (exclu), sans suivre les
 /// branchements (estimation d'un tronçon de code linéaire).
 pub fn range_cycles(b: &mut Cps2Bus, from: u32, to: u32) -> u64 {
+    // sans 68000, pas de durée : le code d'origine n'est pas lu (jeu sans ROM)
+    if crate::sans68k::actif() {
+        return 0;
+    }
     let mut pc = from;
     let mut cyc = 0u64;
     while pc < to {

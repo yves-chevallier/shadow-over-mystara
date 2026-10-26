@@ -2,10 +2,11 @@
 //! ressources ne reconstruisent pas.
 //!
 //!   couverture_rom <assets> <lectures.txt> [écart]
-//!   couverture_rom <assets> --octets <fichier>
+//!   couverture_rom <assets> --octets <fichier> [--sans <fichier d'assets>]
 //!
 //! La seconde forme écrit la couverture mot par mot (un octet par mot, données puis programme, 1 = couvert)
-//! pour `DDSOM_COUVERT` de `lectures_rom`.
+//! pour `DDSOM_COUVERT` de `lectures_rom` ; `--sans data/natives.json` l'écrit sans ce fichier (pour
+//! `tools/zones_natives.py`, qui le régénère).
 //!
 //! Affiche, par espace (données `d`, programme `p`), le total lu, la part couverte, puis les zones lues non
 //! couvertes (regroupées si moins de `écart` octets les séparent, 0x10 par défaut) : début, fin exclue,
@@ -17,8 +18,9 @@ use ddsom_assets::rebuild::Program;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    if a.len() == 4 && a[2] == "--octets" {
-        let p = Program::load(Path::new(&a[1])).expect("ressources");
+    if (a.len() == 4 || a.len() == 6 && a[4] == "--sans") && a[2] == "--octets" {
+        let sans = a.get(5).cloned().unwrap_or_default();
+        let p = Program::load_files(Path::new(&a[1]), &|f| f != sans).expect("ressources");
         let mut out = Vec::new();
         for img in [&p.data, &p.prog] {
             out.extend((0..0x200000u32).map(|w| (img.is_covered(2 * w) && img.is_covered(2 * w + 1)) as u8));

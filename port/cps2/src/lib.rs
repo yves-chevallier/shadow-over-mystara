@@ -123,6 +123,56 @@ pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
     Ok((rom, dec))
 }
 
+/// Contenu des puces de ddsom, tel que la machine le range : depuis les ROMs (`Contenus::depuis_roms`) ou reconstruit
+/// depuis les ressources extraites (`ddsom_assets::rebuild::contenus`, jeu sans ROM).
+pub struct Contenus {
+    /// Programme 68000, vue données (mots grand-boutistes, 0x200000 mots).
+    pub programme: Vec<u16>,
+    /// Programme 68000, vue espace programme déchiffrée (opcodes et lectures relatives au PC).
+    pub programme_dechiffre: Vec<u16>,
+    /// Région graphique (`cps2_gfx::rom::load_gfx`).
+    pub graphismes: Vec<u8>,
+    /// Région du Z80 (0x50000 : 0-7FFF fixe, banques à partir de 0x10000).
+    pub audio: Vec<u8>,
+    /// Programme du DSP QSound (`dl-1425.bin`, au moins 0x2000 octets : seules ses tables servent).
+    pub dsp: Vec<u8>,
+    /// ROM d'échantillons QSound (4 Mo).
+    pub echantillons: Vec<u8>,
+}
+
+impl Contenus {
+    /// Lit les ROMs (ddsom.zip et dl-1425.bin). `gfx` et `samples`, s'ils sont donnés, remplacent les ROMs graphiques
+    /// (`dd2.13m`...) et d'échantillons (`dd2.11m`, `dd2.12m`), qui ne sont alors pas lues.
+    pub fn depuis_roms(romdir: &Path, gfx: Option<Vec<u8>>, samples: Option<Vec<u8>>) -> io::Result<Self> {
+        let (programme, programme_dechiffre) = load_program(romdir)?;
+        let graphismes = match gfx {
+            Some(g) => g,
+            None => cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?,
+        };
+        // Z80 : dd2.01 = 0x8000 en 0, puis 0x18000 en 0x10000 (ROM_CONTINUE) ; dd2.02 en 0x28000
+        let mut audio = vec![0u8; 0x50000];
+        let d1 = std::fs::read(romdir.join("dd2.01"))?;
+        audio[..0x8000].copy_from_slice(&d1[..0x8000]);
+        audio[0x10000..0x28000].copy_from_slice(&d1[0x8000..0x20000]);
+        let d2 = std::fs::read(romdir.join("dd2.02"))?;
+        audio[0x28000..0x48000].copy_from_slice(&d2);
+        // échantillons QSound : ROM_LOAD16_WORD_SWAP
+        let echantillons = match samples {
+            Some(s) => s,
+            None => {
+                let mut samples = Vec::with_capacity(0x400000);
+                for name in ["dd2.11m", "dd2.12m"] {
+                    let d = std::fs::read(romdir.join(name))?;
+                    samples.extend(d.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
+                }
+                samples
+            }
+        };
+        let dsp = std::fs::read(romdir.join("dl-1425.bin"))?;
+        Ok(Contenus { programme, programme_dechiffre, graphismes, audio, dsp, echantillons })
+    }
+}
+
 impl Machine {
     /// Charge ddsom depuis un dossier de ROMs extraites. `eeprom` : contenu nvram MAME (128 octets).
     pub fn load_ddsom(romdir: &Path, eeprom: Option<&[u8]>) -> io::Result<Self> {
@@ -138,31 +188,13 @@ impl Machine {
         gfx: Option<Vec<u8>>,
         samples: Option<Vec<u8>>,
     ) -> io::Result<Self> {
-        let (rom, rom_dec) = load_program(romdir)?;
-        let gfx = match gfx {
-            Some(g) => g,
-            None => cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?,
-        };
-        // Z80 : dd2.01 = 0x8000 en 0, puis 0x18000 en 0x10000 (ROM_CONTINUE) ; dd2.02 en 0x28000
-        let mut zrom = vec![0u8; 0x50000];
-        let d1 = std::fs::read(romdir.join("dd2.01"))?;
-        zrom[..0x8000].copy_from_slice(&d1[..0x8000]);
-        zrom[0x10000..0x28000].copy_from_slice(&d1[0x8000..0x20000]);
-        let d2 = std::fs::read(romdir.join("dd2.02"))?;
-        zrom[0x28000..0x48000].copy_from_slice(&d2);
-        // échantillons QSound : ROM_LOAD16_WORD_SWAP
-        let samples = match samples {
-            Some(s) => s,
-            None => {
-                let mut samples = Vec::with_capacity(0x400000);
-                for name in ["dd2.11m", "dd2.12m"] {
-                    let d = std::fs::read(romdir.join(name))?;
-                    samples.extend(d.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
-                }
-                samples
-            }
-        };
-        let dsp = std::fs::read(romdir.join("dl-1425.bin"))?;
+        Ok(Self::ddsom(Contenus::depuis_roms(romdir, gfx, samples)?, eeprom))
+    }
+
+    /// Machine ddsom faite de ces contenus de puces (aucun fichier lu).
+    pub fn ddsom(contenus: Contenus, eeprom: Option<&[u8]>) -> Self {
+        let Contenus { programme: rom, programme_dechiffre: rom_dec, graphismes: gfx, audio: zrom, dsp, echantillons: samples } =
+            contenus;
         let snd = sound::Sound::new(zrom, qsound::QSound::new(&dsp, samples));
         let ee = match eeprom {
             Some(b) => Eeprom93c46::from_bytes(b),
@@ -189,7 +221,7 @@ impl Machine {
             z80_debt: 0.0,
         };
         m.reset();
-        Ok(m)
+        m
     }
 
     /// Multiplie la fréquence du 68000 (1.0 = arcade). Surcadencé, le jeu finit toujours son travail

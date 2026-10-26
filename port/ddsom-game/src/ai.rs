@@ -36,6 +36,10 @@ const END: u32 = u32::MAX;
 /// cache. Les `jsr` et `bsr` sont comptés sans leur sous-routine : celle-ci est soit exécutée par
 /// `crate::call` (qui compte ses cycles), soit réécrite en Rust (qui ajoute sa propre durée).
 fn span(b: &mut Cps2Bus, from: u32, stop: u32, key: u64, taken: impl Fn(u32) -> bool) -> u64 {
+    // sans 68000, pas de durée : le code d'origine n'est pas lu (jeu sans ROM)
+    if crate::sans68k::actif() {
+        return 0;
+    }
     if let Some(v) = SPANS.with(|c| c.borrow().get(&(from, stop, key)).copied()) {
         return v;
     }
@@ -78,6 +82,10 @@ fn span(b: &mut Cps2Bus, from: u32, stop: u32, key: u64, taken: impl Fn(u32) -> 
 
 /// Durée de l'instruction isolée à `pc` (hors dépendances aux données).
 fn insn(b: &mut Cps2Bus, pc: u32) -> u64 {
+    // sans 68000, pas de durée : le code d'origine n'est pas lu (jeu sans ROM)
+    if crate::sans68k::actif() {
+        return 0;
+    }
     let ins = m68k::decode(b, pc);
     m68k::timing::base_cycles(&ins) as u64
 }

@@ -210,7 +210,8 @@ pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
     let Some(n) = crate::lookup(c.pc) else {
         arreter(c, b, format!("pas de native en {:06x}", c.pc));
     };
-    let cout = (n.cost)(c, b);
+    // la durée de la native ne sert plus (et la calculer lirait le code d'origine)
+    let cout = 0;
     DERNIERES.with(|d| {
         let mut d = d.borrow_mut();
         if d.len() == 8 {

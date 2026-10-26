@@ -53,6 +53,10 @@ impl Chemin {
     /// Idem, mais les appels (JSR/BSR) vers les adresses `externes` ne comptent que l'instruction
     /// d'appel : la routine native les exécute elle-même par `call`, qui ajoute leur durée.
     pub fn duree_hors(&self, b: &mut Cps2Bus, depart: u32, arret: Option<u32>, externes: &[u32]) -> u64 {
+        // sans 68000, pas de durée : le code d'origine n'est pas lu (jeu sans ROM)
+        if crate::sans68k::actif() {
+            return 0;
+        }
         let cle = (depart, arret.unwrap_or(0), self.bits, self.n);
         if let Some(v) = CACHE.with(|c| c.borrow().get(&cle).copied()) {
             return v;

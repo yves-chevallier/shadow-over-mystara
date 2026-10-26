@@ -1,0 +1,1 @@
+# espace début fin(exclue) lecteur — généré par tools/zones_natives.py, ne pas éditer

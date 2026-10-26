@@ -165,3 +165,27 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     std::fs::create_dir_all(path.parent().unwrap())?;
     json::save(path, &music, 2)
 }
+
+/// Tables du programme du DSP QSound (`dl-1425.bin`, mots petit-boutistes) que lit l'émulation haut niveau
+/// (`qsound`) : (nom, adresse en mots, nombre de mots). Le reste du programme du DSP n'est que du code, que
+/// l'émulation remplace.
+const DSP_TABLES: [(&str, u32, u32); 4] = [
+    // pan : PAN_BASE (0x110) + position (0-0x20), puis +98 (réverbération), +196 (canal droit)
+    ("pan", 0x110, 0x150),
+    // pas de l'ADPCM : 0x9dc + 8 + pas signé (-8..7)
+    ("adpcm", 0x9dc, 0x10),
+    // filtres FIR : 95 coefficients par entrée depuis 0xd53, et les deux filtres d'origine 0xf73 et 0xfa4
+    ("filters", 0xd53, 0x1000 - 0xd53),
+    // le second filtre déborde de 3 mots et reprend au début (adresses sur 12 bits)
+    ("filters_wrap", 0, 3),
+];
+
+pub fn extract_dsp(roms: &Path, path: &Path) -> io::Result<()> {
+    let bytes = std::fs::read(roms.join("dl-1425.bin"))?;
+    let word = |a: u32| u16::from_le_bytes([bytes[2 * a as usize], bytes[2 * a as usize + 1]]);
+    let tables = DSP_TABLES
+        .iter()
+        .map(|&(name, rom, n)| DriverTable { name: name.into(), rom, words: true, values: (rom..rom + n).map(word).collect() })
+        .collect();
+    json::save(path, &ddsom_assets::music::DspTables { tables }, 2)
+}

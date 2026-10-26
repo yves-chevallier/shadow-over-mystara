@@ -103,5 +103,6 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     save(&rom, &dir.join("rest.json"), regions, &specs, Vec::new())?;
     let (regions, specs, texts) = crate::dialogs::specs(&rom);
     save(&rom, &dir.join("dialogs.json"), regions, &specs, texts)?;
+    save(&rom, &dir.join("natives.json"), Vec::new(), &crate::natives::specs(), Vec::new())?;
     Ok(())
 }

@@ -243,3 +243,16 @@ impl Music {
         (!out.is_empty()).then_some(out)
     }
 }
+
+/// Tables du programme du DSP QSound (`sound/qsound_dsp.json`) : pan, pas de l'ADPCM, coefficients des filtres.
+/// `rom` est une adresse en mots du DSP ; `words` vaut toujours vrai.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DspTables {
+    pub tables: Vec<DriverTable>,
+}
+
+impl DspTables {
+    pub fn load(path: &Path) -> io::Result<Self> {
+        crate::json::load(path)
+    }
+}

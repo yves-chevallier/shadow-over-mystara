@@ -12,6 +12,10 @@
 //! `DDSOM_SANS_68K=1` : la machine A tourne sans 68000 (natives seules, boucle d'image du noyau,
 //! `ddsom_game::install_sans_68k`) ; une adresse sans native l'arrête (« ÉCHEC : arrêt sans 68000 »).
 //!
+//! `DDSOM_ASSETS=<dossier>` (avec `DDSOM_SANS_68K=1`) : la machine A est faite des seules ressources extraites
+//! (`ddsom_assets::rebuild::contenus`, aucune ROM lue : jeu sans ROM, docs/sans-rom.md), avec le pilote son Rust ;
+//! la machine B garde les ROMs et le Z80.
+//!
 //! validate <roms> <eeprom> <scenario> <images>
 
 use std::path::Path;
@@ -57,8 +61,18 @@ fn main() {
         m.set_overclock(std::env::var("DDSOM_OVERCLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(OVERCLOCK));
         m
     };
-    let (mut ma, mut mb) = (load(), load());
     let sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    let mut ma = match std::env::var_os("DDSOM_ASSETS") {
+        Some(dir) => {
+            assert!(sans_68k, "DDSOM_ASSETS demande DDSOM_SANS_68K=1 (le programme 68000 n'est pas dans les assets)");
+            let contenus = ddsom_assets::rebuild::contenus(Path::new(&dir)).expect("assets");
+            let mut m = cps2::Machine::ddsom(contenus, ee.as_deref());
+            m.sound.use_rust_driver();
+            m
+        }
+        None => load(),
+    };
+    let mut mb = load();
     if sans_68k {
         ddsom_game::install_sans_68k(&mut ma);
     } else {

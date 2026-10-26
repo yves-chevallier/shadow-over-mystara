@@ -13,6 +13,7 @@ mod gfx;
 mod levels;
 mod misc;
 mod music;
+mod natives;
 mod palettes;
 mod players;
 mod rest;
@@ -65,6 +66,7 @@ fn main() {
         }
         if wanted("music") {
             music::extract(roms, &out.join("sound/music.json"))?;
+            music::extract_dsp(roms, &out.join("sound/qsound_dsp.json"))?;
         }
         if wanted("data") {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
@@ -134,6 +136,11 @@ Cartes de terrain fixes (scènes 2 et 0x14) et tables des types de terrain (coll
 
 Musiques et effets du pilote son : table des sons, pistes (instructions en jetons), bancs
 d'instruments, fiches d'échantillons et tables du pilote (volumes, enveloppes, hauteurs).
+
+## sound/qsound_dsp.json
+
+Tables du programme du DSP QSound (`dl-1425.bin`) que lit son émulation : pan, pas de l'ADPCM,
+coefficients des filtres.
 
 ## data/rest.json
 

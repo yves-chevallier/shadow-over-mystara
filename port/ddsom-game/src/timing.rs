@@ -17,6 +17,10 @@ thread_local! {
 /// Durée du chemin de `entry` au RTS. `taken(pc)` dit si le branchement conditionnel en `pc`
 /// est pris ; `path` identifie le chemin pour le cache (un bit par décision, au choix de l'appelant).
 pub fn path_cycles(b: &mut Cps2Bus, entry: u32, path: u64, taken: impl Fn(u32) -> bool) -> u64 {
+    // sans 68000, pas de durée : le code d'origine n'est pas lu (jeu sans ROM)
+    if crate::sans68k::actif() {
+        return 0;
+    }
     if let Some(v) = CACHE.with(|c| c.borrow().get(&(entry, path)).copied()) {
         return v;
     }
