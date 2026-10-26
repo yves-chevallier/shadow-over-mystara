@@ -296,3 +296,76 @@ Lots précédents :
 - Limites connues : une variante ou un état hors table fait sauter l'original dans des données ; la
   réécriture délègue au code d'origine avec D0, D1 et A1 posés comme lui, ce qui est exact dans tous les cas
   rencontrés sauf ITEM 1 pour une variante >= 6 (objets qui n'existent pas dans le jeu).
+
+## 6. Recensement des tables d'aiguillage (PSHL, PEFF, ESHL, SET, SOBJ, ITEM, BOX)
+
+Sans 68000, un gestionnaire atteignable par sa table de types mais resté en code d'origine ferait planter le
+jeu, même si aucun scénario ne l'exerce. Outil : `examples/recensement` (natives de toutes les entrées des
+tables, puis objets synthétiques : un objet neuf de chaque type, appelé jusqu'à 120 images en perturbant ses
+entrées, et le code 68000 que la native exécute encore est compté, plage par plage) :
+
+```
+recensement <roms> <eeprom> scenarios/bot30k.txt 3000 20 [PSHL,PEFF,ESHL,SET,SOBJ,ITEM,BOX]
+  DDSOM_ENTREE=adresse   un seul gestionnaire
+  DDSOM_VARIANTES=n      variantes 0..n-1 (0 seule par défaut : au-delà de sa table, un type lit n'importe quoi)
+  DDSOM_ETATS=1          la moitié des trajectoires part d'états +4..+7 tirés (sort souvent des tables)
+  DDSOM_SAUTER=a,b       gestionnaires non exercés (SET 4 et 6 : une animation de cases synthétique boucle)
+```
+
+`examples/reste68k` (inventaire des scénarios) compte maintenant aussi le code d'origine que la machine exécute
+à la place d'une native qui se déclare hors contrat (`COUT_HORS_CONTRAT`), comme l'exécuteur du jeu : avant,
+la porte SET 7 de `cov_mortal_late` (96 instructions, et la reprise de la tâche en 68000 qui s'ensuivait)
+échappait à la mesure.
+
+### Tables de types
+
+Les tables s'arrêtent à la boucle de dispatch suivante (dans le code) ; PSHL 9 réutilise le gestionnaire du
+type 1, PSHL 10 et 11 celui du 2, SET 33 celui du 3, SOBJ 4 et EFFCT 18 celui du SET 8 (0xcc25a).
+
+| Classe | Table | Entrées | Gestionnaires distincts | Natifs | 68000 dans les natives (synthétiques) |
+|---|---|---:|---:|---:|---|
+| PSHL (6) | 0x39908 | 25 | 22 | 22 | aucun |
+| PEFF (0x12) | 0x39992 | 48 | 48 | 48 (PEFF 42 réécrit ici) | aucun (créateurs 0x4aed0 et 0x53746 réécrits ici) |
+| ESHL (8) | 0x39b96 | 73 | 73 | 73 | ESHL 37 (0xa2b62) appelle 0xb4bcc, créateur d'EFFCT |
+| BOX (0xa) | 0x39e76 | 4 | 4 | 4 | aucun |
+| SET (0x10) | 0x39eac | 34 | 33 | 33 (SET 7 complété ici) | aucun |
+| ITEM (0xc) | 0x39f5a | 10 | 10 | 10 | aucun |
+| SOBJ (0x14) | 0x39fa8 | 16 | 16 (dont 0xcc25a) | 16 | aucun |
+
+Chaque entrée a donc sa native. Mesuré sur `bot30k` (variante 0) et `cov_4p_a` (variantes 0 à 2), 20
+trajectoires par type ; `fuzz familles`, `fuzz_joueur`, `fuzz_familles`, `fuzz_set_a`, `fuzz_eshl_c` valident
+les natives elles-mêmes (sections précédentes, `docs/familles-eshl-set-sobj.md`, `docs/familles/joueur.md`).
+
+### Sous-tables (états `+4`, `+5`, `+6`/`+7`, variantes `+3`)
+
+Les natives écrites sur `Cx` implémentent tous les états de leurs tables. Celles écrites sur `Ctx` (ITEM, BOX,
+une partie d'EFFCT) ont un bras `_ => ctx.deleguer(cible)` : il n'est pris que pour un état absent de la table
+de l'original (aucun objet du jeu ne l'atteint ; aucun passage en 68000 sur les trajectoires régulières ni dans
+les 256 scénarios). Avec `DDSOM_ETATS=1`, ces délégations s'exécutent, mais sur des adresses impaires ou en
+plein milieu de tables (`0x28604`, `0xdfa55`, `0xe0699`...) : c'est l'original qui saute dans des données, pas
+un état légitime oublié.
+
+### Réécrit dans ce travail
+
+| Entrée | Rôle | Validation |
+|---|---|---|
+| SET 7 0xcb29c (états 2 et 4) + reprises 0xcb896, 0xcb9c0 | porte de sortie : changement de zone (prime, joueurs morts cachés), quatre genres de sortie (zone annexe, retour, scène suivante, fin de partie), fondu 0x1460 qui cède (la tâche reprend dans les natives aux adresses de retour), sauvegarde/suspension du monde, retour de zone (état 4) | `cov_mortal_late` (scène suivante), `cov/cov_porte_annexe` (nouveau : entrée puis retour), `fuzz_porte` (nouveau, arrêt à l'entrée du fondu puis reprise, 3000 essais dont 737 avec fondu), `fuzz familles` |
+| 0x33b24 | caméras au retour d'une zone annexe (portes 7, 27, 29) | `fuzz petites`, `fuzz_porte`, `cov_porte_annexe` |
+| PEFF 42 0x50b9c | article en vitrine de la boutique : zone de vente, message, vente (stock, bourse BCD, inventaire, refus) | `fuzz boutique` |
+| 0x514ac / 0x514cc | interprète des dialogues du marchand appelé par le comptoir PEFF 43 (12 commandes) | `fuzz boutique` (scripts tirés) |
+| 0x4aed0, 0x53746, 0xa2b4a, 0xa462c | créateurs (PEFF 5, pierres PSHL 0x11, ESHL 0x25, ESHL 0x34 variante 3) | `fuzz petites`, `fuzz_joueur` |
+| 0x101da, 0x1ac90, 0xb230e | palette de la scène 0x69, fin d'éclair, deux paires de cases de tuiles | `fuzz petites` |
+| reprises de 0x1c86e (51 adresses de retour d'étape) et 0x1c702 | fin de la mise à jour du monde et de la phase 12 quand un gestionnaire a cédé | `scene_67`, `cov_mortal_late`, `cov_porte_annexe` |
+
+### Reste en code d'origine, appelé depuis ces familles
+
+Hors de ce périmètre (créateurs d'objets des familles EFFCT et ENEMY, réécrits par ailleurs) :
+
+| Routine | Appelée par |
+|---|---|
+| 0xb4bcc (crée un EFFCT) | ESHL 37 (`eshl_b.rs`, `IMPACT_PIECE`), SET 16 introduction de boss (`set_b.rs`, `SMOKE`) |
+| 0xb97a2 (crée un EFFCT) | ITEM 3 équipement, variante 0xf (`items.rs`) |
+| 0x667f4 (crée un ENEMY) | SET 16 introduction de boss (`set_b.rs`, `BLAST_AT`) |
+
+Et dans EFFCT : `effects.rs` appelle encore la remise en liste 0x1ee1a par `jsr_origine` (code recompilé
+exécuté directement, que l'inventaire ne voit pas ; la routine est pourtant native).
