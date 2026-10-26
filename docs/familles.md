@@ -398,5 +398,6 @@ Hors de ce périmètre (créateurs d'objets des familles EFFCT et ENEMY, réécr
 | 0xb97a2 (crée un EFFCT) | ITEM 3 équipement, variante 0xf (`items.rs`) |
 | 0x667f4 (crée un ENEMY) | SET 17 introduction de boss (`set_b.rs`, `BLAST_AT`) |
 
-Et dans EFFCT : `effects.rs` appelle encore la remise en liste 0x1ee1a par `jsr_origine` (code recompilé
-exécuté directement, que l'inventaire ne voit pas ; la routine est pourtant native).
+Dans EFFCT, `effects.rs` (nuage, type 26) appelait la remise en liste 0x1ee1a par `jsr_origine` (code recompilé exécuté
+directement, que l'inventaire ne voyait pas) : elle passe maintenant par la native (`Ctx::reinsert`, qui rend les
+registres comme l'original), validée par `fuzz_familles ... EFFCT:26` (134 880 essais, aucun écart).

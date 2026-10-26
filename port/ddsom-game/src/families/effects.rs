@@ -599,8 +599,8 @@ fn nuage_actif(ctx: &mut Ctx, o: Obj) {
         return;
     }
     ctx.anim_step();
-    // D0 garde ses mots hauts d'avant : on exécute l'original pour en reproduire les restes
-    ctx.jsr_origine(rom::REINSERT_ACTORS);
+    // D0 garde ses mots hauts d'avant : la native de la remise en liste les rend comme l'original
+    ctx.reinsert();
     let vx = o.u16(ctx.b, Obj::VX) as u32;
     let d0 = ((ctx.c.d[0] & 0xffff_0000 | vx).rotate_left(16)) as i32 >> 8;
     let x = o.u32(ctx.b, Obj::X).wrapping_sub(d0 as u32);

@@ -134,8 +134,8 @@ Plan pour supprimer la machine 68000 :
    la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `taches/`, voir [noyau.md](noyau.md), les tâches et
    sous-programmes de fondu (`taches/fondu.rs`), l'écran des scores `0x1835e` (`taches/ecran_fixe.rs`) et l'interface
    joueurs `0x150ac` (`hud/`), les invites `0xe03fe` (`taches/invite.rs`) et les scripts de transition de la sortie de
-   scène, qui cédaient à presque chaque pas (`scene/transition/`) ; restent, en 68000 : le menu TEST `0x29162` et
-   l'écran `0x19068`, jamais atteint par les scénarios. Les « listes de bulles des boss » créées par `0x9b6` sont des
+   scène, qui cédaient à presque chaque pas (`scene/transition/`) ; le menu TEST `0x29162` et la carte de développement sont en Rust aussi (`taches/service.rs`,
+   `eeprom/carte_dev.rs`) ; l'écran `0x19068` est du code mort (`noyau.md`). Il ne reste aucune tâche en 68000. Les « listes de bulles des boss » créées par `0x9b6` sont des
    tâches de fondu, déjà en Rust).
    Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
    `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.

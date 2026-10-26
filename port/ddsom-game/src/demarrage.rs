@@ -64,7 +64,6 @@ mod ext {
     pub const EFFACER_PLAN_2: (u32, u32) = (0xcc8, 0x442);
     pub const EFFACER_PLAN_3: (u32, u32) = (0xce8, 0x448);
     pub const CONFIG: (u32, u32) = (0x2dc9a, 0x468);
-    pub const REGLAGES_TEST: (u32, u32) = (0x2e8e4, 0x48c);
     pub const REGLAGES: (u32, u32) = (0x2d30a, 0x500);
     pub const CREER_TACHE: (u32, u32) = (0x9b6, 0x530);
     pub const TACHE_DEMARRAGE: u32 = 0x11b16;
@@ -84,7 +83,7 @@ mod io {
     pub const VIDEO: u32 = 0x804122;
     pub const VIDEO_B: u32 = 0x804166;
     /// Port lu au reset (0xe021 sur cette carte) : son bit 14 nul (jamais vu) fait lire la configuration
-    /// (0x2dc9a) dès le reset, et éventuellement réinitialiser les réglages (0x2e8e4).
+    /// (0x2dc9a) dès le reset, et éventuellement réinitialiser la RAM supplémentaire (0x2e8e4, `eeprom::reinitialiser_carte`).
     pub const CARTE: u32 = 0x804030;
     pub const TEST: u32 = 0x804020;
     pub const BOUTONS: u32 = 0x804000;
@@ -186,7 +185,7 @@ fn reset(c: &mut Cpu, b: &mut Cps2Bus) {
         jsr(c, b, ext::CONFIG);
         // combinaison de boutons 0x3304 (actifs bas) de IN2 pressée au démarrage
         if !rd16(b, io::TEST) & 0x3304 == 0x3304 {
-            jsr(c, b, ext::REGLAGES_TEST);
+            crate::eeprom::reinitialiser_carte(c, b);
         }
     }
     // 0x182a : palette de départ, puis cases vides dans le premier quart de la GFX RAM testée
