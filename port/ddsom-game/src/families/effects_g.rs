@@ -1,12 +1,16 @@
 //! Famille EFFCT (suite) : types qu'aucun scénario n'exerce, réécrits pour que la table des types
 //! `0x39ce0` n'ait plus d'entrée en code d'origine (validation par `examples/fuzz_effct.rs`).
 //!
+//! - 43 : pluie de débris (`0xb4bcc`) : en haut de l'écran (réglage 0, avec une poussière au départ) ou
+//!   depuis le créateur (`+0x5c`), vitesses et animation tirées au hasard ; elle tombe, clignote et
+//!   disparaît, ou disparaît avec le créateur ;
 //! - 63 : morceau projeté par un ennemi (ENEMY 22 et 23) : part en arc depuis son créateur (`+0x42`),
 //!   retombe, fait voler des débris, attend, clignote puis disparaît ;
 //! - 81 : éclat lancé par un personnage (`0xb96c0`) : part de la main du joueur (décalage par geste
 //!   `+0x42`), glisse en arc puis clignote les dernières images.
 
 use super::cx::{handlers, Cx};
+use crate::mem::set_low_word;
 use crate::objects::Obj;
 
 /// Champs partagés.
@@ -212,7 +216,148 @@ fn shard_init(x: &mut Cx) {
     x.reinsert();
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 43 : pluie de débris
+// ---------------------------------------------------------------------------------------------
+
+mod rain {
+    /// Objet suivi : l'effet disparaît quand il est libéré ou quand il passe à l'état 4 ou plus.
+    pub const LINK: u32 = 0x5c;
+    pub const SETTING: u32 = 0x2f;
+    pub const TIMER: u32 = 0x42;
+    /// Profondeur de référence, reprise une image sur deux.
+    pub const SAVED_Y: u32 = 0x1c;
+    pub const SPEED_INDEX: u32 = 0x2d;
+    pub const ANIMS: u32 = 0x194c74;
+    /// Tables (espace programme) : vitesse d'animation par variante, puis tirages (vitesses X et Z,
+    /// animation) pour la pluie autour de la caméra et pour les éclats du créateur.
+    pub const SPEED_BY_VARIANT: u32 = 0xb4d7a;
+    pub const CAMERA_VX: u32 = 0xb4e04;
+    pub const CAMERA_VZ: u32 = 0xb4e24;
+    pub const CAMERA_ANIMS: u32 = 0xb4de4;
+    pub const SHARD_SPEED: u32 = 0xb4e94;
+    pub const SHARD_VX: u32 = 0xb4ea4;
+    pub const SHARD_VZ: u32 = 0xb4ec4;
+    pub const SHARD_ANIMS: u32 = 0xb4ee4;
+    /// Poussière (type 25) posée au départ de la pluie : `0xb10c8`, sorte 5.
+    pub const DUST: u32 = 0xb10c8;
+}
+
+fn rng(x: &mut Cx) -> u16 {
+    x.call(super::rom::RNG);
+    x.c.d[0] as u16
+}
+
+fn debris_rain(x: &mut Cx) {
+    if x.u16(rain::LINK) == 0 {
+        // plus d'objet suivi : retrait
+        return x.set32(f::STATE, 0x0600_0000);
+    }
+    match x.u8(f::STATE) {
+        0 => rain_init(x),
+        2 => rain_active(x),
+        _ => free(x),
+    }
+}
+
+fn rain_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    if x.u8(rain::SETTING) == 0 {
+        // pluie : en haut à droite de l'écran, une poussière au départ
+        let px = x.u16(Obj::X).wrapping_add(0x1a0).wrapping_add(x.a5_u16(0x506));
+        let py = x.u16(Obj::Y).wrapping_add(0xa0).wrapping_add(x.a5_u16(0x50a));
+        x.set16(Obj::X, px);
+        x.set16(Obj::Z, py);
+        let y = x.u16(Obj::Y);
+        x.set16(rain::SAVED_Y, y);
+        x.set16(Obj::AX, 0xffe8);
+        x.c.d[0] = 5;
+        for (r, v) in [(1, 0x201), (2, 0), (3, 0)] {
+            set_low_word(&mut x.c.d[r], v);
+        }
+        x.call(rain::DUST);
+        x.set16(rain::TIMER, 0x26);
+        let variant = x.u8(f::VARIANT) as u32;
+        let speed = x.rom8(rain::SPEED_BY_VARIANT + variant);
+        x.set8(rain::SPEED_INDEX, speed);
+        rain_launch(x, rain::CAMERA_VX, rain::CAMERA_VZ, rain::CAMERA_ANIMS, 0x1f);
+    } else {
+        // éclat qui part du créateur
+        x.add8(f::SUB_STATE, 4);
+        let from = x.linked(rain::LINK);
+        for off in [Obj::X, Obj::Z, Obj::Y] {
+            let v = from.u16(x.b, off);
+            x.set16(off, v);
+        }
+        x.set16(Obj::AZ, 0xffd8);
+        x.set16(rain::TIMER, 0x14);
+        let pick = (rng(x) & 0xf) as u32;
+        let speed = x.rom8(rain::SHARD_SPEED + pick);
+        x.set8(rain::SPEED_INDEX, speed);
+        rain_launch(x, rain::SHARD_VX, rain::SHARD_VZ, rain::SHARD_ANIMS, 0xf);
+    }
+}
+
+/// Vitesses X et Z et animation tirées dans les tables (mots, mots, octets ; `anim_mask` borne le dernier tirage).
+fn rain_launch(x: &mut Cx, vx_table: u32, vz_table: u32, anims: u32, anim_mask: u16) {
+    let pick = 2 * (rng(x) & 0xf) as u32;
+    let vx = x.rom16(vx_table + pick);
+    x.set16(Obj::VX, vx);
+    let pick = 2 * (rng(x) & 0xf) as u32;
+    let vz = x.rom16(vz_table + pick);
+    x.set16(Obj::VZ, vz);
+    let pick = (rng(x) & anim_mask) as u32;
+    let anim = x.rom8(anims + pick);
+    x.anim_start(rain::ANIMS, anim as u32);
+}
+
+/// Décompte de `TIMER` ; vrai quand il passe sous zéro.
+fn rain_countdown(x: &mut Cx) -> bool {
+    let t = x.u16(rain::TIMER).wrapping_sub(1);
+    x.set16(rain::TIMER, t);
+    (t as i16) < 0
+}
+
+/// Fin de vie : retrait une fois le délai écoulé, clignotement trois images sur quatre avant.
+fn rain_fade(x: &mut Cx) {
+    if rain_countdown(x) {
+        return x.set8(f::STATE, 6);
+    }
+    let t = x.u16(rain::TIMER);
+    set_hidden(x, t & 3 != 0);
+}
+
+fn rain_active(x: &mut Cx) {
+    let link = x.linked(rain::LINK);
+    if link.u8(x.b, f::STATE) as i8 >= 4 {
+        return free(x);
+    }
+    match x.u8(f::SUB_STATE) {
+        0 => {
+            x.call(super::cx::sub::MOVE_XZ);
+            if rain_countdown(x) {
+                x.add8(f::SUB_STATE, 2);
+                x.set16(rain::TIMER, 0x1c);
+            }
+            // une image sur deux, la pluie reprend sa profondeur de référence (le tirage est perdu)
+            rng(x);
+            if x.a5_u16(0x6e) & 1 == 0 {
+                let y = x.u16(rain::SAVED_Y);
+                x.set16(Obj::Y, y);
+            }
+            x.anim_step();
+        }
+        2 => rain_fade(x),
+        _ => {
+            x.call(super::cx::sub::MOVE_XZ);
+            rain_fade(x);
+        }
+    }
+    x.reinsert();
+}
+
 handlers! {
+    0xb4bec "effct_pluie_debris" 200 debris_rain,
     0xb7866 "effct_morceau_ennemi" 200 chunk,
     0xb96dc "effct_eclat_lance" 150 shard,
 }

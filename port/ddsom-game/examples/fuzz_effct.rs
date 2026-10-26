@@ -122,7 +122,7 @@ fn couverture(c: &Cpu, b: &Cps2Bus, entree: u32, plage: &std::ops::Range<u32>, v
 /// Sous-états (`+5`) de l'état actif que la table de l'original prévoit (au-delà, il saute dans des données).
 fn sous_etats(t: u32) -> &'static [u8] {
     match t {
-        63 => &[0, 2, 4],
+        63 | 43 => &[0, 2, 4],
         _ => &[0],
     }
 }
@@ -142,6 +142,12 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
         }
         // créateur en +0x42
         63 => wr16(b, obj + 0x42, owner as u16),
+        // objet suivi en +0x5c (parfois aucun), réglage 0 ou 1
+        43 => {
+            wr16(b, obj + 0x5c, if alea.une_sur(10) { 0 } else { owner as u16 });
+            wr8(b, obj + 0x2f, alea.pick(&[0, 0, 1]));
+            wr16(b, obj + 0x42, (alea.next() % 0x28) as u16);
+        }
         _ => {}
     }
 }
@@ -163,6 +169,8 @@ fn perturbe(b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
         wr16(b, j + 8, x.wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20));
         wr16(b, j + 0x10, y.wrapping_add((alea.next() % 0x20) as u16).wrapping_sub(0x10));
     }
+    // compteur d'images
+    wr16(b, A5 + 0x6e, alea.next() as u16);
     // jeu en pause (rare)
     wr8(b, A5 + 0x3d, alea.une_sur(20) as u8);
 }
