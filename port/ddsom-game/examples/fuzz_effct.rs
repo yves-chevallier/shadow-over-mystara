@@ -123,6 +123,7 @@ fn couverture(c: &Cpu, b: &Cps2Bus, entree: u32, plage: &std::ops::Range<u32>, v
 fn sous_etats(t: u32) -> &'static [u8] {
     match t {
         63 | 43 => &[0, 2, 4],
+        46 => &[0, 2],
         _ => &[0],
     }
 }
@@ -142,6 +143,16 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
         }
         // créateur en +0x42
         63 => wr16(b, obj + 0x42, owner as u16),
+        // porteur (ENEMY) en +0x46, pièce 0 à 2 ; vie autour des seuils ; coups reçus
+        46 => {
+            let porteur = if alea.une_sur(8) { obj } else { owner };
+            wr16(b, obj + 0x46, porteur as u16);
+            wr8(b, obj + 0x2f, (alea.next() % 3) as u8);
+            wr16(b, porteur + 0x60, 0x100);
+            wr16(b, porteur + 0x62, (alea.next() % 0x140) as u16);
+            wr8(b, porteur + 0x33, alea.pick(&[0, 0, 1, 2, 0x81, 5]));
+            wr8(b, obj + 0x5c, (alea.next() % 4) as u8);
+        }
         // objet suivi en +0x5c (parfois aucun), réglage 0 ou 1
         43 => {
             wr16(b, obj + 0x5c, if alea.une_sur(10) { 0 } else { owner as u16 });
@@ -265,7 +276,9 @@ fn principal() {
                 wr8(&mut b, obj, 1);
                 wr8(&mut b, obj + 2, t as u8);
                 wr8(&mut b, obj + 3, v as u8);
-                wr8(&mut b, obj + 4, if naissance { 0 } else { 2 });
+                // de temps en temps, l'état de libération (4) ou celui que pose le retrait hors écran (6)
+                let etat = if naissance { 0 } else if tour % 8 == 3 { 4 } else if tour % 8 == 7 { 6 } else { 2 };
+                wr8(&mut b, obj + 4, etat);
                 wr8(&mut b, obj + 5, if naissance { 0 } else { alea.pick(sous_etats(t)) });
                 wr8(&mut b, obj + 0x28, EFFCT.class);
                 for off in [0x46u32, 0x50, 0x54, 0x5a, 0x5c, 0x1e] {

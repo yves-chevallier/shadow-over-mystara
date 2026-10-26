@@ -4,6 +4,8 @@
 //! - 43 : pluie de débris (`0xb4bcc`) : en haut de l'écran (réglage 0, avec une poussière au départ) ou
 //!   depuis le créateur (`+0x5c`), vitesses et animation tirées au hasard ; elle tombe, clignote et
 //!   disparaît, ou disparaît avec le créateur ;
+//! - 46 : pièces d'armure d'un ennemi (`0xb53f4`) : elles suivent le porteur et rejouent ses coups reçus,
+//!   tombent quand sa vie passe sous leur seuil et se brisent en éclats (variante 1) qui rebondissent ;
 //! - 63 : morceau projeté par un ennemi (ENEMY 22 et 23) : part en arc depuis son créateur (`+0x42`),
 //!   retombe, fait voler des débris, attend, clignote puis disparaît ;
 //! - 81 : éclat lancé par un personnage (`0xb96c0`) : part de la main du joueur (décalage par geste
@@ -33,6 +35,7 @@ mod rom {
     pub const DEBRIS: u32 = 0x1172e;
     /// Son d'impact au sol.
     pub const SOUND_LANDING: u32 = 0xece9e;
+    pub const ALLOC_EFFECT: u32 = 0x2318;
 }
 
 fn free(x: &mut Cx) {
@@ -356,7 +359,216 @@ fn rain_active(x: &mut Cx) {
     x.reinsert();
 }
 
+// ---------------------------------------------------------------------------------------------
+// Type 46 : pièces d'armure d'un ennemi (créées par trois par `0xb53f4`)
+// ---------------------------------------------------------------------------------------------
+
+mod armour {
+    /// Porteur (ENEMY) : la pièce suit sa position et rejoue son coup reçu (`+0x33`).
+    pub const WEARER: u32 = 0x46;
+    pub const PIECE: u32 = 0x2f;
+    pub const LAST_HIT: u32 = 0x42;
+    /// Vie du porteur (`+0x62`) et vie de départ (`+0x60`) : la pièce tombe quand la vie passe sous
+    /// une fraction de la vie de départ (quart × (seuil + 1), seuil par pièce, table `THRESHOLDS`).
+    pub const LIFE: u32 = 0x62;
+    pub const FULL_LIFE: u32 = 0x60;
+    pub const HIT: u32 = 0x33;
+    /// Seuils (octets, espace programme) et jeux d'animations (longs) par pièce.
+    pub const THRESHOLDS: u32 = 0xb550e;
+    pub const ANIM_SETS: u32 = 0xb54dc;
+    pub const WORN_ANIMS: u32 = 0x195384;
+    /// Éclats de la pièce tombée (variante 1) : par pièce, nombre moins un puis sortes (octets, données).
+    pub const SHARDS: u32 = 0xb5720;
+    /// Éclat (variante 1) : par sorte, fiche de 16 octets (dx, dy, dz, vx, vy, vz et az) ; rebonds.
+    pub const SHARD_LAUNCH: u32 = 0xb55dc;
+    pub const SHARD_ANIMS: u32 = 0x17efe8;
+    pub const BOUNCE_TIMER: u32 = 0x5c;
+    pub const FALLING: u32 = 0x05;
+    pub const ROLLING: u32 = 0x06;
+}
+
+/// Fin commune : retenue dans l'écran, ombre, remise en liste.
+fn on_screen(x: &mut Cx) {
+    x.call(rom::IN_ZONE);
+    x.call(rom::SHADOW);
+    x.reinsert();
+}
+
+fn armour(x: &mut Cx) {
+    x.call(super::cx::sub::PAUSE_HOOK);
+    if x.c.sr & m68k::SR_Z == 0 {
+        return;
+    }
+    if x.u8(f::VARIANT) != 0 {
+        return armour_shard(x);
+    }
+    match x.u8(f::STATE) {
+        0 => {
+            x.add8(f::STATE, 2);
+            x.set8(armour::LAST_HIT, 0xff);
+            x.anim_start(armour::WORN_ANIMS, 4);
+        }
+        2 => armour_worn(x),
+        4 => armour_break(x),
+        _ => free(x),
+    }
+}
+
+/// La vie du porteur est-elle passée sous le seuil de la pièce ?
+fn armour_falls(x: &mut Cx, wearer: Obj) -> bool {
+    let quarter = wearer.u16(x.b, armour::FULL_LIFE) >> 2;
+    let piece = x.u8(armour::PIECE) as u32;
+    let steps = x.rom8(armour::THRESHOLDS + piece) as u16 + 1;
+    let threshold = quarter.wrapping_mul(steps);
+    threshold as i16 > wearer.u16(x.b, armour::LIFE) as i16
+}
+
+fn armour_worn(x: &mut Cx) {
+    let link = x.u16(armour::WEARER);
+    let wearer = Obj(link as i16 as i32 as u32 & 0xff_ffff);
+    if (link as i16) >= 0 || wearer.u8(x.b, Obj::ACTIVE) == 0 || armour_falls(x, wearer) {
+        return x.add8(f::STATE, 2);
+    }
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let v = wearer.u16(x.b, off);
+        x.set16(off, v);
+    }
+    let facing = wearer.u8(x.b, f::FACING);
+    x.set8(f::FACING, facing);
+    let hit = wearer.u8(x.b, armour::HIT) & 0x7f;
+    if hit == 0 {
+        set_hidden(x, true);
+        return on_screen(x);
+    }
+    if hit == x.u8(armour::LAST_HIT) {
+        return on_screen(x);
+    }
+    // nouveau coup : la pièce joue l'animation du coup
+    x.set8(armour::LAST_HIT, hit);
+    set_hidden(x, false);
+    let piece = x.u8(armour::PIECE) as u32;
+    let set = crate::mem::prog32(x.b, armour::ANIM_SETS + 4 * piece);
+    x.anim_start(set, hit as u32);
+}
+
+/// La pièce tombe : elle se brise en éclats (variante 1) posés sur elle.
+fn armour_break(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    let mut at = armour::SHARDS + 4 * x.u8(armour::PIECE) as u32;
+    let count = x.data8(at);
+    at += 1;
+    x.c.a[4] = at;
+    x.c.d[1] = count as u32;
+    loop {
+        let Some(o) = alloc(x) else { return };
+        o.set_u8(x.b, Obj::ACTIVE, 1);
+        o.set_u8(x.b, Obj::KIND, 46);
+        o.set_u8(x.b, Obj::VARIANT, 1);
+        let kind = x.data8(at);
+        at += 1;
+        x.c.a[4] = at;
+        o.set_u8(x.b, armour::PIECE, kind);
+        for off in [Obj::X, Obj::Y, Obj::Z] {
+            let v = x.u16(off);
+            o.set_u16(x.b, off, v);
+        }
+        let facing = x.u8(f::FACING);
+        o.set_u8(x.b, f::FACING, facing);
+        o.set_u16(x.b, armour::WEARER, x.o.0 as u16);
+        let n = (x.c.d[1] as u16).wrapping_sub(1);
+        set_low_word(&mut x.c.d[1], n);
+        if n == 0xffff {
+            return;
+        }
+    }
+}
+
+/// Allocation d'un effet : l'emplacement, ou `None` si le pool est plein.
+fn alloc(x: &mut Cx) -> Option<Obj> {
+    x.call(rom::ALLOC_EFFECT);
+    (x.c.sr & m68k::SR_C == 0).then(|| Obj(x.c.a[1]))
+}
+
+fn armour_shard(x: &mut Cx) {
+    match x.u8(f::STATE) {
+        0 => armour_shard_init(x),
+        2 => armour_shard_active(x),
+        4 => x.add8(f::STATE, 2),
+        _ => free(x),
+    }
+}
+
+fn armour_shard_init(x: &mut Cx) {
+    x.add8(f::STATE, 2);
+    x.set8(f::SUB_STATE, 0);
+    let fiche = armour::SHARD_LAUNCH + ((x.u8(armour::PIECE) as u16) << 4) as u32;
+    let mut dx = x.data16(fiche);
+    let dy = x.data16(fiche + 2);
+    x.add16(Obj::Y, dy);
+    let dz = x.data16(fiche + 4);
+    x.add16(Obj::Z, dz);
+    let mut vx = x.data16(fiche + 6);
+    x.set16(Obj::AX, 0);
+    let vy = x.data16(fiche + 8);
+    x.set16(Obj::VY, vy);
+    x.set16(Obj::AY, 0);
+    let vz = x.data32(fiche + 10);
+    x.set32(Obj::VZ, vz);
+    if x.u8(f::FACING) == 0 {
+        dx = dx.wrapping_neg();
+        vx = vx.wrapping_neg();
+    }
+    x.add16(Obj::X, dx);
+    x.set16(Obj::VX, vx);
+    x.anim_start(armour::SHARD_ANIMS, 9);
+}
+
+/// Nouveau rebond : vitesse et gravité verticales, délai tiré au hasard avant de s'arrêter.
+fn armour_shard_bounce(x: &mut Cx) {
+    x.set8(armour::ROLLING, 0);
+    x.set16(Obj::VZ, 0x380);
+    x.set16(Obj::AZ, 0xff80);
+    let r = rng(x) & 0x1f;
+    x.set8(armour::BOUNCE_TIMER, r as u8);
+}
+
+fn armour_shard_active(x: &mut Cx) {
+    if x.a5_u8(0x3d) != 0 {
+        return on_screen(x);
+    }
+    if x.u8(armour::FALLING) == 0 {
+        x.call(super::cx::sub::MOVE_XYZ);
+        if (x.u16(Obj::Z) as i16) < 0 {
+            // premier contact avec le sol
+            x.set16(Obj::Z, 0);
+            x.add8(armour::FALLING, 2);
+            x.set8(armour::ROLLING, 0);
+            armour_shard_bounce(x);
+            return on_screen(x);
+        }
+    }
+    if x.u8(armour::ROLLING) == 0 {
+        x.anim_step();
+        x.call(super::cx::sub::MOVE_Z);
+        if (x.u16(Obj::Z) as i16) >= 0 {
+            x.anim_step();
+            return on_screen(x);
+        }
+        x.set16(Obj::Z, 0);
+        x.add8(armour::ROLLING, 2);
+    }
+    let t = x.u8(armour::BOUNCE_TIMER).wrapping_sub(1);
+    x.set8(armour::BOUNCE_TIMER, t);
+    if (t as i8) < 0 {
+        // rebond suivant (sans retenue ni remise en liste à cette image)
+        return armour_shard_bounce(x);
+    }
+    x.anim_step();
+    on_screen(x);
+}
+
 handlers! {
+    0xb5454 "effct_armure" 200 armour,
     0xb4bec "effct_pluie_debris" 200 debris_rain,
     0xb7866 "effct_morceau_ennemi" 200 chunk,
     0xb96dc "effct_eclat_lance" 150 shard,
