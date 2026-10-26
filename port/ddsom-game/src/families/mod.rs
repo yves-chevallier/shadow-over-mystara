@@ -567,7 +567,7 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(boxes::pousse::NATIVES)
         .chain(boss_common::NATIVES)
         .chain(creators::NATIVES)
-        .chain([&set_b::SPAWN_BUMPERS])
+        .chain([&set_b::SPAWN_BUMPERS, &set_b::DOOR_B_RESUME])
         .chain(petites::NATIVES)
         .chain(petites::SHAKES)
         .chain(effects_creators::NATIVES)

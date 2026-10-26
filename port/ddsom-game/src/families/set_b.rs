@@ -4,7 +4,7 @@
 //! Les objets SET ne figurent pas dans les listes triées de profondeur par construction (les
 //! appels à `reinsert` des créations les y inscrivent tout de même quand ils les rendent visibles).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{self, handlers, sub, Cx};
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
 
@@ -2434,8 +2434,19 @@ mod door_b {
         x.set_a5_u8(0x43, 0xff);
         x.set_a5_u16(0x490, 2);
         x.set_a5_u8(0x48e, 0xf);
-        // fondu de sortie : cède la main, la tâche reprend en 0xd8f06
-        x.call_at(0x1460, 0xd8f06);
+        // fondu de sortie : cède la main, la tâche reprend en 0xd8f06 (native `RESUME`)
+        x.call_at(0x1460, RESUME_AT);
+        after_fade(x);
+    }
+
+    /// Reprise de la tâche après le fondu de sortie (adresse de retour de l'appel de 0x1460).
+    pub const RESUME_AT: u32 = 0xd8f06;
+
+    pub fn resume_after_fade(x: &mut Cx) {
+        after_fade(x);
+    }
+
+    fn after_fade(x: &mut Cx) {
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
         match x.u8(0x48) as i8 {
@@ -3717,6 +3728,13 @@ mod dialog {
         }
     }
 }
+
+/// Reprise de la porte de passage (type 29) après son fondu de sortie.
+pub const DOOR_B_RESUME: crate::Native = cx::handler(door_b::RESUME_AT, "set_29_reprise", |_, _| 600, |c, b| {
+    let mut x = Cx::new(c, b);
+    door_b::resume_after_fade(&mut x);
+    x.ret();
+});
 
 handlers! {
     0xd4110 "set_16" 400 bumper::run,
