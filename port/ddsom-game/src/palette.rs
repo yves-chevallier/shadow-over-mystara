@@ -16,8 +16,8 @@ const PAGES: u32 = 0x48e;
 const PALETTES: u32 = 0x91c000;
 const PAGE_SIZE: u32 = 0x400;
 
-fn for_each_color(c: &Cpu, b: &mut Cps2Bus, mut f: impl FnMut(u16) -> u16) {
-    let pages = rd8(b, c.a[5] + PAGES);
+fn for_each_color(b: &mut Cps2Bus, mut f: impl FnMut(u16) -> u16) {
+    let pages = rd8(b, crate::mem::A5 + PAGES);
     for k in 0..4 {
         if pages & (1 << k) != 0 {
             let page = PALETTES + PAGE_SIZE * k;
@@ -30,29 +30,45 @@ fn for_each_color(c: &Cpu, b: &mut Cps2Bus, mut f: impl FnMut(u16) -> u16) {
     }
 }
 
-/// 0x168e : luminosité D0 ajoutée (OU) aux couleurs, ou effacée si D0 = 0.
-fn or_brightness(c: &mut Cpu, b: &mut Cps2Bus) {
-    let level = c.d[0] as u16;
-    for_each_color(c, b, |col| if level == 0 { col & 0x0fff } else { col | level });
-    rts(c, b);
+/// 0x168e : luminosité `level` ajoutée (OU) aux couleurs des pages cochées (`A5+0x48e`), ou effacée si `level`
+/// est nul.
+pub fn or_brightness(b: &mut Cps2Bus, level: u16) {
+    for_each_color(b, |col| if level == 0 { col & 0x0fff } else { col | level });
 }
 
 /// 0x1686 : luminosité maximale.
-fn full_brightness(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn full_brightness(b: &mut Cps2Bus) {
+    or_brightness(b, 0xf000);
+}
+
+/// 0x168c : luminosité nulle.
+pub fn no_brightness(b: &mut Cps2Bus) {
+    or_brightness(b, 0);
+}
+
+/// 0x173c : luminosité des couleurs des pages cochées remplacée par `level`.
+pub fn set_brightness(b: &mut Cps2Bus, level: u16) {
+    for_each_color(b, |col| (col & 0x0fff) | level);
+}
+
+// Natives (appels par adresse) : D0 est l'argument ; 0x1686 et 0x168c le laissent posé.
+fn or_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    or_brightness(b, c.d[0] as u16);
+    rts(c, b);
+}
+
+fn full_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[0] = (c.d[0] & 0xffff_0000) | 0xf000;
-    or_brightness(c, b);
+    or_brightness_native(c, b);
 }
 
-/// 0x168c : luminosité minimale.
-fn no_brightness(c: &mut Cpu, b: &mut Cps2Bus) {
+fn no_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[0] = 0;
-    or_brightness(c, b);
+    or_brightness_native(c, b);
 }
 
-/// 0x173c : luminosité remplacée par D0.
-fn set_brightness(c: &mut Cpu, b: &mut Cps2Bus) {
-    let level = c.d[0] as u16;
-    for_each_color(c, b, |col| (col & 0x0fff) | level);
+fn set_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    set_brightness(b, c.d[0] as u16);
     rts(c, b);
 }
 
@@ -60,10 +76,10 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus))
     Native { entry, name, run, touches_sound: false, outputs: 0 }
 }
 
-pub const FULL_BRIGHTNESS: Native = native(0x1686, "palette_full_brightness", full_brightness);
-pub const NO_BRIGHTNESS: Native = native(0x168c, "palette_no_brightness", no_brightness);
-pub const OR_BRIGHTNESS: Native = native(0x168e, "palette_or_brightness", or_brightness);
-pub const SET_BRIGHTNESS: Native = native(0x173c, "palette_set_brightness", set_brightness);
+pub const FULL_BRIGHTNESS: Native = native(0x1686, "palette_full_brightness", full_brightness_native);
+pub const NO_BRIGHTNESS: Native = native(0x168c, "palette_no_brightness", no_brightness_native);
+pub const OR_BRIGHTNESS: Native = native(0x168e, "palette_or_brightness", or_brightness_native);
+pub const SET_BRIGHTNESS: Native = native(0x173c, "palette_set_brightness", set_brightness_native);
 
 // ---------------------------------------------------------------------------------------------
 // Fondus de luminosité (V3) : un pas, répété par les tâches et sous-programmes de `taches::fondu`
@@ -660,46 +676,91 @@ fn flash_color(level: u16, base: u16, mask: u16) -> u16 {
     base.wrapping_add(level).wrapping_add(level << 4).wrapping_add(level << 8) & mask
 }
 
-/// 0x1ac24 : réserve des palettes de l'éclair.
-fn save_flash_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Teinte de l'éclair : (`BASE`, `MASK`) dans D5 et D4 de l'original (`0x1ab6c`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Flash {
+    /// 0x1ab56.
+    Gray,
+    /// 0x1aaa0, 0x1aaba, 0x1aad4, 0x1aaee, 0x1ab08, 0x1ab22, 0x1ab3c.
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+}
+
+impl Flash {
+    const fn tint(self) -> (u16, u16) {
+        match self {
+            Flash::Gray => (0xf300, 0xff00),
+            Flash::A => (0xf002, 0xffff),
+            Flash::B => (0xf000, 0xf00f),
+            Flash::C => (0xf320, 0xffff),
+            Flash::D => (0xf033, 0xffff),
+            Flash::E => (0xf030, 0xffff),
+            Flash::F => (0xf004, 0xffff),
+            Flash::G => (0xf040, 0xf0ff),
+        }
+    }
+}
+
+/// 0x1ac24 : met en réserve les palettes de l'éclair.
+pub fn save_flash(b: &mut Cps2Bus) {
     copy_flash_palettes(b, false);
+}
+
+/// 0x1abe0 : remet les palettes de l'éclair.
+pub fn restore_flash(b: &mut Cps2Bus) {
+    copy_flash_palettes(b, true);
+}
+
+/// Éclair : met les palettes en réserve puis les remplace par des gris teintés. Rend la dernière couleur traitée
+/// (d'où l'original tire ses registres de travail).
+pub fn flash(b: &mut Cps2Bus, teinte: Flash) -> u16 {
+    let (base, mask) = teinte.tint();
+    copy_flash_palettes(b, false);
+    let mut last = 0;
+    for (start, colors) in [(flash::PAGE, flash::PAGE_COLORS), (flash::SPARE, flash::SPARE_COLORS)] {
+        for i in 0..colors {
+            last = rd16(b, start + 2 * i);
+            let tinted = flash_color(flash_level(last), base, mask);
+            wr16(b, start + 2 * i, tinted);
+        }
+    }
+    last
+}
+
+fn save_flash_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    save_flash(b);
     c.a[1] = flash::SPARE + 2 * flash::SPARE_COLORS;
     c.a[2] = flash::BACKUP_SPARE + 2 * flash::SPARE_COLORS;
     set_low_word(&mut c.d[6], 0xffff);
     rts(c, b);
 }
 
-/// 0x1abe0 : remise des palettes de l'éclair.
-fn restore_flash_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
-    copy_flash_palettes(b, true);
+fn restore_flash_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    restore_flash(b);
     c.a[1] = flash::BACKUP_SPARE + 2 * flash::SPARE_COLORS;
     c.a[2] = flash::SPARE + 2 * flash::SPARE_COLORS;
     set_low_word(&mut c.d[6], 0xffff);
     rts(c, b);
 }
 
-/// Éclair : met les palettes en réserve puis les remplace par des gris teintés (`BASE` et `MASK` dans
-/// D5 et D4 de l'original, `0x1ab6c`).
-fn flash_gray<const BASE: u16, const MASK: u16>(c: &mut Cpu, b: &mut Cps2Bus) {
-    copy_flash_palettes(b, false);
-    let mut last = 0;
-    for (start, colors) in [(flash::PAGE, flash::PAGE_COLORS), (flash::SPARE, flash::SPARE_COLORS)] {
-        for i in 0..colors {
-            last = rd16(b, start + 2 * i);
-            let tinted = flash_color(flash_level(last), BASE, MASK);
-            wr16(b, start + 2 * i, tinted);
-        }
-    }
-    // registres de travail comme l'original les laisse (dernière couleur traitée)
+/// Native d'un éclair : les registres de travail comme l'original les laisse (dernière couleur traitée).
+fn flash_native_run(c: &mut Cpu, b: &mut Cps2Bus, teinte: Flash) {
+    let last = flash(b, teinte);
+    let (base, mask) = teinte.tint();
     let level = flash_level(last);
     let (red, green) = (last >> 8 & 0xf, last >> 4 & 0xf);
     c.a[1] = flash::SPARE + 2 * flash::SPARE_COLORS;
-    set_low_word(&mut c.d[0], flash_color(level, BASE, MASK));
+    set_low_word(&mut c.d[0], flash_color(level, base, mask));
     set_low_word(&mut c.d[1], red);
     set_low_word(&mut c.d[2], red + green);
     set_low_word(&mut c.d[3], level << 8);
-    set_low_word(&mut c.d[4], MASK);
-    set_low_word(&mut c.d[5], BASE);
+    set_low_word(&mut c.d[4], mask);
+    set_low_word(&mut c.d[5], base);
     set_low_word(&mut c.d[6], 0xffff);
     rts(c, b);
 }
@@ -708,34 +769,44 @@ const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps
     Native { entry, name, run, touches_sound: false, outputs: regs::ALL }
 }
 
-pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", flash_gray::<0xf300, 0xff00>);
-pub const FLASH_A: Native = flash_native(0x1aaa0, "palette_eclair_a", flash_gray::<0xf002, 0xffff>);
-pub const FLASH_B: Native = flash_native(0x1aaba, "palette_eclair_b", flash_gray::<0xf000, 0xf00f>);
-pub const FLASH_C: Native = flash_native(0x1aad4, "palette_eclair_c", flash_gray::<0xf320, 0xffff>);
-pub const FLASH_D: Native = flash_native(0x1aaee, "palette_eclair_d", flash_gray::<0xf033, 0xffff>);
-pub const FLASH_E: Native = flash_native(0x1ab08, "palette_eclair_e", flash_gray::<0xf030, 0xffff>);
-pub const FLASH_F: Native = flash_native(0x1ab22, "palette_eclair_f", flash_gray::<0xf004, 0xffff>);
-pub const FLASH_G: Native = flash_native(0x1ab3c, "palette_eclair_g", flash_gray::<0xf040, 0xf0ff>);
-pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_eclair_remet", restore_flash_palettes);
-pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_eclair_reserve", save_flash_palettes);
+pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", |c, b| flash_native_run(c, b, Flash::Gray));
+pub const FLASH_A: Native = flash_native(0x1aaa0, "palette_eclair_a", |c, b| flash_native_run(c, b, Flash::A));
+pub const FLASH_B: Native = flash_native(0x1aaba, "palette_eclair_b", |c, b| flash_native_run(c, b, Flash::B));
+pub const FLASH_C: Native = flash_native(0x1aad4, "palette_eclair_c", |c, b| flash_native_run(c, b, Flash::C));
+pub const FLASH_D: Native = flash_native(0x1aaee, "palette_eclair_d", |c, b| flash_native_run(c, b, Flash::D));
+pub const FLASH_E: Native = flash_native(0x1ab08, "palette_eclair_e", |c, b| flash_native_run(c, b, Flash::E));
+pub const FLASH_F: Native = flash_native(0x1ab22, "palette_eclair_f", |c, b| flash_native_run(c, b, Flash::F));
+pub const FLASH_G: Native = flash_native(0x1ab3c, "palette_eclair_g", |c, b| flash_native_run(c, b, Flash::G));
+pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_eclair_remet", restore_flash_native);
+pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_eclair_reserve", save_flash_native);
 
 /// Couleur de l'éclair d'écran (couleur 14 de la page 1 de l'interface, `0x91c41c`) : 0x1ac68 la pose à
-/// 0xff00, 0x1ac86 et 0x35288 à 0xffff (blanc). Drapeaux du `move.w`.
-fn set_flash_color<const COLOR: u16>(c: &mut Cpu, b: &mut Cps2Bus) {
-    wr16(b, FLASH_COLOR, COLOR);
-    c.flags_logic(COLOR as u32, m68k::decode::Size::Word);
+/// 0xff00 (`FLASH_COLOR_ON`), 0x1ac86 et 0x35288 à 0xffff (blanc).
+pub fn set_flash_color(b: &mut Cps2Bus, color: u16) {
+    wr16(b, FLASH_COLOR, color);
+}
+
+/// Les natives laissent les drapeaux du `move.w`.
+fn flash_color_native_run(c: &mut Cpu, b: &mut Cps2Bus, color: u16) {
+    set_flash_color(b, color);
+    c.flags_logic(color as u32, m68k::decode::Size::Word);
     rts(c, b);
 }
 
 const FLASH_COLOR: u32 = 0x91c41c;
+pub const FLASH_COLOR_RED: u16 = 0xff00;
+pub const FLASH_COLOR_WHITE_VALUE: u16 = 0xffff;
 
 const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
     Native { entry, name, run, touches_sound: false, outputs: regs::CCR }
 }
 
-pub const FLASH_COLOR_ON: Native = flash_color_native(0x1ac68, "palette_eclair_couleur", set_flash_color::<0xff00>);
-pub const FLASH_COLOR_WHITE: Native = flash_color_native(0x1ac86, "palette_eclair_blanc", set_flash_color::<0xffff>);
-pub const FLASH_COLOR_WHITE_B: Native = flash_color_native(0x35288, "palette_eclair_blanc_b", set_flash_color::<0xffff>);
+pub const FLASH_COLOR_ON: Native =
+    flash_color_native(0x1ac68, "palette_eclair_couleur", |c, b| flash_color_native_run(c, b, FLASH_COLOR_RED));
+pub const FLASH_COLOR_WHITE: Native =
+    flash_color_native(0x1ac86, "palette_eclair_blanc", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
+pub const FLASH_COLOR_WHITE_B: Native =
+    flash_color_native(0x35288, "palette_eclair_blanc_b", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
 
 /// Copie `longs` × 8 longs de `from` vers `to` par `movem.l` de huit registres (D0-D5, A3, A4 gardent le
 /// dernier bloc) ; rend les adresses de fin.
@@ -764,13 +835,25 @@ fn save_page1(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x37882 : palette du personnage (`+3`) : 8 longs copiés de la table en clair 0x390c2 vers la page 0, au
-/// même décalage (table de décalages 0x378aa).
-fn character_palette(c: &mut Cpu, b: &mut Cps2Bus) {
-    let character = rd8(b, c.a[0] + 3) as u32;
+/// 0x37882 : palette du personnage de l'objet `o` (`+3`) : 8 longs copiés de la table en clair 0x390c2 vers la
+/// page 0, au même décalage (table de décalages 0x378aa).
+pub fn character_palette(b: &mut Cps2Bus, o: crate::objects::Obj) {
+    let (_, from, to) = character_palette_at(b, o.0);
+    copy_palette(b, from, to);
+}
+
+/// (décalage, source, destination) de la palette du personnage de l'objet `o`.
+fn character_palette_at(b: &mut Cps2Bus, o: u32) -> (u32, u32, u32) {
+    let character = rd8(b, o + 3) as u32;
     let offset = crate::mem::prog16(b, 0x378aa + 2 * character) as i16 as i32 as u32;
+    (offset, 0x390c2u32.wrapping_add(offset), 0x91c000u32.wrapping_add(offset))
+}
+
+/// Native de 0x37882 : D0 = décalage, D1-D5/A3/A4 = les longs copiés (`movem`), A1 = fin de la source, A2 = la
+/// destination.
+fn character_palette_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (offset, from, to) = character_palette_at(b, c.a[0]);
     c.d[0] = offset & 0xffff;
-    let (from, to) = (0x390c2u32.wrapping_add(offset), 0x91c000u32.wrapping_add(offset));
     let (end, _) = movem_copy(c, b, from, to, 1, 0);
     c.a[1] = end;
     c.a[2] = to;
@@ -778,7 +861,7 @@ fn character_palette(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_sauve_page1", run: save_page1, touches_sound: false, outputs: regs::ALL };
-pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", run: character_palette, touches_sound: false, outputs: regs::ALL };
+pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", run: character_palette_native, touches_sound: false, outputs: regs::ALL };
 
 /// Routines natives de ce module (les réglages de luminosité sont déclarés dans `lib.rs`).
 pub const NATIVES: &[Native] = &[

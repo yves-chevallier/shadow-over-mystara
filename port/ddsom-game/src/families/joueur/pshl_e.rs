@@ -82,7 +82,7 @@ mod orbit {
         x.set8(f::POWER2, p2);
         x.set_bit(0x1, 1, true);
         x.anim(ANIMS, 0);
-        x.call(SFX);
+        crate::sound::jouer(x.b, SFX, x.o);
     }
 
     /// Sous-état 0 : attend le retard `+0x53`, puis passe à l'animation d'ouverture.

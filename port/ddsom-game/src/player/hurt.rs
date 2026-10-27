@@ -197,7 +197,7 @@ const HANDLERS: &[(u32, Handler)] = &[
                 p.set_u32(g, Obj::Z, 0);
                 next_step(g, p);
                 hurt_animation(g, p, 9);
-                g.rom(rom::LANDING_EFFECT, p);
+                g.son(rom::LANDING_EFFECT, p);
                 return;
             }
         }
@@ -329,7 +329,7 @@ fn hurt_slow(g: &mut Ctx, p: Player) {
     if is_dead(g, p) {
         p.set_u16(g, Player::MAIN, 0x0400);
         p.set_u8(g, Player::ACTIVE, 2);
-        g.rom(rom::DEATH_EFFECT, p);
+        g.son(rom::DEATH_EFFECT, p);
         return run_at(g, p, 0x3b8a6);
     }
     next_step(g, p);
@@ -469,7 +469,7 @@ fn knock_down(g: &mut Ctx, p: Player) {
     p.set_u16(g, Player::MAIN, 0x0400);
     p.set_u8(g, Player::HITSTOP, 1);
     p.set_u8(g, Player::ACTIVE, 2);
-    g.rom(rom::DEATH_EFFECT, p);
+    g.son(rom::DEATH_EFFECT, p);
 }
 
 /// 0x3a1e2 : fin de la réaction, retour à l'état immobile.
@@ -671,7 +671,7 @@ fn land(g: &mut Ctx, p: Player, anim: u16) {
     p.set_u32(g, Obj::Z, 0);
     next_step(g, p);
     hurt_animation(g, p, anim);
-    g.rom(rom::LANDING_EFFECT, p);
+    g.son(rom::LANDING_EFFECT, p);
 }
 
 /// 0x3a522 : fin de la chute, petit rebond (vz 0x240).
@@ -707,7 +707,7 @@ fn land_with_effect(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     next_step(g, p);
     hurt_animation(g, p, 9);
-    g.rom(rom::LANDING_EFFECT, p);
+    g.son(rom::LANDING_EFFECT, p);
 }
 
 /// 0x3a544 : début du glissement au sol (vx 0x300 dans le sens du recul).
@@ -778,7 +778,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
                 let both = p.u32(g, Obj::VX).wrapping_neg();
                 p.set_u32(g, Obj::VX, both);
             }
-            g.rom(rom::BEFORE_HURT_A, p);
+            g.son(rom::BEFORE_HURT_A, p);
         }
         2 => next_animation(g, p, anim(7)),
         4 => fall_to_apex_xyz(g, p, anim(8)),
@@ -798,7 +798,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::Z, 0);
                 next_step(g, p);
                 hurt_animation(g, p, 9);
-                g.rom(rom::LANDING_EFFECT, p);
+                g.son(rom::LANDING_EFFECT, p);
             }
         }
         12 => {
@@ -870,7 +870,7 @@ fn get_up(g: &mut Ctx, p: Player) {
     next_step(g, p);
     hurt_animation(g, p, 0x10);
     let sound = if ram::FRAME_COUNTER.get(g.b) & 2 != 0 { rom::GET_UP_SOUND_B } else { rom::GET_UP_SOUND_A };
-    g.rom(sound, p);
+    g.son(sound, p);
 }
 
 /// 0x3a466 : fin de l'animation de relevé : retour à l'état immobile.
@@ -957,14 +957,14 @@ fn crash_landing(g: &mut Ctx, p: Player) {
             p.set_u8(g, Player::ACTIVE, 2);
             p.set_u16(g, Player::HP, 0);
             p.set_u16(g, Player::MAIN, 0x0400);
-            g.rom(rom::DEATH_EFFECT, p);
+            g.son(rom::DEATH_EFFECT, p);
             let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_sub(1);
             ram::PLAYERS_ALIVE.set(g.b, alive);
         }
     }
     next_step(g, p);
     hurt_animation(g, p, 9);
-    g.rom(rom::LANDING_EFFECT, p);
+    g.son(rom::LANDING_EFFECT, p);
 }
 
 // ---- réaction 0x3e (0x3a62a) : projeté au loin -------------------------------------------------------
@@ -1033,7 +1033,7 @@ fn hurled_landing(g: &mut Ctx, p: Player, anim: u16, effect: bool) {
         next_step(g, p);
         hurt_animation(g, p, anim);
         if effect {
-            g.rom(rom::LANDING_EFFECT, p);
+            g.son(rom::LANDING_EFFECT, p);
         }
         return;
     }
@@ -1090,7 +1090,7 @@ fn shock_start(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::TIMER_6F, 30);
     p.set_u8(g, Player::HITSTOP, 1);
     hurt_animation(g, p, 27);
-    g.rom(0xebbda, p);
+    g.son(0xebbda, p);
 }
 
 /// 0x3ae0e : retombe (sans animation).
@@ -1378,7 +1378,7 @@ fn frozen_start(g: &mut Ctx, p: Player) {
         p.set_u8(g, Player::TIMER_6F, 60);
         g.rom(0x3baea, p);
         hurt_animation(g, p, 19);
-        g.rom(FROZEN_SOUND, p);
+        g.son(FROZEN_SOUND, p);
         if p.u16(g, Obj::Z) == 0 {
             next_step(g, p);
             g.rom(FROZEN_EFFECT, p);
@@ -1389,7 +1389,7 @@ fn frozen_start(g: &mut Ctx, p: Player) {
     }
     p.set_state(g, 0x0400_2c0a);
     p.set_u8(g, 0x53, 1);
-    g.rom(FROZEN_DEATH_SOUND, p);
+    g.son(FROZEN_DEATH_SOUND, p);
     p.set_u8(g, Player::TIMER_6F, 60);
     hurt_animation(g, p, 21);
     if (p.u16(g, Obj::Z) as i16) <= 0 {
@@ -1500,7 +1500,7 @@ fn break_free(g: &mut Ctx, p: Player) {
 pub fn hurt(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
-        g.rom(rom::BEFORE_HURT_A, p);
+        g.son(rom::BEFORE_HURT_A, p);
         g.rom(rom::BEFORE_HURT_B, p);
         if p.u8(g, Player::SLOW_8A) != 0 {
             p.set_u8(g, Player::SLOW_8A, 0);
@@ -1512,7 +1512,7 @@ pub fn hurt(g: &mut Ctx, p: Player) {
     let action = p.u8(g, Player::ACTION);
     jump_table(g, p, HURT_ACTIONS, action);
     if ram::INPUT_RAW.get(g.b) == 0 {
-        crate::terrain::push_68k(g.c, g.b, p.obj());
+        crate::terrain::push(g.b, p.obj());
     }
     clamp_to_screen(g.b, p);
 }
@@ -1524,7 +1524,7 @@ pub fn downed(g: &mut Ctx, p: Player) {
     p.set_u16(g, Player::DYING_TIMER, 0);
     let action = p.u8(g, Player::ACTION);
     jump_table(g, p, DOWN_ACTIONS, action);
-    crate::terrain::push_68k(g.c, g.b, p.obj());
+    crate::terrain::push(g.b, p.obj());
     if p.u8(g, Player::ACTIVE) != 0 {
         ACTORS.reinsert(g.b, p.obj());
     }

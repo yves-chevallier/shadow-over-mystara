@@ -58,7 +58,6 @@ mod call {
     pub const PLAYER_INPUT: u32 = 0x2bdc;
     pub const WAIT: u32 = 0xa40;
     pub const SOUND_C0C: u32 = 0xc0c;
-    pub const SOUND_E0882: u32 = 0xe0882;
     pub const COLLISIONS: u32 = 0x260ee;
     pub const PLAYERS: u32 = 0x35292;
     pub const PLAYER_PARTS: u32 = 0x392e4;
@@ -289,8 +288,8 @@ struct Leave {
     clear_flags: bool,
     next_scene: NextScene,
     phase: u32,
-    /// Appel avant la cession.
-    extra_call: Option<u32>,
+    /// Son joué avant la cession.
+    extra_sound: Option<u32>,
     frames: u32,
     tail: Tail,
 }
@@ -303,7 +302,7 @@ const LEAVE: Leave = Leave {
     clear_flags: true,
     next_scene: NextScene::Same,
     phase: PHASE_ENTRY,
-    extra_call: None,
+    extra_sound: None,
     frames: 4,
     tail: Tail::Both,
 };
@@ -578,7 +577,7 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
     ex.x.set_v8(0x42, 0);
     if leave.black {
         ex.x.set_v8(var::FADE_PAGES, 15);
-        ex.x.call(sub::PALETTES_BLACK);
+        crate::palette::no_brightness(ex.x.b);
     }
     if let Some(w) = leave.clear_word {
         wr16(ex.x.b, w, 0);
@@ -611,8 +610,8 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         }
     }
     ex.x.set_v32(var::PHASE, leave.phase);
-    if let Some(addr) = leave.extra_call {
-        ex.call(addr);
+    if let Some(son) = leave.extra_sound {
+        crate::sound::jouer_global(ex.x.b, son);
     }
     let resume = match leave.tail {
         Tail::Both => Some(Etape::Both),
@@ -680,10 +679,10 @@ impl Etape {
             Etape::DispatchTail(index) => dispatch_tail(x, index),
             Etape::Both => {
                 x.call(call::SOUND_C0C);
-                x.call(call::SOUND_E0882);
+                crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             }
             Etape::Sound => x.call(call::SOUND_C0C),
-            Etape::Command | Etape::TwiceEnd => x.call(call::SOUND_E0882),
+            Etape::Command | Etape::TwiceEnd => crate::sound::service(x.b, crate::sound::Service::ArretGeneral),
             Etape::Twice => {
                 x.call(call::SOUND_C0C);
                 x.c.d[0] = 2;
@@ -1025,7 +1024,7 @@ static SEQ_35: Sequence = Sequence {
         St::Custom(seq35_fade),
         St::Custom(seq35_message),
         St::Custom(seq35_boss),
-        St::Leave(Leave { phase: PHASE_ENDING, extra_call: Some(call::EVENT_E57D6), ..LEAVE }),
+        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(call::EVENT_E57D6), ..LEAVE }),
     ],
 };
 
@@ -1085,8 +1084,7 @@ fn seq6_start(ex: &mut Ex) {
     ex.fade(2, 0x14d0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
     ex.call(call::PLAYER_INPUT);
-    ex.x.c.d[0] = ex.x.c.d[0] & !0xffff | 4;
-    ex.call(0xe0a82);
+    crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
     ex.x.world();
 }
 
@@ -1247,7 +1245,7 @@ fn seq2_countdown(ex: &mut Ex) {
         ex.set_b16(blk::TIMER, 128);
         ex.x.c.d[0] = 30;
         ex.call(0x2860);
-        ex.call(0xe4830);
+        crate::sound::jouer_global(ex.x.b, 0xe4830);
     }
 }
 
@@ -1332,7 +1330,7 @@ fn seq14_countdown(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.message(36);
-        ex.call(0xe61ca);
+        crate::sound::jouer_global(ex.x.b, 0xe61ca);
     }
 }
 
@@ -1444,7 +1442,7 @@ fn seq30_effect(ex: &mut Ex) {
     if ex.b16(blk::TIMER) == 32 {
         let e = ex.x.spawn(&pools::EFFCT, 75);
         e.set_u8(ex.x.b, Obj::VARIANT, 1);
-        ex.call(0xed0c0);
+        crate::sound::jouer_global(ex.x.b, 0xed0c0);
     }
     if ex.countdown() {
         ex.next();
@@ -1497,8 +1495,7 @@ fn seq35_fade(ex: &mut Ex) {
     ex.set_b16(blk::TIMER, 64);
     ex.fade(2, sub::FADE_TASK);
     ex.clear_text();
-    ex.x.c.d[0] = 4;
-    ex.call(0xe0a82);
+    crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
 }
 
 fn seq35_message(ex: &mut Ex) {
@@ -1513,7 +1510,7 @@ fn seq35_message(ex: &mut Ex) {
     ex.set_b16(blk::OBJECT, a1);
     ex.x.c.d[0] = 0x7fff;
     ex.call(0x2860);
-    ex.call(0xe5776);
+    crate::sound::jouer_global(ex.x.b, 0xe5776);
 }
 
 fn seq35_boss(ex: &mut Ex) {

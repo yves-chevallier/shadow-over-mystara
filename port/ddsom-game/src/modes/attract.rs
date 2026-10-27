@@ -102,8 +102,8 @@ crate::etapes! {
             x.wait(1, Etape::LegalScreenSound)
         },
         LegalScreenSound = LEGAL_SOUND => |x| {
-            x.call(SOUND_SCREEN_A);
-            x.call(SOUND_SCREEN_B);
+            crate::sound::jouer_global(x.b, SOUND_SCREEN_A);
+            crate::sound::jouer_global(x.b, SOUND_SCREEN_B);
             x.set_v8(var::FADE_PAGES, 0xf);
             crate::taches::fondu::montee(x)
         },
@@ -161,8 +161,7 @@ crate::etapes! {
             x.jump_to(sub::LOAD_PALETTE)
         },
         NoticeTextShown = NOTICE_TEXT_SHOWN => |x| {
-            x.c.a[4] = NOTICE_TEXT;
-            x.call(0xd5e);
+            crate::text::print(x.b, NOTICE_TEXT);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::NoticeFadeIn)
         },

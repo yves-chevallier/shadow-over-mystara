@@ -126,7 +126,7 @@ mod shot15 {
                 x.set8(0x5d, 0);
                 x.set8(f::ATTACK_POWER, 0xc);
                 x.set8(f::ATTACK_ID, 0x11);
-                x.call(sfx::E4752);
+                crate::sound::jouer(x.b, sfx::E4752, x.o);
                 let owner_state = owner.u32(x.b, 0x4);
                 if owner_state == 0x0202_0004 {
                     x.set32(0x4, 0x0202_0000);
@@ -604,15 +604,10 @@ mod shot17 {
             dx = dx.wrapping_neg();
         }
         let far = if (dx as i32) < (dy as i32) { dy } else { dx } >> 3;
-        x.c.d[0] = x.u32(0xc);
-        x.c.d[1] = far;
-        x.call(crate::aides::DIVIDE.entry);
-        let quotient = x.c.d[0] << 7;
+        let quotient = crate::aides::divide(x.u32(0xc), far).0 << 7;
         let slope = (quotient as u16).wrapping_add(((far >> 16) as u16) << 2);
         x.set16(0x18, slope.wrapping_neg());
-        x.c.a[1] = target.0;
-        x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
-        let angle = (x.c.d[0] as u16 & 0x1f) as u8;
+        let angle = crate::aides::direction_to(x.b, x.o, target) & 0x1f;
         let idx = angle.wrapping_sub(8) as u32;
         let v = x.rom8(AIM_TABLE_B + idx);
         x.set8(0x2d, v);
@@ -630,12 +625,9 @@ mod shot17 {
             if target.u8(x.b, 0) == 0 {
                 return x.set8(0x4, st::FREE);
             }
-            x.c.d[1] = target.u16(x.b, 0x8) as u32;
-            x.c.d[4] = x.u16(0xc) as u32;
-            x.c.d[3] = x.u16(0x8) as u32;
-            x.c.d[2] = 0;
-            x.call(crate::aides::DIRECTION.entry);
-            let angle = (x.c.d[0] as u16 & 0x1f) as u8;
+            let vers = (target.u16(x.b, 0x8), 0);
+            let de = (x.u16(0x8), x.u16(0xc));
+            let angle = crate::aides::direction(x.b, de, vers) & 0x1f;
             let v = x.rom8(AIM_TABLE_A + angle.wrapping_sub(8) as u32);
             x.set8(0x2d, v);
             speed_table(x, 0x44);
@@ -682,7 +674,7 @@ mod shot17 {
         }
         x.set32(0xc, 0);
         x.anim_start(ANIMS, 2);
-        x.call(sfx::ED686);
+        crate::sound::jouer(x.b, sfx::ED686, x.o);
     }
 
     /// Chute du mode > 0 : déplacement en X, Y et Z.
@@ -696,7 +688,7 @@ mod shot17 {
         x.set8(0x2a, 0);
         x.set32(0xc, 0);
         x.anim_start(ANIMS, 2);
-        x.call(sfx::ED686);
+        crate::sound::jouer(x.b, sfx::ED686, x.o);
     }
 }
 
@@ -736,7 +728,7 @@ mod shot18 {
     fn fly(x: &mut Cx) {
         let hit = x.u8(f::HIT_FLAGS);
         if hit & 0x08 != 0 {
-            x.call(sfx::E7376);
+            crate::sound::jouer(x.b, sfx::E7376, x.o);
             return x.free_eshl();
         }
         if hit & 0x20 != 0 {
@@ -803,12 +795,9 @@ mod shot19 {
         if target.u8(x.b, 0) == 0 {
             return x.add8(0x6, 4);
         }
-        x.c.d[3] = x.u16(0x8) as u32;
-        x.c.d[4] = x.u16(0xc) as u32;
-        x.c.d[1] = target.u16(x.b, 0x8) as u32;
-        x.c.d[2] = 0;
-        x.call(crate::aides::DIRECTION.entry);
-        let angle = (x.c.d[0] as u16 & 0x1f) as u8;
+        let de = (x.u16(0x8), x.u16(0xc));
+        let vers = (target.u16(x.b, 0x8), 0);
+        let angle = crate::aides::direction(x.b, de, vers) & 0x1f;
         let (base, steps) = if x.u8(f::FLIP) != 0 { (9, STEPS_FACING_LEFT) } else { (0x10, STEPS_FACING_RIGHT) };
         let r = angle.wrapping_sub(base);
         let step = if r == 0 {
@@ -942,7 +931,7 @@ mod shot20 {
         let owner = x.linked(f::OWNER);
         let armed = owner.u8(x.b, ARMED) & !1;
         owner.set_u8(x.b, ARMED, armed);
-        x.call(sfx::E5020);
+        crate::sound::jouer(x.b, sfx::E5020, x.o);
         x.anim_start(ANIMS, 3);
     }
 
@@ -973,7 +962,7 @@ mod shot20 {
                 let owner = x.linked(f::OWNER);
                 if (owner.u32(x.b, 0x4) as i32) >= 0x0200_0600 && x.u8(0x33) != 0 {
                     x.set8(0x33, 0);
-                    x.call(sfx::E4E5A);
+                    crate::sound::jouer(x.b, sfx::E4E5A, x.o);
                 }
                 if x.anim_step() {
                     if x.u16(f::OWNER) == 0 {
@@ -1016,8 +1005,8 @@ mod shot20 {
                 if !x.anim_step() {
                     return attach(x, ATTACH);
                 }
-                x.call(sfx::E4E5A);
-                x.call(sfx::E4FB6);
+                crate::sound::jouer(x.b, sfx::E4E5A, x.o);
+                crate::sound::jouer(x.b, sfx::E4FB6, x.o);
                 x.add8(0x6, 2);
                 // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
                 let blow = x.alloc_unchecked(&pools::ESHL);
@@ -1048,7 +1037,7 @@ mod shot20 {
                     let owner = x.linked(f::OWNER);
                     let armed = owner.u8(x.b, ARMED) & !1;
                     owner.set_u8(x.b, ARMED, armed);
-                    x.call(sfx::E5020);
+                    crate::sound::jouer(x.b, sfx::E5020, x.o);
                     x.anim_start(ANIMS, 3);
                 } else {
                     attach(x, ATTACH);
@@ -1080,7 +1069,7 @@ mod shot21 {
             0 => init(x),
             2 => active(x),
             _ => {
-                x.call(sfx::E5020);
+                crate::sound::jouer(x.b, sfx::E5020, x.o);
                 x.free_eshl()
             }
         }
@@ -1097,7 +1086,7 @@ mod shot21 {
         x.set8(0x42, 0x4f);
         x.set8(0x1e, 0);
         x.anim_start(ANIMS, 2);
-        x.call(sfx::E4FB6);
+        crate::sound::jouer(x.b, sfx::E4FB6, x.o);
     }
 
     fn burn(x: &mut Cx) {
@@ -1492,7 +1481,7 @@ mod shot25 {
         x.call(IMPACT_SOUND);
         x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
         x.call(crate::camera_modes::SHAKE_B.entry);
-        x.call(IMPACT_EFFECT);
+        crate::sound::jouer(x.b, IMPACT_EFFECT, x.o);
         if x.u16(0x5a) != 0 {
             let shadow = x.linked(0x5a);
             shadow.set_u8(x.b, 0x4, 6);
@@ -1573,7 +1562,7 @@ mod shot26 {
         x.set32(0xc, 0);
         x.set16(0x58, 0x80);
         x.anim_start(ANIMS, 1);
-        x.call(LAND_SOUND);
+        crate::sound::jouer(x.b, LAND_SOUND, x.o);
         x.call(SHADOW);
         if x.c.cond(6) {
             x.set16(0x5a, low16(Obj(x.c.a[1])));
@@ -1662,12 +1651,12 @@ mod shot27 {
             if x.u16(0x58) == 0 {
                 x.add8(0x4, 2);
                 x.set8(0x0, 2);
-                x.call(SOUND_END);
+                crate::sound::jouer(x.b, SOUND_END, x.o);
             }
             x.anim_step();
             if x.u16(0x58) == ROW_AT {
                 start_row(x);
-                x.call(SOUND_ROW);
+                crate::sound::jouer(x.b, SOUND_ROW, x.o);
             }
             return;
         }
@@ -1899,7 +1888,7 @@ mod shot29 {
 
     /// Fin : le créateur est mort ou dans l'état 0x20a.
     fn stop(x: &mut Cx) {
-        x.call(SOUND_END);
+        crate::sound::jouer(x.b, SOUND_END, x.o);
         x.add8(0x4, 2);
     }
 
@@ -1928,7 +1917,7 @@ mod shot29 {
             WAIT => {
                 let source = x.linked(0x5c);
                 if source.u8(x.b, SOURCE_ARMED) != 0 {
-                    x.call(SOUND_START);
+                    crate::sound::jouer(x.b, SOUND_START, x.o);
                     x.add8(0x5, 2);
                     x.set16(0x58, 0x50);
                     let px = source.u16(x.b, 0x8);
@@ -2029,7 +2018,7 @@ mod shot30 {
             0 => init(x),
             2 => active(x),
             4 => {
-                x.call(SOUND_END);
+                crate::sound::jouer(x.b, SOUND_END, x.o);
                 x.free_eshl()
             }
             _ => x.free_eshl(),
@@ -2060,7 +2049,7 @@ mod shot30 {
         }
         let owner = x.linked(f::OWNER);
         if (owner.u8(x.b, 0x4) as i8) >= 4 || owner.u16(x.b, 0x4) == 0x20a {
-            x.call(SOUND_END);
+            crate::sound::jouer(x.b, SOUND_END, x.o);
             return x.free_eshl();
         }
         match x.u8(0x5) {
@@ -2073,7 +2062,7 @@ mod shot30 {
             }
             2 => {
                 x.add8(0x5, 2);
-                x.call(SOUND_START);
+                crate::sound::jouer(x.b, SOUND_START, x.o);
                 x.set16(0x58, 0x30);
                 x.anim_start(ANIMS, 1);
             }
@@ -2089,7 +2078,7 @@ mod shot30 {
             }
             6 => {
                 if x.anim_step() {
-                    x.call(SOUND_END);
+                    crate::sound::jouer(x.b, SOUND_END, x.o);
                     x.add8(0x4, 4);
                     x.set8(0x5, 0);
                     let owner = x.linked(f::OWNER);
@@ -2159,7 +2148,7 @@ mod shot31 {
     fn animation_cue(x: &mut Cx) {
         if x.u8(0x33) != 0 {
             x.set8(0x33, 0);
-            x.call(SOUND_SPAWN);
+            crate::sound::jouer(x.b, SOUND_SPAWN, x.o);
         }
     }
 
@@ -2191,10 +2180,8 @@ mod shot31 {
                 x.add8(0x42, 0xff);
                 if (x.u8(0x42) as i8) < 0 {
                     x.set8(0x42, 0xa);
-                    x.c.d[1] = source.u16(x.b, 0x8) as u32;
-                    x.c.d[2] = source.u16(x.b, 0x10) as u32;
-                    x.call(crate::aides::DIRECTION_FROM_OBJECT.entry);
-                    let angle = (x.c.d[0] as u8).wrapping_add(x.u8(0x58)) & 0x1f;
+                    let vers = (source.u16(x.b, 0x8), source.u16(x.b, 0x10));
+                    let angle = crate::aides::direction_from(x.b, x.o, vers).wrapping_add(x.u8(0x58)) & 0x1f;
                     x.set8(0x2d, angle);
                 }
                 let touching = |x: &mut Cx, a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x20 && x.a5_u8(GAME_PAUSED) == 0;
@@ -2202,7 +2189,7 @@ mod shot31 {
                 let (mx, my) = (x.u16(0x8), x.u16(0x10));
                 let hit = source.u8(x.b, 0x4) != 4 && touching(x, sx, mx) && touching(x, sy, my);
                 if hit {
-                    x.call(SOUND_HIT);
+                    crate::sound::jouer(x.b, SOUND_HIT, x.o);
                     x.set8(0x4, st::FREE);
                     source.set_u8(x.b, 0xb5, 0);
                 } else {
@@ -2259,7 +2246,7 @@ mod shot32 {
                     }
                     if x.u8(0x58) != 0 {
                         x.add8(0x5, 2);
-                        x.call(SOUND_FLYING);
+                        crate::sound::jouer(x.b, SOUND_FLYING, x.o);
                     }
                     ai_step(x);
                 }
@@ -2279,7 +2266,7 @@ mod shot32 {
                     let x_pos = x.u16(0x8);
                     let inside = (left.wrapping_sub(0x30) as i16) < x_pos as i16 && (left.wrapping_add(0x1b0) as i16) > x_pos as i16;
                     if inside {
-                        x.call(SOUND_LANDING);
+                        crate::sound::jouer(x.b, SOUND_LANDING, x.o);
                     }
                     ai_start(x, ANIMS, 2);
                 }
@@ -2300,18 +2287,15 @@ mod shot32 {
         x.set8(f::ATTACK_POWER, 0x14);
         x.call(SET_TRAJECTORY);
         let variant = x.u8(0x3);
-        let target;
+        let (target, angle);
         if variant == 0 {
             target = x.linked(f::OWNER);
-            x.c.a[1] = target.0;
-            x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
+            angle = crate::aides::direction_to(x.b, x.o, target);
         } else {
             target = x.linked(0x42);
-            x.c.d[1] = target.u16(x.b, 0xbc) as u32;
-            x.c.d[2] = target.u16(x.b, 0xbe) as u32;
-            x.call(crate::aides::DIRECTION_FROM_OBJECT.entry);
+            let vers = (target.u16(x.b, 0xbc), target.u16(x.b, 0xbe));
+            angle = crate::aides::direction_from(x.b, x.o, vers);
         }
-        let angle = x.c.d[0] as u8;
         x.set8(0x2d, angle);
         speed_table(x, 0x41);
         // distance horizontale à la cible
@@ -2332,10 +2316,8 @@ mod shot32 {
             }
             steps = (steps + 1) & 0xffff;
         }
-        x.c.d[0] = x.u16(0xc) as u32;
-        x.c.d[1] = steps;
-        x.call(crate::aides::DIVIDE.entry);
-        let slope = (x.c.d[0] as i32).wrapping_neg() as u32;
+        let quotient = crate::aides::divide(x.u16(0xc) as u32, steps).0;
+        let slope = (quotient as i32).wrapping_neg() as u32;
         let slope = (slope.rotate_left(16) as i32 >> 8) as u16;
         x.set16(0x18, slope);
         ai_start(x, ANIMS, 0);
@@ -2359,7 +2341,7 @@ mod shot33 {
             return;
         }
         if host_dead(x) {
-            x.call(SOUND_END);
+            crate::sound::jouer(x.b, SOUND_END, x.o);
             return x.free_eshl();
         }
         match x.u8(0x4) {
@@ -2375,7 +2357,7 @@ mod shot33 {
                         ai_step(x);
                     } else {
                         x.add8(0x5, 2);
-                        x.call(SOUND_FIRE);
+                        crate::sound::jouer(x.b, SOUND_FIRE, x.o);
                         ai_start(x, ANIMS, 1);
                     }
                 }
@@ -2406,7 +2388,7 @@ mod shot33 {
                 _ => {}
             },
             _ => {
-                x.call(SOUND_END);
+                crate::sound::jouer(x.b, SOUND_END, x.o);
                 return x.free_eshl();
             }
         }
@@ -2673,7 +2655,7 @@ mod shot36 {
                     }
                     x.add8(0x5, 2);
                     x.set16(0xc, 0);
-                    x.call(SOUND_LAND);
+                    crate::sound::jouer(x.b, SOUND_LAND, x.o);
                     x.c.d[0] = 0x20;
                     x.call(crate::camera_modes::SHAKE_B.entry);
                     ai_start(x, ANIMS, 1);
@@ -2899,12 +2881,9 @@ mod shot38 {
         let mut angle = host.u16(x.b, 0x50);
         if (angle as i16) < 0 {
             let target = Obj(angle as i16 as i32 as u32 & 0xff_ffff);
-            x.c.d[1] = target.u16(x.b, 0x8) as u32;
-            x.c.d[2] = target.u16(x.b, 0xc).wrapping_add(0x30) as u32;
-            x.c.d[3] = x.u16(0x8) as u32;
-            x.c.d[4] = x.u16(0xc) as u32;
-            x.call(crate::aides::DIRECTION.entry);
-            angle = x.c.d[0] as u16;
+            let vers = (target.u16(x.b, 0x8), target.u16(x.b, 0xc).wrapping_add(0x30));
+            let de = (x.u16(0x8), x.u16(0xc));
+            angle = crate::aides::direction(x.b, de, vers) as u16;
         }
         let flipped = flip != 0;
         let mapped = |a: u16| if flipped { mirror(a) } else { a };
@@ -3028,7 +3007,7 @@ mod shot39 {
                 if (x.u16(0xc) as i16) <= 0 {
                     x.c.d[0] = 0x30;
                     x.call(crate::camera_modes::SHAKE_B.entry);
-                    x.call(SOUND_IMPACT);
+                    crate::sound::jouer(x.b, SOUND_IMPACT, x.o);
                     x.add8(0x5, 2);
                     x.set16(0xc, 0);
                     x.set8(0x42, 0x30);

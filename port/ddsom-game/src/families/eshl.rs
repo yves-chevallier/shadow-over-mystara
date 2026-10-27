@@ -23,7 +23,6 @@ mod sfx {
     pub const EBD30: u32 = 0xebd30;
 }
 
-use super::cx::sub;
 use crate::objects::pools;
 use crate::objects::Courant;
 
@@ -77,7 +76,7 @@ mod shot0 {
         x.set8(f::ATTACK_POWER, power);
         x.set8(f::ATTACK_ID, id);
         x.anim_start(ANIMS, anim);
-        x.call(sfx::EBE86);
+        crate::sound::jouer(x.b, sfx::EBE86, x.o);
         true
     }
 
@@ -85,7 +84,7 @@ mod shot0 {
     fn fly(x: &mut Cx) {
         let hit = x.u8(f::HIT_FLAGS);
         if hit & 0x08 != 0 {
-            x.call(sfx::E7376);
+            crate::sound::jouer(x.b, sfx::E7376, x.o);
             x.free_eshl();
             return;
         }
@@ -93,8 +92,10 @@ mod shot0 {
             x.add8(0x4, 2);
             return fall(x);
         }
-        x.call(sub::TERRAIN_OF_OBJECT);
-        let terrain = x.c.d[2];
+        // registres de 0x24a8 laissés comme l'original (non prouvés morts : voir `pshl::stopped_by_terrain`)
+        let t = crate::video::terrain_of(x.b, x.o);
+        crate::video::terrain_68k(x.c, &t);
+        let terrain = t.numero as u32;
         let ground = (terrain & 0x3f).wrapping_sub(5) as u16 <= 3;
         if ground && terrain & 0x40 == 0 {
             return fall(x);
@@ -110,7 +111,7 @@ mod shot0 {
         match x.u8(0x6) {
             FALL_START => {
                 x.add8(0x6, 2);
-                x.call(sfx::E73E8);
+                crate::sound::jouer(x.b, sfx::E73E8, x.o);
                 x.set16(0x18, -0xc0i16 as u16);
                 x.set16(0x1a, -0x10i16 as u16);
                 x.set16(0x14, 0);
@@ -210,14 +211,14 @@ mod shot1 {
                     x.add8(0x5, 2);
                     x.set16(f::TIMER, 0x50);
                     x.set32(0xc, 0);
-                    x.call(sfx::EBCBE);
+                    crate::sound::jouer(x.b, sfx::EBCBE, x.o);
                     x.anim_start(ANIMS, 1);
                 }
             }
             LANDED => {
                 if x.u8(0x33) != 0 {
                     x.set8(0x33, 0);
-                    x.call(sfx::EBD30);
+                    crate::sound::jouer(x.b, sfx::EBD30, x.o);
                 }
                 let t = x.u16(f::TIMER).wrapping_sub(1);
                 x.set16(f::TIMER, t);
@@ -273,7 +274,7 @@ mod shot2 {
                 let (anim, id) = if owner.u8(x.b, 0x2) != 0 { (1, 0xa) } else { (0, 9) };
                 x.set8(f::ATTACK_ID, id);
                 x.anim_start(ANIMS, anim);
-                x.call(sfx::EBF6A);
+                crate::sound::jouer(x.b, sfx::EBF6A, x.o);
                 fly(x);
             }
             2 => fly(x),
@@ -283,7 +284,7 @@ mod shot2 {
 
     fn fly(x: &mut Cx) {
         if x.u8(f::HIT_FLAGS) & 0x28 != 0 {
-            x.call(sfx::E7376);
+            crate::sound::jouer(x.b, sfx::E7376, x.o);
             return x.free_eshl();
         }
         if blocked_by_terrain(x) {
@@ -372,9 +373,9 @@ mod shot4 {
                     _ => {}
                 }
                 let (px, py) = (x.u16(0x8), x.u16(0x10));
-                x.c.d[0] = px as u32;
-                x.c.d[1] = py as u32;
-                x.call(sub::TERRAIN_AT);
+                // seuls les registres de 0x24b0 restent (D0-D4, A1), pour le gestionnaire suivant
+                let t = crate::video::terrain(x.b, px, py);
+                crate::video::terrain_68k(x.c, &t);
                 x.reinsert();
             }
             _ => x.free_eshl(),
@@ -408,7 +409,7 @@ mod shot4 {
         x.anim_step();
         x.cull_offscreen();
         if (x.u16(0xc) as i16) < 0 {
-            x.call(sfx::ECE2C);
+            crate::sound::jouer(x.b, sfx::ECE2C, x.o);
             x.set16(0xc, 0);
             x.add8(0x5, 2);
             let (vx, ax) = (x.u16(f::OWNER), x.u16(0x42));
@@ -429,7 +430,7 @@ mod shot4 {
         x.set8(f::TIMER, t);
         if (t as i8) < 0 {
             x.add8(0x5, 2);
-            x.call(sfx::EBD30);
+            crate::sound::jouer(x.b, sfx::EBD30, x.o);
             x.anim_start(ANIMS, 1);
         }
     }
@@ -1303,7 +1304,7 @@ mod shot14 {
                     x.add8(0x7, 2);
                     x.set8(f::ATTACK_POWER, 8);
                     x.set8(f::ATTACK_ID, 0xf);
-                    x.call(sfx::E46DE);
+                    crate::sound::jouer(x.b, sfx::E46DE, x.o);
                     breath_anim(x);
                 }
                 _ => {
@@ -1330,7 +1331,7 @@ mod shot14 {
                 }
                 _ => {
                     if x.u8(0x33) != 0 {
-                        x.call(sfx::E47BC);
+                        crate::sound::jouer(x.b, sfx::E47BC, x.o);
                         x.add8(0x7, 2);
                         let child = spawn_child(x, 0);
                         x.set16(0x42, child.0 as u16);

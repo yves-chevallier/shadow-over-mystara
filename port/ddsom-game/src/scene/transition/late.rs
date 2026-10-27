@@ -15,10 +15,6 @@ mod ext {
     pub const PALETTES_2: u32 = 0x1a678;
     pub const PALETTES_3: u32 = 0x1a8ac;
     pub const SCROLL_1_ON: u32 = 0x2a36;
-    /// Texte (A4 = description) sur la couche de caractères.
-    pub const TEXT: u32 = 0x1136;
-    /// Prime versée au joueur (D0 = montant | joueur << 8, A1 = joueur).
-    pub const PAY: u32 = 0x19ae6;
 }
 use sub::{TILE_BLOCK as TB, TILE_BLOCK_2 as TB2};
 
@@ -56,8 +52,7 @@ pub fn scene_31(x: &mut Ctx) -> Flow {
             x.set_v8(0x33, 1);
             set16(x, var::TIMER, 120);
             next(x);
-            x.c.a[4] = 0xf985e;
-            x.call(ext::TEXT);
+            crate::text::print_tall(x.b, 0xf985e);
             // prime et durée d'après le temps restant (table de 8 octets par dizaine de secondes)
             let clock = x.v16(a5::CLOCK);
             let at = (clock >> 8 & 15) * 48 + (clock & 0xf0) / 2;
@@ -255,7 +250,7 @@ crate::etapes! {
             sprites_next_frame(x, Etape::S46Drawn)
         },
         S46Drawn = 0xf9ef2 => |x| {
-            x.call(ext::MUSIC_FINALE);
+            crate::sound::jouer_global(x.b, ext::MUSIC_FINALE);
             set16(x, var::TIMER, 300);
             layers_or(x, 0xe);
             yield_frames(x, 1, At(Etape::S46Shown.into()))
@@ -295,7 +290,7 @@ crate::etapes! {
         },
         FinaleEnd = 0xfa0a2 => |x| {
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-            x.call(sub::PALETTES_WHITE);
+            crate::palette::full_brightness(x.b);
             x.set_v8(0x42, 1);
             let a0 = x.c.a[0];
             let step = rd8(x.b, a0 + 2).wrapping_add(4);
@@ -355,9 +350,7 @@ fn pay_players(x: &mut Ctx) -> bool {
         };
         wr32(x.b, VARS + PRIZE, left);
         let player = (rd8(x.b, p + 2) as u32) << 8;
-        x.c.d[1] = player;
-        x.c.d[0] = amount | player;
-        x.call(ext::PAY);
+        crate::evenements::enfiler_points(x.b, (amount | player) as u16);
         tiles::number6(x.b, PRIZE_AT, VARS + PRIZE, 2);
     }
     paid
@@ -418,7 +411,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf99f0) {
         0 => {
             x.set_v16(a5::LAYERS, 0x138e);
-            x.call(ext::MUSIC_B);
+            crate::sound::jouer_global(x.b, ext::MUSIC_B);
             tiles(x, TB, 0x228, Some(SCROLL_2));
             tiles(x, TB, 0x229, None);
             tiles(x, TB2, 0x15a, Some(SCROLL_3));
@@ -455,7 +448,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            x.call(ext::MUSIC_F);
+            crate::sound::jouer_global(x.b, ext::MUSIC_F);
             tiles(x, TB, 0x226, Some(SCROLL_2));
             tiles(x, TB2, 8, Some(SCROLL_3));
             tiles(x, TB2, 8, None);
@@ -509,7 +502,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9bee) {
         0 => {
             next(x);
-            x.call(ext::MUSIC_G);
+            crate::sound::jouer_global(x.b, ext::MUSIC_G);
             set_camera(x, a5::CAM2_Y, 8);
             tiles(x, TB2, 0x15c, Some(SCROLL_3));
             tiles(x, TB2, 0x15d, None);
@@ -568,7 +561,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             copy_palettes(x, PALETTE_PAGE, PALETTE_SAVE);
-            x.call(ext::MUSIC_H);
+            crate::sound::jouer_global(x.b, ext::MUSIC_H);
             x.set_v16(a5::FADE_DELAY, 1);
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
             goto(x, crate::taches::fondu::vers_le_blanc, At(Etape::S38End.into()))
@@ -654,8 +647,8 @@ pub fn finale(x: &mut Ctx) -> Flow {
         0 => {
             next(x);
             x.set_v8(a5::FADE_PAGES, 12);
-            x.call(sub::PALETTES_WHITE);
-            x.call(ext::MUSIC_FINALE);
+            crate::palette::full_brightness(x.b);
+            crate::sound::jouer_global(x.b, ext::MUSIC_FINALE);
             tiles_w(x, TB, 544, Some(0x915000));
             tiles_w(x, TB, 545, None);
             tiles_w(x, TB2, 389, Some(0x919000));

@@ -667,9 +667,6 @@ pub fn portal_glow(g: &mut Ctx, p: Player) {
     o.set_u8(g.b, 0x5d, step);
 }
 
-/// Routine d'origine appelée en fin de `portal_sparks` : couleur d'éclair de l'écran (palette).
-const FLASH_COLOR_ON: u32 = 0x1ac68;
-
 /// 0x4cfee : quatre étincelles du portail (genre 0x13, variante 1, numéros 3 à 0 en `+0x2f`), puis l'écran prend la
 /// couleur de l'éclair (0x1ac68), même si le pool est plein.
 pub fn portal_sparks(g: &mut Ctx, p: Player) {
@@ -681,7 +678,7 @@ pub fn portal_sparks(g: &mut Ctx, p: Player) {
         o.set_u8(g.b, 0x5a, 4);
         link(g, o, p);
     }
-    g.rom(FLASH_COLOR_ON, p);
+    crate::palette::set_flash_color(g.b, crate::palette::FLASH_COLOR_RED);
 }
 
 /// 0x4d064 : éclat du portail (genre 0x14, variante 1) numéroté `n` (`+0x5e`). Vrai s'il a pu être créé (D0 = 0).

@@ -6,12 +6,10 @@
 //! vie (table par niveau ou valeur fixe, majorée selon l'équipement) et sa barre de vie est mise à jour.
 
 use crate::machine::Machine;
-use super::common::call;
 use super::super::{Ctx, Player};
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::player::externes as ext;
 
 /// Dégâts de base.
 pub enum Damage {
@@ -144,9 +142,9 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
-            call(g, p, ext::effet::HEALTH_BAR, &[(0, bar), (1, max), (2, hp), (3, class)]);
+            crate::evenements::creer_popup(g.b, crate::evenements::Popup { entete: bar as u16, max: max as u16, valeur: hp as u16, brut: class as u8 == 2 });
             if let Some(sound) = s.sound {
-                g.rom(sound, p);
+                g.son(sound, p);
             }
         }
     }

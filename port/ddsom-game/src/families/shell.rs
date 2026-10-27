@@ -1,7 +1,7 @@
 //! Éléments communs aux gestionnaires de la classe ESHL (tirs et attaques des ennemis) : champs
 //! d'un objet ESHL, états, aides de placement et de collision avec le terrain.
 
-use super::cx::{sub, Cx};
+use super::cx::Cx;
 use crate::objects::Obj;
 use crate::objects::Courant;
 
@@ -60,8 +60,10 @@ pub fn suspended(x: &mut Cx) -> bool {
 /// Terrain sous le tir : vrai quand le tir doit s'arrêter (terrains 5 à 8 sans le bit 6 de
 /// l'attribut).
 pub fn blocked_by_terrain(x: &mut Cx) -> bool {
-    x.call(sub::TERRAIN_OF_OBJECT);
-    let terrain = x.c.d[2];
+    // registres de 0x24a8 laissés comme l'original (non prouvés morts : voir `pshl::stopped_by_terrain`)
+    let t = crate::video::terrain_of(x.b, x.o);
+    crate::video::terrain_68k(x.c, &t);
+    let terrain = t.numero as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
 

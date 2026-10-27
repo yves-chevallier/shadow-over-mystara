@@ -140,6 +140,44 @@ une valeur Rust (`if x.anim_step()`, `x.move_xz().gt()`, `let alea = x.random()`
 Pour un lot : `rtk proxy grep -rn "_68k(" <rép>` donne ses adaptateurs restants ; chacun se prouve avec
 `DDSOM_POISON='<étiquette>@<fichier>'` (validation des scénarios qui l'exercent), puis passe au cœur.
 
+## Les services communs (lot S) : son, palettes, texte, terrain, aides, événements
+
+Les modules de services ont maintenant un cœur Rust ordinaire ; leur native (adresse d'origine) n'est plus que
+l'adaptateur pour les appels par adresse qui restent, et reproduit les registres de l'original. Un gestionnaire
+appelle le cœur et n'a plus à garder ses registres pour lui.
+
+| Module | Cœur | Remplace |
+|---|---|---|
+| `sound` | `jouer(b, son, objet)` ; `jouer_global(b, son)` (son qui ne lit pas d'objet : musiques, interface) ; `jouer_avec(b, son, Source { objet, a1, d4 })` (sept entrées lisent D4 ou A1 : 0xe17a4, 0xe17e2, 0xe6910, 0xe7c20, 0xe7e10, 0xec046, 0xec200) ; `service(b, Service::ArretGeneral / Ff05 / Ff06 { verrou, ligne } / Ff07 {..} / Ff08(p) / Ff09(p))` ; `emettre(b, Commande)` | `x.call(sfx::…)` (A0 = l'objet), `x.call(0xe0882)`, `x.call_d0(0xe0a82, n)`… |
+| `palette` | `full_brightness(b)`, `no_brightness(b)`, `or_brightness(b, niveau)`, `set_brightness(b, niveau)` ; `flash(b, Flash::Gray / A…G)`, `save_flash(b)`, `restore_flash(b)`, `set_flash_color(b, FLASH_COLOR_RED / FLASH_COLOR_WHITE_VALUE)` ; `character_palette(b, o)` | 0x1686, 0x168c, 0x168e, 0x173c ; 0x1ab56, 0x1aaa0-0x1ab3c, 0x1ac24, 0x1abe0, 0x1ac68/0x1ac86/0x35288 ; 0x37882 |
+| `text` | `print(b, descripteur) -> fin`, `erase`, `print_over`, `print_tall`, `print_tall_at(b, d, col, row)`, `draw_blocks(b, d, objet)`, `clear_blocks`, `clear_box(b, d) -> fin` | `x.c.a[4] = d; x.call(0xd5e)`… (la fin rendue est l'A4 de l'original, pour enchaîner) |
+| `video` | `terrain(b, x, y) -> Terrain { numero, x, y, case, index, colonne, .. }`, `terrain_of(b, o)` ; `terrain_68k(c, &t)` laisse D0-D4/A1/Z | 0x24b0, 0x24a8 (`x.call(…)` puis `x.c.d[2]`) |
+| `aides` | `direction(b, de, vers) -> u8`, `direction_from(b, o, vers)`, `direction_to(b, o, cible)` ; `grabbed(b, o) -> Saisie` (`.z()` : le drapeau testé) ; `divide(n, d)` ; `game_over(c, b)` | 0x1386, 0x137e, 0x1376 (D1-D4 puis D0) ; 0x2810 ; 0x17ea ; 0x28d8 |
+| `evenements` | `enfiler_points(b, ev) -> bool`, `enfiler_compteur`, `evenement_objet(b, o)`, `crediter_points(b)`, `crediter_compteur(b)`, `vider_points/compteur/popups(b)`, `effacer_popup_courant(b)`, `creer_popup(b, Popup { entete, max, valeur, brut })` | 0x19ae6, 0x19b08, 0x19ad6, 0x19b2a, 0x19b9c, 0x19aa2, 0x19abc, 0x19db4, 0x19e10, 0x19dce (barre de vie : `brut` = D3.b == 2) |
+| `terrain`, `placement` | `terrain::push(b, o) -> bool` (Z de 0x33fe4) ; `placement::place_on_free_ground(b, o)` | `push_68k`, `place_on_free_ground_68k`, `call(0x3668)` |
+| `ram` | `JOUEURS_EN_VIE` (0x35, appelé à tort `DIFFICULTE`), `DEFILEMENT_Y_PLAN1` (0x4ba), `DSW` (0x7fd0) | `a5_u8(0x35)`, `set_a5_u16(0x4ba, …)`… |
+
+**Pour les lots A et B** (familles non converties par le lot S : `boss*`, `enemy*`, `reactions`, `effects*`,
+`items*`, `boxes`, `petites`, `creators`) :
+
+* Son : `x.call(SON)` dans un gestionnaire `Cx` devient `crate::sound::jouer(x.b, SON, x.o)` ; un son qui lit D4
+  (`ParD4`, `DuD4`) prend `jouer_avec(x.b, SON, Source { objet: Some(x.o), d4: Some(valeur), ..Default::default() })`
+  avec la valeur que l'appelant posait dans D4, et la pose de D4 disparaît. Un son appelé avec un objet absent
+  ou sans D4 qu'il lit s'arrête (panique avec le message « ce son lit … ») : la validation le montre aussitôt.
+  Conversion mécanique : `tools/convertir_sons.py <fichiers>` (constantes résolues ; motifs `x.call`, `g.rom`,
+  `call(c, b, …)`, `w.call_ao`), puis relire le diff, retirer les constantes devenues inutiles, valider.
+* **La sauvegarde fantôme n'existe plus** ([son-68000.md](son-68000.md)) : un gestionnaire qui joue un son n'a plus
+  à garder ses registres « pour le son ». Les registres que le gestionnaire **suivant** relit (fin ordinaire,
+  `reinsert`) restent à prouver par `DDSOM_POISON` comme avant.
+* Terrain : `let t = crate::video::terrain_of(x.b, x.o); if t.numero …` ; garder `video::terrain_68k(x.c, &t)` tant
+  qu'un gestionnaire suivant peut relire D3 (vu : `pshl.rs`, `boss11_scene42_mort` image 4447).
+* Direction : `x.c.d[1] = …; x.call(0x137e); let a = x.c.d[0] as u8` devient
+  `let a = crate::aides::direction_from(x.b, x.o, (tx, ty))` ; `x.c.a[1] = cible.0; x.call(0x1376)` devient
+  `direction_to(x.b, x.o, cible)`.
+* Saisie : `x.call(0x2810); if x.c.sr & SR_Z != 0` devient `if crate::aides::grabbed(x.b, x.o).z()` (ou un `match`
+  sur `Saisie` : `Gele`, `Libre`, `Par { joueur, normal }`).
+* Barre de vie : `x.c.d[0..4] = …; x.call(0x19dce)` devient `crate::evenements::creer_popup(x.b, Popup { … })`.
+
 ## Registres morts : `DDSOM_POISON`
 
 Un adaptateur appelle, après avoir posé les registres de l'original :

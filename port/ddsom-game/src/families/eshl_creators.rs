@@ -16,7 +16,7 @@ use m68k::Cpu;
 
 use crate::mem::{prog16, prog8, rd16, rts, wr16, wr32};
 use crate::objects::Obj;
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 use crate::objects::pools;
 
 mod f {
@@ -463,7 +463,7 @@ pub fn four_1c(c: &mut Cpu, b: &mut Cps2Bus) {
             break;
         }
     }
-    call(c, b, 0xebef8);
+    crate::sound::jouer(b, 0xebef8, me);
 }
 
 /// Objets de type `kind` liés au créateur par `+0x5c`, variantes `count - 1` à 0 (D1) ; s'arrête si le pool
@@ -584,7 +584,7 @@ pub fn single_18(c: &mut Cpu, b: &mut Cps2Bus) {
         o.set_u16(b, f::LINK, link);
         moved(c, link as u32, Size::Word);
     }
-    call(c, b, 0xebe14);
+    crate::sound::jouer(b, 0xebe14, me);
 }
 
 /// 0xa1a40 : un objet de type 0x1b ; le créateur garde D1 en `+0x56`, l'objet reprend son `+0x5c` et sa

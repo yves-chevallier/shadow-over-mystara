@@ -116,7 +116,8 @@ pub fn run(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             set_b16(x, f::STATE, 0x800);
-            x.call(0xe0a82);
+            // D0 vaut encore l'état (6), posé pour l'aiguillage : il sert de ligne de la table des délais
+            crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 6 });
             Flow::Done
         }
         8 => match b8(x, f::EXIT_STEP) {
@@ -204,7 +205,7 @@ crate::etapes! {
             x.set_v8(0x34, shop_scene);
             x.call(0x1a296);
             x.set_v8(0x48e, 15);
-            x.call(0x168c);
+            crate::palette::no_brightness(x.b);
             let saved = (x.c.d[7], x.c.a[0]);
             x.call(0x33aa6);
             (x.c.d[7], x.c.a[0]) = saved;

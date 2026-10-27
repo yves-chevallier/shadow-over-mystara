@@ -66,7 +66,6 @@ mod sub {
     pub const MORE_PALETTES: u32 = 0x1a5e8;
     pub const BLOCKS_SCROLL_2: u32 = 0x26d4;
     pub const BLOCKS_SMALL: u32 = 0x2766;
-    pub const OR_BRIGHTNESS: u32 = 0x168e;
     pub const EFFCT: u32 = 0x39cba;
     pub const SET: u32 = 0x39e86;
     pub const SPRITES: u32 = 0x1de96;
@@ -310,9 +309,8 @@ fn decor(x: &mut Ctx) -> Flow {
         wr8(x.b, o + 0x2f, 1);
     }
     for (pages, niveau) in [(0xc, 0xa000), (3, 0xf000)] {
-        set_low_word(&mut x.c.d[0], niveau);
         x.set_v8(var::FADE_PAGES, pages);
-        x.call(sub::OR_BRIGHTNESS);
+        crate::palette::or_brightness(x.b, niveau);
     }
     Flow::Done
 }

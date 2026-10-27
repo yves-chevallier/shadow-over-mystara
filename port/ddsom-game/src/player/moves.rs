@@ -23,8 +23,6 @@ mod rom {
     /// Pose rare 0x26 : son, éclat, création d'un objet SET (D0.b = genre ; A1 et retenue en retour).
     pub const CURSE_SHARD: u32 = 0xb97ba;
     pub const CREATE_SET: u32 = 0xc8312;
-    /// Numéro de terrain au point (D0, D1) -> D2.
-    pub use crate::terrain::TERRAIN_ATTRIBUTE as TERRAIN_AT;
 }
 
 /// Champs propres à ces actions.
@@ -139,7 +137,7 @@ fn run_steer(g: &mut Ctx, p: Player) -> bool {
     } else {
         start_skid(g, p, 6, 56, 27);
     }
-    g.rom(ext::son::SLIDE, p);
+    g.son(ext::son::SLIDE, p);
     true
 }
 
@@ -780,7 +778,7 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u8(g, RARE_TIMER, 0xc0);
         animation::start(g, p, 0x23);
-        g.rom(ext::son::FANFARE, p);
+        g.son(ext::son::FANFARE, p);
         return;
     }
     animation::step(g, p);
@@ -960,7 +958,7 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u32(g, Obj::Z, 0);
             animation::start(g, p, 14);
-            g.rom(ext::son::LANDING, p);
+            g.son(ext::son::LANDING, p);
         }
         6 => {
             if animation::step(g, p) {
@@ -1013,7 +1011,7 @@ pub fn push(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, field::ANIM_EVENT) != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.rom(rom::PUSH_SOUND, p);
+        g.son(rom::PUSH_SOUND, p);
     }
 }
 
@@ -1065,7 +1063,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.rom(ext::son::JUMP_VOICE, p);
+            g.son(ext::son::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);
@@ -1075,7 +1073,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u32(g, Obj::Z, 0);
                 animation::start(g, p, 14);
-                g.rom(ext::son::LANDING, p);
+                g.son(ext::son::LANDING, p);
             }
         }
         4 => {
@@ -1127,12 +1125,8 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
                 let pair = p.u32(g, Obj::VX).wrapping_neg();
                 p.set_u32(g, Obj::VX, pair);
             }
-            let set = |r: &mut u32, v: u16| *r = *r & 0xffff_0000 | v as u32;
             let (x, y) = (p.u16(g, Obj::X).wrapping_add(shift), p.u16(g, Obj::Y));
-            set(&mut g.c.d[0], x);
-            set(&mut g.c.d[1], y);
-            g.rom(rom::TERRAIN_AT, p);
-            if g.c.d[2] & 63 == 0 {
+            if crate::video::terrain(g.b, x, y).numero & 63 == 0 {
                 p.set_u16(g, Obj::X, x);
             }
             super::walk::clamp_to_screen(g.b, p);
@@ -1199,7 +1193,7 @@ pub fn parry(g: &mut Ctx, p: Player) {
         2 => parry_slide(g, p),
         v => unreachable!("0x39ff0 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
-    crate::terrain::push_68k(g.c, g.b, p.obj());
+    crate::terrain::push(g.b, p.obj());
     super::walk::clamp_to_screen(g.b, p);
 }
 

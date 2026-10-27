@@ -93,7 +93,7 @@ mod flame64 {
         let n = x.u8(SOUND_COUNT).wrapping_sub(1);
         x.set8(SOUND_COUNT, n);
         if n == 0 {
-            x.call(SFX_FLAME);
+            crate::sound::jouer(x.b, SFX_FLAME, x.o);
             x.set8(SOUND_COUNT, 3);
         }
         follow(x);
@@ -134,7 +134,7 @@ mod flame64 {
                 if x.anim_step() {
                     x.add8(0x5, 2);
                     shape(x);
-                    x.call(SFX_LAND);
+                    crate::sound::jouer(x.b, SFX_LAND, x.o);
                     x.anim_start(ANIMS, 1);
                 }
             }
@@ -150,7 +150,7 @@ mod flame64 {
                 shape(x);
                 x.set16(TIMER, 12);
                 x.anim_start(ANIMS, 2);
-                x.call(SFX_FLAME);
+                crate::sound::jouer(x.b, SFX_FLAME, x.o);
             }
             _ => {
                 if count_down(x, TIMER) {
@@ -405,7 +405,7 @@ mod shard66 {
                     x.anim_start(ANIMS, n as u16);
                     x.c.d[0] = 4;
                     x.call(crate::camera_modes::SHAKE_A.entry);
-                    x.call(SFX_LAND);
+                    crate::sound::jouer(x.b, SFX_LAND, x.o);
                 }
                 blink(x, false);
             }
@@ -707,7 +707,7 @@ mod stone68 {
                     x.add8(0x5, 2);
                     let rank = x.u8(RANK);
                     if rank == 0 || rank == 5 {
-                        x.call(SFX_RELEASE);
+                        crate::sound::jouer(x.b, SFX_RELEASE, x.o);
                     }
                     return;
                 }
@@ -797,7 +797,7 @@ mod bouncer69 {
         x.set16(0x18, 0x800);
         x.set16(0x1a, 0xff80);
         x.set32(0x1c, 0);
-        x.call(SFX_BOUNCE);
+        crate::sound::jouer(x.b, SFX_BOUNCE, x.o);
     }
 
     fn active(x: &mut Cx) {
@@ -986,7 +986,7 @@ mod ball71 {
         }
         if x.u8(RELEASE) != 0 {
             x.add8(0x5, 2);
-            x.call(SFX_THROW);
+            crate::sound::jouer(x.b, SFX_THROW, x.o);
         }
         x.call(AI_ANIM_STEP);
     }
@@ -1060,7 +1060,7 @@ mod splinter72 {
                             x.add8(0x5, 2);
                             x.set8(f::BOX_SET, 7);
                             x.set8(f::ATTACK_ID, 0x37);
-                            x.call(SFX_THROW);
+                            crate::sound::jouer(x.b, SFX_THROW, x.o);
                             x.anim_start(ANIMS, 1);
                         }
                     }
@@ -1075,7 +1075,7 @@ mod splinter72 {
                             x.set8(f::BOX_SET, 7);
                             x.set8(f::ATTACK_ID, 0x1c);
                             x.anim_start(IMPACT_ANIMS, 0);
-                            x.call(SFX_LAND);
+                            crate::sound::jouer(x.b, SFX_LAND, x.o);
                         }
                     }
                     _ => {

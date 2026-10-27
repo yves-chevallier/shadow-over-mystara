@@ -14,8 +14,11 @@ fn signed(v: u16, negate: bool) -> u16 {
 }
 
 fn stopped_by_terrain(x: &mut Cx) -> bool {
-    x.call(crate::video::TERRAIN_OF_OBJECT.entry);
-    let terrain = x.c.d[2];
+    // registres de 0x24a8 laissés : D3 (index de la case) est relu par un gestionnaire suivant (lot C :
+    // `boss11_scene42_mort`, image 4447)
+    let t = crate::video::terrain_of(x.b, x.o);
+    crate::video::terrain_68k(x.c, &t);
+    let terrain = t.numero as u32;
     x.c.d[0] = x.c.d[0] & 0xffff_0000 | ((terrain & 0x3f).wrapping_sub(5) & 0xffff);
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
@@ -174,8 +177,8 @@ mod chain {
 
     /// Tourne d'un cran vers la cible (`0x53fe0`).
     fn steer(x: &mut Cx) {
-        x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
-        let delta = x.c.d[0] as u8;
+        // la cible est l'objet que l'appelant a laissé dans A1
+        let delta = crate::aides::direction_to(x.b, x.o, Obj(x.c.a[1]));
         let mut step: u8 = 1;
         x.c.d[1] = 1;
         let diff = delta.wrapping_sub(x.u8(0x2d)) & 0x1f;
@@ -305,7 +308,7 @@ mod chain {
                     let flip = x.u8(f::FLIP);
                     spark.set_u8(x.b, f::FLIP, flip);
                 }
-                x.call(SFX_END);
+                crate::sound::jouer(x.b, SFX_END, x.o);
             } else {
                 x.set32(0x58, 0x8080_8080);
             }
@@ -438,7 +441,7 @@ mod knife {
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 || stopped_by_terrain(x) {
                     x.add8(0x4, 2);
-                    return x.call(SFX_HIT);
+                    return crate::sound::jouer(x.b, SFX_HIT, x.o);
                 }
                 x.anim_step();
                 x.move_xy();

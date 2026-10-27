@@ -123,7 +123,7 @@ mod shower {
         x.c.a[0] = ext(owner);
         x.c.a[5] = crate::mem::A5;
         crate::call(x.c, x.b, SPAWN_BOLT);
-        crate::call(x.c, x.b, SFX);
+        crate::sound::jouer(x.b, SFX, Obj(ext(owner)));
         x.c.a[0] = saved;
         x.set8(0x33, 0);
     }

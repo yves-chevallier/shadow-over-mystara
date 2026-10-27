@@ -96,7 +96,8 @@ l'interprète des dialogues de PEFF 43 (0x514ac / 0x514cc, table de 0x514ec : me
 dons d'objets) sont dans `peff_boutique.rs`, validés par `fuzz boutique` à travers le comptoir 0x51076 (aucun
 scénario n'atteint un client `+0x58` positif). PEFF 43 les appelle directement (`peff_boutique::talk_a`/`talk_b`,
 plus de native) avec A1 = case de la liste des joueurs, A2 = le client, D6 = compteur de boucle, que l'interprète
-laisse intacts (ses appels de son les recopient dans la pile privée du son).
+laisse intacts (ses appels de son les recopiaient dans la pile privée du son ; plus depuis le lot S,
+[son-68000.md](../son-68000.md), « La sauvegarde fantôme »).
 
 Créateurs appelés par le code des personnages (`families/creators.rs`) : 0x51c06 (tir PSHL 0 qui accompagne l'arme,
 si le genre `+2` est dans le masque 0x51c5c), 0x4b7a0 (éclair PEFF 10), 0x4dc9a (deux étincelles PEFF 25). Contrat :

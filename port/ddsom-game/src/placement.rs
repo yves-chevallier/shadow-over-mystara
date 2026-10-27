@@ -5,10 +5,8 @@ use m68k::Cpu;
 
 use crate::mem::{prog16, rd16, rd32, rd8, rts, set_low_word, wr16, wr32, A5};
 use crate::objects::Obj;
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 
-/// Numéro de terrain au point (D0, D1) -> D2 (`video::terrain`).
-use crate::terrain::TERRAIN_ATTRIBUTE as TERRAIN_AT;
 /// Terrains libres : numéros inférieurs à 4.
 const FREE_TERRAIN: u16 = 4;
 /// Position de la caméra des joueurs (x, profondeur) ; `A5+0x36` choisit la seconde caméra.
@@ -26,62 +24,78 @@ fn camera(b: &mut Cps2Bus) -> (u16, u16) {
     (rd16(b, A5 + x), rd16(b, A5 + y))
 }
 
-/// 0x3668 : place le joueur A0 à la résurrection. Depuis un point de départ propre au joueur, cherche un
-/// terrain libre en essayant, comme l'original, le point de départ puis le même point décalé de 16
-/// pixels (en profondeur, puis en x) ; à défaut, le centre de l'écran (+192, +80). La hauteur fait
-/// tomber le joueur du haut de l'écran (caméra + 256 - profondeur).
-fn place_on_free_ground(c: &mut Cpu, b: &mut Cps2Bus) {
-    place_on_free_ground_regs(c, b);
-    rts(c, b);
+/// Fin de la recherche de 0x3668, de quoi reconstituer les registres de l'original.
+struct Recherche {
+    /// Compteurs de boucle (D5, D6) au moment de la sortie.
+    d5: u32,
+    d6: u32,
+    /// Dernier terrain examiné (D0-D4, A1).
+    dernier: crate::video::Terrain,
+    /// Hauteur posée (D0).
+    hauteur: u16,
+    /// Profondeur posée (D1).
+    y: u16,
 }
 
-/// 0x3668 appelée de Rust pour le joueur `o` : laisse les registres de l'original (D0, D1 : hauteur et profondeur
-/// trouvées, D2 : terrain, D5, D6 : compteurs de la recherche, A0 = `o`). Personne ne les relit
-/// (`DDSOM_POISON=placement`, lot D), mais la recherche appelle encore `video::terrain` (0x24b0) par ses registres :
-/// le cœur sans registres attend l'API de `video`.
-#[track_caller]
-pub fn place_on_free_ground_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
-    c.a[0] = o.0;
-    place_on_free_ground_regs(c, b);
-    crate::diag::registres_morts(c, "placement", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::d(5) | regs::d(6) | regs::a(1) | regs::CCR);
+/// 0x3668 : place le joueur `o` à la résurrection. Depuis un point de départ propre au joueur, cherche un terrain
+/// libre en essayant, comme l'original, le point de départ puis le même point décalé de 16 pixels (en profondeur,
+/// puis en x) ; à défaut, le centre de l'écran (+192, +80). La hauteur fait tomber le joueur du haut de l'écran
+/// (caméra + 256 - profondeur).
+pub fn place_on_free_ground(b: &mut Cps2Bus, o: Obj) {
+    rechercher(b, o);
 }
 
-fn place_on_free_ground_regs(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
+fn rechercher(b: &mut Cps2Bus, o: Obj) -> Recherche {
+    let me = o.0;
     let player = 2 * rd8(b, me + 2) as u32;
     let (cam_x, _) = camera(b);
     let x0 = cam_x.wrapping_add(prog16(b, START_X + player));
     wr16(b, LAST_X, x0);
     let mut found = None;
+    let (mut d5, mut d6) = (0, 0);
+    let mut dernier = None;
     'search: for i in 0..5u16 {
-        c.d[5] = (4 - i) as u32;
-        set_low_word(&mut c.d[0], if i == 0 { x0 } else { x0.wrapping_add(16) });
+        d5 = (4 - i) as u32;
+        // x de l'essai : la recherche reprend la coordonnée corrigée par le terrain précédent (D0 de 0x24b0)
+        let mut x = if i == 0 { x0 } else { x0.wrapping_add(16) };
         let (_, cam_y) = camera(b);
         let y0 = cam_y.wrapping_add(prog16(b, START_Y + player));
         wr16(b, LAST_Y, y0);
         for j in 0..10u16 {
-            c.d[6] = (9 - j) as u32;
-            set_low_word(&mut c.d[1], if j == 0 { y0 } else { y0.wrapping_add(16) });
-            call(c, b, TERRAIN_AT);
-            if (c.d[2] as u16) < FREE_TERRAIN {
-                found = Some((c.d[0] as u16, c.d[1] as u16));
+            d6 = (9 - j) as u32;
+            let t = crate::video::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
+            dernier = Some(t);
+            if t.numero < FREE_TERRAIN {
+                found = Some((t.x, t.y));
                 break 'search;
             }
+            x = t.x;
         }
-        set_low_word(&mut c.d[6], 0xffff);
+        d6 = d6 & 0xffff_0000 | 0xffff;
     }
     let (x, y) = found.unwrap_or_else(|| {
-        set_low_word(&mut c.d[5], 0xffff);
+        d5 = d5 & 0xffff_0000 | 0xffff;
         let (cam_x, cam_y) = camera(b);
         (cam_x.wrapping_add(192), cam_y.wrapping_add(80))
     });
-    set_low_word(&mut c.d[1], y);
     wr16(b, me + 8, x);
     wr16(b, me + 0x10, y);
     let (_, cam_y) = camera(b);
-    let height = cam_y.wrapping_add(256).wrapping_sub(y);
-    set_low_word(&mut c.d[0], height);
-    wr16(b, me + 0x0c, height);
+    let hauteur = cam_y.wrapping_add(256).wrapping_sub(y);
+    wr16(b, me + 0x0c, hauteur);
+    Recherche { d5, d6, dernier: dernier.expect("au moins un essai"), hauteur, y }
+}
+
+/// Native de 0x3668 (appels par adresse) : laisse les registres de l'original (D0, D1 : hauteur et profondeur
+/// trouvées, D2-D4, A1 : dernier terrain examiné, D5, D6 : compteurs de la recherche).
+fn place_on_free_ground_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let r = rechercher(b, Obj(c.a[0]));
+    crate::video::terrain_68k(c, &r.dernier);
+    c.d[5] = r.d5;
+    c.d[6] = r.d6;
+    set_low_word(&mut c.d[1], r.y);
+    set_low_word(&mut c.d[0], r.hauteur);
+    rts(c, b);
 }
 
 /// Palettes de 16 couleurs (données) copiées dans la palette 0x91c1e0 par 0x3af8..0x3b14.
@@ -138,7 +152,7 @@ pub const NATIVES: &[Native] = &[
     Native {
         entry: 0x3668,
         name: "joueur_place_au_sol",
-        run: place_on_free_ground,
+        run: place_on_free_ground_native,
         touches_sound: false,
         outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::d(6),
     },

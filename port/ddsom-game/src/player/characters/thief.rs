@@ -118,7 +118,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = common::by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.rom(ext::son::JUMP_VOICE, p);
+    g.son(ext::son::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     common::launch_jump(g, p, JUMP_SPEEDS, kind);
 }
@@ -205,7 +205,7 @@ fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = common::by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.rom(ext::son::LANDING, p);
+    g.son(ext::son::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile (et chute de l'arme maudite).
@@ -242,7 +242,7 @@ fn air_knife(g: &mut Ctx, p: Player) {
         land(g, p);
     } else if common::take_event(g, p) {
         spawn::knife(g, p);
-        g.rom(rom::KNIFE_SOUND, p);
+        g.son(rom::KNIFE_SOUND, p);
     }
 }
 
@@ -263,7 +263,7 @@ fn wall_kick(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::VX, vx as u16);
     p.set_u16(g, Obj::AX, 0);
     animation::start(g, p, 0x10);
-    g.rom(ext::son::JUMP_VOICE, p);
+    g.son(ext::son::JUMP_VOICE, p);
 }
 
 /// 0x48ca0 : en l'air, un bord de l'écran touché avec le bouton de saut maintenu fait agripper le bord
@@ -297,7 +297,7 @@ fn air_options(g: &mut Ctx, p: Player) -> bool {
         }
     }
     animation::start(g, p, 3);
-    g.rom(ext::son::JUMP_VOICE, p);
+    g.son(ext::son::JUMP_VOICE, p);
     true
 }
 
@@ -413,7 +413,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             animation::start_plain(g, p, 9);
             clear_recognizers(g, p);
             common::weapon_voice(g, p);
-            g.rom(ext::son::LEAP, p);
+            g.son(ext::son::LEAP, p);
         }
         2 => common::wait_then_stand(g, p),
         _ => {}
@@ -437,7 +437,7 @@ fn charge(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if common::take_event(g, p) {
                 next_step(g, p);
-                g.rom(ext::son::CHARGE_A, p);
+                g.son(ext::son::CHARGE_A, p);
             }
         }
         4 => common::charge_slide(g, p, |g, p| {
@@ -445,7 +445,7 @@ fn charge(g: &mut Ctx, p: Player) {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::slash(g, p, Some(0));
                 spawn::slash(g, p, None);
-                g.rom(ext::son::CHARGE_B, p);
+                g.son(ext::son::CHARGE_B, p);
                 common::weapon_voice(g, p);
             }
         }),
@@ -464,7 +464,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             animation::start_plain(g, p, 0xa);
             clear_recognizers(g, p);
             common::weapon_voice(g, p);
-            g.rom(ext::son::CHARGE_A, p);
+            g.son(ext::son::CHARGE_A, p);
         }
         2 => {
             animation::step(g, p);
@@ -502,9 +502,9 @@ fn leap_kick(g: &mut Ctx, p: Player) {
             // l'original teste « événement absent » : le pas suivant vient donc tout de suite
             if p.u8(g, field::EVENT) == 0 {
                 next_step(g, p);
-                g.rom(ext::son::LEAP_END, p);
+                g.son(ext::son::LEAP_END, p);
                 common::weapon_voice(g, p);
-                g.rom(ext::son::CHARGE_B, p);
+                g.son(ext::son::CHARGE_B, p);
             }
         }
         4 => {
@@ -522,7 +522,7 @@ fn leap_kick(g: &mut Ctx, p: Player) {
             }
             if p.u8(g, field::EVENT) == 2 {
                 p.set_u8(g, field::EVENT, 0);
-                g.rom(rom::SOUND_SHADOW, p);
+                g.son(rom::SOUND_SHADOW, p);
                 spawn::shadow(g, p);
             }
         }
@@ -545,7 +545,7 @@ fn back_kick(g: &mut Ctx, p: Player) {
             p.set_u16(g, Obj::VX, vx);
             p.set_u16(g, Obj::AX, 0);
             animation::start_plain(g, p, 0x13);
-            g.rom(ext::son::LEAP_END, p);
+            g.son(ext::son::LEAP_END, p);
             clear_recognizers(g, p);
         }
         2 => {
@@ -553,7 +553,7 @@ fn back_kick(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::VX, 0);
                 p.set_u8(g, field::EVENT, 0);
                 spawn::shadows(g, p);
-                g.rom(ext::son::SPIN, p);
+                g.son(ext::son::SPIN, p);
             }
             move_xz(g, p);
             if (p.u16(g, Obj::Z) as i16) < 0 {
@@ -599,8 +599,8 @@ fn backstab(g: &mut Ctx, p: Player) {
                 p.set_u16(g, own::ANIM_COUNT, count);
                 animation::start_plain(g, p, 0x15);
             } else if (p.u8(g, field::EVENT) as i8) < 0 {
-                g.rom(rom::SOUND_STAB_A, p);
-                g.rom(rom::SOUND_STAB_B, p);
+                g.son(rom::SOUND_STAB_A, p);
+                g.son(rom::SOUND_STAB_B, p);
             }
         }
         6 => {
@@ -709,7 +709,7 @@ fn throw_knife(g: &mut Ctx, p: Player, anim: u16) {
     }
     if common::take_event(g, p) {
         if spawn::knife(g, p) {
-            g.rom(rom::KNIFE_SOUND, p);
+            g.son(rom::KNIFE_SOUND, p);
         }
     }
 }
@@ -731,7 +731,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, own::COUNTER, 8);
                 animation::start(g, p, 0x1d);
-                g.rom(ext::son::SLIDE, p);
+                g.son(ext::son::SLIDE, p);
             }
         }
         4 => {
@@ -772,7 +772,7 @@ pub fn roll(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::STEP) == 0 {
         next_step(g, p);
         common::roll_start(g, p, 0x600);
-        g.rom(0xe266c, p);
+        g.son(0xe266c, p);
         return;
     }
     if animation::step(g, p) {

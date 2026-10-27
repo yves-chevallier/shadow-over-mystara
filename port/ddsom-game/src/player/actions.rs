@@ -91,7 +91,7 @@ pub fn act(g: &mut Ctx, p: Player) {
         || (ram::SCENE.get(g.b) == 4 && current == action::GRAB)
         || current == action::NO_TERRAIN_C;
     if !skip_terrain {
-        crate::terrain::push_68k(g.c, g.b, p.obj());
+        crate::terrain::push(g.b, p.obj());
     }
     clamp_to_screen(g.b, p);
 }

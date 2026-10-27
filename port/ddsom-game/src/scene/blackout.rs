@@ -64,7 +64,7 @@ crate::etapes! {
     pub enum Etape {
         Faded = at::FADED => |x| {
             x.set_v8(0x48e, 15);
-            x.call(0x168c);
+            crate::palette::no_brightness(x.b);
             if x.v8(0x34) == FINALE {
                 // fin du jeu : caméras placées sur le décor final
                 for (off, v) in [(0x506, 0), (0x50a, 0x200), (0x51e, 4), (0x556, 0), (0x55a, 0x500), (0x56e, 4)] {
@@ -134,7 +134,7 @@ fn palettes(x: &mut Ctx) {
     x.c.a[6] = at + 4;
     crate::hud::forget_displayed(x.b);
     x.set_v8(0x48e, 12);
-    x.call(0x168c);
+    crate::palette::no_brightness(x.b);
 }
 
 /// Sous-état 2 : le script de transition de la scène (`transition`), avec les registres de l'aiguillage d'origine.

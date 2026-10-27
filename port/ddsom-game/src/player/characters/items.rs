@@ -18,15 +18,12 @@ use super::foes::{self, Boost, Damage, Live, Strike};
 use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::{animation, Ctx, Player};
-use crate::player::externes as ext;
 
 /// Routines d'origine appelées par ces automates : sons, cibles, éclairs d'écran et palettes (les créateurs de tirs et
 /// d'effets sont dans `spawn`).
 pub mod rom {
     /// Son d'un objet utilisé.
     pub const SOUND_ITEM: u32 = 0xe2430;
-    /// Éclairs de l'écran (palettes) : foudre, fin, feu.
-    pub const FLASH_FIRE: u32 = 0x1ab3c;
     /// Fin des auras après la magie rouge.
     pub const SPELL_RESET_AURA: u32 = 0x37882;
 }
@@ -147,7 +144,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0xc0);
                 spawn::lightning(g, p, target);
-                g.rom(ext::palette::FLASH_GRAY, p);
+                { crate::palette::flash(g.b, crate::palette::Flash::Gray); };
                 animation::start(g, p, 0);
             }
         }
@@ -158,7 +155,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             let left = p.u16(g, field::TIMER).wrapping_sub(1);
             p.set_u16(g, field::TIMER, left);
             if left == 0 {
-                g.rom(ext::palette::FLASH_RESTORE, p);
+                crate::palette::restore_flash(g.b);
                 common::consume_charge(g, p);
                 common::end_spell_mode(g, p, style.undim_mode);
             }
@@ -262,7 +259,7 @@ pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     (spell.every_frame)(g, p);
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        g.rom(rom::SOUND_ITEM, p);
+        g.son(rom::SOUND_ITEM, p);
         if p.u8(g, field::SPELL_CANCELLED) != 0 {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);
@@ -366,7 +363,7 @@ pub fn red_aura(g: &mut Ctx, p: Player, duration: u16) {
     }
     p.set_u8(g, Player::AURA_B, 0);
     p.set_u8(g, Player::AURA_C, 0);
-    g.rom(rom::SPELL_RESET_AURA, p);
+    crate::palette::character_palette(g.b, p.obj());
 }
 
 /// Combattant et clerc : l'aura est posée au geste.
@@ -425,13 +422,13 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
     animation::step(g, p);
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        g.rom(rom::SOUND_ITEM, p);
+        g.son(rom::SOUND_ITEM, p);
         if p.u8(g, field::SPELL_CANCELLED) != 0 {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);
         } else {
             spawn::meteors(g, p);
-            g.rom(rom::FLASH_FIRE, p);
+            { crate::palette::flash(g.b, crate::palette::Flash::G); };
         }
     }
     let left = p.u16(g, field::TIMER).wrapping_sub(1);
@@ -442,13 +439,13 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
                 next_step(g, p);
                 animation::start_plain(g, p, anim);
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                    g.rom(ext::palette::FLASH_RESTORE, p);
+                    crate::palette::restore_flash(g.b);
                 }
             }
             None => {
                 common::consume_charge(g, p);
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                    g.rom(ext::palette::FLASH_RESTORE, p);
+                    crate::palette::restore_flash(g.b);
                 }
                 common::end_spell_mode(g, p, style.undim_mode);
             }

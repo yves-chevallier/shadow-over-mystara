@@ -230,7 +230,7 @@ mod flash {
                 x.add8(0x4, 2);
                 x.anim(ANIMS, 0);
                 x.reinsert();
-                x.call(SFX_BODY);
+                crate::sound::jouer(x.b, SFX_BODY, x.o);
             }
             0 => init_corner(x),
             2 if !child => body(x),
@@ -319,7 +319,7 @@ mod flash {
             x.set_bit(0x1, 1, false);
             x.set8(0x5b, 2);
             x.set_a5_u16(0x4ba, 0x100);
-            x.call(SFX_CORNER);
+            crate::sound::jouer(x.b, SFX_CORNER, x.o);
         }
         if x.anim_step() {
             x.add8(0x5a, 0xff);

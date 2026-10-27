@@ -261,7 +261,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 0);
             let anim = if common::holds_special_weapon(g, p) { 0x31 } else { 0xd };
             common::start_with_voice(g, p, anim);
-            g.rom(ext::son::STRIKE_HEAVY, p);
+            g.son(ext::son::STRIKE_HEAVY, p);
         }
         2 => common::wait_then_stand(g, p),
         _ => {}
@@ -288,8 +288,8 @@ fn charge(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
                 common::weapon_voice(g, p);
-                g.rom(ext::son::CHARGE_A, p);
-                g.rom(ext::son::CHARGE_B, p);
+                g.son(ext::son::CHARGE_A, p);
+                g.son(ext::son::CHARGE_B, p);
             }
         }
         4 => common::charge_slide(g, p, |g, p| match p.u8(g, field::EVENT) {
@@ -322,7 +322,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             let anim = if common::holds_heavy_second(g, p) { 0xe } else { 0x2c };
             animation::start_plain(g, p, anim);
             common::weapon_voice(g, p);
-            g.rom(ext::son::CHARGE_A, p);
+            g.son(ext::son::CHARGE_A, p);
             clear_recognizers(g, p);
         }
         2 => {
@@ -425,7 +425,7 @@ fn leap_light_wait(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u8(g, field::EVENT, 0);
         spawn::leap(g, p, 0);
-        g.rom(ext::son::LEAP, p);
+        g.son(ext::son::LEAP, p);
     }
     animation::step(g, p);
 }
@@ -438,7 +438,7 @@ fn leap_light_land(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u32(g, Obj::Z, 0);
         animation::start_plain(g, p, 0x2f);
-        g.rom(ext::son::LANDING, p);
+        g.son(ext::son::LANDING, p);
         return;
     }
     animation::step(g, p);
@@ -470,9 +470,9 @@ fn leap_spin(g: &mut Ctx, p: Player) {
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
         spawn::leap(g, p, 0);
-        g.rom(ext::son::LEAP, p);
+        g.son(ext::son::LEAP, p);
         common::weapon_voice(g, p);
-        g.rom(ext::son::LEAP_END, p);
+        g.son(ext::son::LEAP_END, p);
     }
     animation::step(g, p);
 }
@@ -485,7 +485,7 @@ fn leap_descend(g: &mut Ctx, p: Player) {
         p.set_u8(g, Player::STEP, 0xa);
         p.set_u32(g, Obj::Z, 0);
         animation::start_plain(g, p, 0x19);
-        g.rom(ext::son::LANDING, p);
+        g.son(ext::son::LANDING, p);
         return;
     }
     animation::step(g, p);
@@ -521,8 +521,8 @@ fn whirl(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x1ec, 0);
             let anim = if p.u16(g, Obj::Z) != 0 { 0x1c } else { 0x1b };
             animation::start_plain(g, p, anim);
-            g.rom(ext::son::SPIN, p);
-            g.rom(rom::SOUND_SPIN_B, p);
+            g.son(ext::son::SPIN, p);
+            g.son(rom::SOUND_SPIN_B, p);
             clear_recognizers(g, p);
         }
         2 => {

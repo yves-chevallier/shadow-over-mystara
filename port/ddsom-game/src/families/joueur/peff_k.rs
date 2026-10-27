@@ -52,7 +52,7 @@ mod meteors {
         let child = x.u8(0x3) != 0;
         match x.state(0x50156) {
             0 if !child => {
-                x.call(SFX);
+                crate::sound::jouer(x.b, SFX, x.o);
                 copy_palette(x, PALETTE);
                 x.add8(0x4, 2);
                 follow_owner(x);
@@ -113,7 +113,7 @@ mod meteors {
             x.set8(0x59, 0x20);
             x.add8(0x58, 0xff);
             if (x.u8(0x58) as i8) >= 0 {
-                x.call(SFX);
+                crate::sound::jouer(x.b, SFX, x.o);
             }
         }
         x.anim_step();
@@ -147,12 +147,6 @@ mod lamp {
     const OFFSETS_Z: u32 = 0x51996;
     const PALETTE_A: u32 = 0x25b200;
     const PALETTE_B: u32 = 0x25a780;
-    const FADE_ON: u32 = 0x1ab56;
-    const FADE_OFF: u32 = 0x1abe0;
-    const FADE_C: u32 = 0x1aaba;
-    const FADE_D: u32 = 0x1aaee;
-    const FADE_E: u32 = 0x1aad4;
-    const FADE_F: u32 = 0x1ab3c;
     const SFX: u32 = 0xea09c;
 
     pub fn run(x: &mut Cx) {
@@ -164,7 +158,7 @@ mod lamp {
                 x.add16(0xc, 0x40);
                 x.add16(0x10, 0xffff);
                 x.anim(ANIMS, 0);
-                x.call(SFX);
+                crate::sound::jouer(x.b, SFX, x.o);
                 active(x);
             }
             2 => active(x),
@@ -176,7 +170,7 @@ mod lamp {
         let owner = x.link_a1(f::OWNER);
         if x.u8(0x5d) != owner.u8(x.b, 0x7) {
             x.add8(0x4, 2);
-            return x.call(FADE_OFF);
+            return crate::palette::restore_flash(x.b);
         }
         x.copy_pos(owner);
         x.add16(0xc, 0x40);
@@ -208,24 +202,24 @@ mod lamp {
         let v = x.u8(0x38);
         x.c.d[0] = v as u32 * 2;
         match v {
-            0 => x.call(FADE_ON),
+            0 => { crate::palette::flash(x.b, crate::palette::Flash::Gray); },
             1 => {
                 copy_palette(x, PALETTE_A);
-                x.call(FADE_C);
+                { crate::palette::flash(x.b, crate::palette::Flash::B); };
             }
             2 => {
                 x.call(0x3afe);
-                x.call(FADE_D);
+                { crate::palette::flash(x.b, crate::palette::Flash::D); };
             }
             3 => {
                 x.call(0x3afe);
-                x.call(FADE_E);
+                { crate::palette::flash(x.b, crate::palette::Flash::C); };
             }
             4 => {
                 copy_palette(x, PALETTE_B);
-                x.call(FADE_F);
+                { crate::palette::flash(x.b, crate::palette::Flash::G); };
             }
-            _ => x.call(FADE_OFF),
+            _ => crate::palette::restore_flash(x.b),
         }
     }
 }

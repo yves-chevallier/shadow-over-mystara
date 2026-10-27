@@ -439,14 +439,14 @@ fn revive_start(g: &mut Ctx, p: Player) {
     for field in [Player::SLOW, 0x15c, Player::POWERUP, Player::AURA, Player::AURA_B, Player::AURA_C] {
         p.set_u8(g, field, 0);
     }
-    crate::placement::place_on_free_ground_68k(g.c, g.b, p.obj());
+    crate::placement::place_on_free_ground(g.b, p.obj());
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0xd);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
-    g.rom(ext::palette::FULL_BRIGHTNESS, p);
+    crate::palette::full_brightness(g.b);
     crate::objects::rank::raise(g.b);
-    crate::terrain::push_68k(g.c, g.b, p.obj());
+    crate::terrain::push(g.b, p.obj());
 }
 
 /// 0x23c16 : chute jusqu'au sol.
@@ -471,7 +471,7 @@ fn revive_land(g: &mut Ctx, p: Player) {
     }
     next_action(g, p);
     animation::start(g, p, 0x23);
-    g.rom(ext::son::FANFARE, p);
+    g.son(ext::son::FANFARE, p);
 }
 
 /// 0x23c58 : fin de l'animation : le joueur reprend la main, invulnérable 150 images.
@@ -496,7 +496,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::FLAGS, flags);
     p.set_u8(g, Player::FACING, 0x20);
     p.set_u8(g, 0x68, 0);
-    crate::placement::place_on_free_ground_68k(g.c, g.b, p.obj());
+    crate::placement::place_on_free_ground(g.b, p.obj());
     p.set_u32(g, Obj::Z, 0);
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0x35);
@@ -516,7 +516,7 @@ fn wait_start(g: &mut Ctx, p: Player) {
     p.set_u16(g, 0x1e0, delay);
     g.rom(ext::effet::HALO, p);
     animation::step(g, p);
-    g.rom(rom::INTRO_ACTION, p);
+    g.son(rom::INTRO_ACTION, p);
 }
 
 /// 0x23db4 : attend, puis se tourne vers la droite si nécessaire.
@@ -599,7 +599,7 @@ fn thrown_walk(g: &mut Ctx, p: Player) {
     cov!();
     let x = p.u16(g, Obj::X).wrapping_add(2);
     p.set_u16(g, Obj::X, x);
-    if crate::terrain::push_68k(g.c, g.b, p.obj()) {
+    if crate::terrain::push(g.b, p.obj()) {
         animation::step(g, p);
     } else {
         next_step(g, p);

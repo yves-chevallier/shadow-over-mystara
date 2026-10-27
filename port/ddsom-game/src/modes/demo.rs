@@ -75,8 +75,6 @@ mod ext {
     /// Arrête (et lance) la tâche du texte « INSERT COIN » clignotant (`taches/invite.rs`).
     pub const INVITE_STOP: u32 = 0xe03c6;
     pub const INVITE_START: u32 = 0xe03e4;
-    pub const SOUND_E0A82: u32 = 0xe0a82;
-    pub const SOUND_E0A10: u32 = 0xe0a10;
     pub const RESET_PLAYERS: u32 = 0x1f184;
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const SPRITES: u32 = 0x1de96;
@@ -90,7 +88,6 @@ mod ext {
     pub const PLAYER_PREPARE: u32 = 0x3525c;
     pub const PALETTE_SET: u32 = 0x1a67e;
     pub const PALETTE_FADE: u32 = 0x1a8b2;
-    pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const SET: u32 = 0x39e86;
     pub const SOBJ: u32 = 0x39f82;
     pub const TILE_BLOCK: u32 = 0x26d4;
@@ -105,7 +102,6 @@ mod ext {
     pub const STEP_19E20: u32 = 0x19e20;
     pub const SCRIPT_READER: u32 = 0xf2e5c;
     pub const RANK_TICK: u32 = 0x1f27c;
-    pub const END_FRAME: u32 = 0x28d8;
 }
 
 /// Tables en ROM (données, ou adresses lues par le code d'origine relativement au PC).
@@ -241,7 +237,8 @@ crate::etapes! {
         EndingShow = ENDING_SHOW => |x| {
             let v = rd16(x.b, var::VIDEO) | 0xc;
             wr16(x.b, var::VIDEO, v);
-            x.jump_to(ext::SOUND_E0A10)
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            Flow::Done
         },
     }
 }
@@ -547,7 +544,7 @@ fn presentation(x: &mut Ctx) -> Flow {
     set_low_word(&mut x.c.d[0], 84);
     x.call(ext::PALETTE_FADE);
     wr8(x.b, var::FADE_PAGES, 12);
-    x.call(ext::BRIGHTNESS_WHITE);
+    crate::palette::full_brightness(x.b);
     x.c.d[0] = 1;
     crate::taches::attendre_puis_revenir(x)
 }
@@ -586,7 +583,7 @@ fn p0_images(x: &mut Ctx) -> Flow {
     x.c.d[0] = x.prog16(table::TILES + 2 + character) as u32;
     x.call(ext::TILE_BLOCK);
     if rd_state(x, f::PRESENT_KIND) != 0 {
-        x.call_d0(ext::SOUND_E0A82, 0);
+        crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0 });
         x.call_d0(ext::SET_VARIANT, 4);
         if x.ok() {
             let character = rd_state(x, f::PRESENT_CHARACTER);
@@ -827,7 +824,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
                     wr8(x.b, var::FADE_PAGES, 15);
                     x.c.d[0] = 0x10;
                     crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
-                    x.call_d0(ext::SOUND_E0A82, 0);
+                    crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0 });
                 }
             }
         }
@@ -1042,7 +1039,9 @@ pub const DEMO_PHASE_12: Native = Native {
         for f in [ext::STEP_19E20, ext::SCRIPT_READER, ext::RANK_TICK] {
             x.call(f);
         }
-        x.jump_to(ext::END_FRAME);
+        // l'original finit par `jmp 0x28d8` : la fin de partie, puis son `rts`
+        crate::aides::game_over(x.c, x.b);
+        crate::mem::rts(x.c, x.b);
     },
     touches_sound: false,
     outputs: 0,

@@ -19,8 +19,11 @@ fn signed(v: u16, negate: bool) -> u16 {
 
 /// Le tir est arrêté par le terrain : terrains 5 à 8 sans le bit 6 de l'attribut (D2).
 fn stopped_by_terrain(x: &mut Cx) -> bool {
-    x.call(crate::video::TERRAIN_OF_OBJECT.entry);
-    let terrain = x.c.d[2];
+    // registres de 0x24a8 laissés : D3 (index de la case) est relu par un gestionnaire suivant (lot C :
+    // `boss11_scene42_mort`, image 4447)
+    let t = crate::video::terrain_of(x.b, x.o);
+    crate::video::terrain_68k(x.c, &t);
+    let terrain = t.numero as u32;
     x.c.d[0] = x.c.d[0] & 0xffff_0000 | ((terrain & 0x3f).wrapping_sub(5) & 0xffff);
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
@@ -116,12 +119,12 @@ mod thrown {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 pose(x);
-                x.call(SFX_START);
+                crate::sound::jouer(x.b, SFX_START, x.o);
                 x.reinsert();
             }
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 {
-                    x.call(SFX_HIT_WALL);
+                    crate::sound::jouer(x.b, SFX_HIT_WALL, x.o);
                     return x.free_pshl();
                 }
                 if !stopped_by_terrain(x) {
@@ -140,7 +143,7 @@ mod thrown {
                     x.c.d[0] = 0xff;
                 }
                 pose(x);
-                x.call(SFX_LAND);
+                crate::sound::jouer(x.b, SFX_LAND, x.o);
             }
             4 => {
                 if x.u8(0x5) == 0 {
@@ -230,12 +233,12 @@ mod flung {
                 x.add16(0xc, dz);
                 let a = set(x);
                 x.anim(a, 0);
-                x.call(SFX_START);
+                crate::sound::jouer(x.b, SFX_START, x.o);
                 x.reinsert();
             }
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 {
-                    x.call(SFX_HIT_WALL);
+                    crate::sound::jouer(x.b, SFX_HIT_WALL, x.o);
                     return x.free_pshl();
                 }
                 if !stopped_by_terrain(x) {
@@ -248,7 +251,7 @@ mod flung {
                 x.set8(0x50, 4);
                 let a = set(x);
                 x.anim(a, 1);
-                x.call(SFX_LAND);
+                crate::sound::jouer(x.b, SFX_LAND, x.o);
             }
             4 => {
                 x.c.d[0] = x.u8(0x5) as u32;
@@ -342,11 +345,11 @@ mod arc {
                 x.set32(0xc, 0);
                 x.set16(0x5c, 0x50);
                 x.anim(ANIMS, 1);
-                x.call(SFX_BURST);
+                crate::sound::jouer(x.b, SFX_BURST, x.o);
             }
             2 => {
                 if x.u16(0x5c) == 0x48 {
-                    x.call(SFX_MID);
+                    crate::sound::jouer(x.b, SFX_MID, x.o);
                 }
                 x.add16(0x5c, 0xffff);
                 if x.u16(0x5c) == 0 {
@@ -436,8 +439,7 @@ mod bouncer {
         let hit = x.u8(0x57) & 2 != 0;
         let mut bounce = hit;
         if !hit {
-            x.call(crate::video::TERRAIN_OF_OBJECT.entry);
-            let terrain = x.c.d[2];
+            let terrain = crate::video::terrain_of(x.b, x.o).numero as u32;
             let ground = (terrain & 0x3f).wrapping_sub(5) as u16 <= 3;
             if !ground || terrain & 0x40 != 0 {
                 if (x.u16(0xc) as i16) > 0 {
@@ -471,7 +473,7 @@ mod bouncer {
     fn finish(x: &mut Cx) {
         if x.u8(0x33) != 0 {
             x.set8(0x33, 0);
-            x.call(SFX_START);
+            crate::sound::jouer(x.b, SFX_START, x.o);
         }
     }
 
@@ -524,9 +526,9 @@ mod burst {
                 }
                 x.anim(ANIMS, 0);
                 if (x.u16(0x14) as i16) < 0 {
-                    x.call(SFX_LEFT);
+                    crate::sound::jouer(x.b, SFX_LEFT, x.o);
                 } else {
-                    x.call(SFX_RIGHT);
+                    crate::sound::jouer(x.b, SFX_RIGHT, x.o);
                 }
             }
             0 => flame_init(x),
@@ -583,7 +585,7 @@ mod burst {
         x.c.d[0] = 0x20;
         x.call(crate::camera_modes::SHAKE_A.entry);
         x.anim(ANIMS, 1);
-        x.call(SFX_FLAME);
+        crate::sound::jouer(x.b, SFX_FLAME, x.o);
         x.reinsert();
     }
 

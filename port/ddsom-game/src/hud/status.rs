@@ -117,7 +117,6 @@ mod over {
     /// Routines d'origine : musique de départ du compte à rebours, de fin, sortie vers les modes.
     pub const MUSIC_START: u32 = 0xe12b8;
     pub const MUSIC_STOP: u32 = 0xe12f4;
-    pub const SOUND_END: u32 = 0xe0882;
     /// Lève le drapeau de fin de partie (A5-0x715e) lu par la machine à modes.
     pub const GAME_OVER_FLAG: u32 = 0x133f6;
 }
@@ -230,13 +229,13 @@ pub fn countdown(x: &mut Ctx) -> Flow {
         for off in [over::ACTIVE, over::STATE, over::PLAYERS_FREE] {
             wr8(x.b, record + off, 0);
         }
-        x.call(over::MUSIC_STOP);
+        crate::sound::jouer_global(x.b, over::MUSIC_STOP);
         return Flow::Done;
     }
     match rd8(x.b, record + over::STATE) {
         over::START => {
             if x.v8(var::CONTINUE_ALLOWED) != 0 {
-                x.call(over::MUSIC_START);
+                crate::sound::jouer_global(x.b, over::MUSIC_START);
                 wr8(x.b, record + over::ACTIVE, 1);
                 let state = rd8(x.b, record + over::STATE);
                 wr8(x.b, record + over::STATE, state + 2);
@@ -282,7 +281,7 @@ fn wait_game_over(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     x.set_v8(var::PHASE, over::PHASE_GAME_OVER);
-    x.call(over::SOUND_END);
+    crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     x.call(over::GAME_OVER_FLAG);
     Flow::Done
 }
