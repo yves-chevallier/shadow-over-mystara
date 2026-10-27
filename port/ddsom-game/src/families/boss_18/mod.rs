@@ -72,10 +72,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
-pub(self) mod call {
-    pub const BURST: u32 = 0xabec8;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;

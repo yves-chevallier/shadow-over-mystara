@@ -215,8 +215,7 @@ fn death(x: &mut Cx) {
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
-            x.c.d[5] = 5;
-            x.call(call::DUST);
+            lib::debris(x, 5);
             lib::sound(x, 0xec9e8);
             x.anim_start(SET_BODY, 0xb);
         }

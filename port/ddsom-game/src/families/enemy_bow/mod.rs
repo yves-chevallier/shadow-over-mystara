@@ -64,8 +64,6 @@ pub(self) const IDLE: u32 = 0x020a_0000;
 
 pub(self) mod call {
     pub const SWING: u32 = 0x9dbd6;
-    pub const AI_GATE_A: u32 = 0xa4b4;
-    pub const AI_GATE_B: u32 = 0xa4c2;
 }
 
 pub fn run(x: &mut Cx) {

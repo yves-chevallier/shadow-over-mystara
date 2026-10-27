@@ -78,10 +78,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-pub(self) mod call {
-    pub const PICK_TARGET: u32 = 0x424e;
-}
-
 /// Mot de poids faible d'un registre de données.
 pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
     set_dw(x, n, v);
@@ -172,9 +168,13 @@ fn init(x: &mut Cx) {
         lib::sound(x, 0xe13f0);
     }
     x.set_a5_u8(0x50, 1);
-    for a in [0x19e10, 0x19db4, 0x19eb0, 0xd6952, call::PICK_TARGET, 0xa470, 0x788c] {
-        x.call(a);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::create_set_15(x);
+    lib::pick_target(x);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(0x2e, 0x27);
     lib::initial_hp_boss(x);
     lib::create_set_14(x);

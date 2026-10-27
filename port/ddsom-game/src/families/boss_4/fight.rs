@@ -48,8 +48,7 @@ pub(super) fn intro(x: &mut Cx) {
             x.set16(0xc, 0);
             x.set16(TIMER, 0x28);
             lib::shake_54(x, 0xa);
-            x.c.d[5] = 5;
-            x.call(call::DUST);
+            lib::debris(x, 5);
             body(x, 0);
         }
         _ => {
@@ -330,8 +329,7 @@ fn charging(x: &mut Cx) {
     }
     if x.u8(f::KEY_FRAME) == 0x84 {
         lib::sound(x, 0xecdba);
-        x.c.d[5] = 4;
-        x.call(call::DUST);
+        lib::debris(x, 4);
         lib::shake_54(x, 0xa);
     }
 }

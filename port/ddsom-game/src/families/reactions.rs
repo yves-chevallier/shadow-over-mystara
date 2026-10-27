@@ -92,12 +92,6 @@ mod rom {
     pub const PLAYER_HURT: u32 = 0x3bb52;
 }
 
-/// Sous-routines du moteur.
-mod call {
-    pub const SPAWN_EFFECT: u32 = 0xabec8;
-    pub const DEATH: u32 = 0x19ad6;
-}
-
 // ---------------------------------------------------------------------------------------------
 // Aides
 
@@ -1647,7 +1641,7 @@ fn zapped_burn(x: &mut Cx) {
         x.call(0xb3c14);
         x.set32(f::STATE, 0x0600_0000);
         detach_from_host(x);
-        return x.call(call::DEATH);
+        return lib::object_event(x);
     }
     x.c.d[0] = x.c.d[0] & !0xff | (c & 7) as u32;
     if c & 7 != 0 {
@@ -1772,18 +1766,8 @@ fn burnt(x: &mut Cx) {
     x.c.d[6] = 15;
     let n = x.c.d[0];
     anim(x, n);
-    x.c.d[0] = 4;
-    x.c.d[1] = 5;
-    loop {
-        x.call(call::SPAWN_EFFECT);
-        if x.c.sr & m68k::SR_C != 0 {
-            return x.set8(f::STEP, 6);
-        }
-        let n = (x.c.d[1] as u16).wrapping_sub(1);
-        x.c.d[1] = x.c.d[1] & !0xffff | n as u32;
-        if n == 0xffff {
-            return;
-        }
+    if !lib::attack_effects(x, 4, 5) {
+        x.set8(f::STEP, 6);
     }
 }
 fn burnt_fall(x: &mut Cx) {

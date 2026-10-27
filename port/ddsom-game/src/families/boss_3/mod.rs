@@ -69,12 +69,6 @@ pub(self) const SET_DEATH: u32 = 0x1747f0;
 /// Boss enregistré comme obstacle pour les autres objets (mot, adresse ; voir `boss_common`).
 pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const TARGET_SAME_SIDE: u32 = 0xa4c2;
-    pub const TARGET_OTHER_SIDE: u32 = 0xa4b4;
-}
-
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
 pub(self) fn body_anim(x: &mut Cx, n: u32) {
     lib::start(x, SET_BODY, n);

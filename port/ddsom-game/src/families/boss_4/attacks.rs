@@ -138,8 +138,7 @@ fn dive(x: &mut Cx) {
             x.set16(TIMER, 0x1e);
             x.set16(0xc, 0);
             lib::shake_58(x, 0x1e);
-            x.c.d[5] = 5;
-            x.call(call::DUST);
+            lib::debris(x, 5);
             lib::sound(x, 0xecc0a);
             x.c.d[0] = 3;
             air(x, 3);

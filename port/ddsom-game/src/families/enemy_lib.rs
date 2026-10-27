@@ -645,6 +645,24 @@ pub fn attack_effect(x: &mut Cx, variant: u32, setting: u32) {
     x.call(0xabec8);
 }
 
+/// Série d'effets d'attaque (0xabec8) de variante `variant`, réglages `first` à 0 (`dbf D1`). Faux si le pool a
+/// refusé un effet (la série s'arrête là).
+pub fn attack_effects(x: &mut Cx, variant: u32, first: u32) -> bool {
+    x.c.d[0] = variant;
+    x.c.d[1] = first;
+    loop {
+        x.call(0xabec8);
+        if x.c.sr & m68k::SR_C != 0 {
+            return false;
+        }
+        let n = (x.c.d[1] as u16).wrapping_sub(1);
+        x.c.d[1] = x.c.d[1] & !0xffff | n as u32;
+        if n == 0xffff {
+            return true;
+        }
+    }
+}
+
 /// 0xab7d8 : gerbe de débris (EFFCT 6) de variante donnée, liée par `+0x50`.
 pub fn debris_spray(x: &mut Cx, variant: u32) {
     x.c.d[0] = variant;

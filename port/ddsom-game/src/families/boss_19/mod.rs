@@ -76,10 +76,6 @@ pub(self) const ATTACK_10: u32 = 0x0204_0a00;
 const DEAD_HOST: u32 = 0x0406_0000;
 pub(self) const FREE: u32 = 0x0600_0000;
 
-pub(self) mod call {
-    pub const EFFECT: u32 = 0xb10c8;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;

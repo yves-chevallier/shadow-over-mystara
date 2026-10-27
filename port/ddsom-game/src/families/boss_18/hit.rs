@@ -240,19 +240,8 @@ fn hit_h(x: &mut Cx) {
             x.set8(0x87, 0);
             x.set8(SHAKE, 0xf0);
             lib::start(x, SET_HURT, 1);
-            x.c.d[0] = 4;
-            x.c.d[1] = 5;
-            loop {
-                x.call(call::BURST);
-                if carry(x) {
-                    x.add8(f::SUB2, 2);
-                    return;
-                }
-                let d1 = (x.c.d[1] as u16).wrapping_sub(1);
-                x.c.d[1] = x.c.d[1] & 0xffff_0000 | d1 as u32;
-                if d1 == 0xffff {
-                    return;
-                }
+            if !lib::attack_effects(x, 4, 5) {
+                x.add8(f::SUB2, 2);
             }
         }
         2 => {

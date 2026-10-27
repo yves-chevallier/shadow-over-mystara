@@ -43,12 +43,8 @@ pub(super) fn run(x: &mut Cx) {
 
 /// Poussière sous le dragon (0xb10c8) : `kind` 0x100 ou 0x101.
 fn dust(x: &mut Cx, kind: u16) {
-    x.c.d[0] = 0;
-    set_dw(x, 1, kind);
-    set_dw(x, 2, 0);
     let z = x.u16(0xc).wrapping_neg();
-    set_dw(x, 3, z);
-    x.call(call::EFFECT);
+    lib::shock(x, 0, kind, 0, z);
 }
 
 /// Mot lu en A0 − 0x7f92 : l'original voulait le compteur d'images (`A5 + 0x6e`) mais a écrit un déplacement

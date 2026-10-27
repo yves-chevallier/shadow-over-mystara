@@ -74,13 +74,6 @@ pub(self) const SET_BODY: u32 = 0x17557e;
 pub(self) const SET_AIR: u32 = 0x175596;
 pub(self) const SET_HURT: u32 = 0x1755ae;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    /// Bouffées de poussière (`D5` = sorte, 0x1172e) et battement d'ailes (`D0` = côté, 0x11a36).
-    pub const DUST: u32 = 0x1172e;
-    pub const WING: u32 = 0x11a36;
-}
-
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
 pub(self) fn body(x: &mut Cx, n: u32) {
     lib::start(x, SET_BODY, n);
@@ -128,8 +121,7 @@ pub(self) fn cue_double(x: &mut Cx) {
 pub(self) fn dust_tick(x: &mut Cx) {
     if !sub16(x, DUST, 1).gt() {
         x.set16(DUST, 4);
-        x.c.d[5] = 3;
-        x.call(call::DUST);
+        lib::debris(x, 3);
     }
 }
 
@@ -140,8 +132,7 @@ pub(self) fn flap(x: &mut Cx) {
         x.set8(f::KEY_FRAME, k);
         let w = x.u8(WING) ^ 1;
         x.set8(WING, w);
-        x.c.d[0] = x.c.d[0] & !0xff | w as u32;
-        x.call(call::WING);
+        lib::ground_debris(x, w);
     }
 }
 

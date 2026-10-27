@@ -83,9 +83,8 @@ pub(super) fn decide(x: &mut Cx) {
         let found = Obj(x.c.a[1]);
         let facing = x.u8(f::FLIP);
         x.c.d[0] = x.c.d[0] & !0xff | facing as u32;
-        let gate = if facing == found.u8(x.b, 0x2c) { call::AI_GATE_B } else { call::AI_GATE_A };
-        x.call(gate);
-        if !x.c.cond(7) {
+        let same_side = facing == found.u8(x.b, f::FLIP);
+        if lib::decision(x, same_side) {
             set_state_long(x, 0x0204_0000);
             let d5 = x.c.d[5] as u8;
             x.set8(f::SUB2, d5);

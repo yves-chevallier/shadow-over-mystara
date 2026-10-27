@@ -252,9 +252,8 @@ fn lunge_box(x: &mut Cx, d0: i16, d1: u16, far: bool) -> bool {
     let t = load_target(x);
     let side = t.u8(x.b, f::FLIP);
     x.c.d[0] = x.c.d[0] & !0xff | side as u32;
-    let check = if side == x.u8(f::FLIP) { call::TARGET_SAME_SIDE } else { call::TARGET_OTHER_SIDE };
-    x.call(check);
-    if zero(x) {
+    let same_side = side == x.u8(f::FLIP);
+    if !lib::decision(x, same_side) {
         x.c.d[0] = 0;
         return false;
     }
