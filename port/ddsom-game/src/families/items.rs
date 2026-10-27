@@ -142,7 +142,7 @@ fn expire_et_clignote(ctx: &mut Ctx, o: Obj) {
 
 /// Fin commune de l'état de chute : ramener dans la zone, ombre, tri par profondeur.
 fn fin_de_chute(ctx: &mut Ctx) {
-    crate::ai::keep_in_zone(ctx.b, ctx.obj());
+    crate::ai::keep_in_zone_d5(ctx.c, ctx.b, ctx.obj());
     crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
     ctx.reinsert();
 }
@@ -1857,7 +1857,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
 /// Variante 1 : animation de balancement (`0xdd2a8`), tri et mise au point des bords.
 fn contact_1_anime(ctx: &mut Ctx) {
     contact_anime(ctx, 0x18);
-    crate::ai::keep_in_zone(ctx.b, ctx.obj());
+    crate::ai::keep_in_zone_d5(ctx.c, ctx.b, ctx.obj());
     crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
 }
 
@@ -1921,7 +1921,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                     }
                     ctx.anim_step();
                     ctx.reinsert();
-                    crate::ai::keep_in_zone(ctx.b, ctx.obj());
+                    crate::ai::keep_in_zone_d5(ctx.c, ctx.b, ctx.obj());
                     crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
                 }
                 2 => {

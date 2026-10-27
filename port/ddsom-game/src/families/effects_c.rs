@@ -1026,7 +1026,7 @@ fn attached_shake(x: &mut Cx, sub: u8) {
             } else if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(attached::TIMER, 0x3c);
-                crate::ai_aids::debris_set(x.b, x.o, 0xb);
+                crate::ai_aids::debris_set(x.b, x.o, 0xb); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
             }
         }
         8 => {
@@ -1563,7 +1563,7 @@ fn dust_active(x: &mut Cx) {
         let dx: u16 = if x.a5_u16(0x6e) & 1 != 0 { 0xc0u16.wrapping_neg() } else { 0xc0 };
         x.add16(Obj::X, dx);
     }
-    crate::ai::keep_in_zone(x.b, x.o);
+    crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
     crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }

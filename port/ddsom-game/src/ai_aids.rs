@@ -241,6 +241,35 @@ pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, boite: Boite) -
     found
 }
 
+/// 0x7f19c (`box_around`) avec les registres de l'original : D0 = 0/1/2 et drapeaux de `moveq`, D1-D3 laissés par
+/// les tests de la boîte.
+pub fn box_around_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, other: Obj, boite: Boite) -> DansBoite {
+    let mut restes = Restes::default();
+    let found = box_reach(b, me.0, other.0, boite, &mut restes);
+    restes.poser(c);
+    moveq(c, found as i32);
+    found
+}
+
+/// 0x7f0c / 0x7ef4 (`in_front`) avec les registres de l'original : D0 (1 / 0) et drapeaux de `moveq`, D1-D4, A1
+/// et A4 laissés comme l'original.
+pub fn in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, strict: bool, boite: Boite) -> bool {
+    let (oui, restes, autre, table, tirage) = in_front_restes(b, o.0, strict, boite);
+    if let Some(autre) = autre {
+        c.a[1] = autre;
+    }
+    restes.poser(c);
+    if let Some(table) = table {
+        c.a[4] = table;
+    }
+    if let Some((masque, roll)) = tirage {
+        c.d[2] = masque;
+        c.d[0] = roll;
+    }
+    moveq(c, oui as i32);
+    oui
+}
+
 /// Profils de poussée : table d'octets (indexée par l'écart en x / 16) en espace programme, puis
 /// entrées de 8 octets (hauteur maximale, écart en profondeur maximal, poussée) en espace de données.
 const PUSH_PROFILE_INDEX: u32 = 0x1168e;
@@ -1180,18 +1209,19 @@ const TREASURE_ROWS: u32 = 0xe372;
 const TREASURE_LISTS: u32 = 0xe642;
 
 /// 0xe2f6 : trésor de `o` (un ou deux tirages) ; les objets d'une liste sont numérotés à partir de 1 (`+0x2f`) et
-/// posés au-dessus de `o`. Rend le mot bas de D2 que l'original laisse (la ligne, × 16 si elle est non nulle).
-pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> u16 {
+/// posés au-dessus de `o`. Rend le mot bas de D2 que l'original laisse (la ligne, × 16 si elle est non nulle) et son
+/// D5 (le compteur de tirages de la boucle `dbf`, 0x0000ffff à la fin), s'il l'a écrit.
+pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> (u16, Option<u32>) {
     let row = o.u8(b, g::LOOT_ROW) as u16;
     if row == 0 {
-        return 0;
+        return (0, None);
     }
     let mut rank: u8 = 1;
-    for _ in 0..loot_rolls(b) {
+    for left in (0..loot_rolls(b)).rev() {
         let roll = (rng::random(b) & 15).wrapping_add(row << 4);
         let list = crate::mem::prog8(b, TREASURE_ROWS.wrapping_add(offset(roll)));
         if (list as i8) < 0 {
-            break;
+            return (row << 4, Some(left as u32));
         }
         let mut at = rd32(b, TREASURE_LISTS + 4 * list as u32);
         loop {
@@ -1200,7 +1230,7 @@ pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> u16 {
             if (variant as i8) < 0 {
                 break;
             }
-            let Some(item) = alloc(b, &pools::ITEM) else { return row << 4 };
+            let Some(item) = alloc(b, &pools::ITEM) else { return (row << 4, Some(left as u32)) };
             wr8(b, item, 1);
             wr8(b, item + 2, 5);
             wr8(b, item + 3, variant);
@@ -1209,7 +1239,7 @@ pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> u16 {
             place_above(b, o.0, item);
         }
     }
-    row << 4
+    (row << 4, Some(0xffff))
 }
 
 /// Les joueurs en jeu et en vie (présents, PV non nuls), dans l'ordre, avec leur classe (`+3` / 2).

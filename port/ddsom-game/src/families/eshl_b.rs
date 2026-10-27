@@ -2836,7 +2836,7 @@ mod shot38 {
             0 => init(x),
             2 => {
                 fall(x);
-                crate::ai::keep_on_screen(x.b, x.o, 0x10);
+                crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
                 x.call(crate::terrain::SHADOW.entry);
                 x.reinsert();
             }

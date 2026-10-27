@@ -369,7 +369,7 @@ fn cas() -> Vec<Cas> {
             coeur: |c, b, o| ai_aids::drop_special(b, o).unwrap_or(c.d[3] as u16) as u32,
             lecture: |c| c.d[3] as u16 as u32,
         },
-        Cas { entree: 0xe2f6, nom: "drop_treasure", entrees: aucune, coeur: |_, b, o| ai_aids::drop_treasure(b, o) as u32, lecture: |c| c.d[2] as u16 as u32 },
+        Cas { entree: 0xe2f6, nom: "drop_treasure", entrees: aucune, coeur: |c, b, o| { let (d2, d5) = ai_aids::drop_treasure(b, o); d2 as u32 | (d5.unwrap_or(c.d[5]) & 0xffff) << 16 }, lecture: |c| c.d[2] as u16 as u32 | (c.d[5] & 0xffff) << 16 },
         Cas { entree: 0x57c66, nom: "in_right_half", entrees: aucune, coeur: |_, b, o| ddsom_game::families::creators::in_right_half(b, o) as u32, lecture: d0 },
         Cas { entree: 0x5cdc6, nom: "chance_10_16", entrees: aucune, coeur: |_, b, _| ddsom_game::families::creators::chance_10_16(b) as u32, lecture: d0 },
         Cas { entree: 0x19eb0, nom: "popups_effacer_tout", entrees: aucune, coeur: |_, b, _| { ddsom_game::popups::effacer_tout(b); 0 }, lecture: rien },

@@ -371,6 +371,20 @@ pub fn keep_in_zone(b: &mut Cps2Bus, o: Obj) -> bool {
     keep_on_screen(b, o, ZONE_MARGIN)
 }
 
+/// `keep_on_screen` qui laisse aussi le D5 de l'original (`moveq #0,D5`, puis 1 si l'objet a bougé).
+/// Glitch d'origine : D5 traverse les gestionnaires de la boucle de dispatch, et la rangée d'éclats d'une caisse
+/// (0xa17d0, `eshl_creators::row_1a`) en relit l'octet haut : on l'écrit donc en clair.
+pub fn keep_on_screen_d5(c: &mut m68k::Cpu, b: &mut Cps2Bus, o: Obj, margin: u16) -> bool {
+    let moved = keep_on_screen(b, o, margin);
+    c.d[5] = moved as u32;
+    moved
+}
+
+/// `keep_in_zone` avec le D5 de l'original (voir `keep_on_screen_d5`).
+pub fn keep_in_zone_d5(c: &mut m68k::Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
+    keep_on_screen_d5(c, b, o, ZONE_MARGIN)
+}
+
 // ---------------------------------------------------------------------------------------------
 // Cap (0xf0e8, 0x10574)
 

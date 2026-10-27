@@ -83,7 +83,7 @@ fn chunk(x: &mut Cx) {
         _ => free(x),
     }
     if x.u8(Obj::ACTIVE) != 0 {
-        crate::ai::keep_in_zone(x.b, x.o);
+        crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
         crate::terrain::push_68k(x.c, x.b, x.o);
         x.reinsert();
     }
@@ -130,7 +130,7 @@ fn chunk_active(x: &mut Cx) {
             x.set16(Obj::Z, 0);
             x.set16(chunk::TIMER, 0x5a);
             x.call(rom::SOUND_LANDING);
-            crate::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16);
+            crate::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
             match x.u8(f::VARIANT) {
                 0 => {
                 x.anim_start(chunk::ANIMS_0, 0x15);
@@ -387,7 +387,7 @@ mod armour {
 
 /// Fin commune : retenue dans l'écran, ombre, remise en liste.
 fn on_screen(x: &mut Cx) {
-    crate::ai::keep_in_zone(x.b, x.o);
+    crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
     crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
@@ -728,7 +728,7 @@ fn flyer_gun(x: &mut Cx) {
     let turn = if x.u8(f::FACING) != 0 { 0xff80 } else { 0x80 };
     x.add16(flyer::ANGLE, turn);
     flyer_shoot(x, 0);
-    crate::ai::keep_on_screen(x.b, x.o, 0x10);
+    crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
 }
 
 /// Variante 2 : balayeur posé au bord de l'écran, sur la profondeur de l'objet suivi (phase 3), qui tire.

@@ -128,28 +128,39 @@ pub fn turn_toward(x: &mut Cx, px: u16, py: u16) {
 /// 0xfbae : garde l'objet dans l'écran (marge de 0x30 pixels) ; c'est le test de zone de fin d'image. Vrai s'il a
 /// été déplacé.
 pub fn keep_in_zone(x: &mut Cx) -> bool {
-    ai::keep_in_zone(x.b, x.o)
+    ai::keep_in_zone_d5(x.c, x.b, x.o)
 }
 
-/// 0x33fe4 : collision avec le décor (`terrain.rs`) : l'objet est repoussé hors d'un obstacle ; vrai s'il en a
-/// heurté un.
-pub fn collide_terrain(x: &mut Cx) -> bool {
-    crate::terrain::push_collides(x.b, x.o).1
+/// 0x33fe4 : collision avec le décor (`terrain.rs`) : l'objet est repoussé hors d'un obstacle.
+/// Glitch d'origine : les registres de la recherche du terrain (D0-D3, D5 = 1 en cas de choc, A1, A2) traversent
+/// les gestionnaires ; l'étincelle de `flash_and_shake` en tire ses vitesses (D2, D3 : `long_route_14_2p`), le
+/// squelette relit D5 : la routine travaille donc sur les registres de l'original.
+pub fn collide_terrain(x: &mut Cx) {
+    crate::terrain::push_68k(x.c, x.b, x.o);
 }
 
 /// 0xfbb0 : garde l'objet dans l'écran, à `margin` pixels près ; vrai s'il a été déplacé.
 pub fn keep_on_screen(x: &mut Cx, margin: u16) -> bool {
-    ai::keep_on_screen(x.b, x.o, margin)
+    ai::keep_on_screen_d5(x.c, x.b, x.o, margin)
 }
 
 /// 0x424e : choisit un joueur comme cible (`+0x50`, critère tiré au hasard) ; rend ce joueur.
 pub fn pick_target(x: &mut Cx) -> Option<Obj> {
-    ai::pick_target(x.b, x.o, ai::Rule::Strict)
+    let t = ai::pick_target(x.b, x.o, ai::Rule::Strict);
+    found_d5(x, t)
+}
+
+/// D5 = 2 si un joueur est trouvé, 0 sinon (`moveq`) : le D5 de l'original traverse les gestionnaires (voir
+/// `ai::keep_on_screen_d5`).
+fn found_d5(x: &mut Cx, t: Option<Obj>) -> Option<Obj> {
+    x.c.d[5] = if t.is_some() { 2 } else { 0 };
+    t
 }
 
 /// 0x43ae : comme `pick_target`, avec la règle d'éligibilité large.
 pub fn pick_target_any(x: &mut Cx) -> bool {
-    ai::pick_target(x.b, x.o, ai::Rule::Lenient).is_some()
+    let t = ai::pick_target(x.b, x.o, ai::Rule::Lenient);
+    found_d5(x, t).is_some()
 }
 
 /// 0x44ee : un joueur ciblable tiré au hasard (trois essais) devient la cible ; faux si aucun.
@@ -164,7 +175,8 @@ pub const FARTHEST: u8 = 4;
 
 /// 0x43bc : la cible devient le joueur qui répond au critère (`NEAREST`...) ; rend ce joueur.
 pub fn target_by_criterion(x: &mut Cx, criterion: u8) -> Option<Obj> {
-    ai::target_by(x.b, x.o, ai::Criterion::from_byte(criterion), ai::Rule::Lenient)
+    let t = ai::target_by(x.b, x.o, ai::Criterion::from_byte(criterion), ai::Rule::Lenient);
+    found_d5(x, t)
 }
 
 /// 0x453c : PV initiaux d'un boss (table 0x458c), copiés en `+0x60`, `+0x62` et `+0x64`.
@@ -215,13 +227,12 @@ fn boite(dx: i16, half_w: u16, half_d: u16) -> ai_aids::Boite {
 }
 
 /// 0xb5e0 : la cible `+0x50` (au sol) est-elle dans la boîte devant l'objet ?
+///
+/// Les tests de boîte laissent leurs restes dans D0-D3 (et A1, A4 pour la garde) comme l'original : D2 et D3
+/// traversent les gestionnaires et donnent ses vitesses à l'étincelle de `flash_and_shake` (glitch d'origine, vu sur
+/// `long_route_14_2p`) ; le boss 11 relit D2 (`roll`).
 pub fn target_in_front(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> InBox {
-    ai::target_in_front(x.b, x.o, boite(dx, half_w, half_d)).into()
-}
-
-/// `target_in_box` avec les registres de 0xb5e0 (D0-D3, A1), pour une suite qui relit leurs restes.
-pub fn target_in_box_68k(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
-    ai_aids::target_in_front_68k(x.c, x.b, x.o, boite(dx, half_w, half_d)) != ai_aids::DansBoite::Non
+    ai_aids::target_in_front_68k(x.c, x.b, x.o, boite(dx, half_w, half_d)).into()
 }
 
 /// `target_in_front` : la cible est-elle dans la boîte, d'un côté ou de l'autre ?
@@ -231,18 +242,18 @@ pub fn target_in_box(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
 
 /// 0x7f19c : l'objet `other` est-il dans la boîte devant l'objet (mêmes paramètres que `target_in_front`) ?
 pub fn in_box(x: &mut Cx, other: Obj, dx: i16, half_w: u16, half_d: u16) -> InBox {
-    ai_aids::box_around(x.b, x.o, other, boite(dx, half_w, half_d)).into()
+    ai_aids::box_around_68k(x.c, x.b, x.o, other, boite(dx, half_w, half_d)).into()
 }
 
 /// 0x7ef4 : la cible, en garde (`+6` = 12), est-elle dans la boîte devant l'objet et lui fait-elle face ? Si oui
 /// et après un tirage, l'objet passe à l'état 6 avec une parade tirée au hasard, et la fonction rend vrai.
 pub fn guard_in_front(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
-    ai_aids::in_front(x.b, x.o, false, boite(dx, half_w, half_d))
+    ai_aids::in_front_68k(x.c, x.b, x.o, false, boite(dx, half_w, half_d))
 }
 
 /// 0x7f0c : comme `guard_in_front`, la garde pouvant aussi être 14, et la cible au sol.
 pub fn guard_in_front_strict(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
-    ai_aids::in_front(x.b, x.o, true, boite(dx, half_w, half_d))
+    ai_aids::in_front_68k(x.c, x.b, x.o, true, boite(dx, half_w, half_d))
 }
 
 /// 0xa4b4 (`+0x72`) : l'IA agit-elle à cette image ? (bit tiré dans un masque choisi par le rang.)
@@ -326,11 +337,15 @@ pub fn behaviour_by_kind(x: &mut Cx) {
 /// 0x1172e : jeu de débris n° `set` autour de l'objet.
 pub fn debris(x: &mut Cx, set: u32) {
     ai_aids::debris_set(x.b, x.o, set as u16);
+    // D5 = le compteur épuisé du `dbf` (D5 traverse les gestionnaires, voir `ai::keep_on_screen_d5`)
+    x.c.d[5] = 0xffff;
 }
 
 /// 0x11a36 : cinq débris au sol (seconde table si `second` est non nul), puis le son 0xede08.
 pub fn ground_debris(x: &mut Cx, second: u8) {
     ai_aids::ground_debris(x.b, x.o, second != 0);
+    // D5.w = le compteur épuisé du `dbf` (D5 traverse les gestionnaires, voir `ai::keep_on_screen_d5`)
+    x.c.d[5] |= 0xffff;
 }
 
 /// 0xb648 : une seule fois par objet, selon un tirage, lâche l'objet propre à son type.
@@ -340,15 +355,19 @@ pub fn drop_once(x: &mut Cx) {
 
 /// Butin de fin d'un ennemi ou d'un boss : 0xb780, 0xbad6 puis 0xe2f6.
 /// Glitch d'origine : D2 et D3 laissés par ces routines (la ligne de trésor, la ligne de difficulté du butin spécial)
-/// donnent ses vitesses à l'étincelle de `flash_and_shake`, qui suit chez la plupart des boss : on les rend en clair.
+/// donnent ses vitesses à l'étincelle de `flash_and_shake`, qui suit chez la plupart des boss, et D5 (compteur de la
+/// dernière boucle) traverse les gestionnaires jusqu'à 0xa17d0 (`ai::keep_on_screen_d5`) : on les rend en clair.
 pub fn drop_rewards(x: &mut Cx) {
     ai_aids::drop_loot(x.b, x.o);
     let d3 = ai_aids::drop_special(x.b, x.o);
-    let d2 = ai_aids::drop_treasure(x.b, x.o);
+    let (d2, d5) = ai_aids::drop_treasure(x.b, x.o);
     // relu : vitesses de l'étincelle de 0x103ba (`flash_and_shake`)
     x.c.d[2] = x.c.d[2] & !0xffff | d2 as u32;
     if let Some(d3) = d3 {
         x.c.d[3] = x.c.d[3] & !0xffff | d3 as u32;
+    }
+    if let Some(d5) = d5 {
+        x.c.d[5] = d5;
     }
 }
 

@@ -328,9 +328,10 @@ pub fn anim(x: &mut Cx, set: u32, n: u32) {
 /// Fin commune des sous-états actifs : test de zone (0xfbae) puis collision avec le décor (0x33fe4). Vrai si
 /// l'objet a été ramené dans l'écran ou repoussé par le décor (le D5 de l'original, que le squelette relit).
 pub fn zone_and_terrain(x: &mut Cx) -> bool {
-    let moved = lib::keep_in_zone(x);
-    let hit = lib::collide_terrain(x);
-    moved || hit
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
+    // D5 : 1 si la zone a déplacé l'objet (`moveq`) ou si le décor l'a repoussé
+    x.c.d[5] != 0
 }
 
 /// `neg.w (off,A0)`.

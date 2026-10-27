@@ -780,7 +780,7 @@ mod debris45 {
 
     /// Fin commune : retenu à l'écran, puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
-        crate::ai::keep_on_screen(x.b, x.o, MARGIN as u16);
+        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, MARGIN as u16);
         x.reinsert();
     }
 
@@ -1178,7 +1178,7 @@ mod bullet50 {
             _ => x.free_eshl(),
         }
         if x.u8(0) != 0 {
-            crate::ai::keep_in_zone(x.b, x.o);
+            crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
             x.call(crate::terrain::SHADOW.entry);
             x.reinsert();
         }
@@ -1497,7 +1497,7 @@ mod finale52 {
 
     /// Fin de l'image : retenu dans l'écran puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
-        crate::ai::keep_on_screen(x.b, x.o, 0x10);
+        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
         x.reinsert();
     }
 
@@ -3054,7 +3054,7 @@ mod meteor62 {
             crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             crate::sound::jouer(x.b, IMPACT_SOUND, x.o);
         }
-        crate::ai::keep_on_screen(x.b, x.o, 0x10);
+        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
         x.reinsert();
     }
 }

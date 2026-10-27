@@ -224,7 +224,7 @@ fn turn_needed(x: &mut Cx) -> bool {
 /// 0x8dafe : un joueur tout près devant.
 fn hit_near(x: &mut Cx) -> bool {
     // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
-    lib::target_in_box_68k(x, -0x10, 0x20, 0x10)
+    lib::target_in_box(x, -0x10, 0x20, 0x10)
 }
 
 /// 0x8dae2 : rang de vie (0 à 3 environ) : nombre de fois que les PV maximaux tiennent dans quatre fois les PV.
@@ -279,7 +279,7 @@ fn far_roll(x: &mut Cx) -> bool {
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
         // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
-        if lib::target_in_box_68k(x, -0x20, 0xa0, 0x80) {
+        if lib::target_in_box(x, -0x20, 0xa0, 0x80) {
             x.c.d[0] = 1;
             return true;
         }

@@ -282,7 +282,7 @@ mod rocks65 {
         x.anim_step();
         x.move_z();
         if x.u16(0xc) as i16 > 0 {
-            crate::ai::keep_on_screen(x.b, x.o, 16);
+            crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 16);
             x.reinsert();
             return;
         }
@@ -436,7 +436,7 @@ mod shard66 {
     fn blink(x: &mut Cx, hidden: bool) {
         x.set_bit(0x1, 1, hidden);
         x.call(crate::terrain::SHADOW.entry);
-        crate::ai::keep_on_screen(x.b, x.o, 16);
+        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 16);
         x.reinsert();
     }
 }
@@ -508,7 +508,7 @@ mod barrel67 {
     }
 
     fn impact(x: &mut Cx, kind: u32) {
-        crate::ai_aids::debris_set(x.b, x.o, kind as u16);
+        crate::ai_aids::debris_set(x.b, x.o, kind as u16); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
     }
 
     /// Mouvement en X et en hauteur ; vrai quand l'objet touche le sol (hauteur remise à 0).
