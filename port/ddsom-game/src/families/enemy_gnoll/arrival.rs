@@ -124,7 +124,7 @@ fn weapon_key_drop(x: &mut Cx) {
     if x.u8(f::KEY_FRAME) == 9 {
         x.set8(f::KEY_FRAME, 0);
         x.set8(WEAPON, 0);
-        x.call(call::DROP_WEAPON);
+        lib::eshl_12(x);
     }
 }
 
@@ -156,8 +156,7 @@ fn armed_in(x: &mut Cx) {
                 return set_state_long(x, STANCE);
             }
             if x.u8(f::KEY_FRAME) == 0xb {
-                x.c.d[0] = 1;
-                x.call(call::TAKE_WEAPON);
+                lib::eshl_16(x, 1);
                 x.set8(f::KEY_FRAME, 0);
                 x.set8(ARMED, 0);
             }

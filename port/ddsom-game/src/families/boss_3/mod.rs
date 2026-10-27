@@ -285,9 +285,9 @@ fn init(x: &mut Cx) {
     crate::mem::wr16(x.b, BODY_OWNER, x.o.0 as u16);
     x.call(0xb2ef6);
     body_anim(x, 0);
-    for a in [0x19db4, 0x19e10, 0x19eb0] {
-        x.call(a);
-    }
+    lib::empty_popups(x);
+    lib::clear_popup(x);
+    lib::clear_all_popups(x);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------

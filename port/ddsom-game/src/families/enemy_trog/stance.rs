@@ -114,8 +114,7 @@ pub(super) fn pick_attack_close(x: &mut Cx) {
     let mv = pick_byte(x, table);
     x.c.d[4] = x.c.d[4] & !0xff | mv as u32;
     if mv <= 8 {
-        x.call(call::PICK_ATTACK_KIND);
-        if !x.c.cond(7) {
+        if lib::chance_10_16(x) {
             return x.set8(AI_SHOT, 0x15);
         }
     }

@@ -744,9 +744,7 @@ fn dying(x: &mut Cx) {
             x.set_a5_u8(0x50, 0);
             x.set_a5_u8(0x42, 1);
             x.call(0x1ac86);
-            lib::drop_loot(x);
-            lib::drop_special(x);
-            lib::drop_treasure(x);
+            lib::drop_rewards(x);
             x.call(0xe0a10);
             lib::sound(x, 0xe3b6c);
             let kind = x.u8(0x2);

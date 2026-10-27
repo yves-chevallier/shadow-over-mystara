@@ -88,7 +88,6 @@ pub(self) const HARD: u32 = 0x70;
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const PICK_OTHER: u32 = 0x44ee;
     pub const MESSAGE: u32 = 0xc8312;
 }
 
@@ -308,7 +307,11 @@ pub(self) fn retarget(x: &mut Cx) {
     x.c.a[4] = 0x8c9aa;
     let k = x.data8(0x8c9aa + r);
     x.c.d[0] = x.c.d[0] & !0xff | k as u32;
-    x.call(if k == 0 { 0x424e } else { call::PICK_OTHER });
+    if k == 0 {
+        lib::pick_target(x);
+    } else {
+        lib::random_player(x);
+    }
 }
 
 /// 0x8bff0 : compte les servants actifs (état 0x0200) : bits en `+0xb6`, nombre × 4 en `+0xb7` ; aucun : `+0xaa` = 4.
@@ -506,9 +509,10 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     crate::mem::wr16(x.b, 0xff8000 - 0x55ba, x.o.0 as u16);
-    for a in [0x19e10, 0x19db4, 0x19eb0, 0xd6952] {
-        x.call(a);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::create_set_15(x);
     x.set8(0x93, 1);
     x.set8(0x9a, 1);
     x.set8(0x6f, 2);

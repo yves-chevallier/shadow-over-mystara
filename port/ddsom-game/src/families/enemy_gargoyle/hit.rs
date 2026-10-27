@@ -175,9 +175,7 @@ fn dying(x: &mut Cx) {
             lib::sound(x, 0xe385e);
             lib::object_event(x);
             detach_from_host(x);
-            lib::drop_loot(x);
-            lib::drop_special(x);
-            lib::drop_treasure(x);
+            lib::drop_rewards(x);
             let flip = x.u8(0x4a) ^ 0x20;
             x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);

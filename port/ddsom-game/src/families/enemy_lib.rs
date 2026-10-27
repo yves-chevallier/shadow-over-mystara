@@ -4,6 +4,7 @@
 
 use super::cx::Cx;
 use super::enemy_common::*;
+use crate::machine::Machine;
 use crate::objects::{Courant, Obj};
 
 /// 0x1046c : le type de coup `+0x44` suit la clé d'animation `+0x3e`.
@@ -144,11 +145,9 @@ pub fn target_faces_me(x: &mut Cx) -> bool {
 /// 0x1047a : décision d'attaque de l'IA : 0 rien, 1 ou 2 geste choisi selon le côté de la cible.
 pub fn ai_gate(x: &mut Cx) -> u32 {
     let n = if target_faces_me(x) {
-        x.call(0xa4b4);
-        if x.c.cond(7) { 0 } else { 1 }
+        if decision_a(x) { 1 } else { 0 }
     } else if back_to_target(x) {
-        x.call(0xa4c2);
-        if x.c.cond(7) { 0 } else { 2 }
+        if decision_b(x) { 2 } else { 0 }
     } else {
         0
     };
@@ -369,6 +368,24 @@ pub fn decision_b(x: &mut Cx) -> bool {
     !z(x)
 }
 
+/// Décision de l'IA selon le côté de la cible : `decision_b` si elle regarde du même côté que l'objet, sinon
+/// `decision_a`.
+pub fn decision(x: &mut Cx, same_side: bool) -> bool {
+    if same_side { decision_b(x) } else { decision_a(x) }
+}
+
+/// 0x57c66 (`creators.rs`) : l'objet est-il dans la moitié droite de l'écran (x >= caméra + 0xc0) ?
+pub fn in_right_half(x: &mut Cx) -> bool {
+    x.call(0x57c66);
+    !z(x)
+}
+
+/// 0x5cdc6 (`creators.rs`) : tirage au sort, vrai 10 fois sur 16.
+pub fn chance_10_16(x: &mut Cx) -> bool {
+    x.call(0x5cdc6);
+    !z(x)
+}
+
 /// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de l'objet ? Rend ce joueur.
 pub fn attack_hits_a_player(x: &mut Cx, attack: u8) -> Option<Obj> {
     x.c.d[0] = attack as u32;
@@ -493,6 +510,13 @@ pub fn drop_special(x: &mut Cx) {
 /// 0xe2f6 : trésor de l'objet (ligne `+0x80`).
 pub fn drop_treasure(x: &mut Cx) {
     x.call(0xe2f6);
+}
+
+/// Butin de fin d'un ennemi ou d'un boss : 0xb780, 0xbad6 puis 0xe2f6.
+pub fn drop_rewards(x: &mut Cx) {
+    drop_loot(x);
+    drop_special(x);
+    drop_treasure(x);
 }
 
 /// 0x115e2 : le boss pousse les joueurs présents devant lui.
@@ -625,4 +649,162 @@ pub fn attack_effect(x: &mut Cx, variant: u32, setting: u32) {
 pub fn debris_spray(x: &mut Cx, variant: u32) {
     x.c.d[0] = variant;
     x.call(0xab7d8);
+}
+
+// --- routines d'origine sans native, jamais atteintes par les scénarios ---------------------------------
+//
+// Appelées par adresse depuis les familles du lot A, elles n'avaient pas de native : le jeu sans 68000 se serait
+// arrêté en les atteignant. Transcrites de `listing.txt` (registres de sortie de l'original posés), non validées
+// par un scénario (voir docs/code-mort.md, lot A).
+
+/// Copie des positions et de l'orientation de l'objet vers un tir créé.
+fn copy_place(x: &mut Cx, o: Obj, with_z: bool) {
+    let (px, py) = (x.u32(Obj::X), x.u32(Obj::Y));
+    o.set_u32(x.b, Obj::X, px);
+    o.set_u32(x.b, Obj::Y, py);
+    if with_z {
+        let pz = x.u32(Obj::Z);
+        o.set_u32(x.b, Obj::Z, pz);
+    }
+}
+
+/// Allocation ESHL de ces créateurs (`jsr 0x22ea ; bcs fin`) : A1 = l'objet comme l'original.
+fn alloc_eshl(x: &mut Cx) -> Option<Obj> {
+    let o = x.alloc(&crate::objects::pools::ESHL)?;
+    x.c.a[1] = o.0;
+    Some(o)
+}
+
+/// 0xa09ca : tir ESHL 0x12 posé 0x30 pixels au-dessus de l'objet et 0x60 pixels devant lui. Rend le tir et la
+/// retenue finale de l'original.
+/// Glitch d'origine : la retenue que l'appelant teste ensuite (`bcc`) est celle de l'addition de la position en X,
+/// pas celle de l'allocation, quand le tir a pu être créé.
+pub fn eshl_12(x: &mut Cx) -> (Option<Obj>, bool) {
+    let Some(o) = alloc_eshl(x) else { return (None, true) };
+    o.set_u8(x.b, 0, 1);
+    o.set_u8(x.b, Obj::KIND, 0x12);
+    let flip = x.u8(f::FLIP);
+    o.set_u8(x.b, f::FLIP, flip);
+    copy_place(x, o, false);
+    o.set_u16(x.b, Obj::Z, 0x30);
+    let d2: u16 = if flip != 0 { 0x60 } else { (-0x60i16) as u16 };
+    x.c.d[2] = x.c.d[2] & !0xffff | d2 as u32;
+    let old = o.u16(x.b, Obj::X);
+    o.set_u16(x.b, Obj::X, old.wrapping_add(d2));
+    (Some(o), old.checked_add(d2).is_none())
+}
+
+/// 0xa0ae0 : tir ESHL 0x13 visant `target` (long `+0x50`), lancé par l'objet (`+0x54`), à sa position.
+pub fn eshl_13(x: &mut Cx, target: u32) -> Option<Obj> {
+    let o = alloc_eshl(x)?;
+    let link = x.u16(0x42);
+    o.set_u16(x.b, 0x42, link);
+    o.set_u32(x.b, 0x50, target);
+    o.set_u32(x.b, 0x54, x.o.0);
+    o.set_u8(x.b, f::BOX_SET, 0);
+    o.set_u8(x.b, 0, 1);
+    o.set_u8(x.b, Obj::KIND, 0x13);
+    copy_place(x, o, true);
+    let flip = x.u8(f::FLIP);
+    o.set_u8(x.b, f::FLIP, flip);
+    Some(o)
+}
+
+/// 0xa114a : tir ESHL 0x16 de variante `variant` à la position de l'objet (`+0x2f` = sa marque d'image `+0x33`).
+pub fn eshl_16(x: &mut Cx, variant: u8) {
+    x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
+    let Some(o) = alloc_eshl(x) else { return };
+    o.set_u8(x.b, 0, 1);
+    o.set_u8(x.b, Obj::KIND, 0x16);
+    copy_place(x, o, true);
+    let flip = x.u8(f::FLIP);
+    o.set_u8(x.b, f::FLIP, flip);
+    o.set_u8(x.b, Obj::VARIANT, variant);
+    let mark = x.u8(f::KEY_FRAME);
+    o.set_u8(x.b, 0x2f, mark);
+}
+
+/// 0x9f346 : tir ESHL 0xa lancé par l'objet (`+0x50`), à sa position, orienté à l'opposé.
+pub fn eshl_0a(x: &mut Cx) -> Option<Obj> {
+    let o = alloc_eshl(x)?;
+    o.set_u16(x.b, 0x50, x.o.0 as u16);
+    o.set_u8(x.b, 0, 1);
+    o.set_u8(x.b, Obj::KIND, 0xa);
+    copy_place(x, o, false);
+    let flip = x.u8(f::FLIP) ^ 0x20;
+    x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
+    o.set_u8(x.b, f::FLIP, flip);
+    Some(o)
+}
+
+/// 0xa2d22 : six tirs ESHL 0x26 (`+0x2f` = 5 à 0) liés par `+0x46` ; le premier refus du pool arrête la série.
+pub fn eshl_burst_26(x: &mut Cx) {
+    for n in (0..=5u8).rev() {
+        x.c.d[1] = x.c.d[1] & !0xffff | n as u32;
+        let Some(o) = alloc_eshl(x) else { return };
+        o.set_u8(x.b, 0, 1);
+        o.set_u8(x.b, Obj::KIND, 0x26);
+        o.set_u8(x.b, Obj::VARIANT, 0);
+        o.set_u8(x.b, 0x2f, n);
+        o.set_u16(x.b, 0x46, x.o.0 as u16);
+    }
+    x.c.d[1] |= 0xffff;
+}
+
+/// Tirage d'un bit (`random & mask`) dans un masque ; D0 = le tirage, comme l'original.
+fn roll_bit(x: &mut Cx, mask: u32, bits: u32) -> bool {
+    let r = (x.random_68k() as u32) & bits;
+    x.c.d[0] = x.c.d[0] & !0xffff | r;
+    mask >> r & 1 != 0
+}
+
+/// 0xffda : tirage d'un bit dans le masque (mot) de la table 0xffd8, choisi par le compteur d'images / 8.
+pub fn roll_ffda(x: &mut Cx) -> bool {
+    let i = (x.a5_u16(0x7f92) >> 3) << 1;
+    let mask = x.rom16(0xffd8u32.wrapping_add(i as i16 as u32));
+    x.c.d[2] = x.c.d[2] & !0xffff | mask as u32;
+    roll_bit(x, mask as u32, 0xf)
+}
+
+/// 0xad7c : si `+0x78` est positif, tirage d'un bit dans le masque (long) de sa ligne de la table 0xadb0, choisi
+/// par le compteur d'images ; faux sinon. D0 = 1 / 0 comme l'original.
+pub fn roll_78(x: &mut Cx) -> bool {
+    let line = x.u8(0x78);
+    if (line as i8) < 0 {
+        x.c.d[0] = 0;
+        return false;
+    }
+    let row = x.data32(0xadb0 + 4 * line as u32);
+    x.c.a[4] = row;
+    let tick = x.a5_u16(0x7f92);
+    let mask = x.data32(row.wrapping_add(((tick << 2) as i16) as u32));
+    x.c.d[2] = mask;
+    let hit = roll_bit(x, mask, 0x1f);
+    x.c.d[0] = hit as u32;
+    hit
+}
+
+/// 0x10298 : script de palette `index` : huit longs de la table 0x102ba copiés en palette (0x91c380), luminosité
+/// maximale (`ori.l #0xf000f000`).
+pub fn palette_script(x: &mut Cx, index: u16) {
+    const PALETTE: u32 = 0x91c380;
+    let from = 0x102bau32.wrapping_add((index << 5) as i16 as u32);
+    // movem.l (A2),{D0-D6,A3} puis movem.l ...,(A1)
+    let mut longs = [0u32; 8];
+    for (k, v) in longs.iter_mut().enumerate() {
+        let a = from + 4 * k as u32;
+        *v = (x.rom16(a) as u32) << 16 | x.rom16(a + 2) as u32;
+    }
+    for (k, &v) in longs.iter().enumerate() {
+        crate::mem::wr32(x.b, PALETTE + 4 * k as u32, v);
+    }
+    x.c.d[..6].copy_from_slice(&longs[..6]);
+    x.c.a[3] = longs[7];
+    for k in 0..8 {
+        let v = crate::mem::rd32(x.b, PALETTE + 4 * k);
+        crate::mem::wr32(x.b, PALETTE + 4 * k, v | 0xf000_f000);
+    }
+    x.c.a[1] = PALETTE + 0x20;
+    x.c.a[2] = from;
+    x.c.d[6] = 0xffff;
 }

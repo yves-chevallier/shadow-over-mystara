@@ -118,8 +118,7 @@ fn reach_gen(x: &mut Cx, d0: i16, close: bool) -> bool {
     }
     let Some(t) = target(x) else { return false };
     let same_side = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.call(if same_side { 0xa4c2 } else { 0xa4b4 });
-    if x.c.cond(7) {
+    if !lib::decision(x, same_side) {
         return false;
     }
     let r = random(x) as u16;

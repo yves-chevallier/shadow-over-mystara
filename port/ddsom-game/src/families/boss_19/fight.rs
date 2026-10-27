@@ -133,8 +133,7 @@ fn probe_target(x: &mut Cx, d0: i16, d1: u16, d2: u16, no_target: impl Fn(u16) -
     let target = x.linked(f::TARGET);
     x.c.a[1] = target.0;
     let same_side = target.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.call(if same_side { 0xa4c2 } else { 0xa4b4 });
-    !zero(x)
+    lib::decision(x, same_side)
 }
 
 fn probe_front(x: &mut Cx) -> bool {

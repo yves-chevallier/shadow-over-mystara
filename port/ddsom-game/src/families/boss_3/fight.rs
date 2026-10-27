@@ -637,8 +637,7 @@ pub(super) fn carrying(x: &mut Cx) {
 /// 0x80a5c : riposte tirée selon la difficulté (0xffda) : attaque 16 (ruée en piqué) ou 20 (rase-mottes).
 pub(super) fn counter(x: &mut Cx) {
     x.set8(0x86, 0);
-    x.call(0xffda);
-    let s = if zero(x) { 0x0204_1000 } else { 0x0204_1400 };
+    let s = if !lib::roll_ffda(x) { 0x0204_1000 } else { 0x0204_1400 };
     x.set8(0, 1);
     x.set8(INVULNERABLE, 6);
     x.set32(f::STATE, s);

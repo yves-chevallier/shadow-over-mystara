@@ -111,8 +111,7 @@ fn wake_high(x: &mut Cx) {
             x.set8(0x7, 0);
             x.set8(TIMER, 0x7f);
             anim_a(x, 8);
-            x.c.d[0] = 0;
-            x.call(call::SCRIPT_PALETTE);
+            lib::palette_script(x, 0);
             return wake_high_wait(x);
         }
         2 => wake_high_wait(x),
@@ -130,8 +129,7 @@ fn wake_high_wait(x: &mut Cx) {
     }
     x.set8(FALLS, 1);
     if x.anim_step() {
-        x.c.d[0] = 7;
-        x.call(call::SCRIPT_PALETTE);
+        lib::palette_script(x, 7);
         return fight_from_wake(x);
     }
     let event = x.u8(0x3e);
@@ -147,7 +145,7 @@ fn wake_high_wait(x: &mut Cx) {
     }
     x.c.d[0] = (event - 1) as u32;
     x.set8(0x3e, 0);
-    x.call(call::SCRIPT_PALETTE);
+    lib::palette_script(x, (event - 1) as u16);
 }
 
 // --- groupe 2 : combat -------------------------------------------------------------------------

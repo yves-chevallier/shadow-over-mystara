@@ -199,15 +199,13 @@ fn death(x: &mut Cx) {
                 set_abs8(x, A5_DEATH + 2, score);
                 x.set8(0x93, 1);
                 x.set_a5_u8(0x4f, 0xff);
-                for r in [0xe0a10, 0xe3b6c, 0x103ba] {
-                    x.call(r);
-                }
+                lib::sound(x, 0xe0a10);
+                lib::sound(x, 0xe3b6c);
+                lib::flash_and_shake(x);
             } else {
                 lib::object_event(x);
             }
-            for r in [0xb780, 0xbad6, 0xe2f6] {
-                x.call(r);
-            }
+            lib::drop_rewards(x);
             x.set16(0x16, 0);
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x38i16) as u16);

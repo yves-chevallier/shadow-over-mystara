@@ -114,8 +114,7 @@ fn flee(x: &mut Cx) {
         0 => {
             x.set8(NO_ZONE, 1);
             let flipped = x.u8(f::FLIP) != 0;
-            x.call(0x57c66);
-            let run_now = if x.c.cond(7) { !flipped } else { flipped };
+            let run_now = if !lib::in_right_half(x) { !flipped } else { flipped };
             if run_now {
                 x.add8(f::SUB2, 4);
                 run_away(x);

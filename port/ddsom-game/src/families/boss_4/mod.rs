@@ -183,9 +183,10 @@ fn init(x: &mut Cx) {
     x.set8(f::BOX_SET, 0x24);
     lib::initial_hp_boss(x);
     x.set_a5_u8(0x5a, 0);
-    for a in [0x1059e, 0x19e10, 0x19db4, 0x19eb0] {
-        x.call(a);
-    }
+    lib::spread_index(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     for (off, v) in [(0x76, 0), (0x70, 0), (0x6a, 2), (0x75, 0)] {
         x.set8(off, v);
     }

@@ -36,8 +36,7 @@ fn first_reaction(x: &mut Cx) {
     }
     if x.u8(WEAPON) != 0 {
         x.set8(WEAPON, 0);
-        x.c.d[0] = 0;
-        x.call(call::TAKE_WEAPON);
+        lib::eshl_16(x, 0);
     }
     react(x, REACT_FIRST);
 }
@@ -116,8 +115,7 @@ fn fall(x: &mut Cx) {
                 if x.u8(f::KEY_FRAME) != 0xb {
                     return;
                 }
-                x.c.d[0] = 1;
-                x.call(call::TAKE_WEAPON);
+                lib::eshl_16(x, 1);
                 x.set8(f::KEY_FRAME, 0);
             }
             set_state_long(x, STANCE);

@@ -157,9 +157,7 @@ fn death(x: &mut Cx) {
             x.set32(f::IMMUNITY, 0xffff_ffff);
             lib::sound(x, 0xe3cbe);
             lib::object_event(x);
-            lib::drop_loot(x);
-            lib::drop_special(x);
-            lib::drop_treasure(x);
+            lib::drop_rewards(x);
             detach_from_host(x);
             x.set16(Obj::AX, 0);
             x.set16(Obj::VZ, 0x500);

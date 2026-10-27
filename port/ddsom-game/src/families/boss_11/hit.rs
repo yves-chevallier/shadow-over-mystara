@@ -457,9 +457,10 @@ fn death(x: &mut Cx) {
             setw(x, 0, d0);
             wr16(x.b, A5.wrapping_sub(0x557c), d0);
             x.set16(TIMER, 0x10);
-            for a in [0xb780, 0xbad6, 0xe2f6, 0xe0a10, 0xe3b6c, 0x103ba] {
-                x.call(a);
-            }
+            lib::drop_rewards(x);
+            lib::sound(x, 0xe0a10);
+            lib::sound(x, 0xe3b6c);
+            lib::flash_and_shake(x);
             let mut d0 = 0x500u16;
             setw(x, 0, d0);
             if x.u8(f::FLIP) != 0 {

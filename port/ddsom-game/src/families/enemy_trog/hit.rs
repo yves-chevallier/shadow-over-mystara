@@ -137,9 +137,9 @@ pub(super) fn caught(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.set8(NO_SHADOW, 1);
-            x.call(call::BEHIND_CHECK);
+            let left = !lib::in_right_half(x);
             let flipped = x.u8(f::FLIP) != 0;
-            let run_now = if x.c.cond(7) { !flipped } else { flipped };
+            let run_now = if left { !flipped } else { flipped };
             if run_now {
                 x.add8(f::SUB2, 4);
                 run_away(x);

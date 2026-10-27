@@ -77,11 +77,6 @@ const BLINK_TIMES: u32 = 0x5b96c;
 /// Vitesses de marche par série (2 mots par série).
 const WALK_SPEEDS: u32 = 0x5af64;
 
-mod call {
-    pub const BEHIND_CHECK: u32 = 0x57c66;
-    pub const PICK_ATTACK_KIND: u32 = 0x5cdc6;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;

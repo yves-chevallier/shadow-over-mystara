@@ -113,8 +113,7 @@ fn gate(x: &mut Cx) -> bool {
     let theirs = target.u8(x.b, f::FLIP);
     x.c.d[0] = x.c.d[0] & !0xff | theirs as u32;
     let same = theirs == x.u8(f::FLIP);
-    x.call(if same { 0xa4c2 } else { 0xa4b4 });
-    !x.c.cond(7)
+    lib::decision(x, same)
 }
 
 /// 0x61b3a : un joueur devant, assez près : coup de queue ou geste.

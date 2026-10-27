@@ -22,9 +22,11 @@ pub(super) fn spawn_scene_controller(x: &mut Cx) {
 pub(super) fn init(x: &mut Cx) {
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    for r in [0x19e10, 0x19db4, 0x19eb0, 0xe1330, 0xd6952] {
-        x.call(r);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::sound(x, 0xe1330);
+    lib::create_set_15(x);
     let r = random(x);
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);

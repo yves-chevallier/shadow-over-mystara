@@ -147,8 +147,7 @@ fn flee(x: &mut Cx) {
             let turn_back = if wall == 2 {
                 flipped
             } else {
-                x.call(0x57c66);
-                if x.c.cond(7) { flipped } else { !flipped }
+                if !lib::in_right_half(x) { flipped } else { !flipped }
             };
             if turn_back {
                 x.add8(f::SUB2, 2);

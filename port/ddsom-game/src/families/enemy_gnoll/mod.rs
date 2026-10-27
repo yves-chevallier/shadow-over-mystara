@@ -54,12 +54,6 @@ pub(self) const SET_STRIKE: u32 = 0x1649e8;
 pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
-pub(self) mod call {
-    /// Pose ou ramasse l'arme.
-    pub const DROP_WEAPON: u32 = 0xa09ca;
-    pub const TAKE_WEAPON: u32 = 0xa114a;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;

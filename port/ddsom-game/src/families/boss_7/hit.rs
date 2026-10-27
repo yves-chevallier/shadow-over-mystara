@@ -191,9 +191,10 @@ fn death(x: &mut Cx) {
             x.set8(f::FREEZE, stun);
             x.set_a5_u8(0x42, 1);
             x.set_a5_u8(0x50, 0);
-            for a in [0x103ba, 0xe3b6c, 0xe0a10, 0xb780, 0xbad6, 0xe2f6] {
-                x.call(a);
-            }
+            lib::flash_and_shake(x);
+            lib::sound(x, 0xe3b6c);
+            lib::sound(x, 0xe0a10);
+            lib::drop_rewards(x);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);

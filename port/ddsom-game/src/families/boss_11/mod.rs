@@ -265,9 +265,9 @@ fn init(x: &mut Cx) {
     x.set8(0x2e, 0x2c);
     x.set8(0x79, 0x3f);
     x.set8(0x8e, 3);
-    for a in [0xe1330, 0x19db4, 0x19e10] {
-        x.call(a);
-    }
+    lib::sound(x, 0xe1330);
+    lib::empty_popups(x);
+    lib::clear_popup(x);
     x.set_a5_u8(0x50, 1);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
@@ -283,14 +283,14 @@ fn init(x: &mut Cx) {
         x.set8(0x9f, 2);
     }
     x.set8(SLOW, 0);
-    for a in [0x453c, 0xd5f30] {
-        x.call(a);
-    }
+    lib::initial_hp_boss(x);
+    lib::create_set_14(x);
     x.set_a5_u32(0x38, 0x0459_5900);
     x.set_a5_u8(0x5a, 0);
-    for a in [0xd6952, 0x19e10, 0x19db4, 0x19eb0] {
-        x.call(a);
-    }
+    lib::create_set_15(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     let (a, b, c) = (x.u16(0x8), x.u16(0xc), x.u16(0x10));
     x.set16(SAVE_X, a);
     x.set16(SAVE_Z, b);

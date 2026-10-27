@@ -304,8 +304,7 @@ mod riyakaa {
     // --- sous-état 2 : choix d'une attaque -------------------------------------------------------
 
     fn decide(x: &mut Cx) {
-        x.call(0x2810);
-        if !x.c.cond(7) {
+        if grabbed(x) {
             x.set16(f::STATE, 0x0408);
             x.set16(f::SUB2, 0);
             return grab(x);
@@ -637,8 +636,7 @@ mod riyakaa {
                 x.add8(0x7, 2);
                 x.set8(0xa1, 0x1e);
                 x.set8(0x67, 1);
-                x.call(0x5cdc6);
-                if !x.c.cond(7) {
+                if lib::chance_10_16(x) {
                     return body(x, 1);
                 }
                 x.add8(0x7, 2);
@@ -910,8 +908,7 @@ mod riyakaa {
         if pick > 4 {
             return;
         }
-        x.call(0x5cdc6);
-        if x.c.cond(7) {
+        if !lib::chance_10_16(x) {
             x.set8(f::SUB, 4);
             x.set8(0xa3, pick);
             x.set8(0x7, 0);
@@ -1039,8 +1036,7 @@ mod riyakaa {
         let turn = if x.a5_u8(0x34) == 4 {
             flipped
         } else {
-            x.call(0x57c66);
-            if x.c.cond(7) { flipped } else { !flipped }
+            if !lib::in_right_half(x) { flipped } else { !flipped }
         };
         if turn {
             x.add8(f::SUB2, 2);

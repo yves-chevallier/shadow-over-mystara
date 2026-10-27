@@ -198,6 +198,5 @@ fn decision(x: &mut Cx) -> bool {
     }
     let target = load_target(x);
     let same = target.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.call(if same { 0xa4c2 } else { 0xa4b4 });
-    !x.c.cond(7)
+    lib::decision(x, same)
 }

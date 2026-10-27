@@ -139,8 +139,6 @@ pub(self) mod state {
 }
 
 pub(self) mod call {
-    pub const EDGE_PAIR: u32 = 0xa4b4;
-    pub const EDGE_SAME: u32 = 0xa4c2;
     pub const SPLASH: u32 = 0xaaa40;
 }
 
@@ -218,8 +216,7 @@ fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
     let t = x.linked(f::TARGET);
     let same = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
     x.c.a[1] = t.0;
-    x.call(if same { call::EDGE_SAME } else { call::EDGE_PAIR });
-    if zero(x) {
+    if !lib::decision(x, same) {
         return false;
     }
     let r = rand_and(x, 0xf);

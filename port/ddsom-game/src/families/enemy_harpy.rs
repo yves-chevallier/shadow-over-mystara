@@ -482,10 +482,8 @@ fn attack_claws(x: &mut Cx) {
                 if pick_target(x) {
                     x.c.a[2] = x.c.a[1];
                     x.c.d[5] = 0;
-                    x.call(0xa09ca);
-                    if !x.c.cond(5) {
-                        let shot = x.c.a[1];
-                        x.set32(SHOT, shot);
+                    if let (Some(shot), false) = lib::eshl_12(x) {
+                        x.set32(SHOT, shot.0);
                     }
                 }
             }
@@ -509,10 +507,9 @@ fn attack_fire(x: &mut Cx) {
                 x.set8(f::KEY_FRAME, 0);
                 if pick_target(x) {
                     x.c.a[2] = x.c.a[1];
-                    x.call(0xa0ae0);
-                    if !x.c.cond(5) {
-                        let shot = x.c.a[1];
-                        x.set32(SHOT, shot);
+                    let target = x.c.a[2];
+                    if let Some(shot) = lib::eshl_13(x, target) {
+                        x.set32(SHOT, shot.0);
                     }
                 }
             }

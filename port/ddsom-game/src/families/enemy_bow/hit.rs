@@ -83,8 +83,7 @@ pub(super) fn grab(x: &mut Cx) {
             let turn = if x.a5_u8(0x34) == 4 {
                 flipped
             } else {
-                x.call(call::ON_RIGHT_HALF);
-                if x.c.cond(7) {
+                if !lib::in_right_half(x) {
                     flipped
                 } else {
                     !flipped

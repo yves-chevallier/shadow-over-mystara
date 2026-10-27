@@ -189,9 +189,10 @@ fn death(x: &mut Cx) {
             crate::mem::wr16(x.b, 0xff2a84, 0x0f00);
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0xe0a10, 0xe3b6c, 0x103ba] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            lib::sound(x, 0xe0a10);
+            lib::sound(x, 0xe3b6c);
+            lib::flash_and_shake(x);
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             let stun = x.u8(STUN);

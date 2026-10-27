@@ -183,8 +183,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
     let side = t.u8(x.b, f::FLIP);
     setb(x, 0, side);
     let mine = x.u8(f::FLIP);
-    x.call(if side == mine { 0xa4c2 } else { 0xa4b4 });
-    if zero(x) {
+    if !lib::decision(x, side == mine) {
         x.c.d[0] = 0;
         return false;
     }

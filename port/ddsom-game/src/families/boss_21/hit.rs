@@ -62,14 +62,7 @@ fn reaction(x: &mut Cx) {
             return down(x);
         }
     }
-    let code = x.u8(0x49) as u32;
-    let routine = rom32(x, REACTIONS + code);
-    if routine == STUN_REACTION {
-        return stun(x);
-    }
-    x.c.d[0] = code;
-    x.c.a[1] = routine;
-    x.call(routine);
+    react_with(x, REACTIONS, STUN_REACTION, stun);
 }
 
 /// 0x9a4b6 : étourdissement : le boss tremble sur place puis repart.
@@ -258,9 +251,8 @@ fn down(x: &mut Cx) {
             lib::object_event(x);
             x.set8(0, 2);
             x.set8(SLOW, 0);
-            for addr in [0xe5966, 0xb780, 0xbad6, 0xe2f6] {
-                x.call(addr);
-            }
+            lib::sound(x, 0xe5966);
+            lib::drop_rewards(x);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);

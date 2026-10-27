@@ -267,6 +267,15 @@ pub fn react(x: &mut Cx, table: u32) {
     }
 }
 
+/// `react`, sauf la routine `own` de la table, propre au type, exécutée par `own_reaction`.
+pub fn react_with(x: &mut Cx, table: u32, own: u32, own_reaction: fn(&mut Cx)) {
+    let code = x.u8(0x49) as u32;
+    if rom32(x, table + code) == own {
+        return own_reaction(x);
+    }
+    react(x, table);
+}
+
 /// `move.w #v,Dn` : ne change que le mot de poids faible du registre.
 pub fn set_dw(x: &mut Cx, n: usize, v: u16) {
     x.c.d[n] = x.c.d[n] & 0xffff_0000 | v as u32;

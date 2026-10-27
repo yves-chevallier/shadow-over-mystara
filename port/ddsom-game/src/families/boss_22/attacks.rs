@@ -387,7 +387,7 @@ fn land(x: &mut Cx, down: bool) {
         return step_anim(x);
     }
     lib::shake_54(x, 0x1e);
-    x.call(if down { 0xecce6 } else { 0xecd50 });
+    lib::sound(x, if down { 0xecce6 } else { 0xecd50 });
     x.set32(0xc, 0);
     dust_line(x);
     next7(x);

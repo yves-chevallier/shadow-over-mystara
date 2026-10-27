@@ -112,10 +112,8 @@ fn throw(x: &mut Cx) {
             x.set8(TIMER, 0x30);
             if (x.u8(AMMO) as i8) > 0 {
                 x.c.d[5] = 0;
-                x.call(call::SPAWN_THROWN);
-                if !alloc_failed(x) {
-                    let obj = x.c.a[1];
-                    x.set32(THROWN, obj);
+                if let Some(obj) = lib::eshl_0a(x) {
+                    x.set32(THROWN, obj.0);
                     x.add8(AMMO, 0xf0);
                     x.add8(f::SUB3, 0xfa);
                 }

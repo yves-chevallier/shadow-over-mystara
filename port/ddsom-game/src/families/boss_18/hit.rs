@@ -397,9 +397,11 @@ fn death(x: &mut Cx) {
             set_abs8(x, 0xff2a85, 0);
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
-            for addr in [0x103ba, 0xe0a10, 0xe3b6c, 0xe5f86, 0xb780, 0xbad6, 0xe2f6] {
-                x.call(addr);
-            }
+            lib::flash_and_shake(x);
+            lib::sound(x, 0xe0a10);
+            lib::sound(x, 0xe3b6c);
+            lib::sound(x, 0xe5f86);
+            lib::drop_rewards(x);
             x.set8(0, 2);
             x.set16(0x16, 0);
             x.set16(0x18, 0x400);

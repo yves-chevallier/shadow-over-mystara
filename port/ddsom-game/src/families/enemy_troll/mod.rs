@@ -58,10 +58,6 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const HELD: u32 = 0x0408_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
-pub(self) mod call {
-    pub const SPAWN_THROWN: u32 = 0x9f346;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;

@@ -155,9 +155,7 @@ fn dying(x: &mut Cx) {
             x.set32(f::IMMUNITY, 0xffff_ffff);
             lib::sound(x, 0xe3e8e);
             lib::object_event(x);
-            lib::drop_loot(x);
-            lib::drop_special(x);
-            lib::drop_treasure(x);
+            lib::drop_rewards(x);
             if (x.u8(Obj::VARIANT) as i8) >= 0 {
                 detach_from_host(x);
             }

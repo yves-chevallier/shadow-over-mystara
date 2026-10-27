@@ -133,9 +133,10 @@ fn death(x: &mut Cx) {
             crate::mem::wr16(x.b, A5_DEATH, 0x300);
             let score = x.u8(0x7e);
             set_abs8(x, A5_DEATH + 2, score);
-            for r in [0xb780, 0xbad6, 0xe2f6, 0xe0a10, 0xe3b6c, 0x103ba] {
-                x.call(r);
-            }
+            lib::drop_rewards(x);
+            lib::sound(x, 0xe0a10);
+            lib::sound(x, 0xe3b6c);
+            lib::flash_and_shake(x);
             x.set8(0, 2);
             let f = x.u8(0x56);
             x.set8(f::FREEZE, f);

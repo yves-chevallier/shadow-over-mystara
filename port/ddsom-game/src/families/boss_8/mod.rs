@@ -141,9 +141,14 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    for a in [0x19e10, 0x19db4, 0x19eb0, 0xe13f0, 0xd6952, 0x424e, 0xa470, 0x788c] {
-        x.call(a);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::sound(x, 0xe13f0);
+    lib::create_set_15(x);
+    lib::pick_target(x);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(0x2e, 0x28);
     lib::initial_hp_boss(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x4f), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {

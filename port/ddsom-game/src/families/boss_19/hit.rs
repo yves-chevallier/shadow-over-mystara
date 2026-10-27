@@ -322,9 +322,10 @@ fn death(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             fall_start(x);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0x103ba, 0xe0a10, 0xe4f42] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            lib::flash_and_shake(x);
+            lib::sound(x, 0xe0a10);
+            lib::sound(x, 0xe4f42);
         }
         2 => {
             x.move_xz();
@@ -396,9 +397,11 @@ fn death_green(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             fall_start(x);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0x103ba, 0xe0a10, 0xe51e6, 0xe3b6c] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            lib::flash_and_shake(x);
+            lib::sound(x, 0xe0a10);
+            lib::sound(x, 0xe51e6);
+            lib::sound(x, 0xe3b6c);
             green_fall(x);
         }
         2 => green_fall(x),
@@ -446,9 +449,8 @@ fn death_pet(x: &mut Cx) {
             x.set16(TIMER, 0x20);
             lib::object_event(x);
             rest(x);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0xe4f42] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            lib::sound(x, 0xe4f42);
         }
         2 => {
             x.set_bit(0x1, 1, true);

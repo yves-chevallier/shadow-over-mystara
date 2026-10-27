@@ -489,8 +489,7 @@ fn resume_after_slide(x: &mut Cx) {
         x.set32(0x58, 0);
         x.set8(f::ACTIVE, 1);
         if x.u16(f::RESUME_STATE) == 0x205 {
-            x.call(0xad7c);
-            if !x.c.cond(7) {
+            if lib::roll_78(x) {
                 x.set32(f::STATE, saved);
                 x.set8(f::SUB_STEP, 0);
                 x.set32(f::RESUME_STATE, 0);
@@ -511,9 +510,8 @@ fn death(x: &mut Cx) {
     if x.u8(f::SUB_STEP) == 0 {
         x.set8(f::COUNTER, 40);
         next_sub(x);
-        for r in [0x27ee, 0xb780, 0xbad6, 0xe2f6] {
-            x.call(r);
-        }
+        detach_from_host(x);
+        lib::drop_rewards(x);
     }
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);

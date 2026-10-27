@@ -475,7 +475,7 @@ fn cry(x: &mut Cx) {
                 return;
             }
             x.set8(f::KEY_FRAME, 0);
-            x.call(0xa2d22);
+            lib::eshl_burst_26(x);
             lib::sound(x, 0xedbf4);
         }
     }

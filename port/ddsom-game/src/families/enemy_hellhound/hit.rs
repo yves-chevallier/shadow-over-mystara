@@ -162,8 +162,8 @@ fn run_away(x: &mut Cx) {
             let to_right = if x.a5_u8(0x34) == 4 {
                 x.u8(f::FLIP) == 0
             } else {
-                x.call(0x57c66);
-                x.c.cond(7) == (x.u8(f::FLIP) == 0)
+                let left = !lib::in_right_half(x);
+                left == (x.u8(f::FLIP) == 0)
             };
             if to_right {
                 x.add8(f::SUB2, 4);

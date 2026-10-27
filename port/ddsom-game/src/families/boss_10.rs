@@ -585,14 +585,7 @@ fn reaction(x: &mut Cx) {
             return down(x);
         }
     }
-    let code = x.u8(0x49) as u32;
-    let routine = rom32(x, REACTIONS + code);
-    if routine == STUN_REACTION {
-        return stun(x);
-    }
-    x.c.d[0] = code;
-    x.c.a[1] = routine;
-    x.call(routine);
+    react_with(x, REACTIONS, STUN_REACTION, stun);
 }
 
 /// 0x8d294 : étourdissement.
@@ -685,9 +678,9 @@ fn down(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             x.set32(f::IMMUNITY, 0x0fff_ffff);
-            for addr in [0x103ba, 0xe0a10, 0xe3b6c] {
-                x.call(addr);
-            }
+            lib::flash_and_shake(x);
+            lib::sound(x, 0xe0a10);
+            lib::sound(x, 0xe3b6c);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);

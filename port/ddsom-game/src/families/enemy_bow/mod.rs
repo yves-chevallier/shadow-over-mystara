@@ -66,7 +66,6 @@ pub(self) mod call {
     pub const SWING: u32 = 0x9dbd6;
     pub const AI_GATE_A: u32 = 0xa4b4;
     pub const AI_GATE_B: u32 = 0xa4c2;
-    pub const ON_RIGHT_HALF: u32 = 0x57c66;
 }
 
 pub fn run(x: &mut Cx) {

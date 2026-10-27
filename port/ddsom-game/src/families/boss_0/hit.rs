@@ -201,15 +201,13 @@ fn death(x: &mut Cx) {
                 set_abs8(x, A5_DEATH + 2, score);
                 x.set8(0x93, 1);
                 x.set_a5_u8(0x4f, 0xff);
-                for r in [0x103ba, 0xe0a10, 0xe3b6c] {
-                    x.call(r);
-                }
+                lib::flash_and_shake(x);
+                lib::sound(x, 0xe0a10);
+                lib::sound(x, 0xe3b6c);
             } else {
                 lib::object_event(x);
             }
-            for r in [0xb780, 0xbad6, 0xe2f6] {
-                x.call(r);
-            }
+            lib::drop_rewards(x);
             x.set8(0, 2);
             let freeze = x.u8(0x56);
             x.set8(f::FREEZE, freeze);

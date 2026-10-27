@@ -72,9 +72,6 @@ pub(self) mod state {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const EDGE_PAIR: u32 = 0xa4b4;
-    pub const EDGE_SAME: u32 = 0xa4c2;
-    pub const SCRIPT_PALETTE: u32 = 0x10298;
     pub const SPLASH: u32 = 0xaaa40;
 }
 
@@ -179,8 +176,7 @@ pub(self) fn edge_target(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     let t = x.linked(f::TARGET);
     let same_side = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
     x.c.a[1] = t.0;
-    x.call(if same_side { call::EDGE_SAME } else { call::EDGE_PAIR });
-    !zero(x)
+    lib::decision(x, same_side)
 }
 
 /// 0x951dc : pesanteur douce quand l'étape l'a demandée (`+0xa2`) : le boss retombe sur le sol.
@@ -262,9 +258,11 @@ fn init(x: &mut Cx) {
     lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x30);
     lib::initial_hp_boss(x);
-    for r in [0xd5f30, 0xd6952, 0x19e10, 0x19db4, 0x19eb0] {
-        x.call(r);
-    }
+    lib::create_set_14(x);
+    lib::create_set_15(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     for (off, v) in [(0x70, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8)] {
         x.set8(off, v);
     }
