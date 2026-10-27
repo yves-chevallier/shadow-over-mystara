@@ -257,7 +257,6 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(kernel::NATIVES)
         .chain(vblank::NATIVES)
         .chain(taches::natives())
-        .chain(tache_credits::NATIVES)
         .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
         .chain(hud::NATIVES)

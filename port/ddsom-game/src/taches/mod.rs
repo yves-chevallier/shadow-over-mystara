@@ -120,6 +120,7 @@ etapes_des_taches! {
     Scores(ecran_fixe::Etape),
     Service(service::Etape),
     Interface(crate::hud::Etape),
+    Credits(crate::tache_credits::Etape),
 }
 
 /// Exécute l'étape `etape` de la tâche courante ; si elle finit (`Flow::Done`, retour de sous-programme), la suite de
@@ -151,6 +152,7 @@ pub fn entree(entree: u32) -> Option<Etape> {
         ecran_fixe::Etape::Entree.into(),
         service::Etape::Entree.into(),
         crate::hud::Etape::Entree.into(),
+        crate::tache_credits::Etape::Entree.into(),
     ]
         .into_iter()
         .find(|e| e.adresse() == entree)
