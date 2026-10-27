@@ -135,7 +135,7 @@ pub(super) fn recover(x: &mut Cx) {
         return go::idle(x);
     }
     let table = if x.a5_u8(0x48) > 5 { 0x109e2 } else { 0x108e2 };
-    lib::hp_threshold(x, table);
+    lib::next_threshold(x, table);
     if lib::target_in_box(x, 0, 0x38, 0xc) {
         return go::attack(x, 6, true);
     }
@@ -231,7 +231,7 @@ fn run_off(x: &mut Cx) {
                 lib::shake_54(x, 0x10);
                 lib::sound(x, 0xe3d32);
             }
-            if lib::outside(x, -0x30, 0x1b0) {
+            if lib::outside_band(x, -0x30, 0x1b0) {
                 detach_from_host(x);
                 x.free(&pools::ENEMY);
             }

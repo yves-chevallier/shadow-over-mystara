@@ -267,10 +267,15 @@ pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
 }
 
 pub fn push(b: &mut Cps2Bus, o: Obj) -> bool {
+    push_collides(b, o).0
+}
+
+/// `push`, et vrai en second si l'objet a heurté un obstacle (le D5 = 1 de l'original, que des appelants relisent).
+pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
     let mut c = Cpu::default();
     c.a[0] = o.0;
     Push { c: &mut c, b, variant: FIRST }.run();
-    c.sr & m68k::SR_Z != 0
+    (c.sr & m68k::SR_Z != 0, c.d[5] == 1)
 }
 
 pub const SHADOW: Native = Native {

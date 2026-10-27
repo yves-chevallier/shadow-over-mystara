@@ -9,7 +9,7 @@ use crate::objects::Obj;
 
 /// Suite d'un coup, d'une course ou d'une attente : un nouveau départ si un joueur vit, sinon l'attente.
 fn restart_or_idle(x: &mut Cx) {
-    if lib::any_player_alive(x) {
+    if lib::players_alive(x) {
         run_start(x)
     } else {
         idle_alone(x)
@@ -281,7 +281,7 @@ pub(super) fn fight(x: &mut Cx) {
 
 /// 0x79a70 : debout, attend un temps tiré puis repart.
 fn idle(x: &mut Cx) {
-    if !lib::any_player_alive(x) {
+    if !lib::players_alive(x) {
         return idle_alone(x);
     }
     if x.u8(0x7) == 0 {
@@ -301,7 +301,7 @@ fn idle(x: &mut Cx) {
     if sub8(x, IDLE_COUNT, 1).le() {
         return run_start(x);
     }
-    if !lib::faces_target(x) {
+    if !lib::facing_target(x) {
         return turn(x);
     }
     lib::step(x);
@@ -319,7 +319,7 @@ fn turn_around(x: &mut Cx) {
     if !lib::step(x) {
         return;
     }
-    if !lib::any_player_alive(x) {
+    if !lib::players_alive(x) {
         return idle_alone(x);
     }
     let saved = x.u32(SAVED_STATE);
@@ -335,19 +335,19 @@ fn turn_around(x: &mut Cx) {
 
 /// 0x79bb8 : animation de course vers l'avant (6) ou vers l'arrière (7) selon le sens de la cible.
 fn run_animation(x: &mut Cx) {
-    let n = if lib::moves_forward(x) { 6 } else { 7 };
+    let n = if lib::moving_forward(x) { 6 } else { 7 };
     body(x, n);
 }
 
 /// 0x79c92 : choisit, dans la table de l'animation de course, l'entrée du geste en cours.
 fn select_run(x: &mut Cx) {
-    let set = if lib::moves_forward(x) { SET_RUN_BACK } else { SET_RUN_FORWARD };
+    let set = if lib::moving_forward(x) { SET_RUN_BACK } else { SET_RUN_FORWARD };
     lib::switch_keeping_time(x, set);
 }
 
 /// 0x79b3a (kind 2) et 0x79b5c (kind 3) : course ; elle commence par tirer le nombre de pas et leur délai.
 fn run_phase(x: &mut Cx, kind: u8) {
-    if !lib::any_player_alive(x) {
+    if !lib::players_alive(x) {
         return idle_alone(x);
     }
     if x.u8(0x7) != 0 {
@@ -406,7 +406,7 @@ fn keep_running(x: &mut Cx) {
     if lib::guard_in_front(x, -0x30, 0x18, 8) {
         return from_close(x);
     }
-    if !lib::faces_target(x) {
+    if !lib::facing_target(x) {
         return turn(x);
     }
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
@@ -629,7 +629,7 @@ fn triple_strike(x: &mut Cx) {
         }
         6 => {
             if lib::step(x) {
-                if lib::any_player_alive(x) {
+                if lib::players_alive(x) {
                     stand(x);
                 } else {
                     idle_alone(x);

@@ -54,7 +54,7 @@ fn wait(x: &mut Cx) {
         x.set8(LOOK_PREV, 0);
         return mv(x, 4);
     }
-    if lib::outside(x, -0x30, 0x1b0) {
+    if lib::outside_band(x, -0x30, 0x1b0) {
         return go::charge(x, 0);
     }
     let n = x.u8(AI_WAIT).wrapping_sub(1);
@@ -171,7 +171,7 @@ fn march_step(x: &mut Cx) {
         charge_delay(x, table);
         return fly_anim(x);
     }
-    if lib::outside(x, -0x30, 0x1b0) {
+    if lib::outside_band(x, -0x30, 0x1b0) {
         return go::charge(x, 0);
     }
     if x.u8(LOOK) == 3 {

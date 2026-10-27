@@ -78,9 +78,6 @@ mod ext {
     pub const CLEAR_SCROLL_1: u32 = 0xca8;
     pub const CLEAR_SCROLL_2: u32 = 0xcc8;
     pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    pub const POOLS_EFFCT: u32 = 0x2150;
-    pub const POOLS_SET: u32 = 0x2134;
-    pub const POOLS_SOBJ: u32 = 0x21bc;
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const SPRITES: u32 = 0x1de96;
     pub const EFFCT: u32 = 0x39cba;
@@ -165,9 +162,11 @@ fn step_0(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, var::STEP).wrapping_add(2);
     wr8(x.b, var::STEP, s);
     wr8(x.b, var::SUB, 0);
-    for f in [ext::CLEAR_SPRITES, ext::POOLS_EFFCT, ext::POOLS_SET, ext::POOLS_SOBJ, ext::SPRITES_RESET] {
-        x.call(f);
+    x.call(ext::CLEAR_SPRITES);
+    for pool in [&crate::objects::pools::EFFCT, &crate::objects::pools::SET, &crate::objects::pools::SOBJ] {
+        pool.reset(x.b);
     }
+    x.call(ext::SPRITES_RESET);
     x.c.d[0] = 0;
     wr32(x.b, var::SCROLL_1, 0);
     wr32(x.b, var::SCROLL_2, 0);
@@ -293,7 +292,7 @@ crate::etapes! {
         FadeLoop = FADE_LOOP => fade_wait,
         Step6Faded = STEP_6_FADED => |x| {
             x.call(ext::EFFCT);
-            x.call(ext::POOLS_EFFCT);
+            crate::objects::pools::EFFCT.reset(x.b);
             x.call(ext::SPRITES_RESET);
             x.call(ext::SPRITES);
             let v = rd16(x.b, var::VIDEO) & !0xe;
@@ -339,9 +338,10 @@ crate::etapes! {
             crate::taches::attendre_puis_revenir(x)
         },
         StepEFaded = STEP_E_FADED => |x| {
-            for f in [ext::POOLS_SET, ext::POOLS_SOBJ, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
-                x.call(f);
-            }
+            crate::objects::pools::SET.reset(x.b);
+            crate::objects::pools::SOBJ.reset(x.b);
+            x.call(ext::SPRITES_RESET);
+            x.call(ext::CLEAR_SPRITES);
             x.wait(1, Etape::StepEHide)
         },
         StepEHide = STEP_E_HIDE => |x| {
@@ -754,7 +754,7 @@ fn step_a(x: &mut Ctx) -> Flow {
     }
     if any_button(x) {
         wr16(x.b, var::COUNTDOWN, 1);
-        x.call(ext::POOLS_EFFCT);
+        crate::objects::pools::EFFCT.reset(x.b);
     } else if rd8(x.b, var::PLAYERS_PRESENT) != 0 {
         return Flow::Done;
     }

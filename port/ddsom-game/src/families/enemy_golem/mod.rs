@@ -192,13 +192,14 @@ pub(self) fn choose(x: &mut Cx) {
         return set_state_long(x, STANCE);
     }
     load_target(x);
-    if !lib::target_in_box(x, -0x8, 0x68, 8) {
-        if !lib::target_in_box(x, -0xa0, 0x30, 8) {
-            return set_state_long(x, STANCE);
-        }
+    let side = match lib::target_in_front(x, -0x8, 0x68, 8) {
+        lib::InBox::No => lib::target_in_front(x, -0xa0, 0x30, 8),
+        near => near,
+    };
+    if !side.found() {
+        return set_state_long(x, STANCE);
     }
-    let d0 = x.c.d[0] as u8;
-    x.set8(SIDE, d0);
+    x.set8(SIDE, side as u8);
     let b = row_byte(x, 0x69146);
     x.set8(f::SUB2, b);
     x.set16(f::STATE, 0x0208);

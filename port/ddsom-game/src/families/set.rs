@@ -514,8 +514,7 @@ mod wave_leader {
                     return;
                 }
                 x.add8(0x5, 2);
-                x.c.d[0] = x.c.d[0] & !0xffff | CAMERA_LOCK_PARAM;
-                x.call(crate::camera_modes::SHAKE_B.entry);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, CAMERA_LOCK_PARAM as u16);
             }
             2 => {
                 let (a, b) = (x.u8(DEFEATED_A), x.u8(DEFEATED_B));

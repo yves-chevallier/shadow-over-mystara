@@ -317,11 +317,11 @@ fn charge_end(x: &mut Cx) {
 
 /// 0x8df70 : choisit une cible (0x1376 donne le cap) ; faux sans joueur.
 fn aim_target(x: &mut Cx) -> bool {
-    if !lib::target_by_criterion(x, lib::LOWEST_HP) {
+    let Some(target) = lib::target_by_criterion(x, lib::LOWEST_HP) else {
         x.c.d[0] = 0;
         return false;
-    }
-    lib::aim_to(x, crate::objects::Obj(x.c.a[1] & 0xff_ffff));
+    };
+    lib::aim_to(x, target);
     let a = x.c.d[0] as u8;
     x.set8(0xb3, a);
     true

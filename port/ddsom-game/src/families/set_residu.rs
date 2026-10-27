@@ -17,8 +17,8 @@ const ROW: u32 = 0x80;
 /// Tuile vide (code 0x20, attribut 0).
 const BLANK: u32 = 0x20_0000;
 
-/// 0xd5f12 : efface trois colonnes du tampon de tuiles (44 lignes chacune) pour la sortie de scène.
-fn erase_columns(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Efface les trois colonnes du tampon de tuiles ; rend la fin de la dernière (A1 de l'original).
+fn clear_columns(b: &mut Cps2Bus) -> u32 {
     let mut a1 = 0;
     for column in COLUMNS {
         a1 = column;
@@ -27,31 +27,54 @@ fn erase_columns(c: &mut Cpu, b: &mut Cps2Bus) {
             a1 += ROW;
         }
     }
-    c.a[1] = a1;
-    c.d[0] = 0xffff; // compteur du `dbf` épuisé
+    a1
+}
+
+/// 0xd5f12 : efface trois colonnes du tampon de tuiles (44 lignes chacune) pour la sortie de scène.
+fn erase_columns(c: &mut Cpu, b: &mut Cps2Bus) {
+    let end = clear_columns(b);
+    columns_regs(c, end);
+    rts(c, b);
+}
+
+/// Registres que laisse l'effacement des colonnes : A1 = fin de la dernière, D0 = compteur du `dbf` épuisé, D4 =
+/// la tuile vide.
+fn columns_regs(c: &mut Cpu, end: u32) {
+    c.a[1] = end;
+    c.d[0] = 0xffff;
     c.d[4] = BLANK;
     c.flags_logic(BLANK, Size::Long);
-    rts(c, b);
 }
 
 /// Barre de vie du boss (h) : drapeau d'affichage (FF8030) et objet SET de la barre (pointeur court en FF2476).
 const LIFE_BAR_SHOWN: u32 = 0x30;
 const LIFE_BAR_OBJECT: u32 = 0xff_2476;
 
-/// 0xd5ef8 : quand la barre de vie est affichée, la rattache au boss A0 (`+0x34`, variante 1, état remis à zéro)
-/// et efface les colonnes de tuiles de l'ancienne barre (0xd5f12).
-fn attach_life_bar(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0xd5ef8 : quand la barre de vie est affichée, la rattache au boss `boss` (`+0x34`, variante 1, état remis à
+/// zéro) et efface les colonnes de tuiles de l'ancienne barre (0xd5f12). Rend la fin des colonnes effacées (l'A1
+/// de l'original), `None` si la barre n'est pas affichée. Cœur.
+pub fn attach_life_bar(b: &mut Cps2Bus, boss: crate::objects::Obj) -> Option<u32> {
+    if rd8(b, A5 + LIFE_BAR_SHOWN) == 0 {
+        return None;
+    }
+    let bar = rd16(b, LIFE_BAR_OBJECT) as i16 as i32 as u32 & 0xff_ffff;
+    wr16(b, bar + 0x34, boss.word());
+    wr8(b, bar + 3, 1);
+    wr32(b, bar + 4, 0);
+    Some(clear_columns(b))
+}
+
+/// 0xd5ef8 avec les registres de l'original (A1, D0, D4, drapeaux).
+fn attach_life_bar_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let shown = rd8(b, A5 + LIFE_BAR_SHOWN);
     c.flags_logic(shown as u32, Size::Byte);
     if shown == 0 {
         return rts(c, b);
     }
-    let bar = rd16(b, LIFE_BAR_OBJECT) as i16 as i32 as u32 & 0xff_ffff;
-    c.a[1] = bar;
-    wr16(b, bar + 0x34, c.a[0] as u16);
-    wr8(b, bar + 3, 1);
-    wr32(b, bar + 4, 0);
-    erase_columns(c, b);
+    if let Some(end) = attach_life_bar(b, crate::objects::Obj(c.a[0])) {
+        columns_regs(c, end);
+    }
+    rts(c, b);
 }
 
 /// 0xce668 : charge deux grilles de blocs (0x26d4, destination 0x917000) dont les numéros sont lus, par
@@ -134,7 +157,7 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus),
 }
 
 pub const NATIVES: &[Native] = &[
-    native(0xd5ef8, "set_barre_de_vie", attach_life_bar, regs::ALL),
+    native(0xd5ef8, "set_barre_de_vie", attach_life_bar_native, regs::ALL),
     native(0xd5f12, "set_efface_colonnes", erase_columns, regs::ALL),
     native(0xce668, "set_deux_grilles", load_two_grids, regs::ALL),
     native(0xd98b8, "set_vague_debut", |c, b| { wave_start(c, b); rts(c, b) }, regs::ALL),

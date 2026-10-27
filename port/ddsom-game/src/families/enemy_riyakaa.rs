@@ -260,7 +260,7 @@ mod riyakaa {
             }
             2 => {
                 x.anim_step();
-                if lib::pick_target(x) {
+                if lib::pick_target(x).is_some() {
                     if lib::target_in_box(x, 0, 0x80, 0x20) {
                         x.add8(f::SUB2, 2);
                     }
@@ -356,7 +356,7 @@ mod riyakaa {
         let n = countdown(x, 0x71) as i8;
         if n < 0 {
             lib::draw_stance(x);
-            if !lib::pick_target(x) {
+            if lib::pick_target(x).is_none() {
                 return;
             }
             if countdown(x, 0x6b) == 0 {

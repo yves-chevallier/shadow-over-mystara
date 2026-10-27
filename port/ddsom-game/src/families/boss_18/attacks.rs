@@ -42,7 +42,7 @@ fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
 
 /// Fin d'attaque : l'absence de joueurs l'emporte ; sinon `to`.
 fn finish(x: &mut Cx, to: fn(&mut Cx)) {
-    if !lib::any_player_alive(x) {
+    if !lib::players_alive(x) {
         return decide::wait(x);
     }
     to(x);
@@ -162,7 +162,7 @@ fn gesture(x: &mut Cx) {
             if !step_with_spark(x) {
                 return;
             }
-            if !lib::any_player_alive(x) {
+            if !lib::players_alive(x) {
                 return decide::wait(x);
             }
             if (x.u8(BUDGET_4) as i8) <= 0 {
@@ -207,7 +207,7 @@ fn chase_spell(x: &mut Cx) {
             if !sub16(x, CHASE_TIME, 1).gt() {
                 return end_chase(x);
             }
-            if !lib::faces_target(x) {
+            if !lib::facing_target(x) {
                 return decide::interrupt(x);
             }
             if lib::target_in_box(x, -0x50, 0x20, 8) {
@@ -232,7 +232,7 @@ fn chase_spell(x: &mut Cx) {
             if (x.u16(CHASE_TIME) as i16) <= 0 {
                 return end_chase(x);
             }
-            if !lib::any_player_alive(x) {
+            if !lib::players_alive(x) {
                 return decide::wait(x);
             }
             x.set8(0x7, 2);

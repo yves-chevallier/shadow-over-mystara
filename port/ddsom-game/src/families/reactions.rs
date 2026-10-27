@@ -1401,20 +1401,11 @@ fn seized_hits(x: &mut Cx) {
     x.set16(f::HP, if (hp as i16) > 0 { hp } else { 0 });
     x.set8(f::COUNTER, 7);
     anim_step(x);
-    // 0x19dce avec A0 = le joueur, A1 = l'objet saisi
-    let me = x.o.0;
+    // 0x19dce : barre de vie de l'objet saisi, au nom du joueur
     let owner = x.u16(f::OWNER) as i16 as i32 as u32;
-    let d0 = ((rd8(x.b, owner + 2) as u32) << 8) as u16;
-    let d0 = d0 & 0xff00 | (d0 as u8).wrapping_add(x.u8(f::KIND)) as u16;
-    x.c.d[0] = d0 as u32;
-    x.c.d[1] = x.c.d[1] & !0xffff | x.u16(0x60) as u32;
-    x.c.d[2] = x.c.d[2] & !0xffff | x.u16(f::HP) as u32;
-    x.c.d[3] = x.c.d[3] & !0xff | x.u8(f::CLASS) as u32;
-    x.c.a[1] = me;
-    x.c.a[0] = owner;
-    x.c.a[5] = crate::mem::A5;
-    crate::call(x.c, x.b, 0x19dce);
-    x.c.a[0] = me;
+    let entete = ((rd8(x.b, owner + 2) as u16) << 8) | x.u8(f::KIND) as u16;
+    let popup = crate::evenements::Popup { entete, max: x.u16(0x60), valeur: x.u16(f::HP), brut: x.u8(f::CLASS) == 2 };
+    crate::evenements::creer_popup(x.b, popup);
     let i = 4 * x.u8(f::KIND) as u32;
     x.c.d[0] = i;
     let mut d2 = x.rom16(0x3d198 + i);

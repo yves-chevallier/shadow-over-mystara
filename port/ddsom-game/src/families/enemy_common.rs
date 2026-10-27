@@ -325,11 +325,12 @@ pub fn anim(x: &mut Cx, set: u32, n: u32) {
 
 // --- aides communes des types du troisième lot --------------------------------------------------
 
-/// Fin commune des sous-états actifs : test de zone (0xfbae, qui remet D5 à 0) puis collision avec le décor
-/// (0x33fe4).
-pub fn zone_and_terrain(x: &mut Cx) {
-    lib::keep_in_zone(x);
-    lib::collide_terrain(x);
+/// Fin commune des sous-états actifs : test de zone (0xfbae) puis collision avec le décor (0x33fe4). Vrai si
+/// l'objet a été ramené dans l'écran ou repoussé par le décor (le D5 de l'original, que le squelette relit).
+pub fn zone_and_terrain(x: &mut Cx) -> bool {
+    let moved = lib::keep_in_zone(x);
+    let hit = lib::collide_terrain(x);
+    moved || hit
 }
 
 /// `neg.w (off,A0)`.
@@ -360,7 +361,7 @@ pub fn set_state_long(x: &mut Cx, v: u32) {
 
 /// Choisit un joueur comme cible (0x424e) ; faux si aucun n'est vivant.
 pub fn pick_target(x: &mut Cx) -> bool {
-    lib::pick_target(x)
+    lib::pick_target(x).is_some()
 }
 
 /// L'ennemi est saisi par un joueur (0x2810).

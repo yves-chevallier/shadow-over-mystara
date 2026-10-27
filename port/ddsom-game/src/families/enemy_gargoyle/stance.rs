@@ -88,7 +88,7 @@ fn pursue(x: &mut Cx) {
         }
         return;
     }
-    if lib::outside(x, -0x40, 0x1c0) {
+    if lib::outside_band(x, -0x40, 0x1c0) {
         return go::dive(x);
     }
     let n = x.u8(TURNS).wrapping_sub(1);
@@ -189,7 +189,7 @@ fn glide_step(x: &mut Cx) {
         }
         return switch_flight_set(x);
     }
-    if lib::outside(x, -0x40, 0x1c0) {
+    if lib::outside_band(x, -0x40, 0x1c0) {
         return go::dive(x);
     }
     let near = near_box(x, -0x90, 0x10, 6);
@@ -219,7 +219,7 @@ fn near_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u32 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
-    lib::ai_gate(x)
+    lib::turn_decision(x) as u32
 }
 
 /// 0x6575a : choisit le geste d'attaque suivant (table par palier de PV `+0xaa`).
@@ -386,7 +386,7 @@ fn leap(x: &mut Cx) {
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18, 0x40i16) } else { (8, -0x40i16) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, vy as u16);
-            lib::jitter_angle(x);
+            lib::drift_heading(x);
             set_speed(x, 0x3f);
             x.set16(Obj::VZ, 0x380);
             x.set16(Obj::AZ, -0x28i16 as u16);

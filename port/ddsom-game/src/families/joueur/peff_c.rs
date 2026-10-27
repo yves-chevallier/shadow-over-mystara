@@ -433,9 +433,9 @@ mod holy {
             } else {
                 x.c.d[0] = duration as u32;
                 x.c.d[1] = command as u32;
-                let routine = x.rom32(SHAKE_TABLE + command as u32);
-                x.c.a[1] = routine;
-                x.call(routine);
+                // la table désigne la secousse par sa routine (0x2824, 0x2860, 0x289c), qui laisse A1 = la caméra
+                let mode = crate::camera_modes::shake::of_routine(x.rom32(SHAKE_TABLE + command as u32));
+                x.c.a[1] = crate::camera_modes::start_shake(x.b, mode, duration as u16).0;
             }
         }
         x.add8(0x5b, 0xff);

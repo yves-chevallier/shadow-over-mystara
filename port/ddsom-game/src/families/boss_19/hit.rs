@@ -60,13 +60,18 @@ fn tail(x: &mut Cx) {
 
 /// 0x9097c : réaction au coup : la routine de la table, d'après le code du coup.
 fn reaction(x: &mut Cx) {
-    if x.u8(f::SUB2) == 0 {
+    // Glitch d'origine : l'index de la table est le mot bas de D0 dont seul l'octet bas est posé (le code du coup).
+    // Après 0x10112 (et 0xb648), l'octet haut est nul ; sans eux, c'est celui du D0 hérité.
+    let high = if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
         if var::SCENE.get(x.b) == 0x20 {
             lib::drop_once(x);
         }
-    }
-    let index = ((x.c.d[0] & 0xff00) | x.u8(REACTION) as u32) as u16 as i16 as i32;
+        0
+    } else {
+        x.c.d[0] & 0xff00
+    };
+    let index = (high | x.u8(REACTION) as u32) as u16 as i16 as i32;
     let routine = rom32(x, (REACTIONS as i32 + index) as u32);
     match routine {
         0x90b26 => knock(x),

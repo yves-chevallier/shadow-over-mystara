@@ -19,7 +19,7 @@
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::mem::{prog16, rd16, rd8, rts, wr16, wr32, wr8};
+use crate::mem::{prog16, rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::text::clear_cells;
 use crate::{regs, Native};
 
@@ -209,9 +209,10 @@ fn animer(c: &mut Cpu, b: &mut Cps2Bus) {
     suivant(c, b, courant);
 }
 
-/// 0x19eb0 : efface les bulles de tous les emplacements (4, ou 3 réduits), du dernier au premier.
-fn effacer_tout(c: &mut Cpu, b: &mut Cps2Bus) {
-    let petit = reduit(b, c.a[5]);
+/// 0x19eb0 : efface les bulles de tous les emplacements (4, ou 3 réduits), du dernier au premier. Rend la table
+/// des effacements lue (l'A2 de l'original). Cœur.
+pub fn effacer_tout(b: &mut Cps2Bus) -> u32 {
+    let petit = reduit(b, A5);
     let table = rom::EFFACEMENTS[petit as usize];
     let dernier = if petit { 2 } else { 3 };
     for emplacement in (0..=dernier).rev() {
@@ -219,8 +220,14 @@ fn effacer_tout(c: &mut Cpu, b: &mut Cps2Bus) {
         let (col, row, largeur, hauteur) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
         clear_cells(b, col, row, largeur, hauteur);
     }
-    // registres de la boucle d'origine : D6 = -1 (dbf), A2 = la table, A4 = hauteur de sa première case
-    c.d[6] |= 0xffff;
+    table
+}
+
+/// 0x19eb0 avec les registres de la boucle d'origine : D6.w = -1 (`dbf`, D6 haut à zéro : `moveq`), A2 = la table,
+/// A4 = hauteur de sa première case.
+fn effacer_tout_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    let table = effacer_tout(b);
+    c.d[6] = 0xffff;
     c.a[2] = table;
     c.a[4] = table + 3;
 }
@@ -229,7 +236,7 @@ pub const EFFACER_TOUT: Native = Native {
     entry: 0x19eb0,
     name: "popups_effacer_tout",
     run: |c, b| {
-        effacer_tout(c, b);
+        effacer_tout_68k(c, b);
         rts(c, b);
     },
     touches_sound: false,

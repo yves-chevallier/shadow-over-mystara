@@ -80,7 +80,6 @@ mod sub {
     pub const CLEAR_SPRITES: u32 = 0xc58;
     pub const CLEAR_SCROLL_2: u32 = 0xcc8;
     pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    pub const POOLS_RESET: u32 = 0x2062;
 }
 
 /// Plans des décors : plan 1 (caractères), plan 2 et plan 3, en GFX RAM.
@@ -311,9 +310,9 @@ fn keep_a0_a6(x: &mut Ctx, routine: u32) {
 
 /// 0xf7fdc : pools d'objets remis à zéro (A0 gardé).
 fn reset_pools(x: &mut Ctx) {
-    let a0 = x.c.a[0];
-    x.call(sub::POOLS_RESET);
-    x.c.a[0] = a0;
+    for pool in crate::objects::pools::POOLS {
+        pool.reset(x.b);
+    }
 }
 
 /// 0xfa22e : palette D0 des pages de fond, puis noir sur la page 2.

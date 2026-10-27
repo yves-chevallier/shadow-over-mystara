@@ -43,8 +43,7 @@ pub(super) fn run(x: &mut Cx) {
         set_state_long(x, IDLE);
     }
     
-    zone_and_terrain(x);
-    if x.c.d[5] as u8 != 0 {
+    if zone_and_terrain(x) {
         lib::choose_walk_point(x);
     }
 }
@@ -142,8 +141,9 @@ fn attack_choice(x: &mut Cx) {
         set_state_long(x, DASH);
         return x.set16(COUNTER, 0);
     }
-    if lib::target_in_box(x, -0x20, 0x20, 0x10) {
-        x.set8(SIDE, x.c.d[0] as u8);
+    let side = lib::target_in_front(x, -0x20, 0x20, 0x10);
+    if side.found() {
+        x.set8(SIDE, side as u8);
         x.set16(f::STATE, 0x204);
         lib::pick_byte(x);
         return pick_move(x, CLOSE_ATTACKS, 0x204);
@@ -159,11 +159,12 @@ fn attack_choice(x: &mut Cx) {
 
 /// 0x59254 : cible devant ; l'attaque est lancée si la décision par masque le veut.
 fn front_attack(x: &mut Cx) -> bool {
-    if !lib::target_in_box(x, -8, 0x68, 8) {
+    let side = lib::target_in_front(x, -8, 0x68, 8);
+    if !side.found() {
         x.c.d[0] = 0;
         return false;
     }
-    x.set8(SIDE, x.c.d[0] as u8);
+    x.set8(SIDE, side as u8);
     if !decision(x) {
         x.c.d[0] = 0;
         return false;
@@ -175,11 +176,12 @@ fn front_attack(x: &mut Cx) -> bool {
 
 /// 0x592a4 : cible plus loin (boîte large) ; même décision, attaque de loin.
 fn far_attack(x: &mut Cx) -> bool {
-    if !lib::target_in_box(x, -0xa0, 0x30, 8) {
+    let side = lib::target_in_front(x, -0xa0, 0x30, 8);
+    if !side.found() {
         x.c.d[0] = 0;
         return false;
     }
-    x.set8(SIDE, x.c.d[0] as u8);
+    x.set8(SIDE, side as u8);
     if !decision(x) {
         x.c.d[0] = 0;
         return false;

@@ -263,7 +263,7 @@ fn init(x: &mut Cx) {
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x26);
     initial_hp(x);
-    lib::init_hp_rank(x);
+    lib::spread_index(x);
     x.set8(0, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set_bit(1, 1, true);
@@ -309,7 +309,8 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
-        return zone_and_terrain(x);
+        zone_and_terrain(x);
+        return;
     }
     if !paused(x) {
         x.c.d[0] = x.u8(f::SUB) as u32;

@@ -220,7 +220,8 @@ fn active(x: &mut Cx) {
         x.set32(f::STATE, 0x0200_0200);
         x.set8(0, 1);
         x.set_bit(0x1, 1, false);
-        return lib::set_immunities(x);
+        lib::set_immunities(x);
+        return;
     }
     if x.u16(f::TARGET) == 0 {
         lib::pick_target(x);

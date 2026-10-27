@@ -104,11 +104,11 @@ fn interrupt(x: &mut Cx) {
 }
 
 fn needs_turn(x: &mut Cx) -> bool {
-    !lib::faces_target(x)
+    !lib::facing_target(x)
 }
 
 fn facing_forward(x: &mut Cx) -> bool {
-    lib::moves_forward(x)
+    lib::moving_forward(x)
 }
 
 /// Un joueur est-il dans la boîte ? 0 sinon (0x8d4ee, 0x8d50a).
@@ -316,7 +316,7 @@ fn walk(x: &mut Cx) {
 
 /// Choisit l'animation de marche par l'image-clé (0x103e0) ; `mirror` : le test de sens est inversé.
 fn select_walk(x: &mut Cx, mirror: bool) {
-    let z = lib::moves_forward(x);
+    let z = lib::moving_forward(x);
     let set = if z != mirror { WALK_A } else { WALK_B };
     lib::switch_keeping_time(x, set);
 }
@@ -377,8 +377,10 @@ fn jump(x: &mut Cx) {
             x.set16(JUMP_X, xx);
             set_dw(x, 2, 0xc0);
             let found = lib::pick_target_any(x);
-            // Glitch d'origine : si personne n'est trouvé, D2 reste ce que 0x43ae a laissé
-            let mut d2 = x.c.d[2] as u16;
+            // Glitch d'origine : si personne n'est trouvé, l'écart est le D2.w que 0x43ae laisse : la profondeur de
+            // l'objet
+            let mut d2 = x.u16(crate::objects::Obj::Y);
+            set_dw(x, 2, d2);
             if found {
                 d2 = 0x30;
                 let target = x.linked(f::TARGET);

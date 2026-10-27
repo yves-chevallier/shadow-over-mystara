@@ -51,7 +51,6 @@ mod table {
 mod init {
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const SCENE_LOAD: u32 = 0x33aa6;
-    pub const POOLS_INIT: u32 = 0x2062;
     pub const PALETTES: u32 = 0x1a296;
     pub const HOOKS: [u32; 5] = [0x19aa2, 0x19abc, 0x19db4, 0x19e10, 0xf3130];
 }
@@ -108,10 +107,13 @@ fn init_scene(x: &mut Ctx) {
     x.set_v8(0x48, pa);
     x.set_v8(0x49, pb);
     crate::modes::demo::reset_recorder(x.c, x.b);
-    for routine in [init::SPRITES_RESET, init::SCENE_LOAD, script::RESET_ENTRY, init::POOLS_INIT, init::PALETTES]
-        .into_iter()
-        .chain(init::HOOKS)
-    {
+    for routine in [init::SPRITES_RESET, init::SCENE_LOAD, script::RESET_ENTRY] {
+        x.call(routine);
+    }
+    for pool in crate::objects::pools::POOLS {
+        pool.reset(x.b);
+    }
+    for routine in [init::PALETTES].into_iter().chain(init::HOOKS) {
         x.call(routine);
     }
     crate::hud::forget_displayed(x.b);
@@ -612,8 +614,7 @@ fn scene_11(x: &mut Ctx) {
                 x.set_v16(0x4ba, 0x100);
                 x.wr16(TIMER, 12);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
-                x.c.d[0] = 60;
-                x.call(0x2860);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 60);
             }
         }
         12 => {

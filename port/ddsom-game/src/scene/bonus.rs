@@ -275,7 +275,10 @@ fn set_up(x: &mut Ctx) -> Flow {
     }
     if x.v8(a5::SCENE) != 1 {
         x.set_v8(0x42, 2);
-        call_keep_a0(x, &[0x1f184, 0x1de7c, 0x2062]);
+        call_keep_a0(x, &[0x1f184, 0x1de7c]);
+        for pool in crate::objects::pools::POOLS {
+            pool.reset(x.b);
+        }
         x.call(0xcc8);
         x.call(0xce8);
         screen::clear_text(x.c, x.b);

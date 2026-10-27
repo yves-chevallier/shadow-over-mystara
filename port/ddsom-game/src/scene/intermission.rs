@@ -104,8 +104,7 @@ fn boss_intro(x: &mut Ctx) {
                 let state = boss.u8(x.b, 6).wrapping_add(2);
                 boss.set_u8(x.b, 6, state);
             } else if x.rd16(TIMER) == 40 {
-                x.c.d[0] = 40;
-                x.call(0x2860);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 40);
             }
         }
         12 => {

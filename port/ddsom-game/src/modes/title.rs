@@ -50,9 +50,6 @@ mod var {
 /// Sous-routines d'origine.
 mod ext {
     pub const SOUND_RESET: u32 = 0xc0c;
-    pub const POOLS_SOBJ: u32 = 0x21bc;
-    pub const POOLS_SET: u32 = 0x2134;
-    pub const POOLS_EFFCT: u32 = 0x2150;
     pub const RESET_PLAYERS: u32 = 0x1f184;
     pub const SPRITES_RESET: u32 = 0x1de7c;
     /// Objet SOBJ de la scène de titre, de variante D0 (retenue = échec) ; SET de type 0xf.
@@ -110,7 +107,10 @@ fn unknown_step(x: &mut Ctx, entry: u32) -> Flow {
 /// Libère les pools d'objets et remet les sprites à zéro (début et fin d'écran).
 fn reset_objects(x: &mut Ctx) {
     let a0 = x.c.a[0];
-    for f in [ext::POOLS_SOBJ, ext::POOLS_SET, ext::POOLS_EFFCT, ext::RESET_PLAYERS, ext::SPRITES_RESET] {
+    for pool in [&crate::objects::pools::SOBJ, &crate::objects::pools::SET, &crate::objects::pools::EFFCT] {
+        pool.reset(x.b);
+    }
+    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET] {
         x.call(f);
     }
     x.c.a[0] = a0;
@@ -747,12 +747,12 @@ fn leave_wait(x: &mut Ctx, loop_resume: Etape, cleared: Etape, second_title: boo
     }
     let a0 = x.c.a[0];
     // l'original libère les pools dans un ordre différent selon l'écran
-    let pools = if second_title {
-        [ext::POOLS_SET, ext::POOLS_EFFCT, ext::POOLS_SOBJ]
-    } else {
-        [ext::POOLS_SOBJ, ext::POOLS_SET, ext::POOLS_EFFCT]
-    };
-    for f in pools.into_iter().chain([ext::RESET_PLAYERS, ext::SPRITES_RESET]) {
+    use crate::objects::pools::{EFFCT, SET, SOBJ};
+    let pools = if second_title { [&SET, &EFFCT, &SOBJ] } else { [&SOBJ, &SET, &EFFCT] };
+    for pool in pools {
+        pool.reset(x.b);
+    }
+    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET] {
         x.call(f);
     }
     x.c.a[0] = a0;
