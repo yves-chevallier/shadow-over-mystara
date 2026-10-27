@@ -848,6 +848,7 @@ d 0f6f88 0f6f8a scene/mod.rs
 d 0f7ac4 0f7ad0 scene/shop.rs
 d 0f7b3e 0f7b40 scene/shop.rs
 d 0f7ba0 0f7bb0 scene/shop.rs
+d 0f7e5c 0f7e5e scene/shop.rs
 d 0f7f88 0f7f8a scene/mod.rs
 d 0f8596 0f863c sprites.rs
 d 0f881c 0f8856 sprites.rs
@@ -2803,8 +2804,3 @@ p 0f9e58 0f9e5e scene/mod.rs
 p 0f9fc8 0f9fcc scene/mod.rs
 p 0fa42e 0fa434 scene/mod.rs
 p 0fc3e4 0fc3f0 scene/mod.rs
-p 0b9628 0b9698 families/cx.rs
-p 0e6afc 0e6b00 sound.rs
-p 0e6efe 0e6f00 sound.rs
-p 0e7054 0e7058 sound.rs
-p 0e71aa 0e71ae sound.rs

@@ -17,6 +17,7 @@ mod natives;
 mod palettes;
 mod players;
 mod rest;
+mod reste;
 mod rom;
 mod scene_palettes;
 mod scenes;
@@ -71,6 +72,10 @@ fn main() {
         if wanted("data") {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
             data::extract(roms, &out.join("data"))?;
+        }
+        if wanted("data") {
+            // en dernier : tout ce que les autres fichiers ne décrivent pas, hors code 68000
+            reste::extract(roms, out)?;
         }
         std::fs::write(out.join("README.md"), README)?;
         Ok(())
@@ -146,6 +151,13 @@ coefficients des filtres.
 
 Tables lues par le jeu en Rust que les autres fichiers ne couvrent pas : scripts de tuiles et de palettes
 des SET, sous-objets des joueurs (arme et bouclier), palettes d'aura, piles des tâches, panoramique du son.
+
+## data/natives.json, data/reste.json
+
+Le reste de la région programme : `natives.json`, les zones mesurées que lisent les routines natives ;
+`reste.json`, tout ce qu'aucun autre fichier ne décrit, sauf le code 68000 exécuté (plages listées dans
+`code`), en blocs d'octets hexadécimaux. Avec eux, la région programme reconstruite égale la ROM hors code
+(docs/sans-rom.md « Couverture complète des données »).
 
 ## data/spawns.json
 
