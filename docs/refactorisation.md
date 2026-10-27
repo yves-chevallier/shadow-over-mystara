@@ -210,6 +210,8 @@ Restent : couches 35 % du temps avec rendu (lecture des tuiles, `pixels8`), spri
 et le `lookup` des natives pèsent moins de 5 % chacun : non traités, le gain ne vaut pas la complexité avant la
 disparition du chemin `call`.
 
+Validation complète (mode par défaut, 30 000 images) : 269/269 VALIDE.
+
 ## 5. Pilote : les pools d'objets, de bout en bout
 
 Chaîne choisie : l'allocation et la libération des objets (`0x225e`-`0x2408`, `0x21d8`-`0x2250`), appelées de partout
