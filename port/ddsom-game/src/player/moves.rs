@@ -26,6 +26,10 @@ mod rom {
     pub const LEAP_LANDING: u32 = 0xe774c;
     /// Son de la poussée.
     pub const PUSH_SOUND: u32 = 0xeae14;
+    /// Pose rare 0x26 : son, éclat, création d'un objet SET (D0.b = genre ; A1 et retenue en retour).
+    pub const CURSE_SOUND: u32 = 0xe24d8;
+    pub const CURSE_SHARD: u32 = 0xb97ba;
+    pub const CREATE_SET: u32 = 0xc8312;
     /// Numéro de terrain au point (D0, D1) -> D2.
     pub const TERRAIN_AT: u32 = 0x24b0;
 }
@@ -769,6 +773,131 @@ pub fn slow_end(g: &mut Ctx, p: Player) {
         v => unreachable!("0x36be0 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
+
+// ---- actions 0x26, 0x2c et 0x30 : poses rares ----------------------------------------------------
+
+/// Compte à rebours des poses rares (`+0x1e8`, octet) et numéro de la bouffée suivante.
+const RARE_TIMER: u32 = 0x1e8;
+
+/// 0x36b88 : action 0x26, l'arme maudite tombe (`checks::item_curse`, `common::curse_check`, `combat`) : pose 0x23
+/// et son 0xe24d8, puis 192 images d'animation ; à chaque geste (`+0x33`), éclat (0xb97ba) et objet SET 0x29
+/// (0xc8312) marqué en `+0x42`. À la fin, le ralentissement (`+0x66`) cesse et le joueur se remet debout.
+pub fn curse_drop(g: &mut Ctx, p: Player) {
+    if p.u8(g, Player::STEP) == 0 {
+        next_step(g, p);
+        p.set_u8(g, RARE_TIMER, 0xc0);
+        animation::start(g, p, 0x23);
+        g.rom(rom::CURSE_SOUND, p);
+        return;
+    }
+    animation::step(g, p);
+    let left = p.u8(g, RARE_TIMER).wrapping_sub(1);
+    p.set_u8(g, RARE_TIMER, left);
+    if left == 0 {
+        p.set_u8(g, Player::SLOW, 0);
+        to_stand(g, p);
+        return;
+    }
+    if p.u8(g, field::GESTURE) == 0 {
+        return;
+    }
+    p.set_u8(g, field::GESTURE, 0);
+    g.rom(rom::CURSE_SHARD, p);
+    crate::mem::set_low_byte(&mut g.c.d[0], 0x29);
+    g.rom(rom::CREATE_SET, p);
+    if g.c.sr & m68k::SR_C == 0 {
+        wr8(g.b, g.c.a[1] + 0x42, 1);
+    }
+}
+
+/// Bouffées de poussière de l'action 0x2c (0x36d2c, lignes de 4 mots : D0, D1, D2 de 0xb10c8, hauteur).
+const PUFFS: u32 = 0x36d2c;
+
+/// 0x36cb8 : action 0x2c (un effet la donne au joueur, `families/effects_f.rs`) : pose 0x35, six bouffées de
+/// poussière (0xb10c8) espacées de 6 images, puis 6 images d'attente avant de se remettre debout.
+pub fn dust_puffs(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            p.set_u8(g, RARE_TIMER, 0);
+            p.set_u8(g, Player::TIMER_6F, 1);
+            animation::start(g, p, 0x35);
+        }
+        2 => {
+            let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+            p.set_u8(g, Player::TIMER_6F, left);
+            if left != 0 {
+                return;
+            }
+            let row = PUFFS + 8 * p.u8(g, RARE_TIMER) as u32;
+            let height = g.prog16(row + 6);
+            for (r, off) in [(0, 0), (1, 2), (2, 4)] {
+                let v = g.prog16(row + off);
+                crate::mem::set_low_word(&mut g.c.d[r], v);
+            }
+            g.c.d[4] = height as u32;
+            crate::mem::set_low_word(&mut g.c.d[3], 0xffff);
+            g.rom(rom::DUST, p);
+            if g.c.sr & m68k::SR_C == 0 {
+                wr16(g.b, g.c.a[1] + Obj::Z, height);
+            }
+            p.set_u8(g, Player::TIMER_6F, 6);
+            let n = p.u8(g, RARE_TIMER).wrapping_add(1);
+            p.set_u8(g, RARE_TIMER, n);
+            if n == 6 {
+                next_step(g, p);
+                p.set_u8(g, Player::TIMER_6F, 6);
+            }
+        }
+        4 => {
+            let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+            p.set_u8(g, Player::TIMER_6F, left);
+            if left == 0 {
+                to_stand(g, p);
+            }
+        }
+        v => unreachable!("0x36cb8 : valeur {v:#x} hors de la table de sauts de l'original"),
+    }
+}
+
+/// 0x36f1a : action 0x30 (le joueur a frappé une caisse, `families/boxes.rs`) : pose 0x36 jusqu'à sa fin, puis le
+/// ralentissement (`+0x66`) cesse et le joueur se remet debout.
+pub fn box_recoil(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            animation::start(g, p, 0x36);
+        }
+        2 => {
+            if animation::step(g, p) {
+                p.set_u8(g, Player::SLOW, 0);
+                to_stand(g, p);
+            }
+        }
+        v => unreachable!("0x36f1a : valeur {v:#x} hors de la table de sauts de l'original"),
+    }
+}
+
+/// Natives des poses rares, pour la validation différentielle (`fuzz_player player_action`) : `actions::act` les
+/// appelle directement.
+macro_rules! rare_native {
+    ($name:ident, $entry:expr, $label:expr, $f:path) => {
+        pub const $name: crate::Native = crate::Native {
+            entry: $entry,
+            name: $label,
+            run: |c, b| {
+                let p = Player(c.a[0]);
+                $f(&mut Ctx::new(c, b), p);
+                crate::mem::rts(c, b)
+            },
+            touches_sound: false,
+            outputs: 0,
+        };
+    };
+}
+rare_native!(CURSE_DROP, 0x36b88, "player_action_26", curse_drop);
+rare_native!(DUST_PUFFS, 0x36cb8, "player_action_2c", dust_puffs);
+rare_native!(BOX_RECOIL, 0x36f1a, "player_action_30", box_recoil);
 
 // ---- action 0x2a (0x36c12) : saut sur place avec rebond (h) ---------------------------------------
 

@@ -16,10 +16,7 @@ use super::states::{action, state};
 use super::walk::{clamp_to_screen, move_xy, walk_speed};
 use super::{animation, ram, Ctx, Player};
 use crate::mem::wr8;
-use crate::machine::Machine;
 
-/// Table des gestionnaires d'actions (mots : décalages signés relatifs à la table).
-const ACTION_TABLE: u32 = 0x35586;
 
 
 /// 0x35620 : animation d'immobilité selon les modes (marche lente, monture, arme).
@@ -132,11 +129,21 @@ fn run_action(g: &mut Ctx, p: Player) {
         action::NO_TERRAIN_A => moves::exit_scene(g, p),
         action::NO_TERRAIN_C => moves::fall_in(g, p),
         action::SPELL_FIZZLE => moves::spell_fizzle(g, p),
-        other => {
-            let offset = g.prog16(ACTION_TABLE + other as u32) as i16 as i32;
-            g.c.d[0] = other as u32; // les gestionnaires comptent sur D0 = numéro d'action (octet haut nul)
-            g.rom(ACTION_TABLE.wrapping_add(offset as u32), p);
+        // poses rares : l'aiguillage d'origine leur laisse D0 = numéro d'action (octet haut nul), que les routines
+        // qu'elles appellent par adresse peuvent lire
+        0x26 => {
+            g.c.d[0] = 0x26;
+            moves::curse_drop(g, p)
         }
+        0x2c => {
+            g.c.d[0] = 0x2c;
+            moves::dust_puffs(g, p)
+        }
+        0x30 => {
+            g.c.d[0] = 0x30;
+            moves::box_recoil(g, p)
+        }
+        other => unreachable!("action {other:#x} hors de la table d'origine 0x35586 (26 actions paires)"),
     }
 }
 
