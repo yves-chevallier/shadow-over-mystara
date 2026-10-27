@@ -22,7 +22,6 @@ type Handler = fn(&mut Ctx, Player);
 mod rom {
     /// Son de la pose de victoire.
     pub const VICTORY_SOUND: u32 = 0xe24d8;
-    pub const TERRAIN: u32 = 0x33fe4;
     pub const INTRO_SOUND: u32 = 0xab708;
     /// Étincelles de la sortie (D0 = variante).
     pub const SPARKLES: u32 = 0xb378a;
@@ -457,7 +456,7 @@ const END_243D6: Steps = &[
     (0x24454, |g, p| {
         walk_out(g, p);
         wait_done(g, p);
-        g.rom(rom::TERRAIN, p);
+        crate::terrain::push_68k(g.c, g.b, p.obj());
     }),
 ];
 
@@ -686,7 +685,7 @@ const END_249EA: Steps = &[
         let x = p.u16(g, Obj::X).wrapping_add(4);
         p.set_u16(g, Obj::X, x);
         anim_step(g, p);
-        g.rom(rom::TERRAIN, p);
+        crate::terrain::push_68k(g.c, g.b, p.obj());
     }),
 ];
 
@@ -958,8 +957,7 @@ fn pose_with_shout(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, 0x33, 0);
     if matches!(p.class(g), 0 | 2) {
-        g.c.d[0] = 0;
-        g.rom(0x4fd2c, p);
+        super::spawn::swap(g, p, 0);
     }
 }
 

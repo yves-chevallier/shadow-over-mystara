@@ -25,8 +25,6 @@ type Handler = fn(&mut Ctx, Player);
 mod rom {
     pub const BEFORE_HURT_A: u32 = 0xe2100;
     pub const BEFORE_HURT_B: u32 = 0xdb6c0;
-    /// Collision avec le décor.
-    pub const TERRAIN: u32 = 0x33fe4;
     /// Effets de la mort (son, points).
     pub const DEATH_EFFECT: u32 = 0xe21a0;
     /// Poussière et son à l'atterrissage.
@@ -1518,7 +1516,7 @@ pub fn hurt(g: &mut Ctx, p: Player) {
     let action = p.u8(g, Player::ACTION);
     jump_table(g, p, HURT_ACTIONS, action);
     if ram::INPUT_RAW.get(g.b) == 0 {
-        g.rom(rom::TERRAIN, p);
+        crate::terrain::push_68k(g.c, g.b, p.obj());
     }
     clamp_to_screen(g.b, p);
 }
@@ -1530,7 +1528,7 @@ pub fn downed(g: &mut Ctx, p: Player) {
     p.set_u16(g, Player::DYING_TIMER, 0);
     let action = p.u8(g, Player::ACTION);
     jump_table(g, p, DOWN_ACTIONS, action);
-    g.rom(rom::TERRAIN, p);
+    crate::terrain::push_68k(g.c, g.b, p.obj());
     if p.u8(g, Player::ACTIVE) != 0 {
         ACTORS.reinsert(g.b, p.obj());
     }

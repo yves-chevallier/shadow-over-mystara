@@ -10,7 +10,7 @@
 //!
 //! Les routines d'origine qui créent tirs, effets et sons restent appelées telles quelles.
 
-use super::common::{self, call, field, next_step, rom as common_rom, set_forward_motion};
+use super::common::{self, field, next_step, rom as common_rom, set_forward_motion};
 use super::items;
 use super::super::spawn;
 use super::super::actions::{start_stand, to_stand};
@@ -23,8 +23,6 @@ use crate::player::ram;
 
 /// Routines d'origine appelées telles quelles : effets joueur et sons du nain.
 mod rom {
-    /// Secousse de l'écran à l'impact de la plongée (D0 = 0x10).
-    pub const SHAKE: u32 = 0x2824;
     /// Sons.
     pub const SOUND_STRIKE: u32 = 0xe1de0;
     pub const SOUND_CHARGE_A: u32 = 0xe792e;
@@ -232,7 +230,7 @@ fn dive(g: &mut Ctx, p: Player) {
         let vx = if p.u8(g, Player::FACING) == 0 { -0x200i16 } else { 0x200 };
         p.set_u16(g, Obj::VX, vx as u16);
     }
-    call(g, p, rom::SHAKE, &[(0, 0x10)]);
+    crate::camera_modes::start_shake(g.b, crate::camera_modes::shake::A, 0x10);
     g.rom(rom::SOUND_BOUNCE, p);
 }
 
@@ -615,7 +613,7 @@ fn spin_drop(g: &mut Ctx, p: Player) {
             } else {
                 next_step(g, p);
                 animation::start_plain(g, p, 0x24);
-                call(g, p, rom::SHAKE, &[(0, 8)]);
+                crate::camera_modes::start_shake(g.b, crate::camera_modes::shake::A, 8);
             }
         }
         6 => {

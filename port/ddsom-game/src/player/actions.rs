@@ -21,11 +21,6 @@ use crate::machine::Machine;
 /// Table des gestionnaires d'actions (mots : décalages signés relatifs à la table).
 const ACTION_TABLE: u32 = 0x35586;
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    /// Collision avec le décor (murs, trous).
-    pub const TERRAIN: u32 = 0x33fe4;
-}
 
 /// 0x35620 : animation d'immobilité selon les modes (marche lente, monture, arme).
 pub fn start_stand(g: &mut Ctx, p: Player) {
@@ -99,7 +94,7 @@ pub fn act(g: &mut Ctx, p: Player) {
         || (ram::SCENE.get(g.b) == 4 && current == action::GRAB)
         || current == action::NO_TERRAIN_C;
     if !skip_terrain {
-        g.rom(rom::TERRAIN, p);
+        crate::terrain::push_68k(g.c, g.b, p.obj());
     }
     clamp_to_screen(g.b, p);
 }

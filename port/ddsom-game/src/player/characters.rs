@@ -5,12 +5,8 @@
 //! d'origine, chaque `Slot` est une table de 12 adresses (une par valeur de `Player::CHARACTER`) ;
 //! `actions::act` appelle l'adresse de la table.
 //!
-//! Pour réécrire le code d'un personnage, deux possibilités équivalentes :
-//!
-//! 1. déclarer une `Native` à l'adresse d'entrée de la routine d'origine (voir `rom_address`) : toute
-//!    exécution de la routine d'origine, y compris par ce noyau, passe par elle ;
-//! 2. ajouter une ligne à `OVERRIDES` avec une fonction Rust qui reçoit le joueur : le noyau l'appelle
-//!    à la place de la routine d'origine, sans passer par les registres du 68000.
+//! `run` aiguille vers la fonction Rust du personnage (`routine`) ; les natives (`action_native!`) ne servent plus
+//! qu'aux appels par adresse restants (fuzz, `DDSOM_CHECK`).
 //!
 //! Les fonctions communes que les personnages réutilisent sont publiques : `checks::turn_check`,
 //! `attack_button`, `jump_button`, `actions::to_stand`, `walk::walk_speed`, `walk::move_xy`,
@@ -46,7 +42,6 @@ pub mod magic_user;
 pub mod thief;
 
 use super::{Ctx, Player};
-use crate::machine::Machine;
 
 /// Une routine Rust d'un personnage : s'exécute pour une image du joueur.
 pub type CharacterFn = fn(&mut Ctx, Player);
@@ -66,36 +61,47 @@ pub enum Slot {
     Action12,
 }
 
-impl Slot {
-    /// Table d'origine des adresses (un long par valeur de `Player::CHARACTER`), dans le code.
-    pub const fn table(self) -> u32 {
-        match self {
-            Slot::Jump => 0x35918,
-            Slot::Attack => 0x35972,
-            Slot::Special => 0x359cc,
-            Slot::Action10 => 0x35a0a,
-            Slot::Action12 => 0x35a48,
-        }
+/// Routine du personnage `character` (`Player::CHARACTER`) pour l'action `slot` : tables d'origine 0x35918 (saut),
+/// 0x35972 (attaque), 0x359cc (spéciale), 0x35a0a (action 0x10) et 0x35a48 (action 0x12), une adresse par valeur
+/// de `CHARACTER` ; les deux variantes d'un personnage ont le même code.
+pub fn routine(slot: Slot, character: u8) -> CharacterFn {
+    use super::moves;
+    use Slot::*;
+    match (character >> 1, slot) {
+        (0, Jump) => fighter::jump,
+        (0, Attack) => fighter::attack,
+        (0, Special) => fighter::special,
+        (1, Jump) => cleric::jump,
+        (1, Attack) => cleric::attack,
+        (1, Special) => cleric::special,
+        (2, Jump) => elf::jump,
+        (2, Attack) => elf::attack,
+        (2, Special) => elf::special,
+        (3, Jump) => dwarf::jump,
+        (3, Attack) => dwarf::attack,
+        (3, Special) => dwarf::special,
+        (3, Action12) => dwarf::roll,
+        (4, Jump) => magic_user::jump,
+        (4, Attack) => magic_user::attack,
+        (4, Special) => magic_user::special,
+        (4, Action10) => magic_user::dash,
+        (4, Action12) => moves::hop_back,
+        (5, Jump) => thief::jump,
+        (5, Attack) => thief::attack,
+        (5, Special) => thief::special,
+        (5, Action10) => thief::dash,
+        (5, Action12) => thief::roll,
+        (0..=3, Action10) => common::dash,
+        (0..=2, Action12) => moves::leap_attack,
+        (class, _) => unreachable!("personnage {character} (classe {class}) hors des tables 0x35918-0x35a48"),
     }
-}
-
-/// Remplacements Rust du code des personnages : (valeur de `Player::CHARACTER`, action, routine).
-/// À compléter par les agents qui réécrivent les personnages ; la routine d'origine n'est plus
-/// appelée pour ces couples.
-pub const OVERRIDES: &[(u8, Slot, CharacterFn)] = &[];
-
-/// Adresse de la routine d'origine du personnage `character` pour l'action `slot`.
-pub fn rom_address(g: &mut Ctx, slot: Slot, character: u8) -> u32 {
-    g.prog32(slot.table() + 4 * character as u32)
 }
 
 /// Exécute l'action `slot` du personnage du joueur `p`.
 pub fn run(g: &mut Ctx, p: Player, slot: Slot) {
     let character = p.u8(g, Player::CHARACTER);
-    if let Some(&(_, _, f)) = OVERRIDES.iter().find(|o| o.0 == character && o.1 == slot) {
-        return f(g, p);
-    }
-    let target = rom_address(g, slot, character);
-    g.c.d[0] = p.u8(g, Player::ACTION) as u32; // D0 = numéro d'action, octet haut nul (comme l'aiguillage d'origine)
-    g.rom(target, p);
+    // D0 = numéro d'action, octet haut nul, comme l'aiguillage d'origine : le pas d'animation fidèle aux registres
+    // (`common::step_keeping_regs`) et les créateurs qui suivent peuvent encore le lire
+    g.c.d[0] = p.u8(g, Player::ACTION) as u32;
+    routine(slot, character)(g, p)
 }

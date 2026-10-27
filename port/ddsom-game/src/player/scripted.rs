@@ -27,15 +27,11 @@ type Handler = fn(&mut Ctx, Player);
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
-    /// Mise en place du joueur à l'écran après une résurrection.
-    pub const PLACE: u32 = 0x3668;
     pub const REVIVE_SETUP: u32 = 0x4c930;
     pub const REVIVE_SOUND: u32 = 0xe24d8;
     pub const FADE: u32 = 0x1686;
-    pub const TERRAIN: u32 = 0x33fe4;
     pub const INTRO_SOUND: u32 = 0xab708;
     pub const INTRO_ACTION: u32 = 0xe1330;
-    pub const SPECIAL_VOICE: u32 = 0x4fd2c;
 }
 
 /// Tables du code.
@@ -321,8 +317,7 @@ fn scene1_pose(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x33, 0);
     let class = p.class(g);
     if class == 0 || class == 2 {
-        g.c.d[0] = 0;
-        g.rom(rom::SPECIAL_VOICE, p);
+        super::spawn::swap(g, p, 0);
     }
 }
 
@@ -406,8 +401,7 @@ fn walk_in_pose(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x33, 0);
     let class = p.class(g);
     if class == 0 || class == 2 {
-        g.c.d[0] = 0;
-        g.rom(rom::SPECIAL_VOICE, p);
+        super::spawn::swap(g, p, 0);
     }
 }
 
@@ -447,14 +441,14 @@ fn revive_start(g: &mut Ctx, p: Player) {
     for field in [Player::SLOW, 0x15c, Player::POWERUP, Player::AURA, Player::AURA_B, Player::AURA_C] {
         p.set_u8(g, field, 0);
     }
-    g.rom(rom::PLACE, p);
+    crate::placement::place_on_free_ground_68k(g.c, g.b, p.obj());
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0xd);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
     g.rom(rom::FADE, p);
     crate::objects::rank::raise(g.b);
-    g.rom(rom::TERRAIN, p);
+    crate::terrain::push_68k(g.c, g.b, p.obj());
 }
 
 /// 0x23c16 : chute jusqu'au sol.
@@ -504,7 +498,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::FLAGS, flags);
     p.set_u8(g, Player::FACING, 0x20);
     p.set_u8(g, 0x68, 0);
-    g.rom(rom::PLACE, p);
+    crate::placement::place_on_free_ground_68k(g.c, g.b, p.obj());
     p.set_u32(g, Obj::Z, 0);
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0x35);
@@ -607,7 +601,7 @@ fn thrown_walk(g: &mut Ctx, p: Player) {
     cov!();
     let x = p.u16(g, Obj::X).wrapping_add(2);
     p.set_u16(g, Obj::X, x);
-    if g.rom(rom::TERRAIN, p) {
+    if crate::terrain::push_68k(g.c, g.b, p.obj()) {
         animation::step(g, p);
     } else {
         next_step(g, p);

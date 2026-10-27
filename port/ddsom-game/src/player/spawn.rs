@@ -69,10 +69,12 @@ mod kind {
     pub const WITCH: u8 = 0x12;
 }
 
-/// Réserve un emplacement dans `pool` et l'active avec le genre `kind`.
+/// Réserve un emplacement dans `pool` et l'active avec le genre `kind`. Les créateurs sont des natives appelées par
+/// adresse (tables des sorts, `g.rom`) : l'allocation garde ses registres (A1 = l'objet, ou le reste laissé par un
+/// échec ; retenue), que relisent les appelants (`items::lightning`, `items::wall`) et les drapeaux de sortie.
 fn create(g: &mut Ctx, _p: Player, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     cov!();
-    let o = pool.alloc(g.b)?;
+    let o = pool.alloc_68k(g.c, g.b)?;
     o.set_u8(g.b, Obj::ACTIVE, 1);
     o.set_u8(g.b, Obj::KIND, kind);
     Some(o)

@@ -24,18 +24,10 @@ use super::super::{animation, Ctx, Player};
 pub mod rom {
     /// Son d'un objet utilisé.
     pub const SOUND_ITEM: u32 = 0xe2430;
-    /// Foudre : choix de la cible (A1 en retour, Z levé si aucune).
-    pub const LIGHTNING_TARGET: u32 = 0x4f004;
-    /// Mur : choix de la cible.
-    pub const WALL_TARGET: u32 = 0x50324;
     /// Éclairs de l'écran (palettes) : foudre, fin, feu.
     pub const FLASH_LIGHTNING: u32 = 0x1ab56;
     pub const FLASH_END: u32 = 0x1abe0;
     pub const FLASH_FIRE: u32 = 0x1ab3c;
-    /// Palettes du joueur : lumière, normale, rouge.
-    pub const PALETTE_LIGHT: u32 = 0x3af8;
-    pub const PALETTE_NORMAL: u32 = 0x3afe;
-    pub const PALETTE_RED: u32 = 0x3b14;
     /// Fin des auras après la magie rouge.
     pub const SPELL_RESET_AURA: u32 = 0x37882;
 }
@@ -139,11 +131,11 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                let target_found = !g.rom(rom::LIGHTNING_TARGET, p);
-                if target_found {
-                    p.set_u16(g, style.target, g.c.a[1] as u16);
-                } else {
-                    to_stand(g, p);
+                match spawn::lightning_target(g, p, g.c.d[0] as u8) {
+                    Some(target) => p.set_u16(g, style.target, target.word()),
+                    None => {
+                        to_stand(g, p);
+                    }
                 }
             }
         }
@@ -207,7 +199,10 @@ pub fn wall(g: &mut Ctx, p: Player, style: Style) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                let target_found = !g.rom(rom::WALL_TARGET, p);
+                spawn::wall_target(g, p);
+                // Glitch d'origine : l'appelant teste Z, celui de l'`addq` du compteur de murs, ou celui de l'allocation
+                // qui échoue (Z nul) : pool plein, il croit la cible créée et retient l'A1 laissé par l'allocation.
+                let target_found = g.c.sr & m68k::SR_Z == 0;
                 if target_found {
                     p.set_u16(g, style.target, g.c.a[1] as u16);
                 } else {
@@ -339,7 +334,7 @@ pub const CAST_14: Cast = Cast {
     frames: 0x3c,
     fire: |g, p| {
         spawn::fireball(g, p);
-        g.rom(rom::PALETTE_LIGHT, p);
+        crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
     },
     ..BASE
 };
@@ -358,7 +353,7 @@ pub const CAST_15: Cast = Cast {
 pub fn ring_fire(g: &mut Ctx, p: Player) {
     cov!();
     spawn::ring(g, p, 1);
-    g.rom(rom::PALETTE_RED, p);
+    crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::RED);
 }
 
 /// Aura rouge posée sur le lanceur pour `duration` images ; un accessoire (`+0x167` = 2) la renforce.
@@ -387,7 +382,7 @@ pub const CAST_16: Cast = Cast {
 pub const CAST_17: Cast = Cast {
     fire: |g, p| {
         spawn::beam_cast(g, p, 1);
-        g.rom(rom::PALETTE_LIGHT, p);
+        crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
     },
     ..BASE
 };
@@ -408,7 +403,7 @@ pub const CAST_19: Cast = Cast {
     every_frame: common::heal_flicker,
     fire: |g, p| {
         spawn::potion(g, p);
-        g.rom(rom::PALETTE_NORMAL, p);
+        crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
     },
     ..BASE
 };

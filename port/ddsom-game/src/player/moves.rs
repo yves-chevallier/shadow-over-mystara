@@ -7,6 +7,7 @@
 
 use super::actions::to_stand;
 use super::checks::{attack_button, item_curse, jump_button};
+use super::spawn::Thrown;
 use super::states::State;
 use super::walk::{clamp_x, crawl_speed, move_x, move_xy, move_xyz, move_xz, move_z, run_speed, walk_speed};
 use super::{animation, ram, Ctx, Player};
@@ -23,8 +24,6 @@ mod rom {
     /// Sons de l'attaque sautée (départ, atterrissage).
     pub const LEAP_SOUND: u32 = 0xe7622;
     pub const LEAP_LANDING: u32 = 0xe774c;
-    /// Effet de joueur lancé par l'événement d'animation `+0x46` (D0 = numéro).
-    pub const ANIM_EVENT: u32 = 0x4c58e;
     /// Son de la poussée.
     pub const PUSH_SOUND: u32 = 0xeae14;
     /// Numéro de terrain au point (D0, D1) -> D2.
@@ -541,8 +540,7 @@ fn climb_attack(g: &mut Ctx, p: Player) {
     let event = p.u8(g, field::ANIM_EVENT);
     if event != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.c.d[0] = event as u32;
-        g.rom(rom::ANIM_EVENT, p);
+        super::spawn::weapon_trail(g, p, event);
     }
 }
 
@@ -558,13 +556,13 @@ fn climb_spell(g: &mut Ctx, p: Player) {
         return;
     }
     p.set_u8(g, field::GESTURE, 0);
-    let spell = match p.u8(g, climb_field::HELD_ITEM) {
-        0x24 => 0x51f6a,
-        0x25 => 0x51fb6,
-        0x26 => 0x52002,
+    let shot = match p.u8(g, climb_field::HELD_ITEM) {
+        0x24 => Thrown::C,
+        0x25 => Thrown::D,
+        0x26 => Thrown::E,
         _ => return,
     };
-    g.rom(spell, p);
+    super::spawn::thrown(g, p, shot);
 }
 
 // ---- sortie (action 0x20, 0x3632c) (h) ----------------------------------------------------------
@@ -620,7 +618,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
                 let v = p.u16(g, Obj::VX).wrapping_neg();
                 p.set_u16(g, Obj::VX, v);
             }
-            g.rom_d6(0x2cf0, p, 2);
+            crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
         }
         0xe => {
             move_xy(g, p);
@@ -969,8 +967,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
     let event = p.u8(g, field::ANIM_EVENT);
     if event != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.c.d[0] = event as u32;
-        g.rom(rom::ANIM_EVENT, p);
+        super::spawn::weapon_trail(g, p, event);
     }
 }
 
@@ -1080,7 +1077,7 @@ pub fn parry(g: &mut Ctx, p: Player) {
         2 => parry_slide(g, p),
         v => unreachable!("0x39ff0 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
-    g.rom(0x33fe4, p);
+    crate::terrain::push_68k(g.c, g.b, p.obj());
     super::walk::clamp_to_screen(g.b, p);
 }
 
