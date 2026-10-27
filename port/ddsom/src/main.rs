@@ -15,6 +15,8 @@
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter ;
 //! à changer dans touches.cfg (`touches.rs`), manettes Xbox comprises sous Windows (`manette.rs`).
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
+//! `DDSOM_ENREGISTRE=partie.txt` enregistre les entrées en scénario (et l'EEPROM de départ dans
+//! `partie.txt.eeprom`) : `validate <roms> partie.txt.eeprom partie.txt <images>` rejoue la partie.
 
 mod audio;
 mod manette;
@@ -99,6 +101,14 @@ fn main() {
     let frame_time = Duration::from_secs_f64(1.0 / FRAME_HZ);
     let mut next = Instant::now();
     let mut paused = false;
+    let mut enregistreur = std::env::var_os("DDSOM_ENREGISTRE").map(|f| {
+        let f = PathBuf::from(f);
+        let mut ee = f.clone().into_os_string();
+        ee.push(".eeprom");
+        std::fs::write(&ee, m.bus.eeprom.to_bytes())
+            .and_then(|()| ddsom_game::scenario::Enregistreur::cree(&f))
+            .unwrap_or_else(|e| panic!("enregistrement dans {} : {e}", f.display()))
+    });
     let mut buf = vec![0u32; 384 * 224];
 
     while win.is_open() {
@@ -117,6 +127,12 @@ fn main() {
         }
         m.bus.inputs.in0 = t.in0;
         m.bus.inputs.in2 = t.in2;
+        if let Some(e) = &mut enregistreur {
+            if let Err(err) = e.image(&m) {
+                eprintln!("Enregistrement arrêté : {err}");
+                enregistreur = None;
+            }
+        }
         let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
             Ok(img) => img,
             // sans 68000 : arrêt sur une adresse sans routine Rust (diagnostic déjà affiché par la panique)

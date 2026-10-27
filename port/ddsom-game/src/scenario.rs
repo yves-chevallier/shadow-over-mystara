@@ -97,6 +97,57 @@ pub fn set_input(m: &mut cps2::Machine, name: &str, down: bool) -> bool {
     }
 }
 
+/// Enregistre les entrées d'une partie en scénario : une ligne par entrée qui change, rejouable par `validate`.
+pub struct Enregistreur {
+    out: std::fs::File,
+    entrees: Vec<(String, u8, u16)>,
+    avant: [u16; 3],
+    image: usize,
+}
+
+impl Enregistreur {
+    pub fn cree(path: &Path) -> io::Result<Self> {
+        let mut entrees = Vec::new();
+        for p in 1..=4 {
+            for what in ["Right", "Left", "Down", "Up", "Button 1", "Button 2", "Button 3", "Button 4"] {
+                entrees.push(format!("P{p} {what}"));
+            }
+        }
+        entrees.extend(SYSTEME.map(String::from));
+        let entrees = entrees.into_iter().filter_map(|n| input_bit(&n).map(|(port, bit)| (n, port, bit))).collect();
+        Ok(Enregistreur { out: std::fs::File::create(path)?, entrees, avant: [0xffff; 3], image: 0 })
+    }
+
+    /// À appeler juste avant chaque image exécutée, entrées posées : `apply` les rejoue au même instant.
+    pub fn image(&mut self, m: &cps2::Machine) -> io::Result<()> {
+        use std::io::Write;
+        let ports = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
+        let f = self.image.saturating_sub(1);
+        for (nom, port, bit) in &self.entrees {
+            let (a, b) = (self.avant[*port as usize] & bit, ports[*port as usize] & bit);
+            if a != b {
+                writeln!(self.out, "{f} {nom} {}", (b == 0) as u8)?;
+            }
+        }
+        self.avant = ports;
+        self.image += 1;
+        Ok(())
+    }
+}
+
+const SYSTEME: [&str; 10] = [
+    "Coin 1",
+    "Coin 2",
+    "Coin 3",
+    "Coin 4",
+    "1 Player Start",
+    "2 Players Start",
+    "3 Players Start",
+    "4 Players Start",
+    "Service 1",
+    "Service Mode",
+];
+
 /// Nom d'entrée MAME -> (port, bit) pour cps2_4p4b (actif à 0).
 fn input_bit(name: &str) -> Option<(u8, u16)> {
     if let Some(rest) = name.strip_prefix('P') {
