@@ -84,8 +84,6 @@ pub mod sub {
     pub const PALETTES_BLACK: u32 = 0x168c;
     /// Palettes : tout blanc (OU 0xf000).
     pub const PALETTES_WHITE: u32 = 0x1686;
-    /// Création d'une tâche : D0 = numéro d'emplacement × 0x10, A0 = adresse d'entrée.
-    pub const TASK_CREATE: u32 = 0x9b6;
     /// Tâche de fondu de palette vers la cible (emplacement 0x10).
     pub const FADE_TASK: u32 = 0x14ba;
     /// Tâche de fondu à 1 niveau par pas (emplacement 0x10).
@@ -230,7 +228,7 @@ impl<'a> Ctx<'a> {
     fn start_fade_task(&mut self, entry: u32) {
         self.c.a[0] = entry;
         self.c.d[0] = 0x10;
-        self.call(sub::TASK_CREATE);
+        crate::kernel::creer_tache(self.b, 0x10, entry);
     }
 
     /// Crée un objet (allocateur `alloc`) actif, de type `kind` ; l'original écrit sans tester la retenue.
@@ -289,7 +287,6 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
     NATIVES
         .iter()
         .chain(exit::NATIVES)
-        .chain(exit::DISPATCH_TAILS)
         .chain(tally::NATIVES)
         .chain(bonus::NATIVES)
         .chain(characters::NATIVES)

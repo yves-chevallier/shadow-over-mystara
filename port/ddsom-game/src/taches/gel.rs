@@ -7,15 +7,13 @@
 //! processeur surcadencé ([`attente_vide`] la reconnaît).
 //!
 //! Le pas est le même à l'entrée (`0xee080`, tâche neuve) et après chacune des deux cessions (`0xee0fa`,
-//! `0xee16a` : l'original reboucle par un `bra 0xee080`).
+//! `0xee16a` : l'original reboucle par un `bra 0xee080`) : trois étapes ([`Etape`]), un seul pas.
 
 use super::table::{enregistrement, table, Etat, Reprise, Table, EMPLACEMENTS};
 use super::{ceder, Attente};
 use crate::mem::{set_low_byte, set_low_word, A5};
 use crate::modes::Flow;
-use crate::resume;
 use crate::scene::Ctx;
-use crate::Native;
 
 /// Variables de la RAM de travail (décalages depuis A5).
 mod var {
@@ -37,9 +35,16 @@ const BUTTON_MASK: u8 = 0x16;
 /// Bit du mot de réglages qui désigne la marche normale.
 const NORMAL: u16 = 0x80;
 
-/// Adresses de reprise : entrée de la tâche, et retours des deux appels de cession.
-pub const ENTRY: u32 = 0xee080;
-pub const AFTER_YIELD: [u32; 2] = [0xee0fa, 0xee16a];
+crate::etapes! {
+    /// Étapes de la tâche : son entrée, et les retours de ses deux cessions.
+    pub enum Etape {
+        Entree = 0xee080 => step,
+        /// Après une cession sans effet.
+        ApresCession = 0xee0fa => step,
+        /// Après une cession qui a décompté la tâche principale.
+        ApresDecompte = 0xee16a => step,
+    }
+}
 
 /// Un pas : l'effet du passage, puis la cession.
 fn step(x: &mut Ctx) -> Flow {
@@ -47,11 +52,11 @@ fn step(x: &mut Ctx) -> Flow {
     set_low_word(&mut x.c.d[0], normal);
     let resume = if normal == 0 {
         wake_all(x);
-        AFTER_YIELD[0]
+        Etape::ApresCession
     } else if x.v8(var::SCREEN) != 0 && x.v8(var::GAME) != 0 {
         fast_forward(x)
     } else {
-        AFTER_YIELD[0]
+        Etape::ApresCession
     };
     ceder(x, Attente::Prete, resume)
 }
@@ -67,8 +72,8 @@ fn wake_all(x: &mut Ctx) {
 }
 
 /// `0xee0fc` : si un joueur présent presse un bouton, la tâche principale perd une image d'attente. Rend
-/// l'adresse de reprise de la cession qui suit.
-fn fast_forward(x: &mut Ctx) -> u32 {
+/// l'étape qui suit la cession.
+fn fast_forward(x: &mut Ctx) -> Etape {
     x.c.d[0] = 0;
     for (player, present) in var::PRESENT.into_iter().enumerate() {
         if x.v8(present) != 0 {
@@ -79,17 +84,11 @@ fn fast_forward(x: &mut Ctx) -> u32 {
         }
     }
     if x.c.d[0] as u8 == 0 {
-        return AFTER_YIELD[0];
+        return Etape::ApresCession;
     }
     table(x.b).decompter(MAIN);
-    AFTER_YIELD[1]
+    Etape::ApresDecompte
 }
-
-resume!(R_ENTRY, ENTRY, step);
-resume!(R_AFTER_YIELD_A, AFTER_YIELD[0], step);
-resume!(R_AFTER_YIELD_B, AFTER_YIELD[1], step);
-
-pub const NATIVES: &[Native] = &[R_ENTRY, R_AFTER_YIELD_A, R_AFTER_YIELD_B];
 
 /// L'ordonnanceur tourne à vide : la tâche du gel est la seule prête, elle vient de céder la main, et son prochain
 /// pas ne ferait rien. L'état du jeu ne peut plus changer avant la prochaine interruption : `idle` (`lib.rs`) peut
@@ -101,7 +100,7 @@ pub fn attente_vide(tasks: &Table, ram: &[u16]) -> bool {
     }
     // elle a cédé par `jsr 0xa86` depuis l'une de ses deux cessions, et c'est la dernière tâche lancée
     // (l'état de l'ordonnanceur est alors celui de chaque passage suivant)
-    let ceded = matches!(tasks.emplacements[SLOT].reprise, Reprise::Cession(c) if AFTER_YIELD.contains(&c.pc));
+    let ceded = matches!(tasks.emplacements[SLOT].reprise, Reprise::Etape(super::Etape::Gel(Etape::ApresCession | Etape::ApresDecompte), _));
     let main_waiting = tasks.emplacements[MAIN].etat == Etat::Attend;
     ceded && tasks.courante == SLOT && !step_would_act(ram, main_waiting)
 }
@@ -116,7 +115,8 @@ pub fn attente_vide_origine(ram: &[u16]) -> bool {
     if !ready(SLOT) || (0..EMPLACEMENTS).any(|slot| slot != SLOT && ready(slot)) {
         return false;
     }
-    if long(gel + 4) != 0xa8c || !AFTER_YIELD.contains(&long(long(gel + 8) + 60)) || long(0xff_0056) != gel {
+    let after_yield = [Etape::ApresCession.adresse(), Etape::ApresDecompte.adresse()];
+    if long(gel + 4) != 0xa8c || !after_yield.contains(&long(long(gel + 8) + 60)) || long(0xff_0056) != gel {
         return false;
     }
     let main_waiting = byte(enregistrement(MAIN)) == Etat::Attend.octet();

@@ -13,7 +13,7 @@
 use super::Ctx;
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
-use crate::{resume, Native};
+use crate::Native;
 use crate::objects::{pools, Obj};
 
 /// Bloc de la boutique.
@@ -59,9 +59,6 @@ mod rom {
 }
 
 mod sub {
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const WAIT_ONE: u32 = 0xb64;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const MESSAGE: u32 = 0xc8312;
     /// Chemin d'erreur de l'original (`tst.w 1(A5)` : erreur d'adresse) quand un pool est plein.
     pub const FULL: u32 = 0xf7dfa;
@@ -139,80 +136,131 @@ fn open(x: &mut Ctx) -> Flow {
     x.set_v8(0x42, 2);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    x.tail(sub::FADE_OUT, at::OPEN_FADED)
+    x.sous_programme(crate::taches::fondu::descente, Etape::OpenFaded)
 }
 
-// Ouverture : numéro de boutique, tâche des portraits, musique, objets de la boutique et des joueurs, puis la
-// scène de la boutique (69 + numéro) est chargée et son script d'apparition relancé.
-resume!(SHOP_OPEN_FADED, at::OPEN_FADED, |x| {
-    crate::objects::lists::unlink_all_68k(x.c, x.b);
-    x.call(0x2062);
-    let scene = x.v8(0x34) as u32;
-    let shop = rd8(x.b, rom::SHOP_OF_SCENE + scene);
-    set_b8(x, f::SHOP, shop);
-    let a0 = x.c.a[0];
-    x.c.a[0] = PORTRAITS_TASK;
-    x.c.d[0] = x.c.d[0] & !0xffff | 192;
-    x.call(sub::TASK_CREATE);
-    x.c.a[0] = a0;
-    x.set_v8(0x4e, (scene == 5) as u8);
-    if b8(x, f::REOPENED) == 0 {
-        set_b8(x, f::RETURN_SCENE, scene as u8);
+crate::etapes! {
+    /// Étapes (points de reprise) de la boutique, et la tâche des portraits.
+    pub enum Etape {
+        /// Entrée de la tâche des portraits.
+        Portraits = PORTRAITS_TASK => portraits,
+        /// Ouverture : numéro de boutique, tâche des portraits, musique, objets de la boutique et des joueurs, puis la
+        /// scène de la boutique (69 + numéro) est chargée et son script d'apparition relancé.
+        OpenFaded = at::OPEN_FADED => |x| {
+            crate::objects::lists::unlink_all_68k(x.c, x.b);
+            x.call(0x2062);
+            let scene = x.v8(0x34) as u32;
+            let shop = rd8(x.b, rom::SHOP_OF_SCENE + scene);
+            set_b8(x, f::SHOP, shop);
+            let a0 = x.c.a[0];
+            x.c.a[0] = PORTRAITS_TASK;
+            x.c.d[0] = x.c.d[0] & !0xffff | 192;
+            crate::kernel::creer_tache(x.b, 192, PORTRAITS_TASK);
+            x.c.a[0] = a0;
+            x.set_v8(0x4e, (scene == 5) as u8);
+            if b8(x, f::REOPENED) == 0 {
+                set_b8(x, f::RETURN_SCENE, scene as u8);
+            }
+            let index = rd8(x.b, rom::MUSIC_INDEX + shop as u32) as u32;
+            x.c.d[0] = index;
+            let music = rd32(x.b, rom::MUSIC + index);
+            x.c.a[1] = music;
+            x.call(music);
+            set_b16(x, f::STATE, 0x200);
+            set_b8(x, f::SHOPPERS, 0);
+            set_b8(x, f::TALKING, 0);
+            set_b16(x, f::PENDING, 0);
+            set_b16(x, f::NEXT_MESSAGE, 0);
+            set_b16(x, f::TIMER, 1);
+            x.set_v8(0x3c, 4);
+            set_b16(x, 0x1e, 0);
+            set_b16(x, 0x20, 0);
+            x.set_v8(0x3d, 0);
+            x.call(0xca8);
+            crate::hud::forget_displayed(x.b);
+            let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
+            wr8(x.b, o, 1);
+            wr8(x.b, o + 2, 13);
+            for k in 0..4u32 {
+                let p = super::PLAYERS + k * super::PLAYER_STRIDE;
+                let slot = BLOCK + f::PLAYER_OBJECTS + 2 * k;
+                wr16(x.b, slot, 0);
+                if rd8(x.b, p) == 0 || rd16(x.b, p + 0x62) == 0 {
+                    continue;
+                }
+                x.c.a[2] = p;
+                let Some(Obj(e)) = pools::EFFCT.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
+                wr8(x.b, e, 1);
+                wr8(x.b, e + 2, 20);
+                let (variant, character) = (rd8(x.b, p + 3), rd8(x.b, p + 2));
+                wr8(x.b, e + 3, variant);
+                wr8(x.b, e + 0x2f, character);
+                wr16(x.b, e + 0x50, p as u16);
+                wr16(x.b, slot, e as u16);
+                add_b8(x, f::SHOPPERS, 1);
+            }
+            x.c.d[7] = x.c.d[7] & !0xffff | 0xffff;
+            let shop_scene = b8(x, f::SHOP).wrapping_add(69);
+            x.set_v8(0x34, shop_scene);
+            x.call(0x1a296);
+            x.set_v8(0x48e, 15);
+            x.call(0x168c);
+            let saved = (x.c.d[7], x.c.a[0]);
+            x.call(0x33aa6);
+            (x.c.d[7], x.c.a[0]) = saved;
+            x.c.d[0] = x.c.d[0] & !0xffff | 0x12c0;
+            x.set_v16(0x14, 0);
+            x.call(0xbc6);
+            x.call(0xf2e56);
+            x.call(0xf2e5c);
+            Flow::Done
+        },
+        LeaveFaded = at::LEAVE_FADED => |x| {
+            x.call(0xc58);
+            let a0 = x.c.a[0];
+            crate::objects::lists::unlink_all_68k(x.c, x.b);
+            x.c.a[0] = a0;
+            x.set_v8(0x3d, 1);
+            crate::taches::une_image(x, Etape::LeaveWaited)
+        },
+        /// Retour de la boutique : couches effacées, état suivant de la séquence, scène de retour.
+        LeaveWaited = at::LEAVE_WAITED => |x| {
+            for r in [0xca8, 0xcc8, 0xce8] {
+                x.call(r);
+            }
+            let a0 = x.c.a[0];
+            let s = rd8(x.b, a0 + 2).wrapping_add(4);
+            wr8(x.b, a0 + 2, s);
+            x.set_v8(0x3c, 0xff);
+            x.set_v8(0x59, 0);
+            x.and16(0x12, 0xfffe);
+            let layers = x.v16(0x12);
+            wr16(x.b, 0x804122, layers);
+            let shop = rd8(x.b, BLOCK + f::SHOP) as u32;
+            x.c.d[0] = shop;
+            x.c.a[1] = rom::NEXT_SCENE;
+            let next = rd8(x.b, rom::NEXT_SCENE + shop);
+            x.set_v8(0x34, next);
+            if next == 0 {
+                let back = rd8(x.b, BLOCK + f::RETURN_SCENE);
+                x.set_v8(0x34, back);
+            }
+            Flow::Done
+        },
+        ChainFaded = at::CHAIN_FADED => |x| {
+            x.c.d[0] = x.c.d[0] & !0xffff | 0x12c0;
+            x.set_v16(0x14, 0);
+            x.call(0xbc6);
+            Flow::Done
+        },
+        ReopenWaited = at::REOPEN_WAITED => |x| {
+            for r in [0x2134, 0x21bc, 0x20ae, 0x2150, 0xca8, 0xcc8, 0xce8] {
+                x.call(r);
+            }
+            Flow::Done
+        },
     }
-    let index = rd8(x.b, rom::MUSIC_INDEX + shop as u32) as u32;
-    x.c.d[0] = index;
-    let music = rd32(x.b, rom::MUSIC + index);
-    x.c.a[1] = music;
-    x.call(music);
-    set_b16(x, f::STATE, 0x200);
-    set_b8(x, f::SHOPPERS, 0);
-    set_b8(x, f::TALKING, 0);
-    set_b16(x, f::PENDING, 0);
-    set_b16(x, f::NEXT_MESSAGE, 0);
-    set_b16(x, f::TIMER, 1);
-    x.set_v8(0x3c, 4);
-    set_b16(x, 0x1e, 0);
-    set_b16(x, 0x20, 0);
-    x.set_v8(0x3d, 0);
-    x.call(0xca8);
-    crate::hud::forget_displayed(x.b);
-    let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
-    wr8(x.b, o, 1);
-    wr8(x.b, o + 2, 13);
-    for k in 0..4u32 {
-        let p = super::PLAYERS + k * super::PLAYER_STRIDE;
-        let slot = BLOCK + f::PLAYER_OBJECTS + 2 * k;
-        wr16(x.b, slot, 0);
-        if rd8(x.b, p) == 0 || rd16(x.b, p + 0x62) == 0 {
-            continue;
-        }
-        x.c.a[2] = p;
-        let Some(Obj(e)) = pools::EFFCT.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
-        wr8(x.b, e, 1);
-        wr8(x.b, e + 2, 20);
-        let (variant, character) = (rd8(x.b, p + 3), rd8(x.b, p + 2));
-        wr8(x.b, e + 3, variant);
-        wr8(x.b, e + 0x2f, character);
-        wr16(x.b, e + 0x50, p as u16);
-        wr16(x.b, slot, e as u16);
-        add_b8(x, f::SHOPPERS, 1);
-    }
-    x.c.d[7] = x.c.d[7] & !0xffff | 0xffff;
-    let shop_scene = b8(x, f::SHOP).wrapping_add(69);
-    x.set_v8(0x34, shop_scene);
-    x.call(0x1a296);
-    x.set_v8(0x48e, 15);
-    x.call(0x168c);
-    let saved = (x.c.d[7], x.c.a[0]);
-    x.call(0x33aa6);
-    (x.c.d[7], x.c.a[0]) = saved;
-    x.c.d[0] = x.c.d[0] & !0xffff | 0x12c0;
-    x.set_v16(0x14, 0);
-    x.call(0xbc6);
-    x.call(0xf2e56);
-    x.call(0xf2e5c);
-    Flow::Done
-});
+}
 
 /// État 4 : fondu d'ouverture (tâche 0x14ba, qui laisse A0 sur elle), premier message (101), son d'accueil.
 fn welcome(x: &mut Ctx) -> Flow {
@@ -224,7 +272,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     x.set_v8(0x48e, 15);
     x.c.d[0] = x.c.d[0] & !0xffff | 16;
     x.c.a[0] = 0x14ba;
-    x.call(sub::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, 16, 0x14ba);
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {
@@ -337,13 +385,13 @@ fn leave(x: &mut Ctx) -> Flow {
     if chained == 0 {
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
-        return x.tail(sub::FADE_OUT, at::LEAVE_FADED);
+        return x.sous_programme(crate::taches::fondu::descente, Etape::LeaveFaded);
     }
     if b8(x, f::EXIT_SUB) == 0 {
         add_b8(x, f::EXIT_SUB, 2);
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
-        return x.tail(sub::FADE_OUT, at::CHAIN_FADED);
+        return x.sous_programme(crate::taches::fondu::descente, Etape::ChainFaded);
     }
     // boutique suivante : le bloc repart de l'état 0
     x.and16(0x12, 0xfffe);
@@ -353,60 +401,13 @@ fn leave(x: &mut Ctx) -> Flow {
     let a0 = x.c.a[0];
     crate::objects::lists::unlink_all_68k(x.c, x.b);
     x.c.a[0] = a0;
-    x.tail(sub::WAIT_ONE, at::REOPEN_WAITED)
+    crate::taches::une_image(x, Etape::ReopenWaited)
 }
-
-resume!(SHOP_LEAVE_FADED, at::LEAVE_FADED, |x| {
-    x.call(0xc58);
-    let a0 = x.c.a[0];
-    crate::objects::lists::unlink_all_68k(x.c, x.b);
-    x.c.a[0] = a0;
-    x.set_v8(0x3d, 1);
-    x.tail(sub::WAIT_ONE, at::LEAVE_WAITED)
-});
-
-// Retour de la boutique : couches effacées, état suivant de la séquence, scène de retour.
-resume!(SHOP_LEAVE_WAITED, at::LEAVE_WAITED, |x| {
-    for r in [0xca8, 0xcc8, 0xce8] {
-        x.call(r);
-    }
-    let a0 = x.c.a[0];
-    let s = rd8(x.b, a0 + 2).wrapping_add(4);
-    wr8(x.b, a0 + 2, s);
-    x.set_v8(0x3c, 0xff);
-    x.set_v8(0x59, 0);
-    x.and16(0x12, 0xfffe);
-    let layers = x.v16(0x12);
-    wr16(x.b, 0x804122, layers);
-    let shop = rd8(x.b, BLOCK + f::SHOP) as u32;
-    x.c.d[0] = shop;
-    x.c.a[1] = rom::NEXT_SCENE;
-    let next = rd8(x.b, rom::NEXT_SCENE + shop);
-    x.set_v8(0x34, next);
-    if next == 0 {
-        let back = rd8(x.b, BLOCK + f::RETURN_SCENE);
-        x.set_v8(0x34, back);
-    }
-    Flow::Done
-});
-
-resume!(SHOP_CHAIN_FADED, at::CHAIN_FADED, |x| {
-    x.c.d[0] = x.c.d[0] & !0xffff | 0x12c0;
-    x.set_v16(0x14, 0);
-    x.call(0xbc6);
-    Flow::Done
-});
-
-resume!(SHOP_REOPEN_WAITED, at::REOPEN_WAITED, |x| {
-    for r in [0x2134, 0x21bc, 0x20ae, 0x2150, 0xca8, 0xcc8, 0xce8] {
-        x.call(r);
-    }
-    Flow::Done
-});
 
 /// Tâche des portraits (0xf7dfe) : pour chaque joueur en jeu, son portrait (deux colonnes) et le cadre qui le suit ;
 /// puis la tâche se termine (`jmp 0x9f8`).
-fn portraits(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+fn portraits(x: &mut Ctx) -> Flow {
+    let b = &mut *x.b;
     let table = if rd8(b, A5 + 0x20) == 1 { rom::PORTRAITS_WIDE } else { rom::PORTRAITS };
     for k in 0..4 {
         let p = super::PLAYERS + k * super::PLAYER_STRIDE;
@@ -418,16 +419,8 @@ fn portraits(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
         super::tiles::glyph(b, at, tile, attr);
         super::tiles::glyph(b, at + 0x100, 0x1b2, attr);
     }
-    c.pc = 0x9f8;
+    crate::taches::terminer(x)
 }
-
-pub const PORTRAITS_NATIVE: Native = Native {
-    entry: PORTRAITS_TASK,
-    name: "shop_portraits",
-    run: portraits,
-    touches_sound: false,
-    outputs: 0,
-};
 
 pub const SHOP: Native = Native {
     entry: 0xf792e,
@@ -444,10 +437,4 @@ pub const SHOP: Native = Native {
 
 pub const NATIVES: &[Native] = &[
     SHOP,
-    SHOP_OPEN_FADED,
-    SHOP_LEAVE_FADED,
-    SHOP_LEAVE_WAITED,
-    SHOP_CHAIN_FADED,
-    SHOP_REOPEN_WAITED,
-    PORTRAITS_NATIVE,
 ];

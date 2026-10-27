@@ -40,7 +40,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
-use crate::taches::table::{emplacement, enregistrement, table, Contexte, Etat, Reprise, ENREGISTREMENTS};
+use crate::taches::table::{emplacement, enregistrement, table, Contexte, Etat, Reprise, Suite, ENREGISTREMENTS};
 use crate::Native;
 
 /// Adresses de la RAM.
@@ -156,18 +156,32 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) {
             c.a[4] = e.pile;
             c.other_sp = e.pile;
             c.set_sr(0);
-            c.pc = entree;
+            match crate::taches::entree(entree) {
+                Some(etape) => crate::taches::executer(etape, c, b),
+                None => c.pc = entree,
+            }
         }
         (Etat::Prete | Etat::EnCours, Reprise::Cession(ctx)) => {
             e.etat = Etat::EnCours;
-            c.d = ctx.d;
-            c.a[..7].copy_from_slice(&ctx.a);
-            c.other_sp = ctx.usp;
-            c.set_sr(ctx.sr);
+            remettre(c, ctx);
             c.pc = ctx.pc;
+        }
+        // une tâche Rust : son pas est appelé directement
+        (Etat::Prete | Etat::EnCours, Reprise::Etape(etape, ctx)) => {
+            e.etat = Etat::EnCours;
+            remettre(c, ctx);
+            crate::taches::executer(etape, c, b);
         }
         (etat, reprise) => unreachable!("tâche {k} lancée dans l'état {etat:?} avec la reprise {reprise:?}"),
     }
+}
+
+/// Registres, SR et pile d'une tâche qui a cédé.
+fn remettre(c: &mut Cpu, ctx: Contexte) {
+    c.d = ctx.d;
+    c.a[..7].copy_from_slice(&ctx.a);
+    c.other_sp = ctx.usp;
+    c.set_sr(ctx.sr);
 }
 
 /// 0x984 : une tâche a cédé (ou s'est terminée) ; l'ordonnanceur reprend à l'emplacement qui suit le sien.
@@ -193,12 +207,16 @@ fn vers_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Range le contexte de la tâche courante dans la table, puis rend la main à l'ordonnanceur. A1 reçoit la pile de la
 /// tâche telle que l'original l'avait laissée (adresse de retour et 15 registres empilés).
-fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: u32) {
+fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: Suite) {
     crate::taches::table::relever(c, b, reprise);
     let mut a = [0; 7];
     a.copy_from_slice(&c.a[..7]);
-    let ctx = Contexte { pc: reprise, sr: c.sr, usp: c.a[7], d: c.d, a };
-    table(b).ceder(etat, compte, ctx);
+    let ctx = Contexte { pc: reprise.adresse(), sr: c.sr, usp: c.a[7], d: c.d, a };
+    let reprise = match reprise {
+        Suite::Adresse(_) => Reprise::Cession(ctx),
+        Suite::Etape(etape) => Reprise::Etape(etape, ctx),
+    };
+    table(b).ceder(etat, compte, reprise);
     c.a[1] = ctx.usp.wrapping_sub(64);
     vers_ordonnanceur(c, b);
 }
@@ -206,7 +224,8 @@ fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: 
 /// Trap 3 : cède D0.b images (plus le retard des réglages DSW), 0 : suspendue. L'enveloppe 0xa40 appelle d'abord
 /// 0xb40, qui selon DSW remplit un bloc de la GFX RAM de la jauge de charge (jamais, dans ce jeu : bit 0x400 de DSW) ;
 /// les drapeaux sauvés sont ceux de son test de DSW. Le trap laisse D0.w = état et compte, D1.w = 0x100 ou 0x200.
-pub fn attendre(c: &mut Cpu, b: &mut Cps2Bus, reprise: u32) {
+pub fn attendre(c: &mut Cpu, b: &mut Cps2Bus, reprise: impl Into<Suite>) {
+    let reprise = reprise.into();
     c.sr &= !0x0f;
     let reglage = !rd16(b, ram::DSW) & 7;
     let compte = (c.d[0] as u8).wrapping_add(reglage as u8);
@@ -214,14 +233,14 @@ pub fn attendre(c: &mut Cpu, b: &mut Cps2Bus, reprise: u32) {
     set_low_word(&mut d1, if compte == 0 { 0x200 } else { 0x100 });
     let mot = (d0 as u16 & 0xff00) | compte as u16 | d1 as u16;
     set_low_word(&mut d0, mot);
-    let etat = Etat::depuis_octet((mot >> 8) as u8).unwrap_or_else(|| panic!("cession vers {reprise:x} : état {mot:#06x}"));
+    let etat = Etat::depuis_octet((mot >> 8) as u8).unwrap_or_else(|| panic!("cession vers {reprise:x?} : état {mot:#06x}"));
     ceder(c, b, etat, Some(compte), reprise);
     (c.d[0], c.d[1]) = (d0, d1);
 }
 
 /// Trap 4 : cède en restant prête.
-pub fn ceder_prete(c: &mut Cpu, b: &mut Cps2Bus, reprise: u32) {
-    ceder(c, b, Etat::Prete, None, reprise);
+pub fn ceder_prete(c: &mut Cpu, b: &mut Cps2Bus, reprise: impl Into<Suite>) {
+    ceder(c, b, Etat::Prete, None, reprise.into());
 }
 
 /// Trap 1 : la tâche courante se termine et rend sa pile.
@@ -234,13 +253,13 @@ pub fn terminer(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Enveloppe de cession appelée par `jsr` : son adresse de retour est la reprise (ou la suite de l'appel en cours,
 /// quand un pas Rust l'a appelée).
-fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, u32)) {
+fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, Suite)) {
     let reprise = crate::taches::table::depiler_retour(c, b);
     cession(c, b, reprise);
 }
 
 /// 0xae4 (et `trap #7`, 0xae6) : la tâche courante repart de zéro en A0, même pile.
-fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
     let t = table(b);
     t.recommencer(c.a[0]);
     c.a[4] = enregistrement(t.courante);
@@ -253,14 +272,25 @@ fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x9b6 : crée la tâche D0 (décalage), entrée A0. Une tâche déjà là rend sa pile.
 fn creer(c: &mut Cpu, b: &mut Cps2Bus) {
-    table(b).creer(emplacement(c.d[0]), c.a[0]);
+    creer_tache(b, c.d[0], c.a[0]);
     rts(c, b);
+}
+
+/// Crée la tâche de décalage `decalage` dans la table (`0x10 k`), qui démarrera à `entree` (enveloppe `0x9b6` : ni
+/// registre ni drapeau ne change).
+pub fn creer_tache(b: &mut Cps2Bus, decalage: u32, entree: u32) {
+    table(b).creer(emplacement(decalage), entree);
 }
 
 /// 0xa14 : tue la tâche D0.
 fn tuer(c: &mut Cpu, b: &mut Cps2Bus) {
-    table(b).tuer(emplacement(c.d[0]));
+    tuer_tache(b, c.d[0]);
     rts(c, b);
+}
+
+/// Tue la tâche de décalage `decalage` (enveloppe `0xa14` : ni registre ni drapeau ne change).
+pub fn tuer_tache(b: &mut Cps2Bus, decalage: u32) {
+    table(b).tuer(emplacement(decalage));
 }
 
 /// 0xaac : suspend la tâche D0.

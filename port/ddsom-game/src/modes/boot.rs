@@ -6,12 +6,10 @@
 
 use super::Sequence;
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
 mod ext {
-    pub const CLEAR_VIDEO: u32 = 0xc32;
     pub const PALETTES: u32 = 0x1a296;
     pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const SERVICE_CHECK: u32 = 0x2d30a;
@@ -21,7 +19,6 @@ mod ext {
     pub const PRINT: u32 = 0xd5e;
     pub const CLEAR_SCROLL_1: u32 = 0xca8;
     pub const CONFIG_2DC9A: u32 = 0x2dc9a;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const CREDITS_TASK: u32 = 0x13c0a;
     pub const FREEZE_TASK: u32 = 0xee080;
     pub const MODE_LOOP: u32 = 0x133fe;
@@ -51,49 +48,82 @@ pub const BOOT: Native = Native {
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         x.c.a[5] = A5;
-        x.tail(ext::CLEAR_VIDEO, INIT);
+        x.sous_programme(crate::video::ecran_noir::debut, Etape::Init);
     },
     touches_sound: false,
     outputs: 0,
 };
 
 const INIT: u32 = 0x11b22;
-resume!(R_INIT, INIT, |x| {
-    x.call(ext::PALETTES);
-    for i in 0..8 {
-        let v = rd32(x.b, START_PALETTE_SRC + 4 * i);
-        wr32(x.b, START_PALETTE_DST + 4 * i, v);
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        Init = INIT => |x| {
+            x.call(ext::PALETTES);
+            for i in 0..8 {
+                let v = rd32(x.b, START_PALETTE_SRC + 4 * i);
+                wr32(x.b, START_PALETTE_DST + 4 * i, v);
+            }
+            wr8(x.b, A5 + 0x48e, 0xf);
+            x.call(ext::BRIGHTNESS_WHITE);
+            x.call(ext::SERVICE_CHECK);
+            crate::credits::initialiser(x.c, x.b);
+            for f in ext::INIT_STEPS_A {
+                x.call(f);
+            }
+            clear_mode_state(x);
+            crate::rng::seed_68k(x.c, x.b);
+            default_high_scores(x);
+            x.call(ext::INIT_STEP_LAST);
+            x.call(ext::CLEAR_STATUS);
+            crate::taches::partie::effacer_variables(x.c, x.b);
+            wr8(x.b, A5 - 0x713c, 0);
+            set_low_word(&mut x.c.d[0], 0xe);
+            wr16(x.b, CPS_REG_VIDEO, 0xe);
+            wr16(x.b, A5 + 0x12, 0xe);
+            set_low_word(&mut x.c.d[0], 0x12ce);
+            wr16(x.b, CPS_REG_VIDEO_B, 0x12ce);
+            wr16(x.b, A5 + 0x14, 0x12ce);
+            let region = rd8(x.b, REGION_BYTE);
+            let table = match region {
+                0 => WARNING_TABLES[0],
+                1 => WARNING_TABLES[1],
+                _ => WARNING_TABLES[2],
+            };
+            print_region_text(x, table);
+            wr16(x.b, COUNTDOWN, WARNING_FRAMES);
+            x.wait(1, Etape::WarningTick)
+        },
+        WarningTick = WARNING_TICK => |x| {
+            if countdown_tick(x) {
+                return x.wait(1, Etape::WarningTick);
+            }
+            x.call(ext::CLEAR_SCROLL_1);
+            print_region_text(x, NOTICE_TABLE);
+            wr16(x.b, COUNTDOWN, NOTICE_FRAMES);
+            x.wait(1, Etape::NoticeTick)
+        },
+        NoticeTick = NOTICE_TICK => |x| {
+            if countdown_tick(x) {
+                return x.wait(1, Etape::NoticeTick);
+            }
+            x.call(ext::CLEAR_SCROLL_1);
+            wr16(x.b, A5 + 0x7fc6, 0);
+            if rd8(x.b, A5 + 4) & 1 != 0 {
+                wr16(x.b, A5 + 0x7fc6, 1);
+            }
+            x.call(ext::CONFIG_2DC9A);
+            x.call(ext::SERVICE_CHECK);
+            x.c.a[0] = ext::CREDITS_TASK;
+            set_low_word(&mut x.c.d[0], SLOT_CREDITS);
+            crate::kernel::creer_tache(x.b, SLOT_CREDITS as u32, ext::CREDITS_TASK);
+            x.c.a[0] = ext::FREEZE_TASK;
+            set_low_word(&mut x.c.d[0], SLOT_FREEZE);
+            crate::kernel::creer_tache(x.b, SLOT_FREEZE as u32, ext::FREEZE_TASK);
+            x.jump_to(ext::MODE_LOOP)
+        },
     }
-    wr8(x.b, A5 + 0x48e, 0xf);
-    x.call(ext::BRIGHTNESS_WHITE);
-    x.call(ext::SERVICE_CHECK);
-    crate::credits::initialiser(x.c, x.b);
-    for f in ext::INIT_STEPS_A {
-        x.call(f);
-    }
-    clear_mode_state(x);
-    crate::rng::seed_68k(x.c, x.b);
-    default_high_scores(x);
-    x.call(ext::INIT_STEP_LAST);
-    x.call(ext::CLEAR_STATUS);
-    crate::taches::partie::effacer_variables(x.c, x.b);
-    wr8(x.b, A5 - 0x713c, 0);
-    set_low_word(&mut x.c.d[0], 0xe);
-    wr16(x.b, CPS_REG_VIDEO, 0xe);
-    wr16(x.b, A5 + 0x12, 0xe);
-    set_low_word(&mut x.c.d[0], 0x12ce);
-    wr16(x.b, CPS_REG_VIDEO_B, 0x12ce);
-    wr16(x.b, A5 + 0x14, 0x12ce);
-    let region = rd8(x.b, REGION_BYTE);
-    let table = match region {
-        0 => WARNING_TABLES[0],
-        1 => WARNING_TABLES[1],
-        _ => WARNING_TABLES[2],
-    };
-    print_region_text(x, table);
-    wr16(x.b, COUNTDOWN, WARNING_FRAMES);
-    x.wait(1, WARNING_TICK)
-});
+}
 
 /// État de la machine à modes (16 longs en `A5-0x7190`) et `A5-0x54f0..` (4 longs) à zéro (`0x133dc`, puis
 /// `0xfc562`).
@@ -146,35 +176,7 @@ fn countdown_tick(x: &mut Ctx) -> bool {
 }
 
 const WARNING_TICK: u32 = 0x11c06;
-resume!(R_WARNING_TICK, WARNING_TICK, |x| {
-    if countdown_tick(x) {
-        return x.wait(1, WARNING_TICK);
-    }
-    x.call(ext::CLEAR_SCROLL_1);
-    print_region_text(x, NOTICE_TABLE);
-    wr16(x.b, COUNTDOWN, NOTICE_FRAMES);
-    x.wait(1, NOTICE_TICK)
-});
 
 const NOTICE_TICK: u32 = 0x11c4a;
-resume!(R_NOTICE_TICK, NOTICE_TICK, |x| {
-    if countdown_tick(x) {
-        return x.wait(1, NOTICE_TICK);
-    }
-    x.call(ext::CLEAR_SCROLL_1);
-    wr16(x.b, A5 + 0x7fc6, 0);
-    if rd8(x.b, A5 + 4) & 1 != 0 {
-        wr16(x.b, A5 + 0x7fc6, 1);
-    }
-    x.call(ext::CONFIG_2DC9A);
-    x.call(ext::SERVICE_CHECK);
-    x.c.a[0] = ext::CREDITS_TASK;
-    set_low_word(&mut x.c.d[0], SLOT_CREDITS);
-    x.call(ext::TASK_CREATE);
-    x.c.a[0] = ext::FREEZE_TASK;
-    set_low_word(&mut x.c.d[0], SLOT_FREEZE);
-    x.call(ext::TASK_CREATE);
-    x.jump_to(ext::MODE_LOOP)
-});
 
-pub const NATIVES: &[Native] = &[BOOT, R_INIT, R_WARNING_TICK, R_NOTICE_TICK];
+pub const NATIVES: &[Native] = &[BOOT];

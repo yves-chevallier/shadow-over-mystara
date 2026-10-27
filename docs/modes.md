@@ -56,11 +56,12 @@ désactive et reboucle.
 ## 3. Cessions : le découpage des écrans
 
 Un écran cède la main à l'ordonnanceur en plein milieu (attente d'une image, d'un fondu). Une native ne pouvant
-céder, chaque écran est découpé aux points de cession : la native saute dans l'ordonnanceur en donnant l'adresse que
-l'original reprend (celle qui suit le `jsr 0xa40`, `Sequence::wait`), et une autre native, posée à cette adresse (macro
-`resume!`), continue. Quand l'original appelle une routine qui peut céder (`0x1460` et `0x144c` : fondus avec
-attente ; `0xc32` : effacement vidéo), la native fait de même avec `Sequence::tail(adresse, reprise)`. Un appel `bsr`
-qui peut céder est un vrai appel (`push_return`) et le retour a lui aussi sa native (`title::R_T18_AFTER`). Ces appels
+céder, chaque écran est découpé aux points de cession : chaque point de reprise (l'adresse qui suit le `jsr 0xa40`
+de l'original, `Sequence::wait`) est une étape de l'`enum Etape` du module (`etapes!`, voir `noyau.md`, « Tâches
+Rust »), que l'ordonnanceur appelle à la reprise. Quand l'original appelle une routine qui peut céder (`0x1460` et
+`0x144c` : fondus avec attente ; `0xc32` : effacement vidéo), le pas appelle sa fonction Rust avec la suite
+(`Sequence::sous_programme(taches::fondu::descente, Etape::…)`). Un appel `bsr` qui peut céder est un vrai appel
+(`push_return`) et le retour a lui aussi son étape (`title::Etape::T18After`). Ces appels
 ne sont plus empilés sur la pile 68000 : leur suite est rangée dans les *appels en cours* de la tâche
 (`taches::table::Cadre`, voir `noyau.md`, « Appels en cours ») et le `rts` d'une native (`mem::rts`) y revient ; la
 boucle de la machine à modes y range de même le retour de son gestionnaire (`0x1341a`). Les états dont l'original

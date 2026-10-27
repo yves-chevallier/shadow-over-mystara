@@ -3,21 +3,25 @@
 //! À la création : enregistrement du menu remis à zéro, tâche de l'emplacement 15 (`0xf0`) tuée. Puis, à
 //! chaque image, le gestionnaire de l'état du menu (`service::handler`), suivi d'une image d'attente. La
 //! sortie (9. EXIT) remplace la tâche par la tâche de démarrage.
-//!
-//! | Adresse | Étape |
-//! |---|---|
-//! | `0x29162` | entrée |
-//! | `0x29190` | après l'image d'attente : un tour |
-//! | `0x2918a` | retour du gestionnaire quand il a cédé la main en route : l'image d'attente |
 
+use crate::mem::set_low_word;
 use crate::modes::{Flow, Sequence};
-use crate::resume;
 use crate::scene::Ctx;
-use crate::service::{self, at, ext, MENU, MENU_LONGS};
-use crate::Native;
+use crate::service::{self, MENU, MENU_LONGS};
 
-const ENTRY: u32 = 0x29162;
-const TURN: u32 = 0x29190;
+crate::etapes! {
+    /// Étapes de la tâche.
+    pub enum Etape {
+        Entree = 0x29162 => entry,
+        /// Après l'image d'attente : un tour.
+        Turn = 0x29190 => turn,
+        /// Retour du gestionnaire quand il a cédé la main en route : l'image d'attente.
+        HandlerReturn = 0x2918a => wait,
+        /// Reprise du menu après l'image d'attente qui suit l'effacement de l'écran (`service::show_menu`).
+        MenuAfterClear = 0x291ec => service::menu_after_clear,
+    }
+}
+
 /// Emplacement tué à l'entrée.
 const KILLED_SLOT: u16 = 0xf0;
 
@@ -25,14 +29,15 @@ fn entry(x: &mut Ctx) -> Flow {
     for k in 0..MENU_LONGS {
         crate::mem::wr32(x.b, MENU + 4 * k, 0);
     }
-    service::call_d0(x, ext::KILL_TASK, KILLED_SLOT);
+    set_low_word(&mut x.c.d[0], KILLED_SLOT);
+    crate::kernel::tuer_tache(x.b, KILLED_SLOT as u32);
     turn(x)
 }
 
-/// `0x2917a` : le gestionnaire, appelé comme par `jsr` (son retour est empilé) ; s'il rend la main sans
+/// `0x2917a` : le gestionnaire, appelé comme par `jsr` (sa suite est un appel en cours) ; s'il rend la main sans
 /// céder, l'image d'attente.
 fn turn(x: &mut Ctx) -> Flow {
-    x.push_return(at::HANDLER_RETURN);
+    x.push_return(Etape::HandlerReturn);
     match service::handler(x) {
         Flow::Done => {
             x.drop_return();
@@ -44,11 +49,5 @@ fn turn(x: &mut Ctx) -> Flow {
 
 /// `0x2918a` : `jsr 0xb64`, puis un nouveau tour.
 fn wait(x: &mut Ctx) -> Flow {
-    x.tail(ext::WAIT_ONE_FRAME, TURN)
+    crate::taches::une_image(x, Etape::Turn)
 }
-
-resume!(R_ENTRY, ENTRY, entry);
-resume!(R_TURN, TURN, turn);
-resume!(R_HANDLER_RETURN, at::HANDLER_RETURN, wait);
-
-pub const NATIVES: &[Native] = &[R_ENTRY, R_TURN, R_HANDLER_RETURN];

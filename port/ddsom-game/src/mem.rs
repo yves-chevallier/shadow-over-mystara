@@ -27,10 +27,10 @@ pub fn wr32(b: &mut Cps2Bus, a: u32, v: u32) {
     wr16(b, a.wrapping_add(2), v as u16);
 }
 
-/// Revient à l'appelant (RTS) : à la suite de l'appel en cours de la tâche s'il a été fait par un pas Rust, sinon à
-/// l'adresse de retour dépilée (voir `taches::table::Cadre`).
+/// Revient à l'appelant (RTS) : à la suite de l'appel en cours de la tâche s'il a été fait par un pas Rust (une étape
+/// Rust s'exécute aussitôt), sinon à l'adresse de retour dépilée (voir `taches::table::Cadre`).
 pub fn rts(c: &mut m68k::Cpu, b: &mut Cps2Bus) {
-    c.pc = crate::taches::table::depiler_retour(c, b);
+    crate::taches::revenir(c, b);
 }
 
 /// Remplace l'octet bas d'un registre de données (move.b vers Dn).

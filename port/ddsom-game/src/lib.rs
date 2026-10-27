@@ -258,7 +258,6 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(kernel::NATIVES)
         .chain(vblank::NATIVES)
         .chain(taches::natives())
-        .chain(tache_credits::NATIVES)
         .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
         .chain(hud::NATIVES)
@@ -460,11 +459,11 @@ fn executer(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, duree: u64) {
     }
 }
 
-/// Natives qui tiennent leur état dans la table des tâches Rust (noyau, VBLANK, tâche du gel, démarrage) : le code
+/// Natives qui tiennent leur état dans la table des tâches Rust (noyau, VBLANK, démarrage) : le code
 /// d'origine, qui le chercherait en RAM, ne doit jamais s'exécuter à leur place, même quand elles débordent sur
 /// l'interruption suivante (ce qui n'arrive que dans un appel de code d'origine qui dure).
 fn tient_la_table(n: &Native) -> bool {
-    kernel::NATIVES.iter().chain(vblank::NATIVES).chain(taches::gel::NATIVES).chain(demarrage::NATIVES).any(|k| k.entry == n.entry)
+    kernel::NATIVES.iter().chain(vblank::NATIVES).chain(demarrage::NATIVES).any(|k| k.entry == n.entry)
 }
 
 /// Exécuteur : routines natives seulement (le reste est laissé à l'interpréteur). Outils de diagnostic.

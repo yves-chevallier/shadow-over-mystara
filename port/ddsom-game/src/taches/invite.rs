@@ -9,15 +9,14 @@
 use super::{ceder, Attente};
 use crate::mem::{rd32, wr32, A5};
 use crate::modes::Flow;
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
 /// Texte affiché (long).
 const SHOWN: u32 = A5 - 0x5ac2;
-/// Emplacement de la tâche.
+/// Emplacement de la tâche, et son entrée.
 const SLOT: u32 = 0xd0;
-const ENTRY: u32 = 0xe03fe;
+const ENTRY: u32 = Etape::Entree.adresse();
 
 mod var {
     pub const FREE_PLAY: u32 = 0x25;
@@ -43,33 +42,42 @@ mod print {
 const SHOW_FRAMES: u32 = 40;
 const HIDE_FRAMES: u32 = 20;
 
-/// Reprises : après l'affichage et après l'effacement, pour chacune des deux familles de textes.
-mod at {
-    pub const COINS_SHOWN: u32 = 0xe0440;
-    pub const COINS_HIDDEN: u32 = 0xe0452;
-    pub const PLAIN_SHOWN: u32 = 0xe0478;
-    pub const PLAIN_HIDDEN: u32 = 0xe048a;
+crate::etapes! {
+    /// Étapes : l'entrée, puis après l'affichage et après l'effacement, pour chacune des deux familles de textes.
+    pub enum Etape {
+        Entree = 0xe03fe => entry,
+        CoinsShown = 0xe0440 => |x| {
+            print_shown(x, print::COINS_CLEAR);
+            ceder(x, Attente::Images(HIDE_FRAMES), Etape::CoinsHidden)
+        },
+        CoinsHidden = 0xe0452 => |x| show(x, print::COINS, Etape::CoinsShown),
+        PlainShown = 0xe0478 => |x| {
+            print_shown(x, print::PLAIN_CLEAR);
+            ceder(x, Attente::Images(HIDE_FRAMES), Etape::PlainHidden)
+        },
+        PlainHidden = 0xe048a => |x| show(x, print::PLAIN, Etape::PlainShown),
+    }
 }
 
-resume!(INVITE_ENTRY, ENTRY, |x| {
+fn entry(x: &mut Ctx) -> Flow {
     x.c.a[0] = SHOWN;
     if x.v8(var::FREE_PLAY) != 0 {
         wr32(x.b, SHOWN, text::FREE_PLAY);
-        return show(x, print::COINS, at::COINS_SHOWN);
+        return show(x, print::COINS, Etape::CoinsShown);
     }
     if x.v8(var::SETTING) != 0 {
         wr32(x.b, SHOWN, text::SETTING);
-        return show(x, print::PLAIN, at::PLAIN_SHOWN);
+        return show(x, print::PLAIN, Etape::PlainShown);
     }
     let k = 4 * x.v8(var::COINAGE) as u32;
     x.c.d[0] = k;
     let t = rd32(x.b, text::BY_COINAGE + k - 4);
     wr32(x.b, SHOWN, t);
-    show(x, print::COINS, at::COINS_SHOWN)
-});
+    show(x, print::COINS, Etape::CoinsShown)
+}
 
 /// Imprime le texte gardé, puis l'attente d'affichage.
-fn show(x: &mut Ctx, routine: u32, resume: u32) -> Flow {
+fn show(x: &mut Ctx, routine: u32, resume: Etape) -> Flow {
     print_shown(x, routine);
     ceder(x, Attente::Images(SHOW_FRAMES), resume)
 }
@@ -78,38 +86,20 @@ fn print_shown(x: &mut Ctx, routine: u32) {
     x.call(routine);
 }
 
-resume!(INVITE_COINS_SHOWN, at::COINS_SHOWN, |x| {
-    print_shown(x, print::COINS_CLEAR);
-    ceder(x, Attente::Images(HIDE_FRAMES), at::COINS_HIDDEN)
-});
-resume!(INVITE_COINS_HIDDEN, at::COINS_HIDDEN, |x| show(x, print::COINS, at::COINS_SHOWN));
-resume!(INVITE_PLAIN_SHOWN, at::PLAIN_SHOWN, |x| {
-    print_shown(x, print::PLAIN_CLEAR);
-    ceder(x, Attente::Images(HIDE_FRAMES), at::PLAIN_HIDDEN)
-});
-resume!(INVITE_PLAIN_HIDDEN, at::PLAIN_HIDDEN, |x| show(x, print::PLAIN, at::PLAIN_SHOWN));
-
-/// `0xe03c6` : efface le texte (comme le texte des pièces) et arrête la tâche (0xa14) ; registres gardés.
+/// `0xe03c6` : efface le texte (comme le texte des pièces) et arrête la tâche (0xa14) ; D0 et A4 gardés.
 fn stop(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     let (d0, a4) = (c.d[0], c.a[4]);
     let mut x = Ctx::new(c, b);
     print_shown(&mut x, print::COINS_CLEAR);
-    x.c.d[0] = x.c.d[0] & !0xffff | SLOT;
-    x.call(0xa14);
+    crate::kernel::tuer_tache(x.b, SLOT);
     (x.c.d[0], x.c.a[4]) = (d0, a4);
     crate::mem::rts(x.c, x.b);
 }
 
 /// `0xe03e4` : lance la tâche ; registres gardés.
 fn start(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    let (d0, a) = (c.d[0], c.a);
-    let mut x = Ctx::new(c, b);
-    x.c.a[0] = ENTRY;
-    x.c.d[0] = x.c.d[0] & !0xffff | SLOT;
-    x.call(0x9b6);
-    x.c.d[0] = d0;
-    x.c.a[..5].copy_from_slice(&a[..5]);
-    crate::mem::rts(x.c, x.b);
+    crate::kernel::creer_tache(b, SLOT, ENTRY);
+    crate::mem::rts(c, b);
 }
 
 pub const STOP: Native = Native {
@@ -127,5 +117,4 @@ pub const START: Native = Native {
     outputs: 0,
 };
 
-pub const NATIVES: &[Native] =
-    &[INVITE_ENTRY, INVITE_COINS_SHOWN, INVITE_COINS_HIDDEN, INVITE_PLAIN_SHOWN, INVITE_PLAIN_HIDDEN, STOP, START];
+pub const NATIVES: &[Native] = &[STOP, START];

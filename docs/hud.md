@@ -7,12 +7,12 @@ et la fin de partie, `layer.rs` la couche de caractères). `A5` = 0xFF8000. Tout
 
 ## La tâche (`0x150ac`)
 
-Créée en fin de phase 0 de la partie (slot 0x30 de l'ordonnanceur). Son entrée (`0x150ac`, native `ENTRY`) remet
+Créée en fin de phase 0 de la partie (slot 0x30 de l'ordonnanceur). Son entrée (`0x150ac`, étape `Entree`) remet
 les panneaux à zéro (numéro de joueur en `+0`) et les variables de la tâche, puis cède une image à la fois (reprise
-`0x15146`, native `STARTING`) : la disposition `A5+0x344` vient du type de borne (`A5+0x20`, table `0x15164`) ; hors
+`0x15146`, étape `Starting`) : la disposition `A5+0x344` vient du type de borne (`A5+0x20`, table `0x15164`) ; hors
 partie, mode 1 et disposition 0 ; en partie, elle attend la phase 4. Elle boucle ensuite sur `0x15178` et cède une
-image à chaque tour (`jsr 0xb64`, reprise en `0x15212`). Toutes ces adresses sont des natives de reprise (`resume!`,
-voir `tache_credits.rs`) : un tour entier est un appel Rust, et la tâche n'exécute plus de 68000.
+image à chaque tour (`jsr 0xb64`, reprise en `0x15212`, étape `AfterWait`). Ce sont les étapes de `hud::Etape`, que
+l'ordonnanceur appelle à la reprise (`noyau.md`, « Tâches Rust ») : un tour entier est un appel Rust.
 
 Un tour (`hud::tour`) :
 

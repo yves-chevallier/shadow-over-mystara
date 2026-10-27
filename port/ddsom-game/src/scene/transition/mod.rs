@@ -15,14 +15,15 @@
 //! dans l'original : adresse de retour empilée (`bsr`, [`Ret::At`]) ou appel terminal (`bra`, [`Ret::Caller`],
 //! retour à l'aiguillage de la sortie de scène).
 
-mod early;
-mod late;
+pub(crate) mod early;
+pub(crate) mod late;
 
 use super::Ctx;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::objects::Obj;
-use crate::{resume, Native};
+use crate::taches::table::Suite;
+use crate::Native;
 
 /// Variables du script (A6).
 pub const VARS: u32 = A5 - 0x5520;
@@ -64,10 +65,6 @@ const ALL_PAGES: u8 = 15;
 const SCENE_PAGES: u8 = 13;
 
 mod sub {
-    pub const WAIT: u32 = 0xa40;
-    pub const FADE_IN: u32 = 0x144c;
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const FADE_TASK: u32 = 0x14ba;
     pub const FADE_TASK_PAGES: u32 = 0x14d0;
     pub const MESSAGE: u32 = 0xc8312;
@@ -96,7 +93,7 @@ const SCROLL_3: u32 = 0x91b800;
 /// (`bra`, l'aiguillage de la sortie de scène).
 #[derive(Clone, Copy)]
 enum Ret {
-    At(u32),
+    At(Suite),
     Caller,
 }
 use Ret::{At, Caller};
@@ -222,15 +219,16 @@ fn end(x: &mut Ctx) -> Flow {
 /// Cède `n` images (`moveq #n,D0 ; jsr/jmp 0xa40`).
 fn yield_frames(x: &mut Ctx, n: u32, ret: Ret) -> Flow {
     x.c.d[0] = n;
-    goto(x, sub::WAIT, ret)
+    goto(x, crate::taches::attendre_puis_revenir, ret)
 }
 
-/// Saute à un sous-programme qui cède, en empilant le retour s'il y a lieu.
-fn goto(x: &mut Ctx, routine: u32, ret: Ret) -> Flow {
+/// Saute à un sous-programme qui cède (`bsr`, ou `bra` qui revient à l'appelant du script), en rangeant la suite
+/// s'il y a lieu.
+fn goto(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow {
     if let At(r) = ret {
         x.push_return(r);
     }
-    x.jump_to(routine)
+    routine(x)
 }
 
 /// 0xfa102 : couches affichées, une image, puis fondu d'ouverture de toutes les pages (reprise 0xfa110).
@@ -239,12 +237,21 @@ fn show_and_fade_in(x: &mut Ctx, ret: Ret) -> Flow {
         x.push_return(r);
     }
     layers_or(x, 0xe);
-    x.wait(1, FADE_IN_AFTER_FRAME.entry)
+    x.wait(1, Etape::FadeInAfterFrame)
 }
-resume!(FADE_IN_AFTER_FRAME, 0xfa110, |x| fade(x, ALL_PAGES, sub::FADE_IN, Caller));
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::taches::fondu::montee, Caller),
+        SpritesAfterFrame = 0xfa1ca => |x| {
+            keep_a0_a6(x, sub::SPRITES);
+            Flow::Done
+        },
+    }
+}
 
 /// Fondu (délai 3) des `pages` vers le noir (0x1460) ou depuis le noir (0x144c) : 0xfa122, 0xfa134, 0xfa146.
-fn fade(x: &mut Ctx, pages: u8, routine: u32, ret: Ret) -> Flow {
+fn fade(x: &mut Ctx, pages: u8, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow {
     x.set_v16(a5::FADE_DELAY, 3);
     x.set_v8(a5::FADE_PAGES, pages);
     goto(x, routine, ret)
@@ -260,7 +267,7 @@ fn start_task(x: &mut Ctx, task: u32) {
     let a0 = x.c.a[0];
     x.c.a[0] = task;
     set_d0_word(x, 0x10);
-    x.call(sub::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, 0x10, task);
     x.c.a[0] = a0;
 }
 
@@ -289,14 +296,10 @@ fn home_cameras(x: &mut Ctx, ret: Ret) -> Flow {
 }
 
 /// 0xfa1c2 : une image, puis la liste de sprites (reprise 0xfa1ca), retour en `ret`.
-fn sprites_next_frame(x: &mut Ctx, ret: u32) -> Flow {
+fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Suite>) -> Flow {
     x.push_return(ret);
-    x.wait(1, SPRITES_AFTER_FRAME.entry)
+    x.wait(1, Etape::SpritesAfterFrame)
 }
-resume!(SPRITES_AFTER_FRAME, 0xfa1ca, |x| {
-    keep_a0_a6(x, sub::SPRITES);
-    Flow::Done
-});
 
 /// 0xfa1e2 : mise à jour du monde (A0 et A6 gardés).
 fn world(x: &mut Ctx) {
@@ -383,12 +386,12 @@ fn store_message(x: &mut Ctx) {
 }
 /// Boucle `moveq #n,D0 ; jsr 0xc8312 ; bcc ; moveq #1,D0 ; jsr 0xa40 ; bra` : vrai si le message est ouvert ;
 /// sinon la tâche cède une image et reprendra en `retry`.
-fn message(x: &mut Ctx, n: u32, retry: u32) -> bool {
+fn message(x: &mut Ctx, n: u32, retry: impl Into<Suite>) -> bool {
     x.c.d[0] = n;
     message_d0(x, retry)
 }
 /// Comme [`message`], numéro déjà dans D0.
-fn message_d0(x: &mut Ctx, retry: u32) -> bool {
+fn message_d0(x: &mut Ctx, retry: impl Into<Suite>) -> bool {
     x.call(sub::MESSAGE);
     if x.c.sr & 1 != 0 {
         return retry_next_frame(x, retry);
@@ -396,13 +399,13 @@ fn message_d0(x: &mut Ctx, retry: u32) -> bool {
     store_message(x);
     true
 }
-fn retry_next_frame(x: &mut Ctx, retry: u32) -> bool {
-    yield_frames(x, 1, At(retry));
+fn retry_next_frame(x: &mut Ctx, retry: impl Into<Suite>) -> bool {
+    yield_frames(x, 1, At(retry.into()));
     false
 }
 
 /// Objet système de variante `n` (0xddeaa) qui reçoit l'adresse des variables ; sinon cède et reprendra en `retry`.
-fn system_object(x: &mut Ctx, n: u32, retry: u32) -> Option<Obj> {
+fn system_object(x: &mut Ctx, n: u32, retry: impl Into<Suite>) -> Option<Obj> {
     call_d0(x, sub::SOBJ, n);
     if x.c.sr & 1 != 0 {
         retry_next_frame(x, retry);
@@ -415,7 +418,7 @@ fn try_set_object(x: &mut Ctx, n: u32) -> Option<Obj> {
     call_d0(x, sub::SET, n);
     (x.c.sr & 1 == 0).then(|| attach(x))
 }
-fn set_object(x: &mut Ctx, n: u32, retry: u32) -> bool {
+fn set_object(x: &mut Ctx, n: u32, retry: impl Into<Suite>) -> bool {
     try_set_object(x, n).is_some() || retry_next_frame(x, retry)
 }
 /// `move.l A6,0x4c(A1)` : l'objet créé connaît les variables du script.
@@ -482,7 +485,7 @@ pub fn run(x: &mut Ctx, scene: u32) -> Flow {
     }
 }
 
-const COMMON: &[Native] = &[FADE_IN_AFTER_FRAME, SPRITES_AFTER_FRAME];
+const COMMON: &[Native] = &[];
 
 pub fn natives() -> impl Iterator<Item = &'static Native> {
     COMMON.iter().chain(early::NATIVES).chain(late::NATIVES)

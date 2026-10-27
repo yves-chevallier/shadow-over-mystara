@@ -9,7 +9,7 @@ use super::screen::{self, copy_page};
 use super::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
-use crate::{resume, Native};
+use crate::Native;
 use crate::objects::{pools, Obj};
 
 /// Variables de l'écran de bonus (sous A5).
@@ -50,8 +50,6 @@ mod rom {
     pub const BACKDROP_ALT: u32 = 0x3f6c08;
 }
 mod sub {
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const FADE_IN: u32 = 0x144c;
     /// Effet de type 31 : D0 = variante, D1 = `+0x2f`.
     pub const EFFECT: u32 = 0xb1a7a;
     /// Objet SET de type 5.
@@ -98,11 +96,11 @@ pub fn dispatch(x: &mut Ctx, table: u32) -> u8 {
 
 /// Fondu au noir ou depuis le noir (délai 4, toutes les pages, 15 pas) ; la routine cède la main et revient en
 /// `resume`.
-pub fn fade(x: &mut Ctx, routine: u32, resume: u32) -> Flow {
+pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::taches::table::Suite>) -> Flow {
     x.set_v8(a5::FADE_STEPS, 15);
     x.set_v16(a5::FADE_DELAY, 4);
     x.set_v8(a5::FADE_PAGES, 15);
-    x.tail(routine, resume)
+    x.sous_programme(routine, resume)
 }
 
 /// `movem.l A0,-(SP) ; jsr … ; movem.l (SP)+,A0`.
@@ -139,7 +137,7 @@ pub fn run(x: &mut Ctx) -> Flow {
         12 => {
             x.or16(0x14, 12);
             call_keep_a0(x, &[0x1de96]);
-            x.wait(1, at::LAST_FRAME)
+            x.wait(1, Etape::LastFrame)
         }
         _ => Flow::Done,
     }
@@ -171,29 +169,87 @@ fn start(x: &mut Ctx) -> Flow {
         wr8(x.b, A5 - 0x55c8, s);
         return Flow::Done;
     }
-    fade(x, sub::FADE_OUT, at::FADED_OUT)
+    fade(x, crate::taches::fondu::descente, Etape::FadedOut)
 }
 
-// Les caméras sont mises de côté et placées sur le décor du bonus.
-resume!(BONUS_FADED_OUT, at::FADED_OUT, |x| {
-    next_sub_step(x);
-    let main = (x.v16(a5::CAM_X), x.v16(a5::CAM_Y));
-    wr16(x.b, v::SAVED_CAMERAS, main.0);
-    wr16(x.b, v::SAVED_CAMERAS + 2, main.1);
-    x.set_v8(0x53c, 0);
-    let alt = (x.v16(a5::ALT_X), x.v16(a5::ALT_Y));
-    wr16(x.b, v::SAVED_CAMERAS + 4, alt.0);
-    wr16(x.b, v::SAVED_CAMERAS + 6, alt.1);
-    x.set_v16(a5::CAM_Y, 0x408);
-    x.set_v16(a5::ALT_Y, 0x400);
-    x.set_v16(a5::CAM_X, 0);
-    x.set_v16(a5::ALT_X, 0);
-    x.set_v16(0x4ba, 0);
-    if x.v8(a5::SCENE) != 1 {
-        reset_camera_copies(x);
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        /// Les caméras sont mises de côté et placées sur le décor du bonus.
+        FadedOut = at::FADED_OUT => |x| {
+            next_sub_step(x);
+            let main = (x.v16(a5::CAM_X), x.v16(a5::CAM_Y));
+            wr16(x.b, v::SAVED_CAMERAS, main.0);
+            wr16(x.b, v::SAVED_CAMERAS + 2, main.1);
+            x.set_v8(0x53c, 0);
+            let alt = (x.v16(a5::ALT_X), x.v16(a5::ALT_Y));
+            wr16(x.b, v::SAVED_CAMERAS + 4, alt.0);
+            wr16(x.b, v::SAVED_CAMERAS + 6, alt.1);
+            x.set_v16(a5::CAM_Y, 0x408);
+            x.set_v16(a5::ALT_Y, 0x400);
+            x.set_v16(a5::CAM_X, 0);
+            x.set_v16(a5::ALT_X, 0);
+            x.set_v16(0x4ba, 0);
+            if x.v8(a5::SCENE) != 1 {
+                reset_camera_copies(x);
+            }
+            Flow::Done
+        },
+        SetUp = at::SET_UP => |x| {
+            next_sub_step(x);
+            for (from, to) in PAGES {
+                copy_page(x.b, from, to);
+            }
+            for (routine, d0) in [(0x1a67e, 85), (0x1a8b2, 85), (0x1a3d4, 2)] {
+                x.c.d[0] = d0;
+                x.call(routine);
+            }
+            Flow::Done
+        },
+        /// Le titre du bonus (objet SET type 0, variante 69).
+        Started = at::STARTED => |x| {
+            if let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) {
+                for (off, v) in [(0, 1), (2, 0), (3, 69), (0x2f, 3)] {
+                    wr8(x.b, o + off, v);
+                }
+            }
+            Flow::Done
+        },
+        /// L'écran du bonus est effacé ; hors scène 1 l'état est fini, dans la scène 1 les pages de palettes reviennent
+        /// après quatre images.
+        Ended = at::ENDED => |x| {
+            next_sub_step(x);
+            screen::clear_bonus_frame(x.b);
+            let counter = rd16(x.b, v::COUNTER) as i16 as i32 as u32 & 0xff_ffff;
+            wr32(x.b, counter + 4, 0x0600_0000);
+            call_keep_a0(x, &[0x39cba, 0x1de96]);
+            if x.v8(a5::SCENE) != 1 {
+                x.set_v8(0x3c, 0xff);
+                for r in [0xcc8, 0xce8, 0xc58] {
+                    x.call(r);
+                }
+                leave(x);
+                return Flow::Done;
+            }
+            x.set_v8(0x3c, 1);
+            wr16(x.b, v::SECONDS, 4);
+            x.and16(0x14, 0xfff3);
+            x.wait(4, Etape::Scene1Waited)
+        },
+        Scene1Waited = at::SCENE_1_WAITED => |x| {
+            for (to, from) in PAGES {
+                copy_page(x.b, from, to);
+            }
+            Flow::Done
+        },
+        /// Dernière image : fondu depuis le noir, puis l'état suivant de la séquence.
+        LastFrame = at::LAST_FRAME => |x| fade(x, crate::taches::fondu::montee, Etape::FadedIn),
+        FadedIn = at::FADED_IN => |x| {
+            leave(x);
+            Flow::Done
+        },
     }
-    Flow::Done
-});
+}
 
 /// Copies des positions des caméras et champs de défilement remis à leurs valeurs de départ.
 pub fn reset_camera_copies(x: &mut Ctx) {
@@ -239,23 +295,11 @@ fn set_up(x: &mut Ctx) -> Flow {
     x.c.d[1] = 0xffff;
     x.c.d[2] = 4;
     x.call(sub::MUSIC);
-    x.wait(4, at::SET_UP)
+    x.wait(4, Etape::SetUp)
 }
 
 /// Pages de palettes du bonus : la page 0x91c400 passe en 0x910000, et ainsi de suite.
 const PAGES: [(u32, u32); 4] = [(0x91c400, 0x910000), (0x91c800, 0x910400), (0x91cc00, 0x910800), (0x91c000, 0x910c00)];
-
-resume!(BONUS_SET_UP, at::SET_UP, |x| {
-    next_sub_step(x);
-    for (from, to) in PAGES {
-        copy_page(x.b, from, to);
-    }
-    for (routine, d0) in [(0x1a67e, 85), (0x1a8b2, 85), (0x1a3d4, 2)] {
-        x.c.d[0] = d0;
-        x.call(routine);
-    }
-    Flow::Done
-});
 
 /// Sous-état 4 : quand les décors sont prêts (`A5+0x7e66` ≥ 5), cinq objets SET, triés par adresse : les quatre
 /// premiers sont liés aux joueurs, le dernier (le meneur) aux quatre autres. Compte à rebours de 90 secondes,
@@ -312,18 +356,8 @@ fn objects(x: &mut Ctx) -> Flow {
     x.set_v8(0x3c, 2);
     x.c.d[0] = 1;
     x.call(0x1a60a);
-    fade(x, sub::FADE_IN, at::STARTED)
+    fade(x, crate::taches::fondu::montee, Etape::Started)
 }
-
-// Le titre du bonus (objet SET type 0, variante 69).
-resume!(BONUS_STARTED, at::STARTED, |x| {
-    if let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) {
-        for (off, v) in [(0, 1), (2, 0), (3, 69), (0x2f, 3)] {
-            wr8(x.b, o + off, v);
-        }
-    }
-    Flow::Done
-});
 
 /// 0xf67fa : le décor du bonus, rectangle de cases lu dans la ROM (largeur, hauteur, puis les cases par colonnes).
 fn backdrop(x: &mut Ctx) {
@@ -393,44 +427,8 @@ fn end(x: &mut Ctx) -> Flow {
     if !tick16(x, v::SECONDS) {
         return Flow::Done;
     }
-    fade(x, sub::FADE_OUT, at::ENDED)
+    fade(x, crate::taches::fondu::descente, Etape::Ended)
 }
-
-// L'écran du bonus est effacé ; hors scène 1 l'état est fini, dans la scène 1 les pages de palettes reviennent
-// après quatre images.
-resume!(BONUS_ENDED, at::ENDED, |x| {
-    next_sub_step(x);
-    screen::clear_bonus_frame(x.b);
-    let counter = rd16(x.b, v::COUNTER) as i16 as i32 as u32 & 0xff_ffff;
-    wr32(x.b, counter + 4, 0x0600_0000);
-    call_keep_a0(x, &[0x39cba, 0x1de96]);
-    if x.v8(a5::SCENE) != 1 {
-        x.set_v8(0x3c, 0xff);
-        for r in [0xcc8, 0xce8, 0xc58] {
-            x.call(r);
-        }
-        leave(x);
-        return Flow::Done;
-    }
-    x.set_v8(0x3c, 1);
-    wr16(x.b, v::SECONDS, 4);
-    x.and16(0x14, 0xfff3);
-    x.wait(4, at::SCENE_1_WAITED)
-});
-
-resume!(BONUS_SCENE_1_WAITED, at::SCENE_1_WAITED, |x| {
-    for (to, from) in PAGES {
-        copy_page(x.b, from, to);
-    }
-    Flow::Done
-});
-
-// Dernière image : fondu depuis le noir, puis l'état suivant de la séquence.
-resume!(BONUS_LAST_FRAME, at::LAST_FRAME, |x| fade(x, sub::FADE_IN, at::FADED_IN));
-resume!(BONUS_FADED_IN, at::FADED_IN, |x| {
-    leave(x);
-    Flow::Done
-});
 
 /// Entrée d'origine (séquences restées en 68000).
 pub const BONUS: Native = Native {
@@ -448,11 +446,4 @@ pub const BONUS: Native = Native {
 
 pub const NATIVES: &[Native] = &[
     BONUS,
-    BONUS_FADED_OUT,
-    BONUS_SET_UP,
-    BONUS_STARTED,
-    BONUS_ENDED,
-    BONUS_SCENE_1_WAITED,
-    BONUS_LAST_FRAME,
-    BONUS_FADED_IN,
 ];

@@ -2,16 +2,20 @@
 //!
 //! Deux familles, chacune sous deux formes : une *tâche* (créée par `0x9b6`, elle se termine par `0x9f8` à la
 //! fin du fondu) et un *sous-programme* (appelé par `jsr` depuis une séquence, il revient quand le fondu est fini ;
-//! l'appelant attend donc la fin). Les pas cèdent la main par `jsr 0xa40` (D0.w = délai `A5+0x490`) ; chaque
-//! adresse qui suit cette cession reçoit la native du pas suivant.
+//! l'appelant attend donc la fin). Les pas cèdent la main par `jsr 0xa40` (D0.w = délai `A5+0x490`) ; le pas
+//! suivant est une étape de la machine à états ([`Etape`]), qui porte le fondu en cours.
 //!
 //! * **Luminosité** : chaque pas ajoute ±0x1000 aux couleurs des pages cochées (`palette::brightness_step`).
-//!   L'état est à `A5+0x48e` (pages, pas restants, délai, adresses des quatre pages) ; le sens n'est que dans
-//!   D1, que la cession sauve et rend.
+//!   L'état est à `A5+0x48e` (pages, pas restants, délai, adresses des quatre pages) ; le sens est un champ de
+//!   l'étape (l'original le garde dans D1, que la cession sauve et rend, et que le contexte garde aussi).
 //! * **Par composante** : chaque pas rapproche d'un cran chaque composante (`palette::component_step`) ;
-//!   16 pas, `A5-0x65ec` levé pendant le fondu, registres sauvés à l'entrée (`movem`) et rendus à la fin.
+//!   16 pas, `A5-0x65ec` levé pendant le fondu, registres sauvés à l'entrée (`movem`, gardés dans l'étape) et
+//!   rendus à la fin.
+//!
+//! Les sous-programmes sont des fonctions ([`montee`], [`descente`], [`descente_d0`], [`vers_le_blanc`],
+//! [`vers_les_couleurs`], [`vers_les_palettes`]) que les pas appellent directement ; seul le fondu au noir `0x1460`
+//! garde une native, que des gestionnaires d'objets appellent encore par adresse (`call_at`).
 
-use super::table::{garder, reprendre, Contenu};
 use crate::mem::{rd16, rd8, set_low_word, wr32, wr8, A5};
 use crate::modes::Flow;
 use crate::palette::{brightness_step, component_step, white_out, Cible};
@@ -46,16 +50,71 @@ const PAS_COMPLET: u8 = 0x10;
 const PAGES: [u32; 4] = [0x91c000, 0x91c400, 0x91c800, 0x91cc00];
 const DEBUT_PARTIEL: u32 = 0x91c3a0;
 
-/// Cède `delai` images (D0.w, le mot haut de D0 est gardé) ; la suite est la native posée à `reprise`.
-fn attendre(x: &mut Ctx, delai: u16, reprise: u32) -> Flow {
-    set_low_word(&mut x.c.d[0], delai);
-    crate::kernel::attendre(x.c, x.b, reprise);
-    Flow::Yield
+/// Étapes d'un fondu : le début d'une tâche de fondu (d'après son entrée), puis le pas suivant après chaque cession.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Etape {
+    /// Début d'une tâche de fondu de luminosité ; `pas` : nombre de pas imposé (sinon celui de l'état).
+    TacheLuminosite { fondu: Luminosite, pas: Option<u8> },
+    /// Début d'une tâche de fondu par composante (`blanchir` : la tâche `0x1ced4` blanchit d'abord les pages).
+    TacheComposante { fondu: Composante, blanchir: bool },
+    /// Pas suivant d'un fondu de luminosité.
+    Luminosite(Luminosite),
+    /// Pas suivant d'un fondu par composante ; `registres` : D0-D7/A0-A6 sauvés à l'entrée.
+    Composante { fondu: Composante, registres: Registres },
 }
 
-/// La tâche se termine (`jsr 0x9f8`).
-fn terminer(x: &mut Ctx) -> Flow {
-    crate::kernel::terminer(x.c, x.b);
+/// Registres sauvés par `movem.l D0-D7/A0-A6,-(SP)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Registres {
+    d: [u32; 8],
+    a: [u32; 7],
+}
+
+/// Les tâches de fondu, par entrée.
+const TACHES: [(u32, Etape); 10] = [
+    (0x14ba, Etape::TacheLuminosite { fondu: tache(MONTE, false), pas: Some(PAS_COMPLET) }),
+    (0x14c8, Etape::TacheLuminosite { fondu: tache(MONTE, false), pas: None }),
+    (0x14d0, Etape::TacheLuminosite { fondu: tache(DESCEND, false), pas: Some(PAS_COMPLET) }),
+    (0x14de, Etape::TacheLuminosite { fondu: tache(DESCEND, false), pas: None }),
+    (0x1536, Etape::TacheLuminosite { fondu: tache(MONTE, true), pas: None }),
+    (0x153e, Etape::TacheLuminosite { fondu: tache(DESCEND, true), pas: None }),
+    (0x1ccf8, Etape::TacheComposante { fondu: COMPOSANTES[3].1, blanchir: false }),
+    (0x1ce64, Etape::TacheComposante { fondu: COMPOSANTES[4].1, blanchir: false }),
+    (0x1ced4, Etape::TacheComposante { fondu: COMPOSANTES[5].1, blanchir: true }),
+    (0x1cf12, Etape::TacheComposante { fondu: COMPOSANTES[5].1, blanchir: false }),
+];
+
+/// Première étape de la tâche de fondu qui commence à `entree`.
+pub fn tache_depuis_entree(entree: u32) -> Option<Etape> {
+    TACHES.into_iter().find(|&(e, _)| e == entree).map(|(_, etape)| etape)
+}
+
+impl Etape {
+    /// Adresse que l'original reprend à cette étape (entrée de la tâche, ou retour de la cession du pas).
+    pub fn adresse(self) -> u32 {
+        match self {
+            Etape::TacheLuminosite { .. } | Etape::TacheComposante { .. } => {
+                TACHES.into_iter().find(|&(_, e)| e == self).expect("tâche de fondu").0
+            }
+            Etape::Luminosite(f) => f.reprise(),
+            Etape::Composante { fondu, .. } => fondu.reprise,
+        }
+    }
+
+    pub fn pas(self, x: &mut Ctx) -> Flow {
+        match self {
+            Etape::TacheLuminosite { fondu, pas } => fondu.debut_tache(x, pas),
+            Etape::TacheComposante { fondu, blanchir } => fondu.debut(x, blanchir),
+            Etape::Luminosite(fondu) => fondu.pas(x),
+            Etape::Composante { fondu, registres } => fondu.pas(x, registres),
+        }
+    }
+}
+
+/// Cède `delai` images (D0.w, le mot haut de D0 est gardé) ; la suite est l'étape `reprise`.
+fn attendre(x: &mut Ctx, delai: u16, reprise: Etape) -> Flow {
+    set_low_word(&mut x.c.d[0], delai);
+    crate::kernel::attendre(x.c, x.b, reprise);
     Flow::Yield
 }
 
@@ -63,8 +122,8 @@ fn terminer(x: &mut Ctx) -> Flow {
 // Luminosité
 
 /// Un fondu de luminosité : sens (D1), forme (sous-programme ou tâche), pages (complètes ou partielle).
-#[derive(Clone, Copy)]
-struct Luminosite {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Luminosite {
     delta: u32,
     tache: bool,
     partiel: bool,
@@ -78,11 +137,6 @@ impl Luminosite {
             (true, false) => 0x152c,
             (true, true) => 0x158c,
         }
-    }
-
-    /// Lit le fondu interrompu à `reprise` : le sens est dans D1.
-    fn repris(x: &Ctx, reprise: u32) -> Self {
-        Luminosite { delta: x.c.d[1], tache: reprise != 0x14b4, partiel: reprise == 0x158c }
     }
 
     /// Début d'une tâche : `pas` = nombre de pas imposé (sinon celui de l'état). Elle ne démarre que si les
@@ -127,14 +181,14 @@ impl Luminosite {
             return self.fin(x);
         }
         let delai = rd16(x.b, etat::DELAI);
-        attendre(x, delai, self.reprise())
+        attendre(x, delai, Etape::Luminosite(self))
     }
 
     /// Fin : plus de pages ; le sous-programme revient à son appelant, la tâche se termine.
     fn fin(self, x: &mut Ctx) -> Flow {
         wr8(x.b, etat::PAGES, 0);
         if self.tache {
-            terminer(x)
+            super::terminer(x)
         } else {
             Flow::Done
         }
@@ -154,28 +208,32 @@ fn complet(x: &mut Ctx, delta: u32) -> Flow {
     sous_programme(delta).debut_sous_programme(x)
 }
 
-// sous-programmes : 0x144c / 0x1460 fondu complet, 0x146c D0.b pas
-resume!(FONDU_MONTEE, 0x144c, |x| complet(x, MONTE));
-resume!(FONDU_DESCENTE, 0x1460, |x| complet(x, DESCEND));
-resume!(FONDU_DESCENTE_D0, 0x146c, |x| sous_programme(DESCEND).debut_sous_programme(x));
-// tâches : 0x14ba / 0x14d0 fondu complet, 0x14c8 / 0x14de nombre de pas de l'état, 0x1536 / 0x153e partiels
-resume!(FONDU_TACHE_MONTEE, 0x14ba, |x| tache(MONTE, false).debut_tache(x, Some(PAS_COMPLET)));
-resume!(FONDU_TACHE_MONTEE_N, 0x14c8, |x| tache(MONTE, false).debut_tache(x, None));
-resume!(FONDU_TACHE_DESCENTE, 0x14d0, |x| tache(DESCEND, false).debut_tache(x, Some(PAS_COMPLET)));
-resume!(FONDU_TACHE_DESCENTE_N, 0x14de, |x| tache(DESCEND, false).debut_tache(x, None));
-resume!(FONDU_TACHE_RETABLIT, 0x1536, |x| tache(MONTE, true).debut_tache(x, None));
-resume!(FONDU_TACHE_ATTENUE, 0x153e, |x| tache(DESCEND, true).debut_tache(x, None));
-// reprises après la cession d'un pas
-resume!(FONDU_PAS, 0x14b4, |x| Luminosite::repris(x, 0x14b4).pas(x));
-resume!(FONDU_PAS_TACHE, 0x152c, |x| Luminosite::repris(x, 0x152c).pas(x));
-resume!(FONDU_PAS_PARTIEL, 0x158c, |x| Luminosite::repris(x, 0x158c).pas(x));
+/// `0x144c` : fondu complet depuis le noir (sous-programme : la suite de l'appelant attend la fin).
+pub fn montee(x: &mut Ctx) -> Flow {
+    complet(x, MONTE)
+}
+
+/// `0x1460` : fondu complet vers le noir.
+pub fn descente(x: &mut Ctx) -> Flow {
+    complet(x, DESCEND)
+}
+
+/// `0x146c` : fondu vers le noir de D0.b pas.
+pub fn descente_d0(x: &mut Ctx) -> Flow {
+    sous_programme(DESCEND).debut_sous_programme(x)
+}
+
+// le fondu au noir reste appelé par adresse (`call_at` des objets SET qui ferment une scène)
+resume!(FONDU_DESCENTE, 0x1460, descente);
+// tâches : 0x14ba / 0x14d0 fondu complet, 0x14c8 / 0x14de nombre de pas de l'état, 0x1536 / 0x153e partiels (voir
+// `TACHES`)
 
 // ---------------------------------------------------------------------------------------------
 // Par composante
 
 /// Un fondu par composante : cible, forme et adresse qui suit la cession du pas.
-#[derive(Clone, Copy)]
-struct Composante {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Composante {
     cible: Cible,
     tache: bool,
     reprise: u32,
@@ -191,106 +249,57 @@ const COMPOSANTES: [(u32, Composante); 6] = [
     (0x1ced4, Composante { cible: Cible::Palettes, tache: true, reprise: 0x1cefe }),
 ];
 
-fn composante(adresse: u32) -> Composante {
-    COMPOSANTES.into_iter().find(|&(entree, f)| entree == adresse || f.reprise == adresse).unwrap().1
-}
-
-/// Registres sauvés à l'entrée (`movem.l D0-D7/A0-A6,-(SP)`) et rendus à la fin : gardés dans les appels en cours
-/// de la tâche.
-fn sauver_registres(x: &mut Ctx) {
-    let mut a = [0; 7];
-    a.copy_from_slice(&x.c.a[..7]);
-    garder(x.c, x.b, Contenu::Registres { d: x.c.d, a });
-}
-
-fn rendre_registres(x: &mut Ctx) {
-    let Contenu::Registres { d, a } = reprendre(x.c, x.b) else { panic!("fondu par composante : registres sauvés introuvables") };
-    x.c.d = d;
-    x.c.a[..7].copy_from_slice(&a);
+fn composante(entree: u32) -> Composante {
+    COMPOSANTES.into_iter().find(|&(e, _)| e == entree).unwrap().1
 }
 
 impl Composante {
     /// Entrée : registres sauvés, 16 pas (la tâche `0x1ced4` blanchit d'abord les pages, son autre entrée
     /// `0x1cf12` non : `blanchir`).
     fn debut(self, x: &mut Ctx, blanchir: bool) -> Flow {
-        sauver_registres(x);
+        let mut registres = Registres { d: x.c.d, a: [0; 7] };
+        registres.a.copy_from_slice(&x.c.a[..7]);
         if blanchir {
             white_out(x.b);
         }
         wr8(x.b, etat::PAS, PAS_COMPLET);
         wr8(x.b, COMPOSANTE_EN_COURS, 1);
-        self.pas(x)
+        self.pas(x, registres)
     }
 
-    fn pas(self, x: &mut Ctx) -> Flow {
+    fn pas(self, x: &mut Ctx, registres: Registres) -> Flow {
         component_step(x.b, self.cible);
         let reste = rd8(x.b, etat::PAS).wrapping_sub(1);
         wr8(x.b, etat::PAS, reste);
         if reste != 0 {
             let delai = rd16(x.b, etat::DELAI);
-            return attendre(x, delai, self.reprise);
+            return attendre(x, delai, Etape::Composante { fondu: self, registres });
         }
         wr8(x.b, etat::PAGES, 0);
         wr8(x.b, COMPOSANTE_EN_COURS, 0);
-        rendre_registres(x);
+        x.c.d = registres.d;
+        x.c.a[..7].copy_from_slice(&registres.a);
         if self.tache {
-            terminer(x)
+            super::terminer(x)
         } else {
             Flow::Done
         }
     }
 }
 
-macro_rules! composante {
-    ($entree:ident, $reprise:ident, $adresse:expr) => {
-        resume!($entree, $adresse, |x| composante($adresse).debut(x, $adresse == 0x1ced4));
-        resume!($reprise, composante_reprise($adresse), |x| composante($adresse).pas(x));
-    };
+/// `0x1ccc2` : fondu par composante vers le blanc (sous-programme).
+pub fn vers_le_blanc(x: &mut Ctx) -> Flow {
+    composante(0x1ccc2).debut(x, false)
 }
 
-const fn composante_reprise(adresse: u32) -> u32 {
-    let mut i = 0;
-    while i < COMPOSANTES.len() {
-        if COMPOSANTES[i].0 == adresse {
-            return COMPOSANTES[i].1.reprise;
-        }
-        i += 1;
-    }
-    panic!("fondu par composante inconnu")
+/// `0x1ce30` : fondu par composante vers les couleurs.
+pub fn vers_les_couleurs(x: &mut Ctx) -> Flow {
+    composante(0x1ce30).debut(x, false)
 }
 
-composante!(FONDU_BLANC, FONDU_BLANC_PAS, 0x1ccc2);
-composante!(FONDU_COULEURS, FONDU_COULEURS_PAS, 0x1ce30);
-composante!(FONDU_PALETTES, FONDU_PALETTES_PAS, 0x1ce9e);
-composante!(FONDU_TACHE_BLANC, FONDU_TACHE_BLANC_PAS, 0x1ccf8);
-composante!(FONDU_TACHE_COULEURS, FONDU_TACHE_COULEURS_PAS, 0x1ce64);
-composante!(FONDU_TACHE_PALETTES, FONDU_TACHE_PALETTES_PAS, 0x1ced4);
-resume!(FONDU_TACHE_PALETTES_B, 0x1cf12, |x| composante(0x1ced4).debut(x, false));
+/// `0x1ce9e` : fondu par composante vers les palettes.
+pub fn vers_les_palettes(x: &mut Ctx) -> Flow {
+    composante(0x1ce9e).debut(x, false)
+}
 
-pub const NATIVES: &[Native] = &[
-    FONDU_MONTEE,
-    FONDU_DESCENTE,
-    FONDU_DESCENTE_D0,
-    FONDU_TACHE_MONTEE,
-    FONDU_TACHE_MONTEE_N,
-    FONDU_TACHE_DESCENTE,
-    FONDU_TACHE_DESCENTE_N,
-    FONDU_TACHE_RETABLIT,
-    FONDU_TACHE_ATTENUE,
-    FONDU_PAS,
-    FONDU_PAS_TACHE,
-    FONDU_PAS_PARTIEL,
-    FONDU_BLANC,
-    FONDU_BLANC_PAS,
-    FONDU_COULEURS,
-    FONDU_COULEURS_PAS,
-    FONDU_PALETTES,
-    FONDU_PALETTES_PAS,
-    FONDU_TACHE_BLANC,
-    FONDU_TACHE_BLANC_PAS,
-    FONDU_TACHE_COULEURS,
-    FONDU_TACHE_COULEURS_PAS,
-    FONDU_TACHE_PALETTES,
-    FONDU_TACHE_PALETTES_PAS,
-    FONDU_TACHE_PALETTES_B,
-];
+pub const NATIVES: &[Native] = &[FONDU_DESCENTE];

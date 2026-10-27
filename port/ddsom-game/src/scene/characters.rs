@@ -9,7 +9,7 @@ use super::bonus::{call_keep_a0, dispatch, fade};
 use super::Ctx;
 use crate::mem::{prog8, rd16, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
-use crate::{resume, Native};
+use crate::Native;
 
 mod v {
     use crate::mem::A5;
@@ -87,33 +87,51 @@ fn start(x: &mut Ctx) -> Flow {
     }
     wr8(x.b, v::MASK, mask);
     x.set_v8(0x5f, 0);
-    fade(x, 0x1460, at::FADED_OUT)
+    fade(x, crate::taches::fondu::descente, Etape::FadedOut)
 }
 
-// Écran vidé, caméras à l'origine, palettes de l'intermède (84) ; puis le premier joueur.
-resume!(CHARACTERS_FADED_OUT, at::FADED_OUT, |x| {
-    for off in [0x50a, 0x55a, 0x506, 0x556] {
-        x.set_v16(off, 0);
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        /// Écran vidé, caméras à l'origine, palettes de l'intermède (84) ; puis le premier joueur.
+        FadedOut = at::FADED_OUT => |x| {
+            for off in [0x50a, 0x55a, 0x506, 0x556] {
+                x.set_v16(off, 0);
+            }
+            x.set_v8(0x53c, 0);
+            super::bonus::reset_camera_copies(x);
+            x.set_v8(0x42, 2);
+            next_sub_step(x);
+            wr16(x.b, v::PLAYER, super::PLAYERS as u16);
+            wr8(x.b, v::LEFT, 4);
+            call_keep_a0(x, &[0x1f184, 0x1de7c, 0x2062]);
+            x.call(0xca8);
+            x.set_v8(0x3c, 0xff);
+            x.c.d[0] = x.c.d[0] & !0xffff | 84;
+            x.call(0x1a67e);
+            x.c.d[0] = x.c.d[0] & !0xffff | 84;
+            x.call(0x1a8b2);
+            x.c.d[0] = 0;
+            x.call(0x1a60a);
+            x.set_v8(0x48e, 15);
+            x.call(0x1686);
+            next_player(x)
+        },
+        Retry5 = at::RETRY_5 => |x| {
+            let Some(o) = object(x, 5, 4, Etape::Retry5) else { return Flow::Yield };
+            bind(x, o);
+            objects_6_7(x)
+        },
+        Retry6 = at::RETRY_6 => objects_6_7,
+        Retry7 = at::RETRY_7 => object_7,
+        NextWaited = at::NEXT_WAITED => |x| {
+            for r in [0xca8, 0xcc8, 0xce8] {
+                x.call(r);
+            }
+            Flow::Done
+        },
     }
-    x.set_v8(0x53c, 0);
-    super::bonus::reset_camera_copies(x);
-    x.set_v8(0x42, 2);
-    next_sub_step(x);
-    wr16(x.b, v::PLAYER, super::PLAYERS as u16);
-    wr8(x.b, v::LEFT, 4);
-    call_keep_a0(x, &[0x1f184, 0x1de7c, 0x2062]);
-    x.call(0xca8);
-    x.set_v8(0x3c, 0xff);
-    x.c.d[0] = x.c.d[0] & !0xffff | 84;
-    x.call(0x1a67e);
-    x.c.d[0] = x.c.d[0] & !0xffff | 84;
-    x.call(0x1a8b2);
-    x.c.d[0] = 0;
-    x.call(0x1a60a);
-    x.set_v8(0x48e, 15);
-    x.call(0x1686);
-    next_player(x)
-});
+}
 
 /// Sous-état 2 : le prochain joueur concerné, ou la fin de l'état.
 fn next_player(x: &mut Ctx) -> Flow {
@@ -147,11 +165,11 @@ fn player_scene(x: &mut Ctx) -> Flow {
     let p = rd16(x.b, v::PLAYER) as i16 as i32 as u32;
     x.c.a[6] = p;
     x.c.d[1] = rd8(x.b, p + 3) as u32;
-    x.wait(4, at::RETRY_5)
+    x.wait(4, Etape::Retry5)
 }
 
 /// Crée l'objet SET de type `kind` ; s'il n'y a pas de place, attend `frames` images et reprend en `retry`.
-fn object(x: &mut Ctx, kind: u32, frames: u32, retry: u32) -> Option<u32> {
+fn object(x: &mut Ctx, kind: u32, frames: u32, retry: Etape) -> Option<u32> {
     x.c.d[0] = kind;
     x.call(SET);
     if x.c.sr & m68k::SR_C != 0 {
@@ -167,22 +185,14 @@ fn bind(x: &mut Ctx, o: u32) {
     wr32(x.b, o + 0x4c, x.c.a[0]);
 }
 
-resume!(CHARACTERS_RETRY_5, at::RETRY_5, |x| {
-    let Some(o) = object(x, 5, 4, at::RETRY_5) else { return Flow::Yield };
-    bind(x, o);
-    objects_6_7(x)
-});
-resume!(CHARACTERS_RETRY_6, at::RETRY_6, objects_6_7);
-resume!(CHARACTERS_RETRY_7, at::RETRY_7, object_7);
-
 fn objects_6_7(x: &mut Ctx) -> Flow {
-    let Some(o) = object(x, 6, 1, at::RETRY_6) else { return Flow::Yield };
+    let Some(o) = object(x, 6, 1, Etape::Retry6) else { return Flow::Yield };
     bind(x, o);
     object_7(x)
 }
 
 fn object_7(x: &mut Ctx) -> Flow {
-    let Some(o) = object(x, 7, 1, at::RETRY_7) else { return Flow::Yield };
+    let Some(o) = object(x, 7, 1, Etape::Retry7) else { return Flow::Yield };
     wr16(x.b, o + 0x34, x.c.a[6] as u16);
     Flow::Done
 }
@@ -201,15 +211,8 @@ fn player_done(x: &mut Ctx) -> Flow {
     wr8(x.b, v::LEFT, left);
     call_keep_a0(x, &[0x1f184, 0x1de7c, 0x2062, 0x1de96, 0xc58]);
     x.set_v16(0x14, 0x12c0);
-    x.wait(1, at::NEXT_WAITED)
+    x.wait(1, Etape::NextWaited)
 }
-
-resume!(CHARACTERS_NEXT_WAITED, at::NEXT_WAITED, |x| {
-    for r in [0xca8, 0xcc8, 0xce8] {
-        x.call(r);
-    }
-    Flow::Done
-});
 
 /// Fin de l'état (0xf66bc) : état suivant de la séquence, une image cédée (retour direct à l'aiguillage).
 fn end(x: &mut Ctx) -> Flow {
@@ -217,7 +220,7 @@ fn end(x: &mut Ctx) -> Flow {
     x.set_v8(0x33, 0);
     x.set_v8(0x3c, 1);
     x.c.d[0] = 1;
-    x.jump_to(0xa40)
+    crate::taches::attendre_puis_revenir(x)
 }
 
 pub const CHARACTERS: Native = Native {
@@ -235,9 +238,4 @@ pub const CHARACTERS: Native = Native {
 
 pub const NATIVES: &[Native] = &[
     CHARACTERS,
-    CHARACTERS_FADED_OUT,
-    CHARACTERS_RETRY_5,
-    CHARACTERS_RETRY_6,
-    CHARACTERS_RETRY_7,
-    CHARACTERS_NEXT_WAITED,
 ];

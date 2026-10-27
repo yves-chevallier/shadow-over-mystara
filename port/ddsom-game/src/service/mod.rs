@@ -26,7 +26,6 @@ pub mod reglages;
 use crate::config;
 use crate::mem::{set_low_word, wr32};
 use crate::modes::{Flow, Sequence};
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -87,9 +86,6 @@ pub mod key {
 
 /// Routines d'origine.
 pub mod ext {
-    pub const KILL_TASK: u32 = 0xa14;
-    pub const RESTART_TASK: u32 = 0xae4;
-    pub const WAIT_ONE_FRAME: u32 = 0xb64;
     pub const LOCK: u32 = 0xb96;
     pub const UNLOCK: u32 = 0xbac;
     pub const LAYERS_ON: u32 = 0xbc6;
@@ -104,16 +100,6 @@ pub mod ext {
     pub const SOUND_STOP: u32 = 0xe0882;
     pub const BOOT_TASK: u32 = 0x11b16;
     pub const SECRET_TEST: u32 = 0xee16e;
-}
-
-/// Adresses de l'original.
-pub mod at {
-    /// Retour de l'appel du gestionnaire dans la boucle de la tâche (`jsr (table)` en 0x29186).
-    pub const HANDLER_RETURN: u32 = 0x2918a;
-    /// Reprise du menu après l'image d'attente qui suit l'effacement de l'écran.
-    pub const MENU_AFTER_CLEAR: u32 = 0x291ec;
-    /// Retour du `jsr 0xae4` de la sortie (jamais repris : la tâche redevient la tâche de démarrage).
-    pub const EXIT_RETURN: u32 = 0x29354;
 }
 
 /// Textes du menu (descripteurs en ROM).
@@ -312,7 +298,7 @@ pub fn handler(x: &mut Ctx) -> Flow {
 }
 
 /// `0x291a0` : écran remis à neuf (couches coupées, VRAM effacée, palettes d'origine à pleine luminosité),
-/// une image d'attente, puis le menu (`R_MENU_AFTER_CLEAR`).
+/// une image d'attente, puis le menu (`menu_after_clear`).
 pub fn show_menu(x: &mut Ctx) -> Flow {
     layers_off(x);
     for f in [ext::CLEAR_OBJECTS, ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::PALETTES] {
@@ -322,10 +308,11 @@ pub fn show_menu(x: &mut Ctx) -> Flow {
     for off in var::SCROLLS {
         x.set_v16(off, 0);
     }
-    x.tail(ext::WAIT_ONE_FRAME, at::MENU_AFTER_CLEAR)
+    crate::taches::une_image(x, crate::taches::service::Etape::MenuAfterClear)
 }
 
-resume!(R_MENU_AFTER_CLEAR, at::MENU_AFTER_CLEAR, |x| {
+/// `0x291ec` : le menu, une fois l'écran effacé.
+pub fn menu_after_clear(x: &mut Ctx) -> Flow {
     x.set_v8(var::FRAME_FLAG, 0);
     set(x, f::SECRET, 0);
     set(x, f::REPEAT_V, 1);
@@ -340,7 +327,7 @@ resume!(R_MENU_AFTER_CLEAR, at::MENU_AFTER_CLEAR, |x| {
     }
     layers_on(x);
     Flow::Done
-});
+}
 
 /// `0x29254` : choix d'une ligne (haut, bas), entrée dans l'écran (tir 1).
 fn menu(x: &mut Ctx) -> Flow {
@@ -395,7 +382,7 @@ fn exit(x: &mut Ctx) -> Flow {
     }
     x.set_v16(var::ACTIVE, 0);
     x.c.a[0] = ext::BOOT_TASK;
-    x.tail(ext::RESTART_TASK, at::EXIT_RETURN)
+    crate::taches::recommencer(x)
 }
 
 /// `0x29a48` : départ 1P tenu et tir 1 : retour au menu.
@@ -432,4 +419,4 @@ pub const BLOCAGE_MEMOIRE: Native = blocage(memoire::BLOQUE, "service_blocage_me
 /// « EEPROM ERROR » (`0x2d7fa`).
 pub const BLOCAGE_EEPROM: Native = blocage(config::BLOQUE, "service_blocage_eeprom");
 
-pub const NATIVES: &[Native] = &[R_MENU_AFTER_CLEAR, BLOCAGE_MEMOIRE, BLOCAGE_EEPROM];
+pub const NATIVES: &[Native] = &[BLOCAGE_MEMOIRE, BLOCAGE_EEPROM];

@@ -5,17 +5,15 @@
 //! (la phase `A5+0x2c`, table `0x1c502`, suivie de `game::FRAME_END`). Les phases ne cèdent jamais : tout le
 //! travail d'un pas tient dans une native.
 //!
-//! Trois étapes, chacune une native posée à l'adresse de l'original :
-//!
 //! | Adresse | Étape |
 //! |---|---|
-//! | `0x1c45a` | entrée : variables de phase remises à zéro, puis boucle |
-//! | `0x1c468` | début de tour (retour de `FRAME_END`) : compteurs, service, puis cession |
-//! | `0x1c48c` | cession : une image d'attente, sauf tour sauté (voir `wait`) |
-//! | `0x1c4b0` | pas de jeu : appel de la phase |
+//! | `0x1c45a` | entrée ([`Etape::Entree`]) : variables de phase remises à zéro, puis boucle |
+//! | `0x1c468` | début de tour ([`Etape::Tour`], retour de `FRAME_END`) : compteurs, service, puis la cession `0x1c48c` : une image d'attente, sauf tour sauté (voir `wait`) |
+//! | `0x1c4b0` | pas de jeu : appel de la phase (native) |
 //!
 //! Le pas commence à `0x1c4b0` = [`crate::GAME_STEP`], où la machine plafonne le nombre de pas par image
-//! (`cps2::StepCap`) : les étapes précédentes s'arrêtent donc *sur* cette adresse au lieu de l'enchaîner.
+//! (`cps2::StepCap`, que la boucle d'image teste sur le PC avant chaque native) : il reste une native posée à cette
+//! adresse, et les étapes précédentes s'arrêtent *sur* elle au lieu de l'enchaîner.
 
 use super::{ceder, Attente};
 use crate::mem::{rd8, wr32, wr8, A5};
@@ -23,6 +21,15 @@ use crate::modes::{Flow, Sequence};
 use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
+
+crate::etapes! {
+    /// Étapes de la tâche de partie (le pas de jeu, `0x1c4b0`, reste une native : voir plus haut).
+    pub enum Etape {
+        Entree = at::ENTRY => entry,
+        /// Début de tour : retour de la fin d'image (`FRAME_END`), ou d'une phase qui dépile son propre retour.
+        Tour = at::TURN => turn,
+    }
+}
 
 /// Variables de la RAM de travail (décalages depuis A5).
 mod var {
@@ -49,14 +56,13 @@ const PHASES: u32 = 0x1c502;
 mod at {
     pub const ENTRY: u32 = 0x1c45a;
     pub const TURN: u32 = 0x1c468;
-    pub const YIELD: u32 = 0x1c48c;
     pub const STEP: u32 = crate::GAME_STEP;
     /// Retour d'une phase : `game::FRAME_END`.
     pub const FRAME_END: u32 = 0x1c4c4;
 }
 
 /// Appel en cours de la tâche : `suite` reprendra quand l'appelé reviendra (rien n'est empilé sur la pile 68000).
-fn push(x: &mut Ctx, suite: u32) {
+fn push(x: &mut Ctx, suite: impl Into<super::table::Suite>) {
     super::table::appeler(x.c, x.b, suite);
 }
 
@@ -114,7 +120,7 @@ fn wait(x: &mut Ctx) -> Flow {
 /// `0x1c4b0` : le pas de jeu. La phase revient en `FRAME_END`, qui revient au début du tour.
 fn step(x: &mut Ctx) -> Flow {
     wr8(x.b, STEPPED, 0xff);
-    push(x, at::TURN);
+    push(x, Etape::Tour);
     let phase = x.v8(var::PHASE);
     x.c.d[0] = phase as u32;
     flags(x, phase);
@@ -124,9 +130,6 @@ fn step(x: &mut Ctx) -> Flow {
     x.jump_to(handler)
 }
 
-resume!(R_ENTRY, at::ENTRY, entry);
-resume!(R_TURN, at::TURN, turn);
-resume!(R_YIELD, at::YIELD, wait);
 resume!(R_STEP, at::STEP, step);
 
-pub const NATIVES: &[Native] = &[R_ENTRY, R_TURN, R_YIELD, R_STEP];
+pub const NATIVES: &[Native] = &[R_STEP];
