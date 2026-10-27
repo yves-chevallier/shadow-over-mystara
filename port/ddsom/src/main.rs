@@ -12,22 +12,28 @@
 //! `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade), `DDSOM_INTERP=1` (tout interprété) ; ces modes
 //! lisent les ROMs.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
-//! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter.
+//! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter ;
+//! à changer dans touches.cfg (`touches.rs`), manettes Xbox comprises sous Windows (`manette.rs`).
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
+//! `DDSOM_ENREGISTRE=partie.txt` enregistre les entrées en scénario (et l'EEPROM de départ dans
+//! `partie.txt.eeprom`) : `validate <roms> partie.txt.eeprom partie.txt <images>` rejoue la partie.
 
 mod audio;
+mod manette;
+mod touches;
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use cps2::Machine;
-use minifb::{Key, KeyRepeat, Scale, Window, WindowOptions};
+use minifb::{Scale, Window, WindowOptions};
 
 const FRAME_HZ: f64 = 8_000_000.0 / 512.0 / 262.0;
 
 fn main() {
     let (romdir, assets) = arguments(std::env::args().skip(1).collect());
     let nvram = PathBuf::from("nvram/ddsom.eeprom");
+    let mut touches = touches::Touches::charge("touches.cfg".as_ref());
     let eeprom = std::fs::read(&nvram).ok();
     // le jeu : sans 68000, routines Rust seules (il s'arrête sur une adresse qui n'en a pas). Diagnostic :
     // DDSOM_HYBRIDE=1 : routines Rust, le reste en code 68000 recompilé, 68000 surcadencé ; DDSOM_ORIGINE=1 : code
@@ -89,16 +95,28 @@ fn main() {
 
     let audio = audio::Audio::open(qsound::SAMPLE_RATE.round() as u32);
     if audio.is_none() {
-        eprintln!("Son indisponible (PulseAudio introuvable) : le jeu tourne sans son.");
+        eprintln!("Son indisponible (pas de sortie audio) : le jeu tourne sans son.");
     }
 
     let frame_time = Duration::from_secs_f64(1.0 / FRAME_HZ);
     let mut next = Instant::now();
     let mut paused = false;
+    let mut enregistreur = std::env::var_os("DDSOM_ENREGISTRE").map(|f| {
+        let f = PathBuf::from(f);
+        let mut ee = f.clone().into_os_string();
+        ee.push(".eeprom");
+        std::fs::write(&ee, m.bus.eeprom.to_bytes())
+            .and_then(|()| ddsom_game::scenario::Enregistreur::cree(&f))
+            .unwrap_or_else(|e| panic!("enregistrement dans {} : {e}", f.display()))
+    });
     let mut buf = vec![0u32; 384 * 224];
 
-    while win.is_open() && !win.is_key_down(Key::Escape) {
-        if win.is_key_pressed(Key::P, KeyRepeat::No) {
+    while win.is_open() {
+        let t = touches.lit(&win);
+        if t.quitter {
+            break;
+        }
+        if t.pause {
             paused = !paused;
         }
         if paused {
@@ -107,7 +125,14 @@ fn main() {
             next = Instant::now();
             continue;
         }
-        set_inputs(&win, &mut m);
+        m.bus.inputs.in0 = t.in0;
+        m.bus.inputs.in2 = t.in2;
+        if let Some(e) = &mut enregistreur {
+            if let Err(err) = e.image(&m) {
+                eprintln!("Enregistrement arrêté : {err}");
+                enregistreur = None;
+            }
+        }
         let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
             Ok(img) => img,
             // sans 68000 : arrêt sur une adresse sans routine Rust (diagnostic déjà affiché par la panique)
@@ -124,7 +149,7 @@ fn main() {
         win.update_with_buffer(&buf, 384, 224).expect("affichage");
 
         let samples: Vec<i16> = m.sound.audio.drain(..).flat_map(|s| s).collect();
-        let fast = win.is_key_down(Key::Tab);
+        let fast = t.rapide;
         if let (Some(a), false) = (&audio, fast) {
             a.push(samples);
         }
@@ -164,56 +189,4 @@ fn arguments(args: Vec<String>) -> (Option<PathBuf>, Option<PathBuf>) {
         }
     }
     (romdir, assets)
-}
-
-/// Clavier -> ports d'entrée CPS2 (actifs à 0).
-fn set_inputs(win: &Window, m: &mut Machine) {
-    let k = |keys: &[Key]| keys.iter().any(|&key| win.is_key_down(key));
-    let mut in0: u16 = 0xffff;
-    let p1 = [
-        (&[Key::Right][..], 0x01),
-        (&[Key::Left][..], 0x02),
-        (&[Key::Down][..], 0x04),
-        (&[Key::Up][..], 0x08),
-        (&[Key::LeftCtrl, Key::W][..], 0x10),
-        (&[Key::LeftAlt, Key::X][..], 0x20),
-        (&[Key::Space, Key::C][..], 0x40),
-        (&[Key::LeftShift, Key::V][..], 0x80),
-    ];
-    for (keys, bit) in p1 {
-        if k(keys) {
-            in0 &= !bit;
-        }
-    }
-    // joueur 2 : R F D G, boutons A S Q W -> comme MAME
-    let p2 = [
-        (&[Key::G][..], 0x0100),
-        (&[Key::D][..], 0x0200),
-        (&[Key::F][..], 0x0400),
-        (&[Key::R][..], 0x0800),
-        (&[Key::A][..], 0x1000),
-        (&[Key::S][..], 0x2000),
-        (&[Key::Q][..], 0x4000),
-    ];
-    for (keys, bit) in p2 {
-        if k(keys) {
-            in0 &= !bit;
-        }
-    }
-    let mut in2: u16 = 0xffff;
-    let sys = [
-        (&[Key::F2][..], 0x0002),
-        (&[Key::Key9][..], 0x0004),
-        (&[Key::Key1][..], 0x0100),
-        (&[Key::Key2][..], 0x0200),
-        (&[Key::Key5][..], 0x1000),
-        (&[Key::Key6][..], 0x2000),
-    ];
-    for (keys, bit) in sys {
-        if k(keys) {
-            in2 &= !bit;
-        }
-    }
-    m.bus.inputs.in0 = in0;
-    m.bus.inputs.in2 = in2;
 }

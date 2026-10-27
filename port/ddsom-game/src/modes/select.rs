@@ -89,8 +89,6 @@ mod ext {
     pub const PLAYER_UI: u32 = 0x1507a;
     pub const SOUND_E10D8: u32 = 0xe10d8;
     pub const SOUND_E109C: u32 = 0xe109c;
-    pub const SOUND_E0A40: u32 = 0xe0a40;
-    pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const ALLOC_CURSOR: u32 = 0xae776;
     pub const ALLOC_PANEL: u32 = 0xaf346;
     pub const FADE_TASK: u32 = 0x1ced4;
@@ -105,7 +103,6 @@ mod ext {
     pub const PALETTE_SET: u32 = 0x1a67e;
     pub const PALETTE_FADE: u32 = 0x1a8b2;
     pub const PALETTE_PAGE_C: u32 = 0x1a3d4;
-    pub const BRIGHTNESS_WHITE: u32 = 0x1686;
 }
 
 /// Tables en ROM : octets de variante par personnage (code), routines d'initialisation des quatre
@@ -196,7 +193,7 @@ fn step_0(x: &mut Ctx) -> Flow {
         wr32(x.b, var::CHOICES + off, 0xffff_ffff);
     }
     x.call(ext::PLAYER_UI);
-    x.call(ext::SOUND_E10D8);
+    crate::sound::jouer_global(x.b, ext::SOUND_E10D8);
     wr16(x.b, var::COUNTDOWN, 0x203c);
     wr16(x.b, var::COUNTDOWN, COUNTDOWN_START);
     objects_0(x)
@@ -328,7 +325,7 @@ crate::etapes! {
             x.c.a[2] = 0;
             x.c.d[6] = 0xffff;
             wr8(x.b, var::FADE_PAGES, 0xf);
-            x.call(ext::BRIGHTNESS_WHITE);
+            crate::palette::full_brightness(x.b);
             x.c.d[0] = 0;
             for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
                 wr32(x.b, v, 0);
@@ -677,7 +674,7 @@ fn step_6(x: &mut Ctx) -> Flow {
             wr8(x.b, 0xff2478 + 0x3f, 1);
         }
     }
-    x.call_d0(ext::SOUND_E0A82, 0x1c);
+    crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0x1c });
     wr16(x.b, var::FADE_DELAY, 1);
     wr8(x.b, var::FADE_PAGES, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::Step6Faded)
@@ -692,8 +689,8 @@ const STEP_6_PALETTE: u32 = 0x1d1e8;
 fn step_8(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, var::STEP).wrapping_add(2);
     wr8(x.b, var::STEP, s);
-    x.call_d0(ext::SOUND_E0A40, 4);
-    x.call(ext::SOUND_E109C);
+    crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 0xff, ligne: 4 });
+    crate::sound::jouer_global(x.b, ext::SOUND_E109C);
     x.c.a[1] = 0x917000;
     x.call_d0(ext::TILE_BLOCK, 0x208);
     x.call_d0(ext::TILE_BLOCK, 0x209);
@@ -829,7 +826,7 @@ fn step_e(x: &mut Ctx) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    x.call_d0(ext::SOUND_E0A82, 0x1c);
+    crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0x1c });
     let phase = rd8(x.b, var::PHASE).wrapping_add(4);
     wr8(x.b, var::PHASE, phase);
     wr8(x.b, var::STEP, 0);

@@ -22,6 +22,8 @@ use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr16, wr32, w
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
 use crate::Native;
+use crate::player::ram;
+use crate::machine::Machine;
 
 /// Tables de la ROM (données) : un pointeur par personnage vers des lignes de 8 octets
 /// (animation, décalage x, décalage z, retournement, profondeur).
@@ -247,7 +249,7 @@ fn blink_unless_idle(g: &mut Ctx, p: Player) {
     if !(0x24..=0x27).contains(&kind) || (charge as i8) > 5 {
         return;
     }
-    let phase = g.a5u8(super::ram::FRAME_COUNTER) & 7;
+    let phase = ram::FRAME_COUNTER.get(g.b) & 7;
     set_low_byte(&mut g.c.d[0], phase);
     if phase & 4 != 0 {
         p.set_u16(g, Player::OVERLAY_ATTACK, 0);
@@ -259,7 +261,7 @@ fn blink_unless_idle(g: &mut Ctx, p: Player) {
 /// dernier sous-objet manipulé).
 fn sparkle(g: &mut Ctx, target: u32) {
     cov!();
-    let phase = g.a5u8(super::ram::FRAME_COUNTER) & 7;
+    let phase = ram::FRAME_COUNTER.get(g.b) & 7;
     set_low_byte(&mut g.c.d[0], phase);
     if phase != 0 {
         return;
@@ -297,7 +299,7 @@ fn team_score_regs(g: &mut Ctx, reached: bool) {
 pub fn update(g: &mut Ctx) {
     cov!();
     wr16(g.b, TEAM_READY, 0);
-    if g.a5u8(super::ram::PLAYERS_ALIVE) as i8 >= 3 {
+    if ram::PLAYERS_ALIVE.get(g.b) as i8 >= 3 {
         let reached = team_score_reached(g);
         team_score_regs(g, reached);
         if reached {

@@ -6,7 +6,6 @@ use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const FLASH_ON: u32 = 0x1ac68;
 const FLASH_OFF: u32 = 0x1ac90;
 
 fn signed(v: u16, negate: bool) -> u16 {
@@ -83,7 +82,7 @@ mod orbit {
         x.set8(f::POWER2, p2);
         x.set_bit(0x1, 1, true);
         x.anim(ANIMS, 0);
-        x.call(SFX);
+        crate::sound::jouer(x.b, SFX, x.o);
     }
 
     /// Sous-état 0 : attend le retard `+0x53`, puis passe à l'animation d'ouverture.
@@ -279,7 +278,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(FLASH_ON);
+        x.call(crate::palette::FLASH_COLOR_ON.entry);
         x.reinsert();
     }
 
@@ -331,7 +330,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(FLASH_ON);
+        x.call(crate::palette::FLASH_COLOR_ON.entry);
         x.reinsert();
     }
 

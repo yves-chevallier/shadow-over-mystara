@@ -7,9 +7,6 @@ use crate::mem::{rd16, wr16};
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const SHAKE: u32 = 0x2824;
-const FLASH_ON: u32 = 0x1ac68;
-const FLASH_PULSE: u32 = 0x1ac86;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -74,7 +71,7 @@ mod jet {
                     x.add8(0x4, 2);
                     x.anim(ANIMS, 1);
                     x.reinsert();
-                    x.call(SFX);
+                    crate::sound::jouer(x.b, SFX, x.o);
                 }
             }
             2 => active(x),
@@ -188,7 +185,7 @@ mod flame {
                 x.set8(f::POWER2, 6);
                 x.anim(ANIMS, 0);
                 x.reinsert();
-                x.call(SFX);
+                crate::sound::jouer(x.b, SFX, x.o);
             }
             2 => {
                 if x.anim_step() {
@@ -297,7 +294,7 @@ mod star {
                 x.anim(ANIMS, 0);
                 x.reinsert();
                 if x.u8(0x3) == 0 {
-                    x.call(SFX);
+                    crate::sound::jouer(x.b, SFX, x.o);
                 }
             }
             2 => {
@@ -366,9 +363,9 @@ mod stone {
                     x.set32(0xc, 0);
                     x.set16(0x5c, 4);
                     x.set_d0w(8);
-                    x.call(SHAKE);
+                    x.call(crate::camera_modes::SHAKE_A.entry);
                     x.anim(ANIMS, 1);
-                    x.call(SFX);
+                    crate::sound::jouer(x.b, SFX, x.o);
                 }
                 2 => {
                     x.add16(0x5c, 0xffff);
@@ -376,7 +373,7 @@ mod stone {
                         x.add8(0x5, 2);
                         x.set16(0x5c, 4);
                         x.set_a5_u16(0x4ba, 0x100);
-                        x.call(FLASH_ON);
+                        x.call(crate::palette::FLASH_COLOR_ON.entry);
                     }
                     x.anim_step();
                 }
@@ -385,7 +382,7 @@ mod stone {
                     if x.u16(0x5c) == 0 {
                         x.add8(0x5, 2);
                         x.set16(0x5c, 2);
-                        x.call(FLASH_PULSE);
+                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
                     }
                     x.anim_step();
                 }

@@ -433,7 +433,6 @@ mod wave_leader {
 
     /// Délais entre deux vagues (octets, espace programme), indexés par un tirage de 4 bits.
     const DELAYS: u32 = 0xbc63e;
-    const CAMERA_LOCK: u32 = 0x2860;
     const CAMERA_LOCK_PARAM: u32 = 0x3c;
     /// Places libres du pool ENEMY (A5+) ; il en faut trois par vague.
     const ENEMY_FREE: u32 = 0x7e62;
@@ -516,7 +515,7 @@ mod wave_leader {
                 }
                 x.add8(0x5, 2);
                 x.c.d[0] = x.c.d[0] & !0xffff | CAMERA_LOCK_PARAM;
-                x.call(CAMERA_LOCK);
+                x.call(crate::camera_modes::SHAKE_B.entry);
             }
             2 => {
                 let (a, b) = (x.u8(DEFEATED_A), x.u8(DEFEATED_B));
@@ -665,6 +664,71 @@ mod wave_leader {
     }
 }
 
+/// Fondu au noir des portes (SET 7 [`exit_gate`], SET 29 `set_b::door_b`) : le sous-programme 0x1460 cède la main
+/// pendant ses 16 pas. La porte l'appelle comme un sous-programme de tâche (lot E) : la suite, une [`Etape`] qui
+/// porte la porte (A0), est rangée dans les appels en cours de la tâche ; à la fin du fondu, la tâche y reprend,
+/// puis revient dans la boucle de dispatch par l'adresse de retour du gestionnaire, restée sur la pile 68000.
+pub mod fondu_de_sortie {
+    use super::super::set_b;
+    use super::Cx;
+    use crate::mem::A5;
+    use crate::modes::{Flow, Sequence};
+    use crate::objects::Obj;
+
+    /// Paramètres du fondu de luminosité (`taches::fondu`) : pages (bit k : page k) et délai entre deux pas.
+    pub(super) const PAGES: u32 = 0x48e;
+    const DELAI: u32 = 0x490;
+
+    /// Où la tâche reprend après le fondu (adresse de retour de l'appel de 0x1460 dans l'original).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Etape {
+        /// Porte de sortie (SET 7), changement de zone (0xcb896) : `exit_gate::after_fade`.
+        Zone(Obj),
+        /// Porte de sortie (SET 7), scène suivante (0xcb9c0) : `exit_gate::next_scene`.
+        Scene(Obj),
+        /// Porte de passage (SET 29, 0xd8f06) : `set_b::door_b::after_fade`.
+        Passage(Obj),
+    }
+
+    impl Etape {
+        pub const fn adresse(self) -> u32 {
+            match self {
+                Etape::Zone(_) => 0xcb896,
+                Etape::Scene(_) => 0xcb9c0,
+                Etape::Passage(_) => 0xd8f06,
+            }
+        }
+
+        /// La fin du gestionnaire de la porte, puis son retour (`rts`) dans la boucle de dispatch.
+        pub fn pas(self, s: &mut crate::scene::Ctx) -> Flow {
+            let (Etape::Zone(porte) | Etape::Scene(porte) | Etape::Passage(porte)) = self;
+            let mut x = Cx { c: &mut *s.c, b: &mut *s.b, o: porte };
+            match self {
+                Etape::Zone(_) => super::exit_gate::after_fade(&mut x),
+                Etape::Scene(_) => super::exit_gate::next_scene(&mut x),
+                Etape::Passage(_) => set_b::door_b::after_fade(&mut x),
+            }
+            Flow::Done
+        }
+    }
+
+    /// Fondu complet vers le noir (`jsr 0x1460`, délai 2, quatre pages), suivi de `suite`. Le fondu cède la main :
+    /// les fonctions Rust de la boucle de dispatch qui ont appelé le gestionnaire sont abandonnées (`Unwound`),
+    /// comme le faisait `call_at`, et la boucle reprend par l'adresse de retour du gestionnaire.
+    pub fn fondu_au_noir(x: &mut Cx, suite: fn(Obj) -> Etape) -> ! {
+        x.set_a5_u16(DELAI, 2);
+        x.set_a5_u8(PAGES, 0xf);
+        // registres de l'appel d'origine, gardés par le contexte de la tâche jusqu'à la reprise
+        let porte = x.o;
+        x.c.a[0] = porte.0;
+        x.c.a[5] = A5;
+        let mut s = crate::scene::Ctx::new(&mut *x.c, &mut *x.b);
+        // s'il revenait sans céder, la suite et le retour du gestionnaire seraient déjà faits (`revenir`)
+        s.sous_programme(crate::taches::fondu::descente, suite(porte));
+        std::panic::resume_unwind(Box::new(crate::Unwound))
+    }
+}
+
 /// Type 7 (0xcb29c) : porte de sortie de zone (h). Quand un joueur reste 24 images dans l'emprise de la
 /// porte, il « déclenche » la sortie (état imposé par la zone) ; quand tous les joueurs vivants sont
 /// prêts, la zone change. Elle n'agit que si `+0x2f` est nul, hors pause et sans transition en cours
@@ -686,8 +750,8 @@ mod wave_leader {
 /// | 2 | scène suivante `+0x4f` : fondu, puis la partie repasse en phase 8 (entrée de scène) |
 /// | 3 | fin de partie (`A5+0x42`) |
 ///
-/// Le fondu au noir (0x1460) cède la main pendant 16 images : la tâche reprend dans les natives
-/// `RESUME_CHANGE` (0xcb896) et `RESUME_NEXT` (0xcb9c0), aux adresses de retour de ses appels.
+/// Le fondu au noir (0x1460) cède la main pendant 16 images : la tâche reprend aux étapes
+/// [`fondu_de_sortie::Etape::Zone`] (0xcb896) et [`fondu_de_sortie::Etape::Scene`] (0xcb9c0).
 mod exit_gate {
     use super::super::set_b;
     use super::*;
@@ -775,18 +839,14 @@ mod exit_gate {
 
     // --- changement de zone (0xcb844) ---------------------------------------------------------------
 
-    /// Script de palette lancé au changement de zone et au retour (0x1324, A4).
-    const PALETTE_SCRIPT: u32 = 0xcbc02;
-    const RUN_PALETTE_SCRIPT: u32 = 0x1324;
+    /// Rectangle de texte effacé au changement de zone et au retour (`text::CLEAR_BOX`, A4 = colonne, ligne,
+    /// largeur, hauteur).
+    const CLEARED_TEXT_BOX: u32 = 0xcbc02;
     /// Prime de sortie cumulée (octet en A5 - 0x5b20).
     const BONUS_TOTAL: u32 = A5 - 0x5b20;
     const P_FLAGS: u32 = 0x1;
     const P_HIDDEN: u8 = 0x2;
     const PLAYER_STATE_DEAD: u32 = 0x402_0000;
-    /// Fondu au noir (cède la main) et ses paramètres : sens (`A5+0x490`), pas (`A5+0x48e`).
-    const FADE_OUT: u32 = 0x1460;
-    const FADE_DIRECTION: u32 = 0x490;
-    const FADE_STEP: u32 = 0x48e;
     /// Variantes de porte qui marquent la scène (`A5+0x4a`).
     const MARKING_VARIANTS: [u8; 3] = [0x13, 0x15, 0x16];
     const SCENE: u32 = 0x34;
@@ -801,16 +861,11 @@ mod exit_gate {
     const KIND_NEXT_SCENE: u8 = 2;
     const KIND_GAME_OVER: u8 = 3;
 
-    /// Adresses de retour des deux appels du fondu, où la tâche reprend.
-    pub const RESUME_CHANGE_AT: u32 = 0xcb896;
-    pub const RESUME_NEXT_AT: u32 = 0xcb9c0;
-
     /// Tous les joueurs sont prêts (0xcb844) : prime, palette, joueurs morts cachés, puis la sortie.
     fn change_zone(x: &mut Cx) {
         let bonus = rd8(x.b, BONUS_TOTAL).wrapping_add(x.u8(BONUS));
         wr8(x.b, BONUS_TOTAL, bonus);
-        x.c.a[4] = PALETTE_SCRIPT;
-        x.call(RUN_PALETTE_SCRIPT);
+        crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) == 0 {
                 let flags = p.u8(x.b, P_FLAGS) | P_HIDDEN;
@@ -821,8 +876,7 @@ mod exit_gate {
         match x.u8(EXIT_KIND) {
             KIND_NEXT_SCENE => {
                 x.set_a5_u8(NEXT_SCENE_FLAG, 1);
-                fade_out(x, RESUME_NEXT_AT);
-                next_scene(x);
+                fondu_de_sortie::fondu_au_noir(x, fondu_de_sortie::Etape::Scene)
             }
             KIND_GAME_OVER => x.set_a5_u8(GAME_OVER, 1),
             _ => {
@@ -830,17 +884,9 @@ mod exit_gate {
                 if MARKING_VARIANTS.contains(&x.u8(0x3)) {
                     x.set_a5_u8(0x4a, 1);
                 }
-                fade_out(x, RESUME_CHANGE_AT);
-                after_fade(x);
+                fondu_de_sortie::fondu_au_noir(x, fondu_de_sortie::Etape::Zone)
             }
         }
-    }
-
-    /// Fondu au noir : cède la main ; la tâche reprendra en `resume` (adresse de retour de l'appel).
-    fn fade_out(x: &mut Cx, resume: u32) {
-        x.set_a5_u16(FADE_DIRECTION, 2);
-        x.set_a5_u8(FADE_STEP, 0xf);
-        x.call_at(FADE_OUT, resume);
     }
 
     /// Après le fondu d'un changement de zone (0xcb896) : retour d'une zone annexe, ou entrée.
@@ -929,13 +975,13 @@ mod exit_gate {
     /// Entrée dans la zone annexe (0xcc0ca) : caméras, script de scène, palettes, joueurs replacés.
     fn enter_annex(x: &mut Cx) {
         set_b::call_keeping(x, &[0x33aa6]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
-        x.set_a5_u8(FADE_STEP, 0xf);
-        x.call(0x1686);
+        x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(OWNER_GATE, 0);
         set_b::reset_players_after_exit(x);
-        x.call(0x20de6);
+        x.call(crate::scene::entry::PLACE_PLAYERS.entry);
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) != 0 {
                 x.c.a[0] = p.0;
@@ -976,13 +1022,12 @@ mod exit_gate {
     /// État 4 (0xcba48) : retour de la zone annexe, la scène d'avant est rechargée.
     fn arrive(x: &mut Cx) {
         set_b::call_keeping(x, &[0x33b24]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
-        x.set_a5_u8(FADE_STEP, 0xf);
-        x.call(0x1686);
+        x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(OWNER_GATE, 0);
-        x.c.a[4] = PALETTE_SCRIPT;
-        x.call(RUN_PALETTE_SCRIPT);
+        crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
         set_b::restore_camera(x);
         let v = x.u16(0x22);
         x.set_a5_u16(0x52c, v);
@@ -990,9 +1035,8 @@ mod exit_gate {
         x.set_a5_u8(NEXT_SCENE_FLAG, v);
         let v = x.u8(0x26);
         x.set_a5_u8(0x58, v);
-        let d4 = x.u16(0x1c);
-        crate::mem::set_low_word(&mut x.c.d[4], d4);
-        x.call(0xe17a4);
+        let musique = x.u16(0x1c);
+        crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { d4: Some(musique as u32), ..Default::default() });
         let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
         x.c.a[4] = A5 + camera;
         for p in players() {
@@ -1008,7 +1052,6 @@ mod exit_gate {
     const PLACEMENT_ROW: u32 = 0xcbb92;
     const PLACEMENT: u32 = 0xcbbe2;
     const PLAYER_STATE_WALK: u32 = 0x200_0000;
-    const PLACE_ON_GROUND: u32 = 0x3668;
 
     /// Replace un joueur devant la porte (0xcbb3c) ; un joueur hors de l'état 2 est seulement caché
     /// et posé au sol.
@@ -1016,11 +1059,7 @@ mod exit_gate {
         if p.u8(x.b, P_STATE) != 2 {
             let flags = p.u8(x.b, P_FLAGS) | P_HIDDEN;
             p.set_u8(x.b, P_FLAGS, flags);
-            let (d6, d7) = (x.c.d[6], x.c.d[7]);
-            x.c.a[0] = p.0;
-            crate::call(x.c, x.b, PLACE_ON_GROUND);
-            x.c.a[0] = x.o.0;
-            (x.c.d[6], x.c.d[7]) = (d6, d7);
+            crate::placement::place_on_free_ground(x.b, p);
             return;
         }
         p.set_u32(x.b, P_STATE, PLAYER_STATE_WALK);
@@ -2501,8 +2540,6 @@ pub const NATIVES: &[crate::Native] = &[
     entry!(0xc9780 "set_5", name_entry::run),
     entry!(0xcafec "set_6", tile_anim::run6),
     entry!(0xcb29c "set_7", exit_gate::run),
-    entry!(0xcb896 "set_7_reprise_zone", exit_gate::after_fade),
-    entry!(0xcb9c0 "set_7_reprise_scene", exit_gate::next_scene),
     entry!(0xcc2c8 "set_9", inert::run),
     entry!(0xcc3c2 "set_10", dialogue::run),
     entry!(0xcdcaa "set_11", level_end::run),

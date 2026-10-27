@@ -6,7 +6,6 @@ use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const FLASH_ON: u32 = 0x1ac68;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -231,7 +230,7 @@ mod flash {
                 x.add8(0x4, 2);
                 x.anim(ANIMS, 0);
                 x.reinsert();
-                x.call(SFX_BODY);
+                crate::sound::jouer(x.b, SFX_BODY, x.o);
             }
             0 => init_corner(x),
             2 if !child => body(x),
@@ -308,7 +307,7 @@ mod flash {
             o.set_u8(x.b, 0x5a, 2);
             o.set_u16(x.b, f::OWNER, x.o.0 as u16);
         }
-        x.call(FLASH_ON);
+        x.call(crate::palette::FLASH_COLOR_ON.entry);
     }
 
     fn corner(x: &mut Cx) {
@@ -320,7 +319,7 @@ mod flash {
             x.set_bit(0x1, 1, false);
             x.set8(0x5b, 2);
             x.set_a5_u16(0x4ba, 0x100);
-            x.call(SFX_CORNER);
+            crate::sound::jouer(x.b, SFX_CORNER, x.o);
         }
         if x.anim_step() {
             x.add8(0x5a, 0xff);

@@ -740,7 +740,7 @@ const OBJ_PATH: u32 = 0x79;
 const OBJ_AIM_X: u32 = 0x7a;
 const OBJ_AIM_Y: u32 = 0x7c;
 /// Table (en ROM) des tables de points d'approche par type : mot n, puis n + 1 couples (dx, dy).
-const APPROACH_TABLES: u32 = 0xe93e;
+use crate::ai_aids::WALK_POINTS as APPROACH_TABLES;
 
 /// 0xf0e8 : tourne d'un cran l'orientation de A0 vers le point (D1, D2) (angle de 0x137e).
 fn turn_toward(c: &mut Cpu, b: &mut Cps2Bus) {

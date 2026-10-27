@@ -81,9 +81,9 @@ mod ground {
         let anim = if owner.u8(x.b, 0x10c) > 0x14 { 0xb } else { 0xa };
         x.anim(ANIMS, anim);
         if owner.u8(x.b, f::FLIP) != 0 {
-            x.call(SFX_RIGHT);
+            crate::sound::jouer(x.b, SFX_RIGHT, x.o);
         } else {
-            x.call(SFX_LEFT);
+            crate::sound::jouer(x.b, SFX_LEFT, x.o);
         }
         colors(x);
     }
@@ -248,7 +248,7 @@ mod shadow {
         x.set8(f::POWER, 0xc);
         x.set8(f::POWER2, 0xc);
         x.anim(ANIMS, 3);
-        x.call(SFX_STRIKE);
+        crate::sound::jouer(x.b, SFX_STRIKE, x.o);
     }
 
     fn fall(x: &mut Cx) {
@@ -263,7 +263,7 @@ mod shadow {
             x.set32(0xc, 0);
             x.anim(ANIMS, 3);
             if x.u8(0x3) == 0 {
-                x.call(SFX_FALL);
+                crate::sound::jouer(x.b, SFX_FALL, x.o);
             }
             x.set8(f::HIT_FLAGS, 0);
             x.set8(0x3, 0);

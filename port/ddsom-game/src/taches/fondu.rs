@@ -13,13 +13,12 @@
 //!   rendus à la fin.
 //!
 //! Les sous-programmes sont des fonctions ([`montee`], [`descente`], [`descente_d0`], [`vers_le_blanc`],
-//! [`vers_les_couleurs`], [`vers_les_palettes`]) que les pas appellent directement ; seul le fondu au noir `0x1460`
-//! garde une native, que des gestionnaires d'objets appellent encore par adresse (`call_at`).
+//! [`vers_les_couleurs`], [`vers_les_palettes`]) que les pas appellent directement (les portes SET aussi :
+//! `families::set::fondu_de_sortie`).
 
 use crate::mem::{rd16, rd8, set_low_word, wr32, wr8, A5};
 use crate::modes::Flow;
 use crate::palette::{brightness_step, component_step, white_out, Cible};
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -223,8 +222,6 @@ pub fn descente_d0(x: &mut Ctx) -> Flow {
     sous_programme(DESCEND).debut_sous_programme(x)
 }
 
-// le fondu au noir reste appelé par adresse (`call_at` des objets SET qui ferment une scène)
-resume!(FONDU_DESCENTE, 0x1460, descente);
 // tâches : 0x14ba / 0x14d0 fondu complet, 0x14c8 / 0x14de nombre de pas de l'état, 0x1536 / 0x153e partiels (voir
 // `TACHES`)
 
@@ -302,4 +299,4 @@ pub fn vers_les_palettes(x: &mut Ctx) -> Flow {
     composante(0x1ce9e).debut(x, false)
 }
 
-pub const NATIVES: &[Native] = &[FONDU_DESCENTE];
+pub const NATIVES: &[Native] = &[];

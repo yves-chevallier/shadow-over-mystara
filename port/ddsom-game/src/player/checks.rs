@@ -29,10 +29,6 @@ pub mod key {
     pub const SPECIAL: u8 = 0x80;
 }
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    pub const THROW_SETUP: u32 = 0x4fefe;
-}
 
 /// Orientation demandée par les directions (bit 0 : 0x20, sinon 0).
 fn facing_for(keys: u8) -> u8 {
@@ -51,7 +47,7 @@ pub fn turn_check(g: &mut Ctx, p: Player) -> bool {
     if keys == 0 || facing_for(keys) == p.u8(g, Player::FACING) {
         return false;
     }
-    if g.a5u8(ram::SLOW_MODE) != 0 {
+    if ram::SLOW_MODE.get(g.b) != 0 {
         p.flip(g);
         return to_stand(g, p);
     }
@@ -81,7 +77,7 @@ pub fn turn_check(g: &mut Ctx, p: Player) -> bool {
 /// libération d'une prise.
 pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
     cov!();
-    if g.a5u8(ram::SLOW_MODE) != 0 || p.u8(g, Player::POWER_10F) != 0 {
+    if ram::SLOW_MODE.get(g.b) != 0 || p.u8(g, Player::POWER_10F) != 0 {
         return false;
     }
     if p.u8(g, Player::KEYS_NEW) & key::ATTACK == 0 {
@@ -122,7 +118,7 @@ pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
 /// 3 vertical, 0 sur place, 1 en avant, 2 après une course.
 pub fn jump_button(g: &mut Ctx, p: Player) -> bool {
     cov!();
-    if g.a5u8(ram::FROZEN) != 0 || p.u8(g, 0x15c) != 0 || p.u8(g, Player::SLOW_8A) != 0 {
+    if ram::FROZEN.get(g.b) != 0 || p.u8(g, 0x15c) != 0 || p.u8(g, Player::SLOW_8A) != 0 {
         return false;
     }
     let dir = p.u8(g, Player::KEYS_HELD) & key::DIRECTIONS;
@@ -195,7 +191,7 @@ const SPECIAL_ANIM: u32 = 0x372e4;
 /// 0x371be : bouton 4 (attaque spéciale), seulement en phase de jeu 0xc.
 pub fn special_attack(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::PHASE) != 0xc || g.a5u8(ram::PAUSE) != 0 {
+    if ram::PHASE.get(g.b) != 0xc || ram::PAUSE.get(g.b) != 0 {
         return;
     }
     if p.u8(g, Player::KEYS_NEW) & key::SPECIAL == 0 || p.u8(g, 0x15c) != 0 {
@@ -244,7 +240,7 @@ pub fn special_attack(g: &mut Ctx, p: Player) {
 /// trois joueurs sont là, que leurs scores dépassent 2 000 000 et que tous sont prêts.
 pub fn near_death(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::INPUT_MASK) & 0x80 == 0 || g.a5u8(ram::PLAYERS_ALIVE) < 3 {
+    if ram::INPUT_MASK.get(g.b) & 0x80 == 0 || ram::PLAYERS_ALIVE.get(g.b) < 3 {
         return;
     }
     if !team_score_reached(g) || !combos::all_ready(g) {
@@ -309,24 +305,25 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
     if mask >> bit & 1 != 0 {
         if weapon != 0xe {
             p.set_state(g, 0x0204_2600);
-            let z = g.rom(rom::THROW_SETUP, p);
-            return !z;
+            super::spawn::cursed_weapon(g, p);
+            // Z du dernier `move.w` du créateur (le lien), ou de l'allocation qui échoue (nul) : toujours vrai
+            return g.c.sr & m68k::SR_Z == 0;
         }
-        let count = g.a5u8(0x56).wrapping_add(1);
-        g.set_a5u8(0x56, count);
+        let count = ram::CURSE_COUNT.get(g.b).wrapping_add(1);
+        ram::CURSE_COUNT.set(g.b, count);
         if count == 0x50 {
             return curse_fall(g, p);
         }
         let facing = p.u8(g, Player::FACING);
         p.set_u8(g, 0x4a, facing);
         p.set_state(g, 0x0204_3600);
-        g.rom(rom::THROW_SETUP, p);
+        super::spawn::cursed_weapon(g, p);
     }
     if p.u8(g, Player::WEAPON_A) != 0xe {
         return true;
     }
-    let count = g.a5u8(0x56).wrapping_add(1);
-    g.set_a5u8(0x56, count);
+    let count = ram::CURSE_COUNT.get(g.b).wrapping_add(1);
+    ram::CURSE_COUNT.set(g.b, count);
     if count <= 0x4f {
         // `bls` : le drapeau Z reste celui de la comparaison
         return count != 0x4f;

@@ -147,7 +147,7 @@ fn shop_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     // scène 0x4c, deuxième passage : articles de la seconde moitié de la table
     let v = x.u8(f::VARIANT);
-    if x.a5_u8(0x34) == 0x4c && (v as i8) < 0x40 && x.a5_u8(0x5e) != 0 && v != 0 {
+    if crate::ram::SCENE.get(x.b) == 0x4c && (v as i8) < 0x40 && x.a5_u8(0x5e) != 0 && v != 0 {
         x.set8(f::VARIANT, if v == 0x14 { 0x0d } else { v }.wrapping_add(0x40));
     }
     let v = x.u8(f::VARIANT) as u32;
@@ -470,8 +470,7 @@ mod purse {
     pub const GAUGE_END: u32 = 0xaefee;
     pub const ANIM_SET: u32 = 0x1c40c6;
     pub const PALETTE_PAGE: u32 = 0x1a608;
-    /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)`, lecture d'un mot à une adresse
-    /// impaire (erreur d'adresse, le jeu s'arrête sur l'écran d'exception). Hors contrat, laissé à l'original.
+    /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)` (`effects::erreur_d_adresse`).
     pub const POOL_FULL: u32 = 0xaf2bc;
     /// Nombre de curseurs encore ouverts (`A5-0x5553`).
     pub const OPEN: u32 = 0xff2aad;
@@ -482,6 +481,17 @@ mod purse {
     pub const GIFT: u32 = 0x1a;
     pub const LINKED: u32 = 0x5c;
     pub const OPENED: u32 = 0x58;
+}
+
+/// `0xc8312` : objet SET de la scène ; `None` si le pool est plein.
+fn set_de_scene(x: &mut Cx, variante: u8) -> Option<Obj> {
+    super::creators::scene_set(x.b, variante)
+}
+
+/// L'A1 qu'une allocation ratée laisse (`Pool::alloc_or_leftover`) : premier emplacement si le compteur est nul, fin
+/// du pool sinon.
+fn leftover(x: &mut Cx, pool: &pools::Pool) -> Obj {
+    if pool.free_count(x.b) == 0 { pool.slot(0) } else { Obj(pool.end()) }
 }
 
 /// Or du joueur (`+0x114`, BCD sur quatre octets).
@@ -504,7 +514,7 @@ fn purse(x: &mut Cx) {
 fn purse_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set16(0x18, 0);
-    let (cx, cy) = (x.a5_u16(0x506), x.a5_u16(0x50a));
+    let (cx, cy) = (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b));
     x.set16(Obj::X, cx);
     x.set16(Obj::Z, cy);
     let mode = 4 * x.u8(0x2f) as u32;
@@ -523,14 +533,13 @@ fn purse_init(x: &mut Cx) {
     crate::mem::wr32(x.b, 0x91c54e, 0xf062_f0f6);
     crate::mem::wr32(x.b, 0x91c552, 0xf800_ff33);
     // l'original garde D0 (la palette) à travers l'allocation
-    x.c.d[0] = palette as u32;
-    let Some(item) = x.alloc(&pools::ITEM) else { return x.call(purse::POOL_FULL) };
+    let Some(item) = x.alloc(&pools::ITEM) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
     wr8(x.b, item.0, 1);
     wr8(x.b, item.0 + 2, 9);
     wr8(x.b, item.0 + 3, player);
     wr16(x.b, item.0 + 0x5c, x.o.0 as u16);
     // portrait : 8 longs de la palette de la classe, avec le bit de luminosité
-    let dest = 0x91c000u32.wrapping_add(((x.c.d[0] as u16) << 5) as i16 as i32 as u32);
+    let dest = 0x91c000u32.wrapping_add(((palette as u16) << 5) as i16 as i32 as u32);
     let class = owner.u8(x.b, 3) as u32;
     let src = purse::PORTRAITS.wrapping_add(x.data16(purse::PORTRAIT + 2 * class) as i16 as i32 as u32);
     for k in 0..8 {
@@ -545,7 +554,7 @@ fn purse_init(x: &mut Cx) {
     let gauge = if two_players(x) { purse::GAUGE_2P } else { purse::GAUGE };
     let v = x.data32(gauge + p4);
     x.set32(purse::GAUGE_AT, v);
-    let Some(peff) = x.alloc(&pools::PEFF) else { return x.call(purse::POOL_FULL) };
+    let Some(peff) = x.alloc(&pools::PEFF) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
     wr8(x.b, peff.0, 1);
     wr8(x.b, peff.0 + 2, 0x18);
     wr16(x.b, peff.0 + 0x5c, x.o.0 as u16);
@@ -557,7 +566,7 @@ fn purse_init(x: &mut Cx) {
         (purse::ICON_POS, purse::ICON_VARIANT)
     };
     let (pos, var) = (pos + p4, var + player as u32);
-    let Some(icon) = x.alloc(&pools::SOBJ) else { return x.call(purse::POOL_FULL) };
+    let Some(icon) = x.alloc(&pools::SOBJ) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
     wr8(x.b, icon.0, 1);
     wr8(x.b, icon.0 + 2, 0);
     let v = x.data8(var);
@@ -567,19 +576,13 @@ fn purse_init(x: &mut Cx) {
     wr16(x.b, icon.0 + Obj::Y, py);
     wr16(x.b, icon.0 + Obj::Z, 0);
     // six PEFF 0x11 (D5 : compteur de l'original, conservé par l'allocation)
-    x.c.d[5] = 5;
-    loop {
-        let Some(o) = x.alloc(&pools::PEFF) else { return x.call(purse::POOL_FULL) };
+    for n in (0..=5u16).rev() {
+        let Some(o) = x.alloc(&pools::PEFF) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
         wr8(x.b, o.0, 1);
         wr8(x.b, o.0 + 2, 0x11);
-        wr8(x.b, o.0 + 3, x.c.d[5] as u8);
+        wr8(x.b, o.0 + 3, n as u8);
         wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
         wr16(x.b, o.0 + 0x50, w);
-        let n = (x.c.d[5] as u16).wrapping_sub(1);
-        x.c.d[5] = x.c.d[5] & 0xffff_0000 | n as u32;
-        if n == 0xffff {
-            break;
-        }
     }
     purse_anim(x, false);
 }
@@ -767,7 +770,7 @@ fn purse_move(x: &mut Cx, moves: u32) {
             x.set16(off, high);
         }
     };
-    let (cx, cy) = (x.a5_u16(0x506), x.a5_u16(0x50a));
+    let (cx, cy) = (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b));
     clamp(x, Obj::X, cx, 0x16c);
     clamp(x, Obj::Z, cy, 0x100);
 }
@@ -782,7 +785,7 @@ fn purse_leave(x: &mut Cx) {
         }
     }
     x.add16(Obj::X, 4);
-    let cx = x.a5_u16(0x506);
+    let cx = crate::ram::CAMERA_X.get(x.b);
     if (x.u16(Obj::X).wrapping_sub(0x1a0) as i16) <= cx as i16 {
         return;
     }
@@ -955,8 +958,7 @@ fn attached_active(x: &mut Cx) {
             }
             x.add8(f::SUB_STATE, 2);
             set_hidden(x, false);
-            x.c.d[0] = 0xc;
-            x.call(0x2860);
+            crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0xc);
             x.anim_step();
         }
         5 | 6 | 8..=11 => {
@@ -1192,7 +1194,7 @@ fn thrown_active(x: &mut Cx, v: u8) {
             return x.add8(f::STATE, 4);
         }
     }
-    x.call(super::rom::OMBRE);
+    crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
 
@@ -1292,7 +1294,7 @@ fn debris_init(x: &mut Cx) {
     x.set16(Obj::AZ, az);
     let px = x.u16(Obj::X).wrapping_sub(0x80).wrapping_add((mode << 4) as u16);
     x.set16(Obj::X, px);
-    let y = x.a5_u16(0x50a).wrapping_add(0x20);
+    let y = crate::ram::CAMERA_Y.get(x.b).wrapping_add(0x20);
     x.set16(Obj::Y, y);
     x.set16(Obj::Z, 0);
     x.anim_start(scenery::ANIM_DEBRIS, 0);
@@ -1339,7 +1341,7 @@ fn shard_init(x: &mut Cx) {
     x.set16(Obj::AZ, az);
     let px = x.u16(Obj::X).wrapping_sub(0x40).wrapping_add((mode << 5) as u16);
     x.set16(Obj::X, px);
-    let y = x.a5_u16(0x50a).wrapping_add(0x20);
+    let y = crate::ram::CAMERA_Y.get(x.b).wrapping_add(0x20);
     x.set16(Obj::Y, y);
     x.set16(Obj::Z, 0);
     x.anim_start(scenery::ANIM_DEBRIS, 3);
@@ -1385,7 +1387,7 @@ fn follow_end(x: &mut Cx) {
 }
 
 fn follow_rest(x: &mut Cx) {
-    let y = if x.a5_u8(0x34) == 0x2e { 0 } else { 0x500 };
+    let y = if crate::ram::SCENE.get(x.b) == 0x2e { 0 } else { 0x500 };
     x.set_a5_u16(scenery::ALT_CAMERA_X, 0);
     x.set_a5_u16(scenery::ALT_CAMERA_Y, y);
 }
@@ -1415,9 +1417,9 @@ fn follow_active(x: &mut Cx) {
     x.set8(scenery::TRAIL_READ, r as u8);
     let (old_x, old_depth) = (x.u16(scenery::TRAIL + 4 * r), x.u16(scenery::TRAIL + 4 * r + 2));
     let (big_x, big_y) = if target.u8(x.b, 2) == 0x14 { (0x440, 0x400) } else { (0x230, 0x320) };
-    let cam_x = x.a5_u16(0x506).wrapping_add(0xc0).wrapping_sub(old_x).wrapping_add(big_x);
-    let mut cam_y = x.a5_u16(0x50a).wrapping_add(0x40).wrapping_sub(old_depth).wrapping_add(big_y);
-    let limit: u16 = if x.a5_u8(0x34) == 0x2e { 0x2c0 } else { 0x3c0 };
+    let cam_x = crate::ram::CAMERA_X.get(x.b).wrapping_add(0xc0).wrapping_sub(old_x).wrapping_add(big_x);
+    let mut cam_y = crate::ram::CAMERA_Y.get(x.b).wrapping_add(0x40).wrapping_sub(old_depth).wrapping_add(big_y);
+    let limit: u16 = if crate::ram::SCENE.get(x.b) == 0x2e { 0x2c0 } else { 0x3c0 };
     if cam_y as i16 > limit as i16 {
         cam_y = limit;
     }
@@ -1524,10 +1526,10 @@ fn dust_init(x: &mut Cx) {
         if dx as i16 > 0x190 {
             dx -= 0x70;
         }
-        let px = dx.wrapping_add(x.a5_u16(0x506));
+        let px = dx.wrapping_add(crate::ram::CAMERA_X.get(x.b));
         x.set16(Obj::X, px);
         let alea = x.random();
-        let y = (alea & 0x7f).wrapping_add(x.a5_u16(0x50a)).wrapping_add(0x20);
+        let y = (alea & 0x7f).wrapping_add(crate::ram::CAMERA_Y.get(x.b)).wrapping_add(0x20);
         x.set16(Obj::Y, y);
         x.set8(Obj::Z, 0);
         dust_spawn(x);
@@ -1565,7 +1567,7 @@ fn dust_active(x: &mut Cx) {
         x.add16(Obj::X, dx);
     }
     x.call(super::rom::DANS_LA_ZONE);
-    x.call(super::rom::OMBRE);
+    crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
 
@@ -1813,7 +1815,7 @@ fn floater_main(x: &mut Cx) {
                 // touché : secousse de l'écran
                 x.set8(0x33, 0);
                 x.call(0x3af8);
-                x.call(0xb7dec);
+                super::effects_creators::pillars(x.b);
                 x.call(0xe637c);
                 x.set_a5_u16(0x4ba, 0x100);
                 x.set8(floater::SHAKE, 8);
@@ -1906,7 +1908,7 @@ fn carrier_state(x: &mut Cx) -> u32 {
 fn prop_fall(x: &mut Cx, dz: u32, dx: u32, alt_camera: bool) {
     x.add32(Obj::Z, dz);
     x.add32(Obj::X, dx.wrapping_neg());
-    let top = if alt_camera && x.a5_u8(0x36) != 0 { x.a5_u16(0x5b2) } else { x.a5_u16(0x5aa) };
+    let top = if alt_camera && crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { x.a5_u16(0x5b2) } else { x.a5_u16(0x5aa) };
     if (top.wrapping_add(0xf0) as i16) <= (x.u16(Obj::Z) as i16) {
         return free(x);
     }
@@ -2052,7 +2054,7 @@ fn shard_rain(x: &mut Cx) {
         0 if v == 0 => {
             x.add8(f::STATE, 2);
             x.set16(shards::TIMER, 0xe6);
-            x.call(0x1ac7c);
+            super::petites::flash_68k(x.c, x.b, super::petites::ECLAIR_BLEU);
         }
         0 => {
             // A1 : adresse du gestionnaire, laissée par la boucle de dispatch (octet `+0x2c` constant)
@@ -2060,7 +2062,7 @@ fn shard_rain(x: &mut Cx) {
             x.add8(f::STATE, 2);
             x.set16(Obj::VX, 0xfc00);
             x.set16(Obj::VZ, 0xf900);
-            let (cx_, cy) = (x.a5_u16(0x506), x.a5_u16(0x50a));
+            let (cx_, cy) = (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b));
             x.set16(Obj::X, cx_);
             x.set16(Obj::Y, cy.wrapping_add(0x18));
             x.set16(Obj::Z, 0xe8);
@@ -2225,7 +2227,6 @@ mod double {
 /// 0xae748 + 0x1b64 : table de vitesses de la variante.
 fn double_speed_table(x: &mut Cx) {
     let v = x.u8(f::VARIANT) as u32;
-    x.c.d[1] = v;
     let n = (x.rom8(double::SPEEDS + v) as u32) as u16;
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
@@ -2537,7 +2538,7 @@ fn fish(x: &mut Cx) {
                 let k = (x.u8(Obj::SPEED_INDEX) + 1) & 0x1f;
                 x.set8(Obj::SPEED_INDEX, k);
             }
-            if (x.a5_u16(0x506).wrapping_add(0x1c0) as i16) <= (x.u16(Obj::X) as i16) {
+            if (crate::ram::CAMERA_X.get(x.b).wrapping_add(0x1c0) as i16) <= (x.u16(Obj::X) as i16) {
                 x.add8(f::STATE, 2);
             }
             x.anim_step();
@@ -2561,7 +2562,7 @@ fn fish_swim(x: &mut Cx) {
             }
             x.move_x();
             // demi-tour au bord de la caméra alternative
-            let cam = x.a5_u16(0x556);
+            let cam = crate::ram::CAMERA_ALT_X.get(x.b);
             let px = x.u16(Obj::X);
             let turn = if (x.u16(Obj::VX) as i16) < 0 {
                 (cam.wrapping_add(0x40).wrapping_sub(px) as i16) >= 0
@@ -2751,8 +2752,7 @@ fn lob_active(x: &mut Cx) {
                     wr16(x.b, o.0 + Obj::Y, py);
                 }
             }
-            x.c.d[0] = 0xf;
-            x.call(0x2860);
+            crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0xf);
             x.anim_start(lob::ANIM_SET, 2);
             let shake = match v {
                 4 => 0xa,
@@ -2802,8 +2802,8 @@ fn ending_piece(x: &mut Cx) {
                 if (x.u16(Obj::X) as i16) <= 0x80 {
                     x.add8(f::SUB_STATE, 2);
                     wr8(x.b, floater::STEP, 0x14);
-                    x.c.d[0] = 0x10;
-                    return x.call(0x2824);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x10);
+                    return;
                 }
                 // tremble sur place, une image sur deux
                 x.add16(Obj::X, 2);
@@ -3127,10 +3127,10 @@ fn cursor_place(x: &mut Cx) {
     let places = places.wrapping_add(x.data16(places + 2 * mode) as i16 as i32 as u32);
     let k = ((x.u8(0x42) as u32) << 4) + 4 * x.u8(0x2f) as u32;
     let (px, pz) = (x.data16(places + k), x.data16(places + k + 2));
-    let (cx_, cz) = if x.a5_u8(0x36) != 0 {
-        (x.a5_u16(0x556), x.a5_u16(0x55a))
+    let (cx_, cz) = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 {
+        (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b))
     } else {
-        (x.a5_u16(0x506), x.a5_u16(0x50a))
+        (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b))
     };
     x.set16(Obj::X, px.wrapping_add(cx_));
     x.set16(Obj::Z, pz.wrapping_add(cz));
@@ -3215,10 +3215,10 @@ fn cursor_vote(x: &mut Cx) {
 /// 0xb0990 : le compte à rebours est posé sur la caméra, à la place donnée par le mode du scrutin.
 fn timer_place(x: &mut Cx) -> Obj {
     let ballot = x.linked(vote::BALLOT);
-    let (cx_, cz) = if x.a5_u8(0x36) != 0 {
-        (x.a5_u16(0x556), x.a5_u16(0x55a))
+    let (cx_, cz) = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 {
+        (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b))
     } else {
-        (x.a5_u16(0x506), x.a5_u16(0x50a))
+        (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b))
     };
     x.set16(Obj::X, cx_);
     x.set16(Obj::Z, cz);
@@ -3467,10 +3467,9 @@ fn swimmer(x: &mut Cx) {
                 wr8(x.b, o.0 + 2, 62);
                 wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
             }
-            // deux décors SET 0x17 (variantes 0 et 1) ; un pool plein mène l'original dans des données
-            // (0xb778c, hors contrat : laissé à l'original)
+            // deux décors SET 0x17 (variantes 0 et 1)
             for (variant, flip) in [(0u8, 1u8), (1, 0)] {
-                let Some(o) = x.alloc(&pools::SET) else { return x.call(0xb778c) };
+                let Some(o) = x.alloc(&pools::SET) else { super::effects::erreur_d_adresse(0xb778c) };
                 wr8(x.b, o.0, 1);
                 wr8(x.b, o.0 + 2, 0x17);
                 wr8(x.b, o.0 + 3, variant);
@@ -3509,7 +3508,7 @@ fn swimmer_active(x: &mut Cx) {
                 swimmer_anim(x, 4);
             }
             4 => {
-                if (x.a5_u16(0x506) as i16) < 0x10 || !x.anim_step() {
+                if (crate::ram::CAMERA_X.get(x.b) as i16) < 0x10 || !x.anim_step() {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
@@ -3555,7 +3554,7 @@ fn swimmer_active(x: &mut Cx) {
                 x.add16(Obj::X, 4);
                 x.anim_step();
                 x.call(0x3403c);
-                let gap = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506));
+                let gap = x.u16(Obj::X).wrapping_sub(crate::ram::CAMERA_X.get(x.b));
                 if (gap as i16) > 0x1a0 {
                     free(x);
                 }
@@ -3597,7 +3596,6 @@ mod counter {
         (0x400, 0x1b7c0005), (0x404, 0x1b8c0005), (0x480, 0x1b7d0005), (0x484, 0x1b8d0005),
     ];
     pub const GOODS: u32 = 0xb82e0;
-    pub const SCENE_SET: u32 = 0xc8312;
 }
 
 /// `0xb83d8` : premier acheteur dans la zone : le comptoir prend la vente (s'il n'y en a pas d'autre) et
@@ -3608,16 +3606,10 @@ fn counter_buy(x: &mut Cx, _buyer: Obj) {
         return;
     }
     crate::mem::wr16(x.b, counter::ACTIVE, x.o.0 as u16);
-    let (a1, d6) = (x.c.a[1], x.c.d[6]);
-    x.c.d[0] = 0x64;
-    x.call(counter::SCENE_SET);
-    let failed = x.c.sr & m68k::SR_C != 0;
-    let seller = x.c.a[1];
-    (x.c.a[1], x.c.d[6]) = (a1, d6);
-    if failed {
+    let Some(seller) = set_de_scene(x, 0x64) else {
         return crate::mem::wr16(x.b, counter::ACTIVE, 0);
-    }
-    x.set16(counter::SELLER, seller as u16);
+    };
+    x.set16(counter::SELLER, seller.0 as u16);
     x.add8(f::SUB_STATE, 2);
     x.set16(counter::TIMER, 0x18);
 }
@@ -3639,7 +3631,6 @@ fn counter_sale(x: &mut Cx) {
         // la boucle de l'original tient dans A1 (pointeur) et D6 (compteur)
         for k in 0..4u32 {
             x.c.a[1] = shop::BUYERS + 2 * (k + 1);
-            x.c.d[6] = x.c.d[6] & 0xffff_0000 | (3 - k);
             let p = rd16(x.b, shop::BUYERS + 2 * k);
             if p == 0 {
                 continue;
@@ -3648,11 +3639,11 @@ fn counter_sale(x: &mut Cx) {
             if buyer.u8(x.b, 0x58) as i8 <= 0 {
                 continue;
             }
-            let across = buyer.u16(x.b, Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_sub(0xa8);
+            let across = buyer.u16(x.b, Obj::X).wrapping_sub(crate::ram::CAMERA_X.get(x.b)).wrapping_sub(0xa8);
             if across > 0x50 {
                 continue;
             }
-            let depth = buyer.u16(x.b, Obj::Z).wrapping_add(buyer.u16(x.b, Obj::Y)).wrapping_sub(x.a5_u16(0x50a)).wrapping_sub(0x48);
+            let depth = buyer.u16(x.b, Obj::Z).wrapping_add(buyer.u16(x.b, Obj::Y)).wrapping_sub(crate::ram::CAMERA_Y.get(x.b)).wrapping_sub(0x48);
             if depth <= 0x10 {
                 let seller = x.linked(counter::SELLER);
                 if seller.u16(x.b, 0x32) > 1 {
@@ -3663,7 +3654,6 @@ fn counter_sale(x: &mut Cx) {
                 return;
             }
         }
-        x.c.d[6] |= 0xffff;
         return;
     }
     if !countdown_word(x, counter::TIMER) {
@@ -3679,7 +3669,6 @@ fn counter_sale(x: &mut Cx) {
     loop {
         let setting = x.data8(at);
         at += 1;
-        x.c.a[2] = at;
         if (setting as i8) < 0 {
             return;
         }
@@ -3690,13 +3679,12 @@ fn counter_sale(x: &mut Cx) {
         wr8(x.b, o.0 + 0x2f, setting);
         let variant = x.data8(at);
         wr8(x.b, o.0 + 3, variant);
-        let px = x.a5_u16(0x506).wrapping_add(x.data16(at + 1));
+        let px = crate::ram::CAMERA_X.get(x.b).wrapping_add(x.data16(at + 1));
         wr16(x.b, o.0 + Obj::X, px);
         let (z, y) = (x.data16(at + 3), x.data16(at + 5));
         wr16(x.b, o.0 + Obj::Z, z);
         wr16(x.b, o.0 + Obj::Y, y);
         at += 7;
-        x.c.a[2] = at;
     }
 }
 
@@ -3796,7 +3784,7 @@ fn blow(x: &mut Cx) {
             x.set32(Obj::Y, oy);
             let side = if x.u8(0x2f) & 1 != 0 { 1 } else { 0xffff_ffff };
             x.add32(Obj::Y, side);
-            let camera = if x.a5_u8(0x36) != 0 { 0x55a } else { 0x50a };
+            let camera = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { 0x55a } else { 0x50a };
             let top = x.a5_u16(camera).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
             x.set16(Obj::Z, top);
             let k = (owner.u8(x.b, f::VARIANT) & !1) as u32;
@@ -3959,7 +3947,7 @@ fn pillar(x: &mut Cx) {
             x.set16(Obj::Y, by);
             base.set_u16(x.b, 0x12, 0x4000);
             x.set16(0x12, if v & 2 != 0 { 0x8000 } else { 0 });
-            let top = if x.a5_u8(0x36) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(0x50a) };
+            let top = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { crate::ram::CAMERA_ALT_Y.get(x.b) } else { crate::ram::CAMERA_Y.get(x.b) };
             x.set16(Obj::Z, top.wrapping_add(0x100).wrapping_sub(by));
             let delay = x.rom8(0xb7ea2 + v as u32);
             x.set8(0x58, delay);
@@ -4015,11 +4003,11 @@ fn ferry(x: &mut Cx) {
         2 if x.u8(f::SUB_STATE) == 0 => {
             let v = x.u32(0x58);
             x.add32(Obj::X, v);
-            if x.a5_u8(0x2c) == 0xc {
+            if crate::ram::PHASE.get(x.b) == 0xc {
                 x.add8(f::SUB_STATE, 2);
-                x.c.d[0] = 0x63;
-                x.call(0xc8312);
-                x.set16(0x5c, x.c.a[1] as u16);
+                // Glitch d'origine : l'échec de l'allocation n'est pas testé, le lien reprend l'A1 laissé.
+                let decor = set_de_scene(x, 0x63).unwrap_or_else(|| leftover(x, &pools::SET));
+                x.set16(0x5c, decor.0 as u16);
             }
         }
         2 => {
@@ -4028,7 +4016,6 @@ fn ferry(x: &mut Cx) {
                 return x.set_a5_u8(0x42, 1);
             }
             let dx = x.u32(0x58);
-            x.c.d[4] = dx;
             x.add32(Obj::X, dx);
             let (fx, fy) = (x.u16(Obj::X), x.u16(Obj::Y));
             for k in 0..4 {
@@ -4154,7 +4141,7 @@ fn riser_active(x: &mut Cx) {
         }
         10 => {
             x.add16(Obj::Z, 3u16.wrapping_neg());
-            let cam = x.a5_u16(0x50a).wrapping_sub(2);
+            let cam = crate::ram::CAMERA_Y.get(x.b).wrapping_sub(2);
             x.set_a5_u16(0x50a, cam);
             if (x.u16(Obj::Z) as i16) <= 0 {
                 x.set16(Obj::Z, 0);
@@ -4303,14 +4290,12 @@ fn spell_place(x: &mut Cx, wide: bool) {
         dx = dx.wrapping_neg();
     }
     if let Some(t) = turn {
-        crate::mem::set_low_word(&mut x.c.d[3], t);
         if t != 0 {
             let facing = x.u8(0x2c) ^ 0x20;
             x.set8(0x2c, facing);
         }
     }
     crate::mem::set_low_word(&mut x.c.d[1], dx);
-    crate::mem::set_low_word(&mut x.c.d[2], dz);
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
 }
@@ -4406,7 +4391,8 @@ fn spell(x: &mut Cx) {
                         }
                         if mode == 1 && x.u8(0x33) == 1 {
                             x.set8(0x33, 0);
-                            x.call(0xa31c2);
+                            x.c.a[0] = x.o.0;
+                            super::eshl_creators::ring_28(x.c, x.b);
                             x.call(0xed186);
                         }
                         if x.anim_step() {
@@ -4414,10 +4400,12 @@ fn spell(x: &mut Cx) {
                                 1 => x.add8(f::STATE, 2),
                                 3 => {
                                     x.add8(f::STATE, 2);
-                                    x.call(0xa3354);
+                                    x.c.a[0] = x.o.0;
+                                    super::eshl_creators::single_29(x.c, x.b);
                                 }
                                 _ => {
-                                    x.call(0xa5c7c);
+                                    x.c.a[0] = x.o.0;
+                                    super::eshl_creators::single_3b(x.c, x.b);
                                     x.add8(f::STATE, 2);
                                 }
                             }
@@ -4559,7 +4547,6 @@ fn toss_sound(x: &mut Cx, table: u32) {
     let k = 4 * x.u8(f::VARIANT) as u32;
     let routine = (x.rom16(table + k) as u32) << 16 | x.rom16(table + k + 2) as u32;
     if routine != 0 {
-        x.c.a[1] = routine;
         x.call(routine);
     }
 }
@@ -4641,7 +4628,7 @@ fn toss(x: &mut Cx) {
 
 fn screen_piece(x: &mut Cx) {
     let follow = |x: &mut Cx| {
-        let z = x.a5_u16(0x50a).wrapping_sub(x.a5_u16(0x4ba)).wrapping_add(x.u16(0x50));
+        let z = crate::ram::CAMERA_Y.get(x.b).wrapping_sub(x.a5_u16(0x4ba)).wrapping_add(x.u16(0x50));
         x.set16(Obj::Z, z);
     };
     match x.u8(f::STATE) {
@@ -4773,11 +4760,7 @@ fn spark_fall_wait(x: &mut Cx) {
 
 /// Lance la tâche de script `entry` (0x9b6, `trap #0`), A0 conservé.
 fn start_script(x: &mut Cx, entry: u32) {
-    let a0 = x.c.a[0];
-    x.c.a[0] = entry;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0x10;
-    crate::call(x.c, x.b, 0x9b6);
-    x.c.a[0] = a0;
+    crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
 fn finale_trigger(x: &mut Cx) {
@@ -4826,9 +4809,7 @@ fn finale_step(x: &mut Cx) {
             x.set_a5_u16(0x490, 4);
             x.set_a5_u8(0x48e, 8);
             x.set_a5_u8(0x48f, 1);
-            let d7 = x.c.d[7];
-            x.call(0x1ad6a);
-            x.c.d[7] = d7;
+            super::petites::palette_page_restore(x.c, x.b);
             x.set_a5_u32(0x49e, 0xff1190);
             start_script(x, 0x1cf12);
             finale_end(x);
@@ -4854,12 +4835,12 @@ fn drift_dust(x: &mut Cx) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            let mut px = (random_nibble16(x) & 0xff).wrapping_add(x.a5_u16(0x506));
+            let mut px = (random_nibble16(x) & 0xff).wrapping_add(crate::ram::CAMERA_X.get(x.b));
             if x.u8(0x2c) != 0 {
                 px = px.wrapping_add(0x80);
             }
             x.set16(Obj::X, px);
-            let py = (random_nibble16(x) & 0x3f).wrapping_add(x.a5_u16(0x50a)).wrapping_add(0x20);
+            let py = (random_nibble16(x) & 0x3f).wrapping_add(crate::ram::CAMERA_Y.get(x.b)).wrapping_add(0x20);
             x.set16(Obj::Y, py);
             x.set16(Obj::VZ, 0);
             x.set16(Obj::AZ, 0x10);
@@ -4937,7 +4918,7 @@ fn big_letters(x: &mut Cx) {
 
 fn screen_piece_b(x: &mut Cx) {
     let follow = |x: &mut Cx| {
-        let z = x.a5_u16(0x50a).wrapping_sub(x.a5_u16(0x4ba)).wrapping_add(x.u16(0x50));
+        let z = crate::ram::CAMERA_Y.get(x.b).wrapping_sub(x.a5_u16(0x4ba)).wrapping_add(x.u16(0x50));
         x.set16(Obj::Z, z);
     };
     match x.u8(f::STATE) {
@@ -4972,7 +4953,6 @@ fn beacon(x: &mut Cx) {
             x.add8(f::STATE, 2);
             x.set16(0x5c, 0);
             let k = ((x.u8(f::VARIANT) as i8 as i16 as u16) << 3) as i16 as i32 as u32;
-            x.c.d[4] = k & 0xffff;
             let base = 0xb57ecu32.wrapping_add(k);
             for (i, field) in [Obj::X, Obj::Z, Obj::Y].into_iter().enumerate() {
                 let d = x.rom16(base + 2 * i as u32);
@@ -5064,11 +5044,9 @@ fn floor_tile_watch(x: &mut Cx, v: u8) {
         }
         let px = p.u16(x.b, Obj::X) as i16;
         let left = tx.wrapping_sub(d).wrapping_sub(8);
-        x.c.d[4] = 0;
         if (left as i16) > px || (left.wrapping_add(0x10) as i16) <= px {
             continue;
         }
-        x.c.d[4] = 1;
         stepped = true;
         break;
     }
@@ -5156,7 +5134,7 @@ fn courier(x: &mut Cx) {
                 wr8(x.b, o + off, v);
             }
             wr8(x.b, o + 0x2c, 0x20);
-            let cam = x.a5_u16(0x506);
+            let cam = crate::ram::CAMERA_X.get(x.b);
             let (px, pz) = (x.data16(card + 4), x.data16(card + 6));
             wr16(x.b, o + Obj::X, px.wrapping_add(cam));
             wr16(x.b, o + Obj::Z, pz);

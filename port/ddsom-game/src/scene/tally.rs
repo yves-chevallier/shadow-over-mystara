@@ -98,10 +98,7 @@ mod rom {
 mod sub {
     pub const MUSIC: u32 = 0xe1150;
     pub const FADE_TASK: u32 = 0x14de;
-    pub const PRINT_TALL: u32 = 0x1136;
     pub const ALLOC_SET: u32 = 0xce00a;
-    /// Ajoute D0 (joueur << 8 | montant) au score.
-    pub const ADD_SCORE: u32 = 0x19ae6;
 }
 
 /// Le bandeau est dessiné hors champ (lignes 8 et 9 de la première page de la couche, 0x910000), puis copié.
@@ -199,7 +196,7 @@ pub fn run(x: &mut Ctx) -> Flow {
 fn start(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     x.set_v8(a5::HOLD, 1);
-    x.call(sub::MUSIC);
+    crate::sound::jouer_global(x.b, sub::MUSIC);
     x.set_v8(a5::FADE_STEPS, 8);
     // 0xf68c8 : A0 sauvegardé autour de la création de la tâche
     let a0 = x.c.a[0];
@@ -295,8 +292,7 @@ fn clock(x: &mut Ctx) -> Flow {
     }
     next_sub_step(x);
     set_timer(x, 30);
-    x.c.a[4] = rom::TIME_TEXT;
-    x.call(sub::PRINT_TALL);
+    crate::text::print_tall(x.b, rom::TIME_TEXT);
     let t = x.v16(a5::CLOCK);
     tiles::duration(x.b, 0x912db4, t);
     Flow::Done
@@ -315,8 +311,7 @@ fn time_over(x: &mut Ctx) -> Flow {
     tiles::big_digit(x.b, &mut n, byte >> 4);
     n.lead = true;
     tiles::big_digit(x.b, &mut n, byte);
-    x.c.a[4] = rom::NO_TIME_TEXT;
-    x.call(sub::PRINT_TALL);
+    crate::text::print_tall(x.b, rom::NO_TIME_TEXT);
     set_timer(x, 30);
     set_sub_step(x, 16);
     Flow::Done
@@ -570,8 +565,7 @@ fn payout(x: &mut Ctx) -> Flow {
         let (rest, amount) = pay_digit(rd32(x.b, left));
         wr32(x.b, left, rest);
         let character = rd8(x.b, p + p::CHARACTER);
-        x.c.d[0] = (character as u32) << 8 | amount;
-        x.call(sub::ADD_SCORE);
+        crate::evenements::enfiler_points(x.b, ((character as u32) << 8 | amount) as u16);
         let mut i = 2 * character as u32;
         if x.v8(a5::LAYOUT) & 1 != 0 {
             i += 8;

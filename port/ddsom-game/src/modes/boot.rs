@@ -11,12 +11,10 @@ use crate::Native;
 
 mod ext {
     pub const PALETTES: u32 = 0x1a296;
-    pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const SERVICE_CHECK: u32 = 0x2d30a;
     pub const INIT_STEPS_A: [u32; 6] = [0x19aa2, 0x19abc, 0x19db4, 0xee044, 0x2d9e, 0x2df8];
     pub const INIT_STEP_LAST: u32 = 0x19038;
     pub const CLEAR_STATUS: u32 = 0xdabba;
-    pub const PRINT: u32 = 0xd5e;
     pub const CLEAR_SCROLL_1: u32 = 0xca8;
     pub const CONFIG_2DC9A: u32 = 0x2dc9a;
     pub const CREDITS_TASK: u32 = 0x13c0a;
@@ -65,7 +63,7 @@ crate::etapes! {
                 wr32(x.b, START_PALETTE_DST + 4 * i, v);
             }
             wr8(x.b, A5 + 0x48e, 0xf);
-            x.call(ext::BRIGHTNESS_WHITE);
+            crate::palette::full_brightness(x.b);
             x.call(ext::SERVICE_CHECK);
             crate::credits::initialiser(x.c, x.b);
             for f in ext::INIT_STEPS_A {
@@ -160,8 +158,8 @@ fn default_high_scores(x: &mut Ctx) {
 /// Affiche le texte de la région courante : mot `A5+0x70` (modulo 16) indexe la table de pointeurs.
 fn print_region_text(x: &mut Ctx, table: u32) {
     let region = (rd16(x.b, A5 + 0x70) & 0xf) as u32;
-    x.c.a[4] = rd32(x.b, table + 2 * region);
-    x.call(ext::PRINT);
+    let texte = rd32(x.b, table + 2 * region);
+    crate::text::print(x.b, texte);
 }
 
 /// Un tour du décompte : un bouton pressé le raccourcit de neuf images.

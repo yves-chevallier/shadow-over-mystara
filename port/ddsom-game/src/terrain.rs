@@ -17,18 +17,16 @@ use m68k::{Cpu, SR_C, SR_X};
 
 use crate::mem::{rd16, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use crate::{call, ops, regs, Native};
+use crate::{ops, regs, Native};
 
-/// Mot de réglages de A5 : bit 0x800, collision avec le décor active.
-const ENABLED: u32 = 0x7fd0;
+/// Bit des commutateurs (`ram::DSW`) : collision avec le décor active.
+const ENABLED: u16 = 0x800;
 /// Dernier objet testé (A0), sa position x et sa position y : consultés par d'autres routines.
 const LAST_OBJECT: u32 = 0x64;
 const LAST_X: u32 = 0x60;
 const LAST_Y: u32 = 0x62;
 /// Octet de l'objet : numéro de terrain sous lui.
 const OBJ_TERRAIN: u32 = 0x29;
-/// Routine de l'attribut de terrain.
-const TERRAIN_ATTRIBUTE: u32 = 0x24b0;
 
 /// Champs d'un type de terrain (entrée de 16 octets, mots).
 mod kind {
@@ -115,7 +113,7 @@ impl Push<'_> {
             wr16(self.b, A5 + LAST_X, x);
             wr16(self.b, A5 + LAST_Y, y);
         }
-        let enabled = rd16(self.b, A5 + ENABLED) & 0x800;
+        let enabled = crate::ram::DSW.get(self.b) & ENABLED;
         self.set_d(0, enabled);
         ops::logique(self.c, enabled as u32, Size::Word);
         if enabled == 0 {
@@ -124,7 +122,8 @@ impl Push<'_> {
         let (x, y) = (rd16(self.b, a0 + 8), rd16(self.b, a0 + 0x10));
         self.set_d(0, x);
         self.set_d(1, y);
-        call(self.c, self.b, TERRAIN_ATTRIBUTE);
+        let t = crate::video::terrain(self.b, x, y);
+        crate::video::terrain_68k(self.c, &t);
         let number = self.c.d[2] as u8;
         wr8(self.b, a0 + OBJ_TERRAIN, number);
         ops::logique(self.c, number as u32, Size::Byte);
@@ -251,6 +250,27 @@ impl Push<'_> {
 fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
     Push { c, b, variant }.run();
     rts(c, b);
+}
+
+/// 0x33fe4 sur l'objet `o`, sans registre : rend le drapeau Z de l'original (vrai : la dernière case examinée est
+/// libre, ou la collision est désactivée). La routine est transcrite sur des registres de travail (`Push`) ; ici
+/// ce sont des registres privés, jetés au retour (les appelants des joueurs ne relisaient pas ceux de l'original :
+/// `DDSOM_POISON=terrain`, lot D).
+/// Adaptateur : comme `push`, mais sur les registres de l'appelant, laissés comme l'original (familles du lot B,
+/// registres non encore prouvés morts : `DDSOM_POISON=terrain`).
+pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
+    c.a[0] = o.0;
+    Push { c, b, variant: FIRST }.run();
+    let z = c.sr & m68k::SR_Z != 0;
+    crate::diag::registres_morts(c, "terrain", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2) | regs::CCR);
+    z
+}
+
+pub fn push(b: &mut Cps2Bus, o: Obj) -> bool {
+    let mut c = Cpu::default();
+    c.a[0] = o.0;
+    Push { c: &mut c, b, variant: FIRST }.run();
+    c.sr & m68k::SR_Z != 0
 }
 
 pub const SHADOW: Native = Native {

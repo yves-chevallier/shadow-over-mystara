@@ -1,6 +1,7 @@
 //! Tirs des joueurs (PSHL) contre les ennemis : comportements au contact (table ROM 0x267c4).
 
 use super::*;
+use crate::machine::Machine;
 
 // ---------------------------------------------------------------------------------------------
 // Tirs des joueurs contre les ennemis
@@ -12,16 +13,16 @@ pub(super) fn player_shots_hit_enemies(w: &mut World) {
         return;
     }
     scan(w, List::PlayerShots, scratch::SHOTS_OUTER, |w, shot| {
-        if !w.is_active(shot) || w.u8(shot, f::ATTACK_BOX) == 0 || w.u8(shot, f::BOXES_OFF) != 0 {
+        if !w.is_active(shot) || shot.u8(w.b, f::ATTACK_BOX) == 0 || shot.u8(w.b, f::BOXES_OFF) != 0 {
             return Flow::Next;
         }
-        let atk = HitBox(rom::SHOT_ATTACK + 8 * w.u8(shot, f::ATTACK_BOX) as u32);
+        let atk = HitBox(rom::SHOT_ATTACK + 8 * shot.u8(w.b, f::ATTACK_BOX) as u32);
         scan(w, List::Enemies, scratch::SHOTS_INNER, |w, e| {
             // le tir a pu être consommé par l'ennemi précédent
             if !w.is_active(shot) {
                 return Flow::Stop;
             }
-            if w.is_active(e) && w.u8(e, f::BODY_BOX) != 0 && w.u8(e, f::BOXES_OFF) == 0 && w.u16(e, f::HP) != 0 {
+            if w.is_active(e) && e.u8(w.b, f::BODY_BOX) != 0 && e.u8(w.b, f::BOXES_OFF) == 0 && e.u16(w.b, f::HP) != 0 {
                 let body = object_box(w, rom::BODY, e, f::BODY_BOX);
                 if overlap3(w, shot, atk, e, body) {
                     shot_hits_enemy(w, shot, e);
@@ -38,15 +39,15 @@ pub(super) fn player_shots_hit_enemies(w: &mut World) {
 /// affiché est mis à jour.
 pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("shot_hits_enemy");
-    if w.u8(e, f::HITSTOP) != 0 {
+    if e.u8(w.b, f::HITSTOP) != 0 {
         return;
     }
-    let kind = w.u8(shot, f::KIND);
+    let kind = shot.u8(w.b, f::KIND);
     if kind == 0x18 {
         shot_kind_24(w, shot, e);
         return;
     }
-    let owner = Obj::from_word(w.u16(shot, f::OWNER));
+    let owner = Obj::from_word(shot.u16(w.b, f::OWNER));
     let hit = match kind {
         0 | 13 => shot_plain(w, shot, e),
         1 => shot_launch(w, shot, e, 23, Launch::Fixed),
@@ -81,33 +82,33 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
     if !hit {
         return;
     }
-    let owner = Obj::from_word(w.u16(shot, f::OWNER));
-    let hp = w.u16(e, f::HP);
-    w.set16(e, f::HP_PREV, hp);
-    let var = w.u8(owner, f::VARIANT);
-    w.set8(e, f::HIT_BY_VARIANT, var);
-    let k = w.u8(owner, f::KIND);
-    w.set8(e, f::HIT_BY_KIND, k);
-    w.set8(e, f::HITSTOP_VICTIM, 8);
-    w.set16(e, f::LINK, shot.word());
-    w.set16(shot, f::LINK, e.word());
+    let owner = Obj::from_word(shot.u16(w.b, f::OWNER));
+    let hp = e.u16(w.b, f::HP);
+    e.set_u16(w.b, f::HP_PREV, hp);
+    let var = owner.u8(w.b, f::VARIANT);
+    e.set_u8(w.b, f::HIT_BY_VARIANT, var);
+    let k = owner.u8(w.b, f::KIND);
+    e.set_u8(w.b, f::HIT_BY_KIND, k);
+    e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
+    e.set_u16(w.b, f::LINK, shot.word());
+    shot.set_u16(w.b, f::LINK, e.word());
     w.set_bit(e, f::HIT_FLAGS, 1);
     w.set_bit(shot, f::HIT_FLAGS, 1);
-    let st = w.u32(e, f::STATE);
-    w.set32(e, f::PREV_STATE, st);
+    let st = e.u32(w.b, f::STATE);
+    e.set_u32(w.b, f::PREV_STATE, st);
     if kind == 0x17 {
         return;
     }
     let mut dmg = shot_damage(w, shot, e);
     // 0x26774 : l'original teste `+0x166` du tir lui-même (A0), pas celui du lanceur
-    if w.u8(shot, f::GEAR_166) == 4 {
+    if shot.u8(w.b, f::GEAR_166) == 4 {
         dmg = dmg.wrapping_add(5);
     }
     enemy_loses_hp(w, e, dmg);
-    if w.u16(e, f::HP) == 0 && w.u8(e, f::DEATH_CREDIT) != 0 {
-        w.set8(owner, f::KILLS_FLAG, 1);
-        let v = w.u8(e, f::DEATH_VALUE);
-        wr8(w.b, A5 + ram::KILL_FLAG, v);
+    if e.u16(w.b, f::HP) == 0 && e.u8(w.b, f::DEATH_CREDIT) != 0 {
+        owner.set_u8(w.b, f::KILLS_FLAG, 1);
+        let v = e.u8(w.b, f::DEATH_VALUE);
+        ram::KILL_FLAG.set(w.b, v);
     }
     kill_small_enemy(w, shot, e);
     show_enemy_hp(w, owner, e);
@@ -116,13 +117,13 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
 /// 0x26828 : certains tirs achèvent d'un coup les petits ennemis (classe 2, types 0 ou 0x13).
 pub(super) fn kill_small_enemy(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("kill_small_enemy");
-    let t = w.u8(shot, f::KIND) as u32;
-    if w.pc8(0x26856 + t) == 0 || w.u8(e, f::CLASS) != 2 {
+    let t = shot.u8(w.b, f::KIND) as u32;
+    if w.prog8(0x26856 + t) == 0 || e.u8(w.b, f::CLASS) != 2 {
         return;
     }
-    let k = w.u8(e, f::KIND);
+    let k = e.u8(w.b, f::KIND);
     if k == 0 || k == 0x13 {
-        w.set16(e, f::HP, 0);
+        e.set_u16(w.b, f::HP, 0);
     }
 }
 
@@ -139,17 +140,17 @@ pub(super) enum Launch {
 
 /// La victime est-elle immunisée contre ce comportement (long `+0x94`, un bit par comportement) ?
 pub(super) fn immune(w: &mut World, e: Obj, bit: u32) -> bool {
-    w.u32(e, f::IMMUNITY) >> bit & 1 != 0
+    e.u32(w.b, f::IMMUNITY) >> bit & 1 != 0
 }
 
 /// Victime déjà à terre (état 4 avec réaction 0x60 ou 0x88) : certains tirs ne la relancent pas.
 pub(super) fn already_down(w: &mut World, e: Obj) -> bool {
-    w.u8(e, f::STATE) == 4 && matches!(w.u8(e, f::REACTION), 0x60 | 0x88)
+    e.u8(w.b, f::STATE) == 4 && matches!(e.u8(w.b, f::REACTION), 0x60 | 0x88)
 }
 
 /// Majore la puissance du tir (octets A et B) d'une fraction d'elle-même.
 pub(super) fn boost_power(w: &mut World, shot: Obj, shift: u32) {
-    let (a, b) = (w.u8(shot, f::POWER_A), w.u8(shot, f::POWER_B));
+    let (a, b) = (shot.u8(w.b, f::POWER_A), shot.u8(w.b, f::POWER_B));
     w.add8(shot, f::POWER_A, a >> shift);
     w.add8(shot, f::POWER_B, b >> shift);
 }
@@ -166,9 +167,9 @@ pub(super) struct OwnerBonus {
 }
 
 pub(super) fn owner_bonus(w: &mut World, shot: Obj, owner: Obj, bonus: OwnerBonus) {
-    let (a, b) = (w.u8(shot, f::POWER_A), w.u8(shot, f::POWER_B));
+    let (a, b) = (shot.u8(w.b, f::POWER_A), shot.u8(w.b, f::POWER_B));
     if bonus.gear {
-        let g = w.u8(owner, f::WEAPON_10E);
+        let g = owner.u8(w.b, f::WEAPON_10E);
         for (val, sh) in [(0x20u8, 2u32), (0x21, 1)] {
             if g == val {
                 w.add8(shot, f::POWER_A, a >> sh);
@@ -176,7 +177,7 @@ pub(super) fn owner_bonus(w: &mut World, shot: Obj, owner: Obj, bonus: OwnerBonu
             }
         }
     }
-    if bonus.ring && w.u8(owner, f::GEAR_166) == 4 {
+    if bonus.ring && owner.u8(w.b, f::GEAR_166) == 4 {
         w.add8(shot, f::POWER_A, a >> 2);
         w.add8(shot, f::POWER_B, b >> 2);
     }
@@ -185,7 +186,7 @@ pub(super) fn owner_bonus(w: &mut World, shot: Obj, owner: Obj, bonus: OwnerBonu
 
 pub(super) fn owner_flat_bonus(w: &mut World, shot: Obj, owner: Obj, flat: Option<(u8, u8)>) {
     if let Some((val, add)) = flat {
-        if w.u8(owner, f::GEAR_165) == val {
+        if owner.u8(w.b, f::GEAR_165) == val {
             w.add8(shot, f::POWER_A, add);
             w.add8(shot, f::POWER_B, add);
         }
@@ -201,24 +202,24 @@ pub(super) fn owner_hits(w: &mut World, owner: Obj, n: u16) {
 /// 0x4c (ou 0x38 au sol, 0 si elle est à terre), étincelle de type 1.
 pub(super) fn launch(w: &mut World, shot: Obj, e: Obj, face: Launch) -> bool {
     cov::hit("launch");
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::HITSTOP_VICTIM, 8);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
     if matches!(face, Launch::ShotFlip) {
-        let fl = w.u8(shot, f::FLIP);
-        w.set8(e, f::REACTION_FLIP, fl);
+        let fl = shot.u8(w.b, f::FLIP);
+        e.set_u8(w.b, f::REACTION_FLIP, fl);
     }
-    w.set8(e, f::REACTION, 0x4c);
-    if w.u8(e, f::FLIES) == 0 {
-        w.set8(e, f::REACTION, 0x38);
-        if (w.u16(e, f::Z) as i16) <= 0 {
-            w.set8(e, f::REACTION, 0);
+    e.set_u8(w.b, f::REACTION, 0x4c);
+    if e.u8(w.b, f::FLIES) == 0 {
+        e.set_u8(w.b, f::REACTION, 0x38);
+        if (e.u16(w.b, f::Z) as i16) <= 0 {
+            e.set_u8(w.b, f::REACTION, 0);
         }
     }
     if matches!(face, Launch::Fixed) {
-        w.set8(e, f::REACTION_FLIP, 0);
-        if w.u8(shot, f::FACING_AUX) != 6 {
-            w.set8(e, f::REACTION_FLIP, 0x20);
+        e.set_u8(w.b, f::REACTION_FLIP, 0);
+        if shot.u8(w.b, f::FACING_AUX) != 6 {
+            e.set_u8(w.b, f::REACTION_FLIP, 0x20);
         }
     }
     w.call_d1(0xaa96c, shot, e, 1);
@@ -238,8 +239,8 @@ pub(super) fn shot_boost_launch(w: &mut World, shot: Obj, e: Obj, bit: u32, face
     if immune(w, e, bit) {
         return false;
     }
-    let k = w.u8(e, f::KIND);
-    let big = if w.u8(e, f::CLASS) == 4 { matches!(k, 5 | 8 | 0x12) } else { k == 8 };
+    let k = e.u8(w.b, f::KIND);
+    let big = if e.u8(w.b, f::CLASS) == 4 { matches!(k, 5 | 8 | 0x12) } else { k == 8 };
     if big {
         boost_power(w, shot, 1);
     }
@@ -249,11 +250,11 @@ pub(super) fn shot_boost_launch(w: &mut World, shot: Obj, e: Obj, bit: u32, face
 /// Types 0 et 13 : aucun test ; le tir gèle autant que la victime.
 pub(super) fn shot_plain(w: &mut World, shot: Obj, e: Obj) -> bool {
     cov::hit("shot_plain");
-    let v = w.u8(shot, f::HITSTOP_VICTIM);
-    w.set8(shot, f::HITSTOP, v);
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0x20);
+    let v = shot.u8(w.b, f::HITSTOP_VICTIM);
+    shot.set_u8(w.b, f::HITSTOP, v);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0x20);
     true
 }
 
@@ -263,11 +264,11 @@ pub(super) fn shot_knockdown(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bo
     if immune(w, e, 28) || already_down(w, e) {
         return false;
     }
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0x60);
-    let fl = w.u8(e, f::FLIP) ^ 0x20;
-    w.set8(e, f::REACTION_FLIP, fl);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0x60);
+    let fl = e.u8(w.b, f::FLIP) ^ 0x20;
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
     owner_flat_bonus(w, shot, owner, Some((5, 4)));
     true
 }
@@ -278,26 +279,26 @@ pub(super) fn shot_stagger(w: &mut World, shot: Obj, e: Obj) -> bool {
     if immune(w, e, 29) {
         return false;
     }
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::HITSTOP_VICTIM, 8);
-    let fl = w.u8(shot, f::FLIP);
-    w.set8(e, f::REACTION_FLIP, fl);
-    w.set8(e, f::REACTION, 0x4c);
-    if w.u8(e, f::FLIES) == 0 {
-        w.set8(e, f::REACTION, 0x38);
-        if (w.u16(e, f::Z) as i16) <= 0 {
-            w.set8(e, f::REACTION, 0);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
+    let fl = shot.u8(w.b, f::FLIP);
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
+    e.set_u8(w.b, f::REACTION, 0x4c);
+    if e.u8(w.b, f::FLIES) == 0 {
+        e.set_u8(w.b, f::REACTION, 0x38);
+        if (e.u16(w.b, f::Z) as i16) <= 0 {
+            e.set_u8(w.b, f::REACTION, 0);
         }
     }
-    if w.u8(e, f::STAGGER_DELAY) != 0 {
-        w.set8(e, f::STAGGER_DELAY, 0);
+    if e.u8(w.b, f::STAGGER_DELAY) != 0 {
+        e.set_u8(w.b, f::STAGGER_DELAY, 0);
     } else {
-        w.set8(e, f::REACTION, 0x68);
-        w.set8(e, f::STAGGER_DELAY, 0xb4);
+        e.set_u8(w.b, f::REACTION, 0x68);
+        e.set_u8(w.b, f::STAGGER_DELAY, 0xb4);
     }
     w.call_d1(0xaa96c, shot, e, 1);
-    w.call_ao(0xe745a, shot, e);
+    crate::sound::jouer(w.b, 0xe745a, shot);
     true
 }
 
@@ -307,13 +308,13 @@ pub(super) fn shot_mage(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     if immune(w, e, 27) {
         return false;
     }
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0x60);
-    let fl = w.u8(shot, f::FLIP);
-    w.set8(e, f::REACTION_FLIP, fl);
-    let b = w.u8(shot, f::POWER_B);
-    if w.u8(e, f::CLASS) == 4 && w.u8(e, f::KIND) == 0xb {
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0x60);
+    let fl = shot.u8(w.b, f::FLIP);
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
+    let b = shot.u8(w.b, f::POWER_B);
+    if e.u8(w.b, f::CLASS) == 4 && e.u8(w.b, f::KIND) == 0xb {
         w.add8(shot, f::POWER_B, b >> 2);
     }
     owner_flat_bonus(w, shot, owner, Some((5, 4)));
@@ -342,30 +343,30 @@ pub(super) fn shot_combo(w: &mut World, shot: Obj, e: Obj, owner: Obj, bit: u32,
     owner_hits(w, owner, 2);
     w.add8(e, f::HITS_TAKEN, 1);
     if let Combo::Random(_, true) = kind {
-        w.set8(e, f::ACTIVE, 2);
+        e.set_u8(w.b, f::ACTIVE, 2);
     }
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
     let (react, flat) = match kind {
         Combo::Random(r, _) => (r, (4, 5)),
         Combo::OwnerFlip => (0x78, (6, 5)),
         Combo::VictimFlip => (0x88, (4, 5)),
     };
-    w.set8(e, f::REACTION, react);
+    e.set_u8(w.b, f::REACTION, react);
     match kind {
         Combo::Random(..) => {
-            w.set8(e, f::REACTION_FLIP, 0);
+            e.set_u8(w.b, f::REACTION_FLIP, 0);
             if w.random() & 1 != 0 {
-                w.set8(e, f::REACTION_FLIP, 0x20);
+                e.set_u8(w.b, f::REACTION_FLIP, 0x20);
             }
         }
         Combo::OwnerFlip => {
-            let fl = w.u8(owner, f::FLIP) ^ 0x20;
-            w.set8(e, f::REACTION_FLIP, fl);
+            let fl = owner.u8(w.b, f::FLIP) ^ 0x20;
+            e.set_u8(w.b, f::REACTION_FLIP, fl);
         }
         Combo::VictimFlip => {
-            let fl = w.u8(e, f::FLIP) ^ 0x20;
-            w.set8(e, f::REACTION_FLIP, fl);
+            let fl = e.u8(w.b, f::FLIP) ^ 0x20;
+            e.set_u8(w.b, f::REACTION_FLIP, fl);
         }
     }
     owner_bonus(w, shot, owner, OwnerBonus { gear: true, ring: true, flat: Some(flat) });
@@ -379,13 +380,13 @@ pub(super) fn shot_spark(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
         return false;
     }
     owner_hits(w, owner, 2);
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0xc);
-    let fl = w.u8(shot, f::FLIP) ^ 0x20;
-    w.set8(e, f::REACTION_FLIP, fl);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0xc);
+    let fl = shot.u8(w.b, f::FLIP) ^ 0x20;
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
     w.call_d1(0xaa96c, shot, e, 1);
-    w.call_ao(0xe7376, shot, e);
+    crate::sound::jouer(w.b, 0xe7376, shot);
     true
 }
 
@@ -401,13 +402,13 @@ pub(super) fn shot_slam(w: &mut World, shot: Obj, e: Obj, owner: Obj, counts: bo
         }
         owner_hits(w, owner, 1);
     }
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0x4c);
-    if w.u8(e, f::FLIES) == 0 {
-        w.set8(e, f::REACTION, 0x88);
-        let fl = w.u8(e, f::FLIP) ^ 0x20;
-        w.set8(e, f::REACTION_FLIP, fl);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0x4c);
+    if e.u8(w.b, f::FLIES) == 0 {
+        e.set_u8(w.b, f::REACTION, 0x88);
+        let fl = e.u8(w.b, f::FLIP) ^ 0x20;
+        e.set_u8(w.b, f::REACTION_FLIP, fl);
     }
     owner_flat_bonus(w, shot, owner, Some((4, 5)));
     true
@@ -421,12 +422,12 @@ pub(super) fn shot_simple(w: &mut World, shot: Obj, e: Obj, owner: Obj, bit: u32
         return false;
     }
     owner_hits(w, owner, 1);
-    w.set8(e, f::ACTIVE, 2);
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, react);
-    let fl = w.u8(e, f::FLIP) ^ 0x20;
-    w.set8(e, f::REACTION_FLIP, fl);
+    e.set_u8(w.b, f::ACTIVE, 2);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, react);
+    let fl = e.u8(w.b, f::FLIP) ^ 0x20;
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
     owner_flat_bonus(w, shot, owner, Some((flat, 5)));
     true
 }
@@ -439,13 +440,13 @@ pub(super) fn shot_lightning(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bo
     }
     owner_hits(w, owner, 2);
     w.add8(e, f::HITS_TAKEN, 1);
-    w.set32(shot, f::STATE, state::HIT);
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::HITSTOP_VICTIM, 8);
-    w.set8(e, f::REACTION, 0x24);
-    let fl = w.u8(e, f::FLIP) ^ 0x20;
-    w.set8(e, f::REACTION_FLIP, fl);
+    shot.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
+    e.set_u8(w.b, f::REACTION, 0x24);
+    let fl = e.u8(w.b, f::FLIP) ^ 0x20;
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
     owner_bonus(w, shot, owner, OwnerBonus { gear: true, ring: true, flat: None });
     true
 }
@@ -457,13 +458,13 @@ pub(super) fn shot_sweep(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
         return false;
     }
     owner_hits(w, owner, 2);
-    w.set8(e, f::ACTIVE, 2);
+    e.set_u8(w.b, f::ACTIVE, 2);
     w.add8(e, f::HITS_TAKEN, 1);
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0x94);
-    if w.u8(e, f::CLASS) != 4 && w.u8(e, f::KIND) != 0x12 {
-        w.set16(e, f::HP, 0);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0x94);
+    if e.u8(w.b, f::CLASS) != 4 && e.u8(w.b, f::KIND) != 0x12 {
+        e.set_u16(w.b, f::HP, 0);
     }
     owner_bonus(w, shot, owner, OwnerBonus { gear: true, ring: true, flat: None });
     true
@@ -472,24 +473,24 @@ pub(super) fn shot_sweep(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
 /// Type 21 : repousse (le tir s'éteint) ; sans effet sur le boss 0x12 / l'ennemi 8.
 pub(super) fn shot_push(w: &mut World, shot: Obj, e: Obj) -> bool {
     cov::hit("shot_push");
-    let protected = if w.u8(e, f::CLASS) == 4 { 0x12 } else { 8 };
-    if protected == w.u8(e, f::KIND) {
+    let protected = if e.u8(w.b, f::CLASS) == 4 { 0x12 } else { 8 };
+    if protected == e.u8(w.b, f::KIND) {
         return false;
     }
-    w.set8(shot, f::ACTIVE, 2);
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::HITSTOP_VICTIM, 8);
-    w.set8(e, f::REACTION, 0x4c);
-    if w.u8(e, f::FLIES) == 0 {
-        w.set8(e, f::REACTION, 0x38);
-        if (w.u16(e, f::Z) as i16) <= 0 {
-            w.set8(e, f::REACTION, 0);
+    shot.set_u8(w.b, f::ACTIVE, 2);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
+    e.set_u8(w.b, f::REACTION, 0x4c);
+    if e.u8(w.b, f::FLIES) == 0 {
+        e.set_u8(w.b, f::REACTION, 0x38);
+        if (e.u16(w.b, f::Z) as i16) <= 0 {
+            e.set_u8(w.b, f::REACTION, 0);
         }
     }
-    w.set8(e, f::REACTION_FLIP, 0);
-    if (w.u16(shot, f::VX) as i16) >= 0 {
-        w.set8(e, f::REACTION_FLIP, 0x20);
+    e.set_u8(w.b, f::REACTION_FLIP, 0);
+    if (shot.u16(w.b, f::VX) as i16) >= 0 {
+        e.set_u8(w.b, f::REACTION_FLIP, 0x20);
     }
     w.call_d1(0xaa96c, shot, e, 1);
     true
@@ -502,40 +503,40 @@ pub(super) fn shot_execute(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool
         return false;
     }
     owner_hits(w, owner, 2);
-    w.set8(shot, f::ACTIVE, 2);
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0x8c);
-    w.set16(e, f::HP, 0);
-    let fl = w.u8(e, f::FLIP) ^ 0x20;
-    w.set8(e, f::REACTION_FLIP, fl);
+    shot.set_u8(w.b, f::ACTIVE, 2);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0x8c);
+    e.set_u16(w.b, f::HP, 0);
+    let fl = e.u8(w.b, f::FLIP) ^ 0x20;
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
     true
 }
 
 /// Type 24 (0x27242) : tir spécial ; dégâts directs, sans mise à jour de la jauge.
 pub(super) fn shot_kind_24(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("shot_kind_24");
-    if w.u8(shot, f::VARIANT) == 1 {
-        if immune(w, e, 28) || w.u8(e, f::REACTION) == 0x60 {
+    if shot.u8(w.b, f::VARIANT) == 1 {
+        if immune(w, e, 28) || e.u8(w.b, f::REACTION) == 0x60 {
             return;
         }
-        w.set8(e, f::REACTION, 0x60);
+        e.set_u8(w.b, f::REACTION, 0x60);
     } else {
-        w.set8(e, f::REACTION, 0xc);
-        if w.u16(e, f::Z) != 0 {
-            w.set8(e, f::REACTION, 0x38);
+        e.set_u8(w.b, f::REACTION, 0xc);
+        if e.u16(w.b, f::Z) != 0 {
+            e.set_u8(w.b, f::REACTION, 0x38);
         }
     }
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    let fl = w.u8(e, f::FLIP) ^ 0x20;
-    w.set8(e, f::REACTION_FLIP, fl);
-    let hp = w.u16(e, f::HP);
-    w.set16(e, f::HP_PREV, hp);
-    w.set8(e, f::HITSTOP_VICTIM, 8);
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    let fl = e.u8(w.b, f::FLIP) ^ 0x20;
+    e.set_u8(w.b, f::REACTION_FLIP, fl);
+    let hp = e.u16(w.b, f::HP);
+    e.set_u16(w.b, f::HP_PREV, hp);
+    e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
     w.set_bit(e, f::HIT_FLAGS, 1);
-    let st = w.u32(e, f::STATE);
-    w.set32(e, f::PREV_STATE, st);
+    let st = e.u32(w.b, f::STATE);
+    e.set_u32(w.b, f::PREV_STATE, st);
     let dmg = shot_damage(w, shot, e);
     enemy_loses_hp(w, e, dmg);
 }

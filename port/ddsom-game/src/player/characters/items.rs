@@ -24,18 +24,6 @@ use super::super::{animation, Ctx, Player};
 pub mod rom {
     /// Son d'un objet utilisé.
     pub const SOUND_ITEM: u32 = 0xe2430;
-    /// Foudre : choix de la cible (A1 en retour, Z levé si aucune).
-    pub const LIGHTNING_TARGET: u32 = 0x4f004;
-    /// Mur : choix de la cible.
-    pub const WALL_TARGET: u32 = 0x50324;
-    /// Éclairs de l'écran (palettes) : foudre, fin, feu.
-    pub const FLASH_LIGHTNING: u32 = 0x1ab56;
-    pub const FLASH_END: u32 = 0x1abe0;
-    pub const FLASH_FIRE: u32 = 0x1ab3c;
-    /// Palettes du joueur : lumière, normale, rouge.
-    pub const PALETTE_LIGHT: u32 = 0x3af8;
-    pub const PALETTE_NORMAL: u32 = 0x3afe;
-    pub const PALETTE_RED: u32 = 0x3b14;
     /// Fin des auras après la magie rouge.
     pub const SPELL_RESET_AURA: u32 = 0x37882;
 }
@@ -139,11 +127,11 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                let target_found = !g.rom(rom::LIGHTNING_TARGET, p);
-                if target_found {
-                    p.set_u16(g, style.target, g.c.a[1] as u16);
-                } else {
-                    to_stand(g, p);
+                match spawn::lightning_target(g, p, g.c.d[0] as u8) {
+                    Some(target) => p.set_u16(g, style.target, target.word()),
+                    None => {
+                        to_stand(g, p);
+                    }
                 }
             }
         }
@@ -156,7 +144,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0xc0);
                 spawn::lightning(g, p, target);
-                g.rom(rom::FLASH_LIGHTNING, p);
+                { crate::palette::flash(g.b, crate::palette::Flash::Gray); };
                 animation::start(g, p, 0);
             }
         }
@@ -167,7 +155,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             let left = p.u16(g, field::TIMER).wrapping_sub(1);
             p.set_u16(g, field::TIMER, left);
             if left == 0 {
-                g.rom(rom::FLASH_END, p);
+                crate::palette::restore_flash(g.b);
                 common::consume_charge(g, p);
                 common::end_spell_mode(g, p, style.undim_mode);
             }
@@ -207,7 +195,10 @@ pub fn wall(g: &mut Ctx, p: Player, style: Style) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                let target_found = !g.rom(rom::WALL_TARGET, p);
+                spawn::wall_target(g, p);
+                // Glitch d'origine : l'appelant teste Z, celui de l'`addq` du compteur de murs, ou celui de l'allocation
+                // qui échoue (Z nul) : pool plein, il croit la cible créée et retient l'A1 laissé par l'allocation.
+                let target_found = g.c.sr & m68k::SR_Z == 0;
                 if target_found {
                     p.set_u16(g, style.target, g.c.a[1] as u16);
                 } else {
@@ -268,7 +259,7 @@ pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     (spell.every_frame)(g, p);
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        g.rom(rom::SOUND_ITEM, p);
+        g.son(rom::SOUND_ITEM, p);
         if p.u8(g, field::SPELL_CANCELLED) != 0 {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);
@@ -339,7 +330,7 @@ pub const CAST_14: Cast = Cast {
     frames: 0x3c,
     fire: |g, p| {
         spawn::fireball(g, p);
-        g.rom(rom::PALETTE_LIGHT, p);
+        crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
     },
     ..BASE
 };
@@ -358,7 +349,7 @@ pub const CAST_15: Cast = Cast {
 pub fn ring_fire(g: &mut Ctx, p: Player) {
     cov!();
     spawn::ring(g, p, 1);
-    g.rom(rom::PALETTE_RED, p);
+    crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::RED);
 }
 
 /// Aura rouge posée sur le lanceur pour `duration` images ; un accessoire (`+0x167` = 2) la renforce.
@@ -372,7 +363,7 @@ pub fn red_aura(g: &mut Ctx, p: Player, duration: u16) {
     }
     p.set_u8(g, Player::AURA_B, 0);
     p.set_u8(g, Player::AURA_C, 0);
-    g.rom(rom::SPELL_RESET_AURA, p);
+    crate::palette::character_palette(g.b, p.obj());
 }
 
 /// Combattant et clerc : l'aura est posée au geste.
@@ -387,7 +378,7 @@ pub const CAST_16: Cast = Cast {
 pub const CAST_17: Cast = Cast {
     fire: |g, p| {
         spawn::beam_cast(g, p, 1);
-        g.rom(rom::PALETTE_LIGHT, p);
+        crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
     },
     ..BASE
 };
@@ -408,7 +399,7 @@ pub const CAST_19: Cast = Cast {
     every_frame: common::heal_flicker,
     fire: |g, p| {
         spawn::potion(g, p);
-        g.rom(rom::PALETTE_NORMAL, p);
+        crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
     },
     ..BASE
 };
@@ -431,13 +422,13 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
     animation::step(g, p);
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        g.rom(rom::SOUND_ITEM, p);
+        g.son(rom::SOUND_ITEM, p);
         if p.u8(g, field::SPELL_CANCELLED) != 0 {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);
         } else {
             spawn::meteors(g, p);
-            g.rom(rom::FLASH_FIRE, p);
+            { crate::palette::flash(g.b, crate::palette::Flash::G); };
         }
     }
     let left = p.u16(g, field::TIMER).wrapping_sub(1);
@@ -448,13 +439,13 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
                 next_step(g, p);
                 animation::start_plain(g, p, anim);
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                    g.rom(rom::FLASH_END, p);
+                    crate::palette::restore_flash(g.b);
                 }
             }
             None => {
                 common::consume_charge(g, p);
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                    g.rom(rom::FLASH_END, p);
+                    crate::palette::restore_flash(g.b);
                 }
                 common::end_spell_mode(g, p, style.undim_mode);
             }

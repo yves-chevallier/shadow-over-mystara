@@ -62,8 +62,6 @@ mod ext {
     pub const PALETTE_PAGE_C: u32 = 0x1a3d4;
     pub const PALETTE_SET: u32 = 0x1a67e;
     pub const PALETTE_FADE: u32 = 0x1a8b2;
-    pub const BRIGHTNESS_WHITE: u32 = 0x1686;
-    pub const BRIGHTNESS_BLACK: u32 = 0x168c;
     pub const TILE_BLOCK: u32 = 0x26d4;
     pub const TILE_BLOCK_2: u32 = 0x2766;
     pub const SOBJ_VARIANT: u32 = 0xddeaa;
@@ -80,8 +78,6 @@ mod ext {
     pub const EFFCT: u32 = 0x39cba;
     pub const SOBJ: u32 = 0x39f82;
     pub const CAMERAS: u32 = 0x33e20;
-    pub const SOUND_E0A82: u32 = 0xe0a82;
-    pub const SOUND_E0882: u32 = 0xe0882;
     pub const SOUND_E1528: u32 = 0xe1528;
     pub const SOUND_E16F0: u32 = 0xe16f0;
     pub const PLAYER_PREPARE: u32 = 0x3525c;
@@ -144,7 +140,7 @@ crate::etapes! {
             x.call_d0(ext::PALETTE_SET, 89);
             x.call_d0(ext::PALETTE_FADE, 86);
             wr8(x.b, var::FADE_PAGES, 12);
-            x.call(ext::BRIGHTNESS_WHITE);
+            crate::palette::full_brightness(x.b);
             s02_clear(x)
         },
         S02Cleared = S02_CLEARED => |x| {
@@ -153,7 +149,7 @@ crate::etapes! {
             Flow::Done
         },
         S04Fade = S04_FADE => |x| {
-            x.call(ext::SOUND_E1528);
+            crate::sound::jouer_global(x.b, ext::SOUND_E1528);
             fade_settings(x, 3, 4);
             x.sous_programme(crate::taches::fondu::montee, Etape::S04Timer)
         },
@@ -261,7 +257,7 @@ crate::etapes! {
             x.c.a[0] = ext::FADE_TASK_STEP;
             set_low_word(&mut x.c.d[0], 0x10);
             crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_STEP);
-            x.call(ext::SOUND_E16F0);
+            crate::sound::jouer_global(x.b, ext::SOUND_E16F0);
             wr8(x.b, var::FADE_STEPS, 1);
             x.c.a[0] = BLOCK;
             s1c_wait_fade(x)
@@ -386,8 +382,8 @@ crate::etapes! {
             x.call_d0(ext::PALETTE_SET, 84);
             x.call_d0(ext::PALETTE_FADE, 84);
             wr8(x.b, var::FADE_PAGES, 12);
-            x.call(ext::BRIGHTNESS_BLACK);
-            x.call_d0(ext::SOUND_E0A82, 4);
+            crate::palette::no_brightness(x.b);
+            crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
             // joueurs présents et joueurs « prêts à partir » (octet +0x192)
             let mut present = 0u8;
             let mut ready = 0u8;
@@ -486,7 +482,7 @@ crate::etapes! {
             }
             x.call(ext::PLAYERS_UPDATE);
             wr8(x.b, var::PHASE, 20);
-            x.call(ext::SOUND_E0882);
+            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             x.jump_to(ext::BOOTED_SET)
         },
     }
@@ -842,7 +838,7 @@ fn s1a_wait_signal(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     next_step(x);
-    x.call_d0(ext::SOUND_E0A82, 4);
+    crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
     wr8(x.b, var::FADE_STEPS, 1);
     wr16(x.b, var::FADE_DELAY, 4);
     wr8(x.b, var::FADE_PAGES, FADE_ALL);
@@ -1131,7 +1127,7 @@ fn s30_rewards(x: &mut Ctx) -> Flow {
         }
     }
     wr8(x.b, var::FADE_PAGES, 1);
-    x.call(ext::BRIGHTNESS_BLACK);
+    crate::palette::no_brightness(x.b);
     render(x);
     let mut fp = var::PLAYERS;
     for _ in 0..4 {

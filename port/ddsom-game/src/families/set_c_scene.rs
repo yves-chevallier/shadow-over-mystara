@@ -101,8 +101,6 @@ const INIT_SCENE: u32 = 0xd9778;
 const EXIT_SCENE: u32 = 0xd981a;
 const PREPARE_EFFECTS: u32 = 0xebe86;
 const FADE_OUT: u32 = 0xe0c5c;
-const PLAYER_HOOK_A: u32 = 0x19db4;
-const PLAYER_HOOK_B: u32 = 0x19e10;
 
 pub fn run(x: &mut Cx) {
     if x.u8(0x40) != 0 || x.a5_u8(a5::DIFFICULTY) == 0 {
@@ -448,8 +446,8 @@ fn curtain(x: &mut Cx) {
     if !(0..4).any(|i| rd8(x.b, PLAYERS + i * PLAYER_STRIDE + 4) == 2) {
         return;
     }
-    x.call(PLAYER_HOOK_A);
-    x.call(PLAYER_HOOK_B);
+    crate::evenements::vider_popups(x.b);
+    crate::evenements::effacer_popup_courant(x.b);
     for _ in 0..2 {
         let at = x.u16(f::WAIT) as i16 as i32 as u32;
         let offset = x.rom16(CURTAIN_TABLE.wrapping_add(at)) as i16;
@@ -474,7 +472,7 @@ fn clear_all(x: &mut Cx) {
     next_state(x, 2);
     x.set_a5_u8(a5::SCENE_LATCH, 0xff);
     x.set_a5_u8(a5::FROZEN, 0);
-    x.call(FADE_OUT);
+    crate::sound::jouer(x.b, FADE_OUT, x.o);
     for pool in [&SET, &ENEMY, &SOBJ, &BOSS, &EFFCT, &ITEM, &ESHL, &PEFF] {
         for i in 0..pool.slots {
             let o = pool.slot(i);
@@ -497,7 +495,7 @@ fn effects_wave(x: &mut Cx) {
     if x.a5_u8(a5::FROZEN) != 0 {
         return next_state(x, 2);
     }
-    x.call(PREPARE_EFFECTS);
+    crate::sound::jouer(x.b, PREPARE_EFFECTS, x.o);
     if spawn(x, &pools::EFFCT, 0x21, Some(0)).is_none() {
         return;
     }

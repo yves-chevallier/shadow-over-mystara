@@ -168,9 +168,9 @@ mod cure {
         x.add16(0x10, 0xffff);
         x.set16(0x12, 0x8000);
         if x.u8(0x2f) == 0 {
-            x.call(SFX_PRAYER);
+            crate::sound::jouer(x.b, SFX_PRAYER, x.o);
         } else {
-            x.call(SFX_PRAYER_B);
+            crate::sound::jouer(x.b, SFX_PRAYER_B, x.o);
         }
         let n = (x.u8(0x2f) as u32) as u16;
         x.anim_start(ANIMS, n);
@@ -238,7 +238,7 @@ mod cure {
             x.set16(0x12, 0x8000);
         }
         x.anim_start(ANIMS, 0);
-        x.call(SFX_PRAYER);
+        crate::sound::jouer(x.b, SFX_PRAYER, x.o);
     }
 
     /// Variantes 0 et 2 : l'étoile tourne une image puis disparaît ; tous les 4 temps de la durée de
@@ -335,7 +335,7 @@ mod holy {
         x.add16(0xc, 0x7a);
         x.add16(0x10, 0xffff);
         x.anim_start(ANIMS, 0);
-        x.call(SFX_START);
+        crate::sound::jouer(x.b, SFX_START, x.o);
     }
 
     fn init_halo(x: &mut Cx) {
@@ -401,8 +401,8 @@ mod holy {
         x.set16(0xc, 8);
         x.anim_start(ANIMS, 0);
         x.call(BURST_SPAWN);
-        x.call(SFX_BURST_A);
-        x.call(SFX_BURST_B);
+        crate::sound::jouer(x.b, SFX_BURST_A, x.o);
+        crate::sound::jouer(x.b, SFX_BURST_B, x.o);
         let owner = x.link_a1(f::OWNER);
         let player = owner.u8(x.b, 0x10c) as u32;
         let row = x.rom8(SCRIPT_BY_PLAYER + player) as u32;
@@ -429,7 +429,7 @@ mod holy {
                 x.add8(0x4, 2);
                 let owner = x.link_a1(f::OWNER);
                 owner.set_u16(x.b, 0x168, 1);
-                x.call(SFX_END);
+                crate::sound::jouer(x.b, SFX_END, x.o);
             } else {
                 x.c.d[0] = duration as u32;
                 x.c.d[1] = command as u32;

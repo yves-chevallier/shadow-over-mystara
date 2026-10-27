@@ -53,19 +53,28 @@ fn offset(index: u16) -> u32 {
     index as i16 as i32 as u32
 }
 
-fn pointer(c: &Cpu, b: &mut Cps2Bus, table: u32, number: u8) -> u32 {
-    let _ = c;
-    crate::mem::rd32(b, table + 4 * number as u32)
+
+/// 0xa470 : tire l'attitude de l'ennemi `o` (octet de la table `+0x70`, indexée par le compteur d'images), la
+/// range en `+0x71` et la rend (le `beq` des appelants teste sa nullité).
+pub fn stance(b: &mut Cps2Bus, o: Obj) -> u8 {
+    stance_at(b, o).1
 }
 
-/// 0xa470 : tire l'attitude (octet de la table `+0x70`, indexée par le compteur d'images).
-fn stance(c: &mut Cpu, b: &mut Cps2Bus) {
-    let number = rd8(b, c.a[0] + f::STANCE_TABLE);
-    c.a[4] = pointer(c, b, STANCE_POINTERS, number);
+/// (table lue, attitude).
+fn stance_at(b: &mut Cps2Bus, o: Obj) -> (u32, u8) {
+    let number = rd8(b, o.0 + f::STANCE_TABLE);
+    let table = crate::mem::rd32(b, STANCE_POINTERS + 4 * number as u32);
     let tick = rd16(b, TICK);
-    let v = rd8(b, c.a[4].wrapping_add(offset(tick)));
-    wr8(b, c.a[0] + f::STANCE_VALUE, v);
-    c.d[0] = tick as u32;
+    let v = rd8(b, table.wrapping_add(offset(tick)));
+    wr8(b, o.0 + f::STANCE_VALUE, v);
+    (table, v)
+}
+
+/// Native : A4 = la table, D0 = le compteur d'images, drapeaux de l'attitude.
+fn stance_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (table, v) = stance_at(b, Obj(c.a[0]));
+    c.a[4] = table;
+    c.d[0] = rd16(b, TICK) as u32;
     logique(c, v as u32, Size::Byte);
     rts(c, b);
 }
@@ -82,127 +91,180 @@ fn set_w(r: &mut u32, v: u16) {
     *r = *r & !0xffff | v as u32;
 }
 
-/// Sortie « non » des tests : D0 = 0 et les drapeaux de `moveq`.
-fn no(c: &mut Cpu, b: &mut Cps2Bus) {
-    moveq(c, 0);
-    rts(c, b);
+
+/// Boîte devant un objet : décalage en x (vers l'avant), demi-largeur, demi-profondeur (D0, D1, D2 de l'original).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Boite {
+    pub decalage: u16,
+    pub demi_largeur: u16,
+    pub demi_profondeur: u16,
 }
 
-/// 0x7f0c et 0x7ef4 : un adversaire (l'objet visé `+0x50`) est-il dans la boîte devant l'ennemi ?
-/// D0 = décalage de la boîte, D1 et D2 = demi-largeur et demi-profondeur. Si oui, après un tirage de
-/// probabilité, l'ennemi passe à l'état 6 avec une animation tirée au hasard. Les registres D1-D4, A1 et A4
-/// sont laissés comme l'original (le code appelant les relit).
-fn in_front(c: &mut Cpu, b: &mut Cps2Bus, strict: bool) {
-    let me = c.a[0];
-    let target = rd16(b, me + f::TARGET);
-    if target == 0 {
-        return no(c, b);
-    }
-    let other = object(target);
-    c.a[1] = other;
-    let state = rd8(b, other + f::SUB_STATE);
-    if strict {
-        if rd16(b, other + 0x0c) != 0 || (state != 12 && state != 14) {
-            return no(c, b);
+/// Registres de travail que laissent les tests de boîte de l'original (mots bas, s'ils ont été posés).
+#[derive(Default)]
+struct Restes {
+    d0: Option<u16>,
+    d1: Option<u16>,
+    d2: Option<u16>,
+    d3: Option<u16>,
+    d2_octet: Option<u8>,
+    d3_octet: Option<u8>,
+    d4_octet: Option<u8>,
+}
+
+impl Restes {
+    fn poser(&self, c: &mut Cpu) {
+        // dans l'ordre de l'original : octets puis mots, chacun à sa place
+        if let Some(v) = self.d3_octet {
+            set_b(&mut c.d[3], v);
         }
-    } else if state != 12 {
-        return no(c, b);
+        if let Some(v) = self.d4_octet {
+            set_b(&mut c.d[4], v);
+        }
+        for (r, v) in [(0, self.d0), (1, self.d1), (2, self.d2), (3, self.d3)] {
+            if let Some(v) = v {
+                set_w(&mut c.d[r], v);
+            }
+        }
+        if let Some(v) = self.d2_octet {
+            set_b(&mut c.d[2], v);
+        }
     }
+}
+
+/// L'objet `other` est-il dans la boîte devant `me` ? Écarts biaisés comparés en non signé, comme l'original.
+fn dans_la_boite(b: &mut Cps2Bus, me: u32, other: u32, boite: Boite, r: &mut Restes) -> bool {
     let facing = rd8(b, me + f::FACING);
-    set_b(&mut c.d[3], facing);
-    if facing == rd8(b, other + f::FACING) {
-        return no(c, b);
-    }
-    let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
-    set_w(&mut c.d[3], gap);
-    let side = if (gap as i16) >= 0 { 0 } else { 32 };
-    set_b(&mut c.d[4], side);
-    if side != facing {
-        return no(c, b);
-    }
-    let offset_x = if facing != 0 { (c.d[0] as u16).wrapping_neg() } else { c.d[0] as u16 };
+    let offset_x = if facing != 0 { boite.decalage.wrapping_neg() } else { boite.decalage };
     let other_x = rd16(b, other + f::X);
-    set_w(&mut c.d[3], other_x);
-    let half_x = c.d[1] as u16;
+    r.d3 = Some(other_x);
+    let half_x = boite.demi_largeur;
     let reach_x = offset_x.wrapping_add(rd16(b, me + f::X)).wrapping_sub(other_x).wrapping_add(half_x);
-    set_w(&mut c.d[0], reach_x);
-    set_w(&mut c.d[1], half_x.wrapping_mul(2));
+    r.d0 = Some(reach_x);
+    r.d1 = Some(half_x.wrapping_mul(2));
     if reach_x > half_x.wrapping_mul(2) {
-        return no(c, b);
+        return false;
     }
     let other_depth = rd16(b, other + f::DEPTH);
-    set_w(&mut c.d[1], other_depth);
-    let half_depth = c.d[2] as u16;
+    r.d1 = Some(other_depth);
+    let half_depth = boite.demi_profondeur;
     let reach_depth = rd16(b, me + f::DEPTH).wrapping_sub(other_depth).wrapping_add(half_depth);
-    set_w(&mut c.d[0], reach_depth);
-    set_w(&mut c.d[2], half_depth.wrapping_mul(2));
-    if reach_depth > half_depth.wrapping_mul(2) {
-        return no(c, b);
+    r.d0 = Some(reach_depth);
+    r.d2 = Some(half_depth.wrapping_mul(2));
+    reach_depth <= half_depth.wrapping_mul(2)
+}
+
+/// 0x7f0c (`strict`) et 0x7ef4 : un adversaire (l'objet visé `+0x50`) est-il dans la boîte devant l'ennemi `o`, de
+/// face, au sol et dans l'état 12 (ou 14 si `strict`) ? Si oui, après un tirage de probabilité (table `+0x74`),
+/// l'ennemi passe à l'état 6 avec une animation tirée au hasard (table `+0x75`) et le résultat est vrai.
+pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, boite: Boite) -> bool {
+    in_front_restes(b, o.0, strict, boite).0
+}
+
+/// (résultat, restes, adversaire lu (A1), table lue (A4), D2 et D0 longs du tirage).
+fn in_front_restes(b: &mut Cps2Bus, me: u32, strict: bool, boite: Boite) -> (bool, Restes, Option<u32>, Option<u32>, Option<(u32, u32)>) {
+    let mut r = Restes::default();
+    let target = rd16(b, me + f::TARGET);
+    if target == 0 {
+        return (false, r, None, None, None);
+    }
+    let other = object(target);
+    let state = rd8(b, other + f::SUB_STATE);
+    let refuse = if strict { rd16(b, other + 0x0c) != 0 || (state != 12 && state != 14) } else { state != 12 };
+    if refuse {
+        return (false, r, Some(other), None, None);
+    }
+    let facing = rd8(b, me + f::FACING);
+    r.d3_octet = Some(facing);
+    if facing == rd8(b, other + f::FACING) {
+        return (false, r, Some(other), None, None);
+    }
+    let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
+    r.d3 = Some(gap);
+    let side = if (gap as i16) >= 0 { 0 } else { 32 };
+    r.d4_octet = Some(side);
+    if side != facing || !dans_la_boite(b, me, other, boite, &mut r) {
+        return (false, r, Some(other), None, None);
     }
     let number = rd8(b, me + f::BOX_CHANCE);
-    c.a[4] = pointer(c, b, BOX_CHANCE_POINTERS, number);
+    let chances = crate::mem::rd32(b, BOX_CHANCE_POINTERS + 4 * number as u32);
     let tick = rd16(b, TICK);
-    c.d[2] = rd32(b, c.a[4].wrapping_add(offset(tick << 2)));
+    let masque = rd32(b, chances.wrapping_add(offset(tick << 2)));
     let roll = rng::random(b) as u32 & 31;
-    c.d[0] = roll;
-    if c.d[2] >> roll & 1 == 0 {
-        return no(c, b);
+    if masque >> roll & 1 == 0 {
+        return (false, r, Some(other), Some(chances), Some((masque, roll)));
     }
     let number = rd8(b, me + f::BOX_ANIMATION);
     // l'octet `+0x75` est déjà un multiple de 4 : pas de décalage
-    c.a[4] = rd32(b, BOX_ANIMATION_POINTERS.wrapping_add(number as u32));
-    c.a[4] = c.a[4].wrapping_add(offset((tick >> 1) << 5));
+    let animations = rd32(b, BOX_ANIMATION_POINTERS.wrapping_add(number as u32)).wrapping_add(offset((tick >> 1) << 5));
     let pick = rng::random(b) as u32 & 31;
     wr8(b, me + f::STATE, 6);
-    let v = rd8(b, c.a[4].wrapping_add(pick));
+    let v = rd8(b, animations.wrapping_add(pick));
     wr8(b, me + f::SUB_STATE, v);
     wr8(b, me + f::SUB_STEP, 0);
-    moveq(c, 1);
+    (true, r, Some(other), Some(animations), Some((masque, roll)))
+}
+
+/// Native de 0x7f0c / 0x7ef4 : D0 (1 : oui, 0 : non) et drapeaux de `moveq` ; D1-D4, A1 et A4 laissés comme l'original
+/// (le code appelant les relit).
+fn in_front_native(c: &mut Cpu, b: &mut Cps2Bus, strict: bool) {
+    let boite = Boite { decalage: c.d[0] as u16, demi_largeur: c.d[1] as u16, demi_profondeur: c.d[2] as u16 };
+    let (oui, restes, autre, table, tirage) = in_front_restes(b, c.a[0], strict, boite);
+    if let Some(autre) = autre {
+        c.a[1] = autre;
+    }
+    restes.poser(c);
+    if let Some(table) = table {
+        c.a[4] = table;
+    }
+    if let Some((masque, roll)) = tirage {
+        c.d[2] = masque;
+        c.d[0] = roll;
+    }
+    moveq(c, oui as i32);
     rts(c, b);
 }
 
-/// 0x7f19c : l'objet A2 est-il dans la boîte devant l'objet A0 ? D0 = décalage, D1 et D2 = demi-largeur
-/// et demi-profondeur. D0 : 0 non (ou en l'air), 1 oui et de face, 2 oui mais de dos.
-fn box_around(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (me, other) = (c.a[0], c.a[2]);
-    let found = box_reach(c, b, me, other);
-    moveq(c, found);
-    rts(c, b);
+/// Position de l'objet par rapport à la boîte devant un autre (0x7f19c).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DansBoite {
+    /// Hors de la boîte, ou en l'air (D0 = 0).
+    Non,
+    /// Dans la boîte, de face (D0 = 1).
+    Face,
+    /// Dans la boîte, de dos (D0 = 2).
+    Dos,
 }
 
-fn box_reach(c: &mut Cpu, b: &mut Cps2Bus, me: u32, other: u32) -> i32 {
-    if rd16(b, other + 0x0c) != 0 {
-        return 0;
+/// 0x7f19c : l'objet `other` est-il dans la boîte devant l'objet `me` ?
+pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, boite: Boite) -> DansBoite {
+    box_reach(b, me.0, other.0, boite, &mut Restes::default())
+}
+
+fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, boite: Boite, r: &mut Restes) -> DansBoite {
+    if rd16(b, other + 0x0c) != 0 || !dans_la_boite(b, me, other, boite, r) {
+        return DansBoite::Non;
     }
     let facing = rd8(b, me + f::FACING);
-    let offset_x = if facing != 0 { (c.d[0] as u16).wrapping_neg() } else { c.d[0] as u16 };
-    let other_x = rd16(b, other + f::X);
-    set_w(&mut c.d[3], other_x);
-    let half_x = c.d[1] as u16;
-    let reach_x = offset_x.wrapping_add(rd16(b, me + f::X)).wrapping_sub(other_x).wrapping_add(half_x);
-    set_w(&mut c.d[0], reach_x);
-    set_w(&mut c.d[1], half_x.wrapping_mul(2));
-    if reach_x > half_x.wrapping_mul(2) {
-        return 0;
-    }
-    let other_depth = rd16(b, other + f::DEPTH);
-    set_w(&mut c.d[1], other_depth);
-    let half_depth = c.d[2] as u16;
-    let reach_depth = rd16(b, me + f::DEPTH).wrapping_sub(other_depth).wrapping_add(half_depth);
-    set_w(&mut c.d[0], reach_depth);
-    set_w(&mut c.d[2], half_depth.wrapping_mul(2));
-    if reach_depth > half_depth.wrapping_mul(2) {
-        return 0;
-    }
     let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
-    set_w(&mut c.d[1], gap);
+    r.d1 = Some(gap);
     let side = if (gap as i16) < 0 { 32 } else { 0 };
-    set_b(&mut c.d[2], side);
+    r.d2_octet = Some(side);
     if side == facing {
-        1
+        DansBoite::Face
     } else {
-        2
+        DansBoite::Dos
     }
+}
+
+/// Native de 0x7f19c (A0, A2 ; D0-D2 : la boîte) : D0 = 0, 1 ou 2 et drapeaux de `moveq`, D1-D3 laissés.
+fn box_around_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let boite = Boite { decalage: c.d[0] as u16, demi_largeur: c.d[1] as u16, demi_profondeur: c.d[2] as u16 };
+    let mut restes = Restes::default();
+    let found = box_reach(b, c.a[0], c.a[2], boite, &mut restes);
+    restes.poser(c);
+    moveq(c, found as i32);
+    rts(c, b);
 }
 
 /// 0x67452 : le joueur le plus proche dans la boîte devant l'objet A0 (D0 = décalage, D1 = demi-largeur,
@@ -370,7 +432,7 @@ fn animation_by_variant(c: &mut Cpu, b: &mut Cps2Bus) {
     let timer = rd16(b, c.a[0] + ANIM_TIMER);
     let key = rd8(b, c.a[0] + VARIANT);
     find_animation_set(c, b, key, 0x7f);
-    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
+    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
     wr16(b, c.a[0] + ANIM_TIMER, timer);
     copy_mark(c, b);
 }
@@ -380,7 +442,7 @@ fn animation_of_master(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = object(rd16(b, c.a[0] + MASTER));
     let key = rd8(b, c.a[1] + VARIANT);
     find_animation_set(c, b, key, 0x7f);
-    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
+    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
     copy_mark(c, b);
 }
 
@@ -389,7 +451,7 @@ fn animation_of_mark(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = object(rd16(b, c.a[0] + MASTER));
     let key = rd8(b, c.a[1] + ANIM_MARK);
     find_animation_set(c, b, key, 0xff);
-    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
+    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
 }
 
 /// 0x10474 : drapeaux de l'octet `A5+0x35` (joueurs en vie).
@@ -563,7 +625,7 @@ fn release_player(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Tables de points candidats par numéro (`+0x79`) : pointeur, puis nombre de points - 1 et paires
 /// (décalage x, décalage profondeur) autour de la cible.
-const WALK_POINTS: u32 = 0xe93e;
+pub(crate) const WALK_POINTS: u32 = 0xe93e;
 const MIRRORED_WALK_POINTS: u32 = 0xf06a;
 /// Point choisi (`+0x7a`, `+0x7c`), numéro du dernier point retenu (`+0x99`).
 const GOAL_X: u32 = 0x7a;
@@ -902,7 +964,7 @@ fn draw_6b(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x79f6 : dans l'écran, `+0x6e` est tiré dans la table de la ligne `+0x6d`, sinon il vaut 1. D0 = 1.
 fn draw_6e(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    let inside = crate::objects::cull::in_arena_68k(c, b, Obj(me), 0);
+    let inside = crate::objects::cull::in_arena(b, Obj(me), 0);
     let v = if inside { random_entry(c, b, 0x7a50, me + 0x6d) } else { 1 };
     wr8(b, me + 0x6e, v);
     moveq(c, 1);
@@ -943,7 +1005,7 @@ fn parries_69(c: &mut Cpu, b: &mut Cps2Bus) {
 /// par le compteur d'images (32 octets par paire d'images).
 fn draw_84(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    if !crate::objects::cull::in_arena_68k(c, b, Obj(me), 0) {
+    if !crate::objects::cull::in_arena(b, Obj(me), 0) {
         wr16(b, me + 0x84, 1);
         return;
     }
@@ -980,9 +1042,9 @@ fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
 // Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
 // ---------------------------------------------------------------------------------------------
 
-/// Alloue par `alloc` (0x2318, 0x23d8) : l'objet dans A1, ou `None` si le pool est plein.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
-    pool.alloc_68k(c, b).map(|o| o.0)
+/// Alloue par `alloc` (0x2318, 0x23d8) : l'objet, ou `None` si le pool est plein.
+fn alloc(b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
+    pool.alloc(b).map(|o| o.0)
 }
 
 /// Mot suivant de la table A2 (espace de données).
@@ -1025,7 +1087,7 @@ fn debris_set(c: &mut Cpu, b: &mut Cps2Bus) {
     let mirrored = rd8(b, me + f::FACING) != 0;
     for left in (0..=count).rev() {
         set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(c, b, &pools::EFFCT) else { continue };
+        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
         debris(b, fx, me);
         let z = rd16(b, me + 0x0c);
         wr16(b, fx + 0x0c, z);
@@ -1058,7 +1120,7 @@ fn ground_debris(c: &mut Cpu, b: &mut Cps2Bus) {
     let mirrored = rd8(b, me + f::FACING) != 0;
     for left in (0..=4u16).rev() {
         set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(c, b, &pools::EFFCT) else { continue };
+        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
         debris(b, fx, me);
         let ground = rd16(b, A5 + 0x5aa);
         wr16(b, fx + 0x10, ground);
@@ -1086,7 +1148,7 @@ fn ground_debris(c: &mut Cpu, b: &mut Cps2Bus) {
         wr16(b, fx + 0x10, depth);
     }
     set_w(&mut c.d[5], 0xffff);
-    call(c, b, 0xede08);
+    crate::sound::jouer(b, 0xede08, Obj(me));
 }
 
 /// Butin lancé en l'air (ITEM de genre `kind`, variante `variant`) : vitesses (±0x140, -0x28 en z...),
@@ -1129,7 +1191,7 @@ fn drop_once(c: &mut Cpu, b: &mut Cps2Bus) {
     if variant == 0 {
         return;
     }
-    let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+    let Some(item) = alloc(b, &pools::ITEM) else { return };
     wr8(b, me + 0x9d, 1);
     tossed_item(b, me, item, 2, variant, (-0x40i16) as u16, false);
     let flip = rng::random(b) & 1 != 0;
@@ -1168,7 +1230,7 @@ fn drop_loot(c: &mut Cpu, b: &mut Cps2Bus) {
         if (variant as i8) < 0 {
             return;
         }
-        let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+        let Some(item) = alloc(b, &pools::ITEM) else { return };
         tossed_item(b, me, item, 0, variant, 0x40, left != 0);
     }
     set_w(&mut c.d[5], 0xffff);
@@ -1202,7 +1264,7 @@ fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
             if (variant as i8) < 0 {
                 break;
             }
-            let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+            let Some(item) = alloc(b, &pools::ITEM) else { return };
             wr8(b, item, 1);
             wr8(b, item + 2, 5);
             wr8(b, item + 3, variant);
@@ -1408,7 +1470,7 @@ fn drop_special(c: &mut Cpu, b: &mut Cps2Bus) {
             Draw::Restrict => restrict(c, b),
             Draw::Spawn => {
                 let (kind, variant) = drawn(b);
-                let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+                let Some(item) = alloc(b, &pools::ITEM) else { return };
                 tossed_item(b, me, item, kind, variant, 0x40, c.d[5] as u8 == 0);
                 Draw::Next
             }
@@ -1579,7 +1641,7 @@ fn behaviour_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x103ba : éclair d'écran (0x1ac68), secousse de 8 images (`A5+0x4be`) et effet 0xb141a, dont la
 /// variante `+3` est remise à zéro ; rien de plus si l'effet n'a pas pu être créé (retenue).
 fn flash_and_shake(c: &mut Cpu, b: &mut Cps2Bus) {
-    call(c, b, 0x1ac68);
+    crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
     wr16(b, A5 + 0x4be, 8);
     call(c, b, 0xb141a);
     if c.sr & SR_C != 0 {
@@ -1620,10 +1682,10 @@ pub const NATIVES: &[Native] = &[
     leaf!(0x10474, "ia_joueurs_en_vie", players_alive_flags),
     leaf!(0x1047a, "ia_decision_demi_tour", turn_decision),
     leaf!(0x104e0, "ia_meme_cote", same_side_flags),
-    aid(0xa470, "ia_attitude", stance),
-    aid(0x7f0c, "ia_devant", |c, b| in_front(c, b, true)),
-    aid(0x7ef4, "ia_devant_etat_12", |c, b| in_front(c, b, false)),
-    aid(0x7f19c, "ia_boite", box_around),
+    aid(0xa470, "ia_attitude", stance_native),
+    aid(0x7f0c, "ia_devant", |c, b| in_front_native(c, b, true)),
+    aid(0x7ef4, "ia_devant_etat_12", |c, b| in_front_native(c, b, false)),
+    aid(0x7f19c, "ia_boite", box_around_native),
     aid(0x11654, "boss_poussee", push_amount),
     aid(0x1161c, "boss_pousse_joueur", push_player),
     Native { outputs: 0, ..aid(0x115e2, "boss_pousse_joueurs", push_players) },

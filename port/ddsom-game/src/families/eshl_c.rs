@@ -18,10 +18,6 @@ mod rt {
     pub const AI_ANIM_START: u32 = 0x103d6;
     /// Un pas d'animation, puis recopie de `+0x3e` en `+0x44` ; retenue = fin.
     pub const AI_ANIM_STEP: u32 = 0x1040c;
-    /// Direction entre (D1, D2) et l'objet : D0 = octet de direction.
-    pub const DIRECTION: u32 = 0x137e;
-    /// Retient l'objet dans l'écran, marge D0.
-    pub const CLAMP_ON_SCREEN: u32 = 0xfbb0;
     /// Position dans la fenêtre d'écran (D0 = borne basse, D1 = borne haute) : D0 non nul si dehors.
     pub const OUTSIDE_WINDOW: u32 = 0x104a2;
 }
@@ -132,7 +128,7 @@ mod shot40 {
             return;
         }
         x.add8(0x4, 2);
-        x.call(sfx::ED186);
+        crate::sound::jouer(x.b, sfx::ED186, x.o);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 5);
         x.set8(f::ATTACK_ID, 0x1e);
@@ -170,7 +166,7 @@ mod shot40 {
             x.set16(LIFETIME, t);
             if s16(t) < 0 {
                 x.add8(0x4, 2);
-                x.call(sfx::ED90A);
+                crate::sound::jouer(x.b, sfx::ED90A, x.o);
             }
         }
         flicker(x);
@@ -213,8 +209,6 @@ mod shot41 {
     /// Palette copiée (ROM vers RAM palette) : 8 longs.
     const PALETTE_SRC: u32 = 0x25a6e0;
     const PALETTE_DST: u32 = 0x91c2e0;
-    /// Fonction de création de trois tirs de type 40.
-    const SPAWN_TYPE40: u32 = 0xa31c2;
     /// Champs de la cible (objet joueur) : position de visée.
     const TARGET_X: u32 = 0xb0;
     const TARGET_Y: u32 = 0xb2;
@@ -237,7 +231,7 @@ mod shot41 {
             return;
         }
         x.add8(0x4, 2);
-        x.call(sfx::ED32E);
+        crate::sound::jouer(x.b, sfx::ED32E, x.o);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 5);
         x.set8(f::ATTACK_ID, 0x1f);
@@ -249,10 +243,7 @@ mod shot41 {
         x.add16(0x10, 0xffff);
         let t = target(x);
         let (tx, ty) = (t.u16(x.b, TARGET_X), t.u16(x.b, TARGET_Y));
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | tx as u32;
-        x.c.d[2] = x.c.d[2] & 0xffff_0000 | ty as u32;
-        x.call(rt::DIRECTION);
-        let dir = x.c.d[0] as u8;
+        let dir = crate::aides::direction_from(x.b, x.o, (tx, ty));
         x.set8(0x2d, dir);
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x41);
         let t = target(x);
@@ -304,7 +295,7 @@ mod shot41 {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x13);
         x.anim_start(ANIMS, 1);
-        x.call(SPAWN_TYPE40);
+        crate::families::eshl_creators::appeler(x, crate::families::eshl_creators::ring_28);
     }
 }
 
@@ -802,7 +793,7 @@ mod debris45 {
     /// Fin commune : retenu à l'écran, puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
         x.c.d[0] = MARGIN;
-        x.call(rt::CLAMP_ON_SCREEN);
+        x.call(crate::ai::KEEP_ON_SCREEN.entry);
         x.reinsert();
     }
 
@@ -1123,7 +1114,7 @@ mod strike49 {
                 x.add32(0x10, 2);
                 let flip = copy_flip(x, host);
                 x.add16(0x8, if flip != 0 { 0x6e } else { neg(0x6e) });
-                x.call(SOUND);
+                crate::sound::jouer(x.b, SOUND, x.o);
                 ai_anim(x, ANIMS, 0);
             }
             2 => match x.u8(0x5) {
@@ -1185,7 +1176,6 @@ mod bullet50 {
     const SAVED_PRIORITY: u32 = 0x5e;
     /// Retenue à l'écran avec une marge de 0x30 (entrée 0xfbae de 0xfbb0).
     const CLAMP_ON_SCREEN_30: u32 = 0xfbae;
-    const POST_FRAME: u32 = 0x33fe4;
 
     pub fn run(x: &mut Cx) {
         if suspended(x) {
@@ -1204,7 +1194,7 @@ mod bullet50 {
         }
         if x.u8(0) != 0 {
             x.call(CLAMP_ON_SCREEN_30);
-            x.call(POST_FRAME);
+            x.call(crate::terrain::SHADOW.entry);
             x.reinsert();
         }
     }
@@ -1225,7 +1215,7 @@ mod bullet50 {
         x.add16(0xc, dz);
         x.add32(0x10, 2);
         x.set16(0x18, vz);
-        x.call(SOUND);
+        crate::sound::jouer(x.b, SOUND, x.o);
         start_phase(x);
     }
 
@@ -1368,7 +1358,6 @@ mod drop51 {
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
     const IMPACT_FX: u32 = 0xab7d8;
-    const IMPACT_DAMAGE: u32 = 0x2860;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1412,7 +1401,7 @@ mod drop51 {
                 x.c.d[0] = 3;
                 x.call(IMPACT_FX);
                 x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-                x.call(IMPACT_DAMAGE);
+                x.call(crate::camera_modes::SHAKE_B.entry);
             }
             4 => {
                 x.add8(0x4, 2);
@@ -1525,7 +1514,7 @@ mod finale52 {
     /// Fin de l'image : retenu dans l'écran puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
         x.c.d[0] = 0x10;
-        x.call(rt::CLAMP_ON_SCREEN);
+        x.call(crate::ai::KEEP_ON_SCREEN.entry);
         x.reinsert();
     }
 
@@ -1762,7 +1751,7 @@ mod finale52 {
             }
             2 => {
                 if x.a5_u8(STAGE) == 0x2d && s16(x.a5_u16(SCREEN_X)) >= 0x340 {
-                    x.call(SCREEN_END_FX);
+                    crate::sound::jouer(x.b, SCREEN_END_FX, x.o);
                     return end3(x);
                 }
                 if x.u8(0x5) == 0 {
@@ -1972,8 +1961,6 @@ mod aimed53 {
     const LINK: u32 = 0x5c;
     /// Pour chaque direction : (animation, orientation).
     const DIRECTIONS: u32 = 0xa4e16;
-    /// Direction de A0 vers A1 (X, Y), D0 = octet.
-    const DIRECTION_TO: u32 = 0x1376;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -2008,9 +1995,7 @@ mod aimed53 {
         if target == 0 {
             return x.free_eshl();
         }
-        x.c.a[1] = obj_of(target).0;
-        x.call(DIRECTION_TO);
-        let dir = x.c.d[0] as u8;
+        let dir = crate::aides::direction_to(x.b, x.o, obj_of(target));
         x.set8(0x2d, dir);
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x24);
         let row = DIRECTIONS + 2 * dir as u32;
@@ -2046,7 +2031,7 @@ mod burst54 {
         }
         match x.u8(0x4) {
             0 => {
-                x.call(SOUND);
+                crate::sound::jouer(x.b, SOUND, x.o);
                 x.add8(0x4, 2);
                 x.set8(f::BOX_SET, 7);
                 x.set8(f::ATTACK_ID, 0x23);
@@ -2135,7 +2120,7 @@ mod fall55 {
             0 => {
                 spawn(x);
                 x.reinsert();
-                x.call(SOUND);
+                crate::sound::jouer(x.b, SOUND, x.o);
             }
             2 => {
                 if x.a5_u8(GAME_PAUSED) == 0 {
@@ -2357,7 +2342,7 @@ mod pickup56 {
             2 => {
                 if pick_countdown(x) && with_effects {
                     x.anim_start(ANIMS, 3);
-                    x.call(PICKUP_SOUND);
+                    crate::sound::jouer(x.b, PICKUP_SOUND, x.o);
                 }
             }
             4 => {
@@ -2435,8 +2420,6 @@ mod seeker57 {
     const LINK: u32 = 0x5c;
     const LIFE: u32 = 0x46;
     const RETARGET: u32 = 0x42;
-    /// Direction de A0 vers A1.
-    const DIRECTION_TO: u32 = 0x1376;
 
     pub fn run(x: &mut Cx) {
         if x.u16(LINK) == 0 {
@@ -2496,9 +2479,7 @@ mod seeker57 {
                 return approach(x);
             }
             aim = obj_of(w);
-            x.c.a[1] = aim.0;
-            x.call(DIRECTION_TO);
-            let dir = x.c.d[0] as u8;
+            let dir = crate::aides::direction_to(x.b, x.o, aim);
             x.set8(0x2d, dir);
         }
         let dx = aim.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(8);
@@ -2655,7 +2636,7 @@ mod ring59 {
                 x.set8(f::BOX_SET, 7);
                 x.set8(f::ATTACK_ID, 0x24);
                 x.set8(PALETTE_COUNTDOWN, 2);
-                x.call(FX_START_0);
+                crate::sound::jouer(x.b, FX_START_0, x.o);
                 let maker = x.linked(LINK);
                 copy_xyz32(x, maker);
                 copy_flip(x, maker);
@@ -2670,7 +2651,7 @@ mod ring59 {
                 x.set8(f::BOX_SET, 7);
                 x.set8(f::ATTACK_ID, 0x24);
                 x.set8(PALETTE_COUNTDOWN, 2);
-                x.call(FX_START_1);
+                crate::sound::jouer(x.b, FX_START_1, x.o);
                 let maker = x.linked(LINK);
                 let (mx, my) = (maker.u16(x.b, 0x8), maker.u16(x.b, 0x10));
                 let z = maker.u32(x.b, 0xc);
@@ -2714,7 +2695,7 @@ mod ring59 {
             4 => {
                 if x.anim_step() {
                     x.add8(0x4, 2);
-                    x.call(FX_END);
+                    crate::sound::jouer(x.b, FX_END, x.o);
                 }
             }
             _ => {}
@@ -2906,7 +2887,7 @@ mod platform60 {
                 x.move_z();
                 let floor = if trigger == Trigger::Maker || x.u8(0x2f) == 0 { 0x20 } else { 0x38 };
                 if s16(x.u16(0xc)) <= floor {
-                    x.call(THUD);
+                    crate::sound::jouer(x.b, THUD, x.o);
                     x.add8(0x5, 2);
                     x.set16(TIMER, 0x10);
                 }
@@ -3037,7 +3018,6 @@ mod meteor62 {
     /// Retard avant la chute (octets) par variante (32 entrées).
     const DELAYS: u32 = 0xa679e;
     const IMPACT_FX: [u32; 2] = [0xb9c88, 0xab7d8];
-    const IMPACT_DAMAGE: u32 = 0x2860;
     const IMPACT_SOUND: u32 = 0xeafdc;
     const TIMER: u32 = 0x42;
 
@@ -3094,11 +3074,11 @@ mod meteor62 {
             x.c.d[0] = 3;
             x.call(IMPACT_FX[1]);
             x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-            x.call(IMPACT_DAMAGE);
-            x.call(IMPACT_SOUND);
+            x.call(crate::camera_modes::SHAKE_B.entry);
+            crate::sound::jouer(x.b, IMPACT_SOUND, x.o);
         }
         x.c.d[0] = 0x10;
-        x.call(rt::CLAMP_ON_SCREEN);
+        x.call(crate::ai::KEEP_ON_SCREEN.entry);
         x.reinsert();
     }
 }

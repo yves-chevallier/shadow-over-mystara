@@ -29,9 +29,6 @@ use crate::objects::{pools, Obj};
 /// Sous-routines d'origine.
 mod ext {
     pub const VIDEO_ON: u32 = 0xbc6;
-    pub const PRINT: u32 = 0xd5e;
-    pub const PRINT_CLEAR: u32 = 0xd32;
-    pub const PALETTE_STEP: u32 = 0x1686;
     pub const PAGE_PALETTE: u32 = 0x1a3d4;
     pub const PALETTE_SCENE: u32 = 0x1a60a;
     pub const PALETTE_BACK: u32 = 0x1a67e;
@@ -51,11 +48,9 @@ mod ext {
     pub const TILES_16: u32 = 0x260c;
     pub const TILES_BLOCK: u32 = 0x26d4;
     pub const TILES_SCROLL3: u32 = 0x2766;
-    pub const SOUND_E0882: u32 = 0xe0882;
     pub const SOUND_E1060: u32 = 0xe1060;
     pub const SOUND_E18B8: u32 = 0xe18b8;
     pub const SOUND_START: u32 = 0xe181c;
-    pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const ACCOUNTING: u32 = 0x2e4ec;
 }
 
@@ -283,7 +278,7 @@ fn shutdown(x: &mut Ctx) -> Flow {
 /// Fin du démontage : la tâche du menu TEST prend l'emplacement 0, la tâche se termine.
 fn shutdown_after_clear(x: &mut Ctx) -> Flow {
     x.call(ext::PALETTE_RESET);
-    x.call(ext::SOUND_E0882);
+    crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     x.c.a[0] = UI_TASK;
     set_low_word(&mut x.c.d[0], 0);
     crate::kernel::creer_tache(x.b, 0, UI_TASK);
@@ -368,11 +363,11 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     x.c.d[0] = 0x55;
     x.call(ext::PALETTE_FRONT);
     set8(x, var::FADE_PAGES, 0xf);
-    x.call(ext::PALETTE_STEP);
+    crate::palette::full_brightness(x.b);
     video_on(x);
-    x.call(ext::SOUND_E0882);
-    x.call(ext::SOUND_E1060);
-    x.call(ext::SOUND_E18B8);
+    crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
+    crate::sound::jouer_global(x.b, ext::SOUND_E1060);
+    crate::sound::jouer_global(x.b, ext::SOUND_E18B8);
     set8(x, var::COIN_SOUND, 1);
     display(x)
 }
@@ -382,12 +377,11 @@ fn display(x: &mut Ctx) -> Flow {
     x.c.a[1] = a5(var::COIN_1);
     x.call(ext::DISPLAY_CREDITS);
     x.call(ext::DISPLAY_COUNTS);
-    x.c.a[4] = TEXT_CREDITS;
-    x.call(ext::PRINT);
+    crate::text::print(x.b, TEXT_CREDITS);
     let d0 = (rd16(x.b, a5(var::GAME_LANGUAGE)) as u32 * 2) & 0xffff;
     set_low_word(&mut x.c.d[0], d0 as u16);
-    x.c.a[4] = x.rd32(TEXT_TABLE + d0);
-    x.call(ext::PRINT);
+    let texte = x.rd32(TEXT_TABLE + d0);
+    crate::text::print(x.b, texte);
     x.call(ext::SPRITES);
     starts(x)
 }
@@ -519,12 +513,11 @@ fn end(x: &mut Ctx) -> Flow {
         set8(x, var::COIN_SOUND, 0);
         set8(x, var::GAME, 1);
         set8(x, var::COIN_1 + 6, 0);
-        x.c.a[4] = TEXT_CREDITS;
-        x.call(ext::PRINT_CLEAR);
+        crate::text::erase(x.b, TEXT_CREDITS);
         let d0 = (rd16(x.b, a5(var::GAME_LANGUAGE)) as u32 * 2) & 0xffff;
         set_low_word(&mut x.c.d[0], d0 as u16);
-        x.c.a[4] = x.rd32(TEXT_TABLE + d0);
-        x.call(ext::PRINT_CLEAR);
+        let texte = x.rd32(TEXT_TABLE + d0);
+        crate::text::erase(x.b, texte);
         return create_game_task(x);
     }
     // reprise de partie : l'écran de continue est démonté, fondu au noir et effacé
@@ -536,7 +529,7 @@ fn end(x: &mut Ctx) -> Flow {
     set8(x, var::CLEAR_FLAG, 0);
     kill(x, &[0, 0x10, 0xd0]);
     set8(x, var::FADE_PAGES, 0xf);
-    x.call(ext::PALETTE_STEP);
+    crate::palette::full_brightness(x.b);
     set16(x, var::FADE_STEP, 2);
     set8(x, var::FADE_PAGES, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::AfterFade)
@@ -607,9 +600,8 @@ fn start_after_clear(x: &mut Ctx) -> Flow {
 /// `0x141a6` : le joueur démarre : bruit, crédit débité (`D3`), enregistrement du joueur créé,
 /// comptabilité (`jmp`, qui revient à l'appelant).
 fn join(x: &mut Ctx) -> Flow {
-    x.call(ext::SOUND_START);
-    x.c.d[0] = 4;
-    x.call(ext::SOUND_E0A82);
+    crate::sound::jouer_global(x.b, ext::SOUND_START);
+    crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
     let (a1, a3, player, cost) = (x.c.a[1], x.c.a[3], x.c.d[2], x.c.d[3] as u8);
     let credits = rd8(x.b, a1 + 2).wrapping_sub(cost);
     wr8(x.b, a1 + 2, credits);

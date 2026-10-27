@@ -7,10 +7,6 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const FLASH_PULSE: u32 = 0x1ac86;
-const SHAKE_A: u32 = 0x2824;
-const SHAKE_B: u32 = 0x2860;
-const SHAKE_C: u32 = 0x289c;
 const SPEEDS: u32 = 0x1c89b6;
 
 fn signed(v: u16, negate: bool) -> u16 {
@@ -122,8 +118,8 @@ mod storm {
                 let owner = x.link_a1(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
                 x.set_d0w(d0);
-                x.call(SHAKE_A);
-                x.call(SFX_RUMBLE);
+                x.call(crate::camera_modes::SHAKE_A.entry);
+                crate::sound::jouer(x.b, SFX_RUMBLE, x.o);
             }
             4 => {
                 if x.a5_u8(0x3d) == 0 {
@@ -132,13 +128,13 @@ mod storm {
                 let owner = x.link_a1(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
                 x.set_d0w(d0);
-                x.call(SHAKE_B);
+                x.call(crate::camera_modes::SHAKE_B.entry);
                 if x.u8(0x5a) != 0 {
                     return;
                 }
                 x.set16(0x58, 0x20);
                 x.add8(0x5, 4);
-                x.call(SFX_BEGIN);
+                crate::sound::jouer(x.b, SFX_BEGIN, x.o);
             }
             8 => {
                 toggle(x, 0x9, 1 << 1);
@@ -149,7 +145,7 @@ mod storm {
                     let owner = x.link_a1(f::OWNER);
                     let d0 = owner.u16(x.b, 0x168);
                     x.set_d0w(d0);
-                    x.call(SHAKE_C);
+                    x.call(crate::camera_modes::SHAKE_C.entry);
                     spawn_sparks(x);
                     shake_tail(x);
                 }
@@ -177,7 +173,7 @@ mod storm {
     fn end(x: &mut Cx) {
         x.add8(0x4, 2);
         x.anim_step();
-        x.call(SFX_END);
+        crate::sound::jouer(x.b, SFX_END, x.o);
     }
 
     /// `0x4ec02` : seize éclairs.
@@ -267,7 +263,7 @@ mod storm {
         let n = parent.u8(x.b, 0x5a).wrapping_sub(1);
         parent.set_u8(x.b, 0x5a, n);
         x.set8(0x2f, n);
-        x.call(SFX_BOLT);
+        crate::sound::jouer(x.b, SFX_BOLT, x.o);
         let k = (n as u32) << 2;
         x.c.d[0] = k;
         let (dx, dz) = (x.rom16(OFFSETS_B + k), x.rom16(OFFSETS_B + k + 2));
@@ -356,7 +352,7 @@ mod whirl {
         x.add16(0x8, dx);
         x.add16(0xc, dz);
         x.add16(0x10, 0xffff);
-        x.call(SFX_START);
+        crate::sound::jouer(x.b, SFX_START, x.o);
     }
 
     fn init_satellite(x: &mut Cx) {
@@ -409,8 +405,8 @@ mod whirl {
                 x.set8(0x5c, 3);
                 x.set8(0x5d, 1);
                 x.set_a5_u16(0x4ba, 0x100);
-                x.call(FLASH_PULSE);
-                x.call(SFX_LOOP);
+                x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+                crate::sound::jouer(x.b, SFX_LOOP, x.o);
                 x.anim(ANIMS, 0x20);
                 return x.reinsert();
             }

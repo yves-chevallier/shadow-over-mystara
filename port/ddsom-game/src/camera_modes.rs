@@ -97,8 +97,6 @@ const CAM2_MIN_X: u32 = CAMERA_2 + cam::MIN_X;
 mod ext {
     pub const TILES_BLOCK: u32 = 0x26d4;
     /// Secousses de la caméra (modes 0x54, 0x5c), voir `start_shake`.
-    pub const SHAKE_54: u32 = 0x2824;
-    pub const SHAKE_5C: u32 = 0x289c;
     pub const SOUND_BIG: u32 = 0xa8ae8;
 }
 
@@ -424,8 +422,7 @@ fn scripted_scroll(x: &mut Cx) {
                 x.add8(f::STEP, 4);
                 x.set16(cam::MODE, mode::STAGE);
                 sync_previous(x);
-                x.c.d[0] = 30;
-                x.call(ext::SHAKE_54);
+                start_shake(x.b, shake::A, 30);
             }
         }
         0x20 => {
@@ -745,8 +742,7 @@ fn gate_far(x: &mut Cx) {
             x.set16(cam::MIN_X, 0x820);
             shift_players(x, 0x2c0);
             stage_script(x);
-            x.c.d[0] = 0x20;
-            x.call(ext::SHAKE_5C);
+            start_shake(x.b, shake::C, 0x20);
         }
         _ => {}
     }
@@ -1336,8 +1332,8 @@ fn clear_rowscroll_flag(x: &mut Cx) {
 // Initialisation et mise à jour des caméras
 // ---------------------------------------------------------------------------------------------
 
-/// Tables par scène en ROM (espace de données).
-mod tables {
+/// Tables par scène en ROM (espace de données), lues aussi par `scroll::return_cameras`.
+pub(crate) mod tables {
     /// Caméra 1 : butée droite (mots), valeur du port de sortie 0x400004 (mots), registre des couches
     /// (mots), octet « ne recule pas » (octets), butée gauche (mots), pointeur de pas de bande (longs),
     /// octet « figée » (octets).
@@ -1354,9 +1350,9 @@ mod tables {
 }
 
 /// Port de sortie dont la valeur dépend de la scène.
-const OUTPUT_PORT: u32 = 0x400004;
+pub(crate) const OUTPUT_PORT: u32 = 0x400004;
 /// Routines d'origine : active les couches (D0), charge un bloc de tuiles dans la couche 3 (D0, A1).
-const ENABLE_LAYERS: u32 = 0xbc6;
+pub(crate) const ENABLE_LAYERS: u32 = 0xbc6;
 const TILES_SCROLL3: u32 = 0x2766;
 
 /// Blocs de tuiles (indice, adresse dans la couche 2) chargés à l'entrée de certaines scènes, caméra 1.
@@ -1522,13 +1518,21 @@ const fn camera(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus))
     Native { entry, name, run, touches_sound: false, outputs: regs::a(0) }
 }
 
+/// Modes de secousse de la caméra (`cam::MODE`) et leurs entrées d'origine.
+pub mod shake {
+    /// 0x2824.
+    pub const A: u16 = 0x54;
+    /// 0x2860.
+    pub const B: u16 = 0x58;
+    /// 0x289c.
+    pub const C: u16 = 0x5c;
+}
+
 /// 0x2824, 0x2860, 0x289c : lance une secousse de la caméra en service (1, ou 2 si `A5+0x36`) dans le
-/// mode `mode` pour D0 images. Si aucune secousse n'est en cours, la position de repos et le mode
-/// courant sont retenus pour la fin de la secousse. Rend A1 = la caméra.
-fn start_shake(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
-    let camera = A5 + if rd8(b, A5 + 0x36) != 0 { CAMERA_2 } else { CAMERA_1 };
-    c.a[1] = camera;
-    let cam = Obj(camera);
+/// mode `mode` pour `frames` images. Si aucune secousse n'est en cours, la position de repos et le mode
+/// courant sont retenus pour la fin de la secousse. Rend la caméra.
+pub fn start_shake(b: &mut Cps2Bus, mode: u16, frames: u16) -> Obj {
+    let cam = Obj(A5 + if rd8(b, A5 + 0x36) != 0 { CAMERA_2 } else { CAMERA_1 });
     if cam.u8(b, f::SHAKING) == 0 {
         cam.set_u8(b, f::SHAKING, 1);
         let current = cam.u16(b, cam::MODE);
@@ -1539,9 +1543,20 @@ fn start_shake(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
         cam.set_u16(b, f::SHAKE_Y, y);
     }
     cam.set_u16(b, cam::MODE, mode);
-    let count = c.d[0] as u16;
-    cam.set_u16(b, f::SHAKE_COUNT, count);
-    c.flags_logic(count as u32, m68k::decode::Size::Word);
+    cam.set_u16(b, f::SHAKE_COUNT, frames);
+    cam
+}
+
+/// La secousse avec les registres de l'original : D0.w = durée, rend A1 = la caméra et les drapeaux du `move.w`
+/// de la durée.
+fn start_shake_regs(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
+    let frames = c.d[0] as u16;
+    c.a[1] = start_shake(b, mode, frames).0;
+    c.flags_logic(frames as u32, m68k::decode::Size::Word);
+}
+
+fn shake_entry(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
+    start_shake_regs(c, b, mode);
     rts(c, b);
 }
 
@@ -1549,8 +1564,8 @@ const fn shake_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps
     Native { entry, name, run, touches_sound: false, outputs: regs::a(1) | regs::CCR }
 }
 
-pub const SHAKE_A: Native = shake_native(0x2824, "camera_secousse_54", |c, b| start_shake(c, b, 0x54));
-pub const SHAKE_B: Native = shake_native(0x2860, "camera_secousse_58", |c, b| start_shake(c, b, 0x58));
-pub const SHAKE_C: Native = shake_native(0x289c, "camera_secousse_5c", |c, b| start_shake(c, b, 0x5c));
+pub const SHAKE_A: Native = shake_native(0x2824, "camera_secousse_54", |c, b| shake_entry(c, b, shake::A));
+pub const SHAKE_B: Native = shake_native(0x2860, "camera_secousse_58", |c, b| shake_entry(c, b, shake::B));
+pub const SHAKE_C: Native = shake_native(0x289c, "camera_secousse_5c", |c, b| shake_entry(c, b, shake::C));
 
 pub const NATIVES: &[Native] = &[CAMERA1_UPDATE, CAMERA2_UPDATE, SHAKE_A, SHAKE_B, SHAKE_C];

@@ -8,18 +8,17 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const TERRAIN_OF_OBJECT: u32 = 0x24a8;
-const SHAKE: u32 = 0x2824;
-const FLASH_ON: u32 = 0x1ac68;
-const FLASH_PULSE: u32 = 0x1ac86;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
 fn stopped_by_terrain(x: &mut Cx) -> bool {
-    x.call(TERRAIN_OF_OBJECT);
-    let terrain = x.c.d[2];
+    // registres de 0x24a8 laissés : D3 (index de la case) est relu par un gestionnaire suivant (lot C :
+    // `boss11_scene42_mort`, image 4447)
+    let t = crate::video::terrain_of(x.b, x.o);
+    crate::video::terrain_68k(x.c, &t);
+    let terrain = t.numero as u32;
     x.c.d[0] = x.c.d[0] & 0xffff_0000 | ((terrain & 0x3f).wrapping_sub(5) & 0xffff);
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
@@ -34,7 +33,6 @@ mod chain {
     const LINKS: u32 = 0xff204c;
     const SPEEDS: u32 = 0x1c89b6;
     const ANIMS: u32 = 0x15cdb6;
-    const ANGLE_TO_TARGET: u32 = 0x1376;
     const SPAWN_EFFECT: u32 = 0xabec8;
     const SFX_END: u32 = 0xe859a;
 
@@ -179,8 +177,8 @@ mod chain {
 
     /// Tourne d'un cran vers la cible (`0x53fe0`).
     fn steer(x: &mut Cx) {
-        x.call(ANGLE_TO_TARGET);
-        let delta = x.c.d[0] as u8;
+        // la cible est l'objet que l'appelant a laissé dans A1
+        let delta = crate::aides::direction_to(x.b, x.o, Obj(x.c.a[1]));
         let mut step: u8 = 1;
         x.c.d[1] = 1;
         let diff = delta.wrapping_sub(x.u8(0x2d)) & 0x1f;
@@ -310,7 +308,7 @@ mod chain {
                     let flip = x.u8(f::FLIP);
                     spark.set_u8(x.b, f::FLIP, flip);
                 }
-                x.call(SFX_END);
+                crate::sound::jouer(x.b, SFX_END, x.o);
             } else {
                 x.set32(0x58, 0x8080_8080);
             }
@@ -443,7 +441,7 @@ mod knife {
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 || stopped_by_terrain(x) {
                     x.add8(0x4, 2);
-                    return x.call(SFX_HIT);
+                    return crate::sound::jouer(x.b, SFX_HIT, x.o);
                 }
                 x.anim_step();
                 x.move_xy();
@@ -510,9 +508,9 @@ mod fireball {
                 x.set8(f::POWER2, p2);
                 x.set8(0x56, 4);
                 x.set_a5_u16(0x4ba, 0x100);
-                x.call(FLASH_ON);
+                x.call(crate::palette::FLASH_COLOR_ON.entry);
                 x.set_d0w(0x20);
-                x.call(SHAKE);
+                x.call(crate::camera_modes::SHAKE_A.entry);
                 x.anim(ANIMS, 2);
                 x.reinsert();
             }
@@ -545,7 +543,7 @@ mod fireball {
                     if x.u8(0x56) == 0 {
                         x.set_a5_u16(0x4ba, 0);
                     } else if x.u8(0x56) == 2 {
-                        x.call(FLASH_PULSE);
+                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
                     }
                 }
                 if x.anim_step() {

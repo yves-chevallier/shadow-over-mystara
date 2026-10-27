@@ -8,11 +8,12 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::mem::{prog16, prog8, rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{prog16, prog8, rd16, rd32, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use super::cx::{handler, Cx};
 use crate::{call, regs, Native};
 use crate::objects::pools;
+use super::effects_creators::restes::{Pur, Registres};
 
 
 /// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
@@ -30,16 +31,34 @@ fn word(c: &Cpu) -> u16 {
     c.a[0] as u16
 }
 
-/// Crée un objet de `pool` de classe 1 et de type `kind`, lié à A0 par le mot `link`.
+/// Crée un objet de `pool` de type `kind`, lié au créateur par le mot `link` (drapeaux de ce `move.w`).
+pub(crate) fn linked_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, pool: &pools::Pool, kind: u8, link: u32) -> Option<Obj> {
+    let o = r.alloue(b, pool)?;
+    o.set_u8(b, Obj::ACTIVE, 1);
+    o.set_u8(b, Obj::KIND, kind);
+    o.set_u16(b, link, createur.word());
+    r.drapeaux(createur.word() as u32, Size::Word);
+    Some(o)
+}
+
 fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, link: u32) {
-    if let Some(o) = alloc(c, b, pool) {
-        o.set_u8(b, 0x0, 1);
-        o.set_u8(b, 0x2, kind);
-        let me = word(c);
-        o.set_u16(b, link, me);
-        moved(c, me as u32, Size::Word);
-    }
+    let me = Obj(c.a[0]);
+    linked_par(c, b, me, pool, kind, link);
     rts(c, b);
+}
+
+/// 0x4f132 : effet de joueur 0x21 (second temps du séisme des sorts), lié au joueur par `+0x50`.
+pub fn quake_b(b: &mut Cps2Bus, joueur: Obj) -> Option<Obj> {
+    linked_par(&mut Pur, b, joueur, &pools::PEFF, 0x21, 0x50)
+}
+
+/// `quake_b` avec les registres de l'original (appelants par adresse : `player/`) : A1, retenue et drapeaux.
+#[track_caller]
+pub fn quake_b_68k(c: &mut Cpu, b: &mut Cps2Bus, joueur: Obj) -> Option<Obj> {
+    c.a[0] = joueur.0;
+    let r = linked_par(c, b, joueur, &pools::PEFF, 0x21, 0x50);
+    crate::diag::registres_morts(c, "effets", CREATED);
+    r
 }
 
 fn peff_16(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -340,7 +359,7 @@ fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
         o.set_u16(b, 0x50, v);
         o.set_u8(b, 0x3, c.d[3] as u8);
         o.set_u16(b, 0x5c, c.d[4] as u16);
-        let (cx, cy) = if rd8(b, A5 + 0x36) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
+        let (cx, cy) = if crate::ram::CAMERA_ALT_ACTIVE.get(b) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
         let (x, y) = (rd16(b, A5 + cx), rd16(b, A5 + cy));
         let index = (c.d[3] as u16).wrapping_shl(2) as u32;
         let (dx, dy) = (prog16(b, OFFSETS + index), prog16(b, OFFSETS + 2 + index));
@@ -369,6 +388,8 @@ fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
 fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
     const MASK: u16 = 0x067e; // D1-D6, A1, A2
     let (mut dst, mut src) = (0x91c480, 0x25c4c0);
+    // `moveq #0xb,D7` : seuls drapeaux posés (ni `movem` ni `dbf` n'en changent)
+    moved(c, 0xb, Size::Long);
     for _ in 0..12 {
         src = movem_load(c, b, MASK, src);
         dst = movem_store(c, b, MASK, dst);
@@ -382,7 +403,7 @@ fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x1ad6a : 32 blocs de 32 octets lus à partir de 0x285280 sont rangés tour à tour au même endroit,
 /// FF1190 (l'original n'avance pas sa destination : seul le dernier bloc y reste), puis huit couleurs de
 /// 0x1ad4a vont en FF1390.
-fn palette_page_restore(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn palette_page_restore(c: &mut Cpu, b: &mut Cps2Bus) {
     const MASK: u16 = 0x183f; // D0-D5, A3, A4
     let mut src = 0x285280;
     for _ in 0..32 {
@@ -394,15 +415,19 @@ fn palette_page_restore(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[2] = movem_load(c, b, MASK_D0_D6_A3, 0x1ad4a);
     c.a[1] = 0xff1390;
     movem_store(c, b, MASK_D0_D6_A3, 0xff1390);
-    rts(c, b);
 }
 
-/// Éclair de palette : couleur 14 de la page 0x91c400 (`0x91c41c`) fixée à `v`.
-fn flash(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+/// Éclair de palette : couleur 14 de la page 0x91c400 (`0x91c41c`) fixée à `v` ; drapeaux du `move.w`.
+pub(crate) fn flash_68k(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
     wr16(b, 0x91c41c, v);
     moved(c, v as u32, Size::Word);
+}
+fn flash(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+    flash_68k(c, b, v);
     rts(c, b);
 }
+/// Couleurs des éclairs (`flash_68k`) : bleu (0x1ac7c).
+pub(crate) const ECLAIR_BLEU: u16 = 0xf00f;
 /// 0x1ac90 : fin de l'éclair (couleur 0xff50).
 fn flash_off(c: &mut Cpu, b: &mut Cps2Bus) {
     flash(c, b, 0xff50);
@@ -602,7 +627,7 @@ pub const NATIVES: &[Native] = &[
     native(0x4aed0, "cree_effets_5", peff_5_pair, CREATED),
     native(0x53746, "cree_pierres_11", pshl_stones, CREATED | regs::ALL),
     native(0x1a5e8, "palette_douze_blocs", palette_blocks_copy, regs::ALL),
-    native(0x1ad6a, "palette_page_restitue", palette_page_restore, regs::ALL),
+    native(0x1ad6a, "palette_page_restitue", |c, b| { palette_page_restore(c, b); rts(c, b) }, regs::ALL),
     native(0x1ac9a, "eclair_palette_jaune", flash_a, regs::CCR),
     native(0x1ac72, "eclair_palette_vert", flash_b, regs::CCR),
     native(0x1ac7c, "eclair_palette_bleu", flash_c, regs::CCR),

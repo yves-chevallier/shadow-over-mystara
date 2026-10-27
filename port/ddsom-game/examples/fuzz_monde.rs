@@ -176,6 +176,29 @@ fn alea_ia(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     c.d[0] = if alea.dans(2) == 0 { alea.dans(0x80) } else { alea.next() };
 }
 
+/// Aides d'IA à boîte et à table (lot S : 0xa470, 0x7f0c, 0x7ef4, 0x7f19c) : la cible tirée de face ou de dos,
+/// au sol ou en l'air, dans l'état 12, 14 ou autre ; boîte (D0-D2) et tables (`+0x70`, `+0x74`, `+0x75`) au hasard.
+fn alea_boite(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    alea_ia(c, b, alea);
+    let (o, cible) = (objet(0), objet(1));
+    let x = rd16(b, o + 8) & 0x7ff;
+    wr16(b, cible + 8, x.wrapping_add(alea.dans(0x100) as u16).wrapping_sub(0x80));
+    let profondeur = rd16(b, o + 0x10).wrapping_add(alea.dans(0x40) as u16).wrapping_sub(0x20);
+    wr16(b, cible + 0x10, profondeur);
+    wr16(b, cible + 0x0c, if alea.dans(4) == 0 { alea.dans(0x40) as u16 } else { 0 });
+    wr8(b, cible + 0x06, alea.parmi(&[12, 12, 14, 2]));
+    wr8(b, cible + 0x2c, alea.parmi(&[0, 0x20]));
+    wr8(b, o + 0x2c, alea.parmi(&[0, 0x20]));
+    wr8(b, o + 0x70, alea.dans(8) as u8);
+    wr8(b, o + 0x74, alea.dans(8) as u8);
+    wr8(b, o + 0x75, 4 * alea.dans(8) as u8);
+    wr16(b, A5 + 0x7f92, alea.dans(0x20) as u16);
+    c.d[0] = alea.dans(0x60);
+    c.d[1] = alea.dans(0x80) | alea.next() & 0xffff_0000;
+    c.d[2] = alea.dans(0x40) | alea.next() & 0xffff_0000;
+    c.a[2] = cible;
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
@@ -215,6 +238,10 @@ fn main() {
         (0xfbb0, "ai_garde_a_l_ecran", alea_ia),
         (0xe76c, "ai_approche_cible", alea_ia),
         (0xf0e8, "ai_tourne_vers", alea_ia),
+        (0xa470, "ia_attitude", alea_boite),
+        (0x7f0c, "ia_devant", alea_boite),
+        (0x7ef4, "ia_devant_etat_12", alea_boite),
+        (0x7f19c, "ia_boite", alea_boite),
     ];
     for _ in 0..tours {
         for &(entree, nom, prep) in &routines {

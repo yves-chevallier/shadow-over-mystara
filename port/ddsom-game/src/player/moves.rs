@@ -7,27 +7,22 @@
 
 use super::actions::to_stand;
 use super::checks::{attack_button, item_curse, jump_button};
+use super::spawn::Thrown;
 use super::states::State;
 use super::walk::{clamp_x, crawl_speed, move_x, move_xy, move_xyz, move_xz, move_z, run_speed, walk_speed};
 use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
+use crate::machine::Machine;
+use crate::player::externes as ext;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
-    /// Effet de choc (poussière) : D0 variante, D1 réglages, D2 et D3 vitesses.
-    pub const DUST: u32 = 0xb10c8;
-    /// Son du dérapage de la course.
-    pub const SKID_SOUND: u32 = 0xe78e8;
-    /// Sons de l'attaque sautée (départ, atterrissage).
-    pub const LEAP_SOUND: u32 = 0xe7622;
-    pub const LEAP_LANDING: u32 = 0xe774c;
-    /// Effet de joueur lancé par l'événement d'animation `+0x46` (D0 = numéro).
-    pub const ANIM_EVENT: u32 = 0x4c58e;
     /// Son de la poussée.
     pub const PUSH_SOUND: u32 = 0xeae14;
-    /// Numéro de terrain au point (D0, D1) -> D2.
-    pub const TERRAIN_AT: u32 = 0x24b0;
+    /// Pose rare 0x26 : son, éclat, création d'un objet SET (D0.b = genre ; A1 et retenue en retour).
+    pub const CURSE_SHARD: u32 = 0xb97ba;
+    pub const CREATE_SET: u32 = 0xc8312;
 }
 
 /// Champs propres à ces actions.
@@ -75,11 +70,11 @@ fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
     set(&mut g.c.d[1], d1);
     set(&mut g.c.d[2], d2);
     set(&mut g.c.d[3], d3);
-    g.rom(rom::DUST, p);
+    g.rom(ext::effet::DUST, p);
 }
 
 fn dust_turn(g: &mut Ctx, p: Player) -> bool {
-    p.u8(g, Player::CHARACTER).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 3 == 0
+    p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3 == 0
 }
 
 // ---- course (action 6, 0x3573e) ----------------------------------------------------------------
@@ -101,9 +96,7 @@ pub fn run(g: &mut Ctx, p: Player) {
         2 => running(g, p),
         4 => skid_stop(g, p),
         6 => skid_turn(g, p),
-        _ => {
-            g.rom(0x3573e, p);
-        }
+        v => unreachable!("0x3573e : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -144,7 +137,7 @@ fn run_steer(g: &mut Ctx, p: Player) -> bool {
     } else {
         start_skid(g, p, 6, 56, 27);
     }
-    g.rom(rom::SKID_SOUND, p);
+    g.son(ext::son::SLIDE, p);
     true
 }
 
@@ -202,10 +195,7 @@ pub fn carry(g: &mut Ctx, p: Player) {
             return;
         }
         4 => return throw(g, p),
-        _ => {
-            g.rom(0x35c26, p);
-            return;
-        }
+        v => unreachable!("0x35c26 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     match p.u8(g, Player::STEP) {
         0 => {
@@ -238,9 +228,7 @@ pub fn carry(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x35c38, p);
-        }
+        v => unreachable!("0x35c38 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -308,7 +296,7 @@ pub fn pause(g: &mut Ctx, p: Player, last: u16) {
             }
         }
         4 | 8 => {
-            if g.a5u8(0x3d) != 0 {
+            if ram::PAUSE.get(g.b) != 0 {
                 animation::step(g, p);
                 return;
             }
@@ -355,10 +343,7 @@ pub fn climb(g: &mut Ctx, p: Player) {
         n @ (8 | 0xa | 0xc | 0xe) => climb_side(g, p, n),
         0x10 => climb_attack(g, p),
         0x12 => climb_spell(g, p),
-        _ => {
-            g.rom(0x35e56, p);
-            return;
-        }
+        v => unreachable!("0x35e56 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     if matches!(p.u8(g, Player::STEP), 0 | 0x10 | 0x12) {
         return;
@@ -393,7 +378,7 @@ fn climb_start(g: &mut Ctx, p: Player) {
         p.set_u32(g, Obj::VZ, 0x0100_0000);
         p.set_u8(g, climb_field::SWAY_TIMER, 4);
         p.set_u8(g, climb_field::SWAY, 0);
-        crate::objects::motion::select_speed_68k(g.c, g.b, p.obj(), &crate::objects::motion::SPEEDS_B, 1);
+        crate::objects::motion::select_speed(g.b, p.obj(), &crate::objects::motion::SPEEDS_B, 1);
         return animation::start(g, p, 0x3c);
     }
     move_z(g, p);
@@ -433,7 +418,7 @@ fn climb_hold(g: &mut Ctx, p: Player) {
 
 /// `0x35f92` : choix du pas selon les directions maintenues (jeu gelé : descendre).
 fn climb_directions(g: &mut Ctx, p: Player) {
-    if g.a5u8(ram::FROZEN) != 0 {
+    if ram::FROZEN.get(g.b) != 0 {
         p.set_u8(g, Player::STEP, 6);
         return animation::start(g, p, 0x3d);
     }
@@ -465,7 +450,7 @@ fn climb_up(g: &mut Ctx, p: Player) {
             animation::step(g, p);
         }
         8 => {
-            let cam = if g.a5u8(ram::USE_ALT_CAMERA) != 0 { g.a5u16(0x55a) } else { g.a5u16(0x50a) };
+            let cam = if ram::USE_ALT_CAMERA.get(g.b) != 0 { ram::CAMERA_ALT_Y.get(g.b) } else { ram::CAMERA_Y.get(g.b) };
             let top = cam.wrapping_add(0x80);
             let height = p.u16(g, Obj::Y).wrapping_add(p.u16(g, Obj::Z));
             if height as i16 <= top as i16 {
@@ -480,7 +465,7 @@ fn climb_up(g: &mut Ctx, p: Player) {
 
 /// Pas 6 : descendre tant que bas est maintenu (ou jeu gelé) ; au sol, la pose.
 fn climb_down(g: &mut Ctx, p: Player) {
-    if g.a5u8(ram::FROZEN) == 0 {
+    if ram::FROZEN.get(g.b) == 0 {
         match p.u8(g, Player::KEYS_HELD) & 0xf {
             0 => {
                 climb_to_hold(g, p);
@@ -550,8 +535,7 @@ fn climb_attack(g: &mut Ctx, p: Player) {
     let event = p.u8(g, field::ANIM_EVENT);
     if event != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.c.d[0] = event as u32;
-        g.rom(rom::ANIM_EVENT, p);
+        super::spawn::weapon_trail(g, p, event);
     }
 }
 
@@ -567,13 +551,13 @@ fn climb_spell(g: &mut Ctx, p: Player) {
         return;
     }
     p.set_u8(g, field::GESTURE, 0);
-    let spell = match p.u8(g, climb_field::HELD_ITEM) {
-        0x24 => 0x51f6a,
-        0x25 => 0x51fb6,
-        0x26 => 0x52002,
+    let shot = match p.u8(g, climb_field::HELD_ITEM) {
+        0x24 => Thrown::C,
+        0x25 => Thrown::D,
+        0x26 => Thrown::E,
         _ => return,
     };
-    g.rom(spell, p);
+    super::spawn::thrown(g, p, shot);
 }
 
 // ---- sortie (action 0x20, 0x3632c) (h) ----------------------------------------------------------
@@ -590,8 +574,8 @@ mod exit_field {
 }
 
 /// Palettes du fondu : par étape (0x180 octets), par personnage (32 octets) ; destination par personnage.
-const EXIT_PALETTES: u32 = 0x3663e;
-const EXIT_PALETTE_SLOTS: u32 = 0x36626;
+pub(super) const EXIT_PALETTES: u32 = 0x3663e;
+pub(super) const EXIT_PALETTE_SLOTS: u32 = 0x36626;
 
 /// Action 0x20 (0x3632c) : le joueur quitte la scène (h). Le pas de départ choisit la sortie : marche vers
 /// le bas, le haut, la gauche, la droite ou sur place (0 à 8), enfoncement (0xa) ou saut vers l'objet
@@ -629,7 +613,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
                 let v = p.u16(g, Obj::VX).wrapping_neg();
                 p.set_u16(g, Obj::VX, v);
             }
-            g.rom_d6(0x2cf0, p, 2);
+            crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
         }
         0xe => {
             move_xy(g, p);
@@ -663,9 +647,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x3b, 0);
             exit_fade(g, p);
         }
-        _ => {
-            g.rom(0x3632c, p);
-        }
+        v => unreachable!("0x3632c : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -686,7 +668,7 @@ fn exit_walk(g: &mut Ctx, p: Player, timer: u8, vx: u32, vy: u32, facing: Option
     }
     p.set_u32(g, Obj::VX, vx);
     p.set_u32(g, Obj::VY, vy);
-    let anim = if g.a5u8(ram::SLOW_MODE) != 0 { 0x35 } else { anim };
+    let anim = if ram::SLOW_MODE.get(g.b) != 0 { 0x35 } else { anim };
     animation::start(g, p, anim);
 }
 
@@ -779,11 +761,134 @@ pub fn slow_end(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x36be0, p);
-        }
+        v => unreachable!("0x36be0 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
+
+// ---- actions 0x26, 0x2c et 0x30 : poses rares ----------------------------------------------------
+
+/// Compte à rebours des poses rares (`+0x1e8`, octet) et numéro de la bouffée suivante.
+const RARE_TIMER: u32 = 0x1e8;
+
+/// 0x36b88 : action 0x26, l'arme maudite tombe (`checks::item_curse`, `common::curse_check`, `combat`) : pose 0x23
+/// et son 0xe24d8, puis 192 images d'animation ; à chaque geste (`+0x33`), éclat (0xb97ba) et objet SET 0x29
+/// (0xc8312) marqué en `+0x42`. À la fin, le ralentissement (`+0x66`) cesse et le joueur se remet debout.
+pub fn curse_drop(g: &mut Ctx, p: Player) {
+    if p.u8(g, Player::STEP) == 0 {
+        next_step(g, p);
+        p.set_u8(g, RARE_TIMER, 0xc0);
+        animation::start(g, p, 0x23);
+        g.son(ext::son::FANFARE, p);
+        return;
+    }
+    animation::step(g, p);
+    let left = p.u8(g, RARE_TIMER).wrapping_sub(1);
+    p.set_u8(g, RARE_TIMER, left);
+    if left == 0 {
+        p.set_u8(g, Player::SLOW, 0);
+        to_stand(g, p);
+        return;
+    }
+    if p.u8(g, field::GESTURE) == 0 {
+        return;
+    }
+    p.set_u8(g, field::GESTURE, 0);
+    g.rom(rom::CURSE_SHARD, p);
+    crate::mem::set_low_byte(&mut g.c.d[0], 0x29);
+    g.rom(rom::CREATE_SET, p);
+    if g.c.sr & m68k::SR_C == 0 {
+        wr8(g.b, g.c.a[1] + 0x42, 1);
+    }
+}
+
+/// Bouffées de poussière de l'action 0x2c (0x36d2c, lignes de 4 mots : D0, D1, D2 de 0xb10c8, hauteur).
+const PUFFS: u32 = 0x36d2c;
+
+/// 0x36cb8 : action 0x2c (un effet la donne au joueur, `families/effects_f.rs`) : pose 0x35, six bouffées de
+/// poussière (0xb10c8) espacées de 6 images, puis 6 images d'attente avant de se remettre debout.
+pub fn dust_puffs(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            p.set_u8(g, RARE_TIMER, 0);
+            p.set_u8(g, Player::TIMER_6F, 1);
+            animation::start(g, p, 0x35);
+        }
+        2 => {
+            let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+            p.set_u8(g, Player::TIMER_6F, left);
+            if left != 0 {
+                return;
+            }
+            let row = PUFFS + 8 * p.u8(g, RARE_TIMER) as u32;
+            let height = g.prog16(row + 6);
+            for (r, off) in [(0, 0), (1, 2), (2, 4)] {
+                let v = g.prog16(row + off);
+                crate::mem::set_low_word(&mut g.c.d[r], v);
+            }
+            g.c.d[4] = height as u32;
+            crate::mem::set_low_word(&mut g.c.d[3], 0xffff);
+            g.rom(ext::effet::DUST, p);
+            if g.c.sr & m68k::SR_C == 0 {
+                wr16(g.b, g.c.a[1] + Obj::Z, height);
+            }
+            p.set_u8(g, Player::TIMER_6F, 6);
+            let n = p.u8(g, RARE_TIMER).wrapping_add(1);
+            p.set_u8(g, RARE_TIMER, n);
+            if n == 6 {
+                next_step(g, p);
+                p.set_u8(g, Player::TIMER_6F, 6);
+            }
+        }
+        4 => {
+            let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+            p.set_u8(g, Player::TIMER_6F, left);
+            if left == 0 {
+                to_stand(g, p);
+            }
+        }
+        v => unreachable!("0x36cb8 : valeur {v:#x} hors de la table de sauts de l'original"),
+    }
+}
+
+/// 0x36f1a : action 0x30 (le joueur a frappé une caisse, `families/boxes.rs`) : pose 0x36 jusqu'à sa fin, puis le
+/// ralentissement (`+0x66`) cesse et le joueur se remet debout.
+pub fn box_recoil(g: &mut Ctx, p: Player) {
+    match p.u8(g, Player::STEP) {
+        0 => {
+            next_step(g, p);
+            animation::start(g, p, 0x36);
+        }
+        2 => {
+            if animation::step(g, p) {
+                p.set_u8(g, Player::SLOW, 0);
+                to_stand(g, p);
+            }
+        }
+        v => unreachable!("0x36f1a : valeur {v:#x} hors de la table de sauts de l'original"),
+    }
+}
+
+/// Natives des poses rares, pour la validation différentielle (`fuzz_player player_action`) : `actions::act` les
+/// appelle directement.
+macro_rules! rare_native {
+    ($name:ident, $entry:expr, $label:expr, $f:path) => {
+        pub const $name: crate::Native = crate::Native {
+            entry: $entry,
+            name: $label,
+            run: |c, b| {
+                let p = Player(c.a[0]);
+                $f(&mut Ctx::new(c, b), p);
+                crate::mem::rts(c, b)
+            },
+            touches_sound: false,
+            outputs: 0,
+        };
+    };
+}
+rare_native!(CURSE_DROP, 0x36b88, "player_action_26", curse_drop);
+rare_native!(DUST_PUFFS, 0x36cb8, "player_action_2c", dust_puffs);
+rare_native!(BOX_RECOIL, 0x36f1a, "player_action_30", box_recoil);
 
 // ---- action 0x2a (0x36c12) : saut sur place avec rebond (h) ---------------------------------------
 
@@ -816,10 +921,7 @@ pub fn hop(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x3b, 0);
             clamp_x(g.b, p);
         }
-        _ => {
-            g.rom(0x36c12, p);
-            return;
-        }
+        v => unreachable!("0x36c12 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     p.set_u8(g, 0x3b, 0);
     let z = p.u16(g, Obj::Z).wrapping_add(2);
@@ -856,16 +958,14 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u32(g, Obj::Z, 0);
             animation::start(g, p, 14);
-            g.rom(rom::LEAP_LANDING, p);
+            g.son(ext::son::LANDING, p);
         }
         6 => {
             if animation::step(g, p) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x36b26, p);
-        }
+        v => unreachable!("0x36b26 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -888,10 +988,7 @@ pub fn push(g: &mut Ctx, p: Player) {
         4 => 4,
         6 => 2,
         8 => 1,
-        _ => {
-            g.rom(0x36d68, p);
-            return;
-        }
+        v => unreachable!("0x36d68 : valeur {v:#x} hors de la table de sauts de l'original"),
     };
     if p.u8(g, Player::KEYS_HELD) & key == 0 {
         let held = p.u32(g, HELD);
@@ -914,7 +1011,7 @@ pub fn push(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, field::ANIM_EVENT) != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.rom(rom::PUSH_SOUND, p);
+        g.son(rom::PUSH_SOUND, p);
     }
 }
 
@@ -966,7 +1063,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.rom(rom::LEAP_SOUND, p);
+            g.son(ext::son::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);
@@ -976,7 +1073,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u32(g, Obj::Z, 0);
                 animation::start(g, p, 14);
-                g.rom(rom::LEAP_LANDING, p);
+                g.son(ext::son::LANDING, p);
             }
         }
         4 => {
@@ -985,15 +1082,12 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x35a78, p);
-        }
+        v => unreachable!("0x35a78 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     let event = p.u8(g, field::ANIM_EVENT);
     if event != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.c.d[0] = event as u32;
-        g.rom(rom::ANIM_EVENT, p);
+        super::spawn::weapon_trail(g, p, event);
     }
 }
 
@@ -1031,12 +1125,8 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
                 let pair = p.u32(g, Obj::VX).wrapping_neg();
                 p.set_u32(g, Obj::VX, pair);
             }
-            let set = |r: &mut u32, v: u16| *r = *r & 0xffff_0000 | v as u32;
             let (x, y) = (p.u16(g, Obj::X).wrapping_add(shift), p.u16(g, Obj::Y));
-            set(&mut g.c.d[0], x);
-            set(&mut g.c.d[1], y);
-            g.rom(rom::TERRAIN_AT, p);
-            if g.c.d[2] & 63 == 0 {
+            if crate::video::terrain(g.b, x, y).numero & 63 == 0 {
                 p.set_u16(g, Obj::X, x);
             }
             super::walk::clamp_to_screen(g.b, p);
@@ -1054,9 +1144,7 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
                 animation::step(g, p);
             }
         }
-        _ => {
-            g.rom(0x35b96, p);
-        }
+        v => unreachable!("0x35b96 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -1103,12 +1191,9 @@ pub fn parry(g: &mut Ctx, p: Player) {
             parry_slide(g, p);
         }
         2 => parry_slide(g, p),
-        _ => {
-            g.rom(0x39ff0, p);
-            return;
-        }
+        v => unreachable!("0x39ff0 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
-    g.rom(0x33fe4, p);
+    crate::terrain::push(g.b, p.obj());
     super::walk::clamp_to_screen(g.b, p);
 }
 
@@ -1252,7 +1337,7 @@ const BODY_BOXES: u32 = 0x11bffa;
 /// 0x374aa : un ennemi au sol, tourné dans le même sens que le joueur (donc de dos), saisissable et
 /// assez proche est saisi ; le joueur passe à l'attaque de sous-action 26.
 fn backstab(g: &mut Ctx, p: Player) -> bool {
-    if g.a5u8(ram::FROZEN) != 0 {
+    if ram::FROZEN.get(g.b) != 0 {
         return false;
     }
     for enemy in pools::ENEMY.iter() {

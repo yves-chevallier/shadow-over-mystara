@@ -49,10 +49,7 @@ mod ext {
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const POOLS_INIT_SET: u32 = 0x2134;
     pub const POOLS_INIT_SOBJ: u32 = 0x21bc;
-    pub const PLAYERS_PREPARE_A: u32 = 0x35288;
     pub const PLAYERS_PREPARE_B: u32 = 0x3525c;
-    /// Lance un script d'animation de palette (A4 = script).
-    pub const PALETTE_SCRIPT: u32 = 0x1324;
     pub const PHASE0_END_FADE: u32 = 0x1cf3c;
     pub const CLEAR_STATUS: u32 = 0xdabba;
     pub const INPUT_HOOK: u32 = 0x2aec;
@@ -257,8 +254,9 @@ pub const FRAME_END: Native = Native {
 // ---------------------------------------------------------------------------------------------
 // Phase 0 : initialisation de la partie (0x1c522)
 
-/// Scripts d'animation de palette passés à `0x1324` (dans le code, après la table des étapes).
-const PALETTE_SCRIPTS: [u32; 3] = [0x1c546, 0x1c54a, 0x1c54e];
+/// Rectangles de texte effacés par `text::clear_box` (0x1324 ; descripteurs dans le code, après la table des
+/// étapes). Le lot C a montré que 0x1324 efface un rectangle : les noms « scripts de palette » étaient faux.
+const TEXT_BOXES: [u32; 3] = [0x1c546, 0x1c54a, 0x1c54e];
 
 /// Variante des trois objets SET créés à l'étape 0, et leur indice d'animation de palette (`+0x2f`).
 const SET_PALETTES: [(u8, u8); 3] = [(0x3e, 0), (0x3f, 1), (0x40, 2)];
@@ -280,11 +278,6 @@ fn next_step(b: &mut Cps2Bus) {
     wr8(b, A5 + ram::STEP, step);
 }
 
-fn run_script(c: &mut Cpu, b: &mut Cps2Bus, script: u32) {
-    c.a[4] = script;
-    call(c, b, ext::PALETTE_SCRIPT);
-}
-
 /// Étape 0 : trois objets SET (animations de palette), prépare les joueurs.
 fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     next_step(b);
@@ -300,17 +293,17 @@ fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
         set.set_u8(b, Obj::VARIANT, variant);
         set.set_u8(b, SET_PALETTE_INDEX, index);
     }
-    call(c, b, ext::PLAYERS_PREPARE_A);
+    crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_WHITE_VALUE);
     call(c, b, ext::PLAYERS_PREPARE_B);
     let y = rd16(b, A5 + ram::SCROLL2_Y).wrapping_add(0x100);
     wr16(b, A5 + ram::SCROLL2_Y, y);
 }
 
-/// Étape 4 : lance les deux premières animations de palette (puis passe à l'étape 8).
-fn start_palette_scripts(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Étape 4 : efface les deux premiers rectangles de texte (puis passe à l'étape 8).
+fn clear_text_boxes(b: &mut Cps2Bus) {
     next_step(b);
-    run_script(c, b, PALETTE_SCRIPTS[0]);
-    run_script(c, b, PALETTE_SCRIPTS[1]);
+    crate::text::clear_box(b, TEXT_BOXES[0]);
+    crate::text::clear_box(b, TEXT_BOXES[1]);
     let y = rd16(b, A5 + ram::SCROLL2_Y).wrapping_sub(0x100);
     wr16(b, A5 + ram::SCROLL2_Y, y);
 }
@@ -345,7 +338,7 @@ fn wait_then_fade(c: &mut Cpu, b: &mut Cps2Bus) {
         return;
     }
     call(c, b, ext::PHASE0_END_FADE);
-    run_script(c, b, PALETTE_SCRIPTS[2]);
+    crate::text::clear_box(b, TEXT_BOXES[2]);
     reset_pools_and_leave(c, b);
 }
 
@@ -384,7 +377,7 @@ pub fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
     match rd8(b, A5 + ram::STEP) {
         0 => create_palette_objects(c, b),
         4 => {
-            start_palette_scripts(c, b);
+            clear_text_boxes(b);
             wait_then_spawn(c, b);
         }
         8 => wait_then_spawn(c, b),

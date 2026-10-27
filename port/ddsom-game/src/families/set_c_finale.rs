@@ -149,7 +149,6 @@ fn velocity(speed: u16) -> u32 {
 /// et parité de l'image), bascule `+0x43` et lance l'une de deux routines sonores/vidéo.
 fn title_blink(x: &mut Cx) {
     const INIT_A: u32 = 0x3525c;
-    const INIT_B: u32 = 0x1ac86;
     const ON: u32 = 0xea22c;
     const OFF: u32 = 0xea1d0;
     const FLASH: u32 = 0x4ba;
@@ -157,7 +156,7 @@ fn title_blink(x: &mut Cx) {
         0 => {
             next_state(x);
             x.call(INIT_A);
-            x.call(INIT_B);
+            x.call(crate::palette::FLASH_COLOR_WHITE.entry);
             x.set8(0x42, 0);
             x.set_a5_u16(FLASH, 0);
         }
@@ -176,7 +175,7 @@ fn title_blink(x: &mut Cx) {
             x.set_a5_u16(FLASH, 0x100);
             let was_on = x.bit(0x43, 0);
             x.set_bit(0x43, 0, !was_on);
-            x.call(if was_on { ON } else { OFF });
+            crate::sound::jouer_global(x.b, if was_on { ON } else { OFF });
         }
         _ => free(x),
     }

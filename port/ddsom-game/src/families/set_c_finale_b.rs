@@ -466,7 +466,7 @@ pub fn lightning(x: &mut Cx) {
         _ => return,
     }
     if rng(x) & 7 == 0 {
-        x.call(SOUND);
+        crate::sound::jouer(x.b, SOUND, x.o);
     }
     if x.a5_u16(a5::BG_Y) == 0 {
         return next_state(x);
@@ -868,9 +868,8 @@ pub fn countdown_digits(x: &mut Cx) {
     };
     value = value.wrapping_sub(sub);
     x.set32(0x4c, value);
-    x.c.d[1] = (x.u8(0x2f) as u32) << 8;
-    x.c.d[0] = event | (x.u8(0x2f) as u32) << 8;
-    x.call(0x19ae6);
+    let evenement = event | (x.u8(0x2f) as u32) << 8;
+    crate::evenements::enfiler_points(x.b, evenement as u16);
 }
 
 // --- variante 20 : défilement des crédits ---------------------------------------------------------------------------------
@@ -887,7 +886,7 @@ pub fn credits_scroll(x: &mut Cx) {
         next_state(x);
         x.call(0xca8);
         x.set_a5_u8(0x48e, 2);
-        x.call(0x1686);
+        crate::palette::full_brightness(x.b);
         x.set32(0x20, 0);
         x.set32(0x24, TEXT);
         x.set8(0x29, 0);

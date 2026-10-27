@@ -22,7 +22,7 @@ mod hail {
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
-        match x.state(0x4b94a) {
+        match x.u8(0x4) {
             0 if !child => {
                 x.add8(0x4, 2);
                 x.set8(TIMER, 0x70);
@@ -69,7 +69,7 @@ mod hail {
 
     fn child_init(x: &mut Cx) {
         x.add8(0x4, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         for off in [0x8, 0x10] {
@@ -80,41 +80,35 @@ mod hail {
         if x.u8(f::FLIP) == 0 {
             dx = dx.wrapping_neg();
         }
-        x.set_d0w(dx);
         x.add16(0x8, dx);
         x.set16(0xc, 0x10);
         x.set8(TIMER, 0);
         x.set8(ANGLE, 0x10);
         select_table(x);
         place(x);
-        let r = x.rand_and(3);
+        let r = x.rand_mask(3);
         x.set8(PHASE, r as u8);
-        let n = x.c.d[0] as u16;
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS, r);
     }
 
     /// `0x4bae6` : table de vitesses d'après `+0x58`.
     fn select_table(x: &mut Cx) {
         let index = x.u8(TIMER) as u32;
-        x.c.d[0] = index;
         let table = x.rom32(SPEED_TABLES + index);
-        x.c.a[4] = table;
         x.set32(0x4c, table);
     }
 
     /// `0x4bb1a` : vitesses de la rangée courante, puis position autour du joueur et déplacement.
     fn place(x: &mut Cx) {
         let row = (x.u8(ANGLE) as u32) << 2 & 0xffff;
-        x.c.d[0] = row;
         let table = x.u32(0x4c);
-        x.c.a[4] = table;
         let vx = x.data16(table + row);
         let vy = x.data16(table + row + 2);
         x.set16(0x14, vx);
         x.set16(0x1c, vy);
         x.set16(0x16, 0);
         x.set16(0x1e, 0);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         for off in [0x8, 0x10] {
             let v = owner.u16(x.b, off);
             x.set16(off, v);
@@ -123,18 +117,16 @@ mod hail {
         if x.u8(f::FLIP) == 0 {
             dx = dx.wrapping_neg();
         }
-        x.set_d0w(dx);
         x.add16(0x8, dx);
         x.add32(0xc, 0x10000);
         x.move_xy();
     }
 
     fn child_active(x: &mut Cx) {
-        let parent = x.link_a1(PARENT);
+        let parent = x.linked(PARENT);
         if parent.u8(x.b, 0x5a) == 0 {
             x.anim_step();
             let step: u8 = if x.u8(0x2f) != 0 { 0xfe } else { 2 };
-            x.c.d[0] = x.c.d[0] & !0xff | step as u32;
             let angle = x.u8(ANGLE).wrapping_add(step) & 0x1f;
             x.set8(ANGLE, angle);
             place(x);
@@ -143,11 +135,9 @@ mod hail {
                 select_table(x);
             }
             if x.u32(0xc) == 0x300000 {
-                let r = x.rand_and(3) + 4;
+                let r = x.rand_mask(3) + 4;
                 x.set8(PHASE, r as u8);
-                x.set_d0w(r as u16);
-                let n = x.c.d[0] as u16;
-                x.anim_start(ANIMS, n);
+                x.anim_start(ANIMS, r);
             }
             if x.u16(0xc) <= 0x58 {
                 return x.reinsert();
@@ -166,9 +156,7 @@ mod hail {
             x.add8(0x4, 2);
         }
         let row = (x.u8(ANGLE) as u32) << 2 & 0xffff;
-        x.c.d[0] = row;
         let table = x.u32(0x4c);
-        x.c.a[4] = table;
         let vx = x.data16(table + row);
         let vy = x.data16(table + row + 2);
         x.set16(0x14, vx);
@@ -190,7 +178,7 @@ mod spark {
     const ANIMS: u32 = 0x1bc298;
 
     pub fn run(x: &mut Cx) {
-        match x.state(0x4f15a) {
+        match x.u8(0x4) {
             0 => init(x),
             2 => flight(x),
             4 => {
@@ -208,20 +196,17 @@ mod spark {
         x.add8(0x4, 2);
         x.set16(0x58, 1);
         let cam = if x.a5_u8(a5::USE_CAM2) != 0 { 0x54e } else { 0x4fe };
-        x.c.a[6] = 0xff8000 + cam;
         let right = x.u8(0x3) & 1 != 0;
         let shift = if right { 0 } else { 0x180 };
-        x.c.d[0] = shift;
         let cam_x = x.a5_u16(cam + 8);
         let cam_y = x.a5_u16(cam + 0xc);
         x.set16(0x8, cam_x);
         x.set16(0x10, cam_y);
         x.add16(0x8, shift as u16);
         x.set16(0xc, 0xc0);
-        let r = x.rand_and(0x7f);
-        x.add16(0xc, r as u16);
-        let row = x.rand_and(0x18);
-        x.c.d[0] = row;
+        let r = x.rand_mask(0x7f);
+        x.add16(0xc, r);
+        let row = x.rand_mask(0x18) as u32;
         let (vx, vz, az) = (x.rom16(THROWS + row), x.rom16(THROWS + row + 2), x.rom16(THROWS + row + 4));
         x.set16(0x14, vx);
         x.set16(0x18, vz);
@@ -229,8 +214,7 @@ mod spark {
         if !right {
             x.set16(0x14, vx.wrapping_neg());
         }
-        x.rand_and(1);
-        let n = x.c.d[0] as u16;
+        let n = x.rand_mask(1);
         x.anim_start(ANIMS, n);
         x.reinsert();
     }
@@ -266,7 +250,7 @@ mod witch {
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
-        match x.state(0x4d09a) {
+        match x.u8(0x4) {
             0 if !child => parent_init(x),
             0 => child_init(x),
             2 if !child => parent_active(x),
@@ -285,7 +269,7 @@ mod witch {
         x.set8(0x5c, 0);
         x.set8(0x5e, 0);
         x.set8(0x5b, 0x1e);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
@@ -298,7 +282,7 @@ mod witch {
 
     fn child_init(x: &mut Cx) {
         x.add8(0x4, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         x.set16(0x14, -0x400i16 as u16);
@@ -309,8 +293,8 @@ mod witch {
         x.set16(0x10, cy);
         x.add16(0x10, 0x18);
         x.set16(0xc, 0xe8);
-        let r = x.rand_and(0x1f);
-        x.add16(0xc, r as u16);
+        let r = x.rand_mask(0x1f);
+        x.add16(0xc, r);
         let mut d2 = (x.u8(0x5e) as u32 & 0xf) * 2;
         if owner.u8(x.b, f::FLIP) != 0 {
             let vx = x.u16(0x14);
@@ -318,14 +302,10 @@ mod witch {
             d2 += 0x20;
         }
         let base = x.rom16(SPREAD + d2);
-        x.c.d[2] = base as u32;
-        let jitter = x.rand_and(3);
-        let dx = jitter as u16 + base;
-        x.add16(0x8, dx);
-        let anim = x.rand_and(1) + 1;
-        x.set_d0w(anim as u16);
-        let n = x.c.d[0] as u16;
-        x.anim_start(ANIMS, n);
+        let jitter = x.rand_mask(3);
+        x.add16(0x8, jitter + base);
+        let anim = x.rand_mask(1) + 1;
+        x.anim_start(ANIMS, anim);
         x.reinsert();
     }
 
@@ -341,7 +321,6 @@ mod witch {
     fn spawn_spark(x: &mut Cx) -> bool {
         match x.alloc(&pools::PEFF) {
             None => {
-                x.c.d[0] = 1;
                 true
             }
             Some(o) => {
@@ -352,14 +331,13 @@ mod witch {
                 o.set_u8(x.b, 0x5e, rank);
                 let owner = x.u16(f::OWNER);
                 o.set_u16(x.b, f::OWNER, owner);
-                x.c.d[0] = 0;
                 false
             }
         }
     }
 
     fn parent_active(x: &mut Cx) {
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         if owner.u8(x.b, 0x7) == 0xe {
             x.add8(0x4, 2);
             x.set_a5_u16(0x4ba, 0);
@@ -378,7 +356,6 @@ mod witch {
             }
             x.add16(0x58, 1);
             let t = x.u16(0x58);
-            x.c.d[0] = t as u32;
             if t > 0x140 {
                 x.set_bit(0x1, 1, true);
                 if t & 1 == 0 {

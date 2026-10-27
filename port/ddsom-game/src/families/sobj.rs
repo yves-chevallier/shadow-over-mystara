@@ -639,7 +639,7 @@ mod scene {
         x.set32(0xc, 0xd0_0000);
         x.set32(0x10, 0);
         start(x, 0xee);
-        x.call(0xea662);
+        crate::sound::jouer(x.b, 0xea662, x.o);
     }
 
     fn v1_step(x: &mut Cx) {
@@ -698,7 +698,7 @@ mod scene {
         }
         x.set16(0x48, 0);
         start(x, 0xf1);
-        x.call(0xea6a2);
+        crate::sound::jouer(x.b, 0xea6a2, x.o);
     }
 
     fn v3_step(x: &mut Cx) {
@@ -893,7 +893,7 @@ mod scene {
         x.set_a5_u32(0x5c6, script + 4);
         copy_longs(x, V7_PALETTES, PALETTE_B, 8);
         x.set_a5_u8(0x48e, 1);
-        x.call(0x168c);
+        crate::palette::no_brightness(x.b);
     }
 
     fn v7_step(x: &mut Cx) {
@@ -966,7 +966,7 @@ mod scene {
         x.set32(0x10, 0);
         x.add16(0xc, 0xf0);
         start(x, 0x113);
-        x.call(0xea2e8);
+        crate::sound::jouer(x.b, 0xea2e8, x.o);
     }
 
     fn v9_step(x: &mut Cx) {
@@ -988,7 +988,7 @@ mod scene {
         x.set32(0xc, 0x70_0000);
         x.set32(0x10, 0);
         start(x, 0x114);
-        x.call(0xea77e);
+        crate::sound::jouer(x.b, 0xea77e, x.o);
     }
 
     fn v10_step(x: &mut Cx) {
@@ -1024,7 +1024,7 @@ mod scene {
                     return;
                 }
                 x.add8(0x5, 2);
-                x.call(0xea87e);
+                crate::sound::jouer(x.b, 0xea87e, x.o);
             }
             8 => {
                 x.add32(0xc, 0u32.wrapping_sub(0x4000));
@@ -1053,7 +1053,7 @@ mod scene {
         x.add16(0xc, 0xc0);
         x.set16(0x8, 0x30);
         start(x, 0x115);
-        x.call(0xea7fe);
+        crate::sound::jouer(x.b, 0xea7fe, x.o);
     }
 
     /// Variante 12 : sprite qui traverse l'écran (1 pixel par image vers la droite, ou vers la
@@ -1172,7 +1172,7 @@ mod scene {
         x.add8(0x4, 2);
         random_flip(x);
         start(x, 0x1a2);
-        x.call(0xea7be);
+        crate::sound::jouer(x.b, 0xea7be, x.o);
     }
 
     fn v16_step(x: &mut Cx) {
@@ -1196,7 +1196,7 @@ mod scene {
         // `move.w #0x1a3,D0w ; add.b (0x2f,A0),D0b` : l'addition ne déborde pas sur l'octet haut
         let n = 0x100 | (0xa3 + x.u8(0x2f) as u32) & 0xff;
         start(x, n);
-        x.call(0xea83e);
+        crate::sound::jouer(x.b, 0xea83e, x.o);
     }
 
     fn v17_step(x: &mut Cx) {
@@ -1447,7 +1447,7 @@ mod hint {
         }
         let owner = x.linked(0x46);
         if owner.u8(x.b, 0x42) & 2 != 0 {
-            x.call(LEAVE_SOUND);
+            crate::sound::jouer(x.b, LEAVE_SOUND, x.o);
             x.call(SPAWN_ARROW);
             let owner = x.linked(0x46);
             let v = owner.u8(x.b, 0x42) & !2;
@@ -1635,7 +1635,6 @@ mod arrow {
 
     const ANIM_BY_ADVICE: u32 = 0xdf9ae;
     const EVENT_BY_ADVICE: u32 = 0xdfa0e;
-    const SCORE_EVENT: u32 = 0x19ae6;
     const LAST_ADVICE: u16 = 0x136;
     const BLINK_FRAMES: u16 = 0x14;
     const BLINKS: u8 = 0xa;
@@ -1690,11 +1689,9 @@ mod arrow {
         let advice = advice_of_owner(x);
         let i = advice.wrapping_sub(0x118).wrapping_mul(2);
         let code = x.rom16(EVENT_BY_ADVICE.wrapping_add(i as i16 as i32 as u32));
-        x.c.d[0] = (x.c.d[0] & 0xffff_0000) | code as u32;
-        for _ in 0..4 {
-            x.call(SCORE_EVENT);
-            let next = (x.c.d[0] as u16).wrapping_add(0x100);
-            x.c.d[0] = (x.c.d[0] & 0xffff_0000) | next as u32;
+        // un événement par joueur (octet haut : 0 à 3)
+        for joueur in 0..4u16 {
+            crate::evenements::enfiler_points(x.b, code.wrapping_add(joueur << 8));
         }
     }
 
@@ -1883,7 +1880,7 @@ mod badge {
                 x.set8(0x49, counter);
                 if counter != 0 {
                     x.set_bit(0x1, 1, false);
-                    return x.call(SOUND);
+                    return crate::sound::jouer(x.b, SOUND, x.o);
                 }
                 x.set_bit(0x1, 1, true);
                 let n = x.u8(0x48).wrapping_sub(1);
@@ -2252,7 +2249,7 @@ mod target {
         if n < HITS_TO_BREAK {
             return;
         }
-        x.call(SOUND);
+        crate::sound::jouer(x.b, SOUND, x.o);
         let flag = if x.u8(0x3) == VARIANT_A { FLAG_A } else { FLAG_B };
         wr8(x.b, flag, 1);
         x.add8(0x4, 2);

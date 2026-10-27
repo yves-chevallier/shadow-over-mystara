@@ -4,7 +4,8 @@
 //! Les objets SET ne figurent pas dans les listes triées de profondeur par construction (les
 //! appels à `reinsert` des créations les y inscrivent tout de même quand ils les rendent visibles).
 
-use super::cx::{self, handlers, Cx};
+use super::cx::{handlers, Cx};
+use super::eshl_creators;
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -283,23 +284,25 @@ mod ram {
 }
 
 /// Fige la partie et assombrit l'écran : `A5+0x490` = 1, `A5+0x48e` = 0xc, `A5+0x48f` = `flag` pas, palettes
-/// blanchies (0x1686) puis tâche de fondu 0x14de (0x9b6, A0 = l'entrée, D0 = 0x10 ; `taches/fondu.rs`).
+/// blanchies (0x1686) puis tâche de fondu 0x14de (`taches/fondu.rs`).
 fn show_message(x: &mut Cx, flag: u8) {
     x.set_a5_u16(0x490, 1);
     x.set_a5_u8(0x48e, 0xc);
     x.set_a5_u8(0x48f, flag);
-    x.call(0x1686);
-    call_on_list(x, 0x14de);
+    crate::palette::full_brightness(x.b);
+    start_fade_task(x, FADE_TO_BLACK_TASK);
 }
 
-/// Appelle la routine 0x9b6 avec A0 = `list` et D0 = 0x10 (A0 est rétabli ensuite).
-fn call_on_list(x: &mut Cx, list: u32) {
-    let me = x.o.0;
-    x.c.a[1] = me;
-    x.c.a[0] = list;
-    x.c.d[0] = 0x10;
-    crate::call(x.c, x.b, 0x9b6);
-    x.c.a[0] = me;
+/// Tâche de fondu au noir (pas de l'état `A5+0x48f`).
+const FADE_TO_BLACK_TASK: u32 = 0x14de;
+/// Emplacement de la tâche de fondu (décalage dans la table des tâches).
+const FADE_TASK_SLOT: u32 = 0x10;
+
+/// Crée la tâche de fondu `entry` (0x9b6, D0 = 0x10, A0 = l'entrée) ; l'original laisse A1 = l'objet, D0 = 0x10.
+fn start_fade_task(x: &mut Cx, entry: u32) {
+    x.c.a[1] = x.o.0;
+    x.c.d[0] = FADE_TASK_SLOT;
+    crate::kernel::creer_tache(x.b, FADE_TASK_SLOT, entry);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -316,17 +319,12 @@ mod boss_intro {
 
     const STEP: u32 = 0x42;
     const BLAST: u32 = 0x46;
-    /// Routines de son / message (D0 = numéro).
-    const SAY_A: u32 = 0x2824;
-    const SAY_B: u32 = 0x2860;
-    const SAY_C: u32 = 0x289c;
+    /// Routines de son (D0 = numéro).
     const EDA26: u32 = 0xeda26;
     const EDA66: u32 = 0xeda66;
     const ED94A: u32 = 0xed94a;
     const ED9BC: u32 = 0xed9bc;
-    const A2B4A: u32 = 0xa2b4a;
     const SMOKE: u32 = 0xb4bcc;
-    const FADE: u32 = 0x1686;
     /// Tables de décalages (16 mots chacune) de l'explosion en X et en Y.
     const BLAST_DX: u32 = 0xd4910;
     const BLAST_DY: u32 = 0xd4930;
@@ -367,61 +365,61 @@ mod boss_intro {
             }
             2 => {
                 if camera_x(x) >= 0x100 {
-                    x.call(EDA26);
+                    crate::sound::jouer(x.b, EDA26, x.o);
                     x.add8(0x5, 2);
-                    call_with(x, SAY_A, 0x1e);
+                    call_with(x, crate::camera_modes::SHAKE_A.entry, 0x1e);
                 }
             }
             4 => {
                 if camera_x(x) >= 0x180 {
                     next(x, 0x28);
-                    call_with(x, SAY_A, 0x28);
+                    call_with(x, crate::camera_modes::SHAKE_A.entry, 0x28);
                 }
             }
             6 => {
                 if countdown(x) {
                     next(x, 0x28);
-                    call_with(x, SAY_B, 0x28);
+                    call_with(x, crate::camera_modes::SHAKE_B.entry, 0x28);
                 }
             }
             8 => {
                 if countdown(x) {
                     next(x, 0x28);
-                    call_with(x, SAY_A, 0x28);
+                    call_with(x, crate::camera_modes::SHAKE_A.entry, 0x28);
                 }
             }
             10 => {
                 if countdown(x) {
                     x.add8(0x5, 2);
-                    x.call(EDA66);
+                    crate::sound::jouer(x.b, EDA66, x.o);
                 }
             }
             12 => {
                 if camera_x(x) >= 0x200 {
                     next(x, 0x32);
-                    call_with(x, SAY_B, 0x32);
-                    x.call(EDA26);
+                    call_with(x, crate::camera_modes::SHAKE_B.entry, 0x32);
+                    crate::sound::jouer(x.b, EDA26, x.o);
                 }
             }
             14 => {
                 if countdown(x) {
-                    x.call(A2B4A);
+                    eshl_creators::appeler(x, eshl_creators::single_25);
                     next(x, 0x32);
-                    call_with(x, SAY_C, 0x32);
+                    call_with(x, crate::camera_modes::SHAKE_C.entry, 0x32);
                 }
             }
             16 => explosions(x),
             18 => {
                 if countdown(x) {
                     x.add8(0x5, 2);
-                    x.call(EDA66);
+                    crate::sound::jouer(x.b, EDA66, x.o);
                 }
             }
             20 => {
                 if camera_x(x) >= 0x2b0 {
                     next(x, 0x28);
-                    call_with(x, SAY_C, 0x50);
-                    x.call(EDA26);
+                    call_with(x, crate::camera_modes::SHAKE_C.entry, 0x50);
+                    crate::sound::jouer(x.b, EDA26, x.o);
                 }
             }
             22 => spawn_boss(x),
@@ -429,7 +427,7 @@ mod boss_intro {
                 let n = x.u8(BLAST).wrapping_sub(1);
                 x.set8(BLAST, n);
                 if n == 0 {
-                    x.call(EDA66);
+                    crate::sound::jouer(x.b, EDA66, x.o);
                 }
                 let n = x.u8(STEP).wrapping_sub(1);
                 x.set8(STEP, n);
@@ -453,16 +451,16 @@ mod boss_intro {
         let n = x.u8(BLAST).wrapping_sub(1);
         x.set8(BLAST, n);
         if (n as i8) < 0 {
-            x.call(ED94A);
+            crate::sound::jouer(x.b, ED94A, x.o);
             x.set8(BLAST, 0x14);
         }
         if x.u8(STEP) & 3 == 0 {
-            x.call(A2B4A);
+            eshl_creators::appeler(x, eshl_creators::single_25);
             random_blast(x);
         }
         if countdown(x) {
             x.add8(0x5, 2);
-            call_with(x, SAY_B, 0x32);
+            call_with(x, crate::camera_modes::SHAKE_B.entry, 0x32);
         }
     }
 
@@ -497,9 +495,9 @@ mod boss_intro {
                 break;
             }
         }
-        x.call(ED9BC);
+        crate::sound::jouer(x.b, ED9BC, x.o);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(FADE);
+        crate::palette::full_brightness(x.b);
         let Some(boss) = x.alloc(&pools::BOSS) else { return };
         boss.set_u8(x.b, 0, 1);
         boss.set_u8(x.b, 2, 2);
@@ -571,9 +569,6 @@ mod wave_spawner {
     const CREATORS: u32 = 0xd4b92;
     const ENTRY_SIZE: u32 = 0x14;
     const SCRIPT_END: u16 = 0x8000;
-    /// Routines propres à la variante, appelées au démarrage et à la fin.
-    const ON_START: u32 = 0xd98b8;
-    const ON_END: u32 = 0xd995a;
     /// Octet de la RAM (A5+0x51) : générateurs actifs. Octet (A5+0x2c) : mode de jeu (0xc : en jeu).
     const ACTIVE_COUNT: u32 = 0x51;
     const GAME_MODE: u32 = 0x2c;
@@ -635,7 +630,7 @@ mod wave_spawner {
         let timer = x.data16(script);
         x.set16(TIMER, timer);
         x.set32(CURSOR, script + 2);
-        x.call(ON_START);
+        eshl_creators::appeler(x, crate::families::set_residu::wave_start);
         match x.rom8(START_KIND + variant) {
             0 => x.set_a5_u16(SCROLL_LIMIT, 0x20),
             2 => x.set_a5_u16(SCROLL_LIMIT, 4),
@@ -769,7 +764,7 @@ mod wave_spawner {
         }
         let n = x.a5_u8(ACTIVE_COUNT).wrapping_sub(1);
         x.set_a5_u8(ACTIVE_COUNT, if (n as i8) < 0 { 0 } else { n });
-        x.call(ON_END);
+        eshl_creators::appeler(x, crate::families::set_residu::wave_end);
         let variant = x.u8(0x3) as u32;
         match x.rom8(END_KIND + variant) {
             0 => {
@@ -1068,7 +1063,6 @@ mod continue_countdown {
     const MUTED: u32 = 0xff_2472;
     const SCRIPT_ON: u32 = 0xd6922;
     const SCRIPT_OFF: u32 = 0xd694e;
-    const PLAY_SCRIPT: u32 = 0x1324;
     const SPAWN_INVITE: u32 = 0xdfa4a;
     /// Variante -> paramètre de l'invitation (`+0x2c`), selon le niveau `A5+0x34` (octets).
     const INVITE_BY_STAGE: u32 = 0xd6464;
@@ -1131,8 +1125,7 @@ mod continue_countdown {
         if rd8(x.b, MUTED) != 0 {
             return;
         }
-        x.c.a[4] = SCRIPT_OFF;
-        x.call(PLAY_SCRIPT);
+        crate::text::clear_box(x.b, SCRIPT_OFF);
     }
 
     fn rows(x: &mut Cx, base: u32, rows: &[(u16, u16)]) {
@@ -1280,8 +1273,7 @@ mod continue_countdown {
         if !was {
             rows(x, GET_READY, &GET_READY_ROWS);
         } else if rd8(x.b, MUTED) == 0 {
-            x.c.a[4] = SCRIPT_OFF;
-            x.call(PLAY_SCRIPT);
+            crate::text::clear_box(x.b, SCRIPT_OFF);
         }
     }
 
@@ -1318,8 +1310,7 @@ mod continue_countdown {
             if rd8(x.b, MUTED) != 0 {
                 return;
             }
-            x.c.a[4] = SCRIPT_ON;
-            x.call(PLAY_SCRIPT);
+            crate::text::clear_box(x.b, SCRIPT_ON);
             rows(x, GAME_OVER, &GAME_OVER_ROWS);
             return;
         }
@@ -1334,8 +1325,7 @@ mod continue_countdown {
         if rd8(x.b, MUTED) != 0 {
             return;
         }
-        x.c.a[4] = SCRIPT_ON;
-        x.call(PLAY_SCRIPT);
+        crate::text::clear_box(x.b, SCRIPT_ON);
     }
 }
 
@@ -1437,7 +1427,6 @@ mod exit_gate {
 
     const GATE_LOCK: u32 = 0x52;
     const SCENE_HELPER: u32 = 0xcc18e;
-    const PLAY_SCRIPT: u32 = 0x1324;
     /// Script de son joué en quittant la zone.
     const LEAVE_SCRIPT: u32 = 0xd6f0e;
     const EFFECT_TYPE: u8 = 0x2f;
@@ -1544,8 +1533,7 @@ mod exit_gate {
         let entered = x.u8(0x24);
         let n = rd8(x.b, COUNT).wrapping_add(entered);
         wr8(x.b, COUNT, n);
-        x.c.a[4] = SCRIPT;
-        x.call(PLAY_SCRIPT);
+        crate::text::clear_box(x.b, SCRIPT);
         for p in players() {
             if p.u8(x.b, pl::ACTIVE) != 0 && p.u16(x.b, pl::HEALTH) == 0 {
                 let flags = p.u8(x.b, 1) | 2;
@@ -1588,8 +1576,7 @@ mod exit_gate {
             }
         }
         x.set_a5_u32(0x2c, 0x0800_0000);
-        x.c.a[4] = LEAVE_SCRIPT;
-        x.call(PLAY_SCRIPT);
+        crate::text::clear_box(x.b, LEAVE_SCRIPT);
         let stage = x.a5_u8(0x34);
         if stage != LAST_STAGE {
             x.set_a5_u8(0x34, stage + 1);
@@ -1716,7 +1703,6 @@ mod idle_hunter {
     const IDLE_FRAMES: u32 = 0xd8186;
     /// Nombre maximal de poursuivants selon le nombre de joueurs (mots).
     const MAX_ACTIVE: u32 = 0xd8448;
-    const SPAWN_CHASERS: u32 = 0xa44bc;
     const CUTSCENE: u32 = 0x53a;
     const PLAYING: u8 = 0xc;
     const WARMUP: u16 = 0x168;
@@ -1812,7 +1798,7 @@ mod idle_hunter {
         }
         x.c.a[2] = p.0;
         x.c.d[0] = slot;
-        x.call(SPAWN_CHASERS);
+        eshl_creators::appeler(x, eshl_creators::chasers);
         if x.c.cond(7) {
             return None;
         }
@@ -2036,13 +2022,10 @@ mod door_a {
     const ENTER_KINDS: u32 = 0xd8824;
     const PLACEMENT_SIDE: u32 = 0xd896e;
     const PLACEMENT: u32 = 0xd89be;
-    const PLAY_SCRIPT: u32 = 0x1324;
     const SCRIPT: u32 = 0xd86e8;
     const CHECK_FRAMES: i8 = 0x18;
     const SPAWN_SET: u32 = 0xc8312;
-    const TRANSITION: u32 = 0xe0a2e;
     const AFTER: u32 = 0xdd12c;
-    const ON_LEAVE: u32 = 0x20de6;
 
     pub fn run(x: &mut Cx) {
         x.call(HELPER);
@@ -2159,8 +2142,7 @@ mod door_a {
 
     /// Tous les joueurs concernés sont à la porte : le passage commence.
     fn leave(x: &mut Cx) {
-        x.c.d[1] = (x.c.d[1] & 0xffff_0000) | 0xff;
-        call_with(x, TRANSITION, 4);
+        crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 0xff, ligne: 4 });
         x.set_a5_u8(0x51, 1);
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
@@ -2168,8 +2150,7 @@ mod door_a {
             x.set_a5_u8(0x42, 1);
             return;
         }
-        x.c.a[4] = SCRIPT;
-        x.call(PLAY_SCRIPT);
+        crate::text::clear_box(x.b, SCRIPT);
         x.set_a5_u32(0x5c6, 0);
         x.call(AFTER);
         x.set_a5_u16(GATE_LOCK, 0);
@@ -2190,13 +2171,13 @@ mod door_a {
     /// Chargement de la zone cachée (état 0x400 de la porte).
     fn enter_zone(x: &mut Cx) {
         call_keeping(x, &[0x33aa6]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(0x1686);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
         reset_players_after_exit(x);
-        x.call(ON_LEAVE);
+        x.call(crate::scene::entry::PLACE_PLAYERS.entry);
     }
 
     /// Retour à la zone d'origine : les joueurs sont libérés et tous les objets de la zone cachée
@@ -2219,17 +2200,16 @@ mod door_a {
     /// État 4 : arrivée dans la zone cachée (chargement de la nouvelle zone).
     fn arrive(x: &mut Cx) {
         call_keeping(x, &[0x33b24]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(0x1686);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x51, 0);
         restore_camera(x);
         let d4 = x.u16(0x1c);
         x.c.d[4] = (x.c.d[4] & 0xffff_0000) | d4 as u32;
-        x.c.d[1] = (x.c.d[1] & 0xffff_0000) | 0x90;
-        call_with(x, TRANSITION, 0);
+        crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 0x90, ligne: 0 });
         let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
         x.c.a[4] = A5 + camera;
         for p in players() {
@@ -2245,11 +2225,7 @@ mod door_a {
         if p.u8(x.b, 4) != 2 {
             let v = p.u8(x.b, 1) | 2;
             p.set_u8(x.b, 1, v);
-            let d6 = x.c.d[6];
-            x.c.a[0] = p.0;
-            crate::call(x.c, x.b, 0x3668);
-            x.c.a[0] = x.o.0;
-            x.c.d[6] = d6;
+            crate::placement::place_on_free_ground(x.b, p);
             return;
         }
         p.set_u32(x.b, pl::STATE, 0x0200_0000);
@@ -2351,9 +2327,9 @@ mod zone_end {
                 }
                 x.add8(0x4, 2);
                 x.set_a5_u16(SCROLL_LOCK, 0);
-                x.call(0xa462c);
-                x.call(0xe55a2);
-                x.call(0xe13b0);
+                eshl_creators::appeler(x, eshl_creators::linked_34_3);
+                crate::sound::jouer(x.b, 0xe55a2, x.o);
+                crate::sound::jouer(x.b, 0xe13b0, x.o);
             }
             _ => {}
         }
@@ -2364,7 +2340,7 @@ mod zone_end {
 /// `EFFCT`, `BOX`, `ITEM`, `BOSS`, `ESHL`) au lieu de trois pools, et replace les joueurs sur un
 /// repère fixe (table 0xd9052). Mêmes champs (`+0x42..+0x45` compteurs, `+0x16` nombre entré, `+0x17`
 /// bits entrés, `+0x30..` caméra sauvegardée).
-mod door_b {
+pub(super) mod door_b {
     use super::*;
 
     const GATE_LOCK: u32 = 0x52;
@@ -2432,21 +2408,13 @@ mod door_b {
         wr8(x.b, SOUND_FLAG, v);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x43, 0xff);
-        x.set_a5_u16(0x490, 2);
-        x.set_a5_u8(0x48e, 0xf);
-        // fondu de sortie : cède la main, la tâche reprend en 0xd8f06 (native `RESUME`)
-        x.call_at(0x1460, RESUME_AT);
-        after_fade(x);
+        // fondu de sortie : cède la main, la tâche reprend à `after_fade`
+        use crate::families::set::fondu_de_sortie::{fondu_au_noir, Etape};
+        fondu_au_noir(x, Etape::Passage)
     }
 
-    /// Reprise de la tâche après le fondu de sortie (adresse de retour de l'appel de 0x1460).
-    pub const RESUME_AT: u32 = 0xd8f06;
-
-    pub fn resume_after_fade(x: &mut Cx) {
-        after_fade(x);
-    }
-
-    fn after_fade(x: &mut Cx) {
+    /// Après le fondu de sortie (0xd8f06).
+    pub fn after_fade(x: &mut Cx) {
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
         match x.u8(0x48) as i8 {
@@ -2466,14 +2434,14 @@ mod door_b {
 
     fn enter_zone(x: &mut Cx) {
         call_keeping(x, &[0x33aa6]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(0x1686);
-        x.call(0xe0c5c);
+        crate::palette::full_brightness(x.b);
+        crate::sound::jouer(x.b, 0xe0c5c, x.o);
         x.set_a5_u16(GATE_LOCK, 0);
         reset_players_after_exit(x);
-        x.call(0x20de6);
+        x.call(crate::scene::entry::PLACE_PLAYERS.entry);
     }
 
     fn exit_zone(x: &mut Cx) {
@@ -2491,17 +2459,16 @@ mod door_b {
 
     fn arrive(x: &mut Cx) {
         call_keeping(x, &[0x33b24]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(0x1686);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x4a, 1);
         x.set_a5_u8(0x43, 0xf);
         restore_camera(x);
-        let d4 = x.u16(0x1c);
-        x.c.d[4] = (x.c.d[4] & 0xffff_0000) | d4 as u32;
-        x.call(0xe17a4);
+        let musique = x.u16(0x1c);
+        crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { d4: Some(musique as u32), ..Default::default() });
         let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
         x.c.a[4] = A5 + camera;
         for p in players() {
@@ -2516,11 +2483,7 @@ mod door_b {
         if p.u8(x.b, 4) != 2 {
             let v = p.u8(x.b, 1) | 2;
             p.set_u8(x.b, 1, v);
-            let d6 = x.c.d[6];
-            x.c.a[0] = p.0;
-            crate::call(x.c, x.b, 0x3668);
-            x.c.a[0] = x.o.0;
-            x.c.d[6] = d6;
+            crate::placement::place_on_free_ground(x.b, p);
             return;
         }
         p.set_u32(x.b, pl::STATE, 0x0200_2a00);
@@ -2548,7 +2511,8 @@ mod game_over {
     const WAIT_FRAMES: u16 = 0x80;
     const MUSIC: u32 = 0xa8ae8;
     const AFTER_MUSIC: u32 = 0x1ad2a;
-    const MESSAGES: u32 = 0x1ccf8;
+    /// Tâche de fondu par composante vers le blanc.
+    const FADE_TO_WHITE_TASK: u32 = 0x1ccf8;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -2577,7 +2541,7 @@ mod game_over {
         x.set_a5_u16(0x490, 1);
         x.set_a5_u8(0x48e, 0xd);
         x.set_a5_u8(0x48f, 1);
-        call_on_list(x, MESSAGES);
+        start_fade_task(x, FADE_TO_WHITE_TASK);
         x.free(&pools::SET);
     }
 }
@@ -2594,9 +2558,6 @@ mod level_clock {
     use super::*;
 
     const SPEECH: u32 = 0xa66c0;
-    const SAY_A: u32 = 0x2824;
-    const SAY_B: u32 = 0x2860;
-    const SAY_C: u32 = 0x289c;
     const ON: u32 = 0xeda26;
     const OFF: u32 = 0xeda66;
     const TIME: u32 = 0x42;
@@ -2632,7 +2593,7 @@ mod level_clock {
         let n = x.u16(CUE).wrapping_sub(1);
         x.set16(CUE, n);
         if n == 0 {
-            x.call(OFF);
+            crate::sound::jouer(x.b, OFF, x.o);
         }
     }
 
@@ -2658,8 +2619,8 @@ mod level_clock {
                 x.set16(TICK, 0x50);
                 speech(x, 0);
                 x.set16(CUE, 0x28);
-                call_with(x, SAY_A, 0x28);
-                x.call(ON);
+                call_with(x, crate::camera_modes::SHAKE_A.entry, 0x28);
+                crate::sound::jouer(x.b, ON, x.o);
             }
             2 => {
                 countdown(x, 0x50, 0);
@@ -2671,7 +2632,7 @@ mod level_clock {
                 x.set16(TICK, 0x3c);
                 speech(x, 1);
                 x.set16(CUE, 0x28);
-                call_with(x, SAY_B, 0x28);
+                call_with(x, crate::camera_modes::SHAKE_B.entry, 0x28);
             }
             4 => {
                 countdown(x, 0x3c, 1);
@@ -2681,8 +2642,8 @@ mod level_clock {
                 x.add8(0x5, 2);
                 speech(x, 2);
                 x.set16(CUE, 0x78);
-                call_with(x, SAY_C, 0x78);
-                x.call(ON);
+                call_with(x, crate::camera_modes::SHAKE_C.entry, 0x78);
+                crate::sound::jouer(x.b, ON, x.o);
             }
             6 => {
                 let n = x.u16(CUE).wrapping_sub(1);
@@ -2692,7 +2653,7 @@ mod level_clock {
                 }
                 x.add8(0x4, 2);
                 x.set_a5_u8(0x42, 1);
-                x.call(OFF);
+                crate::sound::jouer(x.b, OFF, x.o);
             }
             _ => {}
         }
@@ -3728,13 +3689,6 @@ mod dialog {
         }
     }
 }
-
-/// Reprise de la porte de passage (type 29) après son fondu de sortie.
-pub const DOOR_B_RESUME: crate::Native = cx::handler(door_b::RESUME_AT, "set_29_reprise", |c, b| {
-    let mut x = Cx::new(c, b);
-    door_b::resume_after_fade(&mut x);
-    x.ret();
-});
 
 handlers! {
     0xd4110 "set_16" bumper::run,

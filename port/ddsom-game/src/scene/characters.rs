@@ -114,7 +114,7 @@ crate::etapes! {
             x.c.d[0] = 0;
             x.call(0x1a60a);
             x.set_v8(0x48e, 15);
-            x.call(0x1686);
+            crate::palette::full_brightness(x.b);
             next_player(x)
         },
         Retry5 = at::RETRY_5 => |x| {

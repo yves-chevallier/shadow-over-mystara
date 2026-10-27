@@ -268,7 +268,7 @@ fn request(x: &mut Ctx, new: u8) {
             x.call(ext::SOUND_REQUEST);
         }
     } else if new & key::SHOT2 != 0 {
-        x.call(ext::SOUND_STOP);
+        crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     }
 }
 

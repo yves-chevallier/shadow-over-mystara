@@ -10,7 +10,6 @@ mod ext {
     pub const MUSIC_C: u32 = 0xe14ec;
     pub const MUSIC_D: u32 = 0xe1528;
     pub const MUSIC_E: u32 = 0xe15a0;
-    pub const SOUND_2: u32 = 0xe0a70;
     pub const SCENE_PALETTES: u32 = 0x1a360;
     pub const PALETTE_SET: u32 = 0x1a366;
     pub const PALETTE_3: u32 = 0x1a8b2;
@@ -45,7 +44,7 @@ crate::etapes! {
         S2Shown = 0xf8316 => |x| {
             x.call(ext::SCENE_PALETTES);
             x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
-            x.call(sub::PALETTES_BLACK);
+            crate::palette::no_brightness(x.b);
             Flow::Done
         },
         S2Hidden = 0xf8382 => |x| {
@@ -113,7 +112,7 @@ crate::etapes! {
             scroll_text(x, 0xf8810);
             set16(x, var::TIMER, 120);
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-            x.call(sub::PALETTES_BLACK);
+            crate::palette::no_brightness(x.b);
             fade_task(x, 3, ALL_PAGES, sub::FADE_TASK);
             Flow::Done
         },
@@ -273,9 +272,7 @@ crate::etapes! {
         S13Retry11 = 0xf9022 => s13_set_11,
         S13Set11Drawn = 0xf9034 => |x| yield_frames(x, 1, At(Etape::S13Set11Shown.into())),
         S13Set11Shown = 0xf903c => |x| {
-            x.c.d[0] = 0;
-            x.c.d[1] = x.c.d[1] & !0xffff | 144;
-            x.call(ext::SOUND_2);
+            crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 144, ligne: 0 });
             x.set_v16(a5::LAYERS, 0x138e);
             x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
             x.set_v16(a5::FADE_DELAY, 4);
@@ -292,7 +289,7 @@ crate::etapes! {
         S13Retry9 = 0xf9134 => s13_set_9,
         S13OutDrawn = 0xf9150 => |x| {
             next_sub(x);
-            x.call(ext::MUSIC_E);
+            crate::sound::jouer_global(x.b, ext::MUSIC_E);
             for (off, palettes) in [(0x492, 0x253000), (0x49a, 0x272a60), (0x49e, 0x283140)] {
                 x.set_v32(off, palettes);
             }
@@ -341,7 +338,7 @@ fn s1_message(x: &mut Ctx) -> Flow {
 pub fn scene_2(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf82e4) {
         0 => {
-            x.call(ext::MUSIC_A);
+            crate::sound::jouer_global(x.b, ext::MUSIC_A);
             if !try_message(x, 9) {
                 return Flow::Done;
             }
@@ -405,7 +402,7 @@ pub fn scene_5(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf848a) {
         0 => {
             next(x);
-            x.call(ext::MUSIC_B);
+            crate::sound::jouer_global(x.b, ext::MUSIC_B);
             tiles(x, TB, 0x218, Some(SCROLL_2));
             tiles(x, TB, 0x219, None);
             set16(x, var::TIMER, 60);
@@ -457,7 +454,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf876a) {
         0 => {
             next(x);
-            x.call(ext::MUSIC_A);
+            crate::sound::jouer_global(x.b, ext::MUSIC_A);
             tiles_w(x, TB, 0x20c, Some(SCROLL_2));
             tiles_w(x, TB, 0x20c, None);
             tiles_w(x, TB2, 0x14e, Some(SCROLL_3));
@@ -584,7 +581,7 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
                 return finish(x, 13);
             }
             next(x);
-            x.call(ext::MUSIC_C);
+            crate::sound::jouer_global(x.b, ext::MUSIC_C);
             set_camera(x, a5::CAM1_X, 288);
             tiles(x, TB, 0x214, Some(0x917400));
             tiles(x, TB, 0x215, None);
@@ -666,7 +663,7 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf8e9e) {
         0 => {
             next(x);
-            x.call(ext::MUSIC_D);
+            crate::sound::jouer_global(x.b, ext::MUSIC_D);
             tiles_w(x, TB2, 0x154, Some(SCROLL_3));
             tiles_w(x, TB2, 0x155, None);
             s13_object(x)

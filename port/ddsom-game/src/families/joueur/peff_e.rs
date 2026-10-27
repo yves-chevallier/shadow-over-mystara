@@ -31,14 +31,12 @@ mod ice {
     const ANIMS: u32 = 0x1b6350;
     const OFFSETS: u32 = 0x4bd0e;
     const DELAYS: u32 = 0x4bd98;
-    const TERRAIN: u32 = 0x33fe4;
     const SFX: u32 = 0xe87f4;
     const SCATTER_X: u32 = 0x4c016;
     const SCATTER_Y: u32 = 0x4c036;
     const SPREAD: u32 = 0x4c0ae;
     const CROWN_A: u32 = 0x4c140;
     const CROWN_B: u32 = 0x4c158;
-    const TERRAIN_AT: u32 = 0x24b0;
     /// Octets d'angle de rebond (haut, bas, gauche, droite...).
     const BOUNCE_LEFT: u32 = 0x4be70;
     const BOUNCE_RIGHT: u32 = 0x4be78;
@@ -110,7 +108,7 @@ mod ice {
                 x.move_by_table_xy();
                 x.c.d[0] = x.u16(0x8) as u32;
                 x.c.d[1] = x.u16(0x10) as u32;
-                x.call(TERRAIN);
+                x.call(crate::terrain::SHADOW.entry);
                 if !x.c.cond(7) {
                     let a = x.u8(0x2d).wrapping_add(0x10) & 0x1f;
                     x.c.d[0] = x.c.d[0] & !0xff | a as u32;
@@ -212,7 +210,7 @@ mod ice {
         match x.state(0x4bf16) {
             0 => {
                 x.add8(0x4, 2);
-                x.call(SFX);
+                crate::sound::jouer(x.b, SFX, x.o);
                 x.set16(0x54, 0x168);
                 let owner = x.link_a1(f::OWNER);
                 if owner.u8(x.b, 0x15e) != 0x1a {
@@ -251,7 +249,7 @@ mod ice {
         }
         x.c.d[0] = (t & 0x3f) as u32;
         if t & 0x3f == 0 {
-            x.call(SFX);
+            crate::sound::jouer(x.b, SFX, x.o);
         }
     }
 
@@ -278,8 +276,11 @@ mod ice {
                 x.add16(0x10, dy);
                 x.c.d[0] = x.u16(0x8) as u32;
                 x.c.d[1] = x.u16(0x10) as u32;
-                x.call(TERRAIN_AT);
-                if !x.c.cond(7) {
+                // registres de 0x24b0 laissés : D2 (le terrain) est relu par le rebond d'un gestionnaire suivant
+                let (px, py) = (x.u16(0x8), x.u16(0x10));
+                let t = crate::video::terrain(x.b, px, py);
+                crate::video::terrain_68k(x.c, &t);
+                if t.numero != 0 {
                     x.set8(0x4, 4);
                 }
                 let n = x.rand_and(1) + 2;
@@ -412,7 +413,6 @@ mod banish {
     const FRAMES_A: u32 = 0x4c3a8;
     const FRAMES_B: u32 = 0x4c3d6;
     const SFX: u32 = 0xe9e9e;
-    const DAMAGE: u32 = 0x19dce;
     const POWER_TABLE: u32 = 0x1042e2;
     const POWER_TABLE_BOSS: u32 = 0x104300;
 
@@ -479,7 +479,7 @@ mod banish {
         let n = (x.c.d[0] & 0xffff_0000 | anim as u32) as u16;
         x.anim_start(ANIMS, n);
         if k == 0 {
-            x.call(SFX);
+            crate::sound::jouer(x.b, SFX, x.o);
         }
     }
 
@@ -547,12 +547,8 @@ mod banish {
         }
         let mut d0 = (player.u8(x.b, 0x2) as u16) << 8;
         d0 = d0 & 0xff00 | (d0 as u8).wrapping_add(monster.u8(x.b, 0x2)) as u16;
-        x.c.d[0] = d0 as u32;
-        x.c.d[1] = monster.u16(x.b, 0x60) as u32;
-        x.c.d[2] = monster.u16(x.b, 0x62) as u32;
-        x.c.d[3] = x.c.d[3] & !0xff | monster.u8(x.b, 0x28) as u32;
-        x.c.a[1] = ext(player);
-        x.call(DAMAGE);
+        let (max, valeur, classe) = (monster.u16(x.b, 0x60), monster.u16(x.b, 0x62), monster.u8(x.b, 0x28));
+        crate::evenements::creer_popup(x.b, crate::evenements::Popup { entete: d0, max, valeur, brut: classe == 2 });
     }
 }
 

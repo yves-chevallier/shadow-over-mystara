@@ -20,6 +20,8 @@ use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
+use crate::machine::Machine;
+use crate::player::externes as ext;
 
 /// Octets de l'enregistrement joueur propres aux actions des personnages.
 pub mod field {
@@ -67,20 +69,12 @@ pub mod field {
 
 /// Routines d'origine appelées par ces outils.
 pub mod rom {
-    /// Mise en scène d'un effet de poussière ou d'étincelle (D0 genre, D1 paramètres, D2/D3 vitesses).
-    pub const DUST: u32 = 0xb10c8;
     /// Son associé à l'étincelle de `item_spark`.
     pub const SPARK_SOUND: u32 = 0xea166;
     /// Voix du personnage à l'arme tenue (D4 = numéro de l'arme).
     pub const WEAPON_VOICE: u32 = 0xe7e10;
-    /// Voix du saut, son de l'atterrissage et de la glissade.
-    pub const JUMP_VOICE: u32 = 0xe7622;
-    pub const LANDING_SOUND: u32 = 0xe774c;
-    pub const SLIDE_SOUND: u32 = 0xe78e8;
     /// Création d'un effet joueur (pool PEFF) du type donné par D0, d'après l'arme.
     pub const SPAWN_EFFECT: u32 = 0x4c58e;
-    /// Assombrissement / retour de l'écran (routine de fondu).
-    pub const FADE: u32 = 0x1686;
     /// Lancement d'une tâche (A0 = programme, D0 = priorité) : trap 0.
     pub const START_TASK: u32 = 0x9b6;
     /// Programmes des tâches d'écran du sort : assombrir et rétablir.
@@ -136,14 +130,14 @@ pub fn step_keeping_regs(g: &mut Ctx, p: Player, d0: u8) -> bool {
 pub fn weapon_voice(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A) as u32;
-    call(g, p, rom::WEAPON_VOICE, &[(4, weapon)]);
+    crate::sound::jouer_avec(g.b, rom::WEAPON_VOICE, crate::sound::Source { objet: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Joue la voix de l'arme tenue à la main gauche (D4 = `WEAPON_B`, magicien).
 pub fn weapon_voice_b(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_B) as u32;
-    call(g, p, rom::WEAPON_VOICE, &[(4, weapon)]);
+    crate::sound::jouer_avec(g.b, rom::WEAPON_VOICE, crate::sound::Source { objet: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Démarre l'animation `n`, puis joue la voix de l'arme de la main gauche (`WEAPON_B`, magicien).
@@ -258,7 +252,7 @@ pub fn air_attack_pressed(g: &mut Ctx, p: Player) -> bool {
 /// l'arme 0xd et passe à l'action 0x26. Appelée à la fin d'un saut.
 pub fn curse_check(g: &mut Ctx, p: Player) {
     cov!();
-    if p.u8(g, Player::WEAPON_A) == 0xe && g.a5u8(0x56) > 0x7f {
+    if p.u8(g, Player::WEAPON_A) == 0xe && ram::CURSE_COUNT.get(g.b) > 0x7f {
         p.set_u8(g, Player::WEAPON_A, 0xd);
         p.set_state(g, 0x0200_2600);
         wr8(g.b, A5.wrapping_sub(0x5b82), 1);
@@ -345,11 +339,11 @@ pub fn freeze_others(g: &mut Ctx, p: Player) {
 /// Assombrit ou rétablit l'écran : démarre la tâche d'écran `program` (0x153e / 0x1536) après le
 /// fondu 0x1686. `mode` : 1 assombrir, 2 rétablir.
 fn screen_task(g: &mut Ctx, p: Player, mode: u16, program: u32, fade: bool) {
-    wr16(g.b, A5 + 0x490, mode);
-    wr8(g.b, A5 + 0x48e, 0xd);
-    wr8(g.b, A5 + 0x48f, 5);
+    ram::FADE_DELAY.set(g.b, mode);
+    ram::FADE_PAGES.set(g.b, 0xd);
+    ram::FADE_STEPS.set(g.b, 5);
     if fade {
-        g.rom(rom::FADE, p);
+        crate::palette::full_brightness(g.b);
     }
     g.c.a[1] = p.0;
     g.c.a[0] = program;
@@ -384,9 +378,9 @@ pub fn undim_screen_mode(g: &mut Ctx, p: Player, mode: u16) {
 pub fn begin_spell(g: &mut Ctx, p: Player, timer: Option<u16>) {
     cov!();
     next_step(g, p);
-    g.set_a5u8(ram::PAUSE, 1);
-    g.set_a5u8(0x4a, 1);
-    g.set_a5u16(0x4ba, 0);
+    ram::PAUSE.set(g.b, 1);
+    ram::SPELL_FLAG.set(g.b, 1);
+    ram::SCROLL1_Y.set(g.b, 0);
     if let Some(timer) = timer {
         p.set_u16(g, field::TIMER, timer);
     }
@@ -424,9 +418,9 @@ pub fn end_spell_keep_cancel_mode(g: &mut Ctx, p: Player, mode: u16) {
 /// Retombée des indicateurs de sort : indicateur et pause, ligne choisie, gel des quatre joueurs.
 pub fn clear_spell_state(g: &mut Ctx) {
     cov!();
-    g.set_a5u8(0x4a, 0);
-    g.set_a5u8(ram::PAUSE, 0);
-    g.set_a5u8(0x5b, 0);
+    ram::SPELL_FLAG.set(g.b, 0);
+    ram::PAUSE.set(g.b, 0);
+    ram::SPELL_ROW.set(g.b, 0);
     for k in 0..4 {
         Player::nth(k).set_u8(g, field::SPELL_FROZEN, 0);
     }
@@ -447,13 +441,13 @@ fn dust(g: &mut Ctx, p: Player, table: u32) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
     let vx = g.prog16(table + 4 * class) as u32;
     let vy = g.prog16(table + 2 + 4 * class) as u32;
-    call(g, p, rom::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
+    call(g, p, ext::effet::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
 }
 
 /// 0x3fa7c : poussière du freinage ou de la marche (une image sur quatre).
 pub fn dust_stand(g: &mut Ctx, p: Player) {
     cov!();
-    let phase = p.u8(g, Player::CHARACTER).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 3;
+    let phase = p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3;
     if phase == 0 {
         dust(g, p, tables::DUST_STAND);
     }
@@ -462,7 +456,7 @@ pub fn dust_stand(g: &mut Ctx, p: Player) {
 /// 0x3fac4 : poussière de la charge, tant que la vitesse horizontale dépasse 2 pixels par image.
 pub fn dust_run(g: &mut Ctx, p: Player) {
     cov!();
-    let phase = p.u8(g, Player::CHARACTER).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 3;
+    let phase = p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3;
     if phase != 0 {
         return;
     }
@@ -475,7 +469,7 @@ pub fn dust_run(g: &mut Ctx, p: Player) {
 /// 0x3fb1a : poussière du saut, une image sur deux (selon le numéro du joueur).
 pub fn dust_jump(g: &mut Ctx, p: Player) {
     cov!();
-    let phase = p.u8(g, Player::INDEX).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 1;
+    let phase = p.u8(g, Player::INDEX).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 1;
     if phase == 0 {
         dust(g, p, tables::DUST_JUMP);
     }
@@ -489,7 +483,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     let (d0, d1, d2, height) = (g.prog16(row), g.prog16(row + 2), g.prog16(row + 4), g.prog16(row + 6));
     g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
     g.c.d[4] = height as u32;
-    let z = call(g, p, rom::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
+    let z = call(g, p, ext::effet::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
     let failed = g.c.sr & m68k::SR_C != 0;
     let _ = z;
     if failed {
@@ -497,7 +491,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     }
     let spark = g.c.a[1];
     wr16(g.b, spark + 0x0c, height);
-    g.rom(rom::SPARK_SOUND, p);
+    g.son(rom::SPARK_SOUND, p);
 }
 
 // ---- soins (clerc, potion de soin du combattant) -----------------------------------------------
@@ -556,7 +550,7 @@ fn face_toward(g: &mut Ctx, p: Player, q: Player) {
 /// 0x4175c : toutes les 8 images, la palette du lanceur prend l'un des trois blocs de couleurs du soin.
 pub fn heal_flicker(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(0x6d) & 7 != 0 {
+    if ram::VBLANK_FRAMES_LOW.get(g.b) & 7 != 0 {
         return;
     }
     let mut n = p.u8(g, 0x1ed) + 1;
@@ -679,7 +673,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.rom(rom::JUMP_VOICE, p);
+    g.son(ext::son::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     launch_jump(g, p, kit.speeds, kind);
 }
@@ -744,7 +738,7 @@ pub fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.rom(rom::LANDING_SOUND, p);
+    g.son(ext::son::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile.
@@ -795,7 +789,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.rom(rom::SLIDE_SOUND, p);
+                g.son(ext::son::SLIDE, p);
             }
         }
         4 => {
@@ -1056,15 +1050,14 @@ pub fn cancel_cast(g: &mut Ctx, p: Player, spark: u16) {
 /// dégradé précédent est fini.
 pub fn flash_screen(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(0x48f) != 0 {
+    if ram::FADE_STEPS.get(g.b) != 0 {
         return;
     }
-    g.set_a5u8(0x48e, 0xc);
+    ram::FADE_PAGES.set(g.b, 0xc);
     let phase = (p.u8(g, 0x1eb) + 1) & 3;
     p.set_u8(g, 0x1eb, phase);
     let color: u16 = if phase & 2 != 0 { 0x2000 } else { 0xc000 };
-    g.c.d[0] = g.c.d[0] & 0xffff_0000 | color as u32;
-    g.rom(rom::PALETTE_FADE, p);
+    crate::palette::set_brightness(g.b, color);
 }
 
 /// Réglage de l'intensité des sorts de gel (haut et bas pendant la phase finale) : après une pause de
@@ -1102,10 +1095,10 @@ pub fn intensity_keys(g: &mut Ctx, p: Player, base: u16) {
 /// Les quatre clignotements d'écran du sort de gel : `+0x4ba` vaut 0x100 trois fois sur quatre pas.
 pub fn blink_screen(g: &mut Ctx, p: Player) {
     cov!();
-    g.set_a5u16(0x4ba, 0);
+    ram::SCROLL1_Y.set(g.b, 0);
     let blinks = p.u8(g, 0x1ea);
     if blinks != 0 {
-        g.set_a5u16(0x4ba, 0x100);
+        ram::SCROLL1_Y.set(g.b, 0x100);
         p.set_u8(g, 0x1ea, blinks - 1);
     }
 }

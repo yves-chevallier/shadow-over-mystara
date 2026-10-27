@@ -36,8 +36,6 @@ const CPS_REG_4: u32 = 0x400004;
 
 mod ext {
     pub const SOUND_E172C: u32 = 0xe172c;
-    pub const SOUND_E0A82: u32 = 0xe0a82;
-    pub const SOUND_E0882: u32 = 0xe0882;
     pub const RESET_PLAYERS: u32 = 0x1f184;
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const SPRITES: u32 = 0x1de96;
@@ -52,7 +50,6 @@ mod ext {
     pub const PALETTE_SET: u32 = 0x1a67e;
     pub const PALETTE_93: u32 = 0x1a366;
     pub const TILE_BLOCK: u32 = 0x26d4;
-    pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const LINE: u32 = 0x517ba;
     pub const SCORE_OBJECT: u32 = 0xb1a7a;
     pub const BOOTED_CLEAR: u32 = 0x133f0;
@@ -115,7 +112,7 @@ crate::etapes! {
                 x.c.a[3] = words[7];
             }
             wr8(x.b, A5 + 0x48e, 0xf);
-            x.call(ext::BRIGHTNESS_WHITE);
+            crate::palette::full_brightness(x.b);
             for off in [0x506u32, 0x50a, 0x556, 0x4b6, 0x4ba] {
                 wr16(x.b, A5 + off, 0);
             }
@@ -134,7 +131,7 @@ crate::etapes! {
             Flow::Done
         },
         SaFaded = SA_FADED => |x| {
-            x.call(ext::SOUND_E0882);
+            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES, ext::POOLS] {
                 x.call(f);
             }
@@ -198,7 +195,7 @@ fn scroll(x: &mut Ctx) {
 fn s0_prepare(x: &mut Ctx) -> Flow {
     next_step(x);
     wr16(x.b, STATE + f::TIMER, 300);
-    x.call(ext::SOUND_E172C);
+    crate::sound::jouer_global(x.b, ext::SOUND_E172C);
     for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES, ext::POOLS] {
         x.call(f);
     }
@@ -330,7 +327,7 @@ fn sa_leave(x: &mut Ctx) -> Flow {
         render(x);
         return Flow::Done;
     }
-    x.call_d0(ext::SOUND_E0A82, 4);
+    crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
     wr8(x.b, A5 + 0x48e, 0xf);
     wr16(x.b, A5 + 0x490, 3);
     x.sous_programme(crate::taches::fondu::descente, Etape::SaFaded)
