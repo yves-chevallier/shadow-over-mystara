@@ -97,37 +97,48 @@ impl Layer {
         }
     }
 
-    /// Pen (couleur*16 + pixel) au point (tx, ty) du tilemap, ou None si transparent.
-    fn sample(&self, v: &VideoState, gfx: &[u8], tx: usize, ty: usize) -> Option<u16> {
+    /// Dessine sur la ligne `out` (pens, prio) les pixels des tuiles qui couvrent l'abscisse de tilemap `tx0`
+    /// (pour x = 0..W) à l'ordonnée de tilemap `ty` : une tuile est lue une fois pour toute sa portion de ligne.
+    fn draw_row(&self, v: &VideoState, gfx: &[u8], tx0: usize, ty: usize, pbit: u8, pens: &mut [u16], prio: &mut [u8]) {
         let t = self.tile;
-        let idx = self.tile_index(tx / t, ty / t);
-        let code = v.gfxram[(self.base + 2 * idx) % v.gfxram.len()] as usize;
-        let attr = v.gfxram[(self.base + 2 * idx + 1) % v.gfxram.len()];
-        let mut px = tx % t;
-        let mut py = ty % t;
-        if attr & 0x20 != 0 {
-            px = t - 1 - px;
-        }
-        if attr & 0x40 != 0 {
-            py = t - 1 - py;
-        }
-        let row = match t {
-            8 => {
-                // 8x8 : moitié gauche/droite d'une ligne de 16 pixels selon la colonne (gfxset)
-                let half = (idx >> 5) & 1;
-                SCROLL_TILE_BASE + code * 64 + py * 8 + half * 4
+        let size = 64 * t;
+        let ram = v.gfxram;
+        let mut x = 0;
+        let mut tx = tx0;
+        while x < pens.len() {
+            let n = (t - tx % t).min(pens.len() - x);
+            let idx = self.tile_index(tx / t, ty / t);
+            let code = ram[(self.base + 2 * idx) % ram.len()] as usize;
+            let attr = ram[(self.base + 2 * idx + 1) % ram.len()];
+            let mut py = ty % t;
+            if attr & 0x40 != 0 {
+                py = t - 1 - py;
             }
-            16 => SCROLL_TILE_BASE + code * 128 + py * 8 + (px / 8) * 4,
-            _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16 + (px / 8) * 4,
-        };
-        if row + 4 > gfx.len() {
-            return None;
-        }
-        let p = pixel(gfx, row, px % 8);
-        if p == 15 {
-            None
-        } else {
-            Some(((attr & 0x1f) + self.color_base) * 16 + p as u16)
+            // début de la ligne de pixels de la tuile ; la moitié (4 octets) dépend du pixel pour 16 et 32
+            let row = match t {
+                8 => SCROLL_TILE_BASE + code * 64 + py * 8 + ((idx >> 5) & 1) * 4,
+                16 => SCROLL_TILE_BASE + code * 128 + py * 8,
+                _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16,
+            };
+            let pen_base = ((attr & 0x1f) + self.color_base) * 16;
+            let flip = attr & 0x20 != 0;
+            for i in 0..n {
+                let mut px = tx % t + i;
+                if flip {
+                    px = t - 1 - px;
+                }
+                let r = row + (px / 8) * 4 * (t > 8) as usize;
+                if r + 4 > gfx.len() {
+                    continue;
+                }
+                let p = pixel(gfx, r, px % 8);
+                if p != 15 {
+                    pens[x + i] = pen_base + p as u16;
+                    prio[x + i] |= pbit;
+                }
+            }
+            x += n;
+            tx = (tx + n) % size;
         }
     }
 }
@@ -209,13 +220,9 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
                 scrollx += v.gfxram[(other + ((by as usize + offs) & 0x3ff)) % v.gfxram.len()] as i32;
             }
             let ty = ((by + sy).rem_euclid(size as i32)) as usize;
-            for x in 0..W {
-                let tx = ((x as i32 + VIS_X0 + scrollx).rem_euclid(size as i32)) as usize;
-                if let Some(pen) = layer.sample(v, gfx, tx, ty) {
-                    pens[y * W + x] = pen;
-                    prio[y * W + x] |= pbit;
-                }
-            }
+            let tx0 = ((VIS_X0 + scrollx).rem_euclid(size as i32)) as usize;
+            let ligne = y * W..(y + 1) * W;
+            layer.draw_row(v, gfx, tx0, ty, pbit, &mut pens[ligne.clone()], &mut prio[ligne]);
         }
     }
 
