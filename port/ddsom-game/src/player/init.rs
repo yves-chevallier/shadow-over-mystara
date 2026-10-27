@@ -108,7 +108,7 @@ fn table_of(g: &mut Ctx, p: Player, table: u32) -> u32 {
 fn init_level(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::LEVEL_BY_SCENE);
-    let scene = g.a5u8(ram::SCENE) as u32;
+    let scene = ram::SCENE.get(g.b) as u32;
     let level = g.data8(t + scene);
     p.set_u8(g, Player::LEVEL, level);
 }
@@ -241,8 +241,8 @@ pub fn init_weapon_stats(g: &mut Ctx, p: Player) {
 pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     cov!();
     p.set_u8(g, Player::INDEX, k);
-    let mask = g.a5u8(ram::PLAYERS_MASK) | 1 << k;
-    g.set_a5u8(ram::PLAYERS_MASK, mask);
+    let mask = ram::PLAYERS_MASK.get(g.b) | 1 << k;
+    ram::PLAYERS_MASK.set(g.b, mask);
     p.set_u16(g, Player::ACTIVE, 0x101);
     p.set_u8(g, Player::PALETTE_GROUP, 2);
     p.set_u8(g, Player::PALETTE, k);
@@ -271,8 +271,8 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     if (spare as i8) >= 0 {
         p.set_u8(g, 0x164, spare);
     }
-    let alive = g.a5u8(ram::PLAYERS_ALIVE).wrapping_add(1);
-    g.set_a5u8(ram::PLAYERS_ALIVE, alive);
+    let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_add(1);
+    ram::PLAYERS_ALIVE.set(g.b, alive);
 }
 
 /// Les entrées 0x2e58.. sauvegardent D0 et A0-A3 (movem) puis construisent le joueur `k`.
@@ -331,11 +331,11 @@ enum Join {
 fn join(g: &mut Ctx, k: u8, how: Join) {
     let p = Player::nth(k as u32);
     p.set_u8(g, Player::INDEX, k);
-    let mask = g.a5u8(ram::PLAYERS_MASK) | 1 << k;
-    g.set_a5u8(ram::PLAYERS_MASK, mask);
-    let state = if g.a5u8(ram::INPUT_RAW) != 0 {
+    let mask = ram::PLAYERS_MASK.get(g.b) | 1 << k;
+    ram::PLAYERS_MASK.set(g.b, mask);
+    let state = if ram::INPUT_RAW.get(g.b) != 0 {
         0x0004_0800
-    } else if g.a5u8(ram::SLOW_MODE) != 0 {
+    } else if ram::SLOW_MODE.get(g.b) != 0 {
         0x0004_0c00
     } else {
         0x0004_0000
@@ -379,8 +379,8 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
             p.set_u8(g, 0x164, spare);
         }
     }
-    let alive = g.a5u8(ram::PLAYERS_ALIVE).wrapping_add(1);
-    g.set_a5u8(ram::PLAYERS_ALIVE, alive);
+    let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_add(1);
+    ram::PLAYERS_ALIVE.set(g.b, alive);
     let strength = if how == Join::New { 0 } else { alive };
     g.c.a[0] = p.0;
     join_shockwave(g, p, strength);
@@ -437,8 +437,8 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
             g.c.a[0] = p.0;
             crate::call(g.c, g.b, SHOW_GAUGE);
         }
-        if g.a5u16(0x4ba) != 0 {
-            g.set_a5u16(0x4ba, 0);
+        if ram::SCROLL1_Y.get(g.b) != 0 {
+            ram::SCROLL1_Y.set(g.b, 0);
         }
     }
 }

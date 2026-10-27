@@ -421,13 +421,13 @@ fn turn_undead(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, Player::ACTIVE, 2);
-                if g.a5u8(ram::INPUT_MASK) & 0x40 != 0 {
-                    g.set_a5u8(ram::INPUT_MASK, 0x7f);
+                if ram::INPUT_MASK.get(g.b) & 0x40 != 0 {
+                    ram::INPUT_MASK.set(g.b, 0x7f);
                 }
                 p.set_u8(g, 0x1ea, 4);
                 p.set_u8(g, 0x1eb, 3);
                 p.set_u8(g, 0x1ec, 1);
-                g.set_a5u16(0x4ba, 0x100);
+                ram::SCROLL1_Y.set(g.b, 0x100);
                 for addr in rom::TURN_EFFECTS {
                     g.rom(addr, p);
                 }
@@ -441,11 +441,11 @@ fn turn_undead(g: &mut Ctx, p: Player) {
                 return;
             }
             p.set_u8(g, 0x1ea, 4);
-            g.set_a5u16(0x4ba, 0);
+            ram::SCROLL1_Y.set(g.b, 0);
             let lit = p.u8(g, 0x1ec) ^ 1;
             p.set_u8(g, 0x1ec, lit);
             if lit != 0 {
-                g.set_a5u16(0x4ba, 0x100);
+                ram::SCROLL1_Y.set(g.b, 0x100);
             }
             let flashes = p.u8(g, 0x1eb).wrapping_sub(1);
             p.set_u8(g, 0x1eb, flashes);
@@ -454,10 +454,10 @@ fn turn_undead(g: &mut Ctx, p: Player) {
             }
             next_step(g, p);
             p.set_u8(g, Player::ACTIVE, 1);
-            if g.a5u8(ram::INPUT_MASK) & 0x40 != 0 {
-                g.set_a5u8(ram::INPUT_MASK, 0xff);
+            if ram::INPUT_MASK.get(g.b) & 0x40 != 0 {
+                ram::INPUT_MASK.set(g.b, 0xff);
             }
-            g.set_a5u16(0x4ba, 0);
+            ram::SCROLL1_Y.set(g.b, 0);
             scare_undead(g, p);
         }
         6 => common::wait_then_stand(g, p),
@@ -475,7 +475,7 @@ const STYLE: items::Style = items::Style { cast_anim: 0x20, bolt_anim: 0x1f, spa
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         6 => items::throw_item(g, p, 0x1e, spawn::Thrown::F),
         7 => items::throw_item(g, p, 0x1e, spawn::Thrown::G),
@@ -698,7 +698,7 @@ fn prayer_storm(g: &mut Ctx, p: Player) {
     if countdown(g, p) {
         let flags = p.u8(g, Player::FLAGS) & !2;
         p.set_u8(g, Player::FLAGS, flags);
-        g.set_a5u16(0x4ba, 0);
+        ram::SCROLL1_Y.set(g.b, 0);
         common::end_spell(g, p);
         return;
     }
@@ -992,7 +992,7 @@ fn holy_damage(g: &mut Ctx, p: Player) {
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
                 p.set_u8(g, 0x18a, 1);
                 let loot = o.u8(g.b, 0x9a);
-                g.set_a5u8(0x4f, loot);
+                ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
@@ -1139,8 +1139,8 @@ fn bless_ally(g: &mut Ctx, p: Player) {
 /// reçoivent le drapeau de bonus (`POWERUP`).
 fn end_blessing(g: &mut Ctx, p: Player) {
     cov!();
-    g.set_a5u8(0x4a, 0);
-    g.set_a5u8(ram::PAUSE, 0);
+    ram::SPELL_FLAG.set(g.b, 0);
+    ram::PAUSE.set(g.b, 0);
     for q in Player::all() {
         q.set_u8(g, field::SPELL_FROZEN, 0);
         if q.u16(g, Player::POWERUP_TIMER) != 0 {

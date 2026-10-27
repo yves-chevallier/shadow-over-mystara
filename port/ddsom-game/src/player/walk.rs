@@ -4,10 +4,11 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use super::{ram, Ctx, Player};
-use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
+use crate::mem::{rd16, rts, wr16, wr8};
 use crate::objects::motion::{advance, AXIS_X, AXIS_Y, AXIS_Z};
 use crate::objects::Obj;
 use crate::{regs, Native};
+use crate::machine::Machine;
 
 /// Tables de vitesses (ROM) : un pointeur par personnage vers 16 couples (vx, vy) 8.8, un par
 /// combinaison de directions (bits 0..3 de `KEYS_HELD`).
@@ -43,7 +44,7 @@ pub fn set_speed(g: &mut Ctx, p: Player, tables: u32) {
 /// 0x39260 : vitesse de marche, selon les drapeaux de ralentissement et la classe de vitesse.
 pub fn walk_speed(g: &mut Ctx, p: Player) {
     cov!();
-    let tables = if p.u8(g, Player::SLOW) != 0 || g.a5u8(ram::SLOW_MODE) != 0 {
+    let tables = if p.u8(g, Player::SLOW) != 0 || ram::SLOW_MODE.get(g.b) != 0 {
         speeds::SLOW
     } else if p.u8(g, Player::SLOW_8A) != 0 {
         speeds::SLOW_B
@@ -101,10 +102,6 @@ pub fn move_z(g: &mut Ctx, p: Player) {
     advance(g.b, p.obj(), AXIS_Z);
 }
 
-/// Caméra qui cadre les joueurs : adresse de sa structure (position x en +8, y en +0xc).
-fn camera(b: &mut Cps2Bus) -> u32 {
-    A5 + if rd8(b, A5 + ram::USE_ALT_CAMERA) != 0 { 0x54e } else { 0x4fe }
-}
 
 /// Dernier bord touché : octet `+0x5a` (1 gauche, 2 droite).
 const EDGE_HIT: u32 = 0x5a;
@@ -114,7 +111,7 @@ const EDGE_HIT: u32 = 0x5a;
 /// mémorisé). Renvoie vrai si l'abscisse a été corrigée.
 pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
     cov!();
-    let cam = camera(b);
+    let cam = crate::objects::cull::camera(b);
     let cam_y = rd16(b, cam + 0xc) as i16;
     let y = rd16(b, p.at(0x10)) as i16;
     let (top, bottom) = (cam_y.wrapping_add(0xa4), cam_y.wrapping_add(0x28));
@@ -129,7 +126,7 @@ pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
 /// 0x35dc : seulement l'abscisse (entre camera.x + 0x20 et camera.x + 0x160). Vrai si corrigée.
 pub fn clamp_x(b: &mut Cps2Bus, p: Player) -> bool {
     cov!();
-    let cam = camera(b);
+    let cam = crate::objects::cull::camera(b);
     let cam_x = rd16(b, cam + 8) as i16;
     let x = rd16(b, p.at(0x08)) as i16;
     let (right, left) = (cam_x.wrapping_add(0x160), cam_x.wrapping_add(0x20));
@@ -149,7 +146,7 @@ pub fn clamp_x(b: &mut Cps2Bus, p: Player) -> bool {
 
 /// Entrée 68000 (0x35c0) : D0 = 1 si l'abscisse a été corrigée, A1 = caméra.
 fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let cam = camera(b);
+    let cam = crate::objects::cull::camera(b);
     c.d[0] = clamp_to_screen(b, Player(c.a[0])) as u32;
     c.a[1] = cam;
     rts(c, b);

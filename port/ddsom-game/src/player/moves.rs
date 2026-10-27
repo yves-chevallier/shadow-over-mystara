@@ -12,6 +12,7 @@ use super::walk::{clamp_x, crawl_speed, move_x, move_xy, move_xyz, move_xz, move
 use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
+use crate::machine::Machine;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
@@ -79,7 +80,7 @@ fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
 }
 
 fn dust_turn(g: &mut Ctx, p: Player) -> bool {
-    p.u8(g, Player::CHARACTER).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 3 == 0
+    p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3 == 0
 }
 
 // ---- course (action 6, 0x3573e) ----------------------------------------------------------------
@@ -308,7 +309,7 @@ pub fn pause(g: &mut Ctx, p: Player, last: u16) {
             }
         }
         4 | 8 => {
-            if g.a5u8(0x3d) != 0 {
+            if ram::PAUSE.get(g.b) != 0 {
                 animation::step(g, p);
                 return;
             }
@@ -433,7 +434,7 @@ fn climb_hold(g: &mut Ctx, p: Player) {
 
 /// `0x35f92` : choix du pas selon les directions maintenues (jeu gelé : descendre).
 fn climb_directions(g: &mut Ctx, p: Player) {
-    if g.a5u8(ram::FROZEN) != 0 {
+    if ram::FROZEN.get(g.b) != 0 {
         p.set_u8(g, Player::STEP, 6);
         return animation::start(g, p, 0x3d);
     }
@@ -465,7 +466,7 @@ fn climb_up(g: &mut Ctx, p: Player) {
             animation::step(g, p);
         }
         8 => {
-            let cam = if g.a5u8(ram::USE_ALT_CAMERA) != 0 { g.a5u16(0x55a) } else { g.a5u16(0x50a) };
+            let cam = if ram::USE_ALT_CAMERA.get(g.b) != 0 { ram::CAMERA_ALT_Y.get(g.b) } else { ram::CAMERA_Y.get(g.b) };
             let top = cam.wrapping_add(0x80);
             let height = p.u16(g, Obj::Y).wrapping_add(p.u16(g, Obj::Z));
             if height as i16 <= top as i16 {
@@ -480,7 +481,7 @@ fn climb_up(g: &mut Ctx, p: Player) {
 
 /// Pas 6 : descendre tant que bas est maintenu (ou jeu gelé) ; au sol, la pose.
 fn climb_down(g: &mut Ctx, p: Player) {
-    if g.a5u8(ram::FROZEN) == 0 {
+    if ram::FROZEN.get(g.b) == 0 {
         match p.u8(g, Player::KEYS_HELD) & 0xf {
             0 => {
                 climb_to_hold(g, p);
@@ -686,7 +687,7 @@ fn exit_walk(g: &mut Ctx, p: Player, timer: u8, vx: u32, vy: u32, facing: Option
     }
     p.set_u32(g, Obj::VX, vx);
     p.set_u32(g, Obj::VY, vy);
-    let anim = if g.a5u8(ram::SLOW_MODE) != 0 { 0x35 } else { anim };
+    let anim = if ram::SLOW_MODE.get(g.b) != 0 { 0x35 } else { anim };
     animation::start(g, p, anim);
 }
 
@@ -1252,7 +1253,7 @@ const BODY_BOXES: u32 = 0x11bffa;
 /// 0x374aa : un ennemi au sol, tourné dans le même sens que le joueur (donc de dos), saisissable et
 /// assez proche est saisi ; le joueur passe à l'attaque de sous-action 26.
 fn backstab(g: &mut Ctx, p: Player) -> bool {
-    if g.a5u8(ram::FROZEN) != 0 {
+    if ram::FROZEN.get(g.b) != 0 {
         return false;
     }
     for enemy in pools::ENEMY.iter() {

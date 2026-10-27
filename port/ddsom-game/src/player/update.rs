@@ -19,6 +19,7 @@ use super::{actions, checks, combos, effects, hurt, ram, scripted, Ctx, Player};
 use crate::mem::{rts, wr32, wr8};
 use crate::objects::lists;
 use crate::Native;
+use crate::machine::Machine;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
@@ -86,7 +87,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
         if p.u8(g, 0x16a) != 0 {
             return end_of_frame(g, p);
         }
-        if g.a5u8(ram::PAUSE) == 0 && p.u8(g, Player::POWER_10F) == 0 {
+        if ram::PAUSE.get(g.b) == 0 && p.u8(g, Player::POWER_10F) == 0 {
             status_effects(g, p);
         }
         match p.u8(g, Player::SUB) {
@@ -105,7 +106,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
         // l'aura de vitesse (+0x183) fait jouer l'image deux fois, sauf pendant une attaque 0xe
         if p.u8(g, Player::AURA_B) == 0
             || p.state(g) & !0xff == 0x0200_0e00
-            || g.a5u8(ram::SCENE) == 0x43
+            || ram::SCENE.get(g.b) == 0x43
         {
             return end_of_frame(g, p);
         }
@@ -159,9 +160,9 @@ fn end_of_frame(g: &mut Ctx, p: Player) {
 /// 0x353f4 : fin d'image.
 fn finish(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::SCENE) == 0x29
+    if ram::SCENE.get(g.b) == 0x29
         && p.u16(g, 0xc) == 0
-        && (g.a5u8(ram::FRAME_COUNTER).wrapping_add(p.u8(g, Player::INDEX)) & 0xf) == 0
+        && (ram::FRAME_COUNTER.get(g.b).wrapping_add(p.u8(g, Player::INDEX)) & 0xf) == 0
     {
         g.rom(rom::SCENE_29_HOOK, p);
     }
@@ -256,7 +257,7 @@ fn record_high_score(g: &mut Ctx, p: Player) {
         crate::mem::wr16(g.b, to + 6, v);
         write(g, from);
         let preset = match (name_a >> 24) as u8 {
-            0xff if g.a5u8(0x71) == 0 => Some(8 * character as u32),
+            0xff if ram::VERSION.get(g.b) == 0 => Some(8 * character as u32),
             0xff => Some(8 * (0xc + character as u32)),
             0xfe => Some(0x30),
             0xfd => Some(0x60),

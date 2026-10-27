@@ -46,6 +46,7 @@ pub mod magic_user;
 pub mod thief;
 
 use super::{Ctx, Player};
+use crate::machine::Machine;
 
 /// Une routine Rust d'un personnage : s'exécute pour une image du joueur.
 pub type CharacterFn = fn(&mut Ctx, Player);

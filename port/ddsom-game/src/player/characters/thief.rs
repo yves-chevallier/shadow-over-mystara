@@ -21,6 +21,8 @@ use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
 use crate::objects::Obj;
+use crate::player::ram;
+use crate::machine::Machine;
 
 /// Routines d'origine appelées telles quelles : effets joueur, objets créés et sons du voleur.
 mod rom {
@@ -678,7 +680,7 @@ const STYLE: items::Style = items::Style { cast_anim: 0x1d, bolt_anim: 0x1c, spa
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         0 => items::throw_item(g, p, 0x1a, spawn::Thrown::A),
         1 => items::throw_item(g, p, 0x1a, spawn::Thrown::B),

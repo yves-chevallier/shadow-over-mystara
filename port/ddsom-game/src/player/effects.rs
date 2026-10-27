@@ -7,6 +7,7 @@
 
 use super::{ram, Ctx, Player};
 use crate::mem::{rd32, wr32};
+use crate::machine::Machine;
 
 /// RAM de palette des personnages (deux octets par couleur, 16 couleurs par bloc).
 const PALETTE_RAM: u32 = 0x91_c000;
@@ -45,7 +46,7 @@ pub fn blink(g: &mut Ctx, p: Player) {
         return;
     }
     let mut flags = p.u8(g, Player::FLAGS) | 2;
-    let phase = g.a5u8(ram::FRAME_COUNTER).wrapping_add(p.u8(g, Player::INDEX)) & 3;
+    let phase = ram::FRAME_COUNTER.get(g.b).wrapping_add(p.u8(g, Player::INDEX)) & 3;
     if phase & 1 == 0 {
         flags &= !2;
     }
@@ -58,7 +59,7 @@ fn cycle_palette(g: &mut Ctx, p: Player, aura: u32, base: u32) {
     if p.u8(g, aura) == 0 {
         return;
     }
-    let tick = g.a5u8(ram::FRAME_COUNTER).wrapping_add(p.u8(g, Player::INDEX)) & 7;
+    let tick = ram::FRAME_COUNTER.get(g.b).wrapping_add(p.u8(g, Player::INDEX)) & 7;
     if tick != 0 {
         return;
     }
@@ -100,7 +101,7 @@ pub fn dying_countdown(g: &mut Ctx, p: Player) {
         return;
     }
     p.set_u16(g, Player::DYING_TIMER, (left - 1) as u16);
-    if g.a5u8(ram::FRAME_COUNTER) & 7 == 0 {
+    if ram::FRAME_COUNTER.get(g.b) & 7 == 0 {
         g.rom(DYING_EFFECT, p);
     }
 }

@@ -16,6 +16,7 @@ use super::states::{action, state};
 use super::walk::{clamp_to_screen, move_xy, walk_speed};
 use super::{animation, ram, Ctx, Player};
 use crate::mem::wr8;
+use crate::machine::Machine;
 
 /// Table des gestionnaires d'actions (mots : décalages signés relatifs à la table).
 const ACTION_TABLE: u32 = 0x35586;
@@ -73,7 +74,7 @@ fn stand_animation(g: &mut Ctx, p: Player) -> u16 {
             anim = if matches!(p.u8(g, Player::WEAPON_A), 8 | 0x18) { 3 } else { 0 };
         }
     }
-    if g.a5u8(ram::SLOW_MODE) != 0 {
+    if ram::SLOW_MODE.get(g.b) != 0 {
         anim = 0x35;
     }
     anim
@@ -96,9 +97,9 @@ pub fn act(g: &mut Ctx, p: Player) {
     if current == action::NO_TERRAIN_B || current == action::NO_TERRAIN_A {
         return;
     }
-    let scripted = g.a5u8(ram::INPUT_RAW) != 0;
+    let scripted = ram::INPUT_RAW.get(g.b) != 0;
     let skip_terrain = scripted
-        || (g.a5u8(ram::SCENE) == 4 && current == action::GRAB)
+        || (ram::SCENE.get(g.b) == 4 && current == action::GRAB)
         || current == action::NO_TERRAIN_C;
     if !skip_terrain {
         g.rom(rom::TERRAIN, p);
@@ -172,7 +173,7 @@ fn stand(g: &mut Ctx, p: Player) {
     let acted = turn_check(g, p) || attack_button(g, p) || jump_button(g, p);
     if !acted && p.u8(g, Player::KEYS_HELD) & 0xf != 0 {
         p.set_state(g, state::WALK.0);
-        if g.a5u8(ram::SLOW_MODE) == 0 {
+        if ram::SLOW_MODE.get(g.b) == 0 {
             let anim = if p.u8(g, Player::SLOW_8A) != 0 {
                 0x2f
             } else if p.u8(g, Player::SLOW) != 0 {
@@ -184,7 +185,7 @@ fn stand(g: &mut Ctx, p: Player) {
         }
         return;
     }
-    if g.a5u8(ram::SLOW_MODE) == 0 {
+    if ram::SLOW_MODE.get(g.b) == 0 {
         animation::step(g, p);
     }
 }
@@ -202,7 +203,7 @@ fn slow_switch(g: &mut Ctx, p: Player) {
 /// 0x3567a : marche.
 fn walk(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::SLOW_MODE) == 0 && p.class(g) == 4 {
+    if ram::SLOW_MODE.get(g.b) == 0 && p.class(g) == 4 {
         return walk_magic_user(g, p);
     }
     if p.u8(g, Player::KEYS_HELD) & 0xf == 0 {

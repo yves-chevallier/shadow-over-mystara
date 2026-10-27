@@ -21,6 +21,7 @@ use super::super::init::init_weapon_stats;
 use super::super::walk::{move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
+use crate::player::ram;
 
 /// Routines d'origine appelées telles quelles : effets joueur et sons du combattant.
 mod rom {
@@ -560,7 +561,7 @@ const STYLE: items::Style = items::Style { cast_anim: 0x25, bolt_anim: 0x24, spa
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         0 => items::throw_item(g, p, 0x22, spawn::Thrown::A),
         1 => items::throw_item(g, p, 0x22, spawn::Thrown::B),

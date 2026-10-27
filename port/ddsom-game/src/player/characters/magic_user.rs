@@ -21,6 +21,7 @@ use super::super::combos::clear_recognizers;
 use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
+use crate::player::ram;
 
 /// Routines d'origine appelées telles quelles : tirs, effets joueur, sons, palettes et effets d'écran.
 mod rom {
@@ -426,7 +427,7 @@ const CAST_19: items::Cast = items::Cast { prepare: common::nothing, ..items::CA
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         0 => items::throw_item(g, p, 0xf, spawn::Thrown::A),
         1 => items::throw_item(g, p, 0xf, spawn::Thrown::B),
@@ -683,8 +684,8 @@ fn frost_wait(g: &mut Ctx, p: Player) {
 fn frost_end(g: &mut Ctx, p: Player) {
     cov!();
     common::clear_spell_state(g);
-    g.set_a5u16(0x490, 2);
-    g.set_a5u8(0x48e, 0xc);
+    ram::FADE_DELAY.set(g.b, 2);
+    ram::FADE_PAGES.set(g.b, 0xc);
     g.c.d[0] = g.c.d[0] & 0xffff_0000 | 0xa000;
     g.rom(common::rom::PALETTE_FADE, p);
     common::undim_screen_mode(g, p, UNDIM);
@@ -1064,9 +1065,9 @@ const PORTAL_STRIKE: Strike = Strike {
 /// de l'écran et prend la vitesse (par distance, tous les 16 pixels) de la table `speeds`.
 fn aim_at_center(g: &mut Ctx, p: Player, speeds: u32, vz: u16, az: i16) {
     cov!();
-    let mut center = g.a5u16(0x506);
-    if g.a5u8(0x36) != 0 {
-        center = g.a5u16(0x556);
+    let mut center = ram::CAMERA_X.get(g.b);
+    if ram::USE_ALT_CAMERA.get(g.b) != 0 {
+        center = ram::CAMERA_ALT_X.get(g.b);
     }
     let center = center.wrapping_add(0xc0);
     let x = p.u16(g, Obj::X);
@@ -1375,7 +1376,7 @@ fn sacrifice(g: &mut Ctx, p: Player) {
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
                 p.set_u8(g, 0x18a, 1);
                 let loot = o.u8(g.b, 0x9a);
-                g.set_a5u8(0x4f, loot);
+                ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | kind as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);

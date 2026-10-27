@@ -20,6 +20,7 @@ use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
+use crate::machine::Machine;
 
 /// Octets de l'enregistrement joueur propres aux actions des personnages.
 pub mod field {
@@ -258,7 +259,7 @@ pub fn air_attack_pressed(g: &mut Ctx, p: Player) -> bool {
 /// l'arme 0xd et passe à l'action 0x26. Appelée à la fin d'un saut.
 pub fn curse_check(g: &mut Ctx, p: Player) {
     cov!();
-    if p.u8(g, Player::WEAPON_A) == 0xe && g.a5u8(0x56) > 0x7f {
+    if p.u8(g, Player::WEAPON_A) == 0xe && ram::CURSE_COUNT.get(g.b) > 0x7f {
         p.set_u8(g, Player::WEAPON_A, 0xd);
         p.set_state(g, 0x0200_2600);
         wr8(g.b, A5.wrapping_sub(0x5b82), 1);
@@ -345,9 +346,9 @@ pub fn freeze_others(g: &mut Ctx, p: Player) {
 /// Assombrit ou rétablit l'écran : démarre la tâche d'écran `program` (0x153e / 0x1536) après le
 /// fondu 0x1686. `mode` : 1 assombrir, 2 rétablir.
 fn screen_task(g: &mut Ctx, p: Player, mode: u16, program: u32, fade: bool) {
-    wr16(g.b, A5 + 0x490, mode);
-    wr8(g.b, A5 + 0x48e, 0xd);
-    wr8(g.b, A5 + 0x48f, 5);
+    ram::FADE_DELAY.set(g.b, mode);
+    ram::FADE_PAGES.set(g.b, 0xd);
+    ram::FADE_STEPS.set(g.b, 5);
     if fade {
         g.rom(rom::FADE, p);
     }
@@ -384,9 +385,9 @@ pub fn undim_screen_mode(g: &mut Ctx, p: Player, mode: u16) {
 pub fn begin_spell(g: &mut Ctx, p: Player, timer: Option<u16>) {
     cov!();
     next_step(g, p);
-    g.set_a5u8(ram::PAUSE, 1);
-    g.set_a5u8(0x4a, 1);
-    g.set_a5u16(0x4ba, 0);
+    ram::PAUSE.set(g.b, 1);
+    ram::SPELL_FLAG.set(g.b, 1);
+    ram::SCROLL1_Y.set(g.b, 0);
     if let Some(timer) = timer {
         p.set_u16(g, field::TIMER, timer);
     }
@@ -424,9 +425,9 @@ pub fn end_spell_keep_cancel_mode(g: &mut Ctx, p: Player, mode: u16) {
 /// Retombée des indicateurs de sort : indicateur et pause, ligne choisie, gel des quatre joueurs.
 pub fn clear_spell_state(g: &mut Ctx) {
     cov!();
-    g.set_a5u8(0x4a, 0);
-    g.set_a5u8(ram::PAUSE, 0);
-    g.set_a5u8(0x5b, 0);
+    ram::SPELL_FLAG.set(g.b, 0);
+    ram::PAUSE.set(g.b, 0);
+    ram::SPELL_ROW.set(g.b, 0);
     for k in 0..4 {
         Player::nth(k).set_u8(g, field::SPELL_FROZEN, 0);
     }
@@ -453,7 +454,7 @@ fn dust(g: &mut Ctx, p: Player, table: u32) {
 /// 0x3fa7c : poussière du freinage ou de la marche (une image sur quatre).
 pub fn dust_stand(g: &mut Ctx, p: Player) {
     cov!();
-    let phase = p.u8(g, Player::CHARACTER).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 3;
+    let phase = p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3;
     if phase == 0 {
         dust(g, p, tables::DUST_STAND);
     }
@@ -462,7 +463,7 @@ pub fn dust_stand(g: &mut Ctx, p: Player) {
 /// 0x3fac4 : poussière de la charge, tant que la vitesse horizontale dépasse 2 pixels par image.
 pub fn dust_run(g: &mut Ctx, p: Player) {
     cov!();
-    let phase = p.u8(g, Player::CHARACTER).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 3;
+    let phase = p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3;
     if phase != 0 {
         return;
     }
@@ -475,7 +476,7 @@ pub fn dust_run(g: &mut Ctx, p: Player) {
 /// 0x3fb1a : poussière du saut, une image sur deux (selon le numéro du joueur).
 pub fn dust_jump(g: &mut Ctx, p: Player) {
     cov!();
-    let phase = p.u8(g, Player::INDEX).wrapping_add(g.a5u8(ram::FRAME_COUNTER)) & 1;
+    let phase = p.u8(g, Player::INDEX).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 1;
     if phase == 0 {
         dust(g, p, tables::DUST_JUMP);
     }
@@ -556,7 +557,7 @@ fn face_toward(g: &mut Ctx, p: Player, q: Player) {
 /// 0x4175c : toutes les 8 images, la palette du lanceur prend l'un des trois blocs de couleurs du soin.
 pub fn heal_flicker(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(0x6d) & 7 != 0 {
+    if ram::VBLANK_FRAMES_LOW.get(g.b) & 7 != 0 {
         return;
     }
     let mut n = p.u8(g, 0x1ed) + 1;
@@ -1056,10 +1057,10 @@ pub fn cancel_cast(g: &mut Ctx, p: Player, spark: u16) {
 /// dégradé précédent est fini.
 pub fn flash_screen(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(0x48f) != 0 {
+    if ram::FADE_STEPS.get(g.b) != 0 {
         return;
     }
-    g.set_a5u8(0x48e, 0xc);
+    ram::FADE_PAGES.set(g.b, 0xc);
     let phase = (p.u8(g, 0x1eb) + 1) & 3;
     p.set_u8(g, 0x1eb, phase);
     let color: u16 = if phase & 2 != 0 { 0x2000 } else { 0xc000 };
@@ -1102,10 +1103,10 @@ pub fn intensity_keys(g: &mut Ctx, p: Player, base: u16) {
 /// Les quatre clignotements d'écran du sort de gel : `+0x4ba` vaut 0x100 trois fois sur quatre pas.
 pub fn blink_screen(g: &mut Ctx, p: Player) {
     cov!();
-    g.set_a5u16(0x4ba, 0);
+    ram::SCROLL1_Y.set(g.b, 0);
     let blinks = p.u8(g, 0x1ea);
     if blinks != 0 {
-        g.set_a5u16(0x4ba, 0x100);
+        ram::SCROLL1_Y.set(g.b, 0x100);
         p.set_u8(g, 0x1ea, blinks - 1);
     }
 }

@@ -16,6 +16,8 @@ use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::{regs, Native};
 use crate::objects::pools;
+use crate::player::ram;
+use crate::machine::Machine;
 
 /// Routines d'allocation d'origine (natives) : retenue levée si le pool est plein, A1 = l'emplacement.
 mod alloc {
@@ -237,7 +239,7 @@ pub fn swarm(g: &mut Ctx, p: Player, count: u32) {
             return;
         }
         wr16(g.b, A5.wrapping_sub(RESERVE), left - 1);
-        let scene = g.a5u8(super::ram::SCENE);
+        let scene = ram::SCENE.get(g.b);
         let made = create(g, p, &pools::PEFF, kind::SWARM);
         let Some(o) = made else { return };
         o.set_u16(g.b, field::LINK, p.0 as u16);
@@ -272,7 +274,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
 /// 0x50324 : cible du mur ; la réserve de murs de la scène (`A5 - 0x5fbe`) compte un de plus.
 pub fn wall_target(g: &mut Ctx, p: Player) -> Option<Obj> {
     cov!();
-    let scene = g.a5u8(super::ram::SCENE);
+    let scene = ram::SCENE.get(g.b);
     let o = effect(g, p, kind::WALL_TARGET, None, |g, o| o.set_u8(g.b, field::SCENE, scene))?;
     let walls = A5.wrapping_sub(0x5fbe);
     let old = rd8(g.b, walls);

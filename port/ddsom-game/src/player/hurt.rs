@@ -14,7 +14,7 @@ use crate::machine::Machine;
 use super::actions::to_stand;
 use super::walk::{clamp_to_screen, move_x, move_xyz, move_xz};
 use super::{animation, ram, Ctx, Player};
-use crate::mem::{wr16, wr8, A5};
+use crate::mem::{wr16, wr8};
 use crate::objects::anim::{load_entry, script_of};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
@@ -228,7 +228,7 @@ const HANDLERS: &[(u32, Handler)] = &[
         next_step(g, p);
         set_launch(g, p, 0x180, 0x400);
         face_attacker(g, p);
-        let anim = 0x16 + (g.a5u8(ram::FRAME_COUNTER) & 1) as u16;
+        let anim = 0x16 + (ram::FRAME_COUNTER.get(g.b) & 1) as u16;
         hurt_animation(g, p, anim);
         knock_down_if_dead(g, p);
     }),
@@ -239,7 +239,7 @@ const HANDLERS: &[(u32, Handler)] = &[
         if p.u16(g, Obj::Z) as i16 > 0 {
             next_step(g, p);
             set_launch_keep(g, p, 0x180, 0x400);
-            let anim = 0x16 + (g.a5u8(ram::FRAME_COUNTER) & 1) as u16;
+            let anim = 0x16 + (ram::FRAME_COUNTER.get(g.b) & 1) as u16;
             hurt_animation(g, p, anim);
             return face_attacker(g, p);
         }
@@ -256,7 +256,7 @@ const HANDLERS: &[(u32, Handler)] = &[
         }
         next_step(g, p);
         set_launch_keep(g, p, 0x200, 0x200);
-        let anim = 3 + (g.a5u8(ram::FRAME_COUNTER) & 1) as u16;
+        let anim = 3 + (ram::FRAME_COUNTER.get(g.b) & 1) as u16;
         hurt_animation(g, p, anim);
         face_attacker(g, p);
     }),
@@ -611,7 +611,7 @@ fn launch_b(g: &mut Ctx, p: Player) {
     next_step(g, p);
     set_launch(g, p, 0x200, 0x200);
     face_attacker(g, p);
-    let anim = if g.a5u8(ram::FRAME_COUNTER) & 1 != 0 { 0x17 } else { 0x16 };
+    let anim = if ram::FRAME_COUNTER.get(g.b) & 1 != 0 { 0x17 } else { 0x16 };
     hurt_animation(g, p, anim);
     knock_down_if_dead(g, p);
 }
@@ -746,7 +746,7 @@ fn start_slide(g: &mut Ctx, p: Player, vx: u16) {
 fn slide(g: &mut Ctx, p: Player) {
     cov!();
     move_x(g, p);
-    if p.u16(g, Obj::VX) != 0 && g.a5u8(ram::FRAME_COUNTER) & 1 != 0 {
+    if p.u16(g, Obj::VX) != 0 && ram::FRAME_COUNTER.get(g.b) & 1 != 0 {
         g.c.d[0] = 0;
         g.c.d[1] = 0;
         g.c.d[2] = 0;
@@ -818,7 +818,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
         }
         _ => {
             move_x(g, p);
-            if p.u16(g, Obj::VX) != 0 && g.a5u8(ram::FRAME_COUNTER) & 1 != 0 {
+            if p.u16(g, Obj::VX) != 0 && ram::FRAME_COUNTER.get(g.b) & 1 != 0 {
                 g.c.d[0] = 0;
                 g.c.d[1] = 0;
                 g.c.d[2] = 0;
@@ -872,7 +872,7 @@ fn get_up(g: &mut Ctx, p: Player) {
     }
     next_step(g, p);
     hurt_animation(g, p, 0x10);
-    let sound = if g.a5u8(ram::FRAME_COUNTER) & 2 != 0 { rom::GET_UP_SOUND_B } else { rom::GET_UP_SOUND_A };
+    let sound = if ram::FRAME_COUNTER.get(g.b) & 2 != 0 { rom::GET_UP_SOUND_B } else { rom::GET_UP_SOUND_A };
     g.rom(sound, p);
 }
 
@@ -953,7 +953,7 @@ fn crash_landing(g: &mut Ctx, p: Player) {
     g.c.d[0] = g.c.d[0] & 0xffff_0000 | 10;
     g.rom(0x2824, p);
     p.set_u32(g, Obj::Z, 0);
-    if g.a5u8(ram::FROZEN) == 0 {
+    if ram::FROZEN.get(g.b) == 0 {
         let hp = p.u16(g, Player::HP).wrapping_sub(p.u8(g, Player::TIMER_6F) as u16);
         p.set_u16(g, Player::HP, hp);
         if (hp as i16) <= 0 {
@@ -961,8 +961,8 @@ fn crash_landing(g: &mut Ctx, p: Player) {
             p.set_u16(g, Player::HP, 0);
             p.set_u16(g, Player::MAIN, 0x0400);
             g.rom(rom::DEATH_EFFECT, p);
-            let alive = g.a5u8(ram::PLAYERS_ALIVE).wrapping_sub(1);
-            g.set_a5u8(ram::PLAYERS_ALIVE, alive);
+            let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_sub(1);
+            ram::PLAYERS_ALIVE.set(g.b, alive);
         }
     }
     next_step(g, p);
@@ -979,7 +979,7 @@ fn hurled_out(g: &mut Ctx, p: Player) -> bool {
     if p.u8(g, Player::BLOCKED) != 0 {
         return true;
     }
-    let camera = A5 + if g.a5u8(ram::USE_ALT_CAMERA) != 0 { 0x54e } else { 0x4fe };
+    let camera = crate::objects::cull::camera(g.b);
     let gap = p.u16(g, Obj::X).wrapping_sub(crate::mem::rd16(g.b, camera + 8)).wrapping_sub(32);
     gap > 320
 }
@@ -1049,7 +1049,7 @@ fn hurled_landing(g: &mut Ctx, p: Player, anim: u16, effect: bool) {
 fn hurled_slide(g: &mut Ctx, p: Player, stop: u8) {
     cov!();
     move_x(g, p);
-    if p.u16(g, Obj::VX) != 0 && g.a5u8(ram::FRAME_COUNTER) & 1 != 0 {
+    if p.u16(g, Obj::VX) != 0 && ram::FRAME_COUNTER.get(g.b) & 1 != 0 {
         g.c.d[0] = 0;
         g.c.d[1] = 0;
         g.c.d[2] = 0;
@@ -1193,7 +1193,7 @@ fn dizzy(g: &mut Ctx, p: Player) {
         let pair = p.u32(g, Obj::VX).wrapping_neg();
         p.set_u32(g, Obj::VX, pair);
     }
-    let anim = if g.a5u8(ram::FRAME_COUNTER) & 1 != 0 { 23 } else { 22 };
+    let anim = if ram::FRAME_COUNTER.get(g.b) & 1 != 0 { 23 } else { 22 };
     hurt_animation(g, p, anim);
     p.set_u8(g, Player::HITSTOP, 0);
     knock_down_if_dead(g, p);
@@ -1447,12 +1447,12 @@ fn frozen_wait(g: &mut Ctx, p: Player, next: u16) {
 /// le joueur passe à l'état principal 4.
 fn frozen_end(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(0x42) != 0 {
+    if ram::FROZEN.get(g.b) != 0 {
         p.set_u8(g, 0x7e, 0x20);
         return recover(g, p);
     }
-    let left = g.a5u8(0x35).wrapping_sub(1);
-    wr8(g.b, A5 + 0x35, left);
+    let left = ram::PLAYERS_ALIVE.get(g.b).wrapping_sub(1);
+    ram::PLAYERS_ALIVE.set(g.b, left);
     p.set_u16(g, Player::MAIN, 0x0400);
     p.set_u8(g, Player::TIMER_6F, 60);
     next_step(g, p);
@@ -1517,7 +1517,7 @@ pub fn hurt(g: &mut Ctx, p: Player) {
     }
     let action = p.u8(g, Player::ACTION);
     jump_table(g, p, HURT_ACTIONS, action);
-    if g.a5u8(ram::INPUT_RAW) == 0 {
+    if ram::INPUT_RAW.get(g.b) == 0 {
         g.rom(rom::TERRAIN, p);
     }
     clamp_to_screen(g.b, p);

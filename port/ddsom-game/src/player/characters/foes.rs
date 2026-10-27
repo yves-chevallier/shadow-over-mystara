@@ -10,6 +10,7 @@ use super::common::call;
 use super::super::{Ctx, Player};
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
+use crate::player::ram;
 
 /// Barre de vie d'un monstre frappé (D0 = joueur et type, D1 = PV max, D2 = PV, D3 = classe).
 const HEALTH_BAR: u32 = 0x19dce;
@@ -141,7 +142,7 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
                 p.set_u8(g, 0x18a, 1);
                 let loot = o.u8(g.b, 0x9a);
-                g.set_a5u8(0x4f, loot);
+                ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);

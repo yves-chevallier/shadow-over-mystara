@@ -20,6 +20,8 @@ use super::super::combos::clear_recognizers;
 use super::super::walk::{move_x, move_xz};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
+use crate::player::ram;
+use crate::machine::Machine;
 
 /// Routines d'origine appelées telles quelles : effets joueur, sons, palettes et effets d'écran.
 mod rom {
@@ -596,7 +598,7 @@ const CAST_16: items::Cast = items::Cast {
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         0 => items::throw_item(g, p, 0x20, spawn::Thrown::A),
         1 | 0xb => items::throw_item(g, p, 0x20, spawn::Thrown::B),
