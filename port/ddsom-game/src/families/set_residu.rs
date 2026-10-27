@@ -64,19 +64,6 @@ pub fn attach_life_bar(b: &mut Cps2Bus, boss: crate::objects::Obj) -> Option<u32
     Some(clear_columns(b))
 }
 
-/// 0xd5ef8 avec les registres de l'original (A1, D0, D4, drapeaux).
-fn attach_life_bar_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let shown = rd8(b, A5 + LIFE_BAR_SHOWN);
-    c.flags_logic(shown as u32, Size::Byte);
-    if shown == 0 {
-        return rts(c, b);
-    }
-    if let Some(end) = attach_life_bar(b, crate::objects::Obj(c.a[0])) {
-        columns_regs(c, end);
-    }
-    rts(c, b);
-}
-
 /// 0xce668 : charge deux grilles de blocs (0x26d4, destination 0x917000) dont les numéros sont lus, par
 /// paire de mots, dans la table 0xce686 à l'indice D0 (numéro de personnage).
 fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -157,7 +144,6 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus),
 }
 
 pub const NATIVES: &[Native] = &[
-    native(0xd5ef8, "set_barre_de_vie", attach_life_bar_native, regs::ALL),
     native(0xd5f12, "set_efface_colonnes", erase_columns, regs::ALL),
     native(0xce668, "set_deux_grilles", load_two_grids, regs::ALL),
     native(0xd98b8, "set_vague_debut", |c, b| { wave_start(c, b); rts(c, b) }, regs::ALL),

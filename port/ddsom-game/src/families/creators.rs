@@ -734,32 +734,10 @@ pub fn in_right_half(b: &mut Cps2Bus, o: Obj) -> bool {
     (camera.wrapping_add(0xc0).wrapping_sub(o.u16(b, Obj::X)) as i16) <= 0
 }
 
-/// 0x57c66 avec les registres de l'original : D0 = 1 / 0, D1.w = l'écart, X de la soustraction.
-fn right_half(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (camera, _) = crate::ram::camera(b);
-    let x = rd16(b, c.a[0] + 8);
-    // `sub.w D0w,D1w` : X de la soustraction, que `moveq` garde
-    let gap = crate::ops::sub(c, x as u32, camera.wrapping_add(0xc0) as u32, Size::Word) as u16;
-    c.d[1] = c.d[1] & !0xffff | gap as u32;
-    c.d[0] = in_right_half(b, Obj(c.a[0])) as u32;
-    moved(c, c.d[0], Size::Long);
-    rts(c, b);
-}
-
 /// 0x5cdc6 : tirage au sort, vrai 10 fois sur 16 (bit (hasard & 0xf) du masque 0x03ff). Cœur.
 pub fn chance_10_16(b: &mut Cps2Bus) -> bool {
     let bit = crate::rng::random(b) & 0xf;
     0x03ff >> bit & 1 != 0
-}
-
-/// 0x5cdc6 avec les registres de l'original : D0 = 1 / 0, D1.w = 0x03ff.
-fn chance_10_16_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    crate::rng::random_68k(c, b);
-    let bit = c.d[0] as u16 & 0xf;
-    c.d[1] = c.d[1] & !0xffff | 0x03ff;
-    c.d[0] = (0x03ff >> bit & 1) as u32;
-    moved(c, c.d[0], Size::Long);
-    rts(c, b);
 }
 
 /// 0x97218 : boss : `+0x67` = 1, `+0x79` = 0x31, état 0x02020400.
@@ -791,7 +769,6 @@ pub const NATIVES: &[Native] = &[
     native(0xd9778, "musique_variante", scene_music, regs::d(0) | regs::a(1)),
     native(0xd99f8, "scene_rien", nothing, regs::ALL),
     native(0xce00a, "cree_set_15", set_15, CREATED),
-    native(0xd5f30, "cree_set_14", |c, b| { let me = Obj(c.a[0]); set_14_par(c, b, me); rts(c, b) }, CREATED),
     native(0xcc0ca, "scene_repart", |c, b| { restart_scene(c, b); rts(c, b) }, regs::a(0) | regs::d(7)),
     native(0x53e48, "cree_eclair_joueur", bolt_shot, CREATED | regs::d(6) | regs::a(4)),
     native(0x52578, "cree_tir_5", shot_5, CREATED | regs::d(0) | regs::d(1) | regs::a(4)),
@@ -804,10 +781,7 @@ pub const NATIVES: &[Native] = &[
     native(0x63ae0, "cree_ennemis_7", enemy_7_pair, CREATED | regs::d(0)),
     native(0x5f764, "cree_ennemi_5", enemy_5_at, CREATED),
     native(0x57c8c, "cree_ennemi_1", enemy_1_at, CREATED),
-    native(0x57c66, "ennemi_moitie_droite", right_half, regs::d(0) | regs::d(1) | regs::CCR),
-    native(0x5cdc6, "hasard_10_16", chance_10_16_native, regs::d(0) | regs::d(1) | regs::CCR),
     native(0x97218, "boss_etat_0202", boss_state_0202, regs::CCR),
-    native(0xd6952, "cree_set_15_b", |c, b| { let me = Obj(c.a[0]); set_15_b_par(c, b, me); rts(c, b) }, CREATED | regs::d(0)),
     native(0xc9760, "cree_set_5", set_5, CREATED),
     native(0xd6182, "colonne_vide", blank_column, regs::a(1) | regs::d(0) | regs::d(4)),
     native(0xceb46, "fiche_bonus", bonus_sheet, regs::a(1) | regs::a(4) | regs::d(0) | regs::d(1)),

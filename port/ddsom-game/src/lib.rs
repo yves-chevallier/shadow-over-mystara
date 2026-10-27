@@ -162,7 +162,6 @@ pub const NATIVES: &[Native] = &[
     config::VARIABLES,
     config::INIT,
     popups::ANIMER,
-    popups::EFFACER_TOUT,
     credits::ECRIRE_CHIFFRE,
     eeprom::COMPLET_PIECES_NATIF,
     eeprom::COMPLET_DEPARTS_NATIF,

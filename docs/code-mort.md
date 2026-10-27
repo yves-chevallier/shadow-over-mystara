@@ -149,3 +149,38 @@ défensif supprimé ; une adresse sans native arrête le jeu avec un diagnostic.
 
 Déjà signalée (`docs/noyau.md`, « Code mort de la machine à modes ») : sa tâche n'a pas d'étape d'entrée Rust ; le noyau
 s'arrête sur `entrée 19068 sans étape Rust` si elle était créée (jamais dans les 272 scénarios).
+
+## Lot IA : aides d'IA et derniers services
+
+### Routines du lot A sans native (section précédente) : validées par fuzz, deux erreurs corrigées
+
+`examples/fuzz_ia.rs` compare chaque routine transcrite à l'original (interpréteur 68000 seul, aucune native), sur des
+états tirés à partir d'une partie réelle (un ennemi ou un boss actif sert d'objet) : 0xa09ca, 0xa0ae0, 0xa114a,
+0x9f346, 0xa2d22, 0xad7c sans écart ; deux écarts corrigés :
+
+* **0xffda** (`enemy_lib::roll_ffda`) : la table des masques est en 0xfff4 (`move.w (0xfff4,PC,D0w)`, juste après le
+  `rts` de la routine), pas en 0xffd8 ; 112 tirages sur 200 différaient.
+* **0x10298** (`enemy_lib::palette_script`) : le `movem.l (A2)` lit l'espace **données** (A2 vient d'un `lea`), pas
+  l'espace programme.
+
+Les dix routines ajoutées par le lot D (`moves::curse_drop`, `dust_puffs`, `box_recoil`, sept créateurs de
+`player/spawn.rs`) étaient déjà validées par `fuzz_player` (section du lot D).
+
+### Natives des aides d'IA retirées (aucun appel par adresse)
+
+Après la conversion de leurs appelants (façade `enemy_lib`, familles, combat), plus aucun code Rust ni table de la
+ROM n'appelle par adresse les routines de `ai.rs` et `ai_aids.rs` : leurs natives (0x424e, 0x43ae, 0x43bc, 0x44ee,
+0x453c, 0x4544, 0xa4b4, 0xa4c2, 0xac3a, 0xfe5a, 0x1059e, 0xb5e0, 0x103d6, 0x1040c, 0x1050c, 0x10560, 0xfbae, 0xfbb0,
+0xe76c, 0xf0e8, 0xfffc, 0x103ba, 0xe886, 0xe914, 0xeff2, 0xf084, 0xfda2, 0xff54, 0x104a2, 0x10574, 0x105b6, 0xfc44,
+0xfd64, 0xfd8c, 0x103e0, 0x10428, 0x10450, 0x10474, 0x1047a, 0x104e0, 0xa470, 0x7f0c, 0x7ef4, 0x7f19c, 0x11654,
+0x1161c, 0x115e2, 0x67452, 0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118, 0x10112, 0x1172e, 0x11a36, 0xb648,
+0xb780, 0xbad6, 0xe2f6, 0xe7fa, 0x3e480) et celles des secousses (0x2824, 0x2860, 0x289c : la table de 0x4b172 de
+`peff_c` passe par `camera_modes::shake::of_routine`) sont supprimées ; les cœurs restent. Doublons supprimés :
+0x67452 (`nearest_player_in_box`, déjà réécrite en Rust par le lot A : `enemy_common::find_player`), 0x11654 et
+0x1161c (aides internes de 0x115e2). Les versions Rust du lot A qui doublaient des natives (`outside`,
+`facing_target`, `moving_forward`, `jitter_angle`, `init_hp_rank`, `hp_threshold`, `ai_gate`, `any_player_alive`)
+sont fondues avec les cœurs.
+
+Routines jamais atteintes par les scénarios mais réécrites et validées par `fuzz_ia` (300 tirages chacune, 0 écart) :
+0xe914 (point de marche atteint), 0xe7fa (point proche numéroté), 0xb068 (seconde table de parade), 0x103e0
+(animation de la variante), 0xf084 seule.

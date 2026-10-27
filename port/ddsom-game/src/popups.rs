@@ -21,7 +21,7 @@ use m68k::Cpu;
 
 use crate::mem::{prog16, rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::text::clear_cells;
-use crate::{regs, Native};
+use crate::Native;
 
 const VIDE: u16 = 0xffff;
 /// Pop-up courant (4 mots) ; la durée restante est le dernier.
@@ -228,26 +228,6 @@ pub fn effacer_tout(b: &mut Cps2Bus) -> u32 {
     }
     table
 }
-
-/// 0x19eb0 avec les registres de la boucle d'origine : D6.w = -1 (`dbf`, D6 haut à zéro : `moveq`), A2 = la table,
-/// A4 = hauteur de sa première case.
-fn effacer_tout_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    let table = effacer_tout(b);
-    c.d[6] = 0xffff;
-    c.a[2] = table;
-    c.a[4] = table + 3;
-}
-
-pub const EFFACER_TOUT: Native = Native {
-    entry: 0x19eb0,
-    name: "popups_effacer_tout",
-    run: |c, b| {
-        effacer_tout_68k(c, b);
-        rts(c, b);
-    },
-    touches_sound: false,
-    outputs: regs::d(6) | regs::a(2) | regs::a(4),
-};
 
 pub const ANIMER: Native = Native {
     entry: 0x19e20,
