@@ -132,6 +132,7 @@ etapes_des_taches! {
     Ending(crate::modes::ending::Etape),
     Gameover(crate::modes::gameover::Etape),
     // séquences de scène (tâche de partie)
+    Exit(crate::scene::exit::Etape),
     Blackout(crate::scene::blackout::Etape),
     Transition(crate::scene::transition::Etape),
     TransitionEarly(crate::scene::transition::early::Etape),

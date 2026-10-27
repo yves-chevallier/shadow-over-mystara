@@ -291,7 +291,6 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
     NATIVES
         .iter()
         .chain(exit::NATIVES)
-        .chain(exit::DISPATCH_TAILS)
         .chain(tally::NATIVES)
         .chain(bonus::NATIVES)
         .chain(characters::NATIVES)

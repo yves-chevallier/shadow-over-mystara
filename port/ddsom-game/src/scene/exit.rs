@@ -13,13 +13,13 @@
 //! 0xf5938, 0xf6492, 0xf792e, 0xf7ecc : décompte, bonus, intermède des personnages, boutique, fondu au noir)
 //! sont dans leurs propres modules ([`super::tally`], [`super::bonus`], [`super::characters`],
 //! [`super::shop`], [`super::blackout`]) ; ils sont appelés comme par l'aiguillage d'origine (`jsr (A1)`, son
-//! adresse de retour empilée) et cèdent souvent la main à l'ordonnanceur : la suite est alors une native posée
-//! à l'adresse de reprise d'origine, qui finit par revenir à l'aiguillage (`entrée + 10`, [`DISPATCH_TAILS`]).
+//! suite rangée dans les appels en cours) et cèdent souvent la main à l'ordonnanceur : la tâche reprend alors à
+//! une étape de leur module, qui finit par revenir à la fin d'aiguillage de la séquence (`entrée + 10`,
+//! [`Etape::DispatchTail`]).
 //!
 //! L'état final d'une séquence (`Leave`) prépare la scène suivante puis cède la main une fois
-//! (`0xa40`, quelques images) avant de finir par des appels sons (`0xc0c`, `0xe0882`) : la native
-//! s'interrompt à ce point en empilant l'adresse de reprise d'origine, où une autre native finit le
-//! travail (`RESUME_*`).
+//! (`0xa40`, quelques images) avant de finir par des appels sons (`0xc0c`, `0xe0882`) : la tâche reprend à une
+//! étape qui finit le travail ([`Etape`] : `Both`, `Sound`, `Command`, `Twice`).
 //!
 //! Les séquences 0, 6, 20, 29, 31 et 33 n'ont pas d'aiguillage par `jsr` : leurs états finissent eux-mêmes
 //! l'image (`Update::Nothing`). La séquence 27 devient la 29 quand `A5+0x66` est posé.
@@ -32,6 +32,7 @@ use super::{player, scratch, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::modes::Sequence as _;
 use crate::objects::Obj;
+use crate::taches::table::Suite;
 use crate::Native;
 use crate::objects::pools;
 
@@ -89,8 +90,8 @@ pub struct Ex<'a> {
     handed_off: bool,
     /// Adresse d'origine de la séquence en cours (pour lui céder la main).
     entry: u32,
-    /// Adresse où l'aiguillage d'origine reprend après l'état (`jsr (A1)`), vide pour la séquence 0.
-    dispatch_return: Option<u32>,
+    /// Où l'aiguillage d'origine reprend après l'état (`jsr (A1)`), vide pour la séquence 0.
+    dispatch_return: Option<Suite>,
     /// La mise à jour du monde faite dans l'état a laissé A0 sur un objet : l'aiguillage d'origine compare
     /// alors l'octet `+2` de cet objet (et non l'état de la séquence) à l'état final.
     a0_clobbered: bool,
@@ -221,13 +222,14 @@ impl<'a> Ex<'a> {
         self.x.jump_to(pc);
         self.handed_off = true;
     }
-    /// Cède la main à l'ordonnanceur pour `frames` images ; la reprise a lieu en `resume` (aucune si 0).
-    fn wait_frames(&mut self, frames: u32, resume: u32) {
+    /// Cède la main à l'ordonnanceur pour `frames` images ; la reprise a lieu à `resume` (sinon à la suite de
+    /// l'appelant).
+    fn wait_frames(&mut self, frames: u32, resume: Option<Etape>) {
         self.x.c.d[0] = frames;
         if let Some(back) = self.dispatch_return {
             self.x.push_return(back);
         }
-        if resume != 0 {
+        if let Some(resume) = resume {
             self.x.push_return(resume);
         }
         self.x.c.pc = call::WAIT;
@@ -425,7 +427,7 @@ fn run_sequence(ex: &mut Ex) {
             (s, (s.update != Nothing).then(|| ex.entry + 10))
         }
     };
-    ex.dispatch_return = dispatcher;
+    ex.dispatch_return = dispatcher.map(dispatch_tail_at);
     let step = ex.b8(blk::STEP);
     match sequence.states.get(step as usize / 4) {
         None => return ex.delegate(ex.entry),
@@ -613,67 +615,85 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         ex.call(addr);
     }
     let resume = match leave.tail {
-        Tail::Both => RESUME_BOTH_ENTRY,
-        Tail::Sound => RESUME_SOUND_ENTRY,
-        Tail::Command => RESUME_COMMAND_ENTRY,
-        Tail::Twice => RESUME_TWICE_ENTRY,
-        Tail::Jump => 0,
+        Tail::Both => Some(Etape::Both),
+        Tail::Sound => Some(Etape::Sound),
+        Tail::Command => Some(Etape::Command),
+        Tail::Twice => Some(Etape::Twice),
+        Tail::Jump => None,
     };
     ex.wait_frames(leave.frames, resume);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Reprises après la cession de l'état final
+// Reprises
 
-/// Adresses de reprise d'origine (instruction qui suit le `jsr 0xa40` de certains états finaux).
-const RESUME_BOTH_ENTRY: u32 = 0xf32cc;
-const RESUME_SOUND_ENTRY: u32 = 0xf481a;
-const RESUME_COMMAND_ENTRY: u32 = 0xf4b48;
-const RESUME_TWICE_ENTRY: u32 = 0xf3cec;
-const RESUME_TWICE_END_ENTRY: u32 = 0xf3cfa;
-
-fn resume_both(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut x = Ctx::new(c, b);
-    x.call(call::SOUND_C0C);
-    x.call(call::SOUND_E0882);
-    rts(x.c, x.b);
+/// Étapes de la sortie de scène : fins d'aiguillage des séquences (retour d'un état partagé qui a cédé la main) et
+/// reprises après la cession de l'état final.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Etape {
+    /// Fin d'aiguillage de la séquence d'indice donné (`entrée + 10`).
+    DispatchTail(u8),
+    /// `0xf32cc` : `0xc0c` puis `0xe0882`.
+    Both,
+    /// `0xf481a` : `0xc0c`.
+    Sound,
+    /// `0xf4b48` : `0xe0882`.
+    Command,
+    /// `0xf3cec` : `0xc0c`, puis deux images d'attente avant `TwiceEnd`.
+    Twice,
+    /// `0xf3cfa` : `0xe0882`.
+    TwiceEnd,
 }
 
-macro_rules! resume_native {
-    ($name:ident, $entry:expr, $run:expr) => {
-        pub const $name: Native = Native {
-            entry: $entry,
-            name: stringify!($name),
-            run: $run,
-            touches_sound: false,
-            outputs: 0,
-        };
-    };
+/// Entrées des aiguillages à `jsr (A1)`, par indice de séquence (la 27 a son aiguillage après un test de 10 octets).
+const DISPATCHERS: [(u8, u32); 29] = [
+    (1, 0xf32d8), (2, 0xf33fe), (3, 0xf3594), (4, 0xf3686), (5, 0xf3812), (7, 0xf39f4), (8, 0xf3b18),
+    (9, 0xf3c0a), (10, 0xf3d00), (11, 0xf3e3c), (12, 0xf3f2e), (13, 0xf4020), (14, 0xf4176), (15, 0xf434a),
+    (16, 0xf4480), (17, 0xf455e), (18, 0xf464a), (19, 0xf4738), (21, 0xf493a), (22, 0xf4a68), (23, 0xf4b4e),
+    (25, 0xf4c6e), (26, 0xf4da2), (27, 0xf4ea4), (28, 0xf4f9c), (30, 0xf5390), (32, 0xf565e), (34, 0xf52a4),
+    (35, 0xf5782),
+];
+
+/// Fin d'aiguillage à l'adresse `at` (`entrée + 10`).
+fn dispatch_tail_at(at: u32) -> Suite {
+    match DISPATCHERS.iter().find(|&&(_, entry)| entry + 10 == at) {
+        Some(&(index, _)) => Etape::DispatchTail(index).into(),
+        None => Suite::Adresse(at),
+    }
 }
 
-resume_native!(RESUME_BOTH, RESUME_BOTH_ENTRY, resume_both);
-resume_native!(RESUME_SOUND, RESUME_SOUND_ENTRY, |c, b| {
-    let mut x = Ctx::new(c, b);
-    x.call(call::SOUND_C0C);
-    rts(x.c, x.b);
-});
-resume_native!(RESUME_COMMAND, RESUME_COMMAND_ENTRY, |c, b| {
-    let mut x = Ctx::new(c, b);
-    x.call(call::SOUND_E0882);
-    rts(x.c, x.b);
-});
-resume_native!(RESUME_TWICE, RESUME_TWICE_ENTRY, |c, b| {
-    let mut x = Ctx::new(c, b);
-    x.call(call::SOUND_C0C);
-    x.c.d[0] = 2;
-    x.push_return(RESUME_TWICE_END_ENTRY);
-    x.c.pc = call::WAIT;
-});
-resume_native!(RESUME_TWICE_END, RESUME_TWICE_END_ENTRY, |c, b| {
-    let mut x = Ctx::new(c, b);
-    x.call(call::SOUND_E0882);
-    rts(x.c, x.b);
-});
+impl Etape {
+    /// Adresse que l'original reprend à cette étape.
+    pub fn adresse(self) -> u32 {
+        match self {
+            Etape::DispatchTail(index) => DISPATCHERS.iter().find(|d| d.0 == index).expect("aiguillage").1 + 10,
+            Etape::Both => 0xf32cc,
+            Etape::Sound => 0xf481a,
+            Etape::Command => 0xf4b48,
+            Etape::Twice => 0xf3cec,
+            Etape::TwiceEnd => 0xf3cfa,
+        }
+    }
+
+    pub fn pas(self, x: &mut Ctx) -> crate::modes::Flow {
+        match self {
+            Etape::DispatchTail(index) => dispatch_tail(x, index),
+            Etape::Both => {
+                x.call(call::SOUND_C0C);
+                x.call(call::SOUND_E0882);
+            }
+            Etape::Sound => x.call(call::SOUND_C0C),
+            Etape::Command | Etape::TwiceEnd => x.call(call::SOUND_E0882),
+            Etape::Twice => {
+                x.call(call::SOUND_C0C);
+                x.c.d[0] = 2;
+                crate::kernel::attendre(x.c, x.b, Etape::TwiceEnd);
+                return crate::modes::Flow::Yield;
+            }
+        }
+        crate::modes::Flow::Done
+    }
+}
 
 pub const PHASE_16: Native = Native {
     entry: 0xf3142,
@@ -689,36 +709,14 @@ pub const PHASE_16: Native = Native {
 
 /// Fin d'image de l'aiguillage d'origine d'une séquence (`entrée + 10` : `cmpi.b #dernier,2(A0)`, puis la mise à
 /// jour), où reviennent les reprises après une cession. A0 est celui que l'état a laissé.
-fn dispatch_tail(c: &mut Cpu, b: &mut Cps2Bus, index: u8) {
+fn dispatch_tail(x: &mut Ctx, index: u8) {
     let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("séquence réécrite") };
-    let mut ex = Ex { x: Ctx::new(c, b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: true };
+    let mut ex = Ex { x: Ctx::new(x.c, x.b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: true };
     ex.x.c.a[5] = A5;
     finish_frame(&mut ex, sequence);
-    rts(ex.x.c, ex.x.b);
 }
 
-macro_rules! dispatch_tails {
-    ($($index:expr => $entry:expr),* $(,)?) => {
-        &[$(Native {
-            entry: $entry + 10,
-            name: "scene_exit_dispatch_tail",
-            run: |c, b| dispatch_tail(c, b, $index),
-            touches_sound: false,
-            outputs: 0,
-        }),*]
-    };
-}
-
-/// Les fins d'aiguillage des séquences à `jsr (A1)` (la 27 a son aiguillage après un test de 4 octets).
-pub const DISPATCH_TAILS: &[Native] = dispatch_tails![
-    1 => 0xf32d8, 2 => 0xf33fe, 3 => 0xf3594, 4 => 0xf3686, 5 => 0xf3812, 7 => 0xf39f4, 8 => 0xf3b18,
-    9 => 0xf3c0a, 10 => 0xf3d00, 11 => 0xf3e3c, 12 => 0xf3f2e, 13 => 0xf4020, 14 => 0xf4176, 15 => 0xf434a,
-    16 => 0xf4480, 17 => 0xf455e, 18 => 0xf464a, 19 => 0xf4738, 21 => 0xf493a, 22 => 0xf4a68, 23 => 0xf4b4e,
-    25 => 0xf4c6e, 26 => 0xf4da2, 27 => 0xf4ea4, 28 => 0xf4f9c, 30 => 0xf5390, 32 => 0xf565e, 34 => 0xf52a4,
-    35 => 0xf5782,
-];
-
-pub const NATIVES: &[Native] = &[PHASE_16, RESUME_BOTH, RESUME_SOUND, RESUME_COMMAND, RESUME_TWICE, RESUME_TWICE_END];
+pub const NATIVES: &[Native] = &[PHASE_16];
 
 // ---------------------------------------------------------------------------------------------
 // Les séquences (indice = numéro de séquence / 2 ; voir `docs/scenes.md` pour les scènes)
