@@ -220,39 +220,18 @@ impl Default for Emplacement {
     }
 }
 
-/// Ce qu'une tâche garde d'un appel en cours, à la place de sa pile 68000. Quand un pas Rust appelle un sous-programme
-/// natif qui peut céder la main (fondu, écran noir, gestionnaire d'écran...), la suite de l'appelant est rangée ici
-/// au lieu d'une adresse de retour empilée, de même que ce que le sous-programme sauve pendant qu'il cède (registres,
-/// valeur) : à chaque cession, la pile 68000 de la tâche peut ainsi rester vide, et sa reprise ne dépend plus que de
-/// la table (adresse de la native de reprise, registres, cadres).
+/// Un appel en cours d'une tâche, à la place de sa pile 68000. Quand un pas Rust appelle un sous-programme qui peut
+/// céder la main (fondu, écran noir, gestionnaire d'écran...), la suite de l'appelant est rangée ici au lieu d'une
+/// adresse de retour empilée (ce que le sous-programme garde pendant qu'il cède est dans son étape) : à chaque
+/// cession, la pile 68000 de la tâche reste ainsi vide, et sa reprise ne dépend plus que de la table (étape ou
+/// native de reprise, registres, cadres).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cadre {
     /// Pointeur de pile 68000 quand le cadre a été ouvert : il revient à l'appelé qui rend la main avec cette pile (un
     /// appel 68000 imbriqué a toujours une pile plus basse, son adresse de retour y étant empilée).
     pub pile: u32,
-    pub contenu: Contenu,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Contenu {
-    /// Appel en cours : quand l'appelé revient (`rts` d'une native, ou cession terminale `jmp 0xa40` de l'original),
-    /// la tâche continue à cette suite.
-    Appel(Suite),
-    /// Registres sauvés à l'entrée d'un sous-programme (`movem.l D0-D7/A0-A6,-(SP)`), rendus à sa sortie.
-    Registres { d: [u32; 8], a: [u32; 7] },
-    /// Valeur gardée d'une cession à l'autre (`move.l D0,-(SP)` de l'original).
-    Valeur(u32),
-}
-
-impl Contenu {
-    /// Ce que l'original aurait empilé, en longs, du plus bas au plus haut.
-    fn longs(self) -> Vec<u32> {
-        match self {
-            Contenu::Appel(s) => vec![s.adresse()],
-            Contenu::Valeur(v) => vec![v],
-            Contenu::Registres { d, a } => d.into_iter().chain(a).collect(),
-        }
-    }
+    /// Quand l'appelé revient (`rts` d'une native, ou cession terminale `jmp 0xa40`), la tâche continue à cette suite.
+    pub suite: Suite,
 }
 
 /// Profondeur maximale des appels en cours d'une tâche (4 dans le jeu : partie, phase, séquence, fondu).
@@ -267,7 +246,7 @@ pub struct Cadres {
 
 impl Default for Cadres {
     fn default() -> Self {
-        Cadres { liste: [Cadre { pile: 0, contenu: Contenu::Valeur(0) }; PROFONDEUR], n: 0 }
+        Cadres { liste: [Cadre { pile: 0, suite: Suite::Adresse(0) }; PROFONDEUR], n: 0 }
     }
 }
 
@@ -298,12 +277,12 @@ impl Cadres {
 
     /// Des cadres plus anciens que ceux ouverts à la hauteur `avant` sont repris de la pile 68000, qui remonte à
     /// `apres` : ils passent sous ces cadres plus récents, qui suivent la pile.
-    fn glisser_dessous(&mut self, avant: u32, apres: u32, repris: &[Contenu]) {
+    fn glisser_dessous(&mut self, avant: u32, apres: u32, repris: &[Suite]) {
         let i = self.liste[..self.n].iter().position(|k| k.pile == avant).unwrap_or(self.n);
         let recents: Vec<Cadre> = self.liste[i..self.n].to_vec();
         self.n = i;
-        for &contenu in repris {
-            self.empiler(Cadre { pile: apres, contenu });
+        for &suite in repris {
+            self.empiler(Cadre { pile: apres, suite });
         }
         for k in recents {
             self.empiler(Cadre { pile: apres, ..k });
@@ -313,7 +292,7 @@ impl Cadres {
     /// Retour d'un appelé dont la pile 68000 est `pile` : la suite de l'appel en cours, s'il lui correspond.
     fn retour(&mut self, pile: u32) -> Option<Suite> {
         match self.sommet()? {
-            Cadre { pile: p, contenu: Contenu::Appel(suite) } if p == pile => {
+            Cadre { pile: p, suite } if p == pile => {
                 self.n -= 1;
                 Some(suite)
             }
@@ -330,8 +309,8 @@ pub struct Table {
     /// Piles libres : la dernière est la prochaine donnée (le tas FF005A de l'original, rempli par `boot_init`).
     pub piles: Vec<u32>,
     /// Cadres remis sur la pile 68000 pour du code d'origine et pas encore repris (voir [`relever`]) : emplacement,
-    /// adresse du plus récent sur la pile, contenus du plus ancien au plus récent.
-    remis: Vec<(usize, u32, Vec<Contenu>)>,
+    /// adresse du plus récent sur la pile, suites du plus ancien au plus récent.
+    remis: Vec<(usize, u32, Vec<Suite>)>,
 }
 
 impl Table {
@@ -457,20 +436,7 @@ fn table_si(b: &mut Cps2Bus) -> Option<&mut Table> {
 /// Un pas Rust de la tâche courante appelle un sous-programme natif (qui peut céder la main) : quand celui-ci reviendra,
 /// la tâche continuera à `suite`. Rien n'est empilé sur la pile 68000.
 pub fn appeler(c: &Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) {
-    garder(c, b, Contenu::Appel(suite.into()));
-}
-
-/// Garde des registres ou une valeur pendant que la tâche courante cède la main (à la place de la pile 68000).
-pub fn garder(c: &Cpu, b: &mut Cps2Bus, contenu: Contenu) {
-    table(b).cadres().empiler(Cadre { pile: c.a[7], contenu });
-}
-
-/// Reprend ce que [`garder`] a gardé, à la même hauteur de pile.
-pub fn reprendre(c: &Cpu, b: &mut Cps2Bus) -> Contenu {
-    match table(b).cadres().depiler() {
-        Some(Cadre { pile, contenu }) if pile == c.a[7] && !matches!(contenu, Contenu::Appel(_)) => contenu,
-        cadre => panic!("tâche {} : rien de gardé à la pile {:x} ({cadre:x?})", table(b).courante, c.a[7]),
-    }
+    table(b).cadres().empiler(Cadre { pile: c.a[7], suite: suite.into() });
 }
 
 /// Retour d'un sous-programme (`rts`, ou adresse de reprise d'une enveloppe de cession) : la suite de l'appel en cours
@@ -489,9 +455,9 @@ pub fn depiler_retour(c: &mut Cpu, b: &mut Cps2Bus) -> Suite {
 /// Le code d'origine va s'exécuter avec la pile actuelle (appel `call_at`, `jmp` d'un pas Rust, native remplacée par
 /// son original) : il ne connaît que la pile 68000, où il revient par `rts`, relit ce qu'il a sauvé, et peut même
 /// dépiler les retours de ses appelants pour revenir plus haut. Les cadres ouverts à la hauteur de pile actuelle y sont
-/// donc remis, comme l'original les aurait empilés (retours, registres, valeurs). Rend ce qui a été remis, du plus
-/// ancien au plus récent.
-pub fn mettre_sur_la_pile(c: &mut Cpu, b: &mut Cps2Bus) -> Vec<Contenu> {
+/// donc remis, comme l'original les aurait empilés (adresses de retour). Rend ce qui a été remis, du plus ancien au plus
+/// récent.
+pub fn mettre_sur_la_pile(c: &mut Cpu, b: &mut Cps2Bus) -> Vec<Suite> {
     let pile = c.a[7];
     if c.sr & 0x2000 != 0 {
         return Vec::new();
@@ -502,14 +468,12 @@ pub fn mettre_sur_la_pile(c: &mut Cpu, b: &mut Cps2Bus) -> Vec<Contenu> {
     let mut remis = Vec::new();
     while let Some(cadre) = cadres.sommet().filter(|k| k.pile == pile) {
         cadres.depiler();
-        remis.push(cadre.contenu);
+        remis.push(cadre.suite);
     }
     remis.reverse();
-    for contenu in &remis {
-        for v in contenu.longs().into_iter().rev() {
-            c.a[7] = c.a[7].wrapping_sub(4);
-            wr32(b, c.a[7], v);
-        }
+    for suite in &remis {
+        c.a[7] = c.a[7].wrapping_sub(4);
+        wr32(b, c.a[7], suite.adresse());
     }
     if !remis.is_empty() {
         table(b).remis.push((k, c.a[7], remis.clone()));
@@ -522,36 +486,21 @@ pub fn mettre_sur_la_pile(c: &mut Cpu, b: &mut Cps2Bus) -> Vec<Contenu> {
 /// à cette étape.
 pub fn etape_depilee(b: &Cps2Bus, pc: u32) -> Option<Etape> {
     let t = lire(b)?;
-    t.remis.iter().filter(|r| r.0 == t.courante).flat_map(|r| r.2.iter()).find_map(|c| match *c {
-        Contenu::Appel(Suite::Etape(e)) if e.adresse() == pc => Some(e),
+    t.remis.iter().filter(|r| r.0 == t.courante).flat_map(|r| r.2.iter()).find_map(|s| match *s {
+        Suite::Etape(e) if e.adresse() == pc => Some(e),
         _ => None,
     })
 }
 
-/// Relit sur la pile 68000, à partir de `adresse` (le plus récent est le plus bas), des cadres de mêmes sortes que
-/// `modeles` (du plus ancien au plus récent). Rend leurs contenus, dans le même ordre, et l'adresse qui suit le plus
-/// ancien.
-fn relire(b: &mut Cps2Bus, mut adresse: u32, modeles: &[Contenu]) -> (Vec<Contenu>, u32) {
+/// Relit sur la pile 68000, à partir de `adresse` (le plus récent est le plus bas), autant de retours que `modeles`
+/// (du plus ancien au plus récent) : une étape revient telle quelle si le code d'origine n'a pas changé son adresse.
+/// Rend les suites, dans le même ordre, et l'adresse qui suit la plus ancienne.
+fn relire(b: &mut Cps2Bus, mut adresse: u32, modeles: &[Suite]) -> (Vec<Suite>, u32) {
     let mut relus = Vec::with_capacity(modeles.len());
     for modele in modeles.iter().rev() {
-        let mut long = || {
-            let v = rd32(b, adresse);
-            adresse = adresse.wrapping_add(4);
-            v
-        };
-        relus.push(match *modele {
-            // une étape remise sur la pile revient telle quelle si le code d'origine n'a pas changé son adresse
-            Contenu::Appel(s) => Contenu::Appel(match long() {
-                a if a == s.adresse() => s,
-                a => Suite::Adresse(a),
-            }),
-            Contenu::Valeur(_) => Contenu::Valeur(long()),
-            Contenu::Registres { .. } => {
-                let (mut d, mut a) = ([0; 8], [0; 7]);
-                d.iter_mut().chain(a.iter_mut()).for_each(|r| *r = long());
-                Contenu::Registres { d, a }
-            }
-        });
+        let a = rd32(b, adresse);
+        adresse = adresse.wrapping_add(4);
+        relus.push(if a == modele.adresse() { *modele } else { Suite::Adresse(a) });
     }
     relus.reverse();
     (relus, adresse)
@@ -559,7 +508,7 @@ fn relire(b: &mut Cps2Bus, mut adresse: u32, modeles: &[Contenu]) -> (Vec<Conten
 
 /// Le code d'origine appelé par `call_at` est revenu normalement : les cadres que [`mettre_sur_la_pile`] avait remis
 /// sur la pile 68000 en sont repris (relus, au cas où il les aurait modifiés).
-pub fn reprendre_de_la_pile(c: &mut Cpu, b: &mut Cps2Bus, remis: &[Contenu]) {
+pub fn reprendre_de_la_pile(c: &mut Cpu, b: &mut Cps2Bus, remis: &[Suite]) {
     if remis.is_empty() {
         return;
     }
@@ -569,8 +518,8 @@ pub fn reprendre_de_la_pile(c: &mut Cpu, b: &mut Cps2Bus, remis: &[Contenu]) {
     if let Some(i) = t.remis.iter().rposition(|r| r.0 == k && r.1 == bas) {
         t.remis.remove(i);
     }
-    for contenu in relus {
-        t.cadres().empiler(Cadre { pile: haut, contenu });
+    for suite in relus {
+        t.cadres().empiler(Cadre { pile: haut, suite });
     }
     c.a[7] = haut;
 }
@@ -609,18 +558,18 @@ pub fn relever(c: &mut Cpu, b: &mut Cps2Bus, reprise: Suite) {
         if pile < t.remis[i].1 {
             return;
         }
-        let (_, bas, contenus) = t.remis.remove(i);
+        let (_, bas, suites) = t.remis.remove(i);
         // les plus récents, du bas de la zone jusqu'à la pile, ont été dépilés par le code d'origine
         let mut adresse = bas;
-        let mut restants = contenus.len();
+        let mut restants = suites.len();
         while adresse < pile && restants > 0 {
             restants -= 1;
-            adresse += 4 * contenus[restants].longs().len() as u32;
+            adresse += 4;
         }
         if adresse != pile || restants == 0 {
             continue;
         }
-        let (repris, haut) = relire(b, pile, &contenus[..restants]);
+        let (repris, haut) = relire(b, pile, &suites[..restants]);
         table(b).cadres().glisser_dessous(pile, haut, &repris);
         c.a[7] = haut;
     }
@@ -799,15 +748,13 @@ mod tests {
     #[test]
     fn un_appel_en_cours_ne_revient_qu_a_sa_pile() {
         let mut k = Cadres::default();
-        k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Appel(Suite::Adresse(0x1341a)) });
-        k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Appel(Suite::Adresse(0x1376e)) });
+        k.empiler(Cadre { pile: 0x1000, suite: Suite::Adresse(0x1341a) });
+        k.empiler(Cadre { pile: 0x1000, suite: Suite::Adresse(0x1376e) });
         // un appel 68000 imbriqué revient avec une pile plus basse (son adresse de retour y est empilée)
         assert_eq!(k.retour(0xffc), None);
         assert_eq!(k.retour(0x1000), Some(Suite::Adresse(0x1376e)));
         assert_eq!(k.retour(0x1000), Some(Suite::Adresse(0x1341a)));
         assert_eq!(k.retour(0x1000), None);
-        k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Valeur(1) });
-        assert_eq!(k.retour(0x1000), None, "une valeur gardée n'est pas un retour");
     }
 
     #[test]

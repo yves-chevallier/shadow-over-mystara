@@ -5,14 +5,14 @@
 //! dans l'état Rust de la tâche pour que l'ordonnanceur appelle ses pas directement : 0, la reprise et les registres
 //! suffisent ; sinon des adresses de retour (appels en cours) ou des registres sauvés par la tâche elle-même. Les
 //! adresses de retour sur la pile sont listées, et les appels en cours tenus en Rust (`taches::table::Cadre`) :
-//! `>suite` pour un appel, `R` pour des registres sauvés, `=v` pour une valeur gardée.
+//! `>suite` pour un appel (ce qu'un sous-programme garde pendant qu'il cède est dans son étape).
 //!
 //! Le 68000 restant s'exécute pas à pas, vérifié : une instruction qui dépilerait un appel en cours tenu en Rust
 //! arrête l'outil (`taches::table::verifier_68000`).
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use ddsom_game::taches::table::{lire, Contenu, Etat};
+use ddsom_game::taches::table::{lire, Etat};
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -49,11 +49,7 @@ fn main() {
                 let cadres: Vec<String> = e
                     .cadres
                     .iter()
-                    .map(|k| match k.contenu {
-                        Contenu::Appel(suite) => format!(">{:x}", suite.adresse()),
-                        Contenu::Registres { .. } => "R".into(),
-                        Contenu::Valeur(v) => format!("={v:x}"),
-                    })
+                    .map(|k| format!(">{:x}", k.suite.adresse()))
                     .collect();
                 let entree = vus.entry((nom, c.pc, profondeur, cadres.join(" "))).or_insert_with(|| {
                     let long = |a: u32| (m.bus.ram[(a as usize & 0xffff) / 2] as u32) << 16 | m.bus.ram[(a as usize & 0xffff) / 2 + 1] as u32;

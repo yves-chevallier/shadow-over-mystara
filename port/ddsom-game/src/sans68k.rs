@@ -251,7 +251,7 @@ fn arreter(c: &Cpu, b: &mut Cps2Bus, cause: String) -> ! {
     if let Some(t) = lire(b) {
         let k = t.courante;
         let e = &t.emplacements[k];
-        let cadres: Vec<String> = e.cadres.iter().map(|k| format!("{:x?}@{:x}", k.contenu, k.pile)).collect();
+        let cadres: Vec<String> = e.cadres.iter().map(|k| format!("{:x?}@{:x}", k.suite, k.pile)).collect();
         m += &format!(" ; tâche {k} ({:?}, {:?}) ; cadres [{}]", e.tache, e.etat, cadres.join(" "));
     }
     let pile: Vec<String> = (0..6).map(|i| format!("{:x}", rd32(b, c.a[7].wrapping_add(4 * i)))).collect();
