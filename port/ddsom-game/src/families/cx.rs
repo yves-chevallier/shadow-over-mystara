@@ -213,21 +213,29 @@ impl<'a> Cx<'a> {
     }
 
     // --- objets -------------------------------------------------------------------------------
+    // Fonctions pures : les registres que laissaient les routines d'origine (A1, D6, D0, D1, A4, drapeaux) sont prouvés
+    // morts pour les gestionnaires (validation complète avec `DDSOM_POISON`, docs/guide-refactorisation.md).
+
 
     /// Alloue un objet dans `pool` : l'emplacement réservé (classe écrite, pas encore actif), ou `None` si le pool
     /// est plein.
     pub fn alloc(&mut self, pool: &Pool) -> Option<Obj> {
-        pool.alloc_68k(self.c, self.b)
+        pool.alloc(self.b)
     }
 
     /// Allocation dont l'original ne teste pas l'échec (voir `Pool::alloc_unchecked`, glitch d'origine).
     pub fn alloc_unchecked(&mut self, pool: &Pool) -> Obj {
-        pool.alloc_unchecked_68k(self.c, self.b)
+        pool.alloc_unchecked(self.b)
+    }
+
+    /// Allocation dont l'échec rend l'A1 que l'original laisse (voir `Pool::alloc_or_leftover`).
+    pub fn alloc_or_leftover(&mut self, pool: &Pool) -> Result<Obj, Obj> {
+        pool.alloc_or_leftover(self.b)
     }
 
     /// Libère l'objet courant dans son pool (fin de gestionnaire : l'objet disparaît).
     pub fn free(&mut self, pool: &Pool) {
-        pool.release_68k(self.c, self.b, self.o)
+        pool.release(self.b, self.o)
     }
 
     /// RTS.

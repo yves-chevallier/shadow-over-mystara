@@ -34,7 +34,7 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
 |---|---|---|
 | cœur | `Pool::alloc(&self, b) -> Option<Obj>` | logique pure sur l'état ; aucun `Cpu` |
 | adaptateur | `Pool::alloc_68k(&self, c, b) -> Option<Obj>` | cœur + registres et drapeaux de l'original ; appelle `diag::registres_morts` |
-| méthode de contexte | `Cx::alloc(&mut self, pool)` | raccourci pour les gestionnaires ; appelle l'adaptateur tant qu'il existe, le cœur ensuite |
+| méthode de contexte | `Cx::alloc(&mut self, pool)` | raccourci pour les gestionnaires ; appelle le cœur une fois les registres prouvés morts |
 | native | `pools::ALLOC_SET` (`entry: 0x2348`) | appels par adresse restants : adaptateur puis `rts` ; jamais empoisonnée |
 
 `tools/mesure_refacto.py` compte `regs`, `drap`, `adr`... par zone : un lot les fait baisser ; compter aussi
@@ -58,6 +58,15 @@ jamais. Méthode :
 3. VALIDE partout : remplacer l'adaptateur par le cœur chez ces appelants, supprimer l'appel à `registres_morts` ;
    un écart : il désigne le lecteur (image, adresse). Garder l'adaptateur à cet endroit, avec un commentaire qui nomme
    le lecteur (« A1 relu par le gestionnaire suivant, 0x…  »), et continuer ailleurs.
+
+**Exemple réel (pilote).** `DDSOM_POISON=alloc,free` sur toute la validation : tous les scénarios échouent à l'image 389
+(`ram fff9aa : 0000 au lieu de 00ff`). `free` seul passe ; `alloc` non. Le champ `+0x4c` de l'emplacement 0 du pool SOBJ
+n'est pas écrit : la machine à modes (`modes/title.rs`, étape `0xfa472`) appelle par adresse le créateur
+`SOBJ_VARIANT`, une native en `(c, b)` qui alloue, puis **relit A1** — l'objet créé — que la native laisse parce que
+l'allocation l'y a mis. A1 fait partie du contrat de cette native. D'où la règle : une native appelée par adresse (contexte
+`(c, b)`, `scene::Ctx`, `player::Ctx`) garde l'adaptateur `_68k` tant que ses appelants relisent ses registres ; les
+gestionnaires de la boucle de dispatch (`Cx`, `families::Ctx`, contrat A0/D7) ont leur propre étiquette
+(`gestionnaires`) pour être prouvés à part.
 
 `DDSOM_POISON` change l'empreinte des résultats de `tools/validate_all.sh` (variables `DDSOM_*`) : pas de mélange avec
 les résultats ordinaires.

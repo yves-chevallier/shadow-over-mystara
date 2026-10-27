@@ -1582,11 +1582,11 @@ mod finale52 {
                 return attach(x, boss);
             }
             x.add8(0x5, 2);
-            spawn_followers(x);
+            let last = spawn_followers(x);
             x.anim_start(ANIMS, 0x1b);
-            // l'original recopie ensuite la position depuis A1, qui est alors le dernier élément créé
-            // (et non le boss) : l'objet prend les coordonnées de ce nouvel élément
-            source = Obj(x.c.a[1]);
+            // Glitch d'origine : la position est ensuite recopiée depuis A1, qui désigne alors le dernier élément créé
+            // (et non le boss), ou, si le pool était plein, l'emplacement que l'allocation laisse dans A1.
+            source = last;
         }
         x.call(sub::ANIM_STEP);
         copy_xyz16(x, source);
@@ -1597,10 +1597,16 @@ mod finale52 {
         x.add16(0x10, 0xffff);
     }
 
-    /// Crée trois éléments de sous-types 3, 2, 1 (table), liés au même boss.
-    fn spawn_followers(x: &mut Cx) {
+    /// Crée trois éléments de sous-types 3, 2, 1 (table), liés au même boss. Rend l'A1 de l'original : le dernier
+    /// élément créé, ou ce que l'allocation qui échoue laisse (`Pool::alloc_or_leftover`).
+    fn spawn_followers(x: &mut Cx) -> Obj {
+        let mut a1 = Obj(x.c.a[1]);
         for i in (0..3u32).rev() {
-            let Some(c) = x.alloc(&pools::ESHL) else { return };
+            let c = match x.alloc_or_leftover(&pools::ESHL) {
+                Ok(c) => c,
+                Err(a1) => return a1,
+            };
+            a1 = c;
             c.set_u8(x.b, 0, 1);
             c.set_u8(x.b, 2, 0x34);
             c.set_u8(x.b, 3, 0);
@@ -1609,6 +1615,7 @@ mod finale52 {
             let boss = x.u16(PARENT);
             c.set_u16(x.b, PARENT, boss);
         }
+        a1
     }
 
     /// Sous-types 1 à 3 : invisibles tant que le boss n'a pas armé `+0x3e` (sauf le sous-type 2).

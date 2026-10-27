@@ -422,13 +422,13 @@ impl<'a> Ctx<'a> {
     pub fn free(&mut self, pool: &pools::Pool) {
         self.externe(pool.free_routine);
         let o = self.obj();
-        pool.release_68k(self.c, self.b, o)
+        pool.release(self.b, o)
     }
 
     /// Alloue un objet dans `pool` : l'emplacement, ou `None` si le pool est plein.
     pub fn alloc(&mut self, pool: &pools::Pool) -> Option<Obj> {
         self.externe(pool.alloc_routine);
-        pool.alloc_68k(self.c, self.b)
+        pool.alloc(self.b)
     }
 
     /// Condition « plus grand » (bgt) des drapeaux courants.

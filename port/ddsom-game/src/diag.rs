@@ -33,9 +33,14 @@ pub fn poison_actif(etiquette: &str) -> bool {
 
 /// Registres que l'adaptateur `etiquette` écrit comme l'original et dont on veut prouver qu'ils sont morts
 /// (masque de `crate::regs` : `regs::a(1) | regs::d(6) | regs::CCR`...). Avec `DDSOM_POISON`, ils sont inversés.
+#[track_caller]
 pub fn registres_morts(c: &mut Cpu, etiquette: &str, masque: u32) {
     if !poison_actif(etiquette) {
         return;
+    }
+    // DDSOM_POISON_TRACE=1 : chaque empoisonnement, avec son site d'appel et A1 (diagnostic d'un écart)
+    if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
+        eprintln!("POISON {etiquette} {} a1={:06x}", std::panic::Location::caller(), c.a[1]);
     }
     for i in 0..8 {
         if masque & regs::d(i) != 0 {

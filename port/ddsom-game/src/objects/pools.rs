@@ -220,8 +220,8 @@ impl Pool {
 // ---- adaptation aux registres du 68000 ----
 
 /// Masques des registres que l'original laisse (voir `diag::registres_morts`).
-const REGS_ALLOC: u32 = regs::a(1) | regs::d(6) | regs::CCR;
-const REGS_FREE: u32 = regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR;
+pub const REGS_ALLOC: u32 = regs::a(1) | regs::d(6) | regs::CCR;
+pub const REGS_FREE: u32 = regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR;
 
 impl Pool {
     /// Comme `alloc`, et laisse les registres de l'original : A1 = emplacement trouvé (en cas d'échec : le premier
@@ -267,10 +267,16 @@ impl Pool {
     /// Glitch d'origine : pool plein, l'appelant écrit dans le premier emplacement (compteur nul, objet peut-être
     /// actif) ou juste après le dernier (dans le pool suivant).
     pub fn alloc_unchecked(&self, b: &mut Cps2Bus) -> Obj {
+        self.alloc_or_leftover(b).unwrap_or_else(|a1| a1)
+    }
+
+    /// Allocation dont l'échec rend aussi l'A1 que l'original laisse : le premier emplacement (compteur nul) ou la fin du
+    /// pool (aucune place libre). Pour les appelants d'origine qui relisent A1 après un échec.
+    pub fn alloc_or_leftover(&self, b: &mut Cps2Bus) -> Result<Obj, Obj> {
         match self.scan(b) {
-            Scan::NoneLeft => Obj(A5 + self.first),
-            Scan::Found(_) => self.alloc(b).expect("place trouvée"),
-            Scan::Exhausted => Obj(self.end()),
+            Scan::NoneLeft => Err(Obj(A5 + self.first)),
+            Scan::Found(_) => Ok(self.alloc(b).expect("place trouvée")),
+            Scan::Exhausted => Err(Obj(self.end())),
         }
     }
 
