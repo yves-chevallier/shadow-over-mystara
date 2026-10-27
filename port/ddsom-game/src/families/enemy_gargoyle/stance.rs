@@ -2,6 +2,7 @@
 //! cadences), 8 plongeon vers la cible, 10 saut avec retombée.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -207,7 +208,7 @@ fn glide_step(x: &mut Cx) {
         return go::turn_around(x);
     }
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     lib::step(x);
 }
@@ -314,7 +315,7 @@ fn plunge(x: &mut Cx) {
             fly(x, 5);
         }
         6 => {
-            x.call(sub::MOVE_X);
+            x.move_x();
             let (mut d0, mut d1);
             let leftward = (x.u16(SPEED_X) as i16) < 0;
             if x.u8(SIDE_TURN) == 0 {
@@ -340,7 +341,7 @@ fn plunge(x: &mut Cx) {
             x.set16(GRAVITY, -0x40i16 as u16);
         }
         8 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -357,7 +358,7 @@ fn plunge(x: &mut Cx) {
                 x.set16(TIMER2, 4);
                 spark(x, 8);
             }
-            x.call(sub::MOVE_X);
+            x.move_x();
             if count_down(x, TIMER) {
                 lib::step(x);
             } else if !interrupted(x) {
@@ -391,10 +392,10 @@ fn leap(x: &mut Cx) {
             set_speed(x, 0x3f);
             x.set16(SPEED_Z, 0x380);
             x.set16(GRAVITY, -0x28i16 as u16);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > 0xc0 {
                 return;
             }
@@ -403,7 +404,7 @@ fn leap(x: &mut Cx) {
             x.set16(SPEED_Y, 0);
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 lib::step(x);
                 return;
@@ -414,7 +415,7 @@ fn leap(x: &mut Cx) {
             x.set16(HEIGHT, 0);
             let vy = if x.u8(f::FLIP) != 0 { 0x20i16 } else { -0x20 };
             x.set16(SPEED_Y, vy as u16);
-            x.call(sub::MOVE_X);
+            x.move_x();
             fly(x, 0xa);
         }
         8 => {
@@ -423,7 +424,7 @@ fn leap(x: &mut Cx) {
                 spark(x, 8);
             }
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else if !interrupted(x) {
                 go::wander(x);

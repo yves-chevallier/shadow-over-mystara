@@ -4,6 +4,7 @@
 use super::moves::step_anim;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// 0x7c5b8 : quand le compte à rebours `+0xbc` est écoulé, crée le contrôleur de scène SET 2 (variante 0x3e), une fois.
 pub(super) fn spawn_scene_controller(x: &mut Cx) {
@@ -96,7 +97,7 @@ pub(super) fn arrive(x: &mut Cx) {
         4 => climb(x, true),
         6 => climb(x, false),
         8 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u32(0xc) as i32) > 0 {
                 return step_anim(x);
             }
@@ -132,7 +133,7 @@ pub(super) fn rise_wait(x: &mut Cx) {
 
 /// 0x7d0d2 (montée) et 0x7d0f2 (descente) : la vitesse verticale franchit ±0x100.
 pub(super) fn climb(x: &mut Cx, up: bool) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
     if !reached {
@@ -144,7 +145,7 @@ pub(super) fn climb(x: &mut Cx, up: bool) {
 
 /// 0x7d112 : retombée du saut (son, poussière en ligne, vulnérable).
 pub(super) fn land(x: &mut Cx) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
     }
@@ -261,7 +262,7 @@ pub(super) fn slam(x: &mut Cx) {
                 let a = x.u8(0x2d);
                 x.set8(0x2d, if a != 0 { 0 } else { 0x10 });
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         18 => {
@@ -274,7 +275,7 @@ pub(super) fn slam(x: &mut Cx) {
             choose_spot(x);
             start(x, Set::A, 0xa);
             speed(x, 0x1f);
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         20 => {
@@ -299,7 +300,7 @@ pub(super) fn slam(x: &mut Cx) {
             if needs_turn(x) {
                 return next7(x);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         22 => {
@@ -320,7 +321,7 @@ pub(super) fn slam(x: &mut Cx) {
                 x.set8(f::FLIP, side);
                 return start(x, Set::A, 0x15);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         26 => {
             next7(x);
@@ -397,7 +398,7 @@ pub(super) fn spin_roar(x: &mut Cx) {
             } else if (cam.wrapping_add(0x50).wrapping_sub(x.u16(0x8)) as i16) >= 0 {
                 return next7(x);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         4 => {

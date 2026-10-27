@@ -2,6 +2,7 @@
 //! 10 sortie d'écran) et demi-tours enchaînés sur une attaque (`+5 = 8`, `+6` : 0 à 6).
 
 use super::*;
+use crate::objects::Courant;
 
 // --- sous-état 6 --------------------------------------------------------------------------------
 
@@ -79,8 +80,7 @@ fn hop(x: &mut Cx) {
             body(x, 4);
         }
         4 => {
-            x.call(sub::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 return;
             }
             x.add8(STEP, 2);
@@ -153,7 +153,7 @@ fn exit_screen(x: &mut Cx) {
         return body(x, 2);
     }
     if (x.u8(KEY_FRAME) as i8) >= 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
     step(x);
     let d = x.u16(X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);

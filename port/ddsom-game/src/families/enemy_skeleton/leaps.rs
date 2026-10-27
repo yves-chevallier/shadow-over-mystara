@@ -4,6 +4,7 @@
 
 use super::attacks::{fall, land_wait, ready, rise, restart_slide, settle};
 use super::*;
+use crate::objects::Courant;
 
 // --- sous-état 6 --------------------------------------------------------------------------------
 
@@ -92,7 +93,7 @@ fn hop_forward(x: &mut Cx, striking: bool) {
         8 if striking => rise(x),
         8 => {
             step(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) < 0 {
                 x.add8(STEP, 2);
                 x.set16(ANIM_COUNT, 1);
@@ -101,7 +102,7 @@ fn hop_forward(x: &mut Cx, striking: bool) {
         10 if striking => fall(x),
         10 => {
             step(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u32(HEIGHT) as i32) <= 0 {
                 x.add8(STEP, 2);
                 x.set32(HEIGHT, 0);
@@ -117,7 +118,7 @@ fn hop_forward(x: &mut Cx, striking: bool) {
 /// Montée d'un bond de côté (déplacement en profondeur et en hauteur).
 fn hop_rise(x: &mut Cx) {
     step(x);
-    x.call(sub::MOVE_YZ);
+    x.move_yz();
     if (x.u16(SPEED_Z) as i16) < 0 {
         x.add8(STEP, 2);
         x.set16(ANIM_COUNT, 1);
@@ -126,7 +127,7 @@ fn hop_rise(x: &mut Cx) {
 
 fn hop_fall(x: &mut Cx) {
     step(x);
-    x.call(sub::MOVE_YZ);
+    x.move_yz();
     if (x.u32(HEIGHT) as i32) <= 0 {
         x.add8(STEP, 2);
         x.set32(HEIGHT, 0);
@@ -245,7 +246,7 @@ fn exit_screen(x: &mut Cx) {
         return body(x, 0);
     }
     if (x.u8(KEY_FRAME) as i8) >= 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
     step(x);
     let d = x.u16(X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);
@@ -386,7 +387,7 @@ fn land(x: &mut Cx) {
         }
         2 => {
             step(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) <= 0 {
                 x.add8(f::SUB2, 2);
                 x.set16(ANIM_COUNT, 1);
@@ -394,7 +395,7 @@ fn land(x: &mut Cx) {
         }
         4 => {
             step(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) <= 0 {
                 x.set32(HEIGHT, 0);
                 x.add8(f::SUB2, 2);

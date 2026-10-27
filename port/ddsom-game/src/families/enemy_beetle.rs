@@ -14,7 +14,7 @@
 //! État 4 (touché) : recul, chute puis mort clignotante.
 //! Animations 0x163a86 (mouvements) et 0x163a9e (touché).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 const ANIMS: u32 = 0x163a86;
@@ -54,6 +54,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Tables de la ROM : vitesses par difficulté (pointeurs), temporisations, sens de virage.
 const SPEEDS_WALK: u32 = 0x66700;
@@ -95,7 +96,7 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 fn anim_play(x: &mut Cx, n: u32) {
-    x.anim_start(ANIMS, n);
+    x.anim_start(ANIMS, n as u16);
 }
 
 /// 0x6662e : position de la caméra, X dans le mot bas de D6, Y dans le mot haut.
@@ -277,7 +278,7 @@ fn march(x: &mut Cx) {
 /// 0x66740 : avance dans la table de vitesses ; toutes les `+0xa2` images tourne d'un cran vers l'angle voulu
 /// et enchaîne l'animation de virage.
 fn steer(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     let n = x.u8(TURN_TIMER).wrapping_sub(1);
     x.set8(TURN_TIMER, n);
     if n != 0 {
@@ -355,7 +356,7 @@ fn cross(x: &mut Cx) {
     match x.u8(STEP) {
         0 => cross_start(x),
         2 => {
-            x.call(sub::MOVE_XY);
+            x.move_xy();
             let (cx, _) = camera(x);
             let d5 = x.u16(X).wrapping_sub(cx);
             set_dw(x, 5, d5);
@@ -395,7 +396,7 @@ fn cross_turn(x: &mut Cx, side: u8) {
 
 /// 0x65f5c : sortie par le bord ; l'insecte est retiré quand il l'a passé.
 fn leave(x: &mut Cx) {
-    x.call(sub::MOVE_XY);
+    x.move_xy();
     let (cx, _) = camera(x);
     let d5 = x.u16(X).wrapping_sub(cx);
     set_dw(x, 5, d5);
@@ -433,7 +434,7 @@ fn drift(x: &mut Cx) {
         2 => {
             let pos = x.u32(X);
             x.set32(SAVED_X, pos);
-            x.call(sub::MOVE_TABLE_XZ);
+            x.move_by_table_xz();
             let pos = x.u32(SAVED_X);
             x.set32(X, pos);
             let shift = ((x.u16(DRIFT) as i16 as i32) << 8) as u32;
@@ -482,7 +483,7 @@ fn halt_start(x: &mut Cx) {
 
 /// 0x660e2 : vol jusqu'à l'abscisse d'arrêt ; devant un joueur, s'arrête de rang en rang puis charge.
 fn halt_run(x: &mut Cx) {
-    x.call(sub::MOVE_XY);
+    x.move_xy();
     let (cx, _) = camera(x);
     let d5 = x.u16(X).wrapping_sub(cx);
     let stop = x.u16(STOP_X);
@@ -608,8 +609,8 @@ fn turn_back(x: &mut Cx) {
             x.anim_step();
         }
         6 => {
-            x.call(sub::MOVE_TABLE_XY);
-            x.call(sub::MOVE_Z);
+            x.move_by_table_xy();
+            x.move_z();
             let floor = if x.u8(VARIANT) == 0 { 0x30 } else { 0x10 };
             set_dw(x, 0, floor);
             if floor >= x.u16(HEIGHT) {
@@ -620,7 +621,7 @@ fn turn_back(x: &mut Cx) {
             x.anim_step();
         }
         8 => {
-            x.call(sub::MOVE_XY);
+            x.move_xy();
             let (cx, cy) = camera(x);
             if x.u8(VARIANT) == 0 {
                 if find_player(x, -0x80, 0x40, 0x20) {
@@ -660,7 +661,7 @@ fn pounce(x: &mut Cx) {
             anim_play(x, 8);
         }
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             let n = x.u8(0x6e).wrapping_sub(1);
             x.set8(0x6e, n);
             if n == 0 {
@@ -778,7 +779,7 @@ fn knock_back(x: &mut Cx) {
 fn recoil(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if x.u8(0x29) != 0 {
                 x.set16(SPEED_X, 0);
                 x.set16(SPEED_Y, 0);
@@ -819,9 +820,8 @@ fn fall(x: &mut Cx) {
         x.set8(ANGLE, angle);
         return anim_play(x, 4);
     }
-    x.call(sub::MOVE_TABLE_XY);
-    x.call(0x1e90);
-    if !x.c.cond(5) {
+    x.move_by_table_xy();
+    if !x.in_arena_default() {
         x.call(REMOVE);
         set_state_long(x, DEAD);
     }

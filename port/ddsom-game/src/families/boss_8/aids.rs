@@ -1,6 +1,7 @@
 //! Boss 8 : aides communes (choix d'un joueur, balayage des joueurs, positions, choix de l'attaque suivante).
 
 use super::*;
+use crate::machine::Machine;
 
 /// `lsr.w #k,Dn`.
 pub(super) fn lsr_w(x: &mut Cx, n: usize, k: u32) {
@@ -55,8 +56,8 @@ fn pick(x: &mut Cx, remember: bool) {
         x.c.a[1] = 0;
         x.c.d[1] = 0;
         x.c.a[2] = A5 + 0x5de;
-        x.call(0x19a88);
-        let n = x.c.d[0] & 3;
+        let alea = x.random_68k();
+        let n = alea as u32 & 3;
         setw(x, 0, n as u16);
         setw(x, 1, n as u16);
         if remember && x.u8(PICKED) >> n & 1 != 0 {
@@ -148,8 +149,8 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
 
 /// 0x8a368 : réapparition à un des 32 points tirés dans la table 0x8a384.
 pub(super) fn random_spot(x: &mut Cx) {
-    x.call(0x19a88);
-    let i = x.c.d[0] as u16 & 0x7c;
+    let alea = x.random_68k();
+    let i = alea & 0x7c;
     setw(x, 0, i);
     let px = x.rom16(0x8a384 + i as u32);
     let py = x.rom16(0x8a386 + i as u32);
@@ -161,8 +162,8 @@ pub(super) fn random_spot(x: &mut Cx) {
 
 /// 0x8a404 : pas de côté tiré dans la table 0x8a422.
 pub(super) fn random_sidestep(x: &mut Cx) {
-    x.call(0x19a88);
-    let i = x.c.d[0] as u16 & 0xe;
+    let alea = x.random_68k();
+    let i = alea & 0xe;
     setw(x, 0, i);
     let mut d = x.rom16(0x8a422 + i as u32);
     if x.u8(f::FLIP) != 0 {
@@ -245,8 +246,8 @@ pub(super) fn dodge_spot(x: &mut Cx) {
     x.c.d[6] = d6;
     let table = rom32(x, 0x8a6cc + d6);
     x.c.a[4] = table;
-    x.call(0x19a88);
-    let i = ((x.c.d[0] as u16) & 3) << 3;
+    let alea = x.random_68k();
+    let i = ((alea) & 3) << 3;
     setw(x, 0, i);
     let a = table.wrapping_add(i as u32);
     let dx = x.data16(a);
@@ -291,8 +292,8 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     setw(x, 0, row as u16);
     let a4 = table.wrapping_add(row);
     x.c.a[4] = a4;
-    x.call(0x19a88);
-    let i = x.c.d[0] as u16 & 0x1f;
+    let alea = x.random_68k();
+    let i = alea & 0x1f;
     setw(x, 0, i);
     let step = x.data8(a4 + i as u32);
     x.set8(f::SUB2, step);

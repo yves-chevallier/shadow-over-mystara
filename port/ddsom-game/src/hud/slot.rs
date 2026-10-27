@@ -14,8 +14,6 @@ mod rom {
     /// Statistiques : le joueur a choisi le personnage D0 ; temps de jeu D0 (long) d'un joueur qui revient.
     pub const COUNT_CHARACTER: u32 = 0x2e630;
     pub const COUNT_TIME: u32 = 0x2e696;
-    /// Remise à jour des options de difficulté quand un joueur arrive.
-    pub const PLAYER_ARRIVES: u32 = 0x1f300;
     /// Initialisations du joueur k (créent le joueur dans la partie), pour le choix du personnage et pour
     /// la reprise ; leur adresse est dans une table du code.
     pub const START_PLAYER: u32 = 0x158b8;
@@ -727,7 +725,8 @@ fn join_continue(x: &mut Ctx, s: Slot) {
         s.set_g8(b, player::FLAGS, flags);
         s.set_p8(b, panel::CLAIM, 0);
     }
-    x.call(rom::PLAYER_ARRIVES);
+    // un joueur arrive : le rang baisse (`objects::rank`)
+    crate::objects::rank::lower_68k(x.c, x.b);
     let b = &mut *x.b;
     s.set_p8(b, panel::STEP, 0);
     s.set_p8(b, panel::FLAG_27, 0);

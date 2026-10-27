@@ -9,6 +9,7 @@ use super::enemy_common::*;
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 // ---------------------------------------------------------------------------------------------
 // Type 20 (0x74fc0) : « ManScorpion » (h), ennemi composite greffé sur un ennemi de type 19
@@ -203,7 +204,8 @@ mod man_scorpion {
         let parent = x.linked(f::OWNER);
         let left = parent.u8(x.b, 0x32);
         if left == 0 {
-            return x.call(0x1a56);
+            x.anim_step();
+            return;
         }
         parent.set_u8(x.b, 0x32, left - 1);
         x.set32(f::STATE, DYING);
@@ -228,18 +230,18 @@ mod man_scorpion {
     /// Vol vers le bord gauche : mort (état 6) une fois sorti de l'écran.
     fn fly_left(x: &mut Cx) {
         sparkles(x);
-        x.call(0x1d78);
+        x.move_x();
         let edge = x.a5_u16(0x506).wrapping_sub(0x50) as i16;
         if edge > x.u16(0x8) as i16 {
             x.set32(f::STATE, st::DEAD_LONG);
         }
-        x.call(0x1a56);
+        x.anim_step();
     }
 
     /// Vol vers le bord droit ; à l'arrivée, lâche les bras et rend la main au parent.
     fn fly_right(x: &mut Cx) {
         sparkles(x);
-        x.call(0x1d78);
+        x.move_x();
         let dx = x.u16(0x8).wrapping_sub(x.a5_u16(0x506));
         if dx < 0x100 {
             let mask = x.u8(p::ARMS_MASK);
@@ -255,7 +257,7 @@ mod man_scorpion {
             parent.set_u8(x.b, 0x24, 0);
             x.set32(f::STATE, 0x0202_0000);
         }
-        x.call(0x1a56);
+        x.anim_step();
     }
 
     /// Un bras dont l'état est >= 4 est détaché ; sans plus de bras, le parent est libéré de son
@@ -559,7 +561,7 @@ mod nagpa {
         x.set_bit(0x1, 1, true);
         x.set8(f::BOX_SET, 0x47);
         x.call(rom::IMMUNITIES);
-        x.anim_start(ANIMS, variant as u32);
+        x.anim_start(ANIMS, (variant as u32) as u16);
     }
 
     fn active(x: &mut Cx) {
@@ -629,7 +631,7 @@ mod nagpa {
         x.call(SFX_APPEAR);
         mark_visible(x, false);
         let n = 2 + (x.u8(0x3) != 0) as u32;
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS, n as u16);
     }
 
     fn disappear(x: &mut Cx) {
@@ -640,7 +642,7 @@ mod nagpa {
         x.add8(f::SUB, 0xfa);
         x.set_bit(0x1, 1, true);
         let n = (x.u8(0x3) != 0) as u32;
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS, n as u16);
     }
 }
 

@@ -15,6 +15,8 @@ use crate::objects::Obj;
 use crate::{regs, Native};
 
 use super::{ajoute_u8, gestionnaire, pointeur, rom, Ctx};
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Valeurs de l'octet d'état `+4`.
 mod etat {
@@ -204,8 +206,7 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
     let cible = ctx.saut_table(tresor::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
-            ctx.jsr(rom::MOVE_XYZ);
-            let en_vol = ctx.gt();
+            let en_vol = ctx.move_xyz().gt();
             if !en_vol {
                 // posé : attente au sol
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
@@ -376,8 +377,7 @@ fn conso_actif(ctx: &mut Ctx, o: Obj) {
     let cible = ctx.saut_table(conso::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
-            ctx.jsr(rom::MOVE_XYZ);
-            let en_vol = ctx.gt();
+            let en_vol = ctx.move_xyz().gt();
             if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, conso::DUREE_APRES_CHUTE);
@@ -629,7 +629,7 @@ fn inventaire_rejet(ctx: &mut Ctx, o: Obj) {
         ctx.reinsert();
         return;
     }
-    ctx.jsr(rom::MOVE_XZ);
+    ctx.move_xz();
     let z = o.u16(ctx.b, Obj::Z);
     if z as i16 >= 0 {
         return;
@@ -645,8 +645,7 @@ fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
     let cible = ctx.saut_table(inventaire::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
-            ctx.jsr(rom::MOVE_XYZ);
-            let en_vol = ctx.gt();
+            let en_vol = ctx.move_xyz().gt();
             if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, inventaire::DUREE_AU_SOL);
@@ -750,8 +749,7 @@ fn bonus_actif(ctx: &mut Ctx, o: Obj) {
     match sous_etat {
         sous::CHUTE => {
             ctx.anim_step();
-            ctx.jsr(rom::MOVE_XYZ);
-            let en_vol = ctx.gt();
+            let en_vol = ctx.move_xyz().gt();
             if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, bonus::DUREE_AU_SOL);
@@ -881,8 +879,8 @@ fn icone_init(ctx: &mut Ctx, o: Obj) {
     o.set_u16(ctx.b, Obj::Z, z);
     o.set_u8(ctx.b, scene::DELAI, scene::DELAI_SON);
     o.set_u8(ctx.b, Obj::ACTIVE, 2);
-    ctx.jsr(rom::RNG);
-    let tirage = ctx.c.d[0] as u16 & 3;
+    let alea = ctx.random_68k();
+    let tirage = alea & 3;
     ctx.c.d[0] = ctx.c.d[0] & 0xffff_0000 | tirage as u32;
     o.set_u8(ctx.b, champ::MODE, tirage as u8);
     let animation = ctx.prog8(scene::ICONE_ANIMATIONS + tirage as u32);
@@ -923,7 +921,7 @@ fn icone_envol_vitesse(ctx: &mut Ctx, o: Obj) {
         let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
         o.set_u16(ctx.b, Obj::VX, v);
     }
-    ctx.jsr(rom::ANIM_STEP);
+    ctx.anim_step();
 }
 
 /// Sous-état 2 de l'icône : l'icône s'envole en arc (quatre temps, selon `+6`).
@@ -940,16 +938,16 @@ fn icone_envol(ctx: &mut Ctx, o: Obj) {
             icone_envol_vitesse(ctx, o);
         }
         2 => {
-            ctx.jsr(rom::MOVE_XZ);
+            ctx.move_xz();
             let z = o.u16(ctx.b, Obj::Z);
             if !(z as i16 > 0) {
                 ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
                 o.set_u32(ctx.b, Obj::Z, 0);
             }
-            ctx.jsr(rom::ANIM_STEP);
+            ctx.anim_step();
         }
         6 => {
-            ctx.jsr(rom::MOVE_XZ);
+            ctx.move_xz();
             let z = o.u16(ctx.b, Obj::Z);
             if !(z as i16 > 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
@@ -959,7 +957,7 @@ fn icone_envol(ctx: &mut Ctx, o: Obj) {
                 o.set_u8(ctx.b, Obj::ACTIVE, 1);
                 o.set_u16(ctx.b, scene::MINUTEUR, 0x12c);
             }
-            ctx.jsr(rom::ANIM_STEP);
+            ctx.anim_step();
         }
         _ => ctx.deleguer(cible),
     }
@@ -1021,7 +1019,6 @@ mod depart {
     pub const ETINCELLE: u32 = 0xaba16;
     pub const SON: u32 = 0xb12c0;
     pub const SON_ARRET: u32 = 0xe1d60;
-    pub const MOVE_X: u32 = 0x1d78;
     /// Compteur d'icônes de l'objet `+0x46`.
     pub const ICONES: u32 = 0x30;
     /// Arrêt demandé (`+0x33`).
@@ -1074,7 +1071,7 @@ fn depart_decompte(ctx: &mut Ctx, o: Obj) {
 /// Sous-état 2 : marche en X ; sortie de l'écran, l'icône est libérée.
 fn depart_marche(ctx: &mut Ctx, o: Obj) {
     if o.u8(ctx.b, depart::ARRET) == 0 {
-        ctx.jsr(depart::MOVE_X);
+        ctx.move_x();
         let ecart = o.u16(ctx.b, Obj::X).wrapping_sub(ctx.ram16(0x506)).wrapping_add(0x20);
         ctx.c.d[0] = ctx.c.d[0] & 0xffff_0000 | ecart as u32;
         if ecart > 0x1c0 {
@@ -1082,13 +1079,14 @@ fn depart_marche(ctx: &mut Ctx, o: Obj) {
             depart_decompte(ctx, o);
         }
     }
-    ctx.jsr(rom::ANIM_STEP);
+    ctx.anim_step();
 }
 
 /// Sous-état 4 : arrêt demandé : son et animation d'arrêt, SET créé, l'icône se tourne vers le joueur.
 fn depart_arret(ctx: &mut Ctx, o: Obj) {
     if o.u8(ctx.b, depart::ARRET) != 0 {
-        return ctx.jsr(rom::ANIM_STEP);
+        ctx.anim_step();
+        return;
     }
     let mode = o.u8(ctx.b, champ::MODE) as u32;
     ctx.c.d[0] = mode;
@@ -1114,7 +1112,7 @@ fn depart_arret(ctx: &mut Ctx, o: Obj) {
         let v = joueur.u8(ctx.b, 0x2c) ^ 0x20;
         joueur.set_u8(ctx.b, 0x2c, v);
     }
-    ctx.jsr(rom::ANIM_STEP);
+    ctx.anim_step();
 }
 
 fn icone_depart(ctx: &mut Ctx, o: Obj) {
@@ -1245,7 +1243,7 @@ fn guide_marche(ctx: &mut Ctx, o: Obj) {
     ctx.c.d[2] = ctx.c.d[2] & 0xffff_0000 | cible_y as u32;
     ctx.jsr(scene::ANGLE);
     o.set_u8(ctx.b, Obj::SPEED_INDEX, ctx.c.d[0] as u8);
-    ctx.natif(&crate::objects::motion::MOVE_BY_TABLE_XY);
+    ctx.move_by_table_xy();
     let dx = cible_x.wrapping_sub(o.u16(ctx.b, Obj::X)).wrapping_add(8);
     let dy = cible_y.wrapping_sub(o.u16(ctx.b, Obj::Y)).wrapping_add(8);
     let arrive = !(dx > 0x10) && !(dy > 0x10);
@@ -1271,7 +1269,7 @@ fn guide_marche(ctx: &mut Ctx, o: Obj) {
             proprietaire.set_u8(ctx.b, 0x2c, v);
         }
     }
-    ctx.jsr(rom::ANIM_STEP);
+    ctx.anim_step();
 }
 
 /// Sous-état 2 du guide : attend la fin de la minuterie ou la disparition de l'objet SET créé.
@@ -1550,8 +1548,7 @@ fn reserve_actif(ctx: &mut Ctx, o: Obj) {
         sous::CHUTE => {
             let pose = o.u8(ctx.b, champ::SOUS_SOUS_ETAT);
             if !(pose != 0) {
-                ctx.jsr(rom::MOVE_XYZ);
-                let en_vol = ctx.gt();
+                let en_vol = ctx.move_xyz().gt();
                 if !en_vol {
                     ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
                     o.set_u16(ctx.b, champ::DUREE, reserve::DUREE_AU_SOL);
@@ -1874,7 +1871,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
                     let pas: u16 = if flip { 3 } else { 3u16.wrapping_neg() };
                     decale_x(ctx, o, pas);
                     ctx.anim_step();
-                    ctx.jsr(rom::CULL_OFFSCREEN);
+                    ctx.cull_offscreen();
                 }
                 _ => ctx.deleguer(cible),
             }
@@ -1936,7 +1933,8 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                     if touche {
                         // pas de contact suivant : les sous-états avancent d'eux-mêmes
                         ctx.set_ram8(0x5e, 1);
-                        return ctx.anim_start(contact::ANIMATIONS, 0x19);
+                        ctx.anim_start(contact::ANIMATIONS, 0x19);
+                        return;
                     }
                     contact_1_avance(ctx, o);
                     let reste = o.u8(ctx.b, contact::DELAI).wrapping_sub(1);
@@ -1971,7 +1969,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                     contact_1_avance(ctx, o);
                     ctx.anim_step();
                     ctx.reinsert();
-                    ctx.jsr(rom::CULL_OFFSCREEN);
+                    ctx.cull_offscreen();
                 }
                 _ => ctx.deleguer(cible),
             }
@@ -2023,7 +2021,9 @@ fn contact_2(ctx: &mut Ctx, o: Obj) {
                         contact_2_fin(ctx, o);
                     }
                 }
-                4 => ctx.jsr(rom::ANIM_STEP),
+                4 => {
+                    ctx.anim_step();
+                }
                 _ => ctx.deleguer(cible),
             }
         }
@@ -2244,7 +2244,7 @@ fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
         }
         return ctx.reinsert();
     }
-    ctx.jsr(rom::MOVE_XZ);
+    ctx.move_xz();
     let z = o.u16(ctx.b, Obj::Z);
     if z as i16 >= 0 {
         return;
@@ -2282,8 +2282,7 @@ fn equipement_actif(ctx: &mut Ctx, o: Obj) {
     let cible = ctx.saut_table(equipement::SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
-            ctx.jsr(rom::MOVE_XYZ);
-            let en_vol = ctx.gt();
+            let en_vol = ctx.move_xyz().gt();
             if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, 0x4b0);
@@ -2394,7 +2393,7 @@ fn tombe(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte) -> bool {
     c.d[0] = i;
     let masque = rd16(b, p.chances + i);
     c.d[2] = c.d[2] & 0xffff_0000 | masque as u32;
-    crate::call(c, b, rom::RNG);
+    crate::rng::random_68k(c, b);
     let bit = c.d[0] as u16 & 0xf;
     c.d[0] = c.d[0] & 0xffff_0000 | bit as u32;
     c.d[2] >> bit & 1 != 0

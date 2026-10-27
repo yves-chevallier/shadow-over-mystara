@@ -8,6 +8,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Courant;
 
 mod riyakaa {
     use super::*;
@@ -23,10 +24,6 @@ mod riyakaa {
     const NEXT_ATTACKS: u32 = 0x701dc;
     /// Masques de décision de la contre-attaque (un long par niveau de difficulté).
     const MASKS: u32 = 0x6ff70;
-    /// Routines du moteur et de l'IA.
-    const SPEED_TABLE: u32 = 0x1b64;
-    const MOVE_TABLE: u32 = 0x1cb4;
-    const STEP: u32 = 0x1a56;
     /// Test « un joueur est dans cette boîte ? » : D0, D1, D2 = décalage, portée, hauteur ; Z = non.
     const TARGET_IN_BOX: u32 = 0xb5e0;
     /// Choix d'une cible (Z = aucune), regard vers elle, demi-tour vers elle.
@@ -40,7 +37,7 @@ mod riyakaa {
         if suspended(x) {
             return;
         }
-        x.call(rom::TICK_COUNTERS);
+        x.tick_counters();
         match x.u8(f::STATE) {
             st::INIT => {
                 if paused(x) {
@@ -93,18 +90,17 @@ mod riyakaa {
 
     /// Joue l'animation `n` du jeu des mouvements.
     fn body(x: &mut Cx, n: u32) {
-        x.anim_start(BODY, n);
+        x.anim_start(BODY, n as u16);
     }
 
     /// Joue l'animation `n` du jeu des coups.
     fn strike(x: &mut Cx, n: u32) {
-        x.anim_start(STRIKE, n);
+        x.anim_start(STRIKE, n as u16);
     }
 
     /// Choisit la table de vitesses `n`.
     fn speed(x: &mut Cx, n: u32) {
-        x.c.d[0] = n;
-        x.call(SPEED_TABLE);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
     }
 
     /// Retour à l'état actif, sous-état 0.
@@ -161,8 +157,8 @@ mod riyakaa {
             walk(x);
             x.set8(0, 1);
         }
-        x.call(MOVE_TABLE);
-        x.call(STEP);
+        x.move_by_table_xy();
+        x.anim_step();
     }
 
     /// 0x6f2e0 : entre en courant (variantes 0 et 4).
@@ -215,7 +211,7 @@ mod riyakaa {
 
     /// 0x6f3d2 : retombe jusqu'au sol.
     fn rise_fall(x: &mut Cx) {
-        x.call(0x1dbc);
+        x.move_z();
         if (x.u16(0xc) as i16) >= 0 {
             return;
         }
@@ -270,7 +266,7 @@ mod riyakaa {
                 body(x, 0xd);
             }
             2 => {
-                x.call(STEP);
+                x.anim_step();
                 x.call(PICK_TARGET);
                 if !x.c.cond(7) {
                     x.c.d[0] = 0;
@@ -309,7 +305,7 @@ mod riyakaa {
             return body(x, 0);
         }
         if x.a5_u8(0x35) == 0 {
-            x.call(STEP);
+            x.anim_step();
         } else {
             walk(x);
             x.call(PICK_TARGET);
@@ -361,10 +357,11 @@ mod riyakaa {
         }
         x.set8(0xa1, d5);
         set_dw(x, 0, d6);
-        x.c.a[4] = BODY;
-        x.call(0x1a32);
+        let n = x.c.d[0] as u16;
+        x.anim_start(BODY, n);
         set_dw(x, 0, d4);
-        x.call(SPEED_TABLE);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.call(PICK_TARGET);
         x.call(FACE_TARGET);
         x.call(TURN_TO_TARGET);
@@ -416,8 +413,8 @@ mod riyakaa {
             x.set16(f::SUB2, 0xc00);
             return x.call(0xac3a);
         }
-        x.call(STEP);
-        x.call(MOVE_TABLE);
+        x.anim_step();
+        x.move_by_table_xy();
         if needs_turn(x) {
             x.add8(f::SUB2, 2);
             x.set8(0x7, 0);
@@ -454,7 +451,7 @@ mod riyakaa {
         if (countdown(x, 0x6e) as i8) < 0 {
             x.set16(f::SUB2, 0);
         }
-        x.call(STEP);
+        x.anim_step();
     }
 
     // --- sous-état 4 : coups de patte ------------------------------------------------------------
@@ -478,8 +475,8 @@ mod riyakaa {
         x.set8(0xa0, shift);
         x.add8(0x7, 2);
         set_dw(x, 0, anim as u16);
-        x.c.a[4] = STRIKE;
-        x.call(0x1a32);
+        let n = x.c.d[0] as u16;
+        x.anim_start(STRIKE, n);
     }
 
     /// 0x6f6f0 : coup de patte (`+6` = 0 haut, 2 milieu, 4 bas).
@@ -514,7 +511,7 @@ mod riyakaa {
         match x.u8(0x7) {
             0 => lunge_start(x),
             2 => {
-                x.call(0x1d62);
+                x.move_xy();
                 if x.anim_step() {
                     x.add8(0x7, 2);
                     x.set16(0xc, 0xc);
@@ -524,16 +521,16 @@ mod riyakaa {
                 }
             }
             4 => {
-                x.call(0x1da6);
-                x.call(STEP);
+                x.move_xz();
+                x.anim_step();
                 if x.u16(0xc) < 0xc {
                     x.add8(0x7, 2);
                     body(x, 0x10);
                 }
             }
             6 => {
-                x.call(0x1da6);
-                x.call(STEP);
+                x.move_xz();
+                x.anim_step();
                 if (x.u16(0xc) as i16) < 0 {
                     x.set16(0xc, 0);
                     retreat(x);
@@ -588,8 +585,8 @@ mod riyakaa {
             speed(x, 0xd);
             return body(x, 2);
         }
-        x.call(MOVE_TABLE);
-        x.call(STEP);
+        x.move_by_table_xy();
+        x.anim_step();
         if (countdown(x, 0xa2) as i8) < 0 {
             let s = x.u32(0xa8);
             x.set32(f::STATE, s);
@@ -617,7 +614,7 @@ mod riyakaa {
     }
 
     fn wait_target_follow(x: &mut Cx) {
-        x.call(STEP);
+        x.anim_step();
         if (countdown(x, 0x77) as i8) >= 0 {
             return;
         }
@@ -682,7 +679,7 @@ mod riyakaa {
                 if (countdown(x, 0xa2) as i8) < 0 {
                     return stand_up(x);
                 }
-                x.call(STEP);
+                x.anim_step();
                 if x.u8(0x33) != 0 {
                     toggle_flip(x);
                 }
@@ -707,8 +704,8 @@ mod riyakaa {
                 body(x, 2);
             }
             2 => {
-                x.call(MOVE_TABLE);
-                x.call(STEP);
+                x.move_by_table_xy();
+                x.anim_step();
                 if (countdown(x, 0x6b) as i8) >= 0 {
                     return;
                 }
@@ -752,8 +749,8 @@ mod riyakaa {
                 body(x, 9);
             }
             2 => {
-                x.call(0x1da6);
-                x.call(STEP);
+                x.move_xz();
+                x.anim_step();
                 if (x.u32(0xc) as i32) >= 0 {
                     return;
                 }
@@ -804,7 +801,7 @@ mod riyakaa {
         if countdown(x, 0xa2) == 0 {
             walk(x);
         }
-        x.call(STEP);
+        x.anim_step();
     }
 
     /// 0x6fc44 : court vers sa cible (`+6` = 4 en X, 2 en profondeur).
@@ -839,8 +836,8 @@ mod riyakaa {
         if countdown(x, 0xa2) == 0 {
             walk(x);
         }
-        x.call(MOVE_TABLE);
-        x.call(STEP);
+        x.move_by_table_xy();
+        x.anim_step();
     }
 
     /// 0x6fb78 : saute sur le joueur qu'il vise (trois essais de regard).
@@ -996,7 +993,8 @@ mod riyakaa {
             return body(x, 5);
         }
         if x.u8(0x14) != 0 {
-            return x.call(0x1d78);
+            x.move_x();
+            return;
         }
         x.set8(0, 1);
         x.set32(0x58, 0);
@@ -1104,10 +1102,9 @@ mod riyakaa {
 
     /// 0x6fdf2 : fuit jusqu'à sortir de l'écran, puis disparaît.
     fn grab_flee(x: &mut Cx) {
-        x.call(STEP);
-        x.call(MOVE_TABLE);
-        x.call(0x1e90);
-        if x.c.cond(5) {
+        x.anim_step();
+        x.move_by_table_xy();
+        if x.in_arena_default() {
             return;
         }
         x.set32(f::STATE, st::DEAD_LONG);

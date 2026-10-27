@@ -22,6 +22,7 @@
 //! type, `+0xd` : variante, `+0xe` : `+0x2f`, `+0xf` : `+0x2c`, `+0x10` : mot `+0x42`, `+0x12` : non
 //! nul = coordonnées absolues (sinon relatives à la caméra).
 
+use crate::objects::Courant;
 use crate::families::cx::Cx;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::pools::{BOSS, EFFCT, ENEMY, ESHL, ITEM, PEFF, SET, SOBJ};

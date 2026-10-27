@@ -95,8 +95,6 @@ pub mod sub {
     pub const SPRITES: u32 = 0x1de96;
     /// Copie des entrées vers les joueurs.
     pub const INPUTS: u32 = 0x2aec;
-    /// Remise à zéro du rang (difficulté dynamique).
-    pub const RANK_RESET: u32 = 0x1f258;
     /// Ouvre un message (bulle de dialogue, SET) numéro D0 ; A1 = le message, dont l'octet `+0x22`
     /// passe à 1 quand il est terminé.
     pub const MESSAGE: u32 = 0xc8312;

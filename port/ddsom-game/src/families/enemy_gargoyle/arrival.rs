@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -42,7 +43,7 @@ fn flight(x: &mut Cx) {
             fly(x, 5);
         }
         2 => {
-            x.call(sub::MOVE_X);
+            x.move_x();
             let cam = camera_x(x);
             let rightward = (x.u16(SPEED_X) as i16) >= 0;
             let mut d0 = cam.wrapping_add(if rightward { 0x90 } else { 0xf0 });
@@ -60,7 +61,7 @@ fn flight(x: &mut Cx) {
             x.set16(GRAVITY, -0x40i16 as u16);
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -77,7 +78,7 @@ fn flight(x: &mut Cx) {
                 x.set16(TIMER2, 4);
                 spark(x, 8);
             }
-            x.call(sub::MOVE_X);
+            x.move_x();
             if count_down(x, TIMER) {
                 lib::step(x);
             } else if lib::players_alive(x) {

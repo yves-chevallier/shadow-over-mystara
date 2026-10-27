@@ -90,7 +90,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::mem::{rd8, rts, A5};
-use crate::objects::{anim, lists, pools, Obj};
+use crate::objects::Obj;
 use crate::Native;
 
 /// Toutes les routines natives des familles.
@@ -140,16 +140,8 @@ pub const NATIVES: &[Native] = &[
 
 /// Routines du jeu appelées par les gestionnaires (adresses d'origine).
 pub mod rom {
-    pub const ANIM_STEP: u32 = 0x1a56;
-    pub const REINSERT_ACTORS: u32 = 0x1ee1a;
-    pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const CULL_OFFSCREEN: u32 = 0x1e1a;
     pub const DANS_LA_ZONE: u32 = 0xfbae;
     pub const OMBRE: u32 = 0x33fe4;
-    pub const RNG: u32 = 0x19a88;
 }
 
 /// Contexte d'exécution d'un gestionnaire : la machine.
@@ -228,13 +220,6 @@ impl<'a> Ctx<'a> {
         crate::call(self.c, self.b, adresse);
     }
 
-    /// Appel direct d'une routine native du modèle d'objets (sans passer par l'index des adresses).
-    pub fn natif(&mut self, n: &Native) {
-        self.c.a[7] = self.c.a[7].wrapping_sub(4);
-        crate::mem::wr32(self.b, self.c.a[7], 0xfffe);
-        (n.run)(self.c, self.b);
-    }
-
     /// `jsr adresse` exécuté par le code d'origine seul (aucune routine native, même imbriquée) : les
     /// registres que l'original laisse derrière lui (restes de calcul) sont alors exactement les siens.
     pub fn jsr_origine(&mut self, adresse: u32) {
@@ -254,42 +239,7 @@ impl<'a> Ctx<'a> {
         }
     }
 
-    // ---- services du modèle d'objets ----
-
-    /// `anim_start_indexed` : démarre le script `numero` du jeu d'animations `jeu`.
-    pub fn anim_start(&mut self, jeu: u32, numero: u16) {
-        self.c.a[4] = jeu;
-        self.c.d[0] = numero as u32;
-        self.natif(&anim::ANIM_START_INDEXED);
-    }
-
-    /// Pas d'animation ; vrai si le script est arrivé à sa fin.
-    pub fn anim_step(&mut self) -> bool {
-        self.natif(&anim::ANIM_STEP);
-        self.c.cond(5) // C
-    }
-
-    /// Réinsère l'objet dans la liste triée des acteurs (tri par profondeur). Le handler suivant hérite
-    /// des registres : la native les rend comme l'original (voir `objects::lists`).
-    pub fn reinsert(&mut self) {
-        self.natif(&lists::REINSERT_ACTORS);
-    }
-
-    /// Réinsère l'objet dans la liste triée du premier plan.
-    pub fn reinsert_foreground(&mut self) {
-        self.natif(&lists::REINSERT_FOREGROUND);
-    }
-
-    /// Libère l'objet traité dans son pool.
-    pub fn free(&mut self, pool: &pools::Pool) {
-        let o = self.obj();
-        pool.release(self.b, o)
-    }
-
-    /// Alloue un objet dans `pool` : l'emplacement, ou `None` si le pool est plein.
-    pub fn alloc(&mut self, pool: &pools::Pool) -> Option<Obj> {
-        pool.alloc(self.b)
-    }
+    // Le moteur d'objets (animation, listes, pools...) : trait `objects::Courant` sur l'objet A0.
 
     /// Condition « plus grand » (bgt) des drapeaux courants.
     pub fn gt(&self) -> bool {

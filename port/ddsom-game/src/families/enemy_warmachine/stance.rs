@@ -4,6 +4,7 @@
 use super::arrival::hop_loop;
 use super::decide::*;
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de délais (octets) lues par `charge_delay` et `wander_delay`.
 const CHARGE_A: u32 = 0x78e8c;
@@ -68,9 +69,7 @@ fn wait(x: &mut Cx) {
 
 /// 0x79f6 : fixe le délai d'attente `+0x6e` d'après la difficulté et rend la main (D0 = 1).
 fn pick_wait(x: &mut Cx) {
-    x.c.d[0] = 0;
-    x.call(0x1e92);
-    if !x.c.cond(5) {
+    if !x.in_arena(0) {
         x.set8(AI_WAIT, 1);
         x.c.d[0] = 1;
         return;
@@ -204,7 +203,7 @@ fn march_step(x: &mut Cx) {
         return go::turn(x);
     }
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     lib::step(x);
 }
@@ -241,7 +240,7 @@ fn charge(x: &mut Cx) {
         }
         2 => {
             x.anim_step();
-            x.call(sub::MOVE_X);
+            x.move_x();
             if x.u8(KEY) == 2 {
                 x.set8(KEY, 0);
                 spark(x, 1);

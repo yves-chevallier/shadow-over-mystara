@@ -12,13 +12,14 @@ use crate::mem::wr16;
 use crate::objects::Obj;
 use m68k::SR_C;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Table (espace programme) des déplacements des machines, un mot relatif par variante.
 const VARIANTS: u32 = 25;
 
 /// Routines du moteur appelées.
 mod rom {
-    pub const RNG: u32 = 0x19a88;
     /// Chargeur de blocs 8x8 du scroll 2 / 3 (D0 = grille, A1 = destination).
     pub const LOAD_BLOCKS: u32 = 0x26d4;
     /// Chargeur de blocs 4x4.
@@ -108,8 +109,7 @@ fn conductor(x: &mut Cx) -> Obj {
 }
 
 fn rng(x: &mut Cx) -> u16 {
-    x.call(rom::RNG);
-    x.c.d[0] as u16
+    x.random_68k()
 }
 
 /// Charge la grille de blocs `grid` à `dest` par 0x26d4 ou 0x2766 (D0 = grille, A1 = destination).

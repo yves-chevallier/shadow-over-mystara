@@ -5,8 +5,8 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 const SHAKE: u32 = 0x2824;
 const FLASH_ON: u32 = 0x1ac68;
 const FLASH_PULSE: u32 = 0x1ac86;
@@ -65,7 +65,7 @@ mod jet {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
                 active(x);
             }
             0 => {
@@ -73,7 +73,7 @@ mod jet {
                 if x.u16(0x5c) == 0 {
                     x.add8(0x4, 2);
                     x.anim(ANIMS, 1);
-                    x.call(REINSERT);
+                    x.reinsert();
                     x.call(SFX);
                 }
             }
@@ -84,13 +84,12 @@ mod jet {
 
     fn active(x: &mut Cx) {
         if x.u8(0x3) != 0 {
-            x.call(ANIM_STEP);
-            if x.c.cond(5) {
+            if x.anim_step() {
                 x.add8(0x4, 2);
             }
             return;
         }
-        x.call(MOVE_XZ);
+        x.move_xz();
         if (x.u16(0xc) as i16) >= 0 {
             return;
         }
@@ -153,16 +152,16 @@ mod item {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
-                x.call(ANIM_STEP);
-                x.call(MOVE_XZ);
+                x.anim_step();
+                x.move_xz();
                 if (x.u16(0xc) as i16) < 0 {
                     x.add8(0x4, 2);
                     x.set32(0xc, 0);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_pshl(),
         }
@@ -188,12 +187,11 @@ mod flame {
                 x.set8(f::POWER, 6);
                 x.set8(f::POWER2, 6);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
                 x.call(SFX);
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
             }
@@ -250,7 +248,7 @@ mod volley {
                 let life = x.rom8(LIFETIMES + class);
                 x.set8(0x5c, life);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 let dx = signed(4, x.u8(f::FLIP) == 0);
@@ -260,8 +258,8 @@ mod volley {
                 if x.u8(0x5c) == 0 {
                     x.add8(0x4, 2);
                 }
-                x.call(ANIM_STEP);
-                x.call(CULL);
+                x.anim_step();
+                x.cull_offscreen();
             }
             _ => die(x),
         }
@@ -297,7 +295,7 @@ mod star {
                 x.set8(f::POWER, 6);
                 x.set8(f::POWER2, 6);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
                 if x.u8(0x3) == 0 {
                     x.call(SFX);
                 }
@@ -316,7 +314,7 @@ mod star {
                     let c = x.rom8(COLORS + n as u32);
                     x.set8(0x2b, c);
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             _ => {
                 decrement(x, COUNTER_16);
@@ -355,13 +353,14 @@ mod stone {
                 x.set_d0w(dx);
                 x.add16(0x8, dx);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => match x.u8(0x5) {
                 0 => {
-                    x.call(MOVE_XZ);
+                    x.move_xz();
                     if (x.u16(0xc) as i16) >= 0 {
-                        return x.call(ANIM_STEP);
+                        x.anim_step();
+                        return;
                     }
                     x.add8(0x5, 2);
                     x.set32(0xc, 0);
@@ -379,7 +378,7 @@ mod stone {
                         x.set_a5_u16(0x4ba, 0x100);
                         x.call(FLASH_ON);
                     }
-                    x.call(ANIM_STEP);
+                    x.anim_step();
                 }
                 4 => {
                     x.add16(0x5c, 0xffff);
@@ -388,7 +387,7 @@ mod stone {
                         x.set16(0x5c, 2);
                         x.call(FLASH_PULSE);
                     }
-                    x.call(ANIM_STEP);
+                    x.anim_step();
                 }
                 _ => {
                     if x.u16(0x5c) != 0 {
@@ -398,8 +397,7 @@ mod stone {
                         }
                         x.set_a5_u16(0x4ba, 0);
                     }
-                    x.call(ANIM_STEP);
-                    if x.c.cond(5) {
+                    if x.anim_step() {
                         x.add8(0x4, 2);
                     }
                 }

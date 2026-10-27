@@ -2,6 +2,7 @@
 //! 2 recul (riposte possible), 4 chute, 8 fuite hors de l'écran, 10 rien.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x58d0a;
@@ -64,7 +65,8 @@ fn recoil(x: &mut Cx) {
         }
     }
     if x.u8(SPEED_X) != 0 {
-        return x.call(sub::MOVE_X);
+        x.move_x();
+        return;
     }
     x.set32(0x58, 0);
     if x.u8(POSTURE) == 9 {
@@ -177,10 +179,9 @@ fn flee(x: &mut Cx) {
 fn run_away(x: &mut Cx) {
     step(x);
     if (x.u8(KEY_FRAME) as i8) >= 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
-    x.call(call::SCREEN_CHECK);
-    if !x.c.cond(5) {
+    if !x.in_arena_default() {
         x.call(call::REMOVE);
         return set_state_long(x, st::DEAD_LONG);
     }

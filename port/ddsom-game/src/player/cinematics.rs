@@ -21,8 +21,6 @@ type Handler = fn(&mut Ctx, Player);
 mod rom {
     /// Son de la pose de victoire.
     pub const VICTORY_SOUND: u32 = 0xe24d8;
-    /// Animation du jeu C des personnages (D6 = numéro).
-    pub const ANIM_START_C: u32 = 0x2cf0;
     pub const TERRAIN: u32 = 0x33fe4;
     pub const INTRO_SOUND: u32 = 0xab708;
     /// Étincelles de la sortie (D0 = variante).
@@ -167,7 +165,8 @@ fn start_victory(g: &mut Ctx, p: Player) {
 
 /// Animation du jeu C (0x2cf0).
 fn anim_c(g: &mut Ctx, p: Player, n: u32) {
-    g.rom_d6(rom::ANIM_START_C, p, n);
+    g.c.d[6] = n;
+    crate::objects::anim::start_by_character_68k(g.c, g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, n as u16);
 }
 
 /// Mémorise la place du joueur (table de couples (x, profondeur) par rang) puis se tourne vers elle :

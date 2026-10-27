@@ -43,8 +43,9 @@ fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
         p.set_state(&mut g, state::STAND.0);
         p.set_u8(&mut g, Player::SUBACTION, 0);
     }
-    g.c.d[6] = stand_animation(&mut g, p) as u32;
-    crate::call(c, b, 0x2c16);
+    let n = stand_animation(&mut g, p);
+    g.c.d[6] = n as u32;
+    crate::objects::anim::start_by_character_68k(c, b, p.obj(), &crate::objects::anim::SETS_ARMED, n);
     crate::mem::rts(c, b);
 }
 

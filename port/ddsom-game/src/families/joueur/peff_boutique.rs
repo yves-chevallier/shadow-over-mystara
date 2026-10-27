@@ -10,6 +10,7 @@ use crate::families::cx::{handler, handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
+use crate::objects::Courant;
 
 /// Message du marchand à afficher (mot, A5 - 0x554e) et les deux sons de la boutique (D0 inutile : le
 /// message est lu en RAM).
@@ -144,9 +145,9 @@ mod item {
         let anim = x.data16(ANIMATIONS + 2 * v);
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ANIMS_ALT } else { ANIMS };
         x.c.a[1] = ANIMATIONS;
-        x.c.a[4] = set;
         x.set_d0w(anim);
-        x.call(0x1a32);
+        let n = x.c.d[0] as u16;
+        x.anim_start(set, n);
         x.reinsert();
     }
 
@@ -277,8 +278,8 @@ mod item {
         let stock = x.u8(STOCK).wrapping_sub(1);
         x.set8(STOCK, stock);
         if (stock as i8) < 0 {
-            x.call(ANIM_STEP);
-            x.call(ANIM_STEP);
+            x.anim_step();
+            x.anim_step();
         }
         pay(x, player);
         x.call(SOUND_OK);

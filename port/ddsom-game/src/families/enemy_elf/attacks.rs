@@ -4,6 +4,7 @@
 
 use super::stance::{begin_walk, begin_walk_step, front_box, needs_turn_around, pick_attack, side_box};
 use super::*;
+use crate::objects::Courant;
 
 /// Positions d'arrivée (décalages en X puis en profondeur) après un saut vers la cible, tirées par 0x69eee.
 const JUMP_DX: u32 = 0x69f4a;
@@ -61,7 +62,7 @@ fn finish_back(x: &mut Cx) {
 
 /// 0x69e4e : retombe jusqu'au sol, puis animation de réception.
 fn fall(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     if (x.u16(HEIGHT) as i16) <= 0 {
         x.add8(STEP, 2);
         x.set32(HEIGHT, 0);
@@ -277,7 +278,7 @@ fn drop_strike(x: &mut Cx, kind: Drop) {
             if (x.u16(HEIGHT) as i16) <= 0x30 {
                 step(x);
             }
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -394,7 +395,7 @@ fn landing_group(x: &mut Cx) {
         }
         10 => {
             step(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) <= 0 {
                 x.add8(STEP, 2);
                 x.set32(HEIGHT, 0);
@@ -520,8 +521,7 @@ fn forward_group(x: &mut Cx) {
             }
             x.add8(STEP, 0xc);
             x.set8(REPEAT, 0x10);
-            x.c.d[0] = 0xd;
-            x.call(call::SPEED_TABLE);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 0xd);
             x.set8(ANGLE, 0);
             let target = load_target(x);
             let dy = x.u16(DEPTH).wrapping_sub(target.u16(x.b, DEPTH));

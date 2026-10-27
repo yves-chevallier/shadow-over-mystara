@@ -7,7 +7,7 @@
 //! 0 vol, 2 attaque (`+0x2f` choisit la série : 0 projectiles, 1 coups, 2 tir), 4 pause, 6 sortie
 //! d'écran, 8 sortie par le haut.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
 
@@ -41,10 +41,9 @@ mod g {
     pub const FLIP: u32 = 0x2c;
 }
 use g::*;
+use crate::objects::Courant;
 
 mod call {
-    pub const MOVE_TABLE_XZ: u32 = 0x1cee;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const CREATE_COMPANION: u32 = 0xa036e;
     pub const REMOVE: u32 = 0x27ee;
 }
@@ -75,7 +74,7 @@ fn set_state_long(x: &mut Cx, v: u32) {
 /// Remise en liste : la variante 8 vit dans la liste du premier plan.
 fn reinsert(x: &mut Cx) {
     if x.u8(VARIANT) == 8 {
-        x.call(sub::REINSERT_FOREGROUND);
+        x.reinsert_foreground();
     } else {
         x.reinsert();
     }
@@ -101,12 +100,11 @@ fn leave(x: &mut Cx) {
 }
 
 fn speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 fn move_xz_table(x: &mut Cx) {
-    x.call(call::MOVE_TABLE_XZ);
+    x.move_by_table_xz();
 }
 
 /// Un tour de l'angle de vol : toutes les `reload` images, `+0xa2` s'ajoute à la direction. En vol libre
@@ -168,7 +166,7 @@ fn init(x: &mut Cx) {
         x.set16(EXIT_LIMIT, limit);
     }
     let anim = (x.u8(KIND).wrapping_add(x.u8(SERIES)) as i8) as i16 as u16;
-    x.anim_start(SET_FLY, anim as u32);
+    x.anim_start(SET_FLY, (anim as u32) as u16);
     speed(x, 0x18);
     if variant >> 1 == 0 {
         let vz = x.u16(0x1c);
@@ -275,7 +273,7 @@ fn fly_front(x: &mut Cx) {
 fn turn_back(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            x.call(sub::MOVE_X);
+            x.move_x();
             let t = x.u8(TIMER_B).wrapping_sub(1);
             x.set8(TIMER_B, t);
             if (t as i8) < 0 {
@@ -409,14 +407,14 @@ fn attack_start(x: &mut Cx) {
             let shot = x.c.a[1];
             x.set32(SHOT, shot);
             let n = x.u8(KIND) as u32;
-            x.anim_start(SET_ATTACK, n);
+            x.anim_start(SET_ATTACK, n as u16);
             return x.call(0xed5b2);
         }
     }
     set_state_long(x, 0x0204_0000);
     x.set8(0x77, 0x1e);
     let n = x.u8(KIND) as u32;
-    x.anim_start(SET_FLY, n);
+    x.anim_start(SET_FLY, n as u16);
 }
 
 /// 0x75bd0 : attend la fin du geste de tir.
@@ -425,7 +423,7 @@ fn attack_aim(x: &mut Cx) {
     if x.u8(SHOT_DONE) != 0 {
         x.add8(f::SUB2, 2);
         let n = 2 + x.u8(KIND) as u32;
-        x.anim_start(SET_ATTACK, n);
+        x.anim_start(SET_ATTACK, n as u16);
     }
 }
 
@@ -469,13 +467,13 @@ fn attack_claws(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 2);
             let n = 4 + x.u8(KIND) as u32;
-            x.anim_start(SET_ATTACK, n);
+            x.anim_start(SET_ATTACK, n as u16);
         }
         2 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
                 let n = 6 + x.u8(KIND) as u32;
-                x.anim_start(SET_ATTACK, n);
+                x.anim_start(SET_ATTACK, n as u16);
             }
         }
         4 => {
@@ -483,7 +481,7 @@ fn attack_claws(x: &mut Cx) {
                 x.set8(TIMER_A, 0x1e);
                 x.add8(f::SUB2, 2);
                 let n = 2 + x.u8(KIND) as u32;
-                x.anim_start(SET_FLY, n);
+                x.anim_start(SET_FLY, n as u16);
             } else if x.u8(KEY_FRAME) != 0 {
                 x.set8(KEY_FRAME, 0);
                 if pick_target(x) {
@@ -542,7 +540,7 @@ fn hit(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(sub::REINSERT_FOREGROUND);
+    x.reinsert_foreground();
 }
 
 /// Animation de chute de la série d'attaque (`+0x2f`).
@@ -573,7 +571,7 @@ fn hit_recoil(x: &mut Cx) {
         }
         4 => {
             step(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             let z = x.u16(0xc).wrapping_add(x.u16(0x10));
             let mut limit = x.a5_u16(0x50a);
             if x.a5_u8(0x36) != 0 {
@@ -595,7 +593,7 @@ fn hit_fall(x: &mut Cx) {
         if x.u8(1) & 2 == 0 {
             x.add8(f::STATE, 2);
         }
-        x.call(sub::MOVE_Z);
+        x.move_z();
         return step(x);
     }
     match x.u8(f::SUB2) {
@@ -607,18 +605,18 @@ fn hit_fall(x: &mut Cx) {
             x.set8(RESUME, base as u8 + 2);
             x.set16(0x18, (-0x300i16) as u16);
             let n = base.wrapping_add(x.u8(KIND) as u32) & 0xff;
-            x.anim_start(SET_HIT, n);
+            x.anim_start(SET_HIT, n as u16);
         }
         2 => {
             if (x.u16(0xc) as i16) >= 0 {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 return step(x);
             }
             x.add8(f::SUB2, 2);
             x.set32(0xc, 0);
             x.set8(TIMER_A, 0x10);
             let n = x.u8(RESUME) as i8 as i16 as u16;
-            x.anim_start(SET_HIT, n as u32);
+            x.anim_start(SET_HIT, (n as u32) as u16);
         }
         _ => {
             let t = x.u8(TIMER_A).wrapping_sub(1);
@@ -643,7 +641,7 @@ fn hit_dying(x: &mut Cx) {
     }
     x.set32(0x58, 0);
     let base = hit_anim(x).wrapping_add(x.u8(KIND)).wrapping_sub(2);
-    x.anim_start(SET_HIT, base as u32);
+    x.anim_start(SET_HIT, (base as u32) as u16);
 }
 
 // --- état 6 : libération ---------------------------------------------------------------------------

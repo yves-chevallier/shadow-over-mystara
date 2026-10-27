@@ -4,8 +4,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
-
-const REINSERT: u32 = 0x1ee1a;
+use crate::objects::Courant;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -39,7 +38,7 @@ mod leap {
                 x.add16(0xc, dz);
                 let n = x.u8(0x3) as u32;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 let owner = x.link_a1(f::OWNER);
@@ -55,12 +54,11 @@ mod leap {
                     x.c.d[1] = 0x82;
                     x.add16(0x8, dx);
                     x.add16(0xc, 0x82);
-                    x.call(ANIM_STEP);
-                    if x.c.cond(5) {
+                    if x.anim_step() {
                         x.add8(0x4, 2);
                     }
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -95,11 +93,10 @@ mod swap {
                 x.anim(ANIMS, 0);
                 x.c.d[4] = owner.u8(x.b, 0x10d) as u32;
                 x.call(SFX);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
             }
@@ -121,7 +118,7 @@ mod dash {
                 x.add8(0x4, 2);
                 pose(x);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 let owner = x.link_a1(f::OWNER);
@@ -135,9 +132,9 @@ mod dash {
                 }
                 pose(x);
                 if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 {
-                    x.call(ANIM_STEP);
+                    x.anim_step();
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -180,7 +177,7 @@ mod chip {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 let owner = x.link_a1(f::OWNER);
@@ -229,7 +226,9 @@ mod chunk {
                     let dx = signed(d2, host.u8(x.b, f::FLIP) != 0);
                     x.add16(0x8, dx);
                     x.add16(0xc, d3);
-                    x.call(0x1a32);
+                    let set = x.c.a[4];
+                    let n = x.c.d[0] as u16;
+                    x.anim_start(set, n);
                     x.set16(0x30, 0x14);
                 }
             }
@@ -253,7 +252,7 @@ mod chunk {
             _ => x.free_peff(),
         }
         if x.u8(0) != 0 {
-            x.call(REINSERT);
+            x.reinsert();
         }
     }
 }
@@ -294,8 +293,7 @@ mod rain {
                     x.set_bit(0x1, 1, true);
                     return;
                 }
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     let r = (x.rand_and(3) * 2) as u32;
                     let d = x.rom16(DELAYS + r);
                     x.set16(0x58, d);
@@ -306,7 +304,7 @@ mod rain {
                 }
                 let h = x.u8(0x1) ^ 2;
                 x.set8(0x1, h);
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }

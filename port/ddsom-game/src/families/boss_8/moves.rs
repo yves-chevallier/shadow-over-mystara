@@ -4,6 +4,7 @@
 use super::aids;
 use super::attacks::{leap_rest, leap_start};
 use super::*;
+use crate::objects::Courant;
 
 fn key(x: &mut Cx, kind: u8) {
     x.set8(ANIM_KIND, kind);
@@ -150,7 +151,7 @@ fn rest(x: &mut Cx) {
                 x.set32(f::STATE, 0x0202_0200);
                 return;
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         t => {
             if t == 0x88fac {

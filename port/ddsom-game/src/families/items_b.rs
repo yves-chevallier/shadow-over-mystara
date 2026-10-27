@@ -8,10 +8,11 @@
 //! joueur (mode `+0x2f` = 1, délai `+0x59`) qui retombe et attend d'être repris. Déjà portée, elle ne
 //! rapporte qu'un événement de score.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use crate::mem::A5;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 mod f {
     pub const ACTIVE: u32 = 0x00;
@@ -174,8 +175,7 @@ fn active(x: &mut Cx) {
 
 /// Sous-état 0 : chute ; au sol, la pièce est ramenée dans la vue (sauf rejetée) et scintille.
 fn fall(x: &mut Cx) {
-    x.call(sub::MOVE_XYZ);
-    if !x.c.cond(14) {
+    if !x.move_xyz().gt() {
         x.add8(f::SUB, 2);
         x.set16(f::LIFETIME, LIFETIME);
         x.set32(f::Z, 0);
@@ -233,7 +233,7 @@ fn age(x: &mut Cx) {
 /// l'écran ; retombée, elle attend d'être ramassée.
 fn thrown(x: &mut Cx) {
     if x.u8(f::SUB2) != 0 {
-        x.call(sub::MOVE_XZ);
+        x.move_xz();
         if x.u16(f::Z) as i16 >= 0 {
             return;
         }

@@ -5,8 +5,8 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd32, wr32};
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 /// Fenêtre de palette de la RAM graphique recopiée par les effets (8 longs).
 const PALETTE_WINDOW: u32 = 0x91c1e0;
 /// Masque ajouté ou combiné aux couleurs copiées (bit de transparence des mots).
@@ -60,7 +60,7 @@ mod meteors {
                 x.add16(0x10, 1);
                 x.set16(0x58, 0x510);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             0 => {
                 x.add8(0x4, 2);
@@ -76,7 +76,7 @@ mod meteors {
                 let dz = (x.rand_and(0x7f) as u16).wrapping_sub(0x3f);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 1);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 if !child => {
                 x.c.d[0] = x.c.d[0] & !0xff | x.u8(0x5) as u32;
@@ -93,8 +93,7 @@ mod meteors {
                 }
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.free_peff();
                 }
             }
@@ -117,7 +116,7 @@ mod meteors {
                 x.call(SFX);
             }
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         let signal = x.u8(0x33);
         if signal == 0 {
             return;
@@ -194,14 +193,14 @@ mod lamp {
             x.set8(0x33, 0);
             palette_effect(x);
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         x.set_bit(0x1, 1, false);
         let blink = x.a5_u8(a5::FRAME) & 1;
         x.c.d[0] = x.c.d[0] & !0xff | blink as u32;
         if blink != 0 {
             x.set_bit(0x1, 1, false);
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// `0x519b0` : effet de palette de la variante.

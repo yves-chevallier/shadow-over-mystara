@@ -15,7 +15,7 @@
 //! L'état touché a son propre recul (pas de table de réaction commune). Animations 0x163da8 (mouvements),
 //! 0x163db8 (charge) et 0x163dba (touché).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 const ANIMS: u32 = 0x163da8;
@@ -49,6 +49,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Tables de la ROM (le suffixe dit l'espace de lecture : opcodes pour les `(table,PC,Dn)`, données sinon).
 const SPAWN_LISTS: u32 = 0x669d6;
@@ -86,7 +87,7 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 fn anim_play(x: &mut Cx, n: u32) {
-    x.anim_start(ANIMS, n);
+    x.anim_start(ANIMS, n as u16);
 }
 
 /// Hauteur de départ d'une chute : l'objet apparaît au-dessus de l'écran.
@@ -138,8 +139,7 @@ fn random_timer(x: &mut Cx) {
 fn speed_row(x: &mut Cx) {
     let idx = x.u8(MOVE) as u32;
     let d0 = x.rom8(SPEED_ROW + idx);
-    x.c.d[0] = d0 as u32;
-    x.call(sub::SPEED_TABLE_B);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, (d0 as u32) as u16);
 }
 
 /// Choix du coup suivant dans la ligne de la difficulté : tire `+6` = 2 + octet de la table.
@@ -280,7 +280,7 @@ fn arrival(x: &mut Cx) {
 
 /// Chute : tant que l'altitude est positive ; à l'atterrissage `done` change de sous-état.
 fn land(x: &mut Cx, done: impl FnOnce(&mut Cx)) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     if (x.u16(HEIGHT) as i16) > 0 {
         return;
     }
@@ -303,7 +303,7 @@ fn fly_in(x: &mut Cx) {
             }
         }
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) >= 0 {
                 return;
             }
@@ -368,8 +368,7 @@ fn walk(x: &mut Cx) {
             if x.u8(f::FLIP) != 0 {
                 x.set8(ANGLE, 8);
             }
-            x.c.d[0] = 0xd;
-            x.call(sub::SPEED_TABLE_B);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 0xd);
             anim_play(x, 1);
         }
         2 => {
@@ -637,7 +636,7 @@ fn knock_back(x: &mut Cx) {
 fn recoil(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if x.u8(0x29) != 0 {
                 x.set16(SPEED_X, 0);
                 x.set16(SPEED_Y, 0);
@@ -700,9 +699,8 @@ fn grabbed_flight(x: &mut Cx) {
             }
         }
         4 => {
-            x.call(sub::MOVE_X);
-            x.call(0x1e90);
-            if !x.c.cond(5) {
+            x.move_x();
+            if !x.in_arena_default() {
                 x.call(REMOVE);
                 set_state_long(x, DEAD);
             }

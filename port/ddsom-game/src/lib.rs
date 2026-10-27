@@ -32,6 +32,7 @@ pub mod combat;
 pub mod families;
 pub mod inputs;
 pub mod kernel;
+pub mod machine;
 pub mod mem;
 pub mod modes;
 pub mod objects;

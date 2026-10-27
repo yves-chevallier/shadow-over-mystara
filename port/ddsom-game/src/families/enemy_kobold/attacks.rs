@@ -4,6 +4,7 @@
 //! Chaque geste commence par `begin_wait` (étape 0) et `hold` (étape 2, poursuite en place).
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -153,7 +154,8 @@ fn thrust(x: &mut Cx) {
             x.set16(TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
-                return x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
+                return;
             }
             x.add8(STEP, 2);
             x.set16(SPEED_X, 0x180);
@@ -166,7 +168,7 @@ fn thrust(x: &mut Cx) {
         }
         8 => {
             if x.u8(SPEED_X) != 0 {
-                x.call(sub::MOVE_X);
+                x.move_x();
             }
             if x.anim_step() {
                 x.set32(SPEED_X, 0);
@@ -291,8 +293,7 @@ fn jump_series(x: &mut Cx, vx: i16, kind: u8) {
 
 /// 0x54fc4 : retombée d'un saut → animation 0x18 d'atterrissage.
 fn land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
-    if x.c.cond(14) {
+    if x.move_xz().gt() {
         x.anim_step();
         return;
     }
@@ -376,7 +377,7 @@ fn paw_run(x: &mut Cx) {
     let n = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, n);
     if (n as i16) >= 0 {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.anim_step();
         return;
     }
@@ -522,7 +523,8 @@ fn dash_turn(x: &mut Cx) {
             x.set16(TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
-                return x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
+                return;
             }
             x.add8(STEP, 2);
             mv(x, 5);

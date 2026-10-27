@@ -414,7 +414,7 @@ fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
         let p = A5 + 0x5de + 0x200 * k;
         if alive(b, p) {
             c.a[0] = p;
-            call(c, b, 0x1ee1a);
+            crate::objects::lists::ACTORS.reinsert_68k(c, b, Obj(c.a[0]));
         }
     }
     c.a[0] = a0;
@@ -651,7 +651,7 @@ fn right_half(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x5cdc6 : tirage au sort : D0 = 1 si le bit (hasard & 0xf) du masque 0x03ff est levé (10 chances sur 16).
 fn chance_10_16(c: &mut Cpu, b: &mut Cps2Bus) {
-    call(c, b, 0x19a88);
+    crate::rng::random_68k(c, b);
     let bit = c.d[0] as u16 & 0xf;
     c.d[1] = c.d[1] & !0xffff | 0x03ff;
     c.d[0] = (0x03ff >> bit & 1) as u32;

@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Réactions communes aux coups, indexées par le code `+0x49`.
 const REACTIONS: u32 = 0x6518a;
@@ -111,12 +112,12 @@ fn recoil(x: &mut Cx) {
                 x.set16(TIMER, 0x14);
                 x.set16(SPEED_Y, 0);
             }
-            x.call(sub::MOVE_X);
+            x.move_x();
             x.anim_step();
         }
         4 => {
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 x.anim_step();
             } else {
                 x.set32(0x58, 0);
@@ -184,11 +185,11 @@ fn dying(x: &mut Cx) {
             x.set16(SPEED_Y, 0);
             x.set16(SPEED_Z, 0x480);
             x.set16(GRAVITY, -0x40i16 as u16);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             x.anim_start(SET_FLY, 0xf);
         }
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > 0 {
                 x.anim_step();
             } else {
@@ -197,7 +198,7 @@ fn dying(x: &mut Cx) {
             }
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -211,12 +212,12 @@ fn dying(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
                 x.set16(SPEED_Z, 0x280);
                 x.set16(GRAVITY, -0x40i16 as u16);
-                x.call(sub::MOVE_XZ);
+                x.move_xz();
                 x.anim_start(SET_FLY, 0x11);
             }
         }
         8 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -230,7 +231,7 @@ fn dying(x: &mut Cx) {
         }
         10 => {
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
             } else {
                 x.add8(f::SUB2, 2);
                 x.set16(TIMER, 0x14);
@@ -285,7 +286,7 @@ fn fall(x: &mut Cx) {
             play(x, SET_FLY, 5);
         }
         6 => {
-            x.call(sub::MOVE_X);
+            x.move_x();
             if lib::outside(x, -0x30, 0x1b0) {
                 x.call(call::REMOVE);
                 x.free(&pools::ENEMY);

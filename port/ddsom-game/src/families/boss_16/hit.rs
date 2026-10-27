@@ -10,6 +10,7 @@
 //! | 10 | retour au combat |
 
 use super::*;
+use crate::objects::Courant;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x940a8;
@@ -161,7 +162,7 @@ fn knockback_hold(x: &mut Cx) {
     if x.u8(0x14) == 0 {
         return recover_position(x);
     }
-    x.call(ia::MOVE_X);
+    x.move_x();
     step(x);
 }
 
@@ -171,7 +172,7 @@ fn knockback_hard_hold(x: &mut Cx) {
         sub8(x, SHAKE, 1);
         x.set8(SHAKE, 0x10);
     }
-    x.call(ia::MOVE_XZ);
+    x.move_xz();
     if (x.u16(0xc) as i16) > 0 {
         step(x);
         return;
@@ -253,7 +254,7 @@ fn pushed_back(x: &mut Cx) {
             anim_a(x, 5);
         }
         2 => {
-            x.call(ia::MOVE_X);
+            x.move_x();
             if (x.u8(0x14) as i8) < 0 {
                 return stop(x);
             }
@@ -348,7 +349,7 @@ fn death_sequence(x: &mut Cx, first: u32, second: u32) {
             announce(x);
         }
         2 => {
-            x.call(ia::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) >= 0 {
                 return;
             }

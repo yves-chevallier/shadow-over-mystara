@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -79,7 +80,7 @@ fn crawl_leap(x: &mut Cx) {
         4 => launch(x),
         6 => in_flight(x),
         8 => {
-            x.call(call::MOVE_XY);
+            x.move_xy();
             if sub8(x, TIMER, 1).gt() {
                 return;
             }
@@ -110,7 +111,7 @@ fn in_flight(x: &mut Cx) {
     } else if try_grab(x) {
         return;
     }
-    x.call(ia::MOVE_XZ);
+    x.move_xz();
     if (x.u16(0xc) as i16) > 0 {
         return;
     }
@@ -137,7 +138,7 @@ fn charge(x: &mut Cx) {
             anim_b(x, 0);
         }
         2 => {
-            x.call(call::MOVE_XY);
+            x.move_xy();
             let mut v = x.u16(0x14);
             if x.u8(f::FLIP) == 0 {
                 v = v.wrapping_neg();
@@ -162,7 +163,7 @@ fn charge(x: &mut Cx) {
         }
         6 => {
             step(x);
-            x.call(call::MOVE_XY);
+            x.move_xy();
             if sub8(x, TIMER, 1).gt() {
                 return;
             }
@@ -327,7 +328,7 @@ fn double_jump(x: &mut Cx) {
         }
         2 => {
             step(x);
-            x.call(ia::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) < 0 {
                 x.set16(0xc, 0);
                 next7(x);
@@ -339,7 +340,7 @@ fn double_jump(x: &mut Cx) {
         }
         4 => {
             step(x);
-            x.call(ia::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) < 0 {
                 x.set16(0xc, 0);
                 next_attack(x);

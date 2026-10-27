@@ -61,6 +61,8 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 pub(self) const SET_BODY: u32 = 0x17809c;
 pub(self) const SET_STRIKE: u32 = 0x1780ba;
@@ -71,26 +73,21 @@ pub(self) const WAIT: u32 = 0x020a_0000;
 pub(self) const FIGHT: u32 = 0x0202_0000;
 
 pub(self) fn body(x: &mut Cx, n: u32) {
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 pub(self) mod call {
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const SOUND_EVENT: u32 = 0x2824;
     pub const SOUND_B: u32 = 0x2860;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const BURST: u32 = 0xb10c8;
     pub const ATTACK_START: u32 = 0xac3a;
-    pub const STEP: u32 = 0x1a56;
     pub const FADE: u32 = 0xecf7a;
     pub const PICK_TARGET: u32 = 0x424e;
-    pub const RNG: u32 = 0x19a88;
     /// Seuil des PV et ralenti (`boss_common`, 0x87048).
     pub const HP_THRESHOLD: u32 = 0x87048;
 }
@@ -131,7 +128,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     loop {
-        x.call(rom::TICK_COUNTERS);
+        x.tick_counters();
         if x.u16(f::TARGET) == 0 {
             x.call(call::PICK_TARGET);
         }
@@ -295,8 +292,8 @@ fn idle_attack(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(PHASE_TIMER, 0xa);
     x.set32(f::STATE, 0x0204_0000);
-    x.call(call::RNG);
-    let i = x.c.d[0] & 0xf;
+    let alea = x.random_68k();
+    let i = alea as u32 & 0xf;
     setw(x, 0, i as u16);
     let attack = x.rom8(0x85cd8 + i);
     x.set8(f::SUB2, attack);

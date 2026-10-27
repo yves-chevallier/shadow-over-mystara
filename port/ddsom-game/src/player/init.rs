@@ -8,6 +8,7 @@
 //!   au hasard, équipement, sorts et armes de départ. Les valeurs viennent de tables de la ROM
 //!   (une ligne par personnage, puis par niveau) lues à l'exécution.
 
+use crate::machine::Machine;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 

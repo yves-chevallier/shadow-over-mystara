@@ -2,6 +2,7 @@
 //! 6 seconde table de réactions, 8 saisie par un joueur (le Troll s'enfuit). Zone et ombre sont toujours testées.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x6d0f0;
@@ -47,7 +48,7 @@ fn recoil(x: &mut Cx) {
         return mv(x, 0xc);
     }
     if x.u8(SPEED_X) != 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
     if x.anim_step() {
         set_state_long(x, STANCE);

@@ -2,6 +2,7 @@
 //! 6 seconde table de réactions, 8 saisie par un joueur (le chien s'enfuit hors de l'écran).
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x62aa2;
@@ -49,7 +50,8 @@ fn recoil(x: &mut Cx) {
         2 => {
             puff(x, 3, 0, 2, 0x18, -1);
             if x.u8(SPEED_X) != 0 {
-                return x.call(sub::MOVE_X);
+                x.move_x();
+                return;
             }
             if x.anim_step() {
                 x.set32(0x58, 0);
@@ -122,8 +124,7 @@ fn fall(x: &mut Cx) {
             x.anim_step();
         }
         8 => {
-            x.call(sub::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 x.anim_step();
                 return;
             }
@@ -183,9 +184,8 @@ fn run_away(x: &mut Cx) {
         }
         4 => {
             x.anim_step();
-            x.call(sub::MOVE_TABLE_XY);
-            x.call(0x1e90);
-            if !x.c.cond(5) {
+            x.move_by_table_xy();
+            if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
                 x.call(call::REMOVE);
             }

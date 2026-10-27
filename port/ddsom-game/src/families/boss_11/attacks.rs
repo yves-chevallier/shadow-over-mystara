@@ -2,6 +2,8 @@
 
 use super::behave::life_rank;
 use super::*;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 fn step(x: &mut Cx, table: u32) -> u32 {
     dispatch0(x, table, SUB3)
@@ -64,7 +66,7 @@ fn spit(x: &mut Cx) {
             act(x, 0)
         }
         0x8dc6e => {
-            x.call(call::STEP);
+            x.anim_step();
             sync(x);
             if sub16(x, TIMER, 1).gt() {
                 return;
@@ -83,7 +85,7 @@ fn spit(x: &mut Cx) {
                 return;
             }
             x.set8(KEY, 0);
-            x.call(0x19a88);
+            x.random_68k();
             if is_12(x) {
                 let r = x.c.d[0] as u16 & 3;
                 setw(x, 0, r);
@@ -137,9 +139,9 @@ fn jump_side(x: &mut Cx, speed: i16, z: u16, rise: u16) {
 
 /// Atterrissage d'un bond : la hauteur redevient nulle, le serpent s'immobilise (bruit et poussière).
 fn landing(x: &mut Cx) -> bool {
-    x.call(call::STEP);
+    x.anim_step();
     sync(x);
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if !tst16(x, 0xc).mi() {
         return false;
     }
@@ -208,7 +210,7 @@ fn lunge(x: &mut Cx) {
             x.call(0xe4cfe)
         }
         0x8de0c => {
-            x.call(call::STEP);
+            x.anim_step();
             sync(x);
             if x.u16(0x1a) == 0 {
                 if sub16(x, TIMER, 1).gt() {
@@ -218,7 +220,7 @@ fn lunge(x: &mut Cx) {
                 x.set16(0xc, 0);
                 return act(x, 0x22);
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if !tst16(x, 0xc).mi() {
                 return;
             }
@@ -247,7 +249,7 @@ fn charge(x: &mut Cx) {
         t = 0x8de9a;
     }
     if t == 0x8de9a {
-        x.call(call::STEP);
+        x.anim_step();
         sync(x);
         if sub16(x, TIMER, 1).gt() {
             return;
@@ -295,12 +297,12 @@ fn charge(x: &mut Cx) {
             }
             d0 = 0;
             let _ = d0;
-            x.call(call::MOVE_TABLE_XY);
-            x.call(call::STEP);
+            x.move_by_table_xy();
+            x.anim_step();
             sync(x);
         }
         _ => {
-            x.call(call::MOVE_XY);
+            x.move_xy();
             if x.anim_step() {
                 to_chase(x);
             }
@@ -343,8 +345,8 @@ fn seg_choice(x: &mut Cx) {
     setw(x, 0, i);
     let a4 = 0x8dfcc + i as u32;
     x.c.a[4] = a4;
-    x.call(0x19a88);
-    let r = x.c.d[0] as u16 & 0xf;
+    let alea = x.random_68k();
+    let r = alea & 0xf;
     setw(x, 0, r);
     let v = x.data8(a4 + r as u32);
     x.set8(0xb0, v);
@@ -353,8 +355,8 @@ fn seg_choice(x: &mut Cx) {
 
 /// 0x8dfaa : pas entre deux visées (`+0xb1`, table 0x8dfbc).
 fn pause_tick(x: &mut Cx) {
-    x.call(0x19a88);
-    let r = x.c.d[0] as u16 & 0xf;
+    let alea = x.random_68k();
+    let r = alea & 0xf;
     setw(x, 0, r);
     let v = x.rom8(0x8dfbc + r as u32);
     x.set8(0xb1, v);
@@ -386,8 +388,8 @@ fn approach(x: &mut Cx) {
                 act(x, 0x29);
                 return sync(x);
             }
-            x.call(call::MOVE_TABLE_XY);
-            x.call(call::STEP);
+            x.move_by_table_xy();
+            x.anim_step();
             sync(x);
         }
         _ => {
@@ -405,8 +407,8 @@ fn route_start(x: &mut Cx) -> bool {
     let d0 = x.u16(0x8).wrapping_sub(d1);
     setw(x, 0, d0);
     x.c.a[2] = 0x8e1e8;
-    x.call(0x19a88);
-    let r = x.c.d[0] as u16 & 0xf;
+    let alea = x.random_68k();
+    let r = alea & 0xf;
     setw(x, 0, r);
     let v = x.data8(0x8e1e8 + r as u32);
     setb(x, 0, v);
@@ -543,7 +545,7 @@ fn spit_c(x: &mut Cx) {
             act(x, 0)
         }
         0x8e23e => {
-            x.call(call::STEP);
+            x.anim_step();
             sync(x);
             if sub16(x, TIMER, 1).gt() {
                 return;

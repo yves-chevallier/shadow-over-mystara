@@ -10,14 +10,14 @@ use m68k::{Cpu, SR_C, SR_Z};
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::ops::logique;
-use crate::rng::Rng;
+use crate::objects::Obj;
+use crate::rng;
 use crate::{call, regs, Native};
 use crate::objects::pools;
 
 /// Compteur de l'image courante, qui sert d'index dans les tables d'attitude.
 const TICK: u32 = A5 + 0x7f92;
 /// État du générateur pseudo-aléatoire.
-const RNG_STATE: u32 = A5 + 0x1a;
 
 /// Champs de l'ennemi (A0).
 mod f {
@@ -45,14 +45,6 @@ const BOX_ANIMATION_POINTERS: u32 = 0x800c;
 fn moveq(c: &mut Cpu, v: i32) {
     c.d[0] = v as u32;
     logique(c, v as u32, Size::Long);
-}
-
-/// Tirage du générateur pseudo-aléatoire du jeu (0x19a88).
-fn random(b: &mut Cps2Bus) -> u16 {
-    let mut rng = Rng(rd16(b, RNG_STATE));
-    let (v, _) = rng.suivant();
-    wr16(b, RNG_STATE, v);
-    v
 }
 
 /// Mot de la table de pointeurs `table` désigné par `index`, étendu en signe comme le fait un index
@@ -151,7 +143,7 @@ fn in_front(c: &mut Cpu, b: &mut Cps2Bus, strict: bool) {
     c.a[4] = pointer(c, b, BOX_CHANCE_POINTERS, number);
     let tick = rd16(b, TICK);
     c.d[2] = rd32(b, c.a[4].wrapping_add(offset(tick << 2)));
-    let roll = random(b) as u32 & 31;
+    let roll = rng::random(b) as u32 & 31;
     c.d[0] = roll;
     if c.d[2] >> roll & 1 == 0 {
         return no(c, b);
@@ -160,7 +152,7 @@ fn in_front(c: &mut Cpu, b: &mut Cps2Bus, strict: bool) {
     // l'octet `+0x75` est déjà un multiple de 4 : pas de décalage
     c.a[4] = rd32(b, BOX_ANIMATION_POINTERS.wrapping_add(number as u32));
     c.a[4] = c.a[4].wrapping_add(offset((tick >> 1) << 5));
-    let pick = random(b) as u32 & 31;
+    let pick = rng::random(b) as u32 & 31;
     wr8(b, me + f::STATE, 6);
     let v = rd8(b, c.a[4].wrapping_add(pick));
     wr8(b, me + f::SUB_STATE, v);
@@ -345,8 +337,6 @@ fn push_players(c: &mut Cpu, b: &mut Cps2Bus) {
 // le RTS : `leaf!` l'ajoute pour la native.
 // ---------------------------------------------------------------------------------------------
 
-/// Démarrage d'une animation dans le jeu de données A4.
-const ANIM_START: u32 = 0x1a3c;
 /// Octet `+0x33` : variante d'animation (7 bits) ; `+0x3e` : copie dans `+0x44` après chaque pas.
 const VARIANT: u32 = 0x33;
 const ANIM_TIMER: u32 = 0x30;
@@ -380,7 +370,7 @@ fn animation_by_variant(c: &mut Cpu, b: &mut Cps2Bus) {
     let timer = rd16(b, c.a[0] + ANIM_TIMER);
     let key = rd8(b, c.a[0] + VARIANT);
     find_animation_set(c, b, key, 0x7f);
-    call(c, b, ANIM_START);
+    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
     wr16(b, c.a[0] + ANIM_TIMER, timer);
     copy_mark(c, b);
 }
@@ -390,7 +380,7 @@ fn animation_of_master(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = object(rd16(b, c.a[0] + MASTER));
     let key = rd8(b, c.a[1] + VARIANT);
     find_animation_set(c, b, key, 0x7f);
-    call(c, b, ANIM_START);
+    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
     copy_mark(c, b);
 }
 
@@ -399,7 +389,7 @@ fn animation_of_mark(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = object(rd16(b, c.a[0] + MASTER));
     let key = rd8(b, c.a[1] + ANIM_MARK);
     find_animation_set(c, b, key, 0xff);
-    call(c, b, ANIM_START);
+    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
 }
 
 /// 0x10474 : drapeaux de l'octet `A5+0x35` (joueurs en vie).
@@ -694,7 +684,7 @@ fn outside_screen_range(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x10574 : le cap de l'objet (`+0x2d`, modulo 32) change d'au plus 1 au hasard.
 fn drift_heading(c: &mut Cpu, b: &mut Cps2Bus) {
     const STEPS: [u8; 16] = [1, 1, 0xff, 0, 0xff, 1, 0xff, 0, 1, 0, 1, 0xff, 1, 0xff, 0, 0xff];
-    let step = STEPS[random(b) as usize & 15];
+    let step = STEPS[rng::random(b) as usize & 15];
     c.d[0] = c.d[0] & !0xff | step as u32;
     let heading = rd8(b, c.a[0] + 0x2d).wrapping_add(step) & 31;
     wr8(b, c.a[0] + 0x2d, heading);
@@ -802,7 +792,7 @@ fn countdown_then_state(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     let row = ((rd8(b, A5 + 0x35) as u16) << 4).wrapping_add(((rd16(b, TICK) >> 2) << 1) as u16);
     let mask = b.fetch16(0xff9a_u32.wrapping_add(offset(row))) as u32;
-    let roll = random(b) as u32 & 15;
+    let roll = rng::random(b) as u32 & 15;
     if mask >> roll & 1 == 0 {
         return again(b);
     }
@@ -887,7 +877,7 @@ fn tick_mask_roll(c: &mut Cpu, b: &mut Cps2Bus, pointers: u32, number_at: u32) -
     c.a[4] = rd32(b, pointers + 4 * number as u32);
     let tick = rd16(b, TICK);
     c.d[2] = rd32(b, c.a[4].wrapping_add(offset(tick << 2)));
-    let roll = random(b) as u32 & 31;
+    let roll = rng::random(b) as u32 & 31;
     c.d[0] = roll;
     c.d[2] >> roll & 1 != 0
 }
@@ -896,7 +886,7 @@ fn tick_mask_roll(c: &mut Cpu, b: &mut Cps2Bus, pointers: u32, number_at: u32) -
 fn random_entry(c: &mut Cpu, b: &mut Cps2Bus, pointers: u32, number_at: u32) -> u8 {
     let number = rd8(b, number_at);
     c.a[4] = rd32(b, pointers + 4 * number as u32);
-    let roll = random(b) as u32 & 31;
+    let roll = rng::random(b) as u32 & 31;
     c.d[0] = roll;
     rd8(b, c.a[4] + roll)
 }
@@ -909,15 +899,11 @@ fn draw_6b(c: &mut Cpu, b: &mut Cps2Bus) {
     logique(c, v as u32, Size::Byte);
 }
 
-/// Test d'écran de l'objet (marge D0) : retenue levée s'il est dans l'écran.
-const ON_SCREEN: u32 = 0x1e92;
-
 /// 0x79f6 : dans l'écran, `+0x6e` est tiré dans la table de la ligne `+0x6d`, sinon il vaut 1. D0 = 1.
 fn draw_6e(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    c.d[0] = 0;
-    call(c, b, ON_SCREEN);
-    let v = if c.sr & SR_C != 0 { random_entry(c, b, 0x7a50, me + 0x6d) } else { 1 };
+    let inside = crate::objects::cull::in_arena_68k(c, b, Obj(me), 0);
+    let v = if inside { random_entry(c, b, 0x7a50, me + 0x6d) } else { 1 };
     wr8(b, me + 0x6e, v);
     moveq(c, 1);
 }
@@ -957,16 +943,14 @@ fn parries_69(c: &mut Cpu, b: &mut Cps2Bus) {
 /// par le compteur d'images (32 octets par paire d'images).
 fn draw_84(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    c.d[0] = 0;
-    call(c, b, ON_SCREEN);
-    if c.sr & SR_C == 0 {
+    if !crate::objects::cull::in_arena_68k(c, b, Obj(me), 0) {
         wr16(b, me + 0x84, 1);
         return;
     }
     let number = rd8(b, me + 0x8e) as u32;
     let block = (rd16(b, TICK) >> 1) << 5;
     c.a[4] = rd32(b, 0xf160 + 4 * number).wrapping_add(offset(block));
-    let roll = random(b) as u32 & 31;
+    let roll = rng::random(b) as u32 & 31;
     c.d[0] = roll;
     let v = rd8(b, c.a[4] + roll);
     wr8(b, me + 0x85, v);
@@ -995,7 +979,6 @@ fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
 // ---------------------------------------------------------------------------------------------
 // Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
 // ---------------------------------------------------------------------------------------------
-
 
 /// Alloue par `alloc` (0x2318, 0x23d8) : l'objet dans A1, ou `None` si le pool est plein.
 fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
@@ -1132,7 +1115,7 @@ fn drop_once(c: &mut Cpu, b: &mut Cps2Bus) {
     if rd8(b, me + 0x9d) != 0 {
         return;
     }
-    let roll = random(b) as u32 & 31;
+    let roll = rng::random(b) as u32 & 31;
     c.d[0] = roll;
     c.a[1] = 0xb6fc;
     let mask = rd8(b, me + 0x9c) as u32;
@@ -1149,7 +1132,7 @@ fn drop_once(c: &mut Cpu, b: &mut Cps2Bus) {
     let Some(item) = alloc(c, b, &pools::ITEM) else { return };
     wr8(b, me + 0x9d, 1);
     tossed_item(b, me, item, 2, variant, (-0x40i16) as u16, false);
-    let flip = random(b) & 1 != 0;
+    let flip = rng::random(b) & 1 != 0;
     c.d[0] = flip as u32;
     if flip {
         for field in [0x14, 0x1c] {
@@ -1179,7 +1162,7 @@ fn drop_loot(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[2] = (row << 4) as u32;
     for left in (0..loot_rolls(b)).rev() {
         c.d[5] = left as u32;
-        let roll = (random(b) & 15).wrapping_add(row << 4);
+        let roll = (rng::random(b) & 15).wrapping_add(row << 4);
         let variant = crate::mem::prog8(b, 0xb806_u32.wrapping_add(offset(roll)));
         set_w(&mut c.d[0], roll & 0xff00 | variant as u16);
         if (variant as i8) < 0 {
@@ -1204,7 +1187,7 @@ fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[4] = 1;
     for left in (0..loot_rolls(b)).rev() {
         c.d[5] = left as u32;
-        let roll = (random(b) & 15).wrapping_add(row << 4);
+        let roll = (rng::random(b) & 15).wrapping_add(row << 4);
         set_w(&mut c.d[0], roll);
         let list = crate::mem::prog8(b, 0xe372_u32.wrapping_add(offset(roll)));
         c.d[1] = (list as u32) << 2 & 0xffff;
@@ -1297,7 +1280,7 @@ fn scan_party(c: &mut Cpu, b: &mut Cps2Bus, class_reg: usize, mut visit: impl Fn
 
 /// Tire une entrée de `table` : D0 = `base` + (tirage & `mask`) × `scale` ; A1 = la table.
 fn special_roll(c: &mut Cpu, b: &mut Cps2Bus, table: u32, base: u16, mask: u16, scale: u16) -> u32 {
-    let roll = (random(b) & mask).wrapping_mul(scale).wrapping_add(base);
+    let roll = (rng::random(b) & mask).wrapping_mul(scale).wrapping_add(base);
     c.d[0] = c.d[0] & 0xffff_0000 | roll as u32;
     c.a[1] = table;
     table.wrapping_add(offset(roll))

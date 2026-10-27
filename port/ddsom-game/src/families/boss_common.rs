@@ -17,6 +17,7 @@ use crate::mem::{prog16, prog32, rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::{call, regs, Native};
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Variables de la RAM de travail (décalages de A5) lues par les boss.
 pub mod var {
@@ -186,7 +187,6 @@ pub mod ai {
     pub const STEP: u32 = 0x1040c;
     /// Cible dans la boîte devant l'objet : D0 = portée avant, D1 = portée, D2 = profondeur ; Z = non.
     pub const TARGET_IN_BOX: u32 = 0xb5e0;
-    pub const SPEED_TABLE: u32 = 0x1b64;
 }
 
 /// Lance le script `n` du jeu d'animations `set` (`0x103d6`).
@@ -204,8 +204,7 @@ pub fn step(x: &mut Cx) -> bool {
 
 /// Choisit la table de vitesses `n` (`0x1b64`).
 pub fn speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(ai::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Retenue levée par la dernière routine appelée.
@@ -222,9 +221,6 @@ pub fn zero(x: &Cx) -> bool {
 
 /// Routines du moteur et de l'IA que ces boss appellent.
 pub mod ia {
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
     pub const SOUND_EVENT: u32 = 0x2824;
     pub const PLAYERS_ALIVE: u32 = 0x10474;
     pub const AI_GESTURE: u32 = 0x1047a;

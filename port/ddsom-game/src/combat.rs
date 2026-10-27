@@ -15,6 +15,7 @@ use m68k::decode::Fetch;
 use m68k::{Cpu, SR_Z};
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+pub use crate::objects::Obj;
 use crate::{call, Native};
 
 /// Compteurs d'appel des routines réécrites (couverture de la validation).
@@ -201,26 +202,6 @@ mod rom {
 // ---------------------------------------------------------------------------------------------
 // Accès à la mémoire
 
-/// Objet du jeu, désigné par son adresse.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Obj(pub u32);
-
-impl Obj {
-    /// Objet désigné par un mot de liste (adresse 16 bits étendue en signe : RAM FF8000-FFFFFF).
-    fn from_word(w: u16) -> Obj {
-        Obj(w as i16 as i32 as u32 & 0xff_ffff)
-    }
-    /// Le mot bas de l'adresse, tel que les objets se référencent entre eux.
-    fn word(self) -> u16 {
-        self.0 as u16
-    }
-    /// L'adresse telle que le registre An la contient après `movea.w` (étendue du signe) : c'est
-    /// cette valeur que le jeu range quand il mémorise un objet sur 32 bits (`move.l A1,(0x86,A0)`).
-    fn long_ref(self) -> u32 {
-        self.0 as u16 as i16 as i32 as u32
-    }
-}
-
 /// Mémoire et registres, pour les routines qui doivent appeler du code d'origine.
 pub struct World<'a> {
     pub c: &'a mut Cpu,
@@ -301,9 +282,7 @@ impl World<'_> {
     }
     /// 0x19a88 : générateur pseudo-aléatoire du jeu.
     fn random(&mut self) -> u16 {
-        self.c.a[5] = A5;
-        call(self.c, self.b, 0x19a88);
-        self.c.d[0] as u16
+        crate::rng::random_68k(self.c, self.b)
     }
 }
 

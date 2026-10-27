@@ -13,11 +13,8 @@ use m68k::Cpu;
 use crate::mem::{prog16, prog32, rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::ops::{add, logique, sub};
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 use crate::objects::pools;
-
-/// Générateur pseudo-aléatoire (D0).
-const RNG: u32 = 0x19a88;
 
 /// Joueurs : quatre enregistrements de 0x200 octets.
 const PLAYERS: u32 = A5 + 0x5de;
@@ -124,7 +121,7 @@ fn me(c: &Cpu) -> Obj {
 
 /// Tirage du générateur (D0).
 fn random(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
-    call(c, b, RNG);
+    crate::rng::random_68k(c, b);
     c.d[0] as u16
 }
 

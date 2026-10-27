@@ -2,6 +2,7 @@
 //! n'est en vie).
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     // la variante 10 est saisie dès qu'elle se met debout
@@ -90,7 +91,7 @@ fn approach(x: &mut Cx) {
     }
     x.anim_step();
     if x.u8(KEY) & 1 == 0 {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);

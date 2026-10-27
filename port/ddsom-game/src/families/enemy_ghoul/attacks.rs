@@ -3,6 +3,7 @@
 
 use super::stance::begin_walk;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if special_hit(x, 0x5ff60) {
@@ -87,8 +88,7 @@ fn leap(x: &mut Cx, l: Leap) {
             strike(x, 4);
         }
         4 => {
-            x.call(sub::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 return;
             }
             x.add8(STEP, 2);

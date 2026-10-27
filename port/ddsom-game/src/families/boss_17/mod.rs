@@ -75,6 +75,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Jeux d'animations.
 pub(self) const SET_BODY: u32 = 0x18076e;
@@ -92,12 +93,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
     pub const NEW_MESSAGE: u32 = 0xc8312;
     pub const SPAWN_RING: u32 = 0x57c8c;
 }
@@ -107,7 +102,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     loop {
-        x.call(rom::TICK_COUNTERS);
+        x.tick_counters();
         match x.u8(f::STATE) {
             st::INIT => init(x),
             st::ACTIVE => active(x),
@@ -138,7 +133,7 @@ pub fn run(x: &mut Cx) {
         break;
     }
     if cmp8(x, ANIM_KIND, 0x30).eq() {
-        x.call(call::REINSERT_FOREGROUND);
+        x.reinsert_foreground();
     } else {
         x.reinsert();
     }

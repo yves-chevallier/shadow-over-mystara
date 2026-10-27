@@ -15,6 +15,7 @@
 
 use super::body::push_players;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -123,7 +124,7 @@ fn leap(x: &mut Cx) {
             if x.bit(KEY, 0) {
                 return;
             }
-            x.call(call::MOVE_Z);
+            x.move_z();
             if (x.u16(0xc) as i16) < 0x70 {
                 return;
             }
@@ -140,7 +141,7 @@ fn leap(x: &mut Cx) {
             x.set8(INVULNERABLE, 1);
             step(x);
             if x.bit(KEY, 0) {
-                x.call(call::MOVE_Z);
+                x.move_z();
                 if (x.u16(0x18) as i16) <= 0 {
                     x.set32(0x18, 0);
                 }
@@ -161,7 +162,7 @@ fn leap(x: &mut Cx) {
         }
         6 => {
             step(x);
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }
@@ -176,7 +177,7 @@ fn leap(x: &mut Cx) {
             attack_anim(x, 2);
         }
         _ => {
-            x.call(call::MOVE_XY);
+            x.move_xy();
             if step(x) {
                 after_attack(x)
             }
@@ -299,7 +300,7 @@ fn skim(x: &mut Cx) {
             match x.u8(DIVE) {
                 0 => {
                     step(x);
-                    x.call(call::MOVE_XY);
+                    x.move_xy();
                     no_drift_when_fast(x);
                     if nearest_player_dx(x) as i16 >= 0x30 {
                         return;
@@ -309,7 +310,7 @@ fn skim(x: &mut Cx) {
                 }
                 2 => {
                     step(x);
-                    x.call(call::MOVE_XY);
+                    x.move_xy();
                     no_drift_when_fast(x);
                     if !x.bit(0x57, 2) {
                         return;
@@ -327,7 +328,7 @@ fn skim(x: &mut Cx) {
                 }
                 _ => {
                     step(x);
-                    x.call(call::MOVE_XZ);
+                    x.move_xz();
                     if (x.u16(0xc) as i16) >= 0 {
                         return;
                     }
@@ -337,7 +338,7 @@ fn skim(x: &mut Cx) {
             }
         }
         _ => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if step(x) {
                 after_attack(x)
             }
@@ -425,7 +426,7 @@ fn rush(x: &mut Cx) {
         }
         6 => {
             step(x);
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             cap_speed(x);
             if (x.u16(0xc) as i16) > 8 {
                 return;
@@ -438,7 +439,7 @@ fn rush(x: &mut Cx) {
         }
         _ => {
             step(x);
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             cap_speed(x);
             if sub8(x, TIMER, 1).gt() {
                 return;
@@ -458,7 +459,7 @@ fn cry(x: &mut Cx) {
                 x.set16(0x18, 0x200);
                 attack_anim(x, 0xc);
             }
-            x.call(call::MOVE_Z);
+            x.move_z();
             if !step(x) {
                 return;
             }
@@ -506,7 +507,7 @@ fn side_flight(x: &mut Cx) {
         }
         2 => {
             x.set8(INVULNERABLE, 1);
-            x.call(call::MOVE_Z);
+            x.move_z();
             let mut d = x.u16(0xc).wrapping_sub(0x60);
             if (x.u16(0x18) as i16) < 0 {
                 d = d.wrapping_neg();
@@ -560,7 +561,7 @@ fn side_flight(x: &mut Cx) {
 
 /// 0x80496 : redescend à hauteur 0x40, puis fin de l'attaque.
 fn descend_to_0x40(x: &mut Cx) {
-    x.call(call::MOVE_Z);
+    x.move_z();
     if (x.u16(0xc) as i16) > 0x40 {
         return;
     }
@@ -601,7 +602,7 @@ fn abduction(x: &mut Cx) {
                 x.set16(0x18, 0x600);
                 attack_anim(x, 0x10);
             }
-            x.call(call::MOVE_Z);
+            x.move_z();
             if height_over_camera(x) <= 0x100 {
                 return;
             }
@@ -656,7 +657,7 @@ fn abduction(x: &mut Cx) {
             if try_grab(x) {
                 return;
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0x10 {
                 return;
             }
@@ -669,7 +670,7 @@ fn abduction(x: &mut Cx) {
             if try_grab(x) {
                 return;
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if sub8(x, TIMER, 1).gt() {
                 return;
             }
@@ -686,7 +687,7 @@ fn abduction(x: &mut Cx) {
             attack_anim(x, 0x12);
         }
         10 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if height_over_camera(x) <= 0x100 {
                 return;
             }
@@ -702,7 +703,7 @@ fn abduction(x: &mut Cx) {
                 return;
             }
             x.set8(HOVER, 0);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0x40 {
                 return;
             }

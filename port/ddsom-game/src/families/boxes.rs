@@ -5,6 +5,7 @@ use crate::objects::pools;
 use crate::objects::Obj;
 
 use super::{ajoute_u8, gestionnaire, pointeur, Ctx};
+use crate::objects::Courant;
 
 /// Valeurs de l'octet d'état `+4`.
 mod etat {
@@ -39,7 +40,8 @@ const OMBRES: u8 = 0x35;
 /// caisse (sous-état 4 : elle suit ses mains), la lancer (6 : vol, rebond sur le bord de l'écran,
 /// casse à l'atterrissage) ou la lâcher (8 : chute).
 pub mod caisse {
-    use crate::families::cx::{handlers, sub, Cx};
+use crate::objects::Courant;
+    use crate::families::cx::{handlers, Cx};
     use crate::mem::A5;
     use crate::objects::{pools, Obj};
 
@@ -591,7 +593,7 @@ pub mod caisse {
 
     /// Avance en X et Z (`0x1da6`) ; rend Z.
     fn avance(x: &mut Cx) -> i16 {
-        x.call(sub::MOVE_XZ);
+        x.move_xz();
         x.u16(f::Z) as i16
     }
 
@@ -687,7 +689,7 @@ pub mod caisse {
 
     /// Lâchée, 2 : chute ; au sol, un coffre sans effet spécial redevient intact, sinon la caisse attend.
     fn lachee_chute(x: &mut Cx) {
-        x.call(sub::MOVE_Z);
+        x.move_z();
         if x.u16(f::Z) as i16 >= 0 {
             return;
         }
@@ -925,6 +927,7 @@ gestionnaire!(BOX_2, decor::ENTREE, "box_decor", box_2);
 /// 2) et prévient son SET. Variante 1 : glisse en hauteur (`+0x10`) et se recale sur le décor à chaque pas.
 /// Le joueur poussant est replacé contre le bloc (décalage par personnage et direction).
 pub mod pousse {
+use crate::objects::Courant;
     use crate::families::cx::{handlers, Cx};
     use crate::objects::{pools, Obj};
 

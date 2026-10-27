@@ -10,6 +10,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 /// Jeux de marche choisis par la marque `+0x33` (0x103e0) : de côté, de face.
 const WALK_SIDEWAYS: u32 = 0x17569c;
@@ -249,7 +250,7 @@ fn walking(x: &mut Cx) {
         return decide::turn(x);
     }
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(call::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     step(x);
 }
@@ -306,7 +307,8 @@ fn charge(x: &mut Cx) {
         _ => {
             dust_tick(x);
             if !expired(x, TIMER) {
-                return x.call(call::MOVE_X);
+                x.move_x();
+                return;
             }
             if !alive(x) {
                 return decide::wait(x);
@@ -321,7 +323,7 @@ fn charging(x: &mut Cx) {
     x.anim_step();
     let key = x.u8(KEY);
     if key != 0x80 {
-        x.call(call::MOVE_X);
+        x.move_x();
         let (goal, px) = if x.u8(CHARGE_AT_TARGET) == 0 {
             let cam = x.a5_u16(var::CAMERA1_X);
             let d = if (x.u16(0x14) as i16) < 0 { 0xf0 } else { 0x90 };
@@ -392,17 +394,17 @@ fn hop(x: &mut Cx) {
             speed(x, 0x35);
             x.set16(0x18, 0x300);
             x.set16(0x1a, (-0x40i16) as u16);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0x18) as i16) <= 0 {
                 x.add8(0x7, 2);
                 x.set16(0x16, 0);
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 step(x);
                 return;
@@ -417,14 +419,14 @@ fn hop(x: &mut Cx) {
             }
             setw(x, 0, d);
             x.set16(0x16, d);
-            x.call(call::MOVE_X);
+            x.move_x();
             x.c.d[0] = 7;
             body(x, 7);
         }
         _ => {
             dust_tick(x);
             if !expired(x, TIMER) {
-                x.call(call::MOVE_X);
+                x.move_x();
                 step(x);
                 return;
             }

@@ -3,6 +3,7 @@
 //! ni ombre : seules les remises en liste des routines (`jmp 0x1ee1a`) sont rejouées.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(NO_ZONE) != 0 {
@@ -46,7 +47,7 @@ fn active(x: &mut Cx) {
 
 /// +6 = 0 : marche sur place pendant `+0xa4` images, puis les tirs.
 fn walk(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.anim_step();
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
@@ -83,9 +84,8 @@ fn leave(x: &mut Cx) {
         }
         2 => {
             x.anim_step();
-            x.call(sub::MOVE_TABLE_XY);
-            x.call(call::SCREEN_CHECK);
-            if x.c.cond(5) {
+            x.move_by_table_xy();
+            if x.in_arena_default() {
                 return;
             }
             if (x.u8(TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {

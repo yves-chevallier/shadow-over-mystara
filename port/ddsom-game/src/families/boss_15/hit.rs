@@ -5,6 +5,7 @@
 //! ne l'interrompt pas : le dragon reprend l'état qu'il avait à l'image précédente (`+0xb0`).
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::SUB) == 0 {
@@ -115,7 +116,8 @@ fn pushed_back(x: &mut Cx) {
         return set_anim(x, 0, 1);
     }
     if x.u8(0x14) != 0 {
-        return x.call(call::MOVE_X);
+        x.move_x();
+        return;
     }
     x.set32(0x58, 0);
     stand(x);
@@ -201,7 +203,7 @@ fn death(x: &mut Cx) {
         }
         2 => {
             step(x);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             let cam_y = x.a5_u16(var::SCROLL_Y);
             let d = x.u16(0x10).wrapping_sub(cam_y).wrapping_add(x.u16(0xc));
             if (d as i16) <= 0x200 {

@@ -17,7 +17,7 @@
 //! Animations : 0x164174 (mouvements) et 0x164184 (coups). L'état actif exécute toujours, hors gel, le
 //! test de proximité 0x81aa4, le test de zone, l'ombre et la remise en liste.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod attacks;
@@ -63,6 +63,7 @@ pub(self) mod g {
 }
 
 use g::*;
+use crate::objects::Courant;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_BODY: u32 = 0x164174;
@@ -80,7 +81,6 @@ mod call {
     pub const TURN_TO_TARGET: u32 = 0x788c;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
     pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const PROXIMITY: u32 = 0x81aa4;
     pub const JUMP_EFFECT: u32 = 0xecfe4;
@@ -92,7 +92,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     if x.a5_u8(0x30) != 0 {
-        x.call(rom::TICK_COUNTERS);
+        x.tick_counters();
     }
     match x.u8(f::STATE) {
         st::INIT => init(x),
@@ -106,11 +106,11 @@ pub fn run(x: &mut Cx) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body(x: &mut Cx, n: u32) {
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 fn step(x: &mut Cx) -> bool {
@@ -118,7 +118,7 @@ fn step(x: &mut Cx) -> bool {
 }
 
 fn move_xy(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 /// 0x69528 : saut — effet 0xecfe4 et animation 3.
@@ -239,8 +239,7 @@ fn arrival(x: &mut Cx) {
             x.set8(REPEAT, 0x14);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(ANGLE, angle);
-            x.c.d[0] = 0x12;
-            x.call(call::SPEED_TABLE);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
             body(x, 1);
         }
         2 => match x.u8(f::SUB2) {
@@ -273,7 +272,7 @@ fn arrival(x: &mut Cx) {
                 x.anim_start(SET_STRIKE, 1);
             }
             6 => {
-                x.call(sub::MOVE_XZ);
+                x.move_xz();
                 if (x.u16(HEIGHT) as i16) <= 0 {
                     x.add8(f::SUB2, 2);
                     x.set32(HEIGHT, 0);
@@ -307,7 +306,7 @@ fn arrival(x: &mut Cx) {
 
 /// 0x69558 : descente (déplacement en hauteur) puis réception.
 fn land(x: &mut Cx) {
-    x.call(sub::MOVE_Z);
+    x.move_z();
     if (x.u16(HEIGHT) as i16) > 0 {
         return;
     }

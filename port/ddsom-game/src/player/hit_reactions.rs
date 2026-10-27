@@ -9,6 +9,7 @@
 //! Les tables sont dans la ROM : par classe de l'attaquant puis par type de victime, une ligne de
 //! quatre octets par identifiant de coup (réaction normale, en l'air, étourdie, ajout au compteur).
 
+use crate::machine::Machine;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 

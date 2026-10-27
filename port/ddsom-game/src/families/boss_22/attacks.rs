@@ -2,6 +2,7 @@
 
 use super::moves::step_anim;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     let step = x.u8(f::SUB2);
@@ -166,7 +167,7 @@ fn second_form_strike(x: &mut Cx) {
                 }
             }
             step_anim(x);
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             if facing_wrong(x) {
                 next7(x);
             }
@@ -194,7 +195,8 @@ fn second_form_strike(x: &mut Cx) {
             }
             if x.u16(f::TARGET) != 0 && still_close(x) {
                 step_anim(x);
-                return x.call(call::MOVE_TABLE_XY);
+                x.move_by_table_xy();
+                return;
             }
             next7(x);
             x.set8(VULNERABLE, 1);
@@ -263,7 +265,7 @@ fn charge_strike(x: &mut Cx) {
                 x.set32(f::STATE, state::TURN);
             }
             step_anim(x);
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         4 => finish_attack(x),
         _ => {}
@@ -309,7 +311,7 @@ fn stomp(x: &mut Cx) {
                 x.set32(f::STATE, state::TURN);
             }
             step_anim(x);
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         4 => grab_on_key(x),
         _ => {}
@@ -371,7 +373,7 @@ fn rise_wait(x: &mut Cx) {
 }
 
 fn climb(x: &mut Cx, up: bool) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
     if !reached {
@@ -383,7 +385,7 @@ fn climb(x: &mut Cx, up: bool) {
 
 /// Retombée du plongeon : son, poussière en ligne ; `down` (0x9c4a2) ajoute cinq éclats et ne rend pas vulnérable.
 fn land(x: &mut Cx, down: bool) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
     }

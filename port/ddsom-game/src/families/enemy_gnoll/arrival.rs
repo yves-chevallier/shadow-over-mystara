@@ -2,6 +2,7 @@
 //! haut, 4 saut de côté, 8 arrivée armée (pose la hache), 10 course d'entrée armée suivie de la saisie.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(VARIANT) as u32;
@@ -19,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
 /// Variante 0 : marche vers l'écran pendant `+0xa2` images.
 fn walk_in(x: &mut Cx) {
     if x.u8(f::SUB2) != 0 {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.anim_step();
         let n = x.u8(TIMER).wrapping_sub(1);
         x.set8(TIMER, n);
@@ -54,7 +55,7 @@ fn drop_in(x: &mut Cx, gravity: bool) {
         }
         4 => {
             if gravity {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 if (x.u16(HEIGHT) as i16) > 0 {
                     return;
                 }
@@ -97,7 +98,7 @@ fn side_jump(x: &mut Cx) {
             strike(x, 1);
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) <= 0 {
                 x.add8(f::SUB2, 2);
                 x.set32(HEIGHT, 0);
@@ -166,7 +167,7 @@ fn armed_in(x: &mut Cx) {
 
 /// 0x6ae42 : course armée pendant `+0xa2` images, puis animation 5.
 fn armed_run(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.anim_step();
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);

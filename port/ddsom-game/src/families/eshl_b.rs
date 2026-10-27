@@ -6,11 +6,13 @@
 
 use m68k::SR_C;
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::mem::{rd32, wr32};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Sons (wrappers de la zone 0xe0836-0xee080) et autres routines d'effets.
 mod sfx {
@@ -22,8 +24,6 @@ mod sfx {
     pub const ED686: u32 = 0xed686;
 }
 
-/// Générateur pseudo-aléatoire du jeu (`rng.rs`) : D0.w = tirage.
-const RNG: u32 = 0x19a88;
 /// Angle (0..31) entre deux points : (D1, D2) = (x, y) de la cible, (D3, D4) = (x, z) de l'objet.
 const ANGLE: u32 = 0x1386;
 /// Division non signée D0 / D1 (quotient dans D0).
@@ -58,7 +58,7 @@ fn low16(o: Obj) -> u16 {
 }
 
 fn reinsert_foreground(x: &mut Cx) {
-    x.call(sub::REINSERT_FOREGROUND);
+    x.reinsert_foreground();
 }
 
 /// Copie la position (X, Z, Y en 16.16) d'un objet dans le tir.
@@ -71,8 +71,7 @@ fn copy_position32(x: &mut Cx, from: Obj) {
 
 /// Appelle `1b64` (table de vitesses `n`, indexée par `+0x2d`).
 fn speed_table(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(sub::SPEED_TABLE_B);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -243,8 +242,7 @@ mod shot15 {
             x.set_bit(0x1, 1, !visible);
             return;
         }
-        x.call(sub::MOVE_XZ);
-        if !x.c.cond(14) {
+        if !x.move_xz().gt() {
             x.add8(0x6, 2);
             if phase == PHASE_LAST {
                 x.set8(f::TIMER, 0x32);
@@ -263,7 +261,7 @@ mod shot15 {
                 }
             }
         }
-        x.call(sub::CULL_OFFSCREEN);
+        x.cull_offscreen();
     }
 
     /// Variante 1 (arme tenue) : suit le propriétaire pendant que l'ennemi attaque.
@@ -343,7 +341,7 @@ mod shot16 {
                 x.add8(0x4, 2);
                 x.set8(0x58, 4);
                 let anim = (x.u8(0x43) != 0) as u32;
-                x.anim_start(ANIMS, anim);
+                x.anim_start(ANIMS, anim as u16);
                 reinsert_foreground(x);
             }
             2 => active(x),
@@ -390,7 +388,7 @@ mod shot16 {
     }
 
     fn flying(x: &mut Cx) {
-        x.call(sub::MOVE_TABLE_XZ);
+        x.move_by_table_xz();
         x.anim_step();
         if x.u8(0x2d) != 0 {
             x.add8(0x55, 0xff);
@@ -523,9 +521,9 @@ mod shot17 {
             }
             FALL => {
                 if mode == 0 {
-                    land(x, sub::MOVE_TABLE_XZ, true)
+                    land(x, |x| { x.move_by_table_xz(); }, true)
                 } else if (mode as i8) < 0 {
-                    land(x, sub::MOVE_XZ, true)
+                    land(x, |x| { x.move_xz(); }, true)
                 } else {
                     land_xyz(x)
                 }
@@ -577,7 +575,8 @@ mod shot17 {
         if x.u8(0x6) == 0 {
             x.add8(0x6, 2);
             x.set8(0x54, 0x14);
-            return x.anim_start(ANIMS, 1);
+            x.anim_start(ANIMS, 1);
+            return;
         }
         let parent = ptr(x, 0x56);
         if (parent.u8(x.b, 0x4) as i8) >= 4 {
@@ -675,8 +674,8 @@ mod shot17 {
     }
 
     /// Chute après le tir (modes 0 et < 0) : touche le sol (Z < 0) → animation d'impact.
-    fn land(x: &mut Cx, mover: u32, clear_state: bool) {
-        x.call(mover);
+    fn land(x: &mut Cx, mover: fn(&mut Cx), clear_state: bool) {
+        mover(x);
         x.anim_step();
         if (x.u16(0xc) as i16) >= 0 {
             return;
@@ -692,7 +691,7 @@ mod shot17 {
 
     /// Chute du mode > 0 : déplacement en X, Y et Z.
     fn land_xyz(x: &mut Cx) {
-        x.call(sub::MOVE_XYZ);
+        x.move_xyz();
         x.anim_step();
         if (x.u16(0xc) as i16) > 0 {
             return;
@@ -751,9 +750,9 @@ mod shot18 {
         if blocked_by_terrain(x) {
             return x.free_eshl();
         }
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.anim_step();
-        x.call(sub::CULL_OFFSCREEN);
+        x.cull_offscreen();
         x.reinsert();
     }
 }
@@ -780,7 +779,7 @@ mod shot19 {
             0 => init(x),
             2 => {
                 if (x.u16(0xc) as i16) >= 0 {
-                    x.call(sub::MOVE_XZ);
+                    x.move_xz();
                 } else {
                     x.set32(0xc, 0);
                     x.add8(0x4, 2);
@@ -833,7 +832,7 @@ mod shot19 {
         let dz = x.data16(off + 2);
         x.add16(0xc, dz);
         x.set8(f::FLIP, 0);
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS, anim as u16);
         speed_table(x, 0x40);
         let v = x.u16(0x1c);
         x.set16(0x18, v);
@@ -957,9 +956,9 @@ mod shot20 {
                 x.set8(0x1d, 0);
                 x.add8(0x6, 2);
                 x.c.d[0] = 0;
-                x.call(RNG);
-                let anim = x.rom8(IDLE_ANIMS + (x.c.d[0] & 7)) as u32;
-                x.anim_start(ANIMS, anim);
+                let alea = x.random_68k();
+                let anim = x.rom8(IDLE_ANIMS + (alea as u32 & 7)) as u32;
+                x.anim_start(ANIMS, anim as u16);
                 attach(x, ATTACH);
                 x.anim_step();
             }
@@ -997,8 +996,8 @@ mod shot20 {
                 if x.anim_step() {
                     x.add8(0x6, 0xfe);
                     x.c.d[0] = 0;
-                    x.call(RNG);
-                    let delay = x.rom16(DELAYS + 2 * (x.c.d[0] & 7));
+                    let alea = x.random_68k();
+                    let delay = x.rom16(DELAYS + 2 * (alea as u32 & 7));
                     x.set16(f::TIMER, delay);
                     x.anim_start(ANIMS, 2);
                 } else {
@@ -1180,7 +1179,7 @@ mod shot22 {
             0 => init(x),
             2 => {
                 if x.u8(0x5) == FLY {
-                    x.call(sub::MOVE_XZ);
+                    x.move_xz();
                     if (x.u16(0xc) as i16) > 0 {
                         return;
                     }
@@ -1221,7 +1220,7 @@ mod shot22 {
             x.set32(0x14, vx.wrapping_neg());
         }
         x.add16(0x8, dx);
-        x.anim_start(ANIMS, variant.wrapping_add(10) as u32);
+        x.anim_start(ANIMS, (variant.wrapping_add(10) as u32) as u16);
         x.reinsert();
     }
 }
@@ -1273,7 +1272,7 @@ mod shot23 {
     }
 
     fn slide(x: &mut Cx) {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.anim_step();
         reinsert_foreground(x);
     }
@@ -1400,8 +1399,8 @@ mod shot24 {
         count = count.wrapping_sub(1);
         let mut label: u16 = 1;
         x.c.d[0] = 0;
-        x.call(RNG);
-        let mut table = GROUP_OFFSETS + ((x.c.d[0] & 7) << 3);
+        let alea = x.random_68k();
+        let mut table = GROUP_OFFSETS + ((alea as u32 & 7) << 3);
         loop {
             let Some(e) = x.alloc(&pools::ENEMY) else { return };
             e.set_u8(x.b, 0, 1);
@@ -1467,14 +1466,14 @@ mod shot25 {
         let variant = x.u8(0x3);
         if variant != 0 {
             x.c.d[0] = 0;
-            x.call(RNG);
-            let mut dx = x.c.d[0] as u16 & 0x7f;
+            let alea = x.random_68k();
+            let mut dx = alea & 0x7f;
             if variant & 1 != 0 {
                 dx = dx.wrapping_neg();
             }
             x.add16(0x8, dx);
-            x.call(RNG);
-            let r = x.c.d[0] as u16 & 0x3f;
+            let alea = x.random_68k();
+            let r = alea & 0x3f;
             let dy = if r & 1 != 0 { 0xffff } else { 0 };
             x.add16(0x10, dy);
         }
@@ -1488,7 +1487,7 @@ mod shot25 {
 
     fn fall(x: &mut Cx) {
         x.anim_step();
-        x.call(sub::MOVE_Z);
+        x.move_z();
         if (x.u16(0xc) as i16) >= 0 {
             return;
         }
@@ -1557,8 +1556,8 @@ mod shot26 {
         let height = x.rom16(HEIGHTS + 2 * row);
         x.set16(0xc, height);
         x.c.d[0] = 0;
-        x.call(RNG);
-        let mut table = x.rom16(SPEED_TABLES + 2 * (x.c.d[0] & 3)) as u32;
+        let alea = x.random_68k();
+        let mut table = x.rom16(SPEED_TABLES + 2 * (alea as u32 & 3)) as u32;
         if x.u8(0x56) != 0 && x.u8(0x3) == 0 {
             table = 2;
         }
@@ -1571,7 +1570,7 @@ mod shot26 {
 
     fn fly(x: &mut Cx) {
         x.anim_step();
-        x.call(sub::MOVE_XYZ);
+        x.move_xyz();
         if (x.u16(0xc) as i16) >= 0 {
             return;
         }
@@ -1658,7 +1657,7 @@ mod shot27 {
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 0x16);
         let anim = (x.u8(0x3) != 0) as u32;
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS, anim as u16);
         x.reinsert();
     }
 
@@ -1752,13 +1751,13 @@ mod shot28 {
                 let angle = x.rom8(ANGLES + (variant & 3) as u32);
                 x.set8(0x2d, angle);
                 speed_table(x, 0x3f);
-                x.anim_start(ANIMS, variant as u32);
+                x.anim_start(ANIMS, (variant as u32) as u16);
                 x.reinsert();
             }
             2 => {
-                x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
                 if x.a5_u8(0x6f).wrapping_add(x.u8(0x3)) & 3 == 0 {
-                    x.call(sub::CULL_OFFSCREEN);
+                    x.cull_offscreen();
                 }
                 x.reinsert();
             }
@@ -2156,9 +2155,9 @@ mod shot31 {
     }
 
     fn fly_away(x: &mut Cx) {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.anim_step();
-        x.call(sub::CULL_OFFSCREEN);
+        x.cull_offscreen();
     }
 
     /// Son de rebond quand l'animation lève son drapeau (`+0x33`).
@@ -2190,7 +2189,7 @@ mod shot31 {
                     }
                 }
                 x.anim_step();
-                x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
             }
             HUNT => {
                 animation_cue(x);
@@ -2212,7 +2211,7 @@ mod shot31 {
                     x.set8(0x4, st::FREE);
                     source.set_u8(x.b, 0xb5, 0);
                 } else {
-                    x.call(sub::MOVE_TABLE_XY);
+                    x.move_by_table_xy();
                     x.anim_step();
                 }
             }
@@ -2273,7 +2272,7 @@ mod shot32 {
                     if host_dead(x) {
                         return x.free_eshl();
                     }
-                    x.call(sub::MOVE_XYZ);
+                    x.move_xyz();
                     if (x.u16(0xc) as i16) > 0 {
                         ai_step(x);
                         return;
@@ -2499,7 +2498,8 @@ mod shot34 {
             place_on_source(x);
             x.add16(0x8, 0x9c);
             x.add16(0x10, -0x62i16 as u16);
-            return x.anim_start(ANIMS, 8);
+            x.anim_start(ANIMS, 8);
+            return;
         }
         if let Some(s) = spawn_scenery(x) {
             s.set_u8(x.b, 0x2f, 0);
@@ -2519,7 +2519,7 @@ mod shot34 {
             x.set16(0x42, 0x258);
             x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0xf0;
             let anim = x.c.d[0];
-            x.anim_start(ANIMS_SCREEN, anim);
+            x.anim_start(ANIMS_SCREEN, anim as u16);
         } else {
             let dx = if source.u8(x.b, f::FLIP) != 0 { 8 } else { -8i16 as u16 };
             x.add16(0x8, dx);
@@ -2619,7 +2619,7 @@ mod shot35 {
                         } else {
                             ai_step(x);
                             if (x.u16(0x58) as i16) > 0x38 {
-                                x.call(sub::MOVE_TABLE_XY);
+                                x.move_by_table_xy();
                             }
                         }
                     }
@@ -2627,7 +2627,7 @@ mod shot35 {
                         if ai_step(x) {
                             x.add8(0x4, 2);
                         } else {
-                            x.call(sub::MOVE_TABLE_XY);
+                            x.move_by_table_xy();
                         }
                     }
                     _ => {}
@@ -2673,7 +2673,7 @@ mod shot36 {
             }
             2 => match x.u8(0x5) {
                 0 => {
-                    x.call(sub::MOVE_XYZ);
+                    x.move_xyz();
                     if (x.u16(0xc) as i16) > 0 {
                         ai_step(x);
                         return;
@@ -2701,19 +2701,19 @@ mod shot36 {
         let direction = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
         x.set8(0x2d, direction);
         speed_table(x, 0x17);
-        x.call(RNG);
-        let r = x.c.d[0] & 0xf;
+        let alea = x.random_68k();
+        let r = alea as u32 & 0xf;
         let vz = x.rom16(SPEEDS + 2 * r);
         x.set16(0x18, vz);
     }
 
     /// Position aléatoire autour de la caméra (écran de gauche : décalage de -0xc0).
     fn place(x: &mut Cx) {
-        x.call(RNG);
-        let r = x.c.d[0] & 0xf;
+        let alea = x.random_68k();
+        let r = alea as u32 & 0xf;
         let mut dx = x.rom16(X_OFFSETS + 2 * r);
-        x.call(RNG);
-        let r = x.c.d[0] & 0xf;
+        let alea = x.random_68k();
+        let r = alea as u32 & 0xf;
         let dy = x.rom16(Y_OFFSETS + 2 * r);
         if x.u8(f::FLIP) == 0 {
             dx = dx.wrapping_sub(0xc0);
@@ -2768,22 +2768,22 @@ mod shot37 {
 
     fn launch(x: &mut Cx) {
         x.c.d[0] = 0;
-        x.call(RNG);
-        let r = x.c.d[0] & 0xf;
+        let alea = x.random_68k();
+        let r = alea as u32 & 0xf;
         let vz = x.rom16(SPEEDS + 2 * r);
         x.set16(0x18, vz);
-        x.call(RNG);
-        let r = x.c.d[0] & 7;
+        let alea = x.random_68k();
+        let r = alea as u32 & 7;
         let anim = x.rom8(START_ANIMS + r) as u32;
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS, anim as u16);
     }
 
     fn place(x: &mut Cx) {
-        x.call(RNG);
-        let r = x.c.d[0] & 0xf;
+        let alea = x.random_68k();
+        let r = alea as u32 & 0xf;
         let dx = x.rom16(X_OFFSETS + 2 * r);
-        x.call(RNG);
-        let r = x.c.d[0] & 0xf;
+        let alea = x.random_68k();
+        let r = alea as u32 & 0xf;
         let dy = x.rom16(Y_OFFSETS + 2 * r);
         let px = dx.wrapping_add(x.a5_u16(0x506));
         let py = dy.wrapping_add(x.a5_u16(0x50a));
@@ -2799,7 +2799,7 @@ mod shot37 {
         }
         match x.u8(0x5) {
             FALL => {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 if (x.u16(0xc) as i16) > 0 {
                     x.anim_step();
                 } else {
@@ -2882,8 +2882,8 @@ mod shot38 {
     /// Déplacement tant que Z > 0 ; au sol, passe à l'état suivant.
     fn fall(x: &mut Cx) {
         if x.u8(0x29) == 0 {
-            x.call(sub::MOVE_TABLE_XZ);
-            x.call(sub::MOVE_Y);
+            x.move_by_table_xz();
+            x.move_y();
             if (x.u16(0xc) as i16) >= 0 {
                 return;
             }
@@ -3008,7 +3008,7 @@ mod shot39 {
         let direction = x.rom8(DIRECTIONS + variant);
         x.set8(0x2d, direction);
         let anim = x.rom8(START_ANIMS + variant) as u32;
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS, anim as u16);
     }
 
     /// Fait tourner les 8 images de flamme toutes les 4 images.
@@ -3033,8 +3033,8 @@ mod shot39 {
         }
         match x.u8(0x5) {
             FLY => {
-                x.call(sub::MOVE_TABLE_XY);
-                x.call(sub::MOVE_Z);
+                x.move_by_table_xy();
+                x.move_z();
                 if (x.u16(0xc) as i16) <= 0 {
                     x.c.d[0] = 0x30;
                     x.call(SOUND_THUD);
@@ -3072,7 +3072,7 @@ mod shot39 {
                         let d = x.u8(0x2d).wrapping_add(1) & 0x1f;
                         x.set8(0x2d, d);
                     }
-                    x.call(sub::MOVE_TABLE_XY);
+                    x.move_by_table_xy();
                 }
             }
             _ => {}

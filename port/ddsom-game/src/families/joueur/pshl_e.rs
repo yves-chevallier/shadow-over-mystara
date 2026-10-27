@@ -4,12 +4,10 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
-const SPEED_SELECT: u32 = 0x1b64;
 const FLASH_ON: u32 = 0x1ac68;
 const FLASH_OFF: u32 = 0x1ac90;
-const MOVE_TABLE_XY: u32 = 0x1cb4;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -40,11 +38,11 @@ mod orbit {
                     0 => wait(x),
                     2 => {
                         x.add8(0x5, 2);
-                        x.call(ANIM_STEP);
+                        x.anim_step();
                     }
                     _ => fly(x),
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => {
                 let parent = x.link_a1(0x5c);
@@ -101,8 +99,7 @@ mod orbit {
             x.set_bit(0x1, 1, false);
             x.add8(0x6, 2);
         }
-        x.call(ANIM_STEP);
-        if x.c.cond(5) {
+        if x.anim_step() {
             x.add8(0x5, 2);
             x.set8(0x6, 0);
             x.set16(0x2a, 0x100);
@@ -135,7 +132,7 @@ mod orbit {
                     x.add8(0x2f, 1);
                 }
                 x.set16(0x58, 0x202);
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             _ => match x.u8(0x7) {
                 0 => {
@@ -150,8 +147,8 @@ mod orbit {
                     } else if d1 < 0x50 {
                         x.add8(0x7, 2);
                     }
-                    x.call(MOVE_TABLE_XY);
-                    x.call(ANIM_STEP);
+                    x.move_by_table_xy();
+                    x.anim_step();
                 }
                 2 => {
                     turn(x);
@@ -162,12 +159,12 @@ mod orbit {
                     if want_a == x.u8(0x5b) && want_b == x.u8(0x2d) {
                         x.add8(0x7, 2);
                     }
-                    x.call(ANIM_STEP);
+                    x.anim_step();
                 }
                 _ => {
-                    x.call(MOVE_TABLE_XY);
-                    x.call(ANIM_STEP);
-                    x.call(CULL);
+                    x.move_by_table_xy();
+                    x.anim_step();
+                    x.cull_offscreen();
                 }
             },
         }
@@ -175,7 +172,7 @@ mod orbit {
 
     /// `0x52a9e` : avance d'un pas de rotation tous les `+0x58` images.
     fn turn(x: &mut Cx) {
-        x.call(MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.add8(0x59, 0xff);
         if x.u8(0x59) != 0 {
             return;
@@ -209,9 +206,7 @@ mod orbit {
         let next = x.u8(0x5a).wrapping_add(2) & 0xf;
         x.set8(0x5a, next);
         let anim = x.data8(at + 1);
-        x.c.d[0] = anim as u32;
-        x.c.a[4] = ANIMS;
-        x.call(0x1a32);
+        x.anim_start(ANIMS, (anim as u32) as u16);
     }
 }
 
@@ -255,10 +250,11 @@ mod fountain {
         let owner = x.link_a1(f::OWNER);
         x.copy_pos(owner);
         x.set_d0w(0x45);
-        x.call(SPEED_SELECT);
-        x.call(MOVE_XY);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+        x.move_xy();
         x.anim(ANIMS, 0);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn init_ball(x: &mut Cx) {
@@ -284,7 +280,7 @@ mod fountain {
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
         x.call(FLASH_ON);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn init_spark(x: &mut Cx) {
@@ -295,7 +291,7 @@ mod fountain {
         x.copy_pos(owner);
         x.add16(0x10, 1);
         x.anim(ANIMS, 4);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn init_ember(x: &mut Cx) {
@@ -309,7 +305,7 @@ mod fountain {
         x.copy_pos(owner);
         x.add16(0x10, 1);
         x.anim(ANIMS, 5);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn init_halo(x: &mut Cx) {
@@ -329,13 +325,14 @@ mod fountain {
         x.set_d0w(dx);
         x.add16(0x8, dx);
         x.set_d0w(0x4a);
-        x.call(SPEED_SELECT);
-        x.call(MOVE_XY);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+        x.move_xy();
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
         x.call(FLASH_ON);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     // --- états actifs ----------------------------------------------------------------------------
@@ -368,7 +365,7 @@ mod fountain {
                 let v = x.rom8(TURN + i);
                 x.set8(0x5d, v);
             }
-            x.call(ANIM_STEP);
+            x.anim_step();
         } else {
             x.add16(0x5a, 0xffff);
             if x.u16(0x5a) == 0 {
@@ -383,10 +380,11 @@ mod fountain {
                 let owner = x.link_a1(f::OWNER);
                 x.copy_pos(owner);
                 x.set_d0w(0x45);
-                x.call(SPEED_SELECT);
-                x.call(MOVE_XY);
+                let n = x.c.d[0] as u16;
+                x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+                x.move_xy();
             }
-            x.call(ANIM_STEP);
+            x.anim_step();
         }
     }
 
@@ -399,7 +397,7 @@ mod fountain {
                 x.call(FLASH_OFF);
             }
         }
-        x.call(MOVE_X);
+        x.move_x();
         x.add16(0x5a, 0xffff);
         let t = x.u16(0x5a) & 3;
         x.set16(0x5a, t);
@@ -415,11 +413,11 @@ mod fountain {
                 spawn(x, 3, None);
             }
         }
-        x.call(CULL);
+        x.cull_offscreen();
         if x.u8(0x4) == 6 {
             x.set_a5_u16(0x4ba, 0);
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
     }
 
     /// Crée une braise ou une étincelle liée à la boule (`0x53992`, `0x539b2`).
@@ -433,8 +431,7 @@ mod fountain {
     }
 
     fn spark(x: &mut Cx) {
-        x.call(ANIM_STEP);
-        if x.c.cond(5) {
+        if x.anim_step() {
             x.add8(0x4, 2);
         }
     }
@@ -444,7 +441,7 @@ mod fountain {
         if x.u16(0x5a) == 0 {
             x.add8(0x4, 2);
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
     }
 
     fn halo(x: &mut Cx) {
@@ -461,7 +458,7 @@ mod fountain {
                     x.call(FLASH_OFF);
                 }
             }
-            x.call(ANIM_STEP);
+            x.anim_step();
         } else {
             x.add16(0x5a, 0xffff);
             if x.u16(0x5a) == 0 {
@@ -483,8 +480,9 @@ mod fountain {
                 x.set_d0w(dx);
                 x.add16(0x8, dx);
                 x.set_d0w(0x4a);
-                x.call(SPEED_SELECT);
-                x.call(MOVE_XY);
+                let n = x.c.d[0] as u16;
+                x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+                x.move_xy();
                 let want: u8 = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
                 x.c.d[0] = x.c.d[0] & !0xff | want as u32;
                 if want == x.u8(0x2d) {
@@ -497,7 +495,7 @@ mod fountain {
             if t == 0 {
                 spawn(x, 2, None);
             }
-            x.call(ANIM_STEP);
+            x.anim_step();
         }
     }
 }

@@ -4,8 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
-
-const REINSERT: u32 = 0x1ee1a;
+use crate::objects::Courant;
 
 /// Signe : `neg.w` quand le regard de l'objet vaut `flip_means_neg` (0 : gauche, 1 : droite).
 fn signed(v: u16, negate: bool) -> u16 {
@@ -48,23 +47,22 @@ mod beam {
             0 if !child => init_root(x),
             0 => init_tip(x),
             2 if !child => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 let owner = x.link_a1(f::OWNER);
                 if owner.u8(x.b, 0x7) == 4 {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 if x.u8(0x33) != 0 {
                     x.set8(0x33, 0);
                     x.call(SPAWN_TRAIL);
                 }
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -126,19 +124,18 @@ mod spark {
             0 if !child => init_a(x),
             0 => init_b(x),
             2 if !child => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 flicker(x, false);
                 if gesture_changed(x, 0x5d) {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -202,7 +199,7 @@ mod glow {
                 if x.u8(0x5c) == 0 {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -223,12 +220,12 @@ mod ray {
             0 if !child => init_core(x),
             0 => init_generator(x),
             2 if !child => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 flicker(x, true);
                 if gesture_changed(x, 0x5f) {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 x.c.d[0] = x.u8(0x5) as u32;
@@ -315,22 +312,22 @@ mod impact {
         match x.state(0x4b7d6) {
             0 => init(x),
             2 if !child => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 flicker(x, true);
                 if gesture_changed(x, 0x5d) {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 let owner = x.link_a1(f::OWNER);
                 if owner.u8(x.b, 0x33) != 0 {
                     x.add8(0x4, 2);
                     owner.set_u8(x.b, 0x33, 0);
                     x.call(BURST);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }

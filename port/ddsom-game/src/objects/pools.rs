@@ -187,6 +187,7 @@ impl Pool {
     /// Comme `alloc`, et laisse les registres de l'original : A1 = emplacement trouvé (en cas d'échec : le premier
     /// emplacement si le compteur est nul, la fin du pool si aucune place n'est libre), D6 = compteur de la boucle,
     /// retenue = échec. Pour les appelants pas encore libérés des registres (`docs/guide-refactorisation.md`).
+    #[track_caller]
     pub fn alloc_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
         let (r, _) = self.alloc_regs(c, b);
         crate::diag::registres_morts(c, "alloc", REGS_ALLOC);
@@ -241,6 +242,7 @@ impl Pool {
     }
 
     /// `alloc_unchecked` avec les registres de l'original (voir `alloc_68k`).
+    #[track_caller]
     pub fn alloc_unchecked_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Obj {
         let (_, a1) = self.alloc_regs(c, b);
         crate::diag::registres_morts(c, "alloc", REGS_ALLOC);
@@ -249,6 +251,7 @@ impl Pool {
 
     /// Comme `release`, et laisse les registres de l'original : D0 = 0, D1.w = -1, A4 = fin de l'emplacement,
     /// drapeaux de `tst.l D0`. A0 (l'objet) n'est pas touché.
+    #[track_caller]
     pub fn release_68k(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
         self.release_regs(c, b, obj);
         crate::diag::registres_morts(c, "free", REGS_FREE);

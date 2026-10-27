@@ -12,6 +12,7 @@
 use super::decide;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Jeux d'animations de marche (0x103e0) : le premier si le boss ne regarde pas dans le sens où il avance.
 const WALK_SIDEWAYS: u32 = 0x177992;
@@ -204,7 +205,7 @@ fn keep_walking(x: &mut Cx) {
         return decide::interrupt(x);
     }
     if !tst8(x, KEY).mi() {
-        x.call(call::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     step(x);
 }
@@ -241,7 +242,7 @@ fn charge(x: &mut Cx) {
         2 => {
             step(x);
             if x.u8(KEY) != 2 {
-                x.call(call::MOVE_X);
+                x.move_x();
                 let going_left = (x.u16(0x14) as i16) < 0;
                 let here = x.u16(0x8);
                 let limit = if x.u8(CHARGE_AT_TARGET) == 0 {
@@ -276,7 +277,7 @@ fn charge(x: &mut Cx) {
                 }
                 return decide::chase(x);
             }
-            x.call(call::MOVE_X);
+            x.move_x();
         }
         _ => {}
     }
@@ -331,17 +332,17 @@ fn shoot(x: &mut Cx) {
             speed(x, 0x35);
             x.set16(0x18, 0x300);
             x.set16(0x1a, (-0x40i16) as u16);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if !tst16(x, 0x18).gt() {
                 x.add8(0x7, 2);
                 x.set16(0x16, 0);
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return step_only(x);
             }
@@ -351,7 +352,7 @@ fn shoot(x: &mut Cx) {
             x.set16(0xc, 0);
             let vz: i16 = if x.u8(f::FLIP) == 0 { -0x40 } else { 0x40 };
             x.set16(0x16, vz as u16);
-            x.call(call::MOVE_X);
+            x.move_x();
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
             body(x, 7);
@@ -365,7 +366,7 @@ fn shoot(x: &mut Cx) {
             if sub16(x, TIMER, 1).le() {
                 return resume(x);
             }
-            x.call(call::MOVE_X);
+            x.move_x();
             step(x);
         }
         _ => {}

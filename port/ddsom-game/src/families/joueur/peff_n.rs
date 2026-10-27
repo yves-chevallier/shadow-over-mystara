@@ -5,10 +5,9 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd32, rd8, wr32, wr8};
 use crate::objects::Obj;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 const ANGLE_TO_TARGET: u32 = 0x1376;
-const MOVE_TABLE_XY: u32 = 0x1cb4;
 const IN_ZONE: u32 = 0xfbae;
 const SHADOW: u32 = 0x33fe4;
 const SPAWN_EFFECT: u32 = 0xb10c8;
@@ -95,7 +94,7 @@ mod guardian {
         x.set8(0x2d, angle);
         x.set16(0x42, 0x4b0);
         x.anim(ANIMS, 0);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn active(x: &mut Cx) {
@@ -112,7 +111,7 @@ mod guardian {
         }
         x.call(IN_ZONE);
         x.call(SHADOW);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// Fin de vie : état 4, sous-états nuls, puis la sortie (`bra 0x50794`).
@@ -128,7 +127,7 @@ mod guardian {
     fn start(x: &mut Cx) {
         match x.u8(0x6) {
             0 => {
-                x.call(MOVE_XYZ);
+                x.move_xyz();
                 if (x.u16(0x18) as i16) <= 0 {
                     x.add8(0x6, 2);
                     x.set8(0x4b, 0x1e);
@@ -146,8 +145,8 @@ mod guardian {
                 }
             }
             4 => {
-                x.call(ANIM_STEP);
-                x.call(MOVE_XZ);
+                x.anim_step();
+                x.move_xz();
                 if (x.u16(0xc) as i16) <= 0 {
                     x.add8(0x6, 2);
                     x.set32(0xc, 0);
@@ -155,8 +154,7 @@ mod guardian {
                 }
             }
             _ => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x5, 2);
                     x.set8(0x6, 0);
                     x.anim(ANIMS, 1);
@@ -202,7 +200,7 @@ mod guardian {
             }
             return;
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         x.add8(0x46, 0xff);
         if x.u8(0x46) == 0 {
             x.set8(0x46, 2);
@@ -222,15 +220,14 @@ mod guardian {
             turn(x);
         }
         if (x.u8(0x33) as i8) >= 0 {
-            x.call(MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         engage_test(x);
     }
 
     /// Demi-tour en cours : l'animation 2 puis retour à l'image 3 avec le regard inversé.
     fn flip_turn(x: &mut Cx) {
-        x.call(ANIM_STEP);
-        if !x.c.cond(5) {
+        if !x.anim_step() {
             return;
         }
         let f = x.u8(f::FLIP) ^ 0x20;
@@ -249,7 +246,7 @@ mod guardian {
         if x.u8(0x4a) != 0 {
             return flip_turn(x);
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         x.add8(0x46, 0xff);
         if x.u8(0x46) == 0 {
             x.set8(0x46, 2);
@@ -263,7 +260,7 @@ mod guardian {
             turn(x);
         }
         if (x.u8(0x33) as i8) >= 0 {
-            x.call(MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
     }
 
@@ -280,8 +277,7 @@ mod guardian {
                 x.anim(ANIMS, 4);
             }
             2 => {
-                x.call(ANIM_STEP);
-                if !x.c.cond(5) {
+                if !x.anim_step() {
                     return;
                 }
                 x.add8(0x7, 2);
@@ -297,7 +293,7 @@ mod guardian {
             }
             4 => {
                 strike(x);
-                x.call(MOVE_XZ);
+                x.move_xz();
                 if (x.u16(0xc) as i16) > 0 {
                     return;
                 }
@@ -321,7 +317,7 @@ mod guardian {
                     x.c.d[3] = 0xffff;
                     x.call(SPAWN_EFFECT);
                 }
-                x.call(MOVE_X);
+                x.move_x();
                 if x.u8(0x14) == 0 {
                     x.set32(0x4, 0x0202_0000);
                 }
@@ -346,7 +342,7 @@ mod guardian {
                 x.set32(0x14, 0);
             }
             6 => {
-                x.call(MOVE_XZ);
+                x.move_xz();
                 if (x.u16(0xc) as i16) <= 0 {
                     x.set32(0xc, 0);
                     x.add8(0x5, 2);
@@ -362,7 +358,7 @@ mod guardian {
                 }
             }
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// `0x507bc` : poussière de la disparition pendant 0x1e images, puis le gardien s'enfonce.

@@ -3,6 +3,7 @@
 //! testées ; il n'y a ni pause du hook ni octet `+0` à remettre à 1.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x6bb4c;
@@ -60,7 +61,7 @@ fn recoil(x: &mut Cx) {
         return mv(x, 8);
     }
     if x.u8(SPEED_X) != 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
     if x.anim_step() {
         set_state_long(x, STANCE);

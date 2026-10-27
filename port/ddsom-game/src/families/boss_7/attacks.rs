@@ -3,6 +3,7 @@
 
 use super::aids;
 use super::*;
+use crate::objects::Courant;
 
 /// Étape finale commune des attaques (0x86286) : joue l'animation jusqu'au bout, puis choisit la suite.
 fn finish(x: &mut Cx) {
@@ -57,7 +58,7 @@ fn combo(x: &mut Cx) {
                 x.call(0xb4ef4);
                 x.call(0xed25a);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         0x862f2 => {
             if x.u8(KEY) != 0 {
@@ -67,7 +68,7 @@ fn combo(x: &mut Cx) {
                 eshl_burst_27(x);
                 x.call(0xed1f0);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         _ => {
             if x.u8(HIT_ACK) != 0 {
@@ -75,7 +76,7 @@ fn combo(x: &mut Cx) {
                 aids::after_attack(x);
                 x.set8(HIT_ACK, 0);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
     }
 }
@@ -189,7 +190,7 @@ fn plunge(x: &mut Cx) {
                 x.c.d[1] = 3;
                 x.call(0xb4f44);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         _ => finish(x),
     }
@@ -208,7 +209,8 @@ fn charge(x: &mut Cx) {
         }
         0x8653a => {
             if x.u8(KEY) == 0 {
-                return x.call(call::STEP);
+                x.anim_step();
+                return;
             }
             addq8(x, SUB3, 2);
             x.set8(KEY, 0);
@@ -225,7 +227,7 @@ fn charge(x: &mut Cx) {
         }
         0x86574 => {
             dust(x, 0);
-            x.call(call::MOVE_X);
+            x.move_x();
             if x.anim_step() {
                 addq8(x, SUB3, 2);
                 x.set16(TIMER, 0x14);
@@ -240,8 +242,8 @@ fn charge(x: &mut Cx) {
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
             }
-            x.call(call::MOVE_X);
-            x.call(call::STEP);
+            x.move_x();
+            x.anim_step();
         }
         _ => {
             if timer_done(x) {
@@ -251,8 +253,8 @@ fn charge(x: &mut Cx) {
                 x.set8(0, 1);
                 return aids::after_attack(x);
             }
-            x.call(call::MOVE_X);
-            x.call(call::STEP);
+            x.move_x();
+            x.anim_step();
         }
     }
 }
@@ -303,21 +305,21 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
                 addq8(x, SUB3, 2);
                 x.set8(VULNERABLE, 0);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         0x8669c => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0x18) as i16) <= -0x300 {
                 x.set16(0x1a, (-0x98i16) as u16);
                 addq8(x, SUB3, 2);
                 x.set16(0x30, 1);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         0x866c2 => {
-            x.call(call::MOVE_XZ);
-            if x.c.cond(14) {
-                return x.call(call::STEP);
+            if x.move_xz().gt() {
+                x.anim_step();
+                return;
             }
             x.c.d[0] = 0x14;
             x.call(call::SOUND_B);

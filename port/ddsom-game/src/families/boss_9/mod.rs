@@ -18,6 +18,7 @@
 //!
 //! Animations : 0x17a276.
 
+use crate::objects::Courant;
 use super::boss_common::*;
 use crate::objects::Obj;
 
@@ -87,9 +88,6 @@ pub(self) const HARD: u32 = 0x70;
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_Z: u32 = 0x1dbc;
     pub const PICK_OTHER: u32 = 0x44ee;
     pub const SMOKE: u32 = 0xb10c8;
     pub const MESSAGE: u32 = 0xc8312;

@@ -3,11 +3,10 @@
 
 use super::stance::stance_begin;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = 8;
-    x.call(call::SCREEN_CHECK_MARGIN);
-    if !x.c.cond(5) {
+    if !x.in_arena(8) {
         // hors de l'écran : il revient par l'arrivée de la variante 2
         set_state_long(x, 0x0200_0000);
         return arrival::walk_in(x, 0x20, 0x17);
@@ -84,7 +83,7 @@ fn first(x: &mut Cx) {
                 let saved = x.u8(SAVED_STEP);
                 x.set8(STEP, saved);
             }
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
         }
         10 => {
@@ -230,7 +229,7 @@ fn second(x: &mut Cx) {
         }
         8 => shoot_or_approach(x),
         10 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             x.anim_step();
             if (x.u16(HEIGHT) as i16) >= 0 {
                 return;
@@ -249,7 +248,7 @@ fn second(x: &mut Cx) {
                 let saved = x.u8(SAVED_STEP);
                 x.set8(STEP, saved);
             }
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
         }
         _ => {}
@@ -337,7 +336,7 @@ fn sidestep(x: &mut Cx) {
             mv(x, 2);
         }
         2 => {
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
             let n = x.u8(AI_WANDER).wrapping_sub(1);
             x.set8(AI_WANDER, n);
@@ -373,7 +372,7 @@ fn leap(x: &mut Cx) {
             mv(x, 8);
         }
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             x.anim_step();
             if (x.u32(HEIGHT) as i32) >= 0 {
                 return;

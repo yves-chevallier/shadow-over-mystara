@@ -31,13 +31,10 @@ mod rom {
     pub const REVIVE_SETUP: u32 = 0x4c930;
     pub const REVIVE_SOUND: u32 = 0xe24d8;
     pub const FADE: u32 = 0x1686;
-    pub const RANK_RAISE: u32 = 0x1f2c0;
     pub const TERRAIN: u32 = 0x33fe4;
     pub const INTRO_SOUND: u32 = 0xab708;
     pub const INTRO_ACTION: u32 = 0xe1330;
     pub const SPECIAL_VOICE: u32 = 0x4fd2c;
-    /// Animation du jeu C des personnages (D6 = numéro).
-    pub const ANIM_START_C: u32 = 0x2cf0;
 }
 
 /// Tables du code.
@@ -456,7 +453,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
     restore_palette(g, p);
     g.set_a5u8(0x48e, 0xf);
     g.rom(rom::FADE, p);
-    g.rom(rom::RANK_RAISE, p);
+    crate::objects::rank::raise_68k(g.c, g.b);
     g.rom(rom::TERRAIN, p);
 }
 
@@ -511,7 +508,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0x35);
-    g.rom(rom::RANK_RAISE, p);
+    crate::objects::rank::raise_68k(g.c, g.b);
 }
 
 // ---- attente d'ouverture des commandes (début de scène) ------------------------------------------
@@ -630,7 +627,8 @@ fn thrown_wait_signal(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::AX, 0);
     p.set_u16(g, Obj::VZ, 0x580);
     p.set_u16(g, Obj::AZ, 0xffc8);
-    g.rom_d6(rom::ANIM_START_C, p, 2);
+    g.c.d[6] = 2;
+    crate::objects::anim::start_by_character_68k(g.c, g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
 }
 
 /// Vol plané : vrai à l'atterrissage (altitude repassée sous zéro, remise à zéro).

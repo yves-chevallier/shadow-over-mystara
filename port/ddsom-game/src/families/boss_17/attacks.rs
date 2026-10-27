@@ -14,6 +14,7 @@
 use super::decide;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -161,7 +162,7 @@ fn strike_4(x: &mut Cx) {
             x.set16(0x14, vx as u16);
             x.set16(0x16, vz as u16);
             x.call(0xece9e);
-            x.call(call::MOVE_X);
+            x.move_x();
         }
         4 => {
             if sub16(x, TIMER, 1).le() {
@@ -170,7 +171,7 @@ fn strike_4(x: &mut Cx) {
                 x.set8(INVULNERABLE, 0);
                 return;
             }
-            x.call(call::MOVE_X);
+            x.move_x();
             step(x);
             if x.u8(KEY) == 0 {
                 return;
@@ -227,14 +228,14 @@ fn leap(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0x120).le() {
                 x.add8(0x7, 2);
                 strike(x, 4);
             }
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0xff60).le() {
                 x.add8(0x7, 2);
                 x.set16(0x1a, (-0x30i16) as u16);
@@ -244,7 +245,7 @@ fn leap(x: &mut Cx) {
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).le() {
                 x.add8(0x7, 2);
                 x.set16(0xc, 0);

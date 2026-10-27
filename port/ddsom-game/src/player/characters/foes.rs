@@ -5,6 +5,7 @@
 //! sort (un bit de `+0x94`) passe à la réaction `reaction` attribuée au lanceur, perd des points de
 //! vie (table par niveau ou valeur fixe, majorée selon l'équipement) et sa barre de vie est mise à jour.
 
+use crate::machine::Machine;
 use super::common::call;
 use super::super::{Ctx, Player};
 use crate::objects::pools::{BOSS, ENEMY};

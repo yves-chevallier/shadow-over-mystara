@@ -76,7 +76,6 @@ mod ext {
     /// Arrête (et lance) la tâche du texte « INSERT COIN » clignotant (`taches/invite.rs`).
     pub const INVITE_STOP: u32 = 0xe03c6;
     pub const INVITE_START: u32 = 0xe03e4;
-    pub const RNG_SEED: u32 = 0x19a80;
     pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const SOUND_E0A10: u32 = 0xe0a10;
     pub const KILL_TASK: u32 = 0xa14;
@@ -89,7 +88,6 @@ mod ext {
     pub const CLEAR_SCROLL_3: u32 = 0xce8;
     pub const POOLS: u32 = 0x2062;
     pub const SERVICE_2D9E: u32 = 0x2d9e;
-    pub const SCENE_START_HOOK: u32 = 0x19a80;
     pub const TASK_CREATE: u32 = 0x9b6;
     pub const PLAYER_UI: u32 = 0x150ac;
     pub const PLAYER_PREPARE: u32 = 0x3525c;
@@ -249,7 +247,7 @@ fn scene_start(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     wr8(x.b, var::PHASE, 8);
     wr8(x.b, var::STEP, 0);
-    x.call(ext::SCENE_START_HOOK);
+    crate::rng::seed_68k(x.c, x.b);
     let mut a0 = PLAYERS;
     x.c.d[6] = 3;
     for d6 in (0..4u32).rev() {
@@ -939,7 +937,7 @@ pub fn reset_recorder(c: &mut Cpu, b: &mut Cps2Bus) {
     let dsw = rd16(b, var::DSW);
     c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
     if dsw & 0x2000 != 0 {
-        crate::call(c, b, ext::RNG_SEED);
+        crate::rng::seed_68k(c, b);
         wr16(b, A5 + 0x6c, 0);
         wr16(b, A5 + 0x6e, 0);
         wr16(b, A5 + 0x7f92, 0xe);

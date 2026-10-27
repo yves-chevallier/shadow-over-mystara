@@ -5,6 +5,7 @@
 use super::aids;
 use super::attacks::{leap_rest, leap_start};
 use super::*;
+use crate::objects::Courant;
 
 fn step(x: &mut Cx, table: u32) -> u32 {
     dispatch(x, table, SUB3)
@@ -119,7 +120,7 @@ fn short_walk(x: &mut Cx) {
                 x.set32(f::STATE, 0x0202_0200);
                 return;
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         t => {
             if t == 0x8691a {

@@ -9,6 +9,7 @@
 //! La position se calcule en deux temps : les vitesses `+0x14..+0x1e` s'intègrent dans des décalages
 //! `+0xb4` (X), `+0xb6` (altitude), `+0xb8` (profondeur) que `apply_motion` ajoute ensuite à la position.
 
+use crate::objects::Courant;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -86,7 +87,7 @@ fn play(x: &mut Cx, set_id: u8, n: u8) {
     if set_id != x.u8(ANIM_SET) || n != x.u8(ANIM_NUM) {
         x.set8(ANIM_SET, set_id);
         x.set8(ANIM_NUM, n);
-        x.anim_start(set, n as u32);
+        x.anim_start(set, (n as u32) as u16);
     }
 }
 

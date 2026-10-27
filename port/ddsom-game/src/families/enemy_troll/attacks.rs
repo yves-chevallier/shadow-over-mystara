@@ -4,6 +4,7 @@
 use super::stance::{approach_start, walk_off};
 use crate::objects::Obj;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -221,7 +222,7 @@ fn jump_start(x: &mut Cx) {
 
 /// 0x6cdea : retombée du saut.
 fn land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     if (x.u16(HEIGHT) as i16) >= 0 {
         return;
     }
@@ -423,7 +424,7 @@ fn lunge(x: &mut Cx) {
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
         }
         _ => {}

@@ -11,6 +11,8 @@ use m68k::SR_C;
 use super::cx::Cx;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Champs des objets ENEMY.
 pub mod f {
@@ -53,9 +55,6 @@ pub mod rom {
     pub const INITIAL_HP: u32 = 0x4544;
     /// Immunités du type (rangées en `+0x94`).
     pub const IMMUNITIES: u32 = 0xfe5a;
-    pub const RNG: u32 = 0x19a88;
-    /// Compteurs de fin de handler (gel `+0x53`, compte à rebours `+0x89`).
-    pub const TICK_COUNTERS: u32 = 0xf1bfc;
     /// Variable `A5+0x3d` : jeu en pause.
     pub const PAUSE_FLAG: u32 = 0x3d;
 }
@@ -183,8 +182,8 @@ pub fn free(x: &mut Cx) {
 
 /// Tirage pseudo-aléatoire du jeu (mot dans D0).
 pub fn random(x: &mut Cx) -> u32 {
-    x.call(rom::RNG);
-    x.c.d[0]
+    let alea = x.random_68k();
+    x.c.d[0] & 0xffff_0000 | alea as u32
 }
 
 /// Jeu en pause (`A5+0x3d` non nul).
@@ -194,8 +193,7 @@ pub fn paused(x: &mut Cx) -> bool {
 
 /// Le gestionnaire est suspendu (hook de pause `0x29ea`, Z = non suspendu).
 pub fn suspended(x: &mut Cx) -> bool {
-    x.call(super::cx::sub::PAUSE_HOOK);
-    x.c.cond(6)
+    x.suspended()
 }
 
 /// Objet désigné par un mot de 16 bits de l'objet courant (`movea.w (off,A0),A1`).
@@ -284,7 +282,7 @@ pub fn add16(x: &mut Cx, o: Obj, off: u32, v: u16) {
 
 /// Démarre le script `n` du jeu d'animations `set` (`movea.l set,A4 ; moveq n,D0 ; jsr 0x1a32`).
 pub fn anim(x: &mut Cx, set: u32, n: u32) {
-    x.anim_start(set, n);
+    x.anim_start(set, n as u16);
 }
 
 // --- aides communes des types du troisième lot --------------------------------------------------

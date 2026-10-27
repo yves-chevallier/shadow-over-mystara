@@ -2,6 +2,7 @@
 //! 4 chute, 8 saisie par un joueur (le troglodyte s'enfuit).
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x5acfc;
@@ -84,7 +85,8 @@ fn recoil(x: &mut Cx) {
         }
     }
     if x.u8(SPEED_X) != 0 {
-        return x.call(sub::MOVE_X);
+        x.move_x();
+        return;
     }
     set_state_long(x, STANCE);
     x.set8(0, 1);
@@ -159,8 +161,7 @@ pub(super) fn caught(x: &mut Cx) {
         4 => {
             step(x);
             move_xy(x);
-            x.call(call::SCREEN_CHECK);
-            if !x.c.cond(5) {
+            if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
                 x.call(call::REMOVE);
             }
@@ -177,6 +178,5 @@ fn run_away(x: &mut Cx) {
         x.set8(ANGLE, 0x18);
     }
     body(x, 2);
-    x.c.d[0] = 0x21;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, 0x21);
 }

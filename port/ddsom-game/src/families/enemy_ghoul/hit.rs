@@ -2,6 +2,7 @@
 //! 4 chute, 8 saisie par un joueur (le ghoul s'enfuit).
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x6090c;
@@ -55,7 +56,8 @@ fn recoil(x: &mut Cx) {
         return body(x, 9);
     }
     if x.u8(SPEED_X) != 0 {
-        return x.call(sub::MOVE_X);
+        x.move_x();
+        return;
     }
     set_state_long(x, STANCE);
     x.set8(0, 1);
@@ -139,9 +141,8 @@ fn caught(x: &mut Cx) {
             if vx != 0x300 && vx != 0xfd00 {
                 return x.set8(f::SUB2, 0);
             }
-            x.call(sub::MOVE_X);
-            x.call(call::SCREEN_CHECK);
-            if !x.c.cond(5) {
+            x.move_x();
+            if !x.in_arena_default() {
                 x.call(call::REMOVE);
                 return set_state_long(x, st::DEAD_LONG);
             }

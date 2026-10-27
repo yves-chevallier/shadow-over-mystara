@@ -3,6 +3,8 @@
 
 use super::aids;
 use super::*;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 pub(super) fn run(x: &mut Cx) {
     x.set8(HIT_ACK, 0);
@@ -87,7 +89,8 @@ fn thrown(x: &mut Cx) {
                 x.call(call::BURST);
             }
             if x.u8(0x14) != 0 {
-                return x.call(call::MOVE_X);
+                x.move_x();
+                return;
             }
             if !x.anim_step() {
                 return;
@@ -98,8 +101,8 @@ fn thrown(x: &mut Cx) {
             x.c.d[5] = ((n as u16) << 2) as u32;
             let mask = rom32(x, 0x86dd6 + x.c.d[5]);
             x.c.d[5] = mask;
-            x.call(call::RNG);
-            let i = x.c.d[0] as u16 & 0x1f;
+            let alea = x.random_68k();
+            let i = alea & 0x1f;
             setw(x, 0, i);
             if mask >> i & 1 == 0 {
                 x.set8(0, 1);
@@ -207,13 +210,14 @@ fn death(x: &mut Cx) {
             }
             setw(x, 0, v);
             x.set16(0x14, v);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             body(x, 0xa);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
-                return x.call(call::STEP);
+                x.anim_step();
+                return;
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);

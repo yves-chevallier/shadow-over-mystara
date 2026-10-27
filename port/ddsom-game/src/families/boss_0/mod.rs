@@ -67,6 +67,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Jeux d'animations : corps, entrées en scène et attaques, coups reçus.
 pub(self) const SET_BODY: u32 = 0x171a52;
@@ -81,10 +82,8 @@ pub(self) const THRESHOLDS: u32 = 0x10ae2;
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const ANIM_STEP: u32 = 0x1a56;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const RAND_TIMER: u32 = 0x79f6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
 }
 
 /// Lance l'animation `n` du jeu des corps par l'IA (0x103d6).
@@ -109,7 +108,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),

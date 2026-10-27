@@ -1,6 +1,7 @@
 //! Type 0, sous-état 2 : debout. `+6` : 0 et 8 approche et choix d'un geste, 2 demi-tour, 4 attente, 6 course.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.a5_u8(0x35) == 0 {
@@ -76,7 +77,7 @@ pub(super) fn reach_boxes(x: &mut Cx) {
         return x.call(call::ANNOUNCE);
     }
     x.anim_step();
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     if x.u16(f::TARGET) == 0 {
         return;
     }
@@ -216,7 +217,7 @@ fn run_up(x: &mut Cx) {
                 set_state_long(x, 0x0202_0200);
             }
             x.anim_step();
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         _ => {}
     }

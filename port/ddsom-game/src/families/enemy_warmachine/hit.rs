@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACT: u32 = 0x78a26;
@@ -75,14 +76,14 @@ fn hop_back(x: &mut Cx) {
                 x.set16(TIMER, 6);
                 x.set16(SPEED_Y, 0);
             }
-            x.call(sub::MOVE_X);
+            x.move_x();
             lib::step(x);
         }
         4 => {
             let t = x.u16(TIMER).wrapping_sub(1);
             x.set16(TIMER, t);
             if (t as i16) > 0 {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
                 return;
             }
@@ -174,11 +175,11 @@ fn death(x: &mut Cx) {
             }
             x.set16(SPEED_X, speed as u16);
             x.set8(f::FLIP, flip);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             x.anim_start(SET_MOVE, 0x13);
         }
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > 0 {
                 lib::step(x);
                 return;
@@ -187,7 +188,7 @@ fn death(x: &mut Cx) {
             x.anim_start(SET_MOVE, 0x14);
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -232,7 +233,7 @@ fn run_off(x: &mut Cx) {
             mv(x, 8);
         }
         2 => {
-            x.call(sub::MOVE_X);
+            x.move_x();
             lib::step(x);
             if x.u8(KEY) == 2 {
                 x.set8(KEY, 0);

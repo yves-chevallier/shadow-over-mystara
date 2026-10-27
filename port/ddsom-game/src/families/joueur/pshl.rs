@@ -8,8 +8,8 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 const TERRAIN_OF_OBJECT: u32 = 0x24a8;
 const SFX_HIT_WALL: u32 = 0xe7376;
 const SFX_LAND: u32 = 0xe73e8;
@@ -53,7 +53,7 @@ mod marker {
                 x.copy_pos(carrier);
                 x.anim(ANIMS, kind);
                 x.set32(0x34, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 let carrier = x.link_a1(0x5c);
@@ -72,11 +72,11 @@ mod marker {
                     if (z as i16) > 0 {
                         x.add8(0x5, 2);
                     }
-                    x.call(REINSERT);
+                    x.reinsert();
                 } else if z == 0 {
                     x.free_pshl();
                 } else {
-                    x.call(REINSERT);
+                    x.reinsert();
                 }
             }
             _ => x.free_pshl(),
@@ -118,7 +118,7 @@ mod thrown {
                 x.add16(0xc, dz);
                 pose(x);
                 x.call(SFX_START);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 {
@@ -126,8 +126,8 @@ mod thrown {
                     return x.free_pshl();
                 }
                 if !stopped_by_terrain(x) {
-                    x.call(MOVE_XZ);
-                    return x.call(CULL);
+                    x.move_xz();
+                    return x.cull_offscreen();
                 }
                 x.add8(0x4, 2);
                 x.set8(0x0, 2);
@@ -155,7 +155,7 @@ mod thrown {
                         x.c.d[0] = (angle & 7) as u32;
                         x.anim(ANIMS_A, (angle & 7) as u32);
                     }
-                    x.call(MOVE_XZ);
+                    x.move_xz();
                     if (x.u16(0xc) as i16) >= 0 {
                         return;
                     }
@@ -181,10 +181,8 @@ mod thrown {
     /// Animation d'après l'angle `+0x2d` (`0x51f48`).
     fn pose(x: &mut Cx) {
         let angle = (x.u8(0x2d) & 7) as u32;
-        x.c.d[0] = angle;
         let set = if x.u8(0x2) == 1 { ANIMS_A } else { ANIMS_B };
-        x.c.a[4] = set;
-        x.call(0x1a32);
+        x.anim_start(set, angle as u16);
     }
 }
 
@@ -234,7 +232,7 @@ mod flung {
                 let a = set(x);
                 x.anim(a, 0);
                 x.call(SFX_START);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 {
@@ -242,9 +240,9 @@ mod flung {
                     return x.free_pshl();
                 }
                 if !stopped_by_terrain(x) {
-                    x.call(ANIM_STEP);
-                    x.call(MOVE_X);
-                    return x.call(CULL);
+                    x.anim_step();
+                    x.move_x();
+                    return x.cull_offscreen();
                 }
                 x.add8(0x4, 2);
                 x.set8(0x0, 2);
@@ -257,7 +255,7 @@ mod flung {
                 x.c.d[0] = x.u8(0x5) as u32;
                 match x.u8(0x5) {
                     0 => {
-                        x.call(ANIM_STEP);
+                        x.anim_step();
                         x.add8(0x50, 0xff);
                         if x.u8(0x50) == 0 {
                             x.add8(0x5, 2);
@@ -266,7 +264,7 @@ mod flung {
                         }
                     }
                     2 => {
-                        x.call(MOVE_Z);
+                        x.move_z();
                         if (x.u16(0xc) as i16) < 0 {
                             x.add8(0x5, 2);
                             x.set8(0x50, 0x3c);
@@ -325,7 +323,7 @@ mod arc {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
                 active(x);
             }
             2 => active(x),
@@ -337,7 +335,7 @@ mod arc {
         x.c.d[0] = x.c.d[0] & !0xff | x.u8(0x5) as u32;
         match x.u8(0x5) {
             0 => {
-                x.call(MOVE_XZ);
+                x.move_xz();
                 if (x.u16(0xc) as i16) >= 0 {
                     return;
                 }
@@ -357,10 +355,10 @@ mod arc {
                     x.set16(0x5c, 0x50);
                     x.anim(ANIMS, 2);
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             _ => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 x.add16(0x5c, 0xffff);
                 if x.u16(0x5c) == 0 {
                     x.add8(0x4, 2);
@@ -417,7 +415,7 @@ mod bouncer {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
                 active(x);
             }
             2 => active(x),
@@ -434,8 +432,8 @@ mod bouncer {
             x.add8(0x5e, 0xff);
             x.set8(0x0, 2);
         }
-        x.call(ANIM_STEP);
-        x.call(MOVE_XZ);
+        x.anim_step();
+        x.move_xz();
         let hit = x.u8(0x57) & 2 != 0;
         let mut bounce = hit;
         if !hit {
@@ -491,7 +489,8 @@ mod bouncer {
             x.set_bit(0x1, 1, false);
         }
         if (x.u16(0xc) as i16) > 0 {
-            return x.call(MOVE_XZ);
+            x.move_xz();
+            return;
         }
         x.anim(ANIMS, 1);
     }
@@ -536,14 +535,14 @@ mod burst {
             }
             0 => flame_init(x),
             2 if !child => {
-                x.call(MOVE_XZ);
-                x.call(ANIM_STEP);
+                x.move_xz();
+                x.anim_step();
                 if (x.u16(0xc) as i16) < 0 {
                     x.add8(0x4, 2);
                     spawn_flames(x);
                 }
-                x.call(CULL);
-                x.call(REINSERT);
+                x.cull_offscreen();
+                x.reinsert();
             }
             2 => {
                 if x.u8(0x5e) != 0 {
@@ -554,8 +553,7 @@ mod burst {
                         x.call(FLASH_PULSE);
                     }
                 }
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
             }
@@ -590,7 +588,7 @@ mod burst {
         x.call(SHAKE);
         x.anim(ANIMS, 1);
         x.call(SFX_FLAME);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// `0x525ce` : crée les flammes (variante 1), une de plus tous les 4 pas de retard.

@@ -3,6 +3,7 @@
 //! `+7` est l'étape : les étapes 0 à 4 (selon le coup) sont communes (`ready`, `settle`, `face`).
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if special_hit(x, 0x582e8) {
@@ -266,7 +267,7 @@ pub(super) fn land_wait(x: &mut Cx) {
 
 /// 0x58512 : montée du bond (déplacement en X et en hauteur).
 pub(super) fn rise(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     step(x);
     if (x.u16(SPEED_Z) as i16) < 0 {
         x.add8(STEP, 2);
@@ -277,7 +278,7 @@ pub(super) fn rise(x: &mut Cx) {
 
 /// 0x58536 : descente jusqu'au sol.
 pub(super) fn fall(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     step(x);
     if (x.u32(HEIGHT) as i32) <= 0 {
         x.set32(HEIGHT, 0);

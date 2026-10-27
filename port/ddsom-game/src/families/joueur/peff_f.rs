@@ -4,8 +4,8 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 const FLASH_ON: u32 = 0x1ac68;
 
 fn signed(v: u16, negate: bool) -> u16 {
@@ -38,14 +38,13 @@ mod trail {
                 let anim = (d3 as u32).wrapping_add(rank) & 0xffff;
                 x.anim(ANIMS, anim);
                 cycle(x);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 if x.u8(0x5c) != 0 {
                     place(x);
                 }
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
                 cycle(x);
@@ -145,8 +144,8 @@ mod bubble {
                 x.c.d[2] = dz as u32;
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
-                x.call(ANIM_STEP);
-                x.call(REINSERT);
+                x.anim_step();
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -175,7 +174,7 @@ mod storm {
                 x.set16(0xc, cy.wrapping_add(0x100));
                 x.anim(ANIMS, 0);
                 x.call(SPAWN_STONES);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 x.c.d[0] = x.c.d[0] & !0xff | x.u8(0x5) as u32;
@@ -206,7 +205,7 @@ mod storm {
                         }
                     }
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             _ => x.free_peff(),
         }
@@ -231,7 +230,7 @@ mod flash {
             0 if !child => {
                 x.add8(0x4, 2);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
                 x.call(SFX_BODY);
             }
             0 => init_corner(x),
@@ -295,7 +294,7 @@ mod flash {
                 x.set_bit(0x1, 1, false);
             }
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
     }
 
     /// `0x4cfbc` : quatre étincelles de coin, puis l'éclair d'écran.
@@ -323,8 +322,7 @@ mod flash {
             x.set_a5_u16(0x4ba, 0x100);
             x.call(SFX_CORNER);
         }
-        x.call(ANIM_STEP);
-        if x.c.cond(5) {
+        if x.anim_step() {
             x.add8(0x5a, 0xff);
             if x.u8(0x5a) == 0 {
                 x.add8(0x4, 2);
@@ -341,7 +339,7 @@ mod flash {
                     x.set_a5_u16(0x4ba, 0);
                 }
             }
-            x.call(REINSERT);
+            x.reinsert();
         }
     }
 }

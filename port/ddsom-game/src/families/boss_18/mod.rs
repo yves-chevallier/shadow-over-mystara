@@ -60,6 +60,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_BODY: u32 = 0x181ae0;
 pub(self) const SET_STRIKE: u32 = 0x181af2;
@@ -74,11 +75,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 }
 
 pub(self) mod call {
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const RANDOM_TURN: u32 = 0x10574;
     pub const TURN_NEEDED: u32 = 0x1050c;
@@ -93,7 +89,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),

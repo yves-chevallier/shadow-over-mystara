@@ -37,6 +37,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 const SET_BODY: u32 = 0x17b14e;
 const SET_SHOT: u32 = 0x17b162;
@@ -54,9 +55,6 @@ const REACTIONS: u32 = 0x8d176;
 const STUN_REACTION: u32 = 0x8d294;
 
 mod call {
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const ANIM_STEP: u32 = 0x1a56;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const FACING: u32 = 0x10560;
     pub const TURN_NEEDED: u32 = 0x1050c;
@@ -68,7 +66,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -83,7 +81,7 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 fn body(x: &mut Cx, n: u32) {
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 fn players_alive(x: &mut Cx) -> bool {
@@ -201,7 +199,7 @@ fn intro(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             if x.a5_u8(0x2e) != 6 {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
                 return;
             }
             x.add8(f::SUB2, 2);
@@ -211,7 +209,7 @@ fn intro(x: &mut Cx) {
         }
         2 => {
             if sub16(x, TIMER, 1).ne() {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
                 return;
             }
             x.add8(f::SUB2, 2);
@@ -231,15 +229,14 @@ fn intro(x: &mut Cx) {
         }
         4 => {
             if sub16(x, TIMER, 1).ne() {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
                 return;
             }
             x.add8(f::SUB2, 2);
             x.anim_start(SET_SHOT, 0);
         }
         6 => {
-            x.call(call::ANIM_STEP);
-            if !carry(x) {
+            if !x.anim_step() {
                 return;
             }
             x.add8(f::SUB, 2);
@@ -284,7 +281,7 @@ fn idle(x: &mut Cx) {
     if needs_turn(x) {
         return interrupt(x);
     }
-    x.call(call::ANIM_STEP);
+    x.anim_step();
 }
 
 fn turn(x: &mut Cx) {
@@ -294,8 +291,7 @@ fn turn(x: &mut Cx) {
         body(x, 1);
         return;
     }
-    x.call(call::ANIM_STEP);
-    if !carry(x) {
+    if !x.anim_step() {
         return;
     }
     let side = x.u8(f::FLIP) ^ 0x20;
@@ -365,8 +361,8 @@ fn keep_walking(x: &mut Cx) {
     if needs_turn(x) {
         return interrupt(x);
     }
-    x.call(call::MOVE_TABLE_XY);
-    x.call(call::ANIM_STEP);
+    x.move_by_table_xy();
+    x.anim_step();
 }
 
 fn walk_delay(x: &mut Cx) {
@@ -416,8 +412,7 @@ fn jump(x: &mut Cx) {
             x.call(0xecf10);
         }
         2 => {
-            x.call(call::ANIM_STEP);
-            if carry(x) {
+            if x.anim_step() {
                 x.add8(0x7, 2);
                 let (jx, jy) = (x.u16(JUMP_X), x.u16(JUMP_Y));
                 x.set16(0x8, jx);
@@ -434,8 +429,7 @@ fn jump(x: &mut Cx) {
             }
         }
         4 => {
-            x.call(call::ANIM_STEP);
-            if carry(x) {
+            if x.anim_step() {
                 x.set32(f::STATE, FIGHT);
                 body(x, 0);
             } else if x.u8(KEY) != 0 {
@@ -458,8 +452,7 @@ fn shoot(x: &mut Cx) {
                 x.call(0xe48da);
             }
             2 => {
-                x.call(call::ANIM_STEP);
-                if carry(x) {
+                if x.anim_step() {
                     next_action(x);
                 }
             }
@@ -488,7 +481,7 @@ fn cinematic_shot(x: &mut Cx) {
             x.call(0xe48da);
         }
         2 => {
-            x.call(call::ANIM_STEP);
+            x.anim_step();
             if x.u8(KEY) == 0 {
                 return;
             }
@@ -514,7 +507,7 @@ fn cinematic_shot(x: &mut Cx) {
         }
         4 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
                 return;
             }
             x.add8(0x7, 2);
@@ -522,28 +515,27 @@ fn cinematic_shot(x: &mut Cx) {
             let shot = x.linked(SHOT);
             shot.set_u8(x.b, 0x58, 1);
             x.call(0xe4a82);
-            x.call(call::ANIM_STEP);
+            x.anim_step();
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
                 return;
             }
             x.add8(0x7, 2);
             let shot = x.linked(SHOT);
             shot.set_u8(x.b, 0x59, 1);
-            x.call(call::ANIM_STEP);
+            x.anim_step();
         }
         8 => {
             let shot = x.linked(SHOT);
             if shot.u8(x.b, 0x5a) != 0 {
                 return shot_end(x);
             }
-            x.call(call::ANIM_STEP);
+            x.anim_step();
         }
         10 => {
-            x.call(call::ANIM_STEP);
-            if carry(x) {
+            if x.anim_step() {
                 set_abs8(x, 0xff8043, 0xff);
                 x.set8(0, 1);
                 next_action(x);
@@ -567,12 +559,12 @@ fn wait_state(x: &mut Cx) {
         return next_action(x);
     }
     if !sub8(x, WAIT_BLINK, 1).eq() {
-        x.call(call::ANIM_STEP);
+        x.anim_step();
         return;
     }
     x.set8(WAIT_BLINK, 0xfa);
     x.call(call::FX_SOUND);
-    x.call(call::ANIM_STEP);
+    x.anim_step();
 }
 
 // --- état 4 : touché --------------------------------------------------------------------------------
@@ -662,7 +654,7 @@ fn stun(x: &mut Cx) {
             x.set32(0x16, 0);
             x.set32(f::STATE, 0x0404_0200);
             x.set16(HITS, 1);
-            x.call(call::ANIM_STEP);
+            x.anim_step();
         }
         _ => {}
     }
@@ -688,8 +680,7 @@ fn get_up(x: &mut Cx) {
             if x.a5_u8(var::PAUSE) != 0 {
                 return;
             }
-            x.call(call::ANIM_STEP);
-            if carry(x) {
+            if x.anim_step() {
                 x.set32(f::STATE, 0x0202_0600);
                 x.set8(0, 1);
                 x.anim_start(SET_BODY, 7);
@@ -731,23 +722,23 @@ fn down(x: &mut Cx) {
             x.call(0xe49ae);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0x100).le() {
                 x.add8(f::SUB2, 2);
                 x.anim_start(SET_DIE, 0x16);
             } else {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
             }
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0xff00).le() {
                 x.add8(f::SUB2, 2);
                 x.anim_start(SET_DIE, 0x17);
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }
@@ -757,8 +748,7 @@ fn down(x: &mut Cx) {
             x.anim_start(SET_DIE, 0x18);
         }
         8 => {
-            x.call(call::ANIM_STEP);
-            if carry(x) {
+            if x.anim_step() {
                 x.add8(f::SUB2, 2);
             }
         }

@@ -25,6 +25,7 @@ mod sfx {
 
 use super::cx::sub;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 // ---------------------------------------------------------------------------------------------
 // Type 0 (0x9dbfc) : projectile horizontal, deux variantes (+3)
@@ -98,9 +99,9 @@ mod shot0 {
         if ground && terrain & 0x40 == 0 {
             return fall(x);
         }
-        x.call(sub::MOVE_XZ);
+        x.move_xz();
         x.anim_step();
-        x.call(sub::CULL_OFFSCREEN);
+        x.cull_offscreen();
         x.reinsert();
     }
 
@@ -117,7 +118,7 @@ mod shot0 {
                 x.anim_start(ANIMS, anim);
             }
             FALL_DROP => {
-                x.call(sub::MOVE_XZ);
+                x.move_xz();
                 x.anim_step();
                 if (x.u16(0xc) as i16) < 0 {
                     x.set_bit(0x1, 1, true);
@@ -205,8 +206,7 @@ mod shot1 {
     fn body(x: &mut Cx) {
         match x.u8(0x5) {
             LOB => {
-                x.call(sub::MOVE_XYZ);
-                if !x.c.cond(14) {
+                if !x.move_xyz().gt() {
                     x.add8(0x5, 2);
                     x.set16(f::TIMER, 0x50);
                     x.set32(0xc, 0);
@@ -222,7 +222,7 @@ mod shot1 {
                 let t = x.u16(f::TIMER).wrapping_sub(1);
                 x.set16(f::TIMER, t);
                 if t != 0 {
-                    x.call(sub::ANIM_STEP);
+                    x.anim_step();
                 } else {
                     x.add8(0x5, 2);
                     x.set16(f::TIMER, 0x50);
@@ -246,7 +246,7 @@ mod shot1 {
     /// Fin du gestionnaire quand l'état est inchangé : liste triée puis retrait hors écran.
     fn finish(x: &mut Cx) {
         x.reinsert();
-        x.call(sub::CULL_OFFSCREEN);
+        x.cull_offscreen();
     }
 }
 
@@ -289,8 +289,8 @@ mod shot2 {
         if blocked_by_terrain(x) {
             return x.free_eshl();
         }
-        x.call(sub::MOVE_XZ);
-        x.call(sub::CULL_OFFSCREEN);
+        x.move_xz();
+        x.cull_offscreen();
         x.reinsert();
     }
 }
@@ -324,7 +324,7 @@ mod shot3 {
                 x.reinsert();
             }
             2 => {
-                x.call(sub::MOVE_XY);
+                x.move_xy();
                 if x.anim_step() {
                     x.add8(0x4, 2);
                 }
@@ -399,15 +399,14 @@ mod shot4 {
         x.add16(0x8, dx as u16);
         x.set16(0x42, bounce_vx as u16);
         x.set16(f::OWNER, bounce_ax as u16);
-        x.c.d[0] = 0x36;
-        x.call(sub::SPEED_TABLE_B);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, 0x36);
         x.anim_start(ANIMS, 0);
     }
 
     fn fall(x: &mut Cx) {
-        x.call(sub::MOVE_XZ);
+        x.move_xz();
         x.anim_step();
-        x.call(sub::CULL_OFFSCREEN);
+        x.cull_offscreen();
         if (x.u16(0xc) as i16) < 0 {
             x.call(sfx::ECE2C);
             x.set16(0xc, 0);
@@ -418,15 +417,14 @@ mod shot4 {
             x.set8(f::ATTACK_POWER, 6);
             x.set8(f::ATTACK_ID, 8);
             x.set8(f::TIMER, 0x20);
-            x.c.d[0] = 0x17;
-            x.call(sub::SPEED_TABLE_B);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 0x17);
         }
     }
 
     fn bounce(x: &mut Cx) {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.anim_step();
-        x.call(sub::CULL_OFFSCREEN);
+        x.cull_offscreen();
         let t = x.u8(f::TIMER).wrapping_sub(1);
         x.set8(f::TIMER, t);
         if (t as i8) < 0 {
@@ -467,7 +465,7 @@ mod shot6 {
                 x.set8(f::ATTACK_ID, id);
                 place_in_front(x, owner, 0x40, 0x1b);
                 let variant = x.u8(0x3) as u32;
-                x.anim_start(ANIMS, variant);
+                x.anim_start(ANIMS, variant as u16);
                 x.reinsert();
             }
             2 => {
@@ -563,12 +561,12 @@ mod shot8 {
     fn body(x: &mut Cx) {
         match x.u8(0x5) {
             THRUST => {
-                x.call(sub::MOVE_XYZ);
-                x.call(sub::CULL_OFFSCREEN);
+                x.move_xyz();
+                x.cull_offscreen();
                 if x.u8(0x33) != 0 {
                     x.add8(0x5, 2);
                 }
-                x.call(sub::ANIM_STEP);
+                x.anim_step();
             }
             RECOVER => {
                 if x.anim_step() {
@@ -640,18 +638,17 @@ mod shot9 {
                 x.set8(0x2d, index as u8);
                 x.set32(0x14, 0);
                 x.set32(0x1c, 0);
-                x.c.d[0] = 0x1d;
-                x.call(sub::SPEED_TABLE_A);
+                x.select_speed(&crate::objects::motion::SPEEDS_A, 0x1d);
                 x.anim_start(ANIMS, 0);
             }
             2 => {
                 if !suspended(x) {
                     match x.u8(0x5) {
                         0 => {
-                            x.call(sub::MOVE_TABLE_XY);
-                            x.call(sub::MOVE_Z);
+                            x.move_by_table_xy();
+                            x.move_z();
                             if (x.u16(0xc) as i16) > 0 {
-                                x.call(sub::ANIM_STEP);
+                                x.anim_step();
                             } else {
                                 x.add8(0x5, 2);
                                 x.set16(0xc, 0);
@@ -665,7 +662,7 @@ mod shot9 {
                             }
                         }
                         2 => {
-                            x.call(sub::MOVE_XYZ);
+                            x.move_xyz();
                             if x.anim_step() {
                                 die(x);
                             }
@@ -735,7 +732,7 @@ mod shot9 {
                 }
                 match x.u8(0x6) {
                     0 => {
-                        x.call(sub::ANIM_STEP);
+                        x.anim_step();
                         let z = x.u16(0xc) as i16;
                         let k = x.u8(0x3e) as i8;
                         if z >= 0xa0 || k < 0 || x.rom_i16(RISE_LIMITS + 2 * k as u32) < z {
@@ -754,7 +751,7 @@ mod shot9 {
     }
 
     fn grow(x: &mut Cx) {
-        x.call(sub::ANIM_STEP);
+        x.anim_step();
         pick_frame(x, FIRE_FRAMES);
     }
 
@@ -825,7 +822,7 @@ mod shot9 {
                 }
                 let reach = (growth << 4) + 0x74 + (host.u16(x.b, 0xc) & 0xf);
                 x.add16(0x8, if flip != 0 { reach } else { reach.wrapping_neg() });
-                x.call(sub::ANIM_STEP);
+                x.anim_step();
                 x.set_bit(0x1, 1, false);
                 x.reinsert();
             }
@@ -870,7 +867,7 @@ mod shot10 {
                         x.anim_start(ANIMS, 1);
                     }
                     0 | 1 => {
-                        x.call(sub::ANIM_STEP);
+                        x.anim_step();
                         x.reinsert();
                     }
                     _ => {
@@ -879,7 +876,7 @@ mod shot10 {
                         if (t as i16) < 0 {
                             x.add8(0x4, 2);
                         }
-                        x.call(sub::ANIM_STEP);
+                        x.anim_step();
                         x.reinsert();
                     }
                 }
@@ -919,7 +916,7 @@ mod shot11 {
                     if flags != 0 {
                         let differ = (flags & 1 != 0) != (flags & 2 != 0);
                         if !differ || x.a5_u8(FORCE_ANIM) & 1 != 0 {
-                            x.call(sub::ANIM_STEP);
+                            x.anim_step();
                         }
                     }
                 }
@@ -984,7 +981,7 @@ mod shot12 {
                 attach(x);
                 let variant = x.u8(0x3) as u32;
                 let anim = x.rom8(ANIM_OF_VARIANT + variant);
-                x.anim_start(ANIMS, anim as u32);
+                x.anim_start(ANIMS, (anim as u32) as u16);
                 animate(x);
             }
             2 => animate(x),
@@ -994,7 +991,7 @@ mod shot12 {
 
     fn animate(x: &mut Cx) {
         if x.u8(0x5) == 0 {
-            x.call(sub::ANIM_STEP);
+            x.anim_step();
         }
         x.reinsert();
     }
@@ -1046,10 +1043,10 @@ mod shot13 {
                 let anim = if mode != 0 { 0xe } else { 0xc };
                 if anim != x.u8(CURRENT_ANIM) {
                     x.set8(CURRENT_ANIM, anim);
-                    x.anim_start(ANIMS, anim as u32);
+                    x.anim_start(ANIMS, (anim as u32) as u16);
                 }
                 if mode != 2 {
-                    x.call(sub::ANIM_STEP);
+                    x.anim_step();
                 }
                 x.reinsert();
             }
@@ -1118,7 +1115,7 @@ mod shot14 {
                 x.set8(f::BOX_SET, 7);
                 let variant = x.u8(0x3) as u32;
                 let anim = x.rom8(ANIM_OF_VARIANT + variant);
-                x.anim_start(ANIMS, anim as u32);
+                x.anim_start(ANIMS, (anim as u32) as u16);
             }
             ACTIVE => {
                 if x.a5_u8(GAME_PAUSED) != 0 {
@@ -1240,10 +1237,10 @@ mod shot14 {
             let anim = if owner.u8(x.b, 0xa1) == 2 { 4 } else { 3 };
             if anim != x.u8(0x5c) {
                 x.set8(0x5c, anim);
-                x.anim_start(ANIMS, anim as u32);
+                x.anim_start(ANIMS, (anim as u32) as u16);
             }
         }
-        x.call(sub::ANIM_STEP);
+        x.anim_step();
         x.reinsert();
     }
 
@@ -1296,7 +1293,7 @@ mod shot14 {
                         x.anim_start(ANIMS_CHARGE, 4);
                     } else {
                         attach(x);
-                        x.call(sub::ANIM_STEP);
+                        x.anim_step();
                     }
                 }
                 _ => close(x, 7),
@@ -1339,7 +1336,7 @@ mod shot14 {
                         x.set16(0x42, child.0 as u16);
                     }
                     attach(x);
-                    x.call(sub::ANIM_STEP);
+                    x.anim_step();
                 }
             },
         }
@@ -1347,7 +1344,7 @@ mod shot14 {
 
     fn begin_charge(x: &mut Cx, anim: u32) {
         x.add8(0x7, 2);
-        x.anim_start(ANIMS_CHARGE, anim);
+        x.anim_start(ANIMS_CHARGE, anim as u16);
     }
 
     fn wait_child(x: &mut Cx) {
@@ -1357,7 +1354,7 @@ mod shot14 {
             x.anim_start(ANIMS_CHARGE, 4);
         } else {
             attach(x);
-            x.call(sub::ANIM_STEP);
+            x.anim_step();
         }
     }
 
@@ -1370,7 +1367,7 @@ mod shot14 {
             let v = owner.u8(x.b, PREPARING);
             owner.set_u8(x.b, PREPARING, v & !1);
             owner.set_u8(x.b, 0xbd, 0);
-            x.anim_start(ANIMS, anim);
+            x.anim_start(ANIMS, anim as u16);
         }
     }
 
@@ -1395,7 +1392,7 @@ mod shot14 {
         let first = x.data8(BREATH_ANIMS + index);
         let second = x.data8(BREATH_ANIMS + index + 1);
         let anim = if x.u8(0x3) == 3 { first } else { second };
-        x.anim_start(ANIMS_CHARGE, anim as u32);
+        x.anim_start(ANIMS_CHARGE, (anim as u32) as u16);
     }
 
     /// Phase 4, sous-état 0 : relâche le drapeau de préparation du propriétaire et lance

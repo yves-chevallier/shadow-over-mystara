@@ -359,7 +359,7 @@ fn stage_1(x: &mut Ctx) {
             x.fade_in();
             x.call(0xabb70);
             x.call(sub::TITLE_CARD);
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
             x.call(sfx::SCENE_MUSIC);
         }
         2 => {
@@ -414,7 +414,7 @@ fn stage_2(x: &mut Ctx) {
             x.wr16(TIMER, 1);
             x.fade_in();
             x.call(sub::TITLE_CARD);
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
             x.call(sfx::COMMAND_EAAF4);
             x.call(sfx::SCENE_MUSIC);
         }
@@ -439,7 +439,7 @@ fn scene_4(x: &mut Ctx) {
             x.wr16(TIMER, 0x158);
             x.fade_in();
             x.call(sub::TITLE_CARD);
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
         }
         2 => {
             if x.tick(TIMER) {
@@ -490,7 +490,7 @@ fn boss_cave(x: &mut Ctx) {
                 set.set_u8(x.b, Obj::VARIANT, 1);
             }
             if scene == 7 {
-                x.call(sub::RANK_RESET);
+                crate::objects::rank::reset_68k(x.c, x.b);
             }
             x.call(sfx::SCENE_MUSIC);
         }
@@ -573,7 +573,7 @@ fn scene_11(x: &mut Ctx) {
             x.fade_in();
             x.call(sub::TITLE_CARD);
             x.call(0xb17ba);
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
             x.call(sfx::COMMAND_EA6E2);
             x.call(sfx::SCENE_MUSIC);
         }
@@ -646,7 +646,7 @@ fn wait_players_10(x: &mut Ctx) {
             x.lock();
             x.fade_in();
             x.call(sub::TITLE_CARD);
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
             x.call(sfx::SCENE_MUSIC);
         }
         2 => {
@@ -668,7 +668,7 @@ fn title_card(x: &mut Ctx) {
             x.wr16(TIMER, 1);
             x.fade_in();
             x.call(sub::TITLE_CARD);
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
         }
         2 => {
             if x.tick(TIMER) {
@@ -692,7 +692,7 @@ fn scene_24(x: &mut Ctx) {
             x.lock();
             x.wr16(TIMER, 0xb4);
             x.fade_in();
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
             x.call(sub::TITLE_CARD);
             x.call(sfx::SCENE_MUSIC);
         }
@@ -757,7 +757,7 @@ fn scene_26(x: &mut Ctx) {
             x.lock();
             x.wr16(TIMER, 0x60);
             x.fade_in();
-            x.call(sub::RANK_RESET);
+            crate::objects::rank::reset_68k(x.c, x.b);
             x.call(sfx::SCENE_MUSIC);
         }
         2 => {

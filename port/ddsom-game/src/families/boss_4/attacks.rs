@@ -13,6 +13,7 @@
 use super::decide;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -199,7 +200,7 @@ fn swoop(x: &mut Cx) {
             air(x, 5);
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }
@@ -218,7 +219,7 @@ fn swoop(x: &mut Cx) {
         _ => {
             dust_tick(x);
             if !expired(x, TIMER) {
-                x.call(call::MOVE_X);
+                x.move_x();
                 step(x);
                 return;
             }
@@ -281,7 +282,7 @@ fn leap(x: &mut Cx) {
             if x.u8(KEY) == 0 {
                 return;
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if !Fl::sub16(x.u16(0x18), 0x100).le() {
                 return;
             }
@@ -290,7 +291,7 @@ fn leap(x: &mut Cx) {
             air(x, 8);
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if !Fl::sub16(x.u16(0x18), (-0x100i16) as u16).le() {
                 return;
             }
@@ -299,7 +300,7 @@ fn leap(x: &mut Cx) {
             air(x, 9);
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }
@@ -319,7 +320,7 @@ fn leap(x: &mut Cx) {
         _ => {
             dust_tick(x);
             if !expired(x, TIMER) {
-                x.call(call::MOVE_X);
+                x.move_x();
                 step(x);
                 return;
             }

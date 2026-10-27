@@ -16,7 +16,7 @@
 //! Animations : 0x160e26 (mouvements) et 0x160e44 (coups). `+0xa1` est l'animation voulue,
 //! `+0xa2` celle en cours (on ne relance pas la même).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod attacks;
@@ -60,6 +60,7 @@ pub(self) mod g {
 }
 
 use g::*;
+use crate::objects::Courant;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_BODY: u32 = 0x160e26;
@@ -74,7 +75,6 @@ const KNOCKED: u32 = 0x0408_0000;
 mod call {
     pub const FACE_TARGET: u32 = 0xa470;
     pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
 }
 
@@ -82,7 +82,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -100,7 +100,7 @@ fn pose(x: &mut Cx, want: u8, set: u32, n: u32) {
     x.set8(WANT_ANIM, want);
     if want != x.u8(CUR_ANIM) {
         x.set8(CUR_ANIM, want);
-        x.anim_start(set, n);
+        x.anim_start(set, n as u16);
     }
 }
 
@@ -129,11 +129,11 @@ fn replay(x: &mut Cx, want: u8) -> Replay {
 }
 
 fn body(x: &mut Cx, n: u32) {
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 fn step(x: &mut Cx) {
@@ -141,12 +141,11 @@ fn step(x: &mut Cx) {
 }
 
 fn move_xy(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 fn speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 fn set_state_long(x: &mut Cx, v: u32) {

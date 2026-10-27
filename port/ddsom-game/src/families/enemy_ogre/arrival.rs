@@ -2,6 +2,7 @@
 //! 4 attente d'un joueur dans la boîte (variante 1), 6 apparition cachée jusqu'à l'arrivée d'un joueur (variante 2).
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -37,7 +38,7 @@ fn fall_in(x: &mut Cx) {
             x.set16(SPEED_Y, 0);
             x.set16(SPEED_Z, 0x400);
             x.set16(GRAVITY, -0x40i16 as u16);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             act(x, 7);
         }
         2 => {
@@ -45,21 +46,21 @@ fn fall_in(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) <= 0x100 {
                 x.add8(STEP, 2);
                 act(x, 8);
             }
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) <= -0x100 {
                 x.add8(STEP, 2);
                 act(x, 9);
             }
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -79,7 +80,7 @@ fn fall_in(x: &mut Cx) {
                 spark(x, 3);
             }
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else {
                 x.add8(STEP, 2);
@@ -133,7 +134,7 @@ fn walk_in(x: &mut Cx) {
         2 => {
             lib::step(x);
             if x.u8(KEY) != 2 {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 let cam = x.a5_u16(0x5a6);
                 let leftward = (x.u16(SPEED_X) as i16) < 0;
                 let (mut d0, mut d1) = (cam.wrapping_add(if leftward { 0xf0 } else { 0x90 }), x.u16(X));
@@ -184,7 +185,8 @@ fn dash(x: &mut Cx) {
         spark(x, 3);
     }
     if count_down(x, TIMER) {
-        return x.call(sub::MOVE_X);
+        x.move_x();
+        return;
     }
     if lib::players_alive(x) {
         go::wander(x);

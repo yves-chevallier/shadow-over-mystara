@@ -2,6 +2,8 @@
 //! coup `+0x49`), 4 étourdi, 2, 6, 8, 10 mort.
 
 use super::*;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 pub(super) fn run(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
@@ -107,7 +109,7 @@ fn hit_a(x: &mut Cx) {
         return;
     }
     x.set8(0, 1);
-    x.call(call::MOVE_X);
+    x.move_x();
     let mut d0 = x.u16(0x14);
     setw(x, 0, d0);
     if x.u8(f::FLIP) != 0 {
@@ -132,7 +134,7 @@ fn hit_a(x: &mut Cx) {
 fn hit_b(x: &mut Cx) {
     if x.u8(f::SUB2) != 0 {
         if !sub8(x, 0x87, 1).eq() {
-            x.call(call::STEP);
+            x.anim_step();
             return sync(x);
         }
         return recover(x);
@@ -187,9 +189,9 @@ fn generic(x: &mut Cx) {
                 return;
             }
             x.set8(0, 1);
-            x.call(call::STEP);
+            x.anim_step();
             sync(x);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }
@@ -301,7 +303,7 @@ fn throw(x: &mut Cx) {
             }
             let mut d2 = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
             x.c.d[2] = d2;
-            x.call(0x19a88);
+            x.random_68k();
             d2 &= 0xf;
             setw(x, 2, d2 as u16);
             let d0 = ((x.c.d[0] as u16).wrapping_add(d2 as u16)) & 0x1f;
@@ -312,9 +314,9 @@ fn throw(x: &mut Cx) {
         }
         0x8e7b4 => arc(x),
         0x8e846 => {
-            x.call(call::STEP);
+            x.anim_step();
             sync(x);
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if tst16(x, 0xc).gt() {
                 return arc_end(x);
             }
@@ -401,7 +403,7 @@ fn stunned(x: &mut Cx) {
                 return;
             }
             if sub16(x, 0x84, 1).gt() {
-                x.call(call::STEP);
+                x.anim_step();
                 return;
             }
             x.add8(f::SUB2, 2);
@@ -474,9 +476,9 @@ fn death(x: &mut Cx) {
             x.call(0xe4c20)
         }
         0x8ea6e => {
-            x.call(call::STEP);
+            x.anim_step();
             sync(x);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }
@@ -488,7 +490,7 @@ fn death(x: &mut Cx) {
             x.call(call::SOUND_B)
         }
         _ => {
-            x.call(call::STEP);
+            x.anim_step();
             sync(x);
         }
     }

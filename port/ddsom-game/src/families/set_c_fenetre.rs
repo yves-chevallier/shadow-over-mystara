@@ -14,6 +14,7 @@
 //! Le texte composé est une suite d'octets : caractère (> 15), commande (≤ 15) suivie de son argument,
 //! 0xfe + argument, 0xff + nombre de caractères écrits depuis le précédent 0xff + argument, 0xfd fin.
 
+use crate::objects::Courant;
 use crate::families::cx::Cx;
 use crate::mem::{prog32, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};

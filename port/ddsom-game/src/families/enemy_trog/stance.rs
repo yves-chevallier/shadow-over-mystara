@@ -2,6 +2,7 @@
 //! décide d'attaquer, 2 demi-tour, 4 attente, 6 bond d'approche.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(BLINK_ON) != 0 {
@@ -156,7 +157,7 @@ fn jump(x: &mut Cx) {
     match x.u8(STEP) {
         0 => begin_jump(x),
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if step(x) && (x.u16(HEIGHT) as i16) < 0 {
                 x.add8(STEP, 2);
                 x.set16(HEIGHT, 0);

@@ -41,6 +41,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 const SET_BODY: u32 = 0x175da6;
 const SET_ATTACK: u32 = 0x175dc4;
@@ -49,11 +50,6 @@ const SET_FALL: u32 = 0x175e0c;
 const SPIN_VECTORS: u32 = 0x1c94b6;
 
 mod call {
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const ANIM_STEP: u32 = 0x1a56;
-    pub const SPEED: u32 = 0x1b64;
     pub const PICK_PLAYER: u32 = 0x43bc;
     pub const ANGLE_TO_TARGET: u32 = 0x1376;
     pub const PLAYER_IN_REACH: u32 = 0xfc44;
@@ -79,19 +75,19 @@ pub fn run(x: &mut Cx) {
 fn body(x: &mut Cx, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 0);
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 fn attack_anim(x: &mut Cx, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 1);
-    x.anim_start(SET_ATTACK, n);
+    x.anim_start(SET_ATTACK, n as u16);
 }
 
 fn fall_anim(x: &mut Cx, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 2);
-    x.anim_start(SET_FALL, n);
+    x.anim_start(SET_FALL, n as u16);
 }
 
 /// 0x83dde : fige-la un cran d'animation demandé par `+0x91` (bit 7 = demande).
@@ -119,8 +115,7 @@ fn call_on_list(x: &mut Cx, list: u32, addr: u32) {
 }
 
 fn step(x: &mut Cx) -> bool {
-    x.call(call::ANIM_STEP);
-    carry(x)
+    x.anim_step()
 }
 
 // --- état 0 : création, état 2 : actif ------------------------------------------------------------
@@ -169,7 +164,7 @@ fn active(x: &mut Cx) {
     } else {
         x.set32(0x58, 0);
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
     match x.u8(f::SUB) {
@@ -259,7 +254,7 @@ fn stroll(x: &mut Cx) {
 }
 
 fn stroll_step(x: &mut Cx) {
-    x.call(call::ANIM_STEP);
+    x.anim_step();
     let n = x.u16(COUNT).wrapping_sub(1);
     x.set16(COUNT, n);
     if n & 0x8000 != 0 {
@@ -277,7 +272,8 @@ fn dash(x: &mut Cx, table: u32) {
             let i = level_index(x);
             let n = x.rom16(table + i);
             set_dw(x, 0, n);
-            x.call(call::SPEED);
+            let n = x.c.d[0] as u16;
+            x.select_speed(&crate::objects::motion::SPEEDS_B, n);
             if x.u8(f::FLIP) != 0 {
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
@@ -297,8 +293,8 @@ fn dash(x: &mut Cx, table: u32) {
 }
 
 fn dash_step(x: &mut Cx) {
-    x.call(call::MOVE_XY);
-    x.call(call::ANIM_STEP);
+    x.move_xy();
+    x.anim_step();
     if sub8(x, STEPS, 1).mi() {
         next_action(x);
     }
@@ -367,7 +363,7 @@ fn grab_hold(x: &mut Cx) {
         }
     }
     x.call(call::DRAG_SEIZED);
-    x.call(call::ANIM_STEP);
+    x.anim_step();
     let n = x.u16(COUNT).wrapping_sub(1);
     x.set16(COUNT, n);
     if n & 0x8000 == 0 {
@@ -437,8 +433,7 @@ fn chase(x: &mut Cx) {
             x.add8(f::SUB2, 4);
             x.set8(BLINK, 0x14);
             x.call(call::SOUND);
-            x.c.d[0] = 0x13;
-            x.call(call::SPEED);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 0x13);
             x.set8(ANGLE, 0x18);
             if x.u8(f::FLIP) != 0 {
                 x.set8(ANGLE, 8);
@@ -468,7 +463,7 @@ fn chase_turn(x: &mut Cx) {
 
 /// Tourne d'un cran vers la cible, avance, saisit un joueur à portée.
 fn chase_follow(x: &mut Cx) {
-    x.call(call::ANIM_STEP);
+    x.anim_step();
     x.c.d[0] = x.u8(STEPS) as u32;
     x.call(call::PICK_PLAYER);
     if zero(x) {
@@ -491,7 +486,7 @@ fn chase_follow(x: &mut Cx) {
     } else if a != 0x10 && a != 0 {
         x.set8(f::FLIP, 0x20);
     }
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.c.d[0] = 8;
     x.call(call::PLAYER_IN_REACH);
     if !zero(x) {
@@ -679,9 +674,9 @@ fn tumble(x: &mut Cx) {
             x.call(call::BURST);
         }
         6 | 0xa => {
-            x.call(call::ANIM_STEP);
+            x.anim_step();
             if x.u8(f::STATE + 3) == 0 {
-                x.call(call::MOVE_XZ);
+                x.move_xz();
             }
             if sub8(x, FALL_TIMER, 1).ne() {
                 if (x.u16(0xc) as i16) > 0 {

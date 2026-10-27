@@ -8,6 +8,8 @@ use super::cx::{self, handlers, Cx};
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Les quatre enregistrements de joueurs : A5+0x5de, 0x200 octets chacun.
 const PLAYERS: u32 = A5 + 0x5de;
@@ -144,7 +146,7 @@ mod bumper {
         let py = x.rom16(POSITION + 4 * variant + 2);
         x.set16(0x10, py);
         x.set16(0xc, 0);
-        x.anim_start(ANIMS, variant);
+        x.anim_start(ANIMS, variant as u16);
         x.set32(0x34, 0);
         x.reinsert();
     }
@@ -279,9 +281,6 @@ mod ram {
     pub const CAMERA_Y: u32 = 0x50a;
     pub const CAMERA2_Y: u32 = 0x55a;
 }
-
-/// Générateur de nombres aléatoires (D0 en retour).
-const RANDOM: u32 = 0x19a88;
 
 /// Fige la partie et assombrit l'écran : `A5+0x490` = 1, `A5+0x48e` = 0xc, `A5+0x48f` = `flag` pas, palettes
 /// blanchies (0x1686) puis tâche de fondu 0x14de (0x9b6, A0 = l'entrée, D0 = 0x10 ; `taches/fondu.rs`).
@@ -468,11 +467,11 @@ mod boss_intro {
     }
 
     fn random_blast(x: &mut Cx) {
-        x.call(RANDOM);
-        let i = (x.c.d[0] & 0xf) << 1;
+        let alea = x.random_68k();
+        let i = (alea as u32 & 0xf) << 1;
         let dx = x.rom16(BLAST_DX + i);
-        x.call(RANDOM);
-        let i = (x.c.d[0] & 0xf) << 1;
+        let alea = x.random_68k();
+        let i = (alea as u32 & 0xf) << 1;
         let dy = x.rom16(BLAST_DY + i);
         let px = dx.wrapping_add(x.a5_u16(ram::CAMERA_X));
         let py = dy.wrapping_add(x.a5_u16(ram::CAMERA_Y));
@@ -1677,8 +1676,8 @@ mod rearguard {
         }
         // un joueur présent, tiré au hasard
         let target = loop {
-            x.call(RANDOM);
-            let p = Obj(PLAYERS + (x.c.d[0] & 3) * PLAYER_SIZE);
+            let alea = x.random_68k();
+            let p = Obj(PLAYERS + (alea as u32 & 3) * PLAYER_SIZE);
             if p.u8(x.b, pl::ACTIVE) != 0 {
                 break p;
             }
@@ -1746,8 +1745,8 @@ mod idle_hunter {
             x.set8(0x18 + i, 0);
         }
         let tier = (x.a5_u16(0x7f92) >> 2) << 4;
-        x.call(RANDOM);
-        let index = (x.c.d[0] as u16 & 0xf).wrapping_add(tier);
+        let alea = x.random_68k();
+        let index = (alea & 0xf).wrapping_add(tier);
         let frames = x.rom8(IDLE_FRAMES + index as u32);
         x.set8(0x1c, frames);
         x.set16(0x1e, WARMUP);
@@ -1775,8 +1774,8 @@ mod idle_hunter {
         {
             return;
         }
-        x.call(RANDOM);
-        for i in ORDERS[(x.c.d[0] & 3) as usize] {
+        let alea = x.random_68k();
+        for i in ORDERS[(alea as u32 & 3) as usize] {
             check(x, i);
         }
     }

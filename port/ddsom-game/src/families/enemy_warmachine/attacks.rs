@@ -5,6 +5,7 @@
 use super::arrival::hop_loop;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -59,8 +60,7 @@ fn rush(x: &mut Cx) {
             let goal = target.u16(x.b, X);
             x.set16(GOAL_X, goal);
             x.set8(ANGLE, angle);
-            x.c.d[0] = 0x2b;
-            x.call(call::SPEED_TABLE);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 0x2b);
             spark(x, 1);
             x.call(call::DUST);
             look(x, 0x13);
@@ -68,7 +68,7 @@ fn rush(x: &mut Cx) {
         }
         2 => {
             x.anim_step();
-            x.call(sub::MOVE_X);
+            x.move_x();
             if x.u8(KEY) == 2 {
                 x.set8(KEY, 0);
                 spark(x, 1);
@@ -138,7 +138,7 @@ fn smash(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > 0x100 {
                 return;
             }
@@ -146,7 +146,7 @@ fn smash(x: &mut Cx) {
             weapon(x, 5);
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > -0x100 {
                 return;
             }
@@ -155,7 +155,7 @@ fn smash(x: &mut Cx) {
             weapon(x, 6);
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }

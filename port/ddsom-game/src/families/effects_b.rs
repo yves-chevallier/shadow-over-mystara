@@ -7,11 +7,12 @@
 //! - 75 : bouton de menu, une machine à sept sous-états ;
 //! - 79 : clignotement d'un objet ramassé, détecté par les joueurs voisins.
 
+use crate::machine::Machine;
 use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
-use crate::rng::Rng;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Valeurs de l'octet d'état `+4` (le suivant se calcule par `+2`).
 mod state {
@@ -38,8 +39,6 @@ mod f {
 
 /// Routines d'origine utilisées.
 mod rom {
-    pub const ANIM_STEP: u32 = 0x1a56;
-    pub const MOVE_Z: u32 = 0x1da6;
     pub const SOUND_0ED11C: u32 = 0xed11c;
     pub const SOUND_0ED056: u32 = 0xed056;
     pub const SOUND_0ED90A: u32 = 0xed90a;
@@ -182,16 +181,17 @@ fn victory_active(x: &mut Cx) {
     let creator = owner(x);
     match x.u8(f::SUB_STATE) {
         0 => {
-            x.call(rom::MOVE_Z);
+            x.move_xz();
             if (x.u16(Obj::Z) as i16) <= 0 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(Obj::Z, 0);
             }
-            x.call(rom::ANIM_STEP);
+            x.anim_step();
         }
         2 => {
             if creator.u32(x.b, f::STATE) != 0x0200_0200 {
-                return x.call(rom::ANIM_STEP);
+                x.anim_step();
+                return;
             }
             x.add8(f::SUB_STATE, 2);
             blink_by_frame(x);
@@ -201,7 +201,8 @@ fn victory_active(x: &mut Cx) {
         4 => {
             blink_by_frame(x);
             if creator.u32(x.b, f::STATE) != 0x0200_0800 {
-                return x.call(rom::ANIM_STEP);
+                x.anim_step();
+                return;
             }
             x.add8(f::SUB_STATE, 2);
             x.call(rom::SOUND_0ED90A);
@@ -209,8 +210,7 @@ fn victory_active(x: &mut Cx) {
         }
         6 => {
             blink_by_frame(x);
-            x.call(rom::ANIM_STEP);
-            if x.c.sr & m68k::SR_C != 0 {
+            if x.anim_step() {
                 free(x);
             }
         }
@@ -252,9 +252,10 @@ fn bubble(x: &mut Cx) {
         }
         state::ACTIVE => match x.u8(f::SUB_STATE) {
             0 => {
-                x.call(rom::MOVE_Z);
+                x.move_xz();
                 if (x.u16(Obj::Z) as i16) > 64 {
-                    return x.call(rom::ANIM_STEP);
+                    x.anim_step();
+                    return;
                 }
                 x.add8(f::SUB_STATE, 2);
                 x.set16(Obj::Z, 0);
@@ -322,23 +323,23 @@ fn menu_step(x: &mut Cx) -> u8 {
 
 fn menu_button_active(x: &mut Cx) {
     if x.u8(f::VARIANT) != 0 {
-        return x.call(rom::ANIM_STEP);
+        x.anim_step();
+        return;
     }
     let advance = |x: &mut Cx, n: u32| {
         x.add8(f::SUB_STATE, 2);
-        x.anim_start(anims::MENU, n);
+        x.anim_start(anims::MENU, n as u16);
     };
     match x.u8(f::SUB_STATE) {
         0 => {
             if x.a5_u8(SELECT_STEP) == 6 {
                 advance(x, 4);
             } else {
-                x.call(rom::ANIM_STEP);
+                x.anim_step();
             }
         }
         2 => {
-            x.call(rom::ANIM_STEP);
-            if x.c.sr & m68k::SR_C != 0 {
+            if x.anim_step() {
                 advance(x, 5);
                 x.call(rom::SOUND_0ECF10);
             } else if x.u8(0x33) != 0 {
@@ -350,8 +351,7 @@ fn menu_button_active(x: &mut Cx) {
             }
         }
         4 => {
-            x.call(rom::ANIM_STEP);
-            if x.c.sr & m68k::SR_C != 0 {
+            if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
                 let flags = x.u8(f::FLAGS) | 2;
                 x.set8(f::FLAGS, flags);
@@ -367,8 +367,7 @@ fn menu_button_active(x: &mut Cx) {
             }
         }
         8 => {
-            x.call(rom::ANIM_STEP);
-            if x.c.sr & m68k::SR_C != 0 {
+            if x.anim_step() {
                 advance(x, 7);
             }
         }
@@ -377,12 +376,11 @@ fn menu_button_active(x: &mut Cx) {
                 advance(x, 5);
                 x.call(rom::SOUND_0ECF10);
             } else {
-                x.call(rom::ANIM_STEP);
+                x.anim_step();
             }
         }
         12 => {
-            x.call(rom::ANIM_STEP);
-            if x.c.sr & m68k::SR_C != 0 {
+            if x.anim_step() {
                 x.add8(f::STATE, 2);
             }
         }
@@ -413,9 +411,7 @@ fn blinking(x: &mut Cx) {
             let flags = x.u8(f::FLAGS) | 2;
             x.set8(f::FLAGS, flags);
             x.set8(0x57, 8);
-            let mut rng = Rng(rd16(x.b, A5 + 0x1a));
-            let (v, _) = rng.suivant();
-            wr16(x.b, A5 + 0x1a, v);
+            let v = x.random();
             x.set16(f::TIMER, v & 31);
             x.anim_start(anims::BLINK, 0);
             x.reinsert();

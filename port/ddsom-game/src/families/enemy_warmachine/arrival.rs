@@ -2,6 +2,7 @@
 //! (boîte de portée du joueur) avant de se mettre debout.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -38,7 +39,7 @@ fn roll_in(x: &mut Cx) {
         }
         2 => {
             x.anim_step();
-            x.call(sub::MOVE_X);
+            x.move_x();
             if x.u8(KEY) == 2 {
                 x.set8(KEY, 0);
                 spark(x, 1);
@@ -91,7 +92,7 @@ pub(super) fn hop_loop(x: &mut Cx) {
     let t = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, t);
     if (t as i16) > 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
         lib::step(x);
         return;
     }

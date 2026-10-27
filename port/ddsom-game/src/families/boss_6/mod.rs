@@ -50,6 +50,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_BODY: u32 = 0x177874;
 pub(self) const SET_FLY: u32 = 0x17788c;
@@ -64,9 +65,6 @@ pub(self) fn fly(x: &mut Cx, n: u32) {
 }
 
 pub(self) mod call {
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const DUST: u32 = 0x1172e;
 }
 
@@ -74,7 +72,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     guard(x);
     match x.u8(f::STATE) {
         st::INIT => init(x),

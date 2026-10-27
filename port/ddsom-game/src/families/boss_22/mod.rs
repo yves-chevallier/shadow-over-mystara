@@ -62,6 +62,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Jeux d'animations d'un boss.
 #[derive(Clone, Copy)]
@@ -127,7 +128,7 @@ pub(self) fn kit(x: &mut Cx) -> &'static Kit {
 /// Lance l'animation `n` du jeu `set` (0x1a32).
 pub(self) fn start(x: &mut Cx, set: Set, n: u32) {
     let k = kit(x);
-    x.anim_start(if matches!(set, Set::A) { k.set_a } else { k.set_b }, n);
+    x.anim_start(if matches!(set, Set::A) { k.set_a } else { k.set_b }, n as u16);
 }
 
 /// États posés d'un coup (`+4..+7`).
@@ -139,9 +140,6 @@ pub(self) mod state {
 }
 
 pub(self) mod call {
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_YZ: u32 = 0x1dd4;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const PICK_FAR: u32 = 0x44ee;
     pub const FACE_TARGET: u32 = 0xa470;
@@ -400,7 +398,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     if two(x) {
         two::spawn_scene_controller(x);
     }

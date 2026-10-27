@@ -393,8 +393,7 @@ fn climb_start(g: &mut Ctx, p: Player) {
         p.set_u32(g, Obj::VZ, 0x0100_0000);
         p.set_u8(g, climb_field::SWAY_TIMER, 4);
         p.set_u8(g, climb_field::SWAY, 0);
-        g.c.d[0] = 1;
-        g.rom(0x1b64, p);
+        crate::objects::motion::select_speed_68k(g.c, g.b, p.obj(), &crate::objects::motion::SPEEDS_B, 1);
         return animation::start(g, p, 0x3c);
     }
     move_z(g, p);

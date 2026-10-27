@@ -31,16 +31,46 @@ pub fn poison_actif(etiquette: &str) -> bool {
     !e.is_empty() && e.iter().any(|x| x == etiquette || x == "tout")
 }
 
+/// L'étiquette est empoisonnée au site d'appel `site` (`fichier:ligne:colonne`). Une entrée `étiquette@motif` ne vaut
+/// que pour les sites qui contiennent le motif (`motion@families/sobj`) ; une entrée précédée de `!` exclut ces sites
+/// (`motion,!motion@sobj.rs:120`), pour isoler par bissection le lecteur d'un registre.
+fn empoisonne(etiquette: &str, site: &str) -> bool {
+    let mut actif = false;
+    for x in etiquettes() {
+        let (exclu, x) = match x.strip_prefix('!') {
+            Some(x) => (true, x),
+            None => (false, x.as_str()),
+        };
+        let (nom, motif) = match x.split_once('@') {
+            Some((n, m)) => (n, Some(m)),
+            None => (x, None),
+        };
+        if (nom == etiquette || nom == "tout") && motif.map_or(true, |m| site.contains(m)) {
+            if exclu {
+                return false;
+            }
+            actif = true;
+        }
+    }
+    actif
+}
+
 /// Registres que l'adaptateur `etiquette` écrit comme l'original et dont on veut prouver qu'ils sont morts
 /// (masque de `crate::regs` : `regs::a(1) | regs::d(6) | regs::CCR`...). Avec `DDSOM_POISON`, ils sont inversés.
 #[track_caller]
 pub fn registres_morts(c: &mut Cpu, etiquette: &str, masque: u32) {
-    if !poison_actif(etiquette) {
+    if etiquettes().is_empty() {
+        return;
+    }
+    // le site est celui de l'appelant de l'adaptateur (`#[track_caller]` sur les adaptateurs et les méthodes de
+    // `objects::Courant`)
+    let site = std::panic::Location::caller().to_string();
+    if !empoisonne(etiquette, &site) {
         return;
     }
     // DDSOM_POISON_TRACE=1 : chaque empoisonnement, avec son site d'appel et A1 (diagnostic d'un écart)
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
-        eprintln!("POISON {etiquette} {} a1={:06x}", std::panic::Location::caller(), c.a[1]);
+        eprintln!("POISON {etiquette} {site} a1={:06x}", c.a[1]);
     }
     for i in 0..8 {
         if masque & regs::d(i) != 0 {

@@ -7,6 +7,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -62,11 +63,11 @@ fn arrival(x: &mut Cx) {
             x.set16(0x1a, (-0x20i16) as u16);
             x.set16(0x1c, (-0x80i16) as u16);
             x.set16(0x1e, 0);
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             body(x, 4);
         }
         8 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if tst16(x, 0x18).gt() {
                 step(x);
                 return;
@@ -75,7 +76,7 @@ fn arrival(x: &mut Cx) {
             body(x, 7);
         }
         10 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if tst16(x, 0xc).gt() {
                 step(x);
                 return;
@@ -126,7 +127,7 @@ fn entrance(x: &mut Cx) {
                 x.set16(TIMER, 5);
                 dust(x);
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             let floor = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x100);
             let here = x.u16(0x10).wrapping_add(x.u16(0xc));
             if Fl::sub16(here, floor).lt() {

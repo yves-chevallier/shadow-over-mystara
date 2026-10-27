@@ -7,6 +7,7 @@
 //! Les caméras sont des enregistrements de la RAM de travail (`scroll::CAMERA_1` / `CAMERA_2`) ;
 //! `Cx::o` désigne celle que le script modifie (quelques scripts agissent sur la caméra 2).
 
+use crate::machine::Machine;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
@@ -14,10 +15,10 @@ use crate::families::cx::Cx;
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::player::{Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
-use crate::rng::Rng;
 use crate::scroll::{cam, CAMERA_1, CAMERA_2};
 use crate::{regs, Native};
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Champs de la caméra utilisés par les scripts, en plus de `scroll::cam`.
 mod f {
@@ -95,7 +96,6 @@ const CAM2_MIN_X: u32 = CAMERA_2 + cam::MIN_X;
 /// Sous-routines d'origine appelées.
 mod ext {
     pub const TILES_BLOCK: u32 = 0x26d4;
-    pub const MOVE_Z: u32 = 0x1dbc;
     /// Secousses de la caméra (modes 0x54, 0x5c), voir `start_shake`.
     pub const SHAKE_54: u32 = 0x2824;
     pub const SHAKE_5C: u32 = 0x289c;
@@ -106,13 +106,6 @@ mod ext {
 // Suivi des joueurs
 // ---------------------------------------------------------------------------------------------
 
-/// Tirage du générateur pseudo-aléatoire du jeu (0x19a88).
-fn random(x: &mut Cx) -> u16 {
-    let mut rng = Rng(rd16(x.b, A5 + 0x1a));
-    let (v, _) = rng.suivant();
-    wr16(x.b, A5 + 0x1a, v);
-    v
-}
 
 fn record(k: u32) -> u32 {
     A5 + PLAYER_BASE + k * PLAYER_STRIDE
@@ -542,7 +535,7 @@ fn push_vertical(x: &mut Cx) {
         let v = 0u16.wrapping_sub(x.u16(f::SPEED));
         x.set16(f::SPEED, v);
     }
-    x.call(ext::MOVE_Z);
+    x.move_z();
 }
 
 /// 0x3016e : dégradé de ciel dans la table de défilement par ligne.
@@ -795,7 +788,7 @@ fn shake(x: &mut Cx, amplitude: i16) {
 /// Remplit la table de défilement par ligne de valeurs aléatoires (masque `mask`) : 513 mots.
 fn rowscroll_noise(x: &mut Cx, mask: u16) {
     for k in 0..0x201 {
-        let v = random(x) & mask;
+        let v = x.random() & mask;
         wr16(x.b, hw::ROWSCROLL + 2 * k, v);
     }
 }
@@ -806,7 +799,7 @@ fn rowscroll_shift(x: &mut Cx, mask: u16, tail_offset: u32) {
         let v = rd16(x.b, hw::ROWSCROLL + 2 * k + 2);
         wr16(x.b, hw::ROWSCROLL + 2 * k, v);
     }
-    let v = random(x) & mask;
+    let v = x.random() & mask;
     wr16(x.b, hw::ROWSCROLL + 0x400 + tail_offset, v);
 }
 
@@ -1109,12 +1102,12 @@ fn falling_leaves(x: &mut Cx) {
             if (t as i16) >= 0 {
                 return;
             }
-            let wait = random(x) & 63;
+            let wait = x.random() & 63;
             x.set16(f::TIMER_2, wait);
             let Some(Obj(leaf)) = x.alloc(&pools::SOBJ) else { return };
             wr8(x.b, leaf, 1);
             wr8(x.b, leaf + 2, 0);
-            let variant = VARIANTS[(random(x) & 7) as usize];
+            let variant = VARIANTS[(x.random() & 7) as usize];
             wr8(x.b, leaf + 3, variant);
             wr8(x.b, leaf + 0x2f, 0);
         }

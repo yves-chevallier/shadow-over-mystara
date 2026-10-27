@@ -5,10 +5,8 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
-const SPEED_TABLE_A: u32 = 0x1a94;
-const MOVE_TABLE_XY: u32 = 0x1cb4;
 const FLASH_PULSE: u32 = 0x1ac86;
 const SHAKE_A: u32 = 0x2824;
 const SHAKE_B: u32 = 0x2860;
@@ -58,7 +56,7 @@ mod storm {
         x.add16(0x10, 2);
         x.set16(0x58, 0x20);
         x.anim(ANIMS, 0);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn init_bolt(x: &mut Cx) {
@@ -105,7 +103,7 @@ mod storm {
         x.set8(0x2d, angle);
         let n = x.u8(0x2f) as u32;
         x.anim(ANIMS, n);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     // --- états actifs -------------------------------------------------------------------------------
@@ -173,12 +171,12 @@ mod storm {
         if x.a5_u8(0x3d) == 0 {
             return end(x);
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
     }
 
     fn end(x: &mut Cx) {
         x.add8(0x4, 2);
-        x.call(ANIM_STEP);
+        x.anim_step();
         x.call(SFX_END);
     }
 
@@ -232,7 +230,7 @@ mod storm {
     }
 
     fn bolt(x: &mut Cx) {
-        x.call(REINSERT);
+        x.reinsert();
         if x.u8(0x5) != 0 {
             let parent = x.link_a1(0x5c);
             let k = (x.u8(0x2f) as u32) << 2;
@@ -251,7 +249,7 @@ mod storm {
             }
             return;
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         let vz = x.u16(0x18).wrapping_add(x.u16(0x1a));
         x.set16(0x18, vz);
         let d0 = (((vz as u32) << 16) as i32 >> 8) as u32;
@@ -295,8 +293,8 @@ mod storm {
             x.set8(0x2d, a);
             x.set16(0x58, 2);
         }
-        x.call(REINSERT);
-        x.call(MOVE_TABLE_XY);
+        x.reinsert();
+        x.move_by_table_xy();
         let k = x.u8(0x2f);
         if k & 1 == 0 {
             let vx = x.u16(0x14);
@@ -305,7 +303,7 @@ mod storm {
             let vx = x.u16(0x14).wrapping_neg();
             x.set16(0x18, if k & 2 == 0 { vx } else { ((vx as i16) >> 1) as u16 });
         }
-        x.call(MOVE_Z);
+        x.move_z();
     }
 }
 
@@ -330,7 +328,7 @@ mod whirl {
             0 => init_satellite(x),
             2 if !child => eye(x),
             2 => {
-                x.call(MOVE_XZ);
+                x.move_xz();
                 x.add8(0x58, 0xff);
                 if x.u8(0x58) == 0 {
                     x.add8(0x4, 2);
@@ -375,7 +373,8 @@ mod whirl {
         let mut left = n;
         loop {
             x.set_d0w(0x21);
-            x.call(SPEED_TABLE_A);
+            let n = x.c.d[0] as u16;
+            x.select_speed(&crate::objects::motion::SPEEDS_A, n);
             d4 = d4.wrapping_add(x.u16(0x14));
             d5 = d5.wrapping_add(x.u16(0x1c));
             left -= 1;
@@ -388,7 +387,8 @@ mod whirl {
         x.add16(0x8, ((d4 as i16) >> 8) as u16);
         x.add16(0xc, ((d5 as i16) >> 8) as u16);
         x.set_d0w(0x19);
-        x.call(SPEED_TABLE_A);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_A, n);
         let vy = x.u16(0x1c);
         x.set16(0x18, vy);
         let vx = x.u16(0x14).wrapping_neg();
@@ -397,7 +397,7 @@ mod whirl {
         x.set16(0x18, vz);
         let angle = x.u8(0x2d) as u32;
         x.anim(ANIMS, angle);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn eye(x: &mut Cx) {
@@ -412,7 +412,7 @@ mod whirl {
                 x.call(FLASH_PULSE);
                 x.call(SFX_LOOP);
                 x.anim(ANIMS, 0x20);
-                return x.call(REINSERT);
+                return x.reinsert();
             }
             // le tourbillon se forme : un satellite par image
             let k = x.u8(0x59) as u32;
@@ -447,8 +447,7 @@ mod whirl {
             x.add8(0x5c, 0xff);
             return;
         }
-        x.call(ANIM_STEP);
-        if !x.c.cond(5) {
+        if !x.anim_step() {
             return;
         }
         x.add8(0x4, 2);
@@ -540,11 +539,11 @@ mod target {
                 x.add16(0xc, dz);
                 let n = x.u8(0x3) as u32;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 if x.u8(0x5) == 0 {
-                    x.call(MOVE_XZ);
+                    x.move_xz();
                     if (x.u16(0xc) as i16) <= 0 {
                         x.add8(0x5, 2);
                         x.set16(0x58, 0x78);
@@ -566,7 +565,7 @@ mod target {
                         x.add8(0x4, 2);
                     }
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             _ => x.free_peff(),
         }

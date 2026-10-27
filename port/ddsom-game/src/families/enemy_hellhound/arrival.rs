@@ -2,6 +2,7 @@
 //! 8 chute d'en haut, 10 apparition.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -88,7 +89,7 @@ fn turn_in(x: &mut Cx) {
                     x.call(call::FACE_TARGET);
                 } else {
                     x.anim_step();
-                    x.call(sub::MOVE_TABLE_XY);
+                    x.move_by_table_xy();
                 }
                 return;
             }
@@ -164,7 +165,7 @@ fn drop_in(x: &mut Cx) {
             mv(x, 0xf);
         }
         2 => {
-            x.call(sub::MOVE_Z);
+            x.move_z();
             if (x.u16(HEIGHT) as i16) >= 0 {
                 return;
             }

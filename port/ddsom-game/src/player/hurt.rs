@@ -10,6 +10,7 @@
 //! est exécutée telle quelle (`Ctx::rom`). Les tables d'origine restent donc la source de vérité de
 //! l'aiguillage et les réactions non réécrites continuent de fonctionner.
 
+use crate::machine::Machine;
 use super::actions::to_stand;
 use super::walk::{clamp_to_screen, move_x, move_xyz, move_xz};
 use super::{animation, ram, Ctx, Player};

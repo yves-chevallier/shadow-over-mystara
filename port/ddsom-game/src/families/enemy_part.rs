@@ -8,6 +8,7 @@
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
+use crate::objects::Courant;
 
 // ---------------------------------------------------------------------------------------------
 // Type 7 (0x63b2a) : « Wyvern » (h), tentacule d'un Displacer Beast
@@ -135,8 +136,8 @@ mod tentacle {
                 set = sets.1;
             }
         }
-        x.c.a[4] = set;
-        x.call(0x1a32);
+        let n = x.c.d[0] as u16;
+        x.anim_start(set, n);
     }
 
     // --- état 2 : actif ------------------------------------------------------------------------
@@ -346,7 +347,7 @@ mod tentacle {
             x.add8(f::SUB2, 2);
             start(x, ALT, 0);
         } else {
-            x.call(0x1a56);
+            x.anim_step();
         }
     }
 

@@ -13,7 +13,7 @@
 //! | 12 | `attacks` | saisie d'un joueur |
 //! | état 4 | `hit` | réactions aux coups, recul, chute, saisie par un joueur |
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod arrival;
@@ -58,6 +58,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_MOVE: u32 = 0x162126;
 pub(self) const SET_STRIKE: u32 = 0x162148;
@@ -67,10 +68,8 @@ pub(self) mod call {
     pub const TURN_TO_TARGET: u32 = 0x788c;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
     pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const REMOVE: u32 = 0x27ee;
-    pub const SCREEN_CHECK: u32 = 0x1e92;
     pub const SPARK: u32 = 0xb10c8;
 }
 
@@ -78,7 +77,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
@@ -92,11 +91,11 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 pub(self) fn mv(x: &mut Cx, n: u32) {
-    x.anim_start(SET_MOVE, n);
+    x.anim_start(SET_MOVE, n as u16);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// L'aspect voulu : `+0xa1` et son double `+0xa2`.
@@ -106,8 +105,7 @@ pub(self) fn look(x: &mut Cx, v: u8) {
 }
 
 pub(self) fn set_speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
@@ -127,8 +125,7 @@ pub(self) fn wait_key(x: &mut Cx) {
 
 /// Retombée d'un saut (0x62460) : le geste se termine par une poussière et l'animation 0xc.
 pub(self) fn land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
-    if x.c.cond(14) {
+    if x.move_xz().gt() {
         x.anim_step();
         return;
     }
@@ -214,9 +211,7 @@ pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set16(f::STATE, 0x0204);
     x.set8(STEP, 0);
-    x.c.d[0] = 0;
-    x.call(call::SCREEN_CHECK);
-    if !x.c.cond(5) && x.u8(f::SUB2) == 0x10 {
+    if !x.in_arena(0) && x.u8(f::SUB2) == 0x10 {
         x.set8(f::SUB2, 8);
     }
 }

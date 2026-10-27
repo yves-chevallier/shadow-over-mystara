@@ -5,6 +5,7 @@
 
 use super::stance::{next_move, pursue_tail, ready, walk_begin};
 use super::*;
+use crate::objects::Courant;
 
 /// Série de répétitions d'un coup, tirée dans une table par niveau de difficulté (0x5f5fa).
 const SERIES_TABLE: u32 = 0x5f5fa;
@@ -201,8 +202,7 @@ fn leap_wait(x: &mut Cx) {
 
 /// Fin d'un saut avec choc au sol (0x5e238) : poussière et recul.
 fn leap_land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
-    if !x.c.cond(14) {
+    if !x.move_xz().gt() {
         x.call(0xecb26);
         x.call(0xecdba);
         x.set32(0xc, 0);
@@ -232,7 +232,8 @@ fn slide(x: &mut Cx) {
         dust(x, -0x18);
     }
     if x.u8(0x14) != 0 {
-        return x.call(sub::MOVE_X);
+        x.move_x();
+        return;
     }
     x.add8(0x7, 2);
     x.set32(0x14, 0);
@@ -305,8 +306,7 @@ fn leap_high(x: &mut Cx) {
         }
         6 | 10 => leap_wait(x),
         8 => {
-            x.call(sub::MOVE_XZ);
-            if !x.c.cond(14) {
+            if !x.move_xz().gt() {
                 x.call(0xecb26);
                 dust(x, -0x18);
                 x.set32(0xc, 0);
@@ -457,7 +457,8 @@ fn hop_slide(x: &mut Cx) {
         dust(x, -0x18);
     }
     if (x.u8(0x14) as i8) >= 0 {
-        return x.call(sub::MOVE_X);
+        x.move_x();
+        return;
     }
     x.add8(0x7, 2);
     x.set32(0x14, 0);
@@ -465,7 +466,7 @@ fn hop_slide(x: &mut Cx) {
 
 /// 0x5e6a2 : retombée du petit bond, toujours suivie de la glissade.
 fn hop_land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     x.call(0xecb26);
     x.call(0xecdba);
     x.set32(0xc, 0);

@@ -14,7 +14,7 @@
 //!
 //! Animations 0x177874 et 0x17788c (mouvements et coups), 0x1778a4 (mort).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
 
@@ -58,6 +58,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_A: u32 = 0x177874;
 pub(self) const SET_B: u32 = 0x17788c;
@@ -66,7 +67,6 @@ pub(self) const SET_FLY_AGAINST: u32 = 0x177992;
 pub(self) const SET_FLY_ALONG: u32 = 0x177a36;
 
 pub(self) mod call {
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const REMOVE: u32 = 0x27ee;
     pub const SPAWN_EFFECT: u32 = 0x1172e;
     pub const FLAP: u32 = 0xe76c;
@@ -77,7 +77,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     arm_dies_with_ogre(x);
     x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
@@ -128,8 +128,7 @@ pub(self) fn look(x: &mut Cx, v: u8) {
 }
 
 pub(self) fn set_speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 pub(self) fn spark(x: &mut Cx, d5: u32) {

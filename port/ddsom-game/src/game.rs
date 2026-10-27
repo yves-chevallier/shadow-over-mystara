@@ -54,7 +54,6 @@ mod ext {
     /// Lance un script d'animation de palette (A4 = script).
     pub const PALETTE_SCRIPT: u32 = 0x1324;
     pub const PHASE0_END_FADE: u32 = 0x1cf3c;
-    pub const RANK_LOAD: u32 = 0x1f1b8;
     pub const CLEAR_STATUS: u32 = 0xdabba;
     pub const TASK_CREATE: u32 = 0x9b6;
     pub const INPUT_HOOK: u32 = 0x2aec;
@@ -366,7 +365,7 @@ fn leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + ram::PHASE, phase);
     wr8(b, CLEARED_B, 0);
     wr8(b, A5 + ram::ACTIVE, 1);
-    call(c, b, ext::RANK_LOAD);
+    crate::objects::rank::load_preset_68k(c, b);
     wr8(b, A5 + ram::SCENE, 1);
     wr8(b, A5 + EXIT_CLEARED_BYTES[0], 0);
     wr16(b, A5 + ram::TIMER, 0);

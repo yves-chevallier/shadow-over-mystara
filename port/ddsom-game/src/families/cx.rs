@@ -2,18 +2,20 @@
 //!
 //! Un gestionnaire est appelé par la boucle de dispatch de sa classe (`jsr (table + type * 4)`)
 //! avec A0 = l'objet, A5 = 0xFF8000 et D7 = compteur de la boucle ; il rend la main par RTS en
-//! laissant A0 et D7 intacts. `Cx` regroupe le processeur, le bus et l'objet courant, et offre
-//! les appels de sous-routines du moteur d'objets sous des noms lisibles.
+//! laissant A0 et D7 intacts. `Cx` regroupe le processeur, le bus et l'objet courant. Le moteur d'objets
+//! (animation, mouvement, listes, écran, pools) s'appelle par le trait `objects::Courant` (`x.move_xz()`,
+//! `x.anim_step()`, `x.reinsert()`...), les services communs par `machine::Machine` (`x.random()`).
 //!
-//! Les sous-routines sont exécutées par `crate::call`, qui retrouve leur native par leur adresse.
+//! Les sous-routines encore appelées par adresse (`call`) sont exécutées par `crate::call`, qui retrouve leur
+//! native.
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
-use crate::objects::pools::{self, Pool};
-use crate::objects::Obj;
+use crate::objects::pools;
+use crate::objects::{Courant, Obj};
 use crate::{call, call_at, regs, Native};
 
 /// Contexte d'un gestionnaire : l'objet courant (A0) et la machine.
@@ -24,39 +26,11 @@ pub struct Cx<'a> {
     pub o: Obj,
 }
 
-/// Sous-routines du moteur d'objets, appelées par adresse.
+/// Sous-routines appelées par adresse (le moteur d'objets, lui, s'appelle par `objects::Courant`).
 pub mod sub {
-    /// Charge l'entrée d'animation `D0` du jeu `A4` (`anim_start_indexed`).
-    pub const ANIM_START: u32 = 0x1a32;
-    /// Un pas d'animation ; retenue = fin du script.
-    pub const ANIM_STEP: u32 = 0x1a56;
-    /// Choisit la table de vitesses `D0` (variante A : 0x1a94, variante B : 0x1b64).
-    pub const SPEED_TABLE_B: u32 = 0x1b64;
-    pub const SPEED_TABLE_A: u32 = 0x1a94;
-    /// Déplacement selon la table de vitesses (X et Y : 0x1cb4, X et Z : 0x1cee).
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const MOVE_TABLE_XZ: u32 = 0x1cee;
-    /// Déplacements balistiques : Y puis X, X, Y X Z, X Z, Z, Y Z, Y.
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_Z: u32 = 0x1dbc;
-    pub const MOVE_YZ: u32 = 0x1dd4;
-    pub const MOVE_Y: u32 = 0x1e02;
-    /// Retire l'objet (état 6) s'il est sorti de l'écran.
-    pub const CULL_OFFSCREEN: u32 = 0x1e1a;
-    /// Remet l'objet à sa place dans la liste triée des acteurs / du premier plan.
-    pub const REINSERT_ACTORS: u32 = 0x1ee1a;
-    pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
-    /// Hook de pause : Z = objet non suspendu.
-    pub const PAUSE_HOOK: u32 = 0x29ea;
     /// Attribut du terrain sous l'objet (D2) ; `terrain_at` prend (D0, D1) = (x, y).
     pub const TERRAIN_OF_OBJECT: u32 = 0x24a8;
     pub const TERRAIN_AT: u32 = 0x24b0;
-    /// Allocation d'un objet : A1 = emplacement, retenue = échec.
-    pub const ALLOC_ESHL: u32 = 0x22ea;
-    pub const ALLOC_SET: u32 = 0x2348;
 }
 
 impl<'a> Cx<'a> {
@@ -187,53 +161,9 @@ impl<'a> Cx<'a> {
         wr32(self.b, self.c.a[7], ret);
     }
 
-    /// `lea set,A4 ; moveq #n,D0 ; jsr 0x1a32` : démarre le script `n` du jeu d'animations `set`.
-    pub fn anim_start(&mut self, set: u32, n: u32) {
-        self.c.a[4] = set;
-        self.c.d[0] = n;
-        self.call(sub::ANIM_START);
-    }
-
-    /// Pas d'animation ; vrai quand le script est terminé (retenue levée).
-    pub fn anim_step(&mut self) -> bool {
-        self.call(sub::ANIM_STEP);
-        self.c.sr & SR_C != 0
-    }
-
-    /// Fin du gestionnaire à l'ordinaire : remise en place dans la liste des acteurs.
-    pub fn reinsert(&mut self) {
-        self.call(sub::REINSERT_ACTORS);
-    }
-
     /// Fin du gestionnaire : l'objet est libéré (tir détruit).
     pub fn free_eshl(&mut self) {
         self.free(&pools::ESHL);
-    }
-
-    // --- objets -------------------------------------------------------------------------------
-    // Fonctions pures : les registres que laissaient les routines d'origine (A1, D6, D0, D1, A4, drapeaux) sont prouvés
-    // morts pour les gestionnaires (validation complète avec `DDSOM_POISON`, docs/guide-refactorisation.md).
-
-
-    /// Alloue un objet dans `pool` : l'emplacement réservé (classe écrite, pas encore actif), ou `None` si le pool
-    /// est plein.
-    pub fn alloc(&mut self, pool: &Pool) -> Option<Obj> {
-        pool.alloc(self.b)
-    }
-
-    /// Allocation dont l'original ne teste pas l'échec (voir `Pool::alloc_unchecked`, glitch d'origine).
-    pub fn alloc_unchecked(&mut self, pool: &Pool) -> Obj {
-        pool.alloc_unchecked(self.b)
-    }
-
-    /// Allocation dont l'échec rend l'A1 que l'original laisse (voir `Pool::alloc_or_leftover`).
-    pub fn alloc_or_leftover(&mut self, pool: &Pool) -> Result<Obj, Obj> {
-        pool.alloc_or_leftover(self.b)
-    }
-
-    /// Libère l'objet courant dans son pool (fin de gestionnaire : l'objet disparaît).
-    pub fn free(&mut self, pool: &Pool) {
-        pool.release(self.b, self.o)
     }
 
     /// RTS.

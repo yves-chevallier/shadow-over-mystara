@@ -16,7 +16,6 @@ mod ext {
     pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const SERVICE_CHECK: u32 = 0x2d30a;
     pub const INIT_STEPS_A: [u32; 6] = [0x19aa2, 0x19abc, 0x19db4, 0xee044, 0x2d9e, 0x2df8];
-    pub const INIT_RNG: u32 = 0x19a80;
     pub const INIT_STEP_LAST: u32 = 0x19038;
     pub const CLEAR_STATUS: u32 = 0xdabba;
     pub const PRINT: u32 = 0xd5e;
@@ -73,7 +72,7 @@ resume!(R_INIT, INIT, |x| {
         x.call(f);
     }
     clear_mode_state(x);
-    x.call(ext::INIT_RNG);
+    crate::rng::seed_68k(x.c, x.b);
     default_high_scores(x);
     x.call(ext::INIT_STEP_LAST);
     x.call(ext::CLEAR_STATUS);

@@ -3,6 +3,7 @@
 
 use super::stance::next_move;
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x5ea5c;
@@ -60,7 +61,8 @@ fn recoil(x: &mut Cx) {
                 x.call(0xb10c8);
             }
             if x.u8(0x14) != 0 {
-                return x.call(sub::MOVE_X);
+                x.move_x();
+                return;
             }
             if x.anim_step() {
                 x.set32(0x58, 0);
@@ -140,8 +142,7 @@ fn flee(x: &mut Cx) {
         4 => {
             step(x);
             move_xy(x);
-            x.call(0x1e90);
-            if x.c.cond(5) {
+            if x.in_arena_default() {
                 return;
             }
             set_state_long(x, 0x0600_0000);

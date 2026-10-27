@@ -4,6 +4,7 @@
 use super::parts::{bound_land, bound_wait, bound_y_land, bound_y_wait, finish_to_stance};
 use super::stance::engage;
 use super::*;
+use crate::objects::Courant;
 
 // --- sous-état 8 : charges et bonds -------------------------------------------------------------
 
@@ -160,7 +161,7 @@ fn leap_over_player(x: &mut Cx) {
             if (t as i8) < 0 {
                 return set_state_long(x, ACTIVE_STANCE);
             }
-            x.call(sub::MOVE_XY);
+            x.move_xy();
             step(x);
         }
         4 => bound_y_wait(x),
@@ -185,7 +186,7 @@ pub(super) fn enter(x: &mut Cx) {
         }
         2 => {
             step(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }
@@ -255,7 +256,7 @@ pub(super) fn leave(x: &mut Cx) {
             if top < 0 {
                 set_state_long(x, 0x0600_0000);
             }
-            x.call(sub::MOVE_Z);
+            x.move_z();
             step(x);
             x.set8(LAYER, 3);
         }

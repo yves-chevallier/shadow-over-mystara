@@ -20,6 +20,8 @@ use super::cx::{handlers, Cx};
 use crate::mem::set_low_word;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Champs partagés.
 mod f {
@@ -98,7 +100,8 @@ fn chunk_init(x: &mut Cx) {
     let variant = x.u8(f::VARIANT);
     let Some(throw) = THROWS.get(variant as usize) else {
         // variante 2 : pas de lancer, seulement l'animation
-        return x.anim_start(chunk::ANIMS_1, 0x14);
+        x.anim_start(chunk::ANIMS_1, 0x14);
+        return;
     };
     let creator = x.linked(chunk::CREATOR);
     let (px, py, pz) = (creator.u32(x.b, Obj::X), creator.u32(x.b, Obj::Y), creator.u32(x.b, Obj::Z));
@@ -123,7 +126,7 @@ fn chunk_init(x: &mut Cx) {
 fn chunk_active(x: &mut Cx) {
     match x.u8(f::SUB_STATE) {
         0 => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             if x.u16(Obj::Z) as i16 > 0 {
                 x.anim_step();
                 return;
@@ -136,8 +139,12 @@ fn chunk_active(x: &mut Cx) {
             x.c.d[5] = chunk::DEBRIS_KIND;
             x.call(rom::DEBRIS);
             match x.u8(f::VARIANT) {
-                0 => x.anim_start(chunk::ANIMS_0, 0x15),
-                1 => x.anim_start(chunk::ANIMS_1, 0x15),
+                0 => {
+                x.anim_start(chunk::ANIMS_0, 0x15);
+            }
+                1 => {
+                x.anim_start(chunk::ANIMS_1, 0x15);
+            }
                 _ => {}
             }
         }
@@ -182,7 +189,7 @@ fn shard(x: &mut Cx) {
     match x.u8(f::STATE) {
         0 => shard_init(x),
         2 => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             let t = x.u8(shard::TIMER).wrapping_sub(1);
             x.set8(shard::TIMER, t);
             if t == 0 {
@@ -219,7 +226,7 @@ fn shard_init(x: &mut Cx) {
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
     let anim = x.u8(f::VARIANT) as u32 + if facing { 0 } else { 1 };
-    x.anim_start(shard::ANIMS, anim);
+    x.anim_start(shard::ANIMS, anim as u16);
     x.reinsert();
 }
 
@@ -251,8 +258,7 @@ mod rain {
 }
 
 fn rng(x: &mut Cx) -> u16 {
-    x.call(super::rom::RNG);
-    x.c.d[0] as u16
+    x.random_68k()
 }
 
 fn debris_rain(x: &mut Cx) {
@@ -315,7 +321,7 @@ fn rain_launch(x: &mut Cx, vx_table: u32, vz_table: u32, anims: u32, anim_mask: 
     x.set16(Obj::VZ, vz);
     let pick = (rng(x) & anim_mask) as u32;
     let anim = x.rom8(anims + pick);
-    x.anim_start(rain::ANIMS, anim as u32);
+    x.anim_start(rain::ANIMS, (anim as u32) as u16);
 }
 
 /// Décompte de `TIMER` ; vrai quand il passe sous zéro.
@@ -341,7 +347,7 @@ fn rain_active(x: &mut Cx) {
     }
     match x.u8(f::SUB_STATE) {
         0 => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             if rain_countdown(x) {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(rain::TIMER, 0x1c);
@@ -356,7 +362,7 @@ fn rain_active(x: &mut Cx) {
         }
         2 => rain_fade(x),
         _ => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             rain_fade(x);
         }
     }
@@ -399,8 +405,7 @@ fn on_screen(x: &mut Cx) {
 }
 
 fn armour(x: &mut Cx) {
-    x.call(super::cx::sub::PAUSE_HOOK);
-    if x.c.sr & m68k::SR_Z == 0 {
+    if x.suspended() {
         return;
     }
     if x.u8(f::VARIANT) != 0 {
@@ -452,7 +457,7 @@ fn armour_worn(x: &mut Cx) {
     set_hidden(x, false);
     let piece = x.u8(armour::PIECE) as u32;
     let set = crate::mem::prog32(x.b, armour::ANIM_SETS + 4 * piece);
-    x.anim_start(set, hit as u32);
+    x.anim_start(set, (hit as u32) as u16);
 }
 
 /// La pièce tombe : elle se brise en éclats (variante 1) posés sur elle.
@@ -536,7 +541,7 @@ fn armour_shard_active(x: &mut Cx) {
         return on_screen(x);
     }
     if x.u8(armour::FALLING) == 0 {
-        x.call(super::cx::sub::MOVE_XYZ);
+        x.move_xyz();
         if (x.u16(Obj::Z) as i16) < 0 {
             // premier contact avec le sol
             x.set16(Obj::Z, 0);
@@ -548,7 +553,7 @@ fn armour_shard_active(x: &mut Cx) {
     }
     if x.u8(armour::ROLLING) == 0 {
         x.anim_step();
-        x.call(super::cx::sub::MOVE_Z);
+        x.move_z();
         if (x.u16(Obj::Z) as i16) >= 0 {
             x.anim_step();
             return on_screen(x);
@@ -601,8 +606,7 @@ fn flyer_link(x: &mut Cx) -> Option<Obj> {
 }
 
 fn flyer(x: &mut Cx) {
-    x.call(super::cx::sub::PAUSE_HOOK);
-    if x.c.sr & m68k::SR_Z == 0 {
+    if x.suspended() {
         return;
     }
     let state = x.u8(f::STATE);
@@ -931,8 +935,12 @@ fn fireworks_init(x: &mut Cx) {
             }
             x.anim_start(fireworks::ANIMS_FIRE, 0);
         }
-        4 => x.anim_start(fireworks::ANIMS_FIRE, 2),
-        5 => x.anim_start(fireworks::ANIMS_FIRE, 3),
+        4 => {
+                x.anim_start(fireworks::ANIMS_FIRE, 2);
+            }
+        5 => {
+                x.anim_start(fireworks::ANIMS_FIRE, 3);
+            }
         _ => {
             load_colours(x, 0x253460, 0x91c2e0, 0x20);
             x.set8(0x2a, 1);
@@ -1017,7 +1025,7 @@ fn fireworks_active(x: &mut Cx) {
                 if x.u8(0x33) == 0 && !fading(x) {
                     return free(x);
                 }
-                x.call(super::cx::sub::MOVE_XZ);
+                x.move_xz();
             }
         },
         3 => match sub {
@@ -1072,7 +1080,8 @@ fn last_actor(x: &mut Cx, sub: u8) {
                 x.add8(f::SUB_STATE, 2);
                 x.call(sfx::LANDING);
                 x.set16(Obj::Z, 0);
-                return x.anim_start(fireworks::ANIMS_LAST, 5);
+                x.anim_start(fireworks::ANIMS_LAST, 5);
+                return;
             }
             if x.u8(0x33) == 0 {
                 x.anim_step();
@@ -1124,7 +1133,7 @@ fn hero(x: &mut Cx, sub: u8) {
             fade_task(x, fireworks::FADE_OUT);
         }
         2 => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             x.anim_step();
             if fading(x) {
                 return;
@@ -1264,7 +1273,7 @@ fn hero_lift_off(x: &mut Cx) {
             o.set_u16(x.b, 0x30, 0xe);
         }
     }
-    x.call(super::cx::sub::MOVE_XZ);
+    x.move_xz();
     let top = x.a5_u16(fireworks::CAMERA_Y).wrapping_add(0x100);
     let height = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
     if height as i16 >= top as i16 {

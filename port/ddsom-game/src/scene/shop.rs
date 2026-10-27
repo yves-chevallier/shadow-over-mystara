@@ -145,7 +145,7 @@ fn open(x: &mut Ctx) -> Flow {
 // Ouverture : numéro de boutique, tâche des portraits, musique, objets de la boutique et des joueurs, puis la
 // scène de la boutique (69 + numéro) est chargée et son script d'apparition relancé.
 resume!(SHOP_OPEN_FADED, at::OPEN_FADED, |x| {
-    x.call(0x1f184);
+    crate::objects::lists::unlink_all_68k(x.c, x.b);
     x.call(0x2062);
     let scene = x.v8(0x34) as u32;
     let shop = rd8(x.b, rom::SHOP_OF_SCENE + scene);
@@ -351,7 +351,7 @@ fn leave(x: &mut Ctx) -> Flow {
     x.call(0xc58);
     wr32(x.b, BLOCK, 0);
     let a0 = x.c.a[0];
-    x.call(0x1f184);
+    crate::objects::lists::unlink_all_68k(x.c, x.b);
     x.c.a[0] = a0;
     x.tail(sub::WAIT_ONE, at::REOPEN_WAITED)
 }
@@ -359,7 +359,7 @@ fn leave(x: &mut Ctx) -> Flow {
 resume!(SHOP_LEAVE_FADED, at::LEAVE_FADED, |x| {
     x.call(0xc58);
     let a0 = x.c.a[0];
-    x.call(0x1f184);
+    crate::objects::lists::unlink_all_68k(x.c, x.b);
     x.c.a[0] = a0;
     x.set_v8(0x3d, 1);
     x.tail(sub::WAIT_ONE, at::LEAVE_WAITED)

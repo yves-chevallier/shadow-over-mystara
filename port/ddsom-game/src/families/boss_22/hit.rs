@@ -9,6 +9,7 @@
 //! | 8, 10 | retour au combat |
 
 use super::*;
+use crate::objects::Courant;
 
 
 pub(super) fn run(x: &mut Cx) {
@@ -105,7 +106,8 @@ fn pushed_back(x: &mut Cx) {
                 x.call(call::DUST);
             }
             if x.u8(0x14) != 0 {
-                return x.call(ia::MOVE_X);
+                x.move_x();
+                return;
             }
             if !x.anim_step() {
                 return;
@@ -224,13 +226,13 @@ fn death(x: &mut Cx) {
             x.c.d[0] = vx as u32;
             x.set16(0x14, vx);
             x.set8(f::FLIP, side);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             next6(x);
             let n = if second_form(x) { 0x17 } else { 0x16 };
             start(x, Set::A, n);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }

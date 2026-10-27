@@ -8,6 +8,7 @@
 //! | 4 | descend jusqu'à l'altitude 0x40 |
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -44,7 +45,7 @@ fn wait_then_fall(x: &mut Cx) {
         return;
     }
     at_camera(x);
-    x.call(call::MOVE_Z);
+    x.move_z();
     if (x.u16(0xc) as i16) > 0x40 {
         return;
     }
@@ -55,7 +56,7 @@ fn wait_then_fall(x: &mut Cx) {
 
 fn fall(x: &mut Cx) {
     at_camera(x);
-    x.call(call::MOVE_Z);
+    x.move_z();
     if (x.u16(0xc) as i16) < 0x40 {
         return;
     }

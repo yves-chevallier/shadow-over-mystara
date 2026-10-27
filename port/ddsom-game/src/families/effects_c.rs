@@ -45,6 +45,8 @@ use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Champs partagés.
 mod f {
@@ -164,7 +166,7 @@ fn shop_init(x: &mut Cx) {
     let item = x.data16(shop::ITEMS + 2 * v);
     x.set16(shop::ITEM, item);
     let anim = x.data16(shop::ANIMATIONS + 2 * v) as u32;
-    x.anim_start(shop::ANIM_SET, anim);
+    x.anim_start(shop::ANIM_SET, anim as u16);
     x.reinsert();
 }
 
@@ -411,7 +413,7 @@ fn barrier_switch(x: &mut Cx) {
         _ => free(x),
     }
     if x.u8(0) != 0 {
-        x.call(super::cx::sub::REINSERT_FOREGROUND);
+        x.reinsert_foreground();
     }
 }
 
@@ -593,7 +595,7 @@ fn purse_anim(x: &mut Cx, open: bool) {
         (false, true) => 0x18,
         (true, true) => 0x30,
     };
-    x.anim_start(purse::ANIM_SET, (class & !1).wrapping_add(base) as u32);
+    x.anim_start(purse::ANIM_SET, ((class & !1).wrapping_add(base) as u32) as u16);
     x.reinsert();
 }
 
@@ -825,8 +827,8 @@ fn set_hidden(x: &mut Cx, on: bool) {
 
 /// Tirage du générateur du jeu (0x19a88), 4 bits.
 fn random_nibble(x: &mut Cx) -> u32 {
-    x.call(super::rom::RNG);
-    x.c.d[0] & 0xf
+    let alea = x.random_68k();
+    alea as u32 & 0xf
 }
 
 fn copy_position(x: &mut Cx, from: Obj) {
@@ -859,7 +861,7 @@ fn attached_init(x: &mut Cx) {
             if v == 3 {
                 x.add16(Obj::Y, 4u16.wrapping_neg());
             }
-            x.anim_start(attached::ANIM_SET, v as u32);
+            x.anim_start(attached::ANIM_SET, (v as u32) as u16);
         }
         4 => {
             // reflet : recopie le cadre de sprite du porteur
@@ -893,18 +895,22 @@ fn attached_init(x: &mut Cx) {
                 x.call(0xe5d36);
             }
         }
-        6 => x.anim_start(attached::ANIM_SET, 5),
+        6 => {
+                x.anim_start(attached::ANIM_SET, 5);
+            }
         7 => {}
         8..=11 => {
             const SOUNDS: [u32; 4] = [0xe6a8e, 0xe6fe6, 0xe713c, 0xe6e90];
             x.call(SOUNDS[v as usize - 8]);
-            x.anim_start(attached::ANIM_SET, v as u32 - 3);
+            x.anim_start(attached::ANIM_SET, (v as u32 - 3) as u16);
         }
         12 | 13 => {
             set_hidden(x, true);
-            x.anim_start(attached::ANIM_SET, v as u32 - 3);
+            x.anim_start(attached::ANIM_SET, (v as u32 - 3) as u16);
         }
-        14 => x.anim_start(attached::ANIM_SET_B, 0x16),
+        14 => {
+                x.anim_start(attached::ANIM_SET_B, 0x16);
+            }
         15 => {
             x.set16(attached::TIMER, 0x28);
             x.anim_start(attached::ANIM_SET, 0xb);
@@ -965,10 +971,10 @@ fn attached_active(x: &mut Cx) {
                 }
                 x.add8(f::SUB_STATE, 2);
                 set_hidden(x, false);
-                x.call(super::cx::sub::MOVE_XYZ);
+                x.move_xyz();
                 x.anim_step();
             } else {
-                x.call(super::cx::sub::MOVE_XYZ);
+                x.move_xyz();
                 if x.anim_step() {
                     free(x);
                 } else {
@@ -1094,7 +1100,7 @@ fn scenery_live_target(x: &mut Cx) -> Option<Obj> {
 }
 
 fn reinsert_foreground(x: &mut Cx) {
-    x.call(super::cx::sub::REINSERT_FOREGROUND);
+    x.reinsert_foreground();
 }
 
 fn scenery(x: &mut Cx) {
@@ -1178,7 +1184,7 @@ fn thrown_init(x: &mut Cx, v: u8) {
 fn thrown_active(x: &mut Cx, v: u8) {
     if !paused(x) {
         if v == 1 {
-            x.call(super::cx::sub::MOVE_XY);
+            x.move_xy();
         } else {
             x.call(scenery::PUSH_PLAYERS);
         }
@@ -1205,8 +1211,8 @@ fn spray_init(x: &mut Cx) {
     let (vz, az) = (x.rom16(scenery::SPRAY + k + 4), x.rom16(scenery::SPRAY + k + 6));
     x.set16(Obj::VZ, vz);
     x.set16(Obj::AZ, az);
-    x.call(super::rom::RNG);
-    let mut vx = x.c.d[0] as u16 & 0x3ff;
+    let alea = x.random_68k();
+    let mut vx = alea & 0x3ff;
     if x.u8(0x2f) & 1 != 0 {
         vx = vx.wrapping_neg();
     }
@@ -1217,7 +1223,7 @@ fn spray_init(x: &mut Cx) {
 fn spray_active(x: &mut Cx) {
     if !paused(x) {
         x.anim_step();
-        x.call(super::cx::sub::MOVE_XYZ);
+        x.move_xyz();
         if (x.u16(Obj::Z) as i16) < 0 {
             x.set16(Obj::Z, 0);
             return x.add8(f::STATE, 4);
@@ -1296,7 +1302,7 @@ fn debris_active(x: &mut Cx) {
     if paused(x) {
         return reinsert_foreground(x);
     }
-    x.call(super::cx::sub::MOVE_Z);
+    x.move_z();
     if x.u8(f::SUB_STATE) == 0 {
         let vz = x.u16(Obj::VZ) as i16;
         if vz < 0 {
@@ -1322,8 +1328,8 @@ fn shard_init(x: &mut Cx) {
     let Some(target) = scenery_target(x) else { return x.set8(f::STATE, 6) };
     copy_target(x, target);
     x.set16(Obj::Z, 0xffb0);
-    x.call(super::rom::RNG);
-    let k = x.c.d[0] & 0xe;
+    let alea = x.random_68k();
+    let k = alea as u32 & 0xe;
     let vx = x.rom16(scenery::DRIFT_4 + k);
     x.set16(Obj::VX, vx);
     x.set16(Obj::AX, 0);
@@ -1341,7 +1347,7 @@ fn shard_init(x: &mut Cx) {
 
 fn shard_active(x: &mut Cx) {
     if !paused(x) {
-        x.call(super::cx::sub::MOVE_XZ);
+        x.move_xz();
         if x.u8(f::SUB_STATE) == 0 {
             if x.u8(0x33) != 0 {
                 x.add8(f::SUB_STATE, 2);
@@ -1428,11 +1434,11 @@ fn follow_active(x: &mut Cx) {
 fn spark_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     let Some(target) = scenery_live_target(x) else { return x.set8(f::STATE, 6) };
-    x.call(super::rom::RNG);
-    let px = (x.c.d[0] as u16 & 0x1ff).wrapping_sub(0xff).wrapping_add(target.u16(x.b, Obj::X));
+    let alea = x.random_68k();
+    let px = (alea & 0x1ff).wrapping_sub(0xff).wrapping_add(target.u16(x.b, Obj::X));
     x.set16(Obj::X, px);
-    x.call(super::rom::RNG);
-    let y = 0x1fu16.wrapping_sub(x.c.d[0] as u16 & 0x7f).wrapping_add(target.u16(x.b, Obj::Y));
+    let alea = x.random_68k();
+    let y = 0x1fu16.wrapping_sub(alea & 0x7f).wrapping_add(target.u16(x.b, Obj::Y));
     x.set16(Obj::Y, y);
     x.anim_start(scenery::ANIM_DUST, 0);
 }
@@ -1487,17 +1493,17 @@ fn puff_init(x: &mut Cx) {
     let area = scenery::AREAS_8 + 8 * x.u8(0x2f) as u32;
     for (field, origin, k) in [(Obj::X, 0x506, 0), (Obj::Y, 0x50a, 4)] {
         let mut v = x.a5_u16(origin).wrapping_add(x.data16(area + k));
-        x.call(super::rom::RNG);
+        x.random_68k();
         let mask = x.data16(area + k + 2);
         x.c.d[6] = x.c.d[6] & 0xffff_0000 | mask as u32;
         v = v.wrapping_add(x.c.d[0] as u16 & mask);
-        x.call(super::rom::RNG);
-        v = v.wrapping_add(x.c.d[0] as u16 & 0xf);
+        let alea = x.random_68k();
+        v = v.wrapping_add(alea & 0xf);
         x.set16(field, v);
     }
-    x.call(super::rom::RNG);
+    x.random_68k();
     let d0 = x.c.d[0];
-    x.anim_start(scenery::ANIM_DEBRIS, d0 & 0xffff_0000 | (d0 & 1) + 1);
+    x.anim_start(scenery::ANIM_DEBRIS, (d0 & 0xffff_0000 | (d0 & 1) + 1) as u16);
 }
 
 fn puff_active(x: &mut Cx) {
@@ -1513,15 +1519,15 @@ fn dust_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     let mode = x.u8(0x2f) as u32;
     if mode == 0 {
-        x.call(super::rom::RNG);
-        let mut dx = x.c.d[0] as u16 & 0x1ff;
+        let alea = x.random_68k();
+        let mut dx = alea & 0x1ff;
         if dx as i16 > 0x190 {
             dx -= 0x70;
         }
         let px = dx.wrapping_add(x.a5_u16(0x506));
         x.set16(Obj::X, px);
-        x.call(super::rom::RNG);
-        let y = (x.c.d[0] as u16 & 0x7f).wrapping_add(x.a5_u16(0x50a)).wrapping_add(0x20);
+        let alea = x.random_68k();
+        let y = (alea & 0x7f).wrapping_add(x.a5_u16(0x50a)).wrapping_add(0x20);
         x.set16(Obj::Y, y);
         x.set8(Obj::Z, 0);
         dust_spawn(x);
@@ -1532,7 +1538,7 @@ fn dust_init(x: &mut Cx) {
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
     let anim = x.rom8(scenery::ANIMS_10 + mode) as u32;
-    x.anim_start(scenery::ANIM_DUST, anim);
+    x.anim_start(scenery::ANIM_DUST, anim as u16);
 }
 
 /// 0xb40ba : remplit le pool d'effets de poussières de mode 1 à la même position.
@@ -1554,7 +1560,7 @@ fn dust_active(x: &mut Cx) {
         if x.anim_step() {
             return scenery_done(x);
         }
-        x.call(super::cx::sub::MOVE_XYZ);
+        x.move_xyz();
         let dx: u16 = if x.a5_u16(0x6e) & 1 != 0 { 0xc0u16.wrapping_neg() } else { 0xc0 };
         x.add16(Obj::X, dx);
     }
@@ -1599,7 +1605,7 @@ fn barrier(x: &mut Cx) {
                 }
             } else {
                 // s'élève en tremblant, puis disparaît
-                x.call(super::cx::sub::MOVE_XZ);
+                x.move_xz();
                 let vx = x.u16(Obj::VX).wrapping_neg();
                 x.set16(Obj::VX, vx);
                 if (x.u16(Obj::Z) as i16) >= 0x80 {
@@ -1740,8 +1746,7 @@ fn floater_start_wave(x: &mut Cx) {
     x.set32(Obj::VZ, 0x100_0000);
     x.set16(floater::WAVE_TICK, 4);
     x.set8(0x2d, 0);
-    x.c.d[0] = 1;
-    x.call(super::cx::sub::SPEED_TABLE_B);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, 1);
 }
 
 fn floater_main(x: &mut Cx) {
@@ -1914,7 +1919,7 @@ fn prop(x: &mut Cx) {
             x.add8(f::STATE, 2);
             prop_place(x, 0xffd0);
             let anim = (x.u8(f::VARIANT) != 0) as u32;
-            x.anim_start(prop::ANIM_SET, anim);
+            x.anim_start(prop::ANIM_SET, anim as u16);
         }
         2 => prop_active(x),
         _ => free(x),
@@ -1923,7 +1928,7 @@ fn prop(x: &mut Cx) {
         if x.u8(f::VARIANT) != 0 {
             x.reinsert();
         } else {
-            x.call(super::cx::sub::REINSERT_FOREGROUND);
+            x.reinsert_foreground();
         }
     }
 }
@@ -2070,9 +2075,9 @@ fn shard_rain(x: &mut Cx) {
             let base = x.rom16(shards::RAIN_OFFSETS + k);
             let r = random_nibble16(x) & 3;
             x.add16(Obj::X, base.wrapping_add(r));
-            x.call(super::rom::RNG);
+            x.random_68k();
             let d0 = x.c.d[0];
-            x.anim_start(shards::ANIM_RAIN, d0 & 0xffff_0000 | (d0 & 1) + 1);
+            x.anim_start(shards::ANIM_RAIN, (d0 & 0xffff_0000 | (d0 & 1) + 1) as u16);
             x.reinsert();
         }
         2 if v == 0 => {
@@ -2092,7 +2097,7 @@ fn shard_rain(x: &mut Cx) {
             }
         }
         2 => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(Obj::Z) as i16) < 0 {
                 x.add8(f::STATE, 2);
             }
@@ -2103,8 +2108,7 @@ fn shard_rain(x: &mut Cx) {
 
 /// Tirage du générateur, mot bas.
 fn random_nibble16(x: &mut Cx) -> u16 {
-    x.call(super::rom::RNG);
-    x.c.d[0] as u16
+    x.random_68k()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2221,9 +2225,9 @@ mod double {
 /// 0xae748 + 0x1b64 : table de vitesses de la variante.
 fn double_speed_table(x: &mut Cx) {
     let v = x.u8(f::VARIANT) as u32;
-    x.c.d[0] = x.rom8(double::SPEEDS + v) as u32;
     x.c.d[1] = v;
-    x.call(super::cx::sub::SPEED_TABLE_B);
+    let n = (x.rom8(double::SPEEDS + v) as u32) as u16;
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
 /// Recopie le cadre de sprite du porteur (et sa hauteur si `with_z`).
@@ -2243,7 +2247,7 @@ fn double_copy_frame(x: &mut Cx, with_flip: bool, with_z: bool) {
 
 /// Déplacement en x et y ; vrai quand le x d'arrivée est atteint (dans le sens de la marche).
 fn double_slide(x: &mut Cx) -> bool {
-    x.call(super::cx::sub::MOVE_XY);
+    x.move_xy();
     let (mut a, mut b) = (x.u16(Obj::X) as i16, x.u16(double::TARGET_X) as i16);
     if (x.u8(Obj::SPEED_INDEX) as i8) >= 0x10 {
         std::mem::swap(&mut a, &mut b);
@@ -2381,7 +2385,7 @@ fn chain_link(x: &mut Cx) {
             x.set8(0x2c, facing);
             x.set32(link::HISTORY, 0xffff_ffff);
             let anim = 1u8.wrapping_add(x.u8(0x2f));
-            x.anim_start(link::ANIM_SET, anim as u32);
+            x.anim_start(link::ANIM_SET, (anim as u32) as u16);
             x.reinsert();
         }
         2 if x.u8(f::SUB_STATE) != 0 => {
@@ -2439,7 +2443,7 @@ fn chain_break(x: &mut Cx, head: Obj) {
         x.set8(0x2c, facing ^ 0x20);
     }
     let anim = 5u8.wrapping_add(x.u8(0x2f));
-    x.anim_start(link::ANIM_SET, anim as u32);
+    x.anim_start(link::ANIM_SET, (anim as u32) as u16);
 }
 
 fn chain_link_follow(x: &mut Cx) {
@@ -2472,7 +2476,7 @@ fn chain_link_follow(x: &mut Cx) {
             x.add32(Obj::Z, 0x3_0000u32.wrapping_neg());
             x.set8(Obj::SPEED_INDEX, dir & 0x1f);
         }
-        x.call(super::cx::sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     x.anim_step();
     x.reinsert();
@@ -2507,8 +2511,7 @@ fn fish(x: &mut Cx) {
             x.add8(f::STATE, 2);
             x.set16(fish::TIMER, 4);
             x.set8(Obj::SPEED_INDEX, 0);
-            x.c.d[0] = 1;
-            x.call(super::cx::sub::SPEED_TABLE_B);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 1);
             x.anim_start(fish::ANIM_SET, 6);
             x.reinsert();
         }
@@ -2553,9 +2556,10 @@ fn fish_swim(x: &mut Cx) {
             if t == 0 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(fish::TIMER, 0x60);
-                return x.anim_start(fish::ANIM_SET, 0);
+                x.anim_start(fish::ANIM_SET, 0);
+                return;
             }
-            x.call(super::cx::sub::MOVE_X);
+            x.move_x();
             // demi-tour au bord de la caméra alternative
             let cam = x.a5_u16(0x556);
             let px = x.u16(Obj::X);
@@ -2603,7 +2607,7 @@ fn fish_swim(x: &mut Cx) {
             x.anim_start(fish::ANIM_SET, 4);
         }
         8 => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(Obj::VZ) as i16) < 0 && (x.u16(Obj::Z) as i16) <= -0x10 {
                 x.add8(f::SUB_STATE, 2);
                 x.set32(Obj::Z, 0);
@@ -2656,8 +2660,7 @@ fn divide(mut n: u32, d: u32) -> u32 {
 }
 
 fn lob(x: &mut Cx) {
-    x.call(super::cx::sub::PAUSE_HOOK);
-    if x.c.sr & m68k::SR_Z == 0 {
+    if x.suspended() {
         return;
     }
     match x.u8(f::STATE) {
@@ -2684,8 +2687,8 @@ fn lob_init(x: &mut Cx) {
     x.call(0x137e);
     let dir = x.c.d[0] as u8;
     x.set8(Obj::SPEED_INDEX, dir);
-    x.c.d[0] = x.rom8(lob::SPEED_TABLES + v) as u32;
-    x.call(super::cx::sub::SPEED_TABLE_B);
+    let n = (x.rom8(lob::SPEED_TABLES + v) as u32) as u16;
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n);
     // durée du vol : la plus grande distance (x ou y) divisée par la vitesse
     let dx = (tx.wrapping_sub(x.u16(Obj::X)) as i16).wrapping_abs() as u16;
     let dy = (ty.wrapping_sub(x.u16(Obj::Y)) as i16).wrapping_abs() as u16;
@@ -2728,7 +2731,7 @@ fn lob_active(x: &mut Cx) {
             x.anim_step();
         }
         2 => {
-            x.call(super::cx::sub::MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(Obj::Z) as i16) > 0 {
                 x.anim_step();
                 return;
@@ -2834,7 +2837,7 @@ fn ending_wisp(x: &mut Cx) {
             x.set16(Obj::Y, py);
             x.set16(Obj::VX, 0xff20);
             x.anim_start(0x1991ca, 0);
-            x.call(super::cx::sub::REINSERT_FOREGROUND);
+            x.reinsert_foreground();
         }
         2 => {
             if x.anim_step() {
@@ -2842,7 +2845,7 @@ fn ending_wisp(x: &mut Cx) {
             }
             let odd = x.a5_u16(0x6e) & 1 != 0;
             set_hidden(x, odd);
-            x.call(super::cx::sub::MOVE_X);
+            x.move_x();
         }
         _ => free(x),
     }
@@ -2965,8 +2968,8 @@ fn ballot_count(x: &mut Cx) {
                 let v = if x.u8(0x58 + k) as i8 == best { 0xff } else { 0 };
                 x.set8(0x58 + k, v);
             }
-            x.call(super::rom::RNG);
-            let mut k = x.c.d[0] & 3;
+            let alea = x.random_68k();
+            let mut k = alea as u32 & 3;
             while x.u8(0x58 + k) == 0 {
                 k = (k + 1) & 3;
             }
@@ -3144,7 +3147,7 @@ fn ballot_cursor(x: &mut Cx) {
             x.add32(Obj::Y, player as u32);
             x.set8(0x2a, 1);
             x.set8(0x2b, 0x12u8.wrapping_add(player));
-            x.anim_start(vote::ANIM_SET, 0x173 + player as u32);
+            x.anim_start(vote::ANIM_SET, (0x173 + player as u32) as u16);
             x.reinsert();
         }
         2 => {
@@ -3206,7 +3209,7 @@ fn cursor_vote(x: &mut Cx) {
     ballot.set_u8(x.b, 0x58 + choice, votes);
     x.add8(f::STATE, 2);
     cursor_place(x);
-    x.call(0x1f0be);
+    x.unlink();
 }
 
 /// 0xb0990 : le compte à rebours est posé sur la caméra, à la place donnée par le mode du scrutin.
@@ -3237,7 +3240,7 @@ fn timer_palette(x: &mut Cx, src: u32) {
 /// 0xb0330 : chiffre du compte à rebours (secondes restantes, octet haut de `+0x54`).
 fn timer_show(x: &mut Cx) {
     let anim = 0xe3u8.wrapping_sub(x.u8(0x54));
-    x.anim_start(vote::ANIM_SET, anim as u32);
+    x.anim_start(vote::ANIM_SET, (anim as u32) as u16);
     x.set8(0x3f, 6);
     x.reinsert();
 }
@@ -3316,7 +3319,8 @@ fn double2(x: &mut Cx) {
             let target = x.rom16(double2::TARGETS + 2 * v);
             x.set16(double::TARGET_X, target);
             double2_direction(x);
-            x.call(super::cx::sub::SPEED_TABLE_B);
+            let n = x.c.d[0] as u16;
+            x.select_speed(&crate::objects::motion::SPEEDS_B, n);
             let carrier = x.linked(double::CARRIER);
             copy_position(x, carrier);
             set_hidden(x, true);
@@ -3429,7 +3433,8 @@ fn double2_active(x: &mut Cx) {
                         double2_direction(x);
                         let dir = (x.u8(Obj::SPEED_INDEX).wrapping_add(0x10)) & 0x1f;
                         x.set8(Obj::SPEED_INDEX, dir);
-                        x.call(super::cx::sub::SPEED_TABLE_B);
+                        let n = x.c.d[0] as u16;
+                        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                     }
                 }
             }
@@ -3480,7 +3485,7 @@ fn swimmer(x: &mut Cx) {
 }
 
 fn swimmer_anim(x: &mut Cx, n: u32) {
-    x.anim_start(swimmer::ANIM_SET, n);
+    x.anim_start(swimmer::ANIM_SET, n as u16);
     x.anim_step();
 }
 
@@ -3714,7 +3719,7 @@ fn counter(x: &mut Cx) {
             let message = x.rom16(counter::MESSAGES + 2 * v);
             x.set16(shop::MESSAGE_ID, message);
             let anim = x.data16(counter::ANIMATIONS + 2 * v) as u32;
-            x.anim_start(shop::ANIM_SET, anim);
+            x.anim_start(shop::ANIM_SET, anim as u16);
             x.reinsert();
         }
         2 if x.u8(f::SUB_STATE) != 0 => counter_sale(x),
@@ -3804,7 +3809,7 @@ fn blow(x: &mut Cx) {
             x.add16(Obj::X, dx);
             let setting = x.u8(0x2f) as u32;
             let anim = x.rom8(blow::FALL_ANIMS + setting);
-            x.anim_start(blow::ANIM_SET, anim as u32);
+            x.anim_start(blow::ANIM_SET, (anim as u32) as u16);
             x.reinsert();
         }
         (2, 2) => {
@@ -3901,10 +3906,10 @@ fn blow(x: &mut Cx) {
             x.set16(Obj::AX, ax);
             x.add16(Obj::X, dx);
             x.add16(Obj::Z, dz);
-            x.call(super::rom::RNG);
+            x.random_68k();
             let d0 = x.c.d[0];
             let anim = d0 & 0xffff_0000 | ((d0 & 1) as u8).wrapping_add(0x10) as u32;
-            x.anim_start(blow::ANIM_SET, anim);
+            x.anim_start(blow::ANIM_SET, anim as u16);
             x.reinsert();
         }
         (4, 2) => blow_debris(x),
@@ -3915,7 +3920,7 @@ fn blow(x: &mut Cx) {
 
 /// Débris projeté (variantes 3 et 4) : glisse jusqu'à l'arrêt, attend, puis finit son animation.
 fn blow_debris(x: &mut Cx) {
-    x.call(super::cx::sub::MOVE_XZ);
+    x.move_xz();
     match x.u8(f::SUB_STATE) {
         0 => {
             if x.u16(Obj::VX) == 0 {
@@ -3958,7 +3963,7 @@ fn pillar(x: &mut Cx) {
             x.set16(Obj::Z, top.wrapping_add(0x100).wrapping_sub(by));
             let delay = x.rom8(0xb7ea2 + v as u32);
             x.set8(0x58, delay);
-            x.anim_start(0x1b67f2, 5u8.wrapping_add(v) as u32);
+            x.anim_start(0x1b67f2, (5u8.wrapping_add(v) as u32) as u16);
         }
         2 => {
             let delay = x.u8(0x58);
@@ -3992,8 +3997,7 @@ fn pillar(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 fn ferry(x: &mut Cx) {
-    x.call(super::cx::sub::PAUSE_HOOK);
-    if x.c.sr & m68k::SR_Z == 0 {
+    if x.suspended() {
         return x.set8(f::STATE, 4);
     }
     if x.a5_u8(0x3d) != 0 {
@@ -4062,7 +4066,7 @@ mod riser {
 
 fn riser_anim(x: &mut Cx, n: u32) {
     x.add8(f::SUB_STATE, 2);
-    x.anim_start(riser::ANIM_SET, n);
+    x.anim_start(riser::ANIM_SET, n as u16);
 }
 
 /// Monte de 3 points par image et entraîne la caméra (`A5+0x50a`, 16.16).
@@ -4225,11 +4229,11 @@ fn riser_active(x: &mut Cx) {
             x.set16(Obj::AX, 0);
             x.set16(Obj::VY, 0xfea0);
             x.set16(Obj::AY, 0);
-            x.call(super::cx::sub::MOVE_XYZ);
+            x.move_xyz();
             x.anim_start(riser::ANIM_SET, 6);
         }
         24 => {
-            x.call(super::cx::sub::MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(Obj::VZ) as i16) > 0 {
                 x.anim_step();
             } else {
@@ -4237,7 +4241,7 @@ fn riser_active(x: &mut Cx) {
             }
         }
         26 => {
-            x.call(super::cx::sub::MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(Obj::Z) as i16) > 0 {
                 x.anim_step();
             } else {
@@ -4318,7 +4322,7 @@ fn spell_on_carrier(x: &mut Cx, anim: u32) {
     spell_copy(x, carrier);
     x.add16(Obj::Y, 1);
     x.set16(Obj::Z, 0);
-    x.anim_start(spell::ANIM_SET, anim);
+    x.anim_start(spell::ANIM_SET, anim as u16);
 }
 
 /// 0xb5206 : teinte suivante du clignotement.
@@ -4344,7 +4348,7 @@ fn spell(x: &mut Cx) {
                     x.set16(0x42, if mode == 0 { 0x26 } else { 0xb });
                     spell_place(x, false);
                     let anim = x.rom8(spell::ANIMS_A + v) as u32;
-                    x.anim_start(spell::ANIM_SET, anim);
+                    x.anim_start(spell::ANIM_SET, anim as u16);
                 }
                 1 => spell_on_carrier(x, 5),
                 5 => spell_on_carrier(x, 7),
@@ -4352,7 +4356,7 @@ fn spell(x: &mut Cx) {
                     x.set16(0x42, 0x26);
                     spell_place(x, true);
                     let anim = x.rom8(spell::ANIMS_B + v) as u32;
-                    x.anim_start(spell::ANIM_SET, anim);
+                    x.anim_start(spell::ANIM_SET, anim as u16);
                 }
                 3 => {
                     let owner = x.linked(spell::OWNER);
@@ -4492,7 +4496,7 @@ fn result_card(x: &mut Cx) {
             let creator = x.linked(0x42);
             match x.u8(f::SUB_STATE) {
                 0 => {
-                    x.call(super::cx::sub::MOVE_Z);
+                    x.move_z();
                     if (x.u16(Obj::Z) as i16) <= 0 {
                         x.add8(f::SUB_STATE, 2);
                         x.set16(Obj::Z, 0);
@@ -4562,7 +4566,7 @@ fn toss_sound(x: &mut Cx, table: u32) {
 
 fn toss_land(x: &mut Cx) {
     let kind = x.u8(f::VARIANT) as u32;
-    x.anim_start(toss::ANIM_SET, 5 + kind);
+    x.anim_start(toss::ANIM_SET, (5 + kind) as u16);
     toss_sound(x, toss::SOUNDS_LAND);
 }
 
@@ -4571,8 +4575,8 @@ fn toss(x: &mut Cx) {
         0 => {
             x.add8(f::STATE, 2);
             x.set16(0x5c, 0x20);
-            x.call(super::rom::RNG);
-            let kind = (x.c.d[0] & 3) as u8;
+            let alea = x.random_68k();
+            let kind = (alea as u32 & 3) as u8;
             x.set8(f::VARIANT, kind);
             let k = 4 * kind as u32;
             let (vx, az) = (x.rom16(toss::SPEEDS + k), x.rom16(toss::SPEEDS + k + 2));
@@ -4580,14 +4584,13 @@ fn toss(x: &mut Cx) {
             x.set16(Obj::VX, vx);
             x.set16(Obj::AZ, az);
             toss_sound(x, toss::SOUNDS_START);
-            x.anim_start(toss::ANIM_SET, kind as u32);
+            x.anim_start(toss::ANIM_SET, (kind as u32) as u16);
             x.reinsert();
         }
         2 => match x.u8(f::SUB_STATE) {
             0 => {
                 x.anim_step();
-                x.call(super::cx::sub::MOVE_Z);
-                if x.c.cond(15) {
+                if x.move_z().le() {
                     // au sol
                     x.add8(f::SUB_STATE, 4);
                     x.set16(Obj::Z, 0);
@@ -4611,7 +4614,7 @@ fn toss(x: &mut Cx) {
                 x.reinsert();
                 x.anim_step();
                 if x.u8(0x33) != 0 {
-                    x.call(super::cx::sub::MOVE_X);
+                    x.move_x();
                 }
             }
             8 => {
@@ -4624,7 +4627,7 @@ fn toss(x: &mut Cx) {
                 let vx = if x.u8(0x2c) == 0 { vx.wrapping_neg() } else { vx };
                 x.set16(Obj::AX, vx);
                 x.set16(Obj::AZ, az);
-                x.call(super::cx::sub::MOVE_XZ);
+                x.move_xz();
             }
             _ => {}
         },
@@ -4651,8 +4654,8 @@ fn screen_piece(x: &mut Cx) {
             x.set16(0x50, height);
             follow(x);
             let anim = base.wrapping_add(x.u8(0x2f));
-            x.anim_start(0x18c6ec, anim as u32);
-            x.call(super::cx::sub::REINSERT_FOREGROUND);
+            x.anim_start(0x18c6ec, (anim as u32) as u16);
+            x.reinsert_foreground();
         }
         2 => {
             follow(x);
@@ -4701,7 +4704,7 @@ fn pacer(x: &mut Cx) {
             x.set16(Obj::Z, 0);
             x.set16(Obj::Y, 0x58);
             x.anim_start(0x1c03a6, 0xbc);
-            x.call(super::cx::sub::REINSERT_FOREGROUND);
+            x.reinsert_foreground();
         }
         2 => {
             x.anim_step();
@@ -4738,8 +4741,7 @@ fn spark_fall(x: &mut Cx) {
         }
         2 => {
             x.anim_step();
-            x.call(super::cx::sub::MOVE_XZ);
-            if x.c.sr & m68k::SR_N == 0 {
+            if x.move_xz().pl() {
                 return;
             }
             if x.u8(f::VARIANT) == 0 {
@@ -4748,7 +4750,7 @@ fn spark_fall(x: &mut Cx) {
             x.add8(f::STATE, 2);
             x.set16(0x42, 0x40);
             let anim = (x.u8(0x2f) ^ 1) as u32 + 1;
-            x.anim_start(0x197a5c, anim);
+            x.anim_start(0x197a5c, anim as u16);
             spark_fall_wait(x);
         }
         4 => spark_fall_wait(x),
@@ -4868,7 +4870,7 @@ fn drift_dust(x: &mut Cx) {
             x.reinsert();
         }
         2 => {
-            x.call(super::cx::sub::MOVE_XZ);
+            x.move_xz();
             if x.anim_step() {
                 free(x);
             }
@@ -4978,7 +4980,7 @@ fn beacon(x: &mut Cx) {
             }
             let anim = x.rom16(base + 6);
             let anim = anim & 0xff00 | (anim as u8).wrapping_add(x.u8(0x2f)) as u16;
-            x.anim_start(0x19610c, anim as u32);
+            x.anim_start(0x19610c, (anim as u32) as u16);
             x.reinsert();
         }
         2 => {
@@ -5108,15 +5110,14 @@ fn courier(x: &mut Cx) {
             x.add8(f::STATE, 2);
             x.set32(0x5c, courier::PATH);
             x.set8(0x42, 1);
-            x.c.d[0] = 0x15;
-            x.call(super::cx::sub::SPEED_TABLE_B);
+            x.select_speed(&crate::objects::motion::SPEEDS_B, 0x15);
             let card = courier::CARDS + 8 * x.u8(f::VARIANT) as u32;
             let anim = x.data8(card) as u32;
-            x.anim_start(courier::ANIM_SET, anim);
-            x.call(super::cx::sub::REINSERT_FOREGROUND);
+            x.anim_start(courier::ANIM_SET, anim as u16);
+            x.reinsert_foreground();
         }
         2 => {
-            x.call(super::cx::sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
             let t = x.u8(0x42).wrapping_sub(1);
             x.set8(0x42, t);
@@ -5129,7 +5130,7 @@ fn courier(x: &mut Cx) {
             if (dir as i8) < 0 {
                 x.add8(f::STATE, 2);
                 x.set16(0x42, 0x20);
-                return x.call(0x1f0be);
+                return x.unlink();
             }
             let len = x.data8(p + 1);
             x.set8(0x42, len);

@@ -5,6 +5,8 @@
 //! et le lien `+0x50` vers le joueur ; certains types gardent un lien `+0x52` ou `+0x5c` vers un objet
 //! frère. Les positions suivent le joueur avec un décalage lu dans une table de la ROM.
 
+use crate::machine::Machine;
+use crate::objects::Courant;
 use crate::families::cx::Cx;
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -34,15 +36,6 @@ pub fn ext(o: Obj) -> u32 {
     o.0 as u16 as i16 as i32 as u32
 }
 
-
-/// Déplacements, animation, culling du modèle d'objets.
-pub const MOVE_XZ: u32 = 0x1da6;
-pub const MOVE_X: u32 = 0x1d78;
-pub const MOVE_XY: u32 = 0x1d62;
-pub const MOVE_XYZ: u32 = 0x1d90;
-pub const MOVE_Z: u32 = 0x1dbc;
-pub const ANIM_STEP: u32 = 0x1a56;
-pub const CULL: u32 = 0x1e1a;
 
 /// Décalages de la RAM de travail (A5).
 pub mod a5 {
@@ -74,16 +67,16 @@ impl Cx<'_> {
 
     /// `jsr rng ; andi.w #mask,D0w` : D0 garde son mot haut, le mot bas est masqué ; renvoie le mot bas.
     pub fn rand_and(&mut self, mask: u16) -> u32 {
-        self.call(0x19a88);
-        let low = self.c.d[0] as u16 & mask;
+        let alea = self.random_68k();
+        let low = alea & mask;
         self.c.d[0] = self.c.d[0] & 0xffff_0000 | low as u32;
         low as u32
     }
 
     /// `jsr rng ; andi.b #mask,D0b` : seul l'octet bas de D0 est masqué (le reste du mot garde le tirage).
     pub fn rand_and_b(&mut self, mask: u8) -> u8 {
-        self.call(0x19a88);
-        let low = self.c.d[0] as u8 & mask;
+        let alea = self.random_68k();
+        let low = alea as u8 & mask;
         self.c.d[0] = self.c.d[0] & !0xff | low as u32;
         low
     }
@@ -123,9 +116,7 @@ impl Cx<'_> {
 
     /// Démarre le script `n` du jeu d'animations `set` (`anim_start_indexed`).
     pub fn anim(&mut self, set: u32, n: u32) {
-        self.c.a[4] = set;
-        self.c.d[0] = n;
-        self.call(0x1a32);
+        self.anim_start(set, n as u16);
     }
 
     /// Remplace le mot bas de D0 (`move.w`).

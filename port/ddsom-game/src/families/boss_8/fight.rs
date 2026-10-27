@@ -2,6 +2,8 @@
 
 use super::aids;
 use super::*;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Octet de poids faible d'un registre de données.
 fn setb(x: &mut Cx, n: usize, v: u8) {
@@ -42,8 +44,7 @@ pub(super) fn intro(x: &mut Cx) {
             x.set8(0x38, 0);
         }
         0x88330 => {
-            x.call(call::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 return;
             }
             x.call(0xd5f30);
@@ -135,7 +136,7 @@ fn near_checks(x: &mut Cx) {
         return;
     }
     if aids::player_near(x, true) {
-        x.call(0x19a88);
+        x.random_68k();
         setw(x, 1, 0xffc0);
         let i = x.c.d[0] as u16 & 0xf;
         setw(x, 0, i);
@@ -145,9 +146,9 @@ fn near_checks(x: &mut Cx) {
     if target_in_box_far(x, -0x40, 0x40, 0x20) {
         return x.call(call::ATTACK_START);
     }
-    x.call(call::STEP);
+    x.anim_step();
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(call::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     if x.u8(0x3e) != 0 {
         x.set8(0x3e, 0);
@@ -183,7 +184,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
         x.c.d[0] = 0;
         return false;
     }
-    x.call(0x19a88);
+    x.random_68k();
     setw(x, 1, 0xffc0);
     let i = x.c.d[0] as u16 & 0xf;
     setw(x, 0, i);
@@ -242,7 +243,7 @@ fn stop(x: &mut Cx) {
         x.set8(RESUME_SUB, 4);
         x.set32(f::STATE, 0x0202_0200);
     }
-    x.call(call::STEP);
+    x.anim_step();
 }
 
 /// 0x88702 : approche lente de l'adversaire.
@@ -261,9 +262,9 @@ fn approach(x: &mut Cx) {
                 x.set8(RESUME_SUB, b6);
                 x.set32(f::STATE, 0x0202_0200);
             }
-            x.call(call::STEP);
+            x.anim_step();
             if x.u8(KEY) != 0xff {
-                x.call(call::MOVE_TABLE_XY);
+                x.move_by_table_xy();
             }
         }
         t => {
@@ -298,7 +299,7 @@ pub(super) fn wait(x: &mut Cx) {
         x.add8(f::SUB2, 2);
         body(x, 0xd);
     } else {
-        x.call(call::STEP);
+        x.anim_step();
     }
 }
 

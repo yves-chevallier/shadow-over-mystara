@@ -10,6 +10,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x82c8a;
@@ -70,7 +71,8 @@ fn shake(x: &mut Cx) {
         let stun = x.u8(STUN);
         x.set8(f::FREEZE, stun);
         x.set8(SHAKE, 0x10);
-        return x.anim_start(SET_HURT, 8);
+        x.anim_start(SET_HURT, 8);
+        return;
     }
     if tst8(x, SHAKE).gt() {
         sub8(x, SHAKE, 1);
@@ -113,12 +115,12 @@ fn pushed_back(x: &mut Cx) {
                 x.set16(TIMER, 0x14);
                 x.set16(0x16, 0);
             }
-            x.call(call::MOVE_X);
+            x.move_x();
             x.anim_step();
         }
         _ => {
             if !expired(x, TIMER) {
-                x.call(call::MOVE_X);
+                x.move_x();
                 x.anim_step();
                 return;
             }
@@ -201,12 +203,12 @@ fn death(x: &mut Cx) {
             x.c.d[1] = side as u32;
             x.set16(0x14, vx);
             x.set8(f::FLIP, side);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             x.c.d[0] = 0;
             x.anim_start(SET_HURT, 0);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }

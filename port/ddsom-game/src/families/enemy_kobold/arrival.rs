@@ -2,6 +2,7 @@
 //! 10 chute d'en haut, 12 apparition, 14 course d'arrivée, 16 et 20 réveil, 18 course vers le joueur.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -98,8 +99,7 @@ fn leap_in(x: &mut Cx) {
         }
         2 => wait_key(x),
         4 => {
-            x.call(sub::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 x.anim_step();
                 return;
             }
@@ -143,8 +143,7 @@ fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
             x.anim_step();
         }
         4 => {
-            x.call(sub::MOVE_YZ);
-            if x.c.cond(14) {
+            if x.move_yz().gt() {
                 x.anim_step();
                 return;
             }
@@ -175,7 +174,7 @@ fn drop_in(x: &mut Cx) {
             mv(x, 0x19);
         }
         2 => {
-            x.call(sub::MOVE_Z);
+            x.move_z();
             if (x.u16(HEIGHT) as i16) >= 0 {
                 return;
             }
@@ -234,7 +233,7 @@ fn run_in(x: &mut Cx) {
                 set_state_long(x, STANCE);
             }
             x.anim_step();
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         _ => {}
     }
@@ -283,7 +282,8 @@ fn dash(x: &mut Cx) {
             x.set16(TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
-                return x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
+                return;
             }
             x.add8(STEP, 2);
             x.anim_start(SET_STRIKE, 6);
@@ -319,7 +319,8 @@ fn get_up(x: &mut Cx) {
             x.set16(TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
-                return x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
+                return;
             }
             x.add8(STEP, 2);
             x.anim_start(SET_STRIKE, 6);

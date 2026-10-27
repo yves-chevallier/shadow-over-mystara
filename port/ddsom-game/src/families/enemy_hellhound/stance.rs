@@ -2,6 +2,7 @@
 //! de feu (le chien recule en soufflant), 10 saut de côté.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::SUB2) != 10 && grabbed(x) {
@@ -92,7 +93,7 @@ pub(super) fn reach_boxes(x: &mut Cx) {
         return x.call(call::ANNOUNCE);
     }
     x.anim_step();
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     if x.u16(f::TARGET) == 0 {
         return;
     }
@@ -218,7 +219,7 @@ fn spit(x: &mut Cx) {
                 set_state_long(x, STANCE);
             } else {
                 x.anim_step();
-                x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
             }
         }
         _ => {}

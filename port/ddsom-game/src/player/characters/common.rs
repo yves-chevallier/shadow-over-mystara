@@ -73,8 +73,6 @@ pub mod rom {
     pub const SPARK_SOUND: u32 = 0xea166;
     /// Voix du personnage à l'arme tenue (D4 = numéro de l'arme).
     pub const WEAPON_VOICE: u32 = 0xe7e10;
-    /// Pas d'animation d'un joueur (retenue = fin du script).
-    pub const ANIMATION_STEP: u32 = 0x2d58;
     /// Voix du saut, son de l'atterrissage et de la glissade.
     pub const JUMP_VOICE: u32 = 0xe7622;
     pub const LANDING_SOUND: u32 = 0xe774c;
@@ -131,8 +129,7 @@ pub fn wait_then_stand(g: &mut Ctx, p: Player) {
 pub fn step_keeping_regs(g: &mut Ctx, p: Player, d0: u8) -> bool {
     cov!();
     g.c.d[0] = g.c.d[0] & !0xff | d0 as u32;
-    g.rom(rom::ANIMATION_STEP, p);
-    g.c.sr & m68k::SR_C != 0
+    crate::objects::anim::step_68k(g.c, g.b, p.obj(), true).finished()
 }
 
 /// Joue la voix de l'arme tenue (D4 = `WEAPON_A`).

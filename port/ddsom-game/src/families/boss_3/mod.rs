@@ -63,6 +63,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Jeux d'animations : corps, attaques, mort.
 pub(self) const SET_BODY: u32 = 0x174776;
@@ -74,12 +75,6 @@ pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_Z: u32 = 0x1dbc;
     pub const SOUND_EVENT: u32 = 0x2824;
     pub const ZONE: u32 = 0xfbb0;
     pub const ASK_TARGET: u32 = 0xe76c;
@@ -254,7 +249,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     if x.a5_u8(var::PAUSE) == 0 {
         x.set8(HOVER, 0xff);
     }

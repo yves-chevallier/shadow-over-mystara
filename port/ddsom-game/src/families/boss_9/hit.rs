@@ -2,6 +2,7 @@
 
 use super::moves::{restart, roll};
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::SUB) == 0 {
@@ -92,7 +93,8 @@ fn recoil(x: &mut Cx) {
         smoke_pair(x, 0, 2);
     }
     if x.u8(0x14) != 0 {
-        return x.call(call::MOVE_X);
+        x.move_x();
+        return;
     }
     if x.a5_u8(var::PAUSE) == 0 {
         x.set8(0, 1);
@@ -279,7 +281,7 @@ fn wreck(x: &mut Cx) {
             if d >= 0x100 {
                 x.set32(f::STATE, 0x0600_0000);
             }
-            x.call(call::MOVE_Z);
+            x.move_z();
             anim(x);
             x.set8(0x3b, 9);
         }

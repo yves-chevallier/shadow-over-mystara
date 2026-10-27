@@ -3,15 +3,13 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
-
-const ANIM_START: u32 = 0x1a32;
-const REINSERT: u32 = 0x1ee1a;
-const RNG: u32 = 0x19a88;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Tirage aléatoire du jeu (`0x19a88`) : D0 en sortie.
 fn rand(x: &mut Cx) -> u32 {
-    x.call(RNG);
-    x.c.d[0]
+    let alea = x.random_68k();
+    x.c.d[0] & 0xffff_0000 | alea as u32
 }
 
 /// Type 11 (0x4b93c) : averse de grêlons. Le parent (variante 0) compte 0x70 images en créant, toutes les
@@ -98,8 +96,8 @@ mod hail {
         place(x);
         let r = x.rand_and(3);
         x.set8(PHASE, r as u8);
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        let n = x.c.d[0] as u16;
+        x.anim_start(ANIMS, n);
     }
 
     /// `0x4bae6` : table de vitesses d'après `+0x58`.
@@ -135,13 +133,13 @@ mod hail {
         x.set_d0w(dx);
         x.add16(0x8, dx);
         x.add32(0xc, 0x10000);
-        x.call(MOVE_XY);
+        x.move_xy();
     }
 
     fn child_active(x: &mut Cx) {
         let parent = x.link_a1(PARENT);
         if parent.u8(x.b, 0x5a) == 0 {
-            x.call(ANIM_STEP);
+            x.anim_step();
             let step: u8 = if x.u8(0x2f) != 0 { 0xfe } else { 2 };
             x.c.d[0] = x.c.d[0] & !0xff | step as u32;
             let angle = x.u8(ANGLE).wrapping_add(step) & 0x1f;
@@ -155,26 +153,23 @@ mod hail {
                 let r = x.rand_and(3) + 4;
                 x.set8(PHASE, r as u8);
                 x.set_d0w(r as u16);
-                x.c.a[4] = ANIMS;
-                x.call(ANIM_START);
+                let n = x.c.d[0] as u16;
+                x.anim_start(ANIMS, n);
             }
             if x.u16(0xc) <= 0x58 {
-                return x.call(REINSERT);
+                return x.reinsert();
             }
         }
         // fin de la chute : le grêlon éclate
         x.add8(0x4, 2);
         x.set8(TIMER, 0x20);
         select_table(x);
-        x.c.d[0] = 9;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
-        x.call(REINSERT);
+        x.anim_start(ANIMS, 9);
+        x.reinsert();
     }
 
     fn child_fall(x: &mut Cx) {
-        x.call(ANIM_STEP);
-        if x.c.cond(5) {
+        if x.anim_step() {
             x.add8(0x4, 2);
         }
         let row = (x.u8(ANGLE) as u32) << 2 & 0xffff;
@@ -188,8 +183,8 @@ mod hail {
         x.set16(0x16, 0);
         x.set16(0x1e, 0);
         x.add32(0xc, 0x8000);
-        x.call(MOVE_XY);
-        x.call(REINSERT);
+        x.move_xy();
+        x.reinsert();
     }
 }
 
@@ -206,8 +201,8 @@ mod spark {
             0 => init(x),
             2 => flight(x),
             4 => {
-                x.call(ANIM_STEP);
-                x.call(MOVE_XZ);
+                x.anim_step();
+                x.move_xz();
                 if x.u8(0x1) & 1 == 0 {
                     x.free_peff();
                 }
@@ -242,14 +237,14 @@ mod spark {
             x.set16(0x14, vx.wrapping_neg());
         }
         x.rand_and(1);
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
-        x.call(REINSERT);
+        let n = x.c.d[0] as u16;
+        x.anim_start(ANIMS, n);
+        x.reinsert();
     }
 
     fn flight(x: &mut Cx) {
-        x.call(ANIM_STEP);
-        x.call(MOVE_XZ);
+        x.anim_step();
+        x.move_xz();
         let t = (x.u16(0x58) as i16).wrapping_sub(1);
         x.set16(0x58, t as u16);
         if t >= 0 {
@@ -303,11 +298,9 @@ mod witch {
         x.copy_pos(owner);
         x.add16(0xc, 0x60);
         x.add16(0x10, 1);
-        x.c.d[0] = 0;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        x.anim_start(ANIMS, 0);
         x.call(0x1ac7c);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn child_init(x: &mut Cx) {
@@ -338,13 +331,13 @@ mod witch {
         x.add16(0x8, dx);
         let anim = x.rand_and(1) + 1;
         x.set_d0w(anim as u16);
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
-        x.call(REINSERT);
+        let n = x.c.d[0] as u16;
+        x.anim_start(ANIMS, n);
+        x.reinsert();
     }
 
     fn child_active(x: &mut Cx) {
-        x.call(MOVE_XZ);
+        x.move_xz();
         if (x.u16(0xc) as i16) >= 0 {
             return;
         }
@@ -414,7 +407,7 @@ mod witch {
         if x.u8(0x5d) != 0 && !spawn_spark(x) {
             x.add8(0x5e, 1);
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
     }
 }
 

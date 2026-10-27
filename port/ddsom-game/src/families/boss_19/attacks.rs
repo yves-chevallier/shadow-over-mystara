@@ -14,6 +14,7 @@
 use super::fight;
 use super::*;
 use crate::objects::Obj;
+use crate::objects::Courant;
 
 /// Table des joueurs (FF85DE, 0x200 octets chacun).
 const PLAYERS: u32 = 0xff85de;
@@ -100,7 +101,7 @@ fn back_hop(x: &mut Cx) {
             set_anim(x, 2, 4);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             bounce(x, false);
             if !step(x) {
                 return;
@@ -117,7 +118,7 @@ fn back_hop(x: &mut Cx) {
             if tick_word(x) & 3 == 0 {
                 dust(x, 0x101);
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0x28 {
                 x.set32(0x18, 0);
             }
@@ -149,11 +150,11 @@ fn charge(x: &mut Cx) {
             x.set32(0x1c, 0);
         }
         2 => {
-            x.call(call::MOVE_X);
+            x.move_x();
             if x.u8(MARK) != 0 {
                 return fight::pick_attack_b(x);
             }
-            x.call(call::ANIM_STEP);
+            x.anim_step();
             if tick_word(x) & 3 == 0 {
                 dust(x, 0x101);
             }
@@ -186,7 +187,7 @@ fn breath_step(x: &mut Cx) {
         return fight::pick_attack_b(x);
     }
     aim_choice(x);
-    x.call(call::ANIM_STEP);
+    x.anim_step();
 }
 
 /// Le joueur `a2` est-il utilisable (0x9059e) : place occupée et `+0x182` nul.
@@ -302,7 +303,7 @@ fn aim(x: &mut Cx, p: Obj) {
     set_dw(x, 2, py);
     x.c.a[1] = p.0;
     x.call(0xf0e8);
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 // --- +6 = 6 : saut périlleux en arrière ---------------------------------------------------------------------
@@ -325,7 +326,7 @@ fn backflip(x: &mut Cx) {
             set_anim(x, 2, 7);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             bounce(x, false);
             step(x);
             let t = x.u16(TIMER).wrapping_sub(1);
@@ -359,7 +360,7 @@ fn hop(x: &mut Cx) {
         2 => {
             step(x);
             x.set8(SHIELD, 8);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0x18) as i16) > 0 {
                 return;
             }
@@ -383,7 +384,7 @@ fn hop(x: &mut Cx) {
         6 => {
             x.set8(HURT_BOX, 3);
             x.set8(SHIELD, 8);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             bounce(x, false);
             step(x);
             let t = x.u16(TIMER).wrapping_sub(1);
@@ -420,7 +421,7 @@ fn big_jump(x: &mut Cx) {
         }
         2 => {
             x.set8(SHIELD, 8);
-            x.call(call::MOVE_Z);
+            x.move_z();
             if (x.u16(0xc) as i16) >= 0x100 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x20);
@@ -429,7 +430,7 @@ fn big_jump(x: &mut Cx) {
             if (x.u16(0x18) as i16) < 0 {
                 return lift(x);
             }
-            x.call(call::ANIM_STEP);
+            x.anim_step();
         }
         4 => {
             if sub16(x, TIMER, 1).gt() {
@@ -462,7 +463,7 @@ fn big_jump(x: &mut Cx) {
         }
         6 => {
             x.set8(HURT_BOX, 3);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             bounce(x, true);
             step(x);
             let t = x.u16(TIMER).wrapping_sub(1);

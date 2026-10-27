@@ -5,11 +5,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
-
-const ANIM_START: u32 = 0x1a32;
-const REINSERT: u32 = 0x1ee1a;
-const RNG: u32 = 0x19a88;
-
+use crate::objects::Courant;
 
 /// Type 2 (0x4a880) : halo du joueur qui garde la pose 0x18 (`+0x6a` du joueur) tant que son
 /// animation tourne (jeu 0x1b540c).
@@ -24,10 +20,8 @@ mod halo {
             0 => {
                 x.add8(0x4, 2);
                 place(x);
-                x.c.d[0] = 0;
-                x.c.a[4] = ANIMS;
-                x.call(ANIM_START);
-                x.call(REINSERT);
+                x.anim_start(ANIMS, 0);
+                x.reinsert();
             }
             2 => {
                 let owner = x.link_a1(f::OWNER);
@@ -35,13 +29,12 @@ mod halo {
                     return x.free_peff();
                 }
                 if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 {
-                    x.call(ANIM_STEP);
-                    if x.c.cond(5) {
+                    if x.anim_step() {
                         x.add8(0x4, 2);
                     }
                 }
                 place(x);
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -83,14 +76,12 @@ mod slash {
         x.add8(0x4, 2);
         let owner = x.link_a1(f::OWNER);
         if x.u8(0x3) == 0 {
-            x.c.d[0] = x.u8(0x2f) as u32;
-            x.c.a[4] = ANIMS;
-            return x.call(ANIM_START);
+            let n = (x.u8(0x2f) as u32) as u16;
+            x.anim_start(ANIMS, n);
+            return;
         }
         follow(x, owner, OFFSETS_A);
-        x.c.d[0] = 3;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        x.anim_start(ANIMS, 3);
     }
 
     /// Place la trace devant le joueur (décalage selon sa variante, inversé selon son regard).
@@ -121,12 +112,11 @@ mod slash {
             follow(x, owner, OFFSETS_B);
         }
         if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 {
-            x.call(ANIM_STEP);
-            if x.c.cond(5) {
+            if x.anim_step() {
                 x.add8(0x4, 2);
             }
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 }
 
@@ -182,9 +172,8 @@ mod cure {
         } else {
             x.call(SFX_PRAYER_B);
         }
-        x.c.d[0] = x.u8(0x2f) as u32;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        let n = (x.u8(0x2f) as u32) as u16;
+        x.anim_start(ANIMS, n);
     }
 
     fn init_spark(x: &mut Cx) {
@@ -206,9 +195,7 @@ mod cure {
         x.set8(0x5c, t);
         let r = x.rand_and(1);
         x.set8(0x2f, r as u8);
-        x.c.d[0] = r + 2;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        x.anim_start(ANIMS, (r + 2) as u16);
     }
 
     /// Potion : l'effet se pose sur le joueur qui boit (le soigneur lui-même, ou le premier joueur actif).
@@ -250,16 +237,14 @@ mod cure {
             x.add16(0x10, 0xffff);
             x.set16(0x12, 0x8000);
         }
-        x.c.d[0] = 0;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        x.anim_start(ANIMS, 0);
         x.call(SFX_PRAYER);
     }
 
     /// Variantes 0 et 2 : l'étoile tourne une image puis disparaît ; tous les 4 temps de la durée de
     /// soin (`+0x168` du joueur) elle crée une étincelle.
     fn hold(x: &mut Cx) {
-        x.call(ANIM_STEP);
+        x.anim_step();
         if x.a5_u8(0x3d) == 0 {
             x.add8(0x4, 2);
         }
@@ -269,7 +254,7 @@ mod cure {
         if timer > 0x1e && timer & 3 == 0 {
             spawn_spark(x);
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// `0x4ab82` : étincelle (variante 1) ; le compteur `+0x5f` tourne sur 8.
@@ -285,10 +270,10 @@ mod cure {
     }
 
     fn spark(x: &mut Cx) {
-        x.call(MOVE_Z);
-        x.call(ANIM_STEP);
+        x.move_z();
+        let fin = x.anim_step();
         if x.u8(0x2f) == 0 {
-            if x.c.cond(5) {
+            if fin {
                 x.add8(0x4, 2);
             }
         } else {
@@ -297,7 +282,7 @@ mod cure {
                 x.add8(0x4, 2);
             }
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 }
 
@@ -324,11 +309,10 @@ mod holy {
             0 => init_halo(x),
             2 if !child => active(x),
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -350,9 +334,7 @@ mod holy {
         x.add16(0x8, dx as u16);
         x.add16(0xc, 0x7a);
         x.add16(0x10, 0xffff);
-        x.c.d[0] = 0;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        x.anim_start(ANIMS, 0);
         x.call(SFX_START);
     }
 
@@ -364,9 +346,7 @@ mod holy {
         x.c.d[2] = dy as u32;
         x.add16(0x10, dy);
         let anim = x.u8(0x2f) as u32 + 1;
-        x.c.d[0] = anim;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        x.anim_start(ANIMS, anim as u16);
     }
 
     fn active(x: &mut Cx) {
@@ -375,7 +355,7 @@ mod holy {
             2 => fall(x),
             _ => script(x),
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// Colonne qui clignote de plus en plus lentement, puis s'élève quand le joueur change de geste.
@@ -384,7 +364,7 @@ mod holy {
         x.set_bit(0x1, 1, false);
         let t = x.u16(0x58);
         if t > 0x40 {
-            x.call(ANIM_STEP);
+            x.anim_step();
             let owner = x.link_a1(f::OWNER);
             let action = owner.u8(x.b, 0x7);
             x.c.d[0] = x.c.d[0] & !0xff | action as u32;
@@ -411,17 +391,15 @@ mod holy {
 
     /// Chute de la colonne jusqu'au sol, puis éclatement.
     fn fall(x: &mut Cx) {
-        x.call(ANIM_STEP);
-        x.call(MOVE_Z);
+        x.anim_step();
+        x.move_z();
         if x.u16(0xc) > 8 {
             return;
         }
         x.add8(0x5, 2);
         x.set16(0x58, 0x50);
         x.set16(0xc, 8);
-        x.c.d[0] = 0;
-        x.c.a[4] = ANIMS;
-        x.call(ANIM_START);
+        x.anim_start(ANIMS, 0);
         x.call(BURST_SPAWN);
         x.call(SFX_BURST_A);
         x.call(SFX_BURST_B);

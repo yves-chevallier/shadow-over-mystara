@@ -3,6 +3,7 @@
 
 use super::attacks::squat_begin;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run_c(x: &mut Cx) {
     if !hit_gate(x) {
@@ -78,7 +79,7 @@ fn back_hop(x: &mut Cx, step: u8) {
         6 => wait_key(x),
         8 => {
             x.anim_step();
-            x.call(sub::MOVE_YZ);
+            x.move_yz();
             if (x.u16(SPEED_Z) as i16) < 0 {
                 x.add8(STEP, 2);
                 x.set16(ANIM_TIME, 1);
@@ -86,7 +87,7 @@ fn back_hop(x: &mut Cx, step: u8) {
         }
         10 => {
             x.anim_step();
-            x.call(sub::MOVE_YZ);
+            x.move_yz();
             if x.u32(HEIGHT) as i32 > 0 {
                 return;
             }
@@ -125,7 +126,7 @@ fn forward_hop(x: &mut Cx, step: u8) {
         6 => wait_key(x),
         8 => {
             x.anim_step();
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) < 0 {
                 x.add8(STEP, 2);
                 x.set16(ANIM_TIME, 1);
@@ -133,7 +134,7 @@ fn forward_hop(x: &mut Cx, step: u8) {
         }
         10 => {
             x.anim_step();
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if x.u32(HEIGHT) as i32 > 0 {
                 return;
             }
@@ -170,7 +171,7 @@ fn punch_hop(x: &mut Cx, step: u8) {
             x.add8(STEP, 2);
         }
         8 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             x.anim_step();
             if (x.u16(SPEED_Z) as i16) < 0 {
                 x.add8(STEP, 2);
@@ -179,7 +180,7 @@ fn punch_hop(x: &mut Cx, step: u8) {
             }
         }
         10 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             x.anim_step();
             if x.u32(HEIGHT) as i32 > 0 {
                 return;
@@ -245,7 +246,7 @@ fn leave(x: &mut Cx) {
         return mv(x, 0);
     }
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
     x.anim_step();
     let d = x.u16(X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);
@@ -286,7 +287,7 @@ pub(super) fn run_d(x: &mut Cx) {
                 let n = x.u16(TIMER).wrapping_sub(1);
                 x.set16(TIMER, n);
                 if n != 0 {
-                    x.call(sub::MOVE_TABLE_XY);
+                    x.move_by_table_xy();
                     let d = x.u16(TIMER2).wrapping_sub(x.u16(X)).wrapping_add(0x30);
                     if d < 0x60 {
                         return;
@@ -340,7 +341,7 @@ fn sidestep(x: &mut Cx, step: u8) {
             let n = x.u16(TIMER).wrapping_sub(1);
             x.set16(TIMER, n);
             if n != 0 {
-                x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
                 let d = x.u16(TIMER2).wrapping_sub(x.u16(DEPTH)).wrapping_add(0x20);
                 if d < 0x40 {
                     return;
@@ -351,7 +352,7 @@ fn sidestep(x: &mut Cx, step: u8) {
         4 => wait_key(x),
         6 => {
             x.anim_step();
-            x.call(sub::MOVE_YZ);
+            x.move_yz();
             if (x.u16(SPEED_Z) as i16) < 0 {
                 x.add8(STEP, 2);
                 x.set16(ANIM_TIME, 1);
@@ -359,7 +360,7 @@ fn sidestep(x: &mut Cx, step: u8) {
         }
         8 => {
             x.anim_step();
-            x.call(sub::MOVE_YZ);
+            x.move_yz();
             if x.u32(HEIGHT) as i32 > 0 {
                 return;
             }

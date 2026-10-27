@@ -61,6 +61,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const TYPE_GREEN: u8 = 0xe;
 pub(self) const TYPE_BLACK: u8 = 0x13;
@@ -76,16 +77,8 @@ const DEAD_HOST: u32 = 0x0406_0000;
 pub(self) const FREE: u32 = 0x0600_0000;
 
 pub(self) mod call {
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_Z: u32 = 0x1dbc;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const ANIM_START: u32 = 0x1a32;
-    pub const ANIM_STEP: u32 = 0x1a56;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const PICK_TARGET: u32 = 0x424e;
-    pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
     pub const EFFECT: u32 = 0xb10c8;
     pub const BURST: u32 = 0xabec8;
 }
@@ -94,7 +87,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -125,7 +118,9 @@ pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
     }
     x.set8(ANIM_SET, set);
     x.set8(ANIM_N, n as u8);
-    x.call(call::ANIM_START);
+    let set = x.c.a[4];
+    let n = x.c.d[0] as u16;
+    x.anim_start(set, n);
 }
 
 /// Animation de repos (jeu 0).
@@ -134,8 +129,7 @@ pub(self) fn rest(x: &mut Cx) {
 }
 
 fn step(x: &mut Cx) -> bool {
-    x.call(call::ANIM_STEP);
-    carry(x)
+    x.anim_step()
 }
 
 // --- changements d'état ---------------------------------------------------------------------------
@@ -332,7 +326,7 @@ fn hover(x: &mut Cx) {
         }
         if physics {
             // oscillation : l'accélération s'inverse de part et d'autre de 0x20
-            x.call(call::MOVE_Z);
+            x.move_z();
             let (mut a, mut b) = (0x20i16, -0x200i16);
             let accel = x.u16(0x1a) as i16;
             if x.u16(0xc) as i16 >= 0x20 {

@@ -11,6 +11,7 @@
 use super::decide;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 mod lib {
     pub const SOUND_SHAKE: u32 = 0x2860;
@@ -261,7 +262,7 @@ fn swoop_b(x: &mut Cx) {
             fly(x, 5);
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }
@@ -286,7 +287,7 @@ fn swoop_b(x: &mut Cx) {
             if sub16(x, TIMER, 1).le() {
                 return decide::stand(x);
             }
-            x.call(call::MOVE_X);
+            x.move_x();
             step(x);
         }
         _ => {}
@@ -326,21 +327,21 @@ fn leap(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0x100).le() {
                 x.add8(0x7, 2);
                 fly(x, 8);
             }
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0xff00).le() {
                 x.add8(0x7, 2);
                 fly(x, 9);
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }
@@ -366,7 +367,7 @@ fn leap(x: &mut Cx) {
             if sub16(x, TIMER, 1).le() {
                 return resume_chase(x);
             }
-            x.call(call::MOVE_X);
+            x.move_x();
             step(x);
         }
         _ => {}

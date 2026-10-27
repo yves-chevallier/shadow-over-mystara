@@ -15,7 +15,8 @@
 //! Animations 0x15eed8 (mouvements) et 0x15eef4 (coups). Beaucoup de gestes partagent trois étapes communes :
 //! `next_anim` (0x6935c), `wait` (0x69346, attente de `+0x77` images) et `turn` (0x6899a, demi-tour).
 
-use super::cx::{handlers, sub, Cx};
+use crate::objects::Courant;
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod attacks;
@@ -60,7 +61,6 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 
 pub(self) mod call {
     pub const REMOVE: u32 = 0x27ee;
-    pub const SCREEN_CHECK: u32 = 0x1e90;
 }
 
 pub fn run(x: &mut Cx) {
@@ -81,12 +81,12 @@ pub fn run(x: &mut Cx) {
 
 /// Démarre l'animation `n` du jeu des mouvements.
 pub(self) fn mv(x: &mut Cx, n: u32) {
-    x.anim_start(SET_MOVE, n);
+    x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Démarre l'animation `n` du jeu des coups.
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// Fixe le type de coup et sa force.

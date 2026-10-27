@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Table des montées de l'ogre qui suit son bras, indexée par la clé d'animation (longs).
 const RISE: u32 = 0x713e8;
@@ -140,7 +141,7 @@ fn fly_up_b(x: &mut Cx) {
             }
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -162,7 +163,7 @@ fn fly_up_b(x: &mut Cx) {
                 spark(x, 3);
             }
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else {
                 go::stand(x);
@@ -309,21 +310,21 @@ fn crash(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) <= 0x100 {
                 x.add8(STEP, 2);
                 act(x, 8);
             }
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) <= -0x100 {
                 x.add8(STEP, 2);
                 act(x, 9);
             }
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -346,7 +347,7 @@ fn crash(x: &mut Cx) {
                 spark(x, 3);
             }
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else {
                 end_with(x, false);

@@ -6,11 +6,13 @@
 //! (non nul) ou celle des acteurs. Le créateur renseigne `+3` (variante) et souvent `+0x4c` /
 //! `+0x2f` / `+0x14` (paramètres propres au type).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::shell::{suspended, GAME_PAUSED};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Variables de la RAM de travail (A5+) : caméra du jeu et caméra secondaire.
 mod ram {
@@ -33,7 +35,7 @@ const ANIMS: u32 = 0x1c03a6;
 /// liste des acteurs sinon.
 fn reinsert_by_layer(x: &mut Cx) {
     if x.u8(0x42) != 0 {
-        x.call(sub::REINSERT_FOREGROUND);
+        x.reinsert_foreground();
     } else {
         x.reinsert();
     }
@@ -129,7 +131,7 @@ mod scenery {
         x.set16(0x14, 0);
         x.set8(0x42, 0);
         let variant = x.u8(0x3) as u32;
-        x.anim_start(ANIMS, variant);
+        x.anim_start(ANIMS, variant as u16);
         match x.rom8(INIT_KIND + variant) {
             0 => {}
             1 => {
@@ -145,8 +147,7 @@ mod scenery {
             }
             3 => {
                 x.set8(0x2d, 0);
-                x.c.d[0] = 0xd;
-                x.call(sub::SPEED_TABLE_B);
+                x.select_speed(&crate::objects::motion::SPEEDS_B, 0xd);
             }
             4 => {
                 let v = x.a5_u16(ram::CAMERA2_X);
@@ -256,7 +257,7 @@ mod scenery {
             6 => reinsert_by_layer(x),
             8 => wait_script_end(x, 2),
             9 => {
-                x.call(sub::MOVE_XY);
+                x.move_xy();
                 if x.u16(0x10) > 0x240 {
                     x.add8(0x4, 2);
                 }
@@ -273,7 +274,7 @@ mod scenery {
                 x.add32(0xc, d2);
             }
             18 => {
-                x.call(sub::MOVE_Y);
+                x.move_y();
                 if x.u8(0x1) & 1 == 0 {
                     x.add8(0x4, 2);
                 }
@@ -286,14 +287,14 @@ mod scenery {
             }
             21 => {
                 if x.a5_u8(0x42) == 0 {
-                    x.anim_start(ANIMS, variant);
+                    x.anim_start(ANIMS, variant as u16);
                 } else {
                     wait_script_end(x, 2)
                 }
             }
             22 => {
                 if x.a5_u8(0x42) != 0 {
-                    x.call(sub::MOVE_XY);
+                    x.move_xy();
                     if x.u16(0x10) > 0x240 {
                         x.add8(0x4, 2);
                     }
@@ -331,7 +332,7 @@ mod fixture {
             0 => {
                 x.add8(0x4, 2);
                 let variant = x.u8(0x3) as u32;
-                x.anim_start(ANIMS, variant);
+                x.anim_start(ANIMS, variant as u16);
                 x.reinsert();
                 if x.rom8(INIT_KIND + variant) == 1 {
                     let v = x.u16(0x8);
@@ -406,7 +407,7 @@ mod flasher {
     fn restart(x: &mut Cx) {
         x.set8(0x14, BLINKS);
         let variant = x.u8(0x3) as u32;
-        x.anim_start(ANIMS, variant);
+        x.anim_start(ANIMS, variant as u16);
     }
 }
 
@@ -430,7 +431,7 @@ mod tag {
                 x.add8(0x4, 2);
                 x.set16(0x18, OFFSET_X);
                 x.set16(0x1a, OFFSET_Y);
-                x.anim_start(ANIMS, ANIM);
+                x.anim_start(ANIMS, ANIM as u16);
                 x.reinsert();
             }
             2 => {
@@ -483,8 +484,6 @@ mod scene {
     /// Palettes de la page des éléments (GFX RAM) : 16 couleurs.
     const PALETTE_A: u32 = 0x91c080;
     const PALETTE_B: u32 = 0x91c3e0;
-    /// Générateur de nombres aléatoires.
-    const RANDOM: u32 = 0x19a88;
     /// Création d'un objet SET dont le type est dans D0.
     const SPAWN_SET: u32 = 0xc8312;
 
@@ -566,7 +565,7 @@ mod scene {
 
     /// Démarre le script `n` et remet l'objet en place dans la liste des acteurs.
     fn start(x: &mut Cx, n: u32) {
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS, n as u16);
         x.reinsert();
     }
 
@@ -602,8 +601,8 @@ mod scene {
 
     fn random_flip(x: &mut Cx) {
         x.set8(0x2c, 0);
-        x.call(RANDOM);
-        if x.c.d[0] & 1 != 0 {
+        let alea = x.random_68k();
+        if alea as u32 & 1 != 0 {
             x.set8(0x2c, 0x20);
         }
     }
@@ -618,7 +617,7 @@ mod scene {
         let flip = x.rom8(e + 4);
         x.set8(0x2c, flip);
         let n = x.rom16(e + 6) as u32;
-        x.anim_start(set, n);
+        x.anim_start(set, n as u16);
         if (x.u8(0x2c) as i8) < 0 {
             random_flip(x);
         }
@@ -841,7 +840,7 @@ mod scene {
         x.set16(0x8, px);
         let stop = x.rom16(V6_TABLE + 4 * v + 2);
         x.set16(0x14, stop);
-        x.anim_start(ANIMS, v + 0xfe);
+        x.anim_start(ANIMS, (v + 0xfe) as u16);
         x.reinsert();
     }
 
@@ -1113,8 +1112,7 @@ mod scene {
         let v = x.u8(0x2f) as u16;
         x.add16(0xc, v << 3);
         x.add16(0xc, v << 4);
-        x.c.a[4] = V13_SCRIPTS + 16 * v as u32;
-        x.call(0x1a3c);
+        x.anim_start_entry(V13_SCRIPTS + 16 * v as u32);
         x.reinsert();
     }
 
@@ -1137,7 +1135,7 @@ mod scene {
         x.set16(0x10, v);
         let v = x.rom8(row + 6);
         x.set8(0x2c, v);
-        x.anim_start(ANIMS, 0x190 + which as u32);
+        x.anim_start(ANIMS, (0x190 + which as u32) as u16);
         x.reinsert();
     }
 
@@ -1286,18 +1284,18 @@ mod scene {
         x.set16(0x8, v);
         x.add16(0xc, 0x110);
         x.set16(0x10, 0x10);
-        x.call(RANDOM);
-        let k = x.c.d[0] & 7;
+        let alea = x.random_68k();
+        let k = alea as u32 & 7;
         let dx = x.rom16(V20_X + 2 * k);
         x.add16(0x8, dx);
         x.set32(0x14, 0);
         x.set16(0x18, 0);
-        x.call(RANDOM);
-        let k = x.c.d[0] & 3;
+        let alea = x.random_68k();
+        let k = alea as u32 & 3;
         let az = x.rom16(V20_FALL + 4 * k);
         x.set16(0x1a, az);
         let anim = x.rom16(V20_FALL + 4 * k + 2) as u32;
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS, anim as u16);
         x.reinsert();
     }
 
@@ -1310,7 +1308,7 @@ mod scene {
 
     /// Chute : sort (état mort) quand le bas du sprite repasse au-dessus du bord haut de l'écran.
     fn v20_fall(x: &mut Cx) {
-        x.call(sub::MOVE_XZ);
+        x.move_xz();
         let below = x.u16(0xc).wrapping_add(x.u16(0x10));
         if (below as i16) <= x.a5_u16(ram::CAMERA_Y) as i16 {
             kill(x);
@@ -1425,7 +1423,7 @@ mod hint {
         load_palette(x);
         x.set8(0x16, ADVICE_FRAMES);
         x.set16(0x14, FIRST_ADVICE as u16);
-        x.anim_start(ANIMS, FIRST_ADVICE);
+        x.anim_start(ANIMS, FIRST_ADVICE as u16);
     }
 
     /// Palette de la bulle, luminosité maximale ; l'objet devient visible (`+0x2a`, `+0x2b`).
@@ -1496,7 +1494,7 @@ mod hint {
         x.set8(0x16, ADVICE_FRAMES);
         let n = x.u16(0x14).wrapping_add(1);
         x.set16(0x14, n);
-        x.anim_start(ANIMS, n as u32);
+        x.anim_start(ANIMS, (n as u32) as u16);
         follow(x);
     }
 
@@ -1582,7 +1580,7 @@ mod frame {
                 place(x);
                 let variant = x.u8(0x3) as u32;
                 let anim = x.rom16(ANIM_BY_VARIANT + 2 * variant) as u32;
-                x.anim_start(ANIMS, anim);
+                x.anim_start(ANIMS, anim as u16);
                 x.reinsert();
             }
             2 => {
@@ -1707,7 +1705,7 @@ mod arrow {
         let advice = advice_of_owner(x);
         let i = advice.wrapping_sub(0x118).wrapping_mul(2);
         let anim = x.rom16(ANIM_BY_ADVICE.wrapping_add(i as i16 as i32 as u32)) as u32;
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS, anim as u16);
     }
 
     fn step(x: &mut Cx) {
@@ -1921,7 +1919,7 @@ mod hud_dot {
                 stick_to_camera(x);
                 // `move.w #0x1ab,D0w ; add.b (3,A0),D0b` : l'addition ne déborde pas sur l'octet haut
                 let n = 0x100 | (0xab + x.u8(0x3) as u32) & 0xff;
-                x.anim_start(ANIMS, n);
+                x.anim_start(ANIMS, n as u16);
                 x.reinsert();
             }
             2 => stick_to_camera(x),
@@ -2043,7 +2041,7 @@ mod stage_title {
         if x.a5_u16(ALT) != 0 {
             anim = anim.wrapping_add(0x10d);
         }
-        x.anim_start(ANIMS, anim as u32);
+        x.anim_start(ANIMS, (anim as u32) as u16);
         place(x);
     }
 
@@ -2053,8 +2051,8 @@ mod stage_title {
         x.set16(0x18, STEP_FRAMES);
         x.set16(0x1c, STEPS);
         fade_to(x, STEPS);
-        x.c.a[4] = if x.a5_u16(ALT) != 0 { SCRIPT_2B_ALT } else { SCRIPT_2B };
-        x.call(0x1a3c);
+        let at = if x.a5_u16(ALT) != 0 { SCRIPT_2B_ALT } else { SCRIPT_2B };
+        x.anim_start_entry(at);
         place(x);
     }
 
@@ -2184,7 +2182,7 @@ mod target {
                 let v = x.u16(0x10);
                 x.set16(0x12, v);
                 let variant = x.u8(0x3) as u32;
-                x.anim_start(0x1c40c6, variant);
+                x.anim_start(0x1c40c6, variant as u16);
                 x.reinsert();
             }
             2 => {

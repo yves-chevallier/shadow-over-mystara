@@ -113,7 +113,7 @@ fn sidestep(x: &mut Cx) {
         }
         2 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::MOVE_X);
+                x.move_x();
                 return step_only(x);
             }
             x.add8(0x7, 2);
@@ -127,7 +127,7 @@ fn sidestep(x: &mut Cx) {
         }
         4 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::MOVE_X);
+                x.move_x();
                 return step_only(x);
             }
             x.add8(0x7, 2);
@@ -138,11 +138,11 @@ fn sidestep(x: &mut Cx) {
             }
             x.set16(0x16, v as u16);
             strike(x, 3);
-            x.call(call::MOVE_X);
+            x.move_x();
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::MOVE_X);
+                x.move_x();
                 return step_only(x);
             }
             finish(x, decide::chase);
@@ -222,7 +222,7 @@ fn chase_spell(x: &mut Cx) {
                 x.call(call::ASK_TARGET);
                 speed(x, 0x21);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_only(x);
         }
         4 => {
@@ -266,7 +266,7 @@ fn hop_back(x: &mut Cx) {
             strike_anim(x, 0x14, 6);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0x18).gt() {
                 return step_only(x);
             }
@@ -276,7 +276,7 @@ fn hop_back(x: &mut Cx) {
             strike(x, 7);
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }
@@ -293,7 +293,7 @@ fn hop_back(x: &mut Cx) {
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::MOVE_X);
+                x.move_x();
                 return step_only(x);
             }
             finish(x, decide::stand);
@@ -771,3 +771,4 @@ fn volley(x: &mut Cx) {
 }
 
 use crate::objects::Obj;
+use crate::objects::Courant;

@@ -11,6 +11,7 @@
 //! ceux des autres personnages (`items`) ; les magies 0x18..0x24 lui sont propres. Les routines
 //! d'origine qui créent tirs, effets et sons restent appelées telles quelles.
 
+use crate::machine::Machine;
 use super::common::{self, call, countdown, field, is_cancelled, next_step, take_event};
 use super::foes::{self, Boost, Damage, Live, Strike};
 use super::items;

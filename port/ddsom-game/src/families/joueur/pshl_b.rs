@@ -4,8 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
-
-const REINSERT: u32 = 0x1ee1a;
+use crate::objects::Courant;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -46,8 +45,8 @@ mod ground {
                     x.anim(ANIMS, anim as u32);
                 }
                 colors(x);
-                x.call(ANIM_STEP);
-                x.call(REINSERT);
+                x.anim_step();
+                x.reinsert();
             }
             2 => {
                 let owner = x.link_a1(f::OWNER);
@@ -61,7 +60,7 @@ mod ground {
                     pose(x);
                 }
                 x.set32(0x34, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_pshl(),
         }
@@ -165,7 +164,6 @@ mod shadow {
     const ANIMS: u32 = 0x15c4a8;
     const ANGLES: u32 = 0x52eda;
     const PICK: u32 = 0x52ed4;
-    const SPEED_SELECT: u32 = 0x1b64;
     const SFX_FALL: u32 = 0xeb2f2;
     const SFX_STRIKE: u32 = 0xeb364;
 
@@ -204,14 +202,16 @@ mod shadow {
         let angle = x.rom8(ANGLES + v);
         x.set8(0x2d, angle);
         x.set_d0w(0x17);
-        x.call(SPEED_SELECT);
-        x.call(MOVE_XY);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+        x.move_xy();
         let v = x.u8(0x3) as u32;
         x.c.d[0] = v;
         let angle = x.rom8(ANGLES + v);
         x.set8(0x2d, angle);
         x.set_d0w(0xd);
-        x.call(SPEED_SELECT);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.set16(0x1a, -0x30i16 as u16);
         let v = x.u8(0x3) as u32;
         let pick = x.rom8(PICK + v);
@@ -253,9 +253,9 @@ mod shadow {
 
     fn fall(x: &mut Cx) {
         if x.u8(0x5) == 0 {
-            x.call(MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(0xc) as i16) >= 0 {
-                return x.call(REINSERT);
+                return x.reinsert();
             }
             x.add8(0x5, 2);
             x.set8(f::POWER, 0xc);
@@ -267,7 +267,7 @@ mod shadow {
             }
             x.set8(f::HIT_FLAGS, 0);
             x.set8(0x3, 0);
-            x.call(REINSERT);
+            x.reinsert();
         } else {
             let owner = x.link_a1(f::OWNER);
             if owner.u8(x.b, 0x1ec) == 0 && x.u8(f::HIT_FLAGS) & 2 != 0 {
@@ -275,18 +275,17 @@ mod shadow {
                 let hp = owner.u16(x.b, 0x62).wrapping_sub(0xc);
                 owner.set_u16(x.b, 0x62, if (hp as i16) > 0 { hp } else { 1 });
             }
-            x.call(ANIM_STEP);
-            if x.c.cond(5) {
+            if x.anim_step() {
                 x.add8(0x4, 2);
             }
-            x.call(REINSERT);
+            x.reinsert();
         }
     }
 
     fn throw(x: &mut Cx) {
-        x.call(MOVE_XZ);
+        x.move_xz();
         if (x.u16(0xc) as i16) >= 0 {
-            return x.call(REINSERT);
+            return x.reinsert();
         }
         x.add8(0x4, 2);
         let mut offset = 0u16;
@@ -310,15 +309,14 @@ mod shadow {
             x.c.d[4] = offset as u32;
             x.c.d[3] = rank as u32;
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn strike(x: &mut Cx) {
-        x.call(ANIM_STEP);
-        if x.c.cond(5) {
+        if x.anim_step() {
             x.add8(0x4, 2);
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 }
 

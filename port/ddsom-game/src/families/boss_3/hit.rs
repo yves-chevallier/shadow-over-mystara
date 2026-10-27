@@ -9,6 +9,7 @@
 //! | 10 | retour au combat |
 
 use super::*;
+use crate::objects::Courant;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs, toutes communes).
 const REACTIONS: u32 = 0x80b0a;
@@ -65,7 +66,7 @@ fn pushed_back(x: &mut Cx) {
         }
         return body_anim(x, 9);
     }
-    x.call(call::MOVE_X);
+    x.move_x();
     if (x.u8(0x14) as i8) < 0 {
         return stop(x);
     }
@@ -152,7 +153,7 @@ fn death(x: &mut Cx) {
         }
         2 => falling(x),
         4 => {
-            x.call(call::MOVE_X);
+            x.move_x();
             if !x.anim_step() {
                 return;
             }
@@ -166,7 +167,7 @@ fn death(x: &mut Cx) {
 /// 0x80da2 : chute jusqu'au sol, puis rebond.
 fn falling(x: &mut Cx) {
     x.anim_step();
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if (x.u16(0xc) as i16) >= 0 {
         return;
     }

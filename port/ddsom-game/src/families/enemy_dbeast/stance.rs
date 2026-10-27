@@ -2,6 +2,7 @@
 //! d'une attaque. Les étapes sont `+6` : 0 et 8 poursuite, 2 demi-tour, 4 attente, 6 approche.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Choix d'une attaque dans une table de la ROM : `+4 = 0x0204` (attaque) et `+6` tiré dans la
 /// table du niveau de difficulté (`A5+0x7f92`).
@@ -249,9 +250,7 @@ fn choose_attack_a(x: &mut Cx, close: bool) {
     x.set8(f::SUB2, pick.wrapping_add(base));
     x.set16(f::STATE, 0x0204);
     x.set8(0x7, 0);
-    x.c.d[0] = 0;
-    x.call(0x1e92);
-    if x.c.cond(5) {
+    if x.in_arena(0) {
         return;
     }
     // hors de l'écran : pas de bond

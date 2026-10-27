@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 // --- aides communes -----------------------------------------------------------------------------
 
@@ -42,8 +43,8 @@ fn reached(x: &mut Cx, limit: Option<u16>) -> bool {
 
 /// Pas de course vers l'avant à vitesse horizontale `+0x14` : animation, déplacement, poussière à la mi-pas.
 fn gallop_step(x: &mut Cx) {
-    x.call(call::ANIM_STEP);
-    x.call(ia::MOVE_X);
+    x.anim_step();
+    x.move_x();
     if x.u8(KEY) == 2 {
         x.set8(KEY, 0);
         dust(x, 1);
@@ -78,7 +79,7 @@ fn slide(x: &mut Cx) {
         next7(x);
         body(x, 0xa);
     } else {
-        x.call(ia::MOVE_X);
+        x.move_x();
         step(x);
     }
 }
@@ -154,7 +155,7 @@ fn transformation(x: &mut Cx) {
         }
         2 => {
             if !expired(x, TIMER) {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
                 return;
             }
             next7(x);
@@ -175,7 +176,7 @@ fn transformation(x: &mut Cx) {
                 next7(x);
                 body(x, 0xf);
             } else {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
             }
         }
         6 => {
@@ -186,7 +187,7 @@ fn transformation(x: &mut Cx) {
                 x.call(0xe3bd6);
                 body(x, 0x10);
             } else {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
             }
         }
         8 => {
@@ -197,7 +198,7 @@ fn transformation(x: &mut Cx) {
                 x.set_a5_u16(0x51e, 0);
                 run_start(x);
             } else {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
             }
         }
         _ => {}
@@ -250,7 +251,7 @@ fn partner_arrival(x: &mut Cx) {
                 x.call(0xe3bd6);
                 body(x, 0xd);
             } else {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
             }
         }
         10 => {
@@ -261,7 +262,7 @@ fn partner_arrival(x: &mut Cx) {
                 x.call(0xd5ef8);
                 run_start(x);
             } else {
-                x.call(call::ANIM_STEP);
+                x.anim_step();
             }
         }
         _ => {}
@@ -421,7 +422,7 @@ fn keep_running(x: &mut Cx) {
         return turn(x);
     }
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(call::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     step(x);
 }
@@ -576,14 +577,14 @@ fn arc_jump(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(ia::MOVE_XZ);
+            x.move_xz();
             if Fl::sub16(x.u16(0x18), 0x100).le() {
                 next7(x);
                 entry(x, 5);
             }
         }
         4 => {
-            x.call(ia::MOVE_XZ);
+            x.move_xz();
             if Fl::sub16(x.u16(0x18), (-0x100i16) as u16).le() {
                 next7(x);
                 x.set16(0x1a, (-0x40i16) as u16);
@@ -591,7 +592,7 @@ fn arc_jump(x: &mut Cx) {
             }
         }
         6 => {
-            x.call(ia::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) <= 0 {
                 next7(x);
                 x.set16(0xc, 0);

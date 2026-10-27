@@ -3,6 +3,7 @@
 
 use super::stance::{approach_restart, approach_start};
 use super::*;
+use crate::objects::Courant;
 
 /// Les quatre sauts sur la cible du sous-état 4 (`+6` = 12, 16, 18 et 20) : les trois derniers retombent plus haut
 /// et plus loin, les deux derniers enchaînent encore un coup (étapes `+7` = 12 et plus).
@@ -227,7 +228,7 @@ fn leap_start(x: &mut Cx, height: u32, shift: i16) {
 
 /// 0x6b8a8 : retombée du saut.
 fn land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     if (x.u16(HEIGHT) as i16) > 0 {
         return;
     }
@@ -490,7 +491,7 @@ fn lunge(x: &mut Cx) {
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
         }
         _ => {}

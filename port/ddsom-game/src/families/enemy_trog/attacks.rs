@@ -3,6 +3,7 @@
 //! `+5 = 6` : gardes et bonds. `+5 = 8` : coups de repli. `+7` est l'étape.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Poussée d'esprit inconnue de la ROM : lecture de la table de coups d'un bond, par difficulté.
 fn pick_jump_move(x: &mut Cx) {
@@ -160,7 +161,7 @@ fn leap_strike(x: &mut Cx, id: u8) {
 
 /// Montée et chute d'un bond, puis animation de réception (0xc).
 fn land_with(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     if step(x) && (x.u16(HEIGHT) as i16) < 0 {
         x.add8(STEP, 2);
         x.set16(HEIGHT, 0);
@@ -420,7 +421,7 @@ fn side_hop(x: &mut Cx) {
         }
         return body(x, 0xa);
     }
-    x.call(sub::MOVE_YZ);
+    x.move_yz();
     if step(x) && (x.u16(HEIGHT) as i16) < 0 {
         x.set16(HEIGHT, 0);
         back_to_stance(x);
@@ -461,7 +462,7 @@ fn hop_strike(x: &mut Cx) {
     match x.u8(STEP) {
         0 => hop_strike_begin(x),
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             step(x);
             let h = x.u16(HEIGHT) as i16;
             if h < 0 {
@@ -572,7 +573,7 @@ fn sidestep(x: &mut Cx) {
             }
         }
         4 => {
-            x.call(sub::MOVE_YZ);
+            x.move_yz();
             if step(x) && (x.u16(HEIGHT) as i16) < 0 {
                 x.set8(LOOK_PREV, 0xe0);
                 x.set16(HEIGHT, 0);

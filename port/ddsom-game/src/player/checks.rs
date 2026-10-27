@@ -9,6 +9,7 @@
 //! Entrées (`KEYS_HELD`, `KEYS_NEW`) : bits 0..3 directions, 4 bouton 1 (attaque), 5 bouton 2 (saut),
 //! 6 bouton 3 (lancer), 7 bouton 4 (spécial).
 
+use crate::machine::Machine;
 use super::actions::to_stand;
 use super::{animation, combos};
 use super::states::{action, main, state, sub, State};

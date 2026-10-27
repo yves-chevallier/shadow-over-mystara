@@ -2,6 +2,7 @@
 //! `+6` = 0 marche (croix : X, profondeur), bouton 4 : coup, bouton 5 : saut ; `+6` = 2 : saut en arc.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -63,7 +64,7 @@ fn arc(x: &mut Cx) {
         x.set16(GRAVITY, -0x40i16 as u16);
         return;
     }
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     if (x.u16(HEIGHT) as i16) > 0 {
         return;
     }

@@ -3,6 +3,7 @@
 //! toujours testées.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x68542;
@@ -58,7 +59,8 @@ fn recoil(x: &mut Cx) {
         }
     }
     if x.u8(SPEED_X) != 0 {
-        return x.call(sub::MOVE_X);
+        x.move_x();
+        return;
     }
     x.set32(0x58, 0);
     let anim = if x.u8(GROUP) != 0 { 8 } else { 3 };
@@ -144,10 +146,9 @@ fn grab(x: &mut Cx) {
         4 => {
             x.anim_step();
             if (x.u8(KEY) as i8) >= 0 {
-                x.call(sub::MOVE_X);
+                x.move_x();
             }
-            x.call(call::SCREEN_CHECK);
-            if !x.c.cond(5) {
+            if !x.in_arena_default() {
                 x.call(call::REMOVE);
                 set_state_long(x, st::DEAD_LONG);
                 return;

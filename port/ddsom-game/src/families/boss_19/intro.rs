@@ -9,6 +9,7 @@
 
 use super::fight;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.a5_u8(0x30) == 0 {
@@ -103,7 +104,7 @@ fn green_enter_b(x: &mut Cx) {
 }
 
 fn green_descend(x: &mut Cx) {
-    x.call(call::MOVE_Z);
+    x.move_z();
     if cmp16(x, 0xc, 0x60).ge() {
         x.add8(f::SUB2, 2);
         x.set16(0x18, 0x380);
@@ -111,17 +112,17 @@ fn green_descend(x: &mut Cx) {
         x.set16(0x1c, (-0x200i16) as u16);
         x.set16(0x1e, 0);
         x.set32(0x14, 0);
-        x.call(0x1f0be);
+        x.unlink();
         return green_land(x);
     }
     x.call(0xb3f6a);
-    x.call(0x1f0be);
-    x.call(call::REINSERT_FOREGROUND);
+    x.unlink();
+    x.reinsert_foreground();
 }
 
 fn green_land(x: &mut Cx) {
     step(x);
-    x.call(call::MOVE_XYZ);
+    x.move_xyz();
     if !tst16(x, 0x18).pl() {
         x.add8(f::SUB2, 2);
         x.set32(0x14, 0);
@@ -216,7 +217,7 @@ fn enter(x: &mut Cx) {
 
 /// Vol d'approche : la retombée est coupée sous l'altitude 0x20.
 fn glide(x: &mut Cx) {
-    x.call(call::MOVE_XYZ);
+    x.move_xyz();
     if x.u16(0x18) != 0 && (x.u16(0xc) as i16) < 0x20 {
         x.set16(0x18, 0);
     }

@@ -13,10 +13,11 @@
 //! - 77 : fondu sonore (deux volumes qui montent par paliers, puis arrêt) ;
 //! - 89 : personnage qui entre par la gauche, attend un signal de la scène et ressort par la droite.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use crate::mem::{rd32, wr32, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Champs partagés.
 mod f {
@@ -37,10 +38,6 @@ mod rom {
     pub const SHAKE: u32 = 0x289c;
     /// Crée une tâche (A0 = programme, D0 = paramètre).
     pub const NEW_TASK: u32 = 0x9b6;
-    /// Animation d'un joueur (D6 = numéro, A0 = joueur).
-    pub const PLAYER_ANIM: u32 = 0x2cf0;
-    /// Liste des objets actifs remise à jour.
-    pub const ACTIVE_LIST: u32 = 0x1f0be;
 }
 
 /// Caméra (x, profondeur) et caméra secondaire.
@@ -154,7 +151,7 @@ fn opening(x: &mut Cx) {
 
 fn opening_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
-    x.call(sub::REINSERT_FOREGROUND);
+    x.reinsert_foreground();
     let v = x.u8(f::VARIANT) as u32;
     let target = x.rom16(opening::TARGETS + 2 * v);
     x.set16(opening::TARGET, target);
@@ -166,7 +163,8 @@ fn opening_init(x: &mut Cx) {
         x.set8(0x2b, 0x1d);
         x.set8(0x2a, 1);
         load_palette(x, opening::PALETTE, opening::PALETTE_RAM);
-        return x.anim_start(opening::ANIM_SET, 0x20);
+        x.anim_start(opening::ANIM_SET, 0x20);
+        return;
     }
     // son décor d'accompagnement (SOBJ 3), qui garde un lien long vers l'effet
     if let Some(o) = x.alloc(&pools::SOBJ) {
@@ -254,8 +252,7 @@ mod mirrored {
 }
 
 fn mirrored(x: &mut Cx) {
-    x.call(sub::PAUSE_HOOK);
-    if x.c.sr & m68k::SR_Z == 0 {
+    if x.suspended() {
         return;
     }
     match x.u8(f::STATE) {
@@ -314,7 +311,7 @@ fn mirrored_follow(x: &mut Cx) {
             if (anim as i8) < 0 {
                 return mirrored_hide(x);
             }
-            x.anim_start(mirrored::ANIM_SET, anim as u32);
+            x.anim_start(mirrored::ANIM_SET, (anim as u32) as u16);
             x.set_bit(f::FLAGS, 1, false);
         }
     }
@@ -370,8 +367,7 @@ fn crossing_steps(x: &mut Cx) {
             // vol en cloche jusqu'au sol
             0 => {
                 x.anim_step();
-                x.call(sub::MOVE_XZ);
-                if x.c.sr & m68k::SR_N == 0 {
+                if x.move_xz().pl() {
                     return;
                 }
                 next_step(x, 1, 0x18);
@@ -379,7 +375,7 @@ fn crossing_steps(x: &mut Cx) {
             // glisse sur sa lancée
             4 => {
                 x.anim_step();
-                x.call(sub::MOVE_X);
+                x.move_x();
                 if !timer_out(x) {
                     return;
                 }
@@ -433,7 +429,8 @@ fn crossing_steps(x: &mut Cx) {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
-                return x.anim_start(crossing::ANIM_SET, 7);
+                x.anim_start(crossing::ANIM_SET, 7);
+                return;
             }
             _ => return,
         }
@@ -445,7 +442,7 @@ fn crossing_steps(x: &mut Cx) {
 fn next_step(x: &mut Cx, anim: u32, timer: u16) {
     x.add8(f::SUB_STATE, 4);
     x.set16(crossing::TIMER, timer);
-    x.anim_start(crossing::ANIM_SET, anim);
+    x.anim_start(crossing::ANIM_SET, anim as u16);
     x.reinsert();
 }
 
@@ -478,7 +475,7 @@ fn passage(x: &mut Cx) {
             x.set16(Obj::X, px);
             x.set16(Obj::Y, py);
             x.set16(Obj::Z, 0);
-            x.anim_start(passage::ANIM_SET, v);
+            x.anim_start(passage::ANIM_SET, v as u16);
             x.reinsert();
         }
         2 => {
@@ -509,7 +506,7 @@ fn passage_open(x: &mut Cx) {
     if x.a5_u8(passage::FADE) != 0 {
         return;
     }
-    x.call(rom::ACTIVE_LIST);
+    x.unlink();
     for p in living_players(x) {
         let (px, pz, py) = (p.u16(x.b, Obj::X), p.u16(x.b, Obj::Z), p.u16(x.b, Obj::Y));
         p.set_u16(x.b, Obj::X, px.wrapping_sub(0x7c8));
@@ -600,11 +597,8 @@ fn launch(x: &mut Cx) {
         x.call(launcher::SOUND_SERVICE);
         x.call(launcher::SOUND_LAUNCH);
         // animation 2 du joueur, puis le joueur est projeté en l'air
-        let (a0, d6) = (x.c.a[0], x.c.d[6]);
-        x.c.d[6] = 2;
-        x.c.a[0] = p.0;
-        crate::call(x.c, x.b, rom::PLAYER_ANIM);
-        x.c.a[0] = a0;
+        let d6 = x.c.d[6];
+        crate::objects::anim::start_by_character_68k(x.c, x.b, p, &crate::objects::anim::SETS_BY_VARIANT, 2);
         x.c.d[6] = d6;
         p.set_u16(x.b, Obj::VX, 0);
         p.set_u16(x.b, Obj::AX, 0);

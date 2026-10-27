@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -196,7 +197,7 @@ fn glide_step(x: &mut Cx) {
         return go::turn_around(x);
     }
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     lib::step(x);
 }
@@ -309,7 +310,7 @@ fn plunge(x: &mut Cx) {
         2 => {
             lib::step(x);
             if x.u8(KEY) != 2 {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 let leftward = (x.u16(SPEED_X) as i16) < 0;
                 let (mut d0, mut d1);
                 if x.u8(SIDE_TURN) == 0 {
@@ -340,7 +341,8 @@ fn plunge(x: &mut Cx) {
                 spark(x, 3);
             }
             if count_down(x, TIMER) {
-                return x.call(sub::MOVE_X);
+                x.move_x();
+                return;
             }
             if !interrupted(x) {
                 go::wander(x);
@@ -400,17 +402,17 @@ fn leap(x: &mut Cx) {
             set_speed(x, 0x35);
             x.set16(SPEED_Z, 0x300);
             x.set16(GRAVITY, -0x40i16 as u16);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) <= 0 {
                 x.add8(STEP, 2);
                 x.set16(SPEED_Y, 0);
             }
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 lib::step(x);
                 return;
@@ -421,7 +423,7 @@ fn leap(x: &mut Cx) {
             x.set16(HEIGHT, 0);
             let vy = if x.u8(f::FLIP) != 0 { 0x40i16 } else { -0x40 };
             x.set16(SPEED_Y, vy as u16);
-            x.call(sub::MOVE_X);
+            x.move_x();
             let arm = x.linked(ARM);
             arm.set_u8(x.b, 0x58, 1);
             mv(x, 7);
@@ -432,7 +434,7 @@ fn leap(x: &mut Cx) {
                 spark(x, 3);
             }
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else {
                 end_leap(x);

@@ -3,6 +3,7 @@
 //! accroupi.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -173,7 +174,7 @@ fn wait_key(x: &mut Cx) {
 
 /// 0x67e22 : montée, jusqu'au sommet (`+0x18` négatif).
 fn rise(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     x.anim_step();
     if (x.u16(SPEED_Z) as i16) < 0 {
         x.add8(STEP, 2);
@@ -184,7 +185,7 @@ fn rise(x: &mut Cx) {
 
 /// 0x67e46 : descente jusqu'au sol.
 fn fall(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
     x.anim_step();
     if x.u32(HEIGHT) as i32 > 0 {
         return;
@@ -212,7 +213,7 @@ fn approach(x: &mut Cx) {
         if n == 0 {
             return choose(x);
         }
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     let d = x.u16(TIMER2).wrapping_sub(x.u16(X)).wrapping_add(0x40);
     if d >= 0x80 {

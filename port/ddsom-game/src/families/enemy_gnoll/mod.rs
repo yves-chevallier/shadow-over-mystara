@@ -15,7 +15,7 @@
 //!
 //! Animations 0x1649d0 (mouvements, `+0xa6` ajouté à l'animation de provocation) et 0x1649e8 (coups).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod arrival;
@@ -57,6 +57,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_MOVE: u32 = 0x1649d0;
 pub(self) const SET_STRIKE: u32 = 0x1649e8;
@@ -68,7 +69,6 @@ pub(self) mod call {
     pub const TURN_TO_TARGET: u32 = 0x788c;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
     pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const REMOVE: u32 = 0x27ee;
     pub const AI_GATE_A: u32 = 0xa4b4;
@@ -87,7 +87,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     if x.a5_u8(0x30) != 0 {
-        x.call(rom::TICK_COUNTERS);
+        x.tick_counters();
     }
     x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
@@ -107,12 +107,12 @@ pub fn run(x: &mut Cx) {
 
 /// Démarre l'animation `n` du jeu des mouvements.
 pub(self) fn mv(x: &mut Cx, n: u32) {
-    x.anim_start(SET_MOVE, n);
+    x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Démarre l'animation `n` du jeu des coups.
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// Démarre le coup `n` : type de coup `kind` et force `power`.
@@ -123,8 +123,7 @@ pub(self) fn strike_with(x: &mut Cx, n: u32, kind: u8, power: u8) {
 }
 
 pub(self) fn set_speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// 0x6ad12 : son puis animation 4.

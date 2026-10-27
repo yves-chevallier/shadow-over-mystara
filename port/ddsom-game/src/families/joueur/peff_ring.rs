@@ -10,14 +10,11 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Jeux d'animations des icônes : normal, palette alternative.
 const ICONS: u32 = 0x1aef78;
 const ICONS_ALT: u32 = 0x1b21c2;
-/// Appel `anim_start_indexed`.
-const ANIM_START: u32 = 0x1a32;
-/// Réinsertion dans la liste des acteurs.
-const REINSERT: u32 = 0x1ee1a;
 
 /// Champs des parents et des enfants.
 mod g {
@@ -138,7 +135,6 @@ fn for_children(x: &mut Cx, n: u32, mut f: impl FnMut(&mut Cx, Obj)) {
 mod ring0 {
     use super::*;
 
-    const SUB: u32 = 0x49f82;
     const OFFSETS: u32 = 0x49f88;
     const INITIAL_ANGLE: u32 = 0x49f0e;
     const SPEEDS: u32 = 0x4a20a;
@@ -187,10 +183,9 @@ mod ring0 {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
         let count = if x.u8(0x2d) != 0 { 0xa } else { count };
-        x.c.d[0] = (item << 4) + count & 0xffff;
         x.c.d[1] = count;
-        x.c.a[4] = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        x.call(ANIM_START);
+        let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
+        x.anim_start(set, ((item << 4) + count & 0xffff) as u16);
     }
 
     fn parent_init(x: &mut Cx) {
@@ -355,7 +350,7 @@ mod ring0 {
         if !ring_alive(x, g::GENERATION) {
             x.set8(0x4, 4);
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 }
 
@@ -453,10 +448,9 @@ mod ring1 {
                 stock as u32
             };
         }
-        x.c.d[0] = d0 + d1 & 0xffff;
         x.c.d[1] = d1;
-        x.c.a[4] = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        x.call(ANIM_START);
+        let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
+        x.anim_start(set, (d0 + d1 & 0xffff) as u16);
     }
 
     fn parent(x: &mut Cx) {
@@ -713,7 +707,7 @@ mod ring1 {
         if !ring_alive(x, GENERATION) {
             x.set8(0x4, 4);
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 }
 

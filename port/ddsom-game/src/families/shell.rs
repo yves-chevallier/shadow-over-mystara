@@ -3,6 +3,7 @@
 
 use super::cx::{sub, Cx};
 use crate::objects::Obj;
+use crate::objects::Courant;
 
 /// Champs propres aux objets ESHL.
 pub mod f {
@@ -53,8 +54,7 @@ pub fn place_in_front(x: &mut Cx, owner: Obj, dx: i16, dz: u16) {
 
 /// Pause du jeu : vrai quand l'objet est suspendu (octet `+0x40`).
 pub fn suspended(x: &mut Cx) -> bool {
-    x.call(sub::PAUSE_HOOK);
-    x.c.cond(6)
+    x.suspended()
 }
 
 /// Terrain sous le tir : vrai quand le tir doit s'arrêter (terrains 5 à 8 sans le bit 6 de

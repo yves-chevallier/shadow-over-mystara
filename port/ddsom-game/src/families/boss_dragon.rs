@@ -30,14 +30,10 @@ const STOPS: u32 = 0x8f97a;
 const BOB_TABLE: u32 = 0x8faa2;
 
 mod rom {
-    pub const REACHED_X: u32 = 0x1e92;
     pub const BEGIN_A: u32 = 0xdf4bc;
     pub const NEW_MESSAGE: u32 = 0xc8312;
     pub const BEGIN_CUTSCENE: u32 = 0xe0d8c;
     pub const END_CUTSCENE: u32 = 0xe0c5c;
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_YZ: u32 = 0x1dd4;
 }
 
 /// Champs propres à ce type.
@@ -62,6 +58,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Octet `0xff0ec6` (`A5-0x713a`) : non nul, le dragon se retire.
 const RETREAT_FLAG: u32 = 0xff0ec6;
@@ -145,14 +142,14 @@ fn drift(x: &mut Cx) {
     let left = scroll_x(x).wrapping_sub(0x80);
     x.set16(0x8, left);
     bob(x);
-    x.call(rom::MOVE_YZ);
+    x.move_yz();
     x.anim_step();
 }
 
 /// Déplacement du dragon qui suit le meneur.
 fn glide(x: &mut Cx) {
     chase(x);
-    x.call(rom::MOVE_YZ);
+    x.move_yz();
     x.anim_step();
 }
 
@@ -247,14 +244,13 @@ fn approach(x: &mut Cx) {
         x.add16(0x8, dx);
         let reach = scroll_x(x).wrapping_add(0x50);
         set_dw(x, 0, reach);
-        x.call(rom::REACHED_X);
-        if x.c.sr & m68k::SR_C != 0 {
+        if x.in_arena(x.c.d[0] as u16) {
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0xb4);
         }
     }
     bob(x);
-    x.call(rom::MOVE_XYZ);
+    x.move_xyz();
     x.anim_step();
 }
 
@@ -314,8 +310,8 @@ fn leave(x: &mut Cx) {
     let y = lead.u16(x.b, 0x10).wrapping_sub(0x10);
     x.set16(0x10, y);
     bob(x);
-    x.call(rom::MOVE_X);
-    x.call(rom::MOVE_YZ);
+    x.move_x();
+    x.move_yz();
     x.anim_step();
 }
 

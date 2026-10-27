@@ -12,13 +12,17 @@
 //! - `motion` : vitesses, accélérations, tables de vitesse par index.
 //! - `rank` : compteur de rang (difficulté dynamique).
 //! - `cull` : test de présence à l'écran et inscription dans les files de collision.
+//! - `courant` : le trait `Courant`, ces routines appliquées à l'objet d'un gestionnaire (`x.move_xz()`...).
 
 pub mod anim;
+pub mod courant;
 pub mod cull;
 pub mod lists;
 pub mod motion;
 pub mod pools;
 pub mod rank;
+
+pub use courant::Courant;
 
 use cps2::Cps2Bus;
 
@@ -187,6 +191,23 @@ impl Obj {
 
     pub fn at(self, off: u32) -> u32 {
         self.0.wrapping_add(off)
+    }
+
+    /// Objet désigné par un mot (lien, pointeur 16 bits d'un champ) : adresse étendue en signe comme le fait
+    /// `movea.w`, soit la RAM FF8000-FFFFFF pour un mot négatif.
+    pub fn from_word(w: u16) -> Obj {
+        Obj(w as i16 as i32 as u32 & 0xff_ffff)
+    }
+
+    /// Le mot bas de l'adresse, tel que les objets se référencent entre eux.
+    pub fn word(self) -> u16 {
+        self.0 as u16
+    }
+
+    /// L'adresse telle que le registre An la contient après `movea.w` (étendue du signe sur 32 bits) : c'est cette
+    /// valeur que le jeu range quand il mémorise un objet sur 32 bits (`move.l A1,(0x86,A0)`).
+    pub fn long_ref(self) -> u32 {
+        self.0 as u16 as i16 as i32 as u32
     }
 
     pub fn u8(self, b: &mut Cps2Bus, off: u32) -> u8 {

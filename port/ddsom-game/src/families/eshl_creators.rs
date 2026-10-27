@@ -14,8 +14,6 @@ use crate::objects::Obj;
 use crate::{call, regs, Native};
 use crate::objects::pools;
 
-const RNG: u32 = 0x19a88;
-
 mod f {
     pub const ACTIVE: u32 = 0x00;
     pub const KIND: u32 = 0x02;
@@ -98,7 +96,7 @@ fn fragments(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: u8, count: u16, sk
 /// 0xa7b0a : éclats du boss 11 (type 0x44) ; un tirage choisit leur nombre et celui qui manque (table
 /// 0xa7b64 : couples nombre, absent).
 fn boss11_shards(c: &mut Cpu, b: &mut Cps2Bus) {
-    call(c, b, RNG);
+    crate::rng::random_68k(c, b);
     let i = c.d[0] as u16 & 0xe;
     set_low_word(&mut c.d[0], i);
     let count = prog8(b, 0xa7b64 + i as u32);
@@ -450,7 +448,7 @@ fn row_1a(c: &mut Cpu, b: &mut Cps2Bus) {
             if tx <= me.u16(b, f::X) { 0xa189c } else { 0xa18bc }
         }
     };
-    call(c, b, RNG);
+    crate::rng::random_68k(c, b);
     let r = (c.d[0] as u16 & 3) << 3;
     set_low_word(&mut c.d[0], r);
     row(c, b, 0x1a, Some(table + r as u32));

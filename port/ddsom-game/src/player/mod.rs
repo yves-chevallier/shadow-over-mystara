@@ -57,7 +57,6 @@ use m68k::{Bus, Cpu, SR_Z};
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use crate::rng::Rng;
 use crate::{call, Native};
 
 /// Routines natives des joueurs.
@@ -232,14 +231,6 @@ impl<'a> Ctx<'a> {
         } else {
             w as u8
         }
-    }
-
-    /// Tirage du générateur pseudo-aléatoire (0x19a88) ; les appelants masquent le résultat.
-    pub fn random(&mut self) -> u16 {
-        let mut rng = Rng(rd16(self.b, A5 + 0x1a));
-        let (v, _) = rng.suivant();
-        wr16(self.b, A5 + 0x1a, v);
-        v
     }
 
     /// Appelle une routine d'origine (ou native) pour le joueur `p` : A0 = joueur, A5 = base de la

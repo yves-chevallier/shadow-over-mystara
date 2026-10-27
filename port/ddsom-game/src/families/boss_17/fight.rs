@@ -10,6 +10,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 /// Jeux d'animations de marche, choisis par la marque `+0x33` (0x103e0) : le premier quand le boss ne regarde pas
 /// dans le sens où il avance, le second sinon.
@@ -188,7 +189,7 @@ fn keep_walking(x: &mut Cx) {
     if needs_turn(x) {
         return decide::interrupt(x);
     }
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     step(x);
 }
 
@@ -212,7 +213,7 @@ fn dash(x: &mut Cx) {
             body(x, 6);
         }
         2 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.a5_u16(0x6e) & 3 == 0 {
                 attacks::dust_unless_slow(x);
             }
@@ -226,7 +227,7 @@ fn dash(x: &mut Cx) {
             step(x);
         }
         4 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if cmp16(x, 0x18, 0xff00).le() {
                 x.add8(0x7, 2);
                 x.set16(0x16, 0);
@@ -236,7 +237,7 @@ fn dash(x: &mut Cx) {
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 step(x);
             } else {

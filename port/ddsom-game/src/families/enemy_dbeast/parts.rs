@@ -5,6 +5,7 @@
 //! leur comportement dans `run`.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Création selon la variante `+3` (0x71f86).
 pub(super) fn spawn(x: &mut Cx) {
@@ -336,8 +337,7 @@ pub(super) fn bound_wait(x: &mut Cx) {
 
 /// Atterrissage d'un bond en X et Z (0x727f0).
 pub(super) fn bound_land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
-    if x.c.cond(14) {
+    if x.move_xz().gt() {
         return step(x);
     }
     x.set32(0xc, 0);
@@ -391,8 +391,7 @@ pub(super) fn bound_y_wait(x: &mut Cx) {
 }
 
 pub(super) fn bound_y_land(x: &mut Cx) {
-    x.call(sub::MOVE_YZ);
-    if x.c.cond(14) {
+    if x.move_yz().gt() {
         return step(x);
     }
     x.set32(0xc, 0);
@@ -451,7 +450,7 @@ fn drop_in(x: &mut Cx) {
             play(x, 0x10);
         }
         2 => {
-            x.call(sub::MOVE_Z);
+            x.move_z();
             if (x.u16(0xc) as i16) < 0 {
                 x.add8(0x7, 2);
                 x.set32(0xc, 0);

@@ -10,6 +10,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x9a40a;
@@ -131,7 +132,7 @@ fn pushed_back(x: &mut Cx) {
                 let n = if cmp8(x, PHASE, 2).ge() { 0xd } else { 0xc };
                 body(x, n);
             } else {
-                x.call(call::MOVE_X);
+                x.move_x();
                 step(x);
             }
         }
@@ -202,7 +203,7 @@ fn get_up(x: &mut Cx) {
                 x.set8(f::FLIP, side);
                 body(x, 0x11);
             } else {
-                x.call(call::MOVE_XY);
+                x.move_xy();
                 step(x);
             }
         }
@@ -273,11 +274,11 @@ fn down(x: &mut Cx) {
             }
             x.set16(0x14, vx as u16);
             x.set8(f::FLIP, side);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             x.anim_start(SET_BODY, 0x12);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0x100).gt() {
                 x.anim_step();
             } else {
@@ -286,7 +287,7 @@ fn down(x: &mut Cx) {
             }
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if cmp16(x, 0x18, 0xff00).gt() {
                 x.anim_step();
             } else {
@@ -295,7 +296,7 @@ fn down(x: &mut Cx) {
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }

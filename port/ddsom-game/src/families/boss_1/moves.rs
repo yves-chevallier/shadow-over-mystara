@@ -1,6 +1,7 @@
 //! Boss 1, état actif : arrivée (`+5` = 0), combat (2), attaques (4), attente (6 à 10), saisie (12).
 
 use super::*;
+use crate::objects::Courant;
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
@@ -55,7 +56,7 @@ pub(super) fn intro(x: &mut Cx) {
             body(x, 3);
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return puff(x, 8);
             }
@@ -80,7 +81,7 @@ pub(super) fn intro(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > 0x100 {
                 return;
             }
@@ -88,7 +89,7 @@ pub(super) fn intro(x: &mut Cx) {
             body(x, 0xc);
         }
         10 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > -0x100 {
                 return;
             }
@@ -96,7 +97,7 @@ pub(super) fn intro(x: &mut Cx) {
             body(x, 0xd);
         }
         12 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
                 step(x);
                 return;
@@ -123,7 +124,7 @@ pub(super) fn intro(x: &mut Cx) {
 
 /// 0x7aeda : la traversée, maintenue dans l'écran ; un saut par la table des vitesses à chaque bord touché.
 fn crossing(x: &mut Cx) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     let mut bumped = false;
     let cam_x = x.a5_u16(var::CAMERA1_X);
     let px = x.u16(0x8) as i16;
@@ -277,7 +278,7 @@ fn hop_walk(x: &mut Cx, second: bool) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > 0x100 {
                 return;
             }
@@ -285,7 +286,7 @@ fn hop_walk(x: &mut Cx, second: bool) {
             hop_anim(x, 1);
         }
         4 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > -0x100 {
                 return;
             }
@@ -293,7 +294,7 @@ fn hop_walk(x: &mut Cx, second: bool) {
             hop_anim(x, 2);
         }
         6 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
                 step(x);
                 return;
@@ -424,7 +425,7 @@ fn leap_attack(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > 0x100 {
                 return;
             }
@@ -432,7 +433,7 @@ fn leap_attack(x: &mut Cx) {
             body(x, 0x14);
         }
         4 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > -0x100 {
                 return;
             }
@@ -440,7 +441,7 @@ fn leap_attack(x: &mut Cx) {
             body(x, 0x15);
         }
         6 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
                 step(x);
                 return;
@@ -507,17 +508,17 @@ fn backing(x: &mut Cx) {
             speed(x, 0x35);
             x.set16(0x18, 0x300);
             x.set16(0x1a, (-0x40i16) as u16);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
         }
         4 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if x.u16(0x18) as i16 <= 0 {
                 next7(x);
                 x.set16(0x16, 0);
             }
         }
         6 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if x.u16(0xc) as i16 > 0 {
                 step(x);
                 return;
@@ -533,7 +534,7 @@ fn backing(x: &mut Cx) {
             }
             set_dw(x, 0, v);
             x.set16(0x16, v);
-            x.call(call::MOVE_X);
+            x.move_x();
             x.call(call::LANDING);
             x.call(0xecdba);
             body(x, 0x18);
@@ -544,7 +545,7 @@ fn backing(x: &mut Cx) {
                 dust(x, 3);
             }
             if !expired(x, TIMER) {
-                x.call(call::MOVE_X);
+                x.move_x();
                 step(x);
                 return;
             }
@@ -670,7 +671,7 @@ fn split(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > 0x100 {
                 return;
             }
@@ -678,7 +679,7 @@ fn split(x: &mut Cx) {
             body(x, 0xc);
         }
         4 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0x18) as i16 > -0x100 {
                 return;
             }
@@ -686,7 +687,7 @@ fn split(x: &mut Cx) {
             body(x, 0xd);
         }
         6 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
                 step(x);
                 return;

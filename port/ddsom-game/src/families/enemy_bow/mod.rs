@@ -15,7 +15,7 @@
 //! Animations 0x16032c (mouvements) et 0x160350 (tirs). Le Bow Gnoll n'a pas de test « joueur en vie » : l'attente
 //! (`+5` = 10) revient au sous-état 2 quand le compte `+0x6e` est écoulé.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod arrival;
@@ -64,6 +64,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_MOVE: u32 = 0x16032c;
 pub(self) const SET_SHOT: u32 = 0x160350;
@@ -75,11 +76,8 @@ pub(self) mod call {
     pub const FACE_TARGET: u32 = 0xa470;
     pub const TURN_TO_TARGET: u32 = 0x788c;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const REMOVE: u32 = 0x27ee;
-    pub const SCREEN_CHECK: u32 = 0x1e90;
-    pub const SCREEN_CHECK_MARGIN: u32 = 0x1e92;
     pub const SWING: u32 = 0x9dbd6;
     pub const AI_GATE_A: u32 = 0xa4b4;
     pub const AI_GATE_B: u32 = 0xa4c2;
@@ -90,7 +88,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     if x.u16(f::TARGET) == 0 {
         pick_target(x);
     }
@@ -112,17 +110,16 @@ pub fn run(x: &mut Cx) {
 
 /// Démarre l'animation `n` du jeu des mouvements.
 pub(self) fn mv(x: &mut Cx, n: u32) {
-    x.anim_start(SET_MOVE, n);
+    x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Démarre l'animation `n` du jeu des tirs.
 pub(self) fn shot(x: &mut Cx, n: u32) {
-    x.anim_start(SET_SHOT, n);
+    x.anim_start(SET_SHOT, n as u16);
 }
 
 pub(self) fn set_speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// 0x5ce22 : direction de marche selon l'orientation (0xc à gauche, 4 à droite).

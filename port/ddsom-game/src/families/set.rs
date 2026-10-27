@@ -1,9 +1,11 @@
 //! Objets de décor (classe SET, pool de 32 objets de 0x50 octets, table 0x39eac) : types 0, 1 et
 //! 3 à 14. Les objets SET ne figurent pas dans les listes triées (voir `docs/objets.md`).
 
-use super::cx::{sub, Cx};
+use super::cx::Cx;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Type 8 (0xcc25a), partagé par les tables SET (8), SOBJ (4) et EFFCT (18) : générateur du
 /// contrôleur de scène. À la première image il attend ; à la suivante il crée un objet SET de
@@ -431,7 +433,6 @@ mod wave_leader {
 
     /// Délais entre deux vagues (octets, espace programme), indexés par un tirage de 4 bits.
     const DELAYS: u32 = 0xbc63e;
-    const RNG: u32 = 0x19a88;
     const CAMERA_LOCK: u32 = 0x2860;
     const CAMERA_LOCK_PARAM: u32 = 0x3c;
     /// Places libres du pool ENEMY (A5+) ; il en faut trois par vague.
@@ -537,8 +538,8 @@ mod wave_leader {
                 } else if x.u8(WAIT) != 0 {
                     { let w = x.u8(WAIT); x.set8(WAIT, w - 1); }
                 } else if spawn_wave(x).is_some() {
-                    x.call(RNG);
-                    let delay = x.rom8(DELAYS + (x.c.d[0] & 0xf));
+                    let alea = x.random_68k();
+                    let delay = x.rom8(DELAYS + (alea as u32 & 0xf));
                     x.set8(WAIT, delay);
                 }
             }
@@ -650,8 +651,8 @@ mod wave_leader {
         // côté d'arrivée : tiré au sort la première fois, puis alterné
         let mut side = x.u8(SIDE);
         if (side as i8) < 0 {
-            x.call(RNG);
-            side = ((x.c.d[0] & 1) << 5) as u8;
+            let alea = x.random_68k();
+            side = ((alea as u32 & 1) << 5) as u8;
             x.set8(SIDE, side ^ 0x20);
         }
         lead.set_u8(x.b, E_SIDE, side);
@@ -938,7 +939,7 @@ mod exit_gate {
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) != 0 {
                 x.c.a[0] = p.0;
-                crate::call(x.c, x.b, sub::REINSERT_ACTORS);
+                crate::objects::lists::ACTORS.reinsert_68k(x.c, x.b, p);
             }
         }
         x.c.a[0] = x.o.0;

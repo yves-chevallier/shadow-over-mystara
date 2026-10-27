@@ -2,6 +2,7 @@
 //! décide d'attaquer, 2 demi-tour, 4 attente.
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if grabbed(x) {
@@ -29,8 +30,7 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x696b0 : l'elfe se met en marche vers sa cible.
 pub(super) fn begin_walk(x: &mut Cx) {
     x.set8(VULNERABLE, 1);
-    x.c.d[0] = 0x12;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
     body(x, 1);
     pick_target(x);
     x.call(call::FACE_TARGET);

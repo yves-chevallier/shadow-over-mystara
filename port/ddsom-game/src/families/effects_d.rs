@@ -12,6 +12,8 @@ use super::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 mod f {
     pub const STATE: u32 = 0x04;
@@ -36,8 +38,8 @@ fn free(x: &mut Cx) {
 }
 
 fn random(x: &mut Cx) -> u32 {
-    x.call(super::rom::RNG);
-    x.c.d[0]
+    let alea = x.random_68k();
+    x.c.d[0] & 0xffff_0000 | alea as u32
 }
 
 /// État 4 (`0xb2916`) : passe à 6 et libère ; état 6 : libère.
@@ -120,9 +122,7 @@ fn coin_init(x: &mut Cx) {
     x.set8(f::FACING, if r & 1 != 0 { 0x20 } else { 0 });
     let r = random(x);
     let anim = (x.rom8(COIN_ANIMS + (r & 0xf)) as u16).wrapping_add(0x104);
-    x.c.d[0] = r & 0xffff_0000 | anim as u32;
-    x.c.a[4] = ANIM_SET;
-    x.call(super::cx::sub::ANIM_START);
+    x.anim_start(ANIM_SET, (r & 0xffff_0000 | anim as u32) as u16);
     x.set8(f::STEP, 0);
     x.reinsert();
 }
@@ -139,7 +139,7 @@ fn coin_active(x: &mut Cx) {
         return x.set8(f::HIDDEN, 1);
     }
     x.anim_step();
-    x.call(super::cx::sub::MOVE_XZ);
+    x.move_xz();
     if (x.u16(Obj::VZ) as i16) < 0 {
         x.set32(Obj::Y, 0);
     }
@@ -193,7 +193,7 @@ fn trophy_init(x: &mut Cx) {
     if x.u8(f::MODE) & 1 != 0 {
         anim = anim & 0xff00 | (anim as u8).wrapping_add(1) as u16;
     }
-    x.anim_start(REWARD_SET, anim as u32);
+    x.anim_start(REWARD_SET, (anim as u32) as u16);
     x.reinsert();
 }
 
@@ -281,7 +281,7 @@ const REWARD_SET: u32 = 0x190ba8;
 fn reward_anim(x: &mut Cx, n: u16) {
     let mode = x.u8(f::MODE) as u32;
     let base = x.data16(REWARD_ANIMS + 2 * mode);
-    x.anim_start(REWARD_SET, base.wrapping_add(n) as u32);
+    x.anim_start(REWARD_SET, (base.wrapping_add(n) as u32) as u16);
 }
 
 fn reward_init(x: &mut Cx) {
@@ -321,7 +321,7 @@ fn at_camera(x: &mut Cx, cx: u32, cy: u32) {
 }
 
 fn rank_anim(x: &mut Cx, value: u8) {
-    x.anim_start(ANIM_SET, 0xe3u16.wrapping_sub(value as u16) as u32);
+    x.anim_start(ANIM_SET, (0xe3u16.wrapping_sub(value as u16) as u32) as u16);
     x.reinsert();
 }
 
@@ -423,8 +423,8 @@ fn counters_init(x: &mut Cx) {
     x.set32(Obj::Y, 0);
     x.set16(Obj::Z, 0x448);
     x.add16(Obj::X, 0x50);
-    x.c.a[4] = if x.a5_u16(0x70) == 0 { 0xb2af0 } else { 0xb2b6a };
-    x.call(0x1a3c);
+    let at = if x.a5_u16(0x70) == 0 { 0xb2af0 } else { 0xb2b6a };
+    x.anim_start_entry(at);
     x.reinsert();
     for (k, at) in COUNTER_TILES.into_iter().enumerate() {
         let value = rd8(x.b, COUNTERS + k as u32) as u16;
@@ -460,7 +460,7 @@ fn player_line_init(x: &mut Cx) {
     x.add16(Obj::X, 0x10);
     x.add16(Obj::Z, 0xb8);
     x.add16(Obj::Z, ((mode as u16) << 5).wrapping_neg());
-    x.anim_start(ANIM_SET, 0x173 + mode);
+    x.anim_start(ANIM_SET, (0x173 + mode) as u16);
     x.reinsert();
 }
 
@@ -765,7 +765,7 @@ fn walker_move(x: &mut Cx) {
     x.call(0x137e);
     let direction = x.c.d[0] as u8;
     x.set8(Obj::SPEED_INDEX, direction);
-    x.call(super::cx::sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 /// La cible est atteinte à 8 près sur l'axe `off`.
@@ -811,7 +811,7 @@ fn walker_jump(x: &mut Cx) {
             }
             2 => {
                 x.anim_step();
-                x.call(super::cx::sub::MOVE_XZ);
+                x.move_xz();
                 if (x.u16(Obj::VZ) as i16) <= 0 {
                     reward_anim(x, 7);
                     x.add8(f::SUB_STEP, 2);
@@ -819,7 +819,7 @@ fn walker_jump(x: &mut Cx) {
             }
             4 => {
                 x.anim_step();
-                x.call(super::cx::sub::MOVE_XZ);
+                x.move_xz();
                 if (x.u16(Obj::Z) as i16) <= 0 {
                     x.add8(f::STEP, 2);
                     x.set8(f::SUB_STEP, 0);
@@ -892,7 +892,7 @@ fn walker_run(x: &mut Cx) {
         step @ (4 | 6) => {
             if x.u8(f::SUB_STEP) == 0 {
                 x.anim_step();
-                x.call(super::cx::sub::MOVE_X);
+                x.move_x();
                 if x.u8(Obj::VX) != 0 {
                     return;
                 }

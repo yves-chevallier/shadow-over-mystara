@@ -2,6 +2,7 @@
 
 use super::attacks::{begin_wait, hold, paw_begin};
 use super::*;
+use crate::objects::Courant;
 
 /// Fin d'un geste du sous-état 6 : retour à l'affût (0x5634a).
 fn ready_after_anim(x: &mut Cx) {
@@ -116,8 +117,7 @@ fn attacks_wait_key(x: &mut Cx) {
 
 /// 0x5515e : retombée du saut périlleux.
 fn land_yz(x: &mut Cx) {
-    x.call(sub::MOVE_YZ);
-    if x.c.cond(14) {
+    if x.move_yz().gt() {
         x.anim_step();
         return;
     }
@@ -163,8 +163,7 @@ fn attacks_wait_key_clear(x: &mut Cx) {
 
 /// 0x54fc4 : retombée d'un saut.
 fn land(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
-    if x.c.cond(14) {
+    if x.move_xz().gt() {
         x.anim_step();
         return;
     }
@@ -250,7 +249,7 @@ fn c_paw(x: &mut Cx) {
             let n = x.u16(TIMER).wrapping_sub(1);
             x.set16(TIMER, n);
             if (n as i16) >= 0 {
-                x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
                 x.anim_step();
             } else {
                 set_state_long(x, STANCE);
@@ -301,7 +300,7 @@ fn c_side(x: &mut Cx) {
             if (n as i16) < 0 {
                 return set_state_long(x, STANCE);
             }
-            x.call(sub::MOVE_XY);
+            x.move_xy();
             x.anim_step();
         }
         4 => attacks_wait_key(x),

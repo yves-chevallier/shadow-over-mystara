@@ -12,6 +12,8 @@ use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 mod f {
     pub const STATE: u32 = 0x04;
@@ -34,8 +36,7 @@ fn free(x: &mut Cx) {
 /// Préambule commun : le crochet de pause (0x29ea, Z faux : objet suspendu), la pause du jeu, et au
 /// moins un joueur présent dans un état ≤ 2. Vrai si le gestionnaire continue.
 fn scene_running(x: &mut Cx, suspended: impl FnOnce(&mut Cx)) -> bool {
-    x.call(super::cx::sub::PAUSE_HOOK);
-    if x.c.sr & m68k::SR_Z == 0 {
+    if x.suspended() {
         suspended(x);
         return false;
     }
@@ -308,7 +309,7 @@ fn gate_enter(x: &mut Cx) {
     x.set16(f::STATE, 0x400);
     x.set16(gate::CURTAIN, 0);
     x.set_a5_u8(0x44, 0);
-    x.call(0x1f0be);
+    x.unlink();
     // 0xae298 : sauvegarde du contexte
     let (cam_x, cam_y) = (x.a5_u32(0x506), x.a5_u32(0x50a));
     x.set32(gate::CAMERA_X, cam_x);
@@ -518,8 +519,8 @@ fn attack_fx_flash(x: &mut Cx) {
             let k = attacker_index(x, owner, 2, false);
             let offset = x.data16(attack_fx::FLASH_PLACES + 2 * k) as i16 as i32 as u32;
             let places = attack_fx::FLASH_PLACES.wrapping_add(offset);
-            x.call(super::rom::RNG);
-            let pick = 4 * (x.c.d[0] & 7);
+            let alea = x.random_68k();
+            let pick = 4 * (alea as u32 & 7);
             let (mut dx, dz) = (x.data16(places + pick), x.data16(places + pick + 2));
             let facing = owner.u8(x.b, 0x2c);
             x.set8(0x2c, facing);
@@ -531,9 +532,9 @@ fn attack_fx_flash(x: &mut Cx) {
             if x.a5_u8(0x6f) & 1 != 0 {
                 x.set8(0x2c, facing ^ 0x20);
             }
-            x.call(super::rom::RNG);
-            let anim = x.c.d[0] & 3;
-            x.anim_start(attack_fx::ANIM_A, anim);
+            let alea = x.random_68k();
+            let anim = alea as u32 & 3;
+            x.anim_start(attack_fx::ANIM_A, anim as u16);
             x.call(attack_fx::SOUND_FLASH);
         }
         2 => attack_fx_anim_or_leave(x),
@@ -564,7 +565,7 @@ fn attack_fx_mark(x: &mut Cx) {
             }
             x.add16(Obj::X, dx);
             let anim = x.rom8(attack_fx::MARK_ANIMS + kind);
-            x.anim_start(attack_fx::ANIM_A, anim as u32);
+            x.anim_start(attack_fx::ANIM_A, (anim as u32) as u16);
             x.reinsert();
         }
         2 => {
@@ -624,7 +625,7 @@ fn attack_fx_shower(x: &mut Cx) {
                 x.set16(0x2a, 0x110);
             }
             x.add8(f::STATE, 2);
-            x.anim_start(attack_fx::ANIM_A, anim as u32);
+            x.anim_start(attack_fx::ANIM_A, (anim as u32) as u16);
             attack_fx_shard(x);
         }
         2 => attack_fx_shard(x),
@@ -722,7 +723,7 @@ fn attack_fx_shard(x: &mut Cx) {
     }
     let v = x.u8(0x01) ^ 2;
     x.set8(0x01, v);
-    x.call(super::cx::sub::MOVE_XZ);
+    x.move_xz();
     if x.u16(Obj::Z) as i16 <= 0 {
         free(x);
     }
@@ -781,7 +782,7 @@ fn burst_init(x: &mut Cx) {
     x.set16(Obj::VZ, vz);
     x.add16(Obj::X, vx);
     x.add16(Obj::Z, vz);
-    x.anim_start(attack_fx::ANIM_A, anim);
+    x.anim_start(attack_fx::ANIM_A, anim as u16);
     x.reinsert();
 }
 
@@ -839,7 +840,7 @@ fn attack_fx_rise(x: &mut Cx) {
             x.set16(Obj::Z, z);
             let mode = x.u8(0x2f) as u32;
             let anim = x.rom8(0xac9f0 + mode) as u32;
-            x.anim_start(attack_fx::ANIM_A, anim);
+            x.anim_start(attack_fx::ANIM_A, anim as u16);
             x.reinsert();
         }
         2 => {
@@ -911,7 +912,7 @@ fn attack_fx_parts(x: &mut Cx) {
                     let d: u32 = if mode == 1 { 0xffff_ffff } else { 1 };
                     let depth = source.u32(x.b, Obj::Y).wrapping_add(d);
                     x.set32(Obj::Y, depth);
-                    x.anim_start(attack_fx::ANIM_B, 4 + mode as u32);
+                    x.anim_start(attack_fx::ANIM_B, (4 + mode as u32) as u16);
                 }
                 _ => {
                     let depth = source.u32(x.b, Obj::Y).wrapping_add(2);
@@ -977,7 +978,8 @@ fn attack_fx_sparks(x: &mut Cx) {
         m @ (1 | 2) => {
             if x.u8(f::STATE) == 0 {
                 x.add8(f::STATE, 2);
-                return x.anim_start(attack_fx::ANIM_A, 0x15 + m as u32);
+                x.anim_start(attack_fx::ANIM_A, (0x15 + m as u32) as u16);
+                return;
             }
             let owner = x.linked(attack_fx::OWNER);
             let action = owner.u8(x.b, 0x49);

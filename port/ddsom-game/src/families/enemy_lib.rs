@@ -4,6 +4,7 @@
 
 use super::cx::Cx;
 use super::enemy_common::*;
+use crate::objects::Courant;
 
 /// 0x1046c : le type de coup `+0x44` suit la clé d'animation `+0x3e`.
 fn copy_strike_kind(x: &mut Cx) {
@@ -13,7 +14,7 @@ fn copy_strike_kind(x: &mut Cx) {
 
 /// 0x103d6 : démarre le script `n` du jeu `set`.
 pub fn start(x: &mut Cx, set: u32, n: u32) {
-    x.anim_start(set, n);
+    x.anim_start(set, n as u16);
     copy_strike_kind(x);
 }
 
@@ -28,7 +29,8 @@ pub fn switch_keeping_time(x: &mut Cx, table: u32) {
     x.c.a[4] = at;
     x.c.d[2] = x.c.d[2] & !0xffff | time as u32;
     x.c.d[0] = x.c.d[0] & !0xff | key as u32;
-    x.call(0x1a3c);
+    let at = x.c.a[4];
+    x.anim_start_entry(at);
     x.set16(0x30, time);
     copy_strike_kind(x);
 }

@@ -5,10 +5,9 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, rd32, wr16};
 use crate::objects::Obj;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 const ANGLE_TO_TARGET: u32 = 0x1376;
-const MOVE_TABLE_XY: u32 = 0x1cb4;
 const IN_ZONE: u32 = 0xfbae;
 const SHADOW: u32 = 0x33fe4;
 const BLOOD: u32 = 0xb141a;
@@ -95,7 +94,7 @@ mod pet {
         let life = if class <= 0xe { 0x2d0 } else { 0x348 };
         x.set16(0x42, life);
         x.anim(ANIMS, 0);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// `0x4f388` : suit l'étape d'animation du lanceur (`+0x33`) : place et image.
@@ -140,7 +139,7 @@ mod pet {
         if tail {
             x.call(IN_ZONE);
             x.call(SHADOW);
-            x.call(REINSERT);
+            x.reinsert();
         }
     }
 
@@ -150,14 +149,14 @@ mod pet {
         match x.u8(0x6) {
             0 => pose(x),
             2 => {
-                x.call(MOVE_XYZ);
+                x.move_xyz();
                 if (x.u16(0x18) as i16) <= 0 {
                     x.add8(0x6, 2);
                     x.anim(ANIMS, 7);
                 }
             }
             _ => {
-                x.call(MOVE_XZ);
+                x.move_xz();
                 if (x.u16(0xc) as i16) <= 0 {
                     x.set32(0xc, 0);
                     x.add8(0x5, 2);
@@ -165,7 +164,7 @@ mod pet {
                 }
             }
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         true
     }
 
@@ -205,11 +204,11 @@ mod pet {
                 }
             }
             if !lost {
-                x.call(MOVE_TABLE_XY);
+                x.move_by_table_xy();
                 attack_test(x);
             }
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         true
     }
 
@@ -221,7 +220,7 @@ mod pet {
             leave(x);
             return true;
         }
-        x.call(ANIM_STEP);
+        x.anim_step();
         x.add8(0x46, 0xff);
         if x.u8(0x46) == 0 {
             x.set8(0x46, 2);
@@ -234,7 +233,7 @@ mod pet {
             x.link_a1(f::OWNER);
             turn(x);
         }
-        x.call(MOVE_TABLE_XY);
+        x.move_by_table_xy();
         true
     }
 
@@ -284,9 +283,9 @@ mod pet {
             x.anim(ANIMS, 0xc);
             return true;
         }
-        x.call(ANIM_STEP);
-        x.call(MOVE_TABLE_XY);
-        x.call(MOVE_Z);
+        x.anim_step();
+        x.move_by_table_xy();
+        x.move_z();
         if (x.u16(0x18) as i16) < 0 {
             x.add8(0x7, 2);
             x.anim(ANIMS, 0xb);
@@ -304,9 +303,9 @@ mod pet {
             x.anim(ANIMS, 0xd);
             return true;
         }
-        x.call(ANIM_STEP);
-        x.call(MOVE_TABLE_XY);
-        x.call(MOVE_Z);
+        x.anim_step();
+        x.move_by_table_xy();
+        x.move_z();
         if (x.u16(0xc) as i16) <= 0 {
             x.set32(0xc, 0);
             x.set8(0x5, 2);
@@ -340,7 +339,7 @@ mod pet {
             d0 = d0.wrapping_neg();
         }
         x.add16(0x8, d0);
-        x.call(ANIM_STEP);
+        x.anim_step();
         if target.u16(x.b, 0x4) == 0x200
             || target.u8(x.b, 0x95) & 2 != 0
             || target.u8(x.b, 0x49) == 0x84
@@ -410,8 +409,8 @@ mod pet {
                 x.anim(ANIMS, 0xe);
             }
             2 => {
-                x.call(ANIM_STEP);
-                x.call(MOVE_XZ);
+                x.anim_step();
+                x.move_xz();
                 if (x.u16(0x18) as i16) <= 0 && (x.u16(0xc) as i16) <= 0 {
                     x.set8(0x46, 0x28);
                     x.add8(0x5, 2);
@@ -426,7 +425,7 @@ mod pet {
                 x.set8(0x1, v);
             }
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     // --- recherches de cibles ------------------------------------------------------------------------------------

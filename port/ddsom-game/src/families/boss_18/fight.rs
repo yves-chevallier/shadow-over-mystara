@@ -11,6 +11,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -70,7 +71,7 @@ fn turn(x: &mut Cx) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         if was_walking(x) {
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         let side = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, side);
@@ -84,7 +85,7 @@ fn turn(x: &mut Cx) {
     }
     if !step(x) {
         if was_walking(x) {
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         return;
     }
@@ -122,7 +123,7 @@ fn walk(x: &mut Cx, slow: bool) {
     }
     x.call(call::ASK_TARGET);
     speed(x, 0xd);
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     let kind = x.u8(ANIM_KIND);
     if kind != x.u8(ANIM_LAST) {
         x.set8(ANIM_LAST, kind);
@@ -169,7 +170,7 @@ fn keep_walking(x: &mut Cx) {
             return decide::interrupt(x);
         }
     }
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     step(x);
 }
 
@@ -192,7 +193,7 @@ fn dash(x: &mut Cx) {
             body(x, 5);
         }
         2 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if !tst16(x, 0x18).gt() {
                 x.add8(0x7, 2);
                 x.set16(0x16, 0);
@@ -200,7 +201,7 @@ fn dash(x: &mut Cx) {
             step(x);
         }
         4 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if !tst16(x, 0xc).gt() {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xc);
@@ -214,7 +215,7 @@ fn dash(x: &mut Cx) {
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::MOVE_XY);
+                x.move_xy();
                 step(x);
                 return;
             }

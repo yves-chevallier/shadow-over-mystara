@@ -9,6 +9,7 @@
 
 use super::*;
 use crate::objects::Obj;
+use crate::objects::Courant;
 
 /// Octets de choix d'attaque (4 lignes de 16 : 0x91a28, 0x91a38, 0x91a48, 0x91a58) et seuil de patience.
 const PICKS: [u32; 4] = [0x91a28, 0x91a38, 0x91a48, 0x91a58];
@@ -42,7 +43,7 @@ fn watch(x: &mut Cx) {
         x.call(0xa470);
         return rest(x);
     }
-    x.call(call::ANIM_STEP);
+    x.anim_step();
     if far_from_center(x) {
         return wander(x);
     }
@@ -205,7 +206,7 @@ fn jump(x: &mut Cx) {
         x.set8(0x38, 0);
         return;
     }
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if x.u16(0xc) as i16 >= 0x2c0 {
         x.set16(0xc, 0x2c0);
     }

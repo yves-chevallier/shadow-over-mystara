@@ -12,6 +12,7 @@
 //! (résultat toujours faux, retour avec l'état « attente » écrit) reproduites telles quelles.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Table des octets de seuils des ripostes spéciales (0x901e0), indexée par le quart de PV restant.
 const SPECIAL_LEVELS: u32 = 0x901e0;
@@ -74,8 +75,8 @@ fn walk(x: &mut Cx, shot: u8) {
     if facing_away(x) {
         return turn(x);
     }
-    x.call(call::MOVE_TABLE_XY);
-    x.call(call::ANIM_STEP);
+    x.move_by_table_xy();
+    x.anim_step();
 }
 
 /// 0x901c2 : une riposte spéciale est-elle due ? Les PV restants (en quarts de `+0x60`) la déclenchent.
@@ -168,7 +169,7 @@ fn turning(x: &mut Cx) {
     }
     x.call(call::PICK_TARGET);
     x.call(call::ASK_TARGET);
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 // --- +6 = 4 : immobile -------------------------------------------------------------------------------
@@ -183,7 +184,7 @@ fn hold(x: &mut Cx) {
         if facing_away(x) {
             return turn(x);
         }
-        x.call(call::ANIM_STEP);
+        x.anim_step();
         return;
     }
     x.set32(f::STATE, STAND);
@@ -206,8 +207,8 @@ fn close_in(x: &mut Cx) {
     if facing_away(x) {
         return turn(x);
     }
-    x.call(call::ANIM_STEP);
-    x.call(call::MOVE_TABLE_XY);
+    x.anim_step();
+    x.move_by_table_xy();
 }
 
 // --- choix d'une attaque après un tir d'essai (0x910b6) ---------------------------------------------------------

@@ -3,6 +3,7 @@
 
 use super::stance::next_move;
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de la réaction commune (indexées par le code de réaction `+0x49`).
 const REACT_PART: u32 = 0x740c0;
@@ -80,7 +81,8 @@ fn recoil(x: &mut Cx) {
                 x.call(0xb10c8);
             }
             if x.u8(0x14) != 0 {
-                return x.call(sub::MOVE_X);
+                x.move_x();
+                return;
             }
             if x.anim_step() {
                 x.set32(0x58, 0);
@@ -123,8 +125,7 @@ fn fall(x: &mut Cx) {
             step(x);
         }
         6 => {
-            x.call(sub::MOVE_XZ);
-            if !x.c.cond(14) {
+            if !x.move_xz().gt() {
                 x.set32(0xc, 0);
             }
             if x.anim_step() {
@@ -185,9 +186,8 @@ fn flee(x: &mut Cx) {
             x.call(sub::TERRAIN_OF_OBJECT);
             let terrain = x.c.d[2] as u8;
             x.set8(0x29, terrain);
-            x.call(sub::MOVE_TABLE_XY);
-            x.call(0x1e90);
-            if x.c.cond(5) {
+            x.move_by_table_xy();
+            if x.in_arena_default() {
                 step(x);
             } else {
                 x.call(0x27ee);
@@ -210,8 +210,7 @@ fn flee(x: &mut Cx) {
             step(x);
         }
         12 => {
-            x.call(sub::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 return step(x);
             }
             x.set32(0xc, 0);
@@ -240,9 +239,8 @@ fn run_away(x: &mut Cx) {
 
 /// 0x7449e : continue jusqu'à sortir de l'écran, puis disparaît.
 fn leave_screen(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
-    x.call(0x1e90);
-    if x.c.cond(5) {
+    x.move_by_table_xy();
+    if x.in_arena_default() {
         return step(x);
     }
     set_state_long(x, 0x0600_0000);

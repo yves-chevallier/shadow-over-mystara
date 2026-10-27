@@ -5,6 +5,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::rd16;
 use crate::objects::Obj;
+use crate::objects::Courant;
 
 /// Type 44 (0x517dc) : pastille posée sur la caméra secondaire à un décalage de colonne (`+3`), animée
 /// par le jeu `0x1bcbbe` (ou `0x1bcd5a` en palette alternative) ; elle sort quand elle quitte l'écran par le bas.
@@ -44,10 +45,8 @@ mod badge {
         x.c.d[1] = byte as u32;
         x.set8(0x42, byte);
         let n = (which * 2 + byte as u32) & 0xffff;
-        x.c.d[0] = n;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ANIMS_ALT } else { ANIMS };
-        x.c.a[4] = set;
-        x.call(0x1a32);
+        x.anim_start(set, n as u16);
         x.reinsert();
     }
 
@@ -145,7 +144,7 @@ mod shop {
         x.c.d[2] = dz;
         x.add32(0x8, dx);
         x.add32(0xc, dz);
-        x.call(ANIM_STEP);
+        x.anim_step();
     }
 
     /// Le joueur de la case A1, s'il est dans la zone (`D0` et `A2` laissés comme l'original).

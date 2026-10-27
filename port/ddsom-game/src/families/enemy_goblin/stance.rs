@@ -2,6 +2,7 @@
 //! qu'aucun joueur n'est en vie).
 
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(NO_ZONE) != 0 || grabbed(x) {
@@ -74,7 +75,7 @@ fn approach(x: &mut Cx) {
     x.set8(LOOK_PREV, 0x80);
     x.anim_step();
     if x.u8(KEY) == 0 {
-        x.call(sub::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);
@@ -117,13 +118,12 @@ fn wait(x: &mut Cx) {
 pub(super) fn walk_off(x: &mut Cx) {
     let step = x.u8(STEP);
     if step == 2 {
-        x.call(call::SCREEN_CHECK);
-        if x.c.cond(5) {
+        if x.in_arena_default() {
             return x.add8(f::STATE, 4);
         }
         x.anim_step();
         if x.u8(KEY) == 0 {
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
         }
         return x.reinsert();
     }

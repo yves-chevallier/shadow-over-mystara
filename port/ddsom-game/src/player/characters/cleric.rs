@@ -11,6 +11,7 @@
 //! leur fin (`common::begin_spell` / `end_spell`). Les routines d'origine qui créent tirs, effets et
 //! sons restent appelées telles quelles.
 
+use crate::machine::Machine;
 use super::common::{self, call, field, next_step};
 use super::items;
 use super::super::spawn;

@@ -14,7 +14,7 @@
 //!
 //! Animations 0x15d4ae (mouvements) et 0x15d4ec (coups) ; `+0xa2/+0xa3` aspect courant et précédent.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod arrival;
@@ -59,6 +59,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_MOVE: u32 = 0x15d4ae;
 pub(self) const SET_STRIKE: u32 = 0x15d4ec;
@@ -71,10 +72,8 @@ pub(self) mod call {
     pub const TURN_TO_TARGET: u32 = 0x788c;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
     pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const REMOVE: u32 = 0x27ee;
-    pub const SCREEN_CHECK: u32 = 0x1e92;
     pub const SPARK: u32 = 0xb10c8;
 }
 
@@ -82,7 +81,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
@@ -96,11 +95,11 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 pub(self) fn mv(x: &mut Cx, n: u32) {
-    x.anim_start(SET_MOVE, n);
+    x.anim_start(SET_MOVE, n as u16);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// L'aspect voulu : `+0xa2` et son double `+0xa3`.
@@ -110,8 +109,7 @@ pub(self) fn look(x: &mut Cx, v: u8) {
 }
 
 pub(self) fn set_speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
@@ -213,9 +211,7 @@ pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set16(f::STATE, 0x0204);
     x.set8(STEP, 0);
-    x.c.d[0] = 0;
-    x.call(call::SCREEN_CHECK);
-    if !x.c.cond(5) && matches!(x.u8(f::SUB2), 0x16 | 0x18 | 0x1a | 0x1c | 0x1e) {
+    if !x.in_arena(0) && matches!(x.u8(f::SUB2), 0x16 | 0x18 | 0x1a | 0x1c | 0x1e) {
         x.set8(f::SUB2, 0x14);
     }
 }

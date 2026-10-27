@@ -4,8 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
-
-const REINSERT: u32 = 0x1ee1a;
+use crate::objects::Courant;
 
 /// Type 17 (0x4c9fe) : icône d'un emplacement d'équipement (rang `+3`) du joueur propriétaire, posée sur
 /// l'écran à une place qui dépend de la partie (`A5+0x20` : mode un joueur ou plus) et du joueur. Elle change
@@ -85,8 +84,8 @@ mod slot_icon {
         x.c.d[0] = (item << 4) + count & 0xffff;
         x.c.d[1] = count;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        x.c.a[4] = set;
-        x.call(0x1a32);
+        let n = x.c.d[0] as u16;
+        x.anim_start(set, n);
     }
 
     fn active(x: &mut Cx) {
@@ -94,7 +93,7 @@ mod slot_icon {
         pickup(x);
         approach(x);
         scroll(x);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// `0x4cb50` : l'équipement a changé : nouvelle image (l'icône d'un objet retiré retourne à sa place).
@@ -114,10 +113,8 @@ mod slot_icon {
         }
         x.set8(0x57, item);
         x.set8(0x58, count);
-        x.c.d[0] = (((item as u32) << 4) + count as u32) & 0xffff;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        x.c.a[4] = set;
-        x.call(0x1a32);
+        x.anim_start(set, ((((item as u32) << 4) + count as u32) & 0xffff) as u16);
     }
 
     /// `0x4cc56` : un objet ramassé (lié par `+0x5c`) passe sur l'icône : elle le prend.

@@ -3,6 +3,7 @@
 //! 12 saisie d'un joueur.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Fin d'un geste : si plus personne n'est en vie la créature se retire, sinon elle repart au hasard.
 fn finish(x: &mut Cx) {
@@ -156,7 +157,7 @@ fn sidestep(x: &mut Cx) {
                 x.set16(TIMER2, 4);
                 spark(x, 8);
             }
-            x.call(sub::MOVE_X);
+            x.move_x();
             if count_down(x, TIMER) {
                 return;
             }
@@ -171,7 +172,7 @@ fn sidestep(x: &mut Cx) {
                 spark(x, 8);
             }
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else if lib::players_alive(x) {
                 go::wander(x);
@@ -206,7 +207,7 @@ fn jump_back(x: &mut Cx) {
             x.set16(GRAVITY, -0x30i16 as u16);
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > 0x1c0 {
                 return;
             }
@@ -214,7 +215,7 @@ fn jump_back(x: &mut Cx) {
             strike(x, 9);
         }
         6 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > -0x1e0 {
                 lib::step(x);
                 return;
@@ -226,7 +227,7 @@ fn jump_back(x: &mut Cx) {
             strike(x, 0xa);
         }
         8 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 lib::step(x);
                 return;
@@ -285,7 +286,7 @@ fn plunge_attack(x: &mut Cx) {
             if x.u8(KEY) != 0 {
                 return;
             }
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > 0xe0 {
                 return;
             }
@@ -293,7 +294,7 @@ fn plunge_attack(x: &mut Cx) {
             strike(x, 0xc);
         }
         4 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(SPEED_Z) as i16) > -0xa0 {
                 lib::step(x);
                 return;
@@ -304,7 +305,7 @@ fn plunge_attack(x: &mut Cx) {
         }
         6 => {
             strike_hit(x);
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 lib::step(x);
                 return;
@@ -321,7 +322,7 @@ fn plunge_attack(x: &mut Cx) {
                 spark(x, 8);
             }
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else {
                 finish(x);
@@ -361,7 +362,7 @@ fn stoop(x: &mut Cx) {
             }
         }
         6 => {
-            x.call(sub::MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(HEIGHT) as i16) <= 0 {
                 return land_from_dive(x);
             }
@@ -389,7 +390,7 @@ fn stoop(x: &mut Cx) {
             }
             lib::step(x);
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_XY);
+                x.move_xy();
             } else if lib::players_alive(x) {
                 go::wander(x);
             } else {

@@ -6,6 +6,7 @@
 //! couché), 0x90c34 (0x80) et 0x90a96 (0xa8 : tremblement puis mort).
 
 use super::*;
+use crate::objects::Courant;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x909a0;
@@ -136,7 +137,7 @@ fn knock_slide(x: &mut Cx) {
     }
     x.set8(0, 1);
     if x.u16(0x14) != 0 {
-        x.call(call::MOVE_XZ);
+        x.move_xz();
         let mut v = x.u16(0x14) as i16;
         if x.u8(f::FLIP) == 0 {
             v = v.wrapping_neg();
@@ -178,7 +179,7 @@ fn lie_down(x: &mut Cx) {
         }
         x.set8(HOVER, 1);
         hover(x);
-        x.call(call::ANIM_STEP);
+        x.anim_step();
         return;
     }
     if (x.u16(f::HP) as i16) <= 0 {
@@ -291,12 +292,13 @@ fn pushed_back(x: &mut Cx) {
         let t = x.u16(TIMER) - 1;
         x.set16(TIMER, t);
         if t != 0 {
-            x.call(call::ANIM_STEP);
+            x.anim_step();
             return;
         }
     }
     if x.u8(0x14) != 0 {
-        return x.call(call::MOVE_X);
+        x.move_x();
+        return;
     }
     x.set32(0x58, 0);
     stand(x);
@@ -328,7 +330,7 @@ fn death(x: &mut Cx) {
             }
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             let cam_y = camera_y(x);
             let d = x.u16(0x10).wrapping_sub(cam_y).wrapping_add(x.u16(0xc));
             if (d as i16) <= 0x100 {
@@ -374,7 +376,7 @@ fn fall_start(x: &mut Cx) {
 
 /// Fin de la chute : la caméra est dépassée par le bas, le dragon est libéré.
 fn fall_end(x: &mut Cx) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if (x.u16(0xc) as i16) > -0x100 {
         return;
     }
@@ -409,7 +411,7 @@ fn death_green(x: &mut Cx) {
 }
 
 fn green_fall(x: &mut Cx) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     let cam_y = camera_y(x);
     let d = x.u16(0x10).wrapping_sub(cam_y).wrapping_add(x.u16(0xc));
     if (d as i16) <= 0x100 {
@@ -425,14 +427,12 @@ fn green_fall(x: &mut Cx) {
     x.set32(0x1c, 0);
     x.set16(0x18, (-0x400i16) as u16);
     x.set16(0x1a, 0);
-    x.c.a[4] = 0x17dbd2;
-    x.c.d[0] = 1;
-    x.call(call::ANIM_START);
+    x.anim_start(0x17dbd2, 1);
     fall_end_green(x);
 }
 
 fn fall_end_green(x: &mut Cx) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if (x.u16(0xc) as i16) > -0x100 {
         return;
     }

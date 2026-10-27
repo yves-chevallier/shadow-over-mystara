@@ -2,6 +2,8 @@
 //! déclenchent une attaque ou une manœuvre.
 
 use super::*;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 // --- groupe 0 : arrivée --------------------------------------------------------------------------------------
 
@@ -30,7 +32,7 @@ pub(super) fn intro(x: &mut Cx) {
         0x8d818 => fall(x),
         0x8d858 => {
             x.set8(NO_ZONE, 0xff);
-            x.call(call::MOVE_X);
+            x.move_x();
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
                 body(x, 0);
@@ -39,7 +41,7 @@ pub(super) fn intro(x: &mut Cx) {
         }
         _ => {
             if Fl::sub8(x.a5_u8(0x2c), 0xc).lt() {
-                x.call(call::STEP);
+                x.anim_step();
                 return sync(x);
             }
             x.set8(0, 1);
@@ -55,7 +57,7 @@ pub(super) fn intro(x: &mut Cx) {
 /// 0x8d818 : chute jusqu'au sol.
 fn fall(x: &mut Cx) {
     x.set8(NO_ZONE, 0xff);
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if !tst16(x, 0xc).mi() {
         return;
     }
@@ -92,7 +94,7 @@ pub(super) fn lone(x: &mut Cx) {
         x.add8(SUB3, 2);
         return body(x, 0);
     }
-    x.call(call::STEP);
+    x.anim_step();
     sync(x);
 }
 
@@ -108,8 +110,8 @@ fn walk_delay(x: &mut Cx) {
 
 /// 0x8eb7e : nombre de pas tiré.
 fn walk_steps(x: &mut Cx) {
-    x.call(0x19a88);
-    let i = x.c.d[0] as u16 & 0x1f;
+    let alea = x.random_68k();
+    let i = alea & 0x1f;
     setw(x, 0, i);
     let v = x.rom8(0x8eb90 + i as u32);
     x.set8(0x6b, v);
@@ -146,7 +148,7 @@ pub(super) fn chase(x: &mut Cx) {
         x.call(call::ASK_TARGET);
         speed(x, 0x17);
     }
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     pose(x);
     if turn_needed(x) {
         return to_turn(x);
@@ -188,7 +190,7 @@ fn pose(x: &mut Cx) {
         if n as u8 != x.u8(ANIM_N) {
             return body(x, n);
         }
-        x.call(call::STEP);
+        x.anim_step();
         return sync(x);
     }
     body(x, 0);
@@ -278,15 +280,15 @@ fn near_roll(x: &mut Cx) -> bool {
     setw(x, 0, i);
     let mask = rom32(x, 0x8da88 + i as u32);
     x.c.d[1] = mask;
-    x.call(0x19a88);
-    let r = x.c.d[0] as u16 & 1;
+    let alea = x.random_68k();
+    let r = alea & 1;
     setw(x, 0, r);
     if r == 0 {
         x.c.d[0] = 0;
         return false;
     }
-    x.call(0x19a88);
-    let b = x.c.d[0] as u16 & 0x1f;
+    let alea = x.random_68k();
+    let b = alea & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
         x.c.d[0] = 1;
@@ -303,8 +305,8 @@ fn far_roll(x: &mut Cx) -> bool {
     setw(x, 0, i);
     let mask = rom32(x, 0x8dad2 + i as u32);
     x.c.d[1] = mask;
-    x.call(0x19a88);
-    let b = x.c.d[0] as u16 & 0x1f;
+    let alea = x.random_68k();
+    let b = alea & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
         setw(x, 0, 0xffe0);
@@ -324,8 +326,8 @@ fn far_roll(x: &mut Cx) -> bool {
 fn pick(x: &mut Cx, table: u32) {
     x.c.a[4] = table;
     if !roll(x) {
-        x.call(0x19a88);
-        let i = x.c.d[0] as u16 & 0xf;
+        let alea = x.random_68k();
+        let i = alea & 0xf;
         setw(x, 0, i);
         let v = x.data8(table + i as u32);
         setb(x, 1, v);
@@ -349,8 +351,8 @@ fn pick(x: &mut Cx, table: u32) {
 
 /// 0x8db98 : tirage « renoncer » selon la difficulté et le nombre de joueurs ; vrai si le bit tombe.
 fn roll(x: &mut Cx) -> bool {
-    x.call(0x19a88);
-    let r = x.c.d[0] as u16 & 7;
+    let alea = x.random_68k();
+    let r = alea & 7;
     setw(x, 0, r);
     let n = x.a5_u8(var::PLAYERS_ALIVE).wrapping_sub(1);
     setb(x, 1, n);

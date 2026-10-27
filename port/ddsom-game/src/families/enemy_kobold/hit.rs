@@ -2,6 +2,7 @@
 //! 6 seconde table de réactions, 8 saisie par un joueur (le Kobold s'enfuit).
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x56816;
@@ -61,7 +62,7 @@ fn recoil(x: &mut Cx) {
         2 => {
             puff(x, 3, 2, 8, -1);
             if x.u8(SPEED_X) != 0 {
-                x.call(sub::MOVE_X);
+                x.move_x();
             } else if x.anim_step() {
                 x.set32(0x58, 0);
                 x.set32(SPEED_X, 0);
@@ -144,9 +145,8 @@ fn run_away(x: &mut Cx) {
             if x.a5_u8(0x34) == 4 && x.u8(f::SUB2) == 4 {
                 return x.add8(f::SUB2, 2);
             }
-            x.call(sub::MOVE_TABLE_XY);
-            x.call(0x1e90);
-            if !x.c.cond(5) {
+            x.move_by_table_xy();
+            if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
                 return x.call(call::REMOVE);
             }
@@ -157,7 +157,7 @@ fn run_away(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
             }
             zone_shadow(x);
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
         }
         8 => {
@@ -181,8 +181,7 @@ fn run_away(x: &mut Cx) {
             x.anim_step();
         }
         12 => {
-            x.call(sub::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 x.anim_step();
                 return;
             }

@@ -4,10 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
-
-const REINSERT: u32 = 0x1ee1a;
-const SPEED_SELECT: u32 = 0x1b64;
-const MOVE_TABLE_XY: u32 = 0x1cb4;
+use crate::objects::Courant;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -43,10 +40,10 @@ mod hit_spark {
                 x.add16(0xc, dz);
                 let n = x.u8(0x3) as u32;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 if !child => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 x.set_bit(0x1, 1, true);
                 let v = x.u8(0x5d) ^ 1;
                 x.set8(0x5d, v);
@@ -61,8 +58,7 @@ mod hit_spark {
                 }
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
             }
@@ -91,7 +87,7 @@ mod prayer {
             },
             2 => match variant {
                 0 => {
-                    x.call(ANIM_STEP);
+                    x.anim_step();
                     x.add16(0x5c, 0xffff);
                     if x.u16(0x5c) == 0 {
                         x.add8(0x4, 2);
@@ -99,8 +95,7 @@ mod prayer {
                 }
                 1 => rays(x),
                 _ => {
-                    x.call(ANIM_STEP);
-                    if x.c.cond(5) {
+                    if x.anim_step() {
                         x.add8(0x4, 2);
                     }
                 }
@@ -126,7 +121,7 @@ mod prayer {
         let life = x.rom16(DURATIONS + class * 2);
         x.set16(0x5c, life);
         x.anim(ANIMS, 0);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn init_rays(x: &mut Cx) {
@@ -145,12 +140,14 @@ mod prayer {
         x.copy_pos(owner);
         x.add16(0xc, 0x20);
         x.set_d0w(0x43);
-        x.call(SPEED_SELECT);
-        x.call(MOVE_TABLE_XY);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+        x.move_by_table_xy();
         x.set_d0w(0x21);
-        x.call(SPEED_SELECT);
+        let n = x.c.d[0] as u16;
+        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.anim(ANIMS, 1);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn init_glow(x: &mut Cx) {
@@ -163,7 +160,7 @@ mod prayer {
         x.add16(0xc, 0x37);
         x.add16(0x10, 0xffff);
         x.anim(ANIMS, 3);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn rays(x: &mut Cx) {
@@ -200,16 +197,15 @@ mod prayer {
                 x.add8(0x5, 2);
                 x.anim(ANIMS, 2);
             }
-            x.call(ANIM_STEP);
-            x.call(MOVE_TABLE_XY);
-            x.call(REINSERT);
+            x.anim_step();
+            x.move_by_table_xy();
+            x.reinsert();
         } else {
-            x.call(ANIM_STEP);
-            if x.c.cond(5) {
+            if x.anim_step() {
                 x.add8(0x4, 2);
             }
-            x.call(MOVE_TABLE_XY);
-            x.call(REINSERT);
+            x.move_by_table_xy();
+            x.reinsert();
         }
     }
 }
@@ -237,7 +233,7 @@ mod glow {
                 x.add16(0x10, 0xffff);
                 let n = x.u8(0x3) as u32;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 let owner = x.link_a1(f::OWNER);
@@ -246,7 +242,7 @@ mod glow {
                 if gesture != x.u8(0x5d) {
                     x.add8(0x4, 2);
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             _ => x.free_peff(),
         }

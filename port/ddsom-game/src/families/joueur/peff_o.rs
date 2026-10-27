@@ -6,8 +6,8 @@ use crate::mem::{rd32, wr32, wr8};
 use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 const ANIMS: u32 = 0x1c40c6;
 /// Position de l'icône par joueur (X, Y) : deux versions selon `A5+0x20` (1 : écran à un joueur).
 const PLAYER_SPOTS_A: u32 = 0x4d792;
@@ -52,7 +52,7 @@ mod coins {
                 x.set16(0x8, cx.wrapping_add(dx));
                 x.set16(0x10, cy.wrapping_add(dy));
                 x.anim(ANIMS, 0x2b);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 check(x);

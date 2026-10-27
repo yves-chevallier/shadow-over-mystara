@@ -2,6 +2,7 @@
 //! saisi (12), transformation (14).
 
 use super::*;
+use crate::objects::Courant;
 
 /// Animation du corps `n` pour l'animation `id`, avec les réglages sonores `(0x27, 5)` et une vitesse `speed`.
 fn body_pose(x: &mut Cx, id: u8, n: u32, speed_n: u32) {
@@ -12,7 +13,7 @@ fn body_pose(x: &mut Cx, id: u8, n: u32, speed_n: u32) {
 
 /// 0x1a56 : un pas d'animation (la retenue, fin du script, n'est pas utilisée).
 pub(super) fn step_anim(x: &mut Cx) {
-    x.call(0x1a56);
+    x.anim_step();
 }
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
@@ -42,7 +43,7 @@ pub(super) fn arrive(x: &mut Cx) {
             start(x, Set::A, 0x1c);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u32(0xc) as i32) > 0 {
                 return step_anim(x);
             }
@@ -137,7 +138,7 @@ fn stand(x: &mut Cx) {
         return x.tail(call::REROLL);
     }
     step_anim(x);
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     if x.u16(f::TARGET) == 0 {
         return;
     }
@@ -164,7 +165,8 @@ fn turn(x: &mut Cx) {
         2 => {
             if x.u16(f::TARGET) != 0 && turn_not_needed(x) {
                 step_anim(x);
-                return x.call(call::MOVE_TABLE_XY);
+                x.move_by_table_xy();
+                return;
             }
             next7(x);
             x.set8(VULNERABLE, 1);
@@ -271,7 +273,7 @@ fn leap(x: &mut Cx) {
                 x.set8(SAVED_STEP, step);
                 x.set32(f::STATE, state::TURN);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         _ => {}
@@ -318,7 +320,7 @@ fn spot_run(x: &mut Cx) {
             choose_spot(x);
             x.set8(VULNERABLE, 1);
             body_pose(x, 2, 2, 0x15);
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         2 => {
@@ -338,7 +340,7 @@ fn spot_run(x: &mut Cx) {
                 x.set8(0x2d, a & 0x1f);
                 x.set16(TIMER, 6);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         _ => {}
@@ -361,7 +363,7 @@ fn spot_pause(x: &mut Cx) {
             if sub8(x, TIMER, 1).mi() {
                 return x.set32(f::STATE, state::STAND);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step_anim(x);
         }
         _ => {}
@@ -412,8 +414,8 @@ fn leap_rise_wait(x: &mut Cx) {
     step_anim(x);
 }
 
-fn leap_climb(x: &mut Cx, f_move: u32, up: bool) {
-    x.call(f_move);
+fn leap_climb(x: &mut Cx, f_move: fn(&mut Cx), up: bool) {
+    f_move(x);
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
     if !reached {
@@ -423,8 +425,8 @@ fn leap_climb(x: &mut Cx, f_move: u32, up: bool) {
     step_anim(x);
 }
 
-fn leap_land(x: &mut Cx, f_move: u32) {
-    x.call(f_move);
+fn leap_land(x: &mut Cx, f_move: fn(&mut Cx)) {
+    f_move(x);
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
     }
@@ -464,9 +466,9 @@ fn spot_leap_a(x: &mut Cx) {
             start(x, Set::A, 5);
         }
         2 => leap_rise_wait(x),
-        4 => leap_climb(x, call::MOVE_XZ, true),
-        6 => leap_climb(x, call::MOVE_XZ, false),
-        8 => leap_land(x, call::MOVE_XZ),
+        4 => leap_climb(x, |x| { x.move_xz(); }, true),
+        6 => leap_climb(x, |x| { x.move_xz(); }, false),
+        8 => leap_land(x, |x| { x.move_xz(); }),
         10 => leap_end(x),
         _ => {}
     }
@@ -494,9 +496,9 @@ fn spot_leap_b(x: &mut Cx) {
             start(x, Set::A, 5);
         }
         2 => leap_rise_wait(x),
-        4 => leap_climb(x, call::MOVE_YZ, true),
-        6 => leap_climb(x, call::MOVE_YZ, false),
-        8 => leap_land(x, call::MOVE_YZ),
+        4 => leap_climb(x, |x| { x.move_yz(); }, true),
+        6 => leap_climb(x, |x| { x.move_yz(); }, false),
+        8 => leap_land(x, |x| { x.move_yz(); }),
         10 => leap_end(x),
         _ => {}
     }
@@ -666,7 +668,7 @@ pub(super) fn transform(x: &mut Cx) {
         6 => leap_transform(x, true),
         8 => leap_transform(x, false),
         10 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u32(0xc) as i32) > 0 {
                 return step_anim(x);
             }
@@ -694,7 +696,7 @@ pub(super) fn transform(x: &mut Cx) {
 }
 
 fn leap_transform(x: &mut Cx, up: bool) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
     if !reached {

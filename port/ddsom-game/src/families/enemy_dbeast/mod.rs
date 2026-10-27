@@ -80,6 +80,7 @@ pub(self) mod g {
 }
 
 use g::*;
+use crate::objects::Courant;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_A: u32 = 0x166fb6;
@@ -96,7 +97,6 @@ const KNOCKED: u32 = 0x0408_0000;
 
 /// Routines du moteur et de l'IA.
 mod call {
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const ANGLE: u32 = 0x137e;
     pub const FACE_TARGET: u32 = 0xa470;
     pub const TURN_TO_TARGET: u32 = 0x788c;
@@ -106,7 +106,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -139,13 +139,13 @@ fn anim_b(x: &mut Cx, n: u8) -> u32 {
 /// Joue l'animation `n` de la série des mouvements.
 fn play(x: &mut Cx, n: u8) {
     let n = anim_a(x, n);
-    x.anim_start(SET_A, n);
+    x.anim_start(SET_A, n as u16);
 }
 
 /// Joue l'animation `n` de la série des coups.
 fn play_b(x: &mut Cx, n: u8) {
     let n = anim_b(x, n);
-    x.anim_start(SET_B, n);
+    x.anim_start(SET_B, n as u16);
 }
 
 /// Joue l'animation `n` (série des mouvements) si ce n'est pas déjà celle en cours (`+0xaf`).
@@ -153,7 +153,7 @@ fn play_once(x: &mut Cx, n: u8) {
     let n = anim_a(x, n);
     if n as u8 != x.u8(LAST_ANIM) {
         x.set8(LAST_ANIM, n as u8);
-        x.anim_start(SET_A, n);
+        x.anim_start(SET_A, n as u16);
     }
 }
 
@@ -164,13 +164,12 @@ fn step(x: &mut Cx) {
 
 /// Déplacement selon la table de vitesses (X, Y).
 fn move_xy(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 /// Choisit la table de vitesses `n`.
 fn speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Pose les trois vitesses d'un bond : X, Z, accélération en Z.

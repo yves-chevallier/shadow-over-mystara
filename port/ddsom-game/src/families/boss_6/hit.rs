@@ -11,6 +11,7 @@
 use super::decide;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 const REACTIONS: u32 = 0x8527a;
 /// La seule routine de la table propre au boss (code 0x4c) : étourdissement avec tremblement.
@@ -128,7 +129,7 @@ fn pushed_back(x: &mut Cx) {
                 x.set16(TIMER, 0x14);
                 x.set16(0x16, 0);
             }
-            x.call(call::MOVE_X);
+            x.move_x();
             step(x);
         }
         4 => {
@@ -136,7 +137,7 @@ fn pushed_back(x: &mut Cx) {
                 x.set32(0x58, 0);
                 decide::attack_6_shielded(x);
             } else {
-                x.call(call::MOVE_X);
+                x.move_x();
                 step(x);
             }
         }
@@ -229,7 +230,7 @@ fn down(x: &mut Cx) {
             x.anim_start(SET_HURT, 0);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if tst16(x, 0xc).gt() {
                 return;
             }

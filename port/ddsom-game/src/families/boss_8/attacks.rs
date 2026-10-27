@@ -3,6 +3,7 @@
 
 use super::aids;
 use super::*;
+use crate::objects::Courant;
 
 /// Clé d'animation `kind` (`+0xa2`, recopiée en `+0xa3`).
 fn key(x: &mut Cx, kind: u8) {
@@ -68,7 +69,7 @@ fn combo(x: &mut Cx) {
                 x.set8(KEY, 0);
                 x.call(0xe42c6);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         0x88870 => {
             if x.u8(KEY) != 0 {
@@ -77,7 +78,7 @@ fn combo(x: &mut Cx) {
                 x.set8(KEY, 0);
                 x.call(0xa5c9a);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         _ => {
             if x.u8(HIT_ACK) != 0 {
@@ -85,7 +86,7 @@ fn combo(x: &mut Cx) {
                 aids::after_attack(x);
                 x.set8(HIT_ACK, 0);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
     }
 }
@@ -195,7 +196,8 @@ fn charge(x: &mut Cx) {
         }
         0x88aac => {
             if x.u8(KEY) == 0 {
-                return x.call(call::STEP);
+                x.anim_step();
+                return;
             }
             addq8(x, SUB3, 2);
             x.set8(KEY, 0);
@@ -212,7 +214,7 @@ fn charge(x: &mut Cx) {
         }
         0x88ae6 => {
             dust(x);
-            x.call(call::MOVE_X);
+            x.move_x();
             if x.anim_step() {
                 addq8(x, SUB3, 2);
                 x.set16(TIMER, 0x14);
@@ -227,8 +229,8 @@ fn charge(x: &mut Cx) {
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
             }
-            x.call(call::MOVE_X);
-            x.call(call::STEP);
+            x.move_x();
+            x.anim_step();
         }
         _ => {
             if sub16(x, TIMER, 1).mi() {
@@ -238,8 +240,8 @@ fn charge(x: &mut Cx) {
                 x.set8(0, 1);
                 return aids::after_attack(x);
             }
-            x.call(call::MOVE_X);
-            x.call(call::STEP);
+            x.move_x();
+            x.anim_step();
         }
     }
 }
@@ -290,10 +292,10 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
                 addq8(x, SUB3, 2);
                 x.set8(VULNERABLE, 0);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         0x88c0e => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if !Fl::sub16(x.u16(0x18), 0xfd00).gt() || true {
                 // cmpi.w #-0x300,(0x18,A0) ; bgt : l'élan vertical se réduit
             }
@@ -302,12 +304,12 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
                 addq8(x, SUB3, 2);
                 x.set16(0x30, 1);
             }
-            x.call(call::STEP);
+            x.anim_step();
         }
         0x88c34 => {
-            x.call(call::MOVE_XZ);
-            if x.c.cond(14) {
-                return x.call(call::STEP);
+            if x.move_xz().gt() {
+                x.anim_step();
+                return;
             }
             x.c.d[0] = 0x14;
             x.call(call::SOUND_B);
@@ -389,7 +391,7 @@ fn lunge(x: &mut Cx, first: bool) {
                 addq8(x, SUB3, 2);
                 strike(x, 0xe);
             } else {
-                x.call(call::STEP);
+                x.anim_step();
             }
         }
         _ => finish(x),

@@ -58,8 +58,7 @@ impl Mach<'_> {
     }
     /// 0x19a88 : tirage pseudo-aléatoire (D0 reçoit le nouvel état).
     fn random(&mut self) {
-        self.c.a[5] = A5;
-        call(self.c, self.b, 0x19a88);
+        crate::rng::random_68k(self.c, self.b);
     }
 }
 

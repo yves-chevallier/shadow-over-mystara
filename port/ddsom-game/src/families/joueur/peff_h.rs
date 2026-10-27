@@ -4,8 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
-
-const REINSERT: u32 = 0x1ee1a;
+use crate::objects::Courant;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -40,7 +39,7 @@ mod shower {
                 x.add8(0x4, 2);
                 place(x, OFFSETS_A, true);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             0 => {
                 x.add8(0x4, 2);
@@ -50,7 +49,7 @@ mod shower {
                     place(x, OFFSETS_C, false);
                 }
                 x.anim(ANIMS, 1);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 if !child => {
                 if gesture_changed(x, 0x5d) {
@@ -62,7 +61,7 @@ mod shower {
                 if v != 0 {
                     x.set_bit(0x1, 1, true);
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             2 => bolt(x),
             _ => x.free_peff(),
@@ -96,8 +95,7 @@ mod shower {
     /// Variante 1, état 2 : une goutte fait tomber un éclair à la fin de son animation.
     fn bolt(x: &mut Cx) {
         let wide = x.u8(0x15e) == 0x18;
-        x.call(ANIM_STEP);
-        if x.c.cond(5) {
+        if x.anim_step() {
             x.add8(0x4, 2);
         }
         if x.u8(0x33) == 0 {
@@ -156,7 +154,7 @@ mod strike {
                 x.add16(0xc, 0x7c);
                 x.set16(0x12, 0x4000);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             0 => {
                 x.add8(0x4, 2);
@@ -170,17 +168,17 @@ mod strike {
                 }
                 let n = x.u8(0x2f) as u32 + 1;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 if !child => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 if gesture_changed(x, 0x59) {
                     x.add8(0x4, 2);
                 }
             }
             2 => {
                 if x.u8(0x5) == 0 {
-                    x.call(ANIM_STEP);
+                    x.anim_step();
                     let owner = x.link_a1(f::OWNER);
                     let same = owner.u8(x.b, 0x7) == x.u8(0x59);
                     x.c.d[0] = x.c.d[0] & !0xff | owner.u8(x.b, 0x7) as u32;
@@ -201,8 +199,7 @@ mod strike {
                         sweep(x);
                     }
                 } else {
-                    x.call(ANIM_STEP);
-                    if x.c.cond(5) {
+                    if x.anim_step() {
                         x.add8(0x4, 2);
                     }
                     x.set_bit(0x1, 1, true);
@@ -340,7 +337,7 @@ mod ring {
                 x.add16(0x10, 0xffff);
                 let n = x.u8(0x3) as u32;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 if !child => {
                 x.set_bit(0x1, 1, true);
@@ -352,11 +349,10 @@ mod ring {
                 if gesture_changed(x, 0x5b) {
                     x.add8(0x4, 2);
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             2 => {
-                x.call(ANIM_STEP);
-                if !x.c.cond(5) {
+                if !x.anim_step() {
                     return;
                 }
                 x.add8(0x4, 2);
@@ -421,10 +417,10 @@ mod moon {
                 x.add16(0x12, dp);
                 let n = x.u8(0x3) as u32;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 let owner = x.link_a1(f::OWNER);
                 if owner.u8(x.b, 0x7) == 6 {
                     x.add8(0x4, 2);
@@ -458,8 +454,7 @@ mod moon {
                 }
             }
             4 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
                 x.set_bit(0x1, 1, true);
@@ -514,15 +509,15 @@ mod aura {
                 x.add16(0x10, 0xffff);
                 let n = x.u8(0x3) as u32;
                 x.anim(ANIMS, n);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
-                x.call(ANIM_STEP);
+                let fin = x.anim_step();
                 if !child {
                     if gesture_changed(x, 0x59) {
                         x.add8(0x4, 2);
                     }
-                } else if x.c.cond(5) {
+                } else if fin {
                     x.add8(0x4, 2);
                 }
             }

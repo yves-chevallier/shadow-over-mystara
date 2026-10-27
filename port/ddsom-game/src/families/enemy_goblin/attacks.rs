@@ -3,6 +3,7 @@
 
 use super::stance::{approach_start, walk_off};
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -200,7 +201,7 @@ fn charge(x: &mut Cx) {
         set_speed(x, 0x12);
         return mv(x, 1);
     }
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.anim_step();
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
@@ -400,7 +401,7 @@ fn lunge(x: &mut Cx) {
             mv(x, 3);
         }
         8 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -419,7 +420,7 @@ fn lunge(x: &mut Cx) {
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
         }
         _ => {}

@@ -17,6 +17,7 @@ use crate::objects::Obj;
 use crate::{regs, Native};
 use cps2::Cps2Bus;
 use m68k::Cpu;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -48,7 +49,7 @@ fn rise_start(x: &mut Cx) {
 
 /// 0x91cec : monte jusqu'à l'altitude 0x300.
 fn rise_up(x: &mut Cx) {
-    x.call(call::MOVE_Z);
+    x.move_z();
     if (x.u16(0xc) as i16) < 0x300 {
         return;
     }
@@ -77,7 +78,7 @@ fn fall_start(x: &mut Cx) {
 
 /// 0x91d4e : descend jusqu'à l'altitude 0x20, puis attend 0x20 images.
 fn fall_down(x: &mut Cx) {
-    x.call(call::MOVE_Z);
+    x.move_z();
     if (x.u16(0xc) as i16) > 0x20 {
         return;
     }
@@ -309,8 +310,7 @@ fn sweep(x: &mut Cx) {
     eshl_shot_34(x, 1);
     x.call(0xe54dc);
     x.set8(0x2d, 0);
-    x.c.d[0] = 0x18;
-    x.call(0x1a94);
+    x.select_speed(&crate::objects::motion::SPEEDS_A, 0x18);
 }
 
 /// 0x92036 : fin du souffle, puis lance le vol de sortie.
@@ -334,7 +334,7 @@ fn sweep_end(x: &mut Cx) {
 /// 0x92066 : s'éloigne jusqu'à sortir de l'écran, puis se replace en haut à droite.
 fn leave(x: &mut Cx) {
     x.set8(0x42, 1);
-    x.call(call::MOVE_X);
+    x.move_x();
     let d = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X)) as i16;
     if !(d < -0x80) && d < 0x200 {
         return;
@@ -515,7 +515,7 @@ fn attack_14(x: &mut Cx) {
         }
         2 => {
             step(x);
-            x.call(call::MOVE_Z);
+            x.move_z();
             follow(x);
             if (x.u16(0xc) as i16) >= 0x80 {
                 x.add8(0x7, 2);
@@ -546,8 +546,8 @@ fn attack_14(x: &mut Cx) {
             if try_seize(x) {
                 return;
             }
-            x.call(call::MOVE_Y);
-            x.call(call::MOVE_Z);
+            x.move_y();
+            x.move_z();
             if (x.u16(0xc) as i16) > 0 {
                 let low = x.u16(0xc).wrapping_add(x.u16(0x10));
                 let floor = x.a5_u16(var::SCROLL_Y).wrapping_add(0x60);

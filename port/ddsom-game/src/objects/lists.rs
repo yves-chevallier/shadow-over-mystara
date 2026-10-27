@@ -14,9 +14,8 @@
 //! registre laissé par le précédent : 0x4bd32 fait `andi.b #$f,D0` puis indexe une table avec tout
 //! D0.w, dont l'octet haut est le lien de liste laissé par `reinsert`. Les natives 0x1ee1a et
 //! 0x1ef6c (`Reinsert`) transcrivent donc l'original instruction par instruction et rendent
-//! D0-D2, A1-A4 et les drapeaux tels que lui, selon le chemin suivi. Les appelants Rust
-//! (`SortedList::reinsert`) n'ont pas ce contrat et utilisent l'algorithme en clair
-//! (`plan_reinsert`).
+//! D0-D2, A1-A4 et les drapeaux tels que lui, selon le chemin suivi (`SortedList::reinsert_68k`). Les
+//! appelants qui n'ont pas ce contrat utilisent l'algorithme en clair (`SortedList::reinsert`, `plan_reinsert`).
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -337,15 +336,17 @@ impl Way {
 struct Reinsert<'a> {
     c: &'a mut Cpu,
     b: &'a mut Cps2Bus,
+    /// L'objet réinséré (A0 de l'original).
+    obj: Obj,
     list: SortedList,
 }
 
 impl Reinsert<'_> {
     fn a0(&self) -> u32 {
-        self.c.a[0]
+        self.obj.0
     }
     fn a0w(&self) -> u16 {
-        self.c.a[0] as u16
+        self.obj.0 as u16
     }
     /// `movea.w src,An`.
     fn movea(&mut self, n: usize, w: u16) -> u32 {
@@ -490,12 +491,43 @@ impl Reinsert<'_> {
     }
 }
 
+/// Registres que laisse la réinsertion d'origine (voir `diag::registres_morts`, étiquette `lists`).
+pub const REGS_REINSERT: u32 =
+    regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4) | regs::CCR;
+
+impl SortedList {
+    /// `reinsert` avec les registres de l'original, selon le chemin suivi (voir `Reinsert`).
+    #[track_caller]
+    pub fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+        Reinsert { c, b, obj, list: self }.run();
+        crate::diag::registres_morts(c, "lists", REGS_REINSERT);
+    }
+}
+
+/// `unlink_all` avec le registre de l'original : A0 = dernier objet retiré (inchangé si les listes sont vides).
+#[track_caller]
+pub fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+    let last = unlink_all_regs(c, b);
+    crate::diag::registres_morts(c, "lists", regs::a(0));
+    last
+}
+
+fn unlink_all_regs(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+    let last = unlink_all(b);
+    if let Some(o) = last {
+        c.a[0] = o.0 | 0xff00_0000; // movea.w : étendu en signe
+    }
+    last
+}
+
 fn reinsert_native(list: SortedList, c: &mut Cpu, b: &mut Cps2Bus) {
-    Reinsert { c, b, list }.run();
+    let obj = Obj(c.a[0]);
+    Reinsert { c, b, obj, list }.run();
     rts(c, b);
 }
 
-/// 0x1f0be : retire l'objet A0 de sa liste.
+/// 0x1f0be : retire l'objet A0 de sa liste. L'original ne laisse aucun registre utile : les appelants Rust
+/// appellent `unlink` directement.
 fn unlink_native(c: &mut Cpu, b: &mut Cps2Bus) {
     unlink(b, Obj(c.a[0]));
     rts(c, b);
@@ -503,9 +535,7 @@ fn unlink_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x1f184 : vide les deux listes.
 fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(last) = unlink_all(b) {
-        c.a[0] = last.0 | 0xff00_0000; // movea.w : étendu en signe
-    }
+    unlink_all_regs(c, b);
     rts(c, b);
 }
 

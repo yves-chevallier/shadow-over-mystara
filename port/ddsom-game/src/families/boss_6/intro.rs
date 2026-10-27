@@ -3,6 +3,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -30,7 +31,7 @@ fn enter(x: &mut Cx) {
     x.set16(0x16, 0);
     x.set16(0x18, 0x400);
     x.set16(0x1a, (-0x40i16) as u16);
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     fly(x, 7);
 }
 
@@ -40,7 +41,7 @@ fn rise(x: &mut Cx) {
     if x.u8(KEY) != 0 {
         return;
     }
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if cmp16(x, 0x18, 0x100).le() {
         x.add8(f::SUB2, 2);
         x.call(0xe13f0);
@@ -50,7 +51,7 @@ fn rise(x: &mut Cx) {
 
 /// +6 = 4 : sommet du bond.
 fn peak(x: &mut Cx) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if cmp16(x, 0x18, 0xff00).le() {
         x.add8(f::SUB2, 2);
         fly(x, 9);
@@ -59,7 +60,7 @@ fn peak(x: &mut Cx) {
 
 /// +6 = 6 : chute ; à l'atterrissage, secousse et poussière.
 fn land(x: &mut Cx) {
-    x.call(call::MOVE_XZ);
+    x.move_xz();
     if tst16(x, 0xc).gt() {
         return;
     }
@@ -86,7 +87,7 @@ fn roar_wait(x: &mut Cx) {
         x.set16(TIMER, 0x14);
         return;
     }
-    x.call(call::MOVE_X);
+    x.move_x();
     step(x);
 }
 

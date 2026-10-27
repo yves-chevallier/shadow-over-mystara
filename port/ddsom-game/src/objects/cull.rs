@@ -111,9 +111,20 @@ pub fn despawn_if_offscreen(b: &mut Cps2Bus, obj: Obj) {
     }
 }
 
-/// 0x1e1a : `despawn_if_offscreen` avec les registres de l'original (A1 = caméra, D0 = dernier test).
-fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus) {
-    let obj = Obj(c.a[0]);
+/// Registres que laissent les routines d'origine (voir `diag::registres_morts`, étiquette `cull`).
+pub const REGS_DESPAWN: u32 = regs::d(0) | regs::a(1) | regs::CCR;
+pub const REGS_IN_ARENA: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::CCR;
+pub const REGS_VISIBILITY: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::CCR;
+
+/// `despawn_if_offscreen` avec les registres de l'original (A1 = caméra, D0 = dernier test).
+#[track_caller]
+pub fn despawn_if_offscreen_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+    cull_offscreen(c, b, obj);
+    crate::diag::registres_morts(c, "cull", REGS_DESPAWN);
+}
+
+/// 0x1e1a, registres compris.
+fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     let cam = camera(b);
     c.a[1] = cam;
     load_screen_x(c, b, 0, obj, cam);
@@ -134,23 +145,51 @@ fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus) {
             c.flags_logic(6, Size::Byte);
         }
     }
-    rts(c, b);
 }
 
 pub const CULL_OFFSCREEN: Native = Native {
     entry: 0x1e1a,
     name: "obj_cull_offscreen",
-    run: cull_offscreen,
+    run: |c, b| {
+        cull_offscreen(c, b, Obj(c.a[0]));
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };
 
 // ---- 0x1e92 : zone de jeu élargie ----
 
-/// 0x1e92 : l'objet A0 est-il dans la zone élargie de la marge D0.w ? (C = dedans, comme le
-/// `cmp` final de l'original.) Une seconde marge fixe, 0x3e, s'applique à la hauteur.
-fn in_arena(c: &mut Cpu, b: &mut Cps2Bus) {
-    let obj = Obj(c.a[0]);
+/// Marge de la zone de jeu par défaut (0x1e90) ; c'est aussi la marge fixe de la hauteur.
+pub const ARENA_MARGIN: u16 = 0x3e;
+
+/// 0x1e92 : l'objet est-il dans la zone de jeu élargie de `margin` pixels ? En largeur, l'abscisse à l'écran
+/// plus la marge doit rester sous 0x180 + 2 × marge ; en profondeur (`Obj::Y` seul, sans l'altitude), avec la marge
+/// fixe `ARENA_MARGIN`, sous 0x100 + 2 × 0x3e. Comparaisons non signées sur 16 bits, comme l'original.
+pub fn in_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
+    let cam = camera(b);
+    let x = screen_x(b, obj, cam).wrapping_add(margin);
+    if x >= 0x180u16.wrapping_add(margin.wrapping_add(margin)) {
+        return false;
+    }
+    let y = obj.u16(b, Obj::Y).wrapping_sub(rd16(b, cam + 0xc)).wrapping_add(ARENA_MARGIN);
+    y < 0x100 + 2 * ARENA_MARGIN
+}
+
+/// `in_arena` avec les registres de l'original : D0 = marge (long), puis D0-D2 et A1 (caméra) des calculs,
+/// retenue = dedans.
+#[track_caller]
+pub fn in_arena_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
+    c.d[0] = margin as u32;
+    c.flags_logic(margin as u32, Size::Long);
+    in_arena_regs(c, b, obj);
+    let inside = c.cond(5 /* cs */);
+    crate::diag::registres_morts(c, "cull", REGS_IN_ARENA);
+    inside
+}
+
+/// 0x1e92, registres compris : marge dans D0.w.
+fn in_arena_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     let cam = camera(b);
     c.a[1] = cam;
     load_screen_x(c, b, 1, obj, cam);
@@ -170,28 +209,29 @@ fn in_arena(c: &mut Cpu, b: &mut Cps2Bus) {
         add_w(c, 2, dw(c, 0));
         cmp_w(c, 1, dw(c, 2));
     }
-    rts(c, b);
-}
-
-/// 0x1e90 : `in_arena` avec la marge par défaut 0x3e.
-fn in_arena_default(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.d[0] = 0x3e;
-    c.flags_logic(0x3e, Size::Long);
-    in_arena(c, b);
 }
 
 pub const IN_ARENA: Native = Native {
     entry: 0x1e92,
     name: "obj_in_arena",
-    run: in_arena,
+    run: |c, b| {
+        in_arena_regs(c, b, Obj(c.a[0]));
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };
 
+/// 0x1e90 : `in_arena` avec la marge par défaut 0x3e.
 pub const IN_ARENA_DEFAULT: Native = Native {
     entry: 0x1e90,
     name: "obj_in_arena_default",
-    run: in_arena_default,
+    run: |c, b| {
+        c.d[0] = ARENA_MARGIN as u32;
+        c.flags_logic(ARENA_MARGIN as u32, Size::Long);
+        in_arena_regs(c, b, Obj(c.a[0]));
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -228,9 +268,17 @@ pub fn update_visibility(b: &mut Cps2Bus, obj: Obj) -> bool {
     true
 }
 
-/// 0x1ed2 : D0 = 0 hors écran ou caché, 1 sans file de candidats, sinon classe × 2.
-fn on_screen(c: &mut Cpu, b: &mut Cps2Bus) {
-    let obj = Obj(c.a[0]);
+/// `update_visibility` avec les registres de l'original : D0 = 0 hors écran ou caché, 1 sans file de candidats,
+/// sinon classe × 2 ; D1, D2, A1, A2 des calculs.
+#[track_caller]
+pub fn update_visibility_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
+    let visible = on_screen(c, b, obj);
+    crate::diag::registres_morts(c, "cull", REGS_VISIBILITY);
+    visible
+}
+
+/// 0x1ed2, registres compris ; vrai si l'objet est visible.
+fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     let cam = camera(b);
     c.a[2] = cam;
     let class = obj.u8(b, Obj::CLASS);
@@ -272,7 +320,8 @@ fn on_screen(c: &mut Cpu, b: &mut Cps2Bus) {
         }
     };
     let flags = obj.u8(b, Obj::FLAGS);
-    if visible && flags & 2 == 0 {
+    let shown = visible && flags & 2 == 0;
+    if shown {
         obj.set_u8(b, Obj::FLAGS, flags | 1);
         c.d[0] = class as u32;
         c.flags_logic(class as u32, Size::Byte);
@@ -293,13 +342,16 @@ fn on_screen(c: &mut Cpu, b: &mut Cps2Bus) {
         c.d[0] = 0;
         c.flags_logic(0, Size::Long);
     }
-    rts(c, b);
+    shown
 }
 
 pub const ON_SCREEN: Native = Native {
     entry: 0x1ed2,
     name: "obj_on_screen",
-    run: on_screen,
+    run: |c, b| {
+        on_screen(c, b, Obj(c.a[0]));
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
 };

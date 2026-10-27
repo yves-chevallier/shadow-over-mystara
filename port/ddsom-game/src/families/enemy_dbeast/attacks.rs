@@ -7,6 +7,7 @@
 use super::parts::{bound_land, bound_wait};
 use super::stance::{engage, next_move};
 use super::*;
+use crate::objects::Courant;
 
 /// État long à reprendre après un demi-tour : sous-état 4 (ici) ou 6 (`attacks_b`).
 pub(super) const RESUME_ATTACK: u32 = 0x0204_0000;
@@ -202,7 +203,7 @@ fn lunge(x: &mut Cx) {
         }
         8 => {
             if x.u8(0x14) != 0 {
-                x.call(sub::MOVE_X);
+                x.move_x();
             }
             if x.anim_step() {
                 x.set32(0x14, 0);
@@ -389,8 +390,7 @@ fn backflip(x: &mut Cx) {
         }
         6 | 10 => bound_wait(x),
         8 => {
-            x.call(sub::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 return step(x);
             }
             x.set32(0xc, 0);

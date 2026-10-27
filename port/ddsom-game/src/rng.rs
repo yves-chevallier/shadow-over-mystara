@@ -2,8 +2,8 @@
 //! du jeu (comportement des ennemis, dégâts, butins...) en dépendent, donc aussi la reproductibilité
 //! des parties.
 //!
-//! L'état est un mot en `A5+0x1a` (octet haut en 0x1a, octet bas en 0x1b), initialisé à 0x01c3 au
-//! démarrage d'une partie (0x19a80). Chaque tirage (0x19a88) :
+//! L'état est un mot en `A5+0x1a` (`ram::GERME` : octet haut en 0x1a, octet bas en 0x1b), initialisé à
+//! 0x01c3 au démarrage d'une partie (0x19a80). Chaque tirage (0x19a88) :
 //!
 //! ```text
 //! t     = ((3 × état) mod 2^16) >> 8        (octet)
@@ -12,17 +12,18 @@
 //! résultat = nouvel état (mot)
 //! ```
 //!
-//! Les appelants (537 sites) masquent le résultat avec `andi` ; aucun ne lit les drapeaux.
+//! Un seul tirage pour tout le jeu : [`random`] (cœur) ; [`random_68k`] laisse en plus D0.w et les
+//! drapeaux de l'original pour les appelants pas encore libérés des registres. Les contextes l'offrent
+//! sous `x.random()` (`crate::machine::Machine`).
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
-use crate::mem::{rd16, rts, wr16};
+use crate::mem::rts;
+use crate::ram::GERME;
 use crate::{regs, Native};
 
-/// Mot d'état, relatif à A5.
-const ETAT: u32 = 0x1a;
 /// Graine posée au début d'une partie.
 pub const GRAINE: u16 = 0x01c3;
 
@@ -45,29 +46,60 @@ impl Rng {
     }
 }
 
-/// 0x19a80 : remet la graine.
-fn graine(c: &mut Cpu, b: &mut Cps2Bus) {
-    wr16(b, c.a[5] + ETAT, GRAINE);
-    c.flags_logic(GRAINE as u32, Size::Word);
-    rts(c, b);
+/// Un tirage (0x19a88) : avance le germe et rend le nouvel état. Les appelants masquent le résultat.
+pub fn random(b: &mut Cps2Bus) -> u16 {
+    tirage(b).0
 }
 
-/// 0x19a88 : un tirage. Sortie : D0 (mot bas) = nouvel état. D0 haut est rendu intact.
-fn tirage(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut rng = Rng(rd16(b, c.a[5] + ETAT));
-    let (etat, retenue) = rng.suivant();
-    wr16(b, c.a[5] + ETAT, etat);
+fn tirage(b: &mut Cps2Bus) -> (u16, bool) {
+    let mut rng = Rng(GERME.get(b));
+    let r = rng.suivant();
+    GERME.set(b, r.0);
+    r
+}
+
+/// Masque des registres que l'original laisse (voir `diag::registres_morts`).
+pub const REGS_RANDOM: u32 = regs::d(0) | regs::CCR;
+
+/// `random` avec les registres de l'original : D0.w = nouvel état (D0 haut intact), N et Z du mot, X = retenue
+/// de l'addition d'octets.
+#[track_caller]
+pub fn random_68k(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
+    let v = random_regs(c, b);
+    crate::diag::registres_morts(c, "random", REGS_RANDOM);
+    v
+}
+
+fn random_regs(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
+    let (etat, retenue) = tirage(b);
     c.d[0] = c.d[0] & 0xffff_0000 | etat as u32;
     // move.w final : N et Z du résultat ; X vient de l'addition d'octets
     c.flags_logic(etat as u32, Size::Word);
     c.sr = c.sr & !SR_X | if retenue { SR_X } else { 0 };
-    rts(c, b);
+    etat
+}
+
+/// 0x19a80 : remet la graine.
+pub fn seed(b: &mut Cps2Bus) {
+    GERME.set(b, GRAINE);
+}
+
+/// `seed` avec les drapeaux de l'original (`move.w` : N et Z de la graine).
+#[track_caller]
+pub fn seed_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    seed(b);
+    c.flags_logic(GRAINE as u32, Size::Word);
+    crate::diag::registres_morts(c, "random", regs::CCR);
 }
 
 pub const SEED: Native = Native {
     entry: 0x19a80,
     name: "rng_seed",
-    run: graine,
+    run: |c, b| {
+        seed(b);
+        c.flags_logic(GRAINE as u32, Size::Word);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::CCR,
 };
@@ -75,7 +107,10 @@ pub const SEED: Native = Native {
 pub const NEXT: Native = Native {
     entry: 0x19a88,
     name: "rng_next",
-    run: tirage,
+    run: |c, b| {
+        random_regs(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
 };

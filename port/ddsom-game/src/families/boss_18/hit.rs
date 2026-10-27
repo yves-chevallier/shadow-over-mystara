@@ -7,6 +7,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::Courant;
 
 /// Table des routines de réaction (mots relatifs à 0x986d6, indexés par `+0x49 / 2`).
 const REACTIONS: u32 = 0x986d6;
@@ -99,7 +100,7 @@ fn begin_throw(x: &mut Cx) {
     x.add8(f::SUB2, 2);
     face_away(x);
     freeze_by_stun(x);
-    x.call(call::MOVE_XYZ);
+    x.move_xyz();
 }
 
 // --- hit_a, hit_b : recul sur place --------------------------------------------------------------------------
@@ -111,7 +112,7 @@ fn hit_a(x: &mut Cx, anim: u32) {
     if dead(x) {
         return death(x);
     }
-    x.anim_start(SET_HURT, anim);
+    x.anim_start(SET_HURT, anim as u16);
     x.add8(f::SUB2, 2);
     x.set8(SHAKE, 0x10);
     x.set16(0x14, 0x180);
@@ -137,7 +138,7 @@ fn slide_back(x: &mut Cx) {
     if x.u8(0x14) == 0 {
         return decide::back_on_feet(x);
     }
-    x.call(call::MOVE_X);
+    x.move_x();
 }
 
 // --- hit_c : projection selon le code ---------------------------------------------------------------------------
@@ -162,7 +163,7 @@ fn hit_c(x: &mut Cx) {
 fn thrown(x: &mut Cx) {
     match x.u8(f::SUB2) {
         2 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(0x18) as i16) >= 0 {
                 return;
             }
@@ -171,7 +172,7 @@ fn thrown(x: &mut Cx) {
             x.set16(0x16, 0);
         }
         4 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }
@@ -186,7 +187,7 @@ fn thrown(x: &mut Cx) {
             if !sub16(x, TIMER, 1).gt() {
                 return decide::back_on_feet(x);
             }
-            x.call(call::MOVE_XY);
+            x.move_xy();
             x.call(0x24a8);
             if !zero(x) {
                 return decide::back_on_feet(x);
@@ -211,7 +212,7 @@ fn hit_d(x: &mut Cx, anim: u32, base: u32, slow_rise: bool, grounded: bool) {
     if grounded {
         x.set8(0, 2);
     }
-    x.anim_start(SET_HURT, anim);
+    x.anim_start(SET_HURT, anim as u16);
     let row = (x.u8(REACTION) as u32).wrapping_sub(base);
     throw_speeds(x, row);
     if slow_rise {
@@ -254,7 +255,7 @@ fn hit_h(x: &mut Cx) {
             }
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }
@@ -294,7 +295,7 @@ fn hit_i(x: &mut Cx) {
         }
         2 => {
             if sub16(x, COUNT, 1).gt() {
-                x.call(call::MOVE_XZ);
+                x.move_xz();
                 if (x.u16(0xc) as i16) < 0 {
                     x.set16(0xc, 0);
                 }
@@ -357,18 +358,18 @@ fn pushed_back(x: &mut Cx) {
         }
         2 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::MOVE_XY);
+                x.move_xy();
                 return step_only(x);
             }
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x14);
             x.set16(0x16, 0);
-            x.call(call::MOVE_XY);
+            x.move_xy();
             step_only(x);
         }
         4 => {
             if sub16(x, TIMER, 1).gt() {
-                x.call(call::MOVE_XY);
+                x.move_xy();
                 return step_only(x);
             }
             x.set32(0x58, 0);
@@ -410,11 +411,11 @@ fn death(x: &mut Cx) {
             }
             x.set16(0x14, vx as u16);
             x.set8(f::FLIP, side);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             x.anim_start(SET_HURT, 2);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
             }

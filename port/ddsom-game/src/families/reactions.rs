@@ -12,12 +12,14 @@
 //! (hauteur), `+0x1a` (gravité), `+0x1c`/`+0x1e` (secondaires) ; hauteur `+0xc` (long) ; compteur `+0x90` ;
 //! liaison en attente `+0x91` (bit 7) vers `+0x2a`/`+0x2b` ; orientation de l'agresseur `+0x4a`.
 
-use super::cx::{sub, Cx};
+use super::cx::Cx;
 use crate::mem::{rd16, rd32, rd8, rts};
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
 use crate::Native;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Champs des objets touchés.
 mod f {
@@ -90,9 +92,7 @@ mod rom {
 /// Sous-routines du moteur.
 mod call {
     pub const LANDED: u32 = 0x3e480;
-    pub const RANDOM: u32 = 0x19a88;
     pub const SPAWN_EFFECT: u32 = 0xabec8;
-    pub const GET_UP_CHECK: u32 = 0x1e92;
     pub const DEATH: u32 = 0x19ad6;
     pub const BOSS_RECOVER: u32 = 0xf118;
 }
@@ -140,23 +140,23 @@ fn speeds(x: &mut Cx, vx: u16, vy: u16, vz: u16, gravity: u16) {
     x.set16(f::GRAVITY, gravity);
 }
 fn anim_step(x: &mut Cx) {
-    x.call(sub::ANIM_STEP);
+    x.anim_step();
 }
 fn move_x(x: &mut Cx) {
-    x.call(sub::MOVE_X);
+    x.move_x();
 }
 fn move_xz(x: &mut Cx) {
-    x.call(sub::MOVE_XZ);
+    x.move_xz();
 }
 fn move_xyz(x: &mut Cx) {
-    x.call(sub::MOVE_XYZ);
+    x.move_xyz();
 }
 fn landed(x: &mut Cx) {
     x.call(call::LANDED);
 }
 fn random(x: &mut Cx) -> u32 {
-    x.call(call::RANDOM);
-    x.c.d[0]
+    let alea = x.random_68k();
+    x.c.d[0] & 0xffff_0000 | alea as u32
 }
 /// Effet `0xabec8` (D0 = variante, D1 = paramètre).
 fn effect(x: &mut Cx, d0: u32, d1: u32) {
@@ -193,7 +193,8 @@ fn anim(x: &mut Cx, n: u32) {
         x.c.d[0] = x.c.d[0] & !0xff | (x.c.d[0] as u8).wrapping_add(add) as u32;
         x.c.a[4] = (x.rom16(routine + 6) as u32) << 16 | x.rom16(routine + 8) as u32;
     }
-    x.call(sub::ANIM_START);
+    let (set, n) = (x.c.a[4], x.c.d[0] as u16);
+    x.anim_start(set, n);
 }
 
 /// Routine d'une table par type (longs relatifs au PC) ; les entrées vides (`rts`) ne font rien.
@@ -450,8 +451,8 @@ fn slide_end(x: &mut Cx) {
 /// terre) ; sinon la suite `then` (A6 la désigne dans l'original : `jmp (A6)`).
 fn grab_check(x: &mut Cx, then: fn(&mut Cx)) {
     if x.u8(f::GRABBED) != 0 {
-        x.c.d[0] = 0;
-        x.call(call::GET_UP_CHECK);
+        // `bhi` sur la dernière comparaison de 0x1e92 (Z compris) : drapeaux de l'original (adaptateur)
+        crate::objects::cull::in_arena_68k(x.c, x.b, x.o, 0);
         if !x.c.cond(2) {
             x.set16(f::RECOVER, 1);
             let i = type_index(x);

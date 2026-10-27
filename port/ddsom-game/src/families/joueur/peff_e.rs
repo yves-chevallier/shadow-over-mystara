@@ -5,8 +5,8 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
-
-const REINSERT: u32 = 0x1ee1a;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -31,8 +31,6 @@ mod ice {
     const ANIMS: u32 = 0x1b6350;
     const OFFSETS: u32 = 0x4bd0e;
     const DELAYS: u32 = 0x4bd98;
-    const SPEED_SELECT: u32 = 0x1b64;
-    const MOVE_TABLE_XY: u32 = 0x1cb4;
     const TERRAIN: u32 = 0x33fe4;
     const SFX: u32 = 0xe87f4;
     const SCATTER_X: u32 = 0x4c016;
@@ -83,7 +81,8 @@ mod ice {
                 x.set8(0x2d, r);
                 x.set8(0x54, r.wrapping_add(1));
                 x.set_d0w(0x2b);
-                x.call(SPEED_SELECT);
+                let n = x.c.d[0] as u16;
+                x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                 x.anim(ANIMS, 0);
                 // un halo (variante 1) suit l'éclat
                 if let Some(o) = x.alloc(&pools::PEFF) {
@@ -107,8 +106,8 @@ mod ice {
                     x.set8(0x54, delay);
                 }
                 bounce(x);
-                x.call(ANIM_STEP);
-                x.call(MOVE_TABLE_XY);
+                x.anim_step();
+                x.move_by_table_xy();
                 x.c.d[0] = x.u16(0x8) as u32;
                 x.c.d[1] = x.u16(0x10) as u32;
                 x.call(TERRAIN);
@@ -116,7 +115,7 @@ mod ice {
                     let a = x.u8(0x2d).wrapping_add(0x10) & 0x1f;
                     x.c.d[0] = x.c.d[0] & !0xff | a as u32;
                     x.set8(0x2d, a);
-                    x.call(MOVE_TABLE_XY);
+                    x.move_by_table_xy();
                 }
                 if x.a5_u8(0x3d) == 0 {
                     x.add8(0x4, 2);
@@ -127,7 +126,7 @@ mod ice {
                 if t & 2 != 0 {
                     x.set_bit(0x1, 1, false);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -136,7 +135,7 @@ mod ice {
     /// Rebond sur les bords de l'écran (`0x4bda8`) : le tirage `andi.w #7,D2w` porte sur D2, laissé
     /// par l'appelant.
     fn bounce(x: &mut Cx) {
-        x.call(0x19a88);
+        x.random_68k();
         let d2 = x.c.d[2] & 7;
         x.c.d[2] = x.c.d[2] & 0xffff_0000 | d2;
         let d0 = x.u16(0x8);
@@ -192,7 +191,7 @@ mod ice {
                 x.anim(ANIMS, 1);
             }
             2 => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 let parent = x.link_a1(0x5c);
                 let flags = parent.u8(x.b, 0x1);
                 x.set8(0x1, flags);
@@ -201,7 +200,7 @@ mod ice {
                 if x.a5_u8(0x3d) == 0 {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -287,11 +286,10 @@ mod ice {
                 x.anim(ANIMS, n);
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -316,11 +314,10 @@ mod ice {
                 x.anim(ANIMS, 4);
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -345,18 +342,18 @@ mod ice {
                 x.anim(ANIMS, 5);
             }
             2 => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 let frozen = x.a5_u8(0x3d) != 0;
                 if frozen {
                     let owner = x.link_a1(f::OWNER);
                     let gesture = owner.u8(x.b, 0x7);
                     x.c.d[0] = x.c.d[0] & !0xff | gesture as u32;
                     if gesture == x.u8(0x56) {
-                        return x.call(REINSERT);
+                        return x.reinsert();
                     }
                 }
                 x.add8(0x4, 2);
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -397,8 +394,8 @@ mod blessing {
                 if blink != 0 {
                     x.set_bit(0x1, 1, true);
                 }
-                x.call(ANIM_STEP);
-                x.call(REINSERT);
+                x.anim_step();
+                x.reinsert();
             }
             _ => x.free_peff(),
         }
@@ -435,7 +432,7 @@ mod banish {
             }
             0 => init_beam(x),
             2 if !child => {
-                x.call(ANIM_STEP);
+                x.anim_step();
                 x.set_bit(0x1, 1, true);
                 let blink = x.a5_u8(a5::FRAME) & 1;
                 x.c.d[0] = x.c.d[0] & !0xff | blink as u32;
@@ -446,7 +443,7 @@ mod banish {
                 if owner.u8(x.b, 0x7) == 4 {
                     x.add8(0x4, 2);
                 }
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => fall(x),
             _ => x.free_peff(),
@@ -479,9 +476,8 @@ mod banish {
             frame = x.rom16(FRAMES_B + row);
         }
         let anim = frame & 0xff00 | (frame as u8).wrapping_add(k) as u16;
-        x.c.d[0] = x.c.d[0] & 0xffff_0000 | anim as u32;
-        x.c.a[4] = ANIMS;
-        x.call(0x1a32);
+        let n = (x.c.d[0] & 0xffff_0000 | anim as u32) as u16;
+        x.anim_start(ANIMS, n);
         if k == 0 {
             x.call(SFX);
         }
@@ -502,8 +498,8 @@ mod banish {
             x.add8(0x4, 2);
         }
         strike(x);
-        x.call(ANIM_STEP);
-        x.call(REINSERT);
+        x.anim_step();
+        x.reinsert();
     }
 
     /// Le faisceau 0 touche le sol : blesse le monstre visé (`0x4c4a0`).

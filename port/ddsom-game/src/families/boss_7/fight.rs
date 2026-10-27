@@ -2,6 +2,8 @@
 
 use super::aids;
 use super::*;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 // --- groupe 0 : arrivée --------------------------------------------------------------------------------------
 
@@ -33,8 +35,7 @@ fn arrival(x: &mut Cx) {
             }
         }
         0x85d72 => {
-            x.call(call::MOVE_XZ);
-            if x.c.cond(14) {
+            if x.move_xz().gt() {
                 return;
             }
             aids::burst_small(x);
@@ -70,7 +71,7 @@ fn pose(x: &mut Cx) {
         x.c.d[0] = 0;
         body(x, 0);
     } else {
-        x.call(call::STEP);
+        x.anim_step();
     }
 }
 
@@ -140,7 +141,7 @@ fn near_checks(x: &mut Cx) {
         return;
     }
     if aids::player_near(x, true) {
-        x.call(call::RNG);
+        x.random_68k();
         setw(x, 1, 0xffc0);
         let i = x.c.d[0] as u16 & 0xf;
         setw(x, 0, i);
@@ -150,9 +151,9 @@ fn near_checks(x: &mut Cx) {
     if target_in_box_far(x, -0x40, 0x40, 0x20) {
         return x.call(call::ATTACK_START);
     }
-    x.call(call::STEP);
+    x.anim_step();
     if (x.u8(KEY) as i8) >= 0 {
-        x.call(call::MOVE_TABLE_XY);
+        x.move_by_table_xy();
     }
     if x.u8(0x3e) != 0 {
         x.set8(0x3e, 0);
@@ -189,7 +190,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
         x.c.d[0] = 0;
         return false;
     }
-    x.call(call::RNG);
+    x.random_68k();
     setw(x, 1, 0xffc0);
     let i = x.c.d[0] as u16 & 0xf;
     setw(x, 0, i);
@@ -247,7 +248,7 @@ fn stop(x: &mut Cx) {
         x.set8(RESUME_SUB, 4);
         x.set32(f::STATE, 0x0202_0200);
     }
-    x.call(call::STEP);
+    x.anim_step();
 }
 
 /// 0x86180 : approche lente de l'adversaire.
@@ -266,9 +267,9 @@ fn approach(x: &mut Cx) {
                 x.set8(RESUME_SUB, b6);
                 x.set32(f::STATE, 0x0202_0200);
             }
-            x.call(call::STEP);
+            x.anim_step();
             if x.u8(KEY) != 0xff {
-                x.call(call::MOVE_TABLE_XY);
+                x.move_by_table_xy();
             }
         }
         t => {
@@ -303,7 +304,7 @@ pub(super) fn wait(x: &mut Cx) {
         x.add8(f::SUB2, 2);
         body(x, 0xd);
     } else {
-        x.call(call::STEP);
+        x.anim_step();
     }
 }
 

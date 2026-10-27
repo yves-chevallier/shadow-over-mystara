@@ -9,6 +9,7 @@
 //! | 10 | retour au combat |
 
 use super::*;
+use crate::objects::Courant;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x7bbbe;
@@ -112,12 +113,12 @@ fn pushed_back(x: &mut Cx) {
                 x.set16(TIMER, 4);
                 x.set16(0x16, 0);
             }
-            x.call(call::MOVE_X);
+            x.move_x();
             step(x);
         }
         _ => {
             if !expired(x, TIMER) {
-                x.call(call::MOVE_X);
+                x.move_x();
                 step(x);
                 return;
             }
@@ -175,7 +176,7 @@ fn down(x: &mut Cx) {
         }
         6 => {
             step(x);
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
                 return;
             }
@@ -246,11 +247,11 @@ fn death(x: &mut Cx) {
             x.c.d[1] = side;
             x.set16(0x14, vx);
             x.set8(f::FLIP, side as u8);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             x.anim_start(SET_BODY, 0x1e);
         }
         2 => {
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if x.u16(0xc) as i16 > 0 {
                 step(x);
                 return;

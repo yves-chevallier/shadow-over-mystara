@@ -15,7 +15,7 @@
 //! Animations : 0x16191c (mouvements) et 0x161930 (coups). `+0xa0/+0xa1` sont des octets d'aspect.
 //! Les sous-états 2, 4, 6 et 8 commencent par la réaction aux drapeaux de coup `+0x8f` (0x60c88).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod attacks;
@@ -52,6 +52,7 @@ pub(self) mod g {
 }
 
 use g::*;
+use crate::objects::Courant;
 
 const SET_BODY: u32 = 0x16191c;
 const SET_STRIKE: u32 = 0x161930;
@@ -68,10 +69,8 @@ mod call {
     pub const TURN_TO_TARGET: u32 = 0x788c;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
     pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const WALK_ASIDE: u32 = 0xeff2;
-    pub const SCREEN_CHECK: u32 = 0x1e90;
     pub const REMOVE: u32 = 0x27ee;
 }
 
@@ -79,7 +78,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -92,11 +91,11 @@ pub fn run(x: &mut Cx) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body(x: &mut Cx, n: u32) {
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 fn step(x: &mut Cx) -> bool {
@@ -104,7 +103,7 @@ fn step(x: &mut Cx) -> bool {
 }
 
 fn move_xy(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 /// L'aspect voulu (`LOOK` et `LOOK_PREV` identiques).
@@ -121,8 +120,7 @@ fn set_angle(x: &mut Cx, flipped: u8, otherwise: u8) {
 
 /// Table de vitesses 0xd puis marche : `ANGLE` puis 0x1b64 avec D0 = `speed`.
 fn set_speed(x: &mut Cx, speed: u32) {
-    x.c.d[0] = speed;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, speed as u16);
 }
 
 /// Ligne de 32 octets de la difficulté (`A5+0x7f92`).
@@ -342,8 +340,7 @@ fn arrival(x: &mut Cx) {
                 body(x, 4);
             }
             4 => {
-                x.call(sub::MOVE_XZ);
-                if x.c.cond(14) {
+                if x.move_xz().gt() {
                     return;
                 }
                 x.add8(f::SUB2, 2);
@@ -365,7 +362,7 @@ fn arrival(x: &mut Cx) {
                 body(x, 4);
             }
             2 => {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 if (x.u16(HEIGHT) as i16) >= 0 {
                     return;
                 }

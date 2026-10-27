@@ -23,7 +23,7 @@ use m68k::decode::Size;
 use m68k::Cpu;
 
 use super::motion::{cmp, lsl_word};
-use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, wr16, wr32, A5};
+use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr16, wr32, A5};
 use crate::{regs, Native};
 
 const BASE: u32 = A5 + 0x7f92;
@@ -115,42 +115,75 @@ pub fn lower(b: &mut Cps2Bus) {
 
 // ---- adaptation aux registres du 68000 ----
 
-fn set_low_word(r: &mut u32, v: u16) {
-    *r = (*r & 0xffff_0000) | v as u32;
+/// Registres que laissent les routines d'origine (voir `diag::registres_morts`, étiquette `rank`).
+pub const REGS_RANK: u32 = regs::d(0) | regs::d(1) | regs::a(0) | regs::a(1) | regs::a(4) | regs::CCR;
+
+/// `reset` avec les registres de l'original (A0 = structure).
+#[track_caller]
+pub fn reset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    reset_regs(c, b);
+    crate::diag::registres_morts(c, "rank", REGS_RANK);
+}
+
+/// `load_preset` de la ligne `A5+0x2a` puis `reset`, avec les registres de l'original.
+#[track_caller]
+pub fn load_preset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    load_preset_regs(c, b);
+    crate::diag::registres_morts(c, "rank", REGS_RANK);
+}
+
+/// `tick` avec les registres de l'original (D0 = rang, A0 = structure).
+#[track_caller]
+pub fn tick_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    tick_regs(c, b);
+    crate::diag::registres_morts(c, "rank", REGS_RANK);
+}
+
+/// `raise` avec les registres de l'original (D0 = rang).
+#[track_caller]
+pub fn raise_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    raise_regs(c, b);
+    crate::diag::registres_morts(c, "rank", REGS_RANK);
+}
+
+/// `lower` avec les registres de l'original (D0 = rang, D1 = baisse, A1 = table des baisses).
+#[track_caller]
+pub fn lower_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    lower_regs(c, b);
+    crate::diag::registres_morts(c, "rank", REGS_RANK);
 }
 
 /// 0x1f258 : `reset`. Laisse A0 = structure.
-fn reset_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn reset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = BASE;
     let active = rd8(b, A5 + GAME_ACTIVE);
     c.flags_logic(active as u32, Size::Byte);
     reset(b);
     let initial = get(b, INITIAL);
     c.flags_logic(initial as u32, Size::Word);
-    rts(c, b);
 }
 
 /// 0x1f1b8 : charge la ligne de réglages `A5+0x2a`, puis `reset`.
-fn load_preset_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn load_preset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let row = rd8(b, A5 + PRESET_ROW);
     let off = lsl_word(c, row as u16, 4);
     c.d[0] = off as u32;
     load_preset(b, row);
     c.a[4] = PRESETS + 16 * row as u32 + 16;
-    reset_native(c, b);
+    reset_regs(c, b);
 }
 
 /// 0x1f27c : `tick`, opérations et drapeaux de l'original (D0 = rang, A0 = structure).
-fn tick_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn tick_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let active = rd8(b, A5 + GAME_ACTIVE);
     c.flags_logic(active as u32, Size::Byte);
     if active == 0 {
-        return rts(c, b);
+        return;
     }
     let mode = rd8(b, A5 + PLAYERS_MODE);
     c.flags_logic(mode as u32, Size::Byte);
     if mode == 0 {
-        return rts(c, b);
+        return;
     }
     c.a[0] = BASE;
     let timer = get(b, TIMER);
@@ -158,7 +191,7 @@ fn tick_native(c: &mut Cpu, b: &mut Cps2Bus) {
     if timer != 0 {
         let left = c.addsub(true, 1, timer as u32, false, Size::Word, false);
         set(b, TIMER, left as u16);
-        return rts(c, b);
+        return;
     }
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
@@ -186,11 +219,10 @@ fn tick_native(c: &mut Cpu, b: &mut Cps2Bus) {
     c.flags_logic(d0 as u32, Size::Word);
     set(b, CURRENT, d0 & 0x1f);
     c.flags_logic((d0 & 0x1f) as u32, Size::Word);
-    rts(c, b);
 }
 
 /// 0x1f2c0 : `raise`.
-fn raise_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn raise_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
     c.flags_logic(delay as u32, Size::Word);
@@ -207,11 +239,10 @@ fn raise_native(c: &mut Cpu, b: &mut Cps2Bus) {
     set_low_word(&mut c.d[0], d0);
     set(b, CURRENT, d0);
     c.flags_logic(d0 as u32, Size::Word);
-    rts(c, b);
 }
 
 /// 0x1f300 : `lower`.
-fn lower_native(c: &mut Cpu, b: &mut Cps2Bus) {
+fn lower_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
     c.flags_logic(delay as u32, Size::Word);
@@ -233,13 +264,15 @@ fn lower_native(c: &mut Cpu, b: &mut Cps2Bus) {
     set_low_word(&mut c.d[0], d0);
     set(b, CURRENT, d0);
     c.flags_logic(d0 as u32, Size::Word);
-    rts(c, b);
 }
 
 pub const RANK_RESET: Native = Native {
     entry: 0x1f258,
     name: "rank_reset",
-    run: reset_native,
+    run: |c, b| {
+        reset_regs(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -247,7 +280,10 @@ pub const RANK_RESET: Native = Native {
 pub const RANK_LOAD_PRESET: Native = Native {
     entry: 0x1f1b8,
     name: "rank_load_preset",
-    run: load_preset_native,
+    run: |c, b| {
+        load_preset_regs(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -255,7 +291,10 @@ pub const RANK_LOAD_PRESET: Native = Native {
 pub const RANK_RAISE: Native = Native {
     entry: 0x1f2c0,
     name: "rank_raise",
-    run: raise_native,
+    run: |c, b| {
+        raise_regs(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -263,7 +302,10 @@ pub const RANK_RAISE: Native = Native {
 pub const RANK_LOWER: Native = Native {
     entry: 0x1f300,
     name: "rank_lower",
-    run: lower_native,
+    run: |c, b| {
+        lower_regs(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -271,7 +313,10 @@ pub const RANK_LOWER: Native = Native {
 pub const RANK_TICK: Native = Native {
     entry: 0x1f27c,
     name: "rank_tick",
-    run: tick_native,
+    run: |c, b| {
+        tick_regs(c, b);
+        rts(c, b);
+    },
     touches_sound: false,
     outputs: regs::ALL,
 };

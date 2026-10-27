@@ -53,6 +53,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 const SET_A: u32 = 0x17efe8;
 const SET_B: u32 = 0x17f002;
@@ -71,9 +72,6 @@ pub(self) mod state {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const MOVE_Y: u32 = 0x1dbc;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const PICK_FAR: u32 = 0x44ee;
     pub const FACE_TARGET: u32 = 0xa470;
@@ -204,7 +202,7 @@ fn gravity(x: &mut Cx) {
         return;
     }
     x.set8(FALLS, 0);
-    x.call(call::MOVE_Y);
+    x.move_z();
     if (x.u16(0x1a) as i16) >= 0 {
         x.set16(0x1a, (-0x18i16) as u16);
     }
@@ -243,7 +241,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     x.set8(0xa4, 0);
     match x.u8(f::STATE) {
         st::INIT => init(x),

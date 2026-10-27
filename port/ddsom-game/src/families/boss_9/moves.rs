@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 // --- groupe 0 : entrée en scène --------------------------------------------------------------------
 
@@ -118,7 +119,7 @@ fn x_cam(x: &mut Cx) -> u16 {
 
 /// L'engin roule (0x1d78) et ses roues tournent (0x1a56).
 pub(super) fn roll(x: &mut Cx) {
-    x.call(call::MOVE_X);
+    x.move_x();
     anim(x);
 }
 
@@ -245,7 +246,8 @@ fn pass(x: &mut Cx) {
         }
     }
     if !past_edge(x) {
-        return x.call(call::MOVE_X);
+        x.move_x();
+        return;
     }
     turn_back(x);
     if sub8(x, PASSES, 1).mi() {
@@ -254,7 +256,8 @@ fn pass(x: &mut Cx) {
         reset_dashes(x);
         draw_passes(x);
         draw_stops(x);
-        return x.call(call::MOVE_X);
+        x.move_x();
+        return;
     }
     x.set8(0x7, 0);
     reset_wait(x)
@@ -294,7 +297,8 @@ fn approach(x: &mut Cx) {
             let d = x.u16(STOP_X).wrapping_sub(x.u16(0x8)).wrapping_add(8);
             set_dw(x, 0, d);
             if d > 0x20 {
-                return x.call(call::MOVE_X);
+                x.move_x();
+                return;
             }
             x.set8(GAIT, 2);
             if sub8(x, COUNT, 1).pl() {
@@ -398,7 +402,7 @@ fn sway(x: &mut Cx) {
             x.set8(COUNT, 1);
         }
         x.set16(0x14, 0);
-        x.call(call::MOVE_XY);
+        x.move_xy();
     }
     anim(x)
 }

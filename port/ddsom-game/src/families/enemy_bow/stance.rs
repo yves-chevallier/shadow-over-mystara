@@ -3,6 +3,7 @@
 use super::shoot::start_shot;
 use super::*;
 use crate::objects::Obj;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(EXPIRED) != 0 || grabbed(x) {
@@ -40,8 +41,7 @@ fn idle_begin(x: &mut Cx) {
 
 /// +6 = 2 : marche vers la cible ; tire ou esquive quand elle est à portée.
 fn advance(x: &mut Cx) {
-    x.call(call::SCREEN_CHECK);
-    if !x.c.cond(5) {
+    if !x.in_arena_default() {
         x.set8(SHOT_KIND, 5);
         x.add8(f::SUB2, 2);
         x.set8(TIMER, 0x20);
@@ -68,7 +68,7 @@ fn advance(x: &mut Cx) {
         }
     }
     x.call(call::WALK_STEP);
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.anim_step();
     if point_blank(x) {
         set_state_long(x, 0x0204_0202);
@@ -133,7 +133,7 @@ fn strafe(x: &mut Cx) {
         return advance(x);
     }
     x.call(call::WALK_STEP);
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.anim_step();
 }
 
@@ -185,7 +185,7 @@ fn side_step(x: &mut Cx, along_x: bool) {
     if (n as i8) < 0 {
         set_state_long(x, STANCE);
     }
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.anim_step();
 }
 

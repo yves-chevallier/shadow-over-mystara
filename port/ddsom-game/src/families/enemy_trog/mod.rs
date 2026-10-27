@@ -16,7 +16,7 @@
 //! Animations : 0x15faa0 (mouvements) et 0x15fabe (coups). La série 0 (`+0x2f`) clignote après un
 //! coup encaissé : `flicker` (compteurs `+0xa5..+0xa8`, `+0xaa`, `+0xae`).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod attacks;
@@ -71,6 +71,7 @@ pub(self) mod g {
 }
 
 use g::*;
+use crate::objects::Courant;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_BODY: u32 = 0x15faa0;
@@ -94,10 +95,8 @@ mod call {
     pub const TURN_TO_TARGET: u32 = 0x788c;
     pub const RAND_TARGET_CHECK: u32 = 0x79ce;
     pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const REMOVE: u32 = 0x27ee;
-    pub const SCREEN_CHECK: u32 = 0x1e90;
     pub const BEHIND_CHECK: u32 = 0x57c66;
     pub const PICK_ATTACK_KIND: u32 = 0x5cdc6;
 }
@@ -106,7 +105,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -119,11 +118,11 @@ pub fn run(x: &mut Cx) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body(x: &mut Cx, n: u32) {
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 fn step(x: &mut Cx) -> bool {
@@ -137,7 +136,7 @@ fn set_angle(x: &mut Cx, flipped: u8, otherwise: u8) {
 }
 
 fn move_xy(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 /// Ligne de 32 octets de la difficulté dans `table` (`A5+0x7f92`).
@@ -158,8 +157,8 @@ fn walk_speed(x: &mut Cx, idx: u32) {
     let series = x.u8(SERIES) as u32;
     x.c.d[1] = (series << 2) & 0xff;
     x.c.a[1] = WALK_SPEEDS + x.c.d[1];
-    x.c.d[0] = x.data16(x.c.a[1] + idx) as u32;
-    x.call(call::SPEED_TABLE);
+    let n = (x.data16(x.c.a[1] + idx) as u32) as u16;
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
 /// Un joueur dans la boîte ? Les deux décisions par masque (0xa4c2, 0xa4b4) doivent accepter.
@@ -394,7 +393,7 @@ fn arrival(x: &mut Cx) {
                 body(x, 0xb);
             }
             2 => {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 if (x.u16(HEIGHT) as i16) < 0 {
                     x.add8(f::SUB2, 2);
                     x.set32(HEIGHT, 0);
@@ -421,7 +420,7 @@ fn arrival(x: &mut Cx) {
                 body(x, 4);
             }
             2 => {
-                x.call(sub::MOVE_XZ);
+                x.move_xz();
                 if step(x) && (x.u16(HEIGHT) as i16) < 0 {
                     x.set16(HEIGHT, 0);
                     x.add8(f::SUB2, 2);
@@ -450,8 +449,7 @@ fn arrival(x: &mut Cx) {
                 body(x, 0xa);
             } else {
                 step(x);
-                x.call(sub::MOVE_YZ);
-                if x.c.cond(10) {
+                if x.move_yz().pl() {
                     return;
                 }
                 x.set8(LOOK_PREV, 0xe0);

@@ -27,6 +27,7 @@ enum Play {
 }
 use Play::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// États du maître (`+4` à `+7`).
 struct Master {
@@ -478,10 +479,6 @@ mod dark_warrior_double {
     const MODE: u32 = 0xb9;
     const PHASE: u32 = 0xba;
     const STEP: u32 = 0xbb;
-    /// Déplacements (O1).
-    const MOVE_XYZ: u32 = 0x1d90;
-    const MOVE_XZ: u32 = 0x1da6;
-    const MOVE_X: u32 = 0x1d78;
     /// Table d'adresses des réactions aux coups (code `+0x49` du maître).
     const REACTIONS: u32 = 0x77aec;
     /// Terrain sous l'objet qui renverse la vitesse en profondeur (octets par terrain 0..8).
@@ -593,10 +590,10 @@ mod dark_warrior_double {
     }
 
     /// Le maître n'a pas fini son pas d'animation (`+0x33` nul) : le double rejoue le déplacement.
-    fn replay(x: &mut Cx, mover: u32) {
+    fn replay(x: &mut Cx, mover: fn(&mut Cx)) {
         let m = x.linked(MASTER);
         if m.u8(x.b, 0x33) == 0 {
-            x.call(mover);
+            mover(x);
         }
     }
 
@@ -622,11 +619,11 @@ mod dark_warrior_double {
         match m.u8(x.b, PHASE) {
             0 | 2 | 4 | 6 => mirror_speeds(x),
             8 => {
-                replay(x, MOVE_XYZ);
+                replay(x, |x| { x.move_xyz(); });
                 copy_height_frame(x);
             }
             10 | 12 => {
-                x.call(MOVE_XYZ);
+                x.move_xyz();
                 copy_height_frame(x);
             }
             _ => copy_height_frame(x),
@@ -646,7 +643,7 @@ mod dark_warrior_double {
                     }
                     2 => {
                         if m.u8(x.b, 0x33) == 0 {
-                            x.call(MOVE_XYZ);
+                            x.move_xyz();
                             copy_height(x);
                             if terrain_reverses(x) {
                                 let v = (x.u32(0x1c) as i32).wrapping_neg();
@@ -656,7 +653,7 @@ mod dark_warrior_double {
                         copy_frame(x);
                     }
                     4 | 6 => {
-                        x.call(MOVE_XYZ);
+                        x.move_xyz();
                         copy_height(x);
                         if terrain_reverses(x) {
                             let v = (x.u32(0x1c) as i32).wrapping_neg();
@@ -673,12 +670,12 @@ mod dark_warrior_double {
                     0 => copy_speeds(x),
                     2 => {
                         if m.u8(x.b, 0x33) == 0 {
-                            x.call(MOVE_XYZ);
+                            x.move_xyz();
                             copy_height(x);
                         }
                     }
                     4 | 6 => {
-                        x.call(MOVE_XYZ);
+                        x.move_xyz();
                         copy_height(x);
                     }
                     _ => {}
@@ -691,18 +688,18 @@ mod dark_warrior_double {
                     2 => {
                         if m.u8(x.b, 0x33) != 0 {
                             copy_speeds(x);
-                            x.call(MOVE_XZ);
+                            x.move_xz();
                             copy_height(x);
                         }
                     }
                     4 => {
-                        x.call(MOVE_XZ);
+                        x.move_xz();
                         copy_height(x);
                         let v = m.u16(x.b, 0x16);
                         x.set16(0x16, v);
                     }
                     6 => {
-                        x.call(MOVE_XZ);
+                        x.move_xz();
                         let h = m.u16(x.b, 0xc);
                         x.set16(0xc, h);
                         if (h as i16) <= 0 {
@@ -711,7 +708,7 @@ mod dark_warrior_double {
                         }
                     }
                     8 => {
-                        x.call(MOVE_X);
+                        x.move_x();
                         mode4(x);
                         return;
                     }
@@ -730,11 +727,11 @@ mod dark_warrior_double {
             10 => match m.u8(x.b, STEP) {
                 0 => mirror_speeds(x),
                 2 => {
-                    replay(x, MOVE_XYZ);
+                    replay(x, |x| { x.move_xyz(); });
                     copy_height_frame(x);
                 }
                 4 | 6 => {
-                    x.call(MOVE_XYZ);
+                    x.move_xyz();
                     copy_height_frame(x);
                 }
                 _ => copy_height_frame(x),
@@ -774,7 +771,7 @@ mod dark_warrior_double {
                 2 | 4 => {
                     let v = m.u16(x.b, 0x16);
                     x.set16(0x16, v);
-                    x.call(MOVE_X);
+                    x.move_x();
                     copy_frame(x);
                 }
                 _ => {}
@@ -789,7 +786,7 @@ mod dark_warrior_double {
                     copy_frame(x);
                 }
                 6 => {
-                    x.call(MOVE_XYZ);
+                    x.move_xyz();
                     copy_height_frame(x);
                 }
                 _ => {}
@@ -800,7 +797,7 @@ mod dark_warrior_double {
                     copy_frame(x);
                 }
                 2 => {
-                    x.call(MOVE_XZ);
+                    x.move_xz();
                     copy_height_frame(x);
                 }
                 4 | 6 => copy_frame(x),

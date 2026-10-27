@@ -3,12 +3,14 @@
 //! Même cadre que `eshl.rs` : un `mod` par type, `run` est appelé par le dispatch avec l'objet
 //! courant ; `+4` est l'état principal, `+5` / `+6` / `+7` les sous-états (octets pairs).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::mem::wr32;
 use crate::objects::Obj;
 use m68k::SR_C;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Sous-routines communes de l'IA des ennemis.
 mod rt {
@@ -16,8 +18,6 @@ mod rt {
     pub const AI_ANIM_START: u32 = 0x103d6;
     /// Un pas d'animation, puis recopie de `+0x3e` en `+0x44` ; retenue = fin.
     pub const AI_ANIM_STEP: u32 = 0x1040c;
-    /// Tirage pseudo-aléatoire : D0 (mot bas) = nouvel état.
-    pub const RANDOM: u32 = 0x19a88;
     /// Direction entre (D1, D2) et l'objet : D0 = octet de direction.
     pub const DIRECTION: u32 = 0x137e;
     /// Retient l'objet dans l'écran, marge D0.
@@ -54,8 +54,8 @@ fn ai_step(x: &mut Cx) -> bool {
 /// Alloue un objet ESHL ; `None` si le pool est plein.
 /// Tirage pseudo-aléatoire.
 fn random(x: &mut Cx) -> u32 {
-    x.call(rt::RANDOM);
-    x.c.d[0]
+    let alea = x.random_68k();
+    x.c.d[0] & 0xffff_0000 | alea as u32
 }
 
 /// Les trois coordonnées 16.16 (X, Y, Z) de `from`, copiées en long.
@@ -156,7 +156,7 @@ mod shot40 {
         }
         let r = random(x) & 0xf;
         let anim = x.rom8(RANDOM_ANIMS + r);
-        x.anim_start(ANIMS, anim as u32);
+        x.anim_start(ANIMS, (anim as u32) as u16);
     }
 
     fn live(x: &mut Cx) {
@@ -165,7 +165,7 @@ mod shot40 {
             return x.free_eshl();
         }
         if x.u8(0x5) == 0 {
-            x.call(sub::ANIM_STEP);
+            x.anim_step();
             let t = x.u16(LIFETIME).wrapping_sub(1);
             x.set16(LIFETIME, t);
             if s16(t) < 0 {
@@ -254,8 +254,7 @@ mod shot41 {
         x.call(rt::DIRECTION);
         let dir = x.c.d[0] as u8;
         x.set8(0x2d, dir);
-        x.c.d[0] = 0x41;
-        x.call(sub::SPEED_TABLE_B);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, 0x41);
         let t = target(x);
         let mut dist = s16(x.u16(0x8).wrapping_sub(t.u16(x.b, TARGET_X)));
         if dist < 0 {
@@ -295,9 +294,9 @@ mod shot41 {
     }
 
     fn fall(x: &mut Cx) {
-        x.call(sub::MOVE_XYZ);
+        x.move_xyz();
         if s16(x.u16(0xc)) > 0 {
-            x.call(sub::ANIM_STEP);
+            x.anim_step();
             return;
         }
         x.add8(0x5, 2);
@@ -506,8 +505,7 @@ mod shot43 {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(f::BOX_SET, 7);
-                x.c.d[0] = 0x40;
-                x.call(sub::SPEED_TABLE_B);
+                x.select_speed(&crate::objects::motion::SPEEDS_B, 0x40);
                 let dir = x.u8(0x2d) as u32 >> 1;
                 let extra = x.rom8(ANIM_OF_DIRECTION + dir);
                 ai_anim(x, ANIMS, 0x10u32.wrapping_add(extra as u32) & 0xff);
@@ -527,7 +525,7 @@ mod shot43 {
         if x.u8(f::HIT_FLAGS) & 0x28 != 0 {
             return x.free_eshl();
         }
-        x.call(sub::MOVE_XYZ);
+        x.move_xyz();
         x.c.d[0] = neg(0x50) as u32;
         x.c.d[1] = 0x1d0;
         x.call(rt::OUTSIDE_WINDOW);
@@ -792,7 +790,7 @@ mod debris45 {
                     x.set16(0x1a, 0);
                     ai_anim(x, ANIMS, 0x11);
                 }
-                x.call(sub::MOVE_XYZ);
+                x.move_xyz();
                 settle(x);
             }
             4 => x.add8(0x4, 2),
@@ -822,8 +820,7 @@ mod debris45 {
                 }
                 let k = x.u8(0x2f);
                 x.set8(0x2d, k.wrapping_mul(4));
-                x.c.d[0] = 0x1f;
-                x.call(sub::SPEED_TABLE_A);
+                x.select_speed(&crate::objects::motion::SPEEDS_A, 0x1f);
                 place(x, src);
                 x.set8(f::ATTACK_ID, 0x14);
                 x.anim_start(ANIMS, 0x1f);
@@ -832,7 +829,7 @@ mod debris45 {
                 match x.u8(0x5) {
                     0 => {
                         if src.u8(x.b, 0xa4) == 4 {
-                            x.call(sub::ANIM_STEP);
+                            x.anim_step();
                         } else {
                             x.add8(0x5, 2);
                             x.set32(0x14, 0);
@@ -843,9 +840,9 @@ mod debris45 {
                         }
                     }
                     2 => {
-                        x.call(sub::ANIM_STEP);
-                        x.call(sub::MOVE_TABLE_XY);
-                        x.call(sub::MOVE_Z);
+                        x.anim_step();
+                        x.move_by_table_xy();
+                        x.move_z();
                         if s16(x.u16(0xc)) < 0 {
                             x.set16(0xc, 0);
                             x.add8(0x4, 2);
@@ -895,7 +892,7 @@ mod scroller46 {
             0 => {
                 x.add8(0x4, 2);
                 let variant = x.u8(0x3) as u32;
-                x.anim_start(ANIMS, variant);
+                x.anim_start(ANIMS, variant as u16);
                 x.reinsert();
             }
             2 => {
@@ -1060,7 +1057,7 @@ mod lob48 {
                         }
                     }
                     2 => {
-                        x.call(sub::MOVE_Z);
+                        x.move_z();
                         if s16(x.u16(0xc)) <= 0x20 {
                             x.add8(0x5, 2);
                             x.set16(WAIT, 0x10);
@@ -1075,7 +1072,7 @@ mod lob48 {
                         x.set16(0x1a, 0);
                     }
                     6 => {
-                        x.call(sub::MOVE_Z);
+                        x.move_z();
                         if s16(x.u16(HOME_Z)) > s16(x.u16(0xc)) {
                             return;
                         }
@@ -1220,8 +1217,7 @@ mod bullet50 {
         }
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 0x14);
-        x.c.d[0] = speed;
-        x.call(sub::SPEED_TABLE_B);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, speed as u16);
         let host = x.linked(HOST);
         copy_xyz16(x, host);
         let flip = x.u8(f::FLIP);
@@ -1288,14 +1284,13 @@ mod bullet50 {
                     x.set16(0x4, 0x204);
                     return end_animation(x);
                 }
-                x.call(sub::MOVE_XYZ);
+                x.move_xyz();
                 phase_tick(x);
                 if s16(x.u16(0xc)) > 0 {
                     return restore_priority(x);
                 }
                 x.add8(0x5, 2);
-                x.c.d[0] = 0x17;
-                x.call(sub::SPEED_TABLE_B);
+                x.select_speed(&crate::objects::motion::SPEEDS_B, 0x17);
                 x.set16(FALL_TIMER, 0x1a);
                 x.set16(0xc, 0);
                 restore_priority(x);
@@ -1305,7 +1300,7 @@ mod bullet50 {
                     x.set16(0x4, 0x204);
                     return end_animation(x);
                 }
-                x.call(sub::MOVE_XY);
+                x.move_xy();
                 let t = x.u16(FALL_TIMER).wrapping_sub(1);
                 x.set16(FALL_TIMER, t);
                 if s16(t) <= 0 {
@@ -1330,7 +1325,7 @@ mod bullet50 {
                 if host_stunned(x) {
                     return end_slow(x);
                 }
-                x.call(sub::MOVE_XYZ);
+                x.move_xyz();
                 phase_tick(x);
                 let t = x.u16(FALL_TIMER).wrapping_sub(1);
                 x.set16(FALL_TIMER, t);
@@ -1340,7 +1335,7 @@ mod bullet50 {
                 restore_priority(x);
             }
             2 => {
-                x.call(sub::MOVE_XY);
+                x.move_xy();
                 if ai_step(x) {
                     x.free_eshl();
                 }
@@ -1402,8 +1397,8 @@ mod drop51 {
                     x.set16(0x1a, neg(0x40));
                     return;
                 }
-                x.call(sub::ANIM_STEP);
-                x.call(sub::MOVE_Z);
+                x.anim_step();
+                x.move_z();
                 if s16(x.u16(0xc)) >= 0 {
                     if x.u8(f::HIT_FLAGS) & 0x8 != 0 {
                         x.set8(f::HIT_FLAGS, 0);
@@ -1550,7 +1545,7 @@ mod finale52 {
                 attach(x, boss);
                 let sub = x.u8(SUBTYPE) as u32;
                 let anim = x.rom8(ANIM_OF_SUBTYPE + sub);
-                x.anim_start(ANIMS, anim as u32);
+                x.anim_start(ANIMS, (anim as u32) as u16);
                 init_boxes(x);
             }
             2 => {
@@ -1588,7 +1583,7 @@ mod finale52 {
             // (et non le boss), ou, si le pool était plein, l'emplacement que l'allocation laisse dans A1.
             source = last;
         }
-        x.call(sub::ANIM_STEP);
+        x.anim_step();
         copy_xyz16(x, source);
         copy_flip(x, source);
         let dx = if x.u8(f::FLIP) != 0 { 8 } else { neg(8) };
@@ -1627,7 +1622,7 @@ mod finale52 {
             return;
         }
         x.set_bit(0x1, 1, false);
-        x.call(sub::ANIM_STEP);
+        x.anim_step();
     }
 
     // ----- variante 1 -----
@@ -1648,7 +1643,7 @@ mod finale52 {
                 x.set_bit(0x1, 1, false);
                 if x.u8(0x5) == 0 {
                     if boss.u16(x.b, PARENT_STATE) == 0x214 {
-                        x.call(sub::ANIM_STEP);
+                        x.anim_step();
                         beside(x, boss);
                         hit_players(x);
                         return settle(x);
@@ -1727,7 +1722,8 @@ mod finale52 {
                 if x.u8(0x5) == 0 {
                     if x.anim_step() {
                         x.add8(0x5, 2);
-                        return x.anim_start(ANIMS, 0x1f);
+                        x.anim_start(ANIMS, 0x1f);
+                        return;
                     }
                     cover_screen(x, Some(boss));
                     let d = boss.u16(x.b, 0x10).wrapping_sub(x.u16(0x10));
@@ -1737,7 +1733,7 @@ mod finale52 {
                     x.add16(0xc, 1);
                 } else {
                     x.set_a5_u16(FLAG_4BA, 0);
-                    x.call(sub::ANIM_STEP);
+                    x.anim_step();
                     fall_check(x);
                     // piège de l'original : la boucle des joueurs a laissé A1 après le quatrième joueur
                     // (0xff8dde) et 0xa49fc incrémente le mot +0x12 de cet « objet », pas celui du boss
@@ -1773,7 +1769,8 @@ mod finale52 {
                     if x.anim_step() {
                         x.add8(0x5, 2);
                         x.set16(TIMER, 0x100);
-                        return x.anim_start(ANIMS, 0x1f);
+                        x.anim_start(ANIMS, 0x1f);
+                        return;
                     }
                 } else {
                     x.set_a5_u16(FLAG_4BA, 0);
@@ -1782,7 +1779,7 @@ mod finale52 {
                     if s16(t) <= 0 {
                         return end3(x);
                     }
-                    x.call(sub::ANIM_STEP);
+                    x.anim_step();
                     fall_check(x);
                 }
                 cover_screen(x, None);
@@ -1985,9 +1982,9 @@ mod aimed53 {
                 if x.u8(f::HIT_FLAGS) & 0x28 != 0 {
                     return x.free_eshl();
                 }
-                x.call(sub::MOVE_TABLE_XY);
-                x.call(sub::ANIM_STEP);
-                x.call(sub::CULL_OFFSCREEN);
+                x.move_by_table_xy();
+                x.anim_step();
+                x.cull_offscreen();
                 x.reinsert();
             }
             _ => x.free_eshl(),
@@ -2015,13 +2012,12 @@ mod aimed53 {
         x.call(DIRECTION_TO);
         let dir = x.c.d[0] as u8;
         x.set8(0x2d, dir);
-        x.c.d[0] = 0x24;
-        x.call(sub::SPEED_TABLE_B);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, 0x24);
         let row = DIRECTIONS + 2 * dir as u32;
         let flip = x.rom8(row + 1);
         x.set8(f::FLIP, flip);
         let anim = x.rom8(row);
-        x.anim_start(ANIMS, anim as u32);
+        x.anim_start(ANIMS, (anim as u32) as u16);
         x.reinsert();
     }
 }
@@ -2066,8 +2062,8 @@ mod burst54 {
                             x.add8(0x5, 2);
                             x.set16(TIMER, 0xa);
                         }
-                        x.call(sub::MOVE_XYZ);
-                        x.call(sub::ANIM_STEP);
+                        x.move_xyz();
+                        x.anim_step();
                     }
                     2 => {
                         let t = x.u16(TIMER).wrapping_sub(1);
@@ -2075,7 +2071,7 @@ mod burst54 {
                         if s16(t) < 0 {
                             x.add8(0x4, 2);
                         }
-                        x.call(sub::ANIM_STEP);
+                        x.anim_step();
                     }
                     _ => {}
                 }
@@ -2117,7 +2113,7 @@ mod burst54 {
         x.set16(0x14, vx);
         x.set16(0x16, ax);
         let anim = if with_anim { word(x, 9) as u32 } else { 0 };
-        x.anim_start(ANIMS, anim);
+        x.anim_start(ANIMS, anim as u16);
     }
 }
 
@@ -2179,8 +2175,7 @@ mod fall55 {
     }
 
     fn fall(x: &mut Cx) {
-        x.call(sub::MOVE_XZ);
-        if x.c.cond(14) {
+        if x.move_xz().gt() {
             return;
         }
         x.add8(0x5, 2);
@@ -2202,7 +2197,7 @@ mod fall55 {
                 x.set_bit(0x1, 1, false);
             }
         }
-        x.call(sub::ANIM_STEP);
+        x.anim_step();
     }
 }
 
@@ -2266,7 +2261,7 @@ mod pickup56 {
             x.set8(0x2b, 0x13);
             x.set8(f::ATTACK_ID, 0x22);
         }
-        x.anim_start(ANIMS, INIT_ANIMS[k]);
+        x.anim_start(ANIMS, (INIT_ANIMS[k]) as u16);
         if k == 3 {
             random_delay(x);
         }
@@ -2313,7 +2308,7 @@ mod pickup56 {
 
     fn flash_animate(x: &mut Cx) {
         flash(x);
-        x.call(sub::ANIM_STEP);
+        x.anim_step();
     }
 
     /// Un joueur au sol, assez proche, ramasse l'objet : `+5` suivant, décompte de 30 images.
@@ -2469,8 +2464,7 @@ mod seeker57 {
         x.add16(0x8, if flip != 0 { 0x4a } else { neg(0x4a) });
         x.add16(0xc, 0x32);
         x.anim_start(ANIMS, 0);
-        x.c.d[0] = 7;
-        x.call(sub::SPEED_TABLE_B);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, 7);
     }
 
     fn live(x: &mut Cx) {
@@ -2519,8 +2513,8 @@ mod seeker57 {
     }
 
     fn approach(x: &mut Cx) {
-        x.call(sub::MOVE_TABLE_XY);
-        x.call(sub::ANIM_STEP);
+        x.move_by_table_xy();
+        x.anim_step();
     }
 
     /// Crée 16 éclats (type 58, variantes 15 à 0) puis passe à l'état 6.
@@ -2571,11 +2565,11 @@ mod shard58 {
                     if s16(t) < 0 {
                         x.add8(0x4, 2);
                     }
-                    x.call(sub::ANIM_STEP);
+                    x.anim_step();
                     if x.u8(0x2f) == 0 {
-                        x.call(sub::MOVE_TABLE_XY);
+                        x.move_by_table_xy();
                     } else {
-                        x.call(sub::MOVE_TABLE_XZ);
+                        x.move_by_table_xz();
                     }
                 }
                 blink_by_variant(x);
@@ -2606,9 +2600,8 @@ mod shard58 {
         x.set8(0x2d, speed_index);
         x.set8(f::FLIP, new_flip);
         x.set8(0x2f, subtype);
-        x.anim_start(ANIMS, anim as u32);
-        x.c.d[0] = speeds as u32;
-        x.call(sub::SPEED_TABLE_B);
+        x.anim_start(ANIMS, (anim as u32) as u16);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, (speeds as u32) as u16);
     }
 }
 
@@ -2712,7 +2705,7 @@ mod ring59 {
                 let t = x.u16(TIMER).wrapping_sub(1);
                 x.set16(TIMER, t);
                 if s16(t) >= 0 {
-                    x.call(sub::ANIM_STEP);
+                    x.anim_step();
                 } else {
                     x.add8(0x5, 2);
                     x.anim_start(ANIMS, 3);
@@ -2910,7 +2903,7 @@ mod platform60 {
                 }
             }
             SINK => {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 let floor = if trigger == Trigger::Maker || x.u8(0x2f) == 0 { 0x20 } else { 0x38 };
                 if s16(x.u16(0xc)) <= floor {
                     x.call(THUD);
@@ -2928,7 +2921,7 @@ mod platform60 {
                 }
             }
             RISE => {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 if s16(x.u16(HOME_Z)) > s16(x.u16(0xc)) {
                     return;
                 }
@@ -3092,8 +3085,8 @@ mod meteor62 {
             let t = x.u8(TIMER) - 1;
             return x.set8(TIMER, t);
         }
-        x.call(sub::ANIM_STEP);
-        x.call(sub::MOVE_Z);
+        x.anim_step();
+        x.move_z();
         if s16(x.u16(0xc)) < 0 {
             x.call(IMPACT_FX[0]);
             x.set16(0xc, 0);
@@ -3222,7 +3215,8 @@ mod hand63 {
                     let facing = x.u8(f::FLIP) != 0;
                     if (d >= 0) != facing {
                         x.set16(0x6, 0x800);
-                        return x.anim_start(ANIMS, 5);
+                        x.anim_start(ANIMS, 5);
+                        return;
                     }
                 }
             }
@@ -3239,7 +3233,7 @@ mod hand63 {
             2.. => lost_boss(x),
             _ => {
                 follow(x);
-                x.call(sub::ANIM_STEP);
+                x.anim_step();
             }
         }
     }

@@ -14,7 +14,7 @@
 //! | 6, 8, 10 | `attacks` | tourne sur place tant qu'aucun joueur n'est en vie |
 //! | état 4 | `hit` | réactions, mort en cinq temps, fuite |
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
 
@@ -58,6 +58,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const SET_MOVE: u32 = 0x171a52;
 pub(self) const SET_WEAPON: u32 = 0x171a7e;
@@ -65,7 +66,6 @@ pub(self) const SET_FLY_A: u32 = 0x171b76;
 pub(self) const SET_FLY_B: u32 = 0x171c1a;
 
 pub(self) mod call {
-    pub const SPEED_TABLE: u32 = 0x1b64;
     pub const WALK_STEP: u32 = 0xe76c;
     pub const REMOVE: u32 = 0x27ee;
     pub const SPAWN_EFFECT: u32 = 0x1172e;
@@ -79,7 +79,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
@@ -116,8 +116,7 @@ pub(self) fn look(x: &mut Cx, v: u8) {
 }
 
 pub(self) fn set_speed(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Étincelle (0x1172e) numéro `n`.

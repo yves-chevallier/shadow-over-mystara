@@ -9,6 +9,7 @@
 
 use super::arrival::stand_when_done;
 use super::*;
+use crate::objects::Courant;
 
 /// Table de la ROM : durée et clé de tir des flammes du souffle.
 const FLAME_SCRIPT: u32 = 0x62284;
@@ -84,8 +85,7 @@ fn bite_land(x: &mut Cx) {
         x.c.d[0] = 2;
         return x.call(0xfd64);
     }
-    x.call(sub::MOVE_XZ);
-    if x.c.cond(14) {
+    if x.move_xz().gt() {
         x.anim_step();
         return;
     }
@@ -106,7 +106,7 @@ fn slide(x: &mut Cx) {
         x.add8(STEP, 2);
         x.set32(SPEED_X, 0);
     } else {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
 }
 
@@ -119,7 +119,7 @@ fn begin_jump(x: &mut Cx, vx: i16, speed_z: u16, anim: u32, set: u32) {
     x.set16(SPEED_Y, 0);
     x.set16(SPEED_Z, speed_z);
     x.set16(GRAVITY, -0x38i16 as u16);
-    x.anim_start(set, anim);
+    x.anim_start(set, anim as u16);
 }
 
 // --- sous-état 4 ----------------------------------------------------------------------------------------
@@ -227,7 +227,7 @@ fn paw(x: &mut Cx) {
             let n = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, n);
             if (n as i8) >= 0 {
-                x.call(sub::MOVE_TABLE_XY);
+                x.move_by_table_xy();
                 x.anim_step();
             } else {
                 back_on_guard(x);
@@ -451,8 +451,7 @@ fn b_hop(x: &mut Cx) {
         }
         6 => wait_key(x),
         8 => {
-            x.call(sub::MOVE_YZ);
-            if x.c.cond(14) {
+            if x.move_yz().gt() {
                 x.anim_step();
             } else {
                 land_dust(x);
@@ -657,13 +656,12 @@ fn c_side(x: &mut Cx) {
             if (n as i8) < 0 {
                 return set_state_long(x, STANCE);
             }
-            x.call(sub::MOVE_XY);
+            x.move_xy();
             x.anim_step();
         }
         4 => wait_key(x),
         6 => {
-            x.call(sub::MOVE_YZ);
-            if x.c.cond(14) {
+            if x.move_yz().gt() {
                 x.anim_step();
             } else {
                 land_dust(x);
@@ -687,7 +685,7 @@ pub(super) fn idle(x: &mut Cx) {
             mv(x, 2);
         }
         2 => {
-            x.call(sub::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.anim_step();
             let n = x.u8(0x90).wrapping_sub(1);
             x.set8(0x90, n);

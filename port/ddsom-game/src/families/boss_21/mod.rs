@@ -75,6 +75,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Jeux d'animations.
 pub(self) const SET_BODY: u32 = 0x1836ec;
@@ -92,11 +93,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_XY: u32 = 0x1d62;
-    pub const MOVE_XYZ: u32 = 0x1d90;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const SPAWN_RING: u32 = 0x57c8c;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const RANDOM_TURN: u32 = 0x10574;
@@ -111,7 +107,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     loop {
-        x.call(rom::TICK_COUNTERS);
+        x.tick_counters();
         match x.u8(f::STATE) {
             st::INIT => init(x),
             st::ACTIVE => active(x),

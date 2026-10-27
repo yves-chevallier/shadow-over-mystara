@@ -8,7 +8,9 @@
 use crate::objects::pools;
 use crate::objects::Obj;
 
-use super::{ajoute_u8, gestionnaire, pointeur, rom, Ctx};
+use super::{ajoute_u8, gestionnaire, pointeur, Ctx};
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Valeurs de l'octet d'état `+4`.
 mod etat {
@@ -254,8 +256,8 @@ fn scintillement_init(ctx: &mut Ctx, o: Obj) {
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
     o.set_u8(ctx.b, scintillement::REPETITIONS, 8);
-    ctx.jsr(rom::RNG);
-    let tirage = ctx.c.d[0] as u16 & 0x1f;
+    let alea = ctx.random_68k();
+    let tirage = alea & 0x1f;
     o.set_u16(ctx.b, scintillement::DELAI, tirage);
     let variante = o.u8(ctx.b, Obj::VARIANT);
     ctx.anim_start(scintillement::ANIMATIONS, variante as u16);
@@ -358,13 +360,14 @@ fn trainee_actif(ctx: &mut Ctx, o: Obj) {
             ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
             o.set_u16(ctx.b, trainee::DELAI, 0x200);
             let variante = o.u8(ctx.b, Obj::VARIANT);
-            return ctx.anim_start(trainee::ANIMATIONS, variante as u16);
+            ctx.anim_start(trainee::ANIMATIONS, variante as u16);
+            return;
         }
         if reste > 0x50 {
             return;
         }
         ctx.anim_step();
-        ctx.jsr(rom::MOVE_X);
+        ctx.move_x();
         return ctx.reinsert();
     }
     let reste = o.u16(ctx.b, trainee::DELAI).wrapping_sub(1);
@@ -399,8 +402,8 @@ mod eclat {
 
 fn eclat_init(ctx: &mut Ctx, o: Obj) {
     ajoute_u8(ctx, o, Obj::STATE, 2);
-    ctx.jsr(rom::RNG);
-    let tirage = ctx.c.d[0] as u16 & 0x3f;
+    let alea = ctx.random_68k();
+    let tirage = alea & 0x3f;
     o.set_u16(ctx.b, eclat::DECALAGE, tirage);
     let flip = o.u8(ctx.b, champ::FLIP) ^ 0x20;
     o.set_u8(ctx.b, champ::FLIP, flip);
@@ -456,8 +459,7 @@ fn eclat_atterrit(ctx: &mut Ctx, o: Obj) {
 
 fn eclat_actif(ctx: &mut Ctx, o: Obj) {
     ctx.anim_step();
-    ctx.jsr(rom::MOVE_XZ);
-    let en_vol = ctx.c.cond(10); // bpl
+    let en_vol = ctx.move_xz().pl(); // bpl
     if en_vol {
         return;
     }
@@ -505,10 +507,10 @@ fn poussiere_init(ctx: &mut Ctx, o: Obj) {
         dx = dx.wrapping_sub(d3);
         dy = dy.wrapping_sub(d3);
         let masque = (d3 << 1).wrapping_sub(1);
-        ctx.jsr(rom::RNG);
-        dx = dx.wrapping_add(ctx.c.d[0] as u16 & masque);
-        ctx.jsr(rom::RNG);
-        dy = dy.wrapping_add(ctx.c.d[0] as u16 & masque);
+        let alea = ctx.random_68k();
+        dx = dx.wrapping_add(alea & masque);
+        let alea = ctx.random_68k();
+        dy = dy.wrapping_add(alea & masque);
     }
     decale_u16(ctx, o, Obj::X, dx);
     let sur_z = o.u8(ctx.b, poussiere::SUR_Z);
@@ -570,11 +572,11 @@ mod nuage {
 
 fn nuage_init(ctx: &mut Ctx, o: Obj) {
     ajoute_u8(ctx, o, Obj::STATE, 2);
-    ctx.jsr(rom::RNG);
-    let tirage = ctx.c.d[0] as u16 & 0x3f;
+    let alea = ctx.random_68k();
+    let tirage = alea & 0x3f;
     o.set_u16(ctx.b, nuage::DELAI, tirage);
-    ctx.jsr(rom::RNG);
-    let tirage = ctx.c.d[0] as u16 & 0x3f;
+    let alea = ctx.random_68k();
+    let tirage = alea & 0x3f;
     o.set_u16(ctx.b, Obj::Y, tirage);
     decale_u16(ctx, o, Obj::Y, 0x50);
     o.set_u16(ctx.b, Obj::Z, 0);
@@ -598,8 +600,9 @@ fn nuage_actif(ctx: &mut Ctx, o: Obj) {
         return;
     }
     ctx.anim_step();
-    // D0 garde ses mots hauts d'avant : la native de la remise en liste les rend comme l'original
-    ctx.reinsert();
+    // D0 garde ses mots hauts d'avant : la remise en liste les rend comme l'original, relus ici (adaptateur)
+    let o = ctx.obj();
+    crate::objects::lists::ACTORS.reinsert_68k(ctx.c, ctx.b, o);
     let vx = o.u16(ctx.b, Obj::VX) as u32;
     let d0 = ((ctx.c.d[0] & 0xffff_0000 | vx).rotate_left(16)) as i32 >> 8;
     let x = o.u32(ctx.b, Obj::X).wrapping_sub(d0 as u32);
@@ -1060,8 +1063,8 @@ fn impact_init(ctx: &mut Ctx, o: Obj) {
         impact_position_table(ctx, o);
     }
     impact_drapeau(ctx, o);
-    ctx.jsr(rom::RNG);
-    let tirage = ctx.c.d[0] as u16 & 0xf;
+    let alea = ctx.random_68k();
+    let tirage = alea & 0xf;
     let drapeau = o.u8(ctx.b, impact::VARIANTE_HASARD);
     let table = if drapeau == 0 { impact::HASARD_A } else { impact::HASARD_B };
     let animation = ctx.prog8(table + tirage as u32);
@@ -1181,7 +1184,7 @@ fn debris_init(ctx: &mut Ctx, o: Obj) {
 }
 
 fn debris_actif(ctx: &mut Ctx, o: Obj) {
-    ctx.jsr(rom::MOVE_XZ);
+    ctx.move_xz();
     ctx.anim_step();
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
@@ -1269,7 +1272,7 @@ fn eclat_unique_actif(ctx: &mut Ctx, o: Obj) {
         let y = o.u32(ctx.b, Obj::Y).wrapping_add(2);
         o.set_u32(ctx.b, Obj::Y, y);
     }
-    ctx.jsr(rom::ANIM_STEP);
+    ctx.anim_step();
 }
 
 fn eclat_unique_clignote(ctx: &mut Ctx, o: Obj) {
@@ -1324,14 +1327,14 @@ fn balayage_actif(ctx: &mut Ctx, o: Obj) {
             o.set_u8(ctx.b, balayage::DELAI, delai - 1);
             decale_u16(ctx, o, Obj::X, 2);
         } else {
-            ctx.jsr(rom::MOVE_X);
+            ctx.move_x();
             let vx = o.u16(ctx.b, Obj::VX);
             if !(vx as i16 >= 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 1);
             }
         }
     }
-    ctx.jsr(rom::ANIM_STEP);
+    ctx.anim_step();
     ctx.reinsert();
 }
 
@@ -1469,7 +1472,7 @@ fn marque_actif(ctx: &mut Ctx, o: Obj) {
     if sous != 0x2c {
         return ctx.free(&pools::EFFCT);
     }
-    ctx.jsr(rom::ANIM_STEP);
+    ctx.anim_step();
 }
 
 fn marque_gestionnaire(ctx: &mut Ctx) {
@@ -1584,8 +1587,8 @@ mod eclats_debris {
 
 /// Tirage aléatoire masqué.
 fn tirage(ctx: &mut Ctx, masque: u16) -> u16 {
-    ctx.jsr(rom::RNG);
-    ctx.c.d[0] as u16 & masque
+    let alea = ctx.random_68k();
+    alea & masque
 }
 
 fn eclats_debris_init(ctx: &mut Ctx, o: Obj) {
@@ -1613,8 +1616,7 @@ fn eclats_debris_init(ctx: &mut Ctx, o: Obj) {
 }
 
 fn eclats_debris_actif(ctx: &mut Ctx, _o: Obj) {
-    ctx.jsr(rom::MOVE_XYZ);
-    let positif = ctx.c.cond(10); // bpl
+    let positif = ctx.move_xyz().pl(); // bpl
     if positif {
         return;
     }
@@ -1687,13 +1689,12 @@ fn projectile_actif(ctx: &mut Ctx, o: Obj) {
     let cible = ctx.saut_table(projectile::SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         0 => {
-            ctx.jsr(rom::MOVE_XZ);
-            let en_vol = ctx.gt();
+            let en_vol = ctx.move_xz().gt();
             if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, Obj::Z, 0);
             }
-            ctx.jsr(rom::ANIM_STEP);
+            ctx.anim_step();
         }
         2 => {}
         _ => ctx.deleguer(cible),
@@ -1881,7 +1882,7 @@ fn accessoire_gestionnaire(ctx: &mut Ctx) {
                 ajoute_u8(ctx, o, Obj::STATE, 2);
             }
             accessoire_suit(ctx, o);
-            ctx.jsr(rom::ANIM_STEP);
+            ctx.anim_step();
             ctx.reinsert();
         }
         etat::LIBERE => ctx.free(&pools::EFFCT),
@@ -2073,8 +2074,8 @@ fn creer_impact(ctx: &mut Ctx, o: Obj) {
 
 /// `0xaacfe` : une fois sur seize environ, tire au hasard si on poursuit (`0x5555` : bits pairs).
 fn bulle_hasard(ctx: &mut Ctx, o: Obj) {
-    ctx.jsr(rom::RNG);
-    let tirage = ctx.c.d[0] as u16 & 0xf;
+    let alea = ctx.random_68k();
+    let tirage = alea & 0xf;
     if 0x5555u16 >> tirage & 1 != 0 {
         bulle_suite(ctx, o);
     }
@@ -2267,7 +2268,7 @@ fn bulle_actif(ctx: &mut Ctx, o: Obj) {
         // variante 3 : clignote, se recolle, et passe à l'état suivant au bout de `MINUTEUR` images
         let flags = o.u8(ctx.b, Obj::FLAGS);
         o.set_u8(ctx.b, Obj::FLAGS, flags ^ 2);
-        ctx.jsr(rom::ANIM_STEP);
+        ctx.anim_step();
         bulle_3_recolle(ctx, o);
         let reste = o.u8(ctx.b, bulle::MINUTEUR).wrapping_sub(1);
         o.set_u8(ctx.b, bulle::MINUTEUR, reste);

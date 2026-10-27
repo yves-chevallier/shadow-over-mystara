@@ -6,8 +6,8 @@ use super::pshell::*;
 use crate::mem::{rd16, wr16};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
 
-const REINSERT: u32 = 0x1ee1a;
 const TERRAIN_OF_OBJECT: u32 = 0x24a8;
 const SHAKE: u32 = 0x2824;
 const FLASH_ON: u32 = 0x1ac68;
@@ -35,8 +35,6 @@ mod chain {
     const SPEEDS: u32 = 0x1c89b6;
     const ANIMS: u32 = 0x15cdb6;
     const ANGLE_TO_TARGET: u32 = 0x1376;
-    const MOVE_TABLE_XY: u32 = 0x1cb4;
-    const ACTIVE_CHECK: u32 = 0x1f0be;
     const SPAWN_EFFECT: u32 = 0xabec8;
     const SFX_END: u32 = 0xe859a;
 
@@ -110,11 +108,11 @@ mod chain {
         }
         find_target(x, 0);
         x.anim(ANIMS, 0);
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     fn active(x: &mut Cx) {
-        x.call(ANIM_STEP);
+        x.anim_step();
         'follow: {
             if x.u16(0x42) != 0 {
                 x.add16(0x42, 0xffff);
@@ -171,12 +169,12 @@ mod chain {
         let angle = x.u8(0x2d);
         x.set8(0x58, angle);
         x.set8(0x2d, angle & 0x1f);
-        x.call(MOVE_TABLE_XY);
+        x.move_by_table_xy();
         x.set8(f::FLIP, 0);
         if (x.u8(0x2d) as i8) <= 0x10 {
             x.set8(f::FLIP, 0x20);
         }
-        x.call(REINSERT);
+        x.reinsert();
     }
 
     /// Tourne d'un cran vers la cible (`0x53fe0`).
@@ -296,7 +294,7 @@ mod chain {
             x.add8(0x5, 2);
             x.set8(0x0, 2);
             x.set8(0x42, 4);
-            x.call(ACTIVE_CHECK);
+            x.unlink();
             if x.u16(0x54) != 0 {
                 x.set32(0x58, 0x8080_8080);
                 x.c.d[0] = 6;
@@ -362,7 +360,7 @@ mod wall {
                 x.set8(f::POWER2, p2);
                 let anim = x.rom8(PICK + class);
                 x.anim(ANIMS, anim as u32);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 match x.u8(0x5) {
@@ -396,7 +394,7 @@ mod wall {
                         }
                     }
                 }
-                x.call(ANIM_STEP);
+                x.anim_step();
             }
             _ => x.free_pshl(),
         }
@@ -440,16 +438,16 @@ mod knife {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 1);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 if x.u8(f::HIT_FLAGS) & 2 != 0 || stopped_by_terrain(x) {
                     x.add8(0x4, 2);
                     return x.call(SFX_HIT);
                 }
-                x.call(ANIM_STEP);
-                x.call(MOVE_XY);
-                x.call(CULL);
+                x.anim_step();
+                x.move_xy();
+                x.cull_offscreen();
             }
             _ => x.free_pshl(),
         }
@@ -499,7 +497,7 @@ mod fireball {
                 x.set8(f::POWER, p1);
                 x.set8(f::POWER2, p2);
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             0 => {
                 x.add8(0x4, 2);
@@ -516,18 +514,17 @@ mod fireball {
                 x.set_d0w(0x20);
                 x.call(SHAKE);
                 x.anim(ANIMS, 2);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 if !child => {
                 if x.u8(0x5) == 0 {
-                    x.call(ANIM_STEP);
-                    if x.c.cond(5) {
+                    if x.anim_step() {
                         x.add8(0x5, 2);
                         x.anim(ANIMS, 1);
                     }
                 } else {
-                    x.call(MOVE_XZ);
-                    x.call(ANIM_STEP);
+                    x.move_xz();
+                    x.anim_step();
                     if (x.u16(0xc) as i16) < 0 {
                         x.add8(0x4, 2);
                         if let Some(o) = x.alloc(&pools::PSHL) {
@@ -539,7 +536,7 @@ mod fireball {
                             o.set_u16(x.b, f::OWNER, owner);
                         }
                     }
-                    x.call(CULL);
+                    x.cull_offscreen();
                 }
             }
             2 => {
@@ -551,8 +548,7 @@ mod fireball {
                         x.call(FLASH_PULSE);
                     }
                 }
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
             }
@@ -599,11 +595,10 @@ mod bolt {
                     x.add32(0x10, 0xfffe_8000);
                 }
                 x.anim(ANIMS, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
-                x.call(ANIM_STEP);
-                if x.c.cond(5) {
+                if x.anim_step() {
                     x.add8(0x4, 2);
                 }
             }
@@ -628,12 +623,12 @@ mod spark {
                 let n = 0x1du32.wrapping_add(x.u8(0x3) as u32) & 0xff;
                 x.anim(ANIMS, n);
                 x.set32(0x34, 0);
-                x.call(REINSERT);
+                x.reinsert();
             }
             2 => {
                 let parent = x.link_a1(0x5c);
                 x.copy_pos(parent);
-                x.call(REINSERT);
+                x.reinsert();
             }
             _ => x.free_pshl(),
         }

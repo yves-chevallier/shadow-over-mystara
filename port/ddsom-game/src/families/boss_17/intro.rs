@@ -12,6 +12,7 @@ use crate::objects::Obj;
 use super::decide;
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -100,7 +101,7 @@ fn arrival(x: &mut Cx) {
                     x.set16(TIMER, 7);
                 }
             }
-            x.call(call::MOVE_XY);
+            x.move_xy();
             step(x);
         }
         2 => {
@@ -108,7 +109,7 @@ fn arrival(x: &mut Cx) {
                 x.add8(0x7, 2);
                 x.set16(0x1e, (-0x20i16) as u16);
             }
-            x.call(call::MOVE_XY);
+            x.move_xy();
             step(x);
         }
         3 => {
@@ -121,7 +122,7 @@ fn arrival(x: &mut Cx) {
                 x.set16(0x1e, 0);
                 x.set16(0x14, 0);
             }
-            x.call(call::MOVE_XY);
+            x.move_xy();
             step(x);
         }
         4 => {
@@ -144,7 +145,7 @@ fn arrival(x: &mut Cx) {
                     }
                 }
             }
-            x.call(call::MOVE_XY);
+            x.move_xy();
             step(x);
         }
         5 => {
@@ -154,7 +155,7 @@ fn arrival(x: &mut Cx) {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, true);
             } else {
-                x.call(call::MOVE_XY);
+                x.move_xy();
                 step(x);
             }
         }
@@ -453,7 +454,7 @@ fn fall(x: &mut Cx) {
     let rate = if first { 0x12000 } else { 0x11000 };
     let y = x.a5_u32(var::SCROLL_Y).wrapping_sub(rate);
     x.set_a5_u32(var::SCROLL_Y, y);
-    x.call(call::MOVE_XYZ);
+    x.move_xyz();
     let (limit, next) = if first { (0x80, 0x13) } else { (0xff80, 0x14) };
     if cmp16(x, 0x18, limit).le() {
         x.add8(0x7, 2);
@@ -467,7 +468,7 @@ fn fall(x: &mut Cx) {
 fn land(x: &mut Cx) {
     let y = x.a5_u32(var::SCROLL_Y).wrapping_sub(0x10000);
     x.set_a5_u32(var::SCROLL_Y, y);
-    x.call(call::MOVE_XYZ);
+    x.move_xyz();
     if tst16(x, 0xc).gt() {
         return;
     }
@@ -506,14 +507,14 @@ fn variant(x: &mut Cx, second: bool) {
                 x.set16(0x18, 0x300);
                 x.set16(0x1a, (-0x20i16) as u16);
                 x.set32(0x1c, 0);
-                x.call(call::MOVE_XYZ);
+                x.move_xyz();
                 body(x, 4);
             } else {
                 step(x);
             }
         }
         4 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if tst16(x, 0x18).gt() {
                 step(x);
             } else {
@@ -522,7 +523,7 @@ fn variant(x: &mut Cx, second: bool) {
             }
         }
         5 => {
-            x.call(call::MOVE_XYZ);
+            x.move_xyz();
             if tst16(x, 0xc).gt() {
                 step(x);
             } else {

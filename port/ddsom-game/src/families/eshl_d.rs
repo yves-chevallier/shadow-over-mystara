@@ -4,10 +4,12 @@
 //! Même cadre que `eshl.rs` : un `mod` par type, `run` est appelé par le dispatch avec l'objet
 //! courant ; `+4` est l'état principal, `+5` / `+6` les sous-états (octets pairs).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Alloue un objet ESHL ; `None` si le pool est plein.
 /// `subq.w #1,(off,A0)` : vrai quand le compteur atteint zéro.
@@ -138,8 +140,7 @@ mod flame64 {
                 }
             }
             2 => {
-                x.call(sub::MOVE_XYZ);
-                if x.c.cond(14) {
+                if x.move_xyz().gt() {
                     x.anim_step();
                     return;
                 }
@@ -274,8 +275,7 @@ mod rocks65 {
 
     /// Tirage pseudo-aléatoire (mot bas de D0).
     fn random(x: &mut Cx) -> u16 {
-        x.call(0x19a88);
-        x.c.d[0] as u16
+        x.random_68k()
     }
 
     fn fall(x: &mut Cx, v: usize) {
@@ -284,7 +284,7 @@ mod rocks65 {
             return;
         }
         x.anim_step();
-        x.call(sub::MOVE_Z);
+        x.move_z();
         if x.u16(0xc) as i16 > 0 {
             x.set_d0w(16);
             x.call(CLAMP_ON_SCREEN);
@@ -357,7 +357,7 @@ mod shard66 {
         x.set16(0x18, 0x60);
         x.set16(TIMER, 8);
         let n = x.rom8(START_ANIMS + v as u32) as u32;
-        x.anim_start(ANIMS, n);
+        x.anim_start(ANIMS, n as u16);
     }
 
     fn active(x: &mut Cx) {
@@ -400,7 +400,7 @@ mod shard66 {
                 x.set16(0x1a, 0xff00);
             }
             2 => {
-                x.call(sub::MOVE_Z);
+                x.move_z();
                 if x.u16(0xc) as i16 <= 0 {
                     x.set16(0xc, 0);
                     x.add8(0x5, 2);
@@ -408,7 +408,7 @@ mod shard66 {
                     x.set16(TIMER, 16);
                     let v = x.u8(0x3) as u32;
                     let n = x.rom8(LAND_ANIMS + v) as u32;
-                    x.anim_start(ANIMS, n);
+                    x.anim_start(ANIMS, n as u16);
                     x.c.d[0] = 4;
                     x.call(LAND_DAMAGE);
                     x.call(SFX_LAND);
@@ -493,8 +493,7 @@ mod barrel67 {
         x.set8(f::BOX_SET, 7);
         let dir = if x.u8(f::FLIP) != 0 { 8 } else { 24 };
         x.set8(0x2d, dir);
-        x.c.d[0] = SPEED_TABLE;
-        x.call(sub::SPEED_TABLE_B);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, SPEED_TABLE as u16);
         let step = ((x.u16(0x14) as i16).unsigned_abs() as i32) << 16 >> 8;
         let owner = x.linked(f::OWNER);
         x.c.a[1] = x.u16(f::OWNER) as i16 as i32 as u32;
@@ -532,7 +531,7 @@ mod barrel67 {
 
     /// Mouvement en X et en hauteur ; vrai quand l'objet touche le sol (hauteur remise à 0).
     fn lands(x: &mut Cx) -> bool {
-        x.call(sub::MOVE_XZ);
+        x.move_xz();
         if x.u16(0xc) as i16 > 0 {
             return false;
         }
@@ -568,7 +567,7 @@ mod barrel67 {
             }
             2 => {
                 spin(x);
-                x.call(sub::MOVE_X);
+                x.move_x();
                 if count_down_le(x, TIMER) {
                     x.set8(0x5, 6);
                     x.set16(TIMER, 60);
@@ -580,7 +579,7 @@ mod barrel67 {
             4 => match x.u8(0x6) {
                 0 => {
                     spin(x);
-                    x.call(sub::MOVE_XZ);
+                    x.move_xz();
                     if x.u16(0x18) as i16 <= 0 {
                         x.add8(0x6, 2);
                         x.set8(0x0, 2);
@@ -652,7 +651,6 @@ mod stone68 {
     const RANK: u32 = 0x2f;
     const TIMER: u32 = 0x42;
     const SPEED_TABLE: u32 = 31;
-    const UNLINK: u32 = 0x1f0be;
     const SFX_RELEASE: u32 = 0xe4de6;
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
@@ -695,7 +693,7 @@ mod stone68 {
                 x.set16(0xc, z);
                 if (z as i16) < RISE_HEIGHT as i16 {
                     x.set_bit(0x1, 1, false);
-                    x.call(sub::REINSERT_FOREGROUND);
+                    x.reinsert_foreground();
                     return;
                 }
                 x.set16(0xc, RISE_HEIGHT);
@@ -706,9 +704,8 @@ mod stone68 {
                 let rank = (x.u8(RANK) & 7) as u32;
                 let dir = x.rom8(DIRECTIONS + rank);
                 x.set8(0x2d, dir);
-                x.c.d[0] = SPEED_TABLE;
-                x.call(sub::SPEED_TABLE_A);
-                x.call(UNLINK);
+                x.select_speed(&crate::objects::motion::SPEEDS_A, SPEED_TABLE as u16);
+                x.unlink();
             }
             2 => {
                 let held = carrier.u8(x.b, 0x0) != 0 && carrier.u32(x.b, 0x4) & !0xff == RELEASE_STATE;
@@ -723,7 +720,7 @@ mod stone68 {
             }
             _ => {
                 height_anim(x);
-                x.call(sub::MOVE_XY);
+                x.move_xy();
                 let top = x.a5_u16(SCREEN_TOP);
                 if (x.u16(0x10).wrapping_sub(top) as i16) <= 0 {
                     x.add8(0x4, 2);
@@ -747,7 +744,7 @@ mod stone68 {
                 break;
             }
         }
-        x.anim_start(ANIMS, anim as u32);
+        x.anim_start(ANIMS, (anim as u32) as u16);
     }
 }
 
@@ -795,7 +792,7 @@ mod bouncer69 {
         let delay = x.rom16(row);
         x.set16(TIMER, delay);
         let anim = x.rom16(row + 2);
-        x.anim_start(ANIMS, anim as u32);
+        x.anim_start(ANIMS, (anim as u32) as u16);
     }
 
     /// 0xa7ed4 : vitesses d'un bond (vers l'avant), son.
@@ -818,7 +815,7 @@ mod bouncer69 {
             x.add8(0x5, 2);
         }
         x.anim_step();
-        x.call(sub::MOVE_XZ);
+        x.move_xz();
         if x.u16(0xc) as i16 <= 0 {
             x.set16(0xc, 0);
             bounce(x);
@@ -894,7 +891,7 @@ mod gate70 {
         }
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, if variant == 0 { 0x34 } else { 0x35 });
-        x.anim_start(ANIMS, (variant != 0) as u32);
+        x.anim_start(ANIMS, ((variant != 0) as u32) as u16);
         x.reinsert();
     }
 
@@ -945,7 +942,7 @@ mod ball71 {
             2 => match (variant, x.u8(0x5)) {
                 (0, 0) => held(x),
                 (0, 2) => {
-                    x.call(sub::MOVE_XYZ);
+                    x.move_xyz();
                     if x.u16(0xc) as i16 > 0 {
                         x.call(AI_ANIM_STEP);
                     } else {
@@ -979,8 +976,7 @@ mod ball71 {
         x.call(PALETTE_LIGHT);
         let dir = if x.u8(f::FLIP) != 0 { 8 } else { 24 };
         x.set8(0x2d, dir);
-        x.c.d[0] = SPEED_TABLE;
-        x.call(sub::SPEED_TABLE_B);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, SPEED_TABLE as u16);
         x.set16(0x18, 0xfc00);
         ai_anim(x, 0);
     }
@@ -1076,8 +1072,7 @@ mod splinter72 {
                         }
                     }
                     2 => {
-                        x.call(sub::MOVE_XYZ);
-                        if x.c.cond(14) {
+                        if x.move_xyz().gt() {
                             x.anim_step();
                         } else {
                             x.set16(0xc, 0);

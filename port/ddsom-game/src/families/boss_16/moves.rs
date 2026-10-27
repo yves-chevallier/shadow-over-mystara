@@ -2,6 +2,7 @@
 //! une attaque (8), pause (10), joueur saisi (12).
 
 use super::*;
+use crate::objects::Courant;
 
 // --- groupe 0 : réveil --------------------------------------------------------------------------
 
@@ -258,7 +259,7 @@ fn walk(x: &mut Cx, kind: u8) {
         return x.set32(f::STATE, state::LEAP);
     }
     x.call(ai::STEP);
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     if target_behind(x) {
         x.set32(SAVED_STATE, state::STAND);
         x.set32(f::STATE, state::TURN);
@@ -301,7 +302,7 @@ fn leap(x: &mut Cx) {
                 x.set32(SAVED_STATE, state::STAND);
                 x.set32(f::STATE, state::TURN);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             x.call(ai::STEP);
         }
         _ => {}
@@ -354,7 +355,7 @@ fn run_to_spot(x: &mut Cx) {
             choose_spot(x);
             anim_a(x, 2);
             speed(x, 8);
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step(x);
         }
         2 => {
@@ -374,7 +375,7 @@ fn run_to_spot(x: &mut Cx) {
                 x.set8(0x2d, a & 0x1f);
                 x.set16(TIMER, 6);
             }
-            x.call(call::MOVE_TABLE_XY);
+            x.move_by_table_xy();
             step(x);
         }
         _ => {}
@@ -396,8 +397,8 @@ fn spot_jump(x: &mut Cx) {
         }
         2 => {
             step(x);
-            x.call(call::MOVE_TABLE_XY);
-            x.call(call::MOVE_Y);
+            x.move_by_table_xy();
+            x.move_z();
             if (x.u16(0xc) as i16) >= 0 {
                 return;
             }
@@ -526,7 +527,7 @@ pub(super) fn holding(x: &mut Cx) {
                     x.set32(0x14, 0);
                     x.set32(0x1c, 0);
                 }
-                x.call(ia::MOVE_XZ);
+                x.move_xz();
                 if (x.u16(0xc) as i16) > 0 {
                     x.set16(0xc, 0);
                 }

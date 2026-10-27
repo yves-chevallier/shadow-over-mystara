@@ -3,6 +3,7 @@
 //! `+0xac` est non nul.
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x5cbe8;
@@ -107,9 +108,8 @@ pub(super) fn grab(x: &mut Cx) {
         }
         4 => {
             x.anim_step();
-            x.call(sub::MOVE_TABLE_XY);
-            x.call(call::SCREEN_CHECK);
-            if x.c.cond(5) {
+            x.move_by_table_xy();
+            if x.in_arena_default() {
                 return;
             }
             if (x.u8(TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
@@ -128,6 +128,5 @@ fn run_away(x: &mut Cx) {
     x.set8(VULNERABLE, 1);
     walk_angle(x);
     mv(x, 2);
-    x.c.d[0] = 0x21;
-    x.call(call::SPEED_TABLE);
+    x.select_speed(&crate::objects::motion::SPEEDS_B, 0x21);
 }

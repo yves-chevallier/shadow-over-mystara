@@ -2,6 +2,7 @@
 //! 4 chute, 8 saisie par un joueur (l'elfe disparaît).
 
 use super::*;
+use crate::objects::Courant;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x6a206;
@@ -50,7 +51,7 @@ fn recoil(x: &mut Cx) {
         return body(x, 7);
     }
     if x.u8(SPEED_X) != 0 {
-        x.call(sub::MOVE_X);
+        x.move_x();
     }
     if step(x) {
         set_state_long(x, STANCE);

@@ -16,7 +16,7 @@
 //!
 //! Animations : 0x15eed8 (mouvements) et 0x15eef4 (coups).
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
 mod attacks;
@@ -83,6 +83,7 @@ pub(self) mod g {
 }
 
 use g::*;
+use crate::objects::Courant;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_BODY: u32 = 0x15eed8;
@@ -107,7 +108,6 @@ mod call {
     pub const SPEED_STEP: u32 = 0xe914;
     pub const WALK_PATH: u32 = 0xf0e8;
     pub const FLASH: u32 = 0xe7fa;
-    pub const SCREEN_CHECK: u32 = 0x1e90;
     pub const REMOVE: u32 = 0x27ee;
     pub const DEAD_STEP: u32 = 0xe886;
 }
@@ -116,7 +116,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    x.call(rom::TICK_COUNTERS);
+    x.tick_counters();
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -129,11 +129,11 @@ pub fn run(x: &mut Cx) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body(x: &mut Cx, n: u32) {
-    x.anim_start(SET_BODY, n);
+    x.anim_start(SET_BODY, n as u16);
 }
 
 fn strike(x: &mut Cx, n: u32) {
-    x.anim_start(SET_STRIKE, n);
+    x.anim_start(SET_STRIKE, n as u16);
 }
 
 fn step(x: &mut Cx) -> bool {
@@ -141,7 +141,7 @@ fn step(x: &mut Cx) -> bool {
 }
 
 fn move_xy(x: &mut Cx) {
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
 }
 
 /// Fin des coups : étape suivante tirée dans la table par difficulté, ou retour debout.
@@ -338,7 +338,7 @@ fn arrival(x: &mut Cx) {
         }
         4 => {
             if x.u8(STEP) == 0 {
-                x.call(sub::MOVE_XZ);
+                x.move_xz();
                 if (x.u16(HEIGHT) as i16) > 0 {
                     return;
                 }

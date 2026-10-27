@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACTIONS: u32 = 0x715d4;
@@ -70,12 +71,12 @@ fn recoil(x: &mut Cx) {
                 x.set16(TIMER, 0x14);
                 x.set16(SPEED_Y, 0);
             }
-            x.call(sub::MOVE_X);
+            x.move_x();
             lib::step(x);
         }
         4 => {
             if count_down(x, TIMER) {
-                x.call(sub::MOVE_X);
+                x.move_x();
                 lib::step(x);
             } else {
                 x.set32(0x58, 0);
@@ -173,7 +174,7 @@ fn dying(x: &mut Cx) {
             x.anim_start(SET_DEATH, 0);
         }
         2 => {
-            x.call(sub::MOVE_XZ);
+            x.move_xz();
             if (x.u16(HEIGHT) as i16) > 0 {
                 return;
             }
@@ -223,7 +224,7 @@ fn flee(x: &mut Cx) {
         2 => {
             lib::step(x);
             if x.u8(KEY) != 2 {
-                x.call(sub::MOVE_X);
+                x.move_x();
             }
             if x.u8(KEY) == 3 {
                 x.set8(KEY, 0);

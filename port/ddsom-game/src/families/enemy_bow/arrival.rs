@@ -3,6 +3,7 @@
 
 use super::stance::stance_begin;
 use super::*;
+use crate::objects::Courant;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(VARIANT) as u32;
@@ -25,7 +26,7 @@ fn end_of_walk(x: &mut Cx) {
         x.set16(f::SUB2, 0);
         return stance_begin(x);
     }
-    x.call(sub::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     x.anim_step();
 }
 

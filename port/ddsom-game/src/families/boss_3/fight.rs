@@ -2,6 +2,7 @@
 //! emporté (12), riposte (14).
 
 use super::*;
+use crate::objects::Courant;
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
@@ -31,7 +32,7 @@ pub(super) fn intro(x: &mut Cx) {
             set_dw(x, 0, px);
             x.set16(0x8, px);
             step(x);
-            x.call(call::MOVE_Z);
+            x.move_z();
             if (x.u16(0xc) as i16) < 0x80 {
                 return hidden(x);
             }
@@ -45,7 +46,7 @@ pub(super) fn intro(x: &mut Cx) {
             x.set16(0x1a, (-0x60i16) as u16);
             x.set8(TIMER, 0x20);
             body_anim(x, 0xd);
-            x.call(0x1f0be);
+            x.unlink();
             end_frame(x, 0x50);
         }
         4 => {
@@ -72,14 +73,14 @@ pub(super) fn intro(x: &mut Cx) {
 fn hidden(x: &mut Cx) {
     set_dw(x, 0, 0x50);
     x.call(call::ZONE);
-    x.call(0x1ef6c);
+    x.reinsert_foreground();
 }
 
 /// 0x7f6a8 : descente jusqu'au sol, puis cri.
 fn descend(x: &mut Cx) {
     if x.a5_u8(var::PAUSE) == 0 {
         step(x);
-        x.call(call::MOVE_Z);
+        x.move_z();
         if (x.u16(0xc) as i16) <= 0 {
             x.set16(0xc, 0);
             next6(x);
@@ -234,7 +235,7 @@ fn approach(x: &mut Cx) {
         return x.call(call::ATTACK_LOCK);
     }
     step(x);
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     if target_behind(x) {
         x.set32(SAVED_STATE, 0x0202_0000);
         x.set32(f::STATE, 0x0202_0200);
@@ -308,7 +309,7 @@ fn patrol(x: &mut Cx) {
         x.call(call::ATTACK_LOCK);
         return choose_attack(x, false);
     }
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     if target_behind(x) {
         let side = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, side);
@@ -343,7 +344,7 @@ fn climb(x: &mut Cx) {
         return body_anim(x, 1);
     }
     step(x);
-    x.call(call::MOVE_Z);
+    x.move_z();
     if (x.u16(0xc) as i16) < 0x30 {
         return;
     }
@@ -361,7 +362,7 @@ fn land(x: &mut Cx) {
         x.set16(0x18, (-0x400i16) as u16);
     }
     step(x);
-    x.call(call::MOVE_Z);
+    x.move_z();
     if (x.u16(0xc) as i16) > 0 {
         return;
     }
@@ -389,7 +390,7 @@ fn sweep(x: &mut Cx) {
         x.set32(SAVED_STATE, 0x0202_0400);
         x.set32(f::STATE, 0x0202_0200);
     }
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     step(x);
 }
 
@@ -450,7 +451,7 @@ fn circling(x: &mut Cx) {
             body_anim(x, 3);
         }
         speed(x, 0x15);
-        x.call(call::MOVE_TABLE_XY);
+        x.move_by_table_xy();
         step(x);
         return;
     }
@@ -472,7 +473,7 @@ fn circling(x: &mut Cx) {
         x.set8(ANGLE, a);
         x.set16(TIMER, 6);
     }
-    x.call(call::MOVE_TABLE_XY);
+    x.move_by_table_xy();
     step(x);
 }
 
@@ -493,8 +494,8 @@ fn take_off(x: &mut Cx) {
         2 => {
             step(x);
             if x.u8(KEY) == 0 {
-                x.call(call::MOVE_TABLE_XY);
-                x.call(call::MOVE_Z);
+                x.move_by_table_xy();
+                x.move_z();
             }
             if (x.u16(0xc) as i16) >= 0 {
                 return;
@@ -602,7 +603,7 @@ pub(super) fn carrying(x: &mut Cx) {
         }
         2 => {
             step(x);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) <= 0x30 {
                 x.set16(0xc, 0x30);
             }
@@ -623,7 +624,7 @@ pub(super) fn carrying(x: &mut Cx) {
         }
         _ => {
             step(x);
-            x.call(call::MOVE_XZ);
+            x.move_xz();
             if (x.u16(0xc) as i16) <= 0x70 {
                 return x.call(call::HOLD);
             }

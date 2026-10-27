@@ -58,6 +58,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
+use crate::objects::Courant;
 
 pub(self) const TYPE_BIG: u8 = 0xf;
 pub(self) const TYPE_SMALL: u8 = 0x14;
@@ -69,13 +70,6 @@ pub(self) const WAIT: u32 = 0x020a_0000;
 pub(self) const ATTACK_4: u32 = 0x0204_0400;
 
 pub(self) mod call {
-    pub const MOVE_X: u32 = 0x1d78;
-    pub const MOVE_Y: u32 = 0x1e02;
-    pub const MOVE_XZ: u32 = 0x1da6;
-    pub const MOVE_Z: u32 = 0x1dbc;
-    pub const ANIM_START: u32 = 0x1a32;
-    pub const ANIM_STEP: u32 = 0x1a56;
-    pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
     pub const PICK_FAR: u32 = 0x43ae;
     pub const CATCH_IN_REACH: u32 = 0xfc44;
     pub const SEIZE: u32 = 0xfd64;
@@ -117,7 +111,9 @@ pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
     }
     x.set8(ANIM_SET, set);
     x.set8(ANIM_N, n as u8);
-    x.call(call::ANIM_START);
+    let set = x.c.a[4];
+    let n = x.c.d[0] as u16;
+    x.anim_start(set, n);
 }
 
 pub(self) fn rest(x: &mut Cx) {
@@ -125,8 +121,7 @@ pub(self) fn rest(x: &mut Cx) {
 }
 
 pub(self) fn step(x: &mut Cx) -> bool {
-    x.call(call::ANIM_STEP);
-    carry(x)
+    x.anim_step()
 }
 
 // --- changements d'état ---------------------------------------------------------------------------
@@ -218,7 +213,7 @@ fn init(x: &mut Cx) {
 pub(self) fn active(x: &mut Cx) {
     if x.u8(FOREGROUND) != 0 {
         x.set8(FOREGROUND, 0);
-        x.call(0x1f0be);
+        x.unlink();
     }
     if x.a5_u8(var::PAUSE) == 0 {
         if tst8(x, f::FREEZE).gt() {
@@ -264,8 +259,8 @@ pub(self) fn active(x: &mut Cx) {
 pub(self) fn finish(x: &mut Cx) {
     x.set8(0xb6, 0);
     if x.u8(FOREGROUND) != 0 {
-        x.call(0x1f0be);
-        x.call(call::REINSERT_FOREGROUND);
+        x.unlink();
+        x.reinsert_foreground();
     } else {
         x.reinsert();
     }
@@ -389,8 +384,7 @@ fn release(x: &mut Cx) {
 
 /// `jsr 0x1a56` : un pas de script, rend vrai à la fin (retenue levée).
 fn step_anim(x: &mut Cx) -> bool {
-    x.call(call::ANIM_STEP);
-    carry(x)
+    x.anim_step()
 }
 
 handlers! {
