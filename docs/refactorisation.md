@@ -427,8 +427,9 @@ Périmètre : `families/effects*.rs`, `effects_creators.rs`, `items*.rs`, `boxes
   (`camera_modes::start_shake`), la création de tâche (`kernel::creer_tache`), les éclairs et pages de palette
   du lot (`petites`), la remise à zéro de scène (`creators::restart_scene`). Restent par adresse (pas d'API Rust) :
   les sons (enveloppes de `sound.rs`), `evenements` (0x19ae6, 0x19b08), `ai` (0xfbae, 0xfbb0, 0x103d6, 0x137e,
-  0x1172e), palettes de `palette.rs`, vidéo, scène (0x33aa6, 0xf2e56, 0x20de6), créateurs ESHL du lot C
-  (0xa31c2, 0xa3354, 0xa5c7c, 0xa5f38, table des effets spéciaux des coffres), 0x3403c (second décor).
+  0x1172e), palettes de `palette.rs`, vidéo, scène (0x33aa6, 0xf2e56, 0x20de6), 0x3403c (second décor). Les
+  créateurs ESHL du lot C (fusionné) sont appelés comme fonctions Rust, y compris par la table des effets spéciaux
+  des coffres (`match` sur l'adresse lue).
 * **J2.** `DDSOM_POISON=effets` (registres des créateurs après les appels convertis) puis `DDSOM_POISON=restes`
   (registres laissés par les gestionnaires : restes des aiguillages `saut_table`, pointeurs de lecture, compteurs
   de boucle) : 270/270, écritures supprimées. Un lecteur trouvé : le nuage (type 26) relisait le mot haut de D0 de
@@ -448,6 +449,20 @@ Périmètre : `families/effects*.rs`, `effects_creators.rs`, `items*.rs`, `boxes
   généré) et `natives.json` des assets régénéré.
 * **Nommer.** Variables de la caméra, de la scène et de la phase par `ram.rs` (85 accès) ; constantes d'adresses
   recopiées supprimées avec leurs appels.
+* **Contrats des natives restantes.** `fuzz createurs` (`examples/fuzz.rs`, mode hybride, contrôle) compare chaque
+  créateur du lot à l'original sur des états tirés : 0 écart après correction de drapeaux que l'ancienne écriture
+  oubliait (X du `lsr` du choc, `moveq #0,D0` de la colonne ESHL au pool plein, X de la moitié droite, `moveq` des
+  douze blocs de palette, `move.b D1` du décor 11, table des décalages du joueur scripté lue en ROM).
+* **Mesure** (`tools/mesure_refacto.py`, fichiers du lot, avant 1f5ae77 / après) : lignes 16 022 / 16 104 ; `regs`
+  729 / 425 ; `drap` 40 / 38 ; `adr` 266 / 124 (les sons, `evenements`, `ai`, palettes et vidéo hors lot) ; `pile`
+  1 / 2 (`Unwound` explicite du feu d'artifice) ; `brut` 490 / 451 ; `a5` 263 / 174 ; adresses déclarées dans
+  plusieurs fichiers touchant le lot 51 / 39 (72 / 47 déclarations du lot) ; lignes dupliquées (`--doublons 6`)
+  221 / 223.
+* **Restent en `_68k` (et pourquoi).** Les natives appelées par adresse (créateurs de `creators.rs`, `petites.rs`,
+  `effects_creators.rs`, `effects_aids.rs` : leur contrat de registres sert aux appelants hors lot), `regs_68k` de
+  la boucle des éclats (`effects_f`, D6 de l'allocation relu, glitch d'origine), `terrain::push_68k` (pas de cœur,
+  il appelle `video::terrain` par ses registres), `random_68k` des tirages dont D0 est relu (`effects_c`),
+  `petites::flash_68k` (drapeaux non prouvés morts), `start_by_character_68k` (`effects_f`, D6 sauvé autour).
 
 ## Avancement
 
