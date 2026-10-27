@@ -3,12 +3,17 @@
 //!
 //!   fuzz_porte <roms> <eeprom> <scénario> <chauffe> <essais>
 //!
+//! `DDSOM_PORTE=29` : la porte de passage (SET 29, 0xd8dce) à la place, que les scénarios n'atteignent pas : état 2
+//! avec des joueurs actifs tirés près de la porte (genre de sortie `+0x48` tiré, 0 à 3), ou état 4.
+//!
 //! Chaque essai part de l'état du jeu après la chauffe, pose une porte de variante tirée, déjà initialisée,
 //! dans l'état 2 avec tous les joueurs prêts (genre de sortie `+0x48` tiré, 0 à 3), ou dans l'état 4 (retour
 //! de zone, champs mémorisés tirés). Le code d'origine s'exécute seul (interpréteur) jusqu'à son retour ou
-//! jusqu'à l'appel du fondu 0x1460 ; la native de même, arrêtée à l'entrée du fondu. Les deux mémoires sont
-//! comparées (hors table des tâches et piles), puis chacun reprend après le fondu (le fondu, déjà natif,
-//! n'est pas rejoué) : l'original à son adresse de retour, la native par sa native de reprise. Les mémoires
+//! jusqu'à la première cession du fondu 0x1460 (`jsr 0xa40`) ; la native de même (elle appelle le fondu en Rust,
+//! qui cède : `Unwound`). Les deux mémoires sont comparées (hors table des tâches et piles), avec A0 et D7 du
+//! contexte rangé par la cession, et la suite rangée dans les appels en cours (l'étape de la porte) avec l'adresse
+//! de retour de l'appel d'origine. Puis chacun finit le fondu sans attendre : l'original en revenant aussitôt de
+//! chaque `jsr 0xa40`, la native en exécutant les étapes de la tâche jusqu'au retour du gestionnaire. Les mémoires
 //! finales sont comparées.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -16,10 +21,15 @@ use std::path::Path;
 
 use cps2::Cps2Bus;
 use ddsom_game::mem::{rd32, wr16, wr32, wr8, A5};
+use ddsom_game::taches::table::{self, Reprise, Suite};
 use m68k::Cpu;
 
-const ENTREE: u32 = 0xcb29c;
+/// Entrées des deux portes (types SET 7 et 29).
+const SORTIE: u32 = 0xcb29c;
+const PASSAGE: u32 = 0xd8dce;
 const FONDU: u32 = 0x1460;
+/// Enveloppe de cession (`jsr 0xa40`) appelée par chaque pas du fondu.
+const CESSION: u32 = 0xa40;
 const SENTINELLE: u32 = 0xfffe;
 /// Table des tâches FF0064 et piles : propres à chaque machine.
 const IGNOREE: std::ops::Range<u32> = 0xff_0000..0xff_0e66;
@@ -38,27 +48,35 @@ impl Alea {
     }
 }
 
-/// Arrêt de la native à l'entrée du fondu.
-struct Fondu;
-
-fn crochet(pc: u32, entree: bool) {
-    if entree && pc == FONDU {
-        std::panic::resume_unwind(Box::new(Fondu));
-    }
-}
-
-/// Code d'origine seul jusqu'au retour à la sentinelle, ou jusqu'à l'entrée du fondu. Vrai si le fondu est atteint.
-fn origine(c: &mut Cpu, b: &mut Cps2Bus) -> Option<bool> {
+/// Code d'origine seul jusqu'au retour à la sentinelle, ou jusqu'à `arret`. Vrai si `arret` est atteint. Avec
+/// `sans_cession`, chaque `jsr 0xa40` revient aussitôt (le fondu se fait sans attendre).
+fn origine(c: &mut Cpu, b: &mut Cps2Bus, arret: u32, sans_cession: bool) -> Option<bool> {
     for _ in 0..2_000_000 {
         if c.pc == SENTINELLE {
             return Some(false);
         }
-        if c.pc == FONDU {
+        if c.pc == arret {
             return Some(true);
+        }
+        if sans_cession && c.pc == CESSION {
+            c.pc = rd32(b, c.a[7]);
+            c.a[7] = c.a[7].wrapping_add(4);
+            continue;
         }
         c.step(b);
     }
     None
+}
+
+/// Registres, SR et pile rangés par la cession de la tâche courante (comme `kernel::remettre`), et son étape.
+fn reprise(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::taches::Etape> {
+    let t = table::table(b);
+    let Reprise::Etape(etape, ctx) = t.emplacements[t.courante].reprise else { return None };
+    c.d = ctx.d;
+    c.a[..7].copy_from_slice(&ctx.a);
+    c.other_sp = ctx.usp;
+    c.set_sr(ctx.sr);
+    Some(etape)
 }
 
 fn appelle(c: &mut Cpu, b: &mut Cps2Bus, adresse: u32) {
@@ -100,10 +118,11 @@ fn principal() {
         m.run_frame();
     }
     ddsom_game::set_trace(|_| {});
-    ddsom_game::set_native_hook(crochet);
     if std::env::var_os("DDSOM_PANIQUES").is_none() {
         std::panic::set_hook(Box::new(|_| {}));
     }
+    let passage = std::env::var("DDSOM_PORTE").is_ok_and(|v| v == "29");
+    let (entree, sorte, variantes) = if passage { (PASSAGE, 29u8, 3) } else { (SORTIE, 7, 0x38) };
     let mut alea = Alea(0x2545_f491_4f6c_dd1d);
     let (mut bilan, mut ecarts_vus, mut fondus, mut abandons) = (0u32, 0u32, 0u32, 0u32);
     for essai in 0..essais.parse::<u32>().unwrap() {
@@ -114,8 +133,8 @@ fn principal() {
             wr16(&mut b, porte + off, 0);
         }
         wr8(&mut b, porte, 1);
-        wr8(&mut b, porte + 2, 7);
-        wr8(&mut b, porte + 3, (alea.next() % 0x38) as u8);
+        wr8(&mut b, porte + 2, sorte);
+        wr8(&mut b, porte + 3, (alea.next() % variantes) as u8);
         wr8(&mut b, porte + 0x28, 0x10);
         // initialisation (état 0) par la native, sur la copie : champs de la table des portes
         c.a[0] = porte;
@@ -124,7 +143,7 @@ fn principal() {
             wr8(&mut b, A5 + off, v);
         }
         wr16(&mut b, A5 + 0x52, 0);
-        ddsom_game::call(&mut c, &mut b, ENTREE);
+        ddsom_game::call(&mut c, &mut b, entree);
         let etat4 = alea.next() % 3 == 0;
         if etat4 {
             wr8(&mut b, porte + 4, 4);
@@ -140,6 +159,20 @@ fn principal() {
             for j in 0..4u32 {
                 let p = 0xff_85de + 0x200 * j;
                 wr8(&mut b, p + 4, alea.parmi(&[0, 2, 2, 4]));
+            }
+        } else if passage {
+            wr8(&mut b, porte + 4, 2);
+            wr8(&mut b, porte + 0x40, 0);
+            wr8(&mut b, porte + 0x48, alea.parmi(&[0, 0, 1, 1, 2, 3]));
+            // joueurs actifs ou non, près de la porte (emprise 0x60 x 0x40) ou un peu au-delà
+            for j in 0..4u32 {
+                let p = 0xff_85de + 0x200 * j;
+                wr8(&mut b, p, alea.parmi(&[0, 1, 1, 2]));
+                for (champ, porte_champ, portee) in [(8u32, 8u32, 0x30u32), (0x10, 0x10, 0x20)] {
+                    let ecart = (alea.next() % (4 * portee)) as u16;
+                    let v = ddsom_game::mem::rd16(&mut b, porte + porte_champ).wrapping_add(ecart).wrapping_sub(2 * portee as u16);
+                    wr16(&mut b, p + champ, v);
+                }
             }
         } else {
             wr8(&mut b, porte + 4, 2);
@@ -164,20 +197,25 @@ fn principal() {
         c.a[0] = porte;
         c.a[5] = A5;
         c.d[7] = alea.next() & 0x1f;
-        c.d[0] = 7 * 4;
-        c.a[1] = ENTREE;
+        c.d[0] = sorte as u32 * 4;
+        c.a[1] = entree;
         let (mut c2, mut b2) = (c.clone(), b.clone());
-        // l'original
-        appelle(&mut c2, &mut b2, ENTREE);
-        let Some(fondu) = origine(&mut c2, &mut b2) else {
+        // l'original, jusqu'à l'entrée du fondu (adresse de retour au sommet de la pile), puis jusqu'à sa cession
+        appelle(&mut c2, &mut b2, entree);
+        let Some(fondu) = origine(&mut c2, &mut b2, FONDU, false) else {
             abandons += 1;
             continue;
         };
-        // la native
-        let r = catch_unwind(AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, ENTREE)));
+        let retour = rd32(&mut b2, c2.a[7]);
+        if fondu && origine(&mut c2, &mut b2, CESSION, false) != Some(true) {
+            abandons += 1;
+            continue;
+        }
+        // la native : le fondu cède la main (`Unwound`), ou elle revient
+        let r = catch_unwind(AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
         let fondu_natif = match r {
             Ok(()) => false,
-            Err(e) if e.is::<Fondu>() => true,
+            Err(e) if e.is::<ddsom_game::Unwound>() => true,
             Err(_) => {
                 println!("essai {essai} : panique de la native");
                 ecarts_vus += 1;
@@ -190,6 +228,7 @@ fn principal() {
             ecarts_vus += 1;
             continue;
         }
+        let etape = if fondu { reprise(&mut c, &mut b) } else { None };
         let d = ecarts(&c, &b, &c2, &b2);
         if !d.is_empty() {
             println!("essai {essai} état4={etat4} variante {:02x} : avant le fondu {}", ddsom_game::mem::rd8(&mut b2, porte + 3), d.join(", "));
@@ -200,22 +239,27 @@ fn principal() {
             continue;
         }
         fondus += 1;
-        // reprise après le fondu : adresse de retour de l'appel, au sommet de la pile de chacun
-        let retour = rd32(&mut b2, c2.a[7]);
-        c2.a[7] = c2.a[7].wrapping_add(4);
-        c2.pc = retour;
-        let retour_natif = rd32(&mut b, c.a[7]);
-        if retour != retour_natif {
-            println!("essai {essai} : reprise en {retour_natif:06x} au lieu de {retour:06x}");
+        // la suite du fondu : l'étape de la porte, à l'adresse de retour de l'appel d'origine
+        let suite = table::table(&mut b).cadres().sommet().map(|k| k.suite);
+        if !matches!(suite, Some(Suite::Etape(e)) if e.adresse() == retour) {
+            println!("essai {essai} : suite {suite:x?} au lieu de {retour:06x}");
             ecarts_vus += 1;
             continue;
         }
-        let a0 = c.a[0];
+        // fin du fondu sans attendre : chaque pas de la tâche, jusqu'au retour du gestionnaire
+        let mut etape = etape;
         let r = catch_unwind(AssertUnwindSafe(|| {
-            c.a[0] = a0;
-            ddsom_game::call(&mut c, &mut b, retour)
+            for _ in 0..64 {
+                let Some(e) = etape else { break };
+                ddsom_game::taches::executer(e, &mut c, &mut b);
+                if c.pc == SENTINELLE {
+                    return true;
+                }
+                etape = reprise(&mut c, &mut b);
+            }
+            false
         }));
-        if r.is_err() || origine(&mut c2, &mut b2) != Some(false) {
+        if r.ok() != Some(true) || origine(&mut c2, &mut b2, SENTINELLE, true) != Some(false) {
             println!("essai {essai} : reprise interrompue");
             ecarts_vus += 1;
             continue;

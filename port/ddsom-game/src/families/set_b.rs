@@ -4,7 +4,7 @@
 //! Les objets SET ne figurent pas dans les listes triées de profondeur par construction (les
 //! appels à `reinsert` des créations les y inscrivent tout de même quand ils les rendent visibles).
 
-use super::cx::{self, handlers, Cx};
+use super::cx::{handlers, Cx};
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -2364,7 +2364,7 @@ mod zone_end {
 /// `EFFCT`, `BOX`, `ITEM`, `BOSS`, `ESHL`) au lieu de trois pools, et replace les joueurs sur un
 /// repère fixe (table 0xd9052). Mêmes champs (`+0x42..+0x45` compteurs, `+0x16` nombre entré, `+0x17`
 /// bits entrés, `+0x30..` caméra sauvegardée).
-mod door_b {
+pub(super) mod door_b {
     use super::*;
 
     const GATE_LOCK: u32 = 0x52;
@@ -2432,21 +2432,13 @@ mod door_b {
         wr8(x.b, SOUND_FLAG, v);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x43, 0xff);
-        x.set_a5_u16(0x490, 2);
-        x.set_a5_u8(0x48e, 0xf);
-        // fondu de sortie : cède la main, la tâche reprend en 0xd8f06 (native `RESUME`)
-        x.call_at(0x1460, RESUME_AT);
-        after_fade(x);
+        // fondu de sortie : cède la main, la tâche reprend à `after_fade`
+        use crate::families::set::fondu_de_sortie::{fondu_au_noir, Etape};
+        fondu_au_noir(x, Etape::Passage)
     }
 
-    /// Reprise de la tâche après le fondu de sortie (adresse de retour de l'appel de 0x1460).
-    pub const RESUME_AT: u32 = 0xd8f06;
-
-    pub fn resume_after_fade(x: &mut Cx) {
-        after_fade(x);
-    }
-
-    fn after_fade(x: &mut Cx) {
+    /// Après le fondu de sortie (0xd8f06).
+    pub fn after_fade(x: &mut Cx) {
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
         match x.u8(0x48) as i8 {
@@ -3728,13 +3720,6 @@ mod dialog {
         }
     }
 }
-
-/// Reprise de la porte de passage (type 29) après son fondu de sortie.
-pub const DOOR_B_RESUME: crate::Native = cx::handler(door_b::RESUME_AT, "set_29_reprise", |c, b| {
-    let mut x = Cx::new(c, b);
-    door_b::resume_after_fade(&mut x);
-    x.ret();
-});
 
 handlers! {
     0xd4110 "set_16" bumper::run,

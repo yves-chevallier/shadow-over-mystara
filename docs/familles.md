@@ -382,7 +382,7 @@ un état légitime oublié.
 
 | Entrée | Rôle | Validation |
 |---|---|---|
-| SET 7 0xcb29c (états 2 et 4) + reprises 0xcb896, 0xcb9c0 | porte de sortie : changement de zone (prime, joueurs morts cachés), quatre genres de sortie (zone annexe, retour, scène suivante, fin de partie), fondu 0x1460 qui cède (la tâche reprend dans les natives aux adresses de retour), sauvegarde/suspension du monde, retour de zone (état 4) | `cov_mortal_late` (scène suivante), `cov/cov_porte_annexe` (nouveau : entrée puis retour), `fuzz_porte` (nouveau, arrêt à l'entrée du fondu puis reprise, 3000 essais dont 737 avec fondu), `fuzz familles` |
+| SET 7 0xcb29c (états 2 et 4) + reprises 0xcb896, 0xcb9c0 | porte de sortie : changement de zone (prime, joueurs morts cachés), quatre genres de sortie (zone annexe, retour, scène suivante, fin de partie), fondu 0x1460 qui cède (appelé en Rust comme un sous-programme de tâche, la tâche reprend aux étapes `set::fondu_de_sortie::Etape`), sauvegarde/suspension du monde, retour de zone (état 4) | `cov_mortal_late` (scène suivante), `cov/cov_porte_annexe` (nouveau : entrée puis retour), `fuzz_porte` (jusqu'à la première cession du fondu, puis fondu fini sans attendre et étape de reprise ; 3000 essais dont 728 avec fondu ; `DDSOM_PORTE=29` : porte de passage SET 29, 649 avec fondu), `fuzz familles` |
 | 0x33b24 | caméras au retour d'une zone annexe (portes 7, 27, 29) | `fuzz petites`, `fuzz_porte`, `cov_porte_annexe` |
 | PEFF 42 0x50b9c | article en vitrine de la boutique : zone de vente, message, vente (stock, bourse BCD, inventaire, refus) | `fuzz boutique` |
 | 0x514ac / 0x514cc | interprète des dialogues du marchand appelé par le comptoir PEFF 43 (12 commandes) | `fuzz boutique` (scripts tirés) |
