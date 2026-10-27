@@ -848,6 +848,7 @@ d 0f6f88 0f6f8a scene/mod.rs
 d 0f7ac4 0f7ad0 scene/shop.rs
 d 0f7b3e 0f7b40 scene/shop.rs
 d 0f7ba0 0f7bb0 scene/shop.rs
+d 0f7e5c 0f7e5e scene/shop.rs
 d 0f7f88 0f7f8a scene/mod.rs
 d 0f8596 0f863c sprites.rs
 d 0f881c 0f8856 sprites.rs

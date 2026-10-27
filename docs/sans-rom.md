@@ -156,6 +156,13 @@ plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_
   `zones_natives.txt`) sont VALIDE avec des assets extraits sans ces prolongements ; et encore VALIDE quand
   `natives.json` est réduit aux 192 zones qui touchent le code (tout le reste venant de `reste.json`). Témoin : les
   mêmes assets avec un `reste.json` vidé de ses blocs échouent (images 1 325 et 562).
+* **Bots longs** (autobot, hors de la validation complète) : deux joueurs avec magies (90 000 images), un joueur
+  qui parcourt 28 scènes en difficulté 7 et en langue 4 (90 000), trois joueurs mortels (60 000). Avec
+  `DDSOM_ASSETS`, chacun finit exactement comme en mode par défaut (avec les ROMs) : arrêts sans 68000 faute de
+  native en 0x4dfe2 (`magic_user.rs`, image 15 318) et 0x20ae (`scene/shop.rs`, image 86 671), divergence de
+  natives à l'image 13 279 (trois joueurs) ; ce sont des trous du mode sans 68000, pas des données. Seul écart
+  d'assets trouvé : la lecture hors bornes de la table des boutiques ci-dessous (image 86 640), corrigée. Avec un
+  `reste.json` vidé, les trois divergent dès les images 4 370, 4 651 et 5 780.
 * **Sans ROM du tout** : une copie du dépôt (`git archive`) se construit sans dossier `rom/` (`ddsom-rc` vide, avec
   l'avertissement « ROMs introuvables ») et `ddsom --assets <assets>`, lancé d'un dossier sans `../rom`, démarre le
   jeu sans 68000 depuis les assets.
@@ -168,9 +175,13 @@ plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_
   sens est dans son lecteur ; les décrire une à une (comme `data/*.json`) reste à faire, et les tables d'adresses
   de routines disparaîtront quand les aiguillages seront des `match` Rust.
 * **Couverture complète hors code exécuté** (« Couverture complète des données ») : le seul trou possible est une
-  native qui lirait comme donnée, sur un chemin jamais mesuré, un octet d'une instruction exécutée (le cas des
-  192 zones de `natives.json` qui touchent le code, ou des opérandes trouvés par `extract`). La validation avec
-  `DDSOM_ASSETS` le montrerait ; il suffit alors de relancer `lectures_rom` et `zones_natives.py` sur ce scénario.
+  lecture, sur un chemin jamais mesuré, d'un octet d'une instruction exécutée (le cas des 192 zones de
+  `natives.json` qui touchent le code, ou des opérandes trouvés par `extract`). Exemple trouvé par un bot long :
+  la table des boutiques enchaînées (0xf7d72, 20 octets suivis de code) lue avec un numéro de boutique hors
+  bornes (234, après un saut de scène du bot) prend un octet du code (0xf7e5c), comme l'original ; zone ajoutée à
+  la main à `zones_natives.txt`. La validation avec `DDSOM_ASSETS` montre ces cas ; il suffit alors de relancer
+  `lectures_rom` (avec `DDSOM_COUVERT`) sur ce scénario et d'ajouter la zone. Ranger aussi le code dans les assets
+  supprimerait ce dernier risque (au prix de 486 Ko de plus, le programme entier).
 * **Les trous du mode sans 68000** (natives manquantes : arrêt avec diagnostic) sont les mêmes avec ou sans ROM.
 * L'émulation du DSP QSound lit ses tables comme le DSP (adresses du programme d'origine) ; les tables du pilote son
   aussi (adresses linéaires de la région du Z80). Les ranger en tableaux Rust nommés est l'étape suivante, quand ces
