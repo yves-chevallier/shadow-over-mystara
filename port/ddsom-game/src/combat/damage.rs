@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::objects::pools;
+use crate::machine::Machine;
 
 /// Tables de barème de la ROM programme. Les tables lues par adressage relatif au PC de l'original
 /// sont dans l'espace programme (`pc8`/`pc16`), les autres en lecture ordinaire.
@@ -41,16 +42,16 @@ pub(super) fn roll_variation(w: &mut World, base: u16) -> u16 {
     let line = base.wrapping_sub(1).min(4) as u8;
     let line = (line << 5) as u16;
     let d0 = w.random() & 0x1f;
-    let delta = w.pc8(table::ROLL + (d0 + line) as u32) as i8 as i16 as u16;
+    let delta = w.prog8(table::ROLL + (d0 + line) as u32) as i8 as i16 as u16;
     base.wrapping_add(delta)
 }
 
 /// 0x422a : dégâts d'un tir de joueur. Puissance A contre un ennemi ordinaire, B sinon.
 pub(super) fn shot_damage(w: &mut World, shot: Obj, e: Obj) -> u16 {
     cov::hit("shot_damage");
-    let mut base = w.u8(shot, f::POWER_A);
-    if w.u8(e, f::CLASS) != 2 {
-        base = w.u8(shot, f::POWER_B);
+    let mut base = shot.u8(w.b, f::POWER_A);
+    if e.u8(w.b, f::CLASS) != 2 {
+        base = shot.u8(w.b, f::POWER_B);
     }
     let d = roll_variation(w, base as u16);
     if (d as i16) < 0 {
@@ -68,15 +69,15 @@ pub(super) fn shot_damage(w: &mut World, shot: Obj, e: Obj) -> u16 {
 /// est aussi affiché (`show_damage`).
 pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
     cov::hit("player_damage");
-    let kind = w.u8(p, f::ATTACK_KIND);
+    let kind = p.u8(w.b, f::ATTACK_KIND);
     let mut d5: u16 = match kind {
-        0 => w.u8(p, 0x109) as u16,
-        1 => w.u8(p, 0x10a) as u16,
+        0 => p.u8(w.b, 0x109) as u16,
+        1 => p.u8(w.b, 0x10a) as u16,
         2 => 0,
         _ => return show_damage(w, p, 0, DamageDisplay::Dealt),
     };
     if kind != 2 {
-        if w.u8(p, 0x79) != 0 {
+        if p.u8(w.b, 0x79) != 0 {
             let half = (d5 as u8) >> 1;
             d5 = (d5 & 0xff00) | (d5 as u8).wrapping_add(half) as u16;
         }
@@ -87,19 +88,19 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
         d5 = 1;
     }
     d5 = roll_variation(w, d5);
-    d5 = d5.wrapping_add(w.u8(p, 0x100) as u16);
+    d5 = d5.wrapping_add(p.u8(w.b, 0x100) as u16);
     if (d5 as i16) < 0 {
         d5 = 1;
     }
     if kind >= 2 {
         return d5;
     }
-    let step = w.u8(p, f::SUBACTION);
+    let step = p.u8(w.b, f::SUBACTION);
     if step == 0xc || step == 0x16 {
         d5 = d5.wrapping_add(d5 >> 1);
     } else {
-        w.set8(p, 0x77, 0);
-        if w.u8(p, f::VARIANT) >> 1 == 4 {
+        p.set_u8(w.b, 0x77, 0);
+        if p.u8(w.b, f::VARIANT) >> 1 == 4 {
             if let Some(d0) = mage_critical(w, p, e) {
                 return d0;
             }
@@ -115,21 +116,21 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
 /// 0x3cb6.. : coup critique des classes autres que le magicien : +5 de dégâts, drapeau `+0x77`.
 fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
     cov::hit("critical_hit");
-    if (w.u8(p, 0x3d) as i8) > 2 {
+    if (p.u8(w.b, 0x3d) as i8) > 2 {
         return d5;
     }
-    let mut row: u8 = if (w.u16(p, f::HP) as i16) > 16 { 0 } else { 16 };
+    let mut row: u8 = if (p.u16(w.b, f::HP) as i16) > 16 { 0 } else { 16 };
     row = row.wrapping_add((w.random() & 15) as u8);
-    let row = w.pc8(table::CRIT_ROW + row as u32);
+    let row = w.prog8(table::CRIT_ROW + row as u32);
     if row == 0 {
         return d5;
     }
-    let mask = w.pc16(table::CRIT_MASK + row as u32);
+    let mask = w.prog16(table::CRIT_MASK + row as u32);
     let bit = w.random() & 15;
     if mask >> bit & 1 == 0 {
         return d5;
     }
-    w.set8(p, 0x77, 1);
+    p.set_u8(w.b, 0x77, 1);
     d5.wrapping_add(5)
 }
 
@@ -138,26 +139,26 @@ fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
 /// calcul commun continue (`None`).
 fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
     cov::hit("mage_critical");
-    if w.u8(p, 0x47) != 0x30 {
+    if p.u8(w.b, 0x47) != 0x30 {
         return None;
     }
-    let mut row: u8 = if (w.u16(p, f::HP) as i16) > 16 { 0 } else { 16 };
-    if w.u8(e, f::CLASS) == 4 {
+    let mut row: u8 = if (p.u16(w.b, f::HP) as i16) > 16 { 0 } else { 16 };
+    if e.u8(w.b, f::CLASS) == 4 {
         row = row.wrapping_add(0x20);
     }
     row = row.wrapping_add((w.random() & 15) as u8);
-    let first = w.pc8(table::MAGE_ROW + row as u32) as i8;
+    let first = w.prog8(table::MAGE_ROW + row as u32) as i8;
     if first < 0 {
         return Some(show_damage(w, p, 1, DamageDisplay::Dealt));
     }
     let idx = (first as u16).wrapping_add(w.random() & 15);
-    let shift = w.pc8(table::MAGE_SHIFT + idx as u32) as i8;
+    let shift = w.prog8(table::MAGE_SHIFT + idx as u32) as i8;
     if shift < 0 {
         return Some(show_damage(w, p, 1, DamageDisplay::Dealt));
     }
-    w.set8(p, 0x77, 1);
-    w.set8(p, 0x18e, 3);
-    let d0 = w.u16(e, f::HP_MAX).checked_shr(shift as u32 & 63).unwrap_or(0);
+    p.set_u8(w.b, 0x77, 1);
+    p.set_u8(w.b, 0x18e, 3);
+    let d0 = e.u16(w.b, f::HP_MAX).checked_shr(shift as u32 & 63).unwrap_or(0);
     Some(show_damage(w, p, d0, DamageDisplay::Dealt))
 }
 
@@ -165,18 +166,18 @@ fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
 /// (`+0x107`) : +4 si faible, moitié si résistante.
 fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
     cov::hit("elemental");
-    let element = w.u8(p, 0x107);
+    let element = p.u8(w.b, 0x107);
     if element == 0 {
         return d5;
     }
-    let weak = w.u8(e, 0x9e);
+    let weak = e.u8(w.b, 0x9e);
     if weak == 0 {
         return d5;
     }
     if element == weak {
         return d5.wrapping_add(4);
     }
-    if element == w.u8(e, 0x9f) {
+    if element == e.u8(w.b, 0x9f) {
         return d5 >> 1;
     }
     d5
@@ -186,13 +187,13 @@ fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
 /// l'arme, plancher du même enregistrement.
 fn party_bonus(w: &mut World, p: Obj, d5: u16) -> u16 {
     cov::hit("party_bonus");
-    let alive = w.a5_8(ram::PLAYERS_ALIVE);
+    let alive = ram::PLAYERS_ALIVE.get(w.b);
     if (alive as i8) <= 1 {
         return d5;
     }
-    let mut weapon = w.u8(p, f::WEAPON_10D);
-    if w.u8(p, f::ATTACK_KIND) != 0 {
-        weapon = w.u8(p, f::WEAPON_10E);
+    let mut weapon = p.u8(w.b, f::WEAPON_10D);
+    if p.u8(w.b, f::ATTACK_KIND) != 0 {
+        weapon = p.u8(w.b, f::WEAPON_10E);
     }
     let row = table::PARTY_BONUS + (weapon << 2) as u32;
     let bonus = rd8(w.b, row + alive.wrapping_sub(2) as u32) as i8 as i16 as u16;
@@ -223,10 +224,10 @@ pub(super) fn show_damage(w: &mut World, p: Obj, dmg: u16, which: DamageDisplay)
         DamageDisplay::Dealt => 0x9121e8,
         DamageDisplay::Taken => 0x9121ec,
     };
-    if w.a5_16(0x7fd0) & 0x200 != 0 {
+    if ram::DSW.get(w.b) & 0x200 != 0 {
         return dmg;
     }
-    let idx = w.u8(p, f::KIND) as i8 as i16 as u16;
+    let idx = p.u8(w.b, f::KIND) as i8 as i16 as u16;
     let mut at = base + (((idx << 8).wrapping_add(idx << 7)) as u32);
     // conversion en deux chiffres BCD par soustractions de 10 (octet bas seulement)
     let mut units = dmg & 0xff;
@@ -256,30 +257,30 @@ pub(super) fn show_damage(w: &mut World, p: Obj, dmg: u16, which: DamageDisplay)
 /// moins, selon la table des PV bas. Affiche le résultat.
 pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
     cov::hit("damage_vs_player");
-    let setting = w.a5_16(ram::DAMAGE_SETTING);
+    let setting = ram::DAMAGE_SETTING.get(w.b);
     let table = {
         let at = table::ENEMY_SCALE + 2 * setting as u32;
-        w.pc16(at) as u32 * 0x10000 + w.pc16(at + 2) as u32
+        w.prog16(at) as u32 * 0x10000 + w.prog16(at + 2) as u32
     };
-    let tick = w.a5_16(ram::TICK);
+    let tick = ram::TICK.get(w.b);
     let mut d5 = rd8(w.b, table + tick as u32) as i8 as i16 as u16;
-    d5 = d5.wrapping_add(w.u8(atk, f::POWER_A) as u16);
+    d5 = d5.wrapping_add(atk.u8(w.b, f::POWER_A) as u16);
     d5 = if (d5 as i16) > 0 { roll_variation(w, d5) } else { 1 };
-    let defense = w.u8(p, 0x10b) as u16;
+    let defense = p.u8(w.b, 0x10b) as u16;
     let (diff, borrow) = d5.overflowing_sub(defense);
     d5 = if !borrow && diff != 0 { diff } else { 1 };
     // réduction par tranches de 1/32 (n tranches => d5 -= d5 * n / 32)
-    let slices = if (w.u16(p, f::HP) as i16) > 0x20 {
-        let prot = w.u8(p, 0x108);
+    let slices = if (p.u16(w.b, f::HP) as i16) > 0x20 {
+        let prot = p.u8(w.b, 0x108);
         if (prot as i8) >= 9 {
             None
         } else {
-            Some(w.pc8(table::PROTECTION + prot as u32))
+            Some(w.prog8(table::PROTECTION + prot as u32))
         }
     } else {
-        let class = (w.u8(p, f::VARIANT) >> 1) as u16;
-        let idx = (class << 5).wrapping_sub(1).wrapping_add(w.u16(p, f::HP));
-        let t = table::LOW_HP_SHIELD[(w.a5_16(ram::DAMAGE_SETTING) == 6) as usize];
+        let class = (p.u8(w.b, f::VARIANT) >> 1) as u16;
+        let idx = (class << 5).wrapping_sub(1).wrapping_add(p.u16(w.b, f::HP));
+        let t = table::LOW_HP_SHIELD[(ram::DAMAGE_SETTING.get(w.b) == 6) as usize];
         let n = rd8(w.b, t.wrapping_add(idx as i16 as i32 as u32));
         if n == 0 {
             None
@@ -302,21 +303,21 @@ pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
 /// 0x388a : un coup de voleur (`ATTACK_KIND` 3) peut faire tomber du butin de l'ennemi `e`.
 pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     cov::hit("steal_loot");
-    if w.u8(p, f::VARIANT) >> 1 != 5 {
+    if p.u8(w.b, f::VARIANT) >> 1 != 5 {
         return;
     }
-    let loot = w.u8(e, 0x81) as u32;
+    let loot = e.u8(w.b, 0x81) as u32;
     if loot == 0 {
         return;
     }
     let entry = table::LOOT + (loot << 3) + ((w.random() & 1) as u32) * 4;
     let weight = rd8(w.b, entry + 2).wrapping_add(rd8(w.b, entry + 3));
-    let level = w.u8(p, 0x10c) as u32;
-    let mut chance = w.pc8(table::LOOT_LEVEL + level).wrapping_sub(weight);
+    let level = p.u8(w.b, 0x10c) as u32;
+    let mut chance = w.prog8(table::LOOT_LEVEL + level).wrapping_sub(weight);
     if (chance as i8) < 0 {
         chance = 0;
     }
-    let mask = (w.pc16(table::LOOT_MASK + 4 * chance as u32) as u32) << 16 | w.pc16(table::LOOT_MASK + 4 * chance as u32 + 2) as u32;
+    let mask = (w.prog16(table::LOOT_MASK + 4 * chance as u32) as u32) << 16 | w.prog16(table::LOOT_MASK + 4 * chance as u32 + 2) as u32;
     let bit = w.random() & 0x1f;
     if mask >> bit & 1 == 0 {
         return;
@@ -327,15 +328,15 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     w.c.a[5] = A5;
     let Some(item) = pools::ITEM.alloc_68k(w.c, w.b) else { return };
     let item = Obj(item.0);
-    w.set8(item, f::ACTIVE, 1);
+    item.set_u8(w.b, f::ACTIVE, 1);
     let (kind, var) = (rd8(w.b, entry), rd8(w.b, entry + 1));
-    w.set8(item, f::KIND, kind);
-    w.set8(item, f::VARIANT, var);
-    let (x, z, y) = (w.u16(e, f::X), w.u16(e, f::Z), w.u16(e, f::Y));
-    w.set16(item, f::X, x);
-    w.set16(item, f::Z, z.wrapping_add(16));
-    w.set16(item, f::Y, y.wrapping_sub(1));
-    w.set16(item, 0x18, 0x300);
-    w.set16(item, 0x1a, 0xffd8);
-    w.set8(e, 0x81, 0);
+    item.set_u8(w.b, f::KIND, kind);
+    item.set_u8(w.b, f::VARIANT, var);
+    let (x, z, y) = (e.u16(w.b, f::X), e.u16(w.b, f::Z), e.u16(w.b, f::Y));
+    item.set_u16(w.b, f::X, x);
+    item.set_u16(w.b, f::Z, z.wrapping_add(16));
+    item.set_u16(w.b, f::Y, y.wrapping_sub(1));
+    item.set_u16(w.b, 0x18, 0x300);
+    item.set_u16(w.b, 0x1a, 0xffd8);
+    e.set_u8(w.b, 0x81, 0);
 }

@@ -209,6 +209,9 @@ pub mod ram {
     pub const BOSS_SIGNAL: Mot = Mot::a5(0x51e);
     /// Cinématique en cours (h).
     pub const CUTSCENE: Octet = Octet::a5(0x53a);
+    /// Mot des commutateurs lu au VBLANK (`FF7FD0`) : bit 0x200 sans affichage des dégâts, 0x800 collisions avec
+    /// le décor.
+    pub const DSW: Mot = Mot::a5(0x7fd0);
     /// Mot : compteur du hasard des tables (voir combat).
     pub const TICK: Mot = Mot::a5(0x7f92);
 }

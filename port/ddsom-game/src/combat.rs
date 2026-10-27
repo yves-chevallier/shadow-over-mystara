@@ -11,10 +11,9 @@
 //! quelles par `crate::call`.
 
 use cps2::Cps2Bus;
-use m68k::decode::Fetch;
 use m68k::{Cpu, SR_Z};
 
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
 use crate::{call, Native};
 
@@ -58,31 +57,27 @@ use contact::*;
 use damage::*;
 use shots::*;
 
-/// Variables de A5 (RAM FF8000) lues par les collisions.
+/// Variables de A5 (RAM FF8000) lues par les collisions (les variables partagées avec les joueurs sont dans
+/// `player::ram`).
 mod ram {
-    /// Octet : nombre de joueurs en vie (0 : plus de collisions).
-    pub const PLAYERS_ALIVE: u32 = 0x35;
-    /// Octet : pause (les collisions entre joueurs et ennemis sont suspendues).
-    pub const PAUSE: u32 = 0x3d;
-    /// Octet : jeu gelé (cinématique) ; avec `SCRIPTED_A` et `SCRIPTED_B` : scénario en cours.
-    pub const FROZEN: u32 = 0x42;
-    pub const SCRIPTED_A: u32 = 0x44;
-    pub const SCRIPTED_B: u32 = 0x4e;
-    /// Octet : difficulté (> 5 : attaques ennemies renforcées).
-    pub const DIFFICULTY: u32 = 0x48;
-    /// Octet : valeur copiée depuis l'ennemi tué (`DEATH_VALUE`) quand il le prévoit.
-    pub const KILL_FLAG: u32 = 0x4f;
-    /// Mot : réglage de dégâts du jeu (0, 2, 4, 6 : table de barème d'attaque ennemie).
-    pub const DAMAGE_SETTING: u32 = 0x70;
-    /// Compteur 5 bits (FFFF92) qui sert d'index aux tables de hasard.
-    pub const TICK: u32 = 0x7f92;
-    /// Premier joueur ; les suivants sont espacés de 0x200.
-    pub const PLAYERS: u32 = 0x5de;
+    use crate::mem::A5;
+    use crate::ram::{Mot, Octet};
+
+    pub use crate::player::ram::{
+        FROZEN, INPUT_RAW as SCRIPTED_A, KILL_FLAG, PAUSE, PLAYERS_ALIVE, SCRIPTED_B, TICK, DSW,
+    };
+    /// Difficulté (> 5 : attaques ennemies renforcées).
+    pub const DIFFICULTY: Octet = Octet::a5(0x48);
+    /// Réglage de dégâts du jeu (0, 2, 4, 6 : table de barème d'attaque ennemie).
+    pub const DAMAGE_SETTING: Mot = Mot::a5(0x70);
+    /// Entrées courantes (un octet par joueur) et celles de l'image précédente (`FF8000`, `FF8006`).
+    pub const INPUTS: u32 = A5;
+    pub const INPUTS_PREV: u32 = A5 + 6;
     /// Nombre d'objets visibles par catégorie (mots) : tirs joueur, tirs ennemis, ennemis/boss,
     /// caisses, objets ramassables.
-    pub const COUNTS: u32 = 0x7e72;
+    pub const COUNTS: u32 = A5 + 0x7e72;
     /// Tableaux de pointeurs (mots) correspondants.
-    pub const LISTS: [u32; 5] = [0x7e86, 0x7eaa, 0x7ef6, 0x7f28, 0x7f52];
+    pub const LISTS: [u32; 5] = [A5 + 0x7e86, A5 + 0x7eaa, A5 + 0x7ef6, A5 + 0x7f28, A5 + 0x7f52];
 }
 
 /// Compteurs de boucle que l'original tient en RAM (FF1A62..) : leur valeur finale est visible.
@@ -212,58 +207,22 @@ pub struct World<'a> {
 }
 
 impl World<'_> {
-    fn u8(&mut self, o: Obj, off: u32) -> u8 {
-        rd8(self.b, o.0 + off)
-    }
-    fn u16(&mut self, o: Obj, off: u32) -> u16 {
-        rd16(self.b, o.0 + off)
-    }
-    fn u32(&mut self, o: Obj, off: u32) -> u32 {
-        rd32(self.b, o.0 + off)
-    }
-    fn set8(&mut self, o: Obj, off: u32, v: u8) {
-        wr8(self.b, o.0 + off, v)
-    }
-    fn set16(&mut self, o: Obj, off: u32, v: u16) {
-        wr16(self.b, o.0 + off, v)
-    }
-    fn set32(&mut self, o: Obj, off: u32, v: u32) {
-        wr32(self.b, o.0 + off, v)
-    }
     /// bset sur un octet.
     fn set_bit(&mut self, o: Obj, off: u32, bit: u32) {
-        let v = self.u8(o, off) | 1 << bit;
-        self.set8(o, off, v)
+        let v = o.u8(self.b, off) | 1 << bit;
+        o.set_u8(self.b, off, v)
     }
     fn add8(&mut self, o: Obj, off: u32, d: u8) {
-        let v = self.u8(o, off).wrapping_add(d);
-        self.set8(o, off, v)
+        let v = o.u8(self.b, off).wrapping_add(d);
+        o.set_u8(self.b, off, v)
     }
     fn add16(&mut self, o: Obj, off: u32, d: u16) {
-        let v = self.u16(o, off).wrapping_add(d);
-        self.set16(o, off, v)
+        let v = o.u16(self.b, off).wrapping_add(d);
+        o.set_u16(self.b, off, v)
     }
     /// Bit 0 de l'octet d'activité : l'objet participe aux collisions.
     fn is_active(&mut self, o: Obj) -> bool {
-        self.u8(o, f::ACTIVE) & 1 != 0
-    }
-    fn a5_8(&mut self, off: u32) -> u8 {
-        rd8(self.b, A5 + off)
-    }
-    fn a5_16(&mut self, off: u32) -> u16 {
-        rd16(self.b, A5 + off)
-    }
-    /// Lecture en espace programme (adressage relatif au PC de l'original : octets déchiffrés).
-    fn pc8(&mut self, a: u32) -> u8 {
-        let w = self.b.fetch16(a & !1);
-        if a & 1 == 0 {
-            (w >> 8) as u8
-        } else {
-            w as u8
-        }
-    }
-    fn pc16(&mut self, a: u32) -> u16 {
-        self.b.fetch16(a)
+        o.u8(self.b, f::ACTIVE) & 1 != 0
     }
     /// Appelle une routine d'origine avec A0 et A1 (acteur, cible) ; renvoie le drapeau Z.
     fn call_ao(&mut self, addr: u32, a0: Obj, a1: Obj) -> bool {
@@ -337,14 +296,14 @@ impl HitBox {
 
 /// Boîte `index` du jeu de boîtes de l'objet, dans la table de pointeurs `table`.
 fn hitbox(w: &mut World, table: u32, o: Obj, index: u8) -> HitBox {
-    let set = w.u8(o, f::BOX_SET) as u32;
+    let set = o.u8(w.b, f::BOX_SET) as u32;
     let base = rd32(w.b, table + 4 * set);
     HitBox(base + 8 * index as u32)
 }
 
 /// Boîte de l'objet pour l'index donné par son champ `field` (corps, poussée ou attaque).
 fn object_box(w: &mut World, table: u32, o: Obj, field: u32) -> HitBox {
-    let idx = w.u8(o, field);
+    let idx = o.u8(w.b, field);
     hitbox(w, table, o, idx)
 }
 
@@ -406,15 +365,15 @@ impl Pair {
         let mut ao = rd8(w.b, self.abox.0 + off) as i8 as i16 as u16;
         let mut bo = rd8(w.b, self.bbox.0 + off) as i8 as i16 as u16;
         if flip {
-            if w.u8(self.a, f::FLIP) != 0 {
+            if self.a.u8(w.b, f::FLIP) != 0 {
                 ao = ao.wrapping_neg();
             }
-            if w.u8(self.b, f::FLIP) != 0 {
+            if self.b.u8(w.b, f::FLIP) != 0 {
                 bo = bo.wrapping_neg();
             }
         }
-        let a = ao.wrapping_add(w.u16(self.a, pos));
-        let b = bo.wrapping_add(w.u16(self.b, pos));
+        let a = ao.wrapping_add(self.a.u16(w.b, pos));
+        let b = bo.wrapping_add(self.b.u16(w.b, pos));
         let half = half_sum(rd8(w.b, self.abox.0 + half), rd8(w.b, self.bbox.0 + half), self.signed);
         Probe { delta: a.wrapping_sub(b), half }
     }
@@ -452,7 +411,7 @@ enum List {
 
 impl List {
     fn len(self, w: &mut World) -> u16 {
-        w.a5_16(ram::COUNTS + 2 * self as u32)
+        rd16(w.b, ram::COUNTS + 2 * self as u32)
     }
 }
 
@@ -468,7 +427,7 @@ enum Flow {
 fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World, Obj) -> Flow) {
     let n = list.len(w);
     wr16(w.b, counter, n);
-    let mut p = A5 + ram::LISTS[list as usize];
+    let mut p = ram::LISTS[list as usize];
     loop {
         let o = Obj::from_word(rd16(w.b, p));
         p += 2;
@@ -485,7 +444,7 @@ fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World
 
 /// Les 4 enregistrements joueur.
 fn players() -> impl Iterator<Item = Obj> {
-    (0..4).map(|k| Obj(A5 + ram::PLAYERS + 0x200 * k))
+    crate::ram::JOUEURS.iter()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -494,17 +453,17 @@ fn players() -> impl Iterator<Item = Obj> {
 /// 0x260ee : toutes les collisions de l'image.
 pub fn combat_update(w: &mut World) {
     cov::hit("combat_update");
-    if w.a5_8(ram::PLAYERS_ALIVE) == 0 {
+    if ram::PLAYERS_ALIVE.get(w.b) == 0 {
         return;
     }
-    let scripted = w.a5_8(ram::SCRIPTED_A) != 0 && w.a5_8(ram::SCRIPTED_B) != 0;
-    if w.a5_8(ram::FROZEN) == 0 && !scripted {
+    let scripted = ram::SCRIPTED_A.get(w.b) != 0 && ram::SCRIPTED_B.get(w.b) != 0;
+    if ram::FROZEN.get(w.b) == 0 && !scripted {
         player_attacks_clash_enemies(w);
         player_attacks_clash_enemy_shots(w);
         player_hits_enemies(w);
         player_hits_boxes(w);
         player_shots_hit_enemies(w);
-        if w.a5_8(ram::PAUSE) != 0 {
+        if ram::PAUSE.get(w.b) != 0 {
             return;
         }
         enemies_hit_players(w);
@@ -522,17 +481,17 @@ pub fn combat_update(w: &mut World) {
 /// 0x26150 : le coup d'un joueur touche-t-il un ennemi (boîte d'attaque contre boîte de corps) ?
 fn player_hits_enemies(w: &mut World) {
     cov::hit("player_hits_enemies");
-    if List::Enemies.len(w) == 0 || w.a5_8(ram::PAUSE) != 0 {
+    if List::Enemies.len(w) == 0 || ram::PAUSE.get(w.b) != 0 {
         return;
     }
     for p in players() {
-        if !w.is_active(p) || w.u8(p, f::ATTACK_BOX) == 0 {
+        if !w.is_active(p) || p.u8(w.b, f::ATTACK_BOX) == 0 {
             continue;
         }
         // A2 reste la boîte du joueur d'un ennemi à l'autre, sauf si un coup l'a écrasée (w.a2)
         w.a2 = object_box(w, rom::ATTACK, p, f::ATTACK_BOX).0;
         scan(w, List::Enemies, scratch::PLAYER_HITS_ENEMY, |w, e| {
-            if w.is_active(e) && w.u8(e, f::BODY_BOX) != 0 && w.u8(e, f::BOXES_OFF) == 0 && w.u16(e, f::HP) != 0 {
+            if w.is_active(e) && e.u8(w.b, f::BODY_BOX) != 0 && e.u8(w.b, f::BOXES_OFF) == 0 && e.u16(w.b, f::HP) != 0 {
                 let body = object_box(w, rom::BODY, e, f::BODY_BOX);
                 let atk = HitBox(w.a2);
                 if overlap3(w, p, atk, e, body) {
@@ -551,12 +510,12 @@ fn player_hits_boxes(w: &mut World) {
         return;
     }
     for p in players() {
-        if w.u8(p, f::ACTIVE) == 0 || w.u8(p, f::ATTACK_BOX) == 0 {
+        if p.u8(w.b, f::ACTIVE) == 0 || p.u8(w.b, f::ATTACK_BOX) == 0 {
             continue;
         }
         let atk = object_box(w, rom::ATTACK, p, f::ATTACK_BOX);
         scan(w, List::Boxes, scratch::PLAYER_HITS_ENEMY, |w, bx| {
-            if w.is_active(bx) && w.u8(bx, f::BODY_BOX) != 0 && w.u8(bx, f::BOXES_OFF) == 0 {
+            if w.is_active(bx) && bx.u8(w.b, f::BODY_BOX) != 0 && bx.u8(w.b, f::BOXES_OFF) == 0 {
                 let body = object_box(w, rom::BODY, bx, f::BODY_BOX);
                 if overlap3(w, p, atk, bx, body) {
                     player_blow_on_box(w, p, bx);
@@ -570,11 +529,11 @@ fn player_hits_boxes(w: &mut World) {
 /// 0x2659e : un joueur frappe une caisse (la caisse retient le coup et réagit).
 fn player_blow_on_box(w: &mut World, p: Obj, bx: Obj) {
     cov::hit("player_blow_on_box");
-    if w.u8(p, f::ACTION) == 6 || w.u8(p, f::ATTACK_BOX) == 4 {
+    if p.u8(w.b, f::ACTION) == 6 || p.u8(w.b, f::ATTACK_BOX) == 4 {
         return;
     }
-    w.set16(bx, f::KEYS_HELD, p.word());
-    w.set8(bx, f::KEYS_NEW, 1);
+    bx.set_u16(w.b, f::KEYS_HELD, p.word());
+    bx.set_u8(w.b, f::KEYS_NEW, 1);
     w.call_d1(0xaa96c, p, bx, 0);
 }
 
@@ -583,110 +542,110 @@ fn player_blow_on_box(w: &mut World, p: Obj, bx: Obj) {
 fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     cov::hit("player_blow_on_enemy");
     trace!("coup {:06x} sur {:06x}", p.0, e.0);
-    if w.u8(e, f::HITSTOP) != 0 || w.u8(p, f::ATTACK_BOX) == 4 {
+    if e.u8(w.b, f::HITSTOP) != 0 || p.u8(w.b, f::ATTACK_BOX) == 4 {
         return;
     }
     // le coup de type 3 est sans effet sur le boss de type 0x12 (h)
-    if w.u8(p, f::ATTACK_KIND) == 3 && w.u8(e, f::CLASS) == 4 && w.u8(e, f::KIND) == 0x12 {
+    if p.u8(w.b, f::ATTACK_KIND) == 3 && e.u8(w.b, f::CLASS) == 4 && e.u8(w.b, f::KIND) == 0x12 {
         return;
     }
     w.set_bit(p, f::HIT_MARK, 0);
     // un même coup (ATTACK_ID) ne touche qu'une fois chaque victime : la victime retient le
     // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du joueur`)
-    let id = w.u8(p, f::ATTACK_ID);
-    let slot = e.0 + f::HIT_MARK + w.u8(p, f::KIND) as u32;
+    let id = p.u8(w.b, f::ATTACK_ID);
+    let slot = e.0 + f::HIT_MARK + p.u8(w.b, f::KIND) as u32;
     if rd8(w.b, slot) == id {
         return;
     }
     wr8(w.b, slot, id);
-    w.set8(p, f::RECOIL, 0);
-    if w.u8(p, f::ACTION) != 0xa {
-        w.set8(p, f::RECOIL + 1, 0x18);
-        w.set8(p, f::RECOIL, 1);
-        let m = w.u8(p, f::SUBACTION);
+    p.set_u8(w.b, f::RECOIL, 0);
+    if p.u8(w.b, f::ACTION) != 0xa {
+        p.set_u8(w.b, f::RECOIL + 1, 0x18);
+        p.set_u8(w.b, f::RECOIL, 1);
+        let m = p.u8(w.b, f::SUBACTION);
         if m != 0 {
-            w.set8(p, f::RECOIL, 2);
+            p.set_u8(w.b, f::RECOIL, 2);
             if m != 2 {
-                w.set8(p, f::RECOIL, 4);
+                p.set_u8(w.b, f::RECOIL, 4);
                 if m != 4 {
-                    w.set8(p, f::RECOIL, 0);
+                    p.set_u8(w.b, f::RECOIL, 0);
                 }
             }
         }
     }
-    let hp = w.u16(e, f::HP);
-    w.set16(e, f::HP_PREV, hp);
-    let flip = w.u8(p, f::FLIP);
-    w.set8(e, f::REACTION_FLIP, flip);
-    let var = w.u8(p, f::VARIANT);
-    w.set8(e, f::HIT_BY_VARIANT, var);
-    let kind = w.u8(p, f::KIND);
-    w.set8(e, f::HIT_BY_KIND, kind);
-    w.set16(e, f::LINK, p.word());
+    let hp = e.u16(w.b, f::HP);
+    e.set_u16(w.b, f::HP_PREV, hp);
+    let flip = p.u8(w.b, f::FLIP);
+    e.set_u8(w.b, f::REACTION_FLIP, flip);
+    let var = p.u8(w.b, f::VARIANT);
+    e.set_u8(w.b, f::HIT_BY_VARIANT, var);
+    let kind = p.u8(w.b, f::KIND);
+    e.set_u8(w.b, f::HIT_BY_KIND, kind);
+    e.set_u16(w.b, f::LINK, p.word());
     w.set_bit(e, f::HIT_FLAGS, 0);
-    let st = w.u32(e, f::STATE);
-    w.set32(e, f::PREV_STATE, st);
-    w.set8(e, f::HITSTOP_VICTIM, 0xc);
-    w.set8(p, f::HITSTOP, 0x14);
-    w.set8(p, f::HIT_FLAGS, 0x14);
-    let weapon = w.u8(p, f::WEAPON_10D);
+    let st = e.u32(w.b, f::STATE);
+    e.set_u32(w.b, f::PREV_STATE, st);
+    e.set_u8(w.b, f::HITSTOP_VICTIM, 0xc);
+    p.set_u8(w.b, f::HITSTOP, 0x14);
+    p.set_u8(w.b, f::HIT_FLAGS, 0x14);
+    let weapon = p.u8(w.b, f::WEAPON_10D);
     if weapon != 0x1d && weapon != 0x1e {
-        w.set8(e, f::HITSTOP_VICTIM, 8);
-        w.set8(p, f::HITSTOP, 8);
-        w.set8(p, f::HIT_FLAGS, 8);
+        e.set_u8(w.b, f::HITSTOP_VICTIM, 8);
+        p.set_u8(w.b, f::HITSTOP, 8);
+        p.set_u8(w.b, f::HIT_FLAGS, 8);
     }
-    if w.u8(p, f::ATTACK_KIND) == 3 {
-        w.set32(p, f::STATE, state::ATTACKING);
-        w.set8(p, f::SUBACTION, 0x12);
+    if p.u8(w.b, f::ATTACK_KIND) == 3 {
+        p.set_u32(w.b, f::STATE, state::ATTACKING);
+        p.set_u8(w.b, f::SUBACTION, 0x12);
         steal_loot(w, p, e);
         enemy_reacts_to_hit(w, p, e);
         return;
     }
     // coup paré / absorbé par la victime (0xb048 : Z clair)
     if !w.call_ao(0xb048, p, e) {
-        w.set32(e, f::STATE, state::BLOCKED);
-        w.set8(p, f::HITSTOP, 8);
+        e.set_u32(w.b, f::STATE, state::BLOCKED);
+        p.set_u8(w.b, f::HITSTOP, 8);
         w.set_bit(p, f::HIT_MARK, 6);
-        if w.u8(p, 0x47) == 0x60 {
-            w.set32(p, f::STATE, state::ATTACKING);
-            w.set8(p, f::SUBACTION, 0x12);
+        if p.u8(w.b, 0x47) == 0x60 {
+            p.set_u32(w.b, f::STATE, state::ATTACKING);
+            p.set_u8(w.b, f::SUBACTION, 0x12);
         }
         w.call_d1(0xaaa04, p, e, 4);
         return;
     }
     count_combo(w, p, e);
     let mut dmg = player_damage(w, p, e);
-    if w.u8(p, f::WEAPON_10D) == 0xb && w.u8(e, 0x82) != 0 {
+    if p.u8(w.b, f::WEAPON_10D) == 0xb && e.u8(w.b, 0x82) != 0 {
         dmg = dmg.wrapping_add(dmg >> 1);
     }
-    if w.u8(p, f::WEAPON_10D) == 0xc && w.u8(e, 0x83) != 0 {
+    if p.u8(w.b, f::WEAPON_10D) == 0xc && e.u8(w.b, 0x83) != 0 {
         dmg = 0x200;
     }
-    if w.u8(p, f::GEAR_184) != 0 {
+    if p.u8(w.b, f::GEAR_184) != 0 {
         dmg = dmg.wrapping_add(dmg >> 2);
     }
-    if w.u8(p, f::GEAR_166) == 5 && w.u8(p, f::ATTACK_KIND) == 2 {
+    if p.u8(w.b, f::GEAR_166) == 5 && p.u8(w.b, f::ATTACK_KIND) == 2 {
         dmg = dmg.wrapping_add(dmg >> 2);
     }
-    if w.u8(p, f::GEAR_163) == 0 {
+    if p.u8(w.b, f::GEAR_163) == 0 {
         dmg = dmg.wrapping_add(3);
     }
-    if w.u8(p, f::GEAR_166) == 2 {
+    if p.u8(w.b, f::GEAR_166) == 2 {
         dmg = dmg.wrapping_add(1);
     }
     // plafond (octet bas seulement) fixé par le joueur
-    let cap = w.u8(p, f::DAMAGE_CAP);
+    let cap = p.u8(w.b, f::DAMAGE_CAP);
     if (dmg as u8 as i8) > cap as i8 {
         dmg = (dmg & 0xff00) | cap as u16;
     }
     enemy_loses_hp(w, e, dmg);
-    if w.u16(e, f::HP) == 0 && w.u8(e, f::DEATH_CREDIT) != 0 {
-        let v = w.u8(e, f::DEATH_VALUE);
-        wr8(w.b, A5 + ram::KILL_FLAG, v);
-        w.set8(p, f::KILLS_FLAG, 1);
+    if e.u16(w.b, f::HP) == 0 && e.u8(w.b, f::DEATH_CREDIT) != 0 {
+        let v = e.u8(w.b, f::DEATH_VALUE);
+        ram::KILL_FLAG.set(w.b, v);
+        p.set_u8(w.b, f::KILLS_FLAG, 1);
     }
-    if w.u8(p, 0x18f) != 0 {
-        let add = w.u8(p, 0x18e) as u16;
+    if p.u8(w.b, 0x18f) != 0 {
+        let add = p.u8(w.b, 0x18e) as u16;
         w.add16(p, f::HITS_LANDED, add);
     }
     show_enemy_hp(w, p, e);
@@ -695,16 +654,16 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
 
 /// HP -= dégâts, plancher à 0 (soustraction sur 16 bits, résultat négatif ramené à 0).
 fn enemy_loses_hp(w: &mut World, e: Obj, dmg: u16) {
-    let hp = w.u16(e, f::HP).wrapping_sub(dmg);
-    w.set16(e, f::HP, if (hp as i16) < 0 { 0 } else { hp });
+    let hp = e.u16(w.b, f::HP).wrapping_sub(dmg);
+    e.set_u16(w.b, f::HP, if (hp as i16) < 0 { 0 } else { hp });
 }
 
 /// 0x19dce : enfile l'affichage de la jauge de vie de l'ennemi touché (clé : joueur, type d'ennemi).
 fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
     cov::hit("show_enemy_hp");
-    let key = ((w.u8(attacker, f::KIND) as u32) << 8) + w.u8(e, f::KIND) as u32;
+    let key = ((attacker.u8(w.b, f::KIND) as u32) << 8) + e.u8(w.b, f::KIND) as u32;
     w.c.d[0] = key & 0xffff;
-    let (hp_max, hp, class) = (w.u16(e, f::HP_MAX), w.u16(e, f::HP), w.u8(e, f::CLASS));
+    let (hp_max, hp, class) = (e.u16(w.b, f::HP_MAX), e.u16(w.b, f::HP), e.u8(w.b, f::CLASS));
     set_low16(&mut w.c.d[1], hp_max);
     set_low16(&mut w.c.d[2], hp);
     set_low8(&mut w.c.d[3], class);
@@ -715,33 +674,33 @@ fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
 /// son d'impact joué (0xe662a pour les coups simples, 0xe823a pour les spéciaux ; queue de saut).
 fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
     cov::hit("enemy_reacts_to_hit");
-    w.set32(e, f::STATE, state::HIT);
-    w.set8(e, f::FLAGS, 1);
-    w.set8(e, f::REACTION, 0x4c);
-    if w.u8(e, f::FLIES) == 0 {
+    e.set_u32(w.b, f::STATE, state::HIT);
+    e.set_u8(w.b, f::FLAGS, 1);
+    e.set_u8(w.b, f::REACTION, 0x4c);
+    if e.u8(w.b, f::FLIES) == 0 {
         w.call_ao(0xf232e, p, e);
     }
     w.call_d1(0xaa96c, p, e, 0);
-    let mut d4 = w.u8(p, f::WEAPON_10D);
-    if w.u8(p, f::ATTACK_KIND) != 0 {
-        d4 = w.u8(p, f::WEAPON_10E);
+    let mut d4 = p.u8(w.b, f::WEAPON_10D);
+    if p.u8(w.b, f::ATTACK_KIND) != 0 {
+        d4 = p.u8(w.b, f::WEAPON_10E);
     }
     set_low8(&mut w.c.d[4], d4);
-    let target = if w.u8(p, f::ATTACK_KIND) <= 1 { 0xe662a } else { 0xe823a };
+    let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { 0xe662a } else { 0xe823a };
     w.call_ao(target, p, e);
 }
 
 /// 0x26562 : compte les coups spéciaux enchaînés (octet `+0x9c` de la victime) hors classe 4.
 fn count_combo(w: &mut World, p: Obj, e: Obj) {
     cov::hit("count_combo");
-    let class = w.u8(p, f::VARIANT) >> 1;
+    let class = p.u8(w.b, f::VARIANT) >> 1;
     if class == 4 {
         return;
     }
-    let m = w.u8(p, f::SUBACTION);
-    if (m == 0xc || m == 0x16 || m == 0x18) && m != w.u8(p, f::COMBO_MARK) {
+    let m = p.u8(w.b, f::SUBACTION);
+    if (m == 0xc || m == 0x16 || m == 0x18) && m != p.u8(w.b, f::COMBO_MARK) {
         w.add8(e, f::HITS_TAKEN, 1);
-        w.set8(p, f::COMBO_MARK, m);
+        p.set_u8(w.b, f::COMBO_MARK, m);
     }
 }
 
