@@ -411,15 +411,15 @@ fn row(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, mut directions: Option<u32>) {
 }
 
 /// Nombre d'éclats moins un, lu dans une table (programme) indexée par le compteur `A5+0x7f92` / 2.
-fn count_by_tick(c: &mut Cpu, b: &mut Cps2Bus, table: u32) {
+fn count_by_tick(c: &mut Cpu, b: &mut Cps2Bus, table: u32) -> u8 {
     let i = rd16(b, crate::mem::A5 + 0x7f92) >> 1;
     set_low_word(&mut c.d[0], i);
-    c.d[5] = prog8(b, table.wrapping_add(i as i16 as i32 as u32)) as u32;
+    prog8(b, table.wrapping_add(i as i16 as i32 as u32))
 }
 
 /// 0xa1670 : rangée d'éclats de type 0x19 (nombre tiré de la table 0xa16ac).
 pub fn row_19(c: &mut Cpu, b: &mut Cps2Bus) {
-    count_by_tick(c, b, 0xa16ac);
+    c.d[5] = count_by_tick(c, b, 0xa16ac) as u32;
     row(c, b, 0x19, None);
 }
 
@@ -428,7 +428,11 @@ pub fn row_19(c: &mut Cpu, b: &mut Cps2Bus) {
 pub fn row_1a(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = Obj(c.a[0]);
     me.set_u16(b, 0x56, c.d[1] as u16);
-    count_by_tick(c, b, 0xa184c);
+    // Glitch d'origine : `move.b (table),D5.b` sans `moveq #0,D5` (contrairement à 0xa1670) : l'octet haut du
+    // mot D5 laissé par l'appelant (la caisse, `boxes::effet_special`) s'ajoute au compte de la boucle `dbf D5.w`,
+    // qui peut alors remplir le pool ESHL.
+    let n = count_by_tick(c, b, 0xa184c);
+    set_low_byte(&mut c.d[5], n);
     let table = match c.d[1] as u8 {
         1 => 0xa185c,
         2 => 0xa187c,

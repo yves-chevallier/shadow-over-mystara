@@ -275,8 +275,9 @@ fn put_down(g: &mut Ctx, p: Player, held: u32) {
 const PAUSE_TIMER: u32 = 0x1e8;
 
 /// Actions 0x1c (0x3626c, `last` = 34) et 0x1e (0x362d0, `last` = 33) : animation 0, pause de 0x1a images
-/// puis animation `last` jusqu'à sa fin (retenue par l'arrêt du jeu `A5+0x3d`) ; le joueur redevient alors
-/// actif, invulnérable 16 images, et immobile.
+/// puis animation `last` tant que le jeu est arrêté (`A5+0x3d`) ; le joueur redevient alors actif,
+/// invulnérable 16 images, et immobile. Pendant l'arrêt, seule l'action 0x1c fait avancer son animation : 0x362d0
+/// rend la main sans rien faire (`rts` en 0x3632a ; bot `longue_h`, image 19 500).
 pub fn pause(g: &mut Ctx, p: Player, last: u16) {
     match p.u8(g, Player::STEP) {
         // la table de 0x3626c répète les pas 0 et 4 aux pas 6 et 8 (celle de 0x362d0 s'arrête au pas 4)
@@ -297,7 +298,9 @@ pub fn pause(g: &mut Ctx, p: Player, last: u16) {
         }
         4 | 8 => {
             if ram::PAUSE.get(g.b) != 0 {
-                animation::step(g, p);
+                if last == 34 {
+                    animation::step(g, p);
+                }
                 return;
             }
             p.set_u8(g, Player::ACTIVE, 1);

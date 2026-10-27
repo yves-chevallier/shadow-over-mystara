@@ -32,6 +32,7 @@ use crate::Native;
 /// Toutes les routines natives du modèle d'objets.
 pub const NATIVES: &[Native] = &[
     pools::INIT_ALL,
+    pools::INIT_PEFF,
     pools::INIT_SET,
     pools::INIT_EFFCT,
     pools::INIT_SOBJ,

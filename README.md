@@ -99,7 +99,7 @@ Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=..
 
 Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`Maj` (ou `W` `X` `C` `V`)
 = boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
-`Tab` avance rapide, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
+`Tab` avance rapide, `F11` plein écran, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
 
 Les touches se changent dans `touches.cfg`, créé au premier lancement (`action = touches`, noms
 minifb : `Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`…). Lettres et chiffres suivent la disposition

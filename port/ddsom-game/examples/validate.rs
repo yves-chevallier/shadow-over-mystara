@@ -98,6 +98,8 @@ fn main() {
     let mut arret: Option<String> = None;
     let lent: Option<u128> = std::env::var("DDSOM_LENT").ok().and_then(|v| v.parse().ok());
     // DDSOM_CHECK_FRAME=n : contrôle de tous les registres de chaque appel natif pendant l'image n
+    // DDSOM_DIFF_MAX=n : nombre de mots de RAM différents affichés (10 par défaut)
+    let diff_max: usize = std::env::var("DDSOM_DIFF_MAX").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
     let check_frame: Option<usize> = std::env::var("DDSOM_CHECK_FRAME").ok().and_then(|v| v.parse().ok());
     for f in 0..frames {
         if check_frame == Some(f + 1) {
@@ -134,7 +136,7 @@ fn main() {
         let gfx = ma.bus.gfxram.iter().zip(&mb.bus.gfxram).filter(|(x, y)| x != y).count();
         let mot_en_test = f < DEMARRAGE && ram.len() + gfx <= 1;
         let mut what = Vec::new();
-        for &i in ram.iter().take(10).filter(|_| !mot_en_test) {
+        for &i in ram.iter().take(diff_max).filter(|_| !mot_en_test) {
             what.push(format!("ram {:06x} : {:04x} au lieu de {:04x}", 0xff0000 + 2 * i, ma.bus.ram[i], mb.bus.ram[i]));
         }
         if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram).filter(|_| !mot_en_test) {

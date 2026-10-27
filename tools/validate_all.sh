@@ -10,6 +10,8 @@
 #   scenarios/scene/        entrée de scène, DDSOM_SCENES=1 (6500)
 #   scenarios/scene_end/    sortie de scène, DDSOM_SCENES=1 (9000)
 #   scenarios/cov/          couverture de tout le jeu, DDSOM_COV=1 (COV_FRAMES, 30000 par défaut)
+#   scenarios/long/         bots longs (autobot, plusieurs joueurs, routes, boutiques), DDSOM_LONG=1 (chacun son
+#                           nombre d'images, dans <nom>.images ; ~3 min chacun)
 # Au plus DDSOM_JOBS validations simultanées (par défaut : nombre de cœurs). Le jeu validé est le jeu sans 68000 (le
 # mode hybride, DDSOM_HYBRIDE=1, est retiré).
 #
@@ -27,7 +29,7 @@ jobs=${DDSOM_JOBS:-$(nproc)}
 cargo build --release -q --manifest-path port/Cargo.toml -p ddsom-game --examples
 bin=port/target/release/examples/validate
 # empreinte : le binaire et les variables DDSOM_* qui changent son comportement (pas celles de ce script)
-reglages=$(env | grep '^DDSOM_' | grep -vE '^DDSOM_(JOBS|RESULTATS|SCENES|COV|ROMS|EEPROM)=' | sort || true)
+reglages=$(env | grep '^DDSOM_' | grep -vE '^DDSOM_(JOBS|RESULTATS|SCENES|COV|LONG|ROMS|EEPROM)=' | sort || true)
 empreinte=$({ sha256sum < "$bin"; echo "$reglages"; } | sha256sum | cut -c1-16)
 resultats=${DDSOM_RESULTATS:-$HOME/.cache/ddsom/validate}/$empreinte
 mkdir -p "$resultats"
@@ -42,7 +44,19 @@ list() {
 	done
 	return 0
 }
+# idem, nombre d'images propre à chaque scénario (fichier <nom>.images à côté)
+list_own() {
+	local dir=$1 s
+	for s in "$dir"/*.txt; do
+		[[ -e $s ]] && echo "$s $(cat "${s%.txt}.images")"
+	done
+	return 0
+}
 {
+	# les plus longs d'abord : ils fixent la durée totale
+	if [[ ${DDSOM_LONG:-0} == 1 ]]; then
+		list_own scenarios/long
+	fi
 	list scenarios "$frames"
 	list scenarios/extra 12000
 	list scenarios/boss 12000
