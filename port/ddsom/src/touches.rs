@@ -16,6 +16,8 @@ pub enum Port {
     In0(u16),
     In2(u16),
     Pause,
+    Sauver,
+    Charger,
     Rapide,
     Quitter,
 }
@@ -45,6 +47,8 @@ const ACTIONS: &[(&str, Port, &str)] = &[
     ("j1.piece", Port::In2(0x1000), "Key5 Pad1Back"),
     ("j2.piece", Port::In2(0x2000), "Key6 Pad2Back"),
     ("pause", Port::Pause, "P"),
+    ("sauver", Port::Sauver, "F5"),
+    ("charger", Port::Charger, "F9"),
     ("rapide", Port::Rapide, "Tab"),
     ("quitter", Port::Quitter, "Escape"),
 ];
@@ -55,7 +59,8 @@ pub struct Touches {
     manettes: Manettes,
     trace: bool,
     avant: Vec<String>,
-    pause_avant: bool,
+    /// Pause, sauver, charger tenus à l'image précédente (ils agissent à l'appui).
+    avant_appui: [bool; 3],
 }
 
 /// Lecture du clavier pour une image.
@@ -63,8 +68,10 @@ pub struct Etat {
     /// Ports d'entrée CPS2 (actifs à 0).
     pub in0: u16,
     pub in2: u16,
-    /// Pause vient d'être pressée.
+    /// Pause, sauver, charger viennent d'être pressés.
     pub pause: bool,
+    pub sauver: bool,
+    pub charger: bool,
     pub rapide: bool,
     pub quitter: bool,
 }
@@ -101,7 +108,7 @@ impl Touches {
             }
         }
         let trace = std::env::var("DDSOM_TOUCHES").is_ok_and(|v| v == "1");
-        Touches { actions, manettes: Manettes::ouvre(), trace, avant: Vec::new(), pause_avant: false }
+        Touches { actions, manettes: Manettes::ouvre(), trace, avant: Vec::new(), avant_appui: [false; 3] }
     }
 
     /// État des actions d'après les touches et les boutons tenus.
@@ -115,21 +122,24 @@ impl Touches {
             }
             self.avant = bas.clone();
         }
-        let mut e = Etat { in0: 0xffff, in2: 0xffff, pause: false, rapide: false, quitter: false };
-        let mut pause = false;
+        let mut e =
+            Etat { in0: 0xffff, in2: 0xffff, pause: false, sauver: false, charger: false, rapide: false, quitter: false };
+        let mut appui = [false; 3];
         for (port, keys) in &self.actions {
             if keys.iter().any(|k| bas.contains(k)) {
                 match *port {
                     Port::In0(bit) => e.in0 &= !bit,
                     Port::In2(bit) => e.in2 &= !bit,
-                    Port::Pause => pause = true,
+                    Port::Pause => appui[0] = true,
+                    Port::Sauver => appui[1] = true,
+                    Port::Charger => appui[2] = true,
                     Port::Rapide => e.rapide = true,
                     Port::Quitter => e.quitter = true,
                 }
             }
         }
-        e.pause = pause && !self.pause_avant;
-        self.pause_avant = pause;
+        [e.pause, e.sauver, e.charger] = std::array::from_fn(|i| appui[i] && !self.avant_appui[i]);
+        self.avant_appui = appui;
         e
     }
 }
