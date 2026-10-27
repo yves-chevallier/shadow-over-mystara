@@ -36,6 +36,7 @@ mod g {
     pub const SAVED_X: u32 = 0xa;
 }
 use g::*;
+use crate::objects::pools;
 
 const SET_BODY: u32 = 0x17b14e;
 const SET_SHOT: u32 = 0x17b162;
@@ -53,8 +54,6 @@ const REACTIONS: u32 = 0x8d176;
 const STUN_REACTION: u32 = 0x8d294;
 
 mod call {
-    pub const FREE_BOSS: u32 = 0x2234;
-    pub const ALLOC_BOSS: u32 = 0x23a8;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const ANIM_STEP: u32 = 0x1a56;
@@ -74,7 +73,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
     if x.u8(0) != 0 {
         x.reinsert();
@@ -218,12 +217,12 @@ fn intro(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x60);
             // un ennemi (type 18, variante 0xff) et un boss (type 19, variante 1) liés à Nagpa
-            let enemy = alloc(x, rom::ALLOC_ENEMY);
+            let enemy = alloc(x, &pools::ENEMY);
             enemy.set_u8(x.b, 0, 1);
             enemy.set_u8(x.b, 2, 0x12);
             enemy.set_u8(x.b, 3, 0xff);
             enemy.set_u16(x.b, f::HOST, x.o.0 as u16);
-            let boss = alloc(x, call::ALLOC_BOSS);
+            let boss = alloc(x, &pools::BOSS);
             boss.set_u8(x.b, 0, 1);
             boss.set_u8(x.b, 2, 0x13);
             boss.set_u8(x.b, 3, 1);
@@ -496,7 +495,7 @@ fn cinematic_shot(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
             x.set8(KEY, 0);
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return shot_end(x) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return shot_end(x) };
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x21);
             shot.set_u16(x.b, 0x42, x.o.0 as u16);

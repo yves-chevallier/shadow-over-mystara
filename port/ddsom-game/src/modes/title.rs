@@ -11,6 +11,7 @@ use crate::mem::{rd16, rd8, rd32, set_low_word, wr16, wr32, wr8};
 use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
+use crate::objects::{pools, Obj};
 
 /// Champs du bloc d'état (décalages depuis `mode::BASE`).
 mod f {
@@ -55,8 +56,6 @@ mod ext {
     pub const POOLS_EFFCT: u32 = 0x2150;
     pub const RESET_PLAYERS: u32 = 0x1f184;
     pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const ALLOC_SET: u32 = 0x2348;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
     /// Objet SOBJ de la scène de titre, de variante D0 (retenue = échec) ; SET de type 0xf.
     pub const SOBJ_VARIANT: u32 = 0xddeaa;
     pub const SET_VARIANT: u32 = 0xce00a;
@@ -490,11 +489,7 @@ fn t18_palette(x: &mut Ctx) -> Flow {
     t18_object(x)
 }
 fn t18_object(x: &mut Ctx) -> Flow {
-    x.call(ext::ALLOC_SET);
-    if !x.ok() {
-        return x.wait(1, T18_RETRY);
-    }
-    let o = x.c.a[1];
+    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, T18_RETRY) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 4);
     wr8(x.b, o + 3, 0x34);
@@ -535,11 +530,7 @@ fn t18_sub(x: &mut Ctx) -> Flow {
     t18_text_object(x)
 }
 fn t18_text_object(x: &mut Ctx) -> Flow {
-    x.call(ext::ALLOC_SOBJ);
-    if !x.ok() {
-        return x.wait(1, T18_SUB_RETRY);
-    }
-    let o = x.c.a[1];
+    let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return x.wait(1, T18_SUB_RETRY) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0xf0);
@@ -576,11 +567,7 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
     t1a_object(x)
 }
 fn t1a_object(x: &mut Ctx) -> Flow {
-    x.call(ext::ALLOC_SET);
-    if !x.ok() {
-        return x.wait(1, T1A_RETRY);
-    }
-    let o = x.c.a[1];
+    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, T1A_RETRY) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x42);
@@ -612,11 +599,7 @@ pub fn title_text(x: &mut Ctx) -> Flow {
         x.c.a[3] = crate::mem::A5 + 0x54e;
     }
     loop {
-        x.call(ext::ALLOC_SOBJ);
-        if !x.ok() {
-            break;
-        }
-        let o = x.c.a[1];
+        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, x.c.d[4] as u8);
@@ -826,11 +809,7 @@ fn s04_wait_object(x: &mut Ctx) -> Flow {
     s04_object(x)
 }
 fn s04_object(x: &mut Ctx) -> Flow {
-    x.call(ext::ALLOC_SET);
-    if !x.ok() {
-        return x.wait(1, S04_RETRY);
-    }
-    let o = x.c.a[1];
+    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, S04_RETRY) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x44);

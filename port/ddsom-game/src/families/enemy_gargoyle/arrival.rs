@@ -2,6 +2,7 @@
 //! `+6` = 2 : arrivée posée (crée une ombre, attend un joueur à portée).
 
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -97,8 +98,7 @@ fn landed(x: &mut Cx) {
             x.add8(STEP, 2);
             x.set_bit(1, 1, false);
             x.set8(NO_GRAB, 1);
-            let shadow = alloc(x, rom::ALLOC_EFFCT);
-            if !alloc_failed(x) {
+            if let Some(shadow) = x.alloc(&pools::EFFCT) {
                 shadow.set_u8(x.b, 0, 1);
                 shadow.set_u8(x.b, 2, 0x32);
                 shadow.set_u8(x.b, 3, 0xe);

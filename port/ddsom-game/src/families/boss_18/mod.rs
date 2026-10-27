@@ -59,6 +59,7 @@ pub(self) mod g {
     pub const AIM_ON: u32 = 0xbb;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const SET_BODY: u32 = 0x181ae0;
 pub(self) const SET_STRIKE: u32 = 0x181af2;
@@ -78,7 +79,6 @@ pub(self) mod call {
     pub const MOVE_XYZ: u32 = 0x1d90;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const RANDOM_TURN: u32 = 0x10574;
     pub const TURN_NEEDED: u32 = 0x1050c;
@@ -98,7 +98,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
     if x.a5_u8(0x30) == 0 {
         x.set8(0x3a, 0);
@@ -151,7 +151,7 @@ fn init(x: &mut Cx) {
         x.set16(0x8, px);
         x.set16(0x10, py);
         x.set16(TIMER, 0x3c);
-        if let Some(e) = alloc_retry(x, rom::ALLOC_EFFCT) {
+        if let Some(e) = alloc_retry(x, &pools::EFFCT) {
             e.set_u8(x.b, 0, 1);
             e.set_u8(x.b, 2, 0x26);
             e.set_u16(x.b, 0x42, x.o.0 as u16);

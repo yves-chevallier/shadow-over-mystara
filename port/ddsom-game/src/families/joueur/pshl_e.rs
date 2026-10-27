@@ -3,6 +3,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const SPEED_SELECT: u32 = 0x1b64;
@@ -423,7 +424,7 @@ mod fountain {
 
     /// Crée une braise ou une étincelle liée à la boule (`0x53992`, `0x539b2`).
     fn spawn(x: &mut Cx, variant: u8, _power: Option<(u8, u8)>) {
-        if let Some(o) = x.alloc(ALLOC_PSHL) {
+        if let Some(o) = x.alloc(&pools::PSHL) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 0x12);
             o.set_u8(x.b, 3, variant);

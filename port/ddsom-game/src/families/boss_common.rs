@@ -16,6 +16,7 @@ pub use super::enemy_common::*;
 use crate::mem::{prog16, prog32, rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::{call, regs, Native};
+use crate::objects::pools;
 
 /// Variables de la RAM de travail (décalages de A5) lues par les boss.
 pub mod var {
@@ -233,8 +234,6 @@ pub mod ia {
     pub const PHASE_UP: u32 = 0x105b6;
     pub const DUST: u32 = 0x1172e;
     pub const WIDE_BOX: u32 = 0x7ef4;
-    pub const ALLOC_BOSS: u32 = 0x23a8;
-    pub const FREE_BOSS: u32 = 0x2234;
 }
 
 /// Au moins un joueur en vie (0x10474).
@@ -323,20 +322,8 @@ pub const A5_DEATH: u32 = A5 - 0x557c;
 /// Alloue un objet de la classe `routine` (retenue levée = pool plein). Les gestionnaires qui insistent
 /// (`jsr alloc ; bcs retry`) bouclent ici ; le pool ne se vide qu'avec le temps, l'original resterait
 /// bloqué : on abandonne après 64 essais.
-pub fn alloc_retry(x: &mut Cx, routine: u32) -> Option<Obj> {
-    for _ in 0..64 {
-        let o = alloc(x, routine);
-        if !alloc_failed(x) {
-            return Some(o);
-        }
-    }
-    None
-}
-
-/// Alloue sans insister.
-pub fn try_alloc(x: &mut Cx, routine: u32) -> Option<Obj> {
-    let o = alloc(x, routine);
-    (!alloc_failed(x)).then_some(o)
+pub fn alloc_retry(x: &mut Cx, pool: &pools::Pool) -> Option<Obj> {
+    (0..64).find_map(|_| x.alloc(pool))
 }
 
 /// Écrit un octet à une adresse absolue de la RAM de travail.

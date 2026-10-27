@@ -17,6 +17,7 @@ use crate::mem::{rd16, rd32, rd8, rts};
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
 use crate::Native;
+use crate::objects::pools;
 
 /// Champs des objets touchés.
 mod f {
@@ -91,7 +92,6 @@ mod call {
     pub const LANDED: u32 = 0x3e480;
     pub const RANDOM: u32 = 0x19a88;
     pub const SPAWN_EFFECT: u32 = 0xabec8;
-    pub const ALLOC_EFFCT: u32 = 0x2318;
     pub const GET_UP_CHECK: u32 = 0x1e92;
     pub const DEATH: u32 = 0x19ad6;
     pub const BOSS_RECOVER: u32 = 0xf118;
@@ -973,8 +973,8 @@ fn sparks(x: &mut Cx) {
     }
     for v in [1u8, 0] {
         x.c.d[5] = v as u32;
-        x.call(call::ALLOC_EFFCT);
-        let o = Obj(x.c.a[1]);
+        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        let o = x.alloc_unchecked(&pools::EFFCT);
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 8);
         o.set_u8(x.b, 3, v);

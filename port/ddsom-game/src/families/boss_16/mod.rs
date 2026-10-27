@@ -52,6 +52,7 @@ pub(self) mod g {
     pub const PAUSE_SEEN: u32 = 0x42;
 }
 use g::*;
+use crate::objects::pools;
 
 const SET_A: u32 = 0x17efe8;
 const SET_B: u32 = 0x17f002;
@@ -70,7 +71,6 @@ pub(self) mod state {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const MOVE_XY: u32 = 0x1d62;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const MOVE_Y: u32 = 0x1dbc;
@@ -91,7 +91,6 @@ pub(self) mod call {
     pub const BLOOD: u32 = 0xedd96;
     pub const SPLASH: u32 = 0xaaa40;
     pub const EFFECT: u32 = 0xabec8;
-    pub const ALLOC_EFFCT: u32 = 0x2318;
 }
 
 // --- animations --------------------------------------------------------------------------------
@@ -250,7 +249,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
 }
 

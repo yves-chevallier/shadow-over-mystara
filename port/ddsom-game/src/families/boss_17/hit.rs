@@ -10,6 +10,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x96a0c;
@@ -251,7 +252,7 @@ pub(super) fn recovered_tail(x: &mut Cx) {
             return decide::attack_14(x);
         }
         if x.u8(VARIANT) == 2 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 && cmp8(x, PHASE, 2).eq() {
-            if let Some(o) = try_alloc(x, call::ALLOC_SET) {
+            if let Some(o) = x.alloc(&pools::SET) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, 2);
                 o.set_u8(x.b, 3, 0x6f);

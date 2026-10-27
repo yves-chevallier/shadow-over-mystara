@@ -49,7 +49,6 @@ mod ext {
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const POOLS_INIT_SET: u32 = 0x2134;
     pub const POOLS_INIT_SOBJ: u32 = 0x21bc;
-    pub const ALLOC_SET: u32 = 0x2348;
     pub const PLAYERS_PREPARE_A: u32 = 0x35288;
     pub const PLAYERS_PREPARE_B: u32 = 0x3525c;
     /// Lance un script d'animation de palette (A4 = script).
@@ -294,12 +293,6 @@ fn run_script(c: &mut Cpu, b: &mut Cps2Bus, script: u32) {
     call(c, b, ext::PALETTE_SCRIPT);
 }
 
-/// Alloue un objet SET ; `None` si le pool est plein (retenue positionnée par l'allocation).
-fn alloc_set(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
-    call(c, b, ext::ALLOC_SET);
-    (c.sr & 1 == 0).then(|| Obj(c.a[1]))
-}
-
 /// Étape 0 : trois objets SET (animations de palette), prépare les joueurs.
 fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     next_step(b);
@@ -309,7 +302,7 @@ fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     call(c, b, ext::POOLS_INIT_SET);
     for (variant, index) in SET_PALETTES {
         // le pool vient d'être vidé : l'allocation réussit
-        let set = alloc_set(c, b).expect("pool SET vide");
+        let set = pools::SET.alloc_68k(c, b).expect("pool SET vide");
         set.set_u8(b, Obj::ACTIVE, 1);
         set.set_u8(b, Obj::KIND, 0);
         set.set_u8(b, Obj::VARIANT, variant);
@@ -347,7 +340,7 @@ fn wait_then_spawn(c: &mut Cpu, b: &mut Cps2Bus) {
     if !animate(c, b, 0x1c5ea) {
         return;
     }
-    let Some(set) = alloc_set(c, b) else { return };
+    let Some(set) = pools::SET.alloc_68k(c, b) else { return };
     set.set_u8(b, Obj::ACTIVE, 1);
     set.set_u8(b, Obj::KIND, 0xc);
     next_step(b);

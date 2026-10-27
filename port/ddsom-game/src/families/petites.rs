@@ -6,23 +6,18 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
 use crate::mem::{prog16, prog8, rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use super::cx::{handler, Cx};
 use crate::{call, regs, Native};
+use crate::objects::pools;
 
-const ALLOC_PSHL: u32 = 0x225e;
-const ALLOC_PEFF: u32 = 0x228e;
-const ALLOC_ENEMY: u32 = 0x22bc;
-const ALLOC_ESHL: u32 = 0x22ea;
-const ALLOC_SOBJ: u32 = 0x2408;
 
 /// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, routine: u32) -> Option<Obj> {
-    call(c, b, routine);
-    (c.sr & SR_C == 0).then(|| Obj(c.a[1]))
+fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {
+    pool.alloc_68k(c, b)
 }
 
 /// Drapeaux d'un `move`/`clr` de `v` : N et Z selon la valeur, V et C à zéro.
@@ -36,7 +31,7 @@ fn word(c: &Cpu) -> u16 {
 }
 
 /// Crée un objet de `pool` de classe 1 et de type `kind`, lié à A0 par le mot `link`.
-fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: u32, kind: u8, link: u32) {
+fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, link: u32) {
     if let Some(o) = alloc(c, b, pool) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, kind);
@@ -48,21 +43,21 @@ fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: u32, kind: u8, link: u32) {
 }
 
 fn peff_16(c: &mut Cpu, b: &mut Cps2Bus) {
-    linked(c, b, ALLOC_PEFF, 0x10, 0x50);
+    linked(c, b, &pools::PEFF, 0x10, 0x50);
 }
 fn peff_33(c: &mut Cpu, b: &mut Cps2Bus) {
-    linked(c, b, ALLOC_PEFF, 0x21, 0x50);
+    linked(c, b, &pools::PEFF, 0x21, 0x50);
 }
 fn sobj_7(c: &mut Cpu, b: &mut Cps2Bus) {
-    linked(c, b, ALLOC_SOBJ, 0x7, 0x46);
+    linked(c, b, &pools::SOBJ, 0x7, 0x46);
 }
 fn sobj_10(c: &mut Cpu, b: &mut Cps2Bus) {
-    linked(c, b, ALLOC_SOBJ, 0xa, 0x46);
+    linked(c, b, &pools::SOBJ, 0xa, 0x46);
 }
 
 /// 0x54700 : tir de type 0x17 qui reprend le mot `+0x50` du créateur.
 fn shot_17(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, ALLOC_PSHL) {
+    if let Some(o) = alloc(c, b, &pools::PSHL) {
         let me = Obj(c.a[0]);
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x17);
@@ -77,7 +72,7 @@ fn shot_17(c: &mut Cpu, b: &mut Cps2Bus) {
 /// créé. `always_zero` : 0x54872 rend D0 = 0 même quand le tir est créé (bizarrerie de l'original).
 fn shot_18(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, always_zero: bool) {
     let me = word(c);
-    let created = alloc(c, b, ALLOC_PSHL);
+    let created = alloc(c, b, &pools::PSHL);
     if let Some(shot) = created {
         shot.set_u8(b, 0x0, 1);
         shot.set_u8(b, 0x2, 0x18);
@@ -108,8 +103,8 @@ fn enemy_pair(c: &mut Cpu, b: &mut Cps2Bus) {
         return rts(c, b);
     }
     for variant in 0..2 {
-        call(c, b, ALLOC_ENEMY);
-        let o = Obj(c.a[1]);
+        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        let o = pools::ENEMY.alloc_unchecked_68k(c, b);
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x19);
         o.set_u8(b, 0x3, variant);
@@ -136,7 +131,7 @@ fn eshl_volley(c: &mut Cpu, b: &mut Cps2Bus) {
     let row = 0xa66e2u32.wrapping_add(c.d[2] as i16 as i32 as u32);
     c.d[5] = prog8(b, row) as u32;
     loop {
-        let Some(o) = alloc(c, b, ALLOC_ESHL) else { break };
+        let Some(o) = alloc(c, b, &pools::ESHL) else { break };
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x3e);
         o.set_u8(b, 0x3, c.d[5] as u8);
@@ -159,7 +154,7 @@ fn roar(c: &mut Cpu, b: &mut Cps2Bus, table: u32, variant: u8) {
     let mut n = (c.d[1] as u16).wrapping_sub(1);
     set_low_word(&mut c.d[1], n);
     loop {
-        let Some(o) = alloc(c, b, ALLOC_ESHL) else { break };
+        let Some(o) = alloc(c, b, &pools::ESHL) else { break };
         let me = Obj(c.a[0]);
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x41);
@@ -186,7 +181,7 @@ fn roar_small(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xa036e : harpie, créature compagne (ESHL 0x10) : copie la variante, la position décalée de ±0x2f en X
 /// et de -0x78 en Z ; la moitié des PV du créateur (`+0x60 / 4`) va dans `+0x58` du créateur.
 fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
-    let Some(o) = alloc(c, b, ALLOC_ESHL) else { return rts(c, b) };
+    let Some(o) = alloc(c, b, &pools::ESHL) else { return rts(c, b) };
     let me = Obj(c.a[0]);
     let flip = me.u8(b, 0x2c) != 0;
     let v = me.u8(b, 0x3);
@@ -226,7 +221,7 @@ fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xa0566 : harpie, projectile ESHL 0x11 : D5 va dans `+0x42` du créateur, A2 et le créateur sont les
 /// liens `+0x50` et `+0x56` (longs) ; le créateur remet `+0xa5` à zéro.
 fn harpy_shot(c: &mut Cpu, b: &mut Cps2Bus) {
-    let Some(o) = alloc(c, b, ALLOC_ESHL) else { return rts(c, b) };
+    let Some(o) = alloc(c, b, &pools::ESHL) else { return rts(c, b) };
     let me = Obj(c.a[0]);
     me.set_u8(b, 0x42, c.d[5] as u8);
     let v = me.u8(b, 0x43);
@@ -313,7 +308,7 @@ fn palette_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x4aed0 : deux effets de type 5, variante 1, indices `+0x2f` 0 et 1, liés au créateur (`+0x50`).
 fn peff_5_pair(c: &mut Cpu, b: &mut Cps2Bus) {
     for index in [0, 1] {
-        let Some(o) = alloc(c, b, ALLOC_PEFF) else { break };
+        let Some(o) = alloc(c, b, &pools::PEFF) else { break };
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 5);
         o.set_u8(b, 0x3, 1);
@@ -336,7 +331,7 @@ fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
     set_low_word(&mut c.d[4], 0x40);
     set_low_word(&mut c.d[5], COUNT - 1);
     loop {
-        let Some(o) = alloc(c, b, ALLOC_PSHL) else { break };
+        let Some(o) = alloc(c, b, &pools::PSHL) else { break };
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x11);
         let v = me.u8(b, 0x2c);

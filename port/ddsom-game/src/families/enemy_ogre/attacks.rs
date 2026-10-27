@@ -4,6 +4,7 @@
 //! 6 bond et chute sur la cible, 8 bras variante 2 : l'ogre monte en suivant le bras, puis redescend.
 
 use super::*;
+use crate::objects::pools;
 
 /// Table des montées de l'ogre qui suit son bras, indexée par la clé d'animation (longs).
 const RISE: u32 = 0x713e8;
@@ -56,10 +57,7 @@ fn roar(x: &mut Cx) {
 
 /// 0x70eca : crée le bras (type 0x2a, variante `variant`) lié à l'ogre ; faux si l'allocation échoue.
 fn throw_arm(x: &mut Cx, variant: Option<u8>) -> bool {
-    let arm = alloc(x, rom::ALLOC_ESHL);
-    if alloc_failed(x) {
-        return false;
-    }
+    let Some(arm) = x.alloc(&pools::ESHL) else { return false };
     x.set16(ARM, arm.0 as u16);
     arm.set_u8(x.b, 0, 1);
     arm.set_u8(x.b, 2, 0x2a);

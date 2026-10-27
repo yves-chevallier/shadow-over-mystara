@@ -70,6 +70,7 @@ pub(self) mod g {
     pub const HITS: u32 = 0x84;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeux d'animations : corps, vol et attaques, coups reçus.
 pub(self) const SET_BODY: u32 = 0x17557e;
@@ -81,7 +82,6 @@ pub(self) mod call {
     pub const MOVE_X: u32 = 0x1d78;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const SOUND_EVENT: u32 = 0x2824;
     pub const SOUND_B: u32 = 0x2860;
     pub const ASK_TARGET: u32 = 0xe76c;
@@ -183,7 +183,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
     if x.u8(INVULNERABLE) != 0 {
         x.set8(0x38, 0);
@@ -257,7 +257,7 @@ fn init(x: &mut Cx) {
 /// Crée un double ENEMY de type `kind` (le pool est attendu tant qu'il est plein) et le lie au boss (`link`).
 /// `life` : (retrait, minimum, jeu de boîtes) pour un double qui a ses propres PV.
 fn spawn_double(x: &mut Cx, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
-    let Some(d) = alloc_retry(x, rom::ALLOC_ENEMY) else { return };
+    let Some(d) = alloc_retry(x, &pools::ENEMY) else { return };
     d.set_u8(x.b, 0, 1);
     d.set_u8(x.b, 2, kind);
     if let Some((cut, least, boxes)) = life {

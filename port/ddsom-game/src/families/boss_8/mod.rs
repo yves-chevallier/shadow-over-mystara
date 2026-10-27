@@ -56,6 +56,7 @@ pub(self) mod g {
     pub const IDLE_WAIT: u32 = 0xbe;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const SET_BODY: u32 = 0x1790f6;
 pub(self) const SET_STRIKE: u32 = 0x179116;
@@ -74,7 +75,6 @@ pub(self) mod call {
     pub const MOVE_X: u32 = 0x1d78;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const SOUND_EVENT: u32 = 0x2824;
     pub const SOUND_B: u32 = 0x2860;
     pub const ASK_TARGET: u32 = 0xe76c;
@@ -114,7 +114,7 @@ pub fn run(x: &mut Cx) {
             st::INIT => init(x),
             st::ACTIVE => active(x),
             st::HIT => hit::run(x),
-            _ => x.call(call::FREE_BOSS),
+            _ => x.free(&pools::BOSS),
         }
         if x.u8(0) == 0 {
             return;
@@ -215,7 +215,7 @@ fn active(x: &mut Cx) {
     }
     if tst8(x, SPAWNED).eq() {
         if sub16(x, SPAWN_TIME, 1).mi() {
-            if let Some(e) = try_alloc(x, super::cx::sub::ALLOC_SET) {
+            if let Some(e) = x.alloc(&pools::SET) {
                 e.set_u8(x.b, 0, 1);
                 e.set_u8(x.b, 3, 0x72);
                 e.set_u8(x.b, 2, 2);

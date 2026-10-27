@@ -11,6 +11,7 @@
 use super::cx::{handlers, sub, Cx};
 use crate::mem::A5;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 mod f {
     pub const ACTIVE: u32 = 0x00;
@@ -63,8 +64,6 @@ mod rom {
     /// Par personnage : la pièce de l'emplacement 4 lui est interdite.
     pub const SLOT_4_FORBIDDEN: u32 = 0xdb482;
     pub const ANIMATIONS: u32 = 0x1bee82;
-    pub const FREE_ITEM: u32 = 0x2242;
-    pub const ALLOC_ITEM: u32 = 0x23d8;
     pub const SPARKLE: u32 = 0xae3ec;
     pub const PUSH_OUT: u32 = 0xfbae;
     pub const TERRAIN: u32 = 0x33fe4;
@@ -92,7 +91,7 @@ fn run(x: &mut Cx) {
     match state {
         0 => init(x),
         2 => active(x),
-        4 | 6 => x.call(rom::FREE_ITEM),
+        4 | 6 => x.free(&pools::ITEM),
         _ => x.call(target),
     }
 }
@@ -377,7 +376,7 @@ fn already_worn(x: &mut Cx) {
 /// `0xdb672` : crée l'ITEM 2 de variante `variant` rejeté par le joueur (A2), avec le compteur de coups D2.
 fn drop_old(x: &mut Cx, player: Obj, variant: u8) {
     x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
-    let Some(n) = x.alloc(rom::ALLOC_ITEM) else { return };
+    let Some(n) = x.alloc(&pools::ITEM) else { return };
     n.set_u8(x.b, f::ACTIVE, 1);
     n.set_u8(x.b, f::KIND, 2);
     n.set_u8(x.b, f::VARIANT, variant);

@@ -2,6 +2,7 @@
 //! 6 mort en plusieurs temps, 8 fuite (saisi par un joueur), 10 reprise du combat.
 
 use super::*;
+use crate::objects::pools;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACTIONS: u32 = 0x715d4;
@@ -196,7 +197,7 @@ fn dying(x: &mut Cx) {
         }
         8 => {
             if !count_down(x, TIMER) {
-                x.call(rom::FREE_ENEMY);
+                x.free(&pools::ENEMY);
             } else {
                 let v = x.u8(1) ^ 2;
                 x.set8(1, v);
@@ -233,7 +234,7 @@ fn flee(x: &mut Cx) {
             }
             if lib::outside(x, -0x40, 0x1c0) {
                 x.call(call::REMOVE);
-                x.call(rom::FREE_ENEMY);
+                x.free(&pools::ENEMY);
             }
         }
         _ => {}

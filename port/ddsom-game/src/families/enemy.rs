@@ -8,6 +8,7 @@ use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 // ---------------------------------------------------------------------------------------------
 // Type 20 (0x74fc0) : « ManScorpion » (h), ennemi composite greffé sur un ennemi de type 19
@@ -96,7 +97,7 @@ mod man_scorpion {
             let mut at = x.o.0 + p::ARMS;
             for d5 in [1u8, 0] {
                 x.c.d[5] = d5 as u32;
-                let o = alloc(x, rom::ALLOC_ENEMY);
+                let o = alloc(x, &pools::ENEMY);
                 let active = x.u8(0);
                 o.set_u8(x.b, 0, active);
                 o.set_u8(x.b, 0xbc, d5);
@@ -123,7 +124,7 @@ mod man_scorpion {
         let mut at = x.o.0 + p::LIMBS;
         for d5 in [1u8, 0] {
             x.c.d[5] = d5 as u32;
-            let o = alloc(x, rom::ALLOC_ESHL);
+            let o = alloc(x, &pools::ESHL);
             let active = x.u8(0);
             o.set_u8(x.b, 0, active);
             o.set_u8(x.b, 3, d5);
@@ -135,7 +136,7 @@ mod man_scorpion {
     }
 
     fn spawn_shadow(x: &mut Cx) {
-        let o = alloc(x, rom::ALLOC_EFFCT);
+        let o = alloc(x, &pools::EFFCT);
         let active = x.u8(0);
         o.set_u8(x.b, 0, active);
         o.set_u8(x.b, 2, SHADOW_TYPE);
@@ -149,7 +150,7 @@ mod man_scorpion {
         for d5 in [1u8, 0] {
             x.c.d[5] = d5 as u32;
             x.c.d[4] = kind as u32;
-            let o = alloc(x, rom::ALLOC_ITEM);
+            let o = alloc(x, &pools::ITEM);
             let active = x.u8(0);
             o.set_u8(x.b, 0, active);
             o.set_u8(x.b, f::FLIP, d5 << 5);

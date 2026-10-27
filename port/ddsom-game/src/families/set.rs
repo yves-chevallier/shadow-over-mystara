@@ -3,7 +3,7 @@
 
 use super::cx::{sub, Cx};
 use crate::objects::Obj;
-use m68k::SR_C;
+use crate::objects::pools;
 
 /// Type 8 (0xcc25a), partagé par les tables SET (8), SOBJ (4) et EFFCT (18) : générateur du
 /// contrôleur de scène. À la première image il attend ; à la suivante il crée un objet SET de
@@ -28,11 +28,7 @@ mod scene_spawner {
         match x.u8(0x4) {
             WAIT => x.add8(0x4, 2),
             SPAWN => {
-                x.call(sub::ALLOC_SET);
-                if x.c.sr & SR_C != 0 {
-                    return;
-                }
-                let child = Obj(x.c.a[1]);
+                let Some(child) = x.alloc(&pools::SET) else { return };
                 child.set_u8(x.b, 0, 1);
                 child.set_u8(x.b, 2, SCENE_CONTROLLER);
                 let variant = x.u8(VARIANT_PARAM);
@@ -101,7 +97,7 @@ mod inert {
         match x.u8(0x4) {
             0 => x.add8(0x4, 2),
             2 => {}
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 }
@@ -131,7 +127,7 @@ mod level_end {
                 wait_players(x);
             }
             2 => wait_players(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -189,7 +185,7 @@ mod fade_white {
                     util::brighten(x, addr, count);
                 }
             }
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 }
@@ -244,14 +240,14 @@ mod palette_anim {
                 x.set8(STEP, s);
                 if (s as i8) < 0 {
                     x.add8(0x4, 2);
-                    x.call(sub::FREE_SET);
+                    x.free(&pools::SET);
                 }
             }
             4 => {
                 x.add8(0x4, 2);
-                x.call(sub::FREE_SET);
+                x.free(&pools::SET);
             }
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 }
@@ -276,7 +272,7 @@ mod scene_trigger {
                 trigger(x);
             }
             2 => trigger(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -363,7 +359,7 @@ mod tile_anim {
                 step(x, skip_transparent);
             }
             2 => step(x, skip_transparent),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -435,7 +431,6 @@ mod wave_leader {
 
     /// Délais entre deux vagues (octets, espace programme), indexés par un tirage de 4 bits.
     const DELAYS: u32 = 0xbc63e;
-    const ALLOC_ENEMY: u32 = 0x22bc;
     const RNG: u32 = 0x19a88;
     const CAMERA_LOCK: u32 = 0x2860;
     const CAMERA_LOCK_PARAM: u32 = 0x3c;
@@ -505,7 +500,7 @@ mod wave_leader {
             }
             2 => substate(x),
             4 => x.add8(0x4, 2),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -621,8 +616,8 @@ mod wave_leader {
         }
         let mut slots = [Obj(0); 3];
         for (i, slot) in slots.iter_mut().enumerate() {
-            x.call(ALLOC_ENEMY);
-            *slot = Obj(x.c.a[1]);
+            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            *slot = x.alloc_unchecked(&pools::ENEMY);
             slot.set_u8(x.b, 0, 1);
             x.set16(WINGS + 2 * i as u32, slot.0 as u16);
         }
@@ -767,7 +762,7 @@ mod exit_gate {
             0 => init(x),
             2 => watch(x),
             4 => arrive(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -884,7 +879,6 @@ mod exit_gate {
     const PSHL_POOL: set_b::Pool = set_b::Pool { base: A5 + 0x10de, size: 0x60, count: 18 };
     /// Décors de type 0x13 libérés à l'entrée des portes de variante 8 et 0xa.
     const FREED_KIND: u8 = 0x13;
-    const FREE_SET: u32 = 0x2210;
     /// Caméras imposées par les variantes 8 et 0xa (`+0x30..+0x3c`).
     const CAMERA_VARIANT_8: [u32; 4] = [0x2a0_0000, 0x108_0000, 0x150_0000, 0];
     const CAMERA_VARIANT_A: [u32; 4] = [0x400_0000, 0x1fe_0000, 0x200_0000, 0x7b_0000];
@@ -911,9 +905,7 @@ mod exit_gate {
             for i in 0..set_b::SET_POOL.count {
                 let o = Obj(set_b::SET_POOL.base + i * set_b::SET_POOL.size);
                 if o.u8(x.b, 0) != 0 && o.u8(x.b, 2) == FREED_KIND {
-                    x.c.a[0] = o.0;
-                    crate::call(x.c, x.b, FREE_SET);
-                    x.c.a[0] = x.o.0;
+                    pools::SET.release_68k(x.c, x.b, o);
                 }
             }
         }
@@ -1258,7 +1250,7 @@ mod palette_script {
             0 => start(x),
             2 => play(x),
             4 => finish(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -1422,7 +1414,7 @@ mod dialogue {
         if frame != 0 {
             wr32(x.b, (frame as i16 as i32 as u32 & 0xff_ffff) + 4, FRAME_FREE_STATE);
         }
-        x.call(sub::FREE_SET);
+        x.free(&pools::SET);
     }
 
     fn create(x: &mut Cx) {
@@ -1659,7 +1651,7 @@ mod name_entry {
                 let slave = at(x, SLAVES + 2 * i);
                 slave.set_u32(x.b, 4, FREE_ON_NEXT);
             }
-            x.call(sub::FREE_SET);
+            x.free(&pools::SET);
         }
 
         /// 0xc9810 : une image. Compte les curseurs, repère les cases partagées, anime et dessine.
@@ -2484,7 +2476,7 @@ mod name_entry {
                 x.set8(DONE, 1);
                 finish(x);
             }
-            x.call(sub::FREE_SET);
+            x.free(&pools::SET);
         }
     }
 }

@@ -66,6 +66,7 @@ pub(self) mod g {
     pub const MARK_X: u32 = 0xbc;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeux d'animations : corps, entrées en scène et attaques, coups reçus.
 pub(self) const SET_BODY: u32 = 0x171a52;
@@ -113,7 +114,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(ia::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
     if x.u8(INVULNERABLE) != 0 {
         x.set8(0x38, 0);

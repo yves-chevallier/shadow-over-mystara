@@ -22,6 +22,7 @@ use crate::modes::{Flow, Sequence};
 use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
+use crate::objects::pools;
 
 /// Bloc d'état de l'écran (`A0`, A5 - 0x70b0).
 mod etat {
@@ -68,8 +69,6 @@ mod sub {
     pub const BLOCKS_SCROLL_2: u32 = 0x26d4;
     pub const BLOCKS_SMALL: u32 = 0x2766;
     pub const OR_BRIGHTNESS: u32 = 0x168e;
-    pub const ALLOC_EFFCT: u32 = 0x2318;
-    pub const ALLOC_SET: u32 = 0x2348;
     pub const EFFCT: u32 = 0x39cba;
     pub const SET: u32 = 0x39e86;
     pub const SPRITES: u32 = 0x1de96;
@@ -195,7 +194,7 @@ fn embleme(x: &mut Ctx, ligne: Ligne) {
     if rd8(x.b, ligne.0 + 0xd) == 0 {
         return;
     }
-    if let Some(o) = alloue(x, sub::ALLOC_EFFCT) {
+    if let Some(o) = alloue(x, &pools::EFFCT) {
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0x5b);
         let variante = rd8(x.b, ligne.0 + 0xc);
@@ -205,9 +204,8 @@ fn embleme(x: &mut Ctx, ligne: Ligne) {
 }
 
 /// Allocation d'un objet : son adresse, ou rien (retenue levée).
-fn alloue(x: &mut Ctx, allocateur: u32) -> Option<u32> {
-    x.call(allocateur);
-    (x.c.sr & 1 == 0).then_some(x.c.a[1])
+fn alloue(x: &mut Ctx, pool: &pools::Pool) -> Option<u32> {
+    pool.alloc_68k(x.c, x.b).map(|o| o.0)
 }
 
 /// `0x18b8e` : ligne des rangs 5 à 10 (`rang` = 10 à 5) à partir de la case `p`.
@@ -303,7 +301,7 @@ fn decor(x: &mut Ctx) -> Flow {
     for k in 0..6 {
         ligne_basse(x, Ligne(RANGS_BAS - LIGNE * k), 0x912168 - 0x10 * k, 10 - k as u16);
     }
-    if let Some(o) = alloue(x, sub::ALLOC_SET) {
+    if let Some(o) = alloue(x, &pools::SET) {
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 4);
         wr8(x.b, o + 3, 3);
@@ -340,7 +338,7 @@ fn premiers_rangs(x: &mut Ctx) -> Flow {
         ligne_haute(x, Ligne(RANGS_HAUTS + LIGNE * k), 0x9100d8 + 0x800 * k, 2 + k as u16);
     }
     for k in 0..4 {
-        if let Some(o) = alloue(x, sub::ALLOC_EFFCT) {
+        if let Some(o) = alloue(x, &pools::EFFCT) {
             wr8(x.b, o, 1);
             wr8(x.b, o + 2, 3);
             wr8(x.b, o + 3, 3 - k as u8);
@@ -368,7 +366,7 @@ fn meilleur_score(x: &mut Ctx) {
     let ligne = Ligne(MEILLEUR);
     let mut p = Pinceau(0x9100ac);
     embleme(x, ligne);
-    if let Some(o) = alloue(x, sub::ALLOC_EFFCT) {
+    if let Some(o) = alloue(x, &pools::EFFCT) {
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0x5b);
         wr8(x.b, o + 0x2f, 1);

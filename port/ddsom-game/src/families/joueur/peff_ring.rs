@@ -9,6 +9,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Jeux d'animations des icônes : normal, palette alternative.
 const ICONS: u32 = 0x1aef78;
@@ -207,8 +208,8 @@ mod ring0 {
         let mut a2 = x.o.0 + g::CHILDREN;
         for k in 0..6u32 {
             x.c.d[4] = k;
-            x.call(ALLOC_PEFF);
-            let child = Obj(x.c.a[1]);
+            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            let child = x.alloc_unchecked(&pools::PEFF);
             child.set_u8(x.b, 0, 1);
             child.set_u8(x.b, 2, 0);
             child.set_u8(x.b, 3, k as u8);
@@ -538,8 +539,8 @@ mod ring1 {
         let mut a2 = x.o.0 + g::CHILDREN;
         for k in 0..=count as u32 {
             x.c.d[4] = k;
-            x.call(ALLOC_PEFF);
-            let child = Obj(x.c.a[1]);
+            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            let child = x.alloc_unchecked(&pools::PEFF);
             child.set_u8(x.b, 0, 1);
             child.set_u8(x.b, 2, 1);
             child.set_u8(x.b, 3, k as u8);

@@ -7,19 +7,9 @@
 use super::cx::{handlers, sub, Cx};
 use super::shell::*;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Alloue un objet ESHL ; `None` si le pool est plein.
-fn alloc(x: &mut Cx) -> Option<Obj> {
-    x.call(sub::ALLOC_ESHL);
-    (!x.c.cond(5)).then(|| Obj(x.c.a[1]))
-}
-
-/// Alloue un objet SET ; `None` si le pool est plein.
-fn alloc_set(x: &mut Cx) -> Option<Obj> {
-    x.call(sub::ALLOC_SET);
-    (!x.c.cond(5)).then(|| Obj(x.c.a[1]))
-}
-
 /// `subq.w #1,(off,A0)` : vrai quand le compteur atteint zéro.
 fn count_down(x: &mut Cx, off: u32) -> bool {
     x.add16(off, 0xffff);
@@ -194,7 +184,7 @@ mod flame64 {
     /// Flamme fille de variante `variant` (0xa6e8e, 0xa6eb2, 0xa6ed6) : la variante 0 hérite de la
     /// génération, les colonnes du compteur de sons.
     fn spawn(x: &mut Cx, variant: u8) {
-        let Some(child) = alloc(x) else { return };
+        let Some(child) = x.alloc(&pools::ESHL) else { return };
         child.set_u8(x.b, 0x0, 1);
         child.set_u8(x.b, 0x2, 64);
         child.set_u8(x.b, 0x3, variant);
@@ -892,7 +882,7 @@ mod gate70 {
 
     fn init(x: &mut Cx, variant: u8) {
         x.add8(0x4, 2);
-        if let Some(set) = alloc_set(x) {
+        if let Some(set) = x.alloc(&pools::SET) {
             set.set_u8(x.b, 0x0, 1);
             set.set_u8(x.b, 0x2, 7);
             set.set_u8(x.b, 0x3, if variant == 0 { 0x2c } else { 0x2e });
@@ -1026,7 +1016,7 @@ mod ball71 {
         if x.c.cond(6) {
             return;
         }
-        let Some(ball) = alloc(x) else { return };
+        let Some(ball) = x.alloc(&pools::ESHL) else { return };
         ball.set_u8(x.b, 0x0, 1);
         ball.set_u8(x.b, 0x2, 71);
         ball.set_u8(x.b, 0x3, 1);

@@ -4,9 +4,10 @@
 //! Les objets SET ne figurent pas dans les listes triées de profondeur par construction (les
 //! appels à `reinsert` des créations les y inscrivent tout de même quand ils les rendent visibles).
 
-use super::cx::{self, handlers, sub, Cx};
+use super::cx::{self, handlers, Cx};
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Les quatre enregistrements de joueurs : A5+0x5de, 0x200 octets chacun.
 const PLAYERS: u32 = A5 + 0x5de;
@@ -47,11 +48,7 @@ fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     crate::mem::wr16(b, A5 + 0x46, 0);
     for counter in (0..13u32).rev() {
         c.d[5] = c.d[5] & !0xffff | counter;
-        crate::call(c, b, sub::ALLOC_SET);
-        if c.sr & m68k::SR_C != 0 {
-            return crate::mem::rts(c, b);
-        }
-        let o = Obj(c.a[1]);
+        let Some(o) = pools::SET.alloc_68k(c, b) else { return crate::mem::rts(c, b) };
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, 0x10);
         o.set_u8(b, Obj::VARIANT, counter as u8 + 1);
@@ -134,7 +131,7 @@ mod bumper {
         match x.u8(0x4) {
             0 => init(x),
             2 => watch(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -332,7 +329,6 @@ mod boss_intro {
     const ED9BC: u32 = 0xed9bc;
     const A2B4A: u32 = 0xa2b4a;
     const SMOKE: u32 = 0xb4bcc;
-    const BOSS_ALLOC: u32 = 0x23a8;
     const FADE: u32 = 0x1686;
     /// Tables de décalages (16 mots chacune) de l'explosion en X et en Y.
     const BLAST_DX: u32 = 0xd4910;
@@ -346,7 +342,7 @@ mod boss_intro {
             }
             2 => step(x),
             4 => x.add8(0x4, 2),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -507,11 +503,7 @@ mod boss_intro {
         x.call(ED9BC);
         x.set_a5_u8(0x48e, 0xf);
         x.call(FADE);
-        x.call(BOSS_ALLOC);
-        if x.c.sr & m68k::SR_C != 0 {
-            return;
-        }
-        let boss = Obj(x.c.a[1]);
+        let Some(boss) = x.alloc(&pools::BOSS) else { return };
         boss.set_u8(x.b, 0, 1);
         boss.set_u8(x.b, 2, 2);
         x.add8(0x5, 2);
@@ -547,9 +539,9 @@ mod scroll_to {
                     linked.set_u16(x.b, 0x2a, n);
                     call_with(x, 0x2824, 0x10);
                 }
-                x.call(sub::FREE_SET);
+                x.free(&pools::SET);
             }
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 }
@@ -609,7 +601,7 @@ mod wave_spawner {
             0 => start(x),
             2 => play(x),
             4 => finish(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -853,7 +845,7 @@ mod life_bar {
             }
             2 => bar(x),
             4 => dismiss(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -878,7 +870,7 @@ mod life_bar {
         for c in [COLUMN_A, COLUMN_B, COLUMN_C] {
             clear_column(x, c);
         }
-        x.call(sub::FREE_SET);
+        x.free(&pools::SET);
     }
 
     /// Habillage de la colonne de gauche (cases de la liste d'octets du type de joueur), et
@@ -1127,7 +1119,7 @@ mod continue_countdown {
             0 => init(x, camera),
             2 => counting(x, camera),
             4 => finish(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -1383,7 +1375,7 @@ mod rank_adjust {
                 x.add8(0x4, 2);
                 adjust(x);
             }
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -1448,7 +1440,6 @@ mod exit_gate {
 
     const GATE_LOCK: u32 = 0x52;
     const SCENE_HELPER: u32 = 0xcc18e;
-    const ALLOC_EFFCT: u32 = 0x2318;
     const PLAY_SCRIPT: u32 = 0x1324;
     /// Script de son joué en quittant la zone.
     const LEAVE_SCRIPT: u32 = 0xd6f0e;
@@ -1479,7 +1470,7 @@ mod exit_gate {
             }
             2 => watch(x),
             4 => leave(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -1575,9 +1566,7 @@ mod exit_gate {
         let v = x.u8(0x17) | bit;
         x.set8(0x17, v);
         if x.a5_u16(GATE_LOCK) == 0 {
-            x.call(ALLOC_EFFCT);
-            if x.c.sr & m68k::SR_C == 0 {
-                let effect = Obj(x.c.a[1]);
+            if let Some(effect) = x.alloc(&pools::EFFCT) {
                 effect.set_u8(x.b, 0, 1);
                 effect.set_u8(x.b, 2, EFFECT_TYPE);
                 effect.set_u8(x.b, 0x2f, 0);
@@ -1615,7 +1604,7 @@ mod exit_gate {
         } else {
             bonus_stage(x);
         }
-        x.call(sub::FREE_SET);
+        x.free(&pools::SET);
     }
 
     /// Zone bonus : retour au niveau 0x1c, quatre fois au plus, puis fin de partie.
@@ -1661,7 +1650,7 @@ mod rearguard {
                 watch(x);
             }
             2 => watch(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -1699,11 +1688,7 @@ mod rearguard {
         x.set8(0x8, COOLDOWN);
         let mut shot_x = FIRST_X;
         for i in (0..3u32).rev() {
-            x.call(sub::ALLOC_ESHL);
-            if x.c.sr & m68k::SR_C != 0 {
-                return remember_camera(x);
-            }
-            let shot = Obj(x.c.a[1]);
+            let Some(shot) = x.alloc(&pools::ESHL) else { return remember_camera(x) };
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, ESHL_TYPE);
             shot.set_u8(x.b, 0x2c, 0);
@@ -1745,7 +1730,7 @@ mod idle_hunter {
         match x.u8(0x4) {
             0 => init(x),
             2 => step(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -2075,7 +2060,7 @@ mod door_a {
             0 => init(x),
             2 => watch(x),
             4 => arrive(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -2316,7 +2301,7 @@ mod zone_end {
                 sub_state(x);
             }
             2 => sub_state(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -2406,7 +2391,7 @@ mod door_b {
             0 => init(x),
             2 => watch(x),
             4 => arrive(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -2582,7 +2567,7 @@ mod game_over {
                 countdown(x);
             }
             4 => countdown(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -2596,7 +2581,7 @@ mod game_over {
         x.set_a5_u8(0x48e, 0xd);
         x.set_a5_u8(0x48f, 1);
         call_on_list(x, MESSAGES);
-        x.call(sub::FREE_SET);
+        x.free(&pools::SET);
     }
 }
 
@@ -2631,7 +2616,7 @@ mod level_clock {
                 x.set16(0x1e, v);
             }
             2 => step(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -2741,7 +2726,7 @@ mod test_selector {
                 x.set8(0x2f, 0);
             }
             2 => step(x),
-            _ => x.call(sub::FREE_SET),
+            _ => x.free(&pools::SET),
         }
     }
 
@@ -3677,7 +3662,7 @@ mod dialog {
         x.set8(0x22, 0);
         let v = crate::mem::rd8(x.b, OPEN_COUNT).wrapping_sub(1);
         crate::mem::wr8(x.b, OPEN_COUNT, v);
-        x.call(sub::FREE_SET);
+        x.free(&pools::SET);
     }
 
     // --- dessin du cadre ----------------------------------------------------------------------

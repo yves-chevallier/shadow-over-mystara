@@ -41,7 +41,7 @@ const OMBRES: u8 = 0x35;
 pub mod caisse {
     use crate::families::cx::{handlers, sub, Cx};
     use crate::mem::A5;
-    use crate::objects::Obj;
+    use crate::objects::{pools, Obj};
 
     /// Sous-états `+5` de l'état actif.
     mod sous {
@@ -135,8 +135,6 @@ pub mod caisse {
         /// Par classe du porteur : table des décalages (X, Z) de la caisse portée, par pose.
         pub const PRISES: u32 = 0xda398;
         // sous-routines non réécrites, ou natives
-        pub const FREE_BOX: u32 = 0x2226;
-        pub const ALLOC_ITEM: u32 = 0x23d8;
         pub const TERRAIN: u32 = 0x24a8;
         pub const COLLISION_DECOR: u32 = 0x33fe4;
         pub const EFFET_INITIAL: u32 = 0xb6596;
@@ -164,7 +162,7 @@ pub mod caisse {
         match etat {
             0 => init(x),
             2 => actif(x),
-            4 | 6 => x.call(rom::FREE_BOX),
+            4 | 6 => x.free(&pools::BOX),
             _ => x.call(cible),
         }
     }
@@ -313,7 +311,7 @@ pub mod caisse {
     /// les vitesses `(vx, vy)`. `None` si le pool d'ITEM est plein.
     fn cree_butin(x: &mut Cx, butin: u8, vx: u16, vy: u16) -> Option<Obj> {
         x.c.d[0] = butin as u32;
-        let n = x.alloc(rom::ALLOC_ITEM)?;
+        let n = x.alloc(&pools::ITEM)?;
         x.c.a[3] = rom::BUTINS;
         let rang = 2 * butin as u32;
         x.c.d[0] = rang;
@@ -760,7 +758,7 @@ fn box_2(ctx: &mut Ctx) {
             ctx.reinsert();
         }
         etat::ACTIF => ctx.reinsert(),
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_BOX),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::BOX),
         _ => ctx.deleguer(cible),
     }
 }
@@ -913,7 +911,7 @@ fn barriere_gestionnaire(ctx: &mut Ctx) {
                 _ => ctx.deleguer(cible),
             }
         }
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_BOX),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::BOX),
         _ => ctx.deleguer(cible),
     }
 }
@@ -929,14 +927,13 @@ gestionnaire!(BOX_2, decor::ENTREE, "box_decor", box_2);
 /// 2) et prévient son SET. Variante 1 : glisse en hauteur (`+0x10`) et se recale sur le décor à chaque pas.
 /// Le joueur poussant est replacé contre le bloc (décalage par personnage et direction).
 pub mod pousse {
-    use crate::families::cx::{handlers, sub, Cx};
-    use crate::objects::Obj;
+    use crate::families::cx::{handlers, Cx};
+    use crate::objects::{pools, Obj};
 
     const ETATS: u32 = 0xda808;
     const INITS: u32 = 0xda826;
     const ACTIFS: u32 = 0xda8d0;
     const ANIMATIONS: u32 = 0x1bebc2;
-    const FREE_BOX: u32 = 0x2226;
     /// Collision avec le décor (0x33fe4) puis recalage de l'objet (0x35c0).
     const TERRAIN: u32 = 0x33fe4;
     const RECALE: u32 = 0x35c0;
@@ -1005,7 +1002,7 @@ pub mod pousse {
                 }
                 x.reinsert();
             }
-            _ => x.call(FREE_BOX),
+            _ => x.free(&pools::BOX),
         }
     }
 
@@ -1030,11 +1027,7 @@ pub mod pousse {
         x.set16(f::X_MAX, 0x290);
         x.set16(f::X_MIN, 0x1d8);
         x.anim_start(ANIMATIONS, 7);
-        x.call(sub::ALLOC_SET);
-        if x.c.cond(5) {
-            return;
-        }
-        let set = Obj(x.c.a[1]);
+        let Some(set) = x.alloc(&pools::SET) else { return };
         set.set_u8(x.b, 0x0, 1);
         set.set_u8(x.b, 0x2, 7);
         set.set_u8(x.b, 0x3, 0xc);

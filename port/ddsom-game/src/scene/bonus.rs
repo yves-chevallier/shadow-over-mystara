@@ -10,6 +10,7 @@ use super::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::{resume, Native};
+use crate::objects::{pools, Obj};
 
 /// Variables de l'écran de bonus (sous A5).
 mod v {
@@ -55,7 +56,6 @@ mod sub {
     pub const EFFECT: u32 = 0xb1a7a;
     /// Objet SET de type 5.
     pub const SET_5: u32 = 0xc9760;
-    pub const ALLOC_SET: u32 = 0x2348;
     pub const MUSIC: u32 = 0xe1114;
     pub const TILE_BLOCK: u32 = 0x26d4;
     pub const TILE_BLOCK_3: u32 = 0x2766;
@@ -317,9 +317,7 @@ fn objects(x: &mut Ctx) -> Flow {
 
 // Le titre du bonus (objet SET type 0, variante 69).
 resume!(BONUS_STARTED, at::STARTED, |x| {
-    x.call(sub::ALLOC_SET);
-    if x.c.sr & m68k::SR_C == 0 {
-        let o = x.c.a[1];
+    if let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) {
         for (off, v) in [(0, 1), (2, 0), (3, 69), (0x2f, 3)] {
             wr8(x.b, o + off, v);
         }

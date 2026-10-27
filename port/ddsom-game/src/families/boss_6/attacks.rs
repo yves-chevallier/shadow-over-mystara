@@ -10,6 +10,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 mod lib {
     pub const SOUND_SHAKE: u32 = 0x2860;
@@ -101,7 +102,7 @@ fn roar(x: &mut Cx) {
 
 /// Crée l'ESHL 0x2a lié au boss (variante `v`) ; faux si le pool est plein.
 fn make_shot(x: &mut Cx, v: u8) -> bool {
-    let Some(shot) = try_alloc(x, call::ALLOC_ESHL) else { return false };
+    let Some(shot) = x.alloc(&pools::ESHL) else { return false };
     x.set16(CHILD, shot.0 as u16);
     shot.set_u8(x.b, 0, 1);
     shot.set_u8(x.b, 2, 0x2a);

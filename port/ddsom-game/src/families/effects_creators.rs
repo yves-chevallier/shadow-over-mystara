@@ -8,17 +8,14 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
 use crate::mem::{prog16, prog32, rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::ops::{add, logique, sub};
 use crate::{call, regs, Native};
+use crate::objects::pools;
 
-/// Allocations : effet (EFFCT), tir ennemi (ESHL), décor (SET). A1 = emplacement, retenue = échec.
-const ALLOC_EFFECT: u32 = 0x2318;
-const ALLOC_ESHL: u32 = 0x22ea;
-const ALLOC_SET: u32 = 0x2348;
 /// Générateur pseudo-aléatoire (D0).
 const RNG: u32 = 0x19a88;
 
@@ -97,21 +94,20 @@ fn put8(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, off: u32, v: u8) {
 }
 
 /// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, routine: u32) -> Option<Obj> {
-    call(c, b, routine);
-    (c.sr & SR_C == 0).then(|| Obj(c.a[1]))
+fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {
+    pool.alloc_68k(c, b)
 }
 
 /// Alloue un objet et pose son activité et son type (`move.b #1,(A1)`, `move.b #type,(2,A1)`).
-fn spawn_in(c: &mut Cpu, b: &mut Cps2Bus, routine: u32, kind: u8) -> Option<Obj> {
-    let o = alloc(c, b, routine)?;
+fn spawn_in(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8) -> Option<Obj> {
+    let o = alloc(c, b, pool)?;
     o.set_u8(b, Obj::ACTIVE, 1);
     put8(c, b, o, Obj::KIND, kind);
     Some(o)
 }
 
 fn spawn(c: &mut Cpu, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
-    spawn_in(c, b, ALLOC_EFFECT, kind)
+    spawn_in(c, b, &pools::EFFCT, kind)
 }
 
 /// Copie les mots hauts de X, Z, Y du créateur.
@@ -269,7 +265,7 @@ fn drift(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xb66e4 : effet de type 53 ; l'activité est incrémentée (`addq.b #1,(A1)`), non posée.
 fn type_53(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, ALLOC_EFFECT) {
+    if let Some(o) = alloc(c, b, &pools::EFFCT) {
         bump_active(c, b, o);
         put8(c, b, o, Obj::KIND, kind::TYPE_53);
     }
@@ -283,7 +279,7 @@ fn bump_active(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
 
 /// 0xb6a5c : machine (type 55) liée au créateur par `+0x5c` ; activité incrémentée.
 fn launcher(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, ALLOC_EFFECT) {
+    if let Some(o) = alloc(c, b, &pools::EFFCT) {
         bump_active(c, b, o);
         o.set_u8(b, Obj::KIND, kind::LAUNCHER);
         link(c, b, o, 0x5c, c.a[0]);
@@ -292,7 +288,7 @@ fn launcher(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xb6c42 : éclat (type 56) posé à (0xc0, 0x50) de la caméra ; activité incrémentée.
 fn camera_shard(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, ALLOC_EFFECT) {
+    if let Some(o) = alloc(c, b, &pools::EFFCT) {
         bump_active(c, b, o);
         o.set_u8(b, Obj::KIND, kind::SHARDS);
         let (x, y) = (rd16(b, A5 + 0x506), rd16(b, A5 + 0x50a));
@@ -319,7 +315,7 @@ fn mirrored_pair(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xb6ba8 : effet de type 57 lié au créateur par `+0x50` : variante D0, réglage D1.
 fn type_57(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, ALLOC_EFFECT) {
+    if let Some(o) = alloc(c, b, &pools::EFFCT) {
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u16(b, 0x50, c.a[0] as u16);
         o.set_u8(b, Obj::KIND, kind::TYPE_57);
@@ -331,7 +327,7 @@ fn type_57(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xb68b0 : trois effets de type 54, variantes 0 (laissée telle quelle), 1 et 2.
 fn type_54_trio(c: &mut Cpu, b: &mut Cps2Bus) {
     for variant in 0..3u8 {
-        let Some(o) = alloc(c, b, ALLOC_EFFECT) else { return };
+        let Some(o) = alloc(c, b, &pools::EFFCT) else { return };
         bump_active(c, b, o);
         put8(c, b, o, Obj::KIND, kind::TYPE_54);
         if variant != 0 {
@@ -791,8 +787,8 @@ fn trails(c: &mut Cpu, b: &mut Cps2Bus) {
     set_low_byte(&mut c.d[4], living);
     c.a[4] = SEATS;
     loop {
-        call(c, b, ALLOC_EFFECT);
-        let o = Obj(c.a[1]);
+        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        let o = pools::EFFCT.alloc_unchecked_68k(c, b);
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, kind::TRAIL);
         o.set_u8(b, 0x2c, 0x20);
@@ -843,11 +839,7 @@ fn set_list(c: &mut Cpu, b: &mut Cps2Bus) {
         if (kind as i8) < 0 {
             return;
         }
-        call(c, b, ALLOC_SET);
-        if c.sr & SR_C != 0 {
-            return;
-        }
-        let o = Obj(c.a[1]);
+        let Some(o) = pools::SET.alloc_68k(c, b) else { return };
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, c.d[0] as u8);
         let setting = rd8(b, c.a[4]);
@@ -864,7 +856,7 @@ fn set_list(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xa836c : coup (ESHL 0x48, variante 0) de réglage D4, lié par `+0x5c`.
 fn eshl_slash(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = spawn_in(c, b, ALLOC_ESHL, kind::ESHL_SLASH) {
+    if let Some(o) = spawn_in(c, b, &pools::ESHL, kind::ESHL_SLASH) {
         o.set_u8(b, Obj::VARIANT, 0);
         o.set_u8(b, 0x2f, c.d[4] as u8);
         link(c, b, o, 0x5c, c.a[0]);
@@ -874,7 +866,7 @@ fn eshl_slash(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xa817c : colonne montante (ESHL 0x47) posée sur le créateur, 0x80 plus haut, juste devant ;
 /// rend D0 = 1.
 fn eshl_rise(c: &mut Cpu, b: &mut Cps2Bus) {
-    let Some(o) = spawn_in(c, b, ALLOC_ESHL, kind::ESHL_RISE) else { return };
+    let Some(o) = spawn_in(c, b, &pools::ESHL, kind::ESHL_RISE) else { return };
     let from = me(c);
     o.set_u8(b, Obj::VARIANT, 0);
     o.set_u8(b, 0x2f, 0);

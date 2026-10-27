@@ -24,6 +24,7 @@ use crate::mem::{rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::resume;
 use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::Native;
+use crate::objects::{pools, Obj};
 
 /// Variables de la RAM de travail (adresses absolues).
 mod var {
@@ -93,7 +94,6 @@ mod ext {
     pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const ALLOC_CURSOR: u32 = 0xae776;
     pub const ALLOC_PANEL: u32 = 0xaf346;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const TASK_CREATE: u32 = 0x9b6;
     pub const FADE_TASK: u32 = 0x1ced4;
     pub const FADE_TASK_B: u32 = 0x14ba;
@@ -688,11 +688,7 @@ fn step_8(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PLAYERS_PRESENT, count);
     let mut d4 = 0xeau8;
     for _ in 0..2 {
-        x.call(ext::ALLOC_SOBJ);
-        if x.c.sr & 1 != 0 {
-            break;
-        }
-        let o = x.c.a[1];
+        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, d4);

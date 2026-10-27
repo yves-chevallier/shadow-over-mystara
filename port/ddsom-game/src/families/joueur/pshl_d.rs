@@ -5,6 +5,7 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const TERRAIN_OF_OBJECT: u32 = 0x24a8;
@@ -33,7 +34,6 @@ mod chain {
     const LINKS: u32 = 0xff204c;
     const SPEEDS: u32 = 0x1c89b6;
     const ANIMS: u32 = 0x15cdb6;
-    const ALLOC_EFFCT: u32 = 0x2318;
     const ANGLE_TO_TARGET: u32 = 0x1376;
     const MOVE_TABLE_XY: u32 = 0x1cb4;
     const ACTIVE_CHECK: u32 = 0x1f0be;
@@ -89,8 +89,8 @@ mod chain {
         // quatre étincelles, triées par adresse puis chaînées
         let mut sparks = [0u16; 4];
         for s in sparks.iter_mut() {
-            x.call(ALLOC_EFFCT);
-            let spark = Obj(x.c.a[1]);
+            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            let spark = x.alloc_unchecked(&pools::EFFCT);
             *s = spark.0 as u16;
             spark.set_u8(x.b, 0, 1);
             spark.set_u8(x.b, 2, 0xc);
@@ -530,7 +530,7 @@ mod fireball {
                     x.call(ANIM_STEP);
                     if (x.u16(0xc) as i16) < 0 {
                         x.add8(0x4, 2);
-                        if let Some(o) = x.alloc(ALLOC_PSHL) {
+                        if let Some(o) = x.alloc(&pools::PSHL) {
                             o.set_u8(x.b, 0, 1);
                             o.set_u8(x.b, 2, 0x16);
                             o.set_u8(x.b, 3, 1);

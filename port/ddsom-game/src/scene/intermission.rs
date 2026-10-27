@@ -15,6 +15,7 @@ use m68k::Cpu;
 use super::{scratch, sub, var, Ctx};
 use crate::mem::{rts, wr32};
 use crate::Native;
+use crate::objects::pools;
 
 /// Variables temporaires des deux séquences.
 const TIMER: u32 = scratch(0x9a2a);
@@ -71,7 +72,7 @@ fn boss_intro(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.set_v8(BOSS_STATE, 8);
-                let boss = x.spawn(sub::ALLOC_BOSS, 9);
+                let boss = x.spawn(&pools::BOSS, 9);
                 x.store_obj(BOSS, boss);
             }
         }

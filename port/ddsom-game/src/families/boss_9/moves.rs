@@ -1,6 +1,7 @@
 //! Boss 9, état actif : entrée en scène (`+5` = 0), départ (2), passages et arrêts (4), attente (6).
 
 use super::*;
+use crate::objects::pools;
 
 // --- groupe 0 : entrée en scène --------------------------------------------------------------------
 
@@ -131,7 +132,7 @@ fn board(x: &mut Cx) {
         let slot = 5 - k as u8;
         x.c.d[5] = slot as u32;
         x.c.a[2] = x.o.0 + CREW + 2 * k;
-        let Some(m) = try_alloc(x, rom::ALLOC_ENEMY) else { return };
+        let Some(m) = x.alloc(&pools::ENEMY) else { return };
         let active = x.u8(0);
         m.set_u8(x.b, 0, active);
         m.set_u8(x.b, 0xbc, slot);
@@ -152,7 +153,7 @@ fn board(x: &mut Cx) {
 
 /// 0x8abc2 : panache de fumée (SET 2, variante 0xe), puis départ du premier passage.
 pub(super) fn start(x: &mut Cx) {
-    if let Some(s) = try_alloc(x, call::ALLOC_SET) {
+    if let Some(s) = x.alloc(&pools::SET) {
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 3, 0xe);
         s.set_u8(x.b, 2, 2);
@@ -181,7 +182,7 @@ pub(super) fn restart(x: &mut Cx) {
 pub(super) fn fight(x: &mut Cx) {
     if x.u8(SMOKE_DONE) == 0 && sub16(x, SMOKE_DELAY, 1).mi() {
         x.set8(SMOKE_DONE, 1);
-        if let Some(s) = try_alloc(x, call::ALLOC_SET) {
+        if let Some(s) = x.alloc(&pools::SET) {
             s.set_u8(x.b, 0, 1);
             s.set_u8(x.b, 3, 0x1c);
             s.set_u8(x.b, 2, 2);

@@ -14,6 +14,7 @@ use crate::mem::{rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
+use crate::objects::{pools, Obj};
 
 const BLOCK: u32 = 0xff_2b00;
 mod f {
@@ -69,8 +70,6 @@ mod ext {
     pub const TILE_BLOCK_2: u32 = 0x2766;
     pub const SOBJ_VARIANT: u32 = 0xddeaa;
     pub const SET_VARIANT: u32 = 0xce00a;
-    pub const ALLOC_SET: u32 = 0x2348;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const MESSAGE: u32 = 0xc8312;
     pub const SCORE_OBJECT: u32 = 0xb1a7a;
     pub const TASK_CREATE: u32 = 0x9b6;
@@ -331,11 +330,7 @@ fn s06_wait(x: &mut Ctx) -> Flow {
     s06_object(x)
 }
 fn s06_object(x: &mut Ctx) -> Flow {
-    x.call(ext::ALLOC_SET);
-    if !x.ok() {
-        return x.wait(1, S06_RETRY);
-    }
-    let o = x.c.a[1];
+    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, S06_RETRY) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 70);
@@ -639,11 +634,7 @@ fn s1c_wait(x: &mut Ctx) -> Flow {
 fn credits_objects_a(x: &mut Ctx) {
     let mut a2 = 0xfbe92;
     while rd16(x.b, a2) != 0xffff {
-        x.call(ext::ALLOC_SOBJ);
-        if !x.ok() {
-            return;
-        }
-        let o = x.c.a[1];
+        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return };
         wr8(x.b, o, 1);
         for (dst, size) in [(8u32, 2u32), (0xc, 2), (0x10, 2), (0x2c, 1), (2, 1), (3, 1), (0x2f, 1)] {
             if size == 2 {

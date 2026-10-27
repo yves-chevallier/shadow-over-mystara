@@ -74,6 +74,7 @@ pub(self) mod g {
     pub const HITS: u32 = 0x84;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeux d'animations.
 pub(self) const SET_BODY: u32 = 0x1836ec;
@@ -96,7 +97,6 @@ pub(self) mod call {
     pub const MOVE_XYZ: u32 = 0x1d90;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const SPAWN_RING: u32 = 0x57c8c;
     pub const ASK_TARGET: u32 = 0xe76c;
     pub const RANDOM_TURN: u32 = 0x10574;
@@ -116,7 +116,7 @@ pub fn run(x: &mut Cx) {
             st::INIT => init(x),
             st::ACTIVE => active(x),
             st::HIT => hit::run(x),
-            _ => x.call(call::FREE_BOSS),
+            _ => x.free(&pools::BOSS),
         }
         if x.u8(INVULNERABLE) != 0 {
             x.set8(0x38, 0);
@@ -223,7 +223,7 @@ fn wait_for_players(x: &mut Cx) {
 /// Un effet (EFFCT) lié au boss (`+0x42`) : octet actif, type, variante, orientation du boss.
 /// `retry` : insiste tant que le pool est plein.
 pub(self) fn effect(x: &mut Cx, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
-    let e = if retry { alloc_retry(x, rom::ALLOC_EFFCT)? } else { try_alloc(x, rom::ALLOC_EFFCT)? };
+    let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, kind);
     if let Some(v) = variant {

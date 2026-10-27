@@ -7,13 +7,13 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
 use crate::mem::{prog16, prog8, rd16, rts, wr16, wr32};
 use crate::objects::Obj;
 use crate::{call, regs, Native};
+use crate::objects::pools;
 
-const ALLOC_ESHL: u32 = 0x22ea;
 const RNG: u32 = 0x19a88;
 
 mod f {
@@ -38,11 +38,7 @@ mod f {
 
 /// Alloue un ESHL de type `kind` (actif) ; `None` (retenue levée) si le pool est plein.
 fn spawn(c: &mut Cpu, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
-    call(c, b, ALLOC_ESHL);
-    if c.sr & SR_C != 0 {
-        return None;
-    }
-    let o = Obj(c.a[1]);
+    let o = pools::ESHL.alloc_68k(c, b)?;
     o.set_u8(b, f::ACTIVE, 1);
     o.set_u8(b, f::KIND, kind);
     Some(o)
@@ -375,8 +371,8 @@ fn twelve_5(c: &mut Cpu, b: &mut Cps2Bus) {
     set_low_byte(&mut c.d[1], 11);
     c.d[2] = 0;
     loop {
-        call(c, b, ALLOC_ESHL);
-        let o = Obj(c.a[1]);
+        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        let o = pools::ESHL.alloc_unchecked_68k(c, b);
         o.set_u8(b, f::ACTIVE, 1);
         o.set_u8(b, f::KIND, 5);
         o.set_u8(b, f::INDEX, c.d[2] as u8);

@@ -3,6 +3,7 @@
 //! 10 reprise du combat.
 
 use super::*;
+use crate::objects::pools;
 
 /// Réactions communes aux coups, indexées par le code `+0x49`.
 const REACTIONS: u32 = 0x6518a;
@@ -243,7 +244,7 @@ fn dying(x: &mut Cx) {
         }
         14 => {
             if x.anim_step() {
-                x.call(rom::FREE_ENEMY);
+                x.free(&pools::ENEMY);
             }
         }
         _ => {}
@@ -287,7 +288,7 @@ fn fall(x: &mut Cx) {
             x.call(sub::MOVE_X);
             if lib::outside(x, -0x30, 0x1b0) {
                 x.call(call::REMOVE);
-                x.call(rom::FREE_ENEMY);
+                x.free(&pools::ENEMY);
             }
         }
         _ => {}

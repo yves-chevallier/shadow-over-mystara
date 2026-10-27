@@ -54,31 +54,40 @@ pub struct Pool {
     /// Les objets du pool figurent dans les listes triées : la libération les en retire.
     pub listed: bool,
     pub queue: Option<&'static Queue>,
+    /// Routines d'allocation et de libération de l'original (adresses d'entrée de leurs natives).
+    pub alloc_routine: u32,
+    pub free_routine: u32,
 }
 
 /// Tirs du joueur.
-pub const PSHL: Pool = Pool { name: "PSHL", class: 6, first: 0x10de, stride: 0x60, slots: 18, free: 0x7e5e, listed: true, queue: Some(&QUEUE_PSHL) };
+pub const PSHL: Pool = Pool { name: "PSHL", class: 6, first: 0x10de, stride: 0x60, slots: 18, free: 0x7e5e, listed: true, queue: Some(&QUEUE_PSHL), alloc_routine: 0x225e, free_routine: 0x21d8 };
 /// Effets liés au joueur.
-pub const PEFF: Pool = Pool { name: "PEFF", class: 0x12, first: 0x179e, stride: 0x60, slots: 48, free: 0x7e60, listed: true, queue: None };
+pub const PEFF: Pool = Pool { name: "PEFF", class: 0x12, first: 0x179e, stride: 0x60, slots: 48, free: 0x7e60, listed: true, queue: None, alloc_routine: 0x228e, free_routine: 0x21e6 };
 /// Ennemis.
-pub const ENEMY: Pool = Pool { name: "ENEMY", class: 2, first: 0x299e, stride: 0xc0, slots: 22, free: 0x7e62, listed: true, queue: Some(&QUEUE_ENEMY_BOSS) };
+pub const ENEMY: Pool = Pool { name: "ENEMY", class: 2, first: 0x299e, stride: 0xc0, slots: 22, free: 0x7e62, listed: true, queue: Some(&QUEUE_ENEMY_BOSS), alloc_routine: 0x22bc, free_routine: 0x21f4 };
 /// Boss (file de collisions partagée avec les ennemis).
-pub const BOSS: Pool = Pool { name: "BOSS", class: 4, first: 0x3a1e, stride: 0xc0, slots: 3, free: 0x7e6c, listed: true, queue: Some(&QUEUE_ENEMY_BOSS) };
+pub const BOSS: Pool = Pool { name: "BOSS", class: 4, first: 0x3a1e, stride: 0xc0, slots: 3, free: 0x7e6c, listed: true, queue: Some(&QUEUE_ENEMY_BOSS), alloc_routine: 0x23a8, free_routine: 0x2234 };
 /// Tirs et attaques ennemis.
-pub const ESHL: Pool = Pool { name: "ESHL", class: 8, first: 0x3c5e, stride: 0x60, slots: 38, free: 0x7e64, listed: true, queue: Some(&QUEUE_ESHL) };
+pub const ESHL: Pool = Pool { name: "ESHL", class: 8, first: 0x3c5e, stride: 0x60, slots: 38, free: 0x7e64, listed: true, queue: Some(&QUEUE_ESHL), alloc_routine: 0x22ea, free_routine: 0x2202 };
 /// Décors et mises en place (hors listes triées).
-pub const SET: Pool = Pool { name: "SET", class: 0x10, first: 0x4a9e, stride: 0x50, slots: 32, free: 0x7e66, listed: false, queue: None };
+pub const SET: Pool = Pool { name: "SET", class: 0x10, first: 0x4a9e, stride: 0x50, slots: 32, free: 0x7e66, listed: false, queue: None, alloc_routine: 0x2348, free_routine: 0x2210 };
 /// Effets visuels.
-pub const EFFCT: Pool = Pool { name: "EFFCT", class: 0xe, first: 0x549e, stride: 0x60, slots: 38, free: 0x7e68, listed: true, queue: None };
+pub const EFFCT: Pool = Pool { name: "EFFCT", class: 0xe, first: 0x549e, stride: 0x60, slots: 38, free: 0x7e68, listed: true, queue: None, alloc_routine: 0x2318, free_routine: 0x2218 };
 /// Objets ramassables.
-pub const ITEM: Pool = Pool { name: "ITEM", class: 0xc, first: 0x62de, stride: 0x60, slots: 32, free: 0x7e6e, listed: true, queue: Some(&QUEUE_ITEM) };
+pub const ITEM: Pool = Pool { name: "ITEM", class: 0xc, first: 0x62de, stride: 0x60, slots: 32, free: 0x7e6e, listed: true, queue: Some(&QUEUE_ITEM), alloc_routine: 0x23d8, free_routine: 0x2242 };
 /// Caisses et coffres.
-pub const BOX: Pool = Pool { name: "BOX", class: 0xa, first: 0x6ede, stride: 0x80, slots: 21, free: 0x7e6a, listed: true, queue: Some(&QUEUE_BOX) };
+pub const BOX: Pool = Pool { name: "BOX", class: 0xa, first: 0x6ede, stride: 0x80, slots: 21, free: 0x7e6a, listed: true, queue: Some(&QUEUE_BOX), alloc_routine: 0x2378, free_routine: 0x2226 };
 /// Objets système et interface.
-pub const SOBJ: Pool = Pool { name: "SOBJ", class: 0x14, first: 0x795e, stride: 0x50, slots: 16, free: 0x7e70, listed: true, queue: None };
+pub const SOBJ: Pool = Pool { name: "SOBJ", class: 0x14, first: 0x795e, stride: 0x50, slots: 16, free: 0x7e70, listed: true, queue: None, alloc_routine: 0x2408, free_routine: 0x2250 };
 
 /// Les pools dans l'ordre de leur initialisation (`0x2062`).
 pub const POOLS: [&Pool; 10] = [&PSHL, &PEFF, &ENEMY, &BOSS, &ESHL, &SET, &EFFCT, &BOX, &ITEM, &SOBJ];
+
+/// Pool dont `routine` est la routine d'allocation : certaines tables de la ROM désignent le pool d'un objet à créer
+/// par l'adresse de sa routine d'allocation.
+pub fn pool_of_alloc_routine(routine: u32) -> &'static Pool {
+    POOLS.into_iter().find(|p| p.alloc_routine == routine).unwrap_or_else(|| panic!("{routine:#x} : pas une routine d'allocation"))
+}
 
 /// Pool correspondant à un code de classe (`Obj::CLASS`).
 pub fn pool_of_class(class: u8) -> Option<&'static Pool> {
@@ -348,20 +357,20 @@ fn init_cost(pools: &[&Pool], entry: u32, b: &mut Cps2Bus) -> u64 {
 }
 
 macro_rules! pool_natives {
-    ($pool:ident, $alloc:ident, $alloc_entry:expr, $alloc_name:expr, $free:ident, $free_entry:expr, $free_name:expr) => {
+    ($pool:ident, $alloc:ident, $alloc_name:expr, $free:ident, $free_name:expr) => {
         pub const $alloc: Native = Native {
-            entry: $alloc_entry,
+            entry: $pool.alloc_routine,
             name: $alloc_name,
-            cost: |_, b| alloc_cost(&$pool, $alloc_entry, b),
+            cost: |_, b| alloc_cost(&$pool, $pool.alloc_routine, b),
             run: |c, b| alloc_native(&$pool, c, b),
             touches_sound: false,
             outputs: regs::a(1) | regs::d(6) | regs::CCR,
             exact_cost: true,
         };
         pub const $free: Native = Native {
-            entry: $free_entry,
+            entry: $pool.free_routine,
             name: $free_name,
-            cost: |c, b| free_cost(&$pool, $free_entry, c, b),
+            cost: |c, b| free_cost(&$pool, $pool.free_routine, c, b),
             run: |c, b| free_native(&$pool, c, b),
             touches_sound: false,
             outputs: regs::d(0) | regs::d(1) | regs::a(0) | regs::a(4) | regs::CCR,
@@ -370,16 +379,16 @@ macro_rules! pool_natives {
     };
 }
 
-pool_natives!(PSHL, ALLOC_PSHL, 0x225e, "pool_alloc_pshl", FREE_PSHL, 0x21d8, "pool_free_pshl");
-pool_natives!(PEFF, ALLOC_PEFF, 0x228e, "pool_alloc_peff", FREE_PEFF, 0x21e6, "pool_free_peff");
-pool_natives!(ENEMY, ALLOC_ENEMY, 0x22bc, "pool_alloc_enemy", FREE_ENEMY, 0x21f4, "pool_free_enemy");
-pool_natives!(ESHL, ALLOC_ESHL, 0x22ea, "pool_alloc_eshl", FREE_ESHL, 0x2202, "pool_free_eshl");
-pool_natives!(EFFCT, ALLOC_EFFCT, 0x2318, "pool_alloc_effct", FREE_EFFCT, 0x2218, "pool_free_effct");
-pool_natives!(SET, ALLOC_SET, 0x2348, "pool_alloc_set", FREE_SET, 0x2210, "pool_free_set");
-pool_natives!(BOX, ALLOC_BOX, 0x2378, "pool_alloc_box", FREE_BOX, 0x2226, "pool_free_box");
-pool_natives!(BOSS, ALLOC_BOSS, 0x23a8, "pool_alloc_boss", FREE_BOSS, 0x2234, "pool_free_boss");
-pool_natives!(ITEM, ALLOC_ITEM, 0x23d8, "pool_alloc_item", FREE_ITEM, 0x2242, "pool_free_item");
-pool_natives!(SOBJ, ALLOC_SOBJ, 0x2408, "pool_alloc_sobj", FREE_SOBJ, 0x2250, "pool_free_sobj");
+pool_natives!(PSHL, ALLOC_PSHL, "pool_alloc_pshl", FREE_PSHL, "pool_free_pshl");
+pool_natives!(PEFF, ALLOC_PEFF, "pool_alloc_peff", FREE_PEFF, "pool_free_peff");
+pool_natives!(ENEMY, ALLOC_ENEMY, "pool_alloc_enemy", FREE_ENEMY, "pool_free_enemy");
+pool_natives!(ESHL, ALLOC_ESHL, "pool_alloc_eshl", FREE_ESHL, "pool_free_eshl");
+pool_natives!(EFFCT, ALLOC_EFFCT, "pool_alloc_effct", FREE_EFFCT, "pool_free_effct");
+pool_natives!(SET, ALLOC_SET, "pool_alloc_set", FREE_SET, "pool_free_set");
+pool_natives!(BOX, ALLOC_BOX, "pool_alloc_box", FREE_BOX, "pool_free_box");
+pool_natives!(BOSS, ALLOC_BOSS, "pool_alloc_boss", FREE_BOSS, "pool_free_boss");
+pool_natives!(ITEM, ALLOC_ITEM, "pool_alloc_item", FREE_ITEM, "pool_free_item");
+pool_natives!(SOBJ, ALLOC_SOBJ, "pool_alloc_sobj", FREE_SOBJ, "pool_free_sobj");
 
 macro_rules! init_native {
     ($const:ident, $entry:expr, $name:expr, $pools:expr) => {

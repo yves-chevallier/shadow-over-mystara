@@ -4,6 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd32, wr32};
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 /// Fenêtre de palette de la RAM graphique recopiée par les effets (8 longs).
@@ -126,7 +127,7 @@ mod meteors {
             return;
         }
         for _ in 0..2 {
-            let Some(o) = x.alloc(ALLOC_PEFF) else { return };
+            let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, KIND);
             o.set_u16(x.b, 0x5c, x.o.0 as u16);

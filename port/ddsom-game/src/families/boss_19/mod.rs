@@ -60,6 +60,7 @@ pub(self) mod g {
     pub const PUSHED: u32 = 0xb2;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const TYPE_GREEN: u8 = 0xe;
 pub(self) const TYPE_BLACK: u8 = 0x13;
@@ -80,7 +81,6 @@ pub(self) mod call {
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_Z: u32 = 0x1dbc;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const ANIM_START: u32 = 0x1a32;
     pub const ANIM_STEP: u32 = 0x1a56;
     pub const ASK_TARGET: u32 = 0xe76c;
@@ -99,7 +99,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
 }
 

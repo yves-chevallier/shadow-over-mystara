@@ -3,6 +3,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 
@@ -215,7 +216,6 @@ mod ray {
 
     const ANIMS: u32 = 0x1b5db2;
     const SHOT_COUNTS: u32 = 0x4b75a;
-    const ALLOC_PSHL: u32 = 0x225e;
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
@@ -285,7 +285,7 @@ mod ray {
         x.c.d[4] = remaining as u32;
         let mut created = 0u8;
         loop {
-            let Some(shot) = x.alloc(ALLOC_PSHL) else { break };
+            let Some(shot) = x.alloc(&pools::PSHL) else { break };
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 6);
             shot.set_u16(x.b, f::OWNER, owner.0 as u16);

@@ -4,6 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 
@@ -85,7 +86,7 @@ mod ice {
                 x.call(SPEED_SELECT);
                 x.anim(ANIMS, 0);
                 // un halo (variante 1) suit l'éclat
-                if let Some(o) = x.alloc(ALLOC_PEFF) {
+                if let Some(o) = x.alloc(&pools::PEFF) {
                     o.set_u8(x.b, 0, 1);
                     o.set_u8(x.b, 2, 0xc);
                     o.set_u8(x.b, 3, 1);
@@ -243,7 +244,7 @@ mod ice {
         x.c.d[0] = x.c.d[0] & !0xff | (d0 & mask) as u32;
         if d0 & mask == 0 {
             // flocon (variante 3), sans lien
-            if let Some(o) = x.alloc(ALLOC_PEFF) {
+            if let Some(o) = x.alloc(&pools::PEFF) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, 0xc);
                 o.set_u8(x.b, 3, 3);

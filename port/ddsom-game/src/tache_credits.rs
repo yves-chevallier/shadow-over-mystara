@@ -25,6 +25,7 @@ use crate::resume;
 use crate::scene::Ctx;
 use crate::taches::table::{garder, reprendre, Contenu};
 use crate::Native;
+use crate::objects::{pools, Obj};
 
 /// Sous-routines d'origine.
 mod ext {
@@ -42,7 +43,6 @@ mod ext {
     pub const PALETTE_BACK: u32 = 0x1a67e;
     pub const PALETTE_FRONT: u32 = 0x1a8b2;
     pub const PALETTE_RESET: u32 = 0x1a296;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const SPRITES: u32 = 0x1de96;
     pub const START_BUTTONS: u32 = 0x141e0;
     pub const LOCK_COUNTERS: u32 = 0x14290;
@@ -288,8 +288,8 @@ resume!(R_AFTER_INIT_CLEAR, at::AFTER_INIT_CLEAR, |x| {
     x.call(ext::PLAYERS_PANELS);
     // cinq objets système : (variante, X, Z)
     for (variant, px, pz) in [(0xe7, 0x70, 0xd0), (0xe8, 0x70, 0xd0), (0xe4, 0x20, 0xb0), (0xe5, 0x00, 0x70), (0xe6, 0x13c, 0x60)] {
-        x.call(ext::ALLOC_SOBJ);
-        let o = x.c.a[1];
+        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        let Obj(o) = pools::SOBJ.alloc_unchecked_68k(x.c, x.b);
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, variant);

@@ -13,6 +13,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -54,7 +55,7 @@ fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
 
 /// Poussière : un EFFCT 0x32 de variante `v` lié au boss, sans insister (0x2318).
 fn puff(x: &mut Cx, v: u8) {
-    if let Some(e) = try_alloc(x, rom::ALLOC_EFFCT) {
+    if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x32);
         e.set_u8(x.b, 3, v);
@@ -287,7 +288,7 @@ fn throw(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set8(INVULNERABLE, 0);
             x.set16(TIMER, 0x14);
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return throw_end(x) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return throw_end(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x20);
@@ -364,7 +365,7 @@ fn breath(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
             x.set8(KEY, 0);
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return breath_end(x) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return breath_end(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x21);
@@ -504,7 +505,7 @@ fn final_roar(x: &mut Cx) {
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0x3c);
-            if let Some(e) = try_alloc(x, rom::ALLOC_EFFCT) {
+            if let Some(e) = x.alloc(&pools::EFFCT) {
                 e.set_u8(x.b, 0, 1);
                 e.set_u8(x.b, 2, 0x25);
                 e.set_u16(x.b, 0x42, x.o.0 as u16);

@@ -3,6 +3,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const SPEED_SELECT: u32 = 0x1b64;
@@ -174,7 +175,7 @@ mod prayer {
             }
             if x.u16(0x5c) & 7 == 0 {
                 for rank in (0..5u32).rev() {
-                    let Some(o) = x.alloc(ALLOC_PEFF) else { break };
+                    let Some(o) = x.alloc(&pools::PEFF) else { break };
                     o.set_u8(x.b, 0, 1);
                     o.set_u8(x.b, 2, KIND);
                     o.set_u8(x.b, 3, 1);

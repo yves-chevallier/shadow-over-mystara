@@ -14,6 +14,7 @@ use super::Ctx;
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::{resume, Native};
+use crate::objects::{pools, Obj};
 
 /// Bloc de la boutique.
 pub const BLOCK: u32 = A5 - 0x5560;
@@ -62,8 +63,6 @@ mod sub {
     pub const WAIT_ONE: u32 = 0xb64;
     pub const TASK_CREATE: u32 = 0x9b6;
     pub const MESSAGE: u32 = 0xc8312;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
-    pub const ALLOC_EFFCT: u32 = 0x2318;
     /// Chemin d'erreur de l'original (`tst.w 1(A5)` : erreur d'adresse) quand un pool est plein.
     pub const FULL: u32 = 0xf7dfa;
 }
@@ -177,11 +176,7 @@ resume!(SHOP_OPEN_FADED, at::OPEN_FADED, |x| {
     x.set_v8(0x3d, 0);
     x.call(0xca8);
     crate::hud::forget_displayed(x.b);
-    x.call(sub::ALLOC_SOBJ);
-    if x.c.sr & m68k::SR_C != 0 {
-        return x.jump_to(sub::FULL);
-    }
-    let o = x.c.a[1];
+    let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 13);
     for k in 0..4u32 {
@@ -192,11 +187,7 @@ resume!(SHOP_OPEN_FADED, at::OPEN_FADED, |x| {
             continue;
         }
         x.c.a[2] = p;
-        x.call(sub::ALLOC_EFFCT);
-        if x.c.sr & m68k::SR_C != 0 {
-            return x.jump_to(sub::FULL);
-        }
-        let e = x.c.a[1];
+        let Some(Obj(e)) = pools::EFFCT.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
         wr8(x.b, e, 1);
         wr8(x.b, e + 2, 20);
         let (variant, character) = (rd8(x.b, p + 3), rd8(x.b, p + 2));

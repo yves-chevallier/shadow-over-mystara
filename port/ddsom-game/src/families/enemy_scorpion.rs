@@ -48,6 +48,7 @@ mod g {
     pub const EXIT_TIMER: u32 = 0xa8;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Tables de la ROM (le suffixe dit l'espace de lecture : opcodes pour les `(table,PC,Dn)`, données sinon).
 const SPAWN_LISTS: u32 = 0x669d6;
@@ -77,7 +78,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit(x),
-        st::DEAD => x.call(rom::FREE_ENEMY),
+        st::DEAD => x.free(&pools::ENEMY),
         _ => {}
     }
 }

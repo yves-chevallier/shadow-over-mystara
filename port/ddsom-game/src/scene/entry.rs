@@ -19,6 +19,7 @@ use crate::game;
 use crate::mem::{rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::Native;
+use crate::objects::pools;
 
 /// Commandes son appelées par les séquences (wrappers de `sound_table.rs`).
 mod sfx {
@@ -394,7 +395,7 @@ fn stage_1(x: &mut Ctx) {
                 x.set_v8(var::PLAYERS_FROZEN, 0);
             } else if x.rd16(TIMER) == 0x50 {
                 for (px, py) in [(0x180, 0x210), (0x230, 0x220), (0x2d0, 0x200)] {
-                    let o = x.spawn(sub::ALLOC_ENEMY, 0x14);
+                    let o = x.spawn(&pools::ENEMY, 0x14);
                     o.set_u8(x.b, Obj::ACTIVE, 2);
                     o.set_u8(x.b, Obj::VARIANT, 1);
                     o.set_u16(x.b, Obj::X, px);
@@ -481,14 +482,14 @@ fn boss_cave(x: &mut Ctx) {
             if scene != 9 {
                 x.call(sub::TITLE_CARD);
             }
-            let effect = x.spawn(sub::ALLOC_EFFCT, 13);
+            let effect = x.spawn(&pools::EFFCT, 13);
             let camera_x = x.v16(0x506);
             let camera_y = x.v16(0x50a);
             effect.set_u16(x.b, Obj::X, camera_x.wrapping_sub(0x100));
             effect.set_u16(x.b, Obj::Y, camera_y.wrapping_add(0x50));
             x.set_v16(0x46, effect.0 as u16);
-            x.spawn(sub::ALLOC_BOSS, 13);
-            let set = x.spawn(sub::ALLOC_SET, 14);
+            x.spawn(&pools::BOSS, 13);
+            let set = x.spawn(&pools::SET, 14);
             if scene == 9 {
                 set.set_u8(x.b, Obj::VARIANT, 1);
             }
@@ -515,7 +516,7 @@ fn scene_8(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0x100);
             x.fade_in();
-            let effect = x.spawn(sub::ALLOC_EFFCT, 0x22);
+            let effect = x.spawn(&pools::EFFCT, 0x22);
             let camera_x = x.v16(0x506);
             let camera_y = x.v16(0x50a);
             effect.set_u16(x.b, Obj::X, camera_x.wrapping_sub(0x60));
@@ -545,9 +546,9 @@ fn scene_10(x: &mut Ctx) {
             x.lock();
             x.wr16(TIMER, 0xc0);
             x.fade_in();
-            let effect = x.spawn(sub::ALLOC_EFFCT, 0x13);
+            let effect = x.spawn(&pools::EFFCT, 0x13);
             x.set_v16(0x46, effect.0 as u16);
-            let set = x.spawn(sub::ALLOC_SET, 14);
+            let set = x.spawn(&pools::SET, 14);
             set.set_u8(x.b, Obj::VARIANT, 1);
             x.call(sfx::SCENE_MUSIC);
         }
@@ -605,7 +606,7 @@ fn scene_11(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.wr16(TIMER, 0xe0);
-                let o = x.spawn(sub::ALLOC_ENEMY, 0x15);
+                let o = x.spawn(&pools::ENEMY, 0x15);
                 o.set_u8(x.b, Obj::VARIANT, 8);
                 o.set_u16(x.b, 0x42, 0x401);
                 x.store_obj(ENEMY, o);
@@ -735,7 +736,7 @@ fn scene_24(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.wr16(TIMER, 0xa0);
-                let boss = x.spawn(sub::ALLOC_BOSS, 6);
+                let boss = x.spawn(&pools::BOSS, 6);
                 x.store_obj(BOSS, boss);
             }
         }
@@ -879,7 +880,7 @@ fn scene_32(x: &mut Ctx) {
         2 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.spawn(sub::ALLOC_BOSS, 0x13);
+                x.spawn(&pools::BOSS, 0x13);
             }
         }
         4 => {} // le boss d'ouverture passe lui-même à la sous-étape 6
@@ -1087,7 +1088,7 @@ fn boss_gate(x: &mut Ctx, prepare: u32, tail: u32, spawn_at: u16, boss: u8, wait
                 x.end_scene();
                 x.call(0x1abe0);
             } else if x.rd16(TIMER) == spawn_at {
-                x.spawn(sub::ALLOC_BOSS, boss);
+                x.spawn(&pools::BOSS, boss);
             }
         }
         _ => {}
@@ -1112,7 +1113,7 @@ fn scene_44(x: &mut Ctx) {
         }
         2 => {
             x.next_sub();
-            let boss = x.spawn(sub::ALLOC_BOSS, 0x11);
+            let boss = x.spawn(&pools::BOSS, 0x11);
             boss.set_u8(x.b, Obj::VARIANT, 1);
         }
         4 => {}
@@ -1171,7 +1172,7 @@ fn scene_54(x: &mut Ctx) {
             x.call(sub::TITLE_CARD);
             if x.v8(0x66) == 0 {
                 x.set_sub(4);
-                let boss = x.spawn(sub::ALLOC_BOSS, 0x11);
+                let boss = x.spawn(&pools::BOSS, 0x11);
                 boss.set_u8(x.b, Obj::VARIANT, 2);
             }
             x.call(sfx::SCENE_MUSIC);
@@ -1205,7 +1206,7 @@ fn scene_58(x: &mut Ctx) {
         0 => {
             begin(x);
             x.fade_in();
-            x.spawn(sub::ALLOC_BOSS, 5);
+            x.spawn(&pools::BOSS, 5);
             x.call(sub::TITLE_CARD);
             x.call(sfx::SCENE_MUSIC);
         }
@@ -1245,7 +1246,7 @@ fn scene_64(x: &mut Ctx) {
         0 => {
             begin(x);
             x.fade_in();
-            x.spawn(sub::ALLOC_EFFCT, 75);
+            x.spawn(&pools::EFFCT, 75);
             x.call(sub::TITLE_CARD);
             x.call(sfx::SCENE_MUSIC);
         }
@@ -1315,7 +1316,7 @@ fn scene_66(x: &mut Ctx) {
                 x.wr16(scratch(0x9a60), 0);
                 x.lock();
                 x.fade_in_stepped();
-                x.spawn(sub::ALLOC_BOSS, 10);
+                x.spawn(&pools::BOSS, 10);
             }
         }
         2 => {
@@ -1376,7 +1377,7 @@ fn final_effects(x: &mut Ctx) {
     x.lock();
     x.fade_in_stepped();
     for variant in 0..4 {
-        let effect = x.spawn(sub::ALLOC_EFFCT, 0x50);
+        let effect = x.spawn(&pools::EFFCT, 0x50);
         effect.set_u8(x.b, Obj::VARIANT, variant);
     }
     x.call(sfx::SCENE_MUSIC);
@@ -1392,7 +1393,7 @@ fn scene_105(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0x80);
             x.fade_in();
-            let effect = x.spawn(sub::ALLOC_EFFCT, 0x24);
+            let effect = x.spawn(&pools::EFFCT, 0x24);
             effect.set_u8(x.b, Obj::VARIANT, 2);
             x.call(sfx::SCENE_MUSIC);
         }
@@ -1414,7 +1415,7 @@ fn scene_105(x: &mut Ctx) {
                 } else {
                     x.next_sub();
                     x.message(87, MESSAGE);
-                    let effect = x.spawn(sub::ALLOC_EFFCT, 0x50);
+                    let effect = x.spawn(&pools::EFFCT, 0x50);
                     effect.set_u8(x.b, Obj::VARIANT, 6);
                 }
             }

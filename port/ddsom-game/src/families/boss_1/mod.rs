@@ -70,6 +70,7 @@ pub(self) mod g {
     pub const MARK_Z: u32 = 0xbe;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeux d'animations : corps, attaques, coups reçus.
 pub(self) const SET_BODY: u32 = 0x172794;
@@ -82,9 +83,7 @@ pub(self) mod call {
     pub const MOVE_XYZ: u32 = 0x1d90;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const ANGLE_TO: u32 = 0x137e;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const SOUND_EVENT: u32 = 0x2824;
-    pub const ALLOC_EFFCT: u32 = 0x2318;
     pub const ASK_RAND_TIMER: u32 = 0x79f6;
     pub const PLAYERS_ALIVE: u32 = 0x10474;
     pub const AI_GESTURE: u32 = 0x1047a;
@@ -191,7 +190,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
     if x.u8(INVULNERABLE) != 0 {
         x.set8(0x38, 0);
@@ -547,7 +546,7 @@ pub(self) fn puff(x: &mut Cx, n: u8) {
         return;
     }
     x.set8(PUFFS, 0);
-    let Some(e) = try_alloc(x, call::ALLOC_EFFCT) else { return };
+    let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, 0x32);
     e.set_u8(x.b, 3, 4);
@@ -558,7 +557,7 @@ pub(self) fn puff(x: &mut Cx, n: u8) {
 
 /// 0x7c542 : crée le double (ENEMY 0x1a) du bond en ciseaux, lié au boss par `+0xb0`.
 pub(self) fn spawn_double(x: &mut Cx) {
-    let Some(d) = try_alloc(x, rom::ALLOC_ENEMY) else {
+    let Some(d) = x.alloc(&pools::ENEMY) else {
         x.set16(DOUBLE, 0);
         return;
     };

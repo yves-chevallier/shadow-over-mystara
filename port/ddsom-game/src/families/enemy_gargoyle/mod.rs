@@ -63,6 +63,7 @@ pub(self) mod g {
     pub const GOAL_DEPTH: u32 = 0xbe;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const SET_FLY: u32 = 0x162ebc;
 pub(self) const SET_STRIKE: u32 = 0x162eee;
@@ -87,7 +88,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        st::DEAD => x.call(rom::FREE_ENEMY),
+        st::DEAD => x.free(&pools::ENEMY),
         _ => {}
     }
     if x.u8(INVULNERABLE) != 0 {

@@ -4,6 +4,7 @@
 //! Les barèmes sont des tables de la ROM (lues à l'exécution) ; seules les formules sont ici.
 
 use super::*;
+use crate::objects::pools;
 
 /// Tables de barème de la ROM programme. Les tables lues par adressage relatif au PC de l'original
 /// sont dans l'espace programme (`pc8`/`pc16`), les autres en lecture ordinaire.
@@ -324,11 +325,8 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     w.a2 = e.0;
     w.c.a[1] = e.0;
     w.c.a[5] = A5;
-    call(w.c, w.b, 0x23d8);
-    if w.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let item = Obj(w.c.a[1] & 0xff_ffff);
+    let Some(item) = pools::ITEM.alloc_68k(w.c, w.b) else { return };
+    let item = Obj(item.0);
     w.set8(item, f::ACTIVE, 1);
     let (kind, var) = (rd8(w.b, entry), rd8(w.b, entry + 1));
     w.set8(item, f::KIND, kind);

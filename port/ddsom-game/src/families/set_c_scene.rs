@@ -22,11 +22,11 @@
 //! type, `+0xd` : variante, `+0xe` : `+0x2f`, `+0xf` : `+0x2c`, `+0x10` : mot `+0x42`, `+0x12` : non
 //! nul = coordonnées absolues (sinon relatives à la caméra).
 
-use crate::families::cx::{sub, Cx};
+use crate::families::cx::Cx;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::pools::{BOSS, EFFCT, ENEMY, ESHL, ITEM, PEFF, SET, SOBJ};
 use crate::objects::Obj;
-use m68k::SR_C;
+use crate::objects::pools;
 
 /// Champs du contrôleur.
 mod f {
@@ -50,6 +50,7 @@ mod f {
 
 /// Variables de la RAM de travail (offsets depuis A5).
 mod a5 {
+    
     pub const PHASE: u32 = 0x2c;
     /// Niveau en cours.
     pub const STAGE: u32 = 0x34;
@@ -101,8 +102,6 @@ const PREPARE_EFFECTS: u32 = 0xebe86;
 const FADE_OUT: u32 = 0xe0c5c;
 const PLAYER_HOOK_A: u32 = 0x19db4;
 const PLAYER_HOOK_B: u32 = 0x19e10;
-const ALLOC_EFFCT: u32 = 0x2318;
-const ALLOC_BOSS: u32 = 0x23a8;
 
 pub fn run(x: &mut Cx) {
     if x.u8(0x40) != 0 || x.a5_u8(a5::DIFFICULTY) == 0 {
@@ -112,20 +111,14 @@ pub fn run(x: &mut Cx) {
         0 => init(x),
         2 => script(x),
         4 => finish(x),
-        6 => x.call(sub::FREE_SET),
+        6 => x.free(&pools::SET),
         _ => {}
     }
 }
 
-/// Alloue un objet avec l'allocateur `allocator` ; `None` si le pool est plein.
-fn alloc(x: &mut Cx, allocator: u32) -> Option<Obj> {
-    x.call(allocator);
-    (x.c.sr & SR_C == 0).then(|| Obj(x.c.a[1]))
-}
-
 /// Alloue et active un objet de type `kind` (et de variante `variant`).
-fn spawn(x: &mut Cx, allocator: u32, kind: u8, variant: Option<u8>) -> Option<Obj> {
-    let o = alloc(x, allocator)?;
+fn spawn(x: &mut Cx, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Option<Obj> {
+    let o = x.alloc(pool)?;
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
     if let Some(v) = variant {
@@ -161,7 +154,7 @@ fn init(x: &mut Cx) {
 fn start(x: &mut Cx, action: u8) {
     match action {
         // 10 et 11 : sans partie en cours (A5+0x66 nul), le contrôleur se libère
-        10 | 11 if x.a5_u8(0x66) == 0 => x.call(sub::FREE_SET),
+        10 | 11 if x.a5_u8(0x66) == 0 => x.free(&pools::SET),
         10 | 0 => {
             x.set_a5_u16(a5::TRANSITION, 4);
             next_state(x, 2);
@@ -291,7 +284,7 @@ fn run_entry(x: &mut Cx, entry: u32, word: u16) {
     }
     let class_offset = x.data8(entry + 0xb);
     let allocator = x.data32(ALLOC_TABLE + class_offset as u32);
-    let Some(o) = alloc(x, allocator) else {
+    let Some(o) = x.alloc(pools::pool_of_alloc_routine(allocator)) else {
         x.set16(f::LIVE_LIMIT, 0xffff);
         x.set16(f::WAIT, 0);
         return;
@@ -376,7 +369,7 @@ fn end_action(x: &mut Cx, action: u8) {
         6 => curtain(x),
         7 => effects_wave(x),
         9 => {
-            if spawn(x, sub::ALLOC_SET, 0x11, None).is_some() {
+            if spawn(x, &pools::SET, 0x11, None).is_some() {
                 next_state(x, 2)
             }
         }
@@ -396,10 +389,10 @@ fn title_cards(x: &mut Cx, param: u16, cards: [(u8, u8); 2]) {
     x.set_a5_u16(0x56e, param);
     x.set_a5_u8(0x54f, 0);
     for (variant, extra) in cards {
-        let Some(o) = spawn(x, sub::ALLOC_SET, 0, Some(variant)) else { return };
+        let Some(o) = spawn(x, &pools::SET, 0, Some(variant)) else { return };
         o.set_u8(x.b, 0x2f, extra);
     }
-    let Some(o) = spawn(x, sub::ALLOC_SOBJ, 0, Some(0x56)) else { return };
+    let Some(o) = spawn(x, &pools::SOBJ, 0, Some(0x56)) else { return };
     o.set_u8(x.b, 3, 0x57);
     end_action(x, 1)
 }
@@ -504,12 +497,12 @@ fn effects_wave(x: &mut Cx) {
         return next_state(x, 2);
     }
     x.call(PREPARE_EFFECTS);
-    if spawn(x, ALLOC_EFFCT, 0x21, Some(0)).is_none() {
+    if spawn(x, &pools::EFFCT, 0x21, Some(0)).is_none() {
         return;
     }
     next_state(x, 2);
     for (variant, extra) in [(1, 0x20), (2, 0), (3, 0x20)] {
-        let Some(o) = spawn(x, ALLOC_EFFCT, 0x21, Some(variant)) else { return };
+        let Some(o) = spawn(x, &pools::EFFCT, 0x21, Some(variant)) else { return };
         if extra != 0 {
             o.set_u8(x.b, 0x2c, extra);
         }
@@ -518,7 +511,7 @@ fn effects_wave(x: &mut Cx) {
 
 /// Actions 13 et 14 : crée un boss (type 3 ou 1) sauf s'il est interdit ou si la scène est figée.
 fn spawn_boss(x: &mut Cx, kind: u8) {
-    if x.a5_u8(a5::NO_BOSS) == 0 && x.a5_u8(a5::FROZEN) == 0 && spawn(x, ALLOC_BOSS, kind, None).is_none() {
+    if x.a5_u8(a5::NO_BOSS) == 0 && x.a5_u8(a5::FROZEN) == 0 && spawn(x, &pools::BOSS, kind, None).is_none() {
         return;
     }
     next_state(x, 2);

@@ -3,6 +3,7 @@
 //! ombre sont testées sauf en fuite (`+5` = 8).
 
 use super::*;
+use crate::objects::pools;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACT: u32 = 0x78a26;
@@ -206,7 +207,7 @@ fn death(x: &mut Cx) {
             let t = x.u16(TIMER).wrapping_sub(1);
             x.set16(TIMER, t);
             if (t as i16) <= 0 {
-                return x.call(rom::FREE_ENEMY);
+                return x.free(&pools::ENEMY);
             }
             let flags = x.u8(1) ^ 2;
             x.set8(1, flags);
@@ -242,7 +243,7 @@ fn run_off(x: &mut Cx) {
             }
             if lib::outside(x, -0x30, 0x1b0) {
                 x.call(call::REMOVE);
-                x.call(rom::FREE_ENEMY);
+                x.free(&pools::ENEMY);
             }
         }
         _ => {}

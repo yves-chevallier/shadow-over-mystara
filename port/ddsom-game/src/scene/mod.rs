@@ -32,7 +32,7 @@ use m68k::decode::Fetch;
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::objects::Obj;
+use crate::objects::{pools, Obj};
 use crate::{call, Native};
 
 /// Variables de la RAM de travail (offsets depuis A5) communes aux séquences de scène.
@@ -100,12 +100,7 @@ pub mod sub {
     /// Ouvre un message (bulle de dialogue, SET) numéro D0 ; A1 = le message, dont l'octet `+0x22`
     /// passe à 1 quand il est terminé.
     pub const MESSAGE: u32 = 0xc8312;
-    /// Allocation d'un objet dans le pool de sa classe : A1 = objet, retenue = échec.
-    pub const ALLOC_ENEMY: u32 = 0x22bc;
-    pub const ALLOC_EFFCT: u32 = 0x2318;
     pub const ALLOC_SET: u32 = 0x2348;
-    pub const ALLOC_BOSS: u32 = 0x23a8;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
     /// Objet système « carton » de début de scène (type 14).
     pub const TITLE_CARD: u32 = 0xdfe26;
     /// Objet système de type 6, de variante D0.
@@ -241,9 +236,8 @@ impl<'a> Ctx<'a> {
     }
 
     /// Crée un objet (allocateur `alloc`) actif, de type `kind` ; l'original écrit sans tester la retenue.
-    pub fn spawn(&mut self, alloc: u32, kind: u8) -> Obj {
-        self.call(alloc);
-        let o = Obj(self.c.a[1]);
+    pub fn spawn(&mut self, pool: &pools::Pool, kind: u8) -> Obj {
+        let o = pool.alloc_unchecked_68k(self.c, self.b);
         o.set_u8(self.b, Obj::ACTIVE, 1);
         o.set_u8(self.b, Obj::KIND, kind);
         o

@@ -326,6 +326,15 @@ impl<'a> Ctx<'a> {
         crate::call(self.c, self.b, adresse);
     }
 
+    /// Exécution à blanc : la routine d'origine `adresse` est appelée (sa durée n'est pas celle du chemin relevé).
+    fn externe(&mut self, adresse: u32) {
+        if let Some(r) = &mut self.rec {
+            if !r.externes.contains(&adresse) {
+                r.externes.push(adresse);
+            }
+        }
+    }
+
     /// Appel direct d'une routine native du modèle d'objets (sans passer par l'index des adresses).
     pub fn natif(&mut self, n: &Native) {
         if let Some(r) = &mut self.rec {
@@ -409,20 +418,17 @@ impl<'a> Ctx<'a> {
         self.natif(&lists::REINSERT_FOREGROUND);
     }
 
-    /// Libère l'emplacement de l'objet dans son pool.
-    pub fn free(&mut self, pool: &Native) {
-        self.natif(pool);
+    /// Libère l'objet traité dans son pool.
+    pub fn free(&mut self, pool: &pools::Pool) {
+        self.externe(pool.free_routine);
+        let o = self.obj();
+        pool.release_68k(self.c, self.b, o)
     }
 
-    /// Alloue un objet dans le pool `pool` : renvoie l'emplacement, ou `None` si le pool est plein.
-    pub fn alloc(&mut self, pool: &Native) -> Option<Obj> {
-        self.natif(pool);
-        (!self.c.cond(5)).then(|| Obj(self.c.a[1]))
-    }
-
-    /// Alloue un objet ITEM (voir `alloc`).
-    pub fn alloc_item(&mut self) -> Option<Obj> {
-        self.alloc(&pools::ALLOC_ITEM)
+    /// Alloue un objet dans `pool` : l'emplacement, ou `None` si le pool est plein.
+    pub fn alloc(&mut self, pool: &pools::Pool) -> Option<Obj> {
+        self.externe(pool.alloc_routine);
+        pool.alloc_68k(self.c, self.b)
     }
 
     /// Condition « plus grand » (bgt) des drapeaux courants.

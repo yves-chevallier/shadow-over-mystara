@@ -11,6 +11,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 /// Jeux d'animations de marche (0x103e0) : le premier si le boss ne regarde pas dans le sens où il avance.
 const WALK_SIDEWAYS: u32 = 0x177992;
@@ -314,7 +315,7 @@ fn shoot(x: &mut Cx) {
                 return;
             }
             x.add8(0x7, 2);
-            let Some(shot) = try_alloc(x, call::ALLOC_ESHL) else { return resume(x) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return resume(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x2a);

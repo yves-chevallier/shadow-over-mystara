@@ -43,6 +43,7 @@ pub(self) mod g {
     pub const TIMER: u32 = 0xb0;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) mod call {
     pub const MOVE_X: u32 = 0x1d78;
@@ -50,7 +51,6 @@ pub(self) mod call {
     pub const MOVE_XYZ: u32 = 0x1d90;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const SOUND_B: u32 = 0x2860;
     pub const STEP: u32 = 0x1a56;
     pub const ASK_TARGET: u32 = 0xe76c;
@@ -199,7 +199,7 @@ pub fn run(x: &mut Cx) {
         0 => init(x),
         2 => active(x),
         4 => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
     if (x.u8(SLOW) as i8) > 0 {
         sub8(x, SLOW, 1);

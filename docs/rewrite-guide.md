@@ -1,5 +1,9 @@
 # Guide de réécriture en Rust
 
+> La conversion du 68000 est finie. La phase suivante (rendre le code lisible, sans changer le comportement) suit
+> [guide-refactorisation.md](guide-refactorisation.md) et [refactorisation.md](refactorisation.md) ; ce guide reste la
+> référence pour la frontière avec le code d'origine (natives, registres, validation).
+
 Objectif : remplacer tout le code 68000 de ddsom par du Rust **idiomatique, minimal et lisible**, au
 comportement **identique image par image**. Le code vit dans `port/ddsom-game`.
 

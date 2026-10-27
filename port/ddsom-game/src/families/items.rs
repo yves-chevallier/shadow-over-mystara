@@ -261,7 +261,7 @@ fn tresor(ctx: &mut Ctx) {
     match etat {
         etat::INIT => tresor_init(ctx, o),
         etat::ACTIF => tresor_actif(ctx, o),
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -426,7 +426,7 @@ fn conso_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => conso_init(ctx, o),
         etat::ACTIF => conso_actif(ctx, o),
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -467,7 +467,7 @@ mod inventaire {
 
 /// `0xdc28a` : recrée en l'air l'objet `ancien` (remplacé dans l'inventaire) avec sa quantité.
 fn objet_expulse(ctx: &mut Ctx, o: Obj, joueur: Obj, ancien: u8, quantite: u8) {
-    let Some(n) = ctx.alloc_item() else {
+    let Some(n) = ctx.alloc(&pools::ITEM) else {
         ctx.pris(true); // bcs : pool plein
         return;
     };
@@ -706,7 +706,7 @@ fn inventaire_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => inventaire_init(ctx, o),
         etat::ACTIF => inventaire_actif(ctx, o),
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -805,7 +805,7 @@ fn bonus_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => bonus_init(ctx, o),
         etat::ACTIF => bonus_actif(ctx, o),
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1169,7 +1169,7 @@ fn icone(ctx: &mut Ctx, o: Obj) {
             }
         }
         4 => ctx.sans_chemin(cible, |ctx| icone_depart(ctx, o)),
-        6 => ctx.free(&pools::FREE_ITEM),
+        6 => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1360,7 +1360,7 @@ fn guide(ctx: &mut Ctx, o: Obj) {
             let n = ctx.ram8(scene::COMPTEUR).wrapping_add(4);
             ctx.set_ram8(scene::COMPTEUR, n);
         }
-        etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1442,7 +1442,7 @@ fn guide_3(ctx: &mut Ctx, o: Obj) {
             }
         }
         etat::LIBERE => {}
-        etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1606,7 +1606,7 @@ fn reserve_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => reserve_init(ctx, o),
         etat::ACTIF => reserve_actif(ctx, o),
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1650,7 +1650,7 @@ fn accompagnement_gestionnaire(ctx: &mut Ctx) {
     if ctx.pris(reste as i16 >= 0) {
         return;
     }
-    ctx.free(&pools::FREE_ITEM);
+    ctx.free(&pools::ITEM);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1895,7 +1895,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
                 _ => ctx.deleguer(cible),
             }
         }
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1992,7 +1992,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                 _ => ctx.deleguer(cible),
             }
         }
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -2043,7 +2043,7 @@ fn contact_2(ctx: &mut Ctx, o: Obj) {
                 _ => ctx.deleguer(cible),
             }
         }
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }
@@ -2343,7 +2343,7 @@ fn equipement_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => equipement_init(ctx, o),
         etat::ACTIF => equipement_actif(ctx, o),
-        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::FREE_ITEM),
+        etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
 }

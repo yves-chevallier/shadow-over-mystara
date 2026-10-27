@@ -3,6 +3,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const FLASH_ON: u32 = 0x1ac68;
@@ -300,7 +301,7 @@ mod flash {
     /// `0x4cfbc` : quatre étincelles de coin, puis l'éclair d'écran.
     fn spawn_corners(x: &mut Cx) {
         for rank in (0..4u8).rev() {
-            let Some(o) = x.alloc(ALLOC_PEFF) else { break };
+            let Some(o) = x.alloc(&pools::PEFF) else { break };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 0x13);
             o.set_u8(x.b, 3, 1);

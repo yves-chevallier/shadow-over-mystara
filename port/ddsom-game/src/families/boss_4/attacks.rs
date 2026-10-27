@@ -12,6 +12,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -424,7 +425,7 @@ fn breath_in_flight(x: &mut Cx) {
 /// Un jet du souffle (ESHL 0x32, variante `variant`) : son angle suit la table `angles` (16 crans, retournés
 /// quand le boss regarde à gauche). Faux si le pool est plein.
 fn breath_shot(x: &mut Cx, angles: u32, variant: Option<u8>) -> bool {
-    let Some(s) = try_alloc(x, rom::ALLOC_ESHL) else { return false };
+    let Some(s) = x.alloc(&pools::ESHL) else { return false };
     s.set_u8(x.b, 0, 1);
     s.set_u8(x.b, 2, 0x32);
     if let Some(v) = variant {

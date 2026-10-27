@@ -7,10 +7,11 @@
 //! objet « chef d'orchestre »). Elles ne sont jamais appelées dans les scénarios (voir
 //! `docs/familles/set_c.md`). Les variantes pas encore réécrites sont exécutées par le code d'origine.
 
-use crate::families::cx::{sub, Cx};
+use crate::families::cx::Cx;
 use crate::mem::wr16;
 use crate::objects::Obj;
 use m68k::SR_C;
+use crate::objects::pools;
 
 /// Table (espace programme) des déplacements des machines, un mot relatif par variante.
 const VARIANTS: u32 = 25;
@@ -98,7 +99,7 @@ fn next_substate(x: &mut Cx) {
 
 /// Passe l'objet à l'état 6 (libération au passage suivant).
 fn free(x: &mut Cx) {
-    x.call(sub::FREE_SET);
+    x.free(&pools::SET);
 }
 
 /// Le chef d'orchestre : l'objet pointé par `+0x4c` (adresse longue).

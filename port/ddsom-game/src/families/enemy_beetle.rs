@@ -53,6 +53,7 @@ mod g {
     pub const SAVED_STATE: u32 = 0x8a;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Tables de la ROM : vitesses par difficulté (pointeurs), temporisations, sens de virage.
 const SPEEDS_WALK: u32 = 0x66700;
@@ -828,7 +829,7 @@ fn fall(x: &mut Cx) {
 }
 
 fn free(x: &mut Cx) {
-    x.call(rom::FREE_ENEMY);
+    x.free(&pools::ENEMY);
 }
 
 handlers! {

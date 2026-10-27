@@ -15,6 +15,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -318,7 +319,7 @@ fn ball(x: &mut Cx) {
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0x14);
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return end_shot(x, decide::chase) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return end_shot(x, decide::chase) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x20);
@@ -378,7 +379,7 @@ fn beam(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
             x.set8(KEY, 0);
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return end_shot(x, decide::stand) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return end_shot(x, decide::stand) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x21);
@@ -437,7 +438,7 @@ fn beam(x: &mut Cx) {
 
 /// 0x9931a : un nuage (effet 0x32, variante 15) derrière le Lich.
 fn dust(x: &mut Cx) {
-    let Some(e) = try_alloc(x, rom::ALLOC_EFFCT) else { return };
+    let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, 0x32);
     e.set_u8(x.b, 3, 0xf);
@@ -674,7 +675,7 @@ fn rain(x: &mut Cx) {
             x.set8(INVULNERABLE, 0);
             x.set16(TIMER, 0x5a);
             for n in (0..=0xfu8).rev() {
-                let Some(e) = try_alloc(x, rom::ALLOC_ESHL) else { break };
+                let Some(e) = x.alloc(&pools::ESHL) else { break };
                 e.set_u8(x.b, 0, 1);
                 e.set_u8(x.b, 2, 0x23);
                 e.set_u8(x.b, 3, n);
@@ -741,7 +742,7 @@ fn volley(x: &mut Cx) {
                 x.set8(INVULNERABLE, 0);
                 return strike(x, 0xc);
             }
-            if let Some(e) = try_alloc(x, rom::ALLOC_ESHL) {
+            if let Some(e) = x.alloc(&pools::ESHL) {
                 e.set_u8(x.b, 0, 1);
                 e.set_u8(x.b, 2, 0x24);
                 e.set_u16(x.b, 0x42, x.o.0 as u16);

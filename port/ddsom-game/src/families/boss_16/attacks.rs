@@ -1,6 +1,7 @@
 //! Boss 16, groupe 4 : les huit attaques (`+6` = 0 à 14). Chacune finit par `next_attack` (0x94e24).
 
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -20,7 +21,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0xb59a6 / 0xb59c8 : un EFFCT 0x30 (variante 1 ou 2) lié au boss (`+0x46`).
 fn spawn_trail(x: &mut Cx, variant: u8) {
-    if let Some(e) = try_alloc(x, call::ALLOC_EFFCT) {
+    if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x30);
         e.set_u8(x.b, 3, variant);
@@ -31,7 +32,7 @@ fn spawn_trail(x: &mut Cx, variant: u8) {
 
 /// 0xa3b4a / 0xa3b66 : un ESHL 0x2d (variante 0 ou, avec `index` en `+0x2f`, 1) lié au boss (`+0x46`).
 fn spawn_flame(x: &mut Cx, variant: u8, index: u8) {
-    if let Some(s) = try_alloc(x, rom::ALLOC_ESHL) {
+    if let Some(s) = x.alloc(&pools::ESHL) {
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 2, 0x2d);
         s.set_u8(x.b, 3, variant);

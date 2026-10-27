@@ -33,6 +33,7 @@ use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::modes::Sequence as _;
 use crate::objects::Obj;
 use crate::Native;
+use crate::objects::pools;
 
 /// Bloc d'état de la sortie de scène (A0 dans l'original) et ses champs.
 const BASE: u32 = A5 - 0x55ca;
@@ -1275,7 +1276,7 @@ fn seq4_probe(ex: &mut Ex) {
             }
         }
     }
-    let effect = ex.x.spawn(sub::ALLOC_EFFCT, 0x59);
+    let effect = ex.x.spawn(&pools::EFFCT, 0x59);
     ex.set_b16(blk::EFFECT, effect.0 as u16);
 }
 
@@ -1449,7 +1450,7 @@ fn seq30_message_done(ex: &mut Ex) {
 
 fn seq30_effect(ex: &mut Ex) {
     if ex.b16(blk::TIMER) == 32 {
-        let e = ex.x.spawn(sub::ALLOC_EFFCT, 75);
+        let e = ex.x.spawn(&pools::EFFCT, 75);
         e.set_u8(ex.x.b, Obj::VARIANT, 1);
         ex.call(0xed0c0);
     }

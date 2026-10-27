@@ -1,6 +1,7 @@
 //! Boss 0, état actif : entrées en scène (`+5` = 0), combat (2), attaques (4), attente (6 à 10).
 
 use super::*;
+use crate::objects::pools;
 
 // --- aides communes -----------------------------------------------------------------------------
 
@@ -157,7 +158,7 @@ fn transformation(x: &mut Cx) {
                 return;
             }
             next7(x);
-            let Some(partner) = alloc_retry(x, ia::ALLOC_BOSS) else { return };
+            let Some(partner) = alloc_retry(x, &pools::BOSS) else { return };
             partner.set_u8(x.b, 0, 2);
             partner.set_u8(x.b, 2, 0);
             partner.set_u8(x.b, 3, 1);
@@ -679,7 +680,7 @@ fn spit(x: &mut Cx) {
                 return;
             }
             x.set8(KEY, 0);
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return };
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x43);
             for off in [0x8, 0xc, 0x10] {

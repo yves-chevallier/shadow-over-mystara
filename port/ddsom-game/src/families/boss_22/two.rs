@@ -3,13 +3,14 @@
 
 use super::moves::step_anim;
 use super::*;
+use crate::objects::pools;
 
 /// 0x7c5b8 : quand le compte à rebours `+0xbc` est écoulé, crée le contrôleur de scène SET 2 (variante 0x3e), une fois.
 pub(super) fn spawn_scene_controller(x: &mut Cx) {
     if x.u8(0xa4) != 0 || !sub16(x, SPOT_TIMER, 1).mi() {
         return;
     }
-    let Some(set) = try_alloc(x, 0x2348) else { return };
+    let Some(set) = x.alloc(&pools::SET) else { return };
     set.set_u8(x.b, 0, 1);
     set.set_u8(x.b, 3, 0x3e);
     set.set_u8(x.b, 2, 2);
@@ -52,7 +53,7 @@ pub(super) fn init(x: &mut Cx) {
     let players = x.a5_u8(var::PLAYERS_ALIVE);
     let alone = players == 1 || (players == 2 && (x.a5_u16(var::DIFFICULTY) as i16) < 0x17);
     if !alone {
-        let Some(part) = try_alloc(x, 0x23a8) else { return };
+        let Some(part) = x.alloc(&pools::BOSS) else { return };
         part.set_u8(x.b, 0, 1);
         part.set_u8(x.b, 2, 0x16);
         x.set16(HOST, part.0 as u16);

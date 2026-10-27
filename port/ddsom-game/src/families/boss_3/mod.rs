@@ -62,6 +62,7 @@ pub(self) mod g {
     pub const GOAL_TURN: u32 = 0xb5;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeux d'animations : corps, attaques, mort.
 pub(self) const SET_BODY: u32 = 0x174776;
@@ -79,7 +80,6 @@ pub(self) mod call {
     pub const MOVE_XYZ: u32 = 0x1d90;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_Z: u32 = 0x1dbc;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const SOUND_EVENT: u32 = 0x2824;
     pub const ZONE: u32 = 0xfbb0;
     pub const ASK_TARGET: u32 = 0xe76c;
@@ -265,7 +265,7 @@ pub fn run(x: &mut Cx) {
         st::HIT => hit::run(x),
         _ => {
             crate::mem::wr16(x.b, BODY_OWNER, 0);
-            x.call(call::FREE_BOSS);
+            x.free(&pools::BOSS);
         }
     }
 }

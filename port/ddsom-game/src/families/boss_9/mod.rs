@@ -71,6 +71,7 @@ pub(self) mod g {
     pub const LIVES: u32 = 0xbf;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeu d'animations.
 pub(self) const SET: u32 = 0x17a276;
@@ -89,8 +90,6 @@ pub(self) mod call {
     pub const MOVE_XY: u32 = 0x1d62;
     pub const MOVE_X: u32 = 0x1d78;
     pub const MOVE_Z: u32 = 0x1dbc;
-    pub const FREE_BOSS: u32 = 0x2234;
-    pub const ALLOC_SET: u32 = 0x2348;
     pub const PICK_OTHER: u32 = 0x44ee;
     pub const SMOKE: u32 = 0xb10c8;
     pub const MESSAGE: u32 = 0xc8312;
@@ -421,7 +420,7 @@ pub(self) fn refill_crew(x: &mut Cx, all: bool) {
         x.c.a[2] = x.o.0 + CREW + 2 * k;
         if x.u8(CREW_BITS) >> k & 1 == 0 {
             x.set16(CREW + 2 * k, 0);
-            if let Some(m) = try_alloc(x, rom::ALLOC_ENEMY) {
+            if let Some(m) = x.alloc(&pools::ENEMY) {
                 let variant = if x.u8(CREW_COUNT) == 0 { 2 } else { 1 };
                 m.set_u8(x.b, 3, variant);
                 m.set_u8(x.b, 0, 1);
@@ -500,7 +499,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
 }
 
@@ -532,7 +531,7 @@ fn init(x: &mut Cx) {
     for (kind, last, linked) in [(0xdu8, 1u8, true), (0xe, 7, false)] {
         for k in (0..=last).rev() {
             x.c.d[5] = k as u32;
-            let Some(p) = try_alloc(x, rom::ALLOC_ESHL) else { break };
+            let Some(p) = x.alloc(&pools::ESHL) else { break };
             let active = x.u8(0);
             p.set_u8(x.b, 0, active);
             p.set_u8(x.b, 3, k);
@@ -544,7 +543,7 @@ fn init(x: &mut Cx) {
         }
     }
     x.c.a[2] = x.o.0 + DRIVER;
-    if let Some(d) = try_alloc(x, rom::ALLOC_ENEMY) {
+    if let Some(d) = x.alloc(&pools::ENEMY) {
         let active = x.u8(0);
         d.set_u8(x.b, 0, active);
         d.set_u8(x.b, 0xbc, 6);

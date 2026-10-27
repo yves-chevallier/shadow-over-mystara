@@ -19,6 +19,7 @@
 use super::cx::{handlers, Cx};
 use crate::mem::set_low_word;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Champs partagés.
 mod f {
@@ -31,7 +32,6 @@ mod f {
 
 /// Routines d'origine.
 mod rom {
-    pub const FREE_EFFECT: u32 = 0x2218;
     /// Retenue dans l'écran (marge 0x30).
     pub const IN_ZONE: u32 = 0xfbae;
     /// Ombre au sol.
@@ -40,11 +40,10 @@ mod rom {
     pub const DEBRIS: u32 = 0x1172e;
     /// Son d'impact au sol.
     pub const SOUND_LANDING: u32 = 0xece9e;
-    pub const ALLOC_EFFECT: u32 = 0x2318;
 }
 
 fn free(x: &mut Cx) {
-    x.call(rom::FREE_EFFECT);
+    x.free(&pools::EFFCT);
 }
 
 /// Bit 1 de `FLAGS` : objet masqué (clignotement).
@@ -465,7 +464,7 @@ fn armour_break(x: &mut Cx) {
     x.c.a[4] = at;
     x.c.d[1] = count as u32;
     loop {
-        let Some(o) = alloc(x) else { return };
+        let Some(o) = x.alloc(&pools::EFFCT) else { return };
         o.set_u8(x.b, Obj::ACTIVE, 1);
         o.set_u8(x.b, Obj::KIND, 46);
         o.set_u8(x.b, Obj::VARIANT, 1);
@@ -489,11 +488,6 @@ fn armour_break(x: &mut Cx) {
 }
 
 /// Allocation d'un effet : l'emplacement, ou `None` si le pool est plein.
-fn alloc(x: &mut Cx) -> Option<Obj> {
-    x.call(rom::ALLOC_EFFECT);
-    (x.c.sr & m68k::SR_C == 0).then(|| Obj(x.c.a[1]))
-}
-
 fn armour_shard(x: &mut Cx) {
     match x.u8(f::STATE) {
         0 => armour_shard_init(x),
@@ -672,11 +666,7 @@ fn flyer_shoot(x: &mut Cx, variant: u8) {
     if x.a5_u16(0x6e) & 3 != 0 {
         return;
     }
-    x.call(super::cx::sub::ALLOC_ESHL);
-    if x.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let o = Obj(x.c.a[1]);
+    let Some(o) = x.alloc(&pools::ESHL) else { return };
     o.set_u8(x.b, Obj::ACTIVE, 1);
     o.set_u8(x.b, Obj::KIND, flyer::SHOT);
     o.set_u8(x.b, Obj::VARIANT, variant);
@@ -690,7 +680,7 @@ fn flyer_gun_init(x: &mut Cx) {
     let facing = link.u8(x.b, f::FACING);
     x.set8(f::FACING, facing);
     // son corps (variante 0)
-    if let Some(o) = alloc(x) {
+    if let Some(o) = x.alloc(&pools::EFFCT) {
         o.set_u8(x.b, Obj::ACTIVE, 1);
         o.set_u8(x.b, Obj::KIND, 48);
         o.set_u8(x.b, Obj::VARIANT, 0);
@@ -927,7 +917,7 @@ fn fireworks_init(x: &mut Cx) {
             x.set16(Obj::Y + 2, 0xffff);
             // ses deux acolytes (variantes 4 et 5)
             for (variant, dx) in [(4u8, 0x20u16), (5, 0x10)] {
-                let Some(o) = alloc(x) else { break };
+                let Some(o) = x.alloc(&pools::EFFCT) else { break };
                 o.set_u8(x.b, Obj::ACTIVE, 1);
                 o.set_u8(x.b, Obj::KIND, 80);
                 o.set_u8(x.b, Obj::VARIANT, variant);
@@ -1233,7 +1223,7 @@ fn fireworks_fade_back(x: &mut Cx) {
 
 /// `0xb95e8` : une fusée (type 50) : variante, délai jusqu'à la suivante et place lus pour le tir `TIMER`.
 fn rocket(x: &mut Cx) {
-    let Some(o) = alloc(x) else { return };
+    let Some(o) = x.alloc(&pools::EFFCT) else { return };
     o.set_u8(x.b, Obj::ACTIVE, 1);
     o.set_u8(x.b, Obj::KIND, 0x32);
     let n = x.u16(fireworks::TIMER) as i16 as i32 as u32;
@@ -1252,7 +1242,7 @@ fn rocket(x: &mut Cx) {
 fn hero_lift_off(x: &mut Cx) {
     if countdown(x, fireworks::TIMER) <= 0 {
         x.set16(fireworks::TIMER, 5);
-        if let Some(o) = alloc(x) {
+        if let Some(o) = x.alloc(&pools::EFFCT) {
             o.set_u8(x.b, Obj::ACTIVE, 1);
             o.set_u8(x.b, Obj::KIND, 0x32);
             o.set_u8(x.b, Obj::VARIANT, 7);

@@ -58,6 +58,7 @@ pub(self) mod g {
     pub const GUARD: u32 = 0xad;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const SET_MOVE: u32 = 0x15d4ae;
 pub(self) const SET_STRIKE: u32 = 0x15d4ec;
@@ -87,7 +88,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        st::DEAD => x.call(rom::FREE_ENEMY),
+        st::DEAD => x.free(&pools::ENEMY),
         _ => {}
     }
 }

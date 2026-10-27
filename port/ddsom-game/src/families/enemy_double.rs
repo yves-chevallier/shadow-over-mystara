@@ -26,6 +26,7 @@ enum Play {
     Step,
 }
 use Play::*;
+use crate::objects::pools;
 
 /// États du maître (`+4` à `+7`).
 struct Master {
@@ -101,8 +102,7 @@ fn restart_or_step_spawn(x: &mut Cx, n: u32) {
     x.set8(0x33, 0);
     // l'original réessaie tant que le pool de tirs est plein
     let shot = loop {
-        let o = alloc(x, rom::ALLOC_ESHL);
-        if !alloc_failed(x) {
+        if let Some(o) = x.alloc(&pools::ESHL) {
             break o;
         }
     };
@@ -136,10 +136,7 @@ fn hurt(x: &mut Cx, dying_code: u8, effect_variant: u8) {
     x.call(0xe4188);
     x.set8(0x7e, dying_code);
     x.call(0x19ad6);
-    let e = alloc(x, rom::ALLOC_EFFCT);
-    if alloc_failed(x) {
-        return;
-    }
+    let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, 0x3f);
     e.set_u8(x.b, 3, effect_variant);
@@ -530,10 +527,7 @@ mod dark_warrior_double {
 
     /// 0x77c8a : effet EFFCT 0x32 à la place du double (un pixel plus haut).
     fn spawn_effect(x: &mut Cx) {
-        let e = alloc(x, rom::ALLOC_EFFCT);
-        if alloc_failed(x) {
-            return;
-        }
+        let Some(e) = x.alloc(&pools::EFFCT) else { return };
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x32);
         e.set_u8(x.b, 3, 7);

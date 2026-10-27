@@ -63,7 +63,7 @@ fn trois_etats(
     match etat {
         etat::INIT => init(ctx, o),
         etat::ACTIF => actif(ctx, o),
-        etat::LIBERE => ctx.free(&pools::FREE_EFFCT),
+        etat::LIBERE => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -157,7 +157,7 @@ fn bandeau_fin(ctx: &mut Ctx, o: Obj) {
     let compteur = crate::mem::rd32(ctx.b, o.0 + bandeau::CREATEUR);
     let v = crate::mem::rd8(ctx.b, compteur).wrapping_sub(1);
     crate::mem::wr8(ctx.b, compteur, v);
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 fn bandeau_actif(ctx: &mut Ctx, o: Obj) {
@@ -432,7 +432,7 @@ fn eclat_atterrit(ctx: &mut Ctx, o: Obj) {
         let pause = ctx.ram8(0x42) != 0;
         if !ctx.pris(pause) {
             ctx.jsr(eclat::CREER_TIR_A);
-            let tir = ctx.alloc(&pools::ALLOC_ESHL);
+            let tir = ctx.alloc(&pools::ESHL);
             if ctx.pris(tir.is_none()) {
                 return;
             }
@@ -442,7 +442,7 @@ fn eclat_atterrit(ctx: &mut Ctx, o: Obj) {
             tir.set_u8(ctx.b, champ::MODE, 0);
             ctx.c.d[0] = 3;
             ctx.jsr(eclat::CREER_TIR_B);
-            let tir = ctx.alloc(&pools::ALLOC_ESHL);
+            let tir = ctx.alloc(&pools::ESHL);
             if ctx.pris(tir.is_none()) {
                 return;
             }
@@ -452,7 +452,7 @@ fn eclat_atterrit(ctx: &mut Ctx, o: Obj) {
             tir.set_u8(ctx.b, champ::MODE, 1);
         }
     }
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 fn eclat_actif(ctx: &mut Ctx, o: Obj) {
@@ -545,7 +545,7 @@ fn poussiere_actif(ctx: &mut Ctx, o: Obj) {
     o.set_u8(ctx.b, Obj::FLAGS, flags ^ 2);
     let fin = ctx.anim_step();
     if ctx.pris(fin) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     ctx.reinsert();
 }
@@ -673,7 +673,7 @@ fn place_sur_camera(ctx: &mut Ctx, o: Obj) {
 
 fn interface_0(ctx: &mut Ctx, o: Obj) {
     if partie_finie(ctx) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     let etat = o.u8(ctx.b, Obj::STATE);
     let cible = ctx.saut_table(interface::ETATS_0, etat as u32);
@@ -720,7 +720,7 @@ fn interface_1(ctx: &mut Ctx, o: Obj) {
                 ctx.pris(absent)
             } {
                 if partie_finie(ctx) {
-                    ctx.free(&pools::FREE_EFFCT);
+                    ctx.free(&pools::EFFCT);
                 }
                 return;
             }
@@ -748,7 +748,7 @@ fn interface_1(ctx: &mut Ctx, o: Obj) {
             ctx.anim_step();
             ctx.reinsert();
         }
-        etat::LIBERE => ctx.free(&pools::FREE_EFFCT),
+        etat::LIBERE => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -796,7 +796,7 @@ fn interface_2(ctx: &mut Ctx, o: Obj) {
         }
         etat::ACTIF => {
             if partie_finie(ctx) {
-                return ctx.free(&pools::FREE_EFFCT);
+                return ctx.free(&pools::EFFCT);
             }
             let porteur = pointeur(ctx, o, interface::PORTEUR);
             let absent = porteur.u8(ctx.b, 0x1c) == 0;
@@ -861,7 +861,7 @@ fn interface_2(ctx: &mut Ctx, o: Obj) {
             recopie_palette(ctx, o, 0x800);
             ctx.reinsert();
         }
-        etat::LIBERE => ctx.free(&pools::FREE_EFFCT),
+        etat::LIBERE => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -876,7 +876,7 @@ fn interface_2_animation(ctx: &mut Ctx, o: Obj, d1: u16) {
 
 fn interface_3(ctx: &mut Ctx, o: Obj) {
     if partie_finie(ctx) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     let etat = o.u8(ctx.b, Obj::STATE);
     let cible = ctx.saut_table(interface::ETATS_3, etat as u32);
@@ -927,7 +927,7 @@ fn interface_4(ctx: &mut Ctx, o: Obj) {
         }
         etat::ACTIF => {
             if partie_finie(ctx) {
-                return ctx.free(&pools::FREE_EFFCT);
+                return ctx.free(&pools::EFFCT);
             }
             ctx.reinsert();
         }
@@ -1086,7 +1086,7 @@ fn impact_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => impact_init(ctx, o),
         etat::ACTIF => impact_actif(ctx, o),
-        etat::LIBERE | 6 => ctx.free(&pools::FREE_EFFCT),
+        etat::LIBERE | 6 => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1112,7 +1112,7 @@ mod debris {
 
 /// `0xab7d8` : crée un débris (type 6, variante `variante`) rattaché à l'objet courant.
 fn cree_debris(ctx: &mut Ctx, o: Obj, variante: u8) -> Option<Obj> {
-    let nouveau = ctx.alloc(&pools::ALLOC_EFFCT);
+    let nouveau = ctx.alloc(&pools::EFFCT);
     // deux `bcs` successifs : dans `0xab7d8`, puis chez l'appelant (la retenue est restée levée)
     ctx.pris(nouveau.is_none());
     ctx.pris(nouveau.is_none());
@@ -1216,7 +1216,7 @@ fn debris_fin(ctx: &mut Ctx, o: Obj) {
     let reste = o.u8(ctx.b, debris::CLIGNOTEMENT).wrapping_sub(1);
     o.set_u8(ctx.b, debris::CLIGNOTEMENT, reste);
     if ctx.pris(reste == 0) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     if !ctx.pris(reste & 1 == 0) {
         let flags = o.u8(ctx.b, Obj::FLAGS);
@@ -1233,7 +1233,7 @@ fn debris_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => debris_init(ctx, o),
         etat::ACTIF => debris_actif(ctx, o),
         etat::LIBERE => debris_fin(ctx, o),
-        6 => ctx.free(&pools::FREE_EFFCT),
+        6 => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1244,7 +1244,7 @@ fn debris_gestionnaire(ctx: &mut Ctx) {
 /// Type 1 : emplacement de table inutilisé dans cette version du jeu : le gestionnaire libère
 /// l'objet aussitôt (`bra` vers `jmp 0x2218`).
 fn supprime(ctx: &mut Ctx) {
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1282,7 +1282,7 @@ fn eclat_unique_clignote(ctx: &mut Ctx, o: Obj) {
     let reste = o.u8(ctx.b, eclat_unique::COMPTE).wrapping_sub(1);
     o.set_u8(ctx.b, eclat_unique::COMPTE, reste);
     if ctx.pris(reste == 0) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags ^ 2);
@@ -1434,7 +1434,7 @@ fn etincelle_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => etincelle_init(ctx, o),
         etat::ACTIF => etincelle_actif(ctx, o),
         etat::LIBERE => ajoute_u8(ctx, o, Obj::STATE, 2),
-        6 => ctx.free(&pools::FREE_EFFCT),
+        6 => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1469,11 +1469,11 @@ fn marque_actif(ctx: &mut Ctx, o: Obj) {
     let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
     let etat = proprietaire.u16(ctx.b, 4);
     if ctx.pris(etat != 0x204) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     let sous = proprietaire.u8(ctx.b, 6);
     if ctx.pris(sous != 0x2c) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     ctx.jsr(rom::ANIM_STEP);
 }
@@ -1485,7 +1485,7 @@ fn marque_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => marque_init(ctx, o),
         etat::ACTIF => marque_actif(ctx, o),
-        etat::LIBERE => ctx.free(&pools::FREE_EFFCT),
+        etat::LIBERE => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1526,9 +1526,9 @@ fn gerbe_init(ctx: &mut Ctx, o: Obj) {
 fn gerbe_explose(ctx: &mut Ctx, o: Obj) {
     let mut dernier = None;
     for restant in (0..=8u32).rev() {
-        let nouveau = ctx.alloc(&pools::ALLOC_EFFCT);
+        let nouveau = ctx.alloc(&pools::EFFCT);
         if ctx.pris(nouveau.is_none()) {
-            return ctx.free(&pools::FREE_EFFCT);
+            return ctx.free(&pools::EFFCT);
         }
         let n = nouveau.unwrap();
         n.set_u8(ctx.b, Obj::ACTIVE, 1);
@@ -1554,7 +1554,7 @@ fn gerbe_explose(ctx: &mut Ctx, o: Obj) {
             n.set_u16(ctx.b, off, v);
         }
     }
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 fn gerbe_gestionnaire(ctx: &mut Ctx) {
@@ -1625,11 +1625,11 @@ fn eclats_debris_actif(ctx: &mut Ctx, _o: Obj) {
     if ctx.pris(positif) {
         return;
     }
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 fn eclats_debris_fin(ctx: &mut Ctx, _o: Obj) {
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 fn eclats_debris_gestionnaire(ctx: &mut Ctx) {
@@ -1719,7 +1719,7 @@ fn projectile_gestionnaire(ctx: &mut Ctx) {
     match etat {
         etat::INIT => projectile_init(ctx, o),
         etat::ACTIF => projectile_actif(ctx, o),
-        etat::LIBERE | 6 => ctx.free(&pools::FREE_EFFCT),
+        etat::LIBERE | 6 => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1892,7 +1892,7 @@ fn accessoire_gestionnaire(ctx: &mut Ctx) {
             ctx.jsr(rom::ANIM_STEP);
             ctx.reinsert();
         }
-        etat::LIBERE => ctx.free(&pools::FREE_EFFCT),
+        etat::LIBERE => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1930,14 +1930,14 @@ fn declencheur_effet(ctx: &mut Ctx, o: Obj) {
         decalage = decalage.wrapping_add(0x100);
         ctx.pris(i < 3); // dbf
     }
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 fn declencheur_actif(ctx: &mut Ctx, o: Obj) {
     let limite = ctx.ram16(0x506).wrapping_sub(0x60);
     let x = o.u16(ctx.b, Obj::X);
     if ctx.pris(limite as i16 > x as i16) {
-        return ctx.free(&pools::FREE_EFFCT);
+        return ctx.free(&pools::EFFCT);
     }
     let principal = Obj(ctx.ram16(declencheur::PRINCIPAL) as i16 as i32 as u32 & 0xff_ffff);
     let dx = principal.u16(ctx.b, Obj::X).wrapping_sub(x).wrapping_add(0x44);
@@ -2034,7 +2034,7 @@ fn bulle_cree_suite(ctx: &mut Ctx, o: Obj) {
     o.set_u32(ctx.b, Obj::STATE, 0);
     o.set_u8(ctx.b, Obj::VARIANT, 3);
     o.set_u8(ctx.b, bulle::FIN_ANIMATION, 0);
-    let nouveau = ctx.alloc(&pools::ALLOC_EFFCT);
+    let nouveau = ctx.alloc(&pools::EFFCT);
     if ctx.pris(nouveau.is_none()) {
         return;
     }
@@ -2071,7 +2071,7 @@ fn bulle_suite(ctx: &mut Ctx, o: Obj) {
 /// `0xb13fa` : crée l'étincelle d'impact (type 29, variante 0) sur l'objet porté (`+0x54`). Pour le personnage 1,
 /// l'appelant saute dans l'épilogue `0xaa9fe` d'une autre routine (voir `Ctx::epilogue_etranger`).
 fn creer_impact(ctx: &mut Ctx, o: Obj) {
-    if let Some(n) = ctx.alloc(&pools::ALLOC_EFFCT) {
+    if let Some(n) = ctx.alloc(&pools::EFFCT) {
         n.set_u8(ctx.b, Obj::ACTIVE, 1);
         n.set_u8(ctx.b, Obj::KIND, 0x1d);
         n.set_u8(ctx.b, Obj::VARIANT, 0);
@@ -2316,7 +2316,7 @@ fn bulle_fin(ctx: &mut Ctx, o: Obj) {
             crate::mem::wr16(ctx.b, bulle::PALETTE_JAUGE, 0xffff);
         }
     }
-    ctx.free(&pools::FREE_EFFCT);
+    ctx.free(&pools::EFFCT);
 }
 
 fn bulle_gestionnaire(ctx: &mut Ctx) {
@@ -2327,7 +2327,7 @@ fn bulle_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => bulle_init(ctx, o),
         etat::ACTIF => bulle_actif(ctx, o),
         etat::LIBERE => bulle_fin(ctx, o),
-        6 => ctx.free(&pools::FREE_EFFCT),
+        6 => ctx.free(&pools::EFFCT),
         _ => ctx.deleguer(cible),
     }
 }
@@ -2377,7 +2377,7 @@ fn trace_init(ctx: &mut Ctx, o: Obj) {
 fn trace_actif(ctx: &mut Ctx, _o: Obj) {
     let fin = ctx.anim_step();
     if ctx.pris(fin) {
-        ctx.free(&pools::FREE_EFFCT);
+        ctx.free(&pools::EFFCT);
     }
 }
 

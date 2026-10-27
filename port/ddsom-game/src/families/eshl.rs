@@ -24,6 +24,7 @@ mod sfx {
 }
 
 use super::cx::sub;
+use crate::objects::pools;
 
 // ---------------------------------------------------------------------------------------------
 // Type 0 (0x9dbfc) : projectile horizontal, deux variantes (+3)
@@ -1248,8 +1249,8 @@ mod shot14 {
 
     /// Crée un tir de type 15 lié à cette partie ; l'original n'examine pas l'échec d'allocation.
     fn spawn_child(x: &mut Cx, variant: u8) -> Obj {
-        x.call(sub::ALLOC_ESHL);
-        let child = Obj(x.c.a[1]);
+        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        let child = x.alloc_unchecked(&pools::ESHL);
         let active = x.u8(0);
         child.set_u8(x.b, 0, active);
         child.set_u8(x.b, 2, 0xf);

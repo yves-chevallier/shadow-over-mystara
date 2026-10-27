@@ -2,6 +2,7 @@
 //! 8 plongeon vers la cible, 10 bond qui lance un bras (objet de type 0x2a, variante 0).
 
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -383,10 +384,7 @@ fn leap(x: &mut Cx) {
                 return;
             }
             x.add8(STEP, 2);
-            let arm = alloc(x, rom::ALLOC_ESHL);
-            if alloc_failed(x) {
-                return end_leap(x);
-            }
+            let Some(arm) = x.alloc(&pools::ESHL) else { return end_leap(x) };
             x.set16(ARM, arm.0 as u16);
             arm.set_u8(x.b, 0, 1);
             arm.set_u8(x.b, 2, 0x2a);

@@ -4,6 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 const ANIM_START: u32 = 0x1a32;
 const REINSERT: u32 = 0x1ee1a;
@@ -273,7 +274,7 @@ mod cure {
 
     /// `0x4ab82` : étincelle (variante 1) ; le compteur `+0x5f` tourne sur 8.
     fn spawn_spark(x: &mut Cx) {
-        if let Some(o) = x.alloc(ALLOC_PEFF) {
+        if let Some(o) = x.alloc(&pools::PEFF) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 4);
             o.set_u8(x.b, 3, 1);

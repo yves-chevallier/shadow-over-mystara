@@ -11,6 +11,7 @@
 use super::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 mod f {
     pub const STATE: u32 = 0x04;
@@ -29,10 +30,9 @@ mod f {
 }
 
 const ANIM_SET: u32 = 0x1c03a6;
-const FREE_EFFECT: u32 = 0x2218;
 
 fn free(x: &mut Cx) {
-    x.call(FREE_EFFECT);
+    x.free(&pools::EFFCT);
 }
 
 fn random(x: &mut Cx) -> u32 {

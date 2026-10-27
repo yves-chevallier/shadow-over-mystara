@@ -40,6 +40,7 @@ mod g {
     pub const DEATH_FLAG: u32 = 0x91;
 }
 use g::*;
+use crate::objects::pools;
 
 const SET_BODY: u32 = 0x175da6;
 const SET_ATTACK: u32 = 0x175dc4;
@@ -48,12 +49,10 @@ const SET_FALL: u32 = 0x175e0c;
 const SPIN_VECTORS: u32 = 0x1c94b6;
 
 mod call {
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const MOVE_XY: u32 = 0x1d62;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const ANIM_STEP: u32 = 0x1a56;
-    pub const ALLOC_SET: u32 = 0x2348;
     pub const SPEED: u32 = 0x1b64;
     pub const PICK_PLAYER: u32 = 0x43bc;
     pub const ANGLE_TO_TARGET: u32 = 0x1376;
@@ -70,7 +69,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
 }
 
@@ -217,7 +216,7 @@ fn intro(x: &mut Cx) {
                 return;
             }
             x.call(0xd5f30);
-            if let Some(set) = try_alloc(x, call::ALLOC_SET) {
+            if let Some(set) = x.alloc(&pools::SET) {
                 set.set_u8(x.b, 0, 1);
                 set.set_u8(x.b, 2, 2);
                 set.set_u8(x.b, 3, 0x73);
@@ -800,7 +799,7 @@ fn dying_burst(x: &mut Cx) {
         x.set16(COUNT, r);
     }
     if step(x) {
-        x.call(call::FREE_BOSS);
+        x.free(&pools::BOSS);
     }
 }
 

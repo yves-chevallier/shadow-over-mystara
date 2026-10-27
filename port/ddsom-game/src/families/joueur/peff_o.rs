@@ -5,6 +5,7 @@ use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd32, wr32, wr8};
 use super::pshell::*;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const ANIMS: u32 = 0x1c40c6;
@@ -59,7 +60,7 @@ mod coins {
                 x.c.d[0] = delta;
                 x.add32(0x8, delta);
             }
-            _ => x.call(0x2218),
+            _ => x.free(&pools::EFFCT),
         }
     }
 

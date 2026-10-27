@@ -11,6 +11,7 @@ use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::rng::Rng;
+use crate::objects::pools;
 
 /// Valeurs de l'octet d'état `+4` (le suivant se calcule par `+2`).
 mod state {
@@ -37,10 +38,6 @@ mod f {
 
 /// Routines d'origine utilisées.
 mod rom {
-    pub const FREE_EFFECT: u32 = 0x2218;
-    pub const ALLOC_EFFECT: u32 = 0x2318;
-    pub const ALLOC_ESHL: u32 = 0x22ea;
-    pub const ALLOC_BOX: u32 = 0x23a8;
     pub const ANIM_STEP: u32 = 0x1a56;
     pub const MOVE_Z: u32 = 0x1da6;
     pub const SOUND_0ED11C: u32 = 0xed11c;
@@ -73,7 +70,7 @@ fn owner(x: &mut Cx) -> Obj {
 }
 
 fn free(x: &mut Cx) {
-    x.call(rom::FREE_EFFECT);
+    x.free(&pools::EFFCT);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -82,11 +79,7 @@ fn free(x: &mut Cx) {
 
 /// 0xb8dc2 : crée le clignotement (type 79) sur la position de l'objet, un cran plus haut.
 fn spawn_blink(x: &mut Cx) {
-    x.call(rom::ALLOC_EFFECT);
-    if x.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let blink = Obj(x.c.a[1]);
+    let Some(blink) = x.alloc(&pools::EFFCT) else { return };
     wr8(x.b, blink.0, 1);
     wr8(x.b, blink.0 + 2, 79);
     for field in [Obj::X, Obj::Z, Obj::Y] {
@@ -100,11 +93,7 @@ fn spawn_blink(x: &mut Cx) {
 
 /// 0xa532e : crée le tir d'éclat de ramassage (ESHL de type 55) à l'endroit où le détecteur est touché.
 fn spawn_pickup_flash(x: &mut Cx) {
-    x.call(rom::ALLOC_ESHL);
-    if x.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let flash = x.c.a[1];
+    let Some(Obj(flash)) = x.alloc(&pools::ESHL) else { return };
     wr8(x.b, flash, 1);
     wr8(x.b, flash + 2, 55);
     let variant = x.u8(f::VARIANT);
@@ -354,8 +343,8 @@ fn menu_button_active(x: &mut Cx) {
                 x.call(rom::SOUND_0ECF10);
             } else if x.u8(0x33) != 0 {
                 x.set8(0x33, 0);
-                x.call(rom::ALLOC_BOX);
-                let spawned = x.c.a[1];
+                // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+                let Obj(spawned) = x.alloc_unchecked(&pools::BOSS);
                 wr8(x.b, spawned, 1);
                 wr8(x.b, spawned + 2, 8);
             }

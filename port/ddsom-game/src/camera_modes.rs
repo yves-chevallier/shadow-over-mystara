@@ -8,7 +8,7 @@
 //! `Cx::o` désigne celle que le script modifie (quelques scripts agissent sur la caméra 2).
 
 use cps2::Cps2Bus;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
 use crate::families::cx::Cx;
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
@@ -17,6 +17,7 @@ use crate::player::{Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::rng::Rng;
 use crate::scroll::{cam, CAMERA_1, CAMERA_2};
 use crate::{regs, Native};
+use crate::objects::pools;
 
 /// Champs de la caméra utilisés par les scripts, en plus de `scroll::cam`.
 mod f {
@@ -94,11 +95,6 @@ const CAM2_MIN_X: u32 = CAMERA_2 + cam::MIN_X;
 /// Sous-routines d'origine appelées.
 mod ext {
     pub const TILES_BLOCK: u32 = 0x26d4;
-    pub const ALLOC_EFFECT: u32 = 0x2318;
-    pub const ALLOC_SET: u32 = 0x2348;
-    pub const ALLOC_ENEMY: u32 = 0x22bc;
-    pub const ALLOC_BOX: u32 = 0x23a8;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const MOVE_Z: u32 = 0x1dbc;
     /// Secousses de la caméra (modes 0x54, 0x5c), voir `start_shake`.
     pub const SHAKE_54: u32 = 0x2824;
@@ -686,12 +682,9 @@ fn camera_2_follow(x: &mut Cx) {
 }
 
 /// Création d'un objet décor (SET) à la fin d'un défilement : `kind` écrit dans son type.
-fn spawn_gate(x: &mut Cx, alloc: u32, kind: u8, bump: u8) -> bool {
-    x.call(alloc);
-    if x.c.sr & SR_C != 0 {
-        return false;
-    }
-    let (obj, variant) = (x.c.a[1], x.u8(f::KIND));
+fn spawn_gate(x: &mut Cx, pool: &pools::Pool, kind: u8, bump: u8) -> bool {
+    let Some(Obj(obj)) = x.alloc(pool) else { return false };
+    let variant = x.u8(f::KIND);
     wr8(x.b, obj, 1);
     wr8(x.b, obj + 2, kind);
     wr8(x.b, obj + 3, variant.wrapping_add(bump));
@@ -716,7 +709,7 @@ fn advance_to(x: &mut Cx, target: i16, next: u16) {
         }
     }
     x.set16(cam::X, target as u16);
-    if spawn_gate(x, ext::ALLOC_EFFECT, 0, 0) {
+    if spawn_gate(x, &pools::EFFCT, 0, 0) {
         x.set16(cam::MODE, next);
         x.set8(f::STEP, 0);
         x.add16(f::TIMER, 1);
@@ -728,7 +721,7 @@ fn gate(x: &mut Cx) {
     if x.u8(f::STEP) == 0 {
         return;
     }
-    if !spawn_gate(x, ext::ALLOC_SET, 2, 1) {
+    if !spawn_gate(x, &pools::SET, 2, 1) {
         return;
     }
     x.set16(cam::X, 0x468);
@@ -752,7 +745,7 @@ fn gate_far(x: &mut Cx) {
     match x.u8(f::STEP) {
         0x04 => x.add16(cam::X, 0xfffe),
         0x08 => {
-            if !spawn_gate(x, ext::ALLOC_SET, 2, 1) {
+            if !spawn_gate(x, &pools::SET, 2, 1) {
                 return;
             }
             x.set16(cam::X, 0x820);
@@ -1118,11 +1111,7 @@ fn falling_leaves(x: &mut Cx) {
             }
             let wait = random(x) & 63;
             x.set16(f::TIMER_2, wait);
-            x.call(ext::ALLOC_SOBJ);
-            if x.c.sr & SR_C != 0 {
-                return;
-            }
-            let leaf = x.c.a[1];
+            let Some(Obj(leaf)) = x.alloc(&pools::SOBJ) else { return };
             wr8(x.b, leaf, 1);
             wr8(x.b, leaf + 2, 0);
             let variant = VARIANTS[(random(x) & 7) as usize];
@@ -1160,11 +1149,7 @@ fn rising(x: &mut Cx) {
             }
             x.set16(cam::Y, 0);
             x.set16(cam::X, 560);
-            x.call(ext::ALLOC_BOX);
-            if x.c.sr & SR_C != 0 {
-                return;
-            }
-            let obj = x.c.a[1];
+            let Some(Obj(obj)) = x.alloc(&pools::BOSS) else { return };
             wr8(x.b, obj, 1);
             wr8(x.b, obj + 2, 0xf);
             x.add8(f::STEP, 4);
@@ -1196,11 +1181,7 @@ fn strolling(x: &mut Cx) {
 
 /// 0x33152 : un objet de décor est créé quand le décor est arrivé en bas.
 fn rubble(x: &mut Cx) {
-    x.call(ext::ALLOC_ENEMY);
-    if x.c.sr & SR_C != 0 {
-        return;
-    }
-    let obj = x.c.a[1];
+    let Some(Obj(obj)) = x.alloc(&pools::ENEMY) else { return };
     let v = rd8(x.b, obj).wrapping_add(1);
     wr8(x.b, obj, v);
     wr8(x.b, obj + 2, 0x15);

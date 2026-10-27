@@ -57,6 +57,7 @@ pub(self) mod g {
     pub const BITES: u32 = 0xb0;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const SET_MOVE: u32 = 0x162126;
 pub(self) const SET_STRIKE: u32 = 0x162148;
@@ -83,7 +84,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        st::DEAD => x.call(rom::FREE_ENEMY),
+        st::DEAD => x.free(&pools::ENEMY),
         _ => {}
     }
 }

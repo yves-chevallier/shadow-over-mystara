@@ -4,6 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const SHAKE: u32 = 0x2824;
@@ -96,7 +97,7 @@ mod jet {
         x.add8(0x4, 2);
         let (mut offset, mut delay) = (0u16, 1u16);
         for _ in 0..3 {
-            let Some(o) = x.alloc(ALLOC_PSHL) else { return };
+            let Some(o) = x.alloc(&pools::PSHL) else { return };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, KIND);
             o.set_u8(x.b, 3, 1);

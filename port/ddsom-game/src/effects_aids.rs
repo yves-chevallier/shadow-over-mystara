@@ -2,15 +2,13 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
-use crate::call;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::ops::logique;
 use crate::{regs, Native};
+use crate::objects::{pools, Obj};
 
-/// Allocation d'un effet : A1 = emplacement, retenue levée si le pool est plein.
-const ALLOC_EFFECT: u32 = 0x2318;
 /// Scène dont les effets de choc ne sont pas créés.
 const SCENE: u32 = 0x34;
 const NO_SHOCK_SCENE: u8 = 41;
@@ -23,9 +21,8 @@ const SPARK_KIND: u8 = 4;
 /// D1 = deux octets de réglage (bas : `+0x2d`, haut : `+0x2f`), D2 et D3 = vitesses (`+0x14`, `+0x1c`).
 fn shock(c: &mut Cpu, b: &mut Cps2Bus) {
     if rd8(b, A5 + SCENE) != NO_SHOCK_SCENE {
-        call(c, b, ALLOC_EFFECT);
-        if c.sr & SR_C == 0 {
-            let (me, fx) = (c.a[0], c.a[1]);
+        if let Some(Obj(fx)) = pools::EFFCT.alloc_68k(c, b) {
+            let me = c.a[0];
             wr8(b, fx, 1);
             wr8(b, fx + 2, SHOCK_KIND);
             for field in [0x08, 0x10, 0x0c] {
@@ -56,9 +53,7 @@ fn spark(c: &mut Cpu, b: &mut Cps2Bus) {
     let skip = (rd8(b, me + 0x3c) as i8) < 2 && rd8(b, me + 0x10d).wrapping_sub(16) <= 3;
     if !skip {
         c.a[2] = c.a[1];
-        call(c, b, ALLOC_EFFECT);
-        if c.sr & SR_C == 0 {
-            let fx = c.a[1];
+        if let Some(Obj(fx)) = pools::EFFCT.alloc_68k(c, b) {
             wr8(b, fx, 1);
             wr8(b, fx + 2, SPARK_KIND);
             wr8(b, fx + 3, c.d[1] as u8);
@@ -86,9 +81,8 @@ fn spark_between(c: &mut Cpu, b: &mut Cps2Bus, owner_first: bool) {
     let saved = [c.a[1], c.a[2], c.a[3], c.a[4]];
     let me = c.a[0];
     c.a[2] = c.a[1];
-    call(c, b, ALLOC_EFFECT);
-    if c.sr & SR_C == 0 {
-        let (fx, other) = (c.a[1], c.a[2]);
+    if let Some(Obj(fx)) = pools::EFFCT.alloc_68k(c, b) {
+        let other = c.a[2];
         wr8(b, fx, 1);
         wr8(b, fx + 2, SPARK_KIND);
         wr8(b, fx + 3, c.d[1] as u8);
@@ -162,18 +156,11 @@ fn place_between(b: &mut Cps2Bus, me: u32, fx: u32, victim: u32) -> (u16, u16, u
     (z, front.wrapping_sub(1), gap >> 1, their_z)
 }
 
-/// Allocation d'un objet de décor (SOBJ) et d'un effet de joueur (PEFF).
-const ALLOC_SOBJ: u32 = 0x2408;
-const ALLOC_PEFF: u32 = 0x228e;
 
 /// Crée un objet de type `kind` dans le pool alloué par `alloc` : variante D0. Rend l'objet dans A1 ;
 /// la retenue levée signale un pool plein.
-fn spawn(c: &mut Cpu, b: &mut Cps2Bus, alloc: u32, kind: u8) -> Option<u32> {
-    call(c, b, alloc);
-    if c.sr & SR_C != 0 {
-        return None;
-    }
-    let object = c.a[1];
+fn spawn(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8) -> Option<u32> {
+    let object = pool.alloc_68k(c, b)?.0;
     wr8(b, object, 1);
     wr8(b, object + 2, kind);
     wr8(b, object + 3, c.d[0] as u8);
@@ -183,19 +170,19 @@ fn spawn(c: &mut Cpu, b: &mut Cps2Bus, alloc: u32, kind: u8) -> Option<u32> {
 
 /// 0xddeaa : décor de type 6.
 fn spawn_scenery_6(c: &mut Cpu, b: &mut Cps2Bus) {
-    spawn(c, b, ALLOC_SOBJ, 6);
+    spawn(c, b, &pools::SOBJ, 6);
 }
 
 /// 0xdfa4a : décor de type 11, orienté selon D1.
 fn spawn_scenery_11(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(object) = spawn(c, b, ALLOC_SOBJ, 11) {
+    if let Some(object) = spawn(c, b, &pools::SOBJ, 11) {
         wr8(b, object + 0x2c, c.d[1] as u8);
     }
 }
 
 /// 0x517ba : effet de joueur de type 44 ; son réglage `+0x2f` est l'octet suivant dans la table A4.
 fn spawn_player_effect_44(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(object) = spawn(c, b, ALLOC_PEFF, 44) {
+    if let Some(object) = spawn(c, b, &pools::PEFF, 44) {
         let setting = rd8(b, c.a[4]);
         c.a[4] = c.a[4].wrapping_add(1);
         wr8(b, object + 0x2f, setting);

@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::mem::{rd16, rd32, rd8, wr32, A5};
+use crate::objects::pools;
 
 /// Joueurs : quatre enregistrements de 0x200 octets.
 const PLAYERS: u32 = A5 + 0x5de;
@@ -854,7 +855,7 @@ fn choose_reward(x: &mut Cx) {
 pub fn countdown_digits(x: &mut Cx) {
     let mut value = x.u32(0x4c);
     if value == 0 {
-        return x.call(sub::FREE_SET);
+        return x.free(&pools::SET);
     }
     let (sub, event) = if value & 0xf00 != 0 {
         (0x100, 4)
@@ -880,7 +881,7 @@ pub fn countdown_digits(x: &mut Cx) {
 pub fn credits_scroll(x: &mut Cx) {
     const TEXT: u32 = 0xd01de;
     if x.u8(0x4) == 6 {
-        return x.call(sub::FREE_SET);
+        return x.free(&pools::SET);
     }
     if x.u8(0x4) == 0 {
         next_state(x);

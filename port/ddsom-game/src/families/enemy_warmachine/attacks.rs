@@ -4,7 +4,7 @@
 
 use super::arrival::hop_loop;
 use super::*;
-use crate::objects::Obj;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -247,11 +247,7 @@ fn grenade(x: &mut Cx) {
                 return;
             }
             x.set8(KEY, 0);
-            x.call(rom::ALLOC_ESHL);
-            if alloc_failed(x) {
-                return;
-            }
-            let obj = Obj(x.c.a[1]);
+            let Some(obj) = x.alloc(&pools::ESHL) else { return };
             obj.set_u8(x.b, 0, 1);
             obj.set_u8(x.b, 2, 0x43);
             let at = x.u16(X);

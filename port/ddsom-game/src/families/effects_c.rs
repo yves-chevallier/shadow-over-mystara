@@ -44,6 +44,7 @@
 use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Champs partagés.
 mod f {
@@ -55,11 +56,8 @@ mod f {
 
 /// Routines d'origine utilisées.
 mod rom {
-    pub const FREE_EFFECT: u32 = 0x2218;
 }
 
-/// Allocation d'un EFFCT : A1 = emplacement, retenue = pool plein.
-const ALLOC_EFFECT: u32 = 0x2318;
 
 /// Joueurs : quatre enregistrements de 0x200 octets.
 const PLAYERS: u32 = A5 + 0x5de;
@@ -70,7 +68,7 @@ fn players() -> impl Iterator<Item = Obj> {
 }
 
 fn free(x: &mut Cx) {
-    x.call(rom::FREE_EFFECT);
+    x.free(&pools::EFFCT);
 }
 
 /// Indique si `o` est dans la boîte `(dx, demi-largeur, dy, demi-profondeur)` centrée sur l'objet courant
@@ -469,10 +467,6 @@ mod purse {
     /// Fin de la jauge : tuile selon le reste (mots, indexés de -7 à 0).
     pub const GAUGE_END: u32 = 0xaefee;
     pub const ANIM_SET: u32 = 0x1c40c6;
-    /// Allocations : 0x23d8 (ITEM), 0x228e (PEFF), 0x2408 (SOBJ).
-    pub const ALLOC_ITEM: u32 = 0x23d8;
-    pub const ALLOC_PEFF: u32 = 0x228e;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
     pub const PALETTE_PAGE: u32 = 0x1a608;
     /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)`, lecture d'un mot à une adresse
     /// impaire (erreur d'adresse, le jeu s'arrête sur l'écran d'exception). Hors contrat, laissé à l'original.
@@ -505,11 +499,6 @@ fn purse(x: &mut Cx) {
 }
 
 /// Allocation par une routine d'origine : l'emplacement (A1), ou `None` (retenue).
-fn alloc(x: &mut Cx, routine: u32) -> Option<Obj> {
-    x.call(routine);
-    (x.c.sr & m68k::SR_C == 0).then(|| Obj(x.c.a[1]))
-}
-
 fn purse_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set16(0x18, 0);
@@ -533,7 +522,7 @@ fn purse_init(x: &mut Cx) {
     crate::mem::wr32(x.b, 0x91c552, 0xf800_ff33);
     // l'original garde D0 (la palette) à travers l'allocation
     x.c.d[0] = palette as u32;
-    let Some(item) = alloc(x, purse::ALLOC_ITEM) else { return x.call(purse::POOL_FULL) };
+    let Some(item) = x.alloc(&pools::ITEM) else { return x.call(purse::POOL_FULL) };
     wr8(x.b, item.0, 1);
     wr8(x.b, item.0 + 2, 9);
     wr8(x.b, item.0 + 3, player);
@@ -554,7 +543,7 @@ fn purse_init(x: &mut Cx) {
     let gauge = if two_players(x) { purse::GAUGE_2P } else { purse::GAUGE };
     let v = x.data32(gauge + p4);
     x.set32(purse::GAUGE_AT, v);
-    let Some(peff) = alloc(x, purse::ALLOC_PEFF) else { return x.call(purse::POOL_FULL) };
+    let Some(peff) = x.alloc(&pools::PEFF) else { return x.call(purse::POOL_FULL) };
     wr8(x.b, peff.0, 1);
     wr8(x.b, peff.0 + 2, 0x18);
     wr16(x.b, peff.0 + 0x5c, x.o.0 as u16);
@@ -566,7 +555,7 @@ fn purse_init(x: &mut Cx) {
         (purse::ICON_POS, purse::ICON_VARIANT)
     };
     let (pos, var) = (pos + p4, var + player as u32);
-    let Some(icon) = alloc(x, purse::ALLOC_SOBJ) else { return x.call(purse::POOL_FULL) };
+    let Some(icon) = x.alloc(&pools::SOBJ) else { return x.call(purse::POOL_FULL) };
     wr8(x.b, icon.0, 1);
     wr8(x.b, icon.0 + 2, 0);
     let v = x.data8(var);
@@ -578,7 +567,7 @@ fn purse_init(x: &mut Cx) {
     // six PEFF 0x11 (D5 : compteur de l'original, conservé par l'allocation)
     x.c.d[5] = 5;
     loop {
-        let Some(o) = alloc(x, purse::ALLOC_PEFF) else { return x.call(purse::POOL_FULL) };
+        let Some(o) = x.alloc(&pools::PEFF) else { return x.call(purse::POOL_FULL) };
         wr8(x.b, o.0, 1);
         wr8(x.b, o.0 + 2, 0x11);
         wr8(x.b, o.0 + 3, x.c.d[5] as u8);
@@ -1548,7 +1537,7 @@ fn dust_init(x: &mut Cx) {
 
 /// 0xb40ba : remplit le pool d'effets de poussières de mode 1 à la même position.
 fn dust_spawn(x: &mut Cx) {
-    while let Some(o) = alloc(x, ALLOC_EFFECT) {
+    while let Some(o) = x.alloc(&pools::EFFCT) {
         wr8(x.b, o.0, 1);
         wr8(x.b, o.0 + 2, 42);
         wr8(x.b, o.0 + 3, 10);
@@ -1584,7 +1573,6 @@ mod barrier {
     pub const SET_VARIANTS: u32 = 0xba034;
     /// Variantes des interrupteurs, quatre octets par variante (données) ; une valeur négative arrête la liste.
     pub const SWITCHES: u32 = 0xba07c;
-    pub const ALLOC_SET: u32 = 0x2348;
     pub const OPEN_SOUND: u32 = 0xeaf6a;
     /// Décor SET associé (pointeur de 16 bits).
     pub const SET: u32 = 0x46;
@@ -1634,7 +1622,7 @@ fn barrier_init(x: &mut Cx) {
     let v = x.u8(f::VARIANT) as u32;
     // le décor : l'original réessaie jusqu'à trouver une place
     let set = loop {
-        if let Some(o) = alloc(x, barrier::ALLOC_SET) {
+        if let Some(o) = x.alloc(&pools::SET) {
             break o;
         }
     };
@@ -1652,7 +1640,7 @@ fn barrier_init(x: &mut Cx) {
             break;
         }
         let variant = x.data8(list + k);
-        if let Some(o) = alloc(x, ALLOC_EFFECT) {
+        if let Some(o) = x.alloc(&pools::EFFCT) {
             wr8(x.b, o.0, 1);
             wr8(x.b, o.0 + 2, 87);
             wr8(x.b, o.0 + 3, variant);
@@ -1778,7 +1766,7 @@ fn floater_main(x: &mut Cx) {
             x.add8(f::SUB_STATE, 2);
             floater_start_wave(x);
             // 0xb337e : le reflet (type 36 variante 1)
-            if let Some(o) = alloc(x, ALLOC_EFFECT) {
+            if let Some(o) = x.alloc(&pools::EFFCT) {
                 wr8(x.b, o.0, 1);
                 wr8(x.b, o.0 + 2, 36);
                 wr8(x.b, o.0 + 3, 1);
@@ -2094,7 +2082,7 @@ fn shard_rain(x: &mut Cx) {
                 x.add8(f::STATE, 2);
             }
             // 0xb9956 : la goutte suivante
-            if let Some(o) = alloc(x, ALLOC_EFFECT) {
+            if let Some(o) = x.alloc(&pools::EFFCT) {
                 wr8(x.b, o.0, 1);
                 wr8(x.b, o.0 + 2, 83);
                 wr8(x.b, o.0 + 3, 1);
@@ -2163,8 +2151,8 @@ fn machine_active(x: &mut Cx) {
                 x.set16(machine::TIMER, 0x40);
                 x.anim_start(machine::ANIM_SET, 0);
                 // un objet BOX 0x12 ; l'original ne teste pas l'échec de l'allocation
-                x.call(0x23a8);
-                let o = x.c.a[1];
+                // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+                let Obj(o) = x.alloc_unchecked(&pools::BOSS);
                 wr8(x.b, o, 1);
                 wr8(x.b, o + 2, 0x12);
             }
@@ -2183,7 +2171,7 @@ fn machine_active(x: &mut Cx) {
                 x.add8(f::SUB_STATE, 2);
                 x.anim_start(machine::ANIM_SET, 0);
                 // 0xb6eb0 : le reflet (type 58 variante 1)
-                if let Some(o) = alloc(x, ALLOC_EFFECT) {
+                if let Some(o) = x.alloc(&pools::EFFCT) {
                     wr8(x.b, o.0, 1);
                     wr8(x.b, o.0 + 2, 58);
                     wr8(x.b, o.0 + 3, 1);
@@ -2266,7 +2254,7 @@ fn double_slide(x: &mut Cx) -> bool {
 /// 0xae700 : crée l'objet suivant (type 39), en réessayant jusqu'à trouver une place.
 fn double_spawn(x: &mut Cx) {
     let o = loop {
-        if let Some(o) = alloc(x, ALLOC_EFFECT) {
+        if let Some(o) = x.alloc(&pools::EFFCT) {
             break o;
         }
     };
@@ -2750,7 +2738,7 @@ fn lob_active(x: &mut Cx) {
             x.set16(Obj::Z, 0);
             let pieces = if (v as i8) < 5 { 3 } else { 2 };
             for _ in 0..pieces {
-                if let Some(o) = alloc(x, ALLOC_EFFECT) {
+                if let Some(o) = x.alloc(&pools::EFFCT) {
                     wr8(x.b, o.0, 1);
                     wr8(x.b, o.0 + 2, 50);
                     wr8(x.b, o.0 + 3, 5);
@@ -2886,7 +2874,7 @@ mod vote {
 }
 
 fn spawn_vote(x: &mut Cx, variant: u8, mode: u8) -> Option<Obj> {
-    let o = alloc(x, ALLOC_EFFECT)?;
+    let o = x.alloc(&pools::EFFCT)?;
     wr8(x.b, o.0, 1);
     wr8(x.b, o.0 + 2, 23);
     wr8(x.b, o.0 + 3, variant);
@@ -3391,7 +3379,7 @@ fn double2_active(x: &mut Cx) {
                 x.add8(f::SUB_STATE, 2);
                 match sub {
                     4 => {
-                        if let Some(o) = alloc(x, ALLOC_EFFECT) {
+                        if let Some(o) = x.alloc(&pools::EFFCT) {
                             wr8(x.b, o.0, 1);
                             wr8(x.b, o.0 + 2, 50);
                             wr8(x.b, o.0 + 3, 2);
@@ -3401,7 +3389,7 @@ fn double2_active(x: &mut Cx) {
                         }
                     }
                     6 => {
-                        if let Some(o) = alloc(x, ALLOC_EFFECT) {
+                        if let Some(o) = x.alloc(&pools::EFFCT) {
                             wr8(x.b, o.0, 1);
                             wr8(x.b, o.0 + 2, 50);
                             wr8(x.b, o.0 + 3, 6);
@@ -3417,7 +3405,7 @@ fn double2_active(x: &mut Cx) {
                     8 => {
                         // le morceau projeté (type 39, variante + 5) : l'original réessaie jusqu'à trouver une place
                         let o = loop {
-                            if let Some(o) = alloc(x, ALLOC_EFFECT) {
+                            if let Some(o) = x.alloc(&pools::EFFCT) {
                                 break o;
                             }
                         };
@@ -3469,7 +3457,7 @@ fn swimmer(x: &mut Cx) {
             let wave = random_nibble16(x) as u8 & 1;
             x.set8(0x2f, wave);
             // 0xb7792 : son remous (type 62)
-            if let Some(o) = alloc(x, ALLOC_EFFECT) {
+            if let Some(o) = x.alloc(&pools::EFFCT) {
                 wr8(x.b, o.0, 1);
                 wr8(x.b, o.0 + 2, 62);
                 wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
@@ -3477,7 +3465,7 @@ fn swimmer(x: &mut Cx) {
             // deux décors SET 0x17 (variantes 0 et 1) ; un pool plein mène l'original dans des données
             // (0xb778c, hors contrat : laissé à l'original)
             for (variant, flip) in [(0u8, 1u8), (1, 0)] {
-                let Some(o) = alloc(x, 0x2348) else { return x.call(0xb778c) };
+                let Some(o) = x.alloc(&pools::SET) else { return x.call(0xb778c) };
                 wr8(x.b, o.0, 1);
                 wr8(x.b, o.0 + 2, 0x17);
                 wr8(x.b, o.0 + 3, variant);
@@ -3605,7 +3593,6 @@ mod counter {
     ];
     pub const GOODS: u32 = 0xb82e0;
     pub const SCENE_SET: u32 = 0xc8312;
-    pub const ALLOC_PEFF: u32 = 0x228e;
 }
 
 /// `0xb83d8` : premier acheteur dans la zone : le comptoir prend la vente (s'il n'y en a pas d'autre) et
@@ -3691,7 +3678,7 @@ fn counter_sale(x: &mut Cx) {
         if (setting as i8) < 0 {
             return;
         }
-        let Some(o) = alloc(x, counter::ALLOC_PEFF) else { return };
+        let Some(o) = x.alloc(&pools::PEFF) else { return };
         wr8(x.b, o.0, 1);
         wr8(x.b, o.0 + 2, 0x2a);
         wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
@@ -4092,7 +4079,7 @@ fn riser_shoot(x: &mut Cx, variant: u8) {
     }
     x.add8(f::SUB_STATE, 2);
     x.set8(0x33, 0);
-    let Some(o) = alloc(x, ALLOC_EFFECT) else { return };
+    let Some(o) = x.alloc(&pools::EFFCT) else { return };
     wr8(x.b, o.0, 1);
     wr8(x.b, o.0 + 2, 50);
     wr8(x.b, o.0 + 3, variant);
@@ -4195,7 +4182,7 @@ fn riser_active(x: &mut Cx) {
             x.set16(riser::TIMER, 0x50);
             // le morceau projeté (type 39 variante 9) : l'original réessaie jusqu'à trouver une place
             let o = loop {
-                if let Some(o) = alloc(x, ALLOC_EFFECT) {
+                if let Some(o) = x.alloc(&pools::EFFCT) {
                     break o;
                 }
             };
@@ -4854,11 +4841,7 @@ fn finale_end(x: &mut Cx) {
     if x.a5_u8(0x48f) != 0 {
         return;
     }
-    x.call(0x23a8);
-    if x.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let o = x.c.a[1];
+    let Some(Obj(o)) = x.alloc(&pools::BOSS) else { return };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0x14);
     x.set8(0x2f, 1);
@@ -5036,7 +5019,7 @@ fn floor_tile(x: &mut Cx) {
             let px = x.rom16(tiles::POSITIONS + 2 * v as u32);
             x.set16(Obj::X, px);
             if (v as i8) < 9 {
-                let Some(o) = alloc(x, ALLOC_EFFECT) else { return };
+                let Some(o) = x.alloc(&pools::EFFCT) else { return };
                 x.set16(tiles::NEXT, o.0 as u16);
                 let a = rd8(x.b, o.0).wrapping_add(1);
                 wr8(x.b, o.0, a);
@@ -5091,7 +5074,7 @@ fn floor_tile_watch(x: &mut Cx, v: u8) {
     if stepped == down {
         return;
     }
-    let Some(o) = alloc(x, 0x2348) else { return };
+    let Some(o) = x.alloc(&pools::SET) else { return };
     let a = rd8(x.b, o.0).wrapping_add(1);
     wr8(x.b, o.0, a);
     wr8(x.b, o.0 + 2, 6);
@@ -5161,11 +5144,7 @@ fn courier(x: &mut Cx) {
                 }
                 return;
             }
-            x.call(0x22bc);
-            if x.c.sr & m68k::SR_C != 0 {
-                return;
-            }
-            let o = x.c.a[1];
+            let Some(Obj(o)) = x.alloc(&pools::ENEMY) else { return };
             x.add8(f::STATE, 2);
             let card = courier::CARDS + 8 * x.u8(f::VARIANT) as u32;
             let link = x.u16(0x46);

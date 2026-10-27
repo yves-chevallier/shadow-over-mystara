@@ -3,6 +3,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 
@@ -291,7 +292,7 @@ mod shadow {
         let mut offset = 0u16;
         let mut rank = 1u8;
         for _ in 0..3 {
-            let Some(o) = x.alloc(ALLOC_PSHL) else { break };
+            let Some(o) = x.alloc(&pools::PSHL) else { break };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 8);
             o.set_u8(x.b, 3, 1);

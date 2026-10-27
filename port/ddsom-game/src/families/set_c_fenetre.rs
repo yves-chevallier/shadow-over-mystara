@@ -14,7 +14,7 @@
 //! Le texte composé est une suite d'octets : caractère (> 15), commande (≤ 15) suivie de son argument,
 //! 0xfe + argument, 0xff + nombre de caractères écrits depuis le précédent 0xff + argument, 0xfd fin.
 
-use crate::families::cx::{sub, Cx};
+use crate::families::cx::Cx;
 use crate::mem::{prog32, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
 
@@ -580,7 +580,7 @@ fn free(x: &mut Cx) {
     x.set8(f::CLOSED, 0);
     let n = rd8(x.b, WINDOW_COUNT).wrapping_sub(1);
     wr8(x.b, WINDOW_COUNT, n);
-    x.call(sub::FREE_SET);
+    x.free(&pools::SET);
 }
 
 // ---- composition du texte -----------------------------------------------------------------------

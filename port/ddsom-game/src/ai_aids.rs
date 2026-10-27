@@ -12,6 +12,7 @@ use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::ops::logique;
 use crate::rng::Rng;
 use crate::{call, regs, Native};
+use crate::objects::pools;
 
 /// Compteur de l'image courante, qui sert d'index dans les tables d'attitude.
 const TICK: u32 = A5 + 0x7f92;
@@ -995,14 +996,10 @@ fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
 // Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
 // ---------------------------------------------------------------------------------------------
 
-/// Allocation d'un objet ramassable (ITEM) : A1, retenue levée si le pool est plein.
-const ALLOC_ITEM: u32 = 0x23d8;
-const ALLOC_EFFECT: u32 = 0x2318;
 
 /// Alloue par `alloc` (0x2318, 0x23d8) : l'objet dans A1, ou `None` si le pool est plein.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, alloc: u32) -> Option<u32> {
-    call(c, b, alloc);
-    (c.sr & SR_C == 0).then_some(c.a[1])
+fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
+    pool.alloc_68k(c, b).map(|o| o.0)
 }
 
 /// Mot suivant de la table A2 (espace de données).
@@ -1045,7 +1042,7 @@ fn debris_set(c: &mut Cpu, b: &mut Cps2Bus) {
     let mirrored = rd8(b, me + f::FACING) != 0;
     for left in (0..=count).rev() {
         set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(c, b, ALLOC_EFFECT) else { continue };
+        let Some(fx) = alloc(c, b, &pools::EFFCT) else { continue };
         debris(b, fx, me);
         let z = rd16(b, me + 0x0c);
         wr16(b, fx + 0x0c, z);
@@ -1078,7 +1075,7 @@ fn ground_debris(c: &mut Cpu, b: &mut Cps2Bus) {
     let mirrored = rd8(b, me + f::FACING) != 0;
     for left in (0..=4u16).rev() {
         set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(c, b, ALLOC_EFFECT) else { continue };
+        let Some(fx) = alloc(c, b, &pools::EFFCT) else { continue };
         debris(b, fx, me);
         let ground = rd16(b, A5 + 0x5aa);
         wr16(b, fx + 0x10, ground);
@@ -1149,7 +1146,7 @@ fn drop_once(c: &mut Cpu, b: &mut Cps2Bus) {
     if variant == 0 {
         return;
     }
-    let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+    let Some(item) = alloc(c, b, &pools::ITEM) else { return };
     wr8(b, me + 0x9d, 1);
     tossed_item(b, me, item, 2, variant, (-0x40i16) as u16, false);
     let flip = random(b) & 1 != 0;
@@ -1188,7 +1185,7 @@ fn drop_loot(c: &mut Cpu, b: &mut Cps2Bus) {
         if (variant as i8) < 0 {
             return;
         }
-        let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+        let Some(item) = alloc(c, b, &pools::ITEM) else { return };
         tossed_item(b, me, item, 0, variant, 0x40, left != 0);
     }
     set_w(&mut c.d[5], 0xffff);
@@ -1222,7 +1219,7 @@ fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
             if (variant as i8) < 0 {
                 break;
             }
-            let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+            let Some(item) = alloc(c, b, &pools::ITEM) else { return };
             wr8(b, item, 1);
             wr8(b, item + 2, 5);
             wr8(b, item + 3, variant);
@@ -1428,7 +1425,7 @@ fn drop_special(c: &mut Cpu, b: &mut Cps2Bus) {
             Draw::Restrict => restrict(c, b),
             Draw::Spawn => {
                 let (kind, variant) = drawn(b);
-                let Some(item) = alloc(c, b, ALLOC_ITEM) else { return };
+                let Some(item) = alloc(c, b, &pools::ITEM) else { return };
                 tossed_item(b, me, item, kind, variant, 0x40, c.d[5] as u8 == 0);
                 Draw::Next
             }

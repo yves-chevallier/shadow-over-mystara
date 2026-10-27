@@ -10,6 +10,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 const REACTIONS: u32 = 0x8527a;
 /// La seule routine de la table propre au boss (code 0x4c) : étourdissement avec tremblement.
@@ -256,7 +257,7 @@ fn down(x: &mut Cx) {
         }
         8 => {
             if sub16(x, TIMER, 1).le() {
-                x.call(call::FREE_BOSS);
+                x.free(&pools::BOSS);
             } else {
                 let b = x.u8(0x1) ^ 0x2;
                 x.set8(0x1, b);

@@ -11,19 +11,12 @@ use m68k::{Cpu, SR_C};
 use crate::mem::{prog32, prog8, rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::{call, regs, Native};
+use crate::objects::pools;
 
-/// Allocations dans les pools : A1 = emplacement, retenue = pool plein.
-const ALLOC_PSHL: u32 = 0x225e;
-const ALLOC_PEFF: u32 = 0x228e;
-const ALLOC_ESHL: u32 = 0x22ea;
-const ALLOC_SET: u32 = 0x2348;
-const ALLOC_ITEM: u32 = 0x23d8;
-const ALLOC_SOBJ: u32 = 0x2408;
 
 /// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, routine: u32) -> Option<Obj> {
-    call(c, b, routine);
-    (c.sr & SR_C == 0).then(|| Obj(c.a[1]))
+fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {
+    pool.alloc_68k(c, b)
 }
 
 /// Drapeaux d'un `move` de `v` (taille `size`) : N et Z selon la valeur, V et C à zéro.
@@ -49,7 +42,7 @@ fn weapon_shot(c: &mut Cpu, b: &mut Cps2Bus) {
         c.sr = c.sr & 0xff00 | SR_C;
         return rts(c, b);
     }
-    let Some(shot) = alloc(c, b, ALLOC_PSHL) else {
+    let Some(shot) = alloc(c, b, &pools::PSHL) else {
         c.sr = c.sr & 0xff00 | SR_C;
         return rts(c, b);
     };
@@ -70,7 +63,7 @@ fn weapon_shot(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Effet PEFF de genre `kind` (à lier ensuite au joueur par `link_effect`).
 fn player_effect(c: &mut Cpu, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
-    let fx = alloc(c, b, ALLOC_PEFF)?;
+    let fx = alloc(c, b, &pools::PEFF)?;
     fx.set_u8(b, 0x0, 1);
     fx.set_u8(b, 0x2, kind);
     Some(fx)
@@ -118,7 +111,7 @@ fn enemy_shot_9(c: &mut Cpu, b: &mut Cps2Bus) {
         return rts(c, b);
     }
     let me = c.a[0];
-    if let Some(shot) = alloc(c, b, ALLOC_ESHL) {
+    if let Some(shot) = alloc(c, b, &pools::ESHL) {
         shot.set_u8(b, 0x0, 1);
         shot.set_u8(b, 0x2, 9);
         shot.set_u8(b, 0x3, 0);
@@ -130,7 +123,7 @@ fn enemy_shot_9(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xcdedc : objet SET 13 de variante D0.
 fn set_13(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(set) = alloc(c, b, ALLOC_SET) {
+    if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
         set.set_u8(b, 0x2, 13);
         let v = c.d[0] as u8;
@@ -143,7 +136,7 @@ fn set_13(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xc8312 : objet SET de variante D0, dont le type dépend de la scène (`A5+0x73 / 2`, table 0xc834c) ;
 /// compte les SET créés (`A5+0x51`, `A5-0x5b8e`). D0 = indice de la scène, Z = (D0.b == 0).
 fn scene_set(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(set) = alloc(c, b, ALLOC_SET) {
+    if let Some(set) = alloc(c, b, &pools::SET) {
         for at in [A5 + 0x51, A5 - 0x5b8e] {
             let n = rd8(b, at).wrapping_add(1);
             wr8(b, at, n);
@@ -182,7 +175,7 @@ const SET_A_BLOQUE: u32 = A5 - 0x5fbe;
 /// 0xcc352 / 0xcc38e : objet SET 0xa de variante D0 (effet d'un objet utilisé), qui retient la classe de
 /// `classe` (`+0x2f`) ; refusé (retenue seule, `move #1,CCR`) s'il en existe déjà un ou si le pool est plein.
 fn set_a(c: &mut Cpu, b: &mut Cps2Bus, classe: fn(&mut Cpu, &mut Cps2Bus) -> u8) {
-    let cree = (rd8(b, SET_A_ACTIF) == 0 && rd8(b, SET_A_BLOQUE) == 0).then(|| alloc(c, b, ALLOC_SET)).flatten();
+    let cree = (rd8(b, SET_A_ACTIF) == 0 && rd8(b, SET_A_BLOQUE) == 0).then(|| alloc(c, b, &pools::SET)).flatten();
     match cree {
         Some(set) => {
             wr8(b, SET_A_ACTIF, 1);
@@ -219,7 +212,7 @@ fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
         moved(c, niveau as u32, Size::Byte);
         return rts(c, b);
     }
-    if let Some(item) = alloc(c, b, ALLOC_ITEM) {
+    if let Some(item) = alloc(c, b, &pools::ITEM) {
         item.set_u8(b, 0x0, 1);
         item.set_u8(b, 0x2, 6);
         item.set_u8(b, 0x3, c.d[0] as u8);
@@ -248,7 +241,7 @@ fn nothing(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xce00a : objet SET 15 de variante D0.
 fn set_15(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(set) = alloc(c, b, ALLOC_SET) {
+    if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
         set.set_u8(b, 0x2, 0xf);
         let v = c.d[0] as u8;
@@ -260,7 +253,7 @@ fn set_15(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xdfe26 : objet SOBJ 14.
 fn sobj_14(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, ALLOC_SOBJ) {
+    if let Some(o) = alloc(c, b, &pools::SOBJ) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0xe);
         moved(c, 0xe, Size::Byte);
@@ -270,7 +263,7 @@ fn sobj_14(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xdfc78 : objet SOBJ 12 de variante D0, vitesse nulle ; drapeaux de D0.b.
 fn sobj_12(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, ALLOC_SOBJ) {
+    if let Some(o) = alloc(c, b, &pools::SOBJ) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0xc);
         let v = c.d[0] as u8;
@@ -284,7 +277,7 @@ fn sobj_12(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xdf688 : objet SOBJ 8 lié au créateur (`+0x14`), variante 1 si le créateur a lui-même un lien.
 fn sobj_8(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    if let Some(o) = alloc(c, b, ALLOC_SOBJ) {
+    if let Some(o) = alloc(c, b, &pools::SOBJ) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 8);
         o.set_u16(b, 0x14, me as u16);
@@ -304,7 +297,7 @@ fn set_20(c: &mut Cpu, b: &mut Cps2Bus) {
     let game = rd8(b, A5 + 0x30);
     moved(c, game as u32, Size::Byte);
     if game != 0 {
-        if let Some(set) = alloc(c, b, ALLOC_SET) {
+        if let Some(set) = alloc(c, b, &pools::SET) {
             set.set_u8(b, 0x0, 1);
             set.set_u8(b, 0x2, 0x14);
             set.set_u16(b, 0x20, me as u16);
@@ -319,7 +312,7 @@ fn set_20(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xd6952 : objet SET 0x15 (variante 2) dont `+0x42` vient de la table 0xd697c selon le type du créateur.
 fn set_21(c: &mut Cpu, b: &mut Cps2Bus) {
     let kind = rd8(b, c.a[0] + 2) as u32;
-    if let Some(set) = alloc(c, b, ALLOC_SET) {
+    if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
         set.set_u8(b, 0x2, 0x15);
         set.set_u8(b, 0x3, 2);
@@ -333,7 +326,7 @@ fn set_21(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xc9760 : objet SET 5 (variante 1), `+0x24` nul.
 fn set_5(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(set) = alloc(c, b, ALLOC_SET) {
+    if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
         set.set_u8(b, 0x2, 5);
         set.set_u8(b, 0x3, 1);
@@ -448,7 +441,7 @@ fn bolt_shot(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     wr16(b, A5 - 0x5fb4, left - 1);
     let me = Obj(c.a[0]);
-    if let Some(shot) = alloc(c, b, ALLOC_PSHL) {
+    if let Some(shot) = alloc(c, b, &pools::PSHL) {
         shot.set_u8(b, 0x0, 1);
         shot.set_u8(b, 0x2, 0x13);
         shot.set_u16(b, 0x50, me.0 as u16);
@@ -464,7 +457,7 @@ fn bolt_shot(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x52578 : tir de type 5 à la position et dans l'orientation du créateur, même joueur ; pool plein : D0 = 0.
 fn shot_5(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = Obj(c.a[0]);
-    let Some(shot) = alloc(c, b, ALLOC_PSHL) else {
+    let Some(shot) = alloc(c, b, &pools::PSHL) else {
         c.d[0] = 0;
         moved(c, 0, Size::Long);
         return rts(c, b);
@@ -488,7 +481,7 @@ fn shot_5(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x54842 : tir de type 0x18 (variante 1, résistances 0x10) lié par `+0x5c` ; D0 = 1, ou 0 si le pool est plein.
 fn shot_18(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    c.d[0] = match alloc(c, b, ALLOC_PSHL) {
+    c.d[0] = match alloc(c, b, &pools::PSHL) {
         Some(shot) => {
             shot.set_u8(b, 0x0, 1);
             shot.set_u8(b, 0x2, 0x18);
@@ -507,7 +500,7 @@ fn shot_18(c: &mut Cpu, b: &mut Cps2Bus) {
 /// Effet de joueur (PEFF) de type `kind`, variante `variant`, lié au joueur (`+0x50`).
 fn peff(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let me = c.a[0];
-    let fx = alloc(c, b, ALLOC_PEFF)?;
+    let fx = alloc(c, b, &pools::PEFF)?;
     fx.set_u8(b, 0x0, 1);
     fx.set_u8(b, 0x2, kind);
     if let Some(v) = variant {
@@ -532,7 +525,7 @@ fn peff_8(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x51bb6 : effet 0x2f (sans lien).
 fn peff_2f(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(fx) = alloc(c, b, ALLOC_PEFF) {
+    if let Some(fx) = alloc(c, b, &pools::PEFF) {
         fx.set_u8(b, 0x0, 1);
         fx.set_u8(b, 0x2, 0x2f);
         moved(c, 0x2f, Size::Byte);
@@ -545,7 +538,7 @@ fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
     c.d[5] = 3;
     loop {
-        let Some(fx) = alloc(c, b, ALLOC_PEFF) else { break };
+        let Some(fx) = alloc(c, b, &pools::PEFF) else { break };
         fx.set_u8(b, 0x0, 1);
         fx.set_u8(b, 0x2, 0x13);
         fx.set_u8(b, 0x3, 1);
@@ -569,7 +562,7 @@ fn peff_7(c: &mut Cpu, b: &mut Cps2Bus) {
     let step = me.u8(b, 7);
     if c.d[0] as u8 == 0 {
         for index in [0, 1] {
-            let Some(fx) = alloc(c, b, ALLOC_PEFF) else { return rts(c, b) };
+            let Some(fx) = alloc(c, b, &pools::PEFF) else { return rts(c, b) };
             fx.set_u8(b, 0x0, 1);
             fx.set_u8(b, 0x2, 7);
             fx.set_u8(b, 0x3, 0);
@@ -578,7 +571,7 @@ fn peff_7(c: &mut Cpu, b: &mut Cps2Bus) {
             fx.set_u16(b, 0x50, me.0 as u16);
             moved(c, me.0 & 0xffff, Size::Word);
         }
-    } else if let Some(fx) = alloc(c, b, ALLOC_PEFF) {
+    } else if let Some(fx) = alloc(c, b, &pools::PEFF) {
         fx.set_u8(b, 0x0, 1);
         fx.set_u8(b, 0x2, 7);
         fx.set_u8(b, 0x3, 1);
@@ -589,7 +582,6 @@ fn peff_7(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-const ALLOC_ENEMY: u32 = 0x22bc;
 
 /// 0x63ae0 : s'il reste plus de deux places d'ennemis (`A5+0x7e62`), deux ennemis de type 7 (variantes 0
 /// et 1) liés au créateur par `+0x46` ; D0 = 1, sinon 0 (l'allocation n'est pas vérifiée).
@@ -601,8 +593,8 @@ fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
         return rts(c, b);
     }
     for variant in [0, 1] {
-        call(c, b, ALLOC_ENEMY);
-        let o = Obj(c.a[1]);
+        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        let o = pools::ENEMY.alloc_unchecked_68k(c, b);
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 7);
         o.set_u8(b, 0x3, variant);
@@ -618,7 +610,7 @@ fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
 /// drapeaux de D0.b (`or.b D0b,D0b`).
 fn enemy_at(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, link: u32, extra: &[(u32, u8)]) {
     let me = c.a[0];
-    if let Some(o) = alloc(c, b, ALLOC_ENEMY) {
+    if let Some(o) = alloc(c, b, &pools::ENEMY) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, kind);
         o.set_u16(b, 0x8, c.d[0] as u16);

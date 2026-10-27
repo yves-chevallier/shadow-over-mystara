@@ -4,6 +4,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const SPEED_TABLE_A: u32 = 0x1a94;
@@ -184,7 +185,7 @@ mod storm {
     /// `0x4ec02` : seize éclairs.
     fn spawn_bolts(x: &mut Cx) {
         for rank in (0..16u8).rev() {
-            let Some(o) = x.alloc(ALLOC_PEFF) else { return };
+            let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, KIND);
             o.set_u8(x.b, 3, 1);
@@ -199,7 +200,7 @@ mod storm {
     /// `0x4ec36` : quatre étincelles.
     fn spawn_sparks(x: &mut Cx) {
         for rank in (0..4u8).rev() {
-            let Some(o) = x.alloc(ALLOC_PEFF) else { return };
+            let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, KIND);
             o.set_u8(x.b, 3, 2);
@@ -421,7 +422,7 @@ mod whirl {
             x.c.d[0] = k * 2;
             let angle = x.rom8(SPAWN_TABLE + 2 * k);
             let count = x.rom8(SPAWN_TABLE + 2 * k + 1);
-            if let Some(o) = x.alloc(ALLOC_PEFF) {
+            if let Some(o) = x.alloc(&pools::PEFF) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, KIND);
                 o.set_u8(x.b, 3, 1);

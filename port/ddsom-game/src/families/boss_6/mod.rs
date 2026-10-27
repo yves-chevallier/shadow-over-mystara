@@ -49,6 +49,7 @@ pub(self) mod g {
     pub const MARK_X: u32 = 0xbc;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const SET_BODY: u32 = 0x177874;
 pub(self) const SET_FLY: u32 = 0x17788c;
@@ -66,8 +67,6 @@ pub(self) mod call {
     pub const MOVE_X: u32 = 0x1d78;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
-    pub const FREE_BOSS: u32 = 0x2234;
-    pub const ALLOC_ESHL: u32 = 0x22ea;
     pub const DUST: u32 = 0x1172e;
 }
 
@@ -81,7 +80,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
     if x.u8(INVULNERABLE) != 0 {
         x.set8(0x38, 0);

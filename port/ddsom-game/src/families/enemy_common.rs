@@ -10,6 +10,7 @@ use m68k::SR_C;
 
 use super::cx::Cx;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Champs des objets ENEMY.
 pub mod f {
@@ -47,11 +48,7 @@ pub mod st {
 
 /// Routines du moteur appelées par les ennemis.
 pub mod rom {
-    pub const FREE_ENEMY: u32 = 0x21f4;
-    pub const ALLOC_ENEMY: u32 = 0x22bc;
     pub const ALLOC_ESHL: u32 = 0x22ea;
-    pub const ALLOC_EFFCT: u32 = 0x2318;
-    pub const ALLOC_ITEM: u32 = 0x23d8;
     /// PV initiaux selon le type, la difficulté et le nombre de joueurs.
     pub const INITIAL_HP: u32 = 0x4544;
     /// Immunités du type (rangées en `+0x94`).
@@ -65,18 +62,14 @@ pub mod rom {
 
 /// Alloue un objet du pool `alloc` (adresse d'une routine d'allocation) et rend son adresse (`A1`).
 /// L'original n'examine pas la retenue : il écrit à travers `A1` même si le pool est plein.
-pub fn alloc(x: &mut Cx, alloc: u32) -> Obj {
-    x.call(alloc);
-    Obj(x.c.a[1])
+pub fn alloc(x: &mut Cx, pool: &pools::Pool) -> Obj {
+    x.alloc_unchecked(pool)
 }
 
 /// Alloue un tir ESHL actif de type `kind`, avec la variante `variant`, lié à l'objet courant par le mot `link`
 /// (`None` si le pool est plein). Les créateurs ci-dessous sont les petites routines 0x9ddee..0xa6824 de l'original.
 fn spawn_eshl(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
-    let o = alloc(x, rom::ALLOC_ESHL);
-    if alloc_failed(x) {
-        return None;
-    }
+    let Some(o) = x.alloc(&pools::ESHL) else { return None };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
     o.set_u8(x.b, 3, variant);
@@ -86,10 +79,7 @@ fn spawn_eshl(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
 
 /// Alloue un EFFCT actif de type `kind`, variante `variant`, lié à l'objet courant par le mot `link`.
 fn spawn_effct(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
-    let o = alloc(x, rom::ALLOC_EFFCT);
-    if alloc_failed(x) {
-        return None;
-    }
+    let Some(o) = x.alloc(&pools::EFFCT) else { return None };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
     o.set_u8(x.b, 3, variant);
@@ -132,10 +122,7 @@ pub fn effct_trio_2e(x: &mut Cx) {
 
 /// 0x667f4 : un ennemi de type 10, variante 4, lié par `+0x5c`, en (D0.w, D1.w) (explosions de l'arrivée du boss 2, SET 17).
 pub fn enemy_blast_at(x: &mut Cx) {
-    let o = alloc(x, rom::ALLOC_ENEMY);
-    if alloc_failed(x) {
-        return;
-    }
+    let Some(o) = x.alloc(&pools::ENEMY) else { return };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, 0xa);
     o.set_u16(x.b, 0x5c, x.o.0 as u16);
@@ -191,7 +178,7 @@ pub fn alloc_failed(x: &Cx) -> bool {
 
 /// Libère l'ennemi courant (état « mort » traité).
 pub fn free(x: &mut Cx) {
-    x.call(rom::FREE_ENEMY);
+    x.free(&pools::ENEMY);
 }
 
 /// Tirage pseudo-aléatoire du jeu (mot dans D0).
@@ -440,8 +427,7 @@ pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
         let routine_index = x.data8(at) as u32;
         at += 1;
         let routine = rom32(x, allocs + 4 * routine_index);
-        let o = alloc(x, routine);
-        if !alloc_failed(x) {
+        if let Some(o) = x.alloc(pools::pool_of_alloc_routine(routine)) {
             let (kind, variant, group) = (x.data8(at), x.data8(at + 1), x.data8(at + 2));
             let (px, ph, pz) = (x.data16(at + 3), x.data16(at + 5), x.data16(at + 7));
             o.set_u8(x.b, 0, 1);

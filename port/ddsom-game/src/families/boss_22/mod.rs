@@ -61,6 +61,7 @@ pub(self) mod g {
     pub const HOST: u32 = 0x42;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeux d'animations d'un boss.
 #[derive(Clone, Copy)]
@@ -138,7 +139,6 @@ pub(self) mod state {
 }
 
 pub(self) mod call {
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_YZ: u32 = 0x1dd4;
@@ -413,7 +413,7 @@ pub fn run(x: &mut Cx) {
             if !two(x) {
                 x.set_a5_u8(0x50, 0);
             }
-            x.tail(call::FREE_BOSS);
+            x.free(&pools::BOSS);
         }
     }
 }

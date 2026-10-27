@@ -7,6 +7,7 @@
 
 use crate::families::cx::Cx;
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Champs propres aux objets joueur.
 pub mod f {
@@ -33,12 +34,6 @@ pub fn ext(o: Obj) -> u32 {
     o.0 as u16 as i16 as i32 as u32
 }
 
-/// Libération d'un tir (PSHL) ou d'un effet (PEFF) : appelée en queue de gestionnaire.
-pub const FREE_PSHL: u32 = 0x21d8;
-pub const FREE_PEFF: u32 = 0x21e6;
-/// Allocations dans les pools.
-pub const ALLOC_PSHL: u32 = 0x225e;
-pub const ALLOC_PEFF: u32 = 0x228e;
 
 /// Déplacements, animation, culling du modèle d'objets.
 pub const MOVE_XZ: u32 = 0x1da6;
@@ -105,18 +100,12 @@ impl Cx<'_> {
 
     /// Libère le tir.
     pub fn free_pshl(&mut self) {
-        self.call(FREE_PSHL);
+        self.free(&pools::PSHL);
     }
 
     /// Libère l'effet.
     pub fn free_peff(&mut self) {
-        self.call(FREE_PEFF);
-    }
-
-    /// Alloue un objet dans un pool : `None` quand le pool est plein (retenue levée), sinon l'emplacement (A1).
-    pub fn alloc(&mut self, routine: u32) -> Option<Obj> {
-        self.call(routine);
-        (!self.c.cond(5)).then(|| Obj(self.c.a[1]))
+        self.free(&pools::PEFF);
     }
 
     /// Copie la position (X, Z, Y entiers) d'un autre objet.

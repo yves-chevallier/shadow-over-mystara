@@ -7,6 +7,7 @@
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
+use crate::objects::pools;
 
 const REINSERT: u32 = 0x1ee1a;
 const TERRAIN_OF_OBJECT: u32 = 0x24a8;
@@ -602,7 +603,7 @@ mod burst {
         let mut remaining = n as u16;
         x.c.d[5] = n as u32;
         loop {
-            let Some(o) = x.alloc(ALLOC_PSHL) else { break };
+            let Some(o) = x.alloc(&pools::PSHL) else { break };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 5);
             o.set_u8(x.b, 3, 1);

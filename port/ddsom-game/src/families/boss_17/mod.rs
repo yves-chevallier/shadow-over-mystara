@@ -74,6 +74,7 @@ pub(self) mod g {
     pub const MARK_Y: u32 = 0xbe;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Jeux d'animations.
 pub(self) const SET_BODY: u32 = 0x18076e;
@@ -97,9 +98,6 @@ pub(self) mod call {
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_TABLE_XY: u32 = 0x1cb4;
     pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
-    pub const FREE_BOSS: u32 = 0x2234;
-    pub const ALLOC_SET: u32 = 0x2348;
-    pub const ALLOC_BOSS: u32 = 0x23a8;
     pub const NEW_MESSAGE: u32 = 0xc8312;
     pub const SPAWN_RING: u32 = 0x57c8c;
 }
@@ -114,7 +112,7 @@ pub fn run(x: &mut Cx) {
             st::INIT => init(x),
             st::ACTIVE => active(x),
             st::HIT => hit::run(x),
-            _ => x.call(call::FREE_BOSS),
+            _ => x.free(&pools::BOSS),
         }
         if x.u8(INVULNERABLE) != 0 {
             x.set8(0x38, 0);

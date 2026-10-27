@@ -11,6 +11,7 @@
 use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 mod f {
     pub const STATE: u32 = 0x04;
@@ -18,7 +19,6 @@ mod f {
     pub const VARIANT: u32 = 0x03;
 }
 
-const FREE_EFFECT: u32 = 0x2218;
 const ANIM_SET: u32 = 0x1c03a6;
 /// Joueurs : quatre enregistrements de 0x200 octets.
 const PLAYERS: u32 = A5 + 0x5de;
@@ -28,7 +28,7 @@ fn players() -> impl DoubleEndedIterator<Item = Obj> {
 }
 
 fn free(x: &mut Cx) {
-    x.call(FREE_EFFECT);
+    x.free(&pools::EFFCT);
 }
 
 /// Préambule commun : le crochet de pause (0x29ea, Z faux : objet suspendu), la pause du jeu, et au
@@ -343,10 +343,8 @@ fn gate_enter(x: &mut Cx) {
 
 /// 0xcc200 : décor (SET 8) de variante D0 et de réglage D1 ; à défaut un SOBJ 4, à défaut un EFFCT 18.
 fn scene_prop(x: &mut Cx) {
-    for (alloc, kind) in [(0x2348, 8), (0x2408, 4), (0x2318, 0x12)] {
-        x.call(alloc);
-        if x.c.sr & m68k::SR_C == 0 {
-            let o = Obj(x.c.a[1]);
+    for (alloc, kind) in [(&pools::SET, 8), (&pools::SOBJ, 4), (&pools::EFFCT, 0x12)] {
+        if let Some(o) = x.alloc(alloc) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, kind);
             o.set_u8(x.b, f::VARIANT, x.c.d[0] as u8);
@@ -463,14 +461,9 @@ mod attack_fx {
     pub const SOURCE: u32 = 0x54;
 }
 
-fn alloc_effect(x: &mut Cx) -> Option<Obj> {
-    x.call(0x2318);
-    (x.c.sr & m68k::SR_C == 0).then(|| Obj(x.c.a[1]))
-}
-
 /// 0xabec8 : crée un EFFCT 11 de variante `variant` et de mode `mode`, rattaché à l'objet courant.
 fn attack_fx_spawn(x: &mut Cx, variant: u8, mode: u8) -> Option<Obj> {
-    let o = alloc_effect(x)?;
+    let o = x.alloc(&pools::EFFCT)?;
     wr8(x.b, o.0, 1);
     wr8(x.b, o.0 + 2, 11);
     wr16(x.b, o.0 + attack_fx::OWNER, x.o.0 as u16);

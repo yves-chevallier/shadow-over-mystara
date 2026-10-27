@@ -10,6 +10,7 @@ use super::cx::{handlers, sub, Cx};
 use super::shell::*;
 use crate::mem::{rd32, wr32};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Sons (wrappers de la zone 0xe0836-0xee080) et autres routines d'effets.
 mod sfx {
@@ -27,9 +28,6 @@ const RNG: u32 = 0x19a88;
 const ANGLE: u32 = 0x1386;
 /// Division non signée D0 / D1 (quotient dans D0).
 const DIVIDE: u32 = 0x17ea;
-/// Réservation d'un objet ENEMY et EFFCT (ESHL : `sub::ALLOC_ESHL`).
-const ALLOC_ENEMY: u32 = 0x22bc;
-const ALLOC_EFFCT: u32 = 0x2318;
 
 /// État long « à libérer » (`+4 = 6`, `+5..+7` = 0).
 const DEAD: u32 = 0x0600_0000;
@@ -49,11 +47,6 @@ fn ptr(x: &mut Cx, off: u32) -> Obj {
 }
 
 /// Réserve un objet dans le pool dont `alloc` est la routine d'allocation ; `None` si le pool est plein.
-fn alloc(x: &mut Cx, alloc: u32) -> Option<Obj> {
-    x.call(alloc);
-    (x.c.sr & SR_C == 0).then(|| Obj(x.c.a[1]))
-}
-
 /// L'objet est marqué à libérer à la prochaine image.
 fn kill(x: &mut Cx) {
     x.set32(0x4, DEAD);
@@ -1031,8 +1024,8 @@ mod shot20 {
                 x.call(sfx::E4E5A);
                 x.call(sfx::E4FB6);
                 x.add8(0x6, 2);
-                x.call(sub::ALLOC_ESHL);
-                let blow = Obj(x.c.a[1]);
+                // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+                let blow = x.alloc_unchecked(&pools::ESHL);
                 let active = x.u8(0x0);
                 blow.set_u8(x.b, 0, active);
                 blow.set_u8(x.b, 3, 0);
@@ -1143,7 +1136,7 @@ mod shot21 {
                     x.anim_start(ANIMS, 1);
                 } else {
                     if x.u8(0x46) == 0 {
-                        if let Some(e) = alloc(x, ALLOC_EFFCT) {
+                        if let Some(e) = x.alloc(&pools::EFFCT) {
                             e.set_u8(x.b, 0, 1);
                             e.set_u8(x.b, 3, 0);
                             e.set_u8(x.b, 2, 0x18);
@@ -1385,7 +1378,7 @@ mod shot24 {
 
     /// Lance l'effet suivant (variante 1) et avance `+0x56` modulo 16.
     fn spawn_effect(x: &mut Cx) {
-        if let Some(e) = alloc(x, sub::ALLOC_ESHL) {
+        if let Some(e) = x.alloc(&pools::ESHL) {
             e.set_u8(x.b, 0, 1);
             e.set_u8(x.b, 2, 0x18);
             e.set_u8(x.b, 3, 1);
@@ -1410,7 +1403,7 @@ mod shot24 {
         x.call(RNG);
         let mut table = GROUP_OFFSETS + ((x.c.d[0] & 7) << 3);
         loop {
-            let Some(e) = alloc(x, ALLOC_ENEMY) else { return };
+            let Some(e) = x.alloc(&pools::ENEMY) else { return };
             e.set_u8(x.b, 0, 1);
             e.set_u8(x.b, 2, 1);
             e.set_u8(x.b, 3, 4);
@@ -1810,7 +1803,7 @@ fn copy_position16(x: &mut Cx, from: Obj) {
 fn spawn_row(x: &mut Cx, kind: u8, mut px: u16, rightwards: bool) {
     let mut label: u16 = 1;
     loop {
-        let Some(e) = alloc(x, sub::ALLOC_ESHL) else { return };
+        let Some(e) = x.alloc(&pools::ESHL) else { return };
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, kind);
         e.set_u8(x.b, 3, 1);
@@ -2443,7 +2436,6 @@ mod shot34 {
 
     const ANIMS_SCREEN: u32 = 0x1c03a6;
     const ANIMS: u32 = 0x17e03a;
-    const ALLOC_SET: u32 = 0x2348;
     /// (destination dans la palette, source dans la ROM), 8 longs chacun.
     const PALETTES: [(u32, u32); 4] = [(0x91c2e0, 0x2538c0), (0x91c300, 0x2538e0), (0x91c360, 0x253900), (0x91c3e0, 0x253920)];
     const TINT: u32 = 0xf000_f000;
@@ -2475,7 +2467,7 @@ mod shot34 {
 
     /// Décor SET (type 0, variante 0x47) ; `None` si le pool est plein.
     fn spawn_scenery(x: &mut Cx) -> Option<Obj> {
-        let s = alloc(x, ALLOC_SET)?;
+        let s = x.alloc(&pools::SET)?;
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 2, 0);
         s.set_u8(x.b, 3, 0x47);

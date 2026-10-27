@@ -15,11 +15,10 @@ use super::{Ctx, Player};
 use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::{regs, Native};
+use crate::objects::pools;
 
 /// Routines d'allocation d'origine (natives) : retenue levée si le pool est plein, A1 = l'emplacement.
 mod alloc {
-    pub const PSHL: u32 = 0x225e;
-    pub const PEFF: u32 = 0x228e;
 }
 
 /// Octets de l'objet créé.
@@ -68,14 +67,10 @@ mod kind {
     pub const WITCH: u8 = 0x12;
 }
 
-/// Réserve un emplacement dans le pool dont `alloc` est l'allocateur et l'active avec le genre `kind`.
-fn create(g: &mut Ctx, p: Player, alloc: u32, kind: u8) -> Option<Obj> {
+/// Réserve un emplacement dans `pool` et l'active avec le genre `kind`.
+fn create(g: &mut Ctx, _p: Player, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     cov!();
-    g.rom(alloc, p);
-    if g.c.sr & m68k::SR_C != 0 {
-        return None;
-    }
-    let o = Obj(g.c.a[1]);
+    let o = pool.alloc_68k(g.c, g.b)?;
     o.set_u8(g.b, Obj::ACTIVE, 1);
     o.set_u8(g.b, Obj::KIND, kind);
     Some(o)
@@ -91,7 +86,7 @@ fn link(g: &mut Ctx, o: Obj, p: Player) {
 /// Crée un effet lié au joueur : genre, variante (`Obj::VARIANT`), puis le lien. `fill` écrit les autres octets.
 fn effect(g: &mut Ctx, p: Player, kind: u8, variant: Option<u8>, fill: impl FnOnce(&mut Ctx, Obj)) -> Option<Obj> {
     cov!();
-    let o = create(g, p, alloc::PEFF, kind)?;
+    let o = create(g, p, &pools::PEFF, kind)?;
     if let Some(v) = variant {
         o.set_u8(g.b, Obj::VARIANT, v);
     }
@@ -243,7 +238,7 @@ pub fn swarm(g: &mut Ctx, p: Player, count: u32) {
         }
         wr16(g.b, A5.wrapping_sub(RESERVE), left - 1);
         let scene = g.a5u8(super::ram::SCENE);
-        let made = create(g, p, alloc::PEFF, kind::SWARM);
+        let made = create(g, p, &pools::PEFF, kind::SWARM);
         let Some(o) = made else { return };
         o.set_u16(g.b, field::LINK, p.0 as u16);
         o.set_u8(g.b, Obj::VARIANT, n as u8);
@@ -292,7 +287,7 @@ pub fn lightning(g: &mut Ctx, p: Player, target: u32) {
     cov!();
     let step = step_of(g, p);
     let facing = p.u8(g, Player::FACING);
-    let created = create(g, p, alloc::PEFF, kind::LIGHTNING);
+    let created = create(g, p, &pools::PEFF, kind::LIGHTNING);
     let Some(o) = created else { return };
     let (x, z, y) = (rd16(g.b, target + Obj::X), rd16(g.b, target + Obj::Z), rd16(g.b, target + Obj::Y));
     o.set_u16(g.b, field::LINK, p.0 as u16);
@@ -308,7 +303,7 @@ pub fn lightning(g: &mut Ctx, p: Player, target: u32) {
 pub fn flare(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
-    let Some(o) = create(g, p, alloc::PEFF, kind::LIGHTNING) else { return };
+    let Some(o) = create(g, p, &pools::PEFF, kind::LIGHTNING) else { return };
     o.set_u16(g.b, field::LINK, p.0 as u16);
     let facing = p.u8(g, Player::FACING);
     o.set_u8(g.b, Player::FACING, facing);
@@ -326,7 +321,7 @@ pub fn flare(g: &mut Ctx, p: Player) {
 /// 0x4ccac : créature invoquée, tournée comme le joueur.
 pub fn summon(g: &mut Ctx, p: Player) {
     cov!();
-    let Some(o) = create(g, p, alloc::PEFF, kind::SUMMON) else { return };
+    let Some(o) = create(g, p, &pools::PEFF, kind::SUMMON) else { return };
     let facing = p.u8(g, Player::FACING);
     o.set_u8(g.b, Player::FACING, facing);
     link(g, o, p);
@@ -400,7 +395,7 @@ pub fn ice_shards(g: &mut Ctx, p: Player) {
     let facing = p.u8(g, Player::FACING);
     let (x, z, y) = (p.u16(g, Obj::X), p.u16(g, Obj::Z), p.u16(g, Obj::Y));
     for n in 0..6u8 {
-        let created = create(g, p, alloc::PEFF, kind::ICE);
+        let created = create(g, p, &pools::PEFF, kind::ICE);
         let Some(o) = created else { return };
         o.set_u8(g.b, Obj::VARIANT, 4);
         o.set_u8(g.b, Player::FACING, facing);
@@ -465,7 +460,7 @@ impl Thrown {
 pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     cov!();
     let shot = which.shot();
-    let Some(o) = create(g, p, alloc::PSHL, shot.kind) else {
+    let Some(o) = create(g, p, &pools::PSHL, shot.kind) else {
         g.c.d[0] = 0;
         g.c.flags_logic(0, Size::Long);
         return false;
@@ -504,7 +499,7 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
 /// 0x54522 : boule de feu (magie 14), tir de genre 0x16.
 pub fn fireball(g: &mut Ctx, p: Player) {
     cov!();
-    let Some(o) = create(g, p, alloc::PSHL, kind::FIREBALL) else { return };
+    let Some(o) = create(g, p, &pools::PSHL, kind::FIREBALL) else { return };
     link(g, o, p);
 }
 
@@ -512,7 +507,7 @@ pub fn fireball(g: &mut Ctx, p: Player) {
 pub fn ice_ground(g: &mut Ctx, p: Player) -> bool {
     cov!();
     for v in 0..2 {
-        let Some(o) = create(g, p, alloc::PSHL, kind::ICE_GROUND) else {
+        let Some(o) = create(g, p, &pools::PSHL, kind::ICE_GROUND) else {
             g.c.d[0] = 0;
             g.c.flags_logic(0, Size::Long);
             return false;
@@ -526,7 +521,7 @@ pub fn ice_ground(g: &mut Ctx, p: Player) -> bool {
 /// 0x54426 : couteau lancé (tir de genre 0x15, puissances 10 et 5). Renvoie faux si le pool est plein.
 pub fn knife(g: &mut Ctx, p: Player) -> bool {
     cov!();
-    let Some(o) = create(g, p, alloc::PSHL, kind::KNIFE) else {
+    let Some(o) = create(g, p, &pools::PSHL, kind::KNIFE) else {
         g.c.d[0] = 0;
         g.c.flags_logic(0, Size::Long);
         return false;
@@ -541,7 +536,7 @@ pub fn knife(g: &mut Ctx, p: Player) -> bool {
 pub fn shadows(g: &mut Ctx, p: Player) {
     cov!();
     for v in (0..6).rev() {
-        let Some(o) = create(g, p, alloc::PSHL, kind::SHADOW) else { return };
+        let Some(o) = create(g, p, &pools::PSHL, kind::SHADOW) else { return };
         o.set_u8(g.b, Obj::VARIANT, v);
         link(g, o, p);
     }
@@ -550,7 +545,7 @@ pub fn shadows(g: &mut Ctx, p: Player) {
 /// Ombre du coup de pied sauté (tir de genre 8, paramètre 2), tel que le crée 0x49212 du voleur.
 pub fn shadow(g: &mut Ctx, p: Player) {
     cov!();
-    let Some(o) = create(g, p, alloc::PSHL, kind::SHADOW) else { return };
+    let Some(o) = create(g, p, &pools::PSHL, kind::SHADOW) else { return };
     o.set_u8(g.b, field::PARAM, 2);
     link(g, o, p);
 }
@@ -560,7 +555,7 @@ pub fn witch(g: &mut Ctx, p: Player) {
     cov!();
     const SLOTS: u32 = 0x5394e;
     for n in 0..5u8 {
-        let Some(o) = create(g, p, alloc::PSHL, kind::WITCH) else { return };
+        let Some(o) = create(g, p, &pools::PSHL, kind::WITCH) else { return };
         let facing = p.u8(g, Player::FACING);
         o.set_u8(g.b, Player::FACING, facing);
         o.set_u16(g.b, field::LINK, p.0 as u16);
@@ -576,7 +571,7 @@ pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     const POWER: u32 = 0x10_41f2;
     const POWER_BOSS: u32 = 0x10_4210;
-    let Some(o) = create(g, p, alloc::PSHL, kind::WITCH) else { return };
+    let Some(o) = create(g, p, &pools::PSHL, kind::WITCH) else { return };
     o.set_u8(g.b, Obj::VARIANT, v);
     o.set_u16(g.b, field::LINK, p.0 as u16);
     let level = p.u8(g, 0x10c) as u32;

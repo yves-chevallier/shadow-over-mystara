@@ -57,6 +57,7 @@ pub(self) mod g {
     pub const PUSHED: u32 = 0xb8;
 }
 use g::*;
+use crate::objects::pools;
 
 pub(self) const TYPE_BIG: u8 = 0xf;
 pub(self) const TYPE_SMALL: u8 = 0x14;
@@ -72,7 +73,6 @@ pub(self) mod call {
     pub const MOVE_Y: u32 = 0x1e02;
     pub const MOVE_XZ: u32 = 0x1da6;
     pub const MOVE_Z: u32 = 0x1dbc;
-    pub const FREE_BOSS: u32 = 0x2234;
     pub const ANIM_START: u32 = 0x1a32;
     pub const ANIM_STEP: u32 = 0x1a56;
     pub const REINSERT_FOREGROUND: u32 = 0x1ef6c;
@@ -91,7 +91,7 @@ pub fn run(x: &mut Cx) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
         st::HIT => hit::run(x),
-        _ => x.call(call::FREE_BOSS),
+        _ => x.free(&pools::BOSS),
     }
 }
 

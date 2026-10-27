@@ -30,8 +30,6 @@ const STOPS: u32 = 0x8f97a;
 const BOB_TABLE: u32 = 0x8faa2;
 
 mod rom {
-    pub const FREE: u32 = 0x21f4;
-    pub const ALLOC_ESHL: u32 = 0x22ea;
     pub const REACHED_X: u32 = 0x1e92;
     pub const BEGIN_A: u32 = 0xdf4bc;
     pub const NEW_MESSAGE: u32 = 0xc8312;
@@ -63,6 +61,7 @@ mod g {
     pub const SLOW: u32 = 0xbc;
 }
 use g::*;
+use crate::objects::pools;
 
 /// Octet `0xff0ec6` (`A5-0x713a`) : non nul, le dragon se retire.
 const RETREAT_FLAG: u32 = 0xff0ec6;
@@ -81,7 +80,7 @@ pub fn run(x: &mut Cx) {
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
-        _ => x.call(rom::FREE),
+        _ => x.free(&pools::ENEMY),
     }
 }
 
@@ -106,7 +105,7 @@ fn init(x: &mut Cx) {
     x.set16(0x18, 0x300);
     x.set16(0x1a, (-0x28i16) as u16);
     for variant in [1, 0] {
-        let shot = alloc(x, rom::ALLOC_ESHL);
+        let shot = alloc(x, &pools::ESHL);
         let active = x.u8(0);
         shot.set_u8(x.b, 0, active);
         shot.set_u8(x.b, 3, variant);
@@ -123,7 +122,7 @@ fn active(x: &mut Cx) {
     if x.u8(f::SUB) == 0 {
         stage(x);
     } else {
-        x.call(rom::FREE);
+        x.free(&pools::ENEMY);
     }
     x.reinsert();
 }

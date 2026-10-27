@@ -14,6 +14,7 @@ use m68k::decode::Fetch;
 use m68k::{Cpu, SR_C};
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
 use crate::{call, call_at, regs, Native};
 
@@ -55,14 +56,9 @@ pub mod sub {
     /// Attribut du terrain sous l'objet (D2) ; `terrain_at` prend (D0, D1) = (x, y).
     pub const TERRAIN_OF_OBJECT: u32 = 0x24a8;
     pub const TERRAIN_AT: u32 = 0x24b0;
-    /// Libération de l'objet dans son pool.
-    pub const FREE_ESHL: u32 = 0x2202;
-    pub const FREE_SET: u32 = 0x2210;
-    pub const FREE_SOBJ: u32 = 0x2250;
     /// Allocation d'un objet : A1 = emplacement, retenue = échec.
     pub const ALLOC_ESHL: u32 = 0x22ea;
     pub const ALLOC_SET: u32 = 0x2348;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
 }
 
 impl<'a> Cx<'a> {
@@ -213,7 +209,25 @@ impl<'a> Cx<'a> {
 
     /// Fin du gestionnaire : l'objet est libéré (tir détruit).
     pub fn free_eshl(&mut self) {
-        self.call(sub::FREE_ESHL);
+        self.free(&pools::ESHL);
+    }
+
+    // --- objets -------------------------------------------------------------------------------
+
+    /// Alloue un objet dans `pool` : l'emplacement réservé (classe écrite, pas encore actif), ou `None` si le pool
+    /// est plein.
+    pub fn alloc(&mut self, pool: &Pool) -> Option<Obj> {
+        pool.alloc_68k(self.c, self.b)
+    }
+
+    /// Allocation dont l'original ne teste pas l'échec (voir `Pool::alloc_unchecked`, glitch d'origine).
+    pub fn alloc_unchecked(&mut self, pool: &Pool) -> Obj {
+        pool.alloc_unchecked_68k(self.c, self.b)
+    }
+
+    /// Libère l'objet courant dans son pool (fin de gestionnaire : l'objet disparaît).
+    pub fn free(&mut self, pool: &Pool) {
+        pool.release_68k(self.c, self.b, self.o)
     }
 
     /// RTS.

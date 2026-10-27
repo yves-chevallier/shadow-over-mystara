@@ -10,6 +10,7 @@ use super::cx::{handlers, sub, Cx};
 use super::shell::{suspended, GAME_PAUSED};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Variables de la RAM de travail (A5+) : caméra du jeu et caméra secondaire.
 mod ram {
@@ -118,7 +119,7 @@ mod scenery {
             WAIT => init(x),
             FOLLOW => follow(x),
             GONE => x.add8(0x4, 2),
-            FREE => x.call(sub::FREE_SOBJ),
+            FREE => x.free(&pools::SOBJ),
             _ => {}
         }
     }
@@ -362,7 +363,7 @@ mod fixture {
                     }
                 }
             }
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 }
@@ -395,7 +396,7 @@ mod flasher {
                     }
                 }
             }
-            _ => return x.call(sub::FREE_SOBJ),
+            _ => return x.free(&pools::SOBJ),
         }
         let margin = x.c.d[2] as u16;
         cull_beyond(x, margin);
@@ -444,7 +445,7 @@ mod tag {
                 x.set16(0x10, py);
                 x.anim_step();
             }
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 }
@@ -461,7 +462,7 @@ mod ghost {
         if x.u8(0x4) == 0 {
             x.add8(0x4, 2);
         }
-        x.call(sub::FREE_SOBJ);
+        x.free(&pools::SOBJ);
     }
 }
 
@@ -533,14 +534,14 @@ mod scene {
             0 => init(x),
             2 => step(x),
             4 => kill(x),
-            6 => x.call(sub::FREE_SOBJ),
+            6 => x.free(&pools::SOBJ),
             _ => {}
         }
     }
 
     fn kill(x: &mut Cx) {
         x.set32(0x4, DEAD);
-        x.call(sub::FREE_SOBJ);
+        x.free(&pools::SOBJ);
     }
 
     fn rom32(x: &mut Cx, addr: u32) -> u32 {
@@ -571,11 +572,7 @@ mod scene {
 
     /// Crée un objet SOBJ de type 6 (routine 0xddeaa), de variante `variant` ; rien en cas d'échec.
     fn spawn(x: &mut Cx, variant: u8) -> Option<Obj> {
-        x.call(sub::ALLOC_SOBJ);
-        if x.c.sr & m68k::SR_C != 0 {
-            return None;
-        }
-        let child = Obj(x.c.a[1]);
+        let Some(child) = x.alloc(&pools::SOBJ) else { return None };
         child.set_u8(x.b, 0, 1);
         child.set_u8(x.b, 2, 6);
         child.set_u8(x.b, 3, variant);
@@ -613,7 +610,7 @@ mod scene {
 
     fn v0_init(x: &mut Cx) {
         if (signal(x) as i8) < 0 {
-            return x.call(sub::FREE_SOBJ);
+            return x.free(&pools::SOBJ);
         }
         x.add8(0x4, 2);
         let e = V0_ENTRIES + 8 * x.u8(0x2f) as u32;
@@ -1515,7 +1512,7 @@ mod hint {
 
     fn leave(x: &mut Cx) {
         if x.u8(0x5) != 0 {
-            return x.call(sub::FREE_SOBJ);
+            return x.free(&pools::SOBJ);
         }
         x.set16(0x4, 0x200);
         load_palette(x);
@@ -1536,7 +1533,7 @@ mod marker {
                 track(x)
             }
             2 => track(x),
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 
@@ -1551,7 +1548,7 @@ mod marker {
         x.add16(0x10, 1);
         let limit = x.a5_u16(ram::CAMERA_X).wrapping_sub(0x40) as i16;
         if limit > x.u16(0x8) as i16 {
-            return x.call(sub::FREE_SOBJ);
+            return x.free(&pools::SOBJ);
         }
         x.anim_step();
         x.reinsert();
@@ -1604,7 +1601,7 @@ mod frame {
                     x.set8(0x4, 4);
                 }
             }
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 
@@ -1656,7 +1653,7 @@ mod arrow {
         match x.u8(0x4) {
             0 => start(x),
             2 => step(x),
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 
@@ -1771,11 +1768,7 @@ mod badge {
 
     /// Crée un objet SOBJ de type 11 de variante `variant` et de paramètre `param` (`+0x2c`).
     fn spawn(x: &mut Cx, variant: u8, param: u8) -> Option<Obj> {
-        x.call(sub::ALLOC_SOBJ);
-        if x.c.sr & m68k::SR_C != 0 {
-            return None;
-        }
-        let o = Obj(x.c.a[1]);
+        let Some(o) = x.alloc(&pools::SOBJ) else { return None };
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 0xb);
         o.set_u8(x.b, 3, variant);
@@ -1847,9 +1840,9 @@ mod badge {
             },
             4 => {
                 x.set32(0x4, KILL);
-                x.call(sub::FREE_SOBJ);
+                x.free(&pools::SOBJ);
             }
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 
@@ -1902,13 +1895,13 @@ mod badge {
                 }
                 owner.set_u8(x.b, 0x44, 1);
                 x.set32(0x4, KILL);
-                x.call(sub::FREE_SOBJ);
+                x.free(&pools::SOBJ);
             }
             4 => {
                 x.set32(0x4, KILL);
-                x.call(sub::FREE_SOBJ);
+                x.free(&pools::SOBJ);
             }
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 }
@@ -1934,9 +1927,9 @@ mod hud_dot {
             2 => stick_to_camera(x),
             4 => {
                 x.set32(0x4, 0x0600_0000);
-                x.call(sub::FREE_SOBJ);
+                x.free(&pools::SOBJ);
             }
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 }
@@ -1978,7 +1971,7 @@ mod panel {
                 wr16(x.b, at, 0);
             }
         }
-        x.call(sub::FREE_SOBJ);
+        x.free(&pools::SOBJ);
     }
 }
 
@@ -2019,9 +2012,9 @@ mod stage_title {
                 if x.a5_u8(0x34) == STAGE_2B {
                     x.set_a5_u32(0x5c6, 0);
                 }
-                x.call(sub::FREE_SOBJ)
+                x.free(&pools::SOBJ)
             }
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 
@@ -2032,14 +2025,14 @@ mod stage_title {
 
     fn start(x: &mut Cx) {
         if x.a5_u8(0x30) == 0 {
-            return x.call(sub::FREE_SOBJ);
+            return x.free(&pools::SOBJ);
         }
         let stage = x.a5_u8(0x34);
         if stage == STAGE_2B {
             return start_2b(x);
         }
         if x.a5_u8(0x4e) != 0 && stage == 0x1c {
-            return x.call(sub::FREE_SOBJ);
+            return x.free(&pools::SOBJ);
         }
         x.add8(0x4, 2);
         x.set16(0x14, DURATION);
@@ -2208,7 +2201,7 @@ mod target {
                 follow_camera2(x);
             }
             4 => follow_camera2(x),
-            _ => x.call(sub::FREE_SOBJ),
+            _ => x.free(&pools::SOBJ),
         }
     }
 

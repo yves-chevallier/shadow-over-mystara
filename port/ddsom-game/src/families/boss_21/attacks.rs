@@ -13,6 +13,7 @@
 
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -260,7 +261,7 @@ fn beam(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x14);
             // pas de place : on saute à la dernière étape
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return beam_end_anim(x) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return beam_end_anim(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x20);
@@ -333,7 +334,7 @@ fn cinematic_shot(x: &mut Cx) {
             x.set8(INVULNERABLE, 0);
             x.set16(TIMER, 0xa);
             x.set8(KEY, 0);
-            let Some(shot) = try_alloc(x, rom::ALLOC_ESHL) else { return cinematic_end(x) };
+            let Some(shot) = x.alloc(&pools::ESHL) else { return cinematic_end(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x21);
@@ -471,7 +472,7 @@ fn whirl(x: &mut Cx) {
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x3c);
-                if let Some(e) = try_alloc(x, rom::ALLOC_EFFCT) {
+                if let Some(e) = x.alloc(&pools::EFFCT) {
                     e.set_u8(x.b, 0, 1);
                     e.set_u8(x.b, 2, 0x25);
                     e.set_u16(x.b, 0x42, x.o.0 as u16);

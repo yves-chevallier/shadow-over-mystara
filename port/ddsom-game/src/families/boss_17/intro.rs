@@ -11,6 +11,7 @@
 use crate::objects::Obj;
 use super::decide;
 use super::*;
+use crate::objects::pools;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -30,7 +31,7 @@ fn state7(x: &mut Cx) -> u32 {
 /// Un effet (EFFCT) lié au boss (`+0x42`) : octet actif, type, variante facultative, orientation du boss.
 /// `retry` : insiste tant que le pool est plein.
 fn effect(x: &mut Cx, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
-    let e = if retry { alloc_retry(x, rom::ALLOC_EFFCT)? } else { try_alloc(x, rom::ALLOC_EFFCT)? };
+    let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, kind);
     if let Some(v) = variant {
@@ -434,7 +435,7 @@ fn camera_rise(x: &mut Cx) {
     core.set_u16(x.b, 0xc, 0xb0);
     x.set16(CHILD, core.0 as u16);
     for d5 in (0..=3u8).rev() {
-        let Some(e) = alloc_retry(x, rom::ALLOC_EFFCT) else { return };
+        let Some(e) = alloc_retry(x, &pools::EFFCT) else { return };
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x3c);
         e.set_u8(x.b, 3, d5);
@@ -583,7 +584,7 @@ fn variant_start(x: &mut Cx, second: bool) {
     if second {
         fx(x, 0xe4e5a);
         fx(x, 0xe1430);
-    } else if let Some(boss) = alloc_retry(x, call::ALLOC_BOSS) {
+    } else if let Some(boss) = alloc_retry(x, &pools::BOSS) {
         boss.set_u8(x.b, 0, 2);
         boss.set_u8(x.b, 2, 0x15);
         let side = x.u8(f::FLIP);

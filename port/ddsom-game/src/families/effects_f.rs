@@ -16,6 +16,7 @@
 use super::cx::{handlers, sub, Cx};
 use crate::mem::{rd32, wr32, A5};
 use crate::objects::Obj;
+use crate::objects::pools;
 
 /// Champs partagés.
 mod f {
@@ -28,9 +29,6 @@ mod f {
 
 /// Routines d'origine.
 mod rom {
-    pub const FREE_EFFECT: u32 = 0x2218;
-    pub const ALLOC_SOBJ: u32 = 0x2408;
-    pub const ALLOC_BOSS: u32 = 0x23a8;
     /// Crée le décor de scène D0 (A1, retenue = échec).
     pub const SCENE_SET: u32 = 0xc8312;
     /// Ombre au sol de l'objet.
@@ -65,7 +63,7 @@ fn living_players(x: &mut Cx) -> Vec<Obj> {
 }
 
 fn free(x: &mut Cx) {
-    x.call(rom::FREE_EFFECT);
+    x.free(&pools::EFFCT);
 }
 
 /// Pose l'objet sur la caméra, décalé de (dx, dy), au sol.
@@ -171,9 +169,7 @@ fn opening_init(x: &mut Cx) {
         return x.anim_start(opening::ANIM_SET, 0x20);
     }
     // son décor d'accompagnement (SOBJ 3), qui garde un lien long vers l'effet
-    x.call(rom::ALLOC_SOBJ);
-    if x.c.sr & m68k::SR_C == 0 {
-        let o = Obj(x.c.a[1]);
+    if let Some(o) = x.alloc(&pools::SOBJ) {
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 3);
         o.set_u32(x.b, 0x14, x.o.0);
@@ -537,11 +533,7 @@ fn passage_boss(x: &mut Cx) {
     if x.a5_u8(passage::FADE) != 0 {
         return;
     }
-    x.call(rom::ALLOC_BOSS);
-    if x.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let boss = Obj(x.c.a[1]);
+    let Some(boss) = x.alloc(&pools::BOSS) else { return };
     boss.set_u8(x.b, 0, 1);
     boss.set_u8(x.b, 2, 7);
     let (cx, cy) = (x.a5_u16(CAMERA_X), x.a5_u16(CAMERA_Y));

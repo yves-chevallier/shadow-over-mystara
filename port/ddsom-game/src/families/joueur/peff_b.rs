@@ -2,6 +2,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
+use crate::objects::pools;
 
 const ANIM_START: u32 = 0x1a32;
 const REINSERT: u32 = 0x1ee1a;
@@ -64,7 +65,7 @@ mod hail {
     /// Deux grêlons liés au parent (`+0x5c`) et au joueur.
     fn spawn_pair(x: &mut Cx) {
         for side in 0..2 {
-            let Some(o) = x.alloc(ALLOC_PEFF) else { return };
+            let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, KIND);
             o.set_u8(x.b, 3, 1);
@@ -255,7 +256,7 @@ mod spark {
             return;
         }
         if x.a5_u8(0x3d) != 0 {
-            if let Some(o) = x.alloc(ALLOC_PEFF) {
+            if let Some(o) = x.alloc(&pools::PEFF) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, 0x21);
                 let v = x.u8(0x3).wrapping_add(1);
@@ -273,7 +274,6 @@ mod witch {
 
     const ANIMS: u32 = 0x1bb058;
     const SPREAD: u32 = 0x4d1bc;
-    const ALLOC_SET: u32 = 0x2348;
     const KIND: u8 = 0x14;
 
     pub fn run(x: &mut Cx) {
@@ -288,7 +288,7 @@ mod witch {
     }
 
     fn parent_init(x: &mut Cx) {
-        let Some(set) = x.alloc(ALLOC_SET) else { return };
+        let Some(set) = x.alloc(&pools::SET) else { return };
         set.set_u8(x.b, 0, 1);
         set.set_u8(x.b, 2, 0);
         set.set_u8(x.b, 3, 0x4e);
@@ -353,7 +353,7 @@ mod witch {
 
     /// Crée un éclat (variante 1) qui garde le rang `+0x5e` de ce parent ; renvoie vrai si le pool est plein.
     fn spawn_spark(x: &mut Cx) -> bool {
-        match x.alloc(ALLOC_PEFF) {
+        match x.alloc(&pools::PEFF) {
             None => {
                 x.c.d[0] = 1;
                 true

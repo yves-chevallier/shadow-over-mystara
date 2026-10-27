@@ -8,6 +8,7 @@ use super::shell::*;
 use crate::mem::wr32;
 use crate::objects::Obj;
 use m68k::SR_C;
+use crate::objects::pools;
 
 /// Sous-routines communes de l'IA des ennemis.
 mod rt {
@@ -51,11 +52,6 @@ fn ai_step(x: &mut Cx) -> bool {
 }
 
 /// Alloue un objet ESHL ; `None` si le pool est plein.
-fn alloc(x: &mut Cx) -> Option<Obj> {
-    x.call(sub::ALLOC_ESHL);
-    if x.c.sr & SR_C != 0 { None } else { Some(Obj(x.c.a[1])) }
-}
-
 /// Tirage pseudo-aléatoire.
 fn random(x: &mut Cx) -> u32 {
     x.call(rt::RANDOM);
@@ -471,7 +467,7 @@ mod shot42 {
 
     /// Crée un éclat (type 43) devant l'attaque, avec l'angle courant, puis tourne l'angle.
     fn spawn_shard(x: &mut Cx) {
-        let Some(c) = alloc(x) else { return };
+        let Some(c) = x.alloc(&pools::ESHL) else { return };
         c.set_u8(x.b, 0, 1);
         c.set_u8(x.b, 2, 0x2b);
         let (px, pz) = (x.u16(0x8), x.u16(0xc));
@@ -1604,7 +1600,7 @@ mod finale52 {
     /// Crée trois éléments de sous-types 3, 2, 1 (table), liés au même boss.
     fn spawn_followers(x: &mut Cx) {
         for i in (0..3u32).rev() {
-            let Some(c) = alloc(x) else { return };
+            let Some(c) = x.alloc(&pools::ESHL) else { return };
             c.set_u8(x.b, 0, 1);
             c.set_u8(x.b, 2, 0x34);
             c.set_u8(x.b, 3, 0);
@@ -2523,7 +2519,7 @@ mod seeker57 {
     /// Crée 16 éclats (type 58, variantes 15 à 0) puis passe à l'état 6.
     fn explode(x: &mut Cx) {
         for n in (0..16u8).rev() {
-            let Some(c) = alloc(x) else { break };
+            let Some(c) = x.alloc(&pools::ESHL) else { break };
             c.set_u8(x.b, 0, 1);
             c.set_u8(x.b, 2, 0x3a);
             c.set_u8(x.b, 3, n);
@@ -3260,7 +3256,7 @@ mod hand63 {
             _ => {}
         }
         if x.anim_step() {
-            if let Some(shot) = alloc(x) {
+            if let Some(shot) = x.alloc(&pools::ESHL) {
                 shot.set_u8(x.b, 0, 1);
                 shot.set_u8(x.b, 2, 0x35);
                 shot.set_u16(x.b, LINK, x.o.0 as u16);
