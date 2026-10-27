@@ -71,14 +71,27 @@ fn gfx_base(reg: u16, boundary: usize) -> usize {
     (base & 0x3ffff) / 2
 }
 
-/// Pixel (0..15) d'une ligne graphique : `row` pointe sur 4 octets (un plan par octet, MSB = pixel 0).
+/// `ECLATE[b]` : les 8 bits de `b` rangés un par octet, le bit de poids fort dans l'octet 0 (pixel 0).
+const ECLATE: [u64; 256] = {
+    let mut t = [0u64; 256];
+    let mut b = 0;
+    while b < 256 {
+        let mut k = 0;
+        while k < 8 {
+            t[b] |= (((b >> (7 - k)) & 1) as u64) << (8 * k);
+            k += 1;
+        }
+        b += 1;
+    }
+    t
+};
+
+/// Les 8 pixels (0..15) d'une ligne graphique : `row` pointe sur 4 octets (un plan par octet, MSB = pixel 0).
 #[inline]
-fn pixel(gfx: &[u8], row: usize, x: usize) -> u8 {
-    let bit = 7 - x;
-    ((gfx[row + 3] >> bit) & 1) << 3
-        | ((gfx[row + 2] >> bit) & 1) << 2
-        | ((gfx[row + 1] >> bit) & 1) << 1
-        | ((gfx[row] >> bit) & 1)
+fn pixels8(gfx: &[u8], row: usize) -> [u8; 8] {
+    let r = &gfx[row..row + 4];
+    (ECLATE[r[0] as usize] | ECLATE[r[1] as usize] << 1 | ECLATE[r[2] as usize] << 2 | ECLATE[r[3] as usize] << 3)
+        .to_le_bytes()
 }
 
 struct Layer {
@@ -122,17 +135,24 @@ impl Layer {
             };
             let pen_base = ((attr & 0x1f) + self.color_base) * 16;
             let flip = attr & 0x20 != 0;
+            let mut groupe = usize::MAX; // groupe de 8 pixels décodé dans `pix` (usize::MAX : aucun)
+            let mut pix = [0u8; 8];
+            let mut valide = false;
             for i in 0..n {
                 let mut px = tx % t + i;
                 if flip {
                     px = t - 1 - px;
                 }
-                let r = row + (px / 8) * 4 * (t > 8) as usize;
-                if r + 4 > gfx.len() {
-                    continue;
+                if px / 8 != groupe {
+                    groupe = px / 8;
+                    let r = row + groupe * 4 * (t > 8) as usize;
+                    valide = r + 4 <= gfx.len();
+                    if valide {
+                        pix = pixels8(gfx, r);
+                    }
                 }
-                let p = pixel(gfx, r, px % 8);
-                if p != 15 {
+                let p = pix[px % 8];
+                if valide && p != 15 {
                     pens[x + i] = pen_base + p as u16;
                     prio[x + i] |= pbit;
                 }
@@ -302,13 +322,14 @@ fn draw_tile16(gfx: &[u8], code: usize, col: u16, flipx: bool, flipy: bool, sx: 
             continue;
         }
         let ry = if flipy { 15 - py } else { py };
+        let (g, d) = (pixels8(gfx, base + ry * 8), pixels8(gfx, base + ry * 8 + 4));
         for px in 0..16 {
             let bx = sx + px as i32 - VIS_X0;
             if bx < 0 || bx >= SCREEN_W as i32 {
                 continue;
             }
             let rx = if flipx { 15 - px } else { px };
-            let p = pixel(gfx, base + ry * 8 + (rx / 8) * 4, rx % 8);
+            let p = if rx < 8 { g[rx] } else { d[rx - 8] };
             if p == 15 {
                 continue;
             }
