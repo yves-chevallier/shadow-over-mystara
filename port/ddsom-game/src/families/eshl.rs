@@ -540,6 +540,8 @@ mod shot8 {
         match x.u8(0x4) {
             0 => {
                 if x.u16(f::OWNER) == 0 {
+                    // 0x9ee16 : sans propriétaire, l'effet passe à l'état 6
+                    x.set32(0x4, 0x0600_0000);
                     return;
                 }
                 x.add8(0x4, 2);
@@ -1055,10 +1057,12 @@ mod shot13 {
         }
     }
 
-    /// Colle l'effet au propriétaire. Sans propriétaire, l'original ne fait rien et A1 garde la
-    /// valeur laissée par le dispatch (adresse du gestionnaire).
+    /// Colle l'effet au propriétaire (0x9f712). Sans propriétaire, l'effet passe à l'état 6 (`move.l #0x6000000,(4,A0)`
+    /// en 0x9f692, dont le `rts` revient à l'appelant, qui continue) et A1 garde la valeur laissée par le dispatch
+    /// (adresse du gestionnaire).
     fn attach(x: &mut Cx) -> Obj {
         if x.u16(f::OWNER) == 0 {
+            x.set32(0x4, 0x0600_0000);
             return Obj(x.c.a[1]);
         }
         let owner = x.linked(f::OWNER);
