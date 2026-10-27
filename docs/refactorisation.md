@@ -332,6 +332,48 @@ Mesure (`tools/mesure_refacto.py`, avant : b53a8b1 ; après : lot 0b fusionné a
 Adresses déclarées dans plusieurs fichiers : 288 → 251 (1 378 → 1 101 déclarations) ; aucune adresse du moteur
 d'objets n'y figure plus.
 
+## 8. Lot D : joueurs et monde
+
+Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain.rs`, `scroll.rs`, `camera_modes.rs`,
+`placement.rs`. Code mort et trous : [code-mort.md](code-mort.md), section du lot D.
+
+* **Accesseurs propres supprimés.** `player::Ctx` perd `a5u8/a5u16/set_a5u8/set_a5u16` et ses `data*`/`prog*` (trait
+  `Machine`) ; les variables de la RAM sont typées dans `player::ram` (`ram::Octet/Mot`, celles de `crate::ram`
+  réexportées ; nommées : `SPELL_ROW`, `CURSE_COUNT`, `SCROLL1_Y`, `FADE_*`, `CAMERA_FOCUS`, `BOSS_SIGNAL`, `DSW`...).
+  `combat::World` perd `u8/u16/u32/set8/16/32`, `a5_8/a5_16`, `pc8/pc16` et son `random` à registres : vues `Obj`,
+  variables partagées avec `player::ram`, `Machine`, files de collision prises dans `objects::pools`
+  (`QUEUE_*`).
+* **J1 dans le périmètre.** Aiguillage des actions des personnages en Rust (`characters::routine`, tables
+  0x35918-0x35a48 relues dans la ROM ; `OVERRIDES` vide supprimée) ; décor (`terrain::push_68k`), placement et
+  palettes d'effet (`placement`), secousse de caméra (`camera_modes::start_shake`, cœur + natives), créateurs
+  d'effets joueur (`spawn::swap`, `weapon_trail`, `thrown`, `lightning_target`, `wall_target`), animations par
+  variante : appels de fonctions Rust au lieu de `g.rom(adresse)`. Restent par adresse (`Ctx::rom`) : les sons, les
+  palettes de `palette.rs`, les effets de `families`, `video::terrain` (0x24b0), déclarés une seule fois
+  (`player::externes`) en attendant leur API.
+* **J2.** `DDSOM_POISON` (scénarios du lot, 90) a prouvé morts et fait passer au cœur : rang, animations,
+  allocation (combat, ai_aids), vitesses, zone de jeu, tirage du combat ; registres du décor (`terrain`), du
+  placement et des palettes (`placement`) ; D0/D1/A1 après les créateurs, secousses et animations convertis
+  (étiquette temporaire). Le pas d'animation des joueurs suit maintenant la retenue de l'original (durée nulle :
+  `Step::finished`, glitch d'origine).
+* **Replis et trous.** 13 replis `_ => g.rom(adresse propre)` des automates (jamais atteints, parfois récursifs)
+  deviennent `unreachable!`. Dix routines atteignables **sans native** (le jeu sans 68000 s'y serait arrêté) sont
+  écrites en Rust et validées par `fuzz_player` contre l'original : actions 0x26, 0x2c, 0x30 (`moves::curse_drop`,
+  `dust_puffs`, `box_recoil`) et sept créateurs (`spawn::cursed_weapon`, `dying_shards`, `storm_cloud`,
+  `portal_glow`, `portal_sparks`, `portal_burst`, `rain`). D'autres entrées de tables des réactions restent à
+  vérifier (code-mort.md).
+* **Restent en `_68k` (et pourquoi).** `spawn::create` (A1 et retenue de l'allocation : contrat des créateurs
+  appelés par adresse, relus par `items::lightning`/`wall`) ; `common::step_keeping_regs` (D0.b du pas d'animation
+  relu comme variante par le créateur suivant) ; `terrain::push_68k`, `placement::place_on_free_ground_68k`
+  (registres prouvés morts, mais ils appellent `video::terrain` par ses registres) ; `ai::Mach::random` (machine à
+  registres des IA : D0 relu, `DDSOM_POISON=random@ai.rs` échoue à l'image 2742 d'`attract`).
+* **Mesure** (`tools/mesure_refacto.py`, zones du lot, avant c8107db / après) : lignes 20 722 / 20 878 (dix routines
+  ajoutées), `regs` 756 / 755, `drap` 104 / 110, `adr` 354 / 285, `brut` 917 / 895, `a5` 138 / 78 ; adresses
+  déclarées dans plusieurs fichiers du lot 43 / 0 (112 / 0 déclarations) ; lignes dupliquées (`--doublons 6`) de
+  `player` 1 464 / 1 497, `combat` 38 / 30, `ai` 8 / 0 ; appels `_68k` 17 / 13 (les 13 restants sont décrits
+  ci-dessus).
+* **Pas faits** : `ai.rs`/`ai_aids.rs` (natives à contrat de registres appelées par les familles), `scroll.rs`,
+  `combat` (`call_ao` vers effets et sons hors lot), `--doublons` des personnages.
+
 ## Avancement
 
 | Étape | Commit | Validation |
@@ -343,3 +385,4 @@ d'objets n'y figure plus.
 | Lot E : tâches et écrans en machines à états (étapes, sous-machines des fondus et de l'écran noir) | voir `git log` (wt-taches) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) |
 | Lot 0b : API du moteur d'objets, appelants convertis (adaptateurs) | f60da0a | complète, 269/269 sans 68000 |
 | Lot 0b : fusion du lot E, méthodes au cœur après `DDSOM_POISON`, documentation | voir `git log` | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) ; empoisonnée : lecteurs isolés (guide) |
+| Lot D : joueurs et monde (accesseurs, appels Rust directs, poison, trous réécrits) | voir `git log` (wt-joueur) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; poison du lot sur 90 scénarios ; fuzz_player des dix routines ajoutées |
