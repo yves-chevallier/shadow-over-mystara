@@ -10,7 +10,7 @@
 //! créent tirs, effets, sons et projectiles restent appelées telles quelles (voir `common::rom` et les
 //! constantes `rom` ci-dessous).
 
-use super::common::{self, field, next_step, rom as common_rom, set_forward_motion};
+use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
 use crate::mem::rd32;
 use super::super::spawn;
@@ -21,17 +21,13 @@ use super::super::init::init_weapon_stats;
 use super::super::walk::{move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
+use crate::player::ram;
+use crate::player::externes as ext;
 
 /// Routines d'origine appelées telles quelles : effets joueur et sons du combattant.
 mod rom {
     /// Sons.
-    pub const SOUND_CHARGE_A: u32 = 0xe792e;
-    pub const SOUND_CHARGE_B: u32 = 0xe1fc0;
-    pub const SOUND_LEAP: u32 = 0xe1f20;
-    pub const SOUND_LEAP_END: u32 = 0xe7668;
-    pub const SOUND_SPIN_A: u32 = 0xe2060;
     pub const SOUND_SPIN_B: u32 = 0xe828c;
-    pub const SOUND_STRIKE: u32 = 0xe1de0;
 }
 
 /// Table du combattant (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
@@ -265,7 +261,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 0);
             let anim = if common::holds_special_weapon(g, p) { 0x31 } else { 0xd };
             common::start_with_voice(g, p, anim);
-            g.rom(rom::SOUND_STRIKE, p);
+            g.rom(ext::son::STRIKE_HEAVY, p);
         }
         2 => common::wait_then_stand(g, p),
         _ => {}
@@ -292,8 +288,8 @@ fn charge(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
                 common::weapon_voice(g, p);
-                g.rom(rom::SOUND_CHARGE_A, p);
-                g.rom(rom::SOUND_CHARGE_B, p);
+                g.rom(ext::son::CHARGE_A, p);
+                g.rom(ext::son::CHARGE_B, p);
             }
         }
         4 => common::charge_slide(g, p, |g, p| match p.u8(g, field::EVENT) {
@@ -326,7 +322,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             let anim = if common::holds_heavy_second(g, p) { 0xe } else { 0x2c };
             animation::start_plain(g, p, anim);
             common::weapon_voice(g, p);
-            g.rom(rom::SOUND_CHARGE_A, p);
+            g.rom(ext::son::CHARGE_A, p);
             clear_recognizers(g, p);
         }
         2 => {
@@ -429,7 +425,7 @@ fn leap_light_wait(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u8(g, field::EVENT, 0);
         spawn::leap(g, p, 0);
-        g.rom(rom::SOUND_LEAP, p);
+        g.rom(ext::son::LEAP, p);
     }
     animation::step(g, p);
 }
@@ -442,7 +438,7 @@ fn leap_light_land(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u32(g, Obj::Z, 0);
         animation::start_plain(g, p, 0x2f);
-        g.rom(common_rom::LANDING_SOUND, p);
+        g.rom(ext::son::LANDING, p);
         return;
     }
     animation::step(g, p);
@@ -474,9 +470,9 @@ fn leap_spin(g: &mut Ctx, p: Player) {
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
         spawn::leap(g, p, 0);
-        g.rom(rom::SOUND_LEAP, p);
+        g.rom(ext::son::LEAP, p);
         common::weapon_voice(g, p);
-        g.rom(rom::SOUND_LEAP_END, p);
+        g.rom(ext::son::LEAP_END, p);
     }
     animation::step(g, p);
 }
@@ -489,7 +485,7 @@ fn leap_descend(g: &mut Ctx, p: Player) {
         p.set_u8(g, Player::STEP, 0xa);
         p.set_u32(g, Obj::Z, 0);
         animation::start_plain(g, p, 0x19);
-        g.rom(common_rom::LANDING_SOUND, p);
+        g.rom(ext::son::LANDING, p);
         return;
     }
     animation::step(g, p);
@@ -525,7 +521,7 @@ fn whirl(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x1ec, 0);
             let anim = if p.u16(g, Obj::Z) != 0 { 0x1c } else { 0x1b };
             animation::start_plain(g, p, anim);
-            g.rom(rom::SOUND_SPIN_A, p);
+            g.rom(ext::son::SPIN, p);
             g.rom(rom::SOUND_SPIN_B, p);
             clear_recognizers(g, p);
         }
@@ -560,7 +556,7 @@ const STYLE: items::Style = items::Style { cast_anim: 0x25, bolt_anim: 0x24, spa
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         0 => items::throw_item(g, p, 0x22, spawn::Thrown::A),
         1 => items::throw_item(g, p, 0x22, spawn::Thrown::B),

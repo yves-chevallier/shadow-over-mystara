@@ -23,30 +23,23 @@ use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr8, A5};
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
+use crate::player::externes as ext;
 
 /// Routines d'origine appelées telles quelles : effets joueur, sons et palettes du clerc.
 mod rom {
     /// Sons des coups.
-    pub const SOUND_CHARGE_A: u32 = 0xe792e;
-    pub const SOUND_CHARGE_B: u32 = 0xe1fc0;
-    pub const SOUND_STRIKE: u32 = 0xe1e80;
     pub const SOUND_STRIKE_B: u32 = 0xe8156;
     /// Sons du saut tournoyant.
-    pub const SOUND_LEAP: u32 = 0xe1f20;
     pub const SOUND_LEAP_LAND: u32 = 0xe2760;
     pub const SOUND_SPIN: u32 = 0xe81c8;
     /// Effets du renvoi des morts-vivants (attaque 0x18) : écran, palettes, sons.
     pub const TURN_EFFECTS: [u32; 5] = [0x4b518, 0x3b0c, 0x1ac86, 0x51bb6, 0xe27da];
-    /// Palettes du joueur : lumière, normale.
-    pub const PALETTE_LIGHT: u32 = 0x3af8;
-    pub const PALETTE_NORMAL: u32 = 0x3afe;
     /// Prières : effets joueur (pool PEFF) créés au geste, avec leurs sons.
     pub const PRAYER_EVENT_SOUND: u32 = 0xe2aba;
     pub const PRAYER_AURA_SOUND: u32 = 0xe96e0;
     pub const PRAYER_AURA_B_SOUND: u32 = 0xe9030;
     pub const PRAYER_STORM_SOUND: u32 = 0xe2afa;
     pub const PRAYER_SWARM_START_SOUND: u32 = 0xe2bba;
-    pub const PRAYER_CURE_SOUND: u32 = 0xe8db4;
     pub const SOUND_PRAYER: u32 = 0xe2c7a;
     pub const PRAYER_BANISH_SOUND: u32 = 0xe9e34;
     pub const PRAYER_BANISH_START_SOUND: u32 = 0xe2cba;
@@ -57,8 +50,6 @@ mod rom {
     pub const PRAYER_PROTECT_SOUND: u32 = 0xe2c3a;
     pub const PRAYER_HEAL_SOUND_SELF_A: u32 = 0xe2b7a;
     pub const PRAYER_HEAL_SOUND_SELF_B: u32 = 0xe2bfa;
-    /// Barre de vie d'un monstre frappé (D0 = joueur et type, D1 = PV max, D2 = PV, D3 = classe).
-    pub const HEALTH_BAR: u32 = 0x19dce;
 }
 
 /// Table du clerc (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
@@ -235,7 +226,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
                 clear_recognizers(g, p);
                 common::weapon_voice(g, p);
             }
-            g.rom(rom::SOUND_STRIKE, p);
+            g.rom(ext::son::STRIKE_LIGHT, p);
         }
         2 => common::wait_then_stand(g, p),
         _ => {}
@@ -260,9 +251,9 @@ fn charge(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                g.rom(rom::SOUND_CHARGE_A, p);
+                g.rom(ext::son::CHARGE_A, p);
                 common::weapon_voice(g, p);
-                g.rom(rom::SOUND_CHARGE_B, p);
+                g.rom(ext::son::CHARGE_B, p);
             }
         }
         4 => common::charge_slide(g, p, |g, p| {
@@ -287,7 +278,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             animation::start_plain(g, p, 0xe);
             clear_recognizers(g, p);
             common::weapon_voice(g, p);
-            g.rom(rom::SOUND_CHARGE_A, p);
+            g.rom(ext::son::CHARGE_A, p);
         }
         2 => {
             common::run_strike_slide(g, p, 0xf);
@@ -342,7 +333,7 @@ fn leap(g: &mut Ctx, p: Player) {
             }
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
-                g.rom(rom::SOUND_LEAP, p);
+                g.rom(ext::son::LEAP, p);
             }
         }
         4 => {
@@ -421,13 +412,13 @@ fn turn_undead(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, Player::ACTIVE, 2);
-                if g.a5u8(ram::INPUT_MASK) & 0x40 != 0 {
-                    g.set_a5u8(ram::INPUT_MASK, 0x7f);
+                if ram::INPUT_MASK.get(g.b) & 0x40 != 0 {
+                    ram::INPUT_MASK.set(g.b, 0x7f);
                 }
                 p.set_u8(g, 0x1ea, 4);
                 p.set_u8(g, 0x1eb, 3);
                 p.set_u8(g, 0x1ec, 1);
-                g.set_a5u16(0x4ba, 0x100);
+                ram::SCROLL1_Y.set(g.b, 0x100);
                 for addr in rom::TURN_EFFECTS {
                     g.rom(addr, p);
                 }
@@ -441,11 +432,11 @@ fn turn_undead(g: &mut Ctx, p: Player) {
                 return;
             }
             p.set_u8(g, 0x1ea, 4);
-            g.set_a5u16(0x4ba, 0);
+            ram::SCROLL1_Y.set(g.b, 0);
             let lit = p.u8(g, 0x1ec) ^ 1;
             p.set_u8(g, 0x1ec, lit);
             if lit != 0 {
-                g.set_a5u16(0x4ba, 0x100);
+                ram::SCROLL1_Y.set(g.b, 0x100);
             }
             let flashes = p.u8(g, 0x1eb).wrapping_sub(1);
             p.set_u8(g, 0x1eb, flashes);
@@ -454,10 +445,10 @@ fn turn_undead(g: &mut Ctx, p: Player) {
             }
             next_step(g, p);
             p.set_u8(g, Player::ACTIVE, 1);
-            if g.a5u8(ram::INPUT_MASK) & 0x40 != 0 {
-                g.set_a5u8(ram::INPUT_MASK, 0xff);
+            if ram::INPUT_MASK.get(g.b) & 0x40 != 0 {
+                ram::INPUT_MASK.set(g.b, 0xff);
             }
-            g.set_a5u16(0x4ba, 0);
+            ram::SCROLL1_Y.set(g.b, 0);
             scare_undead(g, p);
         }
         6 => common::wait_then_stand(g, p),
@@ -475,7 +466,7 @@ const STYLE: items::Style = items::Style { cast_anim: 0x20, bolt_anim: 0x1f, spa
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         6 => items::throw_item(g, p, 0x1e, spawn::Thrown::F),
         7 => items::throw_item(g, p, 0x1e, spawn::Thrown::G),
@@ -620,7 +611,7 @@ fn prayer_hold(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::aura(g, p, 0);
-                g.rom(rom::PALETTE_LIGHT, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::PRAYER_AURA_SOUND, p);
             } else {
                 animation::step(g, p);
@@ -698,7 +689,7 @@ fn prayer_storm(g: &mut Ctx, p: Player) {
     if countdown(g, p) {
         let flags = p.u8(g, Player::FLAGS) & !2;
         p.set_u8(g, Player::FLAGS, flags);
-        g.set_a5u16(0x4ba, 0);
+        ram::SCROLL1_Y.set(g.b, 0);
         common::end_spell(g, p);
         return;
     }
@@ -741,8 +732,8 @@ fn prayer_swarm(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::beam(g, p, false);
-                g.rom(rom::PALETTE_NORMAL, p);
-                g.rom(rom::PRAYER_CURE_SOUND, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
+                g.rom(ext::son::PRAYER_QUAKE, p);
             }
             animation::step(g, p);
         }
@@ -786,8 +777,8 @@ fn prayer_beam(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::beam(g, p, false);
-                g.rom(rom::PALETTE_NORMAL, p);
-                g.rom(rom::PRAYER_CURE_SOUND, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
+                g.rom(ext::son::PRAYER_QUAKE, p);
             }
             if !countdown(g, p) {
                 return;
@@ -842,7 +833,7 @@ fn prayer_banish(g: &mut Ctx, p: Player) {
                 if p.u8(g, field::EVENT) != 0 {
                     p.set_u8(g, field::EVENT, 0);
                     spawn::banish(g, p, None);
-                    g.rom(rom::PALETTE_LIGHT, p);
+                    crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                     g.rom(rom::PRAYER_BANISH_SOUND, p);
                 }
                 animation::step(g, p);
@@ -922,7 +913,7 @@ fn prayer_holy_light(g: &mut Ctx, p: Player) {
             } else if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::holy_light(g, p);
-                g.rom(rom::PALETTE_LIGHT, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
             }
         }
         4 => {
@@ -992,11 +983,11 @@ fn holy_damage(g: &mut Ctx, p: Player) {
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
                 p.set_u8(g, 0x18a, 1);
                 let loot = o.u8(g.b, 0x9a);
-                g.set_a5u8(0x4f, loot);
+                ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
-            call(g, p, rom::HEALTH_BAR, &[(0, bar), (1, max), (2, hp), (3, class)]);
+            call(g, p, ext::effet::HEALTH_BAR, &[(0, bar), (1, max), (2, hp), (3, class)]);
         }
     }
 }
@@ -1028,7 +1019,7 @@ fn prayer_protection(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::blessing(g, p, 2);
-                g.rom(rom::PALETTE_LIGHT, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::PRAYER_BLESS_SOUND, p);
                 g.rom(rom::PRAYER_PROTECT_SOUND, p);
             }
@@ -1093,7 +1084,7 @@ fn prayer_blessing(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) == 1 {
                 let area = p.u8(g, field::AREA);
                 spawn::blessing(g, p, area);
-                g.rom(rom::PALETTE_LIGHT, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::PRAYER_BLESS_SOUND, p);
                 g.rom(if area != 0 { rom::PRAYER_BLESS_SOUND_AREA } else { rom::PRAYER_BLESS_SOUND_SELF }, p);
             }
@@ -1139,8 +1130,8 @@ fn bless_ally(g: &mut Ctx, p: Player) {
 /// reçoivent le drapeau de bonus (`POWERUP`).
 fn end_blessing(g: &mut Ctx, p: Player) {
     cov!();
-    g.set_a5u8(0x4a, 0);
-    g.set_a5u8(ram::PAUSE, 0);
+    ram::SPELL_FLAG.set(g.b, 0);
+    ram::PAUSE.set(g.b, 0);
     for q in Player::all() {
         q.set_u8(g, field::SPELL_FROZEN, 0);
         if q.u16(g, Player::POWERUP_TIMER) != 0 {
@@ -1185,7 +1176,7 @@ fn prayer_heal(g: &mut Ctx, p: Player, variant: u32) {
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::cure(g, p, variant as u8);
-                g.rom(rom::PALETTE_NORMAL, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 let sound = if p.u8(g, field::AREA) != 0 {
                     rom::PRAYER_BLESS_SOUND_AREA
                 } else if variant == 0 {

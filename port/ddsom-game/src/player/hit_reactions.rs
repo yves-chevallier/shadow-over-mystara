@@ -16,6 +16,7 @@ use m68k::Cpu;
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, rts, wr8};
 use crate::Native;
+use crate::player::externes as ext;
 
 mod tables {
     /// Par classe de l'attaquant (pointeurs) puis type de victime (pointeurs) : lignes de réaction.
@@ -61,10 +62,6 @@ const WIZARD_BLOW: u32 = 0x80;
 /// Coup de poussée : la victime se retourne vers l'agresseur.
 const PUSH_BLOW: u32 = 0x58;
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    pub const WAND_EFFECT: u32 = 0xcc352;
-}
 
 /// 0xf232e : `a` est le joueur qui frappe, `v` la victime (adresse de l'objet).
 pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
@@ -86,7 +83,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
     let per_kind = g.data32(by_class + class_offset);
     let rows = g.data32(per_kind + 4 * kind);
     // seuil d'étourdissement : deux niveaux de table pour les victimes qui ne sont pas des ennemis
-    let slot = (kind * 8 + ((g.a5u16(ram::TICK) as u32 & 0x1c) >> 2)) & 0xffff;
+    let slot = (kind * 8 + ((ram::TICK.get(g.b) as u32 & 0x1c) >> 2)) & 0xffff;
     let mut threshold = g.data8(tables::THRESHOLD_ENEMY + slot) as u32;
     if !is_enemy {
         threshold = g.data8(tables::THRESHOLD_OTHER + ((slot & 0xff00) | threshold)) as u32;
@@ -119,7 +116,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
                         wr8(g.b, att + f::WAND_CHARGE, charge - 1);
                         if charge - 1 == 5 {
                             g.c.d[0] = 0xf;
-                            g.rom(rom::WAND_EFFECT, a);
+                            g.rom(ext::effet::WAND, a);
                         }
                     }
                 }
@@ -171,7 +168,7 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
     if chance == 0 {
         return;
     }
-    let tick = ((g.a5u16(ram::TICK) & 0x1e) * 2) as u16;
+    let tick = ((ram::TICK.get(g.b) & 0x1e) * 2) as u16;
     let offset = (((chance - 1) as u16) << 10).wrapping_add(tick);
     let mask = g.data16(tables::STUN_MASKS.wrapping_add(offset as i16 as i32 as u32)) as u32;
     let roll = (g.random() & 0x1f) as u32;
@@ -185,7 +182,7 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
 fn set_stun_time(g: &mut Ctx, v: u32) {
     cov!();
     let timer = (rd8(g.b, v + f::STUN_TIMER) as u16) << 8;
-    let tick = g.a5u16(ram::TICK) << 4;
+    let tick = ram::TICK.get(g.b) << 4;
     let roll = g.random() & 0xf;
     let index = timer.wrapping_add(tick).wrapping_add(roll);
     let time = g.data8(tables::STUN_TIMES.wrapping_add(index as i16 as i32 as u32));

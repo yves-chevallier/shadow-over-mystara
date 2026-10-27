@@ -13,6 +13,7 @@
 use super::moves::{combo, Combo};
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, wr8, A5};
+use crate::machine::Machine;
 
 /// Portes des actions : neuf octets (un par action déclenchable) suivis de trois autres, lus dans
 /// le code à chaque image.
@@ -167,7 +168,7 @@ fn recognize_mirror(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -
 /// du joueur (Z = 0 au retour de l'action), les suivants ne sont pas examinés.
 pub fn detect(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::INPUT_RAW) != 0 || g.a5u8(ram::SLOW_MODE) != 0 {
+    if ram::INPUT_RAW.get(g.b) != 0 || ram::SLOW_MODE.get(g.b) != 0 {
         return;
     }
     select_gates(g, p);
@@ -178,10 +179,10 @@ pub fn detect(g: &mut Ctx, p: Player) {
 fn select_gates(g: &mut Ctx, p: Player) {
     cov!();
     use gates::*;
-    if g.a5u8(ram::PAUSE) != 0 || p.u8(g, Player::SUB) != 0 {
+    if ram::PAUSE.get(g.b) != 0 || p.u8(g, Player::SUB) != 0 {
         return set_gates(g, BLOCKED);
     }
-    if g.a5u8(ram::FROZEN) != 0 {
+    if ram::FROZEN.get(g.b) != 0 {
         return set_gates(g, FROZEN);
     }
     let action = p.u8(g, Player::ACTION);
@@ -263,7 +264,7 @@ fn run_recognizers(g: &mut Ctx, p: Player) {
 /// précédente) et qu'un magicien armé de l'arme 0x21 est libre de lancer son sort ultime.
 pub fn all_ready(g: &mut Ctx) -> bool {
     cov!();
-    if g.a5u8(ram::FROZEN) != 0 || g.a5u8(ram::PAUSE) != 0 {
+    if ram::FROZEN.get(g.b) != 0 || ram::PAUSE.get(g.b) != 0 {
         return false;
     }
     let (mut holding, mut caster) = (0, false);

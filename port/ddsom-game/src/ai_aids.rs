@@ -370,7 +370,7 @@ fn animation_by_variant(c: &mut Cpu, b: &mut Cps2Bus) {
     let timer = rd16(b, c.a[0] + ANIM_TIMER);
     let key = rd8(b, c.a[0] + VARIANT);
     find_animation_set(c, b, key, 0x7f);
-    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
+    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
     wr16(b, c.a[0] + ANIM_TIMER, timer);
     copy_mark(c, b);
 }
@@ -380,7 +380,7 @@ fn animation_of_master(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = object(rd16(b, c.a[0] + MASTER));
     let key = rd8(b, c.a[1] + VARIANT);
     find_animation_set(c, b, key, 0x7f);
-    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
+    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
     copy_mark(c, b);
 }
 
@@ -389,7 +389,7 @@ fn animation_of_mark(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = object(rd16(b, c.a[0] + MASTER));
     let key = rd8(b, c.a[1] + ANIM_MARK);
     find_animation_set(c, b, key, 0xff);
-    crate::objects::anim::start_entry_68k(c, b, Obj(c.a[0]), c.a[4]);
+    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
 }
 
 /// 0x10474 : drapeaux de l'octet `A5+0x35` (joueurs en vie).
@@ -563,7 +563,7 @@ fn release_player(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Tables de points candidats par numéro (`+0x79`) : pointeur, puis nombre de points - 1 et paires
 /// (décalage x, décalage profondeur) autour de la cible.
-const WALK_POINTS: u32 = 0xe93e;
+pub(crate) const WALK_POINTS: u32 = 0xe93e;
 const MIRRORED_WALK_POINTS: u32 = 0xf06a;
 /// Point choisi (`+0x7a`, `+0x7c`), numéro du dernier point retenu (`+0x99`).
 const GOAL_X: u32 = 0x7a;
@@ -902,7 +902,7 @@ fn draw_6b(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x79f6 : dans l'écran, `+0x6e` est tiré dans la table de la ligne `+0x6d`, sinon il vaut 1. D0 = 1.
 fn draw_6e(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    let inside = crate::objects::cull::in_arena_68k(c, b, Obj(me), 0);
+    let inside = crate::objects::cull::in_arena(b, Obj(me), 0);
     let v = if inside { random_entry(c, b, 0x7a50, me + 0x6d) } else { 1 };
     wr8(b, me + 0x6e, v);
     moveq(c, 1);
@@ -943,7 +943,7 @@ fn parries_69(c: &mut Cpu, b: &mut Cps2Bus) {
 /// par le compteur d'images (32 octets par paire d'images).
 fn draw_84(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
-    if !crate::objects::cull::in_arena_68k(c, b, Obj(me), 0) {
+    if !crate::objects::cull::in_arena(b, Obj(me), 0) {
         wr16(b, me + 0x84, 1);
         return;
     }
@@ -980,9 +980,9 @@ fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
 // Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
 // ---------------------------------------------------------------------------------------------
 
-/// Alloue par `alloc` (0x2318, 0x23d8) : l'objet dans A1, ou `None` si le pool est plein.
-fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
-    pool.alloc_68k(c, b).map(|o| o.0)
+/// Alloue par `alloc` (0x2318, 0x23d8) : l'objet, ou `None` si le pool est plein.
+fn alloc(b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
+    pool.alloc(b).map(|o| o.0)
 }
 
 /// Mot suivant de la table A2 (espace de données).
@@ -1025,7 +1025,7 @@ fn debris_set(c: &mut Cpu, b: &mut Cps2Bus) {
     let mirrored = rd8(b, me + f::FACING) != 0;
     for left in (0..=count).rev() {
         set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(c, b, &pools::EFFCT) else { continue };
+        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
         debris(b, fx, me);
         let z = rd16(b, me + 0x0c);
         wr16(b, fx + 0x0c, z);
@@ -1058,7 +1058,7 @@ fn ground_debris(c: &mut Cpu, b: &mut Cps2Bus) {
     let mirrored = rd8(b, me + f::FACING) != 0;
     for left in (0..=4u16).rev() {
         set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(c, b, &pools::EFFCT) else { continue };
+        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
         debris(b, fx, me);
         let ground = rd16(b, A5 + 0x5aa);
         wr16(b, fx + 0x10, ground);
@@ -1129,7 +1129,7 @@ fn drop_once(c: &mut Cpu, b: &mut Cps2Bus) {
     if variant == 0 {
         return;
     }
-    let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+    let Some(item) = alloc(b, &pools::ITEM) else { return };
     wr8(b, me + 0x9d, 1);
     tossed_item(b, me, item, 2, variant, (-0x40i16) as u16, false);
     let flip = rng::random(b) & 1 != 0;
@@ -1168,7 +1168,7 @@ fn drop_loot(c: &mut Cpu, b: &mut Cps2Bus) {
         if (variant as i8) < 0 {
             return;
         }
-        let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+        let Some(item) = alloc(b, &pools::ITEM) else { return };
         tossed_item(b, me, item, 0, variant, 0x40, left != 0);
     }
     set_w(&mut c.d[5], 0xffff);
@@ -1202,7 +1202,7 @@ fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
             if (variant as i8) < 0 {
                 break;
             }
-            let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+            let Some(item) = alloc(b, &pools::ITEM) else { return };
             wr8(b, item, 1);
             wr8(b, item + 2, 5);
             wr8(b, item + 3, variant);
@@ -1408,7 +1408,7 @@ fn drop_special(c: &mut Cpu, b: &mut Cps2Bus) {
             Draw::Restrict => restrict(c, b),
             Draw::Spawn => {
                 let (kind, variant) = drawn(b);
-                let Some(item) = alloc(c, b, &pools::ITEM) else { return };
+                let Some(item) = alloc(b, &pools::ITEM) else { return };
                 tossed_item(b, me, item, kind, variant, 0x40, c.d[5] as u8 == 0);
                 Draw::Next
             }

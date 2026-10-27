@@ -21,20 +21,15 @@ use super::walk::{move_x, move_xz, move_z};
 use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
+use crate::machine::Machine;
+use crate::player::externes as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
-    /// Mise en place du joueur à l'écran après une résurrection.
-    pub const PLACE: u32 = 0x3668;
     pub const REVIVE_SETUP: u32 = 0x4c930;
-    pub const REVIVE_SOUND: u32 = 0xe24d8;
-    pub const FADE: u32 = 0x1686;
-    pub const TERRAIN: u32 = 0x33fe4;
-    pub const INTRO_SOUND: u32 = 0xab708;
     pub const INTRO_ACTION: u32 = 0xe1330;
-    pub const SPECIAL_VOICE: u32 = 0x4fd2c;
 }
 
 /// Tables du code.
@@ -63,9 +58,8 @@ mod tables {
     pub const THROWN_ROWS: u32 = 0x23e58;
 }
 
-/// Signal de la cinématique partagé avec le boss 21 (mot `A5+0x51e`) : 0x5c quand il projette les
-/// joueurs, 4 une fois le premier retombé.
-const BOSS_SIGNAL: u32 = 0x51e;
+// Signal de la cinématique partagé avec le boss 21 (`ram::BOSS_SIGNAL`) : 0x5c quand il projette les
+// joueurs, 4 une fois le premier retombé.
 const SIGNAL_THROW: u16 = 0x5c;
 const SIGNAL_LANDED: u16 = 4;
 /// Profondeur visée par le joueur (mot).
@@ -150,7 +144,7 @@ pub fn update(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::SUB) {
         0 => {
-            let scene = g.a5u8(ram::SCENE) as u32;
+            let scene = ram::SCENE.get(g.b) as u32;
             let routine = g.prog32(tables::BY_SCENE + 4 * scene);
             run_at(g, p, routine);
             ACTORS.reinsert(g.b, p.obj());
@@ -169,7 +163,7 @@ pub fn update(g: &mut Ctx, p: Player) {
             ACTORS.reinsert(g.b, p.obj());
         }
         0xc => {
-            let scene = g.a5u8(ram::SCENE) as u32;
+            let scene = ram::SCENE.get(g.b) as u32;
             let routine = end_routine(g, scene);
             // l'aiguillage d'origine (0x23f40) saute avec D0 = 4 × scène et A1 = routine
             g.c.d[0] = scene << 2;
@@ -206,7 +200,7 @@ fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
 
 /// Même correctif dans le code d'origine (machine de référence de la validation) : à l'entrée de l'aiguillage.
 pub fn patch_end_by_scene(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) -> bool {
-    let scene = crate::mem::rd8(b, crate::mem::A5 + 0x34) as u32;
+    let scene = ram::SCENE.get(b) as u32;
     if scene <= LAST_END_SCENE {
         return false;
     }
@@ -285,12 +279,12 @@ fn scene1_walk(g: &mut Ctx, p: Player) {
 /// 0x24f12 : attend que la scène (`A5+0x2e`) arrive à l'étape 6.
 fn scene1_wait_progress(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(0x2e) == 6 {
+    if ram::SUB_STEP.get(g.b) == 6 {
         next_action(g, p);
         let k = p.u8(g, 0x7d) as u32;
         let delay = g.prog16(tables::SCENE1_WAIT + 2 * k);
         p.set_u16(g, 0x1e0, delay);
-        g.rom(rom::INTRO_SOUND, p);
+        g.rom(ext::effet::HALO, p);
     }
     animation::step(g, p);
 }
@@ -321,15 +315,14 @@ fn scene1_pose(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x33, 0);
     let class = p.class(g);
     if class == 0 || class == 2 {
-        g.c.d[0] = 0;
-        g.rom(rom::SPECIAL_VOICE, p);
+        super::spawn::swap(g, p, 0);
     }
 }
 
 /// 0x24f98 : attend l'étape 8, puis la course finale (animation 7, vitesses par table 0x21).
 fn scene1_dash_start(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(0x2e) != 8 {
+    if ram::SUB_STEP.get(g.b) != 8 {
         animation::step(g, p);
         return;
     }
@@ -406,15 +399,14 @@ fn walk_in_pose(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x33, 0);
     let class = p.class(g);
     if class == 0 || class == 2 {
-        g.c.d[0] = 0;
-        g.rom(rom::SPECIAL_VOICE, p);
+        super::spawn::swap(g, p, 0);
     }
 }
 
 /// 0x23ab2 : en phase de jeu, le joueur reprend la main.
 fn walk_in_end(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::PHASE) == 0xc {
+    if ram::PHASE.get(g.b) == 0xc {
         give_control(g, p);
     }
     animation::step(g, p);
@@ -447,14 +439,14 @@ fn revive_start(g: &mut Ctx, p: Player) {
     for field in [Player::SLOW, 0x15c, Player::POWERUP, Player::AURA, Player::AURA_B, Player::AURA_C] {
         p.set_u8(g, field, 0);
     }
-    g.rom(rom::PLACE, p);
+    crate::placement::place_on_free_ground_68k(g.c, g.b, p.obj());
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0xd);
     restore_palette(g, p);
-    g.set_a5u8(0x48e, 0xf);
-    g.rom(rom::FADE, p);
-    crate::objects::rank::raise_68k(g.c, g.b);
-    g.rom(rom::TERRAIN, p);
+    ram::FADE_PAGES.set(g.b, 0xf);
+    g.rom(ext::palette::FULL_BRIGHTNESS, p);
+    crate::objects::rank::raise(g.b);
+    crate::terrain::push_68k(g.c, g.b, p.obj());
 }
 
 /// 0x23c16 : chute jusqu'au sol.
@@ -479,7 +471,7 @@ fn revive_land(g: &mut Ctx, p: Player) {
     }
     next_action(g, p);
     animation::start(g, p, 0x23);
-    g.rom(rom::REVIVE_SOUND, p);
+    g.rom(ext::son::FANFARE, p);
 }
 
 /// 0x23c58 : fin de l'animation : le joueur reprend la main, invulnérable 150 images.
@@ -504,11 +496,11 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::FLAGS, flags);
     p.set_u8(g, Player::FACING, 0x20);
     p.set_u8(g, 0x68, 0);
-    g.rom(rom::PLACE, p);
+    crate::placement::place_on_free_ground_68k(g.c, g.b, p.obj());
     p.set_u32(g, Obj::Z, 0);
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0x35);
-    crate::objects::rank::raise_68k(g.c, g.b);
+    crate::objects::rank::raise(g.b);
 }
 
 // ---- attente d'ouverture des commandes (début de scène) ------------------------------------------
@@ -522,7 +514,7 @@ fn wait_start(g: &mut Ctx, p: Player) {
     let k = p.u8(g, 0x7d) as u32;
     let delay = g.prog16(tables::WAIT_DELAYS + 2 * k);
     p.set_u16(g, 0x1e0, delay);
-    g.rom(rom::INTRO_SOUND, p);
+    g.rom(ext::effet::HALO, p);
     animation::step(g, p);
     g.rom(rom::INTRO_ACTION, p);
 }
@@ -556,7 +548,7 @@ fn wait_pose(g: &mut Ctx, p: Player) {
 /// 0x23df2 : dès que les commandes sont ouvertes, le joueur reprend la main.
 fn wait_inputs(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::INPUT_MASK) != 0 {
+    if ram::INPUT_MASK.get(g.b) != 0 {
         give_control(g, p);
     }
 }
@@ -607,7 +599,7 @@ fn thrown_walk(g: &mut Ctx, p: Player) {
     cov!();
     let x = p.u16(g, Obj::X).wrapping_add(2);
     p.set_u16(g, Obj::X, x);
-    if g.rom(rom::TERRAIN, p) {
+    if crate::terrain::push_68k(g.c, g.b, p.obj()) {
         animation::step(g, p);
     } else {
         next_step(g, p);
@@ -618,7 +610,7 @@ fn thrown_walk(g: &mut Ctx, p: Player) {
 /// 0x23eb4 : attend le signal du boss, puis est projeté en l'air (vitesses x et z, gravité).
 fn thrown_wait_signal(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u16(BOSS_SIGNAL) != SIGNAL_THROW {
+    if ram::BOSS_SIGNAL.get(g.b) != SIGNAL_THROW {
         animation::step(g, p);
         return;
     }
@@ -627,8 +619,7 @@ fn thrown_wait_signal(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::AX, 0);
     p.set_u16(g, Obj::VZ, 0x580);
     p.set_u16(g, Obj::AZ, 0xffc8);
-    g.c.d[6] = 2;
-    crate::objects::anim::start_by_character_68k(g.c, g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
+    crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
 }
 
 /// Vol plané : vrai à l'atterrissage (altitude repassée sous zéro, remise à zéro).
@@ -647,7 +638,7 @@ fn thrown_flight(g: &mut Ctx, p: Player) -> bool {
 fn thrown_first_fall(g: &mut Ctx, p: Player) {
     cov!();
     if thrown_flight(g, p) {
-        g.set_a5u16(BOSS_SIGNAL, SIGNAL_LANDED);
+        ram::BOSS_SIGNAL.set(g.b, SIGNAL_LANDED);
         start_stand(g, p);
     }
 }
@@ -663,7 +654,7 @@ fn thrown_fall(g: &mut Ctx, p: Player) {
 /// 0x23f2a : en phase de jeu, le joueur reprend la main.
 fn thrown_end(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::PHASE) == 0xc {
+    if ram::PHASE.get(g.b) == 0xc {
         give_control(g, p);
     }
     animation::step(g, p);

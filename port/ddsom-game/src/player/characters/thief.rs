@@ -11,7 +11,7 @@
 //!
 //! Les routines d'origine qui créent tirs, effets et sons restent appelées telles quelles.
 
-use super::common::{self, field, next_step, rom as common_rom, set_forward_motion};
+use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
 use super::super::spawn;
 use super::super::actions::to_stand;
@@ -21,17 +21,15 @@ use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
 use crate::objects::Obj;
+use crate::player::ram;
+use crate::machine::Machine;
+use crate::player::externes as ext;
 
 /// Routines d'origine appelées telles quelles : effets joueur, objets créés et sons du voleur.
 mod rom {
     pub const KNIFE_SOUND: u32 = 0xeb8bc;
     /// Sons.
     pub const SOUND_SHADOW: u32 = 0xe2578;
-    pub const SOUND_STRIKE: u32 = 0xe1f20;
-    pub const SOUND_CHARGE_A: u32 = 0xe792e;
-    pub const SOUND_CHARGE_B: u32 = 0xe1fc0;
-    pub const SOUND_LEAP: u32 = 0xe7668;
-    pub const SOUND_SPIN: u32 = 0xe2060;
     pub const SOUND_STAB_A: u32 = 0xe25f2;
     pub const SOUND_STAB_B: u32 = 0xe7304;
 }
@@ -120,7 +118,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = common::by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.rom(common_rom::JUMP_VOICE, p);
+    g.rom(ext::son::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     common::launch_jump(g, p, JUMP_SPEEDS, kind);
 }
@@ -207,7 +205,7 @@ fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = common::by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.rom(common_rom::LANDING_SOUND, p);
+    g.rom(ext::son::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile (et chute de l'arme maudite).
@@ -265,7 +263,7 @@ fn wall_kick(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::VX, vx as u16);
     p.set_u16(g, Obj::AX, 0);
     animation::start(g, p, 0x10);
-    g.rom(common_rom::JUMP_VOICE, p);
+    g.rom(ext::son::JUMP_VOICE, p);
 }
 
 /// 0x48ca0 : en l'air, un bord de l'écran touché avec le bouton de saut maintenu fait agripper le bord
@@ -299,7 +297,7 @@ fn air_options(g: &mut Ctx, p: Player) -> bool {
         }
     }
     animation::start(g, p, 3);
-    g.rom(common_rom::JUMP_VOICE, p);
+    g.rom(ext::son::JUMP_VOICE, p);
     true
 }
 
@@ -415,7 +413,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             animation::start_plain(g, p, 9);
             clear_recognizers(g, p);
             common::weapon_voice(g, p);
-            g.rom(rom::SOUND_STRIKE, p);
+            g.rom(ext::son::LEAP, p);
         }
         2 => common::wait_then_stand(g, p),
         _ => {}
@@ -439,7 +437,7 @@ fn charge(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if common::take_event(g, p) {
                 next_step(g, p);
-                g.rom(rom::SOUND_CHARGE_A, p);
+                g.rom(ext::son::CHARGE_A, p);
             }
         }
         4 => common::charge_slide(g, p, |g, p| {
@@ -447,7 +445,7 @@ fn charge(g: &mut Ctx, p: Player) {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::slash(g, p, Some(0));
                 spawn::slash(g, p, None);
-                g.rom(rom::SOUND_CHARGE_B, p);
+                g.rom(ext::son::CHARGE_B, p);
                 common::weapon_voice(g, p);
             }
         }),
@@ -466,7 +464,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             animation::start_plain(g, p, 0xa);
             clear_recognizers(g, p);
             common::weapon_voice(g, p);
-            g.rom(rom::SOUND_CHARGE_A, p);
+            g.rom(ext::son::CHARGE_A, p);
         }
         2 => {
             animation::step(g, p);
@@ -504,9 +502,9 @@ fn leap_kick(g: &mut Ctx, p: Player) {
             // l'original teste « événement absent » : le pas suivant vient donc tout de suite
             if p.u8(g, field::EVENT) == 0 {
                 next_step(g, p);
-                g.rom(rom::SOUND_LEAP, p);
+                g.rom(ext::son::LEAP_END, p);
                 common::weapon_voice(g, p);
-                g.rom(rom::SOUND_CHARGE_B, p);
+                g.rom(ext::son::CHARGE_B, p);
             }
         }
         4 => {
@@ -547,7 +545,7 @@ fn back_kick(g: &mut Ctx, p: Player) {
             p.set_u16(g, Obj::VX, vx);
             p.set_u16(g, Obj::AX, 0);
             animation::start_plain(g, p, 0x13);
-            g.rom(rom::SOUND_LEAP, p);
+            g.rom(ext::son::LEAP_END, p);
             clear_recognizers(g, p);
         }
         2 => {
@@ -555,7 +553,7 @@ fn back_kick(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::VX, 0);
                 p.set_u8(g, field::EVENT, 0);
                 spawn::shadows(g, p);
-                g.rom(rom::SOUND_SPIN, p);
+                g.rom(ext::son::SPIN, p);
             }
             move_xz(g, p);
             if (p.u16(g, Obj::Z) as i16) < 0 {
@@ -678,7 +676,7 @@ const STYLE: items::Style = items::Style { cast_anim: 0x1d, bolt_anim: 0x1c, spa
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         0 => items::throw_item(g, p, 0x1a, spawn::Thrown::A),
         1 => items::throw_item(g, p, 0x1a, spawn::Thrown::B),
@@ -733,7 +731,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, own::COUNTER, 8);
                 animation::start(g, p, 0x1d);
-                g.rom(common_rom::SLIDE_SOUND, p);
+                g.rom(ext::son::SLIDE, p);
             }
         }
         4 => {

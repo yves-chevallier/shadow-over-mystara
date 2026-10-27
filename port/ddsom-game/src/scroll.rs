@@ -892,15 +892,11 @@ pub const RESET_CAMERAS: Native = Native {
 fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
     const SERVICE: u32 = 0x33bdc;
-    const LIMITS: u32 = 0x2f0ee;
-    const VIDEO_CONTROL: u32 = 0x2f008;
-    const VIDEO_CONTROL_PORT: u32 = 0x40_0004;
-    const LAYERS: u32 = 0x2ef22;
-    const LAYERS_ON: u32 = 0xbc6;
-    const PRIORITIES: u32 = 0x2f332;
-    const BOUNDS_A: u32 = 0x2f3aa;
-    const BOUNDS_B: u32 = 0x32650;
-    const MODES: u32 = 0x2f2ba;
+    use crate::camera_modes::tables::{
+        FROZEN as MODES, HOLD_MIN as PRIORITIES, LAYERS, MAX_X_1 as LIMITS, OUTPUT as VIDEO_CONTROL,
+        ROW_STEP_1 as BOUNDS_A, ROW_STEP_2 as BOUNDS_B,
+    };
+    use crate::camera_modes::{ENABLE_LAYERS as LAYERS_ON, OUTPUT_PORT as VIDEO_CONTROL_PORT};
     let stage = rd8(b, A5 + STAGE) as u32;
     let service = rd8(b, SERVICE + stage);
     wr8(b, A5 + 0x36, service);

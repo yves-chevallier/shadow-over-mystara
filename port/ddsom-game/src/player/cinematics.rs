@@ -14,18 +14,11 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, wr32, A5};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
+use crate::machine::Machine;
+use crate::player::externes as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    /// Son de la pose de victoire.
-    pub const VICTORY_SOUND: u32 = 0xe24d8;
-    pub const TERRAIN: u32 = 0x33fe4;
-    pub const INTRO_SOUND: u32 = 0xab708;
-    /// Étincelles de la sortie (D0 = variante).
-    pub const SPARKLES: u32 = 0xb378a;
-}
 
 /// Étape du script de la scène (octet), attendue par les joueurs.
 const SCENE_STEP: u32 = A5 - 0x55c8;
@@ -33,9 +26,6 @@ const SCENE_STEP: u32 = A5 - 0x55c8;
 const SCENE_ACTOR: u32 = A5 - 0x55ba;
 /// Valeur de `ram::FROZEN` quand la fin de scène est terminée.
 const END_DONE: u8 = 2;
-/// Caméra : abscisse et profondeur de l'écran.
-const CAMERA_X: u32 = 0x506;
-const CAMERA_Y: u32 = 0x50a;
 
 /// Champs du script : place visée (x, profondeur), minuterie.
 const TARGET_X: u32 = 0x1e0;
@@ -143,7 +133,7 @@ fn scene_step(g: &mut Ctx) -> u8 {
 }
 
 fn end_done(g: &mut Ctx) -> bool {
-    g.a5u8(ram::FROZEN) == END_DONE
+    ram::FROZEN.get(g.b) == END_DONE
 }
 
 fn rank(g: &mut Ctx, p: Player) -> u32 {
@@ -154,7 +144,7 @@ fn rank(g: &mut Ctx, p: Player) -> u32 {
 fn victory_pose(g: &mut Ctx, p: Player) {
     let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
     animation::start(g, p, anim);
-    g.rom(rom::VICTORY_SOUND, p);
+    g.rom(ext::son::FANFARE, p);
 }
 
 /// Pas suivant et pose de victoire.
@@ -165,8 +155,7 @@ fn start_victory(g: &mut Ctx, p: Player) {
 
 /// Animation du jeu C (0x2cf0).
 fn anim_c(g: &mut Ctx, p: Player, n: u32) {
-    g.c.d[6] = n;
-    crate::objects::anim::start_by_character_68k(g.c, g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, n as u16);
+    crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, n as u16);
 }
 
 /// Mémorise la place du joueur (table de couples (x, profondeur) par rang) puis se tourne vers elle :
@@ -300,7 +289,7 @@ fn elf_effect(g: &mut Ctx, p: Player) {
 /// Marche vers la droite (4 pixels par image) tant que le joueur est à moins de 480 pixels du bord
 /// gauche de l'écran.
 fn walk_out(g: &mut Ctx, p: Player) {
-    let limit = g.a5u16(CAMERA_X).wrapping_add(480);
+    let limit = ram::CAMERA_X.get(g.b).wrapping_add(480);
     if limit > p.u16(g, Obj::X) {
         let x = p.u16(g, Obj::X).wrapping_add(4);
         p.set_u16(g, Obj::X, x);
@@ -325,7 +314,7 @@ fn sink(g: &mut Ctx, p: Player) {
 
 /// 0x24b88 : sans `A5+0x66`, pose de victoire puis attente ; sinon pose immobile (0x24102).
 fn end_24b88(g: &mut Ctx, p: Player) {
-    if g.a5u8(0x66) != 0 {
+    if ram::NO_WALK_IN.get(g.b) != 0 {
         super::scripted::idle(g, p);
         return;
     }
@@ -419,7 +408,7 @@ const END_2411A: Steps = &[
 const END_2434E: Steps = &[
     (0x24372, |g, p| {
         start_victory(g, p);
-        let scene = g.a5u8(ram::SCENE);
+        let scene = ram::SCENE.get(g.b);
         if scene == 46 {
             p.set_u8(g, 0x193, 1);
         }
@@ -460,7 +449,7 @@ const END_243D6: Steps = &[
     (0x24454, |g, p| {
         walk_out(g, p);
         wait_done(g, p);
-        g.rom(rom::TERRAIN, p);
+        crate::terrain::push_68k(g.c, g.b, p.obj());
     }),
 ];
 
@@ -485,7 +474,7 @@ const END_2447E: Steps = &[
     }),
     (0x24594, stand_after_anim),
     (0x245a8, |g, p| {
-        if g.a5u8(0x53a) != 0 {
+        if ram::CUTSCENE.get(g.b) != 0 {
             next(g, p);
         }
         anim_step(g, p);
@@ -521,7 +510,7 @@ const END_245EC: Steps = &[
         let delay = g.prog8(0x24660 + k);
         p.set_u8(g, TIMER, delay);
         start_stand(g, p);
-        g.rom(rom::INTRO_SOUND, p);
+        g.rom(ext::effet::HALO, p);
     }),
     (0x24664, |g, p| {
         let left = p.u8(g, TIMER).wrapping_sub(1);
@@ -564,8 +553,7 @@ const END_245EC: Steps = &[
 
 /// Palettes de la disparition (données) : 3 jeux de 12 personnages × 32 octets ; destination en mémoire
 /// des palettes, décalage par personnage (table de mots).
-const FADE_PALETTES: u32 = 0x3663e;
-const FADE_TARGETS: u32 = 0x36626;
+use super::moves::{EXIT_PALETTES as FADE_PALETTES, EXIT_PALETTE_SLOTS as FADE_TARGETS};
 const PALETTE_RAM: u32 = 0x91c000;
 
 /// 0x24734 : disparition : après 48 images le joueur est masqué ; toutes les 12 images, sa palette passe
@@ -608,7 +596,7 @@ const END_247B2: Steps = &[
         let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
         animation::start(g, p, anim);
         reset_speed_class(g, p);
-        g.rom(rom::VICTORY_SOUND, p);
+        g.rom(ext::son::FANFARE, p);
     }),
     (0x2480c, |g, p| {
         if scene_step(g) == 12 {
@@ -644,7 +632,7 @@ const END_247B2: Steps = &[
         p.set_u16(g, TIMER, left);
         if left == 0 {
             g.c.d[0] = 4;
-            g.rom(rom::SPARKLES, p);
+            g.rom(ext::effet::STARS, p);
         }
         anim_step(g, p);
     }),
@@ -682,14 +670,14 @@ const END_249EA: Steps = &[
         }
     }),
     (0x24a34, |g, p| {
-        let limit = g.a5u16(CAMERA_X).wrapping_add(480);
+        let limit = ram::CAMERA_X.get(g.b).wrapping_add(480);
         if limit <= p.u16(g, Obj::X) {
             next(g, p);
         }
         let x = p.u16(g, Obj::X).wrapping_add(4);
         p.set_u16(g, Obj::X, x);
         anim_step(g, p);
-        g.rom(rom::TERRAIN, p);
+        crate::terrain::push_68k(g.c, g.b, p.obj());
     }),
 ];
 
@@ -721,7 +709,7 @@ const END_24ABA: Steps = &[
 const END_24B18: Steps = &[
     (0x24b3e, start_victory),
     (0x24b58, |g, p| {
-        if g.a5u8(0x5c) != 0 && scene_step(g) == 16 {
+        if ram::NO_VICTORY.get(g.b) != 0 && scene_step(g) == 16 {
             next(g, p);
             start_stand(g, p);
         } else {
@@ -828,7 +816,7 @@ const END_24DE6: Steps = &[
             return;
         }
         next(g, p);
-        let (x, y) = (g.a5u16(CAMERA_X), g.a5u16(CAMERA_Y));
+        let (x, y) = (ram::CAMERA_X.get(g.b), ram::CAMERA_Y.get(g.b));
         let at = 0x24e66 + 4 * (rank(g, p) & 3);
         let (dx, dy) = (g.prog16(at), g.prog16(at + 2));
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
@@ -843,13 +831,11 @@ const END_24DE6: Steps = &[
 // Entrées en scène (`+5` = 0, table 0x23826 indexée par la scène)
 //
 // Le joueur apparaît (souvent hors de l'écran à gauche), attend, marche vers la droite, prend la pose
-// et reçoit les commandes quand la partie entre en phase de jeu (`ram::PHASE` = 12). `INTRO_STEP`
+// et reçoit les commandes quand la partie entre en phase de jeu (`ram::PHASE` = 12). `ram::SUB_STEP`
 // (`A5+0x2e`) est l'étape du script d'entrée de la scène. L'appelant (`scripted::update`) réinsère le
 // joueur dans la liste des acteurs.
 // =================================================================================================
 
-/// Étape du script d'entrée de la scène.
-const INTRO_STEP: u32 = 0x2e;
 /// Phase de jeu : les joueurs reçoivent les commandes.
 const PLAYING_PHASE: u8 = 12;
 /// Seconde minuterie des entrées.
@@ -902,7 +888,7 @@ fn appear(g: &mut Ctx, p: Player, visible: bool, armed: bool) {
 
 /// Dernier pas : en phase de jeu, le joueur reçoit les commandes.
 fn take_control(g: &mut Ctx, p: Player) {
-    if g.a5u8(ram::PHASE) == PLAYING_PHASE {
+    if ram::PHASE.get(g.b) == PLAYING_PHASE {
         p.set_state(g, 0x0200_0000);
     }
     anim_step(g, p);
@@ -963,8 +949,7 @@ fn pose_with_shout(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, 0x33, 0);
     if matches!(p.class(g), 0 | 2) {
-        g.c.d[0] = 0;
-        g.rom(0x4fd2c, p);
+        super::spawn::swap(g, p, 0);
     }
 }
 
@@ -990,7 +975,7 @@ fn draw_weapon_after_wait(g: &mut Ctx, p: Player) {
 /// Le joueur se place devant l'objet suivi par la caméra (`A5+0x46`), décalé selon son numéro (`+2`) ;
 /// `table` : décalages en x (mots).
 fn place_by_focus(g: &mut Ctx, p: Player, table: u32) -> u32 {
-    let focus = g.a5u16(0x46) as i16 as i32 as u32;
+    let focus = ram::CAMERA_FOCUS.get(g.b) as i16 as i32 as u32;
     let (x, y) = (rd16(g.b, focus + 8), rd16(g.b, focus + 0x10));
     p.set_u16(g, Obj::X, x);
     p.set_u16(g, Obj::Y, y);
@@ -1021,7 +1006,7 @@ fn intro_23b32(g: &mut Ctx, p: Player) {
         p.set_u8(g, 0x15c, 0);
         p.set_u8(g, ARMED, 1);
         start_stand(g, p);
-    } else if g.a5u8(ram::PHASE) == PLAYING_PHASE {
+    } else if ram::PHASE.get(g.b) == PLAYING_PHASE {
         p.set_state(g, 0x0200_0000);
     }
 }
@@ -1045,7 +1030,7 @@ const INTRO_24FE2: Steps = &[
             next(g, p);
             let wait = per_rank16(g, p, 0x25066);
             p.set_u16(g, WAIT, wait);
-            g.rom(rom::INTRO_SOUND, p);
+            g.rom(ext::effet::HALO, p);
             anim_0(g, p);
         } else {
             anim_step(g, p);
@@ -1155,7 +1140,7 @@ const INTRO_2522E: Steps = &[
         follow_focus(g, p);
     }),
     (0x25294, |g, p| {
-        if g.a5u8(ram::PHASE) == PLAYING_PHASE {
+        if ram::PHASE.get(g.b) == PLAYING_PHASE {
             p.set_state(g, 0x0200_0000);
         }
         follow_focus(g, p);
@@ -1178,7 +1163,7 @@ const INTRO_252AC: Steps = &[
         anim_0(g, p);
     }),
     (0x252e2, |g, p| {
-        let focus = g.a5u16(0x46) as i16 as i32 as u32;
+        let focus = ram::CAMERA_FOCUS.get(g.b) as i16 as i32 as u32;
         let (x, y) = (rd16(g.b, focus + 8), rd16(g.b, focus + 0x10));
         p.set_u16(g, Obj::X, x);
         p.set_u16(g, Obj::Y, y.wrapping_sub(17));
@@ -1223,7 +1208,7 @@ fn intro_253a0_start(g: &mut Ctx, p: Player) {
 
 const INTRO_253A0: Steps = &[
     (0x253b4, |g, p| {
-        if g.a5u8(INTRO_STEP) == 14 {
+        if ram::SUB_STEP.get(g.b) == 14 {
             intro_253a0_start(g, p);
         }
     }),
@@ -1286,16 +1271,16 @@ const INTRO_25504: Steps = &[
     (0x2553a, wait_then_walk),
     (0x2554c, |g, p| walk_right(g, p, WAIT, anim_0)),
     (0x25568, |g, p| {
-        if g.a5u8(INTRO_STEP) == 8 {
+        if ram::SUB_STEP.get(g.b) == 8 {
             next(g, p);
             let wait = per_rank16(g, p, 0x2558e);
             p.set_u16(g, WAIT, wait);
-            g.rom(rom::INTRO_SOUND, p);
+            g.rom(ext::effet::HALO, p);
         }
         anim_step(g, p);
     }),
     (0x25596, |g, p| {
-        if g.a5u8(INTRO_STEP) >= 10 {
+        if ram::SUB_STEP.get(g.b) >= 10 {
             draw_weapon_after_wait(g, p);
         } else {
             anim_step(g, p);
@@ -1311,7 +1296,7 @@ const INTRO_255EA: Steps = &[
         anim_0(g, p);
     }),
     (0x25612, |g, p| {
-        if g.a5u8(INTRO_STEP) == 6 {
+        if ram::SUB_STEP.get(g.b) == 6 {
             next(g, p);
             p.set_u8(g, ARMED, 1);
             animation::start(g, p, 51);
@@ -1328,7 +1313,7 @@ const INTRO_2564A: Steps = &[
         super::hurt::hurt_animation(g, p, 16);
     }),
     (0x25674, |g, p| {
-        if g.a5u8(ram::PHASE) == PLAYING_PHASE {
+        if ram::PHASE.get(g.b) == PLAYING_PHASE {
             next(g, p);
             let wait = per_rank16(g, p, 0x25690);
             p.set_u16(g, WAIT, wait);
@@ -1352,7 +1337,7 @@ const INTRO_256C2: Steps = &[
         animation::start(g, p, 2);
     }),
     (0x256f6, |g, p| {
-        if g.a5u8(0x4e) != 0 || g.a5u8(INTRO_STEP) == 6 {
+        if ram::SCRIPTED_B.get(g.b) != 0 || ram::SUB_STEP.get(g.b) == 6 {
             next(g, p);
         }
     }),
@@ -1374,7 +1359,7 @@ const INTRO_257A4: Steps = &[
         animation::start(g, p, 2);
     }),
     (0x257d0, |g, p| {
-        if g.a5u8(INTRO_STEP) == 6 {
+        if ram::SUB_STEP.get(g.b) == 6 {
             next(g, p);
             p.set_u16(g, WAIT, 80);
         }
@@ -1421,7 +1406,7 @@ const INTRO_25814: Steps = &[
 const INTRO_258DE: Steps = &[
     (0x258f0, |g, p| {
         appear(g, p, false, false);
-        let slow = g.a5u8(ram::SLOW_MODE) != 0;
+        let slow = ram::SLOW_MODE.get(g.b) != 0;
         p.set_u16(g, WAIT, if slow { 128 } else { 80 });
         p.set_u16(g, Obj::VX, if slow { 1 } else { 2 });
         animation::start(g, p, if slow { 53 } else { 2 });
@@ -1434,7 +1419,7 @@ const INTRO_258DE: Steps = &[
             return;
         }
         p.set_state(g, 0x0200_0000);
-        if g.a5u8(ram::SLOW_MODE) == 0 {
+        if ram::SLOW_MODE.get(g.b) == 0 {
             start_stand(g, p);
         } else {
             animation::start(g, p, 53);
@@ -1518,7 +1503,7 @@ fn intro_25a24(g: &mut Ctx, p: Player) {
 /// 0x25b20 : à la scène 41, une image sur seize (selon le compteur et l'octet `A5+2`, comme l'original),
 /// effet de pas dans l'eau (h).
 fn splash(g: &mut Ctx, p: Player) {
-    if g.a5u8(ram::SCENE) == 41 && g.a5u8(ram::FRAME_COUNTER).wrapping_add(g.a5u8(2)) & 15 == 0 {
+    if ram::SCENE.get(g.b) == 41 && ram::FRAME_COUNTER.get(g.b).wrapping_add(ram::INPUTS_2.get(g.b)) & 15 == 0 {
         g.rom(0xb9c6a, p);
     }
 }
@@ -1540,7 +1525,7 @@ const INTRO_25AA2: Steps = &[
         anim_step(g, p);
     }),
     (0x25b06, |g, p| {
-        if g.a5u8(ram::PHASE) == PLAYING_PHASE {
+        if ram::PHASE.get(g.b) == PLAYING_PHASE {
             p.set_state(g, 0x0200_0000);
         }
         splash(g, p);
@@ -1561,7 +1546,7 @@ const INTRO_25B3E: Steps = &[
 const INTRO_25BA0: Steps = &[
     (0x25bba, |g, p| {
         appear(g, p, false, false);
-        let x = g.a5u16(CAMERA_X);
+        let x = ram::CAMERA_X.get(g.b);
         let at = 0x25bf6 + 4 * p.u8(g, RANK) as u32;
         let (dx, dy) = (g.prog16(at), g.prog16(at + 2));
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
@@ -1570,7 +1555,7 @@ const INTRO_25BA0: Steps = &[
         animation::start(g, p, 2);
     }),
     (0x25c06, |g, p| {
-        if g.a5u8(INTRO_STEP) == 6 {
+        if ram::SUB_STEP.get(g.b) == 6 {
             next(g, p);
             p.set_u16(g, TIMER_B, 80);
         }
@@ -1579,7 +1564,7 @@ const INTRO_25BA0: Steps = &[
         walk_right(g, p, TIMER_B, |g, p| {
             let wait = per_rank16(g, p, 0x25c4a);
             p.set_u16(g, WAIT, wait);
-            g.rom(rom::INTRO_SOUND, p);
+            g.rom(ext::effet::HALO, p);
             anim_0(g, p);
         })
     }),
@@ -1601,7 +1586,7 @@ const INTRO_25C9E: Steps = &[
         appear(g, p, false, true);
         p.set_u16(g, WAIT, 80);
         animation::start(g, p, 2);
-        if g.a5u8(0x66) == 0 {
+        if ram::NO_WALK_IN.get(g.b) == 0 {
             p.set_u8(g, Player::ACTION, 6);
             p.set_u16(g, TIMER_B, 480);
         }
@@ -1663,14 +1648,14 @@ const INTRO_25E28: Steps = &[
 
 /// 0x25efc : sans `A5+0x5c`, attente du signal `A5+0x51e`, puis attente et marche.
 fn intro_25efc(g: &mut Ctx, p: Player) {
-    if g.a5u8(0x5c) == 0 {
+    if ram::NO_VICTORY.get(g.b) == 0 {
         dispatch(g, p, 0x25f12, INTRO_25EFC);
     }
 }
 
 const INTRO_25EFC: Steps = &[
     (0x25f18, |g, p| {
-        if g.a5u16(0x51e) != 0 {
+        if ram::BOSS_SIGNAL.get(g.b) != 0 {
             appear(g, p, false, true);
             p.set_u16(g, WAIT, 192);
             p.set_u16(g, TIMER_B, 80);
@@ -1685,13 +1670,13 @@ const INTRO_25F7E: Steps = &[
     (0x25f9e, |g, p| {
         next(g, p);
         p.set_u8(g, ARMED, 0);
-        if g.a5u8(0x5c) == 0 {
+        if ram::NO_VICTORY.get(g.b) == 0 {
             p.set_u8(g, Player::ACTION, 16);
             p.set_u8(g, ARMED, 1);
         }
         p.set_u8(g, Player::ACTIVE, 1);
         p.set_u16(g, WAIT, 32);
-        let (x, y) = (g.a5u16(CAMERA_X), g.a5u16(CAMERA_Y));
+        let (x, y) = (ram::CAMERA_X.get(g.b), ram::CAMERA_Y.get(g.b));
         let k = (p.u8(g, RANK) & 3) as u32;
         let (dx, dy) = (g.prog16(0x26004 + 4 * k), g.prog16(0x26006 + 4 * k));
         p.set_u16(g, Obj::X, x.wrapping_add(dx));
@@ -1700,7 +1685,7 @@ const INTRO_25F7E: Steps = &[
         anim_0(g, p);
     }),
     (0x26014, |g, p| {
-        if g.a5u8(INTRO_STEP) == 8 && countdown(g, p, WAIT) {
+        if ram::SUB_STEP.get(g.b) == 8 && countdown(g, p, WAIT) {
             next(g, p);
             let k = (p.u8(g, RANK) & 3) as u32;
             let wait = g.prog16(0x26040 + 2 * k);
@@ -1724,7 +1709,7 @@ const INTRO_25F7E: Steps = &[
         }
     }),
     (0x2607e, |g, p| {
-        if g.a5u8(INTRO_STEP) == 12 {
+        if ram::SUB_STEP.get(g.b) == 12 {
             next(g, p);
             p.set_u16(g, WAIT, 64);
         }

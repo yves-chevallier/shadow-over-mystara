@@ -21,37 +21,20 @@ use super::super::combos::clear_recognizers;
 use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
+use crate::player::ram;
+use crate::player::externes as ext;
 
 /// Routines d'origine appelées telles quelles : tirs, effets joueur, sons, palettes et effets d'écran.
 mod rom {
-    pub const SOUND_STRIKE: u32 = 0xe1e80;
-    pub const SOUND_STRIKE_B: u32 = 0xe1de0;
-    pub const SLIDE_SOUND: u32 = 0xe78e8;
     /// Interface des baguettes : mise à jour de la liste d'objets (D0 = reste, D1 = baguette) et son.
     pub const ROD_LIST: u32 = 0xb96c0;
-    pub const ROD_SOUND: u32 = 0xcc352;
-    /// Palettes du joueur : lumière, normale.
-    pub const PALETTE_LIGHT: u32 = 0x3af8;
-    pub const PALETTE_NORMAL: u32 = 0x3afe;
     /// Effets d'écran des magies.
-    pub const SCREEN_FLASH_END: u32 = 0x1abe0;
-    pub const SCREEN_RIPPLE: u32 = 0x1aaa0;
-    pub const SCREEN_FLASH_A: u32 = 0x1ab56;
     pub const SCREEN_FLASH_B: u32 = 0x1ab08;
     pub const SCREEN_GLOW: u32 = 0x1aaba;
     pub const SCREEN_SHATTER: u32 = 0x1ac86;
     /// Effets joueur (pool PEFF) des magies.
-    pub const EFFECT_SPARKS: u32 = 0x4dc9a;
-    pub const EFFECT_BOLT: u32 = 0x4b7a0;
-    pub const EFFECT_QUAKE: u32 = 0x4b340;
-    pub const EFFECT_QUAKE_B: u32 = 0x4f132;
     pub const EFFECT_STORM: u32 = 0x4d020;
-    pub const EFFECT_STORM_B: u32 = 0x51aa4;
     pub const EFFECT_RAIN: u32 = 0x4d660;
-    pub const EFFECT_RAIN_B: u32 = 0x54274;
-    pub const EFFECT_PORTAL_B: u32 = 0x51872;
-    pub const EFFECT_PORTAL_C: u32 = 0x4cfee;
-    pub const EFFECT_PORTAL_TEST: u32 = 0x4d064;
     pub const EFFECT_WALL: u32 = 0x4d2c0;
     pub const EFFECT_WAVE: u32 = 0x4dfe2;
 }
@@ -157,7 +140,7 @@ fn rod_shot(g: &mut Ctx, p: Player) {
                 p.set_u8(g, 0x140 + i, 0x56);
                 p.set_u8(g, 0x148 + i, 0);
                 call(g, p, rom::ROD_LIST, &[(0, 5 - i), (1, tag)]);
-                call(g, p, rom::ROD_SOUND, &[(0, sound)]);
+                call(g, p, ext::effet::WAND, &[(0, sound)]);
                 return;
             }
         }
@@ -190,7 +173,7 @@ fn start_lunge(g: &mut Ctx, p: Player) {
     cov!();
     common::set_forward_motion(g, p, 0x400, (-0x38i16) as u16);
     animation::start_plain(g, p, 0xd);
-    g.rom(rom::SOUND_STRIKE, p);
+    g.rom(ext::son::STRIKE_LIGHT, p);
 }
 
 /// Coup de bâton (0x45d88) : un coup, puis, si le bouton reste appuyé et que le coup a porté, une fente.
@@ -303,7 +286,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             animation::start_plain(g, p, 0xc);
-            g.rom(rom::SOUND_STRIKE_B, p);
+            g.rom(ext::son::STRIKE_HEAVY, p);
             clear_recognizers(g, p);
         }
         2 => common::wait_then_stand(g, p),
@@ -350,7 +333,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.rom(rom::SLIDE_SOUND, p);
+                g.rom(ext::son::SLIDE, p);
             }
         }
         4 => {
@@ -426,7 +409,7 @@ const CAST_19: items::Cast = items::Cast { prepare: common::nothing, ..items::CA
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
-    g.set_a5u8(0x5b, which);
+    ram::SPELL_ROW.set(g.b, which);
     match which {
         0 => items::throw_item(g, p, 0xf, spawn::Thrown::A),
         1 => items::throw_item(g, p, 0xf, spawn::Thrown::B),
@@ -506,7 +489,7 @@ fn sparks(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.rom(rom::EFFECT_SPARKS, p);
+                g.rom(ext::effet::SPARKS, p);
                 g.rom(0xe84c6, p);
             }
             if countdown(g, p) {
@@ -559,8 +542,8 @@ fn bolt(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_BOLT, &[(0, 0)]);
-                g.rom(rom::PALETTE_LIGHT, p);
+                call(g, p, ext::effet::BOLT, &[(0, 0)]);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(0xe2a34, p);
             }
             if countdown(g, p) {
@@ -578,7 +561,7 @@ fn bolt(g: &mut Ctx, p: Player) {
                     common::cancel_cast(g, p, 0x1d);
                     return linger(g, p);
                 }
-                call(g, p, rom::EFFECT_BOLT, &[(0, 1)]);
+                call(g, p, ext::effet::BOLT, &[(0, 1)]);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -683,8 +666,8 @@ fn frost_wait(g: &mut Ctx, p: Player) {
 fn frost_end(g: &mut Ctx, p: Player) {
     cov!();
     common::clear_spell_state(g);
-    g.set_a5u16(0x490, 2);
-    g.set_a5u8(0x48e, 0xc);
+    ram::FADE_DELAY.set(g.b, 2);
+    ram::FADE_PAGES.set(g.b, 0xc);
     g.c.d[0] = g.c.d[0] & 0xffff_0000 | 0xa000;
     g.rom(common::rom::PALETTE_FADE, p);
     common::undim_screen_mode(g, p, UNDIM);
@@ -715,7 +698,7 @@ fn quake(g: &mut Ctx, p: Player) {
         0 => {
             common::begin_cast(g, p, Some(0x30), Some(0x154));
             common::dim_screen(g, p);
-            g.rom(rom::SCREEN_RIPPLE, p);
+            g.rom(ext::palette::FLASH_A, p);
             animation::start_plain(g, p, 0x3d);
         }
         2 => {
@@ -727,8 +710,8 @@ fn quake(g: &mut Ctx, p: Player) {
                 animation::start_plain(g, p, 0x3e);
                 g.rom(0xe2ffa, p);
             } else if take_event(g, p) {
-                call(g, p, rom::EFFECT_QUAKE, &[(0, 0)]);
-                g.rom(rom::PALETTE_NORMAL, p);
+                call(g, p, ext::effet::QUAKE, &[(0, 0)]);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.rom(0xe8db4, p);
             }
         }
@@ -739,17 +722,17 @@ fn quake(g: &mut Ctx, p: Player) {
                     p.set_u8(g, Player::STEP, 8);
                     common::cancel_cast(g, p, 0x1f);
                     common::item_spark(g, p, 0x20);
-                    g.rom(rom::SCREEN_FLASH_END, p);
+                    g.rom(ext::palette::FLASH_RESTORE, p);
                     return linger(g, p);
                 }
-                call(g, p, rom::EFFECT_QUAKE, &[(0, 1)]);
-                g.rom(rom::EFFECT_QUAKE_B, p);
+                call(g, p, ext::effet::QUAKE, &[(0, 1)]);
+                g.rom(ext::effet::QUAKE_B, p);
                 g.rom(0xe8b22, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
                 animation::start_plain(g, p, 0x3f);
-                g.rom(rom::SCREEN_FLASH_END, p);
+                g.rom(ext::palette::FLASH_RESTORE, p);
             } else if p.u16(g, field::TIMER) == 0x64 {
                 foes::strike_foes(g, p, &QUAKE_STRIKE);
             }
@@ -805,8 +788,8 @@ fn storm(g: &mut Ctx, p: Player) {
         2 | 0xa => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_BOLT, &[(0, 0)]);
-                g.rom(if step == 2 { rom::PALETTE_LIGHT } else { rom::PALETTE_NORMAL }, p);
+                call(g, p, ext::effet::BOLT, &[(0, 0)]);
+                crate::placement::load_effect_palette(g.b, if step == 2 { crate::placement::effect_palette::LIGHT } else { crate::placement::effect_palette::NORMAL });
                 g.rom(0xe2a74, p);
                 g.rom(if step == 2 { 0xe97b4 } else { 0xe974a }, p);
             }
@@ -827,11 +810,11 @@ fn storm(g: &mut Ctx, p: Player) {
                 }
                 if step == 4 {
                     spawn::flare(g, p);
-                    g.rom(rom::SCREEN_FLASH_A, p);
+                    g.rom(ext::palette::FLASH_GRAY, p);
                 } else {
                     call(g, p, rom::EFFECT_STORM, &[(0, 1)]);
                     g.rom(rom::SCREEN_GLOW, p);
-                    g.rom(rom::EFFECT_STORM_B, p);
+                    spawn::storm_cloud(g, p);
                 }
             }
             if p.u16(g, field::TIMER) == 0x60 {
@@ -844,7 +827,7 @@ fn storm(g: &mut Ctx, p: Player) {
         }
         6 | 0xe => {
             if animation::step(g, p) {
-                g.rom(rom::SCREEN_FLASH_END, p);
+                g.rom(ext::palette::FLASH_RESTORE, p);
                 finish_kept(g, p);
             }
         }
@@ -862,7 +845,7 @@ fn rain(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, rom::EFFECT_RAIN, &[(0, 0)]);
-                g.rom(rom::PALETTE_NORMAL, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 sounds(g, p, &[0xe2a34, 0xe9424]);
             }
             if countdown(g, p) {
@@ -881,7 +864,7 @@ fn rain(g: &mut Ctx, p: Player) {
                     return linger(g, p);
                 }
                 call(g, p, rom::EFFECT_RAIN, &[(0, 1)]);
-                g.rom(rom::EFFECT_RAIN_B, p);
+                spawn::rain(g, p);
                 g.rom(0xe948e, p);
             }
             if countdown(g, p) {
@@ -926,7 +909,7 @@ fn witch(g: &mut Ctx, p: Player) {
         4 => {
             if countdown(g, p) {
                 next_step(g, p);
-                g.rom(rom::PALETTE_LIGHT, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 let (timer, anim) = if p.u8(g, 0x1e8) != 0 { (0x80, 0x1a) } else { (0x50, 0x19) };
                 p.set_u16(g, field::TIMER, timer);
                 animation::start_plain(g, p, anim);
@@ -1020,7 +1003,7 @@ fn wave(g: &mut Ctx, p: Player) {
             } else if take_event(g, p) {
                 call(g, p, rom::EFFECT_WAVE, &[(0, 0)]);
                 call(g, p, rom::EFFECT_WAVE, &[(0, 1)]);
-                g.rom(rom::PALETTE_LIGHT, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(0xe9240, p);
             } else {
                 animation::step(g, p);
@@ -1064,9 +1047,9 @@ const PORTAL_STRIKE: Strike = Strike {
 /// de l'écran et prend la vitesse (par distance, tous les 16 pixels) de la table `speeds`.
 fn aim_at_center(g: &mut Ctx, p: Player, speeds: u32, vz: u16, az: i16) {
     cov!();
-    let mut center = g.a5u16(0x506);
-    if g.a5u8(0x36) != 0 {
-        center = g.a5u16(0x556);
+    let mut center = ram::CAMERA_X.get(g.b);
+    if ram::USE_ALT_CAMERA.get(g.b) != 0 {
+        center = ram::CAMERA_ALT_X.get(g.b);
     }
     let center = center.wrapping_add(0xc0);
     let x = p.u16(g, Obj::X);
@@ -1117,7 +1100,7 @@ fn portal(g: &mut Ctx, p: Player) {
             }
             let duration = by_level(g, p, PORTAL_DURATIONS);
             p.set_u16(g, field::TIMER, duration);
-            g.rom(rom::PALETTE_NORMAL, p);
+            crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
             spawn::portal(g, p, 2);
             animation::start_plain(g, p, 0x30);
             g.rom(0xe91d6, p);
@@ -1140,7 +1123,7 @@ fn portal(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::VX, 0);
                 p.set_u16(g, Obj::VZ, 0);
                 if !is_cancelled(g, p) {
-                    g.rom(rom::SCREEN_FLASH_END, p);
+                    g.rom(ext::palette::FLASH_RESTORE, p);
                 }
                 animation::start_plain(g, p, 0x31);
             }
@@ -1233,7 +1216,7 @@ fn wall(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, rom::EFFECT_WALL, &[(0, 0)]);
-                g.rom(rom::PALETTE_LIGHT, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(0xe92c6, p);
             }
             if countdown(g, p) {
@@ -1282,7 +1265,7 @@ fn drain(g: &mut Ctx, p: Player) {
             if animation::step(g, p) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x120);
-                g.rom(rom::PALETTE_NORMAL, p);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 spawn::portal(g, p, 2);
                 animation::start_plain(g, p, 0x30);
                 g.rom(0xe91d6, p);
@@ -1291,9 +1274,9 @@ fn drain(g: &mut Ctx, p: Player) {
         4 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.rom(rom::EFFECT_PORTAL_B, p);
+                spawn::portal_glow(g, p);
                 spawn::portal(g, p, 0);
-                g.rom(rom::EFFECT_PORTAL_C, p);
+                spawn::portal_sparks(g, p);
                 g.rom(0xe323a, p);
             }
             if countdown(g, p) {
@@ -1305,10 +1288,9 @@ fn drain(g: &mut Ctx, p: Player) {
             }
             let timer = p.u16(g, field::TIMER);
             if timer <= 0x100 {
-                let tally = p.u8(g, 0x1ef) as u32;
-                g.c.d[0] = g.c.d[0] & !0xff | tally;
-                if g.rom(rom::EFFECT_PORTAL_TEST, p) {
-                    p.set_u8(g, 0x1ef, (tally as u8).wrapping_add(1));
+                let tally = p.u8(g, 0x1ef);
+                if spawn::portal_burst(g, p, tally) {
+                    p.set_u8(g, 0x1ef, tally.wrapping_add(1));
                 }
             }
             if timer == 0xe0 {
@@ -1375,7 +1357,7 @@ fn sacrifice(g: &mut Ctx, p: Player) {
             if o.u16(g.b, 0x62) == 0 && o.u8(g.b, 0x93) != 0 {
                 p.set_u8(g, 0x18a, 1);
                 let loot = o.u8(g.b, 0x9a);
-                g.set_a5u8(0x4f, loot);
+                ram::KILL_FLAG.set(g.b, loot);
             }
             let bar = (index as u32) << 8 | kind as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);

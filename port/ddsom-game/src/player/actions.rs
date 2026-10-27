@@ -17,14 +17,7 @@ use super::walk::{clamp_to_screen, move_xy, walk_speed};
 use super::{animation, ram, Ctx, Player};
 use crate::mem::wr8;
 
-/// Table des gestionnaires d'actions (mots : décalages signés relatifs à la table).
-const ACTION_TABLE: u32 = 0x35586;
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    /// Collision avec le décor (murs, trous).
-    pub const TERRAIN: u32 = 0x33fe4;
-}
 
 /// 0x35620 : animation d'immobilité selon les modes (marche lente, monture, arme).
 pub fn start_stand(g: &mut Ctx, p: Player) {
@@ -33,19 +26,16 @@ pub fn start_stand(g: &mut Ctx, p: Player) {
     animation::start(g, p, anim);
 }
 
-/// Entrées 68000 de `to_stand` (0x35614) et `start_stand` (0x35620), encore appelées par le code
-/// d'origine des personnages et des cinématiques : l'animation passe par l'entrée d'origine 0x2c16
-/// (D6 = numéro), qui laisse les registres que ces appelants peuvent relire.
+/// Entrées par adresse de `to_stand` (0x35614, appelée par `aides.rs`) et `start_stand` (0x35620). Les
+/// registres que laissait l'animation (D5, D6, A4) ne sont relus par personne (`DDSOM_POISON=anim`).
 fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
     let p = Player(c.a[0]);
     let mut g = Ctx::new(c, b);
     if reset {
-        p.set_state(&mut g, state::STAND.0);
-        p.set_u8(&mut g, Player::SUBACTION, 0);
+        to_stand(&mut g, p);
+    } else {
+        start_stand(&mut g, p);
     }
-    let n = stand_animation(&mut g, p);
-    g.c.d[6] = n as u32;
-    crate::objects::anim::start_by_character_68k(c, b, p.obj(), &crate::objects::anim::SETS_ARMED, n);
     crate::mem::rts(c, b);
 }
 
@@ -73,7 +63,7 @@ fn stand_animation(g: &mut Ctx, p: Player) -> u16 {
             anim = if matches!(p.u8(g, Player::WEAPON_A), 8 | 0x18) { 3 } else { 0 };
         }
     }
-    if g.a5u8(ram::SLOW_MODE) != 0 {
+    if ram::SLOW_MODE.get(g.b) != 0 {
         anim = 0x35;
     }
     anim
@@ -96,12 +86,12 @@ pub fn act(g: &mut Ctx, p: Player) {
     if current == action::NO_TERRAIN_B || current == action::NO_TERRAIN_A {
         return;
     }
-    let scripted = g.a5u8(ram::INPUT_RAW) != 0;
+    let scripted = ram::INPUT_RAW.get(g.b) != 0;
     let skip_terrain = scripted
-        || (g.a5u8(ram::SCENE) == 4 && current == action::GRAB)
+        || (ram::SCENE.get(g.b) == 4 && current == action::GRAB)
         || current == action::NO_TERRAIN_C;
     if !skip_terrain {
-        g.rom(rom::TERRAIN, p);
+        crate::terrain::push_68k(g.c, g.b, p.obj());
     }
     clamp_to_screen(g.b, p);
 }
@@ -139,11 +129,21 @@ fn run_action(g: &mut Ctx, p: Player) {
         action::NO_TERRAIN_A => moves::exit_scene(g, p),
         action::NO_TERRAIN_C => moves::fall_in(g, p),
         action::SPELL_FIZZLE => moves::spell_fizzle(g, p),
-        other => {
-            let offset = g.prog16(ACTION_TABLE + other as u32) as i16 as i32;
-            g.c.d[0] = other as u32; // les gestionnaires comptent sur D0 = numéro d'action (octet haut nul)
-            g.rom(ACTION_TABLE.wrapping_add(offset as u32), p);
+        // poses rares : l'aiguillage d'origine leur laisse D0 = numéro d'action (octet haut nul), que les routines
+        // qu'elles appellent par adresse peuvent lire
+        0x26 => {
+            g.c.d[0] = 0x26;
+            moves::curse_drop(g, p)
         }
+        0x2c => {
+            g.c.d[0] = 0x2c;
+            moves::dust_puffs(g, p)
+        }
+        0x30 => {
+            g.c.d[0] = 0x30;
+            moves::box_recoil(g, p)
+        }
+        other => unreachable!("action {other:#x} hors de la table d'origine 0x35586 (26 actions paires)"),
     }
 }
 
@@ -172,7 +172,7 @@ fn stand(g: &mut Ctx, p: Player) {
     let acted = turn_check(g, p) || attack_button(g, p) || jump_button(g, p);
     if !acted && p.u8(g, Player::KEYS_HELD) & 0xf != 0 {
         p.set_state(g, state::WALK.0);
-        if g.a5u8(ram::SLOW_MODE) == 0 {
+        if ram::SLOW_MODE.get(g.b) == 0 {
             let anim = if p.u8(g, Player::SLOW_8A) != 0 {
                 0x2f
             } else if p.u8(g, Player::SLOW) != 0 {
@@ -184,7 +184,7 @@ fn stand(g: &mut Ctx, p: Player) {
         }
         return;
     }
-    if g.a5u8(ram::SLOW_MODE) == 0 {
+    if ram::SLOW_MODE.get(g.b) == 0 {
         animation::step(g, p);
     }
 }
@@ -202,7 +202,7 @@ fn slow_switch(g: &mut Ctx, p: Player) {
 /// 0x3567a : marche.
 fn walk(g: &mut Ctx, p: Player) {
     cov!();
-    if g.a5u8(ram::SLOW_MODE) == 0 && p.class(g) == 4 {
+    if ram::SLOW_MODE.get(g.b) == 0 && p.class(g) == 4 {
         return walk_magic_user(g, p);
     }
     if p.u8(g, Player::KEYS_HELD) & 0xf == 0 {
@@ -294,8 +294,6 @@ fn grabbed(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x36abe, p);
-        }
+        v => unreachable!("0x36abe : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }

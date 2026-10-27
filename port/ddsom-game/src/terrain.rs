@@ -28,7 +28,7 @@ const LAST_Y: u32 = 0x62;
 /// Octet de l'objet : numéro de terrain sous lui.
 const OBJ_TERRAIN: u32 = 0x29;
 /// Routine de l'attribut de terrain.
-const TERRAIN_ATTRIBUTE: u32 = 0x24b0;
+pub const TERRAIN_ATTRIBUTE: u32 = 0x24b0;
 
 /// Champs d'un type de terrain (entrée de 16 octets, mots).
 mod kind {
@@ -251,6 +251,19 @@ impl Push<'_> {
 fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
     Push { c, b, variant }.run();
     rts(c, b);
+}
+
+/// 0x33fe4 appelée de Rust sur l'objet `o` : laisse les registres de l'original (D0-D2, D5, A0 = `o`, A1, A2 et les
+/// drapeaux) ; rend le drapeau Z (vrai : la dernière case examinée est libre, ou la collision est désactivée). Les
+/// appelants des joueurs ne relisent pas ces registres (`DDSOM_POISON=terrain`, lot D) ; le cœur sans registres
+/// attend l'API de `video::terrain` (0x24b0, appelé par ses registres).
+#[track_caller]
+pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
+    c.a[0] = o.0;
+    Push { c, b, variant: FIRST }.run();
+    let z = c.sr & m68k::SR_Z != 0;
+    crate::diag::registres_morts(c, "terrain", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2) | regs::CCR);
+    z
 }
 
 pub const SHADOW: Native = Native {
