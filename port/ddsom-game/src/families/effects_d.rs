@@ -143,7 +143,7 @@ fn coin_active(x: &mut Cx) {
     if (x.u16(Obj::VZ) as i16) < 0 {
         x.set32(Obj::Y, 0);
     }
-    if x.u16(Obj::Z) >= x.a5_u16(0x50a) {
+    if x.u16(Obj::Z) >= crate::ram::CAMERA_Y.get(x.b) {
         return x.reinsert();
     }
     // sortie par le bas de l'écran
@@ -226,10 +226,8 @@ fn trophy_active(x: &mut Cx) {
             if pending != 5 {
                 return x.add8(f::SUB_STATE, 2);
             }
-            x.c.d[0] = trophy::SCENERY_KIND;
-            x.call(0xc8312);
-            if x.c.sr & m68k::SR_C == 0 {
-                x.set16(trophy::SCENERY, x.c.a[1] as u16);
+            if let Some(decor) = super::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
+                x.set16(trophy::SCENERY, decor.0 as u16);
             }
         }
         6 => {
@@ -257,7 +255,7 @@ const SIGN_HEIGHTS: u32 = 0xb2908;
 
 fn sign_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
-    let (cy, cx) = (x.a5_u16(0x55a), x.a5_u16(0x556));
+    let (cy, cx) = (crate::ram::CAMERA_ALT_Y.get(x.b), crate::ram::CAMERA_ALT_X.get(x.b));
     x.set16(Obj::Z, cy);
     x.set16(Obj::X, cx);
     x.set32(Obj::Y, 0xffff_ffff);
@@ -345,7 +343,7 @@ fn rank_active(x: &mut Cx) {
 
 fn plate_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
-    let cam = x.a5_u16(0x556);
+    let cam = crate::ram::CAMERA_ALT_X.get(x.b);
     x.set16(Obj::X, cam);
     x.set32(Obj::Y, 0);
     x.set16(Obj::Z, 0x460);
@@ -418,7 +416,7 @@ fn draw_big_number(x: &mut Cx, mut at: u32, bcd: u16) {
 
 fn counters_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
-    let cam = x.a5_u16(0x556);
+    let cam = crate::ram::CAMERA_ALT_X.get(x.b);
     x.set16(Obj::X, cam);
     x.set32(Obj::Y, 0);
     x.set16(Obj::Z, 0x448);
@@ -433,7 +431,7 @@ fn counters_init(x: &mut Cx) {
 }
 
 fn counters_active(x: &mut Cx) {
-    let gap = x.u16(Obj::Z).wrapping_sub(x.a5_u16(0x55a));
+    let gap = x.u16(Obj::Z).wrapping_sub(crate::ram::CAMERA_ALT_Y.get(x.b));
     if (gap as i16) < 0x100 {
         return;
     }
@@ -497,7 +495,7 @@ mod line {
 
 fn line_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
-    let (cam_x, cam_y) = (x.a5_u16(0x556), x.a5_u16(0x55a));
+    let (cam_x, cam_y) = (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b));
     x.set16(Obj::Z, cam_y);
     x.set16(Obj::X, cam_x);
     x.set32(Obj::Y, 0);
@@ -513,7 +511,7 @@ fn line_init(x: &mut Cx) {
 
 /// La ligne (montante) atteint le haut de la caméra : elle se dessine une fois dans le fond 2.
 fn line_active(x: &mut Cx) {
-    if x.u8(f::SUB_STATE) != 0 || (x.u16(Obj::Z) as i16) < (x.a5_u16(0x55a) as i16) {
+    if x.u8(f::SUB_STATE) != 0 || (x.u16(Obj::Z) as i16) < (crate::ram::CAMERA_ALT_Y.get(x.b) as i16) {
         return;
     }
     x.add8(f::SUB_STATE, 2);
@@ -705,7 +703,7 @@ fn walker_init(x: &mut Cx) {
     }
     let sub = x.rom8(place + 10);
     x.set8(f::SUB_STATE, sub);
-    let (cam_x, cam_y) = (x.a5_u16(0x556), x.a5_u16(0x55a));
+    let (cam_x, cam_y) = (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b));
     x.add16(Obj::X, cam_x);
     x.add16(walker::TARGET_X, cam_x);
     x.add16(Obj::Y, cam_y);

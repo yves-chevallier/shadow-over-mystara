@@ -294,7 +294,7 @@ Mesure (`tools/mesure_refacto.py`, zones du lot : `scene`, `modes`, `hud`, `tach
 `pile` 407 → 67, natives 389 → 49 ; `regs` (886), `drap` (23), `brut` (1 837 → 1 836) inchangés : le lot a porté sur
 J3, pas sur J2.
 
-## 7. Lot 0b : l'API du moteur d'objets
+## 8. Lot 0b : l'API du moteur d'objets
 
 Fait sur le modèle du pilote (§ 5), décrit pour les lots suivants dans le guide (« L'API commune (lot 0b) »).
 
@@ -332,7 +332,7 @@ Mesure (`tools/mesure_refacto.py`, avant : b53a8b1 ; après : lot 0b fusionné a
 Adresses déclarées dans plusieurs fichiers : 288 → 251 (1 378 → 1 101 déclarations) ; aucune adresse du moteur
 d'objets n'y figure plus.
 
-## 8. Lot D : joueurs et monde
+## 9. Lot D : joueurs et monde
 
 Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain.rs`, `scroll.rs`, `camera_modes.rs`,
 `placement.rs`. Code mort et trous : [code-mort.md](code-mort.md), section du lot D.
@@ -374,7 +374,7 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
 * **Pas faits** : `ai.rs`/`ai_aids.rs` (natives à contrat de registres appelées par les familles), `scroll.rs`,
   `combat` (`call_ao` vers effets et sons hors lot), `--doublons` des personnages.
 
-## 9. Lot C : tirs et décors (`eshl*`, `set*`, `sobj`, `shell`, `joueur/`)
+## 10. Lot C : tirs et décors (`eshl*`, `set*`, `sobj`, `shell`, `joueur/`)
 
 * **Fondu au noir des portes sans `call_at`.** Les portes SET 7 (`set.rs`, `exit_gate`) et SET 29 (`set_b.rs`,
   `door_b`) appellent `taches::fondu::descente` comme un sous-programme de tâche (`set::fondu_de_sortie`) : la suite
@@ -406,8 +406,65 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
   en argument. (2) Les **créateurs** (`eshl_creators`, `set_residu`, tremplins) : leurs registres de sortie (A1,
   retenue, compteurs) sont relus par les gestionnaires d'ennemis et de boss (lot A) et par les sons qui suivent ;
   empoisonnés, une trentaine de scénarios divergent. Ils gardent leur contrat.
+## 11. Lot B : effets, objets, coffres
 
-## 10. Lot S : services communs (son, palettes, texte, terrain, aides, événements)
+Périmètre : `families/effects*.rs`, `effects_creators.rs`, `items*.rs`, `boxes.rs`, `petites.rs`, `creators.rs`,
+`effects_aids.rs`. Code mort et replis : [code-mort.md](code-mort.md), section du lot B.
+
+* **Créateurs écrits une fois** (`effects_creators::restes::Registres`). Chaque créateur (allouer, poser type,
+  variante, réglage, lien) est une fonction générique sur un `Registres` : `Pur` (le cœur, aucun registre) ou le
+  processeur (natives appelées par adresse et adaptateurs `_68k` : l'allocation passe par `Pool::alloc_68k`, les
+  drapeaux du dernier `move`, les compteurs de boucle et les tirages vont dans les registres de l'original). Plus
+  de seconde implémentation « à registres » à tenir à jour. Convertis : tous les créateurs d'EFFCT
+  (`effects_creators.rs`), les étincelles et chocs (`effects_aids.rs`), les créateurs de `creators.rs`/`petites.rs`
+  appelés par le lot ou demandés par le lot D.
+* **Cœurs pour le lot D** (appelants par adresse de `player/externes.rs`, à brancher) : `effects_aids::shock`
+  (0xb10c8, `DUST`), `effects_creators::halo` (0xab708), `blow` (0xb378a, `STARS`), `creators::set_a` (0xcc352,
+  `WAND`), `creators::sparks` (0x4dc9a), `bolt` (0x4b7a0), `quake` (0x4b340), `petites::quake_b` (0x4f132), chacun
+  avec son adaptateur `_68k` (registres de l'original, étiquette `effets`). `HEALTH_BAR` (0x19dce) est dans
+  `evenements.rs`, hors lot.
+* **J1.** Plus d'appel par adresse vers les créateurs du lot, le décor (`terrain::push_68k`), la secousse
+  (`camera_modes::start_shake`), la création de tâche (`kernel::creer_tache`), les éclairs et pages de palette
+  du lot (`petites`), la remise à zéro de scène (`creators::restart_scene`). Restent par adresse (pas d'API Rust) :
+  les sons (enveloppes de `sound.rs`), `evenements` (0x19ae6, 0x19b08), `ai` (0xfbae, 0xfbb0, 0x103d6, 0x137e,
+  0x1172e), palettes de `palette.rs`, vidéo, scène (0x33aa6, 0xf2e56, 0x20de6), 0x3403c (second décor). Les
+  créateurs ESHL du lot C (fusionné) sont appelés comme fonctions Rust, y compris par la table des effets spéciaux
+  des coffres (`match` sur l'adresse lue).
+* **J2.** `DDSOM_POISON=effets` (registres des créateurs après les appels convertis) puis `DDSOM_POISON=restes`
+  (registres laissés par les gestionnaires : restes des aiguillages `saut_table`, pointeurs de lecture, compteurs
+  de boucle) : 270/270, écritures supprimées. Un lecteur trouvé : le nuage (type 26) relisait le mot haut de D0 de
+  l'aiguillage (nul) après la remise en liste ; écrit en clair. Restent des lectures de registres réels : D2 hérité
+  par `items_b::drop_old` (compteur de coups de la pièce rejetée, glitch d'origine), A2 de `guide_cible` (aucun
+  joueur vivant), A1 laissé par la boucle de dispatch (`effects_c`, adresse du gestionnaire), D0 des tirages
+  (`effects_c`, `effects_d::random`), D4 hérité du radeau (`effects_e`), D6 de l'allocation dans la boucle des
+  éclats (`effects_f`, glitch d'origine documenté).
+* **Replis.** 68 aiguillages `_ => deleguer(cible)` relevés table par table : état 6 (libération) explicite là où
+  la table l'a, `hors_table` ailleurs ; deux branchements « pool plein » vers une erreur d'adresse de l'original
+  (`erreur_d_adresse`).
+* **Cession (lot E).** Le feu d'artifice (type 80) fait attendre la tâche de partie au milieu de la boucle de
+  dispatch : ses reprises sont des étapes (`effects_g::Etape`, ligne ajoutée à `taches::etapes_des_taches!`) au lieu
+  de natives à adresse et de `call_at` ; l'abandon de la boucle reste un `Unwound` (la boucle de dispatch n'est pas
+  une machine à états). Nouveau scénario `cov/cov_effct_feu` (le chemin n'était exercé par aucun) ; ses lectures de
+  la ROM manquaient aux assets sans ROM : cinq zones ajoutées à `port/extract/zones_natives.txt` (fichier local
+  généré) et `natives.json` des assets régénéré.
+* **Nommer.** Variables de la caméra, de la scène et de la phase par `ram.rs` (85 accès) ; constantes d'adresses
+  recopiées supprimées avec leurs appels.
+* **Contrats des natives restantes.** `fuzz createurs` (`examples/fuzz.rs`, mode hybride, contrôle) compare chaque
+  créateur du lot à l'original sur des états tirés : 0 écart après correction de drapeaux que l'ancienne écriture
+  oubliait (X du `lsr` du choc, `moveq #0,D0` de la colonne ESHL au pool plein, X de la moitié droite, `moveq` des
+  douze blocs de palette, `move.b D1` du décor 11, table des décalages du joueur scripté lue en ROM).
+* **Mesure** (`tools/mesure_refacto.py`, fichiers du lot, avant 1f5ae77 / après) : lignes 16 022 / 16 104 ; `regs`
+  729 / 425 ; `drap` 40 / 38 ; `adr` 266 / 124 (les sons, `evenements`, `ai`, palettes et vidéo hors lot) ; `pile`
+  1 / 2 (`Unwound` explicite du feu d'artifice) ; `brut` 490 / 451 ; `a5` 263 / 174 ; adresses déclarées dans
+  plusieurs fichiers touchant le lot 51 / 39 (72 / 47 déclarations du lot) ; lignes dupliquées (`--doublons 6`)
+  221 / 223.
+* **Restent en `_68k` (et pourquoi).** Les natives appelées par adresse (créateurs de `creators.rs`, `petites.rs`,
+  `effects_creators.rs`, `effects_aids.rs` : leur contrat de registres sert aux appelants hors lot), `regs_68k` de
+  la boucle des éclats (`effects_f`, D6 de l'allocation relu, glitch d'origine), `terrain::push_68k` (pas de cœur,
+  il appelle `video::terrain` par ses registres), `random_68k` des tirages dont D0 est relu (`effects_c`),
+  `petites::flash_68k` (drapeaux non prouvés morts), `start_by_character_68k` (`effects_f`, D6 sauvé autour).
+
+## 12. Lot S : services communs (son, palettes, texte, terrain, aides, événements)
 
 Périmètre : `sound.rs`, `palette.rs`, `text.rs`, `video.rs`, `aides.rs`, `evenements.rs`, `terrain.rs`,
 `placement.rs`, `ai_aids.rs` (et `ai.rs`, `scroll.rs`, `camera_modes.rs`, laissés par le lot D), plus les
@@ -475,3 +532,4 @@ appelants hors des familles des lots A et B. API et mode d'emploi : [guide-refac
 | Lot D : joueurs et monde (accesseurs, appels Rust directs, poison, trous réécrits) | voir `git log` (wt-joueur) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; poison du lot sur 90 scénarios ; fuzz_player des dix routines ajoutées |
 | Lot C : fondu des portes en sous-programme de tâche, J1 dans le lot, registres morts des gestionnaires sans son | e3a49b7 (wt-decors) | complète, 269/269 sans 68000 (30 min 49 s, 8 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; `fuzz_porte` (portes 7 et 29), `fuzz boutique`, `fuzz petites` sans écart |
 | Lot S : services communs sans registres (sauvegarde fantôme du son, cœurs son/palette/texte/terrain/aides/événements, appelants hors lots A-B) | voir `git log` (wt-services) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; `fuzz son`, `fuzz video`, `fuzz u1`, `fuzz_monde ia_` |
+| Lot B : créateurs en fonctions Rust, appels directs, replis, registres prouvés morts, étape du feu d'artifice | voir `git log` (wt-effets) | complète, 270/270 sans 68000 et 270/270 depuis les assets ; `DDSOM_POISON=effets` et `restes` 270/270 |

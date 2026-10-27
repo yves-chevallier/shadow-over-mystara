@@ -2414,6 +2414,7 @@ p 0b77ba 0b77be families/mod.rs
 p 0b7ea2 0b7ea6 families/cx.rs
 p 0b8126 0b812c families/cx.rs
 p 0b82e4 0b82e8 families/effects_c.rs
+p 0b9628 0b9698 families/cx.rs
 p 0b9a4a 0b9a6a families/cx.rs
 p 0b9d3e 0b9d6a families/cx.rs
 p 0b9e08 0b9e40 families/cx.rs
@@ -2639,9 +2640,13 @@ p 0e64ca 0e64ce sound.rs
 p 0e666c 0e6684 sound.rs
 p 0e694a 0e6990 sound.rs
 p 0e6a18 0e6a1c sound.rs
+p 0e6afc 0e6b00 sound.rs
 p 0e6c52 0e6c56 sound.rs
 p 0e6da8 0e6dac sound.rs
+p 0e6efe 0e6f00 sound.rs
+p 0e7054 0e7058 sound.rs
 p 0e70c6 0e70ca sound.rs
+p 0e71aa 0e71ae sound.rs
 p 0e721c 0e7220 sound.rs
 p 0e7372 0e7376 sound.rs
 p 0e73e4 0e73e8 sound.rs
@@ -2798,3 +2803,8 @@ p 0f9e58 0f9e5e scene/mod.rs
 p 0f9fc8 0f9fcc scene/mod.rs
 p 0fa42e 0fa434 scene/mod.rs
 p 0fc3e4 0fc3f0 scene/mod.rs
+p 0b9628 0b9698 families/cx.rs
+p 0e6afc 0e6b00 sound.rs
+p 0e6efe 0e6f00 sound.rs
+p 0e7054 0e7058 sound.rs
+p 0e71aa 0e71ae sound.rs

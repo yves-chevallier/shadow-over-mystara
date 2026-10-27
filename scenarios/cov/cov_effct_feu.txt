@@ -1,0 +1,16 @@
+# EFFCT 80 (feu d'artifice de la scène d'un personnage), variante 0 : le personnage qui tire, créé par poke dans
+# le dernier emplacement EFFCT pendant la scène 10 ; l'étape de scène `A5+0x2e` = 0x12 le fait partir (attente de la
+# tâche de partie au milieu de la boucle de dispatch, `effects_g::Etape`).
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1440 P1 Button 1 1
+1446 P1 Button 1 0
+2399 poke8 ff8034 10
+2924 P1 Left 1
+3000 poke8 ffe2a6 0x0e
+3000 poke8 ffe281 0
+3000 poke8 ffe280 80
+3000 poke8 ffe27e 1
+3020 poke8 ff802e 0x12

@@ -17,6 +17,9 @@ mod etat {
     pub const INIT: u8 = 0;
     pub const ACTIF: u8 = 2;
     pub const LIBERE: u8 = 4;
+    /// Posé par l'objet parent qui détruit ses effets (ou par l'effet lui-même, `accessoire_suit`) : libération,
+    /// sans le travail de l'état 4 (`jmp 0x2218`).
+    pub const DETRUIT: u8 = 6;
 }
 
 /// Champs partagés.
@@ -33,8 +36,24 @@ const PAS_JOUEUR: u32 = 0x200;
 /// Jeu d'animations « interface » commun à de nombreux effets.
 const ANIMATIONS_INTERFACE: u32 = 0x1c03a6;
 
-fn lit_ram16(ctx: &mut Ctx, decalage: i32) -> u16 {
-    ctx.ram16(decalage)
+/// Cible du saut par table `move.w (table,PC,Dn.w),D1 ; jmp (table,PC,D1.w)` pour l'indice `index` (l'adresse que
+/// l'original atteindrait ; seuls les indices hors table y mènent encore, `hors_table`).
+pub(crate) fn cible(ctx: &mut Ctx, table: u32, index: u32) -> u32 {
+    let mot = ctx.prog16(table.wrapping_add(index)) as i16;
+    table.wrapping_add(mot as i32 as u32)
+}
+
+/// Valeur d'état ou de variante hors de la table de sauts de l'original, qui sauterait dans des données ou au milieu
+/// du code : jamais produite (docs/code-mort.md, lot B).
+pub(crate) fn hors_table(cible: u32) -> ! {
+    unreachable!("indice hors de la table de sauts : l'original sauterait en {cible:#x}")
+}
+
+/// Pool plein là où l'original saute en `adresse` : `tst.w (1,A5)`, lecture d'un mot à une adresse impaire. Le 68000
+/// lève une erreur d'adresse et le jeu s'arrête sur son écran d'exception ; le moteur s'arrête aussi
+/// (docs/code-mort.md, lot B).
+pub(crate) fn erreur_d_adresse(adresse: u32) -> ! {
+    panic!("pool plein : l'original lit un mot à une adresse impaire en {adresse:#x} (erreur d'adresse, écran d'exception)")
 }
 
 /// Passe `X`, `Z`, `Y` (mots hauts) de `o` à ceux de `source`.
@@ -61,12 +80,13 @@ fn trois_etats(
 ) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(table, etat as u32);
+    let cible = cible(ctx, table, etat as u32);
     match etat {
         etat::INIT => init(ctx, o),
         etat::ACTIF => actif(ctx, o),
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -180,12 +200,13 @@ fn bandeau_actif(ctx: &mut Ctx, o: Obj) {
 fn bandeau(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(bandeau::TABLE, etat as u32);
+    let cible = cible(ctx, bandeau::TABLE, etat as u32);
     match etat {
         etat::INIT => bandeau_init(ctx, o),
         etat::ACTIF => bandeau_actif(ctx, o),
         etat::LIBERE => bandeau_fin(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -344,7 +365,7 @@ fn trainee_init(ctx: &mut Ctx, o: Obj) {
     let y = ctx.prog16(trainee::POSITIONS + rang + 2);
     o.set_u16(ctx.b, Obj::Y, y);
     o.set_u16(ctx.b, Obj::Z, 0);
-    let (cam_x, cam_y) = (lit_ram16(ctx, 0x506), lit_ram16(ctx, 0x50a));
+    let (cam_x, cam_y) = (crate::ram::CAMERA_X.get(ctx.b), crate::ram::CAMERA_Y.get(ctx.b));
     decale_u16(ctx, o, Obj::X, cam_x);
     decale_u16(ctx, o, Obj::Y, cam_y);
     let animation = o.u8(ctx.b, Obj::VARIANT).wrapping_add(0xc);
@@ -397,7 +418,6 @@ mod eclat {
     pub const ANIMATIONS: u32 = 0x193ffe;
     pub const DECALAGE: u32 = 0x5c;
     pub const CREER_TIR_A: u32 = 0xeab50;
-    pub const CREER_TIR_B: u32 = 0xa8ae8;
 }
 
 fn eclat_init(ctx: &mut Ctx, o: Obj) {
@@ -411,7 +431,7 @@ fn eclat_init(ctx: &mut Ctx, o: Obj) {
     let dx = ctx.prog16(eclat::POSITIONS + rang);
     let dz = ctx.prog16(eclat::POSITIONS + rang + 2);
     o.set_u16(ctx.b, Obj::Y, 0x40);
-    let (x, z) = (lit_ram16(ctx, 0x556), lit_ram16(ctx, 0x55a));
+    let (x, z) = (crate::ram::CAMERA_ALT_X.get(ctx.b), crate::ram::CAMERA_ALT_Y.get(ctx.b));
     o.set_u16(ctx.b, Obj::X, x);
     o.set_u16(ctx.b, Obj::Z, z);
     decale_u16(ctx, o, Obj::X, dx);
@@ -442,8 +462,7 @@ fn eclat_atterrit(ctx: &mut Ctx, o: Obj) {
             tir.set_u8(ctx.b, Obj::ACTIVE, 1);
             tir.set_u8(ctx.b, Obj::KIND, 0x17);
             tir.set_u8(ctx.b, champ::MODE, 0);
-            ctx.c.d[0] = 3;
-            ctx.jsr(eclat::CREER_TIR_B);
+            super::effects_creators::set_list(ctx.b, 3);
             let tir = ctx.alloc(&pools::ESHL);
             if tir.is_none() {
                 return;
@@ -469,12 +488,13 @@ fn eclat_actif(ctx: &mut Ctx, o: Obj) {
 fn eclat(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(eclat::TABLE, etat as u32);
+    let cible = cible(ctx, eclat::TABLE, etat as u32);
     match etat {
         etat::INIT => eclat_init(ctx, o),
         etat::ACTIF => eclat_actif(ctx, o),
         etat::LIBERE => eclat_atterrit(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -580,7 +600,7 @@ fn nuage_init(ctx: &mut Ctx, o: Obj) {
     o.set_u16(ctx.b, Obj::Y, tirage);
     decale_u16(ctx, o, Obj::Y, 0x50);
     o.set_u16(ctx.b, Obj::Z, 0);
-    let cam = lit_ram16(ctx, 0x556);
+    let cam = crate::ram::CAMERA_ALT_X.get(ctx.b);
     o.set_u16(ctx.b, Obj::X, cam.wrapping_add(0x1c0));
     let variante = o.u8(ctx.b, Obj::VARIANT) as u32;
     let vitesse = ctx.prog16(nuage::VITESSES + 2 * variante);
@@ -600,14 +620,15 @@ fn nuage_actif(ctx: &mut Ctx, o: Obj) {
         return;
     }
     ctx.anim_step();
-    // D0 garde ses mots hauts d'avant : la remise en liste les rend comme l'original, relus ici (adaptateur)
+    // l'original relit D0 après la remise en liste, qui n'en change que le mot bas : le mot haut est celui de
+    // l'aiguillage des états (`moveq #0,D0`), nul ; `swap D0 ; asr.l #8,D0` donne donc la vitesse × 256
+    ctx.reinsert();
     let o = ctx.obj();
-    crate::objects::lists::ACTORS.reinsert_68k(ctx.c, ctx.b, o);
     let vx = o.u16(ctx.b, Obj::VX) as u32;
-    let d0 = ((ctx.c.d[0] & 0xffff_0000 | vx).rotate_left(16)) as i32 >> 8;
+    let d0 = (vx << 16) as i32 >> 8;
     let x = o.u32(ctx.b, Obj::X).wrapping_sub(d0 as u32);
     o.set_u32(ctx.b, Obj::X, x);
-    let limite = lit_ram16(ctx, 0x556).wrapping_sub(0x40);
+    let limite = crate::ram::CAMERA_ALT_X.get(ctx.b).wrapping_sub(0x40);
     let xw = o.u16(ctx.b, Obj::X);
     if !((limite as i16) < xw as i16) {
         ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -661,13 +682,13 @@ mod interface {
 
 /// Phase de jeu : 8 ou plus, la partie est finie.
 fn partie_finie(ctx: &mut Ctx) -> bool {
-    let phase = ctx.ram8(0x2c) as i8;
+    let phase = crate::ram::PHASE.get(ctx.b) as i8;
     phase >= 8
 }
 
 /// Place l'objet sur la caméra (`X` = caméra x, `Z` = caméra y, `Y` = 0).
 fn place_sur_camera(ctx: &mut Ctx, o: Obj) {
-    let (cam_x, cam_y) = (lit_ram16(ctx, 0x506), lit_ram16(ctx, 0x50a));
+    let (cam_x, cam_y) = (crate::ram::CAMERA_X.get(ctx.b), crate::ram::CAMERA_Y.get(ctx.b));
     o.set_u16(ctx.b, Obj::X, cam_x);
     o.set_u16(ctx.b, Obj::Z, cam_y);
     o.set_u32(ctx.b, Obj::Y, 0);
@@ -678,7 +699,7 @@ fn interface_0(ctx: &mut Ctx, o: Obj) {
         return ctx.free(&pools::EFFCT);
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(interface::ETATS_0, etat as u32);
+    let cible = cible(ctx, interface::ETATS_0, etat as u32);
     match etat {
         etat::INIT => {
             let pret = o.u8(ctx.b, 0x1c);
@@ -691,13 +712,13 @@ fn interface_0(ctx: &mut Ctx, o: Obj) {
             }
         }
         etat::ACTIF => {}
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
 fn interface_1(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(interface::ETATS_1, etat as u32);
+    let cible = cible(ctx, interface::ETATS_1, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -749,7 +770,8 @@ fn interface_1(ctx: &mut Ctx, o: Obj) {
             ctx.reinsert();
         }
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -776,7 +798,7 @@ fn recopie_palette(ctx: &mut Ctx, o: Obj, decalage: u16) {
 
 fn interface_2(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(interface::ETATS_2, etat as u32);
+    let cible = cible(ctx, interface::ETATS_2, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -862,7 +884,8 @@ fn interface_2(ctx: &mut Ctx, o: Obj) {
             ctx.reinsert();
         }
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -879,7 +902,7 @@ fn interface_3(ctx: &mut Ctx, o: Obj) {
         return ctx.free(&pools::EFFCT);
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(interface::ETATS_3, etat as u32);
+    let cible = cible(ctx, interface::ETATS_3, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -895,7 +918,7 @@ fn interface_3(ctx: &mut Ctx, o: Obj) {
             }
             interface_3_animation(ctx, o);
         }
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -909,7 +932,7 @@ fn interface_3_animation(ctx: &mut Ctx, o: Obj) {
 
 fn interface_4(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(interface::ETATS_4, etat as u32);
+    let cible = cible(ctx, interface::ETATS_4, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -931,21 +954,22 @@ fn interface_4(ctx: &mut Ctx, o: Obj) {
             }
             ctx.reinsert();
         }
-        _ => ctx.deleguer(cible),
+        etat::LIBERE | etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
 fn interface_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    let cible = ctx.saut_table(interface::TABLE, 2 * variante as u32);
+    let cible = cible(ctx, interface::TABLE, 2 * variante as u32);
     match variante {
         0 => interface_0(ctx, o),
         1 => interface_1(ctx, o),
         2 => interface_2(ctx, o),
         3 => interface_3(ctx, o),
         4 => interface_4(ctx, o),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1082,12 +1106,12 @@ fn impact_actif(ctx: &mut Ctx, o: Obj) {
 fn impact_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(impact::TABLE, etat as u32);
+    let cible = cible(ctx, impact::TABLE, etat as u32);
     match etat {
         etat::INIT => impact_init(ctx, o),
         etat::ACTIF => impact_actif(ctx, o),
         etat::LIBERE | 6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1225,13 +1249,13 @@ fn debris_fin(ctx: &mut Ctx, o: Obj) {
 fn debris_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(debris::TABLE, etat as u32);
+    let cible = cible(ctx, debris::TABLE, etat as u32);
     match etat {
         etat::INIT => debris_init(ctx, o),
         etat::ACTIF => debris_actif(ctx, o),
         etat::LIBERE => debris_fin(ctx, o),
         6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1288,12 +1312,13 @@ fn eclat_unique_clignote(ctx: &mut Ctx, o: Obj) {
 fn eclat_unique_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(eclat_unique::TABLE, etat as u32);
+    let cible = cible(ctx, eclat_unique::TABLE, etat as u32);
     match etat {
         etat::INIT => eclat_unique_init(ctx, o),
         etat::ACTIF => eclat_unique_actif(ctx, o),
         etat::LIBERE => eclat_unique_clignote(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1426,13 +1451,13 @@ fn etincelle_actif(ctx: &mut Ctx, o: Obj) {
 fn etincelle_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(etincelle::TABLE, etat as u32);
+    let cible = cible(ctx, etincelle::TABLE, etat as u32);
     match etat {
         etat::INIT => etincelle_init(ctx, o),
         etat::ACTIF => etincelle_actif(ctx, o),
         etat::LIBERE => ajoute_u8(ctx, o, Obj::STATE, 2),
         6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1478,12 +1503,13 @@ fn marque_actif(ctx: &mut Ctx, o: Obj) {
 fn marque_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(marque::TABLE, etat as u32);
+    let cible = cible(ctx, marque::TABLE, etat as u32);
     match etat {
         etat::INIT => marque_init(ctx, o),
         etat::ACTIF => marque_actif(ctx, o),
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1556,7 +1582,7 @@ fn gerbe_explose(ctx: &mut Ctx, o: Obj) {
 fn gerbe_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(gerbe::TABLE, etat as u32);
+    let cible = cible(ctx, gerbe::TABLE, etat as u32);
     match etat {
         etat::INIT => gerbe_init(ctx, o),
         etat::ACTIF => {
@@ -1568,7 +1594,8 @@ fn gerbe_gestionnaire(ctx: &mut Ctx) {
             gerbe_explose(ctx, o);
         }
         etat::LIBERE => gerbe_explose(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1630,12 +1657,13 @@ fn eclats_debris_fin(ctx: &mut Ctx, _o: Obj) {
 fn eclats_debris_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(eclats_debris::TABLE, etat as u32);
+    let cible = cible(ctx, eclats_debris::TABLE, etat as u32);
     match etat {
         etat::INIT => eclats_debris_init(ctx, o),
         etat::ACTIF => eclats_debris_actif(ctx, o),
         etat::LIBERE => eclats_debris_fin(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1686,7 +1714,7 @@ fn projectile_init(ctx: &mut Ctx, o: Obj) {
 
 fn projectile_actif(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(projectile::SOUS_ETATS, sous_etat as u32);
+    let cible = cible(ctx, projectile::SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         0 => {
             let en_vol = ctx.move_xz().gt();
@@ -1697,7 +1725,7 @@ fn projectile_actif(ctx: &mut Ctx, o: Obj) {
             ctx.anim_step();
         }
         2 => {}
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1709,12 +1737,12 @@ fn projectile_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(projectile::TABLE, etat as u32);
+    let cible = cible(ctx, projectile::TABLE, etat as u32);
     match etat {
         etat::INIT => projectile_init(ctx, o),
         etat::ACTIF => projectile_actif(ctx, o),
         etat::LIBERE | 6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1860,7 +1888,7 @@ fn accessoire_suit(ctx: &mut Ctx, o: Obj) {
 fn accessoire_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(accessoire::TABLE, etat as u32);
+    let cible = cible(ctx, accessoire::TABLE, etat as u32);
     match etat {
         etat::INIT => {
             let figee = ctx.ram8(0x3d) != 0;
@@ -1886,7 +1914,8 @@ fn accessoire_gestionnaire(ctx: &mut Ctx) {
             ctx.reinsert();
         }
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1926,7 +1955,7 @@ fn declencheur_effet(ctx: &mut Ctx, o: Obj) {
 }
 
 fn declencheur_actif(ctx: &mut Ctx, o: Obj) {
-    let limite = ctx.ram16(0x506).wrapping_sub(0x60);
+    let limite = crate::ram::CAMERA_X.get(ctx.b).wrapping_sub(0x60);
     let x = o.u16(ctx.b, Obj::X);
     if limite as i16 > x as i16 {
         return ctx.free(&pools::EFFCT);
@@ -1953,12 +1982,13 @@ fn declencheur_init(ctx: &mut Ctx, o: Obj) {
 fn declencheur_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(declencheur::TABLE, etat as u32);
+    let cible = cible(ctx, declencheur::TABLE, etat as u32);
     match etat {
         etat::INIT => declencheur_init(ctx, o),
         etat::ACTIF => declencheur_actif(ctx, o),
         etat::LIBERE => declencheur_effet(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -2109,8 +2139,7 @@ fn bulle_0_action_10d(ctx: &mut Ctx, o: Obj, joueur: Obj) {
 fn bulle_0(ctx: &mut Ctx, o: Obj) {
     let joueur = pointeur(ctx, o, bulle::PROPRIETAIRE);
     let action = joueur.u8(ctx.b, 0x3d);
-    ctx.c.a[1] = o.u16(ctx.b, bulle::PROPRIETAIRE) as i16 as i32 as u32;
-    let cible = ctx.saut_table(bulle::ACTIONS_0, action as u32);
+    let cible = cible(ctx, bulle::ACTIONS_0, action as u32);
     let octet = |ctx: &mut Ctx, off: u32| joueur.u8(ctx.b, off) as u16;
     let classe = joueur.u8(ctx.b, 3) >> 1;
     match action {
@@ -2183,7 +2212,7 @@ fn bulle_0(ctx: &mut Ctx, o: Obj) {
             }
             bulle_affiche(ctx, o, 0x10);
         }
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -2192,11 +2221,11 @@ fn bulle_0(ctx: &mut Ctx, o: Obj) {
 fn bulle_selon_action(ctx: &mut Ctx, o: Obj, offset_pointeur: u32, doubler: bool, table: u32, nombre: u32) {
     let source = pointeur(ctx, o, offset_pointeur);
     let action = source.u8(ctx.b, 0x3d) as u32;
-    ctx.c.a[1] = o.u16(ctx.b, offset_pointeur) as i16 as i32 as u32;
     let indice = if doubler { action * 2 } else { action };
-    let cible = ctx.saut_table(table, indice);
+    let cible = cible(ctx, table, indice);
     if indice >= nombre || (!doubler && indice & 1 != 0) {
-        return ctx.deleguer(cible);
+        // une action hors de la table mènerait l'original dans le code qui la suit
+        hors_table(cible);
     }
     let code = match (table, indice / if doubler { 2 } else { 1 }) {
         (bulle::ACTIONS_1, _) => 0x10,
@@ -2248,7 +2277,7 @@ fn bulle_init(ctx: &mut Ctx, o: Obj) {
     ajoute_u8(ctx, o, Obj::STATE, 2);
     o.set_u8(ctx.b, champ::MODE, 0);
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    let cible = ctx.saut_table(bulle::VARIANTES, 2 * variante as u32);
+    let cible = cible(ctx, bulle::VARIANTES, 2 * variante as u32);
     match variante {
         0 => bulle_0(ctx, o),
         1 => bulle_selon_action(ctx, o, bulle::PROPRIETAIRE, false, bulle::ACTIONS_1, 6),
@@ -2258,7 +2287,7 @@ fn bulle_init(ctx: &mut Ctx, o: Obj) {
         5 => bulle_selon_action(ctx, o, bulle::PORTE, true, bulle::ACTIONS_5, 6),
         6 => bulle_selon_action(ctx, o, bulle::PORTE, true, bulle::ACTIONS_6, 6),
         7 => bulle_affiche(ctx, o, 4),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -2314,13 +2343,13 @@ fn bulle_fin(ctx: &mut Ctx, o: Obj) {
 fn bulle_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(bulle::ETATS, etat as u32);
+    let cible = cible(ctx, bulle::ETATS, etat as u32);
     match etat {
         etat::INIT => bulle_init(ctx, o),
         etat::ACTIF => bulle_actif(ctx, o),
         etat::LIBERE => bulle_fin(ctx, o),
         6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 

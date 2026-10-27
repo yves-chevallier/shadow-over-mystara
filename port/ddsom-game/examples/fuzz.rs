@@ -8,7 +8,8 @@
 //! Groupes : son (0x68c, 0xe0836-0xee000), u1 (RNG et files d'événements 0x19a80-0x1a000),
 //! c1 (monnayeurs 0x13c00-0x14e50), m2 (EEPROM et configuration 0x2d300-0x2ede0),
 //! video (primitives vidéo, palettes et fondus : natives `video_*` et `palette_*`),
-//! camera (recopie du décor par les caméras 1 et 2, 0x2f81c 0x2f86e 0x328a8, et décors à parallaxe 0x33178...).
+//! camera (recopie du décor par les caméras 1 et 2, 0x2f81c 0x2f86e 0x328a8, et décors à parallaxe 0x33178...),
+//! createurs (créateurs d'objets du lot B : `effects_creators`, `creators`, `petites`, `effects_aids`).
 
 use std::path::Path;
 
@@ -892,6 +893,38 @@ fn alea_petites(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     }
 }
 
+/// Créateurs d'objets du lot B (`families::effects_creators`, `creators`, `petites`, `effects_aids`) : créateur pris
+/// dans un pool ou parmi les joueurs, registres et places libres des pools tirés (parfois aucune : la création échoue
+/// en cours de route).
+fn alea_createurs(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
+    use ddsom_game::objects::pools::POOLS;
+    registres(c, b, alea);
+    let pool = POOLS[alea.next() as usize % POOLS.len()];
+    c.a[0] = if alea.une_chance_sur(4) { 0xff85de + 0x200 * (alea.next() % 4) } else { pool.slot(alea.next() % pool.slots).0 };
+    c.a[1] = 0x910000 + 4 * (alea.next() % 0xf00);
+    c.a[4] = 0xff0000 + (alea.next() % 0x8000);
+    c.a[5] = A5;
+    wr8(b, A5 + 0x36, (alea.next() % 2) as u8);
+    wr8(b, A5 + 0x34, (alea.next() % 0x6c) as u8);
+    for p in POOLS {
+        let libres = if alea.une_chance_sur(5) { alea.next() % 3 } else { p.slots / 2 };
+        wr16(b, A5 + p.free, libres as u16);
+    }
+}
+
+/// Entrées du groupe `createurs` (sans les aiguillages par table et la remise à zéro de scène, qui appellent du code
+/// choisi par l'état et ne sont pas des créateurs).
+fn createurs() -> Vec<u32> {
+    use ddsom_game::families::{creators, effects_creators, petites};
+    // les étincelles posées entre deux objets lisent leurs boîtes de collision : sur des objets tirés au hasard,
+    // l'original boucle sans fin (hors contrat), elles sont validées par les scénarios
+    let exclues = [0xa8ae8, 0xa8af8, 0xd981a, 0xd9778, 0xcc0ca, 0x180ac, 0x1c44a, 0xaa96c, 0xaaa04, 0xaaa84];
+    effects_creators::NATIVES.iter().chain(creators::NATIVES).chain(petites::NATIVES).chain(ddsom_game::effects_aids::NATIVES)
+        .map(|n| n.entry)
+        .filter(|e| !exclues.contains(e))
+        .collect()
+}
+
 /// Boutique : l'article en vitrine (PEFF 42) et le comptoir (PEFF 43) avec l'interprète des dialogues du marchand, sur un client (objet
 /// PEFF dont `+0x50` désigne un joueur) à l'inventaire, à la bourse et à l'état de menu tirés ; le script de
 /// dialogue est écrit dans un emplacement ITEM (commandes valides, sauts vers l'avant, fin par un arrêt).
@@ -1004,6 +1037,7 @@ fn main() {
         "camera" => (alea_camera, 0x2f000..0x33400),
         "petites" => (alea_petites, 0x0..0x100000),
         "boutique" => (alea_boutique, 0x50b9c..0x514d0),
+        "createurs" => (alea_createurs, 0x0..0x100000),
         _ => {
             eprintln!("groupe inconnu : {groupe}");
             std::process::exit(2);
@@ -1026,6 +1060,7 @@ fn main() {
         .map(|n| n.entry)
         .filter(|e| plage.contains(e) && (*groupe != "son" || *e == 0x68c || *e >= 0xe0836))
         .filter(|e| *groupe != "petites" || PETITES.contains(e))
+        .filter(|e| *groupe != "createurs" || createurs().contains(e))
         .filter(|e| *groupe != "boutique" || matches!(*e, 0x50b9c | 0x51076))
         .filter(|e| *groupe != "camera" || matches!(*e, 0x2f81c | 0x2f86e | 0x328a8 | 0x33178 | 0x33196 | 0x331e8 | 0x3326c))
         .filter(|e| *groupe != "video" || matches!(*e, 0xb40 | 0xb46 | 0xb96 | 0xbac | 0xbc6 | 0xbfc | 0xc58 | 0xca8 | 0xcc8 | 0xce8 | 0x158e | 0x15c8 | 0x1602 | 0x164e | 0x1a296 | 0x1a350 | 0x1a360 | 0x1a366 | 0x1a3d4 | 0x1a608 | 0x1a60a | 0x1a678 | 0x1a67e | 0x1a8ac | 0x1a8b2 | 0x1cd32 | 0x1cd7c | 0x1cdd6 | 0x1cf3c | 0x1cfb8 | 0x1cfc8 | 0x1d00e | 0x1d042 | 0x24a8 | 0x24b0 | 0x255a | 0x25e8 | 0x260c | 0x26d4 | 0x2766))

@@ -73,7 +73,7 @@ fn raft(x: &mut Cx) {
             if x.u8(f::SUB_STATE) == 0 {
                 let v = x.u32(raft::SPEED);
                 x.add32(Obj::X, v);
-                if x.a5_u8(0x2c) == 0xc {
+                if crate::ram::PHASE.get(x.b) == 0xc {
                     x.add8(f::SUB_STATE, 2);
                 }
                 x.anim_step();
@@ -117,7 +117,7 @@ fn raft_drift(x: &mut Cx) {
         x.add32(Obj::X, dx as u32);
         x.add32(Obj::Y, dy as u32);
         x.c.d[4] = dx as u32;
-        x.call(super::rom::OMBRE);
+        crate::terrain::push_68k(x.c, x.b, x.o);
     }
     let (rx, ry) = (x.u16(Obj::X), x.u16(Obj::Y));
     for p in players().rev() {
@@ -175,7 +175,6 @@ mod gate {
     /// Décalage en x des joueurs, par personnage, au retour (mots, espace programme).
     pub const RETURN_OFFSETS: u32 = 0xae3b4;
     pub const MUSIC_OF_SCENE: u32 = 0xe0d8c;
-    pub const RESTART_SCENE: u32 = 0xcc0ca;
     pub const PLAY_MUSIC: u32 = 0xe17a4;
 }
 
@@ -216,7 +215,8 @@ fn gate_init(x: &mut Cx) {
         x.set8(Obj::VZ + 1, swing);
     }
     if x.u8(gate::MOVING) != 0 {
-        x.call(0xdf688);
+        let o = x.o;
+        super::creators::sobj_8(x.b, o);
     }
     let mode = x.u8(0x2f) as u32;
     if mode == 0 {
@@ -252,7 +252,7 @@ fn gate_swing(x: &mut Cx) {
 fn gate_watch(x: &mut Cx) {
     x.anim_step();
     gate_swing(x);
-    if (x.a5_u16(0x506).wrapping_sub(0x40) as i16) > (x.u16(Obj::X) as i16) {
+    if (crate::ram::CAMERA_X.get(x.b).wrapping_sub(0x40) as i16) > (x.u16(Obj::X) as i16) {
         // sorti de l'écran par la gauche
         return x.set8(f::STATE, 6);
     }
@@ -304,7 +304,7 @@ fn gate_curtain(x: &mut Cx) {
 /// 0xada96 : entrée dans la sous-scène (scène 7 → 6, sinon 12). Le contexte de la scène est sauvé dans
 /// l'objet, les objets des pools sont gelés, le décor de la variante est créé, puis la scène repart.
 fn gate_enter(x: &mut Cx) {
-    let scene = if x.a5_u8(0x34) == 7 { 6 } else { 0xc };
+    let scene = if crate::ram::SCENE.get(x.b) == 7 { 6 } else { 0xc };
     x.set_a5_u8(0x34, scene);
     x.set16(f::STATE, 0x400);
     x.set16(gate::CURTAIN, 0);
@@ -314,7 +314,7 @@ fn gate_enter(x: &mut Cx) {
     let (cam_x, cam_y) = (x.a5_u32(0x506), x.a5_u32(0x50a));
     x.set32(gate::CAMERA_X, cam_x);
     x.set32(gate::CAMERA_Y, cam_y);
-    let (alt_x, alt_y) = (x.a5_u16(0x556), x.a5_u16(0x55a));
+    let (alt_x, alt_y) = (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b));
     x.set16(gate::ALT_X, alt_x);
     x.set16(gate::ALT_Y, alt_y);
     let scroll = crate::mem::rd32(x.b, gate::SCENE_SCROLL);
@@ -339,7 +339,8 @@ fn gate_enter(x: &mut Cx) {
     x.c.d[1] = x.c.d[1] & !0xff | v as u32;
     scene_prop(x);
     x.call(gate::MUSIC_OF_SCENE);
-    x.call(gate::RESTART_SCENE);
+    x.c.a[0] = x.o.0;
+    super::creators::restart_scene(x.c, x.b);
 }
 
 /// 0xcc200 : décor (SET 8) de variante D0 et de réglage D1 ; à défaut un SOBJ 4, à défaut un EFFCT 18.
@@ -358,7 +359,7 @@ fn scene_prop(x: &mut Cx) {
 /// 0xae11a, sous-état 0 : retour de la sous-scène (scène 6 → 7, sinon 9). La scène repart avec le
 /// contexte sauvé par `gate_enter`, les joueurs vivants sont replacés devant l'objet suivi.
 fn gate_leave(x: &mut Cx) {
-    let scene = if x.a5_u8(0x34) == 6 { 7 } else { 9 };
+    let scene = if crate::ram::SCENE.get(x.b) == 6 { 7 } else { 9 };
     x.set_a5_u8(0x34, scene);
     x.set_a5_u8(0x44, 1);
     let (a0, d7) = (x.c.a[0], x.c.d[7]);
@@ -454,8 +455,6 @@ mod attack_fx {
     pub const SHOWER_SHEETS: u32 = 0xad1b4;
     pub const SHOWER_DATA: u32 = 0xad232;
     pub const SHOWER_ANIMS: u32 = 0xad354;
-    /// Créateur d'un effet 11 (`0xabec8`, natif).
-    pub const SPAWN: u32 = 0xabec8;
     pub const ANIM_A: u32 = 0x18f412;
     pub const ANIM_B: u32 = 0x15cdb6;
     pub const OWNER: u32 = 0x5c;
@@ -644,14 +643,9 @@ fn attack_fx_shower_spawn(x: &mut Cx) {
         at += 2;
         loop {
             let variant = x.u8(f::VARIANT);
-            x.c.d[0] = variant as u32;
-            x.c.d[1] = 0;
-            x.c.a[4] = at;
-            x.call(attack_fx::SPAWN);
-            if x.c.sr & m68k::SR_C != 0 {
-                break;
-            }
-            let o = Obj(x.c.a[1]);
+            let me = x.o;
+            let cree = super::effects_creators::attack(x.b, me, variant, 0);
+            let Some(o) = cree else { break };
             let (vx, vz) = (x.data16(at), x.data16(at + 2));
             o.set_u16(x.b, Obj::VX, vx);
             o.set_u16(x.b, Obj::VZ, vz);
@@ -665,8 +659,6 @@ fn attack_fx_shower_spawn(x: &mut Cx) {
                 break;
             }
         }
-        x.c.a[4] = at;
-        x.c.d[5] = x.c.d[5] & 0xffff_0000 | n as u32;
     }
     free(x);
 }
@@ -835,7 +827,7 @@ fn attack_fx_rise(x: &mut Cx) {
             }
             let d: u32 = if x.u8(0x2f) & 1 != 0 { 1 } else { 0xffff_ffff };
             x.add32(Obj::Y, d);
-            let top = if x.a5_u8(0x36) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(0x50a) };
+            let top = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { crate::ram::CAMERA_ALT_Y.get(x.b) } else { crate::ram::CAMERA_Y.get(x.b) };
             let z = top.wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
             x.set16(Obj::Z, z);
             let mode = x.u8(0x2f) as u32;
