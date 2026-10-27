@@ -10,3 +10,4 @@ cps2 = { path = "../cps2" }
 ddsom-assets = { path = "../ddsom-assets" }
 ddsom-sound = { path = "../ddsom-sound" }
 png = "0.17"
+m68k = { path = "../m68k" }

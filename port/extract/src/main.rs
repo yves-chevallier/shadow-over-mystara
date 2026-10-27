@@ -17,6 +17,7 @@ mod natives;
 mod palettes;
 mod players;
 mod rest;
+mod reste;
 mod rom;
 mod scene_palettes;
 mod scenes;
@@ -71,6 +72,10 @@ fn main() {
         if wanted("data") {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
             data::extract(roms, &out.join("data"))?;
+        }
+        if wanted("data") {
+            // en dernier : tout ce que les autres fichiers ne décrivent pas, hors code 68000
+            reste::extract(roms, out)?;
         }
         std::fs::write(out.join("README.md"), README)?;
         Ok(())

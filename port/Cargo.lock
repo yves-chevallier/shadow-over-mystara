@@ -167,7 +167,9 @@ dependencies = [
  "cps2-gfx",
  "ddsom-assets",
  "ddsom-sound",
+ "m68k",
  "png",
+ "recomp",
 ]
 
 [[package]]

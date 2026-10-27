@@ -16,7 +16,8 @@ Catégories de l'outil (sans argument : toutes) : `gfx`, `palettes` (`palettes.p
 `scene_palettes.json`), `sounds`, `sprites` (`sprites/frames.json`, `anims.json`, `tables.json`), `levels`,
 `terrain`, `texts`, `music` (`sound/music.json`), `data` (`data/spawns.json` et les tables de données
 `data/players.json`, `combat.json`, `enemies.json`, `boxes.json`, `scenes.json`, `misc.json`,
-`dialogs.json`, `rest.json`).
+`dialogs.json`, `rest.json`, `natives.json`, puis en dernier `reste.json` : tout le reste de la région programme
+hors code 68000, voir [sans-rom.md](sans-rom.md) « Couverture complète des données »).
 
 Les tests relisent les fichiers et réencodent chaque table au format de la ROM : ils échouent au premier
 octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test ignoré si un fichier manque).
@@ -40,6 +41,7 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Réactions aux coups | `data/combat.json` | `combat_sans_perte` |
 | Tables des ennemis | `data/enemies.json` | `ennemis_sans_perte` |
 | Tables lues par le Rust, hors des précédentes | `data/rest.json` | `restes_sans_perte` |
+| Tout le reste de la région programme, hors code 68000 | `data/reste.json` | `programme_complet_hors_code` (`tests/rebuild.rs`), exemple `programme_complet` |
 | Tout le programme, graphismes, échantillons | tous | `programme_reconstruit`, `graphismes_reconstruits`, `echantillons_reconstruits` (`tests/rebuild.rs`) |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
@@ -58,9 +60,10 @@ d'un chargement de fichier (les encodeurs des tests sans perte y sont réunis ; 
 | `Program::load(assets)` | ROM programme, vue données et vue espace programme déchiffrée (`Image`), à leurs adresses : tous les fichiers du tableau ci-dessus | `programme_reconstruit` : octets couverts identiques à `cps2::load_program` ; aucune écriture contradictoire |
 
 `Image::covered()` donne les zones décrites par les fichiers ; les autres octets valent zéro. Sur la ROM
-programme (4 Mo, vue données), les ressources couvrent 3 084 046 octets (images, palettes, cartes de décors,
-textes, tables) ; le reste est du code 68000 et des tables non extraites (voir « Lectures de la ROM
-programme par le Rust »). Ne sont pas reconstruits : le code et les données du Z80 (`dd2.01`, `dd2.02` :
+programme (4 Mo, vue données), les fichiers décrits couvrent 3 084 046 octets (images, palettes, cartes de décors,
+textes, tables) ; `data/natives.json` (zones mesurées) et `data/reste.json` complètent tout le reste sauf le code
+68000 exécuté (486 399 octets) : la région programme reconstruite égale la ROM partout ailleurs, dans les deux
+espaces ([sans-rom.md](sans-rom.md) « Couverture complète des données »). Ne sont pas reconstruits : le code et les données du Z80 (`dd2.01`, `dd2.02` :
 seules les tables du pilote, `sound/music.json`, sont extraites), le programme du DSP QSound
 (`dl-1425.bin`) et le code 68000.
 
