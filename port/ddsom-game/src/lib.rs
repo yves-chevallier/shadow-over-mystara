@@ -224,13 +224,10 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(families::natives())
         .chain(dispatch::NATIVES)
         .chain(game::NATIVES)
-        .chain(game::RESUME_NATIVES)
         .chain(scene::natives())
         .chain(modes::natives())
         .chain(sound::wrappers_natifs())
-        .chain(demarrage::NATIVES)
         .chain(kernel::NATIVES)
-        .chain(vblank::NATIVES)
         .chain(taches::natives())
         .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
@@ -238,51 +235,53 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(service::NATIVES)
 }
 
-/// Appelle une routine d'origine (pas encore réécrite) depuis une routine native, comme un JSR :
-/// exécution jusqu'au retour, natives et blocs recompilés compris. Les cycles s'accumulent.
-/// L'adresse de retour empilée est une sentinelle : préférer `call_at` quand l'appelant d'origine
-/// est connu.
+/// Appelle une routine par son adresse depuis une routine native, comme un `jsr` : les natives (et, en mode hybride, le
+/// code d'origine) s'exécutent jusqu'au retour. L'adresse de retour empilée est une sentinelle. La routine ne doit ni
+/// céder la main ni revenir plus haut que son appelant : les appels qui le peuvent ont une suite (étape Rust, voir
+/// `taches::table::appeler` et [`appeler_attendu`]).
 #[track_caller]
 pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     // jamais exécutée par le jeu
     const RETURN: u32 = 0x00_fffe;
-    call_at(c, b, addr, RETURN);
-}
-
-/// Point de bascule de l'ordonnanceur : une tâche qui cède la main (0xa40, 0xa86) ou se termine y
-/// passe, sa pile et son PC sauvegardés.
-const TASK_SWITCH: u32 = 0x984;
-
-/// Comme `call`, en empilant `ret`, l'adresse de retour de l'appel d'origine (instruction qui suit
-/// son `jsr`). Si la routine cède la main à l'ordonnanceur, les fonctions Rust en cours sont
-/// abandonnées (`Unwound`) : la tâche, réveillée plus tard, reviendra par les adresses de retour de
-/// sa pile dans le code d'origine, qui finit le travail comme l'original. Les appelants Rust doivent
-/// donc empiler les mêmes adresses de retour que le code qu'ils remplacent.
-#[track_caller]
-pub fn call_at(c: &mut Cpu, b: &mut Cps2Bus, addr: u32, ret: u32) {
     let site = std::panic::Location::caller();
     let _site = (TRACE.get().is_some() || sans68k::actif()).then(|| SiteDAppel::entrer(site, addr));
-    // le code appelé trouve sur la pile 68000 les appels en cours tenus en Rust à cette hauteur (`taches::table::Cadre`)
-    let remis = taches::table::mettre_sur_la_pile(c, b);
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
-    mem::wr32(b, c.a[7], ret);
+    mem::wr32(b, c.a[7], RETURN);
     c.pc = addr;
-    while !(c.pc == ret && c.a[7] == sp) {
-        if c.pc == TASK_SWITCH || c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
-            // la tâche cède la main, ou le code 68000 a dépilé plus que son adresse de retour et
-            // poursuit ailleurs
-            std::panic::resume_unwind(Box::new(Unwound));
+    while !(c.pc == RETURN && c.a[7] == sp) {
+        if taches::a_cede() || c.pc == TASK_SWITCH || c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
+            panic!("appel de {addr:06x} ({site}) : la routine a cédé la main ou est revenue plus haut que son appelant (PC {:06x})", c.pc);
         }
-        if sans68k::actif() {
-            sans68k::pas(c, b);
-        } else if TRACE.get().is_some() {
-            run_traced(c.pc, c, b, u64::MAX);
-        } else if run(c.pc, c, b, u64::MAX).is_none() {
-            c.step(b);
-        }
+        un_pas(c, b);
     }
-    taches::table::reprendre_de_la_pile(c, b, &remis);
+}
+
+/// Point de bascule de l'ordonnanceur : une tâche qui cède la main (0xa40, 0xa86) ou se termine y passe.
+const TASK_SWITCH: u32 = 0x984;
+
+/// Une native (ou, en mode hybride, une instruction ou un bloc d'origine) à l'adresse du PC.
+fn un_pas(c: &mut Cpu, b: &mut Cps2Bus) {
+    if sans68k::actif() {
+        sans68k::pas(c, b);
+    } else if TRACE.get().is_some() {
+        run_traced(c.pc, c, b, u64::MAX);
+    } else if run(c.pc, c, b, u64::MAX).is_none() {
+        c.step(b);
+    }
+}
+
+/// Appelle la native `adresse` (gestionnaire désigné par une table de la ROM) pour une fonction Rust qui continue
+/// après elle : l'appel attendu `appel` a été ouvert par `taches::table::appeler_attendu`, avec la suite de la tâche si
+/// la native cède. Les natives s'enchaînent (sauts) jusqu'au retour. Rend vrai si la native est revenue ; faux si la
+/// tâche a cédé la main, ou si l'appelé a dépilé l'appel pour revenir plus haut (épilogue étranger des bulles) : la
+/// fonction Rust abandonne alors, et la tâche continuera par les suites des appels en cours.
+pub fn appeler_attendu(c: &mut Cpu, b: &mut Cps2Bus, adresse: u32, appel: taches::table::Appel) -> bool {
+    c.pc = adresse;
+    while taches::table::en_attente(b, appel) && !taches::a_cede() {
+        un_pas(c, b);
+    }
+    taches::table::revenu(b, appel)
 }
 
 /// Inventaire du 68000 restant (`examples/reste68k`) : fonction appelée avec l'adresse de chaque
@@ -306,7 +305,7 @@ thread_local! {
     static APPELS: std::cell::RefCell<Vec<(&'static std::panic::Location<'static>, u32)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Appel en cours (rendu à la fin de l'appel, même abandonné par `Unwound`).
+/// Appel en cours (rendu à la fin de l'appel).
 struct SiteDAppel;
 
 impl SiteDAppel {
@@ -323,7 +322,7 @@ impl Drop for SiteDAppel {
 }
 
 /// Inventaire : l'appel Rust le plus intérieur en cours (site et routine appelée), s'il y en a un. Le site est
-/// l'appel de `call`/`call_at` ou d'une de leurs enveloppes (`Ctx::call`, `Cx::call`...).
+/// l'appel de `call` ou d'une de ses enveloppes (`Ctx::call`, `Cx::call`...).
 pub fn site_d_appel() -> Option<(&'static std::panic::Location<'static>, u32)> {
     APPELS.with(|a| a.borrow().last().copied())
 }
@@ -358,21 +357,26 @@ pub fn set_verifier_appels(on: bool) {
     VERIFIER_APPELS.store(on, Ordering::Relaxed);
 }
 
-/// Fin anormale d'un appel : une routine d'origine a quitté en dépilant les adresses de retour de ses
-/// appelants (par exemple en revenant directement à la boucle de partie), ou a cédé la main à
-/// l'ordonnanceur. Les fonctions Rust qui l'appelaient sont abandonnées ; l'exécution reprend au PC
-/// atteint, comme dans l'original.
-pub struct Unwound;
+thread_local! {
+    /// Natives en cours d'exécution les unes dans les autres (appels par adresse, étapes).
+    static PROFONDEUR: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
 
-/// Exécute une native ; renvoie normalement, ou après abandon des fonctions Rust si le code 68000
-/// appelé a quitté par un autre chemin que son retour (voir `Unwound`).
+/// Exécute une native. Une native de premier niveau (ordonnanceur, VBLANK, native enchaînée par un saut) commence sans
+/// cession en cours (`taches::a_cede`).
 fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
-    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (n.run)(c, b)));
-    if let Err(payload) = r {
-        if !payload.is::<Unwound>() {
-            std::panic::resume_unwind(payload);
+    /// Rend la profondeur, même si la native panique (outils qui rattrapent les paniques).
+    struct Niveau(u32);
+    impl Drop for Niveau {
+        fn drop(&mut self) {
+            PROFONDEUR.with(|p| p.set(self.0));
         }
     }
+    let niveau = Niveau(PROFONDEUR.with(|p| p.replace(p.get() + 1)));
+    if niveau.0 == 0 {
+        taches::oublier_cession();
+    }
+    (n.run)(c, b);
 }
 
 /// Exécuteur : routine native si disponible, sinon bloc recompilé.
@@ -437,7 +441,7 @@ fn executer(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, duree: u64) {
 /// d'origine, qui le chercherait en RAM, ne doit jamais s'exécuter à leur place, même quand elles débordent sur
 /// l'interruption suivante (ce qui n'arrive que dans un appel de code d'origine qui dure).
 fn tient_la_table(n: &Native) -> bool {
-    kernel::NATIVES.iter().chain(vblank::NATIVES).chain(demarrage::NATIVES).any(|k| k.entry == n.entry)
+    kernel::NATIVES.iter().any(|k| k.entry == n.entry)
 }
 
 /// Exécuteur : routines natives seulement (le reste est laissé à l'interpréteur). Outils de diagnostic.
@@ -488,16 +492,27 @@ fn patches() -> Vec<cps2::Patch> {
 }
 
 /// Active les routines natives (et le code recompilé) sur la machine.
+///
+/// Le jeu est le jeu sans 68000 (`install_sans_68k`). Le mode hybride (natives et code d'origine recompilé pour le reste,
+/// `DDSOM_HYBRIDE=1`) est retiré : les tâches sont des machines à états Rust lancées par un ordonnanceur Rust, et les
+/// appels en cours ne sont plus sur la pile 68000 ; le code d'origine ne pourrait plus prendre la suite d'une native au
+/// milieu d'une tâche. Seule la machine de référence (`install_reference`) exécute encore le 68000.
 pub fn install(m: &mut cps2::Machine) {
-    m.executor = Some(run);
-    m.idle = Some(idle);
-    cap_steps(m);
+    install_sans_68k(m);
+}
+
+/// `DDSOM_HYBRIDE=1` demandait le mode hybride, retiré (voir [`install`]) : arrêt avec un message.
+pub fn refuser_hybride() {
+    if std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1") {
+        eprintln!("DDSOM_HYBRIDE=1 : le mode hybride est retiré (docs/refactorisation.md, lot « noyau final ») ; le jeu est le jeu sans 68000.");
+        std::process::exit(2);
+    }
 }
 
 /// Jeu sans 68000 : natives seules, boucle d'image du noyau (`sans68k`). Le `Cpu` de la machine n'est plus qu'un banc
 /// de registres ; une adresse sans native arrête le jeu avec un diagnostic.
 pub fn install_sans_68k(m: &mut cps2::Machine) {
-    install(m);
+    cap_steps(m);
     sans68k::installer(m);
 }
 
@@ -508,21 +523,15 @@ pub fn install_reference(m: &mut cps2::Machine) {
     cap_steps(m);
 }
 
-/// L'ordonnanceur (0x932-0x95e) tourne à vide : aucune tâche prête et pas de nouvelle image, ou seule la tâche
-/// du gel est prête et son prochain pas ne ferait rien (`taches::gel::attente_vide`). La machine du jeu a sa table des
-/// tâches en Rust ; une machine d'origine, en RAM.
+/// Machine de référence : l'ordonnanceur d'origine (0x932-0x95e) tourne à vide : aucune tâche prête (table FF0064)
+/// et pas de nouvelle image, ou seule la tâche du gel est prête et son prochain pas ne ferait rien
+/// (`taches::gel::attente_vide_origine`). Le jeu a son propre critère (`sans68k`).
 pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
     const NEW_FRAME: usize = 0x164 / 2; // FF0164 (octet haut) : posé par le VBLANK, effacé au début d'un parcours
-    if !(0x932..0x960).contains(&c.pc) || b.ram[NEW_FRAME] >> 8 != 0 {
-        return false;
-    }
-    match taches::table::lire(b) {
-        Some(t) => t.emplacements.iter().all(|e| !e.etat.lancable()) || taches::gel::attente_vide(t, &b.ram),
-        None => {
-            const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
-            (0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || taches::gel::attente_vide_origine(&b.ram)
-        }
-    }
+    const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
+    (0x932..0x960).contains(&c.pc)
+        && b.ram[NEW_FRAME] >> 8 == 0
+        && ((0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || taches::gel::attente_vide_origine(&b.ram))
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
@@ -585,8 +594,7 @@ fn adopt_mask() -> u32 {
 /// Exécute la routine d'origine sur une copie de la machine jusqu'à son retour ; rend le CPU obtenu.
 fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
     let (mut c2, mut b2) = (c.clone(), b.clone());
-    // appelée par un pas Rust : l'original trouve son adresse de retour sur la pile
-    taches::table::vers_le_68000(&mut c2, &mut b2);
+    pile_pour_l_original(&mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
     let mut guard = 0;
@@ -598,6 +606,15 @@ fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
         assert!(guard < 1_000_000, "{} : la routine d'origine ne revient pas", n.name);
     }
     c2
+}
+
+/// Contrôle d'une native appelée par un pas Rust (son retour est un appel en cours de la tâche, pas une adresse
+/// empilée) : la copie qui exécute l'original reçoit une adresse de retour sentinelle.
+fn pile_pour_l_original(c2: &mut Cpu, b2: &mut Cps2Bus) {
+    if taches::table::appelee_par_un_cadre(c2, b2) {
+        c2.a[7] = c2.a[7].wrapping_sub(4);
+        mem::wr32(b2, c2.a[7], 0x00_fffe);
+    }
 }
 
 /// `DDSOM_CHECK_ONLY=préfixe,...` : seules les natives nommées sont contrôlées (les autres, dont celles
@@ -612,7 +629,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();
-    taches::table::vers_le_68000(&mut c2, &mut b2);
+    pile_pour_l_original(&mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
     let mut guard = 0;

@@ -131,3 +131,21 @@ atteignable.
 
 * 0x818e6, 0x819e2 (formes du corps d'un boss, table 0x81ad4, appelées par `boss_common::push_out_of_boss`) : sans
   native. `+0xa4` (forme) n'est non nul pour aucun boss des scénarios (h). À transcrire avec le boss qui les pose.
+
+## Lot « noyau final » (`kernel.rs`, `vblank.rs`, `demarrage.rs`, `sans68k.rs`)
+
+### Handlers des traps 0 à 7 et 12 (0x9c2, 0x9fa, 0xa20, 0xa52, 0xa92, 0xab8, 0xad4, 0xae6, 0xafa ; natives retirées)
+
+Ce qu'ils font : le travail des enveloppes de l'ordonnanceur (créer, finir, tuer, céder, suspendre, réveiller une
+tâche, recommencer en A0, masquer les interruptions). Pourquoi ils ne sont pas atteints : le jeu ne prend ces traps que
+par leurs enveloppes (0x9b6... 0xb64, natives qui font le travail sur la table des tâches Rust sans prendre le trap) ;
+seul `trap #7` est aussi exécuté directement, par le menu de mise au point 0x2c3e0, que le jeu réécrit n'exécute pas
+(carte de développement, `docs/service.md`). Les natives de ces adresses ne servaient qu'au mode hybride (le 68000 y
+aurait été) : 0x9c2-0xad4 paniquaient, 0xae6 recommençait la tâche, 0xafa/0xaf8 changeaient le masque puis revenaient.
+Hypothèse : chemin normal du noyau d'origine, rendu inutile par la réécriture (pas du code mort de l'original). Repli
+défensif supprimé ; une adresse sans native arrête le jeu avec un diagnostic.
+
+### Tâche de l'écran 0x19068 (emplacement 0xf0)
+
+Déjà signalée (`docs/noyau.md`, « Code mort de la machine à modes ») : sa tâche n'a pas d'étape d'entrée Rust ; le noyau
+s'arrête sur `entrée 19068 sans étape Rust` si elle était créée (jamais dans les 272 scénarios).

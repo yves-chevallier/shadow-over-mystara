@@ -94,14 +94,8 @@ mod ext {
     pub const SET_VARIANT: u32 = 0xce00a;
     pub const SOBJ_VARIANT: u32 = 0xddeaa;
     pub const FADE_TASK_OUT: u32 = 0x14d0;
-    /// Gestionnaire de la phase 12 de la démonstration, et ses étapes.
+    /// Entrées des joueurs, au début de la phase 12 de la démonstration.
     pub const INPUTS: u32 = 0x2aec;
-    pub const WORLD_UPDATE: u32 = 0x1c86e;
-    pub const GAUGE: u32 = 0xb3e;
-    pub const COLLISIONS: u32 = 0x260ee;
-    pub const STEP_19E20: u32 = 0x19e20;
-    pub const SCRIPT_READER: u32 = 0xf2e5c;
-    pub const RANK_TICK: u32 = 0x1f27c;
 }
 
 /// Tables en ROM (données, ou adresses lues par le code d'origine relativement au PC).
@@ -240,6 +234,12 @@ crate::etapes! {
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             Flow::Done
         },
+        /// Retours des phases (`jsr (A0)` des deux boucles) : une phase peut céder la main, puis y revenir.
+        AfterPhaseA = at::AFTER_PHASE_A => after_phase,
+        AfterPhaseB = at::AFTER_PHASE_B => after_phase,
+        /// Retour de la mise à jour du monde dans la phase 12 de la démonstration (`jsr 0x1c86e` en `0x1fa44`), quand
+        /// un gestionnaire d'objet a fait céder la main à la tâche.
+        ApresMonde = 0x1fa4a => demo_after_world,
     }
 }
 
@@ -385,26 +385,21 @@ fn after_yield_a(x: &mut Ctx) -> Flow {
             return scene_end_a(x);
         }
     }
-    run_phase(x, table::PHASES_A, Etape::LoopA, at::AFTER_PHASE_A)
+    run_phase(x, table::PHASES_A, Etape::LoopA, Etape::AfterPhaseA)
 }
 
-// Retours des phases : l'adresse de retour empilée par `call_at` (la phase peut céder la main, puis y revenir par
-// `rts`) reste une native.
-crate::resume!(AFTER_PHASE_A, at::AFTER_PHASE_A, after_phase);
-crate::resume!(AFTER_PHASE_B, at::AFTER_PHASE_B, after_phase);
-
-/// Appelle le gestionnaire de la phase courante (`jsr (A0)` précédé du `pea` de la boucle).
-fn run_phase(x: &mut Ctx, phases: u32, loop_top: Etape, after: u32) -> Flow {
+/// Appelle le gestionnaire de la phase courante (`jsr (A0)` précédé du `pea` de la boucle) : il revient à `after`
+/// (`after_phase`), qui revient en haut de la boucle ; une phase peut aussi revenir directement en haut de la boucle,
+/// en dépilant le retour de son appel.
+fn run_phase(x: &mut Ctx, phases: u32, loop_top: Etape, after: Etape) -> Flow {
     wr8(x.b, var::YIELDED, 0xff);
-    // la phase peut revenir directement en haut de la boucle, en dépilant le retour de son appel : `call_at` remet
-    // alors cet appel en cours sur la pile 68000
     x.push_return(loop_top);
+    x.push_return(after);
     let phase = rd8(x.b, var::PHASE) as u32;
     let handler = prog32(x, phases + phase);
     x.c.d[0] = phase;
     x.c.a[0] = handler;
-    crate::call_at(x.c, x.b, handler, after);
-    after_phase(x)
+    x.jump_to(handler)
 }
 
 /// `0x1f9b0` : après la phase, gère l'écran de chargement et vide les files de collision ; le `rts`
@@ -428,8 +423,7 @@ fn after_phase(x: &mut Ctx) -> Flow {
         }
     }
     reset_queues(x);
-    crate::mem::rts(x.c, x.b);
-    Flow::Yield
+    Flow::Done
 }
 
 /// Les files de collision repartent à vide (comme `game::FRAME_END`).
@@ -829,7 +823,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
             }
         }
     }
-    run_phase(x, table::PHASES_B, Etape::LoopB, at::AFTER_PHASE_B)
+    run_phase(x, table::PHASES_B, Etape::LoopB, Etape::AfterPhaseB)
 }
 
 /// `0x20abc` : scène suivante : comme `0x1fb20` mais efface aussi `A5+0x59`.
@@ -1024,33 +1018,37 @@ pub const DEMO_PHASE_12: Native = Native {
     name: "demo_phase_12",
     run: |c, b| {
         let mut x = Ctx::new(c, b);
-        x.c.a[5] = A5;
-        x.call(ext::INPUTS);
-        demo_inputs(&mut x);
-        x.call(ext::WORLD_UPDATE);
-        x.c.d[1] = 0x54_0000;
-        x.call(ext::GAUGE);
-        x.call(ext::SPRITES);
-        x.c.d[1] = 0x48_0002;
-        x.call(ext::GAUGE);
-        x.call(ext::COLLISIONS);
-        x.c.d[1] = 0x4f_001e;
-        x.call(ext::GAUGE);
-        for f in [ext::STEP_19E20, ext::SCRIPT_READER, ext::RANK_TICK] {
-            x.call(f);
+        if demo_phase_12(&mut x) == Flow::Done {
+            crate::mem::rts(x.c, x.b);
         }
-        // l'original finit par `jmp 0x28d8` : la fin de partie, puis son `rts`
-        crate::aides::game_over(x.c, x.b);
-        crate::mem::rts(x.c, x.b);
     },
     touches_sound: false,
     outputs: 0,
 };
 
+/// `0x1fa38` : entrées de l'IA, puis la mise à jour du monde (un gestionnaire d'objet peut y faire céder la main à la
+/// tâche : elle reprendra à [`Etape::ApresMonde`]).
+fn demo_phase_12(x: &mut Ctx) -> Flow {
+    x.c.a[5] = A5;
+    x.call(ext::INPUTS);
+    demo_inputs(x);
+    x.push_return(Etape::ApresMonde);
+    if crate::game::update_world(x.c, x.b) == Flow::Yield {
+        return Flow::Yield;
+    }
+    x.drop_return();
+    demo_after_world(x)
+}
+
+/// `0x1fa4a` : comme la phase 12 du jeu (`game::apres_le_monde`) ; l'original finit par `jmp 0x28d8` (la fin de
+/// partie, puis son `rts`).
+fn demo_after_world(x: &mut Ctx) -> Flow {
+    crate::game::apres_le_monde(x.c, x.b);
+    Flow::Done
+}
+
 pub const NATIVES: &[Native] = &[
     DEMO_PHASE_12,
-    AFTER_PHASE_A,
-    AFTER_PHASE_B,
     RECORDER_RESET,
     RECORDER_STOP,
 ];

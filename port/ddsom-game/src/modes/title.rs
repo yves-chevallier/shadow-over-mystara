@@ -4,7 +4,7 @@
 //! une étape prépare des objets système (variantes de SOBJ, SET), attend qu'ils aient fini (champs du
 //! bloc d'état que les objets modifient par le pointeur `+0x4c` de l'objet) et passe à la suivante.
 //! Les attentes dans une étape (pool d'objets plein, fondu en cours) cèdent une image à
-//! l'ordonnanceur et reprennent à l'adresse d'origine (`resume!`).
+//! l'ordonnanceur et reprennent à une étape Rust (`etapes!`).
 
 use super::{mode, sub, Block, Flow, Sequence};
 use crate::mem::{rd16, rd8, rd32, set_low_word, wr16, wr32, wr8};

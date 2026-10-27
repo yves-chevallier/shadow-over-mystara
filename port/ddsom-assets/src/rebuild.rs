@@ -10,6 +10,7 @@ use std::io;
 use std::path::Path;
 
 use crate::data::DataFile;
+use crate::reste::Reste;
 use crate::texts;
 use crate::{
     Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts,
@@ -107,7 +108,7 @@ impl Program {
     }
 
     /// Fichiers (chemins relatifs à `dir`) qui servent à reconstruire le programme.
-    pub const FILES: [&'static str; 18] = [
+    pub const FILES: [&'static str; 19] = [
         "palettes.png",
         "sprites/frames.json",
         "sprites/anims.json",
@@ -126,6 +127,7 @@ impl Program {
         "data/dialogs.json",
         "data/rest.json",
         "data/natives.json",
+        "data/reste.json",
     ];
 
     /// Comme `load`, mais seuls les fichiers que `want` accepte sont écrits (les images de sprites sont lues
@@ -178,10 +180,14 @@ impl Program {
         if need(&mut p, "data/spawns.json") {
             p.put_spawns(&Spawns::load(&dir.join("data/spawns.json"))?);
         }
-        for rel in &Self::FILES[9..] {
+        for rel in &Self::FILES[9..18] {
             if need(&mut p, rel) {
                 p.put_data(&DataFile::load(&dir.join(rel))?).map_err(io::Error::other)?;
             }
+        }
+        // en dernier : le reste complète ce que les autres fichiers décrivent
+        if need(&mut p, "data/reste.json") {
+            p.put_reste(&Reste::load(&dir.join("data/reste.json"))?).map_err(io::Error::other)?;
         }
         Ok(p)
     }
@@ -387,6 +393,24 @@ impl Program {
         for sc in &s.scripts {
             self.data.put(sc.rom, &sc.bytes());
         }
+    }
+
+    /// Le reste de la région programme (`data/reste.json`) : ses blocs, puis l'espace programme hors de la zone
+    /// chiffrée, recopié de l'espace données (il lui est égal).
+    pub fn put_reste(&mut self, r: &Reste) -> Result<(), String> {
+        for b in &r.donnees {
+            self.data.put(b.debut, &b.bytes()?);
+        }
+        for b in &r.programme {
+            self.prog.put(b.debut, &b.bytes()?);
+        }
+        for a in r.fin_chiffree..PROGRAM_SIZE as u32 {
+            if self.data.is_covered(a) && !self.prog.is_covered(a) {
+                let v = self.data.bytes[a as usize];
+                self.prog.put(a, &[v]);
+            }
+        }
+        Ok(())
     }
 
     /// Tables de données (`data/*.json`) et leurs textes.
