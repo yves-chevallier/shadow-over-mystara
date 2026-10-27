@@ -258,7 +258,7 @@ mod rain {
 }
 
 fn rng(x: &mut Cx) -> u16 {
-    x.random_68k()
+    x.random()
 }
 
 fn debris_rain(x: &mut Cx) {

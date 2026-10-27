@@ -275,7 +275,7 @@ mod rocks65 {
 
     /// Tirage pseudo-aléatoire (mot bas de D0).
     fn random(x: &mut Cx) -> u16 {
-        x.random_68k()
+        x.random()
     }
 
     fn fall(x: &mut Cx, v: usize) {

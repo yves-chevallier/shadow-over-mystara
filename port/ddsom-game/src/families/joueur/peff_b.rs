@@ -4,13 +4,6 @@ use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Courant;
-use crate::machine::Machine;
-
-/// Tirage aléatoire du jeu (`0x19a88`) : D0 en sortie.
-fn rand(x: &mut Cx) -> u32 {
-    let alea = x.random_68k();
-    x.c.d[0] & 0xffff_0000 | alea as u32
-}
 
 /// Type 11 (0x4b93c) : averse de grêlons. Le parent (variante 0) compte 0x70 images en créant, toutes les
 /// 8 images, deux grêlons (variante 1, sens 0 et 1) ; chaque grêlon tourne autour de sa position

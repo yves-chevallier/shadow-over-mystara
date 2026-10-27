@@ -467,10 +467,10 @@ mod boss_intro {
     }
 
     fn random_blast(x: &mut Cx) {
-        let alea = x.random_68k();
+        let alea = x.random();
         let i = (alea as u32 & 0xf) << 1;
         let dx = x.rom16(BLAST_DX + i);
-        let alea = x.random_68k();
+        let alea = x.random();
         let i = (alea as u32 & 0xf) << 1;
         let dy = x.rom16(BLAST_DY + i);
         let px = dx.wrapping_add(x.a5_u16(ram::CAMERA_X));
@@ -1676,7 +1676,7 @@ mod rearguard {
         }
         // un joueur présent, tiré au hasard
         let target = loop {
-            let alea = x.random_68k();
+            let alea = x.random();
             let p = Obj(PLAYERS + (alea as u32 & 3) * PLAYER_SIZE);
             if p.u8(x.b, pl::ACTIVE) != 0 {
                 break p;
@@ -1745,7 +1745,7 @@ mod idle_hunter {
             x.set8(0x18 + i, 0);
         }
         let tier = (x.a5_u16(0x7f92) >> 2) << 4;
-        let alea = x.random_68k();
+        let alea = x.random();
         let index = (alea & 0xf).wrapping_add(tier);
         let frames = x.rom8(IDLE_FRAMES + index as u32);
         x.set8(0x1c, frames);
@@ -1774,7 +1774,7 @@ mod idle_hunter {
         {
             return;
         }
-        let alea = x.random_68k();
+        let alea = x.random();
         for i in ORDERS[(alea as u32 & 3) as usize] {
             check(x, i);
         }

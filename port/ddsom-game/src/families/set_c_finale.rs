@@ -109,7 +109,7 @@ fn conductor(x: &mut Cx) -> Obj {
 }
 
 fn rng(x: &mut Cx) -> u16 {
-    x.random_68k()
+    x.random()
 }
 
 /// Charge la grille de blocs `grid` à `dest` par 0x26d4 ou 0x2766 (D0 = grille, A1 = destination).

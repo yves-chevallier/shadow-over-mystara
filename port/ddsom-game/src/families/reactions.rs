@@ -155,7 +155,7 @@ fn landed(x: &mut Cx) {
     x.call(call::LANDED);
 }
 fn random(x: &mut Cx) -> u32 {
-    let alea = x.random_68k();
+    let alea = x.random();
     x.c.d[0] & 0xffff_0000 | alea as u32
 }
 /// Effet `0xabec8` (D0 = variante, D1 = paramètre).

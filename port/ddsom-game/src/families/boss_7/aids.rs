@@ -19,7 +19,7 @@ fn pick(x: &mut Cx, remember: bool) {
     for _ in 0..4096 {
         x.c.d[1] = 0;
         x.c.a[2] = A5 + 0x5de;
-        let alea = x.random_68k();
+        let alea = x.random();
         let n = alea as u32 & 3;
         setw(x, 0, n as u16);
         setw(x, 1, n as u16);
@@ -104,7 +104,7 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
 
 /// 0x87c6c : pas de côté tiré dans la table 0x87c8a.
 pub(super) fn random_sidestep(x: &mut Cx) {
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = alea & 0xe;
     setw(x, 0, i);
     let mut d = x.rom16(0x87c8a + i as u32);
@@ -187,7 +187,7 @@ pub(super) fn dodge_spot(x: &mut Cx) {
     x.c.d[6] = d6;
     let table = rom32(x, 0x87f30 + d6);
     x.c.a[4] = table;
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = ((alea) & 3) << 3;
     setw(x, 0, i);
     let a = table.wrapping_add(i as u32);
@@ -233,7 +233,7 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     setw(x, 0, row as u16);
     let a4 = table.wrapping_add(row);
     x.c.a[4] = a4;
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = alea & 0x1f;
     setw(x, 0, i);
     let step = x.data8(a4 + i as u32);

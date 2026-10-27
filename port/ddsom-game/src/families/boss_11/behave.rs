@@ -110,7 +110,7 @@ fn walk_delay(x: &mut Cx) {
 
 /// 0x8eb7e : nombre de pas tiré.
 fn walk_steps(x: &mut Cx) {
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = alea & 0x1f;
     setw(x, 0, i);
     let v = x.rom8(0x8eb90 + i as u32);
@@ -280,14 +280,14 @@ fn near_roll(x: &mut Cx) -> bool {
     setw(x, 0, i);
     let mask = rom32(x, 0x8da88 + i as u32);
     x.c.d[1] = mask;
-    let alea = x.random_68k();
+    let alea = x.random();
     let r = alea & 1;
     setw(x, 0, r);
     if r == 0 {
         x.c.d[0] = 0;
         return false;
     }
-    let alea = x.random_68k();
+    let alea = x.random();
     let b = alea & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
@@ -305,7 +305,7 @@ fn far_roll(x: &mut Cx) -> bool {
     setw(x, 0, i);
     let mask = rom32(x, 0x8dad2 + i as u32);
     x.c.d[1] = mask;
-    let alea = x.random_68k();
+    let alea = x.random();
     let b = alea & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
@@ -326,7 +326,7 @@ fn far_roll(x: &mut Cx) -> bool {
 fn pick(x: &mut Cx, table: u32) {
     x.c.a[4] = table;
     if !roll(x) {
-        let alea = x.random_68k();
+        let alea = x.random();
         let i = alea & 0xf;
         setw(x, 0, i);
         let v = x.data8(table + i as u32);
@@ -351,7 +351,7 @@ fn pick(x: &mut Cx, table: u32) {
 
 /// 0x8db98 : tirage « renoncer » selon la difficulté et le nombre de joueurs ; vrai si le bit tombe.
 fn roll(x: &mut Cx) -> bool {
-    let alea = x.random_68k();
+    let alea = x.random();
     let r = alea & 7;
     setw(x, 0, r);
     let n = x.a5_u8(var::PLAYERS_ALIVE).wrapping_sub(1);

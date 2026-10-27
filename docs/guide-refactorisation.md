@@ -25,7 +25,7 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
    compteurs d'appels de `validate`, le jeu sans 68000 qui s'arrête sur une adresse sans native) se remplace par la
    native appelée directement, ou par `unreachable!("…")` documenté si l'aiguillage de la ROM ne peut pas y mener.
    Ne pas inventer de logique pour un chemin jamais exercé : le dire.
-8. **Rester dans son lot.** Ne pas modifier `lib.rs`, `families/mod.rs`, `families/cx.rs`, `objects/`, `mem.rs`, `ram.rs`,
+8. **Rester dans son lot.** Ne pas modifier `lib.rs`, `families/mod.rs`, `families/cx.rs`, `objects/`, `machine.rs`, `rng.rs`, `mem.rs`, `ram.rs`,
    `diag.rs`, `taches/table.rs` hors du lot 0 ; un besoin d'API se code d'abord dans son module et se signale.
 
 ## Convention de nommage des couches
@@ -116,7 +116,29 @@ Un contexte sans objet courant (joueurs, combat, IA, scènes, natives `(c, b)`) 
 
 ### Ce qui reste en adaptateur, et pourquoi
 
-RESTE_68K
+Les méthodes de `Courant` (sauf `reinsert` et `reinsert_foreground`, voir plus bas) et `Machine::random` appellent
+**le cœur** : la validation complète avec
+`DDSOM_POISON=anim,motion,lists,cull,rank,random` a désigné les lecteurs de registres, et chacun a été soit replié dans
+une valeur Rust (`if x.anim_step()`, `x.move_xz().gt()`, `let alea = x.random()`), soit laissé sur l'adaptateur,
+écrit en clair à l'endroit qui relit le registre :
+
+* `x.random_68k()` suivi d'une lecture de D0 plus loin (`effects_c.rs`, `boss_7/fight.rs`, `boss_8/fight.rs`,
+  `boss_11`, `joueur/peff_e.rs`) ; `pshell::rand_and`/`rand_and_b` (contrat : D0 masqué en place) ; `ai::Mach::random`
+  et `combat::World::random` (machines à registres de leurs lots).
+* Les natives appelées par adresse (`(c, b)`, `scene::Ctx`, `player::Ctx` via `g.rom`, `modes`, `game.rs`) : créateurs
+  (`creators.rs`, `eshl_creators.rs`, `effects_creators.rs`, `items.rs` : D0 du tirage relu), `ai_aids.rs` (animation,
+  zone de jeu), rang (`scene/entry.rs`, `hud/slot.rs`, `game.rs`, `player/scripted.rs`), graine (`modes`), listes
+  (`scene/shop.rs`, `set.rs`, `creators.rs`), animations des joueurs (`player/`, `effects_f.rs`). Leur contrat de
+  registres est à prouver par leur lot, comme au pilote.
+* `reinsert`, `reinsert_foreground` : la fin ordinaire d'un gestionnaire laisse D0-D2, A1-A4 au gestionnaire
+  **suivant** de la boucle de dispatch, et certains les relisent (`joueur/peff_e.rs` tire son rebond dans le D2
+  hérité ; `pshl_b.rs` aussi ; `scorpion_scene36`, `mash_c5`). `Courant::reinsert` garde donc l'adaptateur. Le cœur
+  `ACTORS.reinsert(b, o)` reste pour les appelants hors boucle de dispatch.
+* Lecteurs repérés et documentés sur place : `effects.rs` (D0 haut après la remise en liste : `reinsert_68k`),
+  `reactions.rs` (`bhi` après 0x1e92 : `in_arena_68k`).
+
+Pour un lot : `rtk proxy grep -rn "_68k(" <rép>` donne ses adaptateurs restants ; chacun se prouve avec
+`DDSOM_POISON='<étiquette>@<fichier>'` (validation des scénarios qui l'exercent), puis passe au cœur.
 
 ## Registres morts : `DDSOM_POISON`
 
@@ -275,6 +297,13 @@ native.
   homonymes d'autres types (`dispatch::PSHL` est une `Class`) ; relire le diff.
 * **`rts` pour jeter un appel en cours** : `mem::rts` exécute aussitôt une suite qui est une étape ; pour abandonner
   un cadre sans le suivre, `Sequence::drop_return` ou `table::depiler_retour`.
+* **Durée d'animation nulle** : `anim_step` d'une entrée de durée 0 fait repartir la durée de 0xFFFF et lève la
+  retenue (le `bcs` de l'appelant la prend pour une fin de script). `anim::Step::Wrapped`, `Step::finished()` ; le
+  premier essai du lot 0b, qui ne rendait vrai qu'en fin de script, faisait diverger `ending` (un son manquant).
+* **Drapeaux d'un mouvement** : `bgt`/`ble`/`bpl` après un `move_*` testent la dernière addition ; utiliser la
+  `LastAdd` rendue, pas `x.c.cond(...)` (qui ne vaut plus rien depuis que les méthodes appellent le cœur).
+* **Lectures de drapeaux indirectes** : des aides (`carry(x)`, `zero(x)`, `ctx.gt()`) lisent les drapeaux de la
+  dernière routine ; après une méthode de `Courant`, elles lisent n'importe quoi. Les remplacer par la valeur rendue.
 * **Une validation lancée recompile** : ne pas modifier les sources pendant le `cargo build` de `validate_all.sh`.
 
 ## Check-list d'un lot

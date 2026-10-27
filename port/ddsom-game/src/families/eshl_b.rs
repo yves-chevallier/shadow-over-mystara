@@ -956,7 +956,7 @@ mod shot20 {
                 x.set8(0x1d, 0);
                 x.add8(0x6, 2);
                 x.c.d[0] = 0;
-                let alea = x.random_68k();
+                let alea = x.random();
                 let anim = x.rom8(IDLE_ANIMS + (alea as u32 & 7)) as u32;
                 x.anim_start(ANIMS, anim as u16);
                 attach(x, ATTACH);
@@ -996,7 +996,7 @@ mod shot20 {
                 if x.anim_step() {
                     x.add8(0x6, 0xfe);
                     x.c.d[0] = 0;
-                    let alea = x.random_68k();
+                    let alea = x.random();
                     let delay = x.rom16(DELAYS + 2 * (alea as u32 & 7));
                     x.set16(f::TIMER, delay);
                     x.anim_start(ANIMS, 2);
@@ -1399,7 +1399,7 @@ mod shot24 {
         count = count.wrapping_sub(1);
         let mut label: u16 = 1;
         x.c.d[0] = 0;
-        let alea = x.random_68k();
+        let alea = x.random();
         let mut table = GROUP_OFFSETS + ((alea as u32 & 7) << 3);
         loop {
             let Some(e) = x.alloc(&pools::ENEMY) else { return };
@@ -1466,13 +1466,13 @@ mod shot25 {
         let variant = x.u8(0x3);
         if variant != 0 {
             x.c.d[0] = 0;
-            let alea = x.random_68k();
+            let alea = x.random();
             let mut dx = alea & 0x7f;
             if variant & 1 != 0 {
                 dx = dx.wrapping_neg();
             }
             x.add16(0x8, dx);
-            let alea = x.random_68k();
+            let alea = x.random();
             let r = alea & 0x3f;
             let dy = if r & 1 != 0 { 0xffff } else { 0 };
             x.add16(0x10, dy);
@@ -1556,7 +1556,7 @@ mod shot26 {
         let height = x.rom16(HEIGHTS + 2 * row);
         x.set16(0xc, height);
         x.c.d[0] = 0;
-        let alea = x.random_68k();
+        let alea = x.random();
         let mut table = x.rom16(SPEED_TABLES + 2 * (alea as u32 & 3)) as u32;
         if x.u8(0x56) != 0 && x.u8(0x3) == 0 {
             table = 2;
@@ -2701,7 +2701,7 @@ mod shot36 {
         let direction = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
         x.set8(0x2d, direction);
         speed_table(x, 0x17);
-        let alea = x.random_68k();
+        let alea = x.random();
         let r = alea as u32 & 0xf;
         let vz = x.rom16(SPEEDS + 2 * r);
         x.set16(0x18, vz);
@@ -2709,10 +2709,10 @@ mod shot36 {
 
     /// Position aléatoire autour de la caméra (écran de gauche : décalage de -0xc0).
     fn place(x: &mut Cx) {
-        let alea = x.random_68k();
+        let alea = x.random();
         let r = alea as u32 & 0xf;
         let mut dx = x.rom16(X_OFFSETS + 2 * r);
-        let alea = x.random_68k();
+        let alea = x.random();
         let r = alea as u32 & 0xf;
         let dy = x.rom16(Y_OFFSETS + 2 * r);
         if x.u8(f::FLIP) == 0 {
@@ -2768,21 +2768,21 @@ mod shot37 {
 
     fn launch(x: &mut Cx) {
         x.c.d[0] = 0;
-        let alea = x.random_68k();
+        let alea = x.random();
         let r = alea as u32 & 0xf;
         let vz = x.rom16(SPEEDS + 2 * r);
         x.set16(0x18, vz);
-        let alea = x.random_68k();
+        let alea = x.random();
         let r = alea as u32 & 7;
         let anim = x.rom8(START_ANIMS + r) as u32;
         x.anim_start(ANIMS, anim as u16);
     }
 
     fn place(x: &mut Cx) {
-        let alea = x.random_68k();
+        let alea = x.random();
         let r = alea as u32 & 0xf;
         let dx = x.rom16(X_OFFSETS + 2 * r);
-        let alea = x.random_68k();
+        let alea = x.random();
         let r = alea as u32 & 0xf;
         let dy = x.rom16(Y_OFFSETS + 2 * r);
         let px = dx.wrapping_add(x.a5_u16(0x506));

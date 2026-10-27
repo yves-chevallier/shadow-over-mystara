@@ -101,7 +101,7 @@ fn thrown(x: &mut Cx) {
             x.c.d[5] = ((n as u16) << 2) as u32;
             let mask = rom32(x, 0x86dd6 + x.c.d[5]);
             x.c.d[5] = mask;
-            let alea = x.random_68k();
+            let alea = x.random();
             let i = alea & 0x1f;
             setw(x, 0, i);
             if mask >> i & 1 == 0 {

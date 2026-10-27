@@ -879,7 +879,7 @@ fn icone_init(ctx: &mut Ctx, o: Obj) {
     o.set_u16(ctx.b, Obj::Z, z);
     o.set_u8(ctx.b, scene::DELAI, scene::DELAI_SON);
     o.set_u8(ctx.b, Obj::ACTIVE, 2);
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     let tirage = alea & 3;
     ctx.c.d[0] = ctx.c.d[0] & 0xffff_0000 | tirage as u32;
     o.set_u8(ctx.b, champ::MODE, tirage as u8);

@@ -54,7 +54,7 @@ fn ai_step(x: &mut Cx) -> bool {
 /// Alloue un objet ESHL ; `None` si le pool est plein.
 /// Tirage pseudo-aléatoire.
 fn random(x: &mut Cx) -> u32 {
-    let alea = x.random_68k();
+    let alea = x.random();
     x.c.d[0] & 0xffff_0000 | alea as u32
 }
 

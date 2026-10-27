@@ -827,7 +827,7 @@ fn set_hidden(x: &mut Cx, on: bool) {
 
 /// Tirage du générateur du jeu (0x19a88), 4 bits.
 fn random_nibble(x: &mut Cx) -> u32 {
-    let alea = x.random_68k();
+    let alea = x.random();
     alea as u32 & 0xf
 }
 
@@ -1211,7 +1211,7 @@ fn spray_init(x: &mut Cx) {
     let (vz, az) = (x.rom16(scenery::SPRAY + k + 4), x.rom16(scenery::SPRAY + k + 6));
     x.set16(Obj::VZ, vz);
     x.set16(Obj::AZ, az);
-    let alea = x.random_68k();
+    let alea = x.random();
     let mut vx = alea & 0x3ff;
     if x.u8(0x2f) & 1 != 0 {
         vx = vx.wrapping_neg();
@@ -1328,7 +1328,7 @@ fn shard_init(x: &mut Cx) {
     let Some(target) = scenery_target(x) else { return x.set8(f::STATE, 6) };
     copy_target(x, target);
     x.set16(Obj::Z, 0xffb0);
-    let alea = x.random_68k();
+    let alea = x.random();
     let k = alea as u32 & 0xe;
     let vx = x.rom16(scenery::DRIFT_4 + k);
     x.set16(Obj::VX, vx);
@@ -1434,10 +1434,10 @@ fn follow_active(x: &mut Cx) {
 fn spark_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     let Some(target) = scenery_live_target(x) else { return x.set8(f::STATE, 6) };
-    let alea = x.random_68k();
+    let alea = x.random();
     let px = (alea & 0x1ff).wrapping_sub(0xff).wrapping_add(target.u16(x.b, Obj::X));
     x.set16(Obj::X, px);
-    let alea = x.random_68k();
+    let alea = x.random();
     let y = 0x1fu16.wrapping_sub(alea & 0x7f).wrapping_add(target.u16(x.b, Obj::Y));
     x.set16(Obj::Y, y);
     x.anim_start(scenery::ANIM_DUST, 0);
@@ -1497,7 +1497,7 @@ fn puff_init(x: &mut Cx) {
         let mask = x.data16(area + k + 2);
         x.c.d[6] = x.c.d[6] & 0xffff_0000 | mask as u32;
         v = v.wrapping_add(x.c.d[0] as u16 & mask);
-        let alea = x.random_68k();
+        let alea = x.random();
         v = v.wrapping_add(alea & 0xf);
         x.set16(field, v);
     }
@@ -1519,14 +1519,14 @@ fn dust_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     let mode = x.u8(0x2f) as u32;
     if mode == 0 {
-        let alea = x.random_68k();
+        let alea = x.random();
         let mut dx = alea & 0x1ff;
         if dx as i16 > 0x190 {
             dx -= 0x70;
         }
         let px = dx.wrapping_add(x.a5_u16(0x506));
         x.set16(Obj::X, px);
-        let alea = x.random_68k();
+        let alea = x.random();
         let y = (alea & 0x7f).wrapping_add(x.a5_u16(0x50a)).wrapping_add(0x20);
         x.set16(Obj::Y, y);
         x.set8(Obj::Z, 0);
@@ -2108,7 +2108,7 @@ fn shard_rain(x: &mut Cx) {
 
 /// Tirage du générateur, mot bas.
 fn random_nibble16(x: &mut Cx) -> u16 {
-    x.random_68k()
+    x.random()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2968,7 +2968,7 @@ fn ballot_count(x: &mut Cx) {
                 let v = if x.u8(0x58 + k) as i8 == best { 0xff } else { 0 };
                 x.set8(0x58 + k, v);
             }
-            let alea = x.random_68k();
+            let alea = x.random();
             let mut k = alea as u32 & 3;
             while x.u8(0x58 + k) == 0 {
                 k = (k + 1) & 3;
@@ -4575,7 +4575,7 @@ fn toss(x: &mut Cx) {
         0 => {
             x.add8(f::STATE, 2);
             x.set16(0x5c, 0x20);
-            let alea = x.random_68k();
+            let alea = x.random();
             let kind = (alea as u32 & 3) as u8;
             x.set8(f::VARIANT, kind);
             let k = 4 * kind as u32;

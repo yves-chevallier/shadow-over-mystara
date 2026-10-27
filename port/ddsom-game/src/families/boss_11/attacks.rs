@@ -345,7 +345,7 @@ fn seg_choice(x: &mut Cx) {
     setw(x, 0, i);
     let a4 = 0x8dfcc + i as u32;
     x.c.a[4] = a4;
-    let alea = x.random_68k();
+    let alea = x.random();
     let r = alea & 0xf;
     setw(x, 0, r);
     let v = x.data8(a4 + r as u32);
@@ -355,7 +355,7 @@ fn seg_choice(x: &mut Cx) {
 
 /// 0x8dfaa : pas entre deux visées (`+0xb1`, table 0x8dfbc).
 fn pause_tick(x: &mut Cx) {
-    let alea = x.random_68k();
+    let alea = x.random();
     let r = alea & 0xf;
     setw(x, 0, r);
     let v = x.rom8(0x8dfbc + r as u32);
@@ -407,7 +407,7 @@ fn route_start(x: &mut Cx) -> bool {
     let d0 = x.u16(0x8).wrapping_sub(d1);
     setw(x, 0, d0);
     x.c.a[2] = 0x8e1e8;
-    let alea = x.random_68k();
+    let alea = x.random();
     let r = alea & 0xf;
     setw(x, 0, r);
     let v = x.data8(0x8e1e8 + r as u32);

@@ -519,7 +519,7 @@ fn attack_fx_flash(x: &mut Cx) {
             let k = attacker_index(x, owner, 2, false);
             let offset = x.data16(attack_fx::FLASH_PLACES + 2 * k) as i16 as i32 as u32;
             let places = attack_fx::FLASH_PLACES.wrapping_add(offset);
-            let alea = x.random_68k();
+            let alea = x.random();
             let pick = 4 * (alea as u32 & 7);
             let (mut dx, dz) = (x.data16(places + pick), x.data16(places + pick + 2));
             let facing = owner.u8(x.b, 0x2c);
@@ -532,7 +532,7 @@ fn attack_fx_flash(x: &mut Cx) {
             if x.a5_u8(0x6f) & 1 != 0 {
                 x.set8(0x2c, facing ^ 0x20);
             }
-            let alea = x.random_68k();
+            let alea = x.random();
             let anim = alea as u32 & 3;
             x.anim_start(attack_fx::ANIM_A, anim as u16);
             x.call(attack_fx::SOUND_FLASH);

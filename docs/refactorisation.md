@@ -294,6 +294,44 @@ Mesure (`tools/mesure_refacto.py`, zones du lot : `scene`, `modes`, `hud`, `tach
 `pile` 407 → 67, natives 389 → 49 ; `regs` (886), `drap` (23), `brut` (1 837 → 1 836) inchangés : le lot a porté sur
 J3, pas sur J2.
 
+## 7. Lot 0b : l'API du moteur d'objets
+
+Fait sur le modèle du pilote (§ 5), décrit pour les lots suivants dans le guide (« L'API commune (lot 0b) »).
+
+* **Cœurs, adaptateurs, natives** pour `anim` (start, start_entry, start_by_character, step), `motion` (ballistic,
+  move_by_table, select_speed, suspended, tick_counters), `lists` (reinsert, unlink, unlink_all), `cull`
+  (despawn_if_offscreen, in_arena, update_visibility), `rank` (reset, load_preset, tick, raise, lower) et `rng`
+  (random, seed). Les natives n'appellent plus que la forme « registres » de l'adaptateur, plus `rts`.
+* **Contexte commun** : trait `machine::Machine` (choisi plutôt qu'une base `Jeu` : les accès disjoints `x.c`/`x.b`
+  ne survivraient pas à un `Deref`), implémenté par `Cx`, `families::Ctx`, `player::Ctx`, `scene::Ctx`,
+  `combat::World` ; `random`, `prog*`, `data*`. Trait `objects::Courant` pour les gestionnaires (`x.move_xz()`,
+  `x.anim_step()`, `x.reinsert()`...), qui remplace les méthodes inhérentes de `Cx` et `Ctx` (et `Ctx::natif`).
+* **Un seul `random`** (`rng::random`) : copies de `camera_modes`, `player::Ctx`, `ai_aids`, `effects_b` supprimées ;
+  ~90 sites `x.call(RNG)` convertis. **`combat::Obj`** fusionné dans `objects::Obj` (`from_word`, `word`, `long_ref`).
+* **Appelants** : ~1 400 appels par adresse convertis par scripts (familles, joueurs, scènes, modes ; appels de lot E
+  limités à une ligne). Lectures immédiates de drapeaux et de D0 repliées dans les valeurs rendues (`if x.anim_step()`,
+  `x.move_xz().gt()` via `motion::LastAdd`, `let alea = x.random()`). Constantes d'adresse recopiées supprimées
+  (dont des noms faux : `MOVE_Z = 0x1da6` déplaçait en X et Z, `MOVE_Y = 0x1dbc` en Z, `PLAYER_ARRIVES = 0x1f300`
+  baissait le rang).
+* **Glitches mis au jour** : durée d'animation nulle qui repart de 0xFFFF en levant la retenue (`anim::Step::Wrapped`,
+  vu par `ending`) ; registres de la réinsertion relus par le gestionnaire suivant (`Courant::reinsert` garde
+  l'adaptateur).
+* **Preuve** : `DDSOM_POISON` gagne les sites (`étiquette@motif`, `!étiquette@motif`, `#[track_caller]` sur
+  adaptateurs et méthodes). Validation complète empoisonnée (`anim,motion,lists,cull,rank,random`), lecteurs isolés
+  site par site, puis méthodes passées au cœur. Restent 88 appels `_68k` hors modules du socle (liste dans le guide) :
+  natives appelées par adresse, aides à contrat de registres, lecteurs documentés.
+
+Mesure (`tools/mesure_refacto.py`, avant : b53a8b1 ; après : lot 0b fusionné avec le lot E de main, dont les chiffres
+`pile` et `natives` de `scene`/`modes` viennent) :
+
+| | regs | drap | adr | brut | a5 |
+|---|---:|---:|---:|---:|---:|
+| families avant / après | 3 608 / 3 453 | 305 / 190 | 3 573 / 2 064 | 1 104 / 1 101 | 1 003 / 1 001 |
+| total avant / après | 5 865 / 5 714 | 642 / 530 | 4 584 / 2 976 | 4 579 / 4 567 | 1 307 / 1 300 |
+
+Adresses déclarées dans plusieurs fichiers : 288 → 251 (1 378 → 1 101 déclarations) ; aucune adresse du moteur
+d'objets n'y figure plus.
+
 ## Avancement
 
 | Étape | Commit | Validation |
@@ -303,3 +341,5 @@ J3, pas sur J2.
 | Pilote, poison, glitch de l'orbe, gestionnaires en fonctions pures | voir `git log` | complète, 269/269 normal (15 min 40 s) et sans 68000 (15 min 19 s), en parallèle à 7 tâches chacune |
 | Lot 0a : plus de durées du mode hybride, jeu sans 68000 par défaut (`DDSOM_HYBRIDE=1` : diagnostic) | edef15d, documentation | complète, 269/269 sans 68000 (14 min 46 s, 10 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; hybride : bot30k 5 000 images VALIDE (non exigé) |
 | Lot E : tâches et écrans en machines à états (étapes, sous-machines des fondus et de l'écran noir) | voir `git log` (wt-taches) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) |
+| Lot 0b : API du moteur d'objets, appelants convertis (adaptateurs) | f60da0a | complète, 269/269 sans 68000 |
+| Lot 0b : fusion du lot E, méthodes au cœur après `DDSOM_POISON`, documentation | voir `git log` | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) ; empoisonnée : lecteurs isolés (guide) |

@@ -266,7 +266,7 @@ fn idle_attack(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(PHASE_TIMER, 0xa);
     x.set32(f::STATE, 0x0204_0000);
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = alea as u32 & 0xf;
     setw(x, 0, i as u16);
     let step = x.rom8(0x88294 + i);

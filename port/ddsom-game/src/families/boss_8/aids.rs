@@ -56,7 +56,7 @@ fn pick(x: &mut Cx, remember: bool) {
         x.c.a[1] = 0;
         x.c.d[1] = 0;
         x.c.a[2] = A5 + 0x5de;
-        let alea = x.random_68k();
+        let alea = x.random();
         let n = alea as u32 & 3;
         setw(x, 0, n as u16);
         setw(x, 1, n as u16);
@@ -149,7 +149,7 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
 
 /// 0x8a368 : réapparition à un des 32 points tirés dans la table 0x8a384.
 pub(super) fn random_spot(x: &mut Cx) {
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = alea & 0x7c;
     setw(x, 0, i);
     let px = x.rom16(0x8a384 + i as u32);
@@ -162,7 +162,7 @@ pub(super) fn random_spot(x: &mut Cx) {
 
 /// 0x8a404 : pas de côté tiré dans la table 0x8a422.
 pub(super) fn random_sidestep(x: &mut Cx) {
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = alea & 0xe;
     setw(x, 0, i);
     let mut d = x.rom16(0x8a422 + i as u32);
@@ -246,7 +246,7 @@ pub(super) fn dodge_spot(x: &mut Cx) {
     x.c.d[6] = d6;
     let table = rom32(x, 0x8a6cc + d6);
     x.c.a[4] = table;
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = ((alea) & 3) << 3;
     setw(x, 0, i);
     let a = table.wrapping_add(i as u32);
@@ -292,7 +292,7 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     setw(x, 0, row as u16);
     let a4 = table.wrapping_add(row);
     x.c.a[4] = a4;
-    let alea = x.random_68k();
+    let alea = x.random();
     let i = alea & 0x1f;
     setw(x, 0, i);
     let step = x.data8(a4 + i as u32);

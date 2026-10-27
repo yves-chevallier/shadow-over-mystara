@@ -256,7 +256,7 @@ fn scintillement_init(ctx: &mut Ctx, o: Obj) {
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
     o.set_u8(ctx.b, scintillement::REPETITIONS, 8);
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     let tirage = alea & 0x1f;
     o.set_u16(ctx.b, scintillement::DELAI, tirage);
     let variante = o.u8(ctx.b, Obj::VARIANT);
@@ -402,7 +402,7 @@ mod eclat {
 
 fn eclat_init(ctx: &mut Ctx, o: Obj) {
     ajoute_u8(ctx, o, Obj::STATE, 2);
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     let tirage = alea & 0x3f;
     o.set_u16(ctx.b, eclat::DECALAGE, tirage);
     let flip = o.u8(ctx.b, champ::FLIP) ^ 0x20;
@@ -507,9 +507,9 @@ fn poussiere_init(ctx: &mut Ctx, o: Obj) {
         dx = dx.wrapping_sub(d3);
         dy = dy.wrapping_sub(d3);
         let masque = (d3 << 1).wrapping_sub(1);
-        let alea = ctx.random_68k();
+        let alea = ctx.random();
         dx = dx.wrapping_add(alea & masque);
-        let alea = ctx.random_68k();
+        let alea = ctx.random();
         dy = dy.wrapping_add(alea & masque);
     }
     decale_u16(ctx, o, Obj::X, dx);
@@ -572,10 +572,10 @@ mod nuage {
 
 fn nuage_init(ctx: &mut Ctx, o: Obj) {
     ajoute_u8(ctx, o, Obj::STATE, 2);
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     let tirage = alea & 0x3f;
     o.set_u16(ctx.b, nuage::DELAI, tirage);
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     let tirage = alea & 0x3f;
     o.set_u16(ctx.b, Obj::Y, tirage);
     decale_u16(ctx, o, Obj::Y, 0x50);
@@ -1063,7 +1063,7 @@ fn impact_init(ctx: &mut Ctx, o: Obj) {
         impact_position_table(ctx, o);
     }
     impact_drapeau(ctx, o);
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     let tirage = alea & 0xf;
     let drapeau = o.u8(ctx.b, impact::VARIANTE_HASARD);
     let table = if drapeau == 0 { impact::HASARD_A } else { impact::HASARD_B };
@@ -1587,7 +1587,7 @@ mod eclats_debris {
 
 /// Tirage aléatoire masqué.
 fn tirage(ctx: &mut Ctx, masque: u16) -> u16 {
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     alea & masque
 }
 
@@ -2074,7 +2074,7 @@ fn creer_impact(ctx: &mut Ctx, o: Obj) {
 
 /// `0xaacfe` : une fois sur seize environ, tire au hasard si on poursuit (`0x5555` : bits pairs).
 fn bulle_hasard(ctx: &mut Ctx, o: Obj) {
-    let alea = ctx.random_68k();
+    let alea = ctx.random();
     let tirage = alea & 0xf;
     if 0x5555u16 >> tirage & 1 != 0 {
         bulle_suite(ctx, o);

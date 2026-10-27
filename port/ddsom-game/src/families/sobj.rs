@@ -601,7 +601,7 @@ mod scene {
 
     fn random_flip(x: &mut Cx) {
         x.set8(0x2c, 0);
-        let alea = x.random_68k();
+        let alea = x.random();
         if alea as u32 & 1 != 0 {
             x.set8(0x2c, 0x20);
         }
@@ -1284,13 +1284,13 @@ mod scene {
         x.set16(0x8, v);
         x.add16(0xc, 0x110);
         x.set16(0x10, 0x10);
-        let alea = x.random_68k();
+        let alea = x.random();
         let k = alea as u32 & 7;
         let dx = x.rom16(V20_X + 2 * k);
         x.add16(0x8, dx);
         x.set32(0x14, 0);
         x.set16(0x18, 0);
-        let alea = x.random_68k();
+        let alea = x.random();
         let k = alea as u32 & 3;
         let az = x.rom16(V20_FALL + 4 * k);
         x.set16(0x1a, az);

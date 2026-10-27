@@ -538,7 +538,7 @@ mod wave_leader {
                 } else if x.u8(WAIT) != 0 {
                     { let w = x.u8(WAIT); x.set8(WAIT, w - 1); }
                 } else if spawn_wave(x).is_some() {
-                    let alea = x.random_68k();
+                    let alea = x.random();
                     let delay = x.rom8(DELAYS + (alea as u32 & 0xf));
                     x.set8(WAIT, delay);
                 }
@@ -651,7 +651,7 @@ mod wave_leader {
         // côté d'arrivée : tiré au sort la première fois, puis alterné
         let mut side = x.u8(SIDE);
         if (side as i8) < 0 {
-            let alea = x.random_68k();
+            let alea = x.random();
             side = ((alea as u32 & 1) << 5) as u8;
             x.set8(SIDE, side ^ 0x20);
         }

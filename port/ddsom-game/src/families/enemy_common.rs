@@ -182,7 +182,7 @@ pub fn free(x: &mut Cx) {
 
 /// Tirage pseudo-aléatoire du jeu (mot dans D0).
 pub fn random(x: &mut Cx) -> u32 {
-    let alea = x.random_68k();
+    let alea = x.random();
     x.c.d[0] & 0xffff_0000 | alea as u32
 }
 
