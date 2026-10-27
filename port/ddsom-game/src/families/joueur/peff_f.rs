@@ -347,8 +347,8 @@ mod flash {
 }
 
 handlers! {
-    0x4c5be "peff_15" 120 trail::run,
-    0x4c948 "peff_16" 100 bubble::run,
-    0x4ccca "peff_18" 100 storm::run,
-    0x4ce0c "peff_19" 120 flash::run,
+    0x4c5be "peff_15" trail::run,
+    0x4c948 "peff_16" bubble::run,
+    0x4ccca "peff_18" storm::run,
+    0x4ce0c "peff_19" flash::run,
 }

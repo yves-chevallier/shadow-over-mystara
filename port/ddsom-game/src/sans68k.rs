@@ -210,8 +210,6 @@ pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
     let Some(n) = crate::lookup(c.pc) else {
         arreter(c, b, format!("pas de native en {:06x}", c.pc));
     };
-    // la durée de la native ne sert plus (et la calculer lirait le code d'origine)
-    let cout = 0;
     DERNIERES.with(|d| {
         let mut d = d.borrow_mut();
         if d.len() == 8 {
@@ -222,7 +220,8 @@ pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
     if trace(b) {
         eprintln!("{}:{} {:06x} {} sr={:04x} sp={:x}", b.frame, b.scanline, c.pc, n.name, c.sr, c.a[7]);
     }
-    crate::executer(n, c, b, cout);
+    // sans 68000, une native ne dure rien
+    crate::executer(n, c, b, 0);
 }
 
 /// Diagnostic : `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n.

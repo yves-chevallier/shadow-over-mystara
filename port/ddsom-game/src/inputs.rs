@@ -11,7 +11,6 @@ use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, wr8};
-use crate::timing::path_cycles;
 use crate::Native;
 
 /// Décalages par rapport à A5 (RAM FF8000).
@@ -115,25 +114,12 @@ fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn read_inputs_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let (four, on, busy) = read_inputs_path(c, b);
-    let path = (four as u64) | (on as u64) << 1 | (busy as u64) << 2;
-    path_cycles(b, 0x080c, path, |pc| match pc {
-        0x08bc => four,
-        0x08de => on,
-        0x08f4 => busy,
-        _ => panic!("read_inputs : branchement inattendu en {pc:06x}"),
-    })
-}
-
 pub const READ_INPUTS: Native = Native {
     entry: 0x080c,
     name: "read_inputs",
-    cost: read_inputs_cost,
     run: read_inputs,
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: true,
 };
 
 /// 0x2aec : recopie les entrées dans les enregistrements des joueurs.
@@ -180,19 +166,12 @@ fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn copy_inputs_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let raw = rd8(b, c.a[5] + ram::INPUT_RAW) != 0;
-    path_cycles(b, 0x2aec, raw as u64, |_| raw)
-}
-
 pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
     entry: 0x2aec,
     name: "copy_inputs_to_players",
-    cost: copy_inputs_cost,
     run: copy_inputs_to_players,
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: true,
 };
 
 /// 0x2bfe : entrées du joueur de l'objet A0. Sortie : D0 = maintenues, D1 = nouveaux appuis.
@@ -212,11 +191,9 @@ fn get_player_input(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const GET_PLAYER_INPUT: Native = Native {
     entry: 0x2bfe,
     name: "get_player_input",
-    cost: |_, b| path_cycles(b, 0x2bfe, 0, |_| false),
     run: get_player_input,
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: true,
 };
 
 /// 0x2bdc : entrées des quatre joueurs effacées (mot des touches maintenues `+0x6c`, octet `+0x6e`).
@@ -233,9 +210,7 @@ fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CLEAR_PLAYER_INPUTS: Native = Native {
     entry: 0x2bdc,
     name: "clear_player_inputs",
-    cost: |_, _| 100,
     run: clear_player_inputs,
     touches_sound: false,
     outputs: crate::regs::CCR,
-    exact_cost: false,
 };

@@ -399,7 +399,7 @@ pub(self) fn far_gesture(x: &mut Cx) -> Option<u32> {
 }
 
 handlers! {
-    0x794ae "boss_0" 1200 run,
+    0x794ae "boss_0" run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
-    0x7a5ac "boss_0_releve" 300 hit::get_up,
+    0x7a5ac "boss_0_releve" hit::get_up,
 }

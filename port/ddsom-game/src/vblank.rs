@@ -202,11 +202,9 @@ fn vblank(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const VBLANK: Native = Native {
     entry: 0x574,
     name: "vblank",
-    cost: |_, _| 1500,
     run: vblank,
     touches_sound: true,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[VBLANK];

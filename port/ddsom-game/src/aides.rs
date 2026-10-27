@@ -105,31 +105,25 @@ fn direction_to_object(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const DIRECTION_FROM_OBJECT: Native = Native {
     entry: 0x137e,
     name: "direction_objet",
-    cost: |_, _| 220,
     run: direction_from_object,
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
-    exact_cost: false,
 };
 
 pub const DIRECTION_TO_OBJECT: Native = Native {
     entry: 0x1376,
     name: "direction_vers_objet",
-    cost: |_, _| 240,
     run: direction_to_object,
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
-    exact_cost: false,
 };
 
 pub const DIRECTION: Native = Native {
     entry: 0x1386,
     name: "direction",
-    cost: |_, _| 200,
     run: direction,
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -157,11 +151,9 @@ fn grabbed(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const GRABBED: Native = Native {
     entry: 0x2810,
     name: "objet_saisi",
-    cost: |_, _| 60,
     run: grabbed,
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -270,11 +262,9 @@ fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const GAME_OVER: Native = Native {
     entry: 0x28d8,
     name: "fin_de_partie",
-    cost: |_, _| 200,
     run: game_over,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// `0x17ea` : division non signée de 32 bits par décalages et soustractions (32 tours). Rend le quotient et
@@ -306,11 +296,9 @@ fn divide_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const DIVIDE: Native = Native {
     entry: 0x17ea,
     name: "division",
-    cost: |_, _| 600,
     run: divide_native,
     touches_sound: false,
     outputs: regs::d(0) | regs::d(2) | regs::d(3),
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[DIRECTION, DIRECTION_FROM_OBJECT, DIRECTION_TO_OBJECT, GRABBED, GAME_OVER, DIVIDE];

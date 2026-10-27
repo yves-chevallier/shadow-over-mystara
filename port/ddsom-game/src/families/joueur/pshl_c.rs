@@ -410,10 +410,10 @@ mod stone {
 }
 
 handlers! {
-    0x530bc "pshl_12" 150 jet::run,
-    0x53290 "pshl_13" 120 item::run,
-    0x53412 "pshl_14" 100 flame::run,
-    0x534d6 "pshl_15" 120 volley::run,
-    0x5369a "pshl_16" 100 star::run,
-    0x537fa "pshl_17" 120 stone::run,
+    0x530bc "pshl_12" jet::run,
+    0x53290 "pshl_13" item::run,
+    0x53412 "pshl_14" flame::run,
+    0x534d6 "pshl_15" volley::run,
+    0x5369a "pshl_16" star::run,
+    0x537fa "pshl_17" stone::run,
 }

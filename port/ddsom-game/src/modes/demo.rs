@@ -973,27 +973,23 @@ pub fn stop_recorder(b: &mut Cps2Bus) {
 pub const RECORDER_RESET: Native = Native {
     entry: 0xe0538,
     name: "demo_enregistreur_depart",
-    cost: |_, _| 100,
     run: |c, b| {
         reset_recorder(c, b);
         crate::mem::rts(c, b);
     },
     touches_sound: false,
     outputs: crate::regs::d(5) | crate::regs::a(0),
-    exact_cost: false,
 };
 
 pub const RECORDER_STOP: Native = Native {
     entry: 0xe05d6,
     name: "demo_enregistreur_arret",
-    cost: |_, _| 50,
     run: |c, b| {
         stop_recorder(b);
         crate::mem::rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Enregistrement : l'entrée courante dure une image de plus tant que les entrées ne changent pas (et que sa durée
@@ -1026,7 +1022,6 @@ fn record_inputs(x: &mut Ctx) {
 pub const DEMO_PHASE_12: Native = Native {
     entry: 0x1fa38,
     name: "demo_phase_12",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         x.c.a[5] = A5;
@@ -1048,7 +1043,6 @@ pub const DEMO_PHASE_12: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[

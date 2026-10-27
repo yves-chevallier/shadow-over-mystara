@@ -395,5 +395,5 @@ fn drop_old(x: &mut Cx, player: Obj, variant: u8) {
 }
 
 handlers! {
-    0xdb0c2 "item_piece" 150 run,
+    0xdb0c2 "item_piece" run,
 }

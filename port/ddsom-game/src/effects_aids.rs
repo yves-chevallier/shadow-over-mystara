@@ -219,7 +219,7 @@ fn place_scripted_player(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs }
 }
 
 macro_rules! leaf {

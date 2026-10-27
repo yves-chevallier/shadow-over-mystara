@@ -3,8 +3,8 @@
 //! Le scénario déroule la partie avec le code d'origine seul (la ligne du temps est celle du jeu). Aux
 //! appels d'un gestionnaire réécrit (un sur `période`), on prend l'état réel, on en tire `essais`
 //! copies dont quelques octets sont perturbés (champs de l'objet, de son joueur, drapeaux de scène),
-//! puis on exécute sur chacune le code d'origine et la routine native, et on compare (RAM, registres,
-//! cycles). Cela exerce des branches que les scénarios n'atteignent pas. Les états absurdes sont
+//! puis on exécute sur chacune le code d'origine et la routine native, et on compare (RAM, registres).
+//! Cela exerce des branches que les scénarios n'atteignent pas. Les états absurdes sont
 //! sans danger : les parties non réécrites s'exécutent en code d'origine dans les deux versions.
 //!
 //! Les types que les scénarios n'exercent jamais se testent en les *forçant* : le dernier argument
@@ -273,19 +273,10 @@ fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: boo
         return;
     }
     // routine native sur la copie perturbée (même état de départ que l'original)
-    let resultat = catch_unwind(AssertUnwindSafe(|| {
-        let cout = (n.cost)(&c1, &mut b1);
-        (n.run)(&mut c1, &mut b1);
-        c1.cycles += cout;
-    }));
+    let resultat = catch_unwind(AssertUnwindSafe(|| (n.run)(&mut c1, &mut b1)));
     let mut diffs = Vec::new();
     match resultat {
         Err(e) => {
-            if let (true, Some(cd), Some(mut bd)) = (std::env::var_os("FUZZ_TRACE").is_some(), c_depart.clone(), b_depart.clone()) {
-                ddsom_game::families::activer_diagnostic(true);
-                let _ = catch_unwind(AssertUnwindSafe(|| (n.cost)(&cd, &mut bd)));
-                ddsom_game::families::activer_diagnostic(false);
-            }
             let msg = e
                 .downcast_ref::<String>()
                 .cloned()
@@ -303,10 +294,6 @@ fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: boo
             return;
         }
         Ok(()) => {}
-    }
-    // durée comparée seulement pour les gestionnaires à durée exacte (ancienne méthode)
-    if n.exact_cost && c1.cycles != c2.cycles {
-        diffs.push(format!("cycles {} au lieu de {}", c1.cycles - c.cycles, c2.cycles - c.cycles));
     }
     if c1.d[7] != c2.d[7] {
         diffs.push(format!("d7={:08x} au lieu de {:08x}", c1.d[7], c2.d[7]));
@@ -407,7 +394,6 @@ fn main() {
     }
     PARAMETRES.with(|p| *p.borrow_mut() = (periode, essais));
     std::panic::set_hook(Box::new(|_| {})); // les paniques sont comptées, pas affichées
-    ddsom_game::families::activer_couverture();
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let voulus = a.get(8).cloned().unwrap_or_default();
@@ -426,9 +412,6 @@ fn main() {
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
-    }
-    for (fichier, ligne, pris) in ddsom_game::families::couverture() {
-        println!("COUV {} {ligne} {pris}", fichier.rsplit('/').next().unwrap());
     }
     let mut total_ecarts = 0;
     for (nom, bilan) in BILAN.with(|m| std::mem::take(&mut *m.borrow_mut())) {

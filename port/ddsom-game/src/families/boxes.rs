@@ -726,7 +726,7 @@ pub mod caisse {
     }
 
     handlers! {
-        0xd99fa "box_caisse" 150 run,
+        0xd99fa "box_caisse" run,
     }
 }
 
@@ -744,7 +744,7 @@ mod decor {
 fn box_2(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -793,7 +793,7 @@ fn barriere_cree_set(ctx: &mut Ctx, o: Obj) {
     ctx.c.d[0] = ctx.c.d[0] & 0xffff_ff00 | 0x8b;
     ctx.jsr(barriere::CREER_SET);
     let echec = ctx.c.cond(5);
-    if ctx.pris(echec) {
+    if echec {
         return;
     }
     let nouveau = Obj(ctx.c.a[1]);
@@ -831,31 +831,29 @@ fn barriere_init(ctx: &mut Ctx, o: Obj) {
 /// quand elle sort de l'écran.
 fn barriere_actif_0(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    ctx.jsr_indirect(0xda602, |ctx| {
-        let cible = ctx.saut_table(barriere::SOUS_ETATS_0, sous_etat as u32);
-        match sous_etat {
-            0 => {
-                let coup = o.u8(ctx.b, champ::COUP_B);
-                if !ctx.pris(coup == 0) {
-                    ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
-                    barriere_cree_set(ctx, o);
-                }
-                ctx.reinsert();
+    let cible = ctx.saut_table(barriere::SOUS_ETATS_0, sous_etat as u32);
+    match sous_etat {
+        0 => {
+            let coup = o.u8(ctx.b, champ::COUP_B);
+            if !(coup == 0) {
+                ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
+                barriere_cree_set(ctx, o);
             }
-            2 => {
-                let set = pointeur(ctx, o, barriere::SET_CREE);
-                let fini = set.u8(ctx.b, 0x22) != 0;
-                if !ctx.pris(!fini) {
-                    o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
-                    o.set_u8(ctx.b, champ::COUP_B, 0);
-                }
-            }
-            _ => ctx.deleguer(cible),
+            ctx.reinsert();
         }
-    });
+        2 => {
+            let set = pointeur(ctx, o, barriere::SET_CREE);
+            let fini = set.u8(ctx.b, 0x22) != 0;
+            if fini {
+                o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
+                o.set_u8(ctx.b, champ::COUP_B, 0);
+            }
+        }
+        _ => ctx.deleguer(cible),
+    }
     let (cam_x, _) = ctx.camera();
     let ecart = cam_x.wrapping_sub(o.u16(ctx.b, Obj::X));
-    if !ctx.pris((ecart as i16) < 0x200) {
+    if !((ecart as i16) < 0x200) {
         ajoute_u8(ctx, o, Obj::STATE, 2);
     }
 }
@@ -866,7 +864,7 @@ fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
     match sous_etat {
         0 | 4 => {
             let coup = o.u8(ctx.b, champ::COUP_B);
-            if ctx.pris(coup == 0) {
+            if coup == 0 {
                 return ctx.reinsert();
             }
             ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
@@ -877,7 +875,7 @@ fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
         }
         2 | 6 => {
             let fin = ctx.anim_step();
-            if ctx.pris(!fin) {
+            if !fin {
                 return;
             }
             if sous_etat == 2 {
@@ -895,7 +893,7 @@ fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
 fn barriere_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -1143,6 +1141,6 @@ pub mod pousse {
     }
 
     handlers! {
-        0xda7f2 "box_pousse" 120 run,
+        0xda7f2 "box_pousse" run,
     }
 }

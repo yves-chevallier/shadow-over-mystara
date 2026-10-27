@@ -356,9 +356,9 @@ mod impact {
 }
 
 handlers! {
-    0x4b1b6 "peff_6" 120 beam::run,
-    0x4b3b4 "peff_7" 120 spark::run,
-    0x4b530 "peff_8" 120 glow::run,
-    0x4b61a "peff_9" 120 ray::run,
-    0x4b7c8 "peff_10" 120 impact::run,
+    0x4b1b6 "peff_6" beam::run,
+    0x4b3b4 "peff_7" spark::run,
+    0x4b530 "peff_8" glow::run,
+    0x4b61a "peff_9" ray::run,
+    0x4b7c8 "peff_10" impact::run,
 }

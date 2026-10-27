@@ -575,7 +575,7 @@ fn shake_b(x: &mut Cx) {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, cost: |_, _| 100, run, touches_sound: false, outputs, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs }
 }
 
 const CREATED: u32 = regs::a(1) | regs::CCR;
@@ -619,8 +619,8 @@ pub const NATIVES: &[Native] = &[
 
 /// Réactions d'ennemis : mêmes registres que `handler` (A0, D7) et ceux qu'elles modifient.
 pub const SHAKES: &[Native] = &[
-    Native { outputs: regs::a(0) | regs::d(7) | regs::d(0) | regs::d(1) | regs::a(4), ..handler(0x78ad2, "ennemi_tremble_a", |_, _| 100, |c, b| run_shake(c, b, shake_a)) },
-    Native { outputs: regs::a(0) | regs::d(7) | regs::d(0) | regs::d(1) | regs::a(4), ..handler(0x71680, "ennemi_tremble_b", |_, _| 100, |c, b| run_shake(c, b, shake_b)) },
+    Native { outputs: regs::a(0) | regs::d(7) | regs::d(0) | regs::d(1) | regs::a(4), ..handler(0x78ad2, "ennemi_tremble_a", |c, b| run_shake(c, b, shake_a)) },
+    Native { outputs: regs::a(0) | regs::d(7) | regs::d(0) | regs::d(1) | regs::a(4), ..handler(0x71680, "ennemi_tremble_b", |c, b| run_shake(c, b, shake_b)) },
 ];
 
 fn run_shake(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cx)) {

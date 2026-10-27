@@ -598,7 +598,6 @@ fn pay_digit(v: u32) -> (u32, u32) {
 pub const TALLY: Native = Native {
     entry: 0xf590e,
     name: "scene_tally",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
@@ -607,7 +606,6 @@ pub const TALLY: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[TALLY, TALLY_FADE_WAIT, TALLY_AFTER_FADE];

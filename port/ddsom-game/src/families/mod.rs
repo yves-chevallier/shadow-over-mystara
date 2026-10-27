@@ -5,10 +5,8 @@
 //! `A0` = objet et `D7` = compteur de boucle. Chaque gestionnaire est une petite machine à états
 //! (octets `+4`, `+5`, `+6` de l'objet) ; il rend la main par `rts` en laissant `A0` et `D7` intacts.
 //!
-//! Une routine native remplace un gestionnaire entier : la logique est écrite une seule fois sur un
-//! [`Ctx`] ; elle sert à la fois à calculer la durée exacte de l'original (exécution à blanc sur une
-//! copie de la machine, en notant chaque branchement conditionnel de l'original) et à l'exécution
-//! réelle. Les sous-routines non réécrites (sons, génération d'objets...) sont appelées par
+//! Une routine native remplace un gestionnaire entier : la logique est écrite sur un [`Ctx`]. Les
+//! sous-routines non réécrites (sons, génération d'objets...) sont appelées par
 //! [`Ctx::jsr`] ; les états d'un type qu'aucun scénario n'exerce restent en code d'origine
 //! ([`Ctx::deleguer`]).
 //!
@@ -91,7 +89,6 @@ pub mod sobj;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::chemin::Chemin;
 use crate::mem::{rd8, rts, A5};
 use crate::objects::{anim, lists, pools, Obj};
 use crate::Native;
@@ -155,64 +152,18 @@ pub mod rom {
     pub const RNG: u32 = 0x19a88;
 }
 
-/// Couverture des décisions (fichier, ligne, résultat) observées pendant les exécutions réelles, quand
-/// elle est activée (outils de validation : voir `examples/familles.rs`).
-static COUVERTURE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static COUVERTURE: std::sync::Mutex<std::collections::BTreeSet<(&'static str, u32, bool)>> =
-    std::sync::Mutex::new(std::collections::BTreeSet::new());
-
-/// Affiche, pour chaque calcul de durée, les tronçons du code d'origine parcourus (outil de diagnostic).
-static DIAGNOSTIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-pub fn activer_diagnostic(actif: bool) {
-    DIAGNOSTIC.store(actif, std::sync::atomic::Ordering::Relaxed);
-}
-
-pub fn activer_couverture() {
-    COUVERTURE_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
-}
-
-pub fn couverture() -> Vec<(&'static str, u32, bool)> {
-    COUVERTURE.lock().unwrap().iter().copied().collect()
-}
-
-/// Contexte d'exécution d'un gestionnaire : la machine, et en mode « à blanc » le relevé des
-/// décisions de l'original.
+/// Contexte d'exécution d'un gestionnaire : la machine.
 pub struct Ctx<'a> {
     pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
-    rec: Option<Rec>,
     /// Le gestionnaire a déjà dépilé son adresse de retour (voir `epilogue_etranger`).
     retour_deja: bool,
-}
-
-/// Un tronçon de code d'origine parcouru, avec les décisions de ses branchements.
-struct Troncon {
-    depart: u32,
-    arret: Option<u32>,
-    chemin: Chemin,
-    /// Nombre de décisions relevées.
-    decisions: u32,
-}
-
-#[derive(Default)]
-struct Rec {
-    troncons: Vec<Troncon>,
-    /// Appels dont la durée est ajoutée par l'exécution elle-même (cycles de `c`).
-    externes: Vec<u32>,
-    /// Instructions isolées (appels indirects) comptées à part.
-    isolees: u64,
 }
 
 impl<'a> Ctx<'a> {
     /// Exécution réelle.
     pub fn reel(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        Ctx { c, b, rec: None, retour_deja: false }
-    }
-
-    /// Exécution à blanc (sur une copie) : relève le chemin suivi par l'original.
-    fn a_blanc(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        Ctx { c, b, rec: Some(Rec::default()), retour_deja: false }
+        Ctx { c, b, retour_deja: false }
     }
 
     /// L'objet traité (registre A0).
@@ -225,32 +176,8 @@ impl<'a> Ctx<'a> {
         self.c.d[7] as u16
     }
 
-    // ---- relevé du chemin de l'original ----
-
-    /// Le code d'origine continue en `adresse` (début d'un tronçon).
-    pub fn at(&mut self, adresse: u32) {
-        if let Some(r) = &mut self.rec {
-            r.troncons.push(Troncon { depart: adresse, arret: None, chemin: Chemin::default(), decisions: 0 });
-        }
-    }
-
-    /// Décision d'un branchement conditionnel de l'original (vrai : branchement pris).
-    #[track_caller]
-    pub fn pris(&mut self, pris: bool) -> bool {
-        if self.rec.is_none() && COUVERTURE_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
-            let l = std::panic::Location::caller();
-            COUVERTURE.lock().unwrap().insert((l.file(), l.line(), pris));
-        }
-        if let Some(r) = &mut self.rec {
-            let t = r.troncons.last_mut().expect("tronçon");
-            t.chemin.pris(pris);
-            t.decisions += 1;
-        }
-        pris
-    }
-
-    /// Saut par table `jmp (table,PC,D1.w)` : lit le mot de la table à l'indice `index` (octets),
-    /// ouvre le tronçon de la cible et renvoie son adresse.
+    /// Saut par table `jmp (table,PC,D1.w)` : lit le mot de la table à l'indice `index` (octets) et
+    /// renvoie l'adresse de la cible.
     pub fn saut_table(&mut self, table: u32, index: u32) -> u32 {
         let mot = self.prog16(table.wrapping_add(index)) as i16;
         let cible = table.wrapping_add(mot as i32 as u32);
@@ -258,7 +185,6 @@ impl<'a> Ctx<'a> {
         // qui s'exécutent en code d'origine (`deleguer`)
         self.c.d[0] = index;
         self.c.d[1] = self.c.d[1] & 0xffff_0000 | mot as u16 as u32;
-        self.at(cible);
         cible
     }
 
@@ -267,7 +193,6 @@ impl<'a> Ctx<'a> {
         let mot = self.prog16(table.wrapping_add(index)) as i16;
         let cible = table.wrapping_add(mot as i32 as u32);
         self.c.d[1] = mot as u16 as u32;
-        self.at(cible);
         cible
     }
 
@@ -290,73 +215,29 @@ impl<'a> Ctx<'a> {
 
     /// Exécute le code d'origine à partir de `adresse` (jusqu'à son `rts`) : états non réécrits.
     pub fn deleguer(&mut self, adresse: u32) {
-        if let Some(r) = &mut self.rec {
-            // le tronçon ouvert pour cette cible ne doit pas être compté : l'exécution s'en charge
-            if r.troncons.last().is_some_and(|t| t.depart == adresse && t.decisions == 0) {
-                r.troncons.pop();
-            }
-        }
         // un état qui n'est qu'un `jmp abs.l` (la libération, le plus souvent) : appel direct de sa cible
         const JMP_ABS_L: u16 = 0x4ef9;
         let adresse = if self.prog16(adresse) == JMP_ABS_L { self.prog32(adresse + 2) } else { adresse };
         crate::call(self.c, self.b, adresse);
     }
 
-    /// État réécrit sans relevé de chemin, à la place de l'état d'origine `adresse` ouvert par
-    /// `saut_table` : comme `deleguer`, mais `corps` (Rust) s'exécute au lieu du code d'origine. Sa durée
-    /// est celle de ses sous-routines ; ses `pris` ne relèvent rien.
-    pub fn sans_chemin(&mut self, adresse: u32, corps: impl FnOnce(&mut Ctx)) {
-        if let Some(r) = &mut self.rec {
-            if r.troncons.last().is_some_and(|t| t.depart == adresse && t.decisions == 0) {
-                r.troncons.pop();
-            }
-        }
-        corps(&mut Ctx::reel(&mut *self.c, &mut *self.b));
-    }
-
     // ---- appels ----
 
     /// `jsr adresse` d'une routine non réécrite (ou déjà native), registres tels que préparés.
     pub fn jsr(&mut self, adresse: u32) {
-        if let Some(r) = &mut self.rec {
-            if !r.externes.contains(&adresse) {
-                r.externes.push(adresse);
-            }
-        }
         crate::call(self.c, self.b, adresse);
-    }
-
-    /// Exécution à blanc : la routine d'origine `adresse` est appelée (sa durée n'est pas celle du chemin relevé).
-    fn externe(&mut self, adresse: u32) {
-        if let Some(r) = &mut self.rec {
-            if !r.externes.contains(&adresse) {
-                r.externes.push(adresse);
-            }
-        }
     }
 
     /// Appel direct d'une routine native du modèle d'objets (sans passer par l'index des adresses).
     pub fn natif(&mut self, n: &Native) {
-        if let Some(r) = &mut self.rec {
-            if !r.externes.contains(&n.entry) {
-                r.externes.push(n.entry);
-            }
-        }
-        let cout = (n.cost)(self.c, self.b);
         self.c.a[7] = self.c.a[7].wrapping_sub(4);
         crate::mem::wr32(self.b, self.c.a[7], 0xfffe);
         (n.run)(self.c, self.b);
-        self.c.cycles += cout;
     }
 
     /// `jsr adresse` exécuté par le code d'origine seul (aucune routine native, même imbriquée) : les
     /// registres que l'original laisse derrière lui (restes de calcul) sont alors exactement les siens.
     pub fn jsr_origine(&mut self, adresse: u32) {
-        if let Some(r) = &mut self.rec {
-            if !r.externes.contains(&adresse) {
-                r.externes.push(adresse);
-            }
-        }
         if crate::sans68k::actif() {
             // jeu sans 68000 : la native, qui rend les mêmes registres (`objects::lists::Reinsert`)
             return crate::call(self.c, self.b, adresse);
@@ -370,25 +251,6 @@ impl<'a> Ctx<'a> {
             if ddsom_rc::run_block(self.c.pc, self.c, self.b, u64::MAX).is_none() {
                 self.c.step(self.b);
             }
-        }
-    }
-
-    /// `jsr (An)` à l'adresse `instruction` : l'instruction est comptée à part, le tronçon courant
-    /// s'arrête là, `corps` exécute la routine appelée (qui ouvre ses propres tronçons avec `at`, ou
-    /// se délègue au code d'origine), puis un autre tronçon reprend après l'instruction.
-    pub fn jsr_indirect(&mut self, instruction: u32, corps: impl FnOnce(&mut Ctx)) {
-        let mut suite = None;
-        if self.rec.is_some() {
-            let ins = m68k::decode(self.b, instruction);
-            let cycles = m68k::timing::base_cycles(&ins) as u64;
-            let r = self.rec.as_mut().unwrap();
-            r.troncons.last_mut().expect("tronçon").arret = Some(instruction);
-            r.isolees += cycles;
-            suite = Some(instruction.wrapping_add(ins.len));
-        }
-        corps(self);
-        if let Some(suite) = suite {
-            self.at(suite);
         }
     }
 
@@ -420,14 +282,12 @@ impl<'a> Ctx<'a> {
 
     /// Libère l'objet traité dans son pool.
     pub fn free(&mut self, pool: &pools::Pool) {
-        self.externe(pool.free_routine);
         let o = self.obj();
         pool.release(self.b, o)
     }
 
     /// Alloue un objet dans `pool` : l'emplacement, ou `None` si le pool est plein.
     pub fn alloc(&mut self, pool: &pools::Pool) -> Option<Obj> {
-        self.externe(pool.alloc_routine);
         pool.alloc(self.b)
     }
 
@@ -478,36 +338,11 @@ impl<'a> Ctx<'a> {
     /// Caméra de l'image : (x, y) écran, avec la caméra alternative si `A5+0x36` est non nul.
     pub fn camera(&mut self) -> (u16, u16) {
         let alt = self.ram8(0x36) != 0;
-        self.pris(!alt); // beq : la caméra principale
         if alt {
             (self.ram16(0x556), self.ram16(0x55a))
         } else {
             (self.ram16(0x506), self.ram16(0x50a))
         }
-    }
-
-    /// Durée de l'exécution à blanc : le code d'origine parcouru + les cycles des sous-routines.
-    fn cout(self, b_rom: &mut Cps2Bus, cycles_sous_routines: u64) -> u64 {
-        let rec = self.rec.expect("exécution à blanc");
-        if DIAGNOSTIC.load(std::sync::atomic::Ordering::Relaxed) {
-            // diagnostic : décrit chaque tronçon avant le calcul (qui peut échouer)
-            for t in &rec.troncons {
-                eprintln!("   tronçon {:06x}..{:?} : {} décisions {:?}", t.depart, t.arret, t.decisions, t.chemin);
-            }
-        }
-        let propres: u64 = rec
-            .troncons
-            .iter()
-            .map(|t| t.chemin.duree_hors(b_rom, t.depart, t.arret, &rec.externes))
-            .sum();
-        if DIAGNOSTIC.load(std::sync::atomic::Ordering::Relaxed) {
-            for t in &rec.troncons {
-                let d = t.chemin.duree_hors(b_rom, t.depart, t.arret, &rec.externes);
-                eprintln!("   tronçon {:06x}..{:?} : {} cycles, {} décisions", t.depart, t.arret, d, t.decisions);
-            }
-            eprintln!("   propres {propres}, isolées {}, sous-routines {cycles_sous_routines}, externes {:x?}", rec.isolees, rec.externes);
-        }
-        propres + rec.isolees + cycles_sous_routines
     }
 }
 
@@ -522,27 +357,13 @@ pub(crate) fn pointeur(ctx: &mut Ctx, o: Obj, off: u32) -> Obj {
     Obj(o.u16(ctx.b, off) as i16 as i32 as u32 & 0xff_ffff)
 }
 
-/// Durée exacte d'un gestionnaire pour l'état courant : exécution à blanc sur une copie.
-pub fn cout(c: &Cpu, b: &mut Cps2Bus, entree: u32, logique: fn(&mut Ctx)) -> u64 {
-    let mut c2 = c.clone();
-    let mut b2 = b.clone();
-    let debut = c2.cycles;
-    let mut ctx = Ctx::a_blanc(&mut c2, &mut b2);
-    ctx.at(entree);
-    logique(&mut ctx);
-    let sous_routines = ctx.c.cycles - debut;
-    ctx.cout(b, sous_routines)
-}
-
-/// Exécute un gestionnaire (RTS compris). Les cycles des sous-routines sont comptés dans `cout`.
+/// Exécute un gestionnaire (RTS compris).
 pub fn executer(c: &mut Cpu, b: &mut Cps2Bus, logique: fn(&mut Ctx)) {
-    let debut = c.cycles;
     let retour_deja = {
         let mut ctx = Ctx::reel(c, b);
         logique(&mut ctx);
         ctx.retour_deja
     };
-    c.cycles = debut;
     if !retour_deja {
         rts(c, b);
     }
@@ -554,18 +375,16 @@ macro_rules! gestionnaire {
         pub const $const: crate::Native = crate::Native {
             entry: $entree,
             name: $nom,
-            cost: |c, b| crate::families::cout(c, b, $entree, $logique),
             run: |c, b| crate::families::executer(c, b, $logique),
             touches_sound: false,
             outputs: crate::regs::a(0) | crate::regs::d(7),
-            exact_cost: false,
         };
     };
 }
 pub(crate) use gestionnaire;
 
 /// Routines natives des familles ESHL, SET et SOBJ (voir `docs/familles-eshl-set-sobj.md`) : un
-/// gestionnaire par type, écrit sur [`cx::Cx`] (durée indicative, pas d'exécution à blanc).
+/// gestionnaire par type, écrit sur [`cx::Cx`].
 pub fn natives() -> impl Iterator<Item = &'static Native> {
     [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, eshl_d::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, effects_b::NATIVES, effects_c::NATIVES, effects_d::NATIVES, effects_e::NATIVES, effects_f::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_common::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, enemy_golem::NATIVES, enemy_warmachine::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_15::HELPERS, boss_18::NATIVES, boss_4::NATIVES, boss_7::NATIVES, boss_8::NATIVES, boss_11::NATIVES, boss_1::NATIVES, boss_3::NATIVES, boss_9::NATIVES]
         .into_iter()

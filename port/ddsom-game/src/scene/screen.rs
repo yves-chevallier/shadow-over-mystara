@@ -74,7 +74,6 @@ macro_rules! clear_native {
         pub const $name: Native = Native {
             entry: $entry,
             name: $label,
-            cost: |_, _| 100,
             run: |c, b| {
                 clear_longs(b, $at, $n);
                 if $d0 {
@@ -84,7 +83,6 @@ macro_rules! clear_native {
             },
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     };
 }
@@ -93,7 +91,6 @@ macro_rules! clear_native {
 pub const RESET_EXIT: Native = Native {
     entry: 0xf3130,
     name: "scene_exit_reset",
-    cost: |_, _| 100,
     run: |c, b| {
         clear_longs(b, blocks::EXIT, 8);
         c.a[4] = blocks::EXIT + 32;
@@ -102,7 +99,6 @@ pub const RESET_EXIT: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 clear_native!(RESET_SHOP, 0xf7916, "scene_shop_reset", blocks::SHOP, 5, true);
 clear_native!(RESET_TRANSITION, 0xf7ee0, "scene_transition_reset", blocks::TRANSITION, 4, false);
@@ -111,14 +107,12 @@ clear_native!(RESET_RANKING, 0xfc562, "ranking_reset", blocks::RANKING, 4, true)
 pub const CLEAR_TEXT: Native = Native {
     entry: 0xf683c,
     name: "scene_clear_text",
-    cost: |_, _| 100,
     run: |c, b| {
         clear_text(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[RESET_EXIT, RESET_SHOP, RESET_TRANSITION, RESET_RANKING, CLEAR_TEXT];

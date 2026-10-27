@@ -596,11 +596,9 @@ macro_rules! creator {
         pub const $name: Native = Native {
             entry: $entry,
             name: $label,
-            cost: |_, _| 100,
             run: |c, b| run(c, b, |$g, $p| $body),
             touches_sound: false,
             outputs: $outputs,
-            exact_cost: false,
         };
     };
 }

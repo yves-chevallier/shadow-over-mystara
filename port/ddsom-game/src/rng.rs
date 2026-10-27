@@ -18,7 +18,6 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
-use crate::chemin::Chemin;
 use crate::mem::{rd16, rts, wr16};
 use crate::{regs, Native};
 
@@ -68,19 +67,15 @@ fn tirage(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const SEED: Native = Native {
     entry: 0x19a80,
     name: "rng_seed",
-    cost: |_, b| Chemin::default().duree(b, 0x19a80),
     run: graine,
     touches_sound: false,
     outputs: regs::CCR,
-    exact_cost: true,
 };
 
 pub const NEXT: Native = Native {
     entry: 0x19a88,
     name: "rng_next",
-    cost: |_, b| Chemin::default().duree(b, 0x19a88),
     run: tirage,
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
-    exact_cost: true,
 };

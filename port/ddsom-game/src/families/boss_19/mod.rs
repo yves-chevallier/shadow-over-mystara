@@ -354,5 +354,5 @@ fn hover(x: &mut Cx) {
 }
 
 handlers! {
-    0x8fae4 "boss_19" 1200 run,
+    0x8fae4 "boss_19" run,
 }

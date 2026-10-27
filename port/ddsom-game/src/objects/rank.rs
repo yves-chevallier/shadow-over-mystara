@@ -24,7 +24,6 @@ use m68k::Cpu;
 
 use super::motion::{cmp, lsl_word};
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, wr16, wr32, A5};
-use crate::timing::path_cycles;
 use crate::{regs, Native};
 
 const BASE: u32 = A5 + 0x7f92;
@@ -240,95 +239,39 @@ fn lower_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const RANK_RESET: Native = Native {
     entry: 0x1f258,
     name: "rank_reset",
-    cost: |_, b| {
-        let idle = rd8(b, A5 + GAME_ACTIVE) == 0;
-        path_cycles(b, 0x1f258, idle as u64, |_| !idle)
-    },
     run: reset_native,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const RANK_LOAD_PRESET: Native = Native {
     entry: 0x1f1b8,
     name: "rank_load_preset",
-    cost: |_, b| {
-        let idle = rd8(b, A5 + GAME_ACTIVE) == 0;
-        path_cycles(b, 0x1f1b8, idle as u64, |_| !idle)
-    },
     run: load_preset_native,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const RANK_RAISE: Native = Native {
     entry: 0x1f2c0,
     name: "rank_raise",
-    cost: |_, b| {
-        let below = (get(b, CURRENT).wrapping_add(1) as i16) < get(b, MAX) as i16;
-        path_cycles(b, 0x1f2c0, below as u64, |_| below)
-    },
     run: raise_native,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const RANK_LOWER: Native = Native {
     entry: 0x1f300,
     name: "rank_lower",
-    cost: |_, b| {
-        let mode = rd8(b, A5 + PLAYERS_MODE) as u32;
-        let drop = rd8(b, BASE + DROP_TABLE + mode) as u16;
-        let ok = (get(b, CURRENT).wrapping_sub(drop) as i16) >= get(b, MIN) as i16;
-        path_cycles(b, 0x1f300, ok as u64, |_| ok)
-    },
     run: lower_native,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const RANK_TICK: Native = Native {
     entry: 0x1f27c,
     name: "rank_tick",
-    cost: tick_cost,
     run: tick_native,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
-
-fn tick_cost(_: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let active = rd8(b, A5 + GAME_ACTIVE) != 0;
-    let mode = rd8(b, A5 + PLAYERS_MODE) != 0;
-    let timer = get(b, TIMER);
-    let (rank, max) = (get(b, CURRENT), get(b, MAX));
-    let at_max = rank == max;
-    let below = (rank.wrapping_add(1) as i16) < max as i16;
-    // chemin : 0 inactif, 1 mode nul, 2 timer en cours, 3 monte, 4 déjà au max, 5 atteint le max
-    let path = if !active {
-        0
-    } else if !mode {
-        1
-    } else if timer != 0 {
-        2
-    } else if at_max {
-        4
-    } else if below {
-        3
-    } else {
-        5
-    };
-    path_cycles(b, 0x1f27c, path, |pc| match (pc, path) {
-        (0x1f280, p) => p == 0,
-        (0x1f286, p) => p == 1,
-        (0x1f290, p) => p != 2,
-        (0x1f296, _) => true,
-        (0x1f2a4, p) => p == 4,
-        (0x1f2ac, p) => p == 3,
-        _ => false,
-    })
-}

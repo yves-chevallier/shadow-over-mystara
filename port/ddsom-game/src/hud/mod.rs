@@ -284,14 +284,12 @@ resume!(STARTING, at::STARTING, |x| {
 pub const FORGET_DISPLAYED: Native = Native {
     entry: 0x1507a,
     name: "hud_forget_displayed",
-    cost: |_, _| 100,
     run: |c, b| {
         slot::forget_displayed(b);
         crate::mem::rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 resume!(LOOP, at::LOOP, |x| tour(x));

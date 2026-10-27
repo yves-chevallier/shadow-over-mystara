@@ -179,12 +179,10 @@ fn scroll_out(x: &mut Ctx) {
 pub const PHASE_24: Native = Native {
     entry: 0x21c2a,
     name: "scene_phase_24",
-    cost: |_, _| 100,
     run: |c, b| {
         phase_24(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };

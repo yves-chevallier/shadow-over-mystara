@@ -9,18 +9,14 @@
 //!
 //! Les natives s'enchaînent dans le code d'origine aux points d'entrée situés après l'appel du script
 //! de mode (0x2f81c : avec butées de la cible ; 0x2f86e et 0x328a8 : recopie seule) ; les scripts de
-//! mode et l'initialisation de la scène (premier appel) restent du code d'origine. La durée est
-//! exacte : le parcours est rejoué en simulation sur le code d'origine (`Exec`), tronçon par
-//! tronçon, pour que les boucles de 19 à 35 cases ne dépassent pas la capacité d'un `Chemin`.
+//! mode et l'initialisation de la scène (premier appel) restent du code d'origine.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::chemin::Chemin;
-use crate::mem::rts;
+use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::video::hw;
-use crate::vue::Vue;
 use crate::Native;
 
 /// Champs de l'enregistrement caméra (offsets depuis son adresse).
@@ -69,93 +65,15 @@ const TERRAIN_TILES: [u16; 2] = [0x1bc0, 0x1d80];
 /// Décalage de tuile ajouté aux cases de la carte.
 const MAP_TILE_OFFSET: u32 = 0x1800_0000;
 
-/// Routines d'origine appelées (leur durée est comptée à part).
-const HELPERS: &[u32] = &[0x2fdfc, 0x2fe30, 0x2fe5c, 0x2fe6a, 0x2fe78, 0x2fec0, 0x2fefa, 0x2ff1c, 0x2ff66];
-
-// ---------------------------------------------------------------------------------------------
-// Exécution réelle ou simulée (pour la durée exacte)
-// ---------------------------------------------------------------------------------------------
-
-/// Parcours du code d'origine en simulation : durée du tronçon en cours depuis `from`, chaque
-/// sous-routine ayant son propre tronçon.
-struct Sim {
-    total: u64,
-    frames: Vec<(u32, Chemin)>,
-    /// Sous-routines d'origine appelées (comptées à part).
-    helpers: &'static [u32],
-}
-
+/// Accès à la machine d'une caméra.
 struct Exec<'a> {
-    v: Vue<'a>,
-    sim: Option<Sim>,
+    b: &'a mut Cps2Bus,
 }
 
 impl<'a> Exec<'a> {
     fn real(b: &'a mut Cps2Bus) -> Self {
-        Exec { v: Vue::reelle(b), sim: None }
+        Exec { b }
     }
-
-    fn simulated(b: &'a mut Cps2Bus, entry: u32, helpers: &'static [u32]) -> Self {
-        Exec { v: Vue::simulee(b), sim: Some(Sim { total: 0, frames: vec![(entry, Chemin::default())], helpers }) }
-    }
-
-    /// Décision d'un branchement conditionnel de l'original (vrai : pris).
-    fn pris(&mut self, pris: bool) -> bool {
-        if let Some(s) = &mut self.sim {
-            s.frames.last_mut().unwrap().1.pris(pris);
-        }
-        pris
-    }
-
-    /// L'exécution atteint `addr` : le tronçon en cours est terminé.
-    fn mark(&mut self, addr: u32) {
-        if let Some(s) = &mut self.sim {
-            let (from, path) = s.frames.last_mut().unwrap();
-            s.total += std::mem::take(path).duree_hors(self.v.b, *from, Some(addr), s.helpers);
-            *from = addr;
-        }
-    }
-
-    /// Boucle `dbf` de `n` tours dont la tête est `head` (dont l'exécution vient d'être marquée) : les
-    /// `n - 1` premiers tours sont comptés ici, le dernier est le suivant dans le tronçon.
-    fn repeat(&mut self, head: u32, n: u32) {
-        if let Some(s) = &mut self.sim {
-            let mut again = Chemin::default();
-            again.pris(true);
-            s.total += (n as u64 - 1) * again.duree_hors(self.v.b, head, Some(head), &[]);
-            s.frames.last_mut().unwrap().1.pris(false);
-        }
-    }
-
-    /// Entrée dans une sous-routine d'origine `entry` (son tronçon est compté à part).
-    fn enter(&mut self, entry: u32) {
-        if let Some(s) = &mut self.sim {
-            s.frames.push((entry, Chemin::default()));
-        }
-    }
-
-    /// Retour de la sous-routine.
-    fn leave(&mut self) {
-        if let Some(s) = &mut self.sim {
-            let (from, path) = s.frames.pop().unwrap();
-            s.total += path.duree_hors(self.v.b, from, None, s.helpers);
-        }
-    }
-
-    /// Durée totale jusqu'au RTS.
-    fn finish(mut self) -> u64 {
-        let s = self.sim.as_mut().expect("simulation");
-        let (from, path) = s.frames.pop().unwrap();
-        s.total + path.duree_hors(self.v.b, from, None, s.helpers)
-    }
-}
-
-/// Enregistre la décision d'un branchement (l'expression est évaluée avant d'emprunter la caméra).
-macro_rules! pris {
-    ($cam:expr, $cond:expr) => {{
-        let taken = $cond;
-        $cam.x.pris(taken)
-    }};
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -177,19 +95,12 @@ enum Step {
 }
 
 impl Camera1<'_> {
-    /// Appel d'une sous-routine d'origine `entry`.
-    fn helper<R>(&mut self, entry: u32, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.x.enter(entry);
-        let r = f(self);
-        self.x.leave();
-        r
-    }
 
     fn get(&mut self, field: u32) -> u16 {
-        self.x.v.rd16(self.cam + field)
+        rd16(self.x.b, self.cam + field)
     }
     fn set(&mut self, field: u32, v: u16) {
-        self.x.v.wr16(self.cam + field, v);
+        wr16(self.x.b, self.cam + field, v);
     }
     fn add(&mut self, field: u32, d: u16) {
         let v = self.get(field).wrapping_add(d);
@@ -198,24 +109,24 @@ impl Camera1<'_> {
 
     /// 0x2f81c : suite du script de mode : limites de la cible, puis recopie du décor.
     fn after_mode(&mut self) {
-        if pris!(self, self.x.v.rd8(self.cam + cam::FROZEN) != 0) {
+        if rd8(self.x.b, self.cam + cam::FROZEN) != 0 {
             return;
         }
-        if pris!(self, self.get(cam::MODE) == 4) {
+        if self.get(cam::MODE) == 4 {
             return self.draw();
         }
         let (limit, mut x) = (self.get(cam::MAX_X) as i16, self.get(cam::X) as i16);
-        if !pris!(self, limit >= x) {
+        if !(limit >= x) {
             self.set(cam::X, limit as u16);
             x = limit;
         }
         let behind = x.wrapping_sub(0x60);
         let min = self.get(cam::MIN_X) as i16;
-        if !pris!(self, behind <= min) {
-            if !pris!(self, self.x.v.rd8(self.cam + cam::HOLD_MIN) != 0) {
+        if !(behind <= min) {
+            if !(rd8(self.x.b, self.cam + cam::HOLD_MIN) != 0) {
                 self.set(cam::MIN_X, behind as u16);
             }
-        } else if !pris!(self, x >= min) {
+        } else if !(x >= min) {
             self.set(cam::X, min as u16);
         }
         self.draw();
@@ -232,16 +143,14 @@ impl Camera1<'_> {
         loop {
             match test {
                 0 => {
-                    self.x.mark(0x2f886);
-                    if pris!(self, self.get(cam::DX) as i16 >= 0x10) {
+                    if self.get(cam::DX) as i16 >= 0x10 {
                         self.column(true);
                     } else {
                         test = 1;
                     }
                 }
                 1 => {
-                    self.x.mark(0x2f890);
-                    if pris!(self, self.get(cam::DX) as i16 <= -0x10) {
+                    if self.get(cam::DX) as i16 <= -0x10 {
                         if let Step::Return = self.column(false) {
                             return;
                         }
@@ -250,16 +159,14 @@ impl Camera1<'_> {
                     }
                 }
                 2 => {
-                    self.x.mark(0x2f89a);
-                    if pris!(self, self.get(cam::DY) as i16 >= 0x10) {
+                    if self.get(cam::DY) as i16 >= 0x10 {
                         self.row(true);
                     } else {
                         test = 3;
                     }
                 }
                 _ => {
-                    self.x.mark(0x2f8a4);
-                    if pris!(self, self.get(cam::DY) as i16 <= -0x10) {
+                    if self.get(cam::DY) as i16 <= -0x10 {
                         if let Step::Return = self.row(false) {
                             return;
                         }
@@ -276,84 +183,76 @@ impl Camera1<'_> {
     /// 0x2fdfc : ligne de la case à écrire (décalage dans la couche) pour le bas de l'écran,
     /// y dessiné arrondi au multiple de 16 supérieur.
     fn row_offset_down(&mut self) -> u16 {
-        self.helper(0x2fdfc, |s| {
-            let mut y = s.get(cam::DRAWN_Y);
-            if !pris!(s, y & 0xf == 0) {
-                y = y.wrapping_add(0x10);
-            }
-            layer_row_offset(y.wrapping_add(0x100), y)
-        })
+        let mut y = self.get(cam::DRAWN_Y);
+        if !(y & 0xf == 0) {
+            y = y.wrapping_add(0x10);
+        }
+        layer_row_offset(y.wrapping_add(0x100), y)
+    
     }
 
     /// 0x2fe30 : idem pour le haut de l'écran (y dessiné - 16).
     fn row_offset_up(&mut self) -> u16 {
-        self.helper(0x2fe30, |s| {
-            let y = s.get(cam::DRAWN_Y).wrapping_sub(0x10) & 0x3ff;
-            layer_row_offset(y, y)
-        })
+        let y = self.get(cam::DRAWN_Y).wrapping_sub(0x10) & 0x3ff;
+        layer_row_offset(y, y)
+    
     }
 
     /// 0x2fe5c : colonne (décalage dans la couche) à gauche de l'écran : (x dessiné - 0x40) x 4.
     fn column_left(&mut self) -> u16 {
-        self.helper(0x2fe5c, |s| s.get(cam::DRAWN_X).wrapping_sub(0x40).wrapping_mul(4))
+        self.get(cam::DRAWN_X).wrapping_sub(0x40).wrapping_mul(4)
     }
 
     /// 0x2fe6a : colonne à droite de l'écran : (x dessiné + 0x1e0) x 4.
     fn column_right(&mut self) -> u16 {
-        self.helper(0x2fe6a, |s| s.get(cam::DRAWN_X).wrapping_add(0x1e0).wrapping_mul(4))
+        self.get(cam::DRAWN_X).wrapping_add(0x1e0).wrapping_mul(4)
     }
 
     /// 0x2fe78 (bas) / 0x2fec0 (haut) : curseur de carte pour la ligne en bas / en haut de l'écran. La
     /// bande avance de `ROW_STEP` par 256 pixels ; le décalage dans la bande vient du quartet haut de y.
     fn row_cursor(&mut self, down: bool) {
-        self.helper(if down { 0x2fe78 } else { 0x2fec0 }, |s| {
-            let mut y = s.get(cam::DRAWN_Y);
-            // bas : y arrondi au multiple de 16 supérieur, distance mesurée 256 pixels plus bas ;
-            // haut : 16 pixels au-dessus
-            let (mut distance, nibble_source) = if down {
-                if !pris!(s, y & 0xf == 0) {
-                    y = y.wrapping_add(0x10);
-                }
-                (y.wrapping_add(0x100), y)
-            } else {
-                let above = y.wrapping_sub(0x10);
-                (above, above)
-            };
-            let mut step = s.get(cam::ROW_STEP);
-            if !pris!(s, distance as i16 >= 0) {
-                distance = distance.wrapping_neg();
-                step = step.wrapping_neg();
+        let mut y = self.get(cam::DRAWN_Y);
+        // bas : y arrondi au multiple de 16 supérieur, distance mesurée 256 pixels plus bas ;
+        // haut : 16 pixels au-dessus
+        let (mut distance, nibble_source) = if down {
+            if !(y & 0xf == 0) {
+                y = y.wrapping_add(0x10);
             }
-            let strips = distance >> 8;
-            let head = if down { 0x2fea4 } else { 0x2fede };
-            s.x.mark(head);
-            s.x.repeat(head, strips as u32 + 1);
-            s.set(cam::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
-            s.set(cam::CURSOR_OFFSET, 0x3c - ((nibble_source & 0xf0) >> 2));
-        });
+            (y.wrapping_add(0x100), y)
+        } else {
+            let above = y.wrapping_sub(0x10);
+            (above, above)
+        };
+        let mut step = self.get(cam::ROW_STEP);
+        if !(distance as i16 >= 0) {
+            distance = distance.wrapping_neg();
+            step = step.wrapping_neg();
+        }
+        let strips = distance >> 8;
+        self.set(cam::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
+        self.set(cam::CURSOR_OFFSET, 0x3c - ((nibble_source & 0xf0) >> 2));
+    
     }
 
     /// 0x2ff1c (colonne droite) / 0x2fefa (colonne gauche) : avance le curseur de la colonne ajoutée.
     fn cursor_for_column(&mut self, right: bool) {
-        self.helper(if right { 0x2ff1c } else { 0x2fefa }, |s| {
-            let x = s.get(cam::DRAWN_X);
-            let column = if right { x.wrapping_add(0x1e0) } else { x.wrapping_sub(0x40) } & 0xfff0;
-            s.add(cam::CURSOR_OFFSET, (column & 0xff).wrapping_mul(4));
-            let strip = if right { column >> 8 } else { (column >> 8) as u8 as i8 as u16 };
-            s.add(cam::CURSOR_ROW, strip);
-        });
+        let x = self.get(cam::DRAWN_X);
+        let column = if right { x.wrapping_add(0x1e0) } else { x.wrapping_sub(0x40) } & 0xfff0;
+        self.add(cam::CURSOR_OFFSET, (column & 0xff).wrapping_mul(4));
+        let strip = if right { column >> 8 } else { (column >> 8) as u8 as i8 as u16 };
+        self.add(cam::CURSOR_ROW, strip);
+    
     }
 
     /// 0x2ff66 : adresse en ROM de la bande de la carte désignée par le curseur.
     fn strip_address(&mut self) -> u32 {
-        let stage = self.x.v.rd8(self.a5 + STAGE) as u32;
-        self.helper(0x2ff66, |s| {
-            let table = s.x.v.prog16(ROW_TABLES + 4 * stage) as u32;
-            let table = table << 16 | s.x.v.prog16(ROW_TABLES + 4 * stage + 2) as u32;
-            let strip = s.get(cam::CURSOR_ROW).wrapping_mul(2) as i16 as u32;
-            let first = s.x.v.rd16(table.wrapping_add(strip)) as u32;
-            MAP + (first << 10)
-        })
+        let stage = rd8(self.x.b, self.a5 + STAGE) as u32;
+        let table = crate::mem::prog16(self.x.b, ROW_TABLES + 4 * stage) as u32;
+        let table = table << 16 | crate::mem::prog16(self.x.b, ROW_TABLES + 4 * stage + 2) as u32;
+        let strip = self.get(cam::CURSOR_ROW).wrapping_mul(2) as i16 as u32;
+        let first = rd16(self.x.b, table.wrapping_add(strip)) as u32;
+        MAP + (first << 10)
+    
     }
 
     // --- recopie ---
@@ -361,24 +260,24 @@ impl Camera1<'_> {
     /// Case de la carte à la position `at` (adresse dans la table d'indices), au format de la couche.
     fn map_cell(&mut self, at: u32) -> u32 {
         let off = at.wrapping_sub(MAP);
-        let bank = self.x.v.rd32(BANKS + (off >> 16 & 0xc));
+        let bank = rd32(self.x.b, BANKS + (off >> 16 & 0xc));
         let c = off >> 2;
-        let index = self.x.v.rd16(MAP + (c & 0xe) + (c >> 1 & 0x3fff0)) as u32;
+        let index = rd16(self.x.b, MAP + (c & 0xe) + (c >> 1 & 0x3fff0)) as u32;
         let sub = (off as u16 >> 3 & 8) as u32 + (off & 4);
-        self.x.v.rd32(bank.wrapping_add(index << 4).wrapping_add(sub))
+        rd32(self.x.b, bank.wrapping_add(index << 4).wrapping_add(sub))
     }
 
     /// Écrit la case `cell` en `at` : tuile de la carte, ou tuile de terrain en mode débogage.
     fn put_cell(&mut self, at: u32, cell: u32) {
-        let terrain_view = self.x.v.rd8(self.a5 + TERRAIN_VIEW) != 0;
-        if !pris!(self, !terrain_view) {
+        let terrain_view = rd8(self.x.b, self.a5 + TERRAIN_VIEW) != 0;
+        if !(!terrain_view) {
             let attribute = cell & 0xff80;
             let number = (attribute >> 7) as u16;
-            let tile = number.wrapping_add(TERRAIN_TILES[pris!(self, number & 0x40 != 0) as usize]);
-            self.x.v.wr16(at, tile);
-            self.x.v.wr16(at + 2, attribute as u16);
+            let tile = number.wrapping_add(TERRAIN_TILES[(number & 0x40 != 0) as usize]);
+            wr16(self.x.b, at, tile);
+            wr16(self.x.b, at + 2, attribute as u16);
         } else {
-            self.x.v.wr32(at, cell.wrapping_add(MAP_TILE_OFFSET));
+            wr32(self.x.b, at, cell.wrapping_add(MAP_TILE_OFFSET));
         }
     }
 
@@ -387,7 +286,7 @@ impl Camera1<'_> {
         self.add(cam::DX, if right { 0x10u16.wrapping_neg() } else { 0x10 });
         let drawn = self.get(cam::DRAWN_X).wrapping_add(if right { 0x10 } else { 0x10u16.wrapping_neg() });
         self.set(cam::DRAWN_X, drawn);
-        if !right && pris!(self, (drawn as i16) < 0) {
+        if !right && ((drawn as i16) < 0) {
             return Step::Return;
         }
         self.d4 = Some(0x3f);
@@ -401,14 +300,12 @@ impl Camera1<'_> {
         a2 = a2.wrapping_add(offset as i16 as u32);
         a1 = a1.wrapping_add(d3 as i16 as u32);
         let wrap_offset = offset & 0x3c0;
-        let head = if right { 0x2f8f2 } else { 0x2fa48 };
-        for i in 0..COLUMN_CELLS {
-            self.x.mark(head);
+        for _ in 0..COLUMN_CELLS {
             let cell = self.map_cell(a2);
             a2 += 4;
             self.put_cell(a1, cell);
             a1 += 4;
-            if !pris!(self, a1 as u16 & 0x3f != 0) {
+            if !(a1 as u16 & 0x3f != 0) {
                 // fin de colonne de la couche : bande suivante de la carte, colonne suivante de la couche
                 let step = self.get(cam::ROW_STEP);
                 self.add(cam::CURSOR_ROW, step);
@@ -416,7 +313,6 @@ impl Camera1<'_> {
                 let next = (a1 as u16).wrapping_add(0xfc0) & 0x3fc0;
                 a1 = hw::SCROLL2.wrapping_add(next as i16 as u32);
             }
-            pris!(self, i + 1 < COLUMN_CELLS);
         }
         Step::Continue
     }
@@ -426,7 +322,7 @@ impl Camera1<'_> {
         self.add(cam::DY, if down { 0x10u16.wrapping_neg() } else { 0x10 });
         let drawn = self.get(cam::DRAWN_Y).wrapping_add(if down { 0x10 } else { 0x10u16.wrapping_neg() });
         self.set(cam::DRAWN_Y, drawn);
-        if !down && pris!(self, (drawn as i16) < 0) {
+        if !down && ((drawn as i16) < 0) {
             return Step::Return;
         }
         self.d4 = Some(0x40);
@@ -438,19 +334,16 @@ impl Camera1<'_> {
         self.cursor_for_column(false);
         let mut a2 = self.strip_address();
         let mut offset = self.get(cam::CURSOR_OFFSET);
-        let head = if down { 0x2fb90 } else { 0x2fce4 };
-        for i in 0..ROW_CELLS {
-            self.x.mark(head);
+        for _ in 0..ROW_CELLS {
             let cell = self.map_cell(a2.wrapping_add(offset as u32));
             self.put_cell(a1.wrapping_add(column as i16 as u32), cell);
             column = column.wrapping_add(0x40) & 0xfc0;
             offset = offset.wrapping_add(0x40);
-            if !pris!(self, offset & 0x3c0 != 0) {
+            if !(offset & 0x3c0 != 0) {
                 offset = offset.wrapping_sub(0x400);
                 self.add(cam::CURSOR_ROW, 1);
                 a2 = self.strip_address();
             }
-            pris!(self, i + 1 < ROW_CELLS);
         }
         Step::Continue
     }
@@ -500,8 +393,6 @@ const COLUMN_CELLS_3: u32 = 11;
 const ROW_CELLS_3: u32 = 15;
 /// Décalage de tuile ajouté aux cases de la carte.
 const MAP_TILE_OFFSET_3: u32 = 0x1f00_0000;
-/// Routines d'origine appelées par la caméra 2.
-const HELPERS_3: &[u32] = &[0x32c2a, 0x32c5e, 0x32c8a, 0x32c96, 0x32ca2, 0x32cea, 0x32d22, 0x32d3c, 0x32d54];
 
 struct Camera2<'a> {
     x: Exec<'a>,
@@ -512,19 +403,12 @@ struct Camera2<'a> {
 }
 
 impl Camera2<'_> {
-    /// Appel d'une sous-routine d'origine `entry`.
-    fn helper<R>(&mut self, entry: u32, f: impl FnOnce(&mut Self) -> R) -> R {
-        self.x.enter(entry);
-        let r = f(self);
-        self.x.leave();
-        r
-    }
 
     fn get(&mut self, field: u32) -> u16 {
-        self.x.v.rd16(self.cam + field)
+        rd16(self.x.b, self.cam + field)
     }
     fn set(&mut self, field: u32, v: u16) {
-        self.x.v.wr16(self.cam + field, v);
+        wr16(self.x.b, self.cam + field, v);
     }
     fn add(&mut self, field: u32, d: u16) {
         let v = self.get(field).wrapping_add(d);
@@ -541,16 +425,14 @@ impl Camera2<'_> {
         loop {
             match test {
                 0 => {
-                    self.x.mark(0x328c0);
-                    if pris!(self, self.get(cam::DX) as i16 >= 0x20) {
+                    if self.get(cam::DX) as i16 >= 0x20 {
                         self.column(true);
                     } else {
                         test = 1;
                     }
                 }
                 1 => {
-                    self.x.mark(0x328ca);
-                    if pris!(self, self.get(cam::DX) as i16 <= -0x20) {
+                    if self.get(cam::DX) as i16 <= -0x20 {
                         if let Step::Return = self.column(false) {
                             return;
                         }
@@ -559,16 +441,14 @@ impl Camera2<'_> {
                     }
                 }
                 2 => {
-                    self.x.mark(0x328d4);
-                    if pris!(self, self.get(cam::DY) as i16 >= 0x20) {
+                    if self.get(cam::DY) as i16 >= 0x20 {
                         self.row(true);
                     } else {
                         test = 3;
                     }
                 }
                 _ => {
-                    self.x.mark(0x328de);
-                    if pris!(self, self.get(cam::DY) as i16 <= -0x20) {
+                    if self.get(cam::DY) as i16 <= -0x20 {
                         if let Step::Return = self.row(false) {
                             return;
                         }
@@ -585,82 +465,74 @@ impl Camera2<'_> {
     /// 0x32c2a (bas) / 0x32c5e (haut) : décalage dans la couche de la ligne de cases, y dessiné arrondi
     /// au multiple de 32 supérieur (bas) ou diminué de 32 (haut).
     fn row_offset(&mut self, down: bool) -> u16 {
-        self.helper(if down { 0x32c2a } else { 0x32c5e }, |s| {
-            let mut y = s.get(cam::DRAWN_Y);
-            let page_source = if down {
-                if !pris!(s, y & 0x1f == 0) {
-                    y = y.wrapping_add(0x20);
-                }
-                y.wrapping_add(0x100)
-            } else {
-                y = y.wrapping_sub(0x20) & 0x7ff;
-                y
-            };
-            0x3800u16.wrapping_sub((page_source & 0x700) << 3).wrapping_add(0x1c - ((y & 0xe0) >> 3))
-        })
+        let mut y = self.get(cam::DRAWN_Y);
+        let page_source = if down {
+            if !(y & 0x1f == 0) {
+                y = y.wrapping_add(0x20);
+            }
+            y.wrapping_add(0x100)
+        } else {
+            y = y.wrapping_sub(0x20) & 0x7ff;
+            y
+        };
+        0x3800u16.wrapping_sub((page_source & 0x700) << 3).wrapping_add(0x1c - ((y & 0xe0) >> 3))
+    
     }
 
     /// 0x32c8a / 0x32c96 : colonne (x - 0x20 ou x + 0x180) à gauche / à droite de l'écran.
     fn column_x(&mut self, right: bool) -> u16 {
-        self.helper(if right { 0x32c96 } else { 0x32c8a }, |s| {
-            let x = s.get(cam::DRAWN_X);
-            if right { x.wrapping_add(0x180) } else { x.wrapping_sub(0x20) }
-        })
+        let x = self.get(cam::DRAWN_X);
+        if right { x.wrapping_add(0x180) } else { x.wrapping_sub(0x20) }
+    
     }
 
     /// 0x32ca2 (bas) / 0x32cea (haut) : curseur de carte pour la ligne du bas / du haut.
     fn row_cursor(&mut self, down: bool) {
-        self.helper(if down { 0x32ca2 } else { 0x32cea }, |s| {
-            let mut y = s.get(cam::DRAWN_Y);
-            let mut step = s.get(cam::ROW_STEP);
-            let (distance, nibble_source) = if down {
-                if !pris!(s, y & 0x1f == 0) {
-                    y = y.wrapping_add(0x20);
-                }
-                let mut distance = y.wrapping_add(0x100);
-                if !pris!(s, distance as i16 >= 0) {
-                    distance = distance.wrapping_neg();
-                    step = step.wrapping_neg();
-                }
-                (distance, y)
-            } else {
-                let mut above = y.wrapping_sub(0x20);
-                if !pris!(s, above as i16 >= 0) {
-                    above = 0;
-                }
-                (above, above)
-            };
-            let strips = distance >> 8;
-            let head = if down { 0x32cce } else { 0x32d06 };
-            s.x.mark(head);
-            s.x.repeat(head, strips as u32 + 1);
-            s.set(cam::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
-            s.set(cam::CURSOR_OFFSET, 0x1c - ((nibble_source & 0xe0) >> 3));
-        });
+        let mut y = self.get(cam::DRAWN_Y);
+        let mut step = self.get(cam::ROW_STEP);
+        let (distance, nibble_source) = if down {
+            if !(y & 0x1f == 0) {
+                y = y.wrapping_add(0x20);
+            }
+            let mut distance = y.wrapping_add(0x100);
+            if !(distance as i16 >= 0) {
+                distance = distance.wrapping_neg();
+                step = step.wrapping_neg();
+            }
+            (distance, y)
+        } else {
+            let mut above = y.wrapping_sub(0x20);
+            if !(above as i16 >= 0) {
+                above = 0;
+            }
+            (above, above)
+        };
+        let strips = distance >> 8;
+        self.set(cam::CURSOR_ROW, step.wrapping_mul(strips).wrapping_neg());
+        self.set(cam::CURSOR_OFFSET, 0x1c - ((nibble_source & 0xe0) >> 3));
+    
     }
 
     /// 0x32d3c (colonne droite) / 0x32d22 (colonne gauche) : avance le curseur de la colonne ajoutée ;
     /// le décalage s'additionne sur l'octet bas seulement (sans retenue).
     fn cursor_for_column(&mut self, right: bool) {
-        self.helper(if right { 0x32d3c } else { 0x32d22 }, |s| {
-            let x = s.get(cam::DRAWN_X);
-            let column = if right { x.wrapping_add(0x180) } else { x.wrapping_sub(0x20) } & 0xffe0;
-            let low = s.x.v.rd8(s.cam + cam::CURSOR_OFFSET + 1).wrapping_add(column as u8);
-            s.x.v.wr8(s.cam + cam::CURSOR_OFFSET + 1, low);
-            let strip = if right { column >> 8 } else { (column >> 8) as u8 as i8 as u16 };
-            s.add(cam::CURSOR_ROW, strip);
-        });
+        let x = self.get(cam::DRAWN_X);
+        let column = if right { x.wrapping_add(0x180) } else { x.wrapping_sub(0x20) } & 0xffe0;
+        let low = rd8(self.x.b, self.cam + cam::CURSOR_OFFSET + 1).wrapping_add(column as u8);
+        wr8(self.x.b, self.cam + cam::CURSOR_OFFSET + 1, low);
+        let strip = if right { column >> 8 } else { (column >> 8) as u8 as i8 as u16 };
+        self.add(cam::CURSOR_ROW, strip);
+    
     }
 
     /// 0x32d54 : adresse en ROM de la bande de la carte désignée par le curseur.
     fn strip_address(&mut self) -> u32 {
-        let stage = self.x.v.rd8(self.a5 + STAGE) as u32;
-        self.helper(0x32d54, |s| {
-            let table = (s.x.v.prog16(ROW_TABLES_3 + 4 * stage) as u32) << 16 | s.x.v.prog16(ROW_TABLES_3 + 4 * stage + 2) as u32;
-            let strip = s.get(cam::CURSOR_ROW).wrapping_mul(2) as i16 as u32;
-            let first = s.x.v.rd16(table.wrapping_add(strip)) as u32;
-            MAP_3 + (first << 8)
-        })
+        let stage = rd8(self.x.b, self.a5 + STAGE) as u32;
+        let table = (crate::mem::prog16(self.x.b, ROW_TABLES_3 + 4 * stage) as u32) << 16 | crate::mem::prog16(self.x.b, ROW_TABLES_3 + 4 * stage + 2) as u32;
+        let strip = self.get(cam::CURSOR_ROW).wrapping_mul(2) as i16 as u32;
+        let first = rd16(self.x.b, table.wrapping_add(strip)) as u32;
+        MAP_3 + (first << 8)
+    
     }
 
     // --- recopie ---
@@ -668,11 +540,11 @@ impl Camera2<'_> {
     /// Case de la carte à la position `at` ; `banks` : bits d'adresse qui choisissent la banque.
     fn map_cell(&mut self, at: u32, banks: u32) -> u32 {
         let off = at.wrapping_sub(MAP_3);
-        let bank = self.x.v.rd32(BANKS_3 + ((off >> 16 & banks) << 2));
+        let bank = rd32(self.x.b, BANKS_3 + ((off >> 16 & banks) << 2));
         let c = off >> 2;
-        let index = self.x.v.rd16(MAP_3 + (c & 6) + (c >> 1 & !7)) as u32;
+        let index = rd16(self.x.b, MAP_3 + (c & 6) + (c >> 1 & !7)) as u32;
         let sub = (off as u16 >> 2 & 8) as u32 + (off & 4);
-        self.x.v.rd32(bank.wrapping_add(index << 4).wrapping_add(sub)).wrapping_add(MAP_TILE_OFFSET_3)
+        rd32(self.x.b, bank.wrapping_add(index << 4).wrapping_add(sub)).wrapping_add(MAP_TILE_OFFSET_3)
     }
 
     /// Colonne de 11 cases à droite (`right`) ou à gauche de l'écran, écrite de haut en bas.
@@ -681,7 +553,7 @@ impl Camera2<'_> {
         let old = self.get(cam::DRAWN_X);
         let drawn = old.wrapping_add(if right { 0x20 } else { 0x20u16.wrapping_neg() });
         self.set(cam::DRAWN_X, drawn);
-        if !right && pris!(self, old <= 0x20) {
+        if !right && (old <= 0x20) {
             return Step::Return;
         }
         let d3 = self.row_offset(true);
@@ -695,14 +567,12 @@ impl Camera2<'_> {
         a2 = a2.wrapping_add(offset as i16 as u32);
         a1 = a1.wrapping_add(d3 as i16 as u32);
         let wrap_offset = offset & 0xe0;
-        let head = if right { 0x3292a } else { 0x329fc };
-        for i in 0..COLUMN_CELLS_3 {
-            self.x.mark(head);
+        for _ in 0..COLUMN_CELLS_3 {
             let cell = self.map_cell(a2, 0xf);
             a2 += 4;
-            self.x.v.wr32(a1, cell);
+            wr32(self.x.b, a1, cell);
             a1 += 4;
-            if !pris!(self, a1 as u16 & 0x1f != 0) {
+            if !(a1 as u16 & 0x1f != 0) {
                 // fin de colonne de la couche : bande suivante de la carte, colonne suivante de la couche
                 let step = self.get(cam::ROW_STEP);
                 self.add(cam::CURSOR_ROW, step);
@@ -710,11 +580,10 @@ impl Camera2<'_> {
                 let here = a1 as u16 & 0x3fe0;
                 a1 = a1.wrapping_sub(here as i16 as u32);
                 a1 = a1.wrapping_add((here.wrapping_add(0x7e0) & 0x3fe0) as i16 as u32);
-                if !right && !pris!(self, (a1 as i32) < hw::PALETTES as i32) {
+                if !right && !((a1 as i32) < hw::PALETTES as i32) {
                     a1 = a1.wrapping_sub(0x4000);
                 }
             }
-            pris!(self, i + 1 < COLUMN_CELLS_3);
         }
         Step::Continue
     }
@@ -726,10 +595,10 @@ impl Camera2<'_> {
         let drawn = old.wrapping_add(if down { 0x20 } else { 0x20u16.wrapping_neg() });
         self.set(cam::DRAWN_Y, drawn);
         if !down {
-            if pris!(self, old <= 0x20) {
+            if old <= 0x20 {
                 return Step::Return;
             }
-            if pris!(self, drawn as i16 <= 0) {
+            if drawn as i16 <= 0 {
                 return Step::Continue;
             }
         }
@@ -741,19 +610,16 @@ impl Camera2<'_> {
         self.cursor_for_column(false);
         let mut a2 = self.strip_address();
         let mut offset = self.get(cam::CURSOR_OFFSET);
-        let head = if down { 0x32ad0 } else { 0x32b9e };
-        for i in 0..ROW_CELLS_3 {
-            self.x.mark(head);
+        for _ in 0..ROW_CELLS_3 {
             let cell = self.map_cell(a2.wrapping_add(offset as u32), 1);
-            self.x.v.wr32(a1.wrapping_add(column as i16 as u32), cell);
+            wr32(self.x.b, a1.wrapping_add(column as i16 as u32), cell);
             column = column.wrapping_add(0x20) & 0x7e0;
             offset = offset.wrapping_add(0x20);
-            if !pris!(self, offset & 0xe0 != 0) {
+            if !(offset & 0xe0 != 0) {
                 offset = offset.wrapping_sub(0x100);
                 self.add(cam::CURSOR_ROW, 1);
                 a2 = self.strip_address();
             }
-            pris!(self, i + 1 < ROW_CELLS_3);
         }
         Step::Continue
     }
@@ -824,32 +690,28 @@ pub(crate) fn creep(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
 }
 
 const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs: crate::regs::CCR, exact_cost: true }
+    Native { entry, name, run, touches_sound: false, outputs: crate::regs::CCR }
 }
 
 pub const PARALLAX_QUARTER: Native = Native {
-    cost: |_, b| crate::video::ligne_droite(b, 0x33178),
     ..leaf(0x33178, "decor_parallaxe_quart", |c, b| {
         parallax_quarter(c, b);
         rts(c, b)
     })
 };
 pub const PARALLAX_THREE_QUARTERS: Native = Native {
-    cost: |_, b| crate::video::ligne_droite(b, 0x33196),
     ..leaf(0x33196, "decor_parallaxe_trois_quarts", |c, b| {
         parallax_three_quarters(c, b);
         rts(c, b)
     })
 };
 pub const CREEP_6: Native = Native {
-    cost: |_, b| crate::video::ligne_droite(b, 0x331e8),
     ..leaf(0x331e8, "decor_avance_6", |c, b| {
         creep(c, b, 6);
         rts(c, b)
     })
 };
 pub const CREEP_3: Native = Native {
-    cost: |_, b| crate::video::ligne_droite(b, 0x3326c),
     ..leaf(0x3326c, "decor_avance_3", |c, b| {
         creep(c, b, 3);
         rts(c, b)
@@ -964,11 +826,9 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const FOLLOW_PLAYERS_Y: Native = Native {
     entry: 0x31616,
     name: "camera_suit_joueurs_y",
-    cost: |_, _| 200,
     run: follow_players_y,
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: false,
 };
 
 /// 0x33e20 : met à jour les deux caméras. La première mémorise sa cible précédente (+0x26, +0x2a)
@@ -1019,11 +879,9 @@ fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const RESET_CAMERAS: Native = Native {
     entry: 0x33aa6,
     name: "cameras_depart",
-    cost: |_, _| 300,
     run: reset_cameras,
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: false,
 };
 
 /// 0x33b24 : caméras au retour d'une zone annexe (porte de sortie SET 7 et portes 27, 29, avant qu'elles ne
@@ -1083,20 +941,16 @@ fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const RETURN_CAMERAS: Native = Native {
     entry: 0x33b24,
     name: "cameras_retour",
-    cost: |_, _| 300,
     run: return_cameras,
     touches_sound: false,
     // appelée par les portes (natives), qui ne relisent aucun registre
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const UPDATE_CAMERAS: Native = Native {
     entry: 0x33e20,
     name: "cameras_mise_a_jour",
-    cost: |_, _| 100,
     run: update_cameras,
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: false,
 };

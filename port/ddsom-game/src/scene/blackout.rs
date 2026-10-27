@@ -148,7 +148,6 @@ fn script(x: &mut Ctx) -> Flow {
 pub const BLACKOUT: Native = Native {
     entry: 0xf7ecc,
     name: "scene_blackout",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
@@ -157,7 +156,6 @@ pub const BLACKOUT: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[BLACKOUT, BLACKOUT_FADED, BLACKOUT_CLEARED, BLACKOUT_FINALE_1, BLACKOUT_FINALE_2];

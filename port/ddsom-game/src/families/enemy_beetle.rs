@@ -833,5 +833,5 @@ fn free(x: &mut Cx) {
 }
 
 handlers! {
-    0x65ae8 "enemy_9" 600 run,
+    0x65ae8 "enemy_9" run,
 }

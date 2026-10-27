@@ -1009,7 +1009,7 @@ fn attack_fx_sparks(x: &mut Cx) {
 }
 
 handlers! {
-    0xabeea "effct_attaque" 300 attack_fx,
-    0xad63e "effct_radeau" 300 raft,
-    0xad866 "effct_passage" 300 gate,
+    0xabeea "effct_attaque" attack_fx,
+    0xad63e "effct_radeau" raft,
+    0xad866 "effct_passage" gate,
 }

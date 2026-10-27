@@ -564,5 +564,5 @@ fn hit(x: &mut Cx) {
 }
 
 handlers! {
-    0x76f0e "enemy_25" 700 run,
+    0x76f0e "enemy_25" run,
 }

@@ -14,7 +14,6 @@ use m68k::{Bus, Cpu, SR_C, SR_N, SR_X, SR_Z};
 
 use super::Obj;
 use crate::mem::{rd16, rd8, rts};
-use crate::timing::path_cycles;
 use crate::{regs, Native};
 
 /// Un axe du mouvement : décalages de la vitesse, de l'accélération et de la position.
@@ -153,11 +152,9 @@ macro_rules! straight_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            cost: |_, b| path_cycles(b, $entry, 0, |_| false),
             run: $run,
             touches_sound: false,
             outputs: $outputs,
-            exact_cost: true,
         };
     };
 }
@@ -237,11 +234,9 @@ fn pause_hook(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const PAUSE_HOOK: Native = Native {
     entry: 0x29ea,
     name: "obj_pause_hook",
-    cost: |_, b| path_cycles(b, 0x29ea, 0, |_| false),
     run: pause_hook,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 /// 0xf1bfc : compteurs de fin de handler. Un octet négatif en `COUNTER_53` est remis à zéro ; le
@@ -281,19 +276,7 @@ fn countdowns(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const COUNTDOWNS: Native = Native {
     entry: 0xf1bfc,
     name: "obj_tick_counters",
-    cost: |c, b| {
-        let obj = Obj(c.a[0]);
-        let non_negative = (obj.u8(b, Obj::COUNTER_53) as i8) >= 0;
-        let left = obj.u8(b, Obj::COUNTDOWN);
-        let path = non_negative as u64 | (left == 0) as u64 * 2 | (left as i8 > 1) as u64 * 4;
-        path_cycles(b, 0xf1bfc, path, |pc| match pc {
-            0xf1c00 => non_negative,
-            0xf1c0c => left == 0,
-            _ => left as i8 > 1,
-        })
-    },
     run: countdowns,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };

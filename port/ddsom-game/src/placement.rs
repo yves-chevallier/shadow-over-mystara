@@ -89,18 +89,16 @@ fn load_effect_palette(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
 
 const fn palette(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
     let outputs = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::d(5) | regs::d(6) | regs::a(1) | regs::a(2) | regs::a(3);
-    Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs }
 }
 
 pub const NATIVES: &[Native] = &[
     Native {
         entry: 0x3668,
         name: "joueur_place_au_sol",
-        cost: |_, _| 0,
         run: place_on_free_ground,
         touches_sound: false,
         outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::d(6),
-        exact_cost: false,
     },
     palette(0x3af8, "palette_effet_20", |c, b| load_effect_palette(c, b, 0x20)),
     palette(0x3afe, "palette_effet_0", |c, b| load_effect_palette(c, b, 0)),

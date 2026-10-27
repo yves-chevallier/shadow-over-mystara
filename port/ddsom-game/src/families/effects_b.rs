@@ -460,9 +460,9 @@ fn blinking(x: &mut Cx) {
 }
 
 handlers! {
-    0xb841c "effct_detecteur" 200 pickup_detector,
-    0xb84c6 "effct_victoire" 300 victory_screen,
-    0xb85fa "effct_bulle_createur" 300 bubble,
-    0xb871a "effct_bouton" 300 menu_button,
-    0xb8df2 "effct_clignotement" 300 blinking,
+    0xb841c "effct_detecteur" pickup_detector,
+    0xb84c6 "effct_victoire" victory_screen,
+    0xb85fa "effct_bulle_createur" bubble,
+    0xb871a "effct_bouton" menu_button,
+    0xb8df2 "effct_clignotement" blinking,
 }

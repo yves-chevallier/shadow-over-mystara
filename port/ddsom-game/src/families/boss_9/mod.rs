@@ -611,7 +611,7 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x8a75c "boss_9" 900 run,
+    0x8a75c "boss_9" run,
 }
 
 use super::cx::handlers;

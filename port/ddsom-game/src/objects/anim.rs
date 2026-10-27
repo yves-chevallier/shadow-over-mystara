@@ -26,7 +26,6 @@ use m68k::Cpu;
 use super::motion::{cmp, lsl_word};
 use super::Obj;
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte};
-use crate::timing::path_cycles;
 use crate::{regs, Native};
 
 /// Résultat d'un pas d'animation.
@@ -155,27 +154,6 @@ fn anim_step_long(c: &mut Cpu, b: &mut Cps2Bus) {
     step_native(c, b, true)
 }
 
-/// Chemin pris par un pas : 0 durée non écoulée, 1 suite, 2 fin, 3 saut.
-fn step_path(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let obj = Obj(c.a[0]);
-    if obj.u16(b, Obj::ANIM_TIMER).wrapping_sub(1) != 0 {
-        return 0;
-    }
-    match obj.u8(b, Obj::ANIM_FLAGS) {
-        0 => 1,
-        0xfe => 2,
-        _ => 3,
-    }
-}
-
-fn step_cost(entry: u32, branches: [u32; 3], c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let path = step_path(c, b);
-    // branchements : bne (durée non écoulée), beq (suite), bne (saut)
-    path_cycles(b, entry, path, |pc| {
-        (pc == branches[0] && path == 0) || (pc == branches[1] && path == 1) || (pc == branches[2] && path == 3)
-    })
-}
-
 /// Tables de jeux d'animations par personnage, lues dans le code (espace programme) : un pointeur
 /// par variante `Obj::VARIANT`.
 const CHARACTER_SETS: u32 = 0x2c58;
@@ -236,72 +214,55 @@ fn anim_start_long_by_variant(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const ANIM_START_INDEXED: Native = Native {
     entry: 0x1a32,
     name: "anim_start_indexed",
-    cost: |_, b| path_cycles(b, 0x1a32, 0, |_| false),
     run: anim_start_indexed,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const ANIM_START: Native = Native {
     entry: 0x1a3c,
     name: "anim_start",
-    cost: |_, b| path_cycles(b, 0x1a3c, 0, |_| false),
     run: anim_start,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const ANIM_STEP: Native = Native {
     entry: 0x1a56,
     name: "anim_step",
-    cost: |c, b| step_cost(0x1a56, [0x1a5a, 0x1a64, 0x1a6a], c, b),
     run: anim_step,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const ANIM_STEP_LONG: Native = Native {
     entry: 0x2d58,
     name: "anim_step_long",
-    cost: |c, b| step_cost(0x2d58, [0x2d5c, 0x2d66, 0x2d6c], c, b),
     run: anim_step_long,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const ANIM_START_LONG_DOUBLE: Native = Native {
     entry: 0x2c16,
     name: "anim_start_long_double",
-    cost: |c, b| {
-        let weapon = rd8(b, c.a[0] + 0x68) != 0;
-        path_cycles(b, 0x2c16, weapon as u64, |_| weapon)
-    },
     run: anim_start_long_double,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const ANIM_START_LONG_BY_CHAR: Native = Native {
     entry: 0x2c88,
     name: "anim_start_long_by_char",
-    cost: |_, b| path_cycles(b, 0x2c88, 0, |_| false),
     run: anim_start_long_by_char,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const ANIM_START_LONG_BY_VARIANT: Native = Native {
     entry: 0x2cf0,
     name: "anim_start_long_by_variant",
-    cost: |_, b| path_cycles(b, 0x2cf0, 0, |_| false),
     run: anim_start_long_by_variant,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };

@@ -1130,13 +1130,13 @@ mod splinter72 {
 }
 
 handlers! {
-    0xa6efa "eshl_64" 250 flame64::run,
-    0xa72c4 "eshl_65" 200 rocks65::run,
-    0xa75c6 "eshl_66" 220 shard66::run,
-    0xa78c2 "eshl_67" 200 barrel67::run,
-    0xa7b76 "eshl_68" 220 stone68::run,
-    0xa7e30 "eshl_69" 160 bouncer69::run,
-    0xa801a "eshl_70" 120 gate70::run,
-    0xa81ca "eshl_71" 180 ball71::run,
-    0xa838e "eshl_72" 160 splinter72::run,
+    0xa6efa "eshl_64" flame64::run,
+    0xa72c4 "eshl_65" rocks65::run,
+    0xa75c6 "eshl_66" shard66::run,
+    0xa78c2 "eshl_67" barrel67::run,
+    0xa7b76 "eshl_68" stone68::run,
+    0xa7e30 "eshl_69" bouncer69::run,
+    0xa801a "eshl_70" gate70::run,
+    0xa81ca "eshl_71" ball71::run,
+    0xa838e "eshl_72" splinter72::run,
 }

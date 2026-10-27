@@ -482,5 +482,5 @@ fn dead(x: &mut Cx) {
 }
 
 handlers! {
-    0x5f792 "enemy_5" 800 run,
+    0x5f792 "enemy_5" run,
 }

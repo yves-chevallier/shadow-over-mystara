@@ -529,18 +529,18 @@ mod talk {
 }
 
 handlers! {
-    0x50b9c "peff_42" 300 item::run,
+    0x50b9c "peff_42" item::run,
 }
 
 /// Interprètes du dialogue : appelés par le comptoir (PEFF 43) avec A0 = le comptoir, A2 = le client ; ils
 /// gardent A1 et D6 (la boucle de l'appelant les relit).
 pub const TALK: [crate::Native; 2] = [
-    handler(0x514ac, "boutique_dialogue_a", |_, _| 300, |c, b| {
+    handler(0x514ac, "boutique_dialogue_a", |c, b| {
         let mut x = Cx::new(c, b);
         talk::zone_a(&mut x);
         x.ret();
     }),
-    handler(0x514cc, "boutique_dialogue_b", |_, _| 300, |c, b| {
+    handler(0x514cc, "boutique_dialogue_b", |c, b| {
         let mut x = Cx::new(c, b);
         talk::zone_b(&mut x);
         x.ret();

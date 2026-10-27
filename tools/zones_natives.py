@@ -5,15 +5,15 @@ port/extract/zones_natives.txt (docs/sans-rom.md).
   tools/zones_natives.py <couvert.bin> <lectures.txt>... > port/extract/zones_natives.txt
 
 <couvert.bin> : `couverture_rom <assets> --octets <couvert.bin> --sans data/natives.json` (couverture mot par mot
-des autres fichiers d'assets) ; <lectures.txt> : sorties de `lectures_rom` en mode sans 68000 (DDSOM_SANS_68K=1,
+des autres fichiers d'assets) ; <lectures.txt> : sorties de `lectures_rom` en mode sans 68000 (par défaut,
 DDSOM_COUVERT=<couvert.bin>). Les zones lues non couvertes séparées de moins de ECART octets sont réunies ; chacune
-est attribuée au fichier Rust qui en lit le plus de mots (premier appelant hors des accès génériques mem.rs, vue.rs).
+est attribuée au fichier Rust qui en lit le plus de mots (premier appelant hors des accès génériques mem.rs).
 """
 import collections
 import sys
 
 ECART = 0x10
-GENERIQUES = ('mem.rs', 'vue.rs')
+GENERIQUES = ('mem.rs',)
 # lues avant toute mesure (Cpu::reset au chargement, espace programme) : pile et PC initiaux
 FIXES = [('p', 0x0, 0x8, 'vecteurs')]
 # lecteurs que trois niveaux d'appel ne résolvent pas (accès génériques) : début de zone -> fichier

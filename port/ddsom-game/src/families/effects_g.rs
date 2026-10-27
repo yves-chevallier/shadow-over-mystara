@@ -1290,15 +1290,15 @@ fn fireworks_after_state(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
 
 /// Points de reprise du type 80 (la tâche y revient après avoir cédé la main dans `hero_rockets`).
 pub const RESUMES: &[crate::Native] = &[
-    super::cx::handler(fireworks::AFTER_WAIT, "effct_feu_artifice_reprise", |_, _| 100, fireworks_after_wait),
-    super::cx::handler(fireworks::AFTER_STATE, "effct_feu_artifice_fin", |_, _| 100, fireworks_after_state),
+    super::cx::handler(fireworks::AFTER_WAIT, "effct_feu_artifice_reprise", fireworks_after_wait),
+    super::cx::handler(fireworks::AFTER_STATE, "effct_feu_artifice_fin", fireworks_after_state),
 ];
 
 handlers! {
-    0xb8ef6 "effct_feu_artifice" 300 fireworks,
-    0xb59ea "effct_machine_volante" 200 flyer,
-    0xb5454 "effct_armure" 200 armour,
-    0xb4bec "effct_pluie_debris" 200 debris_rain,
-    0xb7866 "effct_morceau_ennemi" 200 chunk,
-    0xb96dc "effct_eclat_lance" 150 shard,
+    0xb8ef6 "effct_feu_artifice" fireworks,
+    0xb59ea "effct_machine_volante" flyer,
+    0xb5454 "effct_armure" armour,
+    0xb4bec "effct_pluie_debris" debris_rain,
+    0xb7866 "effct_morceau_ennemi" chunk,
+    0xb96dc "effct_eclat_lance" shard,
 }

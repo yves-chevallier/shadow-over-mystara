@@ -421,28 +421,22 @@ pub const NATIVES: &[Native] = &[
     Native {
         entry: 0x81aa4,
         name: "boss_repousse",
-        cost: |_, _| 60,
         run: push_out_of_boss,
         touches_sound: false,
         outputs: regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR,
-        exact_cost: false,
     },
     Native {
         entry: 0x833b6,
         name: "boss_oscillation",
-        cost: |_, _| 80,
         run: bob,
         touches_sound: false,
         outputs: regs::d(0),
-        exact_cost: false,
     },
     Native {
         entry: 0x87048,
         name: "boss_seuil_pv",
-        cost: |_, _| 70,
         run: hp_threshold,
         touches_sound: false,
         outputs: regs::d(0) | regs::d(1),
-        exact_cost: false,
     },
 ];

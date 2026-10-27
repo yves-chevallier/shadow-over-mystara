@@ -327,5 +327,5 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x54914 "enemy_0" 900 run,
+    0x54914 "enemy_0" run,
 }

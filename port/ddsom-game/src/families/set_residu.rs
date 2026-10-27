@@ -130,7 +130,7 @@ mod camera {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, cost: |_, _| 100, run, touches_sound: false, outputs, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs }
 }
 
 pub const NATIVES: &[Native] = &[

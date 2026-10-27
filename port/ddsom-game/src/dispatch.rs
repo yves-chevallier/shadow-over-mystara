@@ -142,7 +142,6 @@ macro_rules! natives {
         pub const $nom: Native = Native {
             entry: $class.entry,
             name: $name,
-            cost: |_, _| 100,
             run: |c, b| {
                 // appelée par un `jsr` d'origine : son adresse de retour est déjà sur la pile
                 $class.update(c, b, None);
@@ -150,16 +149,13 @@ macro_rules! natives {
             },
             touches_sound: false,
             outputs: 0, // les appelants enchaînent sur d'autres appels
-            exact_cost: false,
         };
         pub const $reprise: Native = Native {
             entry: $class.entry + HANDLER_RETURN,
             name: concat!($name, "_reprise"),
-            cost: |_, _| 100,
             run: |c, b| $class.resume(c, b),
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     )*};
 }

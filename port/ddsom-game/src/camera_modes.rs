@@ -1526,7 +1526,7 @@ pub const CAMERA1_UPDATE: Native = camera(0x2ede0, "camera1_mise_a_jour", camera
 pub const CAMERA2_UPDATE: Native = camera(0x32108, "camera2_mise_a_jour", camera2_update);
 
 const fn camera(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs: regs::a(0), exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: regs::a(0) }
 }
 
 /// 0x2824, 0x2860, 0x289c : lance une secousse de la caméra en service (1, ou 2 si `A5+0x36`) dans le
@@ -1553,7 +1553,7 @@ fn start_shake(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
 }
 
 const fn shake_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 60, run, touches_sound: false, outputs: regs::a(1) | regs::CCR, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: regs::a(1) | regs::CCR }
 }
 
 pub const SHAKE_A: Native = shake_native(0x2824, "camera_secousse_54", |c, b| start_shake(c, b, 0x54));

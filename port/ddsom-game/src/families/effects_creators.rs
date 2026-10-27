@@ -883,7 +883,7 @@ fn eshl_rise(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn creator(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, cost: |_, _| 100, run, touches_sound: false, outputs, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs }
 }
 
 /// Déclare les natives : chaque créateur se termine par un RTS.

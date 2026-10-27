@@ -5,9 +5,7 @@
 //! laissant A0 et D7 intacts. `Cx` regroupe le processeur, le bus et l'objet courant, et offre
 //! les appels de sous-routines du moteur d'objets sous des noms lisibles.
 //!
-//! Les sous-routines non réécrites sont exécutées par `crate::call` (durée comprise) ; celles qui
-//! le sont déjà (animation, déplacements, listes triées, sons...) sont des routines natives que
-//! `call` retrouve par leur adresse : leur durée exacte s'ajoute donc à celle du gestionnaire.
+//! Les sous-routines sont exécutées par `crate::call`, qui retrouve leur native par leur adresse.
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -245,16 +243,15 @@ impl<'a> Cx<'a> {
 }
 
 /// Native d'un gestionnaire : contrat de la boucle de dispatch (A0 et D7 conservés).
-pub const fn handler(entry: u32, name: &'static str, cost: fn(&Cpu, &mut Cps2Bus) -> u64, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost, run, touches_sound: false, outputs: regs::a(0) | regs::d(7), exact_cost: false }
+pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
+    Native { entry, name, run, touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
-/// Déclare la table `NATIVES` d'un fichier de types : `adresse "nom" coût chemin::du::gestionnaire`.
-/// Le coût est une estimation de la durée propre du gestionnaire en cycles (hors sous-routines).
+/// Déclare la table `NATIVES` d'un fichier de types : `adresse "nom" chemin::du::gestionnaire`.
 macro_rules! handlers {
-    ($( $entry:literal $name:literal $cost:literal $f:path ),* $(,)?) => {
+    ($( $entry:literal $name:literal $f:path ),* $(,)?) => {
         pub const NATIVES: &[$crate::Native] = &[ $(
-            $crate::families::cx::handler($entry, $name, |_, _| $cost, |c, b| {
+            $crate::families::cx::handler($entry, $name, |c, b| {
                 let mut x = $crate::families::cx::Cx::new(c, b);
                 $f(&mut x);
                 x.ret();

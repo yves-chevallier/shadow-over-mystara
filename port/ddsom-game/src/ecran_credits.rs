@@ -334,7 +334,6 @@ macro_rules! native {
         pub const $nom: Native = Native {
             entry: $entree,
             name: stringify!($nom),
-            cost: |_, _| 200,
             run: |c, b| {
                 let mut x = Ctx::new(c, b);
                 x.c.a[5] = A5;
@@ -343,7 +342,6 @@ macro_rules! native {
             },
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     };
 }

@@ -264,7 +264,7 @@ pub(self) fn slow_tick(x: &mut Cx) {
 }
 
 handlers! {
-    0x9947a "boss_21" 1200 run,
+    0x9947a "boss_21" run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
-    0x9a6d4 "boss_21_releve" 300 hit::recovered,
+    0x9a6d4 "boss_21_releve" hit::recovered,
 }

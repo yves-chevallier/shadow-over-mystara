@@ -197,11 +197,9 @@ fn update_players(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const UPDATE_PLAYERS: Native = Native {
     entry: 0x35292,
     name: "players_update",
-    cost: |_, _| 3_000,
     run: update_players,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Tableau des meilleurs scores : dix entrées de 14 octets en FF0FD0, du meilleur au moins bon.

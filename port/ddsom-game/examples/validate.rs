@@ -1,18 +1,18 @@
 //! Validation de la réécriture sur un scénario, image par image.
 //!
-//! Deux machines rejouent les mêmes entrées, 68000 surcadencé (le jeu finit toujours son travail
-//! dans l'image : il est alors déterminé image par image, quelle que soit la durée de chaque
-//! routine) :
-//!   A : jeu réécrit (routines Rust, code d'origine pour le reste) ;
-//!   B : code d'origine seul.
+//! Deux machines rejouent les mêmes entrées :
+//!   A : le jeu, sans 68000 (natives seules, boucle d'image du noyau, `ddsom_game::install_sans_68k`) ; une
+//!       adresse sans native l'arrête (« ÉCHEC : arrêt sans 68000 ») ;
+//!   B : code d'origine seul, 68000 surcadencé (il finit toujours son travail dans l'image : il est alors
+//!       déterminé image par image).
 //! À chaque image, l'état du jeu (RAM de travail hors piles, GFX RAM, table de sprites, palette)
 //! doit être identique, et la table des tâches Rust du jeu doit valoir celle de la RAM de l'original. `DDSOM_CHECK=1` active en plus le contrôle appel par appel des routines
 //! natives (diagnostic : registres et mémoire comparés à l'original sur une copie).
 //!
-//! `DDSOM_SANS_68K=1` : la machine A tourne sans 68000 (natives seules, boucle d'image du noyau,
-//! `ddsom_game::install_sans_68k`) ; une adresse sans native l'arrête (« ÉCHEC : arrêt sans 68000 »).
+//! `DDSOM_HYBRIDE=1` (diagnostic) : la machine A est le mode hybride (routines Rust, code d'origine recompilé
+//! pour le reste, 68000 surcadencé, durée constante par routine Rust) ; elle n'a pas à suivre l'original.
 //!
-//! `DDSOM_ASSETS=<dossier>` (avec `DDSOM_SANS_68K=1`) : la machine A est faite des seules ressources extraites
+//! `DDSOM_ASSETS=<dossier>` (pas en mode hybride) : la machine A est faite des seules ressources extraites
 //! (`ddsom_assets::rebuild::contenus`, aucune ROM lue : jeu sans ROM, docs/sans-rom.md), avec le pilote son Rust ;
 //! la machine B garde les ROMs et le Z80.
 //!
@@ -61,10 +61,10 @@ fn main() {
         m.set_overclock(std::env::var("DDSOM_OVERCLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(OVERCLOCK));
         m
     };
-    let sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    let sans_68k = !std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1");
     let mut ma = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
-            assert!(sans_68k, "DDSOM_ASSETS demande DDSOM_SANS_68K=1 (le programme 68000 n'est pas dans les assets)");
+            assert!(sans_68k, "DDSOM_ASSETS exclut DDSOM_HYBRIDE=1 (le programme 68000 n'est pas dans les assets)");
             let contenus = ddsom_assets::rebuild::contenus(Path::new(&dir)).expect("assets");
             let mut m = cps2::Machine::ddsom(contenus, ee.as_deref());
             m.sound.use_rust_driver();
@@ -170,7 +170,7 @@ fn main() {
     let report = ddsom_game::report();
     for (name, st) in &report {
         let errors = if check {
-            format!(" {:>5} écarts, cycles {} (natif {})", st.mismatches, st.original_cycles, st.native_cycles)
+            format!(" {:>5} écarts", st.mismatches)
         } else {
             String::new()
         };

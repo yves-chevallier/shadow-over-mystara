@@ -77,7 +77,7 @@ fn etat_suivant(ctx: &mut Ctx, o: Obj, sous_etat: u8) {
 /// Un objet créé au-dessus du sol (altitude non nulle) commence par tomber.
 fn en_l_air(ctx: &mut Ctx, o: Obj) -> bool {
     let z = o.u16(ctx.b, Obj::Z);
-    !ctx.pris(z == 0) // tst.w (0xc,A0) ; beq : au sol
+    !(z == 0) // tst.w (0xc,A0) ; beq : au sol
 }
 
 /// Marque l'objet de collection `+0x5d` comme ramassé.
@@ -92,16 +92,16 @@ fn dans_la_vue(ctx: &mut Ctx, o: Obj) {
     let (cam_x, cam_y) = ctx.camera();
     let y_min = cam_y.wrapping_add(0x20);
     let y = o.u16(ctx.b, Obj::Y);
-    if !ctx.pris(y_min < y) {
+    if !(y_min < y) {
         o.set_u16(ctx.b, Obj::Y, y_min);
     }
     let x_min = cam_x.wrapping_add(0x18);
     let x = o.u16(ctx.b, Obj::X);
-    if !ctx.pris(x_min as i16 <= x as i16) {
+    if !(x_min as i16 <= x as i16) {
         o.set_u16(ctx.b, Obj::X, x_min);
     } else {
         let x_max = cam_x.wrapping_add(0x168);
-        if !ctx.pris(x_max > x) {
+        if !(x_max > x) {
             o.set_u16(ctx.b, Obj::X, x_max);
         }
     }
@@ -112,17 +112,17 @@ fn dans_la_vue(ctx: &mut Ctx, o: Obj) {
 fn expire_et_clignote(ctx: &mut Ctx, o: Obj) {
     let reste = o.u16(ctx.b, champ::DUREE).wrapping_sub(1);
     o.set_u16(ctx.b, champ::DUREE, reste);
-    if !ctx.pris(reste as i16 >= 0) {
+    if !(reste as i16 >= 0) {
         o.set_u8(ctx.b, Obj::STATE, etat::LIBERE);
         o.set_u8(ctx.b, Obj::ACTIVE, 2);
     }
-    if ctx.pris(reste > 0x3c) {
+    if reste > 0x3c {
         return;
     }
     let phase = reste.wrapping_add(ctx.loop_counter());
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
-    if ctx.pris(phase & 1 == 0) {
+    if phase & 1 == 0 {
         return;
     }
     o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
@@ -145,12 +145,12 @@ fn anime_et_trie(ctx: &mut Ctx, jeu: u32, numero: u8) {
 /// ramassage forcé (`RAMASSE` = 2). Renvoie faux tant qu'il faut attendre.
 fn ramassage_pret(ctx: &mut Ctx, o: Obj) -> bool {
     let ramasse = o.u8(ctx.b, champ::RAMASSE);
-    if ctx.pris(ramasse == 2) {
+    if ramasse == 2 {
         return true;
     }
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     let pret = joueur.u8(ctx.b, 0x33) != 0;
-    !ctx.pris(!pret)
+    pret
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -206,7 +206,7 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
         sous::CHUTE => {
             ctx.jsr(rom::MOVE_XYZ);
             let en_vol = ctx.gt();
-            if !ctx.pris(en_vol) {
+            if !en_vol {
                 // posé : attente au sol
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, tresor::DUREE_AU_SOL);
@@ -219,16 +219,16 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
         sous::ATTENTE => {
             // en cinématique, un objet resté à gauche de l'écran disparaît
             let cinematique = ctx.ram8(0x44) != 0;
-            if !ctx.pris(!cinematique) {
+            if cinematique {
                 let limite = ctx.ram16(0x506).wrapping_sub(0x40);
                 let x = o.u16(ctx.b, Obj::X);
-                if !ctx.pris((limite as i16) < x as i16) {
+                if !((limite as i16) < x as i16) {
                     o.set_u8(ctx.b, Obj::STATE, etat::HORS_ECRAN);
                     return;
                 }
             }
             let ramasse = o.u8(ctx.b, champ::RAMASSE);
-            if !ctx.pris(ramasse == 0) {
+            if !(ramasse == 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
             }
             expire_et_clignote(ctx, o);
@@ -253,7 +253,7 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
 fn tresor(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -283,8 +283,6 @@ mod conso {
     pub const ANIMATIONS: u32 = 0x1bee16;
     pub const DUREE_INITIALE: u16 = 0x960;
     pub const DUREE_APRES_CHUTE: u16 = 0x708;
-    /// Instruction `jsr (A1)` qui appelle l'effet du ramassage.
-    pub const APPEL_EFFET: u32 = 0xdafa4;
     /// Effets de ramassage (adresses d'origine, lues dans la table `EFFETS`).
     pub const NOURRITURE: u32 = 0xdafd0;
     pub const POTION_B: u32 = 0xdb044;
@@ -320,10 +318,9 @@ fn conso_init(ctx: &mut Ctx, o: Obj) {
 
 /// Effet d'une nourriture : soigne le joueur ; à pleine santé, événement de score et son.
 fn effet_nourriture(ctx: &mut Ctx, o: Obj) {
-    ctx.at(conso::NOURRITURE);
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     let (vie_max, vie) = (joueur.u16(ctx.b, 0x60), joueur.u16(ctx.b, 0x62));
-    if !ctx.pris(vie_max != vie) {
+    if !(vie_max != vie) {
         ctx.c.d[1] = (joueur.u8(ctx.b, 2) as u32) << 8;
         ctx.c.d[0] = 0x11 + ctx.c.d[1];
         ctx.jsr(appel::EVENEMENT);
@@ -332,18 +329,17 @@ fn effet_nourriture(ctx: &mut Ctx, o: Obj) {
         return;
     }
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    let soin: u16 = if ctx.pris(variante == 0) { 0x14 } else { 0x28 };
+    let soin: u16 = if variante == 0 { 0x14 } else { 0x28 };
     let vie = vie.wrapping_add(soin);
     joueur.set_u16(ctx.b, 0x62, vie);
-    if !ctx.pris(vie <= vie_max) {
+    if !(vie <= vie_max) {
         joueur.set_u16(ctx.b, 0x62, vie_max);
     }
     ctx.jsr(appel::FIN_EFFET);
 }
 
 /// Potions : le joueur reçoit un compte à rebours de 0x2d0 images et des drapeaux +0x180..0x184.
-fn effet_potion(ctx: &mut Ctx, o: Obj, adresse: u32, octets: &[(u32, u8)]) {
-    ctx.at(adresse);
+fn effet_potion(ctx: &mut Ctx, o: Obj, octets: &[(u32, u8)]) {
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     joueur.set_u16(ctx.b, 0x180, 0x2d0);
     for &(off, v) in octets {
@@ -358,21 +354,20 @@ fn conso_effet(ctx: &mut Ctx, o: Obj) {
     // registres de l'original au moment du `jsr (A1)` (utiles si la variante est hors table)
     ctx.c.d[0] = variante << 2;
     ctx.c.a[1] = cible;
-    ctx.jsr_indirect(conso::APPEL_EFFET, |ctx| match cible {
+    match cible {
         conso::NOURRITURE => effet_nourriture(ctx, o),
-        conso::POTION_B => effet_potion(ctx, o, cible, &[(1, 1), (0x183, 1), (0x184, 0), (0x182, 0)]),
-        conso::POTION_A => effet_potion(ctx, o, cible, &[(0x184, 1), (0x183, 0), (0x182, 0)]),
-        conso::SANS_EFFET => ctx.at(cible),
+        conso::POTION_B => effet_potion(ctx, o, &[(1, 1), (0x183, 1), (0x184, 0), (0x182, 0)]),
+        conso::POTION_A => effet_potion(ctx, o, &[(0x184, 1), (0x183, 0), (0x182, 0)]),
+        conso::SANS_EFFET => {}
         conso::COMPTEUR => {
-            ctx.at(cible);
             let n = ctx.ram8(0x45).wrapping_add(1);
             ctx.set_ram8(0x45, n);
-            if !ctx.pris(n <= 9) {
+            if !(n <= 9) {
                 ctx.set_ram8(0x45, 9);
             }
         }
         _ => ctx.deleguer(cible),
-    });
+    }
     marque_ramasse(ctx, o);
 }
 
@@ -383,7 +378,7 @@ fn conso_actif(ctx: &mut Ctx, o: Obj) {
         sous::CHUTE => {
             ctx.jsr(rom::MOVE_XYZ);
             let en_vol = ctx.gt();
-            if !ctx.pris(en_vol) {
+            if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, conso::DUREE_APRES_CHUTE);
                 o.set_u32(ctx.b, Obj::Z, 0);
@@ -394,12 +389,12 @@ fn conso_actif(ctx: &mut Ctx, o: Obj) {
         }
         sous::ATTENTE => {
             let ramasse = o.u8(ctx.b, champ::RAMASSE);
-            if !ctx.pris(ramasse == 0) {
+            if !(ramasse == 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
             }
             // seules les variantes 2 et suivantes disparaissent
             let variante = o.u8(ctx.b, Obj::VARIANT);
-            if ctx.pris(variante == 0) || ctx.pris(variante == 1) {
+            if (variante == 0) || (variante == 1) {
                 return;
             }
             expire_et_clignote(ctx, o);
@@ -418,7 +413,7 @@ fn conso_actif(ctx: &mut Ctx, o: Obj) {
 fn conso_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -468,10 +463,8 @@ mod inventaire {
 /// `0xdc28a` : recrée en l'air l'objet `ancien` (remplacé dans l'inventaire) avec sa quantité.
 fn objet_expulse(ctx: &mut Ctx, o: Obj, joueur: Obj, ancien: u8, quantite: u8) {
     let Some(n) = ctx.alloc(&pools::ITEM) else {
-        ctx.pris(true); // bcs : pool plein
         return;
     };
-    ctx.pris(false);
     n.set_u8(ctx.b, Obj::ACTIVE, 1);
     n.set_u8(ctx.b, champ::MODE, 1);
     n.set_u8(ctx.b, inventaire::QUANTITE, quantite);
@@ -515,10 +508,10 @@ fn inventaire_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     let id = ctx.rom8(inventaire::FICHES + ligne);
     let classe = joueur.u8(ctx.b, 3) >> 1;
     let interdit = ctx.rom8(inventaire::FICHES + 1 + (classe.wrapping_add(ligne as u8)) as u32);
-    if ctx.pris(interdit != 0) {
+    if interdit != 0 {
         return ramassage_refuse(ctx, o);
     }
-    if !ctx.pris(id != 0x23) && ctx.pris(classe == 2) {
+    if !(id != 0x23) && (classe == 2) {
         evenement_inventaire(ctx, joueur);
         return false;
     }
@@ -526,18 +519,17 @@ fn inventaire_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     // 1. l'objet est déjà porté : la quantité augmente
     for i in 0..6u32 {
         let porte = joueur.u8(ctx.b, inventaire::IDENTIFIANTS + i);
-        if ctx.pris(porte != id) {
-            ctx.pris(i < 5); // dbf
+        if porte != id {
             continue;
         }
         let n = joueur.u8(ctx.b, inventaire::QUANTITES + i).wrapping_add(quantite);
         joueur.set_u8(ctx.b, inventaire::QUANTITES + i, n);
         let variante = o.u8(ctx.b, Obj::VARIANT);
         // variantes à exemplaire unique : 7, 0x10, 0x11
-        let unique = ctx.pris(variante == 7) || ctx.pris(variante == 0x10) || ctx.pris(variante == 0x11);
+        let unique = (variante == 7) || (variante == 0x10) || (variante == 0x11);
         if unique {
             joueur.set_u8(ctx.b, inventaire::QUANTITES + i, 1);
-        } else if !ctx.pris(n <= 9) {
+        } else if !(n <= 9) {
             joueur.set_u8(ctx.b, inventaire::QUANTITES + i, 9);
         } else {
             return false;
@@ -548,8 +540,7 @@ fn inventaire_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     // 2. un emplacement vide
     for i in 0..6u32 {
         let porte = joueur.u8(ctx.b, inventaire::IDENTIFIANTS + i);
-        if ctx.pris(porte != inventaire::VIDE) {
-            ctx.pris(i < 5);
+        if porte != inventaire::VIDE {
             continue;
         }
         joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS + i, id);
@@ -560,10 +551,9 @@ fn inventaire_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     let premier = joueur.u8(ctx.b, inventaire::IDENTIFIANTS);
     for k in 0..8u32 {
         let verrou = ctx.rom8(inventaire::VERROUILLES + ((classe as u32) << 3) + k);
-        if !ctx.pris(premier != verrou) {
+        if !(premier != verrou) {
             return ramassage_refuse(ctx, o);
         }
-        ctx.pris(k < 7);
     }
     let ancienne_quantite = joueur.u8(ctx.b, inventaire::QUANTITES);
     joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS, id);
@@ -575,10 +565,10 @@ fn inventaire_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
 fn inventaire_init(ctx: &mut Ctx, o: Obj) {
     let variante = o.u8(ctx.b, Obj::VARIANT);
     let mode = o.u8(ctx.b, champ::MODE);
-    if ctx.pris(mode != 0) {
+    if mode != 0 {
         // objet jeté : attend la fin du délai
         let delai = o.u8(ctx.b, inventaire::DELAI);
-        if !ctx.pris(delai == 0) {
+        if !(delai == 0) {
             o.set_u8(ctx.b, inventaire::DELAI, delai - 1);
             return;
         }
@@ -614,11 +604,11 @@ fn inventaire_init(ctx: &mut Ctx, o: Obj) {
 /// Sous-état 6 : l'objet refusé est rejeté en arc vers l'extérieur de l'écran puis retombe.
 fn inventaire_rejet(ctx: &mut Ctx, o: Obj) {
     let lance = o.u8(ctx.b, champ::SOUS_SOUS_ETAT) != 0;
-    if !ctx.pris(lance) {
+    if !lance {
         // attente du délai, puis lancer
         let delai = o.u8(ctx.b, inventaire::DELAI).wrapping_sub(1);
         o.set_u8(ctx.b, inventaire::DELAI, delai);
-        if ctx.pris(delai != 0) {
+        if delai != 0 {
             return;
         }
         ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
@@ -632,7 +622,7 @@ fn inventaire_rejet(ctx: &mut Ctx, o: Obj) {
         let (cam_x, _) = ctx.camera();
         let limite = cam_x.wrapping_add(0xc0);
         let x = o.u16(ctx.b, Obj::X);
-        if !ctx.pris(limite as i16 > x as i16) {
+        if !(limite as i16 > x as i16) {
             let v = o.u32(ctx.b, Obj::VX).wrapping_neg();
             o.set_u32(ctx.b, Obj::VX, v);
         }
@@ -641,7 +631,7 @@ fn inventaire_rejet(ctx: &mut Ctx, o: Obj) {
     }
     ctx.jsr(rom::MOVE_XZ);
     let z = o.u16(ctx.b, Obj::Z);
-    if ctx.pris(z as i16 >= 0) {
+    if z as i16 >= 0 {
         return;
     }
     o.set_u8(ctx.b, champ::SOUS_ETAT, sous::ATTENTE);
@@ -657,12 +647,12 @@ fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
         sous::CHUTE => {
             ctx.jsr(rom::MOVE_XYZ);
             let en_vol = ctx.gt();
-            if !ctx.pris(en_vol) {
+            if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, inventaire::DUREE_AU_SOL);
                 o.set_u32(ctx.b, Obj::Z, 0);
                 let mode = o.u8(ctx.b, champ::MODE);
-                if !ctx.pris(mode != 0) {
+                if !(mode != 0) {
                     dans_la_vue(ctx, o);
                     ctx.jsr(appel::SCINTILLEMENT);
                 }
@@ -672,7 +662,7 @@ fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
         }
         sous::ATTENTE => {
             let ramasse = o.u8(ctx.b, champ::RAMASSE);
-            if !ctx.pris(ramasse == 0) {
+            if !(ramasse == 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
             }
             ctx.anim_step();
@@ -681,11 +671,11 @@ fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
         sous::RAMASSE => {
             let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
             let pret = joueur.u8(ctx.b, 0x33) != 0;
-            if ctx.pris(!pret) {
+            if !pret {
                 return;
             }
             let refuse = inventaire_ajoute(ctx, o);
-            if !ctx.pris(refuse) {
+            if !refuse {
                 ajoute_u8(ctx, o, Obj::STATE, 2);
             }
             marque_ramasse(ctx, o);
@@ -698,7 +688,7 @@ fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
 fn inventaire_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -738,7 +728,7 @@ fn bonus_init(ctx: &mut Ctx, o: Obj) {
         etat_suivant(ctx, o, sous::CHUTE);
         o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
         let mode = o.u8(ctx.b, champ::MODE);
-        if !ctx.pris(mode == 0) {
+        if !(mode == 0) {
             let base = bonus::VITESSES + ((mode as u32) << 3);
             for (i, off) in [Obj::VX, Obj::VZ, Obj::AZ, Obj::VY].into_iter().enumerate() {
                 let v = ctx.prog16(base + 2 * i as u32);
@@ -762,7 +752,7 @@ fn bonus_actif(ctx: &mut Ctx, o: Obj) {
             ctx.anim_step();
             ctx.jsr(rom::MOVE_XYZ);
             let en_vol = ctx.gt();
-            if !ctx.pris(en_vol) {
+            if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, bonus::DUREE_AU_SOL);
                 o.set_u32(ctx.b, Obj::Z, 0);
@@ -774,7 +764,7 @@ fn bonus_actif(ctx: &mut Ctx, o: Obj) {
         }
         sous::ATTENTE => {
             let ramasse = o.u8(ctx.b, champ::RAMASSE);
-            if !ctx.pris(ramasse == 0) {
+            if !(ramasse == 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
             }
             ctx.anim_step();
@@ -797,7 +787,7 @@ fn bonus_actif(ctx: &mut Ctx, o: Obj) {
 fn bonus_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -845,8 +835,6 @@ mod scene {
     pub const GUIDE_ANIMATIONS: u32 = 0xdcb6e;
     pub const GUIDE_ANIMATIONS_ARRIVEE: u32 = 0xdcbbc;
     pub const TABLE_VITESSES: u32 = 0x1c65b6;
-    /// Appel de `jsr (d8,PC,Xn)` du guide.
-    pub const GUIDE_APPEL: u32 = 0xdcb88;
     /// Champs.
     pub const DELAI: u32 = 0x4c;
     pub const CIBLE_X: u32 = 0x52;
@@ -876,7 +864,7 @@ fn suit_proprietaire(ctx: &mut Ctx, o: Obj) -> Obj {
     let y = o.u16(ctx.b, Obj::Y).wrapping_sub(1);
     o.set_u16(ctx.b, Obj::Y, y);
     let retourne = o.u8(ctx.b, 0x2c) != 0;
-    let decalage = if ctx.pris(!retourne) { 0 } else { 2 };
+    let decalage = if !retourne { 0 } else { 2 };
     let dx = ctx.prog16(scene::DECALAGES_X + decalage);
     let x = o.u16(ctx.b, Obj::X).wrapping_add(dx);
     o.set_u16(ctx.b, Obj::X, x);
@@ -905,12 +893,12 @@ fn icone_init(ctx: &mut Ctx, o: Obj) {
 /// (`base` : 0 ou 0x10 selon l'appelant, première ou seconde série de sons).
 fn icone_son(ctx: &mut Ctx, o: Obj, base: u32) {
     let en_pause = ctx.ram8(scene::PAUSE) != 0;
-    if ctx.pris(en_pause) {
+    if en_pause {
         return;
     }
     let reste = o.u8(ctx.b, scene::DELAI).wrapping_sub(1);
     o.set_u8(ctx.b, scene::DELAI, reste);
-    if ctx.pris(reste != 0) {
+    if reste != 0 {
         return;
     }
     o.set_u8(ctx.b, scene::DELAI, scene::DELAI_SON);
@@ -931,7 +919,7 @@ fn icone_suivi(ctx: &mut Ctx, o: Obj) {
 /// Vitesses de l'envol (`0xdc7c2`) : retournées avec l'orientation, puis pas d'animation.
 fn icone_envol_vitesse(ctx: &mut Ctx, o: Obj) {
     let flip = o.u8(ctx.b, champ::FLIP) != 0;
-    if !ctx.pris(!flip) {
+    if flip {
         let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
         o.set_u16(ctx.b, Obj::VX, v);
     }
@@ -954,7 +942,7 @@ fn icone_envol(ctx: &mut Ctx, o: Obj) {
         2 => {
             ctx.jsr(rom::MOVE_XZ);
             let z = o.u16(ctx.b, Obj::Z);
-            if !ctx.pris(z as i16 > 0) {
+            if !(z as i16 > 0) {
                 ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
                 o.set_u32(ctx.b, Obj::Z, 0);
             }
@@ -963,7 +951,7 @@ fn icone_envol(ctx: &mut Ctx, o: Obj) {
         6 => {
             ctx.jsr(rom::MOVE_XZ);
             let z = o.u16(ctx.b, Obj::Z);
-            if !ctx.pris(z as i16 > 0) {
+            if !(z as i16 > 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
                 o.set_u8(ctx.b, champ::SOUS_SOUS_ETAT, 0);
@@ -981,18 +969,18 @@ fn icone_envol(ctx: &mut Ctx, o: Obj) {
 /// écoulé (ou revient au suivi si le propriétaire reprend).
 fn icone_attente(ctx: &mut Ctx, o: Obj) {
     let ramasse = o.u8(ctx.b, champ::RAMASSE);
-    if ctx.pris(ramasse == 1) {
+    if ramasse == 1 {
         let pause = ctx.ram8(scene::PAUSE) != 0;
-        if ctx.pris(pause) {
+        if pause {
             o.set_u8(ctx.b, champ::RAMASSE, 0);
         } else {
             ajoute_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, champ::SOUS_ETAT, 0);
             let proprietaire = pointeur(ctx, o, scene::PROPRIETAIRE_2);
             let variante = o.u8(ctx.b, Obj::VARIANT);
-            if !ctx.pris(variante != 2) {
+            if !(variante != 2) {
                 let reserve = proprietaire.u8(ctx.b, 0x31);
-                if !ctx.pris(reserve == 0) {
+                if !(reserve == 0) {
                     o.set_u8(ctx.b, Obj::VARIANT, 0);
                 }
             }
@@ -1002,16 +990,16 @@ fn icone_attente(ctx: &mut Ctx, o: Obj) {
     }
     icone_son(ctx, o, 0x10);
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    if !ctx.pris(variante != 2) {
+    if !(variante != 2) {
         let proprietaire = pointeur(ctx, o, scene::PROPRIETAIRE_2);
         let reserve = proprietaire.u8(ctx.b, 0x31);
-        if !ctx.pris(reserve == 0) {
+        if !(reserve == 0) {
             o.set_u16(ctx.b, scene::MINUTEUR, 1);
         }
     }
     let reste = o.u16(ctx.b, scene::MINUTEUR).wrapping_sub(1);
     o.set_u16(ctx.b, scene::MINUTEUR, reste);
-    if !ctx.pris(reste != 0) {
+    if !(reste != 0) {
         o.set_u8(ctx.b, Obj::VARIANT, 0);
         o.set_u32(ctx.b, Obj::STATE, 0x0400_0000);
     }
@@ -1168,7 +1156,7 @@ fn icone(ctx: &mut Ctx, o: Obj) {
                 _ => ctx.deleguer(cible),
             }
         }
-        4 => ctx.sans_chemin(cible, |ctx| icone_depart(ctx, o)),
+        4 => icone_depart(ctx, o),
         6 => ctx.free(&pools::ITEM),
         _ => ctx.deleguer(cible),
     }
@@ -1188,33 +1176,32 @@ fn guide_cible(ctx: &mut Ctx, o: Obj) {
     for i in 0..4u32 {
         let joueur = Obj(scene::JOUEURS + i * scene::PAS_JOUEUR);
         let actif = joueur.u8(ctx.b, Obj::ACTIVE) != 0;
-        let vivant = !ctx.pris(!actif) && {
+        let vivant = actif && {
             let etat = joueur.u8(ctx.b, Obj::STATE) as i8;
-            !ctx.pris(etat >= 4)
+            !(etat >= 4)
         };
         if vivant {
             let mut dx = o.u16(ctx.b, Obj::X).wrapping_sub(joueur.u16(ctx.b, Obj::X));
-            if !ctx.pris(dx as i16 >= 0) {
+            if !(dx as i16 >= 0) {
                 dx = dx.wrapping_neg();
             }
             let mut dy = o.u16(ctx.b, Obj::Y).wrapping_sub(joueur.u16(ctx.b, Obj::Y));
-            if !ctx.pris(dy as i16 >= 0) {
+            if !(dy as i16 >= 0) {
                 dy = dy.wrapping_neg();
             }
             let distance = dx.wrapping_add(dy);
-            if !ctx.pris(meilleur <= distance) {
+            if !(meilleur <= distance) {
                 meilleur = distance;
                 choisi = joueur.0;
             }
         }
-        ctx.pris(i < 3); // dbf
     }
     o.set_u16(ctx.b, champ::PROPRIETAIRE, choisi as u16);
     let cible = Obj(choisi);
     let y = cible.u16(ctx.b, Obj::Y);
     o.set_u16(ctx.b, scene::CIBLE_Y, y);
     let ecart = cible.u16(ctx.b, Obj::X).wrapping_sub(cam_x);
-    let decalage: u16 = if ctx.pris(ecart <= 0x140) { 0x20 } else { 0x20u16.wrapping_neg() };
+    let decalage: u16 = if ecart <= 0x140 { 0x20 } else { 0x20u16.wrapping_neg() };
     let x = cible.u16(ctx.b, Obj::X).wrapping_add(decalage);
     o.set_u16(ctx.b, scene::CIBLE_X, x);
 }
@@ -1235,7 +1222,7 @@ fn guide_init(ctx: &mut Ctx, o: Obj) {
 fn guide_animation(ctx: &mut Ctx, o: Obj) {
     let mut animation = 0x12;
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    if !ctx.pris(variante == 3) {
+    if !(variante == 3) {
         let mode = o.u8(ctx.b, champ::MODE) as u32;
         animation = ctx.prog8(scene::GUIDE_ANIMATIONS_ARRIVEE + mode);
     }
@@ -1247,7 +1234,7 @@ fn cree_set(ctx: &mut Ctx, type_set: u32) -> Option<Obj> {
     ctx.c.d[0] = type_set;
     ctx.jsr(scene::CREER_SET);
     let echec = ctx.c.cond(5);
-    (!ctx.pris(echec)).then(|| Obj(ctx.c.a[1]))
+    (!echec).then(|| Obj(ctx.c.a[1]))
 }
 
 /// Sous-état 0 du guide : marche vers le point d'arrivée ; arrivé, change d'animation et crée un SET.
@@ -1261,25 +1248,25 @@ fn guide_marche(ctx: &mut Ctx, o: Obj) {
     ctx.natif(&crate::objects::motion::MOVE_BY_TABLE_XY);
     let dx = cible_x.wrapping_sub(o.u16(ctx.b, Obj::X)).wrapping_add(8);
     let dy = cible_y.wrapping_sub(o.u16(ctx.b, Obj::Y)).wrapping_add(8);
-    let arrive = !ctx.pris(dx > 0x10) && !ctx.pris(dy > 0x10);
+    let arrive = !(dx > 0x10) && !(dy > 0x10);
     if arrive {
         ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
         guide_animation(ctx, o);
         o.set_u16(ctx.b, scene::MINUTEUR, 0x3c);
         o.set_u16(ctx.b, scene::CREE, 0);
         let variante = o.u8(ctx.b, Obj::VARIANT);
-        let type_set = if ctx.pris(variante != 3) { 1 } else { 0x26 };
+        let type_set = if variante != 3 { 1 } else { 0x26 };
         if let Some(n) = cree_set(ctx, type_set) {
             o.set_u16(ctx.b, scene::CREE, n.0 as u16);
         }
         let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
         let x = o.u16(ctx.b, Obj::X);
         let x_proprietaire = proprietaire.u16(ctx.b, Obj::X);
-        if !ctx.pris(x > x_proprietaire) {
+        if !(x > x_proprietaire) {
             o.set_u8(ctx.b, 0x2c, 0x20);
         }
         let (a, b) = (o.u8(ctx.b, 0x2c), proprietaire.u8(ctx.b, 0x2c));
-        if !ctx.pris(a != b) {
+        if !(a != b) {
             let v = proprietaire.u8(ctx.b, 0x2c) ^ 0x20;
             proprietaire.set_u8(ctx.b, 0x2c, v);
         }
@@ -1290,16 +1277,16 @@ fn guide_marche(ctx: &mut Ctx, o: Obj) {
 /// Sous-état 2 du guide : attend la fin de la minuterie ou la disparition de l'objet SET créé.
 fn guide_attente(ctx: &mut Ctx, o: Obj) {
     let cree = o.u16(ctx.b, scene::CREE);
-    if !ctx.pris(cree == 0) {
+    if !(cree == 0) {
         let set = pointeur(ctx, o, scene::CREE);
         let fini = set.u8(ctx.b, 0x22) != 0;
-        if !ctx.pris(fini) {
+        if !fini {
             return;
         }
     } else {
         let reste = o.u16(ctx.b, scene::MINUTEUR).wrapping_sub(1);
         o.set_u16(ctx.b, scene::MINUTEUR, reste);
-        if ctx.pris(reste != 0) {
+        if reste != 0 {
             return;
         }
     }
@@ -1311,7 +1298,7 @@ fn guide_attente(ctx: &mut Ctx, o: Obj) {
 /// Sous-état 4 du guide : quand le compteur de scène atteint 0x10, crée un second SET.
 fn guide_second_objet(ctx: &mut Ctx, o: Obj) {
     let compteur = ctx.ram8(scene::COMPTEUR);
-    if ctx.pris(compteur != 0x10) {
+    if compteur != 0x10 {
         return;
     }
     o.set_u16(ctx.b, scene::CREE, 0);
@@ -1327,25 +1314,23 @@ fn guide_second_objet(ctx: &mut Ctx, o: Obj) {
 fn guide_fin(ctx: &mut Ctx, o: Obj) {
     let set = pointeur(ctx, o, scene::CREE);
     let en_cours = set.u8(ctx.b, 0x22) == 0;
-    if !ctx.pris(en_cours) {
+    if !en_cours {
         ajoute_u8(ctx, o, Obj::STATE, 2);
     }
 }
 
 fn guide_actif(ctx: &mut Ctx, o: Obj) {
     let fige = ctx.ram8(scene::SCENE_FIGEE) != 0;
-    if !ctx.pris(fige) {
+    if !fige {
         let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-        ctx.jsr_indirect(scene::GUIDE_APPEL, |ctx| {
-            let cible = ctx.saut_table(scene::GUIDE_SOUS_ETATS, sous_etat as u32);
-            match sous_etat {
-                0 => guide_marche(ctx, o),
-                2 => guide_attente(ctx, o),
-                4 => guide_second_objet(ctx, o),
-                6 => guide_fin(ctx, o),
-                _ => ctx.deleguer(cible),
-            }
-        });
+        let cible = ctx.saut_table(scene::GUIDE_SOUS_ETATS, sous_etat as u32);
+        match sous_etat {
+            0 => guide_marche(ctx, o),
+            2 => guide_attente(ctx, o),
+            4 => guide_second_objet(ctx, o),
+            6 => guide_fin(ctx, o),
+            _ => ctx.deleguer(cible),
+        }
     }
     ctx.reinsert();
 }
@@ -1450,7 +1435,7 @@ fn guide_3(ctx: &mut Ctx, o: Obj) {
 fn scene_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let variante = o.u8(ctx.b, Obj::VARIANT);
@@ -1458,7 +1443,7 @@ fn scene_gestionnaire(ctx: &mut Ctx) {
     match variante {
         0 | 2 => icone(ctx, o),
         1 => guide(ctx, o),
-        3 => ctx.sans_chemin(cible, |ctx| guide_3(ctx, o)),
+        3 => guide_3(ctx, o),
         _ => ctx.deleguer(cible),
     }
 }
@@ -1485,9 +1470,9 @@ mod reserve {
 fn reserve_init(ctx: &mut Ctx, o: Obj) {
     let variante = o.u8(ctx.b, Obj::VARIANT);
     let mode = o.u8(ctx.b, champ::MODE);
-    if ctx.pris(mode != 0) {
+    if mode != 0 {
         let delai = o.u8(ctx.b, inventaire::DELAI);
-        if !ctx.pris(delai == 0) {
+        if !(delai == 0) {
             o.set_u8(ctx.b, inventaire::DELAI, delai - 1);
             return;
         }
@@ -1509,7 +1494,7 @@ fn reserve_init(ctx: &mut Ctx, o: Obj) {
 /// Sous-état d'attente : le joueur qui touche l'objet (`RAMASSE`) le fait passer au ramassage.
 fn reserve_attente(ctx: &mut Ctx, o: Obj) {
     let ramasse = o.u8(ctx.b, champ::RAMASSE);
-    if !ctx.pris(ramasse == 0) {
+    if !(ramasse == 0) {
         ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
     }
     expire_et_clignote(ctx, o);
@@ -1520,7 +1505,7 @@ fn reserve_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     let classe = (joueur.u8(ctx.b, 3) >> 1) as u32;
     let accepte = ctx.rom8(reserve::CLASSES + classe);
-    if !ctx.pris(accepte != 0) {
+    if !(accepte != 0) {
         o.set_u8(ctx.b, champ::SOUS_ETAT, 6);
         o.set_u8(ctx.b, champ::SOUS_SOUS_ETAT, 0);
         o.set_u8(ctx.b, inventaire::DELAI, 0xc);
@@ -1530,7 +1515,7 @@ fn reserve_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     let compteur = joueur.0 + reserve::COMPTEURS + variante;
     let n = crate::mem::rd8(ctx.b, compteur).wrapping_add(1);
     crate::mem::wr8(ctx.b, compteur, n);
-    if !ctx.pris(n <= 9) {
+    if !(n <= 9) {
         crate::mem::wr8(ctx.b, compteur, 9);
     }
     false
@@ -1539,21 +1524,21 @@ fn reserve_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
 fn reserve_ramasse(ctx: &mut Ctx, o: Obj) {
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     let ramasse = o.u8(ctx.b, champ::RAMASSE);
-    if !ctx.pris(ramasse == 2) {
+    if !(ramasse == 2) {
         let pret = joueur.u8(ctx.b, 0x33) != 0;
-        if ctx.pris(!pret) {
+        if !pret {
             return;
         }
     }
     let personnage = joueur.u8(ctx.b, 3) as u32;
     let autorise = ctx.prog8(reserve::PERSONNAGES + personnage);
-    if !ctx.pris(autorise != 0) {
+    if !(autorise != 0) {
         ajoute_u8(ctx, o, champ::SOUS_ETAT, 0xfe);
         o.set_u8(ctx.b, champ::RAMASSE, 0);
         return;
     }
     let refuse = reserve_ajoute(ctx, o);
-    if !ctx.pris(refuse) {
+    if !refuse {
         ajoute_u8(ctx, o, Obj::STATE, 2);
     }
 }
@@ -1564,27 +1549,27 @@ fn reserve_actif(ctx: &mut Ctx, o: Obj) {
     match sous_etat {
         sous::CHUTE => {
             let pose = o.u8(ctx.b, champ::SOUS_SOUS_ETAT);
-            if !ctx.pris(pose != 0) {
+            if !(pose != 0) {
                 ctx.jsr(rom::MOVE_XYZ);
                 let en_vol = ctx.gt();
-                if !ctx.pris(en_vol) {
+                if !en_vol {
                     ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
                     o.set_u16(ctx.b, champ::DUREE, reserve::DUREE_AU_SOL);
                     o.set_u32(ctx.b, Obj::Z, 0);
                     let mode = o.u8(ctx.b, champ::MODE);
-                    if !ctx.pris(mode != 0) {
+                    if !(mode != 0) {
                         dans_la_vue(ctx, o);
                     }
                 }
                 return fin_de_chute(ctx);
             }
             let mode = o.u8(ctx.b, champ::MODE);
-            if !ctx.pris(mode == 0) {
+            if !(mode == 0) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 return reserve_attente(ctx, o);
             }
             let fin = ctx.anim_step();
-            if !ctx.pris(!fin) {
+            if fin {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
             }
         }
@@ -1598,7 +1583,7 @@ fn reserve_actif(ctx: &mut Ctx, o: Obj) {
 fn reserve_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -1627,7 +1612,7 @@ mod accompagnement {
 fn accompagnement_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let etat = o.u8(ctx.b, Obj::STATE);
-    if !ctx.pris(etat != 0) {
+    if !(etat != 0) {
         ajoute_u8(ctx, o, Obj::STATE, 2);
         o.set_u8(ctx.b, 0x2a, 1);
         let variante = o.u8(ctx.b, Obj::VARIANT);
@@ -1647,7 +1632,7 @@ fn accompagnement_gestionnaire(ctx: &mut Ctx) {
     ctx.anim_step();
     let reste = o.u16(ctx.b, accompagnement::DUREE).wrapping_sub(1);
     o.set_u16(ctx.b, accompagnement::DUREE, reste);
-    if ctx.pris(reste as i16 >= 0) {
+    if reste as i16 >= 0 {
         return;
     }
     ctx.free(&pools::ITEM);
@@ -1698,11 +1683,11 @@ mod contact {
 /// joueur devient le propriétaire.
 fn contact_joueur(ctx: &mut Ctx, o: Obj) -> bool {
     let occupe = ctx.ram8(contact::OCCUPE) != 0;
-    if ctx.pris(occupe) {
+    if occupe {
         return false;
     }
     let boite = o.u8(ctx.b, 0x39) as u32;
-    if ctx.pris(boite == 0) {
+    if boite == 0 {
         return false;
     }
     let ma_boite = contact::BOITES_OBJET + (boite << 3);
@@ -1714,7 +1699,6 @@ fn contact_joueur(ctx: &mut Ctx, o: Obj) -> bool {
             o.set_u16(ctx.b, champ::PROPRIETAIRE, joueur.0 as u16);
             return true;
         }
-        ctx.pris(i < 3); // dbf
     }
     false
 }
@@ -1722,19 +1706,19 @@ fn contact_joueur(ctx: &mut Ctx, o: Obj) -> bool {
 /// Le joueur est-il présent, en vie, libre, et sa boîte recouvre-t-elle celle de l'objet ?
 fn joueur_touche(ctx: &mut Ctx, o: Obj, joueur: Obj, ma_boite: u32) -> bool {
     let absent = joueur.u8(ctx.b, Obj::ACTIVE) != 1;
-    if ctx.pris(absent) {
+    if absent {
         return false;
     }
     let mort = joueur.u8(ctx.b, Obj::STATE) as i8 >= 4;
-    if ctx.pris(mort) {
+    if mort {
         return false;
     }
     let occupe = joueur.u8(ctx.b, 0x182) != 0;
-    if ctx.pris(occupe) {
+    if occupe {
         return false;
     }
     let numero = joueur.u8(ctx.b, 0x38) as u32;
-    if ctx.pris(numero == 0) {
+    if numero == 0 {
         return false;
     }
     let classe = (joueur.u8(ctx.b, 3) >> 1) as u32;
@@ -1749,17 +1733,17 @@ fn chevauche(ctx: &mut Ctx, o: Obj, joueur: Obj, a: u32, b: u32) -> bool {
     // X : les décalages s'inversent avec l'orientation de chacun
     let mut da = octet(ctx, a);
     let retourne = o.u8(ctx.b, champ::FLIP) != 0;
-    if !ctx.pris(!retourne) {
+    if retourne {
         da = da.wrapping_neg();
     }
     let mut db = octet(ctx, b);
     let joueur_retourne = joueur.u8(ctx.b, champ::FLIP) != 0;
-    if !ctx.pris(!joueur_retourne) {
+    if joueur_retourne {
         db = db.wrapping_neg();
     }
     let ecart = da.wrapping_add(o.u16(ctx.b, Obj::X)).wrapping_sub(db).wrapping_sub(joueur.u16(ctx.b, Obj::X));
     let demi = ctx.rom8(a + 1).wrapping_add(ctx.rom8(b + 1)) as u16;
-    if ctx.pris(ecart.wrapping_add(demi) > demi.wrapping_mul(2)) {
+    if ecart.wrapping_add(demi) > demi.wrapping_mul(2) {
         return false;
     }
     // Y puis Z : décalages fixes
@@ -1768,7 +1752,7 @@ fn chevauche(ctx: &mut Ctx, o: Obj, joueur: Obj, a: u32, b: u32) -> bool {
         let db = octet(ctx, b + decalage);
         let ecart = da.wrapping_add(o.u16(ctx.b, position)).wrapping_sub(db.wrapping_add(joueur.u16(ctx.b, position)));
         let demi = ctx.rom8(a + taille).wrapping_add(ctx.rom8(b + taille)) as u16;
-        if ctx.pris(ecart.wrapping_add(demi) > demi.wrapping_mul(2)) {
+        if ecart.wrapping_add(demi) > demi.wrapping_mul(2) {
             return false;
         }
     }
@@ -1792,13 +1776,13 @@ fn contact_anime_mode(ctx: &mut Ctx, o: Obj, table: u32) {
 /// type est négatif (pas de scène) ou si le pool est plein.
 fn contact_cree_set(ctx: &mut Ctx, o: Obj) -> bool {
     let mot = o.u16(ctx.b, contact::SET_CREE);
-    if ctx.pris(mot as i16 <= -1) {
+    if mot as i16 <= -1 {
         return false;
     }
     ctx.c.d[0] = mot as u32;
     ctx.jsr(contact::CREER_SET);
     let echec = ctx.c.cond(5);
-    if ctx.pris(echec) {
+    if echec {
         return false;
     }
     let nouveau = Obj(ctx.c.a[1]);
@@ -1813,7 +1797,7 @@ fn contact_cree_set(ctx: &mut Ctx, o: Obj) -> bool {
 fn contact_oriente(ctx: &mut Ctx, o: Obj) {
     let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
     let (x_proprietaire, x) = (proprietaire.u16(ctx.b, Obj::X), o.u16(ctx.b, Obj::X));
-    let sens = if ctx.pris(x_proprietaire < x) { 0 } else { 0x20 };
+    let sens = if x_proprietaire < x { 0 } else { 0x20 };
     o.set_u8(ctx.b, champ::FLIP, sens);
 }
 
@@ -1821,7 +1805,7 @@ fn contact_oriente(ctx: &mut Ctx, o: Obj) {
 fn contact_set_fini(ctx: &mut Ctx, o: Obj) -> bool {
     let set = pointeur(ctx, o, contact::SET_CREE);
     let fini = set.u8(ctx.b, 0x22) != 0;
-    ctx.pris(fini)
+    fini
 }
 
 /// Variante 0, fin de la scène (`0xdd22e`) : lève le verrou et passe au sous-état de fuite.
@@ -1854,11 +1838,11 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
                 0 => {
                     ctx.anim_step();
                     let ramasse = o.u8(ctx.b, champ::RAMASSE);
-                    if ctx.pris(ramasse == 0) {
+                    if ramasse == 0 {
                         return;
                     }
                     let occupe = ctx.ram8(contact::OCCUPE) != 0;
-                    if !ctx.pris(!occupe) {
+                    if occupe {
                         o.set_u8(ctx.b, champ::RAMASSE, 0);
                         return;
                     }
@@ -1870,7 +1854,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
                 2 => {
                     ctx.anim_step();
                     let touche = o.u8(ctx.b, 0x33);
-                    if ctx.pris(touche == 1) {
+                    if touche == 1 {
                         return;
                     }
                     ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
@@ -1887,7 +1871,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
                 }
                 6 => {
                     let flip = o.u8(ctx.b, champ::FLIP) != 0;
-                    let pas: u16 = if ctx.pris(flip) { 3 } else { 3u16.wrapping_neg() };
+                    let pas: u16 = if flip { 3 } else { 3u16.wrapping_neg() };
                     decale_x(ctx, o, pas);
                     ctx.anim_step();
                     ctx.jsr(rom::CULL_OFFSCREEN);
@@ -1918,7 +1902,7 @@ fn contact_1_avance(ctx: &mut Ctx, o: Obj) {
 fn contact_1_vitesse(ctx: &mut Ctx, o: Obj) {
     o.set_u16(ctx.b, Obj::VX, 0x200);
     let flip = o.u8(ctx.b, champ::FLIP) != 0;
-    if !ctx.pris(flip) {
+    if !flip {
         let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
         o.set_u16(ctx.b, Obj::VX, v);
     }
@@ -1949,7 +1933,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
             match sous_etat {
                 0 => {
                     let touche = contact_joueur(ctx, o);
-                    if ctx.pris(touche) {
+                    if touche {
                         // pas de contact suivant : les sous-états avancent d'eux-mêmes
                         ctx.set_ram8(0x5e, 1);
                         return ctx.anim_start(contact::ANIMATIONS, 0x19);
@@ -1957,7 +1941,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                     contact_1_avance(ctx, o);
                     let reste = o.u8(ctx.b, contact::DELAI).wrapping_sub(1);
                     o.set_u8(ctx.b, contact::DELAI, reste);
-                    if !ctx.pris(reste != 0) {
+                    if !(reste != 0) {
                         o.set_u8(ctx.b, contact::DELAI, 0x3c);
                         let flip = o.u8(ctx.b, champ::FLIP) ^ 0x20;
                         o.set_u8(ctx.b, champ::FLIP, flip);
@@ -1979,7 +1963,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                 4 => {
                     let set = pointeur(ctx, o, contact::SET_CREE);
                     let en_cours = set.u8(ctx.b, 0x22) == 0;
-                    if !ctx.pris(en_cours) {
+                    if !en_cours {
                         contact_1_sortie(ctx, o);
                     }
                 }
@@ -2020,11 +2004,11 @@ fn contact_2(ctx: &mut Ctx, o: Obj) {
                 0 => {
                     ctx.anim_step();
                     let ramasse = o.u8(ctx.b, champ::RAMASSE);
-                    if ctx.pris(ramasse == 0) {
+                    if ramasse == 0 {
                         return;
                     }
                     let occupe = ctx.ram8(contact::OCCUPE) != 0;
-                    if !ctx.pris(!occupe) {
+                    if occupe {
                         o.set_u8(ctx.b, champ::RAMASSE, 0);
                         return;
                     }
@@ -2089,16 +2073,16 @@ mod equipement {
 fn equipement_bonus(ctx: &mut Ctx, o: Obj) {
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    if !ctx.pris(variante != 0x24) {
+    if !(variante != 0x24) {
         return joueur.set_u8(ctx.b, 0x18c, 0x14);
     }
-    if !ctx.pris(variante != 0x25) {
+    if !(variante != 0x25) {
         return joueur.set_u8(ctx.b, 0x18b, 0x14);
     }
-    if !ctx.pris(variante != 0x26) {
+    if !(variante != 0x26) {
         joueur.set_u8(ctx.b, 0x18d, 0x14);
     }
-    if !ctx.pris(variante != 0x27) {
+    if !(variante != 0x27) {
         joueur.set_u8(ctx.b, 0x191, 0x14);
     }
 }
@@ -2134,14 +2118,14 @@ fn equipement_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     let ligne = ((o.u8(ctx.b, Obj::VARIANT) as u32) << 3) & 0xffff;
     let classe = (joueur.u8(ctx.b, 3) >> 1) as u32;
     let autorise = ctx.rom8(equipement::FICHES + ligne + classe);
-    if !ctx.pris(autorise != 0) {
+    if !(autorise != 0) {
         return equipement_refuse(ctx, o);
     }
     let mut id = ctx.rom8(equipement::FICHES + 6 + ligne);
     // déjà équipé ?
     for off in [equipement::PREMIER_EQUIPE, equipement::SECOND_EQUIPE] {
         let equipe = joueur.u8(ctx.b, off).wrapping_add(0x2e);
-        if ctx.pris(equipe == id) {
+        if equipe == id {
             return equipement_accepte(ctx, o, joueur);
         }
     }
@@ -2149,18 +2133,18 @@ fn equipement_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     for i in 0..6u32 {
         let slot = joueur.u8(ctx.b, inventaire::IDENTIFIANTS + i);
         let vide = slot == inventaire::VIDE;
-        if !ctx.pris(vide) {
+        if !vide {
             let objet = slot <= 0x2d;
-            if ctx.pris(objet) {
+            if objet {
                 // objet d'inventaire : seulement s'il est identique
-                if ctx.pris(slot == id) {
+                if slot == id {
                     return equipement_accepte(ctx, o, joueur);
                 }
             } else {
                 let (g_slot, g_nouveau) = (equipement_groupe(ctx, slot), equipement_groupe(ctx, id));
-                if !ctx.pris(g_nouveau != g_slot) {
+                if !(g_nouveau != g_slot) {
                     // même groupe : on garde le meilleur
-                    if !ctx.pris(id as i8 > slot as i8) {
+                    if !(id as i8 > slot as i8) {
                         id = slot;
                     }
                     joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS + i, id);
@@ -2168,19 +2152,18 @@ fn equipement_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
                 }
             }
         }
-        ctx.pris(i < 5); // dbf
     }
     // équipement porté en main (octet 0x10d, ou 0x10e pour la classe 4)
     let mut porte = joueur.u8(ctx.b, equipement::PREMIER_EQUIPE);
     let classe_main = joueur.u8(ctx.b, 3) >> 1;
-    if !ctx.pris(classe_main != 4) {
+    if !(classe_main != 4) {
         porte = joueur.u8(ctx.b, equipement::SECOND_EQUIPE);
     }
     let groupe_porte = ctx.rom8(equipement::FICHES + 7 + ((porte as u32) << 3));
     let groupe_nouveau = equipement_groupe(ctx, id);
-    if !ctx.pris(groupe_nouveau != groupe_porte) {
+    if !(groupe_nouveau != groupe_porte) {
         let nouveau = id.wrapping_sub(0x2e);
-        if !ctx.pris(porte as i8 > nouveau as i8) {
+        if !(porte as i8 > nouveau as i8) {
             joueur.set_u8(ctx.b, equipement::PREMIER_EQUIPE, nouveau);
         }
         return equipement_accepte(ctx, o, joueur);
@@ -2188,21 +2171,19 @@ fn equipement_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     // un emplacement libre
     for i in 0..6u32 {
         let slot = joueur.u8(ctx.b, inventaire::IDENTIFIANTS + i);
-        if !ctx.pris(slot != inventaire::VIDE) {
+        if !(slot != inventaire::VIDE) {
             joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS + i, id);
             equipement_bonus(ctx, o);
             return false;
         }
-        ctx.pris(i < 5); // dbf
     }
     // échange avec le premier emplacement, sauf s'il est verrouillé pour cette classe
     let premier = joueur.u8(ctx.b, inventaire::IDENTIFIANTS);
     for k in 0..8u32 {
         let verrou = ctx.rom8(equipement::VERROUILLES + (classe << 3) + k);
-        if ctx.pris(premier == verrou) {
+        if premier == verrou {
             return equipement_refuse(ctx, o);
         }
-        ctx.pris(k < 7);
     }
     let ancienne_quantite = joueur.u8(ctx.b, inventaire::QUANTITES);
     objet_expulse(ctx, o, joueur, premier, ancienne_quantite);
@@ -2214,9 +2195,9 @@ fn equipement_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
 
 fn equipement_init(ctx: &mut Ctx, o: Obj) {
     let mode = o.u8(ctx.b, champ::MODE);
-    if ctx.pris(mode != 0) {
+    if mode != 0 {
         let delai = o.u8(ctx.b, inventaire::DELAI);
-        if !ctx.pris(delai == 0) {
+        if !(delai == 0) {
             o.set_u8(ctx.b, inventaire::DELAI, delai - 1);
             return;
         }
@@ -2240,10 +2221,10 @@ fn equipement_init(ctx: &mut Ctx, o: Obj) {
 /// par la classe 1 plus de sept fois déclenche une scène.
 fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
     let lance = o.u8(ctx.b, champ::SOUS_SOUS_ETAT) != 0;
-    if !ctx.pris(lance) {
+    if !lance {
         let delai = o.u8(ctx.b, inventaire::DELAI).wrapping_sub(1);
         o.set_u8(ctx.b, inventaire::DELAI, delai);
-        if ctx.pris(delai != 0) {
+        if delai != 0 {
             return;
         }
         ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
@@ -2257,7 +2238,7 @@ fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
         let (cam_x, _) = ctx.camera();
         let limite = cam_x.wrapping_add(0xc0);
         let x = o.u16(ctx.b, Obj::X);
-        if !ctx.pris(limite as i16 > x as i16) {
+        if !(limite as i16 > x as i16) {
             let v = o.u32(ctx.b, Obj::VX).wrapping_neg();
             o.set_u32(ctx.b, Obj::VX, v);
         }
@@ -2265,7 +2246,7 @@ fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
     }
     ctx.jsr(rom::MOVE_XZ);
     let z = o.u16(ctx.b, Obj::Z);
-    if ctx.pris(z as i16 >= 0) {
+    if z as i16 >= 0 {
         return;
     }
     o.set_u8(ctx.b, champ::SOUS_ETAT, sous::ATTENTE);
@@ -2274,16 +2255,16 @@ fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
     o.set_u8(ctx.b, champ::RAMASSE, 0);
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     let classe = joueur.u8(ctx.b, 3) >> 1;
-    if ctx.pris(classe != 1) {
+    if classe != 1 {
         return;
     }
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    if ctx.pris(variante != 0xf) {
+    if variante != 0xf {
         return;
     }
     let n = ctx.ram8(0x57).wrapping_add(1);
     ctx.set_ram8(0x57, n);
-    if ctx.pris(n <= 7) {
+    if n <= 7 {
         return;
     }
     o.set_u16(ctx.b, champ::DUREE, 0x4b0);
@@ -2303,12 +2284,12 @@ fn equipement_actif(ctx: &mut Ctx, o: Obj) {
         sous::CHUTE => {
             ctx.jsr(rom::MOVE_XYZ);
             let en_vol = ctx.gt();
-            if !ctx.pris(en_vol) {
+            if !en_vol {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
                 o.set_u16(ctx.b, champ::DUREE, 0x4b0);
                 o.set_u32(ctx.b, Obj::Z, 0);
                 let mode = o.u8(ctx.b, champ::MODE);
-                if !ctx.pris(mode != 0) {
+                if !(mode != 0) {
                     dans_la_vue(ctx, o);
                 }
             }
@@ -2318,11 +2299,11 @@ fn equipement_actif(ctx: &mut Ctx, o: Obj) {
         sous::RAMASSE => {
             let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
             let pret = joueur.u8(ctx.b, 0x33) != 0;
-            if ctx.pris(!pret) {
+            if !pret {
                 return;
             }
             let refuse = equipement_ajoute(ctx, o);
-            if !ctx.pris(refuse) {
+            if !refuse {
                 ajoute_u8(ctx, o, Obj::STATE, 2);
             }
             marque_ramasse(ctx, o);
@@ -2335,7 +2316,7 @@ fn equipement_actif(ctx: &mut Ctx, o: Obj) {
 fn equipement_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
-    if ctx.pris(cache) {
+    if cache {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
@@ -2377,11 +2358,9 @@ fn efface_ramasses(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const EFFACE_RAMASSES: Native = Native {
     entry: 0xdabba,
     name: "item_efface_ramasses",
-    cost: |_, _| 1000,
     run: efface_ramasses,
     touches_sound: false,
     outputs: regs::d(0) | regs::d(6) | regs::a(0),
-    exact_cost: false,
 };
 
 /// Un équipement du joueur qui peut tomber quand il est touché : (octet de l'objet porté, compteur de
@@ -2466,9 +2445,7 @@ fn chute_equipement(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CHUTE_EQUIPEMENT: Native = Native {
     entry: 0xdb6c0,
     name: "item_chute_equipement",
-    cost: |_, _| 200,
     run: chute_equipement,
     touches_sound: false,
     outputs: regs::d(0) | regs::d(2) | regs::a(4),
-    exact_cost: false,
 };

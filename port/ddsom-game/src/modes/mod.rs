@@ -207,7 +207,6 @@ macro_rules! resume {
         pub const $name: $crate::Native = $crate::Native {
             entry: $entry,
             name: stringify!($name),
-            cost: |_, _| 100,
             run: |c, b| {
                 let mut x = $crate::scene::Ctx::new(c, b);
                 $crate::modes::c_a5(&mut x);
@@ -218,7 +217,6 @@ macro_rules! resume {
             },
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     };
 }
@@ -300,7 +298,7 @@ fn after_wait(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 100, run, touches_sound: false, outputs: 0, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: 0 }
 }
 
 pub const LOOP: Native = native(at::LOOP, "mode_loop", start);

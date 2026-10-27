@@ -436,7 +436,6 @@ resume!(BONUS_FADED_IN, at::FADED_IN, |x| {
 pub const BONUS: Native = Native {
     entry: 0xf5938,
     name: "scene_bonus",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
@@ -445,7 +444,6 @@ pub const BONUS: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[

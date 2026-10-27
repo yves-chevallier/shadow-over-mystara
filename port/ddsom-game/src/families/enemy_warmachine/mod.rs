@@ -274,7 +274,7 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x77d12 "enemy_27" 1000 run,
+    0x77d12 "enemy_27" run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
-    0x78c3c "enemy_27_releve" 300 hit::recover,
+    0x78c3c "enemy_27_releve" hit::recover,
 }

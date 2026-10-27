@@ -375,5 +375,5 @@ pub(self) fn next_attack(x: &mut Cx) {
 }
 
 handlers! {
-    0x9325e "boss_16" 1200 run,
+    0x9325e "boss_16" run,
 }

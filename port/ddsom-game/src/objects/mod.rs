@@ -12,10 +12,8 @@
 //! - `motion` : vitesses, accélérations, tables de vitesse par index.
 //! - `rank` : compteur de rang (difficulté dynamique).
 //! - `cull` : test de présence à l'écran et inscription dans les files de collision.
-//! - `cost` : durée des routines à boucles (suivi du code d'origine).
 
 pub mod anim;
-pub mod cost;
 pub mod cull;
 pub mod lists;
 pub mod motion;

@@ -12,8 +12,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use super::cost::{walk_cycles, Trace};
-use super::lists::{self, plan_removal};
+use super::lists;
 use super::Obj;
 use crate::mem::{rd16, rts, wr16, wr32, wr8, A5};
 use crate::{regs, Native};
@@ -176,45 +175,6 @@ impl Pool {
         self.clear_slot(b, obj);
     }
 
-    /// Décisions de l'original pour la recherche d'une place.
-    fn scan_trace(&self, scan: Scan, t: &mut Trace) {
-        match scan {
-            Scan::NoneLeft => {
-                t.take(true);
-            }
-            Scan::Found(i) => {
-                t.take(false);
-                for _ in 0..i {
-                    t.take(false);
-                    t.take(true);
-                }
-                t.take(true);
-            }
-            Scan::Exhausted => {
-                t.take(false);
-                for j in 0..self.slots {
-                    t.take(false);
-                    t.take(j + 1 < self.slots);
-                }
-            }
-        }
-    }
-
-    /// Décisions de l'original pour remettre à zéro un emplacement (boucle de 32 octets).
-    fn clear_trace(&self, t: &mut Trace) {
-        let passes = self.stride / 32;
-        for j in 0..passes {
-            t.take(j + 1 < passes);
-        }
-    }
-
-    /// Décisions de l'original pour `reset` (une boucle `dbf` autour de la remise à zéro).
-    fn reset_trace(&self, t: &mut Trace) {
-        for i in 0..self.slots {
-            self.clear_trace(t);
-            t.take(i + 1 < self.slots);
-        }
-    }
 }
 
 // ---- adaptation aux registres du 68000 ----
@@ -316,26 +276,10 @@ fn alloc_native(pool: &Pool, c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn alloc_cost(pool: &Pool, entry: u32, b: &mut Cps2Bus) -> u64 {
-    let mut t = Trace::new();
-    let scan = pool.scan(b);
-    pool.scan_trace(scan, &mut t);
-    walk_cycles(b, entry, &t)
-}
-
 /// Libération : A0 = objet. L'original laisse D0 = 0, D1.w = -1, A4 = fin de l'emplacement.
 fn free_native(pool: &Pool, c: &mut Cpu, b: &mut Cps2Bus) {
     pool.release_regs(c, b, Obj(c.a[0]));
     rts(c, b);
-}
-
-fn free_cost(pool: &Pool, entry: u32, c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut t = Trace::new();
-    if pool.listed {
-        plan_removal(b, Obj(c.a[0]), &mut t);
-    }
-    pool.clear_trace(&mut t);
-    walk_cycles(b, entry, &t)
 }
 
 /// Initialisation de pools consécutifs. Laisse D0 = 0, D1.w = D7.w = -1 et A0 = A4 = fin du
@@ -354,33 +298,21 @@ fn init_native(pools: &[&Pool], c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn init_cost(pools: &[&Pool], entry: u32, b: &mut Cps2Bus) -> u64 {
-    let mut t = Trace::new();
-    for pool in pools {
-        pool.reset_trace(&mut t);
-    }
-    walk_cycles(b, entry, &t)
-}
-
 macro_rules! pool_natives {
     ($pool:ident, $alloc:ident, $alloc_name:expr, $free:ident, $free_name:expr) => {
         pub const $alloc: Native = Native {
             entry: $pool.alloc_routine,
             name: $alloc_name,
-            cost: |_, b| alloc_cost(&$pool, $pool.alloc_routine, b),
             run: |c, b| alloc_native(&$pool, c, b),
             touches_sound: false,
             outputs: regs::a(1) | regs::d(6) | regs::CCR,
-            exact_cost: true,
         };
         pub const $free: Native = Native {
             entry: $pool.free_routine,
             name: $free_name,
-            cost: |c, b| free_cost(&$pool, $pool.free_routine, c, b),
             run: |c, b| free_native(&$pool, c, b),
             touches_sound: false,
             outputs: regs::d(0) | regs::d(1) | regs::a(0) | regs::a(4) | regs::CCR,
-            exact_cost: true,
         };
     };
 }
@@ -401,11 +333,9 @@ macro_rules! init_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            cost: |_, b| init_cost(&$pools, $entry, b),
             run: |c, b| init_native(&$pools, c, b),
             touches_sound: false,
             outputs: regs::ALL,
-            exact_cost: true,
         };
     };
 }

@@ -256,21 +256,17 @@ fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
 pub const SHADOW: Native = Native {
     entry: 0x33fe4,
     name: "terrain_push",
-    cost: |_, _| 300,
     run: |c, b| run(FIRST, c, b),
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: false,
 };
 
 pub const SHADOW_SECOND: Native = Native {
     entry: 0x3403c,
     name: "terrain_push_2",
-    cost: |_, _| 300,
     run: |c, b| run(SECOND, c, b),
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[SHADOW, SHADOW_SECOND];

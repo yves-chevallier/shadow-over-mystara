@@ -334,9 +334,7 @@ fn update_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const UPDATE: Native = Native {
     entry: 0x392e4,
     name: "player_overlays_update",
-    cost: |_, _| 4_000,
     run: update_native,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };

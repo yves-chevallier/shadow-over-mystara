@@ -20,7 +20,6 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
-use crate::chemin::Chemin;
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, wr16, wr32, wr8};
 use crate::ops;
 use crate::{regs, Native};
@@ -62,14 +61,6 @@ fn set_mot(r: &mut u32, v: u16) {
 
 // ---------------------------------------------------------------------------------------------
 // Remises à vide
-
-/// Décisions d'une boucle `dbf` de `n` tours.
-fn boucle(n: u32) -> Chemin {
-    let mut p = Chemin::default();
-    p.repete(n - 1, true);
-    p.pris(false);
-    p
-}
 
 /// `n` longs à 0xFFFFFFFF depuis `debut` (`move.l D1,(A)+ ; dbf D0`). D1 = -1, mot bas de D0 = 0xFFFF,
 /// le registre d'adresse `ptr` rend la fin de la zone.
@@ -149,14 +140,6 @@ fn enfiler(c: &mut Cpu, b: &mut Cps2Bus, anneau: &Anneau, evenement: u16) {
     ops::logique(c, reduit as u32, Size::Byte);
 }
 
-/// Décision unique de ces routines : la case d'écriture est-elle occupée (retour sans rien faire) ?
-fn chemin_enfiler(c: &Cpu, b: &mut Cps2Bus, anneau: &Anneau) -> Chemin {
-    let mut p = Chemin::default();
-    let index = rd8(b, a5(c, anneau.ecriture));
-    p.pris(rd16(b, a5(c, anneau.cases).wrapping_add(index as u32)) != VIDE);
-    p
-}
-
 fn enfiler_points(c: &mut Cpu, b: &mut Cps2Bus) {
     enfiler(c, b, &POINTS, c.d[0] as u16);
     rts(c, b);
@@ -198,9 +181,6 @@ struct Credit {
     compteur: u32,
     /// Plafond BCD (comparaison signée de 32 bits).
     plafond: u32,
-    /// Entrée de la routine, et début de sa boucle (pour mesurer la durée).
-    entree: u32,
-    boucle: u32,
 }
 
 const CREDIT_POINTS: Credit = Credit {
@@ -209,8 +189,6 @@ const CREDIT_POINTS: Credit = Credit {
     table: 0x19c0e,
     compteur: 0x110,
     plafond: 0x0999_9999,
-    entree: 0x19b2a,
-    boucle: 0x19b32,
 };
 const CREDIT_COMPTEUR: Credit = Credit {
     anneau: COMPTEUR,
@@ -218,8 +196,6 @@ const CREDIT_COMPTEUR: Credit = Credit {
     table: 0x19d52,
     compteur: 0x114,
     plafond: 0x0009_9999,
-    entree: 0x19b9c,
-    boucle: 0x19ba4,
 };
 
 /// Ce que le traitement d'un événement laisse dans les registres.
@@ -285,65 +261,6 @@ fn crediter(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
     }
 }
 
-/// Pour chaque événement en attente, le compteur serait-il plafonné ? (simulation sans effet sur la
-/// mémoire : les compteurs déjà modifiés par un événement précédent sont suivis à part)
-fn plafonnements(c: &Cpu, b: &mut Cps2Bus, k: &Credit) -> Vec<bool> {
-    let mut sortie = Vec::new();
-    let mut index = rd8(b, a5(c, k.lecture));
-    let mut vides: Vec<u8> = Vec::new();
-    let mut compteurs: Vec<(u32, u32)> = Vec::new();
-    loop {
-        let evenement = if vides.contains(&index) {
-            VIDE
-        } else {
-            rd16(b, a5(c, k.anneau.cases).wrapping_add(index as u32))
-        };
-        if evenement == VIDE {
-            return sortie;
-        }
-        let joueur = a5(c, JOUEUR_1) + (((evenement & 0x300) as u32) << 1);
-        let table = k.table + ((evenement as u32 & 0xff) << 2);
-        let adresse = joueur + k.compteur;
-        let courant = match compteurs.iter().position(|&(a, _)| a == adresse) {
-            Some(i) => compteurs[i].1,
-            None => rd32(b, adresse),
-        };
-        let mut valeur = courant.to_be_bytes();
-        let mut retenue = false;
-        for i in (0..4).rev() {
-            (valeur[i], retenue) = ops::abcd(rd8(b, table + i as u32), valeur[i], retenue);
-        }
-        let mut valeur = u32::from_be_bytes(valeur);
-        let plafonne = valeur as i32 >= k.plafond as i32;
-        if plafonne {
-            valeur = k.plafond;
-        }
-        match compteurs.iter_mut().find(|(a, _)| *a == adresse) {
-            Some(e) => e.1 = valeur,
-            None => compteurs.push((adresse, valeur)),
-        }
-        sortie.push(plafonne);
-        vides.push(index);
-        index = index.wrapping_add(2) & MASQUE;
-    }
-}
-
-/// Durée : tronçon d'entrée, un tour de boucle par événement (selon le plafonnement), tour final.
-fn cout_crediter(c: &Cpu, b: &mut Cps2Bus, k: &Credit) -> u64 {
-    let mut total = Chemin::default().duree_entre(b, k.entree, Some(k.boucle));
-    for plafonne in plafonnements(c, b, k) {
-        let mut p = Chemin::default();
-        p.pris(false); // beq : case non vide
-        p.repete(3, true);
-        p.pris(false); // fin de la boucle abcd
-        p.pris(!plafonne); // blt
-        total += p.duree_entre(b, k.boucle, Some(k.boucle));
-    }
-    let mut fin = Chemin::default();
-    fin.pris(true); // beq : case vide
-    total + fin.duree(b, k.boucle)
-}
-
 fn crediter_points(c: &mut Cpu, b: &mut Cps2Bus) {
     crediter(c, b, &CREDIT_POINTS);
     rts(c, b);
@@ -397,44 +314,25 @@ fn creer_popup(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Décisions de 0x19dce : inhibé, case occupée, D3 == 2.
-fn chemin_creer_popup(c: &Cpu, b: &mut Cps2Bus) -> Chemin {
-    let mut p = Chemin::default();
-    let inhibe = rd8(b, a5(c, POPUP_INHIBE)) != 0;
-    p.pris(inhibe);
-    if inhibe {
-        return p;
-    }
-    let index = rd8(b, a5(c, POPUP_ECRITURE));
-    let occupee = rd16(b, a5(c, POPUP_ENTREES).wrapping_add(index as u32)) != VIDE;
-    p.pris(occupee);
-    if !occupee {
-        p.pris(c.d[3] as u8 == 2);
-    }
-    p
-}
-
 macro_rules! natif {
-    ($nom:ident, $entree:expr, $name:expr, $run:expr, $cost:expr) => {
+    ($nom:ident, $entree:expr, $name:expr, $run:expr) => {
         pub const $nom: Native = Native {
             entry: $entree,
             name: $name,
-            cost: $cost,
             run: $run,
             touches_sound: false,
             outputs: regs::ALL,
-            exact_cost: true,
         };
     };
 }
 
-natif!(VIDER_POINTS, 0x19aa2, "evt_vider_points", vider_points, |_, b| boucle(32).duree(b, 0x19aa2));
-natif!(VIDER_COMPTEUR, 0x19abc, "evt_vider_compteur", vider_compteur, |_, b| boucle(32).duree(b, 0x19abc));
-natif!(VIDER_POPUPS, 0x19db4, "evt_vider_popups", vider_popups, |_, b| boucle(64).duree(b, 0x19db4));
-natif!(EFFACER_POPUP, 0x19e10, "evt_effacer_popup", effacer_popup_courant, |_, b| boucle(4).duree(b, 0x19e10));
-natif!(ENFILER_POINTS, 0x19ae6, "evt_enfiler_points", enfiler_points, |c, b| chemin_enfiler(c, b, &POINTS).duree(b, 0x19ae6));
-natif!(ENFILER_COMPTEUR, 0x19b08, "evt_enfiler_compteur", enfiler_compteur, |c, b| chemin_enfiler(c, b, &COMPTEUR).duree(b, 0x19b08));
-natif!(EVENEMENT_OBJET, 0x19ad6, "evt_evenement_objet", evenement_objet, |c, b| chemin_enfiler(c, b, &POINTS).duree(b, 0x19ad6));
-natif!(CREER_POPUP, 0x19dce, "evt_creer_popup", creer_popup, |c, b| chemin_creer_popup(c, b).duree(b, 0x19dce));
-natif!(CREDITER_POINTS, 0x19b2a, "evt_crediter_points", crediter_points, |c, b| cout_crediter(c, b, &CREDIT_POINTS));
-natif!(CREDITER_COMPTEUR, 0x19b9c, "evt_crediter_compteur", crediter_compteur, |c, b| cout_crediter(c, b, &CREDIT_COMPTEUR));
+natif!(VIDER_POINTS, 0x19aa2, "evt_vider_points", vider_points);
+natif!(VIDER_COMPTEUR, 0x19abc, "evt_vider_compteur", vider_compteur);
+natif!(VIDER_POPUPS, 0x19db4, "evt_vider_popups", vider_popups);
+natif!(EFFACER_POPUP, 0x19e10, "evt_effacer_popup", effacer_popup_courant);
+natif!(ENFILER_POINTS, 0x19ae6, "evt_enfiler_points", enfiler_points);
+natif!(ENFILER_COMPTEUR, 0x19b08, "evt_enfiler_compteur", enfiler_compteur);
+natif!(EVENEMENT_OBJET, 0x19ad6, "evt_evenement_objet", evenement_objet);
+natif!(CREER_POPUP, 0x19dce, "evt_creer_popup", creer_popup);
+natif!(CREDITER_POINTS, 0x19b2a, "evt_crediter_points", crediter_points);
+natif!(CREDITER_COMPTEUR, 0x19b9c, "evt_crediter_compteur", crediter_compteur);

@@ -363,5 +363,5 @@ fn held(x: &mut Cx) {
 }
 
 handlers! {
-    0x71e44 "enemy_19" 800 run,
+    0x71e44 "enemy_19" run,
 }

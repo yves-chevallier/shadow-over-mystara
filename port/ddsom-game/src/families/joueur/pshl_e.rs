@@ -503,6 +503,6 @@ mod fountain {
 }
 
 handlers! {
-    0x527ec "pshl_6" 150 orbit::run,
-    0x53a08 "pshl_18" 150 fountain::run,
+    0x527ec "pshl_6" orbit::run,
+    0x53a08 "pshl_18" fountain::run,
 }

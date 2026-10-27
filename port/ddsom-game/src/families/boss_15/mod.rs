@@ -394,7 +394,7 @@ fn step_anim(x: &mut Cx) -> bool {
 }
 
 handlers! {
-    0x91530 "boss_15" 1200 run,
+    0x91530 "boss_15" run,
 }
 
 /// Routine du boss appelée par un effet (0xb482e) : rapprochement d'un objet vers un autre.

@@ -507,6 +507,6 @@ fn group(x: &mut Cx) {
 }
 
 handlers! {
-    0x9aeaa "boss_22" 1200 run,
-    0x7c5a8 "boss_2" 1200 run,
+    0x9aeaa "boss_22" run,
+    0x7c5a8 "boss_2" run,
 }

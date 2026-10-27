@@ -474,7 +474,7 @@ fn turn_decision(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs: regs::d(0) | regs::CCR, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: regs::d(0) | regs::CCR }
 }
 
 // ---------------------------------------------------------------------------------------------

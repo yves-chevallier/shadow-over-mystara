@@ -37,11 +37,9 @@ fn players() -> impl Iterator<Item = Obj> {
 pub const SPAWN_BUMPERS: crate::Native = crate::Native {
     entry: 0xd40e8,
     name: "set_tremplins_d40e8",
-    cost: |_, _| 400,
     run: spawn_bumpers,
     touches_sound: false,
     outputs: crate::regs::d(5) | crate::regs::d(6) | crate::regs::a(1),
-    exact_cost: false,
 };
 
 fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
@@ -3733,28 +3731,28 @@ mod dialog {
 }
 
 /// Reprise de la porte de passage (type 29) après son fondu de sortie.
-pub const DOOR_B_RESUME: crate::Native = cx::handler(door_b::RESUME_AT, "set_29_reprise", |_, _| 600, |c, b| {
+pub const DOOR_B_RESUME: crate::Native = cx::handler(door_b::RESUME_AT, "set_29_reprise", |c, b| {
     let mut x = Cx::new(c, b);
     door_b::resume_after_fade(&mut x);
     x.ret();
 });
 
 handlers! {
-    0xd4110 "set_16" 400 bumper::run,
-    0xd7056 "set_24" 800 dialog::run,
-    0xd9424 "set_30" 200 game_over::run,
-    0xd9492 "set_31" 300 level_clock::run,
-    0xd96d0 "set_32" 200 test_selector::run,
-    0xd8458 "set_27" 600 door_a::run,
-    0xd8ce4 "set_28" 300 zone_end::run,
-    0xd8dce "set_29" 600 door_b::run,
-    0xd801e "set_25" 300 rearguard::run,
-    0xd810a "set_26" 300 idle_hunter::run,
-    0xd69c2 "set_22" 300 rank_adjust::run,
-    0xd6c5c "set_23" 500 exit_gate::run,
-    0xd5f5a "set_20" 600 life_bar::run,
-    0xd6372 "set_21" 500 continue_countdown::run,
-    0xd466a "set_17" 300 boss_intro::run,
-    0xd49a2 "set_19" 400 wave_spawner::run,
-    0xd4950 "set_18" 200 scroll_to::run,
+    0xd4110 "set_16" bumper::run,
+    0xd7056 "set_24" dialog::run,
+    0xd9424 "set_30" game_over::run,
+    0xd9492 "set_31" level_clock::run,
+    0xd96d0 "set_32" test_selector::run,
+    0xd8458 "set_27" door_a::run,
+    0xd8ce4 "set_28" zone_end::run,
+    0xd8dce "set_29" door_b::run,
+    0xd801e "set_25" rearguard::run,
+    0xd810a "set_26" idle_hunter::run,
+    0xd69c2 "set_22" rank_adjust::run,
+    0xd6c5c "set_23" exit_gate::run,
+    0xd5f5a "set_20" life_bar::run,
+    0xd6372 "set_21" continue_countdown::run,
+    0xd466a "set_17" boss_intro::run,
+    0xd49a2 "set_19" wave_spawner::run,
+    0xd4950 "set_18" scroll_to::run,
 }

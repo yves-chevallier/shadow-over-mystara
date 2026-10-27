@@ -254,7 +254,7 @@ mod glow {
 }
 
 handlers! {
-    0x4d2fe "peff_21" 100 hit_spark::run,
-    0x4d3e2 "peff_22" 150 prayer::run,
-    0x4d682 "peff_23" 100 glow::run,
+    0x4d2fe "peff_21" hit_spark::run,
+    0x4d3e2 "peff_22" prayer::run,
+    0x4d682 "peff_23" glow::run,
 }

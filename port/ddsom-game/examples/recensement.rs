@@ -299,14 +299,8 @@ fn trajectoire(
         c.d[7] = pas;
         c.d[0] = 4 * kind as u32;
         c.a[1] = entree;
-        let native = ddsom_game::all_natives().find(|n| n.entry == entree).unwrap();
         bilan.appels += 1;
         PROGRES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let cout = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (native.cost)(&c, &mut b)));
-        if cout.is_err() {
-            bilan.hors_contrat += 1;
-            break;
-        }
         VUS.with(|v| v.borrow_mut().clear());
         ACTIF.with(|a| *a.borrow_mut() = true);
         PROFONDEUR.with(|p| *p.borrow_mut() = 0);

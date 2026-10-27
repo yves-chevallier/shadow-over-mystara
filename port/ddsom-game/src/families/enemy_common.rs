@@ -466,9 +466,7 @@ fn detach_from_host(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
 pub const NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x27ee,
     name: "ennemi_detacher_hote",
-    cost: |_, _| 60,
     run: detach_from_host,
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::a(1),
-    exact_cost: false,
 }];

@@ -228,27 +228,23 @@ fn effacer_tout(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const EFFACER_TOUT: Native = Native {
     entry: 0x19eb0,
     name: "popups_effacer_tout",
-    cost: |_, _| 300,
     run: |c, b| {
         effacer_tout(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: regs::d(6) | regs::a(2) | regs::a(4),
-    exact_cost: false,
 };
 
 pub const ANIMER: Native = Native {
     entry: 0x19e20,
     name: "popups_animer",
-    cost: |_, _| 300,
     run: |c, b| {
         animer(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 #[cfg(test)]

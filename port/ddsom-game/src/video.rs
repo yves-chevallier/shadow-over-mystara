@@ -7,9 +7,7 @@
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::chemin::Chemin;
-use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, wr32, wr8, A5};
-use crate::vue::Vue;
+use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, wr16, wr32, wr8, A5};
 use crate::{regs, Native};
 
 /// Variables de la RAM de travail (offsets depuis A5 = FF8000) propres au sous-système vidéo.
@@ -52,26 +50,6 @@ pub mod hw {
     pub const OBJ_BANK: u32 = 0x8040e1;
 }
 
-/// Décisions d'une boucle `dbf` de `n` tours (n >= 1) : continuer n - 1 fois, puis sortir.
-pub fn tours(p: &mut Chemin, n: u32) {
-    p.repete(n - 1, true);
-    p.pris(false);
-}
-
-/// Durée d'une routine « préambule, boucle de `n` tours, suite jusqu'au RTS » dont le corps est
-/// régulier (trop de tours pour un `Chemin`). `avant` : décisions du préambule ; `reprise` : décisions
-/// d'un tour qui boucle (la dernière est la reprise) ; `dernier` : décisions du dernier tour et de la
-/// suite. `debut` : première instruction de la boucle.
-pub fn duree_boucle(b: &mut Cps2Bus, entree: u32, avant: &Chemin, debut: u32, reprise: &Chemin, dernier: &Chemin, n: u64) -> u64 {
-    let prefixe = if entree == debut { 0 } else { avant.duree_entre(b, entree, Some(debut)) };
-    prefixe + (n - 1) * reprise.duree_entre(b, debut, Some(debut)) + dernier.duree(b, debut)
-}
-
-/// Durée d'une routine sans branchement conditionnel.
-pub fn ligne_droite(b: &mut Cps2Bus, entree: u32) -> u64 {
-    Chemin::default().duree(b, entree)
-}
-
 fn a5(c: &Cpu, off: u32) -> u32 {
     c.a[5].wrapping_add(off)
 }
@@ -88,17 +66,6 @@ fn set_low_word(r: &mut u32, v: u16) {
 const GAUGE: u32 = 0x0020_0003;
 /// La jauge occupe les 32 premiers longs de la couche de caractères (la première colonne).
 const GAUGE_LONGS: u32 = 32;
-
-/// Décisions de 0xb46 pour l'état courant (jauge masquée par le bit 10 des réglages).
-fn gauge_path(b: &mut Cps2Bus, a5: u32) -> Chemin {
-    let mut p = Chemin::default();
-    let hidden = rd16(b, a5 + ram::DIP) & 0x400 != 0;
-    p.pris(hidden);
-    if !hidden {
-        tours(&mut p, GAUGE_LONGS);
-    }
-    p
-}
 
 /// 0xb40 : appelée à chaque attente (0xa40) ; fixe D1 puis dessine la jauge (0xb46).
 fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -127,14 +94,6 @@ fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
             | if c.d[1] & 0x8000_0000 != 0 { m68k::SR_N } else { 0 };
     }
     rts(c, b);
-}
-
-fn gauge_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    gauge_path(b, c.a[5]).duree(b, 0xb46)
-}
-
-fn gauge_with_value_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    gauge_path(b, c.a[5]).duree(b, 0xb40)
 }
 
 /// 0xb96 : verrouille les compteurs de pièces des bits D0 (en plus des bits forcés).
@@ -173,12 +132,6 @@ fn enable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
         }
     }
     rts(c, b);
-}
-
-fn enable_layers_cost(_: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut p = Chemin::default();
-    p.pris(rd8(b, ram::FROZEN) != 0);
-    p.duree(b, 0xbc6)
 }
 
 /// 0xbfc : désactive les couches D0 (D0 est complémenté au retour, comme l'original).
@@ -295,40 +248,30 @@ fn clear_scroll3(c: &mut Cpu, b: &mut Cps2Bus) {
     fill_run(c, b, hw::SCROLL3, hw::PALETTES, 0x1f00);
 }
 
-/// Durée d'un remplissage de `cases` cases (boucle `blt` en 0xd04 : reprise sauf au dernier tour).
-fn fill_cost(b: &mut Cps2Bus, entry: u32, cases: u64) -> u64 {
-    let (mut reprise, mut dernier) = (Chemin::default(), Chemin::default());
-    reprise.pris(true);
-    dernier.pris(false);
-    duree_boucle(b, entry, &Chemin::default(), 0xd04, &reprise, &dernier, cases)
+const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+    Native { entry, name, run, touches_sound: false, outputs }
 }
 
-const fn fixed(entry: u32, name: &'static str, cost: fn(&Cpu, &mut Cps2Bus) -> u64, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, cost, run, touches_sound: false, outputs, exact_cost: true }
-}
-
-pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge_cost, gauge, regs::d(2) | regs::a(0) | regs::CCR);
+pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
 /// 0xb3e : `bra.b 0xb46`, appelé par la mise à jour du monde (D1 = marqueur de la classe).
-pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_jauge_b3e", gauge_cost, gauge, regs::d(2) | regs::a(0) | regs::CCR);
-pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_jauge_d1", gauge_with_value_cost, gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
-pub const LOCK: Native = fixed(0xb96, "video_verrou", |_, b| ligne_droite(b, 0xb96), lock, regs::d(1));
-pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", |_, b| ligne_droite(b, 0xbac), unlock, regs::d(0) | regs::d(1));
-pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_couches_on", enable_layers_cost, enable_layers, 0);
-pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_couches_off", |_, b| ligne_droite(b, 0xbfc), disable_layers, regs::d(0));
+pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_jauge_b3e", gauge, regs::d(2) | regs::a(0) | regs::CCR);
+pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_jauge_d1", gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
+pub const LOCK: Native = fixed(0xb96, "video_verrou", lock, regs::d(1));
+pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", unlock, regs::d(0) | regs::d(1));
+pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_couches_on", enable_layers, 0);
+pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_couches_off", disable_layers, regs::d(0));
 pub const BLANK_SCREEN: Native = Native {
     entry: 0xc0c,
     name: "video_ecran_noir",
-    cost: |_, _| 300,
     run: blank_screen,
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1),
-    exact_cost: false,
 };
-pub const CLEAR_OBJECTS: Native = fixed(0xc58, "video_effacer_objets", |_, b| ligne_droite(b, 0xc58), clear_objects, 0);
-pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_effacer_scroll1", |_, b| fill_cost(b, 0xca8, 0x4000 / 4), clear_scroll1, regs::d(0) | regs::d(1));
-pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_effacer_debut_scroll1", |_, _| 0, clear_scroll1_start, regs::ALL);
-pub const CLEAR_SCROLL2: Native = fixed(0xcc8, "video_effacer_scroll2", |_, b| fill_cost(b, 0xcc8, 0x4000 / 4), clear_scroll2, regs::d(0) | regs::d(1));
-pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_effacer_scroll3", |_, b| fill_cost(b, 0xce8, 0x4000 / 4), clear_scroll3, regs::d(0) | regs::d(1));
+pub const CLEAR_OBJECTS: Native = fixed(0xc58, "video_effacer_objets", clear_objects, 0);
+pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_effacer_scroll1", clear_scroll1, regs::d(0) | regs::d(1));
+pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_effacer_debut_scroll1", clear_scroll1_start, regs::ALL);
+pub const CLEAR_SCROLL2: Native = fixed(0xcc8, "video_effacer_scroll2", clear_scroll2, regs::d(0) | regs::d(1));
+pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_effacer_scroll3", clear_scroll3, regs::d(0) | regs::d(1));
 
 
 // ---------------------------------------------------------------------------------------------
@@ -343,12 +286,12 @@ const TERRAIN_MAP_STAGE_14: u32 = 0x3f9c9c;
 /// Scènes 2 et 0x14 : carte fixe en ROM (y décalé de -/+ 0x10) ; ailleurs : case de la couche de
 /// défilement 2 en GFX RAM, avec la correction de caméra quand la caméra 2 est courante.
 /// Rend D2 (numéro), D0/D1 (coordonnées corrigées), A1 (adresse de la case) et Z (numéro nul).
-fn terrain_attribute(v: &mut Vue, c: &mut Cpu) {
-    let stage = v.rd8(a5(c, ram::STAGE));
+fn terrain_attribute(b: &mut Cps2Bus, c: &mut Cpu) {
+    let stage = rd8(b, a5(c, ram::STAGE));
     let (mut x, mut y) = (c.d[0] as u16, c.d[1] as u16);
-    let fixed_map = if v.pris(stage == 2) {
+    let fixed_map = if stage == 2 {
         Some((TERRAIN_MAP_STAGE_2, 0x10u16.wrapping_neg()))
-    } else if v.pris(stage == 0x14) {
+    } else if stage == 0x14 {
         Some((TERRAIN_MAP_STAGE_14, 0x10))
     } else {
         None
@@ -361,12 +304,12 @@ fn terrain_attribute(v: &mut Vue, c: &mut Cpu) {
         c.d[3] = row.wrapping_add(column) as u32;
         set_low_word(&mut c.d[4], column);
         c.a[1] = map.wrapping_add(row.wrapping_add(column) as i16 as u32);
-        v.rd16(c.a[1])
+        rd16(b, c.a[1])
     } else {
-        let camera_2 = v.rd8(a5(c, ram::USE_CAMERA_2)) != 0;
-        if !v.pris(!camera_2) {
-            x = x.wrapping_add(v.rd16(a5(c, ram::SCROLL[0])).wrapping_sub(v.rd16(a5(c, ram::SCROLL_2[0]))));
-            y = y.wrapping_add(v.rd16(a5(c, ram::SCROLL[1])).wrapping_sub(v.rd16(a5(c, ram::SCROLL_2[1]))));
+        let camera_2 = rd8(b, a5(c, ram::USE_CAMERA_2)) != 0;
+        if !(!camera_2) {
+            x = x.wrapping_add(rd16(b, a5(c, ram::SCROLL[0])).wrapping_sub(rd16(b, a5(c, ram::SCROLL_2[0]))));
+            y = y.wrapping_add(rd16(b, a5(c, ram::SCROLL[1])).wrapping_sub(rd16(b, a5(c, ram::SCROLL_2[1]))));
         }
         let page = 0x3000u16.wrapping_sub((y & 0x300) << 4);
         let row = 0x3c - ((y as u8 >> 2) & 0x3c) as u16;
@@ -375,7 +318,7 @@ fn terrain_attribute(v: &mut Vue, c: &mut Cpu) {
         set_low_word(&mut c.d[4], column);
         c.a[1] = hw::SCROLL2.wrapping_add(page.wrapping_add(row).wrapping_add(column) as i16 as u32);
         c.d[2] = 0;
-        v.rd16(c.a[1] + 2)
+        rd16(b, c.a[1] + 2)
     };
     let attribute = (word & 0xff80) >> 7;
     set_low_word(&mut c.d[0], x);
@@ -386,14 +329,8 @@ fn terrain_attribute(v: &mut Vue, c: &mut Cpu) {
 
 /// 0x24b0 : numéro de terrain en (D0, D1).
 fn terrain_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    terrain_attribute(&mut Vue::reelle(b), c);
+    terrain_attribute(b, c);
     rts(c, b);
-}
-
-fn terrain_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut v = Vue::simulee(b);
-    terrain_attribute(&mut v, &mut c.clone());
-    v.chemin.duree(b, 0x24b0)
 }
 
 /// 0x24a8 : numéro de terrain sous l'objet A0 (position x en +8, y en +0x10).
@@ -403,19 +340,10 @@ fn terrain_of_object(c: &mut Cpu, b: &mut Cps2Bus) {
     terrain_native(c, b);
 }
 
-fn terrain_of_object_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut c2 = c.clone();
-    set_low_word(&mut c2.d[0], rd16(b, c.a[0] + 8));
-    set_low_word(&mut c2.d[1], rd16(b, c.a[0] + 0x10));
-    let mut v = Vue::simulee(b);
-    terrain_attribute(&mut v, &mut c2);
-    v.chemin.duree(b, 0x24a8)
-}
-
 const TERRAIN_OUT: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::a(1) | regs::CCR;
 
-pub const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_cost, terrain_native, TERRAIN_OUT);
-pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_objet", terrain_of_object_cost, terrain_of_object, TERRAIN_OUT);
+pub const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_native, TERRAIN_OUT);
+pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_objet", terrain_of_object, TERRAIN_OUT);
 
 // ---------------------------------------------------------------------------------------------
 // V2 : chargeurs de blocs de tuiles
@@ -479,39 +407,39 @@ const LOAD_SMALL: Blocks = Blocks {
     source: Source::Banks { origin: 0x2459c0, list: 0x27e6, mask: 0xffff_e000, shift: 5, program: true },
 };
 
-fn prog_long(v: &mut Vue, a: u32) -> u32 {
-    (v.prog16(a) as u32) << 16 | v.prog16(a + 2) as u32
+fn prog_long(b: &mut Cps2Bus, a: u32) -> u32 {
+    (crate::mem::prog16(b, a) as u32) << 16 | crate::mem::prog16(b, a + 2) as u32
 }
 
 impl Blocks {
     /// Adresse en ROM des cases du bloc dont l'indice est lu en `at`.
-    fn block_source(&self, v: &mut Vue, at: u32) -> u32 {
-        let index = v.rd16(at) as u32;
+    fn block_source(&self, b: &mut Cps2Bus, at: u32) -> u32 {
+        let index = rd16(b, at) as u32;
         match self.source {
             Source::Fixed(base) => base.wrapping_add(index << 6),
             Source::Banks { origin, list, mask, shift, program } => {
                 let selector = ((at.wrapping_sub(origin) & mask) << shift).rotate_left(16) as u16 as i16;
                 let at = list.wrapping_add(selector as u32);
-                let table = if program { prog_long(v, at) } else { v.rd32(at) };
+                let table = if program { prog_long(b, at) } else { rd32(b, at) };
                 table.wrapping_add(index << 4)
             }
         }
     }
 
     /// Charge la grille d'indices D0 en `dst`. Rend l'adresse finale de la destination et la fin des indices.
-    fn load(&self, v: &mut Vue, d0: u16, mut dst: u32) -> (u32, u32) {
+    fn load(&self, b: &mut Cps2Bus, d0: u16, mut dst: u32) -> (u32, u32) {
         let page_base = self.page.map_or(0, |p| dst & !(p - 1));
         let mut at = self.index_base.wrapping_add(d0 as u32 * self.index_size);
         let row_advance = (self.cells * self.row_stride).wrapping_sub(self.grid * self.cells * 4);
         for _ in 0..self.grid {
             for _ in 0..self.grid {
-                let mut src = self.block_source(v, at);
+                let mut src = self.block_source(b, at);
                 at += 2;
                 for row in 0..self.cells {
                     for col in 0..self.cells {
-                        let cell = v.rd32(src).wrapping_add((self.code_offset as u32) << 16);
+                        let cell = rd32(b, src).wrapping_add((self.code_offset as u32) << 16);
                         src += 4;
-                        v.wr32(dst + row * self.row_stride + col * 4, cell);
+                        wr32(b, dst + row * self.row_stride + col * 4, cell);
                     }
                 }
                 dst = dst.wrapping_add(self.cells * 4);
@@ -523,20 +451,10 @@ impl Blocks {
         }
         (dst, at)
     }
-
-    /// Décisions des boucles : `grid` lignes de `grid` blocs.
-    fn path(&self) -> Chemin {
-        let mut p = Chemin::default();
-        for row in 0..self.grid {
-            tours(&mut p, self.grid);
-            p.pris(row + 1 < self.grid);
-        }
-        p
-    }
 }
 
 fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, blocks: &Blocks) {
-    let (dst, at) = blocks.load(&mut Vue::reelle(b), c.d[0] as u16, c.a[1]);
+    let (dst, at) = blocks.load(b, c.d[0] as u16, c.a[1]);
     c.d[0] = 0xffff;
     c.a[1] = dst;
     c.a[2] = at;
@@ -545,9 +463,9 @@ fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, blocks: &Blocks) {
 
 const LOAD_OUT: u32 = regs::d(0) | regs::a(1) | regs::a(2);
 
-pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocs_4x4", |_, b| LOAD_4X4.path().duree(b, 0x260c), |c, b| load_blocks(c, b, &LOAD_4X4), LOAD_OUT);
-pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocs_scroll2", |_, b| LOAD_SCROLL2.path().duree(b, 0x26d4), |c, b| load_blocks(c, b, &LOAD_SCROLL2), LOAD_OUT);
-pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocs_petits", |_, b| LOAD_SMALL.path().duree(b, 0x2766), |c, b| load_blocks(c, b, &LOAD_SMALL), LOAD_OUT);
+pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocs_4x4", |c, b| load_blocks(c, b, &LOAD_4X4), LOAD_OUT);
+pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocs_scroll2", |c, b| load_blocks(c, b, &LOAD_SCROLL2), LOAD_OUT);
+pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocs_petits", |c, b| load_blocks(c, b, &LOAD_SMALL), LOAD_OUT);
 
 // ---------------------------------------------------------------------------------------------
 // V2 : chiffres dans la couche de caractères
@@ -580,15 +498,6 @@ fn decimal_digits(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn decimal_digits_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let value = (c.d[0] as u16).min(99);
-    let mut p = Chemin::default();
-    p.pris((c.d[0] as u16) < 100);
-    p.repete(value as u32 / 10, false);
-    p.pris(true);
-    p.duree(b, 0x255a)
-}
-
 /// 0x25e8 : D0 en quatre chiffres hexadécimaux (quartet fort en premier), un par colonne à partir de A1.
 /// Rend A1 = A1 + 4 colonnes.
 fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -600,15 +509,10 @@ fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const DECIMAL_DIGITS: Native = fixed(0x255a, "video_chiffres_decimaux", decimal_digits_cost, decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
+pub const DECIMAL_DIGITS: Native = fixed(0x255a, "video_chiffres_decimaux", decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
 pub const HEX_DIGITS: Native = fixed(
     0x25e8,
     "video_chiffres_hexa",
-    |_, b| {
-        let mut p = Chemin::default();
-        tours(&mut p, 4);
-        p.duree(b, 0x25e8)
-    },
     hex_digits,
     regs::a(1) | regs::CCR,
 );
@@ -630,11 +534,9 @@ fn copy_fixed_screens(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const COPY_FIXED_SCREENS: Native = Native {
     entry: 0x19038,
     name: "video_copie_ecrans_fixes",
-    cost: |_, _| 600,
     run: copy_fixed_screens,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Routines natives de ce module.

@@ -141,7 +141,6 @@ fn player(k: u32) -> u32 {
 pub const PHASE_4: Native = Native {
     entry: 0x1ca20,
     name: "select_phase_4",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         x.c.a[5] = A5;
@@ -163,7 +162,6 @@ pub const PHASE_4: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------

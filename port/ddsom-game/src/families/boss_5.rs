@@ -804,5 +804,5 @@ fn dying_burst(x: &mut Cx) {
 }
 
 handlers! {
-    0x8341c "boss_5" 900 run,
+    0x8341c "boss_5" run,
 }

@@ -370,7 +370,7 @@ fn counter_reaction(x: &mut Cx) {
 
 /// Natives : gestionnaire, riposte et formes du corps (appelées par 0x81aa4 de `boss_common`).
 pub const NATIVES: &[crate::Native] = &[
-    super::cx::handler(0x7f41a, "boss_3", |_, _| 1200, |c, b| {
+    super::cx::handler(0x7f41a, "boss_3", |c, b| {
         let mut x = Cx::new(c, b);
         run(&mut x);
         x.ret();
@@ -378,7 +378,6 @@ pub const NATIVES: &[crate::Native] = &[
     crate::Native {
         entry: 0x81ae0,
         name: "boss_3_riposte",
-        cost: |_, _| 80,
         run: |c, b| {
             let mut x = Cx::new(c, b);
             counter_reaction(&mut x);
@@ -386,7 +385,6 @@ pub const NATIVES: &[crate::Native] = &[
         },
         touches_sound: false,
         outputs: crate::regs::d(0) | crate::regs::d(1),
-        exact_cost: false,
     },
     body::SHOVE_FRONT,
     body::SHOVE_SIDE,

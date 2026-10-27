@@ -1296,13 +1296,6 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
         println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    // calibrage des durées estimées des gestionnaires : écart moyen original - native par appel
-    for (name, st) in ddsom_game::report() {
-        if st.calls > 0 && (name.starts_with("eshl_") || name.starts_with("set_") || name.starts_with("sobj_")) {
-            let ecart = (st.original_cycles as i64 - st.native_cycles as i64) as f64 / st.calls as f64;
-            println!("  durée {name}: original {:.0} cycles/appel, écart à corriger de la durée estimée {ecart:+.0}", st.original_cycles as f64 / st.calls as f64);
-        }
-    }
     println!("{essais} appels de gestionnaires");
     if let Ok(fichier) = std::env::var("DDSOM_COUVERTURE") {
         let texte: Vec<String> = vus.iter().map(|a| format!("{a:06x}")).collect();

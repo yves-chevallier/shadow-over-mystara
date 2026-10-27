@@ -317,5 +317,5 @@ fn land(x: &mut Cx) {
 }
 
 handlers! {
-    0x69384 "enemy_12" 800 run,
+    0x69384 "enemy_12" run,
 }

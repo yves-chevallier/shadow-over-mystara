@@ -830,8 +830,8 @@ mod dark_warrior_double {
 }
 
 handlers! {
-    0x77736 "enemy_26" 600 dark_warrior_double::run,
-    0x75f42 "enemy_22" 600 chimera::run,
-    0x76592 "enemy_23" 600 spectre::run,
-    0x76afc "enemy_24" 600 manticore::run,
+    0x77736 "enemy_26" dark_warrior_double::run,
+    0x75f42 "enemy_22" chimera::run,
+    0x76592 "enemy_23" spectre::run,
+    0x76afc "enemy_24" manticore::run,
 }

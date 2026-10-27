@@ -106,7 +106,6 @@ const FADE_ALL: u8 = 0xf;
 pub const PHASE_28: Native = Native {
     entry: 0xfb292,
     name: "ending_phase_28",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         x.c.a[5] = A5;
@@ -121,7 +120,6 @@ pub const PHASE_28: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 resume!(R_RETURN, at::RETURN, |x| {
     x.c.a[0] = BLOCK;

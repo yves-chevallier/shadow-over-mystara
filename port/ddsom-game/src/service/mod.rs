@@ -423,12 +423,8 @@ pub fn back_to_menu(x: &mut Ctx) -> Flow {
 /// que la machine tient sans interpréteur en laissant passer le temps jusqu'à la fin de l'image. Aucune
 /// EEPROM ni aucune RAM de la machine émulée n'y mène (voir `docs/service.md` §7) : ils existent pour que
 /// l'adresse ait une native.
-fn tour_de_blocage(c: &m68k::Cpu, b: &mut cps2::Cps2Bus) -> u64 {
-    b.irq_horizon.saturating_sub(c.cycles).clamp(1, 4000)
-}
-
 const fn blocage(entry: u32, name: &'static str) -> Native {
-    Native { entry, name, cost: tour_de_blocage, run: |_, _| {}, touches_sound: false, outputs: 0, exact_cost: false }
+    Native { entry, name, run: |_, _| {}, touches_sound: false, outputs: 0 }
 }
 
 /// « NG » du MEMORY CHECK (`0x2d112`).

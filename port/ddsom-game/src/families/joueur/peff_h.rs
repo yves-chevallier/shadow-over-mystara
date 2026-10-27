@@ -532,9 +532,9 @@ mod aura {
 }
 
 handlers! {
-    0x4dd02 "peff_25" 150 shower::run,
-    0x4e038 "peff_26" 150 strike::run,
-    0x4e316 "peff_27" 120 ring::run,
-    0x4e4fa "peff_28" 120 moon::run,
-    0x4e6ca "peff_29" 100 aura::run,
+    0x4dd02 "peff_25" shower::run,
+    0x4e038 "peff_26" strike::run,
+    0x4e316 "peff_27" ring::run,
+    0x4e4fa "peff_28" moon::run,
+    0x4e6ca "peff_29" aura::run,
 }

@@ -767,5 +767,5 @@ fn down(x: &mut Cx) {
 }
 
 handlers! {
-    0x8ca4a "boss_10" 900 run,
+    0x8ca4a "boss_10" run,
 }

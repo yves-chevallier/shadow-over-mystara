@@ -774,28 +774,10 @@ fn combat_update_native(c: &mut Cpu, b: &mut Cps2Bus) {
     crate::mem::rts(c, b);
 }
 
-/// Durée estimée : environ 110 cycles par paire (objet, objet) confrontée, plus un socle.
-fn combat_update_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let _ = c;
-    let mut w_ = [0u64; 5];
-    for (i, n) in w_.iter_mut().enumerate() {
-        *n = rd16(b, A5 + ram::COUNTS + 2 * i as u32) as u64;
-    }
-    let [shots, eshots, enemies, boxes, items] = w_;
-    let alive = (0..4).filter(|k| rd8(b, A5 + ram::PLAYERS + 0x200 * k) != 0).count() as u64;
-    let pairs = shots * enemies + boxes * enemies + alive * (4 * enemies + 2 * eshots + 3 * boxes + items);
-    CYCLES_BASE + CYCLES_PER_PAIR * pairs
-}
-
-const CYCLES_BASE: u64 = 1_200;
-const CYCLES_PER_PAIR: u64 = 110;
-
 pub const COMBAT_UPDATE: Native = Native {
     entry: 0x260ee,
     name: "combat_update",
-    cost: combat_update_cost,
     run: combat_update_native,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };

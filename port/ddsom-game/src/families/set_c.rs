@@ -12,7 +12,7 @@ mod finale;
 mod fenetre;
 
 handlers! {
-    0xbc814 "set_scene_bc814" 300 scene::run,
-    0xc8352 "set_fenetre_c8352" 400 fenetre::run,
-    0xce024 "set_ecrans_ce024" 600 finale::run,
+    0xbc814 "set_scene_bc814" scene::run,
+    0xc8352 "set_fenetre_c8352" fenetre::run,
+    0xce024 "set_ecrans_ce024" finale::run,
 }

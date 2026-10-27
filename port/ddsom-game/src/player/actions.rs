@@ -51,21 +51,17 @@ fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
 pub const TO_STAND: crate::Native = crate::Native {
     entry: 0x35614,
     name: "player_to_stand",
-    cost: |_, _| 100,
     run: |c, b| stand_native(c, b, true),
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: false,
 };
 
 pub const START_STAND: crate::Native = crate::Native {
     entry: 0x35620,
     name: "player_start_stand",
-    cost: |_, _| 100,
     run: |c, b| stand_native(c, b, false),
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: false,
 };
 
 fn stand_animation(g: &mut Ctx, p: Player) -> u16 {

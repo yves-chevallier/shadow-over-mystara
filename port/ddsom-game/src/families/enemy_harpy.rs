@@ -657,5 +657,5 @@ fn dead(x: &mut Cx) {
 }
 
 handlers! {
-    0x756c4 "enemy_21" 600 run,
+    0x756c4 "enemy_21" run,
 }

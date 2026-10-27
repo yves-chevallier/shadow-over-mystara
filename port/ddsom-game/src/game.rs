@@ -202,11 +202,9 @@ const WORLD_RESUMES: [Native; RESUMES] = {
     const MODEL: Native = Native {
         entry: 0,
         name: "world_update_reprise",
-        cost: |_, _| 100,
         run: resume_world,
         touches_sound: false,
         outputs: 0,
-        exact_cost: false,
     };
     let mut out = [MODEL; RESUMES];
     let (mut k, mut o) = (0, 0);
@@ -226,14 +224,12 @@ const WORLD_RESUMES: [Native; RESUMES] = {
 pub const WORLD_UPDATE: Native = Native {
     entry: 0x1c86e,
     name: "world_update",
-    cost: |_, _| 100,
     run: |c, b| {
         update_world(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0, // les appelants enchaînent sur d'autres appels
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -248,7 +244,6 @@ const QUEUES: [&Queue; 5] =
 pub const FRAME_END: Native = Native {
     entry: 0x1c4c4,
     name: "game_frame_end",
-    cost: |_, _| 100,
     run: |c, b| {
         for queue in QUEUES {
             queue.reset(b);
@@ -259,7 +254,6 @@ pub const FRAME_END: Native = Native {
     },
     touches_sound: false,
     outputs: regs::a(0),
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -405,14 +399,12 @@ pub fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const PHASE_0: Native = Native {
     entry: 0x1c522,
     name: "game_phase0",
-    cost: |_, _| 100,
     run: |c, b| {
         phase0(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -549,28 +541,24 @@ pub fn debug_scene_skip(b: &mut Cps2Bus) {
 pub const PHASE_12: Native = Native {
     entry: 0x1c6a0,
     name: "game_phase12",
-    cost: |_, _| 100,
     run: |c, b| {
         phase12(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Reprise de la phase 12 quand la mise à jour du monde a cédé la main : la tâche revient en 0x1c702.
 pub const PHASE_12_RESUME: Native = Native {
     entry: WORLD_RETURN,
     name: "game_phase12_reprise",
-    cost: |_, _| 100,
     run: |c, b| {
         phase12_after_world(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Routines natives de la boucle de partie.

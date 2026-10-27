@@ -645,6 +645,6 @@ mod nagpa {
 }
 
 handlers! {
-    0x74fc0 "enemy_20" 600 man_scorpion::run,
-    0x79300 "enemy_28" 600 nagpa::run,
+    0x74fc0 "enemy_20" man_scorpion::run,
+    0x79300 "enemy_28" nagpa::run,
 }

@@ -2481,10 +2481,10 @@ mod name_entry {
     }
 }
 
-/// Déclare une native de gestionnaire : adresse, nom, coût (fonction ou constante), fonction.
+/// Déclare une native de gestionnaire : adresse, nom, fonction.
 macro_rules! entry {
-    ($entry:literal $name:literal $cost:expr, $f:path) => {
-        super::cx::handler($entry, $name, $cost, |c, b| {
+    ($entry:literal $name:literal, $f:path) => {
+        super::cx::handler($entry, $name, |c, b| {
             let mut x = Cx::new(c, b);
             $f(&mut x);
             x.ret();
@@ -2493,19 +2493,19 @@ macro_rules! entry {
 }
 
 pub const NATIVES: &[crate::Native] = &[
-    entry!(0xcc25a "set_commun_cc25a" |_, _| 120, scene_spawner::run),
-    entry!(0xba310 "set_0" |_, _| 300, palette_script::run),
-    entry!(0xbc518 "set_1" |_, _| 600, wave_leader::run),
-    entry!(0xc935a "set_4" |_, _| 600, tile_anim::run4),
-    entry!(0xc9780 "set_5" |_, _| 800, name_entry::run),
-    entry!(0xcafec "set_6" |_, _| 600, tile_anim::run6),
-    entry!(0xcb29c "set_7" |_, _| 300, exit_gate::run),
-    entry!(0xcb896 "set_7_reprise_zone" |_, _| 300, exit_gate::after_fade),
-    entry!(0xcb9c0 "set_7_reprise_scene" |_, _| 300, exit_gate::next_scene),
-    entry!(0xcc2c8 "set_9" |_, _| 120, inert::run),
-    entry!(0xcc3c2 "set_10" |_, _| 200, dialogue::run),
-    entry!(0xcdcaa "set_11" |_, _| 400, level_end::run),
-    entry!(0xcdd70 "set_12" |_, _| 1500, fade_white::run),
-    entry!(0xcdef6 "set_13" |_, _| 120, palette_anim::run),
-    entry!(0xcdf86 "set_14" |_, _| 200, scene_trigger::run),
+    entry!(0xcc25a "set_commun_cc25a", scene_spawner::run),
+    entry!(0xba310 "set_0", palette_script::run),
+    entry!(0xbc518 "set_1", wave_leader::run),
+    entry!(0xc935a "set_4", tile_anim::run4),
+    entry!(0xc9780 "set_5", name_entry::run),
+    entry!(0xcafec "set_6", tile_anim::run6),
+    entry!(0xcb29c "set_7", exit_gate::run),
+    entry!(0xcb896 "set_7_reprise_zone", exit_gate::after_fade),
+    entry!(0xcb9c0 "set_7_reprise_scene", exit_gate::next_scene),
+    entry!(0xcc2c8 "set_9", inert::run),
+    entry!(0xcc3c2 "set_10", dialogue::run),
+    entry!(0xcdcaa "set_11", level_end::run),
+    entry!(0xcdd70 "set_12", fade_white::run),
+    entry!(0xcdef6 "set_13", palette_anim::run),
+    entry!(0xcdf86 "set_14", scene_trigger::run),
 ];

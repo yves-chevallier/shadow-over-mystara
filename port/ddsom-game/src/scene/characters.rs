@@ -223,7 +223,6 @@ fn end(x: &mut Ctx) -> Flow {
 pub const CHARACTERS: Native = Native {
     entry: 0xf6492,
     name: "scene_characters",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
@@ -232,7 +231,6 @@ pub const CHARACTERS: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[

@@ -131,19 +131,15 @@ fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cpu, &mut Cps2Bus) -> bool) {
 pub const SHOVE_FRONT: crate::Native = crate::Native {
     entry: 0x818e6,
     name: "boss_3_pousse_devant",
-    cost: |_, _| 60,
     run: |c, b| native(c, b, shove_front),
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::d(1) | crate::regs::a(2) | crate::regs::CCR,
-    exact_cost: false,
 };
 
 pub const SHOVE_SIDE: crate::Native = crate::Native {
     entry: 0x819e2,
     name: "boss_3_pousse_cote",
-    cost: |_, _| 60,
     run: |c, b| native(c, b, shove_side),
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::d(1) | crate::regs::a(2) | crate::regs::CCR,
-    exact_cost: false,
 };

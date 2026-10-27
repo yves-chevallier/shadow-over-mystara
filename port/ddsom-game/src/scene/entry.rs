@@ -194,14 +194,12 @@ pub fn place_players(x: &mut Ctx) {
 pub const PLACE_PLAYERS: Native = Native {
     entry: 0x20de6,
     name: "scene_place_joueurs",
-    cost: |_, _| 200,
     run: |c, b| {
         place_players(&mut Ctx::new(c, b));
         crate::mem::rts(c, b);
     },
     touches_sound: false,
     outputs: crate::regs::ALL,
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -271,14 +269,12 @@ pub fn phase_8(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const PHASE_8: Native = Native {
     entry: 0x20c38,
     name: "scene_phase_8",
-    cost: |_, _| 100,
     run: |c, b| {
         phase_8(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 // --- séquences sans état -----------------------------------------------------------------------

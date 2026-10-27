@@ -644,11 +644,9 @@ macro_rules! resume_native {
         pub const $name: Native = Native {
             entry: $entry,
             name: stringify!($name),
-            cost: |_, _| 100,
             run: $run,
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     };
 }
@@ -680,7 +678,6 @@ resume_native!(RESUME_TWICE_END, RESUME_TWICE_END_ENTRY, |c, b| {
 pub const PHASE_16: Native = Native {
     entry: 0xf3142,
     name: "scene_phase_16",
-    cost: |_, _| 100,
     run: |c, b| {
         if !phase_16(c, b) {
             rts(c, b);
@@ -688,7 +685,6 @@ pub const PHASE_16: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Fin d'image de l'aiguillage d'origine d'une séquence (`entrée + 10` : `cmpi.b #dernier,2(A0)`, puis la mise à
@@ -706,11 +702,9 @@ macro_rules! dispatch_tails {
         &[$(Native {
             entry: $entry + 10,
             name: "scene_exit_dispatch_tail",
-            cost: |_, _| 100,
             run: |c, b| dispatch_tail(c, b, $index),
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         }),*]
     };
 }

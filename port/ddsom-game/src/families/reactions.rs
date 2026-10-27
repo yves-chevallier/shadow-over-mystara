@@ -2341,11 +2341,9 @@ macro_rules! reaction_natives {
         &[$(Native {
             entry: $entry,
             name: "enemy_reaction",
-            cost: |_, _| 100,
             run: |c, b| native_run(c, b, $entry),
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         }),*]
     };
 }
@@ -2363,11 +2361,9 @@ pub const NATIVES: &[Native] = reaction_natives![
 pub const PLAYER_HURT_ANIMATION: Native = Native {
     entry: 0x3bb16,
     name: "player_hurt_animation",
-    cost: |_, _| 100,
     run: player_hurt_animation,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 #[cfg(test)]

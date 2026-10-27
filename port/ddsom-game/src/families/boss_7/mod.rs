@@ -303,5 +303,5 @@ fn idle_attack(x: &mut Cx) {
 }
 
 handlers! {
-    0x859f8 "boss_7" 1200 run,
+    0x859f8 "boss_7" run,
 }

@@ -611,10 +611,6 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                 if progres {
                     eprintln!("appel {entree:06x} variante {} pas {pas} objet {:02x?}", avant_obj[3], &avant_obj[..8]);
                 }
-                // coût « hors contrat » : l'exécuteur lancerait le code d'origine (qui peut céder la main) ; rien à comparer
-                if ddsom_game::all_natives().any(|n| n.entry == entree && (n.cost)(&c, &mut b) > u64::MAX / 8) {
-                    continue;
-                }
                 let mut r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
                 // les curseurs du tableau de saisie tournent aussi (même gestionnaire, A0 = le curseur)
                 let apres_maitre = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
@@ -661,13 +657,6 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
         total += st.mismatches;
         println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
-    }
-    // calibrage des durées estimées des gestionnaires : écart moyen original - native par appel
-    for (name, st) in ddsom_game::report() {
-        if st.calls > 0 && (name.starts_with("eshl_") || name.starts_with("set_") || name.starts_with("sobj_")) {
-            let ecart = (st.original_cycles as i64 - st.native_cycles as i64) as f64 / st.calls as f64;
-            println!("  durée {name}: original {:.0} cycles/appel, écart à corriger de la durée estimée {ecart:+.0}", st.original_cycles as f64 / st.calls as f64);
-        }
     }
     println!("{essais} appels de gestionnaires");
     if let Ok(fichier) = std::env::var("DDSOM_COUVERTURE") {

@@ -369,5 +369,5 @@ fn bob(x: &mut Cx) {
 }
 
 handlers! {
-    0x8f59c "boss_13" 600 run,
+    0x8f59c "boss_13" run,
 }

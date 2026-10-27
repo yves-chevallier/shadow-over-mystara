@@ -16,7 +16,6 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C};
 
-use crate::chemin::Chemin;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::{regs, Native};
 
@@ -212,54 +211,20 @@ fn enfiler_si_son(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-impl Chemin {
-    /// Décisions prises par 0xe0836 (si `avec_test`) puis 0xe0848.
-    fn enfilage(&mut self, c: &Cpu, b: &mut Cps2Bus, avec_test: bool) {
-        if avec_test {
-            // bne (mot) ; bne (partie) ; beq (attract nul -> abandon)
-            let mot = rd16(b, a5(c, ram::SON_MOT)) != 0;
-            self.pris(mot);
-            if !mot {
-                let partie = rd8(b, a5(c, ram::SON_PARTIE)) != 0;
-                self.pris(partie);
-                if !partie {
-                    let abandon = rd8(b, a5(c, ram::SON_ATTRACT)) == 0;
-                    self.pris(abandon);
-                    if abandon {
-                        return;
-                    }
-                }
-            }
-        }
-        let pleine = file_pleine(c, b);
-        self.pris(pleine);
-    }
-}
-
-fn enfiler_cout(c: &Cpu, b: &mut Cps2Bus, entree: u32, avec_test: bool) -> u64 {
-    let mut p = Chemin::default();
-    p.enfilage(c, b, avec_test);
-    p.duree(b, entree)
-}
-
 pub const ENFILER_SI_SON: Native = Native {
     entry: 0xe0836,
     name: "son_enfiler",
-    cost: |c, b| enfiler_cout(c, b, 0xe0836, true),
     run: enfiler_si_son,
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
-    exact_cost: true,
 };
 
 pub const ENFILER_DIRECT: Native = Native {
     entry: 0xe0848,
     name: "son_enfiler_direct",
-    cost: |c, b| enfiler_cout(c, b, 0xe0848, false),
     run: enfiler_direct,
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
-    exact_cost: true,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -314,17 +279,13 @@ fn wrapper_en(entree: u32) -> &'static Wrapper {
 }
 
 /// Panoramique (0-0x2f -> octet de la table de ROM) d'un objet : position écran de l'objet par
-/// rapport à la caméra, bornée à 0..0x178, par tranches de 8 pixels. Trois décisions de branchement
-/// sont enregistrées dans `chemin`.
-fn panoramique(c: &Cpu, b: &mut Cps2Bus, chemin: &mut Chemin) -> u8 {
+/// rapport à la caméra, bornée à 0..0x178, par tranches de 8 pixels.
+fn panoramique(c: &Cpu, b: &mut Cps2Bus) -> u8 {
     let x = rd16(b, c.a[0] + 8);
     let camera_2 = rd8(b, a5(c, ram::CAMERA_CHOIX)) != 0;
-    chemin.pris(!camera_2);
     let camera = rd16(b, a5(c, if camera_2 { ram::CAMERA_2_X } else { ram::CAMERA_1_X }));
     let ecart = x.wrapping_sub(camera);
-    chemin.pris(ecart as i16 >= 0);
     let ecart = if (ecart as i16) < 0 { 0 } else { ecart };
-    chemin.pris(ecart < 0x180);
     let ecart = if ecart < 0x180 { ecart } else { 0x178 };
     rd8(b, TABLE_PAN + ((ecart & 0x1ff) >> 3) as u32)
 }
@@ -335,17 +296,14 @@ struct Plan {
     commande: Option<Commande>,
     /// Le son est-il autorisé (sinon la commande est abandonnée par l'enfileur) ?
     autorise: bool,
-    chemin: Chemin,
 }
 
 fn planifier(w: &Wrapper, c: &Cpu, b: &mut Cps2Bus) -> Plan {
-    let mut chemin = Chemin::default();
     // indice de la table de commandes, calculé par les sous-routines 0xedee4 / 0xedef2
     let indice = match w.cmd {
         Cmd::Fixe(_) => 0,
         Cmd::Alternee(_) => {
             let voix_b = rd16(b, a5(c, ram::ALTERNANCE)) != 0;
-            chemin.pris(!voix_b); // beq : voix A
             if voix_b { 2 } else { 0 }
         }
         Cmd::ParObjet(_) => {
@@ -364,19 +322,17 @@ fn planifier(w: &Wrapper, c: &Cpu, b: &mut Cps2Bus) -> Plan {
     };
     if w.opts & GARDE != 0 {
         let muet = rd8(b, a5(c, ram::MUET_GARDE)) != 0;
-        chemin.pris(muet);
         if muet {
-            return Plan { commande: None, autorise: false, chemin };
+            return Plan { commande: None, autorise: false };
         }
     }
     let mut d2 = w.d2;
     if w.opts & PAN != 0 {
-        d2 |= (panoramique(c, b, &mut chemin) as u32) << 8;
+        d2 |= (panoramique(c, b) as u32) << 8;
     }
     let direct = w.opts & DIRECT != 0;
-    chemin.enfilage(c, b, !direct);
     let autorise = direct || son_autorise(c, b);
-    Plan { commande: Some(Commande { d1: d1 as u32, d2, d3: w.d3 }), autorise, chemin }
+    Plan { commande: Some(Commande { d1: d1 as u32, d2, d3: w.d3 }), autorise }
 }
 
 /// Sauvegarde fantôme : l'original empile D0-D7, A0-A4 sur la pile privée (copie morte restée en RAM).
@@ -411,21 +367,13 @@ fn run_wrapper(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Durée du wrapper d'origine sur le chemin choisi.
-fn cout_wrapper(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let w = wrapper_en(c.pc);
-    planifier(w, c, b).chemin.duree(b, w.entry)
-}
-
 fn wrapper_natif(w: &Wrapper) -> Native {
     Native {
         entry: w.entry,
         name: "son_wrapper",
-        cost: cout_wrapper,
         run: run_wrapper,
         touches_sound: false,
         outputs: 0, // tous les registres sont rendus intacts : rien à comparer
-        exact_cost: true,
     }
 }
 
@@ -436,11 +384,9 @@ pub fn wrappers_natifs() -> &'static [Native] {
         let aiguillages = AIGUILLAGES.iter().map(|&(entry, _)| Native {
             entry,
             name: "son_aiguillage",
-            cost: |_, _| 300,
             run: run_aiguillage,
             touches_sound: false,
             outputs: 0, // tous les registres sont rendus intacts
-            exact_cost: false,
         });
         table::WRAPPERS.iter().map(wrapper_natif).chain(aiguillages).collect()
     })
@@ -594,19 +540,6 @@ fn transmettre(b: &mut Cps2Bus, entree: u32) {
     }
 }
 
-/// Décisions de 0x68c : drapeau de silence, délai nul, file vide, Z80 pas prêt.
-fn chemin_envoi(c: &Cpu, b: &mut Cps2Bus) -> Chemin {
-    let mut p = Chemin::default();
-    p.pris(rd8(b, a5(c, ram::SILENCE)) != 0);
-    p.pris(rd16(b, a5(c, ram::DELAI)) == 0);
-    let vide = rd16(b, a5(c, ram::TETE_LECTURE)) == rd16(b, a5(c, ram::TETE_ECRITURE));
-    p.pris(vide);
-    if !vide {
-        p.pris(rd8(b, z80::ACQUIT) != 0xff);
-    }
-    p
-}
-
 /// 0x68c (VBLANK) : une commande de la file part vers le Z80 si celui-ci a acquitté la précédente.
 fn envoyer_au_z80(c: &mut Cpu, b: &mut Cps2Bus) {
     let silence = rd8(b, a5(c, ram::SILENCE)) != 0;
@@ -632,19 +565,12 @@ fn envoyer_au_z80(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Durée jusqu'au JMP final inclus (l'affichage des verrous est compté par son propre appel).
-fn envoyer_cout(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    chemin_envoi(c, b).duree(b, 0x68c)
-}
-
 pub const ENVOYER_AU_Z80: Native = Native {
     entry: 0x68c,
     name: "son_envoyer_z80",
-    cost: envoyer_cout,
     run: envoyer_au_z80,
     touches_sound: true,
     outputs: 0, // le VBLANK a sauvegardé tous les registres
-    exact_cost: false,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -677,7 +603,7 @@ fn service_delai(c: &mut Cpu, b: &mut Cps2Bus, commande: u16, verrou: u8) {
 }
 
 const fn service_natif(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), touches_sound: bool) -> Native {
-    Native { entry, name, cost: |_, _| 200, run, touches_sound, outputs: regs::CCR, exact_cost: false }
+    Native { entry, name, run, touches_sound, outputs: regs::CCR }
 }
 
 /// 0xe0882 : commande 0xff00 (arrêt général).
@@ -735,22 +661,18 @@ fn init_pile_privee(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const INIT_PILE_PRIVEE: Native = Native {
     entry: 0xee044,
     name: "son_init_pile",
-    cost: |_, _| 40,
     run: init_pile_privee,
     touches_sound: false,
     outputs: regs::a(0) | regs::CCR,
-    exact_cost: false,
 };
 
 /// 0xec238 : son vide (un simple `rts`), cible de l'aiguillage 0xec200 pour les objets sans son.
 pub const AUCUN: Native = Native {
     entry: 0xec238,
     name: "son_aucun",
-    cost: |_, _| 16,
     run: rts,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: false,
 };
 
 /// Routines natives du son, hors wrappers (listées une à une dans `lib.rs::NATIVES`).

@@ -23,7 +23,6 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
-use crate::chemin::Chemin;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::{call, regs, Native};
 
@@ -359,7 +358,6 @@ pub fn tester(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
 
 /// Un compteur long en RAM, son image dans `CONFIG`, et sa place dans l'EEPROM.
 struct Compteur {
-    entree: u32,
     /// Seulement si cet octet (relatif à A5) est non nul.
     condition: Option<u32>,
     valeur: u32,
@@ -368,11 +366,11 @@ struct Compteur {
     place: u16,
 }
 
-const PIECES: Compteur = Compteur { entree: 0x2daca, condition: None, valeur: 0x76, image: 0xffff_9dee, place: 0x60 };
-const DEPARTS: Compteur = Compteur { entree: 0x2daf4, condition: None, valeur: 0x7a, image: 0xffff_9df2, place: 0x64 };
+const PIECES: Compteur = Compteur { condition: None, valeur: 0x76, image: 0xffff_9dee, place: 0x60 };
+const DEPARTS: Compteur = Compteur { condition: None, valeur: 0x7a, image: 0xffff_9df2, place: 0x64 };
 const CONTINUES: Compteur =
-    Compteur { entree: 0x2db1e, condition: Some(0x25), valeur: 0x7e, image: 0xffff_9df6, place: 0x68 };
-const PARTIES: Compteur = Compteur { entree: 0x2db4e, condition: None, valeur: 0x7fd4, image: 0xffff_9dfa, place: 0x6c };
+    Compteur { condition: Some(0x25), valeur: 0x7e, image: 0xffff_9df6, place: 0x68 };
+const PARTIES: Compteur = Compteur { condition: None, valeur: 0x7fd4, image: 0xffff_9dfa, place: 0x6c };
 
 /// Incrémente le compteur et, s'il a changé par rapport à son image, l'écrit dans l'EEPROM (0x2d8aa).
 /// Rend vrai si l'EEPROM a été écrite.
@@ -410,29 +408,6 @@ natif_compteur!(compter_pieces, PIECES);
 natif_compteur!(compter_departs, DEPARTS);
 natif_compteur!(compter_continues, CONTINUES);
 natif_compteur!(compter_parties, PARTIES);
-
-/// Décisions d'un compteur : condition, mode sans comptabilité, valeur inchangée.
-fn chemin_compteur(c: &Cpu, b: &mut Cps2Bus, k: &Compteur) -> Chemin {
-    let mut p = Chemin::default();
-    if let Some(cond) = k.condition {
-        let absent = rd8(b, a5(c, cond)) == 0;
-        p.pris(absent);
-        if absent {
-            return p;
-        }
-    }
-    let valeur = rd32(b, a5(c, k.valeur)).wrapping_add(1);
-    let sans_compta = rd8(b, a5(c, ram::SANS_COMPTA)) != 0;
-    p.pris(sans_compta);
-    if !sans_compta {
-        p.pris(valeur == rd32(b, a5(c, k.image)));
-    }
-    p
-}
-
-fn cout_compteur(c: &Cpu, b: &mut Cps2Bus, k: &Compteur) -> u64 {
-    chemin_compteur(c, b, k).duree_hors(b, k.entree, None, &[0x2d8aa])
-}
 
 // ---------------------------------------------------------------------------------------------
 // Comptabilité complète : EEPROM puis compteurs de la RAM supplémentaire
@@ -483,204 +458,29 @@ fn vblank_compta(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn cout_vblank_compta(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut p = Chemin::default();
-    let actif = rd8(b, a5(c, ram::SANS_COMPTA)) != 0;
-    p.pris(!actif);
-    if actif {
-        p.pris(rd16(b, 0x664000) & 1 != 0);
-    }
-    p.duree(b, 0x2dcf6)
-}
-
-// ---------------------------------------------------------------------------------------------
-// Durées
-
-/// Décisions d'une boucle `dbf` de `n` tours.
-fn boucle(p: &mut Chemin, n: u32) {
-    p.repete(n - 1, true);
-    p.pris(false);
-}
-
-/// Boucle de comparaison de `n` mots tous égaux : à chaque tour [différence ? non] puis `dbf`.
-fn comparaison(p: &mut Chemin, n: u32) {
-    for i in 0..n {
-        p.pris(false);
-        p.pris(i + 1 < n);
-    }
-}
-
-fn mots_transferes(c: &Cpu, b: &mut Cps2Bus) -> u32 {
-    rd16(b, a5(c, ram::MOTS_COURANT)) as u32 + 1
-}
-
-/// Durée d'une lecture de `n` mots : préambule, `n - 1` tours complets, dernier tour.
-fn duree_lire(b: &mut Cps2Bus, n: u32) -> u64 {
-    let tour = |fin: bool| {
-        let mut p = Chemin::default();
-        boucle(&mut p, 10);
-        boucle(&mut p, 16);
-        p.pris(!fin);
-        p
-    };
-    let prefixe = Chemin::default().duree_entre(b, 0x2d846, Some(0x2d868));
-    prefixe + (n as u64 - 1) * tour(false).duree_entre(b, 0x2d868, Some(0x2d868)) + tour(true).duree(b, 0x2d868)
-}
-
-/// Durée d'une écriture de `n` mots (les deux attentes de fin d'écriture sont supposées immédiates).
-fn duree_ecrire(b: &mut Cps2Bus, n: u32) -> u64 {
-    let tour = |fin: bool| {
-        let mut p = Chemin::default();
-        boucle(&mut p, 10); // commande d'effacement
-        p.repete(3, false); // attente : délai, DO ; puis l'erreur éventuelle
-        boucle(&mut p, 10); // commande d'écriture
-        boucle(&mut p, 16); // 16 bits de données
-        p.repete(3, false);
-        p.pris(!fin);
-        p
-    };
-    let mut prefixe = Chemin::default();
-    boucle(&mut prefixe, 10); // autorisation d'écriture
-    let prefixe = prefixe.duree_entre(b, 0x2d90e, Some(0x2d93c));
-    prefixe + (n as u64 - 1) * tour(false).duree_entre(b, 0x2d93c, Some(0x2d93c)) + tour(true).duree(b, 0x2d93c)
-}
-
-fn cout_lire(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let n = mots_transferes(c, b);
-    duree_lire(b, n)
-}
-
-fn cout_ecrire(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let n = mots_transferes(c, b);
-    duree_ecrire(b, n)
-}
-
-/// Mots du transfert d'après `MOTS` (les routines de haut niveau recopient `MOTS` dans `MOTS_COURANT`).
-fn mots_demandes(c: &Cpu, b: &mut Cps2Bus) -> u32 {
-    rd16(b, a5(c, ram::MOTS)) as u32 + 1
-}
-
-fn cout_ecrire_verifier(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let n = mots_demandes(c, b);
-    let mut p = Chemin::default();
-    comparaison(&mut p, n);
-    p.duree_hors(b, 0x2d8aa, None, &[0x2d90e, 0x2d846]) + duree_ecrire(b, n) + duree_lire(b, n)
-}
-
-/// Premier couple de mots des deux exemplaires de la configuration qui diffère après la relecture
-/// (simulée : la relecture remplace les mots lus), ou `None` s'ils concordent tous.
-fn premier_ecart(c: &Cpu, b: &mut Cps2Bus) -> Option<u32> {
-    let debut = rd16(b, a5(c, ram::DEBUT));
-    let mots = rd16(b, a5(c, ram::MOTS)) as u32 + 1;
-    let config = a5(c, ram::CONFIG);
-    let premier = config.wrapping_add(debut as i16 as u32);
-    let mot = |b: &mut Cps2Bus, a: u32| {
-        let i = a.wrapping_sub(premier) / 2;
-        if a >= premier && a - premier < 2 * mots && (a - premier) % 2 == 0 {
-            b.eeprom.data[((adresse(debut) as u32 + i) & 0x3f) as usize]
-        } else {
-            rd16(b, a)
-        }
-    };
-    (0..24).find(|&i| mot(b, config + 2 * i) != mot(b, config + 0x30 + 2 * i))
-}
-
-fn cout_lire_verifier(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let n = mots_demandes(c, b);
-    let lecture = duree_lire(b, n);
-    let ecart = premier_ecart(c, b);
-    // un tour : comparaison jusqu'au premier écart (ou aux 24 mots), puis éventuellement un nouvel essai
-    let tour = |reessai: Option<bool>| {
-        let mut p = Chemin::default();
-        match ecart {
-            None => comparaison(&mut p, 24),
-            Some(j) => {
-                for _ in 0..j {
-                    p.pris(false);
-                    p.pris(true);
-                }
-                p.pris(true); // différence
-            }
-        }
-        if let Some(r) = reessai {
-            p.pris(r); // bne : nouvel essai
-        }
-        p
-    };
-    if ecart.is_none() {
-        return tour(None).duree_hors(b, 0x2d808, None, &[0x2d846]) + lecture;
-    }
-    let debut = Chemin::default().duree_hors(b, 0x2d808, Some(0x2d80e), &[0x2d846]);
-    let essai = tour(Some(true)).duree_hors(b, 0x2d80e, Some(0x2d80e), &[0x2d846]) + lecture;
-    let dernier = tour(Some(false)).duree_hors(b, 0x2d80e, None, &[0x2d846]) + lecture;
-    debut + (ESSAIS as u64 - 1) * essai + dernier
-}
-
 macro_rules! natif {
-    ($nom:ident, $entree:expr, $name:expr, $run:expr, $cost:expr, $sorties:expr, $exact:expr) => {
+    ($nom:ident, $entree:expr, $name:expr, $run:expr, $sorties:expr) => {
         pub const $nom: Native = Native {
             entry: $entree,
             name: $name,
-            cost: $cost,
             run: $run,
             touches_sound: false,
             outputs: $sorties,
-            exact_cost: $exact,
         };
     };
 }
 
-natif!(LIRE, 0x2d846, "eeprom_lire", natif_lire, cout_lire, 0, true);
-natif!(ECRIRE, 0x2d90e, "eeprom_ecrire", natif_ecrire, cout_ecrire, regs::d(0) | regs::CCR, true);
-natif!(
-    ECRIRE_VERIFIER,
-    0x2d8aa,
-    "eeprom_ecrire_verifier",
-    natif_ecrire_verifier,
-    cout_ecrire_verifier,
-    regs::d(0) | regs::CCR,
-    true
-);
-natif!(
-    LIRE_VERIFIER,
-    0x2d808,
-    "eeprom_lire_verifier",
-    natif_lire_verifier,
-    cout_lire_verifier,
-    regs::d(0) | regs::CCR,
-    true
-);
-natif!(COMPTER_PIECES, 0x2daca, "compta_pieces", compter_pieces, |c, b| cout_compteur(c, b, &PIECES), regs::d(0), false);
-natif!(COMPTER_DEPARTS, 0x2daf4, "compta_departs", compter_departs, |c, b| cout_compteur(c, b, &DEPARTS), regs::d(0), false);
-natif!(
-    COMPTER_CONTINUES,
-    0x2db1e,
-    "compta_continues",
-    compter_continues,
-    |c, b| cout_compteur(c, b, &CONTINUES),
-    regs::d(0),
-    false
-);
-natif!(COMPTER_PARTIES, 0x2db4e, "compta_parties", compter_parties, |c, b| cout_compteur(c, b, &PARTIES), regs::d(0), false);
-natif!(VBLANK_COMPTA, 0x2dcf6, "compta_vblank", vblank_compta, cout_vblank_compta, regs::d(0), true);
-natif!(
-    COMPLET_PIECES_NATIF,
-    0x2e448,
-    "compta_complete_pieces",
-    natif_compta_pieces,
-    |_, _| 300,
-    regs::CCR,
-    false
-);
-natif!(
-    COMPLET_DEPARTS_NATIF,
-    0x2e49a,
-    "compta_complete_departs",
-    natif_compta_departs,
-    |_, _| 300,
-    regs::CCR,
-    false
-);
+natif!(LIRE, 0x2d846, "eeprom_lire", natif_lire, 0);
+natif!(ECRIRE, 0x2d90e, "eeprom_ecrire", natif_ecrire, regs::d(0) | regs::CCR);
+natif!(ECRIRE_VERIFIER, 0x2d8aa, "eeprom_ecrire_verifier", natif_ecrire_verifier, regs::d(0) | regs::CCR);
+natif!(LIRE_VERIFIER, 0x2d808, "eeprom_lire_verifier", natif_lire_verifier, regs::d(0) | regs::CCR);
+natif!(COMPTER_PIECES, 0x2daca, "compta_pieces", compter_pieces, regs::d(0));
+natif!(COMPTER_DEPARTS, 0x2daf4, "compta_departs", compter_departs, regs::d(0));
+natif!(COMPTER_CONTINUES, 0x2db1e, "compta_continues", compter_continues, regs::d(0));
+natif!(COMPTER_PARTIES, 0x2db4e, "compta_parties", compter_parties, regs::d(0));
+natif!(VBLANK_COMPTA, 0x2dcf6, "compta_vblank", vblank_compta, regs::d(0));
+natif!(COMPLET_PIECES_NATIF, 0x2e448, "compta_complete_pieces", natif_compta_pieces, regs::CCR);
+natif!(COMPLET_DEPARTS_NATIF, 0x2e49a, "compta_complete_departs", natif_compta_departs, regs::CCR);
 
 // ---------------------------------------------------------------------------------------------
 // Parties gratuites et RAM de la carte de développement
@@ -744,39 +544,31 @@ fn stat_duree(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const STAT_PERSONNAGE: Native = Native {
     entry: 0x2e630,
     name: "compta_stat_personnage",
-    cost: |_, _| 40,
     run: stat_personnage,
     touches_sound: false,
     outputs: regs::CCR,
-    exact_cost: false,
 };
 
 pub const STAT_DUREE: Native = Native {
     entry: 0x2e696,
     name: "compta_stat_duree",
-    cost: |_, _| 40,
     run: stat_duree,
     touches_sound: false,
     outputs: regs::CCR,
-    exact_cost: false,
 };
 
 pub const COMPTA_PARTIES: Native = Native {
     entry: 0x2e4ec,
     name: "compta_parties",
-    cost: |_, _| 100,
     run: compta_parties,
     touches_sound: false,
     outputs: regs::CCR,
-    exact_cost: false,
 };
 
 pub const COMPTA_INIT: Native = Native {
     entry: 0x2dc9a,
     name: "compta_init",
-    cost: |_, _| 100,
     run: compta_init,
     touches_sound: false,
     outputs: regs::CCR,
-    exact_cost: false,
 };

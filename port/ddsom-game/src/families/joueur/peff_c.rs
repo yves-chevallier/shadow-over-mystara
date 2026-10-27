@@ -472,8 +472,8 @@ mod holy {
 }
 
 handlers! {
-    0x4a880 "peff_2" 120 halo::run,
-    0x4a9fe "peff_3" 120 slash::run,
-    0x4abaa "peff_4" 120 cure::run,
-    0x4af14 "peff_5" 120 holy::run,
+    0x4a880 "peff_2" halo::run,
+    0x4a9fe "peff_3" slash::run,
+    0x4abaa "peff_4" cure::run,
+    0x4af14 "peff_5" holy::run,
 }

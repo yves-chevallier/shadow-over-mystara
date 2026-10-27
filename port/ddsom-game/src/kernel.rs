@@ -304,11 +304,9 @@ macro_rules! natif {
         pub const $nom: Native = Native {
             entry: $entree,
             name: stringify!($nom),
-            cost: |_, _| 60,
             run: $corps,
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     };
 }

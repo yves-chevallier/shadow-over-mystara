@@ -353,5 +353,5 @@ pub(self) fn dispatch0(x: &mut Cx, table: u32, idx: u32) -> u32 {
 }
 
 handlers! {
-    0x8d59e "boss_11" 1200 run,
+    0x8d59e "boss_11" run,
 }

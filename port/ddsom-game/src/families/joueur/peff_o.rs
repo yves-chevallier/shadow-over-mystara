@@ -161,5 +161,5 @@ mod coins {
 }
 
 handlers! {
-    0x4d718 "peff_24" 150 coins::run,
+    0x4d718 "peff_24" coins::run,
 }

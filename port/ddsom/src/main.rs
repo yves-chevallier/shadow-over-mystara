@@ -4,11 +4,13 @@
 //! ../rom. Avec `--assets`, les graphismes et les échantillons viennent du dossier produit par `extract`
 //! (PNG et WAV) au lieu des ROMs graphiques et sonores (`dd2.11m`...`dd2.20m` non lues) ; `--assets` seul
 //! (sans dossier) lit `../assets`.
-//! `DDSOM_SANS_68K=1` : jeu sans 68000, seulement les routines réécrites en Rust (`docs/noyau.md`). Avec
-//! `--assets`, il se joue alors **sans aucune ROM** : tout vient du dossier d'assets (tables du programme,
+//! Le jeu tourne sans 68000 : seulement les routines réécrites en Rust (`docs/noyau.md`). Avec `--assets`
+//! sans dossier de ROMs, il se joue **sans aucune ROM** : tout vient du dossier d'assets (tables du programme,
 //! graphismes, données du pilote son, tables du DSP, échantillons ; `docs/sans-rom.md`), le pilote son est
-//! celui en Rust, et aucun fichier ROM n'est ouvert. Sans dossier de ROMs, `--assets` choisit ce mode de
-//! lui-même.
+//! celui en Rust, et aucun fichier ROM n'est ouvert.
+//! Diagnostic : `DDSOM_HYBRIDE=1` (routines Rust et code 68000 recompilé pour le reste, 68000 surcadencé),
+//! `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade), `DDSOM_INTERP=1` (tout interprété) ; ces modes
+//! lisent les ROMs.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter.
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
@@ -27,15 +29,16 @@ fn main() {
     let (romdir, assets) = arguments(std::env::args().skip(1).collect());
     let nvram = PathBuf::from("nvram/ddsom.eeprom");
     let eeprom = std::fs::read(&nvram).ok();
-    // jeu réécrit en Rust (le reste en code 68000 recompilé), 68000 surcadencé : pas de
-    // ralentissements. DDSOM_SANS_68K=1 : sans 68000, routines Rust seules (le jeu s'arrête sur une
-    // adresse qui n'en a pas) ; DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ;
-    // DDSOM_INTERP=1 : tout interprété.
-    let mut sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    // le jeu : sans 68000, routines Rust seules (il s'arrête sur une adresse qui n'en a pas). Diagnostic :
+    // DDSOM_HYBRIDE=1 : routines Rust, le reste en code 68000 recompilé, 68000 surcadencé ; DDSOM_ORIGINE=1 : code
+    // d'origine à la vitesse de l'arcade ; DDSOM_INTERP=1 : tout interprété.
+    let hybride = std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1");
+    let mut sans_68k =
+        !(hybride || std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some());
     // sans ROM : assets seuls, ce qui demande le jeu sans 68000 (le programme 68000 n'est pas dans les assets)
     let romdir = match (&assets, romdir) {
         (Some(_), None) if !sans_68k && !PathBuf::from(DEFAULT_ROMS).is_dir() => {
-            eprintln!("Pas de dossier de ROMs : jeu sans ROM, depuis les assets seuls (sans 68000).");
+            eprintln!("Pas de dossier de ROMs : jeu sans ROM, depuis les assets seuls (sans 68000, pas de diagnostic).");
             sans_68k = true;
             None
         }

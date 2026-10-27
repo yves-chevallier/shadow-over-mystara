@@ -340,7 +340,7 @@ pub(self) fn cooldown(x: &mut Cx) {
 }
 
 handlers! {
-    0x63fb0 "enemy_8" 800 run,
+    0x63fb0 "enemy_8" run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
-    0x653b2 "enemy_8_releve" 300 attacks::regroup,
+    0x653b2 "enemy_8_releve" attacks::regroup,
 }

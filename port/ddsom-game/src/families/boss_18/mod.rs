@@ -199,5 +199,5 @@ fn wait_for_players(x: &mut Cx) {
 }
 
 handlers! {
-    0x975ec "boss_18" 1200 run,
+    0x975ec "boss_18" run,
 }

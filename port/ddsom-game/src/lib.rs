@@ -1,18 +1,19 @@
 //! Logique de jeu de ddsom réécrite en Rust idiomatique.
 //!
 //! Une *routine native* remplace une routine 68000 à son adresse d'entrée. Elle produit exactement
-//! le même état (mémoire, registres, drapeaux) et déclare la même durée, tirée du code original par
-//! `timing::path_cycles`. Si la routine ne tient pas avant l'échéance de la ligne, la version
-//! d'origine (recompilée) s'exécute à sa place : le moment des interruptions reste identique.
+//! le même état (mémoire, registres, drapeaux).
 //!
-//! Jeu sans 68000 (`install_sans_68k`, module `sans68k`) : natives seules, toujours exécutées en entier, et boucle
-//! d'image du noyau ; une adresse sans native arrête le jeu.
+//! Le jeu est le jeu sans 68000 (`install_sans_68k`, module `sans68k`) : natives seules, toujours exécutées en
+//! entier, et boucle d'image du noyau ; une adresse sans native arrête le jeu.
+//!
+//! Mode hybride (`install`, diagnostic) : natives et code d'origine recompilé pour le reste, sur le 68000 surcadencé.
+//! Chaque native dure [`DUREE_NATIVE`] cycles ; si elle ne tient pas avant l'échéance de la ligne, la version
+//! d'origine s'exécute à sa place. Ce mode n'a plus à reproduire l'original image par image.
 //!
 //! Mode contrôle (`set_check(true)`) : chaque appel exécute aussi la routine d'origine sur une copie
 //! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
 
 pub mod camera_modes;
-pub mod chemin;
 pub mod config;
 pub mod credits;
 pub mod demarrage;
@@ -52,10 +53,8 @@ pub mod sprites;
 pub mod tache_credits;
 pub mod taches;
 pub mod text;
-pub mod timing;
 pub mod video;
 pub mod vblank;
-pub mod vue;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -68,9 +67,7 @@ use m68k::Cpu;
 pub struct Native {
     pub entry: u32,
     pub name: &'static str,
-    /// Durée de la routine d'origine en cycles, évaluée sans effet de bord.
-    pub cost: fn(&Cpu, &mut Cps2Bus) -> u64,
-    /// Exécute la routine, RTS final compris (cycles non comptés : ajoutés par l'appelant).
+    /// Exécute la routine, RTS final compris (durée non comptée : ajoutée par l'appelant, [`DUREE_NATIVE`]).
     pub run: fn(&mut Cpu, &mut Cps2Bus),
     /// La routine accède à la RAM partagée avec le Z80 : elle doit tenir dans la ligne en cours,
     /// sinon l'entrelacement avec le Z80 changerait.
@@ -78,9 +75,10 @@ pub struct Native {
     /// Contrat : registres et drapeaux que l'appelant peut lire au retour (voir `regs`). Les autres
     /// registres sont libres ; la mémoire doit toujours être identique.
     pub outputs: u32,
-    /// La durée déclarée est exacte (sinon c'est une estimation : seule la mémoire fait foi).
-    pub exact_cost: bool,
 }
+
+/// Durée d'une native en mode hybride (cycles du 68000), la même pour toutes : ce mode ne sert plus qu'au diagnostic.
+pub const DUREE_NATIVE: u64 = 100;
 
 /// Masques de registres pour `Native::outputs`.
 pub mod regs {
@@ -360,7 +358,6 @@ pub fn site_d_appel() -> Option<(&'static std::panic::Location<'static>, u32)> {
 /// `set_trace`. Les durées ne sont pas contrôlées (le 68000 est surcadencé).
 pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
-        let cost = (n.cost)(c, b);
         let hook = NATIVE_HOOK.get();
         if let Some(h) = hook {
             h(pc, true);
@@ -369,7 +366,7 @@ pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32
         if let Some(h) = hook {
             h(pc, false);
         }
-        c.cycles += cost;
+        c.cycles += DUREE_NATIVE;
     } else {
         if let Some(t) = TRACE.get() {
             t(pc);
@@ -407,10 +404,9 @@ fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
 /// Exécuteur : routine native si disponible, sinon bloc recompilé.
 pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
-        let cost = (n.cost)(c, b);
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
-        if c.cycles + cost <= limit || tient_la_table(n) || taches::table::appelee_par_un_cadre(c, b) {
-            executer(n, c, b, cost);
+        if c.cycles + DUREE_NATIVE <= limit || tient_la_table(n) || taches::table::appelee_par_un_cadre(c, b) {
+            executer(n, c, b, DUREE_NATIVE);
             return Some(c.pc);
         }
     }
@@ -422,16 +418,16 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     ddsom_rc::run_block(pc, c, b, dl)
 }
 
-/// Exécute la native `n` (durée annoncée `cost`), avec les diagnostics demandés : contrôle contre l'original
+/// Exécute la native `n`, qui dure `duree` cycles, avec les diagnostics demandés : contrôle contre l'original
 /// (`DDSOM_CHECK`), registres repris de l'original (`DDSOM_ADOPT_REGS`), comptage des appels.
-fn executer(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
+fn executer(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, duree: u64) {
     if CHECK.load(Ordering::Relaxed) && checked(n) {
-        check(n, c, b, cost);
+        check(n, c, b);
     } else if adopt_regs(n) {
         // diagnostic : registres de sortie repris de l'original (registres hérités)
         let c2 = original(n, c, b);
         exec(n, c, b);
-        c.cycles += cost;
+        c.cycles += duree;
         if c.pc == c2.pc {
             // DDSOM_ADOPT_MASK=hex : seuls les registres du masque (bits de `regs`) sont repris
             let mask = adopt_mask();
@@ -456,7 +452,7 @@ fn executer(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
             taches::table::noter(c.pc, c.a[7]);
         }
         exec(n, c, b);
-        c.cycles += cost;
+        c.cycles += duree;
         if COUNT.load(Ordering::Relaxed) {
             STATS.lock().unwrap().entry(n.name).or_default().calls += 1;
         }
@@ -473,13 +469,12 @@ fn tient_la_table(n: &Native) -> bool {
 /// Exécuteur : routines natives seulement (le reste est laissé à l'interpréteur). Outils de diagnostic.
 pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     let n = lookup(pc)?;
-    let cost = (n.cost)(c, b);
     let limit = if n.touches_sound { dl } else { b.irq_horizon };
-    if c.cycles + cost > limit {
+    if c.cycles + DUREE_NATIVE > limit {
         return None;
     }
     (n.run)(c, b);
-    c.cycles += cost;
+    c.cycles += DUREE_NATIVE;
     Some(c.pc)
 }
 
@@ -579,9 +574,6 @@ pub struct Stats {
     pub first: Option<String>,
     /// Dernier écart (outils de diagnostic).
     pub last: Option<String>,
-    /// Cycles cumulés de l'original et de la native (sous-routines comprises) : calibrage des durées.
-    pub original_cycles: u64,
-    pub native_cycles: u64,
     /// Mode `CHECK_ALL` : nombre d'appels où chaque registre (D0-D7, A0-A7) diffère de l'original.
     pub regs: [u64; 16],
 }
@@ -642,7 +634,7 @@ fn checked(n: &Native) -> bool {
     only.as_ref().map_or(true, |p| p.iter().any(|p| n.name.starts_with(p.as_str())))
 }
 
-fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
+fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();
@@ -657,15 +649,8 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
         guard += 1;
         assert!(guard < 1_000_000, "{} : la routine d'origine ne revient pas", n.name);
     }
-    let start = c.cycles;
     (n.run)(c, b);
-    c.cycles += cost;
-    let native_cycles = c.cycles - start;
     let mut diffs = Vec::new();
-    // durée totale de la native, sous-routines d'origine appelées comprises
-    if n.exact_cost && c.cycles - start != c2.cycles - start {
-        diffs.push(format!("cycles {} au lieu de {}", c.cycles - start, c2.cycles - start));
-    }
     let mut reg_diffs = [false; 16];
     let outputs = if CHECK_ALL.load(Ordering::Relaxed) { regs::ALL } else { n.outputs };
     for i in 0..8 {
@@ -688,8 +673,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     }
     let sp = c2.a[7] & 0xff_ffff;
     mem::diff_bus(b, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
-    // On reprend la durée réelle de l'original : le reste de l'exécution suit exactement le timing
-    // du code d'origine. Les registres hors contrat gardent les valeurs de la routine native : si un
+    // On reprend la durée réelle de l'original. Les registres hors contrat gardent les valeurs de la routine native : si un
     // appelant en dépendait (contrat incomplet), la suite divergera et la validation le verra.
     c.cycles = c2.cycles;
     if let (Some((mut c3, mut b3)), false) = (pre, diffs.is_empty()) {
@@ -706,8 +690,6 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, cost: u64) {
     let mut st = STATS.lock().unwrap();
     let s = st.entry(n.name).or_default();
     s.calls += 1;
-    s.original_cycles += c2.cycles - start;
-    s.native_cycles += native_cycles;
     for (n, &d) in reg_diffs.iter().enumerate() {
         s.regs[n] += d as u64;
     }

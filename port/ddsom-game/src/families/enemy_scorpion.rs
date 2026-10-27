@@ -725,5 +725,5 @@ fn run_off(x: &mut Cx) {
 }
 
 handlers! {
-    0x6681c "enemy_10" 600 run,
+    0x6681c "enemy_10" run,
 }

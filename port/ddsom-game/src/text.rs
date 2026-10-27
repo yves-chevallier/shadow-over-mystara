@@ -294,17 +294,8 @@ fn clear_box(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Coût estimé : ~40 cycles par caractère du descripteur.
-fn text_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut n = 0;
-    while n < 256 && rd8(b, c.a[4] + n) != b'@' {
-        n += 1;
-    }
-    200 + 40 * n as u64
-}
-
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: text_cost, run, touches_sound: false, outputs: regs::a(4) | regs::CCR, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: regs::a(4) | regs::CCR }
 }
 
 pub const PRINT: Native = native(0x0d5e, "text_print", print);

@@ -302,7 +302,7 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x81b3a "boss_4" 1200 run,
+    0x81b3a "boss_4" run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
-    0x82ea0 "boss_4_releve" 300 hit::resume,
+    0x82ea0 "boss_4_releve" hit::resume,
 }

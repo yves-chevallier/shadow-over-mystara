@@ -7,10 +7,8 @@
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::chemin::Chemin;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32};
-use crate::video::{hw, tours};
-use crate::vue::Vue;
+use crate::video::hw;
 use crate::{regs, Native};
 
 /// Pages de palettes concernées (bit k : page 0x91c000 + 0x400 k).
@@ -58,13 +56,8 @@ fn set_brightness(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// ~ 8 cycles par couleur et par page active.
-fn cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    100 + 8 * 512 * rd8(b, c.a[5] + PAGES).count_ones().min(4) as u64
-}
-
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost, run, touches_sound: false, outputs: 0, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: 0 }
 }
 
 pub const FULL_BRIGHTNESS: Native = native(0x1686, "palette_full_brightness", full_brightness);
@@ -141,10 +134,6 @@ pub fn brightness_step(b: &mut Cps2Bus, delta: u32, partiel: bool) {
     }
 }
 
-const fn exact(entry: u32, name: &'static str, cost: fn(&Cpu, &mut Cps2Bus) -> u64, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost, run, touches_sound: false, outputs: 0, exact_cost: true }
-}
-
 // ---------------------------------------------------------------------------------------------
 // Chargement des palettes de scène depuis la bibliothèque de la ROM (V3)
 // ---------------------------------------------------------------------------------------------
@@ -161,26 +150,26 @@ const FULL_RANGE: std::ops::Range<u8> = 0x45..0x5a;
 const STAGE_VAR: u32 = 0x34;
 const PALETTE_BYTES: u32 = 32;
 
-fn copy_palette(v: &mut Vue, from: u32, to: u32) {
+fn copy_palette(b: &mut Cps2Bus, from: u32, to: u32) {
     for i in 0..PALETTE_BYTES / 4 {
-        let long = v.rd32(from + 4 * i);
-        v.wr32(to + 4 * i, long);
+        let long = rd32(b, from + 4 * i);
+        wr32(b, to + 4 * i, long);
     }
 }
 
-fn prog_long(v: &mut Vue, a: u32) -> u32 {
-    (v.prog16(a) as u32) << 16 | v.prog16(a + 2) as u32
+fn prog_long(b: &mut Cps2Bus, a: u32) -> u32 {
+    (crate::mem::prog16(b, a) as u32) << 16 | crate::mem::prog16(b, a + 2) as u32
 }
 
 /// Adresse d'une table de code indexée par `n * 4` (calcul 16 bits, mot signé). Les tables lues par
 /// un accès relatif au PC (pages 1 à 3) sont en espace programme ; celles dont l'adresse passe par
 /// un registre (`lea (d,PC),A3` puis indexation) en espace données.
-fn table_entry(v: &mut Vue, table: u32, n: u32, program: bool) -> u32 {
+fn table_entry(b: &mut Cps2Bus, table: u32, n: u32, program: bool) -> u32 {
     let at = table.wrapping_add((n as u16).wrapping_shl(2) as i16 as u32);
     if program {
-        prog_long(v, at)
+        prog_long(b, at)
     } else {
-        v.rd32(at)
+        rd32(b, at)
     }
 }
 
@@ -198,35 +187,33 @@ struct StageEnd {
 
 /// 0x1a36c : palettes de la scène `d0` (octet bas) à partir de `dst`, puis palettes supplémentaires
 /// de la scène en cours (`A5 + 0x34`).
-fn load_stage_palettes(v: &mut Vue, a5: u32, d0: u32, mut dst: u32) -> StageEnd {
+fn load_stage_palettes(b: &mut Cps2Bus, a5: u32, d0: u32, mut dst: u32) -> StageEnd {
     let stage = d0 as u8;
-    let count = if v.pris((stage as i8) < FULL_RANGE.start as i8) {
+    let count = if (stage as i8) < FULL_RANGE.start as i8 {
         29
-    } else if v.pris(stage >= FULL_RANGE.end) {
+    } else if stage >= FULL_RANGE.end {
         29
     } else {
         32
     };
     let mut list = STAGE_PALETTES + ((d0 as u16) << 6) as i16 as u32;
     let mut last = None;
-    for i in 0..count {
-        let offset = v.rd16(list);
+    for _ in 0..count {
+        let offset = rd16(b, list);
         list += 2;
-        if !v.pris(offset & 0x8000 != 0) {
-            copy_palette(v, LIBRARY + offset as i16 as u32, dst);
+        if !(offset & 0x8000 != 0) {
+            copy_palette(b, LIBRARY + offset as i16 as u32, dst);
             last = Some(dst);
         }
         dst += PALETTE_BYTES;
-        v.pris(i + 1 < count);
     }
-    let current = v.rd8(a5 + STAGE_VAR) as u32;
-    let extra = table_entry(v, STAGE_EXTRA, current, false);
-    if !v.pris(extra == 0) {
+    let current = rd8(b, a5 + STAGE_VAR) as u32;
+    let extra = table_entry(b, STAGE_EXTRA, current, false);
+    if !(extra == 0) {
         for i in 0..EXTRA_PALETTES {
-            copy_palette(v, extra + i * PALETTE_BYTES, dst);
+            copy_palette(b, extra + i * PALETTE_BYTES, dst);
             last = Some(dst);
             dst += PALETTE_BYTES;
-            v.pris(i + 1 < EXTRA_PALETTES);
         }
     }
     StageEnd { dst, list, last, extra }
@@ -277,44 +264,32 @@ fn stage_args(b: &mut Cps2Bus, c: &Cpu, entry: u32) -> (u32, u32) {
 
 fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
     let (d0, dst) = stage_args(b, c, entry);
-    let end = load_stage_palettes(&mut Vue::reelle(b), c.a[5], d0, dst);
+    let end = load_stage_palettes(b, c.a[5], d0, dst);
     stage_regs(c, b, &end);
     rts(c, b);
 }
 
-fn stage_cost_raw(b: &mut Cps2Bus, a5: u32, d0: u32, dst: u32, entry: u32) -> u64 {
-    let mut v = Vue::simulee(b);
-    load_stage_palettes(&mut v, a5, d0, dst);
-    v.chemin.duree(b, entry)
-}
-
-fn stage_cost(c: &Cpu, b: &mut Cps2Bus, entry: u32) -> u64 {
-    let (d0, dst) = stage_args(b, c, entry);
-    stage_cost_raw(b, c.a[5], d0, dst, entry)
-}
-
-pub const STAGE_FREE: Native = exact(0x1a366, "palette_scene_d0", |c, b| stage_cost(c, b, 0x1a366), |c, b| stage_run(c, b, 0x1a366));
-pub const STAGE_PAGE0: Native = exact(0x1a360, "palette_scene", |c, b| stage_cost(c, b, 0x1a360), |c, b| stage_run(c, b, 0x1a360));
-pub const STAGE_SCROLL1: Native = exact(0x1a350, "palette_scene_scroll1", |c, b| stage_cost(c, b, 0x1a350), |c, b| stage_run(c, b, 0x1a350));
+pub const STAGE_FREE: Native = native(0x1a366, "palette_scene_d0", |c, b| stage_run(c, b, 0x1a366));
+pub const STAGE_PAGE0: Native = native(0x1a360, "palette_scene", |c, b| stage_run(c, b, 0x1a360));
+pub const STAGE_SCROLL1: Native = native(0x1a350, "palette_scene_scroll1", |c, b| stage_run(c, b, 0x1a350));
 
 /// 0x1a3d4 : les 32 palettes de l'ensemble D0 (adresse en code à `0x1a3fc + 4 D0`) dans la page 0.
 const SETS: u32 = 0x1a3fc;
 const PAGE_PALETTES: u32 = 32;
 
 /// Rend l'adresse source (0 : ensemble absent).
-fn load_set(v: &mut Vue, d0: u32) -> u32 {
-    let source = table_entry(v, SETS, d0, false);
-    if !v.pris(source == 0) {
+fn load_set(b: &mut Cps2Bus, d0: u32) -> u32 {
+    let source = table_entry(b, SETS, d0, false);
+    if !(source == 0) {
         for i in 0..PAGE_PALETTES {
-            copy_palette(v, source + i * PALETTE_BYTES, PALETTES + i * PALETTE_BYTES);
-            v.pris(i + 1 < PAGE_PALETTES);
+            copy_palette(b, source + i * PALETTE_BYTES, PALETTES + i * PALETTE_BYTES);
         }
     }
     source
 }
 
 fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
-    let source = load_set(&mut Vue::reelle(b), c.d[0]);
+    let source = load_set(b, c.d[0]);
     // registres de l'original : D0.w décalé, A4 = fin de la page, A3 = fin de la source
     let shifted = (c.d[0] as u16) << 2;
     set_low_word(&mut c.d[0], shifted);
@@ -334,24 +309,17 @@ fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn set_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut v = Vue::simulee(b);
-    let _ = load_set(&mut v, c.d[0]);
-    v.chemin.duree(b, 0x1a3d4)
-}
-
-pub const LOAD_SET: Native = exact(0x1a3d4, "palette_ensemble", set_cost, set_run);
+pub const LOAD_SET: Native = native(0x1a3d4, "palette_ensemble", set_run);
 
 /// Pages 1 à 3 : table de code (adresse par scène), entrée « scène en cours », entrée « D0 donné ».
 const PAGE_TABLES: [(u32, u32, u32); 3] = [(0x1a62c, 0x1a608, 0x1a60a), (0x1a6a0, 0x1a678, 0x1a67e), (0x1a8d4, 0x1a8ac, 0x1a8b2)];
 
 /// Les 32 palettes de la page `k + 1` d'après la table de la page, entrée `d0`.
-fn load_page(v: &mut Vue, k: usize, d0: u32) -> u32 {
-    let source = table_entry(v, PAGE_TABLES[k].0, d0, true);
+fn load_page(b: &mut Cps2Bus, k: usize, d0: u32) -> u32 {
+    let source = table_entry(b, PAGE_TABLES[k].0, d0, true);
     let page = PALETTES + PAGE_SIZE * (k as u32 + 1);
     for i in 0..PAGE_PALETTES {
-        copy_palette(v, source + i * PALETTE_BYTES, page + i * PALETTE_BYTES);
-        v.pris(i + 1 < PAGE_PALETTES);
+        copy_palette(b, source + i * PALETTE_BYTES, page + i * PALETTE_BYTES);
     }
     source
 }
@@ -390,26 +358,16 @@ fn page_d0(b: &mut Cps2Bus, c: &Cpu, k: usize, entry: u32) -> u32 {
 
 fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
     let d0 = page_d0(b, c, k, entry);
-    let source = load_page(&mut Vue::reelle(b), k, d0);
+    let source = load_page(b, k, d0);
     page_regs(c, b, k, source);
     rts(c, b);
 }
 
-fn page_cost_raw(b: &mut Cps2Bus, k: usize, d0: u32, entry: u32) -> u64 {
-    let mut v = Vue::simulee(b);
-    load_page(&mut v, k, d0);
-    v.chemin.duree(b, entry)
-}
-
 macro_rules! page_native {
     ($name:ident, $nom:literal, $k:literal, $entry:expr) => {
-        pub const $name: Native = exact(
+        pub const $name: Native = native(
             $entry,
             $nom,
-            |c, b| {
-                let d0 = page_d0(b, c, $k, $entry);
-                page_cost_raw(b, $k, d0, $entry)
-            },
             |c, b| page_run(c, b, $k, $entry),
         );
     };
@@ -442,11 +400,10 @@ fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
     let special = special_sources(stage);
     let entry = if special.is_some() { 0x1a350 } else { 0x1a360 };
     let (d0, dst) = stage_args(b, c, entry);
-    // une vue par chargeur : chacun a ses propres décisions de boucle
-    let end = load_stage_palettes(&mut Vue::reelle(b), c.a[5], d0, dst);
+    let end = load_stage_palettes(b, c.a[5], d0, dst);
     stage_regs(c, b, &end);
     for (k, d0) in [(0, 0), (1, stage as u32), (2, stage as u32)] {
-        let source = load_page(&mut Vue::reelle(b), k, d0);
+        let source = load_page(b, k, d0);
         page_regs(c, b, k, source);
     }
     wr16(b, CLEARED_WORD, 0);
@@ -459,25 +416,7 @@ fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn load_all_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let stage = rd8(b, c.a[5] + STAGE_VAR);
-    let special = special_sources(stage).is_some();
-    let mut skeleton = Chemin::default();
-    skeleton.pris(stage == 0x2f);
-    if stage != 0x2f {
-        skeleton.pris(stage == 0x42);
-    }
-    let entry = if special { 0x1a350 } else { 0x1a360 };
-    let externes = [0x1a350, 0x1a360, 0x1a608, 0x1a678, 0x1a8ac];
-    let (d0, dst) = stage_args(b, c, entry);
-    skeleton.duree_hors(b, 0x1a296, None, &externes)
-        + stage_cost_raw(b, c.a[5], d0, dst, entry)
-        + page_cost_raw(b, 0, 0, 0x1a608)
-        + page_cost_raw(b, 1, stage as u32, 0x1a678)
-        + page_cost_raw(b, 2, stage as u32, 0x1a8ac)
-}
-
-pub const LOAD_ALL: Native = exact(0x1a296, "palette_chargement_scene", load_all_cost, load_all);
+pub const LOAD_ALL: Native = native(0x1a296, "palette_chargement_scene", load_all);
 
 // ---------------------------------------------------------------------------------------------
 // Fondus par composante (V3) : chaque couleur approche d'une cible d'un cran par composante
@@ -488,20 +427,11 @@ pub const LOAD_ALL: Native = exact(0x1a296, "palette_chargement_scene", load_all
 const SOURCES: u32 = 0x492;
 const PAGES_FLAG: u32 = 0x48e;
 
-/// Position d'une composante par rapport à sa cible.
-#[derive(Clone, Copy)]
-enum Cmp {
-    Equal,
-    Up,
-    Down,
-}
-
 /// Fait avancer d'un cran chaque composante RGB (quartets 0 à 2) de `color` vers `target`. La
-/// luminosité (quartet 3) est conservée. Rend la couleur et la position de chaque composante.
-fn approach(color: u16, target: u16) -> (u16, [Cmp; 3]) {
+/// luminosité (quartet 3) est conservée.
+fn approach(color: u16, target: u16) -> u16 {
     let mut out = color;
-    let mut cmps = [Cmp::Equal; 3];
-    for (n, cmp) in cmps.iter_mut().enumerate() {
+    for n in 0..3 {
         let shift = 4 * n as u32;
         let (cur, goal) = (color >> shift & 0xf, target >> shift & 0xf);
         let next = match goal.cmp(&cur) {
@@ -509,107 +439,35 @@ fn approach(color: u16, target: u16) -> (u16, [Cmp; 3]) {
             std::cmp::Ordering::Greater => cur + 1,
             std::cmp::Ordering::Less => cur - 1,
         };
-        *cmp = match goal.cmp(&cur) {
-            std::cmp::Ordering::Equal => Cmp::Equal,
-            std::cmp::Ordering::Greater => Cmp::Up,
-            std::cmp::Ordering::Less => Cmp::Down,
-        };
         out = out & !(0xf << shift) | next << shift;
     }
-    (out, cmps)
+    out
 }
 
 /// Fait avancer chaque composante RGB d'un cran vers 0xf (blanc).
-fn brighten(color: u16) -> (u16, [Cmp; 3]) {
+fn brighten(color: u16) -> u16 {
     let mut out = color;
-    let mut cmps = [Cmp::Equal; 3];
-    for (n, cmp) in cmps.iter_mut().enumerate() {
+    for n in 0..3 {
         let shift = 4 * n as u32;
         if color >> shift & 0xf != 0xf {
             out += 1 << shift;
-            *cmp = Cmp::Up;
         }
     }
-    (out, cmps)
+    out
 }
 
-/// Repères d'une boucle sur les 512 couleurs d'une page.
-#[derive(Clone, Copy)]
-struct ColorLoop {
-    /// Première instruction du traitement d'une couleur.
-    start: u32,
-    /// Première instruction du traitement d'une composante, et ce qui suit le dernier tour.
-    nibble: u32,
-    after_nibbles: u32,
-    /// Décisions d'une composante : égal / plus / moins, ou seulement (butée / plus).
-    three_way: bool,
-}
-
-const TARGET_LOOP: ColorLoop = ColorLoop { start: 0x1cfcc, nibble: 0x1cfd6, after_nibbles: 0x1d004, three_way: true };
-const CONSTANT_LOOP: ColorLoop = ColorLoop { start: 0x1d046, nibble: 0x1d04e, after_nibbles: 0x1d07c, three_way: true };
-const WHITE_LOOP: ColorLoop = ColorLoop { start: 0x1d012, nibble: 0x1d01c, after_nibbles: 0x1d038, three_way: false };
-
-impl ColorLoop {
-    fn nibble_cost(&self, b: &mut Cps2Bus, cmp: Cmp, last: bool) -> u64 {
-        let mut p = Chemin::default();
-        match cmp {
-            Cmp::Equal => p.pris(true),
-            Cmp::Up => {
-                p.pris(false);
-                if self.three_way {
-                    p.pris(true);
-                }
-            }
-            Cmp::Down => {
-                p.pris(false);
-                p.pris(false);
-            }
-        }
-        p.pris(!last);
-        p.duree_entre(b, self.nibble, Some(if last { self.after_nibbles } else { self.nibble }))
-    }
-
-    /// Durée de la boucle sur 512 couleurs, d'après les comparaisons de chaque composante.
-    fn cost(&self, b: &mut Cps2Bus, entry: u32, cmps: &[[Cmp; 3]]) -> u64 {
-        let mut table = [[0u64; 2]; 3];
-        for cmp in [Cmp::Equal, Cmp::Up, Cmp::Down] {
-            if self.three_way || !matches!(cmp, Cmp::Down) {
-                table[cmp as usize] = [self.nibble_cost(b, cmp, false), self.nibble_cost(b, cmp, true)];
-            }
-        }
-        let prologue = Chemin::default().duree_entre(b, self.start, Some(self.nibble));
-        let (mut again, mut last) = (Chemin::default(), Chemin::default());
-        again.pris(true);
-        last.pris(false);
-        let next_color = again.duree_entre(b, self.after_nibbles, Some(self.start));
-        let finish = last.duree(b, self.after_nibbles);
-        let mut total = if entry == self.start { 0 } else { Chemin::default().duree_entre(b, entry, Some(self.start)) };
-        for (i, colors) in cmps.iter().enumerate() {
-            total += prologue + if i + 1 < cmps.len() { next_color } else { finish };
-            for (k, cmp) in colors.iter().enumerate() {
-                total += table[*cmp as usize][(k == 2) as usize];
-            }
-        }
-        total
-    }
-}
-
-fn colors_of(b: &mut Cps2Bus, page: u32, f: impl Fn(&mut Cps2Bus, u32, u32) -> (u16, [Cmp; 3])) -> Vec<(u16, [Cmp; 3])> {
+fn colors_of(b: &mut Cps2Bus, page: u32, f: impl Fn(&mut Cps2Bus, u32, u32) -> u16) -> Vec<u16> {
     (0..COLORS).map(|i| f(b, page, i)).collect()
 }
 
-fn rewrite(b: &mut Cps2Bus, page: u32, results: &[(u16, [Cmp; 3])]) {
-    for (i, (color, _)) in results.iter().enumerate() {
+fn rewrite(b: &mut Cps2Bus, page: u32, results: &[u16]) {
+    for (i, color) in results.iter().enumerate() {
         wr16(b, page + 2 * i as u32, *color);
     }
 }
 
-fn cmps_of(results: Vec<(u16, [Cmp; 3])>) -> Vec<[Cmp; 3]> {
-    results.into_iter().map(|(_, c)| c).collect()
-}
-
 /// 0x1cfc8 : approche les 512 couleurs de la page A0 des couleurs cibles à A1.
-fn approach_page_results(b: &mut Cps2Bus, page: u32, target: u32) -> Vec<(u16, [Cmp; 3])> {
+fn approach_page_results(b: &mut Cps2Bus, page: u32, target: u32) -> Vec<u16> {
     colors_of(b, page, |b, page, i| approach(rd16(b, page + 2 * i), rd16(b, target + 2 * i)))
 }
 
@@ -618,13 +476,8 @@ fn approach_page(b: &mut Cps2Bus, page: u32, target: u32) {
     rewrite(b, page, &results);
 }
 
-fn approach_page_cost(b: &mut Cps2Bus, page: u32, target: u32) -> u64 {
-    let cmps = cmps_of(approach_page_results(b, page, target));
-    TARGET_LOOP.cost(b, 0x1cfc8, &cmps)
-}
-
 /// 0x1d042 : approche les 512 couleurs de la page A0 de la couleur unique D1.
-fn approach_constant_results(b: &mut Cps2Bus, page: u32, goal: u16) -> Vec<(u16, [Cmp; 3])> {
+fn approach_constant_results(b: &mut Cps2Bus, page: u32, goal: u16) -> Vec<u16> {
     colors_of(b, page, |b, page, i| approach(rd16(b, page + 2 * i), goal))
 }
 
@@ -633,36 +486,16 @@ fn approach_constant(b: &mut Cps2Bus, page: u32, goal: u16) {
     rewrite(b, page, &results);
 }
 
-fn approach_constant_cost(b: &mut Cps2Bus, page: u32, goal: u16) -> u64 {
-    let cmps = cmps_of(approach_constant_results(b, page, goal));
-    CONSTANT_LOOP.cost(b, 0x1d042, &cmps)
-}
-
 /// 0x1d00e : les 512 couleurs de la page A0 gagnent un cran vers le blanc.
 fn brighten_page(b: &mut Cps2Bus, page: u32) {
     let results = colors_of(b, page, |b, page, i| brighten(rd16(b, page + 2 * i)));
     rewrite(b, page, &results);
 }
 
-fn brighten_page_cost(b: &mut Cps2Bus, page: u32) -> u64 {
-    let cmps = cmps_of(colors_of(b, page, |b, page, i| brighten(rd16(b, page + 2 * i))));
-    WHITE_LOOP.cost(b, 0x1d00e, &cmps)
-}
-
 /// Pages cochées (A5 + 0x48e) avec leur adresse en GFX RAM.
 fn flagged_pages(b: &mut Cps2Bus, a5: u32) -> Vec<(usize, u32)> {
     let flags = rd8(b, a5 + PAGES_FLAG);
     (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, PALETTES + PAGE_SIZE * k as u32)).collect()
-}
-
-/// Durée du squelette des routines qui parcourent les pages cochées et appellent `external` pour chacune.
-fn pages_skeleton(b: &mut Cps2Bus, a5: u32, entry: u32, external: u32) -> u64 {
-    let flags = rd8(b, a5 + PAGES_FLAG);
-    let mut p = Chemin::default();
-    for k in 0..4 {
-        p.pris(flags >> k & 1 == 0);
-    }
-    p.duree_hors(b, entry, None, &[external])
 }
 
 /// 0x1cd7c : un pas de fondu de chaque page cochée vers sa palette cible (`A5 + 0x492 + 4 k`).
@@ -674,15 +507,6 @@ fn fade_to_palettes(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn fade_to_palettes_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut total = pages_skeleton(b, c.a[5], 0x1cd7c, 0x1cfc8);
-    for (k, page) in flagged_pages(b, c.a[5]) {
-        let target = rd32(b, c.a[5] + SOURCES + 4 * k as u32);
-        total += approach_page_cost(b, page, target);
-    }
-    total
-}
-
 /// 0x1cdd6 : un pas de fondu de chaque page cochée vers la couleur (mot) `A5 + 0x492 + 4 k`.
 fn fade_to_colors(c: &mut Cpu, b: &mut Cps2Bus) {
     for (k, page) in flagged_pages(b, c.a[5]) {
@@ -692,29 +516,12 @@ fn fade_to_colors(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn fade_to_colors_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut total = pages_skeleton(b, c.a[5], 0x1cdd6, 0x1d042);
-    for (k, page) in flagged_pages(b, c.a[5]) {
-        let goal = rd16(b, c.a[5] + SOURCES + 4 * k as u32);
-        total += approach_constant_cost(b, page, goal);
-    }
-    total
-}
-
 /// 0x1cd32 : un pas de fondu vers le blanc de chaque page cochée.
 fn fade_to_white(c: &mut Cpu, b: &mut Cps2Bus) {
     for (_, page) in flagged_pages(b, c.a[5]) {
         brighten_page(b, page);
     }
     rts(c, b);
-}
-
-fn fade_to_white_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let mut total = pages_skeleton(b, c.a[5], 0x1cd32, 0x1d00e);
-    for (_, page) in flagged_pages(b, c.a[5]) {
-        total += brighten_page_cost(b, page);
-    }
-    total
 }
 
 /// Cible d'un fondu par composante.
@@ -762,12 +569,6 @@ fn fill_page(b: &mut Cps2Bus, page: u32, values: [u32; 8]) {
     }
 }
 
-fn fill_page_cost(b: &mut Cps2Bus) -> u64 {
-    let mut p = Chemin::default();
-    tours(&mut p, 32);
-    p.duree(b, 0x1cfb8)
-}
-
 fn fill_page_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let values = [c.d[0], c.d[1], c.d[2], c.d[3], c.d[4], c.d[5], c.d[6], c.a[1]];
     fill_page(b, c.a[0], values);
@@ -783,38 +584,30 @@ fn white_pages(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn white_pages_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let pages = flagged_pages(b, c.a[5]).len() as u64;
-    pages_skeleton(b, c.a[5], 0x1cf3c, 0x1cfb8) + pages * fill_page_cost(b)
-}
-
-pub const FADE_TO_PALETTES: Native = exact(0x1cd7c, "palette_fondu_vers_palettes", fade_to_palettes_cost, fade_to_palettes);
-pub const FADE_TO_COLORS: Native = exact(0x1cdd6, "palette_fondu_vers_couleurs", fade_to_colors_cost, fade_to_colors);
-pub const FADE_TO_WHITE: Native = exact(0x1cd32, "palette_fondu_vers_blanc", fade_to_white_cost, fade_to_white);
-pub const WHITE_PAGES: Native = exact(0x1cf3c, "palette_pages_blanches", white_pages_cost, white_pages);
-pub const FILL_PAGE: Native = exact(0x1cfb8, "palette_page_unie", |_, b| fill_page_cost(b), fill_page_native);
-pub const APPROACH_PAGE: Native = exact(
+pub const FADE_TO_PALETTES: Native = native(0x1cd7c, "palette_fondu_vers_palettes", fade_to_palettes);
+pub const FADE_TO_COLORS: Native = native(0x1cdd6, "palette_fondu_vers_couleurs", fade_to_colors);
+pub const FADE_TO_WHITE: Native = native(0x1cd32, "palette_fondu_vers_blanc", fade_to_white);
+pub const WHITE_PAGES: Native = native(0x1cf3c, "palette_pages_blanches", white_pages);
+pub const FILL_PAGE: Native = native(0x1cfb8, "palette_page_unie", fill_page_native);
+pub const APPROACH_PAGE: Native = native(
     0x1cfc8,
     "palette_approche_page",
-    |c, b| approach_page_cost(b, c.a[0], c.a[1]),
     |c, b| {
         approach_page(b, c.a[0], c.a[1]);
         rts(c, b);
     },
 );
-pub const APPROACH_CONSTANT: Native = exact(
+pub const APPROACH_CONSTANT: Native = native(
     0x1d042,
     "palette_approche_couleur",
-    |c, b| approach_constant_cost(b, c.a[0], c.d[1] as u16),
     |c, b| {
         approach_constant(b, c.a[0], c.d[1] as u16);
         rts(c, b);
     },
 );
-pub const BRIGHTEN_PAGE: Native = exact(
+pub const BRIGHTEN_PAGE: Native = native(
     0x1d00e,
     "palette_eclaircit_page",
-    |c, b| brighten_page_cost(b, c.a[0]),
     |c, b| {
         brighten_page(b, c.a[0]);
         rts(c, b);
@@ -912,7 +705,7 @@ fn flash_gray<const BASE: u16, const MASK: u16>(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 3000, run, touches_sound: false, outputs: regs::ALL, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: regs::ALL }
 }
 
 pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", flash_gray::<0xf300, 0xff00>);
@@ -937,7 +730,7 @@ fn set_flash_color<const COLOR: u16>(c: &mut Cpu, b: &mut Cps2Bus) {
 const FLASH_COLOR: u32 = 0x91c41c;
 
 const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 40, run, touches_sound: false, outputs: regs::CCR, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: regs::CCR }
 }
 
 pub const FLASH_COLOR_ON: Native = flash_color_native(0x1ac68, "palette_eclair_couleur", set_flash_color::<0xff00>);
@@ -984,8 +777,8 @@ fn character_palette(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_sauve_page1", cost: |_, _| 2000, run: save_page1, touches_sound: false, outputs: regs::ALL, exact_cost: false };
-pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", cost: |_, _| 200, run: character_palette, touches_sound: false, outputs: regs::ALL, exact_cost: false };
+pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_sauve_page1", run: save_page1, touches_sound: false, outputs: regs::ALL };
+pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", run: character_palette, touches_sound: false, outputs: regs::ALL };
 
 /// Routines natives de ce module (les réglages de luminosité sont déclarés dans `lib.rs`).
 pub const NATIVES: &[Native] = &[

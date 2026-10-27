@@ -424,17 +424,14 @@ fn portraits(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
 pub const PORTRAITS_NATIVE: Native = Native {
     entry: PORTRAITS_TASK,
     name: "shop_portraits",
-    cost: |_, _| 100,
     run: portraits,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const SHOP: Native = Native {
     entry: 0xf792e,
     name: "scene_shop",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
@@ -443,7 +440,6 @@ pub const SHOP: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] = &[

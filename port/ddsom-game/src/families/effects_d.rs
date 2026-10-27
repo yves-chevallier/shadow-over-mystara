@@ -916,5 +916,5 @@ fn walker_run(x: &mut Cx) {
 }
 
 handlers! {
-    0xb1a98 "effct_decompte" 300 countdown_screen,
+    0xb1a98 "effct_decompte" countdown_screen,
 }

@@ -577,7 +577,7 @@ pub(self) fn spawn_double(x: &mut Cx) {
 }
 
 handlers! {
-    0x7acea "boss_1" 1200 run,
+    0x7acea "boss_1" run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
-    0x7bece "boss_1_releve" 300 hit::get_up,
+    0x7bece "boss_1_releve" hit::get_up,
 }

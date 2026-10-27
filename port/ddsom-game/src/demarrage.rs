@@ -202,12 +202,6 @@ fn reset(c: &mut Cpu, b: &mut Cps2Bus) {
     c.pc = at::RELACHE_Z80;
 }
 
-/// Durée d'un tour d'attente : jusqu'à la fin de l'image au plus (au-delà, l'original prendrait la place
-/// de la native), par tranches plus courtes qu'une ligne.
-fn tour_d_attente(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    b.irq_horizon.saturating_sub(c.cycles).clamp(1, 4000)
-}
-
 /// 0x18cc : à l'heure de l'original, relâche le Z80 et efface le drapeau de sa boîte aux lettres.
 fn relacher_z80(c: &mut Cpu, b: &mut Cps2Bus) {
     if position(b) < RELACHE_Z80 {
@@ -289,23 +283,21 @@ fn lancement(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 macro_rules! natif {
-    ($nom:ident, $libelle:literal, $entree:expr, $cout:expr, $corps:expr) => {
+    ($nom:ident, $libelle:literal, $entree:expr, $corps:expr) => {
         pub const $nom: Native = Native {
             entry: $entree,
             name: $libelle,
-            cost: $cout,
             run: $corps,
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     };
 }
 
-natif!(RESET, "demarrage_reset", at::RESET, |_, _| 100, reset);
-natif!(RELACHE, "demarrage_relacher_z80", at::RELACHE_Z80, tour_d_attente, relacher_z80);
-natif!(POIGNEE, "demarrage_poignee_z80", at::POIGNEE, tour_d_attente, poignee_de_main);
-natif!(BOOT, "demarrage_boot_init", at::BOOT_INIT, tour_d_attente, boot_init);
-natif!(LANCEMENT, "demarrage_lancement", at::LANCEMENT, |_, _| 100, lancement);
+natif!(RESET, "demarrage_reset", at::RESET, reset);
+natif!(RELACHE, "demarrage_relacher_z80", at::RELACHE_Z80, relacher_z80);
+natif!(POIGNEE, "demarrage_poignee_z80", at::POIGNEE, poignee_de_main);
+natif!(BOOT, "demarrage_boot_init", at::BOOT_INIT, boot_init);
+natif!(LANCEMENT, "demarrage_lancement", at::LANCEMENT, lancement);
 
 pub const NATIVES: &[Native] = &[RESET, RELACHE, POIGNEE, BOOT, LANCEMENT];

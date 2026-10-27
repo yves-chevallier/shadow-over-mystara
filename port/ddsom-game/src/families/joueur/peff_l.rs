@@ -216,5 +216,5 @@ mod slot_icon {
 }
 
 handlers! {
-    0x4c9fe "peff_17" 150 slot_icon::run,
+    0x4c9fe "peff_17" slot_icon::run,
 }

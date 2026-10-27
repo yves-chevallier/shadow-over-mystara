@@ -35,7 +35,6 @@ const CLEARED: u32 = 0x1c846;
 pub const PHASE_20: Native = Native {
     entry: 0x1c80c,
     name: "gameover_phase_20",
-    cost: |_, _| 100,
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         x.c.a[5] = A5;
@@ -45,7 +44,6 @@ pub const PHASE_20: Native = Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 fn phase_20(x: &mut Ctx) -> Flow {

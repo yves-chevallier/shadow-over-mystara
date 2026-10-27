@@ -24,7 +24,6 @@ macro_rules! action_native {
         pub const $name: crate::Native = crate::Native {
             entry: $entry,
             name: $label,
-            cost: |_, _| 100,
             run: |c, b| {
                 let p = $crate::player::Player(c.a[0]);
                 $f(&mut $crate::player::Ctx::new(c, b), p);
@@ -32,7 +31,6 @@ macro_rules! action_native {
             },
             touches_sound: false,
             outputs: 0,
-            exact_cost: false,
         };
     };
 }

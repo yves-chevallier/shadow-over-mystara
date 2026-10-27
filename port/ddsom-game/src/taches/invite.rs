@@ -115,20 +115,16 @@ fn start(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
 pub const STOP: Native = Native {
     entry: 0xe03c6,
     name: "invite_stop",
-    cost: |_, _| 100,
     run: stop,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 pub const START: Native = Native {
     entry: 0xe03e4,
     name: "invite_start",
-    cost: |_, _| 100,
     run: start,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const NATIVES: &[Native] =

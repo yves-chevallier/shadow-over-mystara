@@ -83,21 +83,17 @@ fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CLEAR_PLAYERS: Native = Native {
     entry: 0x2d9e,
     name: "players_clear",
-    cost: |_, _| 3_000,
     run: clear_players,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const CLEAR_OVERLAYS: Native = Native {
     entry: 0x2df8,
     name: "players_clear_overlays",
-    cost: |_, _| 3_000,
     run: clear_overlays,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Pointeur de la table du personnage de `p` dans la table de pointeurs `table`.
@@ -304,11 +300,9 @@ const fn init_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2
     Native {
         entry,
         name,
-        cost: |_, _| 1_700,
         run,
         touches_sound: false,
         outputs: regs::d(0) | regs::a(0) | regs::a(1) | regs::a(2) | regs::a(3),
-        exact_cost: false,
     }
 }
 
@@ -449,7 +443,7 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
 }
 
 const fn join_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, cost: |_, _| 0, run, touches_sound: false, outputs: 0, exact_cost: false }
+    Native { entry, name, run, touches_sound: false, outputs: 0 }
 }
 
 macro_rules! join_entry {
@@ -492,9 +486,7 @@ fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const NATIVES: &[Native] = &[Native {
     entry: 0x3552,
     name: "player_weapon_stats",
-    cost: |_, _| 100,
     run: weapon_stats_native,
     touches_sound: false,
     outputs: regs::d(0) | regs::a(4),
-    exact_cost: false,
 }];

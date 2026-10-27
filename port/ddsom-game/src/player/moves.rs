@@ -1066,7 +1066,6 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
 pub const LEAP: crate::Native = crate::Native {
     entry: 0x35a78,
     name: "leap_attack",
-    cost: |_, _| 100,
     run: |c, b| {
         let p = Player(c.a[0]);
         leap_attack(&mut Ctx::new(c, b), p);
@@ -1074,13 +1073,11 @@ pub const LEAP: crate::Native = crate::Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const HOP_BACK: crate::Native = crate::Native {
     entry: 0x35b96,
     name: "magic_user_hop_back",
-    cost: |_, _| 100,
     run: |c, b| {
         let p = Player(c.a[0]);
         hop_back(&mut Ctx::new(c, b), p);
@@ -1088,7 +1085,6 @@ pub const HOP_BACK: crate::Native = crate::Native {
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 // ---- parade (`+5` = 8, 0x39ff0) ----------------------------------------------------------------------

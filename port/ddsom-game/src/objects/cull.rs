@@ -11,12 +11,10 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use super::cost::range_cycles;
 use super::motion::{cmp, lsl_word};
 use super::pools::{QUEUE_BOX, QUEUE_ENEMY_BOSS, QUEUE_ESHL, QUEUE_ITEM, QUEUE_PSHL};
 use super::Obj;
 use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, A5};
-use crate::timing::path_cycles;
 use crate::{regs, Native};
 
 /// Adresse de la caméra courante (x en +8, y en +0xc).
@@ -139,30 +137,12 @@ fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn cull_offscreen_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let obj = Obj(c.a[0]);
-    let cam = camera(b);
-    let x_out = screen_x(b, obj, cam).wrapping_add(0x40) >= 0x200;
-    let y_out = !x_out && screen_height(b, obj, cam).wrapping_add(0x40) > 0x180;
-    let inactive = !obj.is_active(b);
-    let alt = rd8(b, A5 + super::ram::USE_ALT_CAMERA) != 0;
-    let path = x_out as u64 | (y_out as u64) << 1 | (inactive as u64) << 2 | (alt as u64) << 3;
-    path_cycles(b, 0x1e1a, path, |pc| match pc {
-        0x1e22 => !alt,
-        0x1e3a => x_out,
-        0x1e52 => y_out,
-        _ => inactive,
-    })
-}
-
 pub const CULL_OFFSCREEN: Native = Native {
     entry: 0x1e1a,
     name: "obj_cull_offscreen",
-    cost: cull_offscreen_cost,
     run: cull_offscreen,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 // ---- 0x1e92 : zone de jeu élargie ----
@@ -200,33 +180,20 @@ fn in_arena_default(c: &mut Cpu, b: &mut Cps2Bus) {
     in_arena(c, b);
 }
 
-fn in_arena_cost(entry: u32, margin: u16, c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let obj = Obj(c.a[0]);
-    let cam = camera(b);
-    let x = screen_x(b, obj, cam).wrapping_add(margin);
-    let outside = x >= 0x180u16.wrapping_add(margin.wrapping_mul(2));
-    let alt = rd8(b, A5 + super::ram::USE_ALT_CAMERA) != 0;
-    path_cycles(b, entry, outside as u64 | (alt as u64) << 1, |pc| if pc == 0x1e9a { !alt } else { outside })
-}
-
 pub const IN_ARENA: Native = Native {
     entry: 0x1e92,
     name: "obj_in_arena",
-    cost: |c, b| in_arena_cost(0x1e92, c.d[0] as u16, c, b),
     run: in_arena,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 pub const IN_ARENA_DEFAULT: Native = Native {
     entry: 0x1e90,
     name: "obj_in_arena_default",
-    cost: |c, b| in_arena_cost(0x1e90, 0x3e, c, b),
     run: in_arena_default,
     touches_sound: false,
     outputs: regs::ALL,
-    exact_cost: true,
 };
 
 // ---- 0x1ed2 : visibilité et inscription aux collisions ----
@@ -329,25 +296,10 @@ fn on_screen(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Durée estimée de `on_screen` : somme des instructions du chemin pris, sans le détail des
-/// branchements.
-fn on_screen_cost(c: &Cpu, b: &mut Cps2Bus) -> u64 {
-    let obj = Obj(c.a[0]);
-    let visible = is_visible(b, obj) && obj.u8(b, Obj::FLAGS) & 2 == 0;
-    let head = if obj.u8(b, Obj::CLASS) != 0 { range_cycles(b, 0x1ed2, 0x1f26) } else { range_cycles(b, 0x1ed2, 0x1eda) + range_cycles(b, 0x1f26, 0x1f6a) };
-    if visible {
-        head + range_cycles(b, 0x1f6a, 0x1f90) + 90
-    } else {
-        head + range_cycles(b, 0x1f94, 0x1f9e)
-    }
-}
-
 pub const ON_SCREEN: Native = Native {
     entry: 0x1ed2,
     name: "obj_on_screen",
-    cost: on_screen_cost,
     run: on_screen,
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
-    exact_cost: false,
 };

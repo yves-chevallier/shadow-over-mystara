@@ -823,12 +823,12 @@ fn walker(x: &mut Cx) {
 }
 
 handlers! {
-    0xa8594 "effct_ouverture" 200 opening,
-    0xb2f40 "effct_silhouette_reflet" 200 mirrored,
-    0xb66f8 "effct_traversee" 200 crossing,
-    0xb68f4 "effct_passage" 200 passage,
-    0xb6a74 "effct_lanceur" 200 launcher,
-    0xb7f28 "effct_enseigne_depart" 200 start_sign,
-    0xb896e "effct_fondu_sonore" 150 sound_fade,
-    0xba0b0 "effct_passant" 200 walker,
+    0xa8594 "effct_ouverture" opening,
+    0xb2f40 "effct_silhouette_reflet" mirrored,
+    0xb66f8 "effct_traversee" crossing,
+    0xb68f4 "effct_passage" passage,
+    0xb6a74 "effct_lanceur" launcher,
+    0xb7f28 "effct_enseigne_depart" start_sign,
+    0xb896e "effct_fondu_sonore" sound_fade,
+    0xba0b0 "effct_passant" walker,
 }

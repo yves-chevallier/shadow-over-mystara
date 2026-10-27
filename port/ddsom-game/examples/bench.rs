@@ -2,9 +2,9 @@
 //!
 //! bench <roms> <eeprom> <scenario> <images>
 //!
-//! `DDSOM_SANS_68K=1` : jeu sans 68000 (`install_sans_68k`) ; sinon jeu normal (natives et 68000 surcadencé ×16, comme
-//! la machine A de `validate`). `DDSOM_SON_RUST=1` : pilote son Rust au lieu du Z80 émulé (comme l'application).
-//! `DDSOM_ASSETS=<dossier>` (avec `DDSOM_SANS_68K=1`) : machine faite des seuls assets.
+//! Le jeu sans 68000 (`install_sans_68k`), comme la machine A de `validate` ; `DDSOM_HYBRIDE=1` : mode hybride
+//! (natives et 68000 surcadencé ×16, diagnostic). `DDSOM_SON_RUST=1` : pilote son Rust au lieu du Z80 émulé (comme l'application).
+//! `DDSOM_ASSETS=<dossier>` (pas en mode hybride) : machine faite des seuls assets.
 //! Seul `Machine::run_frame` est mesuré (jeu, Z80 ou pilote son, QSound), sans le rendu de l'image
 //! (`DDSOM_RENDU=1` : avec), ni la sortie audio et vidéo de l'application. Base de la phase d'optimisation : docs/refactorisation.md, « Performance ».
 
@@ -17,10 +17,10 @@ fn main() {
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
-    let sans_68k = std::env::var("DDSOM_SANS_68K").is_ok_and(|v| v == "1");
+    let sans_68k = !std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1");
     let mut m = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
-            assert!(sans_68k, "DDSOM_ASSETS demande DDSOM_SANS_68K=1");
+            assert!(sans_68k, "DDSOM_ASSETS exclut DDSOM_HYBRIDE=1");
             let contenus = ddsom_assets::rebuild::contenus(Path::new(&dir)).expect("assets");
             let mut m = cps2::Machine::ddsom(contenus, ee.as_deref());
             m.sound.use_rust_driver();

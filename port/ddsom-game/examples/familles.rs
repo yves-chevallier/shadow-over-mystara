@@ -1,8 +1,7 @@
 //! Contrôle détaillé des gestionnaires des familles ITEM / BOX / EFFCT sur un scénario : chaque appel
 //! est exécuté par l'original et par la routine native sur des copies, puis comparé (RAM, registres
-//! de sortie, cycles). Un écart affiche l'objet (type, variante, états, 0x60 octets) avant l'appel.
+//! de sortie). Un écart affiche l'objet (type, variante, états, 0x60 octets) avant l'appel.
 //!   familles <roms> <eeprom> <scénario> <images> [nombre d'écarts à afficher]
-//! Affiche aussi la couverture des décisions des gestionnaires (lignes `COUV fichier ligne résultat`).
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -20,15 +19,12 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     let Some(n) = ddsom_game::families::NATIVES.iter().find(|n| n.entry == pc) else {
         return ddsom_game::run(pc, c, b, dl);
     };
-    let cout = (n.cost)(c, b);
     let obj = c.a[0];
     let avant: Vec<u8> = (0..0x60).map(|i| ddsom_game::mem::rd8(b, obj + i)).collect();
     let mut c1 = c.clone();
     let mut b1 = b.clone();
-    let (c0, mut b0) = (c.clone(), b.clone());
-    let debut = c1.cycles;
+    let (c0, b0) = (c.clone(), b.clone());
     (n.run)(&mut c1, &mut b1);
-    c1.cycles += cout;
     // original
     let ret = ddsom_game::mem::rd32(b, c.a[7]);
     let sp_apres = c.a[7].wrapping_add(4);
@@ -38,9 +34,6 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
         }
     }
     let mut diffs = Vec::new();
-    if c1.cycles - debut != c.cycles - debut {
-        diffs.push(format!("cycles {} au lieu de {}", c1.cycles - debut, c.cycles - debut));
-    }
     if c1.d[7] != c.d[7] {
         diffs.push(format!("d7={:08x} au lieu de {:08x}", c1.d[7], c.d[7]));
     }
@@ -62,9 +55,6 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             v > 0
         });
     if afficher {
-        ddsom_game::families::activer_diagnostic(true);
-        (n.cost)(&c0, &mut b0);
-        ddsom_game::families::activer_diagnostic(false);
         if std::env::var_os("FAMILLES_TRACE").is_some() {
             // trace de l'original, instruction par instruction (pc et cycles cumulés)
             let (mut ct, mut bt) = (c0.clone(), b0.clone());
@@ -97,7 +87,6 @@ fn main() {
     if let Some(n) = a.get(5) {
         RESTE.with(|r| *r.borrow_mut() = n.parse().unwrap());
     }
-    ddsom_game::families::activer_couverture();
     // les autres routines natives en mode contrôle : la partie suit exactement le temps de l'original
     ddsom_game::set_check(true);
     let ee = std::fs::read(eeprom).ok();
@@ -107,9 +96,6 @@ fn main() {
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
-    }
-    for (fichier, ligne, pris) in ddsom_game::families::couverture() {
-        println!("COUV {} {ligne} {pris}", fichier.rsplit('/').next().unwrap());
     }
     for (nom, (appels, ecarts)) in APPELS.with(|m| m.borrow().clone()) {
         println!("  {nom:24} {appels:>8} appels {ecarts:>5} écarts");

@@ -158,9 +158,7 @@ fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CLAMP: Native = Native {
     entry: 0x35c0,
     name: "player_clamp_to_screen",
-    cost: |_, _| 200,
     run: clamp_native,
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1),
-    exact_cost: false,
 };

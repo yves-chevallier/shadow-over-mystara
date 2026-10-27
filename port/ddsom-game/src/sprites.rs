@@ -639,23 +639,15 @@ fn reset_lists(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const RESET_LISTS: Native = Native {
     entry: 0x1de7c,
     name: "sprites_vide_les_listes",
-    cost: |_, _| 100,
     run: reset_lists,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 pub const BUILD_SPRITE_LIST: Native = Native {
     entry: 0x1de96,
     name: "build_sprite_list",
-    // estimation : ~120 cycles par morceau dessiné en moyenne ; contrôlée par le mode contrôle
-    cost: |c, b| {
-        let used = 0x36a - rd16(b, c.a[5] + ram::BUDGET).min(0x36a);
-        2_000 + 120 * used as u64
-    },
     run: build_sprite_list,
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };

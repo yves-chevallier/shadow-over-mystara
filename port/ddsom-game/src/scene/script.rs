@@ -176,26 +176,22 @@ pub const RESET_ENTRY: u32 = 0xf2e56;
 pub const SPAWN_SCRIPT: Native = Native {
     entry: SPAWN_ENTRY,
     name: "scene_script",
-    cost: |_, _| 100,
     run: |c, b| {
         step(c, b);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
 
 /// Remet le lecteur à l'état « charger le script » (changement de scène).
 pub const SCRIPT_RESET: Native = Native {
     entry: RESET_ENTRY,
     name: "scene_script_reset",
-    cost: |_, _| 20,
     run: |c, b| {
         wr8(b, STATE, state::LOAD);
         rts(c, b);
     },
     touches_sound: false,
     outputs: 0,
-    exact_cost: false,
 };
