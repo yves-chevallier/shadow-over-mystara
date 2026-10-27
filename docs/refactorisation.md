@@ -282,7 +282,7 @@ détail du noyau : [noyau.md](noyau.md), « Tâches Rust ».
 * **Pas 4, ce qui reste (et pourquoi).** `resume!` : le pas de jeu `0x1c4b0` (la boucle d'image teste le plafond de
   pas, `cps2::StepCap`, sur le PC), les retours des phases de la démonstration `0x1f98c`/`0x20a98` (adresse de retour
   d'un `call_at` vers une phase qui peut céder), le fondu au noir `0x1460` (appelé par `call_at` par les objets SET,
-  `families/set.rs`, `set_b.rs`). `Cadre`, `mettre_sur_la_pile`, `Unwound` et `Reprise::Cession` restent pour les
+  `families/set.rs`, `set_b.rs`) ; plus depuis le lot C, § 8). `Cadre`, `mettre_sur_la_pile`, `Unwound` et `Reprise::Cession` restent pour les
   appelants hors du lot : gestionnaires d'objets qui cèdent par `call_at` (fondu des SET, reprises `game.rs`
   `WORLD_RESUMES`/`PHASE_12_RESUME` et `dispatch.rs` `RESUME_*`, adresses de retour de leurs `call_at`), épilogue
   étranger des bulles (`families/mod.rs`, qui dépile des cadres remis sur la pile ; l'étape `Tour` qu'il atteint est
@@ -374,6 +374,39 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
 * **Pas faits** : `ai.rs`/`ai_aids.rs` (natives à contrat de registres appelées par les familles), `scroll.rs`,
   `combat` (`call_ao` vers effets et sons hors lot), `--doublons` des personnages.
 
+## 9. Lot C : tirs et décors (`eshl*`, `set*`, `sobj`, `shell`, `joueur/`)
+
+* **Fondu au noir des portes sans `call_at`.** Les portes SET 7 (`set.rs`, `exit_gate`) et SET 29 (`set_b.rs`,
+  `door_b`) appellent `taches::fondu::descente` comme un sous-programme de tâche (`set::fondu_de_sortie`) : la suite
+  est une étape `fondu_de_sortie::Etape` (`taches::Etape::PorteSet`) qui porte la porte ; à la fin du fondu la tâche
+  y reprend, puis revient dans la boucle de dispatch par l'adresse de retour du gestionnaire. Les fonctions Rust de la
+  boucle sont abandonnées par `Unwound`, comme le faisait `call_at`. Disparaissent : `resume!(FONDU_DESCENTE, 0x1460)`
+  (`taches/fondu.rs`) et les natives de reprise 0xcb896, 0xcb9c0, 0xd8f06. `fuzz_porte` suit maintenant le fondu
+  jusqu'au bout (étapes de la tâche) et couvre aussi la porte 29, que les scénarios n'atteignent pas
+  (`DDSOM_PORTE=29`).
+* **J1.** Plus d'appel par adresse vers les natives du lot : créateurs ESHL (`eshl_creators::appeler`, chaque
+  créateur est une fonction publique `(c, b)`, la native n'ajoute que `rts`), routines de vague (`set_residu`),
+  interprète du dialogue de la boutique (`peff_boutique::talk_a/b`, natives 0x514ac/0x514cc retirées), création de
+  la tâche de fondu (`kernel::creer_tache` au lieu de 0x9b6). Les adresses des natives d'autres modules appelées par
+  le lot ne sont plus recopiées : `crate::camera_modes::SHAKE_A.entry`, `terrain::SHADOW`, `palette::*`,
+  `text::CLEAR_BOX`, `aides::*`, `video::*`, `ai::KEEP_ON_SCREEN`, `scene::*` (60 constantes locales, dont des noms
+  faux : `SAY_A`/`SAY_B`/`SAY_C`, `SOUND_THUD`, `AREA_DAMAGE`, `CAMERA_LOCK` désignaient les secousses de caméra
+  0x2824/0x2860/0x289c ; `RUN_PALETTE_SCRIPT`/`PLAY_SCRIPT` l'effacement d'un rectangle de texte 0x1324).
+* **J2, preuve à la sortie des gestionnaires.** Diagnostic (non gardé) : à la sortie de chaque gestionnaire du lot,
+  les registres qu'il a changés sont empoisonnés. Validation complète : tous morts sauf trois lecteurs d'origine,
+  documentés : D4 laissé par la copie de palette du SET 0 (`set.rs`, relu par 0xad7b0), D2 des effets PEFF 12-14
+  (`peff_e.rs`, rebond du suivant), D3 de la gerbe de flammes PSHL 5 (`pshl.rs`, relu par un gestionnaire suivant,
+  `boss11_scene42_mort` image 4447). Les écritures résiduelles des gestionnaires sans appel lisant des registres
+  ont été retirées (`peff_ring`, `peff_b`, `peff_g`, `peff_l`, `peff_o`, `peff` ; aides `rand_mask` et `linked`
+  sans registre).
+* **Ce qui bloque le reste de J2.** (1) Les **appels de son** (153 sites) : chaque wrapper recopie D0-D7 et A0-A4
+  sur la pile privée du son (`sound::sauvegarde_fantome`, copie morte restée en RAM, que `validate` compare) ; tout
+  registre vivant au moment d'un son doit donc rester celui de l'original, et un gestionnaire qui joue un son garde
+  ses écritures de registres. Il faudrait que `validate` ignore cette zone, ou une API de son qui prenne ces valeurs
+  en argument. (2) Les **créateurs** (`eshl_creators`, `set_residu`, tremplins) : leurs registres de sortie (A1,
+  retenue, compteurs) sont relus par les gestionnaires d'ennemis et de boss (lot A) et par les sons qui suivent ;
+  empoisonnés, une trentaine de scénarios divergent. Ils gardent leur contrat.
+
 ## Avancement
 
 | Étape | Commit | Validation |
@@ -386,3 +419,4 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
 | Lot 0b : API du moteur d'objets, appelants convertis (adaptateurs) | f60da0a | complète, 269/269 sans 68000 |
 | Lot 0b : fusion du lot E, méthodes au cœur après `DDSOM_POISON`, documentation | voir `git log` | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) ; empoisonnée : lecteurs isolés (guide) |
 | Lot D : joueurs et monde (accesseurs, appels Rust directs, poison, trous réécrits) | voir `git log` (wt-joueur) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; poison du lot sur 90 scénarios ; fuzz_player des dix routines ajoutées |
+| Lot C : fondu des portes en sous-programme de tâche, J1 dans le lot, registres morts des gestionnaires sans son | e3a49b7 (wt-decors) | complète, 269/269 sans 68000 (30 min 49 s, 8 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; `fuzz_porte` (portes 7 et 29), `fuzz boutique`, `fuzz petites` sans écart |

@@ -6,7 +6,6 @@ use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const FLASH_ON: u32 = 0x1ac68;
 const FLASH_OFF: u32 = 0x1ac90;
 
 fn signed(v: u16, negate: bool) -> u16 {
@@ -279,7 +278,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(FLASH_ON);
+        x.call(crate::palette::FLASH_COLOR_ON.entry);
         x.reinsert();
     }
 
@@ -331,7 +330,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(FLASH_ON);
+        x.call(crate::palette::FLASH_COLOR_ON.entry);
         x.reinsert();
     }
 

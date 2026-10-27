@@ -3,6 +3,7 @@
 
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
+use super::peff_boutique;
 use crate::mem::rd16;
 use crate::objects::Obj;
 use crate::objects::Courant;
@@ -20,7 +21,7 @@ mod badge {
     const ANIMS_ALT: u32 = 0x1bcd5a;
 
     pub fn run(x: &mut Cx) {
-        match x.state(0x517ea) {
+        match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
             _ => x.free_peff(),
@@ -32,17 +33,12 @@ mod badge {
         let variant = x.u8(0x3) as u32;
         let column = x.rom16(COLUMNS + 2 * variant);
         let cam_x = x.a5_u16(a5::CAM2_X);
-        x.c.d[0] = x.u8(0x3) as u32 * 2;
-        x.c.d[1] = column.wrapping_add(cam_x) as u32;
-        x.set16(0x8, x.c.d[1] as u16);
+        x.set16(0x8, column.wrapping_add(cam_x));
         let cam_y = x.a5_u16(a5::CAM2_Y);
         x.set16(0xc, cam_y);
         x.set32(0x10, 0);
-        x.c.a[4] = ANIM_BYTES;
         let which = x.u8(0x2f) as u32;
         let byte = x.data8(ANIM_BYTES + which);
-        x.c.d[0] = which;
-        x.c.d[1] = byte as u32;
         x.set8(0x42, byte);
         let n = (which * 2 + byte as u32) & 0xffff;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ANIMS_ALT } else { ANIMS };
@@ -52,7 +48,6 @@ mod badge {
 
     fn active(x: &mut Cx) {
         let d = x.u16(0xc).wrapping_sub(x.a5_u16(a5::CAM2_Y));
-        x.set_d0w(d);
         if d >= 0x110 {
             x.free_peff();
         }
@@ -74,9 +69,6 @@ mod shop {
     const SCRIPTS_B: u32 = 0x5113e;
     const ANIMS: u32 = 0x1c03a6;
     const FIRST_SCENE: u16 = 0x45;
-    /// Interprète du script de chaque zone (A2 = le joueur).
-    const TALK_A: u32 = 0x514ac;
-    const TALK_B: u32 = 0x514cc;
     /// Quatre joueurs enregistrés (mots, 0 = absent).
     const PLAYERS: u32 = 0xff2aa4;
     /// Position du défilement et sa valeur à l'image précédente (longs, A5).
@@ -89,7 +81,7 @@ mod shop {
     const PLAYER_READY: u32 = 0x58;
 
     pub fn run(x: &mut Cx) {
-        match x.state(0x51084) {
+        match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
             _ => x.free_peff(),
@@ -106,7 +98,6 @@ mod shop {
                 x.set16(field + k, v);
             }
         }
-        x.c.a[3] = ZONES_B;
         let index = (scene as u16).wrapping_sub(FIRST_SCENE).wrapping_mul(4) as i16 as u32;
         let a = x.rom32(SCRIPTS_A.wrapping_add(index));
         x.set32(0x1c, a);
@@ -117,16 +108,18 @@ mod shop {
         x.reinsert();
     }
 
-    /// Deux tours des quatre joueurs (D6 compteur, A1 pointeur dans la liste, comme l'original : le script
-    /// lancé peut les relire), puis suivi du défilement et pas d'animation.
+    /// Deux tours des quatre joueurs (D6 compteur, A1 pointeur dans la liste, comme l'original : l'interprète du
+    /// dialogue, appelé avec A2 = le joueur prêt dans la zone, sauve tous les registres dans ses appels de son), puis
+    /// suivi du défilement et pas d'animation.
     fn active(x: &mut Cx) {
-        for (zone, talk) in [(ZONE_A, TALK_A), (ZONE_B, TALK_B)] {
+        let zones: [(u32, fn(&mut Cx)); 2] = [(ZONE_A, peff_boutique::talk_a), (ZONE_B, peff_boutique::talk_b)];
+        for (zone, talk) in zones {
             x.c.d[6] = 3;
             x.c.a[1] = PLAYERS;
             loop {
                 if let Some(player) = in_zone(x, zone) {
                     if (player.u8(x.b, PLAYER_READY) as i8) > 0 {
-                        x.call(talk);
+                        talk(x);
                     }
                 }
                 x.c.a[1] = x.c.a[1].wrapping_add(2);
@@ -140,8 +133,6 @@ mod shop {
         let [dx, dz] = [0, 1].map(|k| {
             (x.a5_u32(SCROLL[k]).wrapping_sub(x.a5_u32(PREVIOUS_SCROLL[k])) as i32 >> 1) as u32
         });
-        x.c.d[0] = dx;
-        x.c.d[2] = dz;
         x.add32(0x8, dx);
         x.add32(0xc, dz);
         x.anim_step();

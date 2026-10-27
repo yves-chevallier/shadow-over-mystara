@@ -8,17 +8,13 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const TERRAIN_OF_OBJECT: u32 = 0x24a8;
-const SHAKE: u32 = 0x2824;
-const FLASH_ON: u32 = 0x1ac68;
-const FLASH_PULSE: u32 = 0x1ac86;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
 fn stopped_by_terrain(x: &mut Cx) -> bool {
-    x.call(TERRAIN_OF_OBJECT);
+    x.call(crate::video::TERRAIN_OF_OBJECT.entry);
     let terrain = x.c.d[2];
     x.c.d[0] = x.c.d[0] & 0xffff_0000 | ((terrain & 0x3f).wrapping_sub(5) & 0xffff);
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
@@ -34,7 +30,6 @@ mod chain {
     const LINKS: u32 = 0xff204c;
     const SPEEDS: u32 = 0x1c89b6;
     const ANIMS: u32 = 0x15cdb6;
-    const ANGLE_TO_TARGET: u32 = 0x1376;
     const SPAWN_EFFECT: u32 = 0xabec8;
     const SFX_END: u32 = 0xe859a;
 
@@ -179,7 +174,7 @@ mod chain {
 
     /// Tourne d'un cran vers la cible (`0x53fe0`).
     fn steer(x: &mut Cx) {
-        x.call(ANGLE_TO_TARGET);
+        x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
         let delta = x.c.d[0] as u8;
         let mut step: u8 = 1;
         x.c.d[1] = 1;
@@ -510,9 +505,9 @@ mod fireball {
                 x.set8(f::POWER2, p2);
                 x.set8(0x56, 4);
                 x.set_a5_u16(0x4ba, 0x100);
-                x.call(FLASH_ON);
+                x.call(crate::palette::FLASH_COLOR_ON.entry);
                 x.set_d0w(0x20);
-                x.call(SHAKE);
+                x.call(crate::camera_modes::SHAKE_A.entry);
                 x.anim(ANIMS, 2);
                 x.reinsert();
             }
@@ -545,7 +540,7 @@ mod fireball {
                     if x.u8(0x56) == 0 {
                         x.set_a5_u16(0x4ba, 0);
                     } else if x.u8(0x56) == 2 {
-                        x.call(FLASH_PULSE);
+                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
                     }
                 }
                 if x.anim_step() {

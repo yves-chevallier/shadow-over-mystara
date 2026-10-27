@@ -38,15 +38,14 @@ mod coins {
     use super::*;
 
     pub fn run(x: &mut Cx) {
-        match x.state(0x4d726) {
+        match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(0x16, 0);
                 let table = if x.a5_u8(0x20) == 1 { PLAYER_SPOTS_A } else { PLAYER_SPOTS_B };
                 let (cx, cy) = (x.a5_u16(a5::CAM_X), x.a5_u16(a5::CAM_Y));
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let row = (owner.u8(x.b, 0x2) as u32) << 2;
-                x.c.d[0] = row;
                 let dx = x.data16(table + row);
                 let dy = x.data16(table + row + 2);
                 x.set16(0x8, cx.wrapping_add(dx));
@@ -57,7 +56,6 @@ mod coins {
             2 => {
                 check(x);
                 let delta = x.a5_u32(a5::CAM_X).wrapping_sub(x.a5_u32(0x524));
-                x.c.d[0] = delta;
                 x.add32(0x8, delta);
             }
             _ => x.free(&pools::EFFCT),
@@ -66,7 +64,7 @@ mod coins {
 
     /// `0x4d7ac`
     fn check(x: &mut Cx) {
-        let linked = x.link_a1(0x5c);
+        let linked = x.linked(0x5c);
         let flags = x.u8(0x17);
         let had = flags & 1 != 0;
         x.set8(0x17, flags & !1);
@@ -108,19 +106,14 @@ mod coins {
     /// `0x4d81c` : le joueur du lien (`+0x1a`) rend l'équipement de son emplacement `+3`.
     fn sell(x: &mut Cx) {
         let who = Obj(x.u16(0x1a) as i16 as i32 as u32 & 0xff_ffff);
-        x.c.a[6] = x.u16(0x1a) as i16 as i32 as u32;
         let player_word = who.u16(x.b, f::OWNER);
         let player = Obj(player_word as i16 as i32 as u32 & 0xff_ffff);
-        x.c.a[1] = player_word as i16 as i32 as u32;
         let rank = who.u8(x.b, 0x3) as u32;
         let slot = player.0 + rank;
-        x.c.a[2] = (player_word as i16 as i32 as u32).wrapping_add(rank);
         let character = (player.u8(x.b, 0x3) & 0xe) as u32;
         let table = x.rom32(SELL_TABLES + character * 2);
-        x.c.a[3] = table;
         let id = crate::mem::rd8(x.b, slot + 0x140) as u32;
         let code = x.data8(table + id);
-        x.c.d[0] = code as u32;
         if code == 0 {
             return;
         }

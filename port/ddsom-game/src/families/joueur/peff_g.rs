@@ -19,10 +19,10 @@ mod hit_spark {
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
-        match x.state(0x4d30c) {
+        match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let gesture = owner.u8(x.b, 0x7);
                 x.set8(0x5c, gesture);
                 let flip = owner.u8(x.b, f::FLIP);
@@ -33,8 +33,6 @@ mod hit_spark {
                 if child {
                     (dx, dz) = (-0x18i16 as u16, 0x36);
                 }
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = dz as u32;
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -50,9 +48,8 @@ mod hit_spark {
                 if v == 0 {
                     x.set_bit(0x1, 1, false);
                 }
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let gesture = owner.u8(x.b, 0x7);
-                x.c.d[0] = x.c.d[0] & !0xff | gesture as u32;
                 if gesture != x.u8(0x5c) {
                     x.add8(0x4, 2);
                 }
@@ -79,7 +76,7 @@ mod prayer {
 
     pub fn run(x: &mut Cx) {
         let variant = x.u8(0x3);
-        match x.state(0x4d3f0) {
+        match x.u8(0x4) {
             0 => match variant {
                 0 => init_halo(x),
                 1 => init_rays(x),
@@ -106,7 +103,7 @@ mod prayer {
 
     fn init_halo(x: &mut Cx) {
         x.add8(0x4, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
@@ -117,7 +114,6 @@ mod prayer {
             x.add16(0x10, 2);
         }
         let class = owner.u8(x.b, 0x10c) as u32;
-        x.c.d[0] = class * 2;
         let life = x.rom16(DURATIONS + class * 2);
         x.set16(0x5c, life);
         x.anim(ANIMS, 0);
@@ -127,32 +123,28 @@ mod prayer {
     fn init_rays(x: &mut Cx) {
         if x.u8(0x2f) == 0 {
             x.add8(0x4, 2);
-            let owner = x.link_a1(f::OWNER);
+            let owner = x.linked(f::OWNER);
             let life = owner.u16(x.b, 0x168).wrapping_sub(0x1e);
             x.set16(0x5c, life);
             return;
         }
         x.add8(0x4, 2);
         x.set16(0x5c, 0x28);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
         x.add16(0xc, 0x20);
-        x.set_d0w(0x43);
-        let n = x.c.d[0] as u16;
-        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, 0x43);
         x.move_by_table_xy();
-        x.set_d0w(0x21);
-        let n = x.c.d[0] as u16;
-        x.select_speed(&crate::objects::motion::SPEEDS_B, n);
+        x.select_speed(&crate::objects::motion::SPEEDS_B, 0x21);
         x.anim(ANIMS, 1);
         x.reinsert();
     }
 
     fn init_glow(x: &mut Cx) {
         x.add8(0x4, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
@@ -187,7 +179,6 @@ mod prayer {
         }
         x.set_bit(0x1, 1, true);
         let d = x.u16(0x5c).wrapping_add(x.c.d[7] as u16);
-        x.c.d[0] = (d & 1) as u32;
         if d & 1 != 0 {
             x.set_bit(0x1, 1, false);
         }
@@ -217,7 +208,7 @@ mod glow {
     const ANIMS: u32 = 0x1bb402;
 
     pub fn run(x: &mut Cx) {
-        match x.state(0x4d690) {
+        match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
                 follow_owner(x);
@@ -225,8 +216,6 @@ mod glow {
                 if x.u8(0x3) != 0 {
                     (dx, dz) = (-0x69i16 as u16, 0x3a);
                 }
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = dz as u32;
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -236,9 +225,8 @@ mod glow {
                 x.reinsert();
             }
             2 => {
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let gesture = owner.u8(x.b, 0x7);
-                x.c.d[0] = x.c.d[0] & !0xff | gesture as u32;
                 if gesture != x.u8(0x5d) {
                     x.add8(0x4, 2);
                 }

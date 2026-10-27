@@ -36,7 +36,6 @@ mod flame64 {
     const TIMER: u32 = 0x42;
     const SOUND_COUNT: u32 = 0x46;
     const LAST_GENERATION: u8 = 4;
-    const AREA_DAMAGE: u32 = 0x2860;
     const SFX_FLAME: u32 = 0xed548;
     const SFX_LAND: u32 = 0xed4de;
 
@@ -146,7 +145,7 @@ mod flame64 {
                 }
                 x.set16(0xc, 0);
                 x.c.d[0] = 8;
-                x.call(AREA_DAMAGE);
+                x.call(crate::camera_modes::SHAKE_B.entry);
                 x.add8(0x5, 2);
                 shape(x);
                 x.set16(TIMER, 12);
@@ -222,9 +221,7 @@ mod rocks65 {
     const SCREEN: u32 = 0x4fe;
     const SCREEN_P2: u32 = 0x54e;
     const IMPACT_FX: u32 = 0xab7d8;
-    const AREA_DAMAGE: u32 = 0x2860;
     const SFX: [u32; 2] = [0xeafdc, 0xed548];
-    const CLAMP_ON_SCREEN: u32 = 0xfbb0;
 
     pub fn run(x: &mut Cx) {
         if suspended(x) {
@@ -287,7 +284,7 @@ mod rocks65 {
         x.move_z();
         if x.u16(0xc) as i16 > 0 {
             x.set_d0w(16);
-            x.call(CLAMP_ON_SCREEN);
+            x.call(crate::ai::KEEP_ON_SCREEN.entry);
             x.reinsert();
             return;
         }
@@ -300,7 +297,7 @@ mod rocks65 {
             x.anim_start(ANIMS[1], 1);
         }
         x.c.d[0] = 8;
-        x.call(AREA_DAMAGE);
+        x.call(crate::camera_modes::SHAKE_B.entry);
         x.call(SFX[v]);
     }
 }
@@ -325,10 +322,7 @@ mod shard66 {
     const CARRIER: u32 = 0x46;
     const TIMER: u32 = 0x42;
     const RANK: u32 = 0x2f;
-    const LAND_DAMAGE: u32 = 0x2824;
     const SFX_LAND: u32 = 0xe4de6;
-    const TERRAIN: u32 = 0x33fe4;
-    const CLAMP_ON_SCREEN: u32 = 0xfbb0;
     /// États `+4.w` de l'éclat dans lequel il reste tenu.
     const HELD_STATE: u16 = 0x204;
 
@@ -410,7 +404,7 @@ mod shard66 {
                     let n = x.rom8(LAND_ANIMS + v) as u32;
                     x.anim_start(ANIMS, n as u16);
                     x.c.d[0] = 4;
-                    x.call(LAND_DAMAGE);
+                    x.call(crate::camera_modes::SHAKE_A.entry);
                     x.call(SFX_LAND);
                 }
                 blink(x, false);
@@ -445,9 +439,9 @@ mod shard66 {
     /// Fin commune : visibilité (bit 1 de `+1` : caché), terrain, retenue dans l'écran, tri.
     fn blink(x: &mut Cx, hidden: bool) {
         x.set_bit(0x1, 1, hidden);
-        x.call(TERRAIN);
+        x.call(crate::terrain::SHADOW.entry);
         x.set_d0w(16);
-        x.call(CLAMP_ON_SCREEN);
+        x.call(crate::ai::KEEP_ON_SCREEN.entry);
         x.reinsert();
     }
 }
@@ -1045,7 +1039,6 @@ mod splinter72 {
     const CREATOR: u32 = 0x5c;
     const RANK: u32 = 0x2f;
     const PALETTE_LIGHT: u32 = 0x3af8;
-    const AREA_DAMAGE: u32 = 0x2860;
     const SFX_THROW: u32 = 0xed4de;
     const SFX_LAND: u32 = 0xed548;
 
@@ -1077,7 +1070,7 @@ mod splinter72 {
                         } else {
                             x.set16(0xc, 0);
                             x.c.d[0] = 40;
-                            x.call(AREA_DAMAGE);
+                            x.call(crate::camera_modes::SHAKE_B.entry);
                             x.add8(0x5, 2);
                             x.set8(f::BOX_SET, 7);
                             x.set8(f::ATTACK_ID, 0x1c);

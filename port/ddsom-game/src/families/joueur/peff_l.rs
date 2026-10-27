@@ -28,7 +28,7 @@ mod slot_icon {
         if x.a5_u8(0x3d) != 0 {
             return;
         }
-        match x.state(0x4ca14) {
+        match x.u8(0x4) {
             0 => {
                 init(x);
                 active(x);
@@ -40,10 +40,9 @@ mod slot_icon {
 
     /// Joueur propriétaire + rang de l'emplacement (`lea (0,A1,D0.w),A1`).
     fn slot(x: &mut Cx) -> Obj {
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let rank = x.u8(0x3) as u32;
         let at = Obj(owner.0 + rank);
-        x.c.a[1] = ext(owner).wrapping_add(rank);
         at
     }
 
@@ -57,17 +56,13 @@ mod slot_icon {
         x.set8(0x58, count);
         let (player_table, slot_table) = if x.a5_u8(0x20) == 1 { (PLAYER_A, SLOT_A) } else { (PLAYER_B, SLOT_B) };
         let (mut d1, mut d2) = (x.a5_u16(a5::CAM_X), x.a5_u16(a5::CAM_Y));
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let row = (owner.u8(x.b, 0x2) as u32) << 2;
         d1 = d1.wrapping_add(x.data16(player_table + row));
         d2 = d2.wrapping_add(x.data16(player_table + row + 2));
         let row = (x.u8(0x3) as u32) << 2;
         d1 = d1.wrapping_add(x.data16(slot_table + row));
         d2 = d2.wrapping_add(x.data16(slot_table + row + 2));
-        x.c.d[1] = d1 as u32;
-        x.c.d[2] = d2 as u32;
-        x.c.a[2] = player_table;
-        x.c.a[3] = slot_table;
         x.set16(HOME, d1);
         x.set16(HOME + 2, d2);
         x.set16(0x8, d1);
@@ -81,11 +76,8 @@ mod slot_icon {
         let at = slot(x);
         let item = at.u8(x.b, 0x140) as u32;
         let count = at.u8(x.b, 0x148) as u32;
-        x.c.d[0] = (item << 4) + count & 0xffff;
-        x.c.d[1] = count;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        let n = x.c.d[0] as u16;
-        x.anim_start(set, n);
+        x.anim_start(set, ((item << 4) + count & 0xffff) as u16);
     }
 
     fn active(x: &mut Cx) {
@@ -101,8 +93,6 @@ mod slot_icon {
         let at = slot(x);
         let item = at.u8(x.b, 0x140);
         let count = at.u8(x.b, 0x148);
-        x.c.d[0] = item as u32;
-        x.c.d[1] = count as u32;
         if item == x.u8(0x57) && count == x.u8(0x58) {
             return;
         }
@@ -122,8 +112,7 @@ mod slot_icon {
         if x.u8(TAKEN) != 0 {
             return;
         }
-        let item = x.link_a1(0x5c);
-        x.c.a[6] = ext(item);
+        let item = x.linked(0x5c);
         let dx = item.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0x10);
         if dx > 0x20 {
             return;
@@ -144,7 +133,7 @@ mod slot_icon {
     fn approach(x: &mut Cx) {
         let taken = x.u8(TAKEN) as i8;
         if taken > 0 {
-            let item = x.link_a1(0x5c);
+            let item = x.linked(0x5c);
             let (ix, iz) = (item.u16(x.b, 0x8), item.u16(x.b, 0xc));
             x.set16(0x8, ix);
             x.set16(0xc, iz);
@@ -206,7 +195,6 @@ mod slot_icon {
     /// `0x4cc9a` : suit le défilement de la caméra.
     fn scroll(x: &mut Cx) {
         let delta = x.a5_u32(a5::CAM_X).wrapping_sub(x.a5_u32(0x524));
-        x.c.d[0] = delta;
         x.add32(0x8, delta);
         x.add32(HOME, delta);
     }

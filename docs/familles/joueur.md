@@ -93,9 +93,10 @@ regard (0 ou 0x20 ; copié du joueur), `+0x2e` jeu de boîtes de collision, `+0x
 
 PEFF 42 (0x50b9c, article en vitrine de la boutique : zone de vente, message, vente contre la bourse BCD) et
 l'interprète des dialogues de PEFF 43 (0x514ac / 0x514cc, table de 0x514ec : messages, menu, vente, apprentissage,
-dons d'objets) sont dans `peff_boutique.rs`, validés par `fuzz boutique` (aucun scénario n'atteint un client
-`+0x58` positif). PEFF 43 les appelle avec A1 = case de la liste des joueurs, A2 = le client, D6 = compteur de
-boucle, que l'interprète laisse intacts.
+dons d'objets) sont dans `peff_boutique.rs`, validés par `fuzz boutique` à travers le comptoir 0x51076 (aucun
+scénario n'atteint un client `+0x58` positif). PEFF 43 les appelle directement (`peff_boutique::talk_a`/`talk_b`,
+plus de native) avec A1 = case de la liste des joueurs, A2 = le client, D6 = compteur de boucle, que l'interprète
+laisse intacts (ses appels de son les recopient dans la pile privée du son).
 
 Créateurs appelés par le code des personnages (`families/creators.rs`) : 0x51c06 (tir PSHL 0 qui accompagne l'arme,
 si le genre `+2` est dans le masque 0x51c5c), 0x4b7a0 (éclair PEFF 10), 0x4dc9a (deux étincelles PEFF 25). Contrat :

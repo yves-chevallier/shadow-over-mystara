@@ -7,10 +7,6 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const FLASH_PULSE: u32 = 0x1ac86;
-const SHAKE_A: u32 = 0x2824;
-const SHAKE_B: u32 = 0x2860;
-const SHAKE_C: u32 = 0x289c;
 const SPEEDS: u32 = 0x1c89b6;
 
 fn signed(v: u16, negate: bool) -> u16 {
@@ -122,7 +118,7 @@ mod storm {
                 let owner = x.link_a1(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
                 x.set_d0w(d0);
-                x.call(SHAKE_A);
+                x.call(crate::camera_modes::SHAKE_A.entry);
                 x.call(SFX_RUMBLE);
             }
             4 => {
@@ -132,7 +128,7 @@ mod storm {
                 let owner = x.link_a1(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
                 x.set_d0w(d0);
-                x.call(SHAKE_B);
+                x.call(crate::camera_modes::SHAKE_B.entry);
                 if x.u8(0x5a) != 0 {
                     return;
                 }
@@ -149,7 +145,7 @@ mod storm {
                     let owner = x.link_a1(f::OWNER);
                     let d0 = owner.u16(x.b, 0x168);
                     x.set_d0w(d0);
-                    x.call(SHAKE_C);
+                    x.call(crate::camera_modes::SHAKE_C.entry);
                     spawn_sparks(x);
                     shake_tail(x);
                 }
@@ -409,7 +405,7 @@ mod whirl {
                 x.set8(0x5c, 3);
                 x.set8(0x5d, 1);
                 x.set_a5_u16(0x4ba, 0x100);
-                x.call(FLASH_PULSE);
+                x.call(crate::palette::FLASH_COLOR_WHITE.entry);
                 x.call(SFX_LOOP);
                 x.anim(ANIMS, 0x20);
                 return x.reinsert();
