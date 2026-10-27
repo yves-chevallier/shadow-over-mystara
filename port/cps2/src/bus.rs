@@ -126,8 +126,13 @@ impl Cps2Bus {
     fn latch_palette(&mut self) {
         let base = ((self.cps_a[0x0a / 2] as usize * 256) & !0x3ff) & 0x3ffff;
         let n = self.gfxram.len();
-        for i in 0..self.palette.len() {
-            self.palette[i] = self.gfxram[(base / 2 + i) % n];
+        let debut = base / 2 % n;
+        // copie en deux tranches si la palette déborde de la fin de la GFX RAM (adressage circulaire)
+        let len = self.palette.len();
+        let premiere = len.min(n - debut);
+        self.palette[..premiere].copy_from_slice(&self.gfxram[debut..debut + premiere]);
+        for i in premiere..len {
+            self.palette[i] = self.gfxram[(debut + i) % n];
         }
     }
 

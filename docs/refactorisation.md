@@ -186,6 +186,32 @@ QSound (FIR vectorisé, ou mixage à la fréquence de sortie) ; dans le jeu, l'a
 sans décodage d'adresse) puis la disparition du chemin `call`/cadres (J1, J3) et de `lookup`. Le jeu en Rust n'est pas le
 goulot : l'optimiser avant les lots n'aurait pas de sens.
 
+### Lot F : résultats (branche wt-perf)
+
+Contrôle bit à bit : `examples/controle_rendu <roms> <eeprom> <scénario> <images> [sortie]` imprime, par image, le
+hachage des pixels et celui des échantillons audio (jeu sans 68000, rendu allumé, Z80 émulé ou `DDSOM_SON_RUST=1`).
+Référence enregistrée avec le code d'avant le lot, puis comparée avec `cmp` après chaque optimisation : attract,
+bot30k, boss10_scene65, cov_4p_a, 4 000 images, deux modes de son, soit 8 séries, toutes identiques à chaque étape.
+(`validate` ne calculant plus l'image, il ne vérifie pas le rendu.)
+
+`bench` bot30k, sans 68000, pilote son Rust (12 000 images, une seule instance) :
+
+| Étape | avec rendu | sans rendu |
+|---|---:|---:|
+| avant (socle) | 364 im/s (le rendu seul : 92 %) | 5 470 im/s |
+| rendu par portions de tuile (une tuile lue par ligne) | 798 | |
+| huit pixels décodés d'un coup (table d'éclatement des bits) | 1 285 | |
+| ligne de tuile décodée puis recopiée en tranche | 1 626 | |
+| FIR QSound en produits scalaires contigus | 1 862 | 11 408 |
+| voix muettes, palette en tranches | 1 862 | 11 325 (bruit) |
+
+Restent : couches 35 % du temps avec rendu (lecture des tuiles, `pixels8`), sprites 7 %, QSound ~45 % sans rendu
+(110 ns par échantillon, la boucle des 16 voix domine), le jeu ~25 µs par image. Le bus (`read_word`/`write_word`)
+et le `lookup` des natives pèsent moins de 5 % chacun : non traités, le gain ne vaut pas la complexité avant la
+disparition du chemin `call`.
+
+Validation complète (mode par défaut, 30 000 images) : 269/269 VALIDE.
+
 ## 5. Pilote : les pools d'objets, de bout en bout
 
 Chaîne choisie : l'allocation et la libération des objets (`0x225e`-`0x2408`, `0x21d8`-`0x2250`), appelées de partout

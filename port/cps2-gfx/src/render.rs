@@ -71,14 +71,27 @@ fn gfx_base(reg: u16, boundary: usize) -> usize {
     (base & 0x3ffff) / 2
 }
 
-/// Pixel (0..15) d'une ligne graphique : `row` pointe sur 4 octets (un plan par octet, MSB = pixel 0).
+/// `ECLATE[b]` : les 8 bits de `b` rangés un par octet, le bit de poids fort dans l'octet 0 (pixel 0).
+const ECLATE: [u64; 256] = {
+    let mut t = [0u64; 256];
+    let mut b = 0;
+    while b < 256 {
+        let mut k = 0;
+        while k < 8 {
+            t[b] |= (((b >> (7 - k)) & 1) as u64) << (8 * k);
+            k += 1;
+        }
+        b += 1;
+    }
+    t
+};
+
+/// Les 8 pixels (0..15) d'une ligne graphique : `row` pointe sur 4 octets (un plan par octet, MSB = pixel 0).
 #[inline]
-fn pixel(gfx: &[u8], row: usize, x: usize) -> u8 {
-    let bit = 7 - x;
-    ((gfx[row + 3] >> bit) & 1) << 3
-        | ((gfx[row + 2] >> bit) & 1) << 2
-        | ((gfx[row + 1] >> bit) & 1) << 1
-        | ((gfx[row] >> bit) & 1)
+fn pixels8(gfx: &[u8], row: usize) -> [u8; 8] {
+    let r = &gfx[row..row + 4];
+    (ECLATE[r[0] as usize] | ECLATE[r[1] as usize] << 1 | ECLATE[r[2] as usize] << 2 | ECLATE[r[3] as usize] << 3)
+        .to_le_bytes()
 }
 
 struct Layer {
@@ -97,37 +110,52 @@ impl Layer {
         }
     }
 
-    /// Pen (couleur*16 + pixel) au point (tx, ty) du tilemap, ou None si transparent.
-    fn sample(&self, v: &VideoState, gfx: &[u8], tx: usize, ty: usize) -> Option<u16> {
+    /// Dessine sur la ligne `out` (pens, prio) les pixels des tuiles qui couvrent l'abscisse de tilemap `tx0`
+    /// (pour x = 0..W) à l'ordonnée de tilemap `ty` : une tuile est lue une fois pour toute sa portion de ligne.
+    fn draw_row(&self, v: &VideoState, gfx: &[u8], tx0: usize, ty: usize, pbit: u8, pens: &mut [u16], prio: &mut [u8]) {
         let t = self.tile;
-        let idx = self.tile_index(tx / t, ty / t);
-        let code = v.gfxram[(self.base + 2 * idx) % v.gfxram.len()] as usize;
-        let attr = v.gfxram[(self.base + 2 * idx + 1) % v.gfxram.len()];
-        let mut px = tx % t;
-        let mut py = ty % t;
-        if attr & 0x20 != 0 {
-            px = t - 1 - px;
-        }
-        if attr & 0x40 != 0 {
-            py = t - 1 - py;
-        }
-        let row = match t {
-            8 => {
-                // 8x8 : moitié gauche/droite d'une ligne de 16 pixels selon la colonne (gfxset)
-                let half = (idx >> 5) & 1;
-                SCROLL_TILE_BASE + code * 64 + py * 8 + half * 4
+        let size = 64 * t;
+        let ram = v.gfxram;
+        let mut x = 0;
+        let mut tx = tx0;
+        while x < pens.len() {
+            let n = (t - tx % t).min(pens.len() - x);
+            let idx = self.tile_index(tx / t, ty / t);
+            let code = ram[(self.base + 2 * idx) % ram.len()] as usize;
+            let attr = ram[(self.base + 2 * idx + 1) % ram.len()];
+            let mut py = ty % t;
+            if attr & 0x40 != 0 {
+                py = t - 1 - py;
             }
-            16 => SCROLL_TILE_BASE + code * 128 + py * 8 + (px / 8) * 4,
-            _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16 + (px / 8) * 4,
-        };
-        if row + 4 > gfx.len() {
-            return None;
-        }
-        let p = pixel(gfx, row, px % 8);
-        if p == 15 {
-            None
-        } else {
-            Some(((attr & 0x1f) + self.color_base) * 16 + p as u16)
+            // début de la ligne de pixels de la tuile ; la moitié (4 octets) dépend du pixel pour 16 et 32
+            let row = match t {
+                8 => SCROLL_TILE_BASE + code * 64 + py * 8 + ((idx >> 5) & 1) * 4,
+                16 => SCROLL_TILE_BASE + code * 128 + py * 8,
+                _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16,
+            };
+            let pen_base = ((attr & 0x1f) + self.color_base) * 16;
+            let flip = attr & 0x20 != 0;
+            // ligne de pixels de la tuile, dans l'ordre de l'écran ; un groupe hors de la région graphique reste transparent
+            let mut ligne = [15u8; 32];
+            for g in 0..t / 8 {
+                let r = row + g * 4 * (t > 8) as usize;
+                if r + 4 <= gfx.len() {
+                    ligne[g * 8..g * 8 + 8].copy_from_slice(&pixels8(gfx, r));
+                }
+            }
+            if flip {
+                ligne[..t].reverse();
+            }
+            let u = tx % t;
+            let dest = x..x + n;
+            for ((&p, pen), pr) in ligne[u..u + n].iter().zip(&mut pens[dest.clone()]).zip(&mut prio[dest]) {
+                if p != 15 {
+                    *pen = pen_base + p as u16;
+                    *pr |= pbit;
+                }
+            }
+            x += n;
+            tx = (tx + n) % size;
         }
     }
 }
@@ -209,13 +237,9 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
                 scrollx += v.gfxram[(other + ((by as usize + offs) & 0x3ff)) % v.gfxram.len()] as i32;
             }
             let ty = ((by + sy).rem_euclid(size as i32)) as usize;
-            for x in 0..W {
-                let tx = ((x as i32 + VIS_X0 + scrollx).rem_euclid(size as i32)) as usize;
-                if let Some(pen) = layer.sample(v, gfx, tx, ty) {
-                    pens[y * W + x] = pen;
-                    prio[y * W + x] |= pbit;
-                }
-            }
+            let tx0 = ((VIS_X0 + scrollx).rem_euclid(size as i32)) as usize;
+            let ligne = y * W..(y + 1) * W;
+            layer.draw_row(v, gfx, tx0, ty, pbit, &mut pens[ligne.clone()], &mut prio[ligne]);
         }
     }
 
@@ -295,13 +319,14 @@ fn draw_tile16(gfx: &[u8], code: usize, col: u16, flipx: bool, flipy: bool, sx: 
             continue;
         }
         let ry = if flipy { 15 - py } else { py };
+        let (g, d) = (pixels8(gfx, base + ry * 8), pixels8(gfx, base + ry * 8 + 4));
         for px in 0..16 {
             let bx = sx + px as i32 - VIS_X0;
             if bx < 0 || bx >= SCREEN_W as i32 {
                 continue;
             }
             let rx = if flipx { 15 - px } else { px };
-            let p = pixel(gfx, base + ry * 8 + (rx / 8) * 4, rx % 8);
+            let p = if rx < 8 { g[rx] } else { d[rx - 8] };
             if p == 15 {
                 continue;
             }

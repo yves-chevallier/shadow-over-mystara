@@ -59,8 +59,31 @@ impl Default for Fir {
     }
 }
 
+/// Somme des produits (arithmétique modulo 2^32, comme le DSP).
+fn produit_scalaire(a: &[i16], b: &[i16]) -> i32 {
+    a.iter().zip(b).fold(0i32, |s, (&x, &y)| s.wrapping_add(x as i32 * y as i32))
+}
+
 impl Fir {
     fn apply(&mut self, input: i16) -> i32 {
+        let m = self.tap_count - 1; // longueur du tampon circulaire
+        if m < 1 || self.delay_pos < 0 || self.delay_pos >= m {
+            return self.apply_general(input);
+        }
+        // Les m premiers coefficients lisent le tampon à partir de delay_pos en le parcourant circulairement,
+        // le dernier lit l'entrée. delay_pos revient à sa valeur, reçoit l'entrée puis avance.
+        let (m, p) = (m as usize, self.delay_pos as usize);
+        let ligne = &self.delay_line[..m];
+        let taps = &self.taps[..m];
+        let mut somme = produit_scalaire(&taps[..m - p], &ligne[p..]).wrapping_add(produit_scalaire(&taps[m - p..], &ligne[..p]));
+        somme = somme.wrapping_add(self.taps[m] as i32 * input as i32);
+        self.delay_line[p] = input;
+        self.delay_pos = if p + 1 >= m { 0 } else { p as i32 + 1 };
+        0i32.wrapping_sub(somme << 2)
+    }
+
+    /// Version d'origine, pour les états anormaux (filtre non initialisé).
+    fn apply_general(&mut self, input: i16) -> i32 {
         let mut output: i32 = 0;
         let mut tap = 0;
         while tap < self.tap_count - 1 {
@@ -438,7 +461,8 @@ impl QSound {
 
     fn voice_update(&mut self, i: usize, echo_out: &mut i32) -> i16 {
         let v = self.voice[i];
-        let output = ((v.volume as i32 * self.read_sample(v.bank, v.addr as u16) as i32) >> 14) as i16;
+        // voix muette : sortie nulle sans lire l'échantillon (la phase avance quand même)
+        let output = if v.volume == 0 { 0 } else { ((v.volume as i32 * self.read_sample(v.bank, v.addr as u16) as i32) >> 14) as i16 };
         *echo_out = echo_out.wrapping_add(((output as i32) * v.echo as i32) << 2);
         let mut new_phase = (v.rate as i32).wrapping_add(((v.addr as i32) << 12) | (v.phase >> 4) as i32);
         if (new_phase >> 12) >= v.end_addr as i32 {
@@ -509,6 +533,9 @@ impl QSound {
             for i in 0..19 {
                 let pan = self.voice_pan[i].wrapping_add(ch as u16 * PAN_TABLE_CH_OFFSET);
                 let vo = self.voice_output[i] as i32;
+                if vo == 0 {
+                    continue; // contribution nulle
+                }
                 dry = dry.wrapping_sub(vo * self.dsp(pan.wrapping_add(PAN_TABLE_DRY)) as i16 as i32);
                 wet = wet.wrapping_sub(vo * self.dsp(pan.wrapping_add(PAN_TABLE_WET)) as i16 as i32);
             }
