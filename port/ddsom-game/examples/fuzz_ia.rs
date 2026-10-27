@@ -370,6 +370,13 @@ fn cas() -> Vec<Cas> {
             lecture: |c| c.d[3] as u16 as u32,
         },
         Cas { entree: 0xe2f6, nom: "drop_treasure", entrees: aucune, coeur: |_, b, o| ai_aids::drop_treasure(b, o) as u32, lecture: |c| c.d[2] as u16 as u32 },
+        Cas { entree: 0x57c66, nom: "in_right_half", entrees: aucune, coeur: |_, b, o| ddsom_game::families::creators::in_right_half(b, o) as u32, lecture: d0 },
+        Cas { entree: 0x5cdc6, nom: "chance_10_16", entrees: aucune, coeur: |_, b, _| ddsom_game::families::creators::chance_10_16(b) as u32, lecture: d0 },
+        Cas { entree: 0x19eb0, nom: "popups_effacer_tout", entrees: aucune, coeur: |_, b, _| { ddsom_game::popups::effacer_tout(b); 0 }, lecture: rien },
+        Cas { entree: 0x19e20, nom: "popups_animer", entrees: aucune, coeur: |_, b, _| { ddsom_game::popups::animer(b); 0 }, lecture: rien },
+        Cas { entree: 0xd5f30, nom: "set_14", entrees: aucune, coeur: |_, b, o| { ddsom_game::families::creators::set_14(b, o); 0 }, lecture: rien },
+        Cas { entree: 0xd6952, nom: "set_15_b", entrees: aucune, coeur: |_, b, o| { ddsom_game::families::creators::set_15_b(b, o); 0 }, lecture: rien },
+        Cas { entree: 0xd5ef8, nom: "attach_life_bar", entrees: aucune, coeur: |_, b, o| { ddsom_game::families::set_residu::attach_life_bar(b, o); 0 }, lecture: rien },
         Cas {
             entree: 0x103ba,
             nom: "flash_and_shake",

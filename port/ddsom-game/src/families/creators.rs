@@ -731,7 +731,7 @@ fn enemy_1_at(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x57c66 : l'objet `o` est-il dans la moitié droite de l'écran (x >= caméra + 0xc0) ? Cœur.
 pub fn in_right_half(b: &mut Cps2Bus, o: Obj) -> bool {
     let (camera, _) = crate::ram::camera(b);
-    (o.u16(b, Obj::X).wrapping_sub(camera.wrapping_add(0xc0)) as i16) <= 0
+    (camera.wrapping_add(0xc0).wrapping_sub(o.u16(b, Obj::X)) as i16) <= 0
 }
 
 /// 0x57c66 avec les registres de l'original : D0 = 1 / 0, D1.w = l'écart, X de la soustraction.

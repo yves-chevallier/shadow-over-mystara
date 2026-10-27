@@ -1374,13 +1374,19 @@ fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
     Some(indices.iter().zip(SLOTS).map(|(&index, slot)| (index, slot)).collect())
 }
 
-/// 0x2ede0 : la caméra 1 est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
-fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2ede0 : la caméra 1 (A5+0x4fe) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
+/// A0 = la caméra en sortie.
+pub fn update_camera_1(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.a[0] = A5 + CAMERA_1;
     if rd8(b, c.a[0]) != 0 {
         step(c, b);
     } else {
         init_camera_1(c, b);
     }
+}
+
+fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
+    update_camera_1(c, b);
     rts(c, b);
 }
 
@@ -1454,13 +1460,18 @@ fn load_scroll3_blocks(x: &mut Cx, first: u32, slots: [u32; 8]) {
     }
 }
 
-/// 0x32108 : la caméra 2 est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
-fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x32108 : la caméra 2 (A5+0x54e) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
+pub fn update_camera_2(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.a[0] = A5 + CAMERA_2;
     if rd8(b, c.a[0]) != 0 {
         step_2(c, b);
     } else {
         init_camera_2(c, b);
     }
+}
+
+fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
+    update_camera_2(c, b);
     rts(c, b);
 }
 

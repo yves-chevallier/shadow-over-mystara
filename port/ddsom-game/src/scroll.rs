@@ -833,15 +833,19 @@ pub const FOLLOW_PLAYERS_Y: Native = Native {
 
 /// 0x33e20 : met à jour les deux caméras. La première mémorise sa cible précédente (+0x26, +0x2a)
 /// avant que son script de mode (0x2ede0) la déplace ; la seconde est traitée par 0x32108.
-fn update_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Appelée directement (sans adresse) : A0 = la caméra 2 en sortie, comme l'original.
+pub fn update_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     use crate::mem::{rd32, wr32, A5};
-    c.a[0] = A5 + CAMERA_1;
-    let (x, y) = (rd32(b, c.a[0] + cam::X), rd32(b, c.a[0] + cam::Y));
-    wr32(b, c.a[0] + cam::PREVIOUS_X, x);
-    wr32(b, c.a[0] + cam::PREVIOUS_Y, y);
-    crate::call(c, b, 0x2ede0);
-    c.a[0] = A5 + CAMERA_2;
-    crate::call(c, b, 0x32108);
+    let camera = A5 + CAMERA_1;
+    let (x, y) = (rd32(b, camera + cam::X), rd32(b, camera + cam::Y));
+    wr32(b, camera + cam::PREVIOUS_X, x);
+    wr32(b, camera + cam::PREVIOUS_Y, y);
+    crate::camera_modes::update_camera_1(c, b);
+    crate::camera_modes::update_camera_2(c, b);
+}
+
+fn update_cameras_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    update_cameras(c, b);
     rts(c, b);
 }
 
@@ -873,7 +877,7 @@ fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     wr32(b, A5 + 0x50e, 0);
     c.d[0] = 4 * stage;
     c.a[1] = STARTS;
-    update_cameras(c, b);
+    update_cameras_native(c, b);
 }
 
 pub const RESET_CAMERAS: Native = Native {
@@ -931,7 +935,7 @@ fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + 0x53c, mode);
     c.d[0] = stage;
     c.a[4] = MODES;
-    update_cameras(c, b);
+    update_cameras_native(c, b);
 }
 
 pub const RETURN_CAMERAS: Native = Native {
@@ -946,7 +950,7 @@ pub const RETURN_CAMERAS: Native = Native {
 pub const UPDATE_CAMERAS: Native = Native {
     entry: 0x33e20,
     name: "cameras_mise_a_jour",
-    run: update_cameras,
+    run: update_cameras_native,
     touches_sound: false,
     outputs: crate::regs::ALL,
 };

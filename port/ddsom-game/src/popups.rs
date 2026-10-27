@@ -161,14 +161,13 @@ fn cadre(b: &mut Cps2Bus, a4: u32, id: u16, petit: bool, mut d1: i16, mut d2: i1
     }
 }
 
-/// Fait du prochain pop-up de la file le pop-up courant (s'il y en a un) et lance son dessin.
-fn suivant(c: &mut Cpu, b: &mut Cps2Bus, courant: u32) {
-    let a5 = c.a[5];
-    let index = rd8(b, a5 + LECTURE);
-    c.d[0] = index as u32;
-    let case = a5 + ENTREES + index as u32;
+/// Fait du prochain pop-up de la file le pop-up courant (s'il y en a un) et lance son dessin. Rend l'index de
+/// lecture lu.
+fn suivant(b: &mut Cps2Bus, courant: u32) -> u8 {
+    let index = rd8(b, A5 + LECTURE);
+    let case = A5 + ENTREES + index as u32;
     if rd16(b, case) == VIDE {
-        return;
+        return index;
     }
     for decalage in [0, 2, 4, 6] {
         let mot = rd16(b, case + decalage);
@@ -178,16 +177,15 @@ fn suivant(c: &mut Cpu, b: &mut Cps2Bus, courant: u32) {
     if rd16(b, courant + 4) == 0 {
         wr16(b, courant + DUREE, DUREE_DEFAUT);
     }
-    dessiner(b, a5, courant);
-    wr8(b, a5 + LECTURE, index.wrapping_add(ENTREE_TAILLE));
+    dessiner(b, A5, courant);
+    wr8(b, A5 + LECTURE, index.wrapping_add(ENTREE_TAILLE));
+    index
 }
 
-/// 0x19e20 : un pas de la machine à états des pop-ups.
-fn animer(c: &mut Cpu, b: &mut Cps2Bus) {
-    let a5 = c.a[5];
-    let courant = a5.wrapping_add(COURANT);
-    c.a[0] = courant;
-    c.a[2] = a5 + ENTREES;
+/// 0x19e20 : un pas de la machine à états des pop-ups. Rend l'index de lecture de la file s'il a été lu (le D0.b de
+/// l'original). Cœur.
+pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
+    let courant = A5.wrapping_add(COURANT);
     let duree = rd16(b, courant + DUREE);
     if duree != 0 {
         let duree = duree - 1;
@@ -195,18 +193,26 @@ fn animer(c: &mut Cpu, b: &mut Cps2Bus) {
         if duree != 0 {
             // le pop-up courant continue ; s'il y en a un autre en attente, on abrège
             if duree < DUREE_RACCOURCIE {
-                return;
+                return None;
             }
-            let index = rd8(b, a5 + LECTURE);
-            c.d[0] = index as u32;
-            if rd16(b, a5 + ENTREES + index as u32) != VIDE {
+            let index = rd8(b, A5 + LECTURE);
+            if rd16(b, A5 + ENTREES + index as u32) != VIDE {
                 wr16(b, courant + DUREE, DUREE_RACCOURCIE);
             }
-            return;
+            return Some(index);
         }
-        effacer(b, a5, courant);
+        effacer(b, A5, courant);
     }
-    suivant(c, b, courant);
+    Some(suivant(b, courant))
+}
+
+/// `animer` avec les registres de l'original : A0 = le pop-up courant, A2 = la file, D0 = l'index lu.
+fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.a[0] = A5.wrapping_add(COURANT);
+    c.a[2] = A5 + ENTREES;
+    if let Some(index) = animer(b) {
+        c.d[0] = index as u32;
+    }
 }
 
 /// 0x19eb0 : efface les bulles de tous les emplacements (4, ou 3 réduits), du dernier au premier. Rend la table
@@ -247,7 +253,7 @@ pub const ANIMER: Native = Native {
     entry: 0x19e20,
     name: "popups_animer",
     run: |c, b| {
-        animer(c, b);
+        animer_68k(c, b);
         rts(c, b);
     },
     touches_sound: false,
