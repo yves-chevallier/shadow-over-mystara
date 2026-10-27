@@ -95,6 +95,7 @@ impl m68k::Bus for Journal<'_> {
 thread_local! {
     /// Adresse dont les écritures de l'original sont signalées (diagnostic `FUZZ_SURVEILLE`), 0 : aucune.
     static SURVEILLEE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static SURVEILLEE_FIN: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     /// PC de l'original dont les registres sont montrés (`FUZZ_PC=adresse,...`) pendant la surveillance.
     static PC_SURVEILLES: Vec<u32> = std::env::var("FUZZ_PC")
         .map(|v| v.split(',').filter_map(|x| u32::from_str_radix(x.trim_start_matches("0x"), 16).ok()).collect())
@@ -103,7 +104,9 @@ thread_local! {
 
 fn ecriture_originale(pc: u32, a: u32, taille: u32, v: u32) {
     let s = SURVEILLEE.with(|x| x.get());
-    if s != 0 && (a & 0xff_ffff..(a & 0xff_ffff) + taille).contains(&s) {
+    let f = SURVEILLEE_FIN.with(|x| x.get()).max(s + 1);
+    let a = a & 0xff_ffff;
+    if s != 0 && a < f && a + taille > s {
         eprintln!("ORIGINAL {pc:06x} : {a:06x} = {v:x}");
     }
 }
@@ -171,6 +174,8 @@ struct Chaude {
 struct Base {
     c: Cpu,
     b: Cps2Bus,
+    /// état synthétisé depuis l'appel d'une autre entrée (substitution)
+    subst: bool,
     lectures: Vec<(u32, u8)>,
     chaudes: Vec<Chaude>,
 }
@@ -740,8 +745,10 @@ fn essai(e: &mut Etat, entree: u32, ib: usize, muts: Vec<Mutation>) {
     let hors = muts.iter().any(|m| !m.plausible);
     // écart limité aux registres de sortie (sans effet tant qu'aucun appelant ne les relit)
     let registres = matches!(&r, Ok(d) if d.iter().all(|x| x.starts_with('d') || x.starts_with('a') && !x.starts_with("au") || x.starts_with("ccr")));
-    cible.bilan.ecarts_plausibles += (!hors && !registres) as u64;
-    let sig = format!("{}{}{}{}{sig}", if registres { "REG " } else { "" }, if muts.is_empty() { "BASE " } else { "" }, if hors { "HORS " } else { "" }, if neuf { "NEUF " } else { "" });
+    cible.bilan.ecarts_plausibles += (!hors && !registres && !cible.bases[ib].subst) as u64;
+    // entrée jamais appelée, essayée depuis l'état d'une voisine : ses registres d'entrée sont ceux d'un autre appel
+    let subst = cible.bases[ib].subst;
+    let sig = format!("{}{}{}{}{}{sig}", if subst { "SUBST " } else { "" }, if registres { "REG " } else { "" }, if muts.is_empty() { "BASE " } else { "" }, if hors { "HORS " } else { "" }, if neuf { "NEUF " } else { "" });
     let compte = cible.bilan.signatures.entry(sig.clone()).or_insert(0);
     *compte += 1;
     if *compte != 1 || cible.bilan.exemples.len() >= e.exemples {
@@ -784,9 +791,13 @@ fn essai(e: &mut Etat, entree: u32, ib: usize, muts: Vec<Mutation>) {
     #[cfg(feature = "surveille")]
     if let Ok(a) = std::env::var("FUZZ_SURVEILLE") {
         // pile d'appels Rust des écritures de la native à cette adresse
+        let (a, fin) = a.split_once('-').unwrap_or((&a, "0"));
         let a = u32::from_str_radix(a.trim_start_matches("0x"), 16).unwrap();
+        let fin = u32::from_str_radix(fin.trim_start_matches("0x"), 16).unwrap();
         ddsom_game::mem::surveille::ADRESSE.store(a, std::sync::atomic::Ordering::Relaxed);
-        eprintln!("SURVEILLE {a:06x} pour {} ({})", n.name, decrire(&min));
+        ddsom_game::mem::surveille::FIN.store(fin, std::sync::atomic::Ordering::Relaxed);
+        SURVEILLEE_FIN.with(|x| x.set(fin));
+        eprintln!("SURVEILLE {a:06x} pour {} {:06x} ({})", n.name, n.entry, decrire(&min));
         SURVEILLEE.with(|x| x.set(a));
         let _ = executer_original(&c0, &b0, pas_max, None);
         SURVEILLEE.with(|x| x.set(0));
@@ -818,7 +829,7 @@ fn fuzzer(entree: u32, c: &Cpu, b: &Cps2Bus) {
             return;
         }
         e.cibles.get_mut(&entree).unwrap().points += 1;
-        fuzzer_depuis(e, entree, c, b);
+        fuzzer_depuis(e, entree, c, b, false);
         if !e.substituts {
             return;
         }
@@ -844,6 +855,10 @@ fn fuzzer(entree: u32, c: &Cpu, b: &Cps2Bus) {
         let mut c2 = c.clone();
         let mut b2 = b.clone();
         c2.pc = y;
+        if e.cibles[&y].gestionnaire.is_none() && cle(&b2, c2.a[0] & 0xff_ffff) < 0x0100_0000 {
+            // A0 n'est pas un objet : un joueur (les sons lisent la position de l'objet A0)
+            c2.a[0] = 0xff_85de + 0x200 * e.sur(4) as u32;
+        }
         if let Some((_, t)) = e.cibles[&y].gestionnaire {
             // l'objet A0 devient du type de `y`, souvent à son état initial
             let obj = c2.a[0] & 0xff_ffff;
@@ -854,12 +869,12 @@ fn fuzzer(entree: u32, c: &Cpu, b: &Cps2Bus) {
             }
         }
         e.cibles.get_mut(&y).unwrap().substitutions += 1;
-        fuzzer_depuis(e, y, &c2, &b2);
+        fuzzer_depuis(e, y, &c2, &b2, true);
     });
 }
 
 /// Fuzz de `entree` depuis l'état `c`, `b` (PC sur l'entrée) : nouvelle base, puis les essais.
-fn fuzzer_depuis(e: &mut Etat, entree: u32, c: &Cpu, b: &Cps2Bus) {
+fn fuzzer_depuis(e: &mut Etat, entree: u32, c: &Cpu, b: &Cps2Bus, subst: bool) {
     // nouvelle base (au plus 3 par native ; ensuite, remplacement d'une base au hasard avec son corpus)
     let analyse = analyser_base(e, c, b);
     let Some((lectures, chaudes)) = analyse else {
@@ -883,7 +898,7 @@ fn fuzzer_depuis(e: &mut Etat, entree: u32, c: &Cpu, b: &Cps2Bus) {
             d.push(v);
         }
     }
-    let base = Base { c: c.clone(), b: b.clone(), lectures, chaudes };
+    let base = Base { c: c.clone(), b: b.clone(), subst, lectures, chaudes };
     // la base elle-même (sans perturbation) : couverture et contrôle
     let nb = e.cibles[&entree].bases.len();
     let ib = if nb < 3 {

@@ -33,12 +33,14 @@ pub fn wr16(b: &mut Cps2Bus, a: u32, v: u16) {
 pub mod surveille {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    /// Adresse surveillée (0 : aucune).
+    /// Adresse surveillée (0 : aucune), et fin de la plage surveillée (0 : l'adresse seule).
     pub static ADRESSE: AtomicU32 = AtomicU32::new(0);
+    pub static FIN: AtomicU32 = AtomicU32::new(0);
 
     pub fn ecriture(a: u32, taille: u32, v: u32) {
         let s = ADRESSE.load(Ordering::Relaxed);
-        if s != 0 && (a..a + taille).contains(&s) {
+        let f = FIN.load(Ordering::Relaxed).max(s + 1);
+        if s != 0 && a < f && a + taille > s {
             eprintln!("ÉCRITURE {a:06x} = {v:x}\n{}", std::backtrace::Backtrace::force_capture());
         }
     }
