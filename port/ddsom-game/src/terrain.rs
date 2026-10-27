@@ -255,11 +255,15 @@ fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x33fe4 appelée de Rust sur l'objet `o` : laisse les registres de l'original (D0-D2, D5, A0 = `o`, A1, A2 et les
 /// drapeaux) ; rend le drapeau Z (vrai : la dernière case examinée est libre, ou la collision est désactivée). Les
-/// appelants des joueurs n'ont pas encore été prouvés indépendants de ces registres.
+/// appelants des joueurs ne relisent pas ces registres (`DDSOM_POISON=terrain`, lot D) ; le cœur sans registres
+/// attend l'API de `video::terrain` (0x24b0, appelé par ses registres).
+#[track_caller]
 pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
     c.a[0] = o.0;
     Push { c, b, variant: FIRST }.run();
-    c.sr & m68k::SR_Z != 0
+    let z = c.sr & m68k::SR_Z != 0;
+    crate::diag::registres_morts(c, "terrain", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2) | regs::CCR);
+    z
 }
 
 pub const SHADOW: Native = Native {

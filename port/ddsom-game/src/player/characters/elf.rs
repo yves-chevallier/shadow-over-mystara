@@ -672,7 +672,7 @@ fn ward_ally(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 spawn::ring(g, p, 0);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::RED);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::RED);
                 pick_ally(g, p);
                 sounds(g, p, &rom::WARD_SOUNDS);
             }
@@ -745,7 +745,7 @@ fn ward_party(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 spawn::ring(g, p, 0);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::P360);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::P360);
                 sounds(g, p, &rom::SHIELD_SOUNDS);
             }
             if countdown(g, p) {
@@ -794,7 +794,7 @@ fn beam(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 spawn::beam_cast(g, p, 0);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::BEAM_SOUND, p);
             }
             if countdown(g, p) {
@@ -877,7 +877,7 @@ fn bolt(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, ext::effet::BOLT, &[(0, 0)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::BOLT_SOUND, p);
             }
             if countdown(g, p) {
@@ -1003,7 +1003,7 @@ fn quake(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, ext::effet::QUAKE, &[(0, 0)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.rom(ext::son::PRAYER_QUAKE, p);
             }
             if countdown(g, p) {
@@ -1080,7 +1080,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
                     for color in [0, 2, 3] {
                         call(g, p, rom::EFFECT_MOON, &[(0, color)]);
                     }
-                    crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                    crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                     g.rom(rom::MOON_SOUND_B, p);
                 }
                 g.rom(rom::SCREEN_FADE_A, p);
@@ -1120,7 +1120,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
                 if !is_cancelled(g, p) {
                     call(g, p, rom::EFFECT_MOON_B, &[(0, 0)]);
                     g.c.d[0] = 2;
-                    crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                    crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 }
                 g.rom(rom::SCREEN_FADE_B, p);
             }

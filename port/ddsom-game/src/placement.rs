@@ -36,10 +36,14 @@ fn place_on_free_ground(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x3668 appelée de Rust pour le joueur `o` : laisse les registres de l'original (D0, D1 : hauteur et profondeur
-/// trouvées, D2 : terrain, D5, D6 : compteurs de la recherche, A0 = `o`).
+/// trouvées, D2 : terrain, D5, D6 : compteurs de la recherche, A0 = `o`). Personne ne les relit
+/// (`DDSOM_POISON=placement`, lot D), mais la recherche appelle encore `video::terrain` (0x24b0) par ses registres :
+/// le cœur sans registres attend l'API de `video`.
+#[track_caller]
 pub fn place_on_free_ground_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
     c.a[0] = o.0;
     place_on_free_ground_regs(c, b);
+    crate::diag::registres_morts(c, "placement", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::d(5) | regs::d(6) | regs::a(1) | regs::CCR);
 }
 
 fn place_on_free_ground_regs(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -107,7 +111,8 @@ pub fn load_effect_palette(b: &mut Cps2Bus, offset: u16) -> ([u32; 8], u32) {
     (longs, from + 32)
 }
 
-/// Registres que laisse 0x3b1c (étiquette `DDSOM_POISON` : `placement`).
+/// Registres que laisse 0x3b1c (sortie des natives ; les appelants Rust des joueurs ne les relisent pas :
+/// `DDSOM_POISON=placement`, lot D).
 const REGS_EFFECT_PALETTE: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::d(5) | regs::d(6) | regs::a(1) | regs::a(2) | regs::a(3);
 
 /// `load_effect_palette` avec les registres de l'original : D0-D6 et A3 gardent les huit longs copiés, A1 et A2 la
@@ -118,13 +123,6 @@ fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
     c.a[3] = longs[7];
     c.a[1] = EFFECT_PALETTE_RAM;
     c.a[2] = next;
-}
-
-/// Adaptateur de `load_effect_palette` pour les appelants Rust pas encore prouvés indépendants des registres.
-#[track_caller]
-pub fn load_effect_palette_68k(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
-    load_effect_palette_regs(c, b, offset);
-    crate::diag::registres_morts(c, "placement", REGS_EFFECT_PALETTE);
 }
 
 fn effect_palette_native(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {

@@ -543,7 +543,7 @@ fn bolt(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, ext::effet::BOLT, &[(0, 0)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(0xe2a34, p);
             }
             if countdown(g, p) {
@@ -711,7 +711,7 @@ fn quake(g: &mut Ctx, p: Player) {
                 g.rom(0xe2ffa, p);
             } else if take_event(g, p) {
                 call(g, p, ext::effet::QUAKE, &[(0, 0)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.rom(0xe8db4, p);
             }
         }
@@ -789,7 +789,7 @@ fn storm(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, ext::effet::BOLT, &[(0, 0)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, if step == 2 { crate::placement::effect_palette::LIGHT } else { crate::placement::effect_palette::NORMAL });
+                crate::placement::load_effect_palette(g.b, if step == 2 { crate::placement::effect_palette::LIGHT } else { crate::placement::effect_palette::NORMAL });
                 g.rom(0xe2a74, p);
                 g.rom(if step == 2 { 0xe97b4 } else { 0xe974a }, p);
             }
@@ -845,7 +845,7 @@ fn rain(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, rom::EFFECT_RAIN, &[(0, 0)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 sounds(g, p, &[0xe2a34, 0xe9424]);
             }
             if countdown(g, p) {
@@ -909,7 +909,7 @@ fn witch(g: &mut Ctx, p: Player) {
         4 => {
             if countdown(g, p) {
                 next_step(g, p);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 let (timer, anim) = if p.u8(g, 0x1e8) != 0 { (0x80, 0x1a) } else { (0x50, 0x19) };
                 p.set_u16(g, field::TIMER, timer);
                 animation::start_plain(g, p, anim);
@@ -1003,7 +1003,7 @@ fn wave(g: &mut Ctx, p: Player) {
             } else if take_event(g, p) {
                 call(g, p, rom::EFFECT_WAVE, &[(0, 0)]);
                 call(g, p, rom::EFFECT_WAVE, &[(0, 1)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(0xe9240, p);
             } else {
                 animation::step(g, p);
@@ -1100,7 +1100,7 @@ fn portal(g: &mut Ctx, p: Player) {
             }
             let duration = by_level(g, p, PORTAL_DURATIONS);
             p.set_u16(g, field::TIMER, duration);
-            crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+            crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
             spawn::portal(g, p, 2);
             animation::start_plain(g, p, 0x30);
             g.rom(0xe91d6, p);
@@ -1216,7 +1216,7 @@ fn wall(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 call(g, p, rom::EFFECT_WALL, &[(0, 0)]);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(0xe92c6, p);
             }
             if countdown(g, p) {
@@ -1265,7 +1265,7 @@ fn drain(g: &mut Ctx, p: Player) {
             if animation::step(g, p) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x120);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 spawn::portal(g, p, 2);
                 animation::start_plain(g, p, 0x30);
                 g.rom(0xe91d6, p);

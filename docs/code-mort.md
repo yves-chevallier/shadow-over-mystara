@@ -44,3 +44,15 @@ section.
 (lueur du portail), 0x4cfee (étincelles du portail), 0x4d064 (éclat du portail), 0x54274 (pluie de traits) : appelés
 par le code des joueurs, jamais exercés par les scénarios, sans native (arrêt du jeu sans 68000). **Comportement
 réel : réécrits** dans `player/spawn.rs`, validés par `fuzz_player spawn` (`DDSOM_ENTREE`, 300 appels chacun, 0 écart).
+
+### À vérifier : entrées de tables d'aiguillage sans gestionnaire Rust ni native
+
+Relevé statique (tables de sauts du code des joueurs, longueur estimée par le premier gestionnaire qui suit la table,
+donc peut-être surestimée) : entrées qui ne mènent ni à un gestionnaire de `HANDLERS`/`Steps`, ni à une native. Si
+elles sont atteignables, le jeu sans 68000 s'y arrêterait ; aucun scénario ne les exerce. Non traité au lot D :
+
+| Table | Entrées sans gestionnaire |
+|---|---|
+| 0x23b98 (résurrection, `scripted`, pas `+6` = 8) | 0x23c7a (résurrection devant l'objet suivi par la caméra) |
+| 0x23d66 (attente, `scripted`) | 0x23d68 |
+| 0x3a584, 0x3a89c, 0x3a9e6, 0x3aa04, 0x3af50, 0x3b57c, 0x3b738, 0x3b7c6, 0x3b8b2, 0x3b8d0 (réactions, `hurt`) | 0x3a59a, 0x3a5a4, 0x3a296, 0x3aa16, 0x3aa5e, 0x3aff8, 0x3b592, 0x3b5b2, 0x3b656, 0x3b740, 0x3b78a, 0x3b7a4, 0x3b7aa, 0x3b7ca, 0x3b7e2, 0x3aa2e, 0x3b8d6, 0x3b8e0 |

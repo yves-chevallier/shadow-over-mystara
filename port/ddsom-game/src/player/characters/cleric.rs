@@ -611,7 +611,7 @@ fn prayer_hold(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::aura(g, p, 0);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::PRAYER_AURA_SOUND, p);
             } else {
                 animation::step(g, p);
@@ -732,7 +732,7 @@ fn prayer_swarm(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::beam(g, p, false);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.rom(ext::son::PRAYER_QUAKE, p);
             }
             animation::step(g, p);
@@ -777,7 +777,7 @@ fn prayer_beam(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::beam(g, p, false);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.rom(ext::son::PRAYER_QUAKE, p);
             }
             if !countdown(g, p) {
@@ -833,7 +833,7 @@ fn prayer_banish(g: &mut Ctx, p: Player) {
                 if p.u8(g, field::EVENT) != 0 {
                     p.set_u8(g, field::EVENT, 0);
                     spawn::banish(g, p, None);
-                    crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                    crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                     g.rom(rom::PRAYER_BANISH_SOUND, p);
                 }
                 animation::step(g, p);
@@ -913,7 +913,7 @@ fn prayer_holy_light(g: &mut Ctx, p: Player) {
             } else if p.u8(g, field::EVENT) != 0 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::holy_light(g, p);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
             }
         }
         4 => {
@@ -1019,7 +1019,7 @@ fn prayer_protection(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::blessing(g, p, 2);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::PRAYER_BLESS_SOUND, p);
                 g.rom(rom::PRAYER_PROTECT_SOUND, p);
             }
@@ -1084,7 +1084,7 @@ fn prayer_blessing(g: &mut Ctx, p: Player) {
             if p.u8(g, field::EVENT) == 1 {
                 let area = p.u8(g, field::AREA);
                 spawn::blessing(g, p, area);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::PRAYER_BLESS_SOUND, p);
                 g.rom(if area != 0 { rom::PRAYER_BLESS_SOUND_AREA } else { rom::PRAYER_BLESS_SOUND_SELF }, p);
             }
@@ -1176,7 +1176,7 @@ fn prayer_heal(g: &mut Ctx, p: Player, variant: u32) {
             if p.u8(g, field::EVENT) == 1 {
                 p.set_u8(g, field::EVENT, 0);
                 spawn::cure(g, p, variant as u8);
-                crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+                crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 let sound = if p.u8(g, field::AREA) != 0 {
                     rom::PRAYER_BLESS_SOUND_AREA
                 } else if variant == 0 {

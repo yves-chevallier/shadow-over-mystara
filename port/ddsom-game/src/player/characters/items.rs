@@ -333,7 +333,7 @@ pub const CAST_14: Cast = Cast {
     frames: 0x3c,
     fire: |g, p| {
         spawn::fireball(g, p);
-        crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+        crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
     },
     ..BASE
 };
@@ -352,7 +352,7 @@ pub const CAST_15: Cast = Cast {
 pub fn ring_fire(g: &mut Ctx, p: Player) {
     cov!();
     spawn::ring(g, p, 1);
-    crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::RED);
+    crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::RED);
 }
 
 /// Aura rouge posée sur le lanceur pour `duration` images ; un accessoire (`+0x167` = 2) la renforce.
@@ -381,7 +381,7 @@ pub const CAST_16: Cast = Cast {
 pub const CAST_17: Cast = Cast {
     fire: |g, p| {
         spawn::beam_cast(g, p, 1);
-        crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
+        crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
     },
     ..BASE
 };
@@ -402,7 +402,7 @@ pub const CAST_19: Cast = Cast {
     every_frame: common::heal_flicker,
     fire: |g, p| {
         spawn::potion(g, p);
-        crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
+        crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
     },
     ..BASE
 };
