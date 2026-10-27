@@ -239,10 +239,6 @@ impl World<'_> {
         self.c.d[1] = d1;
         self.call_ao(addr, a0, a1)
     }
-    /// 0x19a88 : générateur pseudo-aléatoire du jeu.
-    fn random(&mut self) -> u16 {
-        crate::rng::random_68k(self.c, self.b)
-    }
 }
 
 fn set_low16(r: &mut u32, v: u16) {

@@ -324,10 +324,7 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     }
     // objet à créer (ITEM) à la place de l'ennemi ; échec si le pool est plein (retenue)
     w.a2 = e.0;
-    w.c.a[1] = e.0;
-    w.c.a[5] = A5;
-    let Some(item) = pools::ITEM.alloc_68k(w.c, w.b) else { return };
-    let item = Obj(item.0);
+    let Some(item) = pools::ITEM.alloc(w.b) else { return };
     item.set_u8(w.b, f::ACTIVE, 1);
     let (kind, var) = (rd8(w.b, entry), rd8(w.b, entry + 1));
     item.set_u8(w.b, f::KIND, kind);

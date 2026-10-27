@@ -102,9 +102,7 @@ pub fn run(g: &mut Ctx, p: Player) {
         2 => running(g, p),
         4 => skid_stop(g, p),
         6 => skid_turn(g, p),
-        _ => {
-            g.rom(0x3573e, p);
-        }
+        v => unreachable!("0x3573e : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -203,10 +201,7 @@ pub fn carry(g: &mut Ctx, p: Player) {
             return;
         }
         4 => return throw(g, p),
-        _ => {
-            g.rom(0x35c26, p);
-            return;
-        }
+        v => unreachable!("0x35c26 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     match p.u8(g, Player::STEP) {
         0 => {
@@ -239,9 +234,7 @@ pub fn carry(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x35c38, p);
-        }
+        v => unreachable!("0x35c38 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -356,10 +349,7 @@ pub fn climb(g: &mut Ctx, p: Player) {
         n @ (8 | 0xa | 0xc | 0xe) => climb_side(g, p, n),
         0x10 => climb_attack(g, p),
         0x12 => climb_spell(g, p),
-        _ => {
-            g.rom(0x35e56, p);
-            return;
-        }
+        v => unreachable!("0x35e56 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     if matches!(p.u8(g, Player::STEP), 0 | 0x10 | 0x12) {
         return;
@@ -394,7 +384,7 @@ fn climb_start(g: &mut Ctx, p: Player) {
         p.set_u32(g, Obj::VZ, 0x0100_0000);
         p.set_u8(g, climb_field::SWAY_TIMER, 4);
         p.set_u8(g, climb_field::SWAY, 0);
-        crate::objects::motion::select_speed_68k(g.c, g.b, p.obj(), &crate::objects::motion::SPEEDS_B, 1);
+        crate::objects::motion::select_speed(g.b, p.obj(), &crate::objects::motion::SPEEDS_B, 1);
         return animation::start(g, p, 0x3c);
     }
     move_z(g, p);
@@ -664,9 +654,7 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x3b, 0);
             exit_fade(g, p);
         }
-        _ => {
-            g.rom(0x3632c, p);
-        }
+        v => unreachable!("0x3632c : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -780,9 +768,7 @@ pub fn slow_end(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x36be0, p);
-        }
+        v => unreachable!("0x36be0 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -817,10 +803,7 @@ pub fn hop(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x3b, 0);
             clamp_x(g.b, p);
         }
-        _ => {
-            g.rom(0x36c12, p);
-            return;
-        }
+        v => unreachable!("0x36c12 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     p.set_u8(g, 0x3b, 0);
     let z = p.u16(g, Obj::Z).wrapping_add(2);
@@ -864,9 +847,7 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x36b26, p);
-        }
+        v => unreachable!("0x36b26 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -889,10 +870,7 @@ pub fn push(g: &mut Ctx, p: Player) {
         4 => 4,
         6 => 2,
         8 => 1,
-        _ => {
-            g.rom(0x36d68, p);
-            return;
-        }
+        v => unreachable!("0x36d68 : valeur {v:#x} hors de la table de sauts de l'original"),
     };
     if p.u8(g, Player::KEYS_HELD) & key == 0 {
         let held = p.u32(g, HELD);
@@ -986,9 +964,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x35a78, p);
-        }
+        v => unreachable!("0x35a78 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     let event = p.u8(g, field::ANIM_EVENT);
     if event != 0 {
@@ -1055,9 +1031,7 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
                 animation::step(g, p);
             }
         }
-        _ => {
-            g.rom(0x35b96, p);
-        }
+        v => unreachable!("0x35b96 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
 
@@ -1104,10 +1078,7 @@ pub fn parry(g: &mut Ctx, p: Player) {
             parry_slide(g, p);
         }
         2 => parry_slide(g, p),
-        _ => {
-            g.rom(0x39ff0, p);
-            return;
-        }
+        v => unreachable!("0x39ff0 : valeur {v:#x} hors de la table de sauts de l'original"),
     }
     g.rom(0x33fe4, p);
     super::walk::clamp_to_screen(g.b, p);

@@ -453,7 +453,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
     g.rom(rom::FADE, p);
-    crate::objects::rank::raise_68k(g.c, g.b);
+    crate::objects::rank::raise(g.b);
     g.rom(rom::TERRAIN, p);
 }
 
@@ -508,7 +508,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0x35);
-    crate::objects::rank::raise_68k(g.c, g.b);
+    crate::objects::rank::raise(g.b);
 }
 
 // ---- attente d'ouverture des commandes (début de scène) ------------------------------------------
@@ -627,8 +627,7 @@ fn thrown_wait_signal(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::AX, 0);
     p.set_u16(g, Obj::VZ, 0x580);
     p.set_u16(g, Obj::AZ, 0xffc8);
-    g.c.d[6] = 2;
-    crate::objects::anim::start_by_character_68k(g.c, g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
+    crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
 }
 
 /// Vol plané : vrai à l'atterrissage (altitude repassée sous zéro, remise à zéro).

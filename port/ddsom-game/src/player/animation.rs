@@ -6,7 +6,7 @@
 
 
 use super::{Ctx, Player};
-use crate::objects::anim::{self, Step};
+use crate::objects::anim;
 
 /// 0x2c16 : démarre l'animation `number` (décalée de 0x40 si le joueur n'a pas d'arme en main).
 pub fn start(g: &mut Ctx, p: Player, number: u16) {
@@ -18,7 +18,8 @@ pub fn start_plain(g: &mut Ctx, p: Player, number: u16) {
     anim::start_by_character(g.b, p.obj(), &anim::SETS_PLAIN, number);
 }
 
-/// 0x2d58 : un pas d'animation. Renvoie vrai quand le script est terminé (retenue de l'original).
+/// 0x2d58 : un pas d'animation. Renvoie vrai quand la retenue de l'original est levée : script terminé, ou
+/// durée nulle qui repart de 0xFFFF (glitch d'origine, `anim::Step::Wrapped`).
 pub fn step(g: &mut Ctx, p: Player) -> bool {
-    anim::step(g.b, p.obj(), true) == Step::Ended
+    anim::step(g.b, p.obj(), true).finished()
 }

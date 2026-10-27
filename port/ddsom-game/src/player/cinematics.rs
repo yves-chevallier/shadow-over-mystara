@@ -163,8 +163,7 @@ fn start_victory(g: &mut Ctx, p: Player) {
 
 /// Animation du jeu C (0x2cf0).
 fn anim_c(g: &mut Ctx, p: Player, n: u32) {
-    g.c.d[6] = n;
-    crate::objects::anim::start_by_character_68k(g.c, g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, n as u16);
+    crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, n as u16);
 }
 
 /// Mémorise la place du joueur (table de couples (x, profondeur) par rang) puis se tourne vers elle :

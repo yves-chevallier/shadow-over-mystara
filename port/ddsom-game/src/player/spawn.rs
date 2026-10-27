@@ -72,7 +72,7 @@ mod kind {
 /// Réserve un emplacement dans `pool` et l'active avec le genre `kind`.
 fn create(g: &mut Ctx, _p: Player, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     cov!();
-    let o = pool.alloc_68k(g.c, g.b)?;
+    let o = pool.alloc(g.b)?;
     o.set_u8(g.b, Obj::ACTIVE, 1);
     o.set_u8(g.b, Obj::KIND, kind);
     Some(o)

@@ -34,19 +34,16 @@ pub fn start_stand(g: &mut Ctx, p: Player) {
     animation::start(g, p, anim);
 }
 
-/// Entrées 68000 de `to_stand` (0x35614) et `start_stand` (0x35620), encore appelées par le code
-/// d'origine des personnages et des cinématiques : l'animation passe par l'entrée d'origine 0x2c16
-/// (D6 = numéro), qui laisse les registres que ces appelants peuvent relire.
+/// Entrées par adresse de `to_stand` (0x35614, appelée par `aides.rs`) et `start_stand` (0x35620). Les
+/// registres que laissait l'animation (D5, D6, A4) ne sont relus par personne (`DDSOM_POISON=anim`).
 fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
     let p = Player(c.a[0]);
     let mut g = Ctx::new(c, b);
     if reset {
-        p.set_state(&mut g, state::STAND.0);
-        p.set_u8(&mut g, Player::SUBACTION, 0);
+        to_stand(&mut g, p);
+    } else {
+        start_stand(&mut g, p);
     }
-    let n = stand_animation(&mut g, p);
-    g.c.d[6] = n as u32;
-    crate::objects::anim::start_by_character_68k(c, b, p.obj(), &crate::objects::anim::SETS_ARMED, n);
     crate::mem::rts(c, b);
 }
 
@@ -295,8 +292,6 @@ fn grabbed(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        _ => {
-            g.rom(0x36abe, p);
-        }
+        v => unreachable!("0x36abe : valeur {v:#x} hors de la table de sauts de l'original"),
     }
 }
