@@ -89,7 +89,7 @@ fn windup(x: &mut Cx) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
-        x.call(call::ANNOUNCE);
+        lib::pick_byte(x);
         if x.u8(AI_LUNGE) == 0 {
             x.set8(f::SUB3, 0);
             let chosen = x.u8(CHOSEN);

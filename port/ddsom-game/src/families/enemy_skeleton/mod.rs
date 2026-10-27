@@ -84,18 +84,6 @@ const CLOSE_ATTACKS: u32 = 0x5932a;
 const FAR_ATTACKS: u32 = 0x5952a;
 const NEXT_MOVES: u32 = 0x59982;
 
-mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_STEP: u32 = 0xe914;
-    pub const WALK_PATH: u32 = 0xf0e8;
-    pub const FLASH: u32 = 0xe7fa;
-    pub const REMOVE: u32 = 0x27ee;
-    pub const DEAD_STEP: u32 = 0xe886;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -133,7 +121,7 @@ fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
     if x.u16(f::TARGET) != 0 {
         load_target(x);
-        if target_in_box(x, -8, 0x68, 8) || target_in_box(x, -0xa0, 0x30, 8) {
+        if lib::target_in_box(x, -8, 0x68, 8) || lib::target_in_box(x, -0xa0, 0x30, 8) {
             x.set8(SIDE, x.c.d[0] as u8);
             pick_move(x, NEXT_MOVES, 0x208);
             return;
@@ -214,7 +202,7 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xd);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x44), (0x7f, 0), (0x6a, 2), (0x6c, 3), (0x74, 3), (0x76, 3), (0x69, 2), (0x78, 0xff)] {
         x.set8(off, v);
     }
@@ -227,7 +215,7 @@ fn init(x: &mut Cx) {
     x.set8(0xac, 0);
     x.set8(0x83, 1);
     x.set32(f::IMMUNITY, 0x1001);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     let series = x.u8(SERIES) as u32;
     x.c.d[1] = 4 * series;
     if series != 0 {

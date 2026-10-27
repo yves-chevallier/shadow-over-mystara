@@ -83,8 +83,7 @@ pub(super) fn attack_4(x: &mut Cx) {
 
 /// 0x99062 : attaque 6 (poursuite magique) si une cible existe.
 pub(super) fn attack_6(x: &mut Cx) {
-    x.call(call::PICK_FAR);
-    if zero(x) {
+    if !lib::pick_target_any(x) {
         return wait(x);
     }
     x.set8(VULNERABLE, 0);
@@ -208,15 +207,10 @@ pub(super) fn walk_steps_slow(x: &mut Cx) {
 
 /// 0x98d6a, 0x98d86 : un joueur est-il dans la boîte ? Rend 0, ou 1 / 2 : le côté (0x1047a).
 pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ai::TARGET_IN_BOX);
-    if zero(x) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
-    x.call(0x1047a);
-    x.c.d[0] as u8
+    lib::turn_decision(x) as u8
 }
 
 /// Exécute la routine d'état dont une table donne l'adresse.
@@ -314,13 +308,10 @@ pub(super) fn back_on_feet(x: &mut Cx) {
     if x.a5_u8(0x30) == 0 {
         return wait(x);
     }
-    x.call(call::PICK_FAR);
-    if zero(x) {
+    if !lib::pick_target_any(x) {
         return wait(x);
     }
-    x.c.a[1] = 0x114e2;
-    x.call(0x105b6);
-    if !zero(x) {
+    if lib::next_threshold(x, 0x114e2) {
         if cmp8(x, PHASE, 2).eq() {
             return attack_20(x);
         }

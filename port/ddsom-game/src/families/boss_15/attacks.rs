@@ -123,7 +123,7 @@ fn attack_0(x: &mut Cx) {
         0 => reach_player(x),
         2 => {
             x.add8(0x7, 2);
-            x.call(0xe571a);
+            lib::sound(x, 0xe571a);
             x.set16(TIMER, 0xa0);
             set_anim(x, 0, 2);
         }
@@ -150,9 +150,9 @@ fn attack_0(x: &mut Cx) {
             }
             x.set8(0x33, 0);
             x.add8(0x7, 2);
-            x.call(0xe571a);
+            lib::sound(x, 0xe571a);
             eshl_shot_34(x, 0);
-            x.call(0xe54dc);
+            lib::sound(x, 0xe54dc);
             x.set16(TIMER, 0x100);
             flap(x);
         }
@@ -219,7 +219,7 @@ fn attack_2(x: &mut Cx) {
             x.set16(0x10, py);
             x.set16(TIMER, 0x40);
             set_anim(x, 2, 0x13);
-            x.call(0xe571a);
+            lib::sound(x, 0xe571a);
             push_side(x);
         }
         8 => push_side(x),
@@ -308,7 +308,7 @@ fn sweep(x: &mut Cx) {
     }
     x.set8(0x33, 0);
     eshl_shot_34(x, 1);
-    x.call(0xe54dc);
+    lib::sound(x, 0xe54dc);
     x.set8(0x2d, 0);
     x.select_speed(&crate::objects::motion::SPEEDS_A, 0x18);
 }
@@ -402,7 +402,7 @@ fn dive_a(x: &mut Cx) {
     }
     x.set8(0x33, 0);
     eshl_shot_34(x, 2);
-    x.call(0xe54dc);
+    lib::sound(x, 0xe54dc);
 }
 
 fn dive_b(x: &mut Cx) {
@@ -484,8 +484,7 @@ fn attack_12(x: &mut Cx) {
         4 => {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x50);
-            x.c.d[0] = 0x10;
-            x.call(call::SOUND);
+            lib::shake_5c(x, 0x10);
             let routine = if x.u8(TYPE) == TYPE_BIG { 0xa7234 } else { 0xa727c };
             x.call(routine);
         }
@@ -566,13 +565,8 @@ fn attack_14(x: &mut Cx) {
 
 /// 0x9249e : un joueur à portée (0xfc44) est saisi ; rend vrai.
 fn try_seize(x: &mut Cx) -> bool {
-    x.c.d[0] = 7;
-    x.call(call::CATCH_IN_REACH);
-    if zero(x) {
-        return false;
-    }
-    x.c.d[0] = 0;
-    x.call(call::SEIZE);
+    let Some(player) = lib::attack_hits_a_player(x, 7) else { return false };
+    lib::seize_player(x, player, 0);
     true
 }
 

@@ -56,7 +56,7 @@ fn combo(x: &mut Cx) {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
                 x.call(0xb4ef4);
-                x.call(0xed25a);
+                lib::sound(x, 0xed25a);
             }
             x.anim_step();
         }
@@ -66,7 +66,7 @@ fn combo(x: &mut Cx) {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
                 eshl_burst_27(x);
-                x.call(0xed1f0);
+                lib::sound(x, 0xed1f0);
             }
             x.anim_step();
         }
@@ -109,9 +109,8 @@ fn volley_fire(x: &mut Cx, pick: fn(&mut Cx)) {
     if !x.anim_step() {
         return;
     }
-    x.c.d[0] = 0x30;
-    x.call(call::SOUND_B);
-    x.call(0xedd2c);
+    lib::shake_58(x, 0x30);
+    lib::sound(x, 0xedd2c);
     addq8(x, f::SUB3, 2);
     x.set16(TIMER, 0x32);
     x.call(0xb4f60);
@@ -214,7 +213,7 @@ fn charge(x: &mut Cx) {
             }
             addq8(x, f::SUB3, 2);
             x.set8(f::KEY_FRAME, 0);
-            x.call(0xecdba);
+            lib::sound(x, 0xecdba);
             let (mut d0, mut d1) = (-0x800i16, 0x20i16);
             if x.u8(f::FLIP) != 0 {
                 d0 = d0.wrapping_neg();
@@ -321,9 +320,8 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
                 x.anim_step();
                 return;
             }
-            x.c.d[0] = 0x14;
-            x.call(call::SOUND_B);
-            x.call(0xecb98);
+            lib::shake_58(x, 0x14);
+            lib::sound(x, 0xecb98);
             aids::burst_small(x);
             x.set32(0xc, 0);
             addq8(x, f::SUB3, 2);
@@ -354,7 +352,7 @@ fn vanish(x: &mut Cx) {
             addq8(x, f::SUB3, 2);
             x.set8(0, 2);
             key(x, 0x12);
-            x.call(call::FADE);
+            lib::sound(x, 0xecf7a);
             body(x, 4);
         }
         0x86858 => {
@@ -371,7 +369,7 @@ fn vanish(x: &mut Cx) {
                 addq8(x, f::SUB3, 2);
                 x.set_bit(0x1, 1, false);
                 x.set8(0, 1);
-                x.call(call::FADE);
+                lib::sound(x, 0xecf7a);
             }
         }
         _ => finish(x),

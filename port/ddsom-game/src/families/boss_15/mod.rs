@@ -69,14 +69,6 @@ const CHASE: u32 = 0x0202_0400;
 pub(self) const WAIT: u32 = 0x020a_0000;
 pub(self) const ATTACK_4: u32 = 0x0204_0400;
 
-pub(self) mod call {
-    pub const PICK_FAR: u32 = 0x43ae;
-    pub const CATCH_IN_REACH: u32 = 0xfc44;
-    pub const SEIZE: u32 = 0xfd64;
-    pub const DRAG_SEIZED: u32 = 0xfda2;
-    pub const SOUND: u32 = 0x289c;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -174,7 +166,7 @@ fn init(x: &mut Cx) {
     x.set8(0x9a, 0xff);
     let big = x.u8(TYPE) == TYPE_BIG;
     x.set8(0x7e, if big { 0x50 } else { 0x29 });
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.call(0xd5f30);
     x.call(0xd6952);
     x.set8(0x78, 0xff);
@@ -186,9 +178,9 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     x.set_a5_u8(0x5a, 0);
-    x.call(0x788c);
+    lib::draw_6b(x);
     x.set8(0x70, 0);
-    x.call(0xa470);
+    lib::draw_stance(x);
     x.set8(0x81, 0);
     x.set8(0x80, if big { 0x28 } else { 0x2c });
     x.set8(FOREGROUND, 0);
@@ -332,7 +324,7 @@ fn grab(x: &mut Cx) {
                 p.set_u16(x.b, f::HP, 1);
             }
             set_anim(x, 2, 4);
-            x.call(call::DRAG_SEIZED);
+            lib::hold_seized(x);
         }
         2 => {
             if (x.u8(TIMER) as i8) > 0 {
@@ -353,7 +345,7 @@ fn grab(x: &mut Cx) {
 
 fn grab_step(x: &mut Cx) {
     if !step_anim(x) {
-        return x.call(call::DRAG_SEIZED);
+        return lib::hold_seized(x);
     }
     x.set16(ANIM_SET, 0xffff);
     set_anim(x, 2, 4);
@@ -369,15 +361,14 @@ fn grab_step(x: &mut Cx) {
     }
     let hp = p.u16(x.b, f::HP).wrapping_sub(1);
     p.set_u16(x.b, f::HP, hp);
-    x.call(0xedd96);
-    x.call(call::DRAG_SEIZED);
+    lib::sound(x, 0xedd96);
+    lib::hold_seized(x);
 }
 
 fn release(x: &mut Cx) {
     x.set8(0x45, 1);
-    // 0xfd8c relâche le joueur désigné par A1 (resté chargé depuis le début de la prise)
-    x.c.a[1] = x.linked(f::TARGET).0;
-    x.call(0xfd8c);
+    let player = x.linked(f::TARGET);
+    lib::release_player(x, player);
     set_anim(x, 2, 5);
     stand(x);
 }

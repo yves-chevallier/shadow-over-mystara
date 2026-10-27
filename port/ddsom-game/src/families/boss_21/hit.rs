@@ -57,7 +57,7 @@ fn reaction(x: &mut Cx) {
         }
         x.set8(INVULNERABLE, 0);
         x.set_a5_u16(0x51e, 0);
-        x.call(0x10112);
+        lib::set_68(x);
         if out_of_hp(x) {
             return down(x);
         }
@@ -84,7 +84,7 @@ fn stun(x: &mut Cx) {
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
             x.set8(0x90, 0x10);
-            play(x, SET_HURT, 8);
+            lib::start(x, SET_HURT, 8);
         }
         2 => {
             if tst8(x, 0x90).le() {
@@ -93,7 +93,7 @@ fn stun(x: &mut Cx) {
                 x.set8(0, 1);
                 x.set32(f::STATE, 0x0404_0200);
                 x.set32(0x58, 0);
-                step(x);
+                lib::step(x);
                 return;
             }
             sub8(x, 0x90, 1);
@@ -122,7 +122,7 @@ fn pushed_back(x: &mut Cx) {
             x.set8(ANIM_KIND, 0x20);
             x.set8(ANIM_LAST, 0x20);
             x.add8(f::SUB2, 2);
-            x.call(0xec73c);
+            lib::sound(x, 0xec73c);
             body(x, 0xb);
         }
         2 => {
@@ -133,11 +133,11 @@ fn pushed_back(x: &mut Cx) {
                 body(x, n);
             } else {
                 x.move_x();
-                step(x);
+                lib::step(x);
             }
         }
         4 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.set32(0x58, 0);
@@ -186,7 +186,7 @@ fn get_up(x: &mut Cx) {
                 }
             }
             x.set8(Obj::SPEED_INDEX, angle);
-            x.call(call::RANDOM_TURN);
+            lib::drift_heading(x);
             speed(x, 0x2b);
             x.set16(TIMER, 0x1e);
             // l'animation dépend du sens du boss par rapport au bord choisi
@@ -204,7 +204,7 @@ fn get_up(x: &mut Cx) {
                 body(x, 0x11);
             } else {
                 x.move_xy();
-                step(x);
+                lib::step(x);
             }
         }
         6 => {
@@ -228,8 +228,7 @@ pub(super) fn recovered(x: &mut Cx) {
     if !pick_target(x) {
         return decide::wait(x);
     }
-    x.c.a[1] = THRESHOLDS;
-    x.call(0x105b6);
+    lib::next_threshold(x, THRESHOLDS);
     let mut limit = 2;
     if (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 {
         limit = 0;
@@ -242,7 +241,7 @@ pub(super) fn recovered(x: &mut Cx) {
             return decide::attack_16(x);
         }
     }
-    if target_in_box(x, 0, 0x20, 0xc) {
+    if lib::target_in_box(x, 0, 0x20, 0xc) {
         decide::attack_4_shielded(x);
     } else {
         decide::chase(x);

@@ -74,7 +74,7 @@ fn recoil(x: &mut Cx) {
         x.set8(f::FREEZE, 4);
         x.set16(Obj::VX, 0x500);
         x.set16(Obj::AX, -0x38i16 as u16);
-        x.call(0xec6ca);
+        lib::sound(x, 0xec6ca);
         let flip = x.u8(0x4a) ^ 0x20;
         x.set8(0x4a, flip);
         if flip != 0 {
@@ -164,7 +164,7 @@ pub(super) fn caught(x: &mut Cx) {
             move_xy(x);
             if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
-                x.call(call::REMOVE);
+                detach_from_host(x);
             }
         }
         _ => {}

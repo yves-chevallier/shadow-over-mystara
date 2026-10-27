@@ -29,15 +29,15 @@ pub(super) fn run(x: &mut Cx) {
             _ => get_up(x),
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
 /// 0x7bb96 : premier passage : dégâts (0xb648, 0x10112) et, sans PV, la mort ; puis la routine du code de coup.
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0xb648);
-        x.call(0x10112);
+        lib::drop_once(x);
+        lib::set_68(x);
         x.set8(INVULNERABLE, 0);
         // 0x7c588
         if !tst16(x, f::HP).gt() {
@@ -69,7 +69,7 @@ fn shake(x: &mut Cx) {
         let freeze = x.u8(0x56);
         x.set8(f::FREEZE, freeze);
         x.set8(SHAKE, 0x10);
-        return play(x, SET_HURT, 8);
+        return lib::start(x, SET_HURT, 8);
     }
     if tst8(x, SHAKE).gt() {
         let n = x.u8(SHAKE).wrapping_sub(1);
@@ -115,20 +115,20 @@ fn pushed_back(x: &mut Cx) {
                 x.set16(0x16, 0);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         _ => {
             if !expired(x, TIMER) {
                 x.move_x();
-                step(x);
+                lib::step(x);
                 return;
             }
             x.c.d[0] = 0;
             x.set32(0x58, 0);
-            if target_in_box(x, -0x60, 0x35, 6) {
+            if lib::target_in_box(x, -0x60, 0x35, 6) {
                 return go(x, 0x7c344);
             }
-            if target_in_box(x, -0xe0, 0x30, 8) {
+            if lib::target_in_box(x, -0xe0, 0x30, 8) {
                 return go(x, 0x7c2fa);
             }
             walk(x)
@@ -141,7 +141,7 @@ fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             x.set8(ANIM_LAST, 0xff);
             body(x, 0x1b);
         }
@@ -158,10 +158,10 @@ fn down(x: &mut Cx) {
             if x.a5_u8(var::PAUSE) != 0 {
                 return;
             }
-            if step(x) {
+            if lib::step(x) {
                 return get_up(x);
             }
-            if x.u8(f::KEY_FRAME) == 0 || outside(x, 0x18, 0x168) || !target_in_box(x, -0x10, 0x30, 0xc) {
+            if x.u8(f::KEY_FRAME) == 0 || outside(x, 0x18, 0x168) || !lib::target_in_box(x, -0x10, 0x30, 0xc) {
                 return;
             }
             next6(x);
@@ -176,7 +176,7 @@ fn down(x: &mut Cx) {
             body(x, 0x1c);
         }
         6 => {
-            step(x);
+            lib::step(x);
             x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
                 return;
@@ -184,17 +184,16 @@ fn down(x: &mut Cx) {
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            x.call(call::LANDING);
+            lib::sound(x, 0xec820);
             body(x, 0x1d);
         }
         _ => {
-            if step(x) {
+            if lib::step(x) {
                 return;
             }
             x.set8(0, 1);
             x.set8(ANIM_LAST, 0xff);
-            x.c.a[1] = THRESHOLDS;
-            x.call(call::PHASE_UP);
+            lib::next_threshold(x, THRESHOLDS);
             get_up(x)
         }
     }
@@ -208,15 +207,14 @@ pub(super) fn get_up(x: &mut Cx) {
     if !pick_target(x) {
         return idle_alone(x);
     }
-    x.c.a[1] = THRESHOLDS;
-    x.call(call::PHASE_UP);
+    lib::next_threshold(x, THRESHOLDS);
     if outside(x, 0x18, 0x168) {
         return leap_guarded(x);
     }
     if try_split_leap(x) {
         return split_leap(x);
     }
-    if target_in_box(x, -0x40, 0x30, 8) {
+    if lib::target_in_box(x, -0x40, 0x30, 8) {
         return go(x, 0x7c344);
     }
     stand(x)
@@ -254,13 +252,13 @@ fn death(x: &mut Cx) {
         2 => {
             x.move_xz();
             if x.u16(0xc) as i16 > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            x.call(0xec9e8);
+            lib::sound(x, 0xec9e8);
             x.anim_start(SET_BODY, 0x1f);
         }
         4 => {

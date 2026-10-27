@@ -79,12 +79,7 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 }
 
 pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
     pub const BURST: u32 = 0xb10c8;
-    pub const ATTACK_START: u32 = 0xac3a;
-    pub const FADE: u32 = 0xecf7a;
     pub const PICK_TARGET: u32 = 0x424e;
     /// Seuil des PV et ralenti (`boss_common`, 0x87048).
     pub const HP_THRESHOLD: u32 = 0x87048;
@@ -128,7 +123,7 @@ pub fn run(x: &mut Cx) {
     loop {
         x.tick_counters();
         if x.u16(f::TARGET) == 0 {
-            x.call(call::PICK_TARGET);
+            lib::pick_target(x);
         }
         match dispatch(x, 0x85a76, f::STATE) {
             0x85a80 => init(x),
@@ -177,14 +172,14 @@ fn init(x: &mut Cx) {
     } else {
         x.add8(f::STATE, 2);
         x.add16(0xc, 0x50);
-        x.call(0xe13f0);
+        lib::sound(x, 0xe13f0);
     }
     x.set_a5_u8(0x50, 1);
     for a in [0x19e10, 0x19db4, 0x19eb0, 0xd6952, call::PICK_TARGET, 0xa470, 0x788c] {
         x.call(a);
     }
     x.set8(0x2e, 0x27);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.call(0xd5f30);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
         x.set8(off, v);
@@ -234,10 +229,10 @@ fn active(x: &mut Cx) {
         x.set32(f::STATE, 0x0200_0200);
         x.set8(0, 1);
         x.set_bit(0x1, 1, false);
-        return x.call(rom::IMMUNITIES);
+        return lib::set_immunities(x);
     }
     if x.u16(f::TARGET) == 0 {
-        x.call(call::PICK_TARGET);
+        lib::pick_target(x);
     }
     if x.u8(SPAWNED) == 0 && sub16(x, SPAWN_TIME, 1).mi() {
         if let Some(e) = x.alloc(&pools::SET) {
@@ -272,7 +267,7 @@ fn active(x: &mut Cx) {
             idle_reset(x);
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 

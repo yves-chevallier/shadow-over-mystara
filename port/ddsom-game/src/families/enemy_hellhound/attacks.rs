@@ -20,7 +20,7 @@ fn bite_effect(x: &mut Cx, kind: u32) {
     x.set8(f::KEY_FRAME, 0);
     x.c.d[0] = kind;
     x.call(0x9eba6);
-    x.call(0xebd30);
+    lib::sound(x, 0xebd30);
 }
 
 /// 0x61c88 : prépare l'attente (aspect 0, animation 0).
@@ -77,14 +77,9 @@ fn wait_key_clear(x: &mut Cx) {
 /// 0x61eda : en plein bond, la clé déclenche la morsure ; à terre, poussière et animation d'atterrissage.
 fn bite_land(x: &mut Cx) {
     if x.u8(f::KEY_FRAME) != 0 {
-        x.c.d[0] = 4;
-        x.call(0xfc44);
-        if x.c.cond(7) {
-            return step_then_after(x);
-        }
+        let Some(player) = lib::attack_hits_a_player(x, 4) else { return step_then_after(x) };
         x.set32(Obj::Z, 0);
-        x.c.d[0] = 2;
-        return x.call(0xfd64);
+        return lib::seize_player(x, player, 2);
     }
     if x.move_xz().gt() {
         x.anim_step();
@@ -158,12 +153,9 @@ fn lunge(x: &mut Cx) {
         }
         6 => {
             if x.u8(f::KEY_FRAME) != 0 {
-                x.call(0xe361a);
-                x.c.d[0] = 3;
-                x.call(0xfc44);
-                if !x.c.cond(7) {
-                    x.c.d[0] = 0;
-                    return x.call(0xfd64);
+                lib::sound(x, 0xe361a);
+                if let Some(player) = lib::attack_hits_a_player(x, 3) {
+                    return lib::seize_player(x, player, 0);
                 }
             }
             step_then_after(x);
@@ -340,7 +332,7 @@ fn flame_tick(x: &mut Cx, both: bool) -> bool {
         return false;
     }
     if both {
-        x.call(0xed398);
+        lib::sound(x, 0xed398);
     }
     x.call(0x9ed78);
     true
@@ -370,8 +362,7 @@ pub(super) fn run_b(x: &mut Cx) {
 
 /// 0x61a8c : le chien se met à l'affût (test aléatoire, puis boîtes de portée ou charge).
 fn ready(x: &mut Cx) {
-    x.call(call::RAND_TARGET_CHECK);
-    if x.c.cond(7) {
+    if !lib::maybe_draw_6e(x) {
         stance::reach(x);
     } else {
         x.set16(f::SUB2, 0x400);
@@ -734,12 +725,12 @@ pub(super) fn grab(x: &mut Cx) {
             let y = victim.u16(x.b, Obj::Y);
             x.set16(Obj::Y, y);
             if victim.u16(x.b, Obj::Z) != 0 {
-                return x.call(0xfd8c);
+                return lib::release_player(x, victim);
             }
             x.set16(Obj::Z, 0);
             x.set8(BITES, 8);
             strike(x, if which == 0 { 1 } else { 2 });
-            x.call(0xfda2);
+            lib::hold_seized(x);
         }
         2 => bite_victim(x, which),
         _ => {}
@@ -750,7 +741,7 @@ pub(super) fn grab(x: &mut Cx) {
 fn bite_victim(x: &mut Cx, which: u8) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
-        return x.call(0xfda2);
+        return lib::hold_seized(x);
     }
     x.set8(f::KEY_FRAME, 0);
     let n = x.u8(BITES).wrapping_sub(1);
@@ -777,19 +768,18 @@ fn bite_victim(x: &mut Cx, which: u8) {
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);
     }
-    x.call(0xedd96);
+    lib::sound(x, 0xedd96);
     let hp = victim.u16(x.b, f::HP).wrapping_sub(3);
     victim.set_u16(x.b, f::HP, hp);
     if (hp as i16) <= 0 {
         victim.set_u16(x.b, f::HP, 1);
         return release(x);
     }
-    x.call(0xfda2);
+    lib::hold_seized(x);
 }
 
 fn release(x: &mut Cx) {
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
     victim.set_u8(x.b, 0x6f, 1);
-    x.call(0xfd8c);
+    lib::release_player(x, victim);
 }

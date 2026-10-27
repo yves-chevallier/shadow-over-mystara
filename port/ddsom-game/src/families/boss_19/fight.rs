@@ -43,29 +43,25 @@ fn walk(x: &mut Cx, shot: u8) {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 1);
         speed(x, 0x11);
-        x.call(0xa470);
+        lib::draw_stance(x);
         return;
     }
-    x.call(call::PICK_TARGET);
-    x.call(call::ASK_TARGET);
+    lib::pick_target(x);
+    lib::approach_target(x);
     if !sub8(x, WALK_DELAY, 1).gt() {
-        x.call(0xa470);
+        lib::draw_stance(x);
         if !sub8(x, WALK_STEPS, 1).pl() {
-            x.call(0x79ce);
-            if !zero(x) {
+            if lib::maybe_draw_6e(x) {
                 return chase(x);
             }
-            x.call(0x788c);
+            lib::draw_6b(x);
         }
     }
     if special_due(x) {
         return attack_4(x);
     }
     // probe_near (0x9132e) ne rend jamais vrai : la sonde est lancée pour rien
-    set_dw(x, 0, (-0x20i16) as u16);
-    set_dw(x, 1, 0x40);
-    set_dw(x, 2, 0x10);
-    x.call(ai::TARGET_IN_BOX);
+    lib::target_in_front(x, -0x20, 0x40, 0x10);
     if probe_front(x) || probe_back(x) {
         return pick_attack_a(x);
     }
@@ -117,17 +113,17 @@ fn facing_away(x: &mut Cx) -> bool {
 
 /// 0x9130c : un joueur est tout près derrière (boîte 0x7f0c) : le dragon réagit (0xac3a).
 fn probe_far(x: &mut Cx) -> bool {
-    if !target_in_box_far(x, -0x60, 0x60, 0x10) {
+    if !lib::guard_in_front_strict(x, -0x60, 0x60, 0x10) {
         return false;
     }
-    x.call(0xac3a);
+    lib::pick_byte(x);
     true
 }
 
 /// 0x91348, 0x91390 : joueur dans la boîte `(d0, d1, d2)` et tirage favorable (0xa4c2 si la cible regarde du même
 /// côté que le dragon, 0xa4b4 sinon). Sans cible, le dragon attend et la sonde rend vrai comme l'original.
 fn probe_target(x: &mut Cx, d0: i16, d1: u16, d2: u16, no_target: impl Fn(u16) -> bool) -> bool {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
     if no_target(x.u16(f::TARGET)) {
@@ -167,8 +163,8 @@ fn turning(x: &mut Cx) {
     if step(x) {
         return stand(x);
     }
-    x.call(call::PICK_TARGET);
-    x.call(call::ASK_TARGET);
+    lib::pick_target(x);
+    lib::approach_target(x);
     x.move_by_table_xy();
 }
 
@@ -203,7 +199,7 @@ fn close_in(x: &mut Cx) {
         return stand(x);
     }
     x.set8(SHOT, 0x20);
-    x.call(call::ASK_TARGET);
+    lib::approach_target(x);
     if facing_away(x) {
         return turn(x);
     }
@@ -221,7 +217,7 @@ pub(super) fn pick_attack_b(x: &mut Cx) {
     }
     let target = x.linked(f::TARGET);
     x.c.a[1] = target.0;
-    if !target_in_box(x, -0x40, 0x40, 0x20) {
+    if !lib::target_in_box(x, -0x40, 0x40, 0x20) {
         return stand(x);
     }
     let level = (x.a5_u16(var::DIFFICULTY) >> 1) as u32;

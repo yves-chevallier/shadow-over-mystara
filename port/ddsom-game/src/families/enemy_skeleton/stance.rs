@@ -32,9 +32,9 @@ pub(super) fn run(x: &mut Cx) {
                 body(x, 0);
                 x.set32(MOVE_TABLE, 0x1c74b6);
                 pick_target(x);
-                x.call(call::FACE_TARGET);
-                x.call(call::FLASH);
-                x.call(call::TURN_TO_TARGET);
+                lib::draw_stance(x);
+                lib::choose_near_walk_point(x);
+                lib::draw_6b(x);
             }
         }
         _ => {}
@@ -45,7 +45,7 @@ pub(super) fn run(x: &mut Cx) {
     
     zone_shadow(x);
     if x.c.d[5] as u8 != 0 {
-        x.call(call::DEAD_STEP);
+        lib::choose_walk_point(x);
     }
 }
 
@@ -56,8 +56,8 @@ fn begin_idle(x: &mut Cx) {
     x.set8(AI_SHOT, 0xb);
     body(x, 0);
     x.set32(MOVE_TABLE, 0x1c74b6);
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
 }
 
 /// `+6 = 2` : attend la fin de l'animation en marchant, puis tire l'idée suivante.
@@ -108,15 +108,13 @@ fn turn(x: &mut Cx) {
 
 /// 0x58126 : marche vers la cible ; décide de se retourner, d'attendre ou d'attaquer.
 fn walk(x: &mut Cx) {
-    x.call(call::SPEED_STEP);
+    lib::walk_point_reached(x);
     let (y, z) = (x.u16(WALK_ARGS_Y), x.u16(WALK_ARGS_Z));
-    set_dw(x, 1, y);
-    set_dw(x, 2, z);
-    x.call(call::WALK_PATH);
+    lib::turn_toward(x, y, z);
     let n = x.u8(AI_WALK).wrapping_sub(1);
     x.set8(AI_WALK, n);
     if (n as i8) <= 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         if x.u16(f::TARGET) == 0 {
             return;
         }
@@ -132,9 +130,8 @@ fn walk(x: &mut Cx) {
     let n = x.u8(AI_CHOICE).wrapping_sub(1);
     x.set8(AI_CHOICE, n);
     if (n as i8) <= 0 {
-        x.call(call::TURN_TO_TARGET);
-        x.call(call::RAND_TARGET_CHECK);
-        if !x.c.cond(7) {
+        lib::draw_6b(x);
+        if lib::maybe_draw_6e(x) {
             return x.set16(f::SUB2, 0x200);
         }
     }
@@ -143,18 +140,18 @@ fn walk(x: &mut Cx) {
 
 /// 0x58194 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
 fn attack_choice(x: &mut Cx) {
-    if x.u8(SERIES) != 0 && target_in_box(x, -0x20, 0x20, 0xc) {
+    if x.u8(SERIES) != 0 && lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, DASH);
         return x.set16(COUNTER, 0);
     }
-    if target_in_box(x, -0x20, 0x20, 0x10) {
+    if lib::target_in_box(x, -0x20, 0x20, 0x10) {
         x.set8(SIDE, x.c.d[0] as u8);
         x.set16(f::STATE, 0x204);
-        x.call(call::ANNOUNCE);
+        lib::pick_byte(x);
         return pick_move(x, CLOSE_ATTACKS, 0x204);
     }
-    if front_attack(x) || far_attack(x) || target_in_box_far(x, -8, 0x68, 8) {
-        return x.call(call::ANNOUNCE);
+    if front_attack(x) || far_attack(x) || lib::guard_in_front_strict(x, -8, 0x68, 8) {
+        return lib::pick_byte(x);
     }
     step(x);
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
@@ -164,7 +161,7 @@ fn attack_choice(x: &mut Cx) {
 
 /// 0x59254 : cible devant ; l'attaque est lancée si la décision par masque le veut.
 fn front_attack(x: &mut Cx) -> bool {
-    if !target_in_box(x, -8, 0x68, 8) {
+    if !lib::target_in_box(x, -8, 0x68, 8) {
         x.c.d[0] = 0;
         return false;
     }
@@ -180,7 +177,7 @@ fn front_attack(x: &mut Cx) -> bool {
 
 /// 0x592a4 : cible plus loin (boîte large) ; même décision, attaque de loin.
 fn far_attack(x: &mut Cx) -> bool {
-    if !target_in_box(x, -0xa0, 0x30, 8) {
+    if !lib::target_in_box(x, -0xa0, 0x30, 8) {
         x.c.d[0] = 0;
         return false;
     }

@@ -118,7 +118,7 @@ pub(super) fn grab(x: &mut Cx) {
                 host.set_u8(x.b, Obj::SPEED_INDEX, 1);
             }
             set_state_long(x, st::DEAD_LONG);
-            x.call(call::REMOVE);
+            detach_from_host(x);
         }
         _ => {}
     }

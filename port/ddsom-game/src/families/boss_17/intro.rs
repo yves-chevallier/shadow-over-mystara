@@ -102,7 +102,7 @@ fn arrival(x: &mut Cx) {
                 }
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         2 => {
             if !sub16(x, TIMER, 1).gt() {
@@ -110,7 +110,7 @@ fn arrival(x: &mut Cx) {
                 x.set16(0x1e, (-0x20i16) as u16);
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         3 => {
             if !tst16(x, 0x1c).gt() {
@@ -123,7 +123,7 @@ fn arrival(x: &mut Cx) {
                 x.set16(0x14, 0);
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         4 => {
             if !sub16(x, TIMER, 1).gt() {
@@ -146,7 +146,7 @@ fn arrival(x: &mut Cx) {
                 }
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         5 => {
             let low = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x145);
@@ -156,7 +156,7 @@ fn arrival(x: &mut Cx) {
                 x.set_bit(0x1, 1, true);
             } else {
                 x.move_xy();
-                step(x);
+                lib::step(x);
             }
         }
         6 => {
@@ -187,7 +187,7 @@ fn entrance(x: &mut Cx) {
             body(x, 0x18);
         }
         1 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
             }
@@ -195,7 +195,7 @@ fn entrance(x: &mut Cx) {
         2 => {
             let b = x.u8(0x1) ^ 0x2;
             x.set8(0x1, b);
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, false);
                 x.set16(TIMER, 0xa);
@@ -209,11 +209,11 @@ fn entrance(x: &mut Cx) {
                     x.set8(off, v);
                 }
                 x.set8(0, 1);
-                x.call(rom::IMMUNITIES);
+                lib::set_immunities(x);
                 x.call(0xd5f30);
                 decide::chase(x);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         _ => {}
@@ -230,7 +230,7 @@ fn finale(x: &mut Cx) {
             body(x, 0x17);
         }
         1 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, true);
                 x.set16(TIMER, 0xa);
@@ -251,7 +251,7 @@ fn finale(x: &mut Cx) {
             }
         }
         3 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
                 fx(x, 0xe1768);
@@ -259,7 +259,7 @@ fn finale(x: &mut Cx) {
             }
         }
         4 => {
-            step(x);
+            lib::step(x);
             if tst16(x, TIMER).gt() {
                 sub16(x, TIMER, 1);
                 return;
@@ -272,7 +272,7 @@ fn finale(x: &mut Cx) {
             open_message(x, 0x13);
         }
         5 => {
-            step(x);
+            lib::step(x);
             if !message_done(x) {
                 return;
             }
@@ -288,11 +288,11 @@ fn finale(x: &mut Cx) {
                 x.add8(0x7, 2);
                 strike(x, 0xd);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         7 | 14 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
@@ -321,14 +321,14 @@ fn finale(x: &mut Cx) {
             }
         }
         10 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x96);
                 body(x, 0);
             }
         }
         11 => {
-            step(x);
+            lib::step(x);
             if sub16(x, TIMER, 1).gt() {
                 return;
             }
@@ -337,7 +337,7 @@ fn finale(x: &mut Cx) {
             open_message(x, 0x14);
         }
         12 => {
-            step(x);
+            lib::step(x);
             if !message_done(x) {
                 return;
             }
@@ -346,7 +346,7 @@ fn finale(x: &mut Cx) {
             open_message(x, 0x15);
         }
         13 => {
-            step(x);
+            lib::step(x);
             if message_done(x) {
                 x.add8(0x7, 2);
                 strike(x, 0xd);
@@ -488,7 +488,7 @@ fn variant(x: &mut Cx, second: bool) {
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
             }
-            step(x);
+            lib::step(x);
         }
         2 => {
             sub16(x, 0xc, 1);
@@ -497,7 +497,7 @@ fn variant(x: &mut Cx, second: bool) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x14);
             }
-            step(x);
+            lib::step(x);
         }
         3 => {
             if sub16(x, TIMER, 1).le() {
@@ -510,13 +510,13 @@ fn variant(x: &mut Cx, second: bool) {
                 x.move_xyz();
                 body(x, 4);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         4 => {
             x.move_xyz();
             if tst16(x, 0x18).gt() {
-                step(x);
+                lib::step(x);
             } else {
                 x.add8(0x7, 2);
                 body(x, 7);
@@ -525,7 +525,7 @@ fn variant(x: &mut Cx, second: bool) {
         5 => {
             x.move_xyz();
             if tst16(x, 0xc).gt() {
-                step(x);
+                lib::step(x);
             } else {
                 x.add8(0x7, 2);
                 x.set16(0xc, 0);
@@ -533,7 +533,7 @@ fn variant(x: &mut Cx, second: bool) {
             }
         }
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 let scene = x.a5_u8(0x34);
                 if scene == 0x2c || scene == 0x6f {
@@ -544,7 +544,7 @@ fn variant(x: &mut Cx, second: bool) {
         }
         7 => {
             if x.a5_u8(0x2c) != 0xc {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.set_a5_u32(0x38, 0x0459_5900);
@@ -552,7 +552,7 @@ fn variant(x: &mut Cx, second: bool) {
                 x.set8(off, v);
             }
             x.set8(0, 1);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             x.call(0xd5f30);
             decide::chase(x);
         }

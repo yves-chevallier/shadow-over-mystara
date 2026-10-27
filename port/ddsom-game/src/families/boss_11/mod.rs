@@ -44,11 +44,6 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-pub(self) mod call {
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
-}
-
 /// `move.b #v,Dn` : l'octet de poids faible d'un registre de données.
 pub(self) fn setb(x: &mut Cx, n: usize, v: u8) {
     x.c.d[n] = x.c.d[n] & !0xff | v as u32;
@@ -207,8 +202,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     if x.u8(NO_ZONE) == 0 {
-        setw(x, 0, 0x30);
-        x.call(0xfbb0);
+        lib::keep_on_screen(x, 0x30);
         x.call(SHADOW);
     }
     keep_in_screen(x);

@@ -46,57 +46,44 @@ impl Master {
 
 /// Champ du maître (adresse RAM sur 16 bits).
 const MASTER: u32 = 0xb2;
-const PLAY: u32 = 0x10428;
-const PLAY_HIT: u32 = 0x10450;
 
 fn play(x: &mut Cx, play: Play) {
     match play {
-        Anim(set) => {
-            x.c.a[4] = set;
-            x.call(PLAY);
-        }
-        Hit(set) => {
-            x.c.a[4] = set;
-            x.call(PLAY_HIT);
-        }
+        Anim(set) => lib::animation_of_master(x, set),
+        Hit(set) => lib::animation_of_mark(x, set),
         Restart(n) => restart_or_step(x, n),
         RestartSpawn(n) => {
             restart_or_step_spawn(x, n);
         }
         AnimClear(set) => {
-            x.c.a[4] = set;
-            x.call(PLAY);
+            lib::animation_of_master(x, set);
             x.set8(0x38, 0);
         }
-        Step => x.call(STEP_ANIMATION),
+        Step => {
+            lib::step(x);
+        }
         Nothing => {}
     }
 }
 
 /// Jeu d'animations des gestes de la Chimère.
 const GESTURES: u32 = 0x16abd6;
-const START_ANIMATION: u32 = 0x103d6;
-const STEP_ANIMATION: u32 = 0x1040c;
 
 fn restart_or_step(x: &mut Cx, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
-        x.c.d[0] = n;
-        x.c.a[4] = GESTURES;
-        x.call(START_ANIMATION);
+        lib::start(x, GESTURES, n);
     } else {
-        x.call(STEP_ANIMATION);
+        lib::step(x);
     }
 }
 
 fn restart_or_step_spawn(x: &mut Cx, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
-        x.c.d[0] = n;
-        x.c.a[4] = GESTURES;
-        return x.call(START_ANIMATION);
+        return lib::start(x, GESTURES, n);
     }
-    x.call(STEP_ANIMATION);
+    lib::step(x);
     if x.u8(0x33) == 0 {
         return;
     }
@@ -131,10 +118,10 @@ fn hurt(x: &mut Cx, dying_code: u8, effect_variant: u8) {
     x.set16(0x64, hp as u16);
     x.set16(0xb4, 0x14);
     if hp > 0 {
-        return x.call(0xe40b4);
+        return lib::sound(x, 0xe40b4);
     }
     x.set8(0xaf, 1);
-    x.call(0xe4188);
+    lib::sound(x, 0xe4188);
     x.set8(0x7e, dying_code);
     x.call(0x19ad6);
     let Some(e) = x.alloc(&pools::EFFCT) else { return };
@@ -609,7 +596,7 @@ mod dark_warrior_double {
                 _ => copy_frame(x),
             }
         }
-        x.call(IN_ZONE);
+        lib::keep_in_zone(x);
         x.call(SHADOW);
     }
 
@@ -806,7 +793,7 @@ mod dark_warrior_double {
             10 => copy_frame(x),
             _ => {}
         }
-        x.call(IN_ZONE);
+        lib::keep_in_zone(x);
         x.call(SHADOW);
     }
 

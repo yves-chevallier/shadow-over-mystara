@@ -9,6 +9,8 @@
 use m68k::SR_C;
 
 use super::cx::Cx;
+/// Bibliothèque commune des ennemis et des boss (`lib::draw_stance(x)`...).
+pub use super::enemy_lib as lib;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -225,7 +227,7 @@ pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
         return;
     }
     if x.u8(f::SUB) != 0 {
-        x.call(IN_ZONE);
+        lib::keep_in_zone(x);
         x.call(SHADOW);
     }
     x.reinsert();
@@ -245,7 +247,7 @@ pub fn hit_loop_at(x: &mut Cx, no_zone: u32, sub: impl FnOnce(&mut Cx)) {
         sub(x);
     }
     if x.u8(no_zone) == 0 {
-        x.call(IN_ZONE);
+        lib::keep_in_zone(x);
         x.call(SHADOW);
     }
     x.reinsert();
@@ -292,7 +294,7 @@ pub fn anim(x: &mut Cx, set: u32, n: u32) {
 
 /// Fin commune des sous-états actifs : test de zone (0xfbae, qui remet D5 à 0) puis ombre (0x33fe4).
 pub fn zone_shadow(x: &mut Cx) {
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -322,28 +324,9 @@ pub fn set_state_long(x: &mut Cx, v: u32) {
 
 // --- aides d'IA communes ------------------------------------------------------------------------
 
-/// Un joueur est-il dans cette boîte devant l'ennemi ? (0xb5e0 : décalage, portée, profondeur.)
-pub fn target_in_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0xb5e0);
-    !x.c.cond(7)
-}
-
-/// Variante de `target_in_box` pour la routine 0x7f0c (même convention).
-pub fn target_in_box_far(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0x7f0c);
-    !x.c.cond(7)
-}
-
 /// Choisit un joueur comme cible (0x424e) ; faux si aucun n'est vivant.
 pub fn pick_target(x: &mut Cx) -> bool {
-    x.call(0x424e);
-    !x.c.cond(7)
+    lib::pick_target(x)
 }
 
 /// L'ennemi est saisi par un joueur (0x2810).
@@ -447,27 +430,28 @@ pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
 
 /// 0x27ee : l'ennemi se détache de son hôte (`HOST`) : si l'hôte est actif et compte encore des parties
 /// (`+0x2a`), le compte diminue et le lien est effacé. D0 et A1 gardent le lien et l'hôte, comme l'original.
-fn detach_from_host(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    use crate::mem::{rd16, rd8, rts, wr16};
+pub fn detach_from_host(x: &mut Cx) {
     const PARTS: u32 = 0x2a;
-    let me = c.a[0];
-    let host = rd16(b, me + f::HOST);
-    c.d[0] = c.d[0] & 0xffff_0000 | host as u32;
+    let host = x.u16(f::HOST);
+    x.c.d[0] = x.c.d[0] & 0xffff_0000 | host as u32;
     if host != 0 {
-        c.a[1] = host as i16 as i32 as u32;
-        let parts = rd16(b, c.a[1] + PARTS);
-        if rd8(b, c.a[1]) != 0 && parts != 0 {
-            wr16(b, c.a[1] + PARTS, parts - 1);
-            wr16(b, me + f::HOST, 0);
+        x.c.a[1] = host as i16 as i32 as u32;
+        let h = Obj(x.c.a[1] & 0xff_ffff);
+        let parts = h.u16(x.b, PARTS);
+        if h.u8(x.b, 0) != 0 && parts != 0 {
+            h.set_u16(x.b, PARTS, parts - 1);
+            x.set16(f::HOST, 0);
         }
     }
-    rts(c, b);
 }
 
 pub const NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x27ee,
     name: "ennemi_detacher_hote",
-    run: detach_from_host,
+    run: |c, b| {
+        detach_from_host(&mut Cx::new(c, b));
+        crate::mem::rts(c, b);
+    },
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::a(1),
 }];

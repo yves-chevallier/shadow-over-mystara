@@ -24,7 +24,7 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x9b752 : image-clé de l'animation d'attaque (son 0xebfdc), puis fin quand l'animation est finie.
 fn finish_attack(x: &mut Cx) {
     if x.u8(f::KEY_FRAME) != 0 {
-        x.call(0xebfdc);
+        lib::sound(x, 0xebfdc);
         x.set8(f::KEY_FRAME, 0);
     }
     if x.anim_step() {
@@ -70,11 +70,8 @@ fn breath(x: &mut Cx) {
 /// 0x9bfb4 : image-clé de la morsure : saisit un joueur à portée (0xfc44, 0xfd64), sinon fin de l'animation.
 fn grab_on_key(x: &mut Cx) {
     if x.u8(f::KEY_FRAME) != 0 {
-        x.c.d[0] = 5;
-        x.call(call::GRAB_FIND);
-        if !zero(x) {
-            x.c.d[0] = 0;
-            return x.tail(call::GRAB);
+        if let Some(player) = lib::attack_hits_a_player(x, 5) {
+            return lib::seize_player(x, player, 0);
         }
     }
     if x.anim_step() {
@@ -153,17 +150,17 @@ fn second_form_strike(x: &mut Cx) {
                 return next_attack(x);
             }
             x.set8(0x79, 0x23);
-            x.call(call::ASK_TARGET);
+            lib::approach_target(x);
             if sub8(x, WALK_DELAY, 1).mi() {
-                x.call(call::FACE_TARGET);
+                lib::draw_stance(x);
                 let r = rand_and(x, 0xf);
                 if 0xffc0u32 >> r & 1 != 0 {
-                    x.call(0x424e);
+                    lib::pick_target(x);
                 } else {
-                    x.call(call::PICK_FAR);
+                    lib::random_player(x);
                 }
                 if sub8(x, WALK_STEPS, 1).eq() {
-                    x.call(call::AIM);
+                    lib::draw_6b(x);
                 }
             }
             step_anim(x);
@@ -249,13 +246,13 @@ fn charge_strike(x: &mut Cx) {
         2 => {
             rubble(x, 0, 0x201, 0x20, 0x20);
             x.set8(0x79, 0x25);
-            x.call(call::ASK_TARGET);
-            if target_in_box(x, -0x50, 0x30, 0x10) {
+            lib::approach_target(x);
+            if lib::target_in_box(x, -0x50, 0x30, 0x10) {
                 next7(x);
                 sounds(x, 0x29, 6);
                 return start(x, Set::B, 4);
             }
-            if target_in_box(x, -0x10, 0x10, 0x10) || sub16(x, TIMER, 1).mi() {
+            if lib::target_in_box(x, -0x10, 0x10, 0x10) || sub16(x, TIMER, 1).mi() {
                 return next_attack(x);
             }
             if needs_turn(x) {
@@ -296,7 +293,7 @@ fn stomp(x: &mut Cx) {
         2 => {
             rubble(x, 0, 0x201, 0x20, 0x20);
             x.set8(0x79, 0x25);
-            x.call(call::ASK_TARGET);
+            lib::approach_target(x);
             if player_within_reach(x) {
                 next7(x);
                 return start(x, Set::B, 3);
@@ -389,8 +386,7 @@ fn land(x: &mut Cx, down: bool) {
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
     }
-    x.c.d[0] = 0x1e;
-    x.call(ia::SOUND_EVENT);
+    lib::shake_54(x, 0x1e);
     x.call(if down { 0xecce6 } else { 0xecd50 });
     x.set32(0xc, 0);
     dust_line(x);

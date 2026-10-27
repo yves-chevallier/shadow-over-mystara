@@ -78,23 +78,6 @@ pub(self) const SET_HURT: u32 = 0x1727e4;
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
     pub const ANGLE_TO: u32 = 0x137e;
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const ASK_RAND_TIMER: u32 = 0x79f6;
-    pub const PLAYERS_ALIVE: u32 = 0x10474;
-    pub const AI_GESTURE: u32 = 0x1047a;
-    pub const OUTSIDE: u32 = 0x104a2;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const FACING: u32 = 0x10560;
-    pub const RANDOM_TURN: u32 = 0x10574;
-    pub const PHASE_UP: u32 = 0x105b6;
-    pub const DUST: u32 = 0x1172e;
-    pub const WIDE_BOX: u32 = 0x7ef4;
-    /// Prise d'un joueur : cherche (0xfc44), saisit (0xfd64), relâche (0xfd8c), le tient (0xfda2).
-    pub const GRAB_FIND: u32 = 0xfc44;
-    pub const GRAB: u32 = 0xfd64;
-    pub const RELEASE: u32 = 0xfd8c;
-    pub const HOLD: u32 = 0xfda2;
-    pub const LANDING: u32 = 0xec820;
 }
 
 /// Seuils de PV des phases (0x105b6).
@@ -102,11 +85,11 @@ pub(self) const THRESHOLDS: u32 = 0x10be2;
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn attack(x: &mut Cx, n: u32) {
-    play(x, SET_ATTACK, n);
+    lib::start(x, SET_ATTACK, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
@@ -126,37 +109,27 @@ pub(self) fn next7(x: &mut Cx) {
 
 /// Au moins un joueur en vie (0x10474).
 pub(self) fn alive(x: &mut Cx) -> bool {
-    x.call(call::PLAYERS_ALIVE);
-    !zero(x)
+    lib::any_player_alive(x)
 }
 
 /// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
 pub(self) fn outside(x: &mut Cx, d0: i16, d1: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    x.call(call::OUTSIDE);
-    !zero(x)
+    lib::outside_band(x, d0, d1 as i16)
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
 pub(self) fn turn_needed(x: &mut Cx) -> bool {
-    x.call(call::TURN_NEEDED);
-    !zero(x)
+    !lib::faces_target(x)
 }
 
 /// Boîte large devant le boss (0x7ef4).
 pub(self) fn in_wide_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(call::WIDE_BOX);
-    !zero(x)
+    lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// Bouffée de poussière de sorte `k` (0x1172e).
 pub(self) fn dust(x: &mut Cx, k: u32) {
-    x.c.d[5] = k;
-    x.call(call::DUST);
+    lib::debris(x, k);
 }
 
 /// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
@@ -205,7 +178,7 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x21);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.set_a5_u8(0x5a, 0);
     for a in [0x1059e, 0x19db4, 0x19e10, 0x19eb0] {
         x.call(a);
@@ -238,7 +211,7 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     body(x, 4);
-    x.call(0xe1370);
+    lib::sound(x, 0xe1370);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------
@@ -258,7 +231,7 @@ fn active(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 0 {
-        x.call(IN_ZONE);
+        lib::keep_in_zone(x);
         x.call(SHADOW);
     }
 }
@@ -429,11 +402,11 @@ pub(self) fn from_far_gesture(x: &mut Cx, g: u32) {
 
 /// 0x7c080 / 0x7c09e : cible dans la boîte et geste choisi par l'IA (0x1047a), ou rien.
 pub(self) fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
-    x.call(call::AI_GESTURE);
-    (!zero(x)).then_some(x.c.d[0])
+    let turn = lib::turn_decision(x);
+    (turn != lib::Turn::None).then_some(turn as u32)
 }
 
 /// 0x7c47c : nombre de coups de l'enchaînement, selon la difficulté et le nombre de joueurs.

@@ -66,7 +66,7 @@ fn hop_back(x: &mut Cx) {
             set_speed(x, 0x17);
             look(x, 0x20);
             x.add8(f::SUB2, 2);
-            x.call(0xec5e6);
+            lib::sound(x, 0xec5e6);
             mv(x, 0xb);
         }
         2 => {
@@ -141,11 +141,7 @@ pub(super) fn recover(x: &mut Cx) {
     let table = if x.a5_u8(0x48) > 5 { 0x109e2 } else { 0x108e2 };
     x.c.a[1] = table;
     lib::hp_threshold(x, table);
-    set_dw(x, 0, 0);
-    set_dw(x, 1, 0x38);
-    set_dw(x, 2, 0xc);
-    x.call(0xb5e0);
-    if !x.c.cond(7) {
+    if lib::target_in_box(x, 0, 0x38, 0xc) {
         return go::attack(x, 6, true);
     }
     go::fire_a(x);
@@ -159,12 +155,12 @@ fn death(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            x.call(0xe3cbe);
+            lib::sound(x, 0xe3cbe);
             x.call(0x19ad6);
-            x.call(0xb780);
-            x.call(0xbad6);
-            x.call(0xe2f6);
-            x.call(call::REMOVE);
+            lib::drop_loot(x);
+            lib::drop_special(x);
+            lib::drop_treasure(x);
+            detach_from_host(x);
             x.set16(Obj::AX, 0);
             x.set16(Obj::VZ, 0x500);
             x.set16(Obj::AZ, -0x38i16 as u16);
@@ -196,7 +192,7 @@ fn death(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set16(Obj::Z, 0);
             spark(x, 5);
-            x.call(0xec904);
+            lib::sound(x, 0xec904);
             lib::step(x);
         }
         6 => {
@@ -229,7 +225,7 @@ fn run_off(x: &mut Cx) {
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
             spark(x, 1);
-            x.call(call::DUST);
+            lib::sound(x, 0xe3d32);
             look(x, 0x40);
             mv(x, 8);
         }
@@ -239,12 +235,11 @@ fn run_off(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
-                x.c.d[0] = 0x10;
-                x.call(call::SHOCK);
-                x.call(call::DUST);
+                lib::shake_54(x, 0x10);
+                lib::sound(x, 0xe3d32);
             }
             if lib::outside(x, -0x30, 0x1b0) {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 x.free(&pools::ENEMY);
             }
         }

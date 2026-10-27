@@ -77,8 +77,6 @@ const DEAD_HOST: u32 = 0x0406_0000;
 pub(self) const FREE: u32 = 0x0600_0000;
 
 pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const PICK_TARGET: u32 = 0x424e;
     pub const EFFECT: u32 = 0xb10c8;
     pub const BURST: u32 = 0xabec8;
 }
@@ -195,10 +193,10 @@ fn init(x: &mut Cx) {
         x.set8(0x2b, 0x1c);
     }
     if kind == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
-        x.call(0x453c);
+        lib::initial_hp_boss(x);
     } else {
         if x.a5_u8(0x30) != 0 {
-            x.call(0xe1330);
+            lib::sound(x, 0xe1330);
         }
         x.call(0x19db4);
         x.call(0x19e10);
@@ -207,7 +205,7 @@ fn init(x: &mut Cx) {
         x.set_a5_u8(0x50, 1);
         x.set8(0x93, 1);
         x.set8(0x9a, 0xff);
-        x.call(0x453c);
+        lib::initial_hp_boss(x);
         x.call(0xd5f30);
         x.call(0xd6952);
     }
@@ -219,9 +217,9 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     x.set_a5_u8(0x5a, 0);
-    x.call(0x788c);
+    lib::draw_6b(x);
     x.set8(0x70, 0);
-    x.call(0xa470);
+    lib::draw_stance(x);
     x.set8(0x81, 0);
     x.set8(SHIELD, 0);
     x.set8(SPECIALS, 3);
@@ -275,7 +273,7 @@ pub(self) fn active(x: &mut Cx) {
     if x.u8(f::SUB) == 0 {
         return;
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
     x.reinsert();
 }

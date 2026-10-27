@@ -72,11 +72,7 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 }
 
 pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
     pub const BURST: u32 = 0xb10c8;
-    pub const ATTACK_START: u32 = 0xac3a;
 }
 
 /// Mot de poids faible d'un registre de données (`move.w`, `andi.w`...) : le reste du registre est conservé.
@@ -101,7 +97,7 @@ pub fn run(x: &mut Cx) {
     loop {
         x.tick_counters();
         if x.u16(f::TARGET) == 0 {
-            x.call(0x424e);
+            lib::pick_target(x);
         }
         x.c.d[0] = x.u8(f::STATE) as u32;
         let off = x.rom16(0x8803e + x.c.d[0]);
@@ -153,7 +149,7 @@ fn init(x: &mut Cx) {
         x.call(a);
     }
     x.set8(0x2e, 0x28);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x4f), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
         x.set8(off, v);
     }
@@ -207,7 +203,7 @@ fn init(x: &mut Cx) {
 
 fn active(x: &mut Cx) {
     if x.u16(f::TARGET) == 0 {
-        x.call(0x424e);
+        lib::pick_target(x);
     }
     if tst8(x, SPAWNED).eq() {
         if sub16(x, SPAWN_TIME, 1).mi() {
@@ -246,7 +242,7 @@ fn active(x: &mut Cx) {
             idle_reset(x);
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 

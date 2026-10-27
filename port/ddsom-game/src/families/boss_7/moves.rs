@@ -16,7 +16,7 @@ fn fade_out(x: &mut Cx) {
     addq8(x, f::SUB3, 2);
     x.set8(0, 2);
     key(x, 0x12);
-    x.call(call::FADE);
+    lib::sound(x, 0xecf7a);
     body(x, 4);
 }
 
@@ -26,7 +26,7 @@ fn fade_in(x: &mut Cx) {
         addq8(x, f::SUB3, 2);
         x.set_bit(0x1, 1, false);
         x.set8(0, 1);
-        x.call(call::FADE);
+        lib::sound(x, 0xecf7a);
     }
 }
 

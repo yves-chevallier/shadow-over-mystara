@@ -48,7 +48,7 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 2);
             look(x, 0x1e);
-            x.call(0xec5e6);
+            lib::sound(x, 0xec5e6);
             x.set16(Obj::VX, 0x300);
             x.set16(Obj::AX, -0x28i16 as u16);
             let flip = x.u8(0x4a) ^ 0x20;
@@ -149,7 +149,7 @@ fn run_away(x: &mut Cx) {
             x.move_by_table_xy();
             if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
-                return x.call(call::REMOVE);
+                return detach_from_host(x);
             }
             x.anim_step();
         }

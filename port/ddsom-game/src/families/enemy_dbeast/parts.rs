@@ -286,7 +286,7 @@ fn spit(x: &mut Cx) {
                 return;
             }
             step(x);
-            if !target_in_box(x, 0, 0x80, 0x20) {
+            if !lib::target_in_box(x, 0, 0x80, 0x20) {
                 return;
             }
             x.add8(0x7, 2);
@@ -316,7 +316,7 @@ fn spit_once(x: &mut Cx) {
             return;
         }
         step(x);
-        if !target_in_box(x, 0, 0x80, 0x20) {
+        if !lib::target_in_box(x, 0, 0x80, 0x20) {
             return;
         }
         x.add8(0x7, 2);
@@ -383,7 +383,7 @@ fn bound_y_start(x: &mut Cx, vy: i16, anim_marker: u8, anim: u8) {
 /// Retombée d'un bond en profondeur (0x728d4 / 0x728f0).
 pub(super) fn bound_y_wait(x: &mut Cx) {
     if x.u8(f::KEY_FRAME) != 0 {
-        x.call(0xeb9a0);
+        lib::sound(x, 0xeb9a0);
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
     }

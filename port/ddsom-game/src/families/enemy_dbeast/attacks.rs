@@ -362,7 +362,7 @@ pub(super) fn pounce_repeat(x: &mut Cx) {
         let sound = x.rom8(SOUNDS + r);
         if sound != 0 {
             set_dw(x, 0, sound as u16);
-            x.call(0xe38d2);
+            lib::sound(x, 0xe38d2);
         }
     }
     if x.anim_step() {

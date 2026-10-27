@@ -41,7 +41,7 @@ fn state7(x: &mut Cx) -> u8 {
 
 /// Fin d'une attaque : retour au combat si l'animation est finie.
 fn finish(x: &mut Cx, to: fn(&mut Cx)) {
-    if step(x) {
+    if lib::step(x) {
         if !players_alive(x) {
             return decide::wait(x);
         }
@@ -52,7 +52,7 @@ fn finish(x: &mut Cx, to: fn(&mut Cx)) {
 fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
-    play(x, SET_STRIKE, n);
+    lib::start(x, SET_STRIKE, n);
 }
 
 /// Poussière : un EFFCT 0x32 de variante `v` lié au boss, sans insister (0x2318).
@@ -89,7 +89,7 @@ pub(super) fn dust_unless_slow(x: &mut Cx) {
 }
 
 fn spark(x: &mut Cx) {
-    x.call(0xe580a);
+    lib::sound(x, 0xe580a);
 }
 
 // --- +6 = 0 -----------------------------------------------------------------------------------
@@ -101,7 +101,7 @@ fn strike_0(x: &mut Cx) {
             strike_anim(x, 0x10, 0);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 if !players_alive(x) {
                     return decide::wait(x);
                 }
@@ -125,7 +125,7 @@ fn strike_2(x: &mut Cx) {
             strike_anim(x, 0x11, 1);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 if !players_alive(x) {
                     return decide::wait(x);
                 }
@@ -151,7 +151,7 @@ fn strike_4(x: &mut Cx) {
             strike_anim(x, 0x12, 2);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if !tst8(x, f::KEY_FRAME).mi() {
                 return;
             }
@@ -162,7 +162,7 @@ fn strike_4(x: &mut Cx) {
             let (vx, vz) = if x.u8(f::FLIP) == 0 { (-0x900i16, 0x4ci16) } else { (0x900, -0x4c) };
             x.set16(0x14, vx as u16);
             x.set16(0x16, vz as u16);
-            x.call(0xece9e);
+            lib::sound(x, 0xece9e);
             x.move_x();
         }
         4 => {
@@ -173,18 +173,18 @@ fn strike_4(x: &mut Cx) {
                 return;
             }
             x.move_x();
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.set8(f::KEY_FRAME, 0);
             puff(x, 1);
-            x.call(0xe587e);
+            lib::sound(x, 0xe587e);
         }
         6 => {
             if sub16(x, TIMER, 1).le() {
                 x.add8(0x7, 2);
-                play(x, SET_STRIKE, 3);
+                lib::start(x, SET_STRIKE, 3);
             }
         }
         8 => finish(x, decide::chase),
@@ -242,7 +242,7 @@ fn leap(x: &mut Cx) {
                 x.set16(0x1a, (-0x30i16) as u16);
                 strike(x, 5);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         6 => {
@@ -250,17 +250,17 @@ fn leap(x: &mut Cx) {
             if tst16(x, 0xc).le() {
                 x.add8(0x7, 2);
                 x.set16(0xc, 0);
-                x.call(0xecc7c);
+                lib::sound(x, 0xecc7c);
                 return body(x, 0xa);
             }
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.set8(f::KEY_FRAME, 0);
             puff(x, 2);
-            x.call(0xebfdc);
-            x.call(0xe587e);
+            lib::sound(x, 0xebfdc);
+            lib::sound(x, 0xe587e);
         }
         8 => finish(x, decide::chase),
         _ => {}
@@ -283,7 +283,7 @@ fn throw(x: &mut Cx) {
             strike_anim(x, 0x15, 7);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -306,29 +306,29 @@ fn throw(x: &mut Cx) {
             let px = shot.u16(x.b, 0x8).wrapping_add(dx as u16);
             shot.set_u16(x.b, 0x8, px);
             shot.set_u16(x.b, 0xc, 0x30);
-            step(x);
+            lib::step(x);
         }
         4 => {
             if sub16(x, TIMER, 1).gt() {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            x.call(0xe59da);
-            step(x);
+            lib::sound(x, 0xe59da);
+            lib::step(x);
         }
         6 => {
             let shot = x.linked(CHILD);
             if shot.u8(x.b, 0) == 0 || shot.u8(x.b, 0x5a) != 0 {
                 return throw_end(x);
             }
-            step(x);
+            lib::step(x);
         }
         8 => {
-            if step(x) {
+            if lib::step(x) {
                 set_abs8(x, 0xff8043, 0xff);
                 if !players_alive(x) {
                     return decide::wait(x);
@@ -343,7 +343,7 @@ fn throw(x: &mut Cx) {
 /// 0x96614 : le tir a disparu (ou n'a pas pu naître) : fin du geste.
 fn throw_end(x: &mut Cx) {
     x.add8(0x7, 2);
-    play(x, SET_STRIKE, 8);
+    lib::start(x, SET_STRIKE, 8);
 }
 
 // --- +6 = 12 : souffle ----------------------------------------------------------------------------
@@ -360,7 +360,7 @@ fn breath(x: &mut Cx) {
         }
         2 => {
             x.set_a5_u16(0x51e, 4);
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -394,8 +394,8 @@ fn breath(x: &mut Cx) {
             x.set16(TIMER, 0x5a);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            x.call(0xe5a4e);
-            step(x);
+            lib::sound(x, 0xe5a4e);
+            lib::step(x);
         }
         6 => {
             x.set_a5_u16(0x51e, 4);
@@ -405,7 +405,7 @@ fn breath(x: &mut Cx) {
             x.add8(0x7, 2);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x59, 1);
-            step(x);
+            lib::step(x);
         }
         8 => {
             let shot = x.linked(CHILD);
@@ -413,10 +413,10 @@ fn breath(x: &mut Cx) {
                 return breath_end(x);
             }
             x.set_a5_u16(0x51e, 4);
-            step(x);
+            lib::step(x);
         }
         10 => {
-            if step(x) {
+            if lib::step(x) {
                 set_abs8(x, 0xff8043, 0xff);
                 if !players_alive(x) {
                     return decide::wait(x);
@@ -429,14 +429,14 @@ fn breath(x: &mut Cx) {
 }
 
 fn step_only(x: &mut Cx) {
-    step(x);
+    lib::step(x);
 }
 
 /// 0x9676c.
 fn breath_end(x: &mut Cx) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
-    play(x, SET_STRIKE, 0xa);
+    lib::start(x, SET_STRIKE, 0xa);
 }
 
 // --- +6 = 14 : cri ---------------------------------------------------------------------------------
@@ -451,7 +451,7 @@ fn roar(x: &mut Cx) {
             strike_anim(x, 0x17, 0xb);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x1e);
@@ -466,16 +466,16 @@ fn roar(x: &mut Cx) {
             set_abs8(x, 0xff8043, 0xff);
             x.set8(INVULNERABLE, 0);
             decide::spawn_by_level(x);
-            x.call(0xe5ac2);
+            lib::sound(x, 0xe5ac2);
             x.set16(TIMER, 0x3c);
-            step(x);
+            lib::step(x);
         }
         6 => {
             if sub16(x, TIMER, 1).le() {
                 x.add8(0x7, 2);
-                play(x, SET_STRIKE, 0xc);
+                lib::start(x, SET_STRIKE, 0xc);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         8 => finish(x, decide::stand),
@@ -494,7 +494,7 @@ fn final_roar(x: &mut Cx) {
             strike_anim(x, 0x18, 0xd);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
@@ -518,18 +518,18 @@ fn final_roar(x: &mut Cx) {
                 let dx: i16 = if x.u8(f::FLIP) != 0 { -5 } else { 5 };
                 e.set_u16(x.b, 0x8, px.wrapping_add(dx as u16));
             }
-            step(x);
+            lib::step(x);
         }
         6 => {
             if sub16(x, TIMER, 1).le() {
                 x.add8(0x7, 2);
-                play(x, SET_STRIKE, 0xe);
+                lib::start(x, SET_STRIKE, 0xe);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         8 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             set_abs8(x, 0xff8043, 0xff);

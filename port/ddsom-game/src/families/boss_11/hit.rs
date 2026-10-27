@@ -83,7 +83,7 @@ fn hit_a(x: &mut Cx) {
         }
         x.set16(0xc, 0);
         x.add8(f::SUB2, 2);
-        x.call(0xe4bb6);
+        lib::sound(x, 0xe4bb6);
         if x.u8(REACTION) == 0x78 {
             x.c.d[0] = 1;
             x.c.d[1] = 0;
@@ -166,7 +166,7 @@ fn generic(x: &mut Cx) {
                 return dying(x);
             }
             x.add8(f::SUB2, 2);
-            x.call(0xe4bb6);
+            lib::sound(x, 0xe4bb6);
             x.set8(0x87, 0);
             paused(x);
             let stun = x.u8(STUN);
@@ -198,9 +198,8 @@ fn generic(x: &mut Cx) {
             x.set16(0xc, 0);
             x.add8(f::SUB2, 2);
             stop(x);
-            x.c.d[0] = 8;
-            x.call(call::SOUND_B);
-            x.call(0xec892);
+            lib::shake_58(x, 8);
+            lib::sound(x, 0xec892);
             hurt(x, 2)
         }
         _ => {
@@ -221,7 +220,7 @@ fn fallen(x: &mut Cx) {
     x.set8(0x87, 0);
     x.set8(REACTION, 0);
     x.set32(0x8a, 0);
-    x.call(0xf118)
+    lib::draw_84(x)
 }
 
 /// 0x8e69e : étourdissement (code 0x4c).
@@ -243,7 +242,7 @@ fn stun(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             let v = x.u16(0x84).wrapping_sub(8);
             x.set16(0x84, v);
-            x.call(0xe4bb6);
+            lib::sound(x, 0xe4bb6);
             paused(x);
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
@@ -323,7 +322,7 @@ fn throw(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set32(0xc, 0);
             x.set32(0x18, 0);
-            x.call(0xec892);
+            lib::sound(x, 0xec892);
             if (x.u16(f::HP) as i16) > 0 {
                 return arc_end(x);
             }
@@ -473,7 +472,7 @@ fn death(x: &mut Cx) {
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x80i16) as u16);
             hurt(x, 1);
-            x.call(0xe4c20)
+            lib::sound(x, 0xe4c20)
         }
         0x8ea6e => {
             x.anim_step();
@@ -486,8 +485,7 @@ fn death(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             stop(x);
             hurt(x, 3);
-            x.c.d[0] = 8;
-            x.call(call::SOUND_B)
+            lib::shake_58(x, 8)
         }
         _ => {
             x.anim_step();

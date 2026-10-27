@@ -139,23 +139,10 @@ pub(self) mod state {
 }
 
 pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const PICK_FAR: u32 = 0x44ee;
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const AIM: u32 = 0x788c;
-    pub const AIM_DONE: u32 = 0x79ce;
-    pub const REROLL: u32 = 0xac3a;
     pub const EDGE_PAIR: u32 = 0xa4b4;
     pub const EDGE_SAME: u32 = 0xa4c2;
-    pub const GRAB_FIND: u32 = 0xfc44;
-    pub const GRAB: u32 = 0xfd64;
-    pub const RELEASE: u32 = 0xfd8c;
-    pub const HOLD: u32 = 0xfda2;
-    pub const IN_ARENA: u32 = 0xfbb0;
-    pub const BLOOD: u32 = 0xedd96;
     pub const SPLASH: u32 = 0xaaa40;
     pub const DUST: u32 = 0xb10c8;
-    pub const MESSAGE: u32 = 0x289c;
 }
 
 // --- animations --------------------------------------------------------------------------------
@@ -230,7 +217,7 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
 
 /// 0x9b30a et 0x9b384 : une cible dans la boîte, avec des coups possibles (0xa4b4 / 0xa4c2) ; le boss fonce ou attaque.
 fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
-    if !target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
+    if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
         return false;
     }
     let t = x.linked(f::TARGET);
@@ -246,7 +233,7 @@ fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
         return true;
     }
     x.set32(f::STATE, 0x0204_0000);
-    x.call(call::REROLL);
+    lib::pick_byte(x);
     attack_from_table(x, table);
     true
 }
@@ -424,7 +411,7 @@ fn init(x: &mut Cx) {
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
     x.call(0xd5ef8);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);
     }
@@ -439,8 +426,8 @@ fn init(x: &mut Cx) {
     x.set_a5_u8(0x5a, 0);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::AIM);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(RAGE, 0xff);
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x10);
@@ -482,8 +469,7 @@ fn active(x: &mut Cx) {
         x.set16(GUARD, 0xb4);
         x.set16(GUARD_TIMER, 0xf0);
     }
-    x.c.d[0] = 0x30;
-    x.call(call::IN_ARENA);
+    lib::keep_on_screen(x, 0x30);
     x.call(SHADOW);
     x.reinsert();
 }

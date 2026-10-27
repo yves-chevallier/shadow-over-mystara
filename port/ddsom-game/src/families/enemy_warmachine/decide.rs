@@ -87,11 +87,7 @@ pub(super) fn wide_decision(x: &mut Cx, gate: u32) {
 
 /// 0x78f30 : joueur dans la boîte (−0x50, 0x30, 6) puis décision d'attaque de la bibliothèque ; 0 si rien.
 pub(super) fn gate_near(x: &mut Cx) -> u32 {
-    set_dw(x, 0, -0x50i16 as u16);
-    set_dw(x, 1, 0x30);
-    set_dw(x, 2, 6);
-    x.call(0xb5e0);
-    if x.c.cond(7) {
+    if !lib::target_in_box(x, -0x50, 0x30, 6) {
         return 0;
     }
     lib::ai_gate(x)
@@ -106,15 +102,8 @@ pub(super) fn gate_wide(x: &mut Cx) -> u32 {
         x.c.d[0] = 0;
         return 0;
     }
-    set_dw(x, 0, -0xe0i16 as u16);
-    set_dw(x, 1, 0x40);
-    set_dw(x, 2, 0xc);
-    if x.u8(GROUP) != 0 {
-        set_dw(x, 1, 0x60);
-        set_dw(x, 2, 8);
-    }
-    x.call(0xb5e0);
-    if x.c.cond(7) {
+    let (half_w, half_d) = if x.u8(GROUP) != 0 { (0x60, 8) } else { (0x40, 0xc) };
+    if !lib::target_in_box(x, -0xe0, half_w, half_d) {
         x.c.d[0] = 0;
         return 0;
     }

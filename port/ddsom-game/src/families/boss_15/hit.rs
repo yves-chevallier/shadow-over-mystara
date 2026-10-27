@@ -10,7 +10,7 @@ use crate::objects::Courant;
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::SUB) == 0 {
         if x.u8(TYPE) == TYPE_BIG {
-            x.call(0xb648);
+            lib::drop_once(x);
         }
         if (x.u16(f::HP) as i16) <= 0 {
             x.set8(f::SUB, 6);
@@ -59,7 +59,7 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x929c4 : réaction au coup (la table 0x929da n'a qu'une routine, 0x92a82).
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0x10112);
+        lib::set_68(x);
     }
     if x.u8(f::SUB2) == 0 {
         x.set_a5_u16(0x51e, 0);
@@ -183,7 +183,7 @@ fn get_up(x: &mut Cx) {
 fn death(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            x.call(0xe5416);
+            lib::sound(x, 0xe5416);
             x.set_a5_u8(0x42, 1);
             x.set_a5_u8(0x50, 0);
             crate::mem::wr16(x.b, 0xff2a84, 0x0f00);

@@ -40,7 +40,7 @@ fn watch(x: &mut Cx) {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 1);
         speed(x, 0x11);
-        x.call(0xa470);
+        lib::draw_stance(x);
         return rest(x);
     }
     x.anim_step();
@@ -48,9 +48,9 @@ fn watch(x: &mut Cx) {
         return wander(x);
     }
     if !sub8(x, WALK_DELAY, 1).gt() {
-        x.call(0xa470);
+        lib::draw_stance(x);
         if !sub8(x, WALK_STEPS, 1).pl() {
-            x.call(0x788c);
+            lib::draw_6b(x);
         }
     }
     if special_due(x) {
@@ -81,7 +81,7 @@ fn far_from_center(x: &mut Cx) -> bool {
 
 /// Un joueur est-il dans la boîte `(d0, d1, d2)` devant le dragon ?
 fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    target_in_box(x, d0, d1, d2)
+    lib::target_in_box(x, d0, d1, d2)
 }
 
 /// 0x919b0 : numéro (0 à 3) du quart de PV restant, d'après `+0x62` rapporté à `+0x60`.
@@ -117,8 +117,7 @@ fn far_roll(x: &mut Cx) -> bool {
         return false;
     }
     x.c.d[0] = 2;
-    x.call(call::PICK_FAR);
-    !zero(x)
+    lib::pick_target_any(x)
 }
 
 /// 0x91a68 : une riposte spéciale est-elle due ? Les PV passent sous `SPECIALS` quarts de `+0x60` : le dragon lance
@@ -179,9 +178,8 @@ pub(super) fn steer(x: &mut Cx) {
     }
     let mut y = x.a5_u16(var::SCROLL_Y).wrapping_add(0x60);
     x.c.d[0] = y as u32 | (x.c.d[0] & 0xffff_0000);
-    x.call(call::PICK_FAR);
-    if !zero(x) {
-        y = Obj(x.c.a[1]).u16(x.b, 0x10);
+    if lib::pick_target_any(x) {
+        y = x.linked(f::TARGET).u16(x.b, Obj::Y);
     }
     let d = y.wrapping_sub(x.u16(0x10)) as i16;
     if d != 0 {

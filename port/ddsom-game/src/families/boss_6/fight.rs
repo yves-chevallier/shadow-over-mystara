@@ -19,17 +19,6 @@ use crate::objects::Obj;
 const WALK_SIDEWAYS: u32 = 0x177992;
 const WALK_FORWARD: u32 = 0x177a36;
 
-mod lib {
-    pub const FACING: u32 = 0x10560;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RANDOM_TURN: u32 = 0x10574;
-    pub const TARGET_BOX_FAR: u32 = 0x7ef4;
-    pub const OFF_SCREEN: u32 = 0x104a2;
-    pub const SOUND_SHAKE: u32 = 0x2824;
-}
-
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => idle(x),
@@ -47,21 +36,16 @@ fn players_alive(x: &mut Cx) -> bool {
 }
 
 fn needs_turn(x: &mut Cx) -> bool {
-    x.call(lib::TURN_NEEDED);
-    !zero(x)
+    !lib::faces_target(x)
 }
 
 fn facing_forward(x: &mut Cx) -> bool {
-    x.call(lib::FACING);
-    zero(x)
+    lib::moves_forward(x)
 }
 
 /// Le boss est-il hors de la fenêtre `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
 fn off_screen(x: &mut Cx) -> bool {
-    set_dw(x, 0, (-0x50i16) as u16);
-    set_dw(x, 1, 0x1d0);
-    x.call(lib::OFF_SCREEN);
-    x.c.d[0] & 0xff != 0
+    lib::outside_band(x, -0x50, 0x1d0)
 }
 
 fn walk_anim(x: &mut Cx) {
@@ -71,8 +55,7 @@ fn walk_anim(x: &mut Cx) {
 
 fn walk_select(x: &mut Cx) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
-    x.c.a[4] = set;
-    x.call(ai::SELECT);
+    lib::switch_keeping_time(x, set);
 }
 
 // --- +6 = 0 -----------------------------------------------------------------------------------
@@ -83,7 +66,7 @@ fn idle(x: &mut Cx) {
     }
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
-        x.call(lib::RAND_TIMER);
+        lib::draw_6e(x);
         x.set8(ANIM_KIND, 0);
         if x.u8(ANIM_LAST) != 0 {
             x.set8(ANIM_LAST, 0);
@@ -100,7 +83,7 @@ fn idle(x: &mut Cx) {
     if needs_turn(x) {
         return decide::interrupt(x);
     }
-    step(x);
+    lib::step(x);
 }
 
 // --- +6 = 2 -----------------------------------------------------------------------------------
@@ -113,7 +96,7 @@ fn turn(x: &mut Cx) {
         x.set8(ANIM_KIND, 1);
         return body(x, 1);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
     if !players_alive(x) {
@@ -153,7 +136,7 @@ fn walk(x: &mut Cx, slow: bool) {
     if !pick_target(x) {
         return decide::wait(x);
     }
-    x.call(lib::ASK_TARGET);
+    lib::approach_target(x);
     speed(x, 0xd);
     let last = x.u8(ANIM_LAST);
     let kind = x.u8(ANIM_KIND);
@@ -170,7 +153,7 @@ fn keep_walking(x: &mut Cx) {
         if sub8(x, WALK_STEPS, 1).le() {
             return decide::chase_b(x);
         }
-        x.call(lib::ASK_TARGET);
+        lib::approach_target(x);
         speed(x, 0xd);
         if x.u8(ANIM_KIND) == 3 {
             decide::walk_delay_slow(x);
@@ -192,14 +175,10 @@ fn keep_walking(x: &mut Cx) {
     if side != 0 {
         return decide::choose_far(x, side);
     }
-    if target_in_box(x, -0x19, 0x18, 0xe) {
+    if lib::target_in_box(x, -0x19, 0x18, 0xe) {
         return decide::choose_front(x);
     }
-    set_dw(x, 0, (-0x80i16) as u16);
-    set_dw(x, 1, 0x10);
-    set_dw(x, 2, 8);
-    x.call(lib::TARGET_BOX_FAR);
-    if !zero(x) {
+    if lib::guard_in_front(x, -0x80, 0x10, 8) {
         return decide::choose_close(x);
     }
     if needs_turn(x) {
@@ -208,7 +187,7 @@ fn keep_walking(x: &mut Cx) {
     if !tst8(x, f::KEY_FRAME).mi() {
         x.move_by_table_xy();
     }
-    step(x);
+    lib::step(x);
 }
 
 // --- +6 = 8 : charge ----------------------------------------------------------------------------
@@ -241,7 +220,7 @@ fn charge(x: &mut Cx) {
             body(x, 4);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 2 {
                 x.move_x();
                 let going_left = (x.u16(0x14) as i16) < 0;
@@ -259,18 +238,15 @@ fn charge(x: &mut Cx) {
             }
             if x.u8(f::KEY_FRAME) == 3 {
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xecdba);
-                x.c.d[5] = 4;
-                x.call(call::DUST);
-                x.c.d[0] = 0xa;
-                x.call(lib::SOUND_SHAKE);
+                lib::sound(x, 0xecdba);
+                lib::debris(x, 4);
+                lib::shake_54(x, 0xa);
             }
         }
         4 => {
             if !sub16(x, COUNT, 1).gt() {
                 x.set16(COUNT, 4);
-                x.c.d[5] = 3;
-                x.call(call::DUST);
+                lib::debris(x, 3);
             }
             if sub16(x, TIMER, 1).le() {
                 if !players_alive(x) {
@@ -294,10 +270,9 @@ fn charge_end(x: &mut Cx) {
         brake = -brake;
     }
     x.set16(0x16, brake as u16);
-    x.c.d[0] = 0x14;
-    x.call(lib::SOUND_SHAKE);
-    x.call(0xec976);
-    x.call(0xecdba);
+    lib::shake_54(x, 0x14);
+    lib::sound(x, 0xec976);
+    lib::sound(x, 0xecdba);
     body(x, 5);
 }
 
@@ -312,7 +287,7 @@ fn shoot(x: &mut Cx) {
             body(x, 6);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
@@ -329,7 +304,7 @@ fn shoot(x: &mut Cx) {
             let (angle, vz) = if side == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
-            x.call(lib::RANDOM_TURN);
+            lib::drift_heading(x);
             speed(x, 0x35);
             x.set16(0x18, 0x300);
             x.set16(0x1a, (-0x40i16) as u16);
@@ -361,21 +336,20 @@ fn shoot(x: &mut Cx) {
         8 => {
             if !sub16(x, COUNT, 1).gt() {
                 x.set16(COUNT, 4);
-                x.c.d[5] = 3;
-                x.call(call::DUST);
+                lib::debris(x, 3);
             }
             if sub16(x, TIMER, 1).le() {
                 return resume(x);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }
 }
 
 fn step_only(x: &mut Cx) {
-    step(x);
+    lib::step(x);
 }
 
 /// 0x84ad0 : fin du tir : retour à la marche.

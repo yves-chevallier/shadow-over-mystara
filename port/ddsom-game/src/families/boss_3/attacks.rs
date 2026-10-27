@@ -42,7 +42,7 @@ fn swing(x: &mut Cx, n: u32) {
     x.set8(0x45, 0x10);
     stop(x);
     attack_anim(x, n);
-    x.call(call::CRY);
+    lib::sound(x, 0xebfdc);
 }
 
 /// Pas en avant aux images-clés (`+0x33`) : décalage lu dans la table `table` (relative au PC), vers l'avant.
@@ -69,7 +69,7 @@ fn claw(x: &mut Cx) {
     if x.u8(0x7) == 0 {
         return swing(x, 3);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return key_step(x, 0x7fdea, true);
     }
     after_attack(x)
@@ -80,7 +80,7 @@ fn short_claw(x: &mut Cx) {
     if x.u8(0x7) == 0 {
         return swing(x, 4);
     }
-    if step(x) {
+    if lib::step(x) {
         after_attack(x)
     }
 }
@@ -90,17 +90,17 @@ fn double_claw(x: &mut Cx) {
     match x.u8(0x7) {
         0 => swing(x, 3),
         2 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return key_step(x, 0x7fdea, true);
             }
             next7(x);
             x.set8(0x44, 0);
             x.set8(0x45, 0x10);
             attack_anim(x, 9);
-            x.call(call::CRY);
+            lib::sound(x, 0xebfdc);
         }
         _ => {
-            if step(x) {
+            if lib::step(x) {
                 return after_attack(x);
             }
             key_step(x, 0x7fdbc, false)
@@ -120,7 +120,7 @@ fn leap(x: &mut Cx) {
             attack_anim(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.bit(f::KEY_FRAME, 0) {
                 return;
             }
@@ -139,7 +139,7 @@ fn leap(x: &mut Cx) {
         }
         4 => {
             x.set8(INVULNERABLE, 1);
-            step(x);
+            lib::step(x);
             if x.bit(f::KEY_FRAME, 0) {
                 x.move_z();
                 if (x.u16(0x18) as i16) <= 0 {
@@ -161,7 +161,7 @@ fn leap(x: &mut Cx) {
             x.set16(0x16, vz);
         }
         6 => {
-            step(x);
+            lib::step(x);
             x.move_xyz();
             if (x.u16(0xc) as i16) > 0 {
                 return;
@@ -178,7 +178,7 @@ fn leap(x: &mut Cx) {
         }
         _ => {
             x.move_xy();
-            if step(x) {
+            if lib::step(x) {
                 after_attack(x)
             }
         }
@@ -203,24 +203,24 @@ fn cries(x: &mut Cx) {
                 x.set8(TIMER, 1);
                 attack_anim(x, 8);
             }
-            step(x);
+            lib::step(x);
             if !marked_key(x) || sub8(x, TIMER, 1).gt() {
                 return;
             }
             x.call(0xb3e4e);
             next7(x);
             x.set8(TIMER, 4);
-            x.call(call::CRY_B);
+            lib::sound(x, 0xedb82);
         }
         _ => {
             push_players(x, 1);
-            step(x);
+            lib::step(x);
             if !marked_key(x) {
                 return;
             }
             x.call(0xb3e4e);
             if sub8(x, TIMER, 1).gt() {
-                return x.call(call::CRY_B);
+                return lib::sound(x, 0xedb82);
             }
             after_attack(x)
         }
@@ -286,7 +286,7 @@ fn skim(x: &mut Cx) {
             attack_anim(x, 5);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
@@ -299,7 +299,7 @@ fn skim(x: &mut Cx) {
             }
             match x.u8(DIVE) {
                 0 => {
-                    step(x);
+                    lib::step(x);
                     x.move_xy();
                     no_drift_when_fast(x);
                     if nearest_player_dx(x) as i16 >= 0x30 {
@@ -309,7 +309,7 @@ fn skim(x: &mut Cx) {
                     attack_anim(x, 6);
                 }
                 2 => {
-                    step(x);
+                    lib::step(x);
                     x.move_xy();
                     no_drift_when_fast(x);
                     if !x.bit(0x57, 2) {
@@ -327,7 +327,7 @@ fn skim(x: &mut Cx) {
                     x.set16(0x1a, (-0x40i16) as u16);
                 }
                 _ => {
-                    step(x);
+                    lib::step(x);
                     x.move_xz();
                     if (x.u16(0xc) as i16) >= 0 {
                         return;
@@ -339,7 +339,7 @@ fn skim(x: &mut Cx) {
         }
         _ => {
             x.move_xz();
-            if step(x) {
+            if lib::step(x) {
                 after_attack(x)
             }
         }
@@ -383,7 +383,7 @@ fn rush(x: &mut Cx) {
                 body_anim(x, 1);
             }
             x.set8(HOVER, 0);
-            step(x);
+            lib::step(x);
             x.set8(INVULNERABLE, 1);
             let d = 0x50u16.wrapping_sub(x.u16(0xc));
             set_dw(x, 1, d);
@@ -405,7 +405,7 @@ fn rush(x: &mut Cx) {
         4 => {
             if sub8(x, TIMER, 1).gt() {
                 x.set8(HOVER, 0);
-                step(x);
+                lib::step(x);
                 return;
             }
             next7(x);
@@ -425,7 +425,7 @@ fn rush(x: &mut Cx) {
             attack_anim(x, 0xa);
         }
         6 => {
-            step(x);
+            lib::step(x);
             x.move_xyz();
             cap_speed(x);
             if (x.u16(0xc) as i16) > 8 {
@@ -438,7 +438,7 @@ fn rush(x: &mut Cx) {
             attack_anim(x, 0xb);
         }
         _ => {
-            step(x);
+            lib::step(x);
             x.move_xyz();
             cap_speed(x);
             if sub8(x, TIMER, 1).gt() {
@@ -460,7 +460,7 @@ fn cry(x: &mut Cx) {
                 attack_anim(x, 0xc);
             }
             x.move_z();
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
@@ -468,7 +468,7 @@ fn cry(x: &mut Cx) {
             attack_anim(x, 0xd);
         }
         _ => {
-            if step(x) {
+            if lib::step(x) {
                 return after_attack(x);
             }
             if x.u8(f::KEY_FRAME) == 0 {
@@ -476,7 +476,7 @@ fn cry(x: &mut Cx) {
             }
             x.set8(f::KEY_FRAME, 0);
             x.call(0xa2d22);
-            x.call(0xedbf4);
+            lib::sound(x, 0xedbf4);
         }
     }
 }
@@ -484,7 +484,7 @@ fn cry(x: &mut Cx) {
 /// 0x804b0 : cri (0xb3ec6, 0xedb82).
 fn shriek(x: &mut Cx) {
     x.call(0xb3ec6);
-    x.call(call::CRY_B);
+    lib::sound(x, 0xedb82);
 }
 
 /// 0x803aa : vol de côté à hauteur 0x60 vers le milieu de l'écran (corps de côté : il écarte les joueurs).
@@ -540,7 +540,7 @@ fn side_flight(x: &mut Cx) {
             set_dw(x, 0, d);
             x.add16(0x8, d);
             push_players(x, 2);
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -579,14 +579,11 @@ fn height_over_camera(x: &mut Cx) -> i16 {
 
 /// 0x8069a : un joueur à portée est saisi (0xfc44, 0xfd64 : groupe 12) ; vrai si saisi.
 fn try_grab(x: &mut Cx) -> bool {
-    x.c.d[0] = 1;
-    x.call(call::GRAB_FIND);
-    if zero(x) {
+    let Some(player) = lib::attack_hits_a_player(x, 1) else {
         x.c.d[0] = 0;
         return false;
-    }
-    x.c.d[0] = 2;
-    x.call(call::GRAB);
+    };
+    lib::seize_player(x, player, 2);
     x.c.d[0] = 1;
     true
 }
@@ -651,7 +648,7 @@ fn abduction(x: &mut Cx) {
             x.set16(0x18, (-0x800i16) as u16);
             x.set16(0x1a, 0x20);
             attack_anim(x, 0x11);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
         }
         6 => {
             if try_grab(x) {

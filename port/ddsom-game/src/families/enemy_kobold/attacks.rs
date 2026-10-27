@@ -427,7 +427,7 @@ pub(super) fn breath_tick(x: &mut Cx) {
         let r = rand_and(x, 0xf);
         let flag = x.rom8(0x55e50 + r);
         if flag != 0 {
-            x.call(0xe327a);
+            lib::sound(x, 0xe327a);
         }
     }
     if !x.anim_step() {

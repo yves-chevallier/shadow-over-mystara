@@ -355,7 +355,7 @@ fn swing_step(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB, 2);
-            x.call(0xede08);
+            lib::sound(x, 0xede08);
             x.set16(0x1c, 0);
             x.set16(0x1e, 0);
             x.set16(0x18, (-0x180i16) as u16);
@@ -478,7 +478,7 @@ fn rise_step(x: &mut Cx) {
             x.set32(OFFSET_X, 0);
             x.set32(0xb6, 0);
             x.set32(OFFSET_Y, 0);
-            x.call(0xe56a6);
+            lib::sound(x, 0xe56a6);
             x.set16(SCRIPT_LEFT, 0);
             body(x, 6);
         }
@@ -502,7 +502,7 @@ fn rise_step(x: &mut Cx) {
                 return finale(x);
             }
             x.call(0xa6e6a);
-            x.call(0xe4cfe);
+            lib::sound(x, 0xe4cfe);
             rise_script_two(x);
         }
         6 => rise_script_two(x),

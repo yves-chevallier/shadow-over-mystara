@@ -76,33 +76,20 @@ pub(self) const SET_HURT: u32 = 0x1755ae;
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-    pub const PLAYERS_ALIVE: u32 = 0x10474;
-    pub const OUTSIDE: u32 = 0x104a2;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const FACING: u32 = 0x10560;
-    pub const RANDOM_TURN: u32 = 0x10574;
-    pub const SELECT: u32 = 0x103e0;
     /// Bouffées de poussière (`D5` = sorte, 0x1172e) et battement d'ailes (`D0` = côté, 0x11a36).
     pub const DUST: u32 = 0x1172e;
     pub const WING: u32 = 0x11a36;
-    /// Souffle du vent des ailes sur les joueurs proches.
-    pub const GUST: u32 = 0x115e2;
     /// Oscillation verticale en vol (`boss_common`).
     pub const BOB: u32 = 0x833b6;
-    pub const ROAR: u32 = 0xe3f76;
 }
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn air(x: &mut Cx, n: u32) {
-    play(x, SET_AIR, n);
+    lib::start(x, SET_AIR, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
@@ -124,8 +111,7 @@ pub(self) fn expired(x: &mut Cx, off: u32) -> bool {
 
 /// Au moins un joueur en vie (0x10474).
 pub(self) fn alive(x: &mut Cx) -> bool {
-    x.call(call::PLAYERS_ALIVE);
-    !zero(x)
+    lib::any_player_alive(x)
 }
 
 /// Le double `off` (`movea.w (off,A0),A1`).
@@ -197,7 +183,7 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x24);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.set_a5_u8(0x5a, 0);
     for a in [0x1059e, 0x19e10, 0x19db4, 0x19eb0] {
         x.call(a);
@@ -237,12 +223,12 @@ fn init(x: &mut Cx) {
     if x.a5_u8(0x30) != 0 {
         x.c.d[0] = 0;
         body(x, 0);
-        x.call(0xe1330);
+        lib::sound(x, 0xe1330);
     } else {
         x.set8(0, 1);
         x.set_bit(0x1, 1, false);
         decide::wait(x);
-        x.call(rom::IMMUNITIES);
+        lib::set_immunities(x);
         x.c.d[0] = 0;
         body(x, 0);
     }
@@ -291,7 +277,7 @@ fn active(x: &mut Cx) {
             _ => hit::resume(x),
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 

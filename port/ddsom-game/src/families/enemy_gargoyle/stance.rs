@@ -79,7 +79,7 @@ fn pursue(x: &mut Cx) {
     }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.call(0x79f6);
+        lib::draw_6e(x);
         x.c.d[0] &= !0xff;
         x.set8(LOOK, 0);
         if x.u8(LOOK_PREV) != 0 {
@@ -158,7 +158,7 @@ fn begin_glide(x: &mut Cx) {
     if !pick_target(x) {
         return go::retire(x);
     }
-    x.call(call::FLAP);
+    lib::approach_target(x);
     set_speed(x, 0xd);
     let prev = x.u8(LOOK_PREV);
     let look = x.u8(LOOK);
@@ -180,7 +180,7 @@ fn glide_step(x: &mut Cx) {
         if (w as i8) <= 0 {
             return go::wander_far(x);
         }
-        x.call(call::FLAP);
+        lib::approach_target(x);
         set_speed(x, 0xd);
         if x.u8(LOOK) == 3 {
             charge_b(x);
@@ -202,7 +202,7 @@ fn glide_step(x: &mut Cx) {
             return pick_a2(x, close);
         }
     }
-    if target_in_box(x, -0x10, 0x14, 8) {
+    if lib::target_in_box(x, -0x10, 0x14, 8) {
         return pick_a(x);
     }
     if !lib::facing_target(x) {
@@ -216,7 +216,7 @@ fn glide_step(x: &mut Cx) {
 
 /// 0x656f8 / 0x65716 : un joueur dans la boîte, puis la décision de l'IA (0, 1 ou 2).
 fn near_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u32 {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
     lib::ai_gate(x)
@@ -312,7 +312,7 @@ fn plunge(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.call(0xe3776);
+            lib::sound(x, 0xe3776);
             fly(x, 5);
         }
         6 => {

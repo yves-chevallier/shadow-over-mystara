@@ -38,9 +38,6 @@ mod tentacle {
     const MID: (u32, u32) = (0x17dbba, 0x1824de);
     const DISPLACER_BEAST: u8 = 0x13;
     const TROLL: u8 = 0xe;
-    /// Sons et effets.
-    const SFX_STRIKE: u32 = 0xe4e5a;
-    const SFX_TROLL_STRIKE: u32 = 0xe50fe;
 
     pub fn run(x: &mut Cx) {
         if suspended(x) {
@@ -94,7 +91,7 @@ mod tentacle {
         x.set8(f::SUB, 0);
         x.set16(f::SUB2, 0);
         follow(x);
-        x.call(rom::IMMUNITIES);
+        lib::set_immunities(x);
         let n = if x.u8(0x3) != 0 { 3 } else { 2 };
         start(x, BODY, n);
     }
@@ -218,9 +215,9 @@ mod tentacle {
         x.set8(0x33, 0);
         x.c.a[1] = x.u16(f::HOST) as i16 as i32 as u32;
         if x.u8(2) == TROLL {
-            x.call(SFX_TROLL_STRIKE);
+            lib::sound(x, 0xe50fe);
         } else {
-            x.call(SFX_STRIKE);
+            lib::sound(x, 0xe4e5a);
         }
     }
 
@@ -266,7 +263,7 @@ mod tentacle {
                 x.set16(0xa4, 0x168);
                 start(x, MID, 2);
                 if x.a5_u8(0x30) != 0 {
-                    x.call(0xe525a);
+                    lib::sound(x, 0xe525a);
                 }
             }
             4 => {
@@ -318,8 +315,8 @@ mod tentacle {
                 x.set16(0xa4, 0x168);
                 start(x, MID, 10);
                 x.call(0x9eede);
-                x.call(0xe4fb6);
-                x.call(SFX_STRIKE);
+                lib::sound(x, 0xe4fb6);
+                lib::sound(x, 0xe4e5a);
             }
             4 => {
                 let n = (x.u16(0xa4) as i16).wrapping_sub(1);

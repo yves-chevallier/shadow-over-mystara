@@ -65,11 +65,11 @@ fn strike_0(x: &mut Cx) {
             strike_anim(x, 0x10, 0);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 return finish(x, decide::chase);
             }
             if take_key(x) {
-                x.call(0xe580a);
+                lib::sound(x, 0xe580a);
             }
         }
         _ => {}
@@ -85,12 +85,12 @@ fn strike_2(x: &mut Cx) {
             strike_anim(x, 0x11, 1);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 return finish(x, decide::chase);
             }
             if take_key(x) {
                 puff(x, 0);
-                x.call(0xe580a);
+                lib::sound(x, 0xe580a);
             }
         }
         _ => {}
@@ -106,7 +106,7 @@ fn strike_4(x: &mut Cx) {
             strike_anim(x, 0x12, 2);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if (x.u8(f::KEY_FRAME) as i8) >= 0 {
                 return;
             }
@@ -121,7 +121,7 @@ fn strike_4(x: &mut Cx) {
             }
             x.set16(0x14, vx as u16);
             x.set16(0x16, vz as u16);
-            x.call(0xecdba);
+            lib::sound(x, 0xecdba);
             x.move_x();
         }
         4 => {
@@ -132,10 +132,10 @@ fn strike_4(x: &mut Cx) {
                 return;
             }
             x.move_x();
-            step(x);
+            lib::step(x);
             if take_key(x) {
                 puff(x, 1);
-                x.call(0xe587e);
+                lib::sound(x, 0xe587e);
             }
         }
         6 => {
@@ -146,7 +146,7 @@ fn strike_4(x: &mut Cx) {
             strike(x, 3);
         }
         8 => {
-            if step(x) {
+            if lib::step(x) {
                 finish(x, decide::chase);
             }
         }
@@ -196,7 +196,7 @@ fn leap(x: &mut Cx) {
             body(x, 5);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
@@ -213,7 +213,7 @@ fn leap(x: &mut Cx) {
                 x.set16(0x1a, (-0x30i16) as u16);
                 strike(x, 5);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         6 => {
@@ -224,14 +224,14 @@ fn leap(x: &mut Cx) {
                 body(x, 0xa);
                 return;
             }
-            step(x);
+            lib::step(x);
             if take_key(x) {
                 puff(x, 2);
-                x.call(0xe587e);
+                lib::sound(x, 0xe587e);
             }
         }
         8 => {
-            if step(x) {
+            if lib::step(x) {
                 finish(x, decide::chase);
             }
         }
@@ -255,7 +255,7 @@ fn beam(x: &mut Cx) {
             strike_anim(x, 0x15, 7);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -278,7 +278,7 @@ fn beam(x: &mut Cx) {
             let px = shot.u16(x.b, 0x8).wrapping_add(dx as u16);
             shot.set_u16(x.b, 0x8, px);
             shot.set_u16(x.b, 0xc, 0x30);
-            step(x);
+            lib::step(x);
         }
         4 => {
             if !sub16(x, TIMER, 1).gt() {
@@ -287,19 +287,19 @@ fn beam(x: &mut Cx) {
                 x.set16(TIMER, 0xa);
                 let shot = x.linked(CHILD);
                 shot.set_u8(x.b, 0x58, 1);
-                x.call(0xe59da);
+                lib::sound(x, 0xe59da);
             }
-            step(x);
+            lib::step(x);
         }
         6 => {
             let shot = x.linked(CHILD);
             if shot.u8(x.b, 0x5a) != 0 {
                 return beam_end_anim(x);
             }
-            step(x);
+            lib::step(x);
         }
         8 => {
-            if step(x) {
+            if lib::step(x) {
                 set_abs8(x, 0xff8043, 0xff);
                 finish(x, decide::chase);
             }
@@ -327,7 +327,7 @@ fn cinematic_shot(x: &mut Cx) {
         }
         2 => {
             x.set_a5_u16(0x51e, 4);
-            step(x);
+            lib::step(x);
             if !take_key_keep(x) {
                 return;
             }
@@ -361,7 +361,7 @@ fn cinematic_shot(x: &mut Cx) {
             x.set16(TIMER, 0x5a);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            x.call(0xe5a4e);
+            lib::sound(x, 0xe5a4e);
             step_only(x);
         }
         6 => {
@@ -383,7 +383,7 @@ fn cinematic_shot(x: &mut Cx) {
             step_only(x);
         }
         10 => {
-            if step(x) {
+            if lib::step(x) {
                 set_abs8(x, 0xff8043, 0xff);
                 finish(x, decide::stand);
             }
@@ -393,7 +393,7 @@ fn cinematic_shot(x: &mut Cx) {
 }
 
 fn step_only(x: &mut Cx) {
-    step(x);
+    lib::step(x);
 }
 
 /// La clé est levée ? (sans la consommer ici : l'original la consomme plus loin).
@@ -418,7 +418,7 @@ fn summon(x: &mut Cx) {
             strike_anim(x, 0x17, 0xb);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x1e);
@@ -432,7 +432,7 @@ fn summon(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set8(INVULNERABLE, 0);
             decide::spawn_by_level(x);
-            x.call(0xe5ac2);
+            lib::sound(x, 0xe5ac2);
             x.set16(TIMER, 0x3c);
             step_only(x);
         }
@@ -444,7 +444,7 @@ fn summon(x: &mut Cx) {
             strike(x, 0xc);
         }
         8 => {
-            if step(x) {
+            if lib::step(x) {
                 finish(x, decide::stand);
             }
         }
@@ -462,7 +462,7 @@ fn whirl(x: &mut Cx) {
             strike_anim(x, 0x18, 0xd);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
@@ -489,7 +489,7 @@ fn whirl(x: &mut Cx) {
                     e.set_u16(x.b, 0x8, nx);
                 }
             }
-            step(x);
+            lib::step(x);
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
@@ -499,7 +499,7 @@ fn whirl(x: &mut Cx) {
             strike(x, 0xe);
         }
         8 => {
-            if step(x) {
+            if lib::step(x) {
                 x.set8(0, 1);
                 x.set8(SLOW_TICK, 0);
                 decide::pick_slow_time(x);

@@ -54,16 +54,6 @@ const CLOSE_ATTACKS: u32 = 0x60d38;
 const FAR_ATTACKS: u32 = 0x60f38;
 const FALLBACK_MOVES: u32 = 0x61164;
 
-mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const WALK_ASIDE: u32 = 0xeff2;
-    pub const REMOVE: u32 = 0x27ee;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -171,7 +161,7 @@ fn decision(x: &mut Cx) -> bool {
 
 /// 0x5fe22 / 0x5fe70 : un joueur dans la boîte et la décision l'accepte ; l'attaque est alors choisie.
 fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bool {
-    let ok = target_in_box(x, d0, d1, d2) && decision(x);
+    let ok = lib::target_in_box(x, d0, d1, d2) && decision(x);
     if ok {
         set_state_long(x, 0x0204_0000);
         pick_attack(x, table, bias);
@@ -232,8 +222,8 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0, 2);
     x.set8(f::BOX_SET, 0x11);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     for (off, v) in [
         (0x68, 2),
         (0x69, 2),

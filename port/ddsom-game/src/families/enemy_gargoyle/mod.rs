@@ -60,12 +60,6 @@ pub(self) const SET_STRIKE: u32 = 0x162eee;
 pub(self) const SET_FLY_AGAINST: u32 = 0x163014;
 pub(self) const SET_FLY_ALONG: u32 = 0x163098;
 
-mod call {
-    pub const REMOVE: u32 = 0x27ee;
-    pub const SPAWN_EFFECT: u32 = 0x1172e;
-    pub const FLAP: u32 = 0xe76c;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -113,8 +107,7 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 
 /// Éclat de décor (0x1172e) au point d'impact `d5`.
 pub(self) fn spark(x: &mut Cx, d5: u32) {
-    x.c.d[5] = d5;
-    x.call(call::SPAWN_EFFECT);
+    lib::debris(x, d5);
 }
 
 pub(self) fn camera_x(x: &mut Cx) -> u16 {
@@ -246,7 +239,7 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x14);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     lib::init_hp_rank(x);
     x.set8(0, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);

@@ -37,14 +37,14 @@ fn enter(x: &mut Cx) {
 
 /// +6 = 2 : montée du bond.
 fn rise(x: &mut Cx) {
-    step(x);
+    lib::step(x);
     if x.u8(f::KEY_FRAME) != 0 {
         return;
     }
     x.move_xz();
     if cmp16(x, 0x18, 0x100).le() {
         x.add8(f::SUB2, 2);
-        x.call(0xe13f0);
+        lib::sound(x, 0xe13f0);
         fly(x, 8);
     }
 }
@@ -69,9 +69,8 @@ fn land(x: &mut Cx) {
     x.set16(TIMER, 0x12);
     x.set16(COUNT, 0);
     x.set16(0x16, 0x48);
-    x.c.d[0] = 0x1e;
-    x.call(0x2860);
-    x.call(0xecc0a);
+    lib::shake_58(x, 0x1e);
+    lib::sound(x, 0xecc0a);
     fly(x, 0xa);
 }
 
@@ -79,8 +78,7 @@ fn land(x: &mut Cx) {
 fn roar_wait(x: &mut Cx) {
     if !sub16(x, COUNT, 1).gt() {
         x.set16(COUNT, 4);
-        x.c.d[5] = 3;
-        x.call(call::DUST);
+        lib::debris(x, 3);
     }
     if sub16(x, TIMER, 1).le() {
         x.add8(f::SUB2, 2);
@@ -88,21 +86,21 @@ fn roar_wait(x: &mut Cx) {
         return;
     }
     x.move_x();
-    step(x);
+    lib::step(x);
 }
 
 /// +6 = 10 : pause avant de se relever.
 fn settle(x: &mut Cx) {
     if sub16(x, TIMER, 1).le() {
         x.add8(f::SUB2, 2);
-        x.call(0xe3da6);
+        lib::sound(x, 0xe3da6);
         body(x, 8);
     }
 }
 
 /// +6 = 12 : se relève.
 fn stand_up(x: &mut Cx) {
-    if step(x) {
+    if lib::step(x) {
         x.add8(f::SUB2, 2);
         body(x, 0);
     }
@@ -114,6 +112,6 @@ fn wait_camera(x: &mut Cx) {
         x.call(0xd5f30);
         decide::chase(x);
     } else {
-        step(x);
+        lib::step(x);
     }
 }

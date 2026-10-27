@@ -34,8 +34,8 @@ pub(super) fn begin_walk(x: &mut Cx) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
     body(x, 1);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
 }
 
 /// 0x696a0 : début de la marche en comptant une étape de plus.
@@ -48,20 +48,19 @@ pub(super) fn begin_walk_step(x: &mut Cx) {
 
 /// 0x696de : marche ; se retourne, attend ou attaque.
 fn walk(x: &mut Cx) {
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     let n = x.u8(AI_WALK).wrapping_sub(1);
     x.set8(AI_WALK, n);
     if (n as i8) < 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         if !pick_target(x) {
             return;
         }
         let n = x.u8(AI_CHOICE).wrapping_sub(1);
         x.set8(AI_CHOICE, n);
         if n == 0 {
-            x.call(call::TURN_TO_TARGET);
-            x.call(call::RAND_TARGET_CHECK);
-            if !x.c.cond(7) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 return x.set16(f::SUB2, 0x400);
             }
         }
@@ -71,7 +70,7 @@ fn walk(x: &mut Cx) {
 
 /// 0x69718 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
 fn decide(x: &mut Cx) {
-    if target_in_box(x, -0x20, 0x20, 0xc) {
+    if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         x.set16(f::STATE, 0x204);
         let n = rand_and(x, 1) * 2 + 4;
         x.set8(NEXT_ATTACK, n as u8);
@@ -83,11 +82,11 @@ fn decide(x: &mut Cx) {
     if side_box(x) {
         return pick_attack(x, FAR_ATTACKS);
     }
-    if target_in_box_far(x, -0x38, 0x38, 0xc) {
+    if lib::guard_in_front_strict(x, -0x38, 0x38, 0xc) {
         let hint = x.u8(f::SUB2);
         x.set8(NEXT_ATTACK, hint);
         x.set16(f::SUB2, 0);
-        return x.call(call::ANNOUNCE);
+        return lib::pick_byte(x);
     }
     step(x);
     if x.u8(f::KEY_FRAME) & 1 == 0 {
@@ -113,20 +112,18 @@ pub(super) fn side_box(x: &mut Cx) -> bool {
 /// Boîte de détection puis décisions par masque : de même orientation, les deux (0xa4c2 puis 0xa4b4)
 /// doivent accepter ; sinon seule 0xa4b4.
 fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    let found = target_in_box(x, d0, d1, d2);
+    let found = lib::target_in_box(x, d0, d1, d2);
     let ok = found && {
         let target = load_target(x);
         let theirs = target.u8(x.b, f::FLIP);
         x.c.d[1] = x.c.d[1] & !0xff | theirs as u32;
         let same = theirs == x.u8(f::FLIP);
         (if same {
-            x.call(0xa4c2);
-            !x.c.cond(7)
+            lib::decision_b(x)
         } else {
             true
         }) && {
-            x.call(0xa4b4);
-            !x.c.cond(7)
+            lib::decision_a(x)
         }
     };
     x.c.d[0] = ok as u32;

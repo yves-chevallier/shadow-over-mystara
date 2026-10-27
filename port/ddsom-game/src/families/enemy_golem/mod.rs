@@ -48,10 +48,6 @@ pub(self) const SET_MOVE: u32 = 0x15eed8;
 pub(self) const SET_STRIKE: u32 = 0x15eef4;
 pub(self) const STANCE: u32 = 0x0202_0000;
 
-pub(self) mod call {
-    pub const REMOVE: u32 = 0x27ee;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -200,16 +196,8 @@ pub(self) fn choose(x: &mut Cx) {
         return set_state_long(x, STANCE);
     }
     load_target(x);
-    set_dw(x, 0, -8i16 as u16);
-    set_dw(x, 1, 0x68);
-    set_dw(x, 2, 8);
-    x.call(0xb5e0);
-    if x.c.cond(7) {
-        set_dw(x, 0, -0xa0i16 as u16);
-        set_dw(x, 1, 0x30);
-        set_dw(x, 2, 8);
-        x.call(0xb5e0);
-        if x.c.cond(7) {
+    if !lib::target_in_box(x, -0x8, 0x68, 8) {
+        if !lib::target_in_box(x, -0xa0, 0x30, 8) {
             return set_state_long(x, STANCE);
         }
     }
@@ -254,7 +242,7 @@ pub(self) fn restart_walk(x: &mut Cx) {
 
 fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     let (bx, by) = if x.a5_u8(0x36) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
     let cam_x = x.a5_u16(bx);
     let cam_y = x.a5_u16(by);

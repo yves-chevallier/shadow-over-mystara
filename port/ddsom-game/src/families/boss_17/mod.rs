@@ -80,11 +80,11 @@ pub(self) const SET_HURT: u32 = 0x1807c0;
 
 /// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    play(x, SET_STRIKE, n);
+    lib::start(x, SET_STRIKE, n);
 }
 
 /// Routines du moteur appelées par ce boss.
@@ -144,8 +144,8 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(PHASES, 4);
     x.set8(f::BOX_SET, 0x31);
-    x.call(0x453c);
-    x.call(0x1059e);
+    lib::initial_hp_boss(x);
+    lib::spread_index(x);
     x.set_a5_u8(0x5a, 0);
     x.call(0x19e10);
     x.call(0x19db4);
@@ -193,7 +193,7 @@ fn active(x: &mut Cx) {
     }
     // les séquences spéciales (jeu 0x30 et au-delà) n'ont ni zone de jeu ni ombre
     if !cmp8(x, ANIM_KIND, 0x30).ge() {
-        x.call(IN_ZONE);
+        lib::keep_in_zone(x);
         x.call(SHADOW);
     }
 }
@@ -210,7 +210,7 @@ fn wait_for_players(x: &mut Cx) {
             body(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

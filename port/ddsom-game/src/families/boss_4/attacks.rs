@@ -40,12 +40,12 @@ fn back_to_walk(x: &mut Cx) {
 fn roar(x: &mut Cx) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
-        x.call(call::ROAR);
+        lib::sound(x, 0xe3f76);
         kind(x, 0x10);
         x.c.d[0] = 0;
         return air(x, 0);
     }
-    if step(x) {
+    if lib::step(x) {
         back_to_walk(x);
     }
 }
@@ -73,8 +73,8 @@ fn climb(x: &mut Cx) {
         x.set_bit(0x1, 1, true);
         return;
     }
-    x.call(call::GUST);
-    step(x);
+    lib::push_players(x);
+    lib::step(x);
     let k = x.u8(f::KEY_FRAME) & 0x7f;
     x.c.d[0] = x.c.d[0] & !0xff | k as u32;
     if (k as i8) < 3 {
@@ -137,11 +137,10 @@ fn dive(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x1e);
             x.set16(0xc, 0);
-            x.c.d[0] = 0x1e;
-            x.call(call::SOUND_B);
+            lib::shake_58(x, 0x1e);
             x.c.d[5] = 5;
             x.call(call::DUST);
-            x.call(0xecc0a);
+            lib::sound(x, 0xecc0a);
             x.c.d[0] = 3;
             air(x, 3);
         }
@@ -169,7 +168,7 @@ fn swoop(x: &mut Cx) {
             if !pick_target(x) {
                 return decide::wait(x);
             }
-            x.call(call::ROAR);
+            lib::sound(x, 0xe3f76);
             kind(x, 0x12);
             take_off(x);
         }
@@ -195,7 +194,7 @@ fn swoop(x: &mut Cx) {
             x.set16(0x18, 0xf700);
             x.set16(0x16, 0);
             x.set16(0x1a, 0);
-            x.call(call::ROAR);
+            lib::sound(x, 0xe3f76);
             x.c.d[0] = 5;
             air(x, 5);
         }
@@ -220,7 +219,7 @@ fn swoop(x: &mut Cx) {
             dust_tick(x);
             if !expired(x, TIMER) {
                 x.move_x();
-                step(x);
+                lib::step(x);
                 return;
             }
             decide::idle(x);
@@ -228,12 +227,11 @@ fn swoop(x: &mut Cx) {
     }
 }
 
-/// Atterrissage : grondement (`sound`), poussière, animation de vol `n`.
-fn landing(x: &mut Cx, sound: u32, n: u32) {
-    x.c.d[0] = sound;
-    x.call(call::SOUND_EVENT);
-    x.call(0xec976);
-    x.call(0xecdba);
+/// Atterrissage : secousse de `shake` images, poussière, animation de vol `n`.
+fn landing(x: &mut Cx, shake: u16, n: u32) {
+    lib::shake_54(x, shake);
+    lib::sound(x, 0xec976);
+    lib::sound(x, 0xecdba);
     x.c.d[0] = n;
     air(x, n);
 }
@@ -272,13 +270,13 @@ fn leap(x: &mut Cx) {
             setw(x, 1, vz);
             x.set16(0x18, vz);
             x.set16(0x1a, (-0x38i16) as u16);
-            x.call(call::ROAR);
+            lib::sound(x, 0xe3f76);
             kind(x, 0x13);
             x.c.d[0] = 7;
             air(x, 7);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -321,7 +319,7 @@ fn leap(x: &mut Cx) {
             dust_tick(x);
             if !expired(x, TIMER) {
                 x.move_x();
-                step(x);
+                lib::step(x);
                 return;
             }
             back_to_walk(x);
@@ -331,9 +329,9 @@ fn leap(x: &mut Cx) {
 
 /// Les étapes en vol : un pas d'animation, l'oscillation (0x833b6), le vent des ailes, un battement.
 fn hover(x: &mut Cx) {
-    step(x);
+    lib::step(x);
     x.call(call::BOB);
-    x.call(call::GUST);
+    lib::push_players(x);
     flap(x);
 }
 
@@ -346,20 +344,20 @@ fn breath_in_flight(x: &mut Cx) {
             take_off(x);
         }
         2 => {
-            x.call(call::GUST);
+            lib::push_players(x);
             flap(x);
             if !(Fl::sub16(x.u16(0xc), 0x28).lt() || x.u8(f::KEY_FRAME) != 4) {
                 x.add8(0x7, 2);
                 x.set8(INVULNERABLE, 0);
                 x.set16(TIMER, 8);
-                step(x);
+                lib::step(x);
                 return;
             }
             let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
             let v = rom32(x, 0x82852 + i);
             x.c.d[0] = v;
             x.add32(0xc, v);
-            step(x);
+            lib::step(x);
         }
         4 => {
             hover(x);
@@ -391,9 +389,9 @@ fn breath_in_flight(x: &mut Cx) {
         }
         8 => {
             flap(x);
-            step(x);
+            lib::step(x);
             x.call(call::BOB);
-            x.call(call::GUST);
+            lib::push_players(x);
             if expired(x, TIMER) {
                 x.add8(0x7, 2);
             }
@@ -403,8 +401,8 @@ fn breath_in_flight(x: &mut Cx) {
             let z = x.u32(0xc);
             x.set32(0xc, z.wrapping_sub(0x18000));
             if Fl::sub32(z, 0x18000).gt() {
-                x.call(call::GUST);
-                step(x);
+                lib::push_players(x);
+                lib::step(x);
                 return;
             }
             x.add8(0x7, 2);
@@ -415,7 +413,7 @@ fn breath_in_flight(x: &mut Cx) {
         }
         _ => {
             if !expired(x, TIMER) {
-                step(x);
+                lib::step(x);
                 return;
             }
             back_to_walk(x);
@@ -458,13 +456,13 @@ fn timed(x: &mut Cx, next: Option<u16>, cue: bool) {
             cue_double(x);
         }
     }
-    step(x);
+    lib::step(x);
 }
 
 /// Dernière étape commune : attente, puis la marche.
 fn last(x: &mut Cx) {
     if !expired(x, TIMER) {
-        step(x);
+        lib::step(x);
         return;
     }
     back_to_walk(x);
@@ -506,23 +504,23 @@ fn breath(x: &mut Cx) {
                 x.set8(BREATH, 1);
                 x.set8(BREATH_STEP, 0);
             }
-            step(x);
+            lib::step(x);
         }
         6 => {
             if expired(x, TIMER) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xc);
                 cue_double(x);
-                step(x);
+                lib::step(x);
                 return;
             }
             if sub8(x, BREATH, 1).gt() {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.set8(BREATH, 3);
             if !breath_shot(x, 0x82ba2, Some(1)) {
-                step(x);
+                lib::step(x);
             }
         }
         8 => timed(x, Some(4), false),

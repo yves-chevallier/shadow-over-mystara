@@ -42,7 +42,7 @@ fn recoil(x: &mut Cx) {
     }
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.call(0xec658);
+        lib::sound(x, 0xec658);
         let freeze = x.u8(0x56) >> 1;
         x.set8(f::FREEZE, freeze);
         x.set16(TIMER, 0xf);
@@ -168,7 +168,7 @@ fn flee(x: &mut Cx) {
         4 => run_away(x),
         6 => {
             if step(x) {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 set_state_long(x, st::DEAD_LONG);
             }
         }
@@ -183,7 +183,7 @@ fn run_away(x: &mut Cx) {
         x.move_x();
     }
     if !x.in_arena_default() {
-        x.call(call::REMOVE);
+        detach_from_host(x);
         return set_state_long(x, st::DEAD_LONG);
     }
     if x.u8(0x29) == 0 {

@@ -252,7 +252,7 @@ fn leave(x: &mut Cx) {
     x.anim_step();
     let d = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);
     if d > 0x1a0 {
-        x.call(call::REMOVE);
+        detach_from_host(x);
         set_state_long(x, st::DEAD_LONG);
     }
 }

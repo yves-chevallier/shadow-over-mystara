@@ -31,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => resume(x),
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -39,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 fn reaction(x: &mut Cx) {
     x.c.d[0] = 0;
     if x.u8(f::SUB2) == 0 {
-        x.call(0x10112);
+        lib::set_68(x);
         x.set8(INVULNERABLE, 0);
         // 0x833fc
         if !tst16(x, f::HP).gt() {
@@ -136,7 +136,7 @@ fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             x.set8(ANIM_LAST, 0xff);
             x.anim_start(SET_BODY, 0xa);
         }
@@ -166,9 +166,8 @@ pub(super) fn resume(x: &mut Cx) {
     if x.a5_u8(0x30) == 0 || !pick_target(x) {
         return decide::wait(x);
     }
-    x.c.a[1] = THRESHOLDS;
-    x.call(0x105b6);
-    if target_in_box(x, 0, 0x30, 0xc) {
+    lib::next_threshold(x, THRESHOLDS);
+    if lib::target_in_box(x, 0, 0x30, 0xc) {
         decide::swoop(x);
     } else {
         decide::walk(x);
@@ -216,7 +215,7 @@ fn death(x: &mut Cx) {
             x.set16(0xc, 0);
             x.c.d[5] = 5;
             x.call(call::DUST);
-            x.call(0xec9e8);
+            lib::sound(x, 0xec9e8);
             x.anim_start(SET_BODY, 0xb);
         }
         4 => {

@@ -55,16 +55,6 @@ pub(self) const SET_WEAPON: u32 = 0x171a7e;
 pub(self) const SET_FLY_A: u32 = 0x171b76;
 pub(self) const SET_FLY_B: u32 = 0x171c1a;
 
-pub(self) mod call {
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const REMOVE: u32 = 0x27ee;
-    pub const SPAWN_EFFECT: u32 = 0x1172e;
-    pub const SHOCK: u32 = 0x2824;
-    pub const DUST: u32 = 0xe3d32;
-    pub const FLASH: u32 = 0xecdba;
-    pub const IMMUNITIES: u32 = 0xfe5a;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -111,8 +101,7 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 
 /// Étincelle (0x1172e) numéro `n`.
 pub(self) fn spark(x: &mut Cx, n: u32) {
-    x.c.d[5] = n;
-    x.call(call::SPAWN_EFFECT);
+    lib::debris(x, n);
 }
 
 /// X de la caméra (écran unique ou deuxième écran).
@@ -199,7 +188,7 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x20);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     lib::init_hp_rank(x);
     x.set8(0, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);

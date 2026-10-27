@@ -30,8 +30,8 @@ pub(super) fn approach_start(x: &mut Cx) {
     set_speed(x, 0x12);
     mv(x, 1);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
 }
 
 /// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
@@ -40,20 +40,19 @@ fn approach(x: &mut Cx) {
         x.set8(SHOT_KIND, 0x1a);
         return approach_start(x);
     }
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     let n = x.u8(AI_CHARGE).wrapping_sub(1);
     x.set8(AI_CHARGE, n);
     if (n as i8) < 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         if !pick_target(x) {
             return;
         }
         let m = x.u8(AI_WANDER).wrapping_sub(1);
         x.set8(AI_WANDER, m);
         if m == 0 {
-            x.call(call::TURN_TO_TARGET);
-            x.call(call::RAND_TARGET_CHECK);
-            if !x.c.cond(7) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 x.set16(f::SUB2, 0x400);
                 return;
             }
@@ -67,11 +66,11 @@ fn approach(x: &mut Cx) {
         pick_attack(x, FAR_TABLE);
         return;
     }
-    if target_in_box_far(x, -0x38, 0x38, 0xc) {
+    if lib::guard_in_front_strict(x, -0x38, 0x38, 0xc) {
         let chosen = x.u8(f::SUB2);
         x.set8(CHOSEN, chosen);
         x.set16(f::SUB2, 0);
-        return x.call(call::ANNOUNCE);
+        return lib::pick_byte(x);
     }
     x.set8(LOOK_PREV, 0x80);
     x.anim_step();

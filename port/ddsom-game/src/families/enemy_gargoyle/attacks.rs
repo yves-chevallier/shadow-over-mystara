@@ -19,7 +19,7 @@ fn finish(x: &mut Cx) {
 fn strike_hit(x: &mut Cx) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        x.call(0xebfdc);
+        lib::sound(x, 0xebfdc);
     }
 }
 
@@ -151,7 +151,7 @@ fn sidestep(x: &mut Cx) {
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, vy as u16);
             set_speed(x, 0x40);
-            x.call(0xece9e);
+            lib::sound(x, 0xece9e);
         }
         4 => {
             if !count_down(x, TIMER2) {
@@ -376,13 +376,8 @@ fn stoop(x: &mut Cx) {
                     x.set16(Obj::AZ, -0x30i16 as u16);
                 }
             }
-            x.c.d[0] = 9;
-            x.call(0xfc44);
-            if x.c.cond(7) {
-                return;
-            }
-            x.c.d[0] = 0;
-            x.call(0xfd64);
+            let Some(player) = lib::attack_hits_a_player(x, 9) else { return };
+            lib::seize_player(x, player, 0);
         }
         8 => {
             if !count_down(x, TIMER2) {
@@ -446,7 +441,7 @@ fn aim_dive(x: &mut Cx) {
     x.set16(Obj::AX, 0);
     x.set16(Obj::AZ, 0);
     x.set16(Obj::AY, 0);
-    x.call(0xe3776);
+    lib::sound(x, 0xe3776);
     x.set16(TIMER, 0x5a);
     strike(x, 0xe);
 }
@@ -533,7 +528,7 @@ pub(super) fn grab(x: &mut Cx) {
             x.c.d[3] = d3 as u32;
             x.c.d[4] = d4 as u32;
             x.call(0xaaa40);
-            x.call(0xedd96);
+            lib::sound(x, 0xedd96);
             let victim = x.linked(f::TARGET);
             x.c.a[1] = victim.0 | 0xff00_0000;
             let hp = victim.u16(x.b, f::HP).wrapping_sub(4);
@@ -557,9 +552,8 @@ pub(super) fn grab(x: &mut Cx) {
 /// 0x650a6 : la victime est relâchée (`+0x6f` levé) et la créature passe en vol circulaire.
 fn dismount(x: &mut Cx) {
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
     victim.set_u8(x.b, 0x6f, 1);
-    x.call(0xfd8c);
+    lib::release_player(x, victim);
     go::circle(x);
 }
 
@@ -581,7 +575,7 @@ pub(super) fn regroup(x: &mut Cx) {
     }
     x.c.a[1] = 0x105e2;
     lib::hp_threshold(x, 0x105e2);
-    if target_in_box(x, 0, 0x28, 0xc) {
+    if lib::target_in_box(x, 0, 0x28, 0xc) {
         go::strike_0(x, false);
     } else {
         go::wander(x);

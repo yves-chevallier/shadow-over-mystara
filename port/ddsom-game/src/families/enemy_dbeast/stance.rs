@@ -50,21 +50,21 @@ fn pursue(x: &mut Cx) {
             play(x, 8);
         }
         speed(x, 0x11);
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         return;
     }
     let t = x.u8(AI_TURN).wrapping_sub(1);
     x.set8(AI_TURN, t);
     if (t as i8) < 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         pick_target(x);
         let shot = if x.u8(f::SUB2) == 0 { 0xe } else { 0xf };
         x.set8(AI_SHOT, shot);
-        x.call(0xe76c);
+        lib::approach_target(x);
         let n = x.u8(AI_STEP).wrapping_sub(1);
         x.set8(AI_STEP, n);
         if n == 0 {
-            x.call(call::TURN_TO_TARGET);
+            lib::draw_6b(x);
             return pursue_tail(x);
         }
     }
@@ -74,8 +74,7 @@ fn pursue(x: &mut Cx) {
 
 /// 0x72c7e : la bête se fige un instant si un test de la cible l'y invite, sinon elle engage.
 pub(super) fn pursue_tail(x: &mut Cx) {
-    x.call(0x79ce);
-    if !x.c.cond(7) {
+    if lib::maybe_draw_6e(x) {
         return x.set16(f::SUB2, 0x0400);
     }
     x.set8(REPEAT_LEFT, 2);
@@ -84,15 +83,15 @@ pub(super) fn pursue_tail(x: &mut Cx) {
 
 /// 0x72c96 : la cible est-elle à portée ? Frappe, saisit, ou continue d'avancer.
 pub(super) fn engage(x: &mut Cx) {
-    if target_in_box(x, -0x30, 0x18, 4) {
+    if lib::target_in_box(x, -0x30, 0x18, 4) {
         set_state_long(x, 0x0204_0200);
-        return x.call(0xac3a);
+        return lib::pick_byte(x);
     }
     if reach_front(x) || reach_back(x) {
         return;
     }
-    if target_in_box_far(x, -0x30, 0x30, 0x20) {
-        return x.call(0xac3a);
+    if lib::guard_in_front_strict(x, -0x30, 0x30, 0x20) {
+        return lib::pick_byte(x);
     }
     step(x);
     move_xy(x);
@@ -114,7 +113,7 @@ fn face_resume(x: &mut Cx) {
 /// Un joueur est juste devant (0x72d2a ou 0x72da4) : attaque courte ou longue. `far` : portée de
 /// la seconde boîte.
 fn reach_gen(x: &mut Cx, d0: i16, close: bool) -> bool {
-    if !target_in_box(x, d0, 0x20, 2) {
+    if !lib::target_in_box(x, d0, 0x20, 2) {
         return false;
     }
     let Some(t) = target(x) else { return false };
@@ -131,7 +130,7 @@ fn reach_gen(x: &mut Cx, d0: i16, close: bool) -> bool {
         return true;
     }
     set_state_long(x, 0x0204_0000);
-    x.call(0xac3a);
+    lib::pick_byte(x);
     choose_attack_a(x, close);
     true
 }
@@ -191,7 +190,7 @@ fn approach(x: &mut Cx) {
         0 => {
             x.add8(0x7, 2);
             x.set8(TIMER, 0x28);
-            x.call(call::FACE_TARGET);
+            lib::draw_stance(x);
             approach_walk(x);
         }
         // reprise du pas de marche, sans refaire le décompte
@@ -208,10 +207,10 @@ fn approach(x: &mut Cx) {
             let n = x.u8(AI_TURN).wrapping_sub(1);
             x.set8(AI_TURN, n);
             if (n as i8) < 0 {
-                x.call(call::FACE_TARGET);
+                lib::draw_stance(x);
                 pick_target(x);
                 x.set8(AI_SHOT, 0xe);
-                x.call(0xe76c);
+                lib::approach_target(x);
             }
             if player_ahead(x) {
                 x.set32(RESUME_STATE, 0x0202_0004);
@@ -262,7 +261,7 @@ fn choose_attack_a(x: &mut Cx, close: bool) {
 /// 0x74c3e : fin d'une attaque, la bête enchaîne sur une charge ou se remet debout.
 pub(super) fn next_move(x: &mut Cx) {
     let Some(_) = target(x) else { return set_state_long(x, ACTIVE_STANCE) };
-    if !target_in_box(x, -0x30, 0x30, 8) && !target_in_box(x, -0xd0, 0x70, 8) {
+    if !lib::target_in_box(x, -0x30, 0x30, 8) && !lib::target_in_box(x, -0xd0, 0x70, 8) {
         return set_state_long(x, ACTIVE_STANCE);
     }
     let level = (x.a5_u16(0x7f92) >> 1 << 5) as u32;

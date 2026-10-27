@@ -37,8 +37,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    x.c.d[0] = 0x50;
-    x.call(call::IN_ARENA);
+    lib::keep_on_screen(x, 0x50);
     x.call(SHADOW);
     x.reinsert();
 }
@@ -53,7 +52,7 @@ fn die(x: &mut Cx) {
 /// 0x94092 : premier passage : dégâts (0xb648) ; puis la routine du code de coup.
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0xb648);
+        lib::drop_once(x);
     }
     let code = x.u8(0x49) as u32;
     x.c.d[0] = code;
@@ -163,7 +162,7 @@ fn knockback_hold(x: &mut Cx) {
         return recover_position(x);
     }
     x.move_x();
-    step(x);
+    lib::step(x);
 }
 
 /// 0x94254 : projeté : retombée sur le sol.
@@ -174,7 +173,7 @@ fn knockback_hard_hold(x: &mut Cx) {
     }
     x.move_xz();
     if (x.u16(0xc) as i16) > 0 {
-        step(x);
+        lib::step(x);
         return;
     }
     x.set16(0xc, 0);
@@ -258,7 +257,7 @@ fn pushed_back(x: &mut Cx) {
             if (x.u8(0x14) as i8) < 0 {
                 return stop(x);
             }
-            if step(x) {
+            if lib::step(x) {
                 x.set32(0x58, 0);
                 next_attack(x);
             }
@@ -284,7 +283,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 || !step(x) {
+            if x.a5_u8(var::PAUSE) != 0 || !lib::step(x) {
                 return;
             }
             x.set8(VULNERABLE, 1);
@@ -356,10 +355,10 @@ fn death_sequence(x: &mut Cx, first: u32, second: u32) {
             x.set16(0xc, 0);
             next6(x);
             anim_a(x, second);
-            x.call(0xeca52);
+            lib::sound(x, 0xeca52);
         }
         4 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next6(x);

@@ -297,12 +297,10 @@ fn aim(x: &mut Cx, p: Obj) {
     if x.u8(f::FLIP) != 0 {
         d1 = d1.wrapping_neg();
     }
-    let px = p.u16(x.b, 0x8);
-    set_dw(x, 1, px.wrapping_add(d1 as u16));
+    let px = p.u16(x.b, 0x8).wrapping_add(d1 as u16);
     let py = p.u16(x.b, 0x10);
-    set_dw(x, 2, py);
     x.c.a[1] = p.0;
-    x.call(0xf0e8);
+    lib::turn_toward(x, px, py);
     x.move_by_table_xy();
 }
 

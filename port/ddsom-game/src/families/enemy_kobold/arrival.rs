@@ -39,7 +39,7 @@ fn player_ahead(x: &mut Cx) -> bool {
         return false;
     }
     x.anim_step();
-    target_in_box(x, 0, 0x80, 0x20)
+    lib::target_in_box(x, 0, 0x80, 0x20)
 }
 
 /// +6 = 0 : hurlement, puis démarche vers la cible (animations 4 ou 3).
@@ -134,9 +134,9 @@ fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
             if x.u8(f::KEY_FRAME) != 0 {
                 let special = matches!(x.a5_u8(0x34), 6 | 0xc);
                 if x.u8(Obj::VARIANT) == variant && special {
-                    x.call(0xeb92e);
+                    lib::sound(x, 0xeb92e);
                 } else if !special {
-                    x.call(0xeb9a0);
+                    lib::sound(x, 0xeb9a0);
                 }
                 x.add8(f::SUB3, 2);
                 x.set8(VULNERABLE, 0);

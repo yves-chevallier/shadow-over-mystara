@@ -28,7 +28,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -46,7 +46,7 @@ fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.set8(INVULNERABLE, 0);
         set_abs8(x, 0xff8043, 0xff);
-        x.call(0x10112);
+        lib::set_68(x);
     }
     let code = (x.u8(REACTION) as u32) >> 1;
     let offset = x.rom16(REACTIONS + code) as i16 as i32;
@@ -239,7 +239,7 @@ fn hit_h(x: &mut Cx) {
             x.set8(0x86, 0);
             x.set8(0x87, 0);
             x.set8(SHAKE, 0xf0);
-            play(x, SET_HURT, 1);
+            lib::start(x, SET_HURT, 1);
             x.c.d[0] = 4;
             x.c.d[1] = 5;
             loop {
@@ -264,10 +264,10 @@ fn hit_h(x: &mut Cx) {
             x.add8(f::SUB2, 2);
         }
         4 => {
-            step(x);
+            lib::step(x);
         }
         6 => {
-            step(x);
+            lib::step(x);
             if sub8(x, SHAKE, 1).eq() {
                 decide::back_on_feet(x);
             }
@@ -350,7 +350,7 @@ fn pushed_back(x: &mut Cx) {
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
-            x.call(call::RANDOM_TURN);
+            lib::drift_heading(x);
             speed(x, 0x17);
             x.set8(ANIM_KIND, 0x20);
             x.set8(ANIM_LAST, 0x20);
@@ -381,7 +381,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 fn step_only(x: &mut Cx) {
-    step(x);
+    lib::step(x);
 }
 
 // --- mort -------------------------------------------------------------------------------------------------------------
@@ -428,7 +428,7 @@ fn death(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.call(0xecabc);
+            lib::sound(x, 0xecabc);
         }
         _ => {}
     }
@@ -441,11 +441,10 @@ fn get_up(x: &mut Cx) {
         x.add8(0x7, 2);
         return body(x, 6);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
-    x.call(0x10474);
-    if zero(x) {
+    if !lib::any_player_alive(x) {
         return decide::wait(x);
     }
     decide::back_on_feet(x);

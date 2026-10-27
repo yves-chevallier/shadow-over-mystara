@@ -107,7 +107,7 @@ pub(super) fn caught(x: &mut Cx) {
         return crouch(x);
     }
     if step(x) {
-        x.call(call::REMOVE);
+        detach_from_host(x);
         x.add8(f::STATE, 2);
     }
 }

@@ -204,8 +204,8 @@ fn leap_wait(x: &mut Cx) {
 /// Fin d'un saut avec choc au sol (0x5e238) : poussière et recul.
 fn leap_land(x: &mut Cx) {
     if !x.move_xz().gt() {
-        x.call(0xecb26);
-        x.call(0xecdba);
+        lib::sound(x, 0xecb26);
+        lib::sound(x, 0xecdba);
         x.set32(0xc, 0);
         x.add8(0x7, 2);
         x.set16(0x30, 1);
@@ -308,7 +308,7 @@ fn leap_high(x: &mut Cx) {
         6 | 10 => leap_wait(x),
         8 => {
             if !x.move_xz().gt() {
-                x.call(0xecb26);
+                lib::sound(x, 0xecb26);
                 dust(x, -0x18);
                 x.set32(0xc, 0);
                 x.add8(0x7, 2);
@@ -468,8 +468,8 @@ fn hop_slide(x: &mut Cx) {
 /// 0x5e6a2 : retombée du petit bond, toujours suivie de la glissade.
 fn hop_land(x: &mut Cx) {
     x.move_xz();
-    x.call(0xecb26);
-    x.call(0xecdba);
+    lib::sound(x, 0xecb26);
+    lib::sound(x, 0xecdba);
     x.set32(0xc, 0);
     x.add8(0x7, 2);
     x.set16(0x30, 1);

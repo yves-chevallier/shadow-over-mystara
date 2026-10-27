@@ -95,7 +95,7 @@ fn get_up(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             x.set8(LOOK_PREV, 0xff);
             x.anim_start(SET_A, 0xa);
         }
@@ -137,7 +137,7 @@ pub(super) fn regroup(x: &mut Cx) {
         0x106e2
     };
     lib::hp_threshold(x, table);
-    if target_in_box(x, 0, 0x30, 0xc) {
+    if lib::target_in_box(x, 0, 0x30, 0xc) {
         go::strike_6(x);
     } else {
         go::wander(x);
@@ -153,13 +153,13 @@ fn dying(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            x.call(0xe3e8e);
+            lib::sound(x, 0xe3e8e);
             x.call(0x19ad6);
-            x.call(0xb780);
-            x.call(0xbad6);
-            x.call(0xe2f6);
+            lib::drop_loot(x);
+            lib::drop_special(x);
+            lib::drop_treasure(x);
             if (x.u8(Obj::VARIANT) as i8) >= 0 {
-                x.call(call::REMOVE);
+                detach_from_host(x);
             }
             x.set16(Obj::AX, 0);
             x.set16(Obj::VZ, 0x500);
@@ -182,7 +182,7 @@ fn dying(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set16(Obj::Z, 0);
             spark(x, 5);
-            x.call(0xec904);
+            lib::sound(x, 0xec904);
             x.anim_start(SET_A, 0xb);
         }
         4 => {
@@ -229,13 +229,12 @@ fn flee(x: &mut Cx) {
             }
             if x.u8(f::KEY_FRAME) == 3 {
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xecdba);
+                lib::sound(x, 0xecdba);
                 spark(x, 4);
-                x.c.d[0] = 0xa;
-                x.call(call::SHOCK);
+                lib::shake_54(x, 0xa);
             }
             if lib::outside(x, -0x40, 0x1c0) {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 x.free(&pools::ENEMY);
             }
         }

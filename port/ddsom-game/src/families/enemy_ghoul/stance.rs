@@ -46,32 +46,31 @@ pub(super) fn begin_walk(x: &mut Cx) {
     set_look(x, 0, 2);
     set_speed(x, 0xd);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
 }
 
 /// 0x5fd3e : marche ; se retourne, attend ou attaque.
 fn walk(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.set8(AI_SHOT, 0);
-        x.call(call::WALK_ASIDE);
+        lib::walk_near_point(x);
     } else {
         x.set8(AI_SHOT, 9);
-        x.call(call::WALK_STEP);
+        lib::approach_target(x);
     }
     let n = x.u8(AI_WALK).wrapping_sub(1);
     x.set8(AI_WALK, n);
     if (n as i8) < 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         if !pick_target(x) {
             return;
         }
         let n = x.u8(AI_CHOICE).wrapping_sub(1);
         x.set8(AI_CHOICE, n);
         if n == 0 {
-            x.call(call::TURN_TO_TARGET);
-            x.call(call::RAND_TARGET_CHECK);
-            if !x.c.cond(7) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 return x.set16(f::SUB2, 0x400);
             }
         }
@@ -81,15 +80,15 @@ fn walk(x: &mut Cx) {
 
 /// 0x5fd96 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
 fn decide(x: &mut Cx) {
-    if target_in_box(x, -0x20, 0x20, 8) {
+    if lib::target_in_box(x, -0x20, 0x20, 8) {
         x.set16(f::STATE, 0x204);
         return pick_attack(x, CLOSE_ATTACKS, 0);
     }
     if box_attack(x, 0, 0x50, 8, CLOSE_ATTACKS, 0) || box_attack(x, -0x80, 0x30, 8, FAR_ATTACKS, 0xa) {
         return;
     }
-    if target_in_box_far(x, -8, 0x58, 0x18) {
-        return x.call(call::ANNOUNCE);
+    if lib::guard_in_front_strict(x, -8, 0x58, 0x18) {
+        return lib::pick_byte(x);
     }
     step(x);
     move_xy(x);

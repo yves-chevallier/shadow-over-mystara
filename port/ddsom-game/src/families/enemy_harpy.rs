@@ -41,7 +41,6 @@ use crate::objects::Courant;
 
 mod call {
     pub const CREATE_COMPANION: u32 = 0xa036e;
-    pub const REMOVE: u32 = 0x27ee;
 }
 
 pub fn run(x: &mut Cx) {
@@ -91,7 +90,7 @@ fn vanish(x: &mut Cx) {
 /// Sortie d'écran : comme `vanish`, en retirant d'abord la créature de la scène (0x27ee).
 fn leave(x: &mut Cx) {
     x.add8(f::STATE, 4);
-    x.call(call::REMOVE);
+    detach_from_host(x);
     release_companion(x);
 }
 
@@ -124,8 +123,8 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0, 1);
     x.set8(f::BOX_SET, 0xe);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     x.set8(0x68, 4);
     x.set8(0x69, 4);
     x.set8(0x76, 4);
@@ -404,7 +403,7 @@ fn attack_start(x: &mut Cx) {
             x.set32(SHOT, shot);
             let n = x.u8(KIND) as u32;
             x.anim_start(SET_ATTACK, n as u16);
-            return x.call(0xed5b2);
+            return lib::sound(x, 0xed5b2);
         }
     }
     set_state_long(x, 0x0204_0000);
@@ -433,7 +432,7 @@ fn attack_wait(x: &mut Cx) {
         let shot = Obj(x.u32(SHOT) & 0xff_ffff);
         shot.set_u8(x.b, 0x55, 1);
         x.set8(TIMER_A, 0x1e);
-        x.call(0xed61c);
+        lib::sound(x, 0xed61c);
     }
 }
 
@@ -646,7 +645,7 @@ fn dead(x: &mut Cx) {
     set_dw(x, 1, 0x12);
     let d = x.u16(0x48) & 0xff00;
     set_dw(x, 0, d.wrapping_add(0x12));
-    x.call(call::REMOVE);
+    detach_from_host(x);
     free(x);
 }
 

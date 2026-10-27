@@ -37,7 +37,7 @@ pub(super) fn intro(x: &mut Cx) {
             x.set16(0x14, 0);
             x.set16(0x16, 0x28);
             x.set8(GAIT, 0);
-            x.call(0xea91a);
+            lib::sound(x, 0xea91a);
             let n = x.a5_u8(0x4ff).wrapping_add(4);
             x.set_a5_u8(0x4ff, n);
         }
@@ -64,7 +64,7 @@ pub(super) fn intro(x: &mut Cx) {
             next6(x);
             x.set16(0x14, 0x800);
             x.set8(GAIT, 1);
-            x.call(call::ROLL);
+            lib::sound(x, 0xe45ca);
         }
         16 => {
             jolt(x);
@@ -90,7 +90,7 @@ pub(super) fn intro(x: &mut Cx) {
             x.set8(0x2d, 0x18);
             x.set16(0x14, 0);
             x.set16(0x16, (-8i16) as u16);
-            x.call(call::BRAKE);
+            lib::sound(x, 0xe4626);
         }
         20 => {
             jolt(x);
@@ -98,7 +98,7 @@ pub(super) fn intro(x: &mut Cx) {
             if sub16(x, TIMER, 1).mi() {
                 next6(x);
                 x.set8(GAIT, 2);
-                x.call(call::STOP);
+                lib::sound(x, 0xea984);
                 x.call(0xd5f30);
             }
             roll(x);
@@ -164,7 +164,7 @@ pub(super) fn start(x: &mut Cx) {
 
 /// 0x8abdc : (re)départ : premier passage (`+5` = 4).
 pub(super) fn restart(x: &mut Cx) {
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     x.set8(0, 1);
     x.add8(f::SUB, 2);
     steps(x, 0, 2);
@@ -220,7 +220,7 @@ fn pass(x: &mut Cx) {
             return;
         }
         next7(x);
-        x.call(call::SHOUT);
+        lib::sound(x, 0xea8be);
         x.set8(0x45, 0xa);
         x.set8(0x44, 0x2d);
         count_crew(x);
@@ -304,7 +304,7 @@ fn approach(x: &mut Cx) {
             if sub8(x, COUNT, 1).pl() {
                 return;
             }
-            x.call(call::STOP);
+            lib::sound(x, 0xea984);
             reset_lives(x);
             reset_count(x);
             retarget(x);

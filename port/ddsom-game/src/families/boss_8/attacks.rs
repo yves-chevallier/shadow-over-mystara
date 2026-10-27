@@ -67,7 +67,7 @@ fn combo(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xe42c6);
+                lib::sound(x, 0xe42c6);
             }
             x.anim_step();
         }
@@ -118,9 +118,8 @@ fn volley_start(x: &mut Cx, kind: u8, extra: bool) {
 
 /// Premier tir d'une rafale : sons, effet, puis un tir par joueur en vie.
 fn volley_fire(x: &mut Cx, pick: fn(&mut Cx)) {
-    x.c.d[0] = 0x30;
-    x.call(call::SOUND_B);
-    x.call(0xedd2c);
+    lib::shake_58(x, 0x30);
+    lib::sound(x, 0xedd2c);
     addq8(x, f::SUB3, 2);
     x.set16(TIMER, 0x32);
     let n = x.a5_u8(var::PLAYERS_ALIVE);
@@ -201,7 +200,7 @@ fn charge(x: &mut Cx) {
             }
             addq8(x, f::SUB3, 2);
             x.set8(f::KEY_FRAME, 0);
-            x.call(0xecdba);
+            lib::sound(x, 0xecdba);
             let (mut d0, mut d1) = (-0x800i16, 0x20i16);
             if x.u8(f::FLIP) != 0 {
                 d0 = d0.wrapping_neg();
@@ -311,9 +310,8 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
                 x.anim_step();
                 return;
             }
-            x.c.d[0] = 0x14;
-            x.call(call::SOUND_B);
-            x.call(0xecb98);
+            lib::shake_58(x, 0x14);
+            lib::sound(x, 0xecb98);
             aids::burst_small(x);
             x.set32(0xc, 0);
             addq8(x, f::SUB3, 2);
@@ -344,7 +342,7 @@ fn vanish(x: &mut Cx) {
             addq8(x, f::SUB3, 2);
             x.set8(PHASE_TIMER, 0x10);
             key(x, 0x12);
-            x.call(0xecf7a);
+            lib::sound(x, 0xecf7a);
             body(x, 4);
         }
         0x88dc6 => {
@@ -360,7 +358,7 @@ fn vanish(x: &mut Cx) {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 x.set_bit(0x1, 1, false);
-                x.call(0xecf7a);
+                lib::sound(x, 0xecf7a);
             }
         }
         _ => finish(x),

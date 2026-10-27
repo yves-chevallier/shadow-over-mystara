@@ -150,7 +150,7 @@ fn grab(x: &mut Cx) {
                 x.move_x();
             }
             if !x.in_arena_default() {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 set_state_long(x, st::DEAD_LONG);
                 return;
             }
@@ -174,7 +174,7 @@ fn grab(x: &mut Cx) {
         }
         6 => {
             if x.anim_step() {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 set_state_long(x, st::DEAD_LONG);
             }
         }

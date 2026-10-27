@@ -14,17 +14,6 @@ use crate::objects::pools;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-mod lib {
-    pub const SOUND_SHAKE: u32 = 0x2860;
-    pub const SOUND_SHAKE_B: u32 = 0x2824;
-    pub const SPRITE_FRAME: u32 = 0x115e2;
-    pub const WING_SOUND: u32 = 0x11a36;
-    pub const LANDING_FX: u32 = 0xecc0a;
-    pub const FLIGHT_FX: u32 = 0xec976;
-    pub const TRAIL_FX: u32 = 0xecdba;
-    pub const ARRIVE_FX: u32 = 0xe3da6;
-}
-
 /// Table des incréments de hauteur (longs) du vol bas, indexée par l'image-clé `+0x33` (espace des opcodes).
 const LOW_FLIGHT: u32 = 0x8508c;
 /// Table des incréments de hauteur de 0x8596c.
@@ -69,8 +58,7 @@ fn wing_beat(x: &mut Cx) {
     x.set8(f::KEY_FRAME, k);
     let flap = x.u8(FLAP) ^ 1;
     x.set8(FLAP, flap);
-    set_dw(x, 0, flap as u16);
-    x.call(lib::WING_SOUND);
+    lib::ground_debris(x, flap);
 }
 
 /// `(0xc).l += (mot << 16) >> 8` : la hauteur avance de `v` pixels par image (8.8).
@@ -86,13 +74,13 @@ fn roar(x: &mut Cx) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(ANIM_KIND, 0x10);
             x.set8(ANIM_LAST, 0x10);
             fly(x, 0);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 resume_chase(x);
             }
         }
@@ -176,11 +164,9 @@ fn swoop_a(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x1e);
             x.set16(0xc, 0);
-            x.c.d[0] = 0x1e;
-            x.call(lib::SOUND_SHAKE);
-            x.c.d[5] = 5;
-            x.call(call::DUST);
-            x.call(lib::LANDING_FX);
+            lib::shake_58(x, 0x1e);
+            lib::debris(x, 5);
+            lib::sound(x, 0xecc0a);
             fly(x, 3);
         }
         8 => {
@@ -209,8 +195,8 @@ fn swoop_flight(x: &mut Cx) {
         shot.set_u8(x.b, 0x58, 1);
         return;
     }
-    x.call(lib::SPRITE_FRAME);
-    step(x);
+    lib::push_players(x);
+    lib::step(x);
     let frame = x.u8(f::KEY_FRAME) & 0x7f;
     if !Fl::sub8(frame, 3).ge() {
         wing_beat(x);
@@ -235,7 +221,7 @@ fn swoop_b(x: &mut Cx) {
             if !pick_target(x) {
                 return decide::wait(x);
             }
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(ANIM_KIND, 0x12);
             x.set8(ANIM_LAST, 0x12);
             start_swoop(x);
@@ -258,7 +244,7 @@ fn swoop_b(x: &mut Cx) {
             x.set16(0x18, (-0x680i16) as u16);
             x.set16(0x16, 0);
             x.set16(0x1a, 0);
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(INVULNERABLE, 0);
             fly(x, 5);
         }
@@ -273,23 +259,21 @@ fn swoop_b(x: &mut Cx) {
             x.set16(0xc, 0);
             let vz: i16 = if x.u8(f::FLIP) != 0 { -0x38 } else { 0x38 };
             x.set16(0x16, vz as u16);
-            x.c.d[0] = 0x1e;
-            x.call(lib::SOUND_SHAKE_B);
-            x.call(lib::FLIGHT_FX);
-            x.call(lib::TRAIL_FX);
+            lib::shake_54(x, 0x1e);
+            lib::sound(x, 0xec976);
+            lib::sound(x, 0xecdba);
             fly(x, 6);
         }
         8 => {
             if !sub16(x, COUNT, 1).gt() {
                 x.set16(COUNT, 4);
-                x.c.d[5] = 3;
-                x.call(call::DUST);
+                lib::debris(x, 3);
             }
             if sub16(x, TIMER, 1).le() {
                 return decide::stand(x);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }
@@ -318,13 +302,13 @@ fn leap(x: &mut Cx) {
             }
             x.set16(0x18, vz);
             x.set16(0x1a, (-0x38i16) as u16);
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(ANIM_KIND, 0x13);
             x.set8(ANIM_LAST, 0x13);
             fly(x, 7);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
@@ -353,23 +337,21 @@ fn leap(x: &mut Cx) {
             x.set8(INVULNERABLE, 0);
             let vz: i16 = if x.u8(f::FLIP) == 0 { 0x5c } else { -0x5c };
             x.set16(0x16, vz as u16);
-            x.c.d[0] = 0x14;
-            x.call(lib::SOUND_SHAKE_B);
-            x.call(lib::FLIGHT_FX);
-            x.call(lib::TRAIL_FX);
+            lib::shake_54(x, 0x14);
+            lib::sound(x, 0xec976);
+            lib::sound(x, 0xecdba);
             fly(x, 0xa);
         }
         8 => {
             if !sub16(x, COUNT, 1).gt() {
                 x.set16(COUNT, 4);
-                x.c.d[5] = 3;
-                x.call(call::DUST);
+                lib::debris(x, 3);
             }
             if sub16(x, TIMER, 1).le() {
                 return resume_chase(x);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }
@@ -406,7 +388,7 @@ fn spit(x: &mut Cx) {
             }
         }
         2 => {
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             wing_beat(x);
             let low = Fl::sub16(x.u16(0xc), 0x20).lt();
             if low || x.u8(f::KEY_FRAME) != 4 {
@@ -414,19 +396,19 @@ fn spit(x: &mut Cx) {
                 let inc = rom32(x, LOW_FLIGHT + i);
                 let z = x.u32(0xc).wrapping_add(inc);
                 x.set32(0xc, z);
-                step(x);
+                lib::step(x);
             } else {
                 x.add8(0x7, 2);
                 x.set8(INVULNERABLE, 0);
                 x.set16(TIMER, 0xa);
                 x.set16(COUNT, 0x24);
-                step(x);
+                lib::step(x);
             }
         }
         4 => {
-            step(x);
+            lib::step(x);
             skim_step(x);
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             wing_beat(x);
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
@@ -435,9 +417,9 @@ fn spit(x: &mut Cx) {
             }
         }
         6 => {
-            step(x);
+            lib::step(x);
             skim_step(x);
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             wing_beat(x);
             if x.u8(0x32) != 0 {
                 x.add8(0x7, 2);
@@ -447,9 +429,9 @@ fn spit(x: &mut Cx) {
         }
         8 => {
             wing_beat(x);
-            step(x);
+            lib::step(x);
             skim_step(x);
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             let shot = x.linked(CHILD);
             if shot.u8(x.b, 0) == 0 || (shot.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
                 x.add8(0x7, 2);
@@ -466,14 +448,14 @@ fn spit(x: &mut Cx) {
                 x.set16(TIMER, 0x10);
                 body(x, 0);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         12 => {
             if sub16(x, TIMER, 1).le() {
                 resume_chase(x);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         _ => {}

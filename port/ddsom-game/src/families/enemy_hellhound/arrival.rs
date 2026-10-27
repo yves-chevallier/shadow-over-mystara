@@ -23,8 +23,8 @@ pub(super) fn stand_when_done(x: &mut Cx) {
         return;
     }
     set_state_long(x, STANCE);
-    x.call(call::TURN_TO_TARGET);
-    x.call(call::FACE_TARGET);
+    lib::draw_6b(x);
+    lib::draw_stance(x);
     mv(x, 0);
 }
 
@@ -43,7 +43,7 @@ fn howl(x: &mut Cx) {
                 return;
             }
             x.anim_step();
-            if !target_in_box(x, 0, 0x80, 0x20) {
+            if !lib::target_in_box(x, 0, 0x80, 0x20) {
                 return;
             }
             x.add8(f::SUB3, 2);
@@ -84,10 +84,10 @@ fn turn_in(x: &mut Cx) {
             let n = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, n);
             if n != 0 {
-                if target_in_box(x, 0, 0x80, 0x20) {
+                if lib::target_in_box(x, 0, 0x80, 0x20) {
                     set_state_long(x, STANCE);
-                    x.call(call::TURN_TO_TARGET);
-                    x.call(call::FACE_TARGET);
+                    lib::draw_6b(x);
+                    lib::draw_stance(x);
                 } else {
                     x.anim_step();
                     x.move_by_table_xy();

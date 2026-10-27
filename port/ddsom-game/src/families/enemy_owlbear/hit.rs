@@ -48,7 +48,7 @@ fn recoil(x: &mut Cx) {
         }
         2 => {
             x.add8(f::SUB2, 2);
-            x.call(0xecdba);
+            lib::sound(x, 0xecdba);
         }
         4 => {
             let low = x.a5_u16(0x6e) & 3;
@@ -146,7 +146,7 @@ fn flee(x: &mut Cx) {
                 return;
             }
             set_state_long(x, 0x0600_0000);
-            x.call(0x27ee);
+            detach_from_host(x);
         }
         _ => {}
     }

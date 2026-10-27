@@ -23,7 +23,7 @@ fn roll_in(x: &mut Cx) {
             x.add8(f::SUB3, 2);
             x.set_bit(1, 1, false);
             x.set8(FLAG, 0);
-            x.call(call::IMMUNITIES);
+            lib::set_immunities(x);
             let cam = camera_x(x).wrapping_add(0xc0);
             x.c.d[2] = x.c.d[2] & !0xffff | cam as u32;
             x.set8(f::FLIP, 0);
@@ -34,7 +34,7 @@ fn roll_in(x: &mut Cx) {
             }
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
-            x.call(call::DUST);
+            lib::sound(x, 0xe3d32);
             look(x, 0x30);
             weapon(x, 3);
         }
@@ -44,9 +44,8 @@ fn roll_in(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
-                x.c.d[0] = 0x10;
-                x.call(call::SHOCK);
-                x.call(call::DUST);
+                lib::shake_54(x, 0x10);
+                lib::sound(x, 0xe3d32);
             }
             let cam = camera_x(x);
             let reach = if (x.u16(Obj::VX) as i16) < 0 { 0xe0 } else { 0xa0 };
@@ -77,8 +76,8 @@ pub(super) fn leap_begin(x: &mut Cx) {
     let v: i16 = if x.u8(f::FLIP) != 0 { -0x20 } else { 0x20 };
     x.set16(Obj::AX, v as u16);
     x.c.d[0] = v as u16 as u32;
-    x.call(call::DUST);
-    x.call(call::FLASH);
+    lib::sound(x, 0xe3d32);
+    lib::sound(x, 0xecdba);
     mv(x, 9);
 }
 
@@ -108,7 +107,7 @@ fn wait_a(x: &mut Cx) {
             x.add8(f::SUB3, 2);
             x.set_bit(1, 1, false);
             x.set8(FLAG, 0);
-            x.call(call::IMMUNITIES);
+            lib::set_immunities(x);
             look(x, 0x31);
             mv(x, 2);
         }
@@ -129,7 +128,7 @@ fn wait_b(x: &mut Cx) {
             x.add8(f::SUB3, 2);
             x.set_bit(1, 1, false);
             x.set8(FLAG, 0);
-            x.call(call::IMMUNITIES);
+            lib::set_immunities(x);
             look(x, 0x32);
             mv(x, 0);
         }
@@ -146,11 +145,7 @@ fn wait_b(x: &mut Cx) {
 /// 0x78004 / 0x78080 : choisit une cible ; dès qu'elle est dans la boîte, étape suivante (animation 3).
 fn wait_for_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) {
     pick_target(x);
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0xb5e0);
-    if x.c.cond(7) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return;
     }
     x.add8(f::SUB3, 2);

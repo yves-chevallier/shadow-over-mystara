@@ -97,10 +97,7 @@ fn attack(x: &mut Cx, state: u32) {
 /// Le boss est-il dans la fenêtre horizontale de la caméra élargie de `-0x10` à `0x190` (0x104a2) ?
 /// D0 = bords, D1 = largeur ; rend D0 (0 : dedans, 1 : dehors).
 fn off_screen(x: &mut Cx) -> bool {
-    x.c.d[0] = (-0x10i32) as u32;
-    set_dw(x, 1, 0x190);
-    x.call(0x104a2);
-    x.c.d[0] & 0xff != 0
+    lib::outside_band(x, -0x10, 0x190)
 }
 
 /// 0x972e0 : attaque 10 si le boss est à l'écran et qu'il lui en reste.
@@ -313,15 +310,10 @@ pub(super) fn spawn_ring(x: &mut Cx, count: i16) {
 
 /// 0x96fac, 0x96fc8 : un joueur est-il dans la boîte `(d0, d1, d2)` ? Rend 0 sinon, ou 1 / 2 : le côté (0x1047a).
 pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ai::TARGET_IN_BOX);
-    if zero(x) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
-    x.call(0x1047a);
-    x.c.d[0] as u8
+    lib::turn_decision(x) as u8
 }
 
 /// 0x96fe4 : un joueur est tout près devant ; la table 0x96ffa choisit l'entrée de 0x9700a.

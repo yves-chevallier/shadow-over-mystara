@@ -58,7 +58,6 @@ const STANCE: u32 = 0x0202_0000;
 const REACH: u32 = 0x0208_0000;
 const HELD: u32 = 0x0404_0000;
 const DEAD: u32 = 0x0600_0000;
-const REMOVE: u32 = 0x27ee;
 
 pub fn run(x: &mut Cx) {
     if suspended(x) {
@@ -151,8 +150,8 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0x16);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     for (off, v) in [
         (0x70, 0),
         (0x7e, 4),
@@ -636,7 +635,7 @@ fn recoil(x: &mut Cx) {
                 x.set32(Obj::Z, 0);
                 x.set8(TIMER, 0x28);
                 x.set16(0x30, 1);
-                x.call(REMOVE);
+                detach_from_host(x);
             }
             x.anim_step();
         }
@@ -691,7 +690,7 @@ fn grabbed_flight(x: &mut Cx) {
         4 => {
             x.move_x();
             if !x.in_arena_default() {
-                x.call(REMOVE);
+                detach_from_host(x);
                 set_state_long(x, DEAD);
             }
             if x.u8(EXIT_TIMER) != 0 {

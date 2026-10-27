@@ -56,12 +56,6 @@ pub(self) const HELD: u32 = 0x0408_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
 pub(self) mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const REMOVE: u32 = 0x27ee;
     pub const SPARK: u32 = 0xb10c8;
 }
 
@@ -210,7 +204,7 @@ pub(self) fn after_strike(x: &mut Cx) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
-    let close = target_in_box(x, -0x30, 0x30, 8) || target_in_box(x, -0xd0, 0x70, 8);
+    let close = lib::target_in_box(x, -0x30, 0x30, 8) || lib::target_in_box(x, -0xd0, 0x70, 8);
     if !close {
         return set_state_long(x, STANCE);
     }
@@ -234,11 +228,11 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xc);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     for (off, v) in [(0x70, 0), (0x7e, 8), (0x7f, 0), (0x8e, 0), (0x78, 0xff)] {
         x.set8(off, v);
     }
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     // profils d'IA : 68 69 6a 6c 6d 72 73 74 75 76 81 80
     let params: [u8; 12] = match x.u8(GROUP) {
         0 => [1, 1, 1, 1, 1, 1, 1, 1, 0x14, 1, 0, 1],
@@ -252,8 +246,8 @@ fn init(x: &mut Cx) {
     if !pick_target(x) {
         return set_state_long(x, IDLE);
     }
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     // état de départ, aspect et animation selon la variante
     let (state, look_v, anim, active) = match x.u8(Obj::VARIANT) {
         0 => (STANCE, 0xc, 0xc, false),

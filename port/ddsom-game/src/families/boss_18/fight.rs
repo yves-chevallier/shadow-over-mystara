@@ -27,13 +27,11 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.call(0x10474);
-    !zero(x)
+    lib::any_player_alive(x)
 }
 
 fn needs_turn(x: &mut Cx) -> bool {
-    x.call(call::TURN_NEEDED);
-    !zero(x)
+    !lib::faces_target(x)
 }
 
 // --- +6 = 0 : debout --------------------------------------------------------------------------
@@ -44,7 +42,7 @@ fn idle(x: &mut Cx) {
     }
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
-        x.call(call::RAND_TIMER);
+        lib::draw_6e(x);
         x.set8(ANIM_KIND, 0);
         if x.u8(ANIM_LAST) != 0 {
             x.set8(ANIM_LAST, 0);
@@ -58,7 +56,7 @@ fn idle(x: &mut Cx) {
     if needs_turn(x) {
         return decide::interrupt(x);
     }
-    step(x);
+    lib::step(x);
 }
 
 // --- +6 = 2 : demi-tour ------------------------------------------------------------------------
@@ -84,7 +82,7 @@ fn turn(x: &mut Cx) {
     if (x.u16(CHASE_TIME) as i16) > 0 {
         sub16(x, CHASE_TIME, 1);
     }
-    if !step(x) {
+    if !lib::step(x) {
         if was_walking(x) {
             x.move_by_table_xy();
         }
@@ -118,11 +116,10 @@ fn walk(x: &mut Cx, slow: bool) {
     x.add8(0x7, 2);
     x.set16(0x16, 0);
     x.set16(0x1e, 0);
-    x.call(call::PICK_FAR);
-    if zero(x) {
+    if !lib::pick_target_any(x) {
         return decide::wait(x);
     }
-    x.call(call::ASK_TARGET);
+    lib::approach_target(x);
     speed(x, 0xd);
     x.move_by_table_xy();
     let kind = x.u8(ANIM_KIND);
@@ -139,7 +136,7 @@ fn keep_walking(x: &mut Cx) {
         if sub8(x, WALK_STEPS, 1).le() {
             return decide::chase_b(x);
         }
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
         speed(x, 0xd);
         if x.u8(ANIM_KIND) == 3 {
             decide::walk_delay_slow(x);
@@ -157,14 +154,10 @@ fn keep_walking(x: &mut Cx) {
                 return decide::choose_mid(x, side);
             }
         }
-        if target_in_box(x, 0, 0x2c, 0xc) {
+        if lib::target_in_box(x, 0, 0x2c, 0xc) {
             return decide::choose_front(x);
         }
-        set_dw(x, 0, (-0x20i16) as u16);
-        set_dw(x, 1, 0x40);
-        set_dw(x, 2, 8);
-        x.call(call::TARGET_BOX_FAR);
-        if !zero(x) {
+        if lib::guard_in_front(x, -0x20, 0x40, 8) {
             return decide::choose_close(x);
         }
         if needs_turn(x) {
@@ -172,7 +165,7 @@ fn keep_walking(x: &mut Cx) {
         }
     }
     x.move_by_table_xy();
-    step(x);
+    lib::step(x);
 }
 
 // --- +6 = 8 : charge ----------------------------------------------------------------------------
@@ -187,7 +180,7 @@ fn dash(x: &mut Cx) {
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x50i16) } else { (0x18, 0x50) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
-            x.call(call::RANDOM_TURN);
+            lib::drift_heading(x);
             speed(x, 0x3f);
             x.set8(ANIM_KIND, 4);
             x.set8(ANIM_LAST, 4);
@@ -199,7 +192,7 @@ fn dash(x: &mut Cx) {
                 x.add8(0x7, 2);
                 x.set16(0x16, 0);
             }
-            step(x);
+            lib::step(x);
         }
         4 => {
             x.move_xyz();
@@ -212,12 +205,12 @@ fn dash(x: &mut Cx) {
                 }
                 x.set16(0x16, v as u16);
             }
-            step(x);
+            lib::step(x);
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
                 x.move_xy();
-                step(x);
+                lib::step(x);
                 return;
             }
             if !players_alive(x) {
@@ -238,7 +231,7 @@ fn resume(x: &mut Cx) {
         x.set8(ANIM_LAST, 5);
         return body(x, 6);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
     if !players_alive(x) {

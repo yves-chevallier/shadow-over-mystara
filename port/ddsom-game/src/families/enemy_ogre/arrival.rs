@@ -21,7 +21,7 @@ fn begin(x: &mut Cx) {
     x.add8(f::SUB3, 2);
     x.set_bit(1, 1, false);
     x.set8(INVULNERABLE, 0);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
 }
 
 // --- +6 = 0 : chute d'entrée ----------------------------------------------------------------------------
@@ -70,9 +70,8 @@ fn fall_in(x: &mut Cx) {
             x.set16(TIMER, 0x12);
             x.set16(TIMER2, 0);
             x.set16(Obj::AX, 0x30);
-            x.c.d[0] = 0x1e;
-            x.call(0x2860);
-            x.call(0xecc0a);
+            lib::shake_58(x, 0x1e);
+            lib::sound(x, 0xecc0a);
             act(x, 0xa);
         }
         8 => {
@@ -93,7 +92,7 @@ fn fall_in(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.call(0xe3da6);
+            lib::sound(x, 0xe3da6);
             mv(x, 8);
         }
         12 => {
@@ -159,10 +158,9 @@ fn thump(x: &mut Cx) {
         return;
     }
     x.set8(f::KEY_FRAME, 0);
-    x.call(0xecdba);
+    lib::sound(x, 0xecdba);
     spark(x, 4);
-    x.c.d[0] = 0xa;
-    x.call(call::SHOCK);
+    lib::shake_54(x, 0xa);
 }
 
 /// 0x70794 : début de la course (animation 5).
@@ -172,10 +170,9 @@ fn begin_dash(x: &mut Cx) {
     x.set16(TIMER2, 0);
     let vy = if x.u8(f::FLIP) != 0 { -0x40i16 } else { 0x40 };
     x.set16(Obj::AX, vy as u16);
-    x.c.d[0] = 0x14;
-    x.call(call::SHOCK);
-    x.call(0xec976);
-    x.call(0xecdba);
+    lib::shake_54(x, 0x14);
+    lib::sound(x, 0xec976);
+    lib::sound(x, 0xecdba);
     mv(x, 5);
 }
 
@@ -207,9 +204,9 @@ fn wait_for_player(x: &mut Cx) {
             mv(x, 0);
         }
         2 | 4 => {
-            if target_in_box(x, -0x40, 0x40, 0x40) {
+            if lib::target_in_box(x, -0x40, 0x40, 0x40) {
                 x.add8(f::SUB3, 2);
-                x.call(0xe3da6);
+                lib::sound(x, 0xe3da6);
                 mv(x, 8);
             } else {
                 lib::step(x);
@@ -251,12 +248,12 @@ fn hidden(x: &mut Cx) {
             x.set8(NO_GRAB, 1);
             x.set_bit(1, 1, false);
             x.set8(INVULNERABLE, 0);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             look(x, 0x33);
             mv(x, 0xa);
         }
         2 => {
-            if target_in_box(x, -0x20, 0x60, 0x20) {
+            if lib::target_in_box(x, -0x20, 0x60, 0x20) {
                 x.add8(f::SUB3, 2);
                 x.set8(NO_GRAB, 0);
             }

@@ -80,22 +80,16 @@ pub(self) const SET_HURT: u32 = 0x18373a;
 
 /// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    play(x, SET_STRIKE, n);
+    lib::start(x, SET_STRIKE, n);
 }
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
     pub const SPAWN_RING: u32 = 0x57c8c;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RANDOM_TURN: u32 = 0x10574;
-    pub const FACING: u32 = 0x10560;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-    pub const TARGET_BOX_FAR: u32 = 0x7ef4;
 }
 
 pub fn run(x: &mut Cx) {
@@ -147,8 +141,8 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(PHASES, 4);
     x.set8(f::BOX_SET, 0x31);
-    x.call(0x453c);
-    x.call(0x1059e);
+    lib::initial_hp_boss(x);
+    lib::spread_index(x);
     decide::pick_strike_limit(x);
     x.set8(0, 2);
     x.set_bit(0x1, 1, true);
@@ -187,7 +181,7 @@ fn active(x: &mut Cx) {
     }
     // les séquences spéciales (jeu 0x30 et au-delà) n'ont ni zone de jeu ni ombre
     if !cmp8(x, ANIM_KIND, 0x30).ge() {
-        x.call(IN_ZONE);
+        lib::keep_in_zone(x);
         x.call(SHADOW);
     }
 }
@@ -204,7 +198,7 @@ fn wait_for_players(x: &mut Cx) {
             body(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

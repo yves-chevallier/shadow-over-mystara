@@ -13,6 +13,8 @@
 //! liaison en attente `+0x91` (bit 7) vers `+0x2a`/`+0x2b` ; orientation de l'agresseur `+0x4a`.
 
 use super::cx::Cx;
+use super::enemy_lib as lib;
+use super::enemy_common::detach_from_host;
 use crate::mem::{rd16, rd32, rd8, rts};
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
@@ -91,10 +93,8 @@ mod rom {
 
 /// Sous-routines du moteur.
 mod call {
-    pub const LANDED: u32 = 0x3e480;
     pub const SPAWN_EFFECT: u32 = 0xabec8;
     pub const DEATH: u32 = 0x19ad6;
-    pub const BOSS_RECOVER: u32 = 0xf118;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -152,7 +152,7 @@ fn move_xyz(x: &mut Cx) {
     x.move_xyz();
 }
 fn landed(x: &mut Cx) {
-    x.call(call::LANDED);
+    lib::landing_by_kind(x);
 }
 fn random(x: &mut Cx) -> u32 {
     let alea = x.random();
@@ -479,7 +479,7 @@ fn get_up_done(x: &mut Cx) {
     x.set8(0x67, 0);
     x.set16(f::RECOVER, 1);
     if x.u8(f::REACTION) != 108 {
-        x.call(call::BOSS_RECOVER);
+        lib::draw_84(x);
     }
 }
 
@@ -957,7 +957,7 @@ fn held_end(x: &mut Cx) {
         x.set8(f::ACTIVE, 2);
     }
     if x.u8(f::CLASS) == BOSS {
-        x.call(0xff54);
+        lib::countdown_then_state(x);
         return anim_step(x);
     }
     x.set32(0x16, 0);
@@ -1004,7 +1004,7 @@ fn disintegrate(x: &mut Cx) -> bool {
     if x.u8(f::SUB_STEP) == 0 {
         x.set8(f::COUNTER, 40);
         next_sub(x);
-        x.call(0x27ee);
+        detach_from_host(x);
     }
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);
@@ -1160,8 +1160,7 @@ fn hop_land(x: &mut Cx) {
         return;
     }
     hurt(x);
-    x.c.d[0] = x.c.d[0] & !0xffff | 8;
-    x.call(0x2824);
+    lib::shake_54(x, 8);
 }
 
 /// 0x3cbaa : projection vers l'arrière (compteur 1, X 0x200, hauteur 0x600).
@@ -1287,7 +1286,7 @@ fn floored(x: &mut Cx, stars: bool) {
         defer_link(x);
     }
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
     if stars {
         effect(x, 8, 0);
     }
@@ -1352,7 +1351,7 @@ fn floored_9(x: &mut Cx) {
     speeds(x, 0x200, 0, 0x400, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
     effect(x, 9, 0);
 }
 
@@ -1465,7 +1464,7 @@ fn released(x: &mut Cx) {
     if flipped(x) {
         neg32(x, f::VX);
     }
-    x.call(0xfe5a);
+    lib::set_immunities(x);
 }
 
 /// 0x3d26a : coup reçu par un objet saisi (`+0x87`) ou non ; selon la hauteur, recul (code 0) ou coup bas (56).
@@ -1656,7 +1655,7 @@ fn zapped_burn(x: &mut Cx) {
     if c == 0 {
         x.call(0xb3c14);
         x.set32(f::STATE, 0x0600_0000);
-        x.call(0x27ee);
+        detach_from_host(x);
         return x.call(call::DEATH);
     }
     x.c.d[0] = x.c.d[0] & !0xff | (c & 7) as u32;
@@ -1689,7 +1688,7 @@ fn petrified(x: &mut Cx) {
     if x.u16(f::HEIGHT) as i16 <= 0 {
         next(x);
         x.set8(f::COUNTER, 40);
-        return x.call(0xebc4c);
+        return lib::sound(x, 0xebc4c);
     }
     x.set16(f::VZ, 0);
     x.set16(f::GRAVITY, -64i16 as u16);
@@ -1712,7 +1711,7 @@ fn petrified_end(x: &mut Cx) {
     x.c.d[0] = 5;
     x.call(0xab7d8);
     x.set32(f::STATE, 0x0600_0000);
-    x.call(0x27ee);
+    detach_from_host(x);
     x.call(call::DEATH);
 }
 
@@ -1770,7 +1769,7 @@ fn hop_back(x: &mut Cx) {
 /// 0x3d882 : brûlé (0xe909a), animation D0 laissé tel quel, six étoiles (0xabec8(4)).
 fn burnt(x: &mut Cx) {
     x.set8(0x67, 0);
-    x.call(0xe909a);
+    lib::sound(x, 0xe909a);
     apply_pending(x);
     next(x);
     x.set8(f::ACTIVE, 1);
@@ -1963,7 +1962,7 @@ fn spin_drop(x: &mut Cx) {
     orient_speeds(x);
     defer_link(x);
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
 }
 /// 0x3dada : variante : animation 17 et étoiles 0xabec8(8).
 fn spin_drop_stars(x: &mut Cx) {
@@ -1976,7 +1975,7 @@ fn spin_drop_stars(x: &mut Cx) {
     x.set16(f::GRAVITY, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
     effect(x, 8, 0);
 }
 /// 0x3dbb4 : animation ; chute jusqu'au sol, puis attente de la fin du compteur.

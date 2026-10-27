@@ -296,7 +296,7 @@ fn approach(x: &mut Cx) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 1);
-        x.call(call::ANNOUNCE);
+        lib::pick_byte(x);
         if x.u8(COOLDOWN) == 0 {
             x.set8(f::SUB3, 0);
             let next = x.u8(RESUME);
@@ -594,7 +594,7 @@ fn sidestep(x: &mut Cx) {
 fn choose(x: &mut Cx) {
     x.set8(LOOK_PREV, 1);
     body(x, 0);
-    if target_in_box(x, -0x20, 0x20, 8) {
+    if lib::target_in_box(x, -0x20, 0x20, 8) {
         set_state_long(x, 0x0204_1600);
         return x.set8(RESUME, 6);
     }

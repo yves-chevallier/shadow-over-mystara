@@ -33,7 +33,7 @@ pub(super) fn intro(x: &mut Cx) {
             let h = cy.wrapping_add(0xe0).wrapping_sub(x.u16(0x10));
             setw(x, 0, h);
             x.set16(0xc, h);
-            x.call(call::ROAR);
+            lib::sound(x, 0xe3f76);
             x.c.d[0] = 1;
             air(x, 1);
         }
@@ -41,25 +41,24 @@ pub(super) fn intro(x: &mut Cx) {
             let z = x.u32(0xc);
             x.set32(0xc, z.wrapping_sub(0x18000));
             if Fl::sub32(z, 0x18000).gt() {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
             x.set16(TIMER, 0x28);
-            x.c.d[0] = 0xa;
-            x.call(call::SOUND_EVENT);
+            lib::shake_54(x, 0xa);
             x.c.d[5] = 5;
             x.call(call::DUST);
             body(x, 0);
         }
         _ => {
             if !expired(x, TIMER) {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.call(0xd5f30);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             x.set8(0, 1);
             decide::walk(x);
         }
@@ -81,22 +80,17 @@ pub(super) fn run(x: &mut Cx) {
 
 /// La cible est-elle hors de la zone `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
 fn off_screen(x: &mut Cx) -> bool {
-    setw(x, 0, (-0x50i16) as u16);
-    setw(x, 1, 0x1d0);
-    x.call(call::OUTSIDE);
-    !zero(x)
+    lib::outside_band(x, -0x50, 0x1d0)
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
 fn needs_turn(x: &mut Cx) -> bool {
-    x.call(call::TURN_NEEDED);
-    !zero(x)
+    !lib::faces_target(x)
 }
 
 /// Avance-t-il dans le sens où il regarde (0x10560) ?
 fn facing_forward(x: &mut Cx) -> bool {
-    x.call(call::FACING);
-    zero(x)
+    lib::moves_forward(x)
 }
 
 /// 0x81e7a : debout ; sorti de l'écran il charge, au bout de l'attente il marche, sinon il se tourne vers sa cible.
@@ -106,7 +100,7 @@ fn idle(x: &mut Cx) {
     }
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
-        x.call(call::RAND_TIMER);
+        lib::draw_6e(x);
         x.c.d[0] = 0;
         x.set8(ANIM_KIND, 0);
         if x.u8(ANIM_LAST) != 0 {
@@ -124,7 +118,7 @@ fn idle(x: &mut Cx) {
     if needs_turn(x) {
         return decide::turn(x);
     }
-    step(x);
+    lib::step(x);
 }
 
 /// Animation de marche 2 (de face) ou 3 (de côté).
@@ -137,11 +131,8 @@ fn walk_anim(x: &mut Cx) {
 
 /// Animation de marche reprise à la même marque dans le jeu du sens de marche.
 fn walk_select(x: &mut Cx) {
-    x.c.a[4] = WALK_SIDEWAYS;
-    if facing_forward(x) {
-        x.c.a[4] = WALK_FORWARD;
-    }
-    x.call(call::SELECT);
+    let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
+    lib::switch_keeping_time(x, set);
 }
 
 /// 0x81ede : demi-tour (animation 1), puis reprise de l'état mémorisé.
@@ -154,7 +145,7 @@ fn turn(x: &mut Cx) {
         x.c.d[0] = 1;
         return body(x, 1);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
     if !alive(x) {
@@ -213,7 +204,7 @@ fn set_delay(x: &mut Cx, table: u32) {
 
 /// Vise la cible (0xe76c) et prend la table de vitesses 0xd.
 fn aim(x: &mut Cx) {
-    x.call(call::ASK_TARGET);
+    lib::approach_target(x);
     speed(x, 0xd);
 }
 
@@ -240,7 +231,7 @@ fn walking(x: &mut Cx) {
     if let Some(g) = ai_box(x, -0xd0, 0x20, 0xc) {
         return decide::from_ai(x, g, false);
     }
-    if target_in_box(x, -0x19, 0x18, 0xe) {
+    if lib::target_in_box(x, -0x19, 0x18, 0xe) {
         return decide::from_close(x);
     }
     if target_in_box_7ef4(x, -0x70, 0x10, 8) {
@@ -252,26 +243,21 @@ fn walking(x: &mut Cx) {
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
-    step(x);
+    lib::step(x);
 }
 
 /// 0x83094 / 0x830b2 : la cible est dans la boîte et l'IA (0x1047a) choisit un geste (1 ou 2).
 fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u16> {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
-    x.call(0x1047a);
-    let g = x.c.d[0];
-    (g != 0).then_some(g as u16)
+    let turn = lib::turn_decision(x);
+    (turn != lib::Turn::None).then_some(turn as u16)
 }
 
 /// Boîte large devant le boss (0x7ef4).
 fn target_in_box_7ef4(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    setw(x, 0, d0 as u16);
-    setw(x, 1, d1);
-    setw(x, 2, d2);
-    x.call(0x7ef4);
-    !zero(x)
+    lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// 0x820b6 : charge en ligne droite jusqu'au point visé, poussière et grondement, puis marche.
@@ -343,11 +329,10 @@ fn charging(x: &mut Cx) {
         }
     }
     if x.u8(f::KEY_FRAME) == 0x84 {
-        x.call(0xecdba);
+        lib::sound(x, 0xecdba);
         x.c.d[5] = 4;
         x.call(call::DUST);
-        x.c.d[0] = 0xa;
-        x.call(call::SOUND_EVENT);
+        lib::shake_54(x, 0xa);
     }
 }
 
@@ -362,10 +347,9 @@ fn brake(x: &mut Cx) {
     }
     x.c.d[0] = d;
     x.set16(0x16, d as u16);
-    x.c.d[0] = 0x14;
-    x.call(call::SOUND_EVENT);
-    x.call(0xec976);
-    x.call(0xecdba);
+    lib::shake_54(x, 0x14);
+    lib::sound(x, 0xec976);
+    lib::sound(x, 0xecdba);
     x.c.d[0] = 5;
     body(x, 5);
 }
@@ -380,7 +364,7 @@ fn hop(x: &mut Cx) {
             body(x, 6);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -390,7 +374,7 @@ fn hop(x: &mut Cx) {
             setw(x, 1, vy);
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vy);
-            x.call(call::RANDOM_TURN);
+            lib::drift_heading(x);
             speed(x, 0x35);
             x.set16(0x18, 0x300);
             x.set16(0x1a, (-0x40i16) as u16);
@@ -406,7 +390,7 @@ fn hop(x: &mut Cx) {
         6 => {
             x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.add8(0x7, 2);
@@ -427,7 +411,7 @@ fn hop(x: &mut Cx) {
             dust_tick(x);
             if !expired(x, TIMER) {
                 x.move_x();
-                step(x);
+                lib::step(x);
                 return;
             }
             if !alive(x) {
@@ -451,6 +435,6 @@ pub(super) fn wait_for_players(x: &mut Cx) {
         x.c.d[0] = 0;
         body(x, 0);
     } else {
-        step(x);
+        lib::step(x);
     }
 }

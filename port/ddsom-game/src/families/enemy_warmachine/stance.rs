@@ -145,7 +145,7 @@ fn march(x: &mut Cx, first: bool) {
     if !pick_target(x) {
         return go::idle(x);
     }
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     set_speed(x, 8);
     if matches!(x.u8(LOOK_PREV), 2 | 3) {
         let look = x.u8(LOOK);
@@ -167,7 +167,7 @@ fn march_step(x: &mut Cx) {
         if (m as i8) <= 0 {
             return go::fire_b(x);
         }
-        x.call(call::WALK_STEP);
+        lib::approach_target(x);
         set_speed(x, 8);
         let table = if x.u8(LOOK) == 3 { CHARGE_B } else { CHARGE_A };
         charge_delay(x, table);
@@ -186,18 +186,10 @@ fn march_step(x: &mut Cx) {
     if g != 0 {
         return wide_decision(x, g);
     }
-    set_dw(x, 0, -0x10i16 as u16);
-    set_dw(x, 1, 0x10);
-    set_dw(x, 2, 8);
-    x.call(0xb5e0);
-    if !x.c.cond(7) {
+    if lib::target_in_box(x, -0x10, 0x10, 8) {
         return pick_by_phase(x);
     }
-    set_dw(x, 0, -0x30i16 as u16);
-    set_dw(x, 1, 0x18);
-    set_dw(x, 2, 8);
-    x.call(0x7ef4);
-    if !x.c.cond(7) {
+    if lib::guard_in_front(x, -0x30, 0x18, 8) {
         return point_blank(x);
     }
     if !lib::facing_target(x) {
@@ -235,7 +227,7 @@ fn charge(x: &mut Cx) {
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
             spark(x, 1);
-            x.call(call::DUST);
+            lib::sound(x, 0xe3d32);
             look(x, 4);
             mv(x, 8);
         }
@@ -245,9 +237,8 @@ fn charge(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
-                x.c.d[0] = 0x10;
-                x.call(call::SHOCK);
-                x.call(call::DUST);
+                lib::shake_54(x, 0x10);
+                lib::sound(x, 0xe3d32);
             }
             let (mut d0, mut d1);
             if x.u8(AIMED) == 0 {

@@ -80,11 +80,7 @@ fn appear(x: &mut Cx) {
             if !pick_target(x) {
                 return;
             }
-            x.c.d[0] = 0;
-            x.c.d[1] = x.c.d[1] & 0xffff_0000 | 0x80;
-            x.c.d[2] = 0x20;
-            x.call(0xb5e0);
-            if !x.c.cond(7) {
+            if lib::target_in_box(x, 0, 0x80, 0x20) {
                 x.add8(f::SUB2, 2);
             }
         }

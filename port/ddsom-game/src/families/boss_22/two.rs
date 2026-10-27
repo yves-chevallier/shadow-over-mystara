@@ -28,7 +28,7 @@ pub(super) fn init(x: &mut Cx) {
     let r = random(x);
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.call(0xd5f30);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);
@@ -44,8 +44,8 @@ pub(super) fn init(x: &mut Cx) {
     x.set_a5_u8(0x5a, 0);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::AIM);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(RAGE, 0xff);
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x12c);
@@ -101,9 +101,8 @@ pub(super) fn arrive(x: &mut Cx) {
             if (x.u32(0xc) as i32) > 0 {
                 return step_anim(x);
             }
-            x.c.d[0] = 0x1e;
-            x.call(call::MESSAGE);
-            x.call(rom::IMMUNITIES);
+            lib::shake_5c(x, 0x1e);
+            lib::set_immunities(x);
             x.set32(0xc, 0);
             dust_line(x);
             next7(x);
@@ -149,9 +148,8 @@ pub(super) fn land(x: &mut Cx) {
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
     }
-    x.c.d[0] = 0x1e;
-    x.call(ia::SOUND_EVENT);
-    x.call(0xecd50);
+    lib::shake_54(x, 0x1e);
+    lib::sound(x, 0xecd50);
     x.set32(0xc, 0);
     dust_line(x);
     next7(x);
@@ -255,7 +253,7 @@ pub(super) fn slam(x: &mut Cx) {
             if player_within_reach(x) {
                 return x.set8(0x7, 0x1a);
             }
-            if target_in_box(x, 0, 0x180, 0x10) {
+            if lib::target_in_box(x, 0, 0x180, 0x10) {
                 return next7(x);
             }
             if x.u8(0x29) != 0 {
@@ -283,7 +281,7 @@ pub(super) fn slam(x: &mut Cx) {
             if sub16(x, TIMER2, 1).mi() || player_within_reach(x) {
                 return x.set8(0x7, 0x1a);
             }
-            if target_in_box(x, 0xc0, 0xc0, 0x10) || target_in_box(x, -0xc0, 0xc0, 0x10) {
+            if lib::target_in_box(x, 0xc0, 0xc0, 0x10) || lib::target_in_box(x, -0xc0, 0xc0, 0x10) {
                 return x.set8(0x7, 0x1a);
             }
             let dx = x.u16(SPOT_X).wrapping_sub(x.u16(0x8)).wrapping_add(8);

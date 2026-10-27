@@ -26,9 +26,9 @@ pub(super) fn stance_begin(x: &mut Cx) {
         set_state_long(x, IDLE);
         return idle_begin(x);
     }
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_6b(x);
     x.set8(SHOT_KIND, 3);
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     set_speed(x, 0xd);
     mv(x, 2);
 }
@@ -52,7 +52,7 @@ fn advance(x: &mut Cx) {
     if (n as i8) < 0 {
         let mut waiting = true;
         if pick_target(x) {
-            x.call(call::FACE_TARGET);
+            lib::draw_stance(x);
             let m = x.u8(AI_WANDER).wrapping_sub(1);
             x.set8(AI_WANDER, m);
             if (m as i8) >= 0 {
@@ -60,14 +60,13 @@ fn advance(x: &mut Cx) {
             }
         }
         if waiting {
-            x.call(call::RAND_TARGET_CHECK);
-            if !x.c.cond(7) {
+            if lib::maybe_draw_6e(x) {
                 set_state_long(x, IDLE);
                 return check_facing(x);
             }
         }
     }
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     x.move_by_table_xy();
     x.anim_step();
     if point_blank(x) {
@@ -92,11 +91,7 @@ pub(super) fn decide(x: &mut Cx) {
             x.set8(f::SUB2, d5);
             return check_facing(x);
         }
-        x.c.d[0] = -0x38i32 as u32;
-        x.c.d[1] = 0x38;
-        x.c.d[2] = 0x10;
-        x.call(0x7f0c);
-        if !x.c.cond(7) {
+        if lib::guard_in_front_strict(x, -0x38, 0x38, 0x10) {
             x.set8(f::SUB, 0xa);
             x.set16(f::SUB2, 0);
         }
@@ -132,7 +127,7 @@ fn strafe(x: &mut Cx) {
         x.set8(SHOT_KIND, 3);
         return advance(x);
     }
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     x.move_by_table_xy();
     x.anim_step();
 }

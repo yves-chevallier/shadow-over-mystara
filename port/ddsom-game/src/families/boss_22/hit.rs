@@ -35,8 +35,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 6 {
-        x.c.d[0] = 0x90;
-        x.call(call::IN_ARENA);
+        lib::keep_on_screen(x, 0x90);
         x.call(SHADOW);
     }
     x.reinsert();
@@ -47,7 +46,7 @@ fn reaction(x: &mut Cx) {
     if !second_form(x) {
         x.set8(SECOND_FX, 0);
     }
-    x.call(0x10112);
+    lib::set_68(x);
     x.set8(ARM_TIMER, 0);
     if !tst16(x, f::HP).gt() {
         x.set8(f::SUB, 6);
@@ -76,8 +75,8 @@ fn pushed_back(x: &mut Cx) {
             next6(x);
             x.set8(ANIM_ID, 0x1e);
             x.set8(ANIM_LAST, 0x1e);
-            x.call(0x10112);
-            x.call(0xec6ca);
+            lib::set_68(x);
+            lib::sound(x, 0xec6ca);
             let side = x.u8(0x4a);
             x.set8(f::FLIP, side);
             let side = x.u8(f::FLIP) ^ 0x20;
@@ -142,7 +141,7 @@ fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             let n = if second_form(x) { 0x10 } else { 0xd };
             start(x, Set::A, n);
         }
@@ -184,7 +183,7 @@ fn down(x: &mut Cx) {
 fn death(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            x.call(0xe3b6c);
+            lib::sound(x, 0xe3b6c);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             x.set8(0, 2);
             let freeze = x.u8(0x56);
@@ -240,7 +239,7 @@ fn death(x: &mut Cx) {
             x.set16(0xc, 0);
             let right = x.u8(f::FLIP) != 0;
             dust_trail(x, right);
-            x.call(0xec9e8);
+            lib::sound(x, 0xec9e8);
             if !second_form(x) {
                 effct_33(x);
             }

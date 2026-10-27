@@ -19,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => x.set32(f::STATE, 0x0202_0000),
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -39,7 +39,7 @@ fn reaction(x: &mut Cx) {
     if x.u8(REACTION) != 0xa8 {
         x.set8(0x87, 0);
     }
-    x.call(0x10112);
+    lib::set_68(x);
     x.set8(PHASE_TIMER, 0);
     if (x.u16(f::HP) as i16) <= 0 {
         x.set8(f::SUB, 6);
@@ -68,7 +68,7 @@ fn thrown(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(ANIM_KIND, 0x1e);
             x.set8(ANIM_LAST, 0x1e);
-            x.call(0x10112);
+            lib::set_68(x);
             x.set8(0, 2);
             x.set16(0x14, 0x500);
             x.set16(0x16, (-0x28i16) as u16);
@@ -132,7 +132,7 @@ fn fall(x: &mut Cx) {
     match step(x, 0x89500) {
         0x8950a => {
             x.add8(f::SUB2, 2);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             x.set16(0xc, 0);
             body(x, 8);
         }
@@ -186,7 +186,7 @@ fn death(x: &mut Cx) {
     match dispatch(x, 0x895d0, f::SUB2) {
         0x895da => {
             x.add8(f::SUB2, 2);
-            x.call(0xe43ae);
+            lib::sound(x, 0xe43ae);
             x.set8(0, 2);
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
@@ -228,7 +228,7 @@ fn death(x: &mut Cx) {
             } else {
                 aids::burst_front(x);
             }
-            x.call(0xec9e8);
+            lib::sound(x, 0xec9e8);
             body(x, 0xb);
         }
         0x896b6 => {

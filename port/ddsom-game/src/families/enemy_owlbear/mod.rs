@@ -68,12 +68,6 @@ const ACTIVE_TURN: u32 = 0x0202_0200;
 const ACTIVE_ENGAGE: u32 = 0x0202_0002;
 const KNOCKED: u32 = 0x0408_0000;
 
-mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -190,19 +184,19 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0x10);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     for (off, v) in AI_PARAMS {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     x.set8(0x7e, 0xd);
     x.set8(0x7f, 0);
     x.set8(0x8e, 0);
     x.set16(DELAY, 0x258);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     match x.u8(Obj::VARIANT) {
         0 => {
             set_state_long(x, ACTIVE_STANCE);

@@ -172,12 +172,12 @@ fn dying(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            x.call(0xe385e);
+            lib::sound(x, 0xe385e);
             x.call(0x19ad6);
-            x.call(call::REMOVE);
-            x.call(0xb780);
-            x.call(0xbad6);
-            x.call(0xe2f6);
+            detach_from_host(x);
+            lib::drop_loot(x);
+            lib::drop_special(x);
+            lib::drop_treasure(x);
             let flip = x.u8(0x4a) ^ 0x20;
             x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);
@@ -283,13 +283,13 @@ fn fall(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.call(0xe3776);
+            lib::sound(x, 0xe3776);
             play(x, SET_FLY, 5);
         }
         6 => {
             x.move_x();
             if lib::outside(x, -0x30, 0x1b0) {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 x.free(&pools::ENEMY);
             }
         }

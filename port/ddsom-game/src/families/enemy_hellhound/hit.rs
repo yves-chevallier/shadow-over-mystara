@@ -92,7 +92,7 @@ fn fall(x: &mut Cx) {
             if paused(x) || !x.anim_step() {
                 return;
             }
-            if !target_in_box(x, 0, 0x40, 8) {
+            if !lib::target_in_box(x, 0, 0x40, 8) {
                 x.set8(0x86, 0);
                 x.set8(0, 1);
                 x.set8(VULNERABLE, 1);
@@ -188,7 +188,7 @@ fn run_away(x: &mut Cx) {
             x.move_by_table_xy();
             if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
-                x.call(call::REMOVE);
+                detach_from_host(x);
             }
         }
         _ => {}

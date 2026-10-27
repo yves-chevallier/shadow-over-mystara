@@ -4,7 +4,7 @@
 
 use super::cx::Cx;
 use super::enemy_common::*;
-use crate::objects::Courant;
+use crate::objects::{Courant, Obj};
 
 /// 0x1046c : le type de coup `+0x44` suit la clé d'animation `+0x3e`.
 fn copy_strike_kind(x: &mut Cx) {
@@ -154,4 +154,408 @@ pub fn ai_gate(x: &mut Cx) -> u32 {
     };
     x.c.d[0] = n;
     n
+}
+
+// --- routines de l'IA d'autres modules -------------------------------------------------------------
+//
+// Les routines suivantes appartiennent à `ai.rs` et `ai_aids.rs` (lot D) et ne s'y appellent encore que par
+// adresse (natives à contrat de registres). Chacune n'est appelée qu'ici : les familles du lot A appellent ces
+// fonctions Rust, qui posent les registres d'entrée et rendent le résultat en valeur Rust. Les registres que la
+// native laisse restent posés (des gestionnaires suivants en relisent certains).
+
+/// Z de la dernière routine appelée par adresse.
+fn z(x: &Cx) -> bool {
+    x.c.cond(7)
+}
+
+/// `move.w #v,Dn` : seul le mot bas du registre change.
+fn set_word(x: &mut Cx, n: usize, v: u16) {
+    x.c.d[n] = x.c.d[n] & 0xffff_0000 | v as u32;
+}
+
+/// 0xa470 : tire l'attitude `+0x71` dans la ligne `+0x70` de la table d'attitudes (indexée par le compteur
+/// d'images).
+pub fn draw_stance(x: &mut Cx) {
+    x.call(0xa470);
+}
+
+/// 0x788c : `+0x6b` tiré au hasard dans la ligne `+0x6a` de sa table.
+pub fn draw_6b(x: &mut Cx) {
+    x.call(0x788c);
+}
+
+/// 0x79f6 : dans l'écran, `+0x6e` est tiré dans la ligne `+0x6d` de sa table ; sinon il vaut 1.
+pub fn draw_6e(x: &mut Cx) {
+    x.call(0x79f6);
+}
+
+/// 0x79ce : si le bit tiré dans le masque de la ligne `+0x6c` est levé, comme `draw_6e` et vrai ; sinon faux.
+pub fn maybe_draw_6e(x: &mut Cx) -> bool {
+    x.call(0x79ce);
+    !z(x)
+}
+
+/// 0xf118 : hors de l'écran, `+0x84` = 1 ; sinon `+0x84` = 0 et `+0x85` tiré dans la ligne `+0x8e`.
+pub fn draw_84(x: &mut Cx) {
+    x.call(0xf118);
+}
+
+/// 0x10112 : `+0x68` selon le niveau `A5+0x5a` et le nombre de joueurs en vie (8 sans niveau).
+pub fn set_68(x: &mut Cx) {
+    x.call(0x10112);
+}
+
+/// 0xac3a : `+0x77` tiré dans la table choisie par `+0x76` (indexée par le compteur d'images).
+pub fn pick_byte(x: &mut Cx) {
+    x.call(0xac3a);
+}
+
+/// 0xe76c : choisit le point d'approche de la cible `+0x50` (le plus proche ; de loin, le plus éloigné), le
+/// mémorise et tourne l'objet vers lui.
+pub fn approach_target(x: &mut Cx) {
+    x.call(0xe76c);
+}
+
+/// 0xf0e8 : tourne d'un cran le cap `Obj::SPEED_INDEX` vers le point (`x`, `y`).
+pub fn turn_toward(x: &mut Cx, px: u16, py: u16) {
+    set_word(x, 1, px);
+    set_word(x, 2, py);
+    x.call(0xf0e8);
+}
+
+/// 0xfbae : garde l'objet dans l'écran (marge de 0x30 pixels) ; c'est le test de zone de fin d'image.
+pub fn keep_in_zone(x: &mut Cx) {
+    x.call(0xfbae);
+}
+
+/// 0xfbb0 : garde l'objet dans l'écran, à `margin` pixels près ; vrai s'il a été déplacé.
+pub fn keep_on_screen(x: &mut Cx, margin: u16) -> bool {
+    set_word(x, 0, margin);
+    x.call(0xfbb0);
+    x.c.d[5] == 1
+}
+
+/// 0x424e : choisit un joueur comme cible (`+0x50`, critère tiré au hasard) ; faux si aucun n'est ciblable.
+pub fn pick_target(x: &mut Cx) -> bool {
+    x.call(0x424e);
+    !z(x)
+}
+
+/// 0x43ae : comme `pick_target`, avec la règle d'éligibilité large.
+pub fn pick_target_any(x: &mut Cx) -> bool {
+    x.call(0x43ae);
+    !z(x)
+}
+
+/// 0x44ee : un joueur ciblable tiré au hasard (trois essais) devient la cible ; faux si aucun.
+pub fn random_player(x: &mut Cx) -> bool {
+    x.call(0x44ee);
+    !z(x)
+}
+
+/// Critères de `target_by_criterion` (D0 de 0x43bc) : le plus proche, le moins de PV, le plus éloigné.
+pub const NEAREST: u8 = 0;
+pub const LOWEST_HP: u8 = 2;
+pub const FARTHEST: u8 = 4;
+
+/// 0x43bc : la cible devient le joueur qui répond au critère (`NEAREST`...) ; faux si aucun.
+pub fn target_by_criterion(x: &mut Cx, criterion: u8) -> bool {
+    x.c.d[0] = criterion as u32;
+    x.call(0x43bc);
+    !z(x)
+}
+
+/// 0x453c : PV initiaux d'un boss (table 0x458c), copiés en `+0x60`, `+0x62` et `+0x64`.
+pub fn initial_hp_boss(x: &mut Cx) {
+    x.call(0x453c);
+}
+
+/// 0x4544 : PV initiaux d'un ennemi (table 0x5c8c).
+pub fn initial_hp(x: &mut Cx) {
+    x.call(0x4544);
+}
+
+/// 0xfe5a : immunités (`+0x94`) selon la classe et le type.
+pub fn set_immunities(x: &mut Cx) {
+    x.call(0xfe5a);
+}
+
+/// 0x1059e : rang de PV `+0xac` selon le nombre de joueurs en vie et le compteur d'images.
+pub fn spread_index(x: &mut Cx) {
+    x.call(0x1059e);
+}
+
+/// Côté de la cible trouvée dans une boîte (D0 de 0xb5e0 et 0x7f19c).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum InBox {
+    No = 0,
+    /// Du côté vers lequel l'objet regarde.
+    Ahead = 1,
+    Behind = 2,
+}
+
+impl InBox {
+    fn from_d0(d0: u32) -> InBox {
+        match d0 {
+            0 => InBox::No,
+            1 => InBox::Ahead,
+            2 => InBox::Behind,
+            _ => unreachable!("boîte : D0 = {d0} (0, 1 ou 2 seulement)"),
+        }
+    }
+    pub fn found(self) -> bool {
+        self != InBox::No
+    }
+}
+
+/// 0xb5e0 : la cible `+0x50` (au sol) est-elle dans la boîte de décalage `dx` (retourné selon l'orientation), de
+/// demi-largeur `half_w` et de demi-profondeur `half_d` ?
+pub fn target_in_front(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> InBox {
+    set_word(x, 0, dx as u16);
+    set_word(x, 1, half_w);
+    set_word(x, 2, half_d);
+    x.call(0xb5e0);
+    InBox::from_d0(x.c.d[0])
+}
+
+/// `target_in_front` : la cible est-elle dans la boîte, d'un côté ou de l'autre ?
+pub fn target_in_box(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
+    target_in_front(x, dx, half_w, half_d).found()
+}
+
+/// 0x7f19c : l'objet `other` est-il dans la boîte devant l'objet (mêmes paramètres que `target_in_front`) ?
+pub fn in_box(x: &mut Cx, other: Obj, dx: i16, half_w: u16, half_d: u16) -> InBox {
+    x.c.a[2] = other.0;
+    set_word(x, 0, dx as u16);
+    set_word(x, 1, half_w);
+    set_word(x, 2, half_d);
+    x.call(0x7f19c);
+    InBox::from_d0(x.c.d[0])
+}
+
+/// 0x7ef4 : la cible, en garde (`+6` = 12), est-elle dans la boîte devant l'objet et lui fait-elle face ? Si oui
+/// et après un tirage, l'objet passe à l'état 6 avec une parade tirée au hasard, et la fonction rend vrai.
+pub fn guard_in_front(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
+    guard(x, 0x7ef4, dx, half_w, half_d)
+}
+
+/// 0x7f0c : comme `guard_in_front`, la garde pouvant aussi être 14, et la cible au sol.
+pub fn guard_in_front_strict(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
+    guard(x, 0x7f0c, dx, half_w, half_d)
+}
+
+fn guard(x: &mut Cx, routine: u32, dx: i16, half_w: u16, half_d: u16) -> bool {
+    set_word(x, 0, dx as u16);
+    set_word(x, 1, half_w);
+    set_word(x, 2, half_d);
+    x.call(routine);
+    !z(x)
+}
+
+/// 0xa4b4 (`+0x72`) : l'IA agit-elle à cette image ? (bit tiré dans un masque choisi par le compteur d'images.)
+pub fn decision_a(x: &mut Cx) -> bool {
+    x.call(0xa4b4);
+    !z(x)
+}
+
+/// 0xa4c2 : comme `decision_a`, avec la table de `+0x73`.
+pub fn decision_b(x: &mut Cx) -> bool {
+    x.call(0xa4c2);
+    !z(x)
+}
+
+/// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de l'objet ? Rend ce joueur.
+pub fn attack_hits_a_player(x: &mut Cx, attack: u8) -> Option<Obj> {
+    x.c.d[0] = attack as u32;
+    x.call(0xfc44);
+    (!z(x)).then(|| Obj(x.c.a[1]))
+}
+
+/// 0xfd64 : le joueur `player` est saisi par l'objet (animation de prise `anim`).
+pub fn seize_player(x: &mut Cx, player: Obj, anim: u8) {
+    x.c.a[1] = player.0;
+    x.c.d[0] = anim as u32;
+    x.call(0xfd64);
+}
+
+/// 0xfd8c : le joueur `player` est relâché (A1 = son adresse étendue en signe, comme après `movea.w`).
+pub fn release_player(x: &mut Cx, player: Obj) {
+    x.c.a[1] = player.0 | 0xff00_0000;
+    x.call(0xfd8c);
+}
+
+/// 0xfda2 : le joueur saisi (`+0x50`) suit l'objet selon l'étape de l'animation de prise.
+pub fn hold_seized(x: &mut Cx) {
+    x.call(0xfda2);
+}
+
+/// 0xff54 : compte à rebours `+0x98`, puis nouvel état selon le nombre de joueurs et un tirage.
+pub fn countdown_then_state(x: &mut Cx) {
+    x.call(0xff54);
+}
+
+/// 0xfffc : paramètre de comportement `+0x98` lu selon le type.
+pub fn behaviour_by_kind(x: &mut Cx) {
+    x.call(0xfffc);
+}
+
+/// 0x10574 : le cap `Obj::SPEED_INDEX` change d'au plus un cran au hasard.
+pub fn drift_heading(x: &mut Cx) {
+    x.call(0x10574);
+}
+
+/// 0x105b6 : franchit le palier de PV suivant de la table `thresholds` ; vrai si un palier est passé.
+pub fn next_threshold(x: &mut Cx, thresholds: u32) -> bool {
+    x.c.a[1] = thresholds;
+    x.call(0x105b6);
+    !z(x)
+}
+
+/// 0x1050c : vrai si l'objet regarde vers sa cible (ou n'en a pas).
+pub fn faces_target(x: &mut Cx) -> bool {
+    x.call(0x1050c);
+    z(x)
+}
+
+/// 0x10560 : vrai si la vitesse en X suit l'orientation.
+pub fn moves_forward(x: &mut Cx) -> bool {
+    x.call(0x10560);
+    z(x)
+}
+
+/// 0x104a2 : vrai si l'objet est hors de la bande `[écran + left, écran + right]`.
+pub fn outside_band(x: &mut Cx, left: i16, right: i16) -> bool {
+    set_word(x, 0, left as u16);
+    set_word(x, 1, right as u16);
+    x.call(0x104a2);
+    !z(x)
+}
+
+/// 0x10474 : au moins un joueur en vie.
+pub fn any_player_alive(x: &mut Cx) -> bool {
+    x.call(0x10474);
+    !z(x)
+}
+
+/// Geste choisi par `turn_decision` (D0 de 0x1047a).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Turn {
+    None = 0,
+    /// Face à face, tirage A.
+    FaceToFace = 1,
+    /// Même côté, tirage B.
+    SameSide = 2,
+}
+
+/// 0x1047a : décision de se tourner vers la cible.
+pub fn turn_decision(x: &mut Cx) -> Turn {
+    x.call(0x1047a);
+    match x.c.d[0] {
+        0 => Turn::None,
+        1 => Turn::FaceToFace,
+        2 => Turn::SameSide,
+        d0 => unreachable!("0x1047a : D0 = {d0} (0, 1 ou 2 seulement)"),
+    }
+}
+
+/// 0x1172e : jeu de débris n° `set` autour de l'objet.
+pub fn debris(x: &mut Cx, set: u32) {
+    x.c.d[5] = set;
+    x.call(0x1172e);
+}
+
+/// 0x11a36 : cinq débris au sol (seconde table si `second` est non nul), puis le son 0xede08.
+pub fn ground_debris(x: &mut Cx, second: u8) {
+    x.c.d[0] = x.c.d[0] & !0xff | second as u32;
+    x.call(0x11a36);
+}
+
+/// 0xb648 : une seule fois par objet, selon un tirage, lâche l'objet propre à son type.
+pub fn drop_once(x: &mut Cx) {
+    x.call(0xb648);
+}
+
+/// 0xb780 : butin de l'objet (ligne `+0x80`).
+pub fn drop_loot(x: &mut Cx) {
+    x.call(0xb780);
+}
+
+/// 0xbad6 : objet spécial lâché par l'objet (ligne `+0x80`).
+pub fn drop_special(x: &mut Cx) {
+    x.call(0xbad6);
+}
+
+/// 0xe2f6 : trésor de l'objet (ligne `+0x80`).
+pub fn drop_treasure(x: &mut Cx) {
+    x.call(0xe2f6);
+}
+
+/// 0x115e2 : le boss pousse les joueurs présents devant lui.
+pub fn push_players(x: &mut Cx) {
+    x.call(0x115e2);
+}
+
+/// 0x103ba : éclair d'écran, secousse et effet d'impact.
+pub fn flash_and_shake(x: &mut Cx) {
+    x.call(0x103ba);
+}
+
+/// 0x3e480 : routine d'atterrissage propre au type de l'objet.
+pub fn landing_by_kind(x: &mut Cx) {
+    x.call(0x3e480);
+}
+
+/// 0x10428 : démarre l'animation du jeu `set` dont la marque est la variante (`+0x33`) du maître (`+0xb2`).
+pub fn animation_of_master(x: &mut Cx, set: u32) {
+    x.c.a[4] = set;
+    x.call(0x10428);
+}
+
+/// 0x10450 : démarre l'animation du jeu `set` dont la marque est celle de `+0x3e` du maître.
+pub fn animation_of_mark(x: &mut Cx, set: u32) {
+    x.c.a[4] = set;
+    x.call(0x10450);
+}
+
+/// 0x2824, 0x2860, 0x289c : secousse de la caméra en service pendant `frames` images, dans le mode 0x54, 0x58 ou
+/// 0x5c (`camera_modes.rs`).
+pub fn shake_54(x: &mut Cx, frames: u16) {
+    shake(x, 0x2824, frames)
+}
+pub fn shake_58(x: &mut Cx, frames: u16) {
+    shake(x, 0x2860, frames)
+}
+pub fn shake_5c(x: &mut Cx, frames: u16) {
+    shake(x, 0x289c, frames)
+}
+fn shake(x: &mut Cx, routine: u32, frames: u16) {
+    x.c.d[0] = frames as u32;
+    x.call(routine);
+}
+
+/// Points de marche autour de la cible : 0xe886 (le plus éloigné, sauf le dernier), 0xe914 (atteint : un autre),
+/// 0xeff2 (le plus proche, retourné selon la cible), 0xf084 (le plus éloigné), 0xe7fa (le plus proche, numéroté).
+pub fn choose_walk_point(x: &mut Cx) {
+    x.call(0xe886);
+}
+pub fn walk_point_reached(x: &mut Cx) {
+    x.call(0xe914);
+}
+pub fn walk_near_point(x: &mut Cx) {
+    x.call(0xeff2);
+}
+pub fn walk_far_point(x: &mut Cx) {
+    x.call(0xf084);
+}
+pub fn choose_near_walk_point(x: &mut Cx) {
+    x.call(0xe7fa);
+}
+
+// --- sons ---------------------------------------------------------------------------------------------
+
+/// Joue le son dont `wrapper` est la petite routine d'origine (table `sound_table.rs` : commande, canal et
+/// panoramique selon la position de l'objet). En attendant une API de `sound.rs`, la routine est appelée par son
+/// adresse ; elle rend tous les registres intacts.
+pub fn sound(x: &mut Cx, wrapper: u32) {
+    x.call(wrapper);
 }

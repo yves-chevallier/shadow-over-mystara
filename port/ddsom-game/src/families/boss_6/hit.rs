@@ -20,14 +20,6 @@ const STUN_REACTION: u32 = 0x85326;
 /// Seuils de PV par phase (mots).
 const THRESHOLDS: u32 = 0x10de2;
 
-mod lib {
-    pub const HIT_FX: u32 = 0xb648;
-    pub const RECOVER_FX: u32 = 0xfffc;
-    pub const LANDING_FX: u32 = 0xec9e8;
-    pub const HP_STEP: u32 = 0x10112;
-    pub const PHASE_STEP: u32 = 0x105b6;
-}
-
 pub(super) fn run(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -41,7 +33,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -57,8 +49,8 @@ fn out_of_hp(x: &mut Cx) -> bool {
 
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(lib::HIT_FX);
-        x.call(lib::HP_STEP);
+        lib::drop_once(x);
+        lib::set_68(x);
         x.set8(INVULNERABLE, 0);
         if out_of_hp(x) {
             return down(x);
@@ -86,7 +78,7 @@ fn stun(x: &mut Cx) {
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
             x.set8(0x90, 0x10);
-            play(x, SET_HURT, 8);
+            lib::start(x, SET_HURT, 8);
         }
         2 => {
             if tst8(x, 0x90).le() {
@@ -131,7 +123,7 @@ fn pushed_back(x: &mut Cx) {
                 x.set16(0x16, 0);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         4 => {
             if sub16(x, TIMER, 1).le() {
@@ -139,7 +131,7 @@ fn pushed_back(x: &mut Cx) {
                 decide::attack_6_shielded(x);
             } else {
                 x.move_x();
-                step(x);
+                lib::step(x);
             }
         }
         _ => {}
@@ -150,7 +142,7 @@ fn get_up(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.call(lib::RECOVER_FX);
+            lib::behaviour_by_kind(x);
             x.set8(ANIM_LAST, 0xff);
             x.anim_start(SET_BODY, 0xa);
         }
@@ -185,13 +177,8 @@ pub(super) fn recovered_tail(x: &mut Cx) {
     if !pick_target(x) {
         return decide::wait(x);
     }
-    x.c.a[1] = THRESHOLDS;
-    x.call(lib::PHASE_STEP);
-    set_dw(x, 0, 0);
-    set_dw(x, 1, 0x30);
-    set_dw(x, 2, 0xc);
-    x.call(ai::TARGET_IN_BOX);
-    if !zero(x) {
+    lib::next_threshold(x, THRESHOLDS);
+    if lib::target_in_box(x, 0, 0x30, 0xc) {
         decide::attack_6_shielded(x);
     } else {
         decide::chase(x);
@@ -227,7 +214,7 @@ fn down(x: &mut Cx) {
             }
             x.set16(0x14, vx as u16);
             x.set8(f::FLIP, side);
-            x.call(0x103ba);
+            lib::flash_and_shake(x);
             x.anim_start(SET_HURT, 0);
         }
         2 => {
@@ -237,9 +224,8 @@ fn down(x: &mut Cx) {
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
-            x.c.d[5] = 5;
-            x.call(call::DUST);
-            x.call(lib::LANDING_FX);
+            lib::debris(x, 5);
+            lib::sound(x, 0xec9e8);
             x.anim_start(SET_BODY, 0xb);
         }
         4 => {

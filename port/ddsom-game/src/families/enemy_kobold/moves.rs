@@ -17,8 +17,7 @@ fn ready_after_anim(x: &mut Cx) {
 
 /// 0x555c2 : le Kobold se met à l'affût (test aléatoire, puis boîtes de portée ou charge).
 fn ready(x: &mut Cx) {
-    x.call(call::RAND_TARGET_CHECK);
-    if x.c.cond(7) {
+    if !lib::maybe_draw_6e(x) {
         stance::reach(x);
     } else {
         x.set16(f::SUB2, 0x400);

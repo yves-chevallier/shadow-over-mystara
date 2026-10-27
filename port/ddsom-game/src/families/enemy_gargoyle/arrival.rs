@@ -39,8 +39,8 @@ fn flight(x: &mut Cx) {
             x.set16(Obj::Z, 0x28);
             look(x, 0x30);
             x.set8(INVULNERABLE, 0);
-            x.call(rom::IMMUNITIES);
-            x.call(0xe3776);
+            lib::set_immunities(x);
+            lib::sound(x, 0xe3776);
             fly(x, 5);
         }
         2 => {
@@ -118,7 +118,7 @@ fn landed(x: &mut Cx) {
         }
         2 => {
             pick_target(x);
-            if target_in_box(x, 0, 0x20, 0x40) {
+            if lib::target_in_box(x, 0, 0x20, 0x40) {
                 x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x18);
             }
@@ -147,7 +147,7 @@ fn landed(x: &mut Cx) {
             }
             x.set8(NO_GRAB, 0);
             x.set8(INVULNERABLE, 0);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             spark(x, 0xa);
             if (x.u16(f::TARGET) as i16) >= 0 {
                 go::dive(x);

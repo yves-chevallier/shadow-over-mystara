@@ -39,7 +39,7 @@ fn shaken(x: &mut Cx) {
 
 /// 0x8b4c2 : le coup : avaries, gel ; plus de PV : détruit ; sinon secousse et recul à l'opposé de l'attaquant.
 fn struck(x: &mut Cx) {
-    x.call(call::STOP);
+    lib::sound(x, 0xea984);
     damage_bits(x);
     let f = x.u8(0x56);
     x.set8(f::FREEZE, f);
@@ -138,7 +138,7 @@ fn destroyed(x: &mut Cx) {
     set_abs8(x, A5_DEATH + 2, score);
     x.set_a5_u8(0x42, 1);
     x.set_a5_u8(0x50, 0);
-    x.call(0x103ba);
+    lib::flash_and_shake(x);
     for k in 0..4u32 {
         let m = x.linked(CREW + 2 * k);
         x.c.a[3] = m.0;
@@ -173,7 +173,7 @@ fn wreck(x: &mut Cx) {
                 x.set16(0x14, (-0x500i16) as u16);
                 x.set8(f::FLIP, 0);
                 x.set8(0x2d, 0x18);
-                x.call(call::BRAKE);
+                lib::sound(x, 0xe4626);
             }
             roll(x);
         }
@@ -187,8 +187,8 @@ fn wreck(x: &mut Cx) {
                 if (x.a5_u16(ENEMY_FREE) as i16) >= 4 {
                     next6(x);
                     refill_crew(x, true);
-                    x.call(call::STOP);
-                    x.call(0xe1330);
+                    lib::sound(x, 0xea984);
+                    lib::sound(x, 0xe1330);
                 }
             }
             roll(x);
@@ -202,7 +202,7 @@ fn wreck(x: &mut Cx) {
             x.set16(0x14, 0x800);
             x.set16(0x16, 0);
             x.set8(GAIT, 1);
-            x.call(0xe4682);
+            lib::sound(x, 0xe4682);
         }
         12 => {
             jolt(x);
@@ -264,7 +264,7 @@ fn wreck(x: &mut Cx) {
                     x.set16(0x18, (-0x600i16) as u16);
                     x.set16(0x1a, (-0x10i16) as u16);
                     x.set8(GAIT, 2);
-                    x.call(0xea9ee);
+                    lib::sound(x, 0xea9ee);
                     for off in [DRIVER, CREW, CREW + 2, CREW + 4, CREW + 6] {
                         if x.u16(off) != 0 {
                             let m = x.linked(off);
@@ -310,10 +310,10 @@ fn leaving(x: &mut Cx) {
     if x.u8(f::FLIP) == 0 {
         next6(x);
         negate(x, 0x14);
-        x.call(call::BRAKE);
+        lib::sound(x, 0xe4626);
     } else {
-        x.call(call::ROLL);
-        x.call(call::SHOUT);
+        lib::sound(x, 0xe45ca);
+        lib::sound(x, 0xea8be);
     }
     roll(x)
 }

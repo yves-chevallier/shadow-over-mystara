@@ -91,11 +91,6 @@ pub(self) mod call {
     pub const PICK_OTHER: u32 = 0x44ee;
     pub const SMOKE: u32 = 0xb10c8;
     pub const MESSAGE: u32 = 0xc8312;
-    /// Bruits de l'engin (file des sons).
-    pub const ROLL: u32 = 0xe45ca;
-    pub const BRAKE: u32 = 0xe4626;
-    pub const SHOUT: u32 = 0xea8be;
-    pub const STOP: u32 = 0xea984;
 }
 
 /// Un pas d'animation (0x1a56).
@@ -444,9 +439,9 @@ pub(self) fn target_range(x: &mut Cx) -> u8 {
         let t = load_target(x);
         if t.u16(x.b, 0xc) != 0 {
             2
-        } else if target_in_box(x, -0x40, 0x40, 0x100) {
+        } else if lib::target_in_box(x, -0x40, 0x40, 0x100) {
             1
-        } else if target_in_box(x, -0x100, 0x80, 0x100) {
+        } else if lib::target_in_box(x, -0x100, 0x80, 0x100) {
             0
         } else {
             2
@@ -523,8 +518,8 @@ fn init(x: &mut Cx) {
     x.set8(0x9a, 1);
     x.set8(0x6f, 2);
     x.set8(f::BOX_SET, 0x29);
-    x.call(0x453c);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp_boss(x);
+    lib::set_immunities(x);
     // deux parties 0xd (liées par `+0xa4`, `+0xa6`), huit parties 0xe
     for (kind, last, linked) in [(0xdu8, 1u8, true), (0xe, 7, false)] {
         for k in (0..=last).rev() {
@@ -565,7 +560,7 @@ fn init(x: &mut Cx) {
     let z = x.u32(0x10).wrapping_add(0xffff_8000);
     x.set32(0x10, z);
     x.set16(0x8, 0x80);
-    x.call(0x43ae);
+    lib::pick_target_any(x);
     x.c.d[0] = 0;
     x.set32(0xc, 0);
     x.anim_start(SET, 6);

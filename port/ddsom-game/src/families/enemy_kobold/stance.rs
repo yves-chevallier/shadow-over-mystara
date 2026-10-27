@@ -36,22 +36,21 @@ fn approach(x: &mut Cx) {
         x.set8(LOOK, 0xc);
         mv(x, 0xc);
         set_speed(x, 0xb);
-        return x.call(call::FACE_TARGET);
+        return lib::draw_stance(x);
     }
     let n = x.u8(AI_CHARGE).wrapping_sub(1);
     x.set8(AI_CHARGE, n);
     if (n as i8) < 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         pick_target(x);
         let kind = if x.u8(f::SUB2) == 0 { 0xe } else { 0xf };
         x.set8(SHOT_KIND, kind);
-        x.call(call::WALK_STEP);
+        lib::approach_target(x);
         let w = x.u8(AI_WANDER).wrapping_sub(1);
         x.set8(AI_WANDER, w);
         if w == 0 {
-            x.call(call::TURN_TO_TARGET);
-            x.call(call::RAND_TARGET_CHECK);
-            if !x.c.cond(7) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 return x.set16(f::SUB2, 0x400);
             }
         }
@@ -67,15 +66,15 @@ pub(super) fn reach(x: &mut Cx) {
 
 /// 0x555da : boîtes de portée successives.
 pub(super) fn reach_boxes(x: &mut Cx) {
-    if target_in_box(x, -0x28, 0x18, 4) {
+    if lib::target_in_box(x, -0x28, 0x18, 4) {
         set_state_long(x, 0x0204_0200);
-        return x.call(call::ANNOUNCE);
+        return lib::pick_byte(x);
     }
     if front_attack(x) || far_attack(x) {
         return;
     }
-    if target_in_box_far(x, -0x30, 0x30, 0x20) {
-        return x.call(call::ANNOUNCE);
+    if lib::guard_in_front_strict(x, -0x30, 0x30, 0x20) {
+        return lib::pick_byte(x);
     }
     x.anim_step();
     x.move_by_table_xy();
@@ -104,7 +103,7 @@ fn gate(x: &mut Cx) -> bool {
 
 /// 0x5566e : un joueur devant, tout près : coup de la série courte ou nouveau pas.
 fn front_attack(x: &mut Cx) -> bool {
-    if !target_in_box(x, -0x40, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
+    if !lib::target_in_box(x, -0x40, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
         x.c.d[0] = 0;
         return false;
     }
@@ -114,7 +113,7 @@ fn front_attack(x: &mut Cx) -> bool {
         set_state_long(x, 0x0202_0800);
     } else {
         set_state_long(x, 0x0204_0000);
-        x.call(call::ANNOUNCE);
+        lib::pick_byte(x);
         pick_attack(x, 0);
         x.c.d[0] = 1;
     }
@@ -123,7 +122,7 @@ fn front_attack(x: &mut Cx) -> bool {
 
 /// 0x556e8 : un joueur plus loin devant : geste de la série lointaine.
 fn far_attack(x: &mut Cx) -> bool {
-    if !target_in_box(x, -0xb0, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
+    if !lib::target_in_box(x, -0xb0, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
         x.c.d[0] = 0;
         return false;
     }
@@ -132,7 +131,7 @@ fn far_attack(x: &mut Cx) -> bool {
         set_state_long(x, 0x0202_0800);
     } else {
         set_state_long(x, 0x0204_0000);
-        x.call(call::ANNOUNCE);
+        lib::pick_byte(x);
         pick_attack(x, 0x14);
         x.c.d[0] = 1;
     }
@@ -194,7 +193,7 @@ fn run_up(x: &mut Cx) {
         0 => {
             x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x28);
-            x.call(call::FACE_TARGET);
+            lib::draw_stance(x);
             run_begin(x);
         }
         2 => {
@@ -206,10 +205,10 @@ fn run_up(x: &mut Cx) {
             let n = x.u8(AI_CHARGE).wrapping_sub(1);
             x.set8(AI_CHARGE, n);
             if (n as i8) < 0 {
-                x.call(call::FACE_TARGET);
+                lib::draw_stance(x);
                 pick_target(x);
                 x.set8(SHOT_KIND, 0xe);
-                x.call(call::WALK_STEP);
+                lib::approach_target(x);
             }
             if must_turn(x) {
                 x.set32(RESUME_STATE, 0x0202_0004);

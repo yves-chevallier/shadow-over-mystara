@@ -52,12 +52,6 @@ pub(self) const SET_MOVE: u32 = 0x162126;
 pub(self) const SET_STRIKE: u32 = 0x162148;
 
 pub(self) mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const REMOVE: u32 = 0x27ee;
     pub const SPARK: u32 = 0xb10c8;
 }
 
@@ -123,7 +117,7 @@ pub(self) fn land(x: &mut Cx) {
 /// 0x62478 : poussière, retour au sol, étape suivante.
 pub(self) fn land_dust(x: &mut Cx) {
     dust(x);
-    x.call(0xec820);
+    lib::sound(x, 0xec820);
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -209,7 +203,7 @@ pub(self) fn after_strike(x: &mut Cx) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
-    let close = target_in_box(x, -0x30, 0x30, 8) || target_in_box(x, -0xd0, 0x70, 8);
+    let close = lib::target_in_box(x, -0x30, 0x30, 8) || lib::target_in_box(x, -0xd0, 0x70, 8);
     if !close {
         return set_state_long(x, STANCE);
     }
@@ -234,12 +228,12 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0x6f, 1);
     x.set8(f::BOX_SET, 0x12);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     for (off, v) in [(0x70, 0), (0x7e, 0xf), (0x7f, 0), (0x8e, 0), (0x78, 0xff), (0x81, 0xf), (0x80, 0x10)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     let params: [(u32, u8); 10] = if x.u8(GROUP) == 0 {
         [(0x68, 2), (0x69, 2), (0x6a, 0), (0x6c, 3), (0x6d, 2), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x24), (0x76, 4)]
     } else {
@@ -251,8 +245,8 @@ fn init(x: &mut Cx) {
     if !pick_target(x) {
         return set_state_long(x, IDLE);
     }
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     // état de départ, aspect et animation selon la variante
     let (state, look_v, anim) = match x.u8(Obj::VARIANT) {
         0 => (STANCE, 0xc, 2),

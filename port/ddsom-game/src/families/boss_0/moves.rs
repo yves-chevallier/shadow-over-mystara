@@ -9,7 +9,7 @@ use crate::objects::Obj;
 
 /// Suite d'un coup, d'une course ou d'une attente : un nouveau départ si un joueur vit, sinon l'attente.
 fn restart_or_idle(x: &mut Cx) {
-    if alive(x) {
+    if lib::any_player_alive(x) {
         run_start(x)
     } else {
         idle_alone(x)
@@ -18,7 +18,7 @@ fn restart_or_idle(x: &mut Cx) {
 
 /// Fin d'une animation de coup (0x79e88) : la course reprend quand elle est terminée.
 fn end_of_strike(x: &mut Cx) {
-    if step(x) {
+    if lib::step(x) {
         restart_or_idle(x);
     }
 }
@@ -48,9 +48,9 @@ fn gallop_step(x: &mut Cx) {
     x.move_x();
     if x.u8(f::KEY_FRAME) == 2 {
         x.set8(f::KEY_FRAME, 0);
-        dust(x, 1);
-        sound(x, 0x10);
-        x.call(0xe3d32);
+        lib::debris(x, 1);
+        lib::shake_54(x, 0x10);
+        lib::sound(x, 0xe3d32);
     }
 }
 
@@ -63,10 +63,10 @@ fn start_slide(x: &mut Cx, v: u16, extra: bool) {
     set_dw(x, 0, v);
     x.set16(0x16, v);
     if extra {
-        x.call(0xe13b0);
+        lib::sound(x, 0xe13b0);
     }
-    x.call(0xe3d32);
-    x.call(0xecdba);
+    lib::sound(x, 0xe3d32);
+    lib::sound(x, 0xecdba);
     body(x, 9);
 }
 
@@ -74,14 +74,14 @@ fn start_slide(x: &mut Cx, v: u16, extra: bool) {
 fn slide(x: &mut Cx) {
     if !sub16(x, TIMER2, 1).gt() {
         x.set16(TIMER2, 4);
-        dust(x, 0);
+        lib::debris(x, 0);
     }
     if expired(x, TIMER) {
         next7(x);
         body(x, 0xa);
     } else {
         x.move_x();
-        step(x);
+        lib::step(x);
     }
 }
 
@@ -119,7 +119,7 @@ fn arrival(x: &mut Cx) {
             x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
-            x.call(0xe3d32);
+            lib::sound(x, 0xe3d32);
             anim_kind(x, 0x30);
             entry(x, 3);
         }
@@ -131,10 +131,10 @@ fn arrival(x: &mut Cx) {
         }
         4 => slide(x),
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 x.set_a5_u32(0x38, 0x0459_5900);
                 x.set8(INVULNERABLE, 0);
-                x.call(rom::IMMUNITIES);
+                lib::set_immunities(x);
                 x.call(0xd5f30);
                 run_start(x);
             }
@@ -150,7 +150,7 @@ fn transformation(x: &mut Cx) {
         0 => {
             next7(x);
             x.set16(TIMER, 0x3c);
-            x.call(0xe3cbe);
+            lib::sound(x, 0xe3cbe);
             anim_kind(x, 0x31);
             body(x, 0xe);
         }
@@ -185,7 +185,7 @@ fn transformation(x: &mut Cx) {
             if partner.u32(x.b, f::STATE) == 0x0200_040a {
                 next7(x);
                 x.set16(TIMER, 0x5a);
-                x.call(0xe3bd6);
+                lib::sound(x, 0xe3bd6);
                 body(x, 0x10);
             } else {
                 x.anim_step();
@@ -195,7 +195,7 @@ fn transformation(x: &mut Cx) {
             if expired(x, TIMER) {
                 x.set8(0, 1);
                 x.set8(ROLE, 0);
-                x.call(rom::IMMUNITIES);
+                lib::set_immunities(x);
                 x.set_a5_u16(0x51e, 0);
                 run_start(x);
             } else {
@@ -227,7 +227,7 @@ fn partner_arrival(x: &mut Cx) {
             x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
-            x.call(0xe3d32);
+            lib::sound(x, 0xe3d32);
             anim_kind(x, 0x32);
             entry(x, 3);
         }
@@ -239,7 +239,7 @@ fn partner_arrival(x: &mut Cx) {
         }
         4 => slide(x),
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 next7(x);
                 x.set16(TIMER, 0x14);
                 body(x, 4);
@@ -249,7 +249,7 @@ fn partner_arrival(x: &mut Cx) {
             if expired(x, TIMER) {
                 next7(x);
                 x.set16(TIMER, 0x5a);
-                x.call(0xe3bd6);
+                lib::sound(x, 0xe3bd6);
                 body(x, 0xd);
             } else {
                 x.anim_step();
@@ -259,7 +259,7 @@ fn partner_arrival(x: &mut Cx) {
             if expired(x, TIMER) {
                 x.set8(0, 1);
                 x.set8(ROLE, 0);
-                x.call(rom::IMMUNITIES);
+                lib::set_immunities(x);
                 x.call(0xd5ef8);
                 run_start(x);
             } else {
@@ -288,12 +288,12 @@ pub(super) fn fight(x: &mut Cx) {
 
 /// 0x79a70 : debout, attend un temps tiré puis repart.
 fn idle(x: &mut Cx) {
-    if !alive(x) {
+    if !lib::any_player_alive(x) {
         return idle_alone(x);
     }
     if x.u8(0x7) == 0 {
         next7(x);
-        x.call(call::RAND_TIMER);
+        lib::draw_6e(x);
         x.c.d[0] = 0;
         x.set8(ANIM_KIND, 0);
         if x.u8(ANIM_LAST) != 0 {
@@ -302,16 +302,16 @@ fn idle(x: &mut Cx) {
         }
         return;
     }
-    if outside(x, -0x30, 0x1b0) {
+    if lib::outside_band(x, -0x30, 0x1b0) {
         return charge(x, false);
     }
     if sub8(x, IDLE_COUNT, 1).le() {
         return run_start(x);
     }
-    if turn_needed(x) {
+    if !lib::faces_target(x) {
         return turn(x);
     }
-    step(x);
+    lib::step(x);
 }
 
 /// 0x79ad4 : demi-tour, puis l'état mémorisé est repris.
@@ -324,10 +324,10 @@ fn turn_around(x: &mut Cx) {
         x.set8(ANIM_KIND, 1);
         return body(x, 5);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
-    if !alive(x) {
+    if !lib::any_player_alive(x) {
         return idle_alone(x);
     }
     let saved = x.u32(SAVED_STATE);
@@ -343,23 +343,20 @@ fn turn_around(x: &mut Cx) {
 
 /// 0x79bb8 : animation de course vers l'avant (6) ou vers l'arrière (7) selon le sens de la cible.
 fn run_animation(x: &mut Cx) {
-    let n = if facing_target(x) { 6 } else { 7 };
+    let n = if lib::moves_forward(x) { 6 } else { 7 };
     x.c.d[0] = n;
     body(x, n);
 }
 
 /// 0x79c92 : choisit, dans la table de l'animation de course, l'entrée du geste en cours.
 fn select_run(x: &mut Cx) {
-    x.c.a[4] = SET_RUN_FORWARD;
-    if facing_target(x) {
-        x.c.a[4] = SET_RUN_BACK;
-    }
-    x.call(ai::SELECT);
+    let set = if lib::moves_forward(x) { SET_RUN_BACK } else { SET_RUN_FORWARD };
+    lib::switch_keeping_time(x, set);
 }
 
 /// 0x79b3a (kind 2) et 0x79b5c (kind 3) : course ; elle commence par tirer le nombre de pas et leur délai.
 fn run_phase(x: &mut Cx, kind: u8) {
-    if !alive(x) {
+    if !lib::any_player_alive(x) {
         return idle_alone(x);
     }
     if x.u8(0x7) != 0 {
@@ -375,7 +372,7 @@ fn run_phase(x: &mut Cx, kind: u8) {
     if !pick_target(x) {
         return idle_alone(x);
     }
-    x.call(call::ASK_TARGET);
+    lib::approach_target(x);
     speed(x, 8);
     let last = x.u8(ANIM_LAST);
     if last == 2 || last == 3 {
@@ -396,13 +393,13 @@ fn keep_running(x: &mut Cx) {
         if sub8(x, WALK_STEPS, 1).le() {
             return run_end(x);
         }
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
         speed(x, 8);
         let kind = x.u8(ANIM_KIND);
         walk_delay(x, kind);
         return select_run(x);
     }
-    if outside(x, -0x30, 0x1b0) {
+    if lib::outside_band(x, -0x30, 0x1b0) {
         return charge(x, false);
     }
     if x.u8(ANIM_KIND) == 3 {
@@ -413,19 +410,19 @@ fn keep_running(x: &mut Cx) {
     if let Some(g) = far_gesture(x) {
         return from_far_gesture(x, g);
     }
-    if target_in_box(x, -0x10, 0x10, 8) {
+    if lib::target_in_box(x, -0x10, 0x10, 8) {
         return from_front(x);
     }
-    if in_wide_box(x, -0x30, 0x18, 8) {
+    if lib::guard_in_front(x, -0x30, 0x18, 8) {
         return from_close(x);
     }
-    if turn_needed(x) {
+    if !lib::faces_target(x) {
         return turn(x);
     }
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
-    step(x);
+    lib::step(x);
 }
 
 /// 0x79cac : charge vers la caméra ou vers la position mémorisée de la cible.
@@ -452,8 +449,8 @@ fn charge_phase(x: &mut Cx) {
             x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
-            dust(x, 1);
-            x.call(0xe3d32);
+            lib::debris(x, 1);
+            lib::sound(x, 0xe3d32);
             anim_kind(x, 4);
             body(x, 8);
         }
@@ -466,7 +463,7 @@ fn charge_phase(x: &mut Cx) {
         }
         4 => slide(x),
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 if x.u8(ROLE) == 1 {
                     return transform(x);
                 }
@@ -516,8 +513,8 @@ fn leap_strike(x: &mut Cx) {
             x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x2b);
-            dust(x, 1);
-            x.call(0xe3d32);
+            lib::debris(x, 1);
+            lib::sound(x, 0xe3d32);
             anim_kind(x, 0x13);
             entry(x, 3);
         }
@@ -531,7 +528,7 @@ fn leap_strike(x: &mut Cx) {
         }
         4 => slide(x),
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 restart_or_idle(x);
             }
         }
@@ -574,7 +571,7 @@ fn arc_jump(x: &mut Cx) {
             entry(x, 4);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
@@ -598,10 +595,9 @@ fn arc_jump(x: &mut Cx) {
                 next7(x);
                 x.set16(0xc, 0);
                 x.set16(TIMER, 0x14);
-                x.c.d[0] = 0x14;
-                x.call(0x2860);
-                dust(x, 2);
-                x.call(0xecb98);
+                lib::shake_58(x, 0x14);
+                lib::debris(x, 2);
+                lib::sound(x, 0xecb98);
                 entry(x, 7);
             }
         }
@@ -623,7 +619,7 @@ fn triple_strike(x: &mut Cx) {
             entry(x, 8);
         }
         2 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -641,7 +637,7 @@ fn triple_strike(x: &mut Cx) {
             x.set8(COMBO, n);
         }
         4 => {
-            step(x);
+            lib::step(x);
             if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
@@ -651,8 +647,8 @@ fn triple_strike(x: &mut Cx) {
             }
         }
         6 => {
-            if step(x) {
-                if alive(x) {
+            if lib::step(x) {
+                if lib::any_player_alive(x) {
                     stand(x);
                 } else {
                     idle_alone(x);
@@ -672,7 +668,7 @@ fn spit(x: &mut Cx) {
             entry(x, 0xa);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 next7(x);
                 x.set16(TIMER, 0x14);
                 x.set8(VULNERABLE, 1);
@@ -702,7 +698,7 @@ fn spit(x: &mut Cx) {
             if expired(x, TIMER) {
                 restart_or_idle(x);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         _ => {}
@@ -723,7 +719,7 @@ pub(super) fn wait_for_players(x: &mut Cx) {
             body(x, 0x11);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

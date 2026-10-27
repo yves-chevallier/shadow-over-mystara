@@ -58,7 +58,7 @@ fn windup(x: &mut Cx) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
-        x.call(call::ANNOUNCE);
+        lib::pick_byte(x);
         if x.u8(AI_LUNGE) == 0 {
             x.set8(f::SUB3, 0);
             let chosen = x.u8(CHOSEN);
@@ -435,7 +435,7 @@ fn lunge(x: &mut Cx) {
 fn pick_again(x: &mut Cx) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);
-    let b = if target_in_box(x, -0x20, 0x20, 0xc) {
+    let b = if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, 0x0204_0000);
         rand_and(x, 2);
         x.set16(f::SUB2, 0);

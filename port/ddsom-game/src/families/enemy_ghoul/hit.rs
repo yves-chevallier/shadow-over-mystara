@@ -144,10 +144,10 @@ fn caught(x: &mut Cx) {
             }
             x.move_x();
             if !x.in_arena_default() {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 return set_state_long(x, st::DEAD_LONG);
             }
-            x.call(IN_ZONE);
+            lib::keep_in_zone(x);
             if x.u16(SAVED_X) != x.u16(Obj::X) {
                 let pos = x.u16(Obj::X);
                 x.set16(SAVED_X, pos);
@@ -159,7 +159,7 @@ fn caught(x: &mut Cx) {
             let n = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, n);
             if n == 0 {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 return set_state_long(x, st::DEAD_LONG);
             }
             step(x);

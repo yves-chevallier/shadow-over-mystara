@@ -61,9 +61,9 @@ fn tail(x: &mut Cx) {
 /// 0x9097c : réaction au coup : la routine de la table, d'après le code du coup.
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0x10112);
+        lib::set_68(x);
         if x.a5_u8(0x34) == 0x20 {
-            x.call(0xb648);
+            lib::drop_once(x);
         }
     }
     let index = ((x.c.d[0] & 0xff00) | x.u8(REACTION) as u32) as u16 as i16 as i32;

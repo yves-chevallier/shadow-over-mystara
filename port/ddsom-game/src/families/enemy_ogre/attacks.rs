@@ -42,7 +42,7 @@ fn roar(x: &mut Cx) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.call(0xe3da6);
+            lib::sound(x, 0xe3da6);
             look(x, 0x10);
             act(x, 0);
         }
@@ -108,7 +108,7 @@ fn fly_up_b(x: &mut Cx) {
             if !pick_target(x) {
                 return go::retire(x);
             }
-            x.call(0xe3da6);
+            lib::sound(x, 0xe3da6);
             look(x, 0x12);
             if !throw_arm(x, Some(1)) {
                 return end_with(x, true);
@@ -136,7 +136,7 @@ fn fly_up_b(x: &mut Cx) {
                 x.set16(Obj::VZ, -0x680i16 as u16);
                 x.set16(Obj::AX, 0);
                 x.set16(Obj::AZ, 0);
-                x.call(0xe3da6);
+                lib::sound(x, 0xe3da6);
                 x.set8(INVULNERABLE, 0);
                 act(x, 5);
             }
@@ -152,10 +152,9 @@ fn fly_up_b(x: &mut Cx) {
             x.set16(Obj::Z, 0);
             let vy = if x.u8(f::FLIP) != 0 { -0x38i16 } else { 0x38 };
             x.set16(Obj::AX, vy as u16);
-            x.c.d[0] = 0x1e;
-            x.call(call::SHOCK);
-            x.call(0xec976);
-            x.call(0xecdba);
+            lib::shake_54(x, 0x1e);
+            lib::sound(x, 0xec976);
+            lib::sound(x, 0xecdba);
             act(x, 6);
         }
         8 => {
@@ -206,7 +205,7 @@ fn fly_loop(x: &mut Cx) {
         arm.set_u8(x.b, 0x58, 1);
         return;
     }
-    x.call(0x115e2);
+    lib::push_players(x);
     lib::step(x);
     let key = x.u8(f::KEY_FRAME) & 0x7f;
     if key < 3 {
@@ -262,10 +261,9 @@ fn land_heavily(x: &mut Cx) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x1e);
     x.set16(Obj::Z, 0);
-    x.c.d[0] = 0x1e;
-    x.call(0x2860);
+    lib::shake_58(x, 0x1e);
     spark(x, 5);
-    x.call(0xecc0a);
+    lib::sound(x, 0xecc0a);
     act(x, 3);
 }
 
@@ -302,7 +300,7 @@ fn crash(x: &mut Cx) {
             }
             x.set16(Obj::VZ, d1);
             x.set16(Obj::AZ, -0x38i16 as u16);
-            x.call(0xe3da6);
+            lib::sound(x, 0xe3da6);
             look(x, 0x13);
             act(x, 7);
         }
@@ -336,10 +334,9 @@ fn crash(x: &mut Cx) {
             x.set8(INVULNERABLE, 0);
             let vy = if x.u8(f::FLIP) != 0 { -0x5ci16 } else { 0x5c };
             x.set16(Obj::AX, vy as u16);
-            x.c.d[0] = 0x14;
-            x.call(call::SHOCK);
-            x.call(0xec976);
-            x.call(0xecdba);
+            lib::shake_54(x, 0x14);
+            lib::sound(x, 0xec976);
+            lib::sound(x, 0xecdba);
             act(x, 0xa);
         }
         8 => {
@@ -374,7 +371,7 @@ fn arm_swing(x: &mut Cx) {
             take_off(x);
         }
         2 => {
-            x.call(0x115e2);
+            lib::push_players(x);
             flash_key(x);
             if (x.u16(Obj::Z) as i16) >= 0x20 && x.u8(f::KEY_FRAME) == 4 {
                 x.add8(f::SUB3, 2);
@@ -391,7 +388,7 @@ fn arm_swing(x: &mut Cx) {
         4 => {
             lib::step(x);
             bob(x);
-            x.call(0x115e2);
+            lib::push_players(x);
             flash_key(x);
             if !count_down(x, TIMER) {
                 x.add8(f::SUB3, 2);
@@ -402,7 +399,7 @@ fn arm_swing(x: &mut Cx) {
         6 => {
             lib::step(x);
             bob(x);
-            x.call(0x115e2);
+            lib::push_players(x);
             flash_key(x);
             if x.u8(ANIM_FLAGS) != 0 {
                 x.add8(f::SUB3, 2);
@@ -414,7 +411,7 @@ fn arm_swing(x: &mut Cx) {
             flash_key(x);
             lib::step(x);
             bob(x);
-            x.call(0x115e2);
+            lib::push_players(x);
             let arm = x.linked(ARM);
             if arm.u8(x.b, 0) == 0 || (arm.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
                 x.add8(f::SUB3, 2);

@@ -66,7 +66,6 @@ const HELD: u32 = 0x0404_0000;
 const POUNCE: u32 = 0x0206_0000;
 const AFTER_POUNCE: u32 = 0x0204_0200;
 const DEAD: u32 = 0x0600_0000;
-const REMOVE: u32 = 0x27ee;
 
 pub fn run(x: &mut Cx) {
     if suspended(x) {
@@ -140,8 +139,8 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set16(f::SUB2, 0);
     x.set8(f::BOX_SET, 0x15);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     for (off, v) in [(0x7e, 4), (0x7f, 0), (0x6c, 3), (0x74, 3), (0x76, 3)] {
         x.set8(off, v);
     }
@@ -259,7 +258,7 @@ fn march(x: &mut Cx) {
     let inside = d5 < 0x280 && x.u16(SAVED_DEPTH).wrapping_add(x.u16(Obj::Z)).wrapping_sub(cy).wrapping_add(0x10) <= 0x120;
     if !inside {
         set_state_long(x, DEAD);
-        x.call(REMOVE);
+        detach_from_host(x);
     }
     x.anim_step();
 }
@@ -392,7 +391,7 @@ fn leave(x: &mut Cx) {
     let out = if x.u8(GROUP) & 1 != 0 { (d5 as i16) < -0x10 } else { (d5 as i16) >= 0x190 };
     if out {
         x.set8(f::STATE, 6);
-        x.call(REMOVE);
+        detach_from_host(x);
     }
     x.anim_step();
 }
@@ -442,7 +441,7 @@ fn drift(x: &mut Cx) {
                 let out = if x.u8(GROUP) & 1 != 0 { (d5 as i16) >= 0x190 } else { (d5 as i16) <= -0x10 };
                 if out {
                     set_state_long(x, DEAD);
-                    x.call(REMOVE);
+                    detach_from_host(x);
                 }
             }
             x.anim_step();
@@ -625,7 +624,7 @@ fn turn_back(x: &mut Cx) {
             let ok = d5 < 0x200 && x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z)).wrapping_sub(cy).wrapping_add(0x10) <= 0x120;
             if !ok {
                 x.set8(f::STATE, 6);
-                x.call(REMOVE);
+                detach_from_host(x);
             }
             x.anim_step();
         }
@@ -778,7 +777,7 @@ fn recoil(x: &mut Cx) {
                 x.set32(Obj::Z, 0);
                 x.set8(0xa2, 0x28);
                 x.set16(0x30, 1);
-                x.call(REMOVE);
+                detach_from_host(x);
             }
             x.anim_step();
         }
@@ -811,7 +810,7 @@ fn fall(x: &mut Cx) {
     }
     x.move_by_table_xy();
     if !x.in_arena_default() {
-        x.call(REMOVE);
+        detach_from_host(x);
         set_state_long(x, DEAD);
     }
     x.anim_step();

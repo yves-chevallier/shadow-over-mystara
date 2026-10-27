@@ -72,21 +72,9 @@ pub(self) mod state {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const PICK_FAR: u32 = 0x44ee;
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const AIM: u32 = 0x788c;
-    pub const AIM_DONE: u32 = 0x79ce;
-    pub const REROLL: u32 = 0xac3a;
     pub const EDGE_PAIR: u32 = 0xa4b4;
     pub const EDGE_SAME: u32 = 0xa4c2;
     pub const SCRIPT_PALETTE: u32 = 0x10298;
-    pub const GRAB_FIND: u32 = 0xfc44;
-    pub const GRAB: u32 = 0xfd64;
-    pub const RELEASE: u32 = 0xfd8c;
-    pub const HOLD: u32 = 0xfda2;
-    pub const IN_ARENA: u32 = 0xfbb0;
-    pub const BLOOD: u32 = 0xedd96;
     pub const SPLASH: u32 = 0xaaa40;
     pub const EFFECT: u32 = 0xabec8;
 }
@@ -103,7 +91,7 @@ fn play_set(x: &mut Cx, set: u32, kind: u8, n: u32) {
     }
     x.set8(ANIM_SET, kind);
     x.set8(ANIM_N, n as u8);
-    x.call(ai::PLAY);
+    lib::start(x, set, n);
 }
 
 /// 0x95234 : animation `n` du jeu des mouvements.
@@ -179,10 +167,10 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
 
 /// 0x94902, 0x9491e, 0x94968 : une cible dans la boîte de portée (et, pour les deux dernières, des coups possibles).
 pub(self) fn close_target(x: &mut Cx) -> bool {
-    target_in_box(x, 0, 0x28, 0x20)
+    lib::target_in_box(x, 0, 0x28, 0x20)
 }
 pub(self) fn edge_target(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
     if x.u16(f::TARGET) as i16 >= 0 {
@@ -272,9 +260,9 @@ fn init(x: &mut Cx) {
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     pick_target(x);
-    x.call(call::AIM);
+    lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x30);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     for r in [0xd5f30, 0xd6952, 0x19e10, 0x19db4, 0x19eb0] {
         x.call(r);
     }
@@ -296,7 +284,7 @@ fn init(x: &mut Cx) {
     x.set16(ANIM_SET, 0xffff);
     x.c.d[0] = 0;
     anim_a(x, 0);
-    x.call(0xe1470);
+    lib::sound(x, 0xe1470);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------
@@ -315,8 +303,7 @@ fn active(x: &mut Cx) {
             x.set8(0x38, 0);
         }
     }
-    x.c.d[0] = 0x40;
-    x.call(call::IN_ARENA);
+    lib::keep_on_screen(x, 0x40);
     x.call(SHADOW);
     x.reinsert();
 }
@@ -361,7 +348,7 @@ pub(self) fn next_attack(x: &mut Cx) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return idle(x);
     }
-    if !target_in_box(x, -0x40, 0x40, 0x20) {
+    if !lib::target_in_box(x, -0x40, 0x40, 0x20) {
         return x.set32(f::STATE, state::STAND);
     }
     let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;

@@ -71,33 +71,17 @@ pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const ZONE: u32 = 0xfbb0;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RETARGET: u32 = 0xa470;
     pub const TARGET_SAME_SIDE: u32 = 0xa4c2;
     pub const TARGET_OTHER_SIDE: u32 = 0xa4b4;
-    pub const PICK_OTHER: u32 = 0x44ee;
-    pub const STEPS_DONE: u32 = 0x788c;
-    pub const STEPS_CHECK: u32 = 0x79ce;
-    pub const ATTACK_LOCK: u32 = 0xac3a;
-    /// Prise d'un joueur : cherche (0xfc44), saisit (0xfd64), relâche (0xfd8c), le tient (0xfda2).
-    pub const GRAB_FIND: u32 = 0xfc44;
-    pub const GRAB: u32 = 0xfd64;
-    pub const RELEASE: u32 = 0xfd8c;
-    pub const HOLD: u32 = 0xfda2;
-    /// Cri du boss (son et effet, par la file des sons).
-    pub const CRY: u32 = 0xebfdc;
-    pub const CRY_B: u32 = 0xedb82;
 }
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
 pub(self) fn body_anim(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn attack_anim(x: &mut Cx, n: u32) {
-    play(x, SET_ATTACK, n);
+    lib::start(x, SET_ATTACK, n);
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
@@ -231,7 +215,7 @@ pub(self) fn after_attack(x: &mut Cx) {
         return x.set32(f::STATE, s);
     }
     load_target(x);
-    let close = target_in_box(x, -0x40, 0x40, 0x20);
+    let close = lib::target_in_box(x, -0x40, 0x40, 0x20);
     if x.u8(FLYING) != 0 {
         return x.set32(f::STATE, 0x0202_0a00);
     }
@@ -275,9 +259,9 @@ fn init(x: &mut Cx) {
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     pick_target(x);
-    x.call(call::STEPS_DONE);
+    lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x23);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.call(0xd5f30);
     x.call(0xd6952);
     for (off, v) in [(0x70, 0), (0x8e, 3), (0x78, 0xff), (0x68, 1), (0x69, 1)] {
@@ -336,8 +320,7 @@ fn active(x: &mut Cx) {
 
 /// Fin d'image ordinaire : retenue dans l'écran (marge `margin`), ombre, remise en liste.
 pub(self) fn end_frame(x: &mut Cx, margin: u16) {
-    set_dw(x, 0, margin);
-    x.call(call::ZONE);
+    lib::keep_on_screen(x, margin);
     x.call(SHADOW);
     x.reinsert();
 }

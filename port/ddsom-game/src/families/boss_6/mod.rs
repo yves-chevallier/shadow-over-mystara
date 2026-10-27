@@ -55,15 +55,11 @@ pub(self) const SET_FLY: u32 = 0x17788c;
 pub(self) const SET_HURT: u32 = 0x1778a4;
 
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn fly(x: &mut Cx, n: u32) {
-    play(x, SET_FLY, n);
-}
-
-pub(self) mod call {
-    pub const DUST: u32 = 0x1172e;
+    lib::start(x, SET_FLY, n);
 }
 
 pub fn run(x: &mut Cx) {
@@ -106,10 +102,10 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x26);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.set_a5_u8(0x5a, 0);
-    x.call(0x1059e);
-    x.call(rom::IMMUNITIES);
+    lib::spread_index(x);
+    lib::set_immunities(x);
     x.call(0x19e10);
     x.call(0x19db4);
     x.call(0x19eb0);
@@ -142,7 +138,7 @@ fn active(x: &mut Cx) {
             _ => recovered(x),
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -158,7 +154,7 @@ fn wait_for_players(x: &mut Cx) {
             body(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

@@ -48,12 +48,7 @@ const SET_FALL: u32 = 0x175e0c;
 const SPIN_VECTORS: u32 = 0x1c94b6;
 
 mod call {
-    pub const PICK_PLAYER: u32 = 0x43bc;
     pub const ANGLE_TO_TARGET: u32 = 0x1376;
-    pub const PLAYER_IN_REACH: u32 = 0xfc44;
-    pub const SEIZE: u32 = 0xfd64;
-    pub const DRAG_SEIZED: u32 = 0xfda2;
-    pub const SOUND: u32 = 0xe425c;
     pub const BURST: u32 = 0xabec8;
 }
 
@@ -133,8 +128,8 @@ fn init(x: &mut Cx) {
     x.call(0x19eb0);
     x.call(0xd6952);
     x.set8(f::BOX_SET, 0x25);
-    x.call(0x453c);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp_boss(x);
+    lib::set_immunities(x);
     x.set16(0x8, 0x120);
     x.set16(0xc, 0x30);
     x.set16(0x10, 0x178);
@@ -307,8 +302,8 @@ fn seize(x: &mut Cx) {
         4 => grab_hold(x),
         8 => grab_end(x),
         0xc => {
-            x.c.d[0] = 0;
-            x.call(call::SEIZE);
+            // le joueur saisi est celui qu'A1 désigne encore (registre hérité de l'image précédente)
+            lib::seize_player(x, Obj(x.c.a[1]), 0);
             grab_begin(x);
         }
         _ => {}
@@ -330,7 +325,7 @@ fn grab_hold(x: &mut Cx) {
     if target == 0 {
         return grab_release(x);
     }
-    let mut p = x.linked(f::TARGET);
+    let p = x.linked(f::TARGET);
     x.c.a[1] = p.0;
     if x.u8(BITING) == 0 {
         p.set_u32(x.b, f::STATE, 0x0204_3200);
@@ -346,8 +341,7 @@ fn grab_hold(x: &mut Cx) {
     }
     if x.u8(f::KEY_FRAME) != 0 {
         x.c.a[1] = p.0;
-        x.call(call::SOUND);
-        p = Obj(x.c.a[1]);
+        lib::sound(x, 0xe425c);
     }
     if p.u8(x.b, 0) == 0 {
         return grab_release(x);
@@ -360,7 +354,7 @@ fn grab_hold(x: &mut Cx) {
             return grab_kill(x);
         }
     }
-    x.call(call::DRAG_SEIZED);
+    lib::hold_seized(x);
     x.anim_step();
     let n = x.u16(COUNT).wrapping_sub(1);
     x.set16(COUNT, n);
@@ -407,7 +401,7 @@ fn simple_attack(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(FRAME_KIND, 0x4b);
-            x.call(call::SOUND);
+            lib::sound(x, 0xe425c);
             attack_anim(x, 0);
             end_of_script(x);
         }
@@ -430,7 +424,7 @@ fn chase(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(BLINK, 0x14);
-            x.call(call::SOUND);
+            lib::sound(x, 0xe425c);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x13);
             x.set8(Obj::SPEED_INDEX, 0x18);
             if x.u8(f::FLIP) != 0 {
@@ -462,9 +456,8 @@ fn chase_turn(x: &mut Cx) {
 /// Tourne d'un cran vers la cible, avance, saisit un joueur à portée.
 fn chase_follow(x: &mut Cx) {
     x.anim_step();
-    x.c.d[0] = x.u8(STEPS) as u32;
-    x.call(call::PICK_PLAYER);
-    if zero(x) {
+    let criterion = x.u8(STEPS);
+    if !lib::target_by_criterion(x, criterion) {
         return chase_stop(x);
     }
     x.call(call::ANGLE_TO_TARGET);
@@ -485,11 +478,8 @@ fn chase_follow(x: &mut Cx) {
         x.set8(f::FLIP, 0x20);
     }
     x.move_by_table_xy();
-    x.c.d[0] = 8;
-    x.call(call::PLAYER_IN_REACH);
-    if !zero(x) {
-        x.c.d[0] = 0;
-        x.call(call::SEIZE);
+    if let Some(player) = lib::attack_hits_a_player(x, 8) {
+        lib::seize_player(x, player, 0);
         return grab_begin(x);
     }
     let n = x.u8(COUNT).wrapping_sub(1);
@@ -513,9 +503,7 @@ fn chase_stop(x: &mut Cx) {
 fn next_action(x: &mut Cx) {
     x.set8(BITING, 0);
     x.set8(IN_ATTACK, 0);
-    x.c.d[0] = 0;
-    x.call(call::PICK_PLAYER);
-    if zero(x) {
+    if !lib::target_by_criterion(x, lib::NEAREST) {
         x.set8(f::SUB, 4);
         x.set16(f::SUB2, 0);
         x.set8(STEPS, 0x10);
@@ -581,7 +569,7 @@ fn hit(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -666,7 +654,7 @@ fn tumble(x: &mut Cx) {
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x80i16) as u16);
             fall_anim(x, 0);
-            x.call(0xebbda);
+            lib::sound(x, 0xebbda);
             x.c.d[0] = 8;
             x.c.d[1] = 0;
             x.call(call::BURST);
@@ -763,17 +751,17 @@ fn dying(x: &mut Cx) {
             x.set_a5_u8(0x50, 0);
             x.set_a5_u8(0x42, 1);
             x.call(0x1ac86);
-            x.call(0xb780);
-            x.call(0xbad6);
-            x.call(0xe2f6);
+            lib::drop_loot(x);
+            lib::drop_special(x);
+            lib::drop_treasure(x);
             x.call(0xe0a10);
-            x.call(0xe3b6c);
+            lib::sound(x, 0xe3b6c);
             let kind = x.u8(0x2);
             set_abs8(x, 0xff2a84, kind);
             set_abs8(x, 0xff2a85, 0);
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
-            x.call(0x103ba);
+            lib::flash_and_shake(x);
             x.call(0x19ad6);
             fall_anim(x, 4);
             dying_burst(x);

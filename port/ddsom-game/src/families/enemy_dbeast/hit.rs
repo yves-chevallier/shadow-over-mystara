@@ -46,7 +46,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn zone_and_shadow(x: &mut Cx) {
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -59,7 +59,7 @@ fn recoil(x: &mut Cx) {
             x.set8(WANT_ANIM, 0x1e);
             let want = x.u8(WANT_ANIM);
             x.set8(CUR_ANIM, want);
-            x.call(0xec658);
+            lib::sound(x, 0xec658);
             x.set16(0x14, 0x300);
             x.set16(0x16, (-0x28i16) as u16);
             let flip = x.u8(0x4a) ^ 0x20;
@@ -190,7 +190,7 @@ fn flee(x: &mut Cx) {
             if x.in_arena_default() {
                 step(x);
             } else {
-                x.call(0x27ee);
+                detach_from_host(x);
             }
         }
         8 => {
@@ -247,5 +247,5 @@ fn leave_screen(x: &mut Cx) {
     if x.u8(PARENT) != 0 {
         x.set_a5_u8(0x4e, 1);
     }
-    x.call(0x27ee);
+    detach_from_host(x);
 }

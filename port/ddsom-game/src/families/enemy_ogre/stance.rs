@@ -68,7 +68,7 @@ fn pursue(x: &mut Cx) {
     }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.call(0x79f6);
+        lib::draw_6e(x);
         x.c.d[0] &= !0xff;
         x.set8(LOOK, 0);
         if x.u8(LOOK_PREV) != 0 {
@@ -145,7 +145,7 @@ fn begin_glide(x: &mut Cx) {
     if !pick_target(x) {
         return go::retire(x);
     }
-    x.call(call::FLAP);
+    lib::approach_target(x);
     set_speed(x, 0xd);
     let prev = x.u8(LOOK_PREV);
     let look = x.u8(LOOK);
@@ -166,7 +166,7 @@ fn glide_step(x: &mut Cx) {
         if (w as i8) <= 0 {
             return go::wander_far(x);
         }
-        x.call(call::FLAP);
+        lib::approach_target(x);
         set_speed(x, 0xd);
         if x.u8(LOOK) == 3 {
             charge_b(x);
@@ -188,7 +188,7 @@ fn glide_step(x: &mut Cx) {
             return pick_c(x);
         }
     }
-    if target_in_box(x, -0x19, 0x18, 0xa) {
+    if lib::target_in_box(x, -0x19, 0x18, 0xa) {
         return pick_a2(x);
     }
     if target_in_box_close(x, -0x80, 0x10, 8) {
@@ -205,16 +205,12 @@ fn glide_step(x: &mut Cx) {
 
 /// 0x7ef4 : comme `target_in_box`, pour l'ogre.
 fn target_in_box_close(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0x7ef4);
-    !x.c.cond(7)
+    lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// 0x71a9a / 0x71ab8 : un joueur dans la boîte `(−0x60, 0x30, 6)` ou `(−0xc0, 0x20, 8)`, puis la décision de l'IA.
 fn near_box(x: &mut Cx, which: u32) -> u32 {
-    let found = if which == 0x71a9a { target_in_box(x, -0x60, 0x30, 6) } else { target_in_box(x, -0xc0, 0x20, 8) };
+    let found = if which == 0x71a9a { lib::target_in_box(x, -0x60, 0x30, 6) } else { lib::target_in_box(x, -0xc0, 0x20, 8) };
     if !found {
         return 0;
     }
@@ -330,10 +326,9 @@ fn plunge(x: &mut Cx) {
             }
             if x.u8(f::KEY_FRAME) == 3 {
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xecdba);
+                lib::sound(x, 0xecdba);
                 spark(x, 4);
-                x.c.d[0] = 0xa;
-                x.call(call::SHOCK);
+                lib::shake_54(x, 0xa);
             }
         }
         4 => {
@@ -364,10 +359,9 @@ fn plunge_dash(x: &mut Cx) {
     x.set16(TIMER2, 0);
     let vy = if x.u8(f::FLIP) != 0 { -0x40i16 } else { 0x40 };
     x.set16(Obj::AX, vy as u16);
-    x.c.d[0] = 0x14;
-    x.call(call::SHOCK);
-    x.call(0xec976);
-    x.call(0xecdba);
+    lib::shake_54(x, 0x14);
+    lib::sound(x, 0xec976);
+    lib::sound(x, 0xecdba);
     mv(x, 5);
 }
 

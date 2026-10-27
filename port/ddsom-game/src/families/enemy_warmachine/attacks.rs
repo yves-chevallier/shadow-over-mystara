@@ -63,7 +63,7 @@ fn rush(x: &mut Cx) {
             x.set8(Obj::SPEED_INDEX, angle);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x2b);
             spark(x, 1);
-            x.call(call::DUST);
+            lib::sound(x, 0xe3d32);
             look(x, 0x13);
             weapon(x, 3);
         }
@@ -73,9 +73,8 @@ fn rush(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
-                x.c.d[0] = 0x10;
-                x.call(call::SHOCK);
-                x.call(call::DUST);
+                lib::shake_54(x, 0x10);
+                lib::sound(x, 0xe3d32);
             }
             let (mut d0, mut d1) = (x.u16(GOAL_X), x.u16(Obj::X));
             if (x.u16(Obj::VX) as i16) < 0 {
@@ -91,8 +90,8 @@ fn rush(x: &mut Cx) {
             let v: i16 = if x.u8(f::FLIP) != 0 { -0x30 } else { 0x30 };
             x.set16(Obj::AX, v as u16);
             x.c.d[0] = v as u16 as u32;
-            x.call(call::DUST);
-            x.call(call::FLASH);
+            lib::sound(x, 0xe3d32);
+            lib::sound(x, 0xecdba);
             mv(x, 9);
         }
         4 => hop_loop(x),
@@ -163,10 +162,9 @@ fn smash(x: &mut Cx) {
             x.add8(f::SUB3, 2);
             x.set16(Obj::Z, 0);
             x.set16(TIMER, 0x14);
-            x.c.d[0] = 0x14;
-            x.call(0x2860);
+            lib::shake_58(x, 0x14);
             spark(x, 2);
-            x.call(0xecb98);
+            lib::sound(x, 0xecb98);
             weapon(x, 7);
         }
         8 => {

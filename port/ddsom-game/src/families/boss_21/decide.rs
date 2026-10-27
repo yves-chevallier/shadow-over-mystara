@@ -276,15 +276,10 @@ pub(super) fn spawn_by_level(x: &mut Cx) {
 
 /// 0x9a90c, 0x9a928 : un joueur est-il dans la boîte `(d0, d1, d2)` ? Rend 0 sinon, ou 1 / 2 : le côté (0x1047a).
 pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ai::TARGET_IN_BOX);
-    if zero(x) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
-    x.call(0x1047a);
-    x.c.d[0] as u8
+    lib::turn_decision(x) as u8
 }
 
 /// Exécute la routine d'état dont la table donne l'adresse.

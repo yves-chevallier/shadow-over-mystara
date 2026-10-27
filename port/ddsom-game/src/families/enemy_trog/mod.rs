@@ -78,12 +78,6 @@ const BLINK_TIMES: u32 = 0x5b96c;
 const WALK_SPEEDS: u32 = 0x5af64;
 
 mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const REMOVE: u32 = 0x27ee;
     pub const BEHIND_CHECK: u32 = 0x57c66;
     pub const PICK_ATTACK_KIND: u32 = 0x5cdc6;
 }
@@ -150,13 +144,11 @@ fn walk_speed(x: &mut Cx, idx: u32) {
 
 /// Un joueur dans la boîte ? Les deux décisions par masque (0xa4c2, 0xa4b4) doivent accepter.
 fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    let ok = target_in_box(x, d0, d1, d2) && {
+    let ok = lib::target_in_box(x, d0, d1, d2) && {
         load_target(x);
-        x.call(0xa4c2);
-        !x.c.cond(7)
+        lib::decision_b(x)
     } && {
-        x.call(0xa4b4);
-        !x.c.cond(7)
+        lib::decision_a(x)
     };
     x.c.d[0] = ok as u32;
     ok
@@ -192,8 +184,7 @@ fn needs_turn_around(x: &mut Cx) -> bool {
 /// 0x5af78 : retour debout ; si la décision 0x79ce le veut, au repos.
 fn back_to_stance(x: &mut Cx) {
     set_state_long(x, STANCE);
-    x.call(call::RAND_TARGET_CHECK);
-    if !x.c.cond(7) {
+    if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
     }
 }
@@ -228,8 +219,8 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xe);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     x.c.d[0] = 0;
     for (off, v) in [(0x80, 0xb), (0x68, 4), (0x69, 4), (0x70, 0), (0x6a, 3), (0x6c, 3), (0x6d, 5), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x2c), (BLINK_PHASE, 0xff)] {
         x.set8(off, v);
@@ -421,9 +412,9 @@ fn arrival(x: &mut Cx) {
             if x.u8(f::SUB2) == 0 {
                 let scene = x.a5_u8(0x34);
                 if scene == 6 || scene == 0xc {
-                    x.call(0xeb92e);
+                    lib::sound(x, 0xeb92e);
                 } else {
-                    x.call(0xeb9a0);
+                    lib::sound(x, 0xeb9a0);
                 }
                 x.add8(f::SUB2, 2);
                 x.set16(Obj::VZ, 0x600);

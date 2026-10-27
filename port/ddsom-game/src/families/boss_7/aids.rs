@@ -1,5 +1,6 @@
 //! Boss 7 : aides communes (choix d'un joueur, balayage des joueurs, positions, choix de l'attaque suivante).
 
+use crate::objects::Obj;
 use super::*;
 use crate::mem::A5;
 use crate::machine::Machine;
@@ -49,11 +50,8 @@ fn scan(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     x.c.a[2] = A5 + 0x5de;
     loop {
         if crate::mem::rd8(x.b, x.c.a[2]) != 0 {
-            setw(x, 0, d0 as u16);
-            setw(x, 1, d1);
-            setw(x, 2, d2);
-            x.call(0x7f19c);
-            if !x.c.cond(7) {
+            let player = Obj(x.c.a[2]);
+            if lib::in_box(x, player, d0, d1, d2).found() {
                 return true;
             }
         }

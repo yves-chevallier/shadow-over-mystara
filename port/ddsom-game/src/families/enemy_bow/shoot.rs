@@ -130,7 +130,7 @@ fn approach_target(x: &mut Cx) {
         return;
     }
     set_state_long(x, 0x0202_0200);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_6b(x);
     set_speed(x, 0xd);
     mv(x, 2);
 }
@@ -303,8 +303,7 @@ pub(super) fn run_b(x: &mut Cx) {
 /// 0x5c6e6… : fin d'un geste du sous-état 6 : debout, et au tirage, attente.
 fn done_gesture(x: &mut Cx) {
     set_state_long(x, STANCE);
-    x.call(call::RAND_TARGET_CHECK);
-    if !x.c.cond(7) {
+    if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
         x.set16(f::SUB2, 0);
         stance::check_facing(x);

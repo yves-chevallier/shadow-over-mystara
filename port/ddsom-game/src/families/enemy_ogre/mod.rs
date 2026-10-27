@@ -55,13 +55,6 @@ pub(self) const SET_DEATH: u32 = 0x1778a4;
 pub(self) const SET_FLY_AGAINST: u32 = 0x177992;
 pub(self) const SET_FLY_ALONG: u32 = 0x177a36;
 
-pub(self) mod call {
-    pub const REMOVE: u32 = 0x27ee;
-    pub const SPAWN_EFFECT: u32 = 0x1172e;
-    pub const FLAP: u32 = 0xe76c;
-    pub const SHOCK: u32 = 0x2824;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -121,8 +114,7 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 }
 
 pub(self) fn spark(x: &mut Cx, d5: u32) {
-    x.c.d[5] = d5;
-    x.call(call::SPAWN_EFFECT);
+    lib::debris(x, d5);
 }
 
 pub(self) fn camera_x(x: &mut Cx) -> u16 {
@@ -179,8 +171,7 @@ pub(self) fn flash_key(x: &mut Cx) {
         x.set8(f::KEY_FRAME, k);
         let f = x.u8(FLASH) ^ 1;
         x.set8(FLASH, f);
-        x.c.d[0] = f as u32;
-        x.call(0x11a36);
+        lib::ground_debris(x, f);
     }
 }
 
@@ -260,10 +251,10 @@ pub(self) mod go {
 /// 0x71e04 : PV initiaux ; la variante négative les calcule comme un type 6 (0x453c) puis reprend le type 0x12.
 fn initial_hp(x: &mut Cx) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 {
-        return x.call(rom::INITIAL_HP);
+        return lib::initial_hp(x);
     }
     x.set8(2, 6);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.set8(2, 0x12);
 }
 

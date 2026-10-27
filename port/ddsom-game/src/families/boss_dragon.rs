@@ -32,8 +32,6 @@ const BOB_TABLE: u32 = 0x8faa2;
 mod rom {
     pub const BEGIN_A: u32 = 0xdf4bc;
     pub const NEW_MESSAGE: u32 = 0xc8312;
-    pub const BEGIN_CUTSCENE: u32 = 0xe0d8c;
-    pub const END_CUTSCENE: u32 = 0xe0c5c;
 }
 
 /// Champs propres à ce type.
@@ -210,7 +208,7 @@ fn wait_stop(x: &mut Cx) {
         if !alloc_failed(x) {
             x.set16(MESSAGE, x.c.a[1] as u16);
             x.add8(f::SUB2, 2);
-            x.call(rom::BEGIN_CUTSCENE);
+            lib::sound(x, 0xe0d8c);
             x.set8(TALKING, 1);
             x.set_bit(CUTSCENE, 0, false);
         }
@@ -292,7 +290,7 @@ fn leave(x: &mut Cx) {
     let Some(lead) = leader(x) else { return };
     let left = scroll_x(x).wrapping_sub(0x80);
     if x.u16(0x8).wrapping_sub(left) >= 0x200 {
-        x.call(rom::END_CUTSCENE);
+        lib::sound(x, 0xe0c5c);
         x.set8(TALKING, 0);
         x.set_bit(HOLD, 0, false);
         x.set8(SLOW, 0);

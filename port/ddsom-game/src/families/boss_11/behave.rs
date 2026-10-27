@@ -47,7 +47,7 @@ pub(super) fn intro(x: &mut Cx) {
             x.set8(0, 1);
             x.add8(f::SUB, 2);
             x.set16(f::SUB2, 0);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             x.set16(ANIM_KIND, 0xffff);
             body(x, 0)
         }
@@ -69,9 +69,8 @@ fn fall(x: &mut Cx) {
     setw(x, 0, v);
     x.set16(0x14, v);
     body(x, 7);
-    x.c.d[0] = 8;
-    x.call(call::SOUND_B);
-    x.call(0xecc0a);
+    lib::shake_58(x, 8);
+    lib::sound(x, 0xecc0a);
 }
 
 // --- groupe 6 : sans joueur ----------------------------------------------------------------------------------
@@ -79,9 +78,7 @@ fn fall(x: &mut Cx) {
 /// 0x8d8bc : attend ; un joueur revient (vie > 0) et le compteur `+0xb6` repart.
 pub(super) fn lone(x: &mut Cx) {
     if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
-        x.c.d[0] = 2;
-        x.call(0x43bc);
-        if !zero(x) {
+        if lib::target_by_criterion(x, lib::LOWEST_HP) {
             if tst8(x, 0xb6).gt() {
                 sub8(x, 0xb6, 1);
             } else {
@@ -122,9 +119,7 @@ pub(super) fn chase(x: &mut Cx) {
     if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
         return to_wait(x);
     }
-    x.c.d[0] = 2;
-    x.call(0x43bc);
-    if zero(x) {
+    if !lib::target_by_criterion(x, lib::LOWEST_HP) {
         return to_wait(x);
     }
     if tst16(x, 0xc).gt() {
@@ -145,7 +140,7 @@ pub(super) fn chase(x: &mut Cx) {
         }
     }
     if aim {
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
         speed(x, 0x17);
     }
     x.move_by_table_xy();
@@ -247,11 +242,7 @@ fn turn_needed(x: &mut Cx) -> bool {
 
 /// 0x8dafe : un joueur tout près devant.
 fn hit_near(x: &mut Cx) -> bool {
-    setw(x, 0, 0xfff0);
-    setw(x, 1, 0x20);
-    setw(x, 2, 0x10);
-    x.call(0xb5e0);
-    let ok = !zero(x);
+    let ok = lib::target_in_box(x, -0x10, 0x20, 0x10);
     x.c.d[0] = ok as u32;
     ok
 }
@@ -309,11 +300,7 @@ fn far_roll(x: &mut Cx) -> bool {
     let b = alea & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
-        setw(x, 0, 0xffe0);
-        setw(x, 1, 0xa0);
-        setw(x, 2, 0x80);
-        x.call(0xb5e0);
-        if !zero(x) {
+        if lib::target_in_box(x, -0x20, 0xa0, 0x80) {
             x.c.d[0] = 1;
             return true;
         }

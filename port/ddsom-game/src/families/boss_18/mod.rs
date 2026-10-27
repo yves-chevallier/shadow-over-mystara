@@ -65,21 +65,14 @@ pub(self) const SET_STRIKE: u32 = 0x181af2;
 pub(self) const SET_HURT: u32 = 0x181b10;
 
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    play(x, SET_STRIKE, n);
+    lib::start(x, SET_STRIKE, n);
 }
 
 pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RANDOM_TURN: u32 = 0x10574;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-    pub const TARGET_BOX_FAR: u32 = 0x7ef4;
-    pub const PICK_FAR: u32 = 0x43ae;
-    pub const SOUND_EVENT: u32 = 0x2824;
     pub const BURST: u32 = 0xabec8;
 }
 
@@ -111,12 +104,12 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.call(call::PICK_FAR);
+    lib::pick_target_any(x);
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x32);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     x.set_a5_u8(0x5a, 0);
-    x.call(0x1059e);
+    lib::spread_index(x);
     x.call(0x19e10);
     x.call(0x19db4);
     x.call(0x19eb0);
@@ -170,7 +163,7 @@ fn active(x: &mut Cx) {
             _ => wait_for_players(x),
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -186,7 +179,7 @@ fn wait_for_players(x: &mut Cx) {
             body(x, 8);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

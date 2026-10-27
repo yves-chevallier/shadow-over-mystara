@@ -82,11 +82,11 @@ mod man_scorpion {
         x.set8(f::FLIP, 0);
         x.set8(f::BOX_SET, 0x3b);
         x.set16(0xc, 4);
-        x.call(rom::IMMUNITIES);
+        lib::set_immunities(x);
         x.c.d[0] = 0;
         x.anim_start(ANIMS, 0);
-        x.call(rom::INITIAL_HP);
-        x.call(0xea8be);
+        lib::initial_hp(x);
+        lib::sound(x, 0xea8be);
     }
 
     /// Crée les parties ; `flame_kind` est la variante des flammes ; la variante 1 crée aussi les bras.
@@ -195,7 +195,7 @@ mod man_scorpion {
     /// Plus de bras : sous-état 2, puis tentative de passage à l'état « mort en cours ».
     fn stop_flight(x: &mut Cx) {
         x.add8(f::SUB, 2);
-        x.call(0x27ee);
+        detach_from_host(x);
         take_from_parent(x);
     }
 
@@ -400,7 +400,7 @@ mod man_scorpion {
             parent.set_u8(x.b, 0x21, v);
             parent.set_u8(x.b, 0x24, 0);
         }
-        x.call(0xeb4ba);
+        lib::sound(x, 0xeb4ba);
         for off in [p::LIMBS, p::LIMBS + 2, p::SHADOW] {
             let o = x.linked(off);
             o.set_u32(x.b, f::STATE, st::DEAD_LONG);
@@ -415,7 +415,7 @@ mod man_scorpion {
                 o.set_u8(x.b, 0x90, 1);
             }
         }
-        x.call(0x27ee);
+        detach_from_host(x);
         x.set8(p::DELAY, 0x5a);
         x.anim_start(ANIMS, 2);
         x.reinsert();
@@ -448,7 +448,7 @@ mod man_scorpion {
 
     fn death_start_b(x: &mut Cx) {
         x.add8(f::SUB2, 2);
-        x.call(0xeb4ba);
+        lib::sound(x, 0xeb4ba);
         let parent = x.linked(f::OWNER);
         let v = parent.u8(x.b, 0x21).wrapping_add(1);
         parent.set_u8(x.b, 0x21, v);
@@ -539,9 +539,6 @@ mod nagpa {
     const ANIMS: u32 = 0x16c7fc;
     /// Octet de visibilité : bit 1 pour la variante 0, bit 0 pour la variante 1.
     const VISIBLE_FLAGS: u32 = 0xff8000 - 0x5f9c;
-    /// Test de distance à un joueur : D0 = portée X, D1 = Y, D2 = Z ; Z levé = hors de portée.
-    const PLAYER_IN_RANGE: u32 = 0x7f19c;
-    const SFX_APPEAR: u32 = 0xe5632;
 
     pub fn run(x: &mut Cx) {
         match x.u8(f::STATE) {
@@ -560,7 +557,7 @@ mod nagpa {
         x.add8(f::STATE, 2);
         x.set_bit(0x1, 1, true);
         x.set8(f::BOX_SET, 0x47);
-        x.call(rom::IMMUNITIES);
+        lib::set_immunities(x);
         x.anim_start(ANIMS, (variant as u32) as u16);
     }
 
@@ -585,11 +582,7 @@ mod nagpa {
             let player = A5 + 0x5de + 0x200 * i;
             x.c.a[2] = player;
             if x.data8(player) == 1 {
-                set_dw(x, 0, range);
-                set_dw(x, 1, 0x14);
-                set_dw(x, 2, 0xffe8);
-                x.call(PLAYER_IN_RANGE);
-                if x.c.cond(6) {
+                if lib::in_box(x, Obj(player), range as i16, 0x14, 0xffe8).found() {
                     x.c.d[0] = 1;
                     return true;
                 }
@@ -610,7 +603,7 @@ mod nagpa {
         if !player_near(x) {
             return;
         }
-        x.call(SFX_APPEAR);
+        lib::sound(x, 0xe5632);
         mark_visible(x, true);
         x.add8(f::SUB, 2);
         x.set_bit(0x1, 1, false);
@@ -628,7 +621,7 @@ mod nagpa {
             return;
         }
         x.add8(f::SUB, 2);
-        x.call(SFX_APPEAR);
+        lib::sound(x, 0xe5632);
         mark_visible(x, false);
         let n = 2 + (x.u8(0x3) != 0) as u32;
         x.anim_start(ANIMS, n as u16);

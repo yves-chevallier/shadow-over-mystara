@@ -76,20 +76,14 @@ pub(self) const SET_RUN_BACK: u32 = 0x171c1a;
 /// Seuils de PV des phases (0x105b6).
 pub(self) const THRESHOLDS: u32 = 0x10ae2;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-}
-
 /// Lance l'animation `n` du jeu des corps par l'IA (0x103d6).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 /// Lance l'animation `n` du jeu des entrées en scène.
 pub(self) fn entry(x: &mut Cx, n: u32) {
-    play(x, SET_ENTRY, n);
+    lib::start(x, SET_ENTRY, n);
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
@@ -131,7 +125,7 @@ fn init(x: &mut Cx) {
         pick_target(x);
         x.set8(0xab, 2);
         x.set8(f::BOX_SET, 0x20);
-        x.call(0x453c);
+        lib::initial_hp_boss(x);
         x.set_a5_u8(0x5a, 0);
         for a in [0x1059e, 0x19e10, 0x19db4, 0x19eb0] {
             x.call(a);
@@ -208,7 +202,7 @@ fn active(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(IN_ZONE);
+    lib::keep_in_zone(x);
     x.call(SHADOW);
 }
 
@@ -280,7 +274,7 @@ pub(self) fn transform(x: &mut Cx) {
     x.set8(ROLE, 1);
     x.set8(INVULNERABLE, 0);
     x.set16(0xc, 0);
-    if outside(x, 0x30, 0x150) {
+    if lib::outside_band(x, 0x30, 0x150) {
         return charge(x, false);
     }
     x.set32(f::STATE, 0x0200_0200);

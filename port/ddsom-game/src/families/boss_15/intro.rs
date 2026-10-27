@@ -64,10 +64,10 @@ fn fall(x: &mut Cx) {
     x.add8(f::SUB, 2);
     x.set16(f::SUB2, 0);
     if x.u8(TYPE) != TYPE_BIG {
-        x.call(0xe13f0);
+        lib::sound(x, 0xe13f0);
     }
     x.set8(0, 1);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     rest(x);
     x.call(0xb3fb0);
     // l'arrivée finie, le combat commence dans la même image

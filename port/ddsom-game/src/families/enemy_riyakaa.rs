@@ -24,12 +24,6 @@ mod riyakaa {
     const NEXT_ATTACKS: u32 = 0x701dc;
     /// Masques de décision de la contre-attaque (un long par niveau de difficulté).
     const MASKS: u32 = 0x6ff70;
-    /// Test « un joueur est dans cette boîte ? » : D0, D1, D2 = décalage, portée, hauteur ; Z = non.
-    const TARGET_IN_BOX: u32 = 0xb5e0;
-    /// Choix d'une cible (Z = aucune), regard vers elle, demi-tour vers elle.
-    const PICK_TARGET: u32 = 0x424e;
-    const FACE_TARGET: u32 = 0xa470;
-    const TURN_TO_TARGET: u32 = 0x788c;
     /// État long « actif, sous-état 0 » : retour à la marche.
     const WALK: u32 = 0x0202_0000;
 
@@ -56,8 +50,8 @@ mod riyakaa {
     fn init(x: &mut Cx) {
         x.add8(f::STATE, 2);
         x.set8(f::BOX_SET, 0xf);
-        x.call(rom::INITIAL_HP);
-        x.call(rom::IMMUNITIES);
+        lib::initial_hp(x);
+        lib::set_immunities(x);
         x.c.d[0] = 0;
         // paramètres d'IA lus par les tables de décision, et valeurs de départ
         for (off, v) in [
@@ -267,13 +261,8 @@ mod riyakaa {
             }
             2 => {
                 x.anim_step();
-                x.call(PICK_TARGET);
-                if !x.c.cond(7) {
-                    x.c.d[0] = 0;
-                    set_dw(x, 1, 0x80);
-                    x.c.d[2] = 0x20;
-                    x.call(TARGET_IN_BOX);
-                    if !x.c.cond(7) {
+                if lib::pick_target(x) {
+                    if lib::target_in_box(x, 0, 0x80, 0x20) {
                         x.add8(f::SUB2, 2);
                     }
                 }
@@ -308,7 +297,7 @@ mod riyakaa {
             x.anim_step();
         } else {
             walk(x);
-            x.call(PICK_TARGET);
+            lib::pick_target(x);
         }
     }
 
@@ -345,11 +334,7 @@ mod riyakaa {
         x.set8(0x79, 6);
         x.set8(0x67, 1);
         let (mut d4, mut d5, mut d6) = (0xd, 0, 2);
-        x.c.d[0] = 0;
-        set_dw(x, 1, 0xa0);
-        set_dw(x, 2, 0x20);
-        x.call(TARGET_IN_BOX);
-        if x.c.cond(7) {
+        if !lib::target_in_box(x, 0, 0xa0, 0x20) {
             x.set8(0xad, 1);
             d4 = 0x17;
             d6 = 3;
@@ -362,25 +347,23 @@ mod riyakaa {
         set_dw(x, 0, d4);
         let n = x.c.d[0] as u16;
         x.select_speed(&crate::objects::motion::SPEEDS_B, n);
-        x.call(PICK_TARGET);
-        x.call(FACE_TARGET);
-        x.call(TURN_TO_TARGET);
+        lib::pick_target(x);
+        lib::draw_stance(x);
+        lib::draw_6b(x);
     }
 
     /// 0x6f5a6 : suit la cible tant que le geste dure.
     fn decide_follow(x: &mut Cx) {
-        x.call(0xe76c);
+        lib::approach_target(x);
         let n = countdown(x, 0x71) as i8;
         if n < 0 {
-            x.call(FACE_TARGET);
-            x.call(PICK_TARGET);
-            if x.c.cond(7) {
+            lib::draw_stance(x);
+            if !lib::pick_target(x) {
                 return;
             }
             if countdown(x, 0x6b) == 0 {
-                x.call(TURN_TO_TARGET);
-                x.call(0x79ce);
-                if !x.c.cond(7) {
+                lib::draw_6b(x);
+                if lib::maybe_draw_6e(x) {
                     x.set16(f::SUB2, 0x400);
                     return;
                 }
@@ -391,11 +374,7 @@ mod riyakaa {
 
     /// 0x6f5e0 : adversaire tout près (coup), à portée de saut (bond) ou à rejoindre (marche).
     fn decide_near(x: &mut Cx) {
-        set_dw(x, 0, 0xffe0);
-        set_dw(x, 1, 0x20);
-        set_dw(x, 2, 8);
-        x.call(TARGET_IN_BOX);
-        if !x.c.cond(7) {
+        if lib::target_in_box(x, -0x20, 0x20, 8) {
             x.set32(f::STATE, 0x0204_0c00);
             x.set8(0xa3, 6);
             return;
@@ -403,15 +382,11 @@ mod riyakaa {
         if want_attack(x) {
             return choose_attack(x);
         }
-        set_dw(x, 0, 0xffc8);
-        set_dw(x, 1, 0x38);
-        set_dw(x, 2, 8);
-        x.call(0x7f0c);
-        if !x.c.cond(7) {
+        if lib::guard_in_front_strict(x, -0x38, 0x38, 8) {
             let v = x.u8(f::SUB2);
             x.set8(0xa3, v);
             x.set16(f::SUB2, 0xc00);
-            return x.call(0xac3a);
+            return lib::pick_byte(x);
         }
         x.anim_step();
         x.move_by_table_xy();
@@ -598,7 +573,7 @@ mod riyakaa {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
-            x.call(0xac3a);
+            lib::pick_byte(x);
             if x.u8(0x77) == 0 {
                 x.set8(0x7, 0);
                 let v = x.u8(0xa3);
@@ -845,12 +820,8 @@ mod riyakaa {
         x.set8(0x67, 1);
         let v = x.u8(0xa0);
         x.set8(0xa1, v);
-        set_dw(x, 0, 0xffd8);
-        set_dw(x, 1, 0x28);
-        set_dw(x, 2, 0xc);
-        x.call(TARGET_IN_BOX);
         let shift;
-        if !x.c.cond(7) {
+        if lib::target_in_box(x, -0x28, 0x28, 0xc) {
             x.set32(f::STATE, 0x0204_0c00);
             x.set8(0xa3, 6);
             shift = 0xf6u8;
@@ -880,8 +851,7 @@ mod riyakaa {
     /// 0x700fe : retour à la marche ; un joueur proche déclenche le sous-état 10.
     fn stand_up(x: &mut Cx) {
         walk(x);
-        x.call(0x79ce);
-        if !x.c.cond(7) {
+        if lib::maybe_draw_6e(x) {
             x.set8(f::SUB, 0xa);
         }
     }
@@ -899,24 +869,19 @@ mod riyakaa {
 
     /// 0x70116 : un joueur dans la boîte devant lui et la décision d'attaquer est favorable.
     fn want_attack(x: &mut Cx) -> bool {
+        let found = lib::target_in_box(x, 0, 0x70, 8);
         x.c.d[0] = 0;
-        set_dw(x, 1, 0x70);
-        set_dw(x, 2, 8);
-        x.call(TARGET_IN_BOX);
-        x.c.d[0] = 0;
-        if x.c.cond(7) {
+        if !found {
             return false;
         }
         x.c.a[1] = x.u16(f::OWNER) as i16 as i32 as u32;
         let target = x.linked(f::OWNER);
         let facing = target.u8(x.b, f::FLIP);
         x.c.d[1] = x.c.d[1] & !0xff | facing as u32;
-        x.call(0xa4c2);
-        if x.c.cond(7) {
+        if !lib::decision_b(x) {
             return false;
         }
-        x.call(0xa4b4);
-        if x.c.cond(7) {
+        if !lib::decision_a(x) {
             return false;
         }
         x.c.d[0] = 1;
@@ -981,7 +946,7 @@ mod riyakaa {
             x.set8(f::FREEZE, 4);
             x.set16(0x14, 0x500);
             x.set16(0x16, 0xffc8);
-            x.call(0xec6ca);
+            lib::sound(x, 0xec6ca);
             let side = x.u8(0x4a) ^ 0x20;
             x.set8(0x4a, side);
             if side != 0 {
@@ -1108,7 +1073,7 @@ mod riyakaa {
             return;
         }
         x.set32(f::STATE, st::DEAD_LONG);
-        x.call(0x27ee);
+        detach_from_host(x);
     }
 }
 

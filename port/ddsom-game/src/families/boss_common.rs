@@ -177,30 +177,8 @@ pub fn tst16(x: &mut Cx, off: u32) -> Fl {
 
 // --- bibliothèque d'IA du 68000 (0x103d6..) -----------------------------------------------------
 
-/// Routines d'IA partagées par les ennemis et les boss, encore en 68000.
-pub mod ai {
-    /// Lance le script `D0` du jeu `A4` (`0x1a32`) puis recopie `+0x3e` en `+0x44`.
-    pub const PLAY: u32 = 0x103d6;
-    /// Lance l'entrée du jeu `A4` dont la marque `+3` est celle de l'image-clé `+0x33`.
-    pub const SELECT: u32 = 0x103e0;
-    /// Un pas d'animation (retenue = fin du script) puis `+0x44 = +0x3e`.
-    pub const STEP: u32 = 0x1040c;
-    /// Cible dans la boîte devant l'objet : D0 = portée avant, D1 = portée, D2 = profondeur ; Z = non.
-    pub const TARGET_IN_BOX: u32 = 0xb5e0;
-}
 
-/// Lance le script `n` du jeu d'animations `set` (`0x103d6`).
-pub fn play(x: &mut Cx, set: u32, n: u32) {
-    x.c.a[4] = set;
-    x.c.d[0] = n;
-    x.call(ai::PLAY);
-}
 
-/// Un pas d'animation de l'IA ; vrai si le script est terminé.
-pub fn step(x: &mut Cx) -> bool {
-    x.call(ai::STEP);
-    carry(x)
-}
 
 /// Choisit la table de vitesses `n` (`0x1b64`).
 pub fn speed(x: &mut Cx, n: u32) {
@@ -219,74 +197,22 @@ pub fn zero(x: &Cx) -> bool {
 
 // --- aides partagées par les boss à tables de décision ------------------------------------------
 
-/// Routines du moteur et de l'IA que ces boss appellent.
-pub mod ia {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const PLAYERS_ALIVE: u32 = 0x10474;
-    pub const AI_GESTURE: u32 = 0x1047a;
-    pub const OUTSIDE: u32 = 0x104a2;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const FACING: u32 = 0x10560;
-    pub const PHASE_UP: u32 = 0x105b6;
-    pub const DUST: u32 = 0x1172e;
-    pub const WIDE_BOX: u32 = 0x7ef4;
-}
 
-/// Au moins un joueur en vie (0x10474).
-pub fn alive(x: &mut Cx) -> bool {
-    x.call(ia::PLAYERS_ALIVE);
-    !zero(x)
-}
 
-/// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
-pub fn outside(x: &mut Cx, d0: i16, d1: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    x.call(ia::OUTSIDE);
-    !zero(x)
-}
 
-/// Le boss doit-il se retourner vers sa cible (0x1050c) ?
-pub fn turn_needed(x: &mut Cx) -> bool {
-    x.call(ia::TURN_NEEDED);
-    !zero(x)
-}
 
-/// Le boss regarde-t-il vers sa cible (0x10560, Z levé) ?
-pub fn facing_target(x: &mut Cx) -> bool {
-    x.call(ia::FACING);
-    zero(x)
-}
 
-/// Boîte large devant le boss (0x7ef4).
-pub fn in_wide_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ia::WIDE_BOX);
-    !zero(x)
-}
 
 /// Cible dans la boîte (0xb5e0) puis geste choisi par l'IA (0x1047a) : `Some(D0)` si l'IA en a choisi un.
 pub fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
-    x.call(ia::AI_GESTURE);
-    (!zero(x)).then_some(x.c.d[0])
+    let turn = lib::turn_decision(x);
+    (turn != lib::Turn::None).then_some(turn as u32)
 }
 
-/// Bouffée de poussière de sorte `k` (0x1172e).
-pub fn dust(x: &mut Cx, k: u32) {
-    x.c.d[5] = k;
-    x.call(ia::DUST);
-}
 
-/// Son ou message `n` (0x2824).
-pub fn sound(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(ia::SOUND_EVENT);
-}
 
 /// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)` : sorte d'animation `k` (champs `+0xa0` et `+0xa1`).
 pub fn anim_kind(x: &mut Cx, k: u8) {

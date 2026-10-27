@@ -42,7 +42,7 @@ fn reaction(x: &mut Cx) {
     x.set8(HOVER, 0xff);
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
-        x.call(rom::IMMUNITIES);
+        lib::set_immunities(x);
     }
     let code = x.u8(0x49);
     x.c.d[0] = x.c.d[0] & 0xffff_ff00 | code as u32;
@@ -70,7 +70,7 @@ fn pushed_back(x: &mut Cx) {
     if (x.u8(0x14) as i8) < 0 {
         return stop(x);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
     x.set32(0x58, 0);
@@ -83,7 +83,7 @@ fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             body_anim(x, 0x11);
         }
         2 => {
@@ -112,7 +112,7 @@ fn down(x: &mut Cx) {
             x.set8(0, 1);
         }
         _ => {
-            if x.a5_u8(var::PAUSE) != 0 || !step(x) {
+            if x.a5_u8(var::PAUSE) != 0 || !lib::step(x) {
                 return;
             }
             x.set8(VULNERABLE, 1);
@@ -179,7 +179,7 @@ fn falling(x: &mut Cx) {
     x.set32(0x18, 0);
     next6(x);
     x.anim_start(SET_DEATH, 0x10);
-    x.call(0xecabc);
+    lib::sound(x, 0xecabc);
 }
 
 /// Boss vaincu : type et variante (mot), score (`A5-0x557c..`), lus par la fin de scène.
