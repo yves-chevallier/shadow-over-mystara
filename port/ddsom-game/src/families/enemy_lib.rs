@@ -808,11 +808,11 @@ pub fn roll_78(x: &mut Cx) -> bool {
 pub fn palette_script(x: &mut Cx, index: u16) {
     const PALETTE: u32 = 0x91c380;
     let from = 0x102bau32.wrapping_add((index << 5) as i16 as u32);
-    // movem.l (A2),{D0-D6,A3} puis movem.l ...,(A1)
+    // movem.l (A2),{D0-D6,A3} puis movem.l ...,(A1) : la table est lue dans l'espace des données (adresse dans A2,
+    // `lea` relatif au PC), pas dans celui des instructions
     let mut longs = [0u32; 8];
     for (k, v) in longs.iter_mut().enumerate() {
-        let a = from + 4 * k as u32;
-        *v = (x.rom16(a) as u32) << 16 | x.rom16(a + 2) as u32;
+        *v = x.data32(from + 4 * k as u32);
     }
     for (k, &v) in longs.iter().enumerate() {
         crate::mem::wr32(x.b, PALETTE + 4 * k as u32, v);
