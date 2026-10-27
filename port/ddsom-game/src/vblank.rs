@@ -13,7 +13,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::{call, Native};
+use crate::call;
 
 /// Registres CPS-A (0x804100 + décalage).
 mod cps_a {
@@ -169,6 +169,27 @@ fn reveiller_taches(b: &mut Cps2Bus) {
     wr8(b, a5(var::RALENTI), ralenti);
 }
 
+/// Prise de l'interruption de VBLANK (niveau `niveau`, autovecteur `0x574`) là où le processeur en est (`pc` : adresse
+/// d'origine du point interrompu), comme le 68000 : superviseur, PC et SR empilés, niveau dans le SR ; puis le
+/// traitement et le `rte`.
+pub fn interruption(c: &mut Cpu, b: &mut Cps2Bus, niveau: u8, pc: u32) {
+    m68k::Bus::irq_ack(b, niveau);
+    let sr = c.sr;
+    c.set_sr((sr | SR_S) & !m68k::SR_T);
+    c.a[7] = c.a[7].wrapping_sub(4);
+    wr32(b, c.a[7], pc);
+    c.a[7] = c.a[7].wrapping_sub(2);
+    wr16(b, c.a[7], sr);
+    c.sr = c.sr & !0x0700 | (niveau as u16) << 8;
+    vblank(c, b);
+    // `rte`
+    c.a[7] = c.a[7].wrapping_add(6);
+    c.set_sr(sr);
+}
+
+const SR_S: u16 = 0x2000;
+
+/// 0x574 : le traitement de l'interruption ; tous les registres sont rendus.
 fn vblank(c: &mut Cpu, b: &mut Cps2Bus) {
     let (d, a) = (c.d, c.a);
     c.a[5] = A5;
@@ -192,19 +213,4 @@ fn vblank(c: &mut Cpu, b: &mut Cps2Bus) {
     // le code d'origine finit par la jauge de charge (0xb3e), inactive tant que DSW a son bit 0x400
     c.d = d;
     c.a = a;
-    // RTE
-    let sr = rd16(b, c.a[7]);
-    c.pc = rd32(b, c.a[7] + 2);
-    c.a[7] += 6;
-    c.set_sr(sr);
 }
-
-pub const VBLANK: Native = Native {
-    entry: 0x574,
-    name: "vblank",
-    run: vblank,
-    touches_sound: true,
-    outputs: 0,
-};
-
-pub const NATIVES: &[Native] = &[VBLANK];

@@ -29,7 +29,8 @@ use cps2::{Cps2Bus, LINES, VBLANK_LINE};
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
-use crate::{call_at, Native};
+use crate::call;
+use crate::kernel::Point;
 use crate::taches::table::{table, Table};
 
 /// Position du faisceau : lignes écoulées depuis la mise sous tension (une image commence au vblank).
@@ -46,15 +47,18 @@ const RELACHE_Z80: u64 = faisceau(5, 108);
 /// ... et entre dans `boot_init` (0x492) ici.
 const BOOT_INIT: u64 = faisceau(5, 173);
 
-/// Points du code d'origine où la native attend son heure (le PC y reste tant qu'elle n'est pas venue).
-mod at {
-    pub const RESET: u32 = 0x350;
-    pub const RELACHE_Z80: u32 = 0x18cc;
-    pub const POIGNEE: u32 = 0x18e2;
-    pub const BOOT_INIT: u32 = 0x492;
-    /// Après `move #0x2000,SR` : l'interruption en attente est prise avant.
-    pub const LANCEMENT: u32 = 0x50a;
-    pub const ORDONNANCEUR: u32 = 0x928;
+/// Exécute le point `point` du démarrage ; rend le suivant, ou `None` quand il attend son heure (position du
+/// faisceau, poignée de main du Z80) : il réessaiera à la ligne suivante, sans avoir rien changé. Après `boot_init`
+/// (`move #0x2000,SR`), l'interruption en attente est prise avant le lancement.
+pub fn executer(c: &mut Cpu, b: &mut Cps2Bus, point: Point) -> Option<Point> {
+    match point {
+        Point::Reset => Some(reset(c, b)),
+        Point::RelacheZ80 => relacher_z80(b),
+        Point::Poignee => poignee_de_main(c, b),
+        Point::BootInit => boot_init(c, b),
+        Point::Lancement => Some(lancement(c, b)),
+        _ => unreachable!("point {point:?} : pas un point du démarrage"),
+    }
 }
 
 /// Sous-routines d'origine et adresses de retour de leurs `jsr`.
@@ -143,12 +147,14 @@ fn a5(off: u32) -> u32 {
     A5.wrapping_add(off)
 }
 
-fn jsr(c: &mut Cpu, b: &mut Cps2Bus, (routine, retour): (u32, u32)) {
-    call_at(c, b, routine, retour);
+/// `jsr` d'une routine du démarrage (l'adresse de retour d'origine n'est plus empilée : la pile du démarrage n'est
+/// relue par personne).
+fn jsr(c: &mut Cpu, b: &mut Cps2Bus, (routine, _retour): (u32, u32)) {
+    call(c, b, routine);
 }
 
 /// 0x350 : reset, puis les effets du test de RAM (0x182a) jusqu'au relâchement du Z80.
-fn reset(c: &mut Cpu, b: &mut Cps2Bus) {
+fn reset(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
     wr16(b, io::INCONNU, 0);
     for (port, v) in io::SORTIES[..2].iter().copied() {
         wr16(b, port, v);
@@ -199,30 +205,30 @@ fn reset(c: &mut Cpu, b: &mut Cps2Bus) {
         wr16(b, a, 0x20);
         wr16(b, a + 2, 0);
     }
-    c.pc = at::RELACHE_Z80;
+    Point::RelacheZ80
 }
 
 /// 0x18cc : à l'heure de l'original, relâche le Z80 et efface le drapeau de sa boîte aux lettres.
-fn relacher_z80(c: &mut Cpu, b: &mut Cps2Bus) {
+fn relacher_z80(b: &mut Cps2Bus) -> Option<Point> {
     if position(b) < RELACHE_Z80 {
-        return;
+        return None;
     }
     wr16(b, io::COMMANDES, io::Z80_EN_MARCHE);
     wr8(b, a5(var::PORT_COMMANDES[2].0), var::PORT_COMMANDES[2].1);
     wr8(b, partagee::BOITE, 0);
-    c.pc = at::POIGNEE;
+    Some(Point::Poignee)
 }
 
 /// 0x18e2 : attend la poignée de main du Z80, puis laisse la RAM partagée comme son test.
-fn poignee_de_main(c: &mut Cpu, b: &mut Cps2Bus) {
+fn poignee_de_main(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Point> {
     if b.qram[partagee::POIGNEE_Z80] != partagee::PRET_Z80 {
-        return;
+        return None;
     }
     for a in (partagee::DEBUT..partagee::FIN).step_by(2) {
         wr8(b, a, if a < partagee::BOITE { 0xff } else { 0x55 });
     }
     registres_du_test(c, b);
-    c.pc = at::BOOT_INIT;
+    Some(Point::BootInit)
 }
 
 /// Registres que le test de RAM laisse à `boot_init` (et, par lui, aux réglages 0x2d30a) : les longs de la
@@ -241,13 +247,13 @@ fn registres_du_test(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[2] = rom::TEXTE_ERREUR;
     c.a[3] = partagee::DEBUT - 1;
     c.a[4] = 0;
-    c.a[6] = at::BOOT_INIT;
+    c.a[6] = 0x492; // `boot_init`, adresse de retour du test (`lea`)
 }
 
 /// 0x492 : à l'heure de l'original, boîte aux lettres du Z80, tas des piles, réglages, puis interruptions.
-fn boot_init(c: &mut Cpu, b: &mut Cps2Bus) {
+fn boot_init(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Point> {
     if position(b) < BOOT_INIT {
-        return;
+        return None;
     }
     wr8(b, partagee::BOITE, 0x88);
     wr8(b, partagee::STEREO, 0xff);
@@ -267,11 +273,11 @@ fn boot_init(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = PILES_FIN - 0x40;
     jsr(c, b, ext::REGLAGES);
     c.set_sr(0x2000);
-    c.pc = at::LANCEMENT;
+    Some(Point::Lancement)
 }
 
 /// 0x50a : crée la tâche de démarrage (emplacement 0) et passe la main à l'ordonnanceur.
-fn lancement(c: &mut Cpu, b: &mut Cps2Bus) {
+fn lancement(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
     if rd8(b, rom::DEVELOPPEMENT) != 0 {
         let presse = rd8(b, io::BOUTONS) & 0x10 == 0;
         wr8(b, BOUTON_AU_DEMARRAGE, if presse { 0xff } else { 0 });
@@ -279,25 +285,5 @@ fn lancement(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = ext::TACHE_DEMARRAGE;
     set_low_word(&mut c.d[0], 0);
     jsr(c, b, ext::CREER_TACHE);
-    c.pc = at::ORDONNANCEUR;
+    Point::Debut
 }
-
-macro_rules! natif {
-    ($nom:ident, $libelle:literal, $entree:expr, $corps:expr) => {
-        pub const $nom: Native = Native {
-            entry: $entree,
-            name: $libelle,
-            run: $corps,
-            touches_sound: false,
-            outputs: 0,
-        };
-    };
-}
-
-natif!(RESET, "demarrage_reset", at::RESET, reset);
-natif!(RELACHE, "demarrage_relacher_z80", at::RELACHE_Z80, relacher_z80);
-natif!(POIGNEE, "demarrage_poignee_z80", at::POIGNEE, poignee_de_main);
-natif!(BOOT, "demarrage_boot_init", at::BOOT_INIT, boot_init);
-natif!(LANCEMENT, "demarrage_lancement", at::LANCEMENT, lancement);
-
-pub const NATIVES: &[Native] = &[RESET, RELACHE, POIGNEE, BOOT, LANCEMENT];

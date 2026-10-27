@@ -667,7 +667,7 @@ mod wave_leader {
 /// Fondu au noir des portes (SET 7 [`exit_gate`], SET 29 `set_b::door_b`) : le sous-programme 0x1460 cède la main
 /// pendant ses 16 pas. La porte l'appelle comme un sous-programme de tâche (lot E) : la suite, une [`Etape`] qui
 /// porte la porte (A0), est rangée dans les appels en cours de la tâche ; à la fin du fondu, la tâche y reprend,
-/// puis revient dans la boucle de dispatch par l'adresse de retour du gestionnaire, restée sur la pile 68000.
+/// puis revient dans la boucle de dispatch (son appel en cours, `dispatch::Etape::Aiguillage`).
 pub mod fondu_de_sortie {
     use super::super::set_b;
     use super::Cx;
@@ -712,10 +712,10 @@ pub mod fondu_de_sortie {
         }
     }
 
-    /// Fondu complet vers le noir (`jsr 0x1460`, délai 2, quatre pages), suivi de `suite`. Le fondu cède la main :
-    /// les fonctions Rust de la boucle de dispatch qui ont appelé le gestionnaire sont abandonnées (`Unwound`),
-    /// comme le faisait `call_at`, et la boucle reprend par l'adresse de retour du gestionnaire.
-    pub fn fondu_au_noir(x: &mut Cx, suite: fn(Obj) -> Etape) -> ! {
+    /// Fondu complet vers le noir (`jsr 0x1460`, délai 2, quatre pages), suivi de `suite`. Le fondu cède la main : le
+    /// gestionnaire doit revenir aussitôt (appel terminal), et la boucle de dispatch qui l'a appelé abandonne ; la
+    /// tâche reprendra par les étapes du fondu, puis `suite`, puis la boucle (`dispatch::Etape::Aiguillage`).
+    pub fn fondu_au_noir(x: &mut Cx, suite: fn(Obj) -> Etape) {
         x.set_a5_u16(DELAI, 2);
         x.set_a5_u8(PAGES, 0xf);
         // registres de l'appel d'origine, gardés par le contexte de la tâche jusqu'à la reprise
@@ -725,7 +725,6 @@ pub mod fondu_de_sortie {
         let mut s = crate::scene::Ctx::new(&mut *x.c, &mut *x.b);
         // s'il revenait sans céder, la suite et le retour du gestionnaire seraient déjà faits (`revenir`)
         s.sous_programme(crate::taches::fondu::descente, suite(porte));
-        std::panic::resume_unwind(Box::new(crate::Unwound))
     }
 }
 

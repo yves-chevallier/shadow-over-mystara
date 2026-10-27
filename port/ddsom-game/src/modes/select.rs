@@ -7,7 +7,7 @@
 //!
 //! La phase est une machine à états (`A5+0x2d`, pas de 2) qui fait un pas par image ; seules les
 //! étapes d'ouverture et de fermeture cèdent la main (fondus), à des adresses d'origine reprises par
-//! des natives (`resume!`).
+//! des étapes Rust (`etapes!`).
 //!
 //! | Étape | Rôle |
 //! |---|---|

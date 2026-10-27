@@ -569,6 +569,71 @@ tables de la ROM (réactions propres à un type, créateurs par table), quelques
 `(c, b)` du périmètre. Les `_68k(` gardés : `random_68k` (D0 relu), `terrain_68k` (registres de 0x24a8 relus),
 `shock_68k` (A1, D1, retenue relus), `in_arena_68k` (`bhi` de `reactions.rs`).
 
+## 14. Lot « noyau final » : J3 achevé, l'ordonnanceur en Rust
+
+Périmètre : `dispatch.rs`, `game.rs`, `taches/`, `kernel.rs`, `vblank.rs`, `sans68k.rs`, `demarrage.rs`, `lib.rs`,
+`families/mod.rs`, `families/cx.rs`, et les reprises restantes de `modes/` (boucle, démarrage, démonstration),
+`families/set.rs` et `effects_g.rs` (cessions des gestionnaires). Détail : [noyau.md](noyau.md), « Ordonnanceur et
+traps », « Appels en cours en Rust », « Le jeu sans 68000 ».
+
+* **Plus de cession par la pile 68000.** Les appels en cours de la boucle de partie sont des étapes : fin d'image
+  (`partie::Etape::FinImage`, ex-native `0x1c4c4`), fin de la phase 12 (`game::Etape::ApresMonde`, ex-`PHASE_12_RESUME`),
+  mise à jour du monde (`game::Etape::Monde { ordre, etape }`, ex-`WORLD_RESUMES`, 46 natives), boucles d'aiguillage
+  (`dispatch::Etape::Aiguillage`, ex-`RESUME_*`, 10 natives), retours des phases de la démonstration
+  (`demo::Etape::AfterPhaseA/B`, ex-`resume!` `0x1f98c`/`0x20a98`, et `ApresMonde` `0x1fa4a` pour sa phase 12), boucle
+  de la machine à modes (`modes::Etape`, ex-natives `0x133fe`, `0x1341a`, `0x13422`), entrée de la tâche de démarrage
+  (`boot::Etape::Entree`, ex-native `0x11b16`), pas de jeu (`partie::Etape::Pas`, ex-`resume!` `0x1c4b0`).
+* **Céder au milieu d'une boucle Rust** sans abandon par panique : une boucle qui appelle un gestionnaire puis
+  continue ouvre un *appel attendu* (`table::appeler_attendu`, `crate::appeler_attendu`) dont le `rts` lui rend la
+  main ; si le gestionnaire cède (porte : `fondu_de_sortie::fondu_au_noir` ne diverge plus ; feu d'artifice), la
+  cession est notée (`taches::a_cede`, remise à faux à chaque point de premier niveau), les `rts` suivants ne font
+  rien, et chaque niveau rend `Flow::Yield` ; la tâche reprendra par les cadres. L'épilogue étranger des bulles
+  dépile quatre cadres (`table::depiler_appels`, A1-A4 = leurs adresses d'origine) et revient au cinquième ; observé
+  aussi dans la démonstration de l'attract (`modes/attract`, images 16 857 et suivantes), d'où l'étape `ApresMonde`
+  de sa phase 12.
+* **Disparaissent** : `Unwound` (et le `catch_unwind` de chaque native), `call_at` (`Cx::call_at` ; `Cx::tail` est un
+  `call`), `resume!`, `Reprise::Cession`, `table::mettre_sur_la_pile`, `relever`, `etape_depilee`,
+  `reprendre_de_la_pile`, `vers_le_68000` et la liste `remis`. `Cadre` reste, comme pile des suites d'une tâche (sa
+  hauteur de pile 68000 ne sert plus qu'à distinguer un appel par adresse, qui empile une sentinelle) ; il gagne
+  l'attente (`attendu`). `crate::call` n'admet plus de cession ni de retour plus haut : une panique nomme le site
+  (aucun cas dans les 272 scénarios).
+* **Le noyau ne pose plus de PC.** L'ordonnanceur (`0x928`-`0x984`) et le démarrage (`0x350`-`0x50a`) sont une machine
+  à états (`kernel::Point`, rangé dans la table des tâches) que `sans68k::ligne` fait avancer d'un point à la fois ;
+  l'interruption de VBLANK est une fonction Rust prise entre deux points (`vblank::interruption`). Une tâche est
+  lancée en appelant le pas de son étape ; toutes les reprises et entrées sont des étapes (l'écran mort `0x19068`
+  n'en a pas). Le plafond des pas est compté par le jeu (`sans68k::pas_de_jeu`, `Point::PasRetenu`) au lieu du test
+  du PC (`cps2::StepCap` reste pour la machine de référence). Natives retirées : les cinq de l'ordonnanceur, les dix
+  des handlers de traps et de leur retour (`trap #12` change directement le masque), le VBLANK, les cinq du démarrage.
+* **Mode hybride retiré** (D1 jusqu'au bout) : avec des tâches lancées par un ordonnanceur Rust et des appels en cours
+  hors de la pile 68000, le code d'origine ne peut plus prendre la suite d'une native. `install` = jeu sans 68000,
+  `DDSOM_HYBRIDE=1` arrête les outils avec un message (`refuser_hybride`). La machine de référence (`install_reference`)
+  garde son 68000 et n'a pas changé ; `DDSOM_CHECK` et `DDSOM_ADOPT_REGS` (original sur une copie) marchent toujours.
+  `examples/cessions` et `reste68k` (68000 restant du mode hybride) n'ont plus d'objet.
+* **J1 dans le périmètre** : la mise à jour du monde et la fin de phase appellent directement `player::update::update_all`,
+  `player::overlays::update`, `combat::combat_update`, `rank::tick_68k`, `aides::game_over` ; la fin de la phase 12 est
+  commune au jeu et à la démonstration (`game::apres_le_monde`). Restent par adresse (corps privés d'autres modules) :
+  jauge `0xb3e`, sprites `0x1de96`, caméras `0x33e20`, pop-ups `0x19e20`, script `0xf2e5c`, entrées `0x2aec`, et les
+  quatre services du VBLANK (`0x80c`, `0x68c`, `0x143da`, `0x2dcf6`).
+
+**Sortie du `Cpu` (étape 3) : pas atteinte, ce qui bloque.** `Native::run` garde `(c, b)` et les contextes leur `c` :
+(1) le **PC** sert encore aux sauts d'une native à une autre au sein d'une tâche (`Sequence::jump`/`jump_to`/`tail`,
+~25 sites de `modes/`, `scene/`, `taches/` ; `taches::revenir` vers une `Suite::Adresse`, retour d'un `crate::call` ;
+`ai_aids::landing_by_kind`, `jmp (A1)`) et aux appels par adresse (`crate::call`, 929 `adr`, dont ~430 dans
+`families`) ; (2) les **registres** : 4 269 accès (`regs`) dont 2 195 dans `families`, 349 `modes`, 282 `scene`, 249
+`ai_aids`, 186 `player`, 172 `ai` ; les registres résiduels relus d'une routine à l'autre (bilans des lots C, B, S, A :
+boucle de dispatch A0/D7/D0/A1, `reinsert`, `random_68k`, `terrain_68k`, créateurs, boss 1 et 9...) et ceux que le
+noyau transmet aux tâches neuves et que les cessions rangent dans le contexte ; (3) la **pile 68000** des appels par
+adresse (sentinelle) et de l'interruption (FF0E66 et piles des tâches, ignorées par `validate`). Une structure
+`Registres` portée par les contextes n'a de sens qu'une fois (1) fait : elle remplacerait le banc `Cpu` à l'identique.
+
+Mesure (`tools/mesure_refacto.py`, avant b30905d / après) : `pile` total 117 / 81 (`taches` 22 / 14, `kernel` 17 / 3,
+`sans68k` 10 / 3, `families` 18 / 6) ; natives déclarées 330 / 317 (sans compter les 46 + 10 natives de reprise
+générées) ; `regs` `kernel` 47 / 33, `sans68k` 9 / 3 ; `adr` total 943 / 929 (`game` 15 / 14 : les appels directs
+remplacent `call` mais le compte inclut les commentaires d'adresse) ; lignes 146 821 / 146 702. Écritures de `c.pc` :
+`kernel` 11 / 0, `sans68k` 2 / 0, `demarrage` 5 / 0, `vblank` 1 / 0, `families/mod.rs` 3 / 2 (repli hors jeu de
+`jsr_origine`), `taches` 2 / 2 (`revenir` vers une adresse ; `executer` pose l'adresse d'origine de l'étape :
+un pas qui rendrait la main sans céder ni sauter s'arrêterait sur « pas de native »).
+
 ## Avancement
 
 | Étape | Commit | Validation |

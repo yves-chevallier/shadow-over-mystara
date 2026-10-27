@@ -52,7 +52,8 @@ celle de l'original), donc deux machines surcadencées, ou une native et son ori
 **Plafond** (`ddsom_game::MAX_STEPS_PER_FRAME` = 8 pas, `GAME_STEP` = 0x1c4b0, `cps2::Machine::step_cap`) : au plus 8
 passages en 0x1c4b0 par image ; le suivant est retenu, le reste de l'image est sauté (comme `idle`) et le pas
 s'exécute au début de l'image suivante, après l'IRQ du VBLANK. Huit est la médiane des mesures de l'arcade (5 à 10
-selon le coût du pas). Installé par `ddsom_game::install` (jeu et machine hybride de la validation) et par
+selon le coût du pas). Installé par `ddsom_game::install` (le jeu, qui compte lui-même ses pas :
+`sans68k::pas_de_jeu`, le pas retenu attend au point `kernel::Point::PasRetenu`) et par
 `ddsom_game::install_reference` (code d'origine de la validation, `determinisme`, `tasks`, `watch`...), donc
 identique des deux côtés ; `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade) n'est pas plafonné.
 C'est un écart volontaire avec le code d'origine **surcadencé** (qui ferait 130 pas), pas avec l'arcade. Un pas
@@ -207,10 +208,9 @@ tâche principale (`0x1c45a-0x1c4b2`, qui cède).
   du `lsl`) : les gestionnaires s'en servent d'un objet au suivant.
 - Certains gestionnaires quittent en dépilant les adresses de retour de leurs appelants (bulle de joueur
   de personnage 1 : `movem (SP)+,A1-A4 ; rts` revient à `0x1c468`, début de la boucle de partie, en
-  abandonnant la fin de l'image). Pour que la pile Rust ressemble à celle de l'original, `update` et la
-  phase 12 réservent la place des adresses de retour de la boucle et de `0x1c86e`, et `lib::call` lève
-  `Unwound` quand le code 68000 dépile au-delà de son retour (hors exception : le `trap` change de
-  pile) ; `lib::exec` abandonne alors les fonctions Rust et reprend au PC atteint.
+  abandonnant la fin de l'image). Les appels en cours de la boucle (fin d'image, phase 12, mise à jour du monde,
+  aiguillage) sont des étapes rangées dans la table des tâches ; l'épilogue dépile les quatre plus récents et revient
+  au cinquième, et les fonctions Rust dépassées abandonnent (`docs/noyau.md`, « Appels en cours en Rust »).
 
 ## 9. Comportements indéfinis de l'original : correctifs communs (`cps2::Machine::patches`)
 

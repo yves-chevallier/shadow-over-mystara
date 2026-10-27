@@ -19,7 +19,6 @@ mod ext {
     pub const CONFIG_2DC9A: u32 = 0x2dc9a;
     pub const CREDITS_TASK: u32 = 0x13c0a;
     pub const FREEZE_TASK: u32 = 0xee080;
-    pub const MODE_LOOP: u32 = 0x133fe;
 }
 
 /// Palette de départ : huit longs de la ROM copiés dans la table des palettes.
@@ -40,22 +39,12 @@ const CPS_REG_VIDEO_B: u32 = 0x804166;
 const SLOT_CREDITS: u16 = 0x20;
 const SLOT_FREEZE: u16 = 0xe0;
 
-pub const BOOT: Native = Native {
-    entry: 0x11b16,
-    name: "boot_task",
-    run: |c, b| {
-        let mut x = Ctx::new(c, b);
-        x.c.a[5] = A5;
-        x.sous_programme(crate::video::ecran_noir::debut, Etape::Init);
-    },
-    touches_sound: false,
-    outputs: 0,
-};
-
 const INIT: u32 = 0x11b22;
 crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
+        /// Entrée de la tâche (`0x11b16`) : écran noir, puis l'initialisation.
+        Entree = 0x11b16 => |x| x.sous_programme(crate::video::ecran_noir::debut, Etape::Init),
         Init = INIT => |x| {
             x.call(ext::PALETTES);
             for i in 0..8 {
@@ -118,7 +107,8 @@ crate::etapes! {
             x.c.a[0] = ext::FREEZE_TASK;
             set_low_word(&mut x.c.d[0], SLOT_FREEZE);
             crate::kernel::creer_tache(x.b, SLOT_FREEZE as u32, ext::FREEZE_TASK);
-            x.jump_to(ext::MODE_LOOP)
+            // la tâche continue dans la boucle de la machine à modes (`jmp 0x133fe`)
+            crate::modes::start(x)
         },
     }
 }
@@ -177,4 +167,4 @@ const WARNING_TICK: u32 = 0x11c06;
 
 const NOTICE_TICK: u32 = 0x11c4a;
 
-pub const NATIVES: &[Native] = &[BOOT];
+pub const NATIVES: &[Native] = &[];

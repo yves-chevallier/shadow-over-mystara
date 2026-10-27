@@ -55,11 +55,12 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
   le comportement reste celui de l'original ; ces états sont listés ci-dessous ;
 - **retour par-dessus l'appelant** : EFFCT 4 saute, pour le personnage 1, dans l'épilogue d'une autre routine
   (`movem.l (SP)+,{A1-A4} ; rts`, `beq.w 0xaa9fe`) : l'original ne revient donc pas à son appelant mais plus
-  haut dans la pile, au début du tour de la boucle de partie `0x1c468` (scénario `bot_char2`, entre autres). La
-  routine native fait de même (`Ctx::epilogue_etranger`) : les appels en cours tenus en Rust (aiguillage des
-  EFFCT, mise à jour du monde, fin d'image) sont sur la pile 68000, où `call_at` les a remis
-  (`docs/noyau.md`, « Appels en cours en Rust ») ; elle en dépile quatre longs, revient au cinquième, et `call_at`
-  abandonne les fonctions Rust dépassées (`Unwound`). Il n'y a plus de chemin « hors contrat » où le code
+  haut dans la pile, au début du tour de la boucle de partie `0x1c468` (scénario `bot_char2`, entre autres ; aussi
+  dans la démonstration de l'attract, au début de sa boucle). La routine native fait de même
+  (`Ctx::epilogue_etranger`) : elle dépile les quatre appels en cours les plus récents de la tâche (aiguillage des
+  EFFCT, mise à jour du monde, fin de la phase, fin d'image ; A1-A4 reçoivent leurs adresses d'origine,
+  `docs/noyau.md`, « Appels en cours en Rust »), revient au cinquième, et les fonctions Rust dépassées (boucle de
+  dispatch...) voient que leur appel n'est pas revenu et abandonnent (`taches::table::revenu`). Il n'y a plus de chemin « hors contrat » où le code
   d'origine s'exécute à la place d'une native (l'ancien coût démesuré `COUT_HORS_CONTRAT` a disparu).
 
 ### Outils de validation

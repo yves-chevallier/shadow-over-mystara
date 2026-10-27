@@ -211,11 +211,11 @@ fn principal() {
             abandons += 1;
             continue;
         }
-        // la native : le fondu cède la main (`Unwound`), ou elle revient
+        // la native : le fondu cède la main (`call` s'arrête alors sur une panique), ou elle revient
         let r = catch_unwind(AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
         let fondu_natif = match r {
             Ok(()) => false,
-            Err(e) if e.is::<ddsom_game::Unwound>() => true,
+            Err(e) if e.downcast_ref::<String>().is_some_and(|m| m.contains("a cédé la main")) => true,
             Err(_) => {
                 println!("essai {essai} : panique de la native");
                 ecarts_vus += 1;
