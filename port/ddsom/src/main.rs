@@ -15,14 +15,16 @@
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter ;
 //! à changer dans touches.cfg (`touches.rs`), manettes Xbox comprises sous Windows (`manette.rs`).
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
-//! `DDSOM_ENREGISTRE=partie.txt` enregistre les entrées en scénario (et l'EEPROM de départ dans
-//! `partie.txt.eeprom`) : `validate <roms> partie.txt.eeprom partie.txt <images>` rejoue la partie.
+//! F5 sauvegarde la partie dans sauvegardes/rapide.txt, F9 la reprend (`sauvegarde.rs` : rejeu des entrées).
+//! `DDSOM_ENREGISTRE=partie.txt` écrit de même la partie en quittant : `validate <roms> partie.txt.eeprom
+//! partie.txt <images>` la rejoue.
 
 mod audio;
 mod manette;
+mod sauvegarde;
 mod touches;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use cps2::Machine;
@@ -51,16 +53,16 @@ fn main() {
         (Some(_), None) if sans_68k => None,
         (_, r) => Some(r.unwrap_or_else(|| DEFAULT_ROMS.into())),
     };
-    let loaded = match (&assets, &romdir) {
-        (Some(dir), None) => ddsom_assets::rebuild::contenus(dir).map(|c| Machine::ddsom(c, eeprom.as_deref())),
+    let contenus = match (&assets, &romdir) {
+        (Some(dir), None) => ddsom_assets::rebuild::contenus(dir),
         (Some(dir), Some(romdir)) => ddsom_assets::rebuild::gfx_region(&dir.join("gfx"))
             .and_then(|gfx| Ok((gfx, ddsom_assets::rebuild::qsound_samples(dir)?.bytes)))
-            .and_then(|(gfx, pcm)| Machine::load_ddsom_with(romdir, eeprom.as_deref(), Some(gfx), Some(pcm))),
-        (None, Some(romdir)) => Machine::load_ddsom(romdir, eeprom.as_deref()),
+            .and_then(|(gfx, pcm)| cps2::Contenus::depuis_roms(romdir, Some(gfx), Some(pcm))),
+        (None, Some(romdir)) => cps2::Contenus::depuis_roms(romdir, None, None),
         (None, None) => unreachable!(),
     };
-    let mut m = match loaded {
-        Ok(m) => m,
+    let contenus = match contenus {
+        Ok(c) => c,
         Err(e) => {
             match (&assets, &romdir) {
                 (Some(dir), None) => eprintln!("Impossible de charger les assets depuis {} : {e}", dir.display()),
@@ -70,20 +72,25 @@ fn main() {
             std::process::exit(1);
         }
     };
-
-    if sans_68k {
-        ddsom_game::install_sans_68k(&mut m);
-    } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
-        ddsom_rc::install(&mut m);
-    } else if std::env::var_os("DDSOM_INTERP").is_none() {
-        ddsom_game::install(&mut m);
-        m.set_overclock(16.0);
-    }
-    // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1, et toujours sans ROM (la région
-    // du Z80 reconstruite depuis les assets n'a que les données du pilote, pas son programme)
-    if std::env::var_os("DDSOM_SON_RUST").is_some() || romdir.is_none() {
-        m.sound.use_rust_driver();
-    }
+    // une machine neuve : au démarrage, et à chaque reprise d'une sauvegarde (`sauvegarde.rs`)
+    let machine = |eeprom: Option<&[u8]>| {
+        let mut m = Machine::ddsom(contenus.clone(), eeprom);
+        if sans_68k {
+            ddsom_game::install_sans_68k(&mut m);
+        } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
+            ddsom_rc::install(&mut m);
+        } else if std::env::var_os("DDSOM_INTERP").is_none() {
+            ddsom_game::install(&mut m);
+            m.set_overclock(16.0);
+        }
+        // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1, et toujours sans ROM (la
+        // région du Z80 reconstruite depuis les assets n'a que les données du pilote, pas son programme)
+        if std::env::var_os("DDSOM_SON_RUST").is_some() || romdir.is_none() {
+            m.sound.use_rust_driver();
+        }
+        m
+    };
+    let mut m = machine(eeprom.as_deref());
 
     let mut win = Window::new(
         "Dungeons & Dragons: Shadow over Mystara (port Rust)",
@@ -101,14 +108,11 @@ fn main() {
     let frame_time = Duration::from_secs_f64(1.0 / FRAME_HZ);
     let mut next = Instant::now();
     let mut paused = false;
-    let mut enregistreur = std::env::var_os("DDSOM_ENREGISTRE").map(|f| {
-        let f = PathBuf::from(f);
-        let mut ee = f.clone().into_os_string();
-        ee.push(".eeprom");
-        std::fs::write(&ee, m.bus.eeprom.to_bytes())
-            .and_then(|()| ddsom_game::scenario::Enregistreur::cree(&f))
-            .unwrap_or_else(|e| panic!("enregistrement dans {} : {e}", f.display()))
-    });
+    let mut partie = sauvegarde::Partie::nouvelle(&m);
+    let sauve = |partie: &sauvegarde::Partie, fichier: &Path| match partie.sauve(fichier) {
+        Ok(()) => eprintln!("Partie sauvegardée dans {} (image {}).", fichier.display(), partie.images()),
+        Err(e) => eprintln!("Sauvegarde dans {} impossible : {e}", fichier.display()),
+    };
     let mut buf = vec![0u32; 384 * 224];
 
     while win.is_open() {
@@ -119,6 +123,20 @@ fn main() {
         if t.pause {
             paused = !paused;
         }
+        if t.sauver {
+            sauve(&partie, SAUVEGARDE.as_ref());
+        }
+        if t.charger {
+            let debut = Instant::now();
+            match sauvegarde::Partie::charge(SAUVEGARDE.as_ref(), |ee| machine(Some(ee))) {
+                Ok((nouvelle, p)) => {
+                    eprintln!("Partie reprise à l'image {} ({:.1} s).", p.images(), debut.elapsed().as_secs_f64());
+                    (m, partie) = (nouvelle, p);
+                    next = Instant::now();
+                }
+                Err(e) => eprintln!("Reprise de {} impossible : {e}", SAUVEGARDE),
+            }
+        }
         if paused {
             win.update();
             std::thread::sleep(Duration::from_millis(16));
@@ -127,12 +145,7 @@ fn main() {
         }
         m.bus.inputs.in0 = t.in0;
         m.bus.inputs.in2 = t.in2;
-        if let Some(e) = &mut enregistreur {
-            if let Err(err) = e.image(&m) {
-                eprintln!("Enregistrement arrêté : {err}");
-                enregistreur = None;
-            }
-        }
+        partie.image(&m);
         let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
             Ok(img) => img,
             // sans 68000 : arrêt sur une adresse sans routine Rust (diagnostic déjà affiché par la panique)
@@ -165,6 +178,9 @@ fn main() {
         }
     }
 
+    if let Some(f) = std::env::var_os("DDSOM_ENREGISTRE") {
+        sauve(&partie, f.as_ref());
+    }
     if let Some(dir) = nvram.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -172,6 +188,9 @@ fn main() {
         eprintln!("Sauvegarde de l'EEPROM impossible : {e}");
     }
 }
+
+/// Fichier de la sauvegarde rapide (F5 / F9).
+const SAUVEGARDE: &str = "sauvegardes/rapide.txt";
 
 /// Dossier des ROMs par défaut.
 const DEFAULT_ROMS: &str = "../rom";

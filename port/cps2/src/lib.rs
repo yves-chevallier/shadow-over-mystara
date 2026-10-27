@@ -129,6 +129,7 @@ pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
 
 /// Contenu des puces de ddsom, tel que la machine le range : depuis les ROMs (`Contenus::depuis_roms`) ou reconstruit
 /// depuis les ressources extraites (`ddsom_assets::rebuild::contenus`, jeu sans ROM).
+#[derive(Clone)]
 pub struct Contenus {
     /// Programme 68000, vue données (mots grand-boutistes, 0x200000 mots).
     pub programme: Vec<u16>,

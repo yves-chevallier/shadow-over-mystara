@@ -98,8 +98,8 @@ pub fn set_input(m: &mut cps2::Machine, name: &str, down: bool) -> bool {
 }
 
 /// Enregistre les entrées d'une partie en scénario : une ligne par entrée qui change, rejouable par `validate`.
-pub struct Enregistreur {
-    out: std::fs::File,
+pub struct Enregistreur<W: io::Write = std::fs::File> {
+    out: W,
     entrees: Vec<(String, u8, u16)>,
     avant: [u16; 3],
     image: usize,
@@ -107,6 +107,12 @@ pub struct Enregistreur {
 
 impl Enregistreur {
     pub fn cree(path: &Path) -> io::Result<Self> {
+        Ok(Enregistreur::new(std::fs::File::create(path)?))
+    }
+}
+
+impl<W: io::Write> Enregistreur<W> {
+    pub fn new(out: W) -> Self {
         let mut entrees = Vec::new();
         for p in 1..=4 {
             for what in ["Right", "Left", "Down", "Up", "Button 1", "Button 2", "Button 3", "Button 4"] {
@@ -115,12 +121,29 @@ impl Enregistreur {
         }
         entrees.extend(SYSTEME.map(String::from));
         let entrees = entrees.into_iter().filter_map(|n| input_bit(&n).map(|(port, bit)| (n, port, bit))).collect();
-        Ok(Enregistreur { out: std::fs::File::create(path)?, entrees, avant: [0xffff; 3], image: 0 })
+        Enregistreur { out, entrees, avant: [0xffff; 3], image: 0 }
+    }
+
+    /// Reprend l'enregistrement d'une partie rejouée jusqu'à l'image `image` (déjà écrite dans `out`) : les entrées
+    /// de `m` sont celles de la dernière image rejouée.
+    pub fn reprend(out: W, image: usize, m: &cps2::Machine) -> Self {
+        let mut e = Enregistreur::new(out);
+        e.avant = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
+        e.image = image;
+        e
+    }
+
+    /// Images enregistrées.
+    pub fn images(&self) -> usize {
+        self.image
+    }
+
+    pub fn sortie(&self) -> &W {
+        &self.out
     }
 
     /// À appeler juste avant chaque image exécutée, entrées posées : `apply` les rejoue au même instant.
     pub fn image(&mut self, m: &cps2::Machine) -> io::Result<()> {
-        use std::io::Write;
         let ports = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
         let f = self.image.saturating_sub(1);
         for (nom, port, bit) in &self.entrees {
