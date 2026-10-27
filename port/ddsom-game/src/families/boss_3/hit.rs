@@ -42,8 +42,11 @@ fn reaction(x: &mut Cx) {
     x.set8(HOVER, 0xff);
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
-        lib::set_immunities(x);
+        // 0xfe5a laisse D0 = l'index de la table des immunités (mot haut nul)
+        x.c.d[0] = lib::set_immunities(x) as u32;
     }
+    // Glitch d'origine : seul l'octet bas de D0 est posé ; l'index de la table garde l'octet haut de D0 (celui de
+    // 0xfe5a, ou le D0 hérité).
     let code = x.u8(0x49);
     x.c.d[0] = x.c.d[0] & 0xffff_ff00 | code as u32;
     let i = x.c.d[0] as u16 as i16 as u32;

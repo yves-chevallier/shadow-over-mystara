@@ -47,8 +47,6 @@ mod ext {
     /// Construction de la liste de sprites.
     pub const SPRITES: u32 = 0x1de96;
     pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const POOLS_INIT_SET: u32 = 0x2134;
-    pub const POOLS_INIT_SOBJ: u32 = 0x21bc;
     pub const PLAYERS_PREPARE_B: u32 = 0x3525c;
     pub const PHASE0_END_FADE: u32 = 0x1cf3c;
     pub const CLEAR_STATUS: u32 = 0xdabba;
@@ -281,7 +279,7 @@ fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + ram::TIMER, 0x40);
     wr8(b, A5 + ram::ACTIVE, 1);
     wr8(b, CLEARED_A, 0);
-    call(c, b, ext::POOLS_INIT_SET);
+    crate::objects::pools::SET.reset(b);
     for (variant, index) in SET_PALETTES {
         // le pool vient d'être vidé : l'allocation réussit
         let set = pools::SET.alloc_68k(c, b).expect("pool SET vide");
@@ -342,8 +340,8 @@ fn wait_then_fade(c: &mut Cpu, b: &mut Cps2Bus) {
 fn reset_pools_and_leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + ram::STEP, 0);
     call(c, b, ext::SPRITES_RESET);
-    call(c, b, ext::POOLS_INIT_SOBJ);
-    call(c, b, ext::POOLS_INIT_SET);
+    crate::objects::pools::SOBJ.reset(b);
+    crate::objects::pools::SET.reset(b);
     leave(c, b);
 }
 

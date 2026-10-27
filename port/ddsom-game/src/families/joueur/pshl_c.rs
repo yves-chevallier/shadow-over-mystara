@@ -362,8 +362,7 @@ mod stone {
                     x.add8(0x5, 2);
                     x.set32(0xc, 0);
                     x.set16(0x5c, 4);
-                    x.set_d0w(8);
-                    x.call(crate::camera_modes::SHAKE_A.entry);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 8);
                     x.anim(ANIMS, 1);
                     crate::sound::jouer(x.b, SFX, x.o);
                 }

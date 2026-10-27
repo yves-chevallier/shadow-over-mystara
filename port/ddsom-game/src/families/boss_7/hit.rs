@@ -45,8 +45,9 @@ fn reaction(x: &mut Cx) {
     }
     sub16(x, IDLE_WAIT, 1);
     let code = x.u8(REACTION) as u32;
-    x.c.d[0] = x.c.d[0] & !0xff | code;
-    let routine = rom32(x, 0x86c3a + (x.c.d[0] & 0xffff));
+    // D0 = le code : 0x10112 (`set_68`) a laissé le reste de D0 à zéro. Relu par la routine de réaction.
+    x.c.d[0] = code;
+    let routine = rom32(x, 0x86c3a + code);
     x.c.a[1] = routine;
     x.call(routine);
     if x.u8(f::FREEZE) != 0 && x.u8(0x46) != 0 {

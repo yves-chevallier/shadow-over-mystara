@@ -569,7 +569,7 @@ pub(super) fn regroup(x: &mut Cx) {
     if !pick_target(x) {
         return go::retire(x);
     }
-    lib::hp_threshold(x, 0x105e2);
+    lib::next_threshold(x, 0x105e2);
     if lib::target_in_box(x, 0, 0x28, 0xc) {
         go::strike_0(x, false);
     } else {

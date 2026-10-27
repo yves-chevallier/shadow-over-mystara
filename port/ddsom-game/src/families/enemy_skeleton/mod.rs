@@ -121,8 +121,12 @@ fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
     if x.u16(f::TARGET) != 0 {
         load_target(x);
-        if lib::target_in_box(x, -8, 0x68, 8) || lib::target_in_box(x, -0xa0, 0x30, 8) {
-            x.set8(SIDE, x.c.d[0] as u8);
+        let side = match lib::target_in_front(x, -8, 0x68, 8) {
+            lib::InBox::No => lib::target_in_front(x, -0xa0, 0x30, 8),
+            near => near,
+        };
+        if side.found() {
+            x.set8(SIDE, side as u8);
             pick_move(x, NEXT_MOVES, 0x208);
             return;
         }

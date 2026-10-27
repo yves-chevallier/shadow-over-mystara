@@ -4,7 +4,7 @@
 //! principal, `+5` et `+6` des sous-états (octets pairs, indices de tables de sauts de l'original) ;
 //! `+0x50` désigne le propriétaire (mot sur 16 bits, ou long pour quelques types).
 
-use m68k::SR_C;
+
 
 use super::cx::{handlers, Cx};
 use super::shell::*;
@@ -1479,8 +1479,7 @@ mod shot25 {
         x.set32(0xc, 0);
         x.c.d[0] = 3;
         x.call(IMPACT_SOUND);
-        x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-        x.call(crate::camera_modes::SHAKE_B.entry);
+        crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
         crate::sound::jouer(x.b, IMPACT_EFFECT, x.o);
         if x.u16(0x5a) != 0 {
             let shadow = x.linked(0x5a);
@@ -1757,15 +1756,12 @@ mod shot28 {
 
 /// Démarrage d'animation de l'IA (`0x103d6` : `anim_start_indexed` puis `+0x44 = +0x3e`).
 fn ai_start(x: &mut Cx, set: u32, n: u32) {
-    x.c.a[4] = set;
-    x.c.d[0] = n;
-    x.call(0x103d6);
+    crate::families::enemy_lib::start(x, set, n);
 }
 
 /// Pas d'animation de l'IA (`0x1040c`) ; vrai en fin de script.
 fn ai_step(x: &mut Cx) -> bool {
-    x.call(0x1040c);
-    x.c.sr & SR_C != 0
+    crate::families::enemy_lib::step(x)
 }
 
 /// Abscisse gauche de la caméra courante (`A5+0x506`, ou `0x556` si la caméra alternative est active).
@@ -2226,7 +2222,6 @@ mod shot32 {
     const ANIMS: u32 = 0x16f58c;
     const SOUND_FLYING: u32 = 0xed4de;
     const SOUND_LANDING: u32 = 0xed548;
-    const SET_TRAJECTORY: u32 = 0x3af8;
     const SCREEN_LEFT: u32 = 0x5a6;
     const FLY: u8 = 0;
     const FALL: u8 = 2;
@@ -2285,7 +2280,7 @@ mod shot32 {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 0x14);
-        x.call(SET_TRAJECTORY);
+        crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
         let variant = x.u8(0x3);
         let (target, angle);
         if variant == 0 {
@@ -2656,8 +2651,7 @@ mod shot36 {
                     x.add8(0x5, 2);
                     x.set16(0xc, 0);
                     crate::sound::jouer(x.b, SOUND_LAND, x.o);
-                    x.c.d[0] = 0x20;
-                    x.call(crate::camera_modes::SHAKE_B.entry);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x20);
                     ai_start(x, ANIMS, 1);
                 }
                 2 => {
@@ -2842,8 +2836,7 @@ mod shot38 {
             0 => init(x),
             2 => {
                 fall(x);
-                x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0x10;
-                x.call(crate::ai::KEEP_ON_SCREEN.entry);
+                crate::ai::keep_on_screen(x.b, x.o, 0x10);
                 x.call(crate::terrain::SHADOW.entry);
                 x.reinsert();
             }
@@ -3005,8 +2998,7 @@ mod shot39 {
                 x.move_by_table_xy();
                 x.move_z();
                 if (x.u16(0xc) as i16) <= 0 {
-                    x.c.d[0] = 0x30;
-                    x.call(crate::camera_modes::SHAKE_B.entry);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x30);
                     crate::sound::jouer(x.b, SOUND_IMPACT, x.o);
                     x.add8(0x5, 2);
                     x.set16(0xc, 0);

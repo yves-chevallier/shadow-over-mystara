@@ -120,8 +120,6 @@ mod shop {
     pub const NO_ROOM: u16 = 0x87;
     pub const SOUND_REFUSED: u32 = 0xea5f0;
     pub const SOUND_BOUGHT: u32 = 0xea57e;
-    /// Sortie de la boutique : palette pleine (`0x1686`, couches `A5+0x48e`).
-    pub const FULL_BRIGHTNESS: u32 = 0x1686;
     /// Pointeurs (mots) des quatre acheteurs possibles.
     pub const BUYERS: u32 = 0xff2aa4;
     /// Annonce en cours (`A5-0x554e`).
@@ -233,7 +231,7 @@ fn shop_buy(x: &mut Cx, buyer: Obj) {
             buyer.set_u16(x.b, Obj::STATE, 0x400);
             let (a1, d6) = (x.c.a[1], x.c.d[6]);
             x.set_a5_u8(0x48e, 0xf);
-            x.call(shop::FULL_BRIGHTNESS);
+            crate::palette::full_brightness(x.b);
             (x.c.a[1], x.c.d[6]) = (a1, d6);
         }
         shop::MEAL_BIG => shop_meal(x, buyer, 0x30),
@@ -1028,8 +1026,7 @@ fn attached_shake(x: &mut Cx, sub: u8) {
             } else if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(attached::TIMER, 0x3c);
-                x.c.d[5] = 0xb;
-                x.call(0x1172e);
+                crate::ai_aids::debris_set(x.b, x.o, 0xb);
             }
         }
         8 => {
@@ -1566,7 +1563,7 @@ fn dust_active(x: &mut Cx) {
         let dx: u16 = if x.a5_u16(0x6e) & 1 != 0 { 0xc0u16.wrapping_neg() } else { 0xc0 };
         x.add16(Obj::X, dx);
     }
-    x.call(super::rom::DANS_LA_ZONE);
+    crate::ai::keep_in_zone(x.b, x.o);
     crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
@@ -1814,7 +1811,7 @@ fn floater_main(x: &mut Cx) {
             if x.u8(0x33) != 0 {
                 // touché : secousse de l'écran
                 x.set8(0x33, 0);
-                x.call(0x3af8);
+                crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
                 super::effects_creators::pillars(x.b);
                 x.call(0xe637c);
                 x.set_a5_u16(0x4ba, 0x100);
@@ -2019,7 +2016,7 @@ fn spark(x: &mut Cx) {
             x.add16(Obj::Z, dz);
             x.add16(Obj::Y, 0xffff);
             x.anim_start(shards::ANIM_SPARK, 0);
-            x.call(0x3af8);
+            crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
         }
         2 => {
             x.anim_step();
@@ -2676,7 +2673,7 @@ fn lob(x: &mut Cx) {
 
 fn lob_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
-    x.call(0x3af8);
+    crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
     // 0xb3734 : cible sur l'écran, direction
     let v = x.u8(f::VARIANT) as u32;
     let tx = x.rom16(lob::TARGETS + 4 * v).wrapping_add(x.a5_u16(0x5a6));

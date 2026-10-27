@@ -77,7 +77,7 @@ fn pursue(x: &mut Cx) {
         }
         return;
     }
-    if lib::outside(x, -0x50, 0x1d0) {
+    if lib::outside_band(x, -0x50, 0x1d0) {
         return go::dive(x);
     }
     let n = x.u8(TURNS).wrapping_sub(1);
@@ -175,7 +175,7 @@ fn glide_step(x: &mut Cx) {
         }
         return switch_flight_set(x);
     }
-    if lib::outside(x, -0x50, 0x1d0) {
+    if lib::outside_band(x, -0x50, 0x1d0) {
         return go::dive(x);
     }
     if x.u8(LOOK) == 3 {
@@ -214,7 +214,7 @@ fn near_box(x: &mut Cx, which: u32) -> u32 {
     if !found {
         return 0;
     }
-    lib::ai_gate(x)
+    lib::turn_decision(x) as u32
 }
 
 /// 0x71ad4 : cercle autour du joueur (la table de choix n'a qu'une entrée).
@@ -393,7 +393,7 @@ fn leap(x: &mut Cx) {
             let (angle, vy) = if flip != 0 { (0x18, 0x20i16) } else { (8, -0x20) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, vy as u16);
-            lib::jitter_angle(x);
+            lib::drift_heading(x);
             set_speed(x, 0x35);
             x.set16(Obj::VZ, 0x300);
             x.set16(Obj::AZ, -0x40i16 as u16);

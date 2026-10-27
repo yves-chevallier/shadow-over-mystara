@@ -356,37 +356,50 @@ pub(crate) fn sobj_8_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj)
     Some(o)
 }
 
-/// 0xd5f30 : en partie, objet SET 0x14 (variante 0) lié au créateur (`+0x20`), retenu en `A5-0x5b8a`.
-fn set_20(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let game = rd8(b, A5 + 0x30);
-    moved(c, game as u32, Size::Byte);
-    if game != 0 {
-        if let Some(set) = alloc(c, b, &pools::SET) {
-            set.set_u8(b, 0x0, 1);
-            set.set_u8(b, 0x2, 0x14);
-            set.set_u16(b, 0x20, me as u16);
-            set.set_u8(b, 0x3, 0);
-            wr16(b, A5 - 0x5b8a, set.0 as u16);
-            moved(c, set.0 & 0xffff, Size::Word);
-        }
-    }
-    rts(c, b);
+/// Barre de vie du boss (objet SET 0x14) retenue par 0xd5f30 (mot bas de son adresse).
+const LIFE_BAR_SET: u32 = A5 - 0x5b8a;
+
+/// 0xd5f30 : en partie, objet SET 0x14 (variante 0) lié au créateur `createur` (`+0x20`), retenu en
+/// `A5-0x5b8a`. Cœur.
+pub fn set_14(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    set_14_par(&mut Pur, b, createur)
 }
 
-/// 0xd6952 : objet SET 0x15 (variante 2) dont `+0x42` vient de la table 0xd697c selon le type du créateur.
-fn set_21(c: &mut Cpu, b: &mut Cps2Bus) {
-    let kind = rd8(b, c.a[0] + 2) as u32;
-    if let Some(set) = alloc(c, b, &pools::SET) {
-        set.set_u8(b, 0x0, 1);
-        set.set_u8(b, 0x2, 0x15);
-        set.set_u8(b, 0x3, 2);
-        c.d[0] = 2 * kind;
-        let v = crate::mem::prog16(b, 0xd697c + 2 * kind);
-        set.set_u16(b, 0x42, v);
-        moved(c, v as u32, Size::Word);
+fn set_14_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    let game = crate::ram::PARTIE.get(b);
+    r.drapeaux(game as u32, Size::Byte);
+    if game == 0 {
+        return None;
     }
-    rts(c, b);
+    let set = r.alloue(b, &pools::SET)?;
+    set.set_u8(b, Obj::ACTIVE, 1);
+    set.set_u8(b, Obj::KIND, 0x14);
+    set.set_u16(b, 0x20, createur.word());
+    set.set_u8(b, Obj::VARIANT, 0);
+    wr16(b, LIFE_BAR_SET, set.word());
+    r.drapeaux(set.word() as u32, Size::Word);
+    Some(set)
+}
+
+/// Valeur de `+0x42` de l'objet SET 0x15 de 0xd6952, par type du créateur.
+const SET_15_PARAMS: u32 = 0xd697c;
+
+/// 0xd6952 : objet SET 0x15 (variante 2) dont `+0x42` vient de la table 0xd697c selon le type du créateur. Cœur.
+pub fn set_15_b(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    set_15_b_par(&mut Pur, b, createur)
+}
+
+fn set_15_b_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    let kind = createur.u8(b, Obj::KIND) as u32;
+    let set = r.alloue(b, &pools::SET)?;
+    set.set_u8(b, Obj::ACTIVE, 1);
+    set.set_u8(b, Obj::KIND, 0x15);
+    set.set_u8(b, Obj::VARIANT, 2);
+    r.d(0, 2 * kind);
+    let v = crate::mem::prog16(b, SET_15_PARAMS + 2 * kind);
+    set.set_u16(b, 0x42, v);
+    r.drapeaux(v as u32, Size::Word);
+    Some(set)
 }
 
 /// 0xc9760 : objet SET 5 (variante 1), `+0x24` nul.
@@ -450,7 +463,7 @@ pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     (c.a[0], c.d[7]) = (a0, d7);
     wr8(b, A5 + 0x48e, 0xf);
-    call(c, b, 0x1686);
+    crate::palette::full_brightness(b);
     wr16(b, A5 + 0x52, 0);
     let alive = |b: &mut Cps2Bus, p: u32| rd8(b, p) != 0 && rd16(b, p + 0x62) != 0;
     for k in 0..4 {
@@ -715,28 +728,16 @@ fn enemy_1_at(c: &mut Cpu, b: &mut Cps2Bus) {
     enemy_at(c, b, 1, 0xaa, &[(0xac, 1), (0x2f, 0)]);
 }
 
-/// 0x57c66 : D0 = 1 si l'objet est à droite du milieu de l'écran (x >= caméra + 0xc0), sinon 0 ; D1.w =
-/// l'écart.
-fn right_half(c: &mut Cpu, b: &mut Cps2Bus) {
-    let alt = crate::ram::CAMERA_ALT_ACTIVE.get(b) != 0;
-    let cam = rd16(b, A5 + if alt { 0x556 } else { 0x506 });
-    let x = rd16(b, c.a[0] + 8);
-    // `sub.w D0w,D1w` : X de la soustraction, que `moveq` garde
-    let gap = crate::ops::sub(c, x as u32, cam.wrapping_add(0xc0) as u32, Size::Word) as u16;
-    c.d[1] = c.d[1] & !0xffff | gap as u32;
-    c.d[0] = if gap as i16 > 0 { 0 } else { 1 };
-    moved(c, c.d[0], Size::Long);
-    rts(c, b);
+/// 0x57c66 : l'objet `o` est-il dans la moitié droite de l'écran (x >= caméra + 0xc0) ? Cœur.
+pub fn in_right_half(b: &mut Cps2Bus, o: Obj) -> bool {
+    let (camera, _) = crate::ram::camera(b);
+    (camera.wrapping_add(0xc0).wrapping_sub(o.u16(b, Obj::X)) as i16) <= 0
 }
 
-/// 0x5cdc6 : tirage au sort : D0 = 1 si le bit (hasard & 0xf) du masque 0x03ff est levé (10 chances sur 16).
-fn chance_10_16(c: &mut Cpu, b: &mut Cps2Bus) {
-    crate::rng::random_68k(c, b);
-    let bit = c.d[0] as u16 & 0xf;
-    c.d[1] = c.d[1] & !0xffff | 0x03ff;
-    c.d[0] = (0x03ff >> bit & 1) as u32;
-    moved(c, c.d[0], Size::Long);
-    rts(c, b);
+/// 0x5cdc6 : tirage au sort, vrai 10 fois sur 16 (bit (hasard & 0xf) du masque 0x03ff). Cœur.
+pub fn chance_10_16(b: &mut Cps2Bus) -> bool {
+    let bit = crate::rng::random(b) & 0xf;
+    0x03ff >> bit & 1 != 0
 }
 
 /// 0x97218 : boss : `+0x67` = 1, `+0x79` = 0x31, état 0x02020400.
@@ -768,7 +769,6 @@ pub const NATIVES: &[Native] = &[
     native(0xd9778, "musique_variante", scene_music, regs::d(0) | regs::a(1)),
     native(0xd99f8, "scene_rien", nothing, regs::ALL),
     native(0xce00a, "cree_set_15", set_15, CREATED),
-    native(0xd5f30, "cree_set_14", set_20, CREATED),
     native(0xcc0ca, "scene_repart", |c, b| { restart_scene(c, b); rts(c, b) }, regs::a(0) | regs::d(7)),
     native(0x53e48, "cree_eclair_joueur", bolt_shot, CREATED | regs::d(6) | regs::a(4)),
     native(0x52578, "cree_tir_5", shot_5, CREATED | regs::d(0) | regs::d(1) | regs::a(4)),
@@ -781,10 +781,7 @@ pub const NATIVES: &[Native] = &[
     native(0x63ae0, "cree_ennemis_7", enemy_7_pair, CREATED | regs::d(0)),
     native(0x5f764, "cree_ennemi_5", enemy_5_at, CREATED),
     native(0x57c8c, "cree_ennemi_1", enemy_1_at, CREATED),
-    native(0x57c66, "ennemi_moitie_droite", right_half, regs::d(0) | regs::d(1) | regs::CCR),
-    native(0x5cdc6, "hasard_10_16", chance_10_16, regs::d(0) | regs::d(1) | regs::CCR),
     native(0x97218, "boss_etat_0202", boss_state_0202, regs::CCR),
-    native(0xd6952, "cree_set_15_b", set_21, CREATED | regs::d(0)),
     native(0xc9760, "cree_set_5", set_5, CREATED),
     native(0xd6182, "colonne_vide", blank_column, regs::a(1) | regs::d(0) | regs::d(4)),
     native(0xceb46, "fiche_bonus", bonus_sheet, regs::a(1) | regs::a(4) | regs::d(0) | regs::d(1)),

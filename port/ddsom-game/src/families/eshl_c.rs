@@ -7,19 +7,13 @@ use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::mem::wr32;
 use crate::objects::Obj;
-use m68k::SR_C;
+
 use crate::objects::pools;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
 /// Sous-routines communes de l'IA des ennemis.
 mod rt {
-    /// Charge l'entrée d'animation `D0` du jeu `A4` puis recopie `+0x3e` en `+0x44`.
-    pub const AI_ANIM_START: u32 = 0x103d6;
-    /// Un pas d'animation, puis recopie de `+0x3e` en `+0x44` ; retenue = fin.
-    pub const AI_ANIM_STEP: u32 = 0x1040c;
-    /// Position dans la fenêtre d'écran (D0 = borne basse, D1 = borne haute) : D0 non nul si dehors.
-    pub const OUTSIDE_WINDOW: u32 = 0x104a2;
 }
 
 /// Sons (zone 0xe0836-0xee080).
@@ -36,15 +30,12 @@ fn obj_of(word: u16) -> Obj {
 
 /// Démarre une animation par la routine de l'IA (`0x103d6`).
 fn ai_anim(x: &mut Cx, set: u32, n: u32) {
-    x.c.a[4] = set;
-    x.c.d[0] = n;
-    x.call(rt::AI_ANIM_START);
+    crate::families::enemy_lib::start(x, set, n);
 }
 
 /// Un pas d'animation par la routine de l'IA ; vrai à la fin du script.
 fn ai_step(x: &mut Cx) -> bool {
-    x.call(rt::AI_ANIM_STEP);
-    x.c.sr & SR_C != 0
+    crate::families::enemy_lib::step(x)
 }
 
 /// Alloue un objet ESHL ; `None` si le pool est plein.
@@ -517,10 +508,7 @@ mod shot43 {
             return x.free_eshl();
         }
         x.move_xyz();
-        x.c.d[0] = neg(0x50) as u32;
-        x.c.d[1] = 0x1d0;
-        x.call(rt::OUTSIDE_WINDOW);
-        if x.c.cond(6) {
+        if crate::ai_aids::outside_band(x.b, x.o, neg(0x50), 0x1d0) {
             x.free_eshl();
         }
     }
@@ -792,8 +780,7 @@ mod debris45 {
 
     /// Fin commune : retenu à l'écran, puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
-        x.c.d[0] = MARGIN;
-        x.call(crate::ai::KEEP_ON_SCREEN.entry);
+        crate::ai::keep_on_screen(x.b, x.o, MARGIN as u16);
         x.reinsert();
     }
 
@@ -1174,8 +1161,6 @@ mod bullet50 {
     const FALL_TIMER: u32 = 0x58;
     /// Sauvegarde de `+0x3b` (priorité du cadre) à travers l'animation.
     const SAVED_PRIORITY: u32 = 0x5e;
-    /// Retenue à l'écran avec une marge de 0x30 (entrée 0xfbae de 0xfbb0).
-    const CLAMP_ON_SCREEN_30: u32 = 0xfbae;
 
     pub fn run(x: &mut Cx) {
         if suspended(x) {
@@ -1193,7 +1178,7 @@ mod bullet50 {
             _ => x.free_eshl(),
         }
         if x.u8(0) != 0 {
-            x.call(CLAMP_ON_SCREEN_30);
+            crate::ai::keep_in_zone(x.b, x.o);
             x.call(crate::terrain::SHADOW.entry);
             x.reinsert();
         }
@@ -1400,8 +1385,7 @@ mod drop51 {
                 x.add8(0x4, 2);
                 x.c.d[0] = 3;
                 x.call(IMPACT_FX);
-                x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-                x.call(crate::camera_modes::SHAKE_B.entry);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             }
             4 => {
                 x.add8(0x4, 2);
@@ -1513,8 +1497,7 @@ mod finale52 {
 
     /// Fin de l'image : retenu dans l'écran puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
-        x.c.d[0] = 0x10;
-        x.call(crate::ai::KEEP_ON_SCREEN.entry);
+        crate::ai::keep_on_screen(x.b, x.o, 0x10);
         x.reinsert();
     }
 
@@ -2753,7 +2736,6 @@ mod platform60 {
     const SCROLL: u32 = 0x14;
     const SPAWN_PLAYER_SHOT: u32 = 0x54872;
     const THUD: u32 = 0xeb04e;
-    const COLLISION_TEST: u32 = 0x7f19c;
     /// Positions de départ de la variante 2 par sous-type (4 octets par ligne).
     const START_POSITIONS: u32 = 0xa6046;
     /// Variable `A5+0x51e` (variante 3).
@@ -2928,12 +2910,8 @@ mod platform60 {
             if character == 5 || p.u8(x.b, 0) != 1 {
                 continue;
             }
-            x.c.a[2] = p.0;
-            x.c.d[0] = 0;
-            x.c.d[1] = 0x28;
-            x.c.d[2] = 8;
-            x.call(COLLISION_TEST);
-            if x.c.cond(6) {
+            let boite = crate::ai_aids::Boite { decalage: 0, demi_largeur: 0x28, demi_profondeur: 8 };
+            if crate::ai_aids::box_around(x.b, x.o, p, boite) != crate::ai_aids::DansBoite::Non {
                 return true;
             }
         }
@@ -3073,12 +3051,10 @@ mod meteor62 {
             x.add8(0x4, 2);
             x.c.d[0] = 3;
             x.call(IMPACT_FX[1]);
-            x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-            x.call(crate::camera_modes::SHAKE_B.entry);
+            crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             crate::sound::jouer(x.b, IMPACT_SOUND, x.o);
         }
-        x.c.d[0] = 0x10;
-        x.call(crate::ai::KEEP_ON_SCREEN.entry);
+        crate::ai::keep_on_screen(x.b, x.o, 0x10);
         x.reinsert();
     }
 }

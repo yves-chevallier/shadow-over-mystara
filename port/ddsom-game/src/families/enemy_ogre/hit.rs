@@ -12,7 +12,8 @@ const REACTIONS: u32 = 0x715d4;
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
-        return zone_and_terrain(x);
+        zone_and_terrain(x);
+        return;
     }
     x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
@@ -133,7 +134,7 @@ pub(super) fn regroup(x: &mut Cx) {
     } else {
         0x106e2
     };
-    lib::hp_threshold(x, table);
+    lib::next_threshold(x, table);
     if lib::target_in_box(x, 0, 0x30, 0xc) {
         go::strike_6(x);
     } else {
@@ -228,7 +229,7 @@ fn flee(x: &mut Cx) {
                 spark(x, 4);
                 lib::shake_54(x, 0xa);
             }
-            if lib::outside(x, -0x40, 0x1c0) {
+            if lib::outside_band(x, -0x40, 0x1c0) {
                 detach_from_host(x);
                 x.free(&pools::ENEMY);
             }

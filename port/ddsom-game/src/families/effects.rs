@@ -1931,7 +1931,6 @@ mod declencheur {
     pub const ANIMATIONS: u32 = 0x1bf5c2;
     pub const PRINCIPAL: i32 = 0x46;
     pub const EFFET: u32 = 0xea50c;
-    pub const EVENEMENT: u32 = 0x19b08;
     pub const DECALAGES: u32 = 0xb53ec;
 }
 
@@ -1945,9 +1944,7 @@ fn declencheur_effet(ctx: &mut Ctx, o: Obj) {
         let absent = joueur.u8(ctx.b, Obj::ACTIVE) == 0;
         if !absent {
             let variante = o.u8(ctx.b, Obj::VARIANT) as u32;
-            ctx.c.d[1] = decalage as u32;
-            ctx.c.d[0] = variante + decalage as u32;
-            ctx.jsr(declencheur::EVENEMENT);
+            crate::evenements::enfiler_compteur(ctx.b, (variante as u16).wrapping_add(decalage as u16));
         }
         decalage = decalage.wrapping_add(0x100);
     }

@@ -1,6 +1,6 @@
 //! Fuzz des routines « monde » réécrites avec leurs registres exacts : listes triées (0x1ee1a,
 //! 0x1ef6c), collision avec le décor (0x33fe4, 0x3403c), suivi vertical des joueurs (0x31616), aides
-//! des effets (0xb9eba, 0xb9ee6, 0xba094) et de l'IA (0xfbae, 0xfbb0, 0xe76c, 0xf0e8).
+//! des effets (0xb9eba, 0xb9ee6, 0xba094). Les aides d'IA n'ont plus de native : `fuzz_ia` compare leurs cœurs.
 //!
 //! Chaque routine est appelée en mode contrôle (l'original s'exécute à côté sur une copie ; mémoire,
 //! tous les registres et les drapeaux sont comparés) depuis des états tirés au sort : listes d'objets
@@ -158,47 +158,6 @@ fn alea_effet(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     c.a[1] = if alea.dans(2) == 0 { autre } else { A5 + 0x5de };
 }
 
-fn alea_ia(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
-    wr8(b, A5 + 0x36, alea.dans(2) as u8);
-    for off in [0x506u32, 0x50a, 0x556, 0x55a] {
-        wr16(b, A5 + off, alea.next() as u16 & 0x7ff);
-    }
-    let (o, cible) = (objet(0), objet(1));
-    let x = alea.dans(0x800) as u16;
-    wr16(b, o + 8, if alea.dans(10) == 0 { 0x8000 | x } else { x });
-    wr16(b, o + 0x10, if alea.dans(10) == 0 { 0x8000 | x } else { alea.dans(0x400) as u16 });
-    wr16(b, cible + 8, alea.dans(0x800) as u16);
-    wr16(b, cible + 0x10, alea.dans(0x400) as u16);
-    wr16(b, o + 0x50, if alea.dans(12) == 0 { 0 } else { cible as u16 });
-    wr8(b, o + 0x79, alea.dans(12) as u8);
-    wr8(b, o + 0x2d, alea.dans(32) as u8);
-    c.a[0] = o;
-    c.d[0] = if alea.dans(2) == 0 { alea.dans(0x80) } else { alea.next() };
-}
-
-/// Aides d'IA à boîte et à table (lot S : 0xa470, 0x7f0c, 0x7ef4, 0x7f19c) : la cible tirée de face ou de dos,
-/// au sol ou en l'air, dans l'état 12, 14 ou autre ; boîte (D0-D2) et tables (`+0x70`, `+0x74`, `+0x75`) au hasard.
-fn alea_boite(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
-    alea_ia(c, b, alea);
-    let (o, cible) = (objet(0), objet(1));
-    let x = rd16(b, o + 8) & 0x7ff;
-    wr16(b, cible + 8, x.wrapping_add(alea.dans(0x100) as u16).wrapping_sub(0x80));
-    let profondeur = rd16(b, o + 0x10).wrapping_add(alea.dans(0x40) as u16).wrapping_sub(0x20);
-    wr16(b, cible + 0x10, profondeur);
-    wr16(b, cible + 0x0c, if alea.dans(4) == 0 { alea.dans(0x40) as u16 } else { 0 });
-    wr8(b, cible + 0x06, alea.parmi(&[12, 12, 14, 2]));
-    wr8(b, cible + 0x2c, alea.parmi(&[0, 0x20]));
-    wr8(b, o + 0x2c, alea.parmi(&[0, 0x20]));
-    wr8(b, o + 0x70, alea.dans(8) as u8);
-    wr8(b, o + 0x74, alea.dans(8) as u8);
-    wr8(b, o + 0x75, 4 * alea.dans(8) as u8);
-    wr16(b, A5 + 0x7f92, alea.dans(0x20) as u16);
-    c.d[0] = alea.dans(0x60);
-    c.d[1] = alea.dans(0x80) | alea.next() & 0xffff_0000;
-    c.d[2] = alea.dans(0x40) | alea.next() & 0xffff_0000;
-    c.a[2] = cible;
-}
-
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
@@ -234,14 +193,6 @@ fn main() {
         (0xb9ee6, "effct_dans_la_boite", alea_effet),
         (0xb9eba, "effct_joueur_dans_la_boite", alea_effet),
         (0xba094, "effct_fils_finis", alea_effet),
-        (0xfbae, "ai_zone", alea_ia),
-        (0xfbb0, "ai_garde_a_l_ecran", alea_ia),
-        (0xe76c, "ai_approche_cible", alea_ia),
-        (0xf0e8, "ai_tourne_vers", alea_ia),
-        (0xa470, "ia_attitude", alea_boite),
-        (0x7f0c, "ia_devant", alea_boite),
-        (0x7ef4, "ia_devant_etat_12", alea_boite),
-        (0x7f19c, "ia_boite", alea_boite),
     ];
     for _ in 0..tours {
         for &(entree, nom, prep) in &routines {
@@ -252,10 +203,6 @@ fn main() {
             b.irq_horizon = u64::MAX;
             registres(&mut c, &mut alea);
             prep(&mut c, &mut b, &mut alea);
-            if entree == 0xf0e8 {
-                c.d[1] = alea.next() & 0xffff;
-                c.d[2] = alea.next() & 0xffff;
-            }
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
         }
     }

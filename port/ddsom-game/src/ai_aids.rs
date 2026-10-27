@@ -6,13 +6,12 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::{Fetch, Size};
-use m68k::{Cpu, SR_C, SR_Z};
+use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::ops::logique;
 use crate::objects::Obj;
 use crate::rng;
-use crate::{call, regs, Native};
 use crate::objects::pools;
 
 /// Compteur de l'image courante, qui sert d'index dans les tables d'attitude.
@@ -70,18 +69,6 @@ fn stance_at(b: &mut Cps2Bus, o: Obj) -> (u32, u8) {
     (table, v)
 }
 
-/// Native : A4 = la table, D0 = le compteur d'images, drapeaux de l'attitude.
-fn stance_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (table, v) = stance_at(b, Obj(c.a[0]));
-    c.a[4] = table;
-    c.d[0] = rd16(b, TICK) as u32;
-    logique(c, v as u32, Size::Byte);
-    rts(c, b);
-}
-
-/// Les quatre joueurs (A5 + 0x5de, pas 0x200).
-const PLAYERS: u32 = A5 + 0x5de;
-const PLAYER_STRIDE: u32 = 0x200;
 
 /// Remplace l'octet bas / le mot bas d'un registre (les autres bits restent).
 fn set_b(r: &mut u32, v: u8) {
@@ -205,26 +192,6 @@ fn in_front_restes(b: &mut Cps2Bus, me: u32, strict: bool, boite: Boite) -> (boo
     (true, r, Some(other), Some(animations), Some((masque, roll)))
 }
 
-/// Native de 0x7f0c / 0x7ef4 : D0 (1 : oui, 0 : non) et drapeaux de `moveq` ; D1-D4, A1 et A4 laissés comme l'original
-/// (le code appelant les relit).
-fn in_front_native(c: &mut Cpu, b: &mut Cps2Bus, strict: bool) {
-    let boite = Boite { decalage: c.d[0] as u16, demi_largeur: c.d[1] as u16, demi_profondeur: c.d[2] as u16 };
-    let (oui, restes, autre, table, tirage) = in_front_restes(b, c.a[0], strict, boite);
-    if let Some(autre) = autre {
-        c.a[1] = autre;
-    }
-    restes.poser(c);
-    if let Some(table) = table {
-        c.a[4] = table;
-    }
-    if let Some((masque, roll)) = tirage {
-        c.d[2] = masque;
-        c.d[0] = roll;
-    }
-    moveq(c, oui as i32);
-    rts(c, b);
-}
-
 /// Position de l'objet par rapport à la boîte devant un autre (0x7f19c).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DansBoite {
@@ -257,59 +224,21 @@ fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, boite: Boite, r: &mut Restes)
     }
 }
 
-/// Native de 0x7f19c (A0, A2 ; D0-D2 : la boîte) : D0 = 0, 1 ou 2 et drapeaux de `moveq`, D1-D3 laissés.
-fn box_around_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let boite = Boite { decalage: c.d[0] as u16, demi_largeur: c.d[1] as u16, demi_profondeur: c.d[2] as u16 };
+/// 0xb5e0 (`ai::target_in_front`) avec les registres de l'original : A1 = la cible, D0 = 0/1/2 et drapeaux de
+/// `moveq`, D1-D3 laissés par les tests de la boîte. Pour les appelants dont la suite relit ces restes (boss 11 :
+/// D2, glitch d'origine).
+pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, boite: Boite) -> DansBoite {
+    let pointer = rd16(b, o.0 + f::TARGET);
     let mut restes = Restes::default();
-    let found = box_reach(b, c.a[0], c.a[2], boite, &mut restes);
+    let found = if pointer == 0 {
+        DansBoite::Non
+    } else {
+        c.a[1] = object(pointer);
+        box_reach(b, o.0, object(pointer), boite, &mut restes)
+    };
     restes.poser(c);
     moveq(c, found as i32);
-    rts(c, b);
-}
-
-/// 0x67452 : le joueur le plus proche dans la boîte devant l'objet A0 (D0 = décalage, D1 = demi-largeur,
-/// D2 = demi-profondeur) est mémorisé en `+0x50` (0 si aucun). Distance = écart en profondeur + écart en x.
-/// Les registres D0-D6 et A1 sont laissés comme l'original.
-fn nearest_player_in_box(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let (half_x, half_depth) = (c.d[1] as u16, c.d[2] as u16);
-    wr16(b, me + f::TARGET, 0);
-    // D4 : (2 x demi-largeur, 2 x demi-profondeur), D2 : (demi-largeur, demi-profondeur) ; D3 et D1 : distances
-    c.d[4] = (half_x.wrapping_mul(2) as u32) << 16 | half_depth.wrapping_mul(2) as u32;
-    c.d[2] = (half_x as u32) << 16 | half_depth as u32;
-    c.d[1] = u32::MAX;
-    c.d[3] = 0;
-    let offset_x = if rd8(b, me + f::FACING) != 0 { (c.d[0] as u16).wrapping_neg() } else { c.d[0] as u16 };
-    set_w(&mut c.d[0], offset_x);
-    for k in 0..4 {
-        let player = PLAYERS + k * PLAYER_STRIDE;
-        c.a[1] = player;
-        if rd8(b, player) == 0 {
-            continue;
-        }
-        let depth = rd16(b, me + f::DEPTH).wrapping_sub(rd16(b, player + f::DEPTH)).wrapping_add(half_depth);
-        set_w(&mut c.d[5], depth);
-        if depth > half_depth.wrapping_mul(2) {
-            continue;
-        }
-        set_w(&mut c.d[3], depth);
-        let across = rd16(b, me + f::X).wrapping_add(offset_x).wrapping_sub(rd16(b, player + f::X)).wrapping_add(half_x);
-        set_w(&mut c.d[5], across);
-        if across > half_x.wrapping_mul(2) {
-            continue;
-        }
-        let distance = (c.d[3] as u16).wrapping_add(across);
-        set_w(&mut c.d[3], distance);
-        if distance <= c.d[1] as u16 {
-            set_w(&mut c.d[1], distance);
-            wr16(b, me + f::TARGET, player as u16);
-        }
-    }
-    c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
-    set_w(&mut c.d[6], 0xffff);
-    let found = rd16(b, me + f::TARGET);
-    logique(c, found as u32, Size::Word);
-    rts(c, b);
+    found
 }
 
 /// Profils de poussée : table d'octets (indexée par l'écart en x / 16) en espace programme, puis
@@ -345,14 +274,6 @@ fn push_amount_for(b: &mut Cps2Bus, me: u32, player: u32, gap: u16) -> u32 {
     }
 }
 
-/// 0x11654 : poussée pour l'écart en x D0 entre le boss A0 et le joueur A1.
-fn push_amount(c: &mut Cpu, b: &mut Cps2Bus) {
-    let push = push_amount_for(b, c.a[0], c.a[1], c.d[0] as u16);
-    c.d[0] = push;
-    logique(c, push, Size::Long);
-    rts(c, b);
-}
-
 /// Le boss `me` pousse le joueur `player` en x, du côté vers lequel il regarde ; vrai si poussé.
 fn push_player_once(b: &mut Cps2Bus, me: u32, player: u32) -> bool {
     let gap = (rd16(b, player + f::X).wrapping_sub(rd16(b, me + f::X)) as i16).wrapping_abs() as u16;
@@ -368,165 +289,16 @@ fn push_player_once(b: &mut Cps2Bus, me: u32, player: u32) -> bool {
     true
 }
 
-/// 0x1161c : le boss A0 pousse le joueur A1. D0 = 1 si poussé, 0 sinon.
-fn push_player(c: &mut Cpu, b: &mut Cps2Bus) {
-    let pushed = push_player_once(b, c.a[0], c.a[1]);
-    moveq(c, pushed as i32);
-    rts(c, b);
-}
-
-/// 0x115e2 : le boss A0 pousse chaque joueur présent, sauf le voleur ou le nain dans leur état 26 (`+0x6a`),
-/// un joueur en sortie (`+0x66`) ou protégé (`+0x188`).
-fn push_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    for k in 0..4 {
-        let player = PLAYERS + k * PLAYER_STRIDE;
-        if rd8(b, player) == 0 {
-            continue;
-        }
-        if rd8(b, player + 3) >> 1 == 5 && rd8(b, player + 0x6a) == 26 {
-            continue;
-        }
-        if rd8(b, player + 0x66) == 0 && rd8(b, player + 0x188) == 0 {
-            push_player_once(b, me, player);
-        }
-    }
-    rts(c, b);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Animations par table et tests d'orientation (0x103e0-0x105d0). Les fonctions « corps » ne font pas
 // le RTS : `leaf!` l'ajoute pour la native.
 // ---------------------------------------------------------------------------------------------
 
-/// Octet `+0x33` : variante d'animation (7 bits) ; `+0x3e` : copie dans `+0x44` après chaque pas.
-const VARIANT: u32 = 0x33;
-const ANIM_TIMER: u32 = 0x30;
 const ANIM_MARK: u32 = 0x3e;
-const ANIM_MARK_COPY: u32 = 0x44;
-/// Pointeur (mot) vers le maître, dont la variante choisit l'animation.
-const MASTER: u32 = 0xb2;
-
-/// Premier jeu d'animation (entrée de 16 octets) de A4 dont l'octet `+3` vaut `key` sous le masque.
-fn find_animation_set(c: &mut Cpu, b: &mut Cps2Bus, key: u8, mask: u8) {
-    for _ in 0..0x10000 {
-        if rd8(b, c.a[4] + 3) & mask == key & mask {
-            break;
-        }
-        c.a[4] = c.a[4].wrapping_add(16);
-    }
-}
-
-fn copy_mark(c: &mut Cpu, b: &mut Cps2Bus) {
-    let v = rd8(b, c.a[0] + ANIM_MARK);
-    wr8(b, c.a[0] + ANIM_MARK_COPY, v);
-}
 
 /// Adresse de l'objet désigné par un pointeur de 16 bits (étendu en signe).
 fn object(pointer: u16) -> u32 {
     pointer as i16 as i32 as u32
-}
-
-/// 0x103e0 : démarre l'animation de la variante `+0x33` de l'objet, en gardant son compteur.
-fn animation_by_variant(c: &mut Cpu, b: &mut Cps2Bus) {
-    let timer = rd16(b, c.a[0] + ANIM_TIMER);
-    let key = rd8(b, c.a[0] + VARIANT);
-    find_animation_set(c, b, key, 0x7f);
-    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
-    wr16(b, c.a[0] + ANIM_TIMER, timer);
-    copy_mark(c, b);
-}
-
-/// 0x10428 : démarre l'animation de la variante du maître (`+0xb2`).
-fn animation_of_master(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.a[1] = object(rd16(b, c.a[0] + MASTER));
-    let key = rd8(b, c.a[1] + VARIANT);
-    find_animation_set(c, b, key, 0x7f);
-    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
-    copy_mark(c, b);
-}
-
-/// 0x10450 : démarre l'animation dont la marque (`+3`) est celle de `+0x3e` du maître.
-fn animation_of_mark(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.a[1] = object(rd16(b, c.a[0] + MASTER));
-    let key = rd8(b, c.a[1] + ANIM_MARK);
-    find_animation_set(c, b, key, 0xff);
-    crate::objects::anim::start_entry(b, Obj(c.a[0]), c.a[4]);
-}
-
-/// 0x10474 : drapeaux de l'octet `A5+0x35` (joueurs en vie).
-fn players_alive_flags(c: &mut Cpu, b: &mut Cps2Bus) {
-    let v = rd8(b, A5 + 0x35);
-    logique(c, v as u32, Size::Byte);
-}
-
-/// 0x1052e : l'objet et sa cible se font-ils face ? D0 = 1 / 0 (drapeaux de `moveq`) ; D0-D2 et A1 comme l'original.
-fn facing_each_other(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let pointer = rd16(b, me + f::TARGET);
-    if (pointer as i16) >= 0 {
-        return moveq(c, 0);
-    }
-    c.d[2] = 0;
-    let target = object(pointer);
-    c.a[1] = target;
-    let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, target + f::X)) & 0x8000;
-    set_w(&mut c.d[0], gap);
-    set_b(&mut c.d[1], rd8(b, me + f::FACING));
-    let rotated = (c.d[1] as u16).rotate_right(6);
-    set_w(&mut c.d[1], rotated & gap);
-    let wanted = if rotated & gap & 0x8000 != 0 { 0 } else { 32 };
-    c.d[2] = wanted;
-    moveq(c, (wanted == rd8(b, target + f::FACING) as u32) as i32);
-}
-
-/// 0x104e0 : Z levé si la cible regarde dans le même sens que l'objet, qui la regarde (corps sans RTS).
-fn same_side_flags(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let pointer = rd16(b, me + f::TARGET);
-    if (pointer as i16) >= 0 {
-        return moveq(c, 0);
-    }
-    let target = object(pointer);
-    c.a[1] = target;
-    let facing = rd8(b, me + f::FACING);
-    set_b(&mut c.d[0], facing);
-    if facing != rd8(b, target + f::FACING) {
-        return moveq(c, 0);
-    }
-    c.d[0] = 32;
-    let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, target + f::X));
-    set_w(&mut c.d[1], gap);
-    if (gap as i16) < 0 {
-        c.d[0] = 0;
-    }
-    crate::ops::cmp(c, facing as u32, c.d[0] & 0xff, Size::Byte);
-}
-
-/// 0x1047a : décision de se tourner vers la cible : 1 (face à face, tirage A), 2 (même côté, tirage B), 0 sinon.
-fn turn_decision(c: &mut Cpu, b: &mut Cps2Bus) {
-    facing_each_other(c, b);
-    let result = if c.sr & SR_Z != 0 {
-        same_side_flags(c, b);
-        if c.sr & SR_Z != 0 {
-            0
-        } else {
-            call(c, b, 0xa4c2);
-            if c.sr & SR_Z != 0 {
-                0
-            } else {
-                2
-            }
-        }
-    } else {
-        call(c, b, 0xa4b4);
-        (c.sr & SR_Z == 0) as i32
-    };
-    moveq(c, result);
-}
-
-const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: regs::d(0) | regs::CCR }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -583,42 +355,6 @@ fn player_hit(b: &mut Cps2Bus, me: u32, attack: u32, player: u32) -> bool {
     true
 }
 
-/// 0xfc44 : un joueur est-il touché par la boîte d'attaque D0 de l'objet A0 ? D0 = 1 oui, 0 non.
-fn attack_hits_a_player(c: &mut Cpu, b: &mut Cps2Bus) {
-    let attack = ATTACK_BOXES.wrapping_add(offset((c.d[0] as u16) << 3));
-    let me = c.a[0];
-    c.a[2] = attack;
-    let hit = (0..4).find(|&k| player_hit(b, me, attack, PLAYERS + k * PLAYER_STRIDE));
-    // A1 : le joueur touché (ou la fin de la table) ; D6 : compteur de la boucle de l'original
-    c.a[1] = PLAYERS + hit.map_or(4, |k| k) * PLAYER_STRIDE;
-    set_w(&mut c.d[6], hit.map_or(0xffff, |k| 3 - k as u16));
-    let hit = hit.is_some();
-    moveq(c, hit as i32);
-}
-
-/// 0xfd64 : le joueur A1 est saisi par l'objet A0 (D0 = animation de prise).
-fn seize_player(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (me, player) = (c.a[0], c.a[1]);
-    wr32(b, player + 4, 0x0204_3200);
-    wr8(b, player, 2);
-    wr16(b, player + 0x186, me as u16);
-    wr8(b, player + 0x188, 1);
-    wr16(b, me + f::TARGET, player as u16);
-    wr32(b, me + 4, 0x020c_0000);
-    wr8(b, me + 6, c.d[0] as u8);
-    logique(c, c.d[0] & 0xff, Size::Byte);
-}
-
-/// 0xfd8c : le joueur A1 est relâché (animation 0x34).
-fn release_player(c: &mut Cpu, b: &mut Cps2Bus) {
-    let player = c.a[1];
-    c.d[0] = c.d[0] & !0xff | 0x34;
-    wr32(b, player + 4, 0x0204_0000);
-    wr8(b, player + 6, 0x34);
-    wr8(b, player + 0x188, 0);
-    logique(c, 0, Size::Byte);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Choix d'un point où marcher autour de la cible (0xe886, 0xeff2, 0xf084)
 // ---------------------------------------------------------------------------------------------
@@ -627,101 +363,12 @@ fn release_player(c: &mut Cpu, b: &mut Cps2Bus) {
 /// (décalage x, décalage profondeur) autour de la cible.
 pub(crate) const WALK_POINTS: u32 = 0xe93e;
 const MIRRORED_WALK_POINTS: u32 = 0xf06a;
-/// Point choisi (`+0x7a`, `+0x7c`), numéro du dernier point retenu (`+0x99`).
-const GOAL_X: u32 = 0x7a;
-const GOAL_DEPTH: u32 = 0x7c;
-const LAST_POINT: u32 = 0x99;
-const POINT_SET: u32 = 0x79;
-/// Tourne l'objet vers le point (D1, D2).
-const TURN_TOWARD: u32 = 0xf0e8;
 
 /// Écart « en ville » entre deux points : |dx| + |dy| (mots).
 fn manhattan(b: &mut Cps2Bus, me: u32, x: u16, depth: u16) -> u16 {
     let dx = (x.wrapping_sub(rd16(b, me + f::X)) as i16).wrapping_abs() as u16;
     let dy = (depth.wrapping_sub(rd16(b, me + f::DEPTH)) as i16).wrapping_abs() as u16;
     dx.wrapping_add(dy)
-}
-
-/// Retient le point candidat qui maximise (`farthest`) ou minimise l'écart avec `me`, parmi ceux de la
-/// table de `me`. `skip` : numéro de point à ignorer (sans lire sa paire). `mirror` : les décalages sont
-/// retournés si la cible regarde à gauche. Rend D1/D2 = point retenu comme le fait l'original.
-fn pick_point(c: &mut Cpu, b: &mut Cps2Bus, farthest: bool, skip: Option<u8>, mirror: bool) {
-    let me = c.a[0];
-    let target = object(rd16(b, me + f::TARGET));
-    c.a[1] = target;
-    let table = if mirror { MIRRORED_WALK_POINTS } else { WALK_POINTS };
-    let set = rd8(b, me + POINT_SET) as u32;
-    let mut at = rd32(b, table + 4 * set);
-    c.a[2] = at;
-    let last = rd16(b, at);
-    at += 2;
-    let (target_x, target_depth) = (rd16(b, target + f::X), rd16(b, target + f::DEPTH));
-    wr16(b, me + GOAL_X, target_x);
-    wr16(b, me + GOAL_DEPTH, target_depth);
-    let mut best: u16 = if farthest { 0 } else { 0x7fff };
-    for point in (0..=last).rev() {
-        if skip == Some(point as u8) {
-            continue;
-        }
-        let mut dx = rd16(b, at);
-        let dy = rd16(b, at + 2);
-        at += 4;
-        if mirror && rd8(b, target + f::FACING) != 0 {
-            dx = dx.wrapping_neg();
-        }
-        let (x, depth) = (dx.wrapping_add(target_x), dy.wrapping_add(target_depth));
-        let distance = manhattan(b, me, x, depth);
-        if if farthest { distance > best } else { distance <= best } {
-            best = distance;
-            wr16(b, me + GOAL_X, x);
-            wr16(b, me + GOAL_DEPTH, depth);
-            if skip.is_some() {
-                wr8(b, me + LAST_POINT, point as u8);
-            }
-        }
-    }
-    c.a[2] = at;
-    c.d[1] = rd16(b, me + GOAL_X) as u32;
-    c.d[2] = rd16(b, me + GOAL_DEPTH) as u32;
-}
-
-/// 0xf084 : marche vers le point le plus éloigné autour de la cible.
-fn walk_far_point(c: &mut Cpu, b: &mut Cps2Bus) {
-    pick_point(c, b, true, None, false);
-    call(c, b, TURN_TOWARD);
-}
-
-/// 0xeff2 : marche vers le point le plus proche autour de la cible (décalages retournés selon son sens).
-fn walk_near_point(c: &mut Cpu, b: &mut Cps2Bus) {
-    if rd16(b, c.a[0] + f::TARGET) == 0 {
-        return;
-    }
-    pick_point(c, b, false, None, true);
-    call(c, b, TURN_TOWARD);
-}
-
-/// 0xe886 : choisit le point de marche le plus éloigné autour de la cible, sans le dernier retenu ; si
-/// l'objet est loin de la caméra, marche tout de suite vers un point lointain.
-fn choose_walk_point(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    if rd16(b, me + f::TARGET) == 0 {
-        return;
-    }
-    let camera = if rd8(b, A5 + 0x36) != 0 { rd16(b, A5 + 0x556) } else { rd16(b, A5 + 0x506) };
-    if rd16(b, me + f::X).wrapping_sub(camera) > 384 {
-        return walk_far_point(c, b);
-    }
-    let last = rd8(b, me + LAST_POINT);
-    pick_point(c, b, true, Some(last), false);
-}
-
-/// 0xe914 : si le point de marche est atteint (à 8 pixels près), en choisit un autre.
-fn walk_point_reached(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let near = |goal: u16, here: u16| goal.wrapping_sub(here).wrapping_add(8) <= 16;
-    if near(rd16(b, me + GOAL_X), rd16(b, me + f::X)) && near(rd16(b, me + GOAL_DEPTH), rd16(b, me + f::DEPTH)) {
-        choose_walk_point(c, b);
-    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -732,43 +379,6 @@ fn walk_point_reached(c: &mut Cpu, b: &mut Cps2Bus) {
 fn screen_origin(b: &mut Cps2Bus) -> u16 {
     let offset = if rd8(b, A5 + 0x36) == 0 { 0x5a6 } else { 0x5ae };
     rd16(b, A5 + offset)
-}
-
-/// 0x104a2 : D0 = 1 si l'objet n'est pas entre les abscisses D0 et D1 (relatives à l'écran), 0 sinon.
-fn outside_screen_range(c: &mut Cpu, b: &mut Cps2Bus) {
-    let origin = screen_origin(b);
-    let x = rd16(b, c.a[0] + f::X) as i16;
-    let (low, high) = ((c.d[0] as u16).wrapping_add(origin) as i16, (c.d[1] as u16).wrapping_add(origin) as i16);
-    let outside = low >= x || high <= x;
-    moveq(c, outside as i32);
-}
-
-/// 0x10574 : le cap de l'objet (`+0x2d`, modulo 32) change d'au plus 1 au hasard.
-fn drift_heading(c: &mut Cpu, b: &mut Cps2Bus) {
-    const STEPS: [u8; 16] = [1, 1, 0xff, 0, 0xff, 1, 0xff, 0, 1, 0, 1, 0xff, 1, 0xff, 0, 0xff];
-    let step = STEPS[rng::random(b) as usize & 15];
-    c.d[0] = c.d[0] & !0xff | step as u32;
-    let heading = rd8(b, c.a[0] + 0x2d).wrapping_add(step) & 31;
-    wr8(b, c.a[0] + 0x2d, heading);
-    logique(c, heading as u32, Size::Byte);
-}
-
-/// 0x105b6 : essaie la palier suivant (`+0xaa` < `+0xab`) dont le seuil de la table A1 (ligne `+0xaa`, colonne
-/// `+0xac`, mots) ne dépasse pas les PV (`+0x62`). D0 = 1 si le palier est passé.
-fn next_threshold(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let level = rd8(b, me + 0xaa) as i8;
-    let mut passed = false;
-    if level < rd8(b, me + 0xab) as i8 {
-        let column = rd8(b, me + 0xac) as i8 as i16;
-        let index = (level as i16).wrapping_shl(7).wrapping_add(column);
-        let threshold = rd16(b, c.a[1].wrapping_add(offset(index as u16))) as i16;
-        if threshold >= rd16(b, me + 0x62) as i16 {
-            wr8(b, me + 0xaa, level.wrapping_add(1) as u8);
-            passed = true;
-        }
-    }
-    moveq(c, passed as i32);
 }
 
 /// Table de déplacement des prises (octets signés : décalage x, décalage de hauteur, orientation, sens).
@@ -790,253 +400,16 @@ fn keep_inside_camera(b: &mut Cps2Bus, me: u32) -> bool {
     true
 }
 
-/// 0xfda2 : l'objet saisi (`+0x50`) est tenu par l'objet A0 selon l'étape (`+0x3e`) de l'animation de prise.
-/// D0 = 0 sans objet saisi, 1 sans étape.
-fn hold_seized(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    keep_inside_camera(b, me);
-    let pointer = rd16(b, me + f::TARGET);
-    if (pointer as i16) >= 0 {
-        return moveq(c, 0);
-    }
-    let held = object(pointer);
-    c.a[1] = held;
-    let step = rd8(b, me + ANIM_MARK) as u32;
-    if step == 0 {
-        return moveq(c, 1);
-    }
-    let mut at = SEIZE_OFFSETS + 4 * step;
-    let mirrored = rd8(b, me + f::FACING) != 0;
-    let mut dx = rd8s(b, at);
-    if mirrored {
-        dx = -dx;
-    }
-    let x = (dx as u16).wrapping_add(rd16(b, me + f::X));
-    wr16(b, held + f::X, x);
-    let rise = (rd8s(b, at + 1) as u16).wrapping_add(rd16(b, me + 0x0c));
-    let height = if (rise as i16) < 0 {
-        let z = rd16(b, me + 0x0c).wrapping_sub(rise);
-        wr16(b, me + 0x0c, z);
-        0
-    } else {
-        rise
-    };
-    wr16(b, held + 0x0c, height);
-    let depth = rd16(b, me + f::DEPTH);
-    wr16(b, held + f::DEPTH, depth);
-    wr16(b, me + 0x12, 1);
-    wr16(b, held + 0x12, 1);
-    at += 2;
-    let faces = rd8(b, at) != 0;
-    let mut facing: u8 = if faces { 32 } else { 0 };
-    if mirrored {
-        facing = if facing != 0 { 0 } else { 32 };
-    }
-    wr8(b, held + f::FACING, facing);
-    let direction: i16 = if (rd8(b, at + 1) as i8) < 0 { 1 } else { -1 };
-    let v = rd16(b, me + 0x12).wrapping_add(direction as u16);
-    wr16(b, me + 0x12, v);
-    c.d[0] = if direction < 0 { 0xffff_ffff } else { 0xffff_0001 };
-}
-
-/// 0xff54 : compte à rebours (`+0x98`) puis, selon le nombre de joueurs et un tirage, état 0x020e0000 ou retour
-/// à l'état 0x04040200 (objet actif).
-fn countdown_then_state(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let left = rd8(b, me + 0x98).wrapping_sub(1);
-    wr8(b, me + 0x98, left);
-    let again = |b: &mut Cps2Bus| {
-        wr8(b, me, 1);
-        wr32(b, me + 4, 0x0404_0200);
-    };
-    if left as i8 > 0 {
-        return again(b);
-    }
-    let row = ((rd8(b, A5 + 0x35) as u16) << 4).wrapping_add(((rd16(b, TICK) >> 2) << 1) as u16);
-    let mask = b.fetch16(0xff9a_u32.wrapping_add(offset(row))) as u32;
-    let roll = rng::random(b) as u32 & 15;
-    if mask >> roll & 1 == 0 {
-        return again(b);
-    }
-    wr32(b, me + 4, 0x020e_0000);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Choix d'une cible selon un critère imposé (0x43bc)
 // ---------------------------------------------------------------------------------------------
 
-/// Critère de choix d'un joueur.
-#[derive(Clone, Copy, PartialEq)]
-enum Criterion {
-    Nearest,
-    LowestHp,
-    Farthest,
-}
-
-/// Joueur ciblable au sens de 0x43ca : présent, d'état principal < 4, et visible sauf s'il porte
-/// le drapeau `+0x182` (qui dispense du test de visibilité).
-fn targetable(b: &mut Cps2Bus, player: u32) -> bool {
-    rd8(b, player) != 0
-        && (rd8(b, player + 0x182) != 0 || rd8(b, player + 1) & 2 == 0)
-        && (rd8(b, player + 4) as i8) < 4
-}
-
-/// 0x43bc : choisit un joueur selon le critère D0 (0 le plus proche, 2 le moins de PV, 4 le plus
-/// éloigné ; distance = |dx| + |dy|, à égalité le dernier l'emporte sauf pour le plus proche). A1 =
-/// joueur (0 si aucun), copié en `+0x50` ; D5 = 2 si trouvé ; Z levé si aucun.
-fn target_by_criterion(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let criterion = match c.d[0] as u16 {
-        0 => Criterion::Nearest,
-        2 => Criterion::LowestHp,
-        _ => Criterion::Farthest,
-    };
-    let (x, depth) = (rd16(b, me + f::X), rd16(b, me + f::DEPTH));
-    let mut best: u16 = match criterion {
-        Criterion::Nearest => 0xffff,
-        Criterion::LowestHp => 0x7fff,
-        Criterion::Farthest => 0,
-    };
-    let mut found = 0;
-    for k in 0..4 {
-        let player = PLAYERS + k * PLAYER_STRIDE;
-        if !targetable(b, player) {
-            continue;
-        }
-        let (value, better) = match criterion {
-            Criterion::LowestHp => {
-                let hp = rd16(b, player + 0x62);
-                (hp, hp as i16 <= best as i16)
-            }
-            _ => {
-                let dx = (rd16(b, player + f::X).wrapping_sub(x) as i16).wrapping_abs() as u16;
-                let dy = (rd16(b, player + f::DEPTH).wrapping_sub(depth) as i16).wrapping_abs() as u16;
-                let distance = dx.wrapping_add(dy);
-                (distance, if criterion == Criterion::Nearest { distance < best } else { distance >= best })
-            }
-        };
-        if better {
-            best = value;
-            found = player;
-        }
-    }
-    c.a[1] = found;
-    wr16(b, me + f::TARGET, found as u16);
-    c.d[5] = if found != 0 { 2 } else { 0 };
-    logique(c, c.d[5], Size::Word);
-}
 
 // ---------------------------------------------------------------------------------------------
 // Tirages par tables : attitude, riposte, esquive (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118,
 // 0x10112). Une table de pointeurs (longs) est indexée par un octet de l'objet ; la ligne choisie est
 // lue au hasard (octets) ou par le compteur d'images (masques de 32 bits, un bit tiré au hasard).
 // ---------------------------------------------------------------------------------------------
-
-/// Masque de 32 bits de la ligne `number` de la table `pointers`, choisi par le compteur d'images, et
-/// tirage d'un de ses bits : vrai si le bit est levé. D0 = bit tiré, D2 = masque, A4 = ligne.
-fn tick_mask_roll(c: &mut Cpu, b: &mut Cps2Bus, pointers: u32, number_at: u32) -> bool {
-    let number = rd8(b, number_at);
-    c.a[4] = rd32(b, pointers + 4 * number as u32);
-    let tick = rd16(b, TICK);
-    c.d[2] = rd32(b, c.a[4].wrapping_add(offset(tick << 2)));
-    let roll = rng::random(b) as u32 & 31;
-    c.d[0] = roll;
-    c.d[2] >> roll & 1 != 0
-}
-
-/// Octet tiré au hasard (32 choix) dans la ligne `number` de la table `pointers`. D0 = tirage, A4 = ligne.
-fn random_entry(c: &mut Cpu, b: &mut Cps2Bus, pointers: u32, number_at: u32) -> u8 {
-    let number = rd8(b, number_at);
-    c.a[4] = rd32(b, pointers + 4 * number as u32);
-    let roll = rng::random(b) as u32 & 31;
-    c.d[0] = roll;
-    rd8(b, c.a[4] + roll)
-}
-
-/// 0x788c : `+0x6b` tiré dans la table de la ligne `+0x6a`.
-fn draw_6b(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let v = random_entry(c, b, 0x78ae, me + 0x6a);
-    wr8(b, me + 0x6b, v);
-    logique(c, v as u32, Size::Byte);
-}
-
-/// 0x79f6 : dans l'écran, `+0x6e` est tiré dans la table de la ligne `+0x6d`, sinon il vaut 1. D0 = 1.
-fn draw_6e(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let inside = crate::objects::cull::in_arena(b, Obj(me), 0);
-    let v = if inside { random_entry(c, b, 0x7a50, me + 0x6d) } else { 1 };
-    wr8(b, me + 0x6e, v);
-    moveq(c, 1);
-}
-
-/// 0x79ce : si le bit tiré dans le masque de la ligne `+0x6c` est levé, comme 0x79f6 ; sinon D0 = 0.
-fn maybe_draw_6e(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    if tick_mask_roll(c, b, 0x7a34, me + 0x6c) {
-        draw_6e(c, b);
-    } else {
-        moveq(c, 0);
-    }
-}
-
-/// 0xb048 et 0xb068 : la victime A1 pare-t-elle le coup de l'agresseur A0 (résolution des coups, `combat`) ?
-/// Il faut qu'elle sache parer (`+0x67`), soit au sol (`+0xc` nul) et face à l'agresseur ; un bit est alors
-/// tiré dans le masque de sa ligne `+0x68` (`+0x69` pour 0xb068). D0 = 1 si le coup est paré.
-fn parries(c: &mut Cpu, b: &mut Cps2Bus, field: u32) {
-    let (attacker, victim) = (c.a[0], c.a[1]);
-    let facing = rd8(b, attacker + f::FACING);
-    if rd8(b, victim + 0x67) == 0 || rd16(b, victim + 0x0c) != 0 || facing == rd8(b, victim + f::FACING) {
-        return moveq(c, 0);
-    }
-    let parried = tick_mask_roll(c, b, 0xb0b0, victim + field);
-    moveq(c, parried as i32);
-}
-
-fn parries_68(c: &mut Cpu, b: &mut Cps2Bus) {
-    parries(c, b, 0x68)
-}
-
-fn parries_69(c: &mut Cpu, b: &mut Cps2Bus) {
-    parries(c, b, 0x69)
-}
-
-/// 0xf118 : hors de l'écran, `+0x84` = 1 ; sinon `+0x84` = 0 et `+0x85` tiré dans la ligne `+0x8e`, bloc choisi
-/// par le compteur d'images (32 octets par paire d'images).
-fn draw_84(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    if !crate::objects::cull::in_arena(b, Obj(me), 0) {
-        wr16(b, me + 0x84, 1);
-        return;
-    }
-    let number = rd8(b, me + 0x8e) as u32;
-    let block = (rd16(b, TICK) >> 1) << 5;
-    c.a[4] = rd32(b, 0xf160 + 4 * number).wrapping_add(offset(block));
-    let roll = rng::random(b) as u32 & 31;
-    c.d[0] = roll;
-    let v = rd8(b, c.a[4] + roll);
-    wr8(b, me + 0x85, v);
-    wr8(b, me + 0x84, 0);
-    logique(c, v as u32, Size::Word);
-}
-
-/// 0x10112 : `+0x68` = 8, ou, si `A5+0x5a` est posé, une valeur selon lui (plafonné à 4) et le nombre de
-/// joueurs en vie.
-fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let level = rd8(b, A5 + 0x5a);
-    c.d[0] = level as u32;
-    let v = if level == 0 {
-        8
-    } else {
-        c.d[1] = rd8(b, A5 + 0x35).wrapping_mul(4) as u32;
-        let row = ((level.wrapping_sub(1) as i8).min(3) as u8).wrapping_add(c.d[1] as u8);
-        c.d[0] = row as u32;
-        crate::mem::prog8(b, 0x10144 + row as u32)
-    };
-    wr8(b, me + 0x68, v);
-    logique(c, v as u32, Size::Byte);
-}
 
 // ---------------------------------------------------------------------------------------------
 // Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
@@ -1045,13 +418,6 @@ fn set_68(c: &mut Cpu, b: &mut Cps2Bus) {
 /// Alloue par `alloc` (0x2318, 0x23d8) : l'objet, ou `None` si le pool est plein.
 fn alloc(b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
     pool.alloc(b).map(|o| o.0)
-}
-
-/// Mot suivant de la table A2 (espace de données).
-fn next_word(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
-    let v = rd16(b, c.a[2]);
-    c.a[2] += 2;
-    v
 }
 
 /// Copie la position de `from` dans `to`, posée 16 pixels plus haut et juste devant.
@@ -1077,80 +443,6 @@ fn debris(b: &mut Cps2Bus, fx: u32, me: u32) {
     wr16(b, fx + 0x08, x);
 }
 
-/// 0x1172e : D5 + 1-ème jeu de débris (table 0x1178a : nombre - 1, puis lignes de 4 mots : décalage x,
-/// vitesse x, `+0x18`, `+0x58`), partant de la position de l'objet.
-fn debris_set(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let index = (c.d[5] as u16).wrapping_mul(4);
-    c.a[2] = crate::mem::prog32(b, 0x1178a_u32.wrapping_add(offset(index)));
-    let count = next_word(c, b);
-    let mirrored = rd8(b, me + f::FACING) != 0;
-    for left in (0..=count).rev() {
-        set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
-        debris(b, fx, me);
-        let z = rd16(b, me + 0x0c);
-        wr16(b, fx + 0x0c, z);
-        let depth = rd32(b, me + 0x10).wrapping_sub(1);
-        wr32(b, fx + 0x10, depth);
-        let (mut dx, mut vx) = (next_word(c, b), next_word(c, b));
-        let v18 = next_word(c, b);
-        wr16(b, fx + 0x18, v18);
-        let v58 = next_word(c, b);
-        wr16(b, fx + 0x58, v58);
-        if mirrored {
-            dx = dx.wrapping_neg();
-            vx = vx.wrapping_neg();
-        }
-        set_w(&mut c.d[1], dx);
-        set_w(&mut c.d[2], vx);
-        let x = rd16(b, fx + 0x08).wrapping_add(dx);
-        wr16(b, fx + 0x08, x);
-        wr16(b, fx + 0x14, vx);
-    }
-    set_w(&mut c.d[5], 0xffff);
-}
-
-/// 0x11a36 : cinq débris au sol (profondeur `A5+0x5aa`) ; table 0x11a9e, ou 0x11ada si D0.b est non nul
-/// (lignes de 6 mots : décalage x, vitesse x, vitesse z, `+0x18`, décalage en profondeur, `+0x1c`).
-/// Puis 0xede08.
-fn ground_debris(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    c.a[2] = if c.d[0] as u8 == 0 { 0x11a9e } else { 0x11ada };
-    let mirrored = rd8(b, me + f::FACING) != 0;
-    for left in (0..=4u16).rev() {
-        set_w(&mut c.d[5], left);
-        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
-        debris(b, fx, me);
-        let ground = rd16(b, A5 + 0x5aa);
-        wr16(b, fx + 0x10, ground);
-        let (mut dx, mut vx, mut vz) = (next_word(c, b), next_word(c, b), next_word(c, b));
-        let v18 = next_word(c, b);
-        wr16(b, fx + 0x18, v18);
-        let ddepth = next_word(c, b);
-        let v1c = next_word(c, b);
-        wr16(b, fx + 0x1c, v1c);
-        if mirrored {
-            dx = dx.wrapping_neg();
-            vx = vx.wrapping_neg();
-            vz = vz.wrapping_neg();
-        }
-        set_w(&mut c.d[1], dx);
-        set_w(&mut c.d[2], vx);
-        set_w(&mut c.d[3], vz);
-        set_w(&mut c.d[4], ddepth);
-        let x = rd16(b, fx + 0x08).wrapping_add(dx);
-        wr16(b, fx + 0x08, x);
-        let v14 = rd16(b, fx + 0x14).wrapping_add(vx);
-        wr16(b, fx + 0x14, v14);
-        wr16(b, fx + 0x16, vz);
-        let depth = rd16(b, fx + 0x10).wrapping_add(ddepth);
-        wr16(b, fx + 0x10, depth);
-    }
-    set_w(&mut c.d[5], 0xffff);
-    crate::sound::jouer(b, 0xede08, Obj(me));
-}
-
 /// Butin lancé en l'air (ITEM de genre `kind`, variante `variant`) : vitesses (±0x140, -0x28 en z...),
 /// retournées si `mirrored`.
 fn tossed_item(b: &mut Cps2Bus, me: u32, item: u32, kind: u8, variant: u8, vy: u16, mirrored: bool) {
@@ -1170,40 +462,6 @@ fn tossed_item(b: &mut Cps2Bus, me: u32, item: u32, kind: u8, variant: u8, vy: u
     }
 }
 
-/// 0xb648 : une seule fois par objet (`+0x9d`), selon un bit tiré dans le masque `+0x9c` (table 0xb6fc), lâche
-/// l'objet de genre 2 propre à son type (`+2`, table 0xb6e4 ; 0 : rien).
-fn drop_once(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    if rd8(b, me + 0x9d) != 0 {
-        return;
-    }
-    let roll = rng::random(b) as u32 & 31;
-    c.d[0] = roll;
-    c.a[1] = 0xb6fc;
-    let mask = rd8(b, me + 0x9c) as u32;
-    c.d[1] = rd32(b, 0xb6fc + 4 * mask);
-    if c.d[1] >> roll & 1 == 0 {
-        return;
-    }
-    let kind = rd8(b, me + 2) as u32;
-    let variant = crate::mem::prog8(b, 0xb6e4 + kind);
-    c.d[0] = variant as u32;
-    if variant == 0 {
-        return;
-    }
-    let Some(item) = alloc(b, &pools::ITEM) else { return };
-    wr8(b, me + 0x9d, 1);
-    tossed_item(b, me, item, 2, variant, (-0x40i16) as u16, false);
-    let flip = rng::random(b) & 1 != 0;
-    c.d[0] = flip as u32;
-    if flip {
-        for field in [0x14, 0x1c] {
-            let v = rd16(b, item + field).wrapping_neg();
-            wr16(b, item + field, v);
-        }
-    }
-}
-
 /// Nombre de tirages de butin : deux à plus de trois joueurs en vie, sinon un.
 fn loot_rolls(b: &mut Cps2Bus) -> u16 {
     if rd8(b, A5 + 0x35) > 3 {
@@ -1211,70 +469,6 @@ fn loot_rolls(b: &mut Cps2Bus) -> u16 {
     } else {
         1
     }
-}
-
-/// 0xb780 : butin de l'objet (ligne `+0x80` de la table 0xb806, 16 tirages possibles ; négatif : rien).
-fn drop_loot(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let row = rd8(b, me + 0x80) as u16;
-    c.d[2] = row as u32;
-    if row == 0 {
-        return;
-    }
-    c.d[2] = (row << 4) as u32;
-    for left in (0..loot_rolls(b)).rev() {
-        c.d[5] = left as u32;
-        let roll = (rng::random(b) & 15).wrapping_add(row << 4);
-        let variant = crate::mem::prog8(b, 0xb806_u32.wrapping_add(offset(roll)));
-        set_w(&mut c.d[0], roll & 0xff00 | variant as u16);
-        if (variant as i8) < 0 {
-            return;
-        }
-        let Some(item) = alloc(b, &pools::ITEM) else { return };
-        tossed_item(b, me, item, 0, variant, 0x40, left != 0);
-    }
-    set_w(&mut c.d[5], 0xffff);
-}
-
-/// 0xe2f6 : trésor de l'objet (ligne `+0x80` de la table 0xe372 ; chaque tirage désigne une liste d'objets
-/// de genre 5 terminée par un octet négatif, numérotés à partir de 1 dans `+0x2f`).
-fn drop_treasure(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let row = rd8(b, me + 0x80) as u16;
-    c.d[2] = row as u32;
-    if row == 0 {
-        return;
-    }
-    c.d[2] = (row << 4) as u32;
-    c.d[4] = 1;
-    for left in (0..loot_rolls(b)).rev() {
-        c.d[5] = left as u32;
-        let roll = (rng::random(b) & 15).wrapping_add(row << 4);
-        set_w(&mut c.d[0], roll);
-        let list = crate::mem::prog8(b, 0xe372_u32.wrapping_add(offset(roll)));
-        c.d[1] = (list as u32) << 2 & 0xffff;
-        if (list as i8) < 0 {
-            return;
-        }
-        c.a[4] = rd32(b, 0xe642 + 4 * list as u32);
-        loop {
-            let variant = rd8(b, c.a[4]);
-            c.a[4] += 1;
-            set_b(&mut c.d[0], variant);
-            if (variant as i8) < 0 {
-                break;
-            }
-            let Some(item) = alloc(b, &pools::ITEM) else { return };
-            wr8(b, item, 1);
-            wr8(b, item + 2, 5);
-            wr8(b, item + 3, variant);
-            wr8(b, item + 0x2f, c.d[4] as u8);
-            let rank = (c.d[4] as u8).wrapping_add(1);
-            set_b(&mut c.d[4], rank);
-            place_above(b, me, item);
-        }
-    }
-    set_w(&mut c.d[5], 0xffff);
 }
 
 /// Objet spécial tiré par 0xbad6 : genre et variante.
@@ -1319,42 +513,6 @@ enum Draw {
     Next,
 }
 
-/// Parcourt les joueurs en jeu et en vie (`+0`, PV `+0x62`) comme les boucles de 0xbad6 (A1 sur le joueur, D6
-/// décompte ; la classe dans D`class_reg`) ; `visit` rend vrai pour arrêter. Vrai si la boucle a été arrêtée.
-fn scan_party(c: &mut Cpu, b: &mut Cps2Bus, class_reg: usize, mut visit: impl FnMut(&mut Cpu, u8) -> bool) -> bool {
-    for k in 0..4u32 {
-        let p = A5 + 0x5de + 0x200 * k;
-        c.a[1] = p;
-        c.d[6] = 3 - k;
-        if rd8(b, p) == 0 || rd16(b, p + 0x62) == 0 {
-            continue;
-        }
-        let class = rd8(b, p + 3) >> 1;
-        c.d[class_reg] = class as u32;
-        if visit(c, class) {
-            return true;
-        }
-    }
-    c.a[1] = A5 + 0x5de + 0x800;
-    c.d[6] = 0xffff;
-    false
-}
-
-/// Tire une entrée de `table` : D0 = `base` + (tirage & `mask`) × `scale` ; A1 = la table.
-fn special_roll(c: &mut Cpu, b: &mut Cps2Bus, table: u32, base: u16, mask: u16, scale: u16) -> u32 {
-    let roll = (rng::random(b) & mask).wrapping_mul(scale).wrapping_add(base);
-    c.d[0] = c.d[0] & 0xffff_0000 | roll as u32;
-    c.a[1] = table;
-    table.wrapping_add(offset(roll))
-}
-
-/// Début de la ligne de difficulté (`A5+0x49`) de `size` octets, gardé dans D3.
-fn difficulty_row(c: &mut Cpu, b: &mut Cps2Bus, size: u16) -> u16 {
-    let row = rd8(b, A5 + 0x49) as u16 * size;
-    c.d[3] = row as u32;
-    row
-}
-
 fn drawn(b: &mut Cps2Bus) -> (u8, u8) {
     (rd8(b, DRAWN_KIND), rd8(b, DRAWN_VARIANT))
 }
@@ -1374,31 +532,730 @@ fn redraw(b: &mut Cps2Bus, at: u32, on_1: Draw, on_2: Draw) -> Draw {
     }
 }
 
-/// 0xbad6 : objet spécial lâché par l'objet A0 (ligne `+0x80` de la table 0xbf26, paires genre et variante, 16
-/// tirages possibles ; genre négatif : rien), un ou deux tirages selon le nombre de joueurs. Une variante 0 à 3 de
-/// genre 0 renvoie à des tables par difficulté (`A5+0x49`), certaines selon les classes des personnages en jeu
-/// (clerc, elfe, magicien) ; certains objets sont réservés à un groupe d'un seul genre de lanceurs de sorts et
-/// retirés sinon. L'objet ITEM est lancé en l'air comme le butin (0xb780). Registres de l'original.
-fn drop_special(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    c.d[0] = 0;
-    c.d[1] = 0;
-    let row = rd8(b, me + 0x80) as u16;
-    c.d[2] = row as u32;
+fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
+    let variant = rd8(b, at);
+    set_drawn(b, 4, variant);
+    if variant == 0 { Draw::Next } else { Draw::Spawn }
+}
+
+/// Routines d'atterrissage par type (longs du code) : ennemis (classe 2) aux indices 0..31, boss ensuite.
+const LANDING_BY_KIND: u32 = 0x3e49c;
+
+
+// ---------------------------------------------------------------------------------------------
+// Cœurs du lot IA : chaque routine d'origine est une fonction Rust sur l'objet traité, sans registre.
+// ---------------------------------------------------------------------------------------------
+
+/// Champs de l'ennemi propres à ces aides.
+mod g {
+    /// Clé d'animation de la variante (7 bits) et durée de l'entrée courante.
+    pub const VARIANT_KEY: u32 = 0x33;
+    pub const ANIM_TIMER: u32 = 0x30;
+    /// Marque de l'entrée d'animation (type de coup), recopiée en `+0x44` après chaque pas.
+    pub const ANIM_MARK: u32 = 0x3e;
+    pub const ANIM_MARK_COPY: u32 = 0x44;
+    /// Maître (pointeur de 16 bits) dont la variante ou la marque choisit l'animation.
+    pub const MASTER: u32 = 0xb2;
+    /// Point visé (x, profondeur), jeu de points et numéro du dernier point retenu.
+    pub const GOAL_X: u32 = 0x7a;
+    pub const GOAL_DEPTH: u32 = 0x7c;
+    pub const POINT_SET: u32 = 0x79;
+    pub const LAST_POINT: u32 = 0x99;
+    /// Paliers de PV : palier courant, nombre de paliers, colonne (rang de PV).
+    pub const LEVEL: u32 = 0xaa;
+    pub const LEVELS: u32 = 0xab;
+    /// Paramètre de comportement (et compte à rebours de 0xff54).
+    pub const BEHAVIOUR: u32 = 0x98;
+    /// Lignes des tables de tirage : `+0x6a` → `+0x6b`, `+0x6c` (masques) et `+0x6d` → `+0x6e`, `+0x8e` →
+    /// `+0x85` (`+0x84` : hors de l'écran).
+    pub const ROW_6A: u32 = 0x6a;
+    pub const DRAW_6B: u32 = 0x6b;
+    pub const ROW_6C: u32 = 0x6c;
+    pub const ROW_6D: u32 = 0x6d;
+    pub const DRAW_6E: u32 = 0x6e;
+    pub const OFFSCREEN_84: u32 = 0x84;
+    pub const DRAW_85: u32 = 0x85;
+    pub const ROW_8E: u32 = 0x8e;
+    /// Niveau de parade (0x10112).
+    pub const PARRY_LEVEL: u32 = 0x68;
+    /// Butin : ligne des tables (`+0x80`), masque et drapeau de l'objet lâché une seule fois.
+    pub const LOOT_ROW: u32 = 0x80;
+    pub const ONCE_MASK: u32 = 0x9c;
+    pub const ONCE_DONE: u32 = 0x9d;
+}
+
+/// L'objet désigné par le mot `pointer` (étendu en signe, comme `movea.w`).
+fn linked(pointer: u16) -> Obj {
+    Obj(object(pointer))
+}
+
+// --- animations par table (0x103e0, 0x10428, 0x10450) ----------------------------------------------
+
+/// Première entrée (16 octets) du jeu `set` dont l'octet `+3` vaut `key` sous `mask`.
+fn find_animation(b: &mut Cps2Bus, set: u32, key: u8, mask: u8) -> u32 {
+    let mut at = set;
+    while rd8(b, at + 3) & mask != key & mask {
+        at = at.wrapping_add(16);
+    }
+    at
+}
+
+/// Recopie de la marque d'animation (0x1046c).
+fn copy_mark(b: &mut Cps2Bus, o: Obj) {
+    let v = o.u8(b, g::ANIM_MARK);
+    o.set_u8(b, g::ANIM_MARK_COPY, v);
+}
+
+/// 0x103e0 : démarre l'animation du jeu `set` de même clé que la variante courante (`+0x33`), en gardant la durée
+/// de l'entrée courante.
+pub fn animation_by_variant(b: &mut Cps2Bus, o: Obj, set: u32) {
+    let timer = o.u16(b, g::ANIM_TIMER);
+    let key = o.u8(b, g::VARIANT_KEY);
+    let at = find_animation(b, set, key, 0x7f);
+    crate::objects::anim::start_entry(b, o, at);
+    o.set_u16(b, g::ANIM_TIMER, timer);
+    copy_mark(b, o);
+}
+
+/// 0x10428 : démarre l'animation du jeu `set` de même clé que la variante du maître (`+0xb2`).
+pub fn animation_of_master(b: &mut Cps2Bus, o: Obj, set: u32) {
+    let master = linked(o.u16(b, g::MASTER));
+    let key = master.u8(b, g::VARIANT_KEY);
+    let at = find_animation(b, set, key, 0x7f);
+    crate::objects::anim::start_entry(b, o, at);
+    copy_mark(b, o);
+}
+
+/// 0x10450 : démarre l'animation du jeu `set` dont la marque (`+3`) est celle de l'entrée courante du maître.
+pub fn animation_of_mark(b: &mut Cps2Bus, o: Obj, set: u32) {
+    let master = linked(o.u16(b, g::MASTER));
+    let key = master.u8(b, g::ANIM_MARK);
+    let at = find_animation(b, set, key, 0xff);
+    crate::objects::anim::start_entry(b, o, at);
+}
+
+// --- joueurs et paliers (0x10474, 0x104a2, 0x105b6) -----------------------------------------------
+
+/// 0x10474 : au moins un joueur est en vie.
+pub fn players_alive(b: &mut Cps2Bus) -> bool {
+    crate::ram::JOUEURS_EN_VIE.get(b) != 0
+}
+
+/// 0x104a2 : `o` est-il hors de la bande `[écran + left, écran + right]` (bornes exclues de l'intérieur) ? L'écran
+/// est l'origine de la caméra d'affichage (`A5+0x5a6`, ou `A5+0x5ae` en mode deux caméras).
+pub fn outside_band(b: &mut Cps2Bus, o: Obj, left: u16, right: u16) -> bool {
+    let origin = screen_origin(b);
+    let x = o.u16(b, Obj::X) as i16;
+    let (low, high) = (left.wrapping_add(origin) as i16, right.wrapping_add(origin) as i16);
+    low >= x || high <= x
+}
+
+/// 0x105b6 : franchit le palier de PV suivant (`+0xaa` < `+0xab`) si son seuil dans `table` (ligne du palier,
+/// colonne `+0xac`, mots) atteint les PV (`+0x62`). Vrai si un palier est passé.
+pub fn next_threshold(b: &mut Cps2Bus, o: Obj, table: u32) -> bool {
+    let level = o.u8(b, g::LEVEL) as i8;
+    if level >= o.u8(b, g::LEVELS) as i8 {
+        return false;
+    }
+    let column = o.u8(b, crate::ai::f::HP_RANK) as i8 as i16;
+    let index = (level as i16).wrapping_shl(7).wrapping_add(column);
+    let threshold = rd16(b, table.wrapping_add(offset(index as u16))) as i16;
+    if threshold < o.u16(b, crate::ai::f::HP) as i16 {
+        return false;
+    }
+    o.set_u8(b, g::LEVEL, level.wrapping_add(1) as u8);
+    true
+}
+
+// --- points de marche autour de la cible (0xe76c, 0xe7fa, 0xe886, 0xe914, 0xeff2, 0xf084) ------------
+
+/// Le point de marche retenu : le plus proche ou le plus éloigné de `o`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pick {
+    Nearest,
+    Farthest,
+}
+
+/// Retient, parmi les points de la table de `o` (`+0x79`) autour de sa cible, celui qui est le plus proche (à
+/// égalité, le dernier) ou le plus éloigné (à égalité, le premier) de `o`, et le range en `+0x7a`/`+0x7c` (la
+/// position de la cible si aucun). `skip` : numéro de point sauté sans lire sa paire (glitch d'origine : les
+/// points suivants prennent la paire décalée) ; le point retenu est alors noté en `+0x99`. `mirror` : décalages en
+/// x retournés si la cible regarde à gauche. Rend le point retenu.
+fn pick_point(b: &mut Cps2Bus, o: Obj, table: u32, pick: Pick, skip: Option<u8>, mirror: bool) -> (u16, u16) {
+    let target = linked(o.u16(b, crate::ai::f::TARGET));
+    let set = o.u8(b, g::POINT_SET) as u32;
+    let mut at = rd32(b, table + 4 * set);
+    let last = rd16(b, at);
+    at += 2;
+    let (target_x, target_depth) = (target.u16(b, Obj::X), target.u16(b, Obj::Y));
+    o.set_u16(b, g::GOAL_X, target_x);
+    o.set_u16(b, g::GOAL_DEPTH, target_depth);
+    let mut best: u16 = if pick == Pick::Farthest { 0 } else { 0x7fff };
+    for point in (0..=last).rev() {
+        if skip == Some(point as u8) {
+            continue;
+        }
+        let mut dx = rd16(b, at);
+        let dy = rd16(b, at + 2);
+        at += 4;
+        if mirror && target.u8(b, f::FACING) != 0 {
+            dx = dx.wrapping_neg();
+        }
+        let (x, depth) = (dx.wrapping_add(target_x), dy.wrapping_add(target_depth));
+        let distance = manhattan(b, o.0, x, depth);
+        let better = match pick {
+            Pick::Farthest => distance > best,
+            Pick::Nearest => distance <= best,
+        };
+        if better {
+            best = distance;
+            o.set_u16(b, g::GOAL_X, x);
+            o.set_u16(b, g::GOAL_DEPTH, depth);
+            if skip.is_some() {
+                o.set_u8(b, g::LAST_POINT, point as u8);
+            }
+        }
+    }
+    (o.u16(b, g::GOAL_X), o.u16(b, g::GOAL_DEPTH))
+}
+
+/// `o` est-il à plus de 384 pixels à droite du bord gauche de la caméra en service ?
+fn far_from_camera(b: &mut Cps2Bus, o: Obj) -> bool {
+    let (camera, _) = crate::ram::camera(b);
+    o.u16(b, Obj::X).wrapping_sub(camera) > 0x180
+}
+
+/// 0xf084 : vise le point le plus éloigné autour de la cible et tourne d'un cran vers lui.
+pub fn walk_far_point(b: &mut Cps2Bus, o: Obj) {
+    let goal = pick_point(b, o, WALK_POINTS, Pick::Farthest, None, false);
+    crate::ai::turn_toward(b, o, goal);
+}
+
+/// 0xe76c : vise le point le plus proche autour de la cible (loin de la caméra : le plus éloigné, 0xf084) et
+/// tourne d'un cran vers lui. Rien sans cible.
+pub fn approach_target(b: &mut Cps2Bus, o: Obj) {
+    if o.u16(b, crate::ai::f::TARGET) == 0 {
+        return;
+    }
+    if far_from_camera(b, o) {
+        return walk_far_point(b, o);
+    }
+    let goal = pick_point(b, o, WALK_POINTS, Pick::Nearest, None, false);
+    crate::ai::turn_toward(b, o, goal);
+}
+
+/// 0xeff2 : comme `approach_target` (sans le cas lointain), les décalages retournés selon le sens de la cible.
+pub fn walk_near_point(b: &mut Cps2Bus, o: Obj) {
+    if o.u16(b, crate::ai::f::TARGET) == 0 {
+        return;
+    }
+    let goal = pick_point(b, o, MIRRORED_WALK_POINTS, Pick::Nearest, None, true);
+    crate::ai::turn_toward(b, o, goal);
+}
+
+/// 0xe886 : retient le point le plus éloigné autour de la cible, sauf le dernier retenu (`+0x99`) ; loin de la
+/// caméra, vise tout de suite un point lointain (0xf084). Rien sans cible.
+pub fn choose_walk_point(b: &mut Cps2Bus, o: Obj) {
+    if o.u16(b, crate::ai::f::TARGET) == 0 {
+        return;
+    }
+    if far_from_camera(b, o) {
+        return walk_far_point(b, o);
+    }
+    let last = o.u8(b, g::LAST_POINT);
+    pick_point(b, o, WALK_POINTS, Pick::Farthest, Some(last), false);
+}
+
+/// 0xe914 : le point visé est-il atteint (à 8 pixels près sur chaque axe) ? Alors un autre est choisi (0xe886).
+pub fn walk_point_reached(b: &mut Cps2Bus, o: Obj) {
+    let near = |goal: u16, here: u16| goal.wrapping_sub(here).wrapping_add(8) <= 16;
+    let (gx, x) = (o.u16(b, g::GOAL_X), o.u16(b, Obj::X));
+    let (gy, y) = (o.u16(b, g::GOAL_DEPTH), o.u16(b, Obj::Y));
+    if near(gx, x) && near(gy, y) {
+        choose_walk_point(b, o);
+    }
+}
+
+/// 0xe7fa : retient le point le plus proche autour de la cible et note son numéro (`+0x99`, 0xff si aucun) ; loin
+/// de la caméra, vise un point lointain (0xf084). Rien sans cible.
+pub fn choose_near_walk_point(b: &mut Cps2Bus, o: Obj) {
+    if o.u16(b, crate::ai::f::TARGET) == 0 {
+        return;
+    }
+    if far_from_camera(b, o) {
+        return walk_far_point(b, o);
+    }
+    o.set_u8(b, g::LAST_POINT, 0xff);
+    let target = linked(o.u16(b, crate::ai::f::TARGET));
+    let set = o.u8(b, g::POINT_SET) as u32;
+    let mut at = rd32(b, WALK_POINTS + 4 * set);
+    let last = rd16(b, at);
+    at += 2;
+    let (target_x, target_depth) = (target.u16(b, Obj::X), target.u16(b, Obj::Y));
+    o.set_u16(b, g::GOAL_X, target_x);
+    o.set_u16(b, g::GOAL_DEPTH, target_depth);
+    let mut best: u16 = 0x7fff;
+    for point in (0..=last).rev() {
+        let (x, depth) = (rd16(b, at).wrapping_add(target_x), rd16(b, at + 2).wrapping_add(target_depth));
+        at += 4;
+        let distance = manhattan(b, o.0, x, depth);
+        if distance <= best {
+            best = distance;
+            o.set_u16(b, g::GOAL_X, x);
+            o.set_u16(b, g::GOAL_DEPTH, depth);
+            o.set_u8(b, g::LAST_POINT, point as u8);
+        }
+    }
+}
+
+// --- prises (0xfc44, 0xfd64, 0xfd8c, 0xfda2) --------------------------------------------------------
+
+/// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de `o` ? Rend le premier touché.
+pub fn attack_hits_a_player(b: &mut Cps2Bus, o: Obj, attack: u8) -> Option<Obj> {
+    let boxes = ATTACK_BOXES.wrapping_add(offset((attack as u16) << 3));
+    crate::ram::JOUEURS.iter().find(|p| player_hit(b, o.0, boxes, p.0))
+}
+
+/// 0xfd64 : le joueur `player` est saisi par `o` (animation de prise `anim` de `o`).
+pub fn seize_player(b: &mut Cps2Bus, o: Obj, player: Obj, anim: u8) {
+    player.set_u32(b, Obj::STATE, 0x0204_3200);
+    player.set_u8(b, Obj::ACTIVE, 2);
+    player.set_u16(b, 0x186, o.word());
+    player.set_u8(b, 0x188, 1);
+    o.set_u16(b, crate::ai::f::TARGET, player.word());
+    o.set_u32(b, Obj::STATE, 0x020c_0000);
+    o.set_u8(b, f::SUB_STATE, anim);
+}
+
+/// 0xfd8c : le joueur `player` est relâché (action 0x34).
+pub fn release_player(b: &mut Cps2Bus, player: Obj) {
+    player.set_u32(b, Obj::STATE, 0x0204_0000);
+    player.set_u8(b, f::SUB_STATE, 0x34);
+    player.set_u8(b, 0x188, 0);
+}
+
+/// 0xfda2 : `o` est ramené dans l'écran, puis l'objet qu'il tient (`+0x50`) le suit selon l'étape (`+0x3e`) de
+/// l'animation de prise (table des déplacements : x, hauteur, orientation, sens de `+0x12`).
+pub fn hold_seized(b: &mut Cps2Bus, o: Obj) {
+    let me = o.0;
+    keep_inside_camera(b, me);
+    let pointer = rd16(b, me + f::TARGET);
+    if (pointer as i16) >= 0 {
+        return;
+    }
+    let held = object(pointer);
+    let step = rd8(b, me + ANIM_MARK) as u32;
+    if step == 0 {
+        return;
+    }
+    let mut at = SEIZE_OFFSETS + 4 * step;
+    let mirrored = rd8(b, me + f::FACING) != 0;
+    let mut dx = rd8s(b, at);
+    if mirrored {
+        dx = -dx;
+    }
+    let x = (dx as u16).wrapping_add(rd16(b, me + f::X));
+    wr16(b, held + f::X, x);
+    let rise = (rd8s(b, at + 1) as u16).wrapping_add(rd16(b, me + 0x0c));
+    let height = if (rise as i16) < 0 {
+        let z = rd16(b, me + 0x0c).wrapping_sub(rise);
+        wr16(b, me + 0x0c, z);
+        0
+    } else {
+        rise
+    };
+    wr16(b, held + 0x0c, height);
+    let depth = rd16(b, me + f::DEPTH);
+    wr16(b, held + f::DEPTH, depth);
+    wr16(b, me + 0x12, 1);
+    wr16(b, held + 0x12, 1);
+    at += 2;
+    let faces = rd8(b, at) != 0;
+    let mut facing: u8 = if faces { 32 } else { 0 };
+    if mirrored {
+        facing = if facing != 0 { 0 } else { 32 };
+    }
+    wr8(b, held + f::FACING, facing);
+    let direction: i16 = if (rd8(b, at + 1) as i8) < 0 { 1 } else { -1 };
+    let v = rd16(b, me + 0x12).wrapping_add(direction as u16);
+    wr16(b, me + 0x12, v);
+}
+
+// --- états et paramètres (0xff54, 0xfffc) --------------------------------------------------------------
+
+/// Masques (mots, par joueurs en vie et rang) de 0xff54.
+const COUNTDOWN_MASKS: u32 = 0xff9a;
+
+/// 0xff54 : compte à rebours `+0x98` ; à son terme, et si le bit tiré dans le masque des joueurs en vie et du rang
+/// est levé, état 0x020e0000 ; sinon `o` reste (ou redevient) actif à l'état 0x04040200.
+pub fn countdown_then_state(b: &mut Cps2Bus, o: Obj) {
+    let left = o.u8(b, g::BEHAVIOUR).wrapping_sub(1);
+    o.set_u8(b, g::BEHAVIOUR, left);
+    let again = |b: &mut Cps2Bus| {
+        o.set_u8(b, Obj::ACTIVE, 1);
+        o.set_u32(b, Obj::STATE, 0x0404_0200);
+    };
+    if left as i8 > 0 {
+        return again(b);
+    }
+    let row = ((crate::ram::JOUEURS_EN_VIE.get(b) as u16) << 4).wrapping_add((rd16(b, TICK) >> 2) << 1);
+    let mask = crate::mem::prog16(b, COUNTDOWN_MASKS.wrapping_add(offset(row))) as u32;
+    let roll = rng::random(b) as u32 & 15;
+    if mask >> roll & 1 == 0 {
+        return again(b);
+    }
+    o.set_u32(b, Obj::STATE, 0x020e_0000);
+}
+
+/// Paramètre de comportement par type de 0xfffc.
+const BEHAVIOUR_BY_KIND: u32 = 0x1000a;
+
+/// 0xfffc : paramètre de comportement `+0x98` de `o`, selon son type.
+pub fn behaviour_by_kind(b: &mut Cps2Bus, o: Obj) {
+    let kind = o.u8(b, Obj::KIND) as u32;
+    let v = crate::mem::prog8(b, BEHAVIOUR_BY_KIND + kind);
+    o.set_u8(b, g::BEHAVIOUR, v);
+}
+
+// --- tirages par tables (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118, 0x10112) ---------------------
+
+/// Masque de 32 bits de la ligne `number` de la table `pointers`, choisi par le rang ; un de ses bits est tiré :
+/// vrai s'il est levé.
+fn rank_mask_roll(b: &mut Cps2Bus, pointers: u32, number: u8) -> bool {
+    let row = rd32(b, pointers + 4 * number as u32);
+    let tick = rd16(b, TICK);
+    let mask = rd32(b, row.wrapping_add(offset(tick << 2)));
+    let roll = rng::random(b) as u32 & 31;
+    mask >> roll & 1 != 0
+}
+
+/// Octet tiré au hasard (32 choix) dans la ligne `number` de la table `pointers`.
+fn random_byte(b: &mut Cps2Bus, pointers: u32, number: u8) -> u8 {
+    let row = rd32(b, pointers + 4 * number as u32);
+    let roll = rng::random(b) as u32 & 31;
+    rd8(b, row + roll)
+}
+
+/// 0x788c : `+0x6b` tiré dans la ligne `+0x6a`.
+pub fn draw_6b(b: &mut Cps2Bus, o: Obj) {
+    let number = o.u8(b, g::ROW_6A);
+    let v = random_byte(b, 0x78ae, number);
+    o.set_u8(b, g::DRAW_6B, v);
+}
+
+/// 0x79f6 : dans la zone de jeu, `+0x6e` est tiré dans la ligne `+0x6d` ; sinon il vaut 1.
+pub fn draw_6e(b: &mut Cps2Bus, o: Obj) {
+    let v = if crate::objects::cull::in_arena(b, o, 0) {
+        let number = o.u8(b, g::ROW_6D);
+        random_byte(b, 0x7a50, number)
+    } else {
+        1
+    };
+    o.set_u8(b, g::DRAW_6E, v);
+}
+
+/// 0x79ce : si le bit tiré dans le masque de la ligne `+0x6c` est levé, `draw_6e` et vrai ; sinon faux.
+pub fn maybe_draw_6e(b: &mut Cps2Bus, o: Obj) -> bool {
+    let number = o.u8(b, g::ROW_6C);
+    if !rank_mask_roll(b, 0x7a34, number) {
+        return false;
+    }
+    draw_6e(b, o);
+    true
+}
+
+/// Les deux tables de parade : ligne `+0x68` (0xb048) ou `+0x69` (0xb068) de la victime.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Parry {
+    A,
+    B,
+}
+
+/// 0xb048 / 0xb068 : la victime `victim` pare-t-elle le coup de `attacker` ? Il faut qu'elle sache parer (`+0x67`),
+/// soit au sol et face à l'agresseur ; un bit est alors tiré dans le masque de sa ligne de parade.
+pub fn parries(b: &mut Cps2Bus, attacker: Obj, victim: Obj, table: Parry) -> bool {
+    let facing = attacker.u8(b, f::FACING);
+    if victim.u8(b, 0x67) == 0 || victim.u16(b, Obj::Z) != 0 || facing == victim.u8(b, f::FACING) {
+        return false;
+    }
+    let field = match table {
+        Parry::A => 0x68,
+        Parry::B => 0x69,
+    };
+    let number = victim.u8(b, field);
+    rank_mask_roll(b, 0xb0b0, number)
+}
+
+/// 0xf118 : hors de la zone de jeu, `+0x84` = 1 ; sinon `+0x84` = 0 et `+0x85` est tiré dans la ligne `+0x8e`, bloc
+/// choisi par le rang (32 octets par paire de rangs).
+pub fn draw_84(b: &mut Cps2Bus, o: Obj) {
+    if !crate::objects::cull::in_arena(b, o, 0) {
+        o.set_u16(b, g::OFFSCREEN_84, 1);
+        return;
+    }
+    let number = o.u8(b, g::ROW_8E) as u32;
+    let block = (rd16(b, TICK) >> 1) << 5;
+    let row = rd32(b, 0xf160 + 4 * number).wrapping_add(offset(block));
+    let roll = rng::random(b) as u32 & 31;
+    let v = rd8(b, row + roll);
+    o.set_u8(b, g::DRAW_85, v);
+    o.set_u8(b, g::OFFSCREEN_84, 0);
+}
+
+/// Niveaux de parade par niveau de scène et joueurs en vie de 0x10112.
+const PARRY_LEVELS: u32 = 0x10144;
+
+/// 0x10112 : niveau de parade `+0x68` = 8 sans niveau de scène (`A5+0x5a`), sinon lu selon lui (plafonné à 4) et le
+/// nombre de joueurs en vie.
+pub fn set_68(b: &mut Cps2Bus, o: Obj) {
+    let level = rd8(b, A5 + 0x5a);
+    let v = if level == 0 {
+        8
+    } else {
+        let players = crate::ram::JOUEURS_EN_VIE.get(b).wrapping_mul(4);
+        let row = ((level.wrapping_sub(1) as i8).min(3) as u8).wrapping_add(players);
+        crate::mem::prog8(b, PARRY_LEVELS + row as u32)
+    };
+    o.set_u8(b, g::PARRY_LEVEL, v);
+}
+
+// --- poussée des joueurs (0x115e2) -----------------------------------------------------------------------
+
+/// 0x115e2 : le boss `o` pousse chaque joueur présent devant lui, sauf le voleur ou le nain dans leur état 26
+/// (`+0x6a`), un joueur en sortie (`+0x66`) ou protégé (`+0x188`).
+pub fn push_players(b: &mut Cps2Bus, o: Obj) {
+    for p in crate::ram::JOUEURS.iter() {
+        let player = p.0;
+        if rd8(b, player) == 0 {
+            continue;
+        }
+        if rd8(b, player + 3) >> 1 == 5 && rd8(b, player + 0x6a) == 26 {
+            continue;
+        }
+        if rd8(b, player + 0x66) == 0 && rd8(b, player + 0x188) == 0 {
+            push_player_once(b, o.0, player);
+        }
+    }
+}
+
+// --- débris et butin (0x1172e, 0x11a36, 0xb648, 0xb780, 0xbad6, 0xe2f6) --------------------------------
+
+/// Jeux de débris de 0x1172e.
+const DEBRIS_SETS: u32 = 0x1178a;
+
+/// 0x1172e : jeu de débris n° `set` (table : nombre - 1, puis lignes de 4 mots : décalage x, vitesse x, `+0x18`,
+/// `+0x58`) autour de `o`, retournés si `o` regarde à gauche. Une ligne n'est lue que si l'effet a pu être créé.
+pub fn debris_set(b: &mut Cps2Bus, o: Obj, set: u16) {
+    let mut at = crate::mem::prog32(b, DEBRIS_SETS.wrapping_add(offset(set.wrapping_mul(4))));
+    let mut next = |b: &mut Cps2Bus| {
+        let v = rd16(b, at);
+        at += 2;
+        v
+    };
+    let count = next(b);
+    let mirrored = o.u8(b, f::FACING) != 0;
+    for _ in 0..=count {
+        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
+        debris(b, fx, o.0);
+        let z = o.u16(b, Obj::Z);
+        wr16(b, fx + 0x0c, z);
+        let depth = o.u32(b, Obj::Y).wrapping_sub(1);
+        wr32(b, fx + 0x10, depth);
+        let (mut dx, mut vx) = (next(b), next(b));
+        let v18 = next(b);
+        wr16(b, fx + 0x18, v18);
+        let v58 = next(b);
+        wr16(b, fx + 0x58, v58);
+        if mirrored {
+            dx = dx.wrapping_neg();
+            vx = vx.wrapping_neg();
+        }
+        let x = rd16(b, fx + 0x08).wrapping_add(dx);
+        wr16(b, fx + 0x08, x);
+        wr16(b, fx + 0x14, vx);
+    }
+}
+
+/// Lignes des débris au sol de 0x11a36 (la seconde si `second`).
+const GROUND_DEBRIS: [u32; 2] = [0x11a9e, 0x11ada];
+
+/// 0x11a36 : cinq débris au sol (profondeur `A5+0x5aa`), lignes de 6 mots (décalage x, vitesse x, vitesse z,
+/// `+0x18`, décalage en profondeur, `+0x1c`), retournés si `o` regarde à gauche ; puis le son 0xede08.
+pub fn ground_debris(b: &mut Cps2Bus, o: Obj, second: bool) {
+    let mut at = GROUND_DEBRIS[second as usize];
+    let mut next = |b: &mut Cps2Bus| {
+        let v = rd16(b, at);
+        at += 2;
+        v
+    };
+    let mirrored = o.u8(b, f::FACING) != 0;
+    for _ in 0..5 {
+        let Some(fx) = alloc(b, &pools::EFFCT) else { continue };
+        debris(b, fx, o.0);
+        let ground = rd16(b, A5 + 0x5aa);
+        wr16(b, fx + 0x10, ground);
+        let (mut dx, mut vx, mut vz) = (next(b), next(b), next(b));
+        let v18 = next(b);
+        wr16(b, fx + 0x18, v18);
+        let ddepth = next(b);
+        let v1c = next(b);
+        wr16(b, fx + 0x1c, v1c);
+        if mirrored {
+            dx = dx.wrapping_neg();
+            vx = vx.wrapping_neg();
+            vz = vz.wrapping_neg();
+        }
+        let x = rd16(b, fx + 0x08).wrapping_add(dx);
+        wr16(b, fx + 0x08, x);
+        let v14 = rd16(b, fx + 0x14).wrapping_add(vx);
+        wr16(b, fx + 0x14, v14);
+        wr16(b, fx + 0x16, vz);
+        let depth = rd16(b, fx + 0x10).wrapping_add(ddepth);
+        wr16(b, fx + 0x10, depth);
+    }
+    crate::sound::jouer(b, 0xede08, o);
+}
+
+/// Objet lâché une seule fois par type de 0xb648 (genre 2 ; 0 : rien), et masques de chance.
+const ONCE_VARIANTS: u32 = 0xb6e4;
+const ONCE_MASKS: u32 = 0xb6fc;
+
+/// Lance un objet en l'air au-dessus de `o` (genre `kind`, variante `variant`) : vitesses ±0x140 en x, 0x300 vers
+/// le haut, `vy` en profondeur, retournées si `mirrored`.
+fn toss_item(b: &mut Cps2Bus, o: Obj, item: u32, kind: u8, variant: u8, vy: u16, mirrored: bool) {
+    tossed_item(b, o.0, item, kind, variant, vy, mirrored);
+}
+
+/// 0xb648 : une seule fois par objet (`+0x9d`), si le bit tiré dans le masque `+0x9c` est levé, lâche l'objet de
+/// genre 2 propre à son type (rien pour une variante nulle), lancé d'un côté tiré au hasard.
+pub fn drop_once(b: &mut Cps2Bus, o: Obj) {
+    if o.u8(b, g::ONCE_DONE) != 0 {
+        return;
+    }
+    let roll = rng::random(b) as u32 & 31;
+    let line = o.u8(b, g::ONCE_MASK) as u32;
+    let mask = rd32(b, ONCE_MASKS + 4 * line);
+    if mask >> roll & 1 == 0 {
+        return;
+    }
+    let kind = o.u8(b, Obj::KIND) as u32;
+    let variant = crate::mem::prog8(b, ONCE_VARIANTS + kind);
+    if variant == 0 {
+        return;
+    }
+    let Some(item) = alloc(b, &pools::ITEM) else { return };
+    o.set_u8(b, g::ONCE_DONE, 1);
+    toss_item(b, o, item, 2, variant, (-0x40i16) as u16, false);
+    if rng::random(b) & 1 != 0 {
+        for field in [Obj::VX, Obj::VY] {
+            let v = rd16(b, item + field).wrapping_neg();
+            wr16(b, item + field, v);
+        }
+    }
+}
+
+/// Butin par ligne (`+0x80`, 16 tirages) de 0xb780 ; variante négative : rien.
+const LOOT: u32 = 0xb806;
+
+/// 0xb780 : butin de `o`, un ou deux tirages selon le nombre de joueurs ; le second lancé de l'autre côté.
+pub fn drop_loot(b: &mut Cps2Bus, o: Obj) {
+    let row = o.u8(b, g::LOOT_ROW) as u16;
     if row == 0 {
         return;
     }
-    set_w(&mut c.d[2], row << 5);
-    c.d[5] = (rd8(b, A5 + 0x35) > 3) as u32;
+    for left in (0..loot_rolls(b)).rev() {
+        let roll = (rng::random(b) & 15).wrapping_add(row << 4);
+        let variant = crate::mem::prog8(b, LOOT.wrapping_add(offset(roll)));
+        if (variant as i8) < 0 {
+            return;
+        }
+        let Some(item) = alloc(b, &pools::ITEM) else { return };
+        toss_item(b, o, item, 0, variant, 0x40, left != 0);
+    }
+}
+
+/// Trésors de 0xe2f6 : ligne (`+0x80`, 16 tirages) → liste (longs) d'objets de genre 5, terminée par un octet
+/// négatif.
+const TREASURE_ROWS: u32 = 0xe372;
+const TREASURE_LISTS: u32 = 0xe642;
+
+/// 0xe2f6 : trésor de `o` (un ou deux tirages) ; les objets d'une liste sont numérotés à partir de 1 (`+0x2f`) et
+/// posés au-dessus de `o`. Rend le mot bas de D2 que l'original laisse (la ligne, × 16 si elle est non nulle).
+pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> u16 {
+    let row = o.u8(b, g::LOOT_ROW) as u16;
+    if row == 0 {
+        return 0;
+    }
+    let mut rank: u8 = 1;
+    for _ in 0..loot_rolls(b) {
+        let roll = (rng::random(b) & 15).wrapping_add(row << 4);
+        let list = crate::mem::prog8(b, TREASURE_ROWS.wrapping_add(offset(roll)));
+        if (list as i8) < 0 {
+            break;
+        }
+        let mut at = rd32(b, TREASURE_LISTS + 4 * list as u32);
+        loop {
+            let variant = rd8(b, at);
+            at += 1;
+            if (variant as i8) < 0 {
+                break;
+            }
+            let Some(item) = alloc(b, &pools::ITEM) else { return row << 4 };
+            wr8(b, item, 1);
+            wr8(b, item + 2, 5);
+            wr8(b, item + 3, variant);
+            wr8(b, item + 0x2f, rank);
+            rank = rank.wrapping_add(1);
+            place_above(b, o.0, item);
+        }
+    }
+    row << 4
+}
+
+/// Les joueurs en jeu et en vie (présents, PV non nuls), dans l'ordre, avec leur classe (`+3` / 2).
+fn party_classes(b: &mut Cps2Bus) -> Vec<u8> {
+    let mut classes = Vec::with_capacity(4);
+    for p in crate::ram::JOUEURS.iter() {
+        if p.u8(b, Obj::ACTIVE) != 0 && p.u16(b, crate::ai::f::HP) != 0 {
+            classes.push(p.u8(b, Obj::VARIANT) >> 1);
+        }
+    }
+    classes
+}
+
+/// Tire une entrée de `table` à `base` + (tirage & `mask`) × `scale`.
+fn special_entry(b: &mut Cps2Bus, table: u32, base: u16, mask: u16, scale: u16) -> u32 {
+    let roll = (rng::random(b) & mask).wrapping_mul(scale).wrapping_add(base);
+    table.wrapping_add(offset(roll))
+}
+
+/// Début de la ligne de difficulté (`A5+0x49`) de `size` octets.
+fn difficulty_line(b: &mut Cps2Bus, size: u16) -> u16 {
+    rd8(b, A5 + 0x49) as u16 * size
+}
+
+/// 0xbad6 : objet spécial lâché par `o` (ligne `+0x80` de la table 0xbf26 : paires genre et variante, 16 tirages ;
+/// genre négatif : rien), un ou deux tirages selon le nombre de joueurs. Une variante 0 à 3 de genre 0 renvoie à
+/// des tables par difficulté (`A5+0x49`), certaines selon les classes en jeu (clerc, elfe, magicien) ; certains
+/// objets sont réservés à un groupe d'un seul genre de lanceurs de sorts (`restrict_draw`). L'objet est lancé en
+/// l'air comme le butin. Rend le mot bas de D3 que l'original laisse s'il l'a écrit (ligne de difficulté, ou
+/// classes en jeu).
+pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
+    let row = o.u8(b, g::LOOT_ROW) as u16;
+    if row == 0 {
+        return None;
+    }
+    let mut d3 = None;
+    let mut left = (crate::ram::JOUEURS_EN_VIE.get(b) > 3) as u16;
     let mut step = Draw::Row;
     loop {
         step = match step {
             Draw::Row => {
-                let at = special_roll(c, b, special::ROWS, row << 5, 15, 2);
+                let at = special_entry(b, special::ROWS, row << 5, 15, 2);
                 let (kind, variant) = (rd8(b, at), rd8(b, at + 1));
                 set_drawn(b, kind, variant);
                 match (kind as i8, variant) {
-                    (k, _) if k < 0 => return,
+                    (k, _) if k < 0 => return d3,
                     (0, 0) => Draw::Common,
                     (0, 1) => Draw::Pair,
                     (0, 2) => Draw::Kind2,
@@ -1407,50 +1264,46 @@ fn drop_special(c: &mut Cpu, b: &mut Cps2Bus) {
                 }
             }
             Draw::Common => {
-                let row = difficulty_row(c, b, 64);
-                let at = special_roll(c, b, special::COMMON, row, 31, 1);
-                let caster = scan_party(c, b, 1, |_, class| matches!(class, CLERIC | ELF | MAGE));
-                c.a[1] = special::COMMON;
+                let line = difficulty_line(b, 64);
+                d3 = Some(line);
+                let at = special_entry(b, special::COMMON, line, 31, 1);
+                let caster = party_classes(b).iter().any(|&k| matches!(k, CLERIC | ELF | MAGE));
                 if caster {
                     let variant = rd8(b, at);
                     set_drawn(b, 7, variant);
                     Draw::Restrict
                 } else {
-                    let k = (c.d[0] as u16).wrapping_add(32);
-                    set_w(&mut c.d[0], k);
                     redraw(b, at + 32, Draw::Pair, Draw::Restrict)
                 }
             }
             Draw::Pair => {
-                let row = difficulty_row(c, b, 64);
-                let at = special_roll(c, b, special::PAIRS, row, 31, 2);
+                let line = difficulty_line(b, 64);
+                d3 = Some(line);
+                let at = special_entry(b, special::PAIRS, line, 31, 2);
                 let (kind, variant) = (rd8(b, at), rd8(b, at + 1));
                 set_drawn(b, kind, variant);
                 Draw::Restrict
             }
             Draw::Kind2 => {
-                let row = difficulty_row(c, b, 16);
-                let at = special_roll(c, b, special::KIND_2, row, 15, 1);
+                let line = difficulty_line(b, 16);
+                d3 = Some(line);
+                let at = special_entry(b, special::KIND_2, line, 15, 1);
                 let variant = rd8(b, at);
                 set_drawn(b, 2, variant);
                 Draw::Restrict
             }
             Draw::ByClass => {
-                let row = difficulty_row(c, b, 64);
-                let at = special_roll(c, b, special::BY_CLASS, row, 15, 1);
-                c.d[3] = 0;
-                scan_party(c, b, 1, |c, class| {
-                    let bit = match class {
+                let line = difficulty_line(b, 64);
+                let at = special_entry(b, special::BY_CLASS, line, 15, 1);
+                let classes = party_classes(b).iter().fold(0u8, |bits, &k| {
+                    bits | match k {
                         CLERIC => 1,
                         ELF => 2,
                         MAGE => 4,
                         _ => 0,
-                    };
-                    c.d[3] |= bit;
-                    false
+                    }
                 });
-                c.a[1] = special::BY_CLASS;
-                let classes = c.d[3] as u8;
+                d3 = Some(classes as u16);
                 if classes == 4 {
                     let variant = rd8(b, at);
                     set_drawn(b, 3, variant);
@@ -1461,59 +1314,49 @@ fn drop_special(c: &mut Cpu, b: &mut Cps2Bus) {
                         1 => 16,
                         _ => 32,
                     };
-                    set_w(&mut c.d[1], shift);
-                    let k = (c.d[0] as u16).wrapping_add(shift);
-                    set_w(&mut c.d[0], k);
-                    redraw(b, at + shift as u32, Draw::Common, Draw::Pair)
+                    redraw(b, at + shift, Draw::Common, Draw::Pair)
                 }
             }
-            Draw::Restrict => restrict(c, b),
+            Draw::Restrict => restrict_draw(b, &mut d3),
             Draw::Spawn => {
                 let (kind, variant) = drawn(b);
-                let Some(item) = alloc(b, &pools::ITEM) else { return };
-                tossed_item(b, me, item, kind, variant, 0x40, c.d[5] as u8 == 0);
+                let Some(item) = alloc(b, &pools::ITEM) else { return d3 };
+                toss_item(b, o, item, kind, variant, 0x40, left == 0);
                 Draw::Next
             }
             Draw::Next => {
-                let left = (c.d[5] as u16).wrapping_sub(1);
-                set_w(&mut c.d[5], left);
-                if left == 0xffff {
-                    return;
+                if left == 0 {
+                    return d3;
                 }
+                left -= 1;
                 Draw::Row
             }
         }
     }
 }
 
-/// 0xbcb4 : objets réservés. Genre 3 variante 5 : clercs et magiciens seulement (table 0xd776) ; genre 4 variante 15 :
-/// magiciens seulement (0xda56) ; genre 4 variantes 8 et 9 : clercs seulement (0xdbc6) ; genre 4 variantes 10 et 11 :
-/// selon les magiciens et les clercs en jeu (0xdd36). Un groupe qui ne convient pas garde l'objet tiré.
-fn restrict(c: &mut Cpu, b: &mut Cps2Bus) -> Draw {
+/// 0xbcb4 : objets réservés. Genre 3 variante 5 : clercs et magiciens seulement (table 0xd776) ; genre 4 variante
+/// 15 : magiciens seulement (0xda56) ; genre 4 variantes 8 et 9 : clercs seulement (0xdbc6) ; genre 4 variantes 10
+/// et 11 : selon les magiciens et les clercs en jeu (0xdd36). Un groupe qui ne convient pas garde l'objet tiré.
+fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
     let (kind, variant) = drawn(b);
     match (kind, variant) {
         (3, 5) => {
-            c.d[1] = 0;
-            let other = scan_party(c, b, 0, |c, class| match class {
-                CLERIC => {
-                    c.d[1] |= 1;
-                    false
-                }
-                MAGE => {
-                    c.d[1] |= 2;
-                    false
-                }
-                _ => true,
-            });
-            if other || c.d[1] as u8 == 0 {
+            let classes = party_classes(b);
+            // la boucle de l'original s'arrête au premier joueur ni clerc ni magicien
+            let other = classes.iter().any(|&k| k != CLERIC && k != MAGE);
+            let mut bits = 0u8;
+            for &k in classes.iter().take_while(|&&k| k == CLERIC || k == MAGE) {
+                bits |= if k == CLERIC { 1 } else { 2 };
+            }
+            if other || bits == 0 {
                 return Draw::Spawn;
             }
-            let shift = if c.d[1] as u8 == 1 { 0 } else { 16 };
-            let row = difficulty_row(c, b, 32);
-            let at = special_roll(c, b, special::CLERIC_OR_MAGE, row, 15, 1);
-            let k = (c.d[0] as u16).wrapping_add(shift);
-            set_w(&mut c.d[0], k);
-            let variant = rd8(b, at + shift as u32);
+            let shift = if bits == 1 { 0 } else { 16 };
+            let line = difficulty_line(b, 32);
+            *d3 = Some(line);
+            let at = special_entry(b, special::CLERIC_OR_MAGE, line, 15, 1);
+            let variant = rd8(b, at + shift);
             wr8(b, DRAWN_VARIANT, variant);
             match variant {
                 0 => Draw::Next,
@@ -1523,32 +1366,21 @@ fn restrict(c: &mut Cpu, b: &mut Cps2Bus) -> Draw {
                 _ => Draw::Spawn,
             }
         }
-        (4, 15) => only_class(c, b, MAGE, special::MAGES),
-        (4, 8 | 9) => only_class(c, b, CLERIC, special::CLERICS),
+        (4, 15) => only_class_draw(b, d3, MAGE, special::MAGES),
+        (4, 8 | 9) => only_class_draw(b, d3, CLERIC, special::CLERICS),
         (4, 10 | 11) => {
-            c.d[1] = 0;
-            scan_party(c, b, 0, |c, class| {
-                if class == MAGE {
-                    c.d[1] |= 1;
-                }
-                if class == CLERIC {
-                    c.d[1] |= 2;
-                }
-                false
+            let bits = party_classes(b).iter().fold(0u8, |bits, &k| {
+                bits | if k == MAGE { 1 } else { 0 } | if k == CLERIC { 2 } else { 0 }
             });
-            let shift = match c.d[1] as u8 {
+            let shift = match bits {
                 0 => return Draw::Spawn,
-                1 => {
-                    c.d[0] = 0;
-                    0
-                }
+                1 => 0,
                 2 => 16,
                 _ => 32,
             };
-            set_w(&mut c.d[0], shift);
-            let row = difficulty_row(c, b, 16) + shift;
-            c.d[3] = row as u32;
-            let at = special_roll(c, b, special::MAGE_OR_CLERIC, row, 15, 1);
+            let line = difficulty_line(b, 16) + shift;
+            *d3 = Some(line);
+            let at = special_entry(b, special::MAGE_OR_CLERIC, line, 15, 1);
             reroll_or_none(b, at)
         }
         _ => Draw::Spawn,
@@ -1556,155 +1388,36 @@ fn restrict(c: &mut Cpu, b: &mut Cps2Bus) -> Draw {
 }
 
 /// Tous les joueurs en jeu sont de la classe `class` : nouvelle variante de genre 4 tirée dans `table`.
-fn only_class(c: &mut Cpu, b: &mut Cps2Bus, class: u8, table: u32) -> Draw {
-    if scan_party(c, b, 0, |_, k| k != class) {
+fn only_class_draw(b: &mut Cps2Bus, d3: &mut Option<u16>, class: u8, table: u32) -> Draw {
+    if party_classes(b).iter().any(|&k| k != class) {
         return Draw::Spawn;
     }
-    let row = difficulty_row(c, b, 16);
-    let at = special_roll(c, b, table, row, 15, 1);
+    let line = difficulty_line(b, 16);
+    *d3 = Some(line);
+    let at = special_entry(b, table, line, 15, 1);
     reroll_or_none(b, at)
 }
-fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
-    let variant = rd8(b, at);
-    set_drawn(b, 4, variant);
-    if variant == 0 { Draw::Next } else { Draw::Spawn }
-}
 
-/// 0xe7fa : comme 0xe886, choisit le point de marche le plus proche autour de la cible et mémorise son
-/// numéro (`+0x99`, -1 si aucun) ; loin de la caméra, marche vers un point lointain (0xf084).
-fn choose_near_walk_point(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    if rd16(b, me + f::TARGET) == 0 {
-        return;
-    }
-    let camera = if rd8(b, A5 + 0x36) != 0 { rd16(b, A5 + 0x556) } else { rd16(b, A5 + 0x506) };
-    c.d[1] = c.d[1] & !0xffff | camera as u32;
-    if rd16(b, me + f::X).wrapping_sub(camera) > 384 {
-        return walk_far_point(c, b);
-    }
-    wr8(b, me + LAST_POINT, 0xff);
-    let target = object(rd16(b, me + f::TARGET));
-    c.a[1] = target;
-    let set = rd8(b, me + POINT_SET) as u32;
-    let mut at = rd32(b, WALK_POINTS + 4 * set);
-    let last = rd16(b, at);
-    at += 2;
-    let (target_x, target_depth) = (rd16(b, target + f::X), rd16(b, target + f::DEPTH));
-    wr16(b, me + GOAL_X, target_x);
-    wr16(b, me + GOAL_DEPTH, target_depth);
-    let mut best: u16 = 0x7fff;
-    for point in (0..=last).rev() {
-        let (x, depth) = (rd16(b, at).wrapping_add(target_x), rd16(b, at + 2).wrapping_add(target_depth));
-        at += 4;
-        let distance = manhattan(b, me, x, depth);
-        if distance <= best {
-            best = distance;
-            wr16(b, me + GOAL_X, x);
-            wr16(b, me + GOAL_DEPTH, depth);
-            wr8(b, me + LAST_POINT, point as u8);
-        }
-        set_w(&mut c.d[0], x);
-        set_w(&mut c.d[1], depth);
-    }
-    c.a[2] = at;
-    set_w(&mut c.d[4], best);
-    set_w(&mut c.d[6], 0xffff);
-}
+// --- éclair et secousse (0x103ba), atterrissage par type (0x3e480) -----------------------------------
 
-/// Routines d'atterrissage par type (longs du code) : ennemis (classe 2) aux indices 0..31, boss ensuite.
-const LANDING_BY_KIND: u32 = 0x3e49c;
-
-/// 0x3e480 : saute à la routine d'atterrissage propre au type (`+2`) de l'ennemi ou du boss A0, appelée par
-/// les réactions communes aux coups (`families::reactions`). D0 = index × 4, A1 = routine, comme l'original.
-fn landing_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let base: u8 = if rd8(b, me + 0x28) == 2 { 0 } else { 32 };
-    let index = base.wrapping_add(rd8(b, me + 2)) as u16 * 4;
-    c.d[0] = index as u32;
-    c.a[1] = crate::mem::prog32(b, LANDING_BY_KIND.wrapping_add(offset(index)));
-    // les types sans routine propre pointent sur un simple RTS (0x3e2aa, 0x3bb9a)
-    if c.a[1] == 0x3e2aa || c.a[1] == 0x3bb9a {
-        return crate::mem::rts(c, b);
-    }
-    c.pc = c.a[1];
-}
-
-/// 0xfffc : `+0x98` (paramètre de comportement) lu dans la table 0x1000a selon le type `+2`.
-fn behaviour_by_kind(c: &mut Cpu, b: &mut Cps2Bus) {
-    let kind = rd8(b, c.a[0] + 2) as u32;
-    c.d[0] = kind;
-    let v = crate::mem::prog8(b, 0x1000a + kind);
-    wr8(b, c.a[0] + 0x98, v);
-    c.flags_logic(v as u32, Size::Byte);
-}
-
-/// 0x103ba : éclair d'écran (0x1ac68), secousse de 8 images (`A5+0x4be`) et effet 0xb141a, dont la
-/// variante `+3` est remise à zéro ; rien de plus si l'effet n'a pas pu être créé (retenue).
-fn flash_and_shake(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x103ba : éclair rouge, secousse de 8 images (`A5+0x4be`) et étincelle d'impact (0xb141a, vitesses `vx`, `ax`)
+/// dont la variante est remise à zéro.
+/// Glitch d'origine : l'original ne pose pas les vitesses de l'étincelle ; elle prend les D2 et D3 que laissent les
+/// routines appelées avant (les appelants les passent en clair).
+pub fn flash_and_shake(b: &mut Cps2Bus, o: Obj, vx: u16, ax: u16) {
     crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
     wr16(b, A5 + 0x4be, 8);
-    call(c, b, 0xb141a);
-    if c.sr & SR_C != 0 {
-        return;
+    if let Some(spark) = crate::families::effects_creators::impact_spark(b, o, vx, ax) {
+        spark.set_u8(b, Obj::VARIANT, 0);
     }
-    wr8(b, c.a[1] + 3, 0);
-    c.sr = c.sr & !0xf | SR_Z;
 }
 
-/// Native d'une fonction « corps » (sans RTS) : le RTS est ajouté.
-macro_rules! leaf {
-    ($entry:literal, $name:literal, $body:path) => {
-        aid($entry, $name, |c, b| {
-            $body(c, b);
-            rts(c, b);
-        })
-    };
+/// 0x3e480 : la routine d'atterrissage propre au type de `o` (ennemis : classe 2, types 0..31 ; boss ensuite) et
+/// l'index lu dans la table, que l'original laisse dans D0 en sautant à la routine (A1). `None` pour les types sans
+/// routine (un simple `rts` : 0x3e2aa, 0x3bb9a).
+pub fn landing_routine(b: &mut Cps2Bus, o: Obj) -> Option<(u32, u16)> {
+    let base: u8 = if o.u8(b, Obj::CLASS) == 2 { 0 } else { 32 };
+    let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;
+    let routine = crate::mem::prog32(b, LANDING_BY_KIND.wrapping_add(offset(index)));
+    (routine != 0x3e2aa && routine != 0x3bb9a).then_some((routine, index))
 }
-
-pub const NATIVES: &[Native] = &[
-    Native { outputs: regs::d(0) | regs::CCR, ..leaf!(0xfffc, "ia_comportement_par_type", behaviour_by_kind) },
-    Native { outputs: regs::a(1) | regs::CCR, ..leaf!(0x103ba, "ia_eclair_secousse", flash_and_shake) },
-    Native { outputs: regs::a(0) | regs::d(1) | regs::d(2), ..leaf!(0xe886, "ia_point_de_marche", choose_walk_point) },
-    Native { outputs: regs::a(0) | regs::d(1) | regs::d(2), ..leaf!(0xe914, "ia_point_atteint", walk_point_reached) },
-    Native { outputs: regs::a(0) | regs::d(1) | regs::d(2), ..leaf!(0xeff2, "ia_point_proche", walk_near_point) },
-    Native { outputs: regs::a(0) | regs::d(1) | regs::d(2), ..leaf!(0xf084, "ia_point_lointain", walk_far_point) },
-    leaf!(0xfda2, "ia_tient_saisi", hold_seized),
-    leaf!(0xff54, "ia_decompte_etat", countdown_then_state),
-    leaf!(0x104a2, "ia_hors_ecran", outside_screen_range),
-    leaf!(0x10574, "ia_cap_aleatoire", drift_heading),
-    leaf!(0x105b6, "ia_palier_suivant", next_threshold),
-    leaf!(0xfc44, "ia_attaque_touche", attack_hits_a_player),
-    leaf!(0xfd64, "ia_saisit_joueur", seize_player),
-    leaf!(0xfd8c, "ia_relache_joueur", release_player),
-    leaf!(0x103e0, "ia_anim_variante", animation_by_variant),
-    leaf!(0x10428, "ia_anim_maitre", animation_of_master),
-    leaf!(0x10450, "ia_anim_marque", animation_of_mark),
-    leaf!(0x10474, "ia_joueurs_en_vie", players_alive_flags),
-    leaf!(0x1047a, "ia_decision_demi_tour", turn_decision),
-    leaf!(0x104e0, "ia_meme_cote", same_side_flags),
-    aid(0xa470, "ia_attitude", stance_native),
-    aid(0x7f0c, "ia_devant", |c, b| in_front_native(c, b, true)),
-    aid(0x7ef4, "ia_devant_etat_12", |c, b| in_front_native(c, b, false)),
-    aid(0x7f19c, "ia_boite", box_around_native),
-    aid(0x11654, "boss_poussee", push_amount),
-    aid(0x1161c, "boss_pousse_joueur", push_player),
-    Native { outputs: 0, ..aid(0x115e2, "boss_pousse_joueurs", push_players) },
-    Native { outputs: regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR, ..aid(0x67452, "ia_joueur_proche", nearest_player_in_box) },
-    Native { outputs: regs::a(1) | regs::d(5) | regs::CCR, ..leaf!(0x43bc, "ia_cible_par_critere", target_by_criterion) },
-    Native { outputs: regs::d(0) | regs::a(4) | regs::CCR, ..leaf!(0x788c, "ia_tirage_6b", draw_6b) },
-    Native { outputs: regs::d(0) | regs::d(2) | regs::a(4) | regs::CCR, ..leaf!(0x79ce, "ia_tirage_6e_masque", maybe_draw_6e) },
-    Native { outputs: regs::d(0) | regs::a(4) | regs::CCR, ..leaf!(0x79f6, "ia_tirage_6e", draw_6e) },
-    Native { outputs: regs::d(0) | regs::d(2) | regs::a(4) | regs::CCR, ..leaf!(0xb048, "ia_parade", parries_68) },
-    Native { outputs: regs::d(0) | regs::d(2) | regs::a(4) | regs::CCR, ..leaf!(0xb068, "ia_parade_b", parries_69) },
-    Native { outputs: regs::d(0) | regs::a(4) | regs::CCR, ..leaf!(0xf118, "ia_tirage_84", draw_84) },
-    Native { outputs: regs::d(0) | regs::d(1) | regs::CCR, ..leaf!(0x10112, "ia_valeur_68", set_68) },
-    Native { outputs: regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2), ..leaf!(0x1172e, "debris_jeu", debris_set) },
-    Native { outputs: regs::ALL, ..leaf!(0x11a36, "debris_au_sol", ground_debris) },
-    Native { outputs: regs::d(0) | regs::d(1) | regs::a(1), ..leaf!(0xb648, "butin_unique", drop_once) },
-    Native { outputs: regs::d(0) | regs::d(2) | regs::d(5) | regs::a(1), ..leaf!(0xb780, "butin", drop_loot) },
-    Native { outputs: regs::ALL & !regs::CCR, ..leaf!(0xbad6, "butin_special", drop_special) },
-    Native { outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(4) | regs::d(5) | regs::a(1) | regs::a(4), ..leaf!(0xe2f6, "tresor", drop_treasure) },
-    Native { outputs: regs::a(1) | regs::a(2), ..leaf!(0xe7fa, "ia_point_proche_numerote", choose_near_walk_point) },
-    Native { outputs: regs::d(0) | regs::a(1), ..aid(0x3e480, "ia_atterrissage_par_type", landing_by_kind) },
-];
-

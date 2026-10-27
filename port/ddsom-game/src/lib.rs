@@ -97,25 +97,6 @@ pub mod regs {
 /// Toutes les routines natives.
 pub const NATIVES: &[Native] = &[
     combat::COMBAT_UPDATE,
-    ai::PICK_TARGET,
-    ai::PICK_TARGET_ANY,
-    ai::RANDOM_PLAYER,
-    ai::INITIAL_HP_A,
-    ai::INITIAL_HP_B,
-    ai::DECISION_A,
-    ai::DECISION_B,
-    ai::PICK_BYTE,
-    ai::IMMUNITIES,
-    ai::IN_ZONE,
-    ai::KEEP_ON_SCREEN,
-    ai::APPROACH_TARGET,
-    ai::TURN_TOWARD,
-    ai::SPREAD_INDEX,
-    ai::TARGET_IN_FRONT,
-    ai::START_ANIMATION,
-    ai::STEP_ANIMATION,
-    ai::FACING_TARGET,
-    ai::MOVING_FORWARD,
     inputs::READ_INPUTS,
     inputs::COPY_INPUTS_TO_PLAYERS,
     inputs::GET_PLAYER_INPUT,
@@ -181,7 +162,6 @@ pub const NATIVES: &[Native] = &[
     config::VARIABLES,
     config::INIT,
     popups::ANIMER,
-    popups::EFFACER_TOUT,
     credits::ECRIRE_CHIFFRE,
     eeprom::COMPLET_PIECES_NATIF,
     eeprom::COMPLET_DEPARTS_NATIF,
@@ -238,7 +218,6 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(camera_modes::NATIVES)
         .chain(terrain::NATIVES)
         .chain(placement::NATIVES)
-        .chain(ai_aids::NATIVES)
         .chain(effects_aids::NATIVES)
         .chain(families::NATIVES)
         .chain(families::natives())

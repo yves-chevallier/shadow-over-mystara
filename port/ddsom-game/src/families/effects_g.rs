@@ -34,10 +34,6 @@ mod f {
 
 /// Routines d'origine.
 mod rom {
-    /// Retenue dans l'écran (marge 0x30).
-    pub const IN_ZONE: u32 = 0xfbae;
-    /// Débris projetés (D5 = sorte).
-    pub const DEBRIS: u32 = 0x1172e;
     /// Son d'impact au sol.
     pub const SOUND_LANDING: u32 = 0xece9e;
 }
@@ -87,7 +83,7 @@ fn chunk(x: &mut Cx) {
         _ => free(x),
     }
     if x.u8(Obj::ACTIVE) != 0 {
-        x.call(rom::IN_ZONE);
+        crate::ai::keep_in_zone(x.b, x.o);
         crate::terrain::push_68k(x.c, x.b, x.o);
         x.reinsert();
     }
@@ -134,8 +130,7 @@ fn chunk_active(x: &mut Cx) {
             x.set16(Obj::Z, 0);
             x.set16(chunk::TIMER, 0x5a);
             x.call(rom::SOUND_LANDING);
-            x.c.d[5] = chunk::DEBRIS_KIND;
-            x.call(rom::DEBRIS);
+            crate::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16);
             match x.u8(f::VARIANT) {
                 0 => {
                 x.anim_start(chunk::ANIMS_0, 0x15);
@@ -392,7 +387,7 @@ mod armour {
 
 /// Fin commune : retenue dans l'écran, ombre, remise en liste.
 fn on_screen(x: &mut Cx) {
-    x.call(rom::IN_ZONE);
+    crate::ai::keep_in_zone(x.b, x.o);
     crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
@@ -585,8 +580,6 @@ mod flyer {
     pub const ANIMS: u32 = 0x17f002;
     /// Tir ennemi (ESHL 0x2c) lâché une image sur quatre.
     pub const SHOT: u8 = 0x2c;
-    /// Retenue dans l'écran avec une marge D0.
-    pub const KEEP_ON_SCREEN: u32 = 0xfbb0;
 }
 
 /// L'objet suivi, s'il existe et est actif (`0xb5bf0`).
@@ -735,8 +728,7 @@ fn flyer_gun(x: &mut Cx) {
     let turn = if x.u8(f::FACING) != 0 { 0xff80 } else { 0x80 };
     x.add16(flyer::ANGLE, turn);
     flyer_shoot(x, 0);
-    set_low_word(&mut x.c.d[0], 0x10);
-    x.call(flyer::KEEP_ON_SCREEN);
+    crate::ai::keep_on_screen(x.b, x.o, 0x10);
 }
 
 /// Variante 2 : balayeur posé au bord de l'écran, sur la profondeur de l'objet suivi (phase 3), qui tire.

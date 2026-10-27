@@ -87,7 +87,7 @@ pub(super) fn gate_near(x: &mut Cx) -> u32 {
     if !lib::target_in_box(x, -0x50, 0x30, 6) {
         return 0;
     }
-    lib::ai_gate(x)
+    lib::turn_decision(x) as u32
 }
 
 /// 0x78f4e : joueur dans la boîte large (−0xe0, 0x40 ou 0x60, 0xc ou 8 selon le profil), à l'écran.
@@ -102,7 +102,7 @@ pub(super) fn gate_wide(x: &mut Cx) -> u32 {
     if !lib::target_in_box(x, -0xe0, half_w, half_d) {
         return 0;
     }
-    lib::ai_gate(x)
+    lib::turn_decision(x) as u32
 }
 
 /// 0x78e74 / 0x78e80 : délai de charge `+0x71` d'après la difficulté.

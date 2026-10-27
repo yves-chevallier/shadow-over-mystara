@@ -14,7 +14,8 @@ pub(super) fn run(x: &mut Cx) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
-        return zone_and_terrain(x);
+        zone_and_terrain(x);
+        return;
     }
     x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
@@ -283,7 +284,7 @@ fn fall(x: &mut Cx) {
         }
         6 => {
             x.move_x();
-            if lib::outside(x, -0x30, 0x1b0) {
+            if lib::outside_band(x, -0x30, 0x1b0) {
                 detach_from_host(x);
                 x.free(&pools::ENEMY);
             }

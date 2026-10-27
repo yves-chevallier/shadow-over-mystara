@@ -375,6 +375,11 @@ pub(crate) fn posed_spark_par(r: &mut impl Registres, b: &mut Cps2Bus, createur:
     Some(o)
 }
 
+/// 0xb141a : étincelle d'impact (type 29, variante 1) de vitesses `vx`, `ax`, liée par `+0x5c`. Cœur.
+pub fn impact_spark(b: &mut Cps2Bus, createur: Obj, vx: u16, ax: u16) -> Option<Obj> {
+    impact(&mut Pur, b, createur, vx, ax)
+}
+
 /// 0xb141a : étincelle d'impact (type 29, variante 1) de vitesses `vx`, `ax`, liée par `+0x5c`.
 fn impact(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, vx: u16, ax: u16) -> Option<Obj> {
     let o = spawn(r, b, kind::IMPACT)?;

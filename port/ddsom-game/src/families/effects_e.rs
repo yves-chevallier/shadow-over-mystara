@@ -372,7 +372,7 @@ fn gate_leave(x: &mut Cx) {
     }
     (x.c.a[0], x.c.d[7]) = (a0, d7);
     x.set_a5_u8(0x48e, 0xf);
-    crate::call(x.c, x.b, 0x1686);
+    crate::palette::full_brightness(x.b);
     for p in players() {
         if p.u8(x.b, 0) == 0 || p.u16(x.b, 0x62) == 0 {
             continue;

@@ -104,7 +104,10 @@ crate::etapes! {
             next_sub_step(x);
             wr16(x.b, v::PLAYER, super::PLAYERS as u16);
             wr8(x.b, v::LEFT, 4);
-            call_keep_a0(x, &[0x1f184, 0x1de7c, 0x2062]);
+            call_keep_a0(x, &[0x1f184, 0x1de7c]);
+            for pool in crate::objects::pools::POOLS {
+                pool.reset(x.b);
+            }
             x.call(0xca8);
             x.set_v8(0x3c, 0xff);
             x.c.d[0] = x.c.d[0] & !0xffff | 84;
@@ -209,7 +212,11 @@ fn player_done(x: &mut Ctx) -> Flow {
     wr16(x.b, v::PLAYER, p as u16);
     let left = rd8(x.b, v::LEFT).wrapping_sub(1);
     wr8(x.b, v::LEFT, left);
-    call_keep_a0(x, &[0x1f184, 0x1de7c, 0x2062, 0x1de96, 0xc58]);
+    call_keep_a0(x, &[0x1f184, 0x1de7c]);
+    for pool in crate::objects::pools::POOLS {
+        pool.reset(x.b);
+    }
+    call_keep_a0(x, &[0x1de96, 0xc58]);
     x.set_v16(0x14, 0x12c0);
     x.wait(1, Etape::NextWaited)
 }

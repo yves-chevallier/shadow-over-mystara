@@ -509,8 +509,7 @@ mod fireball {
                 x.set8(0x56, 4);
                 x.set_a5_u16(0x4ba, 0x100);
                 x.call(crate::palette::FLASH_COLOR_ON.entry);
-                x.set_d0w(0x20);
-                x.call(crate::camera_modes::SHAKE_A.entry);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
                 x.anim(ANIMS, 2);
                 x.reinsert();
             }

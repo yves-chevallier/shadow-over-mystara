@@ -604,7 +604,8 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
         return;
     }
     // coup paré / absorbé par la victime (0xb048 : Z clair)
-    if !w.call_ao(0xb048, p, e) {
+    // coup paré par la victime (0xb048)
+    if crate::ai_aids::parries(w.b, p, e, crate::ai_aids::Parry::A) {
         e.set_u32(w.b, f::STATE, state::BLOCKED);
         p.set_u8(w.b, f::HITSTOP, 8);
         w.set_bit(p, f::HIT_MARK, 6);

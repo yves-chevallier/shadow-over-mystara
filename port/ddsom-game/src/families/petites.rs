@@ -531,9 +531,11 @@ fn game_vars_clear(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x180ac : remise à zéro de l'écran fixe : pools SET et EFFCT, sprites, liste triée.
 fn fixed_screen_reset(c: &mut Cpu, b: &mut Cps2Bus) {
     wr32(b, A5 - 0x70b0, 0);
-    for routine in [0x1f184, 0x1de7c, 0x2134, 0x2150] {
+    for routine in [0x1f184, 0x1de7c] {
         call(c, b, routine);
     }
+    pools::SET.reset(b);
+    pools::EFFCT.reset(b);
     rts(c, b);
 }
 
@@ -541,8 +543,6 @@ fn fixed_screen_reset(c: &mut Cpu, b: &mut Cps2Bus) {
 // Réaction aux coups de deux ennemis (table des réactions communes, `react`)
 // ---------------------------------------------------------------------------------------------
 
-/// Début de l'animation de l'ennemi (`0x103d6`, D0 = numéro, A4 = jeu d'animations).
-const ENEMY_ANIMATION: u32 = 0x103d6;
 
 /// 0x78ad2 et 0x71680 : l'ennemi touché tremble sur place. Pas 0 : mémorise X (`+0xa`), lance l'animation 8
 /// du jeu `anim` et pose le compteur (`+0x90` = 16). Pas 2 : décale X de ±2 selon la parité du compteur et
@@ -563,9 +563,7 @@ fn shake(x: &mut Cx, table: u32, anim: u32) {
             let v = x.u8(0x56);
             x.set8(0x53, v);
             x.set8(0x90, 0x10);
-            x.c.d[0] = 8;
-            x.c.a[4] = anim;
-            x.call(ENEMY_ANIMATION);
+            crate::families::enemy_lib::start(x, anim, 8);
         }
         2 => {
             let timer = x.u8(0x90);

@@ -634,6 +634,45 @@ remplacent `call` mais le compte inclut les commentaires d'adresse) ; lignes 146
 `jsr_origine`), `taches` 2 / 2 (`revenir` vers une adresse ; `executer` pose l'adresse d'origine de l'étape :
 un pas qui rendrait la main sans céder ni sauter s'arrêterait sur « pas de native »).
 
+## 15. Lot IA : aides d'IA et derniers services
+
+Périmètre : `ai.rs`, `ai_aids.rs`, `camera_modes.rs` (secousses), `scroll.rs`, `popups.rs`, créateurs privés (SET
+0xd5f30, 0xd6952, 0xd5ef8 ; 0x57c66, 0x5cdc6), initialisation des pools (0x2062, 0x2134, 0x2150, 0x21bc), appels
+des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), plus leurs appelants dans les familles,
+`player/`, `scene/`, `modes/`, `combat.rs`.
+
+* **Cœurs.** Chaque aide d'IA est une fonction Rust sur l'objet (`ai::pick_target(b, o, Rule) -> Option<Obj>`,
+  `target_by`, `random_player`, `initial_hp`, `set_immunities -> u16`, `hp_rank`, `decision_a/b -> bool`,
+  `pick_byte`, `target_in_front(b, o, Boite) -> DansBoite`, `facing_target`, `target_faces_me`, `back_to_target`,
+  `turn_decision -> Turn`, `moving_forward`, `keep_on_screen/keep_in_zone -> bool`, `turn_toward`, `drift_heading` ;
+  `ai_aids::` points de marche, prises, tirages par tables, parades (`Parry`), débris, butins, éclair et secousse,
+  `landing_routine`). La machine à registres `ai::Mach` (opérations à drapeaux exacts) et les ~60 natives des deux
+  modules sont supprimées : plus aucun appel par adresse ne les vise (code-mort.md, lot IA). Autres cœurs :
+  `creators::set_14`, `set_15_b`, `in_right_half`, `chance_10_16`, `set_residu::attach_life_bar`,
+  `popups::effacer_tout`, `popups::animer`, `effects_creators::impact_spark`, `terrain::push_collides`,
+  `camera_modes::shake::of_routine`, `camera_modes::update_camera_1/2` et `scroll::update_cameras` (appelables
+  directement, encore sur le processeur : les caméras appellent des natives vidéo par adresse).
+* **Appelants.** La façade `enemy_lib` n'appelle plus que des cœurs ; ses doublons Rust du lot A (`outside`,
+  `facing_target`...) sont fondus avec eux. Familles (`eshl*`, `items*`, `effects*`, `petites`, `joueur/`), joueurs,
+  scènes, modes, combat : secousses par `start_shake`, zone et écran par `ai::keep_*`, animations de l'IA par
+  `enemy_lib::start/step`, événements par `evenements::enfiler_*`/`creer_popup`, palettes par `palette::full_brightness`
+  et `placement::load_effect_palette`, pools par `Pool::reset`.
+* **Preuve (J2).** Les appels par adresse ont d'abord été sondés (`ai::sonde`, diagnostic retiré depuis) : après
+  chaque native, les registres qu'elle avait changés et ceux que l'appelant avait posés pour elle étaient
+  empoisonnés (`DDSOM_POISON=ia_<adresse>`, un registre à la fois : `ia_<adresse>.d2`), validations complètes puis
+  bissections par étiquette et par site. Lecteurs trouvés, écrits en clair (glitches d'origine) : index de réaction
+  des boss 7, 8, 19 et 3 (octet haut de D0 laissé par 0x10112, 0xb648, 0xfe5a), `+0x8e` de la harpie (D0 de 0xfe5a),
+  D5 de la zone et du décor relu par le squelette (`zone_and_terrain -> bool`), côté de la boîte relu dans D0
+  (squelette, golem), D2 de 0xb5e0 relu par le boss 11 (`target_in_box_68k`, seul adaptateur gardé), D2/D3 de
+  `drop_rewards` donnant leurs vitesses à l'étincelle de 0x103ba (`flash_and_shake`), A1 des cibles (boss 5, 11,
+  harpie : les cœurs rendent la cible), D2 de 0x43ae (boss 10), D0/A1 de la routine d'atterrissage (0x3e480).
+* **Fuzz.** `examples/fuzz_ia.rs` compare chaque cœur à la routine d'origine (interpréteur seul) sur des états tirés
+  d'une partie réelle : 0 écart sur les 70 entrées (skeleton, kobold, hellhound, boss 11, boss 19). Il a corrigé
+  deux routines du lot A (0xffda, 0x10298) et mon propre `in_right_half` (sens de la soustraction).
+* **Restent.** `scroll.rs`/`camera_modes.rs` appellent par adresse les natives vidéo (0x26d4, 0x2766, 0xbc6, 0x3525c)
+  et 0xa8ae8 ; les adaptateurs `_68k` des autres lots (`random_68k`, `terrain_68k`, `push_68k`, `shock_68k`,
+  `in_arena_68k`, `reinsert_68k`) n'ont pas été réexaminés.
+
 ## Avancement
 
 | Étape | Commit | Validation |
@@ -651,3 +690,4 @@ un pas qui rendrait la main sans céder ni sauter s'arrêterait sur « pas de na
 | Lot B : créateurs en fonctions Rust, appels directs, replis, registres prouvés morts, étape du feu d'artifice | voir `git log` (wt-effets) | complète, 270/270 sans 68000 et 270/270 depuis les assets ; `DDSOM_POISON=effets` et `restes` 270/270 |
 | Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B, 9b27479), 272/272 sans 68000 et 272/272 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `zones_natives.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
 | Lot « noyau final » : J3 achevé (appels en cours en étapes, appel attendu, cession notée au lieu de `Unwound`), ordonnanceur, démarrage et VBLANK en machine à états Rust, mode hybride retiré, appels directs de la fin de phase | voir `git log` (wt-noyau) | complète après fusion de main (f8f67af), 272/272 sans 68000 (14 min 55 s, 8 tâches) et 272/272 (10 min 53 s) depuis les assets (`DDSOM_ASSETS`, `data` réextrait par l'`extract` de main : `reste.json`) |
+| Lot IA : cœurs des aides d'IA et services restants, natives retirées, glitches de registres en clair, fuzz_ia | voir `git log` (wt-ia) | complète, 272/272 sans 68000 et 272/272 depuis les assets (`noyau_assets`), JOBS=8 ; poison par adresse et par registre (sondes), `fuzz_ia` 0 écart |

@@ -1374,13 +1374,19 @@ fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
     Some(indices.iter().zip(SLOTS).map(|(&index, slot)| (index, slot)).collect())
 }
 
-/// 0x2ede0 : la caméra 1 est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
-fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2ede0 : la caméra 1 (A5+0x4fe) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
+/// A0 = la caméra en sortie.
+pub fn update_camera_1(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.a[0] = A5 + CAMERA_1;
     if rd8(b, c.a[0]) != 0 {
         step(c, b);
     } else {
         init_camera_1(c, b);
     }
+}
+
+fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
+    update_camera_1(c, b);
     rts(c, b);
 }
 
@@ -1454,13 +1460,18 @@ fn load_scroll3_blocks(x: &mut Cx, first: u32, slots: [u32; 8]) {
     }
 }
 
-/// 0x32108 : la caméra 2 est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
-fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x32108 : la caméra 2 (A5+0x54e) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
+pub fn update_camera_2(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.a[0] = A5 + CAMERA_2;
     if rd8(b, c.a[0]) != 0 {
         step_2(c, b);
     } else {
         init_camera_2(c, b);
     }
+}
+
+fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
+    update_camera_2(c, b);
     rts(c, b);
 }
 
@@ -1526,6 +1537,16 @@ pub mod shake {
     pub const B: u16 = 0x58;
     /// 0x289c.
     pub const C: u16 = 0x5c;
+
+    /// Le mode de la secousse dont une table de la ROM donne la routine.
+    pub fn of_routine(routine: u32) -> u16 {
+        match routine {
+            0x2824 => A,
+            0x2860 => B,
+            0x289c => C,
+            _ => unreachable!("secousse : routine {routine:06x} (0x2824, 0x2860 ou 0x289c seulement)"),
+        }
+    }
 }
 
 /// 0x2824, 0x2860, 0x289c : lance une secousse de la caméra en service (1, ou 2 si `A5+0x36`) dans le
@@ -1547,25 +1568,4 @@ pub fn start_shake(b: &mut Cps2Bus, mode: u16, frames: u16) -> Obj {
     cam
 }
 
-/// La secousse avec les registres de l'original : D0.w = durée, rend A1 = la caméra et les drapeaux du `move.w`
-/// de la durée.
-fn start_shake_regs(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
-    let frames = c.d[0] as u16;
-    c.a[1] = start_shake(b, mode, frames).0;
-    c.flags_logic(frames as u32, m68k::decode::Size::Word);
-}
-
-fn shake_entry(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
-    start_shake_regs(c, b, mode);
-    rts(c, b);
-}
-
-const fn shake_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: regs::a(1) | regs::CCR }
-}
-
-pub const SHAKE_A: Native = shake_native(0x2824, "camera_secousse_54", |c, b| shake_entry(c, b, shake::A));
-pub const SHAKE_B: Native = shake_native(0x2860, "camera_secousse_58", |c, b| shake_entry(c, b, shake::B));
-pub const SHAKE_C: Native = shake_native(0x289c, "camera_secousse_5c", |c, b| shake_entry(c, b, shake::C));
-
-pub const NATIVES: &[Native] = &[CAMERA1_UPDATE, CAMERA2_UPDATE, SHAKE_A, SHAKE_B, SHAKE_C];
+pub const NATIVES: &[Native] = &[CAMERA1_UPDATE, CAMERA2_UPDATE];

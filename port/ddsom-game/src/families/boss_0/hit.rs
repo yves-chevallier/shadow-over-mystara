@@ -261,7 +261,7 @@ fn resting(x: &mut Cx) {
         return body(x, 0xc);
     }
     if lib::step(x) {
-        if !lib::any_player_alive(x) {
+        if !lib::players_alive(x) {
             return idle_alone(x);
         }
         get_up(x);
