@@ -22,7 +22,7 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
 6. **Noms.** Champs et variables nommés d'après `docs/*.md` (vue `Obj`, `Player`, `ram::SCENE`) ; un sens incertain est
    marqué (h). Commentaires en français, brefs ; on garde la langue des identifiants du module.
 7. **Code mort et replis.** Un bras `_ => x.call(0x…)` ou un `deleguer` jamais atteint (vérifier : `examples/reste68k`,
-   compteurs d'appels de `validate`, `DDSOM_SANS_68K=1` qui s'arrête sur une adresse sans native) se remplace par la
+   compteurs d'appels de `validate`, le jeu sans 68000 qui s'arrête sur une adresse sans native) se remplace par la
    native appelée directement, ou par `unreachable!("…")` documenté si l'aiguillage de la ROM ne peut pas y mener.
    Ne pas inventer de logique pour un chemin jamais exercé : le dire.
 8. **Rester dans son lot.** Ne pas modifier `lib.rs`, `families/mod.rs`, `families/cx.rs`, `objects/`, `mem.rs`, `ram.rs`,
@@ -126,9 +126,10 @@ L'adresse d'origine reste une méthode (`Etape::adresse`) tant que `validate` co
 
 ## Pièges connus
 
-* **Exécution à blanc** (mode normal, jusqu'au lot 0a) : une logique de `families::Ctx` qui cesse d'appeler une routine par
-  son adresse doit la déclarer externe (`Ctx::externe`), sinon le calcul de durée parcourt la routine d'origine et panique
-  « branchement sans décision ».
+* **Deux modes.** Le jeu est le mode sans 68000, par défaut partout (`validate`, `validate_all.sh`, `bench`,
+  `ddsom`). `DDSOM_HYBRIDE=1` donne le mode hybride (natives et 68000 de repli, durée constante par native) pour les
+  diagnostics qui exécutent l'original (`DDSOM_CHECK`, `DDSOM_ADOPT_REGS`, `cessions`, `reste68k`) ; il n'est pas tenu
+  de finir VALIDE. Il n'y a plus de durée à tenir à jour (lot 0a).
 * **Registres hérités** : le gestionnaire suivant de la boucle de dispatch, une tâche neuve, une suite de `resume!`
   héritent des registres. C'est ce que `DDSOM_POISON` attrape ; `DDSOM_ADOPT_REGS`/`DDSOM_CHECK_ALL` aident à trouver
   lequel.
@@ -148,9 +149,9 @@ L'adresse d'origine reste une méthode (`Etape::adresse`) tant que `validate` co
    le module du lot si la routine lui appartient, ou le signaler.
 4. Convertir par petits pas : appelants → adaptateur ; constantes et helpers dupliqués supprimés ; champs et variables
    nommés ; glitches marqués. `cargo build` sans nouvel avertissement ; `cargo test --release --lib`.
-5. Validation ciblée (scénarios qui exercent le lot : `boss/`, `enemy/`, `cov/`...), mode normal et
-   `DDSOM_SANS_68K=1`. Commit + push.
+5. Validation ciblée (scénarios qui exercent le lot : `boss/`, `enemy/`, `cov/`...), mode par défaut (sans 68000).
+   Commit + push.
 6. `DDSOM_POISON=<étiquettes du lot>` sur les mêmes scénarios, puis passage au cœur là où c'est prouvé. Commit + push.
-7. Fin de lot : validation complète, deux modes (`DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_JOBS=10 tools/validate_all.sh 30000`,
-   puis avec `DDSOM_SANS_68K=1`), et `DDSOM_ASSETS` sur quelques scénarios ; mesurer après ; rapport : marques avant/après,
+7. Fin de lot : validation complète (`DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_JOBS=10 tools/validate_all.sh 30000`, sans
+   68000), et `DDSOM_ASSETS` sur quelques scénarios ; mesurer après ; rapport : marques avant/après,
    lignes avant/après, résultat exact des validations, glitches et écarts rencontrés, hash du commit poussé.

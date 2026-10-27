@@ -210,8 +210,8 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
 1. **Plus aucune instruction 68000.** Les `call`/`call_at` vers du code d'origine (`docs/reste68k.md`, « Appels Rust qui
    exécutent encore du 68000 » ; surtout C10 SET, C04 boss, C0e EFFCT non exercés, P3, ESHL), le code d'origine où
    reprennent encore des tâches (plus aucune), et les natives que
-   la machine remplace par leur original : celles qui débordent sur l'interruption suivante (`run`, `lib.rs` :
-   `c.cycles + cost > irq_horizon`) ; celles qui se déclaraient hors contrat (`families::COUT_HORS_CONTRAT` :
+   la machine remplace par leur original : en mode hybride, celles qui débordent sur l'interruption suivante (`run`,
+   `lib.rs` : `c.cycles + DUREE_NATIVE > irq_horizon`) ; celles qui se déclaraient hors contrat (`families::COUT_HORS_CONTRAT` :
    épilogue étranger `0xaa9fe` des bulles, pas de réaction non réécrits) s'exécutent maintenant toujours. Sans processeur, une native s'exécute toujours en entier.
 2. **Un exécuteur de natives sans interpréteur.** Un pas finit en posant `c.pc` sur la native suivante (reprise, suite
    d'un cadre, enveloppe de cession) et la machine la cherche (`lookup`) ; sans 68000, une boucle `while let Some(n) =
@@ -246,11 +246,19 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
 8. **L'oracle reste.** `validate`, `DDSOM_CHECK` et les outils de diagnostic comparent à la machine d'origine
    (68000 surcadencé) : elle reste, hors du chemin du jeu.
 
-### Le jeu sans 68000 (`sans68k.rs`, `DDSOM_SANS_68K=1`)
+### Le jeu sans 68000 (`sans68k.rs`)
 
-Les points 2, 6 et 7 sont faits, en mode à part : `ddsom_game::install_sans_68k` fait tourner le jeu sans interpréteur
-ni code recompilé. `DDSOM_SANS_68K=1` le choisit dans `validate` (machine du jeu sans 68000 contre la machine d'origine)
-et dans l'application (`ddsom`) ; le mode normal (`install`) ne change pas.
+Les points 2, 6 et 7 sont faits : `ddsom_game::install_sans_68k` fait tourner le jeu sans interpréteur ni code
+recompilé. C'est **le jeu** (décision D1, [refactorisation.md](refactorisation.md)) : le mode par défaut de `validate`
+(machine du jeu sans 68000 contre la machine d'origine), de `tools/validate_all.sh`, de `bench` et de l'application
+(`ddsom`).
+
+**Mode hybride (diagnostic).** `DDSOM_HYBRIDE=1` (dans `validate`, `bench`, `lectures_rom`, l'application) choisit
+`install` : natives et code d'origine recompilé pour le reste, 68000 surcadencé. Il sert aux diagnostics qui exécutent
+l'original (`DDSOM_CHECK`, `DDSOM_ADOPT_REGS`, `examples/cessions`, `reste68k`...). Chaque native y dure une constante,
+`DUREE_NATIVE` (100 cycles) : les durées exactes (`cost`, `exact_cost`, `Chemin`, exécution à blanc) ont disparu au lot
+0a. Une native qui déborderait sur l'interruption est encore remplacée par son original (sauf celles qui tiennent la
+table des tâches ou qu'un cadre a appelées) ; ce mode n'est plus tenu de finir VALIDE.
 
 * **Exécuteur.** `sans68k::pas` cherche la native posée au PC (`lookup`) et l'exécute ; la boucle d'image et
   `call`/`call_at` ne font rien d'autre (plus de `c.step`, plus de `ddsom_rc`). Le `Cpu` ne sert plus que de banc de
@@ -286,8 +294,7 @@ et dans l'application (`ddsom`) ; le mode normal (`install`) ne change pas.
   plafond »). Avant l'instantané, une vingtaine de scénarios atteignaient le plafond (4 à 20 images chacun, 100 ms
   par image) ; aucun depuis.
 * **Diagnostic.** `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n (ligne, PC, SR, pile).
-* **Sans ROM.** Sans 68000, le code d'origine n'est plus lu du tout (les durées des natives et des chemins ne sont
-  plus calculées) : avec `ddsom --assets`, la machine est faite des seuls assets ([sans-rom.md](sans-rom.md)).
+* **Sans ROM.** Sans 68000, le code d'origine n'est plus lu du tout : avec `ddsom --assets`, la machine est faite des seuls assets ([sans-rom.md](sans-rom.md)).
 
 ## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
 

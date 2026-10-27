@@ -103,7 +103,7 @@ Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`M
 
 Son : `DDSOM_SON_RUST=1 ./jouer.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
 
-Sans ROM : une fois les ressources extraites (ci-dessous), `DDSOM_SANS_68K=1 port/target/release/ddsom --assets
+Sans ROM : une fois les ressources extraites (ci-dessous), `port/target/release/ddsom --assets
 assets` joue sans aucun fichier ROM ni 68000 (routines Rust seules, pilote son Rust) ; voir
 [docs/sans-rom.md](docs/sans-rom.md).
 

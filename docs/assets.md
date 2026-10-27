@@ -838,8 +838,8 @@ code des gestionnaires : décalages vers des routines (des adresses de code : el
 Rust) et quelques tables de données (vitesses des coquilles, positions, tables de décision des chefs 17 et 21).
 Les lectures de `sound.rs` en espace programme (0xe0ca8-0xede06) sont des octets de code des wrappers de son lus pour les évaluer ; elles disparaîtront avec eux.
 
-**Sans 68000** ([sans-rom.md](sans-rom.md)) : `lectures_rom` a un mode `DDSOM_SANS_68K=1` ; plus aucune lecture de
-code pour des durées, et les zones lues non couvertes, mesurées sur les 269 scénarios, sont dans `data/natives.json`
+**Sans 68000** ([sans-rom.md](sans-rom.md)) : `lectures_rom` tourne sans 68000 par défaut ; plus aucune lecture de
+code pour des durées (supprimées au lot 0a), et les zones lues non couvertes, mesurées sur les 269 scénarios, sont dans `data/natives.json`
 (brutes, par lecteur) : le jeu sans 68000 tourne avec les seuls assets.
 
 ## Ce qui reste à extraire

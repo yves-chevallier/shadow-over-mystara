@@ -2,7 +2,8 @@
 
 > La conversion du 68000 est finie. La phase suivante (rendre le code lisible, sans changer le comportement) suit
 > [guide-refactorisation.md](guide-refactorisation.md) et [refactorisation.md](refactorisation.md) ; ce guide reste la
-> référence pour la frontière avec le code d'origine (natives, registres, validation).
+> référence pour la frontière avec le code d'origine (natives, registres, validation). Depuis le lot 0a, une native
+> n'annonce plus de durée et le jeu validé est le jeu sans 68000 (le mode hybride, `DDSOM_HYBRIDE=1`, est un diagnostic).
 
 Objectif : remplacer tout le code 68000 de ddsom par du Rust **idiomatique, minimal et lisible**, au
 comportement **identique image par image**. Le code vit dans `port/ddsom-game`.
@@ -57,11 +58,9 @@ Une routine native remplace une routine 68000 à son adresse d'entrée, partout 
 pub const NOM: Native = Native {
     entry: 0x1d62,           // adresse d'entrée de la routine d'origine
     name: "obj_move_xy",
-    cost: |_, _| 100,        // durée indicative (cycles) ; aucune exactitude requise
     run: obj_move_xy,        // exécute la routine, RTS compris (mem::rts)
     touches_sound: false,    // accède à la RAM partagée Z80 (0x618000-0x619fff) ?
     outputs: regs::d(0),     // registres/drapeaux que les appelants 68000 lisent au retour
-    exact_cost: false,       // obsolète : laisser à false
 };
 ```
 

@@ -1,7 +1,7 @@
 # Refactorisation : du Rust « en forme de 68000 » au Rust ordinaire
 
-La conversion est finie : `port/ddsom-game` fait tourner tout le jeu en Rust, 269/269 scénarios VALIDE en mode normal,
-sans 68000 (`DDSOM_SANS_68K=1`, [noyau.md](noyau.md)) et depuis les seuls assets ([sans-rom.md](sans-rom.md)). Mais le code
+La conversion est finie : `port/ddsom-game` fait tourner tout le jeu en Rust, 269/269 scénarios VALIDE sans 68000 (le
+jeu, mode par défaut depuis le lot 0a, [noyau.md](noyau.md)) et depuis les seuls assets ([sans-rom.md](sans-rom.md)). Mais le code
 garde la forme de l'original. Cette phase le rend lisible, en fonctions réutilisables, puis rapide, **sans changer le
 comportement** : effets de bord, glitches, bugs d'origine, tirages du hasard, ordre des écritures en RAM. La validation
 compare la RAM image par image avec l'original ; elle reste le filet, et l'état du jeu reste donc dans la RAM émulée.
@@ -46,7 +46,7 @@ brut : `rd*/wr*` ; a5 : décalages `A5 + 0x…` écrits en clair.)
    `FREE_BOSS` ×18...), parfois sous des noms faux (`ALLOC_BOX = 0x23a8` désignait l'allocation des BOSS) ; une vingtaine
    de copies de `alloc`, `free`, `random`, `players()`.
 4. **Constantes magiques.** 1 307 décalages `A5 + 0x…` en clair, 4 641 accès bruts `rd16(b, …)`.
-5. **Les durées du mode hybride.** En mode normal, une native qui déborderait sur l'interruption suivante est remplacée par
+5. **Les durées du mode hybride** (supprimées au lot 0a, § 6). En mode normal, une native qui déborderait sur l'interruption suivante est remplacée par
    son original : chaque native annonce sa durée (`cost`, `exact_cost`), parfois exacte, calculée en suivant le chemin de
    l'original (`Chemin`, `walk_cycles`, `path_cycles`, exécution « à blanc » sur une copie de la machine :
    `families::Ctx::a_blanc`, `vue::Vue::simulee`, `objects::cost`, `scroll::Exec::simulated`, `evenements::plafonnements`).
@@ -121,7 +121,7 @@ registres d'une tâche (sens d'un fondu dans D1...) devient un champ nommé de s
 
 ### Quand le `Cpu` quitte le chemin du jeu
 
-1. **D1 — un seul mode de jeu** (décision préalable, lot 0) : le jeu sans 68000 devient le jeu ; le mode normal (natives
+1. **D1 — un seul mode de jeu** (décision préalable, lot 0 ; fait au lot 0a, § 6) : le jeu sans 68000 devient le jeu ; le mode normal (natives
    et 68000 de repli, durées) ne sert plus qu'au diagnostic `DDSOM_CHECK`, avec une durée constante par native. Les
    durées exactes, `Chemin`, l'exécution à blanc et `Vue` disparaissent (1 036 marques).
 2. **J1 — plus d'appel par adresse entre natives** (`adr` → 0 hors tables de la ROM et noyau) : les lots.
@@ -237,6 +237,28 @@ Chaîne choisie : l'allocation et la libération des objets (`0x225e`-`0x2408`, 
 Effet mesurable : `adr` 4 776 → 4 581, `drap` 695 → 643, `regs` 5 979 → 5 907, adresses déclarées plusieurs fois
 299 → 288 (1 491 → 1 378 déclarations). Le temps de la validation complète passe d'environ 1 h 30 à 13 min (mode
 normal) et 9 min 20 s (sans 68000) avec 10 tâches, grâce au rendu éteint.
+
+## 6. Lot 0a : plus de durées, le jeu sans 68000 par défaut
+
+D1 est appliquée. Le mode sans 68000 est le mode par défaut de l'application `ddsom`, de `validate`, de
+`tools/validate_all.sh`, de `bench` et de `lectures_rom` ; `DDSOM_HYBRIDE=1` choisit le mode hybride (natives et 68000
+de repli), qui ne sert plus qu'au diagnostic et n'a plus à finir VALIDE (`DDSOM_SANS_68K` n'existe plus).
+
+* `Native` perd `cost` et `exact_cost` ; en mode hybride chaque native dure `DUREE_NATIVE` (100 cycles), et sans 68000
+  rien (`lib.rs`, `executer`). `Stats` perd `original_cycles`/`native_cycles` (contrôle `DDSOM_CHECK` : mémoire et
+  registres seulement).
+* Supprimés : `chemin.rs`, `timing.rs`, `vue.rs`, `objects/cost.rs` ; l'exécution à blanc et le relevé de chemin de
+  `families::Ctx` (`a_blanc`, `at`, `pris`, `externe`, `sans_chemin`, `jsr_indirect`, `cout`, couverture des
+  décisions), de `ai::Mach` (`dry`, `seg`, `span`, tirage prédit, `refund`), de `scroll::Exec` (`Sim`, `mark`,
+  `repeat`, `helper`) ; les fonctions de coût de chaque module (palette, vidéo, crédits, configuration, EEPROM,
+  événements, son, entrées, objets, combat, texte, démarrage, service) et les arguments de coût des macros
+  (`handlers!`, `entry!`, `natif!`, `handler`, `fixed`...). Les fonctions écrites sur `Vue` (réelle ou simulée)
+  prennent le bus.
+* Le comportement ne change pas : seules des lectures sans effet et des décisions recopiées disparaissent (`ctx.pris(c)`
+  devient `c`). Les exemples `familles`, `fuzz_familles`, `fuzz*`, `recensement` perdent la comparaison des cycles.
+* Mesure (`tools/mesure_refacto.py`, total) : `duree` 1 036 → 11 (restent des faux positifs : le prix d'un crédit,
+  `cost`, dans `hud/slot.rs`, `sprites.rs`, `tache_credits.rs`) ; lignes de code 149 834 → 147 861 ; au passage `regs`
+  5 907 → 5 865, `drap` 643 → 642, `adr` 4 581 → 4 584 (`call` explicites qui remplacent `Vue::appeler`).
 
 ## Avancement
 

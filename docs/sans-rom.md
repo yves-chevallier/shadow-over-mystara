@@ -1,6 +1,6 @@
 # Jouer sans ROM
 
-Le jeu sans 68000 (`DDSOM_SANS_68K=1`, [noyau.md](noyau.md) « Le jeu sans 68000 ») n'exécute plus que les routines
+Le jeu sans 68000 (le mode par défaut, [noyau.md](noyau.md) « Le jeu sans 68000 ») n'exécute plus que les routines
 Rust : le code 68000 d'origine n'est plus lu. Il lit encore des **données** dans la région programme (tables de
 vitesses, de décisions, images de sprites, cartes...), des données du pilote son dans la région du Z80, des tables
 dans le programme du DSP QSound, et bien sûr les graphismes et les échantillons. Tout cela peut venir du dossier
@@ -14,14 +14,15 @@ construit sans rien de protégé (`ddsom-rc`, le code 68000 recompilé, est vide
 cd port
 cargo run --release -p extract -- <dossier des ROMs> <assets>     # une fois : ddsom.zip et dl-1425.bin décompressés
 cargo build --release -p ddsom
-DDSOM_SANS_68K=1 target/release/ddsom --assets <assets>
+target/release/ddsom --assets <assets>
 ```
 
-`ddsom --assets <assets>` choisit ce mode de lui-même quand il n'y a pas de dossier de ROMs (ni donné, ni `../rom`).
+`ddsom --assets <assets>` sans dossier de ROMs donné joue ainsi sans ROM (en mode hybride, `DDSOM_HYBRIDE=1`, il le
+fait aussi quand `../rom` n'existe pas).
 Aucun fichier ROM n'est ouvert : la machine est faite par `ddsom_assets::rebuild::contenus` puis
 `cps2::Machine::ddsom` (la machine ordinaire passe par `cps2::Contenus::depuis_roms`). Le son passe toujours par le
-pilote Rust (`Sound::use_rust_driver`). Sans `DDSOM_SANS_68K`, avec un dossier de ROMs, `--assets` ne prend que
-les graphismes et les échantillons dans les assets (le programme 68000 vient des ROMs, comme avant).
+pilote Rust (`Sound::use_rust_driver`). Avec un dossier de ROMs donné, `--assets` ne prend que les
+graphismes et les échantillons dans les assets (le programme vient des ROMs).
 
 Le dossier d'assets est local (dérivé des ROMs de l'utilisateur), jamais versionné.
 
@@ -43,7 +44,7 @@ contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit �
 ## Ce que le jeu sans 68000 lit dans la région programme
 
 **Mesure.** `lectures_rom` (fonctionnalité `rom-trace`, [assets.md](assets.md) « Lectures de la ROM programme par le
-Rust ») a un mode sans 68000 : `DDSOM_SANS_68K=1`. Toute lecture du bus dans 0x000000-0x3fffff y est comptée (il n'y
+Rust ») tourne sans 68000 par défaut (`DDSOM_HYBRIDE=1` : machine hybride). Toute lecture du bus dans 0x000000-0x3fffff y est comptée (il n'y
 a plus d'instruction 68000 à exclure), en espace données (`rd8`/`rd16`/`rd32`, `data16`...) et programme
 (`prog16`, `rom16` des familles, `Ctx::prog16`...). Lancement sur **tous les scénarios** (269, autant d'images que
 leur validation : la ligne `quit` d'un scénario ne l'arrête pas, le jeu continue en démonstration), en dix morceaux :
@@ -52,7 +53,7 @@ leur validation : la ligne `quit` d'un scénario ne l'arrête pas, le jeu contin
 cd port
 CARGO_TARGET_DIR=target/trace cargo build --release -p ddsom-game --example lectures_rom --features rom-trace
 target/release/examples/couverture_rom <assets> --octets couvert.bin --sans data/natives.json
-DDSOM_SANS_68K=1 DDSOM_COUVERT=couvert.bin target/trace/release/examples/lectures_rom <roms> <eeprom> lectures.txt \
+DDSOM_COUVERT=couvert.bin target/trace/release/examples/lectures_rom <roms> <eeprom> lectures.txt \
     ../scenarios/bot30k.txt:30000 ...
 ../tools/zones_natives.py couvert.bin lectures*.txt > extract/zones_natives.txt   # puis extract ... data
 ```
@@ -90,10 +91,10 @@ génériques (`Vue`, `mem.rs`) à plus de trois niveaux d'appel sont nommées `i
   à chaque image l'image affichée, les échantillons audio, la RAM de travail, la GFX RAM, la RAM d'objets, la
   palette et la RAM partagée. Sur `bot_2p`, `boss/boss13_dragon`, `cov/cov_4p_a`, `modes/ending` (12 000 images
   chacun), `scene_end/end_02` (9 000), `cov/cov_service_tests` et `modes/attract` (6 000) : identique.
-* **`validate` avec `DDSOM_ASSETS=<assets>`** (et `DDSOM_SANS_68K=1`) : la machine testée est faite des seuls assets
+* **`validate` avec `DDSOM_ASSETS=<assets>`** (pas en mode hybride) : la machine testée est faite des seuls assets
   (pilote son Rust), la référence garde les ROMs, le 68000 surcadencé et le Z80. `tools/validate_all.sh` s'en sert
   tel quel (la variable entre dans l'empreinte des résultats) :
-  `DDSOM_SANS_68K=1 DDSOM_ASSETS=<assets> DDSOM_SCENES=1 DDSOM_COV=1 tools/validate_all.sh 30000` donne **269 VALIDE
+  `DDSOM_ASSETS=<assets> DDSOM_SCENES=1 DDSOM_COV=1 tools/validate_all.sh 30000` donne **269 VALIDE
   sur 269** (avec les zones mesurées sur toute la durée des scénarios ; une première mesure arrêtée à la ligne `quit`
   laissait 12 scénarios en échec, qui lisaient ensuite, en démonstration, des zones non mesurées).
 * **Sans ROM du tout** : une copie du dépôt (`git archive`) se construit sans dossier `rom/` (`ddsom-rc` vide, avec
