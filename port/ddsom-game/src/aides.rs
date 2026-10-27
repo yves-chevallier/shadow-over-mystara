@@ -119,6 +119,8 @@ fn direction_native(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[1] = r.d1;
     c.d[2] = r.d2;
     c.d[3] = r.d3;
+    // `add.l #0x8000,D4` (retenue dans le mot haut), puis l'unité dans D4.w
+    c.d[4] = c.d[4].wrapping_add(0x8000);
     set_low_word(&mut c.d[4], r.unite);
     c.d[0] = r.direction as u32;
     ops::logique(c, r.direction as u32, Size::Byte);
