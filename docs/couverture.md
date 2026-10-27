@@ -53,6 +53,10 @@ fonction touchée = au moins une de ses instructions exécutée).
 | bot initial (bot30k, bot_2p, bot_char0-5) | 22 754 | 691 / 2 559 | 14,0 % |
 | scénarios `cov_*` seuls | 89 659 | 1 771 / 2 559 | 54,2 % |
 | union (initial + `cov_*`) | 90 017 | 1 773 / 2 559 | 54,4 % |
+| **272 scénarios de la validation, 2026-10-27** (`main` b30905d) | 121 609 | 2 190 / 2 559 | – |
+
+Les 369 fonctions jamais exécutées, par sous-système (débogage et menus de test 95, wrappers de sons 63, jeu ~200 :
+boss, effets et tirs du joueur, ennemis et leurs tirs, code par personnage, décors) : [couverture-fonctions.md](couverture-fonctions.md).
 
 Par scénario (instructions) : tours 27 700-35 600, parties à 2-4 joueurs 30 800-38 700 (maximum : `cov_4p_a`), attract
 33 000, natural 22 600, mortal 13 900-23 000, service 2 900. Le bot initial plafonne à 15 000-20 500 par scénario.
