@@ -8,8 +8,7 @@
 //! sans dossier de ROMs, il se joue **sans aucune ROM** : tout vient du dossier d'assets (tables du programme,
 //! graphismes, données du pilote son, tables du DSP, échantillons ; `docs/sans-rom.md`), le pilote son est
 //! celui en Rust, et aucun fichier ROM n'est ouvert.
-//! Diagnostic : `DDSOM_HYBRIDE=1` (routines Rust et code 68000 recompilé pour le reste, 68000 surcadencé),
-//! `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade), `DDSOM_INTERP=1` (tout interprété) ; ces modes
+//! Diagnostic : `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade), `DDSOM_INTERP=1` (tout interprété) ; ces modes
 //! lisent les ROMs.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter ;
@@ -38,11 +37,10 @@ fn main() {
     let mut touches = touches::Touches::charge("touches.cfg".as_ref());
     let eeprom = std::fs::read(&nvram).ok();
     // le jeu : sans 68000, routines Rust seules (il s'arrête sur une adresse qui n'en a pas). Diagnostic :
-    // DDSOM_HYBRIDE=1 : routines Rust, le reste en code 68000 recompilé, 68000 surcadencé ; DDSOM_ORIGINE=1 : code
-    // d'origine à la vitesse de l'arcade ; DDSOM_INTERP=1 : tout interprété.
-    let hybride = std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1");
-    let mut sans_68k =
-        !(hybride || std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some());
+    // DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ; DDSOM_INTERP=1 : tout interprété. (Le mode hybride,
+    // DDSOM_HYBRIDE=1, est retiré.)
+    ddsom_game::refuser_hybride();
+    let mut sans_68k = !(std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some());
     // sans ROM : assets seuls, ce qui demande le jeu sans 68000 (le programme 68000 n'est pas dans les assets)
     let romdir = match (&assets, romdir) {
         (Some(_), None) if !sans_68k && !PathBuf::from(DEFAULT_ROMS).is_dir() => {
@@ -79,9 +77,6 @@ fn main() {
             ddsom_game::install_sans_68k(&mut m);
         } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
             ddsom_rc::install(&mut m);
-        } else if std::env::var_os("DDSOM_INTERP").is_none() {
-            ddsom_game::install(&mut m);
-            m.set_overclock(16.0);
         }
         // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1, et toujours sans ROM (la
         // région du Z80 reconstruite depuis les assets n'a que les données du pilote, pas son programme)

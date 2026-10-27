@@ -9,10 +9,9 @@
 //! doit être identique, et la table des tâches Rust du jeu doit valoir celle de la RAM de l'original. `DDSOM_CHECK=1` active en plus le contrôle appel par appel des routines
 //! natives (diagnostic : registres et mémoire comparés à l'original sur une copie).
 //!
-//! `DDSOM_HYBRIDE=1` (diagnostic) : la machine A est le mode hybride (routines Rust, code d'origine recompilé
-//! pour le reste, 68000 surcadencé, durée constante par routine Rust) ; elle n'a pas à suivre l'original.
+//! Le mode hybride (`DDSOM_HYBRIDE=1`) est retiré.
 //!
-//! `DDSOM_ASSETS=<dossier>` (pas en mode hybride) : la machine A est faite des seules ressources extraites
+//! `DDSOM_ASSETS=<dossier>` : la machine A est faite des seules ressources extraites
 //! (`ddsom_assets::rebuild::contenus`, aucune ROM lue : jeu sans ROM, docs/sans-rom.md), avec le pilote son Rust ;
 //! la machine B garde les ROMs et le Z80.
 //!
@@ -70,10 +69,9 @@ fn main() {
         m.set_overclock(std::env::var("DDSOM_OVERCLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(OVERCLOCK));
         m
     };
-    let sans_68k = !std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1");
+    ddsom_game::refuser_hybride();
     let mut ma = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
-            assert!(sans_68k, "DDSOM_ASSETS exclut DDSOM_HYBRIDE=1 (le programme 68000 n'est pas dans les assets)");
             let contenus = ddsom_assets::rebuild::contenus(Path::new(&dir)).expect("assets");
             let mut m = cps2::Machine::ddsom(contenus, ee.as_deref());
             m.sound.use_rust_driver();
@@ -82,20 +80,12 @@ fn main() {
         None => load(),
     };
     let mut mb = load();
-    if sans_68k {
-        ddsom_game::install_sans_68k(&mut ma);
-    } else {
-        ddsom_game::install(&mut ma);
-    }
+    ddsom_game::install_sans_68k(&mut ma);
     ddsom_game::install_reference(&mut mb);
     // l'image n'est pas comparée (seulement l'état) : pas de rendu, c'était l'essentiel du temps d'une image
     ma.rendu = false;
     mb.rendu = false;
     mb.idle = Some(ddsom_game::idle);
-    if std::env::var("DDSOM_NOIDLE").is_ok() && !sans_68k {
-        ma.idle = None;
-        mb.idle = None;
-    }
     let check = std::env::var("DDSOM_CHECK").is_ok();
     let taches_tout = std::env::var("DDSOM_TACHES_TOUT").is_ok();
     ddsom_game::set_check(check);
@@ -202,10 +192,8 @@ fn main() {
             }
         }
     }
-    if sans_68k {
-        let (a_vide, plafonnees) = ddsom_game::sans68k::bilan();
-        println!("sans 68000 : {a_vide} images finies sur une attente active, {plafonnees} arrêtées par le plafond de natives");
-    }
+    let (a_vide, plafonnees) = ddsom_game::sans68k::bilan();
+    println!("sans 68000 : {a_vide} images finies sur une attente active, {plafonnees} arrêtées par le plafond de natives");
     if let Some(m) = &arret {
         println!("ARRÊT {m}");
     }

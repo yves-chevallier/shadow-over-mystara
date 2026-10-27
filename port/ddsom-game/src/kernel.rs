@@ -2,20 +2,22 @@
 //!
 //! Le jeu fait tourner 16 tâches en alternance. Une tâche rend la main par une *enveloppe de cession* (`jsr 0xa40`,
 //! `0xa86`...) ; l'ordonnanceur choisit alors la première tâche prête de la table. L'état des tâches est la table Rust
-//! de [`crate::taches::table`] ; ces natives n'en sont que la frontière avec le 68000 : elles gardent les points
-//! d'entrée, les registres que l'original laisse et la fenêtre d'interruption entre deux emplacements, mais plus
-//! aucun enregistrement en RAM (FF0064), ni pile de l'ordonnanceur (FF0E66 reste son pointeur fixe), ni tas des
-//! piles (FF005A), ni registres sauvés sur la pile des tâches.
+//! de [`crate::taches::table`]. L'ordonnanceur est une machine à états Rust ([`Point`], rangé dans la table) que la
+//! boucle d'image (`sans68k`) fait avancer d'un point à la fois, en prenant l'interruption de VBLANK entre deux
+//! points quand le SR l'autorise, comme le processeur entre deux instructions ; il garde les registres que l'original
+//! laisse et la fenêtre d'interruption entre deux emplacements, mais plus aucun enregistrement en RAM (FF0064), ni
+//! pile de l'ordonnanceur (FF0E66 reste son pointeur fixe), ni tas des piles (FF005A), ni registres sauvés sur la pile
+//! des tâches. Il ne pose plus de PC : une tâche est lancée en appelant le pas de son étape.
 //!
 //! ## Ordonnanceur
 //!
 //! Il parcourt les emplacements dans l'ordre (A0 = adresse de l'enregistrement d'origine, D0.w = emplacements
-//! restants, de 15 à 0). Chaque emplacement est examiné par une exécution native séparée, interruptions masquées
-//! jusqu'au niveau 6 ; entre deux, la fenêtre de 0x952 les autorise. Un VBLANK pose l'indicateur
+//! restants, de 15 à 0). Chaque emplacement est examiné par un point séparé ([`Point::Examen`]), interruptions
+//! masquées jusqu'au niveau 6 ; entre deux, la fenêtre de 0x952 les autorise. Un VBLANK pose l'indicateur
 //! `NOUVELLE_IMAGE` (FF0164) : le parcours reprend alors au début. Une tâche prête reprend avec les registres, le SR
 //! et la pile sauvés à sa cession, à l'adresse qui suit son appel de l'enveloppe ; une tâche neuve démarre à son
 //! entrée, A0 = enregistrement, A1 = entrée, A4 = pile, SR = 0 (mode utilisateur). Quand elle cède, l'ordonnanceur
-//! reprend à l'emplacement suivant (0x984 puis 0x952).
+//! reprend à l'emplacement suivant ([`Point::Retour`] 0x984, puis [`Point::Suivant`] 0x952).
 //!
 //! ## Enveloppes (et traps de l'original)
 //!
@@ -33,13 +35,14 @@
 //!
 //! Dans l'original, une enveloppe sauve les 15 registres sur la pile de la tâche, prend le trap, et sa reprise
 //! (0x9bc, 0xa4c...) les restaure : les enveloppes qui ne cèdent pas laissent donc registres et drapeaux intacts, et
-//! celles qui cèdent sauvent ici le contexte dans la table. Seul `trap #7` est aussi exécuté directement par du code
-//! 68000 (0x2c3e0, menu de mise au point) ; les autres handlers ne sont atteints que par leurs enveloppes.
+//! celles qui cèdent sauvent ici le contexte dans la table. Les handlers des traps ne sont atteints que par leurs
+//! enveloppes (`trap #7` l'est aussi par le menu de mise au point d'origine, 0x2c3e0, que le jeu n'exécute pas) : ils
+//! n'ont pas de native. Les enveloppes restent des natives pour les appels par adresse et les sauts qui subsistent.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, rts, set_low_byte, set_low_word, wr8, A5};
 use crate::taches::table::{emplacement, enregistrement, table, Contexte, Etat, Reprise, Suite, ENREGISTREMENTS};
 use crate::Native;
 
@@ -53,39 +56,80 @@ mod ram {
     pub const PILE_SUPERVISEUR: u32 = super::A5 - 0x719a;
 }
 
-/// Points du code d'origine.
-mod at {
-    /// Début de l'ordonnanceur : pile, A5.
-    pub const DEBUT: u32 = 0x928;
-    /// Nouveau parcours de la table.
-    pub const PARCOURS: u32 = 0x932;
-    /// Examen d'un emplacement (D0 = reste à voir, A0 = enregistrement).
-    pub const EXAMEN: u32 = 0x93e;
-    /// Passage à l'emplacement suivant, après une cession.
-    pub const SUIVANT: u32 = 0x952;
-    /// Retour à l'ordonnanceur d'une tâche qui cède.
-    pub const RETOUR: u32 = 0x984;
-    pub const TRAP_RECOMMENCER: u32 = 0xae6;
-    pub const TRAP_MASQUE: u32 = 0xafa;
-}
-
 const SR_SUPERVISEUR: u16 = 0x2000;
 const SR_PARCOURS: u16 = 0x2600;
 /// Emplacements examinés par un parcours, moins un (D0.w au début).
 const DERNIER: u16 = 15;
 
-fn depiler32(c: &mut Cpu, b: &mut Cps2Bus) -> u32 {
-    let v = rd32(b, c.a[7]);
-    c.a[7] = c.a[7].wrapping_add(4);
-    v
+/// Où en est le processeur : un point du démarrage ou de l'ordonnanceur, ou une tâche. La boucle d'image
+/// (`sans68k::ligne`) exécute un point à la fois ; l'interruption de VBLANK peut être prise entre deux, si le SR
+/// l'autorise. Chaque point garde l'adresse du code d'origine qu'il remplace (diagnostic).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Point {
+    /// Mise sous tension (`0x350`), puis les étapes du démarrage à l'heure de l'original (`demarrage.rs`).
+    #[default]
+    Reset,
+    RelacheZ80,
+    Poignee,
+    BootInit,
+    Lancement,
+    /// `0x928` : l'ordonnanceur prend la main.
+    Debut,
+    /// `0x932` : nouveau parcours de la table.
+    Parcours,
+    /// `0x93e` : examen d'un emplacement (D0 = reste à voir, A0 = enregistrement).
+    Examen,
+    /// `0x952` : passage à l'emplacement suivant, après une cession (fenêtre d'interruption).
+    Suivant,
+    /// `0x984` : retour à l'ordonnanceur d'une tâche qui a cédé (ou s'est terminée).
+    Retour,
+    /// Une tâche continue dans la native posée au PC (saut d'une native à une autre, `Sequence::jump_to`...).
+    Tache,
+    /// Le pas de jeu attend l'image suivante (plafond des pas par image, `taches::partie`).
+    PasRetenu,
 }
 
-/// RTE : dépile SR puis PC.
-fn rte(c: &mut Cpu, b: &mut Cps2Bus) {
-    let sr = rd16(b, c.a[7]);
-    c.a[7] = c.a[7].wrapping_add(2);
-    c.pc = depiler32(c, b);
-    c.set_sr(sr);
+impl Point {
+    /// Adresse du code d'origine (diagnostic).
+    pub fn adresse(self, c: &Cpu) -> u32 {
+        match self {
+            Point::Reset => 0x350,
+            Point::RelacheZ80 => 0x18cc,
+            Point::Poignee => 0x18e2,
+            Point::BootInit => 0x492,
+            Point::Lancement => 0x50a,
+            Point::Debut => 0x928,
+            Point::Parcours => 0x932,
+            Point::Examen => 0x93e,
+            Point::Suivant => 0x952,
+            Point::Retour => 0x984,
+            Point::Tache => c.pc,
+            Point::PasRetenu => crate::GAME_STEP,
+        }
+    }
+
+    /// L'ordonnanceur entre deux tâches (où l'original tourne à vide en attendant une tâche prête).
+    pub fn entre_deux_taches(self) -> bool {
+        matches!(self, Point::Parcours | Point::Examen | Point::Suivant)
+    }
+}
+
+/// Le point où en est le processeur (avant la création de la table : la mise sous tension).
+pub fn point(b: &Cps2Bus) -> Point {
+    crate::taches::table::lire(b).map_or(Point::Reset, |t| t.point)
+}
+
+/// Exécute le point `point` de l'ordonnanceur et rend le suivant (les points du démarrage et des tâches sont
+/// exécutés par `sans68k`).
+pub fn executer(c: &mut Cpu, b: &mut Cps2Bus, point: Point) -> Point {
+    match point {
+        Point::Debut => debut(c),
+        Point::Parcours => parcours(c, b),
+        Point::Examen => examen(c, b),
+        Point::Suivant => apres_cession(c),
+        Point::Retour => retour_ordonnanceur(c, b),
+        _ => unreachable!("point {point:?} : pas un point de l'ordonnanceur"),
+    }
 }
 
 /// Passage en superviseur, comme à la prise d'un trap.
@@ -96,84 +140,78 @@ fn superviseur(c: &mut Cpu) {
 // ---------------------------------------------------------------------------------------------
 // Ordonnanceur
 
-/// 0x928 : l'ordonnanceur prend la main (appelé une fois, au démarrage).
-fn debut(c: &mut Cpu, _b: &mut Cps2Bus) {
+/// 0x928 : l'ordonnanceur prend la main (une fois, à la fin du démarrage).
+fn debut(c: &mut Cpu) -> Point {
     c.a[7] = ram::PILE_SUPERVISEUR;
     c.a[5] = A5;
-    c.pc = at::PARCOURS;
+    Point::Parcours
 }
 
 /// 0x932 : nouveau parcours de la table.
-fn parcours(c: &mut Cpu, b: &mut Cps2Bus) {
+fn parcours(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
     wr8(b, ram::NOUVELLE_IMAGE, 0);
     c.a[0] = ENREGISTREMENTS;
     set_low_word(&mut c.d[0], DERNIER);
-    c.pc = at::EXAMEN;
+    Point::Examen
 }
 
 /// Passe à l'emplacement suivant (`dbf`), ou recommence quand la table est épuisée.
-fn suivant(c: &mut Cpu) {
+fn suivant(c: &mut Cpu) -> Point {
     c.a[0] += 0x10;
     let reste = (c.d[0] as u16).wrapping_sub(1);
     set_low_word(&mut c.d[0], reste);
-    c.pc = if reste == 0xffff { at::PARCOURS } else { at::EXAMEN };
+    if reste == 0xffff { Point::Parcours } else { Point::Examen }
 }
 
 /// 0x93e : examen d'un emplacement, avec interruptions masquées (jusqu'au niveau 6).
-fn examen(c: &mut Cpu, b: &mut Cps2Bus) {
+fn examen(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
     c.set_sr(SR_PARCOURS);
     if rd8(b, ram::NOUVELLE_IMAGE) != 0 {
-        c.pc = at::PARCOURS;
-        return;
+        return Point::Parcours;
     }
     let k = emplacement(c.a[0] - ENREGISTREMENTS);
     let etat = table(b).emplacements[k].etat;
     set_low_byte(&mut c.d[1], etat.octet());
     if etat.lancable() {
-        lancer(c, b, k);
+        lancer(c, b, k)
     } else {
         c.set_sr(SR_SUPERVISEUR);
-        suivant(c);
+        suivant(c)
     }
 }
 
 /// 0x952 : la tâche a cédé, la fenêtre d'interruption s'ouvre et le parcours continue.
-fn apres_cession(c: &mut Cpu, _b: &mut Cps2Bus) {
+fn apres_cession(c: &mut Cpu) -> Point {
     c.set_sr(SR_SUPERVISEUR);
-    suivant(c);
+    suivant(c)
 }
 
-/// 0x960 : lance la tâche de l'emplacement `k` (A0 = son enregistrement).
-fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) {
+/// 0x960 : lance la tâche de l'emplacement `k` (A0 = son enregistrement) : le pas de son étape s'exécute. Rend le
+/// point où la tâche a laissé le processeur (l'ordonnanceur si elle a cédé).
+fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
     let t = table(b);
     t.courante = k;
+    t.point = Point::Tache;
     let e = &mut t.emplacements[k];
     set_low_word(&mut c.d[1], e.etat.octet() as u16);
-    match (e.etat, e.reprise) {
+    let etape = match (e.etat, e.reprise) {
         (Etat::Neuve, Reprise::Entree(entree)) => {
             e.etat = Etat::EnCours;
             c.a[1] = entree;
             c.a[4] = e.pile;
             c.other_sp = e.pile;
             c.set_sr(0);
-            match crate::taches::entree(entree) {
-                Some(etape) => crate::taches::executer(etape, c, b),
-                None => c.pc = entree,
-            }
+            crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"))
         }
-        (Etat::Prete | Etat::EnCours, Reprise::Cession(ctx)) => {
-            e.etat = Etat::EnCours;
-            remettre(c, ctx);
-            c.pc = ctx.pc;
-        }
-        // une tâche Rust : son pas est appelé directement
         (Etat::Prete | Etat::EnCours, Reprise::Etape(etape, ctx)) => {
             e.etat = Etat::EnCours;
             remettre(c, ctx);
-            crate::taches::executer(etape, c, b);
+            etape
         }
         (etat, reprise) => unreachable!("tâche {k} lancée dans l'état {etat:?} avec la reprise {reprise:?}"),
-    }
+    };
+    crate::taches::executer(etape, c, b);
+    table(b).point
 }
 
 /// Registres, SR et pile d'une tâche qui a cédé.
@@ -185,38 +223,44 @@ fn remettre(c: &mut Cpu, ctx: Contexte) {
 }
 
 /// 0x984 : une tâche a cédé (ou s'est terminée) ; l'ordonnanceur reprend à l'emplacement qui suit le sien.
-fn retour_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) {
+fn retour_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
     let k = table(b).courante;
     c.a[7] = ram::PILE_SUPERVISEUR;
     c.a[0] = enregistrement(k);
     set_low_word(&mut c.d[0], DERNIER - k as u16);
-    c.pc = at::SUIVANT;
+    Point::Suivant
 }
 
-/// Rend la main à l'ordonnanceur après une opération sur la tâche courante (registres laissés par le trap).
+/// Rend la main à l'ordonnanceur après une opération sur la tâche courante (registres laissés par le trap) : le code
+/// Rust encore en cours sous la cession revient sans rien faire (`taches::a_cede`).
 fn vers_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.a[0] = enregistrement(table(b).courante);
+    let t = table(b);
+    c.a[0] = enregistrement(t.courante);
+    t.point = Point::Retour;
     superviseur(c);
-    c.pc = at::RETOUR;
+    crate::taches::noter_cession();
+}
+
+/// Le pas de jeu est retenu jusqu'à l'image suivante (plafond des pas par image) : la tâche de partie reste en cours.
+pub fn retenir_le_pas(b: &mut Cps2Bus) {
+    table(b).point = Point::PasRetenu;
 }
 
 // ---------------------------------------------------------------------------------------------
-// Cessions : la tâche courante rend la main ; elle reprendra en `reprise` avec ses registres, son SR et sa pile
-// (A7) actuels. Les tâches Rust cèdent directement (`taches::ceder`) ; les enveloppes de l'original dépilent d'abord
-// leur adresse de retour.
+// Cessions : la tâche courante rend la main ; elle reprendra à l'étape `reprise` avec ses registres, son SR et sa
+// pile (A7) actuels. Les tâches Rust cèdent directement (`taches::ceder`) ; les enveloppes de l'original dépilent
+// d'abord leur adresse de retour (la suite d'un appel en cours).
 
 /// Range le contexte de la tâche courante dans la table, puis rend la main à l'ordonnanceur. A1 reçoit la pile de la
 /// tâche telle que l'original l'avait laissée (adresse de retour et 15 registres empilés).
 fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: Suite) {
-    crate::taches::table::relever(c, b, reprise);
     let mut a = [0; 7];
     a.copy_from_slice(&c.a[..7]);
     let ctx = Contexte { pc: reprise.adresse(), sr: c.sr, usp: c.a[7], d: c.d, a };
-    let reprise = match reprise {
-        Suite::Adresse(_) => Reprise::Cession(ctx),
-        Suite::Etape(etape) => Reprise::Etape(etape, ctx),
+    let Suite::Etape(etape) = reprise else {
+        unreachable!("cession vers l'adresse {:x} : toutes les reprises sont des étapes Rust", reprise.adresse())
     };
-    table(b).ceder(etat, compte, reprise);
+    table(b).ceder(etat, compte, Reprise::Etape(etape, ctx));
     c.a[1] = ctx.usp.wrapping_sub(64);
     vers_ordonnanceur(c, b);
 }
@@ -263,8 +307,9 @@ pub fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
     let t = table(b);
     t.recommencer(c.a[0]);
     c.a[4] = enregistrement(t.courante);
+    t.point = Point::Retour;
     superviseur(c);
-    c.pc = at::RETOUR;
+    crate::taches::noter_cession();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -305,28 +350,12 @@ fn reveiller(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// `trap #12` (enveloppe 0xaf6) : D0 ≠ 0 masque toutes les interruptions de la tâche, D0 = 0 les autorise (SR du
-/// cadre).
-fn trap_masque(c: &mut Cpu, b: &mut Cps2Bus) {
-    let sr = rd16(b, c.a[7]);
-    wr16(b, c.a[7], if c.d[0] as u8 == 0 { sr & 0xf8ff } else { sr | 0x0700 });
-    rte(c, b);
-}
-
-/// `trap #n` : passe en superviseur, empile PC (`retour`) et SR, saute au handler.
-fn prendre_trap(c: &mut Cpu, b: &mut Cps2Bus, handler: u32, retour: u32) {
-    let sr = c.sr;
-    superviseur(c);
-    c.a[7] = c.a[7].wrapping_sub(4);
-    wr32(b, c.a[7], retour);
-    c.a[7] = c.a[7].wrapping_sub(2);
-    wr16(b, c.a[7], sr);
-    c.pc = handler;
-}
-
-/// Handlers des traps 0 à 6 : seules leurs enveloppes, natives, les prenaient.
-fn trap_direct(c: &mut Cpu, _b: &mut Cps2Bus) {
-    panic!("trap pris directement par du code 68000 (handler {:x}) : pas de table en RAM", c.pc);
+/// `0xaf6` (`trap #12`) : D0.b ≠ 0 masque toutes les interruptions de la tâche, D0.b = 0 les autorise ; le SR rendu
+/// par le trap est celui de l'appelant, masque changé.
+fn masquer(c: &mut Cpu, b: &mut Cps2Bus) {
+    let sr = if c.d[0] as u8 == 0 { c.sr & 0xf8ff } else { c.sr | 0x0700 };
+    c.set_sr(sr);
+    rts(c, b);
 }
 
 macro_rules! natif {
@@ -341,12 +370,6 @@ macro_rules! natif {
     };
 }
 
-// ordonnanceur
-natif!(ORDONNANCEUR, at::DEBUT, debut);
-natif!(PARCOURS, at::PARCOURS, parcours);
-natif!(EXAMEN, at::EXAMEN, examen);
-natif!(APRES_CESSION, at::SUIVANT, apres_cession);
-natif!(RETOUR, at::RETOUR, retour_ordonnanceur);
 // enveloppes
 natif!(CREER_TACHE, 0x9b6, creer);
 natif!(TERMINER_TACHE, 0x9f8, terminer);
@@ -356,29 +379,13 @@ natif!(CEDER, 0xa86, |c, b| enveloppe(c, b, ceder_prete));
 natif!(SUSPENDRE_TACHE, 0xaac, suspendre);
 natif!(REVEILLER_TACHE, 0xac8, reveiller);
 natif!(RECOMMENCER_TACHE, 0xae4, recommencer);
-natif!(MASQUER, 0xaf6, |c, b| prendre_trap(c, b, at::TRAP_MASQUE, 0xaf8));
+natif!(MASQUER, 0xaf6, masquer);
 natif!(ATTENDRE_UNE_IMAGE, 0xb64, |c, b| {
     set_low_word(&mut c.d[0], 1);
     enveloppe(c, b, attendre)
 });
-// handlers des traps
-natif!(TRAP_CREER, 0x9c2, trap_direct);
-natif!(TRAP_FINIR, 0x9fa, trap_direct);
-natif!(TRAP_TUER, 0xa20, trap_direct);
-natif!(TRAP_ATTENDRE, 0xa52, trap_direct);
-natif!(TRAP_CEDER, 0xa92, trap_direct);
-natif!(TRAP_SUSPENDRE, 0xab8, trap_direct);
-natif!(TRAP_REVEILLER, 0xad4, trap_direct);
-natif!(TRAP_RECOMMENCER, at::TRAP_RECOMMENCER, recommencer);
-natif!(TRAP_MASQUE, at::TRAP_MASQUE, trap_masque);
-natif!(REPRISE_MASQUER, 0xaf8, rts);
 
 pub const NATIVES: &[Native] = &[
-    ORDONNANCEUR,
-    PARCOURS,
-    EXAMEN,
-    APRES_CESSION,
-    RETOUR,
     CREER_TACHE,
     TERMINER_TACHE,
     TUER_TACHE,
@@ -389,14 +396,4 @@ pub const NATIVES: &[Native] = &[
     RECOMMENCER_TACHE,
     MASQUER,
     ATTENDRE_UNE_IMAGE,
-    TRAP_CREER,
-    TRAP_FINIR,
-    TRAP_TUER,
-    TRAP_ATTENDRE,
-    TRAP_CEDER,
-    TRAP_SUSPENDRE,
-    TRAP_REVEILLER,
-    TRAP_RECOMMENCER,
-    TRAP_MASQUE,
-    REPRISE_MASQUER,
 ];

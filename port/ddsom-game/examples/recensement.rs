@@ -322,7 +322,8 @@ fn trajectoire(
         }
         match r {
             Ok(()) => {}
-            Err(e) if e.is::<ddsom_game::Unwound>() => {
+            // une cession dans un appel par adresse arrête `call` (panique)
+            Err(e) if e.downcast_ref::<String>().is_some_and(|m| m.contains("a cédé la main")) => {
                 bilan.cessions += 1;
                 break;
             }

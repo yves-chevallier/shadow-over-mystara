@@ -4,9 +4,9 @@
 //! du *mode* (`FF0E70` : 0 initialisation, 2 exécution), qui aiguille sur le *sous-mode* (`FF0E71`,
 //! pas de 2) ; le tour finit par une cession d'une image à l'ordonnanceur. Un gestionnaire de
 //! sous-mode est lui-même une machine à états (`FF0E72`) qui peut céder la main en son milieu
-//! (attente de fondu, d'une image, d'un chargement) : une native ne pouvant céder, chaque gestionnaire
-//! est découpé aux points de cession, et la reprise est une native posée à l'adresse que l'original
-//! reprend (voir [`Flow`] et la macro `resume!`).
+//! (attente de fondu, d'une image, d'un chargement) : chaque gestionnaire est découpé aux points de
+//! cession, et la reprise est une étape Rust (`etapes!`, l'adresse que l'original reprend n'étant plus
+//! que le nom de l'étape ; voir [`Flow`]).
 
 pub mod attract;
 pub mod boot;
@@ -20,7 +20,7 @@ pub mod title;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::scene::Ctx;
 use crate::taches::table::Suite;
 use crate::Native;
@@ -66,8 +66,8 @@ pub mod sub {
     pub const TILE_BLOCK: u32 = 0x26d4;
 }
 
-/// Suite d'un gestionnaire : terminé (il rend la main par `rts`) ou cédé à l'ordonnanceur (la reprise
-/// se fera à l'adresse empilée).
+/// Suite d'un gestionnaire : terminé (il revient à la suite de l'appel en cours) ou non (il a cédé la main à
+/// l'ordonnanceur, sauté vers une autre native, ou abandonné : la tâche continuera ailleurs).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Flow {
     Done,
@@ -106,12 +106,8 @@ fn push(c: &mut Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) {
     crate::taches::table::appeler(c, b, suite);
 }
 
-/// Saut à `addr`. Si le code d'origine y prend la suite, il ne connaît que la pile 68000 : les appels en cours tenus en
-/// Rust à cette hauteur y passent.
-fn goto(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
-    if !crate::est_native(addr) {
-        crate::taches::table::vers_le_68000(c, b);
-    }
+/// Saut à `addr` : la native qui y est posée continue la tâche.
+fn goto(c: &mut Cpu, addr: u32) {
     c.pc = addr;
 }
 
@@ -121,16 +117,16 @@ impl Sequence for Ctx<'_> {
     }
     fn tail(&mut self, addr: u32, resume: impl Into<Suite>) -> Flow {
         push(self.c, self.b, resume);
-        goto(self.c, self.b, addr);
+        goto(self.c, addr);
         Flow::Yield
     }
     fn jump(&mut self, addr: u32) -> Flow {
         self.c.a[0] = mode::BASE;
-        goto(self.c, self.b, addr);
+        goto(self.c, addr);
         Flow::Yield
     }
     fn jump_to(&mut self, addr: u32) -> Flow {
-        goto(self.c, self.b, addr);
+        goto(self.c, addr);
         Flow::Yield
     }
     fn push_return(&mut self, suite: impl Into<Suite>) {
@@ -205,27 +201,6 @@ impl Block for Ctx<'_> {
     }
 }
 
-/// Native qui exécute une séquence à une adresse de reprise (ou d'entrée) de l'original.
-#[macro_export]
-macro_rules! resume {
-    ($name:ident, $entry:expr, $body:expr) => {
-        pub const $name: $crate::Native = $crate::Native {
-            entry: $entry,
-            name: stringify!($name),
-            run: |c, b| {
-                let mut x = $crate::scene::Ctx::new(c, b);
-                $crate::modes::c_a5(&mut x);
-                let body: fn(&mut $crate::scene::Ctx) -> $crate::modes::Flow = $body;
-                if body(&mut x) == $crate::modes::Flow::Done {
-                    $crate::mem::rts(x.c, x.b);
-                }
-            },
-            touches_sound: false,
-            outputs: 0,
-        };
-    };
-}
-
 /// A5 est toujours en place dans le code d'origine.
 pub fn c_a5(x: &mut Ctx) {
     x.c.a[5] = A5;
@@ -234,22 +209,31 @@ pub fn c_a5(x: &mut Ctx) {
 // ---------------------------------------------------------------------------------------------
 // La boucle
 
-/// Un tour : appelle le gestionnaire du mode, qui revient en `AFTER_HANDLER`.
-fn turn(x: &mut Ctx) {
+crate::etapes! {
+    /// Étapes de la boucle de la machine à modes (`0x133fe`).
+    pub enum Etape {
+        /// Entrée de la boucle (tâche 0 relancée après une partie, ou fin du démarrage).
+        Entree = at::LOOP => start,
+        /// Le gestionnaire a rendu la main : une image de cession, puis un nouveau tour.
+        ApresGestionnaire = at::AFTER_HANDLER => |x| x.wait(1, Etape::ApresAttente),
+        /// Après la cession : un nouveau tour.
+        ApresAttente = at::AFTER_WAIT => turn,
+    }
+}
+
+/// Un tour : appelle le gestionnaire du mode, qui revient à [`Etape::ApresGestionnaire`].
+fn turn(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     let m = rd8(x.b, mode::MODE);
     x.c.d[0] = m as u32;
     let offset = x.prog16(at::MODE_TABLE + m as u32);
     x.c.d[1] = offset as u32;
-    push(x.c, x.b, at::AFTER_HANDLER);
-    let flow = match m {
+    push(x.c, x.b, Etape::ApresGestionnaire);
+    match m {
         0 => init(x),
         2 => dispatch(x),
         // mode inconnu : le gestionnaire d'origine
         _ => x.jump(at::MODE_TABLE + offset as u32),
-    };
-    if flow == Flow::Done {
-        rts(x.c, x.b);
     }
 }
 
@@ -281,36 +265,14 @@ fn dispatch(x: &mut Ctx) -> Flow {
     }
 }
 
-fn start(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut x = Ctx::new(c, b);
-    c_a5(&mut x);
+/// `0x133fe` : entrée de la boucle.
+pub fn start(x: &mut Ctx) -> Flow {
     wr8(x.b, A5.wrapping_sub(0x7151), 0xff);
     wr8(x.b, A5.wrapping_sub(0x7152), 0);
-    turn(&mut x);
+    turn(x)
 }
-
-/// Le gestionnaire a rendu la main : une image de cession, puis un nouveau tour.
-fn after_handler(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut x = Ctx::new(c, b);
-    c_a5(&mut x);
-    x.wait(1, at::AFTER_WAIT);
-}
-
-fn after_wait(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut x = Ctx::new(c, b);
-    c_a5(&mut x);
-    turn(&mut x);
-}
-
-const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: 0 }
-}
-
-pub const LOOP: Native = native(at::LOOP, "mode_loop", start);
-pub const AFTER_HANDLER: Native = native(at::AFTER_HANDLER, "mode_after_handler", after_handler);
-pub const AFTER_WAIT: Native = native(at::AFTER_WAIT, "mode_after_wait", after_wait);
 
 /// Routines natives de la machine à modes.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    [&LOOP, &AFTER_HANDLER, &AFTER_WAIT].into_iter().chain(attract::NATIVES).chain(title::NATIVES).chain(select::NATIVES).chain(ranking::NATIVES).chain(gameover::NATIVES).chain(boot::NATIVES).chain(demo::NATIVES).chain(ending::NATIVES)
+    attract::NATIVES.iter().chain(title::NATIVES).chain(select::NATIVES).chain(ranking::NATIVES).chain(gameover::NATIVES).chain(boot::NATIVES).chain(demo::NATIVES).chain(ending::NATIVES)
 }

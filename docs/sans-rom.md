@@ -17,8 +17,7 @@ cargo build --release -p ddsom
 target/release/ddsom --assets <assets>
 ```
 
-`ddsom --assets <assets>` sans dossier de ROMs donné joue ainsi sans ROM (en mode hybride, `DDSOM_HYBRIDE=1`, il le
-fait aussi quand `../rom` n'existe pas).
+`ddsom --assets <assets>` sans dossier de ROMs donné joue ainsi sans ROM.
 Aucun fichier ROM n'est ouvert : la machine est faite par `ddsom_assets::rebuild::contenus` puis
 `cps2::Machine::ddsom` (la machine ordinaire passe par `cps2::Contenus::depuis_roms`). Le son passe toujours par le
 pilote Rust (`Sound::use_rust_driver`). Avec un dossier de ROMs donné, `--assets` ne prend que les
@@ -52,7 +51,7 @@ contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit �
 ## Ce que le jeu sans 68000 lit dans la région programme
 
 **Mesure.** `lectures_rom` (fonctionnalité `rom-trace`, [assets.md](assets.md) « Lectures de la ROM programme par le
-Rust ») tourne sans 68000 par défaut (`DDSOM_HYBRIDE=1` : machine hybride). Toute lecture du bus dans 0x000000-0x3fffff y est comptée (il n'y
+Rust ») tourne sans 68000. Toute lecture du bus dans 0x000000-0x3fffff y est comptée (il n'y
 a plus d'instruction 68000 à exclure), en espace données (`rd8`/`rd16`/`rd32`, `data16`...) et programme
 (`prog16`, `rom16` des familles, `Ctx::prog16`...). Lancement sur **tous les scénarios** (269, autant d'images que
 leur validation : la ligne `quit` d'un scénario ne l'arrête pas, le jeu continue en démonstration), en dix morceaux :
@@ -144,7 +143,7 @@ plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_
   à chaque image l'image affichée, les échantillons audio, la RAM de travail, la GFX RAM, la RAM d'objets, la
   palette et la RAM partagée. Sur `bot_2p`, `boss/boss13_dragon`, `cov/cov_4p_a`, `modes/ending` (12 000 images
   chacun), `scene_end/end_02` (9 000), `cov/cov_service_tests` et `modes/attract` (6 000) : identique.
-* **`validate` avec `DDSOM_ASSETS=<assets>`** (pas en mode hybride) : la machine testée est faite des seuls assets
+* **`validate` avec `DDSOM_ASSETS=<assets>`** : la machine testée est faite des seuls assets
   (pilote son Rust), la référence garde les ROMs, le 68000 surcadencé et le Z80. `tools/validate_all.sh` s'en sert
   tel quel (la variable entre dans l'empreinte des résultats) :
   `DDSOM_ASSETS=<assets> DDSOM_SCENES=1 DDSOM_COV=1 tools/validate_all.sh 30000` donne **272 VALIDE

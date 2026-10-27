@@ -2,32 +2,37 @@
 //!
 //! Créée au premier départ (`tache_credits.rs`) à l'emplacement 0, elle boucle sans fin :
 //! compteur d'images, service tous les 60 images (`0x2e540`), cession d'une image, puis un pas de jeu
-//! (la phase `A5+0x2c`, table `0x1c502`, suivie de `game::FRAME_END`). Les phases ne cèdent jamais : tout le
+//! (la phase `A5+0x2c`, table `0x1c502`, suivie de la fin d'image, [`Etape::FinImage`]). Les phases ne cèdent jamais : tout le
 //! travail d'un pas tient dans une native.
 //!
 //! | Adresse | Étape |
 //! |---|---|
 //! | `0x1c45a` | entrée ([`Etape::Entree`]) : variables de phase remises à zéro, puis boucle |
-//! | `0x1c468` | début de tour ([`Etape::Tour`], retour de `FRAME_END`) : compteurs, service, puis la cession `0x1c48c` : une image d'attente, sauf tour sauté (voir `wait`) |
-//! | `0x1c4b0` | pas de jeu : appel de la phase (native) |
+//! | `0x1c468` | début de tour ([`Etape::Tour`], retour de la fin d'image `0x1c4c4`, [`Etape::FinImage`]) : compteurs, service, puis la cession `0x1c48c` : une image d'attente, sauf tour sauté (voir `wait`) |
+//! | `0x1c4b0` | pas de jeu ([`Etape::Pas`]) : appel de la phase |
 //!
-//! Le pas commence à `0x1c4b0` = [`crate::GAME_STEP`], où la machine plafonne le nombre de pas par image
-//! (`cps2::StepCap`, que la boucle d'image teste sur le PC avant chaque native) : il reste une native posée à cette
-//! adresse, et les étapes précédentes s'arrêtent *sur* elle au lieu de l'enchaîner.
+//! Le pas commence à `0x1c4b0` = [`crate::GAME_STEP`], où la machine de référence plafonne le nombre de pas par image
+//! (`cps2::StepCap`, testé sur le PC) ; le jeu compte ses pas lui-même (`sans68k::pas_de_jeu`) : un pas au-delà du
+//! plafond est retenu jusqu'au début de l'image suivante, juste après le VBLANK (`kernel::Point::PasRetenu`).
 
 use super::{ceder, Attente};
 use crate::mem::{rd8, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
-use crate::resume;
 use crate::scene::Ctx;
-use crate::Native;
 
 crate::etapes! {
     /// Étapes de la tâche de partie (le pas de jeu, `0x1c4b0`, reste une native : voir plus haut).
     pub enum Etape {
         Entree = at::ENTRY => entry,
-        /// Début de tour : retour de la fin d'image (`FRAME_END`), ou d'une phase qui dépile son propre retour.
+        /// Début de tour : retour de la fin d'image, ou d'une phase qui dépile son propre retour.
         Tour = at::TURN => turn,
+        /// Le pas de jeu : la phase courante.
+        Pas = at::STEP => step,
+        /// Retour de la phase : fin d'image (`game::fin_d_image`), puis le tour suivant.
+        FinImage = at::FRAME_END => |x| {
+            crate::game::fin_d_image(x.c, x.b);
+            Flow::Done
+        },
     }
 }
 
@@ -57,7 +62,7 @@ mod at {
     pub const ENTRY: u32 = 0x1c45a;
     pub const TURN: u32 = 0x1c468;
     pub const STEP: u32 = crate::GAME_STEP;
-    /// Retour d'une phase : `game::FRAME_END`.
+    /// Retour d'une phase : la fin d'image.
     pub const FRAME_END: u32 = 0x1c4c4;
 }
 
@@ -110,15 +115,19 @@ fn wait(x: &mut Ctx) -> Flow {
     let free = rd8(x.b, FREE_STEPS) as i8;
     if !stepped && free <= MAX_FREE_STEPS {
         wr8(x.b, FREE_STEPS, free.wrapping_add(1) as u8);
-        x.c.pc = at::STEP;
-        return Flow::Yield;
+        return step(x);
     }
     wr8(x.b, FREE_STEPS, 0);
-    ceder(x, Attente::Images(1), at::STEP)
+    ceder(x, Attente::Images(1), Etape::Pas)
 }
 
-/// `0x1c4b0` : le pas de jeu. La phase revient en `FRAME_END`, qui revient au début du tour.
+/// `0x1c4b0` : le pas de jeu, s'il tient dans l'image (sinon il est retenu jusqu'à la suivante). La phase revient à
+/// la fin d'image, qui revient au début du tour.
 fn step(x: &mut Ctx) -> Flow {
+    if !crate::sans68k::pas_de_jeu() {
+        crate::kernel::retenir_le_pas(x.b);
+        return Flow::Yield;
+    }
     wr8(x.b, STEPPED, 0xff);
     push(x, Etape::Tour);
     let phase = x.v8(var::PHASE);
@@ -126,10 +135,7 @@ fn step(x: &mut Ctx) -> Flow {
     flags(x, phase);
     let handler = (x.prog16(PHASES + phase as u32) as u32) << 16 | x.prog16(PHASES + phase as u32 + 2) as u32;
     x.c.a[0] = handler;
-    push(x, at::FRAME_END);
+    push(x, Etape::FinImage);
     x.jump_to(handler)
 }
 
-resume!(R_STEP, at::STEP, step);
-
-pub const NATIVES: &[Native] = &[R_STEP];

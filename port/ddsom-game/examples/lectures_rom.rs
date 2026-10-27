@@ -11,8 +11,7 @@
 //! `ddsom-game/src` de la première lecture.
 //!
 //! Chaque scénario est rejoué sur la machine sans 68000 (natives seules : toute lecture compte ; un arrêt faute de
-//! native finit le scénario à cette image, signalé sur la sortie d'erreur), ou, avec `DDSOM_HYBRIDE=1`, sur la
-//! machine hybride (natives Rust, le reste interprété une instruction à la fois). La sortie donne, pour chaque zone dont tous les mots sont lus par les mêmes scénarios :
+//! native finit le scénario à cette image, signalé sur la sortie d'erreur). La sortie donne, pour chaque zone dont tous les mots sont lus par les mêmes scénarios :
 //! `d|p début fin masque lectures` (hexadécimal, `d` : espace données, `p` : espace programme ; `fin` exclue ;
 //! `masque` : bit n = scénario n). Les zones sont comparées aux ressources par l'exemple `couverture_rom`
 //! de `ddsom-assets` (docs/assets.md).
@@ -63,19 +62,13 @@ fn main() {
         COUVERT.with(|c| *c.borrow_mut() = std::fs::read(f).expect("fichier de couverture"));
         cps2::bus::rom_trace::set_hook(origine);
     }
-    let sans_68k = !std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1");
+    ddsom_game::refuser_hybride();
     let mut mask = vec![[0u32; 2]; 0x200000];
     let mut reads = vec![[0u64; 2]; 0x200000];
     for (n, spec) in a[4..].iter().enumerate() {
         let (path, frames) = spec.rsplit_once(':').expect("scénario:images");
         let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
-        if sans_68k {
-            ddsom_game::install_sans_68k(&mut m);
-        } else {
-            m.set_overclock(16.0);
-            ddsom_game::install(&mut m);
-            m.executor = Some(ddsom_game::run_traced);
-        }
+        ddsom_game::install_sans_68k(&mut m);
         let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scénario");
         cps2::bus::rom_trace::take();
         for f in 0..frames.parse::<usize>().unwrap() {

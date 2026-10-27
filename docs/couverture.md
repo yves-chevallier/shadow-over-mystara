@@ -53,6 +53,10 @@ fonction touchée = au moins une de ses instructions exécutée).
 | bot initial (bot30k, bot_2p, bot_char0-5) | 22 754 | 691 / 2 559 | 14,0 % |
 | scénarios `cov_*` seuls | 89 659 | 1 771 / 2 559 | 54,2 % |
 | union (initial + `cov_*`) | 90 017 | 1 773 / 2 559 | 54,4 % |
+| **272 scénarios de la validation, 2026-10-27** (`main` b30905d) | 121 609 | 2 190 / 2 559 | – |
+
+Les 369 fonctions jamais exécutées, par sous-système (débogage et menus de test 95, wrappers de sons 63, jeu ~200 :
+boss, effets et tirs du joueur, ennemis et leurs tirs, code par personnage, décors) : [couverture-fonctions.md](couverture-fonctions.md).
 
 Par scénario (instructions) : tours 27 700-35 600, parties à 2-4 joueurs 30 800-38 700 (maximum : `cov_4p_a`), attract
 33 000, natural 22 600, mortal 13 900-23 000, service 2 900. Le bot initial plafonne à 15 000-20 500 par scénario.
@@ -163,9 +167,10 @@ Les 22 scénarios de `scenarios/cov/` sont VALIDES sur 30 000 images (`DDSOM_COV
 `scene/scene_67` (régression de la fusion) est corrigé. Les causes, une par une, sont dans `scenarios/ko/README.md` ;
 trois enseignements généraux :
 
-* **Appeler du 68000 qui cède la main** : une native qui appelle par `call` une routine d'origine pouvant atteindre
-  `0xa40` (fondu `0x1460`, chargeurs de scène) doit utiliser `call_at(adresse, retour d'origine)` (`Cx::call_at` pour les
-  gestionnaires d'objets), sinon la tâche réveillée revient à l'adresse sentinelle (`docs/boucle.md`).
+* **Appeler du 68000 qui cède la main** : une native qui appelait par `call` une routine d'origine pouvant atteindre
+  `0xa40` (fondu `0x1460`, chargeurs de scène) devait utiliser `call_at(adresse, retour d'origine)`, sinon la tâche
+  réveillée revenait à l'adresse sentinelle (`docs/boucle.md`). Depuis, les cessions passent par des étapes Rust
+  (`docs/noyau.md`, « Appels en cours en Rust ») et `call_at` a disparu : `call` refuse une cession.
 * **Registres relus par du code qui n'initialise rien** : en plus de D4 et A4 déjà rendus par le constructeur de sprites,
   les registres laissés par le reconnaisseur de combos (D0-D5, D7.b) et la copie de palette par `movem` des fenêtres de
   dialogue (D0-D6/A3) sont relus plus loin (position du sang à la mort d'un boss, nombre de lignes d'une fenêtre).

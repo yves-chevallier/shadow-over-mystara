@@ -12,8 +12,8 @@
 #   scenarios/cov/          couverture de tout le jeu, DDSOM_COV=1 (COV_FRAMES, 30000 par défaut)
 #   scenarios/long/         bots longs (autobot, plusieurs joueurs, routes, boutiques), DDSOM_LONG=1 (chacun son
 #                           nombre d'images, dans <nom>.images ; ~3 min chacun)
-# Au plus DDSOM_JOBS validations simultanées (par défaut : nombre de cœurs). Le jeu validé est le jeu sans 68000 ;
-# DDSOM_HYBRIDE=1 valide le mode hybride (diagnostic, pas tenu de finir VALIDE).
+# Au plus DDSOM_JOBS validations simultanées (par défaut : nombre de cœurs). Le jeu validé est le jeu sans 68000 (le
+# mode hybride, DDSOM_HYBRIDE=1, est retiré).
 #
 # Reprise : chaque résultat est rangé dans $DDSOM_RESULTATS (~/.cache/ddsom/validate par défaut), sous
 # l'empreinte du binaire `validate`, et un scénario déjà VALIDE pour ce binaire, ce fichier et ce nombre

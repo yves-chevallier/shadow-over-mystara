@@ -16,7 +16,7 @@ use m68k::Cpu;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::pools;
 use crate::objects::{Courant, Obj};
-use crate::{call, call_at, regs, Native};
+use crate::{call, regs, Native};
 
 /// Contexte d'un gestionnaire : l'objet courant (A0) et la machine.
 pub struct Cx<'a> {
@@ -138,27 +138,11 @@ impl<'a> Cx<'a> {
         call(self.c, self.b, addr);
     }
 
-    /// Comme `call`, pour une sous-routine qui peut céder la main (0xa40) : `ret` est l'adresse qui suit le
-    /// `jsr` dans le gestionnaire d'origine, par où la tâche reprendra, réveillée plus tard.
-    #[track_caller]
-    pub fn call_at(&mut self, addr: u32, ret: u32) {
-        self.c.a[0] = self.o.0;
-        self.c.a[5] = A5;
-        call_at(self.c, self.b, addr, ret);
-    }
-
-    /// `jmp addr` en fin de gestionnaire : la routine reprend l'adresse de retour du gestionnaire (elle tourne à la même
-    /// profondeur de pile que dans l'original, ce que les résidus de pile comparés par `validate` exigent parfois).
+    /// `jmp addr` en fin de gestionnaire : la routine revient à la place du gestionnaire (appelée ici comme un `jsr`,
+    /// suivi du `rts` du gestionnaire).
     #[track_caller]
     pub fn tail(&mut self, addr: u32) {
-        let sp = self.c.a[7];
-        let ret = rd32(self.b, sp);
-        self.c.a[7] = sp.wrapping_add(4);
-        self.c.a[0] = self.o.0;
-        self.c.a[5] = A5;
-        call_at(self.c, self.b, addr, ret);
-        self.c.a[7] = self.c.a[7].wrapping_sub(4);
-        wr32(self.b, self.c.a[7], ret);
+        self.call(addr);
     }
 
     /// Fin du gestionnaire : l'objet est libéré (tir détruit).
