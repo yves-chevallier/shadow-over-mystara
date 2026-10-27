@@ -44,8 +44,9 @@ impl Journal<'_> {
     fn note(&mut self, a: u32, taille: u8) {
         if let Some(l) = self.lectures.as_deref_mut() {
             let a = a & 0xff_ffff;
-            // ni la RAM du noyau (tâches, piles), ni la pile privée des wrappers de son et son pointeur
-            if a >= 0xff_1000 && !(0xff_2900..0xff_2a20).contains(&a) && l.len() < 200_000 {
+            // ni la RAM du noyau (tâches, piles), ni la pile privée des wrappers de son et son pointeur, ni les
+            // listes triées (têtes, liens des objets) : des états qu'aucun code ne produit
+            if a >= 0xff_1000 && !(0xff_2900..0xff_2a20).contains(&a) && !lien_de_liste(a) && l.len() < 200_000 {
                 // lecture longue : deux mots consécutifs lus par la même instruction
                 if let Some(d) = l.last_mut().filter(|d| taille == 2 && d.1 == 2 && d.2 == self.pc && d.0 + 2 == a) {
                     d.1 = 4;
@@ -73,9 +74,11 @@ impl m68k::Bus for Journal<'_> {
         self.b.read16(a)
     }
     fn write8(&mut self, a: u32, v: u8) {
+        ecriture_originale(self.pc, a, 1, v as u32);
         self.b.write8(a, v)
     }
     fn write16(&mut self, a: u32, v: u16) {
+        ecriture_originale(self.pc, a, 2, v as u32);
         self.b.write16(a, v)
     }
     fn read_prog16(&mut self, a: u32) -> u16 {
@@ -89,6 +92,18 @@ impl m68k::Bus for Journal<'_> {
     }
 }
 
+thread_local! {
+    /// Adresse dont les écritures de l'original sont signalées (diagnostic `FUZZ_SURVEILLE`), 0 : aucune.
+    static SURVEILLEE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+fn ecriture_originale(pc: u32, a: u32, taille: u32, v: u32) {
+    let s = SURVEILLEE.with(|x| x.get());
+    if s != 0 && (a & 0xff_ffff..(a & 0xff_ffff) + taille).contains(&s) {
+        eprintln!("ORIGINAL {pc:06x} : {a:06x} = {v:x}");
+    }
+}
+
 /// Une perturbation : écrire `valeur` (1, 2 ou 4 octets) en `adresse`.
 #[derive(Clone, Copy, Debug)]
 struct Mutation {
@@ -99,19 +114,32 @@ struct Mutation {
     plausible: bool,
 }
 
-/// Clé d'un champ : (pool, décalage dans l'emplacement) pour les objets et les joueurs, sinon l'adresse.
-fn cle(a: u32) -> u32 {
+/// Clé d'un champ : (pool, type de l'objet, décalage dans l'emplacement) pour les objets, (joueur, décalage) pour les
+/// joueurs, sinon l'adresse.
+fn cle(b: &Cps2Bus, a: u32) -> u32 {
     use ddsom_game::objects::pools::POOLS;
     for (i, p) in POOLS.iter().enumerate() {
         let debut = ddsom_game::mem::A5 + p.first;
         if (debut..debut + p.stride * p.slots).contains(&a) {
-            return 0x0100_0000 | (i as u32) << 16 | (a - debut) % p.stride;
+            let slot = debut + (a - debut) / p.stride * p.stride;
+            let type_ = lire(b, slot + 2, 1);
+            return 0x0100_0000 | (i as u32) << 20 | type_ << 12 | (a - slot);
         }
     }
     if (0xff_85de..0xff_85de + 0x800).contains(&a) {
         return 0x0200_0000 | (a - 0xff_85de) % 0x200;
     }
     a
+}
+
+/// Têtes et queues des listes triées (A5+0x5be-0x5c5) et liens `+0x24`/`+0x26` des objets listés et des joueurs.
+fn lien_de_liste(a: u32) -> bool {
+    use ddsom_game::objects::pools::POOLS;
+    if (0xff_85be..0xff_85c6).contains(&a) {
+        return true;
+    }
+    let lien = |debut: u32, pas: u32, n: u32| (debut..debut + pas * n).contains(&a) && (0x24..0x28).contains(&((a - debut) % pas));
+    lien(0xff_85de, 0x200, 4) || POOLS.iter().any(|p| p.listed && lien(ddsom_game::mem::A5 + p.first, p.stride, p.slots))
 }
 
 /// Valeurs vues de chaque champ (clé, taille) dans les états de base.
@@ -171,6 +199,14 @@ struct Cible {
     bilan: Bilan,
     /// appels retenus pour le fuzz
     points: u64,
+    /// zone de l'atlas de l'entrée
+    zone: String,
+    /// gestionnaire d'une classe d'objets : (pool, type)
+    gestionnaire: Option<(usize, u8)>,
+    /// appels synthétisés (entrée jamais appelée, essayée depuis l'état d'une voisine)
+    substitutions: u64,
+    /// bases qui ne passent pas par les zones visées
+    hors_focus: u64,
 }
 
 struct Etat {
@@ -181,6 +217,10 @@ struct Etat {
     frontiere: HashMap<u32, (u32, u32)>,
     alea: Alea,
     domaines: Domaines,
+    /// essayer les entrées jamais appelées depuis l'état d'une voisine (`FUZZ_SUBSTITUTS`)
+    substituts: bool,
+    /// zones visées (`FUZZ_FOCUS=F3,C1`) : seules les bases qui y passent sont fuzzées
+    focus: Vec<(u32, u32)>,
     periode: u64,
     points_max: u64,
     essais: u32,
@@ -270,7 +310,14 @@ fn executer_original(c0: &Cpu, b0: &Cps2Bus, pas_max: u32, mut lectures: Option<
 static INSTRUCTIONS: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
 fn instruction(a: u32) -> bool {
-    INSTRUCTIONS.get().is_none_or(|bm| bm.is_empty() || a >= 0x10_0000 || bit(bm, a))
+    INSTRUCTIONS.get().is_none_or(|bm| bm.is_empty() || a >= 0x10_0000 || bit(bm, a)) || execute(a)
+}
+
+/// Instructions exécutées par les scénarios (`FUZZ_UNION`).
+static UNION: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+
+fn execute(a: u32) -> bool {
+    a < 0x10_0000 && a & 1 == 0 && UNION.get().is_some_and(|u| bit(u, a))
 }
 
 thread_local! {
@@ -285,8 +332,9 @@ fn longueur_table(b: &mut Cps2Bus, base: u32, longue: bool) -> u32 {
         *t.borrow_mut().entry((base, longue)).or_insert_with(|| {
             let mut fin = u32::MAX;
             for i in 0..512u32 {
-                // la table finit où le listing reprend des instructions
-                if i > 0 && instruction(base + if longue { 4 } else { 2 } * i) {
+                // la table finit où commence du code que les scénarios exécutent (le listing désassemble parfois les
+                // tables comme des instructions)
+                if i > 0 && execute(base + if longue { 4 } else { 2 } * i) {
                     return i;
                 }
                 let cible = if longue {
@@ -365,6 +413,10 @@ fn valeurs_chaudes(op: &Op) -> Vec<u32> {
 fn analyser_base(e: &Etat, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<Chaude>)> {
     let mut lectures = Vec::new();
     let o = executer_original(c, b, e.pas_max, Some(&mut lectures))?;
+    // zones visées (`FUZZ_FOCUS`) : la base doit y passer
+    if !e.focus.is_empty() && !o.pcs.iter().any(|&p| e.focus.iter().any(|(d, f)| (*d..*f).contains(&p))) {
+        return Some((Vec::new(), Vec::new()));
+    }
     let mut bb = b.clone();
     // lectures par instruction
     let mut par_pc: HashMap<u32, Vec<(u32, u8)>> = HashMap::new();
@@ -395,7 +447,61 @@ fn analyser_base(e: &Etat, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<
             }
         }
     }
+    // aiguillages par table de sauts : les lectures des trois instructions précédentes reçoivent les indices valides
+    // (bruts, ou divisés par 2 ou 4 : l'index est souvent doublé avant l'accès)
+    for w in o.pcs.windows(4) {
+        let Some(indices) = indices_table(&mut bb, w[3]) else { continue };
+        let mut valeurs: Vec<u32> = Vec::new();
+        for i in indices {
+            for d in [1, 2, 4] {
+                if i % d == 0 && !valeurs.contains(&(i / d)) {
+                    valeurs.push(i / d);
+                }
+            }
+        }
+        for &pc in &w[..3] {
+            if let Some(l) = par_pc.get(&pc) {
+                for &(a, t) in l {
+                    if t <= 2 && vues_ch.insert((a, t, pc)) {
+                        chaudes.push(Chaude { adresse: a, taille: t, valeurs: valeurs.clone() });
+                    }
+                }
+            }
+        }
+    }
     Some((ordre, chaudes))
+}
+
+/// Index valides de l'aiguillage par table de sauts à `pc` (`move.w (d8,PC,Xn)` suivi d'un `jmp`/`jsr`, ou
+/// `jmp (d8,PC,Xn)` dans une liste de `bra`).
+fn indices_table(b: &mut Cps2Bus, pc: u32) -> Option<Vec<u32>> {
+    let ins = m68k::decode(b, pc);
+    match ins.op {
+        Op::Move(t, Ea::PcIdx(base, ext), _) | Op::Movea(t, Ea::PcIdx(base, ext), _) => {
+            let suivante = m68k::decode(b, pc + ins.len);
+            if !matches!(suivante.op, Op::Jmp(_) | Op::Jsr(_)) {
+                return None;
+            }
+            let pas = if t == m68k::Size::Long { 4 } else { 2 };
+            let d8 = ext as i8 as i32 as u32;
+            let _ = d8;
+            Some((0..longueur_table(b, base, pas == 4).min(64)).map(|i| i * pas).collect())
+        }
+        Op::Jmp(Ea::PcIdx(base, _)) | Op::Jsr(Ea::PcIdx(base, _)) => {
+            let mut a = base;
+            let mut v = Vec::new();
+            while v.len() < 64 {
+                let i = m68k::decode(b, a);
+                if !matches!(i.op, Op::Bra(_)) {
+                    break;
+                }
+                v.push(a - base);
+                a += i.len;
+            }
+            (!v.is_empty()).then_some(v)
+        }
+        _ => None,
+    }
 }
 
 fn muter(e: &mut Alea, domaines: &Domaines, base: &Base, muts: &mut Vec<Mutation>) {
@@ -429,7 +535,7 @@ fn muter(e: &mut Alea, domaines: &Domaines, base: &Base, muts: &mut Vec<Mutation
             2 => 0xffff,
             _ => 0xffff_ffff,
         };
-        let domaine = domaines.get(&(cle(adresse), taille)).filter(|d| d.len() > 1);
+        let domaine = domaines.get(&(cle(&base.b, adresse), taille)).filter(|d| d.len() > 1);
         let tirage = e.sur(10);
         let valeur = match (&valeurs, domaine) {
             (Some(v), _) if tirage >= 5 && tirage < 8 => v[e.sur(v.len() as u64) as usize],
@@ -454,7 +560,7 @@ fn muter(e: &mut Alea, domaines: &Domaines, base: &Base, muts: &mut Vec<Mutation
             },
         } & masque;
         let plausible = valeurs.as_ref().is_some_and(|v| v.contains(&valeur))
-            || domaines.get(&(cle(adresse), taille)).is_some_and(|d| d.contains(&valeur));
+            || domaines.get(&(cle(&base.b, adresse), taille)).is_some_and(|d| d.contains(&valeur));
         muts.push(Mutation { adresse, taille, valeur, plausible });
     }
 }
@@ -617,8 +723,10 @@ fn essai(e: &mut Etat, entree: u32, ib: usize, muts: Vec<Mutation>) {
         cible.bilan.ecarts_neufs += 1;
     }
     let hors = muts.iter().any(|m| !m.plausible);
-    cible.bilan.ecarts_plausibles += !hors as u64;
-    let sig = format!("{}{}{}{sig}", if muts.is_empty() { "BASE " } else { "" }, if hors { "HORS " } else { "" }, if neuf { "NEUF " } else { "" });
+    // écart limité aux registres de sortie (sans effet tant qu'aucun appelant ne les relit)
+    let registres = matches!(&r, Ok(d) if d.iter().all(|x| x.starts_with('d') || x.starts_with('a') && !x.starts_with("au") || x.starts_with("ccr")));
+    cible.bilan.ecarts_plausibles += (!hors && !registres) as u64;
+    let sig = format!("{}{}{}{}{sig}", if registres { "REG " } else { "" }, if muts.is_empty() { "BASE " } else { "" }, if hors { "HORS " } else { "" }, if neuf { "NEUF " } else { "" });
     let compte = cible.bilan.signatures.entry(sig.clone()).or_insert(0);
     *compte += 1;
     if *compte != 1 || cible.bilan.exemples.len() >= e.exemples {
@@ -664,6 +772,9 @@ fn essai(e: &mut Etat, entree: u32, ib: usize, muts: Vec<Mutation>) {
         let a = u32::from_str_radix(a.trim_start_matches("0x"), 16).unwrap();
         ddsom_game::mem::surveille::ADRESSE.store(a, std::sync::atomic::Ordering::Relaxed);
         eprintln!("SURVEILLE {a:06x} pour {} ({})", n.name, decrire(&min));
+        SURVEILLEE.with(|x| x.set(a));
+        let _ = executer_original(&c0, &b0, pas_max, None);
+        SURVEILLEE.with(|x| x.set(0));
         let _ = comparer(n, &c0, &b0, &o);
         ddsom_game::mem::surveille::ADRESSE.store(0, std::sync::atomic::Ordering::Relaxed);
     }
@@ -692,50 +803,134 @@ fn fuzzer(entree: u32, c: &Cpu, b: &Cps2Bus) {
             return;
         }
         e.cibles.get_mut(&entree).unwrap().points += 1;
-        // nouvelle base (au plus 3 par native ; ensuite, remplacement d'une base au hasard avec son corpus)
-        let analyse = analyser_base(e, c, b);
-        let Some((lectures, chaudes)) = analyse else {
-            e.cibles.get_mut(&entree).unwrap().bilan.abandons += 1;
+        fuzzer_depuis(e, entree, c, b);
+        if !e.substituts {
             return;
-        };
-        for &(a, t) in &lectures {
-            let v = lire(b, a, t);
-            let d = e.domaines.entry((cle(a), t)).or_default();
-            if d.len() < 48 && !d.contains(&v) {
-                d.push(v);
+        }
+        // une entrée de la même zone (ou un gestionnaire du même pool) jamais appelée, depuis cet état
+        let ici = &e.cibles[&entree];
+        let (zone, pool) = (ici.zone.clone(), ici.gestionnaire.map(|g| g.0));
+        let mut candidats: Vec<u32> = e
+            .cibles
+            .iter()
+            .filter(|(_, y)| y.bilan.appels == 0 && y.substitutions < e.points_max)
+            .filter(|(_, y)| match (pool, y.gestionnaire) {
+                (Some(p), Some((q, _))) => p == q,
+                (None, None) => y.zone == zone,
+                _ => false,
+            })
+            .map(|(&a, _)| a)
+            .collect();
+        if candidats.is_empty() {
+            return;
+        }
+        candidats.sort();
+        let y = candidats[e.sur(candidats.len() as u64) as usize];
+        let mut c2 = c.clone();
+        let mut b2 = b.clone();
+        c2.pc = y;
+        if let Some((_, t)) = e.cibles[&y].gestionnaire {
+            // l'objet A0 devient du type de `y`, souvent à son état initial
+            let obj = c2.a[0] & 0xff_ffff;
+            ddsom_game::mem::wr8(&mut b2, obj + 2, t);
+            ddsom_game::mem::wr8(&mut b2, obj + 3, 0);
+            if e.sur(2) == 0 {
+                ddsom_game::mem::wr32(&mut b2, obj + 4, 0);
             }
         }
-        let base = Base { c: c.clone(), b: b.clone(), lectures, chaudes };
-        // la base elle-même (sans perturbation) : couverture et contrôle
-        let nb = e.cibles[&entree].bases.len();
-        let ib = if nb < 3 {
-            e.cibles.get_mut(&entree).unwrap().bases.push(base);
-            nb
-        } else {
-            let ib = e.sur(3) as usize;
-            let cible = e.cibles.get_mut(&entree).unwrap();
-            cible.bases[ib] = base;
-            cible.corpus.retain(|(i, _)| *i != ib);
-            ib
-        };
-        essai(e, entree, ib, Vec::new());
-        for _ in 0..e.essais {
-            let (ib, mut muts) = {
-                let nb = e.cibles[&entree].bases.len() as u64;
-                let nc = e.cibles[&entree].corpus.len() as u64;
-                if nc > 0 && e.alea() % 3 != 0 {
-                    let k = (e.alea() % nc) as usize;
-                    let (ib, m) = &e.cibles[&entree].corpus[k];
-                    (*ib, m.clone())
-                } else {
-                    ((e.alea() % nb) as usize, Vec::new())
-                }
-            };
-            let Etat { cibles, alea, domaines, .. } = &mut *e;
-            muter(alea, domaines, &cibles[&entree].bases[ib], &mut muts);
-            essai(e, entree, ib, muts);
-        }
+        e.cibles.get_mut(&y).unwrap().substitutions += 1;
+        fuzzer_depuis(e, y, &c2, &b2);
     });
+}
+
+/// Fuzz de `entree` depuis l'état `c`, `b` (PC sur l'entrée) : nouvelle base, puis les essais.
+fn fuzzer_depuis(e: &mut Etat, entree: u32, c: &Cpu, b: &Cps2Bus) {
+    // nouvelle base (au plus 3 par native ; ensuite, remplacement d'une base au hasard avec son corpus)
+    let analyse = analyser_base(e, c, b);
+    let Some((lectures, chaudes)) = analyse else {
+        e.cibles.get_mut(&entree).unwrap().bilan.abandons += 1;
+        return;
+    };
+    if !e.focus.is_empty() && lectures.is_empty() {
+        // la base ne passe pas par les zones visées : au bout de 16, la native n'est plus essayée
+        let cible = e.cibles.get_mut(&entree).unwrap();
+        cible.hors_focus += 1;
+        if cible.hors_focus >= 16 && cible.bases.is_empty() {
+            cible.points = u64::MAX;
+            cible.substitutions = u64::MAX;
+        }
+        return;
+    }
+    for &(a, t) in &lectures {
+        let v = lire(b, a, t);
+        let d = e.domaines.entry((cle(b, a), t)).or_default();
+        if d.len() < 48 && !d.contains(&v) {
+            d.push(v);
+        }
+    }
+    let base = Base { c: c.clone(), b: b.clone(), lectures, chaudes };
+    // la base elle-même (sans perturbation) : couverture et contrôle
+    let nb = e.cibles[&entree].bases.len();
+    let ib = if nb < 3 {
+        e.cibles.get_mut(&entree).unwrap().bases.push(base);
+        nb
+    } else {
+        let ib = e.sur(3) as usize;
+        let cible = e.cibles.get_mut(&entree).unwrap();
+        cible.bases[ib] = base;
+        cible.corpus.retain(|(i, _)| *i != ib);
+        ib
+    };
+    essai(e, entree, ib, Vec::new());
+    for _ in 0..e.essais {
+        let (ib, mut muts) = {
+            let nb = e.cibles[&entree].bases.len() as u64;
+            let nc = e.cibles[&entree].corpus.len() as u64;
+            if nc > 0 && e.alea() % 3 != 0 {
+                let k = (e.alea() % nc) as usize;
+                let (ib, m) = &e.cibles[&entree].corpus[k];
+                (*ib, m.clone())
+            } else {
+                ((e.alea() % nb) as usize, Vec::new())
+            }
+        };
+        let Etat { cibles, alea, domaines, .. } = &mut *e;
+        muter(alea, domaines, &cibles[&entree].bases[ib], &mut muts);
+        essai(e, entree, ib, muts);
+    }
+}
+
+/// Tables de sauts des dix classes d'objets (0x398e2-0x39ff0, W0) : gestionnaire -> (pool, type).
+fn gestionnaires(b: &mut Cps2Bus) -> HashMap<u32, (usize, u8)> {
+    use ddsom_game::objects::pools::POOLS;
+    const TABLES: [(u32, u32); 10] = [
+        (0x10de, 0x39908),
+        (0x179e, 0x39992),
+        (0x299e, 0x39a78),
+        (0x3a1e, 0x39b12),
+        (0x3c5e, 0x39b96),
+        (0x549e, 0x39ce0),
+        (0x6ede, 0x39e76),
+        (0x4a9e, 0x39eac),
+        (0x62de, 0x39f5a),
+        (0x795e, 0x39fa8),
+    ];
+    let mut g = HashMap::new();
+    for (premier, table) in TABLES {
+        let pool = POOLS.iter().position(|p| p.first == premier).expect("pool");
+        for t in 0..128u32 {
+            let a = table + 4 * t;
+            if t > 0 && instruction(a) && INSTRUCTIONS.get().is_some_and(|i| !i.is_empty()) {
+                break;
+            }
+            let entree = (b.fetch16(a) as u32) << 16 | b.fetch16(a + 2) as u32;
+            if entree >= 0x10_0000 || entree & 1 != 0 || !instruction(entree) {
+                break;
+            }
+            g.entry(entree).or_insert((pool, t as u8));
+        }
+    }
+    g
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
@@ -811,28 +1006,30 @@ fn main() {
     let atlas = std::env::var("FUZZ_ATLAS").unwrap_or_else(|_| "docs/atlas.md".into());
     let zs = zones(&atlas);
     let zone_de = |x: u32| zs.iter().find(|(d, f, _)| (*d..*f).contains(&x)).map(|z| z.2.as_str()).unwrap_or("?");
+    INSTRUCTIONS.set(std::env::var("FUZZ_LISTING").ok().map(|f| instructions(&f)).unwrap_or_default()).unwrap();
+    let gestionnaires = gestionnaires(&mut m.bus.clone());
     let mut cibles = HashMap::new();
     let specs: Vec<&str> = a[5].split(',').collect();
-    for n in ddsom_game::all_natives() {
+    for n in ddsom_game::all_natives().chain(ddsom_game::hud::NATIVES_DE_TEST) {
         let voulu = |s: &str| {
             if let Some(p) = s.strip_prefix("nom:") {
                 n.name.starts_with(p)
             } else if let Some(h) = s.strip_prefix("0x") {
                 u32::from_str_radix(h, 16).is_ok_and(|x| x == n.entry)
             } else {
-                s == "*" || zone_de(n.entry) == s
+                s == "*" || s == "tout" || zone_de(n.entry) == s
             }
         };
         let exclu = specs.iter().filter_map(|s| s.strip_prefix('-')).any(voulu);
         if !exclu && specs.iter().filter(|s| !s.starts_with('-')).any(|s| voulu(s)) && !ddsom_game::kernel::NATIVES.iter().any(|k| k.entry == n.entry) {
-            cibles.insert(n.entry, Cible { n, bases: Vec::new(), corpus: Vec::new(), bilan: Bilan::default(), points: 0 });
+            cibles.insert(n.entry, Cible { n, bases: Vec::new(), corpus: Vec::new(), bilan: Bilan::default(), points: 0, zone: zone_de(n.entry).to_string(), gestionnaire: gestionnaires.get(&n.entry).copied(), substitutions: 0, hors_focus: 0 });
         }
     }
     eprintln!("{} natives ciblées", cibles.len());
     let union = std::env::var("FUZZ_UNION").ok().map(|f| std::fs::read(f).expect("union")).unwrap_or_else(|| vec![0; 0x10000]);
     let front = frontiere(&mut m.bus.clone(), &union);
+    UNION.set(union.clone()).unwrap();
     let graine = env("FUZZ_GRAINE", 1);
-    INSTRUCTIONS.set(std::env::var("FUZZ_LISTING").ok().map(|f| instructions(&f)).unwrap_or_default()).unwrap();
     ETAT.with(|x| {
         *x.borrow_mut() = Some(Etat {
             cibles,
@@ -840,6 +1037,10 @@ fn main() {
             vus: vec![0; 0x10000],
             frontiere: front,
             domaines: HashMap::new(),
+            substituts: std::env::var_os("FUZZ_SUBSTITUTS").is_some(),
+            focus: std::env::var("FUZZ_FOCUS")
+                .map(|v| zs.iter().filter(|z| v.split(',').any(|f| f == z.2)).map(|z| (z.0, z.1)).collect())
+                .unwrap_or_default(),
             alea: Alea(0x9e37_79b9_7f4a_7c15 ^ graine.wrapping_mul(0x1000_0000_01b3)),
             periode: env("FUZZ_PERIODE", 16),
             points_max: env("FUZZ_POINTS", 400),
@@ -858,13 +1059,13 @@ fn main() {
     let e = ETAT.with(|x| x.borrow_mut().take().unwrap());
     std::fs::write(&a[6], &e.vus).expect("sortie");
     let mut total = 0;
-    let mut tri: Vec<&Cible> = e.cibles.values().filter(|c| c.bilan.appels > 0).collect();
+    let mut tri: Vec<&Cible> = e.cibles.values().filter(|c| c.bilan.essais > 0 || c.bilan.ecarts + c.bilan.paniques > 0).collect();
     tri.sort_by_key(|c| c.n.entry);
     for c in tri {
         let b = &c.bilan;
         println!(
-            "{:06x} {:32} {:>6} appels {:>6} essais ({:>5} neufs) {:>5} écarts ({:>5} neufs, {:>5} plausibles) {:>4} paniques {:>4} abandons {:>4} hors code {:>5} nouvelles",
-            c.n.entry, c.n.name, b.appels, b.essais, b.neufs, b.ecarts, b.ecarts_neufs, b.ecarts_plausibles, b.paniques, b.abandons, b.hors_code, b.nouvelles
+            "{:06x} {:32} {:>6} appels {:>6} essais ({:>5} neufs) {:>5} écarts ({:>5} neufs, {:>5} plausibles) {:>4} paniques {:>4} abandons {:>4} hors code {:>5} nouvelles{}",
+            c.n.entry, c.n.name, b.appels, b.essais, b.neufs, b.ecarts, b.ecarts_neufs, b.ecarts_plausibles, b.paniques, b.abandons, b.hors_code, b.nouvelles, if c.substitutions > 0 && c.substitutions < u64::MAX { format!(" ({} substitutions)", c.substitutions) } else { String::new() }
         );
         total += b.ecarts + b.paniques;
         for (s, k) in &b.signatures {
