@@ -139,6 +139,7 @@ macro_rules! etapes_des_taches {
 }
 
 etapes_des_taches! {
+    Partie(partie::Etape),
     Gel(gel::Etape),
     Invite(invite::Etape),
     Scores(ecran_fixe::Etape),
@@ -193,6 +194,7 @@ pub fn revenir(c: &mut Cpu, b: &mut Cps2Bus) {
 pub fn entree(entree: u32) -> Option<Etape> {
     [
         Etape::from(gel::Etape::Entree),
+        partie::Etape::Entree.into(),
         invite::Etape::Entree.into(),
         ecran_fixe::Etape::Entree.into(),
         service::Etape::Entree.into(),
