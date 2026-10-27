@@ -101,6 +101,11 @@ Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`M
 = boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
 `Tab` avance rapide, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
 
+Les touches se changent dans `touches.cfg`, créé au premier lancement (`action = touches`, noms
+minifb : `Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`…). Lettres et chiffres suivent la disposition
+du clavier (en AZERTY, `Key1` demande `Maj`) : `DDSOM_TOUCHES=1 ./jouer.sh` affiche le nom des
+touches pressées.
+
 Son : `DDSOM_SON_RUST=1 ./jouer.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
 
 Sans ROM : une fois les ressources extraites (ci-dessous), `port/target/release/ddsom --assets
