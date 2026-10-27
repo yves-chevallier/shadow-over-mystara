@@ -6,7 +6,7 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog16, rd16, wr16, wr32, A5};
+use crate::mem::{prog16, rd16, wr16, A5};
 
 pub const LAYER: u32 = 0x912000;
 pub const COLUMN: u32 = 0x80;
@@ -29,12 +29,6 @@ impl<'a> Brush<'a> {
     pub fn cell(&mut self, tile: u16, attr: u16) {
         wr16(self.b, self.at, tile);
         wr16(self.b, self.at + 2, attr);
-        self.at += CELL;
-    }
-
-    /// Écrit une case d'un seul long.
-    pub fn long(&mut self, v: u32) {
-        wr32(self.b, self.at, v);
         self.at += CELL;
     }
 

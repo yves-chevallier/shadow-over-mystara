@@ -78,7 +78,6 @@ mod ext {
     pub const RNG_SEED: u32 = 0x19a80;
     pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const SOUND_E0A10: u32 = 0xe0a10;
-    pub const KILL_TASK: u32 = 0xa14;
     pub const RESET_PLAYERS: u32 = 0x1f184;
     pub const SPRITES_RESET: u32 = 0x1de7c;
     pub const SPRITES: u32 = 0x1de96;
@@ -89,7 +88,6 @@ mod ext {
     pub const POOLS: u32 = 0x2062;
     pub const SERVICE_2D9E: u32 = 0x2d9e;
     pub const SCENE_START_HOOK: u32 = 0x19a80;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const PLAYER_UI: u32 = 0x150ac;
     pub const PLAYER_PREPARE: u32 = 0x3525c;
     pub const PALETTE_SET: u32 = 0x1a67e;
@@ -342,7 +340,7 @@ fn scene_start(x: &mut Ctx) -> Flow {
     wr8(x.b, var::SCREEN_WAIT, 3);
     x.c.a[0] = ext::PLAYER_UI;
     set_low_word(&mut x.c.d[0], 0x30);
-    x.call(ext::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
     Flow::Done
 }
 
@@ -470,7 +468,7 @@ fn scene_end_common(x: &mut Ctx, resume: Etape) -> Flow {
     wr8(x.b, var::PHASE, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     set_low_word(&mut x.c.d[0], 0x30);
-    x.call(ext::KILL_TASK);
+    crate::kernel::tuer_tache(x.b, x.c.d[0]);
     for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
         x.call(f);
     }
@@ -501,7 +499,7 @@ fn end_of_script(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     set_low_word(&mut x.c.d[0], 0x30);
-    x.call(ext::KILL_TASK);
+    crate::kernel::tuer_tache(x.b, x.c.d[0]);
     for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
         x.call(f);
     }
@@ -830,7 +828,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
                     wr16(x.b, var::FADE_DELAY, 2);
                     wr8(x.b, var::FADE_PAGES, 15);
                     x.c.d[0] = 0x10;
-                    x.call(ext::TASK_CREATE);
+                    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
                     x.call_d0(ext::SOUND_E0A82, 0);
                 }
             }
@@ -862,7 +860,7 @@ fn ending_b(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     set_low_word(&mut x.c.d[0], 0x30);
-    x.call(ext::KILL_TASK);
+    crate::kernel::tuer_tache(x.b, x.c.d[0]);
     x.call(ext::CLEAR_SCROLL_1);
     x.call(ext::PLAYER_PREPARE);
     wr16(x.b, 0x91c41c, 0xf112);

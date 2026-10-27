@@ -97,7 +97,6 @@ mod rom {
 /// Sous-routines du jeu.
 mod sub {
     pub const MUSIC: u32 = 0xe1150;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const FADE_TASK: u32 = 0x14de;
     pub const PRINT_TALL: u32 = 0x1136;
     pub const ALLOC_SET: u32 = 0xce00a;
@@ -209,7 +208,7 @@ fn start(x: &mut Ctx) -> Flow {
     x.set_v16(a5::FADE_DELAY, 1);
     x.set_v8(a5::FADE_PAGES, 13);
     x.c.d[0] = x.c.d[0] & !0xffff | 16;
-    x.call(sub::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
     x.c.a[0] = a0;
     x.push_return(Etape::AfterFade);
     x.wait(1, Etape::FadeWait)

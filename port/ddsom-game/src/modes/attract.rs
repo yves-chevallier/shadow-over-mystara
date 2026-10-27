@@ -56,7 +56,7 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
         x.call(SETUP_SCREEN);
         x.c.d[0] = FIXED_SCREEN_SLOT;
         x.c.a[0] = FIXED_SCREEN_TASK;
-        x.call(sub::TASK_CREATE);
+        crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
         return Flow::Done;
     }
     if rd8(x.b, SCREEN_READY) == 0 {

@@ -93,7 +93,6 @@ mod ext {
     pub const SOUND_E0A82: u32 = 0xe0a82;
     pub const ALLOC_CURSOR: u32 = 0xae776;
     pub const ALLOC_PANEL: u32 = 0xaf346;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const FADE_TASK: u32 = 0x1ced4;
     pub const FADE_TASK_B: u32 = 0x14ba;
     pub const FADE_TASK_C: u32 = 0x14de;
@@ -387,7 +386,7 @@ const FADE_LOOP: u32 = 0x1cca4;
 fn create_task(x: &mut Ctx, entry: u32, slot: u16) {
     x.c.a[0] = entry;
     set_low_word(&mut x.c.d[0], slot);
-    x.call(ext::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
 }
 
 // ---------------------------------------------------------------------------------------------

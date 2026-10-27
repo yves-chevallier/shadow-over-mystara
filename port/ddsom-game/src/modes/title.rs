@@ -73,7 +73,6 @@ mod ext {
     pub const TILE_BLOCK_2: u32 = 0x2766;
     pub const CLEAR_BLOCK: u32 = 0x260c;
     pub const PRINT: u32 = 0xd5e;
-    pub const TASK_CREATE: u32 = 0x9b6;
     /// Tâches de fondu : vers la couleur, depuis la couleur.
     pub const FADE_TASK_IN: u32 = 0x14ba;
     pub const FADE_TASK_OUT: u32 = 0x14d0;
@@ -123,7 +122,8 @@ fn reset_objects(x: &mut Ctx) {
 fn start_fade_task(x: &mut Ctx, entry: u32) {
     let a0 = x.c.a[0];
     x.c.a[0] = entry;
-    x.call_d0(ext::TASK_CREATE, 0x10);
+    x.c.d[0] = 0x10;
+    crate::kernel::creer_tache(x.b, 0x10, x.c.a[0]);
     x.c.a[0] = a0;
 }
 

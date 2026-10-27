@@ -47,7 +47,6 @@ mod var {
 }
 
 mod ext {
-    pub const KILL_TASK: u32 = 0xa14;
     pub const POOLS: u32 = 0x2062;
     pub const POOLS_EFFCT: u32 = 0x2150;
     pub const POOLS_SOBJ: u32 = 0x21bc;
@@ -71,7 +70,6 @@ mod ext {
     pub const SET_VARIANT: u32 = 0xce00a;
     pub const MESSAGE: u32 = 0xc8312;
     pub const SCORE_OBJECT: u32 = 0xb1a7a;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const FADE_TASK_IN: u32 = 0x14ba;
     pub const FADE_TASK_OUT: u32 = 0x14d0;
     pub const FADE_TASK_C: u32 = 0x14de;
@@ -262,7 +260,7 @@ crate::etapes! {
             wr32(x.b, A5 + 0x49e, 0x27e600);
             x.c.a[0] = ext::FADE_TASK_STEP;
             set_low_word(&mut x.c.d[0], 0x10);
-            x.call(ext::TASK_CREATE);
+            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
             x.call(ext::SOUND_E16F0);
             wr8(x.b, var::FADE_STEPS, 1);
             x.c.a[0] = BLOCK;
@@ -572,14 +570,14 @@ fn task_keep_a0(x: &mut Ctx, entry: u32) {
     let a0 = x.c.a[0];
     x.c.a[0] = entry;
     set_low_word(&mut x.c.d[0], 0x10);
-    x.call(ext::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
     x.c.a[0] = a0;
 }
 /// Idem sans restaurer A0 (l'original le laisse sur l'entrée de la tâche).
 fn task_clobber_a0(x: &mut Ctx, entry: u32) {
     x.c.a[0] = entry;
     set_low_word(&mut x.c.d[0], 0x10);
-    x.call(ext::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
 }
 
 fn tile_blocks(x: &mut Ctx, a1: u32, first: u16, second: u16, which: u32) {
@@ -597,7 +595,7 @@ fn tile_blocks(x: &mut Ctx, a1: u32, first: u16, second: u16, which: u32) {
 fn s00_reset(x: &mut Ctx) -> Flow {
     next_step(x);
     set_low_word(&mut x.c.d[0], 0x30);
-    x.call(ext::KILL_TASK);
+    crate::kernel::tuer_tache(x.b, x.c.d[0]);
     for f in [ext::POOLS, ext::SOUND_C0C, ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
         x.call(f);
     }

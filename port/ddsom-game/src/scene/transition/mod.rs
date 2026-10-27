@@ -65,7 +65,6 @@ const ALL_PAGES: u8 = 15;
 const SCENE_PAGES: u8 = 13;
 
 mod sub {
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const FADE_TASK: u32 = 0x14ba;
     pub const FADE_TASK_PAGES: u32 = 0x14d0;
     pub const MESSAGE: u32 = 0xc8312;
@@ -268,7 +267,7 @@ fn start_task(x: &mut Ctx, task: u32) {
     let a0 = x.c.a[0];
     x.c.a[0] = task;
     set_d0_word(x, 0x10);
-    x.call(sub::TASK_CREATE);
+    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
     x.c.a[0] = a0;
 }
 

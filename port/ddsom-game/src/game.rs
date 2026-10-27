@@ -56,7 +56,6 @@ mod ext {
     pub const PHASE0_END_FADE: u32 = 0x1cf3c;
     pub const RANK_LOAD: u32 = 0x1f1b8;
     pub const CLEAR_STATUS: u32 = 0xdabba;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const INPUT_HOOK: u32 = 0x2aec;
     pub const COLLISIONS: u32 = 0x260ee;
     pub const WORLD_EXTRA: u32 = 0x19e20;
@@ -375,7 +374,7 @@ fn leave(c: &mut Cpu, b: &mut Cps2Bus) {
     call(c, b, ext::CLEAR_STATUS);
     c.d[0] = c.d[0] & 0xffff_0000 | PLAYER_UI_SLOT;
     c.a[0] = PLAYER_UI_TASK;
-    call(c, b, ext::TASK_CREATE);
+    crate::kernel::creer_tache(b, c.d[0], c.a[0]);
 }
 
 /// Phase 0 : un pas par image. L'étape (`A5+0x2d` : 0, 4, 8, 12, 16) choisit la suite.

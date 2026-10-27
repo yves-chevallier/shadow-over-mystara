@@ -86,8 +86,6 @@ pub mod key {
 
 /// Routines d'origine.
 pub mod ext {
-    pub const KILL_TASK: u32 = 0xa14;
-    pub const RESTART_TASK: u32 = 0xae4;
     pub const LOCK: u32 = 0xb96;
     pub const UNLOCK: u32 = 0xbac;
     pub const LAYERS_ON: u32 = 0xbc6;
@@ -102,12 +100,6 @@ pub mod ext {
     pub const SOUND_STOP: u32 = 0xe0882;
     pub const BOOT_TASK: u32 = 0x11b16;
     pub const SECRET_TEST: u32 = 0xee16e;
-}
-
-/// Adresses de l'original.
-pub mod at {
-    /// Retour du `jsr 0xae4` de la sortie (jamais repris : la tâche redevient la tâche de démarrage).
-    pub const EXIT_RETURN: u32 = 0x29354;
 }
 
 /// Textes du menu (descripteurs en ROM).

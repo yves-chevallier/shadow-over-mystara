@@ -55,13 +55,6 @@ mod at {
 
 /// Sous-routines du moteur appelées par les écrans.
 pub mod sub {
-    /// Cession à l'ordonnanceur : D0 = nombre d'images.
-    pub const WAIT: u32 = 0xa40;
-    /// Création d'une tâche : D0 = emplacement, A0 = entrée.
-    pub const TASK_CREATE: u32 = 0x9b6;
-    /// Fondu vers le noir et fondu depuis le noir, avec attente de la fin (cèdent la main).
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const FADE_IN: u32 = 0x144c;
     /// Effacements de la VRAM : sprites, plan 1, plan 2, plan 3.
     pub const CLEAR_SPRITES: u32 = 0xc58;
     pub const CLEAR_SCROLL_1: u32 = 0xca8;

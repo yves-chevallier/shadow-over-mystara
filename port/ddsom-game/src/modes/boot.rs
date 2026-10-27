@@ -20,7 +20,6 @@ mod ext {
     pub const PRINT: u32 = 0xd5e;
     pub const CLEAR_SCROLL_1: u32 = 0xca8;
     pub const CONFIG_2DC9A: u32 = 0x2dc9a;
-    pub const TASK_CREATE: u32 = 0x9b6;
     pub const CREDITS_TASK: u32 = 0x13c0a;
     pub const FREEZE_TASK: u32 = 0xee080;
     pub const MODE_LOOP: u32 = 0x133fe;
@@ -118,10 +117,10 @@ crate::etapes! {
             x.call(ext::SERVICE_CHECK);
             x.c.a[0] = ext::CREDITS_TASK;
             set_low_word(&mut x.c.d[0], SLOT_CREDITS);
-            x.call(ext::TASK_CREATE);
+            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
             x.c.a[0] = ext::FREEZE_TASK;
             set_low_word(&mut x.c.d[0], SLOT_FREEZE);
-            x.call(ext::TASK_CREATE);
+            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
             x.jump_to(ext::MODE_LOOP)
         },
     }

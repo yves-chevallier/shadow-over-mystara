@@ -14,7 +14,6 @@ use crate::scene::Ctx;
 use crate::Native;
 
 mod ext {
-    pub const KILL_TASK: u32 = 0xa14;
     pub const PHASE_VARS_CLEAR: u32 = 0x1c44a;
     pub const SOUND_E0882: u32 = 0xe0882;
     pub const MODE_LOOP: u32 = 0x133fe;
@@ -44,7 +43,7 @@ pub const PHASE_20: Native = Native {
 
 fn phase_20(x: &mut Ctx) -> Flow {
     set_low_word(&mut x.c.d[0], PLAYER_UI_SLOT);
-    x.call(ext::KILL_TASK);
+    crate::kernel::tuer_tache(x.b, x.c.d[0]);
     wr16(x.b, A5 + 0x490, 1);
     wr8(x.b, A5 + 0x48e, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::Faded)
