@@ -33,7 +33,9 @@ pub fn shock_68k(c: &mut Cpu, b: &mut Cps2Bus, createur: Obj, variante: u8, regl
 }
 
 pub(crate) fn shock_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, variante: u8, reglage: u16, vx: u16, vy: u16) -> Option<Obj> {
-    if crate::ram::SCENE.get(b) == NO_SHOCK_SCENE {
+    let scene = crate::ram::SCENE.get(b);
+    r.comparaison(NO_SHOCK_SCENE as u32, scene as u32, Size::Byte);
+    if scene == NO_SHOCK_SCENE {
         return None;
     }
     let fx = r.alloue(b, &pools::EFFCT)?;
@@ -49,7 +51,9 @@ pub(crate) fn shock_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, varian
     fx.set_u8(b, 0x2c, facing);
     fx.set_u8(b, Obj::VARIANT, variante);
     fx.set_u8(b, 0x2d, reglage as u8);
+    // `lsr.w #8,D1w` : X = dernier bit sorti (bit 7), gardé jusqu'au retour
     let high = reglage >> 8;
+    r.x(reglage & 0x80 != 0);
     r.d_mot(1, high);
     fx.set_u8(b, 0x2f, high as u8);
     fx.set_u16(b, 0x42, 0);
@@ -195,6 +199,7 @@ fn spawn_scenery_6(c: &mut Cpu, b: &mut Cps2Bus) {
 fn spawn_scenery_11(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(object) = spawn(c, b, &pools::SOBJ, 11) {
         object.set_u8(b, 0x2c, c.d[1] as u8);
+        c.flags_logic(c.d[1] & 0xff, Size::Byte);
     }
 }
 
@@ -223,17 +228,23 @@ fn count_living_players(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x25260 : un joueur scripté se place devant l'objet (`A5+0x46`), décalé selon son numéro (`+2`).
 fn place_scripted_player(c: &mut Cpu, b: &mut Cps2Bus) {
-    const OFFSETS: [u16; 4] = [0x0040, 0x0010, 0xffe8, 0xffbc];
+    /// Décalages en X par numéro de joueur (mots, espace programme : 0x40, 0x10, -0x18, -0x44).
+    const OFFSETS: u32 = 0x2528c;
     let me = c.a[0];
     let focus = rd16(b, A5 + 0x46) as i16 as i32 as u32;
     c.a[1] = focus;
-    let (x, depth) = (rd16(b, focus + 0x08), rd16(b, focus + 0x10));
+    let x = rd16(b, focus + 0x08);
     wr16(b, me + 0x08, x);
+    let depth = rd16(b, focus + 0x10);
     wr16(b, me + 0x10, depth);
     wr16(b, me + 0x0c, 0);
-    let shift = OFFSETS[rd8(b, me + 2) as usize & 3];
-    wr16(b, me + 0x08, x.wrapping_add(shift));
-    wr16(b, me + 0x10, depth.wrapping_sub(18));
+    let index = 2 * rd8(b, me + 2) as u32;
+    let shift = crate::mem::prog16(b, OFFSETS + index);
+    c.d[0] = shift as u32;
+    let x = rd16(b, me + 0x08).wrapping_add(shift);
+    wr16(b, me + 0x08, x);
+    let depth = crate::ops::sub(c, 18, rd16(b, me + 0x10) as u32, Size::Word);
+    wr16(b, me + 0x10, depth as u16);
 }
 
 const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {

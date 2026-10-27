@@ -718,10 +718,11 @@ fn enemy_1_at(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x57c66 : D0 = 1 si l'objet est à droite du milieu de l'écran (x >= caméra + 0xc0), sinon 0 ; D1.w =
 /// l'écart.
 fn right_half(c: &mut Cpu, b: &mut Cps2Bus) {
-    let alt = rd8(b, A5 + 0x36) != 0;
+    let alt = crate::ram::CAMERA_ALT_ACTIVE.get(b) != 0;
     let cam = rd16(b, A5 + if alt { 0x556 } else { 0x506 });
     let x = rd16(b, c.a[0] + 8);
-    let gap = cam.wrapping_add(0xc0).wrapping_sub(x);
+    // `sub.w D0w,D1w` : X de la soustraction, que `moveq` garde
+    let gap = crate::ops::sub(c, x as u32, cam.wrapping_add(0xc0) as u32, Size::Word) as u16;
     c.d[1] = c.d[1] & !0xffff | gap as u32;
     c.d[0] = if gap as i16 > 0 { 0 } else { 1 };
     moved(c, c.d[0], Size::Long);

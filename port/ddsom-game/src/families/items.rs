@@ -217,7 +217,7 @@ fn tresor_init(ctx: &mut Ctx, o: Obj) {
 
 fn tresor_actif(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(tresor::TABLE_SOUS_ETATS, sous_etat as u32);
+    let cible = super::effects::cible(ctx, tresor::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
             let en_vol = ctx.move_xyz().gt();
@@ -235,7 +235,7 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
             // en cinématique, un objet resté à gauche de l'écran disparaît
             let cinematique = ctx.ram8(0x44) != 0;
             if cinematique {
-                let limite = ctx.ram16(0x506).wrapping_sub(0x40);
+                let limite = crate::ram::CAMERA_X.get(ctx.b).wrapping_sub(0x40);
                 let x = o.u16(ctx.b, Obj::X);
                 if !((limite as i16) < x as i16) {
                     o.set_u8(ctx.b, Obj::STATE, etat::HORS_ECRAN);
@@ -272,7 +272,7 @@ fn tresor(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(tresor::TABLE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, tresor::TABLE_ETATS, etat as u32);
     match etat {
         etat::INIT => tresor_init(ctx, o),
         etat::ACTIF => tresor_actif(ctx, o),
@@ -366,8 +366,6 @@ fn conso_effet(ctx: &mut Ctx, o: Obj) {
     let variante = o.u8(ctx.b, Obj::VARIANT) as u32;
     let cible = ctx.prog32(conso::EFFETS + 4 * variante);
     // registres de l'original au moment du `jsr (A1)` (utiles si la variante est hors table)
-    ctx.c.d[0] = variante << 2;
-    ctx.c.a[1] = cible;
     match cible {
         conso::NOURRITURE => effet_nourriture(ctx, o),
         conso::POTION_B => effet_potion(ctx, o, &[(1, 1), (0x183, 1), (0x184, 0), (0x182, 0)]),
@@ -387,7 +385,7 @@ fn conso_effet(ctx: &mut Ctx, o: Obj) {
 
 fn conso_actif(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(conso::TABLE_SOUS_ETATS, sous_etat as u32);
+    let cible = super::effects::cible(ctx, conso::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
             let en_vol = ctx.move_xyz().gt();
@@ -430,7 +428,7 @@ fn conso_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(conso::TABLE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, conso::TABLE_ETATS, etat as u32);
     match etat {
         etat::INIT => conso_init(ctx, o),
         etat::ACTIF => conso_actif(ctx, o),
@@ -654,7 +652,7 @@ fn inventaire_rejet(ctx: &mut Ctx, o: Obj) {
 
 fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(inventaire::TABLE_SOUS_ETATS, sous_etat as u32);
+    let cible = super::effects::cible(ctx, inventaire::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
             let en_vol = ctx.move_xyz().gt();
@@ -703,7 +701,7 @@ fn inventaire_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(inventaire::TABLE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, inventaire::TABLE_ETATS, etat as u32);
     match etat {
         etat::INIT => inventaire_init(ctx, o),
         etat::ACTIF => inventaire_actif(ctx, o),
@@ -757,7 +755,7 @@ fn bonus_init(ctx: &mut Ctx, o: Obj) {
 
 fn bonus_actif(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(bonus::TABLE_SOUS_ETATS, sous_etat as u32);
+    let cible = super::effects::cible(ctx, bonus::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
             ctx.anim_step();
@@ -801,7 +799,7 @@ fn bonus_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(bonus::TABLE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, bonus::TABLE_ETATS, etat as u32);
     match etat {
         etat::INIT => bonus_init(ctx, o),
         etat::ACTIF => bonus_actif(ctx, o),
@@ -892,7 +890,6 @@ fn icone_init(ctx: &mut Ctx, o: Obj) {
     o.set_u8(ctx.b, Obj::ACTIVE, 2);
     let alea = ctx.random();
     let tirage = alea & 3;
-    ctx.c.d[0] = ctx.c.d[0] & 0xffff_0000 | tirage as u32;
     o.set_u8(ctx.b, champ::MODE, tirage as u8);
     let animation = ctx.prog8(scene::ICONE_ANIMATIONS + tirage as u32);
     ctx.anim_start(scene::ANIMATIONS, animation as u16);
@@ -938,7 +935,7 @@ fn icone_envol_vitesse(ctx: &mut Ctx, o: Obj) {
 /// Sous-état 2 de l'icône : l'icône s'envole en arc (quatre temps, selon `+6`).
 fn icone_envol(ctx: &mut Ctx, o: Obj) {
     let temps = o.u8(ctx.b, champ::SOUS_SOUS_ETAT);
-    let cible = ctx.saut_table(scene::ICONE_ENVOL, temps as u32);
+    let cible = super::effects::cible(ctx, scene::ICONE_ENVOL, temps as u32);
     match temps {
         0 | 4 => {
             ajoute_u8(ctx, o, champ::SOUS_SOUS_ETAT, 2);
@@ -1038,13 +1035,11 @@ fn depart_lance(ctx: &mut Ctx, o: Obj) {
     eclat(ctx, o);
     ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    ctx.c.d[0] = ctx.c.d[0] & !0xff | variante as u32;
     ajoute_u8(ctx, o, champ::SOUS_ETAT, variante);
     o.set_u16(ctx.b, Obj::VX, 0x380);
     if o.u8(ctx.b, champ::RAMASSE) != 0 {
         o.set_u16(ctx.b, Obj::VX, 0x200);
         let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
-        ctx.c.a[2] = joueur.0 | 0xff00_0000;
         // le son se joue sur l'icône si le joueur n'est pas devant elle
         if joueur.u16(ctx.b, Obj::Y) as i16 >= o.u16(ctx.b, Obj::Y) as i16 {
             o.set_u16(ctx.b, champ::PROPRIETAIRE, o.0 as u16);
@@ -1053,9 +1048,7 @@ fn depart_lance(ctx: &mut Ctx, o: Obj) {
         o.set_u16(ctx.b, champ::PROPRIETAIRE, joueur.0 as u16);
         let mode = o.u8(ctx.b, champ::MODE) as u32;
         let routine = ctx.prog32(depart::ROUTINES + 4 * mode);
-        ctx.c.d[0] = routine;
         if routine != 0 {
-            ctx.c.a[4] = routine;
             ctx.jsr(routine);
         }
     }
@@ -1071,7 +1064,6 @@ fn depart_lance(ctx: &mut Ctx, o: Obj) {
 /// Un objet de scène de moins pour l'objet `+0x46`.
 fn depart_decompte(ctx: &mut Ctx, o: Obj) {
     let porteur = pointeur(ctx, o, scene::PROPRIETAIRE_2);
-    ctx.c.a[1] = porteur.0 | 0xff00_0000;
     let n = porteur.u8(ctx.b, depart::ICONES).wrapping_sub(1);
     porteur.set_u8(ctx.b, depart::ICONES, n);
 }
@@ -1080,8 +1072,7 @@ fn depart_decompte(ctx: &mut Ctx, o: Obj) {
 fn depart_marche(ctx: &mut Ctx, o: Obj) {
     if o.u8(ctx.b, depart::ARRET) == 0 {
         ctx.move_x();
-        let ecart = o.u16(ctx.b, Obj::X).wrapping_sub(ctx.ram16(0x506)).wrapping_add(0x20);
-        ctx.c.d[0] = ctx.c.d[0] & 0xffff_0000 | ecart as u32;
+        let ecart = o.u16(ctx.b, Obj::X).wrapping_sub(crate::ram::CAMERA_X.get(ctx.b)).wrapping_add(0x20);
         if ecart > 0x1c0 {
             o.set_u32(ctx.b, Obj::STATE, 0x0600_0000);
             depart_decompte(ctx, o);
@@ -1099,7 +1090,6 @@ fn depart_arret(ctx: &mut Ctx, o: Obj) {
     let mode = o.u8(ctx.b, champ::MODE) as u32;
     ctx.c.d[0] = mode;
     let son = ctx.prog8(depart::SONS_ARRET + mode);
-    ctx.c.d[1] = ctx.c.d[1] & !0xff | son as u32;
     if son != 0 {
         ctx.jsr(depart::SON_ARRET);
     }
@@ -1112,7 +1102,6 @@ fn depart_arret(ctx: &mut Ctx, o: Obj) {
         o.set_u16(ctx.b, scene::CREE, n.0 as u16);
     }
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
-    ctx.c.a[1] = joueur.0 | 0xff00_0000;
     if o.u16(ctx.b, Obj::X) <= joueur.u16(ctx.b, Obj::X) {
         o.set_u8(ctx.b, 0x2c, 0x20);
     }
@@ -1125,7 +1114,7 @@ fn depart_arret(ctx: &mut Ctx, o: Obj) {
 
 fn icone_depart(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(depart::SOUS_ETATS, sous_etat as u32);
+    let cible = super::effects::cible(ctx, depart::SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         0 => depart_lance(ctx, o),
         2 => depart_marche(ctx, o),
@@ -1134,7 +1123,6 @@ fn icone_depart(ctx: &mut Ctx, o: Obj) {
         8 => guide_second_objet(ctx, o),
         0xa => {
             let set = pointeur(ctx, o, scene::CREE);
-            ctx.c.a[1] = set.0 | 0xff00_0000;
             if set.u8(ctx.b, 0x22) != 0 {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
             }
@@ -1149,12 +1137,12 @@ fn icone_depart(ctx: &mut Ctx, o: Obj) {
 
 fn icone(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(scene::ICONE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, scene::ICONE_ETATS, etat as u32);
     match etat {
         etat::INIT => icone_init(ctx, o),
         etat::ACTIF => {
             let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-            let cible = ctx.saut_table(scene::ICONE_SOUS_ETATS, sous_etat as u32);
+            let cible = super::effects::cible(ctx, scene::ICONE_SOUS_ETATS, sous_etat as u32);
             match sous_etat {
                 sous::CHUTE => icone_suivi(ctx, o),
                 2 => icone_envol(ctx, o),
@@ -1171,8 +1159,8 @@ fn icone(ctx: &mut Ctx, o: Obj) {
 /// `0xdcddc` : place le guide au bord droit de l'écran et choisit le joueur vivant le plus proche,
 /// dont il retient le propriétaire (`+0x50`), la hauteur (`+0x54`) et un point d'arrivée (`+0x52`).
 fn guide_cible(ctx: &mut Ctx, o: Obj) {
-    let cam_x = ctx.ram16(0x506);
-    let cam_y = ctx.ram16(0x50a);
+    let cam_x = crate::ram::CAMERA_X.get(ctx.b);
+    let cam_y = crate::ram::CAMERA_Y.get(ctx.b);
     o.set_u16(ctx.b, Obj::X, cam_x.wrapping_add(0x1a0));
     o.set_u16(ctx.b, Obj::Y, cam_y.wrapping_add(0x40));
     o.set_u32(ctx.b, Obj::Z, 0);
@@ -1326,7 +1314,7 @@ fn guide_actif(ctx: &mut Ctx, o: Obj) {
     let fige = ctx.ram8(scene::SCENE_FIGEE) != 0;
     if !fige {
         let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-        let cible = ctx.saut_table(scene::GUIDE_SOUS_ETATS, sous_etat as u32);
+        let cible = super::effects::cible(ctx, scene::GUIDE_SOUS_ETATS, sous_etat as u32);
         match sous_etat {
             0 => guide_marche(ctx, o),
             2 => guide_attente(ctx, o),
@@ -1340,7 +1328,7 @@ fn guide_actif(ctx: &mut Ctx, o: Obj) {
 
 fn guide(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(scene::GUIDE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, scene::GUIDE_ETATS, etat as u32);
     match etat {
         etat::INIT => guide_init(ctx, o),
         etat::ACTIF => guide_actif(ctx, o),
@@ -1380,8 +1368,6 @@ fn guide_3_init(ctx: &mut Ctx, o: Obj) {
         }
         crate::mem::wr32(ctx.b, guide_3::PALETTE_DEST + 4 * i, couleur | lumiere);
     }
-    ctx.c.d[0] = lumiere;
-    ctx.c.a[1] = guide_3::PALETTE;
     ctx.c.a[2] = guide_3::PALETTE_DEST + 0x20;
     ajoute_u8(ctx, o, Obj::STATE, 2);
     guide_cible(ctx, o);
@@ -1396,7 +1382,6 @@ fn guide_3_init(ctx: &mut Ctx, o: Obj) {
 fn guide_3_attente(ctx: &mut Ctx, o: Obj) {
     if o.u16(ctx.b, scene::CREE) != 0 {
         let set = pointeur(ctx, o, scene::CREE);
-        ctx.c.a[1] = set.0 | 0xff00_0000;
         if set.u8(ctx.b, 0x22) == 0 {
             return;
         }
@@ -1416,12 +1401,12 @@ fn guide_3_attente(ctx: &mut Ctx, o: Obj) {
 
 fn guide_3(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(guide_3::ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, guide_3::ETATS, etat as u32);
     match etat {
         etat::INIT => guide_3_init(ctx, o),
         etat::ACTIF => {
             let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-            let cible = ctx.saut_table(guide_3::SOUS_ETATS, sous_etat as u32);
+            let cible = super::effects::cible(ctx, guide_3::SOUS_ETATS, sous_etat as u32);
             match sous_etat {
                 0 => guide_marche(ctx, o),
                 2 => guide_3_attente(ctx, o),
@@ -1442,7 +1427,7 @@ fn scene_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    let cible = ctx.saut_table(scene::TABLE_VARIANTES, 2 * variante as u32);
+    let cible = super::effects::cible(ctx, scene::TABLE_VARIANTES, 2 * variante as u32);
     match variante {
         0 | 2 => icone(ctx, o),
         1 => guide(ctx, o),
@@ -1548,7 +1533,7 @@ fn reserve_ramasse(ctx: &mut Ctx, o: Obj) {
 
 fn reserve_actif(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(reserve::TABLE_SOUS_ETATS, sous_etat as u32);
+    let cible = super::effects::cible(ctx, reserve::TABLE_SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
             let pose = o.u8(ctx.b, champ::SOUS_SOUS_ETAT);
@@ -1589,7 +1574,7 @@ fn reserve_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(reserve::TABLE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, reserve::TABLE_ETATS, etat as u32);
     match etat {
         etat::INIT => reserve_init(ctx, o),
         etat::ACTIF => reserve_actif(ctx, o),
@@ -1818,7 +1803,7 @@ fn decale_x(ctx: &mut Ctx, o: Obj, pas: u16) {
 
 fn contact_0(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(contact::V0_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, contact::V0_ETATS, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -1829,7 +1814,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
         }
         etat::ACTIF => {
             let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-            let cible = ctx.saut_table(contact::V0_SOUS_ETATS, sous_etat as u32);
+            let cible = super::effects::cible(ctx, contact::V0_SOUS_ETATS, sous_etat as u32);
             match sous_etat {
                 0 => {
                     ctx.anim_step();
@@ -1914,7 +1899,7 @@ fn contact_1_sortie(ctx: &mut Ctx, o: Obj) {
 
 fn contact_1(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(contact::V1_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, contact::V1_ETATS, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -1925,7 +1910,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
         }
         etat::ACTIF => {
             let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-            let cible = ctx.saut_table(contact::V1_SOUS_ETATS, sous_etat as u32);
+            let cible = super::effects::cible(ctx, contact::V1_SOUS_ETATS, sous_etat as u32);
             match sous_etat {
                 0 => {
                     let touche = contact_joueur(ctx, o);
@@ -1986,7 +1971,7 @@ fn contact_2_fin(ctx: &mut Ctx, o: Obj) {
 
 fn contact_2(ctx: &mut Ctx, o: Obj) {
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(contact::V2_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, contact::V2_ETATS, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -1996,7 +1981,7 @@ fn contact_2(ctx: &mut Ctx, o: Obj) {
         }
         etat::ACTIF => {
             let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-            let cible = ctx.saut_table(contact::V2_SOUS_ETATS, sous_etat as u32);
+            let cible = super::effects::cible(ctx, contact::V2_SOUS_ETATS, sous_etat as u32);
             match sous_etat {
                 0 => {
                     ctx.anim_step();
@@ -2034,7 +2019,7 @@ fn contact_2(ctx: &mut Ctx, o: Obj) {
 fn contact_gestionnaire(ctx: &mut Ctx) {
     let o = ctx.obj();
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    let cible = ctx.saut_table_d1(contact::TABLE_VARIANTES, 2 * variante as u32);
+    let cible = super::effects::cible(ctx, contact::TABLE_VARIANTES, 2 * variante as u32);
     match variante {
         0 => contact_0(ctx, o),
         1 => contact_1(ctx, o),
@@ -2276,7 +2261,7 @@ fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
 
 fn equipement_actif(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(equipement::SOUS_ETATS, sous_etat as u32);
+    let cible = super::effects::cible(ctx, equipement::SOUS_ETATS, sous_etat as u32);
     match sous_etat {
         sous::CHUTE => {
             let en_vol = ctx.move_xyz().gt();
@@ -2316,7 +2301,7 @@ fn equipement_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(equipement::ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, equipement::ETATS, etat as u32);
     match etat {
         etat::INIT => equipement_init(ctx, o),
         etat::ACTIF => equipement_actif(ctx, o),

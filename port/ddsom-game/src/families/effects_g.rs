@@ -273,8 +273,8 @@ fn rain_init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     if x.u8(rain::SETTING) == 0 {
         // pluie : en haut à droite de l'écran, une poussière au départ
-        let px = x.u16(Obj::X).wrapping_add(0x1a0).wrapping_add(x.a5_u16(0x506));
-        let py = x.u16(Obj::Y).wrapping_add(0xa0).wrapping_add(x.a5_u16(0x50a));
+        let px = x.u16(Obj::X).wrapping_add(0x1a0).wrapping_add(crate::ram::CAMERA_X.get(x.b));
+        let py = x.u16(Obj::Y).wrapping_add(0xa0).wrapping_add(crate::ram::CAMERA_Y.get(x.b));
         x.set16(Obj::X, px);
         x.set16(Obj::Z, py);
         let y = x.u16(Obj::Y);
@@ -460,7 +460,7 @@ fn armour_break(x: &mut Cx) {
     let count = x.data8(at);
     at += 1;
     x.c.a[4] = at;
-    x.c.d[1] = count as u32;
+    let mut n = count as u16;
     loop {
         let Some(o) = x.alloc(&pools::EFFCT) else { return };
         o.set_u8(x.b, Obj::ACTIVE, 1);
@@ -468,7 +468,6 @@ fn armour_break(x: &mut Cx) {
         o.set_u8(x.b, Obj::VARIANT, 1);
         let kind = x.data8(at);
         at += 1;
-        x.c.a[4] = at;
         o.set_u8(x.b, armour::PIECE, kind);
         for off in [Obj::X, Obj::Y, Obj::Z] {
             let v = x.u16(off);
@@ -477,8 +476,7 @@ fn armour_break(x: &mut Cx) {
         let facing = x.u8(f::FACING);
         o.set_u8(x.b, f::FACING, facing);
         o.set_u16(x.b, armour::WEARER, x.o.0 as u16);
-        let n = (x.c.d[1] as u16).wrapping_sub(1);
-        set_low_word(&mut x.c.d[1], n);
+        n = n.wrapping_sub(1);
         if n == 0xffff {
             return;
         }
@@ -767,7 +765,7 @@ fn flyer_sweep(x: &mut Cx, link: Obj) {
     x.set8(flyer::PLAYER_IN_LINE, 0);
     let y = link.u16(x.b, Obj::Y);
     x.set16(Obj::Y, y);
-    let camera = if x.a5_u8(0x36) != 0 { 0x556 } else { 0x506 };
+    let camera = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { 0x556 } else { 0x506 };
     let mut px = x.a5_u16(camera);
     if x.u8(f::FACING) != 0 {
         px = px.wrapping_add(0x1c0);
@@ -784,7 +782,6 @@ fn flyer_sweep(x: &mut Cx, link: Obj) {
             x.set8(flyer::PLAYER_IN_LINE, 1);
         }
     }
-    x.c.d[6] = x.c.d[6] & 0xffff_0000 | 0x7fff;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -944,7 +941,6 @@ fn load_colours(x: &mut Cx, from: u32, to: u32, n: u32) {
         crate::mem::wr16(x.b, to + 2 * k, v);
     }
     set_low_word(&mut x.c.d[0], v);
-    set_low_word(&mut x.c.d[1], 0xffff);
 }
 
 /// `0xb95b8` : copie 0x400 octets de `from` vers `to` par blocs de huit longs (registres D1-D6, A3, A4
@@ -963,7 +959,6 @@ fn copy_block(x: &mut Cx, from: u32, to: u32) {
     x.c.a[4] = last[7];
     x.c.a[1] = from + 0x400;
     x.c.a[2] = to + 0x400;
-    set_low_word(&mut x.c.d[0], 0xffff);
 }
 
 /// Lance la tâche de fondu `program` (`0x9b6`, D0.w = 0x10), A0 gardé.
@@ -1168,7 +1163,6 @@ fn hero(x: &mut Cx, sub: u8) {
             x.set16(Obj::VZ, 0x700);
             x.set16(Obj::AZ, 0);
             x.set32(Obj::VX, 0);
-            x.c.d[0] = 0;
             x.call(sfx::LIFT_OFF);
             x.anim_start(fireworks::ANIMS_HERO, 6);
         }

@@ -8,7 +8,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::mem::{prog16, prog8, rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{prog16, prog8, rd16, rd32, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use super::cx::{handler, Cx};
 use crate::{call, regs, Native};
@@ -359,7 +359,7 @@ fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
         o.set_u16(b, 0x50, v);
         o.set_u8(b, 0x3, c.d[3] as u8);
         o.set_u16(b, 0x5c, c.d[4] as u16);
-        let (cx, cy) = if rd8(b, A5 + 0x36) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
+        let (cx, cy) = if crate::ram::CAMERA_ALT_ACTIVE.get(b) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
         let (x, y) = (rd16(b, A5 + cx), rd16(b, A5 + cy));
         let index = (c.d[3] as u16).wrapping_shl(2) as u32;
         let (dx, dy) = (prog16(b, OFFSETS + index), prog16(b, OFFSETS + 2 + index));
@@ -388,6 +388,8 @@ fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
 fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
     const MASK: u16 = 0x067e; // D1-D6, A1, A2
     let (mut dst, mut src) = (0x91c480, 0x25c4c0);
+    // `moveq #0xb,D7` : seuls drapeaux posés (ni `movem` ni `dbf` n'en changent)
+    moved(c, 0xb, Size::Long);
     for _ in 0..12 {
         src = movem_load(c, b, MASK, src);
         dst = movem_store(c, b, MASK, dst);

@@ -76,9 +76,7 @@ const LIFETIME: u16 = 0x4b0;
 
 /// `jmp (table,PC,D0.w)` : D0 = indice, D1.w = mot de la table ; renvoie la cible.
 fn jump(x: &mut Cx, table: u32, i: u8) -> u32 {
-    x.c.d[0] = i as u32;
     let w = x.rom16(table + i as u32);
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | w as u32;
     table.wrapping_add(w as i16 as i32 as u32)
 }
 
@@ -97,8 +95,6 @@ fn run(x: &mut Cx) {
 /// le décalage de la ligne.
 fn load_sheet(x: &mut Cx, sparkle: bool) {
     let row = 8 * x.u8(f::VARIANT) as u32;
-    x.c.d[0] = row;
-    x.c.a[1] = rom::SHEETS;
     let sheet = rom::SHEETS + row;
     let v = x.data8(sheet);
     x.set8(f::SLOT, v);
@@ -158,7 +154,7 @@ fn active(x: &mut Cx) {
             age(x);
         }
         4 => {
-            let player = x.link_a1(f::OWNER);
+            let player = x.linked(f::OWNER);
             if player.u8(x.b, p::READY) != 0 {
                 x.add8(f::STATE, 2);
                 equip(x);
@@ -187,21 +183,18 @@ fn fall(x: &mut Cx) {
 
 /// Ramène la pièce dans la vue : au plus haut à `caméra.y + 0x20`, entre `caméra.x + 0x18` et `+ 0x168`.
 fn into_view(x: &mut Cx) {
-    let cam2 = x.a5_u8(0x36) != 0;
-    let (cam_x, cam_y) = if cam2 { (x.a5_u16(0x556), x.a5_u16(0x55a)) } else { (x.a5_u16(0x506), x.a5_u16(0x50a)) };
+    let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
+    let (cam_x, cam_y) = if cam2 { (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b)) } else { (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b)) };
     let top = cam_y.wrapping_add(0x20);
     if top >= x.u16(f::Y) {
         x.set16(f::Y, top);
     }
     let left = cam_x.wrapping_add(0x18);
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | left as u32;
     let px = x.u16(f::X);
     if left as i16 > px as i16 {
         x.set16(f::X, left);
-        x.c.d[0] = x.c.d[0] & 0xffff_0000 | cam_x as u32;
     } else {
         let right = cam_x.wrapping_add(0x168);
-        x.c.d[0] = x.c.d[0] & 0xffff_0000 | right as u32;
         if right <= px {
             x.set16(f::X, right);
         }
@@ -213,14 +206,12 @@ fn into_view(x: &mut Cx) {
 fn age(x: &mut Cx) {
     let left = x.u16(f::LIFETIME).wrapping_sub(1);
     x.set16(f::LIFETIME, left);
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | left as u32;
     if (left as i16) < 0 {
         x.set8(f::STATE, 4);
         x.set8(f::ACTIVE, 2);
     }
     if left <= 0x3c {
         let phase = left.wrapping_add(x.c.d[7] as u16) & 1;
-        x.c.d[0] = x.c.d[0] & 0xffff_0000 | phase as u32;
         x.set_bit(f::FLAGS, 1, phase == 0);
     }
 }
@@ -245,17 +236,16 @@ fn thrown(x: &mut Cx) {
         return;
     }
     x.add8(f::SUB2, 2);
-    let player = x.link_a1(f::OWNER);
+    let player = x.linked(f::OWNER);
     let y = player.u16(x.b, p::Y).wrapping_sub(1);
     x.set16(f::Y, y);
     x.set16(f::Z, 0x10);
     x.set16(f::VZ, 0);
     x.set16(f::AZ, 0xffc0);
     x.set32(f::VX, 0x0200_0000);
-    let cam2 = x.a5_u8(0x36) != 0;
+    let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
     let cam_x = x.a5_u16(if cam2 { 0x556 } else { 0x506 });
     let middle = cam_x.wrapping_add(0xc0);
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | middle as u32;
     if middle as i16 <= x.u16(f::X) as i16 {
         let v = x.u32(f::VX).wrapping_neg();
         x.set32(f::VX, v);
@@ -266,16 +256,11 @@ fn thrown(x: &mut Cx) {
 /// `0xdb350` : la pièce ramassée prend sa place sur le joueur (gestionnaire de son emplacement), est notée
 /// dans le tableau des objets de collection, puis annoncée (SET 0xa).
 fn equip(x: &mut Cx) {
-    let player = x.link_a1(f::OWNER);
-    x.c.a[2] = x.c.a[1];
-    x.c.a[1] = rom::SHEETS;
+    let player = x.linked(f::OWNER);
     let row = 8 * x.u8(f::VARIANT) as u32;
     let id = x.data8(rom::SHEETS + row + 1);
-    x.c.d[1] = id as u32;
     let slot = x.u8(f::SLOT) as u32;
-    x.c.d[0] = 4 * slot;
     let handler = x.rom32(rom::SLOT_HANDLERS + 4 * slot);
-    x.c.a[3] = handler;
     // emplacement : (octet porté, compteur de coups, décalage du numéro de la pièce rejetée)
     match slot {
         0 => replace(x, player, id, 0x160, None, 0),
@@ -288,11 +273,9 @@ fn equip(x: &mut Cx) {
         7 => replace(x, player, id, 0x167, None, 0x1f),
         _ => crate::families::effects::hors_table(handler),
     }
-    x.c.a[1] = COLLECTED;
     let collection = x.u8(f::COLLECTION) as u32;
     crate::mem::wr8(x.b, COLLECTED + collection, 1);
     let announce = x.u8(f::ANNOUNCE);
-    x.c.d[0] = announce as u32;
     if announce != 0 {
         let o = x.o;
         super::creators::set_a_joueur(x.b, o, announce);
@@ -303,7 +286,6 @@ fn equip(x: &mut Cx) {
 /// événement ; sinon l'ancienne (numéro + `shift`) est rejetée. L'emplacement 2 ne rejette pas la pièce 1.
 fn replace(x: &mut Cx, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift: u8) {
     let old = player.u8(x.b, worn);
-    x.c.d[0] = x.c.d[0] & !0xff | old as u32;
     if old == id {
         if let Some(h) = hits {
             let v = x.u8(f::HITS);
@@ -334,14 +316,11 @@ fn slot_4(x: &mut Cx, player: Obj, id: u8) {
     let character = player.u8(x.b, p::CHARACTER) as u32;
     x.c.d[2] = character;
     let forbidden = x.rom8(rom::SLOT_4_FORBIDDEN + character);
-    x.c.d[0] = x.c.d[0] & !0xff | forbidden as u32;
     if forbidden != 0 {
         let variant = x.u8(f::VARIANT);
-        x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
         return drop_old(x, player, variant);
     }
     let old = player.u8(x.b, 0x164);
-    x.c.d[0] = x.c.d[0] & !0xff | old as u32;
     if old == id {
         return already_worn(x);
     }
@@ -353,7 +332,6 @@ fn slot_4(x: &mut Cx, player: Obj, id: u8) {
     x.c.d[2] = x.c.d[2] & !0xff | hand as u32;
     if hand as i8 > 3 {
         let v = id.wrapping_add(0x28);
-        x.c.d[1] = x.c.d[1] & !0xff | v as u32;
         player.set_u8(x.b, p::SECOND_HAND, v);
     }
     drop_old(x, player, old.wrapping_add(0xa));
@@ -361,7 +339,7 @@ fn slot_4(x: &mut Cx, player: Obj, id: u8) {
 
 /// `0xdb500` : la pièce était déjà portée : événement de score du joueur, puis son.
 fn already_worn(x: &mut Cx) {
-    let player = x.link_a1(f::OWNER);
+    let player = x.linked(f::OWNER);
     let number = (player.u8(x.b, p::NUMBER) as u32) << 8;
     x.c.d[1] = number;
     x.c.d[0] = 0x11 + number;
@@ -372,7 +350,6 @@ fn already_worn(x: &mut Cx) {
 
 /// `0xdb672` : crée l'ITEM 2 de variante `variant` rejeté par le joueur (A2), avec le compteur de coups D2.
 fn drop_old(x: &mut Cx, player: Obj, variant: u8) {
-    x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
     let Some(n) = x.alloc(&pools::ITEM) else { return };
     n.set_u8(x.b, f::ACTIVE, 1);
     n.set_u8(x.b, f::KIND, 2);

@@ -304,7 +304,7 @@ fn menu_button(x: &mut Cx) {
                 x.set16(Obj::Y, 368);
                 x.anim_start(anims::MENU, 0);
             } else {
-                let (cx, cy) = (x.a5_u16(0x506), x.a5_u16(0x50a));
+                let (cx, cy) = (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b));
                 x.set16(Obj::X, cx.wrapping_add(0xc0));
                 x.set16(Obj::Y, cy.wrapping_add(0x40));
                 x.set16(Obj::Z, 40);

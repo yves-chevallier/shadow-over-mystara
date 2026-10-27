@@ -45,6 +45,7 @@ use crate::objects::Courant;
     use crate::mem::A5;
     use crate::objects::{pools, Obj};
     use crate::families::effects_creators;
+    use crate::machine::Machine;
 
     /// Sous-états `+5` de l'état actif.
     mod sous {
@@ -166,21 +167,16 @@ use crate::objects::Courant;
         }
     }
 
-    /// `move.w (table,PC,D0.w),D1.w` : D0 = indice, D1.w = mot de la table (restes lus après le saut) ;
-    /// renvoie la cible (pour les indices hors table, laissés au code d'origine).
+    /// Cible du saut par table `move.w (table,PC,D0.w),D1.w ; jmp` pour l'indice `i` (`hors_table`).
     fn saut(x: &mut Cx, table: u32, i: u8) -> u32 {
-        x.c.d[0] = i as u32;
         let w = x.rom16(table + i as u32);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | w as u32;
         table.wrapping_add(w as i16 as i32 as u32)
     }
 
-    /// Classe du joueur lié (`+3 >> 1`), A1 = le joueur.
+    /// Classe du joueur lié (`+3 >> 1`).
     fn classe(x: &mut Cx) -> u8 {
-        let joueur = x.link_a1(f::JOUEUR);
-        let c = joueur.u8(x.b, j::CLASSE) >> 1;
-        x.c.d[0] = c as u32;
-        c
+        let joueur = x.linked(f::JOUEUR);
+        joueur.u8(x.b, j::CLASSE) >> 1
     }
 
     fn compte_cassee(x: &mut Cx) {
@@ -197,16 +193,13 @@ use crate::objects::Courant;
             let v = x.data8(fiche + i as u32);
             x.set8(off, v);
         }
-        let tirage = x.rand_and(0xf);
+        let tirage = (x.random() & 0xf) as u32;
         let v = x.data8(fiche + 0xa + tirage);
         x.set8(f::BUTIN_GAUCHE, v);
-        let tirage = x.rand_and(0xf);
+        let tirage = (x.random() & 0xf) as u32;
         let v = x.data8(fiche + 0x1a + tirage);
         x.set8(f::SPECIAL, v);
         // pointeurs de lecture de la fiche laissés par l'original
-        x.c.a[1] = fiche + 0xa;
-        x.c.a[2] = fiche + 0xa;
-        x.c.a[3] = fiche + 0x1a;
     }
 
     fn init(x: &mut Cx) {
@@ -309,11 +302,8 @@ use crate::objects::Courant;
     /// Crée l'ITEM `butin` (type et variante lus dans `BUTINS`) au-dessus de la caisse, lancé avec
     /// les vitesses `(vx, vy)`. `None` si le pool d'ITEM est plein.
     fn cree_butin(x: &mut Cx, butin: u8, vx: u16, vy: u16) -> Option<Obj> {
-        x.c.d[0] = butin as u32;
         let n = x.alloc(&pools::ITEM)?;
-        x.c.a[3] = rom::BUTINS;
         let rang = 2 * butin as u32;
-        x.c.d[0] = rang;
         n.set_u8(x.b, f::ACTIVE, 1);
         let kind = x.data8(rom::BUTINS + rang);
         n.set_u8(x.b, 0x2, kind);
@@ -372,7 +362,6 @@ use crate::objects::Courant;
     fn clignote(x: &mut Cx) {
         let reste = x.u8(f::DELAI).wrapping_sub(1);
         x.set8(f::DELAI, reste);
-        x.c.d[0] = x.c.d[0] & !0xff | (reste & 1) as u32;
         if reste == 0 {
             x.add8(f::ETAT, 2);
         }
@@ -400,7 +389,6 @@ use crate::objects::Courant;
             x.add8(f::SOUS_SOUS_ETAT, 2);
             x.set8(f::ACTIVE, 2);
             x.set8(f::DELAI, DUREE_CLIGNOTEMENT);
-            x.c.a[1] = CASSEES;
             compte_cassee(x);
         }
     }
@@ -422,7 +410,6 @@ use crate::objects::Courant;
         }
         x.add16(f::X, 2);
         x.add16(f::Y, 1);
-        x.c.d[0] = x.c.d[0] & !0xff | (reste & 1) as u32;
         if reste & 1 == 0 {
             x.add16(f::X, 0xfffc);
             x.add16(f::Y, 0xfffe);
@@ -445,7 +432,6 @@ use crate::objects::Courant;
             x.set8(f::VERROU, 0);
         }
         let special = x.u8(f::SPECIAL);
-        x.c.d[0] = special as u32;
         if special != 0 {
             if x.u8(f::EFFET_CREE) == 0 {
                 if etincelle_posee(x, special).is_some() {
@@ -469,7 +455,6 @@ use crate::objects::Courant;
         }
         x.add8(f::SOUS_SOUS_ETAT, 2);
         x.set8(f::DELAI, 0xa);
-        x.c.a[1] = CASSEES;
         compte_cassee(x);
         if classe(x) == 3 {
             x.set8(f::ACTIVE, 1);
@@ -518,25 +503,20 @@ use crate::objects::Courant;
     /// `0xd9cea` : la caisse portée suit les mains du joueur (décalage par classe et par pose, retourné
     /// avec lui) ; rien si le joueur ne porte plus.
     fn suit_porteur(x: &mut Cx) {
-        let joueur = x.link_a1(f::JOUEUR);
+        let joueur = x.linked(f::JOUEUR);
         let classe = joueur.u8(x.b, j::CLASSE) as u32;
         let prises = x.data32(rom::PRISES + 4 * classe);
-        x.c.a[4] = prises;
         let pose = joueur.u8(x.b, j::POSE);
-        x.c.d[0] = (4 * classe & 0xff00) | pose as u32;
         if pose == 0 {
             return;
         }
-        let i = (4 * x.c.d[0]) & 0xffff;
-        x.c.d[0] = i;
+        let i = (4 * ((4 * classe & 0xff00) | pose as u32)) & 0xffff;
         let mut dx = x.data16(prises + i);
         let dz = x.data16(prises + i + 2);
-        x.c.d[2] = x.c.d[2] & 0xffff_0000 | dz as u32;
         let retourne = joueur.u8(x.b, j::RETOURNE);
         if retourne != 0 {
             dx = dx.wrapping_neg();
         }
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | dx as u32;
         x.set8(f::RETOURNE, retourne);
         x.copy_pos(joueur);
         x.add16(f::X, dx);
@@ -565,7 +545,7 @@ use crate::objects::Courant;
     /// Lancée, 0 : tant que le joueur la tient, elle suit ses mains ; lâchée, elle part en arc devant
     /// lui (et commence aussitôt son vol).
     fn lancee_depart(x: &mut Cx) {
-        let joueur = x.link_a1(f::JOUEUR);
+        let joueur = x.linked(f::JOUEUR);
         if joueur.u8(x.b, j::POSE) != 0 {
             return suit_porteur(x);
         }
@@ -586,7 +566,6 @@ use crate::objects::Courant;
     fn obstacle(x: &mut Cx) -> bool {
         x.call(rom::TERRAIN);
         let d0 = (x.c.d[2] as u16 & 0x3f).wrapping_sub(5);
-        x.c.d[0] = x.c.d[0] & 0xffff_0000 | d0 as u32;
         d0 <= 3
     }
 
@@ -611,7 +590,6 @@ use crate::objects::Courant;
             }
             eclats(x);
             x.call(rom::SON_ATTERRIT);
-            x.c.a[1] = CASSEES;
             return compte_cassee(x);
         }
         let rebondit = x.u8(f::REBOND) == 0 && (x.u8(f::SANS_DECOR) != 0 || obstacle(x));
@@ -665,21 +643,18 @@ use crate::objects::Courant;
     /// `0xd9f06` : la caisse reste entre les bords de l'écran (X de la caméra + 0x18 à + 0x168) ; sa
     /// position devient sa nouvelle origine.
     fn reste_a_l_ecran(x: &mut Cx) {
-        let cam2 = x.a5_u8(0x36) != 0;
+        let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
         let cam_x = x.a5_u16(if cam2 { 0x556 } else { 0x506 });
         let gauche = cam_x.wrapping_add(0x18);
         let px = x.u16(f::X);
         if (gauche as i16) > px as i16 {
             x.set16(f::X, gauche);
-            x.c.d[0] = x.c.d[0] & 0xffff_0000 | cam_x as u32;
         } else {
             let droite = cam_x.wrapping_add(0x168);
-            x.c.d[0] = x.c.d[0] & 0xffff_0000 | droite as u32;
             if droite <= px {
                 x.set16(f::X, droite);
             }
         }
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | gauche as u32;
         let px = x.u16(f::X);
         x.set16(f::ORIGINE_X, px);
         let py = x.u16(f::Y);
@@ -713,7 +688,6 @@ use crate::objects::Courant;
             x.set8(f::COUP, 0);
             lache_butin(x);
             x.call(rom::SON_COUP);
-            x.c.a[1] = CASSEES;
             compte_cassee(x);
             if x.u8(f::SPECIAL) != 0 {
                 effet_special(x, 2);
@@ -749,7 +723,7 @@ fn box_2(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(decor::TABLE_ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, decor::TABLE_ETATS, etat as u32);
     match etat {
         etat::INIT => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -803,7 +777,7 @@ fn barriere_cree_set(ctx: &mut Ctx, o: Obj) {
 
 fn barriere_init(ctx: &mut Ctx, o: Obj) {
     let variante = o.u8(ctx.b, Obj::VARIANT);
-    let cible = ctx.saut_table(barriere::INITS, 2 * variante as u32);
+    let cible = super::effects::cible(ctx, barriere::INITS, 2 * variante as u32);
     match variante {
         0 | 3 => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
@@ -825,7 +799,7 @@ fn barriere_init(ctx: &mut Ctx, o: Obj) {
 /// quand elle sort de l'écran.
 fn barriere_actif_0(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(barriere::SOUS_ETATS_0, sous_etat as u32);
+    let cible = super::effects::cible(ctx, barriere::SOUS_ETATS_0, sous_etat as u32);
     match sous_etat {
         0 => {
             let coup = o.u8(ctx.b, champ::COUP_B);
@@ -854,7 +828,7 @@ fn barriere_actif_0(ctx: &mut Ctx, o: Obj) {
 
 fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
-    let cible = ctx.saut_table(barriere::SOUS_ETATS_1, sous_etat as u32);
+    let cible = super::effects::cible(ctx, barriere::SOUS_ETATS_1, sous_etat as u32);
     match sous_etat {
         0 | 4 => {
             let coup = o.u8(ctx.b, champ::COUP_B);
@@ -891,12 +865,12 @@ fn barriere_gestionnaire(ctx: &mut Ctx) {
         return;
     }
     let etat = o.u8(ctx.b, Obj::STATE);
-    let cible = ctx.saut_table(barriere::ETATS, etat as u32);
+    let cible = super::effects::cible(ctx, barriere::ETATS, etat as u32);
     match etat {
         etat::INIT => barriere_init(ctx, o),
         etat::ACTIF => {
             let variante = o.u8(ctx.b, Obj::VARIANT);
-            let cible = ctx.saut_table(barriere::ACTIFS, 2 * variante as u32);
+            let cible = super::effects::cible(ctx, barriere::ACTIFS, 2 * variante as u32);
             match variante {
                 0 => barriere_actif_0(ctx, o),
                 1 => barriere_actif_1(ctx, o),
@@ -923,9 +897,6 @@ use crate::objects::Courant;
     use crate::families::cx::{handlers, Cx};
     use crate::objects::{pools, Obj};
 
-    const ETATS: u32 = 0xda808;
-    const INITS: u32 = 0xda826;
-    const ACTIFS: u32 = 0xda8d0;
     const ANIMATIONS: u32 = 0x1bebc2;
     /// Recalage de l'objet après la collision avec le décor (`terrain::push_68k`).
     const RECALE: u32 = 0x35c0;
@@ -976,18 +947,15 @@ use crate::objects::Courant;
             return;
         }
         let etat = x.u8(0x4);
-        saut(x, ETATS, etat as u32);
         match etat {
             0 => {
                 let v = 2 * x.u8(0x3) as u32;
-                saut(x, INITS, v);
                 if v == 0 { init_0(x) } else { init_1(x) }
                 x.reinsert();
             }
             2 => {
                 if x.a5_u8(0x3d) == 0 {
                     let v = 2 * x.u8(0x3) as u32;
-                    saut(x, ACTIFS, v);
                     if x.u8(0x5) == 0 {
                         if v == 0 { actif_0(x) } else { actif_1(x) }
                     }
@@ -996,13 +964,6 @@ use crate::objects::Courant;
             }
             _ => x.free(&pools::BOX),
         }
-    }
-
-    /// `move.w (table,PC,D0.w),D1.w` : D0 = indice, D1.w = mot de la table (restes lus après le saut).
-    fn saut(x: &mut Cx, table: u32, i: u32) {
-        x.c.d[0] = i;
-        let w = x.rom16(table + i);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | w as u32;
     }
 
     fn init_commun(x: &mut Cx, mobile: u8) {
@@ -1038,16 +999,13 @@ use crate::objects::Courant;
             return None;
         }
         let joueur = x.linked(f::JOUEUR);
-        x.c.a[1] = x.u16(f::JOUEUR) as i16 as i32 as u32;
         let etats = joueur.u32(x.b, j::ETATS) & 0xffff_ff00;
-        x.c.d[0] = etats;
         if etats != j::EN_POUSSEE {
             x.set8(f::POUSSE, 0);
             x.set16(f::JOUEUR, 0);
             return None;
         }
         let personnage = (joueur.u8(x.b, j::PERSONNAGE) & 0xfe) as u32;
-        x.c.d[0] = personnage;
         x.set16(f::PERSONNAGE, personnage as u16);
         Some(joueur)
     }
@@ -1055,25 +1013,20 @@ use crate::objects::Courant;
     /// Replace le joueur contre le bloc sur l'axe `axe` (+8 ou +0x10).
     fn recale_joueur(x: &mut Cx, axe: u32, table: u32) {
         let joueur = x.linked(f::JOUEUR);
-        x.c.a[1] = x.u16(f::JOUEUR) as i16 as i32 as u32;
         let v = x.u16(axe);
         joueur.set_u16(x.b, axe, v);
         let i = x.u16(f::PERSONNAGE) as i16 as i32 as u32;
         let d = x.data16(table.wrapping_add(i));
-        x.c.a[2] = table;
-        x.set_d0w(d);
         joueur.set_u16(x.b, axe, v.wrapping_add(d));
     }
 
     /// Variante 0 : glissement en X entre les bornes.
     fn actif_0(x: &mut Cx) {
         let px = x.u16(0x8);
-        x.set_d0w(px);
         if px > x.u16(f::X_MAX) || px <= x.u16(f::X_MIN) {
             x.add8(0x5, 2);
             x.set8(f::ARRETE, 1);
             let set = x.linked(f::SET);
-            x.c.a[1] = x.u16(f::SET) as i16 as i32 as u32;
             set.set_u8(x.b, 0x2f, 0);
             return;
         }

@@ -40,6 +40,10 @@ pub(crate) mod restes {
         fn hasard(&mut self, b: &mut Cps2Bus) -> u16;
         /// Drapeaux d'un `move`/`tst`/`and` de `v`.
         fn drapeaux(&mut self, _v: u32, _taille: Size) {}
+        /// Drapeau X seul (dernier bit sorti d'un décalage, que les instructions suivantes gardent).
+        fn x(&mut self, _bit: bool) {}
+        /// `cmp` : drapeaux de `dst - src` (X conservé).
+        fn comparaison(&mut self, _src: u32, _dst: u32, _taille: Size) {}
         /// `add` : résultat et drapeaux.
         fn addition(&mut self, src: u32, dst: u32, taille: Size) -> u32 {
             masque(dst.wrapping_add(src), taille)
@@ -62,6 +66,14 @@ pub(crate) mod restes {
             Size::Word => v & 0xffff,
             _ => v,
         }
+    }
+
+    /// Registres que l'original laisse à cet endroit et que rien ne semble relire : écrits comme lui, puis
+    /// empoisonnés avec `DDSOM_POISON=restes` pour le prouver avant de supprimer l'écriture.
+    #[track_caller]
+    #[allow(dead_code)] // outil de preuve : sert pendant une conversion, retiré avec les écritures prouvées mortes
+    pub(crate) fn restes(c: &mut Cpu, masque: u32) {
+        crate::diag::registres_morts(c, "restes", masque);
     }
 
     /// Le cœur : aucun registre.
@@ -95,6 +107,12 @@ pub(crate) mod restes {
         }
         fn drapeaux(&mut self, v: u32, taille: Size) {
             self.flags_logic(v, taille);
+        }
+        fn comparaison(&mut self, src: u32, dst: u32, taille: Size) {
+            crate::ops::cmp(self, src, dst, taille);
+        }
+        fn x(&mut self, bit: bool) {
+            self.sr = if bit { self.sr | m68k::SR_X } else { self.sr & !m68k::SR_X };
         }
         fn addition(&mut self, src: u32, dst: u32, taille: Size) -> u32 {
             crate::ops::add(self, src, dst, taille)
@@ -982,19 +1000,25 @@ fn eshl_slash(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u
     Some(o)
 }
 
-/// 0xa817c : colonne montante (ESHL 0x47) posée sur le créateur, 0x80 plus haut, juste devant ; D0 = 1.
+/// 0xa817c : colonne montante (ESHL 0x47) posée sur le créateur, 0x80 plus haut, juste devant ; D0 = 1, ou 0 si le
+/// pool est plein.
 fn eshl_rise(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
-    let o = spawn_in(r, b, &pools::ESHL, kind::ESHL_RISE)?;
+    let Some(o) = spawn_in(r, b, &pools::ESHL, kind::ESHL_RISE) else {
+        r.d(0, 0);
+        r.drapeaux(0, Size::Long);
+        return None;
+    };
     o.set_u8(b, Obj::VARIANT, 0);
     o.set_u8(b, REGLAGE, 0);
     o.set_u16(b, lien::DECOR, createur.word());
     let facing = createur.u8(b, RETOURNE);
     o.set_u8(b, RETOURNE, facing);
     copy_position(b, o, createur);
-    let z = o.u16(b, Obj::Z).wrapping_add(0x80);
-    o.set_u16(b, Obj::Z, z);
-    let y = o.u16(b, Obj::Y).wrapping_sub(1);
-    o.set_u16(b, Obj::Y, y);
+    // `addi.w`, `subi.w` : leur X reste après `moveq`
+    let z = r.addition(0x80, o.u16(b, Obj::Z) as u32, Size::Word);
+    o.set_u16(b, Obj::Z, z as u16);
+    let y = r.soustraction(1, o.u16(b, Obj::Y) as u32, Size::Word);
+    o.set_u16(b, Obj::Y, y as u16);
     r.d(0, 1);
     r.drapeaux(1, Size::Long);
     Some(o)
