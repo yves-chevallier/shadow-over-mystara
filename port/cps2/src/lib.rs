@@ -94,6 +94,10 @@ pub struct Machine {
     /// fait le travail du processeur jusqu'au cycle donné ; le Z80 suit, comme d'ordinaire. `cpu` n'est alors qu'un
     /// banc de registres (jeu sans 68000, `ddsom_game::install_sans_68k`).
     pub line_work: Option<LineWork>,
+    /// `run_frame` rend l'image (vrai par défaut). Faux : l'image n'est pas calculée et `run_frame` rend un vecteur vide.
+    /// Le rendu ne lit que l'état (aucun effet) ; les outils qui ne regardent pas l'image (`validate`, `bench`)
+    /// l'éteignent : c'est l'essentiel du temps d'une image du jeu sans 68000.
+    pub rendu: bool,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -209,6 +213,7 @@ impl Machine {
             step_cap: None,
             patches: Vec::new(),
             line_work: None,
+            rendu: true,
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -309,7 +314,7 @@ impl Machine {
             self.bus.irq_horizon = if raster { (self.cycle_debt + self.line_cycles) as u64 } else { frame_end };
             self.run_line();
         }
-        let image = self.render();
+        let image = if self.rendu { self.render() } else { Vec::new() };
         let bank = self.bus.objram_bank as usize & 1;
         self.obj_buffer.copy_from_slice(&self.bus.objram[bank]);
         self.pri_ctrl_buffer = self.bus.output;

@@ -210,31 +210,94 @@ impl Pool {
 
 // ---- adaptation aux registres du 68000 ----
 
-/// Allocation : A1 = emplacement trouvé, C si échec ; D6 sert de compteur de boucle.
-fn alloc_native(pool: &Pool, c: &mut Cpu, b: &mut Cps2Bus) {
-    let scan = pool.scan(b);
-    match scan {
-        Scan::NoneLeft => {
-            c.a[1] = A5 + pool.first;
-            c.set_ccr(1);
-        }
-        Scan::Found(i) => {
-            let obj = pool.slot(i);
-            let left = pool.free_count(b);
-            let new = c.addsub(true, 1, left as u32, false, Size::Word, false);
-            wr16(b, A5 + pool.free, new as u16);
-            wr8(b, obj.at(Obj::CLASS), pool.class);
-            c.a[1] = obj.0;
-            c.d[6] = pool.slots - 1 - i;
-            // or.b D0b,D0b
-            c.flags_logic(c.d[0], Size::Byte);
-        }
-        Scan::Exhausted => {
-            c.a[1] = pool.end();
-            c.d[6] = 0xffff;
-            c.set_ccr(1);
+/// Masques des registres que l'original laisse (voir `diag::registres_morts`).
+const REGS_ALLOC: u32 = regs::a(1) | regs::d(6) | regs::CCR;
+const REGS_FREE: u32 = regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR;
+
+impl Pool {
+    /// Comme `alloc`, et laisse les registres de l'original : A1 = emplacement trouvé (en cas d'échec : le premier
+    /// emplacement si le compteur est nul, la fin du pool si aucune place n'est libre), D6 = compteur de la boucle,
+    /// retenue = échec. Pour les appelants pas encore libérés des registres (`docs/guide-refactorisation.md`).
+    pub fn alloc_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+        let (r, _) = self.alloc_regs(c, b);
+        crate::diag::registres_morts(c, "alloc", REGS_ALLOC);
+        r
+    }
+
+    /// Allocation de l'original, registres compris : rend aussi l'A1 laissé.
+    fn alloc_regs(&self, c: &mut Cpu, b: &mut Cps2Bus) -> (Option<Obj>, Obj) {
+        let r = match self.scan(b) {
+            Scan::NoneLeft => {
+                c.a[1] = A5 + self.first;
+                c.set_ccr(1);
+                None
+            }
+            Scan::Found(i) => {
+                let obj = self.slot(i);
+                let left = self.free_count(b);
+                let new = c.addsub(true, 1, left as u32, false, Size::Word, false);
+                wr16(b, A5 + self.free, new as u16);
+                wr8(b, obj.at(Obj::CLASS), self.class);
+                c.a[1] = obj.0;
+                c.d[6] = self.slots - 1 - i;
+                // or.b D0b,D0b
+                c.flags_logic(c.d[0], Size::Byte);
+                Some(obj)
+            }
+            Scan::Exhausted => {
+                c.a[1] = self.end();
+                c.d[6] = 0xffff;
+                c.set_ccr(1);
+                None
+            }
+        };
+        (r, Obj(c.a[1]))
+    }
+
+    /// Allocation dont l'appelant d'origine ne teste pas l'échec : l'objet rendu est l'A1 que l'original laisse.
+    /// Glitch d'origine : pool plein, l'appelant écrit dans le premier emplacement (compteur nul, objet peut-être
+    /// actif) ou juste après le dernier (dans le pool suivant).
+    pub fn alloc_unchecked(&self, b: &mut Cps2Bus) -> Obj {
+        match self.scan(b) {
+            Scan::NoneLeft => Obj(A5 + self.first),
+            Scan::Found(_) => self.alloc(b).expect("place trouvée"),
+            Scan::Exhausted => Obj(self.end()),
         }
     }
+
+    /// `alloc_unchecked` avec les registres de l'original (voir `alloc_68k`).
+    pub fn alloc_unchecked_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Obj {
+        let (_, a1) = self.alloc_regs(c, b);
+        crate::diag::registres_morts(c, "alloc", REGS_ALLOC);
+        a1
+    }
+
+    /// Comme `release`, et laisse les registres de l'original : D0 = 0, D1.w = -1, A4 = fin de l'emplacement,
+    /// drapeaux de `tst.l D0`. A0 (l'objet) n'est pas touché.
+    pub fn release_68k(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+        self.release_regs(c, b, obj);
+        crate::diag::registres_morts(c, "free", REGS_FREE);
+    }
+
+    fn release_regs(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+        if self.listed {
+            lists::unlink(b, obj);
+        }
+        let left = self.free_count(b);
+        let new = c.addsub(false, 1, left as u32, false, Size::Word, false);
+        wr16(b, A5 + self.free, new as u16);
+        self.clear_slot(b, obj);
+        c.flags_logic(0, Size::Long);
+        c.d[0] = 0;
+        c.d[1] |= 0xffff;
+        c.a[4] = obj.0 + self.stride;
+    }
+}
+
+/// Allocation : A1 = emplacement trouvé, C si échec ; D6 sert de compteur de boucle. Les natives, appelées par
+/// adresse, rendent toujours les registres (jamais empoisonnés).
+fn alloc_native(pool: &Pool, c: &mut Cpu, b: &mut Cps2Bus) {
+    pool.alloc_regs(c, b);
     rts(c, b);
 }
 
@@ -247,18 +310,7 @@ fn alloc_cost(pool: &Pool, entry: u32, b: &mut Cps2Bus) -> u64 {
 
 /// Libération : A0 = objet. L'original laisse D0 = 0, D1.w = -1, A4 = fin de l'emplacement.
 fn free_native(pool: &Pool, c: &mut Cpu, b: &mut Cps2Bus) {
-    let obj = Obj(c.a[0]);
-    if pool.listed {
-        lists::unlink(b, obj);
-    }
-    let left = pool.free_count(b);
-    let new = c.addsub(false, 1, left as u32, false, Size::Word, false);
-    wr16(b, A5 + pool.free, new as u16);
-    pool.clear_slot(b, obj);
-    c.flags_logic(0, Size::Long);
-    c.d[0] = 0;
-    c.d[1] |= 0xffff;
-    c.a[4] = obj.0 + pool.stride;
+    pool.release_regs(c, b, Obj(c.a[0]));
     rts(c, b);
 }
 

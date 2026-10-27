@@ -79,6 +79,9 @@ fn main() {
         ddsom_game::install(&mut ma);
     }
     ddsom_game::install_reference(&mut mb);
+    // l'image n'est pas comparée (seulement l'état) : pas de rendu, c'était l'essentiel du temps d'une image
+    ma.rendu = false;
+    mb.rendu = false;
     mb.idle = Some(ddsom_game::idle);
     if std::env::var("DDSOM_NOIDLE").is_ok() && !sans_68k {
         ma.idle = None;
