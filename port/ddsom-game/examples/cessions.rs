@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use ddsom_game::taches::table::{lire, Contenu, Etat, Reprise};
+use ddsom_game::taches::table::{lire, Contenu, Etat};
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -39,7 +39,7 @@ fn main() {
             raster |= m.bus.raster_reload[..2].iter().any(|&r| (r as u32) < cps2::LINES);
             let Some(t) = lire(&m.bus) else { continue };
             for e in &t.emplacements {
-                let Reprise::Cession(c) = e.reprise else { continue };
+                let Some(c) = e.reprise.contexte() else { continue };
                 if e.etat == Etat::Libre {
                     continue;
                 }
@@ -50,7 +50,7 @@ fn main() {
                     .cadres
                     .iter()
                     .map(|k| match k.contenu {
-                        Contenu::Appel(suite) => format!(">{suite:x}"),
+                        Contenu::Appel(suite) => format!(">{:x}", suite.adresse()),
                         Contenu::Registres { .. } => "R".into(),
                         Contenu::Valeur(v) => format!("={v:x}"),
                     })

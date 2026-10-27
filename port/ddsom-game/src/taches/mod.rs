@@ -18,9 +18,13 @@ pub mod partie;
 pub mod service;
 pub mod table;
 
+use cps2::Cps2Bus;
+use m68k::Cpu;
+
 use crate::modes::Flow;
 use crate::scene::Ctx;
 use crate::Native;
+use table::Suite;
 
 /// Ce qu'une tâche demande à l'ordonnanceur à la fin d'un pas.
 #[derive(Clone, Copy)]
@@ -31,9 +35,10 @@ pub enum Attente {
     Prete,
 }
 
-/// Cède la main : le noyau range l'attente et le contexte de la tâche dans la table ; elle reprendra dans la native
-/// posée à l'adresse `reprise`, avec ses registres et sa pile actuels.
-pub fn ceder(x: &mut Ctx, attente: Attente, reprise: u32) -> Flow {
+/// Cède la main : le noyau range l'attente et le contexte de la tâche dans la table ; elle reprendra à `reprise`
+/// (une étape Rust, ou la native posée à une adresse), avec ses registres et sa pile actuels.
+pub fn ceder(x: &mut Ctx, attente: Attente, reprise: impl Into<Suite>) -> Flow {
+    let reprise = reprise.into();
     match attente {
         Attente::Images(n) => {
             x.c.d[0] = n;
@@ -44,11 +49,92 @@ pub fn ceder(x: &mut Ctx, attente: Attente, reprise: u32) -> Flow {
     Flow::Yield
 }
 
+/// Déclare les étapes d'une tâche : une variante par point de reprise, avec l'adresse que l'original reprend
+/// (`adresse`, gardée pour le diagnostic) et le pas qui s'y exécute (`pas`).
+#[macro_export]
+macro_rules! etapes {
+    ($(#[$m:meta])* $vis:vis enum $nom:ident { $($(#[$vm:meta])* $var:ident = $adr:expr => $pas:expr,)* }) => {
+        $(#[$m])*
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        $vis enum $nom { $($(#[$vm])* $var,)* }
+        impl $nom {
+            /// Adresse que l'original reprend à cette étape.
+            pub const fn adresse(self) -> u32 {
+                match self { $(Self::$var => $adr,)* }
+            }
+            /// Le pas de l'étape.
+            pub fn pas(self, x: &mut $crate::scene::Ctx) -> $crate::modes::Flow {
+                match self {
+                    $(Self::$var => {
+                        let pas: fn(&mut $crate::scene::Ctx) -> $crate::modes::Flow = $pas;
+                        pas(x)
+                    })*
+                }
+            }
+        }
+    };
+}
+
+/// Déclare l'étape de chaque sorte de tâche.
+macro_rules! etapes_des_taches {
+    ($($(#[$vm:meta])* $var:ident($t:ty),)*) => {
+        /// Point de reprise d'une tâche Rust : l'étape de sa machine à états.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum Etape { $($(#[$vm])* $var($t),)* }
+        impl Etape {
+            /// Adresse que l'original reprend à cette étape (diagnostic, comparaison avec la table FF0064).
+            pub fn adresse(self) -> u32 {
+                match self { $(Etape::$var(e) => e.adresse(),)* }
+            }
+            fn pas(self, x: &mut Ctx) -> Flow {
+                match self { $(Etape::$var(e) => e.pas(x),)* }
+            }
+        }
+        $(
+            impl From<$t> for Etape {
+                fn from(e: $t) -> Self { Etape::$var(e) }
+            }
+            impl From<$t> for Suite {
+                fn from(e: $t) -> Self { Suite::Etape(Etape::$var(e)) }
+            }
+        )*
+    };
+}
+
+etapes_des_taches! {
+    Gel(gel::Etape),
+}
+
+/// Exécute l'étape `etape` de la tâche courante ; si elle finit (`Flow::Done`, retour de sous-programme), la suite de
+/// l'appel en cours ([`revenir`]).
+pub fn executer(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
+    // adresse d'origine, pour les diagnostics (et la boucle d'image, si le pas rend la main sans céder)
+    c.pc = etape.adresse();
+    let mut x = Ctx::new(c, b);
+    crate::modes::c_a5(&mut x);
+    if etape.pas(&mut x) == Flow::Done {
+        revenir(x.c, x.b);
+    }
+}
+
+/// Retour d'un sous-programme (`rts`) : la suite de l'appel en cours, étape Rust exécutée aussitôt, ou adresse posée
+/// au PC.
+pub fn revenir(c: &mut Cpu, b: &mut Cps2Bus) {
+    match table::depiler_retour(c, b) {
+        Suite::Adresse(a) => c.pc = a,
+        Suite::Etape(e) => executer(e, c, b),
+    }
+}
+
+/// Première étape d'une tâche Rust neuve, d'après son entrée (sinon la native posée à l'entrée).
+pub fn entree(entree: u32) -> Option<Etape> {
+    [Etape::from(gel::Etape::Entree)].into_iter().find(|e| e.adresse() == entree)
+}
+
 /// Natives des tâches Rust.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
     partie::NATIVES
         .iter()
-        .chain(gel::NATIVES)
         .chain(fondu::NATIVES)
         .chain(ecran_fixe::NATIVES)
         .chain(service::NATIVES)

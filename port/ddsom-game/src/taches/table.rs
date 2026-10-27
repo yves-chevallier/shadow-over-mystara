@@ -10,10 +10,17 @@
 //! La table vit dans le bus (`Cps2Bus::ext`) : la machine du jeu n'écrit plus FF0052-FF01A5 (pile de
 //! l'ordonnanceur, tâche courante, tas des piles, enregistrements), et les enveloppes de cession ne sauvent plus les
 //! registres sur la pile de la tâche. [`ecarts`] compare la table à celle de la RAM d'une machine d'origine.
+//!
+//! Une tâche Rust reprend à une étape ([`Etape`], `Reprise::Etape`) et ses appels en cours continuent à des étapes
+//! ([`Suite::Etape`]) : l'ordonnanceur appelle son pas sans poser de PC. L'adresse d'origine de l'étape
+//! (`Etape::adresse`) ne sert plus qu'au diagnostic. Les reprises encore désignées par une adresse
+//! (`Reprise::Cession`, [`Suite::Adresse`]) sont celles des natives appelées ou reprises par du code « d'origine »
+//! (familles qui cèdent par `call_at`, boucles de partie, voir `docs/noyau.md`).
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
+use super::Etape;
 use crate::mem::{rd32, wr32};
 
 /// Nombre d'emplacements.
@@ -141,8 +148,49 @@ pub struct Contexte {
 pub enum Reprise {
     /// Pas encore lancée : son entrée.
     Entree(u32),
-    /// A cédé la main.
+    /// A cédé la main ; reprendra dans la native posée à l'adresse `pc` du contexte.
     Cession(Contexte),
+    /// A cédé la main ; reprendra à cette étape Rust (le `pc` du contexte n'est que son adresse d'origine).
+    Etape(Etape, Contexte),
+}
+
+impl Reprise {
+    /// Contexte d'une tâche qui a cédé.
+    pub fn contexte(self) -> Option<Contexte> {
+        match self {
+            Reprise::Entree(_) => None,
+            Reprise::Cession(c) | Reprise::Etape(_, c) => Some(c),
+        }
+    }
+}
+
+/// Ce qui suit un appel en cours, ou une cession : une native à son adresse, ou une étape Rust.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Suite {
+    Adresse(u32),
+    Etape(Etape),
+}
+
+impl Suite {
+    /// Adresse d'origine (celle que l'original empile).
+    pub fn adresse(self) -> u32 {
+        match self {
+            Suite::Adresse(a) => a,
+            Suite::Etape(e) => e.adresse(),
+        }
+    }
+}
+
+impl From<u32> for Suite {
+    fn from(a: u32) -> Self {
+        Suite::Adresse(a)
+    }
+}
+
+impl From<Etape> for Suite {
+    fn from(e: Etape) -> Self {
+        Suite::Etape(e)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -188,8 +236,8 @@ pub struct Cadre {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Contenu {
     /// Appel en cours : quand l'appelé revient (`rts` d'une native, ou cession terminale `jmp 0xa40` de l'original),
-    /// la tâche continue dans la native de reprise à cette adresse.
-    Appel(u32),
+    /// la tâche continue à cette suite.
+    Appel(Suite),
     /// Registres sauvés à l'entrée d'un sous-programme (`movem.l D0-D7/A0-A6,-(SP)`), rendus à sa sortie.
     Registres { d: [u32; 8], a: [u32; 7] },
     /// Valeur gardée d'une cession à l'autre (`move.l D0,-(SP)` de l'original).
@@ -200,7 +248,8 @@ impl Contenu {
     /// Ce que l'original aurait empilé, en longs, du plus bas au plus haut.
     fn longs(self) -> Vec<u32> {
         match self {
-            Contenu::Appel(v) | Contenu::Valeur(v) => vec![v],
+            Contenu::Appel(s) => vec![s.adresse()],
+            Contenu::Valeur(v) => vec![v],
             Contenu::Registres { d, a } => d.into_iter().chain(a).collect(),
         }
     }
@@ -262,7 +311,7 @@ impl Cadres {
     }
 
     /// Retour d'un appelé dont la pile 68000 est `pile` : la suite de l'appel en cours, s'il lui correspond.
-    fn retour(&mut self, pile: u32) -> Option<u32> {
+    fn retour(&mut self, pile: u32) -> Option<Suite> {
         match self.sommet()? {
             Cadre { pile: p, contenu: Contenu::Appel(suite) } if p == pile => {
                 self.n -= 1;
@@ -342,14 +391,14 @@ impl Table {
         self.remis.retain(|r| r.0 != k);
     }
 
-    /// Cession de la tâche courante : nouvel état, et son contexte pour la reprise.
-    pub fn ceder(&mut self, etat: Etat, compte: Option<u8>, contexte: Contexte) {
+    /// Cession de la tâche courante : nouvel état, et où la reprendre.
+    pub fn ceder(&mut self, etat: Etat, compte: Option<u8>, reprise: Reprise) {
         let e = &mut self.emplacements[self.courante];
         e.etat = etat;
         if let Some(compte) = compte {
             e.compte = compte;
         }
-        e.reprise = Reprise::Cession(contexte);
+        e.reprise = reprise;
     }
 
     /// Une image de moins pour la tâche `k` si elle attend ; à zéro, elle est prête.
@@ -406,9 +455,9 @@ fn table_si(b: &mut Cps2Bus) -> Option<&mut Table> {
 // Appels en cours (voir `Cadre`)
 
 /// Un pas Rust de la tâche courante appelle un sous-programme natif (qui peut céder la main) : quand celui-ci reviendra,
-/// la tâche continuera dans la native `suite`. Rien n'est empilé sur la pile 68000.
-pub fn appeler(c: &Cpu, b: &mut Cps2Bus, suite: u32) {
-    garder(c, b, Contenu::Appel(suite));
+/// la tâche continuera à `suite`. Rien n'est empilé sur la pile 68000.
+pub fn appeler(c: &Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) {
+    garder(c, b, Contenu::Appel(suite.into()));
 }
 
 /// Garde des registres ou une valeur pendant que la tâche courante cède la main (à la place de la pile 68000).
@@ -427,14 +476,14 @@ pub fn reprendre(c: &Cpu, b: &mut Cps2Bus) -> Contenu {
 /// Retour d'un sous-programme (`rts`, ou adresse de reprise d'une enveloppe de cession) : la suite de l'appel en cours
 /// de la tâche courante s'il a été fait par un pas Rust avec cette pile, sinon l'adresse de retour dépilée de la pile
 /// 68000.
-pub fn depiler_retour(c: &mut Cpu, b: &mut Cps2Bus) -> u32 {
+pub fn depiler_retour(c: &mut Cpu, b: &mut Cps2Bus) -> Suite {
     let pile = c.a[7];
     if let Some(suite) = table_si(b).and_then(|t| t.cadres().retour(pile)) {
         return suite;
     }
     let retour = rd32(b, pile);
     c.a[7] = pile.wrapping_add(4);
-    retour
+    Suite::Adresse(retour)
 }
 
 /// Le code d'origine va s'exécuter avec la pile actuelle (appel `call_at`, `jmp` d'un pas Rust, native remplacée par
@@ -480,7 +529,11 @@ fn relire(b: &mut Cps2Bus, mut adresse: u32, modeles: &[Contenu]) -> (Vec<Conten
             v
         };
         relus.push(match *modele {
-            Contenu::Appel(_) => Contenu::Appel(long()),
+            // une étape remise sur la pile revient telle quelle si le code d'origine n'a pas changé son adresse
+            Contenu::Appel(s) => Contenu::Appel(match long() {
+                a if a == s.adresse() => s,
+                a => Suite::Adresse(a),
+            }),
             Contenu::Valeur(_) => Contenu::Valeur(long()),
             Contenu::Registres { .. } => {
                 let (mut d, mut a) = ([0; 8], [0; 7]);
@@ -526,14 +579,16 @@ pub fn appelee_par_un_cadre(c: &Cpu, b: &Cps2Bus) -> bool {
         && lire(b).is_some_and(|t| t.emplacements[t.courante].cadres.sommet().is_some_and(|k| k.pile == c.a[7]))
 }
 
-/// La tâche courante cède la main et reprendra dans la native `reprise`. Des cadres remis sur la pile 68000 pour du
-/// code d'origine peuvent y être restés (l'appelé a cédé, ou est revenu plus haut en dépilant une partie d'entre eux) :
-/// ceux qui sont au sommet de la pile en sont repris, et la pile de la tâche redevient vide. Ceux que la pile a
-/// dépassés ont été consommés par le code d'origine ; ceux qu'elle n'atteint pas restent (du code d'origine les
-/// relira). Une reprise dans du code d'origine les laisse tous.
-pub fn relever(c: &mut Cpu, b: &mut Cps2Bus, reprise: u32) {
-    if !crate::est_native(reprise) {
-        return;
+/// La tâche courante cède la main et reprendra à `reprise` (native ou étape Rust). Des cadres remis sur la pile 68000
+/// pour du code d'origine peuvent y être restés (l'appelé a cédé, ou est revenu plus haut en dépilant une partie
+/// d'entre eux) : ceux qui sont au sommet de la pile en sont repris, et la pile de la tâche redevient vide. Ceux que
+/// la pile a dépassés ont été consommés par le code d'origine ; ceux qu'elle n'atteint pas restent (du code d'origine
+/// les relira). Une reprise dans du code d'origine les laisse tous.
+pub fn relever(c: &mut Cpu, b: &mut Cps2Bus, reprise: Suite) {
+    if let Suite::Adresse(a) = reprise {
+        if !crate::est_native(a) {
+            return;
+        }
     }
     loop {
         let pile = c.a[7];
@@ -686,7 +741,7 @@ pub fn ecarts(t: &Table, ram: &[u16], tout: bool) -> Vec<String> {
         match e.reprise {
             Reprise::Entree(entree) => ecart("entrée", entree, long(r + champ::PC)),
             // la pile d'une tâche en cours a changé depuis sa cession
-            Reprise::Cession(c) if tout && !en_cours => {
+            Reprise::Cession(c) | Reprise::Etape(_, c) if tout && !en_cours => {
                 let usp = long(r + champ::USP);
                 if !REPRISES_ORIGINE.contains(&long(r + champ::PC)) {
                     ecart("reprise (PC de l'enregistrement)", c.pc, long(r + champ::PC));
@@ -702,7 +757,7 @@ pub fn ecarts(t: &Table, ram: &[u16], tout: bool) -> Vec<String> {
                     ecart(&format!("A{i}"), c.a[i], long(usp + 32 + 4 * i as u32));
                 }
             }
-            Reprise::Cession(_) => {}
+            Reprise::Cession(_) | Reprise::Etape(..) => {}
         }
     }
     let sommet = if long(TAS) == 0 { TAS_FOND } else { long(TAS) };
@@ -733,12 +788,12 @@ mod tests {
     #[test]
     fn un_appel_en_cours_ne_revient_qu_a_sa_pile() {
         let mut k = Cadres::default();
-        k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Appel(0x1341a) });
-        k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Appel(0x1376e) });
+        k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Appel(Suite::Adresse(0x1341a)) });
+        k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Appel(Suite::Adresse(0x1376e)) });
         // un appel 68000 imbriqué revient avec une pile plus basse (son adresse de retour y est empilée)
         assert_eq!(k.retour(0xffc), None);
-        assert_eq!(k.retour(0x1000), Some(0x1376e));
-        assert_eq!(k.retour(0x1000), Some(0x1341a));
+        assert_eq!(k.retour(0x1000), Some(Suite::Adresse(0x1376e)));
+        assert_eq!(k.retour(0x1000), Some(Suite::Adresse(0x1341a)));
         assert_eq!(k.retour(0x1000), None);
         k.empiler(Cadre { pile: 0x1000, contenu: Contenu::Valeur(1) });
         assert_eq!(k.retour(0x1000), None, "une valeur gardée n'est pas un retour");
