@@ -13,12 +13,121 @@ y compris en jouant depuis les ROMs. Ce sont les cibles des fuzz différentiels 
 `fuzz_porte`, `fuzz_familles`) et des scénarios ciblés.
 
 **Limite.** Couverture par fonction : une fonction exécutée peut avoir des branches jamais prises (la couverture par
-instruction, 121 609 instructions distinctes, n'est pas ventilée ici). Les tailles d'`index.tsv` incluent parfois
+instruction est ventilée plus bas, « Branches des fonctions exécutées »). Les tailles d'`index.tsv` incluent parfois
 des données mal désassemblées.
 
 Reproduire : `cov <roms> <eeprom> <scénario> <images> <sortie.bin>` (exemple de `ddsom-game`) sur chaque scénario
 (4 tâches : 45 min), `names > natives.txt`, puis `tools/couverture_fonctions.py decomp/index.tsv docs/atlas.md natives.txt
 docs/code-mort.md <bitmaps>...`.
+
+## Branches des fonctions exécutées
+
+Même mesure, au niveau des instructions (`tools/couverture_branches.py`, zones de débogage et de test K4, M1, M2, M3
+écartées) : pour chaque fonction exécutée, les instructions jamais exécutées et les sauts conditionnels (`bcc`,
+`dbcc`) pris d'un seul côté (cible ou instruction suivante jamais exécutée ; approximation : un côté peut avoir été
+atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côté manquant de chaque saut :
+[couverture-branches.tsv](couverture-branches.tsv).
+
+| Zone | Sous-système | Fonctions exécutées | Instructions | Jamais exécutées | Sauts pris d'un seul côté |
+|---|---|---:|---:|---:|---:|
+| S1 | Son : wrappers de commandes + FIFO | 347 | 9863 | 552 (6 %) | 472 |
+| C04 | BOSS : boss | 308 | 4447 | 426 (10 %) | 101 |
+| C10 | SET : décors/animations de palette | 116 | 2560 | 399 (16 %) | 52 |
+| C1 | Crédits, pièces, start/continue | 22 | 1152 | 372 (32 %) | 29 |
+| P5 | Code par personnage (6 × 2 variantes) | 53 | 1273 | 188 (15 %) | 48 |
+| F3 | Interface joueurs : sélection / panneaux d'état (h) | 49 | 1062 | 154 (15 %) | 23 |
+| C12 | PEFF : effets du joueur | 68 | 1065 | 106 (10 %) | 19 |
+| V4 | Construction de la liste de sprites (OBJ RAM) | 14 | 643 | 104 (16 %) | 7 |
+| C02 | ENEMY : ennemis | 179 | 2281 | 81 (4 %) | 24 |
+| P4 | Noyau joueur (états, 26 actions génériques) | 57 | 1070 | 74 (7 %) | 16 |
+| C08 | ESHL : tirs/attaques ennemis | 102 | 1600 | 73 (5 %) | 28 |
+| C0c | ITEM : objets ramassables | 14 | 506 | 66 (13 %) | 20 |
+| P6 | Réactions aux coups, saisie des coups spéciaux | 9 | 525 | 62 (12 %) | 9 |
+| C0e | EFFCT : effets | 161 | 2028 | 57 (3 %) | 29 |
+| X1 | Collisions (boîtes, coups, poussée) | 39 | 1800 | 46 (3 %) | 18 |
+| O2 | Pools d'objets et listes triées | 41 | 538 | 43 (8 %) | 11 |
+| E1 | Aides d'IA (cible, portées, décisions aléatoires) | 64 | 1544 | 42 (3 %) | 15 |
+| X2 | Dégâts, terrain, placement | 19 | 351 | 33 (9 %) | 9 |
+| K1 | Noyau : reset, boot, VBLANK, ordonnanceur, traps, entrées, gel | 17 | 363 | 28 (8 %) | 5 |
+| B1 | Scrolling / caméras par scène | 41 | 1049 | 27 (3 %) | 3 |
+| C06 | PSHL : tirs du joueur | 30 | 462 | 26 (6 %) | 15 |
+| V2 | Texte, rectangles et blocs de tuiles | 26 | 650 | 19 (3 %) | 11 |
+| W1 | Boucle de partie et phases 0/4/12/20 | 3 | 82 | 19 (23 %) | 1 |
+| O3 | Aides communes aux types (animations par type) | 24 | 344 | 19 (6 %) | 4 |
+| W3 | Scripts de scène (phases 16/28) | 82 | 749 | 16 (2 %) | 6 |
+| V3 | Palettes et fondus | 38 | 565 | 15 (3 %) | 8 |
+| U1 | RNG et files d'affichage (pop-ups) | 18 | 234 | 9 (4 %) | 5 |
+| F5 | Curseur de sélection de personnage | 8 | 191 | 9 (5 %) | 4 |
+| F1 | Tâche de boot, avertissements région | 5 | 106 | 7 (7 %) | 4 |
+| O1 | Animation, tables de vitesse, physique, culling | 22 | 325 | 6 (2 %) | 0 |
+| F4 | Exécuteur d'écrans fixes (logos) | 4 | 228 | 6 (3 %) | 1 |
+| V1 | Primitives vidéo (attente, couches, effacements) | 13 | 99 | 4 (4 %) | 1 |
+| K2 | Auto-test RAM (« RAM ERROR !! ») | 2 | 54 | 4 (7 %) | 2 |
+| C14 | SOBJ : objets système/UI | 24 | 223 | 4 (2 %) | 4 |
+| F6 | Interpréteur de scripts de scène (démos) | 18 | 230 | 3 (1 %) | 2 |
+| F7 | Écrans titre / copyright | 5 | 47 | 3 (6 %) | 1 |
+| C0a | BOX : caisses/coffres (h) | 7 | 164 | 1 (1 %) | 1 |
+| K3 | Entrées vers enregistrements joueur | 3 | 77 | 0 (0 %) | 0 |
+| P1 | Initialisation des joueurs | 23 | 245 | 0 (0 %) | 0 |
+| U2 | Petites routines / tables (rôle inconnu) | 15 | 150 | 0 (0 %) | 0 |
+| W2 | Sous-scènes de transition à fondus (phases 8/24) | 1 | 12 | 0 (0 %) | 0 |
+| P3 | Comportement scénarisé des joueurs par scène | 3 | 41 | 0 (0 %) | 0 |
+| W0 | Dispatch des 10 classes d'objets | 10 | 120 | 0 (0 %) | 0 |
+
+### Les 50 fonctions les plus trouées
+
+| Fonction | Zone | Native | Instructions | Jamais exécutées | Sauts pris d'un seul côté |
+|---|---|---|---:|---:|---:|
+| `0xc8430` | C10 |  | 272 | 138 | 3 |
+| `0x148be` | C1 | CREDIT_TEXT | 175 | 128 | 4 |
+| `0x46044` | P5 |  | 82 | 70 | 4 |
+| `0xe05ec` | C1 |  | 97 | 69 | 5 |
+| `0x13c2c` | C1 |  | 258 | 54 | 2 |
+| `0x180c8` | F3 |  | 106 | 52 | 8 |
+| `0x1ea6c` | V4 |  | 62 | 48 | 4 |
+| `0x8ec02` | C04 |  | 302 | 46 | 7 |
+| `0x1ec4e` | V4 |  | 44 | 41 | 1 |
+| `0xdbad8` | C0c |  | 119 | 41 | 8 |
+| `0xca524` | C10 |  | 45 | 39 | 1 |
+| `0x143da` | C1 | credits_lire_monnayeurs | 86 | 38 | 2 |
+| `0xe2430` | S1 | son_selon_version | 35 | 33 | 1 |
+| `0xedf80` | S1 |  | 35 | 32 | 1 |
+| `0xf232e` | P6 | enemy_reacts_to_player_hit | 110 | 29 | 4 |
+| `0x376ee` | P4 |  | 33 | 28 | 2 |
+| `0x936ee` | C04 |  | 77 | 28 | 2 |
+| `0xf1b22` | P6 |  | 56 | 28 | 2 |
+| `0x0bad6` | E1 | butin_special | 298 | 27 | 6 |
+| `0x14546` | C1 |  | 34 | 27 | 2 |
+| `0x1ef6c` | O2 | list_reinsert_foreground | 93 | 27 | 3 |
+| `0x4f9be` | C12 |  | 76 | 26 | 2 |
+| `0xa1ba6` | C08 |  | 58 | 26 | 4 |
+| `0x158c6` | F3 |  | 44 | 24 | 3 |
+| `0x7f9fe` | C04 |  | 30 | 23 | 1 |
+| `0x9b30a` | C04 |  | 30 | 23 | 1 |
+| `0x9b384` | C04 |  | 30 | 23 | 1 |
+| `0x77032` | C02 |  | 46 | 21 | 3 |
+| `0x309e0` | B1 |  | 152 | 20 | 0 |
+| `0x47390` | P5 |  | 85 | 20 | 10 |
+| `0x4d7ac` | C12 |  | 54 | 20 | 1 |
+| `0xcbb3c` | C10 |  | 22 | 20 | 1 |
+| `0xd8316` | C10 |  | 24 | 20 | 1 |
+| `0xd8366` | C10 |  | 24 | 20 | 1 |
+| `0xd83b8` | C10 |  | 24 | 20 | 1 |
+| `0x153ba` | F3 |  | 44 | 19 | 2 |
+| `0x154e8` | F3 |  | 46 | 19 | 2 |
+| `0x1c86e` | W1 | world_update | 74 | 19 | 1 |
+| `0x639fe` | C02 |  | 23 | 19 | 1 |
+| `0x87048` | C04 | boss_seuil_pv | 23 | 19 | 1 |
+| `0x87b86` | C04 |  | 23 | 19 | 1 |
+| `0x89788` | C04 |  | 23 | 19 | 1 |
+| `0x8a2c6` | C04 |  | 23 | 19 | 1 |
+| `0xe2a74` | S1 | son_selon_version | 21 | 19 | 1 |
+| `0x03f28` | X2 |  | 24 | 18 | 1 |
+| `0x1422e` | C1 |  | 24 | 18 | 1 |
+| `0x14652` | C1 | DIGITS | 123 | 18 | 4 |
+| `0x47104` | P5 |  | 80 | 18 | 7 |
+| `0x3a98e` | P4 |  | 30 | 17 | 1 |
+| `0xd764a` | C10 |  | 32 | 17 | 1 |
 
 ## 2190 fonctions exécutées sur 2559 ; 369 jamais exécutées
 
