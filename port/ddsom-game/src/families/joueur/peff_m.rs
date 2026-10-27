@@ -7,9 +7,7 @@ use crate::mem::{rd16, rd32, wr16};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-const ANGLE_TO_TARGET: u32 = 0x1376;
 const IN_ZONE: u32 = 0xfbae;
-const SHADOW: u32 = 0x33fe4;
 const BLOOD: u32 = 0xb141a;
 const SFX_BITE: u32 = 0xe8ba2;
 const ANIMS: u32 = 0x1bc346;
@@ -138,7 +136,7 @@ mod pet {
         };
         if tail {
             x.call(IN_ZONE);
-            x.call(SHADOW);
+            x.call(crate::terrain::SHADOW.entry);
             x.reinsert();
         }
     }
@@ -254,7 +252,7 @@ mod pet {
             x.set16(0x18, 0x400);
             x.set16(0x1a, -0x40i16 as u16);
             x.link_a1(0x5c);
-            x.call(ANGLE_TO_TARGET);
+            x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
             let angle = x.c.d[0] as u8;
             x.set8(0x2d, angle);
             flip_by_angle(x);
@@ -474,7 +472,7 @@ mod pet {
 
     /// `0x4f920` : tourne d'un cran vers l'objet que désigne A1.
     fn turn(x: &mut Cx) {
-        x.call(ANGLE_TO_TARGET);
+        x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
         let diff = (x.c.d[0] as u8).wrapping_sub(x.u8(0x2d)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
         let angle = x.u8(0x2d).wrapping_add(step) & 0x1f;

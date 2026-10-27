@@ -31,14 +31,12 @@ mod ice {
     const ANIMS: u32 = 0x1b6350;
     const OFFSETS: u32 = 0x4bd0e;
     const DELAYS: u32 = 0x4bd98;
-    const TERRAIN: u32 = 0x33fe4;
     const SFX: u32 = 0xe87f4;
     const SCATTER_X: u32 = 0x4c016;
     const SCATTER_Y: u32 = 0x4c036;
     const SPREAD: u32 = 0x4c0ae;
     const CROWN_A: u32 = 0x4c140;
     const CROWN_B: u32 = 0x4c158;
-    const TERRAIN_AT: u32 = 0x24b0;
     /// Octets d'angle de rebond (haut, bas, gauche, droite...).
     const BOUNCE_LEFT: u32 = 0x4be70;
     const BOUNCE_RIGHT: u32 = 0x4be78;
@@ -110,7 +108,7 @@ mod ice {
                 x.move_by_table_xy();
                 x.c.d[0] = x.u16(0x8) as u32;
                 x.c.d[1] = x.u16(0x10) as u32;
-                x.call(TERRAIN);
+                x.call(crate::terrain::SHADOW.entry);
                 if !x.c.cond(7) {
                     let a = x.u8(0x2d).wrapping_add(0x10) & 0x1f;
                     x.c.d[0] = x.c.d[0] & !0xff | a as u32;
@@ -278,7 +276,7 @@ mod ice {
                 x.add16(0x10, dy);
                 x.c.d[0] = x.u16(0x8) as u32;
                 x.c.d[1] = x.u16(0x10) as u32;
-                x.call(TERRAIN_AT);
+                x.call(crate::video::TERRAIN.entry);
                 if !x.c.cond(7) {
                     x.set8(0x4, 4);
                 }

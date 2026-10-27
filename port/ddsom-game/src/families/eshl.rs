@@ -576,7 +576,7 @@ mod shot8 {
             _ => {}
         }
         x.call(0xfbae);
-        x.call(0x33fe4);
+        x.call(crate::terrain::SHADOW.entry);
         x.reinsert();
     }
 }

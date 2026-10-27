@@ -893,7 +893,7 @@ mod scene {
         x.set_a5_u32(0x5c6, script + 4);
         copy_longs(x, V7_PALETTES, PALETTE_B, 8);
         x.set_a5_u8(0x48e, 1);
-        x.call(0x168c);
+        x.call(crate::palette::NO_BRIGHTNESS.entry);
     }
 
     fn v7_step(x: &mut Cx) {

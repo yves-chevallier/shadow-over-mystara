@@ -167,6 +167,8 @@ etapes_des_taches! {
     Shop(crate::scene::shop::Etape),
     Characters(crate::scene::characters::Etape),
     Tally(crate::scene::tally::Etape),
+    // gestionnaires d'objets qui appellent un sous-programme qui cède (portes SET : fondu au noir)
+    PorteSet(crate::families::set::fondu_de_sortie::Etape),
     // gestionnaires d'objets qui font attendre la tâche de partie
     FeuArtifice(crate::families::effects_g::Etape),
 }

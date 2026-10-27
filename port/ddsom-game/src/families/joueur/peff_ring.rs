@@ -43,10 +43,8 @@ fn whole_part(word: u16) -> u32 {
 /// choisie par `step`, ligne choisie par l'angle `+0x2d`.
 fn set_speeds(x: &mut Cx, tables: u32, step: u8) {
     let table = x.rom32(tables + 4 * (step as i8 as i16 as u16 as u32 & 0xffff) );
-    x.c.a[4] = table;
     x.set32(0x4c, table);
     let row = (x.u8(0x2d) as u32) << 2 & 0xffff;
-    x.c.d[0] = row;
     let vx = x.data16(table + row);
     let vz = x.data16(table + row + 2);
     x.set16(0x14, vx);
@@ -57,21 +55,16 @@ fn set_speeds(x: &mut Cx, tables: u32, step: u8) {
 
 /// Position de l'enfant : celle du parent, plus deux fois la partie entière des vitesses de la rangée courante.
 fn follow_parent(x: &mut Cx) {
-    let parent = x.link_a1(g::PARENT);
+    let parent = x.linked(g::PARENT);
     let d0 = if x.u8(0x3) != 0 { 0x8000 } else { 0 };
-    x.set_d0w(d0);
     x.copy_pos(parent);
     x.set16(0x12, d0);
     let row = (x.u8(0x2d) as u32) << 2 & 0xffff;
-    x.c.d[0] = row;
     let table = x.u32(0x4c);
-    x.c.a[4] = table;
     let vx = whole_part(x.data16(table + row));
-    x.c.d[1] = vx;
     x.add32(0x8, vx);
     x.add32(0x8, vx);
     let vz = whole_part(x.data16(table + row + 2));
-    x.c.d[1] = vz;
     x.add32(0xc, vz);
     x.add32(0xc, vz);
 }
@@ -82,11 +75,10 @@ fn ring_alive(x: &mut Cx, generation: u32) -> bool {
         return false;
     }
     let current = x.a5_u8(0x34);
-    x.c.d[0] = x.c.d[0] & !0xff | current as u32;
     if current != x.u8(generation) {
         return false;
     }
-    let player = x.link_a1(f::OWNER);
+    let player = x.linked(f::OWNER);
     player.u16(x.b, 0x62) != 0
 }
 
@@ -96,24 +88,20 @@ fn parent_alive(x: &mut Cx, generation: u32, player: Obj) -> bool {
         return false;
     }
     let current = x.a5_u8(0x34);
-    x.c.d[0] = x.c.d[0] & !0xff | current as u32;
     current == x.u8(generation) && player.u16(x.b, 0x62) != 0
 }
 
 /// Parent : suit le joueur à un décalage (mots lus en ROM, selon la variante du joueur).
 fn parent_follow(x: &mut Cx, offsets: u32) {
-    let player = x.link_a1(f::OWNER);
+    let player = x.linked(f::OWNER);
     x.copy_pos(player);
     x.add16(0x10, 0xffff);
     let row = (player.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-    x.c.d[0] = row;
     let mut dx = x.rom16(offsets + row);
     let dz = x.rom16(offsets + row + 2);
     if player.u8(x.b, f::FLIP) == 0 {
         dx = dx.wrapping_neg();
     }
-    x.c.d[1] = dx as u32;
-    x.c.d[2] = dz as u32;
     x.add16(0x8, dx);
     x.add16(0xc, dz);
 }
@@ -121,14 +109,11 @@ fn parent_follow(x: &mut Cx, offsets: u32) {
 /// Pour chacun des `n` enfants du parent, appelle `f`.
 fn for_children(x: &mut Cx, n: u32, mut f: impl FnMut(&mut Cx, Obj)) {
     let mut a2 = x.o.0 + g::CHILDREN;
-    x.c.a[2] = a2;
     for _ in 0..n {
         let child = Obj(x.u16(a2 - x.o.0) as i16 as i32 as u32 & 0xff_ffff);
-        x.c.a[1] = x.u16(a2 - x.o.0) as i16 as i32 as u32;
         f(x, child);
         a2 += 2;
     }
-    x.c.a[2] = a2;
 }
 
 /// Anneau de magies/objets du clerc, de l'elfe... : type 0 (0x49e36).
@@ -141,7 +126,7 @@ mod ring0 {
     const NEXT_ANGLE: u32 = 0x4a172;
 
     pub fn run(x: &mut Cx) {
-        match x.state(0x49e44) {
+        match x.u8(0x4) {
             0 => init(x),
             2 => {
                 if (x.u8(0x3) as i8) < 0 {
@@ -152,7 +137,7 @@ mod ring0 {
             }
             4 => {
                 if (x.u8(0x3) as i8) < 0 {
-                    let player = x.link_a1(f::OWNER);
+                    let player = x.linked(f::OWNER);
                     player.set_u16(x.b, 0x15a, 0);
                     player.set_u8(x.b, 0x15c, 0);
                 }
@@ -173,7 +158,6 @@ mod ring0 {
         let variant = x.u8(0x3) as u32;
         let angle = x.rom8(INITIAL_ANGLE + variant);
         x.set8(0x2d, angle);
-        x.c.d[0] = x.u8(g::STEP) as u32;
         set_speeds(x, SPEEDS, 0);
         icon(x);
     }
@@ -183,7 +167,6 @@ mod ring0 {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
         let count = if x.u8(0x2d) != 0 { 0xa } else { count };
-        x.c.d[1] = count;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
         x.anim_start(set, ((item << 4) + count & 0xffff) as u16);
     }
@@ -197,12 +180,10 @@ mod ring0 {
         x.set8(g::GENERATION, gen);
         x.set16(0x3e, 0x258);
         x.set8(g::DELAY, 0x10);
-        let player = x.link_a1(f::OWNER);
-        x.c.a[3] = ext(player);
+        let player = x.linked(f::OWNER);
         player.set_u8(x.b, 0x15d, 2);
         let mut a2 = x.o.0 + g::CHILDREN;
         for k in 0..6u32 {
-            x.c.d[4] = k;
             // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
             let child = x.alloc_unchecked(&pools::PEFF);
             child.set_u8(x.b, 0, 1);
@@ -213,19 +194,14 @@ mod ring0 {
             a2 += 2;
             let owner = x.u16(f::OWNER);
             child.set_u16(x.b, f::OWNER, owner);
-            x.c.a[4] = ext(player).wrapping_add(0x140);
             let item = player.u8(x.b, 0x140 + k);
             let count = player.u8(x.b, 0x148 + k);
             child.set_u8(x.b, g::ITEM, item);
             child.set_u8(x.b, g::COUNT, count);
         }
-        x.c.a[2] = a2;
-        x.c.d[4] = 6;
-        x.c.d[5] = x.c.d[5] & 0xffff_0000 | 0xffff;
     }
 
     fn parent(x: &mut Cx) {
-        x.c.d[0] = x.u8(0x5) as u32;
         match x.u8(0x5) {
             0 => {
                 // attente de l'ouverture de l'anneau
@@ -247,7 +223,7 @@ mod ring0 {
             }
         }
         parent_follow(x, OFFSETS);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         if parent_alive(x, g::GENERATION, owner) {
             return;
         }
@@ -263,14 +239,12 @@ mod ring0 {
         if x.a5_u8(a5::PAUSED) != 0 {
             return close(x);
         }
-        let player = x.link_a1(f::OWNER);
+        let player = x.linked(f::OWNER);
         let keys = player.u8(x.b, 0x6e);
-        x.c.d[0] = keys as u32;
         if keys & 0x10 != 0 || keys & 0x80 != 0 {
             return close(x);
         }
         let held = player.u8(x.b, 0x6c);
-        x.c.d[0] = held as u32;
         if held & 0x40 == 0 {
             return;
         }
@@ -287,9 +261,6 @@ mod ring0 {
         }
         player.set_u8(x.b, 0x140, last);
         player.set_u8(x.b, 0x148, last_count);
-        x.c.d[0] = last as u32;
-        x.c.d[1] = last_count as u32;
-        x.c.a[1] = player.0;
     }
 
     fn close(x: &mut Cx) {
@@ -299,7 +270,6 @@ mod ring0 {
     }
 
     fn child(x: &mut Cx) {
-        x.c.d[0] = x.u8(0x5) as u32;
         match x.u8(0x5) {
             0 => {
                 x.add8(g::STEP, 1);
@@ -312,10 +282,9 @@ mod ring0 {
             }
             2 => {
                 x.add8(0x5, 2);
-                x.link_a1(g::PARENT);
+                x.linked(g::PARENT);
                 let n = x.u8(0x3).wrapping_add(1);
                 let n = if n > 5 { 0 } else { n };
-                x.c.d[0] = n as u32;
                 x.set8(0x3, n);
                 let target = x.rom8(NEXT_ANGLE + n as u32);
                 x.set8(g::TARGET, target);
@@ -374,7 +343,7 @@ mod ring1 {
     const CHILD_COUNT: u32 = 0x3d;
 
     pub fn run(x: &mut Cx) {
-        match x.state(0x4a22c) {
+        match x.u8(0x4) {
             0 => init(x),
             2 => {
                 if (x.u8(0x3) as i8) < 0 {
@@ -385,7 +354,7 @@ mod ring1 {
             }
             4 => {
                 if (x.u8(0x3) as i8) < 0 {
-                    let player = x.link_a1(f::OWNER);
+                    let player = x.linked(f::OWNER);
                     player.set_u16(x.b, 0x15a, 0);
                     player.set_u8(x.b, 0x15c, 0);
                 }
@@ -396,7 +365,7 @@ mod ring1 {
     }
 
     fn player_is_8_or_9(x: &mut Cx) -> bool {
-        let player = x.link_a1(f::OWNER);
+        let player = x.linked(f::OWNER);
         let v = player.u8(x.b, 0x3);
         v == 8 || v == 9
     }
@@ -420,7 +389,6 @@ mod ring1 {
                 x.set8(0x2d, angle);
             }
         }
-        x.c.d[0] = x.u8(g::STEP) as u32;
         set_speeds(x, SPEEDS, 0);
         icon(x);
     }
@@ -435,12 +403,11 @@ mod ring1 {
             d0 = item << 4 & 0xffff;
             d1 = if x.u8(0x2d) != 0 { 0xa } else { count };
         } else {
-            let player = x.link_a1(f::OWNER);
+            let player = x.linked(f::OWNER);
             let kind = player.u8(x.b, 0x3) >> 1;
             let item = if kind == 2 && item == 0xf { 0x57 } else { item };
             let d0w = ((item as u32) << 4) & 0xffff;
             let stock = player.u8(x.b, 0x150 + count);
-            x.c.a[1] = player.0 + 0x150;
             d0 = d0w;
             d1 = if x.u8(0x2d) != 0 {
                 if stock == 0 { 0xb } else { 0xa }
@@ -448,13 +415,11 @@ mod ring1 {
                 stock as u32
             };
         }
-        x.c.d[1] = d1;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
         x.anim_start(set, (d0 + d1 & 0xffff) as u16);
     }
 
     fn parent(x: &mut Cx) {
-        x.c.d[0] = x.u8(0x5) as u32;
         match x.u8(0x5) {
             0 => create(x),
             2 => {
@@ -468,7 +433,7 @@ mod ring1 {
                 x.add8(g::DELAY, 0xff);
                 if x.u8(g::DELAY) == 0 {
                     x.set8(0x5, 0);
-                    let player = x.link_a1(f::OWNER);
+                    let player = x.linked(f::OWNER);
                     let n = player.u8(x.b, 0x15d).wrapping_add(1);
                     player.set_u8(x.b, 0x15d, n);
                     if n == 3 {
@@ -489,18 +454,15 @@ mod ring1 {
             }
         }
         // suit le joueur
-        let player = x.link_a1(f::OWNER);
+        let player = x.linked(f::OWNER);
         x.copy_pos(player);
         x.add16(0x10, 0xffff);
         let row = (player.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-        x.c.d[0] = row;
         let mut dx = x.rom16(OFFSETS + row);
         let dz = x.rom16(OFFSETS + row + 2);
         if player.u8(x.b, f::FLIP) == 0 {
             dx = dx.wrapping_neg();
         }
-        x.c.d[1] = dx as u32;
-        x.c.d[2] = dz as u32;
         x.add16(0x8, dx);
         x.add16(0xc, dz);
         if parent_alive(x, GENERATION, player) {
@@ -519,20 +481,16 @@ mod ring1 {
         x.set8(GENERATION, gen);
         x.set16(0x40, 0x258);
         x.set8(g::DELAY, 0x10);
-        let player = x.link_a1(f::OWNER);
-        x.c.a[3] = ext(player);
+        let player = x.linked(f::OWNER);
         let page = player.u8(x.b, 0x15d);
-        x.c.d[5] = page as u32;
         x.set8(MODE, page);
         let mut count = x.rom8(0x4a474 + page as u32);
         if !matches!(player.u8(x.b, 0x3), 8 | 9) {
             count = x.rom8(0x4a470 + page as u32);
         }
-        x.c.d[3] = count as u32;
         x.set8(CHILD_COUNT, count);
         let mut a2 = x.o.0 + g::CHILDREN;
         for k in 0..=count as u32 {
-            x.c.d[4] = k;
             // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
             let child = x.alloc_unchecked(&pools::PEFF);
             child.set_u8(x.b, 0, 1);
@@ -544,17 +502,12 @@ mod ring1 {
             a2 += 2;
             let owner = x.u16(f::OWNER);
             child.set_u16(x.b, f::OWNER, owner);
-            x.c.a[4] = ext(player).wrapping_add(0x120);
             let at = ((page as u32) << 4) + k;
             let item = player.u8(x.b, 0x120 + at);
             let amount = player.u8(x.b, 0x128 + at);
-            x.c.d[0] = at;
             child.set_u8(x.b, g::ITEM, item);
             child.set_u8(x.b, g::COUNT, amount);
         }
-        x.c.a[2] = a2;
-        x.c.d[3] = x.c.d[3] & 0xffff_0000 | 0xffff;
-        x.c.d[4] = count as u32 + 1;
     }
 
     fn rotate_or_close(x: &mut Cx) {
@@ -565,9 +518,8 @@ mod ring1 {
         if x.a5_u8(a5::PAUSED) != 0 {
             return shut(x, 8);
         }
-        let player = x.link_a1(f::OWNER);
+        let player = x.linked(f::OWNER);
         let keys = player.u8(x.b, 0x6e);
-        x.c.d[0] = keys as u32;
         if keys & 0x40 != 0 {
             return turn(x, player);
         }
@@ -578,7 +530,6 @@ mod ring1 {
             return shut(x, 8);
         }
         let held = player.u8(x.b, 0x6c);
-        x.c.d[0] = held as u32;
         if held & 0x40 != 0 {
             turn(x, player);
         }
@@ -613,15 +564,9 @@ mod ring1 {
         }
         crate::mem::wr8(x.b, base, keep);
         crate::mem::wr8(x.b, base + 8, keep_count);
-        x.c.d[0] = keep as u32;
-        x.c.d[1] = keep_count as u32;
-        x.c.a[1] = base;
-        x.c.a[2] = src;
-        x.c.a[3] = dst;
     }
 
     fn child(x: &mut Cx) {
-        x.c.d[0] = x.u8(0x5) as u32;
         match x.u8(0x5) {
             0 => {
                 x.add8(g::STEP, 1);
@@ -634,11 +579,10 @@ mod ring1 {
             }
             2 => {
                 x.add8(0x5, 2);
-                let parent = x.link_a1(g::PARENT);
+                let parent = x.linked(g::PARENT);
                 x.set8(0x56, 1);
                 let n = x.u8(0x3).wrapping_add(1);
                 let n = if n > parent.u8(x.b, CHILD_COUNT) { 0 } else { n };
-                x.c.d[0] = n as u32;
                 x.set8(0x3, n);
                 let mut target = x.rom8(NEXT_A + n as u32);
                 x.set8(g::TARGET, target);
@@ -677,7 +621,6 @@ mod ring1 {
                 if x.u8(g::STEP) == 0 {
                     x.set8(0x5, 0xa);
                     x.set8(0x5a, 4);
-                    x.c.d[0] = 0;
                     set_speeds(x, SPEEDS, 0);
                 } else {
                     x.add8(g::STEP, 0xff);

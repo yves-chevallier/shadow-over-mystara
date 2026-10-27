@@ -108,8 +108,9 @@ touches pressées.
 
 Sous Windows, `jouer.bat` (lançable depuis `\\wsl.localhost\...`) compile et lance `ddsom.exe` avec le
 Rust Windows (MSVC) : son par waveOut et manettes Xbox par XInput (`Pad1A`, `Pad1Haut`… dans
-`touches.cfg`, A B X Y = boutons 1 à 4, Start = Start, Back = pièce). `rom\` doit déjà être préparé
-(par exemple par un premier `./jouer.sh`).
+`touches.cfg`, A B X Y = boutons 1 à 4, Start = Start, Back = pièce). Avec un dossier `assets\` à
+la racine (produit par `extract`, voir plus bas), il joue sans aucune ROM ; sinon il prépare `rom\`
+depuis `ddsom.zip` et `qsound.zip`.
 
 Son : `DDSOM_SON_RUST=1 ./jouer.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
 

@@ -73,6 +73,11 @@ impl Cx<'_> {
         low as u32
     }
 
+    /// Tirage masqué (`jsr rng ; andi.w #mask,D0`), sans registre.
+    pub fn rand_mask(&mut self, mask: u16) -> u16 {
+        self.random() & mask
+    }
+
     /// `jsr rng ; andi.b #mask,D0b` : seul l'octet bas de D0 est masqué (le reste du mot garde le tirage).
     pub fn rand_and_b(&mut self, mask: u8) -> u8 {
         let alea = self.random_68k();

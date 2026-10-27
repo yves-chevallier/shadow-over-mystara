@@ -6,7 +6,7 @@
 //! joueur : bourse BCD `+0x112..+0x117` (long `+0x114` comparé aux prix), six cases d'inventaire `+0x140`
 //! (0x56 : vide) et leurs quantités `+0x148`, état du dialogue de la boutique `+0x167`.
 
-use crate::families::cx::{handler, handlers, Cx};
+use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
@@ -533,17 +533,11 @@ handlers! {
     0x50b9c "peff_42" item::run,
 }
 
-/// Interprètes du dialogue : appelés par le comptoir (PEFF 43) avec A0 = le comptoir, A2 = le client ; ils
-/// gardent A1 et D6 (la boucle de l'appelant les relit).
-pub const TALK: [crate::Native; 2] = [
-    handler(0x514ac, "boutique_dialogue_a", |c, b| {
-        let mut x = Cx::new(c, b);
-        talk::zone_a(&mut x);
-        x.ret();
-    }),
-    handler(0x514cc, "boutique_dialogue_b", |c, b| {
-        let mut x = Cx::new(c, b);
-        talk::zone_b(&mut x);
-        x.ret();
-    }),
-];
+/// Interprètes du dialogue (0x514ac, 0x514cc) : appelés par le comptoir (PEFF 43, `peff.rs`) avec x.o = le comptoir,
+/// A2 = le client.
+pub fn talk_a(x: &mut Cx) {
+    talk::zone_a(x);
+}
+pub fn talk_b(x: &mut Cx) {
+    talk::zone_b(x);
+}
