@@ -83,7 +83,7 @@ fn run_in(x: &mut Cx) {
             x.set8(NO_ZONE, 1);
             let (angle, shift) = if x.u8(f::FLIP) != 0 { (8, -0x20i16) } else { (0x18, 0x1a0) };
             x.set8(Obj::SPEED_INDEX, angle);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             x.set16(Obj::X, cam.wrapping_add(shift as u16));
             set_speed(x, 0x12);
             mv(x, 1);

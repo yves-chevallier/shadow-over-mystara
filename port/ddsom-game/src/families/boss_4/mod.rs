@@ -182,7 +182,7 @@ fn init(x: &mut Cx) {
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x24);
     lib::initial_hp_boss(x);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     lib::spread_index(x);
     lib::clear_popup(x);
     lib::empty_popups(x);
@@ -219,7 +219,7 @@ fn init(x: &mut Cx) {
     spawn_double(x, 0x16, Some((0xfa, 0x96, 0x43)), DOUBLE_A);
     spawn_double(x, 0x17, Some((0x12c, 0x64, 0x44)), DOUBLE_B);
     spawn_double(x, 0x18, None, DOUBLE_C);
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.c.d[0] = 0;
         body(x, 0);
         lib::sound(x, 0xe1330);
@@ -267,7 +267,7 @@ fn spawn_double(x: &mut Cx, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => fight::intro(x),
             2 => fight::run(x),

@@ -29,7 +29,7 @@ pub(super) fn run(x: &mut Cx) {
         8 => walk(x, 0x21),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         wait(x);
     }
 }
@@ -219,7 +219,7 @@ pub(super) fn pick_attack_b(x: &mut Cx) {
     if !lib::target_in_box(x, -0x40, 0x40, 0x20) {
         return stand(x);
     }
-    let level = (x.a5_u16(var::DIFFICULTY) >> 1) as u32;
+    let level = (var::RANK.get(x.b) >> 1) as u32;
     let base = PICK_B + (level << 5);
     let r = random(x) & 0x1f;
     let which = x.data8(base + r);

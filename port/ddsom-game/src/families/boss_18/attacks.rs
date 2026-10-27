@@ -168,7 +168,7 @@ fn gesture(x: &mut Cx) {
             if (x.u8(BUDGET_4) as i8) <= 0 {
                 return decide::stand(x);
             }
-            let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+            let players = var::PLAYERS_ALIVE.get(x.b) as u32;
             if players == 0 {
                 return decide::wait(x);
             }
@@ -480,15 +480,15 @@ fn spawn_blast(x: &mut Cx) {
     }
     lib::sound(x, 0xe6156);
     x.set8(SPAWNED, 0);
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * 2;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * 2;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let mut d5 = x.rom8(0x992ca + level + players.saturating_sub(1)) as i8 as i16 as u16;
     loop {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
         let dx = x.rom16(0x9930a + i);
         let dy = x.rom16(0x9930c + i);
-        let px = dx.wrapping_add(x.a5_u16(var::CAMERA1_X));
-        let py = dy.wrapping_add(x.a5_u16(var::CAMERA1_Y));
+        let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
+        let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         set_dw(x, 0, px);
         set_dw(x, 2, py);
         x.c.d[1] = 0;
@@ -578,7 +578,7 @@ fn shockwave(x: &mut Cx) {
 
 /// 0x99184 : réapparition dans l'un des neuf points autour de la caméra, selon la position du Lich.
 fn place_after_teleport(x: &mut Cx) {
-    let cam = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+    let cam = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
     let here = x.u16(0x8);
     let mut d5 = 0u32;
     if Fl::sub16(cam, here).lt() {
@@ -588,7 +588,7 @@ fn place_after_teleport(x: &mut Cx) {
     } else if !Fl::sub16(cam.wrapping_sub(0x70), here).ge() {
         d5 = 0x20;
     }
-    let camy = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x54);
+    let camy = var::CAMERA1_Y.get(x.b).wrapping_add(0x54);
     let y = x.u16(0x10);
     if Fl::sub16(camy, y).lt() {
         if !Fl::sub16(camy.wrapping_add(0x16), y).lt() {
@@ -713,8 +713,8 @@ fn volley(x: &mut Cx) {
             x.add8(0x7, 2);
             set_abs8(x, 0xff8043, 0x7f);
             sub8(x, BUDGET_F, 1);
-            let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * 4;
-            let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+            let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
+            let players = var::PLAYERS_ALIVE.get(x.b) as u32;
             let i = level + 2 * players.saturating_sub(1);
             let n = x.rom16(0x9852e + i);
             x.set16(COUNT, n);

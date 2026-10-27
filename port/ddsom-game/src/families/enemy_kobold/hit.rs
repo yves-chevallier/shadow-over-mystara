@@ -85,7 +85,7 @@ fn fall(x: &mut Cx) {
             mv(x, 0x15);
         }
         2 => {
-            if (x.a5_u8(0x3d) as i8) == 0 {
+            if (var::PAUSE.get(x.b) as i8) == 0 {
                 let n = x.u16(0x84).wrapping_sub(1);
                 x.set16(0x84, n);
                 if (n as i16) <= 0 {
@@ -98,7 +98,7 @@ fn fall(x: &mut Cx) {
             }
         }
         4 => {
-            if x.a5_u8(0x3d) == 0 && x.anim_step() {
+            if var::PAUSE.get(x.b) == 0 && x.anim_step() {
                 x.set8(0, 1);
                 x.set8(VULNERABLE, 1);
                 set_state_long(x, STANCE);
@@ -143,7 +143,7 @@ fn run_away(x: &mut Cx) {
             run_begin(x);
         }
         4 | 14 => {
-            if x.a5_u8(0x34) == 4 && x.u8(f::SUB2) == 4 {
+            if var::SCENE.get(x.b) == 4 && x.u8(f::SUB2) == 4 {
                 return x.add8(f::SUB2, 2);
             }
             x.move_by_table_xy();

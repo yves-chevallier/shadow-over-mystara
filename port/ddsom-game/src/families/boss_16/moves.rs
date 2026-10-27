@@ -160,7 +160,7 @@ pub(super) fn fight(x: &mut Cx) {
         8 => walk(x, 0x30),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }
@@ -314,7 +314,7 @@ pub(super) fn jump_to_spot(x: &mut Cx) {
         4 => spot_jump(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }
@@ -454,7 +454,7 @@ fn wait_then_turn(x: &mut Cx) {
 /// 0x93ece.
 pub(super) fn paused(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+        if var::PLAYERS_ALIVE.get(x.b) != 0 {
             return x.set32(f::STATE, state::WALK);
         }
         x.set8(FALLS, 1);
@@ -472,7 +472,7 @@ pub(super) fn paused(x: &mut Cx) {
             anim_a(x, 6);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) == 0 {
+            if var::PAUSE.get(x.b) == 0 {
                 return x.set32(f::STATE, state::STAND);
             }
             lib::step(x);

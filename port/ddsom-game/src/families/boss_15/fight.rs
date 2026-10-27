@@ -26,7 +26,7 @@ pub(super) fn run(x: &mut Cx) {
         4 => approach(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         wait(x);
     }
 }
@@ -75,7 +75,7 @@ fn watch(x: &mut Cx) {
 
 /// 0x91ab8 : le dragon est à plus de 0x80 pixels du centre de la zone (caméra + 0xc0).
 fn far_from_center(x: &mut Cx) -> bool {
-    let d = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0).wrapping_sub(x.u16(0x8)) as i16;
+    let d = var::SCROLL_X.get(x.b).wrapping_add(0xc0).wrapping_sub(x.u16(0x8)) as i16;
     d.wrapping_abs() >= 0x80
 }
 
@@ -170,13 +170,13 @@ fn pick_attack(x: &mut Cx, row: usize) {
 
 /// 0x91ad8 : se tient au centre de la zone (caméra + 0xc0), à la profondeur d'un joueur (ou de la caméra) et à l'altitude 0x40.
 pub(super) fn steer(x: &mut Cx) {
-    let target_x = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
+    let target_x = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     let d = target_x.wrapping_sub(x.u16(0x8)) as i16;
     if d != 0 {
         let step: i16 = if d < 0 { -1 } else { 1 };
         x.add16(0x8, step as u16);
     }
-    let mut y = x.a5_u16(var::SCROLL_Y).wrapping_add(0x60);
+    let mut y = var::SCROLL_Y.get(x.b).wrapping_add(0x60);
     x.c.d[0] = y as u32 | (x.c.d[0] & 0xffff_0000);
     if lib::pick_target_any(x) {
         y = x.linked(f::TARGET).u16(x.b, Obj::Y);
@@ -220,7 +220,7 @@ fn jump(x: &mut Cx) {
 fn jump_speeds(x: &mut Cx) {
     let d1 = x.rom16(0x91b94);
     let mut d2 = d1 as i16;
-    let mut d0 = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0).wrapping_sub(x.u16(0x8)) as i16;
+    let mut d0 = var::SCROLL_X.get(x.b).wrapping_add(0xc0).wrapping_sub(x.u16(0x8)) as i16;
     if d0 < 0 {
         d0 = d0.wrapping_neg();
         d2 = d2.wrapping_neg();

@@ -45,14 +45,14 @@ fn switch_flight_set(x: &mut Cx) {
 
 /// 0x6563c / 0x65648 : cadence de poursuite lue selon la difficulté.
 fn charge_a(x: &mut Cx) {
-    let level = x.a5_u16(0x7f92) as u32;
+    let level = var::RANK.get(x.b) as u32;
     x.c.d[0] = x.c.d[0] & !0xffff | level;
     let v = x.rom8(0x65654 + level);
     x.set8(CHARGE, v);
 }
 
 fn charge_b(x: &mut Cx) {
-    let level = x.a5_u16(0x7f92) as u32;
+    let level = var::RANK.get(x.b) as u32;
     x.c.d[0] = x.c.d[0] & !0xffff | level;
     let v = x.rom8(0x65674 + level);
     x.set8(CHARGE, v);

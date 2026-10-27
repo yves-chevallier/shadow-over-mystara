@@ -198,7 +198,7 @@ pub fn run(x: &mut Cx) {
     if x.u8(f::STATE) == 0 || x.u8(0) == 0 {
         return;
     }
-    if x.u8(f::STATE) != 4 && x.a5_u8(var::PAUSE) != 0 {
+    if x.u8(f::STATE) != 4 && var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(NO_ZONE) == 0 {
@@ -215,7 +215,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x8d60e : le serpent ne sort pas de l'écran par la gauche ni par le haut.
 fn keep_in_screen(x: &mut Cx) {
-    let cam = if x.a5_u8(var::CAMERA_SELECT) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
+    let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     x.c.a[2] = cam;
     let mut d0 = rd16(x.b, cam + 8);
     setw(x, 0, d0);
@@ -239,7 +239,7 @@ fn restore(x: &mut Cx) {
     if x.u8(f::STATE) == 0 || x.u8(0) == 0 {
         return;
     }
-    if x.u8(f::STATE) != 4 && x.a5_u8(var::PAUSE) != 0 {
+    if x.u8(f::STATE) != 4 && var::PAUSE.get(x.b) != 0 {
         return;
     }
     let (a, b, c) = (x.u16(SAVE_X), x.u16(SAVE_Z), x.u16(SAVE_Y));
@@ -251,7 +251,7 @@ fn restore(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.call(0x9e426);
@@ -286,7 +286,7 @@ fn init(x: &mut Cx) {
     lib::initial_hp_boss(x);
     lib::create_set_14(x);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     lib::create_set_15(x);
     lib::clear_popup(x);
     lib::empty_popups(x);
@@ -307,7 +307,7 @@ fn init(x: &mut Cx) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 fn active(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if tst8(x, f::FREEZE).gt() {

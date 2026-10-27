@@ -89,7 +89,7 @@ fn anim_play(x: &mut Cx, n: u32) {
 
 /// 0x6662e : position de la caméra, X dans le mot bas de D6, Y dans le mot haut.
 fn camera(x: &mut Cx) -> (u16, u16) {
-    let (cx, cy) = if x.a5_u8(0x36) != 0 { (x.a5_u16(0x556), x.a5_u16(0x55a)) } else { (x.a5_u16(0x506), x.a5_u16(0x50a)) };
+    let (cx, cy) = if var::CAMERA_SELECT.get(x.b) != 0 { (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b)) } else { (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b)) };
     x.c.d[6] = (cy as u32) << 16 | cx as u32;
     (cx, cy)
 }
@@ -108,7 +108,7 @@ fn speeds(x: &mut Cx, table: u32) {
 
 /// 0x666d2 : table de vitesses choisie par la difficulté (`A5+0x7f92` & 0x1c).
 fn speeds_by_level(x: &mut Cx, list: u32) {
-    let level = (x.a5_u16(0x7f92) & 0x1c) as u32;
+    let level = (var::RANK.get(x.b) & 0x1c) as u32;
     x.c.a[4] = list;
     set_dw(x, 0, level as u16);
     let table = x.data32(list + level);
@@ -117,7 +117,7 @@ fn speeds_by_level(x: &mut Cx, list: u32) {
 
 /// 0x666a2 : cadence de virage (octets `+0xa2/+0xa3`) selon la difficulté.
 fn turn_timer(x: &mut Cx, table: u32) {
-    let off = ((x.a5_u16(0x7f92) & 0x10) >> 3) as u32;
+    let off = ((var::RANK.get(x.b) & 0x10) >> 3) as u32;
     x.c.a[4] = table;
     set_dw(x, 0, off as u16);
     let v = x.data16(table + off);
@@ -126,7 +126,7 @@ fn turn_timer(x: &mut Cx, table: u32) {
 
 /// 0x6664c / 0x6664e : vitesse `+0x1e` lue dans la table selon la difficulté, `base` = décalage de ligne.
 fn set_speed_y(x: &mut Cx, base: u16) {
-    let off = ((x.a5_u16(0x7f92) & 0x18) >> 2).wrapping_add(base);
+    let off = ((var::RANK.get(x.b) & 0x18) >> 2).wrapping_add(base);
     x.c.a[4] = SPEED_Y_ROW;
     set_dw(x, 0, off);
     let v = x.data16(SPEED_Y_ROW + off as u32);
@@ -304,7 +304,7 @@ fn bite_check(x: &mut Cx) {
         let player = x.linked(f::TARGET);
         if player.u16(x.b, 4) == 0x200 && player.u8(x.b, 6) == 0xc {
             let roll = random(x) & 0x1f;
-            let row = ((x.a5_u16(0x7f92) >> 1) as u32) << 2;
+            let row = ((var::RANK.get(x.b) >> 1) as u32) << 2;
             let odds = x.rom32(BITE_ODDS + row);
             if odds >> roll & 1 != 0 {
                 let state = x.u32(f::STATE);
@@ -674,7 +674,7 @@ fn pounce(x: &mut Cx) {
 
 /// Sous-état 8 : dormant ; réveillé (sous-état 0) quand il est à moins de 0x1c0 pixels de la caméra.
 fn dormant(x: &mut Cx) {
-    let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+    let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d0 = x.u16(Obj::X).wrapping_sub(cam).wrapping_add(0x20);
     set_dw(x, 0, d0);
     if d0 <= 0x1c0 {
@@ -712,7 +712,7 @@ fn react_first(x: &mut Cx) {
             shake_timer(x);
         }
         2 => {
-            if x.a5_u8(0x3d) == 0 {
+            if var::PAUSE.get(x.b) == 0 {
                 x.add8(f::SUB2, 2);
             }
             let n = x.u8(0xa2).wrapping_sub(1);

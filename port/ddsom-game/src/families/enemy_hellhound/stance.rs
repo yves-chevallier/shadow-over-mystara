@@ -18,7 +18,7 @@ pub(super) fn run(x: &mut Cx) {
         10 => hop(x),
         _ => {}
     }
-    if x.u16(Obj::Z) == 0 && x.a5_u8(0x35) == 0 {
+    if x.u16(Obj::Z) == 0 && var::PLAYERS_ALIVE.get(x.b) == 0 {
         set_state_long(x, IDLE);
     }
 }
@@ -26,7 +26,7 @@ pub(super) fn run(x: &mut Cx) {
 // --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
 
 fn approach(x: &mut Cx) {
-    let dx = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506));
+    let dx = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b));
     if dx >= 0x180 {
         // loin de la caméra : se tourne vers la cible puis tire son geste au hasard
         let mut flip = 0;

@@ -31,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(var::PLAYERS_ALIVE) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 fn resume_chase(x: &mut Cx) {
@@ -148,7 +148,7 @@ fn swoop_a(x: &mut Cx) {
                 let (tx, ty) = (target.u16(x.b, 0x8), target.u16(x.b, 0x10));
                 x.set16(0x8, tx);
                 x.set16(0x10, ty);
-                let h = x.a5_u16(var::CAMERA1_Y).wrapping_add(0xf0).wrapping_sub(ty);
+                let h = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0).wrapping_sub(ty);
                 x.set16(0xc, h);
                 x.set16(0x18, (-0x500i16) as u16);
                 x.set16(0x1a, (-0x10i16) as u16);
@@ -184,7 +184,7 @@ fn swoop_a(x: &mut Cx) {
 
 /// +7 = 2 des piqués A et B (0x84bb8) : vol jusqu'à la hauteur de l'écran, avec les battements d'ailes.
 fn swoop_flight(x: &mut Cx) {
-    let ceiling = x.a5_u16(var::CAMERA1_Y).wrapping_add(0xf0);
+    let ceiling = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let height = x.u16(0x10).wrapping_add(x.u16(0xc));
     if Fl::sub16(height, ceiling).ge() {
         x.add8(0x7, 2);
@@ -237,7 +237,7 @@ fn swoop_b(x: &mut Cx) {
             let ty = target.u16(x.b, 0x10);
             x.set16(0x10, ty);
             x.set16(0xc, 0x70);
-            let cam = x.a5_u16(var::CAMERA1_X);
+            let cam = var::CAMERA1_X.get(x.b);
             let (px, vx) = if x.u8(f::FLIP) != 0 { (cam, 0x700i16) } else { (cam.wrapping_add(0x180), -0x700) };
             x.set16(0x8, px);
             x.set16(0x14, vx as u16);

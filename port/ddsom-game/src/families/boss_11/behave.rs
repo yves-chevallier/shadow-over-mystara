@@ -13,10 +13,10 @@ pub(super) fn intro(x: &mut Cx) {
         0x8d7ce => {
             x.add8(f::SUB2, 2);
             x.set8(NO_ZONE, 0xff);
-            let px = x.a5_u16(var::SCROLL_X).wrapping_add(0x190);
+            let px = var::SCROLL_X.get(x.b).wrapping_add(0x190);
             setw(x, 0, px);
             x.set16(0x8, px);
-            let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x40);
+            let py = var::SCROLL_Y.get(x.b).wrapping_add(0x40);
             setw(x, 0, py);
             x.set16(0x10, py);
             x.set16(0xc, 0);
@@ -40,7 +40,7 @@ pub(super) fn intro(x: &mut Cx) {
             sync(x);
         }
         _ => {
-            if Fl::sub8(x.a5_u8(0x2c), 0xc).lt() {
+            if Fl::sub8(var::PHASE.get(x.b), 0xc).lt() {
                 x.anim_step();
                 return sync(x);
             }
@@ -77,7 +77,7 @@ fn fall(x: &mut Cx) {
 
 /// 0x8d8bc : attend ; un joueur revient (vie > 0) et le compteur `+0xb6` repart.
 pub(super) fn lone(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if lib::target_by_criterion(x, lib::LOWEST_HP) {
             if tst8(x, 0xb6).gt() {
                 sub8(x, 0xb6, 1);
@@ -99,7 +99,7 @@ pub(super) fn lone(x: &mut Cx) {
 
 /// 0x8eb52 : délai de marche selon la difficulté.
 fn walk_delay(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY);
+    let level = var::RANK.get(x.b);
     setw(x, 0, level);
     let v = x.rom8(0x8eb5e + level as u32);
     x.set8(0x71, v);
@@ -116,7 +116,7 @@ fn walk_steps(x: &mut Cx) {
 
 /// 0x8d902.
 pub(super) fn chase(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return to_wait(x);
     }
     if !lib::target_by_criterion(x, lib::LOWEST_HP) {
@@ -194,9 +194,9 @@ fn pose(x: &mut Cx) {
 
 /// 0x8da02 : le serpent est hors de l'écran.
 fn off_screen(x: &mut Cx) -> bool {
-    let mut d0 = x.a5_u16(var::SCROLL_X);
-    if x.a5_u8(var::CAMERA_SELECT) != 0 {
-        d0 = x.a5_u16(0x556);
+    let mut d0 = var::SCROLL_X.get(x.b);
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        d0 = var::CAMERA_ALT_X.get(x.b);
     }
     setw(x, 0, d0);
     let here = x.u16(0x8);
@@ -341,11 +341,11 @@ fn roll(x: &mut Cx) -> bool {
     let alea = x.random();
     let r = alea & 7;
     setw(x, 0, r);
-    let n = x.a5_u8(var::PLAYERS_ALIVE).wrapping_sub(1);
+    let n = var::PLAYERS_ALIVE.get(x.b).wrapping_sub(1);
     setb(x, 1, n);
     let d1 = (x.c.d[1] as u16 & 2).wrapping_mul(4);
     setw(x, 1, d1);
-    let level = (x.a5_u16(var::DIFFICULTY) >> 8) as u8;
+    let level = (var::RANK.get(x.b) >> 8) as u8;
     setb(x, 2, level);
     let d2 = (x.c.d[2] as u16) >> 2;
     setw(x, 2, d2);

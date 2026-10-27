@@ -118,7 +118,7 @@ pub(self) fn spark(x: &mut Cx, d5: u32) {
 }
 
 pub(self) fn camera_x(x: &mut Cx) -> u16 {
-    if x.a5_u8(0x36) != 0 { x.a5_u16(0x5ae) } else { x.a5_u16(0x5a6) }
+    if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
 pub(self) fn count_down(x: &mut Cx, off: u32) -> bool {

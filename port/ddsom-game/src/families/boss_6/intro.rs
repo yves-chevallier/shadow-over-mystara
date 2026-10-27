@@ -23,8 +23,8 @@ pub(super) fn run(x: &mut Cx) {
 fn enter(x: &mut Cx) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, false);
-    let px = x.a5_u16(var::CAMERA1_X).wrapping_add(0x1e0);
-    let py = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x48);
+    let px = var::CAMERA1_X.get(x.b).wrapping_add(0x1e0);
+    let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x48);
     x.set16(0x8, px);
     x.set16(0x10, py);
     x.set16(0x14, (-0x500i16) as u16);
@@ -108,7 +108,7 @@ fn stand_up(x: &mut Cx) {
 
 /// +6 = 14 : attend que la caméra soit prête (`A5+0x2c` = 0xc), puis combat.
 fn wait_camera(x: &mut Cx) {
-    if x.a5_u8(0x2c) == 0xc {
+    if var::PHASE.get(x.b) == 0xc {
         lib::create_set_14(x);
         decide::chase(x);
     } else {

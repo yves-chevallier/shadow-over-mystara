@@ -227,7 +227,7 @@ mod man_scorpion {
     fn fly_left(x: &mut Cx) {
         sparkles(x);
         x.move_x();
-        let edge = x.a5_u16(0x506).wrapping_sub(0x50) as i16;
+        let edge = var::SCROLL_X.get(x.b).wrapping_sub(0x50) as i16;
         if edge > x.u16(0x8) as i16 {
             x.set32(f::STATE, st::DEAD_LONG);
         }
@@ -238,7 +238,7 @@ mod man_scorpion {
     fn fly_right(x: &mut Cx) {
         sparkles(x);
         x.move_x();
-        let dx = x.u16(0x8).wrapping_sub(x.a5_u16(0x506));
+        let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
         if dx < 0x100 {
             let mask = x.u8(p::ARMS_MASK);
             for (bit, off) in [(1u8, p::ARMS), (2, p::ARMS + 2)] {

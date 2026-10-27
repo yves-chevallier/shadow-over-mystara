@@ -130,7 +130,7 @@ fn fly_up_b(x: &mut Cx) {
                     d0 = 0x180;
                     vx = -vx;
                 }
-                let px = d0.wrapping_add(x.a5_u16(0x5a6));
+                let px = d0.wrapping_add(var::CAMERA1_X.get(x.b));
                 x.set16(Obj::X, px);
                 x.set16(Obj::VX, vx as u16);
                 x.set16(Obj::VZ, -0x680i16 as u16);
@@ -194,7 +194,7 @@ fn fly_common(x: &mut Cx) {
 
 /// 0x70f14 : vol en montée avec les bras ; fini quand la hauteur dépasse le haut de l'écran.
 fn fly_loop(x: &mut Cx) {
-    let top = x.a5_u16(0x5aa).wrapping_add(0xf0);
+    let top = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let here = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
     if (here as i16) >= (top as i16) {
         x.add8(f::SUB3, 2);
@@ -243,7 +243,7 @@ fn fly_down_from_above(x: &mut Cx) {
     let (tx, tz) = (t.u16(x.b, Obj::X), t.u16(x.b, Obj::Y));
     x.set16(Obj::X, tx);
     x.set16(Obj::Y, tz);
-    let h = x.a5_u16(0x5aa).wrapping_add(0xf0).wrapping_sub(tz);
+    let h = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0).wrapping_sub(tz);
     x.set16(Obj::Z, h);
     x.set16(Obj::VZ, -0x500i16 as u16);
     x.set16(Obj::AZ, -0x10i16 as u16);
@@ -444,7 +444,7 @@ fn arm_swing(x: &mut Cx) {
 // --- sous-états 6, 8, 10 : repos --------------------------------------------------------------------------
 
 pub(super) fn rest(x: &mut Cx) {
-    if (x.a5_u8(0x35) as i8) > 0 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::wander(x);
     }
     x.c.d[0] = x.u8(f::SUB2) as u32;

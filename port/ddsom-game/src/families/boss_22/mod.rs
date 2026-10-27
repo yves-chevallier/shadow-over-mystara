@@ -241,7 +241,7 @@ pub(self) fn hunt_far(x: &mut Cx) -> bool {
 
 /// 0x9d24e et 0x9d254 : attaque tirée dans la ligne de la difficulté de `table` (32 octets par couple de niveaux).
 pub(self) fn attack_from_table(x: &mut Cx, table: u32) {
-    let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;
+    let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
     let step = x.data8(table + row + r);
     x.set8(f::SUB2, step);
@@ -261,7 +261,7 @@ pub(self) fn next_attack(x: &mut Cx) {
             break;
         }
         if reach(x, p, -0x38, 0x38, 0x18) {
-            let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;
+            let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
             let r = rand_and(x, 0x1f);
             let table = kit(x).next;
             let step = x.data8(table + row + r);
@@ -308,8 +308,8 @@ pub(self) fn reach(x: &mut Cx, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16
 /// 0x9da5c : choisit le point d'arrivée de la course (`+0xb0`, `+0xb2`), l'angle et le sens de rotation, d'après la
 /// position du boss dans l'écran (table 0x9dabe : X, Z, angle, sens).
 pub(self) fn choose_spot(x: &mut Cx) {
-    let dx = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X));
-    let dz = x.u16(0x10).wrapping_sub(x.a5_u16(var::SCROLL_Y));
+    let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
+    let dz = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     let row = if (dx as i16) > 0xc0 {
         if (dz as i16) > 0x80 { 0x12 } else { 0xc }
     } else if (dz as i16) > 0x80 {
@@ -318,9 +318,9 @@ pub(self) fn choose_spot(x: &mut Cx) {
         0
     };
     let base = kit(x).spot;
-    let sx = x.rom16(base + row).wrapping_add(x.a5_u16(var::SCROLL_X));
+    let sx = x.rom16(base + row).wrapping_add(var::SCROLL_X.get(x.b));
     x.set16(SPOT_X, sx);
-    let sz = x.rom16(base + 2 + row).wrapping_add(x.a5_u16(var::SCROLL_Y));
+    let sz = x.rom16(base + 2 + row).wrapping_add(var::SCROLL_Y.get(x.b));
     x.set16(SPOT_Z, sz);
     let angle = x.rom8(base + 4 + row);
     x.set8(0x2d, angle);
@@ -399,7 +399,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);
     }
-    let speed = if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 { 7 } else { 6 };
+    let speed = if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 { 7 } else { 6 };
     x.set8(0x72, speed);
     x.set8(0x73, speed);
     for (off, v) in [(0x74, 5), (0x75, 0x3c), (0x76, 6), (0x81, 0x12), (0x80, 0x17)] {
@@ -407,7 +407,7 @@ fn init(x: &mut Cx) {
     }
     x.set16(GUARD, 0xb4);
     x.set16(GUARD_TIMER, 0xf0);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     pick_target(x);
     lib::draw_stance(x);
@@ -431,7 +431,7 @@ fn active(x: &mut Cx) {
     }
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         group(x);
         if tst8(x, ARM_TIMER).gt() {
             sub8(x, ARM_TIMER, 1);

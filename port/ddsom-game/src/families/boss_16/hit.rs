@@ -61,7 +61,7 @@ fn reaction(x: &mut Cx) {
         KNOCKBACK_HARD => knockback(x, true),
         BURST => burst(x),
         KILL => {
-            if x.a5_u8(var::PAUSE) == 0 {
+            if var::PAUSE.get(x.b) == 0 {
                 x.set16(f::HP, 0);
                 die(x);
             }
@@ -89,9 +89,9 @@ fn recover_position(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(0x49, 0);
     x.set32(0x58, 0);
-    let mut edge = x.a5_u16(var::SCROLL_X);
+    let mut edge = var::SCROLL_X.get(x.b);
     if x.a5_u8(0xa) != 0 {
-        edge = x.a5_u16(0x556);
+        edge = var::CAMERA_ALT_X.get(x.b);
     }
     let mut side = 0x20u8;
     let left = edge.wrapping_add(0x30);
@@ -226,7 +226,7 @@ fn burst(x: &mut Cx) {
             }
             set_dw(x, 0, d);
             x.add16(0x8, d);
-            if x.a5_u8(var::PAUSE) == 0 {
+            if var::PAUSE.get(x.b) == 0 {
                 next6(x);
             }
         }
@@ -270,7 +270,7 @@ fn down(x: &mut Cx) {
             anim_a(x, 0x11);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, DOWN_TIME, 1).gt() {
                 return;
             }
             x.set16(DOWN_TIME, 0);
@@ -279,7 +279,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 || !lib::step(x) {
+            if var::PAUSE.get(x.b) != 0 || !lib::step(x) {
                 return;
             }
             x.set8(VULNERABLE, 1);

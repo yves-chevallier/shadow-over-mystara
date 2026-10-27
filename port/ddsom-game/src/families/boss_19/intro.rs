@@ -13,7 +13,7 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         return end(x);
     }
     x.set8(SHIELD, 2);
@@ -62,10 +62,10 @@ fn end(x: &mut Cx) {
 }
 
 fn camera(x: &mut Cx) -> (u16, u16) {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 {
-        (x.a5_u16(0x556), x.a5_u16(0x55a))
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b))
     } else {
-        (x.a5_u16(var::SCROLL_X), x.a5_u16(var::SCROLL_Y))
+        (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b))
     }
 }
 
@@ -245,7 +245,7 @@ fn finish_step(x: &mut Cx) {
 fn wait_camera(x: &mut Cx) {
     x.set8(HOVER, 1);
     step(x);
-    if (x.a5_u8(0x2c) as i8) < 0xc {
+    if (var::PHASE.get(x.b) as i8) < 0xc {
         return;
     }
     x.add8(f::SUB2, 2);
@@ -276,7 +276,7 @@ fn pet_fly(x: &mut Cx) {
 fn pet_wait_camera(x: &mut Cx) {
     x.set8(HOVER, 1);
     step(x);
-    if (x.a5_u8(0x2c) as i8) < 0xc {
+    if (var::PHASE.get(x.b) as i8) < 0xc {
         return;
     }
     x.add8(f::SUB2, 2);

@@ -150,7 +150,7 @@ pub(self) fn wait(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.call(0x76ec4);
@@ -177,7 +177,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x76, 5), (0x8e, 3), (0x6f, 2), (0x68, 5), (0x69, 5), (0x6c, 4), (0x6d, 8), (0x6a, 3)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     lib::draw_6b(x);
     x.set8(0x70, 0);
     lib::draw_stance(x);
@@ -207,7 +207,7 @@ pub(self) fn active(x: &mut Cx) {
         x.set8(FOREGROUND, 0);
         x.unlink();
     }
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         if tst8(x, f::FREEZE).gt() {
             sub8(x, f::FREEZE, 1);
         } else {
@@ -292,7 +292,7 @@ pub(self) fn hover(x: &mut Cx) {
 
 /// `+5` = 6, 8, 10 (0x927fa) : attend qu'un joueur revienne.
 fn idle(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
         return;
     }

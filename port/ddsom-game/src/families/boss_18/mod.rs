@@ -87,7 +87,7 @@ pub fn run(x: &mut Cx) {
         st::HIT => hit::run(x),
         _ => x.free(&pools::BOSS),
     }
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         x.set8(0x3a, 0);
     }
     if x.u8(INVULNERABLE) != 0 {
@@ -108,7 +108,7 @@ fn init(x: &mut Cx) {
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x32);
     lib::initial_hp_boss(x);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     lib::spread_index(x);
     lib::clear_popup(x);
     lib::empty_popups(x);
@@ -130,11 +130,11 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.set8(0, 2);
         x.set_bit(0x1, 1, true);
-        let px = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
-        let py = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x69);
+        let px = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
+        let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x69);
         x.set16(0x8, px);
         x.set16(0x10, py);
         x.set16(TIMER, 0x3c);
@@ -155,7 +155,7 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro::run(x),
             2 => fight::run(x),
@@ -169,7 +169,7 @@ fn active(x: &mut Cx) {
 
 /// `+5` = 6, 8, 10 (0x98640) : attend que des joueurs reviennent.
 fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(0x30) != 0 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 0 {
+    if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::chase(x);
     }
     match x.u8(f::SUB2) {

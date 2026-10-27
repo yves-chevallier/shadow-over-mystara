@@ -31,8 +31,8 @@ fn fall_in(x: &mut Cx) {
     match x.u8(f::SUB3) {
         0 => {
             begin(x);
-            let px = x.a5_u16(0x5a6).wrapping_add(0x1e0);
-            let pz = x.a5_u16(0x5aa).wrapping_add(0x34);
+            let px = var::CAMERA1_X.get(x.b).wrapping_add(0x1e0);
+            let pz = var::CAMERA1_Y.get(x.b).wrapping_add(0x34);
             x.set16(Obj::X, px);
             x.set16(Obj::Y, pz);
             x.set16(Obj::VX, -0x300i16 as u16);
@@ -102,7 +102,7 @@ fn fall_in(x: &mut Cx) {
             }
         }
         14 => {
-            if x.a5_u8(0x2c) == 0xc {
+            if var::PHASE.get(x.b) == 0xc {
                 go::wander(x);
             } else {
                 lib::step(x);
@@ -122,7 +122,7 @@ fn walk_in(x: &mut Cx) {
             x.set16(Obj::AX, 0);
             let mut angle = 0x18;
             x.set8(f::FLIP, 0);
-            if (x.u16(Obj::X) as i16) <= (x.a5_u16(0x5a6) as i16) {
+            if (x.u16(Obj::X) as i16) <= (var::CAMERA1_X.get(x.b) as i16) {
                 x.set8(f::FLIP, 0x20);
                 angle = 8;
             }
@@ -135,7 +135,7 @@ fn walk_in(x: &mut Cx) {
             lib::step(x);
             if x.u8(f::KEY_FRAME) != 2 {
                 x.move_x();
-                let cam = x.a5_u16(0x5a6);
+                let cam = var::CAMERA1_X.get(x.b);
                 let leftward = (x.u16(Obj::VX) as i16) < 0;
                 let (mut d0, mut d1) = (cam.wrapping_add(if leftward { 0xf0 } else { 0x90 }), x.u16(Obj::X));
                 if leftward {

@@ -62,7 +62,7 @@ fn take_off(x: &mut Cx) {
 /// 0x823c2 : montée jusqu'au-dessus de l'écran, au rythme des battements d'ailes ; puis le boss disparaît
 /// (invulnérable) 0x28 images.
 fn climb(x: &mut Cx) {
-    let top = x.a5_u16(var::CAMERA1_Y).wrapping_add(0xf0);
+    let top = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let h = x.u16(0x10).wrapping_add(x.u16(0xc));
     setw(x, 0, top);
     setw(x, 1, h);
@@ -118,7 +118,7 @@ fn dive(x: &mut Cx) {
                 let (tx, ty) = (t.u16(x.b, 0x8), t.u16(x.b, 0x10));
                 x.set16(0x8, tx);
                 x.set16(0x10, ty);
-                let h = x.a5_u16(var::CAMERA1_Y).wrapping_add(0xf0).wrapping_sub(ty);
+                let h = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0).wrapping_sub(ty);
                 setw(x, 0, h);
                 x.set16(0xc, h);
                 x.set16(0x18, 0xfb00);
@@ -186,7 +186,7 @@ fn swoop(x: &mut Cx) {
             x.set16(0xc, 0x80);
             // entrée par le bord opposé à celui que le boss regarde
             let (dx, vx) = if x.u8(f::FLIP) != 0 { (0u16, 0x900u16) } else { (0x180, (-0x900i16) as u16) };
-            let px = dx.wrapping_add(x.a5_u16(var::CAMERA1_X));
+            let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
             setw(x, 0, px);
             setw(x, 1, vx);
             x.set16(0x8, px);

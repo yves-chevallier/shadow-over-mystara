@@ -159,7 +159,7 @@ fn run_away(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.set8(NO_ZONE, 1);
-            let to_right = if x.a5_u8(0x34) == 4 {
+            let to_right = if var::SCENE.get(x.b) == 4 {
                 x.u8(f::FLIP) == 0
             } else {
                 let left = !lib::in_right_half(x);

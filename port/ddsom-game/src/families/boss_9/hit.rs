@@ -95,7 +95,7 @@ fn recoil(x: &mut Cx) {
         x.move_x();
         return;
     }
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         x.set8(0, 1);
         let s = x.u32(RESUME);
         x.set32(f::STATE, s);
@@ -157,7 +157,7 @@ const A5_DEATH: u32 = 0xff8000 - 0x557c;
 /// 0x8b67c : l'épave sort de l'écran, revient, l'équipage est éjecté, dialogue, puis chute hors de l'écran.
 fn wreck(x: &mut Cx) {
     x.set_a5_u16(0x51e, 0);
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     match x.u8(f::SUB2) {

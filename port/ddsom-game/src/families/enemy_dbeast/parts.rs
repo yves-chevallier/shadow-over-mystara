@@ -127,9 +127,9 @@ pub(super) fn run(x: &mut Cx) {
 /// +6 = 0 (0x7245e) : membre attaché ; il se détache quand la bête est loin de la caméra.
 fn attached(x: &mut Cx) {
     if x.u8(0x7) == 0 {
-        let mut cam = x.a5_u16(0x506);
-        if x.a5_u8(0x36) != 0 {
-            cam = x.a5_u16(0x556);
+        let mut cam = var::SCROLL_X.get(x.b);
+        if var::CAMERA_SELECT.get(x.b) != 0 {
+            cam = var::CAMERA_ALT_X.get(x.b);
         }
         let d = x.u16(0x8).wrapping_sub(cam) as i16;
         if d <= 0x140 {
@@ -178,7 +178,7 @@ fn arm(x: &mut Cx) {
             if player_near(x) {
                 x.set8(DONE, 1);
                 play_once(x, 0x4e);
-                if (x.a5_u8(0x35) as i8) > 1 && x.u8(f::KEY_FRAME) != 0 {
+                if (var::PLAYERS_ALIVE.get(x.b) as i8) > 1 && x.u8(f::KEY_FRAME) != 0 {
                     x.set8(f::KEY_FRAME, 0);
                     x.c.d[1] = x.c.d[1] & !0xff | x.u8(SHOTS) as u32;
                     eshl_thrown_by_beast(x);
@@ -445,7 +445,7 @@ fn drop_in(x: &mut Cx) {
             x.set8(WANT_ANIM, 0x19);
             x.set16(0x18, (-0x300i16) as u16);
             x.set16(0x1a, (-0x10i16) as u16);
-            let h = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(0x10));
+            let h = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(0x10));
             x.set16(0xc, h);
             play(x, 0x10);
         }

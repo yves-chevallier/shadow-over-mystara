@@ -171,7 +171,7 @@ fn active(x: &mut Cx) {
     let freeze = tst8(x, f::FREEZE);
     if freeze.gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro::run(x),
             2 => fight::run(x),
@@ -188,7 +188,7 @@ fn active(x: &mut Cx) {
 
 /// `+5` = 6, 8, 10 (0x9a36a) : attend que des joueurs reviennent.
 fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) as i8 > 0 {
+    if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
     match x.u8(f::SUB2) {

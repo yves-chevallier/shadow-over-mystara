@@ -126,7 +126,7 @@ fn init(x: &mut Cx) {
         x.set8(0xab, 2);
         x.set8(f::BOX_SET, 0x20);
         lib::initial_hp_boss(x);
-        x.set_a5_u8(0x5a, 0);
+        var::SCENE_LEVEL.set(x.b, 0);
         lib::spread_index(x);
         lib::clear_popup(x);
         lib::empty_popups(x);
@@ -194,7 +194,7 @@ fn partner_waits(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => moves::intro(x),
             2 => moves::fight(x),
@@ -267,7 +267,7 @@ pub(self) fn transform(x: &mut Cx) {
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(0x93, 0);
     x.set_a5_u16(0x51e, 0x30);
-    let (cx, cy) = (x.a5_u16(var::SCROLL_X), x.a5_u16(var::SCROLL_Y));
+    let (cx, cy) = (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b));
     x.set_a5_u16(0x524, cx);
     x.set_a5_u16(0x528, cy);
     x.set8(0, 2);
@@ -356,7 +356,7 @@ pub(self) fn from_far_gesture(x: &mut Cx, g: u32) {
 
 /// 0x7a7a4 et 0x7a7b0 : délai entre deux pas de la course, selon la difficulté.
 pub(self) fn walk_delay(x: &mut Cx, kind: u8) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let table = if kind == 3 { 0x7a7dc } else { 0x7a7bc };
     let d = x.rom8(table + level);
     x.set8(WALK_DELAY, d);

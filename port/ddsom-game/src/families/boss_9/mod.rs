@@ -195,7 +195,7 @@ pub(self) fn stop_over(x: &mut Cx) {
 // --- tables par difficulté (données de la ROM) ----------------------------------------------------
 
 fn difficulty(x: &mut Cx) -> u32 {
-    x.a5_u16(var::DIFFICULTY) as u32
+    var::RANK.get(x.b) as u32
 }
 
 /// Octet de la table à une entrée par difficulté.
@@ -255,7 +255,7 @@ pub(self) fn draw_stops(x: &mut Cx) {
 
 /// 0x8bc0c : attente avant de repartir, selon le nombre de joueurs, la difficulté et l'équipage.
 pub(self) fn reset_wait(x: &mut Cx) {
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8bc3e + 4 * players);
     let d = difficulty(x);
     x.c.a[4] = list;
@@ -373,7 +373,7 @@ pub(self) fn try_dash(x: &mut Cx) -> bool {
         x.c.d[0] = 0;
         return false;
     }
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8c20c + 4 * players);
     let d = difficulty(x);
     x.c.a[4] = list;
@@ -452,7 +452,7 @@ pub(self) fn target_range(x: &mut Cx) -> u8 {
 /// 0x8c698 / 0x8c6a0 : arrêt de tir tiré par difficulté (`base` : 2 cible proche, 0xe cible à portée).
 pub(self) fn draw_halt(x: &mut Cx, base: u8) {
     x.c.d[2] = base as u32;
-    let level = (x.a5_u16(var::DIFFICULTY) >> 1) << 5;
+    let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = 0x8c6d2u32.wrapping_add(level as i16 as u32);
     x.c.a[4] = at;
     let r = rand_and(x, 0x1f);
@@ -498,7 +498,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x8a772 : hors cinématique, et dès qu'il y a la place (10 ESHL, 5 ENEMY) : parties, conducteur, position.
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     let r = random(x);
@@ -576,7 +576,7 @@ fn active(x: &mut Cx) {
         if freeze != 0 {
             x.set8(f::FREEZE, 0);
         }
-        if x.a5_u8(var::PAUSE) != 0 {
+        if var::PAUSE.get(x.b) != 0 {
             return;
         }
         if x.u8(BLINKING) != 0 && sub8(x, BLINK_TIME, 1).mi() {
@@ -595,7 +595,7 @@ fn active(x: &mut Cx) {
     }
     let rolling = x.u8(GAIT) != 2;
     x.set8(0x3a, rolling as u8);
-    if x.u16(f::TARGET) == 0 || x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if x.u16(f::TARGET) == 0 || var::PLAYERS_ALIVE.get(x.b) == 0 {
         retarget(x);
         x.set32(f::STATE, 0x0206_0000);
     }

@@ -122,7 +122,7 @@ pub(super) fn attack_16(x: &mut Cx) {
 /// 0x9ab50 : la charge si le boss est dans la bande utile de l'écran, sinon l'attaque 4 quand il regarde du bon côté.
 pub(super) fn dash_or_attack(x: &mut Cx) {
     let here = x.u16(0x8);
-    let mut edge = x.a5_u16(var::CAMERA1_X).wrapping_add(0x38);
+    let mut edge = var::CAMERA1_X.get(x.b).wrapping_add(0x38);
     let mut side = 0x20;
     if !Fl::sub16(edge, here).ge() {
         side = 0;
@@ -165,7 +165,7 @@ pub(super) fn after_attack(x: &mut Cx, then: fn(&mut Cx)) {
     if host_dead(x) {
         return start_death(x);
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return wait(x);
     }
     then(x);
@@ -189,14 +189,14 @@ fn target(x: &mut Cx, table: u32, index: u32) -> u32 {
 
 /// 0x9a850 : délai avant le pas suivant, selon la difficulté.
 pub(super) fn walk_delay_fast(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x9a868, level);
     x.set8(WALK_DELAY, v);
 }
 
 /// 0x9a85c : idem, table des marches lentes.
 pub(super) fn walk_delay_slow(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x9a888, level);
     x.set8(WALK_DELAY, v);
 }
@@ -217,8 +217,8 @@ pub(super) fn walk_steps_slow(x: &mut Cx) {
 
 /// Index de la table de difficulté : `(difficulté & 0x1e) × k + (joueurs - 1)`.
 fn level_index(x: &mut Cx, k: u32) -> u32 {
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * k;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * k;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     level + players.saturating_sub(1)
 }
 
@@ -231,8 +231,8 @@ pub(super) fn pick_strike_limit(x: &mut Cx) {
 
 /// 0x9ac9a : durée du ralenti (mot).
 pub(super) fn pick_slow_time(x: &mut Cx) {
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * 4;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let i = level + 2 * players.saturating_sub(1);
     let v = table16(x, 0x9acbc, i);
     x.set16(SLOW_TIME, v);
@@ -240,9 +240,9 @@ pub(super) fn pick_slow_time(x: &mut Cx) {
 
 /// 0x9ad3c : mode du ralenti (1 ou 2), tiré dans un masque de bits par difficulté et nombre de joueurs.
 pub(super) fn pick_slow_mode(x: &mut Cx) {
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let row = players.saturating_sub(1) << 3;
-    let level = ((x.a5_u16(var::DIFFICULTY) & 0x18) >> 2) as u32;
+    let level = ((var::RANK.get(x.b) & 0x18) >> 2) as u32;
     let bit = random(x) & 0x1f & 7;
     let set = table8(x, 0x9ad74, row + level) >> bit & 1 != 0;
     x.set8(SLOW, if set { 2 } else { 1 });
@@ -256,8 +256,8 @@ pub(super) fn spawn_by_level(x: &mut Cx) {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
         let dx = table16(x, 0x9ae1a, i);
         let dy = table16(x, 0x9ae1c, i);
-        let px = dx.wrapping_add(x.a5_u16(var::CAMERA1_X));
-        let py = dy.wrapping_add(x.a5_u16(var::CAMERA1_Y));
+        let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
+        let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         set_dw(x, 0, px);
         set_dw(x, 2, py);
         x.c.d[1] = 0;

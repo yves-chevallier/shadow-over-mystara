@@ -24,7 +24,7 @@ fn arrival(x: &mut Cx) {
             x.set8(0, 2);
             x.set_bit(0x1, 1, false);
             x.set8(f::FLIP, 0);
-            let cx = x.a5_u16(var::SCROLL_X).wrapping_add(0x140);
+            let cx = var::SCROLL_X.get(x.b).wrapping_add(0x140);
             x.set16(0x8, cx);
             let host = x.linked(f::HOST);
             let z = host.u16(x.b, 0xc).wrapping_sub(0x10);
@@ -92,7 +92,7 @@ fn arrival(x: &mut Cx) {
             }
         }
         14 => {
-            if x.a5_u8(0x2c) != 0xc {
+            if var::PHASE.get(x.b) != 0xc {
                 lib::step(x);
                 return;
             }
@@ -128,7 +128,7 @@ fn entrance(x: &mut Cx) {
                 dust(x);
             }
             x.move_xz();
-            let floor = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x100);
+            let floor = var::CAMERA1_Y.get(x.b).wrapping_add(0x100);
             let here = x.u16(0x10).wrapping_add(x.u16(0xc));
             if Fl::sub16(here, floor).lt() {
                 return;

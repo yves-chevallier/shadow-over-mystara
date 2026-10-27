@@ -238,7 +238,7 @@ fn exit_screen(x: &mut Cx) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
-        let d = x.a5_u16(0x506).wrapping_sub(x.u16(Obj::X));
+        let d = var::SCROLL_X.get(x.b).wrapping_sub(x.u16(Obj::X));
         if d as i16 >= 0xc0 {
             negate(x, Obj::VX);
             x.set8(f::FLIP, 0x20);
@@ -250,7 +250,7 @@ fn exit_screen(x: &mut Cx) {
         x.move_x();
     }
     step(x);
-    let d = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);
+    let d = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b)).wrapping_add(0x10);
     if d > 0x1a0 {
         detach_from_host(x);
         set_state_long(x, 0x0600_0000);
@@ -406,7 +406,7 @@ fn land(x: &mut Cx) {
         6 => {
             if step(x) {
                 x.set16(f::SUB2, 0);
-                if x.a5_u8(0x35) != 0 {
+                if var::PLAYERS_ALIVE.get(x.b) != 0 {
                     set_state_long(x, STANCE);
                     pick_target(x);
                 }

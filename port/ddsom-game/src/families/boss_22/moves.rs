@@ -28,8 +28,8 @@ pub(super) fn arrive(x: &mut Cx) {
             next7(x);
             x.set8(VULNERABLE, 0);
             x.set8(f::FLIP, 0);
-            let px = x.a5_u16(var::SCROLL_X).wrapping_add(0x80);
-            let pz = x.a5_u16(var::SCROLL_Y).wrapping_add(0x90);
+            let px = var::SCROLL_X.get(x.b).wrapping_add(0x80);
+            let pz = var::SCROLL_Y.get(x.b).wrapping_add(0x90);
             x.set16(0x8, px);
             x.set16(0x10, pz);
             x.set16(0xc, 0x120);
@@ -82,7 +82,7 @@ pub(super) fn fight(x: &mut Cx) {
         6 => leap(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }
@@ -192,7 +192,7 @@ fn turn(x: &mut Cx) {
 
 /// 0x9b45c : le demi-tour continue tant que le boss est dans l'écran et que la cible est assez proche devant lui.
 fn turn_not_needed(x: &mut Cx) -> bool {
-    let cam = x.a5_u16(var::SCROLL_X);
+    let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
         return false;
     }
@@ -505,7 +505,7 @@ fn spot_leap_b(x: &mut Cx) {
 
 /// 0x9ca0a : sans joueur en vie, le boss attend (animation de repos de sa forme) ; sinon il reprend.
 pub(super) fn paused(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if second_form(x) {
             return x.set32(f::STATE, 0x0204_1000);
         }
@@ -611,7 +611,7 @@ fn release_prey(x: &mut Cx) {
 /// 0xffda : tirage dont les chances (un bit par résultat, mot de la table 0xfff4 choisi par la difficulté) décident si la
 /// transformation s'enchaîne sur une riposte.
 fn flee_roll(x: &mut Cx) -> bool {
-    let row = (((x.a5_u16(var::DIFFICULTY) >> 3) << 1)) as u32;
+    let row = (((var::RANK.get(x.b) >> 3) << 1)) as u32;
     let chances = x.rom16(0xfff4 + row);
     set_dw(x, 2, chances);
     let r = rand_and(x, 0xf);

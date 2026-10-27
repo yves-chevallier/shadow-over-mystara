@@ -129,7 +129,7 @@ pub(self) fn next6(x: &mut Cx) {
 
 /// 0x95220 : la caméra en service (son enregistrement ; X en `+8`, Y en `+0xc`).
 pub(self) fn camera_record(x: &mut Cx) -> crate::objects::Obj {
-    crate::objects::Obj(if x.a5_u8(var::CAMERA_SELECT) != 0 { 0xff854e } else { 0xff84fe })
+    crate::objects::Obj(if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe })
 }
 
 /// 0x950b8 : la cible est-elle derrière le boss ? (sans cible, le boss attend et la réponse est oui.)
@@ -238,14 +238,14 @@ pub fn run(x: &mut Cx) {
 
 /// 0x93286 : attend la fin de la pause ; les variantes 0 et 1 sont choisies d'après la hauteur de la caméra.
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.add8(f::STATE, 2);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     if (x.u8(3) as i8) < 2 {
-        let (variant, z) = if (x.a5_u16(var::SCROLL_Y) as i16) >= 0x130 { (0, 0x1f8) } else { (1, 0x140) };
+        let (variant, z) = if (var::SCROLL_Y.get(x.b) as i16) >= 0x130 { (0, 0x1f8) } else { (1, 0x140) };
         x.set8(3, variant);
         x.set16(0x10, z);
     }
@@ -271,7 +271,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x6a, 3), (0x6c, 4), (0x6d, 8), (TIMER, 0)] {
         x.set8(off, v);
     }
-    let speed = if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 { 7 } else { 6 };
+    let speed = if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 { 7 } else { 6 };
     x.set8(0x72, speed);
     x.set8(0x73, speed);
     for (off, v) in [(0x74, 1), (0x75, 0x44), (0x76, 6), (0x7e, 0x4a), (0x7f, 0), (0x81, 0), (0x80, 0x1a), (0xbf, 0)] {
@@ -307,7 +307,7 @@ fn active(x: &mut Cx) {
 
 /// 0x933d0..0x93452 : vrai si le groupe doit tourner cette image (hors pause, ou en attente de pause).
 fn paused_dispatch(x: &mut Cx) -> bool {
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         x.set8(PAUSE_SEEN, 0);
         return true;
     }
@@ -348,7 +348,7 @@ pub(self) fn next_attack(x: &mut Cx) {
     if !lib::target_in_box(x, -0x40, 0x40, 0x20) {
         return x.set32(f::STATE, state::STAND);
     }
-    let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;
+    let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
     let step = x.data8(0x94e7c + row + r);
     x.set8(f::SUB2, step);

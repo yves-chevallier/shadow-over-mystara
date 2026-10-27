@@ -73,7 +73,7 @@ fn reaction(x: &mut Cx) {
         x.set8(SHAKE, 0x10);
         return set_anim(x, 4, 0);
     }
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return;
     }
@@ -98,7 +98,7 @@ fn reaction(x: &mut Cx) {
 
 /// 0x92b2c : recul : le dragon glisse en arrière pendant 15 images.
 fn pushed_back(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(f::SUB2) == 0 {
@@ -130,7 +130,7 @@ fn get_up(x: &mut Cx) {
             if x.u8(f::SUB2) == 0 {
                 x.add8(f::SUB2, 2);
             }
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, 0x84, 1).gt() {
@@ -143,7 +143,7 @@ fn get_up(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if !step(x) {
@@ -155,7 +155,7 @@ fn get_up(x: &mut Cx) {
             x.set_bit(0x1, 1, true);
         }
         6 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, TIMER, 1).pl() {
@@ -165,7 +165,7 @@ fn get_up(x: &mut Cx) {
             x.set_bit(0x1, 1, false);
         }
         8 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if !step(x) {
@@ -205,7 +205,7 @@ fn death(x: &mut Cx) {
         2 => {
             step(x);
             x.move_xz();
-            let cam_y = x.a5_u16(var::SCROLL_Y);
+            let cam_y = var::SCROLL_Y.get(x.b);
             let d = x.u16(0x10).wrapping_sub(cam_y).wrapping_add(x.u16(0xc));
             if (d as i16) <= 0x200 {
                 return;

@@ -339,9 +339,9 @@ fn exit_flight(x: &mut Cx) {
             }
         }
         1..=3 => {
-            let mut left = x.a5_u16(0x506);
+            let mut left = var::SCROLL_X.get(x.b);
             if x.u8(PARAM) == 4 {
-                left = x.a5_u16(0x556);
+                left = var::CAMERA_ALT_X.get(x.b);
             }
             let limit = x.u16(EXIT_LIMIT).wrapping_add(left) as i16;
             let here = x.u16(0x8).wrapping_add(left) as i16;
@@ -351,7 +351,7 @@ fn exit_flight(x: &mut Cx) {
             }
         }
         _ => {
-            let top = x.a5_u16(0x50a).wrapping_add(0x100);
+            let top = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
             if top <= x.u16(0xc) {
                 leave(x);
             }
@@ -565,9 +565,9 @@ fn hit_recoil(x: &mut Cx) {
             step(x);
             x.move_xz();
             let z = x.u16(0xc).wrapping_add(x.u16(0x10));
-            let mut limit = x.a5_u16(0x50a);
-            if x.a5_u8(0x36) != 0 {
-                limit = x.a5_u16(0x55a);
+            let mut limit = var::SCROLL_Y.get(x.b);
+            if var::CAMERA_SELECT.get(x.b) != 0 {
+                limit = var::CAMERA_ALT_Y.get(x.b);
             }
             if (z as i16) <= (limit as i16) {
                 x.add8(f::STATE, 2);

@@ -28,7 +28,7 @@ fn step(x: &mut Cx, table: u32) -> u32 {
 }
 
 fn paused(x: &mut Cx) -> bool {
-    x.a5_u8(var::PAUSE) != 0
+    var::PAUSE.get(x.b) != 0
 }
 
 /// 0x86be6 : le coup est traité par la routine commune ; sans PV le boss meurt.
@@ -93,7 +93,7 @@ fn thrown(x: &mut Cx) {
             }
             x.set32(0x58, 0);
             x.set32(0x14, 0);
-            let n = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+            let n = var::PLAYERS_ALIVE.get(x.b) as u32;
             x.c.d[5] = ((n as u16) << 2) as u32;
             let mask = rom32(x, 0x86dd6 + x.c.d[5]);
             x.c.d[5] = mask;

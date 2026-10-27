@@ -45,12 +45,12 @@ pub fn step(x: &mut Cx) -> bool {
 
 /// 0x10474 : au moins un joueur en vie (`A5+0x35`).
 pub fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(0x35) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 /// 0x104a2 : l'objet est hors de la zone `[caméra + gauche, caméra + droite]` (selon le mode deux écrans).
 pub fn outside(x: &mut Cx, left: i16, right: i16) -> bool {
-    let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x5ae) } else { x.a5_u16(0x5a6) };
+    let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) };
     let pos = x.u16(0x8) as i16;
     let (lo, hi) = (cam.wrapping_add(left as u16) as i16, cam.wrapping_add(right as u16) as i16);
     x.c.d[0] = x.c.d[0] & !0xffff | lo as u16 as u32;
@@ -93,7 +93,7 @@ pub fn jitter_angle(x: &mut Cx) {
 
 /// 0x1059e : rang de PV (`+0xac`) selon le nombre de joueurs et la difficulté.
 pub fn init_hp_rank(x: &mut Cx) {
-    let players = x.a5_u8(0x35).wrapping_sub(1) << 5;
+    let players = var::PLAYERS_ALIVE.get(x.b).wrapping_sub(1) << 5;
     let level = x.a5_u8(0x7f93) & 0x1e;
     x.c.d[0] = x.c.d[0] & !0xff | players.wrapping_add(level) as u32;
     x.set8(0xac, players.wrapping_add(level));
@@ -760,7 +760,7 @@ fn roll_bit(x: &mut Cx, mask: u32, bits: u32) -> bool {
 
 /// 0xffda : tirage d'un bit dans le masque (mot) de la table 0xffd8, choisi par le compteur d'images / 8.
 pub fn roll_ffda(x: &mut Cx) -> bool {
-    let i = (x.a5_u16(0x7f92) >> 3) << 1;
+    let i = (var::RANK.get(x.b) >> 3) << 1;
     let mask = x.rom16(0xffd8u32.wrapping_add(i as i16 as u32));
     x.c.d[2] = x.c.d[2] & !0xffff | mask as u32;
     roll_bit(x, mask as u32, 0xf)
@@ -776,7 +776,7 @@ pub fn roll_78(x: &mut Cx) -> bool {
     }
     let row = x.data32(0xadb0 + 4 * line as u32);
     x.c.a[4] = row;
-    let tick = x.a5_u16(0x7f92);
+    let tick = var::RANK.get(x.b);
     let mask = x.data32(row.wrapping_add(((tick << 2) as i16) as u32));
     x.c.d[2] = mask;
     let hit = roll_bit(x, mask, 0x1f);

@@ -87,7 +87,7 @@ fn down(x: &mut Cx) {
             body_anim(x, 0x11);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, DOWN_TIME, 1).gt() {
                 return;
             }
             x.set16(DOWN_TIME, 0);
@@ -112,7 +112,7 @@ fn down(x: &mut Cx) {
             x.set8(0, 1);
         }
         _ => {
-            if x.a5_u8(var::PAUSE) != 0 || !lib::step(x) {
+            if var::PAUSE.get(x.b) != 0 || !lib::step(x) {
                 return;
             }
             x.set8(VULNERABLE, 1);

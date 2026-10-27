@@ -237,7 +237,7 @@ fn leave(x: &mut Cx) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
-        let d = x.a5_u16(0x506).wrapping_sub(x.u16(Obj::X));
+        let d = var::SCROLL_X.get(x.b).wrapping_sub(x.u16(Obj::X));
         if (d as i16) >= 0xc0 {
             // `blt` non pris : à droite du bord, il part dans l'autre sens
             negate(x, Obj::VX);
@@ -250,7 +250,7 @@ fn leave(x: &mut Cx) {
         x.move_x();
     }
     x.anim_step();
-    let d = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);
+    let d = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b)).wrapping_add(0x10);
     if d > 0x1a0 {
         detach_from_host(x);
         set_state_long(x, st::DEAD_LONG);

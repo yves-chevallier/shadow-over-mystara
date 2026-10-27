@@ -112,7 +112,7 @@ pub(super) fn gate_wide(x: &mut Cx) -> u32 {
 
 /// 0x78e74 / 0x78e80 : délai de charge `+0x71` d'après la difficulté.
 pub(super) fn charge_delay(x: &mut Cx, table: u32) {
-    let level = x.a5_u16(0x7f92) as u32;
+    let level = var::RANK.get(x.b) as u32;
     x.c.d[0] = x.c.d[0] & !0xffff | level;
     let v = x.rom8(table + level);
     x.set8(AI_CHARGE, v);

@@ -146,7 +146,7 @@ fn init(x: &mut Cx) {
     x.set8(f::BOX_SET, 0x31);
     lib::initial_hp_boss(x);
     lib::spread_index(x);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
@@ -183,7 +183,7 @@ fn active(x: &mut Cx) {
     let freeze = tst8(x, f::FREEZE);
     if freeze.gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro::run(x),
             2 => fight::run(x),
@@ -200,7 +200,7 @@ fn active(x: &mut Cx) {
 
 /// `+5` = 6, 8, 10 (0x96958) : attend que des joueurs reviennent.
 fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) as i8 > 0 {
+    if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
     match x.u8(f::SUB2) {

@@ -262,7 +262,7 @@ mod tentacle {
                 x.add8(f::SUB2, 2);
                 x.set16(0xa4, 0x168);
                 start(x, MID, 2);
-                if x.a5_u8(0x30) != 0 {
+                if var::GAME_ON.get(x.b) != 0 {
                     lib::sound(x, 0xe525a);
                 }
             }

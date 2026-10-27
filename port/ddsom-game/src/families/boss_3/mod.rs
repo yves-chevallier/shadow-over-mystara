@@ -107,7 +107,7 @@ pub(self) fn stop(x: &mut Cx) {
 
 /// 0x8189e : enregistrement de la caméra en service (A2 : 0xff84fe, ou 0xff854e si `A5+0x36`).
 pub(self) fn camera(x: &mut Cx) -> Obj {
-    let a = if x.a5_u8(var::CAMERA_SELECT) != 0 { 0xff854e } else { 0xff84fe };
+    let a = if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe };
     x.c.a[2] = a;
     Obj(a)
 }
@@ -186,7 +186,7 @@ pub(self) fn wound_changed(x: &mut Cx) -> bool {
 /// Tirage d'une attaque dans une table de 32 octets par niveau de difficulté (lue en données, à partir de `table`) :
 /// `+6` = l'attaque, `+4..+5` = actif / attaques, `+7` = 0.
 fn draw_attack(x: &mut Cx, table: u32) {
-    let level = (x.a5_u16(var::DIFFICULTY) >> 1) << 5;
+    let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = table.wrapping_add(level as i16 as u32);
     x.c.a[4] = at;
     let r = rand_and(x, 0x1f);
@@ -230,7 +230,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     x.tick_counters();
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         x.set8(HOVER, 0xff);
     }
     x.set8(BODY_SHAPE, 0);
@@ -249,13 +249,13 @@ pub fn run(x: &mut Cx) {
 
 /// 0x7f44e : réglages du boss (hors cinématique) ; il s'enregistre comme obstacle.
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     pick_target(x);
@@ -272,7 +272,7 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     let mut n = 6;
-    if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 {
+    if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 {
         n = 7;
     }
     x.c.d[0] = n as u32;
@@ -296,7 +296,7 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => fight::intro(x),
             2 => fight::run(x),
@@ -330,7 +330,7 @@ pub(self) fn end_frame(x: &mut Cx, margin: u16) {
 pub(crate) fn counter_reaction(x: &mut Cx) {
     let r = random(x) & 0xf;
     x.c.d[0] = r;
-    let level = (x.a5_u16(var::DIFFICULTY) >> 1).wrapping_mul(4);
+    let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
     let mask = x.rom16(0x81b1a + level as u32);
     x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;
     if mask >> r & 1 == 0 {

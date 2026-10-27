@@ -195,8 +195,8 @@ fn volley(x: &mut Cx) {
             }
             x.add8(f::SUB3, 2);
             x.set8(FLAG, 0);
-            let level = (x.a5_u16(0x7f92) & 0x1e) * 2;
-            let players = x.a5_u8(0x35);
+            let level = (var::RANK.get(x.b) & 0x1e) * 2;
+            let players = var::PLAYERS_ALIVE.get(x.b);
             let rank = if players == 0 { 0 } else { players - 1 } as u16;
             let v = x.rom8(0x78856 + (level + rank) as u32);
             x.set8(COUNT, v);
@@ -278,7 +278,7 @@ fn grenade(x: &mut Cx) {
 
 /// Sous-états 6, 8 et 10 : plus aucun joueur en vie : tourne sur place tant que `A5+0x35` est nul.
 pub(super) fn spin(x: &mut Cx) {
-    if (x.a5_u8(0x35) as i8) > 0 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::fire_a(x);
     }
     x.c.d[0] = x.u8(f::SUB2) as u32;

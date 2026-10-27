@@ -114,7 +114,7 @@ fn volley_fire(x: &mut Cx, pick: fn(&mut Cx)) {
     addq8(x, f::SUB3, 2);
     x.set16(TIMER, 0x32);
     x.call(0xb4f60);
-    let n = x.a5_u8(var::PLAYERS_ALIVE);
+    let n = var::PLAYERS_ALIVE.get(x.b);
     x.set8(VOLLEY, n);
     sub8(x, VOLLEY, 1);
     shoot(x, pick);

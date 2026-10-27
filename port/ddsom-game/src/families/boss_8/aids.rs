@@ -12,7 +12,7 @@ pub(super) fn lsr_w(x: &mut Cx, n: usize, k: u32) {
 
 /// 0x89788 : phases de l'affrontement selon le mode de jeu `A5+0x5a` et le nombre de joueurs `+0xad`.
 pub(super) fn phase(x: &mut Cx) {
-    let mode = x.a5_u8(0x5a);
+    let mode = var::SCENE_LEVEL.get(x.b);
     x.c.d[0] = mode as u32;
     if mode == 0 {
         return;
@@ -224,8 +224,8 @@ pub(super) fn dodge_nearby(x: &mut Cx) {
 
 /// 0x8a666 : un point de chute tiré dans une table choisie selon le quart d'écran où se trouve le boss.
 pub(super) fn dodge_spot(x: &mut Cx) {
-    let dx = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X));
-    let dy = x.u16(0x10).wrapping_sub(x.a5_u16(var::SCROLL_Y));
+    let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
+    let dy = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     setw(x, 0, dx);
     setw(x, 1, dy);
     x.c.d[6] = 0;
@@ -279,7 +279,7 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     if clear_d0 {
         x.c.d[0] = 0;
     }
-    let level = x.a5_u16(var::DIFFICULTY);
+    let level = var::RANK.get(x.b);
     setw(x, 0, level);
     lsr_w(x, 0, 1);
     let row = ((x.c.d[0] as u16) << 5) as i16 as i32 as u32;

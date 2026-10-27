@@ -16,6 +16,31 @@ use crate::objects::pools;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
+/// Variables de la RAM de travail lues par les ennemis et les boss (`ram.rs` pour celles de tout le jeu).
+pub mod var {
+    use crate::ram::{Mot, Octet};
+    pub use crate::ram::{CAMERA_ALT_ACTIVE as CAMERA_SELECT, CAMERA_ALT_X, CAMERA_ALT_Y, PARTIE as GAME_ON, PHASE, SCENE};
+    /// Caméra principale : position (mot ; `SCROLL_Y` se lit aussi en long avec la fraction).
+    pub use crate::ram::{CAMERA_X as SCROLL_X, CAMERA_Y as SCROLL_Y};
+    /// Objet suivi par la caméra (mot, adresse RAM ; 0 = aucun) : le « meneur » que certains boss accompagnent.
+    pub const LEADER: Mot = Mot::a5(0x46);
+    /// Octet non nul : tout est figé (le gestionnaire du boss ne fait rien).
+    pub const FROZEN: Octet = Octet::a5(0x4e);
+    /// Nombre de joueurs en vie (`ram::DIFFICULTE` désigne le même octet : à vérifier).
+    pub const PLAYERS_ALIVE: Octet = Octet::a5(0x35);
+    /// Octet à 1 pendant une cinématique (jeu en pause, entrées coupées).
+    pub const PAUSE: Octet = Octet::a5(0x3d);
+    /// Niveau de la scène pour les boss (0 rien, 3 toujours ; `boss_common::hp_threshold`).
+    pub const SCENE_LEVEL: Octet = Octet::a5(0x5a);
+    /// Position (X, Y) des deux caméras de jeu (objets à `A5+0x59e`, `A5+0x5a6`) (h).
+    pub const CAMERA1_X: Mot = Mot::a5(0x5a6);
+    pub const CAMERA1_Y: Mot = Mot::a5(0x5aa);
+    pub const CAMERA2_X: Mot = Mot::a5(0x5ae);
+    pub const CAMERA2_Y: Mot = Mot::a5(0x5b2);
+    /// Rang (difficulté dynamique, `objects::rank`), 0 à 31 : indexe les tables de décision des ennemis.
+    pub const RANK: Mot = Mot::a5(0x7f92);
+}
+
 /// Champs des objets ENEMY.
 pub mod f {
     /// État principal, sous-état, sous-sous-état.

@@ -27,7 +27,7 @@ pub(super) fn run(x: &mut Cx) {
         6 => jump(x),
         _ => {}
     }
-    if x.a5_u8(0x35) == 0 && (x.u16(Obj::Z) as i16) <= 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 && (x.u16(Obj::Z) as i16) <= 0 {
         set_state_long(x, IDLE);
     }
 }
@@ -213,7 +213,7 @@ pub(super) fn rest(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         return rest_begin(x);
     }
-    if x.a5_u8(0x35) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, STANCE);
         pick_target(x);
     } else {

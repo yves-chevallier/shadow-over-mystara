@@ -20,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn at_camera(x: &mut Cx) {
-    let cx = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
+    let cx = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     x.set16(0x8, cx);
 }
 

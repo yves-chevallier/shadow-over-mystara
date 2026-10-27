@@ -16,7 +16,7 @@ const SHAKE_JUMPS: u32 = 0x90ada;
 
 pub(super) fn run(x: &mut Cx) {
     let alive = (x.u16(f::HP) as i16) > 0;
-    if alive && x.u8(f::SUB) == 0 && x.u32(SAVED_STATE) & 0xffff_ff00 == ATTACK_4 && x.a5_u8(var::PAUSE) == 0 {
+    if alive && x.u8(f::SUB) == 0 && x.u32(SAVED_STATE) & 0xffff_ff00 == ATTACK_4 && var::PAUSE.get(x.b) == 0 {
         // touché pendant le souffle : le dragon le reprend
         x.set8(SHAKE, 0x10);
         x.set8(SHIELD, 8);
@@ -62,7 +62,7 @@ fn tail(x: &mut Cx) {
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
-        if x.a5_u8(0x34) == 0x20 {
+        if var::SCENE.get(x.b) == 0x20 {
             lib::drop_once(x);
         }
     }
@@ -130,7 +130,7 @@ fn retaliate(x: &mut Cx) -> bool {
 }
 
 fn knock_slide(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return;
     }
@@ -206,7 +206,7 @@ fn stagger(x: &mut Cx) {
 }
 
 fn stagger_wait(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.set8(REACTION, 0);
@@ -267,7 +267,7 @@ fn shake_z(x: &mut Cx, d0: i16) {
 // --- +5 = 2 : recul par un gros coup (0x90cb8) --------------------------------------------------------------------
 
 fn pushed_back(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(f::SUB2) == 0 {
@@ -351,10 +351,10 @@ fn death(x: &mut Cx) {
 }
 
 fn camera_y(x: &mut Cx) -> u16 {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 {
-        x.a5_u16(0x55a)
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        var::CAMERA_ALT_Y.get(x.b)
     } else {
-        x.a5_u16(var::SCROLL_Y)
+        var::SCROLL_Y.get(x.b)
     }
 }
 

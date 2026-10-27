@@ -23,7 +23,7 @@ pub(super) fn run(x: &mut Cx) {
         4 => wait(x),
         _ => {}
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         set_state_long(x, IDLE);
     }
 }
@@ -133,7 +133,7 @@ fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 /// 0x6a706 / 0x6a70c : le coup à jouer après l'approche est tiré dans la ligne de la difficulté.
 pub(super) fn pick_attack(x: &mut Cx, table: u32) {
     x.c.d[2] = 0;
-    let row = (x.a5_u16(0x7f92) >> 1) << 5;
+    let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
     x.c.a[4] = table + row as u32;
     let n = rand_and(x, 0x1f);
@@ -197,7 +197,7 @@ pub(super) fn rest(x: &mut Cx) {
         x.set8(VULNERABLE, 1);
         return body(x, 0);
     }
-    if x.a5_u8(0x35) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, STANCE);
         pick_target(x);
     } else {

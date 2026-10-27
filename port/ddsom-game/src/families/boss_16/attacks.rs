@@ -15,7 +15,7 @@ pub(super) fn run(x: &mut Cx) {
         14 => double_jump(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }

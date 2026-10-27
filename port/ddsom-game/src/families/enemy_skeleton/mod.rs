@@ -132,7 +132,7 @@ fn end_attack(x: &mut Cx) {
 
 /// Choisit le coup `+6` dans la ligne de la difficulté (32 octets) de `table`, et pose `+4/+5` à `state`.
 fn pick_move(x: &mut Cx, table: u32, state: u16) {
-    let row = (x.a5_u16(0x7f92) >> 1) << 5;
+    let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
     x.c.a[4] = table + row as u32;
     let n = rand_and(x, 0x1f);
@@ -247,7 +247,7 @@ fn init(x: &mut Cx) {
         2 => {
             x.set8(f::SUB, 0);
             x.set8(f::SUB2, 4);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(0x50a) };
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) };
             let h = cam.wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
             x.set16(Obj::Z, h);
             x.set16(Obj::VX, 0);

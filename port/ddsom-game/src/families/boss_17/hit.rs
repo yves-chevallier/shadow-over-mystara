@@ -161,7 +161,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_BODY, 0xe);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) as i8 > 0 {
+            if var::PAUSE.get(x.b) as i8 > 0 {
                 return;
             }
             if sub16(x, 0x84, 1).gt() {
@@ -194,7 +194,7 @@ fn get_up(x: &mut Cx) {
             body_hurt(x, if wrong { 0xf } else { 0x10 });
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, TIMER, 1).le() {
@@ -208,7 +208,7 @@ fn get_up(x: &mut Cx) {
             }
         }
         6 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if !x.anim_step() {
@@ -245,7 +245,7 @@ pub(super) fn recovered_tail(x: &mut Cx) {
             }
             return decide::attack_14(x);
         }
-        if x.u8(Obj::VARIANT) == 2 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 && cmp8(x, PHASE, 2).eq() {
+        if x.u8(Obj::VARIANT) == 2 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 2 && cmp8(x, PHASE, 2).eq() {
             if let Some(o) = x.alloc(&pools::SET) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, 2);
@@ -254,7 +254,7 @@ pub(super) fn recovered_tail(x: &mut Cx) {
         }
     }
     let mut limit = 2;
-    if (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 2 {
         limit = 0;
     }
     if !Fl::sub8(limit, x.u8(PHASE)).gt() {

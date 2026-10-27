@@ -67,7 +67,7 @@ pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.tick_counters();
     }
     match x.u8(f::STATE) {
@@ -133,7 +133,7 @@ fn back_to_stance(x: &mut Cx) {
 /// 0x6a452 : fin d'un coup — le suivant est tiré dans la ligne de la difficulté (32 octets).
 fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
-    let row = (x.a5_u16(0x7f92) >> 1) << 5;
+    let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
     x.c.a[4] = FALLBACK_MOVES + row as u32;
     let n = rand_and(x, 0x1f);
@@ -157,7 +157,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x68, 4), (0x69, 1), (0x70, 0), (0x6a, 1), (0x6c, 3), (0x6d, 3), (0x72, 3), (0x73, 2), (0x74, 3), (0x75, 0x38), (0x76, 3), (REPEAT, 0x20), (WALK_ANIM, 0), (WALK_ANIM_TIMER, 2)] {
         x.set8(off, v);
     }
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.set8(VULNERABLE, 1);
     }
     for (off, v) in [(0x8e, 0), (0x7f, 0), (0x7e, 0xe)] {

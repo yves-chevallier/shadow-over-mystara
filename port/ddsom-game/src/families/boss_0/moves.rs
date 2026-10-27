@@ -625,8 +625,8 @@ fn triple_strike(x: &mut Cx) {
             }
             next7(x);
             x.set8(INVULNERABLE, 0);
-            let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) * 2;
-            let mut players = x.a5_u8(var::PLAYERS_ALIVE);
+            let level = (var::RANK.get(x.b) & 0x1e) * 2;
+            let mut players = var::PLAYERS_ALIVE.get(x.b);
             if players != 0 {
                 players -= 1;
             }
@@ -709,7 +709,7 @@ fn spit(x: &mut Cx) {
 
 /// 0x7a30c : tant qu'aucun joueur n'est en vie, le boss attend en pose ; dès qu'un joueur revient, il repart.
 pub(super) fn wait_for_players(x: &mut Cx) {
-    if (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 0 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return run_start(x);
     }
     match x.u8(f::SUB2) {

@@ -132,7 +132,7 @@ fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
         }
         2 => {
             if x.u8(f::KEY_FRAME) != 0 {
-                let special = matches!(x.a5_u8(0x34), 6 | 0xc);
+                let special = matches!(var::SCENE.get(x.b), 6 | 0xc);
                 if x.u8(Obj::VARIANT) == variant && special {
                     lib::sound(x, 0xeb92e);
                 } else if !special {
@@ -170,7 +170,7 @@ fn drop_in(x: &mut Cx) {
             x.set8(LOOK, 0x19);
             x.set16(Obj::VZ, -0x300i16 as u16);
             x.set16(Obj::AZ, -0x10i16 as u16);
-            let h = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+            let h = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
             x.set16(Obj::Z, h);
             mv(x, 0x19);
         }

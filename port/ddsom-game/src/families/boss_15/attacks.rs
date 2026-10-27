@@ -212,10 +212,10 @@ fn attack_2(x: &mut Cx) {
             let r = random(x) as u8 & 0x20;
             x.set8(f::FLIP, r);
             let d1: i16 = if r != 0 { -0xe0 } else { 0x260 };
-            let px = x.a5_u16(var::SCROLL_X).wrapping_add(d1 as u16);
+            let px = var::SCROLL_X.get(x.b).wrapping_add(d1 as u16);
             x.set16(0x8, px);
             x.set16(0xc, 0x30);
-            let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x50);
+            let py = var::SCROLL_Y.get(x.b).wrapping_add(0x50);
             x.set16(0x10, py);
             x.set16(TIMER, 0x40);
             set_anim(x, 2, 0x13);
@@ -259,7 +259,7 @@ fn push_side(x: &mut Cx) {
 fn align(x: &mut Cx) {
     x.set8(0x42, 1);
     let edge: u16 = if x.u8(f::FLIP) != 0 { 0x48 } else { 0x138 };
-    let d = edge.wrapping_add(x.a5_u16(var::SCROLL_X)).wrapping_sub(x.u16(0x8)) as i16;
+    let d = edge.wrapping_add(var::SCROLL_X.get(x.b)).wrapping_sub(x.u16(0x8)) as i16;
     if d != 0 {
         let mut s = d >> 4;
         if s == 0 {
@@ -284,7 +284,7 @@ fn sweep(x: &mut Cx) {
         let mut y = x.u32(0x10).wrapping_add((((w as u32) << 16) as i32 >> 8) as u32);
         x.set32(0x10, y);
         y = y >> 16;
-        let lo = x.a5_u16(var::SCROLL_Y).wrapping_add(0x20);
+        let lo = var::SCROLL_Y.get(x.b).wrapping_add(0x20);
         let mut yw = y as u16;
         if !Fl::sub16(yw, lo).ge() {
             yw = lo;
@@ -335,7 +335,7 @@ fn sweep_end(x: &mut Cx) {
 fn leave(x: &mut Cx) {
     x.set8(0x42, 1);
     x.move_x();
-    let d = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X)) as i16;
+    let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b)) as i16;
     if !(d < -0x80) && d < 0x200 {
         return;
     }
@@ -343,9 +343,9 @@ fn leave(x: &mut Cx) {
     x.set_a5_u16(0x51e, 0);
     x.set16(TIMER, 0x20);
     x.set16(0xc, 0x380);
-    let px = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
+    let px = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     x.set16(0x8, px);
-    let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x7a);
+    let py = var::SCROLL_Y.get(x.b).wrapping_add(0x7a);
     x.set16(0x10, py);
 }
 
@@ -380,10 +380,10 @@ fn attack_4(x: &mut Cx) {
 /// 0x92180 : place le dragon au-dessus de l'écran, selon son type.
 fn dive_position(x: &mut Cx) {
     let big = x.u8(TYPE) == TYPE_BIG;
-    let px = x.a5_u16(var::SCROLL_X).wrapping_add(if big { 0x96 } else { 0xc0 });
+    let px = var::SCROLL_X.get(x.b).wrapping_add(if big { 0x96 } else { 0xc0 });
     x.set16(0x8, px);
     x.set16(0x10, 0x170);
-    let z = x.a5_u16(var::SCROLL_Y).wrapping_sub(if big { 0xf0 } else { 0xd8 });
+    let z = var::SCROLL_Y.get(x.b).wrapping_sub(if big { 0xf0 } else { 0xd8 });
     x.set16(0xc, z);
 }
 
@@ -549,7 +549,7 @@ fn attack_14(x: &mut Cx) {
             x.move_z();
             if (x.u16(0xc) as i16) > 0 {
                 let low = x.u16(0xc).wrapping_add(x.u16(0x10));
-                let floor = x.a5_u16(var::SCROLL_Y).wrapping_add(0x60);
+                let floor = var::SCROLL_Y.get(x.b).wrapping_add(0x60);
                 if (low as i16) > floor as i16 {
                     return;
                 }

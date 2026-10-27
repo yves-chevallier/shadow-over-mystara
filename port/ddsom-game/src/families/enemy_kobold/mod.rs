@@ -166,7 +166,7 @@ pub(self) fn set_power(x: &mut Cx) {
 
 /// 0x57c66 : l'ennemi est dans la moitié droite de l'écran (à 0xc0 de la caméra).
 pub(self) fn on_right_half(x: &mut Cx) -> bool {
-    let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+    let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d1 = cam.wrapping_add(0xc0).wrapping_sub(x.u16(Obj::X));
     let right = (d1 as i16) <= 0;
     x.c.d[0] = right as u32;
@@ -179,7 +179,7 @@ pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
     let profile = x.u8(GROUP).wrapping_mul(4) as u32;
     let table = if bias == 0 { 0x56d04 } else { 0x56d14 };
     let list = x.data32(table + profile);
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let mv = x.data8(list + row + r);
     x.set8(f::SUB2, mv.wrapping_add(bias));
@@ -200,7 +200,7 @@ pub(self) fn after_strike(x: &mut Cx) {
     if !close {
         return set_state_long(x, STANCE);
     }
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let mv = x.data8(0x5799c + row + r);
     x.set8(f::SUB2, mv);
@@ -214,7 +214,7 @@ fn init(x: &mut Cx) {
     if paused(x) {
         return;
     }
-    if matches!(x.a5_u8(0x34), 6 | 0xc) {
+    if matches!(var::SCENE.get(x.b), 6 | 0xc) {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x19);
     }

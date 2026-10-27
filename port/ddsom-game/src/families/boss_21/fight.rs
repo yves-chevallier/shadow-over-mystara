@@ -29,7 +29,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(var::PLAYERS_ALIVE) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c, Z levé = non) ?

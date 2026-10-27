@@ -18,44 +18,21 @@ use crate::{call, regs, Native};
 use crate::objects::pools;
 use crate::objects::Courant;
 
-/// Variables de la RAM de travail (décalages de A5) lues par les boss.
-pub mod var {
-    /// Abscisse de la caméra 1 (mot).
-    pub const SCROLL_X: u32 = 0x506;
-    /// Ordonnée de la caméra 1 (mot ; long avec la fraction).
-    pub const SCROLL_Y: u32 = 0x50a;
-    /// Objet suivi par la caméra (mot, adresse RAM ; 0 = aucun) : le « meneur » que certains boss accompagnent.
-    pub const LEADER: u32 = 0x46;
-    /// Octet non nul : tout est figé (le gestionnaire du boss ne fait rien).
-    pub const FROZEN: u32 = 0x4e;
-    /// Nombre de joueurs en vie (octet).
-    pub const PLAYERS_ALIVE: u32 = 0x35;
-    /// Octet à 1 pendant une cinématique (jeu en pause, entrées coupées).
-    pub const PAUSE: u32 = 0x3d;
-    /// Caméra utilisée (octet non nul : la 2) et position (X, Y) de chacune.
-    pub const CAMERA_SELECT: u32 = 0x36;
-    pub const CAMERA1_X: u32 = 0x5a6;
-    pub const CAMERA1_Y: u32 = 0x5aa;
-    pub const CAMERA2_X: u32 = 0x5ae;
-    pub const CAMERA2_Y: u32 = 0x5b2;
-    /// Difficulté (mot, 0 à 31).
-    pub const DIFFICULTY: u32 = 0x7f92;
-}
 
 /// L'objet suivi par la caméra, s'il existe.
 pub fn leader(x: &mut Cx) -> Option<Obj> {
-    (x.a5_u16(var::LEADER) != 0).then(|| Obj(x.a5_u16(var::LEADER) as i16 as i32 as u32 & 0xff_ffff))
+    (var::LEADER.get(x.b) != 0).then(|| Obj(var::LEADER.get(x.b) as i16 as i32 as u32 & 0xff_ffff))
 }
 
 /// Abscisse de la caméra.
 pub fn scroll_x(x: &mut Cx) -> u16 {
-    x.a5_u16(var::SCROLL_X)
+    var::SCROLL_X.get(x.b)
 }
 
 /// Abscisse de la caméra en service (1, ou 2 si `A5+0x36`).
 pub fn camera_x(x: &mut Cx) -> u16 {
-    let off = if x.a5_u8(var::CAMERA_SELECT) != 0 { var::CAMERA2_X } else { var::CAMERA1_X };
-    x.a5_u16(off)
+    let v = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X } else { var::CAMERA1_X };
+    v.get(x.b)
 }
 
 // --- drapeaux du 68000 -------------------------------------------------------------------------
@@ -233,8 +210,8 @@ pub fn jump_target(x: &mut Cx, base: u32, i: u32) -> u32 {
 
 /// Ordonnée de la caméra en service.
 pub fn camera_y(x: &mut Cx) -> u16 {
-    let off = if x.a5_u8(var::CAMERA_SELECT) != 0 { var::CAMERA2_Y } else { var::CAMERA1_Y };
-    x.a5_u16(off)
+    let v = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_Y } else { var::CAMERA1_Y };
+    v.get(x.b)
 }
 
 /// Adresse du long « boss vaincu » (type, variante, score) lu par la fin de scène.
@@ -312,7 +289,7 @@ pub fn bob(x: &mut Cx) {
 /// (2 ou 3 : selon les PV), pose `+0x43` (pas de seuil) ou, si la moitié des PV `+0x62` dépasse 72,
 /// retient ce seuil en `+0xb6` et pose `+0x42`. D0, D1 comme l'original.
 pub fn hp_threshold(x: &mut Cx) {
-    let level = x.a5_u8(0x5a);
+    let level = var::SCENE_LEVEL.get(x.b);
     x.c.d[0] = level as u32;
     if level == 0 {
         return;

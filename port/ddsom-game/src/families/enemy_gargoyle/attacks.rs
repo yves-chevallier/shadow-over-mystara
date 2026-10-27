@@ -462,7 +462,7 @@ fn land_from_dive(x: &mut Cx) {
 // --- sous-états 6, 8, 10 : repos -----------------------------------------------------------------------
 
 pub(super) fn rest(x: &mut Cx) {
-    if x.a5_u8(0x30) != 0 && (x.a5_u8(0x35) as i8) > 0 {
+    if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::wander(x);
     }
     x.c.d[0] = x.u8(f::SUB2) as u32;

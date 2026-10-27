@@ -32,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(var::PLAYERS_ALIVE) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 fn state7(x: &mut Cx) -> u8 {

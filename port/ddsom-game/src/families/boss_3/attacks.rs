@@ -30,7 +30,7 @@ pub(super) fn run(x: &mut Cx) {
         30 => abduction(x),
         _ => claw(x),
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         idle_alone(x);
     }
 }

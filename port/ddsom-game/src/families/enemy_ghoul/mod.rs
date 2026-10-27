@@ -105,7 +105,7 @@ fn set_speed(x: &mut Cx, speed: u32) {
 
 /// Ligne de 32 octets de la difficulté (`A5+0x7f92`).
 fn difficulty_row(x: &mut Cx) -> u32 {
-    ((x.a5_u16(0x7f92) >> 1) << 5) as u32
+    ((var::RANK.get(x.b) >> 1) << 5) as u32
 }
 
 /// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
@@ -336,7 +336,7 @@ fn arrival(x: &mut Cx) {
                 look(x, 0xff);
                 x.set16(Obj::VZ, -0x300i16 as u16);
                 x.set16(Obj::AZ, -0x80i16 as u16);
-                let h = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+                let h = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
                 x.set16(Obj::Z, h);
                 body(x, 4);
             }

@@ -146,7 +146,7 @@ fn down(x: &mut Cx) {
             body(x, 0x1b);
         }
         2 => {
-            if (x.a5_u8(var::PAUSE) as i8) > 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if (var::PAUSE.get(x.b) as i8) > 0 || sub16(x, DOWN_TIME, 1).gt() {
                 return;
             }
             next6(x);
@@ -155,7 +155,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if lib::step(x) {
@@ -241,7 +241,7 @@ fn death(x: &mut Cx) {
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
-            let center = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let center = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             set_dw(x, 2, center);
             let (vx, side) = if center as i16 >= x.u16(0x8) as i16 { (0x200u16, 0u32) } else { ((-0x200i16) as u16, 0x20) };
             set_dw(x, 0, vx);

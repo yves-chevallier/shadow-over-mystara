@@ -95,7 +95,7 @@ fn take_frame_request(x: &mut Cx) {
 
 /// Index dans les tables de difficulté : `(difficulté & 0xfc) / 2` (mots).
 fn level_index(x: &mut Cx) -> u32 {
-    (x.a5_u16(var::DIFFICULTY) as u32 & 0xfc) >> 1
+    (var::RANK.get(x.b) as u32 & 0xfc) >> 1
 }
 
 /// Appelle une routine du moteur avec A0 = `list` (puis rétablit l'objet).
@@ -137,7 +137,7 @@ fn init(x: &mut Cx) {
 
 /// Boucle de l'état actif (0x8349c) ; l'état touché la rappelle pour reprendre le combat.
 fn active(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(BLINK) != 0 && sub8(x, BLINK, 1).gt() {
@@ -199,7 +199,7 @@ fn intro(x: &mut Cx) {
             }
         }
         0xc => {
-            if x.a5_u8(0x2c) != 0xc {
+            if var::PHASE.get(x.b) != 0xc {
                 return;
             }
             lib::create_set_14(x);

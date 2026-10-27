@@ -78,7 +78,7 @@ fn pose(x: &mut Cx) {
 
 /// 0x85e18 : tant qu'un joueur est en vie, marche, demi-tour, arrêt, approche.
 pub(super) fn fight(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, WAIT);
         return;
     }
@@ -88,7 +88,7 @@ pub(super) fn fight(x: &mut Cx) {
         0x86180 => approach(x),
         _ => walk(x),
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, WAIT);
     }
 }
@@ -292,7 +292,7 @@ fn approach(x: &mut Cx) {
 
 /// 0x86af6 : attend qu'un joueur soit en vie.
 pub(super) fn wait(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, FIGHT);
         x.set8(ANIM_KIND, 0x7f);
         lib::pick_target(x);

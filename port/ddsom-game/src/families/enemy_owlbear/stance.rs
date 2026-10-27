@@ -72,7 +72,7 @@ pub(super) fn turn_end(x: &mut Cx) {
 
 /// 0x5f2c6 : la bête a-t-elle envie d'attaquer ? (un bit tiré dans un masque par niveau de difficulté).
 fn attack_chance(x: &mut Cx) -> bool {
-    let level = (x.a5_u16(0x7f92).wrapping_mul(4)) as u32;
+    let level = (var::RANK.get(x.b).wrapping_mul(4)) as u32;
     let mask = rom32(x, ATTACK_CHANCE + level);
     let bit = random(x) & 0x1f;
     mask >> bit & 1 != 0
@@ -84,7 +84,7 @@ pub(super) fn run(x: &mut Cx) {
     if grabbed(x) {
         return set_state_long(x, KNOCKED);
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return set_state_long(x, ACTIVE_IDLE);
     }
     match x.u8(f::SUB2) {
@@ -186,7 +186,7 @@ fn reach(x: &mut Cx, d0: i16, d1: u16, d2: u16, mask: u16, attacks: u32) -> bool
 
 /// 0x5ee94 et 0x5ee9a : tire l'attaque (`+6`) dans la table du niveau de difficulté.
 pub(super) fn choose_attack(x: &mut Cx, table: u32) {
-    let level = (x.a5_u16(0x7f92) >> 1 << 5) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
     let pick = x.data8(table + level + r);
     x.set8(f::SUB2, pick);
@@ -286,7 +286,7 @@ pub(super) fn next_move(x: &mut Cx) {
     if !lib::target_in_box(x, -0x38, 0x38, 0x20) && !lib::target_in_box(x, -0xb0, 0x40, 0x20) {
         return set_state_long(x, ACTIVE_STANCE);
     }
-    let level = (x.a5_u16(0x7f92) >> 1 << 5) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
     let pick = x.data8(NEXT_MOVES + level + r);
     x.set8(f::SUB2, pick);
@@ -319,7 +319,7 @@ pub(super) fn rest(x: &mut Cx) {
             _ => {}
         }
     }
-    if x.a5_u8(0x35) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, ACTIVE_STANCE);
     }
 }

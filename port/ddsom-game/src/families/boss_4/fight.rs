@@ -24,8 +24,8 @@ pub(super) fn intro(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 2);
             x.set_bit(0x1, 1, false);
-            let cx = x.a5_u16(var::CAMERA1_X).wrapping_add(0x120);
-            let cy = x.a5_u16(var::CAMERA1_Y);
+            let cx = var::CAMERA1_X.get(x.b).wrapping_add(0x120);
+            let cy = var::CAMERA1_Y.get(x.b);
             setw(x, 0, cx);
             setw(x, 1, cy.wrapping_add(0x40));
             x.set16(0x8, cx);
@@ -196,7 +196,7 @@ fn walk(x: &mut Cx, slow: bool) {
 
 /// Délai entre deux pas, selon la difficulté (table de la ROM `table`).
 fn set_delay(x: &mut Cx, table: u32) {
-    let level = x.a5_u16(var::DIFFICULTY);
+    let level = var::RANK.get(x.b);
     setw(x, 0, level);
     let d = x.rom8(table + level as u32);
     x.set8(WALK_DELAY, d);
@@ -272,7 +272,7 @@ fn charge(x: &mut Cx) {
                 x.set8(f::FLIP, 0);
                 let px = x.u16(0x8);
                 setw(x, 1, px);
-                if !Fl::sub16(px, x.a5_u16(var::CAMERA1_X)).gt() {
+                if !Fl::sub16(px, var::CAMERA1_X.get(x.b)).gt() {
                     x.set8(f::FLIP, 0x20);
                     angle = 8;
                 }
@@ -311,7 +311,7 @@ fn charging(x: &mut Cx) {
     if key != 0x80 {
         x.move_x();
         let (goal, px) = if x.u8(CHARGE_AT_TARGET) == 0 {
-            let cam = x.a5_u16(var::CAMERA1_X);
+            let cam = var::CAMERA1_X.get(x.b);
             let d = if (x.u16(0x14) as i16) < 0 { 0xf0 } else { 0x90 };
             (cam.wrapping_add(d), x.u16(0x8))
         } else {
@@ -426,7 +426,7 @@ fn hop(x: &mut Cx) {
 
 /// 0x82be2 : sans joueur en vie, le boss se tient debout ; dès qu'un joueur revient (en partie), il marche.
 pub(super) fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(0x30) != 0 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 0 {
+    if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::walk(x);
     }
     if x.u8(f::SUB2) == 0 {

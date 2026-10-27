@@ -154,7 +154,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x70, 0), (0x7e, 0x4f), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     for (off, v) in [(0x68, 8), (0x69, 8), (0x6a, 0), (0x6c, 1), (0x6d, 2), (0x72, 1), (0x73, 1), (0x74, 4), (0x75, 0x40), (0x76, 1), (0x81, 0x22), (0x80, 0x2a)] {
         x.set8(off, v);
     }
@@ -163,8 +163,8 @@ fn init(x: &mut Cx) {
     x.set16(IDLE_TIME, 0xf0);
     x.set8(0, 2);
     x.set_bit(0x1, 1, true);
-    let px = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
-    let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x69);
+    let px = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
+    let py = var::SCROLL_Y.get(x.b).wrapping_add(0x69);
     setw(x, 0, px);
     setw(x, 1, py);
     x.set16(0x8, px);
@@ -178,7 +178,7 @@ fn init(x: &mut Cx) {
     setw(x, 2, hp);
     aids::lsr_w(x, 1, 1);
     aids::lsr_w(x, 2, 2);
-    x.c.d[0] = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    x.c.d[0] = var::PLAYERS_ALIVE.get(x.b) as u32;
     let mut d1 = x.c.d[1] as u16;
     if Fl::sub8(x.c.d[0] as u8, 1).gt() {
         if Fl::sub8(x.c.d[0] as u8, 2).ne() {
@@ -218,7 +218,7 @@ fn active(x: &mut Cx) {
     }
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         let t = dispatch(x, 0x881aa, f::SUB);
         match t {
             0x882ae => fight::intro(x),

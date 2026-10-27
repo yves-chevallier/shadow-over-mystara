@@ -293,7 +293,7 @@ mod riyakaa {
             x.set8(0xa1, 1);
             return body(x, 0);
         }
-        if x.a5_u8(0x35) == 0 {
+        if var::PLAYERS_ALIVE.get(x.b) == 0 {
             x.anim_step();
         } else {
             walk(x);
@@ -321,7 +321,7 @@ mod riyakaa {
             4 => decide_wait(x),
             _ => {}
         }
-        if x.a5_u8(0x35) == 0 {
+        if var::PLAYERS_ALIVE.get(x.b) == 0 {
             x.set32(f::STATE, 0x020a_0000);
         }
     }
@@ -857,7 +857,7 @@ mod riyakaa {
     /// 0x700ca : prend du recul, puis choisit le prochain geste dans une table (sous-état 8).
     fn retreat(x: &mut Cx) {
         x.set8(0x78, 0xff);
-        let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+        let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
         let r = random(x) & 0x1f;
         x.set8(f::SUB, 8);
         let v = x.data8(NEXT_MOVES + row + r);
@@ -901,7 +901,7 @@ mod riyakaa {
     /// sous-état 4 avec ce geste.
     fn choose_attack(x: &mut Cx) {
         x.c.d[2] = 0;
-        let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+        let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
         let r = random(x) & 0x1f;
         let pick = x.data8(NEXT_ATTACKS + row + r);
         x.c.d[2] = pick as u32;
@@ -960,7 +960,7 @@ mod riyakaa {
         }
         x.set8(0, 1);
         x.set32(0x58, 0);
-        let level = ((x.a5_u16(0x7f92) >> 2) << 2) as u32;
+        let level = ((var::RANK.get(x.b) >> 2) << 2) as u32;
         let mask = x.data32(MASKS + level);
         let bit = random(x) & 0x1f;
         x.c.d[2] = mask;
@@ -1033,7 +1033,7 @@ mod riyakaa {
     fn grab_start(x: &mut Cx) {
         x.set8(0xae, 1);
         let flipped = x.u8(f::FLIP) != 0;
-        let turn = if x.a5_u8(0x34) == 4 {
+        let turn = if var::SCENE.get(x.b) == 4 {
             flipped
         } else {
             if !lib::in_right_half(x) { flipped } else { !flipped }

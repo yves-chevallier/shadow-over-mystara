@@ -37,13 +37,13 @@ fn switch_flight_set(x: &mut Cx) {
 }
 
 fn charge_a(x: &mut Cx) {
-    let level = x.a5_u16(0x7f92) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x719f6 + level);
     x.set8(CHARGE, v);
 }
 
 fn charge_b(x: &mut Cx) {
-    let level = x.a5_u16(0x7f92) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x71a16 + level);
     x.set8(CHARGE, v);
 }
@@ -293,7 +293,7 @@ fn plunge(x: &mut Cx) {
                 }
             } else {
                 x.set8(f::FLIP, 0);
-                let cam = x.a5_u16(0x5a6);
+                let cam = var::CAMERA1_X.get(x.b);
                 if (x.u16(Obj::X) as i16) <= (cam as i16) {
                     x.set8(f::FLIP, 0x20);
                     angle = 8;

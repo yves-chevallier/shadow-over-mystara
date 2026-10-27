@@ -116,13 +116,13 @@ fn apply(x: &mut Cx, routine: u32) {
 // --- tirages ------------------------------------------------------------------------------------
 
 pub(super) fn walk_delay_fast(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x85614 + level);
     x.set8(WALK_DELAY, v);
 }
 
 pub(super) fn walk_delay_slow(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x85634 + level);
     x.set8(WALK_DELAY, v);
 }

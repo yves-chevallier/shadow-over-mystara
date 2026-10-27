@@ -198,7 +198,7 @@ fn orphan(x: &mut Cx) {
 
 /// Coordonnées d'écran (caméra) : X en `A5+0x556`, Y en `A5+0x55a`.
 fn camera(x: &mut Cx) -> (u16, u16) {
-    (x.a5_u16(0x556), x.a5_u16(0x55a))
+    (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b))
 }
 
 /// 0x71ff4 : se place sur le parent, décalé selon le rang de la pièce (X inversé quand la pièce

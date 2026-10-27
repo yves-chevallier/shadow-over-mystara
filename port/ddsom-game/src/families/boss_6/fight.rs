@@ -32,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(var::PLAYERS_ALIVE) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 fn needs_turn(x: &mut Cx) -> bool {
@@ -200,7 +200,7 @@ fn charge(x: &mut Cx) {
             let mut angle = 0x18;
             if x.u8(CHARGE_AT_TARGET) == 0 {
                 x.set8(f::FLIP, 0);
-                let cam = x.a5_u16(var::CAMERA1_X);
+                let cam = var::CAMERA1_X.get(x.b);
                 if !Fl::sub16(x.u16(0x8), cam).gt() {
                     x.set8(f::FLIP, 0x20);
                     angle = 8;
@@ -227,7 +227,7 @@ fn charge(x: &mut Cx) {
                 let here = x.u16(0x8);
                 let limit = if x.u8(CHARGE_AT_TARGET) == 0 {
                     let margin = if going_left { 0xf0 } else { 0x90 };
-                    x.a5_u16(var::CAMERA1_X).wrapping_add(margin)
+                    var::CAMERA1_X.get(x.b).wrapping_add(margin)
                 } else {
                     x.u16(MARK_X)
                 };

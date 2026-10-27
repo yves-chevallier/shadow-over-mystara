@@ -161,7 +161,7 @@ fn drop_in(x: &mut Cx) {
             x.set8(LOOK, 0x19);
             x.set16(Obj::VZ, -0x300i16 as u16);
             x.set16(Obj::AZ, -0x80i16 as u16);
-            let h = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+            let h = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
             x.set16(Obj::Z, h);
             mv(x, 0xf);
         }

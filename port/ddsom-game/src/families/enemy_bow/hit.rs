@@ -80,7 +80,7 @@ pub(super) fn grab(x: &mut Cx) {
             x.set8(NO_ZONE, 1);
             let flipped = x.u8(f::FLIP) != 0;
             // `turn` : tourne d'abord (animation 3) ; sinon part tout de suite
-            let turn = if x.a5_u8(0x34) == 4 {
+            let turn = if var::SCENE.get(x.b) == 4 {
                 flipped
             } else {
                 if !lib::in_right_half(x) {

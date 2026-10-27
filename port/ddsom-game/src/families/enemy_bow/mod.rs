@@ -120,7 +120,7 @@ pub(self) fn walk_angle(x: &mut Cx) {
 
 /// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
 pub(self) fn row_byte(x: &mut Cx, table: u32) -> u8 {
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     x.c.d[0] = x.c.d[0] & 0xffff_0000 | row;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);

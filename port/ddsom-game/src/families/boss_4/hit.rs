@@ -141,7 +141,7 @@ fn down(x: &mut Cx) {
             x.anim_start(SET_BODY, 0xa);
         }
         2 => {
-            if (x.a5_u8(var::PAUSE) as i8) > 0 || sub16(x, HITS, 1).gt() {
+            if (var::PAUSE.get(x.b) as i8) > 0 || sub16(x, HITS, 1).gt() {
                 return;
             }
             x.add8(f::SUB2, 2);
@@ -150,7 +150,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         _ => {
-            if x.a5_u8(var::PAUSE) != 0 || !x.anim_step() {
+            if var::PAUSE.get(x.b) != 0 || !x.anim_step() {
                 return;
             }
             resume(x);
@@ -163,7 +163,7 @@ fn down(x: &mut Cx) {
 pub(super) fn resume(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
-    if x.a5_u8(0x30) == 0 || !pick_target(x) {
+    if var::GAME_ON.get(x.b) == 0 || !pick_target(x) {
         return decide::wait(x);
     }
     lib::next_threshold(x, THRESHOLDS);
@@ -197,7 +197,7 @@ fn death(x: &mut Cx) {
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
-            let mid = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let mid = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             setw(x, 2, mid);
             let (vx, side) = if Fl::sub16(mid, x.u16(0x8)).ge() { (0x200u16, 0u8) } else { ((-0x200i16) as u16, 0x20) };
             setw(x, 0, vx);

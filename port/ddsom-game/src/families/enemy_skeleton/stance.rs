@@ -39,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
         }
         _ => {}
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         set_state_long(x, IDLE);
     }
     

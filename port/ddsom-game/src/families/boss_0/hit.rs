@@ -138,7 +138,7 @@ fn down(x: &mut Cx) {
             x.anim_start(SET_BODY, 0x12);
         }
         2 => {
-            if (x.a5_u8(var::PAUSE) as i8) > 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if (var::PAUSE.get(x.b) as i8) > 0 || sub16(x, DOWN_TIME, 1).gt() {
                 return;
             }
             next6(x);
@@ -147,7 +147,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         _ => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if x.anim_step() {

@@ -113,7 +113,7 @@ fn caught(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             let pos = x.u16(Obj::X);
             x.set16(SAVED_X, pos);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             set_dw(x, 0, cam);
             x.set16(Obj::AX, 0);
             x.set16(Obj::VX, 0x300);

@@ -166,8 +166,8 @@ pub(super) fn dodge_nearby(x: &mut Cx) {
 
 /// 0x87eca : un point de chute tiré dans une table choisie selon le quart d'écran où se trouve le boss.
 pub(super) fn dodge_spot(x: &mut Cx) {
-    let dx = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X));
-    let dy = x.u16(0x10).wrapping_sub(x.a5_u16(var::SCROLL_Y));
+    let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
+    let dy = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     setw(x, 0, dx);
     setw(x, 1, dy);
     let right = Fl::sub16(dx, 0xc0).gt();
@@ -221,7 +221,7 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     if clear_d0 {
         x.c.d[0] = 0;
     }
-    let level = x.a5_u16(var::DIFFICULTY);
+    let level = var::RANK.get(x.b);
     setw(x, 0, level >> 1);
     let row = ((x.c.d[0] as u16) << 5) as i16 as i32 as u32;
     setw(x, 0, row as u16);

@@ -111,7 +111,7 @@ fn pushed_back(x: &mut Cx) {
                 return;
             }
             x.set8(SECOND_FX, 0);
-            let alive = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+            let alive = var::PLAYERS_ALIVE.get(x.b) as u32;
             let k = kit(x);
             let chances = rom32(x, k.chances + (alive << k.chances_shift));
             x.c.d[5] = chances;
@@ -138,7 +138,7 @@ fn down(x: &mut Cx) {
             start(x, Set::A, n);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 || sub16(x, 0x84, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, 0x84, 1).gt() {
                 return;
             }
             next6(x);
@@ -147,7 +147,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 || !x.anim_step() {
+            if var::PAUSE.get(x.b) != 0 || !x.anim_step() {
                 return;
             }
             x.set8(0, 1);
@@ -210,7 +210,7 @@ fn death(x: &mut Cx) {
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x38i16) as u16);
             // l'original charge 0x180 dans D0 puis l'écrase par la position de la caméra : la vitesse est cette position + 0xc0
-            let center = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
+            let center = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
             let (vx, side) = if Fl::sub16(center, x.u16(0x8)).ge() { (center, 0u8) } else { (center.wrapping_neg(), 0x20) };
             x.c.d[0] = vx as u32;
             x.set16(0x14, vx);

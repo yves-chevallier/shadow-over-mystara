@@ -24,7 +24,7 @@ pub(super) fn intro(x: &mut Cx) {
             body_anim(x, 0xc);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return hidden(x);
             }
             let cam = camera(x);
@@ -61,7 +61,7 @@ pub(super) fn intro(x: &mut Cx) {
         }
         6 => descend(x),
         _ => {
-            if x.a5_u8(var::PAUSE) == 0 && lib::step(x) {
+            if var::PAUSE.get(x.b) == 0 && lib::step(x) {
                 return enter_fight(x);
             }
             end_frame(x, 0x50);
@@ -77,7 +77,7 @@ fn hidden(x: &mut Cx) {
 
 /// 0x7f6a8 : descente jusqu'au sol, puis cri.
 fn descend(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         lib::step(x);
         x.move_z();
         if (x.u16(0xc) as i16) <= 0 {
@@ -113,7 +113,7 @@ pub(super) fn run(x: &mut Cx) {
         14 => land(x),
         _ => patrol(x),
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         return;
     }
     idle_alone(x);
@@ -406,7 +406,7 @@ pub(super) fn round(x: &mut Cx) {
             circling(x)
         }
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         idle_alone(x);
     }
 }
@@ -541,7 +541,7 @@ pub(super) fn rise(x: &mut Cx) {
 
 /// 0x808d4 : un joueur revient : vol bas ou approche ; sinon le boss reste en pose (au sol ou en l'air).
 pub(super) fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 && pick_target(x) {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 && pick_target(x) {
         let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
         x.c.d[0] = s;
         return x.set32(f::STATE, s);

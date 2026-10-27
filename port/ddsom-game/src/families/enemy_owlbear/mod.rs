@@ -177,7 +177,7 @@ fn init(x: &mut Cx) {
     if paused(x) {
         return;
     }
-    let scene = x.a5_u8(0x34);
+    let scene = var::SCENE.get(x.b);
     if scene == 6 || scene == 0xc {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x18);

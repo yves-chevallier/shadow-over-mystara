@@ -164,7 +164,7 @@ pub fn run(x: &mut Cx) {
 /// 0x85a80 : en partie, le boss tombe du haut de l'écran (groupe 0) ; dans l'attract, il prend la pose (groupe 0,
 /// étape 2).
 fn init(x: &mut Cx) {
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         x.set32(f::STATE, 0x0200_0200);
     } else {
         x.add8(f::STATE, 2);
@@ -181,7 +181,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     for (off, v) in [(0x68, 8), (0x69, 8), (0x6a, 0), (0x6c, 1), (0x6d, 2), (0x72, 1), (0x73, 1), (0x74, 4), (0x75, 0x40), (0x76, 1), (0x81, 0x13), (0x80, 0x18)] {
         x.set8(off, v);
     }
@@ -194,7 +194,7 @@ fn init(x: &mut Cx) {
     let hp = x.u16(0x60);
     setw(x, 1, hp >> 1);
     setw(x, 2, hp >> 2);
-    let players = x.a5_u8(var::PLAYERS_ALIVE);
+    let players = var::PLAYERS_ALIVE.get(x.b);
     x.c.d[0] = players as u32;
     let mut d1 = x.c.d[1] as u16;
     if Fl::sub8(players, 1).gt() {
@@ -222,7 +222,7 @@ fn init(x: &mut Cx) {
 /// 0x85bd0 : hors partie (attract), le boss garde la pose ; sinon un groupe par image, une créature d'appoint
 /// (SET 0x3f) au bout de 0xf0 images, et une attaque forcée s'il reste trop longtemps sans combattre.
 fn active(x: &mut Cx) {
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         x.set32(f::STATE, 0x0200_0200);
         x.set8(0, 1);
         x.set_bit(0x1, 1, false);
@@ -241,7 +241,7 @@ fn active(x: &mut Cx) {
     }
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match dispatch(x, 0x85cc8, f::SUB) {
             0x85d08 => fight::intro(x),
             0x85e18 => fight::fight(x),

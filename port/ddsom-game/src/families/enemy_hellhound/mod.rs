@@ -175,7 +175,7 @@ pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
 pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
     let profile = x.u8(GROUP) as u32;
     let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let mv = x.data8(list + row + r);
     x.set8(f::SUB2, mv.wrapping_add(bias));
@@ -195,7 +195,7 @@ pub(self) fn after_strike(x: &mut Cx) {
     if !close {
         return set_state_long(x, STANCE);
     }
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let mv = x.data8(0x637fe + row + r);
     x.set8(f::SUB2, mv);

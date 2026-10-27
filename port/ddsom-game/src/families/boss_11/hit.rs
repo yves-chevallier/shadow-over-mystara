@@ -20,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x8e8ca : vrai si le jeu est en pause (le serpent reste alors affiché : `+0` = 2).
 fn paused(x: &mut Cx) -> bool {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         x.c.d[0] = 1;
         return true;
@@ -55,7 +55,7 @@ fn reaction(x: &mut Cx) {
     x.c.a[1] = routine;
     match routine {
         0x8e488 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             x.set16(f::HP, 0);
@@ -396,7 +396,7 @@ fn stunned(x: &mut Cx) {
             sync(x);
         }
         0x8e988 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, 0x84, 1).gt() {

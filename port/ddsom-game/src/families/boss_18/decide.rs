@@ -49,7 +49,7 @@ pub(super) fn chase_b(x: &mut Cx) {
 
 /// 0x98fec : la charge si le boss est dans la bande utile de l'écran, sinon l'attaque 16.
 pub(super) fn dash_or_attack(x: &mut Cx) {
-    let cam = x.a5_u16(var::CAMERA1_X);
+    let cam = var::CAMERA1_X.get(x.b);
     let here = x.u16(0x8);
     if Fl::sub16(cam.wrapping_add(0x20), here).ge() || Fl::sub16(cam.wrapping_add(0x160), here).lt() {
         return attack_16(x);
@@ -138,12 +138,12 @@ pub(super) fn attack_18(x: &mut Cx) {
     if x.u8(BUDGET_E) == 0 {
         return attack_0(x);
     }
-    let cam = x.a5_u16(var::CAMERA1_X);
+    let cam = var::CAMERA1_X.get(x.b);
     let here = x.u16(0x8);
     if Fl::sub16(cam.wrapping_add(0x30), here).ge() || Fl::sub16(cam.wrapping_add(0x140), here).lt() {
         return attack_16(x);
     }
-    let camy = x.a5_u16(var::CAMERA1_Y);
+    let camy = var::CAMERA1_Y.get(x.b);
     let y = x.u16(0x10);
     if Fl::sub16(camy.wrapping_add(0x38), y).ge() || Fl::sub16(camy.wrapping_add(0x70), y).lt() {
         return attack_0(x);
@@ -181,13 +181,13 @@ fn target(x: &mut Cx, table: u32, index: u32) -> u32 {
 
 /// 0x98cae : délai avant le pas suivant, marche rapide ; 0x98cba : marche lente.
 pub(super) fn walk_delay_fast(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x98cc6, level);
     x.set8(WALK_DELAY, v);
 }
 
 pub(super) fn walk_delay_slow(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x98ce6, level);
     x.set8(WALK_DELAY, v);
 }
@@ -273,7 +273,7 @@ pub(super) fn choose_far(x: &mut Cx, side: u8) {
         0x98ec6 => table8(x, 0x98f2c, r),
         0x98ed2 | 0x98ed8 => table8(x, 0x98f3c, r),
         0x98eec => {
-            let slot = (x.a5_u8(0x5a) as u32).min(4);
+            let slot = (var::SCENE_LEVEL.get(x.b) as u32).min(4);
             let line = target(x, 0x98f04, 2 * slot);
             let table = match line {
                 0x98f0e => 0x98f4c,
@@ -305,7 +305,7 @@ pub(super) fn back_on_feet(x: &mut Cx) {
     x.set32(0x58, 0);
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         return wait(x);
     }
     if !lib::pick_target_any(x) {

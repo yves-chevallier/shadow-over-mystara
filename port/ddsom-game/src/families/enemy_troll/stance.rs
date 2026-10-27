@@ -148,7 +148,7 @@ pub(super) fn walk_off(x: &mut Cx) {
     x.add8(f::SUB3, 2);
     x.set8(Obj::SPEED_INDEX, 8);
     let mut want = 0x20u8;
-    let base = if x.a5_u8(0x36) != 0 { 0x55e } else { 0x50e };
+    let base = if var::CAMERA_SELECT.get(x.b) != 0 { 0x55e } else { 0x50e };
     let d = x.u16(Obj::X).wrapping_sub(x.a5_u16(base));
     if (d as i16) <= 0xc0 {
         x.set8(Obj::SPEED_INDEX, 8);

@@ -120,7 +120,7 @@ fn grab(x: &mut Cx) {
             x.set8(0xa7, 1);
             let at = x.u16(Obj::X);
             x.set16(TIMER2, at);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             let mut want = 0u8;
             x.set16(Obj::VX, -0x280i16 as u16);
             x.set16(Obj::AX, 0);

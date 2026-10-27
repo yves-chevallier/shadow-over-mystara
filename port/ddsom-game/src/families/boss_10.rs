@@ -76,7 +76,7 @@ fn body(x: &mut Cx, n: u32) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(var::PLAYERS_ALIVE) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 fn wait(x: &mut Cx) {
@@ -128,7 +128,7 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set8(0x2a, 1);
     x.set8(0x2b, 0x18);
     x.set16(0x8, 0xf0);
@@ -162,7 +162,7 @@ fn active(x: &mut Cx) {
         sub8(x, f::FREEZE, 1);
         return zone_and_shadow(x);
     }
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro(x),
             2 => fight(x),
@@ -348,7 +348,7 @@ fn keep_walking(x: &mut Cx) {
 }
 
 fn walk_delay(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x8d47c + level);
     x.set8(WALK_DELAY, v);
 }
@@ -365,8 +365,8 @@ fn jump(x: &mut Cx) {
         0 => {
             x.add8(0x7, 2);
             x.set8(ANIM_KIND, 5);
-            let px = x.a5_u16(var::SCROLL_X);
-            let py = x.a5_u16(var::SCROLL_Y);
+            let px = var::SCROLL_X.get(x.b);
+            let py = var::SCROLL_Y.get(x.b);
             x.set16(JUMP_X, px);
             x.set16(JUMP_Y, py);
             let down = ((random(x) & 3) << 4) as u16 + 0x30;
@@ -382,7 +382,7 @@ fn jump(x: &mut Cx) {
             if found {
                 d2 = 0x30;
                 let target = x.linked(f::TARGET);
-                let edge = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
+                let edge = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
                 let tx = target.u16(x.b, 0x8);
                 if !(edge <= tx) {
                     d2 = 0xe0;
@@ -536,7 +536,7 @@ fn wait_state(x: &mut Cx) {
         x.anim_start(SET_BODY, 6);
         return lib::sound(x, 0xe4a18);
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         lib::pick_target_any(x);
         return next_action(x);
     }
@@ -642,7 +642,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_BODY, 9);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 || sub16(x, HITS, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, HITS, 1).gt() {
                 return;
             }
             x.set8(0, 2);
@@ -652,7 +652,7 @@ fn get_up(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if x.anim_step() {
@@ -686,7 +686,7 @@ fn down(x: &mut Cx) {
             x.set16(0x1a, (-0x38i16) as u16);
             let mut vx: i16 = 0x200;
             let mut side = 0;
-            let edge = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0x20;

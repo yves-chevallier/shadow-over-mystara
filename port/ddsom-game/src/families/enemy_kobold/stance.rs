@@ -5,7 +5,7 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return set_state_long(x, IDLE);
     }
     if matches!(x.u8(Obj::VARIANT), 0xa | 0xb) || grabbed(x) {
@@ -19,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
         6 => run_up(x),
         _ => {}
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         set_state_long(x, IDLE);
     }
 }

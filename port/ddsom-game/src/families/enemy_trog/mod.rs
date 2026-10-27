@@ -117,7 +117,7 @@ fn move_xy(x: &mut Cx) {
 
 /// Ligne de 32 octets de la difficulté dans `table` (`A5+0x7f92`).
 fn difficulty_row(x: &mut Cx) -> u32 {
-    (((x.a5_u16(0x7f92) >> 1) << 5) as u32) & 0xffff
+    (((var::RANK.get(x.b) >> 1) << 5) as u32) & 0xffff
 }
 
 /// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
@@ -316,7 +316,7 @@ fn flicker(x: &mut Cx) {
 /// 0x5b940 : durée d'invisibilité tirée au hasard.
 fn pick_blink_delay(x: &mut Cx) {
     x.set8(BLINK_WAIT, 1);
-    let mut d2 = x.a5_u16(0x7f92);
+    let mut d2 = var::RANK.get(x.b);
     d2 = d2 & 0xff00 | (d2 as u8 >> 1) as u16;
     let row = (d2 << 5) as u32;
     x.c.d[2] = x.c.d[2] & 0xffff_0000 | row;
@@ -361,7 +361,7 @@ fn arrival(x: &mut Cx) {
                 x.set8(LOOK_PREV, 0xe);
                 x.set16(Obj::VZ, -0x300i16 as u16);
                 x.set16(Obj::AZ, -0x80i16 as u16);
-                let cam = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+                let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
                 x.set16(Obj::Z, cam);
                 body(x, 0xb);
             }
@@ -405,7 +405,7 @@ fn arrival(x: &mut Cx) {
         },
         3 | 4 => {
             if x.u8(f::SUB2) == 0 {
-                let scene = x.a5_u8(0x34);
+                let scene = var::SCENE.get(x.b);
                 if scene == 6 || scene == 0xc {
                     lib::sound(x, 0xeb92e);
                 } else {

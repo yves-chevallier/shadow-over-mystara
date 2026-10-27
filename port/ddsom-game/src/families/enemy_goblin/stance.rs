@@ -10,7 +10,7 @@ pub(super) fn run(x: &mut Cx) {
         set_state_long(x, HELD);
         return grab(x);
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return set_state_long(x, IDLE);
     }
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -139,7 +139,7 @@ pub(super) fn walk_off(x: &mut Cx) {
     x.add8(f::SUB3, 2);
     x.set8(Obj::SPEED_INDEX, 8);
     let mut want = 0x20u8;
-    let base = if x.a5_u8(0x36) != 0 { 0x556 } else { 0x506 };
+    let base = if var::CAMERA_SELECT.get(x.b) != 0 { 0x556 } else { 0x506 };
     let d = x.u16(Obj::X).wrapping_sub(x.a5_u16(base));
     if (d as i16) <= 0xc0 {
         x.set8(Obj::SPEED_INDEX, 8);

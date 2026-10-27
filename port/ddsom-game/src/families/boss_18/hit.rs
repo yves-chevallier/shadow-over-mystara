@@ -289,7 +289,7 @@ fn hit_i(x: &mut Cx) {
             x.set32(0x18, 0);
             x.set32(0x1c, 0);
             x.set16(TIMER, 6);
-            let right_of = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let right_of = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             let side = if Fl::sub16(right_of, x.u16(0x8)).ge() { 0x20 } else { 0 };
             x.set8(f::FLIP, side);
             bounce_start(x);
@@ -327,7 +327,7 @@ fn bounce_start(x: &mut Cx) {
     x.set16(0x14, vx as u16);
     x.set16(0x16, vz as u16);
     let d1 = x.u16(0xc).wrapping_add(x.u16(0x10));
-    let d0 = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x80);
+    let d0 = var::CAMERA1_Y.get(x.b).wrapping_add(0x80);
     if Fl::sub16(d1, d0).lt() {
         let v = x.u16(0x18).wrapping_add(0x80);
         x.set16(0x18, v);
@@ -407,7 +407,7 @@ fn death(x: &mut Cx) {
             x.set16(0x18, 0x400);
             x.set16(0x1a, (-0x28i16) as u16);
             let (mut vx, mut side) = (0x180i16, 0x20u8);
-            let edge = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0;

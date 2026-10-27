@@ -10,11 +10,11 @@ fn step(x: &mut Cx, table: u32) -> u32 {
 }
 
 fn cam_x(x: &mut Cx) -> u16 {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 { x.a5_u16(0x556) } else { x.a5_u16(var::SCROLL_X) }
+    if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
 fn cam_y(x: &mut Cx) -> u16 {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(var::SCROLL_Y) }
+    if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) }
 }
 
 pub(super) fn run(x: &mut Cx) {
@@ -433,7 +433,7 @@ fn route_step(x: &mut Cx) -> bool {
     setw(x, 0, i);
     let a1 = a1.wrapping_add(i as i16 as i32 as u32);
     x.c.a[1] = a1;
-    let cam = if x.a5_u8(var::CAMERA_SELECT) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
+    let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     x.c.a[2] = cam;
     let d1 = rd16(x.b, cam + 8).wrapping_add(x.data16(a1));
     let d2 = rd16(x.b, cam + 0xc).wrapping_add(x.data16(a1 + 2));

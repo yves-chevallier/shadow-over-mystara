@@ -19,9 +19,9 @@ pub(super) fn intro(x: &mut Cx) {
             x.set_bit(0x1, 1, false);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            let cx = x.a5_u16(var::CAMERA1_X).wrapping_add(0x1a8);
+            let cx = var::CAMERA1_X.get(x.b).wrapping_add(0x1a8);
             x.set16(0x8, cx);
-            let cy = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x68);
+            let cy = var::CAMERA1_Y.get(x.b).wrapping_add(0x68);
             x.set16(0xc, cy);
             x.set16(0x10, 0);
             x.set8(f::FLIP, 0);
@@ -40,9 +40,9 @@ pub(super) fn intro(x: &mut Cx) {
             }
             next6(x);
             x.set_bit(0x1, 1, false);
-            let cx = x.a5_u16(var::CAMERA1_X).wrapping_add(0x100);
+            let cx = var::CAMERA1_X.get(x.b).wrapping_add(0x100);
             x.set16(0x8, cx);
-            let cy = x.a5_u16(var::CAMERA1_Y);
+            let cy = var::CAMERA1_Y.get(x.b);
             let z = cy.wrapping_add(0x58);
             x.set16(0x10, z);
             let h = cy.wrapping_add(0xf0).wrapping_sub(z);
@@ -127,7 +127,7 @@ pub(super) fn intro(x: &mut Cx) {
 fn crossing(x: &mut Cx) {
     x.move_xz();
     let mut bumped = false;
-    let cam_x = x.a5_u16(var::CAMERA1_X);
+    let cam_x = var::CAMERA1_X.get(x.b);
     let px = x.u16(0x8) as i16;
     let right = cam_x.wrapping_add(0x1b0);
     let left = cam_x.wrapping_sub(0x20);
@@ -138,7 +138,7 @@ fn crossing(x: &mut Cx) {
         bumped = true;
         x.set16(0x8, left);
     }
-    let cam_y = x.a5_u16(var::CAMERA1_Y);
+    let cam_y = var::CAMERA1_Y.get(x.b);
     let h = x.u16(0xc) as i16;
     let low = cam_y.wrapping_add(0x10);
     let high = cam_y.wrapping_add(0xf0);
@@ -397,7 +397,7 @@ fn leap_attack(x: &mut Cx) {
                 mx = d.wrapping_add(t.u16(x.b, 0x8));
                 mz = t.u16(x.b, 0x10);
             } else {
-                let center = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+                let center = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
                 let side = if center as i16 >= x.u16(0x8) as i16 { 0x20 } else { 0 };
                 x.c.d[0] = side;
                 x.set8(f::FLIP, side as u8);
@@ -709,7 +709,7 @@ fn split(x: &mut Cx) {
 
 /// 0x7ba18 : tant qu'aucun joueur n'est en vie, le boss reste en pose.
 pub(super) fn wait_for_players(x: &mut Cx) {
-    if (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 0 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return walk(x);
     }
     if x.u8(f::SUB2) == 0 {

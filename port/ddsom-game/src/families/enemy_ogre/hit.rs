@@ -100,7 +100,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_A, 0xa);
         }
         2 => {
-            if (x.a5_u8(0x3d) as i8) > 0 {
+            if (var::PAUSE.get(x.b) as i8) > 0 {
                 return;
             }
             let n = x.u16(0x84).wrapping_sub(1);
@@ -114,7 +114,7 @@ fn get_up(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(0x3d) == 0 && x.anim_step() {
+            if var::PAUSE.get(x.b) == 0 && x.anim_step() {
                 regroup(x);
             }
         }
@@ -162,7 +162,7 @@ fn dying(x: &mut Cx) {
             x.set16(Obj::AX, 0);
             x.set16(Obj::VZ, 0x500);
             x.set16(Obj::AZ, -0x38i16 as u16);
-            let right = x.a5_u16(0x5a6).wrapping_add(0xc0);
+            let right = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             let (mut vx, mut flip) = (0x200i16, 0);
             if (right as i16) < (x.u16(Obj::X) as i16) {
                 vx = -vx;

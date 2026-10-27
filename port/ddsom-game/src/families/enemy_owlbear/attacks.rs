@@ -126,7 +126,7 @@ fn swipe_begin(x: &mut Cx) {
 
 /// 0x5f5d8 : tire le nombre de coups de la série dans la table du niveau de difficulté.
 fn roll_series(x: &mut Cx) {
-    let level = (x.a5_u16(0x7f92) >> 1 << 4) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
     let r = random(x) & 0xf;
     let n = x.data8(SERIES_TABLE + level + r);
     x.set8(SERIES, n);

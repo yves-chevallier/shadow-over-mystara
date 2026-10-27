@@ -219,7 +219,7 @@ fn second_form_strike(x: &mut Cx) {
 
 /// 0x9c29a : le boss reste dans l'écran et la cible est assez proche devant lui (comme au demi-tour du combat).
 fn still_close(x: &mut Cx) -> bool {
-    let cam = x.a5_u16(var::SCROLL_X);
+    let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
         return false;
     }

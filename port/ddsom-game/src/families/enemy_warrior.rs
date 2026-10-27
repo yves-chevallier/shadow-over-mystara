@@ -206,7 +206,7 @@ fn apply_motion(x: &mut Cx) {
     }
     x.set16(0xc, z);
     let mut y = x.u16(0x10).wrapping_add(x.u16(OFFSET_Y));
-    let cam_y = x.a5_u16(0x50a);
+    let cam_y = var::SCROLL_Y.get(x.b);
     let t = (x.u16(0xc).wrapping_add(y).wrapping_sub(cam_y)) as i16;
     if t < 0x60 {
         y = cam_y.wrapping_add(0x60).wrapping_sub(x.u16(0xc));
@@ -494,7 +494,7 @@ fn rise_step(x: &mut Cx) {
             x.add8(f::SUB, 2);
             x.set16(SCRIPT_LEFT, 0);
             body(x, 3);
-            if x.a5_u8(0x34) != 0x2e {
+            if var::SCENE.get(x.b) != 0x2e {
                 return finale(x);
             }
             x.call(0xa6e6a);

@@ -35,7 +35,7 @@ pub(super) fn init(x: &mut Cx) {
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);
     }
-    let speed = if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 { 7 } else { 6 };
+    let speed = if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 { 7 } else { 6 };
     x.set8(0x72, speed);
     x.set8(0x73, speed);
     for (off, v) in [(0x74, 5), (0x75, 0x3c), (0x76, 6), (0x81, 0x12), (0x80, 0x17)] {
@@ -43,7 +43,7 @@ pub(super) fn init(x: &mut Cx) {
     }
     x.set16(GUARD, 0xb4);
     x.set16(GUARD_TIMER, 0xf0);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     pick_target(x);
     lib::draw_stance(x);
@@ -53,8 +53,8 @@ pub(super) fn init(x: &mut Cx) {
     x.set16(SPOT_TIMER, 0x12c);
     x.set8(0x93, 0);
     x.set8(0xac, 0);
-    let players = x.a5_u8(var::PLAYERS_ALIVE);
-    let alone = players == 1 || (players == 2 && (x.a5_u16(var::DIFFICULTY) as i16) < 0x17);
+    let players = var::PLAYERS_ALIVE.get(x.b);
+    let alone = players == 1 || (players == 2 && (var::RANK.get(x.b) as i16) < 0x17);
     if !alone {
         let Some(part) = x.alloc(&pools::BOSS) else { return };
         part.set_u8(x.b, 0, 1);
@@ -81,8 +81,8 @@ pub(super) fn arrive(x: &mut Cx) {
         0 => {
             next7(x);
             x.set8(VULNERABLE, 0);
-            let px = x.u16(0x8).wrapping_add(0x1b0).wrapping_add(x.a5_u16(var::SCROLL_X));
-            let pz = x.u16(0x10).wrapping_add(0x80).wrapping_add(x.a5_u16(var::SCROLL_Y));
+            let px = x.u16(0x8).wrapping_add(0x1b0).wrapping_add(var::SCROLL_X.get(x.b));
+            let pz = x.u16(0x10).wrapping_add(0x80).wrapping_add(var::SCROLL_Y.get(x.b));
             x.set16(0x8, px);
             x.set16(0x10, pz);
             x.set8(f::FLIP, 0);
@@ -165,7 +165,7 @@ pub(super) fn land(x: &mut Cx) {
 /// 0x7f10a : vitesses du bond selon la distance à la caméra (quatre lignes de 8 octets en 0x7f14c : X, hauteur,
 /// gravité, profondeur).
 fn jump_speeds(x: &mut Cx) {
-    let d = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X));
+    let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let row = if Fl::sub16(d, 0x60).le() {
         0
     } else if Fl::sub16(d, 0xc0).le() {
@@ -351,9 +351,9 @@ pub(super) fn slam(x: &mut Cx) {
 /// Point visé sur le bord de l'écran, du côté où le boss regarde (`+0xb0`, `+0xb2`).
 fn edge_spot(x: &mut Cx) {
     let off = if x.u8(f::FLIP) != 0 { 0x160 } else { 0x20 };
-    let sx = x.a5_u16(var::SCROLL_X).wrapping_add(off);
+    let sx = var::SCROLL_X.get(x.b).wrapping_add(off);
     x.set16(SPOT_X, sx);
-    let sz = x.a5_u16(var::SCROLL_Y).wrapping_add(0x60);
+    let sz = var::SCROLL_Y.get(x.b).wrapping_add(0x60);
     x.set16(SPOT_Z, sz);
 }
 
@@ -390,7 +390,7 @@ pub(super) fn spin_roar(x: &mut Cx) {
                 let angle = (x.c.d[0] as u8).wrapping_add(b6);
                 x.set8(0x2d, angle);
             }
-            let cam = x.a5_u16(var::SCROLL_X);
+            let cam = var::SCROLL_X.get(x.b);
             if x.u8(f::FLIP) != 0 {
                 if (cam.wrapping_add(0x130).wrapping_sub(x.u16(0x8)) as i16) < 0 {
                     return next7(x);

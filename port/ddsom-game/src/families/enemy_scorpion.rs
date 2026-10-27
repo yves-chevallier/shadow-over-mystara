@@ -81,7 +81,7 @@ fn anim_play(x: &mut Cx, n: u32) {
 
 /// Hauteur de départ d'une chute : l'objet apparaît au-dessus de l'écran.
 fn drop_from_above(x: &mut Cx) {
-    let cam = x.a5_u16(0x50a).wrapping_add(0x100);
+    let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
     let depth = x.u16(Obj::Y);
     x.set16(Obj::Z, cam.wrapping_sub(depth));
     set_dw(x, 0, depth);
@@ -91,7 +91,7 @@ fn drop_from_above(x: &mut Cx) {
 
 /// Abscisse de la caméra selon le mode (`A5+0x36` : second écran).
 fn camera_x(x: &mut Cx) -> u16 {
-    if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) }
+    if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
 /// 0x67808 : avance en X et en profondeur selon les vitesses (virgule fixe 8.8).
@@ -104,7 +104,7 @@ fn advance(x: &mut Cx) {
 
 /// 0x6771a : choisit le geste (`+0xa6`) dans la ligne de la difficulté.
 fn pick_move(x: &mut Cx) {
-    let row = ((x.a5_u16(0x7f92) >> 2) << 4) as u32;
+    let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     let r = rand_and(x, 0xf);
     let v = x.data8(MOVE_PICK + row + r);
     x.set8(MOVE, v);
@@ -134,7 +134,7 @@ fn speed_row(x: &mut Cx) {
 /// Choix du coup suivant dans la ligne de la difficulté : tire `+6` = 2 + octet de la table.
 fn pick_attack(x: &mut Cx, table: u32) {
     x.add8(f::SUB2, 2);
-    let row = ((x.a5_u16(0x7f92) >> 2) << 4) as u32;
+    let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     x.c.d[0] = row;
     let r = rand_and(x, 0xf);
     let v = x.data8(table + row + r);
@@ -189,7 +189,7 @@ fn init(x: &mut Cx) {
             x.set8(f::SUB2, d0 as u8);
             let mut shift = 0x190u16;
             set_dw(x, 0, shift);
-            let cam = x.a5_u16(0x506);
+            let cam = var::SCROLL_X.get(x.b);
             x.set16(Obj::X, cam);
             x.set16(Obj::VZ, 0x400);
             x.set16(Obj::AZ, -0x40i16 as u16);
@@ -256,7 +256,7 @@ fn arrival(x: &mut Cx) {
             x.set8(f::SUB2, 2);
         }),
         8 => {
-            let dx = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x20);
+            let dx = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b)).wrapping_add(0x20);
             set_dw(x, 0, dx);
             if dx <= 0x1c0 {
                 x.set8(f::SUB, 2);
@@ -335,7 +335,7 @@ fn free_stance(x: &mut Cx) {
 
 /// 0x674ca : tire le prochain sous-état d'attaque dans la ligne de la difficulté.
 fn choose_attack(x: &mut Cx) {
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let v = x.data8(ATTACK_TABLE + row + r);
     x.set8(f::SUB, v);
@@ -657,7 +657,7 @@ fn recoil(x: &mut Cx) {
 
 /// Sous-état 4 : saisi par un joueur, le scorpion court vers le bord de l'écran le plus proche.
 fn grabbed_flight(x: &mut Cx) {
-    if x.a5_u8(0x3d) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.c.d[0] = x.u8(f::SUB2) as u32;

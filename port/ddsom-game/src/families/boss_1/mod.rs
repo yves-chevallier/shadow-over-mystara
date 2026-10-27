@@ -179,7 +179,7 @@ fn init(x: &mut Cx) {
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x21);
     lib::initial_hp_boss(x);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     lib::spread_index(x);
     lib::empty_popups(x);
     lib::clear_popup(x);
@@ -221,7 +221,7 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => moves::intro(x),
             2 => moves::fight(x),
@@ -412,8 +412,8 @@ pub(self) fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
 
 /// 0x7c47c : nombre de coups de l'enchaînement, selon la difficulté et le nombre de joueurs.
 fn combo_count(x: &mut Cx) {
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) * 2;
-    let mut players = x.a5_u8(var::PLAYERS_ALIVE) as u16;
+    let level = (var::RANK.get(x.b) & 0x1e) * 2;
+    let mut players = var::PLAYERS_ALIVE.get(x.b) as u16;
     if players != 0 {
         players -= 1;
     }

@@ -196,7 +196,7 @@ pub(super) fn enter(x: &mut Cx) {
             play(x, 0);
         }
         4 => {
-            if x.a5_u8(0x35) != 0 {
+            if var::PLAYERS_ALIVE.get(x.b) != 0 {
                 set_state_long(x, ACTIVE_STANCE);
                 x.set8(WANT_ANIM, 0x7f);
                 pick_target(x);

@@ -154,7 +154,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_BODY, 0xe);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) as i8 > 0 {
+            if var::PAUSE.get(x.b) as i8 > 0 {
                 return;
             }
             if sub16(x, HITS, 1).gt() {
@@ -166,7 +166,7 @@ fn get_up(x: &mut Cx) {
             x.set8(0x49, 0);
             x.set16(0x16, 0);
             x.set16(0x1e, 0);
-            let mut edge = x.a5_u16(var::CAMERA1_X);
+            let mut edge = var::CAMERA1_X.get(x.b);
             let mut angle = 8;
             edge = edge.wrapping_add(0x30);
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
@@ -187,7 +187,7 @@ fn get_up(x: &mut Cx) {
             body(x, if wrong { 0xf } else { 0x10 });
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, TIMER, 1).le() {
@@ -201,7 +201,7 @@ fn get_up(x: &mut Cx) {
             }
         }
         6 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if !x.anim_step() {
@@ -223,7 +223,7 @@ pub(super) fn recovered(x: &mut Cx) {
     }
     lib::next_threshold(x, THRESHOLDS);
     let mut limit = 2;
-    if (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 2 {
         limit = 0;
     }
     if !Fl::sub8(limit, x.u8(PHASE)).gt() {
@@ -258,7 +258,7 @@ fn down(x: &mut Cx) {
             x.set16(0x1a, (-0x38i16) as u16);
             let mut vx: i16 = 0x200;
             let mut side = 0;
-            let edge = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0x20;

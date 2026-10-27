@@ -19,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
         4 => wait(x),
         _ => {}
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         set_state_long(x, IDLE);
     }
 }
@@ -136,7 +136,7 @@ pub(super) fn idle(x: &mut Cx) {
         x.set8(VULNERABLE, 1);
         return mv(x, 0);
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.anim_step();
         return;
     }

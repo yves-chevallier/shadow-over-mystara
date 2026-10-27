@@ -139,7 +139,7 @@ fn flee(x: &mut Cx) {
             x.set8(CAUGHT, 1);
             let x0 = x.u16(Obj::X);
             x.set16(SAVED_POS, x0);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             x.c.d[1] = x.c.d[1] & 0xffff_0000 | cam as u32;
             x.c.d[2] = 0;
             x.set16(Obj::VX, -0x280i16 as u16);

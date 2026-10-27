@@ -170,7 +170,7 @@ pub(self) fn host_gone(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.call(0x63ae0);
@@ -194,7 +194,7 @@ fn init(x: &mut Cx) {
     if kind == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
         lib::initial_hp_boss(x);
     } else {
-        if x.a5_u8(0x30) != 0 {
+        if var::GAME_ON.get(x.b) != 0 {
             lib::sound(x, 0xe1330);
         }
         lib::empty_popups(x);
@@ -215,7 +215,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x76, 5), (0x8e, 3), (0x6f, 2), (0x68, 5), (0x69, 5), (0x6c, 4), (0x6d, 8), (0x6a, 3)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     lib::draw_6b(x);
     x.set8(0x70, 0);
     lib::draw_stance(x);
@@ -230,7 +230,7 @@ fn init(x: &mut Cx) {
 
 /// Boucle de l'état actif (0x8fc42) ; l'état touché la rappelle pour reprendre le combat.
 pub(self) fn active(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         if tst8(x, f::FREEZE).gt() {
             sub8(x, f::FREEZE, 1);
         } else {
@@ -279,7 +279,7 @@ pub(self) fn active(x: &mut Cx) {
 
 /// `+5` = 10 (0x908bc) : attend qu'un joueur revienne.
 fn idle(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
         return;
     }

@@ -142,7 +142,7 @@ fn fall(x: &mut Cx) {
 fn flee(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            let wall = x.a5_u8(0x34);
+            let wall = var::SCENE.get(x.b);
             let flipped = x.u8(f::FLIP) != 0;
             let turn_back = if wall == 2 {
                 flipped
@@ -169,7 +169,7 @@ fn flee(x: &mut Cx) {
             }
         }
         4 => {
-            if x.a5_u8(0x34) == 4 {
+            if var::SCENE.get(x.b) == 4 {
                 return x.add8(f::SUB2, 2);
             }
             leave_screen(x);
@@ -240,7 +240,7 @@ fn leave_screen(x: &mut Cx) {
     }
     set_state_long(x, 0x0600_0000);
     if x.u8(PARENT) != 0 {
-        x.set_a5_u8(0x4e, 1);
+        var::FROZEN.set(x.b, 1);
     }
     detach_from_host(x);
 }

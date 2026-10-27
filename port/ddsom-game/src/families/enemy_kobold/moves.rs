@@ -313,7 +313,7 @@ fn c_side(x: &mut Cx) {
 // --- sous-état 10 : promenade -----------------------------------------------------------------------------------
 
 pub(super) fn idle(x: &mut Cx) {
-    if x.a5_u8(0x35) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, STANCE);
         x.set8(LOOK, 0x7f);
         pick_target(x);

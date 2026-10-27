@@ -141,7 +141,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_FLY, 0xe);
         }
         2 => {
-            if (x.a5_u8(0x3d) as i8) > 0 {
+            if (var::PAUSE.get(x.b) as i8) > 0 {
                 return tail(x);
             }
             let n = x.u16(0x84).wrapping_sub(1);
@@ -154,7 +154,7 @@ fn get_up(x: &mut Cx) {
             }
         }
         4 => {
-            if x.a5_u8(0x3d) == 0 && x.anim_step() {
+            if var::PAUSE.get(x.b) == 0 && x.anim_step() {
                 attacks::regroup(x);
             }
         }

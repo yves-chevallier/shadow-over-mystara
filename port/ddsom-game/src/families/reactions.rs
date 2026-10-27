@@ -14,6 +14,7 @@
 
 use super::cx::Cx;
 use super::enemy_lib as lib;
+use super::enemy_common::var;
 use super::enemy_common::detach_from_host;
 use crate::mem::{rd16, rd32, rd8, rts};
 use crate::objects::anim::load_entry;
@@ -126,7 +127,7 @@ fn dead(x: &mut Cx) -> bool {
     (x.u16(f::HP) as i16) <= 0
 }
 fn paused(x: &mut Cx) -> bool {
-    x.a5_u8(0x3d) != 0
+    var::PAUSE.get(x.b) != 0
 }
 /// Mort : sous-état 6 (+ `+0` = 2).
 fn mark_dead(x: &mut Cx) {
@@ -436,7 +437,7 @@ fn get_up(x: &mut Cx) {
 /// 0x3df7c : fin de la glissade : l'objet se relève.
 fn slide_end(x: &mut Cx) {
     x.set32(0x16, 0);
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.set8(0x67, 1);
     }
     x.set8(f::ACTIVE, 1);
@@ -815,7 +816,7 @@ fn skim_flight(x: &mut Cx) {
             if x.u32(f::HEIGHT) as i32 <= 0 {
                 return next(x);
             }
-            let camera = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+            let camera = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             let dx = x.u16(f::X).wrapping_sub(camera);
             x.c.d[0] = x.c.d[0] & !0xffff | dx as u32;
             if dx <= 0x180 && x.u8(f::BLOCKED) == 0 {
@@ -1121,7 +1122,7 @@ fn hop(x: &mut Cx) {
 /// 0x3cacc : monte jusqu'au haut de l'écran (0x110 au-dessus de la caméra), puis 0x3cafc.
 fn hop_rise(x: &mut Cx) {
     move_xz(x);
-    let camera = if x.a5_u8(0x36) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(0x50a) };
+    let camera = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) };
     x.c.d[0] = x.c.d[0] & !0xffff | camera as u32;
     let d1 = x.u16(f::HEIGHT).wrapping_add(x.u16(f::Y)).wrapping_sub(camera);
     x.c.d[1] = x.c.d[1] & !0xffff | d1 as u32;

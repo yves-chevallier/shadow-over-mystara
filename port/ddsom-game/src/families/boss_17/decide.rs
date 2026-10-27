@@ -215,14 +215,14 @@ fn table16(x: &mut Cx, table: u32, index: u32) -> u16 {
 
 /// 0x96ef0 : délai avant le pas suivant, selon la difficulté.
 pub(super) fn walk_delay_fast(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x96f08, level);
     x.set8(WALK_DELAY, v);
 }
 
 /// 0x96efc : idem, table des marches lentes.
 pub(super) fn walk_delay_slow(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x96f28, level);
     x.set8(WALK_DELAY, v);
 }
@@ -243,8 +243,8 @@ pub(super) fn walk_steps_slow(x: &mut Cx) {
 
 /// Index de la table de difficulté : `(difficulté & 0x1e) × k + (joueurs - 1)`.
 fn level_index(x: &mut Cx, k: u32) -> u32 {
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * k;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * k;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     level + players.saturating_sub(1)
 }
 
@@ -257,8 +257,8 @@ pub(super) fn pick_strike_limit(x: &mut Cx) {
 
 /// 0x973c2 : durée du ralenti (mot).
 pub(super) fn pick_slow_time(x: &mut Cx) {
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * 4;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let i = level + 2 * players.saturating_sub(1);
     let v = table16(x, 0x973e4, i);
     x.set16(SLOW_TIME, v);
@@ -266,9 +266,9 @@ pub(super) fn pick_slow_time(x: &mut Cx) {
 
 /// 0x97464 : mode du ralenti (1 ou 2), tiré dans un masque de bits par difficulté et nombre de joueurs.
 pub(super) fn pick_slow_mode(x: &mut Cx) {
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let row = players.saturating_sub(1) << 3;
-    let level = ((x.a5_u16(var::DIFFICULTY) & 0x18) >> 2) as u32;
+    let level = ((var::RANK.get(x.b) & 0x18) >> 2) as u32;
     let i = row + level;
     let bit = random(x) & 0x1f & 7;
     let (table, set_means_one) = if x.u8(Obj::VARIANT) == 0 { (0x974aa, true) } else { (0x974ca, false) };
@@ -290,8 +290,8 @@ pub(super) fn spawn_ring(x: &mut Cx, count: i16) {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
         let dx = table16(x, 0x97570, i);
         let dy = table16(x, 0x97572, i);
-        let px = dx.wrapping_add(x.a5_u16(var::CAMERA1_X));
-        let py = dy.wrapping_add(x.a5_u16(var::CAMERA1_Y));
+        let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
+        let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         set_dw(x, 0, px);
         set_dw(x, 2, py);
         x.c.d[1] = 0;

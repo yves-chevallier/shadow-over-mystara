@@ -30,7 +30,7 @@ pub(super) fn run(x: &mut Cx) {
         _ => {}
     }
     // plus personne à combattre : la bête se repose
-    if x.u16(0xc) == 0 && x.a5_u8(0x35) == 0 {
+    if x.u16(0xc) == 0 && var::PLAYERS_ALIVE.get(x.b) == 0 {
         set_state_long(x, ACTIVE_IDLE);
     }
 }
@@ -242,7 +242,7 @@ fn choose_attack_a(x: &mut Cx, close: bool) {
     let base = if close { 0 } else { 0x14 };
     let profile = x.u8(PROFILE).wrapping_shl(2) as u32;
     let table = x.data32(PICK_TABLE + profile);
-    let level = (x.a5_u16(0x7f92) >> 1 << 5) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
     let pick = x.data8(table.wrapping_add(level).wrapping_add(r));
     x.set8(f::SUB2, pick.wrapping_add(base));
@@ -263,7 +263,7 @@ pub(super) fn next_move(x: &mut Cx) {
     if !lib::target_in_box(x, -0x30, 0x30, 8) && !lib::target_in_box(x, -0xd0, 0x70, 8) {
         return set_state_long(x, ACTIVE_STANCE);
     }
-    let level = (x.a5_u16(0x7f92) >> 1 << 5) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
     let pick = x.data8(CLOSE_TABLE + level + r);
     x.set8(f::SUB2, pick);

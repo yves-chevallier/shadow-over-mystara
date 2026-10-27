@@ -106,10 +106,10 @@ pub(self) fn spark(x: &mut Cx, n: u32) {
 
 /// X de la caméra (écran unique ou deuxième écran).
 pub(self) fn camera_x(x: &mut Cx) -> u16 {
-    if x.a5_u8(0x36) != 0 {
-        x.a5_u16(0x5ae)
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        var::CAMERA2_X.get(x.b)
     } else {
-        x.a5_u16(0x5a6)
+        var::CAMERA1_X.get(x.b)
     }
 }
 
