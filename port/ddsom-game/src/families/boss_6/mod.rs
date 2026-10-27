@@ -106,9 +106,9 @@ fn init(x: &mut Cx) {
     x.set_a5_u8(0x5a, 0);
     lib::spread_index(x);
     lib::set_immunities(x);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     for (off, v) in [(0x76, 0), (0x70, 0), (0x6a, 2), (0x75, 0)] {
         x.set8(off, v);
     }

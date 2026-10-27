@@ -160,9 +160,7 @@ fn random(x: &mut Cx) -> u32 {
 }
 /// Effet `0xabec8` (D0 = variante, D1 = paramètre).
 fn effect(x: &mut Cx, d0: u32, d1: u32) {
-    x.c.d[0] = d0;
-    x.c.d[1] = d1;
-    x.call(call::SPAWN_EFFECT);
+    lib::attack_effect(x, d0, d1);
 }
 /// Indice des tables par type : type, plus 32 hors de la classe ENEMY.
 fn type_index(x: &mut Cx) -> u32 {
@@ -338,7 +336,7 @@ fn fall_38(x: &mut Cx) {
 fn boss_3_hook(x: &mut Cx) {
     next(x);
     if x.u8(f::KIND) == 3 && x.u8(f::CLASS) == BOSS && x.u8(f::SUB) != 6 && x.u8(f::GRABBED) == 0 {
-        x.call(0x81ae0);
+        super::boss_3::counter_reaction(x);
     }
 }
 
@@ -521,7 +519,7 @@ fn death(x: &mut Cx) {
     x.set8(f::COUNTER, c);
     if c == 0 {
         x.set32(f::STATE, 0x0600_0000);
-        return x.call(call::DEATH);
+        return lib::object_event(x);
     }
     blink(x, c);
 }
@@ -715,11 +713,7 @@ fn dust(x: &mut Cx) {
     if !was {
         return;
     }
-    x.c.d[0] = 0;
-    x.c.d[1] = x.c.d[1] & !0xffff | 1;
-    x.c.d[2] = 0;
-    x.c.d[3] = u32::MAX;
-    x.call(0xb10c8);
+    lib::shock(x, 0, 1, 0, 0xffff);
 }
 
 /// 0x3c270 : glissade ; arrêtée, l'ENEMY de type 0 attend l'événement de son animation pour l'animation 7.
@@ -1311,8 +1305,7 @@ fn floored_wait(x: &mut Cx, cry: bool) {
     next_clear(x);
     x.set8(f::COUNTER, 0);
     if cry {
-        x.c.d[0] = 1;
-        x.call(0xab7d8);
+        lib::debris_spray(x, 1);
     }
 }
 fn floored_wait_cry(x: &mut Cx) {
@@ -1327,8 +1320,7 @@ fn unpaused_cry(x: &mut Cx) {
         return;
     }
     next_clear(x);
-    x.c.d[0] = 1;
-    x.call(0xab7d8);
+    lib::debris_spray(x, 1);
 }
 fn unpaused_next(x: &mut Cx) {
     if paused(x) {
@@ -1662,11 +1654,7 @@ fn zapped_burn(x: &mut Cx) {
     if c & 7 != 0 {
         return;
     }
-    x.c.d[0] = 7;
-    x.c.d[1] = x.c.d[1] & !0xffff | 0x200;
-    x.c.d[2] = 0;
-    x.c.d[3] = x.c.d[3] & !0xffff | 0xffff;
-    x.call(0xb10c8);
+    lib::shock(x, 7, 0x200, 0, 0xffff);
     if x.c.sr & m68k::SR_C != 0 {
         return;
     }
@@ -1708,11 +1696,10 @@ fn petrified_end(x: &mut Cx) {
     if paused(x) {
         return;
     }
-    x.c.d[0] = 5;
-    x.call(0xab7d8);
+    lib::debris_spray(x, 5);
     x.set32(f::STATE, 0x0600_0000);
     detach_from_host(x);
-    x.call(call::DEATH);
+    lib::object_event(x);
 }
 
 /// 0x3d762 (code 0x5c...) : en l'air, projection (code 4) ; mort au sol ; sinon tremblement de 60 images puis

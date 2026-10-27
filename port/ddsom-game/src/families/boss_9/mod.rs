@@ -89,7 +89,6 @@ pub(self) const HARD: u32 = 0x70;
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
     pub const PICK_OTHER: u32 = 0x44ee;
-    pub const SMOKE: u32 = 0xb10c8;
     pub const MESSAGE: u32 = 0xc8312;
 }
 
@@ -127,11 +126,7 @@ pub(self) fn every(x: &mut Cx, mask: u8) -> bool {
 /// Deux fumées (0xb10c8) : sorte `kind`, décalage `dx`.
 pub(self) fn smoke_pair(x: &mut Cx, kind: u32, dx: u16) {
     for (dy, dz) in [(0x30, 0x28), (0x28, 8)] {
-        x.c.d[0] = kind;
-        set_dw(x, 1, dx);
-        set_dw(x, 2, dy);
-        set_dw(x, 3, dz);
-        x.call(call::SMOKE);
+        lib::shock(x, kind, dx, dy, dz);
     }
 }
 

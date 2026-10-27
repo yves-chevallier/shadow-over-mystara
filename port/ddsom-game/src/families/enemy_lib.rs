@@ -559,3 +559,65 @@ pub fn choose_near_walk_point(x: &mut Cx) {
 pub fn sound(x: &mut Cx, wrapper: u32) {
     x.call(wrapper);
 }
+
+// --- créateurs d'objets et services d'autres modules ---------------------------------------------------
+//
+// Créateurs de `creators.rs`, `effects_creators.rs`, `effects_aids.rs` (lot B), événements (`evenements.rs`,
+// `popups.rs`), palette : appelés par adresse ici seulement, en attendant leur API.
+
+/// 0xd5f30 : en partie, objet SET 0x14 lié au boss (barre de vie, retenue en `A5-0x5b8a`).
+pub fn create_set_14(x: &mut Cx) {
+    x.call(0xd5f30);
+}
+
+/// 0xd6952 : objet SET 0x15 (variante 2) dont `+0x42` dépend du type du créateur.
+pub fn create_set_15(x: &mut Cx) {
+    x.call(0xd6952);
+}
+
+/// 0xd5ef8 : barre de vie du boss (objet SET).
+pub fn create_life_bar(x: &mut Cx) {
+    x.call(0xd5ef8);
+}
+
+/// 0x19ad6 : événement de l'objet (type `+0x7e`, joueur `+0x48`) dans l'anneau des points.
+pub fn object_event(x: &mut Cx) {
+    x.call(0x19ad6);
+}
+
+/// 0x19e10 : efface le pop-up courant.
+pub fn clear_popup(x: &mut Cx) {
+    x.call(0x19e10);
+}
+
+/// 0x19db4 : vide la file des pop-ups.
+pub fn empty_popups(x: &mut Cx) {
+    x.call(0x19db4);
+}
+
+/// 0x19eb0 : efface tous les pop-ups affichés.
+pub fn clear_all_popups(x: &mut Cx) {
+    x.call(0x19eb0);
+}
+
+/// 0xb10c8 : effet de choc à la position de l'objet : variante, réglage (`+0x2d`, `+0x2f`), vitesses `+0x14`, `+0x1c`.
+pub fn shock(x: &mut Cx, variant: u32, setting: u16, vx: u16, vy: u16) {
+    x.c.d[0] = variant;
+    set_word(x, 1, setting);
+    set_word(x, 2, vx);
+    set_word(x, 3, vy);
+    x.call(0xb10c8);
+}
+
+/// 0xabec8 : effet d'attaque (EFFCT 11) lié par `+0x5c`, de variante et réglage donnés.
+pub fn attack_effect(x: &mut Cx, variant: u32, setting: u32) {
+    x.c.d[0] = variant;
+    x.c.d[1] = setting;
+    x.call(0xabec8);
+}
+
+/// 0xab7d8 : gerbe de débris (EFFCT 6) de variante donnée, liée par `+0x50`.
+pub fn debris_spray(x: &mut Cx, variant: u32) {
+    x.c.d[0] = variant;
+    x.call(0xab7d8);
+}

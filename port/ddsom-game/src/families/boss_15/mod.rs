@@ -167,8 +167,8 @@ fn init(x: &mut Cx) {
     let big = x.u8(TYPE) == TYPE_BIG;
     x.set8(0x7e, if big { 0x50 } else { 0x29 });
     lib::initial_hp_boss(x);
-    x.call(0xd5f30);
-    x.call(0xd6952);
+    lib::create_set_14(x);
+    lib::create_set_15(x);
     x.set8(0x78, 0xff);
     x.set8(f::BOX_SET, 0x2f);
     x.set8(0x82, 1);
@@ -194,9 +194,9 @@ fn init(x: &mut Cx) {
     x.set16(KEPT_Y, py);
     x.set16(ANIM_SET, 0xffff);
     rest(x);
-    x.call(0x19db4);
-    x.call(0x19e10);
-    x.call(0x19eb0);
+    lib::empty_popups(x);
+    lib::clear_popup(x);
+    lib::clear_all_popups(x);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------

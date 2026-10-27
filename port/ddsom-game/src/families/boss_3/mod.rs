@@ -262,8 +262,8 @@ fn init(x: &mut Cx) {
     lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x23);
     lib::initial_hp_boss(x);
-    x.call(0xd5f30);
-    x.call(0xd6952);
+    lib::create_set_14(x);
+    lib::create_set_15(x);
     for (off, v) in [(0x70, 0), (0x8e, 3), (0x78, 0xff), (0x68, 1), (0x69, 1)] {
         x.set8(off, v);
     }
@@ -327,7 +327,7 @@ pub(self) fn end_frame(x: &mut Cx, margin: u16) {
 
 /// 0x81ae0 : riposte d'un coup commun (appelée par les réactions, 0x3e22e) : tirage selon la difficulté, puis
 /// l'attaque 24 (ruée au sol).
-fn counter_reaction(x: &mut Cx) {
+pub(crate) fn counter_reaction(x: &mut Cx) {
     let r = random(x) & 0xf;
     x.c.d[0] = r;
     let level = (x.a5_u16(var::DIFFICULTY) >> 1).wrapping_mul(4);

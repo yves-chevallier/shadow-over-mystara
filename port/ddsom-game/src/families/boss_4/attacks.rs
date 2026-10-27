@@ -330,7 +330,7 @@ fn leap(x: &mut Cx) {
 /// Les étapes en vol : un pas d'animation, l'oscillation (0x833b6), le vent des ailes, un battement.
 fn hover(x: &mut Cx) {
     lib::step(x);
-    x.call(call::BOB);
+    bob(x);
     lib::push_players(x);
     flap(x);
 }
@@ -390,7 +390,7 @@ fn breath_in_flight(x: &mut Cx) {
         8 => {
             flap(x);
             lib::step(x);
-            x.call(call::BOB);
+            bob(x);
             lib::push_players(x);
             if expired(x, TIMER) {
                 x.add8(0x7, 2);

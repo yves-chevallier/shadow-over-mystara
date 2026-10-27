@@ -147,9 +147,9 @@ fn init(x: &mut Cx) {
     lib::initial_hp_boss(x);
     lib::spread_index(x);
     x.set_a5_u8(0x5a, 0);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     decide::pick_strike_limit(x);
     x.set8(0, 2);
     x.set_bit(0x1, 1, true);

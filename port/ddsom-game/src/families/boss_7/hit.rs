@@ -82,11 +82,7 @@ fn thrown(x: &mut Cx) {
             let v = x.a5_u16(0x6e) & 3;
             x.set_a5_u16(0x6e, v);
             if v == 0 {
-                x.c.d[0] = 1;
-                x.c.d[1] = 2;
-                setw(x, 2, 0x20);
-                setw(x, 3, 0xffff);
-                x.call(call::BURST);
+                lib::shock(x, 1, 2, 0x20, 0xffff);
             }
             if x.u8(0x14) != 0 {
                 x.move_x();

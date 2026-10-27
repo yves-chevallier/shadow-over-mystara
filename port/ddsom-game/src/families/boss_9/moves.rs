@@ -99,7 +99,7 @@ pub(super) fn intro(x: &mut Cx) {
                 next6(x);
                 x.set8(GAIT, 2);
                 lib::sound(x, 0xea984);
-                x.call(0xd5f30);
+                lib::create_set_14(x);
             }
             roll(x);
         }

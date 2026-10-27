@@ -79,8 +79,6 @@ pub(self) mod call {
     /// Bouffées de poussière (`D5` = sorte, 0x1172e) et battement d'ailes (`D0` = côté, 0x11a36).
     pub const DUST: u32 = 0x1172e;
     pub const WING: u32 = 0x11a36;
-    /// Oscillation verticale en vol (`boss_common`).
-    pub const BOB: u32 = 0x833b6;
 }
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).

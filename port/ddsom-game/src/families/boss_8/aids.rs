@@ -196,11 +196,7 @@ pub(super) fn clamp(x: &mut Cx) {
 /// Une série de bouffées d'effets (0xb10c8) le long de l'axe : D0 = 1, D1 = 0, D2 = position, D3 = 4.
 pub(super) fn bursts(x: &mut Cx, spots: &[i16]) {
     for &p in spots {
-        x.c.d[0] = 1;
-        x.c.d[1] = 0;
-        setw(x, 2, p as u16);
-        setw(x, 3, 4);
-        x.call(call::BURST);
+        lib::shock(x, 1, 0, p as u16, 4);
     }
 }
 

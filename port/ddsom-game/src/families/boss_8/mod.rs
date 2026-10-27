@@ -71,10 +71,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-pub(self) mod call {
-    pub const BURST: u32 = 0xb10c8;
-}
-
 /// Mot de poids faible d'un registre de données (`move.w`, `andi.w`...) : le reste du registre est conservé.
 pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
     set_dw(x, n, v);

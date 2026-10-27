@@ -110,9 +110,9 @@ fn init(x: &mut Cx) {
     lib::initial_hp_boss(x);
     x.set_a5_u8(0x5a, 0);
     lib::spread_index(x);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     for off in [0x76, 0x70, 0x6a, 0x75, 0x8e] {

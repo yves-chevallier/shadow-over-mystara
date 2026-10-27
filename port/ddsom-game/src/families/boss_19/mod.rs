@@ -78,7 +78,6 @@ pub(self) const FREE: u32 = 0x0600_0000;
 
 pub(self) mod call {
     pub const EFFECT: u32 = 0xb10c8;
-    pub const BURST: u32 = 0xabec8;
 }
 
 pub fn run(x: &mut Cx) {
@@ -198,16 +197,16 @@ fn init(x: &mut Cx) {
         if x.a5_u8(0x30) != 0 {
             lib::sound(x, 0xe1330);
         }
-        x.call(0x19db4);
-        x.call(0x19e10);
-        x.call(0x19eb0);
+        lib::empty_popups(x);
+        lib::clear_popup(x);
+        lib::clear_all_popups(x);
         x.set_a5_u32(0x38, 0x0459_5900);
         x.set_a5_u8(0x50, 1);
         x.set8(0x93, 1);
         x.set8(0x9a, 0xff);
         lib::initial_hp_boss(x);
-        x.call(0xd5f30);
-        x.call(0xd6952);
+        lib::create_set_14(x);
+        lib::create_set_15(x);
     }
     x.set8(0x78, 0xff);
     x.set8(f::BOX_SET, 0x2e);

@@ -29,7 +29,7 @@ pub(super) fn init(x: &mut Cx) {
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
     lib::initial_hp_boss(x);
-    x.call(0xd5f30);
+    lib::create_set_14(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);
     }

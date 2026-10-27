@@ -63,10 +63,6 @@ const FALLBACK_MOVES: u32 = 0x6a480;
 const CLOSE_ATTACKS: u32 = 0x6a73c;
 const FAR_ATTACKS: u32 = 0x6a93c;
 
-mod call {
-    pub const PROXIMITY: u32 = 0x81aa4;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -194,7 +190,7 @@ fn active(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(call::PROXIMITY);
+    super::boss_common::push_out_of_boss(x);
     zone_shadow(x);
     x.reinsert();
 }

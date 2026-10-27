@@ -56,8 +56,7 @@ fn struck(x: &mut Cx) {
     }
     x.set8(0, 2);
     x.set8(SHAKE, 0xf);
-    x.c.d[0] = 4;
-    x.call(0xab7d8);
+    lib::debris_spray(x, 4);
     let away_left = x.u16(0x54) != 0 && {
         let a = x.linked(0x54);
         x.c.a[1] = a.0;

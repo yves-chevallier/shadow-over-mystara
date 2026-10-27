@@ -55,8 +55,6 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
 pub(self) mod call {
-    /// Appelé à chaque image après le sous-état.
-    pub const AFTER_STATE: u32 = 0x81aa4;
     /// Pose ou ramasse l'arme.
     pub const DROP_WEAPON: u32 = 0xa09ca;
     pub const TAKE_WEAPON: u32 = 0xa114a;
@@ -278,7 +276,7 @@ fn active(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(call::AFTER_STATE);
+    super::boss_common::push_out_of_boss(x);
     zone_shadow(x);
     x.reinsert();
 }

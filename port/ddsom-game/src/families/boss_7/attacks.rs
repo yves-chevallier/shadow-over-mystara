@@ -263,11 +263,7 @@ fn dust(x: &mut Cx, kind: u32) {
     let v = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
-        x.c.d[0] = kind;
-        x.c.d[1] = 1;
-        setw(x, 2, (-0x20i16) as u16);
-        setw(x, 3, 0xffff);
-        x.call(call::BURST);
+        lib::shock(x, kind, 1, 0xffe0, 0xffff);
     }
 }
 

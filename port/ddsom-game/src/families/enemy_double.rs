@@ -123,7 +123,7 @@ fn hurt(x: &mut Cx, dying_code: u8, effect_variant: u8) {
     x.set8(0xaf, 1);
     lib::sound(x, 0xe4188);
     x.set8(0x7e, dying_code);
-    x.call(0x19ad6);
+    lib::object_event(x);
     let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, 0x3f);

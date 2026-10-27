@@ -720,9 +720,7 @@ fn react_first(x: &mut Cx) {
             if n != 0 {
                 return;
             }
-            x.c.d[0] = 0;
-            x.c.d[1] = 0;
-            x.call(0xabec8);
+            lib::attack_effect(x, 0, 0);
             if !x.c.cond(5) {
                 shake_timer(x);
             } else {
@@ -786,7 +784,7 @@ fn recoil(x: &mut Cx) {
             x.set8(0xa2, n);
             if n == 0 {
                 set_state_long(x, DEAD);
-                return x.call(0x19ad6);
+                return lib::object_event(x);
             }
             x.set_bit(1, 1, n & 3 != 0);
             x.anim_step();

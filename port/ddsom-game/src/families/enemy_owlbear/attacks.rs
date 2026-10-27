@@ -218,11 +218,7 @@ fn leap_land(x: &mut Cx) {
 
 /// Poussière de réception : 0xb10c8 avec ses quatre paramètres.
 fn dust(x: &mut Cx, d2: i16) {
-    x.c.d[0] = 1;
-    x.c.d[1] = 1;
-    set_dw(x, 2, d2 as u16);
-    set_dw(x, 3, 0xffff);
-    x.call(0xb10c8);
+    lib::shock(x, 1, 1, d2 as u16, 0xffff);
 }
 
 /// Glissade du recul (0x5e27a) : poussière tous les quatre pas, puis arrêt.

@@ -79,10 +79,7 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 }
 
 pub(self) mod call {
-    pub const BURST: u32 = 0xb10c8;
     pub const PICK_TARGET: u32 = 0x424e;
-    /// Seuil des PV et ralenti (`boss_common`, 0x87048).
-    pub const HP_THRESHOLD: u32 = 0x87048;
 }
 
 /// Mot de poids faible d'un registre de données.
@@ -149,7 +146,7 @@ pub fn run(x: &mut Cx) {
         }
         break;
     }
-    x.call(call::HP_THRESHOLD);
+    hp_threshold(x);
     if x.u8(0x43) == 0 {
         let weak = x.u16(WEAK_HP);
         let hp = x.u16(f::HP);
@@ -180,7 +177,7 @@ fn init(x: &mut Cx) {
     }
     x.set8(0x2e, 0x27);
     lib::initial_hp_boss(x);
-    x.call(0xd5f30);
+    lib::create_set_14(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
         x.set8(off, v);
     }

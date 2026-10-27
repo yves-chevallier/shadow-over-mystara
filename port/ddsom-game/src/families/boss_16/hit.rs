@@ -194,9 +194,7 @@ fn burst(x: &mut Cx) {
                 _ => (0xff, 0),
             };
             if kind != 0xff {
-                x.c.d[0] = kind;
-                x.c.d[1] = flag;
-                x.call(call::EFFECT);
+                lib::attack_effect(x, kind, flag);
             }
             let r = rand_and(x, 3);
             let t = x.rom8(0x94368 + r);
@@ -212,9 +210,7 @@ fn burst(x: &mut Cx) {
                 if x.u8(0x49) != 0x60 {
                     let r = rand_and(x, 3);
                     if r != 0 {
-                        x.c.d[0] = 1;
-                        x.c.d[1] = 1;
-                        x.call(call::EFFECT);
+                        lib::attack_effect(x, 1, 1);
                     }
                 }
                 let r = rand_and(x, 3);

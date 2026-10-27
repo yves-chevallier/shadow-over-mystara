@@ -219,11 +219,7 @@ mod man_scorpion {
         let n = x.u8(p::COUNTER).wrapping_add(1) & step;
         x.set8(p::COUNTER, n);
         if n == 0 {
-            x.c.d[0] = 0;
-            set_dw(x, 1, 0x201);
-            set_dw(x, 2, 0x20);
-            set_dw(x, 3, 0x10);
-            x.call(0xb10c8);
+            lib::shock(x, 0, 0x201, 0x20, 0x10);
         }
     }
 
@@ -348,8 +344,7 @@ mod man_scorpion {
                 arm.set_u8(x.b, f::FREEZE, freeze);
             }
         }
-        x.c.d[0] = 0;
-        x.call(0xab7d8);
+        lib::debris_spray(x, 0);
     }
 
     /// Recul de 15 images (2 pixels, sens alterné), puis retour à l'état 2.
@@ -442,7 +437,7 @@ mod man_scorpion {
             parent.set_u8(x.b, 0x26, 0xff);
         }
         x.set32(f::STATE, st::DEAD_LONG);
-        x.call(0x19ad6);
+        lib::object_event(x);
         free(x);
     }
 

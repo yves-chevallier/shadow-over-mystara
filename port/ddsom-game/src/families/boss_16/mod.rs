@@ -76,7 +76,6 @@ pub(self) mod call {
     pub const EDGE_SAME: u32 = 0xa4c2;
     pub const SCRIPT_PALETTE: u32 = 0x10298;
     pub const SPLASH: u32 = 0xaaa40;
-    pub const EFFECT: u32 = 0xabec8;
 }
 
 // --- animations --------------------------------------------------------------------------------

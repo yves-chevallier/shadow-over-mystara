@@ -117,7 +117,7 @@ pub(super) fn intro(x: &mut Cx) {
             x.set16(0xc, 0);
             x.set8(0, 1);
             lib::set_immunities(x);
-            x.call(0xd5f30);
+            lib::create_set_14(x);
             walk(x);
         }
     }

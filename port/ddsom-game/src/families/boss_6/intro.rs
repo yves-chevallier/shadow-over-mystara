@@ -109,7 +109,7 @@ fn stand_up(x: &mut Cx) {
 /// +6 = 14 : attend que la caméra soit prête (`A5+0x2c` = 0xc), puis combat.
 fn wait_camera(x: &mut Cx) {
     if x.a5_u8(0x2c) == 0xc {
-        x.call(0xd5f30);
+        lib::create_set_14(x);
         decide::chase(x);
     } else {
         lib::step(x);

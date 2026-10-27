@@ -135,7 +135,7 @@ fn arrival(x: &mut Cx) {
                 x.set_a5_u32(0x38, 0x0459_5900);
                 x.set8(INVULNERABLE, 0);
                 lib::set_immunities(x);
-                x.call(0xd5f30);
+                lib::create_set_14(x);
                 run_start(x);
             }
         }
@@ -260,7 +260,7 @@ fn partner_arrival(x: &mut Cx) {
                 x.set8(0, 1);
                 x.set8(ROLE, 0);
                 lib::set_immunities(x);
-                x.call(0xd5ef8);
+                lib::create_life_bar(x);
                 run_start(x);
             } else {
                 x.anim_step();

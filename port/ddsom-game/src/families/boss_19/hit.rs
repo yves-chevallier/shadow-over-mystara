@@ -98,9 +98,7 @@ fn knock(x: &mut Cx) {
                 _ => None,
             };
             if let Some(n) = burst {
-                x.c.d[0] = n;
-                x.c.d[1] = 0;
-                x.call(call::BURST);
+                lib::attack_effect(x, n, 0);
             }
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
@@ -189,9 +187,7 @@ fn lie_down(x: &mut Cx) {
     }
     x.add8(f::SUB2, 2);
     rest(x);
-    x.c.d[0] = 3;
-    x.c.d[1] = 0;
-    x.call(call::BURST);
+    lib::attack_effect(x, 3, 0);
 }
 
 // --- 0x90c34 : chancelant (code 0x80) ----------------------------------------------------------------------
@@ -448,7 +444,7 @@ fn death_pet(x: &mut Cx) {
             x.set8(0, 2);
             x.set16(f::IMMUNITY, 0xffff);
             x.set16(TIMER, 0x20);
-            x.call(0x19ad6);
+            lib::object_event(x);
             rest(x);
             for addr in [0xb780, 0xbad6, 0xe2f6, 0xe4f42] {
                 x.call(addr);

@@ -122,9 +122,9 @@ fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 // --- état 0 : création ------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -227,7 +227,7 @@ fn intro(x: &mut Cx) {
             x.set16(f::SUB2, 0);
             body(x, 0);
             lib::set_immunities(x);
-            x.call(0xd5f30);
+            lib::create_set_14(x);
         }
         _ => {}
     }

@@ -154,7 +154,7 @@ fn dying(x: &mut Cx) {
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             lib::sound(x, 0xe3e8e);
-            x.call(0x19ad6);
+            lib::object_event(x);
             lib::drop_loot(x);
             lib::drop_special(x);
             lib::drop_treasure(x);

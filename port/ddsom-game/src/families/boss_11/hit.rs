@@ -85,9 +85,7 @@ fn hit_a(x: &mut Cx) {
         x.add8(f::SUB2, 2);
         lib::sound(x, 0xe4bb6);
         if x.u8(REACTION) == 0x78 {
-            x.c.d[0] = 1;
-            x.c.d[1] = 0;
-            x.call(0xabec8);
+            lib::attack_effect(x, 1, 0);
         }
         paused(x);
         let stun = x.u8(STUN);

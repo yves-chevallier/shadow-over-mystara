@@ -54,11 +54,7 @@ fn recoil(x: &mut Cx) {
             let low = x.a5_u16(0x6e) & 3;
             x.set_a5_u16(0x6e, low);
             if low == 0 {
-                x.c.d[0] = 1;
-                x.c.d[1] = 2;
-                set_dw(x, 2, 0x18);
-                set_dw(x, 3, 0xffff);
-                x.call(0xb10c8);
+                lib::shock(x, 1, 2, 0x18, 0xffff);
             }
             if x.u8(0x14) != 0 {
                 x.move_x();

@@ -205,7 +205,7 @@ fn death(x: &mut Cx) {
                     x.call(r);
                 }
             } else {
-                x.call(0x19ad6);
+                lib::object_event(x);
             }
             for r in [0xb780, 0xbad6, 0xe2f6] {
                 x.call(r);

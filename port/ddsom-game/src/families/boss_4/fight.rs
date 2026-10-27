@@ -57,7 +57,7 @@ pub(super) fn intro(x: &mut Cx) {
                 lib::step(x);
                 return;
             }
-            x.call(0xd5f30);
+            lib::create_set_14(x);
             lib::set_immunities(x);
             x.set8(0, 1);
             decide::walk(x);

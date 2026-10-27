@@ -413,11 +413,7 @@ fn swing_step(x: &mut Cx) {
 
 /// Étincelles de la frappe (0xb10c8) et dispersion de l'effet.
 fn sparks(x: &mut Cx) {
-    x.c.d[0] = 3;
-    x.c.d[1] = 0;
-    x.c.d[2] = 0;
-    x.c.d[3] = 0;
-    x.call(0xb10c8);
+    lib::shock(x, 3, 0, 0, 0);
     let e = x.c.a[1] as u16;
     if e == 0 {
         return;

@@ -644,7 +644,7 @@ fn recoil(x: &mut Cx) {
             x.set8(TIMER, n);
             if n == 0 {
                 set_state_long(x, DEAD);
-                x.call(0x19ad6);
+                lib::object_event(x);
             } else {
                 x.set_bit(1, 1, n & 3 != 0);
                 x.anim_step();

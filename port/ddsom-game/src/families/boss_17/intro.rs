@@ -210,7 +210,7 @@ fn entrance(x: &mut Cx) {
                 }
                 x.set8(0, 1);
                 lib::set_immunities(x);
-                x.call(0xd5f30);
+                lib::create_set_14(x);
                 decide::chase(x);
             } else {
                 lib::step(x);
@@ -553,7 +553,7 @@ fn variant(x: &mut Cx, second: bool) {
             }
             x.set8(0, 1);
             lib::set_immunities(x);
-            x.call(0xd5f30);
+            lib::create_set_14(x);
             decide::chase(x);
         }
         _ => {}

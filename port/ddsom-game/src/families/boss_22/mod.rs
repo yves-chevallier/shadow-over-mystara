@@ -142,7 +142,6 @@ pub(self) mod call {
     pub const EDGE_PAIR: u32 = 0xa4b4;
     pub const EDGE_SAME: u32 = 0xa4c2;
     pub const SPLASH: u32 = 0xaaa40;
-    pub const DUST: u32 = 0xb10c8;
 }
 
 // --- animations --------------------------------------------------------------------------------
@@ -183,11 +182,7 @@ pub(self) fn rubble(x: &mut Cx, d0: u32, d1: u32, d2: u32, d3: u32) {
     if n != 0 {
         return;
     }
-    x.c.d[0] = d0;
-    x.c.d[1] = d1;
-    x.c.d[2] = d2;
-    x.c.d[3] = d3;
-    x.call(call::DUST);
+    lib::shock(x, d0, d1 as u16, d2 as u16, d3 as u16);
 }
 
 /// 0x9d8e0 : la cible est-elle du mauvais côté (le boss ne la regarde pas) ?
@@ -339,11 +334,7 @@ pub(self) fn choose_spot(x: &mut Cx) {
 /// 0x9db72 : cinq poussières en ligne sous le boss qui retombe.
 pub(self) fn dust_line(x: &mut Cx) {
     for dz in [-0x30i16, -0x18, 0, 0x18, 0x30] {
-        x.c.d[0] = 1;
-        set_dw(x, 1, 0);
-        set_dw(x, 2, dz as u16);
-        set_dw(x, 3, 4);
-        x.call(call::DUST);
+        lib::shock(x, 1, 0, dz as u16, 4);
     }
 }
 
@@ -352,11 +343,7 @@ pub(self) fn dust_trail(x: &mut Cx, right: bool) {
     const RIGHT: [i16; 6] = [-0x10, 8, 0x20, 0x38, 0x50, 0x68];
     const LEFT: [i16; 6] = [-0x68, -0x58, -0x38, -0x20, -0x8, 0x10];
     for dz in if right { RIGHT } else { LEFT } {
-        x.c.d[0] = 1;
-        set_dw(x, 1, 0);
-        set_dw(x, 2, dz as u16);
-        set_dw(x, 3, 4);
-        x.call(call::DUST);
+        lib::shock(x, 1, 0, dz as u16, 4);
     }
 }
 
@@ -410,7 +397,7 @@ fn init(x: &mut Cx) {
     let r = random(x);
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
-    x.call(0xd5ef8);
+    lib::create_life_bar(x);
     lib::initial_hp_boss(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);

@@ -255,7 +255,7 @@ fn down(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            x.call(0x19ad6);
+            lib::object_event(x);
             x.set8(0, 2);
             x.set8(SLOW, 0);
             for addr in [0xe5966, 0xb780, 0xbad6, 0xe2f6] {

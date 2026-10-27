@@ -49,7 +49,6 @@ const SPIN_VECTORS: u32 = 0x1c94b6;
 
 mod call {
     pub const ANGLE_TO_TARGET: u32 = 0x1376;
-    pub const BURST: u32 = 0xabec8;
 }
 
 /// Entrée : le jeu ne passe pas par le hook de pause.
@@ -123,10 +122,10 @@ fn init(x: &mut Cx) {
     x.set8(0x9a, 0xff);
     x.set8(0x80, 0x29);
     x.set_a5_u8(0x50, 1);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
-    x.call(0xd6952);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::create_set_15(x);
     x.set8(f::BOX_SET, 0x25);
     lib::initial_hp_boss(x);
     lib::set_immunities(x);
@@ -203,7 +202,7 @@ fn intro(x: &mut Cx) {
             if x.a5_u8(0x2c) != 0xc {
                 return;
             }
-            x.call(0xd5f30);
+            lib::create_set_14(x);
             if let Some(set) = x.alloc(&pools::SET) {
                 set.set_u8(x.b, 0, 1);
                 set.set_u8(x.b, 2, 2);
@@ -655,9 +654,7 @@ fn tumble(x: &mut Cx) {
             x.set16(0x1a, (-0x80i16) as u16);
             fall_anim(x, 0);
             lib::sound(x, 0xebbda);
-            x.c.d[0] = 8;
-            x.c.d[1] = 0;
-            x.call(call::BURST);
+            lib::attack_effect(x, 8, 0);
         }
         6 | 0xa => {
             x.anim_step();
@@ -683,9 +680,7 @@ fn tumble(x: &mut Cx) {
             x.set16(0x18, 0x800);
             x.set16(0x1a, (-0x40i16) as u16);
             fall_anim(x, 0);
-            x.c.d[0] = 7;
-            x.c.d[1] = 0;
-            x.call(call::BURST);
+            lib::attack_effect(x, 7, 0);
         }
         0xc => {
             x.add8(f::SUB2, 2);
@@ -700,9 +695,7 @@ fn tumble(x: &mut Cx) {
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
             }
-            x.c.d[0] = 2;
-            x.c.d[1] = 0;
-            x.call(call::BURST);
+            lib::attack_effect(x, 2, 0);
         }
         0xe => {}
         0x10 => {
@@ -762,7 +755,7 @@ fn dying(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             lib::flash_and_shake(x);
-            x.call(0x19ad6);
+            lib::object_event(x);
             fall_anim(x, 4);
             dying_burst(x);
         }

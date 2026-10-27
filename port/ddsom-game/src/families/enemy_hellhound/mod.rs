@@ -51,10 +51,6 @@ use crate::objects::Courant;
 pub(self) const SET_MOVE: u32 = 0x162126;
 pub(self) const SET_STRIKE: u32 = 0x162148;
 
-pub(self) mod call {
-    pub const SPARK: u32 = 0xb10c8;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -128,11 +124,7 @@ pub(self) fn land_dust(x: &mut Cx) {
 /// 0x63a50 : quatre nuages de poussière autour de l'ennemi.
 pub(self) fn dust(x: &mut Cx) {
     for d2 in [-0x1c, -8, 8, 0x1c] {
-        x.c.d[0] = 0;
-        x.c.d[1] = 0;
-        set_dw(x, 2, d2 as u16);
-        set_dw(x, 3, 4);
-        x.call(call::SPARK);
+        lib::shock(x, 0, 0, d2 as u16, 4);
     }
 }
 
@@ -141,11 +133,7 @@ pub(self) fn puff(x: &mut Cx, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
-        x.c.d[0] = d0;
-        set_dw(x, 1, d1 as u16);
-        set_dw(x, 2, d2 as u16);
-        set_dw(x, 3, d3 as u16);
-        x.call(call::SPARK);
+        lib::shock(x, d0, d1 as u16, d2 as u16, d3 as u16);
     }
 }
 

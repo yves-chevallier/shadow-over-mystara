@@ -46,7 +46,7 @@ pub(super) fn intro(x: &mut Cx) {
             if x.move_xz().gt() {
                 return;
             }
-            x.call(0xd5f30);
+            lib::create_set_14(x);
             aids::burst_small(x);
             x.set16(0xc, 0);
             x.add8(f::SUB2, 2);

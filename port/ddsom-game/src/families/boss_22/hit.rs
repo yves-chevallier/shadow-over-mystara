@@ -61,11 +61,7 @@ fn reaction(x: &mut Cx) {
 
 /// Une poussière (0xb10c8) sans le compteur de huit : le type 2 en lâche une quand il est repoussé vers la droite.
 fn rubble_once(x: &mut Cx) {
-    x.c.d[0] = 0;
-    set_dw(x, 1, 0x201);
-    set_dw(x, 2, 0x20);
-    set_dw(x, 3, 0x20);
-    x.call(call::DUST);
+    lib::shock(x, 0, 0x201, 0x20, 0x20);
 }
 
 /// 0x9cf12 : recul en glissant, puis retour au combat ou riposte.
@@ -98,11 +94,7 @@ fn pushed_back(x: &mut Cx) {
             let tick = x.a5_u16(0x6e) & 3;
             x.set_a5_u16(0x6e, tick);
             if tick == 0 {
-                x.c.d[0] = 1;
-                set_dw(x, 1, 2);
-                set_dw(x, 2, 0x30);
-                set_dw(x, 3, 0xffff);
-                x.call(call::DUST);
+                lib::shock(x, 1, 2, 0x30, 0xffff);
             }
             if x.u8(0x14) != 0 {
                 x.move_x();
@@ -211,7 +203,7 @@ fn death(x: &mut Cx) {
                     x.call(r);
                 }
             } else {
-                x.call(0x19ad6);
+                lib::object_event(x);
             }
             for r in [0xb780, 0xbad6, 0xe2f6] {
                 x.call(r);
