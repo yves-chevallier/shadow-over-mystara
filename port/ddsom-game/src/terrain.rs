@@ -256,6 +256,16 @@ fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
 /// libre, ou la collision est désactivée). La routine est transcrite sur des registres de travail (`Push`) ; ici
 /// ce sont des registres privés, jetés au retour (les appelants des joueurs ne relisaient pas ceux de l'original :
 /// `DDSOM_POISON=terrain`, lot D).
+/// Adaptateur : comme `push`, mais sur les registres de l'appelant, laissés comme l'original (familles du lot B,
+/// registres non encore prouvés morts : `DDSOM_POISON=terrain`).
+pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
+    c.a[0] = o.0;
+    Push { c, b, variant: FIRST }.run();
+    let z = c.sr & m68k::SR_Z != 0;
+    crate::diag::registres_morts(c, "terrain", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2) | regs::CCR);
+    z
+}
+
 pub fn push(b: &mut Cps2Bus, o: Obj) -> bool {
     let mut c = Cpu::default();
     c.a[0] = o.0;
