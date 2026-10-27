@@ -16,8 +16,9 @@ ref/
 # Rust
 target/
 
-# EEPROM sauvegardée par le port jouable
+# EEPROM et touches du port jouable (locales)
 nvram/
+touches.cfg
 
 # Ressources extraites des ROMs (outil extract)
 assets/
