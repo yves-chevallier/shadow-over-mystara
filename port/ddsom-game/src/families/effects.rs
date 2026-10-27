@@ -17,6 +17,9 @@ mod etat {
     pub const INIT: u8 = 0;
     pub const ACTIF: u8 = 2;
     pub const LIBERE: u8 = 4;
+    /// Posé par l'objet parent qui détruit ses effets (ou par l'effet lui-même, `accessoire_suit`) : libération,
+    /// sans le travail de l'état 4 (`jmp 0x2218`).
+    pub const DETRUIT: u8 = 6;
 }
 
 /// Champs partagés.
@@ -32,6 +35,19 @@ const JOUEURS: u32 = 0xff85de;
 const PAS_JOUEUR: u32 = 0x200;
 /// Jeu d'animations « interface » commun à de nombreux effets.
 const ANIMATIONS_INTERFACE: u32 = 0x1c03a6;
+
+/// Valeur d'état ou de variante hors de la table de sauts de l'original, qui sauterait dans des données ou au milieu
+/// du code : jamais produite (docs/code-mort.md, lot B).
+pub(crate) fn hors_table(cible: u32) -> ! {
+    unreachable!("indice hors de la table de sauts : l'original sauterait en {cible:#x}")
+}
+
+/// Pool plein là où l'original saute en `adresse` : `tst.w (1,A5)`, lecture d'un mot à une adresse impaire. Le 68000
+/// lève une erreur d'adresse et le jeu s'arrête sur son écran d'exception ; le moteur s'arrête aussi
+/// (docs/code-mort.md, lot B).
+pub(crate) fn erreur_d_adresse(adresse: u32) -> ! {
+    panic!("pool plein : l'original lit un mot à une adresse impaire en {adresse:#x} (erreur d'adresse, écran d'exception)")
+}
 
 fn lit_ram16(ctx: &mut Ctx, decalage: i32) -> u16 {
     ctx.ram16(decalage)
@@ -66,7 +82,8 @@ fn trois_etats(
         etat::INIT => init(ctx, o),
         etat::ACTIF => actif(ctx, o),
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -185,7 +202,8 @@ fn bandeau(ctx: &mut Ctx) {
         etat::INIT => bandeau_init(ctx, o),
         etat::ACTIF => bandeau_actif(ctx, o),
         etat::LIBERE => bandeau_fin(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -397,7 +415,6 @@ mod eclat {
     pub const ANIMATIONS: u32 = 0x193ffe;
     pub const DECALAGE: u32 = 0x5c;
     pub const CREER_TIR_A: u32 = 0xeab50;
-    pub const CREER_TIR_B: u32 = 0xa8ae8;
 }
 
 fn eclat_init(ctx: &mut Ctx, o: Obj) {
@@ -442,8 +459,7 @@ fn eclat_atterrit(ctx: &mut Ctx, o: Obj) {
             tir.set_u8(ctx.b, Obj::ACTIVE, 1);
             tir.set_u8(ctx.b, Obj::KIND, 0x17);
             tir.set_u8(ctx.b, champ::MODE, 0);
-            ctx.c.d[0] = 3;
-            ctx.jsr(eclat::CREER_TIR_B);
+            super::effects_creators::set_list(ctx.b, 3);
             let tir = ctx.alloc(&pools::ESHL);
             if tir.is_none() {
                 return;
@@ -474,7 +490,8 @@ fn eclat(ctx: &mut Ctx) {
         etat::INIT => eclat_init(ctx, o),
         etat::ACTIF => eclat_actif(ctx, o),
         etat::LIBERE => eclat_atterrit(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -691,7 +708,7 @@ fn interface_0(ctx: &mut Ctx, o: Obj) {
             }
         }
         etat::ACTIF => {}
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -749,7 +766,8 @@ fn interface_1(ctx: &mut Ctx, o: Obj) {
             ctx.reinsert();
         }
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -862,7 +880,8 @@ fn interface_2(ctx: &mut Ctx, o: Obj) {
             ctx.reinsert();
         }
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -895,7 +914,7 @@ fn interface_3(ctx: &mut Ctx, o: Obj) {
             }
             interface_3_animation(ctx, o);
         }
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -931,7 +950,8 @@ fn interface_4(ctx: &mut Ctx, o: Obj) {
             }
             ctx.reinsert();
         }
-        _ => ctx.deleguer(cible),
+        etat::LIBERE | etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -945,7 +965,7 @@ fn interface_gestionnaire(ctx: &mut Ctx) {
         2 => interface_2(ctx, o),
         3 => interface_3(ctx, o),
         4 => interface_4(ctx, o),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1087,7 +1107,7 @@ fn impact_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => impact_init(ctx, o),
         etat::ACTIF => impact_actif(ctx, o),
         etat::LIBERE | 6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1231,7 +1251,7 @@ fn debris_gestionnaire(ctx: &mut Ctx) {
         etat::ACTIF => debris_actif(ctx, o),
         etat::LIBERE => debris_fin(ctx, o),
         6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1293,7 +1313,8 @@ fn eclat_unique_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => eclat_unique_init(ctx, o),
         etat::ACTIF => eclat_unique_actif(ctx, o),
         etat::LIBERE => eclat_unique_clignote(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1432,7 +1453,7 @@ fn etincelle_gestionnaire(ctx: &mut Ctx) {
         etat::ACTIF => etincelle_actif(ctx, o),
         etat::LIBERE => ajoute_u8(ctx, o, Obj::STATE, 2),
         6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1483,7 +1504,8 @@ fn marque_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => marque_init(ctx, o),
         etat::ACTIF => marque_actif(ctx, o),
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1568,7 +1590,8 @@ fn gerbe_gestionnaire(ctx: &mut Ctx) {
             gerbe_explose(ctx, o);
         }
         etat::LIBERE => gerbe_explose(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1635,7 +1658,8 @@ fn eclats_debris_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => eclats_debris_init(ctx, o),
         etat::ACTIF => eclats_debris_actif(ctx, o),
         etat::LIBERE => eclats_debris_fin(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1697,7 +1721,7 @@ fn projectile_actif(ctx: &mut Ctx, o: Obj) {
             ctx.anim_step();
         }
         2 => {}
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1714,7 +1738,7 @@ fn projectile_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => projectile_init(ctx, o),
         etat::ACTIF => projectile_actif(ctx, o),
         etat::LIBERE | 6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -1886,7 +1910,8 @@ fn accessoire_gestionnaire(ctx: &mut Ctx) {
             ctx.reinsert();
         }
         etat::LIBERE => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -1958,7 +1983,8 @@ fn declencheur_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => declencheur_init(ctx, o),
         etat::ACTIF => declencheur_actif(ctx, o),
         etat::LIBERE => declencheur_effet(ctx, o),
-        _ => ctx.deleguer(cible),
+        etat::DETRUIT => ctx.free(&pools::EFFCT),
+        _ => hors_table(cible),
     }
 }
 
@@ -2183,7 +2209,7 @@ fn bulle_0(ctx: &mut Ctx, o: Obj) {
             }
             bulle_affiche(ctx, o, 0x10);
         }
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -2196,7 +2222,8 @@ fn bulle_selon_action(ctx: &mut Ctx, o: Obj, offset_pointeur: u32, doubler: bool
     let indice = if doubler { action * 2 } else { action };
     let cible = ctx.saut_table(table, indice);
     if indice >= nombre || (!doubler && indice & 1 != 0) {
-        return ctx.deleguer(cible);
+        // une action hors de la table mènerait l'original dans le code qui la suit
+        hors_table(cible);
     }
     let code = match (table, indice / if doubler { 2 } else { 1 }) {
         (bulle::ACTIONS_1, _) => 0x10,
@@ -2258,7 +2285,7 @@ fn bulle_init(ctx: &mut Ctx, o: Obj) {
         5 => bulle_selon_action(ctx, o, bulle::PORTE, true, bulle::ACTIONS_5, 6),
         6 => bulle_selon_action(ctx, o, bulle::PORTE, true, bulle::ACTIONS_6, 6),
         7 => bulle_affiche(ctx, o, 4),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 
@@ -2320,7 +2347,7 @@ fn bulle_gestionnaire(ctx: &mut Ctx) {
         etat::ACTIF => bulle_actif(ctx, o),
         etat::LIBERE => bulle_fin(ctx, o),
         6 => ctx.free(&pools::EFFCT),
-        _ => ctx.deleguer(cible),
+        _ => hors_table(cible),
     }
 }
 

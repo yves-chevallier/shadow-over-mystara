@@ -44,6 +44,7 @@ use crate::objects::Courant;
     use crate::families::cx::{handlers, Cx};
     use crate::mem::A5;
     use crate::objects::{pools, Obj};
+    use crate::families::effects_creators;
 
     /// Sous-états `+5` de l'état actif.
     mod sous {
@@ -138,10 +139,6 @@ use crate::objects::Courant;
         pub const PRISES: u32 = 0xda398;
         // sous-routines non réécrites, ou natives
         pub const TERRAIN: u32 = 0x24a8;
-        pub const COLLISION_DECOR: u32 = 0x33fe4;
-        pub const EFFET_INITIAL: u32 = 0xb6596;
-        pub const EFFET_OUVERTURE: u32 = 0xb1352;
-        pub const ECLATS: u32 = 0xab7d8;
         pub const SON_COUP: u32 = 0xeb59e;
         pub const SON_CASSE: u32 = 0xeb610;
         pub const SON_ATTERRIT: u32 = 0xeb52c;
@@ -165,7 +162,7 @@ use crate::objects::Courant;
             0 => init(x),
             2 => actif(x),
             4 | 6 => x.free(&pools::BOX),
-            _ => x.call(cible),
+            _ => crate::families::effects::hors_table(cible),
         }
     }
 
@@ -224,7 +221,7 @@ use crate::objects::Courant;
         x.set16(f::SELF, x.o.0 as u16);
         charge_fiche(x);
         if x.u8(f::SPECIAL) != 0 {
-            x.call(rom::EFFET_INITIAL);
+            effects_creators::shimmer(x.b, x.o);
         }
         let sorte = x.u8(f::SORTE) as u32;
         x.anim(rom::ANIMATIONS, sorte);
@@ -242,7 +239,7 @@ use crate::objects::Courant;
                     0 => ouverture(x),
                     2 => ouverte_attente(x),
                     4 => clignote(x),
-                    _ => x.call(cible),
+                    _ => crate::families::effects::hors_table(cible),
                 }
             }
             sous::PORTEE => {
@@ -262,7 +259,7 @@ use crate::objects::Courant;
                     2 => lachee_chute(x),
                     4 => lachee_casse(x),
                     6 => clignote(x),
-                    _ => x.call(cible),
+                    _ => crate::families::effects::hors_table(cible),
                 }
             }
             sous::TOUCHEE => {
@@ -272,10 +269,10 @@ use crate::objects::Courant;
                     0 => casse(x),
                     2 => clignote(x),
                     4 => tremble(x),
-                    _ => x.call(cible),
+                    _ => crate::families::effects::hors_table(cible),
                 }
             }
-            _ => return x.call(cible),
+            _ => crate::families::effects::hors_table(cible),
         }
         x.reinsert();
     }
@@ -441,8 +438,8 @@ use crate::objects::Courant;
             if cles == 0 {
                 x.set32(f::ETAT, 0x0200_0000);
                 x.set8(f::ACTIVE, 1);
-                x.c.d[0] = 6;
-                return x.call(rom::EFFET_OUVERTURE);
+                etincelle_posee(x, 6);
+                return;
             }
             crate::mem::wr8(x.b, CLES, cles - 1);
             x.set8(f::VERROU, 0);
@@ -451,8 +448,7 @@ use crate::objects::Courant;
         x.c.d[0] = special as u32;
         if special != 0 {
             if x.u8(f::EFFET_CREE) == 0 {
-                x.call(rom::EFFET_OUVERTURE);
-                if !x.c.cond(5) {
+                if etincelle_posee(x, special).is_some() {
                     x.set8(f::EFFET_CREE, 1);
                 }
             }
@@ -511,9 +507,12 @@ use crate::objects::Courant;
 
     /// `moveq #2,D0 ; moveq #0,D1 ; jsr 0xab7d8` : gerbe d'éclats de la caisse.
     fn eclats(x: &mut Cx) {
-        x.c.d[0] = 2;
-        x.c.d[1] = 0;
-        x.call(rom::ECLATS);
+        effects_creators::debris(x.b, x.o, 2);
+    }
+
+    /// `0xb1352` : étincelle posée sur la caisse ; `None` si le pool est plein.
+    fn etincelle_posee(x: &mut Cx, variante: u8) -> Option<Obj> {
+        effects_creators::posed_spark(x.b, x.o, variante)
     }
 
     /// `0xd9cea` : la caisse portée suit les mains du joueur (décalage par classe et par pose, retourné
@@ -558,9 +557,9 @@ use crate::objects::Courant;
             2 => lancee_vol(x),
             4 => lancee_retombe(x),
             6 => clignote(x),
-            _ => x.call(cible),
+            _ => crate::families::effects::hors_table(cible),
         }
-        x.call(rom::COLLISION_DECOR);
+        crate::terrain::push_68k(x.c, x.b, x.o);
     }
 
     /// Lancée, 0 : tant que le joueur la tient, elle suit ses mains ; lâchée, elle part en arc devant
@@ -761,7 +760,7 @@ fn box_2(ctx: &mut Ctx) {
         }
         etat::ACTIF => ctx.reinsert(),
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::BOX),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -785,20 +784,13 @@ mod barriere {
     pub const POSITIONS: u32 = 0xda72c;
     pub const EFFET_INITIAL: u32 = 0xa5f38;
     pub const SON: u32 = 0xeae86;
-    pub const CREER_SET: u32 = 0xc8312;
     pub const FRAPPEUR: u32 = 0x6c;
     pub const SET_CREE: u32 = 0x7c;
 }
 
 /// `0xda6f4` : crée l'objet SET de la barrière et le rattache.
 fn barriere_cree_set(ctx: &mut Ctx, o: Obj) {
-    ctx.c.d[0] = ctx.c.d[0] & 0xffff_ff00 | 0x8b;
-    ctx.jsr(barriere::CREER_SET);
-    let echec = ctx.c.cond(5);
-    if echec {
-        return;
-    }
-    let nouveau = Obj(ctx.c.a[1]);
+    let Some(nouveau) = super::creators::scene_set(ctx.b, 0x8b) else { return };
     let frappeur = pointeur(ctx, o, barriere::FRAPPEUR);
     let mode = (o.u8(ctx.b, champ::MODE) as u32) << 3;
     let classe = ((frappeur.u8(ctx.b, 3) & 0xf) >> 1) as u32;
@@ -825,7 +817,7 @@ fn barriere_init(ctx: &mut Ctx, o: Obj) {
             ctx.jsr(barriere::EFFET_INITIAL);
             ctx.anim_start(barriere::ANIMATIONS_1, 4);
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -851,7 +843,7 @@ fn barriere_actif_0(ctx: &mut Ctx, o: Obj) {
                 o.set_u8(ctx.b, champ::COUP_B, 0);
             }
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
     let (cam_x, _) = ctx.camera();
     let ecart = cam_x.wrapping_sub(o.u16(ctx.b, Obj::X));
@@ -888,7 +880,7 @@ fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
             o.set_u8(ctx.b, champ::COUP_B, 0);
             ctx.jsr(barriere::SON);
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -908,11 +900,11 @@ fn barriere_gestionnaire(ctx: &mut Ctx) {
             match variante {
                 0 => barriere_actif_0(ctx, o),
                 1 => barriere_actif_1(ctx, o),
-                _ => ctx.deleguer(cible),
+                _ => crate::families::effects::hors_table(cible),
             }
         }
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::BOX),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -935,8 +927,7 @@ use crate::objects::Courant;
     const INITS: u32 = 0xda826;
     const ACTIFS: u32 = 0xda8d0;
     const ANIMATIONS: u32 = 0x1bebc2;
-    /// Collision avec le décor (0x33fe4) puis recalage de l'objet (0x35c0).
-    const TERRAIN: u32 = 0x33fe4;
+    /// Recalage de l'objet après la collision avec le décor (`terrain::push_68k`).
     const RECALE: u32 = 0x35c0;
     /// Décalage du joueur contre le bloc, par personnage (mots, en clair) : selon la direction de poussée.
     const CONTRE_HAUT: u32 = 0xdab52;
@@ -1108,7 +1099,7 @@ use crate::objects::Courant;
     }
 
     fn recale_decor(x: &mut Cx) {
-        x.call(TERRAIN);
+        crate::terrain::push_68k(x.c, x.b, x.o);
         x.call(RECALE);
     }
 

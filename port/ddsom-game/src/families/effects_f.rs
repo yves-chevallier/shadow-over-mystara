@@ -30,14 +30,6 @@ mod f {
 
 /// Routines d'origine.
 mod rom {
-    /// Crée le décor de scène D0 (A1, retenue = échec).
-    pub const SCENE_SET: u32 = 0xc8312;
-    /// Ombre au sol de l'objet.
-    pub const SHADOW: u32 = 0x33fe4;
-    /// Secousse de la caméra (D0 = durée).
-    pub const SHAKE: u32 = 0x289c;
-    /// Crée une tâche (A0 = programme, D0 = paramètre).
-    pub const NEW_TASK: u32 = 0x9b6;
 }
 
 /// Caméra (x, profondeur) et caméra secondaire.
@@ -80,11 +72,7 @@ fn load_palette(x: &mut Cx, from: u32, to: u32) {
 
 /// Lance la tâche `program` (0x9b6) avec le paramètre D0.w = `param`.
 fn new_task(x: &mut Cx, program: u32, param: u16) {
-    let a0 = x.c.a[0];
-    x.c.a[0] = program;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | param as u32;
-    crate::call(x.c, x.b, rom::NEW_TASK);
-    x.c.a[0] = a0;
+    crate::kernel::creer_tache(x.b, param as u32, program);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -191,8 +179,7 @@ fn opening_slide(x: &mut Cx) {
     x.add8(f::STATE, 2);
     clear_scene(x);
     x.call(opening::SOUND_ARRIVAL);
-    x.c.d[0] = 0x20;
-    x.call(rom::SHAKE);
+    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x20);
 }
 
 /// Met fin (état 6) aux objets des deux pools. Comme l'original, un objet du premier pool marqué
@@ -395,12 +382,8 @@ fn crossing_steps(x: &mut Cx) {
                 if !timer_out(x) {
                     return;
                 }
-                x.c.d[0] = x.c.d[0] & 0xffff_0000 | crossing::SCENERY_KIND;
-                x.call(rom::SCENE_SET);
-                if x.c.sr & m68k::SR_C != 0 {
-                    return;
-                }
-                x.set16(crossing::SCENERY, x.c.a[1] as u16);
+                let Some(decor) = super::creators::scene_set(x.b, crossing::SCENERY_KIND as u8) else { return };
+                x.set16(crossing::SCENERY, decor.0 as u16);
                 x.add8(f::SUB_STATE, 4);
                 x.set16(crossing::TIMER, 0);
                 x.anim_start(crossing::ANIM_SET, 5);
@@ -424,8 +407,9 @@ fn crossing_steps(x: &mut Cx) {
                     return;
                 }
                 x.call(crossing::SOUND_DONE);
-                x.call(0xb6a5c);
-                if x.c.sr & m68k::SR_C != 0 {
+                let o = x.o;
+                let lanceur = super::effects_creators::launcher(x.b, o);
+                if lanceur.is_none() {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
@@ -620,15 +604,15 @@ fn launch(x: &mut Cx) {
     x.set_a5_u16(CAMERA_X, 0xc78);
     // éclats (type 56) : dix-sept en principe (`dbf D6`), mais l'allocation se sert de D6 pour
     // parcourir le pool, si bien qu'en pratique la boucle remplit le pool
+    // Glitch d'origine : la boucle compte dans D6 (`dbf`), que l'allocation réécrit (rang de l'emplacement trouvé
+    // depuis la fin du pool) : elle s'arrête au pool plein, ou quand le dernier emplacement vient d'être pris.
     x.c.d[6] = 0x10;
-    loop {
-        x.call(0xb6c42);
-        if x.c.sr & m68k::SR_C != 0 {
-            break;
-        }
+    let o = x.o;
+    let dernier = pools::EFFCT.slot(pools::EFFCT.slots - 1);
+    while let Some(eclat) = super::effects_creators::regs_68k(x.c, x.b, o, super::effects_creators::CREATED, |c, b| super::effects_creators::camera_shard_par(c, b)) {
         let n = (x.c.d[6] as u16).wrapping_sub(1);
         x.c.d[6] = x.c.d[6] & 0xffff_0000 | n as u32;
-        if n == 0xffff {
+        if eclat == dernier {
             break;
         }
     }
@@ -775,7 +759,7 @@ fn walker(x: &mut Cx) {
             x.set8(f::FACING, 0x20);
             x.set8(walker::DELAY, 0x38);
             at_camera(x, 0xffd0, 0x60);
-            x.call(rom::SHADOW);
+            crate::terrain::push_68k(x.c, x.b, x.o);
             x.anim_start(walker::ANIM_SET, 0);
             x.reinsert();
         }
@@ -809,7 +793,7 @@ fn walker(x: &mut Cx) {
                     x.anim_step();
                 }
             }
-            x.call(rom::SHADOW);
+            crate::terrain::push_68k(x.c, x.b, x.o);
             x.reinsert();
         }
         _ => free(x),

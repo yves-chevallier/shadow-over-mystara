@@ -226,10 +226,8 @@ fn trophy_active(x: &mut Cx) {
             if pending != 5 {
                 return x.add8(f::SUB_STATE, 2);
             }
-            x.c.d[0] = trophy::SCENERY_KIND;
-            x.call(0xc8312);
-            if x.c.sr & m68k::SR_C == 0 {
-                x.set16(trophy::SCENERY, x.c.a[1] as u16);
+            if let Some(decor) = super::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
+                x.set16(trophy::SCENERY, decor.0 as u16);
             }
         }
         6 => {

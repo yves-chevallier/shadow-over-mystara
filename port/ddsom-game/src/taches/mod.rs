@@ -167,6 +167,8 @@ etapes_des_taches! {
     Shop(crate::scene::shop::Etape),
     Characters(crate::scene::characters::Etape),
     Tally(crate::scene::tally::Etape),
+    // gestionnaires d'objets qui font attendre la tâche de partie
+    FeuArtifice(crate::families::effects_g::Etape),
 }
 
 /// Exécute l'étape `etape` de la tâche courante ; si elle finit (`Flow::Done`, retour de sous-programme), la suite de

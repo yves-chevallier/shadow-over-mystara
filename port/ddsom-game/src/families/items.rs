@@ -14,7 +14,7 @@ use crate::objects::pools;
 use crate::objects::Obj;
 use crate::{regs, Native};
 
-use super::{ajoute_u8, gestionnaire, pointeur, rom, Ctx};
+use super::{ajoute_u8, effects_creators, gestionnaire, pointeur, rom, Ctx};
 use crate::objects::Courant;
 use crate::machine::Machine;
 
@@ -55,18 +55,32 @@ const RAMASSES: i32 = -0x5b88;
 
 /// Sous-routines non réécrites.
 mod appel {
-    /// Crée le scintillement (EFFCT 15) au-dessus de l'objet, d'après `SCINTILLEMENT`.
-    pub const SCINTILLEMENT: u32 = 0xae3ec;
     /// Ramène l'objet dans la zone de jeu visible.
     pub const DANS_LA_ZONE: u32 = 0xfbae;
-    /// Ombre et marque au sol.
-    pub const OMBRE: u32 = 0x33fe4;
     /// Événement de score `(joueur << 8) | type`.
     pub const EVENEMENT: u32 = 0x19ae6;
-    /// Son associé à un ramassage (numéro dans D0).
-    pub const SON_RAMASSAGE: u32 = 0xb12c0;
     /// Fin commune des effets de potion.
     pub const FIN_EFFET: u32 = 0xebaf6;
+}
+
+/// `0xae3ec` : scintillement (EFFCT 15) au-dessus de l'objet, d'après `SCINTILLEMENT`.
+fn scintille(ctx: &mut Ctx, o: Obj) {
+    effects_creators::twinkle(ctx.b, o);
+}
+
+/// `0xb12c0` (D0 = `variante`) : effet de ramassage (EFFCT 27) attaché au joueur propriétaire de l'objet.
+fn effet_ramassage(ctx: &mut Ctx, o: Obj, variante: u8) {
+    effects_creators::pickup(ctx.b, o, variante);
+}
+
+/// `0xc8312` : objet SET de la scène ; `None` si le pool est plein.
+fn set_de_scene(ctx: &mut Ctx, variante: u8) -> Option<Obj> {
+    super::creators::scene_set(ctx.b, variante)
+}
+
+/// `0xaba16` : éclat à animation unique (EFFCT 7) sur l'objet.
+fn eclat(ctx: &mut Ctx, o: Obj) {
+    effects_creators::flash(ctx.b, o);
 }
 
 /// Passe à l'état suivant avec un sous-état donné (`addq.b #2,(4,A0)`, sous-sous-état à zéro).
@@ -133,7 +147,7 @@ fn expire_et_clignote(ctx: &mut Ctx, o: Obj) {
 /// Fin commune de l'état de chute : ramener dans la zone, ombre, tri par profondeur.
 fn fin_de_chute(ctx: &mut Ctx) {
     ctx.jsr(appel::DANS_LA_ZONE);
-    ctx.jsr(appel::OMBRE);
+    crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
     ctx.reinsert();
 }
 
@@ -196,7 +210,7 @@ fn tresor_init(ctx: &mut Ctx, o: Obj) {
         o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
         o.set_u16(ctx.b, champ::DUREE, tresor::DUREE_AU_SOL);
         tresor_parametres(ctx, o);
-        ctx.jsr(appel::SCINTILLEMENT);
+        scintille(ctx, o);
     }
     anime_et_trie(ctx, tresor::ANIMATIONS, variante);
 }
@@ -213,7 +227,7 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
                 o.set_u16(ctx.b, champ::DUREE, tresor::DUREE_AU_SOL);
                 o.set_u32(ctx.b, Obj::Z, 0);
                 dans_la_vue(ctx, o);
-                ctx.jsr(appel::SCINTILLEMENT);
+                scintille(ctx, o);
             }
             fin_de_chute(ctx);
         }
@@ -239,15 +253,15 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
                 return;
             }
             ajoute_u8(ctx, o, Obj::STATE, 2);
-            ctx.c.d[0] = o.u8(ctx.b, tresor::SON) as u32;
-            ctx.jsr(appel::SON_RAMASSAGE);
+            let son = o.u8(ctx.b, tresor::SON);
+            effet_ramassage(ctx, o, son);
             let joueur_bits = o.u16(ctx.b, 0x48) & 0x300;
             ctx.c.d[1] = joueur_bits as u32;
             ctx.c.d[0] = o.u8(ctx.b, tresor::SCORE) as u32 + joueur_bits as u32;
             ctx.jsr(appel::EVENEMENT);
             marque_ramasse(ctx, o);
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -263,7 +277,7 @@ fn tresor(ctx: &mut Ctx) {
         etat::INIT => tresor_init(ctx, o),
         etat::ACTIF => tresor_actif(ctx, o),
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -312,7 +326,7 @@ fn conso_init(ctx: &mut Ctx, o: Obj) {
         o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
         o.set_u16(ctx.b, champ::DUREE, conso::DUREE_INITIALE);
         conso_parametres(ctx, o);
-        ctx.jsr(appel::SCINTILLEMENT);
+        scintille(ctx, o);
     }
     anime_et_trie(ctx, conso::ANIMATIONS, variante);
 }
@@ -325,8 +339,7 @@ fn effet_nourriture(ctx: &mut Ctx, o: Obj) {
         ctx.c.d[1] = (joueur.u8(ctx.b, 2) as u32) << 8;
         ctx.c.d[0] = 0x11 + ctx.c.d[1];
         ctx.jsr(appel::EVENEMENT);
-        ctx.c.d[0] = 5;
-        ctx.jsr(appel::SON_RAMASSAGE);
+        effet_ramassage(ctx, o, 5);
         return;
     }
     let variante = o.u8(ctx.b, Obj::VARIANT);
@@ -367,7 +380,7 @@ fn conso_effet(ctx: &mut Ctx, o: Obj) {
                 ctx.set_ram8(0x45, 9);
             }
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
     marque_ramasse(ctx, o);
 }
@@ -383,7 +396,7 @@ fn conso_actif(ctx: &mut Ctx, o: Obj) {
                 o.set_u16(ctx.b, champ::DUREE, conso::DUREE_APRES_CHUTE);
                 o.set_u32(ctx.b, Obj::Z, 0);
                 dans_la_vue(ctx, o);
-                ctx.jsr(appel::SCINTILLEMENT);
+                scintille(ctx, o);
             }
             fin_de_chute(ctx);
         }
@@ -406,7 +419,7 @@ fn conso_actif(ctx: &mut Ctx, o: Obj) {
             ajoute_u8(ctx, o, Obj::STATE, 2);
             conso_effet(ctx, o);
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -422,7 +435,7 @@ fn conso_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => conso_init(ctx, o),
         etat::ACTIF => conso_actif(ctx, o),
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -497,8 +510,7 @@ fn evenement_inventaire(ctx: &mut Ctx, joueur: Obj) {
     ctx.c.d[1] = 0x11;
     ctx.c.d[0] = (personnage << 8) + 0x11;
     ctx.jsr(appel::EVENEMENT);
-    ctx.c.d[0] = 5;
-    ctx.jsr(appel::SON_RAMASSAGE);
+    effet_ramassage(ctx, ctx.obj(), 5);
 }
 
 /// `0xdc0aa` : range l'objet dans l'inventaire du propriétaire. Renvoie vrai si le ramassage est refusé.
@@ -596,7 +608,7 @@ fn inventaire_init(ctx: &mut Ctx, o: Obj) {
         o.set_u8(ctx.b, champ::SCINTILLEMENT, scintillement);
         let indice = ctx.rom8(inventaire::INDICES + variante as u32);
         o.set_u8(ctx.b, champ::INDICE, indice);
-        ctx.jsr(appel::SCINTILLEMENT);
+        scintille(ctx, o);
     }
     anime_et_trie(ctx, inventaire::ANIMATIONS, variante);
 }
@@ -653,7 +665,7 @@ fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
                 let mode = o.u8(ctx.b, champ::MODE);
                 if !(mode != 0) {
                     dans_la_vue(ctx, o);
-                    ctx.jsr(appel::SCINTILLEMENT);
+                    scintille(ctx, o);
                 }
             }
             ctx.anim_step();
@@ -680,7 +692,7 @@ fn inventaire_actif(ctx: &mut Ctx, o: Obj) {
             marque_ramasse(ctx, o);
         }
         6 => inventaire_rejet(ctx, o),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -696,7 +708,7 @@ fn inventaire_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => inventaire_init(ctx, o),
         etat::ACTIF => inventaire_actif(ctx, o),
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -778,7 +790,7 @@ fn bonus_actif(ctx: &mut Ctx, o: Obj) {
             ctx.c.d[0] = o.u8(ctx.b, Obj::VARIANT) as u32 + joueur_bits as u32;
             ctx.jsr(bonus::EVENEMENT);
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -794,7 +806,7 @@ fn bonus_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => bonus_init(ctx, o),
         etat::ACTIF => bonus_actif(ctx, o),
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -848,7 +860,6 @@ mod scene {
     pub const PAS_JOUEUR: u32 = 0x200;
     // sous-routines non réécrites
     pub const ANGLE: u32 = 0x137e;
-    pub const CREER_SET: u32 = 0xc8312;
 }
 
 /// `0xdcdae` : se place à côté du propriétaire (un pixel devant, décalé selon l'orientation).
@@ -959,7 +970,7 @@ fn icone_envol(ctx: &mut Ctx, o: Obj) {
             }
             ctx.anim_step();
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1016,8 +1027,6 @@ mod depart {
     pub const ANIMATIONS: u32 = 0xdca60;
     pub const SONS_ARRET: u32 = 0xdcaa0;
     pub const ANIMATIONS_ARRET: u32 = 0xdca9c;
-    pub const ETINCELLE: u32 = 0xaba16;
-    pub const SON: u32 = 0xb12c0;
     pub const SON_ARRET: u32 = 0xe1d60;
     /// Compteur d'icônes de l'objet `+0x46`.
     pub const ICONES: u32 = 0x30;
@@ -1026,7 +1035,7 @@ mod depart {
 }
 
 fn depart_lance(ctx: &mut Ctx, o: Obj) {
-    ctx.jsr(depart::ETINCELLE);
+    eclat(ctx, o);
     ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
     let variante = o.u8(ctx.b, Obj::VARIANT);
     ctx.c.d[0] = ctx.c.d[0] & !0xff | variante as u32;
@@ -1040,8 +1049,7 @@ fn depart_lance(ctx: &mut Ctx, o: Obj) {
         if joueur.u16(ctx.b, Obj::Y) as i16 >= o.u16(ctx.b, Obj::Y) as i16 {
             o.set_u16(ctx.b, champ::PROPRIETAIRE, o.0 as u16);
         }
-        ctx.c.d[0] = 0xa;
-        ctx.jsr(depart::SON);
+        effet_ramassage(ctx, o, 0xa);
         o.set_u16(ctx.b, champ::PROPRIETAIRE, joueur.0 as u16);
         let mode = o.u8(ctx.b, champ::MODE) as u32;
         let routine = ctx.prog32(depart::ROUTINES + 4 * mode);
@@ -1135,7 +1143,7 @@ fn icone_depart(ctx: &mut Ctx, o: Obj) {
             let n = ctx.ram8(scene::COMPTEUR).wrapping_add(4);
             ctx.set_ram8(scene::COMPTEUR, n);
         }
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1151,12 +1159,12 @@ fn icone(ctx: &mut Ctx, o: Obj) {
                 sous::CHUTE => icone_suivi(ctx, o),
                 2 => icone_envol(ctx, o),
                 4 => icone_attente(ctx, o),
-                _ => ctx.deleguer(cible),
+                _ => crate::families::effects::hors_table(cible),
             }
         }
         4 => icone_depart(ctx, o),
         6 => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1229,10 +1237,7 @@ fn guide_animation(ctx: &mut Ctx, o: Obj) {
 
 /// Crée un objet SET de type `type_set` ; renvoie son adresse, ou `None` si le pool est plein.
 fn cree_set(ctx: &mut Ctx, type_set: u32) -> Option<Obj> {
-    ctx.c.d[0] = type_set;
-    ctx.jsr(scene::CREER_SET);
-    let echec = ctx.c.cond(5);
-    (!echec).then(|| Obj(ctx.c.a[1]))
+    set_de_scene(ctx, type_set as u8)
 }
 
 /// Sous-état 0 du guide : marche vers le point d'arrivée ; arrivé, change d'animation et crée un SET.
@@ -1327,7 +1332,7 @@ fn guide_actif(ctx: &mut Ctx, o: Obj) {
             2 => guide_attente(ctx, o),
             4 => guide_second_objet(ctx, o),
             6 => guide_fin(ctx, o),
-            _ => ctx.deleguer(cible),
+            _ => crate::families::effects::hors_table(cible),
         }
     }
     ctx.reinsert();
@@ -1344,7 +1349,7 @@ fn guide(ctx: &mut Ctx, o: Obj) {
             ctx.set_ram8(scene::COMPTEUR, n);
         }
         etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1421,12 +1426,12 @@ fn guide_3(ctx: &mut Ctx, o: Obj) {
                 0 => guide_marche(ctx, o),
                 2 => guide_3_attente(ctx, o),
                 4 => {}
-                _ => ctx.deleguer(cible),
+                _ => crate::families::effects::hors_table(cible),
             }
         }
         etat::LIBERE => {}
         etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1442,7 +1447,7 @@ fn scene_gestionnaire(ctx: &mut Ctx) {
         0 | 2 => icone(ctx, o),
         1 => guide(ctx, o),
         3 => guide_3(ctx, o),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1573,7 +1578,7 @@ fn reserve_actif(ctx: &mut Ctx, o: Obj) {
         sous::ATTENTE => reserve_attente(ctx, o),
         sous::RAMASSE => reserve_ramasse(ctx, o),
         6 => inventaire_rejet(ctx, o),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1589,7 +1594,7 @@ fn reserve_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => reserve_init(ctx, o),
         etat::ACTIF => reserve_actif(ctx, o),
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1668,8 +1673,6 @@ mod contact {
     pub const OCCUPE: i32 = -0x5ac4;
     pub const SET_CREE: u32 = 0x42;
     pub const DELAI: u32 = 0x4c;
-    pub const CREER_SET: u32 = 0xc8312;
-    pub const CREER_ETINCELLE: u32 = 0xaba16;
     /// Boîtes de contact : une par type (`+0x39`) pour l'objet, une par personnage et par `+0x38` pour le joueur.
     pub const BOITES_OBJET: u32 = 0xdd590;
     pub const BOITES_JOUEUR: u32 = 0xdd578;
@@ -1776,13 +1779,9 @@ fn contact_cree_set(ctx: &mut Ctx, o: Obj) -> bool {
     if mot as i16 <= -1 {
         return false;
     }
-    ctx.c.d[0] = mot as u32;
-    ctx.jsr(contact::CREER_SET);
-    let echec = ctx.c.cond(5);
-    if echec {
+    let Some(nouveau) = set_de_scene(ctx, mot as u8) else {
         return false;
-    }
-    let nouveau = Obj(ctx.c.a[1]);
+    };
     o.set_u16(ctx.b, contact::SET_CREE, nouveau.0 as u16);
     let proprietaire = pointeur(ctx, o, champ::PROPRIETAIRE);
     let personnage = proprietaire.u8(ctx.b, 2);
@@ -1845,7 +1844,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
                     }
                     ctx.set_ram8(contact::OCCUPE, 1);
                     ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
-                    ctx.jsr(contact::CREER_ETINCELLE);
+                    eclat(ctx, o);
                     contact_anime_mode(ctx, o, contact::V0_ANIMATIONS_TOUCHE);
                 }
                 2 => {
@@ -1873,11 +1872,11 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
                     ctx.anim_step();
                     ctx.cull_offscreen();
                 }
-                _ => ctx.deleguer(cible),
+                _ => crate::families::effects::hors_table(cible),
             }
         }
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -1885,7 +1884,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
 fn contact_1_anime(ctx: &mut Ctx) {
     contact_anime(ctx, 0x18);
     ctx.jsr(rom::DANS_LA_ZONE);
-    ctx.jsr(rom::OMBRE);
+    crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
 }
 
 /// Variante 1 : déplacement horizontal `X += VX << 8`.
@@ -1949,7 +1948,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                     ctx.anim_step();
                     ctx.reinsert();
                     ctx.jsr(rom::DANS_LA_ZONE);
-                    ctx.jsr(rom::OMBRE);
+                    crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
                 }
                 2 => {
                     ajoute_u8(ctx, o, champ::SOUS_ETAT, 2);
@@ -1971,11 +1970,11 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                     ctx.reinsert();
                     ctx.cull_offscreen();
                 }
-                _ => ctx.deleguer(cible),
+                _ => crate::families::effects::hors_table(cible),
             }
         }
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -2024,11 +2023,11 @@ fn contact_2(ctx: &mut Ctx, o: Obj) {
                 4 => {
                     ctx.anim_step();
                 }
-                _ => ctx.deleguer(cible),
+                _ => crate::families::effects::hors_table(cible),
             }
         }
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -2040,7 +2039,7 @@ fn contact_gestionnaire(ctx: &mut Ctx) {
         0 => contact_0(ctx, o),
         1 => contact_1(ctx, o),
         2 => contact_2(ctx, o),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -2093,8 +2092,7 @@ fn equipement_accepte(ctx: &mut Ctx, o: Obj, joueur: Obj) -> bool {
     ctx.c.d[1] = (joueur.u8(ctx.b, 2) as u32) << 8;
     ctx.c.d[0] = 0x11 + ctx.c.d[1];
     ctx.jsr(appel::EVENEMENT);
-    ctx.c.d[0] = 5;
-    ctx.jsr(appel::SON_RAMASSAGE);
+    effet_ramassage(ctx, ctx.obj(), 5);
     false
 }
 
@@ -2271,10 +2269,9 @@ fn equipement_rejet(ctx: &mut Ctx, o: Obj) {
     o.set_u8(ctx.b, Obj::FLAGS, 1);
     o.set_u8(ctx.b, Obj::VARIANT, 0xc);
     ctx.anim_start(equipement::ANIMATIONS, 0xc);
-    ctx.jsr(0xb97a2);
+    effects_creators::posed_flash(ctx.b, o);
     ctx.set_ram8(-0x5b83, 1);
-    ctx.c.d[0] = 0x29;
-    ctx.jsr(0xc8312);
+    set_de_scene(ctx, 0x29);
 }
 
 fn equipement_actif(ctx: &mut Ctx, o: Obj) {
@@ -2308,7 +2305,7 @@ fn equipement_actif(ctx: &mut Ctx, o: Obj) {
             marque_ramasse(ctx, o);
         }
         6 => equipement_rejet(ctx, o),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -2324,7 +2321,7 @@ fn equipement_gestionnaire(ctx: &mut Ctx) {
         etat::INIT => equipement_init(ctx, o),
         etat::ACTIF => equipement_actif(ctx, o),
         etat::LIBERE | etat::HORS_ECRAN => ctx.free(&pools::ITEM),
-        _ => ctx.deleguer(cible),
+        _ => crate::families::effects::hors_table(cible),
     }
 }
 
@@ -2373,13 +2370,12 @@ struct Porte {
 /// Le joueur touché perd au plus un objet par coup : bouclier (`+0x165`, 0 à 3), arme spéciale (`+0x163`)
 /// puis anneau (`+0x162`, sauf 1). Chaque coup décrémente un compteur ; tant qu'il reste positif, la chute
 /// dépend d'un tirage (bit `rng & 0xf` du mot de la table pour ce compteur, en clair) ; l'objet tombe par
-/// `0xcc352` (D0.b = son numéro d'objet).
+/// `0xcc352` (`creators::set_a`, D0.b = son numéro d'objet).
 const BOUCLIER: Porte = Porte { objet: 0x165, coups: 0x16d, chances: 0xdb7c4 };
 const ARME: Porte = Porte { objet: 0x163, coups: 0x16c, chances: 0xdb7b8 };
 const ANNEAU: Porte = Porte { objet: 0x162, coups: 0x16b, chances: 0xdb7d0 };
 /// Nombre d'objets lâchés à ce coup (mot).
 const LACHES: u32 = A5 - 0x5ac8;
-const LACHE_OBJET: u32 = 0xcc352;
 
 /// Le compteur de coups de `p` est épuisé, ou le tirage fait tomber l'objet.
 fn tombe(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte) -> bool {
@@ -2401,7 +2397,7 @@ fn tombe(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte) -> bool {
 
 fn lache(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte, numero: u8) {
     c.d[0] = c.d[0] & !0xff | numero as u32;
-    crate::call(c, b, LACHE_OBJET);
+    super::creators::set_a_par(c, b, numero, |b| o.u8(b, Obj::VARIANT));
     o.set_u8(b, p.objet, 0xff);
     o.set_u8(b, p.coups, 0);
 }
@@ -2428,7 +2424,7 @@ fn chute_equipement(c: &mut Cpu, b: &mut Cps2Bus) {
     let anneau = o.u8(b, ANNEAU.objet);
     if (anneau as i8) >= 0 && anneau != 1 && tombe(c, b, o, &ANNEAU) && rd16(b, LACHES) == 0 {
         c.d[0] = c.d[0] & !0xff | anneau as u32;
-        crate::call(c, b, LACHE_OBJET);
+        super::creators::set_a_par(c, b, anneau, |b| o.u8(b, Obj::VARIANT));
         o.set_u8(b, ANNEAU.objet, 0xff);
         // le personnage 5 garde son anneau d'origine (1)
         let personnage = o.u8(b, 0x3) >> 1;

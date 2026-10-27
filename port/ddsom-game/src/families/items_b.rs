@@ -65,12 +65,8 @@ mod rom {
     /// Par personnage : la pièce de l'emplacement 4 lui est interdite.
     pub const SLOT_4_FORBIDDEN: u32 = 0xdb482;
     pub const ANIMATIONS: u32 = 0x1bee82;
-    pub const SPARKLE: u32 = 0xae3ec;
     pub const PUSH_OUT: u32 = 0xfbae;
-    pub const TERRAIN: u32 = 0x33fe4;
     pub const SCORE_EVENT: u32 = 0x19ae6;
-    pub const PICKUP_SOUND: u32 = 0xb12c0;
-    pub const ANNOUNCE: u32 = 0xcc38e;
 }
 
 /// Tableau des objets de collection ramassés (octets).
@@ -93,7 +89,7 @@ fn run(x: &mut Cx) {
         0 => init(x),
         2 => active(x),
         4 | 6 => x.free(&pools::ITEM),
-        _ => x.call(target),
+        _ => crate::families::effects::hors_table(target),
     }
 }
 
@@ -145,7 +141,7 @@ fn init(x: &mut Cx) {
         x.set8(f::SHADOWS, SHADOW_SET);
         x.set16(f::LIFETIME, LIFETIME);
         load_sheet(x, true);
-        x.call(rom::SPARKLE);
+        super::effects_creators::twinkle(x.b, x.o);
     }
     start_animation(x);
 }
@@ -169,7 +165,7 @@ fn active(x: &mut Cx) {
             }
         }
         6 => thrown(x),
-        _ => x.call(target),
+        _ => crate::families::effects::hors_table(target),
     }
 }
 
@@ -181,11 +177,11 @@ fn fall(x: &mut Cx) {
         x.set32(f::Z, 0);
         if x.u8(f::THROWN) == 0 {
             into_view(x);
-            x.call(rom::SPARKLE);
+            super::effects_creators::twinkle(x.b, x.o);
         }
     }
     x.call(rom::PUSH_OUT);
-    x.call(rom::TERRAIN);
+    crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
 
@@ -290,7 +286,7 @@ fn equip(x: &mut Cx) {
         5 => replace(x, player, id, 0x165, Some(0x16d), 0x12),
         6 => replace(x, player, id, 0x166, None, 0x19),
         7 => replace(x, player, id, 0x167, None, 0x1f),
-        _ => x.call(handler),
+        _ => crate::families::effects::hors_table(handler),
     }
     x.c.a[1] = COLLECTED;
     let collection = x.u8(f::COLLECTION) as u32;
@@ -298,7 +294,8 @@ fn equip(x: &mut Cx) {
     let announce = x.u8(f::ANNOUNCE);
     x.c.d[0] = announce as u32;
     if announce != 0 {
-        x.call(rom::ANNOUNCE);
+        let o = x.o;
+        super::creators::set_a_joueur(x.b, o, announce);
     }
 }
 
@@ -369,8 +366,8 @@ fn already_worn(x: &mut Cx) {
     x.c.d[1] = number;
     x.c.d[0] = 0x11 + number;
     x.call(rom::SCORE_EVENT);
-    x.c.d[0] = 5;
-    x.call(rom::PICKUP_SOUND);
+    let o = x.o;
+    super::effects_creators::pickup(x.b, o, 5);
 }
 
 /// `0xdb672` : crée l'ITEM 2 de variante `variant` rejeté par le joueur (A2), avec le compteur de coups D2.

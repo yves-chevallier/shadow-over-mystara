@@ -36,8 +36,6 @@ mod f {
 mod rom {
     /// Retenue dans l'écran (marge 0x30).
     pub const IN_ZONE: u32 = 0xfbae;
-    /// Ombre au sol.
-    pub const SHADOW: u32 = 0x33fe4;
     /// Débris projetés (D5 = sorte).
     pub const DEBRIS: u32 = 0x1172e;
     /// Son d'impact au sol.
@@ -90,7 +88,7 @@ fn chunk(x: &mut Cx) {
     }
     if x.u8(Obj::ACTIVE) != 0 {
         x.call(rom::IN_ZONE);
-        x.call(rom::SHADOW);
+        crate::terrain::push_68k(x.c, x.b, x.o);
         x.reinsert();
     }
 }
@@ -253,8 +251,6 @@ mod rain {
     pub const SHARD_VX: u32 = 0xb4ea4;
     pub const SHARD_VZ: u32 = 0xb4ec4;
     pub const SHARD_ANIMS: u32 = 0xb4ee4;
-    /// Poussière (type 25) posée au départ de la pluie : `0xb10c8`, sorte 5.
-    pub const DUST: u32 = 0xb10c8;
 }
 
 fn rng(x: &mut Cx) -> u16 {
@@ -284,11 +280,8 @@ fn rain_init(x: &mut Cx) {
         let y = x.u16(Obj::Y);
         x.set16(rain::SAVED_Y, y);
         x.set16(Obj::AX, 0xffe8);
-        x.c.d[0] = 5;
-        for (r, v) in [(1, 0x201), (2, 0), (3, 0)] {
-            set_low_word(&mut x.c.d[r], v);
-        }
-        x.call(rain::DUST);
+        let o = x.o;
+        crate::effects_aids::shock(x.b, o, 5, 0x201, 0, 0);
         x.set16(rain::TIMER, 0x26);
         let variant = x.u8(f::VARIANT) as u32;
         let speed = x.rom8(rain::SPEED_BY_VARIANT + variant);
@@ -400,7 +393,7 @@ mod armour {
 /// Fin commune : retenue dans l'écran, ombre, remise en liste.
 fn on_screen(x: &mut Cx) {
     x.call(rom::IN_ZONE);
-    x.call(rom::SHADOW);
+    crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
 
@@ -825,14 +818,6 @@ mod fireworks {
     pub const ANIMS_HERO: u32 = 0x1836ec;
     pub const ANIMS_FIRE: u32 = 0x1824d4;
     pub const ANIMS_LAST: u32 = 0x18373a;
-    /// Adresse de retour du saut par la table des états (`jsr (table,PC)`), où l'objet est remis en liste.
-    pub const AFTER_STATE: u32 = 0xb8f04;
-    /// Reprise après l'attente de quatre images (`0xa40`) qui suit le dernier tir.
-    pub const AFTER_WAIT: u32 = 0xb91d0;
-    pub const WAIT: u32 = 0xa40;
-    pub const NEW_TASK: u32 = 0x9b6;
-    /// Décor de scène 0x55 (`0xc8312`).
-    pub const SCENE_SET: u32 = 0xc8312;
 }
 
 /// Sons de la scène.
@@ -983,10 +968,7 @@ fn copy_block(x: &mut Cx, from: u32, to: u32) {
 
 /// Lance la tâche de fondu `program` (`0x9b6`, D0.w = 0x10), A0 gardé.
 fn fade_task(x: &mut Cx, program: u32) {
-    x.c.a[0] = program;
-    set_low_word(&mut x.c.d[0], 0x10);
-    crate::call(x.c, x.b, fireworks::NEW_TASK);
-    x.c.a[0] = x.o.0;
+    crate::kernel::creer_tache(x.b, 0x10, program);
 }
 
 fn fireworks_active(x: &mut Cx) {
@@ -1158,14 +1140,13 @@ fn hero(x: &mut Cx, sub: u8) {
         8 => {
             if countdown(x, fireworks::DELAY) <= 0 {
                 // le décor 0x55, quitte à attendre une place
+                // Glitch d'origine : un pool SET plein fait recommencer sans fin (le jeu se fige).
                 let decor = loop {
-                    x.c.d[0] = 0x55;
-                    x.call(fireworks::SCENE_SET);
-                    if x.c.sr & m68k::SR_C == 0 {
-                        break x.c.a[1];
+                    if let Some(o) = super::creators::scene_set(x.b, 0x55) {
+                        break o;
                     }
                 };
-                x.set16(fireworks::DECOR, decor as u16);
+                x.set16(fireworks::DECOR, decor.0 as u16);
                 x.add8(f::SUB_STATE, 2);
             }
             x.anim_step();
@@ -1210,13 +1191,14 @@ fn hero_rockets(x: &mut Cx) {
         return rocket(x);
     }
     x.add8(f::SUB_STATE, 2);
-    // l'attente cède la main : la tâche reprendra à `AFTER_WAIT` (native `fireworks_after_wait`), puis
-    // à `AFTER_STATE`, comme l'original ; si elle revient sans céder, la suite est faite ici
-    crate::taches::table::appeler(x.c, x.b, fireworks::AFTER_STATE);
+    // la partie entière attend quatre images (`jsr 0xa40` au milieu de la boucle de dispatch) : la tâche reprendra
+    // à l'étape `ApresAttente`, puis, au retour, à `ApresEtat` (la fin du gestionnaire), comme l'original
+    crate::taches::table::appeler(x.c, x.b, Etape::ApresEtat);
     x.c.d[0] = 4;
-    x.call_at(fireworks::WAIT, fireworks::AFTER_WAIT);
-    fireworks_fade_back(x);
-    crate::taches::table::depiler_retour(x.c, x.b);
+    crate::kernel::attendre(x.c, x.b, Etape::ApresAttente);
+    // la boucle de dispatch et les appelants Rust en cours sont abandonnés : la tâche reprendra par les étapes,
+    // puis par l'adresse de retour du gestionnaire sur la pile 68000
+    std::panic::resume_unwind(Box::new(crate::Unwound));
 }
 
 /// Après l'attente : fondu de retour depuis les palettes sauvées.
@@ -1283,25 +1265,22 @@ fn hero_lift_off(x: &mut Cx) {
     }
 }
 
-/// Reprise en `0xb91d0` (après l'attente de quatre images) : fondu de retour, puis retour en `AFTER_STATE`.
-fn fireworks_after_wait(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    let mut x = Cx::new(c, b);
-    fireworks_fade_back(&mut x);
-    x.ret();
+crate::etapes! {
+    /// Reprises de la tâche de partie quand le feu d'artifice (type 80) l'a fait attendre (`hero_rockets`) ; le
+    /// contexte rendu par le noyau a l'objet dans A0.
+    pub enum Etape {
+        /// Après l'attente de quatre images : fondu de retour.
+        ApresAttente = 0xb91d0 => |x| {
+            fireworks_fade_back(&mut Cx::new(x.c, x.b));
+            crate::modes::Flow::Done
+        },
+        /// Retour du saut par la table des états (`jsr (table,PC)`) : fin du gestionnaire.
+        ApresEtat = 0xb8f04 => |x| {
+            fireworks_tail(&mut Cx::new(x.c, x.b));
+            crate::modes::Flow::Done
+        },
+    }
 }
-
-/// `0xb8f04` : fin du gestionnaire après la reprise.
-fn fireworks_after_state(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    let mut x = Cx::new(c, b);
-    fireworks_tail(&mut x);
-    x.ret();
-}
-
-/// Points de reprise du type 80 (la tâche y revient après avoir cédé la main dans `hero_rockets`).
-pub const RESUMES: &[crate::Native] = &[
-    super::cx::handler(fireworks::AFTER_WAIT, "effct_feu_artifice_reprise", fireworks_after_wait),
-    super::cx::handler(fireworks::AFTER_STATE, "effct_feu_artifice_fin", fireworks_after_state),
-];
 
 handlers! {
     0xb8ef6 "effct_feu_artifice" fireworks,

@@ -470,8 +470,7 @@ mod purse {
     pub const GAUGE_END: u32 = 0xaefee;
     pub const ANIM_SET: u32 = 0x1c40c6;
     pub const PALETTE_PAGE: u32 = 0x1a608;
-    /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)`, lecture d'un mot à une adresse
-    /// impaire (erreur d'adresse, le jeu s'arrête sur l'écran d'exception). Hors contrat, laissé à l'original.
+    /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)` (`effects::erreur_d_adresse`).
     pub const POOL_FULL: u32 = 0xaf2bc;
     /// Nombre de curseurs encore ouverts (`A5-0x5553`).
     pub const OPEN: u32 = 0xff2aad;
@@ -482,6 +481,17 @@ mod purse {
     pub const GIFT: u32 = 0x1a;
     pub const LINKED: u32 = 0x5c;
     pub const OPENED: u32 = 0x58;
+}
+
+/// `0xc8312` : objet SET de la scène ; `None` si le pool est plein.
+fn set_de_scene(x: &mut Cx, variante: u8) -> Option<Obj> {
+    super::creators::scene_set(x.b, variante)
+}
+
+/// L'A1 qu'une allocation ratée laisse (`Pool::alloc_or_leftover`) : premier emplacement si le compteur est nul, fin
+/// du pool sinon.
+fn leftover(x: &mut Cx, pool: &pools::Pool) -> Obj {
+    if pool.free_count(x.b) == 0 { pool.slot(0) } else { Obj(pool.end()) }
 }
 
 /// Or du joueur (`+0x114`, BCD sur quatre octets).
@@ -524,7 +534,7 @@ fn purse_init(x: &mut Cx) {
     crate::mem::wr32(x.b, 0x91c552, 0xf800_ff33);
     // l'original garde D0 (la palette) à travers l'allocation
     x.c.d[0] = palette as u32;
-    let Some(item) = x.alloc(&pools::ITEM) else { return x.call(purse::POOL_FULL) };
+    let Some(item) = x.alloc(&pools::ITEM) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
     wr8(x.b, item.0, 1);
     wr8(x.b, item.0 + 2, 9);
     wr8(x.b, item.0 + 3, player);
@@ -545,7 +555,7 @@ fn purse_init(x: &mut Cx) {
     let gauge = if two_players(x) { purse::GAUGE_2P } else { purse::GAUGE };
     let v = x.data32(gauge + p4);
     x.set32(purse::GAUGE_AT, v);
-    let Some(peff) = x.alloc(&pools::PEFF) else { return x.call(purse::POOL_FULL) };
+    let Some(peff) = x.alloc(&pools::PEFF) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
     wr8(x.b, peff.0, 1);
     wr8(x.b, peff.0 + 2, 0x18);
     wr16(x.b, peff.0 + 0x5c, x.o.0 as u16);
@@ -557,7 +567,7 @@ fn purse_init(x: &mut Cx) {
         (purse::ICON_POS, purse::ICON_VARIANT)
     };
     let (pos, var) = (pos + p4, var + player as u32);
-    let Some(icon) = x.alloc(&pools::SOBJ) else { return x.call(purse::POOL_FULL) };
+    let Some(icon) = x.alloc(&pools::SOBJ) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
     wr8(x.b, icon.0, 1);
     wr8(x.b, icon.0 + 2, 0);
     let v = x.data8(var);
@@ -569,7 +579,7 @@ fn purse_init(x: &mut Cx) {
     // six PEFF 0x11 (D5 : compteur de l'original, conservé par l'allocation)
     x.c.d[5] = 5;
     loop {
-        let Some(o) = x.alloc(&pools::PEFF) else { return x.call(purse::POOL_FULL) };
+        let Some(o) = x.alloc(&pools::PEFF) else { super::effects::erreur_d_adresse(purse::POOL_FULL) };
         wr8(x.b, o.0, 1);
         wr8(x.b, o.0 + 2, 0x11);
         wr8(x.b, o.0 + 3, x.c.d[5] as u8);
@@ -955,8 +965,7 @@ fn attached_active(x: &mut Cx) {
             }
             x.add8(f::SUB_STATE, 2);
             set_hidden(x, false);
-            x.c.d[0] = 0xc;
-            x.call(0x2860);
+            crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0xc);
             x.anim_step();
         }
         5 | 6 | 8..=11 => {
@@ -1192,7 +1201,7 @@ fn thrown_active(x: &mut Cx, v: u8) {
             return x.add8(f::STATE, 4);
         }
     }
-    x.call(super::rom::OMBRE);
+    crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
 
@@ -1565,7 +1574,7 @@ fn dust_active(x: &mut Cx) {
         x.add16(Obj::X, dx);
     }
     x.call(super::rom::DANS_LA_ZONE);
-    x.call(super::rom::OMBRE);
+    crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
 
@@ -1813,7 +1822,7 @@ fn floater_main(x: &mut Cx) {
                 // touché : secousse de l'écran
                 x.set8(0x33, 0);
                 x.call(0x3af8);
-                x.call(0xb7dec);
+                super::effects_creators::pillars(x.b);
                 x.call(0xe637c);
                 x.set_a5_u16(0x4ba, 0x100);
                 x.set8(floater::SHAKE, 8);
@@ -2052,7 +2061,7 @@ fn shard_rain(x: &mut Cx) {
         0 if v == 0 => {
             x.add8(f::STATE, 2);
             x.set16(shards::TIMER, 0xe6);
-            x.call(0x1ac7c);
+            super::petites::flash_68k(x.c, x.b, super::petites::ECLAIR_BLEU);
         }
         0 => {
             // A1 : adresse du gestionnaire, laissée par la boucle de dispatch (octet `+0x2c` constant)
@@ -2751,8 +2760,7 @@ fn lob_active(x: &mut Cx) {
                     wr16(x.b, o.0 + Obj::Y, py);
                 }
             }
-            x.c.d[0] = 0xf;
-            x.call(0x2860);
+            crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0xf);
             x.anim_start(lob::ANIM_SET, 2);
             let shake = match v {
                 4 => 0xa,
@@ -2802,8 +2810,8 @@ fn ending_piece(x: &mut Cx) {
                 if (x.u16(Obj::X) as i16) <= 0x80 {
                     x.add8(f::SUB_STATE, 2);
                     wr8(x.b, floater::STEP, 0x14);
-                    x.c.d[0] = 0x10;
-                    return x.call(0x2824);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x10);
+                    return;
                 }
                 // tremble sur place, une image sur deux
                 x.add16(Obj::X, 2);
@@ -3467,10 +3475,9 @@ fn swimmer(x: &mut Cx) {
                 wr8(x.b, o.0 + 2, 62);
                 wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
             }
-            // deux décors SET 0x17 (variantes 0 et 1) ; un pool plein mène l'original dans des données
-            // (0xb778c, hors contrat : laissé à l'original)
+            // deux décors SET 0x17 (variantes 0 et 1)
             for (variant, flip) in [(0u8, 1u8), (1, 0)] {
-                let Some(o) = x.alloc(&pools::SET) else { return x.call(0xb778c) };
+                let Some(o) = x.alloc(&pools::SET) else { super::effects::erreur_d_adresse(0xb778c) };
                 wr8(x.b, o.0, 1);
                 wr8(x.b, o.0 + 2, 0x17);
                 wr8(x.b, o.0 + 3, variant);
@@ -3597,7 +3604,6 @@ mod counter {
         (0x400, 0x1b7c0005), (0x404, 0x1b8c0005), (0x480, 0x1b7d0005), (0x484, 0x1b8d0005),
     ];
     pub const GOODS: u32 = 0xb82e0;
-    pub const SCENE_SET: u32 = 0xc8312;
 }
 
 /// `0xb83d8` : premier acheteur dans la zone : le comptoir prend la vente (s'il n'y en a pas d'autre) et
@@ -3609,15 +3615,12 @@ fn counter_buy(x: &mut Cx, _buyer: Obj) {
     }
     crate::mem::wr16(x.b, counter::ACTIVE, x.o.0 as u16);
     let (a1, d6) = (x.c.a[1], x.c.d[6]);
-    x.c.d[0] = 0x64;
-    x.call(counter::SCENE_SET);
-    let failed = x.c.sr & m68k::SR_C != 0;
-    let seller = x.c.a[1];
+    let seller = set_de_scene(x, 0x64);
     (x.c.a[1], x.c.d[6]) = (a1, d6);
-    if failed {
+    let Some(seller) = seller else {
         return crate::mem::wr16(x.b, counter::ACTIVE, 0);
-    }
-    x.set16(counter::SELLER, seller as u16);
+    };
+    x.set16(counter::SELLER, seller.0 as u16);
     x.add8(f::SUB_STATE, 2);
     x.set16(counter::TIMER, 0x18);
 }
@@ -4017,9 +4020,9 @@ fn ferry(x: &mut Cx) {
             x.add32(Obj::X, v);
             if x.a5_u8(0x2c) == 0xc {
                 x.add8(f::SUB_STATE, 2);
-                x.c.d[0] = 0x63;
-                x.call(0xc8312);
-                x.set16(0x5c, x.c.a[1] as u16);
+                // Glitch d'origine : l'échec de l'allocation n'est pas testé, le lien reprend l'A1 laissé.
+                let decor = set_de_scene(x, 0x63).unwrap_or_else(|| leftover(x, &pools::SET));
+                x.set16(0x5c, decor.0 as u16);
             }
         }
         2 => {
@@ -4773,11 +4776,7 @@ fn spark_fall_wait(x: &mut Cx) {
 
 /// Lance la tâche de script `entry` (0x9b6, `trap #0`), A0 conservé.
 fn start_script(x: &mut Cx, entry: u32) {
-    let a0 = x.c.a[0];
-    x.c.a[0] = entry;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0x10;
-    crate::call(x.c, x.b, 0x9b6);
-    x.c.a[0] = a0;
+    crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
 fn finale_trigger(x: &mut Cx) {
@@ -4826,9 +4825,7 @@ fn finale_step(x: &mut Cx) {
             x.set_a5_u16(0x490, 4);
             x.set_a5_u8(0x48e, 8);
             x.set_a5_u8(0x48f, 1);
-            let d7 = x.c.d[7];
-            x.call(0x1ad6a);
-            x.c.d[7] = d7;
+            super::petites::palette_page_restore(x.c, x.b);
             x.set_a5_u32(0x49e, 0xff1190);
             start_script(x, 0x1cf12);
             finale_end(x);

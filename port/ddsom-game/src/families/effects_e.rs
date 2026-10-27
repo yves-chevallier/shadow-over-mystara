@@ -117,7 +117,7 @@ fn raft_drift(x: &mut Cx) {
         x.add32(Obj::X, dx as u32);
         x.add32(Obj::Y, dy as u32);
         x.c.d[4] = dx as u32;
-        x.call(super::rom::OMBRE);
+        crate::terrain::push_68k(x.c, x.b, x.o);
     }
     let (rx, ry) = (x.u16(Obj::X), x.u16(Obj::Y));
     for p in players().rev() {
@@ -175,7 +175,6 @@ mod gate {
     /// Décalage en x des joueurs, par personnage, au retour (mots, espace programme).
     pub const RETURN_OFFSETS: u32 = 0xae3b4;
     pub const MUSIC_OF_SCENE: u32 = 0xe0d8c;
-    pub const RESTART_SCENE: u32 = 0xcc0ca;
     pub const PLAY_MUSIC: u32 = 0xe17a4;
 }
 
@@ -216,7 +215,8 @@ fn gate_init(x: &mut Cx) {
         x.set8(Obj::VZ + 1, swing);
     }
     if x.u8(gate::MOVING) != 0 {
-        x.call(0xdf688);
+        let o = x.o;
+        super::creators::sobj_8(x.b, o);
     }
     let mode = x.u8(0x2f) as u32;
     if mode == 0 {
@@ -339,7 +339,8 @@ fn gate_enter(x: &mut Cx) {
     x.c.d[1] = x.c.d[1] & !0xff | v as u32;
     scene_prop(x);
     x.call(gate::MUSIC_OF_SCENE);
-    x.call(gate::RESTART_SCENE);
+    x.c.a[0] = x.o.0;
+    super::creators::restart_scene(x.c, x.b);
 }
 
 /// 0xcc200 : décor (SET 8) de variante D0 et de réglage D1 ; à défaut un SOBJ 4, à défaut un EFFCT 18.
@@ -454,8 +455,6 @@ mod attack_fx {
     pub const SHOWER_SHEETS: u32 = 0xad1b4;
     pub const SHOWER_DATA: u32 = 0xad232;
     pub const SHOWER_ANIMS: u32 = 0xad354;
-    /// Créateur d'un effet 11 (`0xabec8`, natif).
-    pub const SPAWN: u32 = 0xabec8;
     pub const ANIM_A: u32 = 0x18f412;
     pub const ANIM_B: u32 = 0x15cdb6;
     pub const OWNER: u32 = 0x5c;
@@ -644,14 +643,9 @@ fn attack_fx_shower_spawn(x: &mut Cx) {
         at += 2;
         loop {
             let variant = x.u8(f::VARIANT);
-            x.c.d[0] = variant as u32;
-            x.c.d[1] = 0;
-            x.c.a[4] = at;
-            x.call(attack_fx::SPAWN);
-            if x.c.sr & m68k::SR_C != 0 {
-                break;
-            }
-            let o = Obj(x.c.a[1]);
+            let me = x.o;
+            let cree = super::effects_creators::attack(x.b, me, variant, 0);
+            let Some(o) = cree else { break };
             let (vx, vz) = (x.data16(at), x.data16(at + 2));
             o.set_u16(x.b, Obj::VX, vx);
             o.set_u16(x.b, Obj::VZ, vz);
