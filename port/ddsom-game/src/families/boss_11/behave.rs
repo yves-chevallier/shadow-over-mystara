@@ -14,10 +14,8 @@ pub(super) fn intro(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(NO_ZONE, 0xff);
             let px = var::SCROLL_X.get(x.b).wrapping_add(0x190);
-            setw(x, 0, px);
             x.set16(0x8, px);
             let py = var::SCROLL_Y.get(x.b).wrapping_add(0x40);
-            setw(x, 0, py);
             x.set16(0x10, py);
             x.set16(0xc, 0);
             x.set16(0x14, (-0x200i16) as u16);
@@ -66,7 +64,6 @@ fn fall(x: &mut Cx) {
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
     let v = asr_w(x.u16(0x14), 2);
-    setw(x, 0, v);
     x.set16(0x14, v);
     body(x, 7);
     lib::shake_58(x, 8);
@@ -100,7 +97,6 @@ pub(super) fn lone(x: &mut Cx) {
 /// 0x8eb52 : délai de marche selon la difficulté.
 fn walk_delay(x: &mut Cx) {
     let level = var::RANK.get(x.b);
-    setw(x, 0, level);
     let v = x.rom8(0x8eb5e + level as u32);
     x.set8(0x71, v);
 }
@@ -109,7 +105,6 @@ fn walk_delay(x: &mut Cx) {
 fn walk_steps(x: &mut Cx) {
     let alea = x.random();
     let i = alea & 0x1f;
-    setw(x, 0, i);
     let v = x.rom8(0x8eb90 + i as u32);
     x.set8(0x6b, v);
 }
@@ -174,14 +169,11 @@ fn pose(x: &mut Cx) {
     }
     if w == 0 || w == 8 || w == 9 {
         let mut d1 = x.u8(0x2d) as u16;
-        x.c.d[1] = d1 as u32;
         if x.u8(f::FLIP) != 0 {
             d1 = d1.wrapping_add(0x10);
         }
         d1 &= 0x1f;
-        setw(x, 1, d1);
         let n = if Fl::sub16(d1, 0x10).gt() { 8 } else { 9 };
-        x.c.d[0] = n;
         if n as u8 != x.u8(ANIM_N) {
             return body(x, n);
         }
@@ -198,52 +190,40 @@ fn off_screen(x: &mut Cx) -> bool {
     if var::CAMERA_SELECT.get(x.b) != 0 {
         d0 = var::CAMERA_ALT_X.get(x.b);
     }
-    setw(x, 0, d0);
     let here = x.u16(0x8);
     if Fl::sub16(d0, here).ge() {
-        x.c.d[0] = 1;
         return true;
     }
     d0 = d0.wrapping_add(0x1c0);
-    setw(x, 0, d0);
     if Fl::sub16(d0, here).ge() {
-        x.c.d[0] = 0;
         return false;
     }
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x8da28 : la cible est derrière le serpent.
 fn turn_needed(x: &mut Cx) -> bool {
     let w = x.u16(f::TARGET);
-    setw(x, 0, w);
     if (w as i16) >= 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.c.a[1] = w as i16 as i32 as u32;
     if rd8(x.b, x.c.a[1]) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let mut d = rd16(x.b, x.c.a[1] + 8).wrapping_sub(x.u16(0x8));
     if x.u8(f::FLIP) == 0 {
         d = d.wrapping_neg();
     }
-    setw(x, 0, d);
     if Fl::sub16(d, 0xffd0).gt() {
-        x.c.d[0] = 0;
         return false;
     }
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x8dafe : un joueur tout près devant.
 fn hit_near(x: &mut Cx) -> bool {
     let ok = lib::target_in_box(x, -0x10, 0x20, 0x10);
-    x.c.d[0] = ok as u32;
     ok
 }
 
@@ -270,7 +250,6 @@ fn near_roll(x: &mut Cx) -> bool {
     let i = (x.c.d[0] as u16 & 3) * 4;
     setw(x, 0, i);
     let mask = rom32(x, 0x8da88 + i as u32);
-    x.c.d[1] = mask;
     let alea = x.random();
     let r = alea & 1;
     setw(x, 0, r);
@@ -295,7 +274,6 @@ fn far_roll(x: &mut Cx) -> bool {
     let i = (x.c.d[0] as u16 & 3) * 4;
     setw(x, 0, i);
     let mask = rom32(x, 0x8dad2 + i as u32);
-    x.c.d[1] = mask;
     let alea = x.random();
     let b = alea & 0x1f;
     setw(x, 0, b);
@@ -311,7 +289,6 @@ fn far_roll(x: &mut Cx) -> bool {
 
 /// 0x8db2a : tire une attaque dans la table `table` (16 octets), ou renonce.
 fn pick(x: &mut Cx, table: u32) {
-    x.c.a[4] = table;
     if !roll(x) {
         let alea = x.random();
         let i = alea & 0xf;
@@ -344,13 +321,10 @@ fn roll(x: &mut Cx) -> bool {
     let n = var::PLAYERS_ALIVE.get(x.b).wrapping_sub(1);
     setb(x, 1, n);
     let d1 = (x.c.d[1] as u16 & 2).wrapping_mul(4);
-    setw(x, 1, d1);
     let level = (var::RANK.get(x.b) >> 8) as u8;
     setb(x, 2, level);
     let d2 = (x.c.d[2] as u16) >> 2;
-    setw(x, 2, d2);
     let d1 = d1.wrapping_add(d2);
-    setw(x, 1, d1);
     let v = x.rom8(0x8dbc0 + d1 as u32);
     setb(x, 1, v);
     v >> (r & 7) & 1 != 0

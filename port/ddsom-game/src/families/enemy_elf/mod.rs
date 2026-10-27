@@ -135,7 +135,6 @@ fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
     let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
-    x.c.a[4] = FALLBACK_MOVES + row as u32;
     let n = rand_and(x, 0x1f);
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row as u32 + n);
@@ -153,7 +152,6 @@ fn init(x: &mut Cx) {
     x.set8(f::BOX_SET, 0x18);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    x.c.d[0] = 0;
     for (off, v) in [(0x68, 4), (0x69, 1), (0x70, 0), (0x6a, 1), (0x6c, 3), (0x6d, 3), (0x72, 3), (0x73, 2), (0x74, 3), (0x75, 0x38), (0x76, 3), (REPEAT, 0x20), (WALK_ANIM, 0), (WALK_ANIM_TIMER, 2)] {
         x.set8(off, v);
     }

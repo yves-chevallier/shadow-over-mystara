@@ -78,12 +78,10 @@ mod man_scorpion {
             _ => {}
         }
         x.set16(0x16, 0);
-        x.c.d[0] = 0;
         x.set8(f::FLIP, 0);
         x.set8(f::BOX_SET, 0x3b);
         x.set16(0xc, 4);
         lib::set_immunities(x);
-        x.c.d[0] = 0;
         x.anim_start(ANIMS, 0);
         lib::initial_hp(x);
         lib::sound(x, 0xea8be);
@@ -97,7 +95,6 @@ mod man_scorpion {
         if with_arms {
             let mut at = x.o.0 + p::ARMS;
             for d5 in [1u8, 0] {
-                x.c.d[5] = d5 as u32;
                 let o = alloc(x, &pools::ENEMY);
                 let active = x.u8(0);
                 o.set_u8(x.b, 0, active);
@@ -124,7 +121,6 @@ mod man_scorpion {
     fn spawn_limbs(x: &mut Cx) {
         let mut at = x.o.0 + p::LIMBS;
         for d5 in [1u8, 0] {
-            x.c.d[5] = d5 as u32;
             let o = alloc(x, &pools::ESHL);
             let active = x.u8(0);
             o.set_u8(x.b, 0, active);
@@ -149,8 +145,6 @@ mod man_scorpion {
     fn spawn_flames(x: &mut Cx, kind: u8) {
         let mut at = x.o.0 + p::FLAMES;
         for d5 in [1u8, 0] {
-            x.c.d[5] = d5 as u32;
-            x.c.d[4] = kind as u32;
             let o = alloc(x, &pools::ITEM);
             let active = x.u8(0);
             o.set_u8(x.b, 0, active);
@@ -285,7 +279,6 @@ mod man_scorpion {
                 parent.set_u8(x.b, 0x24, 0);
             }
         }
-        x.c.d[0] = 0;
     }
 
     // --- état 4 : touché -----------------------------------------------------------------------
@@ -575,7 +568,6 @@ mod nagpa {
         let range: u16 = if x.u8(0x3) == 0 { 0x30 } else { 0x50 };
         for i in 0..4u32 {
             let player = A5 + 0x5de + 0x200 * i;
-            x.c.a[2] = player;
             if x.data8(player) == 1 {
                 if lib::in_box(x, Obj(player), range as i16, 0x14, 0xffe8).found() {
                     x.c.d[0] = 1;

@@ -177,7 +177,6 @@ pub(super) fn steer(x: &mut Cx) {
         x.add16(0x8, step as u16);
     }
     let mut y = var::SCROLL_Y.get(x.b).wrapping_add(0x60);
-    x.c.d[0] = y as u32 | (x.c.d[0] & 0xffff_0000);
     if lib::pick_target_any(x) {
         y = x.linked(f::TARGET).u16(x.b, Obj::Y);
     }

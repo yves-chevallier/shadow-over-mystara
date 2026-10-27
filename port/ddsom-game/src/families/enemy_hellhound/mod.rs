@@ -140,33 +140,27 @@ pub(self) fn puff(x: &mut Cx, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
 /// 0x639fe : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
 pub(self) fn must_turn(x: &mut Cx) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0 | 0xff00_0000;
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16;
     let want = if dx > 0 { 0x20 } else { 0 };
     let turn = want != x.u8(f::FLIP);
-    x.c.d[0] = turn as u32;
     turn
 }
 
 /// 0x63a98 : la cible est dans la même rangée (profondeur à 0x30 près) mais loin en X (plus de 0xf0).
 pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = x.linked(f::TARGET);
     let dz = target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x30);
     if dz > 0x60 {
-        x.c.d[0] = 0;
         return false;
     }
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xf0);
     let far = dx > 0x1e0;
-    x.c.d[0] = far as u32;
     far
 }
 

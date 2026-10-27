@@ -463,8 +463,8 @@ pub(self) fn aim_near_target(x: &mut Cx, table: u32, mask: u32) {
     }
     let mx = px.wrapping_add(tx);
     let mz = dz.wrapping_add(t.u16(x.b, 0x10));
-    set_dw(x, 1, mx);
-    set_dw(x, 2, mz);
+    set_dw(x, 1, mx); // relu : D1, D2 relus par la suite (DDSOM_POISON : covb_long_27, covb_long3p_27)
+    set_dw(x, 2, mz); // relu : relu
     x.set16(MARK_X, mx);
     x.set16(MARK_Z, mz);
     aim_at_mark(x);

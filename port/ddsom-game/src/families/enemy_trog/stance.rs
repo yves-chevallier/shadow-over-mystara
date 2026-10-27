@@ -39,7 +39,6 @@ fn begin_walk(x: &mut Cx) {
     x.set8(VULNERABLE, 1);
     x.set16(LOOK, 0);
     body(x, 2);
-    x.c.d[0] = 0;
     walk_speed(x, 0);
     pick_target(x);
     lib::draw_stance(x);

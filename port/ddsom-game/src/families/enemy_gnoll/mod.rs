@@ -125,29 +125,23 @@ pub(self) fn done_attack(x: &mut Cx) {
 /// regarde dans le même sens) ?
 fn box_check(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
-        x.c.d[0] = 0;
         return false;
     }
     let target = load_target(x);
     let facing = target.u8(x.b, 0x2c);
-    x.c.d[1] = x.c.d[1] & !0xff | facing as u32;
     if facing == x.u8(f::FLIP) {
         if !lib::decision_b(x) {
-            x.c.d[0] = 0;
             return false;
         }
     }
     if !lib::decision_a(x) {
-        x.c.d[0] = 0;
         return false;
     }
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x6c040 : joueur tout près.
 pub(self) fn near_box(x: &mut Cx) -> bool {
-    x.c.d[0] = 0;
     box_check(x, 0, 0x70, 0x10)
 }
 
@@ -159,15 +153,12 @@ pub(self) fn far_box(x: &mut Cx) -> bool {
 /// 0x6c078 : le Gnoll tourne le dos à sa cible.
 pub(self) fn faces_wrong(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     let wrong = want as u8 != x.u8(f::FLIP);
-    x.c.d[0] = wrong as u32;
     wrong
 }
 
@@ -178,7 +169,6 @@ pub(self) const FOLLOW_TABLE: u32 = 0x6be1a;
 
 /// 0x6c0a6 (série proche) / 0x6c0a0 (série lointaine) : choisit le geste (`+5 = 4`, `+6 = 0`).
 pub(self) fn pick_attack(x: &mut Cx, table: u32) -> u8 {
-    x.c.d[2] = 0;
     let b = row_byte(x, table);
     x.c.d[0] = x.c.d[0] & !0xff | b as u32;
     x.set8(f::SUB, 4);
@@ -222,7 +212,6 @@ fn init(x: &mut Cx) -> bool {
     x.set8(f::BOX_SET, 0x19);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    x.c.d[0] = 0;
     for (off, v) in [
         (0x68, 4),
         (0x69, 1),

@@ -111,7 +111,6 @@ fn throw(x: &mut Cx) {
             x.add8(f::SUB3, 8);
             x.set8(TIMER, 0x30);
             if (x.u8(AMMO) as i8) > 0 {
-                x.c.d[5] = 0;
                 if let Some(obj) = lib::eshl_0a(x) {
                     x.set32(THROWN, obj.0);
                     x.add8(AMMO, 0xf0);
@@ -445,7 +444,6 @@ fn pick_again(x: &mut Cx) {
     } else {
         return;
     };
-    x.c.d[0] = x.c.d[0] & !0xff | b as u32;
     if b != x.u8(LOOK_PREV) {
         x.set8(LOOK_PREV, b);
         x.set8(COOLDOWN, 2);

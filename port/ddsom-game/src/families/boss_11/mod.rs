@@ -216,19 +216,15 @@ pub fn run(x: &mut Cx) {
 /// 0x8d60e : le serpent ne sort pas de l'écran par la gauche ni par le haut.
 fn keep_in_screen(x: &mut Cx) {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
-    x.c.a[2] = cam;
     let mut d0 = rd16(x.b, cam + 8);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, x.u16(0x8)).le() {
         x.set16(0x8, d0);
     }
     d0 = d0.wrapping_add(0x180);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, rd16(x.b, cam + 8)).ge() {
         x.set16(0x8, d0);
     }
     d0 = rd16(x.b, cam + 0xc);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, x.u16(0x10)).le() {
         x.set16(0x10, d0);
     }
@@ -326,7 +322,6 @@ fn active(x: &mut Cx) {
 /// `moveq 0,D0 ; move.b (idx,A0),D0b ; move.w (table,PC,D0w),D1w ; jsr (table,PC,D1w)` : adresse d'arrivée.
 pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
-    x.c.d[0] = i;
     let off = x.rom16(table + i);
     setw(x, 1, off);
     table.wrapping_add(off as i16 as i32 as u32)
@@ -335,9 +330,7 @@ pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
 /// Variante qui range le décalage dans D0 (`move.w (table,PC,D0w),D0w ; jmp (table,PC,D0w)`).
 pub(self) fn dispatch0(x: &mut Cx, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
-    x.c.d[0] = i;
     let off = x.rom16(table + i);
-    setw(x, 0, off);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 

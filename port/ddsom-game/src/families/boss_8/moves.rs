@@ -59,7 +59,6 @@ pub(super) fn group6(x: &mut Cx) {
                 if x.u8(f::FLIP) != 0 {
                     d = d.wrapping_neg();
                 }
-                setw(x, 1, d);
                 x.add16(0x8, d);
                 aids::clamp(x);
                 reappear(x);
@@ -90,7 +89,6 @@ pub(super) fn group8(x: &mut Cx) {
                     if x.u8(f::FLIP) != 0 {
                         d = d.wrapping_neg();
                     }
-                    setw(x, 1, d);
                     x.add16(0x8, d);
                     aids::clamp(x);
                     reappear(x);
@@ -163,11 +161,9 @@ fn rest(x: &mut Cx) {
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_KIND, 0);
             let k = x.u8(ANIM_KIND);
-            x.c.d[2] = x.c.d[2] & !0xff | k as u32;
             if k != x.u8(ANIM_LAST) {
                 x.set8(ANIM_LAST, k);
             }
-            x.c.d[0] = 0;
             body(x, 0);
         }
     }

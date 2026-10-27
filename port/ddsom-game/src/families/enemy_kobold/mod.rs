@@ -126,33 +126,27 @@ pub(self) fn puff(x: &mut Cx, mask: u16, d1: u16, d2: i16, d3: i16) {
 /// 0x57b9c : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
 pub(self) fn must_turn(x: &mut Cx) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0 | 0xff00_0000;
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16;
     let want = if dx > 0 { 0x20 } else { 0 };
     let turn = want != x.u8(f::FLIP);
-    x.c.d[0] = turn as u32;
     turn
 }
 
 /// 0x57bee : la cible est à plus de 0x30 de profondeur et à plus de 0xa0 en X.
 pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = x.linked(f::TARGET);
     let dz = target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x30);
     if dz <= 0x60 {
-        x.c.d[0] = 0;
         return false;
     }
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xa0);
     let far = dx > 0x140;
-    x.c.d[0] = far as u32;
     far
 }
 
@@ -169,7 +163,6 @@ pub(self) fn on_right_half(x: &mut Cx) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d1 = cam.wrapping_add(0xc0).wrapping_sub(x.u16(Obj::X));
     let right = (d1 as i16) <= 0;
-    x.c.d[0] = right as u32;
     right
 }
 

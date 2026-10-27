@@ -101,7 +101,6 @@ pub(super) fn push_players(x: &mut Cx, shape: u8) {
     x.set8(BODY_SHAPE, shape);
     for k in 0..4u32 {
         let p = 0xff85de + 0x200 * k;
-        x.c.a[1] = p;
         x.c.d[6] = x.c.d[6] & 0xffff_0000 | (3 - k);
         if rd8(x.b, p) == 0 {
             continue;
@@ -118,7 +117,6 @@ pub(super) fn push_players(x: &mut Cx, shape: u8) {
             shove_side(x.c, x.b);
         }
     }
-    x.c.a[1] = 0xff8dde;
     x.c.d[6] = x.c.d[6] & 0xffff_0000 | 0xffff;
 }
 

@@ -81,7 +81,6 @@ fn pick_wait(x: &mut Cx) {
     let r = rand_and(x, 0x1f);
     let v = x.data8(list + r);
     x.set8(AI_WAIT, v);
-    x.c.d[0] = 1;
 }
 
 /// 0x78142 : demi-tour.
@@ -111,7 +110,6 @@ fn turn(x: &mut Cx) {
 
 /// 0x78244 : animation de marche (6 si la vitesse suit l'orientation, 7 sinon).
 fn walk_anim(x: &mut Cx) {
-    x.c.d[0] = 6;
     let n = if lib::moving_forward(x) { 6 } else { 7 };
     mv(x, n);
 }

@@ -33,7 +33,6 @@ fn release_victim(x: &mut Cx) {
 }
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => claw(x),
         2 => claw_b(x),
@@ -465,7 +464,6 @@ pub(super) fn rest(x: &mut Cx) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::wander(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -530,7 +528,6 @@ pub(super) fn grab(x: &mut Cx) {
             x.call(0xaaa40);
             lib::sound(x, 0xedd96);
             let victim = x.linked(f::TARGET);
-            x.c.a[1] = victim.0 | 0xff00_0000;
             let hp = victim.u16(x.b, f::HP).wrapping_sub(4);
             victim.set_u16(x.b, f::HP, hp);
             if (hp as i16) <= 0 {
@@ -559,7 +556,6 @@ fn dismount(x: &mut Cx) {
 
 /// Sous-état 14 : fin de geste, cible de remplacement.
 pub(super) fn done(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     if x.u8(f::SUB2) == 0 {
         regroup(x);
     }
@@ -573,7 +569,6 @@ pub(super) fn regroup(x: &mut Cx) {
     if !pick_target(x) {
         return go::retire(x);
     }
-    x.c.a[1] = 0x105e2;
     lib::hp_threshold(x, 0x105e2);
     if lib::target_in_box(x, 0, 0x28, 0xc) {
         go::strike_0(x, false);

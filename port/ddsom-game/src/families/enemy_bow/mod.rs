@@ -142,7 +142,7 @@ pub(self) fn shoot_roll(x: &mut Cx) -> bool {
 
 /// Boîtes de portée (0xb5e0) ; D5 est posé comme dans l'original.
 fn range_box(x: &mut Cx, d5: u32, d0: i16, d1: u16, d2: u16) -> bool {
-    x.c.d[5] = d5;
+    x.c.d[5] = d5; // relu : D5 relu par la suite (comme pour in_front)
     lib::target_in_box(x, d0, d1, d2)
 }
 
@@ -153,7 +153,7 @@ pub(self) fn point_blank(x: &mut Cx) -> bool {
 
 /// 0x5cdf6 : joueur devant, à courte distance.
 pub(self) fn in_front(x: &mut Cx) -> bool {
-    x.c.d[5] = 0;
+    x.c.d[5] = 0; // relu : D5 relu par la suite (DDSOM_POISON : covb_long3p_02)
     lib::target_in_box(x, -0xd0, 0x60, 0x18)
 }
 
@@ -182,7 +182,6 @@ fn init(x: &mut Cx) -> bool {
         return false;
     }
     x.add8(f::STATE, 2);
-    x.c.d[0] = 0;
     x.set8(f::BOX_SET, 0xf);
     lib::initial_hp(x);
     for (off, v) in [

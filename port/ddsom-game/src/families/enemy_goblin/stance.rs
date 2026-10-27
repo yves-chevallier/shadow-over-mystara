@@ -145,7 +145,6 @@ pub(super) fn walk_off(x: &mut Cx) {
         x.set8(Obj::SPEED_INDEX, 8);
         want = 0;
     }
-    x.c.d[4] = x.c.d[4] & !0xff | want as u32;
     if want != x.u8(f::FLIP) {
         x.add8(f::SUB3, 4);
         mv(x, 2);

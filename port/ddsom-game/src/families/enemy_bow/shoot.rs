@@ -54,9 +54,7 @@ fn first(x: &mut Cx) {
                     mv(x, 2);
                 }
                 4 => {
-                    x.c.d[6] = 3;
                     let d6 = if rand_and(x, 1) != 0 { 3 } else { 2 };
-                    x.c.d[6] = d6;
                     x.set8(AI_WANDER, d6 as u8);
                     set_speed(x, 0x21);
                     x.set8(f::SUB3, 0xa);
@@ -118,7 +116,6 @@ fn aim_again(x: &mut Cx) {
 /// 0x5c472 : l'animation de tir (0 ou 5 selon le profil `+0x2f`).
 fn reload_shot(x: &mut Cx) {
     let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
-    x.c.d[0] = anim;
     shot(x, anim);
 }
 
@@ -172,7 +169,6 @@ fn side_walk(x: &mut Cx) {
     }
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     if want as u8 != x.u8(f::FLIP) {
         let state = x.u32(f::STATE);
         x.set32(RESUME_STATE, state);
@@ -291,7 +287,6 @@ pub(super) fn start_shot(x: &mut Cx) {
 // --- sous-état 6 --------------------------------------------------------------------------------------
 
 pub(super) fn run_b(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => crouch(x),
         2 | 8 => sidestep(x),

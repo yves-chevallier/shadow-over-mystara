@@ -605,10 +605,10 @@ fn push_players(x: &mut Cx) {
         if dx.wrapping_add(dy) <= 0x10 {
             continue;
         }
-        x.c.d[1] = x.u16(0x8) as u32;
-        x.c.d[2] = x.u16(0x10) as u32;
-        x.c.d[3] = p.u16(x.b, 0x8) as u32;
-        x.c.d[4] = p.u16(x.b, 0x10) as u32;
+        x.c.d[1] = x.u16(0x8) as u32; // relu : D1-D4 relus par la suite (DDSOM_POISON : cov_tour2_c1...)
+        x.c.d[2] = x.u16(0x10) as u32; // relu : relu
+        x.c.d[3] = p.u16(x.b, 0x8) as u32; // relu : relu
+        x.c.d[4] = p.u16(x.b, 0x10) as u32; // relu : relu
         shove(x.c, x.b, p);
     }
 }

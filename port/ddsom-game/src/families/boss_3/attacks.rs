@@ -48,7 +48,6 @@ fn swing(x: &mut Cx, n: u32) {
 /// Pas en avant aux images-clés (`+0x33`) : décalage lu dans la table `table` (relative au PC), vers l'avant.
 fn key_step(x: &mut Cx, table: u32, clear: bool) {
     let key = x.u8(f::KEY_FRAME) as u32;
-    x.c.d[0] = key;
     if clear {
         if key == 0 {
             return;
@@ -60,7 +59,6 @@ fn key_step(x: &mut Cx, table: u32, clear: bool) {
         return;
     }
     let d = if x.u8(f::FLIP) != 0 { d } else { d.wrapping_neg() };
-    set_dw(x, 1, d);
     x.add16(0x8, d);
 }
 
@@ -132,7 +130,6 @@ fn leap(x: &mut Cx) {
             next7(x);
             let v = (x.u16(0x18) as i16) >> 1;
             x.set16(0x18, v as u16);
-            set_dw(x, 0, (v.wrapping_neg() >> 2) as u16);
             x.set8(0x44, 0);
             x.set8(0x45, 0x10);
             attack_anim(x, 1);
@@ -155,8 +152,6 @@ fn leap(x: &mut Cx) {
                 vx = vx.wrapping_neg();
                 vz = vz.wrapping_neg();
             }
-            set_dw(x, 0, vx);
-            set_dw(x, 1, vz);
             x.set16(0x14, vx);
             x.set16(0x16, vz);
         }
@@ -169,7 +164,6 @@ fn leap(x: &mut Cx) {
             x.set16(0xc, 0);
             next7(x);
             let v = ((x.u16(0x14) as i16) >> 3) as u16;
-            set_dw(x, 0, v);
             x.set16(0x14, v);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
@@ -239,14 +233,10 @@ fn nearest_player_dx(x: &mut Cx) -> u16 {
         if (d as i16) < 0 {
             d = d.wrapping_neg();
         }
-        set_dw(x, 1, d);
         if (best as i16) > d as i16 {
             best = d;
         }
     }
-    x.c.a[1] = 0xff8dde;
-    x.c.d[6] = x.c.d[6] & 0xffff_0000 | 0xffff;
-    set_dw(x, 0, best);
     best
 }
 
@@ -256,7 +246,6 @@ fn no_drift_when_fast(x: &mut Cx) {
     if (v as i16) < 0 {
         v = v.wrapping_neg();
     }
-    set_dw(x, 0, v);
     if v as i16 >= 0x900 {
         x.set16(0x16, 0);
     }
@@ -277,8 +266,6 @@ fn skim(x: &mut Cx) {
                 vx = vx.wrapping_neg();
                 vz = vz.wrapping_neg();
             }
-            set_dw(x, 0, vx);
-            set_dw(x, 1, vz);
             x.set16(0x14, vx);
             x.set16(0x16, vz);
             x.set8(0x44, 0);
@@ -321,7 +308,6 @@ fn skim(x: &mut Cx) {
                     if x.u8(f::FLIP) == 0 {
                         v = v.wrapping_neg();
                     }
-                    set_dw(x, 0, v);
                     x.set16(0x14, v);
                     x.set16(0x18, 0x400);
                     x.set16(0x1a, (-0x40i16) as u16);
@@ -350,7 +336,6 @@ fn skim(x: &mut Cx) {
 fn skim_end(x: &mut Cx) {
     stop(x);
     let v = ((x.u16(0x14) as i16) >> 2) as u16;
-    set_dw(x, 0, v);
     x.set16(0x14, v);
     x.set16(0x16, 0);
     next7(x);
@@ -360,10 +345,7 @@ fn skim_end(x: &mut Cx) {
 /// 0x8030e : vitesse en X ramenée à ±0x800 si elle la dépasse (et plus de dérive en profondeur).
 fn cap_speed(x: &mut Cx) {
     let v = x.u16(0x14);
-    set_dw(x, 1, v);
     let (cap, abs) = if (v as i16) < 0 { (0xf800u16, v.wrapping_neg()) } else { (0x800, v) };
-    set_dw(x, 0, cap);
-    set_dw(x, 2, abs);
     if abs as i16 <= 0x800 {
         return;
     }
@@ -386,7 +368,6 @@ fn rush(x: &mut Cx) {
             lib::step(x);
             x.set8(INVULNERABLE, 1);
             let d = 0x50u16.wrapping_sub(x.u16(0xc));
-            set_dw(x, 1, d);
             if d == 0 {
                 next7(x);
                 x.set8(TIMER, 0x10);
@@ -399,7 +380,6 @@ fn rush(x: &mut Cx) {
             } else {
                 1
             };
-            x.c.d[0] = v as i32 as u32;
             x.add16(0xc, v as u16);
         }
         4 => {
@@ -416,8 +396,6 @@ fn rush(x: &mut Cx) {
                 vx = vx.wrapping_neg();
                 vz = vz.wrapping_neg();
             }
-            set_dw(x, 1, vx);
-            set_dw(x, 2, vz);
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x14, vx);
             x.set16(0x16, vz);
@@ -497,7 +475,6 @@ fn side_flight(x: &mut Cx) {
             stop(x);
             let mut v = 0x400u16;
             let h = x.u16(0xc);
-            set_dw(x, 1, h);
             if h as i16 > 0x60 {
                 v = v.wrapping_neg();
             }
@@ -528,13 +505,11 @@ fn side_flight(x: &mut Cx) {
             if (a as i16) < 0 {
                 a = a.wrapping_neg();
             }
-            set_dw(x, 1, a);
             if a as i16 > 6 {
                 let mut m = 6u32;
                 if (d as i16) < 0 {
                     m = m & 0xffff_0000 | (6u16).wrapping_neg() as u32;
                 }
-                x.c.d[1] = m;
                 d = m as u16;
             }
             set_dw(x, 0, d);
@@ -573,18 +548,15 @@ fn descend_to_0x40(x: &mut Cx) {
 fn height_over_camera(x: &mut Cx) -> i16 {
     let cam = camera(x);
     let h = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc)).wrapping_add(x.u16(0xc));
-    set_dw(x, 0, h);
     h as i16
 }
 
 /// 0x8069a : un joueur à portée est saisi (0xfc44, 0xfd64 : groupe 12) ; vrai si saisi.
 fn try_grab(x: &mut Cx) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 1) else {
-        x.c.d[0] = 0;
         return false;
     };
     lib::seize_player(x, player, 2);
-    x.c.d[0] = 1;
     true
 }
 
@@ -616,9 +588,7 @@ fn abduction(x: &mut Cx) {
             let cam = camera(x);
             stop(x);
             let cx = cam.u16(x.b, 0x8).wrapping_add(0x100);
-            set_dw(x, 0, cx);
             let mut pz = cam.u16(x.b, 0x10).wrapping_add(0x50);
-            set_dw(x, 1, pz);
             // l'original écrase X par le mot de la cible avant de la tester : sans cible, X = 0
             let mut px = x.u16(f::TARGET);
             if (px as i16) < 0 {
@@ -626,21 +596,15 @@ fn abduction(x: &mut Cx) {
                 px = t.u16(x.b, 0x8);
                 pz = t.u16(x.b, 0x10);
             }
-            set_dw(x, 0, px);
-            set_dw(x, 1, pz);
             x.set16(0x10, pz);
             x.set16(0x8, px);
             let (mut side, mut dx, mut vx) = (0x20u32, (-0x80i16) as u16, 0x800u16);
             let rel = px.wrapping_sub(cam.u16(x.b, 0x8));
-            set_dw(x, 0, rel);
             if (rel as i16) < 0x100 {
                 side = 0;
                 dx = dx.wrapping_neg();
                 vx = vx.wrapping_neg();
             }
-            x.c.d[1] = side;
-            set_dw(x, 2, dx);
-            set_dw(x, 3, vx);
             x.set8(f::FLIP, side as u8);
             x.add16(0x8, dx);
             x.set16(0xc, 0x80);
@@ -677,7 +641,6 @@ fn abduction(x: &mut Cx) {
             if x.u8(f::FLIP) == 0 {
                 v = v.wrapping_neg();
             }
-            set_dw(x, 0, v);
             x.set16(0x14, v);
             x.set16(0x18, 0x400);
             x.set16(0x1a, 0x40);

@@ -46,7 +46,6 @@ pub(super) fn pick_by_phase(x: &mut Cx) {
     // 0x78fea, 0x78ff0 et 0x78ff6 lisent la même table
     let _ = block;
     let b = x.rom8(0x79002 + r) as u32;
-    x.c.d[0] = x.c.d[0] & !0xff | b;
     let target = table_target(x, 0x79012, b);
     stub(x, target);
 }
@@ -65,7 +64,6 @@ pub(super) fn near_decision(x: &mut Cx, gate: u32) {
 
 /// 0x790b4 : décision après la boîte large (0x78f4e) : bloc choisi selon le tirage, `+0xaa` et le profil.
 pub(super) fn wide_decision(x: &mut Cx, gate: u32) {
-    x.c.d[2] = gate;
     let r = rand_and(x, 0xf);
     let d2 = (gate.wrapping_sub(1) as u16).wrapping_mul(2);
     let d1 = (x.u8(PHASE) as i8 as i16 as u16).wrapping_mul(4);
@@ -80,7 +78,6 @@ pub(super) fn wide_decision(x: &mut Cx, gate: u32) {
         _ => return,
     };
     let b = x.rom8(bytes + r) as u32;
-    x.c.d[0] = x.c.d[0] & !0xff | b;
     let target = table_target(x, 0x79198, b);
     stub(x, target);
 }
@@ -99,12 +96,10 @@ pub(super) fn gate_wide(x: &mut Cx) -> u32 {
     let hi = camera_x(x).wrapping_add(0x190) as i16;
     let at = x.u16(Obj::X) as i16;
     if lo >= at || hi <= at {
-        x.c.d[0] = 0;
         return 0;
     }
     let (half_w, half_d) = if x.u8(GROUP) != 0 { (0x60, 8) } else { (0x40, 0xc) };
     if !lib::target_in_box(x, -0xe0, half_w, half_d) {
-        x.c.d[0] = 0;
         return 0;
     }
     lib::ai_gate(x)

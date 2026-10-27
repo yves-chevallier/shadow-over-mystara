@@ -90,13 +90,11 @@ fn anim_play(x: &mut Cx, n: u32) {
 /// 0x6662e : position de la caméra, X dans le mot bas de D6, Y dans le mot haut.
 fn camera(x: &mut Cx) -> (u16, u16) {
     let (cx, cy) = if var::CAMERA_SELECT.get(x.b) != 0 { (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b)) } else { (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b)) };
-    x.c.d[6] = (cy as u32) << 16 | cx as u32;
     (cx, cy)
 }
 
 /// 0x666de : adopte une table de vitesses (paires de mots par angle `+0x2d`).
 fn speeds(x: &mut Cx, table: u32) {
-    x.c.a[4] = table;
     x.set32(SPEEDS, table);
     let off = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
     let (vx, vy) = (x.data16(table + off), x.data16(table + off + 2));
@@ -109,8 +107,6 @@ fn speeds(x: &mut Cx, table: u32) {
 /// 0x666d2 : table de vitesses choisie par la difficulté (`A5+0x7f92` & 0x1c).
 fn speeds_by_level(x: &mut Cx, list: u32) {
     let level = (var::RANK.get(x.b) & 0x1c) as u32;
-    x.c.a[4] = list;
-    set_dw(x, 0, level as u16);
     let table = x.data32(list + level);
     speeds(x, table);
 }
@@ -118,8 +114,6 @@ fn speeds_by_level(x: &mut Cx, list: u32) {
 /// 0x666a2 : cadence de virage (octets `+0xa2/+0xa3`) selon la difficulté.
 fn turn_timer(x: &mut Cx, table: u32) {
     let off = ((var::RANK.get(x.b) & 0x10) >> 3) as u32;
-    x.c.a[4] = table;
-    set_dw(x, 0, off as u16);
     let v = x.data16(table + off);
     x.set16(TURN_PERIOD, v);
 }
@@ -127,8 +121,6 @@ fn turn_timer(x: &mut Cx, table: u32) {
 /// 0x6664c / 0x6664e : vitesse `+0x1e` lue dans la table selon la difficulté, `base` = décalage de ligne.
 fn set_speed_y(x: &mut Cx, base: u16) {
     let off = ((var::RANK.get(x.b) & 0x18) >> 2).wrapping_add(base);
-    x.c.a[4] = SPEED_Y_ROW;
-    set_dw(x, 0, off);
     let v = x.data16(SPEED_Y_ROW + off as u32);
     x.set16(Obj::AY, v);
 }
@@ -200,9 +192,7 @@ fn enter_from_edge(x: &mut Cx) {
         x.set8(f::FLIP, 0x20);
         x.set8(TURN_STEP, 8);
     }
-    set_dw(x, 5, offset);
     let px = cx.wrapping_add(offset);
-    set_dw(x, 6, px);
     x.set16(Obj::X, px);
     anim_play(x, 0);
 }
@@ -226,7 +216,6 @@ fn active(x: &mut Cx) {
         if freeze > 0 {
             x.set8(f::FREEZE, (freeze - 1) as u8);
         } else {
-            x.c.d[0] = x.u8(f::SUB) as u32;
             match x.u8(f::SUB) {
                 0 | 2 => march(x),
                 4 => routes(x),
@@ -249,8 +238,6 @@ fn march(x: &mut Cx) {
         speeds_by_level(x, SPEEDS_WALK);
         turn_timer(x, TIMER_B);
     }
-    x.c.d[6] = 0;
-    x.c.d[5] = 0xffff_ffff;
     steer(x);
     bite_check(x);
     let (cx, cy) = camera(x);
@@ -347,7 +334,6 @@ fn cross(x: &mut Cx) {
             x.move_xy();
             let (cx, _) = camera(x);
             let d5 = x.u16(Obj::X).wrapping_sub(cx);
-            set_dw(x, 5, d5);
             let arrived = if x.u8(GROUP) & 1 != 0 { (d5 as i16) >= 0x140 } else { (d5 as i16) <= 0x40 };
             if arrived {
                 x.add8(f::SUB3, 2);
@@ -367,11 +353,7 @@ fn cross(x: &mut Cx) {
 /// 0x65f18 : virage jusqu'à l'angle de sortie, `side` = la parité qui oriente le virage.
 fn cross_turn(x: &mut Cx, side: u8) {
     x.c.d[0] = x.c.d[0] & !0xff | side as u32;
-    x.c.d[6] = 0;
-    x.c.d[5] = 0xffff_ffff;
     if side & 1 != 0 {
-        x.c.d[6] = 8;
-        x.c.d[5] = 1;
     }
     steer(x);
     let wanted = if x.u8(GROUP) & 1 != 0 { 0x18 } else { 8 };
@@ -387,7 +369,6 @@ fn leave(x: &mut Cx) {
     x.move_xy();
     let (cx, _) = camera(x);
     let d5 = x.u16(Obj::X).wrapping_sub(cx);
-    set_dw(x, 5, d5);
     let out = if x.u8(GROUP) & 1 != 0 { (d5 as i16) < -0x10 } else { (d5 as i16) >= 0x190 };
     if out {
         x.set8(f::STATE, 6);
@@ -407,7 +388,6 @@ fn drift(x: &mut Cx) {
                 x.set8(Obj::SPEED_INDEX, 8);
                 d6 = 1;
             }
-            x.c.d[6] = d6;
             speeds(x, SPEEDS_DRIFT);
             x.set16(TURN_PERIOD, 0x101);
             x.set16(Obj::VX, 0x300);
@@ -437,7 +417,6 @@ fn drift(x: &mut Cx) {
                 x.set8(Obj::SPEED_INDEX, a);
                 let (cx, _) = camera(x);
                 let d5 = x.u16(Obj::X).wrapping_sub(cx);
-                set_dw(x, 5, d5);
                 let out = if x.u8(GROUP) & 1 != 0 { (d5 as i16) >= 0x190 } else { (d5 as i16) <= -0x10 };
                 if out {
                     set_state_long(x, DEAD);
@@ -453,8 +432,6 @@ fn drift(x: &mut Cx) {
 /// 0x660bc : abscisse d'arrêt (`+0xb6`) lue dans la table selon le rang d'arrêt.
 fn set_stop(x: &mut Cx, rank: u8) {
     let base = STOP_XS + if x.u8(GROUP) & 1 != 0 { 6 } else { 0 };
-    x.c.a[4] = base;
-    x.c.d[6] = rank as u32;
     let v = x.data16(base + rank as u32);
     x.set16(STOP_X, v);
 }
@@ -462,7 +439,6 @@ fn set_stop(x: &mut Cx, rank: u8) {
 /// 0x660aa : début d'un vol arrêté.
 fn halt_start(x: &mut Cx) {
     cross_start(x);
-    x.c.d[6] = 0;
     x.set8(STOP_STEP, 0);
     speeds_by_level(x, SPEEDS_FLY);
     turn_timer(x, TIMER_A);
@@ -476,7 +452,6 @@ fn halt_run(x: &mut Cx) {
     let d5 = x.u16(Obj::X).wrapping_sub(cx);
     let stop = x.u16(STOP_X);
     set_dw(x, 5, d5);
-    set_dw(x, 6, stop);
     let before = if x.u8(GROUP) & 1 != 0 { (d5 as i16) < stop as i16 } else { (d5 as i16) > stop as i16 };
     if before {
         x.anim_step();
@@ -556,7 +531,6 @@ fn side_turn(x: &mut Cx) {
     if group & 1 != 0 {
         d0 ^= group;
     }
-    x.c.d[1] = x.c.d[1] & !0xff | group as u32;
     cross_turn(x, d0);
 }
 
@@ -676,7 +650,6 @@ fn pounce(x: &mut Cx) {
 fn dormant(x: &mut Cx) {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d0 = x.u16(Obj::X).wrapping_sub(cam).wrapping_add(0x20);
-    set_dw(x, 0, d0);
     if d0 <= 0x1c0 {
         x.set8(f::SUB, 0);
     }
@@ -705,7 +678,6 @@ fn react_first(x: &mut Cx) {
     if x.u8(HIT_CODE) != 0x5c {
         return knock_back(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -735,7 +707,6 @@ fn react_first(x: &mut Cx) {
 /// 0x664b4 : durée de la secousse tirée au hasard.
 fn shake_timer(x: &mut Cx) {
     let r = random(x) & 3;
-    set_dw(x, 0, r as u16);
     let t = x.rom8(SHAKE_TIMES + r);
     x.set8(0xa2, t);
 }
@@ -751,7 +722,6 @@ fn knock_back(x: &mut Cx) {
     x.set16(Obj::VX, 0x200);
     x.set16(Obj::AX, 0);
     let flip = x.u8(0x4a) ^ 0x20;
-    x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
     x.set8(f::FLIP, flip);
     if flip != 0 {
         negate(x, Obj::VX);

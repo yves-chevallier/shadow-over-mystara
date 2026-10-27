@@ -121,7 +121,6 @@ fn begin_jump(x: &mut Cx, vx: i16, speed_z: u16, anim: u32, set: u32) {
 // --- sous-état 4 ----------------------------------------------------------------------------------------
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => lunge(x),
         2 | 4 => bite(x),
@@ -170,7 +169,6 @@ fn lunge(x: &mut Cx) {
 
 /// `+6` = 2 et 4 : morsure en place.
 fn bite(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -246,7 +244,6 @@ fn back_on_guard(x: &mut Cx) {
 
 /// `+6` = 8 : bond en avant puis morsure.
 fn jump_bite(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -266,7 +263,6 @@ fn jump_bite(x: &mut Cx) {
 
 /// `+6` = 10, 12, 14 : coup de patte court.
 fn short_paw(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -286,7 +282,6 @@ fn short_paw(x: &mut Cx) {
 
 /// `+6` = 16 : souffle de feu (animation 8 puis une série de tirs d'après la table).
 fn breath(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -341,7 +336,6 @@ fn flame_tick(x: &mut Cx, both: bool) -> bool {
 // --- sous-état 6 -------------------------------------------------------------------------------------------
 
 pub(super) fn run_b(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     // étapes communes : 0 attente, 2 poursuite en place (retour à l'état 6)
     match x.u8(f::SUB3) {
         0 => return begin_wait(x),
@@ -555,7 +549,6 @@ fn b_flames(x: &mut Cx) {
 // --- sous-état 8 ----------------------------------------------------------------------------------------------
 
 pub(super) fn run_c(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 | 6 => c_wait(x),
         2 => c_leap(x),
@@ -565,7 +558,6 @@ pub(super) fn run_c(x: &mut Cx) {
 }
 
 fn c_wait(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);
@@ -667,7 +659,6 @@ fn c_side(x: &mut Cx) {
 // --- sous-état 10 : promenade ----------------------------------------------------------------------------
 
 pub(super) fn idle(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -714,11 +705,10 @@ pub(super) fn grab(x: &mut Cx) {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
+    x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if victim.u8(x.b, 0) == 0 || victim.u8(x.b, 0x188) == 0 {
         return set_state_long(x, STANCE);
     }
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -764,7 +754,7 @@ fn bite_victim(x: &mut Cx, which: u8) {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
+    x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);
     }

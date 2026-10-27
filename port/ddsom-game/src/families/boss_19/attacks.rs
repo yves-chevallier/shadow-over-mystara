@@ -295,7 +295,6 @@ fn aim(x: &mut Cx, p: Obj) {
     }
     let px = p.u16(x.b, 0x8).wrapping_add(d1 as u16);
     let py = p.u16(x.b, 0x10);
-    x.c.a[1] = p.0;
     lib::turn_toward(x, px, py);
     x.move_by_table_xy();
 }

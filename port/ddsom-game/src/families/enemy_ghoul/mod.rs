@@ -112,7 +112,6 @@ fn difficulty_row(x: &mut Cx) -> u32 {
 fn pick_byte(x: &mut Cx, table: u32) -> u8 {
     let row = difficulty_row(x);
     set_dw(x, 0, row as u16);
-    x.c.a[4] = table + row;
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
@@ -127,7 +126,6 @@ fn end_attack(x: &mut Cx) {
 
 /// 0x60d04 / 0x60d0c : choisit le coup de l'attaque (`+6` = octet de la table + `bias`).
 fn pick_attack(x: &mut Cx, table: u32, bias: u8) {
-    x.c.d[2] = bias as u32;
     let mv = pick_byte(x, table);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set8(f::SUB3, 0);
@@ -136,16 +134,12 @@ fn pick_attack(x: &mut Cx, table: u32, bias: u8) {
 /// 0x5fdf8 : la cible est de l'autre côté de l'orientation (D0 = 1 ou 0).
 fn needs_turn_around(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
-    set_dw(x, 0, dx);
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = x.c.d[1] & !0xff | want;
     let turn = want != x.u8(f::FLIP) as u32;
-    x.c.d[0] = turn as u32;
     turn
 }
 
@@ -165,20 +159,15 @@ fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bo
         set_state_long(x, 0x0204_0000);
         pick_attack(x, table, bias);
     }
-    x.c.d[0] = ok as u32;
     ok
 }
 
 /// Réaction aux drapeaux de coup `+0x8f` (0x60c88) : vrai si elle a pris la main. `resume` est l'adresse
 /// que l'original reçoit en A6 pour poursuivre.
 fn special_hit(x: &mut Cx, resume: u32) -> bool {
-    x.c.a[6] = resume;
     let flag = x.u8(SPECIAL_HIT);
-    x.c.d[6] = flag as u32;
     if (1..=3).contains(&flag) {
-        x.c.d[6] = 2 * flag as u32;
         let entry = x.rom16(0x60c9c + 2 * flag as u32);
-        set_dw(x, 1, entry);
     }
     match flag {
         1 => {
@@ -449,7 +438,6 @@ fn blink(x: &mut Cx, next: u16) {
 
 fn dead(x: &mut Cx) {
     if x.u8(0xa6) != 0 {
-        x.c.a[1] = x.u16(0xa4) as i16 as i32 as u32;
         let parent = x.linked(0xa4);
         let n = parent.u8(x.b, 0xaf).wrapping_sub(1);
         parent.set_u8(x.b, 0xaf, n);

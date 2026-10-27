@@ -7,7 +7,6 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(Obj::VARIANT) as u32;
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x, 0x40, 0xd),
         2 => walk_in(x, 0x20, 0x17),
@@ -49,7 +48,6 @@ fn fall_in(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set16(Obj::VZ, -4i16 as u16);
-        x.c.d[0] = 0;
         x.set8(f::FLIP, 0);
         return mv(x, 0xf);
     }
@@ -69,7 +67,6 @@ fn appear(x: &mut Cx) {
         set_state_long(x, HELD);
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

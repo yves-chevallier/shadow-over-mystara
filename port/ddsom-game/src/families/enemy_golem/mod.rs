@@ -127,13 +127,11 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
         let theirs = target.u16(x.b, Obj::X);
         if mine != theirs {
             let want = if mine < theirs { 0x20 } else { 0 };
-            x.c.d[2] = want;
             if want as u8 != x.u8(f::FLIP) {
                 d1 = 2;
             }
         }
     }
-    x.c.d[1] = d1;
     x.set8(SIDE, d1 as u8);
     d1 != 0
 }
@@ -141,11 +139,9 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
 /// 0x68910 : drapeau de coup reçu `+0x8f` : rend vrai quand l'état doit continuer normalement.
 pub(self) fn hit_gate(x: &mut Cx) -> bool {
     let v = x.u8(HIT_FLAG);
-    x.c.d[6] = v as u32;
     if v == 0 {
         return true;
     }
-    x.c.d[6] = v as u32 * 2;
     match v {
         1 => {
             if x.u16(Obj::Z) != 0 {
@@ -250,7 +246,6 @@ fn init(x: &mut Cx) {
     x.set32(Obj::Z, 0);
     x.set16(Obj::Y, cam_y.wrapping_add(0x50));
     x.set8(f::FLIP, 0);
-    x.c.d[0] = 0;
     set_state_long(x, STANCE);
     mv(x, 0);
     x.reinsert();

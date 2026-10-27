@@ -515,7 +515,6 @@ fn pick_again(x: &mut Cx) {
     } else {
         return;
     };
-    x.c.d[0] = x.c.d[0] & !0xff | b as u32;
     if b != x.u8(LOOK_PREV) {
         x.set8(LOOK_PREV, b);
         x.set8(COOLDOWN, 2);

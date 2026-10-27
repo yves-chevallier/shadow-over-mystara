@@ -134,7 +134,6 @@ fn end_attack(x: &mut Cx) {
 fn pick_move(x: &mut Cx, table: u32, state: u16) {
     let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
-    x.c.a[4] = table + row as u32;
     let n = rand_and(x, 0x1f);
     let mv = x.data8(table + row as u32 + n);
     x.set8(f::SUB2, mv);
@@ -145,13 +144,9 @@ fn pick_move(x: &mut Cx, table: u32, state: u16) {
 /// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main. L'original reçoit en A6
 /// l'adresse où reprendre (`resume`) quand rien n'est à faire, et laisse A6, D6 et D1 comme ci-dessous.
 fn special_hit(x: &mut Cx, resume: u32) -> bool {
-    x.c.a[6] = resume;
     let flag = x.u8(SPECIAL_HIT);
-    x.c.d[6] = flag as u32;
     if (1..=3).contains(&flag) {
-        x.c.d[6] = 2 * flag as u32;
         let entry = x.rom16(0x5915a + 2 * flag as u32);
-        set_dw(x, 1, entry);
     }
     match flag {
         1 => {
@@ -217,7 +212,6 @@ fn init(x: &mut Cx) {
     x.set32(f::IMMUNITY, 0x1001);
     lib::set_immunities(x);
     let series = x.u8(SERIES) as u32;
-    x.c.d[1] = 4 * series;
     if series != 0 {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x1a);
@@ -228,7 +222,6 @@ fn init(x: &mut Cx) {
         let v = x.data8(row + i as u32);
         x.set8(off, v);
     }
-    x.c.a[1] = row + 4;
     x.set16(f::SUB2, 0);
     match x.u8(Obj::VARIANT) {
         0 => {
@@ -373,7 +366,6 @@ fn blink(x: &mut Cx) {
 
 fn dead(x: &mut Cx) {
     if x.u8(0xac) != 0 {
-        x.c.a[1] = x.u16(0xaa) as i16 as i32 as u32;
         let parent = x.linked(0xaa);
         let n = parent.u8(x.b, 0xaf).wrapping_sub(1);
         parent.set_u8(x.b, 0xaf, n);

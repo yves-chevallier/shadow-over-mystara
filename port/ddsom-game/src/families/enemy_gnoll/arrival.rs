@@ -6,7 +6,6 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(Obj::VARIANT) as u32;
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x),
         2 => drop_in(x, true),
@@ -41,7 +40,6 @@ fn walk_in(x: &mut Cx) {
 /// Variantes 2 et 6 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc`) avant de se
 /// relever, la variante 6 se relève tout de suite.
 fn drop_in(x: &mut Cx, gravity: bool) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.set16(Obj::VZ, 0);
@@ -76,7 +74,6 @@ fn drop_in(x: &mut Cx, gravity: bool) {
 
 /// Variante 4 : bond par le côté (vitesse horizontale −0x280), coup en l'air, retombée.
 fn side_jump(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -180,7 +177,6 @@ fn armed_run(x: &mut Cx) {
 
 /// Variante 10 : le Gnoll entre par le bord de l'écran avec sa hache ; saisi aussitôt la course finie.
 fn armed_run_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

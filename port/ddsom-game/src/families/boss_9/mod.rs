@@ -327,7 +327,7 @@ pub(self) fn count_crew(x: &mut Cx) {
         }
     }
     x.c.a[2] = x.o.0 + CREW + 8;
-    x.c.d[3] = bits as u32;
+    x.c.d[3] = bits as u32; // relu : D3 relu par la suite (DDSOM_POISON : covb_long3p_02)
     x.c.d[4] = 4;
     x.c.d[5] = 0xffff;
     x.c.d[6] = count as u32;

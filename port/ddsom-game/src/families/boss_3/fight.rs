@@ -16,7 +16,6 @@ pub(super) fn intro(x: &mut Cx) {
             next6(x);
             let cam = camera(x);
             let z = cam.u16(x.b, 0xc).wrapping_add(0x80);
-            set_dw(x, 0, z);
             x.set16(0x10, z);
             x.set16(0xc, (-0x80i16) as u16);
             stop(x);
@@ -29,7 +28,6 @@ pub(super) fn intro(x: &mut Cx) {
             }
             let cam = camera(x);
             let px = cam.u16(x.b, 0x8).wrapping_add(0x100);
-            set_dw(x, 0, px);
             x.set16(0x8, px);
             lib::step(x);
             x.move_z();
@@ -38,7 +36,6 @@ pub(super) fn intro(x: &mut Cx) {
             }
             next6(x);
             let z = cam.u16(x.b, 0xc).wrapping_add(0x40);
-            set_dw(x, 0, z);
             x.set16(0x10, z);
             x.set16(0xc, 0xc0);
             stop(x);
@@ -175,7 +172,6 @@ fn retarget(x: &mut Cx, hover_steps: u16) -> Option<bool> {
     }
     lib::draw_stance(x);
     let r = rand_and(x, 0xf);
-    set_dw(x, 1, 0xffc0);
     let ok = if 0xffc0u32 >> r & 1 != 0 { pick_target(x) } else {
         lib::random_player(x)
     };
@@ -258,7 +254,6 @@ fn lunge_box(x: &mut Cx, d0: i16, d1: u16, far: bool) -> bool {
         return false;
     }
     let r = rand_and(x, 0xf);
-    set_dw(x, 1, 0xffc0);
     if 0xffc0u32 >> r & 1 != 0 {
         x.set32(f::STATE, 0x0202_0800);
         return true;
@@ -266,7 +261,6 @@ fn lunge_box(x: &mut Cx, d0: i16, d1: u16, far: bool) -> bool {
     x.set32(f::STATE, 0x0204_0000);
     lib::pick_byte(x);
     choose_attack(x, far);
-    x.c.d[0] = 1;
     true
 }
 
@@ -293,11 +287,9 @@ fn patrol(x: &mut Cx) {
         Some(true) => {}
     }
     lib::step(x);
-    x.c.d[0] = 1;
     let h = x.u16(0xc) as i16;
     if h != 0x30 {
         let d = if h < 0x30 { 1 } else { 0xffff };
-        set_dw(x, 0, d);
         x.add16(0xc, d);
     }
     if lib::target_in_box(x, -0x18, 0x30, 0x18) || lib::target_in_box(x, -0xc0, 0x30, 0x10) || lib::target_in_box(x, -0x50, 0x20, 0x10) {
@@ -415,20 +407,15 @@ fn pick_round_point(x: &mut Cx) -> bool {
     let cam = camera(x);
     let dx = x.u16(0x8).wrapping_sub(cam.u16(x.b, 0x8)) as i16;
     let dz = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc)) as i16;
-    set_dw(x, 0, dx as u16);
-    set_dw(x, 1, dz as u16);
     let quarter: u32 = match (dx > 0xc0, dz > 0x80) {
         (false, false) => 0,
         (false, true) => 6,
         (true, false) => 0xc,
         (true, true) => 0x12,
     };
-    x.c.d[6] = quarter;
     let gx = x.rom16(ROUND_POINTS + quarter).wrapping_add(cam.u16(x.b, 0x8));
-    set_dw(x, 0, gx);
     x.set16(GOAL_X, gx);
     let gz = x.rom16(ROUND_POINTS + 2 + quarter).wrapping_add(cam.u16(x.b, 0xc));
-    set_dw(x, 0, gz);
     x.set16(GOAL_Z, gz);
     let angle = x.rom8(ROUND_POINTS + 4 + quarter);
     x.set8(Obj::SPEED_INDEX, angle);
@@ -452,10 +439,8 @@ fn circling(x: &mut Cx) {
     }
     let arrived = lib::target_in_box(x, 0x80, 0x100, 0x10) || {
         let dx = x.u16(GOAL_X).wrapping_sub(x.u16(0x8)).wrapping_add(8);
-        set_dw(x, 0, dx);
         dx <= 0x10 && {
             let dz = x.u16(GOAL_Z).wrapping_sub(x.u16(0x10)).wrapping_add(8);
-            set_dw(x, 0, dz);
             dz <= 0x10
         }
     };
@@ -542,7 +527,6 @@ pub(super) fn rise(x: &mut Cx) {
 pub(super) fn wait_for_players(x: &mut Cx) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 && pick_target(x) {
         let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
-        x.c.d[0] = s;
         return x.set32(f::STATE, s);
     }
     let anim = if x.u8(FLYING) == 0 && (x.u16(0xc) as i16) <= 0 {
@@ -564,7 +548,6 @@ pub(super) fn wait_for_players(x: &mut Cx) {
 pub(super) fn carrying(x: &mut Cx) {
     let held = |x: &mut Cx| {
         let t = x.u16(f::TARGET);
-        set_dw(x, 0, t);
         if (t as i16) >= 0 {
             return None;
         }
@@ -578,12 +561,10 @@ pub(super) fn carrying(x: &mut Cx) {
         0 => {
             next7(x);
             let v = ((x.u16(0x14) as i16) >> 2) as u16;
-            set_dw(x, 0, v);
             x.set16(0x14, v);
             x.set16(0x16, 0);
             x.set32(0x18, 0);
             let t = x.u16(f::TARGET);
-            set_dw(x, 0, t);
             if (t as i16) >= 0 {
                 return x.set32(f::STATE, 0x0202_0c00);
             }
@@ -609,7 +590,6 @@ pub(super) fn carrying(x: &mut Cx) {
                 if x.u8(f::FLIP) == 0 {
                     v = v.wrapping_neg();
                 }
-                set_dw(x, 0, v);
                 x.set16(0x14, v);
                 x.set16(0x18, 0x200);
                 x.set16(0x1a, 0x20);

@@ -100,8 +100,6 @@ fn pushed_back(x: &mut Cx) {
         0 => {
             x.set16(TIMER, 0x14);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18u8, 0x20u16) } else { (8, (-0x20i16) as u16) };
-            x.c.d[0] = angle as u32;
-            setw(x, 1, vy);
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vy);
             speed(x, 0x17);
@@ -124,7 +122,6 @@ fn pushed_back(x: &mut Cx) {
                 x.anim_step();
                 return;
             }
-            x.c.d[0] = 0;
             x.set32(0x58, 0);
             decide::swoop(x);
         }
@@ -198,10 +195,8 @@ fn death(x: &mut Cx) {
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
             let mid = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
-            setw(x, 2, mid);
             let (vx, side) = if Fl::sub16(mid, x.u16(0x8)).ge() { (0x200u16, 0u8) } else { ((-0x200i16) as u16, 0x20) };
             setw(x, 0, vx);
-            x.c.d[1] = side as u32;
             x.set16(0x14, vx);
             x.set8(f::FLIP, side);
             x.move_xz();

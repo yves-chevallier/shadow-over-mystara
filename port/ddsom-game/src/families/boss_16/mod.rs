@@ -79,7 +79,6 @@ pub(self) mod call {
 
 /// 0x95256 : lance l'animation `n` du jeu `set` (de sorte `kind`) par l'IA, sauf si c'est déjà celle en cours.
 fn play_set(x: &mut Cx, set: u32, kind: u8, n: u32) {
-    x.c.a[4] = set;
     x.c.d[0] = n;
     x.c.d[1] = x.c.d[1] & !0xff | kind as u32;
     if x.u8(ANIM_SET) == kind && x.u8(ANIM_N) == n as u8 {
@@ -109,7 +108,6 @@ pub(self) fn anim_c(x: &mut Cx, n: u32) {
 
 /// 0x95210 : annule les vitesses.
 pub(self) fn stop(x: &mut Cx) {
-    x.c.d[0] = 0;
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -175,7 +173,6 @@ pub(self) fn edge_target(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     }
     let t = x.linked(f::TARGET);
     let same_side = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.c.a[1] = t.0;
     lib::decision(x, same_side)
 }
 
@@ -216,7 +213,6 @@ fn count_victims(x: &mut Cx) -> u32 {
             n += 1;
         }
     }
-    x.c.d[0] = n;
     n
 }
 
@@ -279,7 +275,6 @@ fn init(x: &mut Cx) {
     }
     effct_trio_2e(x);
     x.set16(ANIM_SET, 0xffff);
-    x.c.d[0] = 0;
     anim_a(x, 0);
     lib::sound(x, 0xe1470);
 }

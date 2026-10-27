@@ -583,7 +583,6 @@ pub(super) fn holding(x: &mut Cx) {
             x.c.d[3] = x.u16(0xc).wrapping_add(0x38) as u32;
             x.c.d[4] = x.u16(0x10).wrapping_sub(1) as u32;
             x.call(call::SPLASH);
-            x.c.a[1] = prey.0;
             if (prey.u16(x.b, f::HP) as i16) <= 1 {
                 return release_prey(x);
             }
@@ -613,7 +612,6 @@ fn release_prey(x: &mut Cx) {
 fn flee_roll(x: &mut Cx) -> bool {
     let row = (((var::RANK.get(x.b) >> 3) << 1)) as u32;
     let chances = x.rom16(0xfff4 + row);
-    set_dw(x, 2, chances);
     let r = rand_and(x, 0xf);
     (chances >> r) & 1 != 0
 }

@@ -77,8 +77,6 @@ fn wait(x: &mut Cx) {
     }
     set_state_long(x, STANCE);
     let r = random(x) & 0xf;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | r;
-    set_dw(x, 1, 0x1111);
     if 0x1111u32 >> r & 1 != 0 {
         pick_target(x);
     }

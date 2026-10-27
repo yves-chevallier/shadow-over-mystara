@@ -9,7 +9,6 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => cannon(x, 0x10, 0),
         2 => cannon(x, 0x11, 1),
@@ -89,7 +88,6 @@ fn rush(x: &mut Cx) {
             x.set8(FLAG, 0);
             let v: i16 = if x.u8(f::FLIP) != 0 { -0x30 } else { 0x30 };
             x.set16(Obj::AX, v as u16);
-            x.c.d[0] = v as u16 as u32;
             lib::sound(x, 0xe3d32);
             lib::sound(x, 0xecdba);
             mv(x, 9);
@@ -281,7 +279,6 @@ pub(super) fn spin(x: &mut Cx) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::fire_a(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

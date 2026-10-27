@@ -52,7 +52,6 @@ mod riyakaa {
         x.set8(f::BOX_SET, 0xf);
         lib::initial_hp(x);
         lib::set_immunities(x);
-        x.c.d[0] = 0;
         // paramètres d'IA lus par les tables de décision, et valeurs de départ
         for (off, v) in [
             (0x68, 2),
@@ -415,7 +414,6 @@ mod riyakaa {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
-            x.c.d[0] = 1;
             x.set8(0xa0, 1);
             if x.u8(0xa1) != 1 {
                 x.set8(0xa1, 1);
@@ -445,7 +443,6 @@ mod riyakaa {
     /// `shift` du regard (`+0xa0`).
     fn swing_pose(x: &mut Cx, id: u8, anim: u32, shift: u8) {
         x.set8(0x44, id);
-        x.c.d[2] = anim;
         x.set8(0xa0, shift);
         x.add8(0x7, 2);
         set_dw(x, 0, anim as u16);
@@ -524,7 +521,6 @@ mod riyakaa {
         let v = x.u8(0xa0);
         x.set8(0xa1, v);
         x.set8(0xa0, 0xf6);
-        x.c.d[0] = 0;
         x.set16(0x14, 0);
         x.set16(0x1c, 0);
         x.set16(0x1e, 0);
@@ -534,7 +530,6 @@ mod riyakaa {
         if x.u8(f::FLIP) != 0 {
             d = d.wrapping_neg();
         }
-        set_dw(x, 0, d);
         x.set32(0x8a, 0x0204_0600);
         x.set16(0x16, d);
         strike(x, 2);
@@ -799,7 +794,6 @@ mod riyakaa {
                     x.set8(0x2d, 0);
                 }
             }
-            x.c.d[2] = 0;
             x.set8(0xa0, 0);
             x.set8(0x67, 1);
             x.set8(0xa1, 0);
@@ -868,21 +862,17 @@ mod riyakaa {
     /// 0x70116 : un joueur dans la boîte devant lui et la décision d'attaquer est favorable.
     fn want_attack(x: &mut Cx) -> bool {
         let found = lib::target_in_box(x, 0, 0x70, 8);
-        x.c.d[0] = 0;
         if !found {
             return false;
         }
-        x.c.a[1] = x.u16(f::OWNER) as i16 as i32 as u32;
         let target = x.linked(f::OWNER);
         let facing = target.u8(x.b, f::FLIP);
-        x.c.d[1] = x.c.d[1] & !0xff | facing as u32;
         if !lib::decision_b(x) {
             return false;
         }
         if !lib::decision_a(x) {
             return false;
         }
-        x.c.d[0] = 1;
         true
     }
 
@@ -900,11 +890,9 @@ mod riyakaa {
     /// 0x70178 : tire le prochain geste d'attaque dans une table ; si le jeu le permet, repasse en
     /// sous-état 4 avec ce geste.
     fn choose_attack(x: &mut Cx) {
-        x.c.d[2] = 0;
         let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
         let r = random(x) & 0x1f;
         let pick = x.data8(NEXT_ATTACKS + row + r);
-        x.c.d[2] = pick as u32;
         if pick > 4 {
             return;
         }
@@ -963,7 +951,6 @@ mod riyakaa {
         let level = ((var::RANK.get(x.b) >> 2) << 2) as u32;
         let mask = x.data32(MASKS + level);
         let bit = random(x) & 0x1f;
-        x.c.d[2] = mask;
         if mask >> bit & 1 != 0 {
             x.set32(f::STATE, 0x0204_0600);
             lunge_start(x);

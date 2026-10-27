@@ -79,12 +79,9 @@ fn combo(x: &mut Cx, id: u8) {
             anim = r;
         }
     }
-    x.c.d[2] = d2;
-    x.c.d[3] = d3;
     x.set8(STRIKE_KIND, 0x15);
     x.set8(REPEAT, d3 as u8);
     x.set8(STRIKE_POWER, 5);
-    x.c.a[4] = SET_STRIKE;
     strike(x, anim);
 }
 
@@ -176,8 +173,6 @@ fn stab(x: &mut Cx) {
         x.add8(f::SUB3, 2);
         x.set8(AI_KIND, 2);
         let row = difficulty_row(x);
-        set_dw(x, 2, row as u16);
-        x.c.a[4] = REPEATS_TABLE + row;
         let n = rand_and(x, 0x1f);
         let v = x.data8(REPEATS_TABLE + row + n);
         x.set8(REPEAT, v);
@@ -304,7 +299,6 @@ fn approach(x: &mut Cx) {
         } else {
             x.set8(LOOK_PREV, 1);
         }
-        x.c.d[0] = 0;
         return body(x, 0);
     }
     step(x);
@@ -453,7 +447,6 @@ pub(super) fn forward_hop_begin(x: &mut Cx) {
     if x.u8(f::FLIP) != 0 {
         x.add8(Obj::SPEED_INDEX, 0x10);
     }
-    x.c.d[0] = 2;
     walk_speed(x, 2);
     body(x, 3);
 }

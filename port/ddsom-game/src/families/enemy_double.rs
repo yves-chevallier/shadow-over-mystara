@@ -737,7 +737,6 @@ mod dark_warrior_double {
             return false;
         }
         let b = x.rom8(REVERSING_TERRAIN + terrain as u32);
-        x.c.d[0] = x.c.d[0] & !0xff | b as u32;
         b != 0
     }
 

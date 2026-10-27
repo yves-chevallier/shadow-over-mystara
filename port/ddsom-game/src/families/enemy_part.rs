@@ -213,7 +213,6 @@ mod tentacle {
             return;
         }
         x.set8(0x33, 0);
-        x.c.a[1] = x.u16(f::HOST) as i16 as i32 as u32;
         if x.u8(2) == TROLL {
             lib::sound(x, 0xe50fe);
         } else {

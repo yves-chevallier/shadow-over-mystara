@@ -302,7 +302,6 @@ pub(self) fn go(x: &mut Cx, at: u32) {
 pub(self) fn from_close(x: &mut Cx) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a8e8 + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7a8f8, i);
     go(x, at)
 }
@@ -311,7 +310,6 @@ pub(self) fn from_close(x: &mut Cx) {
 pub(self) fn from_front(x: &mut Cx) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a932 + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7a942, i);
     go(x, at)
 }
@@ -328,7 +326,6 @@ pub(self) fn from_near_gesture(x: &mut Cx, g: u32) {
         0x7a9ce
     };
     let i = x.rom8(table + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7a9de, i);
     go(x, at)
 }
@@ -349,7 +346,6 @@ pub(self) fn from_far_gesture(x: &mut Cx, g: u32) {
         _ => panic!("boss 0 : entrée {entry:#x} inconnue"),
     };
     let i = x.rom8(table + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7aac8, i);
     go(x, at)
 }
@@ -381,7 +377,6 @@ pub(self) fn far_gesture(x: &mut Cx) -> Option<u32> {
     let cam = camera_x(x);
     let px = x.u16(0x8);
     if Fl::sub16(cam.wrapping_sub(0x10), px).ge() || Fl::sub16(cam.wrapping_add(0x190), px).le() {
-        x.c.d[0] = 0;
         return None;
     }
     let (d0, d1, d2) = if x.u8(3) == 0 { (-0xe0, 0x60, 0xa) } else { (-0xe8, 0x48, 0xc) };

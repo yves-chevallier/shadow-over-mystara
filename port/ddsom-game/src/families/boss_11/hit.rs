@@ -22,17 +22,14 @@ pub(super) fn run(x: &mut Cx) {
 fn paused(x: &mut Cx) -> bool {
     if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
-        x.c.d[0] = 1;
         return true;
     }
-    x.c.d[0] = 0;
     false
 }
 
 /// 0x8e8de : fin de la réaction, retour à la poursuite.
 fn recover(x: &mut Cx) {
     x.set8(0, 1);
-    x.c.d[0] = 0;
     x.set8(0x86, 0);
     x.set8(0x87, 0);
     x.set8(REACTION, 0);
@@ -52,7 +49,6 @@ fn reaction(x: &mut Cx) {
     let code = x.u8(REACTION) as u32;
     x.c.d[0] = code;
     let routine = rom32(x, 0x8e3dc + code);
-    x.c.a[1] = routine;
     match routine {
         0x8e488 => {
             if var::PAUSE.get(x.b) != 0 {
@@ -97,8 +93,6 @@ fn hit_a(x: &mut Cx) {
             d0 = d0.wrapping_neg();
             d1 = d1.wrapping_neg();
         }
-        setw(x, 0, d0);
-        setw(x, 1, d1);
         x.set16(0x14, d0);
         x.set16(0x16, d1);
         return hurt(x, 0);
@@ -109,10 +103,8 @@ fn hit_a(x: &mut Cx) {
     x.set8(0, 1);
     x.move_x();
     let mut d0 = x.u16(0x14);
-    setw(x, 0, d0);
     if x.u8(f::FLIP) != 0 {
         d0 = d0.wrapping_neg();
-        setw(x, 0, d0);
     }
     if (d0 as i16) < 0 {
         x.set32(0x14, 0);
@@ -172,10 +164,8 @@ fn generic(x: &mut Cx) {
             x.set8(0x90, 0x10);
             stop(x);
             let mut d0 = 0x500u16;
-            setw(x, 0, d0);
             if x.u8(f::FLIP) != 0 {
                 d0 = d0.wrapping_neg();
-                setw(x, 0, d0);
             }
             x.set16(0x14, d0);
             x.set16(0x18, 0x600);
@@ -214,7 +204,6 @@ fn fallen(x: &mut Cx) {
     x.set8(0, 1);
     x.set32(f::STATE, 0x0404_0000);
     x.set8(0x86, 1);
-    x.c.d[0] = 0;
     x.set8(0x87, 0);
     x.set8(REACTION, 0);
     x.set32(0x8a, 0);
@@ -254,7 +243,6 @@ fn stun(x: &mut Cx) {
         _ => {
             x.c.d[0] = 2;
             let d1 = rd16(x.b, x.o.0.wrapping_sub(0x7f92)) & 1;
-            setw(x, 1, d1);
             let mut d = 2u16;
             if d1 != 0 {
                 d = d.wrapping_neg();
@@ -299,10 +287,8 @@ fn throw(x: &mut Cx) {
                 x.set8(0x90, 1);
             }
             let mut d2 = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            x.c.d[2] = d2;
             x.random_68k();
             d2 &= 0xf;
-            setw(x, 2, d2 as u16);
             let d0 = ((x.c.d[0] as u16).wrapping_add(d2 as u16)) & 0x1f;
             setw(x, 0, d0);
             x.set8(0x2d, d0 as u8);
@@ -343,7 +329,6 @@ fn arc_end(x: &mut Cx) {
 /// 0x8e7b4 : la tête décrit un arc (vecteurs de la table 0x1c94b6).
 fn arc(x: &mut Cx) {
     let a4 = 0x1c94b6;
-    x.c.a[4] = a4;
     let z = x.u32(0xc).wrapping_add(0x20000);
     x.set32(0xc, z);
     if !Fl::sub16(x.u16(0xc), 0x60).lt() {
@@ -366,18 +351,13 @@ fn arc(x: &mut Cx) {
     }
     x.c.d[0] = x.u8(0x2d) as u32;
     let i = (x.c.d[0] as u16) << 2;
-    setw(x, 0, i);
     let vx = x.data16(a4 + i as u32).wrapping_add(x.u16(0x16));
-    x.c.d[1] = vx as u32;
     x.set16(0x14, vx);
     let step = (((vx as u32) << 16) as i32 >> 8) as u32;
-    x.c.d[1] = step;
     x.add32(0x8, step);
     let vy = x.data16(a4 + 2 + i as u32).wrapping_add(x.u16(0x1e));
-    x.c.d[1] = vy as u32;
     x.set16(0x1c, vy);
     let step = (((vy as u32) << 16) as i32 >> 8) as u32;
-    x.c.d[1] = step;
     x.add32(0x10, step);
 }
 
@@ -413,7 +393,6 @@ fn stunned(x: &mut Cx) {
                 return;
             }
             x.set8(0, 1);
-            x.c.d[0] = 0;
             x.set8(0x86, 0);
             x.set8(REACTION, 0);
             x.set32(0x58, 0);
@@ -429,7 +408,6 @@ fn wait_init(x: &mut Cx) {
         return;
     }
     x.add8(f::SUB3, 2);
-    x.c.d[0] = 0;
     let level = x.a5_u8(0x7f92) >> 1;
     setb(x, 0, level);
     let v = x.rom8(0x8e978 + level as u32);

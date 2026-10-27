@@ -173,7 +173,6 @@ fn stun(x: &mut Cx) {
 fn anim(x: &mut Cx, n: u32) {
     x.c.d[0] = n;
     let i = 4 * type_index(x);
-    x.c.d[1] = i;
     let entry = rd32(x.b, rom::ANIM_SETS + i);
     if entry >> 16 != 0 {
         x.c.a[4] = entry;
@@ -181,7 +180,6 @@ fn anim(x: &mut Cx, n: u32) {
         // routine propre : `bsr 0x3e27e ; movea.l #jeu,A4 ; jmp 0x1a32`
         let routine = rom::ANIM_SETS + (entry & 0xffff);
         let v = x.u8(0xbf) as u32;
-        x.c.d[1] = v;
         let add = x.rom8(rom::ANIM_VARIANTS + v);
         x.c.d[0] = x.c.d[0] & !0xff | (x.c.d[0] as u8).wrapping_add(add) as u32;
         x.c.a[4] = (x.rom16(routine + 6) as u32) << 16 | x.rom16(routine + 8) as u32;
@@ -273,7 +271,6 @@ fn launch(x: &mut Cx, n: u32) {
     let c = x.rom8(rom::LAUNCH_COUNTERS + n);
     x.set8(f::COUNTER, c);
     let at = rom::LAUNCH_SPEEDS + 8 * n;
-    x.c.d[0] = 8 * n;
     for (k, off) in [f::VX, f::VY, f::VZ, f::GRAVITY].into_iter().enumerate() {
         let v = x.rom16(at + 2 * k as u32);
         x.set16(off, v);
@@ -425,7 +422,6 @@ fn get_up(x: &mut Cx) {
         return next_clear(x);
     }
     x.set8(f::DOWNED, 1);
-    x.c.a[6] = 0x3e0fc;
     grab_check(x, get_up_done);
 }
 /// 0x3df7c : fin de la glissade : l'objet se relève.
@@ -436,7 +432,6 @@ fn slide_end(x: &mut Cx) {
     }
     x.set8(f::ACTIVE, 1);
     x.set8(f::REACTION, 0);
-    x.c.a[6] = 0x3df9e;
     grab_check(x, resume_after_slide);
 }
 
@@ -449,9 +444,7 @@ fn grab_check(x: &mut Cx, then: fn(&mut Cx)) {
         if !x.c.cond(2) {
             x.set16(f::RECOVER, 1);
             let i = type_index(x);
-            x.c.d[0] = i;
             let keep = x.rom8(rom::NO_GRAB_DOWN + i);
-            x.c.d[0] = keep as u32;
             if keep == 0 {
                 let code = if x.u8(f::DOWNED) != 0 { 108 } else { 104 };
                 x.set8(f::REACTION, code);
@@ -878,7 +871,6 @@ fn pop_by_code(x: &mut Cx) {
     hurt(x);
     x.set8(f::COUNTER, 1);
     let i = (x.u8(f::REACTION) as u32).wrapping_sub(68) & 0xffff;
-    x.c.d[0] = i;
     let at = 0x3c5f2u32.wrapping_add(i as u16 as i16 as i32 as u32);
     let (vz, g) = (x.rom16(at), x.rom16(at + 2));
     speeds(x, 0x100, 0, vz, g);
@@ -960,7 +952,6 @@ fn sparks(x: &mut Cx) {
         return;
     }
     for v in [1u8, 0] {
-        x.c.d[5] = v as u32;
         // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
         let o = x.alloc_unchecked(&pools::EFFCT);
         o.set_u8(x.b, 0, 1);
@@ -968,7 +959,6 @@ fn sparks(x: &mut Cx) {
         o.set_u8(x.b, 3, v);
         o.set_u16(x.b, 0x5c, x.o.0 as u16);
     }
-    x.c.d[5] = 0xffff;
 }
 
 /// 0x3c828 : désintégration (ENEMY de type 1 : 0xeb448, sinon 0xe35a6), puis clignotement et disparition.
@@ -1128,7 +1118,6 @@ fn hop_rise(x: &mut Cx) {
 /// 0x3cafc : quand l'objet lié (`+0x54`) est au sous-pas 4, retombe d'une hauteur aléatoire (animation 11).
 fn hop_top(x: &mut Cx) {
     let a1 = x.u16(0x54) as i16 as i32 as u32;
-    x.c.a[1] = a1;
     if rd8(x.b, a1 + 7) != 4 {
         return;
     }
@@ -1378,7 +1367,6 @@ fn seized_by(x: &mut Cx) {
 /// 0x3d048 : quand le joueur (`+0x50`) signale la prise, l'objet se place devant lui.
 fn seized_stick(x: &mut Cx) {
     let p = x.u16(f::OWNER) as i16 as i32 as u32;
-    x.c.a[6] = p;
     if rd8(x.b, p + 0x33) != 1 {
         return;
     }
@@ -1390,7 +1378,6 @@ fn seized_stick(x: &mut Cx) {
     if !flipped(x) {
         d = d.wrapping_neg();
     }
-    x.c.d[0] = d as u32;
     x.add16(f::X, d);
 }
 /// 0x3d0e8 : le joueur (personnage 5, état 0x02000cxx, action 26) frappe : dégâts selon son coup (`+0x10c`,
@@ -1489,9 +1476,7 @@ fn grab_hit(x: &mut Cx) {
     }
     anim(x, 2);
     let flip = x.u8(f::FLIP) ^ 0x20;
-    x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
     x.set8(f::ATTACKER_FLIP, flip);
-    x.c.d[0] = 0;
     launch(x, 0);
     face_attacker(x);
 }
@@ -1643,7 +1628,6 @@ fn zapped_burn(x: &mut Cx) {
         detach_from_host(x);
         return lib::object_event(x);
     }
-    x.c.d[0] = x.c.d[0] & !0xff | (c & 7) as u32;
     if c & 7 != 0 {
         return;
     }
@@ -1709,7 +1693,6 @@ fn stagger(x: &mut Cx) {
     }
     next(x);
     x.c.d[0] = 5;
-    x.c.d[1] = 0;
     x.set8(f::COUNTER, 60);
     stun(x);
     x.set16(f::VX, 0x180);
@@ -1763,7 +1746,6 @@ fn burnt(x: &mut Cx) {
     x.set8(f::DOWNED, 0);
     x.set8(f::GRABBED, 0);
     x.set8(f::COUNTER, 0xf0);
-    x.c.d[6] = 15;
     let n = x.c.d[0];
     anim(x, n);
     if !lib::attack_effects(x, 4, 5) {
@@ -1797,7 +1779,6 @@ fn burnt_wait(x: &mut Cx) {
 /// Angle de départ d'un tourbillon : au hasard, centré à gauche (8) ou à droite (24) selon l'orientation.
 fn spin_angle(x: &mut Cx) {
     let d2 = if flipped(x) { 24 } else { 8 };
-    x.c.d[2] = d2;
     let r = random(x);
     let a = (r as u16).wrapping_add(d2 as u16 & 15) & 31;
     x.c.d[0] = x.c.d[0] & !0xffff | a as u32;
@@ -1834,21 +1815,17 @@ fn turn_angle(x: &mut Cx) {
 /// 0x3da0e : position sur le cercle (table 0x1c94b6 : X, profondeur), vitesses ajoutées.
 fn orbit(x: &mut Cx) {
     const CIRCLE: u32 = 0x1c94b6;
-    x.c.a[4] = CIRCLE;
     let i = 4 * x.u8(f::ANGLE) as u32;
-    x.c.d[0] = i;
     let vx = rd16(x.b, CIRCLE + i).wrapping_add(x.u16(f::VY));
     x.set16(f::VX, vx);
     x.add32(f::X, ((vx as i16 as i32) << 8) as u32);
     let vy = rd16(x.b, CIRCLE + i + 2).wrapping_add(x.u16(f::VY2));
     x.set16(f::VX2, vy);
     let d = ((vy as i16 as i32) << 8) as u32;
-    x.c.d[1] = d;
     x.add32(f::Y, d);
 }
 /// 0x3d9b2 : monte en tournant jusqu'à 96, puis retombe.
 fn whirl_rise(x: &mut Cx) {
-    x.c.a[4] = 0x1c94b6;
     x.add32(f::HEIGHT, 0x2_0000);
     if x.u16(f::HEIGHT) as i16 >= 96 {
         next(x);
@@ -1903,7 +1880,6 @@ fn spin_rise(x: &mut Cx) {
     if c == 0 {
         return next(x);
     }
-    x.c.a[4] = 0x1c94b6;
     x.add32(f::HEIGHT, 0x2_0000);
     if x.u16(f::HEIGHT) as i16 >= 64 {
         x.set32(f::HEIGHT, 0x0040_0000);
@@ -2038,7 +2014,7 @@ type Step = fn(&mut Cx);
 /// un pas inconnu (le code d'origine s'en charge).
 fn dispatch(x: &mut Cx, table: u32, steps: &[Step]) -> bool {
     let s = x.u8(f::STEP);
-    x.c.d[0] = s as u32;
+    x.c.d[0] = s as u32; // relu : D0 relu par la suite (DDSOM_POISON : cov_tour2_c1...)
     let off = x.rom16(table + s as u32);
     x.c.d[1] = x.c.d[1] & !0xffff | off as u32;
     match steps.get(s as usize / 2) {

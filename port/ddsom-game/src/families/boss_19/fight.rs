@@ -131,7 +131,6 @@ fn probe_target(x: &mut Cx, d0: i16, d1: u16, d2: u16, no_target: impl Fn(u16) -
         return true;
     }
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0;
     let same_side = target.u8(x.b, f::FLIP) == x.u8(f::FLIP);
     lib::decision(x, same_side)
 }
@@ -215,7 +214,6 @@ pub(super) fn pick_attack_b(x: &mut Cx) {
         return wait(x);
     }
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0;
     if !lib::target_in_box(x, -0x40, 0x40, 0x20) {
         return stand(x);
     }

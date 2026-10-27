@@ -96,7 +96,6 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
             // 0x80cb0 : riposte 6 chances sur 16
             let r = rand_and(x, 0xf);
-            set_dw(x, 1, 0xfc00);
             if 0xfc00u32 >> r & 1 == 0 {
                 return;
             }
@@ -174,7 +173,6 @@ fn falling(x: &mut Cx) {
     }
     x.set16(0xc, 0);
     let v = ((x.u16(0x14) as i16) >> 2) as u16;
-    set_dw(x, 0, v);
     x.set16(0x14, v);
     x.set32(0x1c, 0);
     x.set32(0x18, 0);

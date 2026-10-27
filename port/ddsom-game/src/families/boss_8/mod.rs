@@ -80,7 +80,6 @@ pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
 /// rend l'adresse d'arrivée. D0 reçoit l'octet (après un `moveq 0,D0`), D1w le décalage.
 pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
-    x.c.d[0] = i;
     let off = x.rom16(table + i);
     setw(x, 1, off);
     table.wrapping_add(off as i16 as i32 as u32)
@@ -126,8 +125,6 @@ pub fn run(x: &mut Cx) {
     if x.u8(0x43) == 0 {
         let weak = x.u16(WEAK_HP);
         let hp = x.u16(f::HP);
-        setw(x, 0, weak);
-        setw(x, 1, hp.wrapping_sub(weak));
         if !Fl::sub16(hp, weak).gt() {
             x.set8(SLOW, 1);
         }
@@ -191,12 +188,10 @@ fn init(x: &mut Cx) {
     } else {
         x.set8(PHASES, 1);
     }
-    setw(x, 1, d1);
     x.set16(WEAK_HP, d1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
-    x.c.d[0] = 0;
     body(x, 0);
 }
 
@@ -263,7 +258,6 @@ fn idle_attack(x: &mut Cx) {
     x.set32(f::STATE, 0x0204_0000);
     let alea = x.random();
     let i = alea as u32 & 0xf;
-    setw(x, 0, i as u16);
     let step = x.rom8(0x88294 + i);
     x.set8(f::SUB2, step);
 }

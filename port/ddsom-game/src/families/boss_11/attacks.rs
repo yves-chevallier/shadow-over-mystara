@@ -118,16 +118,12 @@ fn spit(x: &mut Cx) {
 fn jump_side(x: &mut Cx, speed: i16, z: u16, rise: u16) {
     stop(x);
     let mut d0 = cam_x(x);
-    setw(x, 0, d0);
     setb(x, 1, 0);
     let mut d2 = speed as u16;
-    setw(x, 2, d2);
     d0 = d0.wrapping_add(0xe0);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, x.u16(0x8)).le() {
         setb(x, 1, 0x20);
         d2 = d2.wrapping_neg();
-        setw(x, 2, d2);
     }
     let side = x.c.d[1] as u8;
     x.set8(f::FLIP, side);
@@ -290,7 +286,6 @@ fn charge(x: &mut Cx) {
                 if !Fl::sub16(w, 0x10).lt() {
                     w = w.wrapping_sub(0x20);
                 }
-                setw(x, 0, w);
                 let cur = x.u8(0x2d).wrapping_sub(w as u8) & 0x1f;
                 x.set8(0x2d, cur);
             }
@@ -313,10 +308,8 @@ fn charge(x: &mut Cx) {
 fn charge_end(x: &mut Cx) {
     x.add8(f::SUB3, 2);
     let a = asr_w(x.u16(0x14), 2);
-    setw(x, 0, a);
     x.set16(0x14, a);
     let b = asr_w(x.u16(0x1c), 2);
-    setw(x, 0, b);
     x.set16(0x1c, b);
     act(x, 0x29);
     sync(x);
@@ -331,7 +324,6 @@ fn aim_target(x: &mut Cx) -> bool {
     x.call(0x1376);
     let a = x.c.d[0] as u8;
     x.set8(0xb3, a);
-    x.c.d[0] = 1;
     true
 }
 
@@ -341,7 +333,6 @@ fn seg_choice(x: &mut Cx) {
     let i = x.c.d[0] as u16 & 0x30;
     setw(x, 0, i);
     let a4 = 0x8dfcc + i as u32;
-    x.c.a[4] = a4;
     let alea = x.random();
     let r = alea & 0xf;
     setw(x, 0, r);
@@ -354,7 +345,6 @@ fn seg_choice(x: &mut Cx) {
 fn pause_tick(x: &mut Cx) {
     let alea = x.random();
     let r = alea & 0xf;
-    setw(x, 0, r);
     let v = x.rom8(0x8dfbc + r as u32);
     x.set8(0xb1, v);
 }
@@ -377,10 +367,8 @@ fn approach(x: &mut Cx) {
             if sub16(x, TIMER, 1).mi() && !route_step(x) {
                 x.add8(f::SUB3, 2);
                 let a = asr_w(x.u16(0x14), 2);
-                setw(x, 0, a);
                 x.set16(0x14, a);
                 let b = asr_w(x.u16(0x1c), 2);
-                setw(x, 0, b);
                 x.set16(0x1c, b);
                 act(x, 0x29);
                 return sync(x);
@@ -400,10 +388,8 @@ fn approach(x: &mut Cx) {
 /// 0x8e0a2 : tracé tiré selon la distance à la caméra (trois tables identiques dans la ROM).
 fn route_start(x: &mut Cx) -> bool {
     let d1 = cam_x(x);
-    setw(x, 1, d1);
     let d0 = x.u16(0x8).wrapping_sub(d1);
     setw(x, 0, d0);
-    x.c.a[2] = 0x8e1e8;
     let alea = x.random();
     let r = alea & 0xf;
     setw(x, 0, r);
@@ -448,7 +434,6 @@ fn route_step(x: &mut Cx) -> bool {
     let i = (x.c.d[0] as u16).wrapping_mul(4);
     setw(x, 0, i);
     let a2 = x.u32(0x4c);
-    x.c.a[2] = a2;
     let mut v = x.data16(a2.wrapping_add(i as i16 as i32 as u32));
     setw(x, 0, v);
     let (mut d0, mut d1l): (u32, u32);
@@ -521,9 +506,6 @@ fn route_step(x: &mut Cx) -> bool {
         }
     }
     x.c.d[0] = d0;
-    x.c.d[1] = d1l;
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | d2 as u32;
-    x.c.d[3] = d3;
     x.set16(TIMER, d2);
     x.c.d[0] = 1;
     true
@@ -575,10 +557,8 @@ fn spit_c(x: &mut Cx) {
             }
             x.add8(f::SUB3, 2);
             let w = x.u16(0x5c);
-            setw(x, 0, w);
             if (w as i16) < 0 {
                 let a1 = w as i16 as i32 as u32;
-                x.c.a[1] = a1;
                 if rd8(x.b, a1) != 0 && rd8(x.b, a1 + 2) == 0x47 {
                     wr8(x.b, a1 + 0x58, 1);
                 }

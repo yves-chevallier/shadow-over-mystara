@@ -73,7 +73,6 @@ fn thrown(x: &mut Cx) {
             x.set16(0x14, 0x500);
             x.set16(0x16, (-0x28i16) as u16);
             let side = x.u8(0x4a) ^ 0x20;
-            x.c.d[0] = x.c.d[0] & !0xff | side as u32;
             x.set8(f::FLIP, side);
             if side != 0 {
                 let (a, b) = (x.u16(0x14).wrapping_neg(), x.u16(0x16).wrapping_neg());
@@ -100,10 +99,8 @@ fn thrown(x: &mut Cx) {
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
             x.c.d[5] = ((n as u16) << 2) as u32;
             let mask = rom32(x, 0x894cc + x.c.d[5]);
-            x.c.d[5] = mask;
             let alea = x.random();
             let i = alea & 0x1f;
-            setw(x, 0, i);
             if mask >> i & 1 == 0 {
                 x.set8(0, 1);
                 x.set32(f::STATE, 0x0202_0000);

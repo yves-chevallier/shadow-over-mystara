@@ -285,7 +285,6 @@ fn plunge(x: &mut Cx) {
             } else {
                 x.set8(f::FLIP, 0);
                 let cam = camera_x(x);
-                set_dw(x, 2, cam);
                 if (x.u16(Obj::X) as i16) <= (cam as i16) {
                     x.set8(f::FLIP, 0x20);
                     angle = 8;
@@ -330,8 +329,6 @@ fn plunge(x: &mut Cx) {
             if leftward {
                 std::mem::swap(&mut d0, &mut d1);
             }
-            set_dw(x, 0, d0);
-            set_dw(x, 1, d1);
             if (d1 as i16) < (d0 as i16) {
                 return;
             }

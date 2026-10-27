@@ -215,7 +215,6 @@ fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
     }
     let t = x.linked(f::TARGET);
     let same = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.c.a[1] = t.0;
     if !lib::decision(x, same) {
         return false;
     }

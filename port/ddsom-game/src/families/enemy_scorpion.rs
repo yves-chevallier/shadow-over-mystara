@@ -84,7 +84,6 @@ fn drop_from_above(x: &mut Cx) {
     let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
     let depth = x.u16(Obj::Y);
     x.set16(Obj::Z, cam.wrapping_sub(depth));
-    set_dw(x, 0, depth);
     x.set16(Obj::VZ, 0);
     x.set16(Obj::AZ, -0x40i16 as u16);
 }
@@ -113,7 +112,6 @@ fn pick_move(x: &mut Cx) {
 /// 0x677e8 : durée du geste (`+0xa2`) selon le rang `d0` et le geste.
 fn set_timer(x: &mut Cx, d0: u32) {
     let idx = ((d0 << 2) & !0xff) | (((d0 << 2) as u8).wrapping_add(x.u8(MOVE)) as u32);
-    x.c.d[0] = idx;
     let t = x.rom8(TIMER_ROW + idx);
     x.set8(TIMER, t);
 }
@@ -174,7 +172,6 @@ fn init(x: &mut Cx) {
     }
     x.set16(f::SUB2, 0);
     let d0 = 2 * x.u8(Obj::VARIANT) as u32;
-    x.c.d[0] = d0;
     match x.u8(Obj::VARIANT) {
         0 => {
             x.set8(f::SUB, 2);
@@ -188,7 +185,6 @@ fn init(x: &mut Cx) {
         2 | 3 => {
             x.set8(f::SUB2, d0 as u8);
             let mut shift = 0x190u16;
-            set_dw(x, 0, shift);
             let cam = var::SCROLL_X.get(x.b);
             x.set16(Obj::X, cam);
             x.set16(Obj::VZ, 0x400);
@@ -197,7 +193,6 @@ fn init(x: &mut Cx) {
             x.set16(Obj::AX, 0);
             if x.u8(f::FLIP) != 0 {
                 shift = -0x10i16 as u16;
-                set_dw(x, 0, shift);
                 negate(x, Obj::VX);
             }
             x.add16(Obj::X, shift);
@@ -257,7 +252,6 @@ fn arrival(x: &mut Cx) {
         }),
         8 => {
             let dx = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b)).wrapping_add(0x20);
-            set_dw(x, 0, dx);
             if dx <= 0x1c0 {
                 x.set8(f::SUB, 2);
                 x.set8(f::SUB2, 4);
@@ -475,10 +469,8 @@ fn face(x: &mut Cx, forward: bool) {
 
 /// 0x66f00 : vitesse et animation du geste, puis suite commune.
 fn attack_move(x: &mut Cx) {
-    x.c.d[0] = x.u8(MOVE) as u32;
     speed_row(x);
     let n = 1 + x.u8(MOVE) as u32;
-    x.c.d[0] = n;
     anim_play(x, n);
     attack_tail(x);
 }
@@ -611,7 +603,6 @@ fn knock_back(x: &mut Cx) {
     x.set16(Obj::VX, 0x200);
     x.set16(Obj::AX, 0);
     let flip = x.u8(0x4a) ^ 0x20;
-    x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
     x.set8(f::FLIP, flip);
     if flip != 0 {
         negate(x, Obj::VX);
@@ -669,12 +660,10 @@ fn grabbed_flight(x: &mut Cx) {
             x.set16(Obj::VX, 0x300);
             let mut want = 0x20;
             let dx = x.u16(Obj::X).wrapping_sub(cam);
-            set_dw(x, 1, dx);
             if (dx as i16) < 0xc0 {
                 negate(x, Obj::VX);
                 want = 0;
             }
-            x.c.d[2] = want as u32;
             if want != x.u8(f::FLIP) {
                 return anim_play(x, 4);
             }

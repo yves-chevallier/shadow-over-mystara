@@ -93,7 +93,6 @@ pub(self) fn set_steps(x: &mut Cx, v: u16) {
 
 /// 0x8188e : vitesses et accélérations (`+0x14..+0x1f`) à zéro.
 pub(self) fn stop(x: &mut Cx) {
-    x.c.d[0] = 0;
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -102,7 +101,6 @@ pub(self) fn stop(x: &mut Cx) {
 /// 0x8189e : enregistrement de la caméra en service (A2 : 0xff84fe, ou 0xff854e si `A5+0x36`).
 pub(self) fn camera(x: &mut Cx) -> Obj {
     let a = if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe };
-    x.c.a[2] = a;
     Obj(a)
 }
 
@@ -123,7 +121,6 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
         d = d.wrapping_neg();
     }
     let behind = (d as i16) < 0;
-    x.c.d[0] = behind as u32;
     behind
 }
 
@@ -141,7 +138,6 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
         let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xc0);
         dx > 0x180
     };
-    x.c.d[0] = far as u32;
     far
 }
 
@@ -161,7 +157,6 @@ fn hp_sixteenths(x: &mut Cx) -> u32 {
             break;
         }
     }
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | d1 as u32;
     d0
 }
 
@@ -173,7 +168,6 @@ pub(self) fn wound_changed(x: &mut Cx) -> bool {
     if changed {
         x.set8(FLYING, w);
     }
-    x.c.d[0] = changed as u32;
     changed
 }
 
@@ -182,7 +176,6 @@ pub(self) fn wound_changed(x: &mut Cx) -> bool {
 fn draw_attack(x: &mut Cx, table: u32) {
     let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = table.wrapping_add(level as i16 as u32);
-    x.c.a[4] = at;
     let r = rand_and(x, 0x1f);
     let k = x.data8(at.wrapping_add(r));
     x.set8(f::SUB2, k);
@@ -323,7 +316,6 @@ pub(self) fn end_frame(x: &mut Cx, margin: u16) {
 /// l'attaque 24 (ruée au sol).
 pub(crate) fn counter_reaction(x: &mut Cx) {
     let r = random(x) & 0xf;
-    x.c.d[0] = r;
     let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
     let mask = x.rom16(0x81b1a + level as u32);
     x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;

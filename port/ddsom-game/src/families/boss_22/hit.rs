@@ -114,7 +114,6 @@ fn pushed_back(x: &mut Cx) {
             let alive = var::PLAYERS_ALIVE.get(x.b) as u32;
             let k = kit(x);
             let chances = rom32(x, k.chances + (alive << k.chances_shift));
-            x.c.d[5] = chances;
             let r = rand_and(x, 0x1f);
             if chances >> r & 1 != 0 {
                 let fuse = if two(x) { 0x50 } else { 0x46 };

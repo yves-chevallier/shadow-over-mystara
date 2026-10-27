@@ -332,6 +332,38 @@ Mesure (`tools/mesure_refacto.py`, avant : b53a8b1 ; après : lot 0b fusionné a
 Adresses déclarées dans plusieurs fichiers : 288 → 251 (1 378 → 1 101 déclarations) ; aucune adresse du moteur
 d'objets n'y figure plus.
 
+## 8. Lot A : ennemis et boss
+
+Périmètre : `families/boss_*`, `boss_common.rs`, `boss_dragon.rs`, `enemy*`, `reactions.rs` (~56 000 lignes de code).
+
+* **Façade `enemy_lib`** (alias `lib`, accessible partout par `enemy_common`) : chaque routine d'un autre lot que
+  les familles appelaient par adresse (IA de `ai.rs`/`ai_aids.rs`, secousses de `camera_modes.rs`, sons, créateurs
+  de `creators.rs`/`effects_creators.rs`/`effects_aids.rs`, événements, collision avec le décor de `terrain.rs`)
+  n'est plus appelée par adresse qu'à un seul endroit, une fonction Rust nommée : entrées en arguments, résultat en
+  valeur Rust (`lib::target_in_front -> InBox`, `lib::attack_hits_a_player -> Option<Obj>`, `lib::turn_decision ->
+  Turn`, `lib::maybe_draw_6e -> bool`...). Les appelants ne lisent plus ni Z, ni la retenue, ni D0. Quand ces lots
+  exposeront un cœur, seul `enemy_lib` changera (« besoins d'API » plus bas).
+* **Noms faux corrigés** (vérifiés par valeur) : `FACE_TARGET = 0xa470` tirait l'attitude (`lib::draw_stance`),
+  `TURN_TO_TARGET = 0x788c` un octet de table (`draw_6b`), `SOUND`/`SHOCK = 0x2824` secouait la caméra
+  (`shake_54`), `SHADOW = 0x33fe4` est la collision avec le décor (`collide_terrain`), `boss_common::facing_target`
+  testait le sens de la vitesse (`moves_forward`), `target_in_box_far = 0x7f0c` teste une cible en garde
+  (`guard_in_front_strict`), `SPEED_Y = +0x16` est l'accélération en X (`Obj::AX`), `ANGLE = +0x2d` l'index de
+  la table de vitesses, `DIFFICULTY = A5+0x7f92` le rang dynamique (`var::RANK`).
+* **État nommé** : champs génériques par `Obj::X`, `Obj::VX`... et `f::SUB3`, `f::KEY_FRAME` (15 copies des mêmes
+  modules de champs supprimées) ; variables de la RAM de travail typées (`enemy_common::var`, `ram::Octet/Mot`).
+* **Natives du périmètre en fonctions Rust** : 0x27ee (détachement de l'hôte), 0x81aa4, 0x833b6, 0x87048
+  (`boss_common`), 0x81ae0 (riposte du boss 3), réactions communes (`reactions::run_common`, appelées directement
+  par `enemy_common::react`) ; leurs natives ne servent plus qu'aux appels par adresse restants.
+* **Routines d'origine sans native** appelées par les familles, jamais atteintes : transcrites
+  (`docs/code-mort.md`, lot A).
+* **J2 : registres résiduels.** Les écritures de registres que plus rien ne relit en Rust (copies des registres de
+  l'original) ont été instrumentées par `DDSOM_POISON` (une étiquette par site), puis la validation empoisonnée a
+  désigné, par bissection sur les sites, les rares écritures relues par la suite (gestionnaire suivant, boucle) :
+  elles restent, marquées `// relu : …` ; les autres sont supprimées.
+
+Reste en adaptateur ou par adresse, et pourquoi : la façade `enemy_lib` (routines d'autres lots, natives à contrat
+de registres) ; les tables de la ROM (réactions propres à un type, `react`) ; quelques créateurs appelés une fois.
+
 ## Avancement
 
 | Étape | Commit | Validation |

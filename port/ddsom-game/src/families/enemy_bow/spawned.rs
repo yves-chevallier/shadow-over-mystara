@@ -10,7 +10,6 @@ pub(super) fn run(x: &mut Cx) {
     if x.u8(NO_ZONE) != 0 {
         return set_state_long(x, HELD);
     }
-    x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
         0 => begin(x),
         2 => active(x),
@@ -71,7 +70,6 @@ fn leave(x: &mut Cx) {
                 x.set8(Obj::SPEED_INDEX, 0x18);
                 want = 0;
             }
-            x.c.d[4] = x.c.d[4] & !0xff | want as u32;
             let anim = if want != x.u8(f::FLIP) {
                 x.add8(f::SUB3, 2);
                 3
@@ -138,6 +136,5 @@ fn shoot(x: &mut Cx) {
 /// 0x5c04a : animation de tir (0 ou 5 selon le profil `+0x2f`).
 fn shoot_anim(x: &mut Cx) {
     let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
-    x.c.d[0] = anim;
     shot(x, anim);
 }

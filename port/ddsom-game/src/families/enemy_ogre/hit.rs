@@ -32,12 +32,10 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x71e24 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ogre meurt.
 fn death_check(x: &mut Cx) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.set8(f::SUB, 6);
     x.set8(0, 2);
-    x.c.d[0] = 1;
     true
 }
 
@@ -91,7 +89,6 @@ fn recoil(x: &mut Cx) {
 // --- sous-état 4 : chute et relevé ---------------------------------------------------------------------------
 
 fn get_up(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

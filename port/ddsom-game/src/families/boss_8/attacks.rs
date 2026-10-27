@@ -206,8 +206,6 @@ fn charge(x: &mut Cx) {
                 d0 = d0.wrapping_neg();
                 d1 = d1.wrapping_neg();
             }
-            setw(x, 0, d0 as u16);
-            setw(x, 1, d1 as u16);
             x.set16(0x14, d0 as u16);
             x.set16(0x16, d1 as u16);
         }

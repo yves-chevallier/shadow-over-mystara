@@ -27,7 +27,6 @@ fn ready(x: &mut Cx) {
 // --- sous-état 6 --------------------------------------------------------------------------------------------
 
 pub(super) fn run_b(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB3) {
         0 => return begin_wait(x),
         2 => return hold(x, 0x0206_0000),
@@ -196,7 +195,6 @@ fn b_hop_strike(x: &mut Cx) {
 // --- sous-état 8 ----------------------------------------------------------------------------------------------
 
 pub(super) fn run_c(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 | 6 => c_wait(x),
         2 => c_paw(x),
@@ -206,7 +204,6 @@ pub(super) fn run_c(x: &mut Cx) {
 }
 
 fn c_wait(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);

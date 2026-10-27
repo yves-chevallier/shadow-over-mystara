@@ -69,7 +69,6 @@ fn growl(x: &mut Cx) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             if player_ahead(x) {
@@ -162,7 +161,6 @@ fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
 
 /// +6 = 10 : chute d'en haut.
 fn drop_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -190,7 +188,6 @@ fn drop_in(x: &mut Cx) {
 
 /// +6 = 12 : apparition.
 fn appear(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -217,7 +214,6 @@ fn appear(x: &mut Cx) {
 
 /// +6 = 14 : course d'arrivée (0x1e images).
 fn run_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

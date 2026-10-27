@@ -97,7 +97,7 @@ pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
     x.c.a[4] = base;
     x.c.d[0] = n;
     // l'original charge le numéro du jeu dans D1b avant de comparer (certains appelants le relisent)
-    x.c.d[1] = x.c.d[1] & !0xff | set as u32;
+    x.c.d[1] = x.c.d[1] & !0xff | set as u32; // relu : D1 relu par la suite (DDSOM_POISON, boss15_scene46)
     if set == x.u8(ANIM_SET) && n as u8 == x.u8(ANIM_N) {
         return;
     }

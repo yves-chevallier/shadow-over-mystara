@@ -124,9 +124,7 @@ pub(self) fn count_down(x: &mut Cx, off: u32) -> bool {
 /// 0x65a9e : se tourne vers la cible.
 pub(self) fn face_target(x: &mut Cx) {
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0 | 0xff00_0000;
     let d1 = target.u16(x.b, Obj::X);
-    set_dw(x, 1, d1);
     let flip = if (d1 as i16) < (x.u16(Obj::X) as i16) { 0 } else { 0x20 };
     x.c.d[0] = flip;
     x.set8(f::FLIP, flip as u8);

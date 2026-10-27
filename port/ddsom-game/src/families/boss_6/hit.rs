@@ -202,7 +202,7 @@ fn down(x: &mut Cx) {
             let mut vx: i16 = 0x200;
             let mut side = 0;
             let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
-            set_dw(x, 2, edge);
+            set_dw(x, 2, edge); // relu : D2 relu par la suite (DDSOM_POISON : cov_tour1_c0, cov_tour5_c4)
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0x20;

@@ -93,7 +93,6 @@ pub(super) fn reach_boxes(x: &mut Cx) {
 /// Décision d'attaque selon l'orientation relative de la cible (0xa4c2 de même sens, 0xa4b4 sinon).
 fn gate(x: &mut Cx) -> bool {
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0 | 0xff00_0000;
     let theirs = target.u8(x.b, f::FLIP);
     x.c.d[0] = x.c.d[0] & !0xff | theirs as u32;
     let same = theirs == x.u8(f::FLIP);
@@ -183,7 +182,6 @@ fn wait(x: &mut Cx) {
 // --- +6 = 6 : course ------------------------------------------------------------------------------------------
 
 fn run_up(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);

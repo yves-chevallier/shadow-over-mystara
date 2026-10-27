@@ -120,7 +120,6 @@ fn turn_around(x: &mut Cx) {
         x.set8(f::FLIP, flip);
         x.set16(f::SUB2, 0xc00);
         let anim = x.u8(APPROACH_ANIM);
-        x.c.d[0] = anim as u32;
         body(x, anim as u32);
     }
 }
@@ -131,7 +130,6 @@ fn cut(x: &mut Cx, kind: u8, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
             let r = rand_and(x, 0xf);
-            set_dw(x, 1, 0xffc0);
             if 0xffc0u32 >> r & 1 != 0 {
                 x.set8(0x79, 0x1b);
                 set_state_long(x, STANCE);
@@ -526,7 +524,6 @@ fn forward_group(x: &mut Cx) {
             x.set8(Obj::SPEED_INDEX, 0);
             let target = load_target(x);
             let dy = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
-            set_dw(x, 0, dy);
             if (dy as i16) < 0 {
                 x.set8(Obj::SPEED_INDEX, 0x10);
             }
@@ -538,7 +535,6 @@ fn forward_group(x: &mut Cx) {
             let mut d2: u16 = 0x32;
             let target = load_target(x);
             let dy = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
-            set_dw(x, 0, dy);
             if (dy as i16) < 0 {
                 d2 = d2.wrapping_neg();
             }
@@ -579,7 +575,6 @@ fn idle_choice(x: &mut Cx) {
     } else {
         return;
     };
-    x.c.d[0] = x.c.d[0] & !0xff | choice as u32;
     post_choice(x, choice);
 }
 

@@ -12,7 +12,6 @@ use crate::objects::Obj;
 const RISE: u32 = 0x713e8;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => roar(x),
         2 => fly_up(x),
@@ -447,7 +446,6 @@ pub(super) fn rest(x: &mut Cx) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::wander(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

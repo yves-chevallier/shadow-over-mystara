@@ -42,7 +42,6 @@ fn walk(x: &mut Cx) {
         x.set16(Obj::Y, at);
         moved = true;
     }
-    x.c.d[2] = moved as u32;
     if moved {
         x.anim_step();
     }

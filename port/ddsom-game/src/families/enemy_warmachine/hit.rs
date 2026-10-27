@@ -35,12 +35,10 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x792e0 : PV épuisés : passe en mort (`+5` = 6) ; vrai dans ce cas.
 fn dying(x: &mut Cx) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.set8(f::SUB, 6);
     x.set8(0, 2);
-    x.c.d[0] = 1;
     true
 }
 
@@ -88,7 +86,6 @@ fn hop_back(x: &mut Cx) {
                 lib::step(x);
                 return;
             }
-            x.c.d[0] = 0;
             x.set32(0x58, 0);
             go::attack(x, 0xa, true);
         }
@@ -98,7 +95,6 @@ fn hop_back(x: &mut Cx) {
 
 /// 0x78be2 : chute puis relevé.
 fn get_up(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -139,7 +135,6 @@ pub(super) fn recover(x: &mut Cx) {
         return go::idle(x);
     }
     let table = if x.a5_u8(0x48) > 5 { 0x109e2 } else { 0x108e2 };
-    x.c.a[1] = table;
     lib::hp_threshold(x, table);
     if lib::target_in_box(x, 0, 0x38, 0xc) {
         return go::attack(x, 6, true);

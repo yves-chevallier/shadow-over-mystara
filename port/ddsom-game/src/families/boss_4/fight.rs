@@ -122,9 +122,7 @@ fn idle(x: &mut Cx) {
 
 /// Animation de marche 2 (de face) ou 3 (de côté).
 fn walk_anim(x: &mut Cx) {
-    x.c.d[0] = 2;
     let n = if facing_forward(x) { 2 } else { 3 };
-    x.c.d[0] = n;
     body(x, n);
 }
 
@@ -157,7 +155,6 @@ fn turn(x: &mut Cx) {
         x.set8(ANIM_KIND, last);
         walk_anim(x);
     } else {
-        x.c.d[0] = 0;
         body(x, 0);
     }
 }
@@ -196,7 +193,6 @@ fn walk(x: &mut Cx, slow: bool) {
 /// Délai entre deux pas, selon la difficulté (table de la ROM `table`).
 fn set_delay(x: &mut Cx, table: u32) {
     let level = var::RANK.get(x.b);
-    setw(x, 0, level);
     let d = x.rom8(table + level as u32);
     x.set8(WALK_DELAY, d);
 }
@@ -343,12 +339,10 @@ fn brake(x: &mut Cx) {
     if x.u8(f::FLIP) != 0 {
         d = d & 0xffff_0000 | (d as u16).wrapping_neg() as u32;
     }
-    x.c.d[0] = d;
     x.set16(0x16, d as u16);
     lib::shake_54(x, 0x14);
     lib::sound(x, 0xec976);
     lib::sound(x, 0xecdba);
-    x.c.d[0] = 5;
     body(x, 5);
 }
 
@@ -430,7 +424,6 @@ pub(super) fn wait_for_players(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(ANIM_LAST, 0xff);
-        x.c.d[0] = 0;
         body(x, 0);
     } else {
         lib::step(x);

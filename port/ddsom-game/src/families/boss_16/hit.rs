@@ -55,7 +55,6 @@ fn reaction(x: &mut Cx) {
         lib::drop_once(x);
     }
     let code = x.u8(0x49) as u32;
-    x.c.d[0] = code;
     match rom32(x, REACTIONS + code) {
         KNOCKBACK => knockback(x, false),
         KNOCKBACK_HARD => knockback(x, true),
@@ -144,7 +143,6 @@ fn knockback_start(x: &mut Cx, hard: bool) {
     if counter(x) {
         return;
     }
-    x.c.d[0] = 0;
     anim_c(x, 0);
 }
 
@@ -154,7 +152,6 @@ fn knockback_hold(x: &mut Cx) {
         let n = x.u8(SHAKE).wrapping_sub(1);
         x.set8(SHAKE, n);
         let d: u16 = if n & 1 != 0 { 0xfffe } else { 2 };
-        set_dw(x, 0, d);
         x.add16(0x8, d);
         return;
     }
@@ -224,7 +221,6 @@ fn burst(x: &mut Cx) {
             if x.u8(f::FLIP) != 0 {
                 d = d.wrapping_neg();
             }
-            set_dw(x, 0, d);
             x.add16(0x8, d);
             if var::PAUSE.get(x.b) == 0 {
                 next6(x);
@@ -287,7 +283,6 @@ fn down(x: &mut Cx) {
             x.set8(TIMER, 6);
             x.set8(0x38, 0);
             x.set32(f::STATE, state::WALK);
-            x.c.d[0] = 0;
             anim_a(x, 0);
         }
         _ => {}
@@ -339,7 +334,6 @@ fn death_sequence(x: &mut Cx, first: u32, second: u32) {
             x.set16(0x18, 0x400);
             x.set16(0x1a, (-0x40i16) as u16);
             let v = if x.u8(f::FLIP) == 0 { 0x200u16 } else { (-0x200i16) as u16 };
-            set_dw(x, 0, v);
             x.set16(0x14, v);
             anim_a(x, first);
             announce(x);

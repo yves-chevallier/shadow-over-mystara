@@ -192,7 +192,6 @@ pub fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
 
 /// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)` : sorte d'animation `k` (champs `+0xa0` et `+0xa1`).
 pub fn anim_kind(x: &mut Cx, k: u8) {
-    x.c.d[0] = k as u32;
     x.set8(0xa0, k);
     x.set8(0xa1, k);
 }
@@ -276,7 +275,6 @@ pub fn bob(x: &mut Cx) {
     if x.u16(0xa8) as i16 <= 36 {
         d = d.wrapping_neg();
     }
-    x.c.d[0] = d;
     x.add32(Obj::Z, d);
     let t = x.u16(0xa8).wrapping_sub(1);
     x.set16(0xa8, t);
@@ -300,7 +298,6 @@ pub fn hp_threshold(x: &mut Cx) {
             return;
         }
         let half = x.u16(f::HP) >> 1;
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | half as u32;
         if half as i16 > 72 {
             x.set8(0xb9, 0);
             x.set16(0xb6, half);

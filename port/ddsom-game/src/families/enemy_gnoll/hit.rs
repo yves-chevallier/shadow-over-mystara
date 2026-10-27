@@ -52,7 +52,6 @@ fn recoil(x: &mut Cx) {
         x.set32(Obj::VX, 0x0500_0000);
         x.set16(Obj::AX, -0x38i16 as u16);
         let flip = x.u8(0x4a) ^ 0x20;
-        x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
         x.set8(0x4a, flip);
         if flip != 0 {
             negate(x, Obj::VX);

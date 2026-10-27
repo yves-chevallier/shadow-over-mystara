@@ -6,7 +6,6 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => howl(x),
         2 => turn_in(x),
@@ -153,7 +152,6 @@ fn leap_in(x: &mut Cx) {
 // --- +6 = 8 : chute d'en haut -----------------------------------------------------------------------------
 
 fn drop_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -182,7 +180,6 @@ fn drop_in(x: &mut Cx) {
 // --- +6 = 10 : apparition ----------------------------------------------------------------------------------
 
 fn appear(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

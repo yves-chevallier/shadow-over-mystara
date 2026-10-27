@@ -46,7 +46,6 @@ fn proximity(x: &mut Cx) -> u8 {
         return 0;
     }
     let level = x.rom8(0x93562 + (best >> 4) as u32);
-    x.c.d[0] = x.c.d[0] & !0xff | level as u32;
     level
 }
 
@@ -139,11 +138,9 @@ fn wake_high_wait(x: &mut Cx) {
         x.call(0x1ac68);
     }
     let event = x.u8(0x3e);
-    x.c.d[0] = event as u32;
     if event == 0 {
         return;
     }
-    x.c.d[0] = (event - 1) as u32;
     x.set8(0x3e, 0);
     lib::palette_script(x, (event - 1) as u16);
 }

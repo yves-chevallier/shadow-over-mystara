@@ -70,19 +70,14 @@ pub(super) fn face(x: &mut Cx) {
 /// 0x59222 : mémorise si la cible est derrière (`+0xa6` = 2, sinon 0) ; vrai si un demi-tour est nécessaire.
 fn needs_turn_around(x: &mut Cx) -> bool {
     let mut side = 0;
-    x.c.d[1] = 0;
     if x.u16(f::TARGET) != 0 {
-        x.c.d[2] = 0;
         let target = load_target(x);
         let tx = target.u16(x.b, Obj::X);
         let mine = x.u16(Obj::X);
-        set_dw(x, 0, mine);
         if mine != tx {
             let want = if mine < tx { 0x20 } else { 0 };
-            x.c.d[2] = want;
             if want != x.u8(f::FLIP) as u32 {
                 side = 2;
-                x.c.d[1] = 2;
             }
         }
     }
@@ -109,7 +104,6 @@ fn thrust(x: &mut Cx, kind: u8, power: u8, anim: u32) {
         0 => {
             let r = random(x) & 0xf;
             x.c.d[0] = x.c.d[0] & 0xffff_0000 | r;
-            set_dw(x, 1, 0xffc0);
             if 0xffc0u32 >> r & 1 != 0 {
                 set_state_long(x, STANCE_ALT);
             } else {
@@ -241,7 +235,6 @@ fn leap(x: &mut Cx, kind: Leap) {
             } else {
                 rand_and(x, 1)
             };
-            x.c.d[0] = n;
             strike(x, n);
         }
         18 => match kind {
@@ -346,10 +339,9 @@ pub(super) fn restart_slide(x: &mut Cx) {
         x.set16(ANIM_STATE, 1);
         step(x);
         let n = (x.c.d[3] as u16).wrapping_sub(1);
-        set_dw(x, 3, n);
+        set_dw(x, 3, n); // relu : D3 relu par la suite (DDSOM_POISON : skeleton_scene13, boss17_scene13)
         if n == 0xffff {
             let c = x.u16(ANIM_COUNT);
-            set_dw(x, 1, c);
             break;
         }
     }

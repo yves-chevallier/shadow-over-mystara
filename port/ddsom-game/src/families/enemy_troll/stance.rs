@@ -20,7 +20,6 @@ pub(super) fn run(x: &mut Cx) {
     }
     // plus aucun joueur en vie : le Troll se met en attente (les quatre octets d'état des joueurs)
     let alive = [0x5de, 0x7de, 0x9de, 0xbde].iter().fold(0u8, |sum, &off| sum.wrapping_add(x.a5_u8(off)));
-    x.c.d[0] = x.c.d[0] & !0xff | alive as u32;
     if alive == 0 {
         set_state_long(x, IDLE);
     }
@@ -154,7 +153,6 @@ pub(super) fn walk_off(x: &mut Cx) {
         x.set8(Obj::SPEED_INDEX, 8);
         want = 0;
     }
-    x.c.d[4] = x.c.d[4] & !0xff | want as u32;
     if want != x.u8(f::FLIP) {
         x.add8(f::SUB3, 4);
         mv(x, 2);

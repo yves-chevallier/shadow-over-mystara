@@ -10,7 +10,6 @@ pub(super) fn run_c(x: &mut Cx) {
     if !hit_gate(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     let step = x.u8(f::SUB3);
     match x.u8(f::SUB2) {
         0 => {
@@ -221,7 +220,6 @@ fn squat_again(x: &mut Cx, step: u8) {
                 x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
                 let group = x.u8(GROUP) as i8 as i32 as u32;
-                x.c.d[0] = group;
                 let v = x.rom8(0x682e8u32.wrapping_add(group));
                 x.set8(0x68, v);
             }
@@ -263,7 +261,6 @@ pub(super) fn run_d(x: &mut Cx) {
     if !hit_gate(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     let step = x.u8(f::SUB3);
     match x.u8(f::SUB2) {
         0 | 6 => {

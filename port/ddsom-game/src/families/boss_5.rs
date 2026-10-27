@@ -270,7 +270,6 @@ fn dash(x: &mut Cx, table: u32) {
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
             }
-            x.c.d[0] = 0;
             if x.u8(ANIM_SET) != 0 {
                 return body(x, 0);
             }
@@ -709,7 +708,6 @@ fn tumble(x: &mut Cx) {
 
 /// Pas du tourbillon (0x83da8) : déplacement par la table de vecteurs de l'angle `+0x2d`.
 fn spin(x: &mut Cx) {
-    x.c.a[4] = SPIN_VECTORS;
     x.add32(0xc, 0x20000);
     if (x.u16(0xc) as i16) >= 0x40 {
         x.set32(0xc, 0x0040_0000);

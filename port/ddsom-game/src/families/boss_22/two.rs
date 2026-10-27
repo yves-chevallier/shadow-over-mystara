@@ -226,12 +226,10 @@ pub(super) fn slam(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) == 1 {
                 x.set_a5_u16(0x51e, 4);
                 x.set8(f::KEY_FRAME, 0);
-                x.c.d[1] = 2;
                 eshl_sweep_1d(x, 2);
             }
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
-                x.c.d[1] = 0;
                 eshl_sweep_1d(x, 0);
             }
             if !x.anim_step() {

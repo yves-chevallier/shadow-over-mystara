@@ -85,7 +85,6 @@ pub(self) fn air(x: &mut Cx, n: u32) {
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
 pub(self) fn kind(x: &mut Cx, k: u8) {
-    x.c.d[0] = k as u32;
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
@@ -107,7 +106,6 @@ pub(self) fn alive(x: &mut Cx) -> bool {
 
 /// Le double `off` (`movea.w (off,A0),A1`).
 pub(self) fn double(x: &mut Cx, off: u32) -> Obj {
-    x.c.a[1] = x.u16(off) as i16 as i32 as u32;
     x.linked(off)
 }
 
@@ -139,7 +137,6 @@ pub(self) fn flap(x: &mut Cx) {
 /// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0` : vitesse (mot) en long à 8 bits de fraction.
 pub(self) fn speed_long(x: &mut Cx, off: u32) -> u32 {
     let v = ((x.u16(off) as i16 as i32) << 8) as u32;
-    x.c.d[0] = v;
     v
 }
 
@@ -219,7 +216,6 @@ fn init(x: &mut Cx) {
         x.set_bit(0x1, 1, false);
         decide::wait(x);
         lib::set_immunities(x);
-        x.c.d[0] = 0;
         body(x, 0);
     }
 }
@@ -236,7 +232,6 @@ fn spawn_double(x: &mut Cx, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
         if (v as i16) < 0 {
             v = least;
         }
-        setw(x, 0, v);
         for off in [0x60, 0x62, 0x64] {
             d.set_u16(x.b, off, v);
         }

@@ -10,7 +10,6 @@ pub(super) fn run(x: &mut Cx) {
         set_state_long(x, HELD);
         return hit::grab(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => stance_begin(x),
         2 => advance(x),
@@ -106,7 +105,6 @@ pub(super) fn check_facing(x: &mut Cx) {
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     if want as u8 == x.u8(f::FLIP) {
         return;
     }
@@ -167,7 +165,6 @@ fn side_step(x: &mut Cx, along_x: bool) {
         } else {
             x.set8(Obj::SPEED_INDEX, 0xf);
             let d = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
-            x.c.d[1] = x.c.d[1] & 0xffff_0000 | d as u32;
             if (d as i16) >= 0 {
                 x.set8(Obj::SPEED_INDEX, 0);
             }
@@ -201,7 +198,6 @@ pub(super) fn idle(x: &mut Cx) {
 // --- sous-état 12 : demi-tour -------------------------------------------------------------------------
 
 pub(super) fn turn_around(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

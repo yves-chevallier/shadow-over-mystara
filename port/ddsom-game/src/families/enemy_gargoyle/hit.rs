@@ -41,12 +41,10 @@ fn tail(x: &mut Cx) {
 /// 0x65ac8 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ennemi meurt.
 fn death_check(x: &mut Cx) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.set8(f::SUB, 6);
     x.set8(0, 2);
-    x.c.d[0] = 1;
     true
 }
 
@@ -177,7 +175,6 @@ fn dying(x: &mut Cx) {
             detach_from_host(x);
             lib::drop_rewards(x);
             let flip = x.u8(0x4a) ^ 0x20;
-            x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);
             let vx = if flip != 0 { -0x200i16 } else { 0x200 };
             x.set16(Obj::VX, vx as u16);

@@ -47,11 +47,9 @@ fn spawn_flame(x: &mut Cx, variant: u8, index: u8) {
 /// 0x93950 : cherche un joueur à saisir (0xfc44) et le saisit (0xfd64) ; vrai s'il est saisi.
 fn try_grab(x: &mut Cx) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 2) else {
-        x.c.d[0] = 0;
         return false;
     };
     lib::seize_player(x, player, 0);
-    x.c.d[0] = 1;
     true
 }
 
@@ -95,7 +93,6 @@ fn launch(x: &mut Cx) {
     x.set16(0x18, 0x200);
     x.set16(0x1a, (-0x40i16) as u16);
     let v = if x.u8(f::FLIP) != 0 { 0x800u16 } else { (-0x800i16) as u16 };
-    x.c.d[0] = v as u32;
     x.set16(0x14, v);
     anim_b(x, 1);
     in_flight(x);
@@ -116,7 +113,6 @@ fn in_flight(x: &mut Cx) {
     next7(x);
     x.set32(0x18, 0);
     let v = (x.u16(0x14) as i16 >> 2) as u16;
-    set_dw(x, 0, v);
     x.set16(0x14, v);
     x.set8(TIMER, 0x10);
 }
@@ -131,7 +127,6 @@ fn charge(x: &mut Cx) {
             let (vx, vz) = if x.u8(f::FLIP) != 0 { (-0x400i16, 0xe0i16) } else { (0x400, -0xe0) };
             x.set16(0x14, vx as u16);
             x.set16(0x16, vz as u16);
-            x.c.d[0] = 0;
             anim_b(x, 0);
         }
         2 => {
@@ -296,7 +291,6 @@ fn roar(x: &mut Cx) {
             }
             x.set8(0x3e, 0);
             let index = key & 0x7f;
-            x.c.d[0] = index as u32;
             spawn_flame(x, 1, index);
             lib::sound(x, 0xed762);
         }
@@ -320,7 +314,6 @@ fn double_jump(x: &mut Cx) {
             x.set16(0x14, v as u16);
             x.set16(0x18, 0x800);
             x.set16(0x1a, (-0x60i16) as u16);
-            x.c.d[0] = 0;
             anim_b(x, 0);
         }
         2 => {

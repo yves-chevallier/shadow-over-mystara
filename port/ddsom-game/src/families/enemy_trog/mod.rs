@@ -123,7 +123,6 @@ fn difficulty_row(x: &mut Cx) -> u32 {
 /// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
 fn pick_byte(x: &mut Cx, table: u32) -> u8 {
     let row = difficulty_row(x);
-    x.c.a[4] = table + row;
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
@@ -145,7 +144,6 @@ fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     } && {
         lib::decision_a(x)
     };
-    x.c.d[0] = ok as u32;
     ok
 }
 
@@ -163,16 +161,12 @@ fn side_box(x: &mut Cx) -> bool {
 /// 0x5afda : la cible est de l'autre côté de l'orientation.
 fn needs_turn_around(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
-    set_dw(x, 0, dx);
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     let turn = want != x.u8(f::FLIP) as u32;
-    x.c.d[0] = turn as u32;
     turn
 }
 
@@ -189,7 +183,6 @@ fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
     let row = difficulty_row(x);
     set_dw(x, 0, row as u16);
-    x.c.a[4] = FALLBACK_MOVES + row;
     let n = rand_and(x, 0x1f);
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row + n);
@@ -216,7 +209,6 @@ fn init(x: &mut Cx) {
     x.set8(f::BOX_SET, 0xe);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    x.c.d[0] = 0;
     for (off, v) in [(0x80, 0xb), (0x68, 4), (0x69, 4), (0x70, 0), (0x6a, 3), (0x6c, 3), (0x6d, 5), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x2c), (BLINK_PHASE, 0xff)] {
         x.set8(off, v);
     }
@@ -320,10 +312,8 @@ fn pick_blink_delay(x: &mut Cx) {
     d2 = d2 & 0xff00 | (d2 as u8 >> 1) as u16;
     let row = (d2 << 5) as u32;
     x.c.d[2] = x.c.d[2] & 0xffff_0000 | row;
-    x.c.a[4] = BLINK_DELAYS + row;
     let n = rand_and(x, 0x1f);
     let idx = x.data8(BLINK_DELAYS + row + n) as u32;
-    set_dw(x, 0, idx as u16);
     let w = x.rom16(BLINK_TIMES + idx);
     x.set16(BLINK_DELAY, w);
 }
@@ -350,7 +340,6 @@ fn arrival(x: &mut Cx) {
             x.set8(REPEAT, 0x18);
             set_angle(x, 8, 0x18);
             x.set16(LOOK, 0);
-            x.c.d[0] = 0;
             walk_speed(x, 0);
             body(x, 2);
         }
@@ -461,9 +450,7 @@ fn rest_begin(x: &mut Cx) {
 // --- état 6 : libération ------------------------------------------------------------------------
 
 fn dead(x: &mut Cx) {
-    set_dw(x, 1, 0x12);
     let w = x.u16(0x48) & 0xff00;
-    set_dw(x, 0, w.wrapping_add(0x12));
     free(x);
 }
 

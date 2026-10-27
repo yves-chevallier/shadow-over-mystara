@@ -52,7 +52,6 @@ fn back_off(x: &mut Cx) {
         if x.u8(f::FLIP) != 0 {
             d = d.wrapping_neg();
         }
-        setw(x, 1, d);
         x.add16(0x8, d);
         aids::clamp(x);
         reappear(x);
@@ -135,7 +134,6 @@ fn short_walk(x: &mut Cx) {
             if x.u8(ANIM_LAST) != 0 {
                 x.set8(ANIM_LAST, 0);
             }
-            x.c.d[0] = 0;
             body(x, 0);
         }
     }

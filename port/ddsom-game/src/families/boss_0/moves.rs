@@ -31,14 +31,11 @@ fn reached(x: &mut Cx, limit: Option<u16>) -> bool {
         Some(l) => l,
         None => {
             let reach = if moving_left { 0xa0 } else { 0xe0 };
-            set_dw(x, 1, reach);
             camera_x(x).wrapping_add(reach)
         }
     };
     let px = x.u16(0x8);
     let (d0, d1) = if moving_left { (bound, px) } else { (px, bound) };
-    set_dw(x, 0, d0);
-    set_dw(x, 1, d1);
     Fl::sub16(d1, d0).ge()
 }
 
@@ -60,7 +57,6 @@ fn start_slide(x: &mut Cx, v: u16, extra: bool) {
     x.set16(TIMER, 0x1e);
     x.set16(TIMER2, 0);
     let v = if x.u8(f::FLIP) != 0 { v.wrapping_neg() } else { v };
-    set_dw(x, 0, v);
     x.set16(0x16, v);
     if extra {
         lib::sound(x, 0xe13b0);
@@ -109,14 +105,12 @@ fn arrival(x: &mut Cx) {
         0 => {
             next7(x);
             let cam = camera_x(x).wrapping_add(0xc0);
-            set_dw(x, 2, cam);
             x.set8(f::FLIP, 0);
             let mut angle = 0x18;
             if Fl::sub16(cam, x.u16(0x8)).gt() {
                 x.set8(f::FLIP, 0x20);
                 angle = 8;
             }
-            x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
             lib::sound(x, 0xe3d32);
@@ -224,7 +218,6 @@ fn partner_arrival(x: &mut Cx) {
             next7(x);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
             lib::sound(x, 0xe3d32);
@@ -320,7 +313,6 @@ fn turn_around(x: &mut Cx) {
         next7(x);
         let side = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, side);
-        x.c.d[0] = 1;
         x.set8(ANIM_KIND, 1);
         return body(x, 5);
     }
@@ -344,7 +336,6 @@ fn turn_around(x: &mut Cx) {
 /// 0x79bb8 : animation de course vers l'avant (6) ou vers l'arrière (7) selon le sens de la cible.
 fn run_animation(x: &mut Cx) {
     let n = if lib::moves_forward(x) { 6 } else { 7 };
-    x.c.d[0] = n;
     body(x, n);
 }
 
@@ -366,7 +357,6 @@ fn run_phase(x: &mut Cx, kind: u8) {
     walk_delay(x, kind);
     x.set8(ANIM_KIND, kind);
     next7(x);
-    x.c.d[0] = 0;
     x.set16(0x16, 0);
     x.set16(0x1e, 0);
     if !pick_target(x) {
@@ -439,14 +429,12 @@ fn charge_phase(x: &mut Cx) {
                 }
             } else {
                 let cam = camera_x(x);
-                set_dw(x, 2, cam);
                 x.set8(f::FLIP, 0);
                 if !Fl::sub16(x.u16(0x8), cam).gt() {
                     x.set8(f::FLIP, 0x20);
                     angle = 8;
                 }
             }
-            x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
             lib::debris(x, 1);
@@ -510,7 +498,6 @@ fn leap_strike(x: &mut Cx) {
             x.set16(0x16, 0);
             mark_target(x);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x2b);
             lib::debris(x, 1);
@@ -543,7 +530,6 @@ fn arc_jump(x: &mut Cx) {
             next7(x);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x17);
             let t = x.linked(f::TARGET);
@@ -562,9 +548,6 @@ fn arc_jump(x: &mut Cx) {
                 }
                 lift = lift.wrapping_add(10);
             }
-            x.c.d[0] = per_frame as u32;
-            set_dw(x, 1, lift);
-            x.c.d[2] = gap as u32;
             x.set16(0x18, lift);
             x.set16(0x1a, (-0x28i16) as u16);
             anim_kind(x, 0x14);
@@ -631,8 +614,6 @@ fn triple_strike(x: &mut Cx) {
                 players -= 1;
             }
             let i = level.wrapping_add(players as u16);
-            x.c.d[0] = x.c.d[0] & 0xffff_0000 | i as u32;
-            x.c.d[1] = players as u32;
             let n = x.rom8(0x7a1ca + i as u32);
             x.set8(COMBO, n);
         }
@@ -691,7 +672,6 @@ fn spit(x: &mut Cx) {
             shot.set_u16(x.b, f::OWNER, owner);
             add16(x, shot, 0xc, 0x30);
             let dx = if side != 0 { 0x60u16 } else { (-0x60i16) as u16 };
-            set_dw(x, 0, dx);
             add16(x, shot, 0x8, dx);
         }
         4 => {

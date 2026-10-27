@@ -253,14 +253,12 @@ fn walk_toward(x: &mut Cx, axis: Axis) {
     if axis == Axis::Horizontal {
         x.set8(Obj::SPEED_INDEX, 8);
         let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
-        set_dw(x, 0, dx);
         if (dx as i16) < 0 {
             x.set8(Obj::SPEED_INDEX, 0x18);
         }
     } else {
         x.set8(Obj::SPEED_INDEX, 0);
         let dy = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
-        set_dw(x, 0, dy);
         if (dy as i16) < 0 {
             x.set8(Obj::SPEED_INDEX, 0x10);
         }

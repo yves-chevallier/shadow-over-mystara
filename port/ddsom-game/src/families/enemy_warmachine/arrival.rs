@@ -6,7 +6,6 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => roll_in(x),
         2 => wait_a(x),
@@ -25,7 +24,6 @@ fn roll_in(x: &mut Cx) {
             x.set8(FLAG, 0);
             lib::set_immunities(x);
             let cam = camera_x(x).wrapping_add(0xc0);
-            x.c.d[2] = x.c.d[2] & !0xffff | cam as u32;
             x.set8(f::FLIP, 0);
             let mut angle = 0x18;
             if (cam as i16) > (x.u16(Obj::X) as i16) {
@@ -75,7 +73,6 @@ pub(super) fn leap_begin(x: &mut Cx) {
     x.set16(TIMER2, 0);
     let v: i16 = if x.u8(f::FLIP) != 0 { -0x20 } else { 0x20 };
     x.set16(Obj::AX, v as u16);
-    x.c.d[0] = v as u16 as u32;
     lib::sound(x, 0xe3d32);
     lib::sound(x, 0xecdba);
     mv(x, 9);

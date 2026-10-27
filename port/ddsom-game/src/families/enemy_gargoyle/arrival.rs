@@ -7,7 +7,6 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => flight(x),
         2 => landed(x),
@@ -27,7 +26,6 @@ fn flight(x: &mut Cx) {
             x.add8(f::SUB3, 2);
             x.set_bit(1, 1, false);
             let right = camera_x(x).wrapping_add(0xc0);
-            set_dw(x, 2, right);
             x.set8(f::FLIP, 0);
             let mut angle = 0x18;
             if (right as i16) > (x.u16(Obj::X) as i16) {
@@ -132,7 +130,6 @@ fn landed(x: &mut Cx) {
             let mut flip = 0;
             if (x.u16(f::TARGET) as i16) < 0 {
                 let target = x.linked(f::TARGET);
-                x.c.a[1] = target.0 | 0xff00_0000;
                 if (target.u16(x.b, Obj::X) as i16) > (x.u16(Obj::X) as i16) {
                     flip = 0x20;
                 }

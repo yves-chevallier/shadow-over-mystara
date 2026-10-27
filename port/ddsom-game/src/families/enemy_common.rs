@@ -340,7 +340,7 @@ pub fn negate(x: &mut Cx, off: u32) {
 
 /// `movea.w (0x50,A0),A1` : A1 = la cible (adresse étendue en signe), qui est rendue.
 pub fn load_target(x: &mut Cx) -> Obj {
-    x.c.a[1] = x.u16(f::TARGET) as i16 as i32 as u32;
+    x.c.a[1] = x.u16(f::TARGET) as i16 as i32 as u32; // relu : A1 relu par la suite (DDSOM_POISON : beetle_scene18, boss2_poke3p, scorpion_scene53)
     x.linked(f::TARGET)
 }
 
@@ -422,14 +422,7 @@ pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
             x.set16(f::TARGET, p as u16);
         }
     }
-    x.c.d[0] = x.c.d[0] & !0xffff | d0 as u32;
-    x.c.d[1] = 0xffff_0000 | best as u32;
-    x.c.d[2] = (d1 as u32) << 16 | d2 as u32;
-    x.c.d[3] = d3 as u32;
-    x.c.d[4] = (d1.wrapping_mul(2) as u32) << 16 | d2.wrapping_mul(2) as u32;
     x.c.d[5] = x.c.d[5] & !0xffff | d5 as u32;
-    x.c.d[6] = 0xffff;
-    x.c.a[1] = 0xff8dde;
     x.u16(f::TARGET) != 0
 }
 
@@ -438,7 +431,6 @@ pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 /// est rangé en `+0x5c` de chaque objet. Les allocations qui échouent sautent leur entrée.
 pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
     let mut at = rom32(x, lists + 4 * index);
-    x.c.a[2] = at;
     let count = x.data16(at);
     at += 2;
     for _ in 0..=count {
@@ -459,7 +451,6 @@ pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
         }
         at += 9;
     }
-    x.c.a[2] = at;
 }
 
 /// 0x27ee : l'ennemi se détache de son hôte (`HOST`) : si l'hôte est actif et compte encore des parties

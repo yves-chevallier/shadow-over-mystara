@@ -15,7 +15,6 @@ pub(super) fn run(x: &mut Cx) {
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 | 2 => react(x, REACT_FIRST),
             4 => fall(x),
@@ -32,7 +31,6 @@ pub(super) fn run(x: &mut Cx) {
 
 /// Chute puis relevé (0x5cc94).
 fn fall(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

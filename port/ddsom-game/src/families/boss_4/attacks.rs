@@ -42,7 +42,6 @@ fn roar(x: &mut Cx) {
         x.add8(0x7, 2);
         lib::sound(x, 0xe3f76);
         kind(x, 0x10);
-        x.c.d[0] = 0;
         return air(x, 0);
     }
     if lib::step(x) {
@@ -55,7 +54,6 @@ fn take_off(x: &mut Cx) {
     x.add8(0x7, 2);
     x.set16(0x18, 0x400);
     x.set16(0x1a, 0);
-    x.c.d[0] = 1;
     air(x, 1);
 }
 
@@ -65,7 +63,6 @@ fn climb(x: &mut Cx) {
     let top = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let h = x.u16(0x10).wrapping_add(x.u16(0xc));
     setw(x, 0, top);
-    setw(x, 1, h);
     if !Fl::sub16(h, top).lt() {
         x.add8(0x7, 2);
         x.set16(TIMER, 0x28);
@@ -76,7 +73,6 @@ fn climb(x: &mut Cx) {
     lib::push_players(x);
     lib::step(x);
     let k = x.u8(f::KEY_FRAME) & 0x7f;
-    x.c.d[0] = x.c.d[0] & !0xff | k as u32;
     if (k as i8) < 3 {
         flap(x);
         x.add16(0x18, (-0x28i16) as u16);
@@ -186,15 +182,12 @@ fn swoop(x: &mut Cx) {
             // entrée par le bord opposé à celui que le boss regarde
             let (dx, vx) = if x.u8(f::FLIP) != 0 { (0u16, 0x900u16) } else { (0x180, (-0x900i16) as u16) };
             let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
-            setw(x, 0, px);
-            setw(x, 1, vx);
             x.set16(0x8, px);
             x.set16(0x14, vx);
             x.set16(0x18, 0xf700);
             x.set16(0x16, 0);
             x.set16(0x1a, 0);
             lib::sound(x, 0xe3f76);
-            x.c.d[0] = 5;
             air(x, 5);
         }
         6 => {
@@ -210,7 +203,6 @@ fn swoop(x: &mut Cx) {
             if x.u8(f::FLIP) == 0 {
                 d = d.wrapping_neg();
             }
-            setw(x, 0, d);
             x.set16(0x16, d);
             landing(x, 0x1e, 6);
         }
@@ -231,7 +223,6 @@ fn landing(x: &mut Cx, shake: u16, n: u32) {
     lib::shake_54(x, shake);
     lib::sound(x, 0xec976);
     lib::sound(x, 0xecdba);
-    x.c.d[0] = n;
     air(x, n);
 }
 
@@ -242,7 +233,6 @@ fn leap(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.c.d[0] = angle;
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x40);
             let t = load_target(x);
@@ -254,7 +244,6 @@ fn leap(x: &mut Cx) {
             if (v as i32) < 0 {
                 v = v.wrapping_neg();
             }
-            x.c.d[0] = v;
             // 0x200, plus 0x10 par pas de `v` jusqu'à couvrir la distance
             let mut vz = 0x200u16;
             loop {
@@ -265,13 +254,10 @@ fn leap(x: &mut Cx) {
                 }
                 vz = vz.wrapping_add(0x10);
             }
-            x.c.d[2] = dist;
-            setw(x, 1, vz);
             x.set16(0x18, vz);
             x.set16(0x1a, (-0x38i16) as u16);
             lib::sound(x, 0xe3f76);
             kind(x, 0x13);
-            x.c.d[0] = 7;
             air(x, 7);
         }
         2 => {
@@ -284,7 +270,6 @@ fn leap(x: &mut Cx) {
                 return;
             }
             x.add8(0x7, 2);
-            x.c.d[0] = 8;
             air(x, 8);
         }
         4 => {
@@ -293,7 +278,6 @@ fn leap(x: &mut Cx) {
                 return;
             }
             x.add8(0x7, 2);
-            x.c.d[0] = 9;
             air(x, 9);
         }
         6 => {
@@ -310,7 +294,6 @@ fn leap(x: &mut Cx) {
             if x.u8(f::FLIP) != 0 {
                 d = d.wrapping_neg();
             }
-            setw(x, 0, d);
             x.set16(0x16, d);
             landing(x, 0x14, 0xa);
         }
@@ -407,7 +390,6 @@ fn breath_in_flight(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(0xc, 0);
             x.set16(TIMER, 0x28);
-            x.c.d[0] = 0;
             body(x, 0);
         }
         _ => {
@@ -437,7 +419,6 @@ fn breath_shot(x: &mut Cx, angles: u32, variant: Option<u8>) -> bool {
     if side != 0 {
         a = a.wrapping_add(0x10) & 0x1f;
     }
-    x.c.d[0] = a as u32;
     s.set_u8(x.b, Obj::SPEED_INDEX, a);
     let n = x.u8(BREATH_STEP).wrapping_add(1) & 0xf;
     x.set8(BREATH_STEP, n);
@@ -474,7 +455,6 @@ fn double_gesture(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 2);
             kind(x, 0x15);
-            x.c.d[0] = 0;
             body(x, 0);
         }
         2 => timed(x, Some(0x5a), true),
@@ -491,7 +471,6 @@ fn breath(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 2);
             kind(x, 0x16);
-            x.c.d[0] = 0;
             body(x, 0);
         }
         2 => timed(x, None, true),

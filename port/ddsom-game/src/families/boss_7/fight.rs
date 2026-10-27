@@ -67,7 +67,6 @@ fn pose(x: &mut Cx) {
     setb(x, 2, 0);
     if x.u8(ANIM_LAST) != 0 {
         x.set8(ANIM_LAST, 0);
-        x.c.d[0] = 0;
         body(x, 0);
     } else {
         x.anim_step();
@@ -140,9 +139,7 @@ fn near_checks(x: &mut Cx) {
     }
     if aids::player_near(x, true) {
         x.random_68k();
-        setw(x, 1, 0xffc0);
         let i = x.c.d[0] as u16 & 0xf;
-        setw(x, 0, i);
         x.set32(f::STATE, if i >= 6 { 0x0204_1000 } else { 0x0204_0600 });
         return lib::pick_byte(x);
     }
@@ -162,7 +159,6 @@ fn near_checks(x: &mut Cx) {
     }
     let t = load_target(x);
     let d = x.u16(0x8).wrapping_sub(t.u16(x.b, 0x8));
-    setw(x, 0, d);
     let side = if (d as i16) < 0 { 0x20 } else { 0 };
     setb(x, 1, side);
     if side != x.u8(f::FLIP) {
@@ -188,9 +184,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
         return false;
     }
     x.random_68k();
-    setw(x, 1, 0xffc0);
     let i = x.c.d[0] as u16 & 0xf;
-    setw(x, 0, i);
     if i >= 6 {
         x.set32(f::STATE, 0x0202_0800);
         return true;
@@ -198,7 +192,6 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
     x.set32(f::STATE, 0x0204_0000);
     lib::pick_byte(x);
     aids::choose_attack(x, front);
-    x.c.d[0] = 1;
     true
 }
 
@@ -217,7 +210,6 @@ fn turn(x: &mut Cx) {
         x.set32(f::STATE, s);
         let sub = x.u8(RESUME_SUB);
         x.set8(f::SUB2, sub);
-        x.c.d[0] = 0;
         body(x, 0);
     }
 }
@@ -231,7 +223,6 @@ fn stop(x: &mut Cx) {
         setb(x, 2, 0);
         if x.u8(ANIM_LAST) != 0 {
             x.set8(ANIM_LAST, 0);
-            x.c.d[0] = 0;
             body(x, 0);
         }
         return;

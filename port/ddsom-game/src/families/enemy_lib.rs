@@ -28,8 +28,6 @@ pub fn switch_keeping_time(x: &mut Cx, table: u32) {
         at += 0x10;
     }
     x.c.a[4] = at;
-    x.c.d[2] = x.c.d[2] & !0xffff | time as u32;
-    x.c.d[0] = x.c.d[0] & !0xff | key as u32;
     let at = x.c.a[4];
     x.anim_start_entry(at);
     x.set16(0x30, time);
@@ -67,9 +65,7 @@ pub fn facing_target(x: &mut Cx) -> bool {
     let target = x.linked(f::TARGET);
     let dx = x.u16(0x8).wrapping_sub(target.u16(x.b, 0x8));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.a[1] = target.0 | 0xff00_0000;
     x.c.d[0] = x.c.d[0] & !0xff | want;
-    x.c.d[1] = x.c.d[1] & !0xffff | dx as u32;
     want as u8 == x.u8(f::FLIP)
 }
 
@@ -77,7 +73,6 @@ pub fn facing_target(x: &mut Cx) -> bool {
 pub fn moving_forward(x: &mut Cx) -> bool {
     let flip = (x.u8(f::FLIP) as u16).rotate_right(6);
     let sign = x.u16(0x14) & 0x8000;
-    x.c.d[1] = flip as u32;
     x.c.d[2] = x.c.d[2] & !0xffff | sign as u32;
     flip == sign
 }
@@ -151,7 +146,6 @@ pub fn ai_gate(x: &mut Cx) -> u32 {
     } else {
         0
     };
-    x.c.d[0] = n;
     n
 }
 
@@ -656,7 +650,7 @@ pub fn attack_effects(x: &mut Cx, variant: u32, first: u32) -> bool {
             return false;
         }
         let n = (x.c.d[1] as u16).wrapping_sub(1);
-        x.c.d[1] = x.c.d[1] & !0xffff | n as u32;
+        x.c.d[1] = x.c.d[1] & !0xffff | n as u32; // relu : compteur de boucle relu au tour suivant
         if n == 0xffff {
             return true;
         }
@@ -689,7 +683,6 @@ fn copy_place(x: &mut Cx, o: Obj, with_z: bool) {
 /// Allocation ESHL de ces créateurs (`jsr 0x22ea ; bcs fin`) : A1 = l'objet comme l'original.
 fn alloc_eshl(x: &mut Cx) -> Option<Obj> {
     let o = x.alloc(&crate::objects::pools::ESHL)?;
-    x.c.a[1] = o.0;
     Some(o)
 }
 
@@ -706,7 +699,6 @@ pub fn eshl_12(x: &mut Cx) -> (Option<Obj>, bool) {
     copy_place(x, o, false);
     o.set_u16(x.b, Obj::Z, 0x30);
     let d2: u16 = if flip != 0 { 0x60 } else { (-0x60i16) as u16 };
-    x.c.d[2] = x.c.d[2] & !0xffff | d2 as u32;
     let old = o.u16(x.b, Obj::X);
     o.set_u16(x.b, Obj::X, old.wrapping_add(d2));
     (Some(o), old.checked_add(d2).is_none())
@@ -750,7 +742,6 @@ pub fn eshl_0a(x: &mut Cx) -> Option<Obj> {
     o.set_u8(x.b, Obj::KIND, 0xa);
     copy_place(x, o, false);
     let flip = x.u8(f::FLIP) ^ 0x20;
-    x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
     o.set_u8(x.b, f::FLIP, flip);
     Some(o)
 }
@@ -758,7 +749,7 @@ pub fn eshl_0a(x: &mut Cx) -> Option<Obj> {
 /// 0xa2d22 : six tirs ESHL 0x26 (`+0x2f` = 5 à 0) liés par `+0x46` ; le premier refus du pool arrête la série.
 pub fn eshl_burst_26(x: &mut Cx) {
     for n in (0..=5u8).rev() {
-        x.c.d[1] = x.c.d[1] & !0xffff | n as u32;
+        x.c.d[1] = x.c.d[1] & !0xffff | n as u32; // relu : compteur de boucle relu au tour suivant
         let Some(o) = alloc_eshl(x) else { return };
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, Obj::KIND, 0x26);
@@ -793,12 +784,9 @@ pub fn roll_78(x: &mut Cx) -> bool {
         return false;
     }
     let row = x.data32(0xadb0 + 4 * line as u32);
-    x.c.a[4] = row;
     let tick = var::RANK.get(x.b);
     let mask = x.data32(row.wrapping_add(((tick << 2) as i16) as u32));
-    x.c.d[2] = mask;
     let hit = roll_bit(x, mask, 0x1f);
-    x.c.d[0] = hit as u32;
     hit
 }
 
@@ -817,12 +805,8 @@ pub fn palette_script(x: &mut Cx, index: u16) {
         crate::mem::wr32(x.b, PALETTE + 4 * k as u32, v);
     }
     x.c.d[..6].copy_from_slice(&longs[..6]);
-    x.c.a[3] = longs[7];
     for k in 0..8 {
         let v = crate::mem::rd32(x.b, PALETTE + 4 * k);
         crate::mem::wr32(x.b, PALETTE + 4 * k, v | 0xf000_f000);
     }
-    x.c.a[1] = PALETTE + 0x20;
-    x.c.a[2] = from;
-    x.c.d[6] = 0xffff;
 }

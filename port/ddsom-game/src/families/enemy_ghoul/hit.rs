@@ -119,12 +119,10 @@ fn caught(x: &mut Cx) {
             x.set16(Obj::VX, 0x300);
             let mut want = 0x20;
             let d1 = pos.wrapping_sub(cam);
-            set_dw(x, 1, d1);
             if (d1 as i16) < 0xc0 {
                 negate(x, Obj::VX);
                 want = 0;
             }
-            x.c.d[2] = want as u32;
             if want != x.u8(f::FLIP) {
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);

@@ -6,7 +6,6 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => fall_in(x),
         2 => walk_in(x),
@@ -27,7 +26,6 @@ fn begin(x: &mut Cx) {
 // --- +6 = 0 : chute d'entrée ----------------------------------------------------------------------------
 
 fn fall_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             begin(x);

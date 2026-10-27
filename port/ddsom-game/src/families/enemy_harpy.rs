@@ -480,8 +480,6 @@ fn attack_claws(x: &mut Cx) {
             } else if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
                 if pick_target(x) {
-                    x.c.a[2] = x.c.a[1];
-                    x.c.d[5] = 0;
                     if let (Some(shot), false) = lib::eshl_12(x) {
                         x.set32(SHOT, shot.0);
                     }
@@ -639,7 +637,6 @@ fn hit_dying(x: &mut Cx) {
 // --- état 6 : libération ---------------------------------------------------------------------------
 
 fn dead(x: &mut Cx) {
-    set_dw(x, 1, 0x12);
     let d = x.u16(0x48) & 0xff00;
     set_dw(x, 0, d.wrapping_add(0x12));
     detach_from_host(x);

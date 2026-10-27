@@ -126,16 +126,13 @@ fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
             lib::decision_a(x)
         }
     };
-    x.c.d[0] = ok as u32;
     ok
 }
 
 /// 0x6a706 / 0x6a70c : le coup à jouer après l'approche est tiré dans la ligne de la difficulté.
 pub(super) fn pick_attack(x: &mut Cx, table: u32) {
-    x.c.d[2] = 0;
     let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
-    x.c.a[4] = table + row as u32;
     let n = rand_and(x, 0x1f);
     let mv = x.data8(table + row as u32 + n);
     x.set8(f::SUB, 4);
@@ -147,16 +144,12 @@ pub(super) fn pick_attack(x: &mut Cx, table: u32) {
 /// 0x6a6de : la cible est de l'autre côté de l'orientation de l'elfe.
 pub(super) fn needs_turn_around(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
-    set_dw(x, 0, dx);
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     let turn = want != x.u8(f::FLIP) as u32;
-    x.c.d[0] = turn as u32;
     turn
 }
 

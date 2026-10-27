@@ -220,7 +220,6 @@ fn init(x: &mut Cx) {
     pick_target(x);
     mv(x, 4);
     // l'état de départ dépend de la variante : 0, 2 ou 4 pour `+6`
-    x.c.d[0] = 0;
     match x.u8(3) {
         0 => go::arrive(x, 0),
         1 => go::arrive(x, 2),

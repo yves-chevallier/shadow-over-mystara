@@ -118,14 +118,12 @@ fn anim_a(x: &mut Cx, n: u8) -> u32 {
     if (n as i8) >= 0x4b {
         return n as u32;
     }
-    x.c.d[1] = shift as u32;
     n.wrapping_add(x.rom8(SHIFT_A + shift as u32)) as u32
 }
 
 /// 0x74f7e : numéro d'animation de la série des coups, toujours décalé.
 fn anim_b(x: &mut Cx, n: u8) -> u32 {
     let shift = x.u8(ANIM_SHIFT);
-    x.c.d[1] = shift as u32;
     n.wrapping_add(x.rom8(SHIFT_B + shift as u32)) as u32
 }
 

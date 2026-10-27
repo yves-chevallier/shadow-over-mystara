@@ -13,7 +13,6 @@ pub(super) fn lsr_w(x: &mut Cx, n: usize, k: u32) {
 /// 0x89788 : phases de l'affrontement selon le mode de jeu `A5+0x5a` et le nombre de joueurs `+0xad`.
 pub(super) fn phase(x: &mut Cx) {
     let mode = var::SCENE_LEVEL.get(x.b);
-    x.c.d[0] = mode as u32;
     if mode == 0 {
         return;
     }
@@ -26,7 +25,6 @@ pub(super) fn phase(x: &mut Cx) {
             return;
         }
         let half = x.u16(f::HP) >> 1;
-        setw(x, 1, half);
         if Fl::sub16(half, 0x48).gt() {
             x.set8(SLOW, 0);
             x.set16(WEAK_HP, half);
@@ -55,12 +53,10 @@ pub(super) fn pick_any(x: &mut Cx) {
 fn pick(x: &mut Cx, remember: bool) {
     for _ in 0..4096 {
         x.c.a[1] = 0;
-        x.c.d[1] = 0;
         x.c.a[2] = A5 + 0x5de;
         let alea = x.random();
         let n = alea as u32 & 3;
         setw(x, 0, n as u16);
-        setw(x, 1, n as u16);
         if remember && x.u8(PICKED) >> n & 1 != 0 {
             continue;
         }
@@ -104,7 +100,7 @@ pub(super) fn scan(x: &mut Cx, exactly_one: bool, d0: i16, d1: u16, d2: u16) -> 
         }
         x.c.a[2] = x.c.a[2].wrapping_add(0x200);
         let k = (x.c.d[6] as u16).wrapping_sub(1);
-        setw(x, 6, k);
+        setw(x, 6, k); // relu : compteur de boucle relu au tour suivant
         if k == 0xffff {
             return false;
         }
@@ -113,7 +109,6 @@ pub(super) fn scan(x: &mut Cx, exactly_one: bool, d0: i16, d1: u16, d2: u16) -> 
 
 /// 0x8a2c6 : vrai si le boss ne regarde pas son adversaire (`+0x50`) et qu'une animation est en cours (`+0xa3`).
 pub(super) fn must_turn(x: &mut Cx) -> bool {
-    x.c.d[0] = 0;
     if x.u8(ANIM_LAST) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -135,13 +130,9 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
             face = 0x20;
         }
     }
-    x.c.d[0] = face as u32;
-    setw(x, 1, d1);
     if face == x.u8(f::FLIP) {
-        x.c.d[0] = 0;
         return false;
     }
-    x.c.d[0] = 1;
     true
 }
 
@@ -149,11 +140,8 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
 pub(super) fn random_spot(x: &mut Cx) {
     let alea = x.random();
     let i = alea & 0x7c;
-    setw(x, 0, i);
     let px = x.rom16(0x8a384 + i as u32);
     let py = x.rom16(0x8a386 + i as u32);
-    setw(x, 1, px);
-    setw(x, 2, py);
     x.set16(0x8, px);
     x.set16(0x10, py);
 }
@@ -162,19 +150,16 @@ pub(super) fn random_spot(x: &mut Cx) {
 pub(super) fn random_sidestep(x: &mut Cx) {
     let alea = x.random();
     let i = alea & 0xe;
-    setw(x, 0, i);
     let mut d = x.rom16(0x8a422 + i as u32);
     if x.u8(f::FLIP) != 0 {
         d = d.wrapping_neg();
     }
-    setw(x, 1, d);
     x.add16(0x8, d);
 }
 
 /// 0x8a49a : ramène le boss dans l'aire de jeu (x de 0x20 à 0x160, y de 0x148 à 0x186).
 pub(super) fn clamp(x: &mut Cx) {
     let y = x.u16(0x10);
-    setw(x, 0, y);
     if Fl::sub16(y, 0x148).gt() {
         if !Fl::sub16(y, 0x186).lt() {
             x.set16(0x10, 0x186);
@@ -183,7 +168,6 @@ pub(super) fn clamp(x: &mut Cx) {
         x.set16(0x10, 0x148);
     }
     let px = x.u16(0x8);
-    setw(x, 0, px);
     if Fl::sub16(px, 0x20).gt() {
         if !Fl::sub16(px, 0x160).lt() {
             x.set16(0x8, 0x160);
@@ -226,9 +210,6 @@ pub(super) fn dodge_nearby(x: &mut Cx) {
 pub(super) fn dodge_spot(x: &mut Cx) {
     let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let dy = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
-    setw(x, 0, dx);
-    setw(x, 1, dy);
-    x.c.d[6] = 0;
     let right = Fl::sub16(dx, 0xc0).gt();
     let low = Fl::sub16(dy, 0x164).gt();
     let d6 = match (right, low) {
@@ -237,18 +218,13 @@ pub(super) fn dodge_spot(x: &mut Cx) {
         (true, false) => 8,
         (true, true) => 0xc,
     };
-    x.c.d[6] = d6;
     let table = rom32(x, 0x8a6cc + d6);
-    x.c.a[4] = table;
     let alea = x.random();
     let i = ((alea) & 3) << 3;
-    setw(x, 0, i);
     let a = table.wrapping_add(i as u32);
     let dx = x.data16(a);
-    setw(x, 1, dx);
     x.add16(0x8, dx);
     let dy = x.data16(a + 2);
-    setw(x, 1, dy);
     x.add16(0x10, dy);
     let side = x.data8(a + 4);
     x.set8(f::FLIP, side);
@@ -283,12 +259,9 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     setw(x, 0, level);
     lsr_w(x, 0, 1);
     let row = ((x.c.d[0] as u16) << 5) as i16 as i32 as u32;
-    setw(x, 0, row as u16);
     let a4 = table.wrapping_add(row);
-    x.c.a[4] = a4;
     let alea = x.random();
     let i = alea & 0x1f;
-    setw(x, 0, i);
     let step = x.data8(a4 + i as u32);
     x.set8(f::SUB2, step);
     x.set16(f::STATE, state);
