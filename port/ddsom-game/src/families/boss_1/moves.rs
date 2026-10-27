@@ -163,15 +163,16 @@ fn crossing(x: &mut Cx) {
         x.set_bit(0x1, 1, true);
         return puff(x, 0);
     }
-    let i = x.u16(TIMER) as u32 * 4;
-    let vx = x.rom16(CROSSING_SPEEDS + i);
+    // index `(d8,PC,D0.w)` : quadruple calculé sur un mot, étendu en signe
+    let i = x.u16(TIMER).wrapping_mul(4) as i16 as i32 as u32;
+    let vx = x.rom16(CROSSING_SPEEDS.wrapping_add(i));
     x.set16(0x14, vx);
-    let vy = x.rom16(CROSSING_SPEEDS + i + 2);
+    let vy = x.rom16(CROSSING_SPEEDS.wrapping_add(i).wrapping_add(2));
     x.set16(0x18, vy);
     let side = if (vx as i16) < 0 { 0 } else { 0x20 };
     x.set8(f::FLIP, side);
-    let t = x.u16(TIMER) as u32;
-    let n = x.rom16(CROSSING_ANIMS + t * 2);
+    let t = x.u16(TIMER).wrapping_mul(2) as i16 as i32 as u32;
+    let n = x.rom16(CROSSING_ANIMS.wrapping_add(t));
     body(x, n as u32);
 }
 
