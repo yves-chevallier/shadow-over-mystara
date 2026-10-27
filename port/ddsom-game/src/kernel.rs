@@ -272,14 +272,25 @@ fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0x9b6 : crée la tâche D0 (décalage), entrée A0. Une tâche déjà là rend sa pile.
 fn creer(c: &mut Cpu, b: &mut Cps2Bus) {
-    table(b).creer(emplacement(c.d[0]), c.a[0]);
+    creer_tache(b, c.d[0], c.a[0]);
     rts(c, b);
+}
+
+/// Crée la tâche de décalage `decalage` dans la table (`0x10 k`), qui démarrera à `entree` (enveloppe `0x9b6` : ni
+/// registre ni drapeau ne change).
+pub fn creer_tache(b: &mut Cps2Bus, decalage: u32, entree: u32) {
+    table(b).creer(emplacement(decalage), entree);
 }
 
 /// 0xa14 : tue la tâche D0.
 fn tuer(c: &mut Cpu, b: &mut Cps2Bus) {
-    table(b).tuer(emplacement(c.d[0]));
+    tuer_tache(b, c.d[0]);
     rts(c, b);
+}
+
+/// Tue la tâche de décalage `decalage` (enveloppe `0xa14` : ni registre ni drapeau ne change).
+pub fn tuer_tache(b: &mut Cps2Bus, decalage: u32) {
+    table(b).tuer(emplacement(decalage));
 }
 
 /// 0xaac : suspend la tâche D0.

@@ -2,7 +2,7 @@
 //! machine à modes, `modes::attract::fixed_screen`).
 //!
 //! À chaque image : l'étape de l'écran (bloc d'état `FF0F50`), puis les objets EFFCT et SET et la liste de
-//! sprites, puis une image de cession (`jsr 0xb64`, reprise en `0x18384`). Étapes (`+0`, pas de 2) :
+//! sprites, puis une image de cession (`jsr 0xb64`, reprise à l'étape `Reprise`, `0x18384`). Étapes (`+0`, pas de 2) :
 //!
 //! * 0 (`0x1838a`) : décor (palettes, deux blocs de tuiles par couche, palettes du titre), six lignes du
 //!   tableau (rangs 5 à 10, `0x18b8e`), objet SET du cadre, luminosités ;
@@ -19,9 +19,7 @@
 use crate::aides::divide;
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8};
 use crate::modes::{Flow, Sequence};
-use crate::resume;
 use crate::scene::Ctx;
-use crate::Native;
 use crate::objects::pools;
 
 /// Bloc d'état de l'écran (`A0`, A5 - 0x70b0).
@@ -72,14 +70,18 @@ mod sub {
     pub const EFFCT: u32 = 0x39cba;
     pub const SET: u32 = 0x39e86;
     pub const SPRITES: u32 = 0x1de96;
-    pub const WAIT_FRAME: u32 = 0xb64;
-    pub const END_TASK: u32 = 0x9f8;
+}
+
+crate::etapes! {
+    /// Étapes de la tâche : l'entrée et le retour de la cession, qui font chacune un tour.
+    pub enum Etape {
+        Entree = 0x1835e => tour,
+        Reprise = 0x18384 => tour,
+    }
 }
 
 /// Adresses de l'original.
 mod at {
-    pub const ENTREE: u32 = 0x1835e;
-    pub const REPRISE: u32 = 0x18384;
     /// Retour de l'appel de l'étape (`jsr (table,PC)`).
     pub const APRES_ETAPE: u32 = 0x1836e;
     pub const ETAPES: u32 = 0x18386;
@@ -412,7 +414,7 @@ fn fin(x: &mut Ctx) -> Flow {
     let fini = rd8(x.b, etat::FINI).wrapping_add(1);
     wr8(x.b, etat::FINI, fini);
     set_low_word(&mut x.c.d[0], 0xf0);
-    x.jump_to(sub::END_TASK)
+    super::terminer(x)
 }
 
 /// Entrée `n` (pas de 2) d'une table de sauts relatifs de l'original.
@@ -449,10 +451,5 @@ fn tour(x: &mut Ctx) -> Flow {
     for routine in [sub::EFFCT, sub::SET, sub::SPRITES] {
         x.call(routine);
     }
-    x.tail(sub::WAIT_FRAME, at::REPRISE)
+    super::une_image(x, Etape::Reprise)
 }
-
-resume!(ECRAN_FIXE, at::ENTREE, tour);
-resume!(ECRAN_FIXE_REPRISE, at::REPRISE, tour);
-
-pub const NATIVES: &[Native] = &[ECRAN_FIXE, ECRAN_FIXE_REPRISE];

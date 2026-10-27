@@ -43,8 +43,7 @@ pub use slot::forget_displayed;
 use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::modes::{Flow, Sequence};
-use crate::resume;
+use crate::modes::Flow;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -222,14 +221,8 @@ fn slot_count(b: &mut Cps2Bus) -> u32 {
 /// Adresses de l'original (reprise de la tâche).
 mod at {
     /// Entrée de la tâche, et reprise de l'attente du début de la partie.
-    pub const ENTRY: u32 = 0x150ac;
-    pub const STARTING: u32 = 0x15146;
     /// Disposition par type de borne (`A5+0x20`), table d'octets relative au PC.
     pub const LAYOUTS: u32 = 0x15164;
-    /// Haut de la boucle, et reprise après la cession.
-    pub const LOOP: u32 = 0x15178;
-    pub const AFTER_WAIT: u32 = 0x15212;
-    pub const WAIT_ONE_FRAME: u32 = 0xb64;
     /// Services de l'interface appelés à chaque tour (entrées des pièces, sons...).
     pub const SERVICES: [u32; 2] = [0x19b2a, 0x19b9c];
 }
@@ -237,9 +230,20 @@ mod at {
 /// Type de borne (nombre de joueurs, h) : choisit la disposition.
 const CABINET: u32 = 0x20;
 
-// 0x150ac : entrée de la tâche. Panneaux remis à zéro (numéro de joueur en `+0`), variables de la tâche, puis
-// attente du début de la partie.
-resume!(ENTRY, at::ENTRY, |x| {
+crate::etapes! {
+    /// Étapes de la tâche (le haut de la boucle, `0x15178`, n'est jamais une reprise : l'entrée y enchaîne).
+    pub enum Etape {
+        Entree = 0x150ac => entry,
+        /// Attente du début de la partie.
+        Starting = 0x15146 => starting,
+        /// Après la cession d'un tour.
+        AfterWait = 0x15212 => tour,
+    }
+}
+
+/// 0x150ac : entrée de la tâche. Panneaux remis à zéro (numéro de joueur en `+0`), variables de la tâche, puis
+/// attente du début de la partie.
+fn entry(x: &mut Ctx) -> Flow {
     x.c.d[0] = 0;
     for k in 0..4 {
         let at = A5 + var::PANELS + k * panel::SIZE;
@@ -260,12 +264,12 @@ resume!(ENTRY, at::ENTRY, |x| {
     for k in 1..4 {
         x.set_v8(var::PANELS + k * panel::SIZE + panel::INDEX, k as u8);
     }
-    x.tail(at::WAIT_ONE_FRAME, at::STARTING)
-});
+    crate::taches::une_image(x, Etape::Starting)
+}
 
-// 0x15146 : disposition selon la borne ; hors partie, panneaux affichés en disposition 0 ; en partie, attente de
-// la phase 4 (choix des personnages) avant la première mise à jour.
-resume!(STARTING, at::STARTING, |x| {
+/// 0x15146 : disposition selon la borne ; hors partie, panneaux affichés en disposition 0 ; en partie, attente de
+/// la phase 4 (choix des personnages) avant la première mise à jour.
+fn starting(x: &mut Ctx) -> Flow {
     let cabinet = x.v8(CABINET);
     x.c.d[0] = x.c.d[0] & !0xff | cabinet as u32;
     let layout = x.prog8(at::LAYOUTS + cabinet as u32);
@@ -275,10 +279,10 @@ resume!(STARTING, at::STARTING, |x| {
         x.set_v8(var::LAYOUT, 0);
         slot::forget_displayed(x.b);
     } else if (x.v8(var::PHASE) as i8) < 4 {
-        return x.tail(at::WAIT_ONE_FRAME, at::STARTING);
+        return crate::taches::une_image(x, Etape::Starting);
     }
     tour(x)
-});
+}
 
 /// 0x1507a, appelée par d'autres modules.
 pub const FORGET_DISPLAYED: Native = Native {
@@ -292,8 +296,6 @@ pub const FORGET_DISPLAYED: Native = Native {
     outputs: 0,
 };
 
-resume!(LOOP, at::LOOP, |x| tour(x));
-resume!(AFTER_WAIT, at::AFTER_WAIT, |x| tour(x));
 
 /// Un tour de la tâche : mise à jour des panneaux selon le mode d'affichage, services, puis cession.
 fn tour(x: &mut Ctx) -> Flow {
@@ -320,8 +322,8 @@ fn tour(x: &mut Ctx) -> Flow {
     for service in at::SERVICES {
         x.call(service);
     }
-    x.tail(at::WAIT_ONE_FRAME, at::AFTER_WAIT)
+    crate::taches::une_image(x, Etape::AfterWait)
 }
 
 /// Routines natives de l'interface des joueurs.
-pub const NATIVES: &[Native] = &[ENTRY, STARTING, FORGET_DISPLAYED, LOOP, AFTER_WAIT];
+pub const NATIVES: &[Native] = &[FORGET_DISPLAYED];

@@ -49,6 +49,19 @@ pub fn ceder(x: &mut Ctx, attente: Attente, reprise: impl Into<Suite>) -> Flow {
     Flow::Yield
 }
 
+/// `jsr 0xb64` : cède une image (D0.w = 1, le mot haut de D0 est gardé) ; la tâche reprendra à `reprise`.
+pub fn une_image(x: &mut Ctx, reprise: impl Into<Suite>) -> Flow {
+    crate::mem::set_low_word(&mut x.c.d[0], 1);
+    crate::kernel::attendre(x.c, x.b, reprise);
+    Flow::Yield
+}
+
+/// `jsr 0x9f8` : la tâche courante se termine.
+pub fn terminer(x: &mut Ctx) -> Flow {
+    crate::kernel::terminer(x.c, x.b);
+    Flow::Yield
+}
+
 /// Déclare les étapes d'une tâche : une variante par point de reprise, avec l'adresse que l'original reprend
 /// (`adresse`, gardée pour le diagnostic) et le pas qui s'y exécute (`pas`).
 #[macro_export]
@@ -103,6 +116,10 @@ macro_rules! etapes_des_taches {
 
 etapes_des_taches! {
     Gel(gel::Etape),
+    Invite(invite::Etape),
+    Scores(ecran_fixe::Etape),
+    Service(service::Etape),
+    Interface(crate::hud::Etape),
 }
 
 /// Exécute l'étape `etape` de la tâche courante ; si elle finit (`Flow::Done`, retour de sous-programme), la suite de
@@ -128,7 +145,15 @@ pub fn revenir(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Première étape d'une tâche Rust neuve, d'après son entrée (sinon la native posée à l'entrée).
 pub fn entree(entree: u32) -> Option<Etape> {
-    [Etape::from(gel::Etape::Entree)].into_iter().find(|e| e.adresse() == entree)
+    [
+        Etape::from(gel::Etape::Entree),
+        invite::Etape::Entree.into(),
+        ecran_fixe::Etape::Entree.into(),
+        service::Etape::Entree.into(),
+        crate::hud::Etape::Entree.into(),
+    ]
+        .into_iter()
+        .find(|e| e.adresse() == entree)
 }
 
 /// Natives des tâches Rust.
@@ -136,7 +161,5 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
     partie::NATIVES
         .iter()
         .chain(fondu::NATIVES)
-        .chain(ecran_fixe::NATIVES)
-        .chain(service::NATIVES)
         .chain(invite::NATIVES)
 }

@@ -22,6 +22,7 @@ use m68k::Cpu;
 
 use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::scene::Ctx;
+use crate::taches::table::Suite;
 use crate::Native;
 
 /// Bloc d'état de la machine à modes (`A0` dans l'original) et ses champs.
@@ -82,18 +83,18 @@ pub enum Flow {
 
 /// Cessions et appels qui peuvent céder, vus depuis une séquence d'écran.
 pub trait Sequence {
-    /// Cède `frames` images à l'ordonnanceur ; la tâche reprendra en `resume` (adresse qui suit le
+    /// Cède `frames` images à l'ordonnanceur ; la tâche reprendra en `resume` (étape Rust, ou adresse qui suit le
     /// `jsr 0xa40` de l'original). La séquence doit rendre `Flow::Yield` aussitôt.
-    fn wait(&mut self, frames: u32, resume: u32) -> Flow;
+    fn wait(&mut self, frames: u32, resume: impl Into<Suite>) -> Flow;
     /// Appelle une routine d'origine qui peut céder : elle revient (`rts`) en `resume`.
-    fn tail(&mut self, addr: u32, resume: u32) -> Flow;
+    fn tail(&mut self, addr: u32, resume: impl Into<Suite>) -> Flow;
     /// Continue dans le code d'origine à `addr`, qui rendra la main à l'appelant de la séquence.
     fn jump(&mut self, addr: u32) -> Flow;
     /// Comme `jump`, sans toucher à A0 (appel terminal `jmp` d'une routine d'origine).
     fn jump_to(&mut self, addr: u32) -> Flow;
     /// Appel `bsr`/`jsr` dont la suite est une native de reprise : rangée dans les appels en cours de la tâche
     /// (`taches::table::Cadre`), elle reprendra quand l'appelé reviendra.
-    fn push_return(&mut self, addr: u32);
+    fn push_return(&mut self, suite: impl Into<Suite>);
     /// L'appelé est revenu sans passer par son `rts` (fonction Rust qui a rendu `Flow::Done`) : l'appel en cours
     /// ouvert par `push_return` est abandonné.
     fn drop_return(&mut self);
@@ -104,8 +105,8 @@ pub trait Sequence {
 
 /// Appel d'un sous-programme natif depuis un pas Rust : sa suite est un appel en cours de la tâche, pas une
 /// adresse empilée.
-fn push(c: &mut Cpu, b: &mut Cps2Bus, v: u32) {
-    crate::taches::table::appeler(c, b, v);
+fn push(c: &mut Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) {
+    crate::taches::table::appeler(c, b, suite);
 }
 
 /// Saut à `addr`. Si le code d'origine y prend la suite, il ne connaît que la pile 68000 : les appels en cours tenus en
@@ -118,10 +119,10 @@ fn goto(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
 }
 
 impl Sequence for Ctx<'_> {
-    fn wait(&mut self, frames: u32, resume: u32) -> Flow {
+    fn wait(&mut self, frames: u32, resume: impl Into<Suite>) -> Flow {
         crate::taches::ceder(self, crate::taches::Attente::Images(frames), resume)
     }
-    fn tail(&mut self, addr: u32, resume: u32) -> Flow {
+    fn tail(&mut self, addr: u32, resume: impl Into<Suite>) -> Flow {
         push(self.c, self.b, resume);
         goto(self.c, self.b, addr);
         Flow::Yield
@@ -135,8 +136,8 @@ impl Sequence for Ctx<'_> {
         goto(self.c, self.b, addr);
         Flow::Yield
     }
-    fn push_return(&mut self, addr: u32) {
-        push(self.c, self.b, addr);
+    fn push_return(&mut self, suite: impl Into<Suite>) {
+        push(self.c, self.b, suite);
     }
     fn drop_return(&mut self) {
         crate::taches::table::depiler_retour(self.c, self.b);
