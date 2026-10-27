@@ -44,12 +44,7 @@ mod rom {
     pub const EFFECT_QUAKE: u32 = 0x4b340;
     pub const EFFECT_QUAKE_B: u32 = 0x4f132;
     pub const EFFECT_STORM: u32 = 0x4d020;
-    pub const EFFECT_STORM_B: u32 = 0x51aa4;
     pub const EFFECT_RAIN: u32 = 0x4d660;
-    pub const EFFECT_RAIN_B: u32 = 0x54274;
-    pub const EFFECT_PORTAL_B: u32 = 0x51872;
-    pub const EFFECT_PORTAL_C: u32 = 0x4cfee;
-    pub const EFFECT_PORTAL_TEST: u32 = 0x4d064;
     pub const EFFECT_WALL: u32 = 0x4d2c0;
     pub const EFFECT_WAVE: u32 = 0x4dfe2;
 }
@@ -829,7 +824,7 @@ fn storm(g: &mut Ctx, p: Player) {
                 } else {
                     call(g, p, rom::EFFECT_STORM, &[(0, 1)]);
                     g.rom(rom::SCREEN_GLOW, p);
-                    g.rom(rom::EFFECT_STORM_B, p);
+                    spawn::storm_cloud(g, p);
                 }
             }
             if p.u16(g, field::TIMER) == 0x60 {
@@ -879,7 +874,7 @@ fn rain(g: &mut Ctx, p: Player) {
                     return linger(g, p);
                 }
                 call(g, p, rom::EFFECT_RAIN, &[(0, 1)]);
-                g.rom(rom::EFFECT_RAIN_B, p);
+                spawn::rain(g, p);
                 g.rom(0xe948e, p);
             }
             if countdown(g, p) {
@@ -1289,9 +1284,9 @@ fn drain(g: &mut Ctx, p: Player) {
         4 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.rom(rom::EFFECT_PORTAL_B, p);
+                spawn::portal_glow(g, p);
                 spawn::portal(g, p, 0);
-                g.rom(rom::EFFECT_PORTAL_C, p);
+                spawn::portal_sparks(g, p);
                 g.rom(0xe323a, p);
             }
             if countdown(g, p) {
@@ -1303,10 +1298,9 @@ fn drain(g: &mut Ctx, p: Player) {
             }
             let timer = p.u16(g, field::TIMER);
             if timer <= 0x100 {
-                let tally = p.u8(g, 0x1ef) as u32;
-                g.c.d[0] = g.c.d[0] & !0xff | tally;
-                if g.rom(rom::EFFECT_PORTAL_TEST, p) {
-                    p.set_u8(g, 0x1ef, (tally as u8).wrapping_add(1));
+                let tally = p.u8(g, 0x1ef);
+                if spawn::portal_burst(g, p, tally) {
+                    p.set_u8(g, 0x1ef, tally.wrapping_add(1));
                 }
             }
             if timer == 0xe0 {

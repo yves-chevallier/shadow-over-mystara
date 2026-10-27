@@ -90,9 +90,6 @@ pub fn restore_palette(g: &mut Ctx, p: Player) {
     copy_palette(g, sources::NORMAL + slot, PALETTE_RAM + slot);
 }
 
-/// Routine d'origine : effet visuel du compte à rebours de la mort.
-const DYING_EFFECT: u32 = 0x5009e;
-
 /// 0x39242 : compte à rebours de mort (`DYING_TIMER`) ; un effet toutes les 8 images.
 pub fn dying_countdown(g: &mut Ctx, p: Player) {
     cov!();
@@ -102,6 +99,6 @@ pub fn dying_countdown(g: &mut Ctx, p: Player) {
     }
     p.set_u16(g, Player::DYING_TIMER, (left - 1) as u16);
     if ram::FRAME_COUNTER.get(g.b) & 7 == 0 {
-        g.rom(DYING_EFFECT, p);
+        super::spawn::dying_shards(g, p);
     }
 }

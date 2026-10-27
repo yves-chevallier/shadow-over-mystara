@@ -19,10 +19,6 @@ use crate::objects::pools;
 use crate::player::ram;
 use crate::machine::Machine;
 
-/// Routines d'allocation d'origine (natives) : retenue levée si le pool est plein, A1 = l'emplacement.
-mod alloc {
-}
-
 /// Octets de l'objet créé.
 mod field {
     /// Lien vers le joueur créateur (mot : adresse).
@@ -67,6 +63,17 @@ mod kind {
     pub const PORTAL: u8 = 0x16;
     /// Sorcière invoquée par le magicien (tir PSHL).
     pub const WITCH: u8 = 0x12;
+    /// Arme maudite qui s'échappe (PEFF).
+    pub const CURSED_WEAPON: u8 = 0x26;
+    /// Éclats du joueur mourant (PEFF).
+    pub const SHARD: u8 = 0x27;
+    /// Effets des sorts du magicien (PEFF) : étincelles et éclat du portail, lueur, nuée de l'orage ; et pluie de
+    /// traits (PSHL).
+    pub const PORTAL_SPARK: u8 = 0x13;
+    pub const PORTAL_BURST: u8 = 0x14;
+    pub const RAIN: u8 = 0x14;
+    pub const PORTAL_GLOW: u8 = 0x2d;
+    pub const STORM_CLOUD: u8 = 0x2e;
 }
 
 /// Réserve un emplacement dans `pool` et l'active avec le genre `kind`. Les créateurs sont des natives appelées par
@@ -584,6 +591,130 @@ pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
     o.set_u8(g.b, 0x46, boss);
 }
 
+// ---- créateurs sans native jusqu'ici (atteignables, jamais exercés par les scénarios) --------------------
+
+/// 0x4fefe : l'arme maudite qui s'échappe des mains (`checks::item_curse`), avec la sous-action en cours (`+0x5c`).
+pub fn cursed_weapon(g: &mut Ctx, p: Player) {
+    cov!();
+    let sub = p.u8(g, Player::SUBACTION);
+    effect(g, p, kind::CURSED_WEAPON, None, |g, o| o.set_u8(g.b, 0x5c, sub));
+}
+
+/// Recopie l'orientation et la position du joueur dans l'éclat, un peu devant lui (profondeur + 1).
+fn shard_place(g: &mut Ctx, p: Player, o: Obj) {
+    let facing = p.u8(g, Player::FACING);
+    o.set_u8(g.b, Player::FACING, facing);
+    let (x, z) = (p.u16(g, Obj::X), p.u16(g, Obj::Z));
+    o.set_u16(g.b, Obj::X, x);
+    o.set_u16(g.b, Obj::Z, z);
+    let y = p.u32(g, Obj::Y).wrapping_add(1);
+    o.set_u32(g.b, Obj::Y, y);
+}
+
+/// 0x5009e : éclats du joueur mourant (`effects::dying_countdown`) : le premier reprend le cadre et la palette du
+/// joueur (`+0x34`, `+0x3c`, `+0x3f`) ; un second (variante 1), qui retient le joueur (`+0x42`), si `+0x42` est non
+/// nul. Rien sans `+0x68`, ni pendant un scénario.
+pub fn dying_shards(g: &mut Ctx, p: Player) {
+    cov!();
+    if p.u8(g, 0x68) == 0 || ram::INPUT_RAW.get(g.b) != 0 {
+        return;
+    }
+    let Some(o) = create(g, p, &pools::PEFF, kind::SHARD) else { return };
+    shard_place(g, p, o);
+    let frame = p.u32(g, Obj::FRAME);
+    o.set_u32(g.b, Obj::FRAME, frame);
+    for off in [0x3c, 0x3f] {
+        let v = p.u8(g, off);
+        o.set_u8(g.b, off, v);
+    }
+    if p.u16(g, 0x42) == 0 {
+        return;
+    }
+    let Some(o) = create(g, p, &pools::PEFF, kind::SHARD) else { return };
+    o.set_u8(g.b, Obj::VARIANT, 1);
+    shard_place(g, p, o);
+    o.set_u16(g.b, 0x42, p.0 as u16);
+}
+
+/// 0x51aa4 : nuée de l'orage (genre 0x2e), en deux moitiés : la seconde (variante 1) tournée vers la gauche.
+pub fn storm_cloud(g: &mut Ctx, p: Player) {
+    cov!();
+    if create(g, p, &pools::PEFF, kind::STORM_CLOUD).is_none() {
+        return;
+    }
+    let Some(o) = create(g, p, &pools::PEFF, kind::STORM_CLOUD) else { return };
+    o.set_u8(g.b, Obj::VARIANT, 1);
+    o.set_u8(g.b, Player::FACING, 0x20);
+}
+
+/// 0x51872 : lueur du portail (genre 0x2d) au-dessus du joueur (0x48 plus haut, un peu devant), avec le pas de
+/// l'action (`+0x5d`).
+pub fn portal_glow(g: &mut Ctx, p: Player) {
+    cov!();
+    let Some(o) = create(g, p, &pools::PEFF, kind::PORTAL_GLOW) else { return };
+    o.set_u16(g.b, field::LINK, p.0 as u16);
+    let facing = p.u8(g, Player::FACING);
+    o.set_u8(g.b, Player::FACING, facing);
+    for off in [Obj::X, Obj::Z, Obj::Y] {
+        let v = p.u16(g, off);
+        o.set_u16(g.b, off, v);
+    }
+    let z = o.u16(g.b, Obj::Z).wrapping_add(0x48);
+    o.set_u16(g.b, Obj::Z, z);
+    let y = o.u16(g.b, Obj::Y).wrapping_sub(1);
+    o.set_u16(g.b, Obj::Y, y);
+    let step = step_of(g, p);
+    o.set_u8(g.b, 0x5d, step);
+}
+
+/// Routine d'origine appelée en fin de `portal_sparks` : couleur d'éclair de l'écran (palette).
+const FLASH_COLOR_ON: u32 = 0x1ac68;
+
+/// 0x4cfee : quatre étincelles du portail (genre 0x13, variante 1, numéros 3 à 0 en `+0x2f`), puis l'écran prend la
+/// couleur de l'éclair (0x1ac68), même si le pool est plein.
+pub fn portal_sparks(g: &mut Ctx, p: Player) {
+    cov!();
+    for n in (0..=3u8).rev() {
+        let Some(o) = create(g, p, &pools::PEFF, kind::PORTAL_SPARK) else { break };
+        o.set_u8(g.b, Obj::VARIANT, 1);
+        o.set_u8(g.b, field::PARAM, n);
+        o.set_u8(g.b, 0x5a, 4);
+        link(g, o, p);
+    }
+    g.rom(FLASH_COLOR_ON, p);
+}
+
+/// 0x4d064 : éclat du portail (genre 0x14, variante 1) numéroté `n` (`+0x5e`). Vrai s'il a pu être créé (D0 = 0).
+pub fn portal_burst(g: &mut Ctx, p: Player, n: u8) -> bool {
+    cov!();
+    effect(g, p, kind::PORTAL_BURST, Some(1), |g, o| o.set_u8(g.b, 0x5e, n)).is_some()
+}
+
+/// 0x54274 : pluie de traits (tirs PSHL de genre 0x14, variantes 0, 1, 2...) : un trait tous les 0x40 pixels, à
+/// partir de 0x80 pixels derrière le joueur, jusqu'au bord de l'écran devant lui (bord gauche de la caméra - 0x40,
+/// ou + 0x1c0 en regardant à gauche). Les positions ne sont pas écrites : seul le nombre de traits en dépend.
+pub fn rain(g: &mut Ctx, p: Player) {
+    cov!();
+    let left = p.faces_left(g);
+    let toward = |d: u16| if left { d.wrapping_neg() } else { d };
+    let mut x = p.u16(g, Obj::X).wrapping_add(toward(0xff80));
+    let camera = if ram::USE_ALT_CAMERA.get(g.b) != 0 { ram::CAMERA_ALT_X.get(g.b) } else { ram::CAMERA_X.get(g.b) };
+    let edge = camera.wrapping_add(if left { 0x1c0 } else { 0xffc0 });
+    let mut n = 0u8;
+    loop {
+        let Some(o) = create(g, p, &pools::PSHL, kind::RAIN) else { return };
+        let facing = p.u8(g, Player::FACING);
+        o.set_u8(g.b, Player::FACING, facing);
+        o.set_u8(g.b, Obj::VARIANT, n);
+        o.set_u16(g.b, field::LINK, p.0 as u16);
+        x = x.wrapping_add(toward(0xffc0));
+        if (toward(x.wrapping_sub(edge)) as i16) < 0 {
+            return;
+        }
+        n = n.wrapping_add(1);
+    }
+}
+
 // ---- natives --------------------------------------------------------------------------------------
 
 /// Exécute un créateur sur l'état des registres du 68000 (A0 = le joueur) puis rend la main.
@@ -726,5 +857,18 @@ creator!(PORTAL, 0x4d3c6, "spawn_portal", regs::a(1), |g, p| {
     portal(g, p, v)
 });
 creator!(WITCH, 0x53918, "spawn_witch", regs::a(1), |g, p| witch(g, p));
+creator!(CURSED_WEAPON, 0x4fefe, "spawn_cursed_weapon", regs::a(1) | regs::CCR, |g, p| cursed_weapon(g, p));
+creator!(DYING_SHARDS, 0x5009e, "spawn_dying_shards", 0, |g, p| dying_shards(g, p));
+creator!(STORM_CLOUD, 0x51aa4, "spawn_storm_cloud", regs::a(1), |g, p| storm_cloud(g, p));
+creator!(PORTAL_GLOW, 0x51872, "spawn_portal_glow", regs::a(1), |g, p| portal_glow(g, p));
+creator!(PORTAL_SPARKS, 0x4cfee, "spawn_portal_sparks", 0, |g, p| portal_sparks(g, p));
+creator!(PORTAL_BURST, 0x4d064, "spawn_portal_burst", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+    let n = g.c.d[0] as u8;
+    let made = portal_burst(g, p, n);
+    // `moveq #0` si l'éclat est créé, `moveq #1` sinon
+    g.c.d[0] = (!made) as u32;
+    g.c.flags_logic(g.c.d[0], Size::Long);
+});
+creator!(RAIN, 0x54274, "spawn_rain", regs::a(1), |g, p| rain(g, p));
 creator!(WITCH_A, 0x53954, "spawn_witch_a", regs::a(1), |g, p| witch_strike(g, p, 1));
 creator!(WITCH_B, 0x539e4, "spawn_witch_b", regs::a(1), |g, p| witch_strike(g, p, 4));

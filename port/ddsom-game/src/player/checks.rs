@@ -29,10 +29,6 @@ pub mod key {
     pub const SPECIAL: u8 = 0x80;
 }
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    pub const THROW_SETUP: u32 = 0x4fefe;
-}
 
 /// Orientation demandée par les directions (bit 0 : 0x20, sinon 0).
 fn facing_for(keys: u8) -> u8 {
@@ -309,8 +305,9 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
     if mask >> bit & 1 != 0 {
         if weapon != 0xe {
             p.set_state(g, 0x0204_2600);
-            let z = g.rom(rom::THROW_SETUP, p);
-            return !z;
+            super::spawn::cursed_weapon(g, p);
+            // Z du dernier `move.w` du créateur (le lien), ou de l'allocation qui échoue (nul) : toujours vrai
+            return g.c.sr & m68k::SR_Z == 0;
         }
         let count = ram::CURSE_COUNT.get(g.b).wrapping_add(1);
         ram::CURSE_COUNT.set(g.b, count);
@@ -320,7 +317,7 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
         let facing = p.u8(g, Player::FACING);
         p.set_u8(g, 0x4a, facing);
         p.set_state(g, 0x0204_3600);
-        g.rom(rom::THROW_SETUP, p);
+        super::spawn::cursed_weapon(g, p);
     }
     if p.u8(g, Player::WEAPON_A) != 0xe {
         return true;
