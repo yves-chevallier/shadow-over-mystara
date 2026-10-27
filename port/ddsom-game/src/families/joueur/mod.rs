@@ -32,7 +32,6 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(peff::NATIVES)
         .chain(peff_b::NATIVES)
         .chain(peff_boutique::NATIVES)
-        .chain(&peff_boutique::TALK)
         .chain(peff_c::NATIVES)
         .chain(peff_d::NATIVES)
         .chain(peff_e::NATIVES)

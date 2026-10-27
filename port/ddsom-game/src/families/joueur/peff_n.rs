@@ -7,9 +7,7 @@ use crate::mem::{rd32, rd8, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-const ANGLE_TO_TARGET: u32 = 0x1376;
 const IN_ZONE: u32 = 0xfbae;
-const SHADOW: u32 = 0x33fe4;
 const SPAWN_EFFECT: u32 = 0xb10c8;
 const ANIMS: u32 = 0x1bc9b6;
 const SPEEDS: u32 = 0x1c7836;
@@ -110,7 +108,7 @@ mod guardian {
             _ => lunge(x),
         }
         x.call(IN_ZONE);
-        x.call(SHADOW);
+        x.call(crate::terrain::SHADOW.entry);
         x.reinsert();
     }
 
@@ -414,7 +412,7 @@ mod guardian {
 
     /// `0x508fc` : tourne d'un cran vers l'objet que désigne A1 ; si le regard doit changer, lance le demi-tour.
     fn turn(x: &mut Cx) {
-        x.call(ANGLE_TO_TARGET);
+        x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
         let diff = (x.c.d[0] as u8).wrapping_sub(x.u8(0x2d)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
         let angle = x.u8(0x2d).wrapping_add(step) & 0x1f;

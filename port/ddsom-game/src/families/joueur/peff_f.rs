@@ -6,7 +6,6 @@ use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const FLASH_ON: u32 = 0x1ac68;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -308,7 +307,7 @@ mod flash {
             o.set_u8(x.b, 0x5a, 2);
             o.set_u16(x.b, f::OWNER, x.o.0 as u16);
         }
-        x.call(FLASH_ON);
+        x.call(crate::palette::FLASH_COLOR_ON.entry);
     }
 
     fn corner(x: &mut Cx) {

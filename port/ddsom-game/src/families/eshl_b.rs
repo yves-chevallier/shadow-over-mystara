@@ -24,10 +24,6 @@ mod sfx {
     pub const ED686: u32 = 0xed686;
 }
 
-/// Angle (0..31) entre deux points : (D1, D2) = (x, y) de la cible, (D3, D4) = (x, z) de l'objet.
-const ANGLE: u32 = 0x1386;
-/// Division non signée D0 / D1 (quotient dans D0).
-const DIVIDE: u32 = 0x17ea;
 
 /// État long « à libérer » (`+4 = 6`, `+5..+7` = 0).
 const DEAD: u32 = 0x0600_0000;
@@ -610,12 +606,12 @@ mod shot17 {
         let far = if (dx as i32) < (dy as i32) { dy } else { dx } >> 3;
         x.c.d[0] = x.u32(0xc);
         x.c.d[1] = far;
-        x.call(DIVIDE);
+        x.call(crate::aides::DIVIDE.entry);
         let quotient = x.c.d[0] << 7;
         let slope = (quotient as u16).wrapping_add(((far >> 16) as u16) << 2);
         x.set16(0x18, slope.wrapping_neg());
         x.c.a[1] = target.0;
-        x.call(0x1376);
+        x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
         let angle = (x.c.d[0] as u16 & 0x1f) as u8;
         let idx = angle.wrapping_sub(8) as u32;
         let v = x.rom8(AIM_TABLE_B + idx);
@@ -638,7 +634,7 @@ mod shot17 {
             x.c.d[4] = x.u16(0xc) as u32;
             x.c.d[3] = x.u16(0x8) as u32;
             x.c.d[2] = 0;
-            x.call(ANGLE);
+            x.call(crate::aides::DIRECTION.entry);
             let angle = (x.c.d[0] as u16 & 0x1f) as u8;
             let v = x.rom8(AIM_TABLE_A + angle.wrapping_sub(8) as u32);
             x.set8(0x2d, v);
@@ -811,7 +807,7 @@ mod shot19 {
         x.c.d[4] = x.u16(0xc) as u32;
         x.c.d[1] = target.u16(x.b, 0x8) as u32;
         x.c.d[2] = 0;
-        x.call(ANGLE);
+        x.call(crate::aides::DIRECTION.entry);
         let angle = (x.c.d[0] as u16 & 0x1f) as u8;
         let (base, steps) = if x.u8(f::FLIP) != 0 { (9, STEPS_FACING_LEFT) } else { (0x10, STEPS_FACING_RIGHT) };
         let r = angle.wrapping_sub(base);
@@ -1435,7 +1431,6 @@ mod shot25 {
     const ANIMS: u32 = 0x16ea18;
     const SHADOW: u32 = 0x54818;
     const IMPACT_SOUND: u32 = 0xab7d8;
-    const IMPACT_SOUND_2: u32 = 0x2860;
     const IMPACT_EFFECT: u32 = 0xeafdc;
 
     pub fn run(x: &mut Cx) {
@@ -1496,7 +1491,7 @@ mod shot25 {
         x.c.d[0] = 3;
         x.call(IMPACT_SOUND);
         x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-        x.call(IMPACT_SOUND_2);
+        x.call(crate::camera_modes::SHAKE_B.entry);
         x.call(IMPACT_EFFECT);
         if x.u16(0x5a) != 0 {
             let shadow = x.linked(0x5a);
@@ -2198,7 +2193,7 @@ mod shot31 {
                     x.set8(0x42, 0xa);
                     x.c.d[1] = source.u16(x.b, 0x8) as u32;
                     x.c.d[2] = source.u16(x.b, 0x10) as u32;
-                    x.call(0x137e);
+                    x.call(crate::aides::DIRECTION_FROM_OBJECT.entry);
                     let angle = (x.c.d[0] as u8).wrapping_add(x.u8(0x58)) & 0x1f;
                     x.set8(0x2d, angle);
                 }
@@ -2309,12 +2304,12 @@ mod shot32 {
         if variant == 0 {
             target = x.linked(f::OWNER);
             x.c.a[1] = target.0;
-            x.call(0x1376);
+            x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
         } else {
             target = x.linked(0x42);
             x.c.d[1] = target.u16(x.b, 0xbc) as u32;
             x.c.d[2] = target.u16(x.b, 0xbe) as u32;
-            x.call(0x137e);
+            x.call(crate::aides::DIRECTION_FROM_OBJECT.entry);
         }
         let angle = x.c.d[0] as u8;
         x.set8(0x2d, angle);
@@ -2339,7 +2334,7 @@ mod shot32 {
         }
         x.c.d[0] = x.u16(0xc) as u32;
         x.c.d[1] = steps;
-        x.call(0x17ea);
+        x.call(crate::aides::DIVIDE.entry);
         let slope = (x.c.d[0] as i32).wrapping_neg() as u32;
         let slope = (slope.rotate_left(16) as i32 >> 8) as u16;
         x.set16(0x18, slope);
@@ -2588,7 +2583,6 @@ mod shot35 {
 
     const ANIMS: u32 = 0x16fafa;
     const DIRECTIONS: u32 = 0xa2934;
-    const SHADOW: u32 = 0x33fe4;
     const FLY: u8 = 0;
     const FADE: u8 = 2;
 
@@ -2633,7 +2627,7 @@ mod shot35 {
                     _ => {}
                 }
                 blink_by_parity(x);
-                x.call(SHADOW);
+                x.call(crate::terrain::SHADOW.entry);
             }
             _ => x.free_eshl(),
         }
@@ -2655,7 +2649,6 @@ mod shot36 {
     const X_OFFSETS: u32 = 0xa2b0a;
     const Y_OFFSETS: u32 = 0xa2b2a;
     const SOUND_LAND: u32 = 0xed548;
-    const SOUND_THUD: u32 = 0x2860;
 
     pub fn run(x: &mut Cx) {
         guarded(x, state)
@@ -2682,7 +2675,7 @@ mod shot36 {
                     x.set16(0xc, 0);
                     x.call(SOUND_LAND);
                     x.c.d[0] = 0x20;
-                    x.call(SOUND_THUD);
+                    x.call(crate::camera_modes::SHAKE_B.entry);
                     ai_start(x, ANIMS, 1);
                 }
                 2 => {
@@ -2849,8 +2842,6 @@ mod shot38 {
     const SPEED_ROWS: u32 = 0xa2ed4;
     const SPEED_ROWS_VARIANT: u32 = 0xa2f34;
     const SPRITES: u32 = 0xa2e10;
-    const ZONE_CHECK: u32 = 0xfbb0;
-    const SHADOW: u32 = 0x33fe4;
 
     pub fn run(x: &mut Cx) {
         if suspended(x) {
@@ -2870,8 +2861,8 @@ mod shot38 {
             2 => {
                 fall(x);
                 x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0x10;
-                x.call(ZONE_CHECK);
-                x.call(SHADOW);
+                x.call(crate::ai::KEEP_ON_SCREEN.entry);
+                x.call(crate::terrain::SHADOW.entry);
                 x.reinsert();
             }
             4 => x.add8(0x4, 2),
@@ -2912,7 +2903,7 @@ mod shot38 {
             x.c.d[2] = target.u16(x.b, 0xc).wrapping_add(0x30) as u32;
             x.c.d[3] = x.u16(0x8) as u32;
             x.c.d[4] = x.u16(0xc) as u32;
-            x.call(ANGLE);
+            x.call(crate::aides::DIRECTION.entry);
             angle = x.c.d[0] as u16;
         }
         let flipped = flip != 0;
@@ -2967,7 +2958,6 @@ mod shot39 {
     const DIRECTIONS: u32 = 0xa3148;
     const START_ANIMS: u32 = 0xa3158;
     const FRAMES: u32 = 0xa31ba;
-    const SOUND_THUD: u32 = 0x2860;
     const SOUND_IMPACT: u32 = 0xecb98;
     const FLY: u8 = 0;
     const SETTLE: u8 = 2;
@@ -3037,7 +3027,7 @@ mod shot39 {
                 x.move_z();
                 if (x.u16(0xc) as i16) <= 0 {
                     x.c.d[0] = 0x30;
-                    x.call(SOUND_THUD);
+                    x.call(crate::camera_modes::SHAKE_B.entry);
                     x.call(SOUND_IMPACT);
                     x.add8(0x5, 2);
                     x.set16(0xc, 0);

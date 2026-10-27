@@ -84,16 +84,16 @@ fn variant_routine(c: &mut Cpu, b: &mut Cps2Bus, kinds: u32, routines: u32) {
     if c.a[1] != NOTHING {
         call(c, b, c.a[1]);
     }
-    rts(c, b);
 }
 
-/// 0xd98b8 : routine propre à la variante, au démarrage d'une vague.
-fn wave_start(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0xd98b8 : routine propre à la variante, au démarrage d'une vague (appelée directement par le générateur SET 19,
+/// A0 = le générateur ; la native ajoute le `rts`).
+pub fn wave_start(c: &mut Cpu, b: &mut Cps2Bus) {
     variant_routine(c, b, 0xd98d8, 0xd98cc);
 }
 
 /// 0xd995a : routine propre à la variante, à la fin d'une vague.
-fn wave_end(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn wave_end(c: &mut Cpu, b: &mut Cps2Bus) {
     variant_routine(c, b, 0xd9976, 0xd996e);
 }
 
@@ -137,8 +137,8 @@ pub const NATIVES: &[Native] = &[
     native(0xd5ef8, "set_barre_de_vie", attach_life_bar, regs::ALL),
     native(0xd5f12, "set_efface_colonnes", erase_columns, regs::ALL),
     native(0xce668, "set_deux_grilles", load_two_grids, regs::ALL),
-    native(0xd98b8, "set_vague_debut", wave_start, regs::ALL),
-    native(0xd995a, "set_vague_fin", wave_end, regs::ALL),
+    native(0xd98b8, "set_vague_debut", |c, b| { wave_start(c, b); rts(c, b) }, regs::ALL),
+    native(0xd995a, "set_vague_fin", |c, b| { wave_end(c, b); rts(c, b) }, regs::ALL),
     native(0x2a24, "camera_limite_x", camera::set_limit_x, regs::CCR),
     native(0x2a2a, "camera_position_y", camera::set_position_y, regs::CCR),
     native(0x2a30, "camera_mode", camera::set_mode, regs::CCR),

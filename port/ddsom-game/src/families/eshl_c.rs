@@ -18,10 +18,6 @@ mod rt {
     pub const AI_ANIM_START: u32 = 0x103d6;
     /// Un pas d'animation, puis recopie de `+0x3e` en `+0x44` ; retenue = fin.
     pub const AI_ANIM_STEP: u32 = 0x1040c;
-    /// Direction entre (D1, D2) et l'objet : D0 = octet de direction.
-    pub const DIRECTION: u32 = 0x137e;
-    /// Retient l'objet dans l'écran, marge D0.
-    pub const CLAMP_ON_SCREEN: u32 = 0xfbb0;
     /// Position dans la fenêtre d'écran (D0 = borne basse, D1 = borne haute) : D0 non nul si dehors.
     pub const OUTSIDE_WINDOW: u32 = 0x104a2;
 }
@@ -213,8 +209,6 @@ mod shot41 {
     /// Palette copiée (ROM vers RAM palette) : 8 longs.
     const PALETTE_SRC: u32 = 0x25a6e0;
     const PALETTE_DST: u32 = 0x91c2e0;
-    /// Fonction de création de trois tirs de type 40.
-    const SPAWN_TYPE40: u32 = 0xa31c2;
     /// Champs de la cible (objet joueur) : position de visée.
     const TARGET_X: u32 = 0xb0;
     const TARGET_Y: u32 = 0xb2;
@@ -251,7 +245,7 @@ mod shot41 {
         let (tx, ty) = (t.u16(x.b, TARGET_X), t.u16(x.b, TARGET_Y));
         x.c.d[1] = x.c.d[1] & 0xffff_0000 | tx as u32;
         x.c.d[2] = x.c.d[2] & 0xffff_0000 | ty as u32;
-        x.call(rt::DIRECTION);
+        x.call(crate::aides::DIRECTION_FROM_OBJECT.entry);
         let dir = x.c.d[0] as u8;
         x.set8(0x2d, dir);
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x41);
@@ -304,7 +298,7 @@ mod shot41 {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x13);
         x.anim_start(ANIMS, 1);
-        x.call(SPAWN_TYPE40);
+        crate::families::eshl_creators::appeler(x, crate::families::eshl_creators::ring_28);
     }
 }
 
@@ -802,7 +796,7 @@ mod debris45 {
     /// Fin commune : retenu à l'écran, puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
         x.c.d[0] = MARGIN;
-        x.call(rt::CLAMP_ON_SCREEN);
+        x.call(crate::ai::KEEP_ON_SCREEN.entry);
         x.reinsert();
     }
 
@@ -1185,7 +1179,6 @@ mod bullet50 {
     const SAVED_PRIORITY: u32 = 0x5e;
     /// Retenue à l'écran avec une marge de 0x30 (entrée 0xfbae de 0xfbb0).
     const CLAMP_ON_SCREEN_30: u32 = 0xfbae;
-    const POST_FRAME: u32 = 0x33fe4;
 
     pub fn run(x: &mut Cx) {
         if suspended(x) {
@@ -1204,7 +1197,7 @@ mod bullet50 {
         }
         if x.u8(0) != 0 {
             x.call(CLAMP_ON_SCREEN_30);
-            x.call(POST_FRAME);
+            x.call(crate::terrain::SHADOW.entry);
             x.reinsert();
         }
     }
@@ -1368,7 +1361,6 @@ mod drop51 {
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
     const IMPACT_FX: u32 = 0xab7d8;
-    const IMPACT_DAMAGE: u32 = 0x2860;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1412,7 +1404,7 @@ mod drop51 {
                 x.c.d[0] = 3;
                 x.call(IMPACT_FX);
                 x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-                x.call(IMPACT_DAMAGE);
+                x.call(crate::camera_modes::SHAKE_B.entry);
             }
             4 => {
                 x.add8(0x4, 2);
@@ -1525,7 +1517,7 @@ mod finale52 {
     /// Fin de l'image : retenu dans l'écran puis remis dans la liste triée.
     fn settle(x: &mut Cx) {
         x.c.d[0] = 0x10;
-        x.call(rt::CLAMP_ON_SCREEN);
+        x.call(crate::ai::KEEP_ON_SCREEN.entry);
         x.reinsert();
     }
 
@@ -1972,8 +1964,6 @@ mod aimed53 {
     const LINK: u32 = 0x5c;
     /// Pour chaque direction : (animation, orientation).
     const DIRECTIONS: u32 = 0xa4e16;
-    /// Direction de A0 vers A1 (X, Y), D0 = octet.
-    const DIRECTION_TO: u32 = 0x1376;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -2009,7 +1999,7 @@ mod aimed53 {
             return x.free_eshl();
         }
         x.c.a[1] = obj_of(target).0;
-        x.call(DIRECTION_TO);
+        x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
         let dir = x.c.d[0] as u8;
         x.set8(0x2d, dir);
         x.select_speed(&crate::objects::motion::SPEEDS_B, 0x24);
@@ -2435,8 +2425,6 @@ mod seeker57 {
     const LINK: u32 = 0x5c;
     const LIFE: u32 = 0x46;
     const RETARGET: u32 = 0x42;
-    /// Direction de A0 vers A1.
-    const DIRECTION_TO: u32 = 0x1376;
 
     pub fn run(x: &mut Cx) {
         if x.u16(LINK) == 0 {
@@ -2497,7 +2485,7 @@ mod seeker57 {
             }
             aim = obj_of(w);
             x.c.a[1] = aim.0;
-            x.call(DIRECTION_TO);
+            x.call(crate::aides::DIRECTION_TO_OBJECT.entry);
             let dir = x.c.d[0] as u8;
             x.set8(0x2d, dir);
         }
@@ -3037,7 +3025,6 @@ mod meteor62 {
     /// Retard avant la chute (octets) par variante (32 entrées).
     const DELAYS: u32 = 0xa679e;
     const IMPACT_FX: [u32; 2] = [0xb9c88, 0xab7d8];
-    const IMPACT_DAMAGE: u32 = 0x2860;
     const IMPACT_SOUND: u32 = 0xeafdc;
     const TIMER: u32 = 0x42;
 
@@ -3094,11 +3081,11 @@ mod meteor62 {
             x.c.d[0] = 3;
             x.call(IMPACT_FX[1]);
             x.c.d[0] = x.c.d[0] & 0xffff_0000 | 8;
-            x.call(IMPACT_DAMAGE);
+            x.call(crate::camera_modes::SHAKE_B.entry);
             x.call(IMPACT_SOUND);
         }
         x.c.d[0] = 0x10;
-        x.call(rt::CLAMP_ON_SCREEN);
+        x.call(crate::ai::KEEP_ON_SCREEN.entry);
         x.reinsert();
     }
 }

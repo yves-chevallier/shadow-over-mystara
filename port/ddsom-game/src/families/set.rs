@@ -433,7 +433,6 @@ mod wave_leader {
 
     /// Délais entre deux vagues (octets, espace programme), indexés par un tirage de 4 bits.
     const DELAYS: u32 = 0xbc63e;
-    const CAMERA_LOCK: u32 = 0x2860;
     const CAMERA_LOCK_PARAM: u32 = 0x3c;
     /// Places libres du pool ENEMY (A5+) ; il en faut trois par vague.
     const ENEMY_FREE: u32 = 0x7e62;
@@ -516,7 +515,7 @@ mod wave_leader {
                 }
                 x.add8(0x5, 2);
                 x.c.d[0] = x.c.d[0] & !0xffff | CAMERA_LOCK_PARAM;
-                x.call(CAMERA_LOCK);
+                x.call(crate::camera_modes::SHAKE_B.entry);
             }
             2 => {
                 let (a, b) = (x.u8(DEFEATED_A), x.u8(DEFEATED_B));
@@ -840,9 +839,9 @@ mod exit_gate {
 
     // --- changement de zone (0xcb844) ---------------------------------------------------------------
 
-    /// Script de palette lancé au changement de zone et au retour (0x1324, A4).
-    const PALETTE_SCRIPT: u32 = 0xcbc02;
-    const RUN_PALETTE_SCRIPT: u32 = 0x1324;
+    /// Rectangle de texte effacé au changement de zone et au retour (`text::CLEAR_BOX`, A4 = colonne, ligne,
+    /// largeur, hauteur).
+    const CLEARED_TEXT_BOX: u32 = 0xcbc02;
     /// Prime de sortie cumulée (octet en A5 - 0x5b20).
     const BONUS_TOTAL: u32 = A5 - 0x5b20;
     const P_FLAGS: u32 = 0x1;
@@ -866,8 +865,8 @@ mod exit_gate {
     fn change_zone(x: &mut Cx) {
         let bonus = rd8(x.b, BONUS_TOTAL).wrapping_add(x.u8(BONUS));
         wr8(x.b, BONUS_TOTAL, bonus);
-        x.c.a[4] = PALETTE_SCRIPT;
-        x.call(RUN_PALETTE_SCRIPT);
+        x.c.a[4] = CLEARED_TEXT_BOX;
+        x.call(crate::text::CLEAR_BOX.entry);
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) == 0 {
                 let flags = p.u8(x.b, P_FLAGS) | P_HIDDEN;
@@ -977,13 +976,13 @@ mod exit_gate {
     /// Entrée dans la zone annexe (0xcc0ca) : caméras, script de scène, palettes, joueurs replacés.
     fn enter_annex(x: &mut Cx) {
         set_b::call_keeping(x, &[0x33aa6]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
-        x.call(0x1686);
+        x.call(crate::palette::FULL_BRIGHTNESS.entry);
         x.set_a5_u16(OWNER_GATE, 0);
         set_b::reset_players_after_exit(x);
-        x.call(0x20de6);
+        x.call(crate::scene::entry::PLACE_PLAYERS.entry);
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) != 0 {
                 x.c.a[0] = p.0;
@@ -1024,13 +1023,13 @@ mod exit_gate {
     /// État 4 (0xcba48) : retour de la zone annexe, la scène d'avant est rechargée.
     fn arrive(x: &mut Cx) {
         set_b::call_keeping(x, &[0x33b24]);
-        x.call(0xf2e56);
+        x.call(crate::scene::script::SCRIPT_RESET.entry);
         set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
-        x.call(0x1686);
+        x.call(crate::palette::FULL_BRIGHTNESS.entry);
         x.set_a5_u16(OWNER_GATE, 0);
-        x.c.a[4] = PALETTE_SCRIPT;
-        x.call(RUN_PALETTE_SCRIPT);
+        x.c.a[4] = CLEARED_TEXT_BOX;
+        x.call(crate::text::CLEAR_BOX.entry);
         set_b::restore_camera(x);
         let v = x.u16(0x22);
         x.set_a5_u16(0x52c, v);

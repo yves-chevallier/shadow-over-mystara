@@ -10,7 +10,6 @@ use crate::mem::{rd16, wr16};
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const TERRAIN_OF_OBJECT: u32 = 0x24a8;
 const SFX_HIT_WALL: u32 = 0xe7376;
 const SFX_LAND: u32 = 0xe73e8;
 
@@ -20,7 +19,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 
 /// Le tir est arrêté par le terrain : terrains 5 à 8 sans le bit 6 de l'attribut (D2).
 fn stopped_by_terrain(x: &mut Cx) -> bool {
-    x.call(TERRAIN_OF_OBJECT);
+    x.call(crate::video::TERRAIN_OF_OBJECT.entry);
     let terrain = x.c.d[2];
     x.c.d[0] = x.c.d[0] & 0xffff_0000 | ((terrain & 0x3f).wrapping_sub(5) & 0xffff);
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
@@ -437,7 +436,7 @@ mod bouncer {
         let hit = x.u8(0x57) & 2 != 0;
         let mut bounce = hit;
         if !hit {
-            x.call(TERRAIN_OF_OBJECT);
+            x.call(crate::video::TERRAIN_OF_OBJECT.entry);
             let terrain = x.c.d[2];
             let ground = (terrain & 0x3f).wrapping_sub(5) as u16 <= 3;
             if !ground || terrain & 0x40 != 0 {
@@ -507,9 +506,6 @@ mod burst {
     const SFX_RIGHT: u32 = 0xe89a4;
     const SFX_LEFT: u32 = 0xe8a2e;
     const SFX_FLAME: u32 = 0xe8ab8;
-    const FLASH_ON: u32 = 0x1ac68;
-    const FLASH_PULSE: u32 = 0x1ac86;
-    const SHAKE: u32 = 0x2824;
     /// Compteur des flammes en vie (`A5-0x5fbc`, adresse absolue).
     const FLAMES: u32 = 0xff2044;
 
@@ -550,7 +546,7 @@ mod burst {
                     if x.u8(0x5e) == 0 {
                         x.set_a5_u16(0x4ba, 0);
                     } else if x.u8(0x5e) == 2 {
-                        x.call(FLASH_PULSE);
+                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
                     }
                 }
                 if x.anim_step() {
@@ -583,9 +579,9 @@ mod burst {
         x.add16(0x10, dy);
         x.set8(0x5e, 4);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(FLASH_ON);
+        x.call(crate::palette::FLASH_COLOR_ON.entry);
         x.c.d[0] = 0x20;
-        x.call(SHAKE);
+        x.call(crate::camera_modes::SHAKE_A.entry);
         x.anim(ANIMS, 1);
         x.call(SFX_FLAME);
         x.reinsert();
