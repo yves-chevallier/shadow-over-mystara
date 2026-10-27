@@ -135,26 +135,23 @@ impl Layer {
             };
             let pen_base = ((attr & 0x1f) + self.color_base) * 16;
             let flip = attr & 0x20 != 0;
-            let mut groupe = usize::MAX; // groupe de 8 pixels décodé dans `pix` (usize::MAX : aucun)
-            let mut pix = [0u8; 8];
-            let mut valide = false;
-            for i in 0..n {
-                let mut px = tx % t + i;
-                if flip {
-                    px = t - 1 - px;
+            // ligne de pixels de la tuile, dans l'ordre de l'écran ; un groupe hors de la région graphique reste transparent
+            let mut ligne = [15u8; 32];
+            for g in 0..t / 8 {
+                let r = row + g * 4 * (t > 8) as usize;
+                if r + 4 <= gfx.len() {
+                    ligne[g * 8..g * 8 + 8].copy_from_slice(&pixels8(gfx, r));
                 }
-                if px / 8 != groupe {
-                    groupe = px / 8;
-                    let r = row + groupe * 4 * (t > 8) as usize;
-                    valide = r + 4 <= gfx.len();
-                    if valide {
-                        pix = pixels8(gfx, r);
-                    }
-                }
-                let p = pix[px % 8];
-                if valide && p != 15 {
-                    pens[x + i] = pen_base + p as u16;
-                    prio[x + i] |= pbit;
+            }
+            if flip {
+                ligne[..t].reverse();
+            }
+            let u = tx % t;
+            let dest = x..x + n;
+            for ((&p, pen), pr) in ligne[u..u + n].iter().zip(&mut pens[dest.clone()]).zip(&mut prio[dest]) {
+                if p != 15 {
+                    *pen = pen_base + p as u16;
+                    *pr |= pbit;
                 }
             }
             x += n;
