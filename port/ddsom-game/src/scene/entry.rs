@@ -999,7 +999,7 @@ fn scene_38(x: &mut Ctx) {
             x.call(sub::PALETTES_BLACK);
             x.c.a[0] = sub::FADE_TASK;
             x.c.d[0] = 0x10;
-            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+            crate::kernel::creer_tache(x.b, 0x10, sub::FADE_TASK);
         }
         2 => {
             if x.tick(TIMER) {

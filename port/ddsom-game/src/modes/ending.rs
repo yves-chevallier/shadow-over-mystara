@@ -260,7 +260,7 @@ crate::etapes! {
             wr32(x.b, A5 + 0x49e, 0x27e600);
             x.c.a[0] = ext::FADE_TASK_STEP;
             set_low_word(&mut x.c.d[0], 0x10);
-            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_STEP);
             x.call(ext::SOUND_E16F0);
             wr8(x.b, var::FADE_STEPS, 1);
             x.c.a[0] = BLOCK;
@@ -570,14 +570,14 @@ fn task_keep_a0(x: &mut Ctx, entry: u32) {
     let a0 = x.c.a[0];
     x.c.a[0] = entry;
     set_low_word(&mut x.c.d[0], 0x10);
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+    crate::kernel::creer_tache(x.b, 0x10, entry);
     x.c.a[0] = a0;
 }
 /// Idem sans restaurer A0 (l'original le laisse sur l'entrée de la tâche).
 fn task_clobber_a0(x: &mut Ctx, entry: u32) {
     x.c.a[0] = entry;
     set_low_word(&mut x.c.d[0], 0x10);
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+    crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
 fn tile_blocks(x: &mut Ctx, a1: u32, first: u16, second: u16, which: u32) {
@@ -595,7 +595,7 @@ fn tile_blocks(x: &mut Ctx, a1: u32, first: u16, second: u16, which: u32) {
 fn s00_reset(x: &mut Ctx) -> Flow {
     next_step(x);
     set_low_word(&mut x.c.d[0], 0x30);
-    crate::kernel::tuer_tache(x.b, x.c.d[0]);
+    crate::kernel::tuer_tache(x.b, 0x30);
     for f in [ext::POOLS, ext::SOUND_C0C, ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
         x.call(f);
     }

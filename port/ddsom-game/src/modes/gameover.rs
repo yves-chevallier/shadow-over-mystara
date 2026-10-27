@@ -43,7 +43,7 @@ pub const PHASE_20: Native = Native {
 
 fn phase_20(x: &mut Ctx) -> Flow {
     set_low_word(&mut x.c.d[0], PLAYER_UI_SLOT);
-    crate::kernel::tuer_tache(x.b, x.c.d[0]);
+    crate::kernel::tuer_tache(x.b, PLAYER_UI_SLOT as u32);
     wr16(x.b, A5 + 0x490, 1);
     wr8(x.b, A5 + 0x48e, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::Faded)

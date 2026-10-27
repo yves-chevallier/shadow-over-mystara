@@ -386,7 +386,7 @@ const FADE_LOOP: u32 = 0x1cca4;
 fn create_task(x: &mut Ctx, entry: u32, slot: u16) {
     x.c.a[0] = entry;
     set_low_word(&mut x.c.d[0], slot);
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+    crate::kernel::creer_tache(x.b, slot as u32, entry);
 }
 
 // ---------------------------------------------------------------------------------------------

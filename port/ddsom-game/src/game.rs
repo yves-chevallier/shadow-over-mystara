@@ -374,7 +374,7 @@ fn leave(c: &mut Cpu, b: &mut Cps2Bus) {
     call(c, b, ext::CLEAR_STATUS);
     c.d[0] = c.d[0] & 0xffff_0000 | PLAYER_UI_SLOT;
     c.a[0] = PLAYER_UI_TASK;
-    crate::kernel::creer_tache(b, c.d[0], c.a[0]);
+    crate::kernel::creer_tache(b, PLAYER_UI_SLOT as u32, PLAYER_UI_TASK);
 }
 
 /// Phase 0 : un pas par image. L'étape (`A5+0x2d` : 0, 4, 8, 12, 16) choisit la suite.

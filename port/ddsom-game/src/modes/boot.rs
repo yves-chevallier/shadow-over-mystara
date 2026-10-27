@@ -117,10 +117,10 @@ crate::etapes! {
             x.call(ext::SERVICE_CHECK);
             x.c.a[0] = ext::CREDITS_TASK;
             set_low_word(&mut x.c.d[0], SLOT_CREDITS);
-            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+            crate::kernel::creer_tache(x.b, SLOT_CREDITS as u32, ext::CREDITS_TASK);
             x.c.a[0] = ext::FREEZE_TASK;
             set_low_word(&mut x.c.d[0], SLOT_FREEZE);
-            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+            crate::kernel::creer_tache(x.b, SLOT_FREEZE as u32, ext::FREEZE_TASK);
             x.jump_to(ext::MODE_LOOP)
         },
     }

@@ -340,7 +340,7 @@ fn scene_start(x: &mut Ctx) -> Flow {
     wr8(x.b, var::SCREEN_WAIT, 3);
     x.c.a[0] = ext::PLAYER_UI;
     set_low_word(&mut x.c.d[0], 0x30);
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+    crate::kernel::creer_tache(x.b, 0x30, ext::PLAYER_UI);
     Flow::Done
 }
 
@@ -468,7 +468,7 @@ fn scene_end_common(x: &mut Ctx, resume: Etape) -> Flow {
     wr8(x.b, var::PHASE, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     set_low_word(&mut x.c.d[0], 0x30);
-    crate::kernel::tuer_tache(x.b, x.c.d[0]);
+    crate::kernel::tuer_tache(x.b, 0x30);
     for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
         x.call(f);
     }
@@ -499,7 +499,7 @@ fn end_of_script(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     set_low_word(&mut x.c.d[0], 0x30);
-    crate::kernel::tuer_tache(x.b, x.c.d[0]);
+    crate::kernel::tuer_tache(x.b, 0x30);
     for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
         x.call(f);
     }
@@ -860,7 +860,7 @@ fn ending_b(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     set_low_word(&mut x.c.d[0], 0x30);
-    crate::kernel::tuer_tache(x.b, x.c.d[0]);
+    crate::kernel::tuer_tache(x.b, 0x30);
     x.call(ext::CLEAR_SCROLL_1);
     x.call(ext::PLAYER_PREPARE);
     wr16(x.b, 0x91c41c, 0xf112);

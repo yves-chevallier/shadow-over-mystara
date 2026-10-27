@@ -155,7 +155,7 @@ crate::etapes! {
             let a0 = x.c.a[0];
             x.c.a[0] = PORTRAITS_TASK;
             x.c.d[0] = x.c.d[0] & !0xffff | 192;
-            crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+            crate::kernel::creer_tache(x.b, 192, PORTRAITS_TASK);
             x.c.a[0] = a0;
             x.set_v8(0x4e, (scene == 5) as u8);
             if b8(x, f::REOPENED) == 0 {
@@ -272,7 +272,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     x.set_v8(0x48e, 15);
     x.c.d[0] = x.c.d[0] & !0xffff | 16;
     x.c.a[0] = 0x14ba;
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+    crate::kernel::creer_tache(x.b, 16, 0x14ba);
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {

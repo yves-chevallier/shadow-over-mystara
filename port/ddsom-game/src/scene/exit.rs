@@ -139,7 +139,7 @@ impl<'a> Ex<'a> {
         self.x.set_v8(var::FADE_PAGES, 15);
         self.x.c.a[0] = entry;
         self.x.c.d[0] = 0x10;
-        crate::kernel::creer_tache(self.x.b, self.x.c.d[0], self.x.c.a[0]);
+        crate::kernel::creer_tache(self.x.b, 0x10, entry);
         self.x.c.a[0] = BASE;
     }
 

@@ -230,7 +230,7 @@ impl<'a> Ctx<'a> {
     fn start_fade_task(&mut self, entry: u32) {
         self.c.a[0] = entry;
         self.c.d[0] = 0x10;
-        crate::kernel::creer_tache(self.b, self.c.d[0], self.c.a[0]);
+        crate::kernel::creer_tache(self.b, 0x10, entry);
     }
 
     /// Crée un objet (allocateur `alloc`) actif, de type `kind` ; l'original écrit sans tester la retenue.

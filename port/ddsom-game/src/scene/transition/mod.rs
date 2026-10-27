@@ -267,7 +267,7 @@ fn start_task(x: &mut Ctx, task: u32) {
     let a0 = x.c.a[0];
     x.c.a[0] = task;
     set_d0_word(x, 0x10);
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+    crate::kernel::creer_tache(x.b, 0x10, task);
     x.c.a[0] = a0;
 }
 
