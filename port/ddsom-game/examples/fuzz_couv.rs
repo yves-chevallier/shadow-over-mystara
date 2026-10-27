@@ -95,6 +95,10 @@ impl m68k::Bus for Journal<'_> {
 thread_local! {
     /// Adresse dont les écritures de l'original sont signalées (diagnostic `FUZZ_SURVEILLE`), 0 : aucune.
     static SURVEILLEE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// PC de l'original dont les registres sont montrés (`FUZZ_PC=adresse,...`) pendant la surveillance.
+    static PC_SURVEILLES: Vec<u32> = std::env::var("FUZZ_PC")
+        .map(|v| v.split(',').filter_map(|x| u32::from_str_radix(x.trim_start_matches("0x"), 16).ok()).collect())
+        .unwrap_or_default();
 }
 
 fn ecriture_originale(pc: u32, a: u32, taille: u32, v: u32) {
@@ -292,6 +296,9 @@ fn executer_original(c0: &Cpu, b0: &Cps2Bus, pas_max: u32, mut lectures: Option<
                 return true;
             }
             pcs.push(c.pc);
+            if SURVEILLEE.with(|x| x.get()) != 0 && PC_SURVEILLES.with(|p| p.contains(&c.pc)) {
+                eprintln!("ORIGINAL en {:06x} : D={:08x?} A={:08x?}", c.pc, c.d, c.a);
+            }
             if valide && !dans_les_tables(&c, &mut b) {
                 valide = false;
             }
@@ -311,6 +318,13 @@ static INSTRUCTIONS: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
 fn instruction(a: u32) -> bool {
     INSTRUCTIONS.get().is_none_or(|bm| bm.is_empty() || a >= 0x10_0000 || bit(bm, a)) || execute(a)
+}
+
+/// Cibles de sauts du listing (`LAB_xxxxxxxx:`, `FUN_`) : du code, jamais une table.
+static ETIQUETTES: std::sync::OnceLock<HashSet<u32>> = std::sync::OnceLock::new();
+
+fn etiquette(a: u32) -> bool {
+    ETIQUETTES.get().is_some_and(|e| e.contains(&a))
 }
 
 /// Instructions exécutées par les scénarios (`FUZZ_UNION`).
@@ -334,7 +348,8 @@ fn longueur_table(b: &mut Cps2Bus, base: u32, longue: bool) -> u32 {
             for i in 0..512u32 {
                 // la table finit où commence du code que les scénarios exécutent (le listing désassemble parfois les
                 // tables comme des instructions)
-                if i > 0 && execute(base + if longue { 4 } else { 2 } * i) {
+                let a = base + if longue { 4 } else { 2 } * i;
+                if i > 0 && (execute(a) || etiquette(a)) {
                     return i;
                 }
                 let cible = if longue {
@@ -976,10 +991,18 @@ fn frontiere(b: &mut Cps2Bus, union: &[u8]) -> HashMap<u32, (u32, u32)> {
     f
 }
 
-/// Débuts d'instructions de listing.txt (lignes `adresse  mnémonique`).
+/// Débuts d'instructions de listing.txt (lignes `adresse  mnémonique`) ; étiquettes (`LAB_`, `; ---- FUN_`).
 fn instructions(listing: &str) -> Vec<u8> {
     let mut bm = vec![0u8; 0x10000];
+    let mut etiquettes = HashSet::new();
     for l in std::fs::read_to_string(listing).expect("listing").lines() {
+        for prefixe in ["LAB_", "; ---- FUN_"] {
+            if let Some(h) = l.strip_prefix(prefixe) {
+                if let Ok(a) = u32::from_str_radix(h.trim_end_matches(':').trim(), 16) {
+                    etiquettes.insert(a);
+                }
+            }
+        }
         if l.len() > 8 && l.as_bytes()[6] == b' ' && l.as_bytes()[7] == b' ' {
             if let Ok(a) = u32::from_str_radix(&l[..6], 16) {
                 if a < 0x10_0000 {
@@ -988,6 +1011,7 @@ fn instructions(listing: &str) -> Vec<u8> {
             }
         }
     }
+    let _ = ETIQUETTES.set(etiquettes);
     bm
 }
 
