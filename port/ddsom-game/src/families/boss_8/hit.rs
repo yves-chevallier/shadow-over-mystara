@@ -187,7 +187,7 @@ fn death(x: &mut Cx) {
             x.set_a5_u8(0x50, 0);
             lib::flash_and_shake(x);
             lib::sound(x, 0xe3b6c);
-            lib::sound(x, 0xe0a10);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::drop_rewards(x);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);

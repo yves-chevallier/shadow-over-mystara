@@ -404,7 +404,7 @@ fn aim_dive(x: &mut Cx) {
     x.c.d[2] = tz as u32;
     x.set16(GOAL_X, tx);
     x.set16(GOAL_DEPTH, tz);
-    x.call(0x137e);
+    lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16));
     let angle = x.c.d[0] as u8;
     x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x35);

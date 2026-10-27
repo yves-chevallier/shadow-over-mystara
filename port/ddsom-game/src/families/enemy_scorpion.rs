@@ -504,7 +504,7 @@ fn turn_and_charge(x: &mut Cx) {
 /// 0x67052 : angle vers la cible ; s'il est du côté regardé, animation 4 et attente, sinon étape 4.
 fn face_target(x: &mut Cx) {
     load_target(x);
-    x.call(0x1376);
+    lib::aim_to(x, Obj(x.c.a[1] & 0xff_ffff));
     let angle = x.c.d[0] as u8;
     x.set8(Obj::SPEED_INDEX, angle);
     let side = ((angle as u16 & 0x10) * 2) as u8;

@@ -570,7 +570,7 @@ fn pose_2(x: &mut Cx, a1: u32, row: u32) -> bool {
     setw(x, 4, d4);
     if d3 != d1 || d4 != d2 {
         x.c.a[1] = a1;
-        x.call(0x1386);
+        lib::aim(x, (x.c.d[3] as u16, x.c.d[4] as u16), (x.c.d[1] as u16, x.c.d[2] as u16));
         let angle = (x.c.d[0] as u8).wrapping_sub(rd8(x.b, a1 + 0x42));
         setb(x, 0, angle);
         if angle != 0 {

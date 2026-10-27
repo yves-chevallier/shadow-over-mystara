@@ -321,7 +321,7 @@ fn aim_target(x: &mut Cx) -> bool {
         x.c.d[0] = 0;
         return false;
     }
-    x.call(0x1376);
+    lib::aim_to(x, crate::objects::Obj(x.c.a[1] & 0xff_ffff));
     let a = x.c.d[0] as u8;
     x.set8(0xb3, a);
     true
@@ -428,7 +428,7 @@ fn route_step(x: &mut Cx) -> bool {
     let (px, py) = (x.u16(0x8), x.u16(0x10));
     setw(x, 3, px);
     setw(x, 4, py);
-    x.call(0x1386);
+    lib::aim(x, (x.c.d[3] as u16, x.c.d[4] as u16), (x.c.d[1] as u16, x.c.d[2] as u16));
     let angle = x.c.d[0] as u8;
     x.set8(0x2d, angle);
     let i = (x.c.d[0] as u16).wrapping_mul(4);

@@ -729,8 +729,9 @@ mod dark_warrior_double {
 
     /// 0x77cee : le terrain sous le double renverse-t-il sa vitesse en profondeur ?
     fn terrain_reverses(x: &mut Cx) -> bool {
-        x.call(0x24a8);
-        let terrain = (x.c.d[2] & 0x3f) as u16;
+        let t = crate::video::terrain_of(x.b, x.o);
+        crate::video::terrain_68k(x.c, &t);
+        let terrain = t.numero & 0x3f;
         x.c.d[2] = x.c.d[2] & !0xffff | terrain as u32;
         if terrain as u8 >= 9 {
             x.c.d[0] = 0;

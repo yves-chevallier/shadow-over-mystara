@@ -324,7 +324,7 @@ fn death(x: &mut Cx) {
             fall_start(x);
             lib::drop_rewards(x);
             lib::flash_and_shake(x);
-            lib::sound(x, 0xe0a10);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe4f42);
         }
         2 => {
@@ -399,7 +399,7 @@ fn death_green(x: &mut Cx) {
             fall_start(x);
             lib::drop_rewards(x);
             lib::flash_and_shake(x);
-            lib::sound(x, 0xe0a10);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe51e6);
             lib::sound(x, 0xe3b6c);
             green_fall(x);

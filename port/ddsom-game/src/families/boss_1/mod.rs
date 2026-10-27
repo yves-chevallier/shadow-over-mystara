@@ -75,11 +75,6 @@ pub(self) const SET_BODY: u32 = 0x172794;
 pub(self) const SET_ATTACK: u32 = 0x1727d4;
 pub(self) const SET_HURT: u32 = 0x1727e4;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const ANGLE_TO: u32 = 0x137e;
-}
-
 /// Seuils de PV des phases (0x105b6).
 pub(self) const THRESHOLDS: u32 = 0x10be2;
 
@@ -472,7 +467,7 @@ pub(self) fn aim_near_target(x: &mut Cx, table: u32, mask: u32) {
 
 /// 0x137e vers (D1, D2) puis `+0x2d` = l'angle.
 pub(self) fn aim_at_mark(x: &mut Cx) {
-    x.call(call::ANGLE_TO);
+    lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16));
     let a = x.c.d[0] as u8;
     x.set8(Obj::SPEED_INDEX, a);
 }

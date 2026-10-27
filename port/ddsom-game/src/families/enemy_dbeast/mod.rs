@@ -17,7 +17,7 @@
 //!
 //! Les pièces ne servent pas d'objets séparés dans l'original : le même code les anime toutes.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
 
@@ -89,11 +89,6 @@ const ACTIVE_STANCE: u32 = 0x0202_0000;
 const ACTIVE_IDLE: u32 = 0x020a_0000;
 /// État touché, sous-état 8 : la bête est projetée ou s'enfuit.
 const KNOCKED: u32 = 0x0408_0000;
-
-/// Routines du moteur et de l'IA.
-mod call {
-    pub const ANGLE: u32 = 0x137e;
-}
 
 pub fn run(x: &mut Cx) {
     if suspended(x) {

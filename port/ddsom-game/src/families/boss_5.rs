@@ -47,10 +47,6 @@ const SET_FALL: u32 = 0x175e0c;
 /// Table des vecteurs (X, Y) par angle (32 × 4 octets), parcourue pendant le tourbillon.
 const SPIN_VECTORS: u32 = 0x1c94b6;
 
-mod call {
-    pub const ANGLE_TO_TARGET: u32 = 0x1376;
-}
-
 /// Entrée : le jeu ne passe pas par le hook de pause.
 pub fn run(x: &mut Cx) {
     match x.u8(f::STATE) {
@@ -458,7 +454,7 @@ fn chase_follow(x: &mut Cx) {
     if !lib::target_by_criterion(x, criterion) {
         return chase_stop(x);
     }
-    x.call(call::ANGLE_TO_TARGET);
+    lib::aim_to(x, Obj(x.c.a[1] & 0xff_ffff));
     let mine = x.u8(Obj::SPEED_INDEX);
     let diff = (x.c.d[0] as u8).wrapping_sub(mine) & 0x1f;
     if diff != 0 {
@@ -743,7 +739,7 @@ fn dying(x: &mut Cx) {
             x.set_a5_u8(0x42, 1);
             x.call(0x1ac86);
             lib::drop_rewards(x);
-            x.call(0xe0a10);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe3b6c);
             let kind = x.u8(0x2);
             set_abs8(x, 0xff2a84, kind);

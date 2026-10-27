@@ -436,7 +436,7 @@ fn death(x: &mut Cx) {
             wr16(x.b, A5.wrapping_sub(0x557c), d0);
             x.set16(TIMER, 0x10);
             lib::drop_rewards(x);
-            lib::sound(x, 0xe0a10);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe3b6c);
             lib::flash_and_shake(x);
             let mut d0 = 0x500u16;

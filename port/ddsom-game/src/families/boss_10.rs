@@ -679,7 +679,7 @@ fn down(x: &mut Cx) {
             set_abs8(x, 0xff2a86, bar);
             x.set32(f::IMMUNITY, 0x0fff_ffff);
             lib::flash_and_shake(x);
-            lib::sound(x, 0xe0a10);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe3b6c);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);

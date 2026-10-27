@@ -189,8 +189,9 @@ fn thrown(x: &mut Cx) {
                 return decide::back_on_feet(x);
             }
             x.move_xy();
-            x.call(0x24a8);
-            if !zero(x) {
+            let t = crate::video::terrain_of(x.b, x.o);
+            crate::video::terrain_68k(x.c, &t);
+            if t.numero != 0 {
                 return decide::back_on_feet(x);
             }
             x.anim_step();
@@ -387,7 +388,7 @@ fn death(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             lib::flash_and_shake(x);
-            lib::sound(x, 0xe0a10);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe3b6c);
             lib::sound(x, 0xe5f86);
             lib::drop_rewards(x);

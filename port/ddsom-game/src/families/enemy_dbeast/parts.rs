@@ -228,7 +228,7 @@ fn rally(x: &mut Cx) -> bool {
     x.set16(AIM_Y, ay);
     set_dw(x, 1, ax);
     set_dw(x, 2, ay);
-    x.call(call::ANGLE);
+    lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16));
     let angle = x.c.d[0] as u8;
     x.set8(Obj::SPEED_INDEX, angle);
     move_xy(x);

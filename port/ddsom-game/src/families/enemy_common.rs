@@ -365,8 +365,7 @@ pub fn pick_target(x: &mut Cx) -> bool {
 
 /// L'ennemi est saisi par un joueur (0x2810).
 pub fn grabbed(x: &mut Cx) -> bool {
-    x.call(0x2810);
-    !x.c.cond(7)
+    !crate::aides::grabbed(x.b, x.o).z()
 }
 
 /// La cible de l'ennemi (joueur désigné par `+0x50`), ou `None` s'il n'en a pas.

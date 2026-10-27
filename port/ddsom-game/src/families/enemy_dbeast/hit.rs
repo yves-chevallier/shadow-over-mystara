@@ -178,8 +178,9 @@ fn flee(x: &mut Cx) {
             if x.u8(0x29) != 0 {
                 x.add8(f::SUB2, 2);
             }
-            x.call(sub::TERRAIN_OF_OBJECT);
-            let terrain = x.c.d[2] as u8;
+            let t = crate::video::terrain_of(x.b, x.o);
+            crate::video::terrain_68k(x.c, &t);
+            let terrain = t.numero as u8;
             x.set8(0x29, terrain);
             x.move_by_table_xy();
             if x.in_arena_default() {

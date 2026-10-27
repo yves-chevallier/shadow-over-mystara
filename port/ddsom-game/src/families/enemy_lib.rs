@@ -169,7 +169,7 @@ fn set_word(x: &mut Cx, n: usize, v: u16) {
 /// 0xa470 : tire l'attitude `+0x71` dans la ligne `+0x70` de la table d'attitudes (indexée par le compteur
 /// d'images).
 pub fn draw_stance(x: &mut Cx) {
-    x.call(0xa470);
+    crate::ai_aids::stance(x.b, x.o);
 }
 
 /// 0x788c : `+0x6b` tiré au hasard dans la ligne `+0x6a` de sa table.
@@ -323,12 +323,13 @@ pub fn target_in_box(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
 
 /// 0x7f19c : l'objet `other` est-il dans la boîte devant l'objet (mêmes paramètres que `target_in_front`) ?
 pub fn in_box(x: &mut Cx, other: Obj, dx: i16, half_w: u16, half_d: u16) -> InBox {
-    x.c.a[2] = other.0;
-    set_word(x, 0, dx as u16);
-    set_word(x, 1, half_w);
-    set_word(x, 2, half_d);
-    x.call(0x7f19c);
-    InBox::from_d0(x.c.d[0])
+    use crate::ai_aids::{box_around, Boite, DansBoite};
+    let boite = Boite { decalage: dx as u16, demi_largeur: half_w, demi_profondeur: half_d };
+    match box_around(x.b, x.o, other, boite) {
+        DansBoite::Non => InBox::No,
+        DansBoite::Face => InBox::Ahead,
+        DansBoite::Dos => InBox::Behind,
+    }
 }
 
 /// 0x7ef4 : la cible, en garde (`+6` = 12), est-elle dans la boîte devant l'objet et lui fait-elle face ? Si oui
@@ -343,11 +344,8 @@ pub fn guard_in_front_strict(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> b
 }
 
 fn guard(x: &mut Cx, routine: u32, dx: i16, half_w: u16, half_d: u16) -> bool {
-    set_word(x, 0, dx as u16);
-    set_word(x, 1, half_w);
-    set_word(x, 2, half_d);
-    x.call(routine);
-    !z(x)
+    let boite = crate::ai_aids::Boite { decalage: dx as u16, demi_largeur: half_w, demi_profondeur: half_d };
+    crate::ai_aids::in_front(x.b, x.o, routine == 0x7f0c, boite)
 }
 
 /// 0xa4b4 (`+0x72`) : l'IA agit-elle à cette image ? (bit tiré dans un masque choisi par le compteur d'images.)
@@ -378,6 +376,28 @@ pub fn in_right_half(x: &mut Cx) -> bool {
 pub fn chance_10_16(x: &mut Cx) -> bool {
     x.call(0x5cdc6);
     !z(x)
+}
+
+/// 0x1386 (`aides::direction`) : direction (0 à 31) de `de` vers `vers` ; D0 = la direction, comme l'original
+/// (des appelants la relisent).
+pub fn aim(x: &mut Cx, de: (u16, u16), vers: (u16, u16)) -> u8 {
+    let a = crate::aides::direction(x.b, de, vers);
+    x.c.d[0] = a as u32;
+    a
+}
+
+/// 0x137e : direction de l'objet vers le point `vers` (D0 posé).
+pub fn aim_from(x: &mut Cx, vers: (u16, u16)) -> u8 {
+    let a = crate::aides::direction_from(x.b, x.o, vers);
+    x.c.d[0] = a as u32;
+    a
+}
+
+/// 0x1376 : direction de l'objet vers `cible` (D0 posé).
+pub fn aim_to(x: &mut Cx, cible: Obj) -> u8 {
+    let a = crate::aides::direction_to(x.b, x.o, cible);
+    x.c.d[0] = a as u32;
+    a
 }
 
 /// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de l'objet ? Rend ce joueur.
@@ -580,7 +600,7 @@ pub fn choose_near_walk_point(x: &mut Cx) {
 /// panoramique selon la position de l'objet). En attendant une API de `sound.rs`, la routine est appelée par son
 /// adresse ; elle rend tous les registres intacts.
 pub fn sound(x: &mut Cx, wrapper: u32) {
-    x.call(wrapper);
+    crate::sound::jouer(x.b, wrapper, x.o);
 }
 
 // --- créateurs d'objets et services d'autres modules ---------------------------------------------------
@@ -605,17 +625,17 @@ pub fn create_life_bar(x: &mut Cx) {
 
 /// 0x19ad6 : événement de l'objet (type `+0x7e`, joueur `+0x48`) dans l'anneau des points.
 pub fn object_event(x: &mut Cx) {
-    x.call(0x19ad6);
+    crate::evenements::evenement_objet(x.b, x.o);
 }
 
 /// 0x19e10 : efface le pop-up courant.
 pub fn clear_popup(x: &mut Cx) {
-    x.call(0x19e10);
+    crate::evenements::effacer_popup_courant(x.b);
 }
 
 /// 0x19db4 : vide la file des pop-ups.
 pub fn empty_popups(x: &mut Cx) {
-    x.call(0x19db4);
+    crate::evenements::vider_popups(x.b);
 }
 
 /// 0x19eb0 : efface tous les pop-ups affichés.
@@ -625,18 +645,13 @@ pub fn clear_all_popups(x: &mut Cx) {
 
 /// 0xb10c8 : effet de choc à la position de l'objet : variante, réglage (`+0x2d`, `+0x2f`), vitesses `+0x14`, `+0x1c`.
 pub fn shock(x: &mut Cx, variant: u32, setting: u16, vx: u16, vy: u16) {
-    x.c.d[0] = variant;
-    set_word(x, 1, setting);
-    set_word(x, 2, vx);
-    set_word(x, 3, vy);
-    x.call(0xb10c8);
+    // A1, D1 et la retenue de l'original restent : un gestionnaire suivant les relit (boss15_scene46, mash_c5)
+    crate::effects_aids::shock_68k(x.c, x.b, x.o, variant as u8, setting, vx, vy);
 }
 
 /// 0xabec8 : effet d'attaque (EFFCT 11) lié par `+0x5c`, de variante et réglage donnés.
 pub fn attack_effect(x: &mut Cx, variant: u32, setting: u32) {
-    x.c.d[0] = variant;
-    x.c.d[1] = setting;
-    x.call(0xabec8);
+    super::effects_creators::attack(x.b, x.o, variant as u8, setting as u8);
 }
 
 /// Série d'effets d'attaque (0xabec8) de variante `variant`, réglages `first` à 0 (`dbf D1`). Faux si le pool a
@@ -645,8 +660,7 @@ pub fn attack_effects(x: &mut Cx, variant: u32, first: u32) -> bool {
     x.c.d[0] = variant;
     x.c.d[1] = first;
     loop {
-        x.call(0xabec8);
-        if x.c.sr & m68k::SR_C != 0 {
+        if super::effects_creators::attack(x.b, x.o, variant as u8, x.c.d[1] as u8).is_none() {
             return false;
         }
         let n = (x.c.d[1] as u16).wrapping_sub(1);
@@ -659,8 +673,7 @@ pub fn attack_effects(x: &mut Cx, variant: u32, first: u32) -> bool {
 
 /// 0xab7d8 : gerbe de débris (EFFCT 6) de variante donnée, liée par `+0x50`.
 pub fn debris_spray(x: &mut Cx, variant: u32) {
-    x.c.d[0] = variant;
-    x.call(0xab7d8);
+    super::effects_creators::debris(x.b, x.o, variant as u8);
 }
 
 // --- routines d'origine sans native, jamais atteintes par les scénarios ---------------------------------
