@@ -122,6 +122,24 @@ etapes_des_taches! {
     Interface(crate::hud::Etape),
     Credits(crate::tache_credits::Etape),
     Fondu(fondu::Etape),
+    // machine à modes (tâche 0 hors partie)
+    Boot(crate::modes::boot::Etape),
+    Attract(crate::modes::attract::Etape),
+    Title(crate::modes::title::Etape),
+    Select(crate::modes::select::Etape),
+    Ranking(crate::modes::ranking::Etape),
+    Demo(crate::modes::demo::Etape),
+    Ending(crate::modes::ending::Etape),
+    Gameover(crate::modes::gameover::Etape),
+    // séquences de scène (tâche de partie)
+    Blackout(crate::scene::blackout::Etape),
+    Transition(crate::scene::transition::Etape),
+    TransitionEarly(crate::scene::transition::early::Etape),
+    TransitionLate(crate::scene::transition::late::Etape),
+    Bonus(crate::scene::bonus::Etape),
+    Shop(crate::scene::shop::Etape),
+    Characters(crate::scene::characters::Etape),
+    Tally(crate::scene::tally::Etape),
 }
 
 /// Exécute l'étape `etape` de la tâche courante ; si elle finit (`Flow::Done`, retour de sous-programme), la suite de

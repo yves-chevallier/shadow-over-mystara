@@ -517,6 +517,17 @@ pub fn mettre_sur_la_pile(c: &mut Cpu, b: &mut Cps2Bus) -> Vec<Contenu> {
     remis
 }
 
+/// Une étape remise sur la pile 68000 par [`mettre_sur_la_pile`], que le code appelé a dépilée pour y revenir (`rts`
+/// après avoir dépilé plus que son adresse de retour, comme l'épilogue étranger des bulles) : la tâche courante continue
+/// à cette étape.
+pub fn etape_depilee(b: &Cps2Bus, pc: u32) -> Option<Etape> {
+    let t = lire(b)?;
+    t.remis.iter().filter(|r| r.0 == t.courante).flat_map(|r| r.2.iter()).find_map(|c| match *c {
+        Contenu::Appel(Suite::Etape(e)) if e.adresse() == pc => Some(e),
+        _ => None,
+    })
+}
+
 /// Relit sur la pile 68000, à partir de `adresse` (le plus récent est le plus bas), des cadres de mêmes sortes que
 /// `modeles` (du plus ancien au plus récent). Rend leurs contenus, dans le même ordre, et l'adresse qui suit le plus
 /// ancien.

@@ -15,7 +15,6 @@
 
 use super::{Block, Flow, Sequence};
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -73,7 +72,7 @@ fn post_game(x: &mut Ctx) -> Flow {
     x.c.a[0] = STATE;
     let step = rd8(x.b, STATE + f::STEP);
     x.c.d[0] = step as u32;
-    x.push_return(RETURN);
+    x.push_return(Etape::Return);
     match step {
         0 => s0_prepare(x),
         2 => s2_scroll(x),
@@ -85,10 +84,85 @@ fn post_game(x: &mut Ctx) -> Flow {
     }
 }
 
-resume!(R_RETURN, RETURN, |x| {
-    x.c.a[0] = super::mode::BASE;
-    Flow::Done
-});
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        Return = RETURN => |x| {
+            x.c.a[0] = super::mode::BASE;
+            Flow::Done
+        },
+        S0Video = S0_VIDEO => |x| {
+            wr16(x.b, CPS_REG_4, 0x1355);
+            wr16(x.b, VIDEO, 0x24c0);
+            x.wait(1, Etape::S0Palettes)
+        },
+        S0Palettes = S0_PALETTES => |x| {
+            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::PALETTE_PAGE_B] {
+                x.call(f);
+            }
+            x.call_d0_low(ext::PALETTE_SET, 83);
+            x.call_d0_low(ext::PALETTE_SET, 83);
+            wr8(x.b, A5 + 0x34, 0);
+            x.call_d0_low(ext::PALETTE_93, 89);
+            // quatre blocs de palette, de la ROM vers la table des palettes (D0-D6 et A3 gardent le dernier)
+            for (dst, src) in [(0x91c3e0u32, 0x291f00u32), (0x91c2e0, 0xfc6d8), (0x91c000, 0x292260), (0x91c3c0, 0x2537c0)] {
+                x.c.a[1] = dst;
+                x.c.a[2] = src;
+                let words: Vec<u32> = (0..8).map(|i| rd32(x.b, src + 4 * i)).collect();
+                for (i, w) in words.iter().enumerate() {
+                    wr32(x.b, dst + 4 * i as u32, *w);
+                }
+                x.c.d[..7].copy_from_slice(&words[..7]);
+                x.c.a[3] = words[7];
+            }
+            wr8(x.b, A5 + 0x48e, 0xf);
+            x.call(ext::BRIGHTNESS_WHITE);
+            for off in [0x506u32, 0x50a, 0x556, 0x4b6, 0x4ba] {
+                wr16(x.b, A5 + off, 0);
+            }
+            wr16(x.b, A5 + 0x55a, 0x701);
+            wr32(x.b, SCROLL, 0x0701_0000);
+            wr8(x.b, A5 + 0x36, 1);
+            x.wait(4, Etape::S0Tiles)
+        },
+        S0Tiles = S0_TILES => |x| {
+            x.c.a[1] = 0x917000;
+            x.call_d0_low(ext::TILE_BLOCK, 197);
+            x.call_d0_low(ext::TILE_BLOCK, 198);
+            wr16(x.b, VIDEO, 0x24ce);
+            wr16(x.b, STATE + f::MARK, 0x728);
+            wr32(x.b, STATE + f::TEXT, 0xfc938);
+            Flow::Done
+        },
+        SaFaded = SA_FADED => |x| {
+            x.call(ext::SOUND_E0882);
+            for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES, ext::POOLS] {
+                x.call(f);
+            }
+            x.wait(1, Etape::SaVideo)
+        },
+        SaVideo = SA_VIDEO => |x| {
+            wr16(x.b, VIDEO, 0x12c0);
+            x.wait(4, Etape::SaCleared)
+        },
+        SaCleared = SA_CLEARED => |x| {
+            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
+                x.call(f);
+            }
+            wr8(x.b, super::mode::SUB, 0);
+            wr16(x.b, super::mode::STEP, 0);
+            wr8(x.b, A5 + 0x36, 0);
+            x.c.d[0] = 0;
+            for off in [0x4bau32, 0x50a, 0x55a] {
+                wr16(x.b, A5 + off, 0);
+            }
+            x.call(ext::BOOTED_CLEAR);
+            x.call(ext::CLEAR_STATUS);
+            wr8(x.b, A5 + 0x30, 0);
+            Flow::Done
+        },
+    }
+}
 
 fn next_step(x: &mut Ctx) {
     let s = rd8(x.b, STATE).wrapping_add(2);
@@ -130,54 +204,11 @@ fn s0_prepare(x: &mut Ctx) -> Flow {
         x.call(f);
     }
     x.c.a[0] = STATE;
-    x.wait(1, S0_VIDEO)
+    x.wait(1, Etape::S0Video)
 }
 const S0_VIDEO: u32 = 0xfc5cc;
-resume!(R_S0_VIDEO, S0_VIDEO, |x| {
-    wr16(x.b, CPS_REG_4, 0x1355);
-    wr16(x.b, VIDEO, 0x24c0);
-    x.wait(1, S0_PALETTES)
-});
 const S0_PALETTES: u32 = 0xfc5e2;
-resume!(R_S0_PALETTES, S0_PALETTES, |x| {
-    for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::PALETTE_PAGE_B] {
-        x.call(f);
-    }
-    x.call_d0_low(ext::PALETTE_SET, 83);
-    x.call_d0_low(ext::PALETTE_SET, 83);
-    wr8(x.b, A5 + 0x34, 0);
-    x.call_d0_low(ext::PALETTE_93, 89);
-    // quatre blocs de palette, de la ROM vers la table des palettes (D0-D6 et A3 gardent le dernier)
-    for (dst, src) in [(0x91c3e0u32, 0x291f00u32), (0x91c2e0, 0xfc6d8), (0x91c000, 0x292260), (0x91c3c0, 0x2537c0)] {
-        x.c.a[1] = dst;
-        x.c.a[2] = src;
-        let words: Vec<u32> = (0..8).map(|i| rd32(x.b, src + 4 * i)).collect();
-        for (i, w) in words.iter().enumerate() {
-            wr32(x.b, dst + 4 * i as u32, *w);
-        }
-        x.c.d[..7].copy_from_slice(&words[..7]);
-        x.c.a[3] = words[7];
-    }
-    wr8(x.b, A5 + 0x48e, 0xf);
-    x.call(ext::BRIGHTNESS_WHITE);
-    for off in [0x506u32, 0x50a, 0x556, 0x4b6, 0x4ba] {
-        wr16(x.b, A5 + off, 0);
-    }
-    wr16(x.b, A5 + 0x55a, 0x701);
-    wr32(x.b, SCROLL, 0x0701_0000);
-    wr8(x.b, A5 + 0x36, 1);
-    x.wait(4, S0_TILES)
-});
 const S0_TILES: u32 = 0xfc6a8;
-resume!(R_S0_TILES, S0_TILES, |x| {
-    x.c.a[1] = 0x917000;
-    x.call_d0_low(ext::TILE_BLOCK, 197);
-    x.call_d0_low(ext::TILE_BLOCK, 198);
-    wr16(x.b, VIDEO, 0x24ce);
-    wr16(x.b, STATE + f::MARK, 0x728);
-    wr32(x.b, STATE + f::TEXT, 0xfc938);
-    Flow::Done
-});
 
 /// Étape 2 : le classement défile ; toutes les 40 lignes de pixels, les lignes suivantes du texte
 /// sont ajoutées. Quand le texte est fini (octet négatif), étape suivante.
@@ -303,38 +334,11 @@ fn sa_leave(x: &mut Ctx) -> Flow {
     x.call_d0(ext::SOUND_E0A82, 4);
     wr8(x.b, A5 + 0x48e, 0xf);
     wr16(x.b, A5 + 0x490, 3);
-    x.tail(ext::FADE_OUT, SA_FADED)
+    x.tail(ext::FADE_OUT, Etape::SaFaded)
 }
 const SA_FADED: u32 = 0xfc8a8;
-resume!(R_SA_FADED, SA_FADED, |x| {
-    x.call(ext::SOUND_E0882);
-    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES, ext::POOLS] {
-        x.call(f);
-    }
-    x.wait(1, SA_VIDEO)
-});
 const SA_VIDEO: u32 = 0xfc8ce;
-resume!(R_SA_VIDEO, SA_VIDEO, |x| {
-    wr16(x.b, VIDEO, 0x12c0);
-    x.wait(4, SA_CLEARED)
-});
 const SA_CLEARED: u32 = 0xfc8dc;
-resume!(R_SA_CLEARED, SA_CLEARED, |x| {
-    for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-        x.call(f);
-    }
-    wr8(x.b, super::mode::SUB, 0);
-    wr16(x.b, super::mode::STEP, 0);
-    wr8(x.b, A5 + 0x36, 0);
-    x.c.d[0] = 0;
-    for off in [0x4bau32, 0x50a, 0x55a] {
-        wr16(x.b, A5 + off, 0);
-    }
-    x.call(ext::BOOTED_CLEAR);
-    x.call(ext::CLEAR_STATUS);
-    wr8(x.b, A5 + 0x30, 0);
-    Flow::Done
-});
 
 /// Charge D0 sur son mot bas (`move.w #n,D0w`) avant l'appel.
 trait LowWord {
@@ -347,12 +351,4 @@ impl LowWord for Ctx<'_> {
     }
 }
 
-pub const NATIVES: &[Native] = &[
-    R_RETURN,
-    R_S0_VIDEO,
-    R_S0_PALETTES,
-    R_S0_TILES,
-    R_SA_FADED,
-    R_SA_VIDEO,
-    R_SA_CLEARED,
-];
+pub const NATIVES: &[Native] = &[];

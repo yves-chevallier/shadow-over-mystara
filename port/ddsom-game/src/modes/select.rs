@@ -21,7 +21,6 @@
 
 use super::{Block, Flow, Sequence};
 use crate::mem::{rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
-use crate::resume;
 use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -269,37 +268,113 @@ fn objects_0(x: &mut Ctx) -> Flow {
     }
     x.call(ext::EFFCT);
     x.call(ext::SPRITES);
-    x.wait(2, FADE_START)
+    x.wait(2, Etape::FadeStart)
 }
 const FADE_START: u32 = 0x1cc0c;
-resume!(R_FADE_START, FADE_START, |x| {
-    wr16(x.b, var::FADE_DELAY, 1);
-    wr8(x.b, var::FADE_PAGES, 0xf);
-    wr32(x.b, var::FADE_SOURCES, 0x28ff00);
-    wr32(x.b, var::FADE_SOURCES + 4, 0x25c0c0);
-    wr32(x.b, var::FADE_SOURCES + 8, 0x279460);
-    wr32(x.b, var::FADE_SOURCES + 12, 0x28c6e0);
-    create_task(x, ext::FADE_TASK, 0x10);
-    wr8(x.b, var::FADE_STEPS, 1);
-    set_low_word(&mut x.c.d[0], 0x203);
-    x.c.a[1] = 0x917000;
-    x.call(ext::TILE_BLOCK);
-    set_low_word(&mut x.c.d[0], 0x204);
-    x.call(ext::TILE_BLOCK);
-    set_low_word(&mut x.c.d[0], 0xfc);
-    x.c.a[1] = 0x91b800;
-    x.call(ext::TILE_BLOCK_2);
-    set_low_word(&mut x.c.d[0], 0xfd);
-    x.call(ext::TILE_BLOCK_2);
-    wr16(x.b, var::VIDEO, 0x12ce);
-    fade_wait(x)
-});
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        FadeStart = FADE_START => |x| {
+            wr16(x.b, var::FADE_DELAY, 1);
+            wr8(x.b, var::FADE_PAGES, 0xf);
+            wr32(x.b, var::FADE_SOURCES, 0x28ff00);
+            wr32(x.b, var::FADE_SOURCES + 4, 0x25c0c0);
+            wr32(x.b, var::FADE_SOURCES + 8, 0x279460);
+            wr32(x.b, var::FADE_SOURCES + 12, 0x28c6e0);
+            create_task(x, ext::FADE_TASK, 0x10);
+            wr8(x.b, var::FADE_STEPS, 1);
+            set_low_word(&mut x.c.d[0], 0x203);
+            x.c.a[1] = 0x917000;
+            x.call(ext::TILE_BLOCK);
+            set_low_word(&mut x.c.d[0], 0x204);
+            x.call(ext::TILE_BLOCK);
+            set_low_word(&mut x.c.d[0], 0xfc);
+            x.c.a[1] = 0x91b800;
+            x.call(ext::TILE_BLOCK_2);
+            set_low_word(&mut x.c.d[0], 0xfd);
+            x.call(ext::TILE_BLOCK_2);
+            wr16(x.b, var::VIDEO, 0x12ce);
+            fade_wait(x)
+        },
+        FadeLoop = FADE_LOOP => fade_wait,
+        Step6Faded = STEP_6_FADED => |x| {
+            x.call(ext::EFFCT);
+            x.call(ext::POOLS_EFFCT);
+            x.call(ext::SPRITES_RESET);
+            x.call(ext::SPRITES);
+            let v = rd16(x.b, var::VIDEO) & !0xe;
+            wr16(x.b, var::VIDEO, v);
+            x.wait(1, Etape::Step6Clear)
+        },
+        Step6Clear = STEP_6_CLEAR => |x| {
+            wr8(x.b, var::SCREEN_ID, 0xff);
+            for f in [ext::CLEAR_SPRITES, ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
+                x.call(f);
+            }
+            x.wait(4, Etape::Step6Palette)
+        },
+        Step6Palette = STEP_6_PALETTE => |x| {
+            x.call_d0(ext::PALETTE_PAGE_A, 0);
+            x.call_d0(ext::PALETTE_SET, 0x56);
+            x.call_d0(ext::PALETTE_FADE, 0x56);
+            x.call_d0(ext::PALETTE_PAGE_C, 3);
+            for i in 0..8 {
+                for j in 0..8 {
+                    wr32(x.b, 0x91c000 + 0x20 * i + 4 * j, 0);
+                }
+            }
+            x.c.a[4] = 0x91c000 + 0x100;
+            for r in 0..6 {
+                x.c.d[r] = 0;
+            }
+            x.c.a[1] = 0;
+            x.c.a[2] = 0;
+            x.c.d[6] = 0xffff;
+            wr8(x.b, var::FADE_PAGES, 0xf);
+            x.call(ext::BRIGHTNESS_WHITE);
+            x.c.d[0] = 0;
+            for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
+                wr32(x.b, v, 0);
+            }
+            Flow::Done
+        },
+        Step8Show = STEP_8_SHOW => |x| {
+            let v = rd16(x.b, var::VIDEO) | 0xe;
+            wr16(x.b, var::VIDEO, v);
+            x.c.d[0] = 1;
+            x.jump_to(super::sub::WAIT)
+        },
+        StepEFaded = STEP_E_FADED => |x| {
+            for f in [ext::POOLS_SET, ext::POOLS_SOBJ, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
+                x.call(f);
+            }
+            x.wait(1, Etape::StepEHide)
+        },
+        StepEHide = STEP_E_HIDE => |x| {
+            let v = rd16(x.b, var::VIDEO) & !0xe;
+            wr16(x.b, var::VIDEO, v);
+            x.wait(1, Etape::StepEClear)
+        },
+        StepEClear = STEP_E_CLEAR => |x| {
+            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
+                x.call(f);
+            }
+            x.wait(4, Etape::StepEFade)
+        },
+        StepEFade = STEP_E_FADE => |x| {
+            wr16(x.b, var::FADE_DELAY, 3);
+            wr8(x.b, var::FADE_PAGES, 0xf);
+            create_task(x, ext::FADE_TASK_B, 0x10);
+            Flow::Done
+        },
+    }
+}
 /// Attend la fin du fondu d'ouverture (une image par tour), puis allume les curseurs.
 fn fade_wait(x: &mut Ctx) -> Flow {
     if rd8(x.b, var::FADE_STEPS) != 0 {
         x.call(ext::EFFCT);
         x.call(ext::SPRITES);
-        return x.wait(1, FADE_LOOP);
+        return x.wait(1, Etape::FadeLoop);
     }
     wr8(x.b, var::SCREEN_ID, 3);
     let main = sign_ext(rd16(x.b, var::MAIN_LINK));
@@ -309,7 +384,6 @@ fn fade_wait(x: &mut Ctx) -> Flow {
     x.jump_to(ext::SPRITES)
 }
 const FADE_LOOP: u32 = 0x1cca4;
-resume!(R_FADE_LOOP, FADE_LOOP, fade_wait);
 
 /// Crée la tâche d'entrée `entry` dans l'emplacement `slot` (`move.w #slot,D0w ; jsr 0x9b6`).
 fn create_task(x: &mut Ctx, entry: u32, slot: u16) {
@@ -609,52 +683,11 @@ fn step_6(x: &mut Ctx) -> Flow {
     x.call_d0(ext::SOUND_E0A82, 0x1c);
     wr16(x.b, var::FADE_DELAY, 1);
     wr8(x.b, var::FADE_PAGES, 0xf);
-    x.tail(ext::FADE_OUT, STEP_6_FADED)
+    x.tail(ext::FADE_OUT, Etape::Step6Faded)
 }
 const STEP_6_FADED: u32 = 0x1d19c;
-resume!(R_STEP_6_FADED, STEP_6_FADED, |x| {
-    x.call(ext::EFFCT);
-    x.call(ext::POOLS_EFFCT);
-    x.call(ext::SPRITES_RESET);
-    x.call(ext::SPRITES);
-    let v = rd16(x.b, var::VIDEO) & !0xe;
-    wr16(x.b, var::VIDEO, v);
-    x.wait(1, STEP_6_CLEAR)
-});
 const STEP_6_CLEAR: u32 = 0x1d1c2;
-resume!(R_STEP_6_CLEAR, STEP_6_CLEAR, |x| {
-    wr8(x.b, var::SCREEN_ID, 0xff);
-    for f in [ext::CLEAR_SPRITES, ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-        x.call(f);
-    }
-    x.wait(4, STEP_6_PALETTE)
-});
 const STEP_6_PALETTE: u32 = 0x1d1e8;
-resume!(R_STEP_6_PALETTE, STEP_6_PALETTE, |x| {
-    x.call_d0(ext::PALETTE_PAGE_A, 0);
-    x.call_d0(ext::PALETTE_SET, 0x56);
-    x.call_d0(ext::PALETTE_FADE, 0x56);
-    x.call_d0(ext::PALETTE_PAGE_C, 3);
-    for i in 0..8 {
-        for j in 0..8 {
-            wr32(x.b, 0x91c000 + 0x20 * i + 4 * j, 0);
-        }
-    }
-    x.c.a[4] = 0x91c000 + 0x100;
-    for r in 0..6 {
-        x.c.d[r] = 0;
-    }
-    x.c.a[1] = 0;
-    x.c.a[2] = 0;
-    x.c.d[6] = 0xffff;
-    wr8(x.b, var::FADE_PAGES, 0xf);
-    x.call(ext::BRIGHTNESS_WHITE);
-    x.c.d[0] = 0;
-    for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
-        wr32(x.b, v, 0);
-    }
-    Flow::Done
-});
 
 // ---------------------------------------------------------------------------------------------
 // Étape 8 : second écran
@@ -698,15 +731,9 @@ fn step_8(x: &mut Ctx) -> Flow {
     x.call(ext::EFFCT);
     x.call(ext::SOBJ);
     x.call(ext::SPRITES);
-    x.wait(2, STEP_8_SHOW)
+    x.wait(2, Etape::Step8Show)
 }
 const STEP_8_SHOW: u32 = 0x1d31c;
-resume!(R_STEP_8_SHOW, STEP_8_SHOW, |x| {
-    let v = rd16(x.b, var::VIDEO) | 0xe;
-    wr16(x.b, var::VIDEO, v);
-    x.c.d[0] = 1;
-    x.jump_to(super::sub::WAIT)
-});
 
 /// `0x1d686` : un joueur en jeu (état < 4) a-t-il pressé un bouton ? (drapeau Z de l'original : faux)
 fn any_button(x: &mut Ctx) -> bool {
@@ -813,46 +840,13 @@ fn step_e(x: &mut Ctx) -> Flow {
     wr16(x.b, var::FADE_DELAY, 1);
     x.c.d[0] = 8;
     wr8(x.b, var::FADE_PAGES, 0xf);
-    x.tail(ext::FADE_OUT_B, STEP_E_FADED)
+    x.tail(ext::FADE_OUT_B, Etape::StepEFaded)
 }
 const STEP_E_FADED: u32 = 0x1d498;
-resume!(R_STEP_E_FADED, STEP_E_FADED, |x| {
-    for f in [ext::POOLS_SET, ext::POOLS_SOBJ, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
-        x.call(f);
-    }
-    x.wait(1, STEP_E_HIDE)
-});
 const STEP_E_HIDE: u32 = 0x1d4b8;
-resume!(R_STEP_E_HIDE, STEP_E_HIDE, |x| {
-    let v = rd16(x.b, var::VIDEO) & !0xe;
-    wr16(x.b, var::VIDEO, v);
-    x.wait(1, STEP_E_CLEAR)
-});
 const STEP_E_CLEAR: u32 = 0x1d4c6;
-resume!(R_STEP_E_CLEAR, STEP_E_CLEAR, |x| {
-    for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-        x.call(f);
-    }
-    x.wait(4, STEP_E_FADE)
-});
 const STEP_E_FADE: u32 = 0x1d4e0;
-resume!(R_STEP_E_FADE, STEP_E_FADE, |x| {
-    wr16(x.b, var::FADE_DELAY, 3);
-    wr8(x.b, var::FADE_PAGES, 0xf);
-    create_task(x, ext::FADE_TASK_B, 0x10);
-    Flow::Done
-});
 
 pub const NATIVES: &[Native] = &[
     PHASE_4,
-    R_FADE_START,
-    R_FADE_LOOP,
-    R_STEP_6_FADED,
-    R_STEP_6_CLEAR,
-    R_STEP_6_PALETTE,
-    R_STEP_8_SHOW,
-    R_STEP_E_FADED,
-    R_STEP_E_HIDE,
-    R_STEP_E_CLEAR,
-    R_STEP_E_FADE,
 ];

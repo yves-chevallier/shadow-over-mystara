@@ -208,6 +208,17 @@ fn interruption(c: &mut Cpu, b: &mut Cps2Bus, niveau: u8) {
 /// Exécute la native posée au PC, ou arrête le jeu s'il n'y en a pas.
 pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
     let Some(n) = crate::lookup(c.pc) else {
+        // une étape Rust remise sur la pile 68000, où une native l'a dépilée pour y revenir
+        if let Some(etape) = crate::taches::table::etape_depilee(b, c.pc) {
+            // comme une native : abandonnée si le code qu'elle appelle cède la main (`Unwound`)
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::taches::executer(etape, c, b)));
+            if let Err(payload) = r {
+                if !payload.is::<crate::Unwound>() {
+                    std::panic::resume_unwind(payload);
+                }
+            }
+            return;
+        }
         arreter(c, b, format!("pas de native en {:06x}", c.pc));
     };
     DERNIERES.with(|d| {

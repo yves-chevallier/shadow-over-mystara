@@ -10,7 +10,6 @@
 
 use super::{mode, Flow, Sequence};
 use crate::mem::{rd16, rts, set_low_word, wr16, wr32, wr8, A5};
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -51,28 +50,32 @@ fn phase_20(x: &mut Ctx) -> Flow {
     x.call(ext::KILL_TASK);
     wr16(x.b, A5 + 0x490, 1);
     wr8(x.b, A5 + 0x48e, 0xf);
-    x.tail(ext::FADE_OUT, FADED)
+    x.tail(ext::FADE_OUT, Etape::Faded)
 }
 
-resume!(R_FADED, FADED, |x| {
-    set_low_word(&mut x.c.d[0], VIDEO_ON);
-    wr16(x.b, CPS_REG_VIDEO_B, VIDEO_ON);
-    wr16(x.b, A5 + 0x14, VIDEO_ON);
-    wr8(x.b, A5 + 0x53c, 0);
-    let flags = rd16(x.b, A5 + 0x12) & !1;
-    wr16(x.b, A5 + 0x12, flags);
-    x.tail(ext::CLEAR_VIDEO, CLEARED)
-});
-
-resume!(R_CLEARED, CLEARED, |x| {
-    x.call(ext::PHASE_VARS_CLEAR);
-    wr8(x.b, A5 + 0x30, 1);
-    reset_modes(x);
-    wr8(x.b, mode::BOOTED, 1);
-    x.call(ext::SOUND_E0882);
-    x.c.a[0] = ext::MODE_LOOP;
-    x.jump_to(ext::REPLACE_TASK)
-});
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        Faded = FADED => |x| {
+            set_low_word(&mut x.c.d[0], VIDEO_ON);
+            wr16(x.b, CPS_REG_VIDEO_B, VIDEO_ON);
+            wr16(x.b, A5 + 0x14, VIDEO_ON);
+            wr8(x.b, A5 + 0x53c, 0);
+            let flags = rd16(x.b, A5 + 0x12) & !1;
+            wr16(x.b, A5 + 0x12, flags);
+            x.tail(ext::CLEAR_VIDEO, Etape::Cleared)
+        },
+        Cleared = CLEARED => |x| {
+            x.call(ext::PHASE_VARS_CLEAR);
+            wr8(x.b, A5 + 0x30, 1);
+            reset_modes(x);
+            wr8(x.b, mode::BOOTED, 1);
+            x.call(ext::SOUND_E0882);
+            x.c.a[0] = ext::MODE_LOOP;
+            x.jump_to(ext::REPLACE_TASK)
+        },
+    }
+}
 
 /// `0x133dc` : remet à zéro le bloc d'état de la machine à modes (64 octets) et celui de l'écran de
 /// classement (quatre longs à `FF2B10`, `0xfc562`).
@@ -88,4 +91,4 @@ pub fn reset_modes(x: &mut Ctx) {
     x.c.d[6] = 0xffff;
 }
 
-pub const NATIVES: &[Native] = &[PHASE_20, R_FADED, R_CLEARED];
+pub const NATIVES: &[Native] = &[PHASE_20];

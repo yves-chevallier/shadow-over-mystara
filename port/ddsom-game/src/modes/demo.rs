@@ -21,7 +21,6 @@ use m68k::Cpu;
 use super::{mode, Block, Flow, Sequence};
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::pools;
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -173,7 +172,7 @@ fn rd_state(x: &mut Ctx, off: u32) -> u8 {
 fn interpreter_a(x: &mut Ctx) -> Flow {
     let step = rd_state(x, f::STEP);
     x.c.d[0] = step as u32;
-    x.push_return(at::RETURN_A);
+    x.push_return(Etape::ReturnA);
     match step {
         0 => start_a(x),
         2 => {
@@ -184,10 +183,72 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
         _ => x.jump_to(0x1fb20),
     }
 }
-resume!(R_RETURN_A, at::RETURN_A, |x| {
-    x.c.a[0] = mode::BASE;
-    Flow::Done
-});
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        ReturnA = at::RETURN_A => |x| {
+            x.c.a[0] = mode::BASE;
+            Flow::Done
+        },
+        LoopA = at::LOOP_A => loop_a,
+        AfterYieldA = at::AFTER_YIELD_A => after_yield_a,
+        SceneEndClearA = SCENE_END_CLEAR_A => |x| scene_end_clear(x, Etape::SceneEndNextA),
+        SceneEndNextA = SCENE_END_NEXT_A => next_operation,
+        EndClear = END_CLEAR => |x| {
+            let v = rd16(x.b, var::VIDEO) & !0xe;
+            wr16(x.b, var::VIDEO, v);
+            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::SERVICE_2D9E, ext::POOLS] {
+                x.call(f);
+            }
+            x.wait(4, Etape::EndShow)
+        },
+        EndShow = END_SHOW => |x| {
+            let v = rd16(x.b, var::VIDEO) | 0xe;
+            wr16(x.b, var::VIDEO, v);
+            Flow::Done
+        },
+        /// Le saut de `0x1fce4` à `0x1fc68` laisse l'adresse du `bsr` sur la pile : le décor est rendu deux fois.
+        PresentAgain = 0x1fdba => p_render,
+        P4Hide = P4_HIDE => |x| {
+            let v = rd16(x.b, var::VIDEO) & !0xe;
+            wr16(x.b, var::VIDEO, v);
+            x.wait(1, Etape::P4Clear)
+        },
+        P4Clear = P4_CLEAR => |x| {
+            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
+                x.call(f);
+            }
+            next_operation(x)
+        },
+        ReturnB = at::RETURN_B => |x| {
+            x.c.a[0] = mode::BASE;
+            Flow::Done
+        },
+        LoopB = at::LOOP_B => loop_b,
+        AfterYieldB = at::AFTER_YIELD_B => after_yield_b,
+        SceneNextClearB = SCENE_NEXT_CLEAR_B => |x| scene_end_clear(x, Etape::SceneNextNextB),
+        SceneNextNextB = SCENE_NEXT_NEXT_B => next_operation_b,
+        EndingReset = ENDING_RESET => |x| {
+            for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
+                x.call(f);
+            }
+            x.wait(1, Etape::EndingClear)
+        },
+        EndingClear = ENDING_CLEAR => |x| {
+            let v = rd16(x.b, var::VIDEO) & !0xc;
+            wr16(x.b, var::VIDEO, v);
+            for f in [ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::SERVICE_2D9E, ext::POOLS] {
+                x.call(f);
+            }
+            x.wait(4, Etape::EndingShow)
+        },
+        EndingShow = ENDING_SHOW => |x| {
+            let v = rd16(x.b, var::VIDEO) | 0xc;
+            wr16(x.b, var::VIDEO, v);
+            x.jump_to(ext::SOUND_E0A10)
+        },
+    }
+}
 
 /// Étape 0 : choisit l'un des deux scripts (alternativement), garde l'horloge de démonstration.
 fn start_a(x: &mut Ctx) -> Flow {
@@ -316,13 +377,11 @@ fn loop_a(x: &mut Ctx) -> Flow {
     if rd8(x.b, var::SCREEN_WAIT) != 0 || rd8(x.b, var::YIELDED) != 0 || skip > 1 {
         wr8(x.b, var::SKIP_YIELD, 0);
         x.c.d[0] = 1;
-        return x.wait(1, at::AFTER_YIELD_A);
+        return x.wait(1, Etape::AfterYieldA);
     }
     wr8(x.b, var::SKIP_YIELD, skip.wrapping_add(3) as u8);
     after_yield_a(x)
 }
-resume!(R_LOOP_A, at::LOOP_A, loop_a);
-resume!(R_AFTER_YIELD_A, at::AFTER_YIELD_A, after_yield_a);
 
 fn after_yield_a(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
@@ -333,11 +392,16 @@ fn after_yield_a(x: &mut Ctx) -> Flow {
             return scene_end_a(x);
         }
     }
-    run_phase(x, table::PHASES_A, at::LOOP_A, at::AFTER_PHASE_A)
+    run_phase(x, table::PHASES_A, Etape::LoopA, at::AFTER_PHASE_A)
 }
 
+// Retours des phases : l'adresse de retour empilée par `call_at` (la phase peut céder la main, puis y revenir par
+// `rts`) reste une native.
+crate::resume!(AFTER_PHASE_A, at::AFTER_PHASE_A, after_phase);
+crate::resume!(AFTER_PHASE_B, at::AFTER_PHASE_B, after_phase);
+
 /// Appelle le gestionnaire de la phase courante (`jsr (A0)` précédé du `pea` de la boucle).
-fn run_phase(x: &mut Ctx, phases: u32, loop_top: u32, after: u32) -> Flow {
+fn run_phase(x: &mut Ctx, phases: u32, loop_top: Etape, after: u32) -> Flow {
     wr8(x.b, var::YIELDED, 0xff);
     // la phase peut revenir directement en haut de la boucle, en dépilant le retour de son appel : `call_at` remet
     // alors cet appel en cours sur la pile 68000
@@ -349,8 +413,6 @@ fn run_phase(x: &mut Ctx, phases: u32, loop_top: u32, after: u32) -> Flow {
     crate::call_at(x.c, x.b, handler, after);
     after_phase(x)
 }
-resume!(R_AFTER_PHASE_A, at::AFTER_PHASE_A, after_phase);
-resume!(R_AFTER_PHASE_B, at::AFTER_PHASE_B, after_phase);
 
 /// `0x1f9b0` : après la phase, gère l'écran de chargement et vide les files de collision ; le `rts`
 /// repart en haut de la boucle.
@@ -400,10 +462,10 @@ fn scene_end_a(x: &mut Ctx) -> Flow {
     wr16(x.b, var::RANK, rank);
     scene_cleanup_1(x);
     wr8(x.b, A5 + 0x50, 0);
-    scene_end_common(x, SCENE_END_CLEAR_A)
+    scene_end_common(x, Etape::SceneEndClearA)
 }
 /// Enchaîne le nettoyage commun puis la cession d'une image dont la reprise est `resume`.
-fn scene_end_common(x: &mut Ctx, resume: u32) -> Flow {
+fn scene_end_common(x: &mut Ctx, resume: Etape) -> Flow {
     stop_recorder(x.b);
     wr8(x.b, var::PHASE, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
@@ -416,7 +478,7 @@ fn scene_end_common(x: &mut Ctx, resume: u32) -> Flow {
 }
 
 /// Après la cession : vide les plans et les files, cède encore, puis lit l'opération suivante.
-fn scene_end_clear(x: &mut Ctx, resume: u32) -> Flow {
+fn scene_end_clear(x: &mut Ctx, resume: Etape) -> Flow {
     let v = rd16(x.b, var::VIDEO) & !0xe;
     wr16(x.b, var::VIDEO, v);
     for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::SERVICE_2D9E, ext::POOLS] {
@@ -427,8 +489,6 @@ fn scene_end_clear(x: &mut Ctx, resume: u32) -> Flow {
 }
 const SCENE_END_CLEAR_A: u32 = 0x1fb6a;
 const SCENE_END_NEXT_A: u32 = 0x1fbd2;
-resume!(R_SCENE_END_CLEAR_A, SCENE_END_CLEAR_A, |x| scene_end_clear(x, SCENE_END_NEXT_A));
-resume!(R_SCENE_END_NEXT_A, SCENE_END_NEXT_A, next_operation);
 
 /// `0x1fa92` : fin du script : retour de l'horloge de démonstration, tout est vidé, écran suivant.
 fn end_of_script(x: &mut Ctx) -> Flow {
@@ -445,7 +505,7 @@ fn end_of_script(x: &mut Ctx) -> Flow {
     for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
         x.call(f);
     }
-    x.wait(1, END_CLEAR)
+    x.wait(1, Etape::EndClear)
 }
 fn restore_clock(x: &mut Ctx) {
     let t = rd16(x.b, var::SAVED_TIME);
@@ -456,20 +516,7 @@ fn restore_clock(x: &mut Ctx) {
     wr16(x.b, var::RANK, rank);
 }
 const END_CLEAR: u32 = 0x1faec;
-resume!(R_END_CLEAR, END_CLEAR, |x| {
-    let v = rd16(x.b, var::VIDEO) & !0xe;
-    wr16(x.b, var::VIDEO, v);
-    for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::SERVICE_2D9E, ext::POOLS] {
-        x.call(f);
-    }
-    x.wait(4, END_SHOW)
-});
 const END_SHOW: u32 = 0x1fb18;
-resume!(R_END_SHOW, END_SHOW, |x| {
-    let v = rd16(x.b, var::VIDEO) | 0xe;
-    wr16(x.b, var::VIDEO, v);
-    Flow::Done
-});
 
 // --- présentation d'un personnage (opération autre que 0 et 2) -----------------------------------
 
@@ -610,12 +657,10 @@ fn p6_text(x: &mut Ctx) -> Flow {
     x.c.a[1] = 0x91c1e0;
     x.c.a[2] = src + 32;
     x.c.a[4] = a4 + 2;
-    x.push_return(0x1fdba);
+    x.push_return(Etape::PresentAgain);
     text_screen(x);
     portrait_object(x)
 }
-// Le saut de `0x1fce4` à `0x1fc68` laisse l'adresse du `bsr` sur la pile : le décor est rendu deux fois.
-resume!(R_PRESENT_AGAIN, 0x1fdba, p_render);
 
 /// Sous-état 4 : après la minuterie, ferme la présentation et lit l'opération suivante.
 fn p4_end(x: &mut Ctx) -> Flow {
@@ -632,21 +677,10 @@ fn p4_end(x: &mut Ctx) -> Flow {
     for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::POOLS, ext::CLEAR_SPRITES] {
         x.call(f);
     }
-    x.wait(1, P4_HIDE)
+    x.wait(1, Etape::P4Hide)
 }
 const P4_HIDE: u32 = 0x1ff5e;
-resume!(R_P4_HIDE, P4_HIDE, |x| {
-    let v = rd16(x.b, var::VIDEO) & !0xe;
-    wr16(x.b, var::VIDEO, v);
-    x.wait(1, P4_CLEAR)
-});
 const P4_CLEAR: u32 = 0x1ff6c;
-resume!(R_P4_CLEAR, P4_CLEAR, |x| {
-    for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-        x.call(f);
-    }
-    next_operation(x)
-});
 
 /// `0x1ffae` : cadre et textes de la présentation, écrits dans le plan 1 (GFX RAM `0x912000`).
 fn text_screen(x: &mut Ctx) {
@@ -722,7 +756,7 @@ fn text_lines(x: &mut Ctx, start: u32, text: u32, attr: u16) {
 fn interpreter_b(x: &mut Ctx) -> Flow {
     let step = rd_state(x, f::STEP);
     x.c.d[0] = step as u32;
-    x.push_return(at::RETURN_B);
+    x.push_return(Etape::ReturnB);
     match step {
         0 => {
             x.call(ext::INVITE_STOP);
@@ -743,10 +777,6 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
         _ => Flow::Done,
     }
 }
-resume!(R_RETURN_B, at::RETURN_B, |x| {
-    x.c.a[0] = mode::BASE;
-    Flow::Done
-});
 
 /// `0x20960` : opération suivante : fin du script (octet négatif) ou scène.
 fn next_operation_b(x: &mut Ctx) -> Flow {
@@ -769,13 +799,11 @@ fn loop_b(x: &mut Ctx) -> Flow {
     if rd8(x.b, var::SCREEN_WAIT) != 0 || rd8(x.b, var::YIELDED) != 0 || skip > 1 {
         wr8(x.b, var::SKIP_YIELD, 0);
         x.c.d[0] = 1;
-        return x.wait(1, at::AFTER_YIELD_B);
+        return x.wait(1, Etape::AfterYieldB);
     }
     wr8(x.b, var::SKIP_YIELD, skip.wrapping_add(3) as u8);
     after_yield_b(x)
 }
-resume!(R_LOOP_B, at::LOOP_B, loop_b);
-resume!(R_AFTER_YIELD_B, at::AFTER_YIELD_B, after_yield_b);
 
 fn after_yield_b(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
@@ -808,7 +836,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
             }
         }
     }
-    run_phase(x, table::PHASES_B, at::LOOP_B, at::AFTER_PHASE_B)
+    run_phase(x, table::PHASES_B, Etape::LoopB, at::AFTER_PHASE_B)
 }
 
 /// `0x20abc` : scène suivante : comme `0x1fb20` mais efface aussi `A5+0x59`.
@@ -818,12 +846,10 @@ fn scene_next_b(x: &mut Ctx) -> Flow {
     scene_cleanup_1(x);
     wr8(x.b, A5 + 0x59, 0);
     wr8(x.b, A5 + 0x50, 0);
-    scene_end_common(x, SCENE_NEXT_CLEAR_B)
+    scene_end_common(x, Etape::SceneNextClearB)
 }
 const SCENE_NEXT_CLEAR_B: u32 = 0x20b0a;
 const SCENE_NEXT_NEXT_B: u32 = 0x20b72;
-resume!(R_SCENE_NEXT_CLEAR_B, SCENE_NEXT_CLEAR_B, |x| scene_end_clear(x, SCENE_NEXT_NEXT_B));
-resume!(R_SCENE_NEXT_NEXT_B, SCENE_NEXT_NEXT_B, next_operation_b);
 
 /// `0x20b86` : fin de la démonstration de jeu : écran de fin.
 fn ending_b(x: &mut Ctx) -> Flow {
@@ -842,30 +868,11 @@ fn ending_b(x: &mut Ctx) -> Flow {
     wr16(x.b, 0x91c41c, 0xf112);
     wr16(x.b, A5 + 0x4ba, 256);
     wr16(x.b, A5 + 0x4b6, 0);
-    x.wait(1, ENDING_RESET)
+    x.wait(1, Etape::EndingReset)
 }
 const ENDING_RESET: u32 = 0x20bec;
-resume!(R_ENDING_RESET, ENDING_RESET, |x| {
-    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
-        x.call(f);
-    }
-    x.wait(1, ENDING_CLEAR)
-});
 const ENDING_CLEAR: u32 = 0x20c06;
-resume!(R_ENDING_CLEAR, ENDING_CLEAR, |x| {
-    let v = rd16(x.b, var::VIDEO) & !0xc;
-    wr16(x.b, var::VIDEO, v);
-    for f in [ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::SERVICE_2D9E, ext::POOLS] {
-        x.call(f);
-    }
-    x.wait(4, ENDING_SHOW)
-});
 const ENDING_SHOW: u32 = 0x20c2c;
-resume!(R_ENDING_SHOW, ENDING_SHOW, |x| {
-    let v = rd16(x.b, var::VIDEO) | 0xc;
-    wr16(x.b, var::VIDEO, v);
-    x.jump_to(ext::SOUND_E0A10)
-});
 
 // ---------------------------------------------------------------------------------------------
 // Entrées enregistrées (`0xe05ec`)
@@ -1047,26 +1054,8 @@ pub const DEMO_PHASE_12: Native = Native {
 
 pub const NATIVES: &[Native] = &[
     DEMO_PHASE_12,
+    AFTER_PHASE_A,
+    AFTER_PHASE_B,
     RECORDER_RESET,
     RECORDER_STOP,
-    R_RETURN_A,
-    R_LOOP_A,
-    R_AFTER_YIELD_A,
-    R_AFTER_PHASE_A,
-    R_SCENE_END_CLEAR_A,
-    R_SCENE_END_NEXT_A,
-    R_END_CLEAR,
-    R_END_SHOW,
-    R_PRESENT_AGAIN,
-    R_P4_HIDE,
-    R_P4_CLEAR,
-    R_RETURN_B,
-    R_LOOP_B,
-    R_AFTER_YIELD_B,
-    R_AFTER_PHASE_B,
-    R_SCENE_NEXT_CLEAR_B,
-    R_SCENE_NEXT_NEXT_B,
-    R_ENDING_RESET,
-    R_ENDING_CLEAR,
-    R_ENDING_SHOW,
 ];

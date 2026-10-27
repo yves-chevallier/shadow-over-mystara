@@ -25,7 +25,7 @@ use sub::{TILE_BLOCK as TB, TILE_BLOCK_2 as TB2};
 
 pub fn scene_1(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf8292) {
-        0 => show_and_fade_in(x, At(S1_SHOWN.entry)),
+        0 => show_and_fade_in(x, At(Etape::S1Shown.into())),
         _ => {
             if !message_done(x) {
                 return Flow::Done;
@@ -35,14 +35,305 @@ pub fn scene_1(x: &mut Ctx) -> Flow {
         }
     }
 }
-resume!(S1_SHOWN, 0xf829a, |x| {
-    call_d0(x, sub::SOUND, 8);
-    next(x);
-    s1_message(x)
-});
-resume!(S1_RETRY, 0xf82b8, s1_message);
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        S1Shown = 0xf829a => |x| {
+            call_d0(x, sub::SOUND, 8);
+            next(x);
+            s1_message(x)
+        },
+        S1Retry = 0xf82b8 => s1_message,
+        S2Shown = 0xf8316 => |x| {
+            x.call(ext::SCENE_PALETTES);
+            x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
+            x.call(sub::PALETTES_BLACK);
+            Flow::Done
+        },
+        S2Hidden = 0xf8382 => |x| {
+            tiles(x, TB, 0x20a, Some(SCROLL_2));
+            tiles(x, TB, 0x20b, None);
+            tiles(x, TB2, 0x14c, Some(SCROLL_3));
+            tiles(x, TB2, 0x14d, None);
+            layers_or(x, 0xc);
+            x.wait(1, Etape::S2Drawn)
+        },
+        S2Drawn = 0xf83cc => |x| fade(x, ALL_PAGES, sub::FADE_IN, Caller),
+        S2Faded = 0xf8456 => |x| hide_layers(x, At(Etape::S2Cleared.into())),
+        S2Cleared = 0xf8464 => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            x.call(sub::CLEAR_SCROLL_3);
+            reset_pools(x);
+            let scene = get8(x, var::MESSAGE);
+            finish(x, scene)
+        },
+        S5Retry = 0xf84e8 => s5_message,
+        S5Faded = 0xf8502 => |x| hide_layers(x, At(Etape::S5Hidden.into())),
+        S5Hidden = 0xf8506 => |x| {
+            tiles(x, TB, 0x24a, Some(SCROLL_2));
+            tiles(x, TB, 0, None);
+            show_layers(x, At(Etape::S5Shown.into()))
+        },
+        S5Shown = 0xf8524 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S5FadedIn.into())),
+        S5FadedIn = 0xf8528 => s5_second_message,
+        S5Retry2 = 0xf853c => s5_second_message,
+        S5TextFaded = 0xf8556 => |x| hide_layers(x, At(Etape::S5TextHidden.into())),
+        S5TextHidden = 0xf855a => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            scroll_text(x, 0xf858a);
+            set16(x, var::TIMER, 120);
+            sprites_next_frame(x, Etape::S5TextShown)
+        },
+        S5TextShown = 0xf8582 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S5TextFadedIn.into())),
+        S5TextFadedIn = 0xf8586 => |x| {
+            next(x);
+            Flow::Done
+        },
+        S5EndFaded = 0xf8734 => |x| {
+            x.set_v32(a5::SCROLL_TEXT, 0);
+            sprites_next_frame(x, Etape::S5EndDrawn)
+        },
+        S5EndDrawn = 0xf873c => |x| yield_frames(x, 1, At(Etape::S5End.into())),
+        S5End = 0xf8744 => |x| {
+            let scene = if x.v8(a5::SCENE) == 5 { 108 } else { 24 };
+            finish(x, scene)
+        },
+        S4Shown = 0xf87c2 => |x| {
+            // palette de la page 7 (huit longs, `movem.l` : les registres gardent les données)
+            const FROM: u32 = 0x292260;
+            const TO: u32 = 0x91c1e0;
+            for k in 0..8 {
+                let v = rd32(x.b, FROM + 4 * k);
+                wr32(x.b, TO + 4 * k, v);
+                if k < 7 {
+                    x.c.d[k as usize] = v;
+                } else {
+                    x.c.a[3] = v;
+                }
+            }
+            (x.c.a[1], x.c.a[2]) = (TO, FROM);
+            scroll_text(x, 0xf8810);
+            set16(x, var::TIMER, 120);
+            x.set_v8(a5::FADE_PAGES, ALL_PAGES);
+            x.call(sub::PALETTES_BLACK);
+            fade_task(x, 3, ALL_PAGES, sub::FADE_TASK);
+            Flow::Done
+        },
+        S4TextGone = 0xf890e => |x| hide_layers(x, At(Etape::S4Hidden.into())),
+        S4Hidden = 0xf8912 => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            x.call(sub::CLEAR_SCROLL_3);
+            set_camera(x, a5::CAM1_X, 0);
+            set_camera(x, a5::CAM1_Y, 0xfff0);
+            yield_frames(x, 1, At(Etape::S4SecondText.into()))
+        },
+        S4SecondText = 0xf893c => |x| {
+            tiles(x, TB, 0x20d, Some(SCROLL_2));
+            tiles(x, TB, 0x20e, None);
+            scroll_text(x, 0xf8986);
+            set16(x, var::TIMER, 60);
+            sprites_next_frame(x, Etape::S4SecondDrawn)
+        },
+        S4SecondDrawn = 0xf897c => |x| {
+            next(x);
+            show_layers(x, At(Etape::S4SecondShown.into()))
+        },
+        S4SecondShown = 0xf8982 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, Caller),
+        S4Faded = 0xf8a84 => |x| hide_layers(x, At(Etape::S4FadedHidden.into())),
+        S4FadedHidden = 0xf8a88 => |x| home_camera_1(x, At(Etape::S4Homed.into())),
+        S4Homed = 0xf8a8c => |x| {
+            tiles(x, TB, 0x210, Some(SCROLL_2));
+            tiles(x, TB, 0x211, None);
+            x.c.d[0] = 87;
+            dark_palette(x);
+            show_layers(x, At(Etape::S4Dark.into()))
+        },
+        S4Dark = 0xf8ab4 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S4DarkIn.into())),
+        S4DarkIn = 0xf8ab8 => s4_message_92,
+        S4Retry92 = 0xf8acc => s4_message_92,
+        S4RetryWizard = 0xf8aea => s4_wizard,
+        S4SecondFaded = 0xf8b1c => |x| {
+            set8(x, var::SIGNAL, 0xff);
+            world(x);
+            sprites_next_frame(x, Etape::S4SecondClear)
+        },
+        S4SecondClear = 0xf8b2a => |x| {
+            x.call(sub::CLEAR_SPRITES);
+            hide_layers(x, At(Etape::S4SecondHidden.into()))
+        },
+        S4SecondHidden = 0xf8b34 => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            home_camera_1(x, At(Etape::S4SecondHomed.into()))
+        },
+        S4SecondHomed = 0xf8b3e => |x| {
+            set8(x, var::SIGNAL, 0);
+            s4_second_object(x)
+        },
+        S4RetryObject = 0xf8b56 => s4_second_object,
+        S4Scenery = 0xf8b64 => |x| {
+            // décor en huit blocs de tuiles du plan 2 (le troisième avec D4 = 0)
+            for (n, at) in [(206, 0x917000), (173, 0x917400), (175, 0x917800), (175, 0x917c00), (172, 0x916000), (205, 0x916400),
+                (174, 0x916800), (174, 0x916c00)]
+            {
+                if at == 0x917800 {
+                    x.c.d[4] = 0;
+                }
+                tiles_w(x, TB, n, Some(at));
+            }
+            x.set_v16(a5::CAM2_Y, 0xffe0);
+            x.set_v16(a5::CAM1_Y, 40);
+            tiles(x, TB2, 0x150, Some(SCROLL_3));
+            tiles(x, TB2, 0x151, None);
+            x.call(ext::SCROLL_2_ON);
+            x.set_v8(0x36, 1);
+            x.set_v16(a5::LAYERS, 0x138e);
+            wr16(x.b, 0x400004, 0x3155);
+            show_layers(x, At(Etape::S4SceneryShown.into()))
+        },
+        S4SceneryShown = 0xf8c2c => |x| {
+            fade_task(x, 3, SCENE_PAGES, sub::FADE_TASK);
+            s4_fading_in(x)
+        },
+        S4FadingIn = 0xf8c44 => |x| yield_frames(x, 1, At(Etape::S4FadingInNext.into())),
+        S4FadingInNext = 0xf8c4c => |x| {
+            if x.v8(a5::FADE_STEPS) != 0 {
+                return s4_fading_in(x);
+            }
+            s4_message_16(x)
+        },
+        S4Retry16 = 0xf8c66 => s4_message_16,
+        S4FadingOut = 0xf8c9c => |x| yield_frames(x, 1, At(Etape::S4FadingOutNext.into())),
+        S4FadingOutNext = 0xf8ca4 => |x| {
+            if x.v8(a5::FADE_STEPS) != 0 {
+                return s4_fading_out(x);
+            }
+            set8(x, var::SIGNAL, 1);
+            world(x);
+            sprites_next_frame(x, Etape::S4FadedOut)
+        },
+        S4FadedOut = 0xf8cb8 => |x| yield_frames(x, 1, At(Etape::S4End.into())),
+        S4End = 0xf8cc0 => |x| hide_layers(x, At(Etape::S4EndHidden.into())),
+        S4EndHidden = 0xf8cc4 => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            x.call(sub::CLEAR_SCROLL_3);
+            finish(x, 11)
+        },
+        S11RetryObject = 0xf8d5a => s11_object,
+        S11Drawn = 0xf8d6c => |x| {
+            layers_or(x, 0xe);
+            yield_frames(x, 1, At(Etape::S11Shown.into()))
+        },
+        S11Shown = 0xf8d7a => |x| {
+            set16(x, var::TIMER, 10);
+            x.set_v16(a5::FADE_DELAY, 4);
+            x.set_v8(a5::FADE_PAGES, ALL_PAGES);
+            x.jump_to(sub::FADE_IN)
+        },
+        S11Retry17 = 0xf8db4 => s11_message_17,
+        S11Retry18 = 0xf8e48 => s11_message_18,
+        S11Faded = 0xf8e6a => |x| {
+            set8(x, var::SIGNAL, 1);
+            world(x);
+            sprites_next_frame(x, Etape::S11DrawnOut)
+        },
+        S11DrawnOut = 0xf8e78 => |x| hide_layers(x, At(Etape::S11Hidden.into())),
+        S11Hidden = 0xf8e7c => |x| home_camera_1(x, At(Etape::S11End.into())),
+        S11End = 0xf8e80 => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            x.call(sub::CLEAR_SCROLL_3);
+            x.c.d[0] = 13;
+            finish(x, 13)
+        },
+        S13RetryObject = 0xf8ee2 => s13_object,
+        S13Drawn = 0xf8ef4 => |x| {
+            layers_or(x, 0xe);
+            yield_frames(x, 1, At(Etape::S13Shown.into()))
+        },
+        S13Shown = 0xf8f02 => |x| {
+            x.set_v16(a5::FADE_DELAY, 4);
+            x.set_v8(a5::FADE_PAGES, ALL_PAGES);
+            x.jump_to(sub::FADE_IN)
+        },
+        S13LeftDrawn = 0xf8f98 => |x| yield_frames(x, 1, At(Etape::S13LeftWaited.into())),
+        S13LeftWaited = 0xf8fa0 => |x| hide_layers(x, At(Etape::S13LeftHidden.into())),
+        S13LeftHidden = 0xf8fa4 => |x| yield_frames(x, 4, At(Etape::S13LeftScenery.into())),
+        S13LeftScenery = 0xf8fac => |x| {
+            let a6 = x.c.a[6];
+            call_d0(x, ext::PALETTE_SET, 1);
+            call_d0(x, sub::LOAD_PALETTE, 29);
+            call_d0(x, ext::PALETTE_3, 11);
+            x.c.a[6] = a6;
+            x.set_v8(0x36, 1);
+            tiles(x, TB, 8, Some(SCROLL_2));
+            for n in [9, 10, 8] {
+                tiles(x, TB, n, None);
+            }
+            tiles(x, TB2, 115, Some(SCROLL_3));
+            tiles(x, TB2, 116, None);
+            s13_set_11(x)
+        },
+        S13Retry11 = 0xf9022 => s13_set_11,
+        S13Set11Drawn = 0xf9034 => |x| yield_frames(x, 1, At(Etape::S13Set11Shown.into())),
+        S13Set11Shown = 0xf903c => |x| {
+            x.c.d[0] = 0;
+            x.c.d[1] = x.c.d[1] & !0xffff | 144;
+            x.call(ext::SOUND_2);
+            x.set_v16(a5::LAYERS, 0x138e);
+            x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
+            x.set_v16(a5::FADE_DELAY, 4);
+            x.set_v8(a5::FADE_STEPS, 1);
+            start_task(x, sub::FADE_TASK);
+            Flow::Done
+        },
+        S13OutFaded = 0xf90cc => |x| yield_frames(x, 30, At(Etape::S13OutScenery.into())),
+        S13OutScenery = 0xf90d4 => s13_out_scenery,
+        S13OutSceneryDrawn = 0xf911c => |x| {
+            set8(x, var::SIGNAL, 0);
+            s13_set_9(x)
+        },
+        S13Retry9 = 0xf9134 => s13_set_9,
+        S13OutDrawn = 0xf9150 => |x| {
+            next_sub(x);
+            x.call(ext::MUSIC_E);
+            for (off, palettes) in [(0x492, 0x253000), (0x49a, 0x272a60), (0x49e, 0x283140)] {
+                x.set_v32(off, palettes);
+            }
+            x.set_v16(a5::FADE_DELAY, 1);
+            x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
+            goto(x, ext::FADE_TO_PALETTES, Caller)
+        },
+        /// état 6 : nouveau décor, dialogue 30
+        S13Closing = 0xf919e => |x| yield_frames(x, 1, At(Etape::S13ClosingWaited.into())),
+        S13ClosingWaited = 0xf91a6 => |x| hide_layers(x, At(Etape::S13ClosingHidden.into())),
+        S13ClosingHidden = 0xf91aa => |x| {
+            set_camera(x, a5::CAM1_X, 8);
+            for off in [a5::CAM1_Y, a5::CAM2_X, a5::CAM2_Y] {
+                set_camera(x, off, 0);
+            }
+            x.call(sub::CLEAR_SCROLL_3);
+            set_d0_word(x, 87);
+            x.call(sub::LOAD_PALETTE);
+            set_d0_word(x, 87);
+            x.call(ext::PALETTE_3);
+            tiles_w(x, TB, 0x216, Some(SCROLL_2));
+            tiles_w(x, TB, 0x217, None);
+            yield_frames(x, 4, At(Etape::S13ClosingDrawn.into()))
+        },
+        S13ClosingDrawn = 0xf9210 => |x| show_layers(x, At(Etape::S13ClosingShown.into())),
+        S13ClosingShown = 0xf9214 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S13ClosingIn.into())),
+        S13ClosingIn = 0xf921a => s13_message_30,
+        S13Retry30 = 0xf922e => s13_message_30,
+        S13Faded = 0xf938a => |x| hide_layers(x, At(Etape::S13End.into())),
+        S13End = 0xf938e => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            let scene = get8(x, var::FLAG);
+            x.c.d[0] = scene as u32;
+            finish(x, scene)
+        },
+    }
+}
 fn s1_message(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 96, S1_RETRY.entry));
+    or_yield!(message(x, 96, Etape::S1Retry));
     Flow::Done
 }
 
@@ -58,7 +349,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
             }
             next(x);
             x.set_v16(a5::LAYERS, 0x12c0);
-            show_and_fade_in(x, At(S2_SHOWN.entry))
+            show_and_fade_in(x, At(Etape::S2Shown.into()))
         }
         2 => {
             if message_done(x) {
@@ -81,7 +372,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
             for off in [a5::CAM1_Y, a5::CAM1_Y + a5::COPY, a5::CAM2_Y, a5::CAM2_Y + a5::COPY] {
                 x.set_v16(off, 0xfff0);
             }
-            hide_layers(x, At(S2_HIDDEN.entry))
+            hide_layers(x, At(Etape::S2Hidden.into()))
         }
         8 => {
             if try_message(x, 11) {
@@ -103,34 +394,11 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
             let scene = answer(x, 0xf847c);
             set8(x, var::MESSAGE, scene);
             call_d0(x, sub::SOUND, 0);
-            fade(x, ALL_PAGES, sub::FADE_OUT, At(S2_FADED.entry))
+            fade(x, ALL_PAGES, sub::FADE_OUT, At(Etape::S2Faded.into()))
         }
         _ => Flow::Done,
     }
 }
-resume!(S2_SHOWN, 0xf8316, |x| {
-    x.call(ext::SCENE_PALETTES);
-    x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
-    x.call(sub::PALETTES_BLACK);
-    Flow::Done
-});
-resume!(S2_HIDDEN, 0xf8382, |x| {
-    tiles(x, TB, 0x20a, Some(SCROLL_2));
-    tiles(x, TB, 0x20b, None);
-    tiles(x, TB2, 0x14c, Some(SCROLL_3));
-    tiles(x, TB2, 0x14d, None);
-    layers_or(x, 0xc);
-    x.wait(1, S2_DRAWN.entry)
-});
-resume!(S2_DRAWN, 0xf83cc, |x| fade(x, ALL_PAGES, sub::FADE_IN, Caller));
-resume!(S2_FADED, 0xf8456, |x| hide_layers(x, At(S2_CLEARED.entry)));
-resume!(S2_CLEARED, 0xf8464, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    x.call(sub::CLEAR_SCROLL_3);
-    reset_pools(x);
-    let scene = get8(x, var::MESSAGE);
-    finish(x, scene)
-});
 
 // ---------------------------------------------------------------------------------------------
 // Scènes 5, 14 et 20 : dialogues 93 et 94, texte défilant ; scène 108 après la 5, sinon 24
@@ -155,65 +423,34 @@ pub fn scene_5(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(S5_FADED.entry))
+            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S5Faded.into()))
         }
         6 => {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(S5_TEXT_FADED.entry))
+            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S5TextFaded.into()))
         }
         8 => {
             if !any_button(x) && !tick(x) {
                 return Flow::Done;
             }
             call_d0(x, sub::SOUND, 0);
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(S5_END_FADED.entry))
+            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S5EndFaded.into()))
         }
         _ => Flow::Done,
     }
 }
-resume!(S5_RETRY, 0xf84e8, s5_message);
 fn s5_message(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 93, S5_RETRY.entry));
+    or_yield!(message(x, 93, Etape::S5Retry));
     next(x);
     Flow::Done
 }
-resume!(S5_FADED, 0xf8502, |x| hide_layers(x, At(S5_HIDDEN.entry)));
-resume!(S5_HIDDEN, 0xf8506, |x| {
-    tiles(x, TB, 0x24a, Some(SCROLL_2));
-    tiles(x, TB, 0, None);
-    show_layers(x, At(S5_SHOWN.entry))
-});
-resume!(S5_SHOWN, 0xf8524, |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(S5_FADED_IN.entry)));
-resume!(S5_FADED_IN, 0xf8528, s5_second_message);
-resume!(S5_RETRY_2, 0xf853c, s5_second_message);
 fn s5_second_message(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 94, S5_RETRY_2.entry));
+    or_yield!(message(x, 94, Etape::S5Retry2));
     next(x);
     Flow::Done
 }
-resume!(S5_TEXT_FADED, 0xf8556, |x| hide_layers(x, At(S5_TEXT_HIDDEN.entry)));
-resume!(S5_TEXT_HIDDEN, 0xf855a, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    scroll_text(x, 0xf858a);
-    set16(x, var::TIMER, 120);
-    sprites_next_frame(x, S5_TEXT_SHOWN.entry)
-});
-resume!(S5_TEXT_SHOWN, 0xf8582, |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(S5_TEXT_FADED_IN.entry)));
-resume!(S5_TEXT_FADED_IN, 0xf8586, |x| {
-    next(x);
-    Flow::Done
-});
-resume!(S5_END_FADED, 0xf8734, |x| {
-    x.set_v32(a5::SCROLL_TEXT, 0);
-    sprites_next_frame(x, S5_END_DRAWN.entry)
-});
-resume!(S5_END_DRAWN, 0xf873c, |x| yield_frames(x, 1, At(S5_END.entry)));
-resume!(S5_END, 0xf8744, |x| {
-    let scene = if x.v8(a5::SCENE) == 5 { 108 } else { 24 };
-    finish(x, scene)
-});
 
 // ---------------------------------------------------------------------------------------------
 // Scènes 4 et 10 : textes défilants, dialogues 15, 92 et 16, deux objets système ; puis la scène 11
@@ -228,7 +465,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
             tiles_w(x, TB2, 0x14e, Some(SCROLL_3));
             tiles_w(x, TB2, 0x14f, None);
             x.set_v16(a5::LAYERS, 0x138e);
-            yield_frames(x, 1, At(S4_SHOWN.entry))
+            yield_frames(x, 1, At(Etape::S4Shown.into()))
         }
         2 => {
             drift(x);
@@ -251,7 +488,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             x.set_v32(a5::SCROLL_TEXT, 0);
-            sprites_next_frame(x, S4_TEXT_GONE.entry)
+            sprites_next_frame(x, Etape::S4TextGone)
         }
         6 => {
             if any_button(x) {
@@ -267,13 +504,13 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(S4_FADED.entry))
+            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S4Faded.into()))
         }
         10 => {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(S4_SECOND_FADED.entry))
+            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S4SecondFaded.into()))
         }
         12 => {
             if !message_done(x) {
@@ -299,69 +536,14 @@ fn drift(x: &mut Ctx) {
     }
 }
 
-resume!(S4_SHOWN, 0xf87c2, |x| {
-    // palette de la page 7 (huit longs, `movem.l` : les registres gardent les données)
-    const FROM: u32 = 0x292260;
-    const TO: u32 = 0x91c1e0;
-    for k in 0..8 {
-        let v = rd32(x.b, FROM + 4 * k);
-        wr32(x.b, TO + 4 * k, v);
-        if k < 7 {
-            x.c.d[k as usize] = v;
-        } else {
-            x.c.a[3] = v;
-        }
-    }
-    (x.c.a[1], x.c.a[2]) = (TO, FROM);
-    scroll_text(x, 0xf8810);
-    set16(x, var::TIMER, 120);
-    x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-    x.call(sub::PALETTES_BLACK);
-    fade_task(x, 3, ALL_PAGES, sub::FADE_TASK);
-    Flow::Done
-});
-resume!(S4_TEXT_GONE, 0xf890e, |x| hide_layers(x, At(S4_HIDDEN.entry)));
-resume!(S4_HIDDEN, 0xf8912, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    x.call(sub::CLEAR_SCROLL_3);
-    set_camera(x, a5::CAM1_X, 0);
-    set_camera(x, a5::CAM1_Y, 0xfff0);
-    yield_frames(x, 1, At(S4_SECOND_TEXT.entry))
-});
-resume!(S4_SECOND_TEXT, 0xf893c, |x| {
-    tiles(x, TB, 0x20d, Some(SCROLL_2));
-    tiles(x, TB, 0x20e, None);
-    scroll_text(x, 0xf8986);
-    set16(x, var::TIMER, 60);
-    sprites_next_frame(x, S4_SECOND_DRAWN.entry)
-});
-resume!(S4_SECOND_DRAWN, 0xf897c, |x| {
-    next(x);
-    show_layers(x, At(S4_SECOND_SHOWN.entry))
-});
-resume!(S4_SECOND_SHOWN, 0xf8982, |x| fade(x, SCENE_PAGES, sub::FADE_IN, Caller));
-
-resume!(S4_FADED, 0xf8a84, |x| hide_layers(x, At(S4_FADED_HIDDEN.entry)));
-resume!(S4_FADED_HIDDEN, 0xf8a88, |x| home_camera_1(x, At(S4_HOMED.entry)));
-resume!(S4_HOMED, 0xf8a8c, |x| {
-    tiles(x, TB, 0x210, Some(SCROLL_2));
-    tiles(x, TB, 0x211, None);
-    x.c.d[0] = 87;
-    dark_palette(x);
-    show_layers(x, At(S4_DARK.entry))
-});
-resume!(S4_DARK, 0xf8ab4, |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(S4_DARK_IN.entry)));
-resume!(S4_DARK_IN, 0xf8ab8, s4_message_92);
-resume!(S4_RETRY_92, 0xf8acc, s4_message_92);
 fn s4_message_92(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 92, S4_RETRY_92.entry));
+    or_yield!(message(x, 92, Etape::S4Retry92));
     set8(x, var::SIGNAL, 0);
     s4_wizard(x)
 }
-resume!(S4_RETRY_WIZARD, 0xf8aea, s4_wizard);
 /// Objet système 0, placé (sous-type 2, X 144, Y 188).
 fn s4_wizard(x: &mut Ctx) -> Flow {
-    let Some(o) = system_object(x, 0, S4_RETRY_WIZARD.entry) else { return Flow::Yield };
+    let Some(o) = system_object(x, 0, Etape::S4RetryWizard) else { return Flow::Yield };
     wr8(x.b, o.0 + 0x2f, 2);
     wr16(x.b, o.0 + 8, 144);
     wr16(x.b, o.0 + 0x10, 0);
@@ -370,94 +552,28 @@ fn s4_wizard(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-resume!(S4_SECOND_FADED, 0xf8b1c, |x| {
-    set8(x, var::SIGNAL, 0xff);
-    world(x);
-    sprites_next_frame(x, S4_SECOND_CLEAR.entry)
-});
-resume!(S4_SECOND_CLEAR, 0xf8b2a, |x| {
-    x.call(sub::CLEAR_SPRITES);
-    hide_layers(x, At(S4_SECOND_HIDDEN.entry))
-});
-resume!(S4_SECOND_HIDDEN, 0xf8b34, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    home_camera_1(x, At(S4_SECOND_HOMED.entry))
-});
-resume!(S4_SECOND_HOMED, 0xf8b3e, |x| {
-    set8(x, var::SIGNAL, 0);
-    s4_second_object(x)
-});
-resume!(S4_RETRY_OBJECT, 0xf8b56, s4_second_object);
 fn s4_second_object(x: &mut Ctx) -> Flow {
-    if system_object(x, 1, S4_RETRY_OBJECT.entry).is_none() {
+    if system_object(x, 1, Etape::S4RetryObject).is_none() {
         return Flow::Yield;
     }
     world(x);
-    sprites_next_frame(x, S4_SCENERY.entry)
+    sprites_next_frame(x, Etape::S4Scenery)
 }
-resume!(S4_SCENERY, 0xf8b64, |x| {
-    // décor en huit blocs de tuiles du plan 2 (le troisième avec D4 = 0)
-    for (n, at) in [(206, 0x917000), (173, 0x917400), (175, 0x917800), (175, 0x917c00), (172, 0x916000), (205, 0x916400),
-        (174, 0x916800), (174, 0x916c00)]
-    {
-        if at == 0x917800 {
-            x.c.d[4] = 0;
-        }
-        tiles_w(x, TB, n, Some(at));
-    }
-    x.set_v16(a5::CAM2_Y, 0xffe0);
-    x.set_v16(a5::CAM1_Y, 40);
-    tiles(x, TB2, 0x150, Some(SCROLL_3));
-    tiles(x, TB2, 0x151, None);
-    x.call(ext::SCROLL_2_ON);
-    x.set_v8(0x36, 1);
-    x.set_v16(a5::LAYERS, 0x138e);
-    wr16(x.b, 0x400004, 0x3155);
-    show_layers(x, At(S4_SCENERY_SHOWN.entry))
-});
-resume!(S4_SCENERY_SHOWN, 0xf8c2c, |x| {
-    fade_task(x, 3, SCENE_PAGES, sub::FADE_TASK);
-    s4_fading_in(x)
-});
 /// Le monde tourne jusqu'à la fin du fondu (0xf8c3c), puis le dialogue 16.
 fn s4_fading_in(x: &mut Ctx) -> Flow {
     world(x);
-    sprites_next_frame(x, S4_FADING_IN.entry)
+    sprites_next_frame(x, Etape::S4FadingIn)
 }
-resume!(S4_FADING_IN, 0xf8c44, |x| yield_frames(x, 1, At(S4_FADING_IN_NEXT.entry)));
-resume!(S4_FADING_IN_NEXT, 0xf8c4c, |x| {
-    if x.v8(a5::FADE_STEPS) != 0 {
-        return s4_fading_in(x);
-    }
-    s4_message_16(x)
-});
-resume!(S4_RETRY_16, 0xf8c66, s4_message_16);
 fn s4_message_16(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 16, S4_RETRY_16.entry));
+    or_yield!(message(x, 16, Etape::S4Retry16));
     next(x);
     Flow::Done
 }
 /// 0xf8c94 : le monde tourne jusqu'à la fin du fondu de sortie.
 fn s4_fading_out(x: &mut Ctx) -> Flow {
     world(x);
-    sprites_next_frame(x, S4_FADING_OUT.entry)
+    sprites_next_frame(x, Etape::S4FadingOut)
 }
-resume!(S4_FADING_OUT, 0xf8c9c, |x| yield_frames(x, 1, At(S4_FADING_OUT_NEXT.entry)));
-resume!(S4_FADING_OUT_NEXT, 0xf8ca4, |x| {
-    if x.v8(a5::FADE_STEPS) != 0 {
-        return s4_fading_out(x);
-    }
-    set8(x, var::SIGNAL, 1);
-    world(x);
-    sprites_next_frame(x, S4_FADED_OUT.entry)
-});
-resume!(S4_FADED_OUT, 0xf8cb8, |x| yield_frames(x, 1, At(S4_END.entry)));
-resume!(S4_END, 0xf8cc0, |x| hide_layers(x, At(S4_END_HIDDEN.entry)));
-resume!(S4_END_HIDDEN, 0xf8cc4, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    x.call(sub::CLEAR_SCROLL_3);
-    finish(x, 11)
-});
 
 // ---------------------------------------------------------------------------------------------
 // Scène 11 (s'il reste du temps) : objet système 2, dialogues 17 et 18 ; puis la scène 13
@@ -519,56 +635,30 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             call_d0(x, sub::SOUND, 0);
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(S11_FADED.entry))
+            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S11Faded.into()))
         }
         _ => Flow::Done,
     }
 }
-resume!(S11_RETRY_OBJECT, 0xf8d5a, s11_object);
 fn s11_object(x: &mut Ctx) -> Flow {
-    if system_object(x, 2, S11_RETRY_OBJECT.entry).is_none() {
+    if system_object(x, 2, Etape::S11RetryObject).is_none() {
         return Flow::Yield;
     }
     set8(x, var::SIGNAL, 0);
     world(x);
-    sprites_next_frame(x, S11_DRAWN.entry)
+    sprites_next_frame(x, Etape::S11Drawn)
 }
-resume!(S11_DRAWN, 0xf8d6c, |x| {
-    layers_or(x, 0xe);
-    yield_frames(x, 1, At(S11_SHOWN.entry))
-});
-resume!(S11_SHOWN, 0xf8d7a, |x| {
-    set16(x, var::TIMER, 10);
-    x.set_v16(a5::FADE_DELAY, 4);
-    x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-    x.jump_to(sub::FADE_IN)
-});
-resume!(S11_RETRY_17, 0xf8db4, s11_message_17);
 fn s11_message_17(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 17, S11_RETRY_17.entry));
+    or_yield!(message(x, 17, Etape::S11Retry17));
     next(x);
     set8(x, var::FLAG, 1);
     Flow::Done
 }
-resume!(S11_RETRY_18, 0xf8e48, s11_message_18);
 fn s11_message_18(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 18, S11_RETRY_18.entry));
+    or_yield!(message(x, 18, Etape::S11Retry18));
     next(x);
     Flow::Done
 }
-resume!(S11_FADED, 0xf8e6a, |x| {
-    set8(x, var::SIGNAL, 1);
-    world(x);
-    sprites_next_frame(x, S11_DRAWN_OUT.entry)
-});
-resume!(S11_DRAWN_OUT, 0xf8e78, |x| hide_layers(x, At(S11_HIDDEN.entry)));
-resume!(S11_HIDDEN, 0xf8e7c, |x| home_camera_1(x, At(S11_END.entry)));
-resume!(S11_END, 0xf8e80, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    x.call(sub::CLEAR_SCROLL_3);
-    x.c.d[0] = 13;
-    finish(x, 13)
-});
 
 // ---------------------------------------------------------------------------------------------
 // Scène 13 : selon le temps restant, objets SET 10 et 11 ou 9 ; dialogue 30 puis un choix (dialogues 136 à 138)
@@ -595,7 +685,7 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
         4 => s13_time_out(x),
         6 => {
             world(x);
-            sprites_next_frame(x, S13_CLOSING.entry)
+            sprites_next_frame(x, Etape::S13Closing)
         }
         8 => {
             if !message_done(x) {
@@ -616,28 +706,18 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
                 Flow::Done
             }
         },
-        12 => fade(x, SCENE_PAGES, sub::FADE_OUT, At(S13_FADED.entry)),
+        12 => fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S13Faded.into())),
         _ => Flow::Done,
     }
 }
-resume!(S13_RETRY_OBJECT, 0xf8ee2, s13_object);
 fn s13_object(x: &mut Ctx) -> Flow {
-    if system_object(x, 3, S13_RETRY_OBJECT.entry).is_none() {
+    if system_object(x, 3, Etape::S13RetryObject).is_none() {
         return Flow::Yield;
     }
     set8(x, var::SIGNAL, 0);
     world(x);
-    sprites_next_frame(x, S13_DRAWN.entry)
+    sprites_next_frame(x, Etape::S13Drawn)
 }
-resume!(S13_DRAWN, 0xf8ef4, |x| {
-    layers_or(x, 0xe);
-    yield_frames(x, 1, At(S13_SHOWN.entry))
-});
-resume!(S13_SHOWN, 0xf8f02, |x| {
-    x.set_v16(a5::FADE_DELAY, 4);
-    x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-    x.jump_to(sub::FADE_IN)
-});
 
 /// Temps restant : objet SET 10, fondu, nouveau décor et objet SET 11 ; l'objet signale sa fin (`+8`).
 fn s13_time_left(x: &mut Ctx) -> Flow {
@@ -656,7 +736,7 @@ fn s13_time_left(x: &mut Ctx) -> Flow {
             }
             set8(x, var::SIGNAL, 0xff);
             world(x);
-            sprites_next_frame(x, S13_LEFT_DRAWN.entry)
+            sprites_next_frame(x, Etape::S13LeftDrawn)
         }
         4 => {
             if x.v8(a5::FADE_STEPS) == 0 {
@@ -684,43 +764,12 @@ fn s13_leave(x: &mut Ctx) -> Flow {
     set8(x, var::SUB, 0);
     fade(x, SCENE_PAGES, sub::FADE_OUT, Caller)
 }
-resume!(S13_LEFT_DRAWN, 0xf8f98, |x| yield_frames(x, 1, At(S13_LEFT_WAITED.entry)));
-resume!(S13_LEFT_WAITED, 0xf8fa0, |x| hide_layers(x, At(S13_LEFT_HIDDEN.entry)));
-resume!(S13_LEFT_HIDDEN, 0xf8fa4, |x| yield_frames(x, 4, At(S13_LEFT_SCENERY.entry)));
-resume!(S13_LEFT_SCENERY, 0xf8fac, |x| {
-    let a6 = x.c.a[6];
-    call_d0(x, ext::PALETTE_SET, 1);
-    call_d0(x, sub::LOAD_PALETTE, 29);
-    call_d0(x, ext::PALETTE_3, 11);
-    x.c.a[6] = a6;
-    x.set_v8(0x36, 1);
-    tiles(x, TB, 8, Some(SCROLL_2));
-    for n in [9, 10, 8] {
-        tiles(x, TB, n, None);
-    }
-    tiles(x, TB2, 115, Some(SCROLL_3));
-    tiles(x, TB2, 116, None);
-    s13_set_11(x)
-});
-resume!(S13_RETRY_11, 0xf9022, s13_set_11);
 fn s13_set_11(x: &mut Ctx) -> Flow {
-    or_yield!(set_object(x, 11, S13_RETRY_11.entry));
+    or_yield!(set_object(x, 11, Etape::S13Retry11));
     next_sub(x);
     world(x);
-    sprites_next_frame(x, S13_SET_11_DRAWN.entry)
+    sprites_next_frame(x, Etape::S13Set11Drawn)
 }
-resume!(S13_SET_11_DRAWN, 0xf9034, |x| yield_frames(x, 1, At(S13_SET_11_SHOWN.entry)));
-resume!(S13_SET_11_SHOWN, 0xf903c, |x| {
-    x.c.d[0] = 0;
-    x.c.d[1] = x.c.d[1] & !0xffff | 144;
-    x.call(ext::SOUND_2);
-    x.set_v16(a5::LAYERS, 0x138e);
-    x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
-    x.set_v16(a5::FADE_DELAY, 4);
-    x.set_v8(a5::FADE_STEPS, 1);
-    start_task(x, sub::FADE_TASK);
-    Flow::Done
-});
 
 /// Temps écoulé : fondu par composante, autre décor, objet SET 9, puis fondu vers des palettes fixées.
 fn s13_time_out(x: &mut Ctx) -> Flow {
@@ -730,7 +779,7 @@ fn s13_time_out(x: &mut Ctx) -> Flow {
             next_sub(x);
             x.set_v16(a5::FADE_DELAY, 1);
             x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
-            goto(x, ext::FADE_BY_COMPONENT, At(S13_OUT_FADED.entry))
+            goto(x, ext::FADE_BY_COMPONENT, At(Etape::S13OutFaded.into()))
         }
         2 => s13_out_scenery(x),
         4 => {
@@ -739,14 +788,12 @@ fn s13_time_out(x: &mut Ctx) -> Flow {
             }
             set8(x, var::SIGNAL, 0);
             world(x);
-            sprites_next_frame(x, S13_OUT_DRAWN.entry)
+            sprites_next_frame(x, Etape::S13OutDrawn)
         }
         6 => s13_leave(x),
         _ => Flow::Done,
     }
 }
-resume!(S13_OUT_FADED, 0xf90cc, |x| yield_frames(x, 30, At(S13_OUT_SCENERY.entry)));
-resume!(S13_OUT_SCENERY, 0xf90d4, s13_out_scenery);
 fn s13_out_scenery(x: &mut Ctx) -> Flow {
     next_sub(x);
     tiles_w(x, TB, 0x22a, Some(SCROLL_2));
@@ -755,51 +802,15 @@ fn s13_out_scenery(x: &mut Ctx) -> Flow {
     tiles(x, TB2, 0x165, None);
     set8(x, var::SIGNAL, 0xff);
     world(x);
-    sprites_next_frame(x, S13_OUT_SCENERY_DRAWN.entry)
+    sprites_next_frame(x, Etape::S13OutSceneryDrawn)
 }
-resume!(S13_OUT_SCENERY_DRAWN, 0xf911c, |x| {
-    set8(x, var::SIGNAL, 0);
-    s13_set_9(x)
-});
-resume!(S13_RETRY_9, 0xf9134, s13_set_9);
 fn s13_set_9(x: &mut Ctx) -> Flow {
-    or_yield!(set_object(x, 9, S13_RETRY_9.entry));
+    or_yield!(set_object(x, 9, Etape::S13Retry9));
     Flow::Done
 }
-resume!(S13_OUT_DRAWN, 0xf9150, |x| {
-    next_sub(x);
-    x.call(ext::MUSIC_E);
-    for (off, palettes) in [(0x492, 0x253000), (0x49a, 0x272a60), (0x49e, 0x283140)] {
-        x.set_v32(off, palettes);
-    }
-    x.set_v16(a5::FADE_DELAY, 1);
-    x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
-    goto(x, ext::FADE_TO_PALETTES, Caller)
-});
 
-// état 6 : nouveau décor, dialogue 30
-resume!(S13_CLOSING, 0xf919e, |x| yield_frames(x, 1, At(S13_CLOSING_WAITED.entry)));
-resume!(S13_CLOSING_WAITED, 0xf91a6, |x| hide_layers(x, At(S13_CLOSING_HIDDEN.entry)));
-resume!(S13_CLOSING_HIDDEN, 0xf91aa, |x| {
-    set_camera(x, a5::CAM1_X, 8);
-    for off in [a5::CAM1_Y, a5::CAM2_X, a5::CAM2_Y] {
-        set_camera(x, off, 0);
-    }
-    x.call(sub::CLEAR_SCROLL_3);
-    set_d0_word(x, 87);
-    x.call(sub::LOAD_PALETTE);
-    set_d0_word(x, 87);
-    x.call(ext::PALETTE_3);
-    tiles_w(x, TB, 0x216, Some(SCROLL_2));
-    tiles_w(x, TB, 0x217, None);
-    yield_frames(x, 4, At(S13_CLOSING_DRAWN.entry))
-});
-resume!(S13_CLOSING_DRAWN, 0xf9210, |x| show_layers(x, At(S13_CLOSING_SHOWN.entry)));
-resume!(S13_CLOSING_SHOWN, 0xf9214, |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(S13_CLOSING_IN.entry)));
-resume!(S13_CLOSING_IN, 0xf921a, s13_message_30);
-resume!(S13_RETRY_30, 0xf922e, s13_message_30);
 fn s13_message_30(x: &mut Ctx) -> Flow {
-    or_yield!(message(x, 30, S13_RETRY_30.entry));
+    or_yield!(message(x, 30, Etape::S13Retry30));
     next(x);
     Flow::Done
 }
@@ -857,24 +868,4 @@ fn choice(x: &mut Ctx, n: u16, table: u32, answers: u32) -> Flow {
     Flow::Done
 }
 
-resume!(S13_FADED, 0xf938a, |x| hide_layers(x, At(S13_END.entry)));
-resume!(S13_END, 0xf938e, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    let scene = get8(x, var::FLAG);
-    x.c.d[0] = scene as u32;
-    finish(x, scene)
-});
-
-pub const NATIVES: &[Native] = &[
-    S1_SHOWN, S1_RETRY, S2_SHOWN, S2_HIDDEN, S2_DRAWN, S2_FADED, S2_CLEARED, S5_RETRY, S5_FADED, S5_HIDDEN, S5_SHOWN,
-    S5_FADED_IN, S5_RETRY_2, S5_TEXT_FADED, S5_TEXT_HIDDEN, S5_TEXT_SHOWN, S5_TEXT_FADED_IN, S5_END_FADED, S5_END_DRAWN,
-    S5_END, S4_SHOWN, S4_TEXT_GONE, S4_HIDDEN, S4_SECOND_TEXT, S4_SECOND_DRAWN, S4_SECOND_SHOWN, S4_FADED,
-    S4_FADED_HIDDEN, S4_HOMED, S4_DARK, S4_DARK_IN, S4_RETRY_92, S4_RETRY_WIZARD, S4_SECOND_FADED, S4_SECOND_CLEAR,
-    S4_SECOND_HIDDEN, S4_SECOND_HOMED, S4_RETRY_OBJECT, S4_SCENERY, S4_SCENERY_SHOWN, S4_FADING_IN, S4_FADING_IN_NEXT,
-    S4_RETRY_16, S4_FADING_OUT, S4_FADING_OUT_NEXT, S4_FADED_OUT, S4_END, S4_END_HIDDEN, S11_RETRY_OBJECT, S11_DRAWN,
-    S11_SHOWN, S11_RETRY_17, S11_RETRY_18, S11_FADED, S11_DRAWN_OUT, S11_HIDDEN, S11_END, S13_RETRY_OBJECT, S13_DRAWN,
-    S13_SHOWN, S13_LEFT_DRAWN, S13_LEFT_WAITED, S13_LEFT_HIDDEN, S13_LEFT_SCENERY, S13_RETRY_11, S13_SET_11_DRAWN,
-    S13_SET_11_SHOWN, S13_OUT_FADED, S13_OUT_SCENERY, S13_OUT_SCENERY_DRAWN, S13_RETRY_9, S13_OUT_DRAWN, S13_CLOSING,
-    S13_CLOSING_WAITED, S13_CLOSING_HIDDEN, S13_CLOSING_DRAWN, S13_CLOSING_SHOWN, S13_CLOSING_IN, S13_RETRY_30,
-    S13_FADED, S13_END,
-];
+pub const NATIVES: &[Native] = &[];

@@ -5,7 +5,6 @@
 
 use super::{mode, sub, Flow, Sequence};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
-use crate::resume;
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -69,16 +68,122 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::TIMER, 1);
     x.set_v16(var::FADE_DELAY, 3);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, FIXED_SCREEN_FADED)
+    x.tail(sub::FADE_OUT, Etape::FixedScreenAfterFade)
 }
 
 const FIXED_SCREEN_FADED: u32 = 0x1376e;
-resume!(FIXED_SCREEN_AFTER_FADE, FIXED_SCREEN_FADED, |x| {
-    x.set_v32(var::SCROLL_2, 0);
-    x.call(sub::CLEAR_SPRITES);
-    x.call(sub::CLEAR_SCROLL_1);
-    Flow::Done
-});
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        FixedScreenAfterFade = FIXED_SCREEN_FADED => |x| {
+            x.set_v32(var::SCROLL_2, 0);
+            x.call(sub::CLEAR_SPRITES);
+            x.call(sub::CLEAR_SCROLL_1);
+            Flow::Done
+        },
+        LegalScreenSetup = LEGAL_SETUP => |x| {
+            wr16(x.b, mode::TIMER, 300);
+            let step = rd8(x.b, mode::STEP).wrapping_add(2);
+            wr8(x.b, mode::STEP, step);
+            x.c.d[0] = TEXT_PALETTE;
+            x.call(sub::LOAD_PALETTE);
+            x.call(sub::CLEAR_SCROLL_3);
+            x.set_v32(var::CAMERA, 0);
+            x.set_v32(var::CAMERA_2, 0);
+            x.wait(1, Etape::LegalScreenTiles)
+        },
+        LegalScreenTiles = LEGAL_TILES => |x| {
+            x.c.d[0] = 0x1c0;
+            x.c.a[1] = TILE_PLANE_3;
+            x.call(sub::TILE_BLOCK);
+            x.c.d[0] = 0x1c1;
+            x.call(sub::TILE_BLOCK);
+            x.or16(var::LAYERS, LAYER_BITS);
+            x.wait(1, Etape::LegalScreenSound)
+        },
+        LegalScreenSound = LEGAL_SOUND => |x| {
+            x.call(SOUND_SCREEN_A);
+            x.call(SOUND_SCREEN_B);
+            x.set_v8(var::FADE_PAGES, 0xf);
+            x.jump_to(sub::FADE_IN)
+        },
+        LegalScreenFaded = LEGAL_FADED => |x| {
+            x.and16(var::LAYERS, !LAYER_BITS);
+            x.wait(1, Etape::LegalScreenCleared)
+        },
+        LegalScreenCleared = LEGAL_CLEARED => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            x.or16(var::LAYERS, LAYER_BITS);
+            x.wait(1, Etape::LegalScreenPalette)
+        },
+        LegalScreenPalette = LEGAL_PALETTE => |x| {
+            wr16(x.b, mode::TIMER, 300);
+            x.c.d[0] = 0;
+            x.call(sub::LOAD_PALETTE);
+            Flow::Done
+        },
+        SecondSetup = SECOND_SETUP => |x| {
+            wr16(x.b, mode::TIMER, 300);
+            let step = rd8(x.b, mode::STEP).wrapping_add(2);
+            wr8(x.b, mode::STEP, step);
+            x.c.d[0] = TEXT_PALETTE;
+            x.call(sub::LOAD_PALETTE);
+            x.call(sub::CLEAR_SCROLL_3);
+            x.set_v32(var::CAMERA, 0);
+            x.set_v32(var::CAMERA_2, 0);
+            x.call(INVITE_STOP);
+            x.wait(1, Etape::SecondTiles)
+        },
+        SecondTiles = SECOND_TILES => |x| {
+            x.c.d[0] = 0x1c2;
+            x.c.a[1] = TILE_PLANE_3;
+            x.call(sub::TILE_BLOCK);
+            x.c.d[0] = 0x1c3;
+            x.call(sub::TILE_BLOCK);
+            x.or16(var::LAYERS, LAYER_BITS);
+            x.wait(1, Etape::SecondFadeIn)
+        },
+        SecondFadeIn = SECOND_FADE_IN => |x| {
+            x.set_v8(var::FADE_PAGES, 0xf);
+            x.jump_to(sub::FADE_IN)
+        },
+        SecondFaded = SECOND_FADED => |x| {
+            x.and16(var::LAYERS, !LAYER_BITS);
+            x.wait(1, Etape::SecondCleared)
+        },
+        SecondCleared = SECOND_CLEARED => |x| {
+            x.call(sub::CLEAR_SCROLL_2);
+            x.or16(var::LAYERS, LAYER_BITS);
+            x.wait(1, Etape::SecondPalette)
+        },
+        SecondPalette = SECOND_PALETTE => |x| {
+            x.c.d[0] = 0;
+            x.jump_to(sub::LOAD_PALETTE)
+        },
+        NoticeTextShown = NOTICE_TEXT_SHOWN => |x| {
+            x.c.a[4] = NOTICE_TEXT;
+            x.call(0xd5e);
+            x.or16(var::LAYERS, LAYER_BITS);
+            x.wait(1, Etape::NoticeFadeIn)
+        },
+        NoticeFadeIn = NOTICE_FADE_IN => |x| {
+            x.set_v8(var::FADE_PAGES, 0xf);
+            // `jsr 0x144c` : la suite est le décompte, juste après
+            x.tail(sub::FADE_IN, Etape::NoticeCountdown)
+        },
+        NoticeCountdown = NOTICE_COUNTDOWN => notice_countdown,
+        NoticeFaded = NOTICE_FADED => |x| {
+            x.and16(var::LAYERS, !LAYER_BITS);
+            x.wait(1, Etape::NoticeCleared)
+        },
+        NoticeCleared = NOTICE_CLEARED => |x| {
+            x.call(sub::CLEAR_SCROLL_1);
+            x.or16(var::LAYERS, LAYER_BITS);
+            x.c.d[0] = 1;
+            x.jump_to(sub::WAIT)
+        },
+    }
+}
 
 /// Sous-mode 8 (`0x1377e`) : image à deux blocs de tuiles pendant 300 images, entre deux fondus.
 fn legal_screen(x: &mut Ctx) -> Flow {
@@ -86,40 +191,14 @@ fn legal_screen(x: &mut Ctx) -> Flow {
         return legal_screen_wait(x);
     }
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, LEGAL_SETUP)
+    x.wait(4, Etape::LegalScreenSetup)
 }
 
 const LEGAL_SETUP: u32 = 0x13794;
-resume!(LEGAL_SCREEN_SETUP, LEGAL_SETUP, |x| {
-    wr16(x.b, mode::TIMER, 300);
-    let step = rd8(x.b, mode::STEP).wrapping_add(2);
-    wr8(x.b, mode::STEP, step);
-    x.c.d[0] = TEXT_PALETTE;
-    x.call(sub::LOAD_PALETTE);
-    x.call(sub::CLEAR_SCROLL_3);
-    x.set_v32(var::CAMERA, 0);
-    x.set_v32(var::CAMERA_2, 0);
-    x.wait(1, LEGAL_TILES)
-});
 
 const LEGAL_TILES: u32 = 0x137bc;
-resume!(LEGAL_SCREEN_TILES, LEGAL_TILES, |x| {
-    x.c.d[0] = 0x1c0;
-    x.c.a[1] = TILE_PLANE_3;
-    x.call(sub::TILE_BLOCK);
-    x.c.d[0] = 0x1c1;
-    x.call(sub::TILE_BLOCK);
-    x.or16(var::LAYERS, LAYER_BITS);
-    x.wait(1, LEGAL_SOUND)
-});
 
 const LEGAL_SOUND: u32 = 0x137e8;
-resume!(LEGAL_SCREEN_SOUND, LEGAL_SOUND, |x| {
-    x.call(SOUND_SCREEN_A);
-    x.call(SOUND_SCREEN_B);
-    x.set_v8(var::FADE_PAGES, 0xf);
-    x.jump_to(sub::FADE_IN)
-});
 
 /// Étape d'attente du sous-mode 8 : à la fin de la minuterie, fondu au noir et écran suivant.
 fn legal_screen_wait(x: &mut Ctx) -> Flow {
@@ -132,29 +211,14 @@ fn legal_screen_wait(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, LEGAL_FADED)
+    x.tail(sub::FADE_OUT, Etape::LegalScreenFaded)
 }
 
 const LEGAL_FADED: u32 = 0x1381c;
-resume!(LEGAL_SCREEN_FADED, LEGAL_FADED, |x| {
-    x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(1, LEGAL_CLEARED)
-});
 
 const LEGAL_CLEARED: u32 = 0x1382a;
-resume!(LEGAL_SCREEN_CLEARED, LEGAL_CLEARED, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    x.or16(var::LAYERS, LAYER_BITS);
-    x.wait(1, LEGAL_PALETTE)
-});
 
 const LEGAL_PALETTE: u32 = 0x1383e;
-resume!(LEGAL_SCREEN_PALETTE, LEGAL_PALETTE, |x| {
-    wr16(x.b, mode::TIMER, 300);
-    x.c.d[0] = 0;
-    x.call(sub::LOAD_PALETTE);
-    Flow::Done
-});
 
 // ---------------------------------------------------------------------------------------------
 // Sous-mode 16 (`0x1384c`) : seconde image de droits, seulement si `A5+0x70` vaut 2
@@ -169,36 +233,11 @@ fn second_legal_screen(x: &mut Ctx) -> Flow {
         return second_legal_wait(x);
     }
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, SECOND_SETUP)
+    x.wait(4, Etape::SecondSetup)
 }
 const SECOND_SETUP: u32 = 0x13876;
-resume!(R_SECOND_SETUP, SECOND_SETUP, |x| {
-    wr16(x.b, mode::TIMER, 300);
-    let step = rd8(x.b, mode::STEP).wrapping_add(2);
-    wr8(x.b, mode::STEP, step);
-    x.c.d[0] = TEXT_PALETTE;
-    x.call(sub::LOAD_PALETTE);
-    x.call(sub::CLEAR_SCROLL_3);
-    x.set_v32(var::CAMERA, 0);
-    x.set_v32(var::CAMERA_2, 0);
-    x.call(INVITE_STOP);
-    x.wait(1, SECOND_TILES)
-});
 const SECOND_TILES: u32 = 0x1389e;
-resume!(R_SECOND_TILES, SECOND_TILES, |x| {
-    x.c.d[0] = 0x1c2;
-    x.c.a[1] = TILE_PLANE_3;
-    x.call(sub::TILE_BLOCK);
-    x.c.d[0] = 0x1c3;
-    x.call(sub::TILE_BLOCK);
-    x.or16(var::LAYERS, LAYER_BITS);
-    x.wait(1, SECOND_FADE_IN)
-});
 const SECOND_FADE_IN: u32 = 0x138d0;
-resume!(R_SECOND_FADE_IN, SECOND_FADE_IN, |x| {
-    x.set_v8(var::FADE_PAGES, 0xf);
-    x.jump_to(sub::FADE_IN)
-});
 fn second_legal_wait(x: &mut Ctx) -> Flow {
     let left = rd16(x.b, mode::TIMER).wrapping_sub(1);
     wr16(x.b, mode::TIMER, left);
@@ -209,24 +248,11 @@ fn second_legal_wait(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, SECOND_FADED)
+    x.tail(sub::FADE_OUT, Etape::SecondFaded)
 }
 const SECOND_FADED: u32 = 0x138f8;
-resume!(R_SECOND_FADED, SECOND_FADED, |x| {
-    x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(1, SECOND_CLEARED)
-});
 const SECOND_CLEARED: u32 = 0x13906;
-resume!(R_SECOND_CLEARED, SECOND_CLEARED, |x| {
-    x.call(sub::CLEAR_SCROLL_2);
-    x.or16(var::LAYERS, LAYER_BITS);
-    x.wait(1, SECOND_PALETTE)
-});
 const SECOND_PALETTE: u32 = 0x1391a;
-resume!(R_SECOND_PALETTE, SECOND_PALETTE, |x| {
-    x.c.d[0] = 0;
-    x.jump_to(sub::LOAD_PALETTE)
-});
 
 // ---------------------------------------------------------------------------------------------
 // Sous-mode 18 (`0x13922`) : mention « violence animée », 120 images
@@ -242,23 +268,11 @@ fn notice_screen(x: &mut Ctx) -> Flow {
     let step = rd8(x.b, mode::STEP).wrapping_add(2);
     wr8(x.b, mode::STEP, step);
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, NOTICE_TEXT_SHOWN)
+    x.wait(4, Etape::NoticeTextShown)
 }
 const NOTICE_TEXT_SHOWN: u32 = 0x13942;
-resume!(R_NOTICE_TEXT_SHOWN, NOTICE_TEXT_SHOWN, |x| {
-    x.c.a[4] = NOTICE_TEXT;
-    x.call(0xd5e);
-    x.or16(var::LAYERS, LAYER_BITS);
-    x.wait(1, NOTICE_FADE_IN)
-});
 const NOTICE_FADE_IN: u32 = 0x1395a;
-resume!(R_NOTICE_FADE_IN, NOTICE_FADE_IN, |x| {
-    x.set_v8(var::FADE_PAGES, 0xf);
-    // `jsr 0x144c` : la suite est le décompte, juste après
-    x.tail(sub::FADE_IN, NOTICE_COUNTDOWN)
-});
 const NOTICE_COUNTDOWN: u32 = 0x13966;
-resume!(R_NOTICE_COUNTDOWN, NOTICE_COUNTDOWN, notice_countdown);
 fn notice_countdown(x: &mut Ctx) -> Flow {
     let left = rd16(x.b, mode::TIMER).wrapping_sub(1);
     wr16(x.b, mode::TIMER, left);
@@ -269,39 +283,9 @@ fn notice_countdown(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, 2);
     wr8(x.b, mode::STEP, 0);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, NOTICE_FADED)
+    x.tail(sub::FADE_OUT, Etape::NoticeFaded)
 }
 const NOTICE_FADED: u32 = 0x1398a;
-resume!(R_NOTICE_FADED, NOTICE_FADED, |x| {
-    x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(1, NOTICE_CLEARED)
-});
 const NOTICE_CLEARED: u32 = 0x13998;
-resume!(R_NOTICE_CLEARED, NOTICE_CLEARED, |x| {
-    x.call(sub::CLEAR_SCROLL_1);
-    x.or16(var::LAYERS, LAYER_BITS);
-    x.c.d[0] = 1;
-    x.jump_to(sub::WAIT)
-});
 
-
-pub const NATIVES: &[Native] = &[
-    FIXED_SCREEN_AFTER_FADE,
-    LEGAL_SCREEN_SETUP,
-    LEGAL_SCREEN_TILES,
-    LEGAL_SCREEN_SOUND,
-    LEGAL_SCREEN_FADED,
-    LEGAL_SCREEN_CLEARED,
-    LEGAL_SCREEN_PALETTE,
-    R_SECOND_SETUP,
-    R_SECOND_TILES,
-    R_SECOND_FADE_IN,
-    R_SECOND_FADED,
-    R_SECOND_CLEARED,
-    R_SECOND_PALETTE,
-    R_NOTICE_TEXT_SHOWN,
-    R_NOTICE_FADE_IN,
-    R_NOTICE_COUNTDOWN,
-    R_NOTICE_FADED,
-    R_NOTICE_CLEARED,
-];
+pub const NATIVES: &[Native] = &[];

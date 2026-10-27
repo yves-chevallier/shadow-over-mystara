@@ -12,7 +12,7 @@ use super::Ctx;
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::ops::abcd;
-use crate::{resume, Native};
+use crate::Native;
 
 /// Variables du décompte (RAM de travail, sous A5).
 mod v {
@@ -211,28 +211,32 @@ fn start(x: &mut Ctx) -> Flow {
     x.c.d[0] = x.c.d[0] & !0xffff | 16;
     x.call(sub::TASK_CREATE);
     x.c.a[0] = a0;
-    x.push_return(AFTER_FADE);
-    x.wait(1, FADE_WAIT)
+    x.push_return(Etape::AfterFade);
+    x.wait(1, Etape::FadeWait)
 }
 
-resume!(TALLY_FADE_WAIT, FADE_WAIT, |x| {
-    if x.v8(a5::FADE_PAGES) != 0 {
-        return x.wait(1, FADE_WAIT);
+crate::etapes! {
+    /// Étapes (points de reprise) de la machine à états.
+    pub enum Etape {
+        FadeWait = FADE_WAIT => |x| {
+            if x.v8(a5::FADE_PAGES) != 0 {
+                return x.wait(1, Etape::FadeWait);
+            }
+            Flow::Done
+        },
+        /// Fin du sous-état 0 : le bandeau est dessiné hors champ, puis son premier pas.
+        AfterFade = AFTER_FADE => |x| {
+            banner(x);
+            wr8(x.b, v::BANNER_AT, 48);
+            wr8(x.b, v::BANNER_WIDTH, 0xff);
+            x.set_v8(a5::FLAG_5F, 0);
+            let n = rd8(x.b, v::SCREENS).wrapping_add(1);
+            wr8(x.b, v::SCREENS, n);
+            banner_step(x);
+            Flow::Done
+        },
     }
-    Flow::Done
-});
-
-// Fin du sous-état 0 : le bandeau est dessiné hors champ, puis son premier pas.
-resume!(TALLY_AFTER_FADE, AFTER_FADE, |x| {
-    banner(x);
-    wr8(x.b, v::BANNER_AT, 48);
-    wr8(x.b, v::BANNER_WIDTH, 0xff);
-    x.set_v8(a5::FLAG_5F, 0);
-    let n = rd8(x.b, v::SCREENS).wrapping_add(1);
-    wr8(x.b, v::SCREENS, n);
-    banner_step(x);
-    Flow::Done
-});
+}
 
 /// Le bandeau, deux rangées à partir de la ligne 8 de la colonne 0 (0x0f6e88) : texte « STAGE CLEAR » et nom
 /// de la scène, dans l'ordre de la variante, une colonne vide entre les deux ; un mot 0xffff marque la fin.
@@ -608,4 +612,4 @@ pub const TALLY: Native = Native {
     outputs: 0,
 };
 
-pub const NATIVES: &[Native] = &[TALLY, TALLY_FADE_WAIT, TALLY_AFTER_FADE];
+pub const NATIVES: &[Native] = &[TALLY];
