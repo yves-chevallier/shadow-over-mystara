@@ -15,6 +15,7 @@ use m68k::{Cpu, SR_Z};
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
+use crate::objects::pools;
 use crate::{call, Native};
 
 /// Compteurs d'appel des routines réécrites (couverture de la validation).
@@ -73,11 +74,6 @@ mod ram {
     /// Entrées courantes (un octet par joueur) et celles de l'image précédente (`FF8000`, `FF8006`).
     pub const INPUTS: u32 = A5;
     pub const INPUTS_PREV: u32 = A5 + 6;
-    /// Nombre d'objets visibles par catégorie (mots) : tirs joueur, tirs ennemis, ennemis/boss,
-    /// caisses, objets ramassables.
-    pub const COUNTS: u32 = A5 + 0x7e72;
-    /// Tableaux de pointeurs (mots) correspondants.
-    pub const LISTS: [u32; 5] = [A5 + 0x7e86, A5 + 0x7eaa, A5 + 0x7ef6, A5 + 0x7f28, A5 + 0x7f52];
 }
 
 /// Compteurs de boucle que l'original tient en RAM (FF1A62..) : leur valeur finale est visible.
@@ -406,8 +402,22 @@ enum List {
 }
 
 impl List {
+    /// La file de collision de la catégorie (`objects::pools`), remplie par `cull::update_visibility`.
+    fn queue(self) -> &'static pools::Queue {
+        match self {
+            List::PlayerShots => &pools::QUEUE_PSHL,
+            List::EnemyShots => &pools::QUEUE_ESHL,
+            List::Enemies => &pools::QUEUE_ENEMY_BOSS,
+            List::Boxes => &pools::QUEUE_BOX,
+            List::Items => &pools::QUEUE_ITEM,
+        }
+    }
     fn len(self, w: &mut World) -> u16 {
-        rd16(w.b, ram::COUNTS + 2 * self as u32)
+        rd16(w.b, A5 + self.queue().count)
+    }
+    /// Premier pointeur (mot) du tableau des objets de la file.
+    fn first(self) -> u32 {
+        A5 + self.queue().array
     }
 }
 
@@ -423,7 +433,7 @@ enum Flow {
 fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World, Obj) -> Flow) {
     let n = list.len(w);
     wr16(w.b, counter, n);
-    let mut p = ram::LISTS[list as usize];
+    let mut p = list.first();
     loop {
         let o = Obj::from_word(rd16(w.b, p));
         p += 2;
