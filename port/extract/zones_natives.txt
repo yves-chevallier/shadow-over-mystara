@@ -214,7 +214,7 @@ d 019a1a 019a92 video.rs
 d 019fe6 019fe8 scene/mod.rs
 d 01ad4a 01ad6a families/petites.rs
 d 01cfe2 01cfe4 scene/mod.rs
-d 01d6cc 01d6d2 modes/select.rs
+d 01d6cc 01d6d4 modes/select.rs
 d 01d8be 01ddd0 sprites.rs
 d 01dfe2 01dfe4 scene/mod.rs
 d 01efe0 01efe2 scene/mod.rs
@@ -691,7 +691,7 @@ d 0bf174 0bf60e families/cx.rs
 d 0bf6c4 0bf830 families/cx.rs
 d 0bfcc0 0bfdda families/cx.rs
 d 0bffc0 0bffc2 scene/mod.rs
-d 0c05e4 0c0686 families/cx.rs
+d 0c05e4 0c0688 families/cx.rs
 d 0c06f4 0c0796 families/cx.rs
 d 0c0804 0c0b56 families/cx.rs
 d 0c0bd0 0c0d02 families/cx.rs
@@ -2395,7 +2395,7 @@ p 0b530e 0b533c families/cx.rs
 p 0b534e 0b5352 families/mod.rs
 p 0b54dc 0b54e8 families/effects_g.rs
 p 0b550e 0b5512 families/cx.rs
-p 0b57e4 0b57ec families/cx.rs
+p 0b57e4 0b57f4 families/cx.rs
 p 0b582c 0b5844 families/cx.rs
 p 0b587c 0b5884 families/cx.rs
 p 0b58ac 0b58b4 families/cx.rs
@@ -2448,7 +2448,7 @@ p 0cb574 0cb600 families/cx.rs
 p 0cb614 0cb620 families/cx.rs
 p 0cb634 0cb690 families/cx.rs
 p 0cb6a4 0cb6b0 families/cx.rs
-p 0cb998 0cb9a4 families/cx.rs
+p 0cb998 0cb9a8 families/cx.rs
 p 0cc2bc 0cc2c0 families/cx.rs
 p 0ce138 0ce140 families/cx.rs
 p 0ce4ea 0ce516 families/cx.rs
@@ -2704,7 +2704,7 @@ p 0eb360 0eb364 sound.rs
 p 0eb3d2 0eb3d6 sound.rs
 p 0eb444 0eb448 sound.rs
 p 0eb4b6 0eb4ba sound.rs
-p 0eb528 0eb52a sound.rs
+p 0eb528 0eb52c sound.rs
 p 0eb59a 0eb59c sound.rs
 p 0eb60c 0eb610 sound.rs
 p 0eb67e 0eb682 sound.rs

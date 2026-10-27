@@ -1,3 +1,4 @@
+# partie jouée par l'utilisateur (DDSOM_ENREGISTRE) : elfe, scène 2, entrée dans la cave de Tritan (porte SET 7)
 946 1 Player Start 1
 956 1 Player Start 0
 980 P1 Button 1 1
