@@ -18,6 +18,7 @@ use super::foes::{self, Boost, Damage, Live, Strike};
 use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::{animation, Ctx, Player};
+use crate::player::externes as ext;
 
 /// Routines d'origine appelées par ces automates : sons, cibles, éclairs d'écran et palettes (les créateurs de tirs et
 /// d'effets sont dans `spawn`).
@@ -25,8 +26,6 @@ pub mod rom {
     /// Son d'un objet utilisé.
     pub const SOUND_ITEM: u32 = 0xe2430;
     /// Éclairs de l'écran (palettes) : foudre, fin, feu.
-    pub const FLASH_LIGHTNING: u32 = 0x1ab56;
-    pub const FLASH_END: u32 = 0x1abe0;
     pub const FLASH_FIRE: u32 = 0x1ab3c;
     /// Fin des auras après la magie rouge.
     pub const SPELL_RESET_AURA: u32 = 0x37882;
@@ -148,7 +147,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0xc0);
                 spawn::lightning(g, p, target);
-                g.rom(rom::FLASH_LIGHTNING, p);
+                g.rom(ext::palette::FLASH_GRAY, p);
                 animation::start(g, p, 0);
             }
         }
@@ -159,7 +158,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             let left = p.u16(g, field::TIMER).wrapping_sub(1);
             p.set_u16(g, field::TIMER, left);
             if left == 0 {
-                g.rom(rom::FLASH_END, p);
+                g.rom(ext::palette::FLASH_RESTORE, p);
                 common::consume_charge(g, p);
                 common::end_spell_mode(g, p, style.undim_mode);
             }
@@ -443,13 +442,13 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
                 next_step(g, p);
                 animation::start_plain(g, p, anim);
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                    g.rom(rom::FLASH_END, p);
+                    g.rom(ext::palette::FLASH_RESTORE, p);
                 }
             }
             None => {
                 common::consume_charge(g, p);
                 if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                    g.rom(rom::FLASH_END, p);
+                    g.rom(ext::palette::FLASH_RESTORE, p);
                 }
                 common::end_spell_mode(g, p, style.undim_mode);
             }

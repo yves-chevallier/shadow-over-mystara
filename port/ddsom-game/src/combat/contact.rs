@@ -146,7 +146,7 @@ pub(super) fn enemy_shots_hit_players(w: &mut World) {
         let body = object_box(w, rom::BODY, p, f::BODY_BOX);
         let n = List::EnemyShots.len(w);
         wr16(w.b, scratch::ENEMY_ATTACKS, n);
-        let mut ptr = ram::LISTS[List::EnemyShots as usize];
+        let mut ptr = List::EnemyShots.first();
         while w.is_active(p) {
             let s = Obj::from_word(rd16(w.b, ptr));
             ptr += 2;
@@ -368,7 +368,7 @@ pub(super) fn boxes_hit_enemies(w: &mut World) {
         return;
     }
     let n = List::Enemies.len(w);
-    let mut ptr = ram::LISTS[List::Enemies as usize];
+    let mut ptr = List::Enemies.first();
     for _ in 0..n {
         let e = Obj::from_word(rd16(w.b, ptr));
         ptr += 2;

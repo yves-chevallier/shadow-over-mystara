@@ -11,9 +11,7 @@ use super::super::{Ctx, Player};
 use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::ram;
-
-/// Barre de vie d'un monstre frappé (D0 = joueur et type, D1 = PV max, D2 = PV, D3 = classe).
-const HEALTH_BAR: u32 = 0x19dce;
+use crate::player::externes as ext;
 
 /// Dégâts de base.
 pub enum Damage {
@@ -146,7 +144,7 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
-            call(g, p, HEALTH_BAR, &[(0, bar), (1, max), (2, hp), (3, class)]);
+            call(g, p, ext::effet::HEALTH_BAR, &[(0, bar), (1, max), (2, hp), (3, class)]);
             if let Some(sound) = s.sound {
                 g.rom(sound, p);
             }

@@ -22,15 +22,13 @@ use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::machine::Machine;
+use crate::player::externes as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
     pub const REVIVE_SETUP: u32 = 0x4c930;
-    pub const REVIVE_SOUND: u32 = 0xe24d8;
-    pub const FADE: u32 = 0x1686;
-    pub const INTRO_SOUND: u32 = 0xab708;
     pub const INTRO_ACTION: u32 = 0xe1330;
 }
 
@@ -286,7 +284,7 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
         let k = p.u8(g, 0x7d) as u32;
         let delay = g.prog16(tables::SCENE1_WAIT + 2 * k);
         p.set_u16(g, 0x1e0, delay);
-        g.rom(rom::INTRO_SOUND, p);
+        g.rom(ext::effet::HALO, p);
     }
     animation::step(g, p);
 }
@@ -446,7 +444,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
     animation::start(g, p, 0xd);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
-    g.rom(rom::FADE, p);
+    g.rom(ext::palette::FULL_BRIGHTNESS, p);
     crate::objects::rank::raise(g.b);
     crate::terrain::push_68k(g.c, g.b, p.obj());
 }
@@ -473,7 +471,7 @@ fn revive_land(g: &mut Ctx, p: Player) {
     }
     next_action(g, p);
     animation::start(g, p, 0x23);
-    g.rom(rom::REVIVE_SOUND, p);
+    g.rom(ext::son::FANFARE, p);
 }
 
 /// 0x23c58 : fin de l'animation : le joueur reprend la main, invulnérable 150 images.
@@ -516,7 +514,7 @@ fn wait_start(g: &mut Ctx, p: Player) {
     let k = p.u8(g, 0x7d) as u32;
     let delay = g.prog16(tables::WAIT_DELAYS + 2 * k);
     p.set_u16(g, 0x1e0, delay);
-    g.rom(rom::INTRO_SOUND, p);
+    g.rom(ext::effet::HALO, p);
     animation::step(g, p);
     g.rom(rom::INTRO_ACTION, p);
 }

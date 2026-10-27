@@ -1332,8 +1332,8 @@ fn clear_rowscroll_flag(x: &mut Cx) {
 // Initialisation et mise à jour des caméras
 // ---------------------------------------------------------------------------------------------
 
-/// Tables par scène en ROM (espace de données).
-mod tables {
+/// Tables par scène en ROM (espace de données), lues aussi par `scroll::return_cameras`.
+pub(crate) mod tables {
     /// Caméra 1 : butée droite (mots), valeur du port de sortie 0x400004 (mots), registre des couches
     /// (mots), octet « ne recule pas » (octets), butée gauche (mots), pointeur de pas de bande (longs),
     /// octet « figée » (octets).
@@ -1350,9 +1350,9 @@ mod tables {
 }
 
 /// Port de sortie dont la valeur dépend de la scène.
-const OUTPUT_PORT: u32 = 0x400004;
+pub(crate) const OUTPUT_PORT: u32 = 0x400004;
 /// Routines d'origine : active les couches (D0), charge un bloc de tuiles dans la couche 3 (D0, A1).
-const ENABLE_LAYERS: u32 = 0xbc6;
+pub(crate) const ENABLE_LAYERS: u32 = 0xbc6;
 const TILES_SCROLL3: u32 = 0x2766;
 
 /// Blocs de tuiles (indice, adresse dans la couche 2) chargés à l'entrée de certaines scènes, caméra 1.

@@ -22,30 +22,18 @@ use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
 use crate::player::ram;
 use crate::machine::Machine;
+use crate::player::externes as ext;
 
 /// Routines d'origine appelées telles quelles : effets joueur, sons, palettes et effets d'écran.
 mod rom {
-    /// Sons des coups.
-    pub const SOUND_STRIKE: u32 = 0xe1e80;
-    pub const SOUND_STRIKE_B: u32 = 0xe1de0;
-    pub const SOUND_CHARGE_A: u32 = 0xe792e;
-    pub const SOUND_CHARGE_B: u32 = 0xe1fc0;
-    pub const SOUND_LEAP: u32 = 0xe1f20;
     /// Rebond sur un monstre pendant le saut (D0, D1 = numéro du joueur << 8).
     pub const BOUNCE_EFFECT: u32 = 0x19ae6;
     /// Tourbillon : effet joueur et sons.
     pub const WHIRL_EFFECT: u32 = 0x4b8d0;
     pub const WHIRL_SOUND_A: u32 = 0xe82fe;
-    pub const WHIRL_SOUND_B: u32 = 0xe2060;
     /// Effets d'écran des magies.
-    pub const SCREEN_FLASH_END: u32 = 0x1abe0;
-    pub const SCREEN_RIPPLE: u32 = 0x1aaa0;
     pub const SCREEN_FADE_A: u32 = 0x1aaee;
     pub const SCREEN_FADE_B: u32 = 0x1aad4;
-    pub const EFFECT_SPARKS: u32 = 0x4dc9a;
-    pub const EFFECT_BOLT: u32 = 0x4b7a0;
-    pub const EFFECT_QUAKE: u32 = 0x4b340;
-    pub const EFFECT_QUAKE_B: u32 = 0x4f132;
     pub const EFFECT_MOON: u32 = 0x4e4de;
     pub const EFFECT_MOON_B: u32 = 0x4e782;
     /// Sons des magies, dans l'ordre d'appel de chaque sort.
@@ -62,7 +50,6 @@ mod rom {
     pub const BOLT_END_SOUNDS: [u32; 2] = [0xe893a, 0xe2d7a];
     pub const FROST_SOUNDS: [u32; 2] = [0xe28e4, 0xe860c];
     pub const FROST_START_SOUND: u32 = 0xe2dba;
-    pub const QUAKE_SOUND: u32 = 0xe8db4;
     pub const QUAKE_START_SOUND: u32 = 0xe2dfa;
     pub const QUAKE_SECOND_SOUND: u32 = 0xe8b22;
     pub const MOON_START_SOUNDS: [u32; 2] = [0xe910c, 0xe296c];
@@ -277,7 +264,7 @@ fn combo(g: &mut Ctx, p: Player) {
         }
         2 => {
             if common::combo_follow(g, p, 0x1a) {
-                g.rom(rom::SOUND_STRIKE, p);
+                g.rom(ext::son::STRIKE_LIGHT, p);
             }
         }
         4 => hop_wait(g, p),
@@ -342,7 +329,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 0);
             animation::start_plain(g, p, 0xf);
             clear_recognizers(g, p);
-            g.rom(rom::SOUND_STRIKE_B, p);
+            g.rom(ext::son::STRIKE_HEAVY, p);
         }
         2 => common::wait_then_stand(g, p),
         _ => {}
@@ -373,7 +360,7 @@ fn charge(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 spawn::slash(g, p, Some(0));
                 spawn::slash(g, p, None);
-                g.rom(rom::SOUND_CHARGE_B, p);
+                g.rom(ext::son::CHARGE_B, p);
             }
         }),
         _ => {}
@@ -391,7 +378,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             animation::start_plain(g, p, 0x10);
             clear_recognizers(g, p);
             common::weapon_voice(g, p);
-            g.rom(rom::SOUND_CHARGE_A, p);
+            g.rom(ext::son::CHARGE_A, p);
         }
         2 => {
             common::run_strike_slide(g, p, 0x11);
@@ -435,7 +422,7 @@ fn retreat_shot(g: &mut Ctx, p: Player) {
                     common::negate_horizontal_speed(g, p);
                 }
                 animation::start_plain(g, p, 0x18);
-                g.rom(rom::SOUND_LEAP, p);
+                g.rom(ext::son::LEAP, p);
             } else {
                 move_x(g, p);
             }
@@ -475,7 +462,7 @@ fn whirl(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 g.rom(rom::WHIRL_EFFECT, p);
                 g.rom(rom::WHIRL_SOUND_A, p);
-                g.rom(rom::WHIRL_SOUND_B, p);
+                g.rom(ext::son::SPIN, p);
             }
             let left = p.u8(g, 0x1e8).wrapping_sub(1);
             p.set_u8(g, 0x1e8, left);
@@ -502,7 +489,7 @@ fn hop_strike(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u8(g, field::MOVE_STATE, 0);
             animation::start_plain(g, p, 0x1a);
-            g.rom(rom::SOUND_STRIKE, p);
+            g.rom(ext::son::STRIKE_LIGHT, p);
         }
         2 => hop_wait(g, p),
         4 => hop_flight(g, p),
@@ -846,7 +833,7 @@ fn sparks(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.rom(rom::EFFECT_SPARKS, p);
+                g.rom(ext::effet::SPARKS, p);
                 g.rom(rom::SPARK_SOUND, p);
             }
             if countdown(g, p) {
@@ -889,7 +876,7 @@ fn bolt(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_BOLT, &[(0, 0)]);
+                call(g, p, ext::effet::BOLT, &[(0, 0)]);
                 crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::LIGHT);
                 g.rom(rom::BOLT_SOUND, p);
             }
@@ -909,7 +896,7 @@ fn bolt(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, 6);
                     return wind_down(g, p, 2);
                 }
-                call(g, p, rom::EFFECT_BOLT, &[(0, 1)]);
+                call(g, p, ext::effet::BOLT, &[(0, 1)]);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -1009,15 +996,15 @@ fn quake(g: &mut Ctx, p: Player) {
         0 => {
             common::begin_cast(g, p, Some(0x3c), Some(0x154));
             common::dim_screen(g, p);
-            g.rom(rom::SCREEN_RIPPLE, p);
+            g.rom(ext::palette::FLASH_A, p);
             animation::start_plain(g, p, 0x2b);
         }
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_QUAKE, &[(0, 0)]);
+                call(g, p, ext::effet::QUAKE, &[(0, 0)]);
                 crate::placement::load_effect_palette_68k(g.c, g.b, crate::placement::effect_palette::NORMAL);
-                g.rom(rom::QUAKE_SOUND, p);
+                g.rom(ext::son::PRAYER_QUAKE, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -1030,8 +1017,8 @@ fn quake(g: &mut Ctx, p: Player) {
                     p.set_u16(g, field::TIMER, 0x10);
                     return quake_rumble(g, p);
                 }
-                call(g, p, rom::EFFECT_QUAKE, &[(0, 1)]);
-                g.rom(rom::EFFECT_QUAKE_B, p);
+                call(g, p, ext::effet::QUAKE, &[(0, 1)]);
+                g.rom(ext::effet::QUAKE_B, p);
                 g.rom(rom::QUAKE_SECOND_SOUND, p);
             }
         }
@@ -1045,7 +1032,7 @@ fn quake_rumble(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
     if countdown(g, p) {
-        g.rom(rom::SCREEN_FLASH_END, p);
+        g.rom(ext::palette::FLASH_RESTORE, p);
         common::end_spell(g, p);
         return;
     }
@@ -1141,7 +1128,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
         0xc => {
             animation::step(g, p);
             if countdown(g, p) {
-                g.rom(rom::SCREEN_FLASH_END, p);
+                g.rom(ext::palette::FLASH_RESTORE, p);
                 common::end_spell(g, p);
             } else if !is_cancelled(g, p) && p.u16(g, field::TIMER) == 0x60 {
                 foes::strike_foes(g, p, &MOON_STRIKE);
@@ -1156,7 +1143,7 @@ fn moon_finish(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
     if countdown(g, p) {
-        g.rom(rom::SCREEN_FLASH_END, p);
+        g.rom(ext::palette::FLASH_RESTORE, p);
         common::end_spell(g, p);
     }
 }

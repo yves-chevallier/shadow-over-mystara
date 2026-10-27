@@ -16,6 +16,7 @@ use m68k::Cpu;
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, rts, wr8};
 use crate::Native;
+use crate::player::externes as ext;
 
 mod tables {
     /// Par classe de l'attaquant (pointeurs) puis type de victime (pointeurs) : lignes de réaction.
@@ -61,10 +62,6 @@ const WIZARD_BLOW: u32 = 0x80;
 /// Coup de poussée : la victime se retourne vers l'agresseur.
 const PUSH_BLOW: u32 = 0x58;
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    pub const WAND_EFFECT: u32 = 0xcc352;
-}
 
 /// 0xf232e : `a` est le joueur qui frappe, `v` la victime (adresse de l'objet).
 pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
@@ -119,7 +116,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
                         wr8(g.b, att + f::WAND_CHARGE, charge - 1);
                         if charge - 1 == 5 {
                             g.c.d[0] = 0xf;
-                            g.rom(rom::WAND_EFFECT, a);
+                            g.rom(ext::effet::WAND, a);
                         }
                     }
                 }

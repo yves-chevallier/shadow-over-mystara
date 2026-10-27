@@ -14,24 +14,17 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
 use crate::machine::Machine;
+use crate::player::externes as ext;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
-    /// Effet de choc (poussière) : D0 variante, D1 réglages, D2 et D3 vitesses.
-    pub const DUST: u32 = 0xb10c8;
-    /// Son du dérapage de la course.
-    pub const SKID_SOUND: u32 = 0xe78e8;
-    /// Sons de l'attaque sautée (départ, atterrissage).
-    pub const LEAP_SOUND: u32 = 0xe7622;
-    pub const LEAP_LANDING: u32 = 0xe774c;
     /// Son de la poussée.
     pub const PUSH_SOUND: u32 = 0xeae14;
     /// Pose rare 0x26 : son, éclat, création d'un objet SET (D0.b = genre ; A1 et retenue en retour).
-    pub const CURSE_SOUND: u32 = 0xe24d8;
     pub const CURSE_SHARD: u32 = 0xb97ba;
     pub const CREATE_SET: u32 = 0xc8312;
     /// Numéro de terrain au point (D0, D1) -> D2.
-    pub const TERRAIN_AT: u32 = 0x24b0;
+    pub use crate::terrain::TERRAIN_ATTRIBUTE as TERRAIN_AT;
 }
 
 /// Champs propres à ces actions.
@@ -79,7 +72,7 @@ fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
     set(&mut g.c.d[1], d1);
     set(&mut g.c.d[2], d2);
     set(&mut g.c.d[3], d3);
-    g.rom(rom::DUST, p);
+    g.rom(ext::effet::DUST, p);
 }
 
 fn dust_turn(g: &mut Ctx, p: Player) -> bool {
@@ -146,7 +139,7 @@ fn run_steer(g: &mut Ctx, p: Player) -> bool {
     } else {
         start_skid(g, p, 6, 56, 27);
     }
-    g.rom(rom::SKID_SOUND, p);
+    g.rom(ext::son::SLIDE, p);
     true
 }
 
@@ -583,8 +576,8 @@ mod exit_field {
 }
 
 /// Palettes du fondu : par étape (0x180 octets), par personnage (32 octets) ; destination par personnage.
-const EXIT_PALETTES: u32 = 0x3663e;
-const EXIT_PALETTE_SLOTS: u32 = 0x36626;
+pub(super) const EXIT_PALETTES: u32 = 0x3663e;
+pub(super) const EXIT_PALETTE_SLOTS: u32 = 0x36626;
 
 /// Action 0x20 (0x3632c) : le joueur quitte la scène (h). Le pas de départ choisit la sortie : marche vers
 /// le bas, le haut, la gauche, la droite ou sur place (0 à 8), enfoncement (0xa) ou saut vers l'objet
@@ -787,7 +780,7 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u8(g, RARE_TIMER, 0xc0);
         animation::start(g, p, 0x23);
-        g.rom(rom::CURSE_SOUND, p);
+        g.rom(ext::son::FANFARE, p);
         return;
     }
     animation::step(g, p);
@@ -837,7 +830,7 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
             }
             g.c.d[4] = height as u32;
             crate::mem::set_low_word(&mut g.c.d[3], 0xffff);
-            g.rom(rom::DUST, p);
+            g.rom(ext::effet::DUST, p);
             if g.c.sr & m68k::SR_C == 0 {
                 wr16(g.b, g.c.a[1] + Obj::Z, height);
             }
@@ -967,7 +960,7 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u32(g, Obj::Z, 0);
             animation::start(g, p, 14);
-            g.rom(rom::LEAP_LANDING, p);
+            g.rom(ext::son::LANDING, p);
         }
         6 => {
             if animation::step(g, p) {
@@ -1072,7 +1065,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.rom(rom::LEAP_SOUND, p);
+            g.rom(ext::son::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);
@@ -1082,7 +1075,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u32(g, Obj::Z, 0);
                 animation::start(g, p, 14);
-                g.rom(rom::LEAP_LANDING, p);
+                g.rom(ext::son::LANDING, p);
             }
         }
         4 => {

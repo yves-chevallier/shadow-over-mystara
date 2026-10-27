@@ -18,6 +18,7 @@ use crate::mem::{wr16, wr8};
 use crate::objects::anim::{load_entry, script_of};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
+use crate::player::externes as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
@@ -29,8 +30,6 @@ mod rom {
     pub const DEATH_EFFECT: u32 = 0xe21a0;
     /// Poussière et son à l'atterrissage.
     pub const LANDING_EFFECT: u32 = 0xe7a12;
-    /// Poussière qui accompagne un glissement.
-    pub const SLIDE_DUST: u32 = 0xb10c8;
     /// Sons de relevé.
     pub const GET_UP_SOUND_A: u32 = 0xe22e8;
     pub const GET_UP_SOUND_B: u32 = 0xe2240;
@@ -749,7 +748,7 @@ fn slide(g: &mut Ctx, p: Player) {
         g.c.d[1] = 0;
         g.c.d[2] = 0;
         g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
-        g.rom(rom::SLIDE_DUST, p);
+        g.rom(ext::effet::DUST, p);
     }
     stop_at_wall(g, p);
     if p.u8(g, Obj::VX) == 0 {
@@ -821,7 +820,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
                 g.c.d[1] = 0;
                 g.c.d[2] = 0;
                 g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
-                g.rom(rom::SLIDE_DUST, p);
+                g.rom(ext::effet::DUST, p);
             }
             stop_xy_at_wall(g, p);
             if p.u8(g, Obj::VX) == 0 {
@@ -1052,7 +1051,7 @@ fn hurled_slide(g: &mut Ctx, p: Player, stop: u8) {
         g.c.d[1] = 0;
         g.c.d[2] = 0;
         g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
-        g.rom(rom::SLIDE_DUST, p);
+        g.rom(ext::effet::DUST, p);
     }
     stop_at_wall(g, p);
     if p.u8(g, Obj::VX) == 0 {
@@ -1141,15 +1140,12 @@ fn shock_release(g: &mut Ctx, p: Player) {
 
 // ---- réaction 0x24 (0x3ae8a) : étourdi -----------------------------------------------------------
 
-/// Étoiles de l'étourdissement (D0, D1 = réglages).
-const STARS: u32 = 0xb378a;
-
 /// 0x3aeaa : étoiles, 40 images d'étourdissement.
 fn dizzy_start(g: &mut Ctx, p: Player) {
     cov!();
     g.c.d[0] = 0;
     g.c.d[1] = 0;
-    g.rom(STARS, p);
+    g.rom(ext::effet::STARS, p);
     next_step(g, p);
     p.set_u8(g, Player::TIMER_6F, 40);
     p.set_u8(g, Player::HITSTOP, 1);
@@ -1166,7 +1162,7 @@ fn dizzy(g: &mut Ctx, p: Player) {
         if g.random() & 127 == 0 {
             g.c.d[0] = 0;
             g.c.d[1] = 1;
-            g.rom(STARS, p);
+            g.rom(ext::effet::STARS, p);
         }
         let mut dx: u16 = 1;
         if left & 1 != 0 {
@@ -1266,7 +1262,7 @@ fn fallen_stars(g: &mut Ctx, p: Player) {
     g.c.d[0] = g.c.d[0] & !0xff | (left & 0xf) as u32;
     if left & 0xf == 0 {
         g.c.d[0] = 3;
-        g.rom(STARS, p);
+        g.rom(ext::effet::STARS, p);
     }
     let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
     p.set_u8(g, Player::TIMER_6F, left);

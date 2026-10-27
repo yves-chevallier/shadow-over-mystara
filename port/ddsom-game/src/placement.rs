@@ -8,7 +8,7 @@ use crate::objects::Obj;
 use crate::{call, regs, Native};
 
 /// Numéro de terrain au point (D0, D1) -> D2 (`video::terrain`).
-const TERRAIN_AT: u32 = 0x24b0;
+use crate::terrain::TERRAIN_ATTRIBUTE as TERRAIN_AT;
 /// Terrains libres : numéros inférieurs à 4.
 const FREE_TERRAIN: u16 = 4;
 /// Position de la caméra des joueurs (x, profondeur) ; `A5+0x36` choisit la seconde caméra.

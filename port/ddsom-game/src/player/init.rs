@@ -15,6 +15,7 @@ use m68k::Cpu;
 use super::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::mem::{rts, wr32, A5};
 use crate::{regs, Native};
+use crate::player::externes as ext;
 
 /// Tables de la ROM programme : un pointeur par personnage (12), chacun vers une table propre.
 mod tables {
@@ -390,9 +391,6 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
 /// 63) ; mot de RAM qui les garde.
 const SHOCK_DAMAGE: u32 = 0x10108;
 const SHOCK_DAMAGE_RAM: u32 = A5 - 0x7194;
-/// Jauge de vie d'un ennemi touché (D0 = joueur << 8 | type, D1 = PV max, D2 = PV, D3 = classe).
-const SHOW_GAUGE: u32 = 0x19dce;
-
 /// 0x10022 : choc de l'arrivée du joueur `p` : chaque boss puis chaque ennemi vivant, visible, non protégé
 /// (`+0x40`, bit 31 de `+0x94`) est projeté (état `0x04000000`, réaction 12, sens opposé au sien) et perd
 /// des PV (les boss à 32 PV ou moins sont épargnés, et gardent au moins 1 PV).
@@ -435,7 +433,7 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
             g.c.d[3] = g.c.d[3] & 0xffff_ff00 | crate::mem::rd8(g.b, e + 0x28) as u32;
             g.c.a[1] = e;
             g.c.a[0] = p.0;
-            crate::call(g.c, g.b, SHOW_GAUGE);
+            crate::call(g.c, g.b, ext::effet::HEALTH_BAR);
         }
         if ram::SCROLL1_Y.get(g.b) != 0 {
             ram::SCROLL1_Y.set(g.b, 0);

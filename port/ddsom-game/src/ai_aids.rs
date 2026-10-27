@@ -563,7 +563,7 @@ fn release_player(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Tables de points candidats par numéro (`+0x79`) : pointeur, puis nombre de points - 1 et paires
 /// (décalage x, décalage profondeur) autour de la cible.
-const WALK_POINTS: u32 = 0xe93e;
+pub(crate) const WALK_POINTS: u32 = 0xe93e;
 const MIRRORED_WALK_POINTS: u32 = 0xf06a;
 /// Point choisi (`+0x7a`, `+0x7c`), numéro du dernier point retenu (`+0x99`).
 const GOAL_X: u32 = 0x7a;

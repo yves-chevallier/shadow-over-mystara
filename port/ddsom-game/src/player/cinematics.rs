@@ -15,17 +15,10 @@ use crate::mem::{rd16, rd32, wr32, A5};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::machine::Machine;
+use crate::player::externes as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
-/// Routines d'origine encore appelées telles quelles.
-mod rom {
-    /// Son de la pose de victoire.
-    pub const VICTORY_SOUND: u32 = 0xe24d8;
-    pub const INTRO_SOUND: u32 = 0xab708;
-    /// Étincelles de la sortie (D0 = variante).
-    pub const SPARKLES: u32 = 0xb378a;
-}
 
 /// Étape du script de la scène (octet), attendue par les joueurs.
 const SCENE_STEP: u32 = A5 - 0x55c8;
@@ -151,7 +144,7 @@ fn rank(g: &mut Ctx, p: Player) -> u32 {
 fn victory_pose(g: &mut Ctx, p: Player) {
     let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
     animation::start(g, p, anim);
-    g.rom(rom::VICTORY_SOUND, p);
+    g.rom(ext::son::FANFARE, p);
 }
 
 /// Pas suivant et pose de victoire.
@@ -517,7 +510,7 @@ const END_245EC: Steps = &[
         let delay = g.prog8(0x24660 + k);
         p.set_u8(g, TIMER, delay);
         start_stand(g, p);
-        g.rom(rom::INTRO_SOUND, p);
+        g.rom(ext::effet::HALO, p);
     }),
     (0x24664, |g, p| {
         let left = p.u8(g, TIMER).wrapping_sub(1);
@@ -560,8 +553,7 @@ const END_245EC: Steps = &[
 
 /// Palettes de la disparition (données) : 3 jeux de 12 personnages × 32 octets ; destination en mémoire
 /// des palettes, décalage par personnage (table de mots).
-const FADE_PALETTES: u32 = 0x3663e;
-const FADE_TARGETS: u32 = 0x36626;
+use super::moves::{EXIT_PALETTES as FADE_PALETTES, EXIT_PALETTE_SLOTS as FADE_TARGETS};
 const PALETTE_RAM: u32 = 0x91c000;
 
 /// 0x24734 : disparition : après 48 images le joueur est masqué ; toutes les 12 images, sa palette passe
@@ -604,7 +596,7 @@ const END_247B2: Steps = &[
         let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
         animation::start(g, p, anim);
         reset_speed_class(g, p);
-        g.rom(rom::VICTORY_SOUND, p);
+        g.rom(ext::son::FANFARE, p);
     }),
     (0x2480c, |g, p| {
         if scene_step(g) == 12 {
@@ -640,7 +632,7 @@ const END_247B2: Steps = &[
         p.set_u16(g, TIMER, left);
         if left == 0 {
             g.c.d[0] = 4;
-            g.rom(rom::SPARKLES, p);
+            g.rom(ext::effet::STARS, p);
         }
         anim_step(g, p);
     }),
@@ -1038,7 +1030,7 @@ const INTRO_24FE2: Steps = &[
             next(g, p);
             let wait = per_rank16(g, p, 0x25066);
             p.set_u16(g, WAIT, wait);
-            g.rom(rom::INTRO_SOUND, p);
+            g.rom(ext::effet::HALO, p);
             anim_0(g, p);
         } else {
             anim_step(g, p);
@@ -1283,7 +1275,7 @@ const INTRO_25504: Steps = &[
             next(g, p);
             let wait = per_rank16(g, p, 0x2558e);
             p.set_u16(g, WAIT, wait);
-            g.rom(rom::INTRO_SOUND, p);
+            g.rom(ext::effet::HALO, p);
         }
         anim_step(g, p);
     }),
@@ -1572,7 +1564,7 @@ const INTRO_25BA0: Steps = &[
         walk_right(g, p, TIMER_B, |g, p| {
             let wait = per_rank16(g, p, 0x25c4a);
             p.set_u16(g, WAIT, wait);
-            g.rom(rom::INTRO_SOUND, p);
+            g.rom(ext::effet::HALO, p);
             anim_0(g, p);
         })
     }),

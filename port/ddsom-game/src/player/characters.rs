@@ -13,8 +13,8 @@
 //! `animation::start`, `animation::step`, `hurt::hurt_animation`...
 
 /// Déclare une `Native` à l'adresse d'origine d'une action de personnage : la fonction Rust reçoit le
-/// joueur (A0) ; aucun registre n'est lu par les appelants. Passer par une native (plutôt que par
-/// `OVERRIDES`) permet la validation différentielle de chaque action (`DDSOM_CHECK=1`, `fuzz_player`).
+/// joueur (A0) ; aucun registre n'est lu par les appelants. Le jeu appelle la fonction directement (`routine`) ; la
+/// native sert à la validation différentielle de chaque action (`DDSOM_CHECK=1`, `fuzz_player`).
 macro_rules! action_native {
     ($name:ident, $entry:expr, $label:expr, $f:path) => {
         pub const $name: crate::Native = crate::Native {

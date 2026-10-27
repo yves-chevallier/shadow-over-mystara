@@ -21,6 +21,7 @@ use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::machine::Machine;
+use crate::player::externes as ext;
 
 /// Octets de l'enregistrement joueur propres aux actions des personnages.
 pub mod field {
@@ -68,20 +69,12 @@ pub mod field {
 
 /// Routines d'origine appelées par ces outils.
 pub mod rom {
-    /// Mise en scène d'un effet de poussière ou d'étincelle (D0 genre, D1 paramètres, D2/D3 vitesses).
-    pub const DUST: u32 = 0xb10c8;
     /// Son associé à l'étincelle de `item_spark`.
     pub const SPARK_SOUND: u32 = 0xea166;
     /// Voix du personnage à l'arme tenue (D4 = numéro de l'arme).
     pub const WEAPON_VOICE: u32 = 0xe7e10;
-    /// Voix du saut, son de l'atterrissage et de la glissade.
-    pub const JUMP_VOICE: u32 = 0xe7622;
-    pub const LANDING_SOUND: u32 = 0xe774c;
-    pub const SLIDE_SOUND: u32 = 0xe78e8;
     /// Création d'un effet joueur (pool PEFF) du type donné par D0, d'après l'arme.
     pub const SPAWN_EFFECT: u32 = 0x4c58e;
-    /// Assombrissement / retour de l'écran (routine de fondu).
-    pub const FADE: u32 = 0x1686;
     /// Lancement d'une tâche (A0 = programme, D0 = priorité) : trap 0.
     pub const START_TASK: u32 = 0x9b6;
     /// Programmes des tâches d'écran du sort : assombrir et rétablir.
@@ -350,7 +343,7 @@ fn screen_task(g: &mut Ctx, p: Player, mode: u16, program: u32, fade: bool) {
     ram::FADE_PAGES.set(g.b, 0xd);
     ram::FADE_STEPS.set(g.b, 5);
     if fade {
-        g.rom(rom::FADE, p);
+        g.rom(ext::palette::FULL_BRIGHTNESS, p);
     }
     g.c.a[1] = p.0;
     g.c.a[0] = program;
@@ -448,7 +441,7 @@ fn dust(g: &mut Ctx, p: Player, table: u32) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
     let vx = g.prog16(table + 4 * class) as u32;
     let vy = g.prog16(table + 2 + 4 * class) as u32;
-    call(g, p, rom::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
+    call(g, p, ext::effet::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
 }
 
 /// 0x3fa7c : poussière du freinage ou de la marche (une image sur quatre).
@@ -490,7 +483,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     let (d0, d1, d2, height) = (g.prog16(row), g.prog16(row + 2), g.prog16(row + 4), g.prog16(row + 6));
     g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
     g.c.d[4] = height as u32;
-    let z = call(g, p, rom::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
+    let z = call(g, p, ext::effet::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
     let failed = g.c.sr & m68k::SR_C != 0;
     let _ = z;
     if failed {
@@ -680,7 +673,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.rom(rom::JUMP_VOICE, p);
+    g.rom(ext::son::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     launch_jump(g, p, kit.speeds, kind);
 }
@@ -745,7 +738,7 @@ pub fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.rom(rom::LANDING_SOUND, p);
+    g.rom(ext::son::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile.
@@ -796,7 +789,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.rom(rom::SLIDE_SOUND, p);
+                g.rom(ext::son::SLIDE, p);
             }
         }
         4 => {

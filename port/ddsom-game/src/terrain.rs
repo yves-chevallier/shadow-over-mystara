@@ -28,7 +28,7 @@ const LAST_Y: u32 = 0x62;
 /// Octet de l'objet : numéro de terrain sous lui.
 const OBJ_TERRAIN: u32 = 0x29;
 /// Routine de l'attribut de terrain.
-const TERRAIN_ATTRIBUTE: u32 = 0x24b0;
+pub const TERRAIN_ATTRIBUTE: u32 = 0x24b0;
 
 /// Champs d'un type de terrain (entrée de 16 octets, mots).
 mod kind {
