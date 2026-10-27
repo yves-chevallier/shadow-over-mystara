@@ -17,10 +17,31 @@ pub fn rd32(b: &mut Cps2Bus, a: u32) -> u32 {
     (rd16(b, a) as u32) << 16 | rd16(b, a.wrapping_add(2)) as u32
 }
 pub fn wr8(b: &mut Cps2Bus, a: u32, v: u8) {
+    #[cfg(feature = "surveille")]
+    surveille::ecriture(a & 0xff_ffff, 1, v as u32);
     b.write8(a & 0xff_ffff, v)
 }
 pub fn wr16(b: &mut Cps2Bus, a: u32, v: u16) {
+    #[cfg(feature = "surveille")]
+    surveille::ecriture(a & 0xff_ffff, 2, v as u32);
     b.write16(a & 0xff_ffff, v)
+}
+
+/// Diagnostic (fonctionnalité `surveille`, `examples/fuzz_couv`) : pile d'appels Rust de chaque écriture à l'adresse
+/// surveillée.
+#[cfg(feature = "surveille")]
+pub mod surveille {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// Adresse surveillée (0 : aucune).
+    pub static ADRESSE: AtomicU32 = AtomicU32::new(0);
+
+    pub fn ecriture(a: u32, taille: u32, v: u32) {
+        let s = ADRESSE.load(Ordering::Relaxed);
+        if s != 0 && (a..a + taille).contains(&s) {
+            eprintln!("ÉCRITURE {a:06x} = {v:x}\n{}", std::backtrace::Backtrace::force_capture());
+        }
+    }
 }
 pub fn wr32(b: &mut Cps2Bus, a: u32, v: u32) {
     wr16(b, a, (v >> 16) as u16);

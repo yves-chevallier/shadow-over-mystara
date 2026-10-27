@@ -17,6 +17,8 @@ ddsom-assets = { path = "../ddsom-assets" }
 [features]
 # Journal des lectures de la ROM programme par le code Rust (examples/lectures_rom.rs).
 rom-trace = ["cps2/rom-trace"]
+# Pile d'appels des écritures à une adresse (examples/fuzz_couv, FUZZ_SURVEILLE).
+surveille = []
 
 [[example]]
 name = "lectures_rom"
