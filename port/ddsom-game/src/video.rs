@@ -188,8 +188,8 @@ fn blank_screen(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xc32 : écran noir en trois images (sous-programme qui cède, `0xb64`, avant et après l'effacement) : une
-/// sous-machine ([`ecran_noir::Etape`]) que les pas Rust appellent directement (`Sequence::sous_programme`) ; son
-/// entrée reste une native pour les appels par adresse (gestionnaires d'objets).
+/// sous-machine ([`ecran_noir::Etape`]) que les pas Rust appellent directement (`Sequence::sous_programme`) ; plus
+/// rien ne l'appelle par adresse.
 pub mod ecran_noir {
     use crate::modes::Flow;
     use crate::scene::Ctx;
@@ -213,8 +213,6 @@ pub mod ecran_noir {
             Fin = 0xc56 => |_| Flow::Done,
         }
     }
-
-    crate::resume!(DEBUT, 0xc32, debut);
 }
 
 /// Remplit [debut, fin) de cases (tuile, 0) : 0xca8 (scroll 1), 0xcc8 (scroll 2), 0xce8 (scroll 3).
@@ -561,7 +559,6 @@ pub const NATIVES: &[Native] = &[
     DISABLE_LAYERS,
     CLEAR_OBJECTS,
     BLANK_SCREEN,
-    ecran_noir::DEBUT,
     CLEAR_SCROLL1,
     CLEAR_SCROLL1_START,
     CLEAR_SCROLL2,

@@ -12,8 +12,9 @@
 //!   16 pas, `A5-0x65ec` levé pendant le fondu, registres sauvés à l'entrée (`movem`, gardés dans l'étape) et
 //!   rendus à la fin.
 //!
-//! Les entrées des sous-programmes (`0x144c`, `0x1460`, `0x146c`, `0x1ccc2`, `0x1ce30`, `0x1ce9e`) restent des
-//! natives : des séquences et des gestionnaires d'objets les appellent par leur adresse.
+//! Les sous-programmes sont des fonctions ([`montee`], [`descente`], [`descente_d0`], [`vers_le_blanc`],
+//! [`vers_les_couleurs`], [`vers_les_palettes`]) que les pas appellent directement ; seul le fondu au noir `0x1460`
+//! garde une native, que des gestionnaires d'objets appellent encore par adresse (`call_at`).
 
 use crate::mem::{rd16, rd8, set_low_word, wr32, wr8, A5};
 use crate::modes::Flow;
@@ -222,10 +223,8 @@ pub fn descente_d0(x: &mut Ctx) -> Flow {
     sous_programme(DESCEND).debut_sous_programme(x)
 }
 
-// sous-programmes, pour les appels par adresse
-resume!(FONDU_MONTEE, 0x144c, montee);
+// le fondu au noir reste appelé par adresse (`call_at` des objets SET qui ferment une scène)
 resume!(FONDU_DESCENTE, 0x1460, descente);
-resume!(FONDU_DESCENTE_D0, 0x146c, descente_d0);
 // tâches : 0x14ba / 0x14d0 fondu complet, 0x14c8 / 0x14de nombre de pas de l'état, 0x1536 / 0x153e partiels (voir
 // `TACHES`)
 
@@ -303,10 +302,4 @@ pub fn vers_les_palettes(x: &mut Ctx) -> Flow {
     composante(0x1ce9e).debut(x, false)
 }
 
-// sous-programmes, pour les appels par adresse (les tâches : `TACHES`)
-resume!(FONDU_BLANC, 0x1ccc2, vers_le_blanc);
-resume!(FONDU_COULEURS, 0x1ce30, vers_les_couleurs);
-resume!(FONDU_PALETTES, 0x1ce9e, vers_les_palettes);
-
-pub const NATIVES: &[Native] =
-    &[FONDU_MONTEE, FONDU_DESCENTE, FONDU_DESCENTE_D0, FONDU_BLANC, FONDU_COULEURS, FONDU_PALETTES];
+pub const NATIVES: &[Native] = &[FONDU_DESCENTE];
