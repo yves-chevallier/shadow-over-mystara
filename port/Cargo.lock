@@ -169,7 +169,6 @@ dependencies = [
  "ddsom-sound",
  "m68k",
  "png",
- "recomp",
 ]
 
 [[package]]

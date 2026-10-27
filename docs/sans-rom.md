@@ -147,9 +147,15 @@ plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_
 * **`validate` avec `DDSOM_ASSETS=<assets>`** (pas en mode hybride) : la machine testée est faite des seuls assets
   (pilote son Rust), la référence garde les ROMs, le 68000 surcadencé et le Z80. `tools/validate_all.sh` s'en sert
   tel quel (la variable entre dans l'empreinte des résultats) :
-  `DDSOM_ASSETS=<assets> DDSOM_SCENES=1 DDSOM_COV=1 tools/validate_all.sh 30000` donne **269 VALIDE
-  sur 269** (avec les zones mesurées sur toute la durée des scénarios ; une première mesure arrêtée à la ligne `quit`
-  laissait 12 scénarios en échec, qui lisaient ensuite, en démonstration, des zones non mesurées).
+  `DDSOM_ASSETS=<assets> DDSOM_SCENES=1 DDSOM_COV=1 tools/validate_all.sh 30000` donne **272 VALIDE
+  sur 272** avec `data/reste.json` (2026-10-27, comme le mode par défaut : 272 sur 272). Avant la couverture
+  complète, les zones mesurées seules donnaient 269 sur 269, mais chaque partie de l'utilisateur pouvait sortir
+  des chemins mesurés (voir ci-dessous).
+* **La couverture complète rend les zones ajoutées à la main inutiles** : `cov_cave_tritan` et `cov_objet_tritan`
+  (deux parties de l'utilisateur qui divergeaient sans ROM, corrigées sur main en prolongeant 8 zones de
+  `zones_natives.txt`) sont VALIDE avec des assets extraits sans ces prolongements ; et encore VALIDE quand
+  `natives.json` est réduit aux 192 zones qui touchent le code (tout le reste venant de `reste.json`). Témoin : les
+  mêmes assets avec un `reste.json` vidé de ses blocs échouent (images 1 325 et 562).
 * **Sans ROM du tout** : une copie du dépôt (`git archive`) se construit sans dossier `rom/` (`ddsom-rc` vide, avec
   l'avertissement « ROMs introuvables ») et `ddsom --assets <assets>`, lancé d'un dossier sans `../rom`, démarre le
   jeu sans 68000 depuis les assets.

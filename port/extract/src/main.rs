@@ -152,6 +152,13 @@ coefficients des filtres.
 Tables lues par le jeu en Rust que les autres fichiers ne couvrent pas : scripts de tuiles et de palettes
 des SET, sous-objets des joueurs (arme et bouclier), palettes d'aura, piles des tâches, panoramique du son.
 
+## data/natives.json, data/reste.json
+
+Le reste de la région programme : `natives.json`, les zones mesurées que lisent les routines natives ;
+`reste.json`, tout ce qu'aucun autre fichier ne décrit, sauf le code 68000 exécuté (plages listées dans
+`code`), en blocs d'octets hexadécimaux. Avec eux, la région programme reconstruite égale la ROM hors code
+(docs/sans-rom.md « Couverture complète des données »).
+
 ## data/spawns.json
 
 Scripts d'apparition des scènes (ennemis, décors, objets qui entrent au fil du défilement).
