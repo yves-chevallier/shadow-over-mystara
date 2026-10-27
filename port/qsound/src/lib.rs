@@ -461,7 +461,8 @@ impl QSound {
 
     fn voice_update(&mut self, i: usize, echo_out: &mut i32) -> i16 {
         let v = self.voice[i];
-        let output = ((v.volume as i32 * self.read_sample(v.bank, v.addr as u16) as i32) >> 14) as i16;
+        // voix muette : sortie nulle sans lire l'échantillon (la phase avance quand même)
+        let output = if v.volume == 0 { 0 } else { ((v.volume as i32 * self.read_sample(v.bank, v.addr as u16) as i32) >> 14) as i16 };
         *echo_out = echo_out.wrapping_add(((output as i32) * v.echo as i32) << 2);
         let mut new_phase = (v.rate as i32).wrapping_add(((v.addr as i32) << 12) | (v.phase >> 4) as i32);
         if (new_phase >> 12) >= v.end_addr as i32 {
@@ -532,6 +533,9 @@ impl QSound {
             for i in 0..19 {
                 let pan = self.voice_pan[i].wrapping_add(ch as u16 * PAN_TABLE_CH_OFFSET);
                 let vo = self.voice_output[i] as i32;
+                if vo == 0 {
+                    continue; // contribution nulle
+                }
                 dry = dry.wrapping_sub(vo * self.dsp(pan.wrapping_add(PAN_TABLE_DRY)) as i16 as i32);
                 wet = wet.wrapping_sub(vo * self.dsp(pan.wrapping_add(PAN_TABLE_WET)) as i16 as i32);
             }
