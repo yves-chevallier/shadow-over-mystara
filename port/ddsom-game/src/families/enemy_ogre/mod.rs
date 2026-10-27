@@ -309,7 +309,7 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
-        return zone_shadow(x);
+        return zone_and_terrain(x);
     }
     if !paused(x) {
         x.c.d[0] = x.u8(f::SUB) as u32;
@@ -324,7 +324,7 @@ fn active(x: &mut Cx) {
             return;
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 handlers! {

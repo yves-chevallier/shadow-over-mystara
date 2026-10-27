@@ -23,7 +23,7 @@ pub(super) fn run(x: &mut Cx) {
         18 | 20 => super::leaps::guard(x),
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 // --- étapes communes ----------------------------------------------------------------------------

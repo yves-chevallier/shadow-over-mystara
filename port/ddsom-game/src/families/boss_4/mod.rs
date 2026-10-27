@@ -276,7 +276,7 @@ fn active(x: &mut Cx) {
         }
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 handlers! {

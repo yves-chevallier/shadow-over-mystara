@@ -22,13 +22,13 @@ pub(super) fn run(x: &mut Cx) {
             0 => {
                 x.set8(LOOK_PREV, 0x7f);
                 react(x, REACT_FIRST);
-                zone_shadow(x);
+                zone_and_terrain(x);
             }
             2 => recoil(x),
             4 => fall(x),
             6 => {
                 react(x, REACT_SECOND);
-                zone_shadow(x);
+                zone_and_terrain(x);
             }
             8 => run_away(x),
             _ => {}
@@ -72,7 +72,7 @@ fn recoil(x: &mut Cx) {
         }
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 // --- sous-état 4 : chute et relevé --------------------------------------------------------------------------
@@ -107,7 +107,7 @@ fn fall(x: &mut Cx) {
         }
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 // --- sous-état 8 : saisie par un joueur ------------------------------------------------------------------------
@@ -157,7 +157,7 @@ fn run_away(x: &mut Cx) {
             if x.u8(0x29) != 0 {
                 x.add8(f::SUB2, 2);
             }
-            zone_shadow(x);
+            zone_and_terrain(x);
             x.move_by_table_xy();
             x.anim_step();
         }

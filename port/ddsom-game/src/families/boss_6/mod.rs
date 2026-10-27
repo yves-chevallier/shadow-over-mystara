@@ -139,7 +139,7 @@ fn active(x: &mut Cx) {
         }
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// `+5` = 6 à 12 (0x851d6) : attend que des joueurs reviennent.

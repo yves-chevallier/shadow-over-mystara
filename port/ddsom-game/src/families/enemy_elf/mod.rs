@@ -191,7 +191,7 @@ fn active(x: &mut Cx) {
         }
     }
     super::boss_common::push_out_of_boss(x);
-    zone_shadow(x);
+    zone_and_terrain(x);
     x.reinsert();
 }
 

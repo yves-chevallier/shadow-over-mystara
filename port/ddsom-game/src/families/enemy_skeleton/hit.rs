@@ -29,7 +29,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 8 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     x.reinsert();
 }
@@ -187,7 +187,7 @@ fn run_away(x: &mut Cx) {
         return set_state_long(x, st::DEAD_LONG);
     }
     if x.u8(0x29) == 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
         if x.u16(SAVED_POS) != x.u16(Obj::X) {
             let x0 = x.u16(Obj::X);
             x.set16(SAVED_POS, x0);

@@ -238,7 +238,7 @@ fn active(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     x.reinsert();
 }
@@ -619,7 +619,7 @@ fn knock_back(x: &mut Cx) {
     }
     x.set8(0, 2);
     x.anim_start(ANIMS_HIT, 0);
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 fn recoil(x: &mut Cx) {
@@ -652,7 +652,7 @@ fn recoil(x: &mut Cx) {
         }
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 /// Sous-état 4 : saisi par un joueur, le scorpion court vers le bord de l'écran le plus proche.
@@ -696,7 +696,7 @@ fn grabbed_flight(x: &mut Cx) {
             if x.u8(EXIT_TIMER) != 0 {
                 let n = x.u8(EXIT_TIMER).wrapping_sub(1);
                 x.set8(EXIT_TIMER, n);
-                zone_shadow(x);
+                zone_and_terrain(x);
             }
             x.anim_step();
         }

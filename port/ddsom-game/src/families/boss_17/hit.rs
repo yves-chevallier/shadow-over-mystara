@@ -35,7 +35,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// 0x975cc : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.

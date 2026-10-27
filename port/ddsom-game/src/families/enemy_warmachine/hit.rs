@@ -29,7 +29,7 @@ pub(super) fn run(x: &mut Cx) {
             return;
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 /// 0x792e0 : PV épuisés : passe en mort (`+5` = 6) ; vrai dans ce cas.

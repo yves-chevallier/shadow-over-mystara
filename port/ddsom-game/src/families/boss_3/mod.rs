@@ -321,7 +321,7 @@ fn active(x: &mut Cx) {
 /// Fin d'image ordinaire : retenue dans l'écran (marge `margin`), ombre, remise en liste.
 pub(self) fn end_frame(x: &mut Cx, margin: u16) {
     lib::keep_on_screen(x, margin);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 

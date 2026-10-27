@@ -14,7 +14,7 @@ pub(super) fn run(x: &mut Cx) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
-        return zone_shadow(x);
+        return zone_and_terrain(x);
     }
     x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
@@ -27,7 +27,7 @@ pub(super) fn run(x: &mut Cx) {
         _ => {}
     }
     if x.u8(f::SUB) != 2 && x.u8(f::SUB) != 8 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
 }
 

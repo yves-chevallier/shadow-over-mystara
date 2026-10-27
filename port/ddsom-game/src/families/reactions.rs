@@ -2311,6 +2311,20 @@ fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     rts(c, b);
 }
 
+/// Exécute la routine de réaction commune `entry` si c'en est une (faux sinon) : appel direct depuis
+/// `enemy_common::react`, sans passer par la native.
+pub fn run_common(x: &mut Cx, entry: u32) -> bool {
+    if !NATIVES.iter().any(|n| n.entry == entry) {
+        return false;
+    }
+    // comme l'appel par adresse : A0 = l'objet, A5 = la RAM de travail
+    x.c.a[0] = x.o.0;
+    x.c.a[5] = crate::mem::A5;
+    let step = x.u8(f::STEP);
+    assert!(run_entry_flag(x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
+    true
+}
+
 /// Exécute la routine de réaction `entry` (RTS compris). Tous les pas des tables d'origine sont réécrits : le pas
 /// (`+6`) part de 0 et n'avance que de 2 en 2 jusqu'au dernier pas de la table, qui ne l'avance plus (mort, fin de
 /// saisie...), et l'indice de `BURNT` (D0.w) est le code de réaction posé par `enemy_common::react` (octet haut

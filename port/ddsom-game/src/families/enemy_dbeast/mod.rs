@@ -342,7 +342,7 @@ fn active(x: &mut Cx) {
     let s = x.u16(f::STATE);
     if s != 0x0200 && s != 0x020c {
         lib::keep_in_zone(x);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }

@@ -25,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
     x.reinsert();
 }
 

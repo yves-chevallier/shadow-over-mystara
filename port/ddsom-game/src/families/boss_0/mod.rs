@@ -203,7 +203,7 @@ fn active(x: &mut Cx) {
         }
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 // --- décisions : états posés d'un coup (0x7ab74..0x7ac70) -----------------------------------------

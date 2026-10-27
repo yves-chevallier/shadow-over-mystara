@@ -33,7 +33,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 8 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     x.reinsert();
 }

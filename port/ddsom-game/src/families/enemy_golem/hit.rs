@@ -25,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
     x.reinsert();
 }
 
@@ -155,7 +155,7 @@ fn grab(x: &mut Cx) {
                 return;
             }
             if x.u8(0x29) == 0 {
-                zone_shadow(x);
+                zone_and_terrain(x);
                 if x.u16(TIMER2) != x.u16(Obj::X) {
                     let at = x.u16(Obj::X);
                     x.set16(TIMER2, at);

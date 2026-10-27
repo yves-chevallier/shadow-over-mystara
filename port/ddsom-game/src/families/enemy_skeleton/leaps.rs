@@ -22,7 +22,7 @@ pub(super) fn run(x: &mut Cx) {
         10 => exit_screen(x),
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 /// Repos de 16 images, puis debout.
@@ -269,7 +269,7 @@ pub(super) fn run_dash(x: &mut Cx) {
         4 => dodge(x),
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 /// Pause de 30 images.
@@ -373,7 +373,7 @@ fn dodge(x: &mut Cx) {
 
 pub(super) fn run_land(x: &mut Cx) {
     land(x);
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 fn land(x: &mut Cx) {

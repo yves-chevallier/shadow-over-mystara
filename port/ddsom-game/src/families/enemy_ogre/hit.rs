@@ -12,7 +12,7 @@ const REACTIONS: u32 = 0x715d4;
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
-        return zone_shadow(x);
+        return zone_and_terrain(x);
     }
     x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
@@ -25,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
         _ => {}
     }
     if x.u8(f::SUB) != 8 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
 }
 

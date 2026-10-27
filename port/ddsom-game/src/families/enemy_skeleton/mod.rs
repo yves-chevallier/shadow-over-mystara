@@ -269,7 +269,7 @@ fn init(x: &mut Cx) {
         _ => return,
     }
     x.reinsert();
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------

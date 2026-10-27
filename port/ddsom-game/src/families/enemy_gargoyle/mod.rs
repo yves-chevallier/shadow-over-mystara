@@ -302,7 +302,7 @@ fn active(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     let s = x.u32(f::STATE);
     x.set32(STATE_SAVED, s);

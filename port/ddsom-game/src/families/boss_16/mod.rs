@@ -303,7 +303,7 @@ fn active(x: &mut Cx) {
         }
     }
     lib::keep_on_screen(x, 0x40);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 

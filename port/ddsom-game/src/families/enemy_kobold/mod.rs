@@ -291,7 +291,7 @@ fn active(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 0 && x.u8(f::SUB2) != 0xe {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     x.reinsert();
 }

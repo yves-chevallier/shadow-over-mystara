@@ -36,7 +36,7 @@ pub(super) fn run(x: &mut Cx) {
     }
     if x.u8(f::SUB) != 6 {
         lib::keep_on_screen(x, 0x90);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }

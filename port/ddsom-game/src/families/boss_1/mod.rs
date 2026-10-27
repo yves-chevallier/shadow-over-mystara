@@ -232,7 +232,7 @@ fn active(x: &mut Cx) {
     }
     if x.u8(f::SUB) != 0 {
         lib::keep_in_zone(x);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
 }
 

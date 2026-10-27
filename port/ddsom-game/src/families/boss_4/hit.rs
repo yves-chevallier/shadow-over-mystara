@@ -32,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// 0x82c68 : premier passage : dégâts (0x10112) et, sans PV, la mort ; puis la routine du code de coup.

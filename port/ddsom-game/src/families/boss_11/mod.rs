@@ -203,7 +203,7 @@ pub fn run(x: &mut Cx) {
     }
     if x.u8(NO_ZONE) == 0 {
         lib::keep_on_screen(x, 0x30);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     keep_in_screen(x);
     chain::update(x);

@@ -38,7 +38,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     lib::keep_on_screen(x, 0x50);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 

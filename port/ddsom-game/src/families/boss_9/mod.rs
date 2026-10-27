@@ -587,7 +587,7 @@ fn active(x: &mut Cx) {
             4 => moves::fight(x),
             _ => moves::wait_for_players(x),
         }
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     let rolling = x.u8(GAIT) != 2;
     x.set8(0x3a, rolling as u8);

@@ -393,7 +393,7 @@ fn arrival(x: &mut Cx) {
                 set_state_long(x, STANCE);
                 x.set8(0, 1);
             }
-            zone_shadow(x);
+            zone_and_terrain(x);
         }
         5 => match x.u8(f::SUB2) {
             0 => {

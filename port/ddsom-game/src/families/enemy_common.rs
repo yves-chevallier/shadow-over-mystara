@@ -211,14 +211,10 @@ pub fn set_state(x: &mut Cx, o: Obj, state: u32) {
     o.set_u32(x.b, f::STATE, state);
 }
 
-/// Test « dans la zone de jeu » et ombre portée, fin commune des états actifs.
-pub const IN_ZONE: u32 = 0xfbae;
-pub const SHADOW: u32 = 0x33fe4;
-
 /// Boucle commune des états actifs des ennemis à IA : tant que le gel `+0x53` est positif il décroît
 /// et rien d'autre ne bouge ; sinon, hors pause, `sub` exécute le sous-état (il rend vrai pour
 /// abandonner l'image sans la suite, comme l'original qui dépile son adresse de retour). La suite
-/// teste la zone et dessine l'ombre dès que le sous-état n'est plus 0, puis remet l'objet en liste.
+/// teste la zone et la collision avec le décor dès que le sous-état n'est plus 0, puis remet l'objet en liste.
 pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
@@ -228,7 +224,7 @@ pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
     }
     if x.u8(f::SUB) != 0 {
         lib::keep_in_zone(x);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }
@@ -248,7 +244,7 @@ pub fn hit_loop_at(x: &mut Cx, no_zone: u32, sub: impl FnOnce(&mut Cx)) {
     }
     if x.u8(no_zone) == 0 {
         lib::keep_in_zone(x);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }
@@ -265,7 +261,10 @@ pub fn react(x: &mut Cx, table: u32) {
     x.c.d[0] = code;
     let routine = rom32(x, table + code);
     x.c.a[1] = routine;
-    x.call(routine);
+    if !super::reactions::run_common(x, routine) {
+        // routine propre au type (native de sa famille)
+        x.call(routine);
+    }
 }
 
 /// `move.w #v,Dn` : ne change que le mot de poids faible du registre.
@@ -292,10 +291,11 @@ pub fn anim(x: &mut Cx, set: u32, n: u32) {
 
 // --- aides communes des types du troisième lot --------------------------------------------------
 
-/// Fin commune des sous-états actifs : test de zone (0xfbae, qui remet D5 à 0) puis ombre (0x33fe4).
-pub fn zone_shadow(x: &mut Cx) {
+/// Fin commune des sous-états actifs : test de zone (0xfbae, qui remet D5 à 0) puis collision avec le décor
+/// (0x33fe4).
+pub fn zone_and_terrain(x: &mut Cx) {
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// `neg.w (off,A0)`.

@@ -164,7 +164,7 @@ fn active(x: &mut Cx) {
         }
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// `+5` = 6, 8, 10 (0x98640) : attend que des joueurs reviennent.

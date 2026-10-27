@@ -25,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     if x.u8(NO_ZONE) == 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     x.reinsert();
 }

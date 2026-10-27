@@ -182,7 +182,7 @@ fn active(x: &mut Cx) {
     // les séquences spéciales (jeu 0x30 et au-delà) n'ont ni zone de jeu ni ombre
     if !cmp8(x, ANIM_KIND, 0x30).ge() {
         lib::keep_in_zone(x);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
 }
 

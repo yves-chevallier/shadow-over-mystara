@@ -47,7 +47,7 @@ pub(super) fn run(x: &mut Cx) {
 
 fn zone_and_shadow(x: &mut Cx) {
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 // --- sous-état 2 : recul d'une pièce --------------------------------------------------------------

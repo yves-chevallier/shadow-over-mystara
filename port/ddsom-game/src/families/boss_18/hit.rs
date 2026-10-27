@@ -29,7 +29,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// 0x99362 : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.

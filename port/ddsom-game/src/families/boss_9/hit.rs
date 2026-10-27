@@ -286,7 +286,7 @@ fn wreck(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB2) < 8 {
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }

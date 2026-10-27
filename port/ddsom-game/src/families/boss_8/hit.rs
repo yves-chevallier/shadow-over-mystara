@@ -20,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 fn step(x: &mut Cx, table: u32) -> u32 {

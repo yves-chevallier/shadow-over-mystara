@@ -85,7 +85,7 @@ fn wait(x: &mut Cx) {
 
 fn zone_and_shadow(x: &mut Cx) {
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// 0x8d526 : choisit l'étape suivante du combat (`+6` = 0, 4 ou 6) d'après une table de 32 octets.
@@ -563,7 +563,7 @@ fn hit(x: &mut Cx) {
         }
     }
     x.set8(0x67, 0);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// 0x8d57a : plus de PV ? Passe alors au groupe 6 (mort).

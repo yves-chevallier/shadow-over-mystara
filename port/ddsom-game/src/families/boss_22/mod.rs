@@ -457,7 +457,7 @@ fn active(x: &mut Cx) {
         x.set16(GUARD_TIMER, 0xf0);
     }
     lib::keep_on_screen(x, 0x30);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 

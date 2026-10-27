@@ -259,7 +259,7 @@ fn active(x: &mut Cx) {
     };
     if !dispatch {
         if x.u8(f::SUB) != 0 {
-            zone_shadow(x);
+            zone_and_terrain(x);
         }
         return x.reinsert();
     }
@@ -274,7 +274,7 @@ fn active(x: &mut Cx) {
         _ => {}
     }
     if x.u8(f::SUB) != 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     if x.u8(SERIES) == 0 {
         flicker(x);

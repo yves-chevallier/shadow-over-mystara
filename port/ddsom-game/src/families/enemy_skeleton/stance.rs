@@ -43,7 +43,7 @@ pub(super) fn run(x: &mut Cx) {
         set_state_long(x, IDLE);
     }
     
-    zone_shadow(x);
+    zone_and_terrain(x);
     if x.c.d[5] as u8 != 0 {
         lib::choose_walk_point(x);
     }

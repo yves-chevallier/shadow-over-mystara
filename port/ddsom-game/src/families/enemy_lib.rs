@@ -228,6 +228,11 @@ pub fn keep_in_zone(x: &mut Cx) {
     x.call(0xfbae);
 }
 
+/// 0x33fe4 : collision avec le décor (`terrain.rs`) : l'objet est repoussé hors d'un obstacle.
+pub fn collide_terrain(x: &mut Cx) {
+    x.call(0x33fe4);
+}
+
 /// 0xfbb0 : garde l'objet dans l'écran, à `margin` pixels près ; vrai s'il a été déplacé.
 pub fn keep_on_screen(x: &mut Cx, margin: u16) -> bool {
     set_word(x, 0, margin);

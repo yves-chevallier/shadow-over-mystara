@@ -248,7 +248,7 @@ fn active(x: &mut Cx) {
             return;
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 handlers! {

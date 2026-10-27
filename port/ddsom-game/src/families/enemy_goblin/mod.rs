@@ -260,7 +260,7 @@ fn active(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     x.reinsert();
 }

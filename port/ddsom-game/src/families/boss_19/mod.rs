@@ -273,7 +273,7 @@ pub(self) fn active(x: &mut Cx) {
         return;
     }
     lib::keep_in_zone(x);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 

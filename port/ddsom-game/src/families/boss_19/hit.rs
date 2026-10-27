@@ -54,7 +54,7 @@ fn dispatch(x: &mut Cx) {
 }
 
 fn tail(x: &mut Cx) {
-    x.call(SHADOW);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 

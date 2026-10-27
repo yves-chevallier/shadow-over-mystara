@@ -597,7 +597,7 @@ mod dark_warrior_double {
             }
         }
         lib::keep_in_zone(x);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
 
     /// Le maître marche : vitesses inversées, ou déplacement rejoué.
@@ -794,7 +794,7 @@ mod dark_warrior_double {
             _ => {}
         }
         lib::keep_in_zone(x);
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
 
     /// 0x77ab6 : le double reprend l'état de réaction du maître et rejoue sa routine de réaction.
