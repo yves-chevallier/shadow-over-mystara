@@ -19,6 +19,7 @@ pub enum Port {
     Sauver,
     Charger,
     Rapide,
+    PleinEcran,
     Quitter,
 }
 
@@ -50,6 +51,7 @@ const ACTIONS: &[(&str, Port, &str)] = &[
     ("sauver", Port::Sauver, "F5"),
     ("charger", Port::Charger, "F9"),
     ("rapide", Port::Rapide, "Tab"),
+    ("plein_ecran", Port::PleinEcran, "F11"),
     ("quitter", Port::Quitter, "Escape"),
 ];
 
@@ -59,8 +61,8 @@ pub struct Touches {
     manettes: Manettes,
     trace: bool,
     avant: Vec<String>,
-    /// Pause, sauver, charger tenus à l'image précédente (ils agissent à l'appui).
-    avant_appui: [bool; 3],
+    /// Pause, sauver, charger, plein écran tenus à l'image précédente (ils agissent à l'appui).
+    avant_appui: [bool; 4],
 }
 
 /// Lecture du clavier pour une image.
@@ -68,10 +70,11 @@ pub struct Etat {
     /// Ports d'entrée CPS2 (actifs à 0).
     pub in0: u16,
     pub in2: u16,
-    /// Pause, sauver, charger viennent d'être pressés.
+    /// Pause, sauver, charger, plein écran viennent d'être pressés.
     pub pause: bool,
     pub sauver: bool,
     pub charger: bool,
+    pub plein_ecran: bool,
     pub rapide: bool,
     pub quitter: bool,
 }
@@ -108,7 +111,7 @@ impl Touches {
             }
         }
         let trace = std::env::var("DDSOM_TOUCHES").is_ok_and(|v| v == "1");
-        Touches { actions, manettes: Manettes::ouvre(), trace, avant: Vec::new(), avant_appui: [false; 3] }
+        Touches { actions, manettes: Manettes::ouvre(), trace, avant: Vec::new(), avant_appui: [false; 4] }
     }
 
     /// État des actions d'après les touches et les boutons tenus.
@@ -122,9 +125,17 @@ impl Touches {
             }
             self.avant = bas.clone();
         }
-        let mut e =
-            Etat { in0: 0xffff, in2: 0xffff, pause: false, sauver: false, charger: false, rapide: false, quitter: false };
-        let mut appui = [false; 3];
+        let mut e = Etat {
+            in0: 0xffff,
+            in2: 0xffff,
+            pause: false,
+            sauver: false,
+            charger: false,
+            plein_ecran: false,
+            rapide: false,
+            quitter: false,
+        };
+        let mut appui = [false; 4];
         for (port, keys) in &self.actions {
             if keys.iter().any(|k| bas.contains(k)) {
                 match *port {
@@ -133,12 +144,13 @@ impl Touches {
                     Port::Pause => appui[0] = true,
                     Port::Sauver => appui[1] = true,
                     Port::Charger => appui[2] = true,
+                    Port::PleinEcran => appui[3] = true,
                     Port::Rapide => e.rapide = true,
                     Port::Quitter => e.quitter = true,
                 }
             }
         }
-        [e.pause, e.sauver, e.charger] = std::array::from_fn(|i| appui[i] && !self.avant_appui[i]);
+        [e.pause, e.sauver, e.charger, e.plein_ecran] = std::array::from_fn(|i| appui[i] && !self.avant_appui[i]);
         self.avant_appui = appui;
         e
     }

@@ -11,7 +11,7 @@
 //! Diagnostic : `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade), `DDSOM_INTERP=1` (tout interprété) ; ces modes
 //! lisent les ROMs.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
-//! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter ;
+//! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, F11 plein écran, Échap quitter ;
 //! à changer dans touches.cfg (`touches.rs`), manettes Xbox comprises sous Windows (`manette.rs`).
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
 //! F5 sauvegarde la partie dans sauvegardes/rapide.txt, F9 la reprend (`sauvegarde.rs` : rejeu des entrées).
@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use cps2::Machine;
-use minifb::{Scale, Window, WindowOptions};
+use minifb::{Scale, ScaleMode, Window, WindowOptions};
 
 const FRAME_HZ: f64 = 8_000_000.0 / 512.0 / 262.0;
 
@@ -87,13 +87,8 @@ fn main() {
     };
     let mut m = machine(eeprom.as_deref());
 
-    let mut win = Window::new(
-        "Dungeons & Dragons: Shadow over Mystara (port Rust)",
-        384,
-        224,
-        WindowOptions { scale: Scale::X2, ..WindowOptions::default() },
-    )
-    .expect("fenêtre");
+    let mut plein_ecran = false;
+    let mut win = fenetre(plein_ecran);
 
     let audio = audio::Audio::open(qsound::SAMPLE_RATE.round() as u32);
     if audio.is_none() {
@@ -114,6 +109,10 @@ fn main() {
         let t = touches.lit(&win);
         if t.quitter {
             break;
+        }
+        if t.plein_ecran {
+            plein_ecran = !plein_ecran;
+            win = fenetre(plein_ecran);
         }
         if t.pause {
             paused = !paused;
@@ -182,6 +181,46 @@ fn main() {
     if let Err(e) = std::fs::write(&nvram, m.bus.eeprom.to_bytes()) {
         eprintln!("Sauvegarde de l'EEPROM impossible : {e}");
     }
+}
+
+const TITRE: &str = "Dungeons & Dragons: Shadow over Mystara (port Rust)";
+
+/// Fenêtre de jeu, ou fenêtre sans bord couvrant l'écran (image étirée sans déformation) en plein écran.
+fn fenetre(plein_ecran: bool) -> Window {
+    let mut win = if plein_ecran {
+        let opts = WindowOptions { none: true, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() };
+        match taille_ecran() {
+            Some((l, h)) => Window::new(TITRE, l, h, opts),
+            // taille de l'écran inconnue : plus grand multiple entier qui y tient
+            None => Window::new(TITRE, 384, 224, WindowOptions { scale: Scale::FitScreen, ..opts }),
+        }
+    } else {
+        Window::new(TITRE, 384, 224, WindowOptions { scale: Scale::X2, ..WindowOptions::default() })
+    }
+    .expect("fenêtre");
+    if plein_ecran {
+        win.set_position(0, 0);
+        win.set_cursor_visibility(false);
+    }
+    win
+}
+
+/// Taille de l'écran principal en pixels (Windows : `GetSystemMetrics` de user32).
+#[cfg(windows)]
+fn taille_ecran() -> Option<(usize, usize)> {
+    type GetSystemMetricsFn = unsafe extern "system" fn(index: i32) -> i32;
+    // SAFETY : signature conforme à <winuser.h> ; la bibliothèque reste chargée pendant les appels.
+    unsafe {
+        let lib = libloading::Library::new("user32.dll").ok()?;
+        let metrique = *lib.get::<GetSystemMetricsFn>(b"GetSystemMetrics").ok()?;
+        let (l, h) = (metrique(0), metrique(1)); // SM_CXSCREEN, SM_CYSCREEN
+        (l > 0 && h > 0).then(|| (l as usize, h as usize))
+    }
+}
+
+#[cfg(not(windows))]
+fn taille_ecran() -> Option<(usize, usize)> {
+    None
 }
 
 /// Fichier de la sauvegarde rapide (F5 / F9).
