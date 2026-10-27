@@ -40,6 +40,84 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
 `tools/mesure_refacto.py` compte `regs`, `drap`, `adr`... par zone : un lot les fait baisser ; compter aussi
 `rtk proxy grep -rn "_68k(" src | wc -l`.
 
+## L'API commune (lot 0b) : ce que les lots A à D utilisent
+
+Le lot 0b a donné au moteur d'objets la forme du pilote `pools` : un cœur pur par routine, un adaptateur `_68k` qui
+laisse en plus les registres de l'original, la native pour les appels par adresse restants, et des méthodes de contexte.
+**On n'appelle plus une routine du moteur par son adresse** (`x.call(sub::MOVE_XZ)`, `ctx.jsr(rom::ANIM_STEP)`) : les
+constantes `MOVE_*`, `ANIM_*`, `SPEED_*`, `REINSERT_*`, `CULL_*`, `RNG`, `RANK_*` ont disparu des familles.
+
+### Contexte commun : le trait `machine::Machine`
+
+Décision : un **trait** plutôt qu'une base `Jeu` embarquée. Tous les contextes tiennent `c` et `b` et y accèdent
+séparément (`f(x.c, x.b)`, des milliers de fois) : une structure de base derrière un `Deref` casserait ces emprunts
+disjoints. `Machine` (`src/machine.rs`) est implémenté pour `families::cx::Cx`, `families::Ctx`, `player::Ctx`,
+`scene::Ctx`, `combat::World` (une ligne par contexte dans la macro `machine!`) et donne une fois pour toutes :
+
+| Méthode | Sens |
+|---|---|
+| `x.random() -> u16` | le tirage unique du jeu (`rng::random`, 0x19a88) ; les appelants masquent |
+| `x.random_68k() -> u16` | idem, et laisse D0.w et les drapeaux (sites dont la suite relit D0) |
+| `x.prog8/16/32(a)` | espace programme (tables lues relativement au PC dans l'original) |
+| `x.data8/16/32(a)` | espace données (tables atteintes par adresse absolue ou pointeur, RAM) |
+| `x.bus()`, `x.machine()` | le bus ; le couple (processeur, bus) pour un adaptateur `_68k` |
+
+`use crate::machine::Machine;` dans le fichier. Les accesseurs propres à chaque contexte (`a5_u8`, `ram8`, `v8`,
+`rom16`...) restent pour l'instant (inhérents, prioritaires sur le trait) : chaque lot les remplace dans son périmètre par
+les vues typées (`ram::Octet/Mot/Long`, `Obj`) ou par `Machine`, puis les supprime. Attention aux homonymes trompeurs :
+`families::Ctx::rom16` lit l'espace **données**, `Cx::rom16` l'espace **programme** ; `Machine` les distingue
+(`data16` / `prog16`). Le générateur n'a plus qu'une implémentation (`rng.rs`) ; les copies (`camera_modes`,
+`player::Ctx::random`, `ai_aids::random`, `effects_b`) sont supprimées.
+
+### Le moteur d'objets vu d'un gestionnaire : le trait `objects::Courant`
+
+Pour les contextes qui traitent un objet (`Cx` : `x.o` ; `families::Ctx` : A0 au moment de l'appel).
+`use crate::objects::Courant;` dans le fichier.
+
+| Méthode | Original | Rend |
+|---|---|---|
+| `alloc(&pool)`, `alloc_unchecked`, `alloc_or_leftover`, `free(&pool)` | pools (pilote) | `Option<Obj>`... |
+| `anim_start(set, n)` | 0x1a32 | adresse après l'entrée (jamais nulle) |
+| `anim_start_entry(at)` | 0x1a3c | idem |
+| `anim_start_by_character(&anim::SETS_ARMED / SETS_PLAIN / SETS_BY_VARIANT, n)` | 0x2c16 / 0x2c88 / 0x2cf0 | idem |
+| `anim_step()`, `anim_step_long()` | 0x1a56, 0x2d58 | `bool` : retenue (fin de script, **ou durée nulle** : glitch, voir `anim::Step::Wrapped`) |
+| `move_x/y/z/xy/xz/yz/xyz()` | 0x1d78, 0x1e02, 0x1dbc, 0x1d62, 0x1da6, 0x1dd4, 0x1d90 | `motion::LastAdd` |
+| `move_by_table_xy()`, `move_by_table_xz()` | 0x1cb4, 0x1cee | `motion::LastAdd` |
+| `select_speed(&motion::SPEEDS_A / SPEEDS_B, n)` | 0x1a94 / 0x1b64 | — |
+| `suspended()` | 0x29ea | `bool` (octet `Obj::HIDDEN` non nul) |
+| `tick_counters()` | 0xf1bfc | — |
+| `reinsert()`, `reinsert_foreground()` | 0x1ee1a, 0x1ef6c | — |
+| `unlink()` | 0x1f0be | — |
+| `cull_offscreen()` | 0x1e1a | — |
+| `in_arena(margin)`, `in_arena_default()` | 0x1e92, 0x1e90 | `bool` (retenue : dedans) |
+| `update_visibility()` | 0x1ed2 | `bool` (visible) |
+
+`motion::LastAdd` est la dernière addition `add.l D0,(position)` : `if x.move_xz().gt()` remplace
+`x.call(MOVE_XZ); if x.c.cond(14)` (`gt`, `le`, `pl`, `mi`, `zero`, `overflow`, calculés comme le 68000). Un pas
+d'animation suivi de `bcs` devient `if x.anim_step()`. Un appelant qui passait l'adresse d'une routine en paramètre
+(`leap_climb(x, call::MOVE_XZ)`) prend une fonction : `leap_climb(x, |x| { x.move_xz(); })`.
+
+### Hors gestionnaire : les cœurs et les adaptateurs
+
+Un contexte sans objet courant (joueurs, combat, IA, scènes, natives `(c, b)`) appelle le module :
+
+| Module | Cœur (bus seul) | Adaptateur (étiquette `DDSOM_POISON`) |
+|---|---|---|
+| `objects::anim` | `start(b, o, set, n)`, `start_entry(b, o, at)`, `start_by_character(b, o, &SETS_*, n)`, `step(b, o, long) -> Step` (`.finished()`) | `start_68k`, `start_entry_68k`, `start_by_character_68k`, `step_68k` (`anim`) |
+| `objects::motion` | `ballistic(b, o, motion::XZ) -> LastAdd`, `move_by_table(b, o, AXIS_Y)`, `select_speed(b, o, &SPEEDS_B, n)`, `suspended(b, o)`, `tick_counters(b, o)`, `advance`, `advance_by_table`, `select_speed_table` | `ballistic_68k`, `move_by_table_68k`, `select_speed_68k`, `suspended_68k`, `tick_counters_68k` (`motion`) |
+| `objects::lists` | `ACTORS.reinsert(b, o)`, `FOREGROUND.reinsert(b, o)`, `unlink(b, o)`, `unlink_all(b)` | `ACTORS.reinsert_68k(c, b, o)`, `unlink_all_68k` (`lists`) |
+| `objects::cull` | `despawn_if_offscreen(b, o)`, `in_arena(b, o, margin)`, `update_visibility(b, o)`, `is_visible`, `camera` | `despawn_if_offscreen_68k`, `in_arena_68k`, `update_visibility_68k` (`cull`) |
+| `objects::rank` | `reset(b)`, `load_preset(b, row)`, `tick(b)`, `raise(b)`, `lower(b)` | `reset_68k`, `load_preset_68k`, `tick_68k`, `raise_68k`, `lower_68k` (`rank`) |
+| `rng` | `random(b)`, `seed(b)` | `random_68k`, `seed_68k` (`random`) |
+| `objects::pools` | (pilote) `POOL.alloc(b)`... | `alloc_68k`, `release_68k` (`alloc`, `free`) |
+
+`combat::Obj` n'existe plus : `combat` utilise `objects::Obj`, qui a gagné `Obj::from_word(w)` (mot étendu en signe),
+`o.word()` et `o.long_ref()`.
+
+### Ce qui reste en adaptateur, et pourquoi
+
+RESTE_68K
+
 ## Registres morts : `DDSOM_POISON`
 
 Un adaptateur appelle, après avoir posé les registres de l'original :
@@ -67,6 +145,11 @@ l'allocation l'y a mis. A1 fait partie du contrat de cette native. D'où la règ
 `(c, b)`, `scene::Ctx`, `player::Ctx`) garde l'adaptateur `_68k` tant que ses appelants relisent ses registres ; les
 gestionnaires de la boucle de dispatch (`Cx`, `families::Ctx`, contrat A0/D7) ont leur propre étiquette
 (`gestionnaires`) pour être prouvés à part.
+
+**Par site** (lot 0b). Une entrée `étiquette@motif` n'empoisonne que les appels dont le site (`fichier:ligne:colonne`
+du gestionnaire, propagé par `#[track_caller]` à travers `Courant` et les adaptateurs) contient le motif ; `!étiquette@motif`
+exclut ces sites : `DDSOM_POISON='motion,!motion@enemy_dbeast/parts.rs'`. Avec `DDSOM_POISON_TRACE=1`, la liste des
+sites empoisonnés avant l'image de l'écart se réduit à quelques candidats qu'on essaie un par un (`motion@shell.rs:57`).
 
 `DDSOM_POISON` change l'empreinte des résultats de `tools/validate_all.sh` (variables `DDSOM_*`) : pas de mélange avec
 les résultats ordinaires.
