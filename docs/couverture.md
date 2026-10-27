@@ -176,3 +176,45 @@ trois enseignements généraux :
 Les natives sont toujours dispensées d'imiter la durée de l'original : un état où la machine de référence passe plusieurs
 images dans une boucle (compteur FF806E qui avance par à-coups) est un comportement indéfini à corriger, pas à reproduire
 (`examples/cyc` compare les dates des natives des deux machines).
+
+## Bots longs (`scenarios/long/`, `DDSOM_LONG=1`)
+
+Parties longues jouées par `examples/autobot.rs` (40 000 à 90 000 images chacune) : plusieurs joueurs, magies et
+objets fréquents, routes des choix 0x14 et 0x38, boutiques, difficultés 0, 3 et 7, langue 4, joueurs mortels. Elles
+sortent des chemins des scénarios de 30 000 images et ont trouvé des trous du mode sans 68000. Génération :
+`tools/gen_long.py [nom...]` (écrit `<nom>.txt` et `<nom>.images`, le nombre d'images du scénario). Validation :
+`DDSOM_LONG=1 tools/validate_all.sh` les ajoute (en tête de liste : chacune dure 1 à 3 minutes) ; sans la variable,
+la validation habituelle ne change pas. Ciblée : `validate <roms> <eeprom> scenarios/long/<nom>.txt $(cat
+scenarios/long/<nom>.images)`.
+
+| Scénario | Images | Contenu |
+|---|---|---|
+| `long_2p_magies` | 90 000 | clerc et magicien, magies et objets très fréquents (scènes 1, 2, 4, 0xb, 0xd, 0xe, 0x10, boutique 0x45) |
+| `long_28_scenes` | 90 000 | nain seul, 28 scènes (1, 5, 9… 109), difficulté 7, langue 4, boutique enchaînée |
+| `long_3p_mortels` | 60 000 | combattant, elfe et nain mortels |
+| `long_4p` | 60 000 | combattant, elfe, magicien, voleur (scènes 1-0xc, boutique 0x45) |
+| `long_route_14` | 60 000 | elfe depuis le choix de route 0x14 (0x18, boutique 0x4c, 0x6a) |
+| `long_route_38` | 60 000 | voleur et nain au choix de route 0x38 |
+| `long_boutiques` | 40 000 | clerc, les 14 boutiques 0x45-0x52, difficulté 0 |
+| `long_2p_d3_mortels` | 60 000 | combattant et magicien mortels, difficulté 3, scènes 0x1d-0x38 |
+| `long_nain_mortel` | 60 000 | nain seul mortel, jeu naturel (game over) |
+| `long_voleur_objets` | 60 000 | voleur, objets et magies très fréquents, scènes 1-56 |
+| `long_magicien_57_86` | 60 000 | magicien, magies très fréquentes, scènes 57-86 |
+| `long_2p_d7_mortels` | 60 000 | clerc et elfe mortels, difficulté 7 |
+| `long_4p_route_38` | 60 000 | quatre joueurs au choix de route 0x38 |
+| `long_route_14_2p` | 60 000 | combattant et clerc depuis le choix de route 0x14 |
+
+Trous trouvés et corrigés (2026-10-27) ; chacun passait inaperçu des 272 scénarios de la validation complète :
+
+| Bot (image) | Symptôme | Cause et correction |
+|---|---|---|
+| `long_2p_magies` (15 318) | arrêt : pas de native en 0x4dfe2 (`magic_user.rs`) | effets des sorts du magicien appelés par adresse sans native : vague 0x4dfe2, et du même coup orage 0x4d020, pluie 0x4d660, mur de feu 0x4d2c0 et les lunes de l'elfe 0x4e4de, 0x4e782 (relevé statique des appels par adresse de `player/`). Réécrits dans `player/spawn.rs` (`wave_bolt`, `storm_spell`, `rain_glow`, `wall_spark`, `moon`, `moon_b`), natives pour le fuzz : `fuzz_player spawn` avec `DDSOM_ENTREE`, 300 appels chacun, 0 écart |
+| `long_2p_magies` (59 919) | divergence : position et angle d'un éclat du gel (PEFF type 12) | registre résiduel : le rebond du gel (0x4bda8) indexe sa table par D2, laissé par le gestionnaire précédent, le parent de l'anneau d'équipement (`peff_ring`, 0x4a370 : `move.w (table),D2w`), que le Rust n'écrivait pas. `parent_follow` laisse D0, D1.w, D2.w (et `parent_alive` D0.b) comme l'original ; le suivi recopié dans `ring1` passe par `parent_follow`. Trouvé avec `examples/registre_ecrit` |
+| `long_2p_magies`, avec `DDSOM_ASSETS` (59 932) | délai d'un éclat du gel nul | glitch d'origine : le délai `move.b (0x4bd98,PC,D0.w)` prend l'octet haut de D0.w laissé par le tirage : 256 lectures de 16 octets sur ±32 Ko, souvent dans le code, absent des assets. Zones déclarées dans `tools/zones_natives.py` et ajoutées à `zones_natives.txt` (154 lignes dans le code) |
+| `long_28_scenes` (86 671) | arrêt : pas de native en 0x20ae (`scene/shop.rs`) | initialisation du pool PEFF à la réouverture d'une boutique enchaînée : native `pools::INIT_PEFF` |
+| `long_3p_mortels` (13 279) | 32 objets ESHL de type 0x1a manquants | glitch d'origine : 0xa17d0 (rangée d'éclats d'une caisse) charge le compte par `move.b (table),D5b` sans effacer D5 (0xa1670 le fait) : l'octet haut de D5.w laissé par la caisse s'ajoute à la boucle `dbf`, qui remplit le pool ; `eshl_creators::row_1a` gardait D5 entier |
+| `long_4p` (24 848) | arrêt : pas de native en 0xe296c (`elf.rs`) | son de la lune de l'elfe qui teste la version (`A5+0x70`) : ajouté à `sound::SELON_VERSION` (seul de ce genre manquant parmi les 7 entrées `tst.w (0x70,A5)` des sons) |
+| `long_2p_d3_mortels` (19 500) | compteur d'animation d'un joueur | `moves::pause` : pendant l'arrêt du jeu (`A5+0x3d`), l'action 0x1e (0x362d0) rend la main sans animer (`rts`), seule 0x1c (0x3626c) anime |
+
+Résultat : les 14 bots finissent VALIDE en mode par défaut et avec `DDSOM_ASSETS` (assets régénérés avec les zones
+ci-dessus). `validate` accepte `DDSOM_DIFF_MAX=n` pour afficher plus de 10 mots de RAM différents.

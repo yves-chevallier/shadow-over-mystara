@@ -160,7 +160,9 @@ plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_
   qui parcourt 28 scènes en difficulté 7 et en langue 4 (90 000), trois joueurs mortels (60 000). Avec
   `DDSOM_ASSETS`, chacun finit exactement comme en mode par défaut (avec les ROMs) : arrêts sans 68000 faute de
   native en 0x4dfe2 (`magic_user.rs`, image 15 318) et 0x20ae (`scene/shop.rs`, image 86 671), divergence de
-  natives à l'image 13 279 (trois joueurs) ; ce sont des trous du mode sans 68000, pas des données. Seul écart
+  natives à l'image 13 279 (trois joueurs) ; ce sont des trous du mode sans 68000, pas des données (corrigés
+  depuis : `scenarios/long/`, docs/couverture.md « Bots longs », avec une autre lecture de code par une native, le délai
+  du gel 0x4bd98 + D0.w, déclarée dans `zones_natives.txt`). Seul écart
   d'assets trouvé : la lecture hors bornes de la table des boutiques ci-dessous (image 86 640), corrigée. Avec un
   `reste.json` vidé, les trois divergent dès les images 4 370, 4 651 et 5 780.
 * **Sans ROM du tout** : une copie du dépôt (`git archive`) se construit sans dossier `rom/` (`ddsom-rc` vide, avec

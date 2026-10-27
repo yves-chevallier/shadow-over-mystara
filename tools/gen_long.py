@@ -46,6 +46,20 @@ SPECS = {
                                pokes=['800:ff802a:3:1']),
     # nain seul mortel, jeu naturel
     'long_nain_mortel': dict(players=1, chars=(3,), frames=60000, seed=509, cast=10, charges=1),
+    # voleur seul, objets et magies très fréquents, scènes 1 à 56
+    'long_voleur_objets': dict(players=1, chars=(5,), frames=60000, seed=510, god='0x70', cast=40, charges=3,
+                               plan=','.join(f'{s}:3000' for s in range(1, 57, 5))),
+    # magicien seul, magies très fréquentes, scènes 57 à 86
+    'long_magicien_57_86': dict(players=1, chars=(4,), frames=60000, seed=511, god='0x70', cast=40, charges=3,
+                                plan=','.join(f'{s}:2500' for s in range(57, 87, 3))),
+    # clerc et elfe mortels, difficulté 7
+    'long_2p_d7_mortels': dict(players=2, chars=(1, 2), frames=60000, seed=512, cast=10, charges=1,
+                               pokes=['800:ff802a:7:1']),
+    # quatre joueurs depuis le choix de route 0x38
+    'long_4p_route_38': dict(players=4, chars=(1, 3, 4, 5), frames=60000, seed=513, god='0x70', plan='56:40000',
+                             cast=15, charges=1),
+    # combattant et clerc depuis le choix de route 0x14
+    'long_route_14_2p': dict(players=2, chars=(0, 1), frames=60000, seed=514, god='0x70', plan='20:40000'),
 }
 
 
@@ -72,7 +86,7 @@ def gen(nom):
     os.remove(base)
     with open(os.path.join(SORTIE, nom + '.images'), 'w') as f:
         f.write(f"{sp['frames']}\n")
-    visites = [l for l in r.stdout.splitlines() if l.startswith('scènes visitées')]
+    visites = [l for l in (r.stdout + r.stderr).splitlines() if l.startswith('scènes visitées')]
     print(nom, r.returncode, *visites)
 
 
