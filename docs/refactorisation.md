@@ -260,6 +260,40 @@ de repli), qui ne sert plus qu'au diagnostic et n'a plus à finir VALIDE (`DDSOM
   `cost`, dans `hud/slot.rs`, `sprites.rs`, `tache_credits.rs`) ; lignes de code 149 834 → 147 861 ; au passage `regs`
   5 907 → 5 865, `drap` 643 → 642, `adr` 4 581 → 4 584 (`call` explicites qui remplacent `Vue::appeler`).
 
+## 7. Lot E : les tâches en machines à états (J3)
+
+Modèle et marche à suivre : [guide-refactorisation.md](guide-refactorisation.md), « Exemple : une tâche qui cède » ;
+détail du noyau : [noyau.md](noyau.md), « Tâches Rust ».
+
+* **Pas 1-2 (étapes, `Reprise::Etape`).** Chaque point de reprise est une variante d'une `enum Etape` de son module
+  (`etapes!`), réunies dans `taches::Etape` ; `table::Suite` (étape ou adresse d'une native) désigne la suite d'une
+  cession et d'un appel en cours. L'ordonnanceur remet le contexte puis appelle le pas (`taches::executer`) au lieu de
+  poser `c.pc` ; une tâche neuve dont l'entrée est une étape démarre de même. Converties : gel, invites, écran des
+  scores, menu TEST, interface des joueurs, crédits, fondus, partie (entrée, début de tour), portraits de la boutique,
+  machine à modes (démarrage, attract, titre, choix, classement, démonstration, fin, fin de partie) et séquences de
+  scène (sortie de scène, fondu au noir, transitions, bonus, boutique, personnages, comptes) : 349 `resume!` → 4.
+* **Pas 3 (sous-machines).** Fondus et écran noir sont des fonctions Rust appelées directement
+  (`Sequence::sous_programme`, appel terminal) ; ce qu'ils gardaient sur la pile (sens d'un fondu dans D1, registres
+  d'un `movem`, D0 d'une impulsion de verrouillage) est un champ de leur étape. Un `Cadre` n'est plus qu'une suite :
+  `Contenu::Registres`, `Valeur`, `garder`, `reprendre` ont disparu.
+* **J1 dans le périmètre.** Plus d'appel par adresse aux enveloppes du noyau (`0x9b6`, `0xa14`, `0xb64`, `0xa40`,
+  `0x9f8`, `0xae4` : `kernel::creer_tache`, `tuer_tache`, `taches::une_image`, `attendre`, `terminer`,
+  `recommencer`), ni aux fondus et à l'écran noir.
+* **Pas 4, ce qui reste (et pourquoi).** `resume!` : le pas de jeu `0x1c4b0` (la boucle d'image teste le plafond de
+  pas, `cps2::StepCap`, sur le PC), les retours des phases de la démonstration `0x1f98c`/`0x20a98` (adresse de retour
+  d'un `call_at` vers une phase qui peut céder), le fondu au noir `0x1460` (appelé par `call_at` par les objets SET,
+  `families/set.rs`, `set_b.rs`). `Cadre`, `mettre_sur_la_pile`, `Unwound` et `Reprise::Cession` restent pour les
+  appelants hors du lot : gestionnaires d'objets qui cèdent par `call_at` (fondu des SET, reprises `game.rs`
+  `WORLD_RESUMES`/`PHASE_12_RESUME` et `dispatch.rs` `RESUME_*`, adresses de retour de leurs `call_at`), épilogue
+  étranger des bulles (`families/mod.rs`, qui dépile des cadres remis sur la pile ; l'étape `Tour` qu'il atteint est
+  retrouvée par `table::etape_depilee`), `families/effects_g.rs` (`table::appeler`). Ils disparaîtront quand les
+  familles (lots A-C) ne céderont plus par `call_at`.
+
+Mesure (`tools/mesure_refacto.py`, zones du lot : `scene`, `modes`, `hud`, `taches`, `service`, `eeprom`,
+`tache_credits`, `game`, `kernel`, `vblank`, `ecran_credits`, `dispatch`) : lignes 18 724 → 18 693, `adr` 625 → 560,
+`pile` 407 → 67, natives 389 → 49 ; `regs` (886), `drap` (23), `brut` (1 837 → 1 836) inchangés : le lot a porté sur
+J3, pas sur J2.
+
 ## Avancement
 
 | Étape | Commit | Validation |
@@ -268,3 +302,4 @@ de repli), qui ne sert plus qu'au diagnostic et n'a plus à finir VALIDE (`DDSOM
 | Pilote, appelants par les adaptateurs ; documents | e1f8159 | complète, 269/269 normal et sans 68000 |
 | Pilote, poison, glitch de l'orbe, gestionnaires en fonctions pures | voir `git log` | complète, 269/269 normal (15 min 40 s) et sans 68000 (15 min 19 s), en parallèle à 7 tâches chacune |
 | Lot 0a : plus de durées du mode hybride, jeu sans 68000 par défaut (`DDSOM_HYBRIDE=1` : diagnostic) | edef15d, documentation | complète, 269/269 sans 68000 (14 min 46 s, 10 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; hybride : bot30k 5 000 images VALIDE (non exigé) |
+| Lot E : tâches et écrans en machines à états (étapes, sous-machines des fondus et de l'écran noir) | voir `git log` (wt-taches) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) |
