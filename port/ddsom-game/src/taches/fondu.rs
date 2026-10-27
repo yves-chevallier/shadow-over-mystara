@@ -207,10 +207,25 @@ fn complet(x: &mut Ctx, delta: u32) -> Flow {
     sous_programme(delta).debut_sous_programme(x)
 }
 
-// sous-programmes : 0x144c / 0x1460 fondu complet, 0x146c D0.b pas
-resume!(FONDU_MONTEE, 0x144c, |x| complet(x, MONTE));
-resume!(FONDU_DESCENTE, 0x1460, |x| complet(x, DESCEND));
-resume!(FONDU_DESCENTE_D0, 0x146c, |x| sous_programme(DESCEND).debut_sous_programme(x));
+/// `0x144c` : fondu complet depuis le noir (sous-programme : la suite de l'appelant attend la fin).
+pub fn montee(x: &mut Ctx) -> Flow {
+    complet(x, MONTE)
+}
+
+/// `0x1460` : fondu complet vers le noir.
+pub fn descente(x: &mut Ctx) -> Flow {
+    complet(x, DESCEND)
+}
+
+/// `0x146c` : fondu vers le noir de D0.b pas.
+pub fn descente_d0(x: &mut Ctx) -> Flow {
+    sous_programme(DESCEND).debut_sous_programme(x)
+}
+
+// sous-programmes, pour les appels par adresse
+resume!(FONDU_MONTEE, 0x144c, montee);
+resume!(FONDU_DESCENTE, 0x1460, descente);
+resume!(FONDU_DESCENTE_D0, 0x146c, descente_d0);
 // tâches : 0x14ba / 0x14d0 fondu complet, 0x14c8 / 0x14de nombre de pas de l'état, 0x1536 / 0x153e partiels (voir
 // `TACHES`)
 
@@ -273,10 +288,25 @@ impl Composante {
     }
 }
 
-// sous-programmes (les tâches : `TACHES`)
-resume!(FONDU_BLANC, 0x1ccc2, |x| composante(0x1ccc2).debut(x, false));
-resume!(FONDU_COULEURS, 0x1ce30, |x| composante(0x1ce30).debut(x, false));
-resume!(FONDU_PALETTES, 0x1ce9e, |x| composante(0x1ce9e).debut(x, false));
+/// `0x1ccc2` : fondu par composante vers le blanc (sous-programme).
+pub fn vers_le_blanc(x: &mut Ctx) -> Flow {
+    composante(0x1ccc2).debut(x, false)
+}
+
+/// `0x1ce30` : fondu par composante vers les couleurs.
+pub fn vers_les_couleurs(x: &mut Ctx) -> Flow {
+    composante(0x1ce30).debut(x, false)
+}
+
+/// `0x1ce9e` : fondu par composante vers les palettes.
+pub fn vers_les_palettes(x: &mut Ctx) -> Flow {
+    composante(0x1ce9e).debut(x, false)
+}
+
+// sous-programmes, pour les appels par adresse (les tâches : `TACHES`)
+resume!(FONDU_BLANC, 0x1ccc2, vers_le_blanc);
+resume!(FONDU_COULEURS, 0x1ce30, vers_les_couleurs);
+resume!(FONDU_PALETTES, 0x1ce9e, vers_les_palettes);
 
 pub const NATIVES: &[Native] =
     &[FONDU_MONTEE, FONDU_DESCENTE, FONDU_DESCENTE_D0, FONDU_BLANC, FONDU_COULEURS, FONDU_PALETTES];

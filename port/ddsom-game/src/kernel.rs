@@ -259,7 +259,7 @@ fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, S
 }
 
 /// 0xae4 (et `trap #7`, 0xae6) : la tâche courante repart de zéro en A0, même pile.
-fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
     let t = table(b);
     t.recommencer(c.a[0]);
     c.a[4] = enregistrement(t.courante);

@@ -390,7 +390,7 @@ fn exit(x: &mut Ctx) -> Flow {
     }
     x.set_v16(var::ACTIVE, 0);
     x.c.a[0] = ext::BOOT_TASK;
-    x.tail(ext::RESTART_TASK, at::EXIT_RETURN)
+    crate::taches::recommencer(x)
 }
 
 /// `0x29a48` : départ 1P tenu et tir 1 : retour au menu.

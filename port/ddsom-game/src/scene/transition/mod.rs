@@ -65,9 +65,6 @@ const ALL_PAGES: u8 = 15;
 const SCENE_PAGES: u8 = 13;
 
 mod sub {
-    pub const WAIT: u32 = 0xa40;
-    pub const FADE_IN: u32 = 0x144c;
-    pub const FADE_OUT: u32 = 0x1460;
     pub const TASK_CREATE: u32 = 0x9b6;
     pub const FADE_TASK: u32 = 0x14ba;
     pub const FADE_TASK_PAGES: u32 = 0x14d0;
@@ -223,15 +220,16 @@ fn end(x: &mut Ctx) -> Flow {
 /// Cède `n` images (`moveq #n,D0 ; jsr/jmp 0xa40`).
 fn yield_frames(x: &mut Ctx, n: u32, ret: Ret) -> Flow {
     x.c.d[0] = n;
-    goto(x, sub::WAIT, ret)
+    goto(x, crate::taches::attendre_puis_revenir, ret)
 }
 
-/// Saute à un sous-programme qui cède, en empilant le retour s'il y a lieu.
-fn goto(x: &mut Ctx, routine: u32, ret: Ret) -> Flow {
+/// Saute à un sous-programme qui cède (`bsr`, ou `bra` qui revient à l'appelant du script), en rangeant la suite
+/// s'il y a lieu.
+fn goto(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow {
     if let At(r) = ret {
         x.push_return(r);
     }
-    x.jump_to(routine)
+    routine(x)
 }
 
 /// 0xfa102 : couches affichées, une image, puis fondu d'ouverture de toutes les pages (reprise 0xfa110).
@@ -245,7 +243,7 @@ fn show_and_fade_in(x: &mut Ctx, ret: Ret) -> Flow {
 crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
-        FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, sub::FADE_IN, Caller),
+        FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::taches::fondu::montee, Caller),
         SpritesAfterFrame = 0xfa1ca => |x| {
             keep_a0_a6(x, sub::SPRITES);
             Flow::Done
@@ -254,7 +252,7 @@ crate::etapes! {
 }
 
 /// Fondu (délai 3) des `pages` vers le noir (0x1460) ou depuis le noir (0x144c) : 0xfa122, 0xfa134, 0xfa146.
-fn fade(x: &mut Ctx, pages: u8, routine: u32, ret: Ret) -> Flow {
+fn fade(x: &mut Ctx, pages: u8, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow {
     x.set_v16(a5::FADE_DELAY, 3);
     x.set_v8(a5::FADE_PAGES, pages);
     goto(x, routine, ret)

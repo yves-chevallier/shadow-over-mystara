@@ -15,8 +15,6 @@ mod ext {
     pub const PALETTE_SET: u32 = 0x1a366;
     pub const PALETTE_3: u32 = 0x1a8b2;
     pub const SCROLL_2_ON: u32 = 0x2a52;
-    pub const FADE_BY_COMPONENT: u32 = 0x1ccc2;
-    pub const FADE_TO_PALETTES: u32 = 0x1ce9e;
 }
 use sub::{TILE_BLOCK as TB, TILE_BLOCK_2 as TB2};
 
@@ -58,7 +56,7 @@ crate::etapes! {
             layers_or(x, 0xc);
             x.wait(1, Etape::S2Drawn)
         },
-        S2Drawn = 0xf83cc => |x| fade(x, ALL_PAGES, sub::FADE_IN, Caller),
+        S2Drawn = 0xf83cc => |x| fade(x, ALL_PAGES, crate::taches::fondu::montee, Caller),
         S2Faded = 0xf8456 => |x| hide_layers(x, At(Etape::S2Cleared.into())),
         S2Cleared = 0xf8464 => |x| {
             x.call(sub::CLEAR_SCROLL_2);
@@ -74,7 +72,7 @@ crate::etapes! {
             tiles(x, TB, 0, None);
             show_layers(x, At(Etape::S5Shown.into()))
         },
-        S5Shown = 0xf8524 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S5FadedIn.into())),
+        S5Shown = 0xf8524 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S5FadedIn.into())),
         S5FadedIn = 0xf8528 => s5_second_message,
         S5Retry2 = 0xf853c => s5_second_message,
         S5TextFaded = 0xf8556 => |x| hide_layers(x, At(Etape::S5TextHidden.into())),
@@ -84,7 +82,7 @@ crate::etapes! {
             set16(x, var::TIMER, 120);
             sprites_next_frame(x, Etape::S5TextShown)
         },
-        S5TextShown = 0xf8582 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S5TextFadedIn.into())),
+        S5TextShown = 0xf8582 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S5TextFadedIn.into())),
         S5TextFadedIn = 0xf8586 => |x| {
             next(x);
             Flow::Done
@@ -138,7 +136,7 @@ crate::etapes! {
             next(x);
             show_layers(x, At(Etape::S4SecondShown.into()))
         },
-        S4SecondShown = 0xf8982 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, Caller),
+        S4SecondShown = 0xf8982 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, Caller),
         S4Faded = 0xf8a84 => |x| hide_layers(x, At(Etape::S4FadedHidden.into())),
         S4FadedHidden = 0xf8a88 => |x| home_camera_1(x, At(Etape::S4Homed.into())),
         S4Homed = 0xf8a8c => |x| {
@@ -148,7 +146,7 @@ crate::etapes! {
             dark_palette(x);
             show_layers(x, At(Etape::S4Dark.into()))
         },
-        S4Dark = 0xf8ab4 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S4DarkIn.into())),
+        S4Dark = 0xf8ab4 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S4DarkIn.into())),
         S4DarkIn = 0xf8ab8 => s4_message_92,
         S4Retry92 = 0xf8acc => s4_message_92,
         S4RetryWizard = 0xf8aea => s4_wizard,
@@ -227,7 +225,7 @@ crate::etapes! {
             set16(x, var::TIMER, 10);
             x.set_v16(a5::FADE_DELAY, 4);
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-            x.jump_to(sub::FADE_IN)
+            crate::taches::fondu::montee(x)
         },
         S11Retry17 = 0xf8db4 => s11_message_17,
         S11Retry18 = 0xf8e48 => s11_message_18,
@@ -252,7 +250,7 @@ crate::etapes! {
         S13Shown = 0xf8f02 => |x| {
             x.set_v16(a5::FADE_DELAY, 4);
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-            x.jump_to(sub::FADE_IN)
+            crate::taches::fondu::montee(x)
         },
         S13LeftDrawn = 0xf8f98 => |x| yield_frames(x, 1, At(Etape::S13LeftWaited.into())),
         S13LeftWaited = 0xf8fa0 => |x| hide_layers(x, At(Etape::S13LeftHidden.into())),
@@ -300,7 +298,7 @@ crate::etapes! {
             }
             x.set_v16(a5::FADE_DELAY, 1);
             x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
-            goto(x, ext::FADE_TO_PALETTES, Caller)
+            goto(x, crate::taches::fondu::vers_les_palettes, Caller)
         },
         /// état 6 : nouveau décor, dialogue 30
         S13Closing = 0xf919e => |x| yield_frames(x, 1, At(Etape::S13ClosingWaited.into())),
@@ -320,7 +318,7 @@ crate::etapes! {
             yield_frames(x, 4, At(Etape::S13ClosingDrawn.into()))
         },
         S13ClosingDrawn = 0xf9210 => |x| show_layers(x, At(Etape::S13ClosingShown.into())),
-        S13ClosingShown = 0xf9214 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S13ClosingIn.into())),
+        S13ClosingShown = 0xf9214 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S13ClosingIn.into())),
         S13ClosingIn = 0xf921a => s13_message_30,
         S13Retry30 = 0xf922e => s13_message_30,
         S13Faded = 0xf938a => |x| hide_layers(x, At(Etape::S13End.into())),
@@ -394,7 +392,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
             let scene = answer(x, 0xf847c);
             set8(x, var::MESSAGE, scene);
             call_d0(x, sub::SOUND, 0);
-            fade(x, ALL_PAGES, sub::FADE_OUT, At(Etape::S2Faded.into()))
+            fade(x, ALL_PAGES, crate::taches::fondu::descente, At(Etape::S2Faded.into()))
         }
         _ => Flow::Done,
     }
@@ -423,20 +421,20 @@ pub fn scene_5(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S5Faded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S5Faded.into()))
         }
         6 => {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S5TextFaded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S5TextFaded.into()))
         }
         8 => {
             if !any_button(x) && !tick(x) {
                 return Flow::Done;
             }
             call_d0(x, sub::SOUND, 0);
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S5EndFaded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S5EndFaded.into()))
         }
         _ => Flow::Done,
     }
@@ -504,13 +502,13 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S4Faded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S4Faded.into()))
         }
         10 => {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S4SecondFaded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S4SecondFaded.into()))
         }
         12 => {
             if !message_done(x) {
@@ -635,7 +633,7 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             call_d0(x, sub::SOUND, 0);
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S11Faded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S11Faded.into()))
         }
         _ => Flow::Done,
     }
@@ -706,7 +704,7 @@ pub fn scene_13(x: &mut Ctx) -> Flow {
                 Flow::Done
             }
         },
-        12 => fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S13Faded.into())),
+        12 => fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S13Faded.into())),
         _ => Flow::Done,
     }
 }
@@ -762,7 +760,7 @@ fn s13_leave(x: &mut Ctx) -> Flow {
     }
     next(x);
     set8(x, var::SUB, 0);
-    fade(x, SCENE_PAGES, sub::FADE_OUT, Caller)
+    fade(x, SCENE_PAGES, crate::taches::fondu::descente, Caller)
 }
 fn s13_set_11(x: &mut Ctx) -> Flow {
     or_yield!(set_object(x, 11, Etape::S13Retry11));
@@ -779,7 +777,7 @@ fn s13_time_out(x: &mut Ctx) -> Flow {
             next_sub(x);
             x.set_v16(a5::FADE_DELAY, 1);
             x.set_v8(a5::FADE_PAGES, SCENE_PAGES);
-            goto(x, ext::FADE_BY_COMPONENT, At(Etape::S13OutFaded.into()))
+            goto(x, crate::taches::fondu::vers_le_blanc, At(Etape::S13OutFaded.into()))
         }
         2 => s13_out_scenery(x),
         4 => {

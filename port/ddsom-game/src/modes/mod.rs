@@ -92,6 +92,10 @@ pub trait Sequence {
     fn jump(&mut self, addr: u32) -> Flow;
     /// Comme `jump`, sans toucher à A0 (appel terminal `jmp` d'une routine d'origine).
     fn jump_to(&mut self, addr: u32) -> Flow;
+    /// Appelle un sous-programme Rust qui peut céder la main (fondu, écran noir : `taches::fondu::descente`,
+    /// `video::ecran_noir::debut`...) : `resume` est rangée dans les appels en cours ; s'il revient sans céder,
+    /// elle s'exécute aussitôt.
+    fn sous_programme(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Suite>) -> Flow;
     /// Appel `bsr`/`jsr` dont la suite est une native de reprise : rangée dans les appels en cours de la tâche
     /// (`taches::table::Cadre`), elle reprendra quand l'appelé reviendra.
     fn push_return(&mut self, suite: impl Into<Suite>);
@@ -138,6 +142,13 @@ impl Sequence for Ctx<'_> {
     }
     fn push_return(&mut self, suite: impl Into<Suite>) {
         push(self.c, self.b, suite);
+    }
+    fn sous_programme(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Suite>) -> Flow {
+        push(self.c, self.b, resume);
+        if sp(self) == Flow::Done {
+            crate::taches::revenir(self.c, self.b);
+        }
+        Flow::Yield
     }
     fn drop_return(&mut self) {
         crate::taches::table::depiler_retour(self.c, self.b);

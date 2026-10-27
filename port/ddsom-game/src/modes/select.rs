@@ -97,8 +97,6 @@ mod ext {
     pub const FADE_TASK: u32 = 0x1ced4;
     pub const FADE_TASK_B: u32 = 0x14ba;
     pub const FADE_TASK_C: u32 = 0x14de;
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const FADE_OUT_B: u32 = 0x146c;
     pub const TILE_BLOCK: u32 = 0x26d4;
     pub const TILE_BLOCK_2: u32 = 0x2766;
     pub const PLAYER_INPUT: u32 = 0x2bfe;
@@ -342,7 +340,7 @@ crate::etapes! {
             let v = rd16(x.b, var::VIDEO) | 0xe;
             wr16(x.b, var::VIDEO, v);
             x.c.d[0] = 1;
-            x.jump_to(super::sub::WAIT)
+            crate::taches::attendre_puis_revenir(x)
         },
         StepEFaded = STEP_E_FADED => |x| {
             for f in [ext::POOLS_SET, ext::POOLS_SOBJ, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
@@ -683,7 +681,7 @@ fn step_6(x: &mut Ctx) -> Flow {
     x.call_d0(ext::SOUND_E0A82, 0x1c);
     wr16(x.b, var::FADE_DELAY, 1);
     wr8(x.b, var::FADE_PAGES, 0xf);
-    x.tail(ext::FADE_OUT, Etape::Step6Faded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::Step6Faded)
 }
 const STEP_6_FADED: u32 = 0x1d19c;
 const STEP_6_CLEAR: u32 = 0x1d1c2;
@@ -840,7 +838,7 @@ fn step_e(x: &mut Ctx) -> Flow {
     wr16(x.b, var::FADE_DELAY, 1);
     x.c.d[0] = 8;
     wr8(x.b, var::FADE_PAGES, 0xf);
-    x.tail(ext::FADE_OUT_B, Etape::StepEFaded)
+    x.sous_programme(crate::taches::fondu::descente_d0, Etape::StepEFaded)
 }
 const STEP_E_FADED: u32 = 0x1d498;
 const STEP_E_HIDE: u32 = 0x1d4b8;

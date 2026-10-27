@@ -50,8 +50,6 @@ mod rom {
     pub const BACKDROP_ALT: u32 = 0x3f6c08;
 }
 mod sub {
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const FADE_IN: u32 = 0x144c;
     /// Effet de type 31 : D0 = variante, D1 = `+0x2f`.
     pub const EFFECT: u32 = 0xb1a7a;
     /// Objet SET de type 5.
@@ -98,11 +96,11 @@ pub fn dispatch(x: &mut Ctx, table: u32) -> u8 {
 
 /// Fondu au noir ou depuis le noir (délai 4, toutes les pages, 15 pas) ; la routine cède la main et revient en
 /// `resume`.
-pub fn fade(x: &mut Ctx, routine: u32, resume: impl Into<crate::taches::table::Suite>) -> Flow {
+pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::taches::table::Suite>) -> Flow {
     x.set_v8(a5::FADE_STEPS, 15);
     x.set_v16(a5::FADE_DELAY, 4);
     x.set_v8(a5::FADE_PAGES, 15);
-    x.tail(routine, resume)
+    x.sous_programme(routine, resume)
 }
 
 /// `movem.l A0,-(SP) ; jsr … ; movem.l (SP)+,A0`.
@@ -171,7 +169,7 @@ fn start(x: &mut Ctx) -> Flow {
         wr8(x.b, A5 - 0x55c8, s);
         return Flow::Done;
     }
-    fade(x, sub::FADE_OUT, Etape::FadedOut)
+    fade(x, crate::taches::fondu::descente, Etape::FadedOut)
 }
 
 crate::etapes! {
@@ -245,7 +243,7 @@ crate::etapes! {
             Flow::Done
         },
         /// Dernière image : fondu depuis le noir, puis l'état suivant de la séquence.
-        LastFrame = at::LAST_FRAME => |x| fade(x, sub::FADE_IN, Etape::FadedIn),
+        LastFrame = at::LAST_FRAME => |x| fade(x, crate::taches::fondu::montee, Etape::FadedIn),
         FadedIn = at::FADED_IN => |x| {
             leave(x);
             Flow::Done
@@ -358,7 +356,7 @@ fn objects(x: &mut Ctx) -> Flow {
     x.set_v8(0x3c, 2);
     x.c.d[0] = 1;
     x.call(0x1a60a);
-    fade(x, sub::FADE_IN, Etape::Started)
+    fade(x, crate::taches::fondu::montee, Etape::Started)
 }
 
 /// 0xf67fa : le décor du bonus, rectangle de cases lu dans la ROM (largeur, hauteur, puis les cases par colonnes).
@@ -429,7 +427,7 @@ fn end(x: &mut Ctx) -> Flow {
     if !tick16(x, v::SECONDS) {
         return Flow::Done;
     }
-    fade(x, sub::FADE_OUT, Etape::Ended)
+    fade(x, crate::taches::fondu::descente, Etape::Ended)
 }
 
 /// Entrée d'origine (séquences restées en 68000).

@@ -48,7 +48,7 @@ pub fn run(x: &mut Ctx) -> Flow {
             x.set_v8(0x5f, 0);
             x.set_v16(0x490, 3);
             x.set_v8(0x48e, 15);
-            x.tail(0x1460, Etape::Faded)
+            x.sous_programme(crate::taches::fondu::descente, Etape::Faded)
         }
         2 => {
             palettes(x);

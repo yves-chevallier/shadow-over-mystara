@@ -68,7 +68,7 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::TIMER, 1);
     x.set_v16(var::FADE_DELAY, 3);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, Etape::FixedScreenAfterFade)
+    x.sous_programme(crate::taches::fondu::descente, Etape::FixedScreenAfterFade)
 }
 
 const FIXED_SCREEN_FADED: u32 = 0x1376e;
@@ -105,7 +105,7 @@ crate::etapes! {
             x.call(SOUND_SCREEN_A);
             x.call(SOUND_SCREEN_B);
             x.set_v8(var::FADE_PAGES, 0xf);
-            x.jump_to(sub::FADE_IN)
+            crate::taches::fondu::montee(x)
         },
         LegalScreenFaded = LEGAL_FADED => |x| {
             x.and16(var::LAYERS, !LAYER_BITS);
@@ -145,7 +145,7 @@ crate::etapes! {
         },
         SecondFadeIn = SECOND_FADE_IN => |x| {
             x.set_v8(var::FADE_PAGES, 0xf);
-            x.jump_to(sub::FADE_IN)
+            crate::taches::fondu::montee(x)
         },
         SecondFaded = SECOND_FADED => |x| {
             x.and16(var::LAYERS, !LAYER_BITS);
@@ -169,7 +169,7 @@ crate::etapes! {
         NoticeFadeIn = NOTICE_FADE_IN => |x| {
             x.set_v8(var::FADE_PAGES, 0xf);
             // `jsr 0x144c` : la suite est le décompte, juste après
-            x.tail(sub::FADE_IN, Etape::NoticeCountdown)
+            x.sous_programme(crate::taches::fondu::montee, Etape::NoticeCountdown)
         },
         NoticeCountdown = NOTICE_COUNTDOWN => notice_countdown,
         NoticeFaded = NOTICE_FADED => |x| {
@@ -180,7 +180,7 @@ crate::etapes! {
             x.call(sub::CLEAR_SCROLL_1);
             x.or16(var::LAYERS, LAYER_BITS);
             x.c.d[0] = 1;
-            x.jump_to(sub::WAIT)
+            crate::taches::attendre_puis_revenir(x)
         },
     }
 }
@@ -211,7 +211,7 @@ fn legal_screen_wait(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, Etape::LegalScreenFaded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::LegalScreenFaded)
 }
 
 const LEGAL_FADED: u32 = 0x1381c;
@@ -248,7 +248,7 @@ fn second_legal_wait(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, Etape::SecondFaded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::SecondFaded)
 }
 const SECOND_FADED: u32 = 0x138f8;
 const SECOND_CLEARED: u32 = 0x13906;
@@ -283,7 +283,7 @@ fn notice_countdown(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, 2);
     wr8(x.b, mode::STEP, 0);
     x.set_v8(var::FADE_PAGES, 0xf);
-    x.tail(sub::FADE_OUT, Etape::NoticeFaded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::NoticeFaded)
 }
 const NOTICE_FADED: u32 = 0x1398a;
 const NOTICE_CLEARED: u32 = 0x13998;

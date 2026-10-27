@@ -212,7 +212,7 @@ crate::etapes! {
             x.next_step();
             x.call(ext::SOUND_E0EBC);
             fade_setup(x, 3, FADE_PAGES_ALL);
-            x.jump_to(sub::FADE_IN)
+            crate::taches::fondu::montee(x)
         },
         T06Object = T06_OBJECT => t06_object,
         T06Retry = T06_RETRY => t06_object,
@@ -426,7 +426,7 @@ fn t04_fade_out(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    x.jump_to(sub::FADE_OUT)
+    crate::taches::fondu::descente(x)
 }
 
 /// Étape 6 : fond d'écran suivant ; crée l'objet de variante 7 (attend si le pool est plein).

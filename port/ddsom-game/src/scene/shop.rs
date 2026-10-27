@@ -59,8 +59,6 @@ mod rom {
 }
 
 mod sub {
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const WAIT_ONE: u32 = 0xb64;
     pub const TASK_CREATE: u32 = 0x9b6;
     pub const MESSAGE: u32 = 0xc8312;
     /// Chemin d'erreur de l'original (`tst.w 1(A5)` : erreur d'adresse) quand un pool est plein.
@@ -139,12 +137,14 @@ fn open(x: &mut Ctx) -> Flow {
     x.set_v8(0x42, 2);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    x.tail(sub::FADE_OUT, Etape::OpenFaded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::OpenFaded)
 }
 
 crate::etapes! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Étapes (points de reprise) de la boutique, et la tâche des portraits.
     pub enum Etape {
+        /// Entrée de la tâche des portraits.
+        Portraits = PORTRAITS_TASK => portraits,
         /// Ouverture : numéro de boutique, tâche des portraits, musique, objets de la boutique et des joueurs, puis la
         /// scène de la boutique (69 + numéro) est chargée et son script d'apparition relancé.
         OpenFaded = at::OPEN_FADED => |x| {
@@ -222,7 +222,7 @@ crate::etapes! {
             x.call(0x1f184);
             x.c.a[0] = a0;
             x.set_v8(0x3d, 1);
-            x.tail(sub::WAIT_ONE, Etape::LeaveWaited)
+            crate::taches::une_image(x, Etape::LeaveWaited)
         },
         /// Retour de la boutique : couches effacées, état suivant de la séquence, scène de retour.
         LeaveWaited = at::LEAVE_WAITED => |x| {
@@ -386,13 +386,13 @@ fn leave(x: &mut Ctx) -> Flow {
     if chained == 0 {
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
-        return x.tail(sub::FADE_OUT, Etape::LeaveFaded);
+        return x.sous_programme(crate::taches::fondu::descente, Etape::LeaveFaded);
     }
     if b8(x, f::EXIT_SUB) == 0 {
         add_b8(x, f::EXIT_SUB, 2);
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
-        return x.tail(sub::FADE_OUT, Etape::ChainFaded);
+        return x.sous_programme(crate::taches::fondu::descente, Etape::ChainFaded);
     }
     // boutique suivante : le bloc repart de l'état 0
     x.and16(0x12, 0xfffe);
@@ -402,12 +402,13 @@ fn leave(x: &mut Ctx) -> Flow {
     let a0 = x.c.a[0];
     x.call(0x1f184);
     x.c.a[0] = a0;
-    x.tail(sub::WAIT_ONE, Etape::ReopenWaited)
+    crate::taches::une_image(x, Etape::ReopenWaited)
 }
 
 /// Tâche des portraits (0xf7dfe) : pour chaque joueur en jeu, son portrait (deux colonnes) et le cadre qui le suit ;
 /// puis la tâche se termine (`jmp 0x9f8`).
-fn portraits(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+fn portraits(x: &mut Ctx) -> Flow {
+    let b = &mut *x.b;
     let table = if rd8(b, A5 + 0x20) == 1 { rom::PORTRAITS_WIDE } else { rom::PORTRAITS };
     for k in 0..4 {
         let p = super::PLAYERS + k * super::PLAYER_STRIDE;
@@ -419,16 +420,8 @@ fn portraits(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
         super::tiles::glyph(b, at, tile, attr);
         super::tiles::glyph(b, at + 0x100, 0x1b2, attr);
     }
-    c.pc = 0x9f8;
+    crate::taches::terminer(x)
 }
-
-pub const PORTRAITS_NATIVE: Native = Native {
-    entry: PORTRAITS_TASK,
-    name: "shop_portraits",
-    run: portraits,
-    touches_sound: false,
-    outputs: 0,
-};
 
 pub const SHOP: Native = Native {
     entry: 0xf792e,
@@ -445,5 +438,4 @@ pub const SHOP: Native = Native {
 
 pub const NATIVES: &[Native] = &[
     SHOP,
-    PORTRAITS_NATIVE,
 ];

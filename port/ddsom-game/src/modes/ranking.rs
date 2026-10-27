@@ -53,7 +53,6 @@ mod ext {
     pub const PALETTE_93: u32 = 0x1a366;
     pub const TILE_BLOCK: u32 = 0x26d4;
     pub const BRIGHTNESS_WHITE: u32 = 0x1686;
-    pub const FADE_OUT: u32 = 0x1460;
     pub const LINE: u32 = 0x517ba;
     pub const SCORE_OBJECT: u32 = 0xb1a7a;
     pub const BOOTED_CLEAR: u32 = 0x133f0;
@@ -334,7 +333,7 @@ fn sa_leave(x: &mut Ctx) -> Flow {
     x.call_d0(ext::SOUND_E0A82, 4);
     wr8(x.b, A5 + 0x48e, 0xf);
     wr16(x.b, A5 + 0x490, 3);
-    x.tail(ext::FADE_OUT, Etape::SaFaded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::SaFaded)
 }
 const SA_FADED: u32 = 0xfc8a8;
 const SA_VIDEO: u32 = 0xfc8ce;

@@ -87,7 +87,7 @@ fn start(x: &mut Ctx) -> Flow {
     }
     wr8(x.b, v::MASK, mask);
     x.set_v8(0x5f, 0);
-    fade(x, 0x1460, Etape::FadedOut)
+    fade(x, crate::taches::fondu::descente, Etape::FadedOut)
 }
 
 crate::etapes! {
@@ -220,7 +220,7 @@ fn end(x: &mut Ctx) -> Flow {
     x.set_v8(0x33, 0);
     x.set_v8(0x3c, 1);
     x.c.d[0] = 1;
-    x.jump_to(0xa40)
+    crate::taches::attendre_puis_revenir(x)
 }
 
 pub const CHARACTERS: Native = Native {

@@ -28,11 +28,9 @@ use crate::objects::{pools, Obj};
 
 /// Sous-routines d'origine.
 mod ext {
-    pub const CLEAR_VIDEO: u32 = 0xc32;
     pub const VIDEO_ON: u32 = 0xbc6;
     pub const PRINT: u32 = 0xd5e;
     pub const PRINT_CLEAR: u32 = 0xd32;
-    pub const FADE_OUT: u32 = 0x1460;
     pub const PALETTE_STEP: u32 = 0x1686;
     pub const PAGE_PALETTE: u32 = 0x1a3d4;
     pub const PALETTE_SCENE: u32 = 0x1a60a;
@@ -229,7 +227,7 @@ impl Etape {
             Etape::ShutdownAfterClear => shutdown_after_clear(x),
             Etape::AfterInitClear => after_init_clear(x),
             Etape::Sequence(seq, k) => sequence(x, seq, k + 1),
-            Etape::AfterFade => x.tail(ext::CLEAR_VIDEO, Etape::AfterFadeClear),
+            Etape::AfterFade => x.sous_programme(crate::video::ecran_noir::debut, Etape::AfterFadeClear),
             Etape::AfterFadeClear => after_fade_clear(x),
             Etape::StartAfterClear => start_after_clear(x),
             Etape::PulseAfterWait { d0 } => pulse_after_wait(x, d0),
@@ -279,7 +277,7 @@ fn shutdown(x: &mut Ctx) -> Flow {
     set16(x, var::FLAGS, flags);
     set8(x, var::SCROLL_MODE, 0);
     set8(x, var::CLEAR_FLAG, 0);
-    x.tail(ext::CLEAR_VIDEO, Etape::ShutdownAfterClear)
+    x.sous_programme(crate::video::ecran_noir::debut, Etape::ShutdownAfterClear)
 }
 
 /// Fin du démontage : la tâche du menu TEST prend l'emplacement 0, la tâche se termine.
@@ -321,7 +319,7 @@ fn init(x: &mut Ctx) -> Flow {
     kill(x, &[0, 0x10, 0x30, 0xd0, 0xf0]);
     set8(x, var::SCROLL_MODE, 0);
     clear_scrolls(x);
-    x.tail(ext::CLEAR_VIDEO, Etape::AfterInitClear)
+    x.sous_programme(crate::video::ecran_noir::debut, Etape::AfterInitClear)
 }
 
 fn after_init_clear(x: &mut Ctx) -> Flow {
@@ -541,7 +539,7 @@ fn end(x: &mut Ctx) -> Flow {
     x.call(ext::PALETTE_STEP);
     set16(x, var::FADE_STEP, 2);
     set8(x, var::FADE_PAGES, 0xf);
-    x.tail(ext::FADE_OUT, Etape::AfterFade)
+    x.sous_programme(crate::taches::fondu::descente, Etape::AfterFade)
 }
 
 fn after_fade_clear(x: &mut Ctx) -> Flow {
@@ -589,7 +587,7 @@ fn start_player(x: &mut Ctx, a1: u32, mask: u8, player: u32, a3: u32) -> Flow {
         wr8(x.b, a1 + 6, 1);
         kill(x, &[0, 0x10, 0x30, 0xd0, 0xf0]);
         clear_scrolls(x);
-        return x.tail(ext::CLEAR_VIDEO, Etape::StartAfterClear);
+        return x.sous_programme(crate::video::ecran_noir::debut, Etape::StartAfterClear);
     }
     join(x)
 }

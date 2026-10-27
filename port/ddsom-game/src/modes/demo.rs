@@ -553,7 +553,7 @@ fn presentation(x: &mut Ctx) -> Flow {
     wr8(x.b, var::FADE_PAGES, 12);
     x.call(ext::BRIGHTNESS_WHITE);
     x.c.d[0] = 1;
-    x.jump_to(super::sub::WAIT)
+    crate::taches::attendre_puis_revenir(x)
 }
 
 fn presentation_step(x: &mut Ctx) -> Flow {

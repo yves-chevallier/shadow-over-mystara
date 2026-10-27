@@ -10,7 +10,6 @@ use crate::scene::Ctx;
 use crate::Native;
 
 mod ext {
-    pub const CLEAR_VIDEO: u32 = 0xc32;
     pub const PALETTES: u32 = 0x1a296;
     pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const SERVICE_CHECK: u32 = 0x2d30a;
@@ -51,7 +50,7 @@ pub const BOOT: Native = Native {
     run: |c, b| {
         let mut x = Ctx::new(c, b);
         x.c.a[5] = A5;
-        x.tail(ext::CLEAR_VIDEO, Etape::Init);
+        x.sous_programme(crate::video::ecran_noir::debut, Etape::Init);
     },
     touches_sound: false,
     outputs: 0,

@@ -187,24 +187,34 @@ fn blank_screen(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xc32 : écran noir en trois images (sous-programme qui cède, `0xb64`, avant et après l'effacement) ;
-/// chaque reprise est une native (0xc42, puis le `rts` en 0xc56).
-mod ecran_noir {
-    use crate::modes::{Flow, Sequence};
-    use crate::resume;
+/// 0xc32 : écran noir en trois images (sous-programme qui cède, `0xb64`, avant et après l'effacement) : une
+/// sous-machine ([`ecran_noir::Etape`]) que les pas Rust appellent directement (`Sequence::sous_programme`) ; son
+/// entrée reste une native pour les appels par adresse (gestionnaires d'objets).
+pub mod ecran_noir {
+    use crate::modes::Flow;
+    use crate::scene::Ctx;
+    use crate::taches::une_image;
 
-    const UNE_IMAGE: u32 = 0xb64;
-    const EFFACEMENT: u32 = 0xc42;
-    const FIN: u32 = 0xc56;
-    resume!(DEBUT, 0xc32, |x| {
+    /// Couches éteintes, puis une image.
+    pub fn debut(x: &mut Ctx) -> Flow {
         super::blank_layers(x.c, x.b);
-        x.tail(UNE_IMAGE, EFFACEMENT)
-    });
-    resume!(SUITE, EFFACEMENT, |x| {
-        super::blank_planes(x.c, x.b);
-        x.tail(UNE_IMAGE, FIN)
-    });
-    resume!(RETOUR, FIN, |_| Flow::Done);
+        une_image(x, Etape::Effacement)
+    }
+
+    crate::etapes! {
+        /// Étapes de l'écran noir.
+        pub enum Etape {
+            /// Objets et couches effacés, puis une image.
+            Effacement = 0xc42 => |x| {
+                super::blank_planes(x.c, x.b);
+                une_image(x, Etape::Fin)
+            },
+            /// Retour à l'appelant.
+            Fin = 0xc56 => |_| Flow::Done,
+        }
+    }
+
+    crate::resume!(DEBUT, 0xc32, debut);
 }
 
 /// Remplit [debut, fin) de cases (tuile, 0) : 0xca8 (scroll 1), 0xcc8 (scroll 2), 0xce8 (scroll 3).
@@ -552,8 +562,6 @@ pub const NATIVES: &[Native] = &[
     CLEAR_OBJECTS,
     BLANK_SCREEN,
     ecran_noir::DEBUT,
-    ecran_noir::SUITE,
-    ecran_noir::RETOUR,
     CLEAR_SCROLL1,
     CLEAR_SCROLL1_START,
     CLEAR_SCROLL2,

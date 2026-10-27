@@ -72,8 +72,6 @@ mod ext {
     pub const MESSAGE: u32 = 0xc8312;
     pub const SCORE_OBJECT: u32 = 0xb1a7a;
     pub const TASK_CREATE: u32 = 0x9b6;
-    pub const FADE_IN: u32 = 0x144c;
-    pub const FADE_OUT: u32 = 0x1460;
     pub const FADE_TASK_IN: u32 = 0x14ba;
     pub const FADE_TASK_OUT: u32 = 0x14d0;
     pub const FADE_TASK_C: u32 = 0x14de;
@@ -159,7 +157,7 @@ crate::etapes! {
         S04Fade = S04_FADE => |x| {
             x.call(ext::SOUND_E1528);
             fade_settings(x, 3, 4);
-            x.tail(ext::FADE_IN, Etape::S04Timer)
+            x.sous_programme(crate::taches::fondu::montee, Etape::S04Timer)
         },
         S04Timer = S04_TIMER => |x| {
             wr16(x.b, BLOCK + f::TIMER, 60);
@@ -169,7 +167,7 @@ crate::etapes! {
         S08Fade = S08_FADE => |x| {
             next_step(x);
             fade_settings(x, 3, 4);
-            x.tail(ext::FADE_OUT, Etape::S08Faded)
+            x.sous_programme(crate::taches::fondu::descente, Etape::S08Faded)
         },
         S08Faded = S08_FADED => |x| {
             let v = rd16(x.b, var::VIDEO) & !0xe;
@@ -215,7 +213,7 @@ crate::etapes! {
             fade_settings(x, 3, FADE_ALL);
             x.c.a[0] = ext::FADE_TASK_IN;
             set_low_word(&mut x.c.d[0], 0x10);
-            x.jump_to(ext::TASK_CREATE)
+            crate::taches::creer_puis_revenir(x)
         },
         S10Retry = S10_RETRY => |x| {
             render(x);
@@ -349,7 +347,7 @@ crate::etapes! {
             fade_settings(x, 3, 13);
             x.c.a[0] = ext::FADE_TASK_IN;
             set_low_word(&mut x.c.d[0], 0x10);
-            x.jump_to(ext::TASK_CREATE)
+            crate::taches::creer_puis_revenir(x)
         },
         S2cLoop = S2C_LOOP => |x| {
             if rd8(x.b, var::FADE_STEPS) != 0 {
@@ -464,7 +462,7 @@ crate::etapes! {
             fade_settings(x, 3, FADE_ALL);
             x.c.a[0] = ext::FADE_TASK_IN;
             set_low_word(&mut x.c.d[0], 0x10);
-            x.jump_to(ext::TASK_CREATE)
+            crate::taches::creer_puis_revenir(x)
         },
         S32Faded = S32_FADED => |x| {
             for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::POOLS, ext::CLEAR_SPRITES] {
@@ -693,7 +691,7 @@ fn s08_object(x: &mut Ctx) -> Flow {
     let v = rd16(x.b, var::VIDEO) | 0xe;
     wr16(x.b, var::VIDEO, v);
     fade_settings(x, 3, FADE_ALL);
-    x.jump_to(ext::FADE_IN)
+    crate::taches::fondu::montee(x)
 }
 /// Réessai de la création de l'objet : `bra 0xfb982` (la remise à zéro du signal n'est pas refaite).
 const S08_RETRY: u32 = 0xfb996;
@@ -991,7 +989,7 @@ fn s1e_object(x: &mut Ctx) -> Flow {
     // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40` : la cession dure D0 images, tel que le rendu le laisse
     x.c.d[0] = 1;
     render_scroll(x);
-    x.tail(super::sub::WAIT, Etape::S1eRetry)
+    crate::taches::attendre(x, Etape::S1eRetry)
 }
 const S1E_RETRY: u32 = 0xfbf26;
 
@@ -1115,13 +1113,13 @@ fn s2e_dialogue(x: &mut Ctx) -> Flow {
     let o = link(x);
     if rd8(x.b, o + 5) == 6 {
         fade_settings(x, 3, FADE_ALL);
-        return x.tail(ext::FADE_IN, Etape::S2eOpened);
+        return x.sous_programme(crate::taches::fondu::montee, Etape::S2eOpened);
     }
     if rd8(x.b, o + 5) != 10 {
         return render_flow(x);
     }
     fade_settings(x, 3, FADE_ALL);
-    x.tail(ext::FADE_OUT, Etape::S2eClosed)
+    x.sous_programme(crate::taches::fondu::descente, Etape::S2eClosed)
 }
 const S2E_OPENED: u32 = 0xfc286;
 const S2E_CLOSED: u32 = 0xfc2ae;
@@ -1180,7 +1178,7 @@ fn s32_end(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     fade_settings(x, 3, FADE_ALL);
-    x.tail(ext::FADE_OUT, Etape::S32Faded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::S32Faded)
 }
 const S32_FADED: u32 = 0xfc450;
 const S32_CLEARED: u32 = 0xfc470;

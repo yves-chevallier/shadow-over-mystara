@@ -15,11 +15,8 @@ use crate::Native;
 
 mod ext {
     pub const KILL_TASK: u32 = 0xa14;
-    pub const FADE_OUT: u32 = 0x1460;
-    pub const CLEAR_VIDEO: u32 = 0xc32;
     pub const PHASE_VARS_CLEAR: u32 = 0x1c44a;
     pub const SOUND_E0882: u32 = 0xe0882;
-    pub const REPLACE_TASK: u32 = 0xae4;
     pub const MODE_LOOP: u32 = 0x133fe;
 }
 
@@ -50,7 +47,7 @@ fn phase_20(x: &mut Ctx) -> Flow {
     x.call(ext::KILL_TASK);
     wr16(x.b, A5 + 0x490, 1);
     wr8(x.b, A5 + 0x48e, 0xf);
-    x.tail(ext::FADE_OUT, Etape::Faded)
+    x.sous_programme(crate::taches::fondu::descente, Etape::Faded)
 }
 
 crate::etapes! {
@@ -63,7 +60,7 @@ crate::etapes! {
             wr8(x.b, A5 + 0x53c, 0);
             let flags = rd16(x.b, A5 + 0x12) & !1;
             wr16(x.b, A5 + 0x12, flags);
-            x.tail(ext::CLEAR_VIDEO, Etape::Cleared)
+            x.sous_programme(crate::video::ecran_noir::debut, Etape::Cleared)
         },
         Cleared = CLEARED => |x| {
             x.call(ext::PHASE_VARS_CLEAR);
@@ -72,7 +69,7 @@ crate::etapes! {
             wr8(x.b, mode::BOOTED, 1);
             x.call(ext::SOUND_E0882);
             x.c.a[0] = ext::MODE_LOOP;
-            x.jump_to(ext::REPLACE_TASK)
+            crate::taches::recommencer(x)
         },
     }
 }

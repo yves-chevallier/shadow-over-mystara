@@ -56,6 +56,30 @@ pub fn une_image(x: &mut Ctx, reprise: impl Into<Suite>) -> Flow {
     Flow::Yield
 }
 
+/// `jsr 0xa40` : cède D0.b images (D0 tel quel) ; la tâche reprendra à `reprise`.
+pub fn attendre(x: &mut Ctx, reprise: impl Into<Suite>) -> Flow {
+    crate::kernel::attendre(x.c, x.b, reprise);
+    Flow::Yield
+}
+
+/// `jmp 0xa40` : cède D0.b images ; la tâche reprendra à la suite de l'appelant (l'appel en cours).
+pub fn attendre_puis_revenir(x: &mut Ctx) -> Flow {
+    let suite = table::depiler_retour(x.c, x.b);
+    attendre(x, suite)
+}
+
+/// `jmp 0x9b6` : crée la tâche D0 (décalage) à l'entrée A0, puis revient à l'appelant.
+pub fn creer_puis_revenir(x: &mut Ctx) -> Flow {
+    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+    Flow::Done
+}
+
+/// `jmp 0xae4` : la tâche courante repart de zéro à l'entrée A0.
+pub fn recommencer(x: &mut Ctx) -> Flow {
+    crate::kernel::recommencer(x.c, x.b);
+    Flow::Yield
+}
+
 /// `jsr 0x9f8` : la tâche courante se termine.
 pub fn terminer(x: &mut Ctx) -> Flow {
     crate::kernel::terminer(x.c, x.b);
@@ -122,6 +146,7 @@ etapes_des_taches! {
     Interface(crate::hud::Etape),
     Credits(crate::tache_credits::Etape),
     Fondu(fondu::Etape),
+    EcranNoir(crate::video::ecran_noir::Etape),
     // machine à modes (tâche 0 hors partie)
     Boot(crate::modes::boot::Etape),
     Attract(crate::modes::attract::Etape),
@@ -173,6 +198,7 @@ pub fn entree(entree: u32) -> Option<Etape> {
         service::Etape::Entree.into(),
         crate::hud::Etape::Entree.into(),
         crate::tache_credits::Etape::Entree.into(),
+        crate::scene::shop::Etape::Portraits.into(),
     ]
     .into_iter()
     .find(|e| e.adresse() == entree)

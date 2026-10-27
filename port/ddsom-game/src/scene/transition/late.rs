@@ -19,8 +19,6 @@ mod ext {
     pub const TEXT: u32 = 0x1136;
     /// Prime versée au joueur (D0 = montant | joueur << 8, A1 = joueur).
     pub const PAY: u32 = 0x19ae6;
-    pub const FADE_BY_COMPONENT: u32 = 0x1ccc2;
-    pub const FADE_TO_COLOUR: u32 = 0x1ce30;
 }
 use sub::{TILE_BLOCK as TB, TILE_BLOCK_2 as TB2};
 
@@ -139,7 +137,7 @@ crate::etapes! {
             tiles(x, TB, 0x20f, Some(SCROLL_2));
             show_layers(x, At(Etape::S33Drawn2.into()))
         },
-        S33Drawn2 = 0xf9980 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S33Shown2.into())),
+        S33Drawn2 = 0xf9980 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S33Shown2.into())),
         S33Shown2 = 0xf9984 => |x| {
             if try_message(x, 40) {
                 next(x);
@@ -170,7 +168,7 @@ crate::etapes! {
         S32Retry60 = 0xf9af0 => s32_message_60,
         S32SecondShown = 0xf9b40 => |x| {
             next(x);
-            fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S32SecondIn.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S32SecondIn.into()))
         },
         S32SecondIn = 0xf9b46 => s32_message_61,
         S32Retry61 = 0xf9b5a => s32_message_61,
@@ -221,7 +219,7 @@ crate::etapes! {
             x.call(TB);
             show_layers(x, At(Etape::S38SceneryShown.into()))
         },
-        S38SceneryShown = 0xf9d70 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S38SceneryIn.into())),
+        S38SceneryShown = 0xf9d70 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S38SceneryIn.into())),
         S38SceneryIn = 0xf9d74 => s38_message_98,
         S38Retry98 = 0xf9d88 => s38_message_98,
         S38LastFaded = 0xf9da2 => |x| hide_layers(x, At(Etape::S38LastHidden.into())),
@@ -231,7 +229,7 @@ crate::etapes! {
             tiles(x, TB, 0x21e, None);
             show_layers(x, At(Etape::S38LastShown.into()))
         },
-        S38LastShown = 0xf9dd0 => |x| fade(x, SCENE_PAGES, sub::FADE_IN, At(Etape::S38LastIn.into())),
+        S38LastShown = 0xf9dd0 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S38LastIn.into())),
         S38LastIn = 0xf9dd4 => s38_message_74,
         S38Retry74 = 0xf9de8 => s38_message_74,
         S38End = 0xf9e26 => |x| {
@@ -282,7 +280,7 @@ crate::etapes! {
         FinaleFaded = 0xfa058 => |x| {
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
             x.set_v16(a5::FADE_DELAY, 1);
-            goto(x, sub::FADE_OUT, At(Etape::FinaleBlack.into()))
+            goto(x, crate::taches::fondu::descente, At(Etape::FinaleBlack.into()))
         },
         FinaleBlack = 0xfa06a => |x| {
             x.set_v16(a5::LAYERS, 0x12c0);
@@ -381,7 +379,7 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S33Faded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S33Faded.into()))
         }
         4 => {
             if !message_done(x) {
@@ -391,7 +389,7 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
             x.set_v8(0x59, v);
             x.c.a[1] = 0xff2478;
             wr8(x.b, 0xff2478 + 0x56, v);
-            fade(x, ALL_PAGES, sub::FADE_OUT, At(Etape::S33EndFaded.into()))
+            fade(x, ALL_PAGES, crate::taches::fondu::descente, At(Etape::S33EndFaded.into()))
         }
         _ => Flow::Done,
     }
@@ -472,13 +470,13 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             x.set_v8(a5::FADE_PAGES, 12);
             x.set_v16(0x49a, 15);
             x.set_v16(0x49e, 15);
-            goto(x, ext::FADE_TO_COLOUR, At(Etape::S32Coloured.into()))
+            goto(x, crate::taches::fondu::vers_les_couleurs, At(Etape::S32Coloured.into()))
         }
         12 => {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, ALL_PAGES, sub::FADE_OUT, At(Etape::S32Faded.into()))
+            fade(x, ALL_PAGES, crate::taches::fondu::descente, At(Etape::S32Faded.into()))
         }
         _ => Flow::Done,
     }
@@ -563,7 +561,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fade(x, SCENE_PAGES, sub::FADE_OUT, At(Etape::S38LastFaded.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::descente, At(Etape::S38LastFaded.into()))
         }
         14 => {
             if !message_done(x) {
@@ -573,7 +571,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
             x.call(ext::MUSIC_H);
             x.set_v16(a5::FADE_DELAY, 1);
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
-            goto(x, ext::FADE_BY_COMPONENT, At(Etape::S38End.into()))
+            goto(x, crate::taches::fondu::vers_le_blanc, At(Etape::S38End.into()))
         }
         _ => Flow::Done,
     }
@@ -679,7 +677,7 @@ pub fn finale(x: &mut Ctx) -> Flow {
             copy_palettes(x, PALETTE_PAGE, PALETTE_SAVE);
             x.set_v8(a5::FADE_PAGES, 12);
             x.set_v16(a5::FADE_DELAY, 1);
-            goto(x, ext::FADE_BY_COMPONENT, At(Etape::FinaleFaded.into()))
+            goto(x, crate::taches::fondu::vers_le_blanc, At(Etape::FinaleFaded.into()))
         }
     }
 }
