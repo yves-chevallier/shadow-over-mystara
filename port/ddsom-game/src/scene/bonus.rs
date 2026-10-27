@@ -294,7 +294,7 @@ fn set_up(x: &mut Ctx) -> Flow {
     }
     x.c.d[1] = 0xffff;
     x.c.d[2] = 4;
-    x.call(sub::MUSIC);
+    crate::sound::jouer_global(x.b, sub::MUSIC);
     x.wait(4, Etape::SetUp)
 }
 

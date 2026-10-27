@@ -15,7 +15,6 @@ use m68k::Cpu;
 use super::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::mem::{rts, wr32, A5};
 use crate::{regs, Native};
-use crate::player::externes as ext;
 
 /// Tables de la ROM programme : un pointeur par personnage (12), chacun vers une table propre.
 mod tables {
@@ -427,13 +426,13 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
                 crate::mem::wr16(b, e + 0x62, left);
             }
             let kind = crate::mem::rd8(b, e + 2);
-            g.c.d[0] = (index as u32) << 8 | kind as u32;
-            g.c.d[1] = g.c.d[1] & 0xffff_0000 | crate::mem::rd16(g.b, e + 0x60) as u32;
-            g.c.d[2] = g.c.d[2] & 0xffff_0000 | crate::mem::rd16(g.b, e + 0x62) as u32;
-            g.c.d[3] = g.c.d[3] & 0xffff_ff00 | crate::mem::rd8(g.b, e + 0x28) as u32;
-            g.c.a[1] = e;
-            g.c.a[0] = p.0;
-            crate::call(g.c, g.b, ext::effet::HEALTH_BAR);
+            let barre = crate::evenements::Popup {
+                entete: (index as u16) << 8 | kind as u16,
+                max: crate::mem::rd16(g.b, e + 0x60),
+                valeur: crate::mem::rd16(g.b, e + 0x62),
+                brut: crate::mem::rd8(g.b, e + 0x28) == 2,
+            };
+            crate::evenements::creer_popup(g.b, barre);
         }
         if ram::SCROLL1_Y.get(g.b) != 0 {
             ram::SCROLL1_Y.set(g.b, 0);

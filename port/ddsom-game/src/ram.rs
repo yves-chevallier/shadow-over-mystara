@@ -103,8 +103,8 @@ pub const ETAPE: Octet = Octet::a5(0x2d);
 pub const PARTIE: Octet = Octet::a5(0x30);
 /// Numéro de scène (1-114 ; `docs/rewrite-guide.md`, « Atteindre un stage »).
 pub const SCENE: Octet = Octet::a5(0x34);
-/// Difficulté (0 à 7, réglage de la borne).
-pub const DIFFICULTE: Octet = Octet::a5(0x35);
+/// Nombre de joueurs en vie (lot D : appelé à tort « difficulté » jusqu'au lot S).
+pub const JOUEURS_EN_VIE: Octet = Octet::a5(0x35);
 /// Caméra alternative choisie (non nul) au lieu de la caméra principale.
 pub const CAMERA_ALT_ACTIVE: Octet = Octet::a5(0x36);
 /// Mode d'affichage des panneaux de l'interface (`hud`).
@@ -113,11 +113,17 @@ pub const AFFICHAGE_PANNEAUX: Octet = Octet::a5(0x3c);
 pub const PAUSE: Octet = Octet::a5(0x4a);
 /// Compteur d'images du VBLANK (`vblank.rs`).
 pub const IMAGES: Mot = Mot::a5(0x6c);
+/// Défilement vertical voulu du plan 1 (`vblank` le recopie dans le registre du plan) : les sorts font trembler
+/// l'écran en le basculant entre 0 et 0x100.
+pub const DEFILEMENT_Y_PLAN1: Mot = Mot::a5(0x4ba);
 /// Caméra principale : position à l'écran (x, y) ; caméra alternative.
 pub const CAMERA_X: Mot = Mot::a5(0x506);
 pub const CAMERA_Y: Mot = Mot::a5(0x50a);
 pub const CAMERA_ALT_X: Mot = Mot::a5(0x556);
 pub const CAMERA_ALT_Y: Mot = Mot::a5(0x55a);
+/// Mot des commutateurs (DSW) lu au VBLANK (`FF7FD0`) : bit 0x200 sans affichage des dégâts, 0x400 jauge de
+/// charge inactive, 0x800 collisions avec le décor.
+pub const DSW: Mot = Mot::a5(0x7fd0);
 /// Les quatre enregistrements de joueurs (0x200 octets ; champs : `player::Player`).
 pub const JOUEURS: Table = Table { base: A5 + 0x5de, pas: 0x200, nombre: 4 };
 

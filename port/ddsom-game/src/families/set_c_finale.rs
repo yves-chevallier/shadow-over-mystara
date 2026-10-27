@@ -175,7 +175,7 @@ fn title_blink(x: &mut Cx) {
             x.set_a5_u16(FLASH, 0x100);
             let was_on = x.bit(0x43, 0);
             x.set_bit(0x43, 0, !was_on);
-            x.call(if was_on { ON } else { OFF });
+            crate::sound::jouer_global(x.b, if was_on { ON } else { OFF });
         }
         _ => free(x),
     }

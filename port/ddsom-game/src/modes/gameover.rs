@@ -15,7 +15,6 @@ use crate::Native;
 
 mod ext {
     pub const PHASE_VARS_CLEAR: u32 = 0x1c44a;
-    pub const SOUND_E0882: u32 = 0xe0882;
     pub const MODE_LOOP: u32 = 0x133fe;
 }
 
@@ -66,7 +65,7 @@ crate::etapes! {
             wr8(x.b, A5 + 0x30, 1);
             reset_modes(x);
             wr8(x.b, mode::BOOTED, 1);
-            x.call(ext::SOUND_E0882);
+            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             x.c.a[0] = ext::MODE_LOOP;
             crate::taches::recommencer(x)
         },

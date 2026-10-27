@@ -33,11 +33,20 @@ const OVERCLOCK: f64 = 16.0;
 ///   sauve plus les registres des tâches qui cèdent la main (ils sont dans la table) et le reste n'est qu'adresses de
 ///   retour et sauvegardes de registres ; FF0E66-FF0FFF était déjà ignoré (débordement de la pile de la première
 ///   tâche) ;
-/// - la pile logicielle de l'interruption (FF2900-FF2A19).
+/// - la sauvegarde fantôme des wrappers son (FF297E-FF2A19, `sound::jouer_wrapper`).
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    ram_du_noyau(a as u32) || (0x2900..0x2a1a).contains(&a)
+    ram_du_noyau(a as u32) || SAUVEGARDE_FANTOME.contains(&a)
 }
+
+/// Écart assumé : chaque wrapper son de l'original empile D0-D7/A0-A4 (52 octets) sous le pointeur de sa pile privée
+/// (FF2A1A, qui vaut lui-même quand la pile est vide) et les dépile ; la copie reste en RAM. Le jeu ne l'écrit plus
+/// (un son ne dépend plus des registres de son appelant). Trace des lectures sur la machine d'origine, tous les
+/// scénarios (docs/son-68000.md) : ces mots ne sont relus que par la restauration des wrappers eux-mêmes et par le test
+/// de la RAM du menu TEST (0x2d096, qui remet la valeur lue) ; trois niveaux d'aiguillage au plus, soit FF297E-FF2A19.
+/// (Jusqu'au lot S, FF2900-FF2A19 entier était ignoré : la fin de la file des sons, ses têtes et l'alternance des voix
+/// sont maintenant comparées.)
+const SAUVEGARDE_FANTOME: std::ops::Range<usize> = 0x297e..0x2a1a;
 
 /// Images du démarrage (1 à 5) : le code d'origine y teste encore la RAM (`ddsom_game::demarrage`). Ce test est non
 /// destructif mais, à la fin d'une image, le mot en cours de test peut porter un motif (0x8888, 0x4444...) au lieu de sa

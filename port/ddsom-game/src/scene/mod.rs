@@ -80,10 +80,6 @@ pub const fn scratch(offset16: u16) -> u32 {
 
 /// Sous-routines du moteur appelées par les séquences.
 pub mod sub {
-    /// Palettes : tout noir (ET 0x0fff) sur les pages de `A5+0x48e`, avant un fondu d'ouverture.
-    pub const PALETTES_BLACK: u32 = 0x168c;
-    /// Palettes : tout blanc (OU 0xf000).
-    pub const PALETTES_WHITE: u32 = 0x1686;
     /// Tâche de fondu de palette vers la cible (emplacement 0x10).
     pub const FADE_TASK: u32 = 0x14ba;
     /// Tâche de fondu à 1 niveau par pas (emplacement 0x10).
@@ -215,7 +211,7 @@ impl<'a> Ctx<'a> {
     pub fn fade_in(&mut self) {
         self.set_v16(var::FADE_DELAY, 2);
         self.set_v8(var::FADE_PAGES, 15);
-        self.call(sub::PALETTES_BLACK);
+        crate::palette::no_brightness(self.b);
         self.start_fade_task(sub::FADE_TASK);
     }
     /// Variante : fondu à un niveau par pas (`A5+0x48f` = 1), sans passer par le noir.

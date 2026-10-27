@@ -7,7 +7,7 @@ use m68k::decode::Size;
 use m68k::Cpu;
 
 use crate::mem::{prog8, rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
-use crate::{call, ops, regs, Native};
+use crate::{ops, regs, Native};
 
 fn set_low_word(r: &mut u32, v: u16) {
     *r = *r & 0xffff_0000 | v as u32;
@@ -24,21 +24,32 @@ fn set_low_byte(r: &mut u32, v: u8) {
 /// Table des directions, en ROM programme : indexée par (octant << 3) | pas.
 const DIRECTIONS: u32 = 0x140c;
 
+/// Calcul de 0x1386 sur les registres de l'original (D1-D4), avec les registres de travail qu'il laisse.
+struct Calcul {
+    direction: u8,
+    d1: u32,
+    d2: u32,
+    d3: u32,
+    /// D4.w : unité de la comparaison.
+    unite: u16,
+    /// D6 : compteur de la boucle d'estimation, s'il a été posé.
+    d6: Option<u32>,
+}
+
 /// Direction du point (D3, D4) vers le point (D1, D2). Les écarts sont pris en valeur absolue (16 bits,
 /// positions biaisées de 0x8000 pour comparer en non signé) ; l'octant dépend des signes et du plus grand
 /// écart, le pas (0 à 3) du rapport entre le petit écart et le grand, estimé par soustractions.
-/// Registres de travail comme l'original les laisse (D1 à D4 et D6).
-fn direction(c: &mut Cpu, b: &mut Cps2Bus) {
+fn calcul(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Calcul {
     let mut octant = 0u8;
-    let mut dx = c.d[1].wrapping_add(0x8000);
-    let (diff, borrow) = (dx as u16).overflowing_sub(c.d[3].wrapping_add(0x8000) as u16);
+    let mut dx = d1.wrapping_add(0x8000);
+    let (diff, borrow) = (dx as u16).overflowing_sub(d3.wrapping_add(0x8000) as u16);
     let abs = if borrow { diff.wrapping_neg() } else { diff };
     set_low_word(&mut dx, abs);
     if borrow {
         octant = 4;
     }
-    let mut dy = c.d[2].wrapping_add(0x8000);
-    let (diff, borrow) = (dy as u16).overflowing_sub(c.d[4].wrapping_add(0x8000) as u16);
+    let mut dy = d2.wrapping_add(0x8000);
+    let (diff, borrow) = (dy as u16).overflowing_sub(d4.wrapping_add(0x8000) as u16);
     let abs = if borrow { diff.wrapping_neg() } else { diff };
     set_low_word(&mut dy, abs);
     if borrow {
@@ -57,8 +68,9 @@ fn direction(c: &mut Cpu, b: &mut Cps2Bus) {
     let high = (dy as u16) >> 3;
     set_low_word(&mut dy, high);
     let unit = (dy as u16).wrapping_mul(2);
+    let mut d6 = None;
     if (dy as u16) < dx as u16 {
-        c.d[6] = 2;
+        let mut compteur = 2u32;
         loop {
             step += 1;
             let sum = (dy as u8).wrapping_add(unit as u8);
@@ -67,22 +79,49 @@ fn direction(c: &mut Cpu, b: &mut Cps2Bus) {
                 break;
             }
             // dbf D6
-            let left = c.d[6] as u16;
-            set_low_word(&mut c.d[6], left.wrapping_sub(1));
+            let left = compteur as u16;
+            set_low_word(&mut compteur, left.wrapping_sub(1));
             if left == 0 {
                 step += 1;
                 break;
             }
         }
+        d6 = Some(compteur);
     }
     let index = (octant << 3 | step) as u32;
-    let value = prog8(b, DIRECTIONS + index);
-    c.d[1] = dx;
-    c.d[2] = dy;
-    c.d[3] = step as u32;
-    set_low_word(&mut c.d[4], unit);
-    c.d[0] = value as u32;
-    ops::logique(c, value as u32, Size::Byte);
+    let direction = prog8(b, DIRECTIONS + index);
+    Calcul { direction, d1: dx, d2: dy, d3: step as u32, unite: unit, d6 }
+}
+
+/// 0x1386 : direction (0 à 31) du point `de` vers le point `vers` (x, z).
+pub fn direction(b: &mut Cps2Bus, de: (u16, u16), vers: (u16, u16)) -> u8 {
+    calcul(b, vers.0 as u32, vers.1 as u32, de.0 as u32, de.1 as u32).direction
+}
+
+/// 0x137e : direction de l'objet `o` (x, z) vers le point `vers`.
+pub fn direction_from(b: &mut Cps2Bus, o: crate::objects::Obj, vers: (u16, u16)) -> u8 {
+    let de = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
+    direction(b, de, vers)
+}
+
+/// 0x1376 : direction de l'objet `o` vers l'objet `cible`.
+pub fn direction_to(b: &mut Cps2Bus, o: crate::objects::Obj, cible: crate::objects::Obj) -> u8 {
+    let vers = (rd16(b, cible.0 + 8), rd16(b, cible.0 + 0x10));
+    direction_from(b, o, vers)
+}
+
+/// Native de 0x1386 : registres de travail comme l'original les laisse (D1 à D4 et D6), D0 = la direction.
+fn direction_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let r = calcul(b, c.d[1], c.d[2], c.d[3], c.d[4]);
+    if let Some(d6) = r.d6 {
+        c.d[6] = d6;
+    }
+    c.d[1] = r.d1;
+    c.d[2] = r.d2;
+    c.d[3] = r.d3;
+    set_low_word(&mut c.d[4], r.unite);
+    c.d[0] = r.direction as u32;
+    ops::logique(c, r.direction as u32, Size::Byte);
     rts(c, b);
 }
 
@@ -91,7 +130,7 @@ fn direction_from_object(c: &mut Cpu, b: &mut Cps2Bus) {
     let (x, z) = (rd16(b, c.a[0] + 8), rd16(b, c.a[0] + 0x10));
     set_low_word(&mut c.d[3], x);
     set_low_word(&mut c.d[4], z);
-    direction(c, b);
+    direction_native(c, b);
 }
 
 /// 0x1376 : direction de l'objet A0 vers l'objet A1.
@@ -121,7 +160,7 @@ pub const DIRECTION_TO_OBJECT: Native = Native {
 pub const DIRECTION: Native = Native {
     entry: 0x1386,
     name: "direction",
-    run: direction,
+    run: direction_native,
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
 };
@@ -130,10 +169,44 @@ pub const DIRECTION: Native = Native {
 // 0x2810 : l'objet A0 est-il saisi par un joueur ?
 // ---------------------------------------------------------------------------------------------
 
-/// Objet saisi : si le jeu n'est pas en démonstration (`A5+0x42` nul) et que le mot `+0x46` de A0 désigne
-/// un joueur, A1 = ce joueur et Z dit s'il est à l'état « normal » (`+0x2c` nul).
-fn grabbed(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Résultat de 0x2810.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Saisie {
+    /// Jeu gelé (`A5+0x42` non nul) : rien n'est lu (Z = 0).
+    Gele,
+    /// Personne ne tient l'objet (mot `+0x46` nul ; Z = 1).
+    Libre,
+    /// Le joueur `joueur` le tient ; `normal` : son octet `+0x2c` est nul (Z).
+    Par { joueur: crate::objects::Obj, normal: bool },
+}
+
+impl Saisie {
+    /// Le drapeau Z que l'original laisse (le test des appelants).
+    pub fn z(self) -> bool {
+        match self {
+            Saisie::Gele => false,
+            Saisie::Libre => true,
+            Saisie::Par { normal, .. } => normal,
+        }
+    }
+}
+
+/// 0x2810 : l'objet `o` est-il saisi par un joueur (mot `+0x46`) ?
+pub fn grabbed(b: &mut Cps2Bus, o: crate::objects::Obj) -> Saisie {
     if rd8(b, A5 + 0x42) != 0 {
+        return Saisie::Gele;
+    }
+    let holder = rd16(b, o.0 + 0x46);
+    if holder == 0 {
+        return Saisie::Libre;
+    }
+    let joueur = crate::objects::Obj::from_word(holder);
+    Saisie::Par { joueur, normal: rd8(b, joueur.0 + 0x2c) == 0 }
+}
+
+/// Native : D0.w = le mot `+0x46`, A1 = le joueur (mot étendu en signe), drapeaux du dernier test.
+fn grabbed_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    if grabbed(b, crate::objects::Obj(c.a[0])) == Saisie::Gele {
         ops::logique(c, 1, Size::Byte);
     } else {
         let holder = rd16(b, c.a[0] + 0x46);
@@ -151,7 +224,7 @@ fn grabbed(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const GRABBED: Native = Native {
     entry: 0x2810,
     name: "objet_saisi",
-    run: grabbed,
+    run: grabbed_native,
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
 };
@@ -163,14 +236,11 @@ pub const GRABBED: Native = Native {
 /// Variables de A5.
 mod var {
     pub const STAGE: u32 = 0x34;
-    pub const PLAYERS_PRESENT: u32 = 0x35;
     pub const GAME_ON: u32 = 0x42;
     pub const LOCK: u32 = 0x3d;
     pub const STAGE_FLAG: u32 = 0x43;
     pub const PHASE: u32 = 0x2c;
-    pub const SCROLL_Y: u32 = 0x4ba;
     pub const HOLD: u32 = 0xffff_aa3a; // A5 - 0x55c6
-    pub const PLAYERS: u32 = 0x5de;
 }
 
 mod player {
@@ -179,18 +249,11 @@ mod player {
     pub const STATE: u32 = 0x04;
     pub const ALTITUDE: u32 = 0x0c;
     pub const HP: u32 = 0x62;
-    pub const SIZE: u32 = 0x200;
     /// Octets remis à zéro quand le joueur revient (effets, saisie, magie...).
     pub const CLEARED: [u32; 8] = [0x2a, 0x66, 0x15c, 0x79, 0x7a, 0x182, 0x183, 0x184];
     pub const RANK: u32 = 0x7d;
     pub const GRAB: u32 = 0x8a;
     pub const GRAB_OBJECT: u32 = 0x86;
-}
-
-mod rout {
-    /// Couleurs du joueur (palette de personnage), et passage à l'état « attente de départ ».
-    pub const PLAYER_PALETTE: u32 = 0x37882;
-    pub const PLAYER_WAIT: u32 = 0x35614;
 }
 
 /// Scènes sans fin de partie (boutique, cinématique) et scènes de démonstration particulières.
@@ -202,39 +265,35 @@ const STATE_WAITING: u32 = 0x0200_0c00;
 /// Phase de fin de partie (`A5+0x2c` = 0x10, étape 0...) et temporisation selon la scène.
 const PHASE_END: u32 = 0x1000_0000;
 
-/// Fin de la phase 12 : quand `A5+0x42` est non nul (partie en cours) et que des joueurs sont à terre
-/// (PV nuls), ils sont remis à l'état d'attente et la phase de fin de partie démarre. Rien ne se
-/// passe si un joueur est encore en l'air ou dans l'état d'attente.
-fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x28d8, fin de la phase 12 : quand `A5+0x42` est non nul (partie en cours) et que des joueurs sont à terre
+/// (PV nuls), ils sont remis à l'état d'attente et la phase de fin de partie démarre. Rien ne se passe si un joueur
+/// est encore en l'air ou dans l'état d'attente. (Le processeur ne sert qu'au contexte des joueurs, pour
+/// `player::actions::to_stand`.)
+pub fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
     let stage = rd8(b, A5 + var::STAGE);
     if STAGE_NO_END.contains(&stage) || rd8(b, A5 + var::GAME_ON) == 0 {
-        return rts(c, b);
+        return;
     }
     wr8(b, A5 + var::STAGE_FLAG, 0x3f);
-    if rd8(b, A5 + var::LOCK) != 0 || rd8(b, A5 + var::PLAYERS_PRESENT) == 0 {
-        return rts(c, b);
+    if rd8(b, A5 + var::LOCK) != 0 || crate::ram::JOUEURS_EN_VIE.get(b) == 0 {
+        return;
     }
-    c.d[0] = 0;
-    c.d[1] = 0;
-    c.a[0] = A5 + var::PLAYERS;
-    for _ in 0..4 {
-        let p = c.a[0];
+    let (mut rang, mut a_terre) = (0u8, 0u8);
+    for p in crate::ram::JOUEURS.iter() {
+        let p = p.0;
         if rd8(b, p + player::ACTIVE) != 0 && rd16(b, p + player::HP) != 0 {
             if stage != STAGE_SKIP_CHECK {
                 if rd16(b, p + player::ALTITUDE) != 0 || rd32(b, p + player::STATE) & 0xffff_ff00 == STATE_WAITING {
-                    return rts(c, b);
+                    return;
                 }
             }
-            let count = (c.d[1] as u8).wrapping_add(1);
-            set_low_byte(&mut c.d[1], count);
+            a_terre = a_terre.wrapping_add(1);
             for off in player::CLEARED {
                 wr8(b, p + off, 0);
             }
             let flags = rd8(b, p + player::FLAGS) & !2;
             wr8(b, p + player::FLAGS, flags);
-            let saved = [c.d[0], c.d[1], c.d[2]];
-            call(c, b, rout::PLAYER_PALETTE);
-            [c.d[0], c.d[1], c.d[2]] = saved;
+            crate::palette::character_palette(b, crate::objects::Obj(p));
             wr8(b, p + player::ACTIVE, 1);
             if rd8(b, p + player::GRAB) != 0 {
                 wr8(b, p + player::GRAB, 0);
@@ -242,27 +301,29 @@ fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
                 wr8(b, object + 5, 8);
                 wr16(b, object + 6, 0);
             }
-            wr8(b, p + player::RANK, c.d[0] as u8);
-            let next = (c.d[0] as u8).wrapping_add(1);
-            set_low_byte(&mut c.d[0], next);
+            wr8(b, p + player::RANK, rang);
+            rang = rang.wrapping_add(1);
             if stage != STAGE_SKIP_WAIT && stage != STAGE_SKIP_CHECK {
-                call(c, b, rout::PLAYER_WAIT);
+                crate::player::actions::to_stand(&mut crate::player::Ctx::new(c, b), crate::player::Player(p));
             }
         }
-        c.a[0] = p + player::SIZE;
     }
-    if c.d[1] as u8 != 0 {
+    if a_terre != 0 {
         wr32(b, A5 + var::PHASE, PHASE_END);
-        wr16(b, A5 + var::SCROLL_Y, 0);
+        crate::ram::DEFILEMENT_Y_PLAN1.set(b, 0);
         wr16(b, A5.wrapping_add(var::HOLD), if stage == 1 { 0x60 } else { 0x120 });
     }
+}
+
+fn game_over_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    game_over(c, b);
     rts(c, b);
 }
 
 pub const GAME_OVER: Native = Native {
     entry: 0x28d8,
     name: "fin_de_partie",
-    run: game_over,
+    run: game_over_native,
     touches_sound: false,
     outputs: 0,
 };

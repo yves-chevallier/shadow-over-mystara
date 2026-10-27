@@ -237,10 +237,6 @@ impl World<'_> {
     }
 }
 
-fn set_low16(r: &mut u32, v: u16) {
-    *r = (*r & !0xffff) | v as u32;
-}
-
 fn set_low8(r: &mut u32, v: u8) {
     *r = (*r & !0xff) | v as u32;
 }
@@ -668,12 +664,14 @@ fn enemy_loses_hp(w: &mut World, e: Obj, dmg: u16) {
 fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
     cov::hit("show_enemy_hp");
     let key = ((attacker.u8(w.b, f::KIND) as u32) << 8) + e.u8(w.b, f::KIND) as u32;
-    w.c.d[0] = key & 0xffff;
     let (hp_max, hp, class) = (e.u16(w.b, f::HP_MAX), e.u16(w.b, f::HP), e.u8(w.b, f::CLASS));
-    set_low16(&mut w.c.d[1], hp_max);
-    set_low16(&mut w.c.d[2], hp);
-    set_low8(&mut w.c.d[3], class);
-    w.call_ao(0x19dce, attacker, e);
+    let barre = crate::evenements::Popup { entete: key as u16, max: hp_max, valeur: hp, brut: class == 2 };
+    // Glitch d'origine : 0x19dce laisse A2 sur la file des pop-ups (sauf s'ils sont inhibés), et A2 est la boîte
+    // d'attaque du joueur pour les ennemis suivants de `player_hits_enemies`
+    if !crate::evenements::popups_inhibes(w.b) {
+        w.a2 = crate::evenements::ENTREES_POPUPS;
+    }
+    crate::evenements::creer_popup(w.b, barre);
 }
 
 /// Fin de 0x2630e (0x264e4) : la victime passe en réaction "touchée", l'étincelle est créée et le
@@ -693,7 +691,8 @@ fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
     }
     set_low8(&mut w.c.d[4], d4);
     let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { 0xe662a } else { 0xe823a };
-    w.call_ao(target, p, e);
+    let source = crate::sound::Source { objet: Some(p), a1: Some(e.0), d4: Some(w.c.d[4]) };
+    crate::sound::jouer_avec(w.b, target, source);
 }
 
 /// 0x26562 : compte les coups spéciaux enchaînés (octet `+0x9c` de la victime) hors classe 4.

@@ -289,7 +289,7 @@ fn show_message(x: &mut Cx, flag: u8) {
     x.set_a5_u16(0x490, 1);
     x.set_a5_u8(0x48e, 0xc);
     x.set_a5_u8(0x48f, flag);
-    x.call(crate::palette::FULL_BRIGHTNESS.entry);
+    crate::palette::full_brightness(x.b);
     start_fade_task(x, FADE_TO_BLACK_TASK);
 }
 
@@ -365,7 +365,7 @@ mod boss_intro {
             }
             2 => {
                 if camera_x(x) >= 0x100 {
-                    x.call(EDA26);
+                    crate::sound::jouer(x.b, EDA26, x.o);
                     x.add8(0x5, 2);
                     call_with(x, crate::camera_modes::SHAKE_A.entry, 0x1e);
                 }
@@ -391,14 +391,14 @@ mod boss_intro {
             10 => {
                 if countdown(x) {
                     x.add8(0x5, 2);
-                    x.call(EDA66);
+                    crate::sound::jouer(x.b, EDA66, x.o);
                 }
             }
             12 => {
                 if camera_x(x) >= 0x200 {
                     next(x, 0x32);
                     call_with(x, crate::camera_modes::SHAKE_B.entry, 0x32);
-                    x.call(EDA26);
+                    crate::sound::jouer(x.b, EDA26, x.o);
                 }
             }
             14 => {
@@ -412,14 +412,14 @@ mod boss_intro {
             18 => {
                 if countdown(x) {
                     x.add8(0x5, 2);
-                    x.call(EDA66);
+                    crate::sound::jouer(x.b, EDA66, x.o);
                 }
             }
             20 => {
                 if camera_x(x) >= 0x2b0 {
                     next(x, 0x28);
                     call_with(x, crate::camera_modes::SHAKE_C.entry, 0x50);
-                    x.call(EDA26);
+                    crate::sound::jouer(x.b, EDA26, x.o);
                 }
             }
             22 => spawn_boss(x),
@@ -427,7 +427,7 @@ mod boss_intro {
                 let n = x.u8(BLAST).wrapping_sub(1);
                 x.set8(BLAST, n);
                 if n == 0 {
-                    x.call(EDA66);
+                    crate::sound::jouer(x.b, EDA66, x.o);
                 }
                 let n = x.u8(STEP).wrapping_sub(1);
                 x.set8(STEP, n);
@@ -451,7 +451,7 @@ mod boss_intro {
         let n = x.u8(BLAST).wrapping_sub(1);
         x.set8(BLAST, n);
         if (n as i8) < 0 {
-            x.call(ED94A);
+            crate::sound::jouer(x.b, ED94A, x.o);
             x.set8(BLAST, 0x14);
         }
         if x.u8(STEP) & 3 == 0 {
@@ -495,9 +495,9 @@ mod boss_intro {
                 break;
             }
         }
-        x.call(ED9BC);
+        crate::sound::jouer(x.b, ED9BC, x.o);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(crate::palette::FULL_BRIGHTNESS.entry);
+        crate::palette::full_brightness(x.b);
         let Some(boss) = x.alloc(&pools::BOSS) else { return };
         boss.set_u8(x.b, 0, 1);
         boss.set_u8(x.b, 2, 2);
@@ -1125,8 +1125,7 @@ mod continue_countdown {
         if rd8(x.b, MUTED) != 0 {
             return;
         }
-        x.c.a[4] = SCRIPT_OFF;
-        x.call(crate::text::CLEAR_BOX.entry);
+        crate::text::clear_box(x.b, SCRIPT_OFF);
     }
 
     fn rows(x: &mut Cx, base: u32, rows: &[(u16, u16)]) {
@@ -1274,8 +1273,7 @@ mod continue_countdown {
         if !was {
             rows(x, GET_READY, &GET_READY_ROWS);
         } else if rd8(x.b, MUTED) == 0 {
-            x.c.a[4] = SCRIPT_OFF;
-            x.call(crate::text::CLEAR_BOX.entry);
+            crate::text::clear_box(x.b, SCRIPT_OFF);
         }
     }
 
@@ -1312,8 +1310,7 @@ mod continue_countdown {
             if rd8(x.b, MUTED) != 0 {
                 return;
             }
-            x.c.a[4] = SCRIPT_ON;
-            x.call(crate::text::CLEAR_BOX.entry);
+            crate::text::clear_box(x.b, SCRIPT_ON);
             rows(x, GAME_OVER, &GAME_OVER_ROWS);
             return;
         }
@@ -1328,8 +1325,7 @@ mod continue_countdown {
         if rd8(x.b, MUTED) != 0 {
             return;
         }
-        x.c.a[4] = SCRIPT_ON;
-        x.call(crate::text::CLEAR_BOX.entry);
+        crate::text::clear_box(x.b, SCRIPT_ON);
     }
 }
 
@@ -1537,8 +1533,7 @@ mod exit_gate {
         let entered = x.u8(0x24);
         let n = rd8(x.b, COUNT).wrapping_add(entered);
         wr8(x.b, COUNT, n);
-        x.c.a[4] = SCRIPT;
-        x.call(crate::text::CLEAR_BOX.entry);
+        crate::text::clear_box(x.b, SCRIPT);
         for p in players() {
             if p.u8(x.b, pl::ACTIVE) != 0 && p.u16(x.b, pl::HEALTH) == 0 {
                 let flags = p.u8(x.b, 1) | 2;
@@ -1581,8 +1576,7 @@ mod exit_gate {
             }
         }
         x.set_a5_u32(0x2c, 0x0800_0000);
-        x.c.a[4] = LEAVE_SCRIPT;
-        x.call(crate::text::CLEAR_BOX.entry);
+        crate::text::clear_box(x.b, LEAVE_SCRIPT);
         let stage = x.a5_u8(0x34);
         if stage != LAST_STAGE {
             x.set_a5_u8(0x34, stage + 1);
@@ -2031,7 +2025,6 @@ mod door_a {
     const SCRIPT: u32 = 0xd86e8;
     const CHECK_FRAMES: i8 = 0x18;
     const SPAWN_SET: u32 = 0xc8312;
-    const TRANSITION: u32 = 0xe0a2e;
     const AFTER: u32 = 0xdd12c;
 
     pub fn run(x: &mut Cx) {
@@ -2149,8 +2142,7 @@ mod door_a {
 
     /// Tous les joueurs concernés sont à la porte : le passage commence.
     fn leave(x: &mut Cx) {
-        x.c.d[1] = (x.c.d[1] & 0xffff_0000) | 0xff;
-        call_with(x, TRANSITION, 4);
+        crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 0xff, ligne: 4 });
         x.set_a5_u8(0x51, 1);
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
@@ -2158,8 +2150,7 @@ mod door_a {
             x.set_a5_u8(0x42, 1);
             return;
         }
-        x.c.a[4] = SCRIPT;
-        x.call(crate::text::CLEAR_BOX.entry);
+        crate::text::clear_box(x.b, SCRIPT);
         x.set_a5_u32(0x5c6, 0);
         x.call(AFTER);
         x.set_a5_u16(GATE_LOCK, 0);
@@ -2183,7 +2174,7 @@ mod door_a {
         x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(crate::palette::FULL_BRIGHTNESS.entry);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
         reset_players_after_exit(x);
         x.call(crate::scene::entry::PLACE_PLAYERS.entry);
@@ -2212,14 +2203,13 @@ mod door_a {
         x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(crate::palette::FULL_BRIGHTNESS.entry);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x51, 0);
         restore_camera(x);
         let d4 = x.u16(0x1c);
         x.c.d[4] = (x.c.d[4] & 0xffff_0000) | d4 as u32;
-        x.c.d[1] = (x.c.d[1] & 0xffff_0000) | 0x90;
-        call_with(x, TRANSITION, 0);
+        crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 0x90, ligne: 0 });
         let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
         x.c.a[4] = A5 + camera;
         for p in players() {
@@ -2235,11 +2225,7 @@ mod door_a {
         if p.u8(x.b, 4) != 2 {
             let v = p.u8(x.b, 1) | 2;
             p.set_u8(x.b, 1, v);
-            let d6 = x.c.d[6];
-            x.c.a[0] = p.0;
-            crate::call(x.c, x.b, 0x3668);
-            x.c.a[0] = x.o.0;
-            x.c.d[6] = d6;
+            crate::placement::place_on_free_ground(x.b, p);
             return;
         }
         p.set_u32(x.b, pl::STATE, 0x0200_0000);
@@ -2342,8 +2328,8 @@ mod zone_end {
                 x.add8(0x4, 2);
                 x.set_a5_u16(SCROLL_LOCK, 0);
                 eshl_creators::appeler(x, eshl_creators::linked_34_3);
-                x.call(0xe55a2);
-                x.call(0xe13b0);
+                crate::sound::jouer(x.b, 0xe55a2, x.o);
+                crate::sound::jouer(x.b, 0xe13b0, x.o);
             }
             _ => {}
         }
@@ -2451,8 +2437,8 @@ pub(super) mod door_b {
         x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(crate::palette::FULL_BRIGHTNESS.entry);
-        x.call(0xe0c5c);
+        crate::palette::full_brightness(x.b);
+        crate::sound::jouer(x.b, 0xe0c5c, x.o);
         x.set_a5_u16(GATE_LOCK, 0);
         reset_players_after_exit(x);
         x.call(crate::scene::entry::PLACE_PLAYERS.entry);
@@ -2476,14 +2462,13 @@ pub(super) mod door_b {
         x.call(crate::scene::script::SCRIPT_RESET.entry);
         call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(0x48e, 0xf);
-        x.call(crate::palette::FULL_BRIGHTNESS.entry);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x4a, 1);
         x.set_a5_u8(0x43, 0xf);
         restore_camera(x);
-        let d4 = x.u16(0x1c);
-        x.c.d[4] = (x.c.d[4] & 0xffff_0000) | d4 as u32;
-        x.call(0xe17a4);
+        let musique = x.u16(0x1c);
+        crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { d4: Some(musique as u32), ..Default::default() });
         let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
         x.c.a[4] = A5 + camera;
         for p in players() {
@@ -2498,11 +2483,7 @@ pub(super) mod door_b {
         if p.u8(x.b, 4) != 2 {
             let v = p.u8(x.b, 1) | 2;
             p.set_u8(x.b, 1, v);
-            let d6 = x.c.d[6];
-            x.c.a[0] = p.0;
-            crate::call(x.c, x.b, 0x3668);
-            x.c.a[0] = x.o.0;
-            x.c.d[6] = d6;
+            crate::placement::place_on_free_ground(x.b, p);
             return;
         }
         p.set_u32(x.b, pl::STATE, 0x0200_2a00);
@@ -2612,7 +2593,7 @@ mod level_clock {
         let n = x.u16(CUE).wrapping_sub(1);
         x.set16(CUE, n);
         if n == 0 {
-            x.call(OFF);
+            crate::sound::jouer(x.b, OFF, x.o);
         }
     }
 
@@ -2639,7 +2620,7 @@ mod level_clock {
                 speech(x, 0);
                 x.set16(CUE, 0x28);
                 call_with(x, crate::camera_modes::SHAKE_A.entry, 0x28);
-                x.call(ON);
+                crate::sound::jouer(x.b, ON, x.o);
             }
             2 => {
                 countdown(x, 0x50, 0);
@@ -2662,7 +2643,7 @@ mod level_clock {
                 speech(x, 2);
                 x.set16(CUE, 0x78);
                 call_with(x, crate::camera_modes::SHAKE_C.entry, 0x78);
-                x.call(ON);
+                crate::sound::jouer(x.b, ON, x.o);
             }
             6 => {
                 let n = x.u16(CUE).wrapping_sub(1);
@@ -2672,7 +2653,7 @@ mod level_clock {
                 }
                 x.add8(0x4, 2);
                 x.set_a5_u8(0x42, 1);
-                x.call(OFF);
+                crate::sound::jouer(x.b, OFF, x.o);
             }
             _ => {}
         }

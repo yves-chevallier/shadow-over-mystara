@@ -188,7 +188,7 @@ fn traiter_ligne(b: &mut Cps2Bus, c: &mut Cpu, separes: bool, l: Ligne, niveau: 
     c.a[0] = a0;
     set_low_byte(&mut c.d[0], somme);
     if !(somme == 0) {
-        crate::call(c, b, ext::BRUIT_PIECE);
+        crate::sound::jouer_global(b, ext::BRUIT_PIECE);
     }
     crate::call(c, b, ext::COMPTABILITE_PIECE);
     c.d[0] = 0;

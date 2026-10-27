@@ -407,6 +407,60 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
   retenue, compteurs) sont relus par les gestionnaires d'ennemis et de boss (lot A) et par les sons qui suivent ;
   empoisonnés, une trentaine de scénarios divergent. Ils gardent leur contrat.
 
+## 10. Lot S : services communs (son, palettes, texte, terrain, aides, événements)
+
+Périmètre : `sound.rs`, `palette.rs`, `text.rs`, `video.rs`, `aides.rs`, `evenements.rs`, `terrain.rs`,
+`placement.rs`, `ai_aids.rs` (et `ai.rs`, `scroll.rs`, `camera_modes.rs`, laissés par le lot D), plus les
+appelants hors des familles des lots A et B. API et mode d'emploi : [guide-refactorisation.md](guide-refactorisation.md),
+« Les services communs (lot S) ».
+
+* **La sauvegarde fantôme du son disparaît** (écart assumé, [son-68000.md](son-68000.md)). Trace des lectures sur la
+  machine d'origine, 269 scénarios : la copie D0-D7/A0-A4 que chaque wrapper laisse sous le pointeur de sa pile
+  privée (FF297E-FF2A19, trois niveaux d'aiguillage au plus) n'est relue que par les restaurations des wrappers et
+  par le test de la RAM du menu TEST (0x2d096, qui remet la valeur lue). Elle était déjà dans la zone ignorée par
+  `validate` (FF2900-FF2A19) : le blocage signalé par le lot C venait des registres que les sons **lisent** (A0,
+  D4, A1), pas de la copie. `validate` n'ignore plus que la sauvegarde (`SAUVEGARDE_FANTOME`) : la fin de la file
+  des sons, ses têtes et l'alternance des voix (FF2900-FF2961) sont maintenant comparées.
+* **Cœurs.** Son : `jouer(b, son, objet)`, `jouer_global`, `jouer_avec(b, son, Source)` (valeurs `Option` : un son
+  qui lit une valeur absente s'arrête), `service(b, Service::…)`, `emettre` ; aiguillages et entrées « selon la
+  version » dans le cœur ; la liste `sound::NATIVES` (inutilisée, en double) supprimée. Palettes : luminosité,
+  éclairs (`Flash`), couleur d'éclair, palette du personnage. Texte : `print`, `erase`, `print_over` (un seul
+  moteur `texte`), `print_tall(_at)`, blocs, `clear_box`, qui rendent la fin du descripteur. Vidéo :
+  `terrain(b, x, y) -> Terrain`, `terrain_of`, `terrain_68k`. Aides : `direction*`, `grabbed -> Saisie`, `game_over`
+  (sans appel par adresse : `palette::character_palette`, `player::actions::to_stand`). Événements : files de
+  points, crédit, pop-ups (`Popup`). Terrain et placement : `terrain::push(b, o)`, `placement::place_on_free_ground(b,
+  o)` (plus d'adaptateur `_68k` : registres de 0x24b0 pris dans `Terrain`). IA : `ai_aids::stance`, `in_front`,
+  `box_around -> DansBoite` (boîte : `Boite`). `ram` : `JOUEURS_EN_VIE` (0x35, ex-`DIFFICULTE`), `DEFILEMENT_Y_PLAN1`
+  (0x4ba), `DSW` (0x7fd0), réexportés par `player::ram`. Les natives restent pour les appels par adresse et
+  reproduisent les registres de l'original.
+* **Appelants convertis** (hors familles des lots A et B) : ~330 appels de son (script `tools/convertir_sons.py`,
+  puis à la main ceux qui lisent D4/A1 ou prennent une adresse calculée : la valeur posée dans D4 devient l'argument),
+  ~110 appels de palettes, textes, directions, terrain, événements, fin de partie. Noms faux corrigés : les
+  « scripts d'animation de palette » de la phase 0 (`game.rs`, 0x1324) effacent des rectangles de texte
+  (`TEXT_BOXES`) ; `DIFFICULTE`.
+* **Registres gardés, et pourquoi.** `pshl::stopped_by_terrain` (et, par prudence, `eshl.rs`, `shell.rs`) gardent les
+  registres de 0x24a8 (`terrain_68k`) : D3 est relu par un gestionnaire suivant (`boss11_scene42_mort`, image 4447,
+  la divergence est apparue en passant au cœur) ; `peff_e.rs` : D2 du terrain relu par le rebond du suivant
+  (lot C). `combat.rs` (`jouer_avec` des aiguillages 0xe662a/0xe823a : D4 posé par l'appelant pour la cible, peut-être
+  un `ParD4`). Les tours de `peff_m`, `peff_n`, `pshl_d` lisent encore leur cible dans A1 (posé par l'appelant).
+* **Glitch mis au jour.** La barre de vie (0x19dce) laisse A2 sur la file des pop-ups, et `player_hits_enemies`
+  garde A2 comme boîte d'attaque du joueur pour les ennemis suivants : après un coup qui affiche une barre, les
+  ennemis suivants de la liste sont testés contre la file des pop-ups (`combat::show_enemy_hp`, marqué ; vu en
+  passant au cœur `evenements::creer_popup` : une dizaine de scénarios divergeaient).
+* **Fuzz.** `fuzz son` (wrappers, aiguillages hors sélecteurs aléatoires, services) et `fuzz video` sans écart ;
+  `fuzz u1` sans écart sur les natives du lot (un écart antérieur, hors lot : D6 de `popups_effacer_tout`,
+  `popups.rs`, 0x0000ffff attendu) ; `fuzz_monde ia_` (nouveau : 0xa470, 0x7f0c, 0x7ef4, 0x7f19c) : mêmes écarts
+  avant et après (drapeau X seulement, que ces natives n'ont jamais reproduit).
+* **Mesure** (`tools/mesure_refacto.py`, avant 44d7794 / après) : total `adr` 2 896 / 2 347, `regs` 5 596 / 5 365,
+  `drap` 536 / 522, lignes 148 020 / 148 078 ; `player` `adr` 263 / 71, `scene` 257 / 173, `modes` 185 / 158,
+  `families` (lot C seulement) 2 053 / 1 839 ; modules du lot : `sound` `regs` 54 / 24, `aides` 46 / 28,
+  `evenements` 43 / 35 (`drap` 30 / 18), `placement` 16 / 8, `ai_aids` 273 / 249 ; adresses déclarées dans plusieurs
+  fichiers 214 / 196 (940 / 872 déclarations). Les `_68k(` passent de 116 à 133 : les adaptateurs du lot portent
+  maintenant ce nom (`terrain_68k`, `enfiler_68k`...), alors que les natives les contenaient sans le dire.
+* **Pas faits.** `ai.rs` (machine à registres des IA), le reste de `ai_aids.rs` (une quarantaine d'aides à contrat
+  D0/Z appelées par les familles des lots A et B : tirages, butin, débris, saisie...), `scroll.rs`,
+  `camera_modes.rs` ; les appels de services dans les familles des lots A et B (à faire par ces lots avec l'API).
+
 ## Avancement
 
 | Étape | Commit | Validation |
@@ -420,3 +474,4 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
 | Lot 0b : fusion du lot E, méthodes au cœur après `DDSOM_POISON`, documentation | voir `git log` | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) ; empoisonnée : lecteurs isolés (guide) |
 | Lot D : joueurs et monde (accesseurs, appels Rust directs, poison, trous réécrits) | voir `git log` (wt-joueur) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; poison du lot sur 90 scénarios ; fuzz_player des dix routines ajoutées |
 | Lot C : fondu des portes en sous-programme de tâche, J1 dans le lot, registres morts des gestionnaires sans son | e3a49b7 (wt-decors) | complète, 269/269 sans 68000 (30 min 49 s, 8 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; `fuzz_porte` (portes 7 et 29), `fuzz boutique`, `fuzz petites` sans écart |
+| Lot S : services communs sans registres (sauvegarde fantôme du son, cœurs son/palette/texte/terrain/aides/événements, appelants hors lots A-B) | voir `git log` (wt-services) | complète, 269/269 sans 68000 (JOBS=8) ; `fuzz son`, `fuzz video`, `fuzz u1`, `fuzz_monde ia_` |

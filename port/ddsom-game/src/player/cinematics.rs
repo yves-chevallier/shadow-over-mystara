@@ -144,7 +144,7 @@ fn rank(g: &mut Ctx, p: Player) -> u32 {
 fn victory_pose(g: &mut Ctx, p: Player) {
     let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
     animation::start(g, p, anim);
-    g.rom(ext::son::FANFARE, p);
+    g.son(ext::son::FANFARE, p);
 }
 
 /// Pas suivant et pose de victoire.
@@ -449,7 +449,7 @@ const END_243D6: Steps = &[
     (0x24454, |g, p| {
         walk_out(g, p);
         wait_done(g, p);
-        crate::terrain::push_68k(g.c, g.b, p.obj());
+        crate::terrain::push(g.b, p.obj());
     }),
 ];
 
@@ -596,7 +596,7 @@ const END_247B2: Steps = &[
         let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
         animation::start(g, p, anim);
         reset_speed_class(g, p);
-        g.rom(ext::son::FANFARE, p);
+        g.son(ext::son::FANFARE, p);
     }),
     (0x2480c, |g, p| {
         if scene_step(g) == 12 {
@@ -677,7 +677,7 @@ const END_249EA: Steps = &[
         let x = p.u16(g, Obj::X).wrapping_add(4);
         p.set_u16(g, Obj::X, x);
         anim_step(g, p);
-        crate::terrain::push_68k(g.c, g.b, p.obj());
+        crate::terrain::push(g.b, p.obj());
     }),
 ];
 
@@ -1045,8 +1045,8 @@ const INTRO_24FE2: Steps = &[
         p.set_u8(g, ARMED, 1);
         animation::start(g, p, 51);
         if p.u8(g, RANK) == 0 {
-            g.rom(0xeaa58, p);
-            g.rom(0xe0c5c, p);
+            g.son(0xeaa58, p);
+            g.son(0xe0c5c, p);
         }
     }),
     (0x2509a, |g, p| {

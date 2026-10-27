@@ -68,11 +68,9 @@ mod ext {
     pub const PALETTE_PAGE_A: u32 = 0x1a60a;
     pub const PALETTE_PAGE_B: u32 = 0x1a608;
     pub const PALETTE_PAGE_C: u32 = 0x1a3d4;
-    pub const BRIGHTNESS_WHITE: u32 = 0x1686;
     pub const TILE_BLOCK: u32 = 0x26d4;
     pub const TILE_BLOCK_2: u32 = 0x2766;
     pub const CLEAR_BLOCK: u32 = 0x260c;
-    pub const PRINT: u32 = 0xd5e;
     /// Tâches de fondu : vers la couleur, depuis la couleur.
     pub const FADE_TASK_IN: u32 = 0x14ba;
     pub const FADE_TASK_OUT: u32 = 0x14d0;
@@ -210,7 +208,7 @@ crate::etapes! {
             x.set_m8(0xd, 6);
             x.set_m8(f::CUE, 0);
             x.next_step();
-            x.call(ext::SOUND_E0EBC);
+            crate::sound::jouer_global(x.b, ext::SOUND_E0EBC);
             fade_setup(x, 3, FADE_PAGES_ALL);
             crate::taches::fondu::montee(x)
         },
@@ -299,13 +297,12 @@ crate::etapes! {
             x.render();
             x.call(ext::INVITE_START);
             x.set_m16(f::TIMER, 300);
-            x.c.a[4] = 0xfacc4;
-            x.call(ext::PRINT);
+            crate::text::print(x.b, 0xfacc4);
             let region = x.v16(var::REGION);
             x.c.d[0] = (x.c.d[0] & 0xffff_0000) | (region.wrapping_add(region) as u32);
             let index = (x.c.d[0] as u16) as i16 as i32 as u32;
-            x.c.a[4] = rd32(x.b, 0xfad92u32.wrapping_add(index));
-            x.call(ext::PRINT);
+            let texte = rd32(x.b, 0xfad92u32.wrapping_add(index));
+            crate::text::print(x.b, texte);
             Flow::Done
         },
         T1eWait = T1E_FADED => |x| leave_wait(x, Etape::T1eWait, Etape::T1eCleared, false),
@@ -326,7 +323,7 @@ crate::etapes! {
             load_title_palette(x);
             x.call_d0(ext::PALETTE_PAGE_C, 1);
             fade_setup(x, 3, 13);
-            x.call(ext::BRIGHTNESS_WHITE);
+            crate::palette::full_brightness(x.b);
             x.or16(var::VIDEO_FLAGS, 1);
             let flags = x.v16(var::VIDEO_FLAGS);
             wr16(x.b, CPS_REG_VIDEO, flags);
@@ -360,7 +357,8 @@ crate::etapes! {
         S02Palette = S02_PALETTE => |x| {
             x.call(ext::PALETTE_PAGE_B);
             x.set_v8(var::FADE_PAGES, 2);
-            x.jump_to(ext::BRIGHTNESS_WHITE)
+            crate::palette::full_brightness(x.b);
+            Flow::Done
         },
         S04Retry = S04_RETRY => s04_object,
         S04Show = S04_SHOW => |x| {
@@ -458,7 +456,7 @@ fn t08_wait_flash(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
-    x.call(ext::BRIGHTNESS_WHITE);
+    crate::palette::full_brightness(x.b);
     x.wait(4, Etape::T08Next)
 }
 const T08_NEXT: u32 = 0xfa4bc;
@@ -536,7 +534,7 @@ fn t12_wait(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
-    x.call(ext::BRIGHTNESS_WHITE);
+    crate::palette::full_brightness(x.b);
     x.wait(4, Etape::T12Scenery)
 }
 const T12_SCENERY: u32 = 0xfa5ba;
@@ -598,7 +596,7 @@ fn t18_palette(x: &mut Ctx) -> Flow {
     x.c.a[4] = src;
     x.c.a[1] = 0x91c3e0;
     x.set_v8(var::FADE_PAGES, 1);
-    x.call(ext::BRIGHTNESS_WHITE);
+    crate::palette::full_brightness(x.b);
     x.c.d[..7].copy_from_slice(&saved.0[..7]);
     x.c.a[2] = saved.1;
     t18_object(x)
@@ -642,7 +640,8 @@ fn t18_text_object(x: &mut Ctx) -> Flow {
     wr32(x.b, target + 4, 0x0600_0000);
     x.set_v16(var::SCROLL_2_Y, 0);
     x.set_v16(var::LAYERS, 0x12ce);
-    x.jump_to(ext::OBJECT_LAUNCH)
+    crate::sound::jouer_global(x.b, ext::OBJECT_LAUNCH);
+    Flow::Done
 }
 const T18_SUB_RETRY: u32 = 0xfa77c;
 
@@ -658,7 +657,7 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
     x.c.a[1] = GFX_PLANE_1_START;
     x.call_d0(ext::CLEAR_BLOCK, 7);
     x.call_d0(ext::CLEAR_BLOCK, 8);
-    x.call(ext::SOUND_E185C);
+    crate::sound::jouer_global(x.b, ext::SOUND_E185C);
     t1a_object(x)
 }
 fn t1a_object(x: &mut Ctx) -> Flow {

@@ -91,8 +91,8 @@ mod swap {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 0);
-                x.c.d[4] = owner.u8(x.b, 0x10d) as u32;
-                x.call(SFX);
+                let voix = owner.u8(x.b, 0x10d) as u32;
+                crate::sound::jouer_avec(x.b, SFX, crate::sound::Source { objet: Some(x.o), a1: None, d4: Some(voix) });
                 x.reinsert();
             }
             2 => {

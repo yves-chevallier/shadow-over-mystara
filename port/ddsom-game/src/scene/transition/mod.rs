@@ -75,8 +75,6 @@ mod sub {
     pub const SPRITES: u32 = 0x1de96;
     pub const TILE_BLOCK: u32 = 0x26d4;
     pub const TILE_BLOCK_2: u32 = 0x2766;
-    pub const PALETTES_BLACK: u32 = 0x168c;
-    pub const PALETTES_WHITE: u32 = 0x1686;
     pub const LOAD_PALETTE: u32 = 0x1a67e;
     pub const SOUND: u32 = 0xe0a82;
     pub const CLEAR_SPRITES: u32 = 0xc58;
@@ -322,7 +320,7 @@ fn reset_pools(x: &mut Ctx) {
 fn dark_palette(x: &mut Ctx) {
     x.call(sub::LOAD_PALETTE);
     x.set_v8(a5::FADE_PAGES, 4);
-    x.call(sub::PALETTES_BLACK);
+    crate::palette::no_brightness(x.b);
 }
 
 /// 0xfa240 : 0x800 octets à zéro en 0x920000 (registres gardés).

@@ -13,8 +13,9 @@
 //! joueurs (0x15200) vide les anneaux : la valeur BCD associée au type (table de ROM, 4 octets par
 //! type) est ajoutée au compteur BCD du joueur (`+0x110`, 8 chiffres ; `+0x114`, 5 chiffres), plafonné.
 //!
-//! Les registres et drapeaux laissés par l'original sont reproduits : ces petites routines ont des
-//! centaines d'appelants (objets ennemis...) dont on ne vérifie pas un à un l'usage des restes.
+//! Cœurs sans registres (`vider_points`, `enfiler_points`, `evenement_objet`, `crediter_points`, `creer_popup`...)
+//! et natives `_68k` pour les appels par adresse : celles-ci reproduisent les registres et drapeaux de l'original,
+//! que des centaines d'appelants (objets ennemis...) peuvent relire.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -51,8 +52,9 @@ const POPUP_INHIBE: u32 = 0x50;
 /// Enregistrements joueur : le premier et la taille (0x200).
 const JOUEUR_1: u32 = 0x5de;
 
-fn a5(c: &Cpu, off: u32) -> u32 {
-    c.a[5].wrapping_add(off)
+/// Adresse `A5 + off` (A5 vaut toujours `mem::A5`).
+const fn a5(off: u32) -> u32 {
+    crate::mem::A5.wrapping_add(off)
 }
 
 fn set_mot(r: &mut u32, v: u16) {
@@ -62,49 +64,68 @@ fn set_mot(r: &mut u32, v: u16) {
 // ---------------------------------------------------------------------------------------------
 // Remises à vide
 
-/// `n` longs à 0xFFFFFFFF depuis `debut` (`move.l D1,(A)+ ; dbf D0`). D1 = -1, mot bas de D0 = 0xFFFF,
-/// le registre d'adresse `ptr` rend la fin de la zone.
-fn remplir(c: &mut Cpu, b: &mut Cps2Bus, debut: u32, n: u32, ptr: usize) {
+/// `n` longs à 0xFFFFFFFF depuis `debut`.
+fn remplir(b: &mut Cps2Bus, debut: u32, n: u32) {
     for k in 0..n {
         wr32(b, debut + 4 * k, 0xffff_ffff);
     }
-    c.a[ptr] = debut + 4 * n;
+}
+
+/// Registres de `move.l D1,(A)+ ; dbf D0` : D1 = -1, mot bas de D0 = 0xFFFF, le registre d'adresse `ptr` rend la fin
+/// de la zone.
+fn remplir_68k(c: &mut Cpu, fin: u32, ptr: usize) {
+    c.a[ptr] = fin;
     set_mot(&mut c.d[0], 0xffff);
     c.d[1] = 0xffff_ffff;
     ops::logique(c, 0xffff_ffff, Size::Long);
 }
 
-/// 0x19aa2 / 0x19abc : vide l'anneau.
-fn vider_anneau(c: &mut Cpu, b: &mut Cps2Bus, anneau: &Anneau) {
-    wr8(b, a5(c, anneau.ecriture), 0);
-    wr8(b, a5(c, anneau.ecriture + 1), 0);
-    remplir(c, b, a5(c, anneau.cases), 32, 0);
-    rts(c, b);
+fn vider_anneau(b: &mut Cps2Bus, anneau: &Anneau) {
+    wr8(b, a5(anneau.ecriture), 0);
+    wr8(b, a5(anneau.ecriture + 1), 0);
+    remplir(b, a5(anneau.cases), 32);
 }
 
-fn vider_points(c: &mut Cpu, b: &mut Cps2Bus) {
-    vider_anneau(c, b, &POINTS);
+/// 0x19aa2 : vide l'anneau des points.
+pub fn vider_points(b: &mut Cps2Bus) {
+    vider_anneau(b, &POINTS);
 }
 
-fn vider_compteur(c: &mut Cpu, b: &mut Cps2Bus) {
-    vider_anneau(c, b, &COMPTEUR);
+/// 0x19abc : vide l'anneau du second compteur.
+pub fn vider_compteur(b: &mut Cps2Bus) {
+    vider_anneau(b, &COMPTEUR);
 }
 
-/// 0x19db4 : vide la file des pop-ups (64 longs, A1 rend la fin).
-fn vider_popups(c: &mut Cpu, b: &mut Cps2Bus) {
-    wr8(b, a5(c, POPUP_ECRITURE), 0);
-    wr8(b, a5(c, POPUP_LECTURE), 0);
-    remplir(c, b, a5(c, POPUP_ENTREES), 64, 1);
-    rts(c, b);
+/// 0x19db4 : vide la file des pop-ups.
+pub fn vider_popups(b: &mut Cps2Bus) {
+    wr8(b, a5(POPUP_ECRITURE), 0);
+    wr8(b, a5(POPUP_LECTURE), 0);
+    remplir(b, a5(POPUP_ENTREES), 64);
 }
 
-/// 0x19e10 : efface le pop-up courant (4 longs). Laisse A1 après la zone, D0 = 0, D6 = 0xFFFF.
-fn effacer_popup_courant(c: &mut Cpu, b: &mut Cps2Bus) {
-    let debut = a5(c, POPUP_COURANT);
+/// 0x19e10 : efface le pop-up courant (4 longs).
+pub fn effacer_popup_courant(b: &mut Cps2Bus) {
     for k in 0..4 {
-        wr32(b, debut + 4 * k, 0);
+        wr32(b, a5(POPUP_COURANT) + 4 * k, 0);
     }
-    c.a[1] = debut + 16;
+}
+
+fn vider_anneau_68k(c: &mut Cpu, b: &mut Cps2Bus, anneau: &Anneau) {
+    vider_anneau(b, anneau);
+    remplir_68k(c, a5(anneau.cases) + 4 * 32, 0);
+    rts(c, b);
+}
+
+fn vider_popups_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    vider_popups(b);
+    remplir_68k(c, a5(POPUP_ENTREES) + 4 * 64, 1);
+    rts(c, b);
+}
+
+/// Laisse A1 après la zone, D0 = 0, D6 = 0xFFFF.
+fn effacer_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_popup_courant(b);
+    c.a[1] = a5(POPUP_COURANT) + 16;
     c.d[0] = 0;
     c.d[6] = 0xffff;
     ops::logique(c, 0, Size::Long);
@@ -114,56 +135,83 @@ fn effacer_popup_courant(c: &mut Cpu, b: &mut Cps2Bus) {
 // ---------------------------------------------------------------------------------------------
 // Enfilage d'un événement de score
 
-/// Enfile `evenement` dans l'anneau si la case d'écriture est libre (0x19ae6 / 0x19b08).
-/// Laisse D6 (index), A4 (début des cases) et les drapeaux comme l'original.
-fn enfiler(c: &mut Cpu, b: &mut Cps2Bus, anneau: &Anneau, evenement: u16) {
-    c.d[6] = 0;
-    ops::logique(c, 0, Size::Long);
-    c.a[4] = a5(c, anneau.cases);
-    let index = rd8(b, a5(c, anneau.ecriture));
-    set_low_byte(&mut c.d[6], index);
-    ops::logique(c, index as u32, Size::Byte);
-    let case = c.a[4].wrapping_add(index as u32);
+/// Issue d'un enfilage : l'index d'écriture lu, et le contenu de la case s'il n'était pas libre.
+struct Enfile {
+    index: u8,
+    occupee: Option<u16>,
+}
+
+fn enfiler(b: &mut Cps2Bus, anneau: &Anneau, evenement: u16) -> Enfile {
+    let index = rd8(b, a5(anneau.ecriture));
+    let case = a5(anneau.cases).wrapping_add(index as u32);
     let contenu = rd16(b, case);
-    ops::cmp(c, VIDE as u32, contenu as u32, Size::Word);
     if contenu != VIDE {
-        return;
+        return Enfile { index, occupee: Some(contenu) };
     }
     wr16(b, case, evenement);
-    ops::logique(c, evenement as u32, Size::Word);
-    let suivant = ops::add(c, 2, index as u32, Size::Byte) as u8;
-    set_low_byte(&mut c.d[6], suivant);
-    let reduit = suivant & MASQUE;
-    set_mot(&mut c.d[6], reduit as u16);
-    ops::logique(c, reduit as u32, Size::Word);
-    wr8(b, a5(c, anneau.ecriture), reduit);
-    ops::logique(c, reduit as u32, Size::Byte);
+    wr8(b, a5(anneau.ecriture), index.wrapping_add(2) & MASQUE);
+    Enfile { index, occupee: None }
 }
 
-fn enfiler_points(c: &mut Cpu, b: &mut Cps2Bus) {
-    enfiler(c, b, &POINTS, c.d[0] as u16);
+/// 0x19ae6 : enfile l'événement de score `evenement` (`(joueur << 8) | type`) si la case d'écriture est libre ;
+/// rend vrai s'il est enfilé.
+pub fn enfiler_points(b: &mut Cps2Bus, evenement: u16) -> bool {
+    enfiler(b, &POINTS, evenement).occupee.is_none()
+}
+
+/// 0x19b08 : idem dans l'anneau du second compteur.
+pub fn enfiler_compteur(b: &mut Cps2Bus, evenement: u16) -> bool {
+    enfiler(b, &COMPTEUR, evenement).occupee.is_none()
+}
+
+/// Événement de score de l'objet `o` : type `+0x7e`, joueur `+0x48` bits 8-9.
+pub fn evenement_de(b: &mut Cps2Bus, o: crate::objects::Obj) -> u16 {
+    let type_ = rd8(b, o.0 + 0x7e) as u16;
+    (rd16(b, o.0 + 0x48) & 0x300).wrapping_add(type_)
+}
+
+/// 0x19ad6 : enfile l'événement de score de l'objet `o` dans l'anneau des points.
+pub fn evenement_objet(b: &mut Cps2Bus, o: crate::objects::Obj) -> bool {
+    let evenement = evenement_de(b, o);
+    enfiler_points(b, evenement)
+}
+
+/// Registres et drapeaux de 0x19ae6 / 0x19b08 : D6 (index), A4 (début des cases).
+fn enfiler_68k(c: &mut Cpu, b: &mut Cps2Bus, anneau: &Anneau, evenement: u16) {
+    let e = enfiler(b, anneau, evenement);
+    c.d[6] = e.index as u32;
+    c.a[4] = a5(anneau.cases);
+    match e.occupee {
+        Some(contenu) => ops::cmp(c, VIDE as u32, contenu as u32, Size::Word),
+        None => {
+            ops::add(c, 2, e.index as u32, Size::Byte);
+            let reduit = e.index.wrapping_add(2) & MASQUE;
+            set_mot(&mut c.d[6], reduit as u16);
+            ops::logique(c, reduit as u32, Size::Byte);
+        }
+    }
+}
+
+fn enfiler_points_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    enfiler_68k(c, b, &POINTS, c.d[0] as u16);
     rts(c, b);
 }
 
-fn enfiler_compteur(c: &mut Cpu, b: &mut Cps2Bus) {
-    enfiler(c, b, &COMPTEUR, c.d[0] as u16);
+fn enfiler_compteur_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    enfiler_68k(c, b, &COMPTEUR, c.d[0] as u16);
     rts(c, b);
 }
 
-/// 0x19ad6 : événement de l'objet A0 (type `+0x7e`, joueur `+0x48` bits 8-9) dans l'anneau des points.
-fn evenement_objet(c: &mut Cpu, b: &mut Cps2Bus) {
-    let type_ = rd8(b, c.a[0] + 0x7e) as u32;
+/// 0x19ad6 : D0 = l'événement, D1.w = le joueur (bits 8-9).
+fn evenement_objet_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    let o = crate::objects::Obj(c.a[0]);
+    let type_ = rd8(b, o.0 + 0x7e) as u32;
     c.d[0] = type_;
-    ops::logique(c, type_, Size::Byte);
-    let mot = rd16(b, c.a[0] + 0x48);
-    set_mot(&mut c.d[1], mot);
-    ops::logique(c, mot as u32, Size::Word);
-    let joueur = mot & 0x300;
+    let joueur = rd16(b, o.0 + 0x48) & 0x300;
     set_mot(&mut c.d[1], joueur);
-    ops::logique(c, joueur as u32, Size::Word);
     let evenement = ops::add(c, joueur as u32, type_, Size::Word) as u16;
     set_mot(&mut c.d[0], evenement);
-    enfiler(c, b, &POINTS, evenement);
+    enfiler_68k(c, b, &POINTS, evenement);
     rts(c, b);
 }
 
@@ -206,9 +254,9 @@ struct Traite {
 
 /// Traite l'événement de la case `index` : vide la case, ajoute la valeur BCD du type au compteur
 /// du joueur, plafonne, avance l'index de lecture.
-fn traiter(c: &Cpu, b: &mut Cps2Bus, k: &Credit, index: u8, evenement: u16) -> Traite {
-    wr16(b, a5(c, k.anneau.cases).wrapping_add(index as u32), VIDE);
-    let joueur = a5(c, JOUEUR_1) + (((evenement & 0x300) as u32) << 1);
+fn traiter(b: &mut Cps2Bus, k: &Credit, index: u8, evenement: u16) -> Traite {
+    wr16(b, a5(k.anneau.cases).wrapping_add(index as u32), VIDE);
+    let joueur = a5(JOUEUR_1) + (((evenement & 0x300) as u32) << 1);
     let ligne = (evenement as u32 & 0xff) << 2;
     let (table, compteur) = (k.table + ligne, joueur + k.compteur);
     // abcd -(A3),-(A4) ×4 : octet de poids faible d'abord, retenue chaînée, X initial nul
@@ -223,94 +271,144 @@ fn traiter(c: &Cpu, b: &mut Cps2Bus, k: &Credit, index: u8, evenement: u16) -> T
     if plafonne {
         wr32(b, compteur, k.plafond);
     }
-    wr8(b, a5(c, k.lecture), index.wrapping_add(2) & MASQUE);
+    wr8(b, a5(k.lecture), index.wrapping_add(2) & MASQUE);
     Traite { joueur, ligne }
 }
 
 /// Évènement en attente à l'index de lecture, s'il y en a un.
-fn en_attente(c: &Cpu, b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
-    let index = rd8(b, a5(c, k.lecture));
-    let evenement = rd16(b, a5(c, k.anneau.cases).wrapping_add(index as u32));
+fn en_attente(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
+    let index = rd8(b, a5(k.lecture));
+    let evenement = rd16(b, a5(k.anneau.cases).wrapping_add(index as u32));
     (evenement != VIDE).then_some((index, evenement))
 }
 
-/// 0x19b2a / 0x19b9c : crédite tous les événements en attente.
-fn crediter(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
+/// Dernier événement traité par un crédit : de quoi reconstituer les registres de l'original.
+struct Dernier {
+    index: u8,
+    traite: Traite,
+}
+
+fn crediter(b: &mut Cps2Bus, k: &Credit) -> Option<Dernier> {
+    let mut dernier = None;
+    while let Some((index, evenement)) = en_attente(b, k) {
+        let traite = traiter(b, k, index, evenement);
+        dernier = Some(Dernier { index, traite });
+    }
+    dernier
+}
+
+/// 0x19b2a : crédite au compteur de points de chaque joueur les événements en attente.
+pub fn crediter_points(b: &mut Cps2Bus) {
+    crediter(b, &CREDIT_POINTS);
+}
+
+/// 0x19b9c : idem pour le second compteur.
+pub fn crediter_compteur(b: &mut Cps2Bus) {
+    crediter(b, &CREDIT_COMPTEUR);
+}
+
+/// Registres de 0x19b2a / 0x19b9c : restes de la dernière itération, D0 = index de lecture final.
+fn crediter_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
     c.d[1] = 0;
     c.d[2] = 0;
-    ops::logique(c, 0, Size::Long);
-    c.a[2] = a5(c, k.anneau.cases);
-    let mut retenue = None;
-    while let Some((index, evenement)) = en_attente(c, b, k) {
-        let t = traiter(c, b, k, index, evenement);
-        // X final : retenue de l'`addq.b #2` sur l'index de lecture
-        retenue = Some(index as u16 + 2 > 0xff);
-        // restes de l'itération, tels que l'original les laisse
-        c.d[0] = index as u32;
-        c.d[1] = t.ligne;
-        c.a[0] = t.joueur;
-        c.a[3] = k.table + t.ligne;
-        c.a[4] = t.joueur + k.compteur;
+    c.a[2] = a5(k.anneau.cases);
+    let dernier = crediter(b, k);
+    if let Some(d) = &dernier {
+        c.d[0] = d.index as u32;
+        c.d[1] = d.traite.ligne;
+        c.a[0] = d.traite.joueur;
+        c.a[3] = k.table + d.traite.ligne;
+        c.a[4] = d.traite.joueur + k.compteur;
         c.d[6] = 0xffff;
     }
-    c.d[0] = rd8(b, a5(c, k.lecture)) as u32;
-    // dernier cmpi.w #-1 : égalité ; X reste celui de la dernière addition décimale
+    c.d[0] = rd8(b, a5(k.lecture)) as u32;
+    // dernier cmpi.w #-1 : égalité ; X : retenue de l'`addq.b #2` sur l'index de lecture de la dernière itération
     ops::cmp(c, VIDE as u32, VIDE as u32, Size::Word);
-    if let Some(r) = retenue {
-        ops::drapeaux(c, SR_X, if r { SR_X } else { 0 });
+    if let Some(d) = dernier {
+        ops::drapeaux(c, SR_X, if d.index as u16 + 2 > 0xff { SR_X } else { 0 });
     }
-}
-
-fn crediter_points(c: &mut Cpu, b: &mut Cps2Bus) {
-    crediter(c, b, &CREDIT_POINTS);
-    rts(c, b);
-}
-
-fn crediter_compteur(c: &mut Cpu, b: &mut Cps2Bus) {
-    crediter(c, b, &CREDIT_COMPTEUR);
     rts(c, b);
 }
 
 // ---------------------------------------------------------------------------------------------
 // Pop-ups
 
-/// 0x19dce : enfile un pop-up (D0, D1, D2 = paramètres ; D3 = 2 : D0 tel quel, sinon + 0x20 sur son
-/// octet bas) dans la case d'écriture si elle est libre et si les pop-ups ne sont pas inhibés.
-fn creer_popup(c: &mut Cpu, b: &mut Cps2Bus) {
-    let inhibe = rd8(b, a5(c, POPUP_INHIBE));
-    ops::logique(c, inhibe as u32, Size::Byte);
+/// Un pop-up (barre de vie d'un monstre frappé, `player::externes::effet::HEALTH_BAR`) : D0, D1, D2 de l'original.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Popup {
+    /// Joueur et type (D0.w) : l'octet bas gagne 0x20 sauf si `brut`.
+    pub entete: u16,
+    /// D1.w, D2.w : PV maximum et PV (h).
+    pub max: u16,
+    pub valeur: u16,
+    /// D3.b = 2 : l'en-tête est pris tel quel.
+    pub brut: bool,
+}
+
+/// Issue de 0x19dce : rien (pop-ups inhibés), case occupée, ou enfilé.
+enum Creation {
+    Inhibe(u8),
+    Occupee { index: u8, contenu: u16 },
+    Faite { index: u8, entete: u16 },
+}
+
+fn creer(b: &mut Cps2Bus, p: Popup) -> Creation {
+    let inhibe = rd8(b, a5(POPUP_INHIBE));
     if inhibe != 0 {
-        rts(c, b);
-        return;
+        return Creation::Inhibe(inhibe);
     }
-    c.d[6] = 0;
-    ops::logique(c, 0, Size::Long);
-    c.a[2] = a5(c, POPUP_ENTREES);
-    let index = rd8(b, a5(c, POPUP_ECRITURE));
-    set_low_byte(&mut c.d[6], index);
-    ops::logique(c, index as u32, Size::Byte);
-    let case = c.a[2].wrapping_add(index as u32);
+    let index = rd8(b, a5(POPUP_ECRITURE));
+    let case = a5(POPUP_ENTREES).wrapping_add(index as u32);
     let contenu = rd16(b, case);
-    ops::cmp(c, VIDE as u32, contenu as u32, Size::Word);
     if contenu != VIDE {
-        rts(c, b);
-        return;
+        return Creation::Occupee { index, contenu };
     }
-    ops::cmp(c, 2, c.d[3] & 0xff, Size::Byte);
-    if c.d[3] as u8 != 2 {
-        let v = ops::add(c, 0x20, c.d[0] & 0xff, Size::Byte);
-        set_low_byte(&mut c.d[0], v as u8);
-    }
-    for (decalage, valeur) in [(0, c.d[0] as u16), (2, c.d[1] as u16), (4, c.d[2] as u16), (6, 0x80)] {
+    let entete = if p.brut { p.entete } else { p.entete & 0xff00 | (p.entete as u8).wrapping_add(0x20) as u16 };
+    for (decalage, valeur) in [(0, entete), (2, p.max), (4, p.valeur), (6, 0x80)] {
         wr16(b, case + decalage, valeur);
-        ops::logique(c, valeur as u32, Size::Word);
     }
-    let suivant = ops::add(c, 8, index as u32, Size::Byte) as u8;
-    set_low_byte(&mut c.d[6], suivant);
-    set_mot(&mut c.d[6], suivant as u16);
-    ops::logique(c, suivant as u32, Size::Word);
-    wr8(b, a5(c, POPUP_ECRITURE), suivant);
-    ops::logique(c, suivant as u32, Size::Byte);
+    // l'index avance de 8 sans masque : il fait le tour des 32 entrées en débordant de son octet
+    wr8(b, a5(POPUP_ECRITURE), index.wrapping_add(8));
+    Creation::Faite { index, entete }
+}
+
+/// Les pop-ups sont-ils inhibés (`A5+0x50`) ? 0x19dce n'écrit alors rien et laisse A2 intact ; sinon il laisse
+/// A2 = [`ENTREES_POPUPS`] (relu par le combat : `combat::show_enemy_hp`).
+pub fn popups_inhibes(b: &mut Cps2Bus) -> bool {
+    rd8(b, a5(POPUP_INHIBE)) != 0
+}
+
+/// Première entrée de la file des pop-ups (A2 que laisse 0x19dce).
+pub const ENTREES_POPUPS: u32 = a5(POPUP_ENTREES);
+
+/// 0x19dce : enfile un pop-up dans la case d'écriture si elle est libre et si les pop-ups ne sont pas inhibés ;
+/// rend vrai s'il est enfilé.
+pub fn creer_popup(b: &mut Cps2Bus, p: Popup) -> bool {
+    matches!(creer(b, p), Creation::Faite { .. })
+}
+
+/// Registres et drapeaux de 0x19dce : D6 (index), A2 (entrées), D0.b (en-tête), drapeaux du dernier test.
+fn creer_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    let p = Popup { entete: c.d[0] as u16, max: c.d[1] as u16, valeur: c.d[2] as u16, brut: c.d[3] as u8 == 2 };
+    match creer(b, p) {
+        Creation::Inhibe(inhibe) => ops::logique(c, inhibe as u32, Size::Byte),
+        Creation::Occupee { index, contenu } => {
+            c.d[6] = index as u32;
+            c.a[2] = a5(POPUP_ENTREES);
+            ops::cmp(c, VIDE as u32, contenu as u32, Size::Word);
+        }
+        Creation::Faite { index, entete } => {
+            c.a[2] = a5(POPUP_ENTREES);
+            ops::cmp(c, 2, c.d[3] & 0xff, Size::Byte);
+            if !p.brut {
+                ops::add(c, 0x20, c.d[0] & 0xff, Size::Byte);
+                set_low_byte(&mut c.d[0], entete as u8);
+            }
+            let suivant = ops::add(c, 8, index as u32, Size::Byte) as u8;
+            c.d[6] = suivant as u32;
+            ops::logique(c, suivant as u32, Size::Byte);
+        }
+    }
     rts(c, b);
 }
 
@@ -326,13 +424,13 @@ macro_rules! natif {
     };
 }
 
-natif!(VIDER_POINTS, 0x19aa2, "evt_vider_points", vider_points);
-natif!(VIDER_COMPTEUR, 0x19abc, "evt_vider_compteur", vider_compteur);
-natif!(VIDER_POPUPS, 0x19db4, "evt_vider_popups", vider_popups);
-natif!(EFFACER_POPUP, 0x19e10, "evt_effacer_popup", effacer_popup_courant);
-natif!(ENFILER_POINTS, 0x19ae6, "evt_enfiler_points", enfiler_points);
-natif!(ENFILER_COMPTEUR, 0x19b08, "evt_enfiler_compteur", enfiler_compteur);
-natif!(EVENEMENT_OBJET, 0x19ad6, "evt_evenement_objet", evenement_objet);
-natif!(CREER_POPUP, 0x19dce, "evt_creer_popup", creer_popup);
-natif!(CREDITER_POINTS, 0x19b2a, "evt_crediter_points", crediter_points);
-natif!(CREDITER_COMPTEUR, 0x19b9c, "evt_crediter_compteur", crediter_compteur);
+natif!(VIDER_POINTS, 0x19aa2, "evt_vider_points", |c, b| vider_anneau_68k(c, b, &POINTS));
+natif!(VIDER_COMPTEUR, 0x19abc, "evt_vider_compteur", |c, b| vider_anneau_68k(c, b, &COMPTEUR));
+natif!(VIDER_POPUPS, 0x19db4, "evt_vider_popups", vider_popups_68k);
+natif!(EFFACER_POPUP, 0x19e10, "evt_effacer_popup", effacer_popup_68k);
+natif!(ENFILER_POINTS, 0x19ae6, "evt_enfiler_points", enfiler_points_68k);
+natif!(ENFILER_COMPTEUR, 0x19b08, "evt_enfiler_compteur", enfiler_compteur_68k);
+natif!(EVENEMENT_OBJET, 0x19ad6, "evt_evenement_objet", evenement_objet_68k);
+natif!(CREER_POPUP, 0x19dce, "evt_creer_popup", creer_popup_68k);
+natif!(CREDITER_POINTS, 0x19b2a, "evt_crediter_points", |c, b| crediter_68k(c, b, &CREDIT_POINTS));
+natif!(CREDITER_COMPTEUR, 0x19b9c, "evt_crediter_compteur", |c, b| crediter_68k(c, b, &CREDIT_COMPTEUR));

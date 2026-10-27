@@ -98,7 +98,7 @@ pub(super) fn parry(w: &mut World, p: Obj, other: Obj) {
     w.set_bit(p, f::HIT_MARK, 5);
     w.set_bit(other, f::HIT_FLAGS, 5);
     w.call_d1(0xaa96c, p, other, 0);
-    w.call_ao(0xe75b0, p, other);
+    crate::sound::jouer(w.b, 0xe75b0, p);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -229,7 +229,7 @@ pub(super) fn enemy_hits_player(w: &mut World, p: Obj, e: Obj) {
         }
     }
     w.call_d1(0xaaa04, p, e, 2);
-    w.call_ao(0xec046, p, e);
+    crate::sound::jouer_avec(w.b, 0xec046, crate::sound::Source { objet: Some(p), a1: Some(e.0), d4: None });
 }
 
 /// 0x2756c : un tir ennemi touche un joueur ; certains équipements ou états l'annulent.
@@ -267,7 +267,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
     p.set_u8(w.b, f::ACTION, action);
     player_loses_hp(w, p, s);
     w.call_d1(0xaaa04, p, s, 5);
-    w.call_ao(0xec200, p, s);
+    crate::sound::jouer_avec(w.b, 0xec200, crate::sound::Source { objet: Some(p), a1: Some(s.0), d4: None });
 }
 
 /// 0x276e0 : retire des PV au joueur (dégâts de 0x4002 moins l'armure) ; à 0 PV, un joueur de

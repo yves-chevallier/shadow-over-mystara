@@ -71,7 +71,7 @@ mod jet {
                     x.add8(0x4, 2);
                     x.anim(ANIMS, 1);
                     x.reinsert();
-                    x.call(SFX);
+                    crate::sound::jouer(x.b, SFX, x.o);
                 }
             }
             2 => active(x),
@@ -185,7 +185,7 @@ mod flame {
                 x.set8(f::POWER2, 6);
                 x.anim(ANIMS, 0);
                 x.reinsert();
-                x.call(SFX);
+                crate::sound::jouer(x.b, SFX, x.o);
             }
             2 => {
                 if x.anim_step() {
@@ -294,7 +294,7 @@ mod star {
                 x.anim(ANIMS, 0);
                 x.reinsert();
                 if x.u8(0x3) == 0 {
-                    x.call(SFX);
+                    crate::sound::jouer(x.b, SFX, x.o);
                 }
             }
             2 => {
@@ -365,7 +365,7 @@ mod stone {
                     x.set_d0w(8);
                     x.call(crate::camera_modes::SHAKE_A.entry);
                     x.anim(ANIMS, 1);
-                    x.call(SFX);
+                    crate::sound::jouer(x.b, SFX, x.o);
                 }
                 2 => {
                     x.add16(0x5c, 0xffff);

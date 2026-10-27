@@ -178,8 +178,8 @@ pub mod ram {
     pub const SUB_STEP: Octet = Octet::a5(0x2e);
     /// Bit k : le joueur k participe à la partie.
     pub const PLAYERS_MASK: Octet = Octet::a5(0x31);
-    /// Nombre de joueurs en vie (`crate::ram::DIFFICULTE` désigne la même adresse sous un autre nom).
-    pub const PLAYERS_ALIVE: Octet = Octet::a5(0x35);
+    /// Nombre de joueurs en vie.
+    pub use crate::ram::JOUEURS_EN_VIE as PLAYERS_ALIVE;
     /// Pause du jeu pendant un sort : les joueurs ne vieillissent plus, les collisions sont suspendues.
     pub const PAUSE: Octet = Octet::a5(0x3d);
     /// Jeu gelé (cinématique).
@@ -215,14 +215,13 @@ pub mod ram {
     pub const FADE_STEPS: Octet = Octet::a5(0x48f);
     pub const FADE_DELAY: Mot = Mot::a5(0x490);
     /// Défilement vertical du plan 1 (`vblank`) : les sorts font trembler l'écran en le basculant.
-    pub const SCROLL1_Y: Mot = Mot::a5(0x4ba);
+    pub use crate::ram::DEFILEMENT_Y_PLAN1 as SCROLL1_Y;
     /// Signal d'un boss aux joueurs scénarisés (lancer, atterrissage).
     pub const BOSS_SIGNAL: Mot = Mot::a5(0x51e);
     /// Cinématique en cours (h).
     pub const CUTSCENE: Octet = Octet::a5(0x53a);
-    /// Mot des commutateurs lu au VBLANK (`FF7FD0`) : bit 0x200 sans affichage des dégâts, 0x800 collisions avec
-    /// le décor.
-    pub const DSW: Mot = Mot::a5(0x7fd0);
+    /// Mot des commutateurs lu au VBLANK (`FF7FD0`).
+    pub use crate::ram::DSW;
     /// Mot : compteur du hasard des tables (voir combat).
     pub const TICK: Mot = Mot::a5(0x7f92);
 }
@@ -247,6 +246,11 @@ impl<'a> Ctx<'a> {
         self.c.a[5] = A5;
         call(self.c, self.b, addr);
         self.c.sr & SR_Z != 0
+    }
+
+    /// Joue le son `son` pour le joueur `p` (panoramique, personnage : `sound::jouer`).
+    pub fn son(&mut self, son: u32, p: Player) {
+        crate::sound::jouer(self.b, son, Obj(p.0));
     }
 
     /// Idem avec le paramètre D6 (numéro d'animation, d'effet...).

@@ -865,8 +865,7 @@ mod exit_gate {
     fn change_zone(x: &mut Cx) {
         let bonus = rd8(x.b, BONUS_TOTAL).wrapping_add(x.u8(BONUS));
         wr8(x.b, BONUS_TOTAL, bonus);
-        x.c.a[4] = CLEARED_TEXT_BOX;
-        x.call(crate::text::CLEAR_BOX.entry);
+        crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) == 0 {
                 let flags = p.u8(x.b, P_FLAGS) | P_HIDDEN;
@@ -979,7 +978,7 @@ mod exit_gate {
         x.call(crate::scene::script::SCRIPT_RESET.entry);
         set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
-        x.call(crate::palette::FULL_BRIGHTNESS.entry);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(OWNER_GATE, 0);
         set_b::reset_players_after_exit(x);
         x.call(crate::scene::entry::PLACE_PLAYERS.entry);
@@ -1026,10 +1025,9 @@ mod exit_gate {
         x.call(crate::scene::script::SCRIPT_RESET.entry);
         set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
         x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
-        x.call(crate::palette::FULL_BRIGHTNESS.entry);
+        crate::palette::full_brightness(x.b);
         x.set_a5_u16(OWNER_GATE, 0);
-        x.c.a[4] = CLEARED_TEXT_BOX;
-        x.call(crate::text::CLEAR_BOX.entry);
+        crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
         set_b::restore_camera(x);
         let v = x.u16(0x22);
         x.set_a5_u16(0x52c, v);
@@ -1037,9 +1035,8 @@ mod exit_gate {
         x.set_a5_u8(NEXT_SCENE_FLAG, v);
         let v = x.u8(0x26);
         x.set_a5_u8(0x58, v);
-        let d4 = x.u16(0x1c);
-        crate::mem::set_low_word(&mut x.c.d[4], d4);
-        x.call(0xe17a4);
+        let musique = x.u16(0x1c);
+        crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { d4: Some(musique as u32), ..Default::default() });
         let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
         x.c.a[4] = A5 + camera;
         for p in players() {
@@ -1055,7 +1052,6 @@ mod exit_gate {
     const PLACEMENT_ROW: u32 = 0xcbb92;
     const PLACEMENT: u32 = 0xcbbe2;
     const PLAYER_STATE_WALK: u32 = 0x200_0000;
-    const PLACE_ON_GROUND: u32 = 0x3668;
 
     /// Replace un joueur devant la porte (0xcbb3c) ; un joueur hors de l'état 2 est seulement caché
     /// et posé au sol.
@@ -1063,11 +1059,7 @@ mod exit_gate {
         if p.u8(x.b, P_STATE) != 2 {
             let flags = p.u8(x.b, P_FLAGS) | P_HIDDEN;
             p.set_u8(x.b, P_FLAGS, flags);
-            let (d6, d7) = (x.c.d[6], x.c.d[7]);
-            x.c.a[0] = p.0;
-            crate::call(x.c, x.b, PLACE_ON_GROUND);
-            x.c.a[0] = x.o.0;
-            (x.c.d[6], x.c.d[7]) = (d6, d7);
+            crate::placement::place_on_free_ground(x.b, p);
             return;
         }
         p.set_u32(x.b, P_STATE, PLAYER_STATE_WALK);

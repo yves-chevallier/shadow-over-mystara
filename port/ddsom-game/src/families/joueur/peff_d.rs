@@ -105,7 +105,7 @@ mod beam {
             x.add32(0x10, 0xffff_0000);
         }
         x.anim(ANIMS, 1);
-        x.call(SFX);
+        crate::sound::jouer(x.b, SFX, x.o);
     }
 }
 

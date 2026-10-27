@@ -290,13 +290,29 @@ pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_effacer_scroll3", clear_sc
 const TERRAIN_MAP_STAGE_2: u32 = 0x3f8e9c;
 const TERRAIN_MAP_STAGE_14: u32 = 0x3f9c9c;
 
-/// Numéro de terrain sous le point (x, y) = (D0, D1) : bits 7 à 15 du mot d'attribut de la case.
-/// Scènes 2 et 0x14 : carte fixe en ROM (y décalé de -/+ 0x10) ; ailleurs : case de la couche de
-/// défilement 2 en GFX RAM, avec la correction de caméra quand la caméra 2 est courante.
-/// Rend D2 (numéro), D0/D1 (coordonnées corrigées), A1 (adresse de la case) et Z (numéro nul).
-fn terrain_attribute(b: &mut Cps2Bus, c: &mut Cpu) {
-    let stage = rd8(b, a5(c, ram::STAGE));
-    let (mut x, mut y) = (c.d[0] as u16, c.d[1] as u16);
+/// Attribut du terrain sous un point, et les restes de calcul que l'original laisse dans ses registres.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Terrain {
+    /// Numéro de terrain : bits 7 à 15 du mot d'attribut de la case (D2.w ; 0 : sol libre).
+    pub numero: u16,
+    /// Coordonnées corrigées (D0.w, D1.w) : y décalé de -/+ 0x10 sur les cartes fixes, caméra 2 sinon.
+    pub x: u16,
+    pub y: u16,
+    /// Adresse de la case (A1) : carte fixe en ROM, ou couche de défilement 2 en GFX RAM.
+    pub case: u32,
+    /// Index de la case dans la carte (D3.w, D3 entier sur les cartes fixes) et colonne (D4.w).
+    pub index: u16,
+    pub colonne: u16,
+    /// Carte fixe des scènes 2 et 0x14 (D2 n'est alors écrit qu'en mot bas ; ailleurs D2 = 0 d'abord).
+    pub carte_fixe: bool,
+}
+
+/// Numéro de terrain sous le point (x, y) (0x24b0). Scènes 2 et 0x14 : carte fixe en ROM (y décalé de -/+ 0x10) ;
+/// ailleurs : case de la couche de défilement 2 en GFX RAM, avec la correction de caméra quand la caméra 2 est
+/// courante.
+pub fn terrain(b: &mut Cps2Bus, x: u16, y: u16) -> Terrain {
+    let stage = rd8(b, crate::mem::A5 + ram::STAGE);
+    let (mut x, mut y) = (x, y);
     let fixed_map = if stage == 2 {
         Some((TERRAIN_MAP_STAGE_2, 0x10u16.wrapping_neg()))
     } else if stage == 0x14 {
@@ -304,40 +320,56 @@ fn terrain_attribute(b: &mut Cps2Bus, c: &mut Cpu) {
     } else {
         None
     };
-    let word = if let Some((map, dy)) = fixed_map {
+    let (word, case, index, colonne) = if let Some((map, dy)) = fixed_map {
         y = y.wrapping_add(dy);
         let row = 0x1e - ((y as u8 >> 3) & 0x1e) as u16;
         let column = x.wrapping_add(x) & 0xffe0;
-        // restes du calcul (D3 = index dans la carte, D4 = colonne) : lus par des appelants qui les prennent pour arguments
-        c.d[3] = row.wrapping_add(column) as u32;
-        set_low_word(&mut c.d[4], column);
-        c.a[1] = map.wrapping_add(row.wrapping_add(column) as i16 as u32);
-        rd16(b, c.a[1])
+        let index = row.wrapping_add(column);
+        let case = map.wrapping_add(index as i16 as u32);
+        (rd16(b, case), case, index, column)
     } else {
-        let camera_2 = rd8(b, a5(c, ram::USE_CAMERA_2)) != 0;
-        if !(!camera_2) {
-            x = x.wrapping_add(rd16(b, a5(c, ram::SCROLL[0])).wrapping_sub(rd16(b, a5(c, ram::SCROLL_2[0]))));
-            y = y.wrapping_add(rd16(b, a5(c, ram::SCROLL[1])).wrapping_sub(rd16(b, a5(c, ram::SCROLL_2[1]))));
+        let camera_2 = rd8(b, crate::mem::A5 + ram::USE_CAMERA_2) != 0;
+        if camera_2 {
+            x = x.wrapping_add(rd16(b, crate::mem::A5 + ram::SCROLL[0]).wrapping_sub(rd16(b, crate::mem::A5 + ram::SCROLL_2[0])));
+            y = y.wrapping_add(rd16(b, crate::mem::A5 + ram::SCROLL[1]).wrapping_sub(rd16(b, crate::mem::A5 + ram::SCROLL_2[1])));
         }
         let page = 0x3000u16.wrapping_sub((y & 0x300) << 4);
         let row = 0x3c - ((y as u8 >> 2) & 0x3c) as u16;
         let column = x.wrapping_shl(2) & 0xfc0;
-        set_low_word(&mut c.d[3], page.wrapping_add(row).wrapping_add(column));
-        set_low_word(&mut c.d[4], column);
-        c.a[1] = hw::SCROLL2.wrapping_add(page.wrapping_add(row).wrapping_add(column) as i16 as u32);
-        c.d[2] = 0;
-        rd16(b, c.a[1] + 2)
+        let index = page.wrapping_add(row).wrapping_add(column);
+        let case = hw::SCROLL2.wrapping_add(index as i16 as u32);
+        (rd16(b, case + 2), case, index, column)
     };
-    let attribute = (word & 0xff80) >> 7;
-    set_low_word(&mut c.d[0], x);
-    set_low_word(&mut c.d[1], y);
-    set_low_word(&mut c.d[2], attribute);
-    c.sr = c.sr & !crate::ops::TOUS | if attribute == 0 { m68k::SR_Z } else { 0 };
+    Terrain { numero: (word & 0xff80) >> 7, x, y, case, index, colonne, carte_fixe: fixed_map.is_some() }
+}
+
+/// Numéro de terrain sous l'objet `o` (0x24a8 : position x en +8, y en +0x10).
+pub fn terrain_of(b: &mut Cps2Bus, o: crate::objects::Obj) -> Terrain {
+    let (x, y) = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
+    terrain(b, x, y)
+}
+
+/// Registres que laisse 0x24b0 : D0/D1 (coordonnées corrigées), D2 (numéro), D3/D4 (restes de calcul, lus par des
+/// appelants qui les prennent pour arguments), A1 (case) et Z (numéro nul).
+pub fn terrain_68k(c: &mut Cpu, t: &Terrain) {
+    if t.carte_fixe {
+        c.d[3] = t.index as u32;
+    } else {
+        set_low_word(&mut c.d[3], t.index);
+        c.d[2] = 0;
+    }
+    set_low_word(&mut c.d[4], t.colonne);
+    c.a[1] = t.case;
+    set_low_word(&mut c.d[0], t.x);
+    set_low_word(&mut c.d[1], t.y);
+    set_low_word(&mut c.d[2], t.numero);
+    c.sr = c.sr & !crate::ops::TOUS | if t.numero == 0 { m68k::SR_Z } else { 0 };
 }
 
 /// 0x24b0 : numéro de terrain en (D0, D1).
 fn terrain_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    terrain_attribute(b, c);
+    let t = terrain(b, c.d[0] as u16, c.d[1] as u16);
+    terrain_68k(c, &t);
     rts(c, b);
 }
 

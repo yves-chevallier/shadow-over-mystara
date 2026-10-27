@@ -130,14 +130,14 @@ pub fn step_keeping_regs(g: &mut Ctx, p: Player, d0: u8) -> bool {
 pub fn weapon_voice(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A) as u32;
-    call(g, p, rom::WEAPON_VOICE, &[(4, weapon)]);
+    crate::sound::jouer_avec(g.b, rom::WEAPON_VOICE, crate::sound::Source { objet: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Joue la voix de l'arme tenue à la main gauche (D4 = `WEAPON_B`, magicien).
 pub fn weapon_voice_b(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_B) as u32;
-    call(g, p, rom::WEAPON_VOICE, &[(4, weapon)]);
+    crate::sound::jouer_avec(g.b, rom::WEAPON_VOICE, crate::sound::Source { objet: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Démarre l'animation `n`, puis joue la voix de l'arme de la main gauche (`WEAPON_B`, magicien).
@@ -343,7 +343,7 @@ fn screen_task(g: &mut Ctx, p: Player, mode: u16, program: u32, fade: bool) {
     ram::FADE_PAGES.set(g.b, 0xd);
     ram::FADE_STEPS.set(g.b, 5);
     if fade {
-        g.rom(ext::palette::FULL_BRIGHTNESS, p);
+        crate::palette::full_brightness(g.b);
     }
     g.c.a[1] = p.0;
     g.c.a[0] = program;
@@ -491,7 +491,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     }
     let spark = g.c.a[1];
     wr16(g.b, spark + 0x0c, height);
-    g.rom(rom::SPARK_SOUND, p);
+    g.son(rom::SPARK_SOUND, p);
 }
 
 // ---- soins (clerc, potion de soin du combattant) -----------------------------------------------
@@ -673,7 +673,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.rom(ext::son::JUMP_VOICE, p);
+    g.son(ext::son::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     launch_jump(g, p, kit.speeds, kind);
 }
@@ -738,7 +738,7 @@ pub fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.rom(ext::son::LANDING, p);
+    g.son(ext::son::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile.
@@ -789,7 +789,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.rom(ext::son::SLIDE, p);
+                g.son(ext::son::SLIDE, p);
             }
         }
         4 => {
@@ -1057,8 +1057,7 @@ pub fn flash_screen(g: &mut Ctx, p: Player) {
     let phase = (p.u8(g, 0x1eb) + 1) & 3;
     p.set_u8(g, 0x1eb, phase);
     let color: u16 = if phase & 2 != 0 { 0x2000 } else { 0xc000 };
-    g.c.d[0] = g.c.d[0] & 0xffff_0000 | color as u32;
-    g.rom(rom::PALETTE_FADE, p);
+    crate::palette::set_brightness(g.b, color);
 }
 
 /// Réglage de l'intensité des sorts de gel (haut et bas pendant la phase finale) : après une pause de

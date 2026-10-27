@@ -27,16 +27,6 @@ pub mod son {
     pub const PRAYER_QUAKE: u32 = 0xe8db4;
 }
 
-/// Palettes de l'écran (`palette`).
-pub mod palette {
-    /// Pleine luminosité (fondu, 0x1686).
-    pub const FULL_BRIGHTNESS: u32 = 0x1686;
-    /// Éclairs : vague (A, 0x1aaa0), gris (0x1ab56), retour des palettes (0x1abe0).
-    pub const FLASH_A: u32 = 0x1aaa0;
-    pub const FLASH_GRAY: u32 = 0x1ab56;
-    pub const FLASH_RESTORE: u32 = 0x1abe0;
-}
-
 /// Effets créés par d'autres sous-systèmes (`families`, `effects_aids`).
 pub mod effet {
     /// Effet de choc (poussière, étincelle) : D0 genre, D1 réglages, D2 et D3 vitesses ; A1 et retenue en retour.

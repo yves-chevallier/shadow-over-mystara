@@ -97,7 +97,6 @@ pub mod ext {
     pub const PRINT: u32 = 0xd5e;
     pub const PALETTES: u32 = 0x1a296;
     pub const SOUND_REQUEST: u32 = 0xe0836;
-    pub const SOUND_STOP: u32 = 0xe0882;
     pub const BOOT_TASK: u32 = 0x11b16;
     pub const SECRET_TEST: u32 = 0xee16e;
 }
@@ -156,8 +155,7 @@ pub fn call_d0(x: &mut Ctx, addr: u32, d0: u16) {
 }
 /// Affiche un texte (descripteur en ROM).
 pub fn print(x: &mut Ctx, descriptor: u32) {
-    x.c.a[4] = descriptor;
-    x.call(ext::PRINT);
+    crate::text::print(x.b, descriptor);
 }
 /// Couches de l'écran coupées / rétablies (masque 0x12ce).
 pub const ALL_LAYERS: u16 = 0x12ce;
@@ -395,7 +393,7 @@ pub fn exit_check(x: &mut Ctx) -> Flow {
 
 /// `0x29a5a` : retour au menu (le son est coupé).
 pub fn back_to_menu(x: &mut Ctx) -> Flow {
-    x.call(ext::SOUND_STOP);
+    crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     set(x, f::STATE, state::MENU);
     // étape de l'écran et curseurs de la configuration (octets 2 à 5)
     x.wr16(MENU + f::STEP, 0);

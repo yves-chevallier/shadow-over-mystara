@@ -21,7 +21,6 @@ mod ext {
     pub const PRINT_TALL: u32 = 0xdca;
     pub const PRINT_STRINGS: u32 = 0x1136;
     pub const PRINT_AT: u32 = 0x1234;
-    pub const CLEAR_RECT: u32 = 0x1324;
     pub const DIGIT: u32 = 0x14e46;
     pub const COUNT_TEXT: u32 = 0x14b74;
 }
@@ -86,8 +85,7 @@ fn modulo(value: u8, by: u8) -> u8 {
 
 /// Efface le rectangle de texte du crédit.
 fn clear_credit_text(x: &mut Ctx) {
-    x.c.a[4] = table::RECT;
-    x.call(ext::CLEAR_RECT);
+    crate::text::clear_box(x.b, table::RECT);
 }
 
 /// Index (en octets) du texte de crédit : 4 octets par crédit entier, plus une fraction de pièces

@@ -119,7 +119,7 @@ mod storm {
                 let d0 = owner.u16(x.b, 0x168);
                 x.set_d0w(d0);
                 x.call(crate::camera_modes::SHAKE_A.entry);
-                x.call(SFX_RUMBLE);
+                crate::sound::jouer(x.b, SFX_RUMBLE, x.o);
             }
             4 => {
                 if x.a5_u8(0x3d) == 0 {
@@ -134,7 +134,7 @@ mod storm {
                 }
                 x.set16(0x58, 0x20);
                 x.add8(0x5, 4);
-                x.call(SFX_BEGIN);
+                crate::sound::jouer(x.b, SFX_BEGIN, x.o);
             }
             8 => {
                 toggle(x, 0x9, 1 << 1);
@@ -173,7 +173,7 @@ mod storm {
     fn end(x: &mut Cx) {
         x.add8(0x4, 2);
         x.anim_step();
-        x.call(SFX_END);
+        crate::sound::jouer(x.b, SFX_END, x.o);
     }
 
     /// `0x4ec02` : seize éclairs.
@@ -263,7 +263,7 @@ mod storm {
         let n = parent.u8(x.b, 0x5a).wrapping_sub(1);
         parent.set_u8(x.b, 0x5a, n);
         x.set8(0x2f, n);
-        x.call(SFX_BOLT);
+        crate::sound::jouer(x.b, SFX_BOLT, x.o);
         let k = (n as u32) << 2;
         x.c.d[0] = k;
         let (dx, dz) = (x.rom16(OFFSETS_B + k), x.rom16(OFFSETS_B + k + 2));
@@ -352,7 +352,7 @@ mod whirl {
         x.add16(0x8, dx);
         x.add16(0xc, dz);
         x.add16(0x10, 0xffff);
-        x.call(SFX_START);
+        crate::sound::jouer(x.b, SFX_START, x.o);
     }
 
     fn init_satellite(x: &mut Cx) {
@@ -406,7 +406,7 @@ mod whirl {
                 x.set8(0x5d, 1);
                 x.set_a5_u16(0x4ba, 0x100);
                 x.call(crate::palette::FLASH_COLOR_WHITE.entry);
-                x.call(SFX_LOOP);
+                crate::sound::jouer(x.b, SFX_LOOP, x.o);
                 x.anim(ANIMS, 0x20);
                 return x.reinsert();
             }
