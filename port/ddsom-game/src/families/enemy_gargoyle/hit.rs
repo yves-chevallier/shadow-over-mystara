@@ -5,6 +5,7 @@
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Réactions communes aux coups, indexées par le code `+0x49`.
 const REACTIONS: u32 = 0x6518a;
@@ -13,7 +14,7 @@ pub(super) fn run(x: &mut Cx) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
-        return zone_shadow(x);
+        return zone_and_terrain(x);
     }
     x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
@@ -26,7 +27,7 @@ pub(super) fn run(x: &mut Cx) {
         _ => {}
     }
     if x.u8(f::SUB) != 2 && x.u8(f::SUB) != 8 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
 }
 
@@ -40,12 +41,10 @@ fn tail(x: &mut Cx) {
 /// 0x65ac8 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ennemi meurt.
 fn death_check(x: &mut Cx) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.set8(f::SUB, 6);
     x.set8(0, 2);
-    x.c.d[0] = 1;
     true
 }
 
@@ -99,8 +98,8 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.set16(TIMER, 0x14);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18, 0x20i16) } else { (8, -0x20) };
-            x.set8(ANGLE, angle);
-            x.set16(SPEED_Y, vy as u16);
+            x.set8(Obj::SPEED_INDEX, angle);
+            x.set16(Obj::AX, vy as u16);
             set_speed(x, 0x17);
             look(x, 0x20);
             x.add8(f::SUB2, 2);
@@ -110,7 +109,7 @@ fn recoil(x: &mut Cx) {
             if !count_down(x, TIMER) {
                 x.add8(f::SUB2, 2);
                 x.set16(TIMER, 0x14);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::AX, 0);
             }
             x.move_x();
             x.anim_step();
@@ -140,7 +139,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_FLY, 0xe);
         }
         2 => {
-            if (x.a5_u8(0x3d) as i8) > 0 {
+            if (var::PAUSE.get(x.b) as i8) > 0 {
                 return tail(x);
             }
             let n = x.u16(0x84).wrapping_sub(1);
@@ -153,7 +152,7 @@ fn get_up(x: &mut Cx) {
             }
         }
         4 => {
-            if x.a5_u8(0x3d) == 0 && x.anim_step() {
+            if var::PAUSE.get(x.b) == 0 && x.anim_step() {
                 attacks::regroup(x);
             }
         }
@@ -171,26 +170,23 @@ fn dying(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            x.call(0xe385e);
-            x.call(0x19ad6);
-            x.call(call::REMOVE);
-            x.call(0xb780);
-            x.call(0xbad6);
-            x.call(0xe2f6);
+            lib::sound(x, 0xe385e);
+            lib::object_event(x);
+            detach_from_host(x);
+            lib::drop_rewards(x);
             let flip = x.u8(0x4a) ^ 0x20;
-            x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);
             let vx = if flip != 0 { -0x200i16 } else { 0x200 };
-            x.set16(SPEED_X, vx as u16);
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x480);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            x.set16(Obj::VX, vx as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x480);
+            x.set16(Obj::AZ, -0x40i16 as u16);
             x.move_xz();
             x.anim_start(SET_FLY, 0xf);
         }
         2 => {
             x.move_xz();
-            if (x.u16(SPEED_Z) as i16) > 0 {
+            if (x.u16(Obj::VZ) as i16) > 0 {
                 x.anim_step();
             } else {
                 x.add8(f::SUB2, 2);
@@ -199,33 +195,33 @@ fn dying(x: &mut Cx) {
         }
         4 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set16(HEIGHT, 0);
+            x.set16(Obj::Z, 0);
             spark(x, 9);
             x.anim_step();
         }
         6 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_Z, 0x280);
-                x.set16(GRAVITY, -0x40i16 as u16);
+                x.set16(Obj::VZ, 0x280);
+                x.set16(Obj::AZ, -0x40i16 as u16);
                 x.move_xz();
                 x.anim_start(SET_FLY, 0x11);
             }
         }
         8 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x10);
-            x.set16(HEIGHT, 0);
-            let vy = if (x.u16(SPEED_X) as i16) > 0 { -0x20i16 } else { 0x20 };
-            x.set16(SPEED_Y, vy as u16);
+            x.set16(Obj::Z, 0);
+            let vy = if (x.u16(Obj::VX) as i16) > 0 { -0x20i16 } else { 0x20 };
+            x.set16(Obj::AX, vy as u16);
             spark(x, 9);
             x.anim_step();
         }
@@ -259,15 +255,15 @@ fn fall(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::AX, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x2b);
             look(x, 0x40);
             play(x, SET_FLY, 1);
         }
         2 => {
-            if (x.u16(HEIGHT) as i16) >= 0x14 && x.u8(KEY) == 4 {
+            if (x.u16(Obj::Z) as i16) >= 0x14 && x.u8(f::KEY_FRAME) == 4 {
                 x.add8(f::SUB2, 2);
                 x.set16(TIMER, 2);
             } else {
@@ -282,13 +278,13 @@ fn fall(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.call(0xe3776);
+            lib::sound(x, 0xe3776);
             play(x, SET_FLY, 5);
         }
         6 => {
             x.move_x();
             if lib::outside(x, -0x30, 0x1b0) {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 x.free(&pools::ENEMY);
             }
         }

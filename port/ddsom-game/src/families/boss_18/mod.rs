@@ -24,8 +24,6 @@ mod hit;
 mod intro;
 
 pub(self) mod g {
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY: u32 = 0x33;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -67,22 +65,11 @@ pub(self) const SET_STRIKE: u32 = 0x181af2;
 pub(self) const SET_HURT: u32 = 0x181b10;
 
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    play(x, SET_STRIKE, n);
-}
-
-pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RANDOM_TURN: u32 = 0x10574;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-    pub const TARGET_BOX_FAR: u32 = 0x7ef4;
-    pub const PICK_FAR: u32 = 0x43ae;
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const BURST: u32 = 0xabec8;
+    lib::start(x, SET_STRIKE, n);
 }
 
 pub fn run(x: &mut Cx) {
@@ -96,7 +83,7 @@ pub fn run(x: &mut Cx) {
         st::HIT => hit::run(x),
         _ => x.free(&pools::BOSS),
     }
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         x.set8(0x3a, 0);
     }
     if x.u8(INVULNERABLE) != 0 {
@@ -113,15 +100,15 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.call(call::PICK_FAR);
+    lib::pick_target_any(x);
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x32);
-    x.call(0x453c);
-    x.set_a5_u8(0x5a, 0);
-    x.call(0x1059e);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::initial_hp_boss(x);
+    var::SCENE_LEVEL.set(x.b, 0);
+    lib::spread_index(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     for off in [0x76, 0x70, 0x6a, 0x75, 0x8e] {
@@ -139,11 +126,11 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.set8(0, 2);
         x.set_bit(0x1, 1, true);
-        let px = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
-        let py = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x69);
+        let px = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
+        let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x69);
         x.set16(0x8, px);
         x.set16(0x10, py);
         x.set16(TIMER, 0x3c);
@@ -164,7 +151,7 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro::run(x),
             2 => fight::run(x),
@@ -172,13 +159,13 @@ fn active(x: &mut Cx) {
             _ => wait_for_players(x),
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 /// `+5` = 6, 8, 10 (0x98640) : attend que des joueurs reviennent.
 fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(0x30) != 0 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 0 {
+    if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::chase(x);
     }
     match x.u8(f::SUB2) {
@@ -188,7 +175,7 @@ fn wait_for_players(x: &mut Cx) {
             body(x, 8);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

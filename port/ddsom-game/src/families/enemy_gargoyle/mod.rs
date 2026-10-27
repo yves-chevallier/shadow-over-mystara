@@ -18,6 +18,7 @@
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
+use crate::objects::Obj;
 
 mod arrival;
 mod attacks;
@@ -25,19 +26,6 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_X2: u32 = 0x1c;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY: u32 = 0x33;
     pub const ANIM_FLAGS: u32 = 0x32;
     pub const VICTIM: u32 = 0x54;
     pub const HIT_FLAGS: u32 = 0x57;
@@ -71,12 +59,6 @@ pub(self) const SET_STRIKE: u32 = 0x162eee;
 /// Jeux de vol selon que la vitesse suit ou non l'orientation (`lib::moving_forward`).
 pub(self) const SET_FLY_AGAINST: u32 = 0x163014;
 pub(self) const SET_FLY_ALONG: u32 = 0x163098;
-
-mod call {
-    pub const REMOVE: u32 = 0x27ee;
-    pub const SPAWN_EFFECT: u32 = 0x1172e;
-    pub const FLAP: u32 = 0xe76c;
-}
 
 pub fn run(x: &mut Cx) {
     if suspended(x) {
@@ -125,12 +107,11 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 
 /// Éclat de décor (0x1172e) au point d'impact `d5`.
 pub(self) fn spark(x: &mut Cx, d5: u32) {
-    x.c.d[5] = d5;
-    x.call(call::SPAWN_EFFECT);
+    lib::debris(x, d5);
 }
 
 pub(self) fn camera_x(x: &mut Cx) -> u16 {
-    if x.a5_u8(0x36) != 0 { x.a5_u16(0x5ae) } else { x.a5_u16(0x5a6) }
+    if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
 /// Décompte d'une minuterie mot `+off` : vrai tant qu'elle reste positive.
@@ -143,22 +124,20 @@ pub(self) fn count_down(x: &mut Cx, off: u32) -> bool {
 /// 0x65a9e : se tourne vers la cible.
 pub(self) fn face_target(x: &mut Cx) {
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0 | 0xff00_0000;
-    let d1 = target.u16(x.b, X);
-    set_dw(x, 1, d1);
-    let flip = if (d1 as i16) < (x.u16(X) as i16) { 0 } else { 0x20 };
+    let d1 = target.u16(x.b, Obj::X);
+    let flip = if (d1 as i16) < (x.u16(Obj::X) as i16) { 0 } else { 0x20 };
     x.c.d[0] = flip;
     x.set8(f::FLIP, flip as u8);
 }
 
 /// 0x65a30 : ondulation verticale en vol selon la clé d'animation (table de longs `0x65a5a`).
 pub(self) fn bob(x: &mut Cx) {
-    let idx = (x.u8(KEY) as u32) << 2;
+    let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let mut d = x.rom32(0x65a5a + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
-    x.add32(HEIGHT, d as u32);
+    x.add32(Obj::Z, d as u32);
     if !count_down(x, TIMER2) {
         x.set16(TIMER2, 0x28);
     }
@@ -166,9 +145,9 @@ pub(self) fn bob(x: &mut Cx) {
 
 /// 0x65a72 : montée progressive (table de longs `0x65a86`).
 pub(self) fn rise(x: &mut Cx) {
-    let idx = (x.u8(KEY) as u32) << 2;
+    let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let d = rom32(x, 0x65a86 + idx);
-    x.add32(HEIGHT, d);
+    x.add32(Obj::Z, d);
 }
 
 // --- transitions d'état : le geste suivant ----------------------------------------------------------
@@ -258,7 +237,7 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x14);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     lib::init_hp_rank(x);
     x.set8(0, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -289,7 +268,7 @@ fn init(x: &mut Cx) {
     }
     pick_target(x);
     fly(x, 0);
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             x.set8(INVULNERABLE, 1);
             set_state_long(x, 0x0200_0000);
@@ -321,7 +300,7 @@ fn active(x: &mut Cx) {
         }
     }
     if x.u8(f::SUB) != 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     let s = x.u32(f::STATE);
     x.set32(STATE_SAVED, s);

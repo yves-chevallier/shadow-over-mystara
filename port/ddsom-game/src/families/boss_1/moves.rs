@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
@@ -18,9 +19,9 @@ pub(super) fn intro(x: &mut Cx) {
             x.set_bit(0x1, 1, false);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            let cx = x.a5_u16(var::CAMERA1_X).wrapping_add(0x1a8);
+            let cx = var::CAMERA1_X.get(x.b).wrapping_add(0x1a8);
             x.set16(0x8, cx);
-            let cy = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x68);
+            let cy = var::CAMERA1_Y.get(x.b).wrapping_add(0x68);
             x.set16(0xc, cy);
             x.set16(0x10, 0);
             x.set8(f::FLIP, 0);
@@ -30,7 +31,7 @@ pub(super) fn intro(x: &mut Cx) {
             puff(x, 0);
             x.c.d[0] = 0;
             x.c.a[4] = SET_BODY;
-            step(x);
+            lib::step(x);
         }
         2 => crossing(x),
         4 => {
@@ -39,9 +40,9 @@ pub(super) fn intro(x: &mut Cx) {
             }
             next6(x);
             x.set_bit(0x1, 1, false);
-            let cx = x.a5_u16(var::CAMERA1_X).wrapping_add(0x100);
+            let cx = var::CAMERA1_X.get(x.b).wrapping_add(0x100);
             x.set16(0x8, cx);
-            let cy = x.a5_u16(var::CAMERA1_Y);
+            let cy = var::CAMERA1_Y.get(x.b);
             let z = cy.wrapping_add(0x58);
             x.set16(0x10, z);
             let h = cy.wrapping_add(0xf0).wrapping_sub(z);
@@ -70,15 +71,15 @@ pub(super) fn intro(x: &mut Cx) {
             x.c.d[0] = 0;
             x.set32(0x14, 0);
             x.set16(0x1e, 0);
-            x.call(call::LANDING);
+            lib::sound(x, 0xec820);
             x.set16(0x18, 0x480);
             x.set16(0x1a, (-0x40i16) as u16);
             dust(x, 6);
             body(x, 0xb);
         }
         8 => {
-            step(x);
-            if x.u8(KEY) != 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();
@@ -99,24 +100,24 @@ pub(super) fn intro(x: &mut Cx) {
         12 => {
             x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            x.call(call::LANDING);
+            lib::sound(x, 0xec820);
             body(x, 0xe);
         }
         _ => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.set_a5_u16(0x51e, 0);
             x.set16(0xc, 0);
             x.set8(0, 1);
-            x.call(rom::IMMUNITIES);
-            x.call(0xd5f30);
+            lib::set_immunities(x);
+            lib::create_set_14(x);
             walk(x);
         }
     }
@@ -126,7 +127,7 @@ pub(super) fn intro(x: &mut Cx) {
 fn crossing(x: &mut Cx) {
     x.move_xz();
     let mut bumped = false;
-    let cam_x = x.a5_u16(var::CAMERA1_X);
+    let cam_x = var::CAMERA1_X.get(x.b);
     let px = x.u16(0x8) as i16;
     let right = cam_x.wrapping_add(0x1b0);
     let left = cam_x.wrapping_sub(0x20);
@@ -137,7 +138,7 @@ fn crossing(x: &mut Cx) {
         bumped = true;
         x.set16(0x8, left);
     }
-    let cam_y = x.a5_u16(var::CAMERA1_Y);
+    let cam_y = var::CAMERA1_Y.get(x.b);
     let h = x.u16(0xc) as i16;
     let low = cam_y.wrapping_add(0x10);
     let high = cam_y.wrapping_add(0xf0);
@@ -206,7 +207,7 @@ fn idle(x: &mut Cx) {
     }
     if x.u8(0x7) == 0 {
         next7(x);
-        x.call(call::ASK_RAND_TIMER);
+        lib::draw_6e(x);
         x.c.d[0] = 0;
         x.set8(ANIM_KIND, 0);
         x.set8(ANIM_LAST, 0);
@@ -218,13 +219,13 @@ fn idle(x: &mut Cx) {
     if !sub8(x, IDLE_COUNT, 1).gt() {
         return walk(x);
     }
-    if target_in_box(x, -0x28, 0x30, 8) {
+    if lib::target_in_box(x, -0x28, 0x30, 8) {
         return from_close(x);
     }
     if turn_needed(x) {
         return turn(x);
     }
-    step(x);
+    lib::step(x);
 }
 
 /// 0x7b1d0 : demi-tour (animation 6), puis reprise de l'état mémorisé.
@@ -235,7 +236,7 @@ fn turning(x: &mut Cx) {
         x.set8(ANIM_KIND, 1);
         return body(x, 6);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
     let side = x.u8(f::FLIP) ^ 0x20;
@@ -274,8 +275,8 @@ fn hop_walk(x: &mut Cx, second: bool) {
             hop(x)
         }
         2 => {
-            step(x);
-            if x.u8(KEY) != 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();
@@ -296,17 +297,17 @@ fn hop_walk(x: &mut Cx, second: bool) {
         6 => {
             x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             next7(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            x.call(call::LANDING);
+            lib::sound(x, 0xec820);
             hop_anim(x, 3);
         }
         8 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
@@ -341,8 +342,7 @@ fn hop(x: &mut Cx) {
     x.set16(0x1a, (-0x70i16) as u16);
     hop_height(x);
     x.c.d[0] = 7;
-    x.call(call::FACING);
-    let first = if zero(x) { 0xf } else { 7 };
+    let first = if lib::moves_forward(x) { 0xf } else { 7 };
     x.c.d[0] = first;
     x.set8(HOP_ANIM, first as u8);
     body(x, first);
@@ -374,13 +374,13 @@ fn between_hops(x: &mut Cx) {
     if let Some(g) = ai_box(x, -0xe0, 0x30, 8) {
         return from_far_gesture(x, g);
     }
-    if target_in_box(x, -0x28, 0x30, 8) {
+    if lib::target_in_box(x, -0x28, 0x30, 8) {
         return from_close(x);
     }
     if in_wide_box(x, -0x68, 0x24, 8) {
         return from_wide_box(x);
     }
-    step(x);
+    lib::step(x);
 }
 
 /// 0x7b45c : grand bond vers la cible ou le milieu de l'écran, puis attaque si on lui a riposté.
@@ -397,7 +397,7 @@ fn leap_attack(x: &mut Cx) {
                 mx = d.wrapping_add(t.u16(x.b, 0x8));
                 mz = t.u16(x.b, 0x10);
             } else {
-                let center = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+                let center = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
                 let side = if center as i16 >= x.u16(0x8) as i16 { 0x20 } else { 0 };
                 x.c.d[0] = side;
                 x.set8(f::FLIP, side as u8);
@@ -421,8 +421,8 @@ fn leap_attack(x: &mut Cx) {
             body(x, 0x13);
         }
         2 => {
-            step(x);
-            if x.u8(KEY) != 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();
@@ -443,19 +443,18 @@ fn leap_attack(x: &mut Cx) {
         6 => {
             x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             next7(x);
             x.set16(0xc, 0);
-            x.c.d[0] = 0xa;
-            x.call(call::SOUND_EVENT);
+            lib::shake_54(x, 0xa);
             dust(x, 6);
-            x.call(call::LANDING);
+            lib::sound(x, 0xec820);
             body(x, 0x16);
         }
         8 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
@@ -470,14 +469,14 @@ fn leap_attack(x: &mut Cx) {
             if turn_needed(x) {
                 return turn(x);
             }
-            if target_in_box(x, -0x60, 0x35, 6) {
+            if lib::target_in_box(x, -0x60, 0x35, 6) {
                 return go(x, 0x7c344);
             }
             go(x, 0x7c300)
         }
         _ => {
             if !expired(x, TIMER) {
-                step(x);
+                lib::step(x);
                 return;
             }
             walk(x)
@@ -494,17 +493,17 @@ fn backing(x: &mut Cx) {
             body(x, 0x17);
         }
         2 => {
-            step(x);
-            if x.u8(KEY) == 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             next7(x);
             let (angle, vz) = if x.u8(f::FLIP) != 0 { (0x18u32, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.c.d[0] = angle;
             set_dw(x, 1, vz);
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             x.set16(0x16, vz);
-            x.call(call::RANDOM_TURN);
+            lib::drift_heading(x);
             speed(x, 0x35);
             x.set16(0x18, 0x300);
             x.set16(0x1a, (-0x40i16) as u16);
@@ -520,7 +519,7 @@ fn backing(x: &mut Cx) {
         6 => {
             x.move_xz();
             if x.u16(0xc) as i16 > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             next7(x);
@@ -535,8 +534,8 @@ fn backing(x: &mut Cx) {
             set_dw(x, 0, v);
             x.set16(0x16, v);
             x.move_x();
-            x.call(call::LANDING);
-            x.call(0xecdba);
+            lib::sound(x, 0xec820);
+            lib::sound(x, 0xecdba);
             body(x, 0x18);
         }
         _ => {
@@ -546,16 +545,16 @@ fn backing(x: &mut Cx) {
             }
             if !expired(x, TIMER) {
                 x.move_x();
-                step(x);
+                lib::step(x);
                 return;
             }
             if !alive(x) {
                 return idle_alone(x);
             }
-            if target_in_box(x, -0x60, 0x35, 6) {
+            if lib::target_in_box(x, -0x60, 0x35, 6) {
                 return go(x, 0x7c344);
             }
-            if target_in_box(x, -0xe0, 0x30, 8) {
+            if lib::target_in_box(x, -0xe0, 0x30, 8) {
                 return go(x, 0x7c2fa);
             }
             walk(x)
@@ -577,16 +576,16 @@ pub(super) fn attacks(x: &mut Cx) {
 fn strike(x: &mut Cx, k: u8) {
     if x.u8(0x7) == 0 {
         next7(x);
-        x.call(0xe3da6);
+        lib::sound(x, 0xe3da6);
         kind(x, 0x10 + k);
         return attack(x, k as u32);
     }
-    if !step(x) {
-        if x.u8(KEY) == 0 {
+    if !lib::step(x) {
+        if x.u8(f::KEY_FRAME) == 0 {
             return;
         }
-        x.set8(KEY, 0);
-        x.call(0xe3f02);
+        x.set8(f::KEY_FRAME, 0);
+        lib::sound(x, 0xe3f02);
         return dust(x, 7);
     }
     // 0x7b7ba : fin du coup ; l'enchaînement continue si le coup a porté
@@ -621,24 +620,20 @@ fn grab_attempt(x: &mut Cx) {
             attack(x, 4);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 next7(x);
                 x.set8(INVULNERABLE, 0);
                 return attack(x, 7);
             }
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
-            x.c.d[0] = 6;
-            x.call(call::GRAB_FIND);
-            if zero(x) {
-                return;
+            if let Some(player) = lib::attack_hits_a_player(x, 6) {
+                lib::seize_player(x, player, 0);
             }
-            x.c.d[0] = 0;
-            x.call(call::GRAB);
         }
         _ => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             if try_split_leap(x) {
@@ -667,8 +662,8 @@ fn split(x: &mut Cx) {
             body(x, 0xb);
         }
         2 => {
-            step(x);
-            if x.u8(KEY) != 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();
@@ -689,22 +684,22 @@ fn split(x: &mut Cx) {
         6 => {
             x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             next7(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            x.call(call::LANDING);
+            lib::sound(x, 0xec820);
             body(x, 0xe);
         }
         _ => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.set16(0xc, 0);
             x.set8(0, 1);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             walk(x)
         }
     }
@@ -714,7 +709,7 @@ fn split(x: &mut Cx) {
 
 /// 0x7ba18 : tant qu'aucun joueur n'est en vie, le boss reste en pose.
 pub(super) fn wait_for_players(x: &mut Cx) {
-    if (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 0 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return walk(x);
     }
     if x.u8(f::SUB2) == 0 {
@@ -722,7 +717,7 @@ pub(super) fn wait_for_players(x: &mut Cx) {
         x.set8(ANIM_LAST, 0xff);
         return body(x, 4);
     }
-    step(x);
+    lib::step(x);
 }
 
 // --- groupe 12 : un joueur saisi ---------------------------------------------------------------
@@ -744,11 +739,11 @@ pub(super) fn holding(x: &mut Cx) {
             x.set8(INVULNERABLE, 0);
             x.set16(TIMER, 6);
             x.set16(TIMER2, 0);
-            x.call(call::HOLD);
+            lib::hold_seized(x);
         }
         2 => {
             if !sub16(x, TIMER2, 1).gt() {
-                x.call(0xedd96);
+                lib::sound(x, 0xedd96);
                 // bouffée de sang à la gueule (0xaaa40)
                 x.c.d[1] = 2;
                 let mut dx = (-0x69i16) as u16;
@@ -776,11 +771,11 @@ pub(super) fn holding(x: &mut Cx) {
                 let d = x.rom16(BITE_DELAYS + phase * 2);
                 x.set16(TIMER2, d);
             }
-            step(x);
-            x.call(call::HOLD);
+            lib::step(x);
+            lib::hold_seized(x);
         }
         _ => {
-            if step(x) {
+            if lib::step(x) {
                 walk(x)
             }
         }
@@ -791,7 +786,7 @@ pub(super) fn holding(x: &mut Cx) {
 fn release(x: &mut Cx) {
     let t = target_obj(x);
     t.set_u8(x.b, 0x6f, 1);
-    x.call(call::RELEASE);
+    lib::release_player(x, t);
     next7(x);
     attack(x, 7);
 }

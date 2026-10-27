@@ -37,9 +37,8 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    x.c.d[0] = 0x50;
-    x.call(call::IN_ARENA);
-    x.call(SHADOW);
+    lib::keep_on_screen(x, 0x50);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 
@@ -53,16 +52,15 @@ fn die(x: &mut Cx) {
 /// 0x94092 : premier passage : dégâts (0xb648) ; puis la routine du code de coup.
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0xb648);
+        lib::drop_once(x);
     }
     let code = x.u8(0x49) as u32;
-    x.c.d[0] = code;
     match rom32(x, REACTIONS + code) {
         KNOCKBACK => knockback(x, false),
         KNOCKBACK_HARD => knockback(x, true),
         BURST => burst(x),
         KILL => {
-            if x.a5_u8(var::PAUSE) == 0 {
+            if var::PAUSE.get(x.b) == 0 {
                 x.set16(f::HP, 0);
                 die(x);
             }
@@ -90,9 +88,9 @@ fn recover_position(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(0x49, 0);
     x.set32(0x58, 0);
-    let mut edge = x.a5_u16(var::SCROLL_X);
+    let mut edge = var::SCROLL_X.get(x.b);
     if x.a5_u8(0xa) != 0 {
-        edge = x.a5_u16(0x556);
+        edge = var::CAMERA_ALT_X.get(x.b);
     }
     let mut side = 0x20u8;
     let left = edge.wrapping_add(0x30);
@@ -145,7 +143,6 @@ fn knockback_start(x: &mut Cx, hard: bool) {
     if counter(x) {
         return;
     }
-    x.c.d[0] = 0;
     anim_c(x, 0);
 }
 
@@ -155,7 +152,6 @@ fn knockback_hold(x: &mut Cx) {
         let n = x.u8(SHAKE).wrapping_sub(1);
         x.set8(SHAKE, n);
         let d: u16 = if n & 1 != 0 { 0xfffe } else { 2 };
-        set_dw(x, 0, d);
         x.add16(0x8, d);
         return;
     }
@@ -163,7 +159,7 @@ fn knockback_hold(x: &mut Cx) {
         return recover_position(x);
     }
     x.move_x();
-    step(x);
+    lib::step(x);
 }
 
 /// 0x94254 : projeté : retombée sur le sol.
@@ -174,7 +170,7 @@ fn knockback_hard_hold(x: &mut Cx) {
     }
     x.move_xz();
     if (x.u16(0xc) as i16) > 0 {
-        step(x);
+        lib::step(x);
         return;
     }
     x.set16(0xc, 0);
@@ -195,9 +191,7 @@ fn burst(x: &mut Cx) {
                 _ => (0xff, 0),
             };
             if kind != 0xff {
-                x.c.d[0] = kind;
-                x.c.d[1] = flag;
-                x.call(call::EFFECT);
+                lib::attack_effect(x, kind, flag);
             }
             let r = rand_and(x, 3);
             let t = x.rom8(0x94368 + r);
@@ -213,9 +207,7 @@ fn burst(x: &mut Cx) {
                 if x.u8(0x49) != 0x60 {
                     let r = rand_and(x, 3);
                     if r != 0 {
-                        x.c.d[0] = 1;
-                        x.c.d[1] = 1;
-                        x.call(call::EFFECT);
+                        lib::attack_effect(x, 1, 1);
                     }
                 }
                 let r = rand_and(x, 3);
@@ -229,9 +221,8 @@ fn burst(x: &mut Cx) {
             if x.u8(f::FLIP) != 0 {
                 d = d.wrapping_neg();
             }
-            set_dw(x, 0, d);
             x.add16(0x8, d);
-            if x.a5_u8(var::PAUSE) == 0 {
+            if var::PAUSE.get(x.b) == 0 {
                 next6(x);
             }
         }
@@ -258,7 +249,7 @@ fn pushed_back(x: &mut Cx) {
             if (x.u8(0x14) as i8) < 0 {
                 return stop(x);
             }
-            if step(x) {
+            if lib::step(x) {
                 x.set32(0x58, 0);
                 next_attack(x);
             }
@@ -275,7 +266,7 @@ fn down(x: &mut Cx) {
             anim_a(x, 0x11);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, DOWN_TIME, 1).gt() {
                 return;
             }
             x.set16(DOWN_TIME, 0);
@@ -284,7 +275,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 || !step(x) {
+            if var::PAUSE.get(x.b) != 0 || !lib::step(x) {
                 return;
             }
             x.set8(VULNERABLE, 1);
@@ -292,7 +283,6 @@ fn down(x: &mut Cx) {
             x.set8(TIMER, 6);
             x.set8(0x38, 0);
             x.set32(f::STATE, state::WALK);
-            x.c.d[0] = 0;
             anim_a(x, 0);
         }
         _ => {}
@@ -318,9 +308,10 @@ fn announce(x: &mut Cx) {
     set_abs8(x, A5_DEATH, 0x10);
     set_abs8(x, A5_DEATH + 1, 0);
     set_abs8(x, A5_DEATH + 2, score);
-    for r in [0xb780, 0xbad6, 0xe2f6, 0x103ba, 0xe0a10, 0xe3b6c] {
-        x.call(r);
-    }
+    lib::drop_rewards(x);
+    lib::flash_and_shake(x);
+    crate::sound::service(x.b, crate::sound::Service::Ff05);
+    lib::sound(x, 0xe3b6c);
 }
 
 /// 0x946fc : séquence de mort ordinaire (animations 0xb, 0xc).
@@ -343,7 +334,6 @@ fn death_sequence(x: &mut Cx, first: u32, second: u32) {
             x.set16(0x18, 0x400);
             x.set16(0x1a, (-0x40i16) as u16);
             let v = if x.u8(f::FLIP) == 0 { 0x200u16 } else { (-0x200i16) as u16 };
-            set_dw(x, 0, v);
             x.set16(0x14, v);
             anim_a(x, first);
             announce(x);
@@ -356,10 +346,10 @@ fn death_sequence(x: &mut Cx, first: u32, second: u32) {
             x.set16(0xc, 0);
             next6(x);
             anim_a(x, second);
-            x.call(0xeca52);
+            lib::sound(x, 0xeca52);
         }
         4 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next6(x);

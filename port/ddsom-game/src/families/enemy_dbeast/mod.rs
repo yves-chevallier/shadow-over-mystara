@@ -17,7 +17,7 @@
 //!
 //! Les pièces ne servent pas d'objets séparés dans l'original : le même code les anime toutes.
 
-use super::cx::{handlers, sub, Cx};
+use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
 
@@ -30,13 +30,8 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    /// Direction de déplacement (index de table de vitesses, 0 à 31).
-    pub const ANGLE: u32 = 0x2d;
     /// Profil d'IA (0 ou 1, difficulté de la bête).
     pub const PROFILE: u32 = 0x2f;
-    /// Image-clé de l'animation en cours (posé par les scripts d'animation).
-    pub const KEY_FRAME: u32 = 0x33;
     /// Priorité d'affichage.
     pub const LAYER: u32 = 0x3b;
     /// Parent (mot, adresse RAM) et cible (mot, joueur).
@@ -95,13 +90,6 @@ const ACTIVE_IDLE: u32 = 0x020a_0000;
 /// État touché, sous-état 8 : la bête est projetée ou s'enfuit.
 const KNOCKED: u32 = 0x0408_0000;
 
-/// Routines du moteur et de l'IA.
-mod call {
-    pub const ANGLE: u32 = 0x137e;
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -125,14 +113,12 @@ fn anim_a(x: &mut Cx, n: u8) -> u32 {
     if (n as i8) >= 0x4b {
         return n as u32;
     }
-    x.c.d[1] = shift as u32;
     n.wrapping_add(x.rom8(SHIFT_A + shift as u32)) as u32
 }
 
 /// 0x74f7e : numéro d'animation de la série des coups, toujours décalé.
 fn anim_b(x: &mut Cx, n: u8) -> u32 {
     let shift = x.u8(ANIM_SHIFT);
-    x.c.d[1] = shift as u32;
     n.wrapping_add(x.rom8(SHIFT_B + shift as u32)) as u32
 }
 
@@ -205,7 +191,7 @@ fn orphan(x: &mut Cx) {
 
 /// Coordonnées d'écran (caméra) : X en `A5+0x556`, Y en `A5+0x55a`.
 fn camera(x: &mut Cx) -> (u16, u16) {
-    (x.a5_u16(0x556), x.a5_u16(0x55a))
+    (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b))
 }
 
 /// 0x71ff4 : se place sur le parent, décalé selon le rang de la pièce (X inversé quand la pièce
@@ -271,7 +257,7 @@ fn target_far(x: &mut Cx) -> bool {
 fn player_near(x: &mut Cx) -> bool {
     for p in 0..4 {
         let player = Obj(0xff85de + 0x200 * p);
-        if player.u8(x.b, 0) != 0 && target_in_box(x, 0, 0x60, 0x28) {
+        if player.u8(x.b, 0) != 0 && lib::target_in_box(x, 0, 0x60, 0x28) {
             return true;
         }
     }
@@ -292,8 +278,8 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xc);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     x.set8(0x70, 0);
     x.set8(0x7e, 0xa);
     x.set8(0x7f, 0);
@@ -313,13 +299,13 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     pick_target(x);
-    if (x.u8(VARIANT) as i8) > 3 {
+    if (x.u8(Obj::VARIANT) as i8) > 3 {
         if x.u16(TARGET) == 0 {
             set_state_long(x, ACTIVE_IDLE);
             return;
         }
-        x.call(call::FACE_TARGET);
-        x.call(call::TURN_TO_TARGET);
+        lib::draw_stance(x);
+        lib::draw_6b(x);
     }
     parts::spawn(x);
 }
@@ -348,8 +334,8 @@ fn active(x: &mut Cx) {
     // les pièces au repos (sous-état 0 et 0xc) ne testent pas la zone de jeu
     let s = x.u16(f::STATE);
     if s != 0x0200 && s != 0x020c {
-        x.call(IN_ZONE);
-        x.call(SHADOW);
+        lib::keep_in_zone(x);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }

@@ -72,30 +72,13 @@ pub(self) mod state {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const PICK_FAR: u32 = 0x44ee;
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const AIM: u32 = 0x788c;
-    pub const AIM_DONE: u32 = 0x79ce;
-    pub const REROLL: u32 = 0xac3a;
-    pub const EDGE_PAIR: u32 = 0xa4b4;
-    pub const EDGE_SAME: u32 = 0xa4c2;
-    pub const SCRIPT_PALETTE: u32 = 0x10298;
-    pub const GRAB_FIND: u32 = 0xfc44;
-    pub const GRAB: u32 = 0xfd64;
-    pub const RELEASE: u32 = 0xfd8c;
-    pub const HOLD: u32 = 0xfda2;
-    pub const IN_ARENA: u32 = 0xfbb0;
-    pub const BLOOD: u32 = 0xedd96;
     pub const SPLASH: u32 = 0xaaa40;
-    pub const EFFECT: u32 = 0xabec8;
 }
 
 // --- animations --------------------------------------------------------------------------------
 
 /// 0x95256 : lance l'animation `n` du jeu `set` (de sorte `kind`) par l'IA, sauf si c'est déjà celle en cours.
 fn play_set(x: &mut Cx, set: u32, kind: u8, n: u32) {
-    x.c.a[4] = set;
     x.c.d[0] = n;
     x.c.d[1] = x.c.d[1] & !0xff | kind as u32;
     if x.u8(ANIM_SET) == kind && x.u8(ANIM_N) == n as u8 {
@@ -103,7 +86,7 @@ fn play_set(x: &mut Cx, set: u32, kind: u8, n: u32) {
     }
     x.set8(ANIM_SET, kind);
     x.set8(ANIM_N, n as u8);
-    x.call(ai::PLAY);
+    lib::start(x, set, n);
 }
 
 /// 0x95234 : animation `n` du jeu des mouvements.
@@ -125,7 +108,6 @@ pub(self) fn anim_c(x: &mut Cx, n: u32) {
 
 /// 0x95210 : annule les vitesses.
 pub(self) fn stop(x: &mut Cx) {
-    x.c.d[0] = 0;
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -145,7 +127,7 @@ pub(self) fn next6(x: &mut Cx) {
 
 /// 0x95220 : la caméra en service (son enregistrement ; X en `+8`, Y en `+0xc`).
 pub(self) fn camera_record(x: &mut Cx) -> crate::objects::Obj {
-    crate::objects::Obj(if x.a5_u8(var::CAMERA_SELECT) != 0 { 0xff854e } else { 0xff84fe })
+    crate::objects::Obj(if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe })
 }
 
 /// 0x950b8 : la cible est-elle derrière le boss ? (sans cible, le boss attend et la réponse est oui.)
@@ -179,10 +161,10 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
 
 /// 0x94902, 0x9491e, 0x94968 : une cible dans la boîte de portée (et, pour les deux dernières, des coups possibles).
 pub(self) fn close_target(x: &mut Cx) -> bool {
-    target_in_box(x, 0, 0x28, 0x20)
+    lib::target_in_box(x, 0, 0x28, 0x20)
 }
 pub(self) fn edge_target(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
     if x.u16(f::TARGET) as i16 >= 0 {
@@ -191,9 +173,7 @@ pub(self) fn edge_target(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     }
     let t = x.linked(f::TARGET);
     let same_side = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.c.a[1] = t.0;
-    x.call(if same_side { call::EDGE_SAME } else { call::EDGE_PAIR });
-    !zero(x)
+    lib::decision(x, same_side)
 }
 
 /// 0x951dc : pesanteur douce quand l'étape l'a demandée (`+0xa2`) : le boss retombe sur le sol.
@@ -233,7 +213,6 @@ fn count_victims(x: &mut Cx) -> u32 {
             n += 1;
         }
     }
-    x.c.d[0] = n;
     n
 }
 
@@ -255,14 +234,14 @@ pub fn run(x: &mut Cx) {
 
 /// 0x93286 : attend la fin de la pause ; les variantes 0 et 1 sont choisies d'après la hauteur de la caméra.
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.add8(f::STATE, 2);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     if (x.u8(3) as i8) < 2 {
-        let (variant, z) = if (x.a5_u16(var::SCROLL_Y) as i16) >= 0x130 { (0, 0x1f8) } else { (1, 0x140) };
+        let (variant, z) = if (var::SCROLL_Y.get(x.b) as i16) >= 0x130 { (0, 0x1f8) } else { (1, 0x140) };
         x.set8(3, variant);
         x.set16(0x10, z);
     }
@@ -272,12 +251,14 @@ fn init(x: &mut Cx) {
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     pick_target(x);
-    x.call(call::AIM);
+    lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x30);
-    x.call(0x453c);
-    for r in [0xd5f30, 0xd6952, 0x19e10, 0x19db4, 0x19eb0] {
-        x.call(r);
-    }
+    lib::initial_hp_boss(x);
+    lib::create_set_14(x);
+    lib::create_set_15(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     for (off, v) in [(0x70, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8)] {
         x.set8(off, v);
     }
@@ -286,7 +267,7 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x6a, 3), (0x6c, 4), (0x6d, 8), (TIMER, 0)] {
         x.set8(off, v);
     }
-    let speed = if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 { 7 } else { 6 };
+    let speed = if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 { 7 } else { 6 };
     x.set8(0x72, speed);
     x.set8(0x73, speed);
     for (off, v) in [(0x74, 1), (0x75, 0x44), (0x76, 6), (0x7e, 0x4a), (0x7f, 0), (0x81, 0), (0x80, 0x1a), (0xbf, 0)] {
@@ -294,9 +275,8 @@ fn init(x: &mut Cx) {
     }
     effct_trio_2e(x);
     x.set16(ANIM_SET, 0xffff);
-    x.c.d[0] = 0;
     anim_a(x, 0);
-    x.call(0xe1470);
+    lib::sound(x, 0xe1470);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------
@@ -315,15 +295,14 @@ fn active(x: &mut Cx) {
             x.set8(0x38, 0);
         }
     }
-    x.c.d[0] = 0x40;
-    x.call(call::IN_ARENA);
-    x.call(SHADOW);
+    lib::keep_on_screen(x, 0x40);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 
 /// 0x933d0..0x93452 : vrai si le groupe doit tourner cette image (hors pause, ou en attente de pause).
 fn paused_dispatch(x: &mut Cx) -> bool {
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         x.set8(PAUSE_SEEN, 0);
         return true;
     }
@@ -361,10 +340,10 @@ pub(self) fn next_attack(x: &mut Cx) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return idle(x);
     }
-    if !target_in_box(x, -0x40, 0x40, 0x20) {
+    if !lib::target_in_box(x, -0x40, 0x40, 0x20) {
         return x.set32(f::STATE, state::STAND);
     }
-    let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;
+    let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
     let step = x.data8(0x94e7c + row + r);
     x.set8(f::SUB2, step);

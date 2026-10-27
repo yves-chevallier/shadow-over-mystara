@@ -6,6 +6,7 @@
 use super::stance::{next_move, pursue_tail, ready, walk_begin};
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Série de répétitions d'un coup, tirée dans une table par niveau de difficulté (0x5f5fa).
 const SERIES_TABLE: u32 = 0x5f5fa;
@@ -125,7 +126,7 @@ fn swipe_begin(x: &mut Cx) {
 
 /// 0x5f5d8 : tire le nombre de coups de la série dans la table du niveau de difficulté.
 fn roll_series(x: &mut Cx) {
-    let level = (x.a5_u16(0x7f92) >> 1 << 4) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
     let r = random(x) & 0xf;
     let n = x.data8(SERIES_TABLE + level + r);
     x.set8(SERIES, n);
@@ -193,7 +194,7 @@ fn leap_at(x: &mut Cx, vx: i16) {
 
 /// 0x5e222 : attend l'image-clé du saut.
 fn leap_wait(x: &mut Cx) {
-    if x.u8(KEY_FRAME) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
     }
@@ -203,8 +204,8 @@ fn leap_wait(x: &mut Cx) {
 /// Fin d'un saut avec choc au sol (0x5e238) : poussière et recul.
 fn leap_land(x: &mut Cx) {
     if !x.move_xz().gt() {
-        x.call(0xecb26);
-        x.call(0xecdba);
+        lib::sound(x, 0xecb26);
+        lib::sound(x, 0xecdba);
         x.set32(0xc, 0);
         x.add8(0x7, 2);
         x.set16(0x30, 1);
@@ -217,11 +218,7 @@ fn leap_land(x: &mut Cx) {
 
 /// Poussière de réception : 0xb10c8 avec ses quatre paramètres.
 fn dust(x: &mut Cx, d2: i16) {
-    x.c.d[0] = 1;
-    x.c.d[1] = 1;
-    set_dw(x, 2, d2 as u16);
-    set_dw(x, 3, 0xffff);
-    x.call(0xb10c8);
+    lib::shock(x, 1, 1, d2 as u16, 0xffff);
 }
 
 /// Glissade du recul (0x5e27a) : poussière tous les quatre pas, puis arrêt.
@@ -307,7 +304,7 @@ fn leap_high(x: &mut Cx) {
         6 | 10 => leap_wait(x),
         8 => {
             if !x.move_xz().gt() {
-                x.call(0xecb26);
+                lib::sound(x, 0xecb26);
                 dust(x, -0x18);
                 x.set32(0xc, 0);
                 x.add8(0x7, 2);
@@ -443,7 +440,7 @@ fn hop_begin(x: &mut Cx) {
 
 /// 0x5e690 : attend l'image-clé du petit bond.
 fn hop_wait(x: &mut Cx) {
-    if x.u8(KEY_FRAME) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
     }
     step(x);
@@ -467,8 +464,8 @@ fn hop_slide(x: &mut Cx) {
 /// 0x5e6a2 : retombée du petit bond, toujours suivie de la glissade.
 fn hop_land(x: &mut Cx) {
     x.move_xz();
-    x.call(0xecb26);
-    x.call(0xecdba);
+    lib::sound(x, 0xecb26);
+    lib::sound(x, 0xecdba);
     x.set32(0xc, 0);
     x.add8(0x7, 2);
     x.set16(0x30, 1);
@@ -494,7 +491,7 @@ fn run_toward_begin(x: &mut Cx) {
         Some(dx) => dx >= 0,
         None => false,
     };
-    x.set8(ANGLE, if right { 8 } else { 0x18 });
+    x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
     x.set8(TIMER, 0x42);
     x.set8(VULNERABLE, 1);
     pose(x, 0x16, SET_BODY, 4);

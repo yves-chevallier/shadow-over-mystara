@@ -25,10 +25,6 @@ mod moves;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours.
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     /// Nombre de pas de la course, délai entre deux pas, attente debout.
     pub const WALK_STEPS: u32 = 0x6b;
@@ -80,20 +76,14 @@ pub(self) const SET_RUN_BACK: u32 = 0x171c1a;
 /// Seuils de PV des phases (0x105b6).
 pub(self) const THRESHOLDS: u32 = 0x10ae2;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-}
-
 /// Lance l'animation `n` du jeu des corps par l'IA (0x103d6).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 /// Lance l'animation `n` du jeu des entrées en scène.
 pub(self) fn entry(x: &mut Cx, n: u32) {
-    play(x, SET_ENTRY, n);
+    lib::start(x, SET_ENTRY, n);
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
@@ -135,11 +125,12 @@ fn init(x: &mut Cx) {
         pick_target(x);
         x.set8(0xab, 2);
         x.set8(f::BOX_SET, 0x20);
-        x.call(0x453c);
-        x.set_a5_u8(0x5a, 0);
-        for a in [0x1059e, 0x19e10, 0x19db4, 0x19eb0] {
-            x.call(a);
-        }
+        lib::initial_hp_boss(x);
+        var::SCENE_LEVEL.set(x.b, 0);
+        lib::spread_index(x);
+        lib::clear_popup(x);
+        lib::empty_popups(x);
+        lib::clear_all_popups(x);
         x.set32(f::IMMUNITY, 0xffff_ffff);
         for (off, v) in [
             (0x76, 0),
@@ -203,7 +194,7 @@ fn partner_waits(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => moves::intro(x),
             2 => moves::fight(x),
@@ -212,8 +203,8 @@ fn active(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 // --- décisions : états posés d'un coup (0x7ab74..0x7ac70) -----------------------------------------
@@ -276,7 +267,7 @@ pub(self) fn transform(x: &mut Cx) {
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(0x93, 0);
     x.set_a5_u16(0x51e, 0x30);
-    let (cx, cy) = (x.a5_u16(var::SCROLL_X), x.a5_u16(var::SCROLL_Y));
+    let (cx, cy) = (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b));
     x.set_a5_u16(0x524, cx);
     x.set_a5_u16(0x528, cy);
     x.set8(0, 2);
@@ -284,7 +275,7 @@ pub(self) fn transform(x: &mut Cx) {
     x.set8(ROLE, 1);
     x.set8(INVULNERABLE, 0);
     x.set16(0xc, 0);
-    if outside(x, 0x30, 0x150) {
+    if lib::outside_band(x, 0x30, 0x150) {
         return charge(x, false);
     }
     x.set32(f::STATE, 0x0200_0200);
@@ -311,7 +302,6 @@ pub(self) fn go(x: &mut Cx, at: u32) {
 pub(self) fn from_close(x: &mut Cx) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a8e8 + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7a8f8, i);
     go(x, at)
 }
@@ -320,7 +310,6 @@ pub(self) fn from_close(x: &mut Cx) {
 pub(self) fn from_front(x: &mut Cx) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a932 + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7a942, i);
     go(x, at)
 }
@@ -337,7 +326,6 @@ pub(self) fn from_near_gesture(x: &mut Cx, g: u32) {
         0x7a9ce
     };
     let i = x.rom8(table + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7a9de, i);
     go(x, at)
 }
@@ -358,14 +346,13 @@ pub(self) fn from_far_gesture(x: &mut Cx, g: u32) {
         _ => panic!("boss 0 : entrée {entry:#x} inconnue"),
     };
     let i = x.rom8(table + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7aac8, i);
     go(x, at)
 }
 
 /// 0x7a7a4 et 0x7a7b0 : délai entre deux pas de la course, selon la difficulté.
 pub(self) fn walk_delay(x: &mut Cx, kind: u8) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let table = if kind == 3 { 0x7a7dc } else { 0x7a7bc };
     let d = x.rom8(table + level);
     x.set8(WALK_DELAY, d);
@@ -390,7 +377,6 @@ pub(self) fn far_gesture(x: &mut Cx) -> Option<u32> {
     let cam = camera_x(x);
     let px = x.u16(0x8);
     if Fl::sub16(cam.wrapping_sub(0x10), px).ge() || Fl::sub16(cam.wrapping_add(0x190), px).le() {
-        x.c.d[0] = 0;
         return None;
     }
     let (d0, d1, d2) = if x.u8(3) == 0 { (-0xe0, 0x60, 0xa) } else { (-0xe8, 0x48, 0xc) };

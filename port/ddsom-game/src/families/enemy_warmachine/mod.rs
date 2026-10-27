@@ -25,17 +25,7 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     pub const AI_WANDER: u32 = 0x6b;
     pub const AI_WAIT: u32 = 0x6e;
@@ -64,16 +54,6 @@ pub(self) const SET_MOVE: u32 = 0x171a52;
 pub(self) const SET_WEAPON: u32 = 0x171a7e;
 pub(self) const SET_FLY_A: u32 = 0x171b76;
 pub(self) const SET_FLY_B: u32 = 0x171c1a;
-
-pub(self) mod call {
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const REMOVE: u32 = 0x27ee;
-    pub const SPAWN_EFFECT: u32 = 0x1172e;
-    pub const SHOCK: u32 = 0x2824;
-    pub const DUST: u32 = 0xe3d32;
-    pub const FLASH: u32 = 0xecdba;
-    pub const IMMUNITIES: u32 = 0xfe5a;
-}
 
 pub fn run(x: &mut Cx) {
     if suspended(x) {
@@ -121,16 +101,15 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 
 /// Étincelle (0x1172e) numéro `n`.
 pub(self) fn spark(x: &mut Cx, n: u32) {
-    x.c.d[5] = n;
-    x.call(call::SPAWN_EFFECT);
+    lib::debris(x, n);
 }
 
 /// X de la caméra (écran unique ou deuxième écran).
 pub(self) fn camera_x(x: &mut Cx) -> u16 {
-    if x.a5_u8(0x36) != 0 {
-        x.a5_u16(0x5ae)
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        var::CAMERA2_X.get(x.b)
     } else {
-        x.a5_u16(0x5a6)
+        var::CAMERA1_X.get(x.b)
     }
 }
 
@@ -209,7 +188,7 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x20);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     lib::init_hp_rank(x);
     x.set8(0, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -241,7 +220,6 @@ fn init(x: &mut Cx) {
     pick_target(x);
     mv(x, 4);
     // l'état de départ dépend de la variante : 0, 2 ou 4 pour `+6`
-    x.c.d[0] = 0;
     match x.u8(3) {
         0 => go::arrive(x, 0),
         1 => go::arrive(x, 2),
@@ -269,7 +247,7 @@ fn active(x: &mut Cx) {
             return;
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 handlers! {

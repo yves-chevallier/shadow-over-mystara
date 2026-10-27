@@ -18,6 +18,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -25,22 +26,8 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    /// Vitesses : en X, en profondeur, en hauteur, pesanteur, vitesse latérale.
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_SIDE: u32 = 0x1c;
-    pub const SPEED_SIDE_Y: u32 = 0x1e;
     /// Série : 0 troglodyte (clignote), 1 variante armée.
     pub const SERIES: u32 = 0x2f;
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY_FRAME: u32 = 0x33;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const VULNERABLE: u32 = 0x67;
@@ -90,17 +77,6 @@ const BLINK_TIMES: u32 = 0x5b96c;
 /// Vitesses de marche par série (2 mots par série).
 const WALK_SPEEDS: u32 = 0x5af64;
 
-mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const REMOVE: u32 = 0x27ee;
-    pub const BEHIND_CHECK: u32 = 0x57c66;
-    pub const PICK_ATTACK_KIND: u32 = 0x5cdc6;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -132,7 +108,7 @@ fn step(x: &mut Cx) -> bool {
 /// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
 fn set_angle(x: &mut Cx, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 fn move_xy(x: &mut Cx) {
@@ -141,13 +117,12 @@ fn move_xy(x: &mut Cx) {
 
 /// Ligne de 32 octets de la difficulté dans `table` (`A5+0x7f92`).
 fn difficulty_row(x: &mut Cx) -> u32 {
-    (((x.a5_u16(0x7f92) >> 1) << 5) as u32) & 0xffff
+    (((var::RANK.get(x.b) >> 1) << 5) as u32) & 0xffff
 }
 
 /// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
 fn pick_byte(x: &mut Cx, table: u32) -> u8 {
     let row = difficulty_row(x);
-    x.c.a[4] = table + row;
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
@@ -163,15 +138,12 @@ fn walk_speed(x: &mut Cx, idx: u32) {
 
 /// Un joueur dans la boîte ? Les deux décisions par masque (0xa4c2, 0xa4b4) doivent accepter.
 fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    let ok = target_in_box(x, d0, d1, d2) && {
+    let ok = lib::target_in_box(x, d0, d1, d2) && {
         load_target(x);
-        x.call(0xa4c2);
-        !x.c.cond(7)
+        lib::decision_b(x)
     } && {
-        x.call(0xa4b4);
-        !x.c.cond(7)
+        lib::decision_a(x)
     };
-    x.c.d[0] = ok as u32;
     ok
 }
 
@@ -189,24 +161,19 @@ fn side_box(x: &mut Cx) -> bool {
 /// 0x5afda : la cible est de l'autre côté de l'orientation.
 fn needs_turn_around(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = load_target(x);
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
-    set_dw(x, 0, dx);
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     let turn = want != x.u8(f::FLIP) as u32;
-    x.c.d[0] = turn as u32;
     turn
 }
 
 /// 0x5af78 : retour debout ; si la décision 0x79ce le veut, au repos.
 fn back_to_stance(x: &mut Cx) {
     set_state_long(x, STANCE);
-    x.call(call::RAND_TARGET_CHECK);
-    if !x.c.cond(7) {
+    if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
     }
 }
@@ -216,12 +183,11 @@ fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
     let row = difficulty_row(x);
     set_dw(x, 0, row as u16);
-    x.c.a[4] = FALLBACK_MOVES + row;
     let n = rand_and(x, 0x1f);
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row + n);
     x.set8(f::SUB2, mv);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// Le clignotement est lancé s'il ne l'est pas déjà (série 0, phase positive).
@@ -241,9 +207,8 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xe);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
-    x.c.d[0] = 0;
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     for (off, v) in [(0x80, 0xb), (0x68, 4), (0x69, 4), (0x70, 0), (0x6a, 3), (0x6c, 3), (0x6d, 5), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x2c), (BLINK_PHASE, 0xff)] {
         x.set8(off, v);
     }
@@ -281,7 +246,7 @@ fn active(x: &mut Cx) {
     };
     if !dispatch {
         if x.u8(f::SUB) != 0 {
-            zone_shadow(x);
+            zone_and_terrain(x);
         }
         return x.reinsert();
     }
@@ -296,7 +261,7 @@ fn active(x: &mut Cx) {
         _ => {}
     }
     if x.u8(f::SUB) != 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     if x.u8(SERIES) == 0 {
         flicker(x);
@@ -343,21 +308,19 @@ fn flicker(x: &mut Cx) {
 /// 0x5b940 : durée d'invisibilité tirée au hasard.
 fn pick_blink_delay(x: &mut Cx) {
     x.set8(BLINK_WAIT, 1);
-    let mut d2 = x.a5_u16(0x7f92);
+    let mut d2 = var::RANK.get(x.b);
     d2 = d2 & 0xff00 | (d2 as u8 >> 1) as u16;
     let row = (d2 << 5) as u32;
     x.c.d[2] = x.c.d[2] & 0xffff_0000 | row;
-    x.c.a[4] = BLINK_DELAYS + row;
     let n = rand_and(x, 0x1f);
     let idx = x.data8(BLINK_DELAYS + row + n) as u32;
-    set_dw(x, 0, idx as u16);
     let w = x.rom16(BLINK_TIMES + idx);
     x.set16(BLINK_DELAY, w);
 }
 
 /// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 chute, 2 bond, 3 et 4 saut, 5 réveil).
 fn arrival(x: &mut Cx) {
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
                 let t = x.u8(REPEAT).wrapping_sub(1);
@@ -377,7 +340,6 @@ fn arrival(x: &mut Cx) {
             x.set8(REPEAT, 0x18);
             set_angle(x, 8, 0x18);
             x.set16(LOOK, 0);
-            x.c.d[0] = 0;
             walk_speed(x, 0);
             body(x, 2);
         }
@@ -386,17 +348,17 @@ fn arrival(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 1);
                 x.set8(LOOK_PREV, 0xe);
-                x.set16(SPEED_Z, -0x300i16 as u16);
-                x.set16(GRAVITY, -0x80i16 as u16);
-                let cam = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(DEPTH));
-                x.set16(HEIGHT, cam);
+                x.set16(Obj::VZ, -0x300i16 as u16);
+                x.set16(Obj::AZ, -0x80i16 as u16);
+                let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+                x.set16(Obj::Z, cam);
                 body(x, 0xb);
             }
             2 => {
                 x.move_z();
-                if (x.u16(HEIGHT) as i16) < 0 {
+                if (x.u16(Obj::Z) as i16) < 0 {
                     x.add8(f::SUB2, 2);
-                    x.set32(HEIGHT, 0);
+                    x.set32(Obj::Z, 0);
                     body(x, 0xc);
                 }
             }
@@ -406,23 +368,23 @@ fn arrival(x: &mut Cx) {
         2 => match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_X, 0);
+                x.set16(Obj::VX, 0);
                 let t = load_target(x);
                 if t.u8(x.b, 0) == 0 {
                     set_state_long(x, IDLE);
                     return rest_begin(x);
                 }
-                x.set16(SPEED_Z, 0x680);
-                x.set16(GRAVITY, -0x38i16 as u16);
-                x.set16(SPEED_Y, 0);
-                let d = t.u16(x.b, X).wrapping_sub(x.u16(X)) << 2;
-                x.set16(SPEED_X, d);
+                x.set16(Obj::VZ, 0x680);
+                x.set16(Obj::AZ, -0x38i16 as u16);
+                x.set16(Obj::AX, 0);
+                let d = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) << 2;
+                x.set16(Obj::VX, d);
                 body(x, 4);
             }
             2 => {
                 x.move_xz();
-                if step(x) && (x.u16(HEIGHT) as i16) < 0 {
-                    x.set16(HEIGHT, 0);
+                if step(x) && (x.u16(Obj::Z) as i16) < 0 {
+                    x.set16(Obj::Z, 0);
                     x.add8(f::SUB2, 2);
                     body(x, 0xc);
                 }
@@ -432,19 +394,19 @@ fn arrival(x: &mut Cx) {
         },
         3 | 4 => {
             if x.u8(f::SUB2) == 0 {
-                let scene = x.a5_u8(0x34);
+                let scene = var::SCENE.get(x.b);
                 if scene == 6 || scene == 0xc {
-                    x.call(0xeb92e);
+                    lib::sound(x, 0xeb92e);
                 } else {
-                    x.call(0xeb9a0);
+                    lib::sound(x, 0xeb9a0);
                 }
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_Z, 0x600);
-                x.set16(GRAVITY, -0x38i16 as u16);
-                x.set16(SPEED_SIDE, 0x80);
-                x.set16(SPEED_SIDE_Y, 0);
-                if x.u8(VARIANT) != 3 {
-                    negate(x, SPEED_SIDE);
+                x.set16(Obj::VZ, 0x600);
+                x.set16(Obj::AZ, -0x38i16 as u16);
+                x.set16(Obj::VY, 0x80);
+                x.set16(Obj::AY, 0);
+                if x.u8(Obj::VARIANT) != 3 {
+                    negate(x, Obj::VY);
                 }
                 body(x, 0xa);
             } else {
@@ -453,7 +415,7 @@ fn arrival(x: &mut Cx) {
                     return;
                 }
                 x.set8(LOOK_PREV, 0xe0);
-                x.set16(HEIGHT, 0);
+                x.set16(Obj::Z, 0);
                 set_state_long(x, STANCE);
             }
         }
@@ -488,9 +450,6 @@ fn rest_begin(x: &mut Cx) {
 // --- état 6 : libération ------------------------------------------------------------------------
 
 fn dead(x: &mut Cx) {
-    set_dw(x, 1, 0x12);
-    let w = x.u16(0x48) & 0xff00;
-    set_dw(x, 0, w.wrapping_add(0x12));
     free(x);
 }
 

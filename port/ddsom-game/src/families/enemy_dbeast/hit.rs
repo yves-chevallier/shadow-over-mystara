@@ -46,8 +46,8 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn zone_and_shadow(x: &mut Cx) {
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 // --- sous-état 2 : recul d'une pièce --------------------------------------------------------------
@@ -59,7 +59,7 @@ fn recoil(x: &mut Cx) {
             x.set8(WANT_ANIM, 0x1e);
             let want = x.u8(WANT_ANIM);
             x.set8(CUR_ANIM, want);
-            x.call(0xec658);
+            lib::sound(x, 0xec658);
             x.set16(0x14, 0x300);
             x.set16(0x16, (-0x28i16) as u16);
             let flip = x.u8(0x4a) ^ 0x20;
@@ -74,11 +74,7 @@ fn recoil(x: &mut Cx) {
             let low = x.a5_u16(0x6e) & 3;
             x.set_a5_u16(0x6e, low);
             if low == 0 {
-                x.c.d[0] = 0;
-                set_dw(x, 1, 2);
-                set_dw(x, 2, 8);
-                set_dw(x, 3, 0xffff);
-                x.call(0xb10c8);
+                lib::shock(x, 0, 2, 8, 0xffff);
             }
             if x.u8(0x14) != 0 {
                 x.move_x();
@@ -118,7 +114,7 @@ fn fall(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.u8(KEY_FRAME) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 0);
             }
@@ -146,13 +142,12 @@ fn fall(x: &mut Cx) {
 fn flee(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            let wall = x.a5_u8(0x34);
+            let wall = var::SCENE.get(x.b);
             let flipped = x.u8(f::FLIP) != 0;
             let turn_back = if wall == 2 {
                 flipped
             } else {
-                x.call(0x57c66);
-                if x.c.cond(7) { flipped } else { !flipped }
+                if !lib::in_right_half(x) { flipped } else { !flipped }
             };
             if turn_back {
                 x.add8(f::SUB2, 2);
@@ -174,7 +169,7 @@ fn flee(x: &mut Cx) {
             }
         }
         4 => {
-            if x.a5_u8(0x34) == 4 {
+            if var::SCENE.get(x.b) == 4 {
                 return x.add8(f::SUB2, 2);
             }
             leave_screen(x);
@@ -183,14 +178,15 @@ fn flee(x: &mut Cx) {
             if x.u8(0x29) != 0 {
                 x.add8(f::SUB2, 2);
             }
-            x.call(sub::TERRAIN_OF_OBJECT);
-            let terrain = x.c.d[2] as u8;
+            let t = crate::video::terrain_of(x.b, x.o);
+            crate::video::terrain_68k(x.c, &t);
+            let terrain = t.numero as u8;
             x.set8(0x29, terrain);
             x.move_by_table_xy();
             if x.in_arena_default() {
                 step(x);
             } else {
-                x.call(0x27ee);
+                detach_from_host(x);
             }
         }
         8 => {
@@ -203,7 +199,7 @@ fn flee(x: &mut Cx) {
             play(x, 6);
         }
         10 => {
-            if x.u8(KEY_FRAME) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 0);
             }
@@ -229,9 +225,9 @@ fn flee(x: &mut Cx) {
 fn run_away(x: &mut Cx) {
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x16);
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
-        x.set8(ANGLE, 0x18);
+        x.set8(Obj::SPEED_INDEX, 0x18);
     }
     play(x, 0xd);
     speed(x, 0x21);
@@ -245,7 +241,7 @@ fn leave_screen(x: &mut Cx) {
     }
     set_state_long(x, 0x0600_0000);
     if x.u8(PARENT) != 0 {
-        x.set_a5_u8(0x4e, 1);
+        var::FROZEN.set(x.b, 1);
     }
-    x.call(0x27ee);
+    detach_from_host(x);
 }

@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x909a0;
@@ -15,7 +16,7 @@ const SHAKE_JUMPS: u32 = 0x90ada;
 
 pub(super) fn run(x: &mut Cx) {
     let alive = (x.u16(f::HP) as i16) > 0;
-    if alive && x.u8(f::SUB) == 0 && x.u32(SAVED_STATE) & 0xffff_ff00 == ATTACK_4 && x.a5_u8(var::PAUSE) == 0 {
+    if alive && x.u8(f::SUB) == 0 && x.u32(SAVED_STATE) & 0xffff_ff00 == ATTACK_4 && var::PAUSE.get(x.b) == 0 {
         // touché pendant le souffle : le dragon le reprend
         x.set8(SHAKE, 0x10);
         x.set8(SHIELD, 8);
@@ -53,16 +54,16 @@ fn dispatch(x: &mut Cx) {
 }
 
 fn tail(x: &mut Cx) {
-    x.call(SHADOW);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 
 /// 0x9097c : réaction au coup : la routine de la table, d'après le code du coup.
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0x10112);
-        if x.a5_u8(0x34) == 0x20 {
-            x.call(0xb648);
+        lib::set_68(x);
+        if var::SCENE.get(x.b) == 0x20 {
+            lib::drop_once(x);
         }
     }
     let index = ((x.c.d[0] & 0xff00) | x.u8(REACTION) as u32) as u16 as i16 as i32;
@@ -97,9 +98,7 @@ fn knock(x: &mut Cx) {
                 _ => None,
             };
             if let Some(n) = burst {
-                x.c.d[0] = n;
-                x.c.d[1] = 0;
-                x.call(call::BURST);
+                lib::attack_effect(x, n, 0);
             }
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
@@ -131,7 +130,7 @@ fn retaliate(x: &mut Cx) -> bool {
 }
 
 fn knock_slide(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return;
     }
@@ -188,9 +187,7 @@ fn lie_down(x: &mut Cx) {
     }
     x.add8(f::SUB2, 2);
     rest(x);
-    x.c.d[0] = 3;
-    x.c.d[1] = 0;
-    x.call(call::BURST);
+    lib::attack_effect(x, 3, 0);
 }
 
 // --- 0x90c34 : chancelant (code 0x80) ----------------------------------------------------------------------
@@ -209,7 +206,7 @@ fn stagger(x: &mut Cx) {
 }
 
 fn stagger_wait(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.set8(REACTION, 0);
@@ -270,7 +267,7 @@ fn shake_z(x: &mut Cx, d0: i16) {
 // --- +5 = 2 : recul par un gros coup (0x90cb8) --------------------------------------------------------------------
 
 fn pushed_back(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(f::SUB2) == 0 {
@@ -312,7 +309,7 @@ fn death(x: &mut Cx) {
     if x.u8(TYPE) == TYPE_GREEN {
         return death_green(x);
     }
-    if x.u8(VARIANT) != 0 {
+    if x.u8(Obj::VARIANT) != 0 {
         return death_pet(x);
     }
     match x.u8(f::SUB2) {
@@ -325,9 +322,10 @@ fn death(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             fall_start(x);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0x103ba, 0xe0a10, 0xe4f42] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            lib::flash_and_shake(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe4f42);
         }
         2 => {
             x.move_xz();
@@ -353,10 +351,10 @@ fn death(x: &mut Cx) {
 }
 
 fn camera_y(x: &mut Cx) -> u16 {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 {
-        x.a5_u16(0x55a)
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        var::CAMERA_ALT_Y.get(x.b)
     } else {
-        x.a5_u16(var::SCROLL_Y)
+        var::SCROLL_Y.get(x.b)
     }
 }
 
@@ -399,9 +397,11 @@ fn death_green(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             fall_start(x);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0x103ba, 0xe0a10, 0xe51e6, 0xe3b6c] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            lib::flash_and_shake(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe51e6);
+            lib::sound(x, 0xe3b6c);
             green_fall(x);
         }
         2 => green_fall(x),
@@ -447,11 +447,10 @@ fn death_pet(x: &mut Cx) {
             x.set8(0, 2);
             x.set16(f::IMMUNITY, 0xffff);
             x.set16(TIMER, 0x20);
-            x.call(0x19ad6);
+            lib::object_event(x);
             rest(x);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0xe4f42] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            lib::sound(x, 0xe4f42);
         }
         2 => {
             x.set_bit(0x1, 1, true);

@@ -10,21 +10,22 @@
 use super::arrival::stand_when_done;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table de la ROM : durée et clé de tir des flammes du souffle.
 const FLAME_SCRIPT: u32 = 0x62284;
 
 /// Effet d'une morsure ou d'un coup (0x9eba6 puis 0xebd30) ; la clé d'animation est remise à zéro.
 fn bite_effect(x: &mut Cx, kind: u32) {
-    x.set8(KEY, 0);
+    x.set8(f::KEY_FRAME, 0);
     x.c.d[0] = kind;
     x.call(0x9eba6);
-    x.call(0xebd30);
+    lib::sound(x, 0xebd30);
 }
 
 /// 0x61c88 : prépare l'attente (aspect 0, animation 0).
 fn begin_wait(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 0);
     mv(x, 0);
@@ -37,7 +38,7 @@ fn hold(x: &mut Cx, resume: u32) {
     let n = x.u8(AI_LUNGE).wrapping_sub(1);
     x.set8(AI_LUNGE, n);
     if (n as i8) < 0 {
-        return x.add8(STEP, 2);
+        return x.add8(f::SUB3, 2);
     }
     if must_turn(x) {
         let sub2 = x.u8(f::SUB2);
@@ -65,9 +66,9 @@ fn done_then_after(x: &mut Cx) {
 /// Attend la clé d'animation puis passe à l'étape suivante, sans remettre la clé à zéro (0x61ec0 remet
 /// `+0x33` à zéro, pas 0x6244a).
 fn wait_key_clear(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
-        x.set8(KEY, 0);
-        x.add8(STEP, 2);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
     }
     x.anim_step();
@@ -75,36 +76,31 @@ fn wait_key_clear(x: &mut Cx) {
 
 /// 0x61eda : en plein bond, la clé déclenche la morsure ; à terre, poussière et animation d'atterrissage.
 fn bite_land(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
-        x.c.d[0] = 4;
-        x.call(0xfc44);
-        if x.c.cond(7) {
-            return step_then_after(x);
-        }
-        x.set32(HEIGHT, 0);
-        x.c.d[0] = 2;
-        return x.call(0xfd64);
+    if x.u8(f::KEY_FRAME) != 0 {
+        let Some(player) = lib::attack_hits_a_player(x, 4) else { return step_then_after(x) };
+        x.set32(Obj::Z, 0);
+        return lib::seize_player(x, player, 2);
     }
     if x.move_xz().gt() {
         x.anim_step();
         return;
     }
-    x.set32(HEIGHT, 0);
-    x.add8(STEP, 2);
+    x.set32(Obj::Z, 0);
+    x.add8(f::SUB3, 2);
     x.set16(0x30, 1);
     x.set8(VULNERABLE, 1);
     mv(x, 0xc);
     let vy = if x.u8(f::FLIP) != 0 { -0x1c } else { 0x1c };
-    x.set16(SPEED_Y, vy as u16);
+    x.set16(Obj::AX, vy as u16);
     x.anim_step();
 }
 
 /// 0x61f3c : le chien glisse en soufflant de la poussière jusqu'à l'arrêt.
 fn slide(x: &mut Cx) {
     puff(x, 3, 1, 1, -0x18, -1);
-    if x.u8(SPEED_X) == 0 {
-        x.add8(STEP, 2);
-        x.set32(SPEED_X, 0);
+    if x.u8(Obj::VX) == 0 {
+        x.add8(f::SUB3, 2);
+        x.set32(Obj::VX, 0);
     } else {
         x.move_x();
     }
@@ -112,20 +108,19 @@ fn slide(x: &mut Cx) {
 
 /// Début d'un bond d'attaque : vitesse horizontale `vx` (inversée si l'ennemi regarde à gauche).
 fn begin_jump(x: &mut Cx, vx: i16, speed_z: u16, anim: u32, set: u32) {
-    x.set16(SPEED_X, vx as u16);
+    x.set16(Obj::VX, vx as u16);
     if x.u8(f::FLIP) != 0 {
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
-    x.set16(SPEED_Y, 0);
-    x.set16(SPEED_Z, speed_z);
-    x.set16(GRAVITY, -0x38i16 as u16);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::VZ, speed_z);
+    x.set16(Obj::AZ, -0x38i16 as u16);
     x.anim_start(set, anim as u16);
 }
 
 // --- sous-état 4 ----------------------------------------------------------------------------------------
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => lunge(x),
         2 | 4 => bite(x),
@@ -139,30 +134,27 @@ pub(super) fn run(x: &mut Cx) {
 
 /// `+6` = 0 : course, saut éventuel puis morsure.
 fn lunge(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
         4 => {
             let r = rand_and(x, 1);
             if r == 0 {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 strike(x, 0);
             } else {
-                x.add8(STEP, 4);
+                x.add8(f::SUB3, 4);
                 x.set8(VULNERABLE, 1);
                 x.set8(LOOK, 8);
                 begin_jump(x, -0x280, 0x4c0, 7, SET_STRIKE);
             }
         }
         6 => {
-            if x.u8(KEY) != 0 {
-                x.call(0xe361a);
-                x.c.d[0] = 3;
-                x.call(0xfc44);
-                if !x.c.cond(7) {
-                    x.c.d[0] = 0;
-                    return x.call(0xfd64);
+            if x.u8(f::KEY_FRAME) != 0 {
+                lib::sound(x, 0xe361a);
+                if let Some(player) = lib::attack_hits_a_player(x, 3) {
+                    return lib::seize_player(x, player, 0);
                 }
             }
             step_then_after(x);
@@ -177,16 +169,15 @@ fn lunge(x: &mut Cx) {
 
 /// `+6` = 2 et 4 : morsure en place.
 fn bite(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             strike(x, 3);
         }
         6 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 bite_effect(x, 0);
             }
             done_then_after(x);
@@ -197,27 +188,27 @@ fn bite(x: &mut Cx) {
 
 /// `+6` = 6 : coup de patte, avec élan ou en courant (deux variantes tirées au hasard).
 fn paw(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
             let r = rand_and(x, 1);
             if r == 0 {
-                x.add8(STEP, 4);
+                x.add8(f::SUB3, 4);
                 look(x, 0xff);
                 x.set8(STRIKE_KIND, 0x2b);
                 return begin_jump(x, 0x180, 0x3c0, 5, SET_MOVE);
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let mut angle = 0x18;
             if x.u16(f::TARGET) != 0 {
                 let target = x.linked(f::TARGET);
-                let d = target.u16(x.b, X).wrapping_sub(x.u16(X)) as i16;
+                let d = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16;
                 if d >= 0 {
                     angle = 8;
                 }
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             look(x, 0x1d);
             x.set8(TIMER, 0x40);
             mv(x, 0xa);
@@ -253,12 +244,11 @@ fn back_on_guard(x: &mut Cx) {
 
 /// `+6` = 8 : bond en avant puis morsure.
 fn jump_bite(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 8);
             begin_jump(x, -0x380, 0x4c0, 7, SET_STRIKE);
@@ -273,16 +263,15 @@ fn jump_bite(x: &mut Cx) {
 
 /// `+6` = 10, 12, 14 : coup de patte court.
 fn short_paw(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             strike(x, 9);
         }
         6 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 bite_effect(x, 1);
             }
             done_then_after(x);
@@ -293,12 +282,11 @@ fn short_paw(x: &mut Cx) {
 
 /// `+6` = 16 : souffle de feu (animation 8 puis une série de tirs d'après la table).
 fn breath(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             strike(x, 8);
         }
         6 => flame_start(x),
@@ -312,10 +300,10 @@ fn breath(x: &mut Cx) {
 
 /// 0x6220e : la clé d'animation lance la série de flammes.
 fn flame_start(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.set8(TIMER, 1);
         x.set8(SCRIPT, 0);
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
     } else {
         x.anim_step();
     }
@@ -339,7 +327,7 @@ fn flame_tick(x: &mut Cx, both: bool) -> bool {
         return false;
     }
     if both {
-        x.call(0xed398);
+        lib::sound(x, 0xed398);
     }
     x.call(0x9ed78);
     true
@@ -348,9 +336,8 @@ fn flame_tick(x: &mut Cx, both: bool) -> bool {
 // --- sous-état 6 -------------------------------------------------------------------------------------------
 
 pub(super) fn run_b(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     // étapes communes : 0 attente, 2 poursuite en place (retour à l'état 6)
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => return begin_wait(x),
         2 => return hold(x, 0x0206_0000),
         _ => {}
@@ -369,8 +356,7 @@ pub(super) fn run_b(x: &mut Cx) {
 
 /// 0x61a8c : le chien se met à l'affût (test aléatoire, puis boîtes de portée ou charge).
 fn ready(x: &mut Cx) {
-    x.call(call::RAND_TARGET_CHECK);
-    if x.c.cond(7) {
+    if !lib::maybe_draw_6e(x) {
         stance::reach(x);
     } else {
         x.set16(f::SUB2, 0x400);
@@ -393,7 +379,7 @@ fn b_end(x: &mut Cx) {
 }
 
 fn b_charge(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
             let r = rand_and(x, 1);
             if r != 0 {
@@ -402,7 +388,7 @@ fn b_charge(x: &mut Cx) {
                 mv(x, 2);
                 return ready(x);
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(TIMER, 0x2a);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 0xa);
@@ -420,9 +406,9 @@ fn b_charge(x: &mut Cx) {
 }
 
 fn b_stretch(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 0xb);
             mv(x, 0xb);
@@ -434,19 +420,19 @@ fn b_stretch(x: &mut Cx) {
 
 /// Saut de côté (0x6239e) : vitesse en profondeur tirée au hasard.
 fn b_hop(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 2);
-            x.set16(SPEED_X2, 0x100);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::VY, 0x100);
             let r = rand_and(x, 1);
             if r != 0 {
-                x.set16(SPEED_X2, -0x100i16 as u16);
+                x.set16(Obj::VY, -0x100i16 as u16);
             }
             x.set8(VULNERABLE, 1);
             look(x, 5);
-            x.set16(SPEED_Y2, 0);
-            x.set16(SPEED_Z, 0x400);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AY, 0);
+            x.set16(Obj::VZ, 0x400);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             mv(x, 5);
         }
         6 => wait_key(x),
@@ -464,7 +450,7 @@ fn b_hop(x: &mut Cx) {
 
 /// `+6` = 6 : bond en avant, atterrissage, retour à l'affût.
 fn b_lunge(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
         8 => land(x),
@@ -475,13 +461,13 @@ fn b_lunge(x: &mut Cx) {
 
 /// `+6` = 8 : bond, atterrissage puis coup de queue.
 fn b_slash(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
         8 => land(x),
         10 => {
             if x.anim_step() {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 strike(x, 0);
             }
         }
@@ -492,34 +478,34 @@ fn b_slash(x: &mut Cx) {
 
 /// 0x62404 : élan du bond (animation 6).
 fn jump_forward(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 6);
-    x.set16(SPEED_X, 0x300);
+    x.set16(Obj::VX, 0x300);
     if x.u8(f::FLIP) != 0 {
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
-    x.set16(SPEED_Y, 0);
-    x.set16(SPEED_Z, 0x380);
-    x.set16(GRAVITY, -0x38i16 as u16);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::VZ, 0x380);
+    x.set16(Obj::AZ, -0x38i16 as u16);
     mv(x, 6);
 }
 
 fn b_claw(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
         8 => land(x),
         10 => {
             if x.anim_step() {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set8(STRIKE_POWER, 5);
                 strike(x, 9);
             }
         }
         12 => {
-            if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.c.d[0] = 1;
                 x.call(0x9eba6);
             }
@@ -532,13 +518,13 @@ fn b_claw(x: &mut Cx) {
 }
 
 fn b_flames(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
         8 => land(x),
         10 => {
             if x.anim_step() {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set8(STRIKE_POWER, 5);
                 strike(x, 8);
             }
@@ -563,7 +549,6 @@ fn b_flames(x: &mut Cx) {
 // --- sous-état 8 ----------------------------------------------------------------------------------------------
 
 pub(super) fn run_c(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 | 6 => c_wait(x),
         2 => c_leap(x),
@@ -573,14 +558,13 @@ pub(super) fn run_c(x: &mut Cx) {
 }
 
 fn c_wait(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 0xfe);
+            x.add8(f::SUB3, 0xfe);
             c_begin(x);
         }
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(TIMER, 0x10);
             c_begin(x);
         }
@@ -610,7 +594,7 @@ fn c_begin(x: &mut Cx) {
 
 /// `+6` = 2 : bond d'attaque, retombée, retour debout (0x616d8).
 fn c_leap(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => jump_forward(x),
         2 => wait_key(x),
         4 => land(x),
@@ -621,30 +605,30 @@ fn c_leap(x: &mut Cx) {
 
 /// `+6` = 4 : pas de côté (en courant) ou saut de côté.
 fn c_side(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
             let r = rand_and(x, 1);
             let mut above = false;
             if x.u16(f::TARGET) != 0 {
                 let target = x.linked(f::TARGET);
-                above = (target.u16(x.b, DEPTH).wrapping_sub(x.u16(DEPTH)) as i16) >= 0;
+                above = (target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)) as i16) >= 0;
             }
             if r == 0 {
-                x.set8(STEP, 4);
-                x.set16(SPEED_X2, -0x80i16 as u16);
+                x.set8(f::SUB3, 4);
+                x.set16(Obj::VY, -0x80i16 as u16);
                 if x.u16(f::TARGET) != 0 && !above {
-                    negate(x, SPEED_X2);
+                    negate(x, Obj::VY);
                 }
-                x.set16(SPEED_Y2, 0);
-                x.set16(SPEED_Z, 0x3c0);
-                x.set16(GRAVITY, -0x38i16 as u16);
+                x.set16(Obj::AY, 0);
+                x.set16(Obj::VZ, 0x3c0);
+                x.set16(Obj::AZ, -0x38i16 as u16);
                 look(x, 6);
                 return mv(x, 5);
             }
-            x.add8(STEP, 2);
-            x.set8(ANGLE, if above { 0x10 } else { 0 });
+            x.add8(f::SUB3, 2);
+            x.set8(Obj::SPEED_INDEX, if above { 0x10 } else { 0 });
             look(x, 0xc);
             x.set8(TIMER, 0x24);
             mv(x, 2);
@@ -675,7 +659,6 @@ fn c_side(x: &mut Cx) {
 // --- sous-état 10 : promenade ----------------------------------------------------------------------------
 
 pub(super) fn idle(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -698,9 +681,9 @@ pub(super) fn idle(x: &mut Cx) {
             if x.anim_step() {
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
-                x.add8(ANGLE, 0x10);
-                let a = x.u8(ANGLE) & 0x1f;
-                x.set8(ANGLE, a);
+                x.add8(Obj::SPEED_INDEX, 0x10);
+                let a = x.u8(Obj::SPEED_INDEX) & 0x1f;
+                x.set8(Obj::SPEED_INDEX, a);
                 x.set8(f::SUB2, 2);
                 x.set8(0x90, 0x50);
                 mv(x, 2);
@@ -708,7 +691,7 @@ pub(super) fn idle(x: &mut Cx) {
         }
         _ => {}
     }
-    if x.a5_u8(0x35) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, STANCE);
         pick_target(x);
     }
@@ -722,23 +705,22 @@ pub(super) fn grab(x: &mut Cx) {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
+    x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if victim.u8(x.b, 0) == 0 || victim.u8(x.b, 0x188) == 0 {
         return set_state_long(x, STANCE);
     }
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
-            let y = victim.u16(x.b, DEPTH);
-            x.set16(DEPTH, y);
-            if victim.u16(x.b, HEIGHT) != 0 {
-                return x.call(0xfd8c);
+            x.add8(f::SUB3, 2);
+            let y = victim.u16(x.b, Obj::Y);
+            x.set16(Obj::Y, y);
+            if victim.u16(x.b, Obj::Z) != 0 {
+                return lib::release_player(x, victim);
             }
-            x.set16(HEIGHT, 0);
+            x.set16(Obj::Z, 0);
             x.set8(BITES, 8);
             strike(x, if which == 0 { 1 } else { 2 });
-            x.call(0xfda2);
+            lib::hold_seized(x);
         }
         2 => bite_victim(x, which),
         _ => {}
@@ -748,10 +730,10 @@ pub(super) fn grab(x: &mut Cx) {
 /// 0x6293e : chaque morsure (clé `+0x33`) tire de la vie au joueur ; à la dernière il est libéré.
 fn bite_victim(x: &mut Cx, which: u8) {
     x.anim_step();
-    if x.u8(KEY) == 0 {
-        return x.call(0xfda2);
+    if x.u8(f::KEY_FRAME) == 0 {
+        return lib::hold_seized(x);
     }
-    x.set8(KEY, 0);
+    x.set8(f::KEY_FRAME, 0);
     let n = x.u8(BITES).wrapping_sub(1);
     x.set8(BITES, n);
     if (n as i8) <= 0 {
@@ -764,31 +746,30 @@ fn bite_victim(x: &mut Cx, which: u8) {
     let reach = if x.u8(f::FLIP) != 0 { 0x38i16 } else { -0x38 };
     let d3 = if which == 0 { 0x1c } else { 0x2c };
     x.c.d[1] = 2;
-    x.c.d[2] = x.u16(X).wrapping_add(reach as u16) as u32;
-    x.c.d[3] = x.u16(HEIGHT).wrapping_add(d3) as u32;
-    x.c.d[4] = x.u16(DEPTH).wrapping_sub(1) as u32;
+    x.c.d[2] = x.u16(Obj::X).wrapping_add(reach as u16) as u32;
+    x.c.d[3] = x.u16(Obj::Z).wrapping_add(d3) as u32;
+    x.c.d[4] = x.u16(Obj::Y).wrapping_sub(1) as u32;
     x.call(0xaaa40);
     if (x.u16(f::TARGET) as i16) >= 0 {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
+    x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);
     }
-    x.call(0xedd96);
+    lib::sound(x, 0xedd96);
     let hp = victim.u16(x.b, f::HP).wrapping_sub(3);
     victim.set_u16(x.b, f::HP, hp);
     if (hp as i16) <= 0 {
         victim.set_u16(x.b, f::HP, 1);
         return release(x);
     }
-    x.call(0xfda2);
+    lib::hold_seized(x);
 }
 
 fn release(x: &mut Cx) {
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
     victim.set_u8(x.b, 0x6f, 1);
-    x.call(0xfd8c);
+    lib::release_player(x, victim);
 }

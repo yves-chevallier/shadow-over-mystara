@@ -19,6 +19,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -26,20 +27,6 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    /// Vitesses : en X, en profondeur, en hauteur, pesanteur.
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    /// Direction de déplacement (table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours (octet fort du mot d'état d'animation `+0x32`).
-    pub const KEY_FRAME: u32 = 0x33;
     /// Dégâts du coup en cours : type et force.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
@@ -76,22 +63,11 @@ const FALLBACK_MOVES: u32 = 0x6a480;
 const CLOSE_ATTACKS: u32 = 0x6a73c;
 const FAR_ATTACKS: u32 = 0x6a93c;
 
-mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const PROXIMITY: u32 = 0x81aa4;
-    pub const JUMP_EFFECT: u32 = 0xecfe4;
-    pub const REMOVE: u32 = 0x27ee;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
     }
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.tick_counters();
     }
     match x.u8(f::STATE) {
@@ -123,7 +99,7 @@ fn move_xy(x: &mut Cx) {
 
 /// 0x69528 : saut — effet 0xecfe4 et animation 3.
 fn launch(x: &mut Cx) {
-    x.call(call::JUMP_EFFECT);
+    lib::sound(x, 0xecfe4);
     body(x, 3);
 }
 
@@ -149,8 +125,7 @@ fn end_to_stance(x: &mut Cx) {
 /// 0x6a680 : retour debout ; si la décision 0x79ce le veut, au repos.
 fn back_to_stance(x: &mut Cx) {
     set_state_long(x, STANCE);
-    x.call(call::RAND_TARGET_CHECK);
-    if !x.c.cond(7) {
+    if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
     }
 }
@@ -158,14 +133,13 @@ fn back_to_stance(x: &mut Cx) {
 /// 0x6a452 : fin d'un coup — le suivant est tiré dans la ligne de la difficulté (32 octets).
 fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
-    let row = (x.a5_u16(0x7f92) >> 1) << 5;
+    let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
-    x.c.a[4] = FALLBACK_MOVES + row as u32;
     let n = rand_and(x, 0x1f);
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row as u32 + n);
     x.set8(f::SUB2, mv);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 // --- état 0 : création --------------------------------------------------------------------------
@@ -176,13 +150,12 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0x18);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
-    x.c.d[0] = 0;
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     for (off, v) in [(0x68, 4), (0x69, 1), (0x70, 0), (0x6a, 1), (0x6c, 3), (0x6d, 3), (0x72, 3), (0x73, 2), (0x74, 3), (0x75, 0x38), (0x76, 3), (REPEAT, 0x20), (WALK_ANIM, 0), (WALK_ANIM_TIMER, 2)] {
         x.set8(off, v);
     }
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.set8(VULNERABLE, 1);
     }
     for (off, v) in [(0x8e, 0), (0x7f, 0), (0x7e, 0xe)] {
@@ -215,15 +188,15 @@ fn active(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(call::PROXIMITY);
-    zone_shadow(x);
+    super::boss_common::push_out_of_boss(x);
+    zone_and_terrain(x);
     x.reinsert();
 }
 
 /// Sous-état 0 : arrivée selon la variante `+3` (octet pair, indice de table : 0 marche, 2 chute, 4 bond,
 /// 6 chute lente).
 fn arrival(x: &mut Cx) {
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
                 move_xy(x);
@@ -238,14 +211,14 @@ fn arrival(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(REPEAT, 0x14);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
             body(x, 1);
         }
         2 => match x.u8(f::SUB2) {
             0 => {
-                x.set16(SPEED_Z, 0);
-                x.set16(GRAVITY, -0x40i16 as u16);
+                x.set16(Obj::VZ, 0);
+                x.set16(Obj::AZ, -0x40i16 as u16);
                 x.add8(f::SUB2, 2);
                 launch(x);
             }
@@ -257,12 +230,12 @@ fn arrival(x: &mut Cx) {
         4 => match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_Z, 0);
-                x.set16(GRAVITY, -0x38i16 as u16);
-                x.set16(SPEED_X, -0x280i16 as u16);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::VZ, 0);
+                x.set16(Obj::AZ, -0x38i16 as u16);
+                x.set16(Obj::VX, -0x280i16 as u16);
+                x.set16(Obj::AX, 0);
                 if x.u8(f::FLIP) != 0 {
-                    negate(x, SPEED_X);
+                    negate(x, Obj::VX);
                 }
                 launch(x);
             }
@@ -273,11 +246,11 @@ fn arrival(x: &mut Cx) {
             }
             6 => {
                 x.move_xz();
-                if (x.u16(HEIGHT) as i16) <= 0 {
+                if (x.u16(Obj::Z) as i16) <= 0 {
                     x.add8(f::SUB2, 2);
-                    x.set32(HEIGHT, 0);
+                    x.set32(Obj::Z, 0);
                     body(x, 5);
-                } else if (x.u16(HEIGHT) as i16) <= 0x30 {
+                } else if (x.u16(Obj::Z) as i16) <= 0x30 {
                     step(x);
                 }
             }
@@ -286,15 +259,15 @@ fn arrival(x: &mut Cx) {
         },
         6 => match x.u8(f::SUB2) {
             0 => {
-                x.set16(SPEED_Z, 0);
-                x.set16(GRAVITY, -0x40i16 as u16);
+                x.set16(Obj::VZ, 0);
+                x.set16(Obj::AZ, -0x40i16 as u16);
                 x.add8(f::SUB2, 2);
                 launch(x);
             }
             2 => wait_anim(x),
             4 => {
                 x.add8(f::SUB2, 2);
-                x.set32(HEIGHT, 0);
+                x.set32(Obj::Z, 0);
                 body(x, 5);
             }
             6 => end_to_stance(x),
@@ -307,11 +280,11 @@ fn arrival(x: &mut Cx) {
 /// 0x69558 : descente (déplacement en hauteur) puis réception.
 fn land(x: &mut Cx) {
     x.move_z();
-    if (x.u16(HEIGHT) as i16) > 0 {
+    if (x.u16(Obj::Z) as i16) > 0 {
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set32(HEIGHT, 0);
+    x.set32(Obj::Z, 0);
     body(x, 5);
 }
 

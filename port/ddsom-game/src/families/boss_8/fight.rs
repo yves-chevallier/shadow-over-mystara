@@ -21,8 +21,7 @@ pub(super) fn intro(x: &mut Cx) {
             }
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x3c);
-            x.c.d[0] = 0x3e;
-            x.call(call::SOUND_EVENT);
+            lib::shake_54(x, 0x3e);
         }
         0x882e0 => {
             if sub16(x, TIMER, 1).pl() {
@@ -30,7 +29,7 @@ pub(super) fn intro(x: &mut Cx) {
             }
             x.add8(f::SUB2, 2);
             x.set_bit(0x1, 1, false);
-            x.call(0xecf7a);
+            lib::sound(x, 0xecf7a);
             body(x, 5);
         }
         0x88308 => {
@@ -47,22 +46,21 @@ pub(super) fn intro(x: &mut Cx) {
             if x.move_xz().gt() {
                 return;
             }
-            x.call(0xd5f30);
+            lib::create_set_14(x);
             aids::burst_small(x);
             x.set16(0xc, 0);
             x.add8(f::SUB2, 2);
             body(x, 0xc);
-            x.call(0xecc0a);
-            x.c.d[0] = 0x1e;
-            x.call(call::SOUND_EVENT);
+            lib::sound(x, 0xecc0a);
+            lib::shake_54(x, 0x1e);
         }
         _ => {
-            if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
-                x.call(0xe42c6);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
+                lib::sound(x, 0xe42c6);
             }
             if x.anim_step() {
-                x.call(rom::IMMUNITIES);
+                lib::set_immunities(x);
                 x.set8(0, 1);
                 x.set32(f::STATE, 0x0202_0000);
             }
@@ -74,7 +72,7 @@ pub(super) fn intro(x: &mut Cx) {
 
 /// 0x8839a : tant qu'un joueur est en vie, marche, demi-tour, arrêt, approche.
 pub(super) fn fight(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, super::WAIT);
         return;
     }
@@ -84,7 +82,7 @@ pub(super) fn fight(x: &mut Cx) {
         0x88692 => stop(x),
         _ => approach(x),
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, super::WAIT);
     }
 }
@@ -101,23 +99,22 @@ fn keyed_body(x: &mut Cx, kind: u8, anim: u32) {
 
 /// 0x883d6 : marche vers l'adversaire, et regarde s'il peut attaquer.
 fn walk(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         keyed_body(x, 1, 2);
         speed(x, 0x10);
-        return x.call(0xa470);
+        return lib::draw_stance(x);
     }
     if sub8(x, 0x71, 1).mi() {
-        x.call(0xa470);
-        x.call(0x424e);
+        lib::draw_stance(x);
+        lib::pick_target(x);
         let shot = if x.u8(f::SUB2) == 0 { 0x20 } else { 0x21 };
         x.set8(SHOT, shot);
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
         if sub8(x, 0x6b, 1).eq() {
-            x.call(0x788c);
-            x.call(0x79ce);
-            if !zero(x) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 x.set16(f::SUB2, 0x400);
                 return;
             }
@@ -130,36 +127,33 @@ fn walk(x: &mut Cx) {
 fn near_checks(x: &mut Cx) {
     if aids::player_near(x, false) {
         x.set32(f::STATE, 0x0204_0000);
-        return x.call(call::ATTACK_START);
+        return lib::pick_byte(x);
     }
     if guard(x, -0x50, 0x20, 0x18, true) || guard(x, -0xb0, 0x40, 0x18, false) {
         return;
     }
     if aids::player_near(x, true) {
         x.random_68k();
-        setw(x, 1, 0xffc0);
         let i = x.c.d[0] as u16 & 0xf;
-        setw(x, 0, i);
         x.set32(f::STATE, if i >= 6 { 0x0204_1000 } else { 0x0204_1200 });
-        return x.call(call::ATTACK_START);
+        return lib::pick_byte(x);
     }
-    if target_in_box_far(x, -0x40, 0x40, 0x20) {
-        return x.call(call::ATTACK_START);
+    if lib::guard_in_front_strict(x, -0x40, 0x40, 0x20) {
+        return lib::pick_byte(x);
     }
     x.anim_step();
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
     if x.u8(0x3e) != 0 {
         x.set8(0x3e, 0);
-        x.call(0xec502);
+        lib::sound(x, 0xec502);
     }
     if x.u16(f::TARGET) == 0 {
         return;
     }
     let t = x.linked(f::TARGET);
     let d = x.u16(0x8).wrapping_sub(t.u16(x.b, 0x8));
-    setw(x, 0, d);
     let side = if (d as i16) < 0 { 0x20 } else { 0 };
     setb(x, 1, side);
     if side != x.u8(f::FLIP) {
@@ -171,7 +165,7 @@ fn near_checks(x: &mut Cx) {
 
 /// 0x88546 (devant, `front`) et 0x885c0 (loin) : un adversaire à portée de coup. Rend vrai si une attaque est engagée.
 fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
-    if !target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
+    if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
         x.c.d[0] = 0;
         return false;
     }
@@ -179,30 +173,26 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
     let side = t.u8(x.b, f::FLIP);
     setb(x, 0, side);
     let mine = x.u8(f::FLIP);
-    x.call(if side == mine { 0xa4c2 } else { 0xa4b4 });
-    if zero(x) {
+    if !lib::decision(x, side == mine) {
         x.c.d[0] = 0;
         return false;
     }
     x.random_68k();
-    setw(x, 1, 0xffc0);
     let i = x.c.d[0] as u16 & 0xf;
-    setw(x, 0, i);
     if i >= 6 {
         x.set32(f::STATE, 0x0202_0800);
         return true;
     }
     x.set32(f::STATE, 0x0204_0000);
-    x.call(call::ATTACK_START);
+    lib::pick_byte(x);
     aids::choose_attack(x, front);
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x8863a : demi-tour, puis reprise de l'état mémorisé (`+0xa6`, `+0xa5`).
 fn turn(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(ANIM_KIND, 4);
         x.set8(ANIM_LAST, 4);
@@ -215,21 +205,19 @@ fn turn(x: &mut Cx) {
         x.set32(f::STATE, s);
         let sub = x.u8(RESUME_SUB);
         x.set8(f::SUB2, sub);
-        x.c.d[0] = 0;
         body(x, 0);
     }
 }
 
 /// 0x88692 : arrêt face à l'adversaire.
 fn stop(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(ANIM_KIND, 0);
         setb(x, 2, 0);
         if x.u8(ANIM_LAST) != 0 {
             x.set8(ANIM_LAST, 0);
-            x.c.d[0] = 0;
             body(x, 0);
         }
         return;
@@ -248,14 +236,14 @@ fn stop(x: &mut Cx) {
 
 /// 0x88702 : approche lente de l'adversaire.
 fn approach(x: &mut Cx) {
-    match dispatch(x, 0x8870e, SUB3) {
+    match dispatch(x, 0x8870e, f::SUB3) {
         0x8875a => {
             if sub16(x, TIMER, 1).mi() {
                 x.set32(f::STATE, 0x0202_0000);
                 return;
             }
             x.set8(SHOT, 0x20);
-            x.call(call::ASK_TARGET);
+            lib::approach_target(x);
             if aids::must_turn(x) {
                 x.set32(RESUME_STATE, 0x0202_0004);
                 let b6 = x.u8(f::SUB2);
@@ -263,16 +251,16 @@ fn approach(x: &mut Cx) {
                 x.set32(f::STATE, 0x0202_0200);
             }
             x.anim_step();
-            if x.u8(KEY) != 0xff {
+            if x.u8(f::KEY_FRAME) != 0xff {
                 x.move_by_table_xy();
             }
         }
         t => {
             if t == 0x8871c {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x28);
             } else {
-                x.add8(SUB3, 0xfe);
+                x.add8(f::SUB3, 0xfe);
             }
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_KIND, 3);
@@ -290,10 +278,11 @@ fn approach(x: &mut Cx) {
 
 /// 0x891e2 : attend qu'un joueur soit en vie.
 pub(super) fn wait(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, 0x0202_0000);
         x.set8(ANIM_KIND, 0x7f);
-        return x.call(0x424e);
+        lib::pick_target(x);
+        return;
     }
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);

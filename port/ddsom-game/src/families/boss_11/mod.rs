@@ -26,8 +26,6 @@ mod chain;
 mod hit;
 
 pub(self) mod g {
-    pub const KEY: u32 = 0x33;
-    pub const SUB3: u32 = 0x7;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const ANIM_KIND: u32 = 0xa0;
@@ -45,11 +43,6 @@ pub(self) mod g {
 use g::*;
 use crate::objects::pools;
 use crate::objects::Courant;
-
-pub(self) mod call {
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
-}
 
 /// `move.b #v,Dn` : l'octet de poids faible d'un registre de données.
 pub(self) fn setb(x: &mut Cx, n: usize, v: u8) {
@@ -205,13 +198,12 @@ pub fn run(x: &mut Cx) {
     if x.u8(f::STATE) == 0 || x.u8(0) == 0 {
         return;
     }
-    if x.u8(f::STATE) != 4 && x.a5_u8(var::PAUSE) != 0 {
+    if x.u8(f::STATE) != 4 && var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(NO_ZONE) == 0 {
-        setw(x, 0, 0x30);
-        x.call(0xfbb0);
-        x.call(SHADOW);
+        lib::keep_on_screen(x, 0x30);
+        lib::collide_terrain(x);
     }
     keep_in_screen(x);
     chain::update(x);
@@ -223,20 +215,16 @@ pub fn run(x: &mut Cx) {
 
 /// 0x8d60e : le serpent ne sort pas de l'écran par la gauche ni par le haut.
 fn keep_in_screen(x: &mut Cx) {
-    let cam = if x.a5_u8(var::CAMERA_SELECT) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
-    x.c.a[2] = cam;
+    let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     let mut d0 = rd16(x.b, cam + 8);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, x.u16(0x8)).le() {
         x.set16(0x8, d0);
     }
     d0 = d0.wrapping_add(0x180);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, rd16(x.b, cam + 8)).ge() {
         x.set16(0x8, d0);
     }
     d0 = rd16(x.b, cam + 0xc);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, x.u16(0x10)).le() {
         x.set16(0x10, d0);
     }
@@ -247,7 +235,7 @@ fn restore(x: &mut Cx) {
     if x.u8(f::STATE) == 0 || x.u8(0) == 0 {
         return;
     }
-    if x.u8(f::STATE) != 4 && x.a5_u8(var::PAUSE) != 0 {
+    if x.u8(f::STATE) != 4 && var::PAUSE.get(x.b) != 0 {
         return;
     }
     let (a, b, c) = (x.u16(SAVE_X), x.u16(SAVE_Z), x.u16(SAVE_Y));
@@ -259,7 +247,7 @@ fn restore(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.call(0x9e426);
@@ -273,9 +261,9 @@ fn init(x: &mut Cx) {
     x.set8(0x2e, 0x2c);
     x.set8(0x79, 0x3f);
     x.set8(0x8e, 3);
-    for a in [0xe1330, 0x19db4, 0x19e10] {
-        x.call(a);
-    }
+    lib::sound(x, 0xe1330);
+    lib::empty_popups(x);
+    lib::clear_popup(x);
     x.set_a5_u8(0x50, 1);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
@@ -291,14 +279,14 @@ fn init(x: &mut Cx) {
         x.set8(0x9f, 2);
     }
     x.set8(SLOW, 0);
-    for a in [0x453c, 0xd5f30] {
-        x.call(a);
-    }
+    lib::initial_hp_boss(x);
+    lib::create_set_14(x);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
-    for a in [0xd6952, 0x19e10, 0x19db4, 0x19eb0] {
-        x.call(a);
-    }
+    var::SCENE_LEVEL.set(x.b, 0);
+    lib::create_set_15(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     let (a, b, c) = (x.u16(0x8), x.u16(0xc), x.u16(0x10));
     x.set16(SAVE_X, a);
     x.set16(SAVE_Z, b);
@@ -315,7 +303,7 @@ fn init(x: &mut Cx) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 fn active(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if tst8(x, f::FREEZE).gt() {
@@ -334,7 +322,6 @@ fn active(x: &mut Cx) {
 /// `moveq 0,D0 ; move.b (idx,A0),D0b ; move.w (table,PC,D0w),D1w ; jsr (table,PC,D1w)` : adresse d'arrivée.
 pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
-    x.c.d[0] = i;
     let off = x.rom16(table + i);
     setw(x, 1, off);
     table.wrapping_add(off as i16 as i32 as u32)
@@ -343,9 +330,7 @@ pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
 /// Variante qui range le décalage dans D0 (`move.w (table,PC,D0w),D0w ; jmp (table,PC,D0w)`).
 pub(self) fn dispatch0(x: &mut Cx, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
-    x.c.d[0] = i;
     let off = x.rom16(table + i);
-    setw(x, 0, off);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 

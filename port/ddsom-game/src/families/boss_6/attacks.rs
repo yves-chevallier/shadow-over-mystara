@@ -12,17 +12,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
-
-mod lib {
-    pub const SOUND_SHAKE: u32 = 0x2860;
-    pub const SOUND_SHAKE_B: u32 = 0x2824;
-    pub const SPRITE_FRAME: u32 = 0x115e2;
-    pub const WING_SOUND: u32 = 0x11a36;
-    pub const LANDING_FX: u32 = 0xecc0a;
-    pub const FLIGHT_FX: u32 = 0xec976;
-    pub const TRAIL_FX: u32 = 0xecdba;
-    pub const ARRIVE_FX: u32 = 0xe3da6;
-}
+use crate::objects::Obj;
 
 /// Table des incréments de hauteur (longs) du vol bas, indexée par l'image-clé `+0x33` (espace des opcodes).
 const LOW_FLIGHT: u32 = 0x8508c;
@@ -41,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(var::PLAYERS_ALIVE) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 fn resume_chase(x: &mut Cx) {
@@ -61,15 +51,14 @@ fn resume_stand(x: &mut Cx) {
 /// Battement d'ailes : l'image-clé a son bit 7 levé (posé par le script) : on le retire, on alterne `+0xb3`
 /// et le son suit (0x11a36).
 fn wing_beat(x: &mut Cx) {
-    if tst8(x, KEY).pl() {
+    if tst8(x, f::KEY_FRAME).pl() {
         return;
     }
-    let k = x.u8(KEY) & 0x7f;
-    x.set8(KEY, k);
+    let k = x.u8(f::KEY_FRAME) & 0x7f;
+    x.set8(f::KEY_FRAME, k);
     let flap = x.u8(FLAP) ^ 1;
     x.set8(FLAP, flap);
-    set_dw(x, 0, flap as u16);
-    x.call(lib::WING_SOUND);
+    lib::ground_debris(x, flap);
 }
 
 /// `(0xc).l += (mot << 16) >> 8` : la hauteur avance de `v` pixels par image (8.8).
@@ -85,13 +74,13 @@ fn roar(x: &mut Cx) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(ANIM_KIND, 0x10);
             x.set8(ANIM_LAST, 0x10);
             fly(x, 0);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 resume_chase(x);
             }
         }
@@ -159,7 +148,7 @@ fn swoop_a(x: &mut Cx) {
                 let (tx, ty) = (target.u16(x.b, 0x8), target.u16(x.b, 0x10));
                 x.set16(0x8, tx);
                 x.set16(0x10, ty);
-                let h = x.a5_u16(var::CAMERA1_Y).wrapping_add(0xf0).wrapping_sub(ty);
+                let h = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0).wrapping_sub(ty);
                 x.set16(0xc, h);
                 x.set16(0x18, (-0x500i16) as u16);
                 x.set16(0x1a, (-0x10i16) as u16);
@@ -175,11 +164,9 @@ fn swoop_a(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x1e);
             x.set16(0xc, 0);
-            x.c.d[0] = 0x1e;
-            x.call(lib::SOUND_SHAKE);
-            x.c.d[5] = 5;
-            x.call(call::DUST);
-            x.call(lib::LANDING_FX);
+            lib::shake_58(x, 0x1e);
+            lib::debris(x, 5);
+            lib::sound(x, 0xecc0a);
             fly(x, 3);
         }
         8 => {
@@ -197,7 +184,7 @@ fn swoop_a(x: &mut Cx) {
 
 /// +7 = 2 des piqués A et B (0x84bb8) : vol jusqu'à la hauteur de l'écran, avec les battements d'ailes.
 fn swoop_flight(x: &mut Cx) {
-    let ceiling = x.a5_u16(var::CAMERA1_Y).wrapping_add(0xf0);
+    let ceiling = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let height = x.u16(0x10).wrapping_add(x.u16(0xc));
     if Fl::sub16(height, ceiling).ge() {
         x.add8(0x7, 2);
@@ -208,9 +195,9 @@ fn swoop_flight(x: &mut Cx) {
         shot.set_u8(x.b, 0x58, 1);
         return;
     }
-    x.call(lib::SPRITE_FRAME);
-    step(x);
-    let frame = x.u8(KEY) & 0x7f;
+    lib::push_players(x);
+    lib::step(x);
+    let frame = x.u8(f::KEY_FRAME) & 0x7f;
     if !Fl::sub8(frame, 3).ge() {
         wing_beat(x);
         let v = x.u16(0x18).wrapping_sub(0x28);
@@ -234,7 +221,7 @@ fn swoop_b(x: &mut Cx) {
             if !pick_target(x) {
                 return decide::wait(x);
             }
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(ANIM_KIND, 0x12);
             x.set8(ANIM_LAST, 0x12);
             start_swoop(x);
@@ -250,14 +237,14 @@ fn swoop_b(x: &mut Cx) {
             let ty = target.u16(x.b, 0x10);
             x.set16(0x10, ty);
             x.set16(0xc, 0x70);
-            let cam = x.a5_u16(var::CAMERA1_X);
+            let cam = var::CAMERA1_X.get(x.b);
             let (px, vx) = if x.u8(f::FLIP) != 0 { (cam, 0x700i16) } else { (cam.wrapping_add(0x180), -0x700) };
             x.set16(0x8, px);
             x.set16(0x14, vx as u16);
             x.set16(0x18, (-0x680i16) as u16);
             x.set16(0x16, 0);
             x.set16(0x1a, 0);
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(INVULNERABLE, 0);
             fly(x, 5);
         }
@@ -272,23 +259,21 @@ fn swoop_b(x: &mut Cx) {
             x.set16(0xc, 0);
             let vz: i16 = if x.u8(f::FLIP) != 0 { -0x38 } else { 0x38 };
             x.set16(0x16, vz as u16);
-            x.c.d[0] = 0x1e;
-            x.call(lib::SOUND_SHAKE_B);
-            x.call(lib::FLIGHT_FX);
-            x.call(lib::TRAIL_FX);
+            lib::shake_54(x, 0x1e);
+            lib::sound(x, 0xec976);
+            lib::sound(x, 0xecdba);
             fly(x, 6);
         }
         8 => {
             if !sub16(x, COUNT, 1).gt() {
                 x.set16(COUNT, 4);
-                x.c.d[5] = 3;
-                x.call(call::DUST);
+                lib::debris(x, 3);
             }
             if sub16(x, TIMER, 1).le() {
                 return decide::stand(x);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }
@@ -302,7 +287,7 @@ fn leap(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x40);
             let target = x.linked(f::TARGET);
             let mut gap = (x.u32(0x8) as i32).wrapping_sub(target.u32(x.b, 0x8) as i32).wrapping_abs();
@@ -317,14 +302,14 @@ fn leap(x: &mut Cx) {
             }
             x.set16(0x18, vz);
             x.set16(0x1a, (-0x38i16) as u16);
-            x.call(lib::ARRIVE_FX);
+            lib::sound(x, 0xe3da6);
             x.set8(ANIM_KIND, 0x13);
             x.set8(ANIM_LAST, 0x13);
             fly(x, 7);
         }
         2 => {
-            step(x);
-            if x.u8(KEY) != 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xz();
@@ -352,23 +337,21 @@ fn leap(x: &mut Cx) {
             x.set8(INVULNERABLE, 0);
             let vz: i16 = if x.u8(f::FLIP) == 0 { 0x5c } else { -0x5c };
             x.set16(0x16, vz as u16);
-            x.c.d[0] = 0x14;
-            x.call(lib::SOUND_SHAKE_B);
-            x.call(lib::FLIGHT_FX);
-            x.call(lib::TRAIL_FX);
+            lib::shake_54(x, 0x14);
+            lib::sound(x, 0xec976);
+            lib::sound(x, 0xecdba);
             fly(x, 0xa);
         }
         8 => {
             if !sub16(x, COUNT, 1).gt() {
                 x.set16(COUNT, 4);
-                x.c.d[5] = 3;
-                x.call(call::DUST);
+                lib::debris(x, 3);
             }
             if sub16(x, TIMER, 1).le() {
                 return resume_chase(x);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }
@@ -378,7 +361,7 @@ fn leap(x: &mut Cx) {
 
 /// 0x8596c : la hauteur avance d'un incrément de la table `SKIM` (signe selon `+0xa8`).
 fn skim_step(x: &mut Cx) {
-    let i = (x.u8(KEY) & 0x7f) as u32 * 4;
+    let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d0 = rom32(x, SKIM + i) as i32;
     if !cmp16(x, COUNT, 0x24).gt() {
         d0 = d0.wrapping_neg();
@@ -405,27 +388,27 @@ fn spit(x: &mut Cx) {
             }
         }
         2 => {
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             wing_beat(x);
             let low = Fl::sub16(x.u16(0xc), 0x20).lt();
-            if low || x.u8(KEY) != 4 {
-                let i = (x.u8(KEY) as u32) * 4;
+            if low || x.u8(f::KEY_FRAME) != 4 {
+                let i = (x.u8(f::KEY_FRAME) as u32) * 4;
                 let inc = rom32(x, LOW_FLIGHT + i);
                 let z = x.u32(0xc).wrapping_add(inc);
                 x.set32(0xc, z);
-                step(x);
+                lib::step(x);
             } else {
                 x.add8(0x7, 2);
                 x.set8(INVULNERABLE, 0);
                 x.set16(TIMER, 0xa);
                 x.set16(COUNT, 0x24);
-                step(x);
+                lib::step(x);
             }
         }
         4 => {
-            step(x);
+            lib::step(x);
             skim_step(x);
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             wing_beat(x);
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
@@ -434,9 +417,9 @@ fn spit(x: &mut Cx) {
             }
         }
         6 => {
-            step(x);
+            lib::step(x);
             skim_step(x);
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             wing_beat(x);
             if x.u8(0x32) != 0 {
                 x.add8(0x7, 2);
@@ -446,11 +429,11 @@ fn spit(x: &mut Cx) {
         }
         8 => {
             wing_beat(x);
-            step(x);
+            lib::step(x);
             skim_step(x);
-            x.call(lib::SPRITE_FRAME);
+            lib::push_players(x);
             let shot = x.linked(CHILD);
-            if shot.u8(x.b, 0) == 0 || (shot.u8(x.b, 0x5a) != 0 && x.u8(KEY) == 4) {
+            if shot.u8(x.b, 0) == 0 || (shot.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
                 x.add8(0x7, 2);
             }
         }
@@ -465,14 +448,14 @@ fn spit(x: &mut Cx) {
                 x.set16(TIMER, 0x10);
                 body(x, 0);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         12 => {
             if sub16(x, TIMER, 1).le() {
                 resume_chase(x);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         _ => {}

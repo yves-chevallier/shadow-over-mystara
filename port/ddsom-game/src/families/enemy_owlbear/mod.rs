@@ -18,6 +18,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -26,11 +27,6 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours (posée par les scripts d'animation).
-    pub const KEY_FRAME: u32 = 0x33;
     /// Dégâts du coup en cours : `+0x44` type, `+0x45` force.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
@@ -71,12 +67,6 @@ const ACTIVE_IDLE: u32 = 0x020a_0000;
 const ACTIVE_TURN: u32 = 0x0202_0200;
 const ACTIVE_ENGAGE: u32 = 0x0202_0002;
 const KNOCKED: u32 = 0x0408_0000;
-
-mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-}
 
 pub fn run(x: &mut Cx) {
     if suspended(x) {
@@ -156,7 +146,7 @@ fn set_state_long(x: &mut Cx, v: u32) {
 /// nul), `otherwise` sinon.
 fn set_angle(x: &mut Cx, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Écart d'abscisse de la cible à la bête (positif : la cible est à droite), `None` sans cible.
@@ -187,27 +177,27 @@ fn init(x: &mut Cx) {
     if paused(x) {
         return;
     }
-    let scene = x.a5_u8(0x34);
+    let scene = var::SCENE.get(x.b);
     if scene == 6 || scene == 0xc {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x18);
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0x10);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     for (off, v) in AI_PARAMS {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     x.set8(0x7e, 0xd);
     x.set8(0x7f, 0);
     x.set8(0x8e, 0);
     x.set16(DELAY, 0x258);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
-    match x.u8(VARIANT) {
+    lib::draw_stance(x);
+    lib::draw_6b(x);
+    match x.u8(Obj::VARIANT) {
         0 => {
             set_state_long(x, ACTIVE_STANCE);
             x.set8(WANT_ANIM, 2);

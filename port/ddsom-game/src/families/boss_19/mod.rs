@@ -20,6 +20,7 @@
 
 use super::boss_common::*;
 use super::cx::handlers;
+use crate::objects::Obj;
 
 mod attacks;
 mod fight;
@@ -28,7 +29,6 @@ mod intro;
 
 pub(self) mod g {
     pub const TYPE: u32 = 0x2;
-    pub const VARIANT: u32 = 0x3;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -76,13 +76,6 @@ pub(self) const ATTACK_10: u32 = 0x0204_0a00;
 const DEAD_HOST: u32 = 0x0406_0000;
 pub(self) const FREE: u32 = 0x0600_0000;
 
-pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const PICK_TARGET: u32 = 0x424e;
-    pub const EFFECT: u32 = 0xb10c8;
-    pub const BURST: u32 = 0xabec8;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -112,7 +105,6 @@ pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
     x.c.a[4] = base;
     x.c.d[0] = n;
     // l'original charge le numéro du jeu dans D1b avant de comparer (certains appelants le relisent)
-    x.c.d[1] = x.c.d[1] & !0xff | set as u32;
     if set == x.u8(ANIM_SET) && n as u8 == x.u8(ANIM_N) {
         return;
     }
@@ -173,7 +165,7 @@ pub(self) fn host_gone(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.call(0x63ae0);
@@ -194,22 +186,22 @@ fn init(x: &mut Cx) {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x1c);
     }
-    if kind == TYPE_BLACK && x.u8(VARIANT) == 1 {
-        x.call(0x453c);
+    if kind == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
+        lib::initial_hp_boss(x);
     } else {
-        if x.a5_u8(0x30) != 0 {
-            x.call(0xe1330);
+        if var::GAME_ON.get(x.b) != 0 {
+            lib::sound(x, 0xe1330);
         }
-        x.call(0x19db4);
-        x.call(0x19e10);
-        x.call(0x19eb0);
+        lib::empty_popups(x);
+        lib::clear_popup(x);
+        lib::clear_all_popups(x);
         x.set_a5_u32(0x38, 0x0459_5900);
         x.set_a5_u8(0x50, 1);
         x.set8(0x93, 1);
         x.set8(0x9a, 0xff);
-        x.call(0x453c);
-        x.call(0xd5f30);
-        x.call(0xd6952);
+        lib::initial_hp_boss(x);
+        lib::create_set_14(x);
+        lib::create_set_15(x);
     }
     x.set8(0x78, 0xff);
     x.set8(f::BOX_SET, 0x2e);
@@ -218,10 +210,10 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x76, 5), (0x8e, 3), (0x6f, 2), (0x68, 5), (0x69, 5), (0x6c, 4), (0x6d, 8), (0x6a, 3)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
-    x.call(0x788c);
+    var::SCENE_LEVEL.set(x.b, 0);
+    lib::draw_6b(x);
     x.set8(0x70, 0);
-    x.call(0xa470);
+    lib::draw_stance(x);
     x.set8(0x81, 0);
     x.set8(SHIELD, 0);
     x.set8(SPECIALS, 3);
@@ -233,12 +225,12 @@ fn init(x: &mut Cx) {
 
 /// Boucle de l'état actif (0x8fc42) ; l'état touché la rappelle pour reprendre le combat.
 pub(self) fn active(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         if tst8(x, f::FREEZE).gt() {
             sub8(x, f::FREEZE, 1);
         } else {
             // le dragon de Nagpa disparaît avec son hôte
-            if x.u8(TYPE) == TYPE_BLACK && x.u8(VARIANT) == 1 {
+            if x.u8(TYPE) == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
                 if (x.u16(f::HOST) as i16) >= 0 {
                     return host_gone(x);
                 }
@@ -275,14 +267,14 @@ pub(self) fn active(x: &mut Cx) {
     if x.u8(f::SUB) == 0 {
         return;
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 
 /// `+5` = 10 (0x908bc) : attend qu'un joueur revienne.
 fn idle(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
         return;
     }

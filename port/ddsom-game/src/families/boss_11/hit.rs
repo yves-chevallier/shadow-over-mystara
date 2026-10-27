@@ -20,19 +20,16 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x8e8ca : vrai si le jeu est en pause (le serpent reste alors affiché : `+0` = 2).
 fn paused(x: &mut Cx) -> bool {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
-        x.c.d[0] = 1;
         return true;
     }
-    x.c.d[0] = 0;
     false
 }
 
 /// 0x8e8de : fin de la réaction, retour à la poursuite.
 fn recover(x: &mut Cx) {
     x.set8(0, 1);
-    x.c.d[0] = 0;
     x.set8(0x86, 0);
     x.set8(0x87, 0);
     x.set8(REACTION, 0);
@@ -52,10 +49,9 @@ fn reaction(x: &mut Cx) {
     let code = x.u8(REACTION) as u32;
     x.c.d[0] = code;
     let routine = rom32(x, 0x8e3dc + code);
-    x.c.a[1] = routine;
     match routine {
         0x8e488 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             x.set16(f::HP, 0);
@@ -83,11 +79,9 @@ fn hit_a(x: &mut Cx) {
         }
         x.set16(0xc, 0);
         x.add8(f::SUB2, 2);
-        x.call(0xe4bb6);
+        lib::sound(x, 0xe4bb6);
         if x.u8(REACTION) == 0x78 {
-            x.c.d[0] = 1;
-            x.c.d[1] = 0;
-            x.call(0xabec8);
+            lib::attack_effect(x, 1, 0);
         }
         paused(x);
         let stun = x.u8(STUN);
@@ -99,8 +93,6 @@ fn hit_a(x: &mut Cx) {
             d0 = d0.wrapping_neg();
             d1 = d1.wrapping_neg();
         }
-        setw(x, 0, d0);
-        setw(x, 1, d1);
         x.set16(0x14, d0);
         x.set16(0x16, d1);
         return hurt(x, 0);
@@ -111,10 +103,8 @@ fn hit_a(x: &mut Cx) {
     x.set8(0, 1);
     x.move_x();
     let mut d0 = x.u16(0x14);
-    setw(x, 0, d0);
     if x.u8(f::FLIP) != 0 {
         d0 = d0.wrapping_neg();
-        setw(x, 0, d0);
     }
     if (d0 as i16) < 0 {
         x.set32(0x14, 0);
@@ -166,7 +156,7 @@ fn generic(x: &mut Cx) {
                 return dying(x);
             }
             x.add8(f::SUB2, 2);
-            x.call(0xe4bb6);
+            lib::sound(x, 0xe4bb6);
             x.set8(0x87, 0);
             paused(x);
             let stun = x.u8(STUN);
@@ -174,10 +164,8 @@ fn generic(x: &mut Cx) {
             x.set8(0x90, 0x10);
             stop(x);
             let mut d0 = 0x500u16;
-            setw(x, 0, d0);
             if x.u8(f::FLIP) != 0 {
                 d0 = d0.wrapping_neg();
-                setw(x, 0, d0);
             }
             x.set16(0x14, d0);
             x.set16(0x18, 0x600);
@@ -198,9 +186,8 @@ fn generic(x: &mut Cx) {
             x.set16(0xc, 0);
             x.add8(f::SUB2, 2);
             stop(x);
-            x.c.d[0] = 8;
-            x.call(call::SOUND_B);
-            x.call(0xec892);
+            lib::shake_58(x, 8);
+            lib::sound(x, 0xec892);
             hurt(x, 2)
         }
         _ => {
@@ -217,11 +204,10 @@ fn fallen(x: &mut Cx) {
     x.set8(0, 1);
     x.set32(f::STATE, 0x0404_0000);
     x.set8(0x86, 1);
-    x.c.d[0] = 0;
     x.set8(0x87, 0);
     x.set8(REACTION, 0);
     x.set32(0x8a, 0);
-    x.call(0xf118)
+    lib::draw_84(x)
 }
 
 /// 0x8e69e : étourdissement (code 0x4c).
@@ -243,7 +229,7 @@ fn stun(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             let v = x.u16(0x84).wrapping_sub(8);
             x.set16(0x84, v);
-            x.call(0xe4bb6);
+            lib::sound(x, 0xe4bb6);
             paused(x);
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
@@ -257,7 +243,6 @@ fn stun(x: &mut Cx) {
         _ => {
             x.c.d[0] = 2;
             let d1 = rd16(x.b, x.o.0.wrapping_sub(0x7f92)) & 1;
-            setw(x, 1, d1);
             let mut d = 2u16;
             if d1 != 0 {
                 d = d.wrapping_neg();
@@ -302,10 +287,8 @@ fn throw(x: &mut Cx) {
                 x.set8(0x90, 1);
             }
             let mut d2 = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            x.c.d[2] = d2;
             x.random_68k();
             d2 &= 0xf;
-            setw(x, 2, d2 as u16);
             let d0 = ((x.c.d[0] as u16).wrapping_add(d2 as u16)) & 0x1f;
             setw(x, 0, d0);
             x.set8(0x2d, d0 as u8);
@@ -323,7 +306,7 @@ fn throw(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set32(0xc, 0);
             x.set32(0x18, 0);
-            x.call(0xec892);
+            lib::sound(x, 0xec892);
             if (x.u16(f::HP) as i16) > 0 {
                 return arc_end(x);
             }
@@ -346,7 +329,6 @@ fn arc_end(x: &mut Cx) {
 /// 0x8e7b4 : la tête décrit un arc (vecteurs de la table 0x1c94b6).
 fn arc(x: &mut Cx) {
     let a4 = 0x1c94b6;
-    x.c.a[4] = a4;
     let z = x.u32(0xc).wrapping_add(0x20000);
     x.set32(0xc, z);
     if !Fl::sub16(x.u16(0xc), 0x60).lt() {
@@ -369,18 +351,13 @@ fn arc(x: &mut Cx) {
     }
     x.c.d[0] = x.u8(0x2d) as u32;
     let i = (x.c.d[0] as u16) << 2;
-    setw(x, 0, i);
     let vx = x.data16(a4 + i as u32).wrapping_add(x.u16(0x16));
-    x.c.d[1] = vx as u32;
     x.set16(0x14, vx);
     let step = (((vx as u32) << 16) as i32 >> 8) as u32;
-    x.c.d[1] = step;
     x.add32(0x8, step);
     let vy = x.data16(a4 + 2 + i as u32).wrapping_add(x.u16(0x1e));
-    x.c.d[1] = vy as u32;
     x.set16(0x1c, vy);
     let step = (((vy as u32) << 16) as i32 >> 8) as u32;
-    x.c.d[1] = step;
     x.add32(0x10, step);
 }
 
@@ -399,7 +376,7 @@ fn stunned(x: &mut Cx) {
             sync(x);
         }
         0x8e988 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, 0x84, 1).gt() {
@@ -416,7 +393,6 @@ fn stunned(x: &mut Cx) {
                 return;
             }
             x.set8(0, 1);
-            x.c.d[0] = 0;
             x.set8(0x86, 0);
             x.set8(REACTION, 0);
             x.set32(0x58, 0);
@@ -428,11 +404,10 @@ fn stunned(x: &mut Cx) {
 
 /// 0x8e95a : durée de l'étourdissement (`+0xb8`, selon la difficulté), posée à la première image.
 fn wait_init(x: &mut Cx) {
-    if x.u8(SUB3) != 0 {
+    if x.u8(f::SUB3) != 0 {
         return;
     }
-    x.add8(SUB3, 2);
-    x.c.d[0] = 0;
+    x.add8(f::SUB3, 2);
     let level = x.a5_u8(0x7f92) >> 1;
     setb(x, 0, level);
     let v = x.rom8(0x8e978 + level as u32);
@@ -460,9 +435,10 @@ fn death(x: &mut Cx) {
             setw(x, 0, d0);
             wr16(x.b, A5.wrapping_sub(0x557c), d0);
             x.set16(TIMER, 0x10);
-            for a in [0xb780, 0xbad6, 0xe2f6, 0xe0a10, 0xe3b6c, 0x103ba] {
-                x.call(a);
-            }
+            lib::drop_rewards(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
+            lib::flash_and_shake(x);
             let mut d0 = 0x500u16;
             setw(x, 0, d0);
             if x.u8(f::FLIP) != 0 {
@@ -473,7 +449,7 @@ fn death(x: &mut Cx) {
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x80i16) as u16);
             hurt(x, 1);
-            x.call(0xe4c20)
+            lib::sound(x, 0xe4c20)
         }
         0x8ea6e => {
             x.anim_step();
@@ -486,8 +462,7 @@ fn death(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             stop(x);
             hurt(x, 3);
-            x.c.d[0] = 8;
-            x.call(call::SOUND_B)
+            lib::shake_58(x, 8)
         }
         _ => {
             x.anim_step();

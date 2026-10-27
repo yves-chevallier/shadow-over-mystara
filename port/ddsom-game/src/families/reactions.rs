@@ -13,6 +13,9 @@
 //! liaison en attente `+0x91` (bit 7) vers `+0x2a`/`+0x2b` ; orientation de l'agresseur `+0x4a`.
 
 use super::cx::Cx;
+use super::enemy_lib as lib;
+use super::enemy_common::var;
+use super::enemy_common::detach_from_host;
 use crate::mem::{rd16, rd32, rd8, rts};
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
@@ -89,14 +92,6 @@ mod rom {
     pub const PLAYER_HURT: u32 = 0x3bb52;
 }
 
-/// Sous-routines du moteur.
-mod call {
-    pub const LANDED: u32 = 0x3e480;
-    pub const SPAWN_EFFECT: u32 = 0xabec8;
-    pub const DEATH: u32 = 0x19ad6;
-    pub const BOSS_RECOVER: u32 = 0xf118;
-}
-
 // ---------------------------------------------------------------------------------------------
 // Aides
 
@@ -126,7 +121,7 @@ fn dead(x: &mut Cx) -> bool {
     (x.u16(f::HP) as i16) <= 0
 }
 fn paused(x: &mut Cx) -> bool {
-    x.a5_u8(0x3d) != 0
+    var::PAUSE.get(x.b) != 0
 }
 /// Mort : sous-état 6 (+ `+0` = 2).
 fn mark_dead(x: &mut Cx) {
@@ -152,7 +147,7 @@ fn move_xyz(x: &mut Cx) {
     x.move_xyz();
 }
 fn landed(x: &mut Cx) {
-    x.call(call::LANDED);
+    lib::landing_by_kind(x);
 }
 fn random(x: &mut Cx) -> u32 {
     let alea = x.random();
@@ -160,9 +155,7 @@ fn random(x: &mut Cx) -> u32 {
 }
 /// Effet `0xabec8` (D0 = variante, D1 = paramètre).
 fn effect(x: &mut Cx, d0: u32, d1: u32) {
-    x.c.d[0] = d0;
-    x.c.d[1] = d1;
-    x.call(call::SPAWN_EFFECT);
+    lib::attack_effect(x, d0, d1);
 }
 /// Indice des tables par type : type, plus 32 hors de la classe ENEMY.
 fn type_index(x: &mut Cx) -> u32 {
@@ -180,7 +173,6 @@ fn stun(x: &mut Cx) {
 fn anim(x: &mut Cx, n: u32) {
     x.c.d[0] = n;
     let i = 4 * type_index(x);
-    x.c.d[1] = i;
     let entry = rd32(x.b, rom::ANIM_SETS + i);
     if entry >> 16 != 0 {
         x.c.a[4] = entry;
@@ -188,7 +180,6 @@ fn anim(x: &mut Cx, n: u32) {
         // routine propre : `bsr 0x3e27e ; movea.l #jeu,A4 ; jmp 0x1a32`
         let routine = rom::ANIM_SETS + (entry & 0xffff);
         let v = x.u8(0xbf) as u32;
-        x.c.d[1] = v;
         let add = x.rom8(rom::ANIM_VARIANTS + v);
         x.c.d[0] = x.c.d[0] & !0xff | (x.c.d[0] as u8).wrapping_add(add) as u32;
         x.c.a[4] = (x.rom16(routine + 6) as u32) << 16 | x.rom16(routine + 8) as u32;
@@ -280,7 +271,6 @@ fn launch(x: &mut Cx, n: u32) {
     let c = x.rom8(rom::LAUNCH_COUNTERS + n);
     x.set8(f::COUNTER, c);
     let at = rom::LAUNCH_SPEEDS + 8 * n;
-    x.c.d[0] = 8 * n;
     for (k, off) in [f::VX, f::VY, f::VZ, f::GRAVITY].into_iter().enumerate() {
         let v = x.rom16(at + 2 * k as u32);
         x.set16(off, v);
@@ -338,7 +328,7 @@ fn fall_38(x: &mut Cx) {
 fn boss_3_hook(x: &mut Cx) {
     next(x);
     if x.u8(f::KIND) == 3 && x.u8(f::CLASS) == BOSS && x.u8(f::SUB) != 6 && x.u8(f::GRABBED) == 0 {
-        x.call(0x81ae0);
+        super::boss_3::counter_reaction(x);
     }
 }
 
@@ -432,18 +422,16 @@ fn get_up(x: &mut Cx) {
         return next_clear(x);
     }
     x.set8(f::DOWNED, 1);
-    x.c.a[6] = 0x3e0fc;
     grab_check(x, get_up_done);
 }
 /// 0x3df7c : fin de la glissade : l'objet se relève.
 fn slide_end(x: &mut Cx) {
     x.set32(0x16, 0);
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.set8(0x67, 1);
     }
     x.set8(f::ACTIVE, 1);
     x.set8(f::REACTION, 0);
-    x.c.a[6] = 0x3df9e;
     grab_check(x, resume_after_slide);
 }
 
@@ -456,9 +444,7 @@ fn grab_check(x: &mut Cx, then: fn(&mut Cx)) {
         if !x.c.cond(2) {
             x.set16(f::RECOVER, 1);
             let i = type_index(x);
-            x.c.d[0] = i;
             let keep = x.rom8(rom::NO_GRAB_DOWN + i);
-            x.c.d[0] = keep as u32;
             if keep == 0 {
                 let code = if x.u8(f::DOWNED) != 0 { 108 } else { 104 };
                 x.set8(f::REACTION, code);
@@ -479,7 +465,7 @@ fn get_up_done(x: &mut Cx) {
     x.set8(0x67, 0);
     x.set16(f::RECOVER, 1);
     if x.u8(f::REACTION) != 108 {
-        x.call(call::BOSS_RECOVER);
+        lib::draw_84(x);
     }
 }
 
@@ -491,8 +477,7 @@ fn resume_after_slide(x: &mut Cx) {
         x.set32(0x58, 0);
         x.set8(f::ACTIVE, 1);
         if x.u16(f::RESUME_STATE) == 0x205 {
-            x.call(0xad7c);
-            if !x.c.cond(7) {
+            if lib::roll_78(x) {
                 x.set32(f::STATE, saved);
                 x.set8(f::SUB_STEP, 0);
                 x.set32(f::RESUME_STATE, 0);
@@ -513,15 +498,14 @@ fn death(x: &mut Cx) {
     if x.u8(f::SUB_STEP) == 0 {
         x.set8(f::COUNTER, 40);
         next_sub(x);
-        for r in [0x27ee, 0xb780, 0xbad6, 0xe2f6] {
-            x.call(r);
-        }
+        detach_from_host(x);
+        lib::drop_rewards(x);
     }
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);
     if c == 0 {
         x.set32(f::STATE, 0x0600_0000);
-        return x.call(call::DEATH);
+        return lib::object_event(x);
     }
     blink(x, c);
 }
@@ -715,11 +699,7 @@ fn dust(x: &mut Cx) {
     if !was {
         return;
     }
-    x.c.d[0] = 0;
-    x.c.d[1] = x.c.d[1] & !0xffff | 1;
-    x.c.d[2] = 0;
-    x.c.d[3] = u32::MAX;
-    x.call(0xb10c8);
+    lib::shock(x, 0, 1, 0, 0xffff);
 }
 
 /// 0x3c270 : glissade ; arrêtée, l'ENEMY de type 0 attend l'événement de son animation pour l'animation 7.
@@ -823,7 +803,7 @@ fn skim_flight(x: &mut Cx) {
             if x.u32(f::HEIGHT) as i32 <= 0 {
                 return next(x);
             }
-            let camera = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+            let camera = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             let dx = x.u16(f::X).wrapping_sub(camera);
             x.c.d[0] = x.c.d[0] & !0xffff | dx as u32;
             if dx <= 0x180 && x.u8(f::BLOCKED) == 0 {
@@ -891,7 +871,6 @@ fn pop_by_code(x: &mut Cx) {
     hurt(x);
     x.set8(f::COUNTER, 1);
     let i = (x.u8(f::REACTION) as u32).wrapping_sub(68) & 0xffff;
-    x.c.d[0] = i;
     let at = 0x3c5f2u32.wrapping_add(i as u16 as i16 as i32 as u32);
     let (vz, g) = (x.rom16(at), x.rom16(at + 2));
     speeds(x, 0x100, 0, vz, g);
@@ -957,7 +936,7 @@ fn held_end(x: &mut Cx) {
         x.set8(f::ACTIVE, 2);
     }
     if x.u8(f::CLASS) == BOSS {
-        x.call(0xff54);
+        lib::countdown_then_state(x);
         return anim_step(x);
     }
     x.set32(0x16, 0);
@@ -973,7 +952,6 @@ fn sparks(x: &mut Cx) {
         return;
     }
     for v in [1u8, 0] {
-        x.c.d[5] = v as u32;
         // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
         let o = x.alloc_unchecked(&pools::EFFCT);
         o.set_u8(x.b, 0, 1);
@@ -981,7 +959,6 @@ fn sparks(x: &mut Cx) {
         o.set_u8(x.b, 3, v);
         o.set_u16(x.b, 0x5c, x.o.0 as u16);
     }
-    x.c.d[5] = 0xffff;
 }
 
 /// 0x3c828 : désintégration (ENEMY de type 1 : 0xeb448, sinon 0xe35a6), puis clignotement et disparition.
@@ -1004,7 +981,7 @@ fn disintegrate(x: &mut Cx) -> bool {
     if x.u8(f::SUB_STEP) == 0 {
         x.set8(f::COUNTER, 40);
         next_sub(x);
-        x.call(0x27ee);
+        detach_from_host(x);
     }
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);
@@ -1129,7 +1106,7 @@ fn hop(x: &mut Cx) {
 /// 0x3cacc : monte jusqu'au haut de l'écran (0x110 au-dessus de la caméra), puis 0x3cafc.
 fn hop_rise(x: &mut Cx) {
     move_xz(x);
-    let camera = if x.a5_u8(0x36) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(0x50a) };
+    let camera = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) };
     x.c.d[0] = x.c.d[0] & !0xffff | camera as u32;
     let d1 = x.u16(f::HEIGHT).wrapping_add(x.u16(f::Y)).wrapping_sub(camera);
     x.c.d[1] = x.c.d[1] & !0xffff | d1 as u32;
@@ -1141,7 +1118,6 @@ fn hop_rise(x: &mut Cx) {
 /// 0x3cafc : quand l'objet lié (`+0x54`) est au sous-pas 4, retombe d'une hauteur aléatoire (animation 11).
 fn hop_top(x: &mut Cx) {
     let a1 = x.u16(0x54) as i16 as i32 as u32;
-    x.c.a[1] = a1;
     if rd8(x.b, a1 + 7) != 4 {
         return;
     }
@@ -1160,8 +1136,7 @@ fn hop_land(x: &mut Cx) {
         return;
     }
     hurt(x);
-    x.c.d[0] = x.c.d[0] & !0xffff | 8;
-    x.call(0x2824);
+    lib::shake_54(x, 8);
 }
 
 /// 0x3cbaa : projection vers l'arrière (compteur 1, X 0x200, hauteur 0x600).
@@ -1287,7 +1262,7 @@ fn floored(x: &mut Cx, stars: bool) {
         defer_link(x);
     }
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
     if stars {
         effect(x, 8, 0);
     }
@@ -1312,8 +1287,7 @@ fn floored_wait(x: &mut Cx, cry: bool) {
     next_clear(x);
     x.set8(f::COUNTER, 0);
     if cry {
-        x.c.d[0] = 1;
-        x.call(0xab7d8);
+        lib::debris_spray(x, 1);
     }
 }
 fn floored_wait_cry(x: &mut Cx) {
@@ -1328,8 +1302,7 @@ fn unpaused_cry(x: &mut Cx) {
         return;
     }
     next_clear(x);
-    x.c.d[0] = 1;
-    x.call(0xab7d8);
+    lib::debris_spray(x, 1);
 }
 fn unpaused_next(x: &mut Cx) {
     if paused(x) {
@@ -1352,7 +1325,7 @@ fn floored_9(x: &mut Cx) {
     speeds(x, 0x200, 0, 0x400, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
     effect(x, 9, 0);
 }
 
@@ -1394,7 +1367,6 @@ fn seized_by(x: &mut Cx) {
 /// 0x3d048 : quand le joueur (`+0x50`) signale la prise, l'objet se place devant lui.
 fn seized_stick(x: &mut Cx) {
     let p = x.u16(f::OWNER) as i16 as i32 as u32;
-    x.c.a[6] = p;
     if rd8(x.b, p + 0x33) != 1 {
         return;
     }
@@ -1406,7 +1378,6 @@ fn seized_stick(x: &mut Cx) {
     if !flipped(x) {
         d = d.wrapping_neg();
     }
-    x.c.d[0] = d as u32;
     x.add16(f::X, d);
 }
 /// 0x3d0e8 : le joueur (personnage 5, état 0x02000cxx, action 26) frappe : dégâts selon son coup (`+0x10c`,
@@ -1465,7 +1436,7 @@ fn released(x: &mut Cx) {
     if flipped(x) {
         neg32(x, f::VX);
     }
-    x.call(0xfe5a);
+    lib::set_immunities(x);
 }
 
 /// 0x3d26a : coup reçu par un objet saisi (`+0x87`) ou non ; selon la hauteur, recul (code 0) ou coup bas (56).
@@ -1505,9 +1476,7 @@ fn grab_hit(x: &mut Cx) {
     }
     anim(x, 2);
     let flip = x.u8(f::FLIP) ^ 0x20;
-    x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
     x.set8(f::ATTACKER_FLIP, flip);
-    x.c.d[0] = 0;
     launch(x, 0);
     face_attacker(x);
 }
@@ -1656,18 +1625,13 @@ fn zapped_burn(x: &mut Cx) {
     if c == 0 {
         x.call(0xb3c14);
         x.set32(f::STATE, 0x0600_0000);
-        x.call(0x27ee);
-        return x.call(call::DEATH);
+        detach_from_host(x);
+        return lib::object_event(x);
     }
-    x.c.d[0] = x.c.d[0] & !0xff | (c & 7) as u32;
     if c & 7 != 0 {
         return;
     }
-    x.c.d[0] = 7;
-    x.c.d[1] = x.c.d[1] & !0xffff | 0x200;
-    x.c.d[2] = 0;
-    x.c.d[3] = x.c.d[3] & !0xffff | 0xffff;
-    x.call(0xb10c8);
+    lib::shock(x, 7, 0x200, 0, 0xffff);
     if x.c.sr & m68k::SR_C != 0 {
         return;
     }
@@ -1689,7 +1653,7 @@ fn petrified(x: &mut Cx) {
     if x.u16(f::HEIGHT) as i16 <= 0 {
         next(x);
         x.set8(f::COUNTER, 40);
-        return x.call(0xebc4c);
+        return lib::sound(x, 0xebc4c);
     }
     x.set16(f::VZ, 0);
     x.set16(f::GRAVITY, -64i16 as u16);
@@ -1709,11 +1673,10 @@ fn petrified_end(x: &mut Cx) {
     if paused(x) {
         return;
     }
-    x.c.d[0] = 5;
-    x.call(0xab7d8);
+    lib::debris_spray(x, 5);
     x.set32(f::STATE, 0x0600_0000);
-    x.call(0x27ee);
-    x.call(call::DEATH);
+    detach_from_host(x);
+    lib::object_event(x);
 }
 
 /// 0x3d762 (code 0x5c...) : en l'air, projection (code 4) ; mort au sol ; sinon tremblement de 60 images puis
@@ -1730,7 +1693,6 @@ fn stagger(x: &mut Cx) {
     }
     next(x);
     x.c.d[0] = 5;
-    x.c.d[1] = 0;
     x.set8(f::COUNTER, 60);
     stun(x);
     x.set16(f::VX, 0x180);
@@ -1770,7 +1732,7 @@ fn hop_back(x: &mut Cx) {
 /// 0x3d882 : brûlé (0xe909a), animation D0 laissé tel quel, six étoiles (0xabec8(4)).
 fn burnt(x: &mut Cx) {
     x.set8(0x67, 0);
-    x.call(0xe909a);
+    lib::sound(x, 0xe909a);
     apply_pending(x);
     next(x);
     x.set8(f::ACTIVE, 1);
@@ -1784,21 +1746,10 @@ fn burnt(x: &mut Cx) {
     x.set8(f::DOWNED, 0);
     x.set8(f::GRABBED, 0);
     x.set8(f::COUNTER, 0xf0);
-    x.c.d[6] = 15;
     let n = x.c.d[0];
     anim(x, n);
-    x.c.d[0] = 4;
-    x.c.d[1] = 5;
-    loop {
-        x.call(call::SPAWN_EFFECT);
-        if x.c.sr & m68k::SR_C != 0 {
-            return x.set8(f::STEP, 6);
-        }
-        let n = (x.c.d[1] as u16).wrapping_sub(1);
-        x.c.d[1] = x.c.d[1] & !0xffff | n as u32;
-        if n == 0xffff {
-            return;
-        }
+    if !lib::attack_effects(x, 4, 5) {
+        x.set8(f::STEP, 6);
     }
 }
 fn burnt_fall(x: &mut Cx) {
@@ -1828,7 +1779,6 @@ fn burnt_wait(x: &mut Cx) {
 /// Angle de départ d'un tourbillon : au hasard, centré à gauche (8) ou à droite (24) selon l'orientation.
 fn spin_angle(x: &mut Cx) {
     let d2 = if flipped(x) { 24 } else { 8 };
-    x.c.d[2] = d2;
     let r = random(x);
     let a = (r as u16).wrapping_add(d2 as u16 & 15) & 31;
     x.c.d[0] = x.c.d[0] & !0xffff | a as u32;
@@ -1865,21 +1815,17 @@ fn turn_angle(x: &mut Cx) {
 /// 0x3da0e : position sur le cercle (table 0x1c94b6 : X, profondeur), vitesses ajoutées.
 fn orbit(x: &mut Cx) {
     const CIRCLE: u32 = 0x1c94b6;
-    x.c.a[4] = CIRCLE;
     let i = 4 * x.u8(f::ANGLE) as u32;
-    x.c.d[0] = i;
     let vx = rd16(x.b, CIRCLE + i).wrapping_add(x.u16(f::VY));
     x.set16(f::VX, vx);
     x.add32(f::X, ((vx as i16 as i32) << 8) as u32);
     let vy = rd16(x.b, CIRCLE + i + 2).wrapping_add(x.u16(f::VY2));
     x.set16(f::VX2, vy);
     let d = ((vy as i16 as i32) << 8) as u32;
-    x.c.d[1] = d;
     x.add32(f::Y, d);
 }
 /// 0x3d9b2 : monte en tournant jusqu'à 96, puis retombe.
 fn whirl_rise(x: &mut Cx) {
-    x.c.a[4] = 0x1c94b6;
     x.add32(f::HEIGHT, 0x2_0000);
     if x.u16(f::HEIGHT) as i16 >= 96 {
         next(x);
@@ -1934,7 +1880,6 @@ fn spin_rise(x: &mut Cx) {
     if c == 0 {
         return next(x);
     }
-    x.c.a[4] = 0x1c94b6;
     x.add32(f::HEIGHT, 0x2_0000);
     if x.u16(f::HEIGHT) as i16 >= 64 {
         x.set32(f::HEIGHT, 0x0040_0000);
@@ -1963,7 +1908,7 @@ fn spin_drop(x: &mut Cx) {
     orient_speeds(x);
     defer_link(x);
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
 }
 /// 0x3dada : variante : animation 17 et étoiles 0xabec8(8).
 fn spin_drop_stars(x: &mut Cx) {
@@ -1976,7 +1921,7 @@ fn spin_drop_stars(x: &mut Cx) {
     x.set16(f::GRAVITY, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    x.call(0xebbda);
+    lib::sound(x, 0xebbda);
     effect(x, 8, 0);
 }
 /// 0x3dbb4 : animation ; chute jusqu'au sol, puis attente de la fin du compteur.
@@ -2069,7 +2014,7 @@ type Step = fn(&mut Cx);
 /// un pas inconnu (le code d'origine s'en charge).
 fn dispatch(x: &mut Cx, table: u32, steps: &[Step]) -> bool {
     let s = x.u8(f::STEP);
-    x.c.d[0] = s as u32;
+    x.c.d[0] = s as u32; // relu : D0 relu par la suite (DDSOM_POISON : cov_tour2_c1...)
     let off = x.rom16(table + s as u32);
     x.c.d[1] = x.c.d[1] & !0xffff | off as u32;
     match steps.get(s as usize / 2) {
@@ -2323,6 +2268,20 @@ fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     let at = set.wrapping_add(off as i16 as i32 as u32);
     c.a[4] = load_entry(b, o, at, true);
     rts(c, b);
+}
+
+/// Exécute la routine de réaction commune `entry` si c'en est une (faux sinon) : appel direct depuis
+/// `enemy_common::react`, sans passer par la native.
+pub fn run_common(x: &mut Cx, entry: u32) -> bool {
+    if !NATIVES.iter().any(|n| n.entry == entry) {
+        return false;
+    }
+    // comme l'appel par adresse : A0 = l'objet, A5 = la RAM de travail
+    x.c.a[0] = x.o.0;
+    x.c.a[5] = crate::mem::A5;
+    let step = x.u8(f::STEP);
+    assert!(run_entry_flag(x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
+    true
 }
 
 /// Exécute la routine de réaction `entry` (RTS compris). Tous les pas des tables d'origine sont réécrits : le pas

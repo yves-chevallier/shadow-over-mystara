@@ -111,7 +111,6 @@ fn enter(x: &mut Cx, target: u32) {
 /// `move.w (tbl,PC,Dn),Dn ; jmp (tbl,PC,Dn)` : adresse d'arrivée pour l'indice `i` (mot de `D0` mis à jour).
 fn jump(x: &mut Cx, table: u32, i: u16) -> u32 {
     let off = x.rom16(table + i as u32);
-    setw(x, 0, off);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 

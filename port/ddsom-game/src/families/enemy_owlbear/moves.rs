@@ -2,6 +2,7 @@
 
 use super::stance::engage;
 use super::*;
+use crate::objects::Obj;
 
 /// Retour en garde, puis test de la portée de la cible (0x5e980).
 fn back_on_guard(x: &mut Cx) {
@@ -45,7 +46,7 @@ fn stand(x: &mut Cx) {
 /// Course vers la cible : `timer` images, direction `angle`, animation `want`/`n`, vitesse `speed_n`.
 fn dash_begin(x: &mut Cx, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
     x.add8(0x7, 2);
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
     x.set8(TIMER, timer);
     x.set8(VULNERABLE, 1);
     pose(x, want, SET_BODY, n);

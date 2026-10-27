@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(BLINK_ON) != 0 {
@@ -15,7 +16,7 @@ pub(super) fn run(x: &mut Cx) {
     }
     match x.u8(f::SUB2) {
         0 => {
-            if x.u8(STEP) == 0 {
+            if x.u8(f::SUB3) == 0 {
                 begin_walk(x);
             } else {
                 walk(x);
@@ -26,28 +27,27 @@ pub(super) fn run(x: &mut Cx) {
         6 => jump(x),
         _ => {}
     }
-    if x.a5_u8(0x35) == 0 && (x.u16(HEIGHT) as i16) <= 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 && (x.u16(Obj::Z) as i16) <= 0 {
         set_state_long(x, IDLE);
     }
 }
 
 /// 0x5a08a : le troglodyte se met en marche vers sa cible.
 fn begin_walk(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(AI_SHOT, 0x14);
     x.set8(VULNERABLE, 1);
     x.set16(LOOK, 0);
     body(x, 2);
-    x.c.d[0] = 0;
     walk_speed(x, 0);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
 }
 
 /// 0x5a0ce : marche ; se retourne, attend ou attaque ; saisi par un joueur, il part en chute.
 fn walk(x: &mut Cx) {
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     if grabbed(x) {
         x.set16(f::STATE, 0x408);
         x.set16(f::SUB2, 0);
@@ -57,16 +57,15 @@ fn walk(x: &mut Cx) {
     let n = x.u8(AI_WALK).wrapping_sub(1);
     x.set8(AI_WALK, n);
     if (n as i8) < 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         if !pick_target(x) {
             return;
         }
         let n = x.u8(AI_CHOICE).wrapping_sub(1);
         x.set8(AI_CHOICE, n);
         if n == 0 {
-            x.call(call::TURN_TO_TARGET);
-            x.call(call::RAND_TARGET_CHECK);
-            if !x.c.cond(7) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 return x.set16(f::SUB2, 0x400);
             }
         }
@@ -76,7 +75,7 @@ fn walk(x: &mut Cx) {
 
 /// 0x5a13c : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
 fn decide(x: &mut Cx) {
-    if target_in_box(x, -0x20, 0x20, 8) {
+    if lib::target_in_box(x, -0x20, 0x20, 8) {
         set_state_long(x, 0x0204_1600);
         x.set8(RESUME, 6);
         return blink_if_running(x);
@@ -87,11 +86,11 @@ fn decide(x: &mut Cx) {
     if side_box(x) {
         return pick_attack_far(x);
     }
-    if target_in_box_far(x, -0x38, 0x38, 8) {
+    if lib::guard_in_front_strict(x, -0x38, 0x38, 8) {
         let hint = x.u8(f::SUB2);
         x.set8(RESUME, hint);
         x.set16(f::SUB2, 0x1600);
-        return x.call(call::ANNOUNCE);
+        return lib::pick_byte(x);
     }
     step(x);
     move_xy(x);
@@ -104,7 +103,7 @@ fn decide(x: &mut Cx) {
     }
     if needs_turn_around(x) {
         x.add8(f::SUB2, 2);
-        x.set8(STEP, 0);
+        x.set8(f::SUB3, 0);
     }
 }
 
@@ -114,15 +113,14 @@ pub(super) fn pick_attack_close(x: &mut Cx) {
     let mv = pick_byte(x, table);
     x.c.d[4] = x.c.d[4] & !0xff | mv as u32;
     if mv <= 8 {
-        x.call(call::PICK_ATTACK_KIND);
-        if !x.c.cond(7) {
+        if lib::chance_10_16(x) {
             return x.set8(AI_SHOT, 0x15);
         }
     }
     blink_if_running(x);
     x.set8(f::SUB, 4);
     x.set8(RESUME, mv);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
     x.set8(f::SUB2, 0x16);
 }
 
@@ -133,7 +131,7 @@ pub(super) fn pick_attack_far(x: &mut Cx) {
     if rand_and(x, 1) != 0 {
         x.add8(RESUME, 2);
     }
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
     x.set8(f::SUB2, 0x16);
     blink_if_running(x);
 }
@@ -141,26 +139,26 @@ pub(super) fn pick_attack_far(x: &mut Cx) {
 /// 0x5a208 : bond de la série 1 vers la cible.
 fn begin_jump(x: &mut Cx) {
     x.set8(f::SUB2, 6);
-    x.set8(STEP, 2);
-    x.set16(SPEED_Z, 0x500);
-    x.set16(GRAVITY, -0x38i16 as u16);
-    x.set16(SPEED_X, 0x300);
-    x.set16(SPEED_Y, 0);
+    x.set8(f::SUB3, 2);
+    x.set16(Obj::VZ, 0x500);
+    x.set16(Obj::AZ, -0x38i16 as u16);
+    x.set16(Obj::VX, 0x300);
+    x.set16(Obj::AX, 0);
     if x.u8(f::FLIP) == 0 {
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
     body(x, 0xa);
 }
 
 /// `+6` = 6 : bond d'approche (étape 0 : envol, 2 : montée et chute, 4 : réception).
 fn jump(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => begin_jump(x),
         2 => {
             x.move_xz();
-            if step(x) && (x.u16(HEIGHT) as i16) < 0 {
-                x.add8(STEP, 2);
-                x.set16(HEIGHT, 0);
+            if step(x) && (x.u16(Obj::Z) as i16) < 0 {
+                x.add8(f::SUB3, 2);
+                x.set16(Obj::Z, 0);
                 body(x, 0xc);
             }
         }
@@ -169,7 +167,7 @@ fn jump(x: &mut Cx) {
                 x.set16(f::SUB2, 0);
                 if needs_turn_around(x) {
                     x.set8(f::SUB2, 2);
-                    x.set8(STEP, 0);
+                    x.set8(f::SUB3, 0);
                 }
             }
         }
@@ -179,8 +177,8 @@ fn jump(x: &mut Cx) {
 
 /// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
@@ -194,8 +192,8 @@ fn turn(x: &mut Cx) {
 
 /// `+6` = 4 : attente.
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(LOOK_PREV, 1);
         return body(x, 0);
@@ -214,7 +212,7 @@ pub(super) fn rest(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         return rest_begin(x);
     }
-    if x.a5_u8(0x35) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, STANCE);
         pick_target(x);
     } else {

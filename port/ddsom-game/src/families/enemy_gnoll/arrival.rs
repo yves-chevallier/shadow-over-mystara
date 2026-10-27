@@ -3,10 +3,10 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(VARIANT) as u32;
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => walk_in(x),
         2 => drop_in(x, true),
         4 => side_jump(x),
@@ -32,7 +32,7 @@ fn walk_in(x: &mut Cx) {
     x.add8(f::SUB2, 2);
     x.set8(TIMER, 0x14);
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x12);
     mv(x, 1);
 }
@@ -40,11 +40,10 @@ fn walk_in(x: &mut Cx) {
 /// Variantes 2 et 6 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc`) avant de se
 /// relever, la variante 6 se relève tout de suite.
 fn drop_in(x: &mut Cx, gravity: bool) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
-            x.set16(SPEED_Z, 0);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            x.set16(Obj::VZ, 0);
+            x.set16(Obj::AZ, -0x40i16 as u16);
             x.add8(f::SUB2, 2);
             mv(x, 3);
         }
@@ -56,12 +55,12 @@ fn drop_in(x: &mut Cx, gravity: bool) {
         4 => {
             if gravity {
                 x.move_z();
-                if (x.u16(HEIGHT) as i16) > 0 {
+                if (x.u16(Obj::Z) as i16) > 0 {
                     return;
                 }
             }
             x.add8(f::SUB2, 2);
-            x.set32(HEIGHT, 0);
+            x.set32(Obj::Z, 0);
             mv(x, 5);
         }
         6 => {
@@ -75,16 +74,15 @@ fn drop_in(x: &mut Cx, gravity: bool) {
 
 /// Variante 4 : bond par le côté (vitesse horizontale −0x280), coup en l'air, retombée.
 fn side_jump(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_Z, 0);
-            x.set16(GRAVITY, -0x38i16 as u16);
-            x.set16(SPEED_X, -0x280i16 as u16);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::VZ, 0);
+            x.set16(Obj::AZ, -0x38i16 as u16);
+            x.set16(Obj::VX, -0x280i16 as u16);
+            x.set16(Obj::AX, 0);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
             mv(x, 3);
         }
@@ -99,12 +97,12 @@ fn side_jump(x: &mut Cx) {
         }
         6 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) <= 0 {
+            if (x.u16(Obj::Z) as i16) <= 0 {
                 x.add8(f::SUB2, 2);
-                x.set32(HEIGHT, 0);
+                x.set32(Obj::Z, 0);
                 return mv(x, 5);
             }
-            if (x.u16(HEIGHT) as i16) > 0x30 {
+            if (x.u16(Obj::Z) as i16) > 0x30 {
                 return;
             }
             x.anim_step();
@@ -120,10 +118,10 @@ fn side_jump(x: &mut Cx) {
 
 /// L'arme se pose (clé 9) ou se reprend (clé 0xb) pendant les animations d'arrivée armée.
 fn weapon_key_drop(x: &mut Cx) {
-    if x.u8(KEY) == 9 {
-        x.set8(KEY, 0);
+    if x.u8(f::KEY_FRAME) == 9 {
+        x.set8(f::KEY_FRAME, 0);
         x.set8(WEAPON, 0);
-        x.call(call::DROP_WEAPON);
+        lib::eshl_12(x);
     }
 }
 
@@ -139,7 +137,7 @@ fn armed_in(x: &mut Cx) {
             x.set8(TIMER, 0x1a);
             set_speed(x, 0x17);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             strike(x, 4);
         }
         2 => armed_run(x),
@@ -154,10 +152,9 @@ fn armed_in(x: &mut Cx) {
             if x.anim_step() {
                 return set_state_long(x, STANCE);
             }
-            if x.u8(KEY) == 0xb {
-                x.c.d[0] = 1;
-                x.call(call::TAKE_WEAPON);
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 0xb {
+                lib::eshl_16(x, 1);
+                x.set8(f::KEY_FRAME, 0);
                 x.set8(ARMED, 0);
             }
         }
@@ -180,7 +177,6 @@ fn armed_run(x: &mut Cx) {
 
 /// Variante 10 : le Gnoll entre par le bord de l'écran avec sa hache ; saisi aussitôt la course finie.
 fn armed_run_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -190,9 +186,9 @@ fn armed_run_in(x: &mut Cx) {
             x.set8(TIMER, 0x1a);
             set_speed(x, 0x17);
             let (angle, shift) = if x.u8(f::FLIP) != 0 { (8, -0x20i16) } else { (0x18, 0x1a0) };
-            x.set8(ANGLE, angle);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
-            x.set16(X, cam.wrapping_add(shift as u16));
+            x.set8(Obj::SPEED_INDEX, angle);
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
+            x.set16(Obj::X, cam.wrapping_add(shift as u16));
             strike(x, 4);
         }
         2 => armed_run(x),

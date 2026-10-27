@@ -42,24 +42,23 @@ fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
 
 /// Fin d'attaque : l'absence de joueurs l'emporte ; sinon `to`.
 fn finish(x: &mut Cx, to: fn(&mut Cx)) {
-    x.call(0x10474);
-    if zero(x) {
+    if !lib::any_player_alive(x) {
         return decide::wait(x);
     }
     to(x);
 }
 
 fn step_only(x: &mut Cx) {
-    step(x);
+    lib::step(x);
 }
 
 /// Consomme le bit 0 de l'image-clé `+0x33`.
 fn key_bit0(x: &mut Cx) -> bool {
-    if x.u8(KEY) & 1 == 0 {
+    if x.u8(f::KEY_FRAME) & 1 == 0 {
         return false;
     }
-    let k = x.u8(KEY) & !1;
-    x.set8(KEY, k);
+    let k = x.u8(f::KEY_FRAME) & !1;
+    x.set8(f::KEY_FRAME, k);
     true
 }
 
@@ -71,9 +70,9 @@ fn end_shot(x: &mut Cx, to: fn(&mut Cx)) {
 
 /// Un pas de l'animation, plus un dernier effet par image-clé (0xe5e2a).
 fn step_with_spark(x: &mut Cx) -> bool {
-    if !step(x) {
+    if !lib::step(x) {
         if key_bit0(x) {
-            x.call(0xe5e2a);
+            lib::sound(x, 0xe5e2a);
         }
         return false;
     }
@@ -86,11 +85,11 @@ fn strike_0(x: &mut Cx) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            x.call(0xe5e2a);
+            lib::sound(x, 0xe5e2a);
             strike_anim(x, 0x10, 0);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 finish(x, decide::chase);
             }
         }
@@ -107,7 +106,7 @@ fn sidestep(x: &mut Cx) {
             x.set16(TIMER, 0x1e);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
             x.set16(0x16, vz as u16);
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x21);
             strike_anim(x, 0x11, 1);
         }
@@ -119,9 +118,9 @@ fn sidestep(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x14);
             x.set16(0x16, 0);
-            x.call(0xe5e2a);
-            let a = x.u8(ANGLE) ^ 0x10;
-            x.set8(ANGLE, a);
+            lib::sound(x, 0xe5e2a);
+            let a = x.u8(Obj::SPEED_INDEX) ^ 0x10;
+            x.set8(Obj::SPEED_INDEX, a);
             speed(x, 0x35);
             strike(x, 2);
         }
@@ -133,7 +132,7 @@ fn sidestep(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x1e);
             let mut v: i16 = 0x2c;
-            if x.u8(ANGLE) != 0x18 {
+            if x.u8(Obj::SPEED_INDEX) != 0x18 {
                 v = -v;
             }
             x.set16(0x16, v as u16);
@@ -163,14 +162,13 @@ fn gesture(x: &mut Cx) {
             if !step_with_spark(x) {
                 return;
             }
-            x.call(0x10474);
-            if zero(x) {
+            if !lib::any_player_alive(x) {
                 return decide::wait(x);
             }
             if (x.u8(BUDGET_4) as i8) <= 0 {
                 return decide::stand(x);
             }
-            let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+            let players = var::PLAYERS_ALIVE.get(x.b) as u32;
             if players == 0 {
                 return decide::wait(x);
             }
@@ -199,7 +197,7 @@ fn chase_spell(x: &mut Cx) {
         0 => {
             x.add8(0x7, 2);
             x.set8(SHOT, 0x2b);
-            x.call(call::ASK_TARGET);
+            lib::approach_target(x);
             speed(x, 0x21);
             x.set8(ANIM_KIND, 0x13);
             x.set8(ANIM_LAST, 0x13);
@@ -209,17 +207,16 @@ fn chase_spell(x: &mut Cx) {
             if !sub16(x, CHASE_TIME, 1).gt() {
                 return end_chase(x);
             }
-            x.call(call::TURN_NEEDED);
-            if !zero(x) {
+            if !lib::faces_target(x) {
                 return decide::interrupt(x);
             }
-            if target_in_box(x, -0x50, 0x20, 8) {
+            if lib::target_in_box(x, -0x50, 0x20, 8) {
                 x.add8(0x7, 2);
                 return strike(x, 5);
             }
             if !sub8(x, AIM_TICK, 1).gt() {
                 x.set8(AIM_TICK, 2);
-                x.call(call::ASK_TARGET);
+                lib::approach_target(x);
                 speed(x, 0x21);
             }
             x.move_by_table_xy();
@@ -235,8 +232,7 @@ fn chase_spell(x: &mut Cx) {
             if (x.u16(CHASE_TIME) as i16) <= 0 {
                 return end_chase(x);
             }
-            x.call(0x10474);
-            if zero(x) {
+            if !lib::any_player_alive(x) {
                 return decide::wait(x);
             }
             x.set8(0x7, 2);
@@ -260,7 +256,7 @@ fn hop_back(x: &mut Cx) {
             x.set16(0x18, 0x580);
             x.set16(0x1a, (-0x38i16) as u16);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (0x18, 0x10i16) } else { (8, -0x10) };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
             speed(x, 0x21);
             strike_anim(x, 0x14, 6);
@@ -272,7 +268,7 @@ fn hop_back(x: &mut Cx) {
             }
             x.add8(0x7, 2);
             x.set16(0x16, 0);
-            x.call(0xe5e2a);
+            lib::sound(x, 0xe5e2a);
             strike(x, 7);
         }
         4 => {
@@ -347,7 +343,7 @@ fn ball(x: &mut Cx) {
             x.set16(TIMER, 0xa);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            x.call(0xe5ffa);
+            lib::sound(x, 0xe5ffa);
             step_only(x);
         }
         6 => {
@@ -373,12 +369,12 @@ fn beam(x: &mut Cx) {
         }
         2 => {
             step_only(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             let Some(shot) = x.alloc(&pools::ESHL) else { return end_shot(x, decide::stand) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
@@ -404,7 +400,7 @@ fn beam(x: &mut Cx) {
             x.set16(TIMER, 0x5a);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            x.call(0xe606e);
+            lib::sound(x, 0xe606e);
             step_only(x);
         }
         6 => {
@@ -482,17 +478,17 @@ fn spawn_blast(x: &mut Cx) {
     if (x.u8(SPAWNED) as i8) > 0 {
         return;
     }
-    x.call(0xe6156);
+    lib::sound(x, 0xe6156);
     x.set8(SPAWNED, 0);
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * 2;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * 2;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let mut d5 = x.rom8(0x992ca + level + players.saturating_sub(1)) as i8 as i16 as u16;
     loop {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
         let dx = x.rom16(0x9930a + i);
         let dy = x.rom16(0x9930c + i);
-        let px = dx.wrapping_add(x.a5_u16(var::CAMERA1_X));
-        let py = dy.wrapping_add(x.a5_u16(var::CAMERA1_Y));
+        let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
+        let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         set_dw(x, 0, px);
         set_dw(x, 2, py);
         x.c.d[1] = 0;
@@ -511,7 +507,7 @@ fn shockwave(x: &mut Cx) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            x.call(0xe5e9e);
+            lib::sound(x, 0xe5e9e);
             set_abs8(x, 0xff8043, 0x7f);
             sub8(x, BUDGET_C, 1);
             x.set16(TIMER, 6);
@@ -538,24 +534,20 @@ fn shockwave(x: &mut Cx) {
                 match n {
                     3 => {
                         x.set16(TIMER, 0x20);
-                        x.c.d[0] = 0x20;
-                        return x.call(call::SOUND_EVENT);
+                        return lib::shake_54(x, 0x20);
                     }
                     2 => {
                         x.set16(TIMER, 0x14);
-                        x.c.d[0] = 0x14;
-                        x.call(0x289c);
+                        lib::shake_5c(x, 0x14);
                     }
                     1 => {
                         x.set8(INVULNERABLE, 0);
                         x.set16(TIMER, 0x14);
-                        x.c.d[0] = 0x14;
-                        x.call(0x2860);
+                        lib::shake_58(x, 0x14);
                     }
                     _ => {
                         x.set16(TIMER, 0xa);
-                        x.c.d[0] = 0xa;
-                        return x.call(call::SOUND_EVENT);
+                        return lib::shake_54(x, 0xa);
                     }
                 }
             }
@@ -563,7 +555,7 @@ fn shockwave(x: &mut Cx) {
             step_only(x);
         }
         6 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.add8(0x7, 2);
@@ -586,7 +578,7 @@ fn shockwave(x: &mut Cx) {
 
 /// 0x99184 : réapparition dans l'un des neuf points autour de la caméra, selon la position du Lich.
 fn place_after_teleport(x: &mut Cx) {
-    let cam = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+    let cam = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
     let here = x.u16(0x8);
     let mut d5 = 0u32;
     if Fl::sub16(cam, here).lt() {
@@ -596,7 +588,7 @@ fn place_after_teleport(x: &mut Cx) {
     } else if !Fl::sub16(cam.wrapping_sub(0x70), here).ge() {
         d5 = 0x20;
     }
-    let camy = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x54);
+    let camy = var::CAMERA1_Y.get(x.b).wrapping_add(0x54);
     let y = x.u16(0x10);
     if Fl::sub16(camy, y).lt() {
         if !Fl::sub16(camy.wrapping_add(0x16), y).lt() {
@@ -616,11 +608,11 @@ fn teleport(x: &mut Cx) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            x.call(0xe60e2);
+            lib::sound(x, 0xe60e2);
             strike_anim(x, 0x18, 0xd);
         }
         2 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.add8(0x7, 2);
@@ -634,11 +626,11 @@ fn teleport(x: &mut Cx) {
             x.add8(0x7, 2);
             place_after_teleport(x);
             x.set_bit(0x1, 1, false);
-            x.call(0xecf10);
+            lib::sound(x, 0xecf10);
             strike(x, 0xe);
         }
         6 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.add8(0x7, 2);
@@ -664,7 +656,7 @@ fn rain(x: &mut Cx) {
             set_abs8(x, 0xff8043, 0x7f);
             sub8(x, BUDGET_E, 1);
             x.set16(TIMER, 0xa);
-            x.call(0xe5e9e);
+            lib::sound(x, 0xe5e9e);
             strike_anim(x, 0x19, 0xb);
         }
         2 => {
@@ -696,7 +688,7 @@ fn rain(x: &mut Cx) {
             strike(x, 0xc);
         }
         6 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.add8(0x7, 2);
@@ -721,14 +713,14 @@ fn volley(x: &mut Cx) {
             x.add8(0x7, 2);
             set_abs8(x, 0xff8043, 0x7f);
             sub8(x, BUDGET_F, 1);
-            let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * 4;
-            let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+            let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
+            let players = var::PLAYERS_ALIVE.get(x.b) as u32;
             let i = level + 2 * players.saturating_sub(1);
             let n = x.rom16(0x9852e + i);
             x.set16(COUNT, n);
             x.set16(TIMER, 0xe);
             dust(x);
-            x.call(0xe5e9e);
+            lib::sound(x, 0xe5e9e);
             strike_anim(x, 0x1a, 0xb);
         }
         2 => {
@@ -753,7 +745,7 @@ fn volley(x: &mut Cx) {
             step_only(x);
         }
         4 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.add8(0x7, 2);

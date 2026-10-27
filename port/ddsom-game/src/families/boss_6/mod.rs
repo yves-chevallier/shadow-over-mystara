@@ -17,6 +17,7 @@
 
 use super::boss_common::*;
 use super::cx::handlers;
+use crate::objects::Obj;
 
 mod attacks;
 mod decide;
@@ -25,9 +26,6 @@ mod hit;
 mod intro;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY: u32 = 0x33;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
@@ -57,15 +55,11 @@ pub(self) const SET_FLY: u32 = 0x17788c;
 pub(self) const SET_HURT: u32 = 0x1778a4;
 
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn fly(x: &mut Cx, n: u32) {
-    play(x, SET_FLY, n);
-}
-
-pub(self) mod call {
-    pub const DUST: u32 = 0x1172e;
+    lib::start(x, SET_FLY, n);
 }
 
 pub fn run(x: &mut Cx) {
@@ -90,7 +84,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x859b2 : une partie liée (variante non nulle) tombe avec son hôte (`+0x46`).
 fn guard(x: &mut Cx) {
-    if x.u8(VARIANT) == 0 || x.u16(f::STATE) == 0x0406 {
+    if x.u8(Obj::VARIANT) == 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }
     let host = x.linked(f::HOST);
@@ -108,13 +102,13 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x26);
-    x.call(0x453c);
-    x.set_a5_u8(0x5a, 0);
-    x.call(0x1059e);
-    x.call(rom::IMMUNITIES);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::initial_hp_boss(x);
+    var::SCENE_LEVEL.set(x.b, 0);
+    lib::spread_index(x);
+    lib::set_immunities(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     for (off, v) in [(0x76, 0), (0x70, 0), (0x6a, 2), (0x75, 0)] {
         x.set8(off, v);
     }
@@ -135,7 +129,7 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro::run(x),
             2 => fight::run(x),
@@ -144,13 +138,13 @@ fn active(x: &mut Cx) {
             _ => recovered(x),
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 /// `+5` = 6 à 12 (0x851d6) : attend que des joueurs reviennent.
 fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) as i8 > 0 {
+    if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
     match x.u8(f::SUB2) {
@@ -160,7 +154,7 @@ fn wait_for_players(x: &mut Cx) {
             body(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

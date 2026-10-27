@@ -12,6 +12,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x96a0c;
@@ -34,7 +35,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// 0x975cc : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
@@ -60,22 +61,15 @@ fn reaction(x: &mut Cx) {
         x.set8(INVULNERABLE, 0);
         set_abs8(x, 0xff8043, 0xff);
         x.set_a5_u16(0x51e, 0);
-        x.call(0x10112);
-        if x.u8(VARIANT) == 0 && tst16(x, f::HP).le() {
+        lib::set_68(x);
+        if x.u8(Obj::VARIANT) == 0 && tst16(x, f::HP).le() {
             return decide::start_death(x);
         }
         if out_of_hp(x) {
             return down(x);
         }
     }
-    let code = x.u8(0x49) as u32;
-    let routine = rom32(x, REACTIONS + code);
-    if routine == STUN_REACTION {
-        return stun(x);
-    }
-    x.c.d[0] = code;
-    x.c.a[1] = routine;
-    x.call(routine);
+    react_with(x, REACTIONS, STUN_REACTION, stun);
 }
 
 /// 0x96ab8 : étourdissement : le boss tremble sur place puis repart.
@@ -90,7 +84,7 @@ fn stun(x: &mut Cx) {
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
             x.set8(0x90, 0x10);
-            play(x, SET_HURT, 8);
+            lib::start(x, SET_HURT, 8);
         }
         2 => {
             if tst8(x, 0x90).le() {
@@ -99,7 +93,7 @@ fn stun(x: &mut Cx) {
                 x.set8(0, 1);
                 x.set32(f::STATE, 0x0404_0200);
                 x.set32(0x58, 0);
-                step(x);
+                lib::step(x);
                 return;
             }
             sub8(x, 0x90, 1);
@@ -128,7 +122,7 @@ fn pushed_back(x: &mut Cx) {
             x.set8(ANIM_KIND, 0x20);
             x.set8(ANIM_LAST, 0x20);
             x.add8(f::SUB2, 2);
-            x.call(0xec73c);
+            lib::sound(x, 0xec73c);
             body(x, 0xb);
         }
         2 => {
@@ -139,11 +133,11 @@ fn pushed_back(x: &mut Cx) {
                 body(x, n);
             } else {
                 x.move_x();
-                step(x);
+                lib::step(x);
             }
         }
         4 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             x.set32(0x58, 0);
@@ -167,7 +161,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_BODY, 0xe);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) as i8 > 0 {
+            if var::PAUSE.get(x.b) as i8 > 0 {
                 return;
             }
             if sub16(x, 0x84, 1).gt() {
@@ -191,8 +185,8 @@ fn get_up(x: &mut Cx) {
                     return;
                 }
             }
-            x.set8(ANGLE, angle);
-            x.call(0x10574);
+            x.set8(Obj::SPEED_INDEX, angle);
+            lib::drift_heading(x);
             speed(x, 0x2b);
             x.set16(TIMER, 0x1e);
             // l'animation dépend du sens du boss par rapport au bord choisi
@@ -200,7 +194,7 @@ fn get_up(x: &mut Cx) {
             body_hurt(x, if wrong { 0xf } else { 0x10 });
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, TIMER, 1).le() {
@@ -210,11 +204,11 @@ fn get_up(x: &mut Cx) {
                 body(x, 0x11);
             } else {
                 x.move_xy();
-                step(x);
+                lib::step(x);
             }
         }
         6 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if !x.anim_step() {
@@ -243,16 +237,15 @@ pub(super) fn recovered_tail(x: &mut Cx) {
     if !pick_target(x) {
         return decide::wait(x);
     }
-    x.c.a[1] = if x.u8(VARIANT) == 0 { THRESHOLDS_A } else { THRESHOLDS_B };
-    x.call(0x105b6);
-    if !zero(x) {
-        if x.u8(VARIANT) == 0 {
+    let thresholds = if x.u8(Obj::VARIANT) == 0 { THRESHOLDS_A } else { THRESHOLDS_B };
+    if lib::next_threshold(x, thresholds) {
+        if x.u8(Obj::VARIANT) == 0 {
             if cmp8(x, PHASE, 3).ge() {
                 return decide::start_death(x);
             }
             return decide::attack_14(x);
         }
-        if x.u8(VARIANT) == 2 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 && cmp8(x, PHASE, 2).eq() {
+        if x.u8(Obj::VARIANT) == 2 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 2 && cmp8(x, PHASE, 2).eq() {
             if let Some(o) = x.alloc(&pools::SET) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, 2);
@@ -261,7 +254,7 @@ pub(super) fn recovered_tail(x: &mut Cx) {
         }
     }
     let mut limit = 2;
-    if (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 {
+    if (var::PLAYERS_ALIVE.get(x.b) as i8) > 2 {
         limit = 0;
     }
     if !Fl::sub8(limit, x.u8(PHASE)).gt() {
@@ -272,11 +265,7 @@ pub(super) fn recovered_tail(x: &mut Cx) {
             return decide::attack_16(x);
         }
     }
-    set_dw(x, 0, 0);
-    set_dw(x, 1, 0x20);
-    set_dw(x, 2, 0xc);
-    x.call(ai::TARGET_IN_BOX);
-    if !zero(x) {
+    if lib::target_in_box(x, 0, 0x20, 0xc) {
         decide::attack_4_shielded(x);
     } else {
         decide::chase(x);
@@ -288,7 +277,7 @@ pub(super) fn recovered_tail(x: &mut Cx) {
 fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            if x.u8(VARIANT) == 0 {
+            if x.u8(Obj::VARIANT) == 0 {
                 return decide::start_death(x);
             }
             x.add8(f::SUB2, 2);
@@ -300,9 +289,11 @@ fn down(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            for addr in [0x103ba, 0xe0a10, 0xe3b6c, 0xe5966, 0xb780, 0xbad6, 0xe2f6] {
-                x.call(addr);
-            }
+            lib::flash_and_shake(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
+            lib::sound(x, 0xe5966);
+            lib::drop_rewards(x);
             x.set8(0, 2);
             x.set8(SLOW, 0);
             x.set16(0x16, 0);
@@ -347,7 +338,7 @@ fn down(x: &mut Cx) {
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
-            x.call(0xecabc);
+            lib::sound(x, 0xecabc);
             x.anim_start(SET_BODY, 0x15);
         }
         8 => {

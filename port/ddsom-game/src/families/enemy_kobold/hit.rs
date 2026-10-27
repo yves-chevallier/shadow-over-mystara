@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x56816;
@@ -21,13 +22,13 @@ pub(super) fn run(x: &mut Cx) {
             0 => {
                 x.set8(LOOK_PREV, 0x7f);
                 react(x, REACT_FIRST);
-                zone_shadow(x);
+                zone_and_terrain(x);
             }
             2 => recoil(x),
             4 => fall(x),
             6 => {
                 react(x, REACT_SECOND);
-                zone_shadow(x);
+                zone_and_terrain(x);
             }
             8 => run_away(x),
             _ => {}
@@ -47,44 +48,42 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 2);
             look(x, 0x1e);
-            x.call(0xec5e6);
-            x.set16(SPEED_X, 0x300);
-            x.set16(SPEED_Y, -0x28i16 as u16);
+            lib::sound(x, 0xec5e6);
+            x.set16(Obj::VX, 0x300);
+            x.set16(Obj::AX, -0x28i16 as u16);
             let flip = x.u8(0x4a) ^ 0x20;
-            x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);
             if flip != 0 {
-                negate(x, SPEED_X);
-                negate(x, SPEED_Y);
+                negate(x, Obj::VX);
+                negate(x, Obj::AX);
             }
             mv(x, 0x1e);
         }
         2 => {
             puff(x, 3, 2, 8, -1);
-            if x.u8(SPEED_X) != 0 {
+            if x.u8(Obj::VX) != 0 {
                 x.move_x();
             } else if x.anim_step() {
                 x.set32(0x58, 0);
-                x.set32(SPEED_X, 0);
+                x.set32(Obj::VX, 0);
                 after_strike(x);
             }
         }
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 // --- sous-état 4 : chute et relevé --------------------------------------------------------------------------
 
 fn fall(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
             mv(x, 0x15);
         }
         2 => {
-            if (x.a5_u8(0x3d) as i8) == 0 {
+            if (var::PAUSE.get(x.b) as i8) == 0 {
                 let n = x.u16(0x84).wrapping_sub(1);
                 x.set16(0x84, n);
                 if (n as i16) <= 0 {
@@ -97,7 +96,7 @@ fn fall(x: &mut Cx) {
             }
         }
         4 => {
-            if x.a5_u8(0x3d) == 0 && x.anim_step() {
+            if var::PAUSE.get(x.b) == 0 && x.anim_step() {
                 x.set8(0, 1);
                 x.set8(VULNERABLE, 1);
                 set_state_long(x, STANCE);
@@ -106,7 +105,7 @@ fn fall(x: &mut Cx) {
         }
         _ => {}
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 // --- sous-état 8 : saisie par un joueur ------------------------------------------------------------------------
@@ -142,13 +141,13 @@ fn run_away(x: &mut Cx) {
             run_begin(x);
         }
         4 | 14 => {
-            if x.a5_u8(0x34) == 4 && x.u8(f::SUB2) == 4 {
+            if var::SCENE.get(x.b) == 4 && x.u8(f::SUB2) == 4 {
                 return x.add8(f::SUB2, 2);
             }
             x.move_by_table_xy();
             if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
-                return x.call(call::REMOVE);
+                return detach_from_host(x);
             }
             x.anim_step();
         }
@@ -156,7 +155,7 @@ fn run_away(x: &mut Cx) {
             if x.u8(0x29) != 0 {
                 x.add8(f::SUB2, 2);
             }
-            zone_shadow(x);
+            zone_and_terrain(x);
             x.move_by_table_xy();
             x.anim_step();
         }
@@ -164,17 +163,17 @@ fn run_away(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(VULNERABLE, 1);
             look(x, 6);
-            x.set16(SPEED_X, -0x380i16 as u16);
+            x.set16(Obj::VX, -0x380i16 as u16);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x4c0);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x4c0);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             mv(x, 6);
         }
         10 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 0);
             }
@@ -185,7 +184,7 @@ fn run_away(x: &mut Cx) {
                 x.anim_step();
                 return;
             }
-            x.set32(HEIGHT, 0);
+            x.set32(Obj::Z, 0);
             x.add8(f::SUB2, 2);
             x.set8(VULNERABLE, 1);
             look(x, 0x18);

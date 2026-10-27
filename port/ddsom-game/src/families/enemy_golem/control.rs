@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -20,28 +21,27 @@ fn walk(x: &mut Cx) {
     x.c.d[1] = x.c.d[1] & !0xff | held as u32;
     let mut moved = false;
     if keys & 1 != 0 {
-        let at = x.u16(X).wrapping_add(3);
-        x.set16(X, at);
+        let at = x.u16(Obj::X).wrapping_add(3);
+        x.set16(Obj::X, at);
         x.set8(f::FLIP, 0x20);
         moved = true;
     }
     if keys & 2 != 0 {
-        let at = x.u16(X).wrapping_sub(3);
-        x.set16(X, at);
+        let at = x.u16(Obj::X).wrapping_sub(3);
+        x.set16(Obj::X, at);
         x.set8(f::FLIP, 0);
         moved = true;
     }
     if keys & 8 != 0 {
-        let at = x.u16(DEPTH).wrapping_add(3);
-        x.set16(DEPTH, at);
+        let at = x.u16(Obj::Y).wrapping_add(3);
+        x.set16(Obj::Y, at);
         moved = true;
     }
     if keys & 4 != 0 {
-        let at = x.u16(DEPTH).wrapping_sub(3);
-        x.set16(DEPTH, at);
+        let at = x.u16(Obj::Y).wrapping_sub(3);
+        x.set16(Obj::Y, at);
         moved = true;
     }
-    x.c.d[2] = moved as u32;
     if moved {
         x.anim_step();
     }
@@ -57,17 +57,17 @@ fn walk(x: &mut Cx) {
 
 /// +6 = 2 : saut en arc (vitesse verticale 0x800).
 fn arc(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.set32(SPEED_X, 0);
-        x.add8(STEP, 2);
-        x.set16(SPEED_Z, 0x800);
-        x.set16(GRAVITY, -0x40i16 as u16);
+    if x.u8(f::SUB3) == 0 {
+        x.set32(Obj::VX, 0);
+        x.add8(f::SUB3, 2);
+        x.set16(Obj::VZ, 0x800);
+        x.set16(Obj::AZ, -0x40i16 as u16);
         return;
     }
     x.move_xz();
-    if (x.u16(HEIGHT) as i16) > 0 {
+    if (x.u16(Obj::Z) as i16) > 0 {
         return;
     }
-    x.set32(HEIGHT, 0);
+    x.set32(Obj::Z, 0);
     set_state_long(x, STANCE);
 }

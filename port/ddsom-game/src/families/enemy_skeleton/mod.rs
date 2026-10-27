@@ -18,6 +18,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -26,25 +27,8 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    /// Étape du coup en cours.
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    /// Hauteur au-dessus du sol (long) et position en profondeur.
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    /// Vitesses : en X, en profondeur, en hauteur, pesanteur, et vitesse latérale des bonds de côté.
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_SIDE: u32 = 0x1c;
-    pub const SPEED_SIDE_Y: u32 = 0x1e;
     /// Série : 0 squelette, 1 squelette armé.
     pub const SERIES: u32 = 0x2f;
-    /// Direction de déplacement (table de vitesses) et image-clé de l'animation.
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY_FRAME: u32 = 0x33;
     /// Compteur d'images de l'animation (mot) et sa valeur courante.
     pub const ANIM_COUNT: u32 = 0x30;
     pub const ANIM_STATE: u32 = 0x32;
@@ -100,18 +84,6 @@ const CLOSE_ATTACKS: u32 = 0x5932a;
 const FAR_ATTACKS: u32 = 0x5952a;
 const NEXT_MOVES: u32 = 0x59982;
 
-mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const SPEED_STEP: u32 = 0xe914;
-    pub const WALK_PATH: u32 = 0xf0e8;
-    pub const FLASH: u32 = 0xe7fa;
-    pub const REMOVE: u32 = 0x27ee;
-    pub const DEAD_STEP: u32 = 0xe886;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -149,7 +121,7 @@ fn end_attack(x: &mut Cx) {
     x.set8(AI_KIND, 0xff);
     if x.u16(f::TARGET) != 0 {
         load_target(x);
-        if target_in_box(x, -8, 0x68, 8) || target_in_box(x, -0xa0, 0x30, 8) {
+        if lib::target_in_box(x, -8, 0x68, 8) || lib::target_in_box(x, -0xa0, 0x30, 8) {
             x.set8(SIDE, x.c.d[0] as u8);
             pick_move(x, NEXT_MOVES, 0x208);
             return;
@@ -160,30 +132,22 @@ fn end_attack(x: &mut Cx) {
 
 /// Choisit le coup `+6` dans la ligne de la difficulté (32 octets) de `table`, et pose `+4/+5` à `state`.
 fn pick_move(x: &mut Cx, table: u32, state: u16) {
-    let row = (x.a5_u16(0x7f92) >> 1) << 5;
+    let row = (var::RANK.get(x.b) >> 1) << 5;
     set_dw(x, 0, row);
-    x.c.a[4] = table + row as u32;
     let n = rand_and(x, 0x1f);
     let mv = x.data8(table + row as u32 + n);
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, state);
-    x.set8(g::STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
-/// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main. L'original reçoit en A6
-/// l'adresse où reprendre (`resume`) quand rien n'est à faire, et laisse A6, D6 et D1 comme ci-dessous.
-fn special_hit(x: &mut Cx, resume: u32) -> bool {
-    x.c.a[6] = resume;
+/// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main (l'adresse de reprise que
+/// l'original passait en A6 n'est relue par personne).
+fn special_hit(x: &mut Cx) -> bool {
     let flag = x.u8(SPECIAL_HIT);
-    x.c.d[6] = flag as u32;
-    if (1..=3).contains(&flag) {
-        x.c.d[6] = 2 * flag as u32;
-        let entry = x.rom16(0x5915a + 2 * flag as u32);
-        set_dw(x, 1, entry);
-    }
     match flag {
         1 => {
-            if x.u16(HEIGHT) != 0 {
+            if x.u16(Obj::Z) != 0 {
                 return false;
             }
             x.set8(SPECIAL_HIT, 0);
@@ -199,12 +163,12 @@ fn special_hit(x: &mut Cx, resume: u32) -> bool {
         2 => {
             set_state_long(x, 0x0400_0000);
             x.set8(SPECIAL_HIT, 0);
-            let code = if x.u16(HEIGHT) == 0 { 0xc } else { 0x38 };
+            let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
             x.set8(0x49, code);
             true
         }
         3 => {
-            if x.u16(HEIGHT) != 0 || x.u8(0x86) != 0 {
+            if x.u16(Obj::Z) != 0 || x.u8(0x86) != 0 {
                 return false;
             }
             x.set8(SPECIAL_HIT, 0);
@@ -221,7 +185,7 @@ fn init(x: &mut Cx) {
     if paused(x) {
         return;
     }
-    if x.u8(VARIANT) == 4 {
+    if x.u8(Obj::VARIANT) == 4 {
         let t = x.u16(0x42).wrapping_sub(1);
         x.set16(0x42, t);
         if t != 0 {
@@ -230,7 +194,7 @@ fn init(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xd);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x44), (0x7f, 0), (0x6a, 2), (0x6c, 3), (0x74, 3), (0x76, 3), (0x69, 2), (0x78, 0xff)] {
         x.set8(off, v);
     }
@@ -243,9 +207,8 @@ fn init(x: &mut Cx) {
     x.set8(0xac, 0);
     x.set8(0x83, 1);
     x.set32(f::IMMUNITY, 0x1001);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     let series = x.u8(SERIES) as u32;
-    x.c.d[1] = 4 * series;
     if series != 0 {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x1a);
@@ -256,9 +219,8 @@ fn init(x: &mut Cx) {
         let v = x.data8(row + i as u32);
         x.set8(off, v);
     }
-    x.c.a[1] = row + 4;
     x.set16(f::SUB2, 0);
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             x.set8(f::SUB, 2);
             body(x, 0);
@@ -275,13 +237,13 @@ fn init(x: &mut Cx) {
         2 => {
             x.set8(f::SUB, 0);
             x.set8(f::SUB2, 4);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(0x50a) };
-            let h = cam.wrapping_add(0x100).wrapping_sub(x.u16(DEPTH));
-            x.set16(HEIGHT, h);
-            x.set16(SPEED_X, 0);
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) };
+            let h = cam.wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+            x.set16(Obj::Z, h);
+            x.set16(Obj::VX, 0);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0);
+            x.set16(Obj::AZ, -0x40i16 as u16);
             body(x, 0xb);
         }
         3 => {
@@ -297,7 +259,7 @@ fn init(x: &mut Cx) {
         _ => return,
     }
     x.reinsert();
-    zone_shadow(x);
+    zone_and_terrain(x);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------
@@ -337,13 +299,13 @@ fn arrival(x: &mut Cx) {
             }
         }
         4 => {
-            if x.u8(STEP) == 0 {
+            if x.u8(f::SUB3) == 0 {
                 x.move_xz();
-                if (x.u16(HEIGHT) as i16) > 0 {
+                if (x.u16(Obj::Z) as i16) > 0 {
                     return;
                 }
-                x.add8(STEP, 2);
-                x.set32(HEIGHT, 0);
+                x.add8(f::SUB3, 2);
+                x.set32(Obj::Z, 0);
                 x.set16(ANIM_COUNT, 1);
             } else {
                 step(x);
@@ -361,9 +323,9 @@ fn arrival(x: &mut Cx) {
 
 /// Arrivée clignotante (`+6 = 6`) : trois séries de clignotements puis l'état debout.
 fn blink(x: &mut Cx) {
-    let d1 = match x.u8(STEP) {
+    let d1 = match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(0, 2);
             x.set8(0xac, 1);
             x.set8(VULNERABLE, 1);
@@ -393,7 +355,7 @@ fn blink(x: &mut Cx) {
     if n != 0 {
         return;
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set16(0x42, d1);
 }
 
@@ -401,7 +363,6 @@ fn blink(x: &mut Cx) {
 
 fn dead(x: &mut Cx) {
     if x.u8(0xac) != 0 {
-        x.c.a[1] = x.u16(0xaa) as i16 as i32 as u32;
         let parent = x.linked(0xaa);
         let n = parent.u8(x.b, 0xaf).wrapping_sub(1);
         parent.set_u8(x.b, 0xaf, n);

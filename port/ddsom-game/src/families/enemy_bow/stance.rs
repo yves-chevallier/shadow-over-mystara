@@ -10,7 +10,6 @@ pub(super) fn run(x: &mut Cx) {
         set_state_long(x, HELD);
         return hit::grab(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => stance_begin(x),
         2 => advance(x),
@@ -26,9 +25,9 @@ pub(super) fn stance_begin(x: &mut Cx) {
         set_state_long(x, IDLE);
         return idle_begin(x);
     }
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_6b(x);
     x.set8(SHOT_KIND, 3);
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     set_speed(x, 0xd);
     mv(x, 2);
 }
@@ -52,7 +51,7 @@ fn advance(x: &mut Cx) {
     if (n as i8) < 0 {
         let mut waiting = true;
         if pick_target(x) {
-            x.call(call::FACE_TARGET);
+            lib::draw_stance(x);
             let m = x.u8(AI_WANDER).wrapping_sub(1);
             x.set8(AI_WANDER, m);
             if (m as i8) >= 0 {
@@ -60,14 +59,13 @@ fn advance(x: &mut Cx) {
             }
         }
         if waiting {
-            x.call(call::RAND_TARGET_CHECK);
-            if !x.c.cond(7) {
+            if lib::maybe_draw_6e(x) {
                 set_state_long(x, IDLE);
                 return check_facing(x);
             }
         }
     }
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     x.move_by_table_xy();
     x.anim_step();
     if point_blank(x) {
@@ -84,19 +82,14 @@ pub(super) fn decide(x: &mut Cx) {
         let found = Obj(x.c.a[1]);
         let facing = x.u8(f::FLIP);
         x.c.d[0] = x.c.d[0] & !0xff | facing as u32;
-        let gate = if facing == found.u8(x.b, 0x2c) { call::AI_GATE_B } else { call::AI_GATE_A };
-        x.call(gate);
-        if !x.c.cond(7) {
+        let same_side = facing == found.u8(x.b, f::FLIP);
+        if lib::decision(x, same_side) {
             set_state_long(x, 0x0204_0000);
             let d5 = x.c.d[5] as u8;
             x.set8(f::SUB2, d5);
             return check_facing(x);
         }
-        x.c.d[0] = -0x38i32 as u32;
-        x.c.d[1] = 0x38;
-        x.c.d[2] = 0x10;
-        x.call(0x7f0c);
-        if !x.c.cond(7) {
+        if lib::guard_in_front_strict(x, -0x38, 0x38, 0x10) {
             x.set8(f::SUB, 0xa);
             x.set16(f::SUB2, 0);
         }
@@ -110,9 +103,8 @@ pub(super) fn check_facing(x: &mut Cx) {
         return;
     }
     let target = load_target(x);
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     if want as u8 == x.u8(f::FLIP) {
         return;
     }
@@ -132,7 +124,7 @@ fn strafe(x: &mut Cx) {
         x.set8(SHOT_KIND, 3);
         return advance(x);
     }
-    x.call(call::WALK_STEP);
+    lib::approach_target(x);
     x.move_by_table_xy();
     x.anim_step();
 }
@@ -159,23 +151,22 @@ pub(super) fn rest(x: &mut Cx) {
 
 /// +6 = 2 (en X, regarde vers la cible) et 4 (en profondeur) : pas de côté pendant `+0x6b` images.
 fn side_step(x: &mut Cx, along_x: bool) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(AI_WANDER, 0x18);
         let target = load_target(x);
         if along_x {
-            x.set8(ANGLE, 0x18);
-            let d = x.u16(X).wrapping_sub(target.u16(x.b, X));
+            x.set8(Obj::SPEED_INDEX, 0x18);
+            let d = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
             x.c.d[1] = x.c.d[1] & 0xffff_0000 | d as u32;
             if (d as i16) >= 0 {
-                x.set8(ANGLE, 8);
+                x.set8(Obj::SPEED_INDEX, 8);
             }
         } else {
-            x.set8(ANGLE, 0xf);
-            let d = x.u16(DEPTH).wrapping_sub(target.u16(x.b, DEPTH));
-            x.c.d[1] = x.c.d[1] & 0xffff_0000 | d as u32;
+            x.set8(Obj::SPEED_INDEX, 0xf);
+            let d = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
             if (d as i16) >= 0 {
-                x.set8(ANGLE, 0);
+                x.set8(Obj::SPEED_INDEX, 0);
             }
         }
         return mv(x, 2);
@@ -207,7 +198,6 @@ pub(super) fn idle(x: &mut Cx) {
 // --- sous-état 12 : demi-tour -------------------------------------------------------------------------
 
 pub(super) fn turn_around(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

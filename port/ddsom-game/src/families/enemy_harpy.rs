@@ -22,12 +22,9 @@ const OFFSETS_Y: u32 = 0x757d2;
 const HIT_ANIM: u32 = 0x75e84;
 
 mod g {
-    pub const VARIANT: u32 = 0x3;
     pub const SERIES: u32 = 0x2f;
-    pub const KEY_FRAME: u32 = 0x33;
     pub const PARAM: u32 = 0x42;
     pub const KIND: u32 = 0x43;
-    pub const ANGLE: u32 = 0x2d;
     pub const COMPANION: u32 = 0xaa;
     pub const TIMER_A: u32 = 0xa0;
     pub const TIMER_B: u32 = 0xa1;
@@ -38,14 +35,12 @@ mod g {
     pub const EXIT_LIMIT: u32 = 0xae;
     pub const TURN_Z: u32 = 0xb0;
     pub const RESUME: u32 = 0xb1;
-    pub const FLIP: u32 = 0x2c;
 }
 use g::*;
 use crate::objects::Courant;
 
 mod call {
     pub const CREATE_COMPANION: u32 = 0xa036e;
-    pub const REMOVE: u32 = 0x27ee;
 }
 
 pub fn run(x: &mut Cx) {
@@ -73,7 +68,7 @@ fn set_state_long(x: &mut Cx, v: u32) {
 
 /// Remise en liste : la variante 8 vit dans la liste du premier plan.
 fn reinsert(x: &mut Cx) {
-    if x.u8(VARIANT) == 8 {
+    if x.u8(Obj::VARIANT) == 8 {
         x.reinsert_foreground();
     } else {
         x.reinsert();
@@ -95,7 +90,7 @@ fn vanish(x: &mut Cx) {
 /// Sortie d'écran : comme `vanish`, en retirant d'abord la créature de la scène (0x27ee).
 fn leave(x: &mut Cx) {
     x.add8(f::STATE, 4);
-    x.call(call::REMOVE);
+    detach_from_host(x);
     release_companion(x);
 }
 
@@ -114,11 +109,11 @@ fn bank(x: &mut Cx, reload: u8, clamp: bool) {
     x.set8(TIMER_A, t);
     if (t as i8) < 0 {
         x.set8(TIMER_A, reload);
-        let mut angle = x.u8(ANGLE).wrapping_add(x.u8(STEP));
+        let mut angle = x.u8(Obj::SPEED_INDEX).wrapping_add(x.u8(STEP));
         if clamp && (angle as i8) < 0 {
             angle = 0;
         }
-        x.set8(ANGLE, angle);
+        x.set8(Obj::SPEED_INDEX, angle);
     }
 }
 
@@ -128,8 +123,8 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0, 1);
     x.set8(f::BOX_SET, 0xe);
-    x.call(rom::INITIAL_HP);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp(x);
+    lib::set_immunities(x);
     x.set8(0x68, 4);
     x.set8(0x69, 4);
     x.set8(0x76, 4);
@@ -141,9 +136,9 @@ fn init(x: &mut Cx) {
     x.set32(0x8a, 0);
     x.set8(PASSES, 2);
     // ligne de la variante : orientation, durées `+0xa0..+0xa3`, décalage en X
-    let row = VARIANT_ROWS + x.u8(VARIANT).wrapping_shl(3) as u32;
+    let row = VARIANT_ROWS + x.u8(Obj::VARIANT).wrapping_shl(3) as u32;
     let flip = x.data16(row);
-    x.set16(FLIP, flip);
+    x.set16(f::FLIP, flip);
     let timers = x.data32(row + 2);
     x.set32(TIMER_A, timers);
     let dx = x.data16(row + 6);
@@ -157,7 +152,7 @@ fn init(x: &mut Cx) {
         d4 = d4 & !0xffff | x.data16(a2 + 2) as u32;
     }
     let d4 = d4 as u16;
-    let variant = x.u8(VARIANT);
+    let variant = x.u8(Obj::VARIANT);
     if variant == 8 || (variant as i8) < 2 {
         x.set16(EXIT_LIMIT, 0x100u16.wrapping_add(d4));
         x.set16(0xc, d4);
@@ -204,7 +199,7 @@ fn fly(x: &mut Cx) {
     if grabbed(x) {
         return set_state_long(x, 0x0206_0000);
     }
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 | 1 => fly_loop(x, 0xc),
         2..=5 => fly_loop_b(x),
         6 | 7 => turn_back(x),
@@ -279,7 +274,7 @@ fn turn_back(x: &mut Cx) {
             if (t as i8) < 0 {
                 let z = x.u16(0xc);
                 x.set16(TURN_Z, z);
-                x.set8(ANGLE, 0);
+                x.set8(Obj::SPEED_INDEX, 0);
                 x.set8(RESUME, 2);
                 set_state_long(x, 0x0202_0000);
             }
@@ -289,25 +284,25 @@ fn turn_back(x: &mut Cx) {
             step(x);
             if (x.u16(0xc) as i16) >= 0xf0 {
                 let mut d = -0x30i16;
-                if x.u8(FLIP) != 0 {
+                if x.u8(f::FLIP) != 0 {
                     d = -d;
                 }
                 x.add16(0x8, d as u16);
-                x.set8(ANGLE, 0x10);
+                x.set8(Obj::SPEED_INDEX, 0x10);
                 x.add8(f::SUB2, 2);
                 let c = x.linked(COMPANION);
-                let flip = c.u8(x.b, FLIP) ^ 0x20;
-                c.set_u8(x.b, FLIP, flip);
-                let own = x.u8(FLIP) ^ 0x20;
-                x.set8(FLIP, own);
+                let flip = c.u8(x.b, f::FLIP) ^ 0x20;
+                c.set_u8(x.b, f::FLIP, flip);
+                let own = x.u8(f::FLIP) ^ 0x20;
+                x.set8(f::FLIP, own);
             }
         }
         4 => {
             move_xz_table(x);
             step(x);
             if (x.u16(TURN_Z) as i16) > (x.u16(0xc) as i16) {
-                let angle = if x.u8(FLIP) == 0 { 8 } else { 0x18 };
-                x.set8(ANGLE, angle);
+                let angle = if x.u8(f::FLIP) == 0 { 8 } else { 0x18 };
+                x.set8(Obj::SPEED_INDEX, angle);
                 let z = x.u16(TURN_Z);
                 x.set16(0xc, z);
                 set_state_long(x, 0x0202_0000);
@@ -336,7 +331,7 @@ fn pause(x: &mut Cx) {
 fn exit_flight(x: &mut Cx) {
     move_xz_table(x);
     step(x);
-    match x.u8(VARIANT) >> 1 {
+    match x.u8(Obj::VARIANT) >> 1 {
         0 => {
             bank(x, 0x14, true);
             if x.u16(0xc) > x.u16(EXIT_LIMIT) {
@@ -344,19 +339,19 @@ fn exit_flight(x: &mut Cx) {
             }
         }
         1..=3 => {
-            let mut left = x.a5_u16(0x506);
+            let mut left = var::SCROLL_X.get(x.b);
             if x.u8(PARAM) == 4 {
-                left = x.a5_u16(0x556);
+                left = var::CAMERA_ALT_X.get(x.b);
             }
             let limit = x.u16(EXIT_LIMIT).wrapping_add(left) as i16;
             let here = x.u16(0x8).wrapping_add(left) as i16;
-            let gone = if x.u8(VARIANT) & 1 == 0 { limit <= here } else { limit >= here };
+            let gone = if x.u8(Obj::VARIANT) & 1 == 0 { limit <= here } else { limit >= here };
             if gone {
                 leave(x);
             }
         }
         _ => {
-            let top = x.a5_u16(0x50a).wrapping_add(0x100);
+            let top = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
             if top <= x.u16(0xc) {
                 leave(x);
             }
@@ -408,7 +403,7 @@ fn attack_start(x: &mut Cx) {
             x.set32(SHOT, shot);
             let n = x.u8(KIND) as u32;
             x.anim_start(SET_ATTACK, n as u16);
-            return x.call(0xed5b2);
+            return lib::sound(x, 0xed5b2);
         }
     }
     set_state_long(x, 0x0204_0000);
@@ -432,12 +427,12 @@ fn attack_wait(x: &mut Cx) {
     if x.anim_step() {
         return x.add8(f::SUB2, 2);
     }
-    if x.u8(KEY_FRAME) != 0 {
-        x.set8(KEY_FRAME, 0);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
         let shot = Obj(x.u32(SHOT) & 0xff_ffff);
         shot.set_u8(x.b, 0x55, 1);
         x.set8(TIMER_A, 0x1e);
-        x.call(0xed61c);
+        lib::sound(x, 0xed61c);
     }
 }
 
@@ -482,15 +477,11 @@ fn attack_claws(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
                 let n = 2 + x.u8(KIND) as u32;
                 x.anim_start(SET_FLY, n as u16);
-            } else if x.u8(KEY_FRAME) != 0 {
-                x.set8(KEY_FRAME, 0);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 if pick_target(x) {
-                    x.c.a[2] = x.c.a[1];
-                    x.c.d[5] = 0;
-                    x.call(0xa09ca);
-                    if !x.c.cond(5) {
-                        let shot = x.c.a[1];
-                        x.set32(SHOT, shot);
+                    if let (Some(shot), false) = lib::eshl_12(x) {
+                        x.set32(SHOT, shot.0);
                     }
                 }
             }
@@ -510,14 +501,13 @@ fn attack_fire(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
                 x.set8(TIMER_A, 0x30);
                 x.anim_start(SET_FLY, 4);
-            } else if x.u8(KEY_FRAME) != 0 {
-                x.set8(KEY_FRAME, 0);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 if pick_target(x) {
                     x.c.a[2] = x.c.a[1];
-                    x.call(0xa0ae0);
-                    if !x.c.cond(5) {
-                        let shot = x.c.a[1];
-                        x.set32(SHOT, shot);
+                    let target = x.c.a[2];
+                    if let Some(shot) = lib::eshl_13(x, target) {
+                        x.set32(SHOT, shot.0);
                     }
                 }
             }
@@ -563,7 +553,7 @@ fn hit_recoil(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
                 x.set16(0x18, 0x400);
                 x.set16(0x1a, (-0x40i16) as u16);
-                let vx = if x.u8(FLIP) != 0 { -0x200i16 } else { 0x200 };
+                let vx = if x.u8(f::FLIP) != 0 { -0x200i16 } else { 0x200 };
                 x.set16(0x14, vx as u16);
                 x.set16(0x16, 0);
                 x.anim_start(SET_HIT, 0x10);
@@ -573,9 +563,9 @@ fn hit_recoil(x: &mut Cx) {
             step(x);
             x.move_xz();
             let z = x.u16(0xc).wrapping_add(x.u16(0x10));
-            let mut limit = x.a5_u16(0x50a);
-            if x.a5_u8(0x36) != 0 {
-                limit = x.a5_u16(0x55a);
+            let mut limit = var::SCROLL_Y.get(x.b);
+            if var::CAMERA_SELECT.get(x.b) != 0 {
+                limit = var::CAMERA_ALT_Y.get(x.b);
             }
             if (z as i16) <= (limit as i16) {
                 x.add8(f::STATE, 2);
@@ -647,10 +637,9 @@ fn hit_dying(x: &mut Cx) {
 // --- état 6 : libération ---------------------------------------------------------------------------
 
 fn dead(x: &mut Cx) {
-    set_dw(x, 1, 0x12);
     let d = x.u16(0x48) & 0xff00;
     set_dw(x, 0, d.wrapping_add(0x12));
-    x.call(call::REMOVE);
+    detach_from_host(x);
     free(x);
 }
 

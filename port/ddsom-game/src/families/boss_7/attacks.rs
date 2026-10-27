@@ -13,7 +13,7 @@ fn finish(x: &mut Cx) {
 }
 
 fn step(x: &mut Cx, table: u32) -> u32 {
-    dispatch(x, table, SUB3)
+    dispatch(x, table, f::SUB3)
 }
 
 pub(super) fn run(x: &mut Cx) {
@@ -32,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x8624a (`+6` = 0) : un seul coup.
 fn slash(x: &mut Cx) {
     if step(x, 0x86258) == 0x8625c {
-        addq8(x, SUB3, 2);
+        addq8(x, f::SUB3, 2);
         x.set8(0x45, 5);
         x.set8(0x44, 0x44);
         key(x, 0xa);
@@ -46,27 +46,27 @@ fn slash(x: &mut Cx) {
 fn combo(x: &mut Cx) {
     match step(x, 0x862a4) {
         0x862ac => {
-            addq8(x, SUB3, 2);
+            addq8(x, f::SUB3, 2);
             key(x, 0xb);
             x.set8(PHASE_TIMER, 0x1e);
             strike(x, 1);
         }
         0x862d0 => {
-            if x.u8(KEY) != 0 {
-                addq8(x, SUB3, 2);
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                addq8(x, f::SUB3, 2);
+                x.set8(f::KEY_FRAME, 0);
                 x.call(0xb4ef4);
-                x.call(0xed25a);
+                lib::sound(x, 0xed25a);
             }
             x.anim_step();
         }
         0x862f2 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(VULNERABLE, 0);
-                addq8(x, SUB3, 2);
-                x.set8(KEY, 0);
+                addq8(x, f::SUB3, 2);
+                x.set8(f::KEY_FRAME, 0);
                 eshl_burst_27(x);
-                x.call(0xed1f0);
+                lib::sound(x, 0xed1f0);
             }
             x.anim_step();
         }
@@ -90,7 +90,7 @@ fn shoot(x: &mut Cx, pick: fn(&mut Cx)) {
 
 /// Début d'une rafale de projectiles (clé `kind`).
 fn volley_start(x: &mut Cx, kind: u8, rain: bool) {
-    addq8(x, SUB3, 2);
+    addq8(x, f::SUB3, 2);
     if !rain {
         x.set8(PHASE_TIMER, 4);
         x.set8(0x45, 5);
@@ -109,13 +109,12 @@ fn volley_fire(x: &mut Cx, pick: fn(&mut Cx)) {
     if !x.anim_step() {
         return;
     }
-    x.c.d[0] = 0x30;
-    x.call(call::SOUND_B);
-    x.call(0xedd2c);
-    addq8(x, SUB3, 2);
+    lib::shake_58(x, 0x30);
+    lib::sound(x, 0xedd2c);
+    addq8(x, f::SUB3, 2);
     x.set16(TIMER, 0x32);
     x.call(0xb4f60);
-    let n = x.a5_u8(var::PLAYERS_ALIVE);
+    let n = var::PLAYERS_ALIVE.get(x.b);
     x.set8(VOLLEY, n);
     sub8(x, VOLLEY, 1);
     shoot(x, pick);
@@ -138,7 +137,7 @@ fn throw_knives(x: &mut Cx) {
         0x863cc => {
             volley_next(x, aids::pick_new);
             if timer_done(x) {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 strike(x, 5);
             }
         }
@@ -157,10 +156,10 @@ fn rain(x: &mut Cx) {
                 return;
             }
             if sub8(x, BURSTS, 1).mi() {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 strike(x, 5);
             } else {
-                sub8(x, SUB3, 2);
+                sub8(x, f::SUB3, 2);
                 strike(x, 0xb);
             }
         }
@@ -175,7 +174,7 @@ fn plunge(x: &mut Cx) {
             if x.u16(f::TARGET) == 0 {
                 return;
             }
-            addq8(x, SUB3, 2);
+            addq8(x, f::SUB3, 2);
             let t = load_target(x);
             let (tx, ty) = (t.u16(x.b, 0x8), t.u16(x.b, 0x10));
             x.set16(TARGET_X, tx);
@@ -184,9 +183,9 @@ fn plunge(x: &mut Cx) {
             strike(x, 2);
         }
         0x8644a => {
-            if x.u8(KEY) != 0 {
-                addq8(x, SUB3, 2);
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                addq8(x, f::SUB3, 2);
+                x.set8(f::KEY_FRAME, 0);
                 x.c.d[1] = 3;
                 x.call(0xb4f44);
             }
@@ -200,7 +199,7 @@ fn plunge(x: &mut Cx) {
 fn charge(x: &mut Cx) {
     match step(x, 0x86500) {
         0x8650a => {
-            addq8(x, SUB3, 2);
+            addq8(x, f::SUB3, 2);
             x.set8(PHASE_TIMER, 4);
             x.set8(0x45, 5);
             x.set8(0x44, 0x46);
@@ -208,20 +207,18 @@ fn charge(x: &mut Cx) {
             strike(x, 7);
         }
         0x8653a => {
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 x.anim_step();
                 return;
             }
-            addq8(x, SUB3, 2);
-            x.set8(KEY, 0);
-            x.call(0xecdba);
+            addq8(x, f::SUB3, 2);
+            x.set8(f::KEY_FRAME, 0);
+            lib::sound(x, 0xecdba);
             let (mut d0, mut d1) = (-0x800i16, 0x20i16);
             if x.u8(f::FLIP) != 0 {
                 d0 = d0.wrapping_neg();
                 d1 = d1.wrapping_neg();
             }
-            setw(x, 0, d0 as u16);
-            setw(x, 1, d1 as u16);
             x.set16(0x14, d0 as u16);
             x.set16(0x16, d1 as u16);
         }
@@ -229,7 +226,7 @@ fn charge(x: &mut Cx) {
             dust(x, 0);
             x.move_x();
             if x.anim_step() {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x14);
                 strike(x, 8);
             }
@@ -237,7 +234,7 @@ fn charge(x: &mut Cx) {
         0x865ba => {
             dust(x, 1);
             if timer_done(x) {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 1);
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
@@ -264,11 +261,7 @@ fn dust(x: &mut Cx, kind: u32) {
     let v = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
-        x.c.d[0] = kind;
-        x.c.d[1] = 1;
-        setw(x, 2, (-0x20i16) as u16);
-        setw(x, 3, 0xffff);
-        x.call(call::BURST);
+        lib::shock(x, kind, 1, 0xffe0, 0xffff);
     }
 }
 
@@ -282,7 +275,7 @@ fn leap(x: &mut Cx) {
 
 /// Début du bond : élan horizontal `vx` (inversé si le boss regarde à gauche).
 pub(super) fn leap_start(x: &mut Cx, vx: i16) {
-    addq8(x, SUB3, 2);
+    addq8(x, f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     key(x, 0x10);
     x.set8(0x44, 0x45);
@@ -301,8 +294,8 @@ pub(super) fn leap_start(x: &mut Cx, vx: i16) {
 pub(super) fn leap_rest(x: &mut Cx, t: u32) {
     match t {
         0x86686 => {
-            if x.u8(KEY) != 0 {
-                addq8(x, SUB3, 2);
+            if x.u8(f::KEY_FRAME) != 0 {
+                addq8(x, f::SUB3, 2);
                 x.set8(VULNERABLE, 0);
             }
             x.anim_step();
@@ -311,7 +304,7 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
             x.move_xz();
             if (x.u16(0x18) as i16) <= -0x300 {
                 x.set16(0x1a, (-0x98i16) as u16);
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set16(0x30, 1);
             }
             x.anim_step();
@@ -321,12 +314,11 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
                 x.anim_step();
                 return;
             }
-            x.c.d[0] = 0x14;
-            x.call(call::SOUND_B);
-            x.call(0xecb98);
+            lib::shake_58(x, 0x14);
+            lib::sound(x, 0xecb98);
             aids::burst_small(x);
             x.set32(0xc, 0);
-            addq8(x, SUB3, 2);
+            addq8(x, f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set16(0x30, 1);
             x.set16(TIMER, 0x14);
@@ -334,7 +326,7 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
         }
         0x8670c => {
             if timer_done(x) {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 strike(x, 5);
             }
         }
@@ -351,15 +343,15 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
 fn vanish(x: &mut Cx) {
     match step(x, 0x86828) {
         0x86830 => {
-            addq8(x, SUB3, 2);
+            addq8(x, f::SUB3, 2);
             x.set8(0, 2);
             key(x, 0x12);
-            x.call(call::FADE);
+            lib::sound(x, 0xecf7a);
             body(x, 4);
         }
         0x86858 => {
             if x.anim_step() {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 aids::random_sidestep(x);
                 x.set_bit(0x1, 1, true);
                 x.set16(TIMER, 8);
@@ -368,10 +360,10 @@ fn vanish(x: &mut Cx) {
         }
         0x86886 => {
             if timer_done(x) {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set_bit(0x1, 1, false);
                 x.set8(0, 1);
-                x.call(call::FADE);
+                lib::sound(x, 0xecf7a);
             }
         }
         _ => finish(x),

@@ -17,7 +17,6 @@ fn flip8(x: &mut Cx) -> u32 {
 /// 0x8f4c2 : l'anneau de rang `+0xa8` (A1), à condition qu'il y ait exactement douze anneaux et que le rang soit unique.
 fn find_head(x: &mut Cx) -> bool {
     let want = x.u8(SEG);
-    x.c.d[0] = want as u32;
     x.c.d[1] = 0;
     x.c.d[2] = 0;
     x.c.d[6] = 0x25;
@@ -29,7 +28,6 @@ fn find_head(x: &mut Cx) -> bool {
             setw(x, 1, n);
             if rd8(x.b, a1 + 0x2f) == want {
                 if x.c.d[2] != 0 {
-                    x.c.d[0] = 0;
                     return false;
                 }
                 x.c.d[2] = a1;
@@ -38,17 +36,15 @@ fn find_head(x: &mut Cx) -> bool {
         a1 = a1.wrapping_add(0x60);
         x.c.a[1] = a1;
         let k = (x.c.d[6] as u16).wrapping_sub(1);
-        setw(x, 6, k);
+        setw(x, 6, k); // relu : compteur de boucle relu au tour suivant
         if k == 0xffff {
             break;
         }
     }
     if x.c.d[1] as u8 != 0xc || x.c.d[2] == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.c.a[1] = x.c.d[2];
-    x.c.d[0] = 1;
     true
 }
 
@@ -113,7 +109,6 @@ fn follow(x: &mut Cx) {
     x.c.d[0] = x.u8(FRAME) as u32;
     let sh = (x.u8(FRAME) as u16) << 5;
     setw(x, 0, sh);
-    x.c.a[6] = row;
     let px = x.u16(0x8);
     wr16(x.b, a1 + 8, px);
     let mut z = x.u16(0xc);
@@ -146,9 +141,7 @@ fn follow(x: &mut Cx) {
     }
     if idx == thr {
         let sub = x.data8(row + 4) as u16;
-        x.c.d[1] = sub as u32;
         let t = x.rom16(0x8ed7a + 2 * sub as u32);
-        setw(x, 1, t);
         let target = 0x8ed7au32.wrapping_add(t as i16 as i32 as u32);
         // si un anneau manque, la sous-routine rend la main (état de mort posé) et le placement continue
         if target == 0x8ed7e {
@@ -164,11 +157,8 @@ fn follow(x: &mut Cx) {
 fn ahead(x: &mut Cx, _idx: u8) {
     let a1 = x.c.a[1];
     let goal = flip8(x) as u16;
-    x.c.d[2] = goal as u32;
     let cur = rd8(x.b, a1 + 0x42) as u16;
-    x.c.d[1] = cur as u32;
     let diff = cur.wrapping_sub(goal);
-    setw(x, 1, diff);
     if diff != 0 {
         let mut d = diff & 0x1f;
         if !Fl::sub16(d, 0x10).lt() {
@@ -177,14 +167,11 @@ fn ahead(x: &mut Cx, _idx: u8) {
         let mut v = asr_w(d.wrapping_neg(), 2);
         if v == 0 {
             v = 1;
-            setw(x, 2, 1);
         }
-        setw(x, 1, v);
         let n = rd8(x.b, a1 + 0x42).wrapping_add(v as u8) & 0x1f;
         put8(x, a1 + 0x42, n);
     }
     let t = rd8(x.b, a1 + 0x43);
-    x.c.d[2] = t as u32;
     if t != 0 {
         let mut d = t as u16 & 0x1f;
         if !Fl::sub16(d, 0x10).lt() {
@@ -194,14 +181,11 @@ fn ahead(x: &mut Cx, _idx: u8) {
         if v == 0 {
             v = 1;
         }
-        setw(x, 2, v);
         let n = t.wrapping_sub(v as u8) & 0x1f;
         put8(x, a1 + 0x43, n);
     }
     let cur = rd8(x.b, a1 + 0x42);
-    x.c.d[1] = cur as u32;
     let goal = flip8(x);
-    x.c.d[2] = goal;
     if cur == goal as u8 && rd8(x.b, a1 + 0x43) == 0 {
         x.add8(SEG, 1);
     }
@@ -222,7 +206,6 @@ fn behind(x: &mut Cx, idx: u8) -> bool {
     setw(x, 0, idx as u16);
     let goal = flip8(x) as u16;
     x.c.d[1] = rd8(x.b, a3 + 0x42) as u32;
-    x.c.d[2] = goal as u32;
     let diff = (rd8(x.b, a3 + 0x42) as u16).wrapping_sub(goal);
     setw(x, 1, diff);
     if diff != 0 {
@@ -238,10 +221,8 @@ fn behind(x: &mut Cx, idx: u8) -> bool {
     }
     let d1 = x.c.d[1] as u8;
     let n = rd8(x.b, a3 + 0x42).wrapping_sub(d1) as u16 & 0x1f;
-    setw(x, 2, n);
     put8(x, a3 + 0x42, n as u8);
     let t = rd8(x.b, a3 + 0x43);
-    x.c.d[2] = t as u32;
     let mut d2 = t as u16;
     if t != 0 {
         d2 = d2.wrapping_sub(0x10);
@@ -249,13 +230,11 @@ fn behind(x: &mut Cx, idx: u8) -> bool {
         if d2 == 0 {
             d2 = 1;
         }
-        setw(x, 2, d2);
     }
     let n3 = (rd8(x.b, a3 + 0x43).wrapping_add(d2 as u8) as u16) & 0x1f;
     put8(x, a3 + 0x43, n3 as u8);
     let cur = rd8(x.b, a3 + 0x42);
     let goal = flip8(x);
-    x.c.d[2] = goal;
     if cur == goal as u8 && rd8(x.b, a3 + 0x43) == 0 {
         let v = x.u8(SEG).wrapping_sub(1);
         x.set8(SEG, v);
@@ -292,7 +271,7 @@ fn rows_a(x: &mut Cx, row: u32) -> bool {
         }
         d2 = (d2.wrapping_add(inc as u16)) & 0x1f;
         put8(x, a3 + 0x43, d2 as u8);
-        x.c.a[2] = a3;
+        x.c.a[2] = a3; // relu : A2 relu par la suite (DDSOM_POISON : cov_tour4_c3, cov_tour8_c1)
         d0 = d0.wrapping_sub(1);
         if d0 == 0xffff {
             break;
@@ -371,7 +350,7 @@ fn rows_b(x: &mut Cx, row: u32) -> bool {
         let diff = cur.wrapping_sub(d2);
         let step = if diff != 0 { smooth(diff) } else { cur_zero(cur) };
         put8(x, a3 + 0x43, (step.wrapping_add(cur) & 0x1f) as u8);
-        x.c.a[2] = a3;
+        x.c.a[2] = a3; // relu : A2 relu par la suite (DDSOM_POISON : cov_tour4_c3, cov_tour8_c1)
         d0 = d0.wrapping_sub(1);
         if d0 == 0xffff {
             break;
@@ -389,7 +368,6 @@ fn cur_zero(_cur: u16) -> u16 {
 fn positions(x: &mut Cx, a1: u32, row: u32) {
     x.c.a[2] = a1;
     let keep = row;
-    x.c.d[6] = row;
     let n = rd8(x.b, a1 + 0x2f) as i32 - 1;
     if n >= 0 {
         let mut d0 = n as u16;
@@ -418,14 +396,13 @@ fn positions(x: &mut Cx, a1: u32, row: u32) {
             { let t = rd16(x.b, a3 + 0x10).wrapping_add(ay); wr16(x.b, a3 + 0x10, t); }
             let s = rd8(x.b, a3 + 3) as u16 + 1;
             wr16(x.b, a3 + 0x12, s);
-            x.c.a[2] = a3;
+            x.c.a[2] = a3; // relu : A2 relu par la suite (DDSOM_POISON : cov_tour4_c3, cov_tour8_c1)
             d0 = d0.wrapping_sub(1);
             if d0 == 0xffff {
                 break;
             }
         }
     }
-    x.c.a[6] = keep;
     place_head(x, a1, keep)
 }
 
@@ -461,13 +438,12 @@ fn place_head(x: &mut Cx, a1: u32, row: u32) {
         0x8f294 => pose_5(x, a1, row),
         _ => pose_6(x, a1, row),
     };
-    trail(x, a1, row);
+    trail(x, a1);
 }
 
 /// Rang de l'anneau `a1` à la ligne `row` : sous le seuil (`+2`), la pose ne s'applique pas.
 fn guarded(x: &mut Cx, a1: u32, row: u32) -> Option<u16> {
     let d0 = rd8(x.b, a1 + 0x2f);
-    x.c.d[0] = d0 as u32;
     if Fl::sub8(d0, x.data8(row + 2)).lt() {
         return None;
     }
@@ -478,7 +454,6 @@ fn guarded(x: &mut Cx, a1: u32, row: u32) -> Option<u16> {
 fn ripple(x: &mut Cx, mut d0: u16, start: u32) -> bool {
     let mut d2 = rd16(x.b, start + 0x42);
     let mut a2 = start;
-    x.c.d[1] = 0;
     loop {
         if !Fl::sub16(d0, 0xb).lt() {
             return true;
@@ -595,8 +570,7 @@ fn pose_2(x: &mut Cx, a1: u32, row: u32) -> bool {
     setw(x, 4, d4);
     if d3 != d1 || d4 != d2 {
         x.c.a[1] = a1;
-        x.call(0x1386);
-        x.c.a[1] = a1;
+        lib::aim(x, (x.c.d[3] as u16, x.c.d[4] as u16), (x.c.d[1] as u16, x.c.d[2] as u16));
         let angle = (x.c.d[0] as u8).wrapping_sub(rd8(x.b, a1 + 0x42));
         setb(x, 0, angle);
         if angle != 0 {
@@ -606,7 +580,6 @@ fn pose_2(x: &mut Cx, a1: u32, row: u32) -> bool {
             if !Fl::sub16(w, 0x10).lt() {
                 s = 0xff;
             }
-            x.c.d[1] = x.c.d[1] & !0xff | s as u32;
             let n = rd8(x.b, a1 + 0x42).wrapping_add(s) & 0x1f;
             put8(x, a1 + 0x42, n);
         }
@@ -688,12 +661,10 @@ fn pose_4(x: &mut Cx, a1: u32, row: u32) -> bool {
     setb(x, 0, diff);
     if diff != 0 {
         w = x.c.d[0] as u16 & 0x1f;
-        setw(x, 0, w);
         let mut s: u8 = 1;
         if !Fl::sub16(w, 0x10).lt() {
             s = 0xff;
         }
-        x.c.d[1] = s as u32;
         let n = rd8(x.b, a1 + 0x43).wrapping_add(s) & 0x1f;
         put8(x, a1 + 0x43, n);
     }
@@ -706,7 +677,6 @@ fn pose_4(x: &mut Cx, a1: u32, row: u32) -> bool {
 fn shift_words(x: &mut Cx, mut d0: u16, start: u32) -> bool {
     let mut a2 = start;
     let mut d2 = rd16(x.b, a2 + 0x42);
-    x.c.d[1] = 0;
     loop {
         if !Fl::sub16(d0, 0xb).lt() {
             return true;
@@ -757,8 +727,7 @@ fn pose_6(x: &mut Cx, a1: u32, row: u32) -> bool {
 }
 
 /// 0x8f36a : les anneaux suivants (rangs croissants) se placent derrière le précédent d'après les trajectoires.
-fn trail(x: &mut Cx, a1: u32, row: u32) -> bool {
-    let keep = row;
+fn trail(x: &mut Cx, a1: u32) -> bool {
     let mut a2 = a1;
     let v = x.u8(0xad) & !1;
     x.set8(0xad, v);
@@ -766,7 +735,6 @@ fn trail(x: &mut Cx, a1: u32, row: u32) -> bool {
     loop {
         x.c.a[2] = a2;
         if !Fl::sub16(d0, 0xb).lt() {
-            x.c.a[6] = keep;
             return true;
         }
         d0 += 1;
@@ -785,7 +753,6 @@ fn trail(x: &mut Cx, a1: u32, row: u32) -> bool {
         { let t = rd16(x.b, a2 + 8); wr16(x.b, a3 + 8, t); }
         { let t = rd16(x.b, a2 + 0x10); wr16(x.b, a3 + 0x10, t); }
         let a4 = 0x106cb8u32.wrapping_add(((d0 - 1) << 3) as u32);
-        x.c.a[4] = a4;
         let (mut a6, mut d1);
         let mut d2;
         loop {

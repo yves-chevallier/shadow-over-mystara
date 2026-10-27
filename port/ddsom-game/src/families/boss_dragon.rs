@@ -32,8 +32,6 @@ const BOB_TABLE: u32 = 0x8faa2;
 mod rom {
     pub const BEGIN_A: u32 = 0xdf4bc;
     pub const NEW_MESSAGE: u32 = 0xc8312;
-    pub const BEGIN_CUTSCENE: u32 = 0xe0d8c;
-    pub const END_CUTSCENE: u32 = 0xe0c5c;
 }
 
 /// Champs propres à ce type.
@@ -71,7 +69,7 @@ const ACTIVE_FIRST: u32 = 0x0200_0000;
 const ACTIVE_LEAVE: u32 = 0x0200_0e00;
 
 pub fn run(x: &mut Cx) {
-    if x.a5_u8(var::FROZEN) != 0 {
+    if var::FROZEN.get(x.b) != 0 {
         return;
     }
     match x.u8(f::STATE) {
@@ -87,7 +85,7 @@ fn init(x: &mut Cx) {
     }
     let Some(lead) = leader(x) else { return };
     x.add8(f::STATE, 2);
-    x.set_a5_u8(var::FROZEN, 0);
+    var::FROZEN.set(x.b, 0);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(f::FLIP, 0x20);
     x.set8(0x6f, 2);
@@ -200,8 +198,8 @@ fn wait_stop(x: &mut Cx) {
         x.set_bit(CUTSCENE, 1, true);
         return;
     }
-    if x.bit(CUTSCENE, 0) && x.a5_u16(SCENE_PHASE) != 4 && x.a5_u8(var::FROZEN) == 0 {
-        x.set_a5_u8(var::PAUSE, 1);
+    if x.bit(CUTSCENE, 0) && x.a5_u16(SCENE_PHASE) != 4 && var::FROZEN.get(x.b) == 0 {
+        var::PAUSE.set(x.b, 1);
         x.set_a5_u8(0x3c, 1);
         x.set_a5_u8(0x33, 1);
         freeze_players(x, true);
@@ -210,7 +208,7 @@ fn wait_stop(x: &mut Cx) {
         if !alloc_failed(x) {
             x.set16(MESSAGE, x.c.a[1] as u16);
             x.add8(f::SUB2, 2);
-            x.call(rom::BEGIN_CUTSCENE);
+            lib::sound(x, 0xe0d8c);
             x.set8(TALKING, 1);
             x.set_bit(CUTSCENE, 0, false);
         }
@@ -220,7 +218,7 @@ fn wait_stop(x: &mut Cx) {
 
 fn wait_cutscene(x: &mut Cx) {
     if x.u16(MESSAGE) != 0 && x.linked(MESSAGE).u8(x.b, 0x22) != 0 {
-        x.set_a5_u8(var::PAUSE, 0);
+        var::PAUSE.set(x.b, 0);
         x.set_a5_u8(0x33, 0);
         freeze_players(x, false);
         x.add8(f::SUB2, 2);
@@ -292,7 +290,7 @@ fn leave(x: &mut Cx) {
     let Some(lead) = leader(x) else { return };
     let left = scroll_x(x).wrapping_sub(0x80);
     if x.u16(0x8).wrapping_sub(left) >= 0x200 {
-        x.call(rom::END_CUTSCENE);
+        lib::sound(x, 0xe0c5c);
         x.set8(TALKING, 0);
         x.set_bit(HOLD, 0, false);
         x.set8(SLOW, 0);
@@ -304,7 +302,7 @@ fn leave(x: &mut Cx) {
     } else if x.u8(SLOW) != 0 {
         -8
     } else {
-        (lead.u16(x.b, 0x58) as i16).wrapping_sub(x.a5_u8(var::PLAYERS_ALIVE) as i16)
+        (lead.u16(x.b, 0x58) as i16).wrapping_sub(var::PLAYERS_ALIVE.get(x.b) as i16)
     };
     x.set16(0x14, vx as u16);
     let y = lead.u16(x.b, 0x10).wrapping_sub(0x10);

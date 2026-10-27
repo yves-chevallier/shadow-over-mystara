@@ -4,17 +4,17 @@
 use super::attacks::squat_begin;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run_c(x: &mut Cx) {
     if !hit_gate(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
-    let step = x.u8(STEP);
+    let step = x.u8(f::SUB3);
     match x.u8(f::SUB2) {
         0 => {
             if step == 0 {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x10);
                 return mv(x, 0);
             }
@@ -41,10 +41,10 @@ fn countdown_stance(x: &mut Cx) {
 /// 0x680ee : attend la clé d'animation.
 fn wait_key(x: &mut Cx) {
     x.anim_step();
-    if x.u8(KEY) == 0 {
+    if x.u8(f::KEY_FRAME) == 0 {
         return;
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
 }
 
 /// 0x68146 : attend la fin de l'animation, puis debout.
@@ -66,33 +66,33 @@ fn back_hop(x: &mut Cx, step: u8) {
                 x.set8(f::SUB2, 8);
                 return squat_begin(x);
             }
-            x.add8(STEP, 2);
-            x.set16(SPEED_X2, 0x200);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::VY, 0x200);
             if rand_and(x, 1) != 0 {
-                negate(x, SPEED_X2);
+                negate(x, Obj::VY);
             }
-            x.set16(SPEED_Y2, 0);
-            x.set16(SPEED_Z, 0x400);
-            x.set16(GRAVITY, -0x80i16 as u16);
+            x.set16(Obj::AY, 0);
+            x.set16(Obj::VZ, 0x400);
+            x.set16(Obj::AZ, -0x80i16 as u16);
             mv(x, 3);
         }
         6 => wait_key(x),
         8 => {
             x.anim_step();
             x.move_yz();
-            if (x.u16(SPEED_Z) as i16) < 0 {
-                x.add8(STEP, 2);
+            if (x.u16(Obj::VZ) as i16) < 0 {
+                x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
             }
         }
         10 => {
             x.anim_step();
             x.move_yz();
-            if x.u32(HEIGHT) as i32 > 0 {
+            if x.u32(Obj::Z) as i32 > 0 {
                 return;
             }
-            x.add8(STEP, 2);
-            x.set32(HEIGHT, 0);
+            x.add8(f::SUB3, 2);
+            x.set32(Obj::Z, 0);
             x.set16(ANIM_TIME, 1);
         }
         12 => end_stance(x),
@@ -113,33 +113,33 @@ fn forward_hop(x: &mut Cx, step: u8) {
                 x.set8(0xa8, 0xff);
                 return squat_begin(x);
             }
-            x.add8(STEP, 2);
-            x.set16(SPEED_X, 0x200);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::VX, 0x200);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x800);
-            x.set16(GRAVITY, -0x80i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x800);
+            x.set16(Obj::AZ, -0x80i16 as u16);
             mv(x, 3);
         }
         6 => wait_key(x),
         8 => {
             x.anim_step();
             x.move_xz();
-            if (x.u16(SPEED_Z) as i16) < 0 {
-                x.add8(STEP, 2);
+            if (x.u16(Obj::VZ) as i16) < 0 {
+                x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
             }
         }
         10 => {
             x.anim_step();
             x.move_xz();
-            if x.u32(HEIGHT) as i32 > 0 {
+            if x.u32(Obj::Z) as i32 > 0 {
                 return;
             }
-            x.add8(STEP, 2);
-            x.set32(HEIGHT, 0);
+            x.add8(f::SUB3, 2);
+            x.set32(Obj::Z, 0);
             x.set16(ANIM_TIME, 1);
         }
         12 => end_stance(x),
@@ -153,41 +153,41 @@ fn punch_hop(x: &mut Cx, step: u8) {
         0 => next_anim(x),
         2 => wait(x),
         4 => {
-            x.add8(STEP, 2);
-            x.set16(SPEED_X, 0x200);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::VX, 0x200);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x800);
-            x.set16(GRAVITY, -0x80i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x800);
+            x.set16(Obj::AZ, -0x80i16 as u16);
             strike(x, 2);
         }
         6 => {
             x.anim_step();
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
         }
         8 => {
             x.move_xz();
             x.anim_step();
-            if (x.u16(SPEED_Z) as i16) < 0 {
-                x.add8(STEP, 2);
+            if (x.u16(Obj::VZ) as i16) < 0 {
+                x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
         }
         10 => {
             x.move_xz();
             x.anim_step();
-            if x.u32(HEIGHT) as i32 > 0 {
+            if x.u32(Obj::Z) as i32 > 0 {
                 return;
             }
-            x.set32(HEIGHT, 0);
+            x.set32(Obj::Z, 0);
             x.set16(ANIM_TIME, 1);
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
         }
         12 => {
             x.anim_step();
@@ -211,16 +211,15 @@ fn squat_again(x: &mut Cx, step: u8) {
             squat_begin(x);
         }
         6 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 let n = x.u16(TIMER).wrapping_sub(1);
                 x.set16(TIMER, n);
                 if (n as i16) >= 0 {
                     return;
                 }
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
                 let group = x.u8(GROUP) as i8 as i32 as u32;
-                x.c.d[0] = group;
                 let v = x.rom8(0x682e8u32.wrapping_add(group));
                 x.set8(0x68, v);
             }
@@ -233,25 +232,25 @@ fn squat_again(x: &mut Cx, step: u8) {
 
 /// +6 = 10 : sortie d'écran à pied (vitesse −0x230 vers le bord le plus proche), puis disparition.
 fn leave(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.set16(SPEED_X, -0x230i16 as u16);
+    if x.u8(f::SUB3) == 0 {
+        x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
-        let d = x.a5_u16(0x506).wrapping_sub(x.u16(X));
+        let d = var::SCROLL_X.get(x.b).wrapping_sub(x.u16(Obj::X));
         if (d as i16) >= 0xc0 {
             // `blt` non pris : à droite du bord, il part dans l'autre sens
-            negate(x, SPEED_X);
+            negate(x, Obj::VX);
             x.set8(f::FLIP, 0x20);
         }
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
         return mv(x, 0);
     }
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_x();
     }
     x.anim_step();
-    let d = x.u16(X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x10);
+    let d = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b)).wrapping_add(0x10);
     if d > 0x1a0 {
-        x.call(call::REMOVE);
+        detach_from_host(x);
         set_state_long(x, st::DEAD_LONG);
     }
 }
@@ -262,12 +261,11 @@ pub(super) fn run_d(x: &mut Cx) {
     if !hit_gate(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
-    let step = x.u8(STEP);
+    let step = x.u8(f::SUB3);
     match x.u8(f::SUB2) {
         0 | 6 => {
             if step == 0 {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x1e);
                 return mv(x, 0);
             }
@@ -275,20 +273,20 @@ pub(super) fn run_d(x: &mut Cx) {
         }
         2 => match step {
             0 => {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 restart_walk(x);
                 x.set16(TIMER, 0x20);
             }
             2 => {
                 x.anim_step();
-                if (x.u8(KEY) as i8) < 0 {
+                if (x.u8(f::KEY_FRAME) as i8) < 0 {
                     return;
                 }
                 let n = x.u16(TIMER).wrapping_sub(1);
                 x.set16(TIMER, n);
                 if n != 0 {
                     x.move_by_table_xy();
-                    let d = x.u16(TIMER2).wrapping_sub(x.u16(X)).wrapping_add(0x30);
+                    let d = x.u16(TIMER2).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x30);
                     if d < 0x60 {
                         return;
                     }
@@ -306,43 +304,43 @@ pub(super) fn run_d(x: &mut Cx) {
 fn sidestep(x: &mut Cx, step: u8) {
     match step {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let mut angle = 0u8;
             if x.u16(f::TARGET) != 0 {
                 let target = load_target(x);
-                if x.u16(DEPTH) < target.u16(x.b, DEPTH) {
+                if x.u16(Obj::Y) < target.u16(x.b, Obj::Y) {
                     angle = 0x10;
                 }
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             if rand_and(x, 1) != 0 {
                 // bond latéral
-                x.set8(STEP, 4);
-                x.set16(SPEED_X2, 0x300);
-                if x.u8(ANGLE) != 0 {
-                    negate(x, SPEED_X2);
+                x.set8(f::SUB3, 4);
+                x.set16(Obj::VY, 0x300);
+                if x.u8(Obj::SPEED_INDEX) != 0 {
+                    negate(x, Obj::VY);
                 }
-                x.set16(SPEED_Y2, 0);
-                x.set16(SPEED_Z, 0x400);
-                x.set16(GRAVITY, -0x80i16 as u16);
+                x.set16(Obj::AY, 0);
+                x.set16(Obj::VZ, 0x400);
+                x.set16(Obj::AZ, -0x80i16 as u16);
                 return mv(x, 3);
             }
             x.set16(TIMER, 0x16);
-            let depth = x.u16(DEPTH);
+            let depth = x.u16(Obj::Y);
             x.set16(TIMER2, depth);
             x.set32(0x4c, 0x1c74b6);
             mv(x, 0);
         }
         2 => {
             x.anim_step();
-            if (x.u8(KEY) as i8) < 0 {
+            if (x.u8(f::KEY_FRAME) as i8) < 0 {
                 return;
             }
             let n = x.u16(TIMER).wrapping_sub(1);
             x.set16(TIMER, n);
             if n != 0 {
                 x.move_by_table_xy();
-                let d = x.u16(TIMER2).wrapping_sub(x.u16(DEPTH)).wrapping_add(0x20);
+                let d = x.u16(TIMER2).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);
                 if d < 0x40 {
                     return;
                 }
@@ -353,19 +351,19 @@ fn sidestep(x: &mut Cx, step: u8) {
         6 => {
             x.anim_step();
             x.move_yz();
-            if (x.u16(SPEED_Z) as i16) < 0 {
-                x.add8(STEP, 2);
+            if (x.u16(Obj::VZ) as i16) < 0 {
+                x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
             }
         }
         8 => {
             x.anim_step();
             x.move_yz();
-            if x.u32(HEIGHT) as i32 > 0 {
+            if x.u32(Obj::Z) as i32 > 0 {
                 return;
             }
-            x.add8(STEP, 2);
-            x.set32(HEIGHT, 0);
+            x.add8(f::SUB3, 2);
+            x.set32(Obj::Z, 0);
             x.set16(ANIM_TIME, 1);
         }
         10 => end_stance(x),

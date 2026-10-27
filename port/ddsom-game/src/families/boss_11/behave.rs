@@ -13,11 +13,9 @@ pub(super) fn intro(x: &mut Cx) {
         0x8d7ce => {
             x.add8(f::SUB2, 2);
             x.set8(NO_ZONE, 0xff);
-            let px = x.a5_u16(var::SCROLL_X).wrapping_add(0x190);
-            setw(x, 0, px);
+            let px = var::SCROLL_X.get(x.b).wrapping_add(0x190);
             x.set16(0x8, px);
-            let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x40);
-            setw(x, 0, py);
+            let py = var::SCROLL_Y.get(x.b).wrapping_add(0x40);
             x.set16(0x10, py);
             x.set16(0xc, 0);
             x.set16(0x14, (-0x200i16) as u16);
@@ -40,14 +38,14 @@ pub(super) fn intro(x: &mut Cx) {
             sync(x);
         }
         _ => {
-            if Fl::sub8(x.a5_u8(0x2c), 0xc).lt() {
+            if Fl::sub8(var::PHASE.get(x.b), 0xc).lt() {
                 x.anim_step();
                 return sync(x);
             }
             x.set8(0, 1);
             x.add8(f::SUB, 2);
             x.set16(f::SUB2, 0);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             x.set16(ANIM_KIND, 0xffff);
             body(x, 0)
         }
@@ -66,22 +64,18 @@ fn fall(x: &mut Cx) {
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
     let v = asr_w(x.u16(0x14), 2);
-    setw(x, 0, v);
     x.set16(0x14, v);
     body(x, 7);
-    x.c.d[0] = 8;
-    x.call(call::SOUND_B);
-    x.call(0xecc0a);
+    lib::shake_58(x, 8);
+    lib::sound(x, 0xecc0a);
 }
 
 // --- groupe 6 : sans joueur ----------------------------------------------------------------------------------
 
 /// 0x8d8bc : attend ; un joueur revient (vie > 0) et le compteur `+0xb6` repart.
 pub(super) fn lone(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
-        x.c.d[0] = 2;
-        x.call(0x43bc);
-        if !zero(x) {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
+        if lib::target_by_criterion(x, lib::LOWEST_HP) {
             if tst8(x, 0xb6).gt() {
                 sub8(x, 0xb6, 1);
             } else {
@@ -90,8 +84,8 @@ pub(super) fn lone(x: &mut Cx) {
             }
         }
     }
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         return body(x, 0);
     }
     x.anim_step();
@@ -102,8 +96,7 @@ pub(super) fn lone(x: &mut Cx) {
 
 /// 0x8eb52 : délai de marche selon la difficulté.
 fn walk_delay(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY);
-    setw(x, 0, level);
+    let level = var::RANK.get(x.b);
     let v = x.rom8(0x8eb5e + level as u32);
     x.set8(0x71, v);
 }
@@ -112,27 +105,24 @@ fn walk_delay(x: &mut Cx) {
 fn walk_steps(x: &mut Cx) {
     let alea = x.random();
     let i = alea & 0x1f;
-    setw(x, 0, i);
     let v = x.rom8(0x8eb90 + i as u32);
     x.set8(0x6b, v);
 }
 
 /// 0x8d902.
 pub(super) fn chase(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return to_wait(x);
     }
-    x.c.d[0] = 2;
-    x.call(0x43bc);
-    if zero(x) {
+    if !lib::target_by_criterion(x, lib::LOWEST_HP) {
         return to_wait(x);
     }
     if tst16(x, 0xc).gt() {
         return to_attack_2(x);
     }
     let mut aim = true;
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         walk_steps(x);
         walk_delay(x);
     } else if sub8(x, 0x71, 1).gt() {
@@ -145,7 +135,7 @@ pub(super) fn chase(x: &mut Cx) {
         }
     }
     if aim {
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
         speed(x, 0x17);
     }
     x.move_by_table_xy();
@@ -179,14 +169,11 @@ fn pose(x: &mut Cx) {
     }
     if w == 0 || w == 8 || w == 9 {
         let mut d1 = x.u8(0x2d) as u16;
-        x.c.d[1] = d1 as u32;
         if x.u8(f::FLIP) != 0 {
             d1 = d1.wrapping_add(0x10);
         }
         d1 &= 0x1f;
-        setw(x, 1, d1);
         let n = if Fl::sub16(d1, 0x10).gt() { 8 } else { 9 };
-        x.c.d[0] = n;
         if n as u8 != x.u8(ANIM_N) {
             return body(x, n);
         }
@@ -199,60 +186,44 @@ fn pose(x: &mut Cx) {
 
 /// 0x8da02 : le serpent est hors de l'écran.
 fn off_screen(x: &mut Cx) -> bool {
-    let mut d0 = x.a5_u16(var::SCROLL_X);
-    if x.a5_u8(var::CAMERA_SELECT) != 0 {
-        d0 = x.a5_u16(0x556);
+    let mut d0 = var::SCROLL_X.get(x.b);
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        d0 = var::CAMERA_ALT_X.get(x.b);
     }
-    setw(x, 0, d0);
     let here = x.u16(0x8);
     if Fl::sub16(d0, here).ge() {
-        x.c.d[0] = 1;
         return true;
     }
     d0 = d0.wrapping_add(0x1c0);
-    setw(x, 0, d0);
     if Fl::sub16(d0, here).ge() {
-        x.c.d[0] = 0;
         return false;
     }
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x8da28 : la cible est derrière le serpent.
 fn turn_needed(x: &mut Cx) -> bool {
     let w = x.u16(f::TARGET);
-    setw(x, 0, w);
     if (w as i16) >= 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.c.a[1] = w as i16 as i32 as u32;
     if rd8(x.b, x.c.a[1]) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let mut d = rd16(x.b, x.c.a[1] + 8).wrapping_sub(x.u16(0x8));
     if x.u8(f::FLIP) == 0 {
         d = d.wrapping_neg();
     }
-    setw(x, 0, d);
     if Fl::sub16(d, 0xffd0).gt() {
-        x.c.d[0] = 0;
         return false;
     }
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x8dafe : un joueur tout près devant.
 fn hit_near(x: &mut Cx) -> bool {
-    setw(x, 0, 0xfff0);
-    setw(x, 1, 0x20);
-    setw(x, 2, 0x10);
-    x.call(0xb5e0);
-    let ok = !zero(x);
-    x.c.d[0] = ok as u32;
+    let ok = lib::target_in_box(x, -0x10, 0x20, 0x10);
     ok
 }
 
@@ -279,7 +250,6 @@ fn near_roll(x: &mut Cx) -> bool {
     let i = (x.c.d[0] as u16 & 3) * 4;
     setw(x, 0, i);
     let mask = rom32(x, 0x8da88 + i as u32);
-    x.c.d[1] = mask;
     let alea = x.random();
     let r = alea & 1;
     setw(x, 0, r);
@@ -304,16 +274,11 @@ fn far_roll(x: &mut Cx) -> bool {
     let i = (x.c.d[0] as u16 & 3) * 4;
     setw(x, 0, i);
     let mask = rom32(x, 0x8dad2 + i as u32);
-    x.c.d[1] = mask;
     let alea = x.random();
     let b = alea & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
-        setw(x, 0, 0xffe0);
-        setw(x, 1, 0xa0);
-        setw(x, 2, 0x80);
-        x.call(0xb5e0);
-        if !zero(x) {
+        if lib::target_in_box(x, -0x20, 0xa0, 0x80) {
             x.c.d[0] = 1;
             return true;
         }
@@ -324,7 +289,6 @@ fn far_roll(x: &mut Cx) -> bool {
 
 /// 0x8db2a : tire une attaque dans la table `table` (16 octets), ou renonce.
 fn pick(x: &mut Cx, table: u32) {
-    x.c.a[4] = table;
     if !roll(x) {
         let alea = x.random();
         let i = alea & 0xf;
@@ -354,16 +318,13 @@ fn roll(x: &mut Cx) -> bool {
     let alea = x.random();
     let r = alea & 7;
     setw(x, 0, r);
-    let n = x.a5_u8(var::PLAYERS_ALIVE).wrapping_sub(1);
+    let n = var::PLAYERS_ALIVE.get(x.b).wrapping_sub(1);
     setb(x, 1, n);
     let d1 = (x.c.d[1] as u16 & 2).wrapping_mul(4);
-    setw(x, 1, d1);
-    let level = (x.a5_u16(var::DIFFICULTY) >> 8) as u8;
+    let level = (var::RANK.get(x.b) >> 8) as u8;
     setb(x, 2, level);
     let d2 = (x.c.d[2] as u16) >> 2;
-    setw(x, 2, d2);
     let d1 = d1.wrapping_add(d2);
-    setw(x, 1, d1);
     let v = x.rom8(0x8dbc0 + d1 as u32);
     setb(x, 1, v);
     v >> (r & 7) & 1 != 0

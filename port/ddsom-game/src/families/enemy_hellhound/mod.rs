@@ -15,6 +15,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod arrival;
 mod attacks;
@@ -22,20 +23,7 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_X2: u32 = 0x1c;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
-    pub const KEY: u32 = 0x33;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const VULNERABLE: u32 = 0x67;
@@ -62,16 +50,6 @@ use crate::objects::Courant;
 
 pub(self) const SET_MOVE: u32 = 0x162126;
 pub(self) const SET_STRIKE: u32 = 0x162148;
-
-pub(self) mod call {
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const TURN_TO_TARGET: u32 = 0x788c;
-    pub const RAND_TARGET_CHECK: u32 = 0x79ce;
-    pub const ANNOUNCE: u32 = 0xac3a;
-    pub const WALK_STEP: u32 = 0xe76c;
-    pub const REMOVE: u32 = 0x27ee;
-    pub const SPARK: u32 = 0xb10c8;
-}
 
 pub fn run(x: &mut Cx) {
     if suspended(x) {
@@ -111,13 +89,13 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
 pub(self) fn set_angle(x: &mut Cx) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Étape commune des gestes : attend la clé d'animation `+0x33` puis passe à l'étape suivante (0x6244a).
 pub(self) fn wait_key(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
     }
     x.anim_step();
@@ -135,9 +113,9 @@ pub(self) fn land(x: &mut Cx) {
 /// 0x62478 : poussière, retour au sol, étape suivante.
 pub(self) fn land_dust(x: &mut Cx) {
     dust(x);
-    x.call(0xec820);
-    x.set32(HEIGHT, 0);
-    x.add8(STEP, 2);
+    lib::sound(x, 0xec820);
+    x.set32(Obj::Z, 0);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 0xc);
     mv(x, 0xc);
@@ -146,11 +124,7 @@ pub(self) fn land_dust(x: &mut Cx) {
 /// 0x63a50 : quatre nuages de poussière autour de l'ennemi.
 pub(self) fn dust(x: &mut Cx) {
     for d2 in [-0x1c, -8, 8, 0x1c] {
-        x.c.d[0] = 0;
-        x.c.d[1] = 0;
-        set_dw(x, 2, d2 as u16);
-        set_dw(x, 3, 4);
-        x.call(call::SPARK);
+        lib::shock(x, 0, 0, d2 as u16, 4);
     }
 }
 
@@ -159,44 +133,34 @@ pub(self) fn puff(x: &mut Cx, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
-        x.c.d[0] = d0;
-        set_dw(x, 1, d1 as u16);
-        set_dw(x, 2, d2 as u16);
-        set_dw(x, 3, d3 as u16);
-        x.call(call::SPARK);
+        lib::shock(x, d0, d1 as u16, d2 as u16, d3 as u16);
     }
 }
 
 /// 0x639fe : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
 pub(self) fn must_turn(x: &mut Cx) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = x.linked(f::TARGET);
-    x.c.a[1] = target.0 | 0xff00_0000;
-    let dx = target.u16(x.b, X).wrapping_sub(x.u16(X)) as i16;
+    let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16;
     let want = if dx > 0 { 0x20 } else { 0 };
     let turn = want != x.u8(f::FLIP);
-    x.c.d[0] = turn as u32;
     turn
 }
 
 /// 0x63a98 : la cible est dans la même rangée (profondeur à 0x30 près) mais loin en X (plus de 0xf0).
 pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let target = x.linked(f::TARGET);
-    let dz = target.u16(x.b, DEPTH).wrapping_sub(x.u16(DEPTH)).wrapping_add(0x30);
+    let dz = target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x30);
     if dz > 0x60 {
-        x.c.d[0] = 0;
         return false;
     }
-    let dx = target.u16(x.b, X).wrapping_sub(x.u16(X)).wrapping_add(0xf0);
+    let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xf0);
     let far = dx > 0x1e0;
-    x.c.d[0] = far as u32;
     far
 }
 
@@ -205,12 +169,12 @@ pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
 pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
     let profile = x.u8(GROUP) as u32;
     let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let mv = x.data8(list + row + r);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set16(f::STATE, 0x0204);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
     if !x.in_arena(0) && x.u8(f::SUB2) == 0x10 {
         x.set8(f::SUB2, 8);
     }
@@ -221,16 +185,16 @@ pub(self) fn after_strike(x: &mut Cx) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
-    let close = target_in_box(x, -0x30, 0x30, 8) || target_in_box(x, -0xd0, 0x70, 8);
+    let close = lib::target_in_box(x, -0x30, 0x30, 8) || lib::target_in_box(x, -0xd0, 0x70, 8);
     if !close {
         return set_state_long(x, STANCE);
     }
-    let row = ((x.a5_u16(0x7f92) >> 1) << 5) as u32;
+    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let mv = x.data8(0x637fe + row + r);
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, 0x0208);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 pub(self) const STANCE: u32 = 0x0202_0000;
@@ -246,12 +210,12 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set8(0x6f, 1);
     x.set8(f::BOX_SET, 0x12);
-    x.call(rom::INITIAL_HP);
+    lib::initial_hp(x);
     for (off, v) in [(0x70, 0), (0x7e, 0xf), (0x7f, 0), (0x8e, 0), (0x78, 0xff), (0x81, 0xf), (0x80, 0x10)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     let params: [(u32, u8); 10] = if x.u8(GROUP) == 0 {
         [(0x68, 2), (0x69, 2), (0x6a, 0), (0x6c, 3), (0x6d, 2), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x24), (0x76, 4)]
     } else {
@@ -263,10 +227,10 @@ fn init(x: &mut Cx) {
     if !pick_target(x) {
         return set_state_long(x, IDLE);
     }
-    x.call(call::FACE_TARGET);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     // état de départ, aspect et animation selon la variante
-    let (state, look_v, anim) = match x.u8(VARIANT) {
+    let (state, look_v, anim) = match x.u8(Obj::VARIANT) {
         0 => (STANCE, 0xc, 2),
         1 => (0x0202_0600, 3, 3),
         2 => (0x0200_0400, 0, 0),

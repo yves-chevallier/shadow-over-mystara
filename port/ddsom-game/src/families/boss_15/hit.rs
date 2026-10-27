@@ -10,7 +10,7 @@ use crate::objects::Courant;
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::SUB) == 0 {
         if x.u8(TYPE) == TYPE_BIG {
-            x.call(0xb648);
+            lib::drop_once(x);
         }
         if (x.u16(f::HP) as i16) <= 0 {
             x.set8(f::SUB, 6);
@@ -59,7 +59,7 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x929c4 : réaction au coup (la table 0x929da n'a qu'une routine, 0x92a82).
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0x10112);
+        lib::set_68(x);
     }
     if x.u8(f::SUB2) == 0 {
         x.set_a5_u16(0x51e, 0);
@@ -73,7 +73,7 @@ fn reaction(x: &mut Cx) {
         x.set8(SHAKE, 0x10);
         return set_anim(x, 4, 0);
     }
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return;
     }
@@ -98,7 +98,7 @@ fn reaction(x: &mut Cx) {
 
 /// 0x92b2c : recul : le dragon glisse en arrière pendant 15 images.
 fn pushed_back(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(f::SUB2) == 0 {
@@ -130,7 +130,7 @@ fn get_up(x: &mut Cx) {
             if x.u8(f::SUB2) == 0 {
                 x.add8(f::SUB2, 2);
             }
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, 0x84, 1).gt() {
@@ -143,7 +143,7 @@ fn get_up(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if !step(x) {
@@ -155,7 +155,7 @@ fn get_up(x: &mut Cx) {
             x.set_bit(0x1, 1, true);
         }
         6 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if sub16(x, TIMER, 1).pl() {
@@ -165,7 +165,7 @@ fn get_up(x: &mut Cx) {
             x.set_bit(0x1, 1, false);
         }
         8 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if !step(x) {
@@ -183,15 +183,16 @@ fn get_up(x: &mut Cx) {
 fn death(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            x.call(0xe5416);
+            lib::sound(x, 0xe5416);
             x.set_a5_u8(0x42, 1);
             x.set_a5_u8(0x50, 0);
             crate::mem::wr16(x.b, 0xff2a84, 0x0f00);
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
-            for addr in [0xb780, 0xbad6, 0xe2f6, 0xe0a10, 0xe3b6c, 0x103ba] {
-                x.call(addr);
-            }
+            lib::drop_rewards(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
+            lib::flash_and_shake(x);
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             let stun = x.u8(STUN);
@@ -204,7 +205,7 @@ fn death(x: &mut Cx) {
         2 => {
             step(x);
             x.move_xz();
-            let cam_y = x.a5_u16(var::SCROLL_Y);
+            let cam_y = var::SCROLL_Y.get(x.b);
             let d = x.u16(0x10).wrapping_sub(cam_y).wrapping_add(x.u16(0xc));
             if (d as i16) <= 0x200 {
                 return;

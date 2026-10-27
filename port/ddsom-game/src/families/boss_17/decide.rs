@@ -4,6 +4,7 @@
 //! Les tables sont lues dans la ROM (espace des opcodes : adressage relatif au PC).
 
 use super::*;
+use crate::objects::Obj;
 
 /// Combat : attente de joueurs (groupe 10), marche vers un joueur, charge...
 pub(super) const WAIT: u32 = 0x020a_0000;
@@ -96,10 +97,7 @@ fn attack(x: &mut Cx, state: u32) {
 /// Le boss est-il dans la fenêtre horizontale de la caméra élargie de `-0x10` à `0x190` (0x104a2) ?
 /// D0 = bords, D1 = largeur ; rend D0 (0 : dedans, 1 : dehors).
 fn off_screen(x: &mut Cx) -> bool {
-    x.c.d[0] = (-0x10i32) as u32;
-    set_dw(x, 1, 0x190);
-    x.call(0x104a2);
-    x.c.d[0] & 0xff != 0
+    lib::outside_band(x, -0x10, 0x190)
 }
 
 /// 0x972e0 : attaque 10 si le boss est à l'écran et qu'il lui en reste.
@@ -217,14 +215,14 @@ fn table16(x: &mut Cx, table: u32, index: u32) -> u16 {
 
 /// 0x96ef0 : délai avant le pas suivant, selon la difficulté.
 pub(super) fn walk_delay_fast(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x96f08, level);
     x.set8(WALK_DELAY, v);
 }
 
 /// 0x96efc : idem, table des marches lentes.
 pub(super) fn walk_delay_slow(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x96f28, level);
     x.set8(WALK_DELAY, v);
 }
@@ -245,8 +243,8 @@ pub(super) fn walk_steps_slow(x: &mut Cx) {
 
 /// Index de la table de difficulté : `(difficulté & 0x1e) × k + (joueurs - 1)`.
 fn level_index(x: &mut Cx, k: u32) -> u32 {
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * k;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * k;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     level + players.saturating_sub(1)
 }
 
@@ -259,8 +257,8 @@ pub(super) fn pick_strike_limit(x: &mut Cx) {
 
 /// 0x973c2 : durée du ralenti (mot).
 pub(super) fn pick_slow_time(x: &mut Cx) {
-    let level = (x.a5_u16(var::DIFFICULTY) & 0x1e) as u32 * 4;
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let i = level + 2 * players.saturating_sub(1);
     let v = table16(x, 0x973e4, i);
     x.set16(SLOW_TIME, v);
@@ -268,12 +266,12 @@ pub(super) fn pick_slow_time(x: &mut Cx) {
 
 /// 0x97464 : mode du ralenti (1 ou 2), tiré dans un masque de bits par difficulté et nombre de joueurs.
 pub(super) fn pick_slow_mode(x: &mut Cx) {
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let row = players.saturating_sub(1) << 3;
-    let level = ((x.a5_u16(var::DIFFICULTY) & 0x18) >> 2) as u32;
+    let level = ((var::RANK.get(x.b) & 0x18) >> 2) as u32;
     let i = row + level;
     let bit = random(x) & 0x1f & 7;
-    let (table, set_means_one) = if x.u8(VARIANT) == 0 { (0x974aa, true) } else { (0x974ca, false) };
+    let (table, set_means_one) = if x.u8(Obj::VARIANT) == 0 { (0x974aa, true) } else { (0x974ca, false) };
     let set = table8(x, table, i) >> bit & 1 != 0;
     x.set8(SLOW, if set == set_means_one { 1 } else { 2 });
 }
@@ -292,8 +290,8 @@ pub(super) fn spawn_ring(x: &mut Cx, count: i16) {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
         let dx = table16(x, 0x97570, i);
         let dy = table16(x, 0x97572, i);
-        let px = dx.wrapping_add(x.a5_u16(var::CAMERA1_X));
-        let py = dy.wrapping_add(x.a5_u16(var::CAMERA1_Y));
+        let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
+        let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         set_dw(x, 0, px);
         set_dw(x, 2, py);
         x.c.d[1] = 0;
@@ -312,15 +310,10 @@ pub(super) fn spawn_ring(x: &mut Cx, count: i16) {
 
 /// 0x96fac, 0x96fc8 : un joueur est-il dans la boîte `(d0, d1, d2)` ? Rend 0 sinon, ou 1 / 2 : le côté (0x1047a).
 pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ai::TARGET_IN_BOX);
-    if zero(x) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
-    x.call(0x1047a);
-    x.c.d[0] as u8
+    lib::turn_decision(x) as u8
 }
 
 /// 0x96fe4 : un joueur est tout près devant ; la table 0x96ffa choisit l'entrée de 0x9700a.

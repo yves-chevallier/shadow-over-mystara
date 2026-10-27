@@ -34,7 +34,7 @@ pub(super) fn run(x: &mut Cx) {
         10 => big_jump(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         wait(x);
     }
 }
@@ -43,12 +43,8 @@ pub(super) fn run(x: &mut Cx) {
 
 /// Poussière sous le dragon (0xb10c8) : `kind` 0x100 ou 0x101.
 fn dust(x: &mut Cx, kind: u16) {
-    x.c.d[0] = 0;
-    set_dw(x, 1, kind);
-    set_dw(x, 2, 0);
     let z = x.u16(0xc).wrapping_neg();
-    set_dw(x, 3, z);
-    x.call(call::EFFECT);
+    lib::shock(x, 0, kind, 0, z);
 }
 
 /// Mot lu en A0 − 0x7f92 : l'original voulait le compteur d'images (`A5 + 0x6e`) mais a écrit un déplacement
@@ -197,7 +193,7 @@ fn usable(x: &mut Cx, a2: Obj) -> bool {
 
 /// 0x90458 : garde la cible actuelle tant que le minuteur (octet `+0xa6`) tourne, sinon en tire une autre.
 fn aim_choice(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return;
     }
     if sub8(x, TIMER, 1).gt() {
@@ -297,12 +293,9 @@ fn aim(x: &mut Cx, p: Obj) {
     if x.u8(f::FLIP) != 0 {
         d1 = d1.wrapping_neg();
     }
-    let px = p.u16(x.b, 0x8);
-    set_dw(x, 1, px.wrapping_add(d1 as u16));
+    let px = p.u16(x.b, 0x8).wrapping_add(d1 as u16);
     let py = p.u16(x.b, 0x10);
-    set_dw(x, 2, py);
-    x.c.a[1] = p.0;
-    x.call(0xf0e8);
+    lib::turn_toward(x, px, py);
     x.move_by_table_xy();
 }
 
@@ -438,9 +431,9 @@ fn big_jump(x: &mut Cx) {
             }
             x.add8(0x7, 2);
             // retombe de l'autre côté de l'écran
-            let mut d0 = x.a5_u16(var::SCROLL_X);
+            let mut d0 = var::SCROLL_X.get(x.b);
             if x.u8(0xa) == 0 {
-                d0 = x.a5_u16(0x556);
+                d0 = var::CAMERA_ALT_X.get(x.b);
             }
             let mut d1 = d0.wrapping_sub(0x40).wrapping_add(0xc0);
             let (mut side, mut vx) = (0x20u8, 0x600u16);

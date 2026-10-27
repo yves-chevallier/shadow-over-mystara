@@ -4,6 +4,7 @@
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -36,13 +37,13 @@ fn switch_flight_set(x: &mut Cx) {
 }
 
 fn charge_a(x: &mut Cx) {
-    let level = x.a5_u16(0x7f92) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x719f6 + level);
     x.set8(CHARGE, v);
 }
 
 fn charge_b(x: &mut Cx) {
-    let level = x.a5_u16(0x7f92) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x71a16 + level);
     x.set8(CHARGE, v);
 }
@@ -65,9 +66,9 @@ fn pursue(x: &mut Cx) {
     if interrupted(x) {
         return;
     }
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
-        x.call(0x79f6);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
+        lib::draw_6e(x);
         x.c.d[0] &= !0xff;
         x.set8(LOOK, 0);
         if x.u8(LOOK_PREV) != 0 {
@@ -93,8 +94,8 @@ fn pursue(x: &mut Cx) {
 // --- +6 = 2 : demi-tour ---------------------------------------------------------------------------
 
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         x.set8(LOOK, 1);
@@ -122,7 +123,7 @@ fn glide(x: &mut Cx, second: bool) {
     if interrupted(x) {
         return;
     }
-    if x.u8(STEP) == 0 {
+    if x.u8(f::SUB3) == 0 {
         if second {
             wander_b(x);
             charge_b(x);
@@ -138,13 +139,13 @@ fn glide(x: &mut Cx, second: bool) {
 }
 
 fn begin_glide(x: &mut Cx) {
-    x.add8(STEP, 2);
-    x.set16(SPEED_Y, 0);
-    x.set16(SPEED_Y2, 0);
+    x.add8(f::SUB3, 2);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::AY, 0);
     if !pick_target(x) {
         return go::retire(x);
     }
-    x.call(call::FLAP);
+    lib::approach_target(x);
     set_speed(x, 0xd);
     let prev = x.u8(LOOK_PREV);
     let look = x.u8(LOOK);
@@ -165,7 +166,7 @@ fn glide_step(x: &mut Cx) {
         if (w as i8) <= 0 {
             return go::wander_far(x);
         }
-        x.call(call::FLAP);
+        lib::approach_target(x);
         set_speed(x, 0xd);
         if x.u8(LOOK) == 3 {
             charge_b(x);
@@ -187,7 +188,7 @@ fn glide_step(x: &mut Cx) {
             return pick_c(x);
         }
     }
-    if target_in_box(x, -0x19, 0x18, 0xa) {
+    if lib::target_in_box(x, -0x19, 0x18, 0xa) {
         return pick_a2(x);
     }
     if target_in_box_close(x, -0x80, 0x10, 8) {
@@ -196,7 +197,7 @@ fn glide_step(x: &mut Cx) {
     if !lib::facing_target(x) {
         return go::turn_around(x);
     }
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
     lib::step(x);
@@ -204,16 +205,12 @@ fn glide_step(x: &mut Cx) {
 
 /// 0x7ef4 : comme `target_in_box`, pour l'ogre.
 fn target_in_box_close(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0x7ef4);
-    !x.c.cond(7)
+    lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// 0x71a9a / 0x71ab8 : un joueur dans la boîte `(−0x60, 0x30, 6)` ou `(−0xc0, 0x20, 8)`, puis la décision de l'IA.
 fn near_box(x: &mut Cx, which: u32) -> u32 {
-    let found = if which == 0x71a9a { target_in_box(x, -0x60, 0x30, 6) } else { target_in_box(x, -0xc0, 0x20, 8) };
+    let found = if which == 0x71a9a { lib::target_in_box(x, -0x60, 0x30, 6) } else { lib::target_in_box(x, -0xc0, 0x20, 8) };
     if !found {
         return 0;
     }
@@ -281,58 +278,57 @@ fn pick_c(x: &mut Cx) {
 // --- +6 = 8 : plongeon -------------------------------------------------------------------------------
 
 fn plunge(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
-            x.set16(SPEED_Y, 0);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::AX, 0);
             let mut angle = 0x18;
             if x.u8(SIDE_TURN) != 0 {
                 let target = load_target(x);
-                let px = target.u16(x.b, X);
+                let px = target.u16(x.b, Obj::X);
                 x.set16(GOAL_X, px);
                 if x.u8(f::FLIP) != 0 {
                     angle = 8;
                 }
             } else {
                 x.set8(f::FLIP, 0);
-                let cam = x.a5_u16(0x5a6);
-                if (x.u16(X) as i16) <= (cam as i16) {
+                let cam = var::CAMERA1_X.get(x.b);
+                if (x.u16(Obj::X) as i16) <= (cam as i16) {
                     x.set8(f::FLIP, 0x20);
                     angle = 8;
                 }
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x35);
             look(x, 4);
             act_a(x, 4);
         }
         2 => {
             lib::step(x);
-            if x.u8(KEY) != 2 {
+            if x.u8(f::KEY_FRAME) != 2 {
                 x.move_x();
-                let leftward = (x.u16(SPEED_X) as i16) < 0;
+                let leftward = (x.u16(Obj::VX) as i16) < 0;
                 let (mut d0, mut d1);
                 if x.u8(SIDE_TURN) == 0 {
                     d0 = camera_x(x).wrapping_add(if leftward { 0xf0 } else { 0x90 });
-                    d1 = x.u16(X);
+                    d1 = x.u16(Obj::X);
                 } else {
                     d0 = x.u16(GOAL_X);
-                    d1 = x.u16(X);
+                    d1 = x.u16(Obj::X);
                 }
                 if leftward {
                     std::mem::swap(&mut d0, &mut d1);
                 }
-                if (d1 as i16) >= (d0 as i16) && x.u8(KEY) != 0 {
+                if (d1 as i16) >= (d0 as i16) && x.u8(f::KEY_FRAME) != 0 {
                     return plunge_dash(x);
                 }
             }
-            if x.u8(KEY) == 3 {
-                x.set8(KEY, 0);
-                x.call(0xecdba);
+            if x.u8(f::KEY_FRAME) == 3 {
+                x.set8(f::KEY_FRAME, 0);
+                lib::sound(x, 0xecdba);
                 spark(x, 4);
-                x.c.d[0] = 0xa;
-                x.call(call::SHOCK);
+                lib::shake_54(x, 0xa);
             }
         }
         4 => {
@@ -358,34 +354,33 @@ fn act_a(x: &mut Cx, n: u32) {
 
 /// 0x70c6c : début de la course du plongeon.
 fn plunge_dash(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x14);
     x.set16(TIMER2, 0);
     let vy = if x.u8(f::FLIP) != 0 { -0x40i16 } else { 0x40 };
-    x.set16(SPEED_Y, vy as u16);
-    x.c.d[0] = 0x14;
-    x.call(call::SHOCK);
-    x.call(0xec976);
-    x.call(0xecdba);
+    x.set16(Obj::AX, vy as u16);
+    lib::shake_54(x, 0x14);
+    lib::sound(x, 0xec976);
+    lib::sound(x, 0xecdba);
     mv(x, 5);
 }
 
 // --- +6 = 10 : bond et lancer de bras ----------------------------------------------------------------------
 
 fn leap(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             look(x, 5);
             mv(x, 6);
         }
         2 => {
             lib::step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let Some(arm) = x.alloc(&pools::ESHL) else { return end_leap(x) };
             x.set16(ARM, arm.0 as u16);
             arm.set_u8(x.b, 0, 1);
@@ -396,33 +391,33 @@ fn leap(x: &mut Cx) {
             let flip = x.u8(f::FLIP);
             arm.set_u8(x.b, f::FLIP, flip);
             let (angle, vy) = if flip != 0 { (0x18, 0x20i16) } else { (8, -0x20) };
-            x.set8(ANGLE, angle);
-            x.set16(SPEED_Y, vy as u16);
+            x.set8(Obj::SPEED_INDEX, angle);
+            x.set16(Obj::AX, vy as u16);
             lib::jitter_angle(x);
             set_speed(x, 0x35);
-            x.set16(SPEED_Z, 0x300);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            x.set16(Obj::VZ, 0x300);
+            x.set16(Obj::AZ, -0x40i16 as u16);
             x.move_xz();
         }
         4 => {
             x.move_xz();
-            if (x.u16(SPEED_Z) as i16) <= 0 {
-                x.add8(STEP, 2);
-                x.set16(SPEED_Y, 0);
+            if (x.u16(Obj::VZ) as i16) <= 0 {
+                x.add8(f::SUB3, 2);
+                x.set16(Obj::AX, 0);
             }
         }
         6 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 lib::step(x);
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x14);
             x.set16(TIMER2, 0);
-            x.set16(HEIGHT, 0);
+            x.set16(Obj::Z, 0);
             let vy = if x.u8(f::FLIP) != 0 { 0x40i16 } else { -0x40 };
-            x.set16(SPEED_Y, vy as u16);
+            x.set16(Obj::AX, vy as u16);
             x.move_x();
             let arm = x.linked(ARM);
             arm.set_u8(x.b, 0x58, 1);

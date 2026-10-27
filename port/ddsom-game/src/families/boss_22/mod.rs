@@ -27,7 +27,6 @@ mod two;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
@@ -140,23 +139,7 @@ pub(self) mod state {
 }
 
 pub(self) mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const PICK_FAR: u32 = 0x44ee;
-    pub const FACE_TARGET: u32 = 0xa470;
-    pub const AIM: u32 = 0x788c;
-    pub const AIM_DONE: u32 = 0x79ce;
-    pub const REROLL: u32 = 0xac3a;
-    pub const EDGE_PAIR: u32 = 0xa4b4;
-    pub const EDGE_SAME: u32 = 0xa4c2;
-    pub const GRAB_FIND: u32 = 0xfc44;
-    pub const GRAB: u32 = 0xfd64;
-    pub const RELEASE: u32 = 0xfd8c;
-    pub const HOLD: u32 = 0xfda2;
-    pub const IN_ARENA: u32 = 0xfbb0;
-    pub const BLOOD: u32 = 0xedd96;
     pub const SPLASH: u32 = 0xaaa40;
-    pub const DUST: u32 = 0xb10c8;
-    pub const MESSAGE: u32 = 0x289c;
 }
 
 // --- animations --------------------------------------------------------------------------------
@@ -197,11 +180,7 @@ pub(self) fn rubble(x: &mut Cx, d0: u32, d1: u32, d2: u32, d3: u32) {
     if n != 0 {
         return;
     }
-    x.c.d[0] = d0;
-    x.c.d[1] = d1;
-    x.c.d[2] = d2;
-    x.c.d[3] = d3;
-    x.call(call::DUST);
+    lib::shock(x, d0, d1 as u16, d2 as u16, d3 as u16);
 }
 
 /// 0x9d8e0 : la cible est-elle du mauvais côté (le boss ne la regarde pas) ?
@@ -231,14 +210,12 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
 
 /// 0x9b30a et 0x9b384 : une cible dans la boîte, avec des coups possibles (0xa4b4 / 0xa4c2) ; le boss fonce ou attaque.
 fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
-    if !target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
+    if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
         return false;
     }
     let t = x.linked(f::TARGET);
     let same = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.c.a[1] = t.0;
-    x.call(if same { call::EDGE_SAME } else { call::EDGE_PAIR });
-    if zero(x) {
+    if !lib::decision(x, same) {
         return false;
     }
     let r = rand_and(x, 0xf);
@@ -247,7 +224,7 @@ fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
         return true;
     }
     x.set32(f::STATE, 0x0204_0000);
-    x.call(call::REROLL);
+    lib::pick_byte(x);
     attack_from_table(x, table);
     true
 }
@@ -263,7 +240,7 @@ pub(self) fn hunt_far(x: &mut Cx) -> bool {
 
 /// 0x9d24e et 0x9d254 : attaque tirée dans la ligne de la difficulté de `table` (32 octets par couple de niveaux).
 pub(self) fn attack_from_table(x: &mut Cx, table: u32) {
-    let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;
+    let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
     let step = x.data8(table + row + r);
     x.set8(f::SUB2, step);
@@ -283,7 +260,7 @@ pub(self) fn next_attack(x: &mut Cx) {
             break;
         }
         if reach(x, p, -0x38, 0x38, 0x18) {
-            let row = ((x.a5_u16(var::DIFFICULTY) >> 1) as u32) << 5;
+            let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
             let r = rand_and(x, 0x1f);
             let table = kit(x).next;
             let step = x.data8(table + row + r);
@@ -330,8 +307,8 @@ pub(self) fn reach(x: &mut Cx, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16
 /// 0x9da5c : choisit le point d'arrivée de la course (`+0xb0`, `+0xb2`), l'angle et le sens de rotation, d'après la
 /// position du boss dans l'écran (table 0x9dabe : X, Z, angle, sens).
 pub(self) fn choose_spot(x: &mut Cx) {
-    let dx = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X));
-    let dz = x.u16(0x10).wrapping_sub(x.a5_u16(var::SCROLL_Y));
+    let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
+    let dz = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     let row = if (dx as i16) > 0xc0 {
         if (dz as i16) > 0x80 { 0x12 } else { 0xc }
     } else if (dz as i16) > 0x80 {
@@ -340,9 +317,9 @@ pub(self) fn choose_spot(x: &mut Cx) {
         0
     };
     let base = kit(x).spot;
-    let sx = x.rom16(base + row).wrapping_add(x.a5_u16(var::SCROLL_X));
+    let sx = x.rom16(base + row).wrapping_add(var::SCROLL_X.get(x.b));
     x.set16(SPOT_X, sx);
-    let sz = x.rom16(base + 2 + row).wrapping_add(x.a5_u16(var::SCROLL_Y));
+    let sz = x.rom16(base + 2 + row).wrapping_add(var::SCROLL_Y.get(x.b));
     x.set16(SPOT_Z, sz);
     let angle = x.rom8(base + 4 + row);
     x.set8(0x2d, angle);
@@ -353,11 +330,7 @@ pub(self) fn choose_spot(x: &mut Cx) {
 /// 0x9db72 : cinq poussières en ligne sous le boss qui retombe.
 pub(self) fn dust_line(x: &mut Cx) {
     for dz in [-0x30i16, -0x18, 0, 0x18, 0x30] {
-        x.c.d[0] = 1;
-        set_dw(x, 1, 0);
-        set_dw(x, 2, dz as u16);
-        set_dw(x, 3, 4);
-        x.call(call::DUST);
+        lib::shock(x, 1, 0, dz as u16, 4);
     }
 }
 
@@ -366,11 +339,7 @@ pub(self) fn dust_trail(x: &mut Cx, right: bool) {
     const RIGHT: [i16; 6] = [-0x10, 8, 0x20, 0x38, 0x50, 0x68];
     const LEFT: [i16; 6] = [-0x68, -0x58, -0x38, -0x20, -0x8, 0x10];
     for dz in if right { RIGHT } else { LEFT } {
-        x.c.d[0] = 1;
-        set_dw(x, 1, 0);
-        set_dw(x, 2, dz as u16);
-        set_dw(x, 3, 4);
-        x.call(call::DUST);
+        lib::shock(x, 1, 0, dz as u16, 4);
     }
 }
 
@@ -424,12 +393,12 @@ fn init(x: &mut Cx) {
     let r = random(x);
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
-    x.call(0xd5ef8);
-    x.call(0x453c);
+    lib::create_life_bar(x);
+    lib::initial_hp_boss(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);
     }
-    let speed = if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 { 7 } else { 6 };
+    let speed = if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 { 7 } else { 6 };
     x.set8(0x72, speed);
     x.set8(0x73, speed);
     for (off, v) in [(0x74, 5), (0x75, 0x3c), (0x76, 6), (0x81, 0x12), (0x80, 0x17)] {
@@ -437,11 +406,11 @@ fn init(x: &mut Cx) {
     }
     x.set16(GUARD, 0xb4);
     x.set16(GUARD_TIMER, 0xf0);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::AIM);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(RAGE, 0xff);
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x10);
@@ -461,7 +430,7 @@ fn active(x: &mut Cx) {
     }
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         group(x);
         if tst8(x, ARM_TIMER).gt() {
             sub8(x, ARM_TIMER, 1);
@@ -483,9 +452,8 @@ fn active(x: &mut Cx) {
         x.set16(GUARD, 0xb4);
         x.set16(GUARD_TIMER, 0xf0);
     }
-    x.c.d[0] = 0x30;
-    x.call(call::IN_ARENA);
-    x.call(SHADOW);
+    lib::keep_on_screen(x, 0x30);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 

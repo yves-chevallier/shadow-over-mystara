@@ -26,8 +26,6 @@ mod hit;
 mod moves;
 
 pub(self) mod g {
-    pub const KEY: u32 = 0x33;
-    pub const SUB3: u32 = 0x7;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -80,18 +78,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const BURST: u32 = 0xb10c8;
-    pub const ATTACK_START: u32 = 0xac3a;
-    pub const FADE: u32 = 0xecf7a;
-    pub const PICK_TARGET: u32 = 0x424e;
-    /// Seuil des PV et ralenti (`boss_common`, 0x87048).
-    pub const HP_THRESHOLD: u32 = 0x87048;
-}
-
 /// Mot de poids faible d'un registre de données.
 pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
     set_dw(x, n, v);
@@ -106,7 +92,6 @@ pub(self) fn setb(x: &mut Cx, n: usize, v: u8) {
 /// rend l'adresse d'arrivée. D0 reçoit l'octet (après un `moveq 0,D0`), D1w le décalage.
 pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
-    x.c.d[0] = i;
     let off = x.rom16(table + i);
     setw(x, 1, off);
     table.wrapping_add(off as i16 as i32 as u32)
@@ -130,7 +115,7 @@ pub fn run(x: &mut Cx) {
     loop {
         x.tick_counters();
         if x.u16(f::TARGET) == 0 {
-            x.call(call::PICK_TARGET);
+            lib::pick_target(x);
         }
         match dispatch(x, 0x85a76, f::STATE) {
             0x85a80 => init(x),
@@ -156,12 +141,10 @@ pub fn run(x: &mut Cx) {
         }
         break;
     }
-    x.call(call::HP_THRESHOLD);
+    hp_threshold(x);
     if x.u8(0x43) == 0 {
         let weak = x.u16(WEAK_HP);
         let hp = x.u16(f::HP);
-        setw(x, 0, weak);
-        setw(x, 1, hp.wrapping_sub(weak));
         if !Fl::sub16(hp, weak).gt() {
             x.set8(SLOW, 1);
         }
@@ -174,24 +157,28 @@ pub fn run(x: &mut Cx) {
 /// 0x85a80 : en partie, le boss tombe du haut de l'écran (groupe 0) ; dans l'attract, il prend la pose (groupe 0,
 /// étape 2).
 fn init(x: &mut Cx) {
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         x.set32(f::STATE, 0x0200_0200);
     } else {
         x.add8(f::STATE, 2);
         x.add16(0xc, 0x50);
-        x.call(0xe13f0);
+        lib::sound(x, 0xe13f0);
     }
     x.set_a5_u8(0x50, 1);
-    for a in [0x19e10, 0x19db4, 0x19eb0, 0xd6952, call::PICK_TARGET, 0xa470, 0x788c] {
-        x.call(a);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::create_set_15(x);
+    lib::pick_target(x);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(0x2e, 0x27);
-    x.call(0x453c);
-    x.call(0xd5f30);
+    lib::initial_hp_boss(x);
+    lib::create_set_14(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     for (off, v) in [(0x68, 8), (0x69, 8), (0x6a, 0), (0x6c, 1), (0x6d, 2), (0x72, 1), (0x73, 1), (0x74, 4), (0x75, 0x40), (0x76, 1), (0x81, 0x13), (0x80, 0x18)] {
         x.set8(off, v);
     }
@@ -204,8 +191,7 @@ fn init(x: &mut Cx) {
     let hp = x.u16(0x60);
     setw(x, 1, hp >> 1);
     setw(x, 2, hp >> 2);
-    let players = x.a5_u8(var::PLAYERS_ALIVE);
-    x.c.d[0] = players as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b);
     let mut d1 = x.c.d[1] as u16;
     if Fl::sub8(players, 1).gt() {
         if players == 2 {
@@ -218,12 +204,10 @@ fn init(x: &mut Cx) {
     } else {
         x.set8(PHASES, 1);
     }
-    setw(x, 1, d1);
     x.set16(WEAK_HP, d1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
-    x.c.d[0] = 0;
     body(x, 0);
 }
 
@@ -232,14 +216,14 @@ fn init(x: &mut Cx) {
 /// 0x85bd0 : hors partie (attract), le boss garde la pose ; sinon un groupe par image, une créature d'appoint
 /// (SET 0x3f) au bout de 0xf0 images, et une attaque forcée s'il reste trop longtemps sans combattre.
 fn active(x: &mut Cx) {
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         x.set32(f::STATE, 0x0200_0200);
         x.set8(0, 1);
         x.set_bit(0x1, 1, false);
-        return x.call(rom::IMMUNITIES);
+        return lib::set_immunities(x);
     }
     if x.u16(f::TARGET) == 0 {
-        x.call(call::PICK_TARGET);
+        lib::pick_target(x);
     }
     if x.u8(SPAWNED) == 0 && sub16(x, SPAWN_TIME, 1).mi() {
         if let Some(e) = x.alloc(&pools::SET) {
@@ -251,7 +235,7 @@ fn active(x: &mut Cx) {
     }
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match dispatch(x, 0x85cc8, f::SUB) {
             0x85d08 => fight::intro(x),
             0x85e18 => fight::fight(x),
@@ -274,8 +258,8 @@ fn active(x: &mut Cx) {
             idle_reset(x);
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 fn idle_reset(x: &mut Cx) {
@@ -294,7 +278,6 @@ fn idle_attack(x: &mut Cx) {
     x.set32(f::STATE, 0x0204_0000);
     let alea = x.random();
     let i = alea as u32 & 0xf;
-    setw(x, 0, i as u16);
     let attack = x.rom8(0x85cd8 + i);
     x.set8(f::SUB2, attack);
 }

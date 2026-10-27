@@ -21,7 +21,6 @@ use super::cx::handlers;
 use crate::objects::Obj;
 
 mod g {
-    pub const KEY: u32 = 0x33;
     pub const STUN: u32 = 0x56;
     pub const FRAME_KIND: u32 = 0x44;
     pub const REACTION: u32 = 0x49;
@@ -36,7 +35,6 @@ mod g {
     pub const IN_ATTACK: u32 = 0xac;
     pub const FALL_TIMER: u32 = 0x90;
     pub const SPIN_DELAY: u32 = 0x87;
-    pub const ANGLE: u32 = 0x2d;
     pub const DEATH_FLAG: u32 = 0x91;
 }
 use g::*;
@@ -48,16 +46,6 @@ const SET_ATTACK: u32 = 0x175dc4;
 const SET_FALL: u32 = 0x175e0c;
 /// Table des vecteurs (X, Y) par angle (32 × 4 octets), parcourue pendant le tourbillon.
 const SPIN_VECTORS: u32 = 0x1c94b6;
-
-mod call {
-    pub const PICK_PLAYER: u32 = 0x43bc;
-    pub const ANGLE_TO_TARGET: u32 = 0x1376;
-    pub const PLAYER_IN_REACH: u32 = 0xfc44;
-    pub const SEIZE: u32 = 0xfd64;
-    pub const DRAG_SEIZED: u32 = 0xfda2;
-    pub const SOUND: u32 = 0xe425c;
-    pub const BURST: u32 = 0xabec8;
-}
 
 /// Entrée : le jeu ne passe pas par le hook de pause.
 pub fn run(x: &mut Cx) {
@@ -103,7 +91,7 @@ fn take_frame_request(x: &mut Cx) {
 
 /// Index dans les tables de difficulté : `(difficulté & 0xfc) / 2` (mots).
 fn level_index(x: &mut Cx) -> u32 {
-    (x.a5_u16(var::DIFFICULTY) as u32 & 0xfc) >> 1
+    (var::RANK.get(x.b) as u32 & 0xfc) >> 1
 }
 
 /// Appelle une routine du moteur avec A0 = `list` (puis rétablit l'objet).
@@ -130,13 +118,13 @@ fn init(x: &mut Cx) {
     x.set8(0x9a, 0xff);
     x.set8(0x80, 0x29);
     x.set_a5_u8(0x50, 1);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
-    x.call(0xd6952);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::create_set_15(x);
     x.set8(f::BOX_SET, 0x25);
-    x.call(0x453c);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp_boss(x);
+    lib::set_immunities(x);
     x.set16(0x8, 0x120);
     x.set16(0xc, 0x30);
     x.set16(0x10, 0x178);
@@ -145,7 +133,7 @@ fn init(x: &mut Cx) {
 
 /// Boucle de l'état actif (0x8349c) ; l'état touché la rappelle pour reprendre le combat.
 fn active(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     if x.u8(BLINK) != 0 && sub8(x, BLINK, 1).gt() {
@@ -207,10 +195,10 @@ fn intro(x: &mut Cx) {
             }
         }
         0xc => {
-            if x.a5_u8(0x2c) != 0xc {
+            if var::PHASE.get(x.b) != 0xc {
                 return;
             }
-            x.call(0xd5f30);
+            lib::create_set_14(x);
             if let Some(set) = x.alloc(&pools::SET) {
                 set.set_u8(x.b, 0, 1);
                 set.set_u8(x.b, 2, 2);
@@ -278,7 +266,6 @@ fn dash(x: &mut Cx, table: u32) {
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
             }
-            x.c.d[0] = 0;
             if x.u8(ANIM_SET) != 0 {
                 return body(x, 0);
             }
@@ -309,8 +296,8 @@ fn seize(x: &mut Cx) {
         4 => grab_hold(x),
         8 => grab_end(x),
         0xc => {
-            x.c.d[0] = 0;
-            x.call(call::SEIZE);
+            // le joueur saisi est celui qu'A1 désigne encore (registre hérité de l'image précédente)
+            lib::seize_player(x, Obj(x.c.a[1]), 0);
             grab_begin(x);
         }
         _ => {}
@@ -332,7 +319,7 @@ fn grab_hold(x: &mut Cx) {
     if target == 0 {
         return grab_release(x);
     }
-    let mut p = x.linked(f::TARGET);
+    let p = x.linked(f::TARGET);
     x.c.a[1] = p.0;
     if x.u8(BITING) == 0 {
         p.set_u32(x.b, f::STATE, 0x0204_3200);
@@ -346,10 +333,9 @@ fn grab_hold(x: &mut Cx) {
             return grab_kill(x);
         }
     }
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.c.a[1] = p.0;
-        x.call(call::SOUND);
-        p = Obj(x.c.a[1]);
+        lib::sound(x, 0xe425c);
     }
     if p.u8(x.b, 0) == 0 {
         return grab_release(x);
@@ -362,7 +348,7 @@ fn grab_hold(x: &mut Cx) {
             return grab_kill(x);
         }
     }
-    x.call(call::DRAG_SEIZED);
+    lib::hold_seized(x);
     x.anim_step();
     let n = x.u16(COUNT).wrapping_sub(1);
     x.set16(COUNT, n);
@@ -409,7 +395,7 @@ fn simple_attack(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(FRAME_KIND, 0x4b);
-            x.call(call::SOUND);
+            lib::sound(x, 0xe425c);
             attack_anim(x, 0);
             end_of_script(x);
         }
@@ -432,11 +418,11 @@ fn chase(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(BLINK, 0x14);
-            x.call(call::SOUND);
+            lib::sound(x, 0xe425c);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x13);
-            x.set8(ANGLE, 0x18);
+            x.set8(Obj::SPEED_INDEX, 0x18);
             if x.u8(f::FLIP) != 0 {
-                x.set8(ANGLE, 8);
+                x.set8(Obj::SPEED_INDEX, 8);
             }
             attack_anim(x, 0x21);
             chase_turn(x);
@@ -464,13 +450,12 @@ fn chase_turn(x: &mut Cx) {
 /// Tourne d'un cran vers la cible, avance, saisit un joueur à portée.
 fn chase_follow(x: &mut Cx) {
     x.anim_step();
-    x.c.d[0] = x.u8(STEPS) as u32;
-    x.call(call::PICK_PLAYER);
-    if zero(x) {
+    let criterion = x.u8(STEPS);
+    if !lib::target_by_criterion(x, criterion) {
         return chase_stop(x);
     }
-    x.call(call::ANGLE_TO_TARGET);
-    let mine = x.u8(ANGLE);
+    lib::aim_to(x, Obj(x.c.a[1] & 0xff_ffff));
+    let mine = x.u8(Obj::SPEED_INDEX);
     let diff = (x.c.d[0] as u8).wrapping_sub(mine) & 0x1f;
     if diff != 0 {
         let mut a = mine;
@@ -478,20 +463,17 @@ fn chase_follow(x: &mut Cx) {
             a = a.wrapping_sub(2);
         }
         a = a.wrapping_add(1) & 0x1f;
-        x.set8(ANGLE, a);
+        x.set8(Obj::SPEED_INDEX, a);
     }
-    let a = x.u8(ANGLE);
+    let a = x.u8(Obj::SPEED_INDEX);
     if a > 0x10 {
         x.set8(f::FLIP, 0);
     } else if a != 0x10 && a != 0 {
         x.set8(f::FLIP, 0x20);
     }
     x.move_by_table_xy();
-    x.c.d[0] = 8;
-    x.call(call::PLAYER_IN_REACH);
-    if !zero(x) {
-        x.c.d[0] = 0;
-        x.call(call::SEIZE);
+    if let Some(player) = lib::attack_hits_a_player(x, 8) {
+        lib::seize_player(x, player, 0);
         return grab_begin(x);
     }
     let n = x.u8(COUNT).wrapping_sub(1);
@@ -515,9 +497,7 @@ fn chase_stop(x: &mut Cx) {
 fn next_action(x: &mut Cx) {
     x.set8(BITING, 0);
     x.set8(IN_ATTACK, 0);
-    x.c.d[0] = 0;
-    x.call(call::PICK_PLAYER);
-    if zero(x) {
+    if !lib::target_by_criterion(x, lib::NEAREST) {
         x.set8(f::SUB, 4);
         x.set16(f::SUB2, 0);
         x.set8(STEPS, 0x10);
@@ -556,7 +536,7 @@ fn next_action(x: &mut Cx) {
     };
     row += random(x) & 0xe;
     let a = x.rom8(0x83f4e + row);
-    x.set8(ANGLE, (a << 1) & 0x1e);
+    x.set8(Obj::SPEED_INDEX, (a << 1) & 0x1e);
     x.set8(f::SUB, (a & 0xf0) >> 2);
     x.set16(f::SUB2, 0);
     let b = x.rom8(0x83f4f + row);
@@ -583,8 +563,8 @@ fn hit(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 fn reaction(x: &mut Cx) {
@@ -649,7 +629,7 @@ fn tumble(x: &mut Cx) {
             x.set32(0x1c, 0);
             x.set8(SPIN_DELAY, if x.c.d[7] & 1 != 0 { 1 } else { 2 });
             let a = (random(x) as u16 + 8) & 0x1f;
-            x.set8(ANGLE, a as u8);
+            x.set8(Obj::SPEED_INDEX, a as u8);
             fall_anim(x, 0);
         }
         2 => {
@@ -668,10 +648,8 @@ fn tumble(x: &mut Cx) {
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x80i16) as u16);
             fall_anim(x, 0);
-            x.call(0xebbda);
-            x.c.d[0] = 8;
-            x.c.d[1] = 0;
-            x.call(call::BURST);
+            lib::sound(x, 0xebbda);
+            lib::attack_effect(x, 8, 0);
         }
         6 | 0xa => {
             x.anim_step();
@@ -697,9 +675,7 @@ fn tumble(x: &mut Cx) {
             x.set16(0x18, 0x800);
             x.set16(0x1a, (-0x40i16) as u16);
             fall_anim(x, 0);
-            x.c.d[0] = 7;
-            x.c.d[1] = 0;
-            x.call(call::BURST);
+            lib::attack_effect(x, 7, 0);
         }
         0xc => {
             x.add8(f::SUB2, 2);
@@ -714,9 +690,7 @@ fn tumble(x: &mut Cx) {
                 let v = x.u16(0x14).wrapping_neg();
                 x.set16(0x14, v);
             }
-            x.c.d[0] = 2;
-            x.c.d[1] = 0;
-            x.call(call::BURST);
+            lib::attack_effect(x, 2, 0);
         }
         0xe => {}
         0x10 => {
@@ -730,21 +704,20 @@ fn tumble(x: &mut Cx) {
 
 /// Pas du tourbillon (0x83da8) : déplacement par la table de vecteurs de l'angle `+0x2d`.
 fn spin(x: &mut Cx) {
-    x.c.a[4] = SPIN_VECTORS;
     x.add32(0xc, 0x20000);
     if (x.u16(0xc) as i16) >= 0x40 {
         x.set32(0xc, 0x0040_0000);
     }
     if sub8(x, SPIN_DELAY, 1).eq() {
         x.set8(SPIN_DELAY, 1);
-        let a = x.u8(ANGLE).wrapping_add(2) & 0x1f;
-        x.set8(ANGLE, a);
+        let a = x.u8(Obj::SPEED_INDEX).wrapping_add(2) & 0x1f;
+        x.set8(Obj::SPEED_INDEX, a);
         x.set8(f::FLIP, 0);
         if a.wrapping_sub(8) >= 0x10 {
             x.set8(f::FLIP, 0x20);
         }
     }
-    let i = (x.u8(ANGLE) as u32) << 2;
+    let i = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
     let vx = x.data16(SPIN_VECTORS + i).wrapping_add(x.u16(0x16));
     x.set16(0x14, vx);
     let dx = ((vx as u32) << 16) as i32 >> 8;
@@ -765,18 +738,16 @@ fn dying(x: &mut Cx) {
             x.set_a5_u8(0x50, 0);
             x.set_a5_u8(0x42, 1);
             x.call(0x1ac86);
-            x.call(0xb780);
-            x.call(0xbad6);
-            x.call(0xe2f6);
-            x.call(0xe0a10);
-            x.call(0xe3b6c);
+            lib::drop_rewards(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
             let kind = x.u8(0x2);
             set_abs8(x, 0xff2a84, kind);
             set_abs8(x, 0xff2a85, 0);
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
-            x.call(0x103ba);
-            x.call(0x19ad6);
+            lib::flash_and_shake(x);
+            lib::object_event(x);
             fall_anim(x, 4);
             dying_burst(x);
         }

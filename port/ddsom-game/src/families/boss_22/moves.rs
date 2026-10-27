@@ -28,8 +28,8 @@ pub(super) fn arrive(x: &mut Cx) {
             next7(x);
             x.set8(VULNERABLE, 0);
             x.set8(f::FLIP, 0);
-            let px = x.a5_u16(var::SCROLL_X).wrapping_add(0x80);
-            let pz = x.a5_u16(var::SCROLL_Y).wrapping_add(0x90);
+            let px = var::SCROLL_X.get(x.b).wrapping_add(0x80);
+            let pz = var::SCROLL_Y.get(x.b).wrapping_add(0x90);
             x.set16(0x8, px);
             x.set16(0x10, pz);
             x.set16(0xc, 0x120);
@@ -47,9 +47,8 @@ pub(super) fn arrive(x: &mut Cx) {
             if (x.u32(0xc) as i32) > 0 {
                 return step_anim(x);
             }
-            x.c.d[0] = 0x1e;
-            x.call(call::MESSAGE);
-            x.call(rom::IMMUNITIES);
+            lib::shake_5c(x, 0x1e);
+            lib::set_immunities(x);
             x.set32(0xc, 0);
             dust_line(x);
             next7(x);
@@ -83,7 +82,7 @@ pub(super) fn fight(x: &mut Cx) {
         6 => leap(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }
@@ -92,9 +91,9 @@ pub(super) fn fight(x: &mut Cx) {
 fn pick_some_target(x: &mut Cx) {
     let r = rand_and(x, 0xf);
     if 0xffc0u32 >> r & 1 != 0 {
-        x.call(0x424e);
+        lib::pick_target(x);
     } else {
-        x.call(call::PICK_FAR);
+        lib::random_player(x);
     }
 }
 
@@ -109,33 +108,32 @@ fn stand(x: &mut Cx) {
         sounds(x, 0x27, 5);
         pose(x, Set::A, 1, 2);
         speed(x, 0x15);
-        return x.tail(call::FACE_TARGET);
+        return lib::draw_stance(x);
     }
     rubble(x, 0, 0x201, 0x20, 0x20);
     if sub8(x, WALK_DELAY, 1).mi() {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         pick_some_target(x);
         let kind = if x.u8(f::SUB2) == 0 { 0x23 } else { 0x24 };
         x.set8(0x79, kind);
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
         if !sub8(x, WALK_STEPS, 1).ne() {
-            x.call(call::AIM);
-            x.call(call::AIM_DONE);
-            if !zero(x) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 x.set16(f::SUB2, 0x400);
                 return;
             }
         }
     }
-    if target_in_box(x, -0x20, 0x20, 0x10) {
+    if lib::target_in_box(x, -0x20, 0x20, 0x10) {
         x.set32(f::STATE, 0x0204_0000);
-        return x.tail(call::REROLL);
+        return lib::pick_byte(x);
     }
     if hunt_close(x) || hunt_far(x) {
         return;
     }
-    if target_in_box_far(x, -0x60, 0x60, 0x10) {
-        return x.tail(call::REROLL);
+    if lib::guard_in_front_strict(x, -0x60, 0x60, 0x10) {
+        return lib::pick_byte(x);
     }
     step_anim(x);
     x.move_by_table_xy();
@@ -194,7 +192,7 @@ fn turn(x: &mut Cx) {
 
 /// 0x9b45c : le demi-tour continue tant que le boss est dans l'écran et que la cible est assez proche devant lui.
 fn turn_not_needed(x: &mut Cx) -> bool {
-    let cam = x.a5_u16(var::SCROLL_X);
+    let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
         return false;
     }
@@ -249,7 +247,7 @@ fn leap(x: &mut Cx) {
         0 => {
             next7(x);
             x.set16(TIMER, 0x1e);
-            x.call(call::FACE_TARGET);
+            lib::draw_stance(x);
             leap_pose(x);
         }
         4 => {
@@ -262,10 +260,10 @@ fn leap(x: &mut Cx) {
                 return x.set32(f::STATE, state::STAND);
             }
             if sub8(x, WALK_DELAY, 1).mi() {
-                x.call(call::FACE_TARGET);
+                lib::draw_stance(x);
                 pick_some_target(x);
                 x.set8(0x79, 0x23);
-                x.call(call::ASK_TARGET);
+                lib::approach_target(x);
             }
             if needs_turn(x) {
                 x.set32(SAVED_STATE, 0x0202_0004);
@@ -326,7 +324,7 @@ fn spot_run(x: &mut Cx) {
         2 => {
             rubble(x, 0, 0x201, 0x20, 0x20);
             let timer = sub16(x, TIMER2, 1);
-            if timer.mi() || target_in_box(x, 0xc0, 0xc0, 0x10) {
+            if timer.mi() || lib::target_in_box(x, 0xc0, 0xc0, 0x10) {
                 return x.set32(f::STATE, state::STAND);
             }
             let dx = x.u16(SPOT_X).wrapping_sub(x.u16(0x8)).wrapping_add(8);
@@ -407,7 +405,7 @@ fn spot_wait(x: &mut Cx) {
 
 /// Étape commune des bonds : attend l'image-clé, monte, redescend, retombe.
 fn leap_rise_wait(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
     }
@@ -430,9 +428,8 @@ fn leap_land(x: &mut Cx, f_move: fn(&mut Cx)) {
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
     }
-    x.c.d[0] = 0x1e;
-    x.call(ia::SOUND_EVENT);
-    x.call(0xecd50);
+    lib::shake_54(x, 0x1e);
+    lib::sound(x, 0xecd50);
     x.set32(0xc, 0);
     dust_line(x);
     next7(x);
@@ -508,7 +505,7 @@ fn spot_leap_b(x: &mut Cx) {
 
 /// 0x9ca0a : sans joueur en vie, le boss attend (animation de repos de sa forme) ; sinon il reprend.
 pub(super) fn paused(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if second_form(x) {
             return x.set32(f::STATE, 0x0204_1000);
         }
@@ -558,20 +555,20 @@ pub(super) fn holding(x: &mut Cx) {
             x.set16(0x10, z);
             x.c.a[1] = prey.0;
             if prey.u16(x.b, 0xc) != 0 {
-                return x.tail(call::RELEASE);
+                return lib::release_player(x, prey);
             }
             let h = prey.u16(x.b, 0xc);
             x.set16(0xc, h);
             x.set8(BITES, 8);
             start(x, Set::B, 9);
-            x.tail(call::HOLD);
+            lib::hold_seized(x);
         }
         2 => {
             step_anim(x);
-            if x.u8(KEY) == 0 {
-                return x.tail(call::HOLD);
+            if x.u8(f::KEY_FRAME) == 0 {
+                return lib::hold_seized(x);
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             if sub8(x, BITES, 1).le() {
                 return release_prey(x);
             }
@@ -586,15 +583,14 @@ pub(super) fn holding(x: &mut Cx) {
             x.c.d[3] = x.u16(0xc).wrapping_add(0x38) as u32;
             x.c.d[4] = x.u16(0x10).wrapping_sub(1) as u32;
             x.call(call::SPLASH);
-            x.c.a[1] = prey.0;
             if (prey.u16(x.b, f::HP) as i16) <= 1 {
                 return release_prey(x);
             }
-            x.call(call::BLOOD);
+            lib::sound(x, 0xedd96);
             let hp = prey.u16(x.b, f::HP).wrapping_sub(4);
             prey.set_u16(x.b, f::HP, hp);
             if (hp as i16) > 0 {
-                return x.tail(call::HOLD);
+                return lib::hold_seized(x);
             }
             prey.set_u16(x.b, f::HP, 1);
             release_prey(x);
@@ -605,9 +601,8 @@ pub(super) fn holding(x: &mut Cx) {
 
 fn release_prey(x: &mut Cx) {
     let prey = x.linked(f::TARGET);
-    x.c.a[1] = prey.0;
     prey.set_u8(x.b, 0x6f, 1);
-    x.tail(call::RELEASE);
+    lib::release_player(x, prey);
 }
 
 // --- groupe 14 : transformation en seconde forme ----------------------------------------------------
@@ -615,9 +610,8 @@ fn release_prey(x: &mut Cx) {
 /// 0xffda : tirage dont les chances (un bit par résultat, mot de la table 0xfff4 choisi par la difficulté) décident si la
 /// transformation s'enchaîne sur une riposte.
 fn flee_roll(x: &mut Cx) -> bool {
-    let row = (((x.a5_u16(var::DIFFICULTY) >> 3) << 1)) as u32;
+    let row = (((var::RANK.get(x.b) >> 3) << 1)) as u32;
     let chances = x.rom16(0xfff4 + row);
-    set_dw(x, 2, chances);
     let r = rand_and(x, 0xf);
     (chances >> r) & 1 != 0
 }
@@ -659,7 +653,7 @@ pub(super) fn transform(x: &mut Cx) {
             start(x, Set::B, 0xa);
         }
         4 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 next6(x);
                 x.set8(VULNERABLE, 0);
             }
@@ -672,9 +666,8 @@ pub(super) fn transform(x: &mut Cx) {
             if (x.u32(0xc) as i32) > 0 {
                 return step_anim(x);
             }
-            x.c.d[0] = 0x1e;
-            x.call(ia::SOUND_EVENT);
-            x.call(0xecce6);
+            lib::shake_54(x, 0x1e);
+            lib::sound(x, 0xecce6);
             x.set32(0xc, 0);
             dust_line(x);
             next6(x);

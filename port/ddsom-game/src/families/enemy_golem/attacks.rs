@@ -4,14 +4,15 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
-    let step = x.u8(STEP);
+    let step = x.u8(f::SUB3);
     match x.u8(f::SUB2) {
         0 => match step {
             0 => {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 set_strike(x, 0xa, 5);
                 strike(x, 0);
             }
@@ -24,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
             4 => wait(x),
             6 => turn(x),
             8 => {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 set_strike(x, 0xc, 4);
                 strike(x, 1);
             }
@@ -44,7 +45,7 @@ pub(super) fn run(x: &mut Cx) {
                 x.set8(AI_SHOT, 3);
                 let state = x.u32(f::STATE);
                 x.set32(0x8a, state);
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 strike(x, 3);
             }
             8 => {
@@ -54,7 +55,7 @@ pub(super) fn run(x: &mut Cx) {
                 if rand_and(x, 1) == 0 {
                     return choose(x);
                 }
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 strike(x, 0);
             }
             10 => until_end(x),
@@ -65,7 +66,7 @@ pub(super) fn run(x: &mut Cx) {
             2 => next_anim(x),
             4 => wait(x),
             6 => {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 let state = x.u32(f::STATE);
                 x.set32(0x8a, state);
                 set_strike(x, 0xc, 2);
@@ -75,7 +76,7 @@ pub(super) fn run(x: &mut Cx) {
             }
             8 => {
                 if x.anim_step() {
-                    x.add8(STEP, 2);
+                    x.add8(f::SUB3, 2);
                     strike(x, 1);
                 }
             }
@@ -96,7 +97,7 @@ pub(super) fn run(x: &mut Cx) {
             0 => next_anim(x),
             2 => wait(x),
             4 => {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x2a);
                 restart_walk(x);
             }
@@ -140,46 +141,46 @@ fn coin_flip(x: &mut Cx) {
     if (0xffc0u32 >> r) & 1 != 0 {
         return set_state_long(x, 0x0202_0600);
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
 }
 
 /// 0x67dce / 0x67dda / 0x67f5e : met en route un bond : vitesse horizontale (inversée si l'orientation est nulle),
 /// poussée vers le haut 0x900, coup de force 5 ; `speed` / `kind` absents quand l'appelant les a déjà posés.
 fn leap_start(x: &mut Cx, speed: Option<i16>, kind: Option<u8>) {
     if let Some(speed) = speed {
-        x.set16(SPEED_X, speed as u16);
+        x.set16(Obj::VX, speed as u16);
     }
     if let Some(kind) = kind {
         x.set8(STRIKE_KIND, kind);
     }
     x.set8(STRIKE_POWER, 5);
     if x.u8(f::FLIP) == 0 {
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
-    x.set16(SPEED_Y, 0);
-    x.set16(SPEED_Z, 0x900);
-    x.set16(GRAVITY, -0x80i16 as u16);
-    x.add8(STEP, 2);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::VZ, 0x900);
+    x.set16(Obj::AZ, -0x80i16 as u16);
+    x.add8(f::SUB3, 2);
     strike(x, 2);
 }
 
 /// 0x67e0e : attend la clé d'animation.
 fn wait_key(x: &mut Cx) {
     x.anim_step();
-    if x.u8(KEY) == 0 {
+    if x.u8(f::KEY_FRAME) == 0 {
         return;
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
 }
 
 /// 0x67e22 : montée, jusqu'au sommet (`+0x18` négatif).
 fn rise(x: &mut Cx) {
     x.move_xz();
     x.anim_step();
-    if (x.u16(SPEED_Z) as i16) < 0 {
-        x.add8(STEP, 2);
+    if (x.u16(Obj::VZ) as i16) < 0 {
+        x.add8(f::SUB3, 2);
         x.set16(ANIM_TIME, 1);
-        x.set8(KEY, 0);
+        x.set8(f::KEY_FRAME, 0);
     }
 }
 
@@ -187,12 +188,12 @@ fn rise(x: &mut Cx) {
 fn fall(x: &mut Cx) {
     x.move_xz();
     x.anim_step();
-    if x.u32(HEIGHT) as i32 > 0 {
+    if x.u32(Obj::Z) as i32 > 0 {
         return;
     }
-    x.set32(HEIGHT, 0);
+    x.set32(Obj::Z, 0);
     x.set16(ANIM_TIME, 1);
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
 }
 
 /// 0x67e6a : fin du bond : choix du geste suivant à la fin de l'animation.
@@ -207,7 +208,7 @@ fn end_choose(x: &mut Cx) {
 /// écoulée ou que le Golem a trop bougé.
 fn approach(x: &mut Cx) {
     x.anim_step();
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         let n = x.u16(TIMER).wrapping_sub(1);
         x.set16(TIMER, n);
         if n == 0 {
@@ -215,7 +216,7 @@ fn approach(x: &mut Cx) {
         }
         x.move_by_table_xy();
     }
-    let d = x.u16(TIMER2).wrapping_sub(x.u16(X)).wrapping_add(0x40);
+    let d = x.u16(TIMER2).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x40);
     if d >= 0x80 {
         choose(x);
     }
@@ -233,22 +234,22 @@ fn hop_turn(x: &mut Cx, step: u8) {
         12 => {
             x.anim_step();
             if (x.u8(ANIM_END) as i8) < 0 {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 if !target_behind(x) {
-                    x.add8(STEP, 2);
+                    x.add8(f::SUB3, 2);
                 }
             }
         }
         14 => turn(x),
         16 => {
-            x.add8(STEP, 2);
-            let anim = if x.u8(STEP) == 0x10 { 0 } else { rand_and(x, 1) };
+            x.add8(f::SUB3, 2);
+            let anim = if x.u8(f::SUB3) == 0x10 { 0 } else { rand_and(x, 1) };
             strike(x, anim);
         }
         18 if x.u8(f::SUB2) == 14 => until_end(x),
         18 => {
             if x.anim_step() {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 strike(x, 1);
             }
         }
@@ -259,25 +260,25 @@ fn hop_turn(x: &mut Cx, step: u8) {
 
 /// +6 = 18 et 20 (et 0x12 posé par le profil `+0x2f`) : se fige un moment (animation 8), puis choix.
 fn squat_step(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => next_anim(x),
         2 => wait(x),
         4 => {
             x.set16(0xa8, 0x100);
             // (le test porte sur l'étape `+7`, pas sur `+6`)
-            if x.u8(STEP) != 0x12 {
+            if x.u8(f::SUB3) != 0x12 {
                 x.set8(0xa9, 1);
             }
             squat_begin(x);
         }
         6 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 let n = x.u16(TIMER).wrapping_sub(1);
                 x.set16(TIMER, n);
                 if (n as i16) >= 0 {
                     return;
                 }
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
                 let group = x.u8(GROUP) as i8 as i32 as u32;
                 x.c.d[0] = group;
@@ -297,7 +298,7 @@ fn squat_step(x: &mut Cx) {
 
 /// 0x6829e : s'accroupit : étape suivante, minuterie 0x3c, animation 8.
 pub(super) fn squat_begin(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x3c);
     x.set8(0x68, 9);
     mv(x, 8);

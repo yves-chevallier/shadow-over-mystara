@@ -42,7 +42,7 @@ fn reaction(x: &mut Cx) {
     x.set8(HOVER, 0xff);
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
-        x.call(rom::IMMUNITIES);
+        lib::set_immunities(x);
     }
     let code = x.u8(0x49);
     x.c.d[0] = x.c.d[0] & 0xffff_ff00 | code as u32;
@@ -70,7 +70,7 @@ fn pushed_back(x: &mut Cx) {
     if (x.u8(0x14) as i8) < 0 {
         return stop(x);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
     x.set32(0x58, 0);
@@ -83,11 +83,11 @@ fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             body_anim(x, 0x11);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, DOWN_TIME, 1).gt() {
                 return;
             }
             x.set16(DOWN_TIME, 0);
@@ -96,7 +96,6 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
             // 0x80cb0 : riposte 6 chances sur 16
             let r = rand_and(x, 0xf);
-            set_dw(x, 1, 0xfc00);
             if 0xfc00u32 >> r & 1 == 0 {
                 return;
             }
@@ -112,7 +111,7 @@ fn down(x: &mut Cx) {
             x.set8(0, 1);
         }
         _ => {
-            if x.a5_u8(var::PAUSE) != 0 || !step(x) {
+            if var::PAUSE.get(x.b) != 0 || !lib::step(x) {
                 return;
             }
             x.set8(VULNERABLE, 1);
@@ -133,9 +132,10 @@ fn death(x: &mut Cx) {
             crate::mem::wr16(x.b, A5_DEATH, 0x300);
             let score = x.u8(0x7e);
             set_abs8(x, A5_DEATH + 2, score);
-            for r in [0xb780, 0xbad6, 0xe2f6, 0xe0a10, 0xe3b6c, 0x103ba] {
-                x.call(r);
-            }
+            lib::drop_rewards(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
+            lib::flash_and_shake(x);
             x.set8(0, 2);
             let f = x.u8(0x56);
             x.set8(f::FREEZE, f);
@@ -173,13 +173,12 @@ fn falling(x: &mut Cx) {
     }
     x.set16(0xc, 0);
     let v = ((x.u16(0x14) as i16) >> 2) as u16;
-    set_dw(x, 0, v);
     x.set16(0x14, v);
     x.set32(0x1c, 0);
     x.set32(0x18, 0);
     next6(x);
     x.anim_start(SET_DEATH, 0x10);
-    x.call(0xecabc);
+    lib::sound(x, 0xecabc);
 }
 
 /// Boss vaincu : type et variante (mot), score (`A5-0x557c..`), lus par la fin de scène.

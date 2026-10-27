@@ -69,14 +69,6 @@ const CHASE: u32 = 0x0202_0400;
 pub(self) const WAIT: u32 = 0x020a_0000;
 pub(self) const ATTACK_4: u32 = 0x0204_0400;
 
-pub(self) mod call {
-    pub const PICK_FAR: u32 = 0x43ae;
-    pub const CATCH_IN_REACH: u32 = 0xfc44;
-    pub const SEIZE: u32 = 0xfd64;
-    pub const DRAG_SEIZED: u32 = 0xfda2;
-    pub const SOUND: u32 = 0x289c;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -105,7 +97,7 @@ pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
     x.c.a[4] = base;
     x.c.d[0] = n;
     // l'original charge le numéro du jeu dans D1b avant de comparer (certains appelants le relisent)
-    x.c.d[1] = x.c.d[1] & !0xff | set as u32;
+    x.c.d[1] = x.c.d[1] & !0xff | set as u32; // relu : D1 relu par la suite (DDSOM_POISON, boss15_scene46)
     if set == x.u8(ANIM_SET) && n as u8 == x.u8(ANIM_N) {
         return;
     }
@@ -158,7 +150,7 @@ pub(self) fn wait(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.call(0x76ec4);
@@ -174,9 +166,9 @@ fn init(x: &mut Cx) {
     x.set8(0x9a, 0xff);
     let big = x.u8(TYPE) == TYPE_BIG;
     x.set8(0x7e, if big { 0x50 } else { 0x29 });
-    x.call(0x453c);
-    x.call(0xd5f30);
-    x.call(0xd6952);
+    lib::initial_hp_boss(x);
+    lib::create_set_14(x);
+    lib::create_set_15(x);
     x.set8(0x78, 0xff);
     x.set8(f::BOX_SET, 0x2f);
     x.set8(0x82, 1);
@@ -185,10 +177,10 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x76, 5), (0x8e, 3), (0x6f, 2), (0x68, 5), (0x69, 5), (0x6c, 4), (0x6d, 8), (0x6a, 3)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
-    x.call(0x788c);
+    var::SCENE_LEVEL.set(x.b, 0);
+    lib::draw_6b(x);
     x.set8(0x70, 0);
-    x.call(0xa470);
+    lib::draw_stance(x);
     x.set8(0x81, 0);
     x.set8(0x80, if big { 0x28 } else { 0x2c });
     x.set8(FOREGROUND, 0);
@@ -202,9 +194,9 @@ fn init(x: &mut Cx) {
     x.set16(KEPT_Y, py);
     x.set16(ANIM_SET, 0xffff);
     rest(x);
-    x.call(0x19db4);
-    x.call(0x19e10);
-    x.call(0x19eb0);
+    lib::empty_popups(x);
+    lib::clear_popup(x);
+    lib::clear_all_popups(x);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------
@@ -215,7 +207,7 @@ pub(self) fn active(x: &mut Cx) {
         x.set8(FOREGROUND, 0);
         x.unlink();
     }
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         if tst8(x, f::FREEZE).gt() {
             sub8(x, f::FREEZE, 1);
         } else {
@@ -300,7 +292,7 @@ pub(self) fn hover(x: &mut Cx) {
 
 /// `+5` = 6, 8, 10 (0x927fa) : attend qu'un joueur revienne.
 fn idle(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
         return;
     }
@@ -332,7 +324,7 @@ fn grab(x: &mut Cx) {
                 p.set_u16(x.b, f::HP, 1);
             }
             set_anim(x, 2, 4);
-            x.call(call::DRAG_SEIZED);
+            lib::hold_seized(x);
         }
         2 => {
             if (x.u8(TIMER) as i8) > 0 {
@@ -353,7 +345,7 @@ fn grab(x: &mut Cx) {
 
 fn grab_step(x: &mut Cx) {
     if !step_anim(x) {
-        return x.call(call::DRAG_SEIZED);
+        return lib::hold_seized(x);
     }
     x.set16(ANIM_SET, 0xffff);
     set_anim(x, 2, 4);
@@ -369,15 +361,14 @@ fn grab_step(x: &mut Cx) {
     }
     let hp = p.u16(x.b, f::HP).wrapping_sub(1);
     p.set_u16(x.b, f::HP, hp);
-    x.call(0xedd96);
-    x.call(call::DRAG_SEIZED);
+    lib::sound(x, 0xedd96);
+    lib::hold_seized(x);
 }
 
 fn release(x: &mut Cx) {
     x.set8(0x45, 1);
-    // 0xfd8c relâche le joueur désigné par A1 (resté chargé depuis le début de la prise)
-    x.c.a[1] = x.linked(f::TARGET).0;
-    x.call(0xfd8c);
+    let player = x.linked(f::TARGET);
+    lib::release_player(x, player);
     set_anim(x, 2, 5);
     stand(x);
 }

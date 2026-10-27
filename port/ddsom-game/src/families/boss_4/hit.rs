@@ -31,15 +31,15 @@ pub(super) fn run(x: &mut Cx) {
             _ => resume(x),
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 /// 0x82c68 : premier passage : dégâts (0x10112) et, sans PV, la mort ; puis la routine du code de coup.
 fn reaction(x: &mut Cx) {
     x.c.d[0] = 0;
     if x.u8(f::SUB2) == 0 {
-        x.call(0x10112);
+        lib::set_68(x);
         x.set8(INVULNERABLE, 0);
         // 0x833fc
         if !tst16(x, f::HP).gt() {
@@ -100,9 +100,7 @@ fn pushed_back(x: &mut Cx) {
         0 => {
             x.set16(TIMER, 0x14);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18u8, 0x20u16) } else { (8, (-0x20i16) as u16) };
-            x.c.d[0] = angle as u32;
-            setw(x, 1, vy);
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vy);
             speed(x, 0x17);
             kind(x, 0x20);
@@ -124,7 +122,6 @@ fn pushed_back(x: &mut Cx) {
                 x.anim_step();
                 return;
             }
-            x.c.d[0] = 0;
             x.set32(0x58, 0);
             decide::swoop(x);
         }
@@ -136,12 +133,12 @@ fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             x.set8(ANIM_LAST, 0xff);
             x.anim_start(SET_BODY, 0xa);
         }
         2 => {
-            if (x.a5_u8(var::PAUSE) as i8) > 0 || sub16(x, HITS, 1).gt() {
+            if (var::PAUSE.get(x.b) as i8) > 0 || sub16(x, HITS, 1).gt() {
                 return;
             }
             x.add8(f::SUB2, 2);
@@ -150,7 +147,7 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         _ => {
-            if x.a5_u8(var::PAUSE) != 0 || !x.anim_step() {
+            if var::PAUSE.get(x.b) != 0 || !x.anim_step() {
                 return;
             }
             resume(x);
@@ -163,12 +160,11 @@ fn down(x: &mut Cx) {
 pub(super) fn resume(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
-    if x.a5_u8(0x30) == 0 || !pick_target(x) {
+    if var::GAME_ON.get(x.b) == 0 || !pick_target(x) {
         return decide::wait(x);
     }
-    x.c.a[1] = THRESHOLDS;
-    x.call(0x105b6);
-    if target_in_box(x, 0, 0x30, 0xc) {
+    lib::next_threshold(x, THRESHOLDS);
+    if lib::target_in_box(x, 0, 0x30, 0xc) {
         decide::swoop(x);
     } else {
         decide::walk(x);
@@ -189,18 +185,18 @@ fn death(x: &mut Cx) {
             crate::mem::wr8(x.b, a5.wrapping_sub(0x557c), kind);
             crate::mem::wr8(x.b, a5.wrapping_sub(0x557b), 0);
             crate::mem::wr8(x.b, a5.wrapping_sub(0x557a), points);
-            for a in [0x103ba, 0xe0a10, 0xe3b6c, 0xe411e, 0xb780, 0xbad6, 0xe2f6] {
-                x.call(a);
-            }
+            lib::flash_and_shake(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
+            lib::sound(x, 0xe411e);
+            lib::drop_rewards(x);
             x.set8(0, 2);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
-            let mid = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
-            setw(x, 2, mid);
+            let mid = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             let (vx, side) = if Fl::sub16(mid, x.u16(0x8)).ge() { (0x200u16, 0u8) } else { ((-0x200i16) as u16, 0x20) };
             setw(x, 0, vx);
-            x.c.d[1] = side as u32;
             x.set16(0x14, vx);
             x.set8(f::FLIP, side);
             x.move_xz();
@@ -214,9 +210,8 @@ fn death(x: &mut Cx) {
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
-            x.c.d[5] = 5;
-            x.call(call::DUST);
-            x.call(0xec9e8);
+            lib::debris(x, 5);
+            lib::sound(x, 0xec9e8);
             x.anim_start(SET_BODY, 0xb);
         }
         4 => {

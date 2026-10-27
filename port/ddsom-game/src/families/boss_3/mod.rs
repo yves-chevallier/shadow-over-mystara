@@ -28,10 +28,6 @@ mod hit;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours.
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     /// Bonds restants de la marche, attente debout, décompte avant le prochain choix de cible.
     pub const WALK_STEPS: u32 = 0x6b;
@@ -73,35 +69,13 @@ pub(self) const SET_DEATH: u32 = 0x1747f0;
 /// Boss enregistré comme obstacle pour les autres objets (mot, adresse ; voir `boss_common`).
 pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const ZONE: u32 = 0xfbb0;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RETARGET: u32 = 0xa470;
-    pub const TARGET_SAME_SIDE: u32 = 0xa4c2;
-    pub const TARGET_OTHER_SIDE: u32 = 0xa4b4;
-    pub const PICK_OTHER: u32 = 0x44ee;
-    pub const STEPS_DONE: u32 = 0x788c;
-    pub const STEPS_CHECK: u32 = 0x79ce;
-    pub const ATTACK_LOCK: u32 = 0xac3a;
-    /// Prise d'un joueur : cherche (0xfc44), saisit (0xfd64), relâche (0xfd8c), le tient (0xfda2).
-    pub const GRAB_FIND: u32 = 0xfc44;
-    pub const GRAB: u32 = 0xfd64;
-    pub const RELEASE: u32 = 0xfd8c;
-    pub const HOLD: u32 = 0xfda2;
-    /// Cri du boss (son et effet, par la file des sons).
-    pub const CRY: u32 = 0xebfdc;
-    pub const CRY_B: u32 = 0xedb82;
-}
-
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
 pub(self) fn body_anim(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn attack_anim(x: &mut Cx, n: u32) {
-    play(x, SET_ATTACK, n);
+    lib::start(x, SET_ATTACK, n);
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
@@ -119,7 +93,6 @@ pub(self) fn set_steps(x: &mut Cx, v: u16) {
 
 /// 0x8188e : vitesses et accélérations (`+0x14..+0x1f`) à zéro.
 pub(self) fn stop(x: &mut Cx) {
-    x.c.d[0] = 0;
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -127,8 +100,7 @@ pub(self) fn stop(x: &mut Cx) {
 
 /// 0x8189e : enregistrement de la caméra en service (A2 : 0xff84fe, ou 0xff854e si `A5+0x36`).
 pub(self) fn camera(x: &mut Cx) -> Obj {
-    let a = if x.a5_u8(var::CAMERA_SELECT) != 0 { 0xff854e } else { 0xff84fe };
-    x.c.a[2] = a;
+    let a = if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe };
     Obj(a)
 }
 
@@ -149,7 +121,6 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
         d = d.wrapping_neg();
     }
     let behind = (d as i16) < 0;
-    x.c.d[0] = behind as u32;
     behind
 }
 
@@ -167,7 +138,6 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
         let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xc0);
         dx > 0x180
     };
-    x.c.d[0] = far as u32;
     far
 }
 
@@ -187,7 +157,6 @@ fn hp_sixteenths(x: &mut Cx) -> u32 {
             break;
         }
     }
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | d1 as u32;
     d0
 }
 
@@ -199,16 +168,14 @@ pub(self) fn wound_changed(x: &mut Cx) -> bool {
     if changed {
         x.set8(FLYING, w);
     }
-    x.c.d[0] = changed as u32;
     changed
 }
 
 /// Tirage d'une attaque dans une table de 32 octets par niveau de difficulté (lue en données, à partir de `table`) :
 /// `+6` = l'attaque, `+4..+5` = actif / attaques, `+7` = 0.
 fn draw_attack(x: &mut Cx, table: u32) {
-    let level = (x.a5_u16(var::DIFFICULTY) >> 1) << 5;
+    let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = table.wrapping_add(level as i16 as u32);
-    x.c.a[4] = at;
     let r = rand_and(x, 0x1f);
     let k = x.data8(at.wrapping_add(r));
     x.set8(f::SUB2, k);
@@ -235,7 +202,7 @@ pub(self) fn after_attack(x: &mut Cx) {
         return x.set32(f::STATE, s);
     }
     load_target(x);
-    let close = target_in_box(x, -0x40, 0x40, 0x20);
+    let close = lib::target_in_box(x, -0x40, 0x40, 0x20);
     if x.u8(FLYING) != 0 {
         return x.set32(f::STATE, 0x0202_0a00);
     }
@@ -250,7 +217,7 @@ pub fn run(x: &mut Cx) {
         return;
     }
     x.tick_counters();
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         x.set8(HOVER, 0xff);
     }
     x.set8(BODY_SHAPE, 0);
@@ -269,21 +236,21 @@ pub fn run(x: &mut Cx) {
 
 /// 0x7f44e : réglages du boss (hors cinématique) ; il s'enregistre comme obstacle.
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
     pick_target(x);
-    x.call(call::STEPS_DONE);
+    lib::draw_6b(x);
     x.set8(f::BOX_SET, 0x23);
-    x.call(0x453c);
-    x.call(0xd5f30);
-    x.call(0xd6952);
+    lib::initial_hp_boss(x);
+    lib::create_set_14(x);
+    lib::create_set_15(x);
     for (off, v) in [(0x70, 0), (0x8e, 3), (0x78, 0xff), (0x68, 1), (0x69, 1)] {
         x.set8(off, v);
     }
@@ -292,7 +259,7 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     let mut n = 6;
-    if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 {
+    if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 {
         n = 7;
     }
     x.c.d[0] = n as u32;
@@ -305,9 +272,9 @@ fn init(x: &mut Cx) {
     crate::mem::wr16(x.b, BODY_OWNER, x.o.0 as u16);
     x.call(0xb2ef6);
     body_anim(x, 0);
-    for a in [0x19db4, 0x19e10, 0x19eb0] {
-        x.call(a);
-    }
+    lib::empty_popups(x);
+    lib::clear_popup(x);
+    lib::clear_all_popups(x);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------
@@ -316,7 +283,7 @@ fn init(x: &mut Cx) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => fight::intro(x),
             2 => fight::run(x),
@@ -340,18 +307,16 @@ fn active(x: &mut Cx) {
 
 /// Fin d'image ordinaire : retenue dans l'écran (marge `margin`), ombre, remise en liste.
 pub(self) fn end_frame(x: &mut Cx, margin: u16) {
-    set_dw(x, 0, margin);
-    x.call(call::ZONE);
-    x.call(SHADOW);
+    lib::keep_on_screen(x, margin);
+    lib::collide_terrain(x);
     x.reinsert();
 }
 
 /// 0x81ae0 : riposte d'un coup commun (appelée par les réactions, 0x3e22e) : tirage selon la difficulté, puis
 /// l'attaque 24 (ruée au sol).
-fn counter_reaction(x: &mut Cx) {
+pub(crate) fn counter_reaction(x: &mut Cx) {
     let r = random(x) & 0xf;
-    x.c.d[0] = r;
-    let level = (x.a5_u16(var::DIFFICULTY) >> 1).wrapping_mul(4);
+    let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
     let mask = x.rom16(0x81b1a + level as u32);
     x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;
     if mask >> r & 1 == 0 {

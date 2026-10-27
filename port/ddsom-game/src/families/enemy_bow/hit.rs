@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x5cbe8;
@@ -14,7 +15,6 @@ pub(super) fn run(x: &mut Cx) {
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 | 2 => react(x, REACT_FIRST),
             4 => fall(x),
@@ -24,14 +24,13 @@ pub(super) fn run(x: &mut Cx) {
         }
     }
     if x.u8(NO_ZONE) == 0 {
-        zone_shadow(x);
+        zone_and_terrain(x);
     }
     x.reinsert();
 }
 
 /// Chute puis relevé (0x5cc94).
 fn fall(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -79,11 +78,10 @@ pub(super) fn grab(x: &mut Cx) {
             x.set8(NO_ZONE, 1);
             let flipped = x.u8(f::FLIP) != 0;
             // `turn` : tourne d'abord (animation 3) ; sinon part tout de suite
-            let turn = if x.a5_u8(0x34) == 4 {
+            let turn = if var::SCENE.get(x.b) == 4 {
                 flipped
             } else {
-                x.call(call::ON_RIGHT_HALF);
-                if x.c.cond(7) {
+                if !lib::in_right_half(x) {
                     flipped
                 } else {
                     !flipped
@@ -114,10 +112,10 @@ pub(super) fn grab(x: &mut Cx) {
             }
             if (x.u8(TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
                 let host = x.linked(f::HOST);
-                host.set_u8(x.b, ANGLE, 1);
+                host.set_u8(x.b, Obj::SPEED_INDEX, 1);
             }
             set_state_long(x, st::DEAD_LONG);
-            x.call(call::REMOVE);
+            detach_from_host(x);
         }
         _ => {}
     }

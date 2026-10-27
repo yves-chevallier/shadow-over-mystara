@@ -10,14 +10,15 @@
 use super::fight;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         return end(x);
     }
     x.set8(SHIELD, 2);
     if x.u8(TYPE) == TYPE_GREEN {
-        if x.u8(VARIANT) != 0 {
+        if x.u8(Obj::VARIANT) != 0 {
             return end(x);
         }
         x.call(0xb3f6a);
@@ -30,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => end(x),
         };
     }
-    if x.u8(VARIANT) == 1 {
+    if x.u8(Obj::VARIANT) == 1 {
         match x.u8(f::SUB2) {
             0 => pet_enter(x),
             2 => pet_fly(x),
@@ -55,16 +56,16 @@ fn end(x: &mut Cx) {
     x.add8(f::SUB, 2);
     x.set16(f::SUB2, 0);
     x.set8(0, 1);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     rest(x);
     fight::run(x);
 }
 
 fn camera(x: &mut Cx) -> (u16, u16) {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 {
-        (x.a5_u16(0x556), x.a5_u16(0x55a))
+    if var::CAMERA_SELECT.get(x.b) != 0 {
+        (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b))
     } else {
-        (x.a5_u16(var::SCROLL_X), x.a5_u16(var::SCROLL_Y))
+        (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b))
     }
 }
 
@@ -74,8 +75,7 @@ fn green_wait(x: &mut Cx) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 0x80);
-    x.c.d[0] = 0x7f;
-    x.call(0x289c);
+    lib::shake_5c(x, 0x7f);
 }
 
 fn green_enter(x: &mut Cx) {
@@ -100,7 +100,7 @@ fn green_enter_b(x: &mut Cx) {
     x.set16(0x1a, 0);
     set_anim(x, 0, 4);
     x.call(0xb3f40);
-    x.call(0xe508a);
+    lib::sound(x, 0xe508a);
 }
 
 fn green_descend(x: &mut Cx) {
@@ -153,7 +153,7 @@ fn announce(x: &mut Cx) {
     x.set8(BUBBLES, 4);
     x.set8(BUBBLE_TICK, 0);
     open_list(x, 0x14de);
-    x.call(0xe50fe);
+    lib::sound(x, 0xe50fe);
 }
 
 /// 0x8fe68 : une bulle de plus toutes les 15 à 78 images.
@@ -167,7 +167,7 @@ fn bubble_tick(x: &mut Cx) {
         let r = (random(x) & 0x3f) as u8 + 0xf;
         x.set8(BUBBLE_TICK, r);
         sub8(x, BUBBLES, 1);
-        x.call(0xead04);
+        lib::sound(x, 0xead04);
     }
 }
 
@@ -176,9 +176,8 @@ fn bubbles(x: &mut Cx) {
     match x.u16(TIMER) as i16 {
         t if t < 0x64 => x.call(0xb4088),
         0x64 => {
-            set_dw(x, 0, 0xa0);
-            x.call(0x2860);
-            x.call(0xe50fe);
+            lib::shake_58(x, 0xa0);
+            lib::sound(x, 0xe50fe);
             x.call(0xb4088);
         }
         _ => {}
@@ -232,7 +231,7 @@ fn fly(x: &mut Cx) {
     }
     x.add8(f::SUB2, 2);
     x.set_a5_u8(0x2e, 6);
-    x.call(0xe50fe);
+    lib::sound(x, 0xe50fe);
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -246,7 +245,7 @@ fn finish_step(x: &mut Cx) {
 fn wait_camera(x: &mut Cx) {
     x.set8(HOVER, 1);
     step(x);
-    if (x.a5_u8(0x2c) as i8) < 0xc {
+    if (var::PHASE.get(x.b) as i8) < 0xc {
         return;
     }
     x.add8(f::SUB2, 2);
@@ -277,7 +276,7 @@ fn pet_fly(x: &mut Cx) {
 fn pet_wait_camera(x: &mut Cx) {
     x.set8(HOVER, 1);
     step(x);
-    if (x.a5_u8(0x2c) as i8) < 0xc {
+    if (var::PHASE.get(x.b) as i8) < 0xc {
         return;
     }
     x.add8(f::SUB2, 2);

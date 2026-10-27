@@ -1,5 +1,6 @@
 //! Boss 8 : aides communes (choix d'un joueur, balayage des joueurs, positions, choix de l'attaque suivante).
 
+use crate::objects::Obj;
 use super::*;
 use crate::machine::Machine;
 
@@ -11,8 +12,7 @@ pub(super) fn lsr_w(x: &mut Cx, n: usize, k: u32) {
 
 /// 0x89788 : phases de l'affrontement selon le mode de jeu `A5+0x5a` et le nombre de joueurs `+0xad`.
 pub(super) fn phase(x: &mut Cx) {
-    let mode = x.a5_u8(0x5a);
-    x.c.d[0] = mode as u32;
+    let mode = var::SCENE_LEVEL.get(x.b);
     if mode == 0 {
         return;
     }
@@ -25,7 +25,6 @@ pub(super) fn phase(x: &mut Cx) {
             return;
         }
         let half = x.u16(f::HP) >> 1;
-        setw(x, 1, half);
         if Fl::sub16(half, 0x48).gt() {
             x.set8(SLOW, 0);
             x.set16(WEAK_HP, half);
@@ -54,12 +53,10 @@ pub(super) fn pick_any(x: &mut Cx) {
 fn pick(x: &mut Cx, remember: bool) {
     for _ in 0..4096 {
         x.c.a[1] = 0;
-        x.c.d[1] = 0;
         x.c.a[2] = A5 + 0x5de;
         let alea = x.random();
         let n = alea as u32 & 3;
         setw(x, 0, n as u16);
-        setw(x, 1, n as u16);
         if remember && x.u8(PICKED) >> n & 1 != 0 {
             continue;
         }
@@ -96,17 +93,14 @@ pub(super) fn scan(x: &mut Cx, exactly_one: bool, d0: i16, d1: u16, d2: u16) -> 
         let alive = crate::mem::rd8(x.b, x.c.a[2]);
         let ok = if exactly_one { alive == 1 } else { alive != 0 };
         if ok {
-            setw(x, 0, d0 as u16);
-            setw(x, 1, d1);
-            setw(x, 2, d2);
-            x.call(0x7f19c);
-            if !x.c.cond(7) {
+            let player = Obj(x.c.a[2]);
+            if lib::in_box(x, player, d0, d1, d2).found() {
                 return true;
             }
         }
         x.c.a[2] = x.c.a[2].wrapping_add(0x200);
         let k = (x.c.d[6] as u16).wrapping_sub(1);
-        setw(x, 6, k);
+        setw(x, 6, k); // relu : compteur de boucle relu au tour suivant
         if k == 0xffff {
             return false;
         }
@@ -115,35 +109,28 @@ pub(super) fn scan(x: &mut Cx, exactly_one: bool, d0: i16, d1: u16, d2: u16) -> 
 
 /// 0x8a2c6 : vrai si le boss ne regarde pas son adversaire (`+0x50`) et qu'une animation est en cours (`+0xa3`).
 pub(super) fn must_turn(x: &mut Cx) -> bool {
-    x.c.d[0] = 0;
     if x.u8(ANIM_LAST) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
     let t = x.linked(f::TARGET);
-    let mut d1 = t.u16(x.b, 0x8);
+    let d1 = t.u16(x.b, 0x8);
     let mine = x.u16(0x8);
     let mut face = 0u8;
     if x.u8(f::FLIP) != 0 {
         face = 0x20;
         let r = Fl::sub16(d1, mine);
-        d1 = d1.wrapping_sub(mine);
         if !r.gt() {
             face = 0;
         }
     } else {
         let r = Fl::sub16(d1, mine);
-        d1 = d1.wrapping_sub(mine);
         if r.gt() {
             face = 0x20;
         }
     }
-    x.c.d[0] = face as u32;
-    setw(x, 1, d1);
     if face == x.u8(f::FLIP) {
-        x.c.d[0] = 0;
         return false;
     }
-    x.c.d[0] = 1;
     true
 }
 
@@ -151,11 +138,8 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
 pub(super) fn random_spot(x: &mut Cx) {
     let alea = x.random();
     let i = alea & 0x7c;
-    setw(x, 0, i);
     let px = x.rom16(0x8a384 + i as u32);
     let py = x.rom16(0x8a386 + i as u32);
-    setw(x, 1, px);
-    setw(x, 2, py);
     x.set16(0x8, px);
     x.set16(0x10, py);
 }
@@ -164,19 +148,16 @@ pub(super) fn random_spot(x: &mut Cx) {
 pub(super) fn random_sidestep(x: &mut Cx) {
     let alea = x.random();
     let i = alea & 0xe;
-    setw(x, 0, i);
     let mut d = x.rom16(0x8a422 + i as u32);
     if x.u8(f::FLIP) != 0 {
         d = d.wrapping_neg();
     }
-    setw(x, 1, d);
     x.add16(0x8, d);
 }
 
 /// 0x8a49a : ramène le boss dans l'aire de jeu (x de 0x20 à 0x160, y de 0x148 à 0x186).
 pub(super) fn clamp(x: &mut Cx) {
     let y = x.u16(0x10);
-    setw(x, 0, y);
     if Fl::sub16(y, 0x148).gt() {
         if !Fl::sub16(y, 0x186).lt() {
             x.set16(0x10, 0x186);
@@ -185,7 +166,6 @@ pub(super) fn clamp(x: &mut Cx) {
         x.set16(0x10, 0x148);
     }
     let px = x.u16(0x8);
-    setw(x, 0, px);
     if Fl::sub16(px, 0x20).gt() {
         if !Fl::sub16(px, 0x160).lt() {
             x.set16(0x8, 0x160);
@@ -198,11 +178,7 @@ pub(super) fn clamp(x: &mut Cx) {
 /// Une série de bouffées d'effets (0xb10c8) le long de l'axe : D0 = 1, D1 = 0, D2 = position, D3 = 4.
 pub(super) fn bursts(x: &mut Cx, spots: &[i16]) {
     for &p in spots {
-        x.c.d[0] = 1;
-        x.c.d[1] = 0;
-        setw(x, 2, p as u16);
-        setw(x, 3, 4);
-        x.call(call::BURST);
+        lib::shock(x, 1, 0, p as u16, 4);
     }
 }
 
@@ -230,11 +206,8 @@ pub(super) fn dodge_nearby(x: &mut Cx) {
 
 /// 0x8a666 : un point de chute tiré dans une table choisie selon le quart d'écran où se trouve le boss.
 pub(super) fn dodge_spot(x: &mut Cx) {
-    let dx = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X));
-    let dy = x.u16(0x10).wrapping_sub(x.a5_u16(var::SCROLL_Y));
-    setw(x, 0, dx);
-    setw(x, 1, dy);
-    x.c.d[6] = 0;
+    let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
+    let dy = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     let right = Fl::sub16(dx, 0xc0).gt();
     let low = Fl::sub16(dy, 0x164).gt();
     let d6 = match (right, low) {
@@ -243,18 +216,13 @@ pub(super) fn dodge_spot(x: &mut Cx) {
         (true, false) => 8,
         (true, true) => 0xc,
     };
-    x.c.d[6] = d6;
     let table = rom32(x, 0x8a6cc + d6);
-    x.c.a[4] = table;
     let alea = x.random();
     let i = ((alea) & 3) << 3;
-    setw(x, 0, i);
     let a = table.wrapping_add(i as u32);
     let dx = x.data16(a);
-    setw(x, 1, dx);
     x.add16(0x8, dx);
     let dy = x.data16(a + 2);
-    setw(x, 1, dy);
     x.add16(0x10, dy);
     let side = x.data8(a + 4);
     x.set8(f::FLIP, side);
@@ -285,20 +253,17 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     if clear_d0 {
         x.c.d[0] = 0;
     }
-    let level = x.a5_u16(var::DIFFICULTY);
+    let level = var::RANK.get(x.b);
     setw(x, 0, level);
     lsr_w(x, 0, 1);
     let row = ((x.c.d[0] as u16) << 5) as i16 as i32 as u32;
-    setw(x, 0, row as u16);
     let a4 = table.wrapping_add(row);
-    x.c.a[4] = a4;
     let alea = x.random();
     let i = alea & 0x1f;
-    setw(x, 0, i);
     let step = x.data8(a4 + i as u32);
     x.set8(f::SUB2, step);
     x.set16(f::STATE, state);
-    x.set8(SUB3, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// 0x8a066 : fin d'une attaque. Un joueur dans la zone (0x7f19c : -0x30, 0x100, 0x40) fait tirer la suite dans la table

@@ -48,17 +48,13 @@ fn recoil(x: &mut Cx) {
         }
         2 => {
             x.add8(f::SUB2, 2);
-            x.call(0xecdba);
+            lib::sound(x, 0xecdba);
         }
         4 => {
             let low = x.a5_u16(0x6e) & 3;
             x.set_a5_u16(0x6e, low);
             if low == 0 {
-                x.c.d[0] = 1;
-                x.c.d[1] = 2;
-                set_dw(x, 2, 0x18);
-                set_dw(x, 3, 0xffff);
-                x.call(0xb10c8);
+                lib::shock(x, 1, 2, 0x18, 0xffff);
             }
             if x.u8(0x14) != 0 {
                 x.move_x();
@@ -118,8 +114,7 @@ fn flee(x: &mut Cx) {
         0 => {
             x.set8(NO_ZONE, 1);
             let flipped = x.u8(f::FLIP) != 0;
-            x.call(0x57c66);
-            let run_now = if x.c.cond(7) { !flipped } else { flipped };
+            let run_now = if !lib::in_right_half(x) { !flipped } else { flipped };
             if run_now {
                 x.add8(f::SUB2, 4);
                 run_away(x);
@@ -146,7 +141,7 @@ fn flee(x: &mut Cx) {
                 return;
             }
             set_state_long(x, 0x0600_0000);
-            x.call(0x27ee);
+            detach_from_host(x);
         }
         _ => {}
     }

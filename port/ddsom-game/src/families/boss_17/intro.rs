@@ -78,11 +78,11 @@ fn arrival(x: &mut Cx) {
             x.set8(0, 2);
             x.set_bit(0x1, 1, false);
             x.set8(f::FLIP, 0x20);
-            let cx = x.a5_u16(var::CAMERA1_X).wrapping_sub(0x10);
+            let cx = var::CAMERA1_X.get(x.b).wrapping_sub(0x10);
             x.set16(0x8, cx);
-            let cy = x.a5_u16(var::CAMERA1_Y);
+            let cy = var::CAMERA1_Y.get(x.b);
             x.set16(0x10, cy);
-            x.set8(ANGLE, 8);
+            x.set8(Obj::SPEED_INDEX, 8);
             speed(x, 0x12);
             x.set16(TIMER, 7);
             effect(x, true, 0x31, None, true);
@@ -91,18 +91,18 @@ fn arrival(x: &mut Cx) {
         }
         1 => {
             if !sub16(x, TIMER, 1).gt() {
-                let a = x.u8(ANGLE).wrapping_sub(1);
+                let a = x.u8(Obj::SPEED_INDEX).wrapping_sub(1);
                 if (a as i8) < 0 {
                     x.add8(0x7, 2);
                     x.set16(TIMER, 0x46);
                 } else {
-                    x.set8(ANGLE, a);
+                    x.set8(Obj::SPEED_INDEX, a);
                     speed(x, 0x12);
                     x.set16(TIMER, 7);
                 }
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         2 => {
             if !sub16(x, TIMER, 1).gt() {
@@ -110,7 +110,7 @@ fn arrival(x: &mut Cx) {
                 x.set16(0x1e, (-0x20i16) as u16);
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         3 => {
             if !tst16(x, 0x1c).gt() {
@@ -123,7 +123,7 @@ fn arrival(x: &mut Cx) {
                 x.set16(0x14, 0);
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         4 => {
             if !sub16(x, TIMER, 1).gt() {
@@ -131,7 +131,7 @@ fn arrival(x: &mut Cx) {
                     x.add8(0x7, 2);
                     x.set16(0x18, 0);
                     fx(x, 0xe5baa);
-                    x.set8(ANGLE, 5);
+                    x.set8(Obj::SPEED_INDEX, 5);
                     speed(x, 0x1d);
                 } else {
                     x.set16(TIMER, 0x28);
@@ -146,17 +146,17 @@ fn arrival(x: &mut Cx) {
                 }
             }
             x.move_xy();
-            step(x);
+            lib::step(x);
         }
         5 => {
-            let low = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x145);
-            let left = x.a5_u16(var::CAMERA1_X).wrapping_add(0x260);
+            let low = var::CAMERA1_Y.get(x.b).wrapping_add(0x145);
+            let left = var::CAMERA1_X.get(x.b).wrapping_add(0x260);
             if Fl::sub16(low, x.u16(0x10)).le() || Fl::sub16(left, x.u16(0x8)).le() {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, true);
             } else {
                 x.move_xy();
-                step(x);
+                lib::step(x);
             }
         }
         6 => {
@@ -175,8 +175,8 @@ fn entrance(x: &mut Cx) {
         0 => {
             x.add8(0x7, 2);
             fx(x, 0xecf10);
-            let px = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
-            let py = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x68);
+            let px = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
+            let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x68);
             x.set16(0x8, px);
             x.set16(0x10, py);
             x.set16(0xc, 0);
@@ -187,15 +187,15 @@ fn entrance(x: &mut Cx) {
             body(x, 0x18);
         }
         1 => {
-            step(x);
-            if x.u8(KEY) != 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
             }
         }
         2 => {
             let b = x.u8(0x1) ^ 0x2;
             x.set8(0x1, b);
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, false);
                 x.set16(TIMER, 0xa);
@@ -209,11 +209,11 @@ fn entrance(x: &mut Cx) {
                     x.set8(off, v);
                 }
                 x.set8(0, 1);
-                x.call(rom::IMMUNITIES);
-                x.call(0xd5f30);
+                lib::set_immunities(x);
+                lib::create_set_14(x);
                 decide::chase(x);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         _ => {}
@@ -230,7 +230,7 @@ fn finale(x: &mut Cx) {
             body(x, 0x17);
         }
         1 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, true);
                 x.set16(TIMER, 0xa);
@@ -241,8 +241,8 @@ fn finale(x: &mut Cx) {
                 x.add8(0x7, 2);
                 x.set_bit(0x1, 1, false);
                 x.set8(f::FLIP, 0);
-                let px = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
-                let py = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x80);
+                let px = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
+                let py = var::CAMERA1_Y.get(x.b).wrapping_add(0x80);
                 x.set16(0x8, px);
                 x.set16(0x10, py);
                 x.set16(0xc, 0);
@@ -251,7 +251,7 @@ fn finale(x: &mut Cx) {
             }
         }
         3 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
                 fx(x, 0xe1768);
@@ -259,7 +259,7 @@ fn finale(x: &mut Cx) {
             }
         }
         4 => {
-            step(x);
+            lib::step(x);
             if tst16(x, TIMER).gt() {
                 sub16(x, TIMER, 1);
                 return;
@@ -272,7 +272,7 @@ fn finale(x: &mut Cx) {
             open_message(x, 0x13);
         }
         5 => {
-            step(x);
+            lib::step(x);
             if !message_done(x) {
                 return;
             }
@@ -288,15 +288,15 @@ fn finale(x: &mut Cx) {
                 x.add8(0x7, 2);
                 strike(x, 0xd);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         7 | 14 => {
-            step(x);
-            if x.u8(KEY) != 0 {
+            lib::step(x);
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
         }
         8 | 15 => {
@@ -321,14 +321,14 @@ fn finale(x: &mut Cx) {
             }
         }
         10 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x96);
                 body(x, 0);
             }
         }
         11 => {
-            step(x);
+            lib::step(x);
             if sub16(x, TIMER, 1).gt() {
                 return;
             }
@@ -337,7 +337,7 @@ fn finale(x: &mut Cx) {
             open_message(x, 0x14);
         }
         12 => {
-            step(x);
+            lib::step(x);
             if !message_done(x) {
                 return;
             }
@@ -346,7 +346,7 @@ fn finale(x: &mut Cx) {
             open_message(x, 0x15);
         }
         13 => {
-            step(x);
+            lib::step(x);
             if message_done(x) {
                 x.add8(0x7, 2);
                 strike(x, 0xd);
@@ -422,13 +422,13 @@ fn camera_rise(x: &mut Cx) {
     if tst16(x, TIMER).gt() && sub16(x, TIMER, 1).gt() {
         return;
     }
-    let y = x.a5_u16(var::SCROLL_Y).wrapping_add(4);
-    x.set_a5_u16(var::SCROLL_Y, y);
+    let y = var::SCROLL_Y.get(x.b).wrapping_add(4);
+    var::SCROLL_Y.set(x.b, y);
     if Fl::sub16(y, 0x1c8).lt() {
         return;
     }
     x.add8(0x7, 2);
-    x.set_a5_u16(var::SCROLL_Y, 0x1c8);
+    var::SCROLL_Y.set(x.b, 0x1c8);
     let Some(core) = effect(x, true, 0x3b, None, false) else { return };
     let (px, py) = (x.u16(0x8), x.u16(0x10));
     core.set_u16(x.b, 0x8, px);
@@ -449,11 +449,14 @@ fn camera_rise(x: &mut Cx) {
 }
 
 /// +7 = 36 et 38 (0x95a8e, 0x95abc) : le boss s'envole, la caméra remonte plus vite que lui.
+/// Ordonnée de la caméra principale lue en long (16.16).
+const SCROLL_Y_LONG: crate::ram::Long = crate::ram::Long(var::SCROLL_Y.0);
+
 fn fall(x: &mut Cx) {
     let first = x.u8(0x7) == 36;
     let rate = if first { 0x12000 } else { 0x11000 };
-    let y = x.a5_u32(var::SCROLL_Y).wrapping_sub(rate);
-    x.set_a5_u32(var::SCROLL_Y, y);
+    let y = SCROLL_Y_LONG.get(x.b).wrapping_sub(rate);
+    SCROLL_Y_LONG.set(x.b, y);
     x.move_xyz();
     let (limit, next) = if first { (0x80, 0x13) } else { (0xff80, 0x14) };
     if cmp16(x, 0x18, limit).le() {
@@ -466,8 +469,8 @@ fn fall(x: &mut Cx) {
 
 /// +7 = 40 (0x95aea) : retombe vers le sol.
 fn land(x: &mut Cx) {
-    let y = x.a5_u32(var::SCROLL_Y).wrapping_sub(0x10000);
-    x.set_a5_u32(var::SCROLL_Y, y);
+    let y = SCROLL_Y_LONG.get(x.b).wrapping_sub(0x10000);
+    SCROLL_Y_LONG.set(x.b, y);
     x.move_xyz();
     if tst16(x, 0xc).gt() {
         return;
@@ -488,7 +491,7 @@ fn variant(x: &mut Cx, second: bool) {
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
             }
-            step(x);
+            lib::step(x);
         }
         2 => {
             sub16(x, 0xc, 1);
@@ -497,7 +500,7 @@ fn variant(x: &mut Cx, second: bool) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x14);
             }
-            step(x);
+            lib::step(x);
         }
         3 => {
             if sub16(x, TIMER, 1).le() {
@@ -510,13 +513,13 @@ fn variant(x: &mut Cx, second: bool) {
                 x.move_xyz();
                 body(x, 4);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         4 => {
             x.move_xyz();
             if tst16(x, 0x18).gt() {
-                step(x);
+                lib::step(x);
             } else {
                 x.add8(0x7, 2);
                 body(x, 7);
@@ -525,7 +528,7 @@ fn variant(x: &mut Cx, second: bool) {
         5 => {
             x.move_xyz();
             if tst16(x, 0xc).gt() {
-                step(x);
+                lib::step(x);
             } else {
                 x.add8(0x7, 2);
                 x.set16(0xc, 0);
@@ -533,9 +536,9 @@ fn variant(x: &mut Cx, second: bool) {
             }
         }
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
-                let scene = x.a5_u8(0x34);
+                let scene = var::SCENE.get(x.b);
                 if scene == 0x2c || scene == 0x6f {
                     x.set_a5_u8(0x2e, 6);
                 }
@@ -543,8 +546,8 @@ fn variant(x: &mut Cx, second: bool) {
             }
         }
         7 => {
-            if x.a5_u8(0x2c) != 0xc {
-                step(x);
+            if var::PHASE.get(x.b) != 0xc {
+                lib::step(x);
                 return;
             }
             x.set_a5_u32(0x38, 0x0459_5900);
@@ -552,8 +555,8 @@ fn variant(x: &mut Cx, second: bool) {
                 x.set8(off, v);
             }
             x.set8(0, 1);
-            x.call(rom::IMMUNITIES);
-            x.call(0xd5f30);
+            lib::set_immunities(x);
+            lib::create_set_14(x);
             decide::chase(x);
         }
         _ => {}
@@ -567,17 +570,17 @@ fn variant_start(x: &mut Cx, second: bool) {
     x.set_bit(0x1, 1, false);
     x.set8(f::FLIP, 0);
     if second {
-        let px = x.a5_u16(var::CAMERA2_X).wrapping_add(0x80);
-        let py = x.a5_u16(var::CAMERA2_Y).wrapping_add(0x60);
+        let px = var::CAMERA2_X.get(x.b).wrapping_add(0x80);
+        let py = var::CAMERA2_Y.get(x.b).wrapping_add(0x60);
         x.set16(0x8, px);
         x.set16(0x10, py);
-        let h = x.a5_u16(var::CAMERA2_Y).wrapping_add(0x148).wrapping_sub(py);
+        let h = var::CAMERA2_Y.get(x.b).wrapping_add(0x148).wrapping_sub(py);
         x.set16(0xc, h);
     } else {
-        let px = x.a5_u16(var::SCROLL_X).wrapping_add(0x80);
+        let px = var::SCROLL_X.get(x.b).wrapping_add(0x80);
         x.set16(0x8, px);
         x.set16(0x10, 0x170);
-        let h = x.a5_u16(var::SCROLL_Y).wrapping_sub(0x170).wrapping_sub(0x30);
+        let h = var::SCROLL_Y.get(x.b).wrapping_sub(0x170).wrapping_sub(0x30);
         x.set16(0xc, h);
     }
     x.set16(TIMER, 0xa);

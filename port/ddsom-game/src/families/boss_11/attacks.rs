@@ -6,15 +6,15 @@ use crate::objects::Courant;
 use crate::machine::Machine;
 
 fn step(x: &mut Cx, table: u32) -> u32 {
-    dispatch0(x, table, SUB3)
+    dispatch0(x, table, f::SUB3)
 }
 
 fn cam_x(x: &mut Cx) -> u16 {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 { x.a5_u16(0x556) } else { x.a5_u16(var::SCROLL_X) }
+    if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
 fn cam_y(x: &mut Cx) -> u16 {
-    if x.a5_u8(var::CAMERA_SELECT) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(var::SCROLL_Y) }
+    if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) }
 }
 
 pub(super) fn run(x: &mut Cx) {
@@ -33,9 +33,9 @@ pub(super) fn run(x: &mut Cx) {
 /// 0x8dc30 : coup de queue (le effet dépend du type).
 fn sting(x: &mut Cx) {
     if is_12(x) {
-        x.call(0xe4de6)
+        lib::sound(x, 0xe4de6)
     } else {
-        x.call(0xe4d72)
+        lib::sound(x, 0xe4d72)
     }
 }
 
@@ -43,7 +43,7 @@ fn sting(x: &mut Cx) {
 fn strike(x: &mut Cx) {
     set44(x, 1);
     if step(x, 0x8dc02) == 0x8dc06 {
-        x.add8(SUB3, 2);
+        x.add8(f::SUB3, 2);
         act(x, 1);
         return;
     }
@@ -51,8 +51,8 @@ fn strike(x: &mut Cx) {
         return to_chase(x);
     }
     sync(x);
-    if x.u8(KEY) != 0 {
-        x.set8(KEY, 0);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
         sting(x);
     }
 }
@@ -61,7 +61,7 @@ fn strike(x: &mut Cx) {
 fn spit(x: &mut Cx) {
     match step(x, 0x8dc52) {
         0x8dc5c => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x10);
             act(x, 0)
         }
@@ -71,20 +71,20 @@ fn spit(x: &mut Cx) {
             if sub16(x, TIMER, 1).gt() {
                 return;
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             act(x, 0x24)
         }
         0x8dc8e => {
             if x.anim_step() {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 act(x, 0x25);
-                return x.call(0xe4b4c);
+                return lib::sound(x, 0xe4b4c);
             }
             sync(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             x.random_68k();
             if is_12(x) {
                 let r = x.c.d[0] as u16 & 3;
@@ -100,7 +100,7 @@ fn spit(x: &mut Cx) {
         }
         0x8dcec => {
             if x.anim_step() {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 return act(x, 0x26);
             }
             sync(x);
@@ -118,16 +118,12 @@ fn spit(x: &mut Cx) {
 fn jump_side(x: &mut Cx, speed: i16, z: u16, rise: u16) {
     stop(x);
     let mut d0 = cam_x(x);
-    setw(x, 0, d0);
     setb(x, 1, 0);
     let mut d2 = speed as u16;
-    setw(x, 2, d2);
     d0 = d0.wrapping_add(0xe0);
-    setw(x, 0, d0);
     if !Fl::sub16(d0, x.u16(0x8)).le() {
         setb(x, 1, 0x20);
         d2 = d2.wrapping_neg();
-        setw(x, 2, d2);
     }
     let side = x.c.d[1] as u8;
     x.set8(f::FLIP, side);
@@ -145,12 +141,11 @@ fn landing(x: &mut Cx) -> bool {
     if !tst16(x, 0xc).mi() {
         return false;
     }
-    x.add8(SUB3, 2);
+    x.add8(f::SUB3, 2);
     x.set16(0xc, 0);
     body(x, 7);
-    x.c.d[0] = 8;
-    x.call(call::SOUND_B);
-    x.call(0xecc0a);
+    lib::shake_58(x, 8);
+    lib::sound(x, 0xecc0a);
     true
 }
 
@@ -159,9 +154,9 @@ fn leap(x: &mut Cx) {
     x.set8(0xb2, 1);
     match step(x, 0x8dd30) {
         0x8dd36 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             jump_side(x, -0x400, 0x600, (-0x40i16) as u16);
-            x.call(0xe4cfe)
+            lib::sound(x, 0xe4cfe)
         }
         0x8dd84 => {
             landing(x);
@@ -180,9 +175,9 @@ fn leap_c(x: &mut Cx) {
     x.set8(0xb2, 1);
     match step(x, 0x8e2fe) {
         0x8e304 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             jump_side(x, -0x100, 0x800, (-0x80i16) as u16);
-            x.call(0xe4cfe)
+            lib::sound(x, 0xe4cfe)
         }
         0x8e352 => {
             landing(x);
@@ -200,14 +195,14 @@ fn leap_c(x: &mut Cx) {
 fn lunge(x: &mut Cx) {
     match step(x, 0x8ddda) {
         0x8dde0 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             stop(x);
             x.set16(0x18, 0x200);
             x.set16(0x1a, (-0x80i16) as u16);
             x.set16(TIMER, 0x20);
             act(x, 0x20);
             sync(x);
-            x.call(0xe4cfe)
+            lib::sound(x, 0xe4cfe)
         }
         0x8de0c => {
             x.anim_step();
@@ -216,7 +211,7 @@ fn lunge(x: &mut Cx) {
                 if sub16(x, TIMER, 1).gt() {
                     return;
                 }
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(0xc, 0);
                 return act(x, 0x22);
             }
@@ -242,7 +237,7 @@ fn charge(x: &mut Cx) {
     x.set8(0xb2, 1);
     let mut t = step(x, 0x8de78);
     if t == 0x8de82 {
-        x.add8(SUB3, 2);
+        x.add8(f::SUB3, 2);
         act(x, 0x27);
         sync(x);
         x.set16(TIMER, 0x20);
@@ -254,12 +249,12 @@ fn charge(x: &mut Cx) {
         if sub16(x, TIMER, 1).gt() {
             return;
         }
-        x.add8(SUB3, 2);
+        x.add8(f::SUB3, 2);
         t = 0x8deb2;
     }
     match t {
         0x8deb2 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             seg_choice(x);
             if !aim_target(x) {
                 return to_chase(x);
@@ -269,7 +264,7 @@ fn charge(x: &mut Cx) {
             x.set8(0x2d, d0 as u8);
             stop(x);
             speed(x, 0x34);
-            x.call(0xe4cfe)
+            lib::sound(x, 0xe4cfe)
         }
         0x8dee2 => {
             if !sub8(x, 0xb1, 1).gt() {
@@ -280,7 +275,7 @@ fn charge(x: &mut Cx) {
                     return charge_end(x);
                 }
                 pause_tick(x);
-                x.call(0xe4cfe);
+                lib::sound(x, 0xe4cfe);
             }
             let mut d0 = 0u32;
             x.c.d[0] = d0;
@@ -291,7 +286,6 @@ fn charge(x: &mut Cx) {
                 if !Fl::sub16(w, 0x10).lt() {
                     w = w.wrapping_sub(0x20);
                 }
-                setw(x, 0, w);
                 let cur = x.u8(0x2d).wrapping_sub(w as u8) & 0x1f;
                 x.set8(0x2d, cur);
             }
@@ -312,12 +306,10 @@ fn charge(x: &mut Cx) {
 
 /// 0x8df38 : fin de la charge, freinage.
 fn charge_end(x: &mut Cx) {
-    x.add8(SUB3, 2);
+    x.add8(f::SUB3, 2);
     let a = asr_w(x.u16(0x14), 2);
-    setw(x, 0, a);
     x.set16(0x14, a);
     let b = asr_w(x.u16(0x1c), 2);
-    setw(x, 0, b);
     x.set16(0x1c, b);
     act(x, 0x29);
     sync(x);
@@ -325,16 +317,13 @@ fn charge_end(x: &mut Cx) {
 
 /// 0x8df70 : choisit une cible (0x1376 donne le cap) ; faux sans joueur.
 fn aim_target(x: &mut Cx) -> bool {
-    x.c.d[0] = 2;
-    x.call(0x43bc);
-    if zero(x) {
+    if !lib::target_by_criterion(x, lib::LOWEST_HP) {
         x.c.d[0] = 0;
         return false;
     }
-    x.call(0x1376);
+    lib::aim_to(x, crate::objects::Obj(x.c.a[1] & 0xff_ffff));
     let a = x.c.d[0] as u8;
     x.set8(0xb3, a);
-    x.c.d[0] = 1;
     true
 }
 
@@ -344,7 +333,6 @@ fn seg_choice(x: &mut Cx) {
     let i = x.c.d[0] as u16 & 0x30;
     setw(x, 0, i);
     let a4 = 0x8dfcc + i as u32;
-    x.c.a[4] = a4;
     let alea = x.random();
     let r = alea & 0xf;
     setw(x, 0, r);
@@ -357,7 +345,6 @@ fn seg_choice(x: &mut Cx) {
 fn pause_tick(x: &mut Cx) {
     let alea = x.random();
     let r = alea & 0xf;
-    setw(x, 0, r);
     let v = x.rom8(0x8dfbc + r as u32);
     x.set8(0xb1, v);
 }
@@ -367,7 +354,7 @@ fn approach(x: &mut Cx) {
     x.set8(0xb2, 1);
     match step(x, 0x8e020) {
         0x8e026 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             stop(x);
             speed(x, 0x2b);
             if !route_start(x) {
@@ -378,12 +365,10 @@ fn approach(x: &mut Cx) {
         }
         0x8e04e => {
             if sub16(x, TIMER, 1).mi() && !route_step(x) {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 let a = asr_w(x.u16(0x14), 2);
-                setw(x, 0, a);
                 x.set16(0x14, a);
                 let b = asr_w(x.u16(0x1c), 2);
-                setw(x, 0, b);
                 x.set16(0x1c, b);
                 act(x, 0x29);
                 return sync(x);
@@ -403,10 +388,8 @@ fn approach(x: &mut Cx) {
 /// 0x8e0a2 : tracé tiré selon la distance à la caméra (trois tables identiques dans la ROM).
 fn route_start(x: &mut Cx) -> bool {
     let d1 = cam_x(x);
-    setw(x, 1, d1);
     let d0 = x.u16(0x8).wrapping_sub(d1);
     setw(x, 0, d0);
-    x.c.a[2] = 0x8e1e8;
     let alea = x.random();
     let r = alea & 0xf;
     setw(x, 0, r);
@@ -436,7 +419,7 @@ fn route_step(x: &mut Cx) -> bool {
     setw(x, 0, i);
     let a1 = a1.wrapping_add(i as i16 as i32 as u32);
     x.c.a[1] = a1;
-    let cam = if x.a5_u8(var::CAMERA_SELECT) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
+    let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     x.c.a[2] = cam;
     let d1 = rd16(x.b, cam + 8).wrapping_add(x.data16(a1));
     let d2 = rd16(x.b, cam + 0xc).wrapping_add(x.data16(a1 + 2));
@@ -445,13 +428,12 @@ fn route_step(x: &mut Cx) -> bool {
     let (px, py) = (x.u16(0x8), x.u16(0x10));
     setw(x, 3, px);
     setw(x, 4, py);
-    x.call(0x1386);
+    lib::aim(x, (x.c.d[3] as u16, x.c.d[4] as u16), (x.c.d[1] as u16, x.c.d[2] as u16));
     let angle = x.c.d[0] as u8;
     x.set8(0x2d, angle);
     let i = (x.c.d[0] as u16).wrapping_mul(4);
     setw(x, 0, i);
     let a2 = x.u32(0x4c);
-    x.c.a[2] = a2;
     let mut v = x.data16(a2.wrapping_add(i as i16 as i32 as u32));
     setw(x, 0, v);
     let (mut d0, mut d1l): (u32, u32);
@@ -520,13 +502,9 @@ fn route_step(x: &mut Cx) -> bool {
                 }
                 d2 = d2.wrapping_add(1);
             }
-            d1l = d1l & 0xffff_0000 | d1w as u32;
         }
     }
     x.c.d[0] = d0;
-    x.c.d[1] = d1l;
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | d2 as u32;
-    x.c.d[3] = d3;
     x.set16(TIMER, d2);
     x.c.d[0] = 1;
     true
@@ -539,7 +517,7 @@ fn spit_c(x: &mut Cx) {
             if !is_12(x) {
                 return to_chase(x);
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x10);
             x.c.d[0] = 0;
             act(x, 0)
@@ -550,20 +528,20 @@ fn spit_c(x: &mut Cx) {
             if sub16(x, TIMER, 1).gt() {
                 return;
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             act(x, 0x24)
         }
         0x8e25e => {
             if x.anim_step() {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 act(x, 0x25);
-                return x.call(0xe4b4c);
+                return lib::sound(x, 0xe4b4c);
             }
             sync(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             x.set16(0x5c, 0);
             x.call(0xa817c);
             if zero(x) {
@@ -576,12 +554,10 @@ fn spit_c(x: &mut Cx) {
             if !x.anim_step() {
                 return sync(x);
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             let w = x.u16(0x5c);
-            setw(x, 0, w);
             if (w as i16) < 0 {
                 let a1 = w as i16 as i32 as u32;
-                x.c.a[1] = a1;
                 if rd8(x.b, a1) != 0 && rd8(x.b, a1 + 2) == 0x47 {
                     wr8(x.b, a1 + 0x58, 1);
                 }

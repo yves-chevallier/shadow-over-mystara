@@ -15,7 +15,7 @@ pub(super) fn run(x: &mut Cx) {
         14 => double_jump(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }
@@ -46,15 +46,10 @@ fn spawn_flame(x: &mut Cx, variant: u8, index: u8) {
 
 /// 0x93950 : cherche un joueur à saisir (0xfc44) et le saisit (0xfd64) ; vrai s'il est saisi.
 fn try_grab(x: &mut Cx) -> bool {
-    x.c.d[0] = 2;
-    x.call(call::GRAB_FIND);
-    if zero(x) {
-        x.c.d[0] = 0;
+    let Some(player) = lib::attack_hits_a_player(x, 2) else {
         return false;
-    }
-    x.c.d[0] = 0;
-    x.call(call::GRAB);
-    x.c.d[0] = 1;
+    };
+    lib::seize_player(x, player, 0);
     true
 }
 
@@ -71,7 +66,7 @@ fn crawl_leap(x: &mut Cx) {
             let d = x.u8(TIMER) as i8 as i16;
             x.add16(0xc, d as u16);
             x.set8(TIMER, (d as u8).wrapping_neg());
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
@@ -98,7 +93,6 @@ fn launch(x: &mut Cx) {
     x.set16(0x18, 0x200);
     x.set16(0x1a, (-0x40i16) as u16);
     let v = if x.u8(f::FLIP) != 0 { 0x800u16 } else { (-0x800i16) as u16 };
-    x.c.d[0] = v as u32;
     x.set16(0x14, v);
     anim_b(x, 1);
     in_flight(x);
@@ -119,7 +113,6 @@ fn in_flight(x: &mut Cx) {
     next7(x);
     x.set32(0x18, 0);
     let v = (x.u16(0x14) as i16 >> 2) as u16;
-    set_dw(x, 0, v);
     x.set16(0x14, v);
     x.set8(TIMER, 0x10);
 }
@@ -134,7 +127,6 @@ fn charge(x: &mut Cx) {
             let (vx, vz) = if x.u8(f::FLIP) != 0 { (-0x400i16, 0xe0i16) } else { (0x400, -0xe0) };
             x.set16(0x14, vx as u16);
             x.set16(0x16, vz as u16);
-            x.c.d[0] = 0;
             anim_b(x, 0);
         }
         2 => {
@@ -162,7 +154,7 @@ fn charge(x: &mut Cx) {
             x.add16(0x8, d);
         }
         6 => {
-            step(x);
+            lib::step(x);
             x.move_xy();
             if sub8(x, TIMER, 1).gt() {
                 return;
@@ -182,25 +174,25 @@ fn tail_flame(x: &mut Cx) {
             anim_b(x, 0xa);
         }
         2 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
             spawn_trail(x, 1);
             x.set8(0xa4, 1);
             anim_b(x, 0xb);
-            x.call(0xed836);
+            lib::sound(x, 0xed836);
         }
         4 => {
             x.set8(0xa4, 1);
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
             anim_b(x, 0xc);
         }
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 next_attack(x);
             }
         }
@@ -217,7 +209,7 @@ fn sweep_a(x: &mut Cx) {
             anim_b(x, 0x14);
         }
         2 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
@@ -226,16 +218,16 @@ fn sweep_a(x: &mut Cx) {
         4 => {
             if x.a5_u16(0x6e) & 0xf == 0 {
                 spawn_flame(x, 0, 0);
-                x.call(0xed7cc);
+                lib::sound(x, 0xed7cc);
             }
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
             anim_b(x, 0x16);
         }
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 next_attack(x);
             }
         }
@@ -252,25 +244,25 @@ fn sweep_b(x: &mut Cx) {
             anim_b(x, 0x14);
         }
         2 => {
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
             spawn_trail(x, 2);
             x.set8(0xa4, 3);
             anim_b(x, 0x15);
-            x.call(0xed8a0);
+            lib::sound(x, 0xed8a0);
         }
         4 => {
             x.set8(0xa4, 3);
-            if !step(x) {
+            if !lib::step(x) {
                 return;
             }
             next7(x);
             anim_b(x, 0x16);
         }
         6 => {
-            if step(x) {
+            if lib::step(x) {
                 next_attack(x);
             }
         }
@@ -299,9 +291,8 @@ fn roar(x: &mut Cx) {
             }
             x.set8(0x3e, 0);
             let index = key & 0x7f;
-            x.c.d[0] = index as u32;
             spawn_flame(x, 1, index);
-            x.call(0xed762);
+            lib::sound(x, 0xed762);
         }
         4 => {
             if x.anim_step() {
@@ -323,11 +314,10 @@ fn double_jump(x: &mut Cx) {
             x.set16(0x14, v as u16);
             x.set16(0x18, 0x800);
             x.set16(0x1a, (-0x60i16) as u16);
-            x.c.d[0] = 0;
             anim_b(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
             x.move_xz();
             if (x.u16(0xc) as i16) < 0 {
                 x.set16(0xc, 0);
@@ -339,7 +329,7 @@ fn double_jump(x: &mut Cx) {
             }
         }
         4 => {
-            step(x);
+            lib::step(x);
             x.move_xz();
             if (x.u16(0xc) as i16) < 0 {
                 x.set16(0xc, 0);

@@ -18,7 +18,6 @@ use super::boss_common::*;
 use super::cx::handlers;
 
 mod g {
-    pub const KEY: u32 = 0x33;
     pub const STUN: u32 = 0x56;
     pub const WALK_STEPS: u32 = 0x6b;
     pub const APPROACH: u32 = 0x6e;
@@ -54,14 +53,6 @@ const SHOOT_NEAR: u32 = 0x0204_0000;
 const REACTIONS: u32 = 0x8d176;
 const STUN_REACTION: u32 = 0x8d294;
 
-mod call {
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const FACING: u32 = 0x10560;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const PICK_FAR: u32 = 0x43ae;
-    pub const FX_SOUND: u32 = 0xe4a18;
-}
-
 pub fn run(x: &mut Cx) {
     if suspended(x) {
         return;
@@ -85,7 +76,7 @@ fn body(x: &mut Cx, n: u32) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    x.a5_u8(var::PLAYERS_ALIVE) != 0
+    var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 fn wait(x: &mut Cx) {
@@ -93,8 +84,8 @@ fn wait(x: &mut Cx) {
 }
 
 fn zone_and_shadow(x: &mut Cx) {
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 /// 0x8d526 : choisit l'étape suivante du combat (`+6` = 0, 4 ou 6) d'après une table de 32 octets.
@@ -113,45 +104,38 @@ fn interrupt(x: &mut Cx) {
 }
 
 fn needs_turn(x: &mut Cx) -> bool {
-    x.call(call::TURN_NEEDED);
-    !zero(x)
+    !lib::faces_target(x)
 }
 
 fn facing_forward(x: &mut Cx) -> bool {
-    x.call(call::FACING);
-    zero(x)
+    lib::moves_forward(x)
 }
 
 /// Un joueur est-il dans la boîte ? 0 sinon (0x8d4ee, 0x8d50a).
 fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ai::TARGET_IN_BOX);
-    if zero(x) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
-    x.call(0x1047a);
-    x.c.d[0] as u8 != 0
+    lib::turn_decision(x) != lib::Turn::None
 }
 
 // --- état 0 : création ------------------------------------------------------------------------
 
 fn init(x: &mut Cx) {
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set8(0x2a, 1);
     x.set8(0x2b, 0x18);
     x.set16(0x8, 0xf0);
     x.set16(0x10, 0x160);
     x.set16(0xc, 0);
     x.set8(f::BOX_SET, 0x31);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     pick_target(x);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
@@ -178,7 +162,7 @@ fn active(x: &mut Cx) {
         sub8(x, f::FREEZE, 1);
         return zone_and_shadow(x);
     }
-    if x.a5_u8(var::PAUSE) == 0 {
+    if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro(x),
             2 => fight(x),
@@ -205,7 +189,7 @@ fn intro(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x20);
             x.anim_start(SET_BODY, 6);
-            x.call(call::FX_SOUND);
+            lib::sound(x, 0xe4a18);
         }
         2 => {
             if sub16(x, TIMER, 1).ne() {
@@ -242,8 +226,8 @@ fn intro(x: &mut Cx) {
             x.add8(f::SUB, 2);
             x.set16(f::SUB2, 0);
             body(x, 0);
-            x.call(rom::IMMUNITIES);
-            x.call(0xd5f30);
+            lib::set_immunities(x);
+            lib::create_set_14(x);
         }
         _ => {}
     }
@@ -267,7 +251,7 @@ fn idle(x: &mut Cx) {
     }
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
-        x.call(0x79f6);
+        lib::draw_6e(x);
         x.set8(ANIM_KIND, 0);
         if x.u8(ANIM_LAST) != 0 {
             x.set8(ANIM_LAST, 0);
@@ -316,7 +300,7 @@ fn walk(x: &mut Cx) {
     if !pick_target(x) {
         return wait(x);
     }
-    x.call(call::ASK_TARGET);
+    lib::approach_target(x);
     speed(x, 0xd);
     let last = x.u8(ANIM_LAST);
     if last == 2 {
@@ -332,11 +316,9 @@ fn walk(x: &mut Cx) {
 
 /// Choisit l'animation de marche par l'image-clé (0x103e0) ; `mirror` : le test de sens est inversé.
 fn select_walk(x: &mut Cx, mirror: bool) {
-    x.call(call::FACING);
-    let z = zero(x);
+    let z = lib::moves_forward(x);
     let set = if z != mirror { WALK_A } else { WALK_B };
-    x.c.a[4] = set;
-    x.call(ai::SELECT);
+    lib::switch_keeping_time(x, set);
 }
 
 fn keep_walking(x: &mut Cx) {
@@ -344,7 +326,7 @@ fn keep_walking(x: &mut Cx) {
         if !sub8(x, WALK_STEPS, 1).pl() {
             return next_action(x);
         }
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
         speed(x, 0xd);
         walk_delay(x);
         return select_walk(x, true);
@@ -355,7 +337,7 @@ fn keep_walking(x: &mut Cx) {
     if probe(x, -0x40, 0x30, 6) {
         return x.set32(f::STATE, SHOOT_NEAR);
     }
-    if target_in_box(x, -0x10, 0x10, 8) {
+    if lib::target_in_box(x, -0x10, 0x10, 8) {
         return x.set32(f::STATE, SHOOT_FAR);
     }
     if needs_turn(x) {
@@ -366,7 +348,7 @@ fn keep_walking(x: &mut Cx) {
 }
 
 fn walk_delay(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x8d47c + level);
     x.set8(WALK_DELAY, v);
 }
@@ -383,8 +365,8 @@ fn jump(x: &mut Cx) {
         0 => {
             x.add8(0x7, 2);
             x.set8(ANIM_KIND, 5);
-            let px = x.a5_u16(var::SCROLL_X);
-            let py = x.a5_u16(var::SCROLL_Y);
+            let px = var::SCROLL_X.get(x.b);
+            let py = var::SCROLL_Y.get(x.b);
             x.set16(JUMP_X, px);
             x.set16(JUMP_Y, py);
             let down = ((random(x) & 3) << 4) as u16 + 0x30;
@@ -394,13 +376,13 @@ fn jump(x: &mut Cx) {
             let xx = x.u16(JUMP_X).wrapping_add(across);
             x.set16(JUMP_X, xx);
             set_dw(x, 2, 0xc0);
-            x.call(call::PICK_FAR);
-            // si personne n'est trouvé, D2 reste ce que 0x43ae a laissé
+            let found = lib::pick_target_any(x);
+            // Glitch d'origine : si personne n'est trouvé, D2 reste ce que 0x43ae a laissé
             let mut d2 = x.c.d[2] as u16;
-            if !zero(x) {
+            if found {
                 d2 = 0x30;
                 let target = x.linked(f::TARGET);
-                let edge = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
+                let edge = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
                 let tx = target.u16(x.b, 0x8);
                 if !(edge <= tx) {
                     d2 = 0xe0;
@@ -409,7 +391,7 @@ fn jump(x: &mut Cx) {
             let xx = x.u16(JUMP_X).wrapping_add(d2);
             x.set16(JUMP_X, xx);
             body(x, 7);
-            x.call(0xecf10);
+            lib::sound(x, 0xecf10);
         }
         2 => {
             if x.anim_step() {
@@ -422,9 +404,9 @@ fn jump(x: &mut Cx) {
                     x.set8(f::FLIP, 0x20);
                 }
                 body(x, 8);
-                x.call(0xecf10);
-            } else if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+                lib::sound(x, 0xecf10);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.set8(0x2b, 0x16);
             }
         }
@@ -432,8 +414,8 @@ fn jump(x: &mut Cx) {
             if x.anim_step() {
                 x.set32(f::STATE, FIGHT);
                 body(x, 0);
-            } else if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.set8(0x2b, 0x18);
             }
         }
@@ -449,7 +431,7 @@ fn shoot(x: &mut Cx) {
             0 => {
                 x.add8(0x7, 2);
                 x.anim_start(SET_SHOT, 0);
-                x.call(0xe48da);
+                lib::sound(x, 0xe48da);
             }
             2 => {
                 if x.anim_step() {
@@ -478,16 +460,16 @@ fn cinematic_shot(x: &mut Cx) {
             set_abs8(x, 0xff8043, 0x7f);
             x.set8(0, 2);
             x.anim_start(SET_SHOT, 1);
-            x.call(0xe48da);
+            lib::sound(x, 0xe48da);
         }
         2 => {
             x.anim_step();
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             let Some(shot) = x.alloc(&pools::ESHL) else { return shot_end(x) };
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x21);
@@ -514,7 +496,7 @@ fn cinematic_shot(x: &mut Cx) {
             x.set16(TIMER, 0x20);
             let shot = x.linked(SHOT);
             shot.set_u8(x.b, 0x58, 1);
-            x.call(0xe4a82);
+            lib::sound(x, 0xe4a82);
             x.anim_step();
         }
         6 => {
@@ -552,10 +534,10 @@ fn wait_state(x: &mut Cx) {
         x.add8(f::SUB2, 2);
         x.set8(WAIT_BLINK, 0xfa);
         x.anim_start(SET_BODY, 6);
-        return x.call(call::FX_SOUND);
+        return lib::sound(x, 0xe4a18);
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
-        x.call(call::PICK_FAR);
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
+        lib::pick_target_any(x);
         return next_action(x);
     }
     if !sub8(x, WAIT_BLINK, 1).eq() {
@@ -563,7 +545,7 @@ fn wait_state(x: &mut Cx) {
         return;
     }
     x.set8(WAIT_BLINK, 0xfa);
-    x.call(call::FX_SOUND);
+    lib::sound(x, 0xe4a18);
     x.anim_step();
 }
 
@@ -581,7 +563,7 @@ fn hit(x: &mut Cx) {
         }
     }
     x.set8(0x67, 0);
-    x.call(SHADOW);
+    lib::collide_terrain(x);
 }
 
 /// 0x8d57a : plus de PV ? Passe alors au groupe 6 (mort).
@@ -603,14 +585,7 @@ fn reaction(x: &mut Cx) {
             return down(x);
         }
     }
-    let code = x.u8(0x49) as u32;
-    let routine = rom32(x, REACTIONS + code);
-    if routine == STUN_REACTION {
-        return stun(x);
-    }
-    x.c.d[0] = code;
-    x.c.a[1] = routine;
-    x.call(routine);
+    react_with(x, REACTIONS, STUN_REACTION, stun);
 }
 
 /// 0x8d294 : étourdissement.
@@ -627,7 +602,7 @@ fn stun(x: &mut Cx) {
             x.set8(f::FREEZE, stun);
             x.set8(SHAKE, 0x10);
             x.anim_start(SET_DIE, 8);
-            x.call(0xe4944);
+            lib::sound(x, 0xe4944);
         }
         2 => {
             if x.u8(SHAKE) == 0 {
@@ -667,7 +642,7 @@ fn get_up(x: &mut Cx) {
             x.anim_start(SET_BODY, 9);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) != 0 || sub16(x, HITS, 1).gt() {
+            if var::PAUSE.get(x.b) != 0 || sub16(x, HITS, 1).gt() {
                 return;
             }
             x.set8(0, 2);
@@ -677,7 +652,7 @@ fn get_up(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
             if x.anim_step() {
@@ -703,15 +678,15 @@ fn down(x: &mut Cx) {
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
             x.set32(f::IMMUNITY, 0x0fff_ffff);
-            for addr in [0x103ba, 0xe0a10, 0xe3b6c] {
-                x.call(addr);
-            }
+            lib::flash_and_shake(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
             let mut vx: i16 = 0x200;
             let mut side = 0;
-            let edge = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0x20;
@@ -719,7 +694,7 @@ fn down(x: &mut Cx) {
             x.set16(0x14, vx as u16);
             x.set8(f::FLIP, side);
             x.anim_start(SET_DIE, 0x15);
-            x.call(0xe49ae);
+            lib::sound(x, 0xe49ae);
         }
         2 => {
             x.move_xz();
@@ -744,7 +719,7 @@ fn down(x: &mut Cx) {
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
-            x.call(0xecabc);
+            lib::sound(x, 0xecabc);
             x.anim_start(SET_DIE, 0x18);
         }
         8 => {

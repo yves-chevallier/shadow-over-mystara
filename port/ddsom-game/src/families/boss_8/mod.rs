@@ -26,8 +26,6 @@ mod hit;
 mod moves;
 
 pub(self) mod g {
-    pub const KEY: u32 = 0x33;
-    pub const SUB3: u32 = 0x7;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -73,14 +71,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const BURST: u32 = 0xb10c8;
-    pub const ATTACK_START: u32 = 0xac3a;
-}
-
 /// Mot de poids faible d'un registre de données (`move.w`, `andi.w`...) : le reste du registre est conservé.
 pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
     set_dw(x, n, v);
@@ -90,7 +80,6 @@ pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
 /// rend l'adresse d'arrivée. D0 reçoit l'octet (après un `moveq 0,D0`), D1w le décalage.
 pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
-    x.c.d[0] = i;
     let off = x.rom16(table + i);
     setw(x, 1, off);
     table.wrapping_add(off as i16 as i32 as u32)
@@ -103,7 +92,7 @@ pub fn run(x: &mut Cx) {
     loop {
         x.tick_counters();
         if x.u16(f::TARGET) == 0 {
-            x.call(0x424e);
+            lib::pick_target(x);
         }
         x.c.d[0] = x.u8(f::STATE) as u32;
         let off = x.rom16(0x8803e + x.c.d[0]);
@@ -136,8 +125,6 @@ pub fn run(x: &mut Cx) {
     if x.u8(0x43) == 0 {
         let weak = x.u16(WEAK_HP);
         let hp = x.u16(f::HP);
-        setw(x, 0, weak);
-        setw(x, 1, hp.wrapping_sub(weak));
         if !Fl::sub16(hp, weak).gt() {
             x.set8(SLOW, 1);
         }
@@ -151,15 +138,20 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    for a in [0x19e10, 0x19db4, 0x19eb0, 0xe13f0, 0xd6952, 0x424e, 0xa470, 0x788c] {
-        x.call(a);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::sound(x, 0xe13f0);
+    lib::create_set_15(x);
+    lib::pick_target(x);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(0x2e, 0x28);
-    x.call(0x453c);
+    lib::initial_hp_boss(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x4f), (0x7f, 0), (0x8e, 3), (0x78, 0xff)] {
         x.set8(off, v);
     }
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     for (off, v) in [(0x68, 8), (0x69, 8), (0x6a, 0), (0x6c, 1), (0x6d, 2), (0x72, 1), (0x73, 1), (0x74, 4), (0x75, 0x40), (0x76, 1), (0x81, 0x22), (0x80, 0x2a)] {
         x.set8(off, v);
     }
@@ -168,8 +160,8 @@ fn init(x: &mut Cx) {
     x.set16(IDLE_TIME, 0xf0);
     x.set8(0, 2);
     x.set_bit(0x1, 1, true);
-    let px = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
-    let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x69);
+    let px = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
+    let py = var::SCROLL_Y.get(x.b).wrapping_add(0x69);
     setw(x, 0, px);
     setw(x, 1, py);
     x.set16(0x8, px);
@@ -183,7 +175,7 @@ fn init(x: &mut Cx) {
     setw(x, 2, hp);
     aids::lsr_w(x, 1, 1);
     aids::lsr_w(x, 2, 2);
-    x.c.d[0] = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    x.c.d[0] = var::PLAYERS_ALIVE.get(x.b) as u32;
     let mut d1 = x.c.d[1] as u16;
     if Fl::sub8(x.c.d[0] as u8, 1).gt() {
         if Fl::sub8(x.c.d[0] as u8, 2).ne() {
@@ -196,12 +188,10 @@ fn init(x: &mut Cx) {
     } else {
         x.set8(PHASES, 1);
     }
-    setw(x, 1, d1);
     x.set16(WEAK_HP, d1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(0x93, 1);
     x.set8(0x9a, 0xff);
-    x.c.d[0] = 0;
     body(x, 0);
 }
 
@@ -209,7 +199,7 @@ fn init(x: &mut Cx) {
 
 fn active(x: &mut Cx) {
     if x.u16(f::TARGET) == 0 {
-        x.call(0x424e);
+        lib::pick_target(x);
     }
     if tst8(x, SPAWNED).eq() {
         if sub16(x, SPAWN_TIME, 1).mi() {
@@ -223,7 +213,7 @@ fn active(x: &mut Cx) {
     }
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         let t = dispatch(x, 0x881aa, f::SUB);
         match t {
             0x882ae => fight::intro(x),
@@ -248,8 +238,8 @@ fn active(x: &mut Cx) {
             idle_reset(x);
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 fn idle_reset(x: &mut Cx) {
@@ -268,7 +258,6 @@ fn idle_attack(x: &mut Cx) {
     x.set32(f::STATE, 0x0204_0000);
     let alea = x.random();
     let i = alea as u32 & 0xf;
-    setw(x, 0, i as u16);
     let step = x.rom8(0x88294 + i);
     x.set8(f::SUB2, step);
 }

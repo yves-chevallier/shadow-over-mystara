@@ -7,56 +7,32 @@
 //! variables du jeu propres aux scènes de boss, les drapeaux du 68000 pour les comparaisons qui dépendent
 //! du débordement (`Fl`) et les aides de la bibliothèque d'IA (0x103d6..0x105b6, encore en 68000).
 
-use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C};
+use m68k::SR_C;
 
 pub use super::cx::Cx;
 pub use super::enemy_common::*;
-use crate::mem::{prog16, prog32, rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{prog16, prog32, rts, A5};
 use crate::objects::Obj;
 use crate::{call, regs, Native};
 use crate::objects::pools;
 use crate::objects::Courant;
 
-/// Variables de la RAM de travail (décalages de A5) lues par les boss.
-pub mod var {
-    /// Abscisse de la caméra 1 (mot).
-    pub const SCROLL_X: u32 = 0x506;
-    /// Ordonnée de la caméra 1 (mot ; long avec la fraction).
-    pub const SCROLL_Y: u32 = 0x50a;
-    /// Objet suivi par la caméra (mot, adresse RAM ; 0 = aucun) : le « meneur » que certains boss accompagnent.
-    pub const LEADER: u32 = 0x46;
-    /// Octet non nul : tout est figé (le gestionnaire du boss ne fait rien).
-    pub const FROZEN: u32 = 0x4e;
-    /// Nombre de joueurs en vie (octet).
-    pub const PLAYERS_ALIVE: u32 = 0x35;
-    /// Octet à 1 pendant une cinématique (jeu en pause, entrées coupées).
-    pub const PAUSE: u32 = 0x3d;
-    /// Caméra utilisée (octet non nul : la 2) et position (X, Y) de chacune.
-    pub const CAMERA_SELECT: u32 = 0x36;
-    pub const CAMERA1_X: u32 = 0x5a6;
-    pub const CAMERA1_Y: u32 = 0x5aa;
-    pub const CAMERA2_X: u32 = 0x5ae;
-    pub const CAMERA2_Y: u32 = 0x5b2;
-    /// Difficulté (mot, 0 à 31).
-    pub const DIFFICULTY: u32 = 0x7f92;
-}
 
 /// L'objet suivi par la caméra, s'il existe.
 pub fn leader(x: &mut Cx) -> Option<Obj> {
-    (x.a5_u16(var::LEADER) != 0).then(|| Obj(x.a5_u16(var::LEADER) as i16 as i32 as u32 & 0xff_ffff))
+    (var::LEADER.get(x.b) != 0).then(|| Obj(var::LEADER.get(x.b) as i16 as i32 as u32 & 0xff_ffff))
 }
 
 /// Abscisse de la caméra.
 pub fn scroll_x(x: &mut Cx) -> u16 {
-    x.a5_u16(var::SCROLL_X)
+    var::SCROLL_X.get(x.b)
 }
 
 /// Abscisse de la caméra en service (1, ou 2 si `A5+0x36`).
 pub fn camera_x(x: &mut Cx) -> u16 {
-    let off = if x.a5_u8(var::CAMERA_SELECT) != 0 { var::CAMERA2_X } else { var::CAMERA1_X };
-    x.a5_u16(off)
+    let v = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X } else { var::CAMERA1_X };
+    v.get(x.b)
 }
 
 // --- drapeaux du 68000 -------------------------------------------------------------------------
@@ -177,30 +153,8 @@ pub fn tst16(x: &mut Cx, off: u32) -> Fl {
 
 // --- bibliothèque d'IA du 68000 (0x103d6..) -----------------------------------------------------
 
-/// Routines d'IA partagées par les ennemis et les boss, encore en 68000.
-pub mod ai {
-    /// Lance le script `D0` du jeu `A4` (`0x1a32`) puis recopie `+0x3e` en `+0x44`.
-    pub const PLAY: u32 = 0x103d6;
-    /// Lance l'entrée du jeu `A4` dont la marque `+3` est celle de l'image-clé `+0x33`.
-    pub const SELECT: u32 = 0x103e0;
-    /// Un pas d'animation (retenue = fin du script) puis `+0x44 = +0x3e`.
-    pub const STEP: u32 = 0x1040c;
-    /// Cible dans la boîte devant l'objet : D0 = portée avant, D1 = portée, D2 = profondeur ; Z = non.
-    pub const TARGET_IN_BOX: u32 = 0xb5e0;
-}
 
-/// Lance le script `n` du jeu d'animations `set` (`0x103d6`).
-pub fn play(x: &mut Cx, set: u32, n: u32) {
-    x.c.a[4] = set;
-    x.c.d[0] = n;
-    x.call(ai::PLAY);
-}
 
-/// Un pas d'animation de l'IA ; vrai si le script est terminé.
-pub fn step(x: &mut Cx) -> bool {
-    x.call(ai::STEP);
-    carry(x)
-}
 
 /// Choisit la table de vitesses `n` (`0x1b64`).
 pub fn speed(x: &mut Cx, n: u32) {
@@ -219,78 +173,25 @@ pub fn zero(x: &Cx) -> bool {
 
 // --- aides partagées par les boss à tables de décision ------------------------------------------
 
-/// Routines du moteur et de l'IA que ces boss appellent.
-pub mod ia {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const PLAYERS_ALIVE: u32 = 0x10474;
-    pub const AI_GESTURE: u32 = 0x1047a;
-    pub const OUTSIDE: u32 = 0x104a2;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const FACING: u32 = 0x10560;
-    pub const PHASE_UP: u32 = 0x105b6;
-    pub const DUST: u32 = 0x1172e;
-    pub const WIDE_BOX: u32 = 0x7ef4;
-}
 
-/// Au moins un joueur en vie (0x10474).
-pub fn alive(x: &mut Cx) -> bool {
-    x.call(ia::PLAYERS_ALIVE);
-    !zero(x)
-}
 
-/// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
-pub fn outside(x: &mut Cx, d0: i16, d1: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    x.call(ia::OUTSIDE);
-    !zero(x)
-}
 
-/// Le boss doit-il se retourner vers sa cible (0x1050c) ?
-pub fn turn_needed(x: &mut Cx) -> bool {
-    x.call(ia::TURN_NEEDED);
-    !zero(x)
-}
 
-/// Le boss regarde-t-il vers sa cible (0x10560, Z levé) ?
-pub fn facing_target(x: &mut Cx) -> bool {
-    x.call(ia::FACING);
-    zero(x)
-}
 
-/// Boîte large devant le boss (0x7ef4).
-pub fn in_wide_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ia::WIDE_BOX);
-    !zero(x)
-}
 
 /// Cible dans la boîte (0xb5e0) puis geste choisi par l'IA (0x1047a) : `Some(D0)` si l'IA en a choisi un.
 pub fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
-    x.call(ia::AI_GESTURE);
-    (!zero(x)).then_some(x.c.d[0])
+    let turn = lib::turn_decision(x);
+    (turn != lib::Turn::None).then_some(turn as u32)
 }
 
-/// Bouffée de poussière de sorte `k` (0x1172e).
-pub fn dust(x: &mut Cx, k: u32) {
-    x.c.d[5] = k;
-    x.call(ia::DUST);
-}
 
-/// Son ou message `n` (0x2824).
-pub fn sound(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    x.call(ia::SOUND_EVENT);
-}
 
 /// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)` : sorte d'animation `k` (champs `+0xa0` et `+0xa1`).
 pub fn anim_kind(x: &mut Cx, k: u8) {
-    x.c.d[0] = k as u32;
     x.set8(0xa0, k);
     x.set8(0xa1, k);
 }
@@ -308,8 +209,8 @@ pub fn jump_target(x: &mut Cx, base: u32, i: u32) -> u32 {
 
 /// Ordonnée de la caméra en service.
 pub fn camera_y(x: &mut Cx) -> u16 {
-    let off = if x.a5_u8(var::CAMERA_SELECT) != 0 { var::CAMERA2_Y } else { var::CAMERA1_Y };
-    x.a5_u16(off)
+    let v = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_Y } else { var::CAMERA1_Y };
+    v.get(x.b)
 }
 
 /// Adresse du long « boss vaincu » (type, variante, score) lu par la fin de scène.
@@ -334,105 +235,100 @@ const BODY: u32 = A5 - 0x5fb2;
 /// Formes du corps (`+0xa4` du boss) : table de sauts relatifs (1 = 0x818e6, 2 = 0x819e2).
 const BODY_SHAPES: u32 = 0x81ad4;
 
-/// 0x81aa4 : repousse l'objet A0 hors du corps du boss enregistré, si ce boss est actif, de classe 3 et
-/// a une forme non nulle (la routine de la forme, restée en code d'origine, déplace l'objet en X).
-/// Rend D0 = 1 (Z = 0) si l'objet a été déplacé, 0 sinon ; A0 intact, A1 = A6 = l'objet.
-fn push_out_of_boss(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    c.a[6] = me;
-    c.a[1] = me;
-    let body = rd16(b, BODY);
+/// 0x81aa4 : repousse l'objet hors du corps du boss enregistré, si ce boss est actif, de classe 3 et a une forme
+/// non nulle (la routine de la forme, restée en code d'origine, déplace l'objet en X). Vrai si l'objet a été
+/// déplacé. Registres de l'original : D0 = 1 / 0 (drapeaux de `tst.l`), A0 intact, A1 = A6 = l'objet.
+pub fn push_out_of_boss(x: &mut Cx) -> bool {
+    let me = x.o.0;
+    x.c.a[6] = me;
+    x.c.a[1] = me;
+    let body = x.data16(BODY);
     let mut moved = false;
     if (body as i16) < 0 {
-        c.a[0] = body as i16 as i32 as u32;
-        let boss = c.a[0] & 0xff_ffff;
-        if rd8(b, boss) != 0 && rd8(b, boss + 2) == 3 {
-            let shape = rd8(b, boss + 0xa4) as u16;
+        x.c.a[0] = body as i16 as i32 as u32;
+        let boss = Obj(x.c.a[0] & 0xff_ffff);
+        if boss.u8(x.b, 0) != 0 && boss.u8(x.b, 2) == 3 {
+            let shape = boss.u8(x.b, 0xa4) as u16;
             if shape != 0 {
-                let off = prog16(b, BODY_SHAPES + 2 * shape as u32);
-                c.d[0] = off as u32;
-                call(c, b, BODY_SHAPES.wrapping_add(off as i16 as u32));
-                moved = !c.cond(7);
+                let off = prog16(x.b, BODY_SHAPES + 2 * shape as u32);
+                x.c.d[0] = off as u32;
+                // la routine de forme (0x818e6, 0x819e2) n'a pas de native : jamais atteinte par les scénarios
+                call(x.c, x.b, BODY_SHAPES.wrapping_add(off as i16 as u32));
+                moved = !x.c.cond(7);
             }
         }
     }
-    c.d[0] = moved as u32;
-    c.flags_logic(c.d[0], Size::Long);
-    c.a[0] = c.a[6];
-    rts(c, b);
+    x.c.d[0] = moved as u32;
+    x.c.flags_logic(x.c.d[0], Size::Long);
+    x.c.a[0] = x.c.a[6];
+    moved
 }
 
 /// Oscillation verticale (par `+0x33`) : décalages longs ajoutés à la hauteur `+0xc`, dans un sens
 /// puis dans l'autre selon le compte à rebours `+0xa8` (période 72 images, retournement à 36).
 const BOB_OFFSETS: u32 = 0x833e4;
 
-/// 0x833b6 : un pas de l'oscillation verticale d'un boss (D0 = décalage appliqué).
-fn bob(c: &mut Cpu, b: &mut Cps2Bus) {
-    let o = c.a[0];
-    let i = (rd8(b, o + 0x33) & 0x7f) as u32 * 4;
-    let mut d = prog32(b, BOB_OFFSETS + i);
-    if rd16(b, o + 0xa8) as i16 <= 36 {
+/// 0x833b6 : un pas de l'oscillation verticale d'un boss (D0 = décalage appliqué, comme l'original).
+pub fn bob(x: &mut Cx) {
+    let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
+    let mut d = prog32(x.b, BOB_OFFSETS + i);
+    if x.u16(0xa8) as i16 <= 36 {
         d = d.wrapping_neg();
     }
-    c.d[0] = d;
-    let z = rd32(b, o + 0xc).wrapping_add(d);
-    wr32(b, o + 0xc, z);
-    let t = rd16(b, o + 0xa8).wrapping_sub(1);
-    wr16(b, o + 0xa8, t);
+    x.add32(Obj::Z, d);
+    let t = x.u16(0xa8).wrapping_sub(1);
+    x.set16(0xa8, t);
     if t as i16 <= 0 {
-        wr16(b, o + 0xa8, 72);
+        x.set16(0xa8, 72);
     }
-    rts(c, b);
 }
 
 /// 0x87048 : selon la difficulté de la scène (`A5+0x5a` : 0 rien, 3 toujours) et la forme `+0xad`
 /// (2 ou 3 : selon les PV), pose `+0x43` (pas de seuil) ou, si la moitié des PV `+0x62` dépasse 72,
 /// retient ce seuil en `+0xb6` et pose `+0x42`. D0, D1 comme l'original.
-fn hp_threshold(c: &mut Cpu, b: &mut Cps2Bus) {
-    let o = c.a[0];
-    let level = rd8(b, A5 + 0x5a);
-    c.d[0] = level as u32;
-    let by_hp = level != 0 && level != 3 && matches!(rd8(b, o + 0xad), 2 | 3);
-    if level != 0 {
-        if by_hp {
-            if rd8(b, o + 0x42) != 0 {
-                return rts(c, b);
-            }
-            let half = rd16(b, o + 0x62) >> 1;
-            c.d[1] = c.d[1] & 0xffff_0000 | half as u32;
-            if half as i16 > 72 {
-                wr8(b, o + 0xb9, 0);
-                wr16(b, o + 0xb6, half);
-                wr8(b, o + 0x42, 1);
-                return rts(c, b);
-            }
-        }
-        wr8(b, o + 0x43, 1);
-        wr8(b, o + 0xb9, 0);
+pub fn hp_threshold(x: &mut Cx) {
+    let level = var::SCENE_LEVEL.get(x.b);
+    x.c.d[0] = level as u32;
+    if level == 0 {
+        return;
     }
-    rts(c, b);
+    let by_hp = level != 3 && matches!(x.u8(0xad), 2 | 3);
+    if by_hp {
+        if x.u8(0x42) != 0 {
+            return;
+        }
+        let half = x.u16(f::HP) >> 1;
+        if half as i16 > 72 {
+            x.set8(0xb9, 0);
+            x.set16(0xb6, half);
+            x.set8(0x42, 1);
+            return;
+        }
+    }
+    x.set8(0x43, 1);
+    x.set8(0xb9, 0);
+}
+
+/// Native d'une fonction de boss appelée par adresse (le RTS est ajouté).
+macro_rules! natif {
+    ($entry:expr, $name:expr, $outputs:expr, $f:expr) => {
+        Native {
+            entry: $entry,
+            name: $name,
+            run: |c, b| {
+                $f(&mut Cx::new(c, b));
+                rts(c, b);
+            },
+            touches_sound: false,
+            outputs: $outputs,
+        }
+    };
 }
 
 pub const NATIVES: &[Native] = &[
-    Native {
-        entry: 0x81aa4,
-        name: "boss_repousse",
-        run: push_out_of_boss,
-        touches_sound: false,
-        outputs: regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR,
-    },
-    Native {
-        entry: 0x833b6,
-        name: "boss_oscillation",
-        run: bob,
-        touches_sound: false,
-        outputs: regs::d(0),
-    },
-    Native {
-        entry: 0x87048,
-        name: "boss_seuil_pv",
-        run: hp_threshold,
-        touches_sound: false,
-        outputs: regs::d(0) | regs::d(1),
-    },
+    natif!(0x81aa4, "boss_repousse", regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR, |x: &mut Cx| {
+        push_out_of_boss(x);
+    }),
+    natif!(0x833b6, "boss_oscillation", regs::d(0), bob),
+    natif!(0x87048, "boss_seuil_pv", regs::d(0) | regs::d(1), hp_threshold),
 ];

@@ -88,14 +88,7 @@ pub(self) const HARD: u32 = 0x70;
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const PICK_OTHER: u32 = 0x44ee;
-    pub const SMOKE: u32 = 0xb10c8;
     pub const MESSAGE: u32 = 0xc8312;
-    /// Bruits de l'engin (file des sons).
-    pub const ROLL: u32 = 0xe45ca;
-    pub const BRAKE: u32 = 0xe4626;
-    pub const SHOUT: u32 = 0xea8be;
-    pub const STOP: u32 = 0xea984;
 }
 
 /// Un pas d'animation (0x1a56).
@@ -132,11 +125,7 @@ pub(self) fn every(x: &mut Cx, mask: u8) -> bool {
 /// Deux fumées (0xb10c8) : sorte `kind`, décalage `dx`.
 pub(self) fn smoke_pair(x: &mut Cx, kind: u32, dx: u16) {
     for (dy, dz) in [(0x30, 0x28), (0x28, 8)] {
-        x.c.d[0] = kind;
-        set_dw(x, 1, dx);
-        set_dw(x, 2, dy);
-        set_dw(x, 3, dz);
-        x.call(call::SMOKE);
+        lib::shock(x, kind, dx, dy, dz);
     }
 }
 
@@ -206,7 +195,7 @@ pub(self) fn stop_over(x: &mut Cx) {
 // --- tables par difficulté (données de la ROM) ----------------------------------------------------
 
 fn difficulty(x: &mut Cx) -> u32 {
-    x.a5_u16(var::DIFFICULTY) as u32
+    var::RANK.get(x.b) as u32
 }
 
 /// Octet de la table à une entrée par difficulté.
@@ -266,7 +255,7 @@ pub(self) fn draw_stops(x: &mut Cx) {
 
 /// 0x8bc0c : attente avant de repartir, selon le nombre de joueurs, la difficulté et l'équipage.
 pub(self) fn reset_wait(x: &mut Cx) {
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8bc3e + 4 * players);
     let d = difficulty(x);
     x.c.a[4] = list;
@@ -318,7 +307,11 @@ pub(self) fn retarget(x: &mut Cx) {
     x.c.a[4] = 0x8c9aa;
     let k = x.data8(0x8c9aa + r);
     x.c.d[0] = x.c.d[0] & !0xff | k as u32;
-    x.call(if k == 0 { 0x424e } else { call::PICK_OTHER });
+    if k == 0 {
+        lib::pick_target(x);
+    } else {
+        lib::random_player(x);
+    }
 }
 
 /// 0x8bff0 : compte les servants actifs (état 0x0200) : bits en `+0xb6`, nombre × 4 en `+0xb7` ; aucun : `+0xaa` = 4.
@@ -334,7 +327,7 @@ pub(self) fn count_crew(x: &mut Cx) {
         }
     }
     x.c.a[2] = x.o.0 + CREW + 8;
-    x.c.d[3] = bits as u32;
+    x.c.d[3] = bits as u32; // relu : D3 relu par la suite (DDSOM_POISON : covb_long3p_02)
     x.c.d[4] = 4;
     x.c.d[5] = 0xffff;
     x.c.d[6] = count as u32;
@@ -380,7 +373,7 @@ pub(self) fn try_dash(x: &mut Cx) -> bool {
         x.c.d[0] = 0;
         return false;
     }
-    let players = x.a5_u8(var::PLAYERS_ALIVE) as u32;
+    let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8c20c + 4 * players);
     let d = difficulty(x);
     x.c.a[4] = list;
@@ -444,9 +437,9 @@ pub(self) fn target_range(x: &mut Cx) -> u8 {
         let t = load_target(x);
         if t.u16(x.b, 0xc) != 0 {
             2
-        } else if target_in_box(x, -0x40, 0x40, 0x100) {
+        } else if lib::target_in_box(x, -0x40, 0x40, 0x100) {
             1
-        } else if target_in_box(x, -0x100, 0x80, 0x100) {
+        } else if lib::target_in_box(x, -0x100, 0x80, 0x100) {
             0
         } else {
             2
@@ -459,7 +452,7 @@ pub(self) fn target_range(x: &mut Cx) -> u8 {
 /// 0x8c698 / 0x8c6a0 : arrêt de tir tiré par difficulté (`base` : 2 cible proche, 0xe cible à portée).
 pub(self) fn draw_halt(x: &mut Cx, base: u8) {
     x.c.d[2] = base as u32;
-    let level = (x.a5_u16(var::DIFFICULTY) >> 1) << 5;
+    let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = 0x8c6d2u32.wrapping_add(level as i16 as u32);
     x.c.a[4] = at;
     let r = rand_and(x, 0x1f);
@@ -505,7 +498,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x8a772 : hors cinématique, et dès qu'il y a la place (10 ESHL, 5 ENEMY) : parties, conducteur, position.
 fn init(x: &mut Cx) {
-    if x.a5_u8(var::PAUSE) != 0 {
+    if var::PAUSE.get(x.b) != 0 {
         return;
     }
     let r = random(x);
@@ -516,15 +509,16 @@ fn init(x: &mut Cx) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     crate::mem::wr16(x.b, 0xff8000 - 0x55ba, x.o.0 as u16);
-    for a in [0x19e10, 0x19db4, 0x19eb0, 0xd6952] {
-        x.call(a);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::create_set_15(x);
     x.set8(0x93, 1);
     x.set8(0x9a, 1);
     x.set8(0x6f, 2);
     x.set8(f::BOX_SET, 0x29);
-    x.call(0x453c);
-    x.call(rom::IMMUNITIES);
+    lib::initial_hp_boss(x);
+    lib::set_immunities(x);
     // deux parties 0xd (liées par `+0xa4`, `+0xa6`), huit parties 0xe
     for (kind, last, linked) in [(0xdu8, 1u8, true), (0xe, 7, false)] {
         for k in (0..=last).rev() {
@@ -565,7 +559,7 @@ fn init(x: &mut Cx) {
     let z = x.u32(0x10).wrapping_add(0xffff_8000);
     x.set32(0x10, z);
     x.set16(0x8, 0x80);
-    x.call(0x43ae);
+    lib::pick_target_any(x);
     x.c.d[0] = 0;
     x.set32(0xc, 0);
     x.anim_start(SET, 6);
@@ -582,7 +576,7 @@ fn active(x: &mut Cx) {
         if freeze != 0 {
             x.set8(f::FREEZE, 0);
         }
-        if x.a5_u8(var::PAUSE) != 0 {
+        if var::PAUSE.get(x.b) != 0 {
             return;
         }
         if x.u8(BLINKING) != 0 && sub8(x, BLINK_TIME, 1).mi() {
@@ -597,11 +591,11 @@ fn active(x: &mut Cx) {
             4 => moves::fight(x),
             _ => moves::wait_for_players(x),
         }
-        x.call(SHADOW);
+        lib::collide_terrain(x);
     }
     let rolling = x.u8(GAIT) != 2;
     x.set8(0x3a, rolling as u8);
-    if x.u16(f::TARGET) == 0 || x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if x.u16(f::TARGET) == 0 || var::PLAYERS_ALIVE.get(x.b) == 0 {
         retarget(x);
         x.set32(f::STATE, 0x0206_0000);
     }

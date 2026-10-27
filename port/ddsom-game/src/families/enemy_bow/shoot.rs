@@ -4,6 +4,7 @@
 use super::stance::stance_begin;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if !x.in_arena(8) {
@@ -34,8 +35,8 @@ fn turn_to_resume(x: &mut Cx) {
 // --- premier geste ------------------------------------------------------------------------------------
 
 fn first(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             let action = row_byte(x, FIRST_ACTIONS);
             x.c.d[0] = x.c.d[0] & !0xff | action as u32;
@@ -44,21 +45,19 @@ fn first(x: &mut Cx) {
                 2 => {
                     x.set8(SAVED_STEP, 2);
                     x.set8(TIMER, 0x20);
-                    x.set8(ANGLE, 8);
+                    x.set8(Obj::SPEED_INDEX, 8);
                     if x.u8(f::FLIP) == 0 {
-                        x.set8(ANGLE, 0x1c);
+                        x.set8(Obj::SPEED_INDEX, 0x1c);
                     }
-                    x.set8(STEP, 8);
+                    x.set8(f::SUB3, 8);
                     set_speed(x, 0xd);
                     mv(x, 2);
                 }
                 4 => {
-                    x.c.d[6] = 3;
                     let d6 = if rand_and(x, 1) != 0 { 3 } else { 2 };
-                    x.c.d[6] = d6;
                     x.set8(AI_WANDER, d6 as u8);
                     set_speed(x, 0x21);
-                    x.set8(STEP, 0xa);
+                    x.set8(f::SUB3, 0xa);
                     reload_shot(x);
                 }
                 6 => {
@@ -67,7 +66,7 @@ fn first(x: &mut Cx) {
                 }
                 8 => {
                     x.set8(REPEAT, 1);
-                    x.set8(STEP, 4);
+                    x.set8(f::SUB3, 4);
                     mv(x, 1);
                 }
                 _ => {}
@@ -81,14 +80,14 @@ fn first(x: &mut Cx) {
             x.set8(TIMER, n);
             if (n as i8) < 0 {
                 let saved = x.u8(SAVED_STEP);
-                x.set8(STEP, saved);
+                x.set8(f::SUB3, saved);
             }
             x.move_by_table_xy();
             x.anim_step();
         }
         10 => {
             if x.anim_step() {
-                x.set8(STEP, 6);
+                x.set8(f::SUB3, 6);
                 side_walk(x);
             }
         }
@@ -98,7 +97,7 @@ fn first(x: &mut Cx) {
 
 /// 0x5c37a : au tirage, un tir sur place, sinon rapprochement (type de tir 4).
 fn shoot_or_approach(x: &mut Cx) {
-    x.set8(STEP, 2);
+    x.set8(f::SUB3, 2);
     if shoot_roll(x) {
         return aim_again(x);
     }
@@ -108,7 +107,7 @@ fn shoot_or_approach(x: &mut Cx) {
 
 /// 0x5c44e : un tir sur place : nombre de tirs tiré dans la rangée, puis animation de tir.
 fn aim_again(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     let n = row_byte(x, SHOT_REPEATS);
     x.set8(REPEAT, n);
     reload_shot(x);
@@ -117,7 +116,6 @@ fn aim_again(x: &mut Cx) {
 /// 0x5c472 : l'animation de tir (0 ou 5 selon le profil `+0x2f`).
 fn reload_shot(x: &mut Cx) {
     let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
-    x.c.d[0] = anim;
     shot(x, anim);
 }
 
@@ -129,7 +127,7 @@ fn approach_target(x: &mut Cx) {
         return;
     }
     set_state_long(x, 0x0202_0200);
-    x.call(call::TURN_TO_TARGET);
+    lib::draw_6b(x);
     set_speed(x, 0xd);
     mv(x, 2);
 }
@@ -137,8 +135,8 @@ fn approach_target(x: &mut Cx) {
 /// +7 = 4 : la flèche part à la clé d'animation ; à la fin de l'animation, un tir de moins.
 fn fire_loop(x: &mut Cx) {
     if !x.anim_step() {
-        if x.u8(KEY) != 0 {
-            x.set8(KEY, 0);
+        if x.u8(f::KEY_FRAME) != 0 {
+            x.set8(f::KEY_FRAME, 0);
             x.call(call::SWING);
         }
         return;
@@ -153,25 +151,24 @@ fn fire_loop(x: &mut Cx) {
 
 /// +7 = 6 : pas de côté vers la profondeur de la cible, puis nouvelle visée.
 fn side_walk(x: &mut Cx) {
-    x.set8(ANGLE, 0);
+    x.set8(Obj::SPEED_INDEX, 0);
     let target = load_target(x);
-    let mine = x.u16(DEPTH);
-    if mine >= target.u16(x.b, DEPTH) {
-        x.add8(ANGLE, 0x10);
+    let mine = x.u16(Obj::Y);
+    if mine >= target.u16(x.b, Obj::Y) {
+        x.add8(Obj::SPEED_INDEX, 0x10);
     }
     let n = x.u8(AI_WANDER).wrapping_sub(1);
     x.set8(AI_WANDER, n);
     if (n as i8) >= 0 {
         x.set8(TIMER, 0x20);
-        let step = x.u8(STEP);
+        let step = x.u8(f::SUB3);
         x.set8(SAVED_STEP, step);
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
         let anim = 0x10 + x.u8(GROUP) as u32;
         return mv(x, anim);
     }
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    x.c.d[1] = want;
     if want as u8 != x.u8(f::FLIP) {
         let state = x.u32(f::STATE);
         x.set32(RESUME_STATE, state);
@@ -179,21 +176,21 @@ fn side_walk(x: &mut Cx) {
         x.set16(f::SUB2, 0);
         return turn_to_resume(x);
     }
-    x.set8(STEP, 2);
+    x.set8(f::SUB3, 2);
     aim_again(x);
 }
 
 // --- second geste (+6 = 2) ----------------------------------------------------------------------------
 
 fn second(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             let action = row_byte(x, SECOND_ACTIONS);
             x.c.d[0] = x.c.d[0] & !0xff | action as u32;
             match action {
                 0 => {
-                    x.set8(STEP, 2);
+                    x.set8(f::SUB3, 2);
                     if shoot_roll(x) {
                         return start_shot(x);
                     }
@@ -209,8 +206,8 @@ fn second(x: &mut Cx) {
                     dash_start(x);
                 }
                 6 => {
-                    x.set8(STEP, 0xa);
-                    x.set16(GRAVITY, -0x38i16 as u16);
+                    x.set8(f::SUB3, 0xa);
+                    x.set16(Obj::AZ, -0x38i16 as u16);
                     jump_speeds(x);
                     mv(x, 8);
                 }
@@ -231,11 +228,11 @@ fn second(x: &mut Cx) {
         10 => {
             x.move_xz();
             x.anim_step();
-            if (x.u16(HEIGHT) as i16) >= 0 {
+            if (x.u16(Obj::Z) as i16) >= 0 {
                 return;
             }
-            x.set16(HEIGHT, 0);
-            x.add8(STEP, 2);
+            x.set16(Obj::Z, 0);
+            x.add8(f::SUB3, 2);
         }
         12 => {
             x.set8(SHOT_KIND, 4);
@@ -246,7 +243,7 @@ fn second(x: &mut Cx) {
             x.set8(TIMER, n);
             if (n as i8) < 0 {
                 let saved = x.u8(SAVED_STEP);
-                x.set8(STEP, saved);
+                x.set8(f::SUB3, saved);
             }
             x.move_by_table_xy();
             x.anim_step();
@@ -257,29 +254,29 @@ fn second(x: &mut Cx) {
 
 /// Vitesses d'un saut : vers le haut 0x200, en avant 0x280 (inversé si l'orientation est non nulle).
 fn jump_speeds(x: &mut Cx) {
-    x.set16(SPEED_Z, 0x200);
-    x.set16(SPEED_X, 0x280);
-    x.set16(SPEED_Y, 0);
+    x.set16(Obj::VZ, 0x200);
+    x.set16(Obj::VX, 0x280);
+    x.set16(Obj::AX, 0);
     if x.u8(f::FLIP) != 0 {
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
 }
 
 /// 0x5c5f6 : élan latéral (vitesse 0xb, animation 2) pendant `0x23` images.
 fn dash_start(x: &mut Cx) {
     x.set8(TIMER, 0x23);
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
-        x.set8(ANGLE, 0x1c);
+        x.set8(Obj::SPEED_INDEX, 0x1c);
     }
-    x.set8(STEP, 0xe);
+    x.set8(f::SUB3, 0xe);
     set_speed(x, 0xb);
     mv(x, 2);
 }
 
 /// 0x5c59e : un tir à bout portant (flèche de type 0xa, force 4).
 pub(super) fn start_shot(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(AI_SHOT, 3);
     x.set8(STRIKE_KIND, 0xa);
     x.set8(STRIKE_POWER, 4);
@@ -290,7 +287,6 @@ pub(super) fn start_shot(x: &mut Cx) {
 // --- sous-état 6 --------------------------------------------------------------------------------------
 
 pub(super) fn run_b(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => crouch(x),
         2 | 8 => sidestep(x),
@@ -302,8 +298,7 @@ pub(super) fn run_b(x: &mut Cx) {
 /// 0x5c6e6… : fin d'un geste du sous-état 6 : debout, et au tirage, attente.
 fn done_gesture(x: &mut Cx) {
     set_state_long(x, STANCE);
-    x.call(call::RAND_TARGET_CHECK);
-    if !x.c.cond(7) {
+    if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
         x.set16(f::SUB2, 0);
         stance::check_facing(x);
@@ -312,8 +307,8 @@ fn done_gesture(x: &mut Cx) {
 
 /// +6 = 0 : se baisse (animation 1 ou 0xb au hasard).
 fn crouch(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         let anim = if rand_and(x, 1) != 0 { 1 } else { 0xb };
         return mv(x, anim);
     }
@@ -324,13 +319,13 @@ fn crouch(x: &mut Cx) {
 
 /// +6 = 2 et 8 : pas de côté pendant `+0x6b` images.
 fn sidestep(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(AI_WANDER, 0xc);
-            x.set8(ANGLE, 0);
+            x.set8(Obj::SPEED_INDEX, 0);
             if rand_and(x, 1) != 0 {
-                x.add8(ANGLE, 0x10);
+                x.add8(Obj::SPEED_INDEX, 0x10);
             }
             set_speed(x, 0xd);
             mv(x, 2);
@@ -344,13 +339,13 @@ fn sidestep(x: &mut Cx) {
                 return;
             }
             if x.u8(f::SUB2) == 8 {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 return;
             }
             done_gesture(x);
         }
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             shot(x, 0);
         }
         6 => {
@@ -364,28 +359,28 @@ fn sidestep(x: &mut Cx) {
 
 /// +6 = 4 et 6 : saut avec élan (vitesse 0x280), retombée, puis tir (6).
 fn leap(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             jump_speeds(x);
             mv(x, 8);
         }
         2 => {
             x.move_xz();
             x.anim_step();
-            if (x.u32(HEIGHT) as i32) >= 0 {
+            if (x.u32(Obj::Z) as i32) >= 0 {
                 return;
             }
-            x.set32(HEIGHT, 0);
+            x.set32(Obj::Z, 0);
             if x.u8(f::SUB2) == 6 {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 return;
             }
             done_gesture(x);
         }
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             shot(x, 1);
         }
         6 => {

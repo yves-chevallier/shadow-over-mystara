@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x6e68c;
@@ -24,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
     x.reinsert();
 }
 
@@ -36,18 +37,17 @@ fn recoil(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(f::FREEZE, 4);
-        x.set16(SPEED_X, 0x500);
-        x.set16(SPEED_Y, -0x38i16 as u16);
+        x.set16(Obj::VX, 0x500);
+        x.set16(Obj::AX, -0x38i16 as u16);
         let flip = x.u8(0x4a) ^ 0x20;
-        x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
         x.set8(0x4a, flip);
         if flip != 0 {
-            negate(x, SPEED_X);
-            negate(x, SPEED_Y);
+            negate(x, Obj::VX);
+            negate(x, Obj::AX);
         }
         return mv(x, 0xc);
     }
-    if x.u8(SPEED_X) != 0 {
+    if x.u8(Obj::VX) != 0 {
         x.move_x();
     }
     if x.anim_step() {
@@ -58,7 +58,6 @@ fn recoil(x: &mut Cx) {
 
 /// Chute puis relevé (0x6e7a2).
 fn fall(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

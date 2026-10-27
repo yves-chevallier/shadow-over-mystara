@@ -4,9 +4,9 @@
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => flight(x),
         2 => landed(x),
@@ -20,57 +20,56 @@ fn signed_by_facing(x: &mut Cx, v: i16) -> u16 {
 }
 
 fn flight(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set_bit(1, 1, false);
             let right = camera_x(x).wrapping_add(0xc0);
-            set_dw(x, 2, right);
             x.set8(f::FLIP, 0);
             let mut angle = 0x18;
-            if (right as i16) > (x.u16(X) as i16) {
+            if (right as i16) > (x.u16(Obj::X) as i16) {
                 x.set8(f::FLIP, 0x20);
                 angle = 8;
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
-            x.set16(HEIGHT, 0x28);
+            x.set16(Obj::Z, 0x28);
             look(x, 0x30);
             x.set8(INVULNERABLE, 0);
-            x.call(rom::IMMUNITIES);
-            x.call(0xe3776);
+            lib::set_immunities(x);
+            lib::sound(x, 0xe3776);
             fly(x, 5);
         }
         2 => {
             x.move_x();
             let cam = camera_x(x);
-            let rightward = (x.u16(SPEED_X) as i16) >= 0;
+            let rightward = (x.u16(Obj::VX) as i16) >= 0;
             let mut d0 = cam.wrapping_add(if rightward { 0x90 } else { 0xf0 });
-            let mut d1 = x.u16(X);
+            let mut d1 = x.u16(Obj::X);
             if !rightward {
                 std::mem::swap(&mut d0, &mut d1);
             }
             if (d1 as i16) < (d0 as i16) {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let vy = signed_by_facing(x, 0x10);
-            x.set16(SPEED_Y, vy);
-            x.set16(SPEED_Z, 0);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            x.set16(Obj::AX, vy);
+            x.set16(Obj::VZ, 0);
+            x.set16(Obj::AZ, -0x40i16 as u16);
         }
         4 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x14);
             x.set16(TIMER2, 0);
-            x.set16(HEIGHT, 0);
+            x.set16(Obj::Z, 0);
             let vy = signed_by_facing(x, 0x10);
-            x.set16(SPEED_Y, vy);
+            x.set16(Obj::AX, vy);
             fly(x, 6);
         }
         6 => {
@@ -93,32 +92,32 @@ fn flight(x: &mut Cx) {
 
 /// `+6` = 2 : l'ombre est créée (EFFCT 0x32), puis la créature attend un joueur dans sa boîte.
 fn landed(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set_bit(1, 1, false);
             x.set8(NO_GRAB, 1);
             if let Some(shadow) = x.alloc(&pools::EFFCT) {
                 shadow.set_u8(x.b, 0, 1);
                 shadow.set_u8(x.b, 2, 0x32);
                 shadow.set_u8(x.b, 3, 0xe);
-                let px = x.u16(X);
-                shadow.set_u16(x.b, X, px);
-                let depth = x.u32(DEPTH);
-                shadow.set_u32(x.b, DEPTH, depth);
+                let px = x.u16(Obj::X);
+                shadow.set_u16(x.b, Obj::X, px);
+                let depth = x.u32(Obj::Y);
+                shadow.set_u32(x.b, Obj::Y, depth);
                 let n = shadow.u16(x.b, 0x12).wrapping_add(1);
                 shadow.set_u16(x.b, 0x12, n);
                 shadow.set_u16(x.b, 0x42, x.o.0 as u16);
-                x.set16(HEIGHT, 0x28);
+                x.set16(Obj::Z, 0x28);
             }
             look(x, 0x31);
             fly(x, 0x13);
         }
         2 => {
             pick_target(x);
-            if target_in_box(x, 0, 0x20, 0x40) {
-                x.add8(STEP, 2);
+            if lib::target_in_box(x, 0, 0x20, 0x40) {
+                x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x18);
             }
         }
@@ -126,13 +125,12 @@ fn landed(x: &mut Cx) {
             if count_down(x, TIMER) {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x32);
             let mut flip = 0;
             if (x.u16(f::TARGET) as i16) < 0 {
                 let target = x.linked(f::TARGET);
-                x.c.a[1] = target.0 | 0xff00_0000;
-                if (target.u16(x.b, X) as i16) > (x.u16(X) as i16) {
+                if (target.u16(x.b, Obj::X) as i16) > (x.u16(Obj::X) as i16) {
                     flip = 0x20;
                 }
             }
@@ -146,7 +144,7 @@ fn landed(x: &mut Cx) {
             }
             x.set8(NO_GRAB, 0);
             x.set8(INVULNERABLE, 0);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             spark(x, 0xa);
             if (x.u16(f::TARGET) as i16) >= 0 {
                 go::dive(x);

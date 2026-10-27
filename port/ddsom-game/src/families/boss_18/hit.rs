@@ -8,6 +8,7 @@
 use super::decide;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction (mots relatifs à 0x986d6, indexés par `+0x49 / 2`).
 const REACTIONS: u32 = 0x986d6;
@@ -27,8 +28,8 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 /// 0x99362 : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
@@ -45,7 +46,7 @@ fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.set8(INVULNERABLE, 0);
         set_abs8(x, 0xff8043, 0xff);
-        x.call(0x10112);
+        lib::set_68(x);
     }
     let code = (x.u8(REACTION) as u32) >> 1;
     let offset = x.rom16(REACTIONS + code) as i16 as i32;
@@ -188,8 +189,9 @@ fn thrown(x: &mut Cx) {
                 return decide::back_on_feet(x);
             }
             x.move_xy();
-            x.call(0x24a8);
-            if !zero(x) {
+            let t = crate::video::terrain_of(x.b, x.o);
+            crate::video::terrain_68k(x.c, &t);
+            if t.numero != 0 {
                 return decide::back_on_feet(x);
             }
             x.anim_step();
@@ -238,20 +240,9 @@ fn hit_h(x: &mut Cx) {
             x.set8(0x86, 0);
             x.set8(0x87, 0);
             x.set8(SHAKE, 0xf0);
-            play(x, SET_HURT, 1);
-            x.c.d[0] = 4;
-            x.c.d[1] = 5;
-            loop {
-                x.call(call::BURST);
-                if carry(x) {
-                    x.add8(f::SUB2, 2);
-                    return;
-                }
-                let d1 = (x.c.d[1] as u16).wrapping_sub(1);
-                x.c.d[1] = x.c.d[1] & 0xffff_0000 | d1 as u32;
-                if d1 == 0xffff {
-                    return;
-                }
+            lib::start(x, SET_HURT, 1);
+            if !lib::attack_effects(x, 4, 5) {
+                x.add8(f::SUB2, 2);
             }
         }
         2 => {
@@ -263,10 +254,10 @@ fn hit_h(x: &mut Cx) {
             x.add8(f::SUB2, 2);
         }
         4 => {
-            step(x);
+            lib::step(x);
         }
         6 => {
-            step(x);
+            lib::step(x);
             if sub8(x, SHAKE, 1).eq() {
                 decide::back_on_feet(x);
             }
@@ -288,7 +279,7 @@ fn hit_i(x: &mut Cx) {
             x.set32(0x18, 0);
             x.set32(0x1c, 0);
             x.set16(TIMER, 6);
-            let right_of = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let right_of = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             let side = if Fl::sub16(right_of, x.u16(0x8)).ge() { 0x20 } else { 0 };
             x.set8(f::FLIP, side);
             bounce_start(x);
@@ -326,7 +317,7 @@ fn bounce_start(x: &mut Cx) {
     x.set16(0x14, vx as u16);
     x.set16(0x16, vz as u16);
     let d1 = x.u16(0xc).wrapping_add(x.u16(0x10));
-    let d0 = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x80);
+    let d0 = var::CAMERA1_Y.get(x.b).wrapping_add(0x80);
     if Fl::sub16(d1, d0).lt() {
         let v = x.u16(0x18).wrapping_add(0x80);
         x.set16(0x18, v);
@@ -347,9 +338,9 @@ fn pushed_back(x: &mut Cx) {
             x.set16(TIMER, 0x14);
             x.set16(0x1e, 0);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
-            x.call(call::RANDOM_TURN);
+            lib::drift_heading(x);
             speed(x, 0x17);
             x.set8(ANIM_KIND, 0x20);
             x.set8(ANIM_LAST, 0x20);
@@ -380,7 +371,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 fn step_only(x: &mut Cx) {
-    step(x);
+    lib::step(x);
 }
 
 // --- mort -------------------------------------------------------------------------------------------------------------
@@ -396,15 +387,17 @@ fn death(x: &mut Cx) {
             set_abs8(x, 0xff2a85, 0);
             let bar = x.u8(0x7e);
             set_abs8(x, 0xff2a86, bar);
-            for addr in [0x103ba, 0xe0a10, 0xe3b6c, 0xe5f86, 0xb780, 0xbad6, 0xe2f6] {
-                x.call(addr);
-            }
+            lib::flash_and_shake(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
+            lib::sound(x, 0xe5f86);
+            lib::drop_rewards(x);
             x.set8(0, 2);
             x.set16(0x16, 0);
             x.set16(0x18, 0x400);
             x.set16(0x1a, (-0x28i16) as u16);
             let (mut vx, mut side) = (0x180i16, 0x20u8);
-            let edge = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0;
@@ -427,7 +420,7 @@ fn death(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.call(0xecabc);
+            lib::sound(x, 0xecabc);
         }
         _ => {}
     }
@@ -440,11 +433,10 @@ fn get_up(x: &mut Cx) {
         x.add8(0x7, 2);
         return body(x, 6);
     }
-    if !step(x) {
+    if !lib::step(x) {
         return;
     }
-    x.call(0x10474);
-    if zero(x) {
+    if !lib::any_player_alive(x) {
         return decide::wait(x);
     }
     decide::back_on_feet(x);

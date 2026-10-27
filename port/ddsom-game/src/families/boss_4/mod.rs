@@ -29,10 +29,6 @@ mod hit;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours (bit 7 : battement d'ailes à jouer).
-    pub const KEY: u32 = 0x33;
     /// Pas restants de la marche (`+0x6b`), décompte avant le prochain pas (`+0x71`), attente debout (`+0x6e`).
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
@@ -78,40 +74,17 @@ pub(self) const SET_BODY: u32 = 0x17557e;
 pub(self) const SET_AIR: u32 = 0x175596;
 pub(self) const SET_HURT: u32 = 0x1755ae;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const SOUND_EVENT: u32 = 0x2824;
-    pub const SOUND_B: u32 = 0x2860;
-    pub const ASK_TARGET: u32 = 0xe76c;
-    pub const RAND_TIMER: u32 = 0x79f6;
-    pub const PLAYERS_ALIVE: u32 = 0x10474;
-    pub const OUTSIDE: u32 = 0x104a2;
-    pub const TURN_NEEDED: u32 = 0x1050c;
-    pub const FACING: u32 = 0x10560;
-    pub const RANDOM_TURN: u32 = 0x10574;
-    pub const SELECT: u32 = 0x103e0;
-    /// Bouffées de poussière (`D5` = sorte, 0x1172e) et battement d'ailes (`D0` = côté, 0x11a36).
-    pub const DUST: u32 = 0x1172e;
-    pub const WING: u32 = 0x11a36;
-    /// Souffle du vent des ailes sur les joueurs proches.
-    pub const GUST: u32 = 0x115e2;
-    /// Oscillation verticale en vol (`boss_common`).
-    pub const BOB: u32 = 0x833b6;
-    pub const ROAR: u32 = 0xe3f76;
-}
-
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn air(x: &mut Cx, n: u32) {
-    play(x, SET_AIR, n);
+    lib::start(x, SET_AIR, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
 pub(self) fn kind(x: &mut Cx, k: u8) {
-    x.c.d[0] = k as u32;
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
@@ -128,13 +101,11 @@ pub(self) fn expired(x: &mut Cx, off: u32) -> bool {
 
 /// Au moins un joueur en vie (0x10474).
 pub(self) fn alive(x: &mut Cx) -> bool {
-    x.call(call::PLAYERS_ALIVE);
-    !zero(x)
+    lib::any_player_alive(x)
 }
 
 /// Le double `off` (`movea.w (off,A0),A1`).
 pub(self) fn double(x: &mut Cx, off: u32) -> Obj {
-    x.c.a[1] = x.u16(off) as i16 as i32 as u32;
     x.linked(off)
 }
 
@@ -148,27 +119,24 @@ pub(self) fn cue_double(x: &mut Cx) {
 pub(self) fn dust_tick(x: &mut Cx) {
     if !sub16(x, DUST, 1).gt() {
         x.set16(DUST, 4);
-        x.c.d[5] = 3;
-        x.call(call::DUST);
+        lib::debris(x, 3);
     }
 }
 
 /// Image-clé marquée (bit 7 de `+0x33`) : un battement d'ailes, de côté alterné.
 pub(self) fn flap(x: &mut Cx) {
-    if (x.u8(KEY) as i8) < 0 {
-        let k = x.u8(KEY) & 0x7f;
-        x.set8(KEY, k);
+    if (x.u8(f::KEY_FRAME) as i8) < 0 {
+        let k = x.u8(f::KEY_FRAME) & 0x7f;
+        x.set8(f::KEY_FRAME, k);
         let w = x.u8(WING) ^ 1;
         x.set8(WING, w);
-        x.c.d[0] = x.c.d[0] & !0xff | w as u32;
-        x.call(call::WING);
+        lib::ground_debris(x, w);
     }
 }
 
 /// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0` : vitesse (mot) en long à 8 bits de fraction.
 pub(self) fn speed_long(x: &mut Cx, off: u32) -> u32 {
     let v = ((x.u16(off) as i16 as i32) << 8) as u32;
-    x.c.d[0] = v;
     v
 }
 
@@ -201,11 +169,12 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(PHASES, 2);
     x.set8(f::BOX_SET, 0x24);
-    x.call(0x453c);
-    x.set_a5_u8(0x5a, 0);
-    for a in [0x1059e, 0x19e10, 0x19db4, 0x19eb0] {
-        x.call(a);
-    }
+    lib::initial_hp_boss(x);
+    var::SCENE_LEVEL.set(x.b, 0);
+    lib::spread_index(x);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     for (off, v) in [(0x76, 0), (0x70, 0), (0x6a, 2), (0x75, 0)] {
         x.set8(off, v);
     }
@@ -238,16 +207,15 @@ fn init(x: &mut Cx) {
     spawn_double(x, 0x16, Some((0xfa, 0x96, 0x43)), DOUBLE_A);
     spawn_double(x, 0x17, Some((0x12c, 0x64, 0x44)), DOUBLE_B);
     spawn_double(x, 0x18, None, DOUBLE_C);
-    if x.a5_u8(0x30) != 0 {
+    if var::GAME_ON.get(x.b) != 0 {
         x.c.d[0] = 0;
         body(x, 0);
-        x.call(0xe1330);
+        lib::sound(x, 0xe1330);
     } else {
         x.set8(0, 1);
         x.set_bit(0x1, 1, false);
         decide::wait(x);
-        x.call(rom::IMMUNITIES);
-        x.c.d[0] = 0;
+        lib::set_immunities(x);
         body(x, 0);
     }
 }
@@ -264,7 +232,6 @@ fn spawn_double(x: &mut Cx, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
         if (v as i16) < 0 {
             v = least;
         }
-        setw(x, 0, v);
         for off in [0x60, 0x62, 0x64] {
             d.set_u16(x.b, off, v);
         }
@@ -286,7 +253,7 @@ fn spawn_double(x: &mut Cx, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
 fn active(x: &mut Cx) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => fight::intro(x),
             2 => fight::run(x),
@@ -295,8 +262,8 @@ fn active(x: &mut Cx) {
             _ => hit::resume(x),
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 handlers! {

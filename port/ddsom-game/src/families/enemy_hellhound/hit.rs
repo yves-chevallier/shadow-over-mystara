@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x62aa2;
@@ -36,26 +37,25 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 2);
             look(x, 0x1e);
-            x.set16(SPEED_X, 0x300);
-            x.set16(SPEED_Y, -0x28i16 as u16);
+            x.set16(Obj::VX, 0x300);
+            x.set16(Obj::AX, -0x28i16 as u16);
             let flip = x.u8(0x4a) ^ 0x20;
-            x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);
             if flip != 0 {
-                negate(x, SPEED_X);
-                negate(x, SPEED_Y);
+                negate(x, Obj::VX);
+                negate(x, Obj::AX);
             }
             mv(x, 0xd);
         }
         2 => {
             puff(x, 3, 0, 2, 0x18, -1);
-            if x.u8(SPEED_X) != 0 {
+            if x.u8(Obj::VX) != 0 {
                 x.move_x();
                 return;
             }
             if x.anim_step() {
                 x.set32(0x58, 0);
-                x.set32(SPEED_X, 0);
+                x.set32(Obj::VX, 0);
                 set_state_long(x, STANCE);
             }
         }
@@ -91,7 +91,7 @@ fn fall(x: &mut Cx) {
             if paused(x) || !x.anim_step() {
                 return;
             }
-            if !target_in_box(x, 0, 0x40, 8) {
+            if !lib::target_in_box(x, 0, 0x40, 8) {
                 x.set8(0x86, 0);
                 x.set8(0, 1);
                 x.set8(VULNERABLE, 1);
@@ -99,25 +99,25 @@ fn fall(x: &mut Cx) {
                 return mv(x, 0);
             }
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_X, 0x300);
+            x.set16(Obj::VX, 0x300);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x380);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x380);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             mv(x, 6);
             let r = rand_and(x, 1);
             if r != 0 {
-                x.set16(SPEED_X, -0x300i16 as u16);
+                x.set16(Obj::VX, -0x300i16 as u16);
                 if x.u8(f::FLIP) != 0 {
-                    negate(x, SPEED_X);
+                    negate(x, Obj::VX);
                 }
                 mv(x, 5);
             }
         }
         6 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 0);
             }
@@ -128,7 +128,7 @@ fn fall(x: &mut Cx) {
                 x.anim_step();
                 return;
             }
-            x.set32(HEIGHT, 0);
+            x.set32(Obj::Z, 0);
             dust(x);
             x.add8(f::SUB2, 2);
             x.set8(VULNERABLE, 1);
@@ -158,11 +158,11 @@ fn run_away(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.set8(NO_ZONE, 1);
-            let to_right = if x.a5_u8(0x34) == 4 {
+            let to_right = if var::SCENE.get(x.b) == 4 {
                 x.u8(f::FLIP) == 0
             } else {
-                x.call(0x57c66);
-                x.c.cond(7) == (x.u8(f::FLIP) == 0)
+                let left = !lib::in_right_half(x);
+                left == (x.u8(f::FLIP) == 0)
             };
             if to_right {
                 x.add8(f::SUB2, 4);
@@ -187,7 +187,7 @@ fn run_away(x: &mut Cx) {
             x.move_by_table_xy();
             if !x.in_arena_default() {
                 set_state_long(x, st::DEAD_LONG);
-                x.call(call::REMOVE);
+                detach_from_host(x);
             }
         }
         _ => {}

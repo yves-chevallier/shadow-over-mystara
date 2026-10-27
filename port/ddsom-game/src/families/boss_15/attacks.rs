@@ -123,7 +123,7 @@ fn attack_0(x: &mut Cx) {
         0 => reach_player(x),
         2 => {
             x.add8(0x7, 2);
-            x.call(0xe571a);
+            lib::sound(x, 0xe571a);
             x.set16(TIMER, 0xa0);
             set_anim(x, 0, 2);
         }
@@ -150,9 +150,9 @@ fn attack_0(x: &mut Cx) {
             }
             x.set8(0x33, 0);
             x.add8(0x7, 2);
-            x.call(0xe571a);
+            lib::sound(x, 0xe571a);
             eshl_shot_34(x, 0);
-            x.call(0xe54dc);
+            lib::sound(x, 0xe54dc);
             x.set16(TIMER, 0x100);
             flap(x);
         }
@@ -212,14 +212,14 @@ fn attack_2(x: &mut Cx) {
             let r = random(x) as u8 & 0x20;
             x.set8(f::FLIP, r);
             let d1: i16 = if r != 0 { -0xe0 } else { 0x260 };
-            let px = x.a5_u16(var::SCROLL_X).wrapping_add(d1 as u16);
+            let px = var::SCROLL_X.get(x.b).wrapping_add(d1 as u16);
             x.set16(0x8, px);
             x.set16(0xc, 0x30);
-            let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x50);
+            let py = var::SCROLL_Y.get(x.b).wrapping_add(0x50);
             x.set16(0x10, py);
             x.set16(TIMER, 0x40);
             set_anim(x, 2, 0x13);
-            x.call(0xe571a);
+            lib::sound(x, 0xe571a);
             push_side(x);
         }
         8 => push_side(x),
@@ -259,7 +259,7 @@ fn push_side(x: &mut Cx) {
 fn align(x: &mut Cx) {
     x.set8(0x42, 1);
     let edge: u16 = if x.u8(f::FLIP) != 0 { 0x48 } else { 0x138 };
-    let d = edge.wrapping_add(x.a5_u16(var::SCROLL_X)).wrapping_sub(x.u16(0x8)) as i16;
+    let d = edge.wrapping_add(var::SCROLL_X.get(x.b)).wrapping_sub(x.u16(0x8)) as i16;
     if d != 0 {
         let mut s = d >> 4;
         if s == 0 {
@@ -284,7 +284,7 @@ fn sweep(x: &mut Cx) {
         let mut y = x.u32(0x10).wrapping_add((((w as u32) << 16) as i32 >> 8) as u32);
         x.set32(0x10, y);
         y = y >> 16;
-        let lo = x.a5_u16(var::SCROLL_Y).wrapping_add(0x20);
+        let lo = var::SCROLL_Y.get(x.b).wrapping_add(0x20);
         let mut yw = y as u16;
         if !Fl::sub16(yw, lo).ge() {
             yw = lo;
@@ -308,7 +308,7 @@ fn sweep(x: &mut Cx) {
     }
     x.set8(0x33, 0);
     eshl_shot_34(x, 1);
-    x.call(0xe54dc);
+    lib::sound(x, 0xe54dc);
     x.set8(0x2d, 0);
     x.select_speed(&crate::objects::motion::SPEEDS_A, 0x18);
 }
@@ -335,7 +335,7 @@ fn sweep_end(x: &mut Cx) {
 fn leave(x: &mut Cx) {
     x.set8(0x42, 1);
     x.move_x();
-    let d = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X)) as i16;
+    let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b)) as i16;
     if !(d < -0x80) && d < 0x200 {
         return;
     }
@@ -343,9 +343,9 @@ fn leave(x: &mut Cx) {
     x.set_a5_u16(0x51e, 0);
     x.set16(TIMER, 0x20);
     x.set16(0xc, 0x380);
-    let px = x.a5_u16(var::SCROLL_X).wrapping_add(0xc0);
+    let px = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     x.set16(0x8, px);
-    let py = x.a5_u16(var::SCROLL_Y).wrapping_add(0x7a);
+    let py = var::SCROLL_Y.get(x.b).wrapping_add(0x7a);
     x.set16(0x10, py);
 }
 
@@ -380,10 +380,10 @@ fn attack_4(x: &mut Cx) {
 /// 0x92180 : place le dragon au-dessus de l'écran, selon son type.
 fn dive_position(x: &mut Cx) {
     let big = x.u8(TYPE) == TYPE_BIG;
-    let px = x.a5_u16(var::SCROLL_X).wrapping_add(if big { 0x96 } else { 0xc0 });
+    let px = var::SCROLL_X.get(x.b).wrapping_add(if big { 0x96 } else { 0xc0 });
     x.set16(0x8, px);
     x.set16(0x10, 0x170);
-    let z = x.a5_u16(var::SCROLL_Y).wrapping_sub(if big { 0xf0 } else { 0xd8 });
+    let z = var::SCROLL_Y.get(x.b).wrapping_sub(if big { 0xf0 } else { 0xd8 });
     x.set16(0xc, z);
 }
 
@@ -402,7 +402,7 @@ fn dive_a(x: &mut Cx) {
     }
     x.set8(0x33, 0);
     eshl_shot_34(x, 2);
-    x.call(0xe54dc);
+    lib::sound(x, 0xe54dc);
 }
 
 fn dive_b(x: &mut Cx) {
@@ -484,8 +484,7 @@ fn attack_12(x: &mut Cx) {
         4 => {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x50);
-            x.c.d[0] = 0x10;
-            x.call(call::SOUND);
+            lib::shake_5c(x, 0x10);
             let routine = if x.u8(TYPE) == TYPE_BIG { 0xa7234 } else { 0xa727c };
             x.call(routine);
         }
@@ -550,7 +549,7 @@ fn attack_14(x: &mut Cx) {
             x.move_z();
             if (x.u16(0xc) as i16) > 0 {
                 let low = x.u16(0xc).wrapping_add(x.u16(0x10));
-                let floor = x.a5_u16(var::SCROLL_Y).wrapping_add(0x60);
+                let floor = var::SCROLL_Y.get(x.b).wrapping_add(0x60);
                 if (low as i16) > floor as i16 {
                     return;
                 }
@@ -566,13 +565,8 @@ fn attack_14(x: &mut Cx) {
 
 /// 0x9249e : un joueur à portée (0xfc44) est saisi ; rend vrai.
 fn try_seize(x: &mut Cx) -> bool {
-    x.c.d[0] = 7;
-    x.call(call::CATCH_IN_REACH);
-    if zero(x) {
-        return false;
-    }
-    x.c.d[0] = 0;
-    x.call(call::SEIZE);
+    let Some(player) = lib::attack_hits_a_player(x, 7) else { return false };
+    lib::seize_player(x, player, 0);
     true
 }
 
@@ -611,10 +605,10 @@ fn push_players(x: &mut Cx) {
         if dx.wrapping_add(dy) <= 0x10 {
             continue;
         }
-        x.c.d[1] = x.u16(0x8) as u32;
-        x.c.d[2] = x.u16(0x10) as u32;
-        x.c.d[3] = p.u16(x.b, 0x8) as u32;
-        x.c.d[4] = p.u16(x.b, 0x10) as u32;
+        x.c.d[1] = x.u16(0x8) as u32; // relu : D1-D4 relus par la suite (DDSOM_POISON : cov_tour2_c1...)
+        x.c.d[2] = x.u16(0x10) as u32; // relu : relu
+        x.c.d[3] = p.u16(x.b, 0x8) as u32; // relu : relu
+        x.c.d[4] = p.u16(x.b, 0x10) as u32; // relu : relu
         shove(x.c, x.b, p);
     }
 }

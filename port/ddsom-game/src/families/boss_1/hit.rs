@@ -10,6 +10,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x7bbbe;
@@ -28,15 +29,15 @@ pub(super) fn run(x: &mut Cx) {
             _ => get_up(x),
         }
     }
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 /// 0x7bb96 : premier passage : dégâts (0xb648, 0x10112) et, sans PV, la mort ; puis la routine du code de coup.
 fn reaction(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.call(0xb648);
-        x.call(0x10112);
+        lib::drop_once(x);
+        lib::set_68(x);
         x.set8(INVULNERABLE, 0);
         // 0x7c588
         if !tst16(x, f::HP).gt() {
@@ -68,7 +69,7 @@ fn shake(x: &mut Cx) {
         let freeze = x.u8(0x56);
         x.set8(f::FREEZE, freeze);
         x.set8(SHAKE, 0x10);
-        return play(x, SET_HURT, 8);
+        return lib::start(x, SET_HURT, 8);
     }
     if tst8(x, SHAKE).gt() {
         let n = x.u8(SHAKE).wrapping_sub(1);
@@ -100,7 +101,7 @@ fn pushed_back(x: &mut Cx) {
             let (angle, vz) = if x.u8(f::FLIP) != 0 { (0x18u32, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.c.d[0] = angle;
             set_dw(x, 1, vz);
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             x.set16(0x16, vz);
             speed(x, 0x17);
             kind(x, 0x20);
@@ -114,20 +115,20 @@ fn pushed_back(x: &mut Cx) {
                 x.set16(0x16, 0);
             }
             x.move_x();
-            step(x);
+            lib::step(x);
         }
         _ => {
             if !expired(x, TIMER) {
                 x.move_x();
-                step(x);
+                lib::step(x);
                 return;
             }
             x.c.d[0] = 0;
             x.set32(0x58, 0);
-            if target_in_box(x, -0x60, 0x35, 6) {
+            if lib::target_in_box(x, -0x60, 0x35, 6) {
                 return go(x, 0x7c344);
             }
-            if target_in_box(x, -0xe0, 0x30, 8) {
+            if lib::target_in_box(x, -0xe0, 0x30, 8) {
                 return go(x, 0x7c2fa);
             }
             walk(x)
@@ -140,12 +141,12 @@ fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
-            x.call(0xfffc);
+            lib::behaviour_by_kind(x);
             x.set8(ANIM_LAST, 0xff);
             body(x, 0x1b);
         }
         2 => {
-            if (x.a5_u8(var::PAUSE) as i8) > 0 || sub16(x, DOWN_TIME, 1).gt() {
+            if (var::PAUSE.get(x.b) as i8) > 0 || sub16(x, DOWN_TIME, 1).gt() {
                 return;
             }
             next6(x);
@@ -154,13 +155,13 @@ fn down(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.a5_u8(var::PAUSE) != 0 {
+            if var::PAUSE.get(x.b) != 0 {
                 return;
             }
-            if step(x) {
+            if lib::step(x) {
                 return get_up(x);
             }
-            if x.u8(KEY) == 0 || outside(x, 0x18, 0x168) || !target_in_box(x, -0x10, 0x30, 0xc) {
+            if x.u8(f::KEY_FRAME) == 0 || outside(x, 0x18, 0x168) || !lib::target_in_box(x, -0x10, 0x30, 0xc) {
                 return;
             }
             next6(x);
@@ -170,12 +171,12 @@ fn down(x: &mut Cx) {
             x.set16(0x18, 0x480);
             x.set16(0x1a, (-0x38i16) as u16);
             let angle = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x12);
             body(x, 0x1c);
         }
         6 => {
-            step(x);
+            lib::step(x);
             x.move_xyz();
             if x.u16(0xc) as i16 > 0 {
                 return;
@@ -183,17 +184,16 @@ fn down(x: &mut Cx) {
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            x.call(call::LANDING);
+            lib::sound(x, 0xec820);
             body(x, 0x1d);
         }
         _ => {
-            if step(x) {
+            if lib::step(x) {
                 return;
             }
             x.set8(0, 1);
             x.set8(ANIM_LAST, 0xff);
-            x.c.a[1] = THRESHOLDS;
-            x.call(call::PHASE_UP);
+            lib::next_threshold(x, THRESHOLDS);
             get_up(x)
         }
     }
@@ -207,15 +207,14 @@ pub(super) fn get_up(x: &mut Cx) {
     if !pick_target(x) {
         return idle_alone(x);
     }
-    x.c.a[1] = THRESHOLDS;
-    x.call(call::PHASE_UP);
+    lib::next_threshold(x, THRESHOLDS);
     if outside(x, 0x18, 0x168) {
         return leap_guarded(x);
     }
     if try_split_leap(x) {
         return split_leap(x);
     }
-    if target_in_box(x, -0x40, 0x30, 8) {
+    if lib::target_in_box(x, -0x40, 0x30, 8) {
         return go(x, 0x7c344);
     }
     stand(x)
@@ -233,14 +232,16 @@ fn death(x: &mut Cx) {
             set_abs8(x, A5_DEATH + 1, 0);
             let score = x.u8(0x7e);
             set_abs8(x, A5_DEATH + 2, score);
-            for r in [0x103ba, 0xe0a10, 0xe3b6c, 0xe3e8e, 0xb780, 0xbad6, 0xe2f6] {
-                x.call(r);
-            }
+            lib::flash_and_shake(x);
+            crate::sound::service(x.b, crate::sound::Service::Ff05);
+            lib::sound(x, 0xe3b6c);
+            lib::sound(x, 0xe3e8e);
+            lib::drop_rewards(x);
             x.set8(0, 2);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
-            let center = x.a5_u16(var::CAMERA1_X).wrapping_add(0xc0);
+            let center = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
             set_dw(x, 2, center);
             let (vx, side) = if center as i16 >= x.u16(0x8) as i16 { (0x200u16, 0u32) } else { ((-0x200i16) as u16, 0x20) };
             set_dw(x, 0, vx);
@@ -253,13 +254,13 @@ fn death(x: &mut Cx) {
         2 => {
             x.move_xz();
             if x.u16(0xc) as i16 > 0 {
-                step(x);
+                lib::step(x);
                 return;
             }
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            x.call(0xec9e8);
+            lib::sound(x, 0xec9e8);
             x.anim_start(SET_BODY, 0x1f);
         }
         4 => {

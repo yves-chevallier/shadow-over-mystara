@@ -49,7 +49,7 @@ pub(super) fn chase_b(x: &mut Cx) {
 
 /// 0x98fec : la charge si le boss est dans la bande utile de l'écran, sinon l'attaque 16.
 pub(super) fn dash_or_attack(x: &mut Cx) {
-    let cam = x.a5_u16(var::CAMERA1_X);
+    let cam = var::CAMERA1_X.get(x.b);
     let here = x.u16(0x8);
     if Fl::sub16(cam.wrapping_add(0x20), here).ge() || Fl::sub16(cam.wrapping_add(0x160), here).lt() {
         return attack_16(x);
@@ -83,8 +83,7 @@ pub(super) fn attack_4(x: &mut Cx) {
 
 /// 0x99062 : attaque 6 (poursuite magique) si une cible existe.
 pub(super) fn attack_6(x: &mut Cx) {
-    x.call(call::PICK_FAR);
-    if zero(x) {
+    if !lib::pick_target_any(x) {
         return wait(x);
     }
     x.set8(VULNERABLE, 0);
@@ -139,12 +138,12 @@ pub(super) fn attack_18(x: &mut Cx) {
     if x.u8(BUDGET_E) == 0 {
         return attack_0(x);
     }
-    let cam = x.a5_u16(var::CAMERA1_X);
+    let cam = var::CAMERA1_X.get(x.b);
     let here = x.u16(0x8);
     if Fl::sub16(cam.wrapping_add(0x30), here).ge() || Fl::sub16(cam.wrapping_add(0x140), here).lt() {
         return attack_16(x);
     }
-    let camy = x.a5_u16(var::CAMERA1_Y);
+    let camy = var::CAMERA1_Y.get(x.b);
     let y = x.u16(0x10);
     if Fl::sub16(camy.wrapping_add(0x38), y).ge() || Fl::sub16(camy.wrapping_add(0x70), y).lt() {
         return attack_0(x);
@@ -182,13 +181,13 @@ fn target(x: &mut Cx, table: u32, index: u32) -> u32 {
 
 /// 0x98cae : délai avant le pas suivant, marche rapide ; 0x98cba : marche lente.
 pub(super) fn walk_delay_fast(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x98cc6, level);
     x.set8(WALK_DELAY, v);
 }
 
 pub(super) fn walk_delay_slow(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x98ce6, level);
     x.set8(WALK_DELAY, v);
 }
@@ -208,15 +207,10 @@ pub(super) fn walk_steps_slow(x: &mut Cx) {
 
 /// 0x98d6a, 0x98d86 : un joueur est-il dans la boîte ? Rend 0, ou 1 / 2 : le côté (0x1047a).
 pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ai::TARGET_IN_BOX);
-    if zero(x) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
-    x.call(0x1047a);
-    x.c.d[0] as u8
+    lib::turn_decision(x) as u8
 }
 
 /// Exécute la routine d'état dont une table donne l'adresse.
@@ -279,7 +273,7 @@ pub(super) fn choose_far(x: &mut Cx, side: u8) {
         0x98ec6 => table8(x, 0x98f2c, r),
         0x98ed2 | 0x98ed8 => table8(x, 0x98f3c, r),
         0x98eec => {
-            let slot = (x.a5_u8(0x5a) as u32).min(4);
+            let slot = (var::SCENE_LEVEL.get(x.b) as u32).min(4);
             let line = target(x, 0x98f04, 2 * slot);
             let table = match line {
                 0x98f0e => 0x98f4c,
@@ -311,16 +305,13 @@ pub(super) fn back_on_feet(x: &mut Cx) {
     x.set32(0x58, 0);
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
-    if x.a5_u8(0x30) == 0 {
+    if var::GAME_ON.get(x.b) == 0 {
         return wait(x);
     }
-    x.call(call::PICK_FAR);
-    if zero(x) {
+    if !lib::pick_target_any(x) {
         return wait(x);
     }
-    x.c.a[1] = 0x114e2;
-    x.call(0x105b6);
-    if !zero(x) {
+    if lib::next_threshold(x, 0x114e2) {
         if cmp8(x, PHASE, 2).eq() {
             return attack_20(x);
         }

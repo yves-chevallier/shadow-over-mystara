@@ -18,6 +18,7 @@
 
 use super::boss_common::*;
 use super::cx::handlers;
+use crate::objects::Obj;
 
 mod attacks;
 mod decide;
@@ -27,11 +28,6 @@ mod intro;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours, posée par les scripts d'animation.
-    pub const KEY: u32 = 0x33;
     /// Valeur d'étourdissement (et recopie en `+0x53` : gel après un coup).
     pub const STUN: u32 = 0x56;
     /// Vulnérable (1) ou non (0).
@@ -84,11 +80,11 @@ pub(self) const SET_HURT: u32 = 0x1807c0;
 
 /// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
 pub(self) fn body(x: &mut Cx, n: u32) {
-    play(x, SET_BODY, n);
+    lib::start(x, SET_BODY, n);
 }
 
 pub(self) fn strike(x: &mut Cx, n: u32) {
-    play(x, SET_STRIKE, n);
+    lib::start(x, SET_STRIKE, n);
 }
 
 /// Routines du moteur appelées par ce boss.
@@ -148,16 +144,16 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.set8(PHASES, 4);
     x.set8(f::BOX_SET, 0x31);
-    x.call(0x453c);
-    x.call(0x1059e);
-    x.set_a5_u8(0x5a, 0);
-    x.call(0x19e10);
-    x.call(0x19db4);
-    x.call(0x19eb0);
+    lib::initial_hp_boss(x);
+    lib::spread_index(x);
+    var::SCENE_LEVEL.set(x.b, 0);
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
     decide::pick_strike_limit(x);
     x.set8(0, 2);
     x.set_bit(0x1, 1, true);
-    if x.u8(VARIANT) != 0 {
+    if x.u8(Obj::VARIANT) != 0 {
         x.set8(0x93, 1);
         x.set8(0x9a, 0xff);
     }
@@ -174,7 +170,7 @@ fn init(x: &mut Cx) {
     x.set8(BUDGET_B, 0xc);
     x.set8(BUDGET_C, 3);
     body(x, 0);
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => decide::start_intro(x),
         1 => decide::start_variant1(x),
         _ => decide::start_variant2(x),
@@ -187,7 +183,7 @@ fn active(x: &mut Cx) {
     let freeze = tst8(x, f::FREEZE);
     if freeze.gt() {
         sub8(x, f::FREEZE, 1);
-    } else if x.a5_u8(var::PAUSE) == 0 {
+    } else if var::PAUSE.get(x.b) == 0 {
         match x.u8(f::SUB) {
             0 => intro::run(x),
             2 => fight::run(x),
@@ -197,14 +193,14 @@ fn active(x: &mut Cx) {
     }
     // les séquences spéciales (jeu 0x30 et au-delà) n'ont ni zone de jeu ni ombre
     if !cmp8(x, ANIM_KIND, 0x30).ge() {
-        x.call(IN_ZONE);
-        x.call(SHADOW);
+        lib::keep_in_zone(x);
+        lib::collide_terrain(x);
     }
 }
 
 /// `+5` = 6, 8, 10 (0x96958) : attend que des joueurs reviennent.
 fn wait_for_players(x: &mut Cx) {
-    if x.a5_u8(var::PLAYERS_ALIVE) as i8 > 0 {
+    if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
     match x.u8(f::SUB2) {
@@ -214,7 +210,7 @@ fn wait_for_players(x: &mut Cx) {
             body(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }

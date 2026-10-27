@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x68542;
@@ -24,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => {}
         }
     }
-    zone_shadow(x);
+    zone_and_terrain(x);
     x.reinsert();
 }
 
@@ -39,14 +40,13 @@ fn recoil(x: &mut Cx) {
         let strength = attacker.u8(x.b, 0x57) >> 1;
         x.set8(f::FREEZE, strength);
         x.set16(TIMER, 0xf);
-        x.set16(SPEED_X, 0x480);
-        x.set16(SPEED_Y, -0x80i16 as u16);
+        x.set16(Obj::VX, 0x480);
+        x.set16(Obj::AX, -0x80i16 as u16);
         let flip = x.u8(0x4a) ^ 0x20;
-        x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
         x.set8(f::FLIP, flip);
         if flip != 0 {
-            negate(x, SPEED_X);
-            negate(x, SPEED_Y);
+            negate(x, Obj::VX);
+            negate(x, Obj::AX);
         }
         return mv(x, 4);
     }
@@ -58,7 +58,7 @@ fn recoil(x: &mut Cx) {
             return;
         }
     }
-    if x.u8(SPEED_X) != 0 {
+    if x.u8(Obj::VX) != 0 {
         x.move_x();
         return;
     }
@@ -71,7 +71,6 @@ fn recoil(x: &mut Cx) {
 
 /// Chute puis relevé (0x6869a).
 fn fall(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -117,15 +116,15 @@ fn grab(x: &mut Cx) {
         0 => {
             x.add8(f::SUB2, 2);
             x.set8(0xa7, 1);
-            let at = x.u16(X);
+            let at = x.u16(Obj::X);
             x.set16(TIMER2, at);
-            let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
+            let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             let mut want = 0u8;
-            x.set16(SPEED_X, -0x280i16 as u16);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::VX, -0x280i16 as u16);
+            x.set16(Obj::AX, 0);
             let d = at.wrapping_sub(0xc0).wrapping_sub(cam);
             if (d as i16) > 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
                 want = 0x20;
             }
             if x.u8(f::FLIP) ^ want == 0 {
@@ -145,18 +144,18 @@ fn grab(x: &mut Cx) {
         }
         4 => {
             x.anim_step();
-            if (x.u8(KEY) as i8) >= 0 {
+            if (x.u8(f::KEY_FRAME) as i8) >= 0 {
                 x.move_x();
             }
             if !x.in_arena_default() {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 set_state_long(x, st::DEAD_LONG);
                 return;
             }
             if x.u8(0x29) == 0 {
-                zone_shadow(x);
-                if x.u16(TIMER2) != x.u16(X) {
-                    let at = x.u16(X);
+                zone_and_terrain(x);
+                if x.u16(TIMER2) != x.u16(Obj::X) {
+                    let at = x.u16(Obj::X);
                     x.set16(TIMER2, at);
                     x.set8(TIMER, 0x3c);
                     return;
@@ -173,7 +172,7 @@ fn grab(x: &mut Cx) {
         }
         6 => {
             if x.anim_step() {
-                x.call(call::REMOVE);
+                detach_from_host(x);
                 set_state_long(x, st::DEAD_LONG);
             }
         }

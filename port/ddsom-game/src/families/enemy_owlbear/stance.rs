@@ -35,10 +35,10 @@ pub(super) fn arrival(x: &mut Cx) {
                 x.set8(CUR_ANIM, 0);
                 return body(x, 1);
             }
-            if target_in_box(x, 0, 0x80, 0x20) {
+            if lib::target_in_box(x, 0, 0x80, 0x20) {
                 set_state_long(x, ACTIVE_STANCE);
-                x.call(call::TURN_TO_TARGET);
-                return x.call(call::FACE_TARGET);
+                lib::draw_6b(x);
+                return lib::draw_stance(x);
             }
             step(x);
             move_xy(x);
@@ -72,7 +72,7 @@ pub(super) fn turn_end(x: &mut Cx) {
 
 /// 0x5f2c6 : la bête a-t-elle envie d'attaquer ? (un bit tiré dans un masque par niveau de difficulté).
 fn attack_chance(x: &mut Cx) -> bool {
-    let level = (x.a5_u16(0x7f92).wrapping_mul(4)) as u32;
+    let level = (var::RANK.get(x.b).wrapping_mul(4)) as u32;
     let mask = rom32(x, ATTACK_CHANCE + level);
     let bit = random(x) & 0x1f;
     mask >> bit & 1 != 0
@@ -84,7 +84,7 @@ pub(super) fn run(x: &mut Cx) {
     if grabbed(x) {
         return set_state_long(x, KNOCKED);
     }
-    if x.a5_u8(0x35) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return set_state_long(x, ACTIVE_IDLE);
     }
     match x.u8(f::SUB2) {
@@ -106,20 +106,20 @@ fn pursue(x: &mut Cx) {
         x.set8(VULNERABLE, 1);
         pose(x, 2, SET_BODY, 2);
         speed(x, 0xb);
-        return x.call(call::FACE_TARGET);
+        return lib::draw_stance(x);
     }
     let t = x.u8(AI_TURN).wrapping_sub(1);
     x.set8(AI_TURN, t);
     if (t as i8) < 0 {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         pick_target(x);
         let shot = if x.u8(f::SUB2) == 0 { 0 } else { 1 };
         x.set8(AI_SHOT, shot);
-        x.call(0xe76c);
+        lib::approach_target(x);
         let n = x.u8(AI_STEP).wrapping_sub(1);
         x.set8(AI_STEP, n);
         if n == 0 {
-            x.call(call::TURN_TO_TARGET);
+            lib::draw_6b(x);
             return pursue_tail(x);
         }
     }
@@ -129,8 +129,7 @@ fn pursue(x: &mut Cx) {
 
 /// 0x5dcc8 : un test de la cible peut figer la bête un instant ; sinon elle engage.
 pub(super) fn pursue_tail(x: &mut Cx) {
-    x.call(call::RAND_TARGET_CHECK);
-    if !x.c.cond(7) {
+    if lib::maybe_draw_6e(x) {
         return x.set16(f::SUB2, 0x0400);
     }
     x.set8(REPEAT_LEFT, 1);
@@ -139,15 +138,15 @@ pub(super) fn pursue_tail(x: &mut Cx) {
 
 /// 0x5dce0 : la cible est-elle à portée ? Frappe, saisit, ou continue d'avancer.
 pub(super) fn engage(x: &mut Cx) {
-    if target_in_box(x, -0x28, 0x28, 0x10) {
+    if lib::target_in_box(x, -0x28, 0x28, 0x10) {
         x.set16(f::STATE, 0x0204);
         return choose_attack(x, CLOSE_ATTACKS);
     }
     if reach(x, -0x38, 0x38, 0x10, 0xf, CLOSE_ATTACKS) || reach(x, -0xb0, 0x40, 0x10, 0x2, FAR_ATTACKS) {
         return;
     }
-    if target_in_box_far(x, -0x38, 0x38, 0x20) {
-        return x.call(0xac3a);
+    if lib::guard_in_front_strict(x, -0x38, 0x38, 0x20) {
+        return lib::pick_byte(x);
     }
     step(x);
     move_xy(x);
@@ -165,13 +164,12 @@ pub(super) fn engage(x: &mut Cx) {
 /// ou un coup court (état `0x02020800`). `mask` : bits du tirage qui choisissent le coup court
 /// (`0xf` : jusqu'à 10 sur 16, `0x2` : une fois sur deux).
 fn reach(x: &mut Cx, d0: i16, d1: u16, d2: u16, mask: u16, attacks: u32) -> bool {
-    if !target_in_box(x, d0, d1, d2) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
     let Some(t) = target(x) else { return false };
     let same_side = t.u8(x.b, f::FLIP) == x.u8(f::FLIP);
-    x.call(if same_side { 0xa4c2 } else { 0xa4b4 });
-    if x.c.cond(7) {
+    if !lib::decision(x, same_side) {
         return false;
     }
     let r = random(x) as u16;
@@ -181,14 +179,14 @@ fn reach(x: &mut Cx, d0: i16, d1: u16, d2: u16, mask: u16, attacks: u32) -> bool
         return true;
     }
     set_state_long(x, 0x0204_0000);
-    x.call(0xac3a);
+    lib::pick_byte(x);
     choose_attack(x, attacks);
     true
 }
 
 /// 0x5ee94 et 0x5ee9a : tire l'attaque (`+6`) dans la table du niveau de difficulté.
 pub(super) fn choose_attack(x: &mut Cx, table: u32) {
-    let level = (x.a5_u16(0x7f92) >> 1 << 5) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
     let pick = x.data8(table + level + r);
     x.set8(f::SUB2, pick);
@@ -252,7 +250,7 @@ fn approach(x: &mut Cx) {
         0 => {
             x.add8(0x7, 2);
             x.set8(TIMER, 0x28);
-            x.call(call::FACE_TARGET);
+            lib::draw_stance(x);
             x.set8(VULNERABLE, 1);
             pose(x, 4, SET_BODY, 5);
             speed(x, 0x1a);
@@ -266,10 +264,10 @@ fn approach(x: &mut Cx) {
             let n = x.u8(AI_TURN).wrapping_sub(1);
             x.set8(AI_TURN, n);
             if (n as i8) < 0 {
-                x.call(call::FACE_TARGET);
+                lib::draw_stance(x);
                 pick_target(x);
                 x.set8(AI_SHOT, 0);
-                x.call(0xe76c);
+                lib::approach_target(x);
             }
             x.set32(RESUME_STATE, ACTIVE_STANCE);
             let sub2 = x.u8(f::SUB2);
@@ -285,10 +283,10 @@ fn approach(x: &mut Cx) {
 /// 0x5f36a : fin d'un coup ; la bête enchaîne une charge si un joueur est proche, sinon se remet debout.
 pub(super) fn next_move(x: &mut Cx) {
     let Some(_) = target(x) else { return set_state_long(x, ACTIVE_STANCE) };
-    if !target_in_box(x, -0x38, 0x38, 0x20) && !target_in_box(x, -0xb0, 0x40, 0x20) {
+    if !lib::target_in_box(x, -0x38, 0x38, 0x20) && !lib::target_in_box(x, -0xb0, 0x40, 0x20) {
         return set_state_long(x, ACTIVE_STANCE);
     }
-    let level = (x.a5_u16(0x7f92) >> 1 << 5) as u32;
+    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
     let pick = x.data8(NEXT_MOVES + level + r);
     x.set8(f::SUB2, pick);
@@ -321,7 +319,7 @@ pub(super) fn rest(x: &mut Cx) {
             _ => {}
         }
     }
-    if x.a5_u8(0x35) != 0 {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, ACTIVE_STANCE);
     }
 }

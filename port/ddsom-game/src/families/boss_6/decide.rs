@@ -116,13 +116,13 @@ fn apply(x: &mut Cx, routine: u32) {
 // --- tirages ------------------------------------------------------------------------------------
 
 pub(super) fn walk_delay_fast(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x85614 + level);
     x.set8(WALK_DELAY, v);
 }
 
 pub(super) fn walk_delay_slow(x: &mut Cx) {
-    let level = x.a5_u16(var::DIFFICULTY) as u32;
+    let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x85634 + level);
     x.set8(WALK_DELAY, v);
 }
@@ -141,15 +141,10 @@ pub(super) fn walk_steps_slow(x: &mut Cx) {
 
 /// Un joueur est-il dans la boîte `(d0, d1, d2)` ? 0 sinon, ou 1 / 2 : le côté (0x1047a).
 pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(ai::TARGET_IN_BOX);
-    if zero(x) {
+    if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
-    x.call(0x1047a);
-    x.c.d[0] as u8
+    lib::turn_decision(x) as u8
 }
 
 /// 0x856f2 : un joueur est tout près devant.

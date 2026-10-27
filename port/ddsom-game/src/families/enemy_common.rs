@@ -9,10 +9,37 @@
 use m68k::SR_C;
 
 use super::cx::Cx;
+/// Bibliothèque commune des ennemis et des boss (`lib::draw_stance(x)`...).
+pub use super::enemy_lib as lib;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
 use crate::machine::Machine;
+
+/// Variables de la RAM de travail lues par les ennemis et les boss (`ram.rs` pour celles de tout le jeu).
+pub mod var {
+    use crate::ram::{Mot, Octet};
+    pub use crate::ram::{CAMERA_ALT_ACTIVE as CAMERA_SELECT, CAMERA_ALT_X, CAMERA_ALT_Y, PARTIE as GAME_ON, PHASE, SCENE};
+    /// Caméra principale : position (mot ; `SCROLL_Y` se lit aussi en long avec la fraction).
+    pub use crate::ram::{CAMERA_X as SCROLL_X, CAMERA_Y as SCROLL_Y};
+    /// Objet suivi par la caméra (mot, adresse RAM ; 0 = aucun) : le « meneur » que certains boss accompagnent.
+    pub const LEADER: Mot = Mot::a5(0x46);
+    /// Octet non nul : tout est figé (le gestionnaire du boss ne fait rien).
+    pub const FROZEN: Octet = Octet::a5(0x4e);
+    /// Nombre de joueurs en vie (`ram::DIFFICULTE` désigne le même octet : à vérifier).
+    pub const PLAYERS_ALIVE: Octet = Octet::a5(0x35);
+    /// Octet à 1 pendant une cinématique (jeu en pause, entrées coupées).
+    pub const PAUSE: Octet = Octet::a5(0x3d);
+    /// Niveau de la scène pour les boss (0 rien, 3 toujours ; `boss_common::hp_threshold`).
+    pub const SCENE_LEVEL: Octet = Octet::a5(0x5a);
+    /// Position (X, Y) des deux caméras de jeu (objets à `A5+0x59e`, `A5+0x5a6`) (h).
+    pub const CAMERA1_X: Mot = Mot::a5(0x5a6);
+    pub const CAMERA1_Y: Mot = Mot::a5(0x5aa);
+    pub const CAMERA2_X: Mot = Mot::a5(0x5ae);
+    pub const CAMERA2_Y: Mot = Mot::a5(0x5b2);
+    /// Rang (difficulté dynamique, `objects::rank`), 0 à 31 : indexe les tables de décision des ennemis.
+    pub const RANK: Mot = Mot::a5(0x7f92);
+}
 
 /// Champs des objets ENEMY.
 pub mod f {
@@ -20,10 +47,13 @@ pub mod f {
     pub const STATE: u32 = 0x4;
     pub const SUB: u32 = 0x5;
     pub const SUB2: u32 = 0x6;
+    pub const SUB3: u32 = 0x7;
     /// Jeu de boîtes de collision (voir `docs/combat.md` §3).
     pub const BOX_SET: u32 = 0x2e;
     /// Orientation (non nul : regarde à gauche).
     pub const FLIP: u32 = 0x2c;
+    /// Marque de l'image-clé de l'animation courante (octet bas de `Obj::ANIM_FLAGS`, bit 7 : marque d'événement).
+    pub const KEY_FRAME: u32 = 0x33;
     /// Hôte (mot, adresse RAM) d'une partie d'ennemi composite.
     pub const HOST: u32 = 0x46;
     /// Parent ou propriétaire (mot, adresse RAM) ; `+0x42` : créateur d'un sous-objet.
@@ -206,14 +236,10 @@ pub fn set_state(x: &mut Cx, o: Obj, state: u32) {
     o.set_u32(x.b, f::STATE, state);
 }
 
-/// Test « dans la zone de jeu » et ombre portée, fin commune des états actifs.
-pub const IN_ZONE: u32 = 0xfbae;
-pub const SHADOW: u32 = 0x33fe4;
-
 /// Boucle commune des états actifs des ennemis à IA : tant que le gel `+0x53` est positif il décroît
 /// et rien d'autre ne bouge ; sinon, hors pause, `sub` exécute le sous-état (il rend vrai pour
 /// abandonner l'image sans la suite, comme l'original qui dépile son adresse de retour). La suite
-/// teste la zone et dessine l'ombre dès que le sous-état n'est plus 0, puis remet l'objet en liste.
+/// teste la zone et la collision avec le décor dès que le sous-état n'est plus 0, puis remet l'objet en liste.
 pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
@@ -222,8 +248,8 @@ pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
         return;
     }
     if x.u8(f::SUB) != 0 {
-        x.call(IN_ZONE);
-        x.call(SHADOW);
+        lib::keep_in_zone(x);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }
@@ -242,8 +268,8 @@ pub fn hit_loop_at(x: &mut Cx, no_zone: u32, sub: impl FnOnce(&mut Cx)) {
         sub(x);
     }
     if x.u8(no_zone) == 0 {
-        x.call(IN_ZONE);
-        x.call(SHADOW);
+        lib::keep_in_zone(x);
+        lib::collide_terrain(x);
     }
     x.reinsert();
 }
@@ -260,7 +286,19 @@ pub fn react(x: &mut Cx, table: u32) {
     x.c.d[0] = code;
     let routine = rom32(x, table + code);
     x.c.a[1] = routine;
-    x.call(routine);
+    if !super::reactions::run_common(x, routine) {
+        // routine propre au type (native de sa famille)
+        x.call(routine);
+    }
+}
+
+/// `react`, sauf la routine `own` de la table, propre au type, exécutée par `own_reaction`.
+pub fn react_with(x: &mut Cx, table: u32, own: u32, own_reaction: fn(&mut Cx)) {
+    let code = x.u8(0x49) as u32;
+    if rom32(x, table + code) == own {
+        return own_reaction(x);
+    }
+    react(x, table);
 }
 
 /// `move.w #v,Dn` : ne change que le mot de poids faible du registre.
@@ -287,10 +325,11 @@ pub fn anim(x: &mut Cx, set: u32, n: u32) {
 
 // --- aides communes des types du troisième lot --------------------------------------------------
 
-/// Fin commune des sous-états actifs : test de zone (0xfbae, qui remet D5 à 0) puis ombre (0x33fe4).
-pub fn zone_shadow(x: &mut Cx) {
-    x.call(IN_ZONE);
-    x.call(SHADOW);
+/// Fin commune des sous-états actifs : test de zone (0xfbae, qui remet D5 à 0) puis collision avec le décor
+/// (0x33fe4).
+pub fn zone_and_terrain(x: &mut Cx) {
+    lib::keep_in_zone(x);
+    lib::collide_terrain(x);
 }
 
 /// `neg.w (off,A0)`.
@@ -301,7 +340,7 @@ pub fn negate(x: &mut Cx, off: u32) {
 
 /// `movea.w (0x50,A0),A1` : A1 = la cible (adresse étendue en signe), qui est rendue.
 pub fn load_target(x: &mut Cx) -> Obj {
-    x.c.a[1] = x.u16(f::TARGET) as i16 as i32 as u32;
+    x.c.a[1] = x.u16(f::TARGET) as i16 as i32 as u32; // relu : A1 relu par la suite (DDSOM_POISON : beetle_scene18, boss2_poke3p, scorpion_scene53)
     x.linked(f::TARGET)
 }
 
@@ -319,34 +358,14 @@ pub fn set_state_long(x: &mut Cx, v: u32) {
 
 // --- aides d'IA communes ------------------------------------------------------------------------
 
-/// Un joueur est-il dans cette boîte devant l'ennemi ? (0xb5e0 : décalage, portée, profondeur.)
-pub fn target_in_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0xb5e0);
-    !x.c.cond(7)
-}
-
-/// Variante de `target_in_box` pour la routine 0x7f0c (même convention).
-pub fn target_in_box_far(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
-    set_dw(x, 0, d0 as u16);
-    set_dw(x, 1, d1);
-    set_dw(x, 2, d2);
-    x.call(0x7f0c);
-    !x.c.cond(7)
-}
-
 /// Choisit un joueur comme cible (0x424e) ; faux si aucun n'est vivant.
 pub fn pick_target(x: &mut Cx) -> bool {
-    x.call(0x424e);
-    !x.c.cond(7)
+    lib::pick_target(x)
 }
 
 /// L'ennemi est saisi par un joueur (0x2810).
 pub fn grabbed(x: &mut Cx) -> bool {
-    x.call(0x2810);
-    !x.c.cond(7)
+    !crate::aides::grabbed(x.b, x.o).z()
 }
 
 /// La cible de l'ennemi (joueur désigné par `+0x50`), ou `None` s'il n'en a pas.
@@ -373,12 +392,11 @@ pub fn needs_turn(x: &mut Cx) -> bool {
 
 /// 0x67452 : cherche le joueur le plus proche dans une boîte devant l'ennemi (décalage `d0`, demi-largeur
 /// `d1`, demi-profondeur `d2`) et le range en `+0x50` ; faux si aucun. La boîte suit l'orientation de l'ennemi.
-/// Les registres de travail sont ceux de l'original (D1 = meilleure distance, D4 = doubles largeurs...).
+/// D5 garde, comme l'original, le dernier écart calculé.
 pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     x.set16(f::TARGET, 0);
     let d0 = if x.u8(f::FLIP) != 0 { d0.wrapping_neg() } else { d0 } as u16;
     let mut best = 0xffffu16;
-    let mut d3 = 0u16;
     let mut d5 = x.c.d[5] as u16;
     for k in 0..4u32 {
         let p = 0xff85de + 0x200 * k;
@@ -390,26 +408,18 @@ pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
         if dy > d2.wrapping_mul(2) {
             continue;
         }
-        d3 = dy;
         let dx = x.u16(0x8).wrapping_add(d0).wrapping_sub(crate::mem::rd16(x.b, p + 0x8)).wrapping_add(d1);
         d5 = dx;
         if dx > d1.wrapping_mul(2) {
             continue;
         }
-        d3 = dx.wrapping_add(dy);
-        if d3 <= best {
-            best = d3;
+        let distance = dx.wrapping_add(dy);
+        if distance <= best {
+            best = distance;
             x.set16(f::TARGET, p as u16);
         }
     }
-    x.c.d[0] = x.c.d[0] & !0xffff | d0 as u32;
-    x.c.d[1] = 0xffff_0000 | best as u32;
-    x.c.d[2] = (d1 as u32) << 16 | d2 as u32;
-    x.c.d[3] = d3 as u32;
-    x.c.d[4] = (d1.wrapping_mul(2) as u32) << 16 | d2.wrapping_mul(2) as u32;
     x.c.d[5] = x.c.d[5] & !0xffff | d5 as u32;
-    x.c.d[6] = 0xffff;
-    x.c.a[1] = 0xff8dde;
     x.u16(f::TARGET) != 0
 }
 
@@ -418,7 +428,6 @@ pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 /// est rangé en `+0x5c` de chaque objet. Les allocations qui échouent sautent leur entrée.
 pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
     let mut at = rom32(x, lists + 4 * index);
-    x.c.a[2] = at;
     let count = x.data16(at);
     at += 2;
     for _ in 0..=count {
@@ -439,32 +448,32 @@ pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
         }
         at += 9;
     }
-    x.c.a[2] = at;
 }
 
 /// 0x27ee : l'ennemi se détache de son hôte (`HOST`) : si l'hôte est actif et compte encore des parties
 /// (`+0x2a`), le compte diminue et le lien est effacé. D0 et A1 gardent le lien et l'hôte, comme l'original.
-fn detach_from_host(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    use crate::mem::{rd16, rd8, rts, wr16};
+pub fn detach_from_host(x: &mut Cx) {
     const PARTS: u32 = 0x2a;
-    let me = c.a[0];
-    let host = rd16(b, me + f::HOST);
-    c.d[0] = c.d[0] & 0xffff_0000 | host as u32;
+    let host = x.u16(f::HOST);
+    x.c.d[0] = x.c.d[0] & 0xffff_0000 | host as u32;
     if host != 0 {
-        c.a[1] = host as i16 as i32 as u32;
-        let parts = rd16(b, c.a[1] + PARTS);
-        if rd8(b, c.a[1]) != 0 && parts != 0 {
-            wr16(b, c.a[1] + PARTS, parts - 1);
-            wr16(b, me + f::HOST, 0);
+        x.c.a[1] = host as i16 as i32 as u32;
+        let h = Obj(x.c.a[1] & 0xff_ffff);
+        let parts = h.u16(x.b, PARTS);
+        if h.u8(x.b, 0) != 0 && parts != 0 {
+            h.set_u16(x.b, PARTS, parts - 1);
+            x.set16(f::HOST, 0);
         }
     }
-    rts(c, b);
 }
 
 pub const NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x27ee,
     name: "ennemi_detacher_hote",
-    run: detach_from_host,
+    run: |c, b| {
+        detach_from_host(&mut Cx::new(c, b));
+        crate::mem::rts(c, b);
+    },
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::a(1),
 }];

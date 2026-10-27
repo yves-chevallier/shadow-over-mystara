@@ -24,7 +24,7 @@ fn arrival(x: &mut Cx) {
             x.set8(0, 2);
             x.set_bit(0x1, 1, false);
             x.set8(f::FLIP, 0);
-            let cx = x.a5_u16(var::SCROLL_X).wrapping_add(0x140);
+            let cx = var::SCROLL_X.get(x.b).wrapping_add(0x140);
             x.set16(0x8, cx);
             let host = x.linked(f::HOST);
             let z = host.u16(x.b, 0xc).wrapping_sub(0x10);
@@ -33,7 +33,7 @@ fn arrival(x: &mut Cx) {
             x.set16(0x10, y);
             x.set16(TIMER, 0x14);
             if effect(x, true, 0x31, Some(2), true).is_some() {
-                x.call(0xe4e5a);
+                lib::sound(x, 0xe4e5a);
             }
             body(x, 0x16);
         }
@@ -41,7 +41,7 @@ fn arrival(x: &mut Cx) {
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
             }
-            step(x);
+            lib::step(x);
         }
         4 => {
             sub16(x, 0xc, 1);
@@ -49,11 +49,11 @@ fn arrival(x: &mut Cx) {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x1e);
             }
-            step(x);
+            lib::step(x);
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.add8(0x7, 2);
@@ -69,7 +69,7 @@ fn arrival(x: &mut Cx) {
         8 => {
             x.move_xyz();
             if tst16(x, 0x18).gt() {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.add8(0x7, 2);
@@ -78,7 +78,7 @@ fn arrival(x: &mut Cx) {
         10 => {
             x.move_xyz();
             if tst16(x, 0xc).gt() {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.add8(0x7, 2);
@@ -86,18 +86,18 @@ fn arrival(x: &mut Cx) {
             body(x, 9);
         }
         12 => {
-            if step(x) {
+            if lib::step(x) {
                 x.add8(0x7, 2);
                 body(x, 0);
             }
         }
         14 => {
-            if x.a5_u8(0x2c) != 0xc {
-                step(x);
+            if var::PHASE.get(x.b) != 0xc {
+                lib::step(x);
                 return;
             }
             x.set8(0, 1);
-            x.call(rom::IMMUNITIES);
+            lib::set_immunities(x);
             decide::stand(x);
         }
         _ => {}
@@ -112,14 +112,14 @@ fn entrance(x: &mut Cx) {
         }
         2 => {
             if x.data8(0xff2a38) != 0x10 {
-                step(x);
+                lib::step(x);
                 return;
             }
             x.add8(0x7, 2);
             x.set16(0x18, 0x700);
             x.set16(0x1a, 0);
             x.set32(0x14, 0);
-            x.call(0xe580a);
+            lib::sound(x, 0xe580a);
             body(x, 6);
         }
         4 => {
@@ -128,7 +128,7 @@ fn entrance(x: &mut Cx) {
                 dust(x);
             }
             x.move_xz();
-            let floor = x.a5_u16(var::CAMERA1_Y).wrapping_add(0x100);
+            let floor = var::CAMERA1_Y.get(x.b).wrapping_add(0x100);
             let here = x.u16(0x10).wrapping_add(x.u16(0xc));
             if Fl::sub16(here, floor).lt() {
                 return;

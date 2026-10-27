@@ -22,18 +22,20 @@ pub(super) fn spawn_scene_controller(x: &mut Cx) {
 pub(super) fn init(x: &mut Cx) {
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
-    for r in [0x19e10, 0x19db4, 0x19eb0, 0xe1330, 0xd6952] {
-        x.call(r);
-    }
+    lib::clear_popup(x);
+    lib::empty_popups(x);
+    lib::clear_all_popups(x);
+    lib::sound(x, 0xe1330);
+    lib::create_set_15(x);
     let r = random(x);
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
-    x.call(0x453c);
-    x.call(0xd5f30);
+    lib::initial_hp_boss(x);
+    lib::create_set_14(x);
     for (off, v) in [(0x70, 0), (0x7e, 0x23), (0x7f, 0), (0x8e, 3), (0x78, 0xff), (0x68, 8), (0x69, 8), (0x6a, 3), (0x6c, 1), (0x6d, 8)] {
         x.set8(off, v);
     }
-    let speed = if x.u16(f::TARGET) != 0 && x.a5_u8(var::PLAYERS_ALIVE) != 1 { 7 } else { 6 };
+    let speed = if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 { 7 } else { 6 };
     x.set8(0x72, speed);
     x.set8(0x73, speed);
     for (off, v) in [(0x74, 5), (0x75, 0x3c), (0x76, 6), (0x81, 0x12), (0x80, 0x17)] {
@@ -41,18 +43,18 @@ pub(super) fn init(x: &mut Cx) {
     }
     x.set16(GUARD, 0xb4);
     x.set16(GUARD_TIMER, 0xf0);
-    x.set_a5_u8(0x5a, 0);
+    var::SCENE_LEVEL.set(x.b, 0);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     pick_target(x);
-    x.call(call::FACE_TARGET);
-    x.call(call::AIM);
+    lib::draw_stance(x);
+    lib::draw_6b(x);
     x.set8(RAGE, 0xff);
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x12c);
     x.set8(0x93, 0);
     x.set8(0xac, 0);
-    let players = x.a5_u8(var::PLAYERS_ALIVE);
-    let alone = players == 1 || (players == 2 && (x.a5_u16(var::DIFFICULTY) as i16) < 0x17);
+    let players = var::PLAYERS_ALIVE.get(x.b);
+    let alone = players == 1 || (players == 2 && (var::RANK.get(x.b) as i16) < 0x17);
     if !alone {
         let Some(part) = x.alloc(&pools::BOSS) else { return };
         part.set_u8(x.b, 0, 1);
@@ -79,8 +81,8 @@ pub(super) fn arrive(x: &mut Cx) {
         0 => {
             next7(x);
             x.set8(VULNERABLE, 0);
-            let px = x.u16(0x8).wrapping_add(0x1b0).wrapping_add(x.a5_u16(var::SCROLL_X));
-            let pz = x.u16(0x10).wrapping_add(0x80).wrapping_add(x.a5_u16(var::SCROLL_Y));
+            let px = x.u16(0x8).wrapping_add(0x1b0).wrapping_add(var::SCROLL_X.get(x.b));
+            let pz = x.u16(0x10).wrapping_add(0x80).wrapping_add(var::SCROLL_Y.get(x.b));
             x.set16(0x8, px);
             x.set16(0x10, pz);
             x.set8(f::FLIP, 0);
@@ -101,9 +103,8 @@ pub(super) fn arrive(x: &mut Cx) {
             if (x.u32(0xc) as i32) > 0 {
                 return step_anim(x);
             }
-            x.c.d[0] = 0x1e;
-            x.call(call::MESSAGE);
-            x.call(rom::IMMUNITIES);
+            lib::shake_5c(x, 0x1e);
+            lib::set_immunities(x);
             x.set32(0xc, 0);
             dust_line(x);
             next7(x);
@@ -124,7 +125,7 @@ pub(super) fn arrive(x: &mut Cx) {
 
 /// 0x7d0bc : attend l'image-clé de l'animation de saut.
 pub(super) fn rise_wait(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
     }
@@ -149,9 +150,8 @@ pub(super) fn land(x: &mut Cx) {
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
     }
-    x.c.d[0] = 0x1e;
-    x.call(ia::SOUND_EVENT);
-    x.call(0xecd50);
+    lib::shake_54(x, 0x1e);
+    lib::sound(x, 0xecd50);
     x.set32(0xc, 0);
     dust_line(x);
     next7(x);
@@ -165,7 +165,7 @@ pub(super) fn land(x: &mut Cx) {
 /// 0x7f10a : vitesses du bond selon la distance à la caméra (quatre lignes de 8 octets en 0x7f14c : X, hauteur,
 /// gravité, profondeur).
 fn jump_speeds(x: &mut Cx) {
-    let d = x.u16(0x8).wrapping_sub(x.a5_u16(var::SCROLL_X));
+    let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let row = if Fl::sub16(d, 0x60).le() {
         0
     } else if Fl::sub16(d, 0xc0).le() {
@@ -223,15 +223,13 @@ pub(super) fn slam(x: &mut Cx) {
             }
         }
         14 => {
-            if x.u8(KEY) == 1 {
+            if x.u8(f::KEY_FRAME) == 1 {
                 x.set_a5_u16(0x51e, 4);
-                x.set8(KEY, 0);
-                x.c.d[1] = 2;
+                x.set8(f::KEY_FRAME, 0);
                 eshl_sweep_1d(x, 2);
             }
-            if x.u8(KEY) == 2 {
-                x.set8(KEY, 0);
-                x.c.d[1] = 0;
+            if x.u8(f::KEY_FRAME) == 2 {
+                x.set8(f::KEY_FRAME, 0);
                 eshl_sweep_1d(x, 0);
             }
             if !x.anim_step() {
@@ -255,7 +253,7 @@ pub(super) fn slam(x: &mut Cx) {
             if player_within_reach(x) {
                 return x.set8(0x7, 0x1a);
             }
-            if target_in_box(x, 0, 0x180, 0x10) {
+            if lib::target_in_box(x, 0, 0x180, 0x10) {
                 return next7(x);
             }
             if x.u8(0x29) != 0 {
@@ -283,7 +281,7 @@ pub(super) fn slam(x: &mut Cx) {
             if sub16(x, TIMER2, 1).mi() || player_within_reach(x) {
                 return x.set8(0x7, 0x1a);
             }
-            if target_in_box(x, 0xc0, 0xc0, 0x10) || target_in_box(x, -0xc0, 0xc0, 0x10) {
+            if lib::target_in_box(x, 0xc0, 0xc0, 0x10) || lib::target_in_box(x, -0xc0, 0xc0, 0x10) {
                 return x.set8(0x7, 0x1a);
             }
             let dx = x.u16(SPOT_X).wrapping_sub(x.u16(0x8)).wrapping_add(8);
@@ -329,7 +327,7 @@ pub(super) fn slam(x: &mut Cx) {
             start(x, Set::B, 2);
         }
         28 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 next7(x);
                 x.set8(0xaf, 1);
             }
@@ -351,9 +349,9 @@ pub(super) fn slam(x: &mut Cx) {
 /// Point visé sur le bord de l'écran, du côté où le boss regarde (`+0xb0`, `+0xb2`).
 fn edge_spot(x: &mut Cx) {
     let off = if x.u8(f::FLIP) != 0 { 0x160 } else { 0x20 };
-    let sx = x.a5_u16(var::SCROLL_X).wrapping_add(off);
+    let sx = var::SCROLL_X.get(x.b).wrapping_add(off);
     x.set16(SPOT_X, sx);
-    let sz = x.a5_u16(var::SCROLL_Y).wrapping_add(0x60);
+    let sz = var::SCROLL_Y.get(x.b).wrapping_add(0x60);
     x.set16(SPOT_Z, sz);
 }
 
@@ -386,11 +384,11 @@ pub(super) fn spin_roar(x: &mut Cx) {
                 let (sx, sz) = (x.u16(SPOT_X), x.u16(SPOT_Z));
                 set_dw(x, 1, sx);
                 set_dw(x, 2, sz);
-                x.call(0x137e);
+                lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16));
                 let angle = (x.c.d[0] as u8).wrapping_add(b6);
                 x.set8(0x2d, angle);
             }
-            let cam = x.a5_u16(var::SCROLL_X);
+            let cam = var::SCROLL_X.get(x.b);
             if x.u8(f::FLIP) != 0 {
                 if (cam.wrapping_add(0x130).wrapping_sub(x.u16(0x8)) as i16) < 0 {
                     return next7(x);
@@ -424,13 +422,13 @@ pub(super) fn spin_roar(x: &mut Cx) {
             start(x, Set::B, 5);
         }
         10 => {
-            if x.u8(KEY) == 1 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 1 {
+                x.set8(f::KEY_FRAME, 0);
                 x.c.d[1] = 2;
                 eshl_sweep_1d(x, 2);
             }
-            if x.u8(KEY) == 2 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 2 {
+                x.set8(f::KEY_FRAME, 0);
                 eshl_wave_1e(x);
                 x.call(0x1ac9a);
                 x.set8(0xb9, 4);

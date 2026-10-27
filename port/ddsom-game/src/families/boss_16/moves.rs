@@ -18,7 +18,7 @@ pub(super) fn wake(x: &mut Cx) {
 /// 0x93606 : combat d'emblée (le groupe 2 tourne dans la même image).
 fn fight_from_wake(x: &mut Cx) {
     x.set8(0, 1);
-    x.call(rom::IMMUNITIES);
+    lib::set_immunities(x);
     x.set32(f::STATE, state::WALK);
     fight(x);
 }
@@ -46,7 +46,6 @@ fn proximity(x: &mut Cx) -> u8 {
         return 0;
     }
     let level = x.rom8(0x93562 + (best >> 4) as u32);
-    x.c.d[0] = x.c.d[0] & !0xff | level as u32;
     level
 }
 
@@ -87,9 +86,9 @@ fn wake_low(x: &mut Cx) {
                     return anim_a(x, 7);
                 }
             }
-            if step(x) {
+            if lib::step(x) {
                 x.set8(0, 1);
-                x.call(rom::IMMUNITIES);
+                lib::set_immunities(x);
                 return x.set32(f::STATE, 0x0204_0800);
             }
             let i = x.u8(NEAR) as u32;
@@ -111,8 +110,7 @@ fn wake_high(x: &mut Cx) {
             x.set8(0x7, 0);
             x.set8(TIMER, 0x7f);
             anim_a(x, 8);
-            x.c.d[0] = 0;
-            x.call(call::SCRIPT_PALETTE);
+            lib::palette_script(x, 0);
             return wake_high_wait(x);
         }
         2 => wake_high_wait(x),
@@ -130,8 +128,7 @@ fn wake_high_wait(x: &mut Cx) {
     }
     x.set8(FALLS, 1);
     if x.anim_step() {
-        x.c.d[0] = 7;
-        x.call(call::SCRIPT_PALETTE);
+        lib::palette_script(x, 7);
         return fight_from_wake(x);
     }
     let event = x.u8(0x3e);
@@ -141,13 +138,11 @@ fn wake_high_wait(x: &mut Cx) {
         x.call(0x1ac68);
     }
     let event = x.u8(0x3e);
-    x.c.d[0] = event as u32;
     if event == 0 {
         return;
     }
-    x.c.d[0] = (event - 1) as u32;
     x.set8(0x3e, 0);
-    x.call(call::SCRIPT_PALETTE);
+    lib::palette_script(x, (event - 1) as u16);
 }
 
 // --- groupe 2 : combat -------------------------------------------------------------------------
@@ -162,7 +157,7 @@ pub(super) fn fight(x: &mut Cx) {
         8 => walk(x, 0x30),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }
@@ -182,7 +177,7 @@ fn stand(x: &mut Cx) {
         x.set32(SAVED_STATE, state::WALK);
         x.set32(f::STATE, state::TURN);
     }
-    step(x);
+    lib::step(x);
 }
 
 /// 0x9368e : demi-tour.
@@ -198,7 +193,7 @@ fn turn(x: &mut Cx) {
             anim_a(x, 1);
         }
         2 => {
-            if step(x) {
+            if lib::step(x) {
                 let s = x.u32(SAVED_STATE);
                 x.set32(f::STATE, s);
             }
@@ -219,31 +214,29 @@ fn walk(x: &mut Cx, kind: u8) {
         if !pick_target(x) {
             return idle(x);
         }
-        x.call(call::FACE_TARGET);
-        return x.call(call::AIM);
+        lib::draw_stance(x);
+        return lib::draw_6b(x);
     }
     if (x.u16(0xc) as i16) <= 0 {
-        x.call(call::ASK_TARGET);
+        lib::approach_target(x);
     }
     if sub8(x, WALK_DELAY, 1).mi() {
-        x.call(call::FACE_TARGET);
+        lib::draw_stance(x);
         let r = rand_and(x, 0xf);
         if 0xffc0u32 >> r & 1 != 0 {
             if !pick_target(x) {
                 return idle(x);
             }
         } else {
-            x.call(call::PICK_FAR);
-            if zero(x) {
+            if !lib::random_player(x) {
                 return idle(x);
             }
         }
         if sub8(x, WALK_STEPS, 1).ne() {
             // la marche continue
         } else {
-            x.call(call::AIM);
-            x.call(call::AIM_DONE);
-            if !zero(x) {
+            lib::draw_6b(x);
+            if lib::maybe_draw_6e(x) {
                 x.set16(f::SUB2, 0);
                 return;
             }
@@ -258,7 +251,7 @@ fn walk(x: &mut Cx, kind: u8) {
     if target_far(x) {
         return x.set32(f::STATE, state::LEAP);
     }
-    x.call(ai::STEP);
+    lib::step(x);
     x.move_by_table_xy();
     if target_behind(x) {
         x.set32(SAVED_STATE, state::STAND);
@@ -278,7 +271,7 @@ fn attack_choice(x: &mut Cx) {
     x.set8(f::SUB2, step);
     x.set16(f::STATE, 0x0204);
     x.set8(0x7, 0);
-    x.call(call::REROLL);
+    lib::pick_byte(x);
 }
 
 /// 0x937e2 : bond vers la cible (le boss est loin d'elle).
@@ -297,13 +290,13 @@ fn leap(x: &mut Cx) {
                 return x.set32(f::STATE, state::WALK);
             }
             x.set8(0x79, 0x2f);
-            x.call(call::ASK_TARGET);
+            lib::approach_target(x);
             if target_behind(x) {
                 x.set32(SAVED_STATE, state::STAND);
                 x.set32(f::STATE, state::TURN);
             }
             x.move_by_table_xy();
-            x.call(ai::STEP);
+            lib::step(x);
         }
         _ => {}
     }
@@ -318,7 +311,7 @@ pub(super) fn jump_to_spot(x: &mut Cx) {
         4 => spot_jump(x),
         _ => {}
     }
-    if x.a5_u8(var::PLAYERS_ALIVE) == 0 {
+    if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, state::IDLE);
     }
 }
@@ -356,10 +349,10 @@ fn run_to_spot(x: &mut Cx) {
             anim_a(x, 2);
             speed(x, 8);
             x.move_by_table_xy();
-            step(x);
+            lib::step(x);
         }
         2 => {
-            let on_target = target_in_box(x, 0x80, 0x100, 0x10);
+            let on_target = lib::target_in_box(x, 0x80, 0x100, 0x10);
             let mut arrived = on_target;
             if !arrived {
                 let dx = (x.u16(SPOT_X).wrapping_sub(x.u16(0x8)).wrapping_add(8)) as i16;
@@ -376,7 +369,7 @@ fn run_to_spot(x: &mut Cx) {
                 x.set16(TIMER, 6);
             }
             x.move_by_table_xy();
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }
@@ -396,7 +389,7 @@ fn spot_jump(x: &mut Cx) {
             anim_a(x, 0);
         }
         2 => {
-            step(x);
+            lib::step(x);
             x.move_by_table_xy();
             x.move_z();
             if (x.u16(0xc) as i16) >= 0 {
@@ -446,7 +439,7 @@ fn wait_then_turn(x: &mut Cx) {
                 x.set32(SAVED_STATE, 0x0208_0004);
                 x.set32(f::STATE, state::TURN);
             } else {
-                step(x);
+                lib::step(x);
             }
         }
         _ => {}
@@ -458,7 +451,7 @@ fn wait_then_turn(x: &mut Cx) {
 /// 0x93ece.
 pub(super) fn paused(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        if x.a5_u8(var::PLAYERS_ALIVE) != 0 {
+        if var::PLAYERS_ALIVE.get(x.b) != 0 {
             return x.set32(f::STATE, state::WALK);
         }
         x.set8(FALLS, 1);
@@ -466,7 +459,7 @@ pub(super) fn paused(x: &mut Cx) {
             next7(x);
             return anim_a(x, 0);
         }
-        step(x);
+        lib::step(x);
         return;
     }
     match x.u8(0x7) {
@@ -476,10 +469,10 @@ pub(super) fn paused(x: &mut Cx) {
             anim_a(x, 6);
         }
         2 => {
-            if x.a5_u8(var::PAUSE) == 0 {
+            if var::PAUSE.get(x.b) == 0 {
                 return x.set32(f::STATE, state::STAND);
             }
-            step(x);
+            lib::step(x);
         }
         _ => {}
     }
@@ -515,7 +508,7 @@ pub(super) fn holding(x: &mut Cx) {
             let hp = prey.u16(x.b, f::HP).wrapping_sub(0x10);
             prey.set_u16(x.b, f::HP, if (hp as i16) > 0 { hp } else { 1 });
             anim_b(x, 2);
-            x.tail(call::HOLD);
+            lib::hold_seized(x);
         }
         2 => {
             if tst8(x, TIMER).gt() {
@@ -542,19 +535,18 @@ pub(super) fn holding(x: &mut Cx) {
 /// 0x93fbc : animation de la morsure ; à sa fin, le joueur perd 1 PV (jamais le dernier) puis le boss le relâche
 /// quand le décompte est écoulé.
 fn hold_bite(x: &mut Cx, prey: crate::objects::Obj) {
-    if !step(x) {
-        return x.tail(call::HOLD);
+    if !lib::step(x) {
+        return lib::hold_seized(x);
     }
     x.set16(ANIM_SET, 0xffff);
     anim_b(x, 3);
     if sub8(x, TIMER, 1).le() || prey.u16(x.b, f::HP) as i16 <= 1 {
-        x.c.a[1] = prey.0;
         prey.set_u8(x.b, 0x6f, 1);
-        return x.tail(call::RELEASE);
+        return lib::release_player(x, prey);
     }
     add16(x, prey, f::HP, 0xffff);
     x.c.a[1] = prey.0;
-    x.call(call::BLOOD);
+    lib::sound(x, 0xedd96);
     x.c.d[1] = 2;
     let mut dx = 0x18u16;
     if x.u8(f::FLIP) == 0 {
@@ -564,5 +556,5 @@ fn hold_bite(x: &mut Cx, prey: crate::objects::Obj) {
     x.c.d[3] = x.u16(0xc).wrapping_add(8) as u32;
     x.c.d[4] = x.u16(0x10).wrapping_sub(2) as u32;
     x.call(call::SPLASH);
-    x.tail(call::HOLD);
+    lib::hold_seized(x);
 }

@@ -46,57 +46,44 @@ impl Master {
 
 /// Champ du maître (adresse RAM sur 16 bits).
 const MASTER: u32 = 0xb2;
-const PLAY: u32 = 0x10428;
-const PLAY_HIT: u32 = 0x10450;
 
 fn play(x: &mut Cx, play: Play) {
     match play {
-        Anim(set) => {
-            x.c.a[4] = set;
-            x.call(PLAY);
-        }
-        Hit(set) => {
-            x.c.a[4] = set;
-            x.call(PLAY_HIT);
-        }
+        Anim(set) => lib::animation_of_master(x, set),
+        Hit(set) => lib::animation_of_mark(x, set),
         Restart(n) => restart_or_step(x, n),
         RestartSpawn(n) => {
             restart_or_step_spawn(x, n);
         }
         AnimClear(set) => {
-            x.c.a[4] = set;
-            x.call(PLAY);
+            lib::animation_of_master(x, set);
             x.set8(0x38, 0);
         }
-        Step => x.call(STEP_ANIMATION),
+        Step => {
+            lib::step(x);
+        }
         Nothing => {}
     }
 }
 
 /// Jeu d'animations des gestes de la Chimère.
 const GESTURES: u32 = 0x16abd6;
-const START_ANIMATION: u32 = 0x103d6;
-const STEP_ANIMATION: u32 = 0x1040c;
 
 fn restart_or_step(x: &mut Cx, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
-        x.c.d[0] = n;
-        x.c.a[4] = GESTURES;
-        x.call(START_ANIMATION);
+        lib::start(x, GESTURES, n);
     } else {
-        x.call(STEP_ANIMATION);
+        lib::step(x);
     }
 }
 
 fn restart_or_step_spawn(x: &mut Cx, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
-        x.c.d[0] = n;
-        x.c.a[4] = GESTURES;
-        return x.call(START_ANIMATION);
+        return lib::start(x, GESTURES, n);
     }
-    x.call(STEP_ANIMATION);
+    lib::step(x);
     if x.u8(0x33) == 0 {
         return;
     }
@@ -131,12 +118,12 @@ fn hurt(x: &mut Cx, dying_code: u8, effect_variant: u8) {
     x.set16(0x64, hp as u16);
     x.set16(0xb4, 0x14);
     if hp > 0 {
-        return x.call(0xe40b4);
+        return lib::sound(x, 0xe40b4);
     }
     x.set8(0xaf, 1);
-    x.call(0xe4188);
+    lib::sound(x, 0xe4188);
     x.set8(0x7e, dying_code);
-    x.call(0x19ad6);
+    lib::object_event(x);
     let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, 0x3f);
@@ -609,8 +596,8 @@ mod dark_warrior_double {
                 _ => copy_frame(x),
             }
         }
-        x.call(IN_ZONE);
-        x.call(SHADOW);
+        lib::keep_in_zone(x);
+        lib::collide_terrain(x);
     }
 
     /// Le maître marche : vitesses inversées, ou déplacement rejoué.
@@ -742,15 +729,15 @@ mod dark_warrior_double {
 
     /// 0x77cee : le terrain sous le double renverse-t-il sa vitesse en profondeur ?
     fn terrain_reverses(x: &mut Cx) -> bool {
-        x.call(0x24a8);
-        let terrain = (x.c.d[2] & 0x3f) as u16;
+        let t = crate::video::terrain_of(x.b, x.o);
+        crate::video::terrain_68k(x.c, &t);
+        let terrain = t.numero & 0x3f;
         x.c.d[2] = x.c.d[2] & !0xffff | terrain as u32;
         if terrain as u8 >= 9 {
             x.c.d[0] = 0;
             return false;
         }
         let b = x.rom8(REVERSING_TERRAIN + terrain as u32);
-        x.c.d[0] = x.c.d[0] & !0xff | b as u32;
         b != 0
     }
 
@@ -806,8 +793,8 @@ mod dark_warrior_double {
             10 => copy_frame(x),
             _ => {}
         }
-        x.call(IN_ZONE);
-        x.call(SHADOW);
+        lib::keep_in_zone(x);
+        lib::collide_terrain(x);
     }
 
     /// 0x77ab6 : le double reprend l'état de réaction du maître et rejoue sa routine de réaction.
