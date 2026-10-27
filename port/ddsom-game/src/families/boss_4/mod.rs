@@ -101,7 +101,7 @@ pub(self) fn expired(x: &mut Cx, off: u32) -> bool {
 
 /// Au moins un joueur en vie (0x10474).
 pub(self) fn alive(x: &mut Cx) -> bool {
-    lib::any_player_alive(x)
+    lib::players_alive(x)
 }
 
 /// Le double `off` (`movea.w (off,A0),A1`).

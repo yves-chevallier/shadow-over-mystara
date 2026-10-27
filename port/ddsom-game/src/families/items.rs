@@ -14,7 +14,7 @@ use crate::objects::pools;
 use crate::objects::Obj;
 use crate::{regs, Native};
 
-use super::{ajoute_u8, effects_creators, gestionnaire, pointeur, rom, Ctx};
+use super::{ajoute_u8, effects_creators, gestionnaire, pointeur, Ctx};
 use crate::objects::Courant;
 use crate::machine::Machine;
 
@@ -55,10 +55,6 @@ const RAMASSES: i32 = -0x5b88;
 
 /// Sous-routines non réécrites.
 mod appel {
-    /// Ramène l'objet dans la zone de jeu visible.
-    pub const DANS_LA_ZONE: u32 = 0xfbae;
-    /// Événement de score `(joueur << 8) | type`.
-    pub const EVENEMENT: u32 = 0x19ae6;
     /// Fin commune des effets de potion.
     pub const FIN_EFFET: u32 = 0xebaf6;
 }
@@ -146,7 +142,7 @@ fn expire_et_clignote(ctx: &mut Ctx, o: Obj) {
 
 /// Fin commune de l'état de chute : ramener dans la zone, ombre, tri par profondeur.
 fn fin_de_chute(ctx: &mut Ctx) {
-    ctx.jsr(appel::DANS_LA_ZONE);
+    crate::ai::keep_in_zone_d5(ctx.c, ctx.b, ctx.obj());
     crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
     ctx.reinsert();
 }
@@ -256,9 +252,8 @@ fn tresor_actif(ctx: &mut Ctx, o: Obj) {
             let son = o.u8(ctx.b, tresor::SON);
             effet_ramassage(ctx, o, son);
             let joueur_bits = o.u16(ctx.b, 0x48) & 0x300;
-            ctx.c.d[1] = joueur_bits as u32;
-            ctx.c.d[0] = o.u8(ctx.b, tresor::SCORE) as u32 + joueur_bits as u32;
-            ctx.jsr(appel::EVENEMENT);
+            let evenement = (o.u8(ctx.b, tresor::SCORE) as u16).wrapping_add(joueur_bits);
+            crate::evenements::enfiler_points(ctx.b, evenement);
             marque_ramasse(ctx, o);
         }
         _ => crate::families::effects::hors_table(cible),
@@ -336,9 +331,8 @@ fn effet_nourriture(ctx: &mut Ctx, o: Obj) {
     let joueur = pointeur(ctx, o, champ::PROPRIETAIRE);
     let (vie_max, vie) = (joueur.u16(ctx.b, 0x60), joueur.u16(ctx.b, 0x62));
     if !(vie_max != vie) {
-        ctx.c.d[1] = (joueur.u8(ctx.b, 2) as u32) << 8;
-        ctx.c.d[0] = 0x11 + ctx.c.d[1];
-        ctx.jsr(appel::EVENEMENT);
+        let evenement = 0x11 + ((joueur.u8(ctx.b, 2) as u16) << 8);
+        crate::evenements::enfiler_points(ctx.b, evenement);
         effet_ramassage(ctx, o, 5);
         return;
     }
@@ -508,9 +502,7 @@ fn ramassage_refuse(ctx: &mut Ctx, o: Obj) -> bool {
 /// Événement de score et son d'un objet qui ne change rien d'autre (`0xdc124`).
 fn evenement_inventaire(ctx: &mut Ctx, joueur: Obj) {
     let personnage = joueur.u8(ctx.b, 2) as u32;
-    ctx.c.d[1] = 0x11;
-    ctx.c.d[0] = (personnage << 8) + 0x11;
-    ctx.jsr(appel::EVENEMENT);
+    crate::evenements::enfiler_points(ctx.b, ((personnage << 8) + 0x11) as u16);
     effet_ramassage(ctx, ctx.obj(), 5);
 }
 
@@ -730,8 +722,6 @@ mod bonus {
     /// Écart entre l'animation en chute et l'animation au sol, et animation au sol d'un objet posé.
     pub const ANIMATION_SOL: u8 = 6;
     pub const ANIMATION_POSE: u8 = 0xc;
-    /// Événement de score.
-    pub const EVENEMENT: u32 = 0x19b08;
 }
 
 fn bonus_init(ctx: &mut Ctx, o: Obj) {
@@ -787,9 +777,8 @@ fn bonus_actif(ctx: &mut Ctx, o: Obj) {
             }
             ajoute_u8(ctx, o, Obj::STATE, 2);
             let joueur_bits = o.u16(ctx.b, 0x48) & 0x300;
-            ctx.c.d[1] = joueur_bits as u32;
-            ctx.c.d[0] = o.u8(ctx.b, Obj::VARIANT) as u32 + joueur_bits as u32;
-            ctx.jsr(bonus::EVENEMENT);
+            let evenement = (o.u8(ctx.b, Obj::VARIANT) as u16).wrapping_add(joueur_bits);
+            crate::evenements::enfiler_compteur(ctx.b, evenement);
         }
         _ => crate::families::effects::hors_table(cible),
     }
@@ -1871,7 +1860,7 @@ fn contact_0(ctx: &mut Ctx, o: Obj) {
 /// Variante 1 : animation de balancement (`0xdd2a8`), tri et mise au point des bords.
 fn contact_1_anime(ctx: &mut Ctx) {
     contact_anime(ctx, 0x18);
-    ctx.jsr(rom::DANS_LA_ZONE);
+    crate::ai::keep_in_zone_d5(ctx.c, ctx.b, ctx.obj());
     crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
 }
 
@@ -1935,7 +1924,7 @@ fn contact_1(ctx: &mut Ctx, o: Obj) {
                     }
                     ctx.anim_step();
                     ctx.reinsert();
-                    ctx.jsr(rom::DANS_LA_ZONE);
+                    crate::ai::keep_in_zone_d5(ctx.c, ctx.b, ctx.obj());
                     crate::terrain::push_68k(ctx.c, ctx.b, ctx.obj());
                 }
                 2 => {
@@ -2077,9 +2066,8 @@ fn equipement_bonus(ctx: &mut Ctx, o: Obj) {
 /// `0xdbb0e` : ramassage réussi : bonus, événement de score et son. Renvoie faux (accepté).
 fn equipement_accepte(ctx: &mut Ctx, o: Obj, joueur: Obj) -> bool {
     equipement_bonus(ctx, o);
-    ctx.c.d[1] = (joueur.u8(ctx.b, 2) as u32) << 8;
-    ctx.c.d[0] = 0x11 + ctx.c.d[1];
-    ctx.jsr(appel::EVENEMENT);
+    let evenement = 0x11 + ((joueur.u8(ctx.b, 2) as u16) << 8);
+    crate::evenements::enfiler_points(ctx.b, evenement);
     effet_ramassage(ctx, ctx.obj(), 5);
     false
 }

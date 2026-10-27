@@ -144,8 +144,7 @@ mod flame64 {
                     return;
                 }
                 x.set16(0xc, 0);
-                x.c.d[0] = 8;
-                x.call(crate::camera_modes::SHAKE_B.entry);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
                 x.add8(0x5, 2);
                 shape(x);
                 x.set16(TIMER, 12);
@@ -283,8 +282,7 @@ mod rocks65 {
         x.anim_step();
         x.move_z();
         if x.u16(0xc) as i16 > 0 {
-            x.set_d0w(16);
-            x.call(crate::ai::KEEP_ON_SCREEN.entry);
+            crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 16);
             x.reinsert();
             return;
         }
@@ -296,8 +294,7 @@ mod rocks65 {
         } else {
             x.anim_start(ANIMS[1], 1);
         }
-        x.c.d[0] = 8;
-        x.call(crate::camera_modes::SHAKE_B.entry);
+        crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
         x.call(SFX[v]);
     }
 }
@@ -403,8 +400,7 @@ mod shard66 {
                     let v = x.u8(0x3) as u32;
                     let n = x.rom8(LAND_ANIMS + v) as u32;
                     x.anim_start(ANIMS, n as u16);
-                    x.c.d[0] = 4;
-                    x.call(crate::camera_modes::SHAKE_A.entry);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 4);
                     crate::sound::jouer(x.b, SFX_LAND, x.o);
                 }
                 blink(x, false);
@@ -440,8 +436,7 @@ mod shard66 {
     fn blink(x: &mut Cx, hidden: bool) {
         x.set_bit(0x1, 1, hidden);
         x.call(crate::terrain::SHADOW.entry);
-        x.set_d0w(16);
-        x.call(crate::ai::KEEP_ON_SCREEN.entry);
+        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 16);
         x.reinsert();
     }
 }
@@ -463,10 +458,6 @@ mod barrel67 {
     const TIMER: u32 = 0x58;
     const DUST_TIMER: u32 = 0x5a;
     const SPIN_TIMER: u32 = 0x5e;
-    const AI_ANIM_START: u32 = 0x103d6;
-    const OUTSIDE_WINDOW: u32 = 0x104a2;
-    /// Effet de choc au sol (D5 = sorte).
-    const IMPACT: u32 = 0x1172e;
 
     pub fn run(x: &mut Cx) {
         if suspended(x) {
@@ -502,9 +493,7 @@ mod barrel67 {
         }
         let vz = vz.clamp(16, 256);
         x.set16(0x1a, (vz as u16).wrapping_neg());
-        x.c.a[4] = ANIMS;
-        x.c.d[0] = 21;
-        x.call(AI_ANIM_START);
+        crate::families::enemy_lib::start(x, ANIMS, 21);
     }
 
     /// 0xa7af4 : bascule l'orientation toutes les 4 images.
@@ -519,8 +508,7 @@ mod barrel67 {
     }
 
     fn impact(x: &mut Cx, kind: u32) {
-        x.c.d[5] = kind;
-        x.call(IMPACT);
+        crate::ai_aids::debris_set(x.b, x.o, kind as u16); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
     }
 
     /// Mouvement en X et en hauteur ; vrai quand l'objet touche le sol (hauteur remise à 0).
@@ -536,10 +524,7 @@ mod barrel67 {
     fn active(x: &mut Cx) {
         match x.u8(0x5) {
             0 => {
-                x.set_d0w(0xffc0);
-                x.c.d[1] = x.c.d[1] & 0xffff_0000 | 448;
-                x.call(OUTSIDE_WINDOW);
-                if x.c.cond(6) {
+                if crate::ai_aids::outside_band(x.b, x.o, 0xffc0, 448) {
                     return x.free_eshl();
                 }
                 if x.u8(f::HIT_FLAGS) & 0x28 != 0 {
@@ -920,10 +905,6 @@ mod ball71 {
     const RELEASE: u32 = 0x58;
     const HIT: u32 = 0x33;
     const SPEED_TABLE: u32 = 33;
-    const PALETTE_LIGHT: u32 = 0x3af8;
-    const AI_ANIM_START: u32 = 0x103d6;
-    const AI_ANIM_STEP: u32 = 0x1040c;
-    const OUTSIDE_WINDOW: u32 = 0x104a2;
     const SFX_THROW: u32 = 0xed4de;
 
     pub fn run(x: &mut Cx) {
@@ -938,7 +919,7 @@ mod ball71 {
                 (0, 2) => {
                     x.move_xyz();
                     if x.u16(0xc) as i16 > 0 {
-                        x.call(AI_ANIM_STEP);
+                        crate::families::enemy_lib::step(x);
                     } else {
                         x.add8(0x5, 2);
                         x.set16(0xc, 0);
@@ -955,9 +936,7 @@ mod ball71 {
     }
 
     fn ai_anim(x: &mut Cx, n: u32) {
-        x.c.a[4] = ANIMS;
-        x.c.d[0] = n;
-        x.call(AI_ANIM_START);
+        crate::families::enemy_lib::start(x, ANIMS, n);
     }
 
     fn init(x: &mut Cx, variant: u8) {
@@ -967,7 +946,7 @@ mod ball71 {
         if variant != 0 {
             return ai_anim(x, 3);
         }
-        x.call(PALETTE_LIGHT);
+        crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
         let dir = if x.u8(f::FLIP) != 0 { 8 } else { 24 };
         x.set8(0x2d, dir);
         x.select_speed(&crate::objects::motion::SPEEDS_B, SPEED_TABLE as u16);
@@ -988,22 +967,18 @@ mod ball71 {
             x.add8(0x5, 2);
             crate::sound::jouer(x.b, SFX_THROW, x.o);
         }
-        x.call(AI_ANIM_STEP);
+        crate::families::enemy_lib::step(x);
     }
 
     fn rolling(x: &mut Cx) {
-        x.call(AI_ANIM_STEP);
-        if x.c.cond(5) {
+        if crate::families::enemy_lib::step(x) {
             return x.free_eshl();
         }
         if x.u8(HIT) == 0 {
             return;
         }
         x.set8(HIT, 0);
-        x.set_d0w(0xfff0);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | 400;
-        x.call(OUTSIDE_WINDOW);
-        if x.c.cond(6) {
+        if crate::ai_aids::outside_band(x.b, x.o, 0xfff0, 400) {
             return;
         }
         let Some(ball) = x.alloc(&pools::ESHL) else { return };
@@ -1038,7 +1013,6 @@ mod splinter72 {
     const ROWS: u32 = 0xa84f4;
     const CREATOR: u32 = 0x5c;
     const RANK: u32 = 0x2f;
-    const PALETTE_LIGHT: u32 = 0x3af8;
     const SFX_THROW: u32 = 0xed4de;
     const SFX_LAND: u32 = 0xed548;
 
@@ -1050,7 +1024,7 @@ mod splinter72 {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
-                x.call(PALETTE_LIGHT);
+                crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
                 place(x);
             }
             2 => {
@@ -1069,8 +1043,7 @@ mod splinter72 {
                             x.anim_step();
                         } else {
                             x.set16(0xc, 0);
-                            x.c.d[0] = 40;
-                            x.call(crate::camera_modes::SHAKE_B.entry);
+                            crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 40);
                             x.add8(0x5, 2);
                             x.set8(f::BOX_SET, 7);
                             x.set8(f::ATTACK_ID, 0x1c);

@@ -27,11 +27,11 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 fn players_alive(x: &mut Cx) -> bool {
-    lib::any_player_alive(x)
+    lib::players_alive(x)
 }
 
 fn needs_turn(x: &mut Cx) -> bool {
-    !lib::faces_target(x)
+    !lib::facing_target(x)
 }
 
 // --- +6 = 0 : debout --------------------------------------------------------------------------

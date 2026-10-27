@@ -5,7 +5,7 @@
 //! suivante (table `0xf80c4`, quatre octets par scène) ; (2) script de transition propre à la scène (table de
 //! sauts `0xf81fa`, variables `A5-0x5520`, module [`super::transition`]).
 
-use super::bonus::{call_keep_a0, dispatch};
+use super::bonus::dispatch;
 use super::screen;
 use super::Ctx;
 use crate::mem::{prog16, rd8, wr16, wr8};
@@ -104,7 +104,9 @@ crate::etapes! {
             x.set_v32(0x534, 0);
             super::bonus::reset_camera_copies(x);
             x.c.d[0] = 0;
-            call_keep_a0(x, &[0x2062]);
+            for pool in crate::objects::pools::POOLS {
+                pool.reset(x.b);
+            }
             Flow::Done
         },
         Finale1 = at::FINALE_1 => |x| {

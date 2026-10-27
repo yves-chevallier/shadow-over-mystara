@@ -368,25 +368,25 @@ mod boss_intro {
                 if camera_x(x) >= 0x100 {
                     crate::sound::jouer(x.b, EDA26, x.o);
                     x.add8(0x5, 2);
-                    call_with(x, crate::camera_modes::SHAKE_A.entry, 0x1e);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x1e);
                 }
             }
             4 => {
                 if camera_x(x) >= 0x180 {
                     next(x, 0x28);
-                    call_with(x, crate::camera_modes::SHAKE_A.entry, 0x28);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x28);
                 }
             }
             6 => {
                 if countdown(x) {
                     next(x, 0x28);
-                    call_with(x, crate::camera_modes::SHAKE_B.entry, 0x28);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x28);
                 }
             }
             8 => {
                 if countdown(x) {
                     next(x, 0x28);
-                    call_with(x, crate::camera_modes::SHAKE_A.entry, 0x28);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x28);
                 }
             }
             10 => {
@@ -398,7 +398,7 @@ mod boss_intro {
             12 => {
                 if camera_x(x) >= 0x200 {
                     next(x, 0x32);
-                    call_with(x, crate::camera_modes::SHAKE_B.entry, 0x32);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x32);
                     crate::sound::jouer(x.b, EDA26, x.o);
                 }
             }
@@ -406,7 +406,7 @@ mod boss_intro {
                 if countdown(x) {
                     eshl_creators::appeler(x, eshl_creators::single_25);
                     next(x, 0x32);
-                    call_with(x, crate::camera_modes::SHAKE_C.entry, 0x32);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x32);
                 }
             }
             16 => explosions(x),
@@ -419,7 +419,7 @@ mod boss_intro {
             20 => {
                 if camera_x(x) >= 0x2b0 {
                     next(x, 0x28);
-                    call_with(x, crate::camera_modes::SHAKE_C.entry, 0x50);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x50);
                     crate::sound::jouer(x.b, EDA26, x.o);
                 }
             }
@@ -461,7 +461,7 @@ mod boss_intro {
         }
         if countdown(x) {
             x.add8(0x5, 2);
-            call_with(x, crate::camera_modes::SHAKE_B.entry, 0x32);
+            crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x32);
         }
     }
 
@@ -533,7 +533,7 @@ mod scroll_to {
                     linked.set_u8(x.b, 0x2e, 0);
                     let n = linked.u16(x.b, 0x2a).wrapping_sub(1);
                     linked.set_u16(x.b, 0x2a, n);
-                    call_with(x, 0x2824, 0x10);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x10);
                 }
                 x.free(&pools::SET);
             }
@@ -2620,7 +2620,7 @@ mod level_clock {
                 x.set16(TICK, 0x50);
                 speech(x, 0);
                 x.set16(CUE, 0x28);
-                call_with(x, crate::camera_modes::SHAKE_A.entry, 0x28);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x28);
                 crate::sound::jouer(x.b, ON, x.o);
             }
             2 => {
@@ -2633,7 +2633,7 @@ mod level_clock {
                 x.set16(TICK, 0x3c);
                 speech(x, 1);
                 x.set16(CUE, 0x28);
-                call_with(x, crate::camera_modes::SHAKE_B.entry, 0x28);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x28);
             }
             4 => {
                 countdown(x, 0x3c, 1);
@@ -2643,7 +2643,7 @@ mod level_clock {
                 x.add8(0x5, 2);
                 speech(x, 2);
                 x.set16(CUE, 0x78);
-                call_with(x, crate::camera_modes::SHAKE_C.entry, 0x78);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x78);
                 crate::sound::jouer(x.b, ON, x.o);
             }
             6 => {

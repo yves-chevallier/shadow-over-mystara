@@ -124,13 +124,13 @@ fn init(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(f::BOX_SET, 0xe);
     lib::initial_hp(x);
-    lib::set_immunities(x);
+    let index = lib::set_immunities(x);
     x.set8(0x68, 4);
     x.set8(0x69, 4);
     x.set8(0x76, 4);
     x.set8(0x67, 0);
-    let d0 = x.c.d[0] as u8;
-    x.set8(0x8e, d0);
+    // Glitch d'origine : `+0x8e` reçoit l'octet bas de D0, l'index de la table des immunités que laisse 0xfe5a.
+    x.set8(0x8e, index as u8);
     x.set8(0x7f, 0);
     x.set8(0x7e, 0xc);
     x.set32(0x8a, 0);
@@ -393,9 +393,9 @@ fn attack_shots(x: &mut Cx) {
 /// 0x75b7c : la créature vise un joueur et lance un projectile.
 fn attack_start(x: &mut Cx) {
     x.add8(f::SUB2, 2);
-    let target_ok = pick_target(x);
-    if target_ok {
-        x.c.a[2] = x.c.a[1];
+    if let Some(target) = lib::pick_target(x) {
+        // A2 = la cible : entrée du créateur 0xa0566
+        x.c.a[2] = target.0;
         x.c.d[5] = 0;
         x.call(0xa0566);
         if !x.c.cond(5) {
@@ -503,10 +503,8 @@ fn attack_fire(x: &mut Cx) {
                 x.anim_start(SET_FLY, 4);
             } else if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
-                if pick_target(x) {
-                    x.c.a[2] = x.c.a[1];
-                    let target = x.c.a[2];
-                    if let Some(shot) = lib::eshl_13(x, target) {
+                if let Some(target) = lib::pick_target(x) {
+                    if let Some(shot) = lib::eshl_13(x, target.0) {
                         x.set32(SHOT, shot.0);
                     }
                 }

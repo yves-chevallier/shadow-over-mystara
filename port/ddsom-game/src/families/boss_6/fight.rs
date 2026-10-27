@@ -36,11 +36,11 @@ fn players_alive(x: &mut Cx) -> bool {
 }
 
 fn needs_turn(x: &mut Cx) -> bool {
-    !lib::faces_target(x)
+    !lib::facing_target(x)
 }
 
 fn facing_forward(x: &mut Cx) -> bool {
-    lib::moves_forward(x)
+    lib::moving_forward(x)
 }
 
 /// Le boss est-il hors de la fenêtre `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?

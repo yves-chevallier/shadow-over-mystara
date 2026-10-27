@@ -65,8 +65,6 @@ mod rom {
     /// Par personnage : la pièce de l'emplacement 4 lui est interdite.
     pub const SLOT_4_FORBIDDEN: u32 = 0xdb482;
     pub const ANIMATIONS: u32 = 0x1bee82;
-    pub const PUSH_OUT: u32 = 0xfbae;
-    pub const SCORE_EVENT: u32 = 0x19ae6;
 }
 
 /// Tableau des objets de collection ramassés (octets).
@@ -176,7 +174,7 @@ fn fall(x: &mut Cx) {
             super::effects_creators::twinkle(x.b, x.o);
         }
     }
-    x.call(rom::PUSH_OUT);
+    crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
     crate::terrain::push_68k(x.c, x.b, x.o);
     x.reinsert();
 }
@@ -341,9 +339,7 @@ fn slot_4(x: &mut Cx, player: Obj, id: u8) {
 fn already_worn(x: &mut Cx) {
     let player = x.linked(f::OWNER);
     let number = (player.u8(x.b, p::NUMBER) as u32) << 8;
-    x.c.d[1] = number;
-    x.c.d[0] = 0x11 + number;
-    x.call(rom::SCORE_EVENT);
+    crate::evenements::enfiler_points(x.b, (0x11 + number) as u16);
     let o = x.o;
     super::effects_creators::pickup(x.b, o, 5);
 }

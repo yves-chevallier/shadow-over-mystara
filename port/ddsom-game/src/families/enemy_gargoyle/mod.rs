@@ -238,7 +238,7 @@ fn init(x: &mut Cx) {
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x14);
     lib::initial_hp(x);
-    lib::init_hp_rank(x);
+    lib::spread_index(x);
     x.set8(0, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set_bit(1, 1, true);

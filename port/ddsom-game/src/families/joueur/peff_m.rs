@@ -7,7 +7,6 @@ use crate::mem::{rd16, rd32, wr16};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-const IN_ZONE: u32 = 0xfbae;
 const BLOOD: u32 = 0xb141a;
 const SFX_BITE: u32 = 0xe8ba2;
 const ANIMS: u32 = 0x1bc346;
@@ -135,7 +134,7 @@ mod pet {
             _ => attack(x),
         };
         if tail {
-            x.call(IN_ZONE);
+            crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
             x.call(crate::terrain::SHADOW.entry);
             x.reinsert();
         }

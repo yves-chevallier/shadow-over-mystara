@@ -582,8 +582,7 @@ mod burst {
         x.set8(0x5e, 4);
         x.set_a5_u16(0x4ba, 0x100);
         x.call(crate::palette::FLASH_COLOR_ON.entry);
-        x.c.d[0] = 0x20;
-        x.call(crate::camera_modes::SHAKE_A.entry);
+        crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
         x.anim(ANIMS, 1);
         crate::sound::jouer(x.b, SFX_FLAME, x.o);
         x.reinsert();

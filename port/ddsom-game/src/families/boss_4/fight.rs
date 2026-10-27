@@ -84,12 +84,12 @@ fn off_screen(x: &mut Cx) -> bool {
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
 fn needs_turn(x: &mut Cx) -> bool {
-    !lib::faces_target(x)
+    !lib::facing_target(x)
 }
 
 /// Avance-t-il dans le sens où il regarde (0x10560) ?
 fn facing_forward(x: &mut Cx) -> bool {
-    lib::moves_forward(x)
+    lib::moving_forward(x)
 }
 
 /// 0x81e7a : debout ; sorti de l'écran il charge, au bout de l'attente il marche, sinon il se tourne vers sa cible.

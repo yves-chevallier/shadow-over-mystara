@@ -206,7 +206,7 @@ fn intro(x: &mut Cx) {
             }
             x.call(0x1abe0);
             x.set_a5_u8(0x48e, 0xf);
-            x.call(0x1686);
+            crate::palette::full_brightness(x.b);
             next_action(x);
         }
         _ => {}
@@ -451,10 +451,10 @@ fn chase_turn(x: &mut Cx) {
 fn chase_follow(x: &mut Cx) {
     x.anim_step();
     let criterion = x.u8(STEPS);
-    if !lib::target_by_criterion(x, criterion) {
+    let Some(target) = lib::target_by_criterion(x, criterion) else {
         return chase_stop(x);
-    }
-    lib::aim_to(x, Obj(x.c.a[1] & 0xff_ffff));
+    };
+    lib::aim_to(x, target);
     let mine = x.u8(Obj::SPEED_INDEX);
     let diff = (x.c.d[0] as u8).wrapping_sub(mine) & 0x1f;
     if diff != 0 {
@@ -497,13 +497,12 @@ fn chase_stop(x: &mut Cx) {
 fn next_action(x: &mut Cx) {
     x.set8(BITING, 0);
     x.set8(IN_ATTACK, 0);
-    if !lib::target_by_criterion(x, lib::NEAREST) {
+    let Some(target) = lib::target_by_criterion(x, lib::NEAREST) else {
         x.set8(f::SUB, 4);
         x.set16(f::SUB2, 0);
         x.set8(STEPS, 0x10);
         return;
-    }
-    let target = Obj(x.c.a[1]);
+    };
     let mut row: u32 = 0;
     let dy = target.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)) as i16;
     row += if dy >= 0x14 {

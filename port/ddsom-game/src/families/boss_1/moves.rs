@@ -343,7 +343,7 @@ fn hop(x: &mut Cx) {
     x.set16(0x1a, (-0x70i16) as u16);
     hop_height(x);
     x.c.d[0] = 7;
-    let first = if lib::moves_forward(x) { 0xf } else { 7 };
+    let first = if lib::moving_forward(x) { 0xf } else { 7 };
     x.c.d[0] = first;
     x.set8(HOP_ANIM, first as u8);
     body(x, first);

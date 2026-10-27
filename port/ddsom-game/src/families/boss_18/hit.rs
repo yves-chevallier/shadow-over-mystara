@@ -436,7 +436,7 @@ fn get_up(x: &mut Cx) {
     if !lib::step(x) {
         return;
     }
-    if !lib::any_player_alive(x) {
+    if !lib::players_alive(x) {
         return decide::wait(x);
     }
     decide::back_on_feet(x);

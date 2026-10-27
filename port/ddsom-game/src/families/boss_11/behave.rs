@@ -75,7 +75,7 @@ fn fall(x: &mut Cx) {
 /// 0x8d8bc : attend ; un joueur revient (vie > 0) et le compteur `+0xb6` repart.
 pub(super) fn lone(x: &mut Cx) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
-        if lib::target_by_criterion(x, lib::LOWEST_HP) {
+        if lib::target_by_criterion(x, lib::LOWEST_HP).is_some() {
             if tst8(x, 0xb6).gt() {
                 sub8(x, 0xb6, 1);
             } else {
@@ -114,7 +114,7 @@ pub(super) fn chase(x: &mut Cx) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return to_wait(x);
     }
-    if !lib::target_by_criterion(x, lib::LOWEST_HP) {
+    if lib::target_by_criterion(x, lib::LOWEST_HP).is_none() {
         return to_wait(x);
     }
     if tst16(x, 0xc).gt() {
@@ -223,8 +223,8 @@ fn turn_needed(x: &mut Cx) -> bool {
 
 /// 0x8dafe : un joueur tout près devant.
 fn hit_near(x: &mut Cx) -> bool {
-    let ok = lib::target_in_box(x, -0x10, 0x20, 0x10);
-    ok
+    // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
+    lib::target_in_box(x, -0x10, 0x20, 0x10)
 }
 
 /// 0x8dae2 : rang de vie (0 à 3 environ) : nombre de fois que les PV maximaux tiennent dans quatre fois les PV.
@@ -278,6 +278,7 @@ fn far_roll(x: &mut Cx) -> bool {
     let b = alea & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
+        // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
         if lib::target_in_box(x, -0x20, 0xa0, 0x80) {
             x.c.d[0] = 1;
             return true;
@@ -323,6 +324,8 @@ fn roll(x: &mut Cx) -> bool {
     let d1 = (x.c.d[1] as u16 & 2).wrapping_mul(4);
     let level = (var::RANK.get(x.b) >> 8) as u8;
     setb(x, 2, level);
+    // Glitch d'origine : seul l'octet bas de D2 est posé ; l'octet haut est celui que laisse le test de boîte
+    // (0xb5e0) qui précède, ou le gestionnaire.
     let d2 = (x.c.d[2] as u16) >> 2;
     let d1 = d1.wrapping_add(d2);
     let v = x.rom8(0x8dbc0 + d1 as u32);

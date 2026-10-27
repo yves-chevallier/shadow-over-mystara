@@ -48,8 +48,6 @@ mod var {
 
 mod ext {
     pub const POOLS: u32 = 0x2062;
-    pub const POOLS_EFFCT: u32 = 0x2150;
-    pub const POOLS_SOBJ: u32 = 0x21bc;
     pub const SOUND_C0C: u32 = 0xc0c;
     pub const RESET_PLAYERS: u32 = 0x1f184;
     pub const SPRITES_RESET: u32 = 0x1de7c;
@@ -348,9 +346,11 @@ crate::etapes! {
                 return s2c_loop(x);
             }
             wr8(x.b, BLOCK + f::SIGNAL, 0xff);
-            for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::POOLS_EFFCT, ext::POOLS_SOBJ, ext::CLEAR_SPRITES] {
-                x.call(f);
-            }
+            x.call(ext::RESET_PLAYERS);
+            x.call(ext::SPRITES_RESET);
+            crate::objects::pools::EFFCT.reset(x.b);
+            crate::objects::pools::SOBJ.reset(x.b);
+            x.call(ext::CLEAR_SPRITES);
             x.wait(1, Etape::S2cPlanes)
         },
         S2cPlanes = S2C_PLANES => |x| {
@@ -1038,9 +1038,11 @@ const S28_LOOP: u32 = 0xfbfe8;
 /// État 42 : vide tout, retire les plans, nouvelle image, objet SOBJ 0.
 fn s2a_clear(x: &mut Ctx) -> Flow {
     render_scroll(x);
-    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::POOLS_EFFCT, ext::POOLS_SOBJ, ext::CLEAR_SPRITES] {
-        x.call(f);
-    }
+    x.call(ext::RESET_PLAYERS);
+    x.call(ext::SPRITES_RESET);
+    crate::objects::pools::EFFCT.reset(x.b);
+    crate::objects::pools::SOBJ.reset(x.b);
+    x.call(ext::CLEAR_SPRITES);
     x.wait(1, Etape::S2aPlanes)
 }
 const S2A_PLANES: u32 = 0xfc022;

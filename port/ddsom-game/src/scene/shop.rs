@@ -149,7 +149,9 @@ crate::etapes! {
         /// scène de la boutique (69 + numéro) est chargée et son script d'apparition relancé.
         OpenFaded = at::OPEN_FADED => |x| {
             crate::objects::lists::unlink_all_68k(x.c, x.b);
-            x.call(0x2062);
+            for pool in crate::objects::pools::POOLS {
+                pool.reset(x.b);
+            }
             let scene = x.v8(0x34) as u32;
             let shop = rd8(x.b, rom::SHOP_OF_SCENE + scene);
             set_b8(x, f::SHOP, shop);
@@ -255,7 +257,11 @@ crate::etapes! {
             Flow::Done
         },
         ReopenWaited = at::REOPEN_WAITED => |x| {
-            for r in [0x2134, 0x21bc, 0x20ae, 0x2150, 0xca8, 0xcc8, 0xce8] {
+            crate::objects::pools::SET.reset(x.b);
+            crate::objects::pools::SOBJ.reset(x.b);
+            x.call(0x20ae);
+            crate::objects::pools::EFFCT.reset(x.b);
+            for r in [0xca8, 0xcc8, 0xce8] {
                 x.call(r);
             }
             Flow::Done

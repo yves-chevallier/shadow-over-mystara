@@ -104,7 +104,7 @@ pub(self) fn next7(x: &mut Cx) {
 
 /// Au moins un joueur en vie (0x10474).
 pub(self) fn alive(x: &mut Cx) -> bool {
-    lib::any_player_alive(x)
+    lib::players_alive(x)
 }
 
 /// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
@@ -114,7 +114,7 @@ pub(self) fn outside(x: &mut Cx, d0: i16, d1: u16) -> bool {
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
 pub(self) fn turn_needed(x: &mut Cx) -> bool {
-    !lib::faces_target(x)
+    !lib::facing_target(x)
 }
 
 /// Boîte large devant le boss (0x7ef4).

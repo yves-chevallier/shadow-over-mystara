@@ -7,7 +7,6 @@ use crate::mem::{rd32, rd8, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-const IN_ZONE: u32 = 0xfbae;
 const SPAWN_EFFECT: u32 = 0xb10c8;
 const ANIMS: u32 = 0x1bc9b6;
 const SPEEDS: u32 = 0x1c7836;
@@ -107,7 +106,7 @@ mod guardian {
             4 => wander(x),
             _ => lunge(x),
         }
-        x.call(IN_ZONE);
+        crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
         x.call(crate::terrain::SHADOW.entry);
         x.reinsert();
     }

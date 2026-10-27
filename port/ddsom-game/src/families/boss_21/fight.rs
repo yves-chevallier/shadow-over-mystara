@@ -34,12 +34,12 @@ fn players_alive(x: &mut Cx) -> bool {
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c, Z levé = non) ?
 fn needs_turn(x: &mut Cx) -> bool {
-    !lib::faces_target(x)
+    !lib::facing_target(x)
 }
 
 /// Le boss regarde-t-il dans le sens où il avance (0x10560, Z levé = oui) ?
 fn facing_forward(x: &mut Cx) -> bool {
-    lib::moves_forward(x)
+    lib::moving_forward(x)
 }
 
 /// Animation de marche d'après le sens (2 ou 3).

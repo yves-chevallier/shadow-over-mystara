@@ -1243,8 +1243,7 @@ fn seq2_countdown(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.set_b16(blk::TIMER, 128);
-        ex.x.c.d[0] = 30;
-        ex.call(0x2860);
+        crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 30);
         crate::sound::jouer_global(ex.x.b, 0xe4830);
     }
 }
@@ -1508,8 +1507,7 @@ fn seq35_message(ex: &mut Ex) {
     ex.call(0xce00a);
     let a1 = ex.x.c.a[1] as u16;
     ex.set_b16(blk::OBJECT, a1);
-    ex.x.c.d[0] = 0x7fff;
-    ex.call(0x2860);
+    crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 0x7fff);
     crate::sound::jouer_global(ex.x.b, 0xe5776);
 }
 
