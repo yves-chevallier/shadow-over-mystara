@@ -663,9 +663,17 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
   bissections par étiquette et par site. Lecteurs trouvés, écrits en clair (glitches d'origine) : index de réaction
   des boss 7, 8, 19 et 3 (octet haut de D0 laissé par 0x10112, 0xb648, 0xfe5a), `+0x8e` de la harpie (D0 de 0xfe5a),
   D5 de la zone et du décor relu par le squelette (`zone_and_terrain -> bool`), côté de la boîte relu dans D0
-  (squelette, golem), D2 de 0xb5e0 relu par le boss 11 (`target_in_box_68k`, seul adaptateur gardé), D2/D3 de
+  (squelette, golem), D2 de 0xb5e0 relu par le boss 11 (restes des tests de boîte, voir plus bas), D2/D3 de
   `drop_rewards` donnant leurs vitesses à l'étincelle de 0x103ba (`flash_and_shake`), A1 des cibles (boss 5, 11,
   harpie : les cœurs rendent la cible), D2 de 0x43ae (boss 10), D0/A1 de la routine d'atterrissage (0x3e480).
+* **Après fusion du lot « trous » (scénarios longs).** Trois scénarios nouveaux ont montré des registres que la
+  preuve sur 272 scénarios n'avait pas atteints : D5 traverse les gestionnaires jusqu'à la rangée d'éclats d'une
+  caisse (0xa17d0, glitch de `row_1a`) : tests de zone (`ai::keep_on_screen_d5`), cibles (D5 = 0 / 2), débris
+  (D5.w = -1) et trésor (compteur) l'écrivent en clair ; les restes D1-D3 des tests de boîte
+  (`target_in_front_68k`, `box_around_68k`, `in_front_68k`) et les registres de la collision avec le décor
+  (`terrain::push_68k`) donnent ses vitesses à l'étincelle de 0x103ba (`long_route_14_2p`). Ces tests de boîte et la
+  collision gardent donc les registres de l'original dans la façade. Outil : `examples/registre_ecrit` compilé sans
+  ROM (interprété, sinon les blocs recompilés ne passent pas par le crochet).
 * **Fuzz.** `examples/fuzz_ia.rs` compare chaque cœur à la routine d'origine (interpréteur seul) sur des états tirés
   d'une partie réelle : 0 écart sur les 70 entrées (skeleton, kobold, hellhound, boss 11, boss 19). Il a corrigé
   deux routines du lot A (0xffda, 0x10298) et mon propre `in_right_half` (sens de la soustraction).
@@ -690,4 +698,4 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
 | Lot B : créateurs en fonctions Rust, appels directs, replis, registres prouvés morts, étape du feu d'artifice | voir `git log` (wt-effets) | complète, 270/270 sans 68000 et 270/270 depuis les assets ; `DDSOM_POISON=effets` et `restes` 270/270 |
 | Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B, 9b27479), 272/272 sans 68000 et 272/272 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `zones_natives.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
 | Lot « noyau final » : J3 achevé (appels en cours en étapes, appel attendu, cession notée au lieu de `Unwound`), ordonnanceur, démarrage et VBLANK en machine à états Rust, mode hybride retiré, appels directs de la fin de phase | voir `git log` (wt-noyau) | complète après fusion de main (f8f67af), 272/272 sans 68000 (14 min 55 s, 8 tâches) et 272/272 (10 min 53 s) depuis les assets (`DDSOM_ASSETS`, `data` réextrait par l'`extract` de main : `reste.json`) |
-| Lot IA : cœurs des aides d'IA et services restants, natives retirées, glitches de registres en clair, fuzz_ia | voir `git log` (wt-ia) | complète, 272/272 sans 68000 et 272/272 depuis les assets (`noyau_assets`), JOBS=8 ; poison par adresse et par registre (sondes), `fuzz_ia` 0 écart |
+| Lot IA : cœurs des aides d'IA et services restants, natives retirées, glitches de registres en clair, fuzz_ia | voir `git log` (wt-ia) | complète, 272/272 puis, fusionné avec le lot « trous », 286/286 (DDSOM_LONG=1) sans 68000 et depuis les assets (`trous_assets`), JOBS=8 ; poison par adresse et par registre (sondes), `fuzz_ia` 0 écart |
