@@ -3,7 +3,7 @@
 > La conversion du 68000 est finie. La phase suivante (rendre le code lisible, sans changer le comportement) suit
 > [guide-refactorisation.md](guide-refactorisation.md) et [refactorisation.md](refactorisation.md) ; ce guide reste la
 > référence pour la frontière avec le code d'origine (natives, registres, validation). Depuis le lot 0a, une native
-> n'annonce plus de durée et le jeu validé est le jeu sans 68000 (le mode hybride, `DDSOM_HYBRIDE=1`, est un diagnostic).
+> n'annonce plus de durée et le jeu validé est le jeu sans 68000 (le mode hybride, `DDSOM_HYBRIDE=1`, a été retiré au lot « noyau final »).
 
 Objectif : remplacer tout le code 68000 de ddsom par du Rust **idiomatique, minimal et lisible**, au
 comportement **identique image par image**. Le code vit dans `port/ddsom-game`.
@@ -21,7 +21,7 @@ images (`examples/determinisme.rs`). Conséquences :
   jeu par image dans l'« avance rapide » (bouton pressé à l'attract ou à l'entrée de scène, où le jeu enchaîne
   ses pas sans attendre l'image : 7-8 pas par image sur l'arcade, mais ×16 en ferait une centaine, dépendant de la
   durée de chaque routine). Ce nombre est plafonné à `MAX_STEPS_PER_FRAME` (8, `cps2::Machine::step_cap`),
-  **à l'identique** dans `ddsom_game::install` (jeu, machine hybride) et `ddsom_game::install_reference` (code
+  **à l'identique** dans `ddsom_game::install` (le jeu) et `ddsom_game::install_reference` (code
   d'origine) : toute machine d'origine créée par un outil doit passer par `install_reference`, jamais par
   `ddsom_rc::install` seul. `DDSOM_STEP_CAP=n` change la valeur, 0 la supprime (mesures à ×1). Voir `docs/boucle.md` §1.
 - le test de mémoire du menu TEST (8. MEMORY CHECK) : il dure une vingtaine d'images interruptions masquées et sa durée

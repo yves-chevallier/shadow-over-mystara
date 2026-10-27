@@ -304,27 +304,25 @@ Convertir un module :
    de native ».
 3. Valider (scénarios qui exercent les écrans : `modes/`, `scene_end/`, `cov_*`).
 
-Ce qui doit rester une native, et pourquoi :
-
-* le **pas de jeu `0x1c4b0`** : la boucle d'image teste le plafond de pas par image (`cps2::StepCap`) sur le PC,
-  avant chaque native ;
-* l'**adresse de retour d'un `call_at`** vers du code qui peut céder (retours des phases de la démonstration
-  `0x1f98c`/`0x20a98`, reprises de la mise à jour du monde et des boucles d'aiguillage, `game.rs`, `dispatch.rs`) :
-  la tâche y revient par un `rts` de la pile 68000 ;
-* les **entrées appelées par adresse** (sous-programmes de fondu et d'écran noir, que des gestionnaires d'objets
-  appellent par `call_at`).
-
-Une étape remise sur la pile 68000 par `call_at` (`mettre_sur_la_pile` écrit son adresse) et dépilée par une
-native qui revient plus haut (épilogue étranger des bulles, qui revient au début du tour de la boucle de partie) est
-retrouvée par `table::etape_depilee` : la boucle sans 68000 l'exécute au lieu de s'arrêter sur une adresse sans
-native.
+Depuis le lot « noyau final » (`refactorisation.md` § 14), plus aucune reprise n'est une native : le pas de jeu
+(`taches::partie::Etape::Pas`, plafond des pas compté par `sans68k::pas_de_jeu`), les retours des phases de la
+démonstration, la boucle de la machine à modes et les appels en cours de la boucle de partie (fin d'image, mise à jour
+du monde, boucles d'aiguillage : `game::Etape`, `dispatch::Etape`) sont des étapes. Un gestionnaire d'objet qui fait
+céder la main à la tâche (fondu des portes, feu d'artifice) cède, puis revient aussitôt ; le code Rust encore en
+cours sous lui le voit (`taches::a_cede`, `taches::table::revenu`) et revient sans rien faire, et la tâche reprendra
+par les étapes rangées dans ses appels en cours. Une fonction Rust qui appelle une native puis continue après elle
+ouvre un **appel attendu** (`taches::table::appeler_attendu` + `crate::appeler_attendu`) : le `rts` de la native lui
+rend la main, et si la native cède, l'appel garde la suite où la tâche reprendra. `crate::call` (appel par adresse)
+n'admet plus de cession : il s'arrête sur une panique qui nomme le site.
 
 ## Pièges connus
 
-* **Deux modes.** Le jeu est le mode sans 68000, par défaut partout (`validate`, `validate_all.sh`, `bench`,
-  `ddsom`). `DDSOM_HYBRIDE=1` donne le mode hybride (natives et 68000 de repli, durée constante par native) pour les
-  diagnostics qui exécutent l'original (`DDSOM_CHECK`, `DDSOM_ADOPT_REGS`, `cessions`, `reste68k`) ; il n'est pas tenu
-  de finir VALIDE. Il n'y a plus de durée à tenir à jour (lot 0a).
+* **Un seul mode.** Le jeu est le jeu sans 68000, partout (`validate`, `validate_all.sh`, `bench`, `ddsom`). Le mode
+  hybride (`DDSOM_HYBRIDE=1`) est retiré (lot « noyau final ») : les tâches sont des machines à états lancées par un
+  ordonnanceur Rust, et leurs appels en cours ne sont plus sur la pile 68000, le code d'origine ne pourrait plus
+  prendre la suite d'une native. Les diagnostics qui exécutent l'original sur une copie (`DDSOM_CHECK`,
+  `DDSOM_ADOPT_REGS`) marchent toujours ; `cessions` et `reste68k`, qui mesuraient le 68000 restant du mode hybride,
+  n'ont plus d'objet. Il n'y a plus de durée à tenir à jour (lot 0a).
 * **Registres hérités** : le gestionnaire suivant de la boucle de dispatch, une tâche neuve, une étape qui reprend
   héritent des registres (le contexte d'une cession les garde, que la reprise soit une étape ou une native). C'est ce que `DDSOM_POISON` attrape ; `DDSOM_ADOPT_REGS`/`DDSOM_CHECK_ALL` aident à trouver
   lequel.

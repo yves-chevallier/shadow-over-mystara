@@ -834,6 +834,10 @@ fn fireworks(x: &mut Cx) {
         2 => fireworks_active(x),
         _ => free(x),
     }
+    // la partie attend (`hero_rockets`) : la fin du gestionnaire est l'étape `ApresEtat`
+    if crate::taches::a_cede() {
+        return;
+    }
     fireworks_tail(x);
 }
 
@@ -1190,9 +1194,8 @@ fn hero_rockets(x: &mut Cx) {
     crate::taches::table::appeler(x.c, x.b, Etape::ApresEtat);
     x.c.d[0] = 4;
     crate::kernel::attendre(x.c, x.b, Etape::ApresAttente);
-    // la boucle de dispatch et les appelants Rust en cours sont abandonnés : la tâche reprendra par les étapes,
-    // puis par l'adresse de retour du gestionnaire sur la pile 68000
-    std::panic::resume_unwind(Box::new(crate::Unwound));
+    // la boucle de dispatch et les appelants Rust en cours abandonnent (`taches::a_cede`) : la tâche reprendra par les
+    // étapes, puis par l'appel en cours de la boucle (`dispatch::Etape::Aiguillage`)
 }
 
 /// Après l'attente : fondu de retour depuis les palettes sauvées.

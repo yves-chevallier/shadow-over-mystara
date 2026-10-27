@@ -148,14 +148,12 @@ pub mod rom {
 pub struct Ctx<'a> {
     pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
-    /// Le gestionnaire a déjà dépilé son adresse de retour (voir `epilogue_etranger`).
-    retour_deja: bool,
 }
 
 impl<'a> Ctx<'a> {
     /// Exécution réelle.
     pub fn reel(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        Ctx { c, b, retour_deja: false }
+        Ctx { c, b }
     }
 
     /// L'objet traité (registre A0).
@@ -188,21 +186,19 @@ impl<'a> Ctx<'a> {
         cible
     }
 
-    /// Saut de l'original dans l'épilogue d'une autre routine (`movem.l (SP)+,{A1-A4} ; rts`) : les
-    /// quatre registres sont rechargés depuis la pile, puis le retour se fait à l'adresse suivante. Ce
-    /// sont les retours des appelants : un effet de bulle (`0xaa9fe`) revient ainsi directement au début
-    /// du tour de la boucle de partie (`0x1c468`). Les appels en cours tenus en Rust à cette hauteur sont sur la
-    /// pile 68000 (`call_at` les y a remis, `taches::table::mettre_sur_la_pile`) : la native les dépile comme
-    /// l'original, et `call_at` abandonne les fonctions Rust dépassées (`Unwound`).
+    /// Saut de l'original dans l'épilogue d'une autre routine (`movem.l (SP)+,{A1-A4} ; rts`) : les quatre registres
+    /// sont rechargés depuis la pile, puis le retour se fait à l'adresse suivante. Ce sont les retours des appelants :
+    /// un effet de bulle (`0xaa9fe`) revient ainsi directement au début du tour de la boucle de partie (`0x1c468`),
+    /// par-dessus l'aiguillage des EFFCT, la mise à jour du monde, la fin de la phase et la fin d'image. Ici, ces
+    /// retours sont les quatre appels en cours les plus récents de la tâche (A1-A4 reçoivent leurs adresses d'origine) ;
+    /// le `rts` du gestionnaire revient au cinquième, et les fonctions Rust dépassées (boucle de dispatch...)
+    /// abandonnent (`taches::table::revenu`).
+    /// Glitch d'origine : le reste de l'image (objets suivants, sprites, collisions, fin d'image) est sauté.
     pub fn epilogue_etranger(&mut self) {
-        let sp = self.c.a[7];
-        for (i, r) in [1usize, 2, 3, 4].into_iter().enumerate() {
-            self.c.a[r] = crate::mem::rd32(self.b, sp.wrapping_add(4 * i as u32));
+        let retours = crate::taches::table::depiler_appels(self.b, 4);
+        for (r, suite) in [1usize, 2, 3, 4].into_iter().zip(retours) {
+            self.c.a[r] = suite.adresse();
         }
-        self.c.a[7] = sp.wrapping_add(16);
-        self.c.pc = crate::mem::rd32(self.b, self.c.a[7]);
-        self.c.a[7] = self.c.a[7].wrapping_add(4);
-        self.retour_deja = true;
     }
 
     /// Exécute le code d'origine à partir de `adresse` (jusqu'à son `rts`) : états non réécrits.
@@ -309,14 +305,8 @@ pub(crate) fn pointeur(ctx: &mut Ctx, o: Obj, off: u32) -> Obj {
 
 /// Exécute un gestionnaire (RTS compris).
 pub fn executer(c: &mut Cpu, b: &mut Cps2Bus, logique: fn(&mut Ctx)) {
-    let retour_deja = {
-        let mut ctx = Ctx::reel(c, b);
-        logique(&mut ctx);
-        ctx.retour_deja
-    };
-    if !retour_deja {
-        rts(c, b);
-    }
+    logique(&mut Ctx::reel(c, b));
+    rts(c, b);
 }
 
 /// Déclare la routine native d'un gestionnaire : adresse d'entrée, nom, logique.

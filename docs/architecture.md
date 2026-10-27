@@ -127,7 +127,8 @@ la tâche des crédits est du Rust (`tache_credits.rs`, `ecran_credits.rs`). La 
 (`taches/table.rs`) : plus d'enregistrements FF0064, de tas des piles ni de pile de l'ordonnanceur en RAM, et les
 registres d'une tâche qui cède sont rangés dans la table au lieu de sa pile. Une tâche est encore « du code qui reprend
 à une adresse avec le contexte du 68000 sauvé » ; c'est l'adresse de reprise qui devient une native quand la tâche est
-réécrite (`resume!`). `tools/reste68k.sh` mesure ce qui tourne encore en 68000 ([reste68k.md](reste68k.md)).
+réécrite. (Depuis : toutes les reprises sont des étapes Rust et l'ordonnanceur est une machine à états Rust, voir
+[noyau.md](noyau.md).) `tools/reste68k.sh` mesure ce qui tourne encore en 68000 ([reste68k.md](reste68k.md)).
 
 Plan pour supprimer la machine 68000 :
 

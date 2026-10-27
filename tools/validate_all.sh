@@ -10,8 +10,8 @@
 #   scenarios/scene/        entrée de scène, DDSOM_SCENES=1 (6500)
 #   scenarios/scene_end/    sortie de scène, DDSOM_SCENES=1 (9000)
 #   scenarios/cov/          couverture de tout le jeu, DDSOM_COV=1 (COV_FRAMES, 30000 par défaut)
-# Au plus DDSOM_JOBS validations simultanées (par défaut : nombre de cœurs). Le jeu validé est le jeu sans 68000 ;
-# DDSOM_HYBRIDE=1 valide le mode hybride (diagnostic, pas tenu de finir VALIDE).
+# Au plus DDSOM_JOBS validations simultanées (par défaut : nombre de cœurs). Le jeu validé est le jeu sans 68000 (le
+# mode hybride, DDSOM_HYBRIDE=1, est retiré).
 #
 # Reprise : chaque résultat est rangé dans $DDSOM_RESULTATS (~/.cache/ddsom/validate par défaut), sous
 # l'empreinte du binaire `validate`, et un scénario déjà VALIDE pour ce binaire, ce fichier et ce nombre

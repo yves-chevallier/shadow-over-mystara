@@ -1,27 +1,28 @@
 //! Le jeu sans 68000 : natives seules et boucle d'image du noyau (voir `docs/noyau.md`, « Vers une boucle sans
 //! 68000 »).
 //!
-//! Le `Cpu` de la machine n'est plus qu'un banc de registres (D0-D7, A0-A7, SR, PC) et de pile : l'exécuteur cherche
-//! la native posée à l'adresse du PC et l'exécute, puis recommence (`while let Some(n) = lookup(c.pc)`). Une native
-//! s'exécute toujours en entier, même quand elle déborderait sur l'interruption suivante : aucune n'est remplacée par
-//! son original. Une adresse sans native (repli d'une native vers le code d'origine, par `call`, sur un chemin non
-//! réécrit) arrête net le jeu avec un diagnostic ([`ARRET`]) au lieu d'exécuter du code d'origine.
+//! Le `Cpu` de la machine n'est plus qu'un banc de registres (D0-D7, A0-A7, SR) et de pile. Le processeur est à un
+//! *point* (`kernel::Point`, rangé dans la table des tâches) : une étape du démarrage, un point de l'ordonnanceur
+//! (machine à états Rust, `kernel`), une tâche, ou le pas de jeu retenu. Une tâche est lancée en appelant le pas de son
+//! étape (`taches::executer`) ; tant qu'elle continue par un saut d'une native à une autre (`Sequence::jump_to`, retour
+//! vers une adresse), la native posée au PC s'exécute ([`pas`]). Une native s'exécute toujours en entier, même quand
+//! elle déborderait sur l'interruption suivante : aucune n'est remplacée par son original. Une adresse sans native
+//! arrête net le jeu avec un diagnostic ([`ARRET`]) au lieu d'exécuter du code d'origine.
 //!
 //! ## L'image
 //!
 //! La machine garde son calendrier (`cps2::Machine::line_work`) : à chaque ligne, [`ligne`] fait le travail du
 //! processeur, puis le Z80 joue sa ligne. Le travail du processeur n'a pas de durée :
 //!
-//! 1. l'interruption de VBLANK, levée à la fin de l'image précédente, est prise dès que le SR l'autorise (au début de
-//!    l'image : l'ordonnanceur l'attend, le pas de jeu retenu aussi ; pendant le démarrage, quand `boot_init` démasque) ;
-//!    elle empile PC et SR comme le processeur et lance la native du VBLANK (`0x574`), qui finit par `RTE` ;
-//! 2. puis les natives s'enchaînent (ordonnanceur, tâches, cessions) jusqu'à ce que l'ordonnanceur tourne à vide
-//!    (`crate::idle` : plus aucune tâche prête, ou seule la tâche du gel sans rien à faire), ou que le pas de jeu
-//!    atteigne le plafond de l'image (`MAX_STEPS_PER_FRAME` passages en `0x1c4b0`, `cps2::StepCap` : le pas retenu
-//!    s'exécute au début de l'image suivante, juste après le VBLANK) ;
-//! 3. au démarrage, une native qui attend une position du faisceau (relâchement du Z80, `boot_init` :
-//!    `demarrage.rs`) rend la main sans rien changer (PC et registres) : la ligne s'arrête là et elle réessaie à la
-//!    suivante.
+//! 1. l'interruption de VBLANK, levée à la fin de l'image précédente, est prise dès que le SR l'autorise, entre deux
+//!    points (au début de l'image : l'ordonnanceur l'attend, le pas de jeu retenu aussi ; pendant le démarrage, quand
+//!    `boot_init` démasque) ; elle s'exécute en entier (`vblank::interruption`) ;
+//! 2. puis les points s'enchaînent (ordonnanceur, tâches, cessions) jusqu'à ce que l'ordonnanceur tourne à vide
+//!    ([`au_repos`] : plus aucune tâche prête, ou seule la tâche du gel sans rien à faire), ou que le pas de jeu
+//!    atteigne le plafond de l'image (`MAX_STEPS_PER_FRAME` pas, [`pas_de_jeu`] : le pas retenu s'exécute au début de
+//!    l'image suivante, juste après le VBLANK) ;
+//! 3. au démarrage, un point qui attend une position du faisceau (relâchement du Z80, `boot_init` :
+//!    `demarrage.rs`) rend la main sans rien changer : la ligne s'arrête là et il réessaie à la suivante.
 //!
 //! Tout le travail de l'image se fait donc au début de sa première ligne (240), avant le Z80, comme à ×16 où il finit
 //! en quelques lignes : seuls le VBLANK et l'envoi des commandes au Z80 (`0x68c`, qu'il appelle) touchent la RAM
@@ -31,7 +32,7 @@
 //! Une tâche prête qui attend un événement amené par le VBLANK (fin d'un fondu...) fait tourner l'ordonnanceur en rond :
 //! l'original tourne ainsi jusqu'à l'interruption. Ici, quand l'état revient identique d'un parcours de
 //! l'ordonnanceur au suivant ([`Instantane`]), l'image est finie. Plafond de sûreté : au plus [`PLAFOND_NATIVES`]
-//! natives par image (compté dans [`bilan`]).
+//! points par image (compté dans [`bilan`]).
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -40,19 +41,20 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use cps2::{Cps2Bus, StepCap};
 use m68k::Cpu;
 
-use crate::mem::{rd32, wr16, wr32};
-use crate::taches::table::lire;
+use crate::kernel::Point;
+use crate::mem::rd32;
+use crate::taches::table::{lire, table};
 use crate::Native;
 
 /// Le jeu tourne sans 68000 (une seule machine du processus, celle du jeu : la machine de référence de `validate`
-/// n'appelle jamais `call_at`).
+/// n'exécute pas de natives).
 static ACTIF: AtomicBool = AtomicBool::new(false);
 
 pub fn actif() -> bool {
     ACTIF.load(Ordering::Relaxed)
 }
 
-/// Branche la boucle sans 68000 sur la machine (après `install`, dont seul le plafond de pas sert encore).
+/// Branche la boucle sans 68000 sur la machine (le plafond de pas de la machine ne sert que pour sa valeur).
 pub(crate) fn installer(m: &mut cps2::Machine) {
     ACTIF.store(true, Ordering::Relaxed);
     m.executor = None;
@@ -61,7 +63,7 @@ pub(crate) fn installer(m: &mut cps2::Machine) {
     m.line_work = Some(ligne);
 }
 
-/// Natives au plus par image : une image ordinaire en exécute quelques milliers.
+/// Points au plus par image : une image ordinaire en exécute quelques milliers.
 pub const PLAFOND_NATIVES: u32 = 1_000_000;
 
 /// Parcours de l'ordonnanceur dans une image à partir duquel on cherche une attente active (voir [`Instantane`]).
@@ -115,6 +117,9 @@ struct Image {
     numero: u64,
     natives: u32,
     parcours: u32,
+    /// Pas de jeu exécutés dans l'image, et leur plafond (`cps2::StepCap::max` ; aucun : pas de plafond).
+    pas: u32,
+    plafond: Option<u32>,
     /// Plus rien à faire avant l'interruption (attente active reconnue, ou plafond).
     finie: bool,
     instantane: Option<Instantane>,
@@ -126,12 +131,9 @@ thread_local! {
     static DERNIERES: RefCell<VecDeque<&'static Native>> = const { RefCell::new(VecDeque::new()) };
 }
 
-const SR_S: u16 = 0x2000;
-/// Début d'un parcours de l'ordonnanceur.
-const PARCOURS: u32 = 0x932;
-
-/// Travail du processeur pendant une ligne (`cps2::Machine::line_work`).
-pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, mut plafond: Option<&mut StepCap>) {
+/// Travail du processeur pendant une ligne (`cps2::Machine::line_work`). Le plafond des pas de jeu n'est lu que pour
+/// sa valeur : le compte des pas de l'image est tenu ici ([`pas_de_jeu`]).
+pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCap>) {
     if b.irq_raster {
         arreter(c, b, "interruption raster (niveau 4) : jamais armée par le jeu".into());
     }
@@ -140,33 +142,83 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, mut plafond: Option<&mut St
         if i.numero != b.frame {
             *i = Image { numero: b.frame, ..Image::default() };
         }
+        i.plafond = plafond.map(|p| p.max);
     });
     loop {
+        // un point de premier niveau : aucune cession en cours
+        crate::taches::oublier_cession();
+        let point = crate::kernel::point(b);
         let niveau = b.irq_level();
         if niveau > (c.sr >> 8 & 7) as u8 {
-            interruption(c, b, niveau);
-        } else if niveau == 0 && (crate::idle(c, b) || image_finie(c, b)) {
-            // (une interruption masquée attend que l'ordonnanceur rouvre sa fenêtre)
+            crate::vblank::interruption(c, b, niveau, point.adresse(c));
+            continue;
+        }
+        // (une interruption masquée attend que l'ordonnanceur rouvre sa fenêtre)
+        if niveau == 0 && (au_repos(b, point) || image_finie(c, b, point)) {
             break;
         }
-        if let Some(cap) = plafond.as_deref_mut().filter(|cap| cap.pc == c.pc) {
-            if !cap.passage() {
-                break;
+        let suivant = match point {
+            Point::Reset | Point::RelacheZ80 | Point::Poignee | Point::BootInit | Point::Lancement => {
+                // `None` : il attend sa position du faisceau
+                let Some(suivant) = crate::demarrage::executer(c, b, point) else { break };
+                suivant
             }
-        }
-        let avant = (c.pc, c.sr, c.d, c.a);
-        pas(c, b);
-        if (c.pc, c.sr, c.d, c.a) == avant {
-            // rien n'a bougé : une native du démarrage attend sa position du faisceau
-            break;
-        }
+            Point::Debut | Point::Parcours | Point::Examen | Point::Suivant | Point::Retour => {
+                crate::kernel::executer(c, b, point)
+            }
+            Point::Tache => {
+                pas(c, b);
+                crate::kernel::point(b)
+            }
+            Point::PasRetenu => {
+                if plafond_atteint() {
+                    break;
+                }
+                table(b).point = Point::Tache;
+                crate::taches::executer(crate::taches::partie::Etape::Pas.into(), c, b);
+                crate::kernel::point(b)
+            }
+        };
+        table(b).point = suivant;
     }
     c.cycles = c.cycles.max(fin);
 }
 
+/// L'ordonnanceur tourne à vide, entre deux tâches : aucune tâche prête et pas de nouvelle image, ou seule la tâche du
+/// gel est prête et son prochain pas ne ferait rien (`taches::gel::attente_vide`).
+fn au_repos(b: &Cps2Bus, point: Point) -> bool {
+    const NOUVELLE_IMAGE: usize = 0x164 / 2; // FF0164 (octet haut) : posé par le VBLANK, effacé au début d'un parcours
+    if !point.entre_deux_taches() || b.ram[NOUVELLE_IMAGE] >> 8 != 0 {
+        return false;
+    }
+    let Some(t) = lire(b) else { return false };
+    t.emplacements.iter().all(|e| !e.etat.lancable()) || crate::taches::gel::attente_vide(t, &b.ram)
+}
+
+/// Un pas de jeu commence (`taches::partie`) : vrai s'il s'exécute dans cette image (il est compté), faux s'il est
+/// retenu jusqu'à la suivante (plafond des pas par image, `crate::MAX_STEPS_PER_FRAME` : écart volontaire avec le jeu
+/// d'origine surcadencé, appliqué à l'identique par la machine de référence).
+pub fn pas_de_jeu() -> bool {
+    IMAGE.with(|i| {
+        let mut i = i.borrow_mut();
+        if i.plafond.is_some_and(|max| i.pas >= max) {
+            return false;
+        }
+        i.pas += 1;
+        true
+    })
+}
+
+fn plafond_atteint() -> bool {
+    IMAGE.with(|i| {
+        let i = i.borrow();
+        i.plafond.is_some_and(|max| i.pas >= max)
+    })
+}
+
 /// L'image n'a plus rien à faire avant l'interruption : attente active reconnue au début d'un parcours de
-/// l'ordonnanceur (même [`Instantane`] qu'au parcours précédent), ou plafond de natives atteint.
-fn image_finie(c: &Cpu, b: &Cps2Bus) -> bool {
+/// l'ordonnanceur (même [`Instantane`] qu'au parcours précédent), ou plafond de points atteint.
+fn image_finie(c: &Cpu, b: &Cps2Bus, point: Point) -> bool {
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
         if i.finie {
@@ -176,7 +228,7 @@ fn image_finie(c: &Cpu, b: &Cps2Bus) -> bool {
         if i.natives >= PLAFOND_NATIVES {
             IMAGES_PLAFONNEES.fetch_add(1, Ordering::Relaxed);
             i.finie = true;
-        } else if c.pc == PARCOURS {
+        } else if point == Point::Parcours {
             i.parcours += 1;
             if i.parcours >= PARCOURS_ORDINAIRES {
                 let maintenant = Instantane::prendre(c, b);
@@ -192,33 +244,9 @@ fn image_finie(c: &Cpu, b: &Cps2Bus) -> bool {
     })
 }
 
-/// Prise d'une interruption (autovecteur), comme le processeur : superviseur, PC et SR empilés, niveau dans le SR.
-fn interruption(c: &mut Cpu, b: &mut Cps2Bus, niveau: u8) {
-    m68k::Bus::irq_ack(b, niveau);
-    let sr = c.sr;
-    c.set_sr((sr | SR_S) & !m68k::SR_T);
-    c.a[7] = c.a[7].wrapping_sub(4);
-    wr32(b, c.a[7], c.pc);
-    c.a[7] = c.a[7].wrapping_sub(2);
-    wr16(b, c.a[7], sr);
-    c.sr = c.sr & !0x0700 | (niveau as u16) << 8;
-    c.pc = rd32(b, (24 + niveau as u32) * 4);
-}
-
 /// Exécute la native posée au PC, ou arrête le jeu s'il n'y en a pas.
 pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
     let Some(n) = crate::lookup(c.pc) else {
-        // une étape Rust remise sur la pile 68000, où une native l'a dépilée pour y revenir
-        if let Some(etape) = crate::taches::table::etape_depilee(b, c.pc) {
-            // comme une native : abandonnée si le code qu'elle appelle cède la main (`Unwound`)
-            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::taches::executer(etape, c, b)));
-            if let Err(payload) = r {
-                if !payload.is::<crate::Unwound>() {
-                    std::panic::resume_unwind(payload);
-                }
-            }
-            return;
-        }
         arreter(c, b, format!("pas de native en {:06x}", c.pc));
     };
     DERNIERES.with(|d| {
@@ -249,6 +277,7 @@ pub const ARRET: &str = "sans 68000 : ";
 fn arreter(c: &Cpu, b: &mut Cps2Bus, cause: String) -> ! {
     let mut m = format!("{cause} (image {}, ligne {})", b.frame, b.scanline);
     if let Some(t) = lire(b) {
+        m += &format!(" ; point {:?}", t.point);
         let k = t.courante;
         let e = &t.emplacements[k];
         let cadres: Vec<String> = e.cadres.iter().map(|k| format!("{:x?}@{:x}", k.suite, k.pile)).collect();

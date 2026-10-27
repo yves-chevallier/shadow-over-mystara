@@ -1,10 +1,11 @@
 //! Tâches de l'ordonnanceur écrites en Rust (voir `docs/noyau.md`, « Tâches Rust »).
 //!
-//! Une tâche Rust est une machine à états dont chaque *pas* s'exécute entre deux cessions de la main. Le pas est une
-//! native posée à l'adresse que le code d'origine reprend après la cession (l'adresse qui suit le `jsr 0xa40` ou
-//! `0xa86`) ; il rend une [`Attente`], que [`ceder`] remet au noyau. La table des tâches ([`table`]) range l'état, le
-//! compte, l'adresse de reprise, les registres et les appels en cours de la tâche ([`table::Cadre`]) : sa pile 68000
-//! est vide à chaque cession. Une tâche Rust et une tâche en 68000 cohabitent, et l'ordonnanceur ne les distingue pas.
+//! Une tâche Rust est une machine à états dont chaque *pas* s'exécute entre deux cessions de la main. Chaque point
+//! de reprise est une étape ([`Etape`], une `enum` par module : `etapes!`) dont l'adresse d'origine (celle qui suit
+//! le `jsr 0xa40` ou `0xa86` de l'original) n'est plus qu'un nom ; le pas rend une [`Attente`], que [`ceder`] remet au
+//! noyau. La table des tâches ([`table`]) range l'état, le compte, l'étape de reprise, les registres et les appels en
+//! cours de la tâche ([`table::Cadre`]) : sa pile 68000 est vide à chaque cession. L'ordonnanceur (`kernel`) lance une
+//! tâche en appelant le pas de son étape ([`executer`]).
 //!
 //! Tâches : [`partie`] (la partie, `0x1c45a`), [`gel`] (avance rapide, `0xee080`), [`fondu`] (fondus de palette,
 //! tâches et sous-programmes qui cèdent la main), [`ecran_fixe`] (tableau des scores de l'attract, `0x1835e`),
@@ -148,7 +149,8 @@ etapes_des_taches! {
     Credits(crate::tache_credits::Etape),
     Fondu(fondu::Etape),
     EcranNoir(crate::video::ecran_noir::Etape),
-    // machine à modes (tâche 0 hors partie)
+    // machine à modes (tâche 0 hors partie) : sa boucle, puis ses écrans
+    Modes(crate::modes::Etape),
     Boot(crate::modes::boot::Etape),
     Attract(crate::modes::attract::Etape),
     Title(crate::modes::title::Etape),
@@ -167,6 +169,9 @@ etapes_des_taches! {
     Shop(crate::scene::shop::Etape),
     Characters(crate::scene::characters::Etape),
     Tally(crate::scene::tally::Etape),
+    // boucle de partie quand un gestionnaire d'objet fait céder la main à la tâche : mise à jour du monde, aiguillage
+    Monde(crate::game::Etape),
+    Aiguillage(crate::dispatch::Etape),
     // gestionnaires d'objets qui appellent un sous-programme qui cède (portes SET : fondu au noir)
     PorteSet(crate::families::set::fondu_de_sortie::Etape),
     // gestionnaires d'objets qui font attendre la tâche de partie
@@ -186,12 +191,41 @@ pub fn executer(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Retour d'un sous-programme (`rts`) : la suite de l'appel en cours, étape Rust exécutée aussitôt, ou adresse posée
-/// au PC.
+/// au PC ; rien si une fonction Rust attendait ce retour (`table::appeler_attendu`), ou si la tâche a déjà cédé la main
+/// (le code Rust qui suit une cession ne fait que revenir : voir [`a_cede`]).
 pub fn revenir(c: &mut Cpu, b: &mut Cps2Bus) {
-    match table::depiler_retour(c, b) {
-        Suite::Adresse(a) => c.pc = a,
-        Suite::Etape(e) => executer(e, c, b),
+    if a_cede() {
+        return;
     }
+    match table::retour(c, b) {
+        None => {}
+        Some(Suite::Adresse(a)) => c.pc = a,
+        Some(Suite::Etape(e)) => executer(e, c, b),
+    }
+}
+
+thread_local! {
+    /// La tâche courante a cédé la main (ou s'est terminée) pendant la native en cours : les fonctions Rust encore
+    /// en cours sous elle reviennent sans rien faire (voir [`a_cede`]).
+    static CEDEE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// La tâche courante a cédé la main pendant la native en cours (`kernel::ceder`, `terminer`, `recommencer`) : sa reprise
+/// est rangée dans la table (étape et appels en cours), et le code Rust encore en cours sous la cession (boucle
+/// d'aiguillage des objets, mise à jour du monde, phase...) doit revenir sans rien faire. C'est ce que faisait
+/// l'abandon par panique (`Unwound`) des fonctions Rust dépassées.
+pub fn a_cede() -> bool {
+    CEDEE.with(|c| c.get())
+}
+
+/// Le noyau rend la main à l'ordonnanceur pour la tâche courante.
+pub(crate) fn noter_cession() {
+    CEDEE.with(|c| c.set(true));
+}
+
+/// Une native de premier niveau commence (ordonnanceur, VBLANK, tâche relancée) : aucune cession en cours.
+pub(crate) fn oublier_cession() {
+    CEDEE.with(|c| c.set(false));
 }
 
 /// Première étape d'une tâche Rust neuve, d'après son entrée (sinon la native posée à l'entrée).
@@ -205,6 +239,8 @@ pub fn entree(entree: u32) -> Option<Etape> {
         crate::hud::Etape::Entree.into(),
         crate::tache_credits::Etape::Entree.into(),
         crate::scene::shop::Etape::Portraits.into(),
+        crate::modes::boot::Etape::Entree.into(),
+        crate::modes::Etape::Entree.into(),
     ]
     .into_iter()
     .find(|e| e.adresse() == entree)
@@ -213,8 +249,7 @@ pub fn entree(entree: u32) -> Option<Etape> {
 
 /// Natives des tâches Rust.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    partie::NATIVES
+    fondu::NATIVES
         .iter()
-        .chain(fondu::NATIVES)
         .chain(invite::NATIVES)
 }
