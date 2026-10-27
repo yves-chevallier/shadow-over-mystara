@@ -16,6 +16,13 @@ ECART = 0x10
 GENERIQUES = ('mem.rs',)
 # lues avant toute mesure (Cpu::reset au chargement, espace programme) : pile et PC initiaux
 FIXES = [('p', 0x0, 0x8, 'vecteurs')]
+# Glitch d'origine : le gel (PEFF type 12, éclat, 0x4bd36) lit son délai `move.b (0x4bd98,PC,D0.w)` avec l'octet
+# haut de D0.w laissé par le tirage (mot A5+0x1a) : 256 lectures de 16 octets réparties sur ±32 Ko autour de la
+# table, dont beaucoup dans le code (bot `longue_a`, image 59 932). Toutes sont déclarées (les mesures n'en voient
+# que quelques-unes) ; celles qui tombent hors du code sont déjà dans reste.json et disparaissent au filtrage.
+for _h in range(256):
+    _a = 0x4bd98 + ((_h << 8) - (0x10000 if _h >= 0x80 else 0))
+    FIXES.append(('p', _a & ~1, (_a + 16 + 1) & ~1, 'families/joueur/peff_e.rs'))
 # lecteurs que trois niveaux d'appel ne résolvent pas (accès génériques) : début de zone -> fichier
 LECTEURS = {
     # page 3 des palettes des scènes 0x58 et 0x59 : entrée nulle, le jeu copie 32 palettes depuis l'adresse 0

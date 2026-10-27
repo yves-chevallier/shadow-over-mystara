@@ -345,6 +345,8 @@ macro_rules! init_native {
 
 // 0x2062 : initialise les 10 pools.
 init_native!(INIT_ALL, 0x2062, "pools_init_all", POOLS);
+// 0x20ae : initialise le pool PEFF (réouverture de la boutique enchaînée, `scene::shop`).
+init_native!(INIT_PEFF, 0x20ae, "pool_init_peff", [&PEFF]);
 // 0x2134 : initialise le pool SET.
 init_native!(INIT_SET, 0x2134, "pool_init_set", [&SET]);
 // 0x2150 : initialise le pool EFFCT.

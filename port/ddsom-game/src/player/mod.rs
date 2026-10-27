@@ -156,6 +156,12 @@ pub const NATIVES: &[Native] = &[
     spawn::PORTAL_SPARKS,
     spawn::PORTAL_BURST,
     spawn::RAIN,
+    spawn::STORM_SPELL,
+    spawn::RAIN_GLOW,
+    spawn::WALL_SPARK,
+    spawn::WAVE_BOLT,
+    spawn::MOON,
+    spawn::MOON_B,
 ];
 
 /// Premier enregistrement joueur (offset depuis A5) et pas entre deux joueurs.

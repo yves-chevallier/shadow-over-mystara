@@ -29,8 +29,6 @@ mod rom {
     /// Tourbillon : effet joueur et sons.
     pub const WHIRL_EFFECT: u32 = 0x4b8d0;
     pub const WHIRL_SOUND_A: u32 = 0xe82fe;
-    pub const EFFECT_MOON: u32 = 0x4e4de;
-    pub const EFFECT_MOON_B: u32 = 0x4e782;
     /// Sons des magies, dans l'ordre d'appel de chaque sort.
     pub const WARD_SOUNDS: [u32; 2] = [0xe28e4, 0xe96e0];
     pub const WARD_END_SOUNDS: [u32; 2] = [0xe2e3a, 0xe8e88];
@@ -1073,7 +1071,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
             } else if p.u16(g, field::TIMER) == 0x20 {
                 if !is_cancelled(g, p) {
                     for color in [0, 2, 3] {
-                        call(g, p, rom::EFFECT_MOON, &[(0, color)]);
+                        spawn::moon(g, p, color as u8);
                     }
                     crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                     g.son(rom::MOON_SOUND_B, p);
@@ -1090,7 +1088,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, 0xe);
                     return moon_finish(g, p);
                 }
-                call(g, p, rom::EFFECT_MOON, &[(0, 1)]);
+                spawn::moon(g, p, 1);
                 g.son(rom::MOON_SOUND, p);
                 items::meteor_damage(g, p);
             }
@@ -1113,7 +1111,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
                 g.son(rom::MOON_SOUND, p);
             } else if p.u16(g, field::TIMER) == 0x20 {
                 if !is_cancelled(g, p) {
-                    call(g, p, rom::EFFECT_MOON_B, &[(0, 0)]);
+                    spawn::moon_b(g, p);
                     g.c.d[0] = 2;
                     crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 }

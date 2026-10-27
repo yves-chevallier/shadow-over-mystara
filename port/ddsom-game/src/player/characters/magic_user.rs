@@ -28,11 +28,6 @@ use crate::player::externes as ext;
 mod rom {
     /// Interface des baguettes : mise à jour de la liste d'objets (D0 = reste, D1 = baguette) et son.
     pub const ROD_LIST: u32 = 0xb96c0;
-    /// Effets joueur (pool PEFF) des magies.
-    pub const EFFECT_STORM: u32 = 0x4d020;
-    pub const EFFECT_RAIN: u32 = 0x4d660;
-    pub const EFFECT_WALL: u32 = 0x4d2c0;
-    pub const EFFECT_WAVE: u32 = 0x4dfe2;
 }
 
 /// Table du magicien (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
@@ -808,7 +803,7 @@ fn storm(g: &mut Ctx, p: Player) {
                     spawn::flare(g, p);
                     { crate::palette::flash(g.b, crate::palette::Flash::Gray); };
                 } else {
-                    call(g, p, rom::EFFECT_STORM, &[(0, 1)]);
+                    spawn::storm_spell(g, p);
                     { crate::palette::flash(g.b, crate::palette::Flash::B); };
                     spawn::storm_cloud(g, p);
                 }
@@ -840,7 +835,7 @@ fn rain(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_RAIN, &[(0, 0)]);
+                spawn::rain_glow(g, p, 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 sounds(g, p, &[0xe2a34, 0xe9424]);
             }
@@ -859,7 +854,7 @@ fn rain(g: &mut Ctx, p: Player) {
                     common::cancel_cast(g, p, 0x22);
                     return linger(g, p);
                 }
-                call(g, p, rom::EFFECT_RAIN, &[(0, 1)]);
+                spawn::rain_glow(g, p, 1);
                 spawn::rain(g, p);
                 g.son(0xe948e, p);
             }
@@ -997,8 +992,8 @@ fn wave(g: &mut Ctx, p: Player) {
                 animation::start_plain(g, p, 0x41);
                 g.son(0xe30ba, p);
             } else if take_event(g, p) {
-                call(g, p, rom::EFFECT_WAVE, &[(0, 0)]);
-                call(g, p, rom::EFFECT_WAVE, &[(0, 1)]);
+                spawn::wave_bolt(g, p, false);
+                spawn::wave_bolt(g, p, true);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.son(0xe9240, p);
             } else {
@@ -1211,7 +1206,7 @@ fn wall(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, rom::EFFECT_WALL, &[(0, 0)]);
+                spawn::wall_spark(g, p, 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.son(0xe92c6, p);
             }
@@ -1224,7 +1219,7 @@ fn wall(g: &mut Ctx, p: Player) {
                     return;
                 }
                 p.set_u16(g, field::TIMER, 0x40);
-                call(g, p, rom::EFFECT_WALL, &[(0, 1)]);
+                spawn::wall_spark(g, p, 1);
                 animation::start_plain(g, p, 0x2d);
                 g.son(0xe313a, p);
                 g.son(0xe9330, p);

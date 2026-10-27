@@ -74,6 +74,14 @@ mod kind {
     pub const RAIN: u8 = 0x14;
     pub const PORTAL_GLOW: u8 = 0x2d;
     pub const STORM_CLOUD: u8 = 0x2e;
+    /// Effets des sorts orage (vers la gauche), pluie, mur de feu et vague du magicien (PEFF).
+    pub const STORM_SPELL: u8 = 0x14;
+    pub const RAIN_GLOW: u8 = 0x17;
+    pub const WALL_SPARK: u8 = 0x15;
+    pub const WAVE_BOLT: u8 = 0x1a;
+    /// Lunes de l'elfe (PEFF).
+    pub const MOON: u8 = 0x1c;
+    pub const MOON_B: u8 = 0x1e;
 }
 
 /// Réserve un emplacement dans `pool` et l'active avec le genre `kind`. Les créateurs sont des natives appelées par
@@ -681,6 +689,61 @@ pub fn portal_sparks(g: &mut Ctx, p: Player) {
     crate::palette::set_flash_color(g.b, crate::palette::FLASH_COLOR_RED);
 }
 
+/// 0x4d020 : effet du sort d'orage lancé vers la gauche (genre 0x14, gestionnaire 0x4d08c), lié au joueur.
+pub fn storm_spell(g: &mut Ctx, p: Player) {
+    cov!();
+    effect(g, p, kind::STORM_SPELL, None, |_, _| {});
+}
+
+/// 0x4d660 : lueur de la pluie (genre 0x17), variante `v` (0 : préparation, 1 : lancer), avec le pas de l'action
+/// du joueur (`+0x5d`).
+pub fn rain_glow(g: &mut Ctx, p: Player, v: u8) {
+    cov!();
+    let step = step_of(g, p);
+    effect(g, p, kind::RAIN_GLOW, Some(v), |g, o| o.set_u8(g.b, 0x5d, step));
+}
+
+/// 0x4d2c0 : étincelle du mur de feu (genre 0x15), variante `v` (0 : préparation, 1 : lancer).
+pub fn wall_spark(g: &mut Ctx, p: Player, v: u8) {
+    cov!();
+    effect(g, p, kind::WALL_SPARK, Some(v), |_, _| {});
+}
+
+/// 0x4dfe2 : foudre de la vague (genre 0x1a) avec le pas de l'action du joueur (`+0x59`). `columns` faux : la
+/// colonne (variante laissée par l'allocation), puis le mot `+0x12` du joueur passe à 0x8000 si elle a pu être
+/// créée ; vrai : deux effets de variante 1 (paramètres 1 puis 0).
+pub fn wave_bolt(g: &mut Ctx, p: Player, columns: bool) {
+    cov!();
+    let step = step_of(g, p);
+    if !columns {
+        if effect(g, p, kind::WAVE_BOLT, None, |g, o| o.set_u8(g.b, 0x59, step)).is_some() {
+            p.set_u16(g, 0x12, 0x8000);
+        }
+        return;
+    }
+    for param in [1, 0] {
+        let made = effect(g, p, kind::WAVE_BOLT, Some(1), |g, o| {
+            o.set_u8(g.b, field::PARAM, param);
+            o.set_u8(g.b, 0x59, step);
+        });
+        if made.is_none() {
+            return;
+        }
+    }
+}
+
+/// 0x4e4de : lune de l'elfe (genre 0x1c), variante `v` (0, 2 et 3 : les trois lunes posées ; 1 : la frappe).
+pub fn moon(g: &mut Ctx, p: Player, v: u8) {
+    cov!();
+    effect(g, p, kind::MOON, Some(v), |_, _| {});
+}
+
+/// 0x4e782 : second effet de la lune de l'elfe (genre 0x1e).
+pub fn moon_b(g: &mut Ctx, p: Player) {
+    cov!();
+    effect(g, p, kind::MOON_B, None, |_, _| {});
+}
+
 /// 0x4d064 : éclat du portail (genre 0x14, variante 1) numéroté `n` (`+0x5e`). Vrai s'il a pu être créé (D0 = 0).
 pub fn portal_burst(g: &mut Ctx, p: Player, n: u8) -> bool {
     cov!();
@@ -867,5 +930,23 @@ creator!(PORTAL_BURST, 0x4d064, "spawn_portal_burst", regs::a(1) | regs::d(0) | 
     g.c.flags_logic(g.c.d[0], Size::Long);
 });
 creator!(RAIN, 0x54274, "spawn_rain", regs::a(1), |g, p| rain(g, p));
+creator!(MOON, 0x4e4de, "spawn_moon", regs::a(1), |g, p| {
+    let v = g.c.d[0] as u8;
+    moon(g, p, v)
+});
+creator!(MOON_B, 0x4e782, "spawn_moon_b", regs::a(1), |g, p| moon_b(g, p));
+creator!(STORM_SPELL, 0x4d020, "spawn_storm_spell", regs::a(1), |g, p| storm_spell(g, p));
+creator!(RAIN_GLOW, 0x4d660, "spawn_rain_glow", regs::a(1), |g, p| {
+    let v = g.c.d[0] as u8;
+    rain_glow(g, p, v)
+});
+creator!(WALL_SPARK, 0x4d2c0, "spawn_wall_spark", regs::a(1), |g, p| {
+    let v = (g.c.d[0] as u8 != 0) as u8;
+    wall_spark(g, p, v)
+});
+creator!(WAVE_BOLT, 0x4dfe2, "spawn_wave_bolt", regs::a(1), |g, p| {
+    let columns = g.c.d[0] as u8 != 0;
+    wave_bolt(g, p, columns)
+});
 creator!(WITCH_A, 0x53954, "spawn_witch_a", regs::a(1), |g, p| witch_strike(g, p, 1));
 creator!(WITCH_B, 0x539e4, "spawn_witch_b", regs::a(1), |g, p| witch_strike(g, p, 4));

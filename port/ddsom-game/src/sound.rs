@@ -716,14 +716,16 @@ pub const SERVICE_FF09: Native = service_natif(0xe0af8, "son_service_ff09", fals
 /// Entrées qui testent la version à palette alternative (`A5+0x70` non nul) avant d'appeler le wrapper
 /// `normal` ou, dans cette version, le wrapper `alternatif` : 0xe2240 / 0xe22e8 (bruit du personnage),
 /// 0xe2430 (bruit par objet), 0xe27da (bruit par genre), 0xe285c (son 0xd5 ou 0xd6, prière du clerc), 0xe2a74 (son
-/// 0xf7 ou 0xf6, tempête du magicien).
-const SELON_VERSION: [(u32, u32, u32); 6] = [
+/// 0xf7 ou 0xf6, tempête du magicien), 0xe296c (son 0xea ou 0xe6, lune de l'elfe : trou trouvé par le bot
+/// `longue_d`).
+const SELON_VERSION: [(u32, u32, u32); 7] = [
     (0xe2240, 0xe2248, 0xe2390),
     (0xe22e8, 0xe22f0, 0xe2390),
     (0xe2430, 0xe2438, 0xe24d8),
     (0xe27da, 0xe27e2, 0xe28a4),
     (0xe285c, 0xe2864, 0xe28a4),
     (0xe2a74, 0xe2a7a, 0xe2a34),
+    (0xe296c, 0xe2974, 0xe29f4),
 ];
 
 /// Version à palette alternative (`A5+0x70` non nul).

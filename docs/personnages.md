@@ -368,8 +368,10 @@ qui lisent A1 ou D0 après l'appel (`prayer_beam`, `items::lightning`, la magie 
 Le fuzz `fuzz_player spawn ...` appelle les natives sur des états de pools variés (vides, pleins, compteurs incohérents), des armes 0x10 à
 0x13, une réserve de scène variable : 4 000 tours sans écart (`DDSOM_ENTREE` pour une seule native).
 
-Reste en ROM : les autres créateurs de l'elfe et du magicien (étincelles 0x4dc9a, foudre 0x4b7a0, séisme 0x4b340 et 0x4f132, lune 0x4e4de et
-0x4e782, éclair, tempête, pluie, sorcière, vague, portail, mur, invocation : voir les constantes `EFFECT_*` de `elf.rs` et `magic_user.rs`).
+Les lunes de l'elfe (0x4e4de, 0x4e782) et les effets des sorts orage, pluie, mur de feu et vague du magicien (0x4d020, 0x4d660, 0x4d2c0,
+0x4dfe2) sont réécrits dans `spawn.rs` (`moon`, `moon_b`, `storm_spell`, `rain_glow`, `wall_spark`, `wave_bolt` ; trous trouvés par les
+bots longs, voir `docs/couverture.md`), validés par `fuzz_player spawn` (300 appels chacun, 0 écart). Restent appelés par adresse (avec
+native) : étincelles 0x4dc9a, foudre 0x4b7a0, séisme 0x4b340 et 0x4f132 (`player/externes.rs`).
 Les **gestionnaires** des tirs (C06) et des effets (C12) sont réécrits : `families/joueur/`, `docs/familles/joueur.md`.
 
 ## 9. Reste en ROM

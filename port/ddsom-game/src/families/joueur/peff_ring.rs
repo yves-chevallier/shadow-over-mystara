@@ -88,10 +88,15 @@ fn parent_alive(x: &mut Cx, generation: u32, player: Obj) -> bool {
         return false;
     }
     let current = x.a5_u8(0x34);
+    // registre résiduel (`move.b (0x34,A5),D0b`), voir `parent_follow`
+    x.c.d[0] = x.c.d[0] & !0xff | current as u32;
     current == x.u8(generation) && player.u16(x.b, 0x62) != 0
 }
 
 /// Parent : suit le joueur à un décalage (mots lus en ROM, selon la variante du joueur).
+/// Laisse D0 = rang, D1.w = décalage X, D2.w = décalage Z comme l'original : la boucle de dispatch ne les
+/// rétablit pas et le gestionnaire PEFF suivant peut les relire (le rebond du gel, 0x4bda8, indexe sa table
+/// par D2 : bot `longue_a`, image 59 919).
 fn parent_follow(x: &mut Cx, offsets: u32) {
     let player = x.linked(f::OWNER);
     x.copy_pos(player);
@@ -102,6 +107,9 @@ fn parent_follow(x: &mut Cx, offsets: u32) {
     if player.u8(x.b, f::FLIP) == 0 {
         dx = dx.wrapping_neg();
     }
+    x.c.d[0] = row;
+    x.c.d[1] = x.c.d[1] & !0xffff | dx as u32;
+    x.c.d[2] = x.c.d[2] & !0xffff | dz as u32;
     x.add16(0x8, dx);
     x.add16(0xc, dz);
 }
@@ -454,17 +462,8 @@ mod ring1 {
             }
         }
         // suit le joueur
+        parent_follow(x, OFFSETS);
         let player = x.linked(f::OWNER);
-        x.copy_pos(player);
-        x.add16(0x10, 0xffff);
-        let row = (player.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-        let mut dx = x.rom16(OFFSETS + row);
-        let dz = x.rom16(OFFSETS + row + 2);
-        if player.u8(x.b, f::FLIP) == 0 {
-            dx = dx.wrapping_neg();
-        }
-        x.add16(0x8, dx);
-        x.add16(0xc, dz);
         if parent_alive(x, GENERATION, player) {
             return;
         }
