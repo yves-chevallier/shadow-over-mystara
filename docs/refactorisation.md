@@ -522,13 +522,15 @@ appelants hors des familles des lots A et B. API et mode d'emploi : [guide-refac
 
 Périmètre : `families/boss_*`, `boss_common.rs`, `boss_dragon.rs`, `enemy*`, `reactions.rs` (~56 000 lignes de code).
 
-* **Façade `enemy_lib`** (alias `lib`, accessible partout par `enemy_common`) : chaque routine d'un autre lot que
-  les familles appelaient par adresse (IA de `ai.rs`/`ai_aids.rs`, secousses de `camera_modes.rs`, sons, créateurs
-  de `creators.rs`/`effects_creators.rs`/`effects_aids.rs`, événements, collision avec le décor de `terrain.rs`)
-  n'est plus appelée par adresse qu'à un seul endroit, une fonction Rust nommée : entrées en arguments, résultat en
-  valeur Rust (`lib::target_in_front -> InBox`, `lib::attack_hits_a_player -> Option<Obj>`, `lib::turn_decision ->
-  Turn`, `lib::maybe_draw_6e -> bool`...). Les appelants ne lisent plus ni Z, ni la retenue, ni D0. Quand ces lots
-  exposeront un cœur, seul `enemy_lib` changera (« besoins d'API » plus bas).
+* **Façade `enemy_lib`** (alias `lib`, accessible partout par `enemy_common`) : chaque routine d'un autre module que
+  les familles appelaient par adresse n'est plus appelée qu'à un seul endroit, une fonction Rust nommée : entrées en
+  arguments, résultat en valeur Rust (`lib::target_in_front -> InBox`, `lib::attack_hits_a_player -> Option<Obj>`,
+  `lib::turn_decision -> Turn`, `lib::maybe_draw_6e -> bool`, `lib::decision(x, même_côté)`...). Les appelants ne
+  lisent plus ni Z, ni la retenue, ni D0. Après la fusion des lots S, B et D, la façade appelle leurs cœurs (son,
+  événements, `ai_aids::stance/in_front/box_around`, `effects_creators::attack/debris`, `aides::direction*`,
+  `aides::grabbed`, `video::terrain_of`) ; restent par adresse dans `enemy_lib` les routines sans cœur (le reste de
+  `ai.rs`/`ai_aids.rs` : tirages 0x788c/0x79ce/0x79f6/0xac3a/0xf118, PV, immunités, cibles, saisie 0xfc44/0xfd64/
+  0xfd8c/0xfda2, butin, débris 0x1172e/0x11a36, poussée ; secousses de `camera_modes.rs` ; quelques créateurs).
 * **Noms faux corrigés** (vérifiés par valeur) : `FACE_TARGET = 0xa470` tirait l'attitude (`lib::draw_stance`),
   `TURN_TO_TARGET = 0x788c` un octet de table (`draw_6b`), `SOUND`/`SHOCK = 0x2824` secouait la caméra
   (`shake_54`), `SHADOW = 0x33fe4` est la collision avec le décor (`collide_terrain`), `boss_common::facing_target`
@@ -539,16 +541,33 @@ Périmètre : `families/boss_*`, `boss_common.rs`, `boss_dragon.rs`, `enemy*`, `
   modules de champs supprimées) ; variables de la RAM de travail typées (`enemy_common::var`, `ram::Octet/Mot`).
 * **Natives du périmètre en fonctions Rust** : 0x27ee (détachement de l'hôte), 0x81aa4, 0x833b6, 0x87048
   (`boss_common`), 0x81ae0 (riposte du boss 3), réactions communes (`reactions::run_common`, appelées directement
-  par `enemy_common::react`) ; leurs natives ne servent plus qu'aux appels par adresse restants.
-* **Routines d'origine sans native** appelées par les familles, jamais atteintes : transcrites
-  (`docs/code-mort.md`, lot A).
+  par `enemy_common::react`, `react_with` pour la routine propre d'un boss) ; leurs natives ne servent plus qu'aux
+  appels par adresse restants.
+* **Routines d'origine sans native** appelées par les familles, jamais atteintes (le jeu sans 68000 s'y serait
+  arrêté) : transcrites dans `enemy_lib` ([code-mort.md](code-mort.md), lot A).
 * **J2 : registres résiduels.** Les écritures de registres que plus rien ne relit en Rust (copies des registres de
-  l'original) ont été instrumentées par `DDSOM_POISON` (une étiquette par site), puis la validation empoisonnée a
-  désigné, par bissection sur les sites, les rares écritures relues par la suite (gestionnaire suivant, boucle) :
-  elles restent, marquées `// relu : …` ; les autres sont supprimées.
+  l'original, ~800) ont été instrumentées une à une (`registres_morts`, une étiquette par site). La validation
+  empoisonnée, puis des bissections automatiques sur les sites (outil de travail : `DDSOM_POISON=lota@fichier:ligne:`),
+  ont désigné les écritures relues par la suite : un gestionnaire suivant (A1 de `load_target`, D1-D4 du boss 15,
+  D5 de l'archer, D2 du boss 6...) ou un compteur de boucle relu au tour suivant. Elles restent, marquées
+  `// relu : …` ; 725 autres sont supprimées. `boss_1` et `boss_9` (lecteurs nombreux) gardent leurs registres.
+  Piège : une écriture dans une boucle peut être relue au tour suivant (lecture placée avant dans le texte).
+* **Besoins d'API** (signalés) : cœurs pour le reste de `ai_aids.rs` et `ai.rs` (tirages, cibles, PV, immunités,
+  saisie, butin, débris), les secousses de `camera_modes.rs`, les créateurs 0xd5f30/0xd6952/0xd5ef8 (SET de la barre
+  de vie), `popups::effacer_tout` (0x19eb0), 0x57c66/0x5cdc6 (`creators.rs`, privés) ; `ram::DIFFICULTE` était le
+  nombre de joueurs en vie (corrigé au lot S).
 
-Reste en adaptateur ou par adresse, et pourquoi : la façade `enemy_lib` (routines d'autres lots, natives à contrat
-de registres) ; les tables de la ROM (réactions propres à un type, `react`) ; quelques créateurs appelés une fois.
+Mesure (périmètre du lot, `tools/mesure_refacto.py` restreint aux fichiers du lot ; avant c8107db / après) :
+
+| | lignes | regs | drap | adr | brut | a5 | `_68k(` | doublons (6 lignes) | adresses déclarées aussi ailleurs |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| avant | 56 744 | 1 729 | 111 | 1 423 | 213 | 426 | 7 | 13 464 | 70 (294 décl.) |
+| après | 55 330 | 973 | 21 | 161 | 191 | 191 | 12 | 12 579 | 11 (18 décl.) |
+
+Des 161 `adr` restants, ~100 sont les appels de la façade `enemy_lib` (un par routine d'un autre lot) ; les autres :
+tables de la ROM (réactions propres à un type, créateurs par table), quelques créateurs appelés une fois, natives
+`(c, b)` du périmètre. Les `_68k(` gardés : `random_68k` (D0 relu), `terrain_68k` (registres de 0x24a8 relus),
+`shock_68k` (A1, D1, retenue relus), `in_arena_68k` (`bhi` de `reactions.rs`).
 
 ## Avancement
 
@@ -565,3 +584,4 @@ de registres) ; les tables de la ROM (réactions propres à un type, `react`) ; 
 | Lot C : fondu des portes en sous-programme de tâche, J1 dans le lot, registres morts des gestionnaires sans son | e3a49b7 (wt-decors) | complète, 269/269 sans 68000 (30 min 49 s, 8 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; `fuzz_porte` (portes 7 et 29), `fuzz boutique`, `fuzz petites` sans écart |
 | Lot S : services communs sans registres (sauvegarde fantôme du son, cœurs son/palette/texte/terrain/aides/événements, appelants hors lots A-B) | voir `git log` (wt-services) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; `fuzz son`, `fuzz video`, `fuzz u1`, `fuzz_monde ia_` |
 | Lot B : créateurs en fonctions Rust, appels directs, replis, registres prouvés morts, étape du feu d'artifice | voir `git log` (wt-effets) | complète, 270/270 sans 68000 et 270/270 depuis les assets ; `DDSOM_POISON=effets` et `restes` 270/270 |
+| Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B), 271/271 sans 68000 et 271/271 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `zones_natives.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
