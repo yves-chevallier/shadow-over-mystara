@@ -4,6 +4,7 @@
 //! Les tables sont lues dans la ROM (espace des opcodes : adressage relatif au PC).
 
 use super::*;
+use crate::objects::Obj;
 
 /// Combat : attente de joueurs (groupe 10), marche vers un joueur, charge...
 pub(super) const WAIT: u32 = 0x020a_0000;
@@ -273,7 +274,7 @@ pub(super) fn pick_slow_mode(x: &mut Cx) {
     let level = ((x.a5_u16(var::DIFFICULTY) & 0x18) >> 2) as u32;
     let i = row + level;
     let bit = random(x) & 0x1f & 7;
-    let (table, set_means_one) = if x.u8(VARIANT) == 0 { (0x974aa, true) } else { (0x974ca, false) };
+    let (table, set_means_one) = if x.u8(Obj::VARIANT) == 0 { (0x974aa, true) } else { (0x974ca, false) };
     let set = table8(x, table, i) >> bit & 1 != 0;
     x.set8(SLOW, if set == set_means_one { 1 } else { 2 });
 }

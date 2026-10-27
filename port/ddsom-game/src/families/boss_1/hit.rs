@@ -10,6 +10,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x7bbbe;
@@ -100,7 +101,7 @@ fn pushed_back(x: &mut Cx) {
             let (angle, vz) = if x.u8(f::FLIP) != 0 { (0x18u32, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.c.d[0] = angle;
             set_dw(x, 1, vz);
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             x.set16(0x16, vz);
             speed(x, 0x17);
             kind(x, 0x20);
@@ -160,7 +161,7 @@ fn down(x: &mut Cx) {
             if step(x) {
                 return get_up(x);
             }
-            if x.u8(KEY) == 0 || outside(x, 0x18, 0x168) || !target_in_box(x, -0x10, 0x30, 0xc) {
+            if x.u8(f::KEY_FRAME) == 0 || outside(x, 0x18, 0x168) || !target_in_box(x, -0x10, 0x30, 0xc) {
                 return;
             }
             next6(x);
@@ -170,7 +171,7 @@ fn down(x: &mut Cx) {
             x.set16(0x18, 0x480);
             x.set16(0x1a, (-0x38i16) as u16);
             let angle = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x12);
             body(x, 0x1c);
         }

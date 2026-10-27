@@ -27,7 +27,6 @@ mod two;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;

@@ -5,6 +5,7 @@
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Réactions communes aux coups, indexées par le code `+0x49`.
 const REACTIONS: u32 = 0x6518a;
@@ -99,8 +100,8 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.set16(TIMER, 0x14);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18, 0x20i16) } else { (8, -0x20) };
-            x.set8(ANGLE, angle);
-            x.set16(SPEED_Y, vy as u16);
+            x.set8(Obj::SPEED_INDEX, angle);
+            x.set16(Obj::AX, vy as u16);
             set_speed(x, 0x17);
             look(x, 0x20);
             x.add8(f::SUB2, 2);
@@ -110,7 +111,7 @@ fn recoil(x: &mut Cx) {
             if !count_down(x, TIMER) {
                 x.add8(f::SUB2, 2);
                 x.set16(TIMER, 0x14);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::AX, 0);
             }
             x.move_x();
             x.anim_step();
@@ -181,16 +182,16 @@ fn dying(x: &mut Cx) {
             x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);
             let vx = if flip != 0 { -0x200i16 } else { 0x200 };
-            x.set16(SPEED_X, vx as u16);
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x480);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            x.set16(Obj::VX, vx as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x480);
+            x.set16(Obj::AZ, -0x40i16 as u16);
             x.move_xz();
             x.anim_start(SET_FLY, 0xf);
         }
         2 => {
             x.move_xz();
-            if (x.u16(SPEED_Z) as i16) > 0 {
+            if (x.u16(Obj::VZ) as i16) > 0 {
                 x.anim_step();
             } else {
                 x.add8(f::SUB2, 2);
@@ -199,33 +200,33 @@ fn dying(x: &mut Cx) {
         }
         4 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set16(HEIGHT, 0);
+            x.set16(Obj::Z, 0);
             spark(x, 9);
             x.anim_step();
         }
         6 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_Z, 0x280);
-                x.set16(GRAVITY, -0x40i16 as u16);
+                x.set16(Obj::VZ, 0x280);
+                x.set16(Obj::AZ, -0x40i16 as u16);
                 x.move_xz();
                 x.anim_start(SET_FLY, 0x11);
             }
         }
         8 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x10);
-            x.set16(HEIGHT, 0);
-            let vy = if (x.u16(SPEED_X) as i16) > 0 { -0x20i16 } else { 0x20 };
-            x.set16(SPEED_Y, vy as u16);
+            x.set16(Obj::Z, 0);
+            let vy = if (x.u16(Obj::VX) as i16) > 0 { -0x20i16 } else { 0x20 };
+            x.set16(Obj::AX, vy as u16);
             spark(x, 9);
             x.anim_step();
         }
@@ -259,15 +260,15 @@ fn fall(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::AX, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x2b);
             look(x, 0x40);
             play(x, SET_FLY, 1);
         }
         2 => {
-            if (x.u16(HEIGHT) as i16) >= 0x14 && x.u8(KEY) == 4 {
+            if (x.u16(Obj::Z) as i16) >= 0x14 && x.u8(f::KEY_FRAME) == 4 {
                 x.add8(f::SUB2, 2);
                 x.set16(TIMER, 2);
             } else {

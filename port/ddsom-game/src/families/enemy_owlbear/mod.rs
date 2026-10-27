@@ -18,6 +18,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -26,11 +27,6 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours (posée par les scripts d'animation).
-    pub const KEY_FRAME: u32 = 0x33;
     /// Dégâts du coup en cours : `+0x44` type, `+0x45` force.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
@@ -156,7 +152,7 @@ fn set_state_long(x: &mut Cx, v: u32) {
 /// nul), `otherwise` sinon.
 fn set_angle(x: &mut Cx, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Écart d'abscisse de la cible à la bête (positif : la cible est à droite), `None` sans cible.
@@ -207,7 +203,7 @@ fn init(x: &mut Cx) {
     pick_target(x);
     x.call(call::FACE_TARGET);
     x.call(call::TURN_TO_TARGET);
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             set_state_long(x, ACTIVE_STANCE);
             x.set8(WANT_ANIM, 2);

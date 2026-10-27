@@ -13,6 +13,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Jeux d'animations de marche (0x103e0) : le premier si le boss ne regarde pas dans le sens où il avance.
 const WALK_SIDEWAYS: u32 = 0x177992;
@@ -204,7 +205,7 @@ fn keep_walking(x: &mut Cx) {
     if needs_turn(x) {
         return decide::interrupt(x);
     }
-    if !tst8(x, KEY).mi() {
+    if !tst8(x, f::KEY_FRAME).mi() {
         x.move_by_table_xy();
     }
     step(x);
@@ -233,7 +234,7 @@ fn charge(x: &mut Cx) {
                     angle = 8;
                 }
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x35);
             x.set8(ANIM_KIND, 4);
             x.set8(ANIM_LAST, 4);
@@ -241,7 +242,7 @@ fn charge(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 2 {
+            if x.u8(f::KEY_FRAME) != 2 {
                 x.move_x();
                 let going_left = (x.u16(0x14) as i16) < 0;
                 let here = x.u16(0x8);
@@ -252,12 +253,12 @@ fn charge(x: &mut Cx) {
                     x.u16(MARK_X)
                 };
                 let (d0, d1) = if going_left { (here, limit) } else { (limit, here) };
-                if !Fl::sub16(d1, d0).lt() && x.u8(KEY) != 0 {
+                if !Fl::sub16(d1, d0).lt() && x.u8(f::KEY_FRAME) != 0 {
                     return charge_end(x);
                 }
             }
-            if x.u8(KEY) == 3 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 3 {
+                x.set8(f::KEY_FRAME, 0);
                 x.call(0xecdba);
                 x.c.d[5] = 4;
                 x.call(call::DUST);
@@ -312,7 +313,7 @@ fn shoot(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.add8(0x7, 2);
@@ -326,7 +327,7 @@ fn shoot(x: &mut Cx) {
             let side = x.u8(f::FLIP);
             shot.set_u8(x.b, f::FLIP, side);
             let (angle, vz) = if side == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
             x.call(lib::RANDOM_TURN);
             speed(x, 0x35);

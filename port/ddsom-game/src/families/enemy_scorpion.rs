@@ -17,6 +17,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 const ANIMS: u32 = 0x163da8;
 const ANIMS_STRIKE: u32 = 0x163db8;
@@ -24,17 +25,6 @@ const ANIMS_HIT: u32 = 0x163dba;
 
 /// Champs propres à ce type.
 mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_X2: u32 = 0x1c;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
     pub const ANIM_FLAGS: u32 = 0x32;
     pub const STRIKE_KIND: u32 = 0x44;
@@ -93,11 +83,11 @@ fn anim_play(x: &mut Cx, n: u32) {
 /// Hauteur de départ d'une chute : l'objet apparaît au-dessus de l'écran.
 fn drop_from_above(x: &mut Cx) {
     let cam = x.a5_u16(0x50a).wrapping_add(0x100);
-    let depth = x.u16(DEPTH);
-    x.set16(HEIGHT, cam.wrapping_sub(depth));
+    let depth = x.u16(Obj::Y);
+    x.set16(Obj::Z, cam.wrapping_sub(depth));
     set_dw(x, 0, depth);
-    x.set16(SPEED_Z, 0);
-    x.set16(GRAVITY, -0x40i16 as u16);
+    x.set16(Obj::VZ, 0);
+    x.set16(Obj::AZ, -0x40i16 as u16);
 }
 
 /// Abscisse de la caméra selon le mode (`A5+0x36` : second écran).
@@ -107,7 +97,7 @@ fn camera_x(x: &mut Cx) -> u16 {
 
 /// 0x67808 : avance en X et en profondeur selon les vitesses (virgule fixe 8.8).
 fn advance(x: &mut Cx) {
-    for (pos, speed) in [(X, SPEED_X), (DEPTH, SPEED_X2)] {
+    for (pos, speed) in [(Obj::X, Obj::VX), (Obj::Y, Obj::VY)] {
         let d = ((x.u16(speed) as u32) << 16) as i32 >> 8;
         x.add32(pos, d as u32);
     }
@@ -184,9 +174,9 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     x.set16(f::SUB2, 0);
-    let d0 = 2 * x.u8(VARIANT) as u32;
+    let d0 = 2 * x.u8(Obj::VARIANT) as u32;
     x.c.d[0] = d0;
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             x.set8(f::SUB, 2);
             anim_play(x, 0);
@@ -201,17 +191,17 @@ fn init(x: &mut Cx) {
             let mut shift = 0x190u16;
             set_dw(x, 0, shift);
             let cam = x.a5_u16(0x506);
-            x.set16(X, cam);
-            x.set16(SPEED_Z, 0x400);
-            x.set16(GRAVITY, -0x40i16 as u16);
-            x.set16(SPEED_X, -0x400i16 as u16);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::X, cam);
+            x.set16(Obj::VZ, 0x400);
+            x.set16(Obj::AZ, -0x40i16 as u16);
+            x.set16(Obj::VX, -0x400i16 as u16);
+            x.set16(Obj::AX, 0);
             if x.u8(f::FLIP) != 0 {
                 shift = -0x10i16 as u16;
                 set_dw(x, 0, shift);
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.add16(X, shift);
+            x.add16(Obj::X, shift);
             anim_play(x, 6);
         }
         4 => {
@@ -267,7 +257,7 @@ fn arrival(x: &mut Cx) {
             x.set8(f::SUB2, 2);
         }),
         8 => {
-            let dx = x.u16(X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x20);
+            let dx = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506)).wrapping_add(0x20);
             set_dw(x, 0, dx);
             if dx <= 0x1c0 {
                 x.set8(f::SUB, 2);
@@ -281,21 +271,21 @@ fn arrival(x: &mut Cx) {
 /// Chute : tant que l'altitude est positive ; à l'atterrissage `done` change de sous-état.
 fn land(x: &mut Cx, done: impl FnOnce(&mut Cx)) {
     x.move_xz();
-    if (x.u16(HEIGHT) as i16) > 0 {
+    if (x.u16(Obj::Z) as i16) > 0 {
         return;
     }
-    x.set32(HEIGHT, 0);
+    x.set32(Obj::Z, 0);
     done(x);
 }
 
 /// Variante 2 : entrée en vol (animation 6), atterrissage (animation 7), reprise de la marche.
 fn fly_in(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 | 4 => {
             x.anim_step();
             if (x.u16(ANIM_FLAGS) as i16) < 0 {
-                if x.u8(STEP) == 0 {
-                    x.add8(STEP, 2);
+                if x.u8(f::SUB3) == 0 {
+                    x.add8(f::SUB3, 2);
                 } else {
                     x.add8(f::SUB, 2);
                     x.set16(f::SUB2, 0);
@@ -304,11 +294,11 @@ fn fly_in(x: &mut Cx) {
         }
         2 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) >= 0 {
+            if (x.u16(Obj::Z) as i16) >= 0 {
                 return;
             }
-            x.set32(HEIGHT, 0);
-            x.add8(STEP, 2);
+            x.set32(Obj::Z, 0);
+            x.add8(f::SUB3, 2);
             anim_play(x, 7);
         }
         _ => {}
@@ -357,37 +347,37 @@ fn choose_attack(x: &mut Cx) {
 
 /// Marche : aller (animation 1), demi-tour (4), retour.
 fn walk(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(TIMER, 0x28);
-            let px = x.u16(X);
+            let px = x.u16(Obj::X);
             x.set16(START_X, px);
-            x.set8(ANGLE, 0x18);
+            x.set8(Obj::SPEED_INDEX, 0x18);
             if x.u8(f::FLIP) != 0 {
-                x.set8(ANGLE, 8);
+                x.set8(Obj::SPEED_INDEX, 8);
             }
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0xd);
             anim_play(x, 1);
         }
         2 => {
-            let d = ((x.u16(SPEED_X) as u32) << 16) as i32 >> 8;
-            x.add32(X, d as u32);
+            let d = ((x.u16(Obj::VX) as u32) << 16) as i32 >> 8;
+            x.add32(Obj::X, d as u32);
             let n = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, n);
             if n != 0 {
                 x.anim_step();
                 return;
             }
-            negate(x, SPEED_X);
-            x.add8(STEP, 2);
+            negate(x, Obj::VX);
+            x.add8(f::SUB3, 2);
             anim_play(x, 4);
         }
         4 => {
             x.anim_step();
             if (x.u8(ANIM_FLAGS) as i8) < 0 {
-                x.set8(STEP, 2);
+                x.set8(f::SUB3, 2);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
                 x.set8(TIMER, 0x28);
@@ -410,19 +400,19 @@ fn melee(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         2 => {
-            if x.u8(STEP) != 0 {
+            if x.u8(f::SUB3) != 0 {
                 return attack_tail(x);
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             face(x, true);
             random_timer(x);
             attack_move(x);
         }
         4 => {
-            if x.u8(STEP) != 0 {
+            if x.u8(f::SUB3) != 0 {
                 return attack_tail(x);
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let r = rand_and(x, 0xf);
             let d0 = x.rom8(RETREAT_ROW + r) as u32;
             set_timer(x, d0);
@@ -442,27 +432,27 @@ fn melee_b(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         2 => {
-            if x.u8(STEP) != 0 {
+            if x.u8(f::SUB3) != 0 {
                 return attack_tail(x);
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             set_timer(x, 1);
             let r = rand_and(x, 1);
-            x.set8(ANGLE, (r << 4) as u8);
+            x.set8(Obj::SPEED_INDEX, (r << 4) as u8);
             attack_move(x);
         }
         4 | 6 => {
-            if x.u8(STEP) != 0 {
+            if x.u8(f::SUB3) != 0 {
                 return attack_tail(x);
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let rank = if x.u8(f::SUB2) == 4 { 1 } else { 2 };
             set_timer(x, rank);
             face(x, false);
             attack_move(x);
         }
         8 => {
-            if x.u8(STEP) != 0 {
+            if x.u8(f::SUB3) != 0 {
                 let n = x.u8(TIMER).wrapping_sub(1);
                 x.set8(TIMER, n);
                 if n == 0 {
@@ -471,7 +461,7 @@ fn melee_b(x: &mut Cx) {
                 x.anim_step();
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             anim_play(x, 0);
         }
         _ => {}
@@ -481,7 +471,7 @@ fn melee_b(x: &mut Cx) {
 /// Direction de marche d'un geste : 8 ou 0x18 selon l'orientation ; `forward` pour avancer vers le côté regardé.
 fn face(x: &mut Cx, forward: bool) {
     let flipped = x.u8(f::FLIP) != 0;
-    x.set8(ANGLE, if flipped == forward { 8 } else { 0x18 });
+    x.set8(Obj::SPEED_INDEX, if flipped == forward { 8 } else { 0x18 });
 }
 
 /// 0x66f00 : vitesse et animation du geste, puis suite commune.
@@ -507,11 +497,11 @@ fn attack_tail(x: &mut Cx) {
 
 /// Sous-état 4, `+6` = 6 : se tourne vers la cible, puis lance le geste.
 fn turn_and_charge(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => face_target(x),
         2 => wait_turn(x),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             random_timer(x);
             attack_move(x);
         }
@@ -525,20 +515,20 @@ fn face_target(x: &mut Cx) {
     load_target(x);
     x.call(0x1376);
     let angle = x.c.d[0] as u8;
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
     let side = ((angle as u16 & 0x10) * 2) as u8;
     if side != x.u8(f::FLIP) {
-        x.set8(STEP, 4);
+        x.set8(f::SUB3, 4);
         return;
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     anim_play(x, 4);
 }
 
 /// 0x67088 : à la fin de l'animation de virage, l'orientation s'inverse.
 fn wait_turn(x: &mut Cx) {
     if (x.u16(ANIM_FLAGS) as i16) < 0 {
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
     }
@@ -567,11 +557,11 @@ fn idle(x: &mut Cx) {
 // --- sous-état 8 : coup spécial ---------------------------------------------------------------
 
 fn charge(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => face_target(x),
         2 => wait_turn(x),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(STRIKE_KIND, 0x1f);
             x.set8(STRIKE_POWER, 2);
             pick_move(x);
@@ -617,16 +607,16 @@ fn knock_back(x: &mut Cx) {
     x.add8(f::SUB, 2);
     let freeze = x.u8(0x56);
     x.set8(f::FREEZE, freeze);
-    x.set16(SPEED_Z, 0x400);
-    x.set16(GRAVITY, -0x40i16 as u16);
-    x.set16(SPEED_X, 0x200);
-    x.set16(SPEED_Y, 0);
+    x.set16(Obj::VZ, 0x400);
+    x.set16(Obj::AZ, -0x40i16 as u16);
+    x.set16(Obj::VX, 0x200);
+    x.set16(Obj::AX, 0);
     let flip = x.u8(0x4a) ^ 0x20;
     x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
     x.set8(f::FLIP, flip);
     if flip != 0 {
-        negate(x, SPEED_X);
-        negate(x, SPEED_Y);
+        negate(x, Obj::VX);
+        negate(x, Obj::AX);
     }
     x.set8(0, 2);
     x.anim_start(ANIMS_HIT, 0);
@@ -638,12 +628,12 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.move_xz();
             if x.u8(0x29) != 0 {
-                x.set16(SPEED_X, 0);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::VX, 0);
+                x.set16(Obj::AX, 0);
             }
-            if (x.u16(HEIGHT) as i16) <= 0 {
+            if (x.u16(Obj::Z) as i16) <= 0 {
                 x.add8(f::SUB2, 2);
-                x.set32(HEIGHT, 0);
+                x.set32(Obj::Z, 0);
                 x.set8(TIMER, 0x28);
                 x.set16(0x30, 1);
                 x.call(REMOVE);
@@ -677,12 +667,12 @@ fn grabbed_flight(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             let cam = camera_x(x);
             set_dw(x, 0, cam);
-            x.set16(SPEED_X, 0x300);
+            x.set16(Obj::VX, 0x300);
             let mut want = 0x20;
-            let dx = x.u16(X).wrapping_sub(cam);
+            let dx = x.u16(Obj::X).wrapping_sub(cam);
             set_dw(x, 1, dx);
             if (dx as i16) < 0xc0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
                 want = 0;
             }
             x.c.d[2] = want as u32;

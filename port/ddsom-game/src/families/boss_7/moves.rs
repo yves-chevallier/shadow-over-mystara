@@ -8,12 +8,12 @@ use super::*;
 use crate::objects::Courant;
 
 fn step(x: &mut Cx, table: u32) -> u32 {
-    dispatch(x, table, SUB3)
+    dispatch(x, table, f::SUB3)
 }
 
 /// 0x8699e : le boss s'efface (début commun des esquives).
 fn fade_out(x: &mut Cx) {
-    addq8(x, SUB3, 2);
+    addq8(x, f::SUB3, 2);
     x.set8(0, 2);
     key(x, 0x12);
     x.call(call::FADE);
@@ -23,7 +23,7 @@ fn fade_out(x: &mut Cx) {
 /// 0x86a06 : le boss reparaît quand le décompte est écoulé.
 fn fade_in(x: &mut Cx) {
     if timer_done(x) {
-        addq8(x, SUB3, 2);
+        addq8(x, f::SUB3, 2);
         x.set_bit(0x1, 1, false);
         x.set8(0, 1);
         x.call(call::FADE);
@@ -47,7 +47,7 @@ fn reappear(x: &mut Cx) {
 /// 0x869c6 : réapparition un peu en arrière (0x60 pixels), dans l'aire de jeu.
 fn back_off(x: &mut Cx) {
     if x.anim_step() {
-        addq8(x, SUB3, 2);
+        addq8(x, f::SUB3, 2);
         let mut d = (-0x60i16) as u16;
         if x.u8(f::FLIP) != 0 {
             d = d.wrapping_neg();
@@ -62,7 +62,7 @@ fn back_off(x: &mut Cx) {
 /// 0x86a4e : réapparition à un point tiré selon le quart d'écran.
 fn jump_away(x: &mut Cx) {
     if x.anim_step() {
-        addq8(x, SUB3, 2);
+        addq8(x, f::SUB3, 2);
         aids::dodge_spot(x);
         reappear(x);
     }
@@ -124,10 +124,10 @@ fn short_walk(x: &mut Cx) {
         }
         t => {
             if t == 0x8691a {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x14);
             } else {
-                x.add8(SUB3, 0xfe);
+                x.add8(f::SUB3, 0xfe);
             }
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_KIND, 0);

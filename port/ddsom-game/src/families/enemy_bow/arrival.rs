@@ -4,10 +4,11 @@
 use super::stance::stance_begin;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(VARIANT) as u32;
-    match x.u8(VARIANT) {
+    x.c.d[0] = x.u8(Obj::VARIANT) as u32;
+    match x.u8(Obj::VARIANT) {
         0 => walk_in(x, 0x40, 0xd),
         2 => walk_in(x, 0x20, 0x17),
         4 => fall_in(x),
@@ -47,18 +48,18 @@ pub(super) fn walk_in(x: &mut Cx, timer: u8, speed: u32) {
 fn fall_in(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.set16(SPEED_Z, -4i16 as u16);
+        x.set16(Obj::VZ, -4i16 as u16);
         x.c.d[0] = 0;
         x.set8(f::FLIP, 0);
         return mv(x, 0xf);
     }
     x.anim_step();
-    let h = x.u16(HEIGHT).wrapping_add(x.u16(SPEED_Z));
-    x.set16(HEIGHT, h);
+    let h = x.u16(Obj::Z).wrapping_add(x.u16(Obj::VZ));
+    x.set16(Obj::Z, h);
     if (h as i16) < 0 {
         x.set8(f::SUB, 2);
         x.set16(f::SUB2, 0);
-        x.set16(HEIGHT, 0);
+        x.set16(Obj::Z, 0);
     }
 }
 
@@ -105,7 +106,7 @@ fn run_in(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(TIMER, 0x20);
-        x.set8(ANGLE, 0xf);
+        x.set8(Obj::SPEED_INDEX, 0xf);
         set_speed(x, 0xd);
         return mv(x, 5);
     }

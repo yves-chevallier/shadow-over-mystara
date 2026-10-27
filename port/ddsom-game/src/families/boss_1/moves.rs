@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
@@ -78,7 +79,7 @@ pub(super) fn intro(x: &mut Cx) {
         }
         8 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();
@@ -275,7 +276,7 @@ fn hop_walk(x: &mut Cx, second: bool) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();
@@ -422,7 +423,7 @@ fn leap_attack(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();
@@ -495,14 +496,14 @@ fn backing(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             next7(x);
             let (angle, vz) = if x.u8(f::FLIP) != 0 { (0x18u32, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.c.d[0] = angle;
             set_dw(x, 1, vz);
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             x.set16(0x16, vz);
             x.call(call::RANDOM_TURN);
             speed(x, 0x35);
@@ -582,10 +583,10 @@ fn strike(x: &mut Cx, k: u8) {
         return attack(x, k as u32);
     }
     if !step(x) {
-        if x.u8(KEY) == 0 {
+        if x.u8(f::KEY_FRAME) == 0 {
             return;
         }
-        x.set8(KEY, 0);
+        x.set8(f::KEY_FRAME, 0);
         x.call(0xe3f02);
         return dust(x, 7);
     }
@@ -626,7 +627,7 @@ fn grab_attempt(x: &mut Cx) {
                 x.set8(INVULNERABLE, 0);
                 return attack(x, 7);
             }
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.c.d[0] = 6;
@@ -668,7 +669,7 @@ fn split(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xyz();

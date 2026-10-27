@@ -57,8 +57,8 @@ pub(super) fn intro(x: &mut Cx) {
             x.call(call::SOUND_EVENT);
         }
         _ => {
-            if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.call(0xe42c6);
             }
             if x.anim_step() {
@@ -101,8 +101,8 @@ fn keyed_body(x: &mut Cx, kind: u8, anim: u32) {
 
 /// 0x883d6 : marche vers l'adversaire, et regarde s'il peut attaquer.
 fn walk(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         keyed_body(x, 1, 2);
         speed(x, 0x10);
@@ -147,7 +147,7 @@ fn near_checks(x: &mut Cx) {
         return x.call(call::ATTACK_START);
     }
     x.anim_step();
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
     if x.u8(0x3e) != 0 {
@@ -201,8 +201,8 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
 
 /// 0x8863a : demi-tour, puis reprise de l'état mémorisé (`+0xa6`, `+0xa5`).
 fn turn(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(ANIM_KIND, 4);
         x.set8(ANIM_LAST, 4);
@@ -222,8 +222,8 @@ fn turn(x: &mut Cx) {
 
 /// 0x88692 : arrêt face à l'adversaire.
 fn stop(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(ANIM_KIND, 0);
         setb(x, 2, 0);
@@ -248,7 +248,7 @@ fn stop(x: &mut Cx) {
 
 /// 0x88702 : approche lente de l'adversaire.
 fn approach(x: &mut Cx) {
-    match dispatch(x, 0x8870e, SUB3) {
+    match dispatch(x, 0x8870e, f::SUB3) {
         0x8875a => {
             if sub16(x, TIMER, 1).mi() {
                 x.set32(f::STATE, 0x0202_0000);
@@ -263,16 +263,16 @@ fn approach(x: &mut Cx) {
                 x.set32(f::STATE, 0x0202_0200);
             }
             x.anim_step();
-            if x.u8(KEY) != 0xff {
+            if x.u8(f::KEY_FRAME) != 0xff {
                 x.move_by_table_xy();
             }
         }
         t => {
             if t == 0x8871c {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x28);
             } else {
-                x.add8(SUB3, 0xfe);
+                x.add8(f::SUB3, 0xfe);
             }
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_KIND, 3);

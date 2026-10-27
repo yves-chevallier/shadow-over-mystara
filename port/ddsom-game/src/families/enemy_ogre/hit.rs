@@ -4,6 +4,7 @@
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACTIONS: u32 = 0x715d4;
@@ -58,8 +59,8 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.set16(TIMER, 0x14);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18, 0x20i16) } else { (8, -0x20) };
-            x.set8(ANGLE, angle);
-            x.set16(SPEED_Y, vy as u16);
+            x.set8(Obj::SPEED_INDEX, angle);
+            x.set16(Obj::AX, vy as u16);
             set_speed(x, 0x17);
             look(x, 0x20);
             x.add8(f::SUB2, 2);
@@ -69,7 +70,7 @@ fn recoil(x: &mut Cx) {
             if !count_down(x, TIMER) {
                 x.add8(f::SUB2, 2);
                 x.set16(TIMER, 0x14);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::AX, 0);
             }
             x.move_x();
             lib::step(x);
@@ -128,7 +129,7 @@ pub(super) fn regroup(x: &mut Cx) {
     if !pick_target(x) {
         return go::retire(x);
     }
-    let table = if (x.u8(VARIANT) as i8) < 0 {
+    let table = if (x.u8(Obj::VARIANT) as i8) < 0 {
         0x10de2
     } else if x.a5_u8(0x48) > 5 {
         0x107e2
@@ -157,29 +158,29 @@ fn dying(x: &mut Cx) {
             x.call(0xb780);
             x.call(0xbad6);
             x.call(0xe2f6);
-            if (x.u8(VARIANT) as i8) >= 0 {
+            if (x.u8(Obj::VARIANT) as i8) >= 0 {
                 x.call(call::REMOVE);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x500);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x500);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             let right = x.a5_u16(0x5a6).wrapping_add(0xc0);
             let (mut vx, mut flip) = (0x200i16, 0);
-            if (right as i16) < (x.u16(X) as i16) {
+            if (right as i16) < (x.u16(Obj::X) as i16) {
                 vx = -vx;
                 flip = 0x20;
             }
-            x.set16(SPEED_X, vx as u16);
+            x.set16(Obj::VX, vx as u16);
             x.set8(f::FLIP, flip);
             x.anim_start(SET_DEATH, 0);
         }
         2 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set16(HEIGHT, 0);
+            x.set16(Obj::Z, 0);
             spark(x, 5);
             x.call(0xec904);
             x.anim_start(SET_A, 0xb);
@@ -215,7 +216,7 @@ fn flee(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::AX, 0);
             angle_by_flip(x);
             set_speed(x, 0x35);
             look(x, 0x40);
@@ -223,11 +224,11 @@ fn flee(x: &mut Cx) {
         }
         2 => {
             lib::step(x);
-            if x.u8(KEY) != 2 {
+            if x.u8(f::KEY_FRAME) != 2 {
                 x.move_x();
             }
-            if x.u8(KEY) == 3 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 3 {
+                x.set8(f::KEY_FRAME, 0);
                 x.call(0xecdba);
                 spark(x, 4);
                 x.c.d[0] = 0xa;

@@ -118,7 +118,7 @@ fn fall(x: &mut Cx) {
             x.set8(0x49, 0);
         }
         4 => {
-            if x.u8(KEY_FRAME) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 0);
             }
@@ -203,7 +203,7 @@ fn flee(x: &mut Cx) {
             play(x, 6);
         }
         10 => {
-            if x.u8(KEY_FRAME) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 0);
             }
@@ -229,9 +229,9 @@ fn flee(x: &mut Cx) {
 fn run_away(x: &mut Cx) {
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x16);
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
-        x.set8(ANGLE, 0x18);
+        x.set8(Obj::SPEED_INDEX, 0x18);
     }
     play(x, 0xd);
     speed(x, 0x21);

@@ -17,6 +17,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod arrival;
 mod attacks;
@@ -24,17 +25,6 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY: u32 = 0x33;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const VULNERABLE: u32 = 0x67;
@@ -198,7 +188,7 @@ pub(self) fn faces_wrong(x: &mut Cx) -> bool {
         return false;
     }
     let target = load_target(x);
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
     x.c.d[1] = want;
     let wrong = want as u8 != x.u8(f::FLIP);
@@ -228,7 +218,7 @@ pub(self) fn follow_up(x: &mut Cx) {
     let b = row_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// 0x6baf2 : le Gnoll est saisi par un joueur : animation de lâcher, puis il disparaît.

@@ -27,10 +27,6 @@ mod intro;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours, posée par les scripts d'animation.
-    pub const KEY: u32 = 0x33;
     /// Valeur d'étourdissement (et recopie en `+0x53` : gel après un coup).
     pub const STUN: u32 = 0x56;
     /// Vulnérable (1) ou non (0).

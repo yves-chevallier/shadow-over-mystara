@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if grabbed(x) {
@@ -12,7 +13,7 @@ pub(super) fn run(x: &mut Cx) {
     }
     match x.u8(f::SUB2) {
         0 => {
-            if x.u8(STEP) == 0 {
+            if x.u8(f::SUB3) == 0 {
                 begin_walk_step(x);
             } else {
                 walk(x);
@@ -39,7 +40,7 @@ pub(super) fn begin_walk(x: &mut Cx) {
 
 /// 0x696a0 : début de la marche en comptant une étape de plus.
 pub(super) fn begin_walk_step(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(WALK_ANIM, 0xf0);
     x.set8(0x79, 0x1a);
     begin_walk(x);
@@ -89,12 +90,12 @@ fn decide(x: &mut Cx) {
         return x.call(call::ANNOUNCE);
     }
     step(x);
-    if x.u8(KEY_FRAME) & 1 == 0 {
+    if x.u8(f::KEY_FRAME) & 1 == 0 {
         move_xy(x);
     }
     if needs_turn_around(x) {
         x.add8(f::SUB2, 2);
-        x.set8(STEP, 0);
+        x.set8(f::SUB3, 0);
     }
 }
 
@@ -153,7 +154,7 @@ pub(super) fn needs_turn_around(x: &mut Cx) -> bool {
         return false;
     }
     let target = load_target(x);
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     set_dw(x, 0, dx);
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
     x.c.d[1] = want;
@@ -164,8 +165,8 @@ pub(super) fn needs_turn_around(x: &mut Cx) -> bool {
 
 /// `+6 = 2` : demi-tour (animation 2, puis inversion de l'orientation).
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         return body(x, 2);
     }
@@ -179,8 +180,8 @@ fn turn(x: &mut Cx) {
 
 /// `+6 = 4` : attente en position de garde.
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         return body(x, 0);
     }

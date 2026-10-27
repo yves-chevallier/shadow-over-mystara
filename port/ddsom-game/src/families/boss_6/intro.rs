@@ -38,7 +38,7 @@ fn enter(x: &mut Cx) {
 /// +6 = 2 : montée du bond.
 fn rise(x: &mut Cx) {
     step(x);
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         return;
     }
     x.move_xz();

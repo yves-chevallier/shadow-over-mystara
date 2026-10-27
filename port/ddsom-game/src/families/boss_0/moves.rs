@@ -3,6 +3,7 @@
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 // --- aides communes -----------------------------------------------------------------------------
 
@@ -45,8 +46,8 @@ fn reached(x: &mut Cx, limit: Option<u16>) -> bool {
 fn gallop_step(x: &mut Cx) {
     x.anim_step();
     x.move_x();
-    if x.u8(KEY) == 2 {
-        x.set8(KEY, 0);
+    if x.u8(f::KEY_FRAME) == 2 {
+        x.set8(f::KEY_FRAME, 0);
         dust(x, 1);
         sound(x, 0x10);
         x.call(0xe3d32);
@@ -116,7 +117,7 @@ fn arrival(x: &mut Cx) {
                 angle = 8;
             }
             x.c.d[0] = angle;
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
             x.call(0xe3d32);
             anim_kind(x, 0x30);
@@ -224,7 +225,7 @@ fn partner_arrival(x: &mut Cx) {
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.c.d[0] = angle;
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
             x.call(0xe3d32);
             anim_kind(x, 0x32);
@@ -421,7 +422,7 @@ fn keep_running(x: &mut Cx) {
     if turn_needed(x) {
         return turn(x);
     }
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
     step(x);
@@ -449,7 +450,7 @@ fn charge_phase(x: &mut Cx) {
                 }
             }
             x.c.d[0] = angle;
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
             dust(x, 1);
             x.call(0xe3d32);
@@ -459,7 +460,7 @@ fn charge_phase(x: &mut Cx) {
         2 => {
             gallop_step(x);
             let limit = if x.u8(CHARGE_AIMED) != 0 { Some(x.u16(MARK_X)) } else { None };
-            if reached(x, limit) && x.u8(KEY) != 0 {
+            if reached(x, limit) && x.u8(f::KEY_FRAME) != 0 {
                 start_slide(x, 0x20, false);
             }
         }
@@ -513,7 +514,7 @@ fn leap_strike(x: &mut Cx) {
             mark_target(x);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.c.d[0] = angle;
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x2b);
             dust(x, 1);
             x.call(0xe3d32);
@@ -523,7 +524,7 @@ fn leap_strike(x: &mut Cx) {
         2 => {
             gallop_step(x);
             let mark = x.u16(MARK_X);
-            if reached(x, Some(mark)) && x.u8(KEY) != 0 {
+            if reached(x, Some(mark)) && x.u8(f::KEY_FRAME) != 0 {
                 x.set8(INVULNERABLE, 0);
                 start_slide(x, 0x30, false);
             }
@@ -546,7 +547,7 @@ fn arc_jump(x: &mut Cx) {
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.c.d[0] = angle;
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x17);
             let t = x.linked(f::TARGET);
             let mut gap = x.u32(0x8).wrapping_sub(t.u32(x.b, 0x8)) as i32;
@@ -574,7 +575,7 @@ fn arc_jump(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xz();
@@ -623,7 +624,7 @@ fn triple_strike(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             next7(x);
@@ -641,7 +642,7 @@ fn triple_strike(x: &mut Cx) {
         }
         4 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             if sub8(x, COMBO, 1).le() {
@@ -677,10 +678,10 @@ fn spit(x: &mut Cx) {
                 x.set8(VULNERABLE, 1);
                 return body(x, 4);
             }
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             let Some(shot) = x.alloc(&pools::ESHL) else { return };
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x43);

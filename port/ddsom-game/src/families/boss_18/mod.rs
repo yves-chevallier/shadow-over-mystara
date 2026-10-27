@@ -24,8 +24,6 @@ mod hit;
 mod intro;
 
 pub(self) mod g {
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY: u32 = 0x33;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;

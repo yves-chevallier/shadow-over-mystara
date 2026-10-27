@@ -90,8 +90,8 @@ pub(super) fn lone(x: &mut Cx) {
             }
         }
     }
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         return body(x, 0);
     }
     x.anim_step();
@@ -131,8 +131,8 @@ pub(super) fn chase(x: &mut Cx) {
         return to_attack_2(x);
     }
     let mut aim = true;
-    if x.u8(SUB3) == 0 {
-        x.add8(SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         walk_steps(x);
         walk_delay(x);
     } else if sub8(x, 0x71, 1).gt() {

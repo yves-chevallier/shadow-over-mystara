@@ -47,13 +47,13 @@ fn swing(x: &mut Cx, n: u32) {
 
 /// Pas en avant aux images-clés (`+0x33`) : décalage lu dans la table `table` (relative au PC), vers l'avant.
 fn key_step(x: &mut Cx, table: u32, clear: bool) {
-    let key = x.u8(KEY) as u32;
+    let key = x.u8(f::KEY_FRAME) as u32;
     x.c.d[0] = key;
     if clear {
         if key == 0 {
             return;
         }
-        x.set8(KEY, 0);
+        x.set8(f::KEY_FRAME, 0);
     }
     let d = x.rom8(table + key) as i8 as i16 as u16;
     if d == 0 {
@@ -121,7 +121,7 @@ fn leap(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.bit(KEY, 0) {
+            if x.bit(f::KEY_FRAME, 0) {
                 return;
             }
             x.move_z();
@@ -140,7 +140,7 @@ fn leap(x: &mut Cx) {
         4 => {
             x.set8(INVULNERABLE, 1);
             step(x);
-            if x.bit(KEY, 0) {
+            if x.bit(f::KEY_FRAME, 0) {
                 x.move_z();
                 if (x.u16(0x18) as i16) <= 0 {
                     x.set32(0x18, 0);
@@ -173,7 +173,7 @@ fn leap(x: &mut Cx) {
             x.set16(0x14, v);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             attack_anim(x, 2);
         }
         _ => {
@@ -187,10 +187,10 @@ fn leap(x: &mut Cx) {
 
 /// Image-clé marquée (bit 7 de `+0x33`) : vrai et marque effacée.
 fn marked_key(x: &mut Cx) -> bool {
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         return false;
     }
-    x.set8(KEY, 0);
+    x.set8(f::KEY_FRAME, 0);
     true
 }
 
@@ -287,7 +287,7 @@ fn skim(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.set8(TIMER, 0x20);
@@ -418,7 +418,7 @@ fn rush(x: &mut Cx) {
             }
             set_dw(x, 1, vx);
             set_dw(x, 2, vz);
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x14, vx);
             x.set16(0x16, vz);
             speed(x, 0x1f);
@@ -471,10 +471,10 @@ fn cry(x: &mut Cx) {
             if step(x) {
                 return after_attack(x);
             }
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             x.call(0xa2d22);
             x.call(0xedbf4);
         }
@@ -541,10 +541,10 @@ fn side_flight(x: &mut Cx) {
             x.add16(0x8, d);
             push_players(x, 2);
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             if sub8(x, TIMER, 1).gt() {
                 return shriek(x);
             }

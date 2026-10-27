@@ -23,7 +23,6 @@ const BOB_TABLE: u32 = 0x7759e;
 const SCRIPTS: u32 = 0x77626;
 
 mod g {
-    pub const VARIANT: u32 = 0x3;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const FLAGS: u32 = 0x1;
     pub const ANIM_SET: u32 = 0xa0;
@@ -40,7 +39,6 @@ mod g {
     pub const OFFSET_X: u32 = 0xb4;
     pub const OFFSET_Z: u32 = 0xb6;
     pub const OFFSET_Y: u32 = 0xb8;
-    pub const FLIP: u32 = 0x2c;
     pub const HOST: u32 = 0x46;
 }
 use g::*;
@@ -114,8 +112,8 @@ fn init(x: &mut Cx) {
     x.set16(OFFSET_Z, 0);
     x.set16(OFFSET_Y, 0);
     // la variante 0 regarde à gauche
-    let flip = if x.u8(VARIANT) == 0 { 0x20 } else { 0 };
-    x.set8(FLIP, flip);
+    let flip = if x.u8(Obj::VARIANT) == 0 { 0x20 } else { 0 };
+    x.set8(f::FLIP, flip);
     x.set16(ANIM_SET, 0xffff);
     body(x, 5);
 }
@@ -143,20 +141,20 @@ fn active(x: &mut Cx) {
         4 => {
             let power = hit_power(x);
             x.set8(STRIKE_KIND, power);
-            if x.u8(VARIANT) == 0 { swing(x) } else { drift(x) }
+            if x.u8(Obj::VARIANT) == 0 { swing(x) } else { drift(x) }
         }
         5 => {
             let power = hit_power(x);
             x.set8(STRIKE_KIND, power);
-            if x.u8(VARIANT) != 0 { swing(x) } else { drift(x) }
+            if x.u8(Obj::VARIANT) != 0 { swing(x) } else { drift(x) }
         }
         6 => {
             x.set8(STRIKE_KIND, 0x4a);
-            if x.u8(VARIANT) != 0 { rise_b(x) } else { rise(x) }
+            if x.u8(Obj::VARIANT) != 0 { rise_b(x) } else { rise(x) }
         }
         7 => {
             x.set8(STRIKE_KIND, 0x4a);
-            if x.u8(VARIANT) == 0 { rise_b(x) } else { rise(x) }
+            if x.u8(Obj::VARIANT) == 0 { rise_b(x) } else { rise(x) }
         }
         8 => {
             x.set8(STRIKE_KIND, 0x4a);
@@ -189,7 +187,7 @@ fn end_part(x: &mut Cx) {
 fn follow_host(x: &mut Cx) {
     let h = host(x);
     let (px, pz, py) = (h.u16(x.b, SLOT_X), h.u16(x.b, SLOT_Z), h.u16(x.b, SLOT_Y));
-    let dx: u16 = if x.u8(FLIP) != 0 { 0xff7e } else { 0x82 };
+    let dx: u16 = if x.u8(f::FLIP) != 0 { 0xff7e } else { 0x82 };
     x.set16(SLOT_X, px.wrapping_add(dx));
     x.set16(SLOT_Z, pz);
     x.set16(SLOT_Y, py);
@@ -281,7 +279,7 @@ fn script_step(x: &mut Cx, n: u32) -> bool {
     }
     let idx = cur.wrapping_mul(2) as u32;
     let mut dx = x.data8(a2.wrapping_add(idx)) as i8 as i16;
-    if x.u8(FLIP) != 0 {
+    if x.u8(f::FLIP) != 0 {
         dx = -dx;
     }
     x.set16(OFFSET_X, dx as u16);
@@ -363,7 +361,7 @@ fn swing_step(x: &mut Cx) {
             x.set16(0x18, (-0x180i16) as u16);
             x.set16(0x1a, 0);
             let (mut vx, mut vy) = (-0xc00i16, 0x80i16);
-            if x.u8(FLIP) == 0 {
+            if x.u8(f::FLIP) == 0 {
                 vx = -vx;
                 vy = -vy;
             }
@@ -376,7 +374,7 @@ fn swing_step(x: &mut Cx) {
             integrate_all(x);
             let mut vx = x.u16(0x14) as i16;
             let mut off = x.u16(OFFSET_X) as i16;
-            if x.u8(FLIP) == 0 {
+            if x.u8(f::FLIP) == 0 {
                 vx = -vx;
                 off = -off;
             }
@@ -393,7 +391,7 @@ fn swing_step(x: &mut Cx) {
             x.anim_step();
             integrate_all(x);
             let mut off = x.u16(OFFSET_X) as i16;
-            if x.u8(FLIP) == 0 {
+            if x.u8(f::FLIP) == 0 {
                 off = -off;
             }
             if off <= 0x30 {
@@ -522,7 +520,7 @@ fn rise_script_two(x: &mut Cx) {
 
 /// 0x77470 : mort de l'hôte, les trois pièces de la variante partent.
 fn finale(x: &mut Cx) {
-    let base = if x.u8(VARIANT) == 0 { 0 } else { 3 };
+    let base = if x.u8(Obj::VARIANT) == 0 { 0 } else { 3 };
     for k in 0..3 {
         x.c.d[4] = base + k;
         x.call(0xa836c);

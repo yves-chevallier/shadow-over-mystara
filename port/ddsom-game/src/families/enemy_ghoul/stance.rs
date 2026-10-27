@@ -2,6 +2,7 @@
 //! décide d'attaquer, 2 demi-tour, 4 attente.
 
 use super::*;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if special_hit(x, 0x5fcb0) {
@@ -12,7 +13,7 @@ pub(super) fn run(x: &mut Cx) {
     }
     match x.u8(f::SUB2) {
         0 | 6 => {
-            if x.u8(STEP) == 0 {
+            if x.u8(f::SUB3) == 0 {
                 begin_walk(x);
             } else {
                 walk(x);
@@ -40,7 +41,7 @@ fn set_look(x: &mut Cx, v: u8, anim: u32) -> bool {
 
 /// 0x5fcec : le ghoul se met en marche vers sa cible.
 pub(super) fn begin_walk(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     set_look(x, 0, 2);
     set_speed(x, 0xd);
@@ -99,8 +100,8 @@ fn decide(x: &mut Cx) {
 
 /// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         look(x, 2);
@@ -115,8 +116,8 @@ fn turn(x: &mut Cx) {
 
 /// `+6` = 4 : attente.
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         if set_look(x, 4, 0) {
             return;
@@ -157,9 +158,9 @@ pub(super) fn patrol(x: &mut Cx) {
         4 => {
             if step(x) {
                 x.set8(f::SUB2, 2);
-                x.add8(ANGLE, 0x10);
-                let a = x.u8(ANGLE) & 0x1f;
-                x.set8(ANGLE, a);
+                x.add8(Obj::SPEED_INDEX, 0x10);
+                let a = x.u8(Obj::SPEED_INDEX) & 0x1f;
+                x.set8(Obj::SPEED_INDEX, a);
                 body(x, 2);
             }
         }

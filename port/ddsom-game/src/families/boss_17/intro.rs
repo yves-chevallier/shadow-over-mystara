@@ -82,7 +82,7 @@ fn arrival(x: &mut Cx) {
             x.set16(0x8, cx);
             let cy = x.a5_u16(var::CAMERA1_Y);
             x.set16(0x10, cy);
-            x.set8(ANGLE, 8);
+            x.set8(Obj::SPEED_INDEX, 8);
             speed(x, 0x12);
             x.set16(TIMER, 7);
             effect(x, true, 0x31, None, true);
@@ -91,12 +91,12 @@ fn arrival(x: &mut Cx) {
         }
         1 => {
             if !sub16(x, TIMER, 1).gt() {
-                let a = x.u8(ANGLE).wrapping_sub(1);
+                let a = x.u8(Obj::SPEED_INDEX).wrapping_sub(1);
                 if (a as i8) < 0 {
                     x.add8(0x7, 2);
                     x.set16(TIMER, 0x46);
                 } else {
-                    x.set8(ANGLE, a);
+                    x.set8(Obj::SPEED_INDEX, a);
                     speed(x, 0x12);
                     x.set16(TIMER, 7);
                 }
@@ -131,7 +131,7 @@ fn arrival(x: &mut Cx) {
                     x.add8(0x7, 2);
                     x.set16(0x18, 0);
                     fx(x, 0xe5baa);
-                    x.set8(ANGLE, 5);
+                    x.set8(Obj::SPEED_INDEX, 5);
                     speed(x, 0x1d);
                 } else {
                     x.set16(TIMER, 0x28);
@@ -188,7 +188,7 @@ fn entrance(x: &mut Cx) {
         }
         1 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
             }
         }
@@ -293,10 +293,10 @@ fn finale(x: &mut Cx) {
         }
         7 | 14 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
         }
         8 | 15 => {

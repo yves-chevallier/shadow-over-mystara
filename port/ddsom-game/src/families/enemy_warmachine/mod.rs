@@ -25,17 +25,7 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     pub const AI_WANDER: u32 = 0x6b;
     pub const AI_WAIT: u32 = 0x6e;

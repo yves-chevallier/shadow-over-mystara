@@ -26,8 +26,6 @@ mod chain;
 mod hit;
 
 pub(self) mod g {
-    pub const KEY: u32 = 0x33;
-    pub const SUB3: u32 = 0x7;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const ANIM_KIND: u32 = 0xa0;

@@ -71,7 +71,7 @@ pub(super) fn jump_toward(x: &mut Cx) {
     x.add8(0x7, 2);
     // vers la droite (8) si la cible est à droite, sinon vers la gauche (0x18)
     let right = target(x).is_some_and(|t| (t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16) >= 0);
-    x.set8(ANGLE, if right { 8 } else { 0x18 });
+    x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
     x.set8(WANT_ANIM, 0x1d);
     x.set8(CUR_ANIM, 0x1d);
     x.set8(TIMER, 0x24);
@@ -148,7 +148,7 @@ fn leap_over_player(x: &mut Cx) {
             }
             x.add8(0x7, 2);
             let below = target(x).is_some_and(|t| (t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)) as i16) >= 0);
-            x.set8(ANGLE, if below { 0x10 } else { 0 });
+            x.set8(Obj::SPEED_INDEX, if below { 0x10 } else { 0 });
             x.set8(WANT_ANIM, 0xc);
             x.set8(CUR_ANIM, 0xc);
             x.set8(TIMER, 0x24);

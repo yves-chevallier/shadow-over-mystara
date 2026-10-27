@@ -18,6 +18,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -26,25 +27,8 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    /// Étape du coup en cours.
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    /// Hauteur au-dessus du sol (long) et position en profondeur.
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    /// Vitesses : en X, en profondeur, en hauteur, pesanteur, et vitesse latérale des bonds de côté.
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_SIDE: u32 = 0x1c;
-    pub const SPEED_SIDE_Y: u32 = 0x1e;
     /// Série : 0 squelette, 1 squelette armé.
     pub const SERIES: u32 = 0x2f;
-    /// Direction de déplacement (table de vitesses) et image-clé de l'animation.
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY_FRAME: u32 = 0x33;
     /// Compteur d'images de l'animation (mot) et sa valeur courante.
     pub const ANIM_COUNT: u32 = 0x30;
     pub const ANIM_STATE: u32 = 0x32;
@@ -167,7 +151,7 @@ fn pick_move(x: &mut Cx, table: u32, state: u16) {
     let mv = x.data8(table + row as u32 + n);
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, state);
-    x.set8(g::STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main. L'original reçoit en A6
@@ -183,7 +167,7 @@ fn special_hit(x: &mut Cx, resume: u32) -> bool {
     }
     match flag {
         1 => {
-            if x.u16(HEIGHT) != 0 {
+            if x.u16(Obj::Z) != 0 {
                 return false;
             }
             x.set8(SPECIAL_HIT, 0);
@@ -199,12 +183,12 @@ fn special_hit(x: &mut Cx, resume: u32) -> bool {
         2 => {
             set_state_long(x, 0x0400_0000);
             x.set8(SPECIAL_HIT, 0);
-            let code = if x.u16(HEIGHT) == 0 { 0xc } else { 0x38 };
+            let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
             x.set8(0x49, code);
             true
         }
         3 => {
-            if x.u16(HEIGHT) != 0 || x.u8(0x86) != 0 {
+            if x.u16(Obj::Z) != 0 || x.u8(0x86) != 0 {
                 return false;
             }
             x.set8(SPECIAL_HIT, 0);
@@ -221,7 +205,7 @@ fn init(x: &mut Cx) {
     if paused(x) {
         return;
     }
-    if x.u8(VARIANT) == 4 {
+    if x.u8(Obj::VARIANT) == 4 {
         let t = x.u16(0x42).wrapping_sub(1);
         x.set16(0x42, t);
         if t != 0 {
@@ -258,7 +242,7 @@ fn init(x: &mut Cx) {
     }
     x.c.a[1] = row + 4;
     x.set16(f::SUB2, 0);
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             x.set8(f::SUB, 2);
             body(x, 0);
@@ -276,12 +260,12 @@ fn init(x: &mut Cx) {
             x.set8(f::SUB, 0);
             x.set8(f::SUB2, 4);
             let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x55a) } else { x.a5_u16(0x50a) };
-            let h = cam.wrapping_add(0x100).wrapping_sub(x.u16(DEPTH));
-            x.set16(HEIGHT, h);
-            x.set16(SPEED_X, 0);
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            let h = cam.wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+            x.set16(Obj::Z, h);
+            x.set16(Obj::VX, 0);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0);
+            x.set16(Obj::AZ, -0x40i16 as u16);
             body(x, 0xb);
         }
         3 => {
@@ -337,13 +321,13 @@ fn arrival(x: &mut Cx) {
             }
         }
         4 => {
-            if x.u8(STEP) == 0 {
+            if x.u8(f::SUB3) == 0 {
                 x.move_xz();
-                if (x.u16(HEIGHT) as i16) > 0 {
+                if (x.u16(Obj::Z) as i16) > 0 {
                     return;
                 }
-                x.add8(STEP, 2);
-                x.set32(HEIGHT, 0);
+                x.add8(f::SUB3, 2);
+                x.set32(Obj::Z, 0);
                 x.set16(ANIM_COUNT, 1);
             } else {
                 step(x);
@@ -361,9 +345,9 @@ fn arrival(x: &mut Cx) {
 
 /// Arrivée clignotante (`+6 = 6`) : trois séries de clignotements puis l'état debout.
 fn blink(x: &mut Cx) {
-    let d1 = match x.u8(STEP) {
+    let d1 = match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(0, 2);
             x.set8(0xac, 1);
             x.set8(VULNERABLE, 1);
@@ -393,7 +377,7 @@ fn blink(x: &mut Cx) {
     if n != 0 {
         return;
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set16(0x42, d1);
 }
 

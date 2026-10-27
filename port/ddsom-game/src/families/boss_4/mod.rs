@@ -29,10 +29,6 @@ mod hit;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours (bit 7 : battement d'ailes à jouer).
-    pub const KEY: u32 = 0x33;
     /// Pas restants de la marche (`+0x6b`), décompte avant le prochain pas (`+0x71`), attente debout (`+0x6e`).
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
@@ -155,9 +151,9 @@ pub(self) fn dust_tick(x: &mut Cx) {
 
 /// Image-clé marquée (bit 7 de `+0x33`) : un battement d'ailes, de côté alterné.
 pub(self) fn flap(x: &mut Cx) {
-    if (x.u8(KEY) as i8) < 0 {
-        let k = x.u8(KEY) & 0x7f;
-        x.set8(KEY, k);
+    if (x.u8(f::KEY_FRAME) as i8) < 0 {
+        let k = x.u8(f::KEY_FRAME) & 0x7f;
+        x.set8(f::KEY_FRAME, k);
         let w = x.u8(WING) ^ 1;
         x.set8(WING, w);
         x.c.d[0] = x.c.d[0] & !0xff | w as u32;

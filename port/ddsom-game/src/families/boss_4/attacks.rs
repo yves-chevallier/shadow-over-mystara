@@ -75,7 +75,7 @@ fn climb(x: &mut Cx) {
     }
     x.call(call::GUST);
     step(x);
-    let k = x.u8(KEY) & 0x7f;
+    let k = x.u8(f::KEY_FRAME) & 0x7f;
     x.c.d[0] = x.c.d[0] & !0xff | k as u32;
     if (k as i8) < 3 {
         flap(x);
@@ -246,7 +246,7 @@ fn leap(x: &mut Cx) {
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.c.d[0] = angle;
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x40);
             let t = load_target(x);
             let mut dist = x.u32(0x8).wrapping_sub(t.u32(x.b, 0x8));
@@ -279,7 +279,7 @@ fn leap(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.move_xz();
@@ -348,14 +348,14 @@ fn breath_in_flight(x: &mut Cx) {
         2 => {
             x.call(call::GUST);
             flap(x);
-            if !(Fl::sub16(x.u16(0xc), 0x28).lt() || x.u8(KEY) != 4) {
+            if !(Fl::sub16(x.u16(0xc), 0x28).lt() || x.u8(f::KEY_FRAME) != 4) {
                 x.add8(0x7, 2);
                 x.set8(INVULNERABLE, 0);
                 x.set16(TIMER, 8);
                 step(x);
                 return;
             }
-            let i = (x.u8(KEY) & 0x7f) as u32 * 4;
+            let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
             let v = rom32(x, 0x82852 + i);
             x.c.d[0] = v;
             x.add32(0xc, v);
@@ -375,7 +375,7 @@ fn breath_in_flight(x: &mut Cx) {
         6 => {
             hover(x);
             let d = double(x, DOUBLE_A);
-            if d.u8(x.b, KEY) != 0 {
+            if d.u8(x.b, f::KEY_FRAME) != 0 {
                 return;
             }
             if expired(x, TIMER) {
@@ -441,7 +441,7 @@ fn breath_shot(x: &mut Cx, angles: u32, variant: Option<u8>) -> bool {
         a = a.wrapping_add(0x10) & 0x1f;
     }
     x.c.d[0] = a as u32;
-    s.set_u8(x.b, ANGLE, a);
+    s.set_u8(x.b, Obj::SPEED_INDEX, a);
     let n = x.u8(BREATH_STEP).wrapping_add(1) & 0xf;
     x.set8(BREATH_STEP, n);
     true
@@ -500,7 +500,7 @@ fn breath(x: &mut Cx) {
         2 => timed(x, None, true),
         4 => {
             let d = double(x, DOUBLE_A);
-            if d.u8(x.b, KEY) != 0 {
+            if d.u8(x.b, f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x64);
                 x.set8(BREATH, 1);

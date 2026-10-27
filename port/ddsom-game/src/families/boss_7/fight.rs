@@ -18,16 +18,16 @@ pub(super) fn intro(x: &mut Cx) {
 
 /// 0x85d1a : le boss apparaît, tombe, atterrit dans un nuage de poussière, puis se met en garde.
 fn arrival(x: &mut Cx) {
-    match dispatch(x, 0x85d28, SUB3) {
+    match dispatch(x, 0x85d28, f::SUB3) {
         0x85d30 => {
-            addq8(x, SUB3, 2);
+            addq8(x, f::SUB3, 2);
             x.call(call::FADE);
             x.set_bit(0x1, 1, false);
             body(x, 0xe);
         }
         0x85d4e => {
             if x.anim_step() {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set16(0x18, (-0x80i16) as u16);
                 x.set16(0x1a, (-0x58i16) as u16);
                 x.set16(0x14, 0);
@@ -40,15 +40,15 @@ fn arrival(x: &mut Cx) {
             }
             aids::burst_small(x);
             x.set16(0xc, 0);
-            addq8(x, SUB3, 2);
+            addq8(x, f::SUB3, 2);
             body(x, 0xc);
             x.call(0xecc0a);
             x.c.d[0] = 0x1e;
             x.call(call::SOUND_EVENT);
         }
         _ => {
-            if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.call(0xe42c6);
             }
             if x.anim_step() {
@@ -62,7 +62,7 @@ fn arrival(x: &mut Cx) {
 
 /// 0x85dd6 : pose de l'attract (animation 0, relancée seulement si la clé change).
 fn pose(x: &mut Cx) {
-    dispatch(x, 0x85de4, SUB3);
+    dispatch(x, 0x85de4, f::SUB3);
     x.set8(VULNERABLE, 0);
     x.set8(ANIM_KIND, 0);
     setb(x, 2, 0);
@@ -106,8 +106,8 @@ fn keyed_body(x: &mut Cx, kind: u8, anim: u32) {
 
 /// 0x85e54 : marche vers l'adversaire, et regarde s'il peut attaquer.
 fn walk(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        addq8(x, SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        addq8(x, f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         keyed_body(x, 1, 2);
         speed(x, 0x10);
@@ -152,7 +152,7 @@ fn near_checks(x: &mut Cx) {
         return x.call(call::ATTACK_START);
     }
     x.anim_step();
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
     if x.u8(0x3e) != 0 {
@@ -207,8 +207,8 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
 
 /// 0x860b8 : demi-tour, puis reprise de l'état mémorisé (`+0xa6`, `+0xa5`).
 fn turn(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        addq8(x, SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        addq8(x, f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         key(x, 4);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -227,8 +227,8 @@ fn turn(x: &mut Cx) {
 
 /// 0x86110 : arrêt face à l'adversaire.
 fn stop(x: &mut Cx) {
-    if x.u8(SUB3) == 0 {
-        addq8(x, SUB3, 2);
+    if x.u8(f::SUB3) == 0 {
+        addq8(x, f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(ANIM_KIND, 0);
         setb(x, 2, 0);
@@ -253,7 +253,7 @@ fn stop(x: &mut Cx) {
 
 /// 0x86180 : approche lente de l'adversaire.
 fn approach(x: &mut Cx) {
-    match dispatch(x, 0x8618c, SUB3) {
+    match dispatch(x, 0x8618c, f::SUB3) {
         0x861d8 => {
             if timer_done(x) {
                 x.set32(f::STATE, FIGHT);
@@ -268,16 +268,16 @@ fn approach(x: &mut Cx) {
                 x.set32(f::STATE, 0x0202_0200);
             }
             x.anim_step();
-            if x.u8(KEY) != 0xff {
+            if x.u8(f::KEY_FRAME) != 0xff {
                 x.move_by_table_xy();
             }
         }
         t => {
             if t == 0x8619a {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x28);
             } else {
-                x.add8(SUB3, 0xfe);
+                x.add8(f::SUB3, 0xfe);
             }
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_KIND, 3);

@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(NO_ZONE) != 0 {
@@ -59,20 +60,20 @@ fn walk(x: &mut Cx) {
 
 /// +6 = 2 : la durée de vie est écoulée : le Bow Gnoll s'éloigne de l'écran, puis disparaît.
 fn leave(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let mut want = 0x20u8;
-            x.set8(ANGLE, 8);
+            x.set8(Obj::SPEED_INDEX, 8);
             let base = if x.a5_u8(0x36) != 0 { 0x55e } else { 0x50e };
-            let d = x.u16(X).wrapping_sub(x.a5_u16(base));
+            let d = x.u16(Obj::X).wrapping_sub(x.a5_u16(base));
             if (d as i16) <= 0xc0 {
-                x.set8(ANGLE, 0x18);
+                x.set8(Obj::SPEED_INDEX, 0x18);
                 want = 0;
             }
             x.c.d[4] = x.c.d[4] & !0xff | want as u32;
             let anim = if want != x.u8(f::FLIP) {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 3
             } else {
                 x.set8(EXPIRED, 1);
@@ -90,7 +91,7 @@ fn leave(x: &mut Cx) {
             }
             if (x.u8(TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
                 let host = x.linked(f::HOST);
-                host.set_u8(x.b, ANGLE, 1);
+                host.set_u8(x.b, Obj::SPEED_INDEX, 1);
             }
             set_state_long(x, st::DEAD_LONG);
             x.call(call::REMOVE);
@@ -98,7 +99,7 @@ fn leave(x: &mut Cx) {
         4 => {
             if x.anim_step() {
                 x.set8(EXPIRED, 1);
-                x.set8(STEP, 0);
+                x.set8(f::SUB3, 0);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
             }
@@ -110,8 +111,8 @@ fn leave(x: &mut Cx) {
 
 /// +6 = 4 : tire (nombre de tirs tiré dans la rangée), reste dans la boucle de tirs.
 fn shoot(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         let n = row_byte(x, SHOT_REPEATS);
         x.set8(REPEAT, n);
         shoot_anim(x);
@@ -125,10 +126,10 @@ fn shoot(x: &mut Cx) {
             return x.reinsert();
         }
         x.add8(f::SUB2, 0xfe);
-        x.set8(STEP, 0);
+        x.set8(f::SUB3, 0);
     }
-    if x.u8(KEY) != 0 {
-        x.set8(KEY, 0);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
         x.call(call::SWING);
     }
     x.reinsert();

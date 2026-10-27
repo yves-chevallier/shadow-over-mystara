@@ -20,10 +20,13 @@ pub mod f {
     pub const STATE: u32 = 0x4;
     pub const SUB: u32 = 0x5;
     pub const SUB2: u32 = 0x6;
+    pub const SUB3: u32 = 0x7;
     /// Jeu de boîtes de collision (voir `docs/combat.md` §3).
     pub const BOX_SET: u32 = 0x2e;
     /// Orientation (non nul : regarde à gauche).
     pub const FLIP: u32 = 0x2c;
+    /// Marque de l'image-clé de l'animation courante (octet bas de `Obj::ANIM_FLAGS`, bit 7 : marque d'événement).
+    pub const KEY_FRAME: u32 = 0x33;
     /// Hôte (mot, adresse RAM) d'une partie d'ennemi composite.
     pub const HOST: u32 = 0x46;
     /// Parent ou propriétaire (mot, adresse RAM) ; `+0x42` : créateur d'un sous-objet.

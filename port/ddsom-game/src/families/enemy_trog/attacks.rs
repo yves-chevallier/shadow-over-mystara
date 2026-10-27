@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Poussée d'esprit inconnue de la ROM : lecture de la table de coups d'un bond, par difficulté.
 fn pick_jump_move(x: &mut Cx) {
@@ -11,7 +12,7 @@ fn pick_jump_move(x: &mut Cx) {
     x.c.d[2] = x.c.d[2] & 0xffff_0000 | row;
     let mv = pick_byte(x, JUMP_MOVES);
     x.set8(f::SUB2, mv);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 // --- sous-état 4 --------------------------------------------------------------------------------
@@ -44,7 +45,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0, 2 ou 4 : une série de coups d'animation 15fabe (nombre de répétitions `+0xa2`).
 fn combo(x: &mut Cx, id: u8) {
-    if x.u8(STEP) != 0 {
+    if x.u8(f::SUB3) != 0 {
         if step(x) {
             let n = x.u8(REPEAT).wrapping_sub(1);
             x.set8(REPEAT, n);
@@ -55,7 +56,7 @@ fn combo(x: &mut Cx, id: u8) {
         }
         return;
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     let look = x.u8(LOOK);
     x.set8(LOOK_PREV, look);
     x.set8(REPEAT, 0);
@@ -89,8 +90,8 @@ fn combo(x: &mut Cx, id: u8) {
 
 /// 6 : double coup.
 fn double(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(AI_KIND, 3);
         x.set8(REPEAT, 1);
         let r = rand_and(x, 1);
@@ -113,10 +114,10 @@ fn double(x: &mut Cx) {
 
 /// 8, 10 et 18 : bond sur la cible avec un coup (8 et 18 enchaînent le coup suivant, 10 rejoue un bond).
 fn leap_strike(x: &mut Cx, id: u8) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
-            x.set16(SPEED_X, 0);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::VX, 0);
             let target = load_target(x);
             if target.u8(x.b, 0) == 0 {
                 set_state_long(x, IDLE);
@@ -125,13 +126,13 @@ fn leap_strike(x: &mut Cx, id: u8) {
             let look = x.u8(LOOK);
             x.set8(LOOK_PREV, look);
             x.set8(LOOK, 0xf0);
-            x.set16(SPEED_Z, 0x680);
-            x.set16(GRAVITY, -0x38i16 as u16);
-            x.set16(SPEED_Y, 0);
-            let dx = target.u16(x.b, X).wrapping_sub(x.u16(X));
-            x.set16(SPEED_X, dx << 2);
+            x.set16(Obj::VZ, 0x680);
+            x.set16(Obj::AZ, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X));
+            x.set16(Obj::VX, dx << 2);
             x.set8(STRIKE_KIND, 0x17);
-            let mut away = x.u16(X).wrapping_sub(target.u16(x.b, X));
+            let mut away = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
             if (away as i16) < 0 {
                 away = away.wrapping_neg();
             }
@@ -153,7 +154,7 @@ fn leap_strike(x: &mut Cx, id: u8) {
             let look = x.u8(LOOK);
             x.set8(LOOK_PREV, look);
             x.set8(f::SUB2, r as u8);
-            x.set8(STEP, 0);
+            x.set8(f::SUB3, 0);
         }
         _ => {}
     }
@@ -162,17 +163,17 @@ fn leap_strike(x: &mut Cx, id: u8) {
 /// Montée et chute d'un bond, puis animation de réception (0xc).
 fn land_with(x: &mut Cx) {
     x.move_xz();
-    if step(x) && (x.u16(HEIGHT) as i16) < 0 {
-        x.add8(STEP, 2);
-        x.set16(HEIGHT, 0);
+    if step(x) && (x.u16(Obj::Z) as i16) < 0 {
+        x.add8(f::SUB3, 2);
+        x.set16(Obj::Z, 0);
         body(x, 0xc);
     }
 }
 
 /// 12 : estoc répété `+0xa2` fois (animation 5).
 fn stab(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(AI_KIND, 2);
         let row = difficulty_row(x);
         set_dw(x, 2, row as u16);
@@ -200,8 +201,8 @@ fn stab_begin(x: &mut Cx) {
 
 /// 14 : jet (animation 8 répétée), avec la routine 0x9e194 qui peut interrompre le geste.
 fn throw(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.call(0x9e194);
         if !x.c.cond(5) {
             x.set8(REPEAT, 6);
@@ -223,12 +224,12 @@ fn throw(x: &mut Cx) {
 
 /// 16 : course vers la cible (animation 2) ou bond.
 fn dash(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) == 0 {
                 return long_jump(x);
             }
-            x.add8(STEP, 4);
+            x.add8(f::SUB3, 4);
             x.set8(LOOK_PREV, 0);
             x.set8(REPEAT, 0x20);
             walk_speed(x, 4);
@@ -257,32 +258,32 @@ fn dash(x: &mut Cx) {
 
 /// 0x5a5a4 : grand bond de côté.
 fn long_jump(x: &mut Cx) {
-    x.add8(STEP, 6);
+    x.add8(f::SUB3, 6);
     x.set8(LOOK_PREV, 0xcc);
-    x.set16(GRAVITY, -0x38i16 as u16);
-    x.set16(SPEED_Z, 0x250);
-    x.set16(SPEED_X, 0x300);
-    x.set16(SPEED_Y, 0);
-    x.set32(SPEED_SIDE, 0);
-    x.set8(ANGLE, 8);
+    x.set16(Obj::AZ, -0x38i16 as u16);
+    x.set16(Obj::VZ, 0x250);
+    x.set16(Obj::VX, 0x300);
+    x.set16(Obj::AX, 0);
+    x.set32(Obj::VY, 0);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
-        x.set8(ANGLE, 0x18);
-        negate(x, SPEED_X);
+        x.set8(Obj::SPEED_INDEX, 0x18);
+        negate(x, Obj::VX);
     }
     body(x, 0xa);
 }
 
 /// 20 : geste spécial (animation 3), interrompu par 0x9e2a0.
 fn special(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(AI_KIND, 2);
         return strike(x, 3);
     }
     if step(x) {
         return end_attack(x);
     }
-    if x.u8(KEY_FRAME) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.call(0x9e2a0);
         if x.c.cond(5) {
             set_state_long(x, IDLE);
@@ -292,12 +293,12 @@ fn special(x: &mut Cx) {
 
 /// 22 : annonce du coup, puis passage au coup prévu `+0xa3` (ou demi-tour si la cible est derrière).
 fn approach(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 1);
         x.call(call::ANNOUNCE);
         if x.u8(COOLDOWN) == 0 {
-            x.set8(STEP, 0);
+            x.set8(f::SUB3, 0);
             let next = x.u8(RESUME);
             x.set8(f::SUB2, next);
         } else {
@@ -310,7 +311,7 @@ fn approach(x: &mut Cx) {
     let n = x.u8(COOLDOWN).wrapping_sub(1);
     x.set8(COOLDOWN, n);
     if (n as i8) < 0 {
-        x.set8(STEP, 0);
+        x.set8(f::SUB3, 0);
         if needs_turn_around(x) {
             x.add8(f::SUB2, 2);
         } else {
@@ -322,8 +323,8 @@ fn approach(x: &mut Cx) {
 
 /// 24 : demi-tour, puis reprise du coup prévu.
 fn turn_around(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 0xe);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
@@ -332,14 +333,14 @@ fn turn_around(x: &mut Cx) {
     if step(x) {
         let next = x.u8(RESUME);
         x.set8(f::SUB2, next);
-        x.set8(STEP, 0);
+        x.set8(f::SUB3, 0);
     }
 }
 
 /// 26 : geste long (animation 8 répétée `+0xa2` fois).
 fn long_gesture(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(REPEAT, 6);
         x.set8(LOOK_PREV, 0xee);
         return body(x, 8);
@@ -373,8 +374,8 @@ pub(super) fn run_b(x: &mut Cx) {
 
 /// Garde sur place (animation 8) jusqu'à la fin de l'animation, puis retour debout.
 fn hold(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 0xee);
         x.set8(VULNERABLE, 1);
         return body(x, 8);
@@ -386,8 +387,8 @@ fn hold(x: &mut Cx) {
 
 /// 2 : garde en posture 9 pendant `0x3c` images.
 fn guard(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(POSTURE, 9);
         x.set8(LOOK, 0xdf);
         x.set8(REPEAT, 0x3c);
@@ -403,34 +404,34 @@ fn guard(x: &mut Cx) {
 
 /// 4 : bond de côté vers la profondeur de la cible.
 fn side_hop(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 0xb1);
-        x.set16(SPEED_Z, 0x600);
-        x.set16(GRAVITY, -0x38i16 as u16);
-        x.set16(SPEED_SIDE_Y, 0);
-        x.set16(SPEED_SIDE, 0x80);
+        x.set16(Obj::VZ, 0x600);
+        x.set16(Obj::AZ, -0x38i16 as u16);
+        x.set16(Obj::AY, 0);
+        x.set16(Obj::VY, 0x80);
         let target = load_target(x);
         if target.u8(x.b, 0) == 0 {
             set_state_long(x, IDLE);
             return rest_begin(x);
         }
-        let dy = target.u16(x.b, DEPTH).wrapping_sub(x.u16(DEPTH));
+        let dy = target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y));
         if (dy as i16) < 0 {
-            negate(x, SPEED_SIDE);
+            negate(x, Obj::VY);
         }
         return body(x, 0xa);
     }
     x.move_yz();
-    if step(x) && (x.u16(HEIGHT) as i16) < 0 {
-        x.set16(HEIGHT, 0);
+    if step(x) && (x.u16(Obj::Z) as i16) < 0 {
+        x.set16(Obj::Z, 0);
         back_to_stance(x);
     }
 }
 
 /// 6, 8 et 10 : course vers l'avant (animation 3) ; à la fin, 6 retourne debout, 8 et 10 enchaînent un coup.
 fn forward_hop(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
+    if x.u8(f::SUB3) == 0 {
         return forward_hop_begin(x);
     }
     move_xy(x);
@@ -446,11 +447,11 @@ fn forward_hop(x: &mut Cx) {
 
 /// 0x5a8c8.
 pub(super) fn forward_hop_begin(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xb0);
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
-        x.add8(ANGLE, 0x10);
+        x.add8(Obj::SPEED_INDEX, 0x10);
     }
     x.c.d[0] = 2;
     walk_speed(x, 2);
@@ -459,15 +460,15 @@ pub(super) fn forward_hop_begin(x: &mut Cx) {
 
 /// 12 : bond avec coup (animation 6 de la série des coups).
 fn hop_strike(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => hop_strike_begin(x),
         2 => {
             x.move_xz();
             step(x);
-            let h = x.u16(HEIGHT) as i16;
+            let h = x.u16(Obj::Z) as i16;
             if h < 0 {
-                x.add8(STEP, 2);
-                x.set16(HEIGHT, 0);
+                x.add8(f::SUB3, 2);
+                x.set16(Obj::Z, 0);
                 body(x, 0xc);
             }
         }
@@ -481,14 +482,14 @@ fn hop_strike(x: &mut Cx) {
 
 /// 0x5a934.
 pub(super) fn hop_strike_begin(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xb2);
-    x.set16(SPEED_Z, 0x680);
-    x.set16(GRAVITY, -0x38i16 as u16);
-    x.set16(SPEED_Y, 0);
-    x.set16(SPEED_X, 0x200);
+    x.set16(Obj::VZ, 0x680);
+    x.set16(Obj::AZ, -0x38i16 as u16);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::VX, 0x200);
     if x.u8(f::FLIP) != 0 {
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
     x.set8(STRIKE_KIND, 0x16);
     x.set8(STRIKE_POWER, 5);
@@ -500,8 +501,8 @@ pub(super) fn hop_strike_begin(x: &mut Cx) {
 pub(super) fn run_fallback(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            if x.u8(STEP) == 0 {
-                x.add8(STEP, 2);
+            if x.u8(f::SUB3) == 0 {
+                x.add8(f::SUB3, 2);
                 x.set8(VULNERABLE, 1);
                 x.set8(REPEAT, 0x10);
                 x.set8(LOOK_PREV, 1);
@@ -533,13 +534,13 @@ pub(super) fn run_fallback(x: &mut Cx) {
 
 /// `+6` = 4 : pas de côté, soit course (étape 0), soit bond en profondeur.
 fn sidestep(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) == 0 {
                 x.set8(REPEAT, 0x10);
-                x.set8(ANGLE, 0);
+                x.set8(Obj::SPEED_INDEX, 0);
                 if x.u8(f::FLIP) == 0 {
-                    x.set8(ANGLE, 0x10);
+                    x.set8(Obj::SPEED_INDEX, 0x10);
                 }
                 walk_speed(x, 4);
                 return body(x, 2);
@@ -549,17 +550,17 @@ fn sidestep(x: &mut Cx) {
             if target.u8(x.b, 0) == 0 {
                 set_state_long(x, IDLE);
             }
-            let dy = target.u16(x.b, DEPTH).wrapping_sub(x.u16(DEPTH));
+            let dy = target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y));
             if (dy as i16) < 0 {
                 d0 += 2;
             }
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_Z, 0x600);
-            x.set16(GRAVITY, -0x38i16 as u16);
-            x.set16(SPEED_SIDE, 0x80);
-            x.set16(SPEED_SIDE_Y, 0);
+            x.set16(Obj::VZ, 0x600);
+            x.set16(Obj::AZ, -0x38i16 as u16);
+            x.set16(Obj::VY, 0x80);
+            x.set16(Obj::AY, 0);
             if d0 != 0 {
-                negate(x, SPEED_SIDE);
+                negate(x, Obj::VY);
             }
             body(x, 0xa);
         }
@@ -574,9 +575,9 @@ fn sidestep(x: &mut Cx) {
         }
         4 => {
             x.move_yz();
-            if step(x) && (x.u16(HEIGHT) as i16) < 0 {
+            if step(x) && (x.u16(Obj::Z) as i16) < 0 {
                 x.set8(LOOK_PREV, 0xe0);
-                x.set16(HEIGHT, 0);
+                x.set16(Obj::Z, 0);
                 set_state_long(x, STANCE);
             }
         }

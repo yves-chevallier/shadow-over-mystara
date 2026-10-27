@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -17,7 +18,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// Début commun d'une arrivée : plus invulnérable, immunités remises.
 fn begin(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set_bit(1, 1, false);
     x.set8(INVULNERABLE, 0);
     x.call(rom::IMMUNITIES);
@@ -26,49 +27,49 @@ fn begin(x: &mut Cx) {
 // --- +6 = 0 : chute d'entrée ----------------------------------------------------------------------------
 
 fn fall_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             begin(x);
             let px = x.a5_u16(0x5a6).wrapping_add(0x1e0);
             let pz = x.a5_u16(0x5aa).wrapping_add(0x34);
-            x.set16(X, px);
-            x.set16(DEPTH, pz);
-            x.set16(SPEED_X, -0x300i16 as u16);
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x400);
-            x.set16(GRAVITY, -0x40i16 as u16);
+            x.set16(Obj::X, px);
+            x.set16(Obj::Y, pz);
+            x.set16(Obj::VX, -0x300i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x400);
+            x.set16(Obj::AZ, -0x40i16 as u16);
             x.move_xz();
             act(x, 7);
         }
         2 => {
             lib::step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xz();
-            if (x.u16(SPEED_Z) as i16) <= 0x100 {
-                x.add8(STEP, 2);
+            if (x.u16(Obj::VZ) as i16) <= 0x100 {
+                x.add8(f::SUB3, 2);
                 act(x, 8);
             }
         }
         4 => {
             x.move_xz();
-            if (x.u16(SPEED_Z) as i16) <= -0x100 {
-                x.add8(STEP, 2);
+            if (x.u16(Obj::VZ) as i16) <= -0x100 {
+                x.add8(f::SUB3, 2);
                 act(x, 9);
             }
         }
         6 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
-            x.add8(STEP, 2);
-            x.set16(HEIGHT, 0);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::Z, 0);
             x.set16(TIMER, 0x12);
             x.set16(TIMER2, 0);
-            x.set16(SPEED_Y, 0x30);
+            x.set16(Obj::AX, 0x30);
             x.c.d[0] = 0x1e;
             x.call(0x2860);
             x.call(0xecc0a);
@@ -83,7 +84,7 @@ fn fall_in(x: &mut Cx) {
                 x.move_x();
                 lib::step(x);
             } else {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(TIMER, 0x14);
             }
         }
@@ -91,13 +92,13 @@ fn fall_in(x: &mut Cx) {
             if count_down(x, TIMER) {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.call(0xe3da6);
             mv(x, 8);
         }
         12 => {
             if lib::step(x) {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 mv(x, 0);
             }
         }
@@ -115,33 +116,33 @@ fn fall_in(x: &mut Cx) {
 // --- +6 = 2 : apparition au sol ---------------------------------------------------------------------------
 
 fn walk_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             begin(x);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::AX, 0);
             let mut angle = 0x18;
             x.set8(f::FLIP, 0);
-            if (x.u16(X) as i16) <= (x.a5_u16(0x5a6) as i16) {
+            if (x.u16(Obj::X) as i16) <= (x.a5_u16(0x5a6) as i16) {
                 x.set8(f::FLIP, 0x20);
                 angle = 8;
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x35);
             look(x, 0x31);
             mv(x, 4);
         }
         2 => {
             lib::step(x);
-            if x.u8(KEY) != 2 {
+            if x.u8(f::KEY_FRAME) != 2 {
                 x.move_x();
                 let cam = x.a5_u16(0x5a6);
-                let leftward = (x.u16(SPEED_X) as i16) < 0;
-                let (mut d0, mut d1) = (cam.wrapping_add(if leftward { 0xf0 } else { 0x90 }), x.u16(X));
+                let leftward = (x.u16(Obj::VX) as i16) < 0;
+                let (mut d0, mut d1) = (cam.wrapping_add(if leftward { 0xf0 } else { 0x90 }), x.u16(Obj::X));
                 if leftward {
                     std::mem::swap(&mut d0, &mut d1);
                 }
-                if (d1 as i16) >= (d0 as i16) && x.u8(KEY) != 0 {
+                if (d1 as i16) >= (d0 as i16) && x.u8(f::KEY_FRAME) != 0 {
                     return begin_dash(x);
                 }
             }
@@ -154,10 +155,10 @@ fn walk_in(x: &mut Cx) {
 
 /// 0x70770 : la clé 3 de l'animation fait trembler le sol.
 fn thump(x: &mut Cx) {
-    if x.u8(KEY) != 3 {
+    if x.u8(f::KEY_FRAME) != 3 {
         return;
     }
-    x.set8(KEY, 0);
+    x.set8(f::KEY_FRAME, 0);
     x.call(0xecdba);
     spark(x, 4);
     x.c.d[0] = 0xa;
@@ -166,11 +167,11 @@ fn thump(x: &mut Cx) {
 
 /// 0x70794 : début de la course (animation 5).
 fn begin_dash(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x14);
     x.set16(TIMER2, 0);
     let vy = if x.u8(f::FLIP) != 0 { -0x40i16 } else { 0x40 };
-    x.set16(SPEED_Y, vy as u16);
+    x.set16(Obj::AX, vy as u16);
     x.c.d[0] = 0x14;
     x.call(call::SHOCK);
     x.call(0xec976);
@@ -198,8 +199,8 @@ fn dash(x: &mut Cx) {
 // --- +6 = 4 : attente d'un joueur ------------------------------------------------------------------------
 
 fn wait_for_player(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             begin(x);
             look(x, 0x32);
@@ -207,7 +208,7 @@ fn wait_for_player(x: &mut Cx) {
         }
         2 | 4 => {
             if target_in_box(x, -0x40, 0x40, 0x40) {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.call(0xe3da6);
                 mv(x, 8);
             } else {
@@ -243,10 +244,10 @@ fn waiting_out(x: &mut Cx) {
 // --- +6 = 6 : apparition cachée -----------------------------------------------------------------------------
 
 fn hidden(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(NO_GRAB, 1);
             x.set_bit(1, 1, false);
             x.set8(INVULNERABLE, 0);
@@ -256,7 +257,7 @@ fn hidden(x: &mut Cx) {
         }
         2 => {
             if target_in_box(x, -0x20, 0x60, 0x20) {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set8(NO_GRAB, 0);
             }
         }

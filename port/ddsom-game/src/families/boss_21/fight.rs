@@ -208,7 +208,7 @@ fn dash(x: &mut Cx) {
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x30i16) as u16);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x28i16) } else { (0x18, 0x28) };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
             x.call(call::RANDOM_TURN);
             speed(x, 0x35);

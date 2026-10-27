@@ -6,7 +6,7 @@ use crate::objects::Courant;
 use crate::machine::Machine;
 
 fn step(x: &mut Cx, table: u32) -> u32 {
-    dispatch0(x, table, SUB3)
+    dispatch0(x, table, f::SUB3)
 }
 
 fn cam_x(x: &mut Cx) -> u16 {
@@ -43,7 +43,7 @@ fn sting(x: &mut Cx) {
 fn strike(x: &mut Cx) {
     set44(x, 1);
     if step(x, 0x8dc02) == 0x8dc06 {
-        x.add8(SUB3, 2);
+        x.add8(f::SUB3, 2);
         act(x, 1);
         return;
     }
@@ -51,8 +51,8 @@ fn strike(x: &mut Cx) {
         return to_chase(x);
     }
     sync(x);
-    if x.u8(KEY) != 0 {
-        x.set8(KEY, 0);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
         sting(x);
     }
 }
@@ -61,7 +61,7 @@ fn strike(x: &mut Cx) {
 fn spit(x: &mut Cx) {
     match step(x, 0x8dc52) {
         0x8dc5c => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x10);
             act(x, 0)
         }
@@ -71,20 +71,20 @@ fn spit(x: &mut Cx) {
             if sub16(x, TIMER, 1).gt() {
                 return;
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             act(x, 0x24)
         }
         0x8dc8e => {
             if x.anim_step() {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 act(x, 0x25);
                 return x.call(0xe4b4c);
             }
             sync(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             x.random_68k();
             if is_12(x) {
                 let r = x.c.d[0] as u16 & 3;
@@ -100,7 +100,7 @@ fn spit(x: &mut Cx) {
         }
         0x8dcec => {
             if x.anim_step() {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 return act(x, 0x26);
             }
             sync(x);
@@ -145,7 +145,7 @@ fn landing(x: &mut Cx) -> bool {
     if !tst16(x, 0xc).mi() {
         return false;
     }
-    x.add8(SUB3, 2);
+    x.add8(f::SUB3, 2);
     x.set16(0xc, 0);
     body(x, 7);
     x.c.d[0] = 8;
@@ -159,7 +159,7 @@ fn leap(x: &mut Cx) {
     x.set8(0xb2, 1);
     match step(x, 0x8dd30) {
         0x8dd36 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             jump_side(x, -0x400, 0x600, (-0x40i16) as u16);
             x.call(0xe4cfe)
         }
@@ -180,7 +180,7 @@ fn leap_c(x: &mut Cx) {
     x.set8(0xb2, 1);
     match step(x, 0x8e2fe) {
         0x8e304 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             jump_side(x, -0x100, 0x800, (-0x80i16) as u16);
             x.call(0xe4cfe)
         }
@@ -200,7 +200,7 @@ fn leap_c(x: &mut Cx) {
 fn lunge(x: &mut Cx) {
     match step(x, 0x8ddda) {
         0x8dde0 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             stop(x);
             x.set16(0x18, 0x200);
             x.set16(0x1a, (-0x80i16) as u16);
@@ -216,7 +216,7 @@ fn lunge(x: &mut Cx) {
                 if sub16(x, TIMER, 1).gt() {
                     return;
                 }
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 x.set16(0xc, 0);
                 return act(x, 0x22);
             }
@@ -242,7 +242,7 @@ fn charge(x: &mut Cx) {
     x.set8(0xb2, 1);
     let mut t = step(x, 0x8de78);
     if t == 0x8de82 {
-        x.add8(SUB3, 2);
+        x.add8(f::SUB3, 2);
         act(x, 0x27);
         sync(x);
         x.set16(TIMER, 0x20);
@@ -254,12 +254,12 @@ fn charge(x: &mut Cx) {
         if sub16(x, TIMER, 1).gt() {
             return;
         }
-        x.add8(SUB3, 2);
+        x.add8(f::SUB3, 2);
         t = 0x8deb2;
     }
     match t {
         0x8deb2 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             seg_choice(x);
             if !aim_target(x) {
                 return to_chase(x);
@@ -312,7 +312,7 @@ fn charge(x: &mut Cx) {
 
 /// 0x8df38 : fin de la charge, freinage.
 fn charge_end(x: &mut Cx) {
-    x.add8(SUB3, 2);
+    x.add8(f::SUB3, 2);
     let a = asr_w(x.u16(0x14), 2);
     setw(x, 0, a);
     x.set16(0x14, a);
@@ -367,7 +367,7 @@ fn approach(x: &mut Cx) {
     x.set8(0xb2, 1);
     match step(x, 0x8e020) {
         0x8e026 => {
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             stop(x);
             speed(x, 0x2b);
             if !route_start(x) {
@@ -378,7 +378,7 @@ fn approach(x: &mut Cx) {
         }
         0x8e04e => {
             if sub16(x, TIMER, 1).mi() && !route_step(x) {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 let a = asr_w(x.u16(0x14), 2);
                 setw(x, 0, a);
                 x.set16(0x14, a);
@@ -539,7 +539,7 @@ fn spit_c(x: &mut Cx) {
             if !is_12(x) {
                 return to_chase(x);
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x10);
             x.c.d[0] = 0;
             act(x, 0)
@@ -550,20 +550,20 @@ fn spit_c(x: &mut Cx) {
             if sub16(x, TIMER, 1).gt() {
                 return;
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             act(x, 0x24)
         }
         0x8e25e => {
             if x.anim_step() {
-                x.add8(SUB3, 2);
+                x.add8(f::SUB3, 2);
                 act(x, 0x25);
                 return x.call(0xe4b4c);
             }
             sync(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             x.set16(0x5c, 0);
             x.call(0xa817c);
             if zero(x) {
@@ -576,7 +576,7 @@ fn spit_c(x: &mut Cx) {
             if !x.anim_step() {
                 return sync(x);
             }
-            x.add8(SUB3, 2);
+            x.add8(f::SUB3, 2);
             let w = x.u16(0x5c);
             setw(x, 0, w);
             if (w as i16) < 0 {

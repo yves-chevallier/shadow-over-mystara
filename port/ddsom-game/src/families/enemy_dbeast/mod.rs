@@ -30,13 +30,8 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    /// Direction de déplacement (index de table de vitesses, 0 à 31).
-    pub const ANGLE: u32 = 0x2d;
     /// Profil d'IA (0 ou 1, difficulté de la bête).
     pub const PROFILE: u32 = 0x2f;
-    /// Image-clé de l'animation en cours (posé par les scripts d'animation).
-    pub const KEY_FRAME: u32 = 0x33;
     /// Priorité d'affichage.
     pub const LAYER: u32 = 0x3b;
     /// Parent (mot, adresse RAM) et cible (mot, joueur).
@@ -313,7 +308,7 @@ fn init(x: &mut Cx) {
         x.set8(off, v);
     }
     pick_target(x);
-    if (x.u8(VARIANT) as i8) > 3 {
+    if (x.u8(Obj::VARIANT) as i8) > 3 {
         if x.u16(TARGET) == 0 {
             set_state_long(x, ACTIVE_IDLE);
             return;

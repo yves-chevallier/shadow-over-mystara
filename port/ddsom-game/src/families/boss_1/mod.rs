@@ -20,16 +20,13 @@
 
 use super::boss_common::*;
 use super::cx::handlers;
+use crate::objects::Obj;
 
 mod hit;
 mod moves;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours.
-    pub const KEY: u32 = 0x33;
     /// Bonds restants de la marche, attente debout.
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
@@ -503,7 +500,7 @@ pub(self) fn aim_near_target(x: &mut Cx, table: u32, mask: u32) {
 pub(self) fn aim_at_mark(x: &mut Cx) {
     x.call(call::ANGLE_TO);
     let a = x.c.d[0] as u8;
-    x.set8(ANGLE, a);
+    x.set8(Obj::SPEED_INDEX, a);
 }
 
 /// 0x7c430 : vitesse verticale du bond selon la distance au point visé : 10 de plus par tranche de la vitesse

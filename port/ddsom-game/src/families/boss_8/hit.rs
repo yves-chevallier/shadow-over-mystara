@@ -212,8 +212,8 @@ fn death(x: &mut Cx) {
             body(x, 0xa);
         }
         0x89660 => {
-            if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.call(0xb85e2);
             }
             x.move_xz();

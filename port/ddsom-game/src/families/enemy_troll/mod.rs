@@ -17,6 +17,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod arrival;
 mod attacks;
@@ -24,17 +25,6 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     pub const AI_WANDER: u32 = 0x6b;
     pub const AI_WAIT: u32 = 0x6e;
@@ -183,7 +173,7 @@ pub(self) fn faces_wrong(x: &mut Cx) -> bool {
         return false;
     }
     let target = load_target(x);
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
     x.c.d[1] = want;
     let wrong = want as u8 != x.u8(f::FLIP);
@@ -213,7 +203,7 @@ pub(self) fn follow_up(x: &mut Cx) {
     let b = row_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// 0x6d08c : le Troll est saisi par un joueur : il s'enfuit en marchant hors de l'écran, puis disparaît.
@@ -224,7 +214,7 @@ pub(self) fn grab(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-        x.set8(ANGLE, angle);
+        x.set8(Obj::SPEED_INDEX, angle);
         set_speed(x, 0x21);
         return mv(x, 1);
     }

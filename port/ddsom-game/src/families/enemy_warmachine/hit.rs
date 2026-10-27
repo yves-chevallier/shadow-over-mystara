@@ -5,6 +5,7 @@
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACT: u32 = 0x78a26;
@@ -60,8 +61,8 @@ fn hop_back(x: &mut Cx) {
         0 => {
             x.set16(TIMER, 0x14);
             let (angle, v) = if x.u8(f::FLIP) != 0 { (0x18, 0x20i16) } else { (8, -0x20i16) };
-            x.set8(ANGLE, angle);
-            x.set16(SPEED_Y, v as u16);
+            x.set8(Obj::SPEED_INDEX, angle);
+            x.set16(Obj::AX, v as u16);
             set_speed(x, 0x17);
             look(x, 0x20);
             x.add8(f::SUB2, 2);
@@ -74,7 +75,7 @@ fn hop_back(x: &mut Cx) {
             if (t as i16) <= 0 {
                 x.add8(f::SUB2, 2);
                 x.set16(TIMER, 6);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::AX, 0);
             }
             x.move_x();
             lib::step(x);
@@ -164,23 +165,23 @@ fn death(x: &mut Cx) {
             x.call(0xbad6);
             x.call(0xe2f6);
             x.call(call::REMOVE);
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x500);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x500);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             let cam = camera_x(x).wrapping_add(0xc0);
             let (mut speed, mut flip) = (0x200i16, 0u8);
-            if (cam as i16) < (x.u16(X) as i16) {
+            if (cam as i16) < (x.u16(Obj::X) as i16) {
                 speed = -speed;
                 flip = 0x20;
             }
-            x.set16(SPEED_X, speed as u16);
+            x.set16(Obj::VX, speed as u16);
             x.set8(f::FLIP, flip);
             x.move_xz();
             x.anim_start(SET_MOVE, 0x13);
         }
         2 => {
             x.move_xz();
-            if (x.u16(SPEED_Z) as i16) > 0 {
+            if (x.u16(Obj::VZ) as i16) > 0 {
                 lib::step(x);
                 return;
             }
@@ -189,11 +190,11 @@ fn death(x: &mut Cx) {
         }
         4 => {
             x.move_xz();
-            if (x.u16(HEIGHT) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set16(HEIGHT, 0);
+            x.set16(Obj::Z, 0);
             spark(x, 5);
             x.call(0xec904);
             lib::step(x);
@@ -223,9 +224,9 @@ fn run_off(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::AX, 0);
             let angle = heading(x);
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
             spark(x, 1);
             x.call(call::DUST);
@@ -235,8 +236,8 @@ fn run_off(x: &mut Cx) {
         2 => {
             x.move_x();
             lib::step(x);
-            if x.u8(KEY) == 2 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 2 {
+                x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
                 x.c.d[0] = 0x10;
                 x.call(call::SHOCK);
@@ -254,7 +255,7 @@ fn run_off(x: &mut Cx) {
 /// 0x78e34 : assommé : animation 0xc, puis tir.
 fn stunned(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
         return mv(x, 0xc);
     }
     if !lib::step(x) {

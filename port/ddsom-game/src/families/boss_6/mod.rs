@@ -17,6 +17,7 @@
 
 use super::boss_common::*;
 use super::cx::handlers;
+use crate::objects::Obj;
 
 mod attacks;
 mod decide;
@@ -25,9 +26,6 @@ mod hit;
 mod intro;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY: u32 = 0x33;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
@@ -90,7 +88,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x859b2 : une partie liée (variante non nulle) tombe avec son hôte (`+0x46`).
 fn guard(x: &mut Cx) {
-    if x.u8(VARIANT) == 0 || x.u16(f::STATE) == 0x0406 {
+    if x.u8(Obj::VARIANT) == 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }
     let host = x.linked(f::HOST);

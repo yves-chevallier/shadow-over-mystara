@@ -428,10 +428,10 @@ fn stunned(x: &mut Cx) {
 
 /// 0x8e95a : durée de l'étourdissement (`+0xb8`, selon la difficulté), posée à la première image.
 fn wait_init(x: &mut Cx) {
-    if x.u8(SUB3) != 0 {
+    if x.u8(f::SUB3) != 0 {
         return;
     }
-    x.add8(SUB3, 2);
+    x.add8(f::SUB3, 2);
     x.c.d[0] = 0;
     let level = x.a5_u8(0x7f92) >> 1;
     setb(x, 0, level);

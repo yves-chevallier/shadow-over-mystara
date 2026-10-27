@@ -12,12 +12,12 @@ fn key(x: &mut Cx, kind: u8) {
 }
 
 fn step(x: &mut Cx, table: u32) -> u32 {
-    dispatch(x, table, SUB3)
+    dispatch(x, table, f::SUB3)
 }
 
 /// 0x89030 : le boss s'efface (début commun des esquives).
 fn fade_out(x: &mut Cx) {
-    addq8(x, SUB3, 2);
+    addq8(x, f::SUB3, 2);
     x.set8(PHASE_TIMER, 0x10);
     key(x, 0x12);
     x.call(0xecf7a);
@@ -27,7 +27,7 @@ fn fade_out(x: &mut Cx) {
 /// 0x8909a : le boss reparaît quand le décompte est écoulé.
 fn fade_in(x: &mut Cx) {
     if sub16(x, TIMER, 1).mi() {
-        addq8(x, SUB3, 2);
+        addq8(x, f::SUB3, 2);
         x.set_bit(0x1, 1, false);
         x.call(0xecf7a);
     }
@@ -54,7 +54,7 @@ pub(super) fn group6(x: &mut Cx) {
         0x89030 => fade_out(x),
         0x8905a => {
             if x.anim_step() {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 let mut d = (-0x80i16) as u16;
                 if x.u8(f::FLIP) != 0 {
                     d = d.wrapping_neg();
@@ -67,7 +67,7 @@ pub(super) fn group6(x: &mut Cx) {
         }
         0x890de => {
             if x.anim_step() {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 aids::dodge_spot(x);
                 reappear(x);
             }
@@ -85,7 +85,7 @@ pub(super) fn group8(x: &mut Cx) {
             0x89030 => fade_out(x),
             0x8905a => {
                 if x.anim_step() {
-                    addq8(x, SUB3, 2);
+                    addq8(x, f::SUB3, 2);
                     let mut d = (-0x80i16) as u16;
                     if x.u8(f::FLIP) != 0 {
                         d = d.wrapping_neg();
@@ -103,7 +103,7 @@ pub(super) fn group8(x: &mut Cx) {
             0x89030 => fade_out(x),
             0x890de => {
                 if x.anim_step() {
-                    addq8(x, SUB3, 2);
+                    addq8(x, f::SUB3, 2);
                     aids::dodge_spot(x);
                     reappear(x);
                 }
@@ -120,7 +120,7 @@ pub(super) fn group8(x: &mut Cx) {
             0x89030 => fade_out(x),
             0x8919c => {
                 if x.anim_step() {
-                    addq8(x, SUB3, 2);
+                    addq8(x, f::SUB3, 2);
                     aids::random_spot(x);
                     aids::clamp(x);
                     x.set8(f::FLIP, 0);
@@ -138,7 +138,7 @@ pub(super) fn group8(x: &mut Cx) {
 
 /// 0x88f90 (`+6` = 0 du groupe 8) : attente debout, puis retour au combat.
 fn rest(x: &mut Cx) {
-    match dispatch(x, 0x88f9e, SUB3) {
+    match dispatch(x, 0x88f9e, f::SUB3) {
         0x88fe2 => {
             if sub16(x, TIMER, 1).mi() {
                 x.set32(f::STATE, 0x0202_0000);
@@ -155,10 +155,10 @@ fn rest(x: &mut Cx) {
         }
         t => {
             if t == 0x88fac {
-                addq8(x, SUB3, 2);
+                addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x14);
             } else {
-                sub8(x, SUB3, 2);
+                sub8(x, f::SUB3, 2);
             }
             x.set8(VULNERABLE, 1);
             x.set8(ANIM_KIND, 0);

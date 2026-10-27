@@ -154,10 +154,10 @@ fn turn(x: &mut Cx) {
         x.set8(f::FLIP, side);
         x.set8(FLYING, 0);
         x.set8(VULNERABLE, 1);
-        x.set8(ANGLE, 0x18);
+        x.set8(Obj::SPEED_INDEX, 0x18);
         if x.u8(f::FLIP) != 0 {
             x.set8(TIMER, 0x20);
-            x.set8(ANGLE, 8);
+            x.set8(Obj::SPEED_INDEX, 8);
         }
         return body_anim(x, 2);
     }
@@ -436,7 +436,7 @@ fn pick_round_point(x: &mut Cx) -> bool {
     set_dw(x, 0, gz);
     x.set16(GOAL_Z, gz);
     let angle = x.rom8(ROUND_POINTS + 4 + quarter);
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
     let turn = x.rom8(ROUND_POINTS + 5 + quarter);
     x.set8(GOAL_TURN, turn);
     turn != 0
@@ -469,8 +469,8 @@ fn circling(x: &mut Cx) {
     }
     if sub16(x, TIMER, 1).mi() {
         let turn = if x.u8(GOAL_TURN) != 0 { 0xff } else { 1 };
-        let a = x.u8(ANGLE).wrapping_add(turn) & 0x1f;
-        x.set8(ANGLE, a);
+        let a = x.u8(Obj::SPEED_INDEX).wrapping_add(turn) & 0x1f;
+        x.set8(Obj::SPEED_INDEX, a);
         x.set16(TIMER, 6);
     }
     x.move_by_table_xy();
@@ -484,7 +484,7 @@ fn take_off(x: &mut Cx) {
         0 => {
             next7(x);
             let angle = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             stop(x);
             x.set16(0x18, 0x300);
             x.set16(0x1a, (-0x60i16) as u16);
@@ -493,7 +493,7 @@ fn take_off(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 x.move_by_table_xy();
                 x.move_z();
             }

@@ -19,6 +19,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -26,20 +27,6 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    /// Vitesses : en X, en profondeur, en hauteur, pesanteur.
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    /// Direction de déplacement (table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours (octet fort du mot d'état d'animation `+0x32`).
-    pub const KEY_FRAME: u32 = 0x33;
     /// Dégâts du coup en cours : type et force.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
@@ -165,7 +152,7 @@ fn end_attack(x: &mut Cx) {
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row as u32 + n);
     x.set8(f::SUB2, mv);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 // --- état 0 : création --------------------------------------------------------------------------
@@ -223,7 +210,7 @@ fn active(x: &mut Cx) {
 /// Sous-état 0 : arrivée selon la variante `+3` (octet pair, indice de table : 0 marche, 2 chute, 4 bond,
 /// 6 chute lente).
 fn arrival(x: &mut Cx) {
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
                 move_xy(x);
@@ -238,14 +225,14 @@ fn arrival(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(REPEAT, 0x14);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
             body(x, 1);
         }
         2 => match x.u8(f::SUB2) {
             0 => {
-                x.set16(SPEED_Z, 0);
-                x.set16(GRAVITY, -0x40i16 as u16);
+                x.set16(Obj::VZ, 0);
+                x.set16(Obj::AZ, -0x40i16 as u16);
                 x.add8(f::SUB2, 2);
                 launch(x);
             }
@@ -257,12 +244,12 @@ fn arrival(x: &mut Cx) {
         4 => match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_Z, 0);
-                x.set16(GRAVITY, -0x38i16 as u16);
-                x.set16(SPEED_X, -0x280i16 as u16);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::VZ, 0);
+                x.set16(Obj::AZ, -0x38i16 as u16);
+                x.set16(Obj::VX, -0x280i16 as u16);
+                x.set16(Obj::AX, 0);
                 if x.u8(f::FLIP) != 0 {
-                    negate(x, SPEED_X);
+                    negate(x, Obj::VX);
                 }
                 launch(x);
             }
@@ -273,11 +260,11 @@ fn arrival(x: &mut Cx) {
             }
             6 => {
                 x.move_xz();
-                if (x.u16(HEIGHT) as i16) <= 0 {
+                if (x.u16(Obj::Z) as i16) <= 0 {
                     x.add8(f::SUB2, 2);
-                    x.set32(HEIGHT, 0);
+                    x.set32(Obj::Z, 0);
                     body(x, 5);
-                } else if (x.u16(HEIGHT) as i16) <= 0x30 {
+                } else if (x.u16(Obj::Z) as i16) <= 0x30 {
                     step(x);
                 }
             }
@@ -286,15 +273,15 @@ fn arrival(x: &mut Cx) {
         },
         6 => match x.u8(f::SUB2) {
             0 => {
-                x.set16(SPEED_Z, 0);
-                x.set16(GRAVITY, -0x40i16 as u16);
+                x.set16(Obj::VZ, 0);
+                x.set16(Obj::AZ, -0x40i16 as u16);
                 x.add8(f::SUB2, 2);
                 launch(x);
             }
             2 => wait_anim(x),
             4 => {
                 x.add8(f::SUB2, 2);
-                x.set32(HEIGHT, 0);
+                x.set32(Obj::Z, 0);
                 body(x, 5);
             }
             6 => end_to_stance(x),
@@ -307,11 +294,11 @@ fn arrival(x: &mut Cx) {
 /// 0x69558 : descente (déplacement en hauteur) puis réception.
 fn land(x: &mut Cx) {
     x.move_z();
-    if (x.u16(HEIGHT) as i16) > 0 {
+    if (x.u16(Obj::Z) as i16) > 0 {
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set32(HEIGHT, 0);
+    x.set32(Obj::Z, 0);
     body(x, 5);
 }
 

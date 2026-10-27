@@ -8,6 +8,7 @@
 use super::decide;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction (mots relatifs à 0x986d6, indexés par `+0x49 / 2`).
 const REACTIONS: u32 = 0x986d6;
@@ -347,7 +348,7 @@ fn pushed_back(x: &mut Cx) {
             x.set16(TIMER, 0x14);
             x.set16(0x1e, 0);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
             x.call(call::RANDOM_TURN);
             speed(x, 0x17);

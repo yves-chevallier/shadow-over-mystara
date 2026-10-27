@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x5cbe8;
@@ -114,7 +115,7 @@ pub(super) fn grab(x: &mut Cx) {
             }
             if (x.u8(TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
                 let host = x.linked(f::HOST);
-                host.set_u8(x.b, ANGLE, 1);
+                host.set_u8(x.b, Obj::SPEED_INDEX, 1);
             }
             set_state_long(x, st::DEAD_LONG);
             x.call(call::REMOVE);

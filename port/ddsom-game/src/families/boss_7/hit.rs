@@ -116,9 +116,9 @@ fn thrown(x: &mut Cx) {
             strike(x, 6);
         }
         _ => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.call(0xb4f1c);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
             if x.anim_step() {
                 x.set32(f::STATE, FIGHT);

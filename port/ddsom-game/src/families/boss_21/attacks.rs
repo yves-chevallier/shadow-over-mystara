@@ -44,10 +44,10 @@ fn finish(x: &mut Cx, to: fn(&mut Cx)) {
 
 /// Consomme l'image-clé `+0x33` ; vrai si elle était levée.
 fn take_key(x: &mut Cx) -> bool {
-    if x.u8(KEY) == 0 {
+    if x.u8(f::KEY_FRAME) == 0 {
         return false;
     }
-    x.set8(KEY, 0);
+    x.set8(f::KEY_FRAME, 0);
     true
 }
 
@@ -107,11 +107,11 @@ fn strike_4(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if (x.u8(KEY) as i8) >= 0 {
+            if (x.u8(f::KEY_FRAME) as i8) >= 0 {
                 return;
             }
             x.add8(0x7, 2);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             x.set16(TIMER, 0x1e);
             puff(x, 3);
             let (mut vx, mut vz) = (0x900u16 as i16, -0x4ci16);
@@ -186,7 +186,7 @@ fn leap(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x17);
             let v = leap_speed(x);
             x.set16(0x18, v);
@@ -197,7 +197,7 @@ fn leap(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xz();
@@ -256,7 +256,7 @@ fn beam(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
@@ -334,7 +334,7 @@ fn cinematic_shot(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set8(INVULNERABLE, 0);
             x.set16(TIMER, 0xa);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             let Some(shot) = x.alloc(&pools::ESHL) else { return cinematic_end(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
@@ -398,7 +398,7 @@ fn step_only(x: &mut Cx) {
 
 /// La clé est levée ? (sans la consommer ici : l'original la consomme plus loin).
 fn take_key_keep(x: &mut Cx) -> bool {
-    x.u8(KEY) != 0
+    x.u8(f::KEY_FRAME) != 0
 }
 
 fn cinematic_end(x: &mut Cx) {
@@ -419,10 +419,10 @@ fn summon(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x1e);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
         }
         4 => {
@@ -463,10 +463,10 @@ fn whirl(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
         }
         4 => {

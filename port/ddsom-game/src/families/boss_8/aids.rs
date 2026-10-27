@@ -298,7 +298,7 @@ fn pick_row(x: &mut Cx, table: u32, state: u16, clear_d0: bool) {
     let step = x.data8(a4 + i as u32);
     x.set8(f::SUB2, step);
     x.set16(f::STATE, state);
-    x.set8(SUB3, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// 0x8a066 : fin d'une attaque. Un joueur dans la zone (0x7f19c : -0x30, 0x100, 0x40) fait tirer la suite dans la table

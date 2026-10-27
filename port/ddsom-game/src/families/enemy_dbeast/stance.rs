@@ -11,7 +11,7 @@ const PICK_TABLE: u32 = 0x7462e;
 const CLOSE_TABLE: u32 = 0x74cac;
 
 pub(super) fn run(x: &mut Cx) {
-    if matches!(x.u8(VARIANT), 0xc | 0xd) || grabbed(x) {
+    if matches!(x.u8(Obj::VARIANT), 0xc | 0xd) || grabbed(x) {
         return set_state_long(x, KNOCKED);
     }
     // une pièce dont le parent est touché l'est aussi

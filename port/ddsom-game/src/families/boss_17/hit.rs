@@ -12,6 +12,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x96a0c;
@@ -61,7 +62,7 @@ fn reaction(x: &mut Cx) {
         set_abs8(x, 0xff8043, 0xff);
         x.set_a5_u16(0x51e, 0);
         x.call(0x10112);
-        if x.u8(VARIANT) == 0 && tst16(x, f::HP).le() {
+        if x.u8(Obj::VARIANT) == 0 && tst16(x, f::HP).le() {
             return decide::start_death(x);
         }
         if out_of_hp(x) {
@@ -191,7 +192,7 @@ fn get_up(x: &mut Cx) {
                     return;
                 }
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.call(0x10574);
             speed(x, 0x2b);
             x.set16(TIMER, 0x1e);
@@ -243,16 +244,16 @@ pub(super) fn recovered_tail(x: &mut Cx) {
     if !pick_target(x) {
         return decide::wait(x);
     }
-    x.c.a[1] = if x.u8(VARIANT) == 0 { THRESHOLDS_A } else { THRESHOLDS_B };
+    x.c.a[1] = if x.u8(Obj::VARIANT) == 0 { THRESHOLDS_A } else { THRESHOLDS_B };
     x.call(0x105b6);
     if !zero(x) {
-        if x.u8(VARIANT) == 0 {
+        if x.u8(Obj::VARIANT) == 0 {
             if cmp8(x, PHASE, 3).ge() {
                 return decide::start_death(x);
             }
             return decide::attack_14(x);
         }
-        if x.u8(VARIANT) == 2 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 && cmp8(x, PHASE, 2).eq() {
+        if x.u8(Obj::VARIANT) == 2 && (x.a5_u8(var::PLAYERS_ALIVE) as i8) > 2 && cmp8(x, PHASE, 2).eq() {
             if let Some(o) = x.alloc(&pools::SET) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, 2);
@@ -288,7 +289,7 @@ pub(super) fn recovered_tail(x: &mut Cx) {
 fn down(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
-            if x.u8(VARIANT) == 0 {
+            if x.u8(Obj::VARIANT) == 0 {
                 return decide::start_death(x);
             }
             x.add8(f::SUB2, 2);

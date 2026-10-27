@@ -20,6 +20,7 @@
 
 use super::boss_common::*;
 use super::cx::handlers;
+use crate::objects::Obj;
 
 mod attacks;
 mod fight;
@@ -28,7 +29,6 @@ mod intro;
 
 pub(self) mod g {
     pub const TYPE: u32 = 0x2;
-    pub const VARIANT: u32 = 0x3;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -194,7 +194,7 @@ fn init(x: &mut Cx) {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x1c);
     }
-    if kind == TYPE_BLACK && x.u8(VARIANT) == 1 {
+    if kind == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
         x.call(0x453c);
     } else {
         if x.a5_u8(0x30) != 0 {
@@ -238,7 +238,7 @@ pub(self) fn active(x: &mut Cx) {
             sub8(x, f::FREEZE, 1);
         } else {
             // le dragon de Nagpa disparaît avec son hôte
-            if x.u8(TYPE) == TYPE_BLACK && x.u8(VARIANT) == 1 {
+            if x.u8(TYPE) == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
                 if (x.u16(f::HOST) as i16) >= 0 {
                     return host_gone(x);
                 }

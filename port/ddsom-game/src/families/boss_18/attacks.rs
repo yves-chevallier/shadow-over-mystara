@@ -55,11 +55,11 @@ fn step_only(x: &mut Cx) {
 
 /// Consomme le bit 0 de l'image-clé `+0x33`.
 fn key_bit0(x: &mut Cx) -> bool {
-    if x.u8(KEY) & 1 == 0 {
+    if x.u8(f::KEY_FRAME) & 1 == 0 {
         return false;
     }
-    let k = x.u8(KEY) & !1;
-    x.set8(KEY, k);
+    let k = x.u8(f::KEY_FRAME) & !1;
+    x.set8(f::KEY_FRAME, k);
     true
 }
 
@@ -107,7 +107,7 @@ fn sidestep(x: &mut Cx) {
             x.set16(TIMER, 0x1e);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
             x.set16(0x16, vz as u16);
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x21);
             strike_anim(x, 0x11, 1);
         }
@@ -120,8 +120,8 @@ fn sidestep(x: &mut Cx) {
             x.set16(TIMER, 0x14);
             x.set16(0x16, 0);
             x.call(0xe5e2a);
-            let a = x.u8(ANGLE) ^ 0x10;
-            x.set8(ANGLE, a);
+            let a = x.u8(Obj::SPEED_INDEX) ^ 0x10;
+            x.set8(Obj::SPEED_INDEX, a);
             speed(x, 0x35);
             strike(x, 2);
         }
@@ -133,7 +133,7 @@ fn sidestep(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x1e);
             let mut v: i16 = 0x2c;
-            if x.u8(ANGLE) != 0x18 {
+            if x.u8(Obj::SPEED_INDEX) != 0x18 {
                 v = -v;
             }
             x.set16(0x16, v as u16);
@@ -260,7 +260,7 @@ fn hop_back(x: &mut Cx) {
             x.set16(0x18, 0x580);
             x.set16(0x1a, (-0x38i16) as u16);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (0x18, 0x10i16) } else { (8, -0x10) };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
             speed(x, 0x21);
             strike_anim(x, 0x14, 6);
@@ -373,12 +373,12 @@ fn beam(x: &mut Cx) {
         }
         2 => {
             step_only(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             let Some(shot) = x.alloc(&pools::ESHL) else { return end_shot(x, decide::stand) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);

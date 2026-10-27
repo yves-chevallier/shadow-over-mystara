@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(NO_ZONE) != 0 || grabbed(x) {
@@ -27,7 +28,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x6c81c : (re)commence la marche vers la cible.
 pub(super) fn approach_start(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     set_speed(x, 0x12);
     mv(x, 1);
@@ -38,7 +39,7 @@ pub(super) fn approach_start(x: &mut Cx) {
 
 /// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
 fn approach(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
+    if x.u8(f::SUB3) == 0 {
         x.set8(SHOT_KIND, 0x1a);
         return approach_start(x);
     }
@@ -90,14 +91,14 @@ fn approach(x: &mut Cx) {
     x.move_by_table_xy();
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);
-        x.set8(STEP, 0);
+        x.set8(f::SUB3, 0);
     }
 }
 
 /// +6 = 2 : demi-tour.
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         return mv(x, 2);
     }
@@ -111,8 +112,8 @@ fn turn(x: &mut Cx) {
 
 /// +6 = 4 : attente sur place.
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         return mv(x, 0);
     }
@@ -127,7 +128,7 @@ fn wait(x: &mut Cx) {
 /// +6 = 6 (et sous-état 4, +6 = 20) : le Troll quitte l'écran en marchant. L'original rend la main à la boucle
 /// avec une remise en liste (`jmp 0x1ee1a`) à plusieurs endroits : on la rejoue.
 pub(super) fn walk_off(x: &mut Cx) {
-    let step = x.u8(STEP);
+    let step = x.u8(f::SUB3);
     if step == 2 {
         if x.in_arena_default() {
             return x.add8(f::STATE, 4);
@@ -139,24 +140,24 @@ pub(super) fn walk_off(x: &mut Cx) {
     if step > 2 {
         if x.anim_step() {
             set_speed(x, 0x21);
-            x.add8(STEP, 0xfe);
+            x.add8(f::SUB3, 0xfe);
             let flip = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
         }
         return x.reinsert();
     }
-    x.add8(STEP, 2);
-    x.set8(ANGLE, 8);
+    x.add8(f::SUB3, 2);
+    x.set8(Obj::SPEED_INDEX, 8);
     let mut want = 0x20u8;
     let base = if x.a5_u8(0x36) != 0 { 0x55e } else { 0x50e };
-    let d = x.u16(X).wrapping_sub(x.a5_u16(base));
+    let d = x.u16(Obj::X).wrapping_sub(x.a5_u16(base));
     if (d as i16) <= 0xc0 {
-        x.set8(ANGLE, 8);
+        x.set8(Obj::SPEED_INDEX, 8);
         want = 0;
     }
     x.c.d[4] = x.c.d[4] & !0xff | want as u32;
     if want != x.u8(f::FLIP) {
-        x.add8(STEP, 4);
+        x.add8(f::SUB3, 4);
         mv(x, 2);
     } else {
         set_speed(x, 0x21);

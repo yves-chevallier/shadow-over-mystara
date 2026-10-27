@@ -2,6 +2,7 @@
 //! relatif) qui aboutissent à l'un des « talons » d'état ; on relit les mêmes tables et on exécute le talon visé.
 
 use super::*;
+use crate::objects::Obj;
 
 /// Saut par table de mots : `base + mot(base + index)` (adressage `(base,PC,Dn)`, espace des opcodes).
 fn table_target(x: &mut Cx, base: u32, index: u32) -> u32 {
@@ -100,7 +101,7 @@ pub(super) fn gate_near(x: &mut Cx) -> u32 {
 pub(super) fn gate_wide(x: &mut Cx) -> u32 {
     let lo = camera_x(x).wrapping_sub(0x10) as i16;
     let hi = camera_x(x).wrapping_add(0x190) as i16;
-    let at = x.u16(X) as i16;
+    let at = x.u16(Obj::X) as i16;
     if lo >= at || hi <= at {
         x.c.d[0] = 0;
         return 0;

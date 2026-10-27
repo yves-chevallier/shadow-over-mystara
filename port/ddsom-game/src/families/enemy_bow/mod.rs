@@ -17,6 +17,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod arrival;
 mod hit;
@@ -25,18 +26,7 @@ mod spawned;
 mod stance;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
-    pub const KEY: u32 = 0x33;
     /// Non nul : créé par un autre objet, tire en place (`spawned`).
     pub const SPAWNED: u32 = 0x42;
     /// Non nul : durée de vie limitée par `LIFETIME`.
@@ -125,13 +115,13 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 /// 0x5ce22 : direction de marche selon l'orientation (0xc à gauche, 4 à droite).
 pub(self) fn face_angle(x: &mut Cx) {
     let angle = if x.u8(f::FLIP) != 0 { 4 } else { 0xc };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
 pub(self) fn walk_angle(x: &mut Cx) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
@@ -197,7 +187,7 @@ pub(self) fn follow_up(x: &mut Cx) {
     let b = row_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 // --- état 0 : création --------------------------------------------------------------------------

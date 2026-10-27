@@ -2,12 +2,13 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if x.a5_u8(0x35) == 0 {
         return set_state_long(x, IDLE);
     }
-    if matches!(x.u8(VARIANT), 0xa | 0xb) || grabbed(x) {
+    if matches!(x.u8(Obj::VARIANT), 0xa | 0xb) || grabbed(x) {
         return set_state_long(x, HELD);
     }
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -29,8 +30,8 @@ fn approach(x: &mut Cx) {
     if target_far_in_line(x) {
         return set_state_long(x, 0x0202_0600);
     }
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(LOOK, 0xc);
         mv(x, 0xc);
@@ -82,7 +83,7 @@ pub(super) fn reach_boxes(x: &mut Cx) {
         return;
     }
     let target = x.linked(f::TARGET);
-    let side = if (x.u16(X).wrapping_sub(target.u16(x.b, X)) as i16) < 0 { 0x20 } else { 0 };
+    let side = if (x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X)) as i16) < 0 { 0x20 } else { 0 };
     if side != x.u8(f::FLIP) {
         x.set32(RESUME_STATE, STANCE);
         x.set8(RESUME_SUB2, 0);
@@ -141,8 +142,8 @@ fn far_attack(x: &mut Cx) -> bool {
 // --- +6 = 2 : demi-tour --------------------------------------------------------------------------------------
 
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         look(x, 5);
         return mv(x, 5);
@@ -162,8 +163,8 @@ fn turn(x: &mut Cx) {
 // --- +6 = 4 : attente -----------------------------------------------------------------------------------------
 
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(LOOK, 0);
         return mv(x, 0);
@@ -184,14 +185,14 @@ fn wait(x: &mut Cx) {
 // --- +6 = 6 : course ------------------------------------------------------------------------------------------
 
 fn run_up(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 0xfe);
+            x.add8(f::SUB3, 0xfe);
             run_begin(x);
         }
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x28);
             x.call(call::FACE_TARGET);
             run_begin(x);

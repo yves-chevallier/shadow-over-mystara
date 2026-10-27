@@ -4,6 +4,7 @@
 use super::stance::begin_walk;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if special_hit(x, 0x5ff60) {
@@ -29,8 +30,8 @@ pub(super) fn run(x: &mut Cx) {
 
 /// Coup de griffe (type `kind`, animation `anim` des coups).
 fn claw(x: &mut Cx, kind: u8, anim: u32) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(STRIKE_KIND, kind);
         look(x, 6);
         x.set8(VULNERABLE, 1);
@@ -60,9 +61,9 @@ struct Leap {
 }
 
 fn leap(x: &mut Cx, l: Leap) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             if let Some(k) = l.kind {
                 x.set8(STRIKE_KIND, k);
             }
@@ -77,22 +78,22 @@ fn leap(x: &mut Cx, l: Leap) {
             if t != 0 {
                 return;
             }
-            x.add8(STEP, 2);
-            x.set16(SPEED_X, -l.speed as u16);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::VX, -l.speed as u16);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Z, l.rise);
-            x.set16(GRAVITY, -(l.gravity as i16) as u16);
-            x.set16(SPEED_Y, 0);
+            x.set16(Obj::VZ, l.rise);
+            x.set16(Obj::AZ, -(l.gravity as i16) as u16);
+            x.set16(Obj::AX, 0);
             strike(x, 4);
         }
         4 => {
             if x.move_xz().gt() {
                 return;
             }
-            x.add8(STEP, 2);
-            x.set32(HEIGHT, 0);
+            x.add8(f::SUB3, 2);
+            x.set32(Obj::Z, 0);
             body(x, 5);
         }
         6 => {
@@ -112,8 +113,8 @@ fn leap(x: &mut Cx, l: Leap) {
 
 /// 8 : garde (animation 3) pendant `0x78` images.
 fn guard(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         look(x, 6);
         x.set8(VULNERABLE, 1);
         x.set8(TIMER, 0x78);
@@ -129,7 +130,7 @@ fn guard(x: &mut Cx) {
 
 /// Début d'une approche : marche vers l'avant (animation 2) pendant `0x18` images.
 fn begin_charge(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     look(x, 6);
     x.set8(VULNERABLE, 1);
     x.set8(TIMER, 0x18);
@@ -140,7 +141,7 @@ fn begin_charge(x: &mut Cx) {
 
 /// 14 : approche, puis un nouveau choix (ou un coup immédiat).
 fn charge(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
+    if x.u8(f::SUB3) == 0 {
         return begin_charge(x);
     }
     let t = x.u8(TIMER).wrapping_sub(1);
@@ -157,13 +158,13 @@ fn charge(x: &mut Cx) {
 
 /// 16 : approche puis geste de feinte (griffe ou animation 3 des coups).
 fn feint(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => begin_charge(x),
         2 => {
             let t = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, t);
             if t == 0 {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set8(TIMER, 0x10);
                 if rand_and(x, 1) == 0 {
                     return body(x, 0);

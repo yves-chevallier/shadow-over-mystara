@@ -26,8 +26,6 @@ mod hit;
 mod moves;
 
 pub(self) mod g {
-    pub const KEY: u32 = 0x33;
-    pub const SUB3: u32 = 0x7;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;

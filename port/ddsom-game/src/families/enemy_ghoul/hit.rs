@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x6090c;
@@ -45,17 +46,17 @@ fn recoil(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(f::FREEZE, 4);
-        x.set16(SPEED_X, 0x500);
-        x.set16(SPEED_Y, -0x38i16 as u16);
+        x.set16(Obj::VX, 0x500);
+        x.set16(Obj::AX, -0x38i16 as u16);
         let flip = x.u8(0x4a) ^ 0x20;
         x.set8(0x4a, flip);
         if flip != 0 {
-            negate(x, SPEED_X);
-            negate(x, SPEED_Y);
+            negate(x, Obj::VX);
+            negate(x, Obj::AX);
         }
         return body(x, 9);
     }
-    if x.u8(SPEED_X) != 0 {
+    if x.u8(Obj::VX) != 0 {
         x.move_x();
         return;
     }
@@ -110,17 +111,17 @@ fn caught(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            let pos = x.u16(X);
+            let pos = x.u16(Obj::X);
             x.set16(SAVED_X, pos);
             let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
             set_dw(x, 0, cam);
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_X, 0x300);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VX, 0x300);
             let mut want = 0x20;
             let d1 = pos.wrapping_sub(cam);
             set_dw(x, 1, d1);
             if (d1 as i16) < 0xc0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
                 want = 0;
             }
             x.c.d[2] = want as u32;
@@ -137,7 +138,7 @@ fn caught(x: &mut Cx) {
             }
         }
         4 => {
-            let vx = x.u16(SPEED_X);
+            let vx = x.u16(Obj::VX);
             if vx != 0x300 && vx != 0xfd00 {
                 return x.set8(f::SUB2, 0);
             }
@@ -147,8 +148,8 @@ fn caught(x: &mut Cx) {
                 return set_state_long(x, st::DEAD_LONG);
             }
             x.call(IN_ZONE);
-            if x.u16(SAVED_X) != x.u16(X) {
-                let pos = x.u16(X);
+            if x.u16(SAVED_X) != x.u16(Obj::X) {
+                let pos = x.u16(Obj::X);
                 x.set16(SAVED_X, pos);
                 x.set8(TIMER, 0x3c);
                 return {

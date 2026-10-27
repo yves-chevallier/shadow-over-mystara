@@ -10,6 +10,7 @@
 use super::fight;
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if x.a5_u8(0x30) == 0 {
@@ -17,7 +18,7 @@ pub(super) fn run(x: &mut Cx) {
     }
     x.set8(SHIELD, 2);
     if x.u8(TYPE) == TYPE_GREEN {
-        if x.u8(VARIANT) != 0 {
+        if x.u8(Obj::VARIANT) != 0 {
             return end(x);
         }
         x.call(0xb3f6a);
@@ -30,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
             _ => end(x),
         };
     }
-    if x.u8(VARIANT) == 1 {
+    if x.u8(Obj::VARIANT) == 1 {
         match x.u8(f::SUB2) {
             0 => pet_enter(x),
             2 => pet_fly(x),

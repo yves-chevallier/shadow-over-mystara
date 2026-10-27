@@ -3,6 +3,7 @@
 use super::attacks::{begin_wait, hold, paw_begin};
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Fin d'un geste du sous-état 6 : retour à l'affût (0x5634a).
 fn ready_after_anim(x: &mut Cx) {
@@ -28,7 +29,7 @@ fn ready(x: &mut Cx) {
 
 pub(super) fn run_b(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => return begin_wait(x),
         2 => return hold(x, 0x0206_0000),
         _ => {}
@@ -46,7 +47,7 @@ pub(super) fn run_b(x: &mut Cx) {
 
 /// +6 = 0 : rugissement ou souffle (tirage au hasard).
 fn b_roar(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
             let r = rand_and(x, 1);
             if r != 0 {
@@ -55,7 +56,7 @@ fn b_roar(x: &mut Cx) {
                 mv(x, 0xc);
                 return ready(x);
             }
-            x.add8(STEP, 4);
+            x.add8(f::SUB3, 4);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 7);
             let r = rand_and(x, 0x1f);
@@ -70,9 +71,9 @@ fn b_roar(x: &mut Cx) {
 }
 
 fn b_stretch(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 0xf);
             mv(x, 0xf);
@@ -84,19 +85,19 @@ fn b_stretch(x: &mut Cx) {
 
 /// +6 = 4 : saut périlleux de côté.
 fn b_somersault(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 2);
-            x.set16(SPEED_X2, 0x100);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::VY, 0x100);
             let r = rand_and(x, 1);
             if r != 0 {
-                x.set16(SPEED_X2, -0x100i16 as u16);
+                x.set16(Obj::VY, -0x100i16 as u16);
             }
             x.set8(VULNERABLE, 1);
             look(x, 6);
-            x.set16(SPEED_Y2, 0);
-            x.set16(SPEED_Z, 0x400);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AY, 0);
+            x.set16(Obj::VZ, 0x400);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             mv(x, 6);
         }
         6 => attacks_wait_key(x),
@@ -108,8 +109,8 @@ fn b_somersault(x: &mut Cx) {
 
 /// 0x55148 : attend la clé d'animation.
 fn attacks_wait_key(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
     }
     x.anim_step();
@@ -122,8 +123,8 @@ fn land_yz(x: &mut Cx) {
         return;
     }
     x.set8(0, 1);
-    x.set32(HEIGHT, 0);
-    x.add8(STEP, 2);
+    x.set32(Obj::Z, 0);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 0x18);
     mv(x, 0x18);
@@ -131,18 +132,18 @@ fn land_yz(x: &mut Cx) {
 
 /// +6 = 6 et 10 : bond de côté ; `strike` : l'animation 7 de coups au lieu de la 0x1c de marche.
 fn b_hop(x: &mut Cx, vx: i16, vz: u16, strike_anim: bool) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             look(x, 0x1c);
-            x.set16(SPEED_X, vx as u16);
+            x.set16(Obj::VX, vx as u16);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, vz);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, vz);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             if strike_anim {
                 strike(x, 7);
             } else {
@@ -167,8 +168,8 @@ fn land(x: &mut Cx) {
         x.anim_step();
         return;
     }
-    x.set32(HEIGHT, 0);
-    x.add8(STEP, 2);
+    x.set32(Obj::Z, 0);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 0x18);
     mv(x, 0x18);
@@ -176,13 +177,13 @@ fn land(x: &mut Cx) {
 
 /// +6 = 8 : bond de côté puis coup.
 fn b_hop_strike(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         4 => b_hop(x, 0x80, 0x2c0, false),
         6 => attacks_wait_key_clear(x),
         8 => land(x),
         10 => {
             if x.anim_step() {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set8(STRIKE_POWER, 5);
                 x.set8(LOOK, 0x28);
                 strike(x, 0);
@@ -206,14 +207,14 @@ pub(super) fn run_c(x: &mut Cx) {
 }
 
 fn c_wait(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 0xfe);
+            x.add8(f::SUB3, 0xfe);
             c_begin(x);
         }
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set16(TIMER, 0x10);
             c_begin(x);
         }
@@ -243,7 +244,7 @@ fn c_begin(x: &mut Cx) {
 
 /// +6 = 2 : coup de patte.
 fn c_paw(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => paw_begin(x),
         2 => {
             let n = x.u16(TIMER).wrapping_sub(1);
@@ -264,8 +265,8 @@ fn c_paw(x: &mut Cx) {
 
 /// +6 = 4 : pas de côté ou saut de côté.
 fn c_side(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
             let r = rand_and(x, 1);
@@ -273,22 +274,22 @@ fn c_side(x: &mut Cx) {
             let mut above = false;
             if target {
                 let t = x.linked(f::TARGET);
-                above = (t.u16(x.b, DEPTH).wrapping_sub(x.u16(DEPTH)) as i16) >= 0;
+                above = (t.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)) as i16) >= 0;
             }
             if r == 0 {
-                x.set8(STEP, 4);
-                x.set16(SPEED_X2, -0x80i16 as u16);
+                x.set8(f::SUB3, 4);
+                x.set16(Obj::VY, -0x80i16 as u16);
                 if target && !above {
-                    negate(x, SPEED_X2);
+                    negate(x, Obj::VY);
                 }
-                x.set16(SPEED_Y2, 0);
-                x.set16(SPEED_Z, 0x3c0);
-                x.set16(GRAVITY, -0x38i16 as u16);
+                x.set16(Obj::AY, 0);
+                x.set16(Obj::VZ, 0x3c0);
+                x.set16(Obj::AZ, -0x38i16 as u16);
                 look(x, 6);
                 return mv(x, 6);
             }
-            x.add8(STEP, 2);
-            x.set8(ANGLE, if above { 0x10 } else { 0 });
+            x.add8(f::SUB3, 2);
+            x.set8(Obj::SPEED_INDEX, if above { 0x10 } else { 0 });
             look(x, 0xc);
             x.set16(TIMER, 0x24);
             mv(x, 0xc);

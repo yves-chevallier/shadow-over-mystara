@@ -16,24 +16,13 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 const ANIMS: u32 = 0x163a86;
 const ANIMS_HIT: u32 = 0x163a9e;
 
 /// Champs propres à ce type.
 mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_X2: u32 = 0x1c;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
     /// Table de vitesses courante (long).
     pub const SPEEDS: u32 = 0x4c;
@@ -110,12 +99,12 @@ fn camera(x: &mut Cx) -> (u16, u16) {
 fn speeds(x: &mut Cx, table: u32) {
     x.c.a[4] = table;
     x.set32(SPEEDS, table);
-    let off = (x.u8(ANGLE) as u32) << 2;
+    let off = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
     let (vx, vy) = (x.data16(table + off), x.data16(table + off + 2));
-    x.set16(SPEED_X, vx);
-    x.set16(SPEED_X2, vy);
-    x.set16(SPEED_Y, 0);
-    x.set16(SPEED_Y2, 0);
+    x.set16(Obj::VX, vx);
+    x.set16(Obj::VY, vy);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::AY, 0);
 }
 
 /// 0x666d2 : table de vitesses choisie par la difficulté (`A5+0x7f92` & 0x1c).
@@ -142,7 +131,7 @@ fn set_speed_y(x: &mut Cx, base: u16) {
     x.c.a[4] = SPEED_Y_ROW;
     set_dw(x, 0, off);
     let v = x.data16(SPEED_Y_ROW + off as u32);
-    x.set16(SPEED_Y2, v);
+    x.set16(Obj::AY, v);
 }
 
 // --- état 0 : création --------------------------------------------------------------------------
@@ -156,10 +145,10 @@ fn init(x: &mut Cx) {
     for (off, v) in [(0x7e, 4), (0x7f, 0), (0x6c, 3), (0x74, 3), (0x76, 3)] {
         x.set8(off, v);
     }
-    x.set16(HEIGHT, 0x36);
+    x.set16(Obj::Z, 0x36);
     x.set8(0xa5, 0);
     x.set8(BITING, 0);
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 | 1 | 3 => start_walk(x),
         2 => enter_from_edge(x),
         4 => nest(x),
@@ -169,15 +158,15 @@ fn init(x: &mut Cx) {
 
 /// 0x65b6c : l'insecte part dans le sens que dicte la parité de `+0x2f`.
 fn start_walk(x: &mut Cx) {
-    let (px, pz) = (x.u16(X), x.u16(DEPTH));
+    let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
     x.set16(SAVED_DEPTH, pz);
     x.set8(SIDE, 0);
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     x.set8(f::FLIP, 0x20);
     x.set8(TURN_STEP, 8);
     if x.u8(GROUP) & 1 == 0 {
-        x.set8(ANGLE, 0x18);
+        x.set8(Obj::SPEED_INDEX, 0x18);
         x.set8(f::FLIP, 0);
         x.set8(TURN_STEP, 0);
     }
@@ -186,11 +175,11 @@ fn start_walk(x: &mut Cx) {
 
 /// 0x65bb4 : reprise de la marche après un bond, selon l'orientation et la parité de `+0x2f`.
 fn resume_walk(x: &mut Cx) {
-    let (px, pz) = (x.u16(X), x.u16(DEPTH));
+    let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
     x.set16(SAVED_DEPTH, pz);
     let flipped = x.u8(f::FLIP) != 0;
-    x.set8(ANGLE, if flipped { 8 } else { 0x18 });
+    x.set8(Obj::SPEED_INDEX, if flipped { 8 } else { 0x18 });
     x.set8(TURN_STEP, if flipped { 8 } else { 0 });
     let odd_group = x.u8(GROUP) != 0;
     x.set8(SIDE, if flipped != odd_group { 0x10 } else { 0 });
@@ -205,17 +194,17 @@ fn enter_from_edge(x: &mut Cx) {
     x.set8(SIDE, 0);
     x.set8(f::FLIP, 0);
     x.set8(TURN_STEP, 0);
-    x.set8(ANGLE, 0x18);
+    x.set8(Obj::SPEED_INDEX, 0x18);
     if x.u8(GROUP) & 1 != 0 {
         offset = -0x10i16 as u16;
-        x.set8(ANGLE, 8);
+        x.set8(Obj::SPEED_INDEX, 8);
         x.set8(f::FLIP, 0x20);
         x.set8(TURN_STEP, 8);
     }
     set_dw(x, 5, offset);
     let px = cx.wrapping_add(offset);
     set_dw(x, 6, px);
-    x.set16(X, px);
+    x.set16(Obj::X, px);
     anim_play(x, 0);
 }
 
@@ -225,7 +214,7 @@ fn nest(x: &mut Cx) {
     x.set8(f::SUB, 8);
     let list = x.u8(0x42) as u32;
     if list == 3 {
-        x.set16(HEIGHT, 0x60);
+        x.set16(Obj::Z, 0x60);
     }
     spawn_list(x, NEST_LISTS, NEST_ALLOCS, list);
 }
@@ -256,8 +245,8 @@ fn march(x: &mut Cx) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         speeds_by_level(x, SPEEDS_WALK);
         turn_timer(x, TIMER_B);
     }
@@ -267,7 +256,7 @@ fn march(x: &mut Cx) {
     bite_check(x);
     let (cx, cy) = camera(x);
     let d5 = x.u16(SAVED_X).wrapping_sub(cx).wrapping_add(0x80);
-    let inside = d5 < 0x280 && x.u16(SAVED_DEPTH).wrapping_add(x.u16(HEIGHT)).wrapping_sub(cy).wrapping_add(0x10) <= 0x120;
+    let inside = d5 < 0x280 && x.u16(SAVED_DEPTH).wrapping_add(x.u16(Obj::Z)).wrapping_sub(cy).wrapping_add(0x10) <= 0x120;
     if !inside {
         set_state_long(x, DEAD);
         x.call(REMOVE);
@@ -288,8 +277,8 @@ fn steer(x: &mut Cx) {
     x.set8(TURN_TIMER, period);
     let idx = ((x.u8(TURN_STEP) & 8) >> 3).wrapping_add(x.u8(SIDE) >> 3) as u32;
     let delta = x.rom8(TURN_DELTA + idx);
-    let angle = x.u8(ANGLE).wrapping_add(delta) & 0x1f;
-    x.set8(ANGLE, angle);
+    let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(delta) & 0x1f;
+    x.set8(Obj::SPEED_INDEX, angle);
     let key = x.u8(TURN_STEP).wrapping_add(x.u8(SIDE)) as u32;
     let entry = TURN_TARGETS + key;
     if angle & 0xf != x.data8(entry) {
@@ -345,7 +334,7 @@ fn routes(x: &mut Cx) {
 
 /// 0x65ea8 : début de traversée.
 fn cross_start(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     speeds_by_level(x, SPEEDS_FLY);
     turn_timer(x, TIMER_A);
     anim_play(x, 0);
@@ -353,16 +342,16 @@ fn cross_start(x: &mut Cx) {
 
 /// Groupes 0 et 1 : traversée, arrêt de la marche puis virage, sortie.
 fn cross(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => cross_start(x),
         2 => {
             x.move_xy();
             let (cx, _) = camera(x);
-            let d5 = x.u16(X).wrapping_sub(cx);
+            let d5 = x.u16(Obj::X).wrapping_sub(cx);
             set_dw(x, 5, d5);
             let arrived = if x.u8(GROUP) & 1 != 0 { (d5 as i16) >= 0x140 } else { (d5 as i16) <= 0x40 };
             if arrived {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 set_speed_y(x, 0x28);
             }
             x.anim_step();
@@ -387,8 +376,8 @@ fn cross_turn(x: &mut Cx, side: u8) {
     }
     steer(x);
     let wanted = if x.u8(GROUP) & 1 != 0 { 0x18 } else { 8 };
-    if x.u8(ANGLE) == wanted {
-        x.add8(STEP, 2);
+    if x.u8(Obj::SPEED_INDEX) == wanted {
+        x.add8(f::SUB3, 2);
         x.set8(0, 1);
         speeds_by_level(x, SPEEDS_WALK);
     }
@@ -398,7 +387,7 @@ fn cross_turn(x: &mut Cx, side: u8) {
 fn leave(x: &mut Cx) {
     x.move_xy();
     let (cx, _) = camera(x);
-    let d5 = x.u16(X).wrapping_sub(cx);
+    let d5 = x.u16(Obj::X).wrapping_sub(cx);
     set_dw(x, 5, d5);
     let out = if x.u8(GROUP) & 1 != 0 { (d5 as i16) < -0x10 } else { (d5 as i16) >= 0x190 };
     if out {
@@ -410,45 +399,45 @@ fn leave(x: &mut Cx) {
 
 /// Groupes 2 et 3 : dérive latérale constante (`+0xb4`) jusqu'à la sortie de l'écran.
 fn drift(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
-            x.set8(ANGLE, 0x18);
+            x.add8(f::SUB3, 2);
+            x.set8(Obj::SPEED_INDEX, 0x18);
             let mut d6 = 0x11;
             if x.u8(GROUP) & 1 != 0 {
-                x.set8(ANGLE, 8);
+                x.set8(Obj::SPEED_INDEX, 8);
                 d6 = 1;
             }
             x.c.d[6] = d6;
             speeds(x, SPEEDS_DRIFT);
             x.set16(TURN_PERIOD, 0x101);
-            x.set16(SPEED_X, 0x300);
-            if x.u8(ANGLE) != 8 {
-                negate(x, SPEED_X);
+            x.set16(Obj::VX, 0x300);
+            if x.u8(Obj::SPEED_INDEX) != 8 {
+                negate(x, Obj::VX);
             }
-            let vx = x.u16(SPEED_X);
+            let vx = x.u16(Obj::VX);
             x.set16(DRIFT, vx);
-            x.set8(ANGLE, d6 as u8);
+            x.set8(Obj::SPEED_INDEX, d6 as u8);
             anim_play(x, 0);
         }
         2 => {
-            let pos = x.u32(X);
+            let pos = x.u32(Obj::X);
             x.set32(SAVED_X, pos);
             x.move_by_table_xz();
             let pos = x.u32(SAVED_X);
-            x.set32(X, pos);
+            x.set32(Obj::X, pos);
             let shift = ((x.u16(DRIFT) as i16 as i32) << 8) as u32;
-            x.add32(X, shift);
+            x.add32(Obj::X, shift);
             let n = x.u8(TURN_TIMER).wrapping_sub(1);
             x.set8(TURN_TIMER, n);
             if n == 0 {
                 let period = x.u8(TURN_PERIOD);
                 x.set8(TURN_TIMER, period);
-                x.add8(ANGLE, 1);
-                let a = x.u8(ANGLE) & 0x1f;
-                x.set8(ANGLE, a);
+                x.add8(Obj::SPEED_INDEX, 1);
+                let a = x.u8(Obj::SPEED_INDEX) & 0x1f;
+                x.set8(Obj::SPEED_INDEX, a);
                 let (cx, _) = camera(x);
-                let d5 = x.u16(X).wrapping_sub(cx);
+                let d5 = x.u16(Obj::X).wrapping_sub(cx);
                 set_dw(x, 5, d5);
                 let out = if x.u8(GROUP) & 1 != 0 { (d5 as i16) >= 0x190 } else { (d5 as i16) <= -0x10 };
                 if out {
@@ -485,7 +474,7 @@ fn halt_start(x: &mut Cx) {
 fn halt_run(x: &mut Cx) {
     x.move_xy();
     let (cx, _) = camera(x);
-    let d5 = x.u16(X).wrapping_sub(cx);
+    let d5 = x.u16(Obj::X).wrapping_sub(cx);
     let stop = x.u16(STOP_X);
     set_dw(x, 5, d5);
     set_dw(x, 6, stop);
@@ -504,13 +493,13 @@ fn halt_run(x: &mut Cx) {
             return;
         }
     }
-    x.set8(STEP, 4);
+    x.set8(f::SUB3, 4);
     if !find_player(x, 0, 0x180, 0x30) {
         set_speed_y(x, 0x28);
     } else {
         let player = load_target(x);
         x.set8(SIDE, 0);
-        let mut gap = x.u16(DEPTH).wrapping_sub(player.u16(x.b, DEPTH)).wrapping_sub(4);
+        let mut gap = x.u16(Obj::Y).wrapping_sub(player.u16(x.b, Obj::Y)).wrapping_sub(4);
         if (gap as i16) < 0 {
             gap = gap.wrapping_neg();
             x.set8(SIDE, 0x10);
@@ -522,14 +511,14 @@ fn halt_run(x: &mut Cx) {
         }
     }
     if x.u8(SIDE) != 0 {
-        negate(x, SPEED_Y2);
+        negate(x, Obj::AY);
     }
     x.anim_step();
 }
 
 /// Groupes 4 et 5.
 fn halt_at(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => halt_start(x),
         2 => halt_run(x),
         4 => side_turn(x),
@@ -540,7 +529,7 @@ fn halt_at(x: &mut Cx) {
 
 /// Groupes 6 et 7 : comme 4 et 5, avec la morsure surveillée à chaque étape.
 fn halt_and_bite(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
             halt_start(x);
             x.set8(BITING, 0);
@@ -574,56 +563,56 @@ fn side_turn(x: &mut Cx) {
 
 /// Sous-état 4 avec `+6` non nul (0x6628a) : se tourne vers un joueur puis remonte vers le haut.
 fn turn_back(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.set8(STEP, 4);
+            x.set8(f::SUB3, 4);
             let player = load_target(x);
-            let (px, pz) = (player.u16(x.b, X), player.u16(x.b, DEPTH));
+            let (px, pz) = (player.u16(x.b, Obj::X), player.u16(x.b, Obj::Y));
             x.set16(0xb0, px);
             x.set16(0xb2, pz);
             x.call(0x1376);
             let angle = x.c.d[0] as u8;
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             if angle & 0xf != 0 {
                 let side = (angle.wrapping_add(0x10) & 0x10) << 1;
                 if side ^ x.u8(f::FLIP) != 0 {
-                    x.set8(STEP, 2);
+                    x.set8(f::SUB3, 2);
                 }
             }
             x.anim_step();
         }
         2 | 4 => {
-            if x.u8(STEP) == 2 {
-                x.add8(STEP, 2);
+            if x.u8(f::SUB3) == 2 {
+                x.add8(f::SUB3, 2);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(TURN_PERIOD, 0x3c);
             speeds_by_level(x, SPEEDS_FLY);
-            x.set16(SPEED_Z, -0x400i16 as u16);
-            x.set16(GRAVITY, 0);
-            if x.u8(VARIANT) == 0 {
-                x.set16(SPEED_Z, -0x200i16 as u16);
+            x.set16(Obj::VZ, -0x400i16 as u16);
+            x.set16(Obj::AZ, 0);
+            if x.u8(Obj::VARIANT) == 0 {
+                x.set16(Obj::VZ, -0x200i16 as u16);
             }
             x.anim_step();
         }
         6 => {
             x.move_by_table_xy();
             x.move_z();
-            let floor = if x.u8(VARIANT) == 0 { 0x30 } else { 0x10 };
+            let floor = if x.u8(Obj::VARIANT) == 0 { 0x30 } else { 0x10 };
             set_dw(x, 0, floor);
-            if floor >= x.u16(HEIGHT) {
-                x.set16(HEIGHT, floor);
-                x.set16(SPEED_Z, 0);
-                x.add8(STEP, 2);
+            if floor >= x.u16(Obj::Z) {
+                x.set16(Obj::Z, floor);
+                x.set16(Obj::VZ, 0);
+                x.add8(f::SUB3, 2);
             }
             x.anim_step();
         }
         8 => {
             x.move_xy();
             let (cx, cy) = camera(x);
-            if x.u8(VARIANT) == 0 {
+            if x.u8(Obj::VARIANT) == 0 {
                 if find_player(x, -0x80, 0x40, 0x20) {
                     x.anim_step();
                 } else {
@@ -632,8 +621,8 @@ fn turn_back(x: &mut Cx) {
                 }
                 return;
             }
-            let d5 = x.u16(X).wrapping_sub(cx).wrapping_add(0x40);
-            let ok = d5 < 0x200 && x.u16(DEPTH).wrapping_add(x.u16(HEIGHT)).wrapping_sub(cy).wrapping_add(0x10) <= 0x120;
+            let d5 = x.u16(Obj::X).wrapping_sub(cx).wrapping_add(0x40);
+            let ok = d5 < 0x200 && x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z)).wrapping_sub(cy).wrapping_add(0x10) <= 0x120;
             if !ok {
                 x.set8(f::STATE, 6);
                 x.call(REMOVE);
@@ -650,13 +639,13 @@ fn pounce(x: &mut Cx) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set16(SPEED_X, 0x400);
-            x.set16(SPEED_Z, 0x400);
-            x.set16(SPEED_Y, 0);
-            x.set16(GRAVITY, 0);
+            x.set16(Obj::VX, 0x400);
+            x.set16(Obj::VZ, 0x400);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::AZ, 0);
             x.set8(0x6e, 0xc);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
             anim_play(x, 8);
         }
@@ -687,7 +676,7 @@ fn pounce(x: &mut Cx) {
 /// Sous-état 8 : dormant ; réveillé (sous-état 0) quand il est à moins de 0x1c0 pixels de la caméra.
 fn dormant(x: &mut Cx) {
     let cam = if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) };
-    let d0 = x.u16(X).wrapping_sub(cam).wrapping_add(0x20);
+    let d0 = x.u16(Obj::X).wrapping_sub(cam).wrapping_add(0x20);
     set_dw(x, 0, d0);
     if d0 <= 0x1c0 {
         x.set8(f::SUB, 0);
@@ -760,16 +749,16 @@ fn knock_back(x: &mut Cx) {
     x.set8(f::SUB2, 0);
     let freeze = x.u8(FREEZE_AT_HIT);
     x.set8(f::FREEZE, freeze);
-    x.set16(SPEED_Z, 0x400);
-    x.set16(GRAVITY, -0x40i16 as u16);
-    x.set16(SPEED_X, 0x200);
-    x.set16(SPEED_Y, 0);
+    x.set16(Obj::VZ, 0x400);
+    x.set16(Obj::AZ, -0x40i16 as u16);
+    x.set16(Obj::VX, 0x200);
+    x.set16(Obj::AX, 0);
     let flip = x.u8(0x4a) ^ 0x20;
     x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
     x.set8(f::FLIP, flip);
     if flip != 0 {
-        negate(x, SPEED_X);
-        negate(x, SPEED_Y);
+        negate(x, Obj::VX);
+        negate(x, Obj::AX);
     }
     x.set8(0, 2);
     x.anim_start(ANIMS_HIT, 0);
@@ -781,12 +770,12 @@ fn recoil(x: &mut Cx) {
         0 => {
             x.move_xz();
             if x.u8(0x29) != 0 {
-                x.set16(SPEED_X, 0);
-                x.set16(SPEED_Y, 0);
+                x.set16(Obj::VX, 0);
+                x.set16(Obj::AX, 0);
             }
-            if (x.u16(HEIGHT) as i16) <= 0 {
+            if (x.u16(Obj::Z) as i16) <= 0 {
                 x.add8(f::SUB2, 2);
-                x.set32(HEIGHT, 0);
+                x.set32(Obj::Z, 0);
                 x.set8(0xa2, 0x28);
                 x.set16(0x30, 1);
                 x.call(REMOVE);
@@ -814,10 +803,10 @@ fn fall(x: &mut Cx) {
     }
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.set16(SPEED_Y, 0);
-        x.set16(SPEED_Y2, 0);
+        x.set16(Obj::AX, 0);
+        x.set16(Obj::AY, 0);
         let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-        x.set8(ANGLE, angle);
+        x.set8(Obj::SPEED_INDEX, angle);
         return anim_play(x, 4);
     }
     x.move_by_table_xy();

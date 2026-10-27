@@ -12,6 +12,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 mod lib {
     pub const SOUND_SHAKE: u32 = 0x2860;
@@ -61,11 +62,11 @@ fn resume_stand(x: &mut Cx) {
 /// Battement d'ailes : l'image-clé a son bit 7 levé (posé par le script) : on le retire, on alterne `+0xb3`
 /// et le son suit (0x11a36).
 fn wing_beat(x: &mut Cx) {
-    if tst8(x, KEY).pl() {
+    if tst8(x, f::KEY_FRAME).pl() {
         return;
     }
-    let k = x.u8(KEY) & 0x7f;
-    x.set8(KEY, k);
+    let k = x.u8(f::KEY_FRAME) & 0x7f;
+    x.set8(f::KEY_FRAME, k);
     let flap = x.u8(FLAP) ^ 1;
     x.set8(FLAP, flap);
     set_dw(x, 0, flap as u16);
@@ -210,7 +211,7 @@ fn swoop_flight(x: &mut Cx) {
     }
     x.call(lib::SPRITE_FRAME);
     step(x);
-    let frame = x.u8(KEY) & 0x7f;
+    let frame = x.u8(f::KEY_FRAME) & 0x7f;
     if !Fl::sub8(frame, 3).ge() {
         wing_beat(x);
         let v = x.u16(0x18).wrapping_sub(0x28);
@@ -302,7 +303,7 @@ fn leap(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x40);
             let target = x.linked(f::TARGET);
             let mut gap = (x.u32(0x8) as i32).wrapping_sub(target.u32(x.b, 0x8) as i32).wrapping_abs();
@@ -324,7 +325,7 @@ fn leap(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xz();
@@ -378,7 +379,7 @@ fn leap(x: &mut Cx) {
 
 /// 0x8596c : la hauteur avance d'un incrément de la table `SKIM` (signe selon `+0xa8`).
 fn skim_step(x: &mut Cx) {
-    let i = (x.u8(KEY) & 0x7f) as u32 * 4;
+    let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d0 = rom32(x, SKIM + i) as i32;
     if !cmp16(x, COUNT, 0x24).gt() {
         d0 = d0.wrapping_neg();
@@ -408,8 +409,8 @@ fn spit(x: &mut Cx) {
             x.call(lib::SPRITE_FRAME);
             wing_beat(x);
             let low = Fl::sub16(x.u16(0xc), 0x20).lt();
-            if low || x.u8(KEY) != 4 {
-                let i = (x.u8(KEY) as u32) * 4;
+            if low || x.u8(f::KEY_FRAME) != 4 {
+                let i = (x.u8(f::KEY_FRAME) as u32) * 4;
                 let inc = rom32(x, LOW_FLIGHT + i);
                 let z = x.u32(0xc).wrapping_add(inc);
                 x.set32(0xc, z);
@@ -450,7 +451,7 @@ fn spit(x: &mut Cx) {
             skim_step(x);
             x.call(lib::SPRITE_FRAME);
             let shot = x.linked(CHILD);
-            if shot.u8(x.b, 0) == 0 || (shot.u8(x.b, 0x5a) != 0 && x.u8(KEY) == 4) {
+            if shot.u8(x.b, 0) == 0 || (shot.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
                 x.add8(0x7, 2);
             }
         }

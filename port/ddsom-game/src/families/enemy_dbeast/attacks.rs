@@ -132,17 +132,17 @@ fn strike_end_quick(x: &mut Cx) {
 
 /// Un son d'impact, quand l'image-clé est atteinte.
 fn key_sound(x: &mut Cx, sound: u32) {
-    if x.u8(KEY_FRAME) != 0 {
-        x.set8(KEY_FRAME, 0);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
         x.call(sound);
     }
 }
 
 /// Direction de marche : vers la droite (8) ou la gauche (0x18) selon l'orientation.
 fn walk_angle(x: &mut Cx) {
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
-        x.set8(ANGLE, 0x18);
+        x.set8(Obj::SPEED_INDEX, 0x18);
     }
 }
 
@@ -356,8 +356,8 @@ fn pounce_start(x: &mut Cx) {
 /// 0x73536 : un saut sur place fini ; au hasard un cri accompagne l'image-clé.
 pub(super) fn pounce_repeat(x: &mut Cx) {
     const SOUNDS: u32 = 0x73584;
-    if x.u8(KEY_FRAME) != 0 {
-        x.set8(KEY_FRAME, 0);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
         let r = random(x) & 0xf;
         let sound = x.rom8(SOUNDS + r);
         if sound != 0 {
@@ -416,7 +416,7 @@ fn turn_run(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set8(VULNERABLE, 1);
             let ahead = target(x).is_some_and(|t| (t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16) >= 0);
-            x.set8(ANGLE, if ahead { 0x18 } else { 8 });
+            x.set8(Obj::SPEED_INDEX, if ahead { 0x18 } else { 8 });
             play(x, 5);
         }
         6 => {

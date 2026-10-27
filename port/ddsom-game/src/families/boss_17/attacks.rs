@@ -15,6 +15,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     match x.u8(f::SUB2) {
@@ -106,8 +107,8 @@ fn strike_0(x: &mut Cx) {
                 }
                 return decide::chase(x);
             }
-            if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 spark(x);
             }
         }
@@ -130,10 +131,10 @@ fn strike_2(x: &mut Cx) {
                 }
                 return decide::chase(x);
             }
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             puff(x, 0);
             spark(x);
         }
@@ -151,11 +152,11 @@ fn strike_4(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if !tst8(x, KEY).mi() {
+            if !tst8(x, f::KEY_FRAME).mi() {
                 return;
             }
             x.add8(0x7, 2);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             x.set16(TIMER, 0x1e);
             puff(x, 3);
             let (vx, vz) = if x.u8(f::FLIP) == 0 { (-0x900i16, 0x4ci16) } else { (0x900, -0x4c) };
@@ -173,10 +174,10 @@ fn strike_4(x: &mut Cx) {
             }
             x.move_x();
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             puff(x, 1);
             x.call(0xe587e);
         }
@@ -199,7 +200,7 @@ fn leap(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(0x16, 0);
             let angle = if x.u8(f::FLIP) == 0 { 0x18 } else { 8 };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x17);
             // vitesse en profondeur assez grande pour atteindre la cible en un bond
             let target = x.linked(f::TARGET);
@@ -225,7 +226,7 @@ fn leap(x: &mut Cx) {
         }
         2 => {
             x.anim_step();
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }
             x.move_xz();
@@ -253,10 +254,10 @@ fn leap(x: &mut Cx) {
                 return body(x, 0xa);
             }
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             puff(x, 2);
             x.call(0xebfdc);
             x.call(0xe587e);
@@ -283,7 +284,7 @@ fn throw(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
@@ -360,12 +361,12 @@ fn breath(x: &mut Cx) {
         2 => {
             x.set_a5_u16(0x51e, 4);
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             let Some(shot) = x.alloc(&pools::ESHL) else { return breath_end(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
@@ -451,10 +452,10 @@ fn roar(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0x1e);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
         }
         4 => {
@@ -494,10 +495,10 @@ fn final_roar(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(0x7, 2);
                 x.set16(TIMER, 0xa);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
             }
         }
         4 => {

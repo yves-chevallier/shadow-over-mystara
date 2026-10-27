@@ -2,6 +2,7 @@
 //! 4 demi-tour. Une idée qui dure (`+7 != 0`) marche vers la cible et décide d'attaquer.
 
 use super::*;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if special_hit(x, 0x5803c) {
@@ -12,7 +13,7 @@ pub(super) fn run(x: &mut Cx) {
     }
     match x.u8(f::SUB2) {
         0 => {
-            if x.u8(STEP) != 0 {
+            if x.u8(f::SUB3) != 0 {
                 walk(x);
             } else {
                 pick_target(x);
@@ -22,10 +23,10 @@ pub(super) fn run(x: &mut Cx) {
         2 => wait(x),
         4 => turn(x),
         6 => {
-            if x.u8(STEP) != 0 {
+            if x.u8(f::SUB3) != 0 {
                 walk(x);
             } else {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 x.set8(VULNERABLE, 1);
                 x.set8(AI_SHOT, 0xc);
                 body(x, 0);
@@ -50,7 +51,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x580ae : l'idée commence, le squelette se tourne vers sa cible.
 fn begin_idle(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     x.set8(AI_SHOT, 0xb);
     body(x, 0);
@@ -61,13 +62,13 @@ fn begin_idle(x: &mut Cx) {
 
 /// `+6 = 2` : attend la fin de l'animation en marchant, puis tire l'idée suivante.
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        if x.u8(KEY_FRAME) != 0xff {
+    if x.u8(f::SUB3) == 0 {
+        if x.u8(f::KEY_FRAME) != 0xff {
             move_xy(x);
             step(x);
             return;
         }
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
     }
     let t = x.u8(AI_WAIT).wrapping_sub(1);
     x.set8(AI_WAIT, t);
@@ -86,13 +87,13 @@ fn wait(x: &mut Cx) {
 
 /// `+6 = 4` : demi-tour (animation 1 puis inversion de l'orientation).
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
+    if x.u8(f::SUB3) == 0 {
         if x.u16(ANIM_STATE) != 0xff {
             move_xy(x);
             step(x);
             return;
         }
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
         return body(x, 1);
     }
     if (x.u8(ANIM_STATE) as i8) < 0 {
@@ -120,9 +121,9 @@ fn walk(x: &mut Cx) {
             return;
         }
         let target = load_target(x);
-        let mine = x.u16(X);
+        let mine = x.u16(Obj::X);
         set_dw(x, 0, mine);
-        let want = if mine as i16 > target.u16(x.b, X) as i16 { 0 } else { 0x20 };
+        let want = if mine as i16 > target.u16(x.b, Obj::X) as i16 { 0 } else { 0x20 };
         x.c.d[1] = want;
         if want != x.u8(f::FLIP) as u32 {
             return x.set16(f::SUB2, 0x400);
@@ -156,7 +157,7 @@ fn attack_choice(x: &mut Cx) {
         return x.call(call::ANNOUNCE);
     }
     step(x);
-    if (x.u8(KEY_FRAME) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         move_xy(x);
     }
 }

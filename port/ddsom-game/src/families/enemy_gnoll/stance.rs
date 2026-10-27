@@ -3,10 +3,11 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     // la variante 10 est saisie dès qu'elle se met debout
-    if x.u8(VARIANT) == 0xa || grabbed(x) {
+    if x.u8(Obj::VARIANT) == 0xa || grabbed(x) {
         x.set16(f::STATE, 0x0408);
         x.set16(f::SUB2, 0);
         return grab(x);
@@ -25,7 +26,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x6affa : (re)commence la marche vers la cible.
 pub(super) fn approach_start(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xf0);
     x.set8(SHOT_KIND, 0x1a);
     approach_restart(x);
@@ -43,7 +44,7 @@ pub(super) fn approach_restart(x: &mut Cx) {
 
 /// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
 fn approach(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
+    if x.u8(f::SUB3) == 0 {
         return approach_start(x);
     }
     x.call(call::WALK_STEP);
@@ -90,19 +91,19 @@ fn approach(x: &mut Cx) {
         return x.call(call::ANNOUNCE);
     }
     x.anim_step();
-    if x.u8(KEY) & 1 == 0 {
+    if x.u8(f::KEY_FRAME) & 1 == 0 {
         x.move_by_table_xy();
     }
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);
-        x.set8(STEP, 0);
+        x.set8(f::SUB3, 0);
     }
 }
 
 /// +6 = 2 : demi-tour.
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         return mv(x, 2);
     }
@@ -116,8 +117,8 @@ fn turn(x: &mut Cx) {
 
 /// +6 = 4 : attente sur place.
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         return mv(x, 0);
     }

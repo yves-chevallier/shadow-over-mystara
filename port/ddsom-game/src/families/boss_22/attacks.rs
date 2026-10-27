@@ -23,9 +23,9 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x9b752 : image-clé de l'animation d'attaque (son 0xebfdc), puis fin quand l'animation est finie.
 fn finish_attack(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.call(0xebfdc);
-        x.set8(KEY, 0);
+        x.set8(f::KEY_FRAME, 0);
     }
     if x.anim_step() {
         next_attack(x);
@@ -69,7 +69,7 @@ fn breath(x: &mut Cx) {
 
 /// 0x9bfb4 : image-clé de la morsure : saisit un joueur à portée (0xfc44, 0xfd64), sinon fin de l'animation.
 fn grab_on_key(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.c.d[0] = 5;
         x.call(call::GRAB_FIND);
         if !zero(x) {
@@ -122,8 +122,8 @@ fn second_form_strike(x: &mut Cx) {
             start(x, Set::B, 7);
         }
         2 => {
-            if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 eshl_wave_1f(x);
                 x.set8(SECOND, 1);
                 x.set8(SECOND_FX, 1);
@@ -365,7 +365,7 @@ fn dive(x: &mut Cx) {
 }
 
 fn rise_wait(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
     }
@@ -420,7 +420,7 @@ fn dive_down(x: &mut Cx) {
             start(x, Set::B, 0xa);
         }
         2 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 next7(x);
                 x.set8(VULNERABLE, 0);
             }

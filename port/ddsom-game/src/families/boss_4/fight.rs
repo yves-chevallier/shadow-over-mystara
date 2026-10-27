@@ -249,7 +249,7 @@ fn walking(x: &mut Cx) {
     if needs_turn(x) {
         return decide::turn(x);
     }
-    if (x.u8(KEY) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_by_table_xy();
     }
     step(x);
@@ -298,7 +298,7 @@ fn charge(x: &mut Cx) {
                     angle = 8;
                 }
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x35);
             kind(x, 4);
             body(x, 4);
@@ -321,7 +321,7 @@ fn charge(x: &mut Cx) {
 /// 0x82128 : la charge avance jusqu'au point visé ; à l'arrivée (marque négative) le boss freine.
 fn charging(x: &mut Cx) {
     x.anim_step();
-    let key = x.u8(KEY);
+    let key = x.u8(f::KEY_FRAME);
     if key != 0x80 {
         x.move_x();
         let (goal, px) = if x.u8(CHARGE_AT_TARGET) == 0 {
@@ -338,11 +338,11 @@ fn charging(x: &mut Cx) {
             x.c.d.swap(0, 1);
         }
         let (a, b) = (x.c.d[0] as u16, x.c.d[1] as u16);
-        if !Fl::sub16(b, a).lt() && (x.u8(KEY) as i8) < 0 {
+        if !Fl::sub16(b, a).lt() && (x.u8(f::KEY_FRAME) as i8) < 0 {
             return brake(x);
         }
     }
-    if x.u8(KEY) == 0x84 {
+    if x.u8(f::KEY_FRAME) == 0x84 {
         x.call(0xecdba);
         x.c.d[5] = 4;
         x.call(call::DUST);
@@ -381,14 +381,14 @@ fn hop(x: &mut Cx) {
         }
         2 => {
             step(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18u8, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.c.d[0] = angle as u32;
             setw(x, 1, vy);
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vy);
             x.call(call::RANDOM_TURN);
             speed(x, 0x35);

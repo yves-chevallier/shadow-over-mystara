@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x56816;
@@ -48,24 +49,24 @@ fn recoil(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             look(x, 0x1e);
             x.call(0xec5e6);
-            x.set16(SPEED_X, 0x300);
-            x.set16(SPEED_Y, -0x28i16 as u16);
+            x.set16(Obj::VX, 0x300);
+            x.set16(Obj::AX, -0x28i16 as u16);
             let flip = x.u8(0x4a) ^ 0x20;
             x.c.d[0] = x.c.d[0] & !0xff | flip as u32;
             x.set8(f::FLIP, flip);
             if flip != 0 {
-                negate(x, SPEED_X);
-                negate(x, SPEED_Y);
+                negate(x, Obj::VX);
+                negate(x, Obj::AX);
             }
             mv(x, 0x1e);
         }
         2 => {
             puff(x, 3, 2, 8, -1);
-            if x.u8(SPEED_X) != 0 {
+            if x.u8(Obj::VX) != 0 {
                 x.move_x();
             } else if x.anim_step() {
                 x.set32(0x58, 0);
-                x.set32(SPEED_X, 0);
+                x.set32(Obj::VX, 0);
                 after_strike(x);
             }
         }
@@ -164,17 +165,17 @@ fn run_away(x: &mut Cx) {
             x.add8(f::SUB2, 2);
             x.set8(VULNERABLE, 1);
             look(x, 6);
-            x.set16(SPEED_X, -0x380i16 as u16);
+            x.set16(Obj::VX, -0x380i16 as u16);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x4c0);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x4c0);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             mv(x, 6);
         }
         10 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 0);
             }
@@ -185,7 +186,7 @@ fn run_away(x: &mut Cx) {
                 x.anim_step();
                 return;
             }
-            x.set32(HEIGHT, 0);
+            x.set32(Obj::Z, 0);
             x.add8(f::SUB2, 2);
             x.set8(VULNERABLE, 1);
             look(x, 0x18);

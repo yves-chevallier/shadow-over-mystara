@@ -18,7 +18,6 @@ use super::boss_common::*;
 use super::cx::handlers;
 
 mod g {
-    pub const KEY: u32 = 0x33;
     pub const STUN: u32 = 0x56;
     pub const WALK_STEPS: u32 = 0x6b;
     pub const APPROACH: u32 = 0x6e;
@@ -423,8 +422,8 @@ fn jump(x: &mut Cx) {
                 }
                 body(x, 8);
                 x.call(0xecf10);
-            } else if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.set8(0x2b, 0x16);
             }
         }
@@ -432,8 +431,8 @@ fn jump(x: &mut Cx) {
             if x.anim_step() {
                 x.set32(f::STATE, FIGHT);
                 body(x, 0);
-            } else if x.u8(KEY) != 0 {
-                x.set8(KEY, 0);
+            } else if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.set8(0x2b, 0x18);
             }
         }
@@ -482,12 +481,12 @@ fn cinematic_shot(x: &mut Cx) {
         }
         2 => {
             x.anim_step();
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return;
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0xa);
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             let Some(shot) = x.alloc(&pools::ESHL) else { return shot_end(x) };
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 0x21);

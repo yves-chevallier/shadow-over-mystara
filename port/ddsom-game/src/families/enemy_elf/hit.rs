@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x6a206;
@@ -40,17 +41,17 @@ fn recoil(x: &mut Cx) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(f::FREEZE, 4);
-        x.set32(SPEED_X, 0x0500_0000);
-        x.set16(SPEED_Y, -0x38i16 as u16);
+        x.set32(Obj::VX, 0x0500_0000);
+        x.set16(Obj::AX, -0x38i16 as u16);
         let flip = x.u8(0x4a) ^ 0x20;
         x.set8(0x4a, flip);
         if flip != 0 {
-            negate(x, SPEED_X);
-            negate(x, SPEED_Y);
+            negate(x, Obj::VX);
+            negate(x, Obj::AX);
         }
         return body(x, 7);
     }
-    if x.u8(SPEED_X) != 0 {
+    if x.u8(Obj::VX) != 0 {
         x.move_x();
     }
     if step(x) {

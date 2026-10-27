@@ -34,14 +34,14 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x6cd5c : l'étape suivante lance l'animation 4.
 fn next_and_start(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     mv(x, 4);
 }
 
 /// 0x6cd64 : étape suivante à la fin de l'animation.
 fn next_when_done(x: &mut Cx) {
     if x.anim_step() {
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
     }
 }
 
@@ -55,12 +55,12 @@ fn finish(x: &mut Cx) {
 // --- geste 0 : provocation, puis geste choisi --------------------------------------------------------
 
 fn windup(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.call(call::ANNOUNCE);
         if x.u8(AI_LUNGE) == 0 {
-            x.set8(STEP, 0);
+            x.set8(f::SUB3, 0);
             let chosen = x.u8(CHOSEN);
             x.set8(f::SUB2, chosen);
         }
@@ -72,7 +72,7 @@ fn windup(x: &mut Cx) {
     if (n as i8) >= 0 {
         return;
     }
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);
     } else {
@@ -83,8 +83,8 @@ fn windup(x: &mut Cx) {
 
 /// +6 = 2 : demi-tour puis geste 0xc (marche).
 fn turn_back(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         return mv(x, 2);
     }
@@ -106,9 +106,9 @@ fn throw_begin(x: &mut Cx) {
 
 /// +6 = 4 : le Troll lance un objet (tant qu'il lui reste des charges `+0xab`), l'attend, puis s'éloigne.
 fn throw(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 8);
+            x.add8(f::SUB3, 8);
             x.set8(TIMER, 0x30);
             if (x.u8(AMMO) as i8) > 0 {
                 x.c.d[5] = 0;
@@ -117,13 +117,13 @@ fn throw(x: &mut Cx) {
                     let obj = x.c.a[1];
                     x.set32(THROWN, obj);
                     x.add8(AMMO, 0xf0);
-                    x.add8(STEP, 0xfa);
+                    x.add8(f::SUB3, 0xfa);
                 }
             }
             throw_anim(x, 0);
         }
         2 | 8 => {
-            if x.u8(STEP) == 8 {
+            if x.u8(f::SUB3) == 8 {
                 x.add8(NO_ZONE, 1);
             }
             let n = x.u8(TIMER).wrapping_sub(1);
@@ -131,7 +131,7 @@ fn throw(x: &mut Cx) {
             if (n as i8) >= 0 {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(TIMER, 0x60);
             throw_anim(x, 4);
         }
@@ -169,8 +169,8 @@ fn throw(x: &mut Cx) {
 fn throw_hold(x: &mut Cx) {
     x.anim_step();
     let obj = Obj(x.u32(THROWN));
-    if x.u8(KEY) != 0 {
-        x.set8(KEY, 0);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.set8(f::KEY_FRAME, 0);
         add8(x, obj, 5, 2);
     }
     if (obj.u8(x.b, 4) as i8) < 4 {
@@ -181,7 +181,7 @@ fn throw_hold(x: &mut Cx) {
 
 /// 0x6caf2 : fin du lancer.
 fn throw_end(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set16(AFTER_THROW, 0xb4);
     mv(x, 0);
 }
@@ -205,35 +205,35 @@ fn again(x: &mut Cx, kind: u8) {
 
 /// 0x6cdb6 : saut de côté (vitesse horizontale 0x300, élan vers le haut).
 fn jump_start(x: &mut Cx) {
-    x.add8(STEP, 2);
-    x.set32(SPEED_X, 0x0300_0000);
+    x.add8(f::SUB3, 2);
+    x.set32(Obj::VX, 0x0300_0000);
     let mut shift = 0x20i16;
     if x.u8(f::FLIP) != 0 {
         shift = -shift;
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
-    let at = x.u16(X).wrapping_add(shift as u16);
-    x.set16(X, at);
-    x.set16(SPEED_Z, 0);
-    x.set16(GRAVITY, -0x40i16 as u16);
-    x.set16(HEIGHT, 0x50);
+    let at = x.u16(Obj::X).wrapping_add(shift as u16);
+    x.set16(Obj::X, at);
+    x.set16(Obj::VZ, 0);
+    x.set16(Obj::AZ, -0x40i16 as u16);
+    x.set16(Obj::Z, 0x50);
     mv(x, 3);
 }
 
 /// 0x6cdea : retombée du saut.
 fn land(x: &mut Cx) {
     x.move_xz();
-    if (x.u16(HEIGHT) as i16) >= 0 {
+    if (x.u16(Obj::Z) as i16) >= 0 {
         return;
     }
-    x.add8(STEP, 2);
-    x.set32(HEIGHT, 0);
+    x.add8(f::SUB3, 2);
+    x.set32(Obj::Z, 0);
     mv(x, 5);
 }
 
 /// +6 = 6 et 8 (sous-état 4) : saut de côté, puis lancer (6) ou retour à la marche (8).
 fn hop(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
         4 => jump_start(x),
@@ -251,7 +251,7 @@ fn hop(x: &mut Cx) {
 
 /// +6 = 8 et 10 (sous-état 6) : saut de côté ; `then_throw` (10) : puis lancer.
 fn jump_here(x: &mut Cx, then_throw: bool) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
         4 => jump_start(x),
@@ -267,11 +267,11 @@ fn jump_here(x: &mut Cx, then_throw: bool) {
 
 /// +6 = 12 : charge vers la cible pendant `+0xa2` images.
 fn charge(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x40);
         let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-        x.set8(ANGLE, angle);
+        x.set8(Obj::SPEED_INDEX, angle);
         set_speed(x, 0x12);
         return mv(x, 1);
     }
@@ -285,8 +285,8 @@ fn charge(x: &mut Cx) {
 
 /// +6 = 18 : repos. L'original sort du repos dès la deuxième image (le test de fin de minuterie est inversé).
 fn rest(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x1e);
         return mv(x, 0);
     }
@@ -302,15 +302,15 @@ fn rest(x: &mut Cx) {
 
 /// +6 = 6 : pas en profondeur.
 fn depth_step(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => next_when_done(x),
         4 => {
             let r = rand_and(x, 1);
             let d: i16 = if r != 0 { -0x18 } else { 0x18 };
-            let at = x.u16(DEPTH).wrapping_add(d as u16);
-            x.set16(DEPTH, at);
-            x.add8(STEP, 2);
+            let at = x.u16(Obj::Y).wrapping_add(d as u16);
+            x.set16(Obj::Y, at);
+            x.add8(f::SUB3, 2);
             mv(x, 3);
         }
         6 => finish(x),
@@ -324,23 +324,23 @@ const TELEPORT_Y: u32 = 0x6ce9c;
 
 /// +6 = 12 : le Troll réapparaît près de sa cible.
 fn teleport(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let r = rand_and(x, 3) * 2;
             let target = load_target(x);
             let off = x.rom16(TELEPORT_X + r);
-            let at = off.wrapping_add(target.u16(x.b, X));
-            x.set16(X, at);
+            let at = off.wrapping_add(target.u16(x.b, Obj::X));
+            x.set16(Obj::X, at);
             let r = rand_and(x, 7) * 2;
             let target = load_target(x);
             let off = x.rom16(TELEPORT_Y + r);
-            let at = off.wrapping_add(target.u16(x.b, DEPTH));
-            x.set16(DEPTH, at);
+            let at = off.wrapping_add(target.u16(x.b, Obj::Y));
+            x.set16(Obj::Y, at);
             x.set8(f::FLIP, 0x20);
-            let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+            let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
             if (dx as i16) < 0 {
                 x.set8(f::FLIP, 0);
             }
@@ -355,8 +355,8 @@ fn teleport(x: &mut Cx) {
 
 /// +6 = 0 : courte pause debout.
 fn pause(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(TIMER, 0x10);
         return mv(x, 0);
@@ -371,15 +371,15 @@ fn pause(x: &mut Cx) {
 
 /// +6 = 2 : saut sur place (sans déplacement horizontal).
 fn jump_in_place(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
         4 => {
-            x.add8(STEP, 2);
-            x.set16(HEIGHT, 0x40);
-            x.set16(SPEED_Z, 0);
-            x.set16(GRAVITY, -0x40i16 as u16);
-            x.set32(SPEED_X, 0x0300_0000);
+            x.add8(f::SUB3, 2);
+            x.set16(Obj::Z, 0x40);
+            x.set16(Obj::VZ, 0);
+            x.set16(Obj::AZ, -0x40i16 as u16);
+            x.set32(Obj::VX, 0x0300_0000);
             mv(x, 3);
         }
         8 => land(x),
@@ -390,30 +390,30 @@ fn jump_in_place(x: &mut Cx) {
 
 /// +6 = 4 : bond (ou course) vers la cible.
 fn lunge(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) != 0 {
                 return next_and_start(x);
             }
-            x.add8(STEP, 0xc);
+            x.add8(f::SUB3, 0xc);
             x.set8(TIMER, 0x10);
             set_speed(x, 0xd);
-            x.set8(ANGLE, 0);
+            x.set8(Obj::SPEED_INDEX, 0);
             let target = load_target(x);
-            let d = x.u16(DEPTH).wrapping_sub(target.u16(x.b, DEPTH));
+            let d = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
             if (d as i16) < 0 {
-                x.set8(ANGLE, 0x10);
+                x.set8(Obj::SPEED_INDEX, 0x10);
             }
             mv(x, 1);
         }
         2 | 6 => next_when_done(x),
         4 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let target = load_target(x);
-            let d = x.u16(DEPTH).wrapping_sub(target.u16(x.b, DEPTH));
+            let d = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
             let step: i16 = if (d as i16) < 0 { -0x32 } else { 0x32 };
-            let at = x.u16(DEPTH).wrapping_add(step as u16);
-            x.set16(DEPTH, at);
+            let at = x.u16(Obj::Y).wrapping_add(step as u16);
+            x.set16(Obj::Y, at);
             mv(x, 3);
         }
         8 => land(x),

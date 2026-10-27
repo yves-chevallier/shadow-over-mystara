@@ -10,6 +10,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x7a396;
@@ -99,7 +100,7 @@ fn pushed_back(x: &mut Cx) {
             let (angle, vz) = if x.u8(f::FLIP) != 0 { (0x18u32, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.c.d[0] = angle;
             set_dw(x, 1, vz);
-            x.set8(ANGLE, angle as u8);
+            x.set8(Obj::SPEED_INDEX, angle as u8);
             x.set16(0x16, vz);
             speed(x, 0x17);
             anim_kind(x, 0x20);

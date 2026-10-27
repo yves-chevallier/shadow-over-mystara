@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
@@ -30,10 +31,10 @@ pub(super) fn stand_when_done(x: &mut Cx) {
 // --- +6 = 0 -----------------------------------------------------------------------------------------
 
 fn howl(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             look(x, 0x17);
             mv(x, 0x10);
         }
@@ -45,7 +46,7 @@ fn howl(x: &mut Cx) {
             if !target_in_box(x, 0, 0x80, 0x20) {
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 1);
             mv(x, 1);
@@ -61,10 +62,10 @@ fn turn_in(x: &mut Cx) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(TIMER, 0x24);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 2);
@@ -93,7 +94,7 @@ fn turn_in(x: &mut Cx) {
                 }
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             look(x, 0);
             mv(x, 4);
@@ -102,7 +103,7 @@ fn turn_in(x: &mut Cx) {
             if !x.anim_step() {
                 return;
             }
-            x.set8(STEP, 0);
+            x.set8(f::SUB3, 0);
             let flip = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
             x.set8(VULNERABLE, 1);
@@ -120,26 +121,26 @@ fn set_angle_run(x: &mut Cx) {
 
 pub(super) fn set_angle_facing(x: &mut Cx, forward: u8, flipped: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { forward };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 // --- +6 = 4 et 6 : bond d'entrée -----------------------------------------------------------------------
 
 fn leap_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             look(x, 6);
             x.set8(STRIKE_KIND, 0x2b);
-            x.set16(SPEED_X, -0x280i16 as u16);
+            x.set16(Obj::VX, -0x280i16 as u16);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x4c0);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x4c0);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             mv(x, 5);
         }
         2 => wait_key(x),
@@ -152,25 +153,25 @@ fn leap_in(x: &mut Cx) {
 // --- +6 = 8 : chute d'en haut -----------------------------------------------------------------------------
 
 fn drop_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 0x19);
-            x.set16(SPEED_Z, -0x300i16 as u16);
-            x.set16(GRAVITY, -0x80i16 as u16);
-            let h = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(DEPTH));
-            x.set16(HEIGHT, h);
+            x.set16(Obj::VZ, -0x300i16 as u16);
+            x.set16(Obj::AZ, -0x80i16 as u16);
+            let h = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+            x.set16(Obj::Z, h);
             mv(x, 0xf);
         }
         2 => {
             x.move_z();
-            if (x.u16(HEIGHT) as i16) >= 0 {
+            if (x.u16(Obj::Z) as i16) >= 0 {
                 return;
             }
-            x.add8(STEP, 2);
-            x.set32(HEIGHT, 0);
+            x.add8(f::SUB3, 2);
+            x.set32(Obj::Z, 0);
             mv(x, 0xc);
         }
         4 => stand_when_done(x),
@@ -181,10 +182,10 @@ fn drop_in(x: &mut Cx) {
 // --- +6 = 10 : apparition ----------------------------------------------------------------------------------
 
 fn appear(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 0x1a);
             x.set16(TIMER_W, 0x400);
@@ -197,7 +198,7 @@ fn appear(x: &mut Cx) {
                 x.anim_step();
                 return;
             }
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(LOOK, 0x1b);
             mv(x, 9);
         }

@@ -18,6 +18,7 @@
 use crate::objects::Courant;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod control;
@@ -25,23 +26,11 @@ mod hit;
 mod moves;
 
 pub(self) mod g {
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_X2: u32 = 0x1c;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
     /// Temps (mot) de l'animation courante.
     pub const ANIM_TIME: u32 = 0x30;
     /// Drapeau de fin (mot) de l'animation courante.
     pub const ANIM_END: u32 = 0x32;
-    pub const KEY: u32 = 0x33;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const AI_WAIT: u32 = 0x77;
@@ -97,7 +86,7 @@ pub(self) fn set_strike(x: &mut Cx, kind: u8, power: u8) {
 
 /// 0x6935c : étape suivante, animation 0.
 pub(self) fn next_anim(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     mv(x, 0);
 }
 
@@ -111,21 +100,21 @@ pub(self) fn wait(x: &mut Cx) {
             return;
         }
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
 }
 
 /// 0x6899a : demi-tour selon `+0xa6` (0 ou 1 : rien, 2 : animation 1 puis 3 : attend la fin et se retourne).
 pub(self) fn turn(x: &mut Cx) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
-        return x.add8(STEP, 2);
+        return x.add8(f::SUB3, 2);
     }
     if side == 2 {
         x.add8(SIDE, 1);
         return mv(x, 1);
     }
     if (x.u8(ANIM_END) as i8) < 0 {
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         return mv(x, 0);
@@ -138,8 +127,8 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
     let mut d1 = 0u32;
     if x.u16(f::TARGET) != 0 {
         let target = load_target(x);
-        let mine = x.u16(X);
-        let theirs = target.u16(x.b, X);
+        let mine = x.u16(Obj::X);
+        let theirs = target.u16(x.b, Obj::X);
         if mine != theirs {
             let want = if mine < theirs { 0x20 } else { 0 };
             x.c.d[2] = want;
@@ -163,7 +152,7 @@ pub(self) fn hit_gate(x: &mut Cx) -> bool {
     x.c.d[6] = v as u32 * 2;
     match v {
         1 => {
-            if x.u16(HEIGHT) != 0 {
+            if x.u16(Obj::Z) != 0 {
                 return true;
             }
             x.set8(HIT_FLAG, 0);
@@ -179,12 +168,12 @@ pub(self) fn hit_gate(x: &mut Cx) -> bool {
         2 => {
             set_state_long(x, 0x0400_0000);
             x.set8(HIT_FLAG, 0);
-            let code = if x.u16(HEIGHT) == 0 { 0xc } else { 0x38 };
+            let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
             x.set8(0x49, code);
             false
         }
         3 => {
-            if x.u16(HEIGHT) != 0 {
+            if x.u16(Obj::Z) != 0 {
                 return true;
             }
             x.set8(HIT_FLAG, 0);
@@ -229,7 +218,7 @@ pub(self) fn choose(x: &mut Cx) {
     let b = row_byte(x, 0x69146);
     x.set8(f::SUB2, b);
     x.set16(f::STATE, 0x0208);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// 0x67ea4 : relance l'animation 2 en reprenant le temps et le drapeau de fin de l'animation précédente
@@ -253,11 +242,11 @@ pub(self) fn restart_walk(x: &mut Cx) {
     }
     x.set16(ANIM_TIME, keep);
     x.set32(0x4c, 0x1c7336);
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
-        x.add8(ANGLE, 0x10);
+        x.add8(Obj::SPEED_INDEX, 0x10);
     }
-    let at = x.u16(X);
+    let at = x.u16(Obj::X);
     x.set16(TIMER2, at);
 }
 
@@ -269,9 +258,9 @@ fn init(x: &mut Cx) {
     let (bx, by) = if x.a5_u8(0x36) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
     let cam_x = x.a5_u16(bx);
     let cam_y = x.a5_u16(by);
-    x.set16(X, cam_x.wrapping_add(0xc0));
-    x.set32(HEIGHT, 0);
-    x.set16(DEPTH, cam_y.wrapping_add(0x50));
+    x.set16(Obj::X, cam_x.wrapping_add(0xc0));
+    x.set32(Obj::Z, 0);
+    x.set16(Obj::Y, cam_y.wrapping_add(0x50));
     x.set8(f::FLIP, 0);
     x.c.d[0] = 0;
     set_state_long(x, STANCE);

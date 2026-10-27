@@ -185,7 +185,7 @@ fn get_up(x: &mut Cx) {
                     return;
                 }
             }
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.call(call::RANDOM_TURN);
             speed(x, 0x2b);
             x.set16(TIMER, 0x1e);

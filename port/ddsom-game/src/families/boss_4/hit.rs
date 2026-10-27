@@ -102,7 +102,7 @@ fn pushed_back(x: &mut Cx) {
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18u8, 0x20u16) } else { (8, (-0x20i16) as u16) };
             x.c.d[0] = angle as u32;
             setw(x, 1, vy);
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vy);
             speed(x, 0x17);
             kind(x, 0x20);

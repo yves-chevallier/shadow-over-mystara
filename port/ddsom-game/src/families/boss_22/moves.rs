@@ -407,7 +407,7 @@ fn spot_wait(x: &mut Cx) {
 
 /// Étape commune des bonds : attend l'image-clé, monte, redescend, retombe.
 fn leap_rise_wait(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
     }
@@ -568,10 +568,10 @@ pub(super) fn holding(x: &mut Cx) {
         }
         2 => {
             step_anim(x);
-            if x.u8(KEY) == 0 {
+            if x.u8(f::KEY_FRAME) == 0 {
                 return x.tail(call::HOLD);
             }
-            x.set8(KEY, 0);
+            x.set8(f::KEY_FRAME, 0);
             if sub8(x, BITES, 1).le() {
                 return release_prey(x);
             }
@@ -659,7 +659,7 @@ pub(super) fn transform(x: &mut Cx) {
             start(x, Set::B, 0xa);
         }
         4 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 next6(x);
                 x.set8(VULNERABLE, 0);
             }

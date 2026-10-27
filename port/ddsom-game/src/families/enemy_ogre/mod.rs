@@ -17,6 +17,7 @@
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
+use crate::objects::Obj;
 
 mod arrival;
 mod attacks;
@@ -24,19 +25,7 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
     pub const ANIM_FLAGS: u32 = 0x32;
-    pub const KEY: u32 = 0x33;
     pub const ARM_OF: u32 = 0x46;
     pub const VULNERABLE: u32 = 0x67;
     pub const WANDER: u32 = 0x6b;
@@ -97,7 +86,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x71dde : un objet de variante négative (le « bras ») meurt avec l'objet `+0x46` qu'il accompagne.
 fn arm_dies_with_ogre(x: &mut Cx) {
-    if (x.u8(VARIANT) as i8) >= 0 || x.u16(f::STATE) == 0x0406 {
+    if (x.u8(Obj::VARIANT) as i8) >= 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }
     let owner = x.linked(ARM_OF);
@@ -149,12 +138,12 @@ pub(self) fn count_down(x: &mut Cx, off: u32) -> bool {
 /// Orientation vers la droite (0x18) ou la gauche (8) selon `flip`.
 pub(self) fn angle_by_flip(x: &mut Cx) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// L'ogre peut être saisi par un joueur (pas les variantes négatives) : abandonne alors le geste.
 pub(self) fn held_by_player(x: &mut Cx) -> bool {
-    if (x.u8(VARIANT) as i8) < 0 || !grabbed(x) {
+    if (x.u8(Obj::VARIANT) as i8) < 0 || !grabbed(x) {
         return false;
     }
     go::held(x);
@@ -172,12 +161,12 @@ pub(self) fn nobody_left(x: &mut Cx) -> bool {
 
 /// 0x71d98 : ondulation verticale en vol selon la clé d'animation (table de longs `0x71dc6`).
 pub(self) fn bob(x: &mut Cx) {
-    let idx = ((x.u8(KEY) & 0x7f) as u32) << 2;
+    let idx = ((x.u8(f::KEY_FRAME) & 0x7f) as u32) << 2;
     let mut d = x.rom32(0x71dc6 + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
-    x.add32(HEIGHT, d as u32);
+    x.add32(Obj::Z, d as u32);
     if !count_down(x, TIMER2) {
         x.set16(TIMER2, 0x48);
     }
@@ -185,9 +174,9 @@ pub(self) fn bob(x: &mut Cx) {
 
 /// Étincelle de la clé d'animation : bit 7 de `+0x33` → effet 0x11a36, alterné par `+0xb3`.
 pub(self) fn flash_key(x: &mut Cx) {
-    if (x.u8(KEY) as i8) < 0 {
-        let k = x.u8(KEY) & 0x7f;
-        x.set8(KEY, k);
+    if (x.u8(f::KEY_FRAME) as i8) < 0 {
+        let k = x.u8(f::KEY_FRAME) & 0x7f;
+        x.set8(f::KEY_FRAME, k);
         let f = x.u8(FLASH) ^ 1;
         x.set8(FLASH, f);
         x.c.d[0] = f as u32;
@@ -270,7 +259,7 @@ pub(self) mod go {
 
 /// 0x71e04 : PV initiaux ; la variante négative les calcule comme un type 6 (0x453c) puis reprend le type 0x12.
 fn initial_hp(x: &mut Cx) {
-    if (x.u8(VARIANT) as i8) >= 0 {
+    if (x.u8(Obj::VARIANT) as i8) >= 0 {
         return x.call(rom::INITIAL_HP);
     }
     x.set8(2, 6);
@@ -314,7 +303,7 @@ fn init(x: &mut Cx) {
     pick_target(x);
     mv(x, 0);
     x.set8(INVULNERABLE, 1);
-    let state = match x.u8(VARIANT) as i8 {
+    let state = match x.u8(Obj::VARIANT) as i8 {
         v if v < 0 => 0x0200_0000,
         0 => 0x0200_0200,
         1 => 0x0200_0400,

@@ -21,7 +21,6 @@ use super::cx::handlers;
 use crate::objects::Obj;
 
 mod g {
-    pub const KEY: u32 = 0x33;
     pub const STUN: u32 = 0x56;
     pub const FRAME_KIND: u32 = 0x44;
     pub const REACTION: u32 = 0x49;
@@ -36,7 +35,6 @@ mod g {
     pub const IN_ATTACK: u32 = 0xac;
     pub const FALL_TIMER: u32 = 0x90;
     pub const SPIN_DELAY: u32 = 0x87;
-    pub const ANGLE: u32 = 0x2d;
     pub const DEATH_FLAG: u32 = 0x91;
 }
 use g::*;
@@ -346,7 +344,7 @@ fn grab_hold(x: &mut Cx) {
             return grab_kill(x);
         }
     }
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.c.a[1] = p.0;
         x.call(call::SOUND);
         p = Obj(x.c.a[1]);
@@ -434,9 +432,9 @@ fn chase(x: &mut Cx) {
             x.set8(BLINK, 0x14);
             x.call(call::SOUND);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x13);
-            x.set8(ANGLE, 0x18);
+            x.set8(Obj::SPEED_INDEX, 0x18);
             if x.u8(f::FLIP) != 0 {
-                x.set8(ANGLE, 8);
+                x.set8(Obj::SPEED_INDEX, 8);
             }
             attack_anim(x, 0x21);
             chase_turn(x);
@@ -470,7 +468,7 @@ fn chase_follow(x: &mut Cx) {
         return chase_stop(x);
     }
     x.call(call::ANGLE_TO_TARGET);
-    let mine = x.u8(ANGLE);
+    let mine = x.u8(Obj::SPEED_INDEX);
     let diff = (x.c.d[0] as u8).wrapping_sub(mine) & 0x1f;
     if diff != 0 {
         let mut a = mine;
@@ -478,9 +476,9 @@ fn chase_follow(x: &mut Cx) {
             a = a.wrapping_sub(2);
         }
         a = a.wrapping_add(1) & 0x1f;
-        x.set8(ANGLE, a);
+        x.set8(Obj::SPEED_INDEX, a);
     }
-    let a = x.u8(ANGLE);
+    let a = x.u8(Obj::SPEED_INDEX);
     if a > 0x10 {
         x.set8(f::FLIP, 0);
     } else if a != 0x10 && a != 0 {
@@ -556,7 +554,7 @@ fn next_action(x: &mut Cx) {
     };
     row += random(x) & 0xe;
     let a = x.rom8(0x83f4e + row);
-    x.set8(ANGLE, (a << 1) & 0x1e);
+    x.set8(Obj::SPEED_INDEX, (a << 1) & 0x1e);
     x.set8(f::SUB, (a & 0xf0) >> 2);
     x.set16(f::SUB2, 0);
     let b = x.rom8(0x83f4f + row);
@@ -649,7 +647,7 @@ fn tumble(x: &mut Cx) {
             x.set32(0x1c, 0);
             x.set8(SPIN_DELAY, if x.c.d[7] & 1 != 0 { 1 } else { 2 });
             let a = (random(x) as u16 + 8) & 0x1f;
-            x.set8(ANGLE, a as u8);
+            x.set8(Obj::SPEED_INDEX, a as u8);
             fall_anim(x, 0);
         }
         2 => {
@@ -737,14 +735,14 @@ fn spin(x: &mut Cx) {
     }
     if sub8(x, SPIN_DELAY, 1).eq() {
         x.set8(SPIN_DELAY, 1);
-        let a = x.u8(ANGLE).wrapping_add(2) & 0x1f;
-        x.set8(ANGLE, a);
+        let a = x.u8(Obj::SPEED_INDEX).wrapping_add(2) & 0x1f;
+        x.set8(Obj::SPEED_INDEX, a);
         x.set8(f::FLIP, 0);
         if a.wrapping_sub(8) >= 0x10 {
             x.set8(f::FLIP, 0x20);
         }
     }
-    let i = (x.u8(ANGLE) as u32) << 2;
+    let i = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
     let vx = x.data16(SPIN_VECTORS + i).wrapping_add(x.u16(0x16));
     x.set16(0x14, vx);
     let dx = ((vx as u32) << 16) as i32 >> 8;

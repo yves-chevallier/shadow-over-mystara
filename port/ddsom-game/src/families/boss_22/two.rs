@@ -124,7 +124,7 @@ pub(super) fn arrive(x: &mut Cx) {
 
 /// 0x7d0bc : attend l'image-clé de l'animation de saut.
 pub(super) fn rise_wait(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
     }
@@ -223,14 +223,14 @@ pub(super) fn slam(x: &mut Cx) {
             }
         }
         14 => {
-            if x.u8(KEY) == 1 {
+            if x.u8(f::KEY_FRAME) == 1 {
                 x.set_a5_u16(0x51e, 4);
-                x.set8(KEY, 0);
+                x.set8(f::KEY_FRAME, 0);
                 x.c.d[1] = 2;
                 eshl_sweep_1d(x, 2);
             }
-            if x.u8(KEY) == 2 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 2 {
+                x.set8(f::KEY_FRAME, 0);
                 x.c.d[1] = 0;
                 eshl_sweep_1d(x, 0);
             }
@@ -329,7 +329,7 @@ pub(super) fn slam(x: &mut Cx) {
             start(x, Set::B, 2);
         }
         28 => {
-            if x.u8(KEY) != 0 {
+            if x.u8(f::KEY_FRAME) != 0 {
                 next7(x);
                 x.set8(0xaf, 1);
             }
@@ -424,13 +424,13 @@ pub(super) fn spin_roar(x: &mut Cx) {
             start(x, Set::B, 5);
         }
         10 => {
-            if x.u8(KEY) == 1 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 1 {
+                x.set8(f::KEY_FRAME, 0);
                 x.c.d[1] = 2;
                 eshl_sweep_1d(x, 2);
             }
-            if x.u8(KEY) == 2 {
-                x.set8(KEY, 0);
+            if x.u8(f::KEY_FRAME) == 2 {
+                x.set8(f::KEY_FRAME, 0);
                 eshl_wave_1e(x);
                 x.call(0x1ac9a);
                 x.set8(0xb9, 4);

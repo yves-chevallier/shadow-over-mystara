@@ -28,10 +28,6 @@ mod hit;
 
 /// Champs propres à ce type.
 pub(self) mod g {
-    /// Direction de déplacement (index de table de vitesses).
-    pub const ANGLE: u32 = 0x2d;
-    /// Image-clé de l'animation en cours.
-    pub const KEY: u32 = 0x33;
     pub const VULNERABLE: u32 = 0x67;
     /// Bonds restants de la marche, attente debout, décompte avant le prochain choix de cible.
     pub const WALK_STEPS: u32 = 0x6b;

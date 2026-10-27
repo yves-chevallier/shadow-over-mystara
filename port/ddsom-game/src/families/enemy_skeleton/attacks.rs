@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if special_hit(x, 0x582e8) {
@@ -29,7 +30,7 @@ pub(super) fn run(x: &mut Cx) {
 
 /// 0x59b98 : le squelette se prépare (animation de repos).
 pub(super) fn ready(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     body(x, 0);
 }
 
@@ -43,21 +44,21 @@ pub(super) fn settle(x: &mut Cx) {
             return;
         }
     }
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
 }
 
 /// 0x591d6 : se tourne vers la cible si elle est derrière (`+0xa6` = 2).
 pub(super) fn face(x: &mut Cx) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
-        return x.add8(STEP, 2);
+        return x.add8(f::SUB3, 2);
     }
     if side == 2 {
         x.set8(SIDE, 3);
         return body(x, 1);
     }
     if (x.u8(ANIM_STATE) as i8) < 0 {
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         body(x, 0);
@@ -73,8 +74,8 @@ fn needs_turn_around(x: &mut Cx) -> bool {
     if x.u16(f::TARGET) != 0 {
         x.c.d[2] = 0;
         let target = load_target(x);
-        let tx = target.u16(x.b, X);
-        let mine = x.u16(X);
+        let tx = target.u16(x.b, Obj::X);
+        let mine = x.u16(Obj::X);
         set_dw(x, 0, mine);
         if mine != tx {
             let want = if mine < tx { 0x20 } else { 0 };
@@ -104,7 +105,7 @@ fn finish(x: &mut Cx) {
 /// Estoc (`+6` = 0 ou 2) : tire au sort de reprendre l'idée, sinon prépare puis frappe (type `kind`,
 /// force `power`, animation `anim`).
 fn thrust(x: &mut Cx, kind: u8, power: u8, anim: u32) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => {
             let r = random(x) & 0xf;
             x.c.d[0] = x.c.d[0] & 0xffff_0000 | r;
@@ -112,14 +113,14 @@ fn thrust(x: &mut Cx, kind: u8, power: u8, anim: u32) {
             if 0xffc0u32 >> r & 1 != 0 {
                 set_state_long(x, STANCE_ALT);
             } else {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
             }
         }
         2 => ready(x),
         4 => settle(x),
         6 => face(x),
         8 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(STRIKE_KIND, kind);
             x.set8(STRIKE_POWER, power);
             strike(x, anim);
@@ -131,7 +132,7 @@ fn thrust(x: &mut Cx, kind: u8, power: u8, anim: u32) {
 
 /// Enchaînement (`+6` = 4) : coup de bouclier, puis, au hasard, un second coup ; la série 1 passe à la garde.
 fn combo(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => face(x),
         2 => ready(x),
         4 => settle(x),
@@ -145,7 +146,7 @@ fn combo(x: &mut Cx) {
             x.set8(STRIKE_POWER, 4);
             let state = x.u32(f::STATE);
             x.set32(0x8a, state);
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             strike(x, 3);
         }
         8 => {
@@ -155,7 +156,7 @@ fn combo(x: &mut Cx) {
             if random(x) & 1 == 0 {
                 end_attack(x);
             } else {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 strike(x, 0);
             }
         }
@@ -166,12 +167,12 @@ fn combo(x: &mut Cx) {
 
 /// Double coup (`+6` = 6) : un coup au hasard parmi deux animations, puis le suivant.
 fn double_cut(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => face(x),
         2 => ready(x),
         4 => settle(x),
         6 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             let state = x.u32(f::STATE);
             x.set32(0x8a, state);
             x.set8(STRIKE_KIND, 5);
@@ -184,7 +185,7 @@ fn double_cut(x: &mut Cx) {
         }
         8 => {
             if step(x) {
-                x.add8(STEP, 2);
+                x.add8(f::SUB3, 2);
                 strike(x, 1);
             }
         }
@@ -208,7 +209,7 @@ pub(super) enum Leap {
 }
 
 fn leap(x: &mut Cx, kind: Leap) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
         4 => jump_up(x, kind),
@@ -225,17 +226,17 @@ fn leap(x: &mut Cx, kind: Leap) {
             Leap::Turning | Leap::TurningCombo => {
                 step(x);
                 if (x.u8(ANIM_STATE) as i8) < 0 {
-                    x.add8(STEP, 2);
+                    x.add8(f::SUB3, 2);
                     if !needs_turn_around(x) {
-                        x.add8(STEP, 2);
+                        x.add8(f::SUB3, 2);
                     }
                 }
             }
         },
         14 => face(x),
         16 => {
-            x.add8(STEP, 2);
-            let n = if x.u8(STEP) == 0x10 {
+            x.add8(f::SUB3, 2);
+            let n = if x.u8(f::SUB3) == 0x10 {
                 0
             } else {
                 rand_and(x, 1)
@@ -246,7 +247,7 @@ fn leap(x: &mut Cx, kind: Leap) {
         18 => match kind {
             Leap::TurningCombo => {
                 if step(x) {
-                    x.add8(STEP, 2);
+                    x.add8(f::SUB3, 2);
                     strike(x, 1);
                 }
             }
@@ -260,8 +261,8 @@ fn leap(x: &mut Cx, kind: Leap) {
 /// 0x584fe : attend l'image-clé du saut.
 pub(super) fn land_wait(x: &mut Cx) {
     step(x);
-    if x.u8(KEY_FRAME) != 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.add8(f::SUB3, 2);
     }
 }
 
@@ -269,10 +270,10 @@ pub(super) fn land_wait(x: &mut Cx) {
 pub(super) fn rise(x: &mut Cx) {
     x.move_xz();
     step(x);
-    if (x.u16(SPEED_Z) as i16) < 0 {
-        x.add8(STEP, 2);
+    if (x.u16(Obj::VZ) as i16) < 0 {
+        x.add8(f::SUB3, 2);
         x.set16(ANIM_COUNT, 1);
-        x.set8(KEY_FRAME, 0);
+        x.set8(f::KEY_FRAME, 0);
     }
 }
 
@@ -280,10 +281,10 @@ pub(super) fn rise(x: &mut Cx) {
 pub(super) fn fall(x: &mut Cx) {
     x.move_xz();
     step(x);
-    if (x.u32(HEIGHT) as i32) <= 0 {
-        x.set32(HEIGHT, 0);
+    if (x.u32(Obj::Z) as i32) <= 0 {
+        x.set32(Obj::Z, 0);
         x.set16(ANIM_COUNT, 1);
-        x.add8(STEP, 2);
+        x.add8(f::SUB3, 2);
     }
 }
 
@@ -291,29 +292,29 @@ pub(super) fn fall(x: &mut Cx) {
 fn jump_up(x: &mut Cx, kind: Leap) {
     match kind {
         Leap::Short => {
-            x.set16(SPEED_X, 0x180);
+            x.set16(Obj::VX, 0x180);
             x.set8(STRIKE_KIND, 7);
         }
         Leap::Long => {
             x.set8(STRIKE_KIND, 8);
-            x.set16(SPEED_X, 0x480);
+            x.set16(Obj::VX, 0x480);
         }
-        Leap::Turning | Leap::TurningCombo => x.set16(SPEED_X, 0x480),
+        Leap::Turning | Leap::TurningCombo => x.set16(Obj::VX, 0x480),
     }
     x.set8(STRIKE_POWER, 5);
     if x.u8(f::FLIP) == 0 {
-        negate(x, SPEED_X);
+        negate(x, Obj::VX);
     }
-    x.set16(SPEED_Y, 0);
-    x.set16(SPEED_Z, 0x900);
-    x.set16(GRAVITY, -0x80i16 as u16);
-    x.add8(STEP, 2);
+    x.set16(Obj::AX, 0);
+    x.set16(Obj::VZ, 0x900);
+    x.set16(Obj::AZ, -0x80i16 as u16);
+    x.add8(f::SUB3, 2);
     strike(x, 2);
 }
 
 /// Glissade (`+6` = 10) : le squelette fonce vers la cible en déplaçant son animation.
 fn slide(x: &mut Cx) {
-    match x.u8(STEP) {
+    match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
         4 => begin_slide(x),
@@ -324,7 +325,7 @@ fn slide(x: &mut Cx) {
 
 /// 0x58582 : lance l'animation 2 en la ramenant à l'image qu'elle avait, mémorise la position.
 fn begin_slide(x: &mut Cx) {
-    x.add8(STEP, 2);
+    x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x2a);
     restart_slide(x);
 }
@@ -358,14 +359,14 @@ pub(super) fn restart_slide(x: &mut Cx) {
 fn finish_restart(x: &mut Cx) {
     x.set32(MOVE_TABLE, 0x1c7336);
     let angle = if x.u8(f::FLIP) != 0 { 8 + 0x10 } else { 8 };
-    x.set8(ANGLE, angle);
-    let pos = x.u16(X);
+    x.set8(Obj::SPEED_INDEX, angle);
+    let pos = x.u16(Obj::X);
     x.set16(SAVED_POS, pos);
 }
 
 fn slide_move(x: &mut Cx) {
     step(x);
-    if (x.u8(KEY_FRAME) as i8) >= 0 {
+    if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         let t = x.u16(TIMER).wrapping_sub(1);
         x.set16(TIMER, t);
         if t == 0 {
@@ -373,7 +374,7 @@ fn slide_move(x: &mut Cx) {
         }
         move_xy(x);
     }
-    let d = x.u16(SAVED_POS).wrapping_sub(x.u16(X)).wrapping_add(0x40);
+    let d = x.u16(SAVED_POS).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x40);
     if d >= 0x80 {
         end_attack(x);
     }

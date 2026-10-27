@@ -18,6 +18,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod attacks;
 mod hit;
@@ -25,22 +26,8 @@ mod stance;
 
 /// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    /// Vitesses : en X, en profondeur, en hauteur, pesanteur, vitesse latérale.
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_SIDE: u32 = 0x1c;
-    pub const SPEED_SIDE_Y: u32 = 0x1e;
     /// Série : 0 troglodyte (clignote), 1 variante armée.
     pub const SERIES: u32 = 0x2f;
-    pub const ANGLE: u32 = 0x2d;
-    pub const KEY_FRAME: u32 = 0x33;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const VULNERABLE: u32 = 0x67;
@@ -132,7 +119,7 @@ fn step(x: &mut Cx) -> bool {
 /// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
 fn set_angle(x: &mut Cx, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 fn move_xy(x: &mut Cx) {
@@ -193,7 +180,7 @@ fn needs_turn_around(x: &mut Cx) -> bool {
         return false;
     }
     let target = load_target(x);
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     set_dw(x, 0, dx);
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
     x.c.d[1] = want;
@@ -221,7 +208,7 @@ fn end_attack(x: &mut Cx) {
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row + n);
     x.set8(f::SUB2, mv);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 /// Le clignotement est lancé s'il ne l'est pas déjà (série 0, phase positive).
@@ -357,7 +344,7 @@ fn pick_blink_delay(x: &mut Cx) {
 
 /// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 chute, 2 bond, 3 et 4 saut, 5 réveil).
 fn arrival(x: &mut Cx) {
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
                 let t = x.u8(REPEAT).wrapping_sub(1);
@@ -386,17 +373,17 @@ fn arrival(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
                 x.set8(VULNERABLE, 1);
                 x.set8(LOOK_PREV, 0xe);
-                x.set16(SPEED_Z, -0x300i16 as u16);
-                x.set16(GRAVITY, -0x80i16 as u16);
-                let cam = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(DEPTH));
-                x.set16(HEIGHT, cam);
+                x.set16(Obj::VZ, -0x300i16 as u16);
+                x.set16(Obj::AZ, -0x80i16 as u16);
+                let cam = x.a5_u16(0x50a).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
+                x.set16(Obj::Z, cam);
                 body(x, 0xb);
             }
             2 => {
                 x.move_z();
-                if (x.u16(HEIGHT) as i16) < 0 {
+                if (x.u16(Obj::Z) as i16) < 0 {
                     x.add8(f::SUB2, 2);
-                    x.set32(HEIGHT, 0);
+                    x.set32(Obj::Z, 0);
                     body(x, 0xc);
                 }
             }
@@ -406,23 +393,23 @@ fn arrival(x: &mut Cx) {
         2 => match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_X, 0);
+                x.set16(Obj::VX, 0);
                 let t = load_target(x);
                 if t.u8(x.b, 0) == 0 {
                     set_state_long(x, IDLE);
                     return rest_begin(x);
                 }
-                x.set16(SPEED_Z, 0x680);
-                x.set16(GRAVITY, -0x38i16 as u16);
-                x.set16(SPEED_Y, 0);
-                let d = t.u16(x.b, X).wrapping_sub(x.u16(X)) << 2;
-                x.set16(SPEED_X, d);
+                x.set16(Obj::VZ, 0x680);
+                x.set16(Obj::AZ, -0x38i16 as u16);
+                x.set16(Obj::AX, 0);
+                let d = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) << 2;
+                x.set16(Obj::VX, d);
                 body(x, 4);
             }
             2 => {
                 x.move_xz();
-                if step(x) && (x.u16(HEIGHT) as i16) < 0 {
-                    x.set16(HEIGHT, 0);
+                if step(x) && (x.u16(Obj::Z) as i16) < 0 {
+                    x.set16(Obj::Z, 0);
                     x.add8(f::SUB2, 2);
                     body(x, 0xc);
                 }
@@ -439,12 +426,12 @@ fn arrival(x: &mut Cx) {
                     x.call(0xeb9a0);
                 }
                 x.add8(f::SUB2, 2);
-                x.set16(SPEED_Z, 0x600);
-                x.set16(GRAVITY, -0x38i16 as u16);
-                x.set16(SPEED_SIDE, 0x80);
-                x.set16(SPEED_SIDE_Y, 0);
-                if x.u8(VARIANT) != 3 {
-                    negate(x, SPEED_SIDE);
+                x.set16(Obj::VZ, 0x600);
+                x.set16(Obj::AZ, -0x38i16 as u16);
+                x.set16(Obj::VY, 0x80);
+                x.set16(Obj::AY, 0);
+                if x.u8(Obj::VARIANT) != 3 {
+                    negate(x, Obj::VY);
                 }
                 body(x, 0xa);
             } else {
@@ -453,7 +440,7 @@ fn arrival(x: &mut Cx) {
                     return;
                 }
                 x.set8(LOOK_PREV, 0xe0);
-                x.set16(HEIGHT, 0);
+                x.set16(Obj::Z, 0);
                 set_state_long(x, STANCE);
             }
         }

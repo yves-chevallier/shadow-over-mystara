@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
     if x.u8(f::SUB2) != 10 && grabbed(x) {
@@ -17,7 +18,7 @@ pub(super) fn run(x: &mut Cx) {
         10 => hop(x),
         _ => {}
     }
-    if x.u16(HEIGHT) == 0 && x.a5_u8(0x35) == 0 {
+    if x.u16(Obj::Z) == 0 && x.a5_u8(0x35) == 0 {
         set_state_long(x, IDLE);
     }
 }
@@ -25,13 +26,13 @@ pub(super) fn run(x: &mut Cx) {
 // --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
 
 fn approach(x: &mut Cx) {
-    let dx = x.u16(X).wrapping_sub(x.a5_u16(0x506));
+    let dx = x.u16(Obj::X).wrapping_sub(x.a5_u16(0x506));
     if dx >= 0x180 {
         // loin de la caméra : se tourne vers la cible puis tire son geste au hasard
         let mut flip = 0;
         if x.u16(f::TARGET) != 0 {
             let target = x.linked(f::TARGET);
-            if (x.u16(X).wrapping_sub(target.u16(x.b, X)) as i16) < 0 {
+            if (x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X)) as i16) < 0 {
                 flip = 0x20;
             }
         }
@@ -44,8 +45,8 @@ fn approach(x: &mut Cx) {
     if target_far_in_line(x) {
         return set_state_long(x, 0x0202_0600);
     }
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         x.set8(LOOK, 0xc);
         mv(x, 2);
@@ -98,7 +99,7 @@ pub(super) fn reach_boxes(x: &mut Cx) {
         return;
     }
     let target = x.linked(f::TARGET);
-    let side = if (x.u16(X).wrapping_sub(target.u16(x.b, X)) as i16) < 0 { 0x20 } else { 0 };
+    let side = if (x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X)) as i16) < 0 { 0x20 } else { 0 };
     if side != x.u8(f::FLIP) {
         x.set32(RESUME_STATE, STANCE);
         x.set8(RESUME_SUB2, 0);
@@ -157,8 +158,8 @@ fn far_attack(x: &mut Cx) -> bool {
 // --- +6 = 2 : demi-tour ------------------------------------------------------------------------------------
 
 fn turn(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         look(x, 4);
         return mv(x, 4);
@@ -178,8 +179,8 @@ fn turn(x: &mut Cx) {
 // --- +6 = 4 : attente -----------------------------------------------------------------------------------------
 
 fn wait(x: &mut Cx) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
         look(x, 0);
         return mv(x, 0);
@@ -200,14 +201,14 @@ fn wait(x: &mut Cx) {
 // --- +6 = 6 : crachat ---------------------------------------------------------------------------------------
 
 fn spit(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         4 => {
-            x.add8(STEP, 0xfe);
+            x.add8(f::SUB3, 0xfe);
             spit_begin(x);
         }
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(TIMER, 0x34);
             spit_begin(x);
         }
@@ -239,20 +240,20 @@ fn spit_begin(x: &mut Cx) {
 // --- +6 = 10 : saut ---------------------------------------------------------------------------------------------
 
 fn hop(x: &mut Cx) {
-    x.c.d[0] = x.u8(STEP) as u32;
-    match x.u8(STEP) {
+    x.c.d[0] = x.u8(f::SUB3) as u32;
+    match x.u8(f::SUB3) {
         0 => {
-            x.add8(STEP, 2);
+            x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             look(x, 6);
             x.set8(STRIKE_KIND, 0x2b);
-            x.set16(SPEED_X, -0x380i16 as u16);
+            x.set16(Obj::VX, -0x380i16 as u16);
             if x.u8(f::FLIP) != 0 {
-                negate(x, SPEED_X);
+                negate(x, Obj::VX);
             }
-            x.set16(SPEED_Y, 0);
-            x.set16(SPEED_Z, 0x4c0);
-            x.set16(GRAVITY, -0x38i16 as u16);
+            x.set16(Obj::AX, 0);
+            x.set16(Obj::VZ, 0x4c0);
+            x.set16(Obj::AZ, -0x38i16 as u16);
             mv(x, 5);
         }
         2 => wait_key(x),

@@ -15,6 +15,7 @@
 
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 
 mod arrival;
 mod attacks;
@@ -22,20 +23,7 @@ mod hit;
 mod stance;
 
 pub(self) mod g {
-    pub const VARIANT: u32 = 0x3;
-    pub const STEP: u32 = 0x7;
-    pub const X: u32 = 0x8;
-    pub const HEIGHT: u32 = 0xc;
-    pub const DEPTH: u32 = 0x10;
-    pub const SPEED_X: u32 = 0x14;
-    pub const SPEED_Y: u32 = 0x16;
-    pub const SPEED_Z: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const SPEED_X2: u32 = 0x1c;
-    pub const SPEED_Y2: u32 = 0x1e;
-    pub const ANGLE: u32 = 0x2d;
     pub const GROUP: u32 = 0x2f;
-    pub const KEY: u32 = 0x33;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const VULNERABLE: u32 = 0x67;
@@ -111,13 +99,13 @@ pub(self) fn set_speed(x: &mut Cx, n: u32) {
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
 pub(self) fn set_angle(x: &mut Cx) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Étape commune des gestes : attend la clé d'animation `+0x33` puis passe à l'étape suivante (0x6244a).
 pub(self) fn wait_key(x: &mut Cx) {
-    if x.u8(KEY) != 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::KEY_FRAME) != 0 {
+        x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
     }
     x.anim_step();
@@ -136,8 +124,8 @@ pub(self) fn land(x: &mut Cx) {
 pub(self) fn land_dust(x: &mut Cx) {
     dust(x);
     x.call(0xec820);
-    x.set32(HEIGHT, 0);
-    x.add8(STEP, 2);
+    x.set32(Obj::Z, 0);
+    x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 0xc);
     mv(x, 0xc);
@@ -175,7 +163,7 @@ pub(self) fn must_turn(x: &mut Cx) -> bool {
     }
     let target = x.linked(f::TARGET);
     x.c.a[1] = target.0 | 0xff00_0000;
-    let dx = target.u16(x.b, X).wrapping_sub(x.u16(X)) as i16;
+    let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16;
     let want = if dx > 0 { 0x20 } else { 0 };
     let turn = want != x.u8(f::FLIP);
     x.c.d[0] = turn as u32;
@@ -189,12 +177,12 @@ pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
         return false;
     }
     let target = x.linked(f::TARGET);
-    let dz = target.u16(x.b, DEPTH).wrapping_sub(x.u16(DEPTH)).wrapping_add(0x30);
+    let dz = target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x30);
     if dz > 0x60 {
         x.c.d[0] = 0;
         return false;
     }
-    let dx = target.u16(x.b, X).wrapping_sub(x.u16(X)).wrapping_add(0xf0);
+    let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xf0);
     let far = dx > 0x1e0;
     x.c.d[0] = far as u32;
     far
@@ -210,7 +198,7 @@ pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
     let mv = x.data8(list + row + r);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set16(f::STATE, 0x0204);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
     if !x.in_arena(0) && x.u8(f::SUB2) == 0x10 {
         x.set8(f::SUB2, 8);
     }
@@ -230,7 +218,7 @@ pub(self) fn after_strike(x: &mut Cx) {
     let mv = x.data8(0x637fe + row + r);
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, 0x0208);
-    x.set8(STEP, 0);
+    x.set8(f::SUB3, 0);
 }
 
 pub(self) const STANCE: u32 = 0x0202_0000;
@@ -266,7 +254,7 @@ fn init(x: &mut Cx) {
     x.call(call::FACE_TARGET);
     x.call(call::TURN_TO_TARGET);
     // état de départ, aspect et animation selon la variante
-    let (state, look_v, anim) = match x.u8(VARIANT) {
+    let (state, look_v, anim) = match x.u8(Obj::VARIANT) {
         0 => (STANCE, 0xc, 2),
         1 => (0x0202_0600, 3, 3),
         2 => (0x0200_0400, 0, 0),

@@ -6,6 +6,7 @@
 use super::stance::{next_move, pursue_tail, ready, walk_begin};
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Série de répétitions d'un coup, tirée dans une table par niveau de difficulté (0x5f5fa).
 const SERIES_TABLE: u32 = 0x5f5fa;
@@ -193,7 +194,7 @@ fn leap_at(x: &mut Cx, vx: i16) {
 
 /// 0x5e222 : attend l'image-clé du saut.
 fn leap_wait(x: &mut Cx) {
-    if x.u8(KEY_FRAME) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
     }
@@ -443,7 +444,7 @@ fn hop_begin(x: &mut Cx) {
 
 /// 0x5e690 : attend l'image-clé du petit bond.
 fn hop_wait(x: &mut Cx) {
-    if x.u8(KEY_FRAME) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
     }
     step(x);
@@ -494,7 +495,7 @@ fn run_toward_begin(x: &mut Cx) {
         Some(dx) => dx >= 0,
         None => false,
     };
-    x.set8(ANGLE, if right { 8 } else { 0x18 });
+    x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
     x.set8(TIMER, 0x42);
     x.set8(VULNERABLE, 1);
     pose(x, 0x16, SET_BODY, 4);

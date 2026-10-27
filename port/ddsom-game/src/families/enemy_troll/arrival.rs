@@ -3,10 +3,11 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(VARIANT) as u32;
-    match x.u8(VARIANT) {
+    x.c.d[0] = x.u8(Obj::VARIANT) as u32;
+    match x.u8(Obj::VARIANT) {
         0 => walk_in(x),
         2 => drop_in(x, true),
         4 => drop_in(x, false),
@@ -29,7 +30,7 @@ fn walk_in(x: &mut Cx) {
     x.add8(f::SUB2, 2);
     x.set8(TIMER, 0x14);
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x12);
     mv(x, 1);
 }
@@ -40,7 +41,7 @@ fn drop_in(x: &mut Cx, gravity: bool) {
     x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
-            x.set16(SPEED_Z, -0x600i16 as u16);
+            x.set16(Obj::VZ, -0x600i16 as u16);
             x.add8(f::SUB2, 2);
             mv(x, 3);
         }
@@ -52,12 +53,12 @@ fn drop_in(x: &mut Cx, gravity: bool) {
         4 => {
             if gravity {
                 x.move_z();
-                if (x.u16(HEIGHT) as i16) >= 0 {
+                if (x.u16(Obj::Z) as i16) >= 0 {
                     return;
                 }
             }
             x.add8(f::SUB2, 2);
-            x.set32(HEIGHT, 0);
+            x.set32(Obj::Z, 0);
             mv(x, 5);
         }
         6 => {

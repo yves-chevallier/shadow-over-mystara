@@ -12,6 +12,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 const REACTIONS: u32 = 0x8527a;
 /// La seule routine de la table propre au boss (code 0x4c) : étourdissement avec tremblement.
@@ -115,7 +116,7 @@ fn pushed_back(x: &mut Cx) {
         0 => {
             x.set16(TIMER, 0x14);
             let (angle, vz) = if x.u8(f::FLIP) == 0 { (8, -0x20i16) } else { (0x18, 0x20) };
-            x.set8(ANGLE, angle);
+            x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vz as u16);
             speed(x, 0x17);
             x.set8(ANIM_KIND, 0x20);
@@ -244,13 +245,13 @@ fn down(x: &mut Cx) {
         4 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
-                if x.u8(VARIANT) != 0 {
+                if x.u8(Obj::VARIANT) != 0 {
                     x.set16(TIMER, 0x1e);
                 }
             }
         }
         6 => {
-            if x.u8(VARIANT) == 0 || sub16(x, TIMER, 1).gt() {
+            if x.u8(Obj::VARIANT) == 0 || sub16(x, TIMER, 1).gt() {
                 return;
             }
             x.add8(f::SUB2, 2);

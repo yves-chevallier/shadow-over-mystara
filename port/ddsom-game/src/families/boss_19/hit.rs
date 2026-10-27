@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::objects::Courant;
+use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x909a0;
@@ -312,7 +313,7 @@ fn death(x: &mut Cx) {
     if x.u8(TYPE) == TYPE_GREEN {
         return death_green(x);
     }
-    if x.u8(VARIANT) != 0 {
+    if x.u8(Obj::VARIANT) != 0 {
         return death_pet(x);
     }
     match x.u8(f::SUB2) {

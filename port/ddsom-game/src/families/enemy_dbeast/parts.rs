@@ -9,7 +9,7 @@ use crate::objects::Courant;
 
 /// Création selon la variante `+3` (0x71f86).
 pub(super) fn spawn(x: &mut Cx) {
-    match x.u8(VARIANT) {
+    match x.u8(Obj::VARIANT) {
         0 => {
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -135,7 +135,7 @@ fn attached(x: &mut Cx) {
         if d <= 0x140 {
             x.add8(0x7, 2);
             let p = x.linked(PARENT);
-            if p.u8(x.b, VARIANT) != 1 {
+            if p.u8(x.b, Obj::VARIANT) != 1 {
                 x.set8(0, 1);
                 x.set32(f::IMMUNITY, 0);
             }
@@ -178,8 +178,8 @@ fn arm(x: &mut Cx) {
             if player_near(x) {
                 x.set8(DONE, 1);
                 play_once(x, 0x4e);
-                if (x.a5_u8(0x35) as i8) > 1 && x.u8(KEY_FRAME) != 0 {
-                    x.set8(KEY_FRAME, 0);
+                if (x.a5_u8(0x35) as i8) > 1 && x.u8(f::KEY_FRAME) != 0 {
+                    x.set8(f::KEY_FRAME, 0);
                     x.c.d[1] = x.c.d[1] & !0xff | x.u8(SHOTS) as u32;
                     eshl_thrown_by_beast(x);
                     let s = x.u8(SHOTS).wrapping_sub(1);
@@ -230,7 +230,7 @@ fn rally(x: &mut Cx) -> bool {
     set_dw(x, 2, ay);
     x.call(call::ANGLE);
     let angle = x.c.d[0] as u8;
-    x.set8(ANGLE, angle);
+    x.set8(Obj::SPEED_INDEX, angle);
     move_xy(x);
     let near = |a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x10;
     near(x.u16(AIM_X), x.u16(0x8)) && near(x.u16(AIM_Y), x.u16(0x10))
@@ -328,7 +328,7 @@ fn spit_once(x: &mut Cx) {
 
 /// Attend la fin de la phase de bond en l'air (image-clé), 0x727da.
 pub(super) fn bound_wait(x: &mut Cx) {
-    if x.u8(KEY_FRAME) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
     }
@@ -382,7 +382,7 @@ fn bound_y_start(x: &mut Cx, vy: i16, anim_marker: u8, anim: u8) {
 
 /// Retombée d'un bond en profondeur (0x728d4 / 0x728f0).
 pub(super) fn bound_y_wait(x: &mut Cx) {
-    if x.u8(KEY_FRAME) != 0 {
+    if x.u8(f::KEY_FRAME) != 0 {
         x.call(0xeb9a0);
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
@@ -466,9 +466,9 @@ fn drop_in(x: &mut Cx) {
 fn slide_start(x: &mut Cx, anim: u8, delay: u16) {
     x.add8(0x7, 2);
     x.set16(TIMER, delay);
-    x.set8(ANGLE, 8);
+    x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
-        x.set8(ANGLE, 0x18);
+        x.set8(Obj::SPEED_INDEX, 0x18);
     }
     play(x, anim);
     speed(x, 0x17);
@@ -514,8 +514,8 @@ fn sneak_gen(x: &mut Cx, sound: u32) {
             play_b(x, 4);
         }
         4 => {
-            if x.u8(KEY_FRAME) != 0 {
-                x.set8(KEY_FRAME, 0);
+            if x.u8(f::KEY_FRAME) != 0 {
+                x.set8(f::KEY_FRAME, 0);
                 x.call(sound);
             }
             if x.anim_step() {

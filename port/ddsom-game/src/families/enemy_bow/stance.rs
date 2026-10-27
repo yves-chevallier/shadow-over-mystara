@@ -110,7 +110,7 @@ pub(super) fn check_facing(x: &mut Cx) {
         return;
     }
     let target = load_target(x);
-    let dx = x.u16(X).wrapping_sub(target.u16(x.b, X));
+    let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
     x.c.d[1] = want;
     if want as u8 == x.u8(f::FLIP) {
@@ -159,23 +159,23 @@ pub(super) fn rest(x: &mut Cx) {
 
 /// +6 = 2 (en X, regarde vers la cible) et 4 (en profondeur) : pas de côté pendant `+0x6b` images.
 fn side_step(x: &mut Cx, along_x: bool) {
-    if x.u8(STEP) == 0 {
-        x.add8(STEP, 2);
+    if x.u8(f::SUB3) == 0 {
+        x.add8(f::SUB3, 2);
         x.set8(AI_WANDER, 0x18);
         let target = load_target(x);
         if along_x {
-            x.set8(ANGLE, 0x18);
-            let d = x.u16(X).wrapping_sub(target.u16(x.b, X));
+            x.set8(Obj::SPEED_INDEX, 0x18);
+            let d = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
             x.c.d[1] = x.c.d[1] & 0xffff_0000 | d as u32;
             if (d as i16) >= 0 {
-                x.set8(ANGLE, 8);
+                x.set8(Obj::SPEED_INDEX, 8);
             }
         } else {
-            x.set8(ANGLE, 0xf);
-            let d = x.u16(DEPTH).wrapping_sub(target.u16(x.b, DEPTH));
+            x.set8(Obj::SPEED_INDEX, 0xf);
+            let d = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
             x.c.d[1] = x.c.d[1] & 0xffff_0000 | d as u32;
             if (d as i16) >= 0 {
-                x.set8(ANGLE, 0);
+                x.set8(Obj::SPEED_INDEX, 0);
             }
         }
         return mv(x, 2);
