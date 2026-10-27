@@ -16,7 +16,7 @@
 //!
 //! Cibles (séparées par des virgules) : code de zone de docs/atlas.md (`C04`), adresse d'entrée hexa (`0x8ec02`) ou
 //! préfixe de nom de native (`nom:boss_`). `-nom:préfixe` exclut. La sortie est un bitmap au format de `cov`
-//! (instructions de l'original exécutées pendant les essais).
+//! (instructions de l'original exécutées pendant les essais), et `<sortie>.identiques` celles des essais sans écart.
 //!
 //! Environnement : FUZZ_UNION (bitmap des scénarios), FUZZ_ATLAS (docs/atlas.md), FUZZ_PERIODE (16 : un appel sur
 //! n), FUZZ_POINTS (400 appels retenus au plus par native), FUZZ_ESSAIS (24 par appel retenu), FUZZ_GRAINE, FUZZ_PAS (300 000 instructions au plus pour l'original),
@@ -222,6 +222,8 @@ struct Etat {
     cibles: HashMap<u32, Cible>,
     union: Vec<u8>,
     vus: Vec<u8>,
+    /// instructions exécutées par des essais sans écart (l'original et la native sont identiques)
+    vus_identiques: Vec<u8>,
     /// sauts conditionnels pris d'un seul côté par les scénarios (adresse -> (cible, suite))
     frontiere: HashMap<u32, (u32, u32)>,
     alea: Alea,
@@ -721,6 +723,11 @@ fn essai(e: &mut Etat, entree: u32, ib: usize, muts: Vec<Mutation>) {
     let neuf = o.pcs.iter().any(|&p| !bit(&e.union, p));
     let n = e.cibles[&entree].n;
     let r = comparer(n, &c0, &b0, &o);
+    if matches!(&r, Ok(d) if d.is_empty()) {
+        for &pc in &o.pcs {
+            poser_bit(&mut e.vus_identiques, pc);
+        }
+    }
     let cible = e.cibles.get_mut(&entree).unwrap();
     cible.bilan.essais += 1;
     cible.bilan.neufs += neuf as u64;
@@ -1074,6 +1081,7 @@ fn main() {
             cibles,
             union,
             vus: vec![0; 0x10000],
+            vus_identiques: vec![0; 0x10000],
             frontiere: front,
             domaines: HashMap::new(),
             substituts: std::env::var_os("FUZZ_SUBSTITUTS").is_some(),
@@ -1097,6 +1105,7 @@ fn main() {
     }
     let e = ETAT.with(|x| x.borrow_mut().take().unwrap());
     std::fs::write(&a[6], &e.vus).expect("sortie");
+    std::fs::write(format!("{}.identiques", a[6]), &e.vus_identiques).expect("sortie");
     let mut total = 0;
     let mut tri: Vec<&Cible> = e.cibles.values().filter(|c| c.bilan.essais > 0 || c.bilan.ecarts + c.bilan.paniques > 0).collect();
     tri.sort_by_key(|c| c.n.entry);
