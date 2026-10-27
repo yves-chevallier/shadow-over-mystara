@@ -5,7 +5,7 @@ use super::*;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    if special_hit(x, 0x5fcb0) {
+    if special_hit(x) {
         return;
     }
     if grabbed(x) {

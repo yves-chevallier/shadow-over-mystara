@@ -393,12 +393,11 @@ pub fn needs_turn(x: &mut Cx) -> bool {
 
 /// 0x67452 : cherche le joueur le plus proche dans une boîte devant l'ennemi (décalage `d0`, demi-largeur
 /// `d1`, demi-profondeur `d2`) et le range en `+0x50` ; faux si aucun. La boîte suit l'orientation de l'ennemi.
-/// Les registres de travail sont ceux de l'original (D1 = meilleure distance, D4 = doubles largeurs...).
+/// D5 garde, comme l'original, le dernier écart calculé.
 pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
     x.set16(f::TARGET, 0);
     let d0 = if x.u8(f::FLIP) != 0 { d0.wrapping_neg() } else { d0 } as u16;
     let mut best = 0xffffu16;
-    let mut d3 = 0u16;
     let mut d5 = x.c.d[5] as u16;
     for k in 0..4u32 {
         let p = 0xff85de + 0x200 * k;
@@ -410,15 +409,14 @@ pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
         if dy > d2.wrapping_mul(2) {
             continue;
         }
-        d3 = dy;
         let dx = x.u16(0x8).wrapping_add(d0).wrapping_sub(crate::mem::rd16(x.b, p + 0x8)).wrapping_add(d1);
         d5 = dx;
         if dx > d1.wrapping_mul(2) {
             continue;
         }
-        d3 = dx.wrapping_add(dy);
-        if d3 <= best {
-            best = d3;
+        let distance = dx.wrapping_add(dy);
+        if distance <= best {
+            best = distance;
             x.set16(f::TARGET, p as u16);
         }
     }

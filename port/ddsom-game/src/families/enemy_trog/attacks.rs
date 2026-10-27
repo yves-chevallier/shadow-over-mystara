@@ -60,20 +60,18 @@ fn combo(x: &mut Cx, id: u8) {
     let look = x.u8(LOOK);
     x.set8(LOOK_PREV, look);
     x.set8(REPEAT, 0);
-    let (mut d2, mut d3) = (1, 0);
+    let mut d3 = 0;
     x.set8(LOOK, 0xff);
     let mut anim = id as u32;
     match id {
         2 => {}
         0 => {
             x.set8(LOOK, 0xfe);
-            d2 = 0;
         }
         _ => {
             x.set8(AI_KIND, 3);
             x.set8(LOOK, 0xfd);
             d3 = 2;
-            d2 = 0;
             let r = rand_and(x, 1);
             d3 += r;
             anim = r;

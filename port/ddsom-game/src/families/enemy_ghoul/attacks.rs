@@ -7,7 +7,7 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    if special_hit(x, 0x5ff60) {
+    if special_hit(x) {
         return;
     }
     match x.u8(f::SUB2) {

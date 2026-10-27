@@ -7,7 +7,7 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 pub(super) fn run(x: &mut Cx) {
-    if special_hit(x, 0x582e8) {
+    if special_hit(x) {
         return;
     }
     match x.u8(f::SUB2) {
@@ -341,7 +341,6 @@ pub(super) fn restart_slide(x: &mut Cx) {
         let n = (x.c.d[3] as u16).wrapping_sub(1);
         set_dw(x, 3, n); // relu : D3 relu par la suite (DDSOM_POISON : skeleton_scene13, boss17_scene13)
         if n == 0xffff {
-            let c = x.u16(ANIM_COUNT);
             break;
         }
     }

@@ -113,19 +113,17 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
         return false;
     }
     let t = x.linked(f::TARGET);
-    let mut d1 = t.u16(x.b, 0x8);
+    let d1 = t.u16(x.b, 0x8);
     let mine = x.u16(0x8);
     let mut face = 0u8;
     if x.u8(f::FLIP) != 0 {
         face = 0x20;
         let r = Fl::sub16(d1, mine);
-        d1 = d1.wrapping_sub(mine);
         if !r.gt() {
             face = 0;
         }
     } else {
         let r = Fl::sub16(d1, mine);
-        d1 = d1.wrapping_sub(mine);
         if r.gt() {
             face = 0x20;
         }

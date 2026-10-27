@@ -21,7 +21,7 @@ pub(super) fn run(x: &mut Cx) {
         match x.u8(f::SUB) {
             0 => {
                 x.set8(LOOK, 0xff);
-                if x.u8(0x49) == 0x64 || !special_hit(x, 0x60902) {
+                if x.u8(0x49) == 0x64 || !special_hit(x) {
                     react(x, REACT_FIRST);
                 }
             }
@@ -73,7 +73,7 @@ fn down(x: &mut Cx) {
             body(x, 6);
         }
         2 => {
-            if special_hit(x, 0x60a52) || paused(x) {
+            if special_hit(x) || paused(x) {
                 return;
             }
             let t = x.u16(0x84).wrapping_sub(1);

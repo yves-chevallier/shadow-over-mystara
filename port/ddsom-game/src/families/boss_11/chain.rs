@@ -438,7 +438,7 @@ fn place_head(x: &mut Cx, a1: u32, row: u32) {
         0x8f294 => pose_5(x, a1, row),
         _ => pose_6(x, a1, row),
     };
-    trail(x, a1, row);
+    trail(x, a1);
 }
 
 /// Rang de l'anneau `a1` à la ligne `row` : sous le seuil (`+2`), la pose ne s'applique pas.
@@ -727,8 +727,7 @@ fn pose_6(x: &mut Cx, a1: u32, row: u32) -> bool {
 }
 
 /// 0x8f36a : les anneaux suivants (rangs croissants) se placent derrière le précédent d'après les trajectoires.
-fn trail(x: &mut Cx, a1: u32, row: u32) -> bool {
-    let keep = row;
+fn trail(x: &mut Cx, a1: u32) -> bool {
     let mut a2 = a1;
     let v = x.u8(0xad) & !1;
     x.set8(0xad, v);

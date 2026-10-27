@@ -75,10 +75,8 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
         return false;
     }
     let t = load_target(x);
-    let mut d1 = t.u16(x.b, 0x8);
     let mine = x.u16(0x8);
-    let r = Fl::sub16(d1, mine);
-    d1 = d1.wrapping_sub(mine);
+    let r = Fl::sub16(t.u16(x.b, 0x8), mine);
     let face = if x.u8(f::FLIP) != 0 {
         if r.gt() { 0x20 } else { 0 }
     } else if r.le() {

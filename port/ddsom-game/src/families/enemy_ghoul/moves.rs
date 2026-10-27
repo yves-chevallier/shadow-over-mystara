@@ -8,7 +8,7 @@ use crate::objects::Obj;
 // --- sous-état 6 --------------------------------------------------------------------------------
 
 pub(super) fn run_b(x: &mut Cx) {
-    if special_hit(x, 0x605d8) {
+    if special_hit(x) {
         return;
     }
     match x.u8(f::SUB2) {
@@ -167,7 +167,7 @@ fn exit_screen(x: &mut Cx) {
 // --- sous-état 8 --------------------------------------------------------------------------------
 
 pub(super) fn run_c(x: &mut Cx) {
-    if special_hit(x, 0x60384) {
+    if special_hit(x) {
         return;
     }
     match x.u8(f::SUB2) {

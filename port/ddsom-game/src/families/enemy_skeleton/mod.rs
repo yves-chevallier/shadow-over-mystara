@@ -141,13 +141,10 @@ fn pick_move(x: &mut Cx, table: u32, state: u16) {
     x.set8(f::SUB3, 0);
 }
 
-/// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main. L'original reçoit en A6
-/// l'adresse où reprendre (`resume`) quand rien n'est à faire, et laisse A6, D6 et D1 comme ci-dessous.
-fn special_hit(x: &mut Cx, resume: u32) -> bool {
+/// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main (l'adresse de reprise que
+/// l'original passait en A6 n'est relue par personne).
+fn special_hit(x: &mut Cx) -> bool {
     let flag = x.u8(SPECIAL_HIT);
-    if (1..=3).contains(&flag) {
-        let entry = x.rom16(0x5915a + 2 * flag as u32);
-    }
     match flag {
         1 => {
             if x.u16(Obj::Z) != 0 {

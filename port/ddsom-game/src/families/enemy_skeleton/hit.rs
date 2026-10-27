@@ -17,7 +17,7 @@ pub(super) fn run(x: &mut Cx) {
         match x.u8(f::SUB) {
             0 => {
                 // le code 0x64 n'est jamais une réaction spéciale
-                if x.u8(0x49) == 0x64 || !special_hit(x, 0x58d00) {
+                if x.u8(0x49) == 0x64 || !special_hit(x) {
                     react(x, REACT_FIRST);
                 }
             }
@@ -37,7 +37,7 @@ pub(super) fn run(x: &mut Cx) {
 // --- sous-état 2 : recul ------------------------------------------------------------------------
 
 fn recoil(x: &mut Cx) {
-    if paused(x) || special_hit(x, 0x58dc6) {
+    if paused(x) || special_hit(x) {
         return;
     }
     if x.u8(f::SUB2) == 0 {
@@ -98,7 +98,7 @@ fn down(x: &mut Cx) {
             body(x, 7);
         }
         2 => {
-            if special_hit(x, 0x58ed0) || paused(x) {
+            if special_hit(x) || paused(x) {
                 return;
             }
             let t = x.u16(0x84).wrapping_sub(1);

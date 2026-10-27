@@ -502,7 +502,6 @@ fn route_step(x: &mut Cx) -> bool {
                 }
                 d2 = d2.wrapping_add(1);
             }
-            d1l = d1l & 0xffff_0000 | d1w as u32;
         }
     }
     x.c.d[0] = d0;

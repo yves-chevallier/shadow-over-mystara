@@ -587,7 +587,6 @@ fn abduction(x: &mut Cx) {
             x.set_bit(0x1, 1, false);
             let cam = camera(x);
             stop(x);
-            let cx = cam.u16(x.b, 0x8).wrapping_add(0x100);
             let mut pz = cam.u16(x.b, 0x10).wrapping_add(0x50);
             // l'original écrase X par le mot de la cible avant de la tester : sans cible, X = 0
             let mut px = x.u16(f::TARGET);

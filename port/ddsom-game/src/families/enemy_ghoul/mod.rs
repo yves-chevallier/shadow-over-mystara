@@ -162,13 +162,9 @@ fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bo
     ok
 }
 
-/// Réaction aux drapeaux de coup `+0x8f` (0x60c88) : vrai si elle a pris la main. `resume` est l'adresse
-/// que l'original reçoit en A6 pour poursuivre.
-fn special_hit(x: &mut Cx, resume: u32) -> bool {
+/// Réaction aux drapeaux de coup `+0x8f` (0x60c88) : vrai si elle a pris la main.
+fn special_hit(x: &mut Cx) -> bool {
     let flag = x.u8(SPECIAL_HIT);
-    if (1..=3).contains(&flag) {
-        let entry = x.rom16(0x60c9c + 2 * flag as u32);
-    }
     match flag {
         1 => {
             if x.u16(Obj::Z) != 0 {
@@ -342,7 +338,7 @@ fn arrival(x: &mut Cx) {
             _ => {}
         },
         3 => {
-            if special_hit(x, 0x5fa74) {
+            if special_hit(x) {
                 return;
             }
             match x.u8(f::SUB2) {

@@ -213,7 +213,6 @@ pub(super) fn pick_attack_b(x: &mut Cx) {
     if (x.u16(f::TARGET) as i16) >= 0 {
         return wait(x);
     }
-    let target = x.linked(f::TARGET);
     if !lib::target_in_box(x, -0x40, 0x40, 0x20) {
         return stand(x);
     }

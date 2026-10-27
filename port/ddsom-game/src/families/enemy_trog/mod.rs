@@ -450,7 +450,6 @@ fn rest_begin(x: &mut Cx) {
 // --- état 6 : libération ------------------------------------------------------------------------
 
 fn dead(x: &mut Cx) {
-    let w = x.u16(0x48) & 0xff00;
     free(x);
 }
 

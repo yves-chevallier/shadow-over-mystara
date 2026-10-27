@@ -865,8 +865,6 @@ mod riyakaa {
         if !found {
             return false;
         }
-        let target = x.linked(f::OWNER);
-        let facing = target.u8(x.b, f::FLIP);
         if !lib::decision_b(x) {
             return false;
         }

@@ -10,7 +10,7 @@ use crate::objects::Obj;
 // --- sous-état 6 --------------------------------------------------------------------------------
 
 pub(super) fn run(x: &mut Cx) {
-    if special_hit(x, 0x5872e) {
+    if special_hit(x) {
         return;
     }
     match x.u8(f::SUB2) {
@@ -260,7 +260,7 @@ fn exit_screen(x: &mut Cx) {
 // --- sous-état 8 : esquives ---------------------------------------------------------------------
 
 pub(super) fn run_dash(x: &mut Cx) {
-    if special_hit(x, 0x58a72) {
+    if special_hit(x) {
         return;
     }
     match x.u8(f::SUB2) {
