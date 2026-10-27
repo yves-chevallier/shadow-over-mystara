@@ -9,6 +9,11 @@ cps2 = { path = "../cps2" }
 ddsom-rc = { path = "../ddsom-rc" }
 ddsom-game = { path = "../ddsom-game" }
 ddsom-assets = { path = "../ddsom-assets" }
-minifb = { version = "0.27", default-features = false, features = ["x11"] }
 libloading = "0.8"
 qsound = { path = "../qsound" }
+
+[target.'cfg(unix)'.dependencies]
+minifb = { version = "0.27", default-features = false, features = ["x11"] }
+
+[target.'cfg(windows)'.dependencies]
+minifb = "0.27"

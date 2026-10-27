@@ -13,10 +13,11 @@
 //! lisent les ROMs.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, Échap quitter ;
-//! à changer dans touches.cfg (`touches.rs`).
+//! à changer dans touches.cfg (`touches.rs`), manettes Xbox comprises sous Windows (`manette.rs`).
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
 
 mod audio;
+mod manette;
 mod touches;
 
 use std::path::PathBuf;
@@ -92,7 +93,7 @@ fn main() {
 
     let audio = audio::Audio::open(qsound::SAMPLE_RATE.round() as u32);
     if audio.is_none() {
-        eprintln!("Son indisponible (PulseAudio introuvable) : le jeu tourne sans son.");
+        eprintln!("Son indisponible (pas de sortie audio) : le jeu tourne sans son.");
     }
 
     let frame_time = Duration::from_secs_f64(1.0 / FRAME_HZ);

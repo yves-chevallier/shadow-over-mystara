@@ -106,6 +106,11 @@ minifb : `Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`…). Lettres et chiffres sui
 du clavier (en AZERTY, `Key1` demande `Maj`) : `DDSOM_TOUCHES=1 ./jouer.sh` affiche le nom des
 touches pressées.
 
+Sous Windows, `jouer.bat` (lançable depuis `\\wsl.localhost\...`) compile et lance `ddsom.exe` avec le
+Rust Windows (MSVC) : son par waveOut et manettes Xbox par XInput (`Pad1A`, `Pad1Haut`… dans
+`touches.cfg`, A B X Y = boutons 1 à 4, Start = Start, Back = pièce). `rom\` doit déjà être préparé
+(par exemple par un premier `./jouer.sh`).
+
 Son : `DDSOM_SON_RUST=1 ./jouer.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
 
 Sans ROM : une fois les ressources extraites (ci-dessous), `port/target/release/ddsom --assets
