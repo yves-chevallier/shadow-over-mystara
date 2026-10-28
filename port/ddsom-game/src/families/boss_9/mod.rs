@@ -87,10 +87,6 @@ pub(self) const ESHL_FREE: u32 = 0x7e64;
 /// Mode « dur » (mot non nul) : vitesses de la table rapide.
 pub(self) const HARD: u32 = 0x70;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const MESSAGE: u32 = 0xc8312;
-}
 
 /// Un pas d'animation (0x1a56).
 pub(self) fn anim<R: Banc>(x: &mut Cx<'_, R>) {

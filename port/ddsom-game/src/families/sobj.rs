@@ -485,8 +485,6 @@ mod scene {
     /// Palettes de la page des éléments (GFX RAM) : 16 couleurs.
     const PALETTE_A: u32 = 0x91c080;
     const PALETTE_B: u32 = 0x91c3e0;
-    /// Création d'un objet SET dont le type est dans D0.
-    const SPAWN_SET: u32 = 0xc8312;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x3) {
@@ -719,11 +717,8 @@ mod scene {
         let kind = x.data8(list);
         list += 1;
         if kind != 0 {
-            x.c.d[0] = kind as u32;
-            x.call(SPAWN_SET);
-            if x.c.sr & m68k::SR_C == 0 {
-                let a1 = x.c.a[1] as u16;
-                x.set16(0x48, a1);
+            if let Some(set) = crate::families::creators::scene_set(x.b, kind) {
+                x.set16(0x48, set.word());
             }
         }
         x.set32(0x44, list);

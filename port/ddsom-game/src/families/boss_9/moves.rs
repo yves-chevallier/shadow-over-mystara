@@ -18,12 +18,8 @@ pub(super) fn intro(x: &mut Cx) {
             x.set16(TIMER, 0xa);
             x.set16(0x14, 0);
             x.set16(0x16, 0);
-            x.c.d[0] = 5;
-            x.call(call::MESSAGE);
-            if carry(x) {
-                return;
-            }
-            x.set16(MESSAGE, x.c.a[1] as u16);
+            let Some(bulle) = crate::families::creators::scene_set(x.b, 5) else { return };
+            x.set16(MESSAGE, bulle.word());
             next6(x);
         }
         6 => {

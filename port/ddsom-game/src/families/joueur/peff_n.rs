@@ -8,7 +8,6 @@ use crate::mem::{rd32, rd8, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-const SPAWN_EFFECT: u32 = 0xb10c8;
 const ANIMS: u32 = 0x1bc9b6;
 const SPEEDS: u32 = 0x1c7836;
 const FRAMES: u32 = 0x11bffa;
@@ -163,15 +162,7 @@ mod guardian {
 
     /// Poussière de l'arrivée (`0xb10c8`) : effet EFFCT 7 à une hauteur légèrement plus haute.
     fn dust(x: &mut Cx) {
-        x.c.d[0] = 7;
-        x.c.d[1] = 0x200;
-        x.c.d[2] = 0;
-        x.c.d[3] = 0xffff;
-        x.call(SPAWN_EFFECT);
-        if x.c.cond(5) {
-            return;
-        }
-        let o = Obj(x.c.a[1]);
+        let Some(o) = crate::effects_aids::shock(x.b, x.o, 7, 0x200, 0, 0xffff) else { return };
         o.set_u8(x.b, 0x43, 1);
         let z = o.u16(x.b, 0xc).wrapping_add(0x18);
         o.set_u16(x.b, 0xc, z);
@@ -309,11 +300,7 @@ mod guardian {
                 let t = x.u8(0x4b) & 3;
                 x.set8(0x4b, t);
                 if t == 0 {
-                    x.c.d[0] = 1;
-                    x.c.d[1] = 1;
-                    x.c.d[2] = 0xfff0;
-                    x.c.d[3] = 0xffff;
-                    x.call(SPAWN_EFFECT);
+                    crate::effects_aids::shock(x.b, x.o, 1, 1, 0xfff0, 0xffff);
                 }
                 x.move_x();
                 if x.u8(0x14) == 0 {

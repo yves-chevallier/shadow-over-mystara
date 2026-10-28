@@ -929,7 +929,7 @@ mod exit_gate {
     const CAMERA_VARIANT_A: [u32; 4] = [0x400_0000, 0x1fe_0000, 0x200_0000, 0x7b_0000];
 
     /// Mémorise l'état de la scène dans la porte et suspend le monde (0xcbcba).
-    fn save_and_suspend(x: &mut Cx) {
+    fn save_and_suspend<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         set_b::save_camera(x);
         let v = x.a5_u16(0x52c);
         x.set16(0x22, v);

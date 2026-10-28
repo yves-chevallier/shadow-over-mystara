@@ -25,8 +25,6 @@ mod rom {
     pub const LOAD_BLOCKS: u32 = 0x26d4;
     /// Chargeur de blocs 4x4.
     pub const LOAD_SMALL: u32 = 0x2766;
-    /// Crée un objet EFFCT de type D0.
-    pub const SPAWN_EFFCT: u32 = 0xb1a7a;
     pub const SPAWN_SOBJ: u32 = 0xddeaa;
 }
 
@@ -272,12 +270,9 @@ fn quake_effects(x: &mut Cx, table: u32) {
         return;
     }
     x.set8(0x42, 1);
-    x.c.d[0] = 0;
-    x.call(rom::SPAWN_EFFCT);
-    if x.c.sr & SR_C != 0 {
-        return;
-    }
-    let child = Obj(x.c.a[1]);
+    // 0xb1a7a, variante 0 ; le réglage est l'octet bas de D1, laissé par ce qui précède
+    let reglage = x.c.d[1] as u8;
+    let Some(child) = crate::families::effects_creators::countdown(x.b, 0, reglage) else { return };
     child.set_u16(x.b, 0x42, x.o.0 as u16);
     let owner = x.u32(0x4c);
     child.set_u32(x.b, 0x4c, owner);

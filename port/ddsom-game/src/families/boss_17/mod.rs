@@ -90,7 +90,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const NEW_MESSAGE: u32 = 0xc8312;
     pub const SPAWN_RING: u32 = 0x57c8c;
 }
 

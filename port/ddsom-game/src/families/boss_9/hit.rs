@@ -244,11 +244,9 @@ fn wreck(x: &mut Cx) {
             } else {
                 crate::families::effects_creators::spawn_kind(x.b, crate::families::effects_creators::kind::SOUND_FADE);
                 x.set16(TIMER, 0xc0);
-                x.c.d[0] = 8;
-                x.call(call::MESSAGE);
-                if !carry(x) {
+                if let Some(bulle) = crate::families::creators::scene_set(x.b, 8) {
                     next6(x);
-                    x.set16(MESSAGE, x.c.a[1] as u16);
+                    x.set16(MESSAGE, bulle.word());
                 }
             }
         }

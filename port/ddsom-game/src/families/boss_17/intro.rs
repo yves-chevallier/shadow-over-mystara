@@ -50,11 +50,8 @@ fn effect<R: Banc>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>
 /// Ouvre une bulle de dialogue de type `kind` (0xc8312) ; son adresse va en `+0x42`.
 fn open_message(x: &mut Cx, kind: u32) {
     for _ in 0..64 {
-        x.c.d[0] = kind;
-        x.call(call::NEW_MESSAGE);
-        if !carry(x) {
-            let a = x.c.a[1] as u16;
-            x.set16(0x42, a);
+        if let Some(bulle) = crate::families::creators::scene_set(x.b, kind as u8) {
+            x.set16(0x42, bulle.word());
             return;
         }
     }

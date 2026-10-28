@@ -335,7 +335,6 @@ mod boss_intro {
     const EDA66: u32 = 0xeda66;
     const ED94A: u32 = 0xed94a;
     const ED9BC: u32 = 0xed9bc;
-    const SMOKE: u32 = 0xb4bcc;
     /// Tables de décalages (16 mots chacune) de l'explosion en X et en Y.
     const BLAST_DX: u32 = 0xd4910;
     const BLAST_DY: u32 = 0xd4930;
@@ -496,15 +495,9 @@ mod boss_intro {
         if !countdown(x) {
             return;
         }
-        x.c.d[1] = 0x1d;
-        x.c.d[2] = 0;
-        loop {
-            x.call(SMOKE);
-            let n = (x.c.d[1] as u16).wrapping_sub(1);
-            x.c.d[1] = (x.c.d[1] & 0xffff_0000) | n as u32;
-            if n == 0xffff {
-                break;
-            }
+        // 0xb4bcc trente fois : la variante est le compteur de la boucle (D1, 0x1d à 0), le réglage nul
+        for n in (0..=0x1d).rev() {
+            crate::families::effects_creators::debris_rain(x.b, x.o, n, 0);
         }
         crate::sound::jouer(x.b, ED9BC, x.o);
         x.set_a5_u8(0x48e, 0xf);
@@ -2679,7 +2672,6 @@ mod test_selector {
 
     const SCREEN: u32 = 0x912bc0;
     const LAST: u8 = 0x32;
-    const APPLY: u32 = 0xcc352;
     const ROW: u32 = 0x80;
 
     pub fn run(x: &mut Cx) {
@@ -2696,12 +2688,9 @@ mod test_selector {
     fn step(x: &mut Cx) {
         let pressed = !x.a5_u8(8) & x.a5_u8(2);
         if pressed >> 4 & 1 != 0 {
-            let index = x.u8(0x2f) as u32;
-            x.c.d[0] = index;
-            let me = x.o.0;
-            x.c.a[0] = PLAYERS;
-            crate::call(x.c, x.b, APPLY);
-            x.c.a[0] = me;
+            // 0xcc352 avec A0 = le premier joueur : sa classe est celle de l'objet SET créé
+            let index = x.u8(0x2f);
+            crate::families::creators::set_a(x.b, Obj(PLAYERS), index);
         } else if pressed >> 5 & 1 != 0 {
             let n = x.u8(0x2f) + 1;
             x.set8(0x2f, if n > LAST { 0 } else { n });
@@ -2763,7 +2752,6 @@ mod dialog {
     const NAME_OPEN: u32 = 0xfffe_0018;
     const NAME_CLOSE: u32 = 0xfffe_000f;
     /// Création / recherche d'objets liés.
-    const FIND_OBJECT: u32 = 0xafe02;
     const SPAWN_SET: u32 = 0xce00a;
     const SPAWN_SOBJ: u32 = 0xddeaa;
 
@@ -2970,15 +2958,11 @@ mod dialog {
                 o.end(x);
             }
             3 => {
-                x.c.d[0] = 0;
-                let d1 = x.u8(0x34) as u32;
-                x.c.d[1] = (x.c.d[1] & !0xff) | d1;
-                x.call(FIND_OBJECT);
-                if x.c.sr & m68k::SR_C != 0 {
+                let reglage = x.u8(0x34);
+                let Some(other) = crate::families::effects_creators::vote(x.b, 0, reglage) else {
                     x.add8(0x5, 0xfe);
                     return;
-                }
-                let other = Obj(x.c.a[1]);
+                };
                 other.set_u16(x.b, 0x50, x.o.0 as u16);
                 x.set16(0x32, 0xffff);
                 build(x, 1);

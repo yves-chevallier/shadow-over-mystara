@@ -32,7 +32,6 @@ const BOB_TABLE: u32 = 0x8faa2;
 
 mod rom {
     pub const BEGIN_A: u32 = 0xdf4bc;
-    pub const NEW_MESSAGE: u32 = 0xc8312;
 }
 
 /// Champs propres à ce type.
@@ -204,10 +203,8 @@ fn wait_stop(x: &mut Cx) {
         x.set_a5_u8(0x3c, 1);
         x.set_a5_u8(0x33, 1);
         freeze_players(x, true);
-        x.c.d[0] = 0xe;
-        x.call(rom::NEW_MESSAGE);
-        if !alloc_failed(x) {
-            x.set16(MESSAGE, x.c.a[1] as u16);
+        if let Some(bulle) = crate::families::creators::scene_set(x.b, 0xe) {
+            x.set16(MESSAGE, bulle.word());
             x.add8(f::SUB2, 2);
             lib::sound(x, 0xe0d8c);
             x.set8(TALKING, 1);

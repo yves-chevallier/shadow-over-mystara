@@ -44,12 +44,9 @@ fn spawn_sobj(x: &mut Cx, variant: u32) -> Option<Obj> {
     (x.c.sr & SR_C == 0).then(|| Obj(x.c.a[1]))
 }
 
-/// Crée un effet (type 0x1f de 0xb1a7a) : D0 = variante, D1 = valeur de `+0x2f`.
-fn spawn_effct(x: &mut Cx, variant: u32, extra: u32) -> Option<Obj> {
-    x.c.d[0] = variant;
-    x.c.d[1] = extra;
-    x.call(rom::SPAWN_EFFCT);
-    (x.c.sr & SR_C == 0).then(|| Obj(x.c.a[1]))
+/// Crée un effet (type 0x1f de 0xb1a7a) : variante, valeur de `+0x2f`.
+fn spawn_effct<R: Banc>(x: &mut Cx<'_, R>, variant: u32, extra: u32) -> Option<Obj> {
+    crate::families::effects_creators::countdown(x.b, variant as u8, extra as u8)
 }
 
 /// Secousse à quatre composantes (0xce24c) : caméra du fond et du second plan, avec recopie des
@@ -673,13 +670,8 @@ const REWARD_PALETTE_ROM: u32 = 0xcfdd2;
 fn bonus_step(x: &mut Cx) {
     match x.u8(0x5) {
         0 => {
-            x.c.d[0] = 0x94;
-            x.call(0xc8312);
-            if x.c.sr & SR_C != 0 {
-                return;
-            }
+            let Some(o) = crate::families::creators::scene_set(x.b, 0x94) else { return };
             next_substate(x);
-            let o = Obj(x.c.a[1]);
             x.set16(0x46, o.0 as u16);
             o.set_u16(x.b, 0x46, 0);
             for p in players() {
@@ -821,13 +813,8 @@ fn choose_reward(x: &mut Cx) {
     x.set32(0x20, taken);
     x.c.d[1] = candidate;
     let id = x.rom16(REWARD_IDS + 2 * candidate);
-    x.c.d[0] = id as u32;
-    x.call(0xc8312);
-    if x.c.sr & SR_C != 0 {
-        return;
-    }
+    let Some(o) = crate::families::creators::scene_set(x.b, id as u8) else { return };
     next_substate(x);
-    let o = Obj(x.c.a[1]);
     x.set16(0x46, o.0 as u16);
     let chosen = x.u16(0x26);
     o.set_u16(x.b, 0x46, chosen);
