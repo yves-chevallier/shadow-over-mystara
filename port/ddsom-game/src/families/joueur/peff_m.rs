@@ -134,8 +134,8 @@ mod pet {
             _ => attack(x),
         };
         if tail {
-            crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-            x.call(crate::terrain::SHADOW.entry);
+            x.keep_in_zone();
+            x.push_terrain();
             x.reinsert();
         }
     }

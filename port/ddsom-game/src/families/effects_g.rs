@@ -84,8 +84,8 @@ fn chunk(x: &mut Cx) {
         _ => free(x),
     }
     if x.u8(Obj::ACTIVE) != 0 {
-        crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-        crate::terrain::push_68k(x.c, x.b, x.o);
+        x.keep_in_zone();
+        x.push_terrain();
         x.reinsert();
     }
 }
@@ -387,9 +387,9 @@ mod armour {
 }
 
 /// Fin commune : retenue dans l'écran, ombre, remise en liste.
-fn on_screen(x: &mut Cx) {
-    crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-    crate::terrain::push_68k(x.c, x.b, x.o);
+fn on_screen<R: Banc>(x: &mut Cx<'_, R>) {
+    x.keep_in_zone();
+    x.push_terrain();
     x.reinsert();
 }
 
@@ -421,7 +421,7 @@ fn armour_falls<R: Banc>(x: &mut Cx<'_, R>, wearer: Obj) -> bool {
     threshold as i16 > wearer.u16(x.b, armour::LIFE) as i16
 }
 
-fn armour_worn(x: &mut Cx) {
+fn armour_worn<R: Banc>(x: &mut Cx<'_, R>) {
     let link = x.u16(armour::WEARER);
     let wearer = Obj(link as i16 as i32 as u32 & 0xff_ffff);
     if (link as i16) >= 0 || wearer.u8(x.b, Obj::ACTIVE) == 0 || armour_falls(x, wearer) {
@@ -480,7 +480,7 @@ fn armour_break(x: &mut Cx) {
 }
 
 /// Allocation d'un effet : l'emplacement, ou `None` si le pool est plein.
-fn armour_shard(x: &mut Cx) {
+fn armour_shard<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => armour_shard_init(x),
         2 => armour_shard_active(x),
@@ -523,7 +523,7 @@ fn armour_shard_bounce<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(armour::BOUNCE_TIMER, r as u8);
 }
 
-fn armour_shard_active(x: &mut Cx) {
+fn armour_shard_active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x3d) != 0 {
         return on_screen(x);
     }
@@ -590,7 +590,7 @@ fn flyer_link<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     ((p as i16) < 0 && o.u8(x.b, Obj::ACTIVE) != 0).then_some(o)
 }
 
-fn flyer(x: &mut Cx) {
+fn flyer<R: Banc>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return;
     }
@@ -700,7 +700,7 @@ fn flyer_wind_down<R: Banc>(x: &mut Cx<'_, R>, keep_while_positive: bool) -> boo
 }
 
 /// Variante 1 : canon qui tourne autour de l'objet suivi tant qu'il est dans la phase 1, et tire.
-fn flyer_gun(x: &mut Cx) {
+fn flyer_gun<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x3d) != 0 {
         return;
     }
@@ -729,7 +729,7 @@ fn flyer_gun(x: &mut Cx) {
     let turn = if x.u8(f::FACING) != 0 { 0xff80 } else { 0x80 };
     x.add16(flyer::ANGLE, turn);
     flyer_shoot(x, 0);
-    crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
+    x.keep_on_screen(0x10);
 }
 
 /// Variante 2 : balayeur posé au bord de l'écran, sur la profondeur de l'objet suivi (phase 3), qui tire.
@@ -1274,7 +1274,7 @@ crate::etapes! {
 
 handlers! {
     0xb8ef6 "effct_feu_artifice" fireworks,
-    0xb59ea "effct_machine_volante" flyer,
+    0xb59ea "effct_machine_volante" #[sans] flyer,
     0xb5454 "effct_armure" armour,
     0xb4bec "effct_pluie_debris" #[sans] debris_rain,
     0xb7866 "effct_morceau_ennemi" chunk,

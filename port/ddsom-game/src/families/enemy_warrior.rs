@@ -75,7 +75,7 @@ fn live_host<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     Some(h)
 }
 
-fn host(x: &mut Cx) -> Obj {
+fn host<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(HOST)
 }
 
@@ -169,13 +169,13 @@ fn active(x: &mut Cx) {
 }
 
 /// Force du coup : 0x4a, ou 0x5a quand l'hôte n'est pas de type 0xf.
-fn hit_power(x: &mut Cx) -> u8 {
+fn hit_power<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     let h = host(x);
     if h.u8(x.b, 2) == 0xf { 0x4a } else { 0x5a }
 }
 
 /// Fin commune : drapeau « hôte visible », puis remise en liste (0x77016).
-fn end_part(x: &mut Cx) {
+fn end_part<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(FLAGS, 1, false);
     let h = host(x);
     if h.u8(x.b, 0x42) != 0 {
@@ -185,7 +185,7 @@ fn end_part(x: &mut Cx) {
 }
 
 /// 0x774a8 : le bras se place à côté de l'hôte, 0x82 pixels de part et d'autre selon son côté.
-fn follow_host(x: &mut Cx) {
+fn follow_host<R: Banc>(x: &mut Cx<'_, R>) {
     let h = host(x);
     let (px, pz, py) = (h.u16(x.b, SLOT_X), h.u16(x.b, SLOT_Z), h.u16(x.b, SLOT_Y));
     let dx: u16 = if x.u8(f::FLIP) != 0 { 0xff7e } else { 0x82 };
@@ -311,7 +311,7 @@ fn idle(x: &mut Cx) {
 }
 
 /// 0x77562 : ondulation verticale pendant que l'hôte agit.
-fn bob(x: &mut Cx) {
+fn bob<R: Banc>(x: &mut Cx<'_, R>) {
     let h = host(x);
     if h.u8(x.b, 5) == 0 {
         return;
@@ -430,7 +430,7 @@ fn sparks(x: &mut Cx) {
 }
 
 /// 0x77244 : le bras qui ne frappe pas descend doucement (`+5` = 0 départ, 2 accélération).
-fn drift(x: &mut Cx) {
+fn drift<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 => {
             x.add8(f::SUB, 2);
@@ -457,7 +457,7 @@ fn drift(x: &mut Cx) {
 // --- états 6 à 8 de l'hôte : sortie en scène ------------------------------------------------------
 
 /// Variante qui reste à terre pendant que l'hôte monte : même mouvement que `drift`.
-fn rise_b(x: &mut Cx) {
+fn rise_b<R: Banc>(x: &mut Cx<'_, R>) {
     drift(x);
 }
 
@@ -507,7 +507,7 @@ fn rise_step(x: &mut Cx) {
     }
 }
 
-fn rise_script_two(x: &mut Cx) {
+fn rise_script_two<R: Banc>(x: &mut Cx<'_, R>) {
     if script_step(x, 2) {
         x.add8(f::SUB, 2);
         let h = host(x);
@@ -526,7 +526,7 @@ fn finale(x: &mut Cx) {
 
 // --- état 4 : touché ----------------------------------------------------------------------------
 
-fn hit(x: &mut Cx) {
+fn hit<R: Banc>(x: &mut Cx<'_, R>) {
     let h = host(x);
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {

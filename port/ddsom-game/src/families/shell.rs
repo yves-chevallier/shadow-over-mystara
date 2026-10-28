@@ -60,10 +60,8 @@ pub fn suspended<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// Terrain sous le tir : vrai quand le tir doit s'arrêter (terrains 5 à 8 sans le bit 6 de
 /// l'attribut).
-pub fn blocked_by_terrain(x: &mut Cx) -> bool {
-    // registres de 0x24a8 laissés comme l'original (non prouvés morts : voir `pshl::stopped_by_terrain`)
+pub fn blocked_by_terrain<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let t = crate::video::terrain_of(x.b, x.o);
-    crate::video::terrain_68k(x.c, &t);
     let terrain = t.numero as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }

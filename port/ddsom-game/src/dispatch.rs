@@ -128,17 +128,22 @@ pub struct Restes {
     /// 0xad63e), les attributs du dernier morceau de la liste des sprites... ; le radeau sans pilote l'ajoute à la
     /// position des joueurs (0xad7b0).
     pub d4: u32,
+    /// D5 : 0 ou 1 (l'objet a bougé) après le maintien dans l'écran (0xfbae, `ai::keep_on_screen`), 1 après une
+    /// collision avec le décor (0x33fe4), le compteur épuisé d'une boucle `dbf`... ; la rangée d'éclats d'une caisse
+    /// (0xa17d0, `eshl_creators::row_1a`) en relit l'octet haut.
+    pub d5: u32,
 }
 
 impl Aiguillage {
     /// Les valeurs que l'original trouve dans les registres à l'entrée du gestionnaire.
     pub fn du_processeur(c: &Cpu) -> Self {
-        Aiguillage { objet: Obj(c.a[0]), compteur: c.d[7] as u16, restes: Restes { d4: c.d[4] } }
+        Aiguillage { objet: Obj(c.a[0]), compteur: c.d[7] as u16, restes: Restes { d4: c.d[4], d5: c.d[5] } }
     }
 
     /// Rend les restes au processeur (le gestionnaire laisse les autres registres tels quels).
     pub fn rendre(&self, c: &mut Cpu) {
         c.d[4] = self.restes.d4;
+        c.d[5] = self.restes.d5;
     }
 }
 

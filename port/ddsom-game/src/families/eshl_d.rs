@@ -282,7 +282,7 @@ mod rocks65 {
         x.anim_step();
         x.move_z();
         if x.u16(0xc) as i16 > 0 {
-            crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 16);
+            x.keep_on_screen(16);
             x.reinsert();
             return;
         }
@@ -433,10 +433,10 @@ mod shard66 {
     }
 
     /// Fin commune : visibilité (bit 1 de `+1` : caché), terrain, retenue dans l'écran, tri.
-    fn blink(x: &mut Cx, hidden: bool) {
+    fn blink<R: Banc>(x: &mut Cx<'_, R>, hidden: bool) {
         x.set_bit(0x1, 1, hidden);
-        x.call(crate::terrain::SHADOW.entry);
-        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 16);
+        x.push_terrain();
+        x.keep_on_screen(16);
         x.reinsert();
     }
 }

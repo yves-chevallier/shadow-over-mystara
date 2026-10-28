@@ -93,9 +93,7 @@ mod shot0 {
             x.add8(0x4, 2);
             return fall(x);
         }
-        // registres de 0x24a8 laissés comme l'original (non prouvés morts : voir `pshl::stopped_by_terrain`)
         let t = crate::video::terrain_of(x.b, x.o);
-        crate::video::terrain_68k(x.c, &t);
         let terrain = t.numero as u32;
         let ground = (terrain & 0x3f).wrapping_sub(5) as u16 <= 3;
         if ground && terrain & 0x40 == 0 {
@@ -260,7 +258,7 @@ mod shot2 {
 
     const ANIMS: u32 = 0x16caa6;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -283,7 +281,7 @@ mod shot2 {
         }
     }
 
-    fn fly(x: &mut Cx) {
+    fn fly<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::HIT_FLAGS) & 0x28 != 0 {
             crate::sound::jouer(x.b, sfx::E7376, x.o);
             return x.free_eshl();
@@ -373,10 +371,8 @@ mod shot4 {
                     EXPLODING => explode(x),
                     _ => {}
                 }
-                let (px, py) = (x.u16(0x8), x.u16(0x10));
-                // seuls les registres de 0x24b0 restent (D0-D4, A1), pour le gestionnaire suivant
-                let t = crate::video::terrain(x.b, px, py);
-                crate::video::terrain_68k(x.c, &t);
+                // l'original cherche ici le terrain sous le tir (0x24b0) sans en lire le résultat ; les registres qu'il
+                // laisse ne sont relus par personne (sonde `sortie`) : la recherche, sans effet, est omise
                 x.reinsert();
             }
             _ => x.free_eshl(),
@@ -537,7 +533,7 @@ mod shot8 {
 
     const ANIMS: u32 = 0x16ccea;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 if x.u16(f::OWNER) == 0 {
@@ -562,7 +558,7 @@ mod shot8 {
     const THRUST: u8 = 0;
     const RECOVER: u8 = 2;
 
-    fn body(x: &mut Cx) {
+    fn body<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             THRUST => {
                 x.move_xyz();
@@ -579,8 +575,8 @@ mod shot8 {
             }
             _ => {}
         }
-        crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-        x.call(crate::terrain::SHADOW.entry);
+        x.keep_in_zone();
+        x.push_terrain();
         x.reinsert();
     }
 }
@@ -1543,12 +1539,12 @@ mod shot5 {
 handlers! {
     0x9dbfc "eshl_00" shot0::run,
     0x9de10 "eshl_01" shot1::run,
-    0x9e0aa "eshl_02" shot2::run,
+    0x9e0aa "eshl_02" #[sans] shot2::run,
     0x9e1b6 "eshl_03" #[sans] shot3::run,
     0x9e2dc "eshl_04" shot4::run,
     0x9ebca "eshl_06" #[sans] shot6::run,
     0x9ecc0 "eshl_07" #[sans] shot7::run,
-    0x9ee00 "eshl_08" shot8::run,
+    0x9ee00 "eshl_08" #[sans] shot8::run,
     0x9ef46 "eshl_09" #[sans] shot9::run,
     0x9f376 "eshl_10" shot10::run,
     0x9f426 "eshl_11" #[sans] shot11::run,

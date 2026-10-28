@@ -119,7 +119,7 @@ fn x_cam<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
 }
 
 /// L'engin roule (0x1d78) et ses roues tournent (0x1a56).
-pub(super) fn roll(x: &mut Cx) {
+pub(super) fn roll<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_x();
     anim(x);
 }

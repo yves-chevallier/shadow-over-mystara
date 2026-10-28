@@ -780,12 +780,12 @@ mod debris45 {
     }
 
     /// Fin commune : retenu à l'écran, puis remis dans la liste triée.
-    fn settle(x: &mut Cx) {
-        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, MARGIN as u16);
+    fn settle<R: Banc>(x: &mut Cx<'_, R>) {
+        x.keep_on_screen(MARGIN as u16);
         x.reinsert();
     }
 
-    fn variant1(x: &mut Cx) {
+    fn variant1<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(src) = source(x, false) else { return vanish(x) };
         match x.u8(0x4) {
             0 => {
@@ -1163,7 +1163,7 @@ mod bullet50 {
     /// Sauvegarde de `+0x3b` (priorité du cadre) à travers l'animation.
     const SAVED_PRIORITY: u32 = 0x5e;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -1179,8 +1179,8 @@ mod bullet50 {
             _ => x.free_eshl(),
         }
         if x.u8(0) != 0 {
-            crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-            x.call(crate::terrain::SHADOW.entry);
+            x.keep_in_zone();
+            x.push_terrain();
             x.reinsert();
         }
     }
@@ -1496,8 +1496,8 @@ mod finale52 {
     }
 
     /// Fin de l'image : retenu dans l'écran puis remis dans la liste triée.
-    fn settle(x: &mut Cx) {
-        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
+    fn settle<R: Banc>(x: &mut Cx<'_, R>) {
+        x.keep_on_screen(0x10);
         x.reinsert();
     }
 
@@ -1599,7 +1599,7 @@ mod finale52 {
 
     // ----- variante 1 -----
 
-    fn variant1(x: &mut Cx) {
+    fn variant1<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -3053,7 +3053,7 @@ mod meteor62 {
             crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             crate::sound::jouer(x.b, IMPACT_SOUND, x.o);
         }
-        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
+        x.keep_on_screen(0x10);
         x.reinsert();
     }
 }
@@ -3310,7 +3310,7 @@ handlers! {
     0xa3ebe "eshl_47" spawn47::run,
     0xa4088 "eshl_48" lob48::run,
     0xa418e "eshl_49" strike49::run,
-    0xa4266 "eshl_50" bullet50::run,
+    0xa4266 "eshl_50" #[sans] bullet50::run,
     0xa4522 "eshl_51" drop51::run,
     0xa46c6 "eshl_52" finale52::run,
     0xa4d82 "eshl_53" #[sans] aimed53::run,

@@ -70,6 +70,8 @@ pub trait Banc {
     /// Remise en liste (0x1ee1a / 0x1ef6c, `premier_plan`) : sur le processeur, l'adaptateur laisse les registres de
     /// l'original au gestionnaire suivant ; sans registres, le cœur.
     fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool);
+    /// Le reste D5 (voir `dispatch::Restes::d5`) : le registre du processeur, ou le reste de la boucle d'aiguillage.
+    fn d5(&mut self) -> &mut u32;
 }
 
 impl Banc for &mut Cpu {
@@ -78,12 +80,18 @@ impl Banc for &mut Cpu {
         let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
         liste.reinsert_68k(self, b, o);
     }
+    fn d5(&mut self) -> &mut u32 {
+        &mut self.d[5]
+    }
 }
 
 impl Banc for &mut Aiguillage {
     fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool) {
         let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
         liste.reinsert(b, o);
+    }
+    fn d5(&mut self) -> &mut u32 {
+        &mut self.restes.d5
     }
 }
 
@@ -98,6 +106,29 @@ impl<R: Banc> Cx<'_, R> {
     #[track_caller]
     pub fn reinsert_foreground(&mut self) {
         self.c.remettre_en_liste(self.b, self.o, true);
+    }
+
+    /// 0xfbb0 : garde l'objet dans l'écran à `marge` pixels près ; vrai s'il a été déplacé.
+    /// Glitch d'origine : le résultat reste dans D5 (0 ou 1), que relit la rangée d'éclats d'une caisse (`Restes::d5`).
+    pub fn keep_on_screen(&mut self, marge: u16) -> bool {
+        let moved = crate::ai::keep_on_screen(self.b, self.o, marge);
+        *self.c.d5() = moved as u32;
+        moved
+    }
+
+    /// 0xfbae : `keep_on_screen` avec la marge de la zone de jeu (0x30).
+    pub fn keep_in_zone(&mut self) -> bool {
+        self.keep_on_screen(crate::ai::ZONE_MARGIN)
+    }
+
+    /// 0x33fe4 : collision avec le décor (`terrain::push`) ; rend le drapeau Z de l'original.
+    /// Glitch d'origine : un choc laisse D5 = 1 (`Restes::d5`).
+    pub fn push_terrain(&mut self) -> bool {
+        let (z, choc) = crate::terrain::push_collides(self.b, self.o);
+        if choc {
+            *self.c.d5() = 1;
+        }
+        z
     }
 }
 

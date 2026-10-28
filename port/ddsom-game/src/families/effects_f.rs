@@ -747,14 +747,14 @@ mod walker {
     pub const SIGNAL: u32 = 0xff2a38;
 }
 
-fn walker(x: &mut Cx) {
+fn walker<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
             x.set8(f::FACING, 0x20);
             x.set8(walker::DELAY, 0x38);
             at_camera(x, 0xffd0, 0x60);
-            crate::terrain::push_68k(x.c, x.b, x.o);
+            x.push_terrain();
             x.anim_start(walker::ANIM_SET, 0);
             x.reinsert();
         }
@@ -788,7 +788,7 @@ fn walker(x: &mut Cx) {
                     x.anim_step();
                 }
             }
-            crate::terrain::push_68k(x.c, x.b, x.o);
+            x.push_terrain();
             x.reinsert();
         }
         _ => free(x),
@@ -803,5 +803,5 @@ handlers! {
     0xb6a74 "effct_lanceur" launcher,
     0xb7f28 "effct_enseigne_depart" #[sans] start_sign,
     0xb896e "effct_fondu_sonore" #[sans] sound_fade,
-    0xba0b0 "effct_passant" walker,
+    0xba0b0 "effct_passant" #[sans] walker,
 }

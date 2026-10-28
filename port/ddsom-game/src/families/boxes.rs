@@ -558,7 +558,7 @@ use crate::objects::Courant;
             6 => clignote(x),
             _ => crate::families::effects::hors_table(cible),
         }
-        crate::terrain::push_68k(x.c, x.b, x.o);
+        x.push_terrain();
     }
 
     /// Lancée, 0 : tant que le joueur la tient, elle suit ses mains ; lâchée, elle part en arc devant
@@ -1071,7 +1071,7 @@ use crate::objects::Courant;
     }
 
     fn recale_decor(x: &mut Cx) {
-        crate::terrain::push_68k(x.c, x.b, x.o);
+        x.push_terrain();
         x.call(RECALE);
     }
 

@@ -1192,7 +1192,7 @@ fn thrown_active(x: &mut Cx, v: u8) {
             return x.add8(f::STATE, 4);
         }
     }
-    crate::terrain::push_68k(x.c, x.b, x.o);
+    x.push_terrain();
     x.reinsert();
 }
 
@@ -1553,7 +1553,7 @@ fn dust_spawn<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn dust_active(x: &mut Cx) {
+fn dust_active<R: Banc>(x: &mut Cx<'_, R>) {
     if !paused(x) {
         if x.anim_step() {
             return scenery_done(x);
@@ -1562,8 +1562,8 @@ fn dust_active(x: &mut Cx) {
         let dx: u16 = if x.a5_u16(0x6e) & 1 != 0 { 0xc0u16.wrapping_neg() } else { 0xc0 };
         x.add16(Obj::X, dx);
     }
-    crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-    crate::terrain::push_68k(x.c, x.b, x.o);
+    x.keep_in_zone();
+    x.push_terrain();
     x.reinsert();
 }
 

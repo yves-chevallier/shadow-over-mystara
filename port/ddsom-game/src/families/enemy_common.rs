@@ -320,7 +320,7 @@ pub fn add16<R: Banc>(x: &mut Cx<'_, R>, o: Obj, off: u32, v: u16) {
 }
 
 /// Démarre le script `n` du jeu d'animations `set` (`movea.l set,A4 ; moveq n,D0 ; jsr 0x1a32`).
-pub fn anim(x: &mut Cx, set: u32, n: u32) {
+pub fn anim<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     x.anim_start(set, n as u16);
 }
 

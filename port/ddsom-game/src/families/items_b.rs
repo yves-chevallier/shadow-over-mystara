@@ -175,8 +175,8 @@ fn fall(x: &mut Cx) {
             super::effects_creators::twinkle(x.b, x.o);
         }
     }
-    crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-    crate::terrain::push_68k(x.c, x.b, x.o);
+    x.keep_in_zone();
+    x.push_terrain();
     x.reinsert();
 }
 

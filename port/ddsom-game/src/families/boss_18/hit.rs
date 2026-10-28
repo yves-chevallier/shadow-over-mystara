@@ -191,8 +191,7 @@ fn thrown(x: &mut Cx) {
             }
             x.move_xy();
             let t = crate::video::terrain_of(x.b, x.o);
-            crate::video::terrain_68k(x.c, &t);
-            if t.numero != 0 {
+                if t.numero != 0 {
                 return decide::back_on_feet(x);
             }
             x.anim_step();

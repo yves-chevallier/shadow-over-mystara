@@ -707,7 +707,7 @@ mod shot18 {
     const SPEED_TABLES: u32 = 0xa0a60;
     const LEVEL_VARIABLE: u32 = 0x7f92;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -726,7 +726,7 @@ mod shot18 {
         }
     }
 
-    fn fly(x: &mut Cx) {
+    fn fly<R: Banc>(x: &mut Cx<'_, R>) {
         let hit = x.u8(f::HIT_FLAGS);
         if hit & 0x08 != 0 {
             crate::sound::jouer(x.b, sfx::E7376, x.o);
@@ -2604,7 +2604,7 @@ mod shot35 {
                     _ => {}
                 }
                 blink_by_parity(x);
-                x.call(crate::terrain::SHADOW.entry);
+                x.push_terrain();
             }
             _ => x.free_eshl(),
         }
@@ -2838,8 +2838,8 @@ mod shot38 {
             0 => init(x),
             2 => {
                 fall(x);
-                crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
-                x.call(crate::terrain::SHADOW.entry);
+                x.keep_on_screen(0x10);
+                x.push_terrain();
                 x.reinsert();
             }
             4 => x.add8(0x4, 2),
@@ -3048,7 +3048,7 @@ handlers! {
     0x9fe0a "eshl_15" shot15::run,
     0xa03e0 "eshl_16" shot16::run,
     0xa05ce "eshl_17" shot17::run,
-    0xa0a06 "eshl_18" shot18::run,
+    0xa0a06 "eshl_18" #[sans] shot18::run,
     0xa0b20 "eshl_19" #[sans] shot19::run,
     0xa0c5a "eshl_20" shot20::run,
     0xa0f96 "eshl_21" shot21::run,

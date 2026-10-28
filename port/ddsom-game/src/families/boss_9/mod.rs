@@ -93,7 +93,7 @@ pub(self) mod call {
 }
 
 /// Un pas d'animation (0x1a56).
-pub(self) fn anim(x: &mut Cx) {
+pub(self) fn anim<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
