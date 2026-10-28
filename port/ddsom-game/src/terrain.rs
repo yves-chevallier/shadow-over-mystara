@@ -278,6 +278,19 @@ pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
     (c.sr & m68k::SR_Z != 0, c.d[5] == 1)
 }
 
+/// `push`, avec les restes de l'original que relisent les gestionnaires suivants (`dispatch::Restes`) : D2 et D3
+/// (case et écart du terrain, glitch d'origine : vitesses de l'étincelle de `flash_and_shake`, réglage du rebond de
+/// l'éclat de gel) et D5 (1 après un choc). Les restes entrent et sortent tels quels quand la routine ne les écrit
+/// pas. Rend le drapeau Z de l'original.
+pub fn push_restes(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut u32) -> bool {
+    let mut c = Cpu::default();
+    c.a[0] = o.0;
+    (c.d[2], c.d[3], c.d[5]) = (*d2, *d3, *d5);
+    Push { c: &mut c, b, variant: FIRST }.run();
+    (*d2, *d3, *d5) = (c.d[2], c.d[3], c.d[5]);
+    c.sr & m68k::SR_Z != 0
+}
+
 pub const SHADOW: Native = Native {
     entry: 0x33fe4,
     name: "terrain_push",

@@ -455,7 +455,7 @@ fn chase_follow(x: &mut Cx) {
     let Some(target) = lib::target_by_criterion(x, criterion) else {
         return chase_stop(x);
     };
-    lib::aim_to(x, target);
+    x.c.d[0] = lib::aim_to(x, target) as u32;
     let mine = x.u8(Obj::SPEED_INDEX);
     let diff = (x.c.d[0] as u8).wrapping_sub(mine) & 0x1f;
     if diff != 0 {

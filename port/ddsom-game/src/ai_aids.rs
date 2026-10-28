@@ -88,7 +88,7 @@ pub struct Boite {
 }
 
 /// Registres de travail que laissent les tests de boîte de l'original (mots bas, s'ils ont été posés).
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, Default)]
 struct Restes {
     d0: Option<u16>,
     d1: Option<u16>,
@@ -222,6 +222,61 @@ fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, boite: Boite, r: &mut Restes)
     } else {
         DansBoite::Dos
     }
+}
+
+/// Restes des tests de boîte relus par la suite (glitch d'origine, `dispatch::Restes`) : D2 et D3 (vitesses de
+/// l'étincelle de `flash_and_shake`, relues par le boss 11) et l'octet bas de D4, dans l'ordre où l'original les pose.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RestesBoite {
+    restes: Restes,
+    /// D2 long : le masque du tirage de `in_front`.
+    masque: Option<u32>,
+}
+
+impl RestesBoite {
+    /// Pose les restes dans D2, D3 et D4 (les registres que l'original laisse et que d'autres relisent).
+    pub fn poser(&self, d2: &mut u32, d3: &mut u32, d4: &mut u32) {
+        let r = &self.restes;
+        if let Some(v) = r.d3_octet {
+            set_b(d3, v);
+        }
+        if let Some(v) = r.d4_octet {
+            set_b(d4, v);
+        }
+        if let Some(v) = r.d2 {
+            set_w(d2, v);
+        }
+        if let Some(v) = r.d3 {
+            set_w(d3, v);
+        }
+        if let Some(v) = r.d2_octet {
+            set_b(d2, v);
+        }
+        if let Some(v) = self.masque {
+            *d2 = v;
+        }
+    }
+}
+
+/// 0xb5e0 (`ai::target_in_front`) : la cible `+0x50` est-elle dans la boîte devant l'objet ? Avec les restes relus.
+pub fn target_in_front_restes(b: &mut Cps2Bus, o: Obj, boite: Boite) -> (DansBoite, RestesBoite) {
+    let pointer = rd16(b, o.0 + f::TARGET);
+    let mut restes = Restes::default();
+    let found = if pointer == 0 { DansBoite::Non } else { box_reach(b, o.0, object(pointer), boite, &mut restes) };
+    (found, RestesBoite { restes, masque: None })
+}
+
+/// 0x7f19c (`box_around`), avec les restes relus.
+pub fn box_around_restes(b: &mut Cps2Bus, me: Obj, other: Obj, boite: Boite) -> (DansBoite, RestesBoite) {
+    let mut restes = Restes::default();
+    let found = box_reach(b, me.0, other.0, boite, &mut restes);
+    (found, RestesBoite { restes, masque: None })
+}
+
+/// 0x7f0c / 0x7ef4 (`in_front`), avec les restes relus.
+pub fn in_front_avec_restes(b: &mut Cps2Bus, o: Obj, strict: bool, boite: Boite) -> (bool, RestesBoite) {
+    let (oui, restes, _, _, tirage) = in_front_restes(b, o.0, strict, boite);
+    (oui, RestesBoite { restes, masque: tirage.map(|(m, _)| m) })
 }
 
 /// 0xb5e0 (`ai::target_in_front`) avec les registres de l'original : A1 = la cible, D0 = 0/1/2 et drapeaux de

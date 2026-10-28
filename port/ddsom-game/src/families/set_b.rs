@@ -483,11 +483,7 @@ mod boss_intro {
         let dy = x.rom16(BLAST_DY + i);
         let px = dx.wrapping_add(x.a5_u16(ram::CAMERA_X));
         let py = dy.wrapping_add(x.a5_u16(ram::CAMERA_Y));
-        x.c.d[2] = (x.c.d[2] & 0xffff_0000) | px as u32;
-        x.c.d[3] = (x.c.d[3] & 0xffff_0000) | py as u32;
-        x.c.d[0] = (x.c.d[0] & 0xffff_0000) | px as u32;
-        x.c.d[1] = (x.c.d[1] & 0xffff_0000) | py as u32;
-        crate::families::enemy_common::enemy_blast_at(x);
+        crate::families::enemy_common::enemy_blast_at(x, px, py);
     }
 
     /// Étape 22 : 30 fumées, puis le boss (BOSS type 2) apparaît.

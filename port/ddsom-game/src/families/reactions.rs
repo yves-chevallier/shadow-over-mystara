@@ -1789,7 +1789,7 @@ fn whirl(x: &mut Cx) {
     x.set32(f::VX2, 0);
     x.set8(f::GRABBED, 0);
     x.set8(f::DOWNED, 0);
-    let c = if x.c.d[7] & 1 != 0 { 1 } else { 2 };
+    let c = if x.compteur() & 1 != 0 { 1 } else { 2 };
     x.set8(f::COUNTER, c);
     spin_angle(x);
 }

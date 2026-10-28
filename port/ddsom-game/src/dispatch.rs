@@ -124,6 +124,12 @@ pub struct Aiguillage {
 /// les y rend.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Restes {
+    /// D2 : ce que laissent la collision avec le décor (0x33fe4, `terrain::push`), les tests de boîte (0xb5e0,
+    /// 0x7f19c, 0x7ef4), la ligne de trésor du butin (0xb780) ; l'étincelle de `flash_and_shake` (0x103ba) en tire sa
+    /// vitesse, le rebond de l'éclat de gel (0x4bda8) son réglage, l'objet ITEM 5 (0xdc382) le relit.
+    pub d2: u32,
+    /// D3 : comme D2 (collision, tests de boîte, butin spécial) ; accélération de l'étincelle de `flash_and_shake`.
+    pub d3: u32,
     /// D4 : le dernier long copié par l'animation de palette (SET 0, 0xba310), le déplacement du radeau (EFFCT,
     /// 0xad63e), les attributs du dernier morceau de la liste des sprites... ; le radeau sans pilote l'ajoute à la
     /// position des joueurs (0xad7b0).
@@ -137,11 +143,13 @@ pub struct Restes {
 impl Aiguillage {
     /// Les valeurs que l'original trouve dans les registres à l'entrée du gestionnaire.
     pub fn du_processeur(c: &Cpu) -> Self {
-        Aiguillage { objet: Obj(c.a[0]), compteur: c.d[7] as u16, restes: Restes { d4: c.d[4], d5: c.d[5] } }
+        Aiguillage { objet: Obj(c.a[0]), compteur: c.d[7] as u16, restes: Restes { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] } }
     }
 
     /// Rend les restes au processeur (le gestionnaire laisse les autres registres tels quels).
     pub fn rendre(&self, c: &mut Cpu) {
+        c.d[2] = self.restes.d2;
+        c.d[3] = self.restes.d3;
         c.d[4] = self.restes.d4;
         c.d[5] = self.restes.d5;
     }

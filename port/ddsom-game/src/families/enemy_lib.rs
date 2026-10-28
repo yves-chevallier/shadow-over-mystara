@@ -128,38 +128,38 @@ pub fn turn_toward<R: Banc>(x: &mut Cx<'_, R>, px: u16, py: u16) {
 
 /// 0xfbae : garde l'objet dans l'écran (marge de 0x30 pixels) ; c'est le test de zone de fin d'image. Vrai s'il a
 /// été déplacé.
-pub fn keep_in_zone(x: &mut Cx) -> bool {
-    ai::keep_in_zone_d5(x.c, x.b, x.o)
+pub fn keep_in_zone<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    x.keep_in_zone()
 }
 
 /// 0x33fe4 : collision avec le décor (`terrain.rs`) : l'objet est repoussé hors d'un obstacle.
-/// Glitch d'origine : les registres de la recherche du terrain (D0-D3, D5 = 1 en cas de choc, A1, A2) traversent
-/// les gestionnaires ; l'étincelle de `flash_and_shake` en tire ses vitesses (D2, D3 : `long_route_14_2p`), le
-/// squelette relit D5 : la routine travaille donc sur les registres de l'original.
-pub fn collide_terrain(x: &mut Cx) {
-    crate::terrain::push_68k(x.c, x.b, x.o);
+/// Glitch d'origine : D2, D3 et D5 (1 en cas de choc) de la recherche du terrain traversent les gestionnaires ;
+/// l'étincelle de `flash_and_shake` en tire ses vitesses (D2, D3 : `long_route_14_2p`), le squelette relit D5 : ils
+/// sont rendus dans les restes (`Cx::push_terrain`).
+pub fn collide_terrain<R: Banc>(x: &mut Cx<'_, R>) {
+    x.push_terrain();
 }
 
 /// 0xfbb0 : garde l'objet dans l'écran, à `margin` pixels près ; vrai s'il a été déplacé.
-pub fn keep_on_screen(x: &mut Cx, margin: u16) -> bool {
-    ai::keep_on_screen_d5(x.c, x.b, x.o, margin)
+pub fn keep_on_screen<R: Banc>(x: &mut Cx<'_, R>, margin: u16) -> bool {
+    x.keep_on_screen(margin)
 }
 
 /// 0x424e : choisit un joueur comme cible (`+0x50`, critère tiré au hasard) ; rend ce joueur.
-pub fn pick_target(x: &mut Cx) -> Option<Obj> {
+pub fn pick_target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let t = ai::pick_target(x.b, x.o, ai::Rule::Strict);
     found_d5(x, t)
 }
 
-/// D5 = 2 si un joueur est trouvé, 0 sinon (`moveq`) : le D5 de l'original traverse les gestionnaires (voir
-/// `ai::keep_on_screen_d5`).
-fn found_d5(x: &mut Cx, t: Option<Obj>) -> Option<Obj> {
-    x.c.d[5] = if t.is_some() { 2 } else { 0 };
+/// D5 = 2 si un joueur est trouvé, 0 sinon (`moveq`) : le D5 de l'original traverse les gestionnaires
+/// (`dispatch::Restes::d5`).
+fn found_d5<R: Banc>(x: &mut Cx<'_, R>, t: Option<Obj>) -> Option<Obj> {
+    *x.c.d5() = if t.is_some() { 2 } else { 0 };
     t
 }
 
 /// 0x43ae : comme `pick_target`, avec la règle d'éligibilité large.
-pub fn pick_target_any(x: &mut Cx) -> bool {
+pub fn pick_target_any<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let t = ai::pick_target(x.b, x.o, ai::Rule::Lenient);
     found_d5(x, t).is_some()
 }
@@ -175,7 +175,7 @@ pub const LOWEST_HP: u8 = 2;
 pub const FARTHEST: u8 = 4;
 
 /// 0x43bc : la cible devient le joueur qui répond au critère (`NEAREST`...) ; rend ce joueur.
-pub fn target_by_criterion(x: &mut Cx, criterion: u8) -> Option<Obj> {
+pub fn target_by_criterion<R: Banc>(x: &mut Cx<'_, R>, criterion: u8) -> Option<Obj> {
     let t = ai::target_by(x.b, x.o, ai::Criterion::from_byte(criterion), ai::Rule::Lenient);
     found_d5(x, t)
 }
@@ -229,32 +229,47 @@ fn boite(dx: i16, half_w: u16, half_d: u16) -> ai_aids::Boite {
 
 /// 0xb5e0 : la cible `+0x50` (au sol) est-elle dans la boîte devant l'objet ?
 ///
-/// Les tests de boîte laissent leurs restes dans D0-D3 (et A1, A4 pour la garde) comme l'original : D2 et D3
-/// traversent les gestionnaires et donnent ses vitesses à l'étincelle de `flash_and_shake` (glitch d'origine, vu sur
-/// `long_route_14_2p`) ; le boss 11 relit D2 (`roll`).
-pub fn target_in_front(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> InBox {
-    ai_aids::target_in_front_68k(x.c, x.b, x.o, boite(dx, half_w, half_d)).into()
+/// Glitch d'origine : les tests de boîte laissent D2 et D3 (et l'octet bas de D4), qui traversent les gestionnaires
+/// et donnent ses vitesses à l'étincelle de `flash_and_shake` (vu sur `long_route_14_2p`) ; le boss 11 relit D2
+/// (`roll`). Ils sont rendus dans les restes.
+pub fn target_in_front<R: Banc>(x: &mut Cx<'_, R>, dx: i16, half_w: u16, half_d: u16) -> InBox {
+    let (found, restes) = ai_aids::target_in_front_restes(x.b, x.o, boite(dx, half_w, half_d));
+    poser_restes(x, restes);
+    found.into()
+}
+
+/// Restes d'un test de boîte (D2, D3, D4) dans ceux de la boucle d'aiguillage.
+fn poser_restes<R: Banc>(x: &mut Cx<'_, R>, restes: ai_aids::RestesBoite) {
+    let (mut d2, mut d3, mut d4) = (*x.c.d2(), *x.c.d3(), *x.c.d4());
+    restes.poser(&mut d2, &mut d3, &mut d4);
+    (*x.c.d2(), *x.c.d3(), *x.c.d4()) = (d2, d3, d4);
 }
 
 /// `target_in_front` : la cible est-elle dans la boîte, d'un côté ou de l'autre ?
-pub fn target_in_box(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
+pub fn target_in_box<R: Banc>(x: &mut Cx<'_, R>, dx: i16, half_w: u16, half_d: u16) -> bool {
     target_in_front(x, dx, half_w, half_d).found()
 }
 
 /// 0x7f19c : l'objet `other` est-il dans la boîte devant l'objet (mêmes paramètres que `target_in_front`) ?
-pub fn in_box(x: &mut Cx, other: Obj, dx: i16, half_w: u16, half_d: u16) -> InBox {
-    ai_aids::box_around_68k(x.c, x.b, x.o, other, boite(dx, half_w, half_d)).into()
+pub fn in_box<R: Banc>(x: &mut Cx<'_, R>, other: Obj, dx: i16, half_w: u16, half_d: u16) -> InBox {
+    let (found, restes) = ai_aids::box_around_restes(x.b, x.o, other, boite(dx, half_w, half_d));
+    poser_restes(x, restes);
+    found.into()
 }
 
 /// 0x7ef4 : la cible, en garde (`+6` = 12), est-elle dans la boîte devant l'objet et lui fait-elle face ? Si oui
 /// et après un tirage, l'objet passe à l'état 6 avec une parade tirée au hasard, et la fonction rend vrai.
-pub fn guard_in_front(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
-    ai_aids::in_front_68k(x.c, x.b, x.o, false, boite(dx, half_w, half_d))
+pub fn guard_in_front<R: Banc>(x: &mut Cx<'_, R>, dx: i16, half_w: u16, half_d: u16) -> bool {
+    let (oui, restes) = ai_aids::in_front_avec_restes(x.b, x.o, false, boite(dx, half_w, half_d));
+    poser_restes(x, restes);
+    oui
 }
 
 /// 0x7f0c : comme `guard_in_front`, la garde pouvant aussi être 14, et la cible au sol.
-pub fn guard_in_front_strict(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> bool {
-    ai_aids::in_front_68k(x.c, x.b, x.o, true, boite(dx, half_w, half_d))
+pub fn guard_in_front_strict<R: Banc>(x: &mut Cx<'_, R>, dx: i16, half_w: u16, half_d: u16) -> bool {
+    let (oui, restes) = ai_aids::in_front_avec_restes(x.b, x.o, true, boite(dx, half_w, half_d));
+    poser_restes(x, restes);
+    oui
 }
 
 /// 0xa4b4 (`+0x72`) : l'IA agit-elle à cette image ? (bit tiré dans un masque choisi par le rang.)
@@ -283,26 +298,19 @@ pub fn chance_10_16<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     super::creators::chance_10_16(x.b)
 }
 
-/// 0x1386 (`aides::direction`) : direction (0 à 31) de `de` vers `vers` ; D0 = la direction, comme l'original
-/// (des appelants la relisent).
-pub fn aim(x: &mut Cx, de: (u16, u16), vers: (u16, u16)) -> u8 {
-    let a = crate::aides::direction(x.b, de, vers);
-    x.c.d[0] = a as u32;
-    a
+/// 0x1386 (`aides::direction`) : direction (0 à 31) de `de` vers `vers`.
+pub fn aim<R: Banc>(x: &mut Cx<'_, R>, de: (u16, u16), vers: (u16, u16)) -> u8 {
+    crate::aides::direction(x.b, de, vers)
 }
 
-/// 0x137e : direction de l'objet vers le point `vers` (D0 posé).
-pub fn aim_from(x: &mut Cx, vers: (u16, u16)) -> u8 {
-    let a = crate::aides::direction_from(x.b, x.o, vers);
-    x.c.d[0] = a as u32;
-    a
+/// 0x137e : direction de l'objet vers le point `vers`.
+pub fn aim_from<R: Banc>(x: &mut Cx<'_, R>, vers: (u16, u16)) -> u8 {
+    crate::aides::direction_from(x.b, x.o, vers)
 }
 
-/// 0x1376 : direction de l'objet vers `cible` (D0 posé).
-pub fn aim_to(x: &mut Cx, cible: Obj) -> u8 {
-    let a = crate::aides::direction_to(x.b, x.o, cible);
-    x.c.d[0] = a as u32;
-    a
+/// 0x1376 : direction de l'objet vers `cible`.
+pub fn aim_to<R: Banc>(x: &mut Cx<'_, R>, cible: Obj) -> u8 {
+    crate::aides::direction_to(x.b, x.o, cible)
 }
 
 /// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de l'objet ? Rend ce joueur.
@@ -316,8 +324,8 @@ pub fn seize_player<R: Banc>(x: &mut Cx<'_, R>, player: Obj, anim: u8) {
 }
 
 /// 0xfd8c : le joueur `player` est relâché.
-pub fn release_player(_x: &mut Cx, player: Obj) {
-    ai_aids::release_player(_x.b, player);
+pub fn release_player<R: Banc>(x: &mut Cx<'_, R>, player: Obj) {
+    ai_aids::release_player(x.b, player);
 }
 
 /// 0xfda2 : le joueur saisi (`+0x50`) suit l'objet selon l'étape de l'animation de prise.
@@ -336,17 +344,17 @@ pub fn behaviour_by_kind<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x1172e : jeu de débris n° `set` autour de l'objet.
-pub fn debris(x: &mut Cx, set: u32) {
+pub fn debris<R: Banc>(x: &mut Cx<'_, R>, set: u32) {
     ai_aids::debris_set(x.b, x.o, set as u16);
-    // D5 = le compteur épuisé du `dbf` (D5 traverse les gestionnaires, voir `ai::keep_on_screen_d5`)
-    x.c.d[5] = 0xffff;
+    // Glitch d'origine : D5 = le compteur épuisé du `dbf`, qui traverse les gestionnaires (`dispatch::Restes::d5`)
+    *x.c.d5() = 0xffff;
 }
 
 /// 0x11a36 : cinq débris au sol (seconde table si `second` est non nul), puis le son 0xede08.
-pub fn ground_debris(x: &mut Cx, second: u8) {
+pub fn ground_debris<R: Banc>(x: &mut Cx<'_, R>, second: u8) {
     ai_aids::ground_debris(x.b, x.o, second != 0);
-    // D5.w = le compteur épuisé du `dbf` (D5 traverse les gestionnaires, voir `ai::keep_on_screen_d5`)
-    x.c.d[5] |= 0xffff;
+    // Glitch d'origine : D5.w = le compteur épuisé du `dbf` (`dispatch::Restes::d5`)
+    *x.c.d5() |= 0xffff;
 }
 
 /// 0xb648 : une seule fois par objet, selon un tirage, lâche l'objet propre à son type.
@@ -358,17 +366,17 @@ pub fn drop_once<R: Banc>(x: &mut Cx<'_, R>) {
 /// Glitch d'origine : D2 et D3 laissés par ces routines (la ligne de trésor, la ligne de difficulté du butin spécial)
 /// donnent ses vitesses à l'étincelle de `flash_and_shake`, qui suit chez la plupart des boss, et D5 (compteur de la
 /// dernière boucle) traverse les gestionnaires jusqu'à 0xa17d0 (`ai::keep_on_screen_d5`) : on les rend en clair.
-pub fn drop_rewards(x: &mut Cx) {
+pub fn drop_rewards<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::drop_loot(x.b, x.o);
     let d3 = ai_aids::drop_special(x.b, x.o);
     let (d2, d5) = ai_aids::drop_treasure(x.b, x.o);
     // relu : vitesses de l'étincelle de 0x103ba (`flash_and_shake`)
-    x.c.d[2] = x.c.d[2] & !0xffff | d2 as u32;
+    *x.c.d2() = *x.c.d2() & !0xffff | d2 as u32;
     if let Some(d3) = d3 {
-        x.c.d[3] = x.c.d[3] & !0xffff | d3 as u32;
+        *x.c.d3() = *x.c.d3() & !0xffff | d3 as u32;
     }
     if let Some(d5) = d5 {
-        x.c.d[5] = d5;
+        *x.c.d5() = d5;
     }
 }
 
@@ -380,8 +388,8 @@ pub fn push_players<R: Banc>(x: &mut Cx<'_, R>) {
 /// 0x103ba : éclair d'écran, secousse et étincelle d'impact.
 /// Glitch d'origine : les vitesses de l'étincelle sont les D2 et D3 laissés par ce qui précède (`drop_rewards`, ou
 /// le gestionnaire) : ils sont lus ici en clair.
-pub fn flash_and_shake(x: &mut Cx) {
-    let (vx, ax) = (x.c.d[2] as u16, x.c.d[3] as u16);
+pub fn flash_and_shake<R: Banc>(x: &mut Cx<'_, R>) {
+    let (vx, ax) = (*x.c.d2() as u16, *x.c.d3() as u16);
     ai_aids::flash_and_shake(x.b, x.o, vx, ax);
 }
 
@@ -493,15 +501,15 @@ pub fn attack_effect<R: Banc>(x: &mut Cx<'_, R>, variant: u32, setting: u32) {
 
 /// Série d'effets d'attaque (0xabec8) de variante `variant`, réglages `first` à 0 (`dbf D1`). Faux si le pool a
 /// refusé un effet (la série s'arrête là).
-pub fn attack_effects(x: &mut Cx, variant: u32, first: u32) -> bool {
-    x.c.d[0] = variant;
-    x.c.d[1] = first;
+pub fn attack_effects<R: Banc>(x: &mut Cx<'_, R>, variant: u32, first: u32) -> bool {
+    // `dbf D1` : le réglage décompte jusqu'à 0, l'octet bas seul est passé au créateur
+    let mut setting = first;
     loop {
-        if super::effects_creators::attack(x.b, x.o, variant as u8, x.c.d[1] as u8).is_none() {
+        if super::effects_creators::attack(x.b, x.o, variant as u8, setting as u8).is_none() {
             return false;
         }
-        let n = (x.c.d[1] as u16).wrapping_sub(1);
-        x.c.d[1] = x.c.d[1] & !0xffff | n as u32; // relu : compteur de boucle relu au tour suivant
+        let n = (setting as u16).wrapping_sub(1);
+        setting = setting & !0xffff | n as u32;
         if n == 0xffff {
             return true;
         }
@@ -571,8 +579,7 @@ pub fn eshl_13<R: Banc>(x: &mut Cx<'_, R>, target: u32) -> Option<Obj> {
 }
 
 /// 0xa114a : tir ESHL 0x16 de variante `variant` à la position de l'objet (`+0x2f` = sa marque d'image `+0x33`).
-pub fn eshl_16(x: &mut Cx, variant: u8) {
-    x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
+pub fn eshl_16<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
     let Some(o) = alloc_eshl(x) else { return };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, Obj::KIND, 0x16);
@@ -597,9 +604,8 @@ pub fn eshl_0a<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
 }
 
 /// 0xa2d22 : six tirs ESHL 0x26 (`+0x2f` = 5 à 0) liés par `+0x46` ; le premier refus du pool arrête la série.
-pub fn eshl_burst_26(x: &mut Cx) {
+pub fn eshl_burst_26<R: Banc>(x: &mut Cx<'_, R>) {
     for n in (0..=5u8).rev() {
-        x.c.d[1] = x.c.d[1] & !0xffff | n as u32; // relu : compteur de boucle relu au tour suivant
         let Some(o) = alloc_eshl(x) else { return };
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, Obj::KIND, 0x26);
@@ -607,31 +613,29 @@ pub fn eshl_burst_26(x: &mut Cx) {
         o.set_u8(x.b, 0x2f, n);
         o.set_u16(x.b, 0x46, x.o.0 as u16);
     }
-    x.c.d[1] |= 0xffff;
 }
 
-/// Tirage d'un bit (`random & mask`) dans un masque ; D0 = le tirage, comme l'original.
-fn roll_bit(x: &mut Cx, mask: u32, bits: u32) -> bool {
+/// Tirage d'un bit (`random & bits`) dans un masque.
+fn roll_bit<R: Banc>(x: &mut Cx<'_, R>, mask: u32, bits: u32) -> bool {
     let r = (x.random() as u32) & bits;
-    x.c.d[0] = x.c.d[0] & !0xffff | r;
     mask >> r & 1 != 0
 }
 
 /// 0xffda : tirage d'un bit dans le masque (mot) de la table 0xfff4, choisi par le rang / 8. (Le lot A lisait la
 /// table en 0xffd8 : corrigé par `fuzz_ia`.)
-pub fn roll_ffda(x: &mut Cx) -> bool {
+pub fn roll_ffda<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let i = (var::RANK.get(x.b) >> 3) << 1;
     let mask = x.rom16(0xfff4u32.wrapping_add(i as i16 as u32));
-    x.c.d[2] = x.c.d[2] & !0xffff | mask as u32;
+    // reste : le masque dans D2.w (`dispatch::Restes::d2`)
+    *x.c.d2() = *x.c.d2() & !0xffff | mask as u32;
     roll_bit(x, mask as u32, 0xf)
 }
 
 /// 0xad7c : si `+0x78` est positif, tirage d'un bit dans le masque (long) de sa ligne de la table 0xadb0, choisi
-/// par le compteur d'images ; faux sinon. D0 = 1 / 0 comme l'original.
-pub fn roll_78(x: &mut Cx) -> bool {
+/// par le compteur d'images ; faux sinon.
+pub fn roll_78<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let line = x.u8(0x78);
     if (line as i8) < 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let row = x.data32(0xadb0 + 4 * line as u32);
@@ -643,7 +647,7 @@ pub fn roll_78(x: &mut Cx) -> bool {
 
 /// 0x10298 : script de palette `index` : huit longs de la table 0x102ba copiés en palette (0x91c380), luminosité
 /// maximale (`ori.l #0xf000f000`).
-pub fn palette_script(x: &mut Cx, index: u16) {
+pub fn palette_script<R: Banc>(x: &mut Cx<'_, R>, index: u16) {
     const PALETTE: u32 = 0x91c380;
     let from = 0x102bau32.wrapping_add((index << 5) as i16 as u32);
     // movem.l (A2),{D0-D6,A3} puis movem.l ...,(A1)
@@ -656,7 +660,8 @@ pub fn palette_script(x: &mut Cx, index: u16) {
     for (k, &v) in longs.iter().enumerate() {
         crate::mem::wr32(x.b, PALETTE + 4 * k as u32, v);
     }
-    x.c.d[..6].copy_from_slice(&longs[..6]);
+    // restes : le `movem` laisse les longs 2 à 5 dans D2-D5 (`dispatch::Restes`)
+    (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (longs[2], longs[3], longs[4], longs[5]);
     for k in 0..8 {
         let v = crate::mem::rd32(x.b, PALETTE + 4 * k);
         crate::mem::wr32(x.b, PALETTE + 4 * k, v | 0xf000_f000);

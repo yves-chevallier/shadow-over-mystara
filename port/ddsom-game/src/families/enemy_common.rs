@@ -150,35 +150,32 @@ pub fn effct_trio_2e<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x667f4 : un ennemi de type 10, variante 4, lié par `+0x5c`, en (D0.w, D1.w) (explosions de l'arrivée du boss 2, SET 17).
-pub fn enemy_blast_at(x: &mut Cx) {
+/// 0x667f4 : un ennemi de type 10, variante 4, lié par `+0x5c`, en (`px`, `py`) (explosions de l'arrivée du boss 2,
+/// SET 17).
+pub fn enemy_blast_at<R: Banc>(x: &mut Cx<'_, R>, px: u16, py: u16) {
     let Some(o) = x.alloc(&pools::ENEMY) else { return };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, 0xa);
     o.set_u16(x.b, 0x5c, x.o.0 as u16);
     o.set_u8(x.b, 3, 4);
-    let (px, py) = (x.c.d[0] as u16, x.c.d[1] as u16);
     o.set_u16(x.b, 0x8, px);
     o.set_u16(x.b, 0x10, py);
 }
 
-/// 0x9ddee : un tir ESHL 1 de variante D1, indice `+0x2f` = 1, propriétaire `+0x50`.
-pub fn eshl_thrown_by_beast(x: &mut Cx) {
-    let variant = x.c.d[1] as u8;
+/// 0x9ddee : un tir ESHL 1 de variante `variant`, indice `+0x2f` = 1, propriétaire `+0x50`.
+pub fn eshl_thrown_by_beast<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
     if let Some(o) = spawn_eshl(x, 1, variant, 0x50) {
         o.set_u8(x.b, 0x2f, 1);
     }
 }
 
 /// 0xa2f96 : seize tirs ESHL 0x27 (variantes 15 à 0) liés par `+0x5c`.
-pub fn eshl_burst_27(x: &mut Cx) {
+pub fn eshl_burst_27<R: Banc>(x: &mut Cx<'_, R>) {
     for variant in (0..16).rev() {
-        x.c.d[1] = x.c.d[1] & !0xffff | variant;
-        if spawn_eshl(x, 0x27, variant as u8, 0x5c).is_none() {
+        if spawn_eshl(x, 0x27, variant, 0x5c).is_none() {
             return;
         }
     }
-    x.c.d[1] |= 0xffff;
 }
 
 /// 0xa6824 : deux tirs ESHL 0x3f (orientation 0 puis 0x20) liés par `+0x5c`.
@@ -211,10 +208,9 @@ pub fn free<R: Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::ENEMY);
 }
 
-/// Tirage pseudo-aléatoire du jeu (mot dans D0).
-pub fn random(x: &mut Cx) -> u32 {
-    let alea = x.random();
-    x.c.d[0] & 0xffff_0000 | alea as u32
+/// Tirage pseudo-aléatoire du jeu (un mot).
+pub fn random<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+    x.random() as u32
 }
 
 /// Jeu en pause (`A5+0x3d` non nul).
@@ -328,11 +324,12 @@ pub fn anim<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
 
 /// Fin commune des sous-états actifs : test de zone (0xfbae) puis collision avec le décor (0x33fe4). Vrai si
 /// l'objet a été ramené dans l'écran ou repoussé par le décor (le D5 de l'original, que le squelette relit).
-pub fn zone_and_terrain(x: &mut Cx) -> bool {
+pub fn zone_and_terrain<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::keep_in_zone(x);
     lib::collide_terrain(x);
-    // D5 : 1 si la zone a déplacé l'objet (`moveq`) ou si le décor l'a repoussé
-    x.c.d[5] != 0
+    // le D5 de l'original (`dispatch::Restes::d5`) : 1 si la zone a déplacé l'objet (`moveq`) ou si le décor l'a
+    // repoussé
+    *x.c.d5() != 0
 }
 
 /// `neg.w (off,A0)`.
@@ -347,11 +344,9 @@ pub fn load_target(x: &mut Cx) -> Obj {
     x.linked(f::TARGET)
 }
 
-/// Tirage `rand & mask` sur le mot de D0 (`andi.w #mask,D0w` : le mot haut de D0 reste celui du tirage).
-pub fn rand_and(x: &mut Cx, mask: u32) -> u32 {
-    let r = random(x);
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | r & mask;
-    r & mask
+/// Tirage `rand & mask` (`andi.w #mask,D0w`).
+pub fn rand_and<R: Banc>(x: &mut Cx<'_, R>, mask: u32) -> u32 {
+    random(x) & mask
 }
 
 /// Écrit le long d'état de l'objet courant (`move.l #v,(4,A0)`).
@@ -396,11 +391,11 @@ pub fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 /// 0x67452 : cherche le joueur le plus proche dans une boîte devant l'ennemi (décalage `d0`, demi-largeur
 /// `d1`, demi-profondeur `d2`) et le range en `+0x50` ; faux si aucun. La boîte suit l'orientation de l'ennemi.
 /// D5 garde, comme l'original, le dernier écart calculé.
-pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+pub fn find_player<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     x.set16(f::TARGET, 0);
     let d0 = if x.u8(f::FLIP) != 0 { d0.wrapping_neg() } else { d0 } as u16;
     let mut best = 0xffffu16;
-    let mut d5 = x.c.d[5] as u16;
+    let mut d5 = *x.c.d5() as u16;
     for k in 0..4u32 {
         let p = 0xff85de + 0x200 * k;
         if crate::mem::rd8(x.b, p) == 0 {
@@ -422,7 +417,8 @@ pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
             x.set16(f::TARGET, p as u16);
         }
     }
-    x.c.d[5] = x.c.d[5] & !0xffff | d5 as u32;
+    // Glitch d'origine : D5.w garde le dernier écart (`dispatch::Restes::d5`)
+    *x.c.d5() = *x.c.d5() & !0xffff | d5 as u32;
     x.u16(f::TARGET) != 0
 }
 
@@ -454,14 +450,12 @@ pub fn spawn_list<R: Banc>(x: &mut Cx<'_, R>, lists: u32, allocs: u32, index: u3
 }
 
 /// 0x27ee : l'ennemi se détache de son hôte (`HOST`) : si l'hôte est actif et compte encore des parties
-/// (`+0x2a`), le compte diminue et le lien est effacé. D0 et A1 gardent le lien et l'hôte, comme l'original.
-pub fn detach_from_host(x: &mut Cx) {
+/// (`+0x2a`), le compte diminue et le lien est effacé.
+pub fn detach_from_host<R: Banc>(x: &mut Cx<'_, R>) {
     const PARTS: u32 = 0x2a;
     let host = x.u16(f::HOST);
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | host as u32;
     if host != 0 {
-        x.c.a[1] = host as i16 as i32 as u32;
-        let h = Obj(x.c.a[1] & 0xff_ffff);
+        let h = x.linked(f::HOST);
         let parts = h.u16(x.b, PARTS);
         if h.u8(x.b, 0) != 0 && parts != 0 {
             h.set_u16(x.b, PARTS, parts - 1);
@@ -474,6 +468,12 @@ pub const NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x27ee,
     name: "ennemi_detacher_hote",
     run: crate::Corps::Processeur(|c, b| {
+        // D0.w et A1 : le lien et l'hôte, comme l'original
+        let host = crate::mem::rd16(b, c.a[0] + f::HOST);
+        c.d[0] = c.d[0] & 0xffff_0000 | host as u32;
+        if host != 0 {
+            c.a[1] = host as i16 as i32 as u32;
+        }
         detach_from_host(&mut Cx::new(c, b));
         crate::mem::rts(c, b);
     }),

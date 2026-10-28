@@ -130,9 +130,9 @@ pub(self) const FOLLOW_TABLE: u32 = 0x5ce72;
 
 /// 0x5cdc6 : tirage au hasard (dix chances sur seize) qui décide d'un tir ; D0 = 0 ou 1.
 pub(self) fn shoot_roll(x: &mut Cx) -> bool {
-    rand_and(x, 0xf);
+    let r = rand_and(x, 0xf);
     let mask = x.rom16(0x5cde0);
-    let hit = (mask >> (x.c.d[0] & 0xf)) & 1 != 0;
+    let hit = (mask >> r) & 1 != 0;
     x.c.d[0] = hit as u32;
     hit
 }

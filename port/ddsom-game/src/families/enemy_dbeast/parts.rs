@@ -182,8 +182,8 @@ fn arm(x: &mut Cx) {
                 play_once(x, 0x4e);
                 if (var::PLAYERS_ALIVE.get(x.b) as i8) > 1 && x.u8(f::KEY_FRAME) != 0 {
                     x.set8(f::KEY_FRAME, 0);
-                    x.c.d[1] = x.c.d[1] & !0xff | x.u8(SHOTS) as u32;
-                    eshl_thrown_by_beast(x);
+                    let variant = x.u8(SHOTS);
+                    eshl_thrown_by_beast(x, variant);
                     let s = x.u8(SHOTS).wrapping_sub(1);
                     x.set8(SHOTS, s);
                     if (s as i8) < 0 {
@@ -230,7 +230,7 @@ fn rally(x: &mut Cx) -> bool {
     x.set16(AIM_Y, ay);
     set_dw(x, 1, ax);
     set_dw(x, 2, ay);
-    lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16));
+    x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
     let angle = x.c.d[0] as u8;
     x.set8(Obj::SPEED_INDEX, angle);
     move_xy(x);

@@ -335,7 +335,7 @@ fn dive(x: &mut Cx) {
                 x.c.a[1] = t.0;
                 x.c.d[1] = t.u16(x.b, 0x8) as u32;
                 x.c.d[2] = t.u16(x.b, 0x10) as u32;
-                lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16));
+                x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
                 let angle = x.c.d[0] as u8;
                 x.set8(0x2d, angle);
                 let v = if x.u8(f::FLIP) != 0 { 0x500u16 } else { (-0x500i16) as u16 };

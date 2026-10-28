@@ -42,11 +42,6 @@ impl<'a> Gx<'a> {
         Cx { c: a, b, o }
     }
 
-    /// Compteur de la boucle d'aiguillage (D7.w de l'original).
-    pub fn compteur(&self) -> u16 {
-        self.c.compteur
-    }
-
     /// Restes de registres que les gestionnaires se transmettent (glitches d'origine).
     pub fn restes(&mut self) -> &mut Restes {
         &mut self.c.restes
@@ -70,8 +65,14 @@ pub trait Banc {
     /// Remise en liste (0x1ee1a / 0x1ef6c, `premier_plan`) : sur le processeur, l'adaptateur laisse les registres de
     /// l'original au gestionnaire suivant ; sans registres, le cœur.
     fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool);
-    /// Le reste D5 (voir `dispatch::Restes::d5`) : le registre du processeur, ou le reste de la boucle d'aiguillage.
+    /// Les restes D2 à D5 (voir `dispatch::Restes`) : le registre du processeur, ou le reste de la boucle
+    /// d'aiguillage.
+    fn d2(&mut self) -> &mut u32;
+    fn d3(&mut self) -> &mut u32;
+    fn d4(&mut self) -> &mut u32;
     fn d5(&mut self) -> &mut u32;
+    /// Compteur de la boucle d'aiguillage (D7.w de l'original) : phase des clignotements « une image sur deux ».
+    fn compteur(&self) -> u16;
 }
 
 impl Banc for &mut Cpu {
@@ -80,8 +81,20 @@ impl Banc for &mut Cpu {
         let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
         liste.reinsert_68k(self, b, o);
     }
+    fn d2(&mut self) -> &mut u32 {
+        &mut self.d[2]
+    }
+    fn d3(&mut self) -> &mut u32 {
+        &mut self.d[3]
+    }
+    fn d4(&mut self) -> &mut u32 {
+        &mut self.d[4]
+    }
     fn d5(&mut self) -> &mut u32 {
         &mut self.d[5]
+    }
+    fn compteur(&self) -> u16 {
+        self.d[7] as u16
     }
 }
 
@@ -90,12 +103,29 @@ impl Banc for &mut Aiguillage {
         let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
         liste.reinsert(b, o);
     }
+    fn d2(&mut self) -> &mut u32 {
+        &mut self.restes.d2
+    }
+    fn d3(&mut self) -> &mut u32 {
+        &mut self.restes.d3
+    }
+    fn d4(&mut self) -> &mut u32 {
+        &mut self.restes.d4
+    }
     fn d5(&mut self) -> &mut u32 {
         &mut self.restes.d5
+    }
+    fn compteur(&self) -> u16 {
+        self.compteur
     }
 }
 
 impl<R: Banc> Cx<'_, R> {
+    /// Compteur de la boucle d'aiguillage (D7.w de l'original).
+    pub fn compteur(&self) -> u16 {
+        self.c.compteur()
+    }
+
     /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (fin ordinaire d'un gestionnaire ; voir [`Banc`]).
     #[track_caller]
     pub fn reinsert(&mut self) {
@@ -122,12 +152,11 @@ impl<R: Banc> Cx<'_, R> {
     }
 
     /// 0x33fe4 : collision avec le décor (`terrain::push`) ; rend le drapeau Z de l'original.
-    /// Glitch d'origine : un choc laisse D5 = 1 (`Restes::d5`).
+    /// Glitch d'origine : la recherche du terrain laisse D2 et D3, et un choc D5 = 1 (`Restes`).
     pub fn push_terrain(&mut self) -> bool {
-        let (z, choc) = crate::terrain::push_collides(self.b, self.o);
-        if choc {
-            *self.c.d5() = 1;
-        }
+        let (mut d2, mut d3, mut d5) = (*self.c.d2(), *self.c.d3(), *self.c.d5());
+        let z = crate::terrain::push_restes(self.b, self.o, &mut d2, &mut d3, &mut d5);
+        (*self.c.d2(), *self.c.d3(), *self.c.d5()) = (d2, d3, d5);
         z
     }
 }
@@ -153,11 +182,6 @@ impl<'a> Cx<'a> {
         let r = f(&mut Cx { c: &mut a, b: &mut *self.b, o: self.o });
         a.rendre(self.c);
         r
-    }
-
-    /// Compteur de la boucle d'aiguillage (D7.w).
-    pub fn compteur(&self) -> u16 {
-        self.c.d[7] as u16
     }
 
     // --- sous-routines -------------------------------------------------------------------------

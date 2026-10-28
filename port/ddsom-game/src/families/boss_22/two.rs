@@ -384,7 +384,7 @@ pub(super) fn spin_roar(x: &mut Cx) {
                 let (sx, sz) = (x.u16(SPOT_X), x.u16(SPOT_Z));
                 set_dw(x, 1, sx);
                 set_dw(x, 2, sz);
-                lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16));
+                x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
                 let angle = (x.c.d[0] as u8).wrapping_add(b6);
                 x.set8(0x2d, angle);
             }

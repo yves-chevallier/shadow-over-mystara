@@ -544,7 +544,7 @@ fn turn_back(x: &mut Cx) {
             let (px, pz) = (player.u16(x.b, Obj::X), player.u16(x.b, Obj::Y));
             x.set16(0xb0, px);
             x.set16(0xb2, pz);
-            lib::aim_to(x, Obj(x.c.a[1] & 0xff_ffff));
+            x.c.d[0] = lib::aim_to(x, Obj(x.c.a[1] & 0xff_ffff)) as u32;
             let angle = x.c.d[0] as u8;
             x.set8(Obj::SPEED_INDEX, angle);
             if angle & 0xf != 0 {
