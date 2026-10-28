@@ -248,3 +248,7 @@ le jeu ne produit pas, gardés tels quels dans le Rust :
 Les natives qui ne servaient plus qu'aux appels par adresse des écrans sont retirées avec leurs appels (le code reste,
 en fonctions Rust) : textes et chiffres de l'écran des crédits (0x148be, 0x14652, 0x14b74, 0x14c1e), boutons de départ
 et verrous des monnayeurs (0x141e0, 0x14290), chiffre des crédits (0x14e46).
+Les remises à zéro des blocs de la sortie de scène, de la boutique et du classement (0xf3130, 0xf7916, 0xfc562) et
+l'effacement du texte des écrans de fin (0xf683c) n'ont plus d'appelant par adresse : leurs natives restent (outils,
+fuzz), en `Corps::Memoire`, sans les registres que laissait l'original (D0 = 0, A4/D6 de la boucle, A1/A2/D0-D2 de
+l'effacement), qu'aucun appelant ne relit plus (le D1.w = -1 de 0xf683c, relu par le bonus, y est écrit en clair).
