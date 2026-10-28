@@ -6,6 +6,7 @@
 //! joueur : bourse BCD `+0x112..+0x117` (long `+0x114` comparé aux prix), six cases d'inventaire `+0x140`
 //! (0x56 : vide) et leurs quantités `+0x148`, état du dialogue de la boutique `+0x167`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
@@ -45,12 +46,12 @@ fn player_of(x: &mut Cx) -> Obj {
 }
 
 /// Première case de l'inventaire qui contient `item`.
-fn find_slot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, player: Obj, item: u8) -> Option<u32> {
+fn find_slot<R: Banc>(x: &mut Cx<'_, R>, player: Obj, item: u8) -> Option<u32> {
     (0..SLOTS).find(|&k| player.u8(x.b, p::SLOTS + k) == item)
 }
 
 /// Pose le message et joue le son du message.
-fn say<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, message: u16) {
+fn say<R: Banc>(x: &mut Cx<'_, R>, message: u16) {
     wr16(x.b, MESSAGE, message);
     crate::sound::jouer(x.b, SOUND_MESSAGE, x.o);
 }

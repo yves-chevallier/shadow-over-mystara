@@ -2,6 +2,7 @@
 //! 6 double coup, 8 bond-coup, 10 glissade, 12 grand bond, 14 et 16 bond avec demi-tour, 18 et 20 garde (série 1).
 //! `+7` est l'étape : les étapes 0 à 4 (selon le coup) sont communes (`ready`, `settle`, `face`).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -29,13 +30,13 @@ pub(super) fn run(x: &mut Cx) {
 // --- étapes communes ----------------------------------------------------------------------------
 
 /// 0x59b98 : le squelette se prépare (animation de repos).
-pub(super) fn ready<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn ready<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     body(x, 0);
 }
 
 /// 0x59b82 : attend que le délai `+0x77` soit écoulé.
-pub(super) fn settle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn settle<R: Banc>(x: &mut Cx<'_, R>) {
     let wait = x.u8(COOLDOWN);
     if wait != 0 {
         let n = wait.wrapping_sub(1);
@@ -48,7 +49,7 @@ pub(super) fn settle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x591d6 : se tourne vers la cible si elle est derrière (`+0xa6` = 2).
-pub(super) fn face<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn face<R: Banc>(x: &mut Cx<'_, R>) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
         return x.add8(f::SUB3, 2);
@@ -252,7 +253,7 @@ fn leap(x: &mut Cx, kind: Leap) {
 }
 
 /// 0x584fe : attend l'image-clé du saut.
-pub(super) fn land_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn land_wait<R: Banc>(x: &mut Cx<'_, R>) {
     step(x);
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
@@ -260,7 +261,7 @@ pub(super) fn land_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58512 : montée du bond (déplacement en X et en hauteur).
-pub(super) fn rise<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     step(x);
     if (x.u16(Obj::VZ) as i16) < 0 {
@@ -347,7 +348,7 @@ pub(super) fn restart_slide(x: &mut Cx) {
     finish_restart(x);
 }
 
-fn finish_restart<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn finish_restart<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(MOVE_TABLE, 0x1c7336);
     let angle = if x.u8(f::FLIP) != 0 { 8 + 0x10 } else { 8 };
     x.set8(Obj::SPEED_INDEX, angle);

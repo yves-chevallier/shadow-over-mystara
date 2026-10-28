@@ -11,6 +11,7 @@
 //!
 //! Elles finissent par `fight::pick_attack_b`. Plusieurs fuient d'une poussière (effet 0xb10c8).
 
+use crate::families::cx::Banc;
 use super::fight;
 use super::*;
 use crate::objects::Obj;
@@ -49,13 +50,13 @@ fn dust(x: &mut Cx, kind: u16) {
 
 /// Mot lu en A0 − 0x7f92 : l'original voulait le compteur d'images (`A5 + 0x6e`) mais a écrit un déplacement
 /// relatif à A0 ; on lit la même adresse.
-fn tick_word<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn tick_word<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     let addr = x.o.0.wrapping_sub(0x7f92) & 0xff_ffff;
     x.data16(addr)
 }
 
 /// Vitesses `(vx, vz)` selon le sens : `(a, b)` si le dragon regarde à droite (`+0x2c` nul inversé).
-fn signed_by_facing<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, a: i16, b: i16) -> (u16, u16) {
+fn signed_by_facing<R: Banc>(x: &mut Cx<'_, R>, a: i16, b: i16) -> (u16, u16) {
     if x.u8(f::FLIP) != 0 {
         (a as u16, b as u16)
     } else {
@@ -76,7 +77,7 @@ fn bounce(x: &mut Cx, grow: bool) {
     x.set16(0x16, 0);
 }
 
-fn jump_back_and_forth<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vx: i16, vz: i16) {
+fn jump_back_and_forth<R: Banc>(x: &mut Cx<'_, R>, vx: i16, vz: i16) {
     let (a, b) = signed_by_facing(x, vx, vz);
     x.set16(0x14, a);
     x.set16(0x16, b);
@@ -187,7 +188,7 @@ fn breath_step(x: &mut Cx) {
 }
 
 /// Le joueur `a2` est-il utilisable (0x9059e) : place occupée et `+0x182` nul.
-fn usable<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, a2: Obj) -> bool {
+fn usable<R: Banc>(x: &mut Cx<'_, R>, a2: Obj) -> bool {
     a2.u8(x.b, 0) != 0 && a2.u8(x.b, 0x182) == 0
 }
 
@@ -224,7 +225,7 @@ fn aim_choice(x: &mut Cx) {
 /// 0x904aa et 0x904ee : le joueur au plus petit score. Le score est `|x| + |y|` (0x904aa) ou `+0x60` du dragon
 /// (0x904ee) ; le meilleur part de -1, donc presque jamais atteint. L'original détruit son compteur de boucle
 /// (`D0`) par l'appel d'usage : la boucle reprend le résultat de ce test.
-fn nearest<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, by_own: bool) -> Option<Obj> {
+fn nearest<R: Banc>(x: &mut Cx<'_, R>, by_own: bool) -> Option<Obj> {
     let mut best: i16 = -1;
     let mut chosen = None;
     let mut counter: u16;
@@ -288,7 +289,7 @@ fn in_random_order(x: &mut Cx) -> Option<Obj> {
 }
 
 /// 0x90576 : marche vers le joueur `p` en visant 0xc0 pixels devant lui.
-fn aim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, p: Obj) {
+fn aim<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
     let mut d1: i16 = 0xc0;
     if x.u8(f::FLIP) != 0 {
         d1 = d1.wrapping_neg();
@@ -395,7 +396,7 @@ fn hop(x: &mut Cx) {
 
 // --- +6 = 10 : grand saut ---------------------------------------------------------------------------------
 
-fn lift<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn lift<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0x18, 0x800);
     x.set16(0x1a, (-0x40i16) as u16);
 }

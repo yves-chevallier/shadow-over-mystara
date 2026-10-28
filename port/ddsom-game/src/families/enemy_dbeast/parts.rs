@@ -4,12 +4,13 @@
 //! lâchées (projectiles, bonds, ombre) : à la création elles reçoivent chacune un `+6` qui choisit
 //! leur comportement dans `run`.
 
+use crate::families::cx::Banc;
 use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Courant;
 
 /// Création selon la variante `+3` (0x71f86).
-pub(super) fn spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn spawn<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             x.set8(0, 2);
@@ -82,14 +83,14 @@ pub(super) fn spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Points de vie des pièces (1) : elles meurent au premier coup.
-fn set_hp<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn set_hp<R: Banc>(x: &mut Cx<'_, R>) {
     for off in [0x60, f::HP, 0x64] {
         x.set16(off, 1);
     }
 }
 
 /// Pièce lâchée qui joue aussitôt une animation (variantes 4 à 7).
-fn lone<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, state: u32, anim: u8) {
+fn lone<R: Banc>(x: &mut Cx<'_, R>, state: u32, anim: u8) {
     set_state_long(x, state);
     x.set8(PART, 0xff);
     x.set16(0xc, 0);
@@ -97,7 +98,7 @@ fn lone<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, state: u32, anim: u8) {
 }
 
 /// Pièce lâchée sans animation de départ (variantes 8 à 13) ; `active` : elle est active.
-fn detached<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, state: u32, active: bool) {
+fn detached<R: Banc>(x: &mut Cx<'_, R>, state: u32, active: bool) {
     set_state_long(x, state);
     x.set8(PART, 0xff);
     if active {
@@ -126,7 +127,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// +6 = 0 (0x7245e) : membre attaché ; il se détache quand la bête est loin de la caméra.
-fn attached<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn attached<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         let mut cam = var::SCROLL_X.get(x.b);
         if var::CAMERA_SELECT.get(x.b) != 0 {
@@ -203,7 +204,7 @@ fn arm(x: &mut Cx) {
 }
 
 /// 0x725a0 : le bras se repose.
-fn arm_rest<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn arm_rest<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(DONE, 0);
     x.set8(SHOTS, 7);
 }
@@ -300,7 +301,7 @@ fn spit(x: &mut Cx) {
 }
 
 /// Fin d'un geste : quand l'animation est finie, retour à la bête debout (0x726e6).
-pub(super) fn finish_to_stance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn finish_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, ACTIVE_STANCE);
         play(x, 0);
@@ -328,7 +329,7 @@ fn spit_once(x: &mut Cx) {
 }
 
 /// Attend la fin de la phase de bond en l'air (image-clé), 0x727da.
-pub(super) fn bound_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn bound_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
@@ -337,7 +338,7 @@ pub(super) fn bound_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Atterrissage d'un bond en X et Z (0x727f0).
-pub(super) fn bound_land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn bound_land<R: Banc>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         return step(x);
     }
@@ -350,7 +351,7 @@ pub(super) fn bound_land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 10 (0x7277c) : bond en X.
-fn bound<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn bound<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -369,7 +370,7 @@ fn bound<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Début d'un bond en profondeur (variantes 12 et 14) : vitesse en Y, bond haut.
-fn bound_y_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vy: i16, anim_marker: u8, anim: u8) {
+fn bound_y_start<R: Banc>(x: &mut Cx<'_, R>, vy: i16, anim_marker: u8, anim: u8) {
     x.set16(0x1c, vy as u16);
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
@@ -382,7 +383,7 @@ fn bound_y_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vy: i16, anim_
 }
 
 /// Retombée d'un bond en profondeur (0x728d4 / 0x728f0).
-pub(super) fn bound_y_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn bound_y_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         lib::sound(x, 0xeb9a0);
         x.add8(0x7, 2);
@@ -391,7 +392,7 @@ pub(super) fn bound_y_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-pub(super) fn bound_y_land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn bound_y_land<R: Banc>(x: &mut Cx<'_, R>) {
     if x.move_yz().gt() {
         return step(x);
     }
@@ -405,7 +406,7 @@ pub(super) fn bound_y_land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 12 (0x7282c) : bond en profondeur vers l'avant.
-fn bound_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn bound_x<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.set16(0x1c, 0x140);
@@ -427,7 +428,7 @@ fn bound_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 14 (0x72840) : bond en profondeur vers l'arrière.
-fn bound_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn bound_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => bound_y_start(x, -0x140, 0xe, 0xa),
         2 => bound_y_wait(x),
@@ -438,7 +439,7 @@ fn bound_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 16 (0x72930) : tombe du haut de l'écran.
-fn drop_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -464,7 +465,7 @@ fn drop_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Glissement vers l'avant avec la vitesse de la table (0x729bc / 0x72a2a).
-fn slide_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, anim: u8, delay: u16) {
+fn slide_start<R: Banc>(x: &mut Cx<'_, R>, anim: u8, delay: u16) {
     x.add8(0x7, 2);
     x.set16(TIMER, delay);
     x.set8(Obj::SPEED_INDEX, 8);
@@ -476,7 +477,7 @@ fn slide_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, anim: u8, delay:
 }
 
 /// +6 = 18 (0x729ac) : glisse 30 images vers l'avant.
-fn slide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn slide<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.set8(VULNERABLE, 1);

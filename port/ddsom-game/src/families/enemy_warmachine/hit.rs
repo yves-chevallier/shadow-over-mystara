@@ -2,6 +2,7 @@
 //! 2 recul, 4 chute et relevé (avec palier de PV), 6 mort en cinq temps, 8 fuite hors de l'écran, 10 assommé. Zone et
 //! ombre sont testées sauf en fuite (`+5` = 8).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -33,7 +34,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x792e0 : PV épuisés : passe en mort (`+5` = 6) ; vrai dans ce cas.
-fn dying<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn dying<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }

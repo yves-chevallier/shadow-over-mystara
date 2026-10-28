@@ -2,6 +2,7 @@
 //! 2 recul, 4 chute et relevé, 6 seconde table de réactions, 8 saisie par un joueur. Zone et ombre sont toujours
 //! testées ; il n'y a ni pause du hook ni octet `+0` à remettre à 1.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -42,7 +43,7 @@ fn first_reaction(x: &mut Cx) {
 }
 
 /// Recul (0x6bbf8).
-fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

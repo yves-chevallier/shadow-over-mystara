@@ -1,12 +1,13 @@
 //! Boss 8, groupe 4 : les attaques (`+6` = 0 à 18), chacune en étapes `+7` = 0, 2, 4...
 //! À la fin d'une attaque, `aids::after_attack` choisit la suite.
 
+use crate::families::cx::Banc;
 use super::aids;
 use super::*;
 use crate::objects::Courant;
 
 /// Clé d'animation `kind` (`+0xa2`, recopiée en `+0xa3`).
-fn key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8) {
+fn key<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }

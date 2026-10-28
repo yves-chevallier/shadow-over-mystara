@@ -1,6 +1,7 @@
 //! Type 8, sous-état 0 : arrivée. `+6` = 0 : vol d'entrée par un bord, atterrissage, premier combat ;
 //! `+6` = 2 : arrivée posée (crée une ombre, attend un joueur à portée).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -15,7 +16,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Signe de l'orientation appliqué à `v` : négatif quand l'ennemi regarde à gauche.
-fn signed_by_facing<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: i16) -> u16 {
+fn signed_by_facing<R: Banc>(x: &mut Cx<'_, R>, v: i16) -> u16 {
     if x.u8(f::FLIP) != 0 { v.wrapping_neg() as u16 } else { v as u16 }
 }
 

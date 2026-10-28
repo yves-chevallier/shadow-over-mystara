@@ -1,5 +1,6 @@
 //! Effets des joueurs (PEFF), deuxième série : types 11, 20, 33. Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
@@ -39,7 +40,7 @@ mod hail {
     }
 
     /// Une image du parent : au bout de 0x70 images il cesse de créer des grêlons (`+0x5a`).
-    fn parent_tick<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn parent_tick<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(TIMER, 0xff);
         if x.u8(TIMER) == 0 {
             x.add8(0x4, 2);
@@ -54,7 +55,7 @@ mod hail {
     }
 
     /// Deux grêlons liés au parent (`+0x5c`) et au joueur.
-    fn spawn_pair<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_pair<R: Banc>(x: &mut Cx<'_, R>) {
         for side in 0..2 {
             let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, 0, 1);
@@ -99,7 +100,7 @@ mod hail {
     }
 
     /// `0x4bb1a` : vitesses de la rangée courante, puis position autour du joueur et déplacement.
-    fn place<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>) {
         let row = (x.u8(ANGLE) as u32) << 2 & 0xffff;
         let table = x.u32(0x4c);
         let vx = x.data16(table + row);
@@ -151,7 +152,7 @@ mod hail {
         x.reinsert();
     }
 
-    fn child_fall<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn child_fall<R: Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             x.add8(0x4, 2);
         }
@@ -219,7 +220,7 @@ mod spark {
         x.reinsert();
     }
 
-    fn flight<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn flight<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.move_xz();
         let t = (x.u16(0x58) as i16).wrapping_sub(1);
@@ -309,7 +310,7 @@ mod witch {
         x.reinsert();
     }
 
-    fn child_active<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn child_active<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_xz();
         if (x.u16(0xc) as i16) >= 0 {
             return;
@@ -318,7 +319,7 @@ mod witch {
     }
 
     /// Crée un éclat (variante 1) qui garde le rang `+0x5e` de ce parent ; renvoie vrai si le pool est plein.
-    fn spawn_spark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn spawn_spark<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         match x.alloc(&pools::PEFF) {
             None => {
                 true
@@ -336,7 +337,7 @@ mod witch {
         }
     }
 
-    fn parent_active<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn parent_active<R: Banc>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         if owner.u8(x.b, 0x7) == 0xe {
             x.add8(0x4, 2);

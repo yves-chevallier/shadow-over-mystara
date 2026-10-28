@@ -1,6 +1,7 @@
 //! Type 11, sous-états 6 (gestes de repli : bonds, accroupi, sortie d'écran) et 8 (attente, bond latéral).
 //! Chacun commence par le drapeau de coup `+0x8f` (`hit_gate`).
 
+use crate::families::cx::Banc;
 use super::attacks::squat_begin;
 use super::*;
 use crate::objects::Courant;
@@ -30,7 +31,7 @@ pub(super) fn run_c(x: &mut Cx) {
 }
 
 /// 0x68080 : minuterie `+0xa2` puis debout.
-fn countdown_stance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn countdown_stance<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, n);
     if n == 0 {
@@ -39,7 +40,7 @@ fn countdown_stance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x680ee : attend la clé d'animation.
-fn wait_key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
         return;
@@ -48,7 +49,7 @@ fn wait_key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x68146 : attend la fin de l'animation, puis debout.
-fn end_stance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn end_stance<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u16(ANIM_END) as i16) < 0 {
         set_state_long(x, STANCE);

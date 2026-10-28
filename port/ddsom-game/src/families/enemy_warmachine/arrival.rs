@@ -1,6 +1,7 @@
 //! Type 27, sous-état 0 : arrivée. `+6` = 0 la machine entre en roulant par le bord de l'écran, 2 et 4 elle attend
 //! (boîte de portée du joueur) avant de se mettre debout.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -67,7 +68,7 @@ fn roll_in(x: &mut Cx) {
 }
 
 /// 0x77f48 : début du bond d'arrivée (poussée verticale ±0x20, animation 9).
-pub(super) fn leap_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn leap_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x1e);
     x.set16(TIMER2, 0);

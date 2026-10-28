@@ -1,6 +1,7 @@
 //! Type 0, état touché (`+4 = 4`, 0x567ca). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 seconde table de réactions, 8 saisie par un joueur (le Kobold s'enfuit).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -195,7 +196,7 @@ fn run_away(x: &mut Cx) {
 }
 
 /// 0x56b42 : le Kobold court vers le bord de l'écran (animation 0x16).
-fn run_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);
     set_angle(x);

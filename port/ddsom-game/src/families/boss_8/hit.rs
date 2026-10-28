@@ -1,6 +1,7 @@
 //! Boss 8, état 4 « touché » (0x89292). Groupes `+5` : 0 réaction (routine commune des ennemis choisie par le code de coup
 //! `+0x49` dans la table de longs 0x89330), 2 projeté, 4 chute, 6 mort, 8 et 10 retour au combat.
 
+use crate::families::cx::Banc;
 use super::aids;
 use super::*;
 use crate::objects::Courant;
@@ -27,7 +28,7 @@ fn step(x: &mut Cx, table: u32) -> u32 {
     dispatch(x, table, f::SUB2)
 }
 
-fn paused<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 

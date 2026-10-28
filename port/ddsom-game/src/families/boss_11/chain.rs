@@ -5,12 +5,13 @@
 //! Un anneau est un objet ESHL de type 5 : `+0x2f` rang, `+0x42` et `+0x43` orientation et inclinaison (0 à 31), `+0x12` mot
 //! d'état. Les recherches de voisin (0x8f482, 0x8f4a2) parcourent le pool sans autre contrôle que le rang.
 
+use crate::families::cx::Banc;
 use super::*;
 
 const FIRST_SEGMENT: u32 = 0xffbc5e;
 const LAST_SEGMENT: u32 = 0xffca3e;
 
-fn flip8<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn flip8<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     if x.u8(f::FLIP) != 0 { 0x18 } else { 8 }
 }
 
@@ -98,7 +99,7 @@ pub(super) fn update(x: &mut Cx) {
     x.set16(SAVE_Y, c);
 }
 
-fn put8<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, a: u32, v: u8) {
+fn put8<R: Banc>(x: &mut Cx<'_, R>, a: u32, v: u8) {
     wr8(x.b, a, v);
 }
 
@@ -281,7 +282,7 @@ fn rows_a(x: &mut Cx, row: u32) -> bool {
 }
 
 /// Angles de départ de la ligne (octets +6 et +7), retournés si le serpent regarde à gauche.
-fn base_angles<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, row: u32) -> (u16, u16) {
+fn base_angles<R: Banc>(x: &mut Cx<'_, R>, row: u32) -> (u16, u16) {
     let mut d1 = x.data8(row + 6) as u16;
     let mut d2 = x.data8(row + 7) as u16;
     if x.u8(f::FLIP) != 0 {

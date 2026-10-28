@@ -1,6 +1,7 @@
 //! Type 1, état touché (`+4 = 4`, 0x58ca6). `+5` : 0 et 6 réaction commune par table (`+0x49`),
 //! 2 recul (riposte possible), 4 chute, 8 fuite hors de l'écran, 10 rien.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -91,7 +92,7 @@ fn recoil(x: &mut Cx) {
 
 // --- sous-état 4 : chute --------------------------------------------------------------------------
 
-fn down<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

@@ -1,6 +1,7 @@
 //! Type 3, sous-états 4 (tirs, `+6` = 0 premier geste choisi dans la rangée de difficulté, 2 second geste, 4 fuite
 //! d'arrivée) et 6 (pas de côté et sauts).
 
+use crate::families::cx::Banc;
 use super::stance::stance_begin;
 use super::*;
 use crate::objects::Courant;
@@ -27,7 +28,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x5c8aa : le demi-tour du sous-état 12.
-fn turn_to_resume<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn turn_to_resume<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     mv(x, 3);
 }
@@ -253,7 +254,7 @@ fn second(x: &mut Cx) {
 }
 
 /// Vitesses d'un saut : vers le haut 0x200, en avant 0x280 (inversé si l'orientation est non nulle).
-fn jump_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(Obj::VZ, 0x200);
     x.set16(Obj::VX, 0x280);
     x.set16(Obj::AX, 0);
@@ -263,7 +264,7 @@ fn jump_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c5f6 : élan latéral (vitesse 0xb, animation 2) pendant `0x23` images.
-fn dash_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn dash_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(TIMER, 0x23);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {

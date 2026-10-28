@@ -1,6 +1,7 @@
 //! Type 15, état touché (`+4 = 4`, 0x6e61a). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 seconde table de réactions, 8 saisie par un joueur. Zone et ombre sont toujours testées.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -30,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Recul (0x6e738).
-fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

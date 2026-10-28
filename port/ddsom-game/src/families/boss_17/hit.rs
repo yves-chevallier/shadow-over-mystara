@@ -8,6 +8,7 @@
 //! | 6, 8 | mort : chute, envol, fin (`+6` = 0 à 10) |
 //! | 10 | fin de relevé (reprend le milieu de `+5` = 4) |
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -39,7 +40,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x975cc : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
-fn out_of_hp<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }
@@ -221,7 +222,7 @@ fn get_up(x: &mut Cx) {
     }
 }
 
-fn body_hurt<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body_hurt<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     body(x, n);
 }
 

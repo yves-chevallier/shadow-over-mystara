@@ -1,6 +1,7 @@
 //! Effets des joueurs (classe PEFF, pool de 48 objets de 0x60 octets, table 0x39992), première série.
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use super::peff_boutique;
@@ -28,7 +29,7 @@ mod badge {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let variant = x.u8(0x3) as u32;
         let column = x.rom16(COLUMNS + 2 * variant);

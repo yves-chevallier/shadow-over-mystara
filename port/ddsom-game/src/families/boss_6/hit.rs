@@ -8,6 +8,7 @@
 //! | 6, 8 | mort : chute, atterrissage, clignotement, libération |
 //! | 10 | reprise |
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -38,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x859d8 : plus de PV ? Passe alors au groupe 6 (mort).
-fn out_of_hp<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }

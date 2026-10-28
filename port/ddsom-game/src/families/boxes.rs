@@ -40,6 +40,7 @@ const OMBRES: u8 = 0x35;
 /// caisse (sous-état 4 : elle suit ses mains), la lancer (6 : vol, rebond sur le bord de l'écran,
 /// casse à l'atterrissage) ou la lâcher (8 : chute).
 pub mod caisse {
+use crate::families::cx::Banc;
 use crate::objects::Courant;
     use crate::families::cx::{handlers, Cx};
     use crate::mem::A5;
@@ -168,24 +169,24 @@ use crate::objects::Courant;
     }
 
     /// Cible du saut par table `move.w (table,PC,D0.w),D1.w ; jmp` pour l'indice `i` (`hors_table`).
-    fn saut<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
+    fn saut<R: Banc>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
         let w = x.rom16(table + i as u32);
         table.wrapping_add(w as i16 as i32 as u32)
     }
 
     /// Classe du joueur lié (`+3 >> 1`).
-    fn classe<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u8 {
+    fn classe<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
         let joueur = x.linked(f::JOUEUR);
         joueur.u8(x.b, j::CLASSE) >> 1
     }
 
-    fn compte_cassee<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn compte_cassee<R: Banc>(x: &mut Cx<'_, R>) {
         let n = crate::mem::rd8(x.b, CASSEES).wrapping_add(1);
         crate::mem::wr8(x.b, CASSEES, n);
     }
 
     /// `0xda082` : recopie la fiche de la variété (10 octets) et tire deux butins au hasard.
-    fn charge_fiche<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn charge_fiche<R: Banc>(x: &mut Cx<'_, R>) {
         let variante = x.u8(f::VARIANTE) as u32;
         let fiche = x.data32(rom::FICHES + 4 * variante);
         let champs = [f::SORTE, f::VERROU, f::BUTIN_HAUT, f::BUTIN_BONUS, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68];
@@ -272,7 +273,7 @@ use crate::objects::Courant;
 
     /// Intacte : un coup (`COUP_B`) la fait passer à l'état « touchée » ; un coffre se met aussitôt à
     /// trembler.
-    fn intacte<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn intacte<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::COUP_B) == 0 {
             return;
         }
@@ -319,7 +320,7 @@ use crate::objects::Courant;
 
     /// Crée l'ITEM `butin` (type et variante lus dans `BUTINS`) au-dessus de la caisse, lancé avec
     /// les vitesses `(vx, vy)`. `None` si le pool d'ITEM est plein.
-    fn cree_butin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, butin: u8, vx: u16, vy: u16) -> Option<Obj> {
+    fn cree_butin<R: Banc>(x: &mut Cx<'_, R>, butin: u8, vx: u16, vy: u16) -> Option<Obj> {
         let n = x.alloc(&pools::ITEM)?;
         let rang = 2 * butin as u32;
         n.set_u8(x.b, f::ACTIVE, 1);
@@ -344,7 +345,7 @@ use crate::objects::Courant;
 
     /// `0xda152` : la caisse brisée lâche son butin (une seule fois) : un objet au centre, un selon la
     /// classe du joueur qui a frappé (lancé à droite) et un tiré au hasard (lancé à gauche).
-    fn lache_butin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn lache_butin<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::BUTIN_LACHE) != 0 {
             return;
         }
@@ -365,7 +366,7 @@ use crate::objects::Courant;
     }
 
     /// `0xda0e6` : le butin bonus, une seule fois.
-    fn lache_bonus<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn lache_bonus<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::BONUS_LACHE) != 0 {
             return;
         }
@@ -377,7 +378,7 @@ use crate::objects::Courant;
     }
 
     /// Clignotement final : compte à rebours `DELAI`, la caisse clignote ; à zéro, état suivant.
-    fn clignote<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn clignote<R: Banc>(x: &mut Cx<'_, R>) {
         let reste = x.u8(f::DELAI).wrapping_sub(1);
         x.set8(f::DELAI, reste);
         if reste == 0 {
@@ -413,7 +414,7 @@ use crate::objects::Courant;
 
     /// Touchée, sous-sous-état 4 : le coffre tremble (±2 en X, ±1 en Y une image sur deux), puis
     /// reprend sa place.
-    fn tremble<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn tremble<R: Banc>(x: &mut Cx<'_, R>) {
         let reste = x.u8(f::DELAI).wrapping_sub(1);
         x.set8(f::DELAI, reste);
         if reste == 0 {
@@ -484,7 +485,7 @@ use crate::objects::Courant;
 
     /// Ouverte, sous-sous-état 2 (`0xd9c5a`) : délai, puis clignotement ; ouverte par la classe 3, un
     /// nouveau coup lâche le bonus puis brise la caisse (ou fait clignoter le coffre).
-    fn ouverte_attente<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn ouverte_attente<R: Banc>(x: &mut Cx<'_, R>) {
         let reste = x.u8(f::DELAI).wrapping_sub(1);
         x.set8(f::DELAI, reste);
         if reste == 0 {
@@ -509,12 +510,12 @@ use crate::objects::Courant;
     }
 
     /// `moveq #2,D0 ; moveq #0,D1 ; jsr 0xab7d8` : gerbe d'éclats de la caisse.
-    fn eclats<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn eclats<R: Banc>(x: &mut Cx<'_, R>) {
         effects_creators::debris(x.b, x.o, 2);
     }
 
     /// `0xb1352` : étincelle posée sur la caisse ; `None` si le pool est plein.
-    fn etincelle_posee<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variante: u8) -> Option<Obj> {
+    fn etincelle_posee<R: Banc>(x: &mut Cx<'_, R>, variante: u8) -> Option<Obj> {
         effects_creators::posed_spark(x.b, x.o, variante)
     }
 
@@ -588,7 +589,7 @@ use crate::objects::Courant;
     }
 
     /// Avance en X et Z (`0x1da6`) ; rend Z.
-    fn avance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> i16 {
+    fn avance<R: Banc>(x: &mut Cx<'_, R>) -> i16 {
         x.move_xz();
         x.u16(f::Z) as i16
     }
@@ -642,7 +643,7 @@ use crate::objects::Courant;
 
     /// Lancée, 4 : le coffre retombe après son rebond ; posé, il redevient intact (ou, ouvert par la
     /// classe 3, attend son clignotement en lâchant le bonus).
-    fn lancee_retombe<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn lancee_retombe<R: Banc>(x: &mut Cx<'_, R>) {
         if avance(x) >= 0 {
             return reste_a_l_ecran(x);
         }
@@ -660,7 +661,7 @@ use crate::objects::Courant;
 
     /// `0xd9f06` : la caisse reste entre les bords de l'écran (X de la caméra + 0x18 à + 0x168) ; sa
     /// position devient sa nouvelle origine.
-    fn reste_a_l_ecran<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn reste_a_l_ecran<R: Banc>(x: &mut Cx<'_, R>) {
         let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
         let cam_x = x.a5_u16(if cam2 { 0x556 } else { 0x506 });
         let gauche = cam_x.wrapping_add(0x18);
@@ -680,7 +681,7 @@ use crate::objects::Courant;
     }
 
     /// Lâchée, 2 : chute ; au sol, un coffre sans effet spécial redevient intact, sinon la caisse attend.
-    fn lachee_chute<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn lachee_chute<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_z();
         if x.u16(f::Z) as i16 >= 0 {
             return;
@@ -910,6 +911,7 @@ gestionnaire!(BOX_2, decor::ENTREE, "box_decor", box_2);
 /// 2) et prévient son SET. Variante 1 : glisse en hauteur (`+0x10`) et se recale sur le décor à chaque pas.
 /// Le joueur poussant est replacé contre le bloc (décalage par personnage et direction).
 pub mod pousse {
+use crate::families::cx::Banc;
 use crate::objects::Courant;
     use crate::families::cx::{handlers, Cx};
     use crate::objects::{pools, Obj};
@@ -983,14 +985,14 @@ use crate::objects::Courant;
         }
     }
 
-    fn init_commun<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, mobile: u8) {
+    fn init_commun<R: Banc>(x: &mut Cx<'_, R>, mobile: u8) {
         x.add8(0x4, 2);
         x.set8(0x0, 1);
         x.set8(0x2e, 0x35);
         x.set8(f::MOBILE, mobile);
     }
 
-    fn init_0<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init_0<R: Banc>(x: &mut Cx<'_, R>) {
         init_commun(x, 1);
         x.set16(0x8, 0x234);
         x.set16(0x10, 0x290);
@@ -1005,13 +1007,13 @@ use crate::objects::Courant;
         x.set16(f::SET, set.0 as u16);
     }
 
-    fn init_1<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init_1<R: Banc>(x: &mut Cx<'_, R>) {
         init_commun(x, 0);
         x.anim_start(ANIMATIONS, 6);
     }
 
     /// Le joueur poussant (A1), s'il est toujours en train de pousser ; sinon le bloc l'oublie.
-    fn pousseur<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+    fn pousseur<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         if x.u16(f::JOUEUR) == 0 {
             return None;
         }
@@ -1028,7 +1030,7 @@ use crate::objects::Courant;
     }
 
     /// Replace le joueur contre le bloc sur l'axe `axe` (+8 ou +0x10).
-    fn recale_joueur<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, axe: u32, table: u32) {
+    fn recale_joueur<R: Banc>(x: &mut Cx<'_, R>, axe: u32, table: u32) {
         let joueur = x.linked(f::JOUEUR);
         let v = x.u16(axe);
         joueur.set_u16(x.b, axe, v);
@@ -1038,7 +1040,7 @@ use crate::objects::Courant;
     }
 
     /// Variante 0 : glissement en X entre les bornes.
-    fn actif_0<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn actif_0<R: Banc>(x: &mut Cx<'_, R>) {
         let px = x.u16(0x8);
         if px > x.u16(f::X_MAX) || px <= x.u16(f::X_MIN) {
             x.add8(0x5, 2);

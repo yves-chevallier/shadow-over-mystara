@@ -1,6 +1,7 @@
 //! Type 11, sous-états 0 et 2 : le Golem debout, piloté par les touches du quatrième joueur (`A5+3`).
 //! `+6` = 0 marche (croix : X, profondeur), bouton 4 : coup, bouton 5 : saut ; `+6` = 2 : saut en arc.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -56,7 +57,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// +6 = 2 : saut en arc (vitesse verticale 0x800).
-fn arc<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn arc<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set32(Obj::VX, 0);
         x.add8(f::SUB3, 2);

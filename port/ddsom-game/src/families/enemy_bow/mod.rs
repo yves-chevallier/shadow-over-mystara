@@ -15,6 +15,7 @@
 //! Animations 0x16032c (mouvements) et 0x160350 (tirs). Le Bow Gnoll n'a pas de test « joueur en vie » : l'attente
 //! (`+5` = 10) revient au sous-état 2 quand le compte `+0x6e` est écoulé.
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -87,7 +88,7 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Démarre l'animation `n` du jeu des mouvements.
-pub(self) fn mv<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
@@ -96,18 +97,18 @@ pub(self) fn shot(x: &mut Cx, n: u32) {
     x.anim_start(SET_SHOT, n as u16);
 }
 
-pub(self) fn set_speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// 0x5ce22 : direction de marche selon l'orientation (0xc à gauche, 4 à droite).
-pub(self) fn face_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn face_angle<R: Banc>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 4 } else { 0xc };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
-pub(self) fn walk_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn walk_angle<R: Banc>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
@@ -173,7 +174,7 @@ pub(self) fn follow_up(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// Faux si le jeu est en pause (rien n'est fait) ; sinon le corps de l'état actif suit dans la même image.
-fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn init<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if paused(x) {
         return false;
     }

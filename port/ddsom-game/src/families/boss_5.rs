@@ -16,6 +16,7 @@
 //!
 //! Animations : 0x175da6 (corps), 0x175dc4 (attaques), 0x175e0c (chute, mort).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -60,26 +61,26 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// 0x83dfe, 0x83e12, 0x83e28 : démarre le script `n` d'un des trois jeux d'animations.
-fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 0);
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn attack_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn attack_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 1);
     x.anim_start(SET_ATTACK, n as u16);
 }
 
-fn fall_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn fall_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 2);
     x.anim_start(SET_FALL, n as u16);
 }
 
 /// 0x83dde : fige-la un cran d'animation demandé par `+0x91` (bit 7 = demande).
-fn take_frame_request<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn take_frame_request<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(DEATH_FLAG);
     if v & 0x80 == 0 {
         return;
@@ -90,7 +91,7 @@ fn take_frame_request<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Index dans les tables de difficulté : `(difficulté & 0xfc) / 2` (mots).
-fn level_index<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn level_index<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     (var::RANK.get(x.b) as u32 & 0xfc) >> 1
 }
 
@@ -102,7 +103,7 @@ fn call_on_list(x: &mut Cx, list: u32, addr: u32) {
     x.c.a[0] = me;
 }
 
-fn step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
@@ -213,7 +214,7 @@ fn intro(x: &mut Cx) {
     }
 }
 
-fn intro_wait_scene<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn intro_wait_scene<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x2e) != 4 {
         return;
     }

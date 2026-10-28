@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), sixième série : types 15 (traînée de l'arme), 16 (bulle d'objet), 18
 //! (pluie de pierres) et 19 (éclair). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
@@ -297,7 +298,7 @@ mod flash {
     }
 
     /// `0x4cfbc` : quatre étincelles de coin, puis l'éclair d'écran.
-    fn spawn_corners<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_corners<R: Banc>(x: &mut Cx<'_, R>) {
         for rank in (0..4u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { break };
             o.set_u8(x.b, 0, 1);

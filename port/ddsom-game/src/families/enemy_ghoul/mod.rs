@@ -15,6 +15,7 @@
 //! Animations : 0x16191c (mouvements) et 0x161930 (coups). `+0xa0/+0xa1` sont des octets d'aspect.
 //! Les sous-états 2, 4, 6 et 8 commencent par la réaction aux drapeaux de coup `+0x8f` (0x60c88).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -70,7 +71,7 @@ pub fn run(x: &mut Cx) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
@@ -78,33 +79,33 @@ fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-fn move_xy<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
 /// L'aspect voulu (`LOOK` et `LOOK_PREV` identiques).
-fn look<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u8) {
+fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
 /// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
-fn set_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
+fn set_angle<R: Banc>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Table de vitesses 0xd puis marche : `ANGLE` puis 0x1b64 avec D0 = `speed`.
-fn set_speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, speed: u32) {
+fn set_speed<R: Banc>(x: &mut Cx<'_, R>, speed: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, speed as u16);
 }
 
 /// Ligne de 32 octets de la difficulté (`A5+0x7f92`).
-fn difficulty_row<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn difficulty_row<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     ((var::RANK.get(x.b) >> 1) << 5) as u32
 }
 
@@ -405,7 +406,7 @@ fn arrival(x: &mut Cx) {
 }
 
 /// 0x5fa56 : l'animation finie, le ghoul se met debout.
-fn end_arrival<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn end_arrival<R: Banc>(x: &mut Cx<'_, R>) {
     if step(x) {
         set_state_long(x, STANCE);
         x.set8(0, 1);
@@ -413,7 +414,7 @@ fn end_arrival<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Clignotement d'arrivée (0x5fbbe), `next` : valeur du mot `+0x42` quand une série est finie.
-fn blink<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, next: u16) {
+fn blink<R: Banc>(x: &mut Cx<'_, R>, next: u16) {
     x.set_bit(1, 1, true);
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
@@ -432,7 +433,7 @@ fn blink<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, next: u16) {
 
 // --- état 6 : libération ------------------------------------------------------------------------
 
-fn dead<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn dead<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0xa6) != 0 {
         let parent = x.linked(0xa4);
         let n = parent.u8(x.b, 0xaf).wrapping_sub(1);

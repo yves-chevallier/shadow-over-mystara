@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), troisième série : types 2 à 5 (aura de maintien, coup, soin, lumière).
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
@@ -258,7 +259,7 @@ mod cure {
     }
 
     /// `0x4ab82` : étincelle (variante 1) ; le compteur `+0x5f` tourne sur 8.
-    fn spawn_spark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_spark<R: Banc>(x: &mut Cx<'_, R>) {
         if let Some(o) = x.alloc(&pools::PEFF) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 4);
@@ -269,7 +270,7 @@ mod cure {
         }
     }
 
-    fn spark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spark<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_z();
         let fin = x.anim_step();
         if x.u8(0x2f) == 0 {

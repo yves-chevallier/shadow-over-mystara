@@ -1,6 +1,7 @@
 //! Type 5, coups (`+5 = 4`). `+6` : 0 et 2 coups de griffe, 4, 10 et 12 bonds-coups, 6 reprise de la marche,
 //! 8 attente en garde, 14 et 16 approche rapide. `+7` est l'étape.
 
+use crate::families::cx::Banc;
 use super::stance::begin_walk;
 use super::*;
 use crate::objects::Courant;
@@ -129,7 +130,7 @@ fn guard(x: &mut Cx) {
 }
 
 /// Début d'une approche : marche vers l'avant (animation 2) pendant `0x18` images.
-fn begin_charge<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn begin_charge<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     look(x, 6);
     x.set8(VULNERABLE, 1);

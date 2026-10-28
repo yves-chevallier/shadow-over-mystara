@@ -18,6 +18,7 @@
 //! Les choix d'attaque (tirages dans les tables de la ROM selon la phase `+0xaa`) et les états qu'ils posent sont
 //! dans `decide`. Animations : 0x17557e (corps), 0x175596 (vol et attaques), 0x1755ae (coups reçus).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -75,16 +76,16 @@ pub(self) const SET_AIR: u32 = 0x175596;
 pub(self) const SET_HURT: u32 = 0x1755ae;
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
-pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn air<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn air<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_AIR, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
-pub(self) fn kind<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, k: u8) {
+pub(self) fn kind<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
@@ -100,17 +101,17 @@ pub(self) fn expired(x: &mut Cx, off: u32) -> bool {
 }
 
 /// Au moins un joueur en vie (0x10474).
-pub(self) fn alive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
 /// Le double `off` (`movea.w (off,A0),A1`).
-pub(self) fn double<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
+pub(self) fn double<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
     x.linked(off)
 }
 
 /// Demande au premier double de rejouer son geste (`+0xb6` du double).
-pub(self) fn cue_double<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn cue_double<R: Banc>(x: &mut Cx<'_, R>) {
     let d = double(x, DOUBLE_A);
     d.set_u8(x.b, 0xb6, 1);
 }
@@ -135,7 +136,7 @@ pub(self) fn flap(x: &mut Cx) {
 }
 
 /// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0` : vitesse (mot) en long à 8 bits de fraction.
-pub(self) fn speed_long<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> u32 {
+pub(self) fn speed_long<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> u32 {
     let v = ((x.u16(off) as i16 as i32) << 8) as u32;
     v
 }
@@ -222,7 +223,7 @@ fn init(x: &mut Cx) {
 
 /// Crée un double ENEMY de type `kind` (le pool est attendu tant qu'il est plein) et le lie au boss (`link`).
 /// `life` : (retrait, minimum, jeu de boîtes) pour un double qui a ses propres PV.
-fn spawn_double<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
+fn spawn_double<R: Banc>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
     let Some(d) = alloc_retry(x, &pools::ENEMY) else { return };
     d.set_u8(x.b, 0, 1);
     d.set_u8(x.b, 2, kind);

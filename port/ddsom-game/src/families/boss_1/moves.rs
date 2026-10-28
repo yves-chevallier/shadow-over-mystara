@@ -1,5 +1,6 @@
 //! Boss 1, état actif : arrivée (`+5` = 0), combat (2), attaques (4), attente (6 à 10), saisie (12).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -322,7 +323,7 @@ fn hop_walk(x: &mut Cx, second: bool) {
 }
 
 /// Animation `k` du bond, à partir de la première animation du sens (`+0xb4`).
-fn hop_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, k: u8) {
+fn hop_anim<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
     let n = k.wrapping_add(x.u8(HOP_ANIM));
     body(x, n as u32);
 }

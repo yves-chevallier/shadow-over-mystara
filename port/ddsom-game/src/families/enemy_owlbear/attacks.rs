@@ -3,6 +3,7 @@
 //! Chaque coup commence par la préparation (`+7 = 0`) et le suivi du regard (`+7 = 2`), puis ses
 //! étapes propres. La fin du coup appelle `next_move`, qui enchaîne une charge ou remet la bête debout.
 
+use crate::families::cx::Banc;
 use super::stance::{next_move, pursue_tail, ready, walk_begin};
 use super::*;
 use crate::objects::Courant;
@@ -67,7 +68,7 @@ fn chain(x: &mut Cx, resume: u32, later: impl FnOnce(&mut Cx, u8)) {
 }
 
 /// 0x5e0ba / 0x5e624 : suit la cible du regard pendant `+0x77` images.
-fn track<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, resume: u32) {
+fn track<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
     let n = x.u8(AI_KICK).wrapping_sub(1);
     x.set8(AI_KICK, n);
     if (n as i8) < 0 {
@@ -88,13 +89,13 @@ fn strike_play(x: &mut Cx, want: u8, n: u32) {
 }
 
 /// Un temps d'attente avant de continuer (`+0xa0` images), puis étape suivante.
-fn pause<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, frames: u8) {
+fn pause<R: Banc>(x: &mut Cx<'_, R>, frames: u8) {
     x.add8(0x7, 2);
     x.set8(TIMER, frames);
 }
 
 /// Attend la fin du délai en avançant (0x5e17e, 0x5e2ea).
-fn walk_on<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn walk_on<R: Banc>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if t != 0 {
@@ -193,7 +194,7 @@ fn leap_at(x: &mut Cx, vx: i16) {
 }
 
 /// 0x5e222 : attend l'image-clé du saut.
-fn leap_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn leap_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
@@ -202,7 +203,7 @@ fn leap_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'un saut avec choc au sol (0x5e238) : poussière et recul.
-fn leap_land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn leap_land<R: Banc>(x: &mut Cx<'_, R>) {
     if !x.move_xz().gt() {
         lib::sound(x, 0xecb26);
         lib::sound(x, 0xecdba);
@@ -325,7 +326,7 @@ fn leap_high(x: &mut Cx) {
 // --- courses (+6 = 8, 10, 16, 18) ------------------------------------------------------------------
 
 /// 0x5e318 : prend son élan en courant vers le côté voulu.
-fn run_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(TIMER, 0x42);
     x.set8(VULNERABLE, 1);
@@ -425,7 +426,7 @@ fn rush_b(x: &mut Cx) {
 // --- seconde série (sous-état 6) ----------------------------------------------------------------
 
 /// 0x5e64a : petit bond en avant.
-fn hop_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn hop_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     let vx = if x.u8(f::FLIP) != 0 { -0x200 } else { 0x200 };
     x.set16(0x14, vx as u16);
@@ -439,7 +440,7 @@ fn hop_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5e690 : attend l'image-clé du petit bond.
-fn hop_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn hop_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
     }
@@ -485,7 +486,7 @@ fn hop_end(x: &mut Cx) {
 }
 
 /// 0x5e750 : course vers le côté de la cible.
-fn run_toward_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn run_toward_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     let right = match target_dx(x) {
         Some(dx) => dx >= 0,

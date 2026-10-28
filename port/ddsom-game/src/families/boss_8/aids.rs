@@ -1,5 +1,6 @@
 //! Boss 8 : aides communes (choix d'un joueur, balayage des joueurs, positions, choix de l'attaque suivante).
 
+use crate::families::cx::Banc;
 use crate::objects::Obj;
 use super::*;
 use crate::machine::Machine;
@@ -11,7 +12,7 @@ pub(super) fn lsr_w(x: &mut Cx, n: usize, k: u32) {
 }
 
 /// 0x89788 : phases de l'affrontement selon le mode de jeu `A5+0x5a` et le nombre de joueurs `+0xad`.
-pub(super) fn phase<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn phase<R: Banc>(x: &mut Cx<'_, R>) {
     let mode = var::SCENE_LEVEL.get(x.b);
     if mode == 0 {
         return;
@@ -35,7 +36,7 @@ pub(super) fn phase<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     calm(x)
 }
 
-fn calm<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn calm<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x43, 1);
     x.set8(SLOW, 0);
 }
@@ -108,7 +109,7 @@ pub(super) fn scan(x: &mut Cx, exactly_one: bool, d0: i16, d1: u16, d2: u16) -> 
 }
 
 /// 0x8a2c6 : vrai si le boss ne regarde pas son adversaire (`+0x50`) et qu'une animation est en cours (`+0xa3`).
-pub(super) fn must_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(super) fn must_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(ANIM_LAST) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -135,7 +136,7 @@ pub(super) fn must_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool
 }
 
 /// 0x8a368 : réapparition à un des 32 points tirés dans la table 0x8a384.
-pub(super) fn random_spot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn random_spot<R: Banc>(x: &mut Cx<'_, R>) {
     let alea = x.random();
     let i = alea & 0x7c;
     let px = x.rom16(0x8a384 + i as u32);
@@ -145,7 +146,7 @@ pub(super) fn random_spot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8a404 : pas de côté tiré dans la table 0x8a422.
-pub(super) fn random_sidestep<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn random_sidestep<R: Banc>(x: &mut Cx<'_, R>) {
     let alea = x.random();
     let i = alea & 0xe;
     let mut d = x.rom16(0x8a422 + i as u32);
@@ -156,7 +157,7 @@ pub(super) fn random_sidestep<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8a49a : ramène le boss dans l'aire de jeu (x de 0x20 à 0x160, y de 0x148 à 0x186).
-pub(super) fn clamp<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn clamp<R: Banc>(x: &mut Cx<'_, R>) {
     let y = x.u16(0x10);
     if Fl::sub16(y, 0x148).gt() {
         if !Fl::sub16(y, 0x186).lt() {
@@ -205,7 +206,7 @@ pub(super) fn dodge_nearby(x: &mut Cx) {
 }
 
 /// 0x8a666 : un point de chute tiré dans une table choisie selon le quart d'écran où se trouve le boss.
-pub(super) fn dodge_spot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn dodge_spot<R: Banc>(x: &mut Cx<'_, R>) {
     let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let dy = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     let right = Fl::sub16(dx, 0xc0).gt();

@@ -1,5 +1,6 @@
 //! Type 0, sous-état 2 : debout. `+6` : 0 et 8 approche et choix d'un geste, 2 demi-tour, 4 attente, 6 course.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -138,7 +139,7 @@ fn far_attack(x: &mut Cx) -> bool {
 
 // --- +6 = 2 : demi-tour --------------------------------------------------------------------------------------
 
-fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -159,7 +160,7 @@ fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : attente -----------------------------------------------------------------------------------------
 
-fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -221,7 +222,7 @@ fn run_up(x: &mut Cx) {
 }
 
 /// 0x5583c : début de la course.
-fn run_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);
     mv(x, 0x16);

@@ -7,6 +7,7 @@
 //! | 2 | bond vers un point calculé (vitesses de saut tirées d'une distance) |
 //! | 4 | rejoint le joueur visé |
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Obj;
 use crate::objects::Courant;
@@ -74,7 +75,7 @@ fn watch(x: &mut Cx) {
 }
 
 /// 0x91ab8 : le dragon est à plus de 0x80 pixels du centre de la zone (caméra + 0xc0).
-fn far_from_center<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn far_from_center<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let d = var::SCROLL_X.get(x.b).wrapping_add(0xc0).wrapping_sub(x.u16(0x8)) as i16;
     d.wrapping_abs() >= 0x80
 }
@@ -85,7 +86,7 @@ fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 }
 
 /// 0x919b0 : numéro (0 à 3) du quart de PV restant, d'après `+0x62` rapporté à `+0x60`.
-fn quarter<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn quarter<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     let d1 = x.u16(0x60) as u32;
     let d3 = (x.u16(0x62) as u32) << 2;
     let (mut d0, mut d2) = (-1i32, 0u32);
@@ -216,7 +217,7 @@ fn jump(x: &mut Cx) {
 
 /// 0x91b54 : vitesses du bond pour atteindre le centre de la zone : vitesse horizontale 0x100 dans le bon sens,
 /// vitesse verticale 0x100 × (distance × 16 / 0x100).
-fn jump_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
     let d1 = x.rom16(0x91b94);
     let mut d2 = d1 as i16;
     let mut d0 = var::SCROLL_X.get(x.b).wrapping_add(0xc0).wrapping_sub(x.u16(0x8)) as i16;
@@ -265,7 +266,7 @@ fn approach(x: &mut Cx) {
 
 /// 0x91c22 : rejoint par tiers l'altitude `z` (1/4 de l'écart par image) et la profondeur `y` (1/4) ; rend vrai
 /// quand les deux sont atteintes.
-pub(super) fn close_in_zy<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, z: i16, y: i16) -> bool {
+pub(super) fn close_in_zy<R: Banc>(x: &mut Cx<'_, R>, z: i16, y: i16) -> bool {
     let mut reached = 0;
     let dz = z.wrapping_sub(x.u16(0xc) as i16);
     let mut s = dz >> 2;
@@ -292,7 +293,7 @@ pub(super) fn close_in_zy<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, z: i1
 }
 
 /// 0x91c6a : idem pour l'altitude `z` (1/4) et l'abscisse `px` (1/16).
-fn close_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, z: i16, px: u16) -> bool {
+fn close_x<R: Banc>(x: &mut Cx<'_, R>, z: i16, px: u16) -> bool {
     let mut reached = 0;
     let dz = z.wrapping_sub(x.u16(0xc) as i16);
     let mut s = dz >> 2;

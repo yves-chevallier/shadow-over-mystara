@@ -1,18 +1,19 @@
 //! Boss 22, états actifs de déplacement : arrivée (`+5` = 0), combat (2), courses et sauts (6 et 8), pause (10), joueur
 //! saisi (12), transformation (14).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 
 /// Animation du corps `n` pour l'animation `id`, avec les réglages sonores `(0x27, 5)` et une vitesse `speed`.
-fn body_pose<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, id: u8, n: u32, speed_n: u32) {
+fn body_pose<R: Banc>(x: &mut Cx<'_, R>, id: u8, n: u32, speed_n: u32) {
     sounds(x, 0x27, 5);
     pose(x, Set::A, id, n);
     speed(x, speed_n);
 }
 
 /// 0x1a56 : un pas d'animation (la retenue, fin du script, n'est pas utilisée).
-pub(super) fn step_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn step_anim<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
@@ -191,7 +192,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// 0x9b45c : le demi-tour continue tant que le boss est dans l'écran et que la cible est assez proche devant lui.
-fn turn_not_needed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn turn_not_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
         return false;
@@ -278,7 +279,7 @@ fn leap(x: &mut Cx) {
     }
 }
 
-fn leap_pose<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn leap_pose<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     body_pose(x, 3, 4, 0x1f);
 }
@@ -404,7 +405,7 @@ fn spot_wait(x: &mut Cx) {
 }
 
 /// Étape commune des bonds : attend l'image-clé, monte, redescend, retombe.
-fn leap_rise_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn leap_rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
@@ -438,7 +439,7 @@ fn leap_land(x: &mut Cx, f_move: fn(&mut Cx)) {
     start(x, Set::A, 6);
 }
 
-fn leap_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn leap_end<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.set8(VULNERABLE, 1);
         x.set32(f::STATE, state::STAND);
@@ -504,7 +505,7 @@ fn spot_leap_b(x: &mut Cx) {
 // --- groupe 10 : pause ----------------------------------------------------------------------------
 
 /// 0x9ca0a : sans joueur en vie, le boss attend (animation de repos de sa forme) ; sinon il reprend.
-pub(super) fn paused<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn paused<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if second_form(x) {
             return x.set32(f::STATE, 0x0204_1000);
@@ -687,7 +688,7 @@ pub(super) fn transform(x: &mut Cx) {
     }
 }
 
-fn leap_transform<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, up: bool) {
+fn leap_transform<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
     x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };

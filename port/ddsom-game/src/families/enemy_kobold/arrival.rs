@@ -1,6 +1,7 @@
 //! Type 0, sous-état 0 : arrivée. `+6` : 0 et 2 hurlement, 4 bond d'entrée, 6 et 8 saut périlleux (variantes 12 et 13),
 //! 10 chute d'en haut, 12 apparition, 14 course d'arrivée, 16 et 20 réveil, 18 course vers le joueur.
 
+use crate::families::cx::Banc;
 use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Courant;
@@ -161,7 +162,7 @@ fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
 }
 
 /// +6 = 10 : chute d'en haut.
-fn drop_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -188,7 +189,7 @@ fn drop_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 12 : apparition.
-fn appear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn appear<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -214,7 +215,7 @@ fn appear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 14 : course d'arrivée (0x1e images).
-fn run_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -338,7 +339,7 @@ fn get_up(x: &mut Cx) {
 
 /// Clé d'animation : effet `effect` ; en fin de script, le Kobold reprend sa marche un pas en avant (`−0x20`
 /// à droite, `+0x20` à gauche).
-fn landing_hit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn landing_hit<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);

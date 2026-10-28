@@ -5,6 +5,7 @@
 //! jeux de tables de décision, de même charpente : l'état du maître (`+4`) mène à son sous-état
 //! (`+5`), puis à `+6` et au geste en cours `+7`, qui désignent un jeu d'animations de la ROM.
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
@@ -38,7 +39,7 @@ struct Master {
 }
 
 impl Master {
-    fn read<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Master {
+    fn read<R: Banc>(x: &mut Cx<'_, R>) -> Master {
         let m = x.linked(MASTER);
         Master { state: m.u8(x.b, 4), sub: m.u8(x.b, 5), s6: m.u8(x.b, 6), s7: m.u8(x.b, 7) }
     }
@@ -47,7 +48,7 @@ impl Master {
 /// Champ du maître (adresse RAM sur 16 bits).
 const MASTER: u32 = 0xb2;
 
-fn play<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, play: Play) {
+fn play<R: Banc>(x: &mut Cx<'_, R>, play: Play) {
     match play {
         Anim(set) => lib::animation_of_master(x, set),
         Hit(set) => lib::animation_of_mark(x, set),
@@ -69,7 +70,7 @@ fn play<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, play: Play) {
 /// Jeu d'animations des gestes de la Chimère.
 const GESTURES: u32 = 0x16abd6;
 
-fn restart_or_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn restart_or_step<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
         lib::start(x, GESTURES, n);
@@ -78,7 +79,7 @@ fn restart_or_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     }
 }
 
-fn restart_or_step_spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn restart_or_step_spawn<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
         return lib::start(x, GESTURES, n);
@@ -103,7 +104,7 @@ fn restart_or_step_spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32
 /// Perte de PV d'un double qui suit sa propre vie (types 22 et 23) : le gel (`+0x58`) tombe après 20
 /// images ; son ; à 0 PV le double passe en « blessé » (`+0xaf`), le jeu note `dying_code` en `+0x7e`
 /// et crée un effet EFFCT 0x3f de variante `effect_variant`.
-fn hurt<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
+fn hurt<R: Banc>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
     let wait = x.u16(0xb4) as i16;
     if wait > 0 {
         x.set16(0xb4, (wait - 1) as u16);
@@ -133,7 +134,7 @@ fn hurt<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, dying_code: u8, effect_
 
 /// Fin commune : recopie l'état du maître (activité, drapeaux, position décalée de `dy` en
 /// profondeur, orientation, propriétaire) et remet l'objet en liste, sauf s'il vient d'être libéré.
-fn mirror<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, dy: u32) {
+fn mirror<R: Banc>(x: &mut Cx<'_, R>, dy: u32) {
     let master = x.linked(MASTER);
     if master.u8(x.b, 0xad) != 0 {
         x.set8(0x38, 0);
@@ -171,7 +172,7 @@ mod manticore {
     /// Jeu neutre (repos) joué quand le maître est dans un état sans geste propre.
     const REST: u32 = 0x16c2da;
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -261,7 +262,7 @@ mod spectre {
     /// Jeu de repos (normal, blessé).
     const REST: (u32, u32) = (0x16b7c2, 0x16b822);
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -357,7 +358,7 @@ mod chimera {
     /// Jeu de repos (normal, blessé).
     const REST: (u32, u32) = (0x16ac0c, 0x16ac6c);
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -502,7 +503,7 @@ mod dark_warrior_double {
     }
 
     /// Le maître oublie son double, qui crée un effet puis disparaît.
-    fn vanish<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn vanish<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         m.set_u16(x.b, MASTER, 0);
         spawn_effect(x);
@@ -510,7 +511,7 @@ mod dark_warrior_double {
     }
 
     /// 0x77c8a : effet EFFCT 0x32 à la place du double (un pixel plus haut).
-    fn spawn_effect<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_effect<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(e) = x.alloc(&pools::EFFCT) else { return };
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x32);
@@ -535,7 +536,7 @@ mod dark_warrior_double {
     // --- recopies du maître ----------------------------------------------------------------------
 
     /// 0x77cdc : recopie du cadre d'animation (`+0x34` long, `+0x38`) du maître.
-    fn copy_frame<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn copy_frame<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let v = m.u32(x.b, 0x34);
         x.set32(0x34, v);
@@ -544,19 +545,19 @@ mod dark_warrior_double {
     }
 
     /// Hauteur du maître (`+0xc`, mot), puis son cadre.
-    fn copy_height<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn copy_height<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let v = m.u16(x.b, 0xc);
         x.set16(0xc, v);
     }
 
-    fn copy_height_frame<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn copy_height_frame<R: Banc>(x: &mut Cx<'_, R>) {
         copy_height(x);
         copy_frame(x);
     }
 
     /// Les trois vitesses (X, Z, Y : longs en `+0x14`, `+0x18`, `+0x1c`) du maître.
-    fn copy_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn copy_speeds<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         for off in [0x14, 0x18, 0x1c] {
             let v = m.u32(x.b, off);
@@ -565,7 +566,7 @@ mod dark_warrior_double {
     }
 
     /// Vitesses du maître inversées en X et Y (Z conservée), hauteur et cadre (0x777fa, 0x77a34).
-    fn mirror_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn mirror_speeds<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let z = m.u32(x.b, 0x18);
         x.set32(0x18, z);

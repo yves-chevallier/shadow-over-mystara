@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), cinquième série : types 12 (le gel), 13 (bénédiction) et 14 (renvoi).
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
@@ -13,7 +14,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 }
 
 /// Caméra de référence : position (X, Y) de la caméra principale, ou de la secondaire si `A5+0x36`.
-fn camera<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
+fn camera<R: Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
     if x.a5_u8(a5::USE_CAM2) != 0 {
         (x.a5_u16(a5::CAM2_X), x.a5_u16(a5::CAM2_Y))
     } else {

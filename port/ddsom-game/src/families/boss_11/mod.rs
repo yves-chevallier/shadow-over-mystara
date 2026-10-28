@@ -16,6 +16,7 @@
 //!
 //! Animations : 0x17b9c2, 0x17b9d6, 0x17ba32 (type 12) et 0x17c8ca, 0x17c8de, 0x17c93a (type 11), choisies par `play`.
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
@@ -59,12 +60,12 @@ pub(self) fn asr_w(v: u16, k: u32) -> u16 {
 }
 
 /// Les types 12 et 11 se distinguent par l'octet `+2`.
-pub(self) fn is_12<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn is_12<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.u8(2) == 0xc
 }
 
 /// `move.b (0x3e,A0),(0xaa,A0)`.
-pub(self) fn sync<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn sync<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(FRAME_SRC);
     x.set8(FRAME, v);
 }
@@ -162,12 +163,12 @@ pub(self) fn to_attack_7(x: &mut Cx) {
 }
 
 /// 0x8d592 : un anneau manque, le serpent meurt (état 4, groupe 6).
-pub(self) fn lost<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn lost<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0406_0000);
 }
 
 /// 0x8ebd0 : vitesses nulles.
-pub(self) fn stop<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn stop<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -214,7 +215,7 @@ pub fn run(x: &mut Cx) {
 }
 
 /// 0x8d60e : le serpent ne sort pas de l'écran par la gauche ni par le haut.
-fn keep_in_screen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn keep_in_screen<R: Banc>(x: &mut Cx<'_, R>) {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     let mut d0 = rd16(x.b, cam + 8);
     if !Fl::sub16(d0, x.u16(0x8)).le() {
@@ -231,7 +232,7 @@ fn keep_in_screen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8d65a : la position est celle de l'image précédente (recopiée par `chain::update`).
-fn restore<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn restore<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::STATE) == 0 || x.u8(0) == 0 {
         return;
     }
@@ -328,7 +329,7 @@ pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
 }
 
 /// Variante qui range le décalage dans D0 (`move.w (table,PC,D0w),D0w ; jmp (table,PC,D0w)`).
-pub(self) fn dispatch0<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
+pub(self) fn dispatch0<R: Banc>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
     table.wrapping_add(off as i16 as i32 as u32)

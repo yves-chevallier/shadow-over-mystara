@@ -1,6 +1,7 @@
 //! Type 6, état touché (`+4 = 4`, 0x62a54). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 seconde table de réactions, 8 saisie par un joueur (le chien s'enfuit hors de l'écran).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -195,7 +196,7 @@ fn run_away(x: &mut Cx) {
 }
 
 /// 0x62ec0 : le chien court vers le bord de l'écran.
-fn run_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x);
     mv(x, 3);

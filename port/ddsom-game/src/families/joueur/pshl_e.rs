@@ -1,6 +1,7 @@
 //! Tirs des joueurs (PSHL), cinquième série : types 6 (tourbillon du rayon) et 18 (gerbe du clerc).
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
@@ -418,7 +419,7 @@ mod fountain {
     }
 
     /// Crée une braise ou une étincelle liée à la boule (`0x53992`, `0x539b2`).
-    fn spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8, _power: Option<(u8, u8)>) {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>, variant: u8, _power: Option<(u8, u8)>) {
         if let Some(o) = x.alloc(&pools::PSHL) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 0x12);
@@ -427,13 +428,13 @@ mod fountain {
         }
     }
 
-    fn spark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spark<R: Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             x.add8(0x4, 2);
         }
     }
 
-    fn ember<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn ember<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x5a, 0xffff);
         if x.u16(0x5a) == 0 {
             x.add8(0x4, 2);

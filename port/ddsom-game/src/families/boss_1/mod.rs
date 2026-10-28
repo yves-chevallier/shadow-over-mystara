@@ -18,6 +18,7 @@
 //! Les choix d'attaque (tirages dans les tables de la ROM selon la phase `+0xaa`) et les états qu'ils posent sont
 //! ici (`go`). Animations : 0x172794 (corps), 0x1727d4 (attaques), 0x1727e4 (coups reçus).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -79,11 +80,11 @@ pub(self) const SET_HURT: u32 = 0x1727e4;
 pub(self) const THRESHOLDS: u32 = 0x10be2;
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
-pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn attack<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn attack<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK, n);
 }
 
@@ -95,25 +96,25 @@ pub(self) fn kind(x: &mut Cx, k: u8) {
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
 /// Au moins un joueur en vie (0x10474).
-pub(self) fn alive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
 /// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
-pub(self) fn outside<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16) -> bool {
+pub(self) fn outside<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16) -> bool {
     lib::outside_band(x, d0, d1 as i16)
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
-pub(self) fn turn_needed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn turn_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
@@ -138,7 +139,7 @@ pub(self) fn target_obj(x: &mut Cx) -> crate::objects::Obj {
 }
 
 /// Mot de la table de sauts relative au PC `base` pour l'index `i` : adresse de la routine choisie.
-pub(self) fn jump_target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
+pub(self) fn jump_target<R: Banc>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
     base.wrapping_add(x.rom16(base + i) as i16 as u32)
 }
 
@@ -246,7 +247,7 @@ pub(self) fn stand(x: &mut Cx) {
 }
 
 /// 0x7c25a : demi-tour, l'état courant sera repris.
-pub(self) fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -310,7 +311,7 @@ fn grab(x: &mut Cx) {
 }
 
 /// 0x7c358 : bond en ciseaux avec un double.
-pub(self) fn split_leap<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn split_leap<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 2);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(GRAB_TRIES, 0);
@@ -318,7 +319,7 @@ pub(self) fn split_leap<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c372 : plus aucun joueur, attente.
-pub(self) fn idle_alone<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn idle_alone<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
@@ -522,7 +523,7 @@ pub(self) fn puff(x: &mut Cx, n: u8) {
 }
 
 /// 0x7c542 : crée le double (ENEMY 0x1a) du bond en ciseaux, lié au boss par `+0xb0`.
-pub(self) fn spawn_double<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn spawn_double<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(d) = x.alloc(&pools::ENEMY) else {
         x.set16(DOUBLE, 0);
         return;

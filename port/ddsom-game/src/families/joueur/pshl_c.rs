@@ -1,6 +1,7 @@
 //! Tirs des joueurs (PSHL), troisième série : types 12 à 17 (objets lancés des magiciens et du
 //! clerc : jarre, flèches, gerbes de flamme). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
@@ -18,7 +19,7 @@ const COUNTER_15: u32 = 0xff2048;
 const COUNTER_16: u32 = 0xff204a;
 
 /// Décrémente un compteur de la RAM (`subq.w #1`).
-fn decrement<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, address: u32) {
+fn decrement<R: Banc>(x: &mut Cx<'_, R>, address: u32) {
     let v = rd16(x.b, address).wrapping_sub(1);
     wr16(x.b, address, v);
 }

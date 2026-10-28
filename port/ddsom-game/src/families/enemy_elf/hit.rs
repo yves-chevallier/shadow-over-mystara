@@ -1,6 +1,7 @@
 //! Type 12, état touché (`+4 = 4`, 0x6a160). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
 //! 4 chute, 8 saisie par un joueur (l'elfe disparaît).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -34,7 +35,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Sous-état 2 : l'elfe recule (animation 7), puis se remet debout.
-fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -61,7 +62,7 @@ fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 : chute (animation 6), attente couché, relevé.
-fn down<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

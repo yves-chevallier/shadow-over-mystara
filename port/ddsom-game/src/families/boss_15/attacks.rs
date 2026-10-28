@@ -11,6 +11,7 @@
 //! | 12 | monte, rugit (0xa7234 / 0xa727c), descend |
 //! | 14 | plonge sur un joueur et le saisit |
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::mem::{rd16, rts};
 use crate::objects::Obj;
@@ -48,7 +49,7 @@ fn rise_start(x: &mut Cx) {
 }
 
 /// 0x91cec : monte jusqu'à l'altitude 0x300.
-fn rise_up<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn rise_up<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) < 0x300 {
         return;
@@ -89,7 +90,7 @@ fn fall_down(x: &mut Cx) {
 }
 
 /// Le joueur visé (`+0x50`) s'il existe, sinon le dragon attend (0x91748).
-fn target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+fn target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     if x.u16(f::TARGET) == 0 {
         wait(x);
         return None;
@@ -103,7 +104,7 @@ fn target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
 }
 
 /// Rejoint par quarts l'altitude 0x40 et la profondeur du joueur visé ; passe à l'étape suivante à l'arrivée.
-fn reach_player<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn reach_player<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(p) = target(x) else { return };
     let y = p.u16(x.b, 0x10) as i16;
     if fight_close(x, y) {
@@ -111,7 +112,7 @@ fn reach_player<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn fight_close<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, y: i16) -> bool {
+fn fight_close<R: Banc>(x: &mut Cx<'_, R>, y: i16) -> bool {
     super::fight::close_in_zy(x, 0x40, y)
 }
 
@@ -314,7 +315,7 @@ fn sweep(x: &mut Cx) {
 }
 
 /// 0x92036 : fin du souffle, puis lance le vol de sortie.
-fn sweep_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn sweep_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     if !step(x) {
         return;
@@ -332,7 +333,7 @@ fn sweep_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x92066 : s'éloigne jusqu'à sortir de l'écran, puis se replace en haut à droite.
-fn leave<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.move_x();
     let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b)) as i16;
@@ -378,7 +379,7 @@ fn attack_4(x: &mut Cx) {
 }
 
 /// 0x92180 : place le dragon au-dessus de l'écran, selon son type.
-fn dive_position<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn dive_position<R: Banc>(x: &mut Cx<'_, R>) {
     let big = x.u8(TYPE) == TYPE_BIG;
     let px = var::SCROLL_X.get(x.b).wrapping_add(if big { 0x96 } else { 0xc0 });
     x.set16(0x8, px);
@@ -564,14 +565,14 @@ fn attack_14(x: &mut Cx) {
 }
 
 /// 0x9249e : un joueur à portée (0xfc44) est saisi ; rend vrai.
-fn try_seize<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn try_seize<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 7) else { return false };
     lib::seize_player(x, player, 0);
     true
 }
 
 /// 0x931ea : se rapproche du joueur visé de 2 pixels par image en X et en Y (sans le dépasser).
-fn follow<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn follow<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return;
     }

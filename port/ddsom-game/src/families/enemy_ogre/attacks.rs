@@ -3,6 +3,7 @@
 //! Sous-état 4, `+6` : 0 rugissement, 2 et 4 l'ogre s'envole et lance des bras (objets de type 0x2a, variante 1),
 //! 6 bond et chute sur la cible, 8 bras variante 2 : l'ogre monte en suivant le bras, puis redescend.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -57,7 +58,7 @@ fn roar(x: &mut Cx) {
 // --- +6 = 2 et 4 : vol et bras ----------------------------------------------------------------------------
 
 /// 0x70eca : crée le bras (type 0x2a, variante `variant`) lié à l'ogre ; faux si l'allocation échoue.
-fn throw_arm<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: Option<u8>) -> bool {
+fn throw_arm<R: Banc>(x: &mut Cx<'_, R>, variant: Option<u8>) -> bool {
     let Some(arm) = x.alloc(&pools::ESHL) else { return false };
     x.set16(ARM, arm.0 as u16);
     arm.set_u8(x.b, 0, 1);
@@ -74,7 +75,7 @@ fn throw_arm<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: Option<u8
 }
 
 /// 0x70ef8 : l'ogre s'élève.
-fn take_off<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(Obj::VZ, 0x400);
     x.set16(Obj::AZ, 0);
@@ -226,7 +227,7 @@ fn fly_loop(x: &mut Cx) {
 }
 
 /// 0x70fd6 : l'ogre disparaît par le haut, puis reparaît au-dessus du joueur et plonge.
-fn fly_down_from_above<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn fly_down_from_above<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, n);
     if (n as i16) <= 0 {
@@ -442,7 +443,7 @@ fn arm_swing(x: &mut Cx) {
 
 // --- sous-états 6, 8, 10 : repos --------------------------------------------------------------------------
 
-pub(super) fn rest<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::wander(x);
     }

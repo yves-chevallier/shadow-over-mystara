@@ -15,6 +15,7 @@
 //! Animations : 0x177874 (sol), 0x17788c (vol), 0x1778a4 (recul). Les variantes `+3` non nulles sont des
 //! parties liées à l'hôte `+0x46` : elles meurent avec lui (`guard`).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -54,11 +55,11 @@ pub(self) const SET_BODY: u32 = 0x177874;
 pub(self) const SET_FLY: u32 = 0x17788c;
 pub(self) const SET_HURT: u32 = 0x1778a4;
 
-pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn fly<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn fly<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_FLY, n);
 }
 
@@ -83,7 +84,7 @@ pub fn run(x: &mut Cx) {
 }
 
 /// 0x859b2 : une partie liée (variante non nulle) tombe avec son hôte (`+0x46`).
-fn guard<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn guard<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }

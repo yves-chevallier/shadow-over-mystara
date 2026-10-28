@@ -1,5 +1,6 @@
 //! Boss 9, état actif : entrée en scène (`+5` = 0), départ (2), passages et arrêts (4), attente (6).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -113,7 +114,7 @@ pub(super) fn intro(x: &mut Cx) {
 }
 
 /// Abscisse de la caméra du plan de l'engin.
-fn x_cam<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn x_cam<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     x.a5_u16(CAM_X)
 }
 

@@ -5,6 +5,7 @@
 //! Les routines de réaction propres au dragon sont 0x90b26 (coup ordinaire : recul, glissade), 0x90a4c (code 0x68 :
 //! couché), 0x90c34 (0x80) et 0x90a96 (0xa8 : tremblement puis mort).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -257,14 +258,14 @@ fn shake(x: &mut Cx) {
     }
 }
 
-fn shake_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, d0: i16) {
+fn shake_x<R: Banc>(x: &mut Cx<'_, R>, d0: i16) {
     let px = x.u16(0x1a).wrapping_add((d0 >> 2) as u16);
     x.set16(0x8, px);
     let z = x.u16(0x18);
     x.set16(0xc, z);
 }
 
-fn shake_z<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, d0: i16) {
+fn shake_z<R: Banc>(x: &mut Cx<'_, R>, d0: i16) {
     let z = x.u16(0x18).wrapping_add((d0 >> 1) as u16);
     x.set16(0xc, z);
 }
@@ -355,7 +356,7 @@ fn death(x: &mut Cx) {
     }
 }
 
-fn camera_y<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn camera_y<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 {
         var::CAMERA_ALT_Y.get(x.b)
     } else {
@@ -363,7 +364,7 @@ fn camera_y<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
     }
 }
 
-fn set_abs16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, addr: u32, v: u16) {
+fn set_abs16<R: Banc>(x: &mut Cx<'_, R>, addr: u32, v: u16) {
     crate::mem::wr16(x.b, addr, v);
 }
 
@@ -378,7 +379,7 @@ fn fall_start(x: &mut Cx) {
 }
 
 /// Fin de la chute : la caméra est dépassée par le bas, le dragon est libéré.
-fn fall_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn fall_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(0xc) as i16) > -0x100 {
         return;
@@ -386,7 +387,7 @@ fn fall_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     release(x);
 }
 
-fn release<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn release<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, FREE);
 }
 
@@ -415,7 +416,7 @@ fn death_green(x: &mut Cx) {
     }
 }
 
-fn green_fall<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn green_fall<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     let cam_y = camera_y(x);
     let d = x.u16(0x10).wrapping_sub(cam_y).wrapping_add(x.u16(0xc));
@@ -436,7 +437,7 @@ fn green_fall<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     fall_end_green(x);
 }
 
-fn fall_end_green<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn fall_end_green<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(0xc) as i16) > -0x100 {
         return;

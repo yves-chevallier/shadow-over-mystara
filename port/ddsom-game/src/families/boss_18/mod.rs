@@ -14,6 +14,7 @@
 //!
 //! Animations : 0x181ae0 (mouvements), 0x181af2 (coups), 0x181b10 (réactions).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -64,7 +65,7 @@ pub(self) const SET_BODY: u32 = 0x181ae0;
 pub(self) const SET_STRIKE: u32 = 0x181af2;
 pub(self) const SET_HURT: u32 = 0x181b10;
 
-pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 

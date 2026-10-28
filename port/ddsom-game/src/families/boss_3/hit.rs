@@ -8,6 +8,7 @@
 //! | 6 | mort : chute, rebond, effondrement |
 //! | 10 | retour au combat |
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 
@@ -56,7 +57,7 @@ fn reaction(x: &mut Cx) {
 }
 
 /// 0x80bb6 : recul en vol (animation 9) jusqu'à l'arrêt ; il se retrouve à terre.
-fn pushed_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
         x.set8(0x68, 1);
@@ -168,7 +169,7 @@ fn death(x: &mut Cx) {
 }
 
 /// 0x80da2 : chute jusqu'au sol, puis rebond.
-fn falling<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn falling<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     x.move_xz();
     if (x.u16(0xc) as i16) >= 0 {

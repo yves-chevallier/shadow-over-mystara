@@ -13,6 +13,7 @@
 //! - 77 : fondu sonore (deux volumes qui montent par paliers, puis arrêt) ;
 //! - 89 : personnage qui entre par la gauche, attend un signal de la scène et ressort par la droite.
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use crate::mem::{rd32, wr32, A5};
 use crate::objects::Obj;
@@ -44,26 +45,26 @@ const FOCUS: u32 = 0x46;
 const PLAYERS: u32 = A5 + 0x5de;
 
 /// Joueurs présents et vivants.
-fn living_players<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Vec<Obj> {
+fn living_players<R: Banc>(x: &mut Cx<'_, R>) -> Vec<Obj> {
     (0..4)
         .map(|k| Obj(PLAYERS + 0x200 * k))
         .filter(|p| p.u8(x.b, 0) != 0 && p.u16(x.b, 0x62) != 0)
         .collect()
 }
 
-fn free<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn free<R: Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
 /// Pose l'objet sur la caméra, décalé de (dx, dy), au sol.
-fn at_camera<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, dx: u16, dy: u16) {
+fn at_camera<R: Banc>(x: &mut Cx<'_, R>, dx: u16, dy: u16) {
     let (cx, cy) = (x.a5_u16(CAMERA_X), x.a5_u16(CAMERA_Y));
     x.set16(Obj::X, cx.wrapping_add(dx));
     x.set16(Obj::Y, cy.wrapping_add(dy));
 }
 
 /// Copie huit longs de couleurs de la ROM dans la palette, avec l'opacité forcée (`| 0xf000f000`).
-fn load_palette<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, from: u32, to: u32) {
+fn load_palette<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32) {
     for k in 0..8 {
         let v = rd32(x.b, from + 4 * k);
         wr32(x.b, to + 4 * k, v | 0xf000_f000);
@@ -71,7 +72,7 @@ fn load_palette<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, from: u32, to: 
 }
 
 /// Lance la tâche `program` (0x9b6) avec le paramètre D0.w = `param`.
-fn new_task<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, program: u32, param: u16) {
+fn new_task<R: Banc>(x: &mut Cx<'_, R>, program: u32, param: u16) {
     crate::kernel::creer_tache(x.b, param as u32, program);
 }
 
@@ -100,7 +101,7 @@ mod opening {
     pub const CAMERA_STOP: i16 = 0x5cc;
 }
 
-fn opening<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn opening<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => opening_init(x),
         2 => match x.u8(f::SUB_STATE) {
@@ -137,7 +138,7 @@ fn opening<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn opening_init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn opening_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.reinsert_foreground();
     let v = x.u8(f::VARIANT) as u32;
@@ -164,7 +165,7 @@ fn opening_init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Glisse vers la gauche de deux pixels par image jusqu'à l'abscisse d'arrivée.
-fn opening_slide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn opening_slide<R: Banc>(x: &mut Cx<'_, R>) {
     x.add16(Obj::X, 0xfffe);
     let target = x.u16(opening::TARGET);
     if (target as i16) < (x.u16(Obj::X) as i16) {
@@ -185,7 +186,7 @@ fn opening_slide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 /// Met fin (état 6) aux objets des deux pools. Comme l'original, un objet du premier pool marqué
 /// `+0x58` fait finir le parcours avec le corps de la seconde boucle, sur les emplacements restants du
 /// premier pool : le second n'est alors pas parcouru.
-fn clear_scene<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn clear_scene<R: Banc>(x: &mut Cx<'_, R>) {
     let (mut slot, mut left) = (A5 + opening::POOL_A, 32);
     let mut spared = false;
     while left > 0 {
@@ -212,7 +213,7 @@ fn clear_scene<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 3 : délai, puis la scène avance (`A5+0x4ff` + 4).
-fn opening_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn opening_wait<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u16(opening::DELAY).wrapping_sub(1);
     x.set16(opening::DELAY, n);
     if (n as i16) >= 0 {
@@ -305,7 +306,7 @@ fn mirrored_follow(x: &mut Cx) {
     x.reinsert();
 }
 
-fn mirrored_hide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn mirrored_hide<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB_STATE, 0);
     x.set_bit(f::FLAGS, 1, true);
     x.reinsert();
@@ -423,7 +424,7 @@ fn crossing_steps(x: &mut Cx) {
 }
 
 /// Passe à l'étape suivante : délai, animation `anim`, remise en place dans la liste des acteurs.
-fn next_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, anim: u32, timer: u16) {
+fn next_step<R: Banc>(x: &mut Cx<'_, R>, anim: u32, timer: u16) {
     x.add8(f::SUB_STATE, 4);
     x.set16(crossing::TIMER, timer);
     x.anim_start(crossing::ANIM_SET, anim as u16);
@@ -431,7 +432,7 @@ fn next_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, anim: u32, timer: 
 }
 
 /// `subq.w #1,(+0x42)` suivi de `bpl` : vrai quand le délai est épuisé (négatif).
-fn timer_out<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn timer_out<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let n = x.u16(crossing::TIMER).wrapping_sub(1);
     x.set16(crossing::TIMER, n);
     (n as i16) < 0
@@ -450,7 +451,7 @@ mod passage {
     pub const FADE_PROGRAM: u32 = 0x1ced4;
 }
 
-fn passage<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn passage<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -486,7 +487,7 @@ fn passage<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Ouvre le passage : la scène recule de 0x7c8 pixels (joueurs compris), puis un fondu est lancé.
-fn passage_open<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn passage_open<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(passage::FADE) != 0 {
         return;
     }
@@ -510,7 +511,7 @@ fn passage_open<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le fondu fini, crée le boss (type 7) devant la caméra et rend la main à la scène.
-fn passage_boss<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn passage_boss<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(passage::FADE) != 0 {
         return;
     }
@@ -630,13 +631,13 @@ mod start_sign {
     pub const RELOAD: u32 = 0x40;
 }
 
-fn start_sign_palette<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn start_sign_palette<R: Banc>(x: &mut Cx<'_, R>) {
     load_palette(x, start_sign::PALETTE, start_sign::PALETTE_RAM);
     x.set8(0x2a, 1);
     x.set8(0x2b, 0x1c);
 }
 
-fn start_sign<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn start_sign<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -674,7 +675,7 @@ fn start_sign<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Enseigne posée à (0xb0, 0xd0) de la caméra, en hauteur (`+0xc`), profondeur nulle.
-fn at_camera_z<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn at_camera_z<R: Banc>(x: &mut Cx<'_, R>) {
     let (cx, cy) = (x.a5_u16(CAMERA_X), x.a5_u16(CAMERA_Y));
     x.set16(Obj::X, cx);
     x.set16(Obj::Z, cy);
@@ -695,14 +696,14 @@ mod sound_fade {
 }
 
 /// Niveaux du son : commandes de service 0xff08 et 0xff09 (0xe0ad8, 0xe0af8), de paramètre le niveau.
-fn sound_fade_levels<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn sound_fade_levels<R: Banc>(x: &mut Cx<'_, R>) {
     let a = x.u16(sound_fade::LEVEL_A);
     crate::sound::service(x.b, crate::sound::Service::Ff08(a));
     let b = x.u16(sound_fade::LEVEL_B);
     crate::sound::service(x.b, crate::sound::Service::Ff09(b));
 }
 
-fn sound_fade<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn sound_fade<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);

@@ -1,6 +1,7 @@
 //! Type 19, seconde série de coups de la bête (sous-état `+5 = 6`, 0x739b2) : bonds et sauts. Mêmes
 //! étapes communes que `attacks` (préparation, regard), reprise après demi-tour en sous-état 6.
 
+use crate::families::cx::Banc;
 use super::attacks::{phased, pounce_repeat, roll_pounces};
 use super::parts::{bound_land, bound_wait, bound_y_land, bound_y_wait};
 use super::stance::pursue_tail;
@@ -90,7 +91,7 @@ fn side_leap(x: &mut Cx) {
 }
 
 /// Début d'un bond en X de la seconde série (0x73b30) : vitesse `vx`, hauteur `vz`.
-fn leap_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vx: i16, vz: u16, anim: Option<u8>) {
+fn leap_start<R: Banc>(x: &mut Cx<'_, R>, vx: i16, vz: u16, anim: Option<u8>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x1c);
@@ -150,7 +151,7 @@ fn long_leap(x: &mut Cx) {
 }
 
 /// 0x73c5a : recule en rugissant puis se retourne, à terre.
-fn retreat<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn retreat<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         return play(x, 0x18);

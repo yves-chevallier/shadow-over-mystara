@@ -16,6 +16,7 @@
 //! Animations : 0x15faa0 (mouvements) et 0x15fabe (coups). La série 0 (`+0x2f`) clignote après un
 //! coup encaissé : `flicker` (compteurs `+0xa5..+0xa8`, `+0xaa`, `+0xae`).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -93,7 +94,7 @@ pub fn run(x: &mut Cx) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
@@ -101,22 +102,22 @@ fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
 /// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
-fn set_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
+fn set_angle<R: Banc>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-fn move_xy<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
 /// Ligne de 32 octets de la difficulté dans `table` (`A5+0x7f92`).
-fn difficulty_row<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn difficulty_row<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     (((var::RANK.get(x.b) >> 1) << 5) as u32) & 0xffff
 }
 
@@ -171,7 +172,7 @@ fn needs_turn_around(x: &mut Cx) -> bool {
 }
 
 /// 0x5af78 : retour debout ; si la décision 0x79ce le veut, au repos.
-fn back_to_stance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -191,7 +192,7 @@ fn end_attack(x: &mut Cx) {
 }
 
 /// Le clignotement est lancé s'il ne l'est pas déjà (série 0, phase positive).
-fn blink_if_running<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn blink_if_running<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) == 0 && (x.u8(BLINK_PHASE) as i8) > 0 {
         x.set8(BLINK_ON, 1);
         x.set16(BLINK_COUNT, 0xc);
@@ -432,7 +433,7 @@ fn arrival(x: &mut Cx) {
 }
 
 /// 0x59f38 : l'animation d'arrivée finie, le troglodyte se met debout.
-fn end_arrival<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn end_arrival<R: Banc>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.set8(LOOK_PREV, 0xe0);
         set_state_long(x, STANCE);
@@ -441,7 +442,7 @@ fn end_arrival<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5a010 : aspect de repos et animation 0xe.
-fn rest_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn rest_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set8(LOOK_PREV, 1);
     body(x, 0xe);
@@ -449,7 +450,7 @@ fn rest_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 6 : libération ------------------------------------------------------------------------
 
-fn dead<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn dead<R: Banc>(x: &mut Cx<'_, R>) {
     free(x);
 }
 

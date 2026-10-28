@@ -4,6 +4,7 @@
 //! Les tirs naissent d'un créateur (`player/spawn.rs`) qui fixe leur genre, leur propriétaire (`+0x50`),
 //! leurs boîtes (`+0x2e`), la puissance (`+0x45`, `+0x46`) et la vitesse ; le gestionnaire les fait vivre.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
@@ -181,7 +182,7 @@ mod thrown {
     }
 
     /// Animation d'après l'angle `+0x2d` (`0x51f48`).
-    fn pose<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn pose<R: Banc>(x: &mut Cx<'_, R>) {
         let angle = (x.u8(0x2d) & 7) as u32;
         let set = if x.u8(0x2) == 1 { ANIMS_A } else { ANIMS_B };
         x.anim_start(set, angle as u16);

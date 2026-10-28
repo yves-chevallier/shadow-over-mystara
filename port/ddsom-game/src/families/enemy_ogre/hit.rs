@@ -1,6 +1,7 @@
 //! Type 18, état touché (`+4 = 4`, 0x7157e). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 mort en plusieurs temps, 8 fuite (saisi par un joueur), 10 reprise du combat.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -31,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x71e24 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ogre meurt.
-fn death_check<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn death_check<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }

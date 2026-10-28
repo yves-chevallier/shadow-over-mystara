@@ -6,6 +6,7 @@
 //! ci-dessous est un sous-état de l'original, nommé d'après son rôle ; l'adresse d'origine est notée
 //! quand elle aide à retrouver le code.
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Courant;
@@ -47,7 +48,7 @@ mod riyakaa {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(f::STATE, 2);
         x.set8(f::BOX_SET, 0xf);
         lib::initial_hp(x);
@@ -82,7 +83,7 @@ mod riyakaa {
     }
 
     /// Joue l'animation `n` du jeu des mouvements.
-    fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+    fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
         x.anim_start(BODY, n as u16);
     }
 
@@ -92,22 +93,22 @@ mod riyakaa {
     }
 
     /// Choisit la table de vitesses `n`.
-    fn speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+    fn speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
         x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
     }
 
     /// Retour à l'état actif, sous-état 0.
-    fn walk<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn walk<R: Banc>(x: &mut Cx<'_, R>) {
         x.set32(f::STATE, WALK);
     }
 
-    fn toggle_flip<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn toggle_flip<R: Banc>(x: &mut Cx<'_, R>) {
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
     }
 
     /// Décompte un octet et rend sa nouvelle valeur.
-    fn countdown<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> u8 {
+    fn countdown<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> u8 {
         let n = x.u8(off).wrapping_sub(1);
         x.set8(off, n);
         n
@@ -145,7 +146,7 @@ mod riyakaa {
     }
 
     /// Déplacement commun des arrivées : la durée `+0xa2` décomptée, puis retour à la marche.
-    fn fly_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn fly_step<R: Banc>(x: &mut Cx<'_, R>) {
         if countdown(x, 0xa2) == 0 {
             walk(x);
             x.set8(0, 1);
@@ -155,7 +156,7 @@ mod riyakaa {
     }
 
     /// 0x6f2e0 : entre en courant (variantes 0 et 4).
-    fn charge_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn charge_in<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::SUB2) != 0 {
             return fly_step(x);
         }
@@ -179,7 +180,7 @@ mod riyakaa {
     }
 
     /// 0x6f35e : entre en bondissant (variante 6).
-    fn leap_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::SUB2) != 0 {
             return fly_step(x);
         }
@@ -193,7 +194,7 @@ mod riyakaa {
     }
 
     /// 0x6f3aa : début de la chute (jaillit vers le haut puis retombe).
-    fn rise_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn rise_start<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
         x.set8(0x67, 0);
         x.set8(0xa1, 0xe);
@@ -203,7 +204,7 @@ mod riyakaa {
     }
 
     /// 0x6f3d2 : retombe jusqu'au sol.
-    fn rise_fall<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn rise_fall<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_z();
         if (x.u16(0xc) as i16) >= 0 {
             return;
@@ -214,7 +215,7 @@ mod riyakaa {
     }
 
     /// 0x6f3f6 : fin de l'animation d'atterrissage.
-    fn rise_land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn rise_land<R: Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             walk(x);
             x.set8(0, 1);
@@ -222,7 +223,7 @@ mod riyakaa {
     }
 
     /// Variante 2 : tombe du haut de l'écran.
-    fn rise<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn rise<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => rise_start(x),
             2 => rise_fall(x),
@@ -232,7 +233,7 @@ mod riyakaa {
     }
 
     /// Variante 10 : apparaît après 30 images, puis tombe comme la variante 2.
-    fn hover<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn hover<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => {
                 x.set8(0x90, 0x1e);
@@ -395,7 +396,7 @@ mod riyakaa {
     }
 
     /// 0x6f650 : se retourne vers la cible.
-    fn decide_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn decide_turn<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -410,7 +411,7 @@ mod riyakaa {
     }
 
     /// 0x6f694 : attente debout avant de repartir.
-    fn decide_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn decide_wait<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -536,7 +537,7 @@ mod riyakaa {
     }
 
     /// 0x6f85e : course en ligne droite (`+6` = 8 : puis coup, 10 : puis marche).
-    fn dash<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn dash<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 0);
@@ -563,7 +564,7 @@ mod riyakaa {
     }
 
     /// 0x6f8d6 : attend de savoir où aller (`+0xa3` = sous-état à reprendre).
-    fn wait_target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn wait_target<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -582,7 +583,7 @@ mod riyakaa {
         wait_target_follow(x);
     }
 
-    fn wait_target_follow<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn wait_target_follow<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         if (countdown(x, 0x77) as i8) >= 0 {
             return;
@@ -597,7 +598,7 @@ mod riyakaa {
     }
 
     /// 0x6f93e : demi-tour.
-    fn turn_around<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -625,7 +626,7 @@ mod riyakaa {
     }
 
     /// 0x6f990 : cri (si le jeu l'interdit, simple regard).
-    fn roar<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn roar<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x7) {
             0 => {
                 x.add8(0x7, 2);
@@ -756,7 +757,7 @@ mod riyakaa {
     }
 
     /// 0x6fbfc : attente de 16 images.
-    fn chase_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn chase_wait<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -773,7 +774,7 @@ mod riyakaa {
     }
 
     /// 0x6fc44 : court vers sa cible (`+6` = 4 en X, 2 en profondeur).
-    fn chase_run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn chase_run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -841,7 +842,7 @@ mod riyakaa {
     // --- aides communes --------------------------------------------------------------------------
 
     /// 0x700fe : retour à la marche ; un joueur proche déclenche le sous-état 10.
-    fn stand_up<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn stand_up<R: Banc>(x: &mut Cx<'_, R>) {
         walk(x);
         if lib::maybe_draw_6e(x) {
             x.set8(f::SUB, 0xa);
@@ -875,7 +876,7 @@ mod riyakaa {
     }
 
     /// 0x70150 : la cible est-elle derrière lui (il doit se retourner) ?
-    fn needs_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         if x.u16(f::OWNER) == 0 {
             return false;
         }
@@ -959,7 +960,7 @@ mod riyakaa {
     }
 
     /// 0x6ff90 : relève après le coup (`+6` : 0 animation, 2 attente, 4 fin).
-    fn recover<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn recover<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
@@ -1015,7 +1016,7 @@ mod riyakaa {
         }
     }
 
-    fn grab_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn grab_start<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0xae, 1);
         let flipped = x.u8(f::FLIP) != 0;
         let turn = if var::SCENE.get(x.b) == 4 {
@@ -1036,7 +1037,7 @@ mod riyakaa {
     }
 
     /// 0x6fdc0 : s'enfuit en courant, face au sens de la fuite.
-    fn grab_run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn grab_run<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x67, 1);
         x.set8(0x2d, 8);
         if x.u8(f::FLIP) == 0 {

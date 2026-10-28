@@ -16,6 +16,7 @@
 //! Animations : 0x160e26 (mouvements) et 0x160e44 (coups). `+0xa1` est l'animation voulue,
 //! `+0xa2` celle en cours (on ne relance pas la même).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -86,7 +87,7 @@ pub fn run(x: &mut Cx) {
 
 /// Pose l'animation voulue `want` ; lance le script `n` du jeu `set` si ce n'est pas déjà la
 /// courante.
-fn pose<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, want: u8, set: u32, n: u32) {
+fn pose<R: Banc>(x: &mut Cx<'_, R>, want: u8, set: u32, n: u32) {
     x.set8(WANT_ANIM, want);
     if want != x.u8(CUR_ANIM) {
         x.set8(CUR_ANIM, want);
@@ -103,7 +104,7 @@ enum Replay {
 
 /// Comme `pose`, pour un coup répété : si l'animation tourne déjà, une répétition de moins
 /// (`+0xad`), et à zéro la bête se remet debout.
-fn replay<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, want: u8) -> Replay {
+fn replay<R: Banc>(x: &mut Cx<'_, R>, want: u8) -> Replay {
     x.set8(WANT_ANIM, want);
     if want != x.u8(CUR_ANIM) {
         x.set8(CUR_ANIM, want);
@@ -118,7 +119,7 @@ fn replay<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, want: u8) -> Replay {
     Replay::Again
 }
 
-fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
@@ -126,43 +127,43 @@ fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn step<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-fn move_xy<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-fn speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-fn set_state_long<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u32) {
+fn set_state_long<R: Banc>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
 /// Direction de marche selon l'orientation : `flipped` si la bête regarde à gauche (octet `+0x2c` non
 /// nul), `otherwise` sinon.
-fn set_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
+fn set_angle<R: Banc>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Écart d'abscisse de la cible à la bête (positif : la cible est à droite), `None` sans cible.
-fn target_dx<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<i16> {
+fn target_dx<R: Banc>(x: &mut Cx<'_, R>) -> Option<i16> {
     let t = target(x)?;
     Some(t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16)
 }
 
 /// Même chose en profondeur (positif : la cible est plus bas à l'écran).
-fn target_dy<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<i16> {
+fn target_dy<R: Banc>(x: &mut Cx<'_, R>) -> Option<i16> {
     let t = target(x)?;
     Some(t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)) as i16)
 }
 
 /// 0x5f710 : la cible est derrière la bête, elle se retourne.
-fn turn_if_behind<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn turn_if_behind<R: Banc>(x: &mut Cx<'_, R>) {
     if needs_turn(x) {
         set_state_long(x, ACTIVE_TURN);
     }

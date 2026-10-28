@@ -1,6 +1,7 @@
 //! Type 1, squelette debout (`+5 = 2`). `+6` : 0 et 6 début de l'idée (cible, regard), 2 marche,
 //! 4 demi-tour. Une idée qui dure (`+7 != 0`) marche vers la cible et décide d'attaquer.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Obj;
 
@@ -49,7 +50,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x580ae : l'idée commence, le squelette se tourne vers sa cible.
-fn begin_idle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn begin_idle<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     x.set8(AI_SHOT, 0xb);
@@ -83,7 +84,7 @@ fn wait(x: &mut Cx) {
 }
 
 /// `+6 = 4` : demi-tour (animation 1 puis inversion de l'orientation).
-fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         if x.u16(ANIM_STATE) != 0xff {
             move_xy(x);

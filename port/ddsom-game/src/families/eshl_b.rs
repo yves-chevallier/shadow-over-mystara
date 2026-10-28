@@ -6,6 +6,7 @@
 
 
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::mem::{rd32, wr32};
@@ -33,18 +34,18 @@ const DEAD: u32 = 0x0600_0000;
 // ---------------------------------------------------------------------------------------------
 
 /// Propriétaire (mot de 16 bits étendu en signe) d'un autre objet.
-fn link_of<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, o: Obj, off: u32) -> Obj {
+fn link_of<R: Banc>(x: &mut Cx<'_, R>, o: Obj, off: u32) -> Obj {
     Obj(o.u16(x.b, off) as i16 as i32 as u32 & 0xff_ffff)
 }
 
 /// Objet désigné par un champ long (`movea.l (off,A0),A1`).
-fn ptr<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
+fn ptr<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
     Obj(x.u32(off) & 0xff_ffff)
 }
 
 /// Réserve un objet dans le pool dont `alloc` est la routine d'allocation ; `None` si le pool est plein.
 /// L'objet est marqué à libérer à la prochaine image.
-fn kill<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn kill<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(0x4, DEAD);
 }
 
@@ -53,12 +54,12 @@ fn low16(o: Obj) -> u16 {
     o.0 as u16
 }
 
-fn reinsert_foreground<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn reinsert_foreground<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert_foreground();
 }
 
 /// Copie la position (X, Z, Y en 16.16) d'un objet dans le tir.
-fn copy_position32<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, from: Obj) {
+fn copy_position32<R: Banc>(x: &mut Cx<'_, R>, from: Obj) {
     for off in [0x8, 0xc, 0x10] {
         let v = from.u32(x.b, off);
         x.set32(off, v);
@@ -66,7 +67,7 @@ fn copy_position32<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, from: Obj) {
 }
 
 /// Appelle `1b64` (table de vitesses `n`, indexée par `+0x2d`).
-fn speed_table<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn speed_table<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
@@ -101,7 +102,7 @@ mod shot15 {
     }
 
     /// Création : placée devant le propriétaire, selon la variante.
-    fn spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(f::BOX_SET, 7);
         if x.u16(f::OWNER) == 0 {
             return kill(x);
@@ -142,7 +143,7 @@ mod shot15 {
 
     /// Vitesses initiales de la variante 0 : portée entre l'ennemi (propriétaire du propriétaire) et
     /// sa cible, ligne 8, 0x10 ou 0x18 de `SPEEDS`.
-    fn aim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn aim<R: Banc>(x: &mut Cx<'_, R>) {
         let part = x.linked(f::OWNER);
         let enemy = link_of(x, part, f::OWNER);
         let target = link_of(x, enemy, f::OWNER);
@@ -174,7 +175,7 @@ mod shot15 {
     }
 
     /// Recopie la position du propriétaire (décalée devant lui).
-    fn follow<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(f::OWNER) == 0 {
             return;
         }
@@ -205,7 +206,7 @@ mod shot15 {
     }
 
     /// Le propriétaire a fini son attaque (ou est dans l'état 0x402) : l'arme disparaît.
-    fn owner_done<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn owner_done<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let part = x.linked(f::OWNER);
         let enemy = link_of(x, part, f::OWNER);
         if enemy.u16(x.b, 0x4) == 0x402 || enemy.u8(x.b, 0xa8) & 1 != 0 {
@@ -218,7 +219,7 @@ mod shot15 {
 
     /// Vol de la variante 0 : le sens se retourne toutes les 5 images, six phases de rebonds
     /// (vitesses décroissantes), puis clignotement.
-    fn fly<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn fly<R: Banc>(x: &mut Cx<'_, R>) {
         let phase = x.u8(0x6);
         if phase > PHASE_BLINK {
             return;
@@ -261,7 +262,7 @@ mod shot15 {
     }
 
     /// Variante 1 (arme tenue) : suit le propriétaire pendant que l'ennemi attaque.
-    fn hold<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn hold<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return follow(x);
         }
@@ -278,7 +279,7 @@ mod shot15 {
     }
 
     /// Variante 1 (coup) : animation en trois temps (coup, attente de 8 images, retour).
-    fn swing<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn swing<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return follow(x);
         }
@@ -372,7 +373,7 @@ mod shot16 {
     }
 
     /// Passe au lancer : table de vitesses 0x18, la vitesse verticale devient celle de Y.
-    fn launch<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn launch<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         speed_table(x, 0x18);
         let v = x.u32(0x1c);
@@ -383,7 +384,7 @@ mod shot16 {
         reinsert_foreground(x);
     }
 
-    fn flying<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn flying<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_by_table_xz();
         x.anim_step();
         if x.u8(0x2d) != 0 {
@@ -402,7 +403,7 @@ mod shot16 {
     }
 
     /// État 4 : tant que le propriétaire a des PV, rien ; sinon l'objet est lancé (ou relâché).
-    fn dropped<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn dropped<R: Banc>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         if (owner.u16(x.b, 0x62) as i16) <= 0 {
             x.set8(0x0, 2);
@@ -463,7 +464,7 @@ mod shot17 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         for i in 0..8 {
             let v = x.data32(PALETTE_SRC + 4 * i);
@@ -494,7 +495,7 @@ mod shot17 {
     }
 
     /// Le parent a quitté ses états normaux : le projectile disparaît.
-    fn check_parent<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn check_parent<R: Banc>(x: &mut Cx<'_, R>) {
         let parent = ptr(x, 0x56);
         if (parent.u8(x.b, 0x4) as i8) >= 4 {
             kill(x);
@@ -544,7 +545,7 @@ mod shot17 {
     }
 
     /// Début de la phase de tir : annonce au parent (`+0xa5`), attente de 20 images.
-    fn begin_aim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn begin_aim<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         if x.u8(0x6) == 0 {
             x.add8(0x6, 2);
             x.set8(0x54, 0x14);
@@ -555,7 +556,7 @@ mod shot17 {
     }
 
     /// Après l'attente : prévient le parent, vrai quand le projectile doit partir.
-    fn ready_to_go<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn ready_to_go<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         x.anim_step();
         x.add8(0x54, 0xff);
         if (x.u8(0x54) as i8) >= 0 {
@@ -567,7 +568,7 @@ mod shot17 {
     }
 
     /// Mode > 0 : vise la cible (rapport distance/altitude, angle).
-    fn aim_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn aim_angle<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x6) == 0 {
             x.add8(0x6, 2);
             x.set8(0x54, 0x14);
@@ -597,7 +598,7 @@ mod shot17 {
     }
 
     /// Calcule la vitesse verticale (pente vers la cible) et l'angle `+0x2d`.
-    fn aim_at<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, target: Obj) {
+    fn aim_at<R: Banc>(x: &mut Cx<'_, R>, target: Obj) {
         let dy = x.u32(0x10).wrapping_sub(target.u32(x.b, 0x10));
         let mut dx = x.u32(0x8).wrapping_sub(target.u32(x.b, 0x8));
         if (dx as i32) < 0 {
@@ -615,7 +616,7 @@ mod shot17 {
     }
 
     /// Mode 0 : tir par table d'angles.
-    fn aim_flat<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn aim_flat<R: Banc>(x: &mut Cx<'_, R>) {
         if !begin_aim(x) {
             return;
         }
@@ -638,7 +639,7 @@ mod shot17 {
     }
 
     /// Mode < 0 : tombe devant la cible (vitesse selon la distance en X).
-    fn aim_drop<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn aim_drop<R: Banc>(x: &mut Cx<'_, R>) {
         if !begin_aim(x) {
             return;
         }
@@ -678,7 +679,7 @@ mod shot17 {
     }
 
     /// Chute du mode > 0 : déplacement en X, Y et Z.
-    fn land_xyz<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn land_xyz<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_xyz();
         x.anim_step();
         if (x.u16(0xc) as i16) > 0 {
@@ -762,7 +763,7 @@ mod shot19 {
     /// Décalages (X, Z) du sprite par pas d'angle.
     const OFFSETS: u32 = 0xa0bfa;
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => {
@@ -786,7 +787,7 @@ mod shot19 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 5);
@@ -831,13 +832,13 @@ mod shot19 {
 // ---------------------------------------------------------------------------------------------
 
 /// Long lu dans l'espace programme (table adressée relativement au PC).
-fn rom32<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
+fn rom32<R: Banc>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
     (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
 }
 
 /// Se colle au propriétaire avec le décalage de la ligne `variante` d'une table (8 octets par ligne :
 /// X, Y entier, Y fractionnaire signé, Z). Sans propriétaire, l'objet est libéré à l'image suivante.
-fn attach<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn attach<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     if x.u16(f::OWNER) == 0 {
         return kill(x);
     }
@@ -891,7 +892,7 @@ mod shot20 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -922,7 +923,7 @@ mod shot20 {
     }
 
     /// Objet figé : la variante 0 repasse une fois à l'état 2 et rend l'arme au propriétaire.
-    fn freeze<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn freeze<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 || x.u8(0x1d) != 0 {
             return;
         }
@@ -1075,7 +1076,7 @@ mod shot21 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -1089,7 +1090,7 @@ mod shot21 {
         crate::sound::jouer(x.b, sfx::E4FB6, x.o);
     }
 
-    fn burn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn burn<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x1e, 1);
         kill(x);
     }
@@ -1159,7 +1160,7 @@ mod shot22 {
     const SPEEDS: u32 = 0xa123a;
     const FLY: u8 = 0;
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => {
@@ -1183,7 +1184,7 @@ mod shot22 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x54, 0x1e);
         x.set8(f::ATTACK_ID, 0x1a);
@@ -1222,7 +1223,7 @@ mod shot23 {
     const ANIMS: u32 = 0x1c03a6;
     const WAIT: u8 = 0;
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => match x.u8(0x5) {
@@ -1256,13 +1257,13 @@ mod shot23 {
         }
     }
 
-    fn slide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn slide<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_by_table_xy();
         x.anim_step();
         reinsert_foreground(x);
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x54, 0x30);
         x.set8(0x2d, 0);
@@ -1361,7 +1362,7 @@ mod shot24 {
     }
 
     /// Lance l'effet suivant (variante 1) et avance `+0x56` modulo 16.
-    fn spawn_effect<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_effect<R: Banc>(x: &mut Cx<'_, R>) {
         if let Some(e) = x.alloc(&pools::ESHL) {
             e.set_u8(x.b, 0, 1);
             e.set_u8(x.b, 2, 0x18);
@@ -1567,7 +1568,7 @@ mod shot26 {
         }
     }
 
-    fn ground<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn ground<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.add16(0x58, 0xffff);
         if x.u16(0x58) != 0 {
@@ -1582,7 +1583,7 @@ mod shot26 {
         }
     }
 
-    fn blink_out<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn blink_out<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.add16(0x58, 0xffff);
         if x.u16(0x58) == 0 {
@@ -1619,7 +1620,7 @@ mod shot27 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) == 0 {
             x.add8(0x4, 2);
             let source = x.linked(0x5c);
@@ -1679,14 +1680,14 @@ mod shot27 {
     }
 
     /// Caché une image sur deux d'après le compteur d'images `A5+0x6f`.
-    fn flicker<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn flicker<R: Banc>(x: &mut Cx<'_, R>) {
         let hidden = x.a5_u8(0x6f) & 1 == 0;
         x.set_bit(0x1, 1, hidden);
     }
 
     /// Crée la rangée d'éléments (variante 1) de part et d'autre, depuis le créateur de l'épicentre
     /// ou le bord de la caméra, jusqu'aux limites de l'écran.
-    fn start_row<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn start_row<R: Banc>(x: &mut Cx<'_, R>) {
         let px = x.u16(0x8);
         let limit = if x.u8(0x56) == 0 {
             let target = x.linked(f::OWNER);
@@ -1714,7 +1715,7 @@ mod shot28 {
     const HEIGHTS: u32 = 0xa1d18;
     const ANGLES: u32 = 0xa1d22;
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1754,22 +1755,22 @@ mod shot28 {
 // ---------------------------------------------------------------------------------------------
 
 /// Démarrage d'animation de l'IA (`0x103d6` : `anim_start_indexed` puis `+0x44 = +0x3e`).
-fn ai_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
+fn ai_start<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     crate::families::enemy_lib::start(x, set, n);
 }
 
 /// Pas d'animation de l'IA (`0x1040c`) ; vrai en fin de script.
-fn ai_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn ai_step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     crate::families::enemy_lib::step(x)
 }
 
 /// Abscisse gauche de la caméra courante (`A5+0x506`, ou `0x556` si la caméra alternative est active).
-fn camera_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn camera_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) }
 }
 
 /// Recopie la position (X, Z, Y : parties entières) d'un objet.
-fn copy_position16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, from: Obj) {
+fn copy_position16<R: Banc>(x: &mut Cx<'_, R>, from: Obj) {
     for off in [0x8, 0xc, 0x10] {
         let v = from.u16(x.b, off);
         x.set16(off, v);
@@ -1778,7 +1779,7 @@ fn copy_position16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, from: Obj) {
 
 /// Crée une rangée de tirs de type `kind` (variante 1) en partant de `px`, de 0x38 en 0x38 vers la
 /// droite ou vers la gauche jusqu'aux limites de l'écran (`+0x58` numérote les éléments).
-fn spawn_row<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8, mut px: u16, rightwards: bool) {
+fn spawn_row<R: Banc>(x: &mut Cx<'_, R>, kind: u8, mut px: u16, rightwards: bool) {
     let mut label: u16 = 1;
     loop {
         let Some(e) = x.alloc(&pools::ESHL) else { return };
@@ -1808,7 +1809,7 @@ fn spawn_row<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8, mut px: 
 }
 
 /// Clignotement selon la parité de `A5+0x6e` et de la variante : caché quand elles diffèrent.
-fn blink_by_parity<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn blink_by_parity<R: Banc>(x: &mut Cx<'_, R>) {
     let hidden = (x.u8(0x3) ^ x.a5_u16(0x6e) as u8) & 1 != 0;
     x.set_bit(0x1, 1, hidden);
 }
@@ -1853,7 +1854,7 @@ mod shot29 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(f::ATTACK_ID, 6);
         x.set8(f::ATTACK_POWER, 5);
         x.set8(f::BOX_SET, 7);
@@ -1882,7 +1883,7 @@ mod shot29 {
     }
 
     /// Fin : le créateur est mort ou dans l'état 0x20a.
-    fn stop<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn stop<R: Banc>(x: &mut Cx<'_, R>) {
         crate::sound::jouer(x.b, SOUND_END, x.o);
         x.add8(0x4, 2);
     }
@@ -1907,7 +1908,7 @@ mod shot29 {
     }
 
     /// Élément central : attend le signal du créateur puis déclenche la rangée.
-    fn centre<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn centre<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             WAIT => {
                 let source = x.linked(0x5c);
@@ -1968,7 +1969,7 @@ mod shot29 {
     }
 
     /// Se colle au créateur ; le décalage dépend de son état d'attaque (`+7`).
-    fn follow<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         let source = x.linked(0x5c);
         copy_position16(x, source);
         let flip = source.u8(x.b, f::FLIP);
@@ -2020,7 +2021,7 @@ mod shot30 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(f::OWNER) == 0 {
             return;
         }
@@ -2114,7 +2115,7 @@ mod shot31 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 7);
@@ -2133,14 +2134,14 @@ mod shot31 {
         speed_table(x, 0x30);
     }
 
-    fn fly_away<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn fly_away<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_by_table_xy();
         x.anim_step();
         x.cull_offscreen();
     }
 
     /// Son de rebond quand l'animation lève son drapeau (`+0x33`).
-    fn animation_cue<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn animation_cue<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x33) != 0 {
             x.set8(0x33, 0);
             crate::sound::jouer(x.b, SOUND_SPAWN, x.o);
@@ -2203,7 +2204,7 @@ mod shot31 {
 // ---------------------------------------------------------------------------------------------
 
 /// Vrai quand l'hôte (`+0x42`) de l'objet est dans l'état 4 : le tir doit disparaître (0xa2510).
-fn host_dead<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn host_dead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let host = x.linked(0x42);
     host.u8(x.b, 0x4) == 4
 }
@@ -2275,7 +2276,7 @@ mod shot32 {
         }
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 0x14);
@@ -2330,7 +2331,7 @@ mod shot33 {
     const SOUND_FIRE: u32 = 0xed474;
     const SOUND_END: u32 = 0xed90a;
 
-    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -2422,7 +2423,7 @@ mod shot34 {
         }
     }
 
-    fn load_palettes<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn load_palettes<R: Banc>(x: &mut Cx<'_, R>) {
         for (dst, src) in PALETTES {
             for i in 0..8 {
                 let v = x.data32(src + 4 * i);
@@ -2436,7 +2437,7 @@ mod shot34 {
     }
 
     /// Décor SET (type 0, variante 0x47) ; `None` si le pool est plein.
-    fn spawn_scenery<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+    fn spawn_scenery<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let s = x.alloc(&pools::SET)?;
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 2, 0);
@@ -2445,7 +2446,7 @@ mod shot34 {
     }
 
     /// Se place sur le créateur (position, orientation, un pixel plus près).
-    fn place_on_source<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Obj {
+    fn place_on_source<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
         let source = x.linked(0x5c);
         copy_position16(x, source);
         let flip = source.u8(x.b, f::FLIP);
@@ -2665,7 +2666,7 @@ mod shot36 {
     }
 
     /// Direction selon l'orientation, table de vitesses 0x17 et vitesse verticale tirée au hasard.
-    fn launch<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn launch<R: Banc>(x: &mut Cx<'_, R>) {
         let direction = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
         x.set8(0x2d, direction);
         speed_table(x, 0x17);
@@ -2676,7 +2677,7 @@ mod shot36 {
     }
 
     /// Position aléatoire autour de la caméra (écran de gauche : décalage de -0xc0).
-    fn place<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>) {
         let alea = x.random();
         let r = alea as u32 & 0xf;
         let mut dx = x.rom16(X_OFFSETS + 2 * r);
@@ -2744,7 +2745,7 @@ mod shot37 {
         x.anim_start(ANIMS, anim as u16);
     }
 
-    fn place<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>) {
         let alea = x.random();
         let r = alea as u32 & 0xf;
         let dx = x.rom16(X_OFFSETS + 2 * r);
@@ -2860,7 +2861,7 @@ mod shot38 {
         x.set8(0x5, 0);
     }
 
-    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let creator = x.u16(0x46);
         if (creator as i16) >= 0 {
@@ -2897,7 +2898,7 @@ mod shot38 {
     }
 
     /// Table de vitesses et vitesses initiales de la ligne `+0x2f`.
-    fn speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn speeds<R: Banc>(x: &mut Cx<'_, R>) {
         let base = if x.u8(0x3) != 0 { SPEED_ROWS_VARIANT } else { SPEED_ROWS };
         let row = base + ((x.u8(0x2f) as u32) << 4);
         let table = x.data32(row);
@@ -2955,7 +2956,7 @@ mod shot39 {
         }
     }
 
-    fn launch<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn launch<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x5c) == 0 {
             return;
         }

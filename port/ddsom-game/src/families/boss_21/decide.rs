@@ -5,6 +5,7 @@
 //! (octet de la table 1, puis mot de la table 2) donnent l'adresse d'une des routines d'état ci-dessous ;
 //! `go` retrouve la routine par cette adresse.
 
+use crate::families::cx::Banc;
 use super::*;
 
 /// Attente : aucun joueur en vie (groupe 10).
@@ -24,7 +25,7 @@ const ATTACK_12: u32 = 0x0204_0c00;
 const ATTACK_16: u32 = 0x0204_1000;
 
 /// 0x9ac32 : le boss attend (aucun joueur en vie).
-pub(super) fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
@@ -35,7 +36,7 @@ pub(super) fn stand(x: &mut Cx) {
 }
 
 /// 0x9ab02 : interrompt l'action en cours (l'état est mémorisé en `+0xa2`).
-pub(super) fn interrupt<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let state = x.u32(f::STATE);
     x.set32(SAVED_STATE, state);
@@ -50,52 +51,52 @@ pub(super) fn chase(x: &mut Cx) {
 }
 
 /// 0x9ab2c : marche vers un joueur (tir 0x32).
-pub(super) fn chase_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn chase_b<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x32);
     x.set32(f::STATE, CHASE_B);
 }
 
 /// 0x9ab7c : charge.
-pub(super) fn dash<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn dash<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     x.set32(f::STATE, DASH);
 }
 
 /// 0x9ab8a : attaque 0 (vulnérable).
-pub(super) fn attack_0<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_0<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, ATTACK_0);
 }
 
-fn attack<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, state: u32) {
+fn attack<R: Banc>(x: &mut Cx<'_, R>, state: u32) {
     x.set8(VULNERABLE, 0);
     x.set32(f::STATE, state);
 }
 
 /// 0x9ab9a : attaque 2.
-pub(super) fn attack_2<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_2<R: Banc>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_2);
 }
 
 /// 0x9aba8 : attaque 4, invulnérable.
-pub(super) fn attack_4_shielded<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_4_shielded<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     attack_4(x);
 }
 
 /// 0x9abae : attaque 4.
-pub(super) fn attack_4<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_4);
 }
 
 /// 0x9abbc : attaque 6.
-pub(super) fn attack_6<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_6<R: Banc>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_6);
 }
 
 /// 0x9abd4 : attaque 10 tant qu'il en reste.
-pub(super) fn attack_10<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_10<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(BUDGET_A) as i8) <= 0 {
         return attack_6(x);
     }
@@ -103,7 +104,7 @@ pub(super) fn attack_10<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9abe8 : attaque 12 tant qu'il en reste.
-pub(super) fn attack_12<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(BUDGET_B) as i8) <= 0 {
         return attack_6(x);
     }
@@ -120,7 +121,7 @@ pub(super) fn attack_16(x: &mut Cx) {
 }
 
 /// 0x9ab50 : la charge si le boss est dans la bande utile de l'écran, sinon l'attaque 4 quand il regarde du bon côté.
-pub(super) fn dash_or_attack<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn dash_or_attack<R: Banc>(x: &mut Cx<'_, R>) {
     let here = x.u16(0x8);
     let mut edge = var::CAMERA1_X.get(x.b).wrapping_add(0x38);
     let mut side = 0x20;
@@ -141,13 +142,13 @@ pub(super) fn dash_or_attack<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 // --- états de départ ----------------------------------------------------------------------------
 
 /// 0x9aac4 : arrivée en scène.
-pub(super) fn start_intro<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_intro<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x30);
     x.set32(f::STATE, 0x0200_0000);
 }
 
 /// 0x9aad4 : mort de l'hôte, début de la sortie de scène.
-pub(super) fn start_death<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_death<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x31);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set_a5_u8(0x5c, 1);
@@ -155,7 +156,7 @@ pub(super) fn start_death<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9ae76 : l'hôte (`+0x46`) est mort (état 0x0406).
-pub(super) fn host_dead<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(super) fn host_dead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let host = x.linked(f::HOST);
     host.u16(x.b, f::STATE) == 0x0406
 }
@@ -174,28 +175,28 @@ pub(super) fn after_attack(x: &mut Cx, then: fn(&mut Cx)) {
 // --- tirages ------------------------------------------------------------------------------------
 
 /// Octet de table lu dans la ROM (adressage `(table,PC,Dn)`).
-fn table8<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u8 {
+fn table8<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u8 {
     x.rom8(table + index)
 }
 
-fn table16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u16 {
+fn table16<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u16 {
     x.rom16(table + index)
 }
 
 /// Adresse visée par l'entrée `index` (octets) d'une table de mots relatifs à son début.
-fn target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
+fn target<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
     (table as i32 + table16(x, table, index) as i16 as i32) as u32
 }
 
 /// 0x9a850 : délai avant le pas suivant, selon la difficulté.
-pub(super) fn walk_delay_fast<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_delay_fast<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x9a868, level);
     x.set8(WALK_DELAY, v);
 }
 
 /// 0x9a85c : idem, table des marches lentes.
-pub(super) fn walk_delay_slow<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_delay_slow<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x9a888, level);
     x.set8(WALK_DELAY, v);
@@ -216,21 +217,21 @@ pub(super) fn walk_steps_slow(x: &mut Cx) {
 }
 
 /// Index de la table de difficulté : `(difficulté & 0x1e) × k + (joueurs - 1)`.
-fn level_index<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, k: u32) -> u32 {
+fn level_index<R: Banc>(x: &mut Cx<'_, R>, k: u32) -> u32 {
     let level = (var::RANK.get(x.b) & 0x1e) as u32 * k;
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     level + players.saturating_sub(1)
 }
 
 /// 0x9ac3c : nombre de coups avant l'attaque 16, selon la difficulté et le nombre de joueurs.
-pub(super) fn pick_strike_limit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn pick_strike_limit<R: Banc>(x: &mut Cx<'_, R>) {
     let i = level_index(x, 2);
     let v = table8(x, 0x9ac5a, i);
     x.set8(STRIKE_LIMIT, v);
 }
 
 /// 0x9ac9a : durée du ralenti (mot).
-pub(super) fn pick_slow_time<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn pick_slow_time<R: Banc>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let i = level + 2 * players.saturating_sub(1);
@@ -283,7 +284,7 @@ pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
 }
 
 /// Exécute la routine d'état dont la table donne l'adresse.
-fn go<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, routine: u32) {
+fn go<R: Banc>(x: &mut Cx<'_, R>, routine: u32) {
     match routine {
         0x9ab50 => dash_or_attack(x),
         0x9ab7c => dash(x),

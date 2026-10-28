@@ -1,19 +1,20 @@
 //! Boss 11/12, groupe 4 : les huit attaques (`+6` = 0 à 14), étapes `+7` = 0, 2, 4...
 
+use crate::families::cx::Banc;
 use super::behave::life_rank;
 use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
-fn step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
+fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch0(x, table, f::SUB3)
 }
 
-fn cam_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn cam_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
-fn cam_y<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn cam_y<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) }
 }
 
@@ -31,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x8dc30 : coup de queue (le effet dépend du type).
-fn sting<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn sting<R: Banc>(x: &mut Cx<'_, R>) {
     if is_12(x) {
         lib::sound(x, 0xe4de6)
     } else {
@@ -342,7 +343,7 @@ fn seg_choice(x: &mut Cx) {
 }
 
 /// 0x8dfaa : pas entre deux visées (`+0xb1`, table 0x8dfbc).
-fn pause_tick<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn pause_tick<R: Banc>(x: &mut Cx<'_, R>) {
     let alea = x.random();
     let r = alea & 0xf;
     let v = x.rom8(0x8dfbc + r as u32);

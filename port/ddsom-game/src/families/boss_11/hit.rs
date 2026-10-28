@@ -1,6 +1,7 @@
 //! Boss 11/12, état 4 « touché » (0x8e39a). Groupes `+5` : 0 réaction (table de longs 0x8e3dc : six routines selon le code de
 //! coup `+0x49`), 4 étourdi, 2, 6, 8, 10 mort.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
@@ -19,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x8e8ca : vrai si le jeu est en pause (le serpent reste alors affiché : `+0` = 2).
-fn paused<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return true;
@@ -198,7 +199,7 @@ fn generic(x: &mut Cx) {
 }
 
 /// 0x8e8fc : relevé après la chute (état 4, groupe 4).
-fn fallen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn fallen<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set32(f::STATE, 0x0404_0000);
     x.set8(0x86, 1);
@@ -315,7 +316,7 @@ fn throw(x: &mut Cx) {
     }
 }
 
-fn arc_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn arc_end<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x29) == 0 {
         return;
     }

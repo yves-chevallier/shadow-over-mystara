@@ -3,6 +3,7 @@
 //! 30 coup suivi d'un bond, 32 coup de patte court.
 //! Chaque geste commence par `begin_wait` (étape 0) et `hold` (étape 2, poursuite en place).
 
+use crate::families::cx::Banc;
 use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Courant;
@@ -38,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x557bc : prépare l'attente.
-pub(super) fn begin_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn begin_wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0);
@@ -47,7 +48,7 @@ pub(super) fn begin_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x5590e / 0x55902 : poursuite en place jusqu'à la fin du compteur `+0x77`, avec demi-tour si la cible change de
 /// côté ; `resume` est l'état à reprendre après le demi-tour.
-pub(super) fn hold<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, resume: u32) {
+pub(super) fn hold<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
     x.set32(RESUME_STATE, resume);
     let n = x.u8(AI_LUNGE).wrapping_sub(1);
     x.set8(AI_LUNGE, n);
@@ -63,7 +64,7 @@ pub(super) fn hold<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, resume: u32)
 }
 
 /// 0x57924 après un pas en arrière de 0x20 : le Kobold rétablit sa place devant le coup.
-fn shift_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn shift_back<R: Banc>(x: &mut Cx<'_, R>) {
     let dx: u16 = if x.u8(f::FLIP) == 0 { 0xffe0 } else { 0x20 };
     x.add16(Obj::X, dx);
 }
@@ -83,7 +84,7 @@ fn step_then_after(x: &mut Cx) {
 }
 
 /// Clé d'animation : tir lancé `throw` (0x9dda8 ou 0x9e062 ; la clé est remise à zéro).
-fn key_effect<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn key_effect<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);
@@ -294,7 +295,7 @@ fn jump_series(x: &mut Cx, vx: i16, kind: u8) {
 }
 
 /// 0x54fc4 : retombée d'un saut → animation 0x18 d'atterrissage.
-fn land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn land<R: Banc>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
         return;

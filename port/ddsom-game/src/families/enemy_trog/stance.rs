@@ -1,6 +1,7 @@
 //! Type 2, troglodyte debout (`+5 = 2`) et au repos (`+5 = 10`). `+6` : 0 marche vers la cible et
 //! décide d'attaquer, 2 demi-tour, 4 attente, 6 bond d'approche.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -137,7 +138,7 @@ pub(super) fn pick_attack_far(x: &mut Cx) {
 }
 
 /// 0x5a208 : bond de la série 1 vers la cible.
-fn begin_jump<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn begin_jump<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, 6);
     x.set8(f::SUB3, 2);
     x.set16(Obj::VZ, 0x500);
@@ -176,7 +177,7 @@ fn jump(x: &mut Cx) {
 }
 
 /// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
-fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -191,7 +192,7 @@ fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 4 : attente.
-fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

@@ -15,6 +15,7 @@
 //! L'état touché a son propre recul (pas de table de réaction commune). Animations 0x163da8 (mouvements),
 //! 0x163db8 (charge) et 0x163dba (touché).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -75,12 +76,12 @@ pub fn run(x: &mut Cx) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-fn anim_play<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn anim_play<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(ANIMS, n as u16);
 }
 
 /// Hauteur de départ d'une chute : l'objet apparaît au-dessus de l'écran.
-fn drop_from_above<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn drop_from_above<R: Banc>(x: &mut Cx<'_, R>) {
     let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
     let depth = x.u16(Obj::Y);
     x.set16(Obj::Z, cam.wrapping_sub(depth));
@@ -89,12 +90,12 @@ fn drop_from_above<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Abscisse de la caméra selon le mode (`A5+0x36` : second écran).
-fn camera_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn camera_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
 /// 0x67808 : avance en X et en profondeur selon les vitesses (virgule fixe 8.8).
-fn advance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn advance<R: Banc>(x: &mut Cx<'_, R>) {
     for (pos, speed) in [(Obj::X, Obj::VX), (Obj::Y, Obj::VY)] {
         let d = ((x.u16(speed) as u32) << 16) as i32 >> 8;
         x.add32(pos, d as u32);
@@ -110,7 +111,7 @@ fn pick_move(x: &mut Cx) {
 }
 
 /// 0x677e8 : durée du geste (`+0xa2`) selon le rang `d0` et le geste.
-fn set_timer<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, d0: u32) {
+fn set_timer<R: Banc>(x: &mut Cx<'_, R>, d0: u32) {
     let idx = ((d0 << 2) & !0xff) | (((d0 << 2) as u8).wrapping_add(x.u8(MOVE)) as u32);
     let t = x.rom8(TIMER_ROW + idx);
     x.set8(TIMER, t);
@@ -123,7 +124,7 @@ fn random_timer(x: &mut Cx) {
 }
 
 /// 0x670d2 : table de vitesses du geste.
-fn speed_row<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn speed_row<R: Banc>(x: &mut Cx<'_, R>) {
     let idx = x.u8(MOVE) as u32;
     let d0 = x.rom8(SPEED_ROW + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, (d0 as u32) as u16);
@@ -142,7 +143,7 @@ fn pick_attack(x: &mut Cx, table: u32) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -272,7 +273,7 @@ fn land(x: &mut Cx, done: impl FnOnce(&mut Cx)) {
 }
 
 /// Variante 2 : entrée en vol (animation 6), atterrissage (animation 7), reprise de la marche.
-fn fly_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn fly_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 | 4 => {
             x.anim_step();
@@ -462,13 +463,13 @@ fn melee_b(x: &mut Cx) {
 }
 
 /// Direction de marche d'un geste : 8 ou 0x18 selon l'orientation ; `forward` pour avancer vers le côté regardé.
-fn face<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, forward: bool) {
+fn face<R: Banc>(x: &mut Cx<'_, R>, forward: bool) {
     let flipped = x.u8(f::FLIP) != 0;
     x.set8(Obj::SPEED_INDEX, if flipped == forward { 8 } else { 0x18 });
 }
 
 /// 0x66f00 : vitesse et animation du geste, puis suite commune.
-fn attack_move<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn attack_move<R: Banc>(x: &mut Cx<'_, R>) {
     speed_row(x);
     let n = 1 + x.u8(MOVE) as u32;
     anim_play(x, n);
@@ -476,7 +477,7 @@ fn attack_move<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x66f1c : avance, décompte et fin du geste.
-fn attack_tail<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn attack_tail<R: Banc>(x: &mut Cx<'_, R>) {
     advance(x);
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
@@ -517,7 +518,7 @@ fn face_target(x: &mut Cx) {
 }
 
 /// 0x67088 : à la fin de l'animation de virage, l'orientation s'inverse.
-fn wait_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn wait_turn<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_FLAGS) as i16) < 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -694,7 +695,7 @@ fn grabbed_flight(x: &mut Cx) {
 }
 
 /// 0x673e4 : le scorpion court (animation 2) pendant 0xff images au plus.
-fn run_off<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn run_off<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set8(EXIT_TIMER, 0xff);
     anim_play(x, 2);

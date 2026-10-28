@@ -1,5 +1,6 @@
 //! Type 4, charges vers un joueur (sous-état `+5 = 8`, 0x5e7ea).
 
+use crate::families::cx::Banc;
 use super::stance::engage;
 use super::*;
 use crate::objects::Obj;
@@ -44,7 +45,7 @@ fn stand(x: &mut Cx) {
 }
 
 /// Course vers la cible : `timer` images, direction `angle`, animation `want`/`n`, vitesse `speed_n`.
-fn dash_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
+fn dash_begin<R: Banc>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
     x.add8(0x7, 2);
     x.set8(Obj::SPEED_INDEX, angle);
     x.set8(TIMER, timer);

@@ -7,6 +7,7 @@
 //! variables du jeu propres aux scènes de boss, les drapeaux du 68000 pour les comparaisons qui dépendent
 //! du débordement (`Fl`) et les aides de la bibliothèque d'IA (0x103d6..0x105b6, encore en 68000).
 
+use crate::families::cx::Banc;
 use m68k::decode::Size;
 use m68k::SR_C;
 
@@ -20,17 +21,17 @@ use crate::objects::Courant;
 
 
 /// L'objet suivi par la caméra, s'il existe.
-pub fn leader<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+pub fn leader<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     (var::LEADER.get(x.b) != 0).then(|| Obj(var::LEADER.get(x.b) as i16 as i32 as u32 & 0xff_ffff))
 }
 
 /// Abscisse de la caméra.
-pub fn scroll_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+pub fn scroll_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     var::SCROLL_X.get(x.b)
 }
 
 /// Abscisse de la caméra en service (1, ou 2 si `A5+0x36`).
-pub fn camera_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+pub fn camera_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     let v = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X } else { var::CAMERA1_X };
     v.get(x.b)
 }
@@ -132,22 +133,22 @@ pub fn sub16(x: &mut Cx, off: u32, k: u16) -> Fl {
 }
 
 /// `cmpi.b #imm,(off,A0)` : drapeaux de `octet - imm`.
-pub fn cmp8<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32, imm: u8) -> Fl {
+pub fn cmp8<R: Banc>(x: &mut Cx<'_, R>, off: u32, imm: u8) -> Fl {
     Fl::sub8(x.u8(off), imm)
 }
 
 /// `cmpi.w #imm,(off,A0)`.
-pub fn cmp16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32, imm: u16) -> Fl {
+pub fn cmp16<R: Banc>(x: &mut Cx<'_, R>, off: u32, imm: u16) -> Fl {
     Fl::sub16(x.u16(off), imm)
 }
 
 /// `tst.b (off,A0)`.
-pub fn tst8<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> Fl {
+pub fn tst8<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> Fl {
     Fl::tst8(x.u8(off))
 }
 
 /// `tst.w (off,A0)`.
-pub fn tst16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> Fl {
+pub fn tst16<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> Fl {
     Fl::tst16(x.u16(off))
 }
 
@@ -157,7 +158,7 @@ pub fn tst16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> Fl {
 
 
 /// Choisit la table de vitesses `n` (`0x1b64`).
-pub fn speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub fn speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
@@ -191,7 +192,7 @@ pub fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
 
 
 /// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)` : sorte d'animation `k` (champs `+0xa0` et `+0xa1`).
-pub fn anim_kind<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, k: u8) {
+pub fn anim_kind<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(0xa0, k);
     x.set8(0xa1, k);
 }
@@ -203,12 +204,12 @@ pub fn expired(x: &mut Cx, off: u32) -> bool {
 
 /// Mot de la table de sauts relative au PC `base` pour l'index d'octets `i` : adresse de la routine choisie
 /// (`move.w (base,PC,Di),Di ; jmp (base,PC,Di)`).
-pub fn jump_target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
+pub fn jump_target<R: Banc>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
     base.wrapping_add(x.rom16(base + i) as i16 as u32)
 }
 
 /// Ordonnée de la caméra en service.
-pub fn camera_y<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
+pub fn camera_y<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     let v = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_Y } else { var::CAMERA1_Y };
     v.get(x.b)
 }
@@ -219,12 +220,12 @@ pub const A5_DEATH: u32 = A5 - 0x557c;
 /// Alloue un objet de la classe `routine` (retenue levée = pool plein). Les gestionnaires qui insistent
 /// (`jsr alloc ; bcs retry`) bouclent ici ; le pool ne se vide qu'avec le temps, l'original resterait
 /// bloqué : on abandonne après 64 essais.
-pub fn alloc_retry<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Option<Obj> {
+pub fn alloc_retry<R: Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Option<Obj> {
     (0..64).find_map(|_| x.alloc(pool))
 }
 
 /// Écrit un octet à une adresse absolue de la RAM de travail.
-pub fn set_abs8<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, addr: u32, v: u8) {
+pub fn set_abs8<R: Banc>(x: &mut Cx<'_, R>, addr: u32, v: u8) {
     crate::mem::wr8(x.b, addr, v);
 }
 

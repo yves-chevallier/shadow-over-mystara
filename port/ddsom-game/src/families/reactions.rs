@@ -12,6 +12,7 @@
 //! (hauteur), `+0x1a` (gravité), `+0x1c`/`+0x1e` (secondaires) ; hauteur `+0xc` (long) ; compteur `+0x90` ;
 //! liaison en attente `+0x91` (bit 7) vers `+0x2a`/`+0x2b` ; orientation de l'agresseur `+0x4a`.
 
+use crate::families::cx::Banc;
 use super::cx::Cx;
 use super::enemy_lib as lib;
 use super::enemy_common::var;
@@ -95,40 +96,40 @@ mod rom {
 // ---------------------------------------------------------------------------------------------
 // Aides
 
-fn next<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn next<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STEP, 2);
 }
-fn next_sub<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn next_sub<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB_STEP, 2);
 }
 /// Pas suivant, sous-pas à zéro.
-fn next_clear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn next_clear<R: Banc>(x: &mut Cx<'_, R>) {
     next(x);
     x.set8(f::SUB_STEP, 0);
 }
-fn neg16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) {
+fn neg16<R: Banc>(x: &mut Cx<'_, R>, off: u32) {
     let v = x.u16(off).wrapping_neg();
     x.set16(off, v);
 }
-fn neg32<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) {
+fn neg32<R: Banc>(x: &mut Cx<'_, R>, off: u32) {
     let v = x.u32(off).wrapping_neg();
     x.set32(off, v);
 }
-fn flipped<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn flipped<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.u8(f::FLIP) != 0
 }
-fn dead<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn dead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     (x.u16(f::HP) as i16) <= 0
 }
-fn paused<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
+fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 /// Mort : sous-état 6 (+ `+0` = 2).
-fn mark_dead<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn mark_dead<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 6);
     x.set8(f::ACTIVE, 2);
 }
-fn speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vx: u16, vy: u16, vz: u16, gravity: u16) {
+fn speeds<R: Banc>(x: &mut Cx<'_, R>, vx: u16, vy: u16, vz: u16, gravity: u16) {
     x.set16(f::VX, vx);
     x.set16(f::VY, vy);
     x.set16(f::VZ, vz);
@@ -137,13 +138,13 @@ fn speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vx: u16, vy: u16, vz:
 fn anim_step(x: &mut Cx) {
     x.anim_step();
 }
-fn move_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn move_x<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_x();
 }
-fn move_xz<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn move_xz<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
 }
-fn move_xyz<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn move_xyz<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xyz();
 }
 fn landed(x: &mut Cx) {
@@ -154,17 +155,17 @@ fn random(x: &mut Cx) -> u32 {
     x.c.d[0] & 0xffff_0000 | alea as u32
 }
 /// Effet `0xabec8` (D0 = variante, D1 = paramètre).
-fn effect<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, d0: u32, d1: u32) {
+fn effect<R: Banc>(x: &mut Cx<'_, R>, d0: u32, d1: u32) {
     lib::attack_effect(x, d0, d1);
 }
 /// Indice des tables par type : type, plus 32 hors de la classe ENEMY.
-fn type_index<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn type_index<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     let base = if x.u8(f::CLASS) == ENEMY { 0 } else { 32 };
     (base + x.u8(f::KIND) as u32) & 0xff
 }
 
 /// 0x3de26 : le gel après le coup prend la durée d'étourdissement.
-fn stun<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn stun<R: Banc>(x: &mut Cx<'_, R>) {
     let s = x.u8(f::STUN);
     x.set8(f::FREEZE, s);
 }
@@ -228,7 +229,7 @@ fn face_attacker(x: &mut Cx) {
     }
 }
 /// 0x3e148 : les vitesses suivent l'orientation actuelle.
-fn orient_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn orient_speeds<R: Banc>(x: &mut Cx<'_, R>) {
     if flipped(x) {
         neg16(x, f::VX);
         neg16(x, f::VY);
@@ -236,7 +237,7 @@ fn orient_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x3e25e : une liaison en attente (`+0x91`, bit 7) devient effective (`+0x2b`, `+0x2a` levé).
-fn apply_pending<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn apply_pending<R: Banc>(x: &mut Cx<'_, R>) {
     let p = x.u8(f::PENDING);
     if (p as i8) >= 0 {
         return;
@@ -246,7 +247,7 @@ fn apply_pending<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::PENDING, 0);
 }
 /// Variante qui efface toujours `+0x91`.
-fn take_pending<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn take_pending<R: Banc>(x: &mut Cx<'_, R>) {
     let p = x.u8(f::PENDING);
     if (p as i8) < 0 {
         x.set8(f::LINK, p & 0x7f);
@@ -255,7 +256,7 @@ fn take_pending<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::PENDING, 0);
 }
 /// Inverse : la liaison effective repasse en attente (`+0x2b` | 0x80 dans `+0x91`).
-fn defer_link<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn defer_link<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(f::PENDING) as i8) < 0 || x.u8(f::LINKED) == 0 {
         return;
     }
@@ -265,7 +266,7 @@ fn defer_link<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x3bda2 : projection prédéfinie `n` (compteur et quatre vitesses de la ROM).
-fn launch<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn launch<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(f::DOWNED, 0);
     next(x);
     let c = x.rom8(rom::LAUNCH_COUNTERS + n);
@@ -1140,7 +1141,7 @@ fn hop_land(x: &mut Cx) {
 }
 
 /// 0x3cbaa : projection vers l'arrière (compteur 1, X 0x200, hauteur 0x600).
-fn knockback_speeds<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn knockback_speeds<R: Banc>(x: &mut Cx<'_, R>) {
     next(x);
     x.set8(f::COUNTER, 1);
     x.set32(f::VX, 0x0200_0000);
@@ -1274,7 +1275,7 @@ fn floored_stars(x: &mut Cx) {
     floored(x, true);
 }
 /// 0x3ce4c / 0x3ce84 : 30 images au sol ; la première variante lance 0xab7d8(1).
-fn floored_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, cry: bool) {
+fn floored_wait<R: Banc>(x: &mut Cx<'_, R>, cry: bool) {
     if x.u8(f::SUB_STEP) == 0 {
         next_sub(x);
         x.set8(f::COUNTER, 30);
@@ -1365,7 +1366,7 @@ fn seized_by(x: &mut Cx) {
     }
 }
 /// 0x3d048 : quand le joueur (`+0x50`) signale la prise, l'objet se place devant lui.
-fn seized_stick<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn seized_stick<R: Banc>(x: &mut Cx<'_, R>) {
     let p = x.u16(f::OWNER) as i16 as i32 as u32;
     if rd8(x.b, p + 0x33) != 1 {
         return;
@@ -1804,7 +1805,7 @@ fn turn_angle(x: &mut Cx) {
     }
 }
 /// 0x3da0e : position sur le cercle (table 0x1c94b6 : X, profondeur), vitesses ajoutées.
-fn orbit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+fn orbit<R: Banc>(x: &mut Cx<'_, R>) {
     const CIRCLE: u32 = 0x1c94b6;
     let i = 4 * x.u8(f::ANGLE) as u32;
     let vx = rd16(x.b, CIRCLE + i).wrapping_add(x.u16(f::VY));
