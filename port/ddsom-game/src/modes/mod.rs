@@ -48,8 +48,6 @@ mod at {
     pub const AFTER_HANDLER: u32 = 0x1341a;
     /// Reprise après la cession : tour suivant.
     pub const AFTER_WAIT: u32 = 0x13422;
-    /// Table des gestionnaires de mode, et table des sous-modes.
-    pub const MODE_TABLE: u32 = 0x13424;
 }
 
 /// Sous-routines du moteur appelées par les écrans.
@@ -196,9 +194,6 @@ crate::etapes! {
 fn turn(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     let m = rd8(x.b, mode::MODE);
-    x.c.d[0] = m as u32;
-    let offset = x.prog16(at::MODE_TABLE + m as u32);
-    x.c.d[1] = offset as u32;
     push(x.c, x.b, Etape::ApresGestionnaire);
     match m {
         0 => init(x),
@@ -212,7 +207,6 @@ fn turn(x: &mut Ctx) -> Flow {
 fn init(x: &mut Ctx) -> Flow {
     let m = rd8(x.b, mode::MODE).wrapping_add(2);
     wr8(x.b, mode::MODE, m);
-    x.c.d[0] = 0;
     wr8(x.b, mode::SUB, 2);
     if rd8(x.b, mode::BOOTED) != 0 {
         wr8(x.b, mode::SUB, 0x14);
@@ -226,7 +220,6 @@ fn init(x: &mut Ctx) -> Flow {
 /// Mode 2 (`0x13450`) : aiguille sur le sous-mode.
 fn dispatch(x: &mut Ctx) -> Flow {
     let sub = rd8(x.b, mode::SUB);
-    x.c.d[0] = sub as u32;
     match attract::screen(x, sub).or_else(|| title::screen(x, sub)).or_else(|| ranking::screen(x, sub)).or_else(|| demo::screen(x, sub)) {
         Some(flow) => flow,
         // les onze entrées de la table (0 à 0x14) sont réécrites (code-mort.md, lot « sortie du Cpu »)

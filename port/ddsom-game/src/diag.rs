@@ -127,7 +127,7 @@ pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16)
 
 /// Registres d'une tâche qu'une étape peut hériter : D0-D7, A0-A4, A6 et les drapeaux (A5 est remis par chaque pas,
 /// A7 est la pile).
-const REGISTRES_DE_TACHE: u32 = 0xff | 0x1f00 | 0x4000 | regs::CCR | X;
+pub const REGISTRES_DE_TACHE: u32 = 0xff | 0x1f00 | 0x4000 | regs::CCR | X;
 
 /// Sondes : le drapeau X, à part des autres drapeaux (`regs::CCR` : N, Z, V et C), pour savoir lequel est relu.
 const X: u32 = 1 << 17;

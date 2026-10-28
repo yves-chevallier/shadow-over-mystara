@@ -9,7 +9,7 @@
 //! pile que la tâche avait à sa dernière cession (celle de l'effacement vidéo, `0xc32`).
 
 use super::{mode, Flow, Sequence};
-use crate::mem::{rd16, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rts, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -39,8 +39,6 @@ pub const PHASE_20: Native = Native {
 
 /// Phase 20 de la partie (`0x1c80c`) : fin de partie.
 pub fn phase_20(x: &mut Ctx) -> Flow {
-    x.c.a[5] = A5;
-    set_low_word(&mut x.c.d[0], PLAYER_UI_SLOT);
     crate::kernel::tuer_tache(x.b, PLAYER_UI_SLOT as u32);
     wr16(x.b, A5 + 0x490, 1);
     wr8(x.b, A5 + 0x48e, 0xf);
@@ -51,7 +49,6 @@ crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
         Faded = FADED => |x| {
-            set_low_word(&mut x.c.d[0], VIDEO_ON);
             wr16(x.b, CPS_REG_VIDEO_B, VIDEO_ON);
             wr16(x.b, A5 + 0x14, VIDEO_ON);
             wr8(x.b, A5 + 0x53c, 0);
@@ -80,9 +77,6 @@ pub fn reset_modes(x: &mut Ctx) {
     for i in 0..4 {
         wr32(x.b, 0xff_2b10 + 4 * i, 0);
     }
-    x.c.a[6] = mode::BASE + 64;
-    x.c.d[0] = 0;
-    x.c.d[6] = 0xffff;
 }
 
 pub const NATIVES: &[Native] = &[PHASE_20];

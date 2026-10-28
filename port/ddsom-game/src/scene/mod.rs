@@ -172,7 +172,10 @@ impl<'a> Ctx<'a> {
 
     /// Fin de l'image d'une séquence : mise à jour du monde (0x1c86e), puis liste de sprites (0x1de96). Aucun
     /// gestionnaire n'y cède la main (l'appel par adresse de l'original ne l'admettait pas).
+    #[track_caller]
     pub fn world(&mut self) {
+        // sonde `rendu` (voir `dispatch::Class::update_sans_suite`)
+        crate::diag::registres_morts(self.c, "rendu", crate::diag::REGISTRES_DE_TACHE);
         let flow = crate::game::update_world(self.c, self.b);
         assert!(flow == crate::modes::Flow::Done, "séquence de scène : un gestionnaire a cédé la main pendant la mise à jour du monde");
         crate::sprites::construire_68k(self.c, self.b);

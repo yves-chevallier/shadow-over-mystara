@@ -100,7 +100,7 @@ fn init_scene(x: &mut Ctx) {
     let (pa, pb) = (x.rd8(table::PALETTE_A + scene), x.rd8(table::PALETTE_B + scene));
     x.set_v8(0x48, pa);
     x.set_v8(0x49, pb);
-    crate::modes::demo::reset_recorder(x.c, x.b);
+    crate::modes::demo::reset_recorder(x.b);
     crate::sprites::vider_listes(x.b);
     // 0x33aa6 : caméras au départ, puis leur mise à jour (dont le D4 est relu : `scroll::update_cameras_68k`)
     crate::scroll::cameras_depart(x.b);

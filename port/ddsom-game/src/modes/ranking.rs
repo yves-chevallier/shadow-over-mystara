@@ -51,7 +51,6 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
 fn post_game(x: &mut Ctx) -> Flow {
     x.c.a[0] = STATE;
     let step = rd8(x.b, STATE + f::STEP);
-    x.c.d[0] = step as u32;
     x.push_return(Etape::Return);
     match step {
         0 => s0_prepare(x),
@@ -83,16 +82,12 @@ crate::etapes! {
             crate::palette::charger_page(x.b, 2, 83);
             wr8(x.b, A5 + 0x34, 0);
             crate::palette::charger_palettes_de_scene(x.b, 89);
-            // quatre blocs de palette, de la ROM vers la table des palettes (D0-D6 et A3 gardent le dernier)
+            // quatre blocs de palette, de la ROM vers la table des palettes
             for (dst, src) in [(0x91c3e0u32, 0x291f00u32), (0x91c2e0, 0xfc6d8), (0x91c000, 0x292260), (0x91c3c0, 0x2537c0)] {
-                x.c.a[1] = dst;
-                x.c.a[2] = src;
-                let words: Vec<u32> = (0..8).map(|i| rd32(x.b, src + 4 * i)).collect();
-                for (i, w) in words.iter().enumerate() {
-                    wr32(x.b, dst + 4 * i as u32, *w);
+                for i in 0..8 {
+                    let w = rd32(x.b, src + 4 * i);
+                    wr32(x.b, dst + 4 * i, w);
                 }
-                x.c.d[..7].copy_from_slice(&words[..7]);
-                x.c.a[3] = words[7];
             }
             wr8(x.b, A5 + 0x48e, 0xf);
             crate::palette::full_brightness(x.b);
@@ -126,7 +121,6 @@ crate::etapes! {
             wr8(x.b, super::mode::SUB, 0);
             wr16(x.b, super::mode::STEP, 0);
             wr8(x.b, A5 + 0x36, 0);
-            x.c.d[0] = 0;
             for off in [0x4bau32, 0x50a, 0x55a] {
                 wr16(x.b, A5 + off, 0);
             }

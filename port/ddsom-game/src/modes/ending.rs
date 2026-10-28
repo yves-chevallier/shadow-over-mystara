@@ -15,7 +15,7 @@ use crate::families::creators::set_15_pur;
 use crate::families::effects_creators::ecran_de_fin;
 use crate::palette::{charger_ensemble, charger_page};
 use crate::video::{charger_grille, effacer_couche, Couche, Grille};
-use crate::mem::{rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -82,10 +82,8 @@ pub const PHASE_28: Native = Native {
 };
 /// Phase 28 de la partie (`0xfb292`) : le générique de fin. L'état revient à [`Etape::Return`].
 pub fn phase_28(x: &mut Ctx) -> Flow {
-    x.c.a[5] = A5;
     x.c.a[0] = BLOCK;
     let step = rd8(x.b, var::STEP);
-    x.c.d[0] = step as u32;
     x.push_return(Etape::Return);
     state(x, step)
 }
@@ -99,7 +97,6 @@ crate::etapes! {
         },
         S00Video = S00_VIDEO => |x| {
             wr16(x.b, var::CPS_REG_4, 0x1355);
-            x.c.d[0] = 0;
             for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y] {
                 wr32(x.b, v, 0);
             }
@@ -179,9 +176,9 @@ crate::etapes! {
             wr8(x.b, BLOCK + f::SIGNAL, 1);
             wr16(x.b, BLOCK + f::TIMER, 180);
             fade_settings(x, 3, FADE_ALL);
-            x.c.a[0] = ext::FADE_TASK_IN;
-            set_low_word(&mut x.c.d[0], 0x10);
-            crate::taches::creer_puis_revenir(x)
+            // `jmp 0x9b6` : la tâche de fondu, puis le retour
+            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_IN);
+            Flow::Done
         },
         S10Retry = S10_RETRY => |x| {
             render(x);
@@ -213,23 +210,12 @@ crate::etapes! {
             for i in 0..256u32 {
                 wr32(x.b, 0x91c000 + 4 * i, 0xffff_ffff);
             }
-            // registres laissés par la copie (`movem.l (A1)+,D1-D6/A3-A4`, dernier bloc) puis par le remplissage
-            let last: Vec<u32> = (248..256u32).map(|i| rd32(x.b, 0x910000 + 4 * i)).collect();
-            x.c.d[2..7].copy_from_slice(&last[1..6]);
-            x.c.a[3] = last[6];
-            x.c.a[4] = last[7];
-            x.c.a[1] = 0x91c000 + 1024;
-            x.c.a[2] = 0x910000 + 1024;
-            x.c.d[0] = 0xffff;
-            x.c.d[1] = 0xffff_ffff;
             wr16(x.b, var::FADE_DELAY, 1);
             wr8(x.b, var::FADE_PAGES, FADE_ALL);
             wr32(x.b, A5 + 0x492, 0x910000);
             wr32(x.b, A5 + 0x496, 0x25c0c0);
             wr32(x.b, A5 + 0x49a, 0x269120);
             wr32(x.b, A5 + 0x49e, 0x27e600);
-            x.c.a[0] = ext::FADE_TASK_STEP;
-            set_low_word(&mut x.c.d[0], 0x10);
             crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_STEP);
             crate::sound::jouer_global(x.b, ext::SOUND_E16F0);
             wr8(x.b, var::FADE_STEPS, 1);
@@ -286,7 +272,6 @@ crate::etapes! {
         S2aScrolls = S2A_SCROLLS => |x| {
             clear_layers(x, &[Couche::Deux, Couche::Trois]);
             wr8(x.b, var::CAMERA_MODE, 4);
-            x.c.d[0] = 0;
             for v in [var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
                 wr16(x.b, v, 0);
             }
@@ -310,9 +295,8 @@ crate::etapes! {
             wr16(x.b, var::VIDEO, 0x12ce);
             render(x);
             fade_settings(x, 3, 13);
-            x.c.a[0] = ext::FADE_TASK_IN;
-            set_low_word(&mut x.c.d[0], 0x10);
-            crate::taches::creer_puis_revenir(x)
+            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_IN);
+            Flow::Done
         },
         S2cLoop = S2C_LOOP => |x| {
             if rd8(x.b, var::FADE_STEPS) != 0 {
@@ -420,9 +404,8 @@ crate::etapes! {
             wr16(x.b, var::VIDEO, 0x12ce);
             wr16(x.b, BLOCK + f::TIMER, 240);
             fade_settings(x, 3, FADE_ALL);
-            x.c.a[0] = ext::FADE_TASK_IN;
-            set_low_word(&mut x.c.d[0], 0x10);
-            crate::taches::creer_puis_revenir(x)
+            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_IN);
+            Flow::Done
         },
         S32Faded = S32_FADED => |x| {
             unlink_and_clear_lists(x);
@@ -550,18 +533,8 @@ fn fade_settings(x: &mut Ctx, delay: u16, pages: u8) {
     wr8(x.b, var::FADE_PAGES, pages);
 }
 
-/// Crée la tâche d'entrée `entry` (emplacement 0x10), A0 restauré (`movem.l A0`).
-fn task_keep_a0(x: &mut Ctx, entry: u32) {
-    let a0 = x.c.a[0];
-    x.c.a[0] = entry;
-    set_low_word(&mut x.c.d[0], 0x10);
-    crate::kernel::creer_tache(x.b, 0x10, entry);
-    x.c.a[0] = a0;
-}
-/// Idem sans restaurer A0 (l'original le laisse sur l'entrée de la tâche).
-fn task_clobber_a0(x: &mut Ctx, entry: u32) {
-    x.c.a[0] = entry;
-    set_low_word(&mut x.c.d[0], 0x10);
+/// Crée la tâche de fondu d'entrée `entry` (emplacement 0x10).
+fn fade_task(x: &mut Ctx, entry: u32) {
     crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
@@ -577,7 +550,6 @@ fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grille: G
 /// État 0 : vide tout, copie les récompenses des joueurs, puis tombe dans l'état 2.
 fn s00_reset(x: &mut Ctx) -> Flow {
     next_step(x);
-    set_low_word(&mut x.c.d[0], 0x30);
     crate::kernel::tuer_tache(x.b, 0x30);
     reset_pools(x);
     crate::video::ecran_noir(x.b);
@@ -593,8 +565,6 @@ fn s00_reset(x: &mut Ctx) -> Flow {
             reward_table(x, p);
         }
     }
-    x.c.a[0] = var::PLAYERS + 0x800;
-    x.c.d[6] = 0xffff;
     x.wait(1, Etape::S00Video)
 }
 
@@ -608,7 +578,6 @@ fn reward_table(x: &mut Ctx, p: u32) {
         let v = rd32(x.b, 0xfb7bc + offset + 4 * i);
         wr32(x.b, p + 0x118 + 4 * i, v);
     }
-    x.c.d[1] = 0;
 }
 const S00_VIDEO: u32 = 0xfb712;
 const S00_PALETTE: u32 = 0xfb758;
@@ -657,7 +626,6 @@ fn s08_wait_dialogue(x: &mut Ctx) -> Flow {
     if rd8(x.b, o + 4) != 6 {
         return Flow::Done;
     }
-    x.c.d[0] = 60;
     x.wait(60, Etape::S08Fade)
 }
 const S08_FADE: u32 = 0xfb916;
@@ -726,7 +694,7 @@ fn s0e_wait_timer(x: &mut Ctx) -> Flow {
     next_step(x);
     fade_settings(x, 3, FADE_ALL);
     wr8(x.b, var::FADE_STEPS, 1);
-    task_keep_a0(x, ext::FADE_TASK_OUT);
+    fade_task(x, ext::FADE_TASK_OUT);
     s0e_wait_fade(x)
 }
 fn s0e_wait_fade(x: &mut Ctx) -> Flow {
@@ -744,11 +712,6 @@ fn s0e_wait_fade(x: &mut Ctx) -> Flow {
     for (i, w) in words.iter().enumerate() {
         wr32(x.b, 0x91c280 + 4 * i as u32, w & 0x0fff_0fff);
     }
-    // `movem.l (A1)+,D0-D6/A3` : les registres gardent les huit longs
-    x.c.d[..7].copy_from_slice(&words[..7]);
-    x.c.a[3] = words[7];
-    x.c.a[1] = 0x291980 + 32;
-    x.c.a[2] = 0x91c280 + 32;
     s0e_wait_music(x)
 }
 const S0E_LOOP: u32 = 0xfba68;
@@ -821,7 +784,7 @@ fn s1a_wait_signal(x: &mut Ctx) -> Flow {
     wr8(x.b, var::FADE_STEPS, 1);
     wr16(x.b, var::FADE_DELAY, 4);
     wr8(x.b, var::FADE_PAGES, FADE_ALL);
-    task_keep_a0(x, ext::FADE_TASK_E);
+    fade_task(x, ext::FADE_TASK_E);
     s1a_wait_fade(x)
 }
 fn s1a_wait_fade(x: &mut Ctx) -> Flow {
@@ -917,13 +880,11 @@ fn credits_objects_c(x: &mut Ctx) {
 /// `0xfbd38` : rendu avec défilement pendant trois images.
 fn s1c_scroll(x: &mut Ctx) -> Flow {
     render_scroll(x);
-    x.c.d[0] = 1;
     x.wait(1, Etape::S1cScroll)
 }
 const S1C_SCROLL: u32 = 0xfbd44;
 const S1C_PALETTE: u32 = 0xfbd56;
 fn s1c_wait_fade(x: &mut Ctx) -> Flow {
-    x.c.d[0] = 1;
     x.wait(1, Etape::S1cFadeLoop)
 }
 const S1C_FADE_LOOP: u32 = 0xfbdc0;
@@ -936,11 +897,10 @@ fn s1e_fade(x: &mut Ctx) -> Flow {
     }
     wr8(x.b, var::FADE_STEPS, 8);
     fade_settings(x, 3, FADE_ALL);
-    task_clobber_a0(x, ext::FADE_TASK_C);
+    fade_task(x, ext::FADE_TASK_C);
     s1e_loop(x)
 }
 fn s1e_loop(x: &mut Ctx) -> Flow {
-    x.c.d[0] = 1;
     x.wait(1, Etape::S1eLoop)
 }
 const S1E_LOOP: u32 = 0xfbf00;
@@ -948,7 +908,8 @@ fn s1e_object(x: &mut Ctx) -> Flow {
     if set_15_pur(x.b, 18).is_ok() {
         return Flow::Done;
     }
-    // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40` : la cession dure D0 images, tel que le rendu le laisse
+    // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40`. Glitch d'origine : la cession dure D0 images, tel que le rendu le laisse
+    // (le dernier gestionnaire d'objet appelé)
     x.c.d[0] = 1;
     render_scroll(x);
     crate::taches::attendre(x, Etape::S1eRetry)
@@ -962,12 +923,11 @@ fn s22_object(x: &mut Ctx) -> Flow {
     }
     wr8(x.b, var::FADE_STEPS, 8);
     fade_settings(x, 3, FADE_ALL);
-    task_clobber_a0(x, ext::FADE_TASK_D);
+    fade_task(x, ext::FADE_TASK_D);
     s22_wait(x)
 }
 fn s22_wait(x: &mut Ctx) -> Flow {
     render_scroll(x);
-    x.c.d[0] = 1;
     x.wait(1, Etape::S22Loop)
 }
 const S22_LOOP: u32 = 0xfbf64;
@@ -993,11 +953,10 @@ fn s28_fade(x: &mut Ctx) -> Flow {
     next_step(x);
     wr8(x.b, var::FADE_STEPS, 1);
     fade_settings(x, 3, 13);
-    task_clobber_a0(x, ext::FADE_TASK_OUT);
+    fade_task(x, ext::FADE_TASK_OUT);
     s28_loop(x)
 }
 fn s28_loop(x: &mut Ctx) -> Flow {
-    x.c.d[0] = 1;
     x.wait(1, Etape::S28Loop)
 }
 const S28_LOOP: u32 = 0xfbfe8;
@@ -1015,7 +974,6 @@ const S2A_PLANES: u32 = 0xfc022;
 const S2A_SCROLLS: u32 = 0xfc034;
 fn s2a_wait(x: &mut Ctx) -> Flow {
     render(x);
-    x.c.d[0] = 1;
     x.wait(1, Etape::S2aWait)
 }
 const S2A_WAIT: u32 = 0xfc07e;
@@ -1044,12 +1002,11 @@ fn s2c_wait(x: &mut Ctx) -> Flow {
     next_step(x);
     fade_settings(x, 3, 13);
     wr8(x.b, var::FADE_STEPS, 1);
-    task_clobber_a0(x, ext::FADE_TASK_OUT);
+    fade_task(x, ext::FADE_TASK_OUT);
     s2c_loop(x)
 }
 fn s2c_loop(x: &mut Ctx) -> Flow {
     render(x);
-    x.c.d[0] = 1;
     x.wait(1, Etape::S2cLoop)
 }
 const S2C_LOOP: u32 = 0xfc14c;
@@ -1057,7 +1014,6 @@ const S2C_PLANES: u32 = 0xfc17e;
 const S2C_CLEARED: u32 = 0xfc18c;
 fn s2c_wait_timer(x: &mut Ctx) -> Flow {
     render(x);
-    x.c.d[0] = 1;
     x.wait(1, Etape::S2cTimer)
 }
 const S2C_TIMER: u32 = 0xfc1d8;
@@ -1126,10 +1082,6 @@ fn s32_end(x: &mut Ctx) -> Flow {
                 a1 += 120;
             }
         }
-        x.c.a[1] = a1;
-        x.c.a[2] = a2;
-        x.c.d[1] = 2;
-        x.c.d[2] = 0xffff;
     }
     if !timer_tick(x) {
         return Flow::Done;

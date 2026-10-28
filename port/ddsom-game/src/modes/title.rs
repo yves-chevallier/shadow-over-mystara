@@ -11,7 +11,7 @@ use crate::effects_aids::decor_6;
 use crate::families::creators::set_15_pur;
 use crate::palette::{charger_ensemble, charger_page};
 use crate::video::{charger_grille, effacer_couche, Couche, Grille};
-use crate::mem::{rd16, rd8, rd32, set_low_word, wr16, wr32, wr8};
+use crate::mem::{rd16, rd8, rd32, wr16, wr32, wr8};
 use crate::scene::Ctx;
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -101,13 +101,9 @@ fn unlink_and_clear_lists(x: &mut Ctx) {
     crate::sprites::vider_listes(x.b);
 }
 
-/// Crée la tâche de fondu `entry` (emplacement 0x10) sans toucher à A0.
+/// Crée la tâche de fondu `entry` (emplacement 0x10), A0 gardé.
 fn start_fade_task(x: &mut Ctx, entry: u32) {
-    let a0 = x.c.a[0];
-    x.c.a[0] = entry;
-    x.c.d[0] = 0x10;
-    crate::kernel::creer_tache(x.b, 0x10, x.c.a[0]);
-    x.c.a[0] = a0;
+    crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
 /// Réglages de fondu communs (délai, pages).
@@ -172,7 +168,6 @@ crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
         T00Load = T00_LOAD => |x| {
-            x.c.d[0] = 0;
             x.set_v16(var::CAMERA_Y, 0x300);
             for off in [var::CAMERA_X, var::SCROLL_1_X, var::SCROLL_2_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
                 x.set_v16(off, 0);
@@ -181,7 +176,6 @@ crate::etapes! {
             charger_page(x.b, 1, 2);
             charger_ensemble(x.b, 1);
             load_title_tiles(x, 138, 403);
-            set_low_word(&mut x.c.d[3], 0x300);
             x.render();
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::T00Fade)
@@ -218,7 +212,6 @@ crate::etapes! {
         T10Object = T10_OBJECT => t10_object,
         T10Retry = T10_RETRY => t10_object,
         T12Scenery = T12_SCENERY => |x| {
-            set_low_word(&mut x.c.d[3], 0x70);
             x.set_m8(f::CUE, 2);
             x.render();
             x.set_v16(var::LAYERS, 0x12ce);
@@ -233,8 +226,6 @@ crate::etapes! {
                 destination = two_blocks(x, Grille::Couche2, tile, destination) + 0x800;
                 tile += 2;
             }
-            set_low_word(&mut x.c.d[2], tile);
-            x.c.d[1] = 0xffff;
             x.render();
             x.set_v16(var::LAYERS, 0x09ce);
             x.wait(1, Etape::T12Fade)
@@ -278,8 +269,7 @@ crate::etapes! {
             x.set_m16(f::TIMER, 300);
             crate::text::print(x.b, 0xfacc4);
             let region = x.v16(var::REGION);
-            x.c.d[0] = (x.c.d[0] & 0xffff_0000) | (region.wrapping_add(region) as u32);
-            let index = (x.c.d[0] as u16) as i16 as i32 as u32;
+            let index = region.wrapping_add(region) as i16 as i32 as u32;
             let texte = rd32(x.b, 0xfad92u32.wrapping_add(index));
             crate::text::print(x.b, texte);
             Flow::Done
@@ -547,7 +537,6 @@ fn t18_palette(x: &mut Ctx) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    let saved = (x.c.d, x.c.a[2]);
     // quatre blocs de 32 octets de la ROM vers la table des palettes
     let mut src = LOGO_PALETTE;
     for dst in [0x91c2e0u32, 0x91c300, 0x91c360, 0x91c3e0] {
@@ -557,12 +546,8 @@ fn t18_palette(x: &mut Ctx) -> Flow {
         }
         src += 32;
     }
-    x.c.a[4] = src;
-    x.c.a[1] = 0x91c3e0;
     x.set_v8(var::FADE_PAGES, 1);
     crate::palette::full_brightness(x.b);
-    x.c.d[..7].copy_from_slice(&saved.0[..7]);
-    x.c.a[2] = saved.1;
     t18_object(x)
 }
 fn t18_object(x: &mut Ctx) -> Flow {
@@ -600,7 +585,6 @@ fn t18_text_object(x: &mut Ctx) -> Flow {
     wr16(x.b, o + 0xc, 0x3f0);
     wr32(x.b, o + 0x10, 1);
     let target = x.m16(f::OBJECT) as i16 as i32 as u32 & 0xff_ffff;
-    x.c.a[1] = target;
     wr32(x.b, target + 4, 0x0600_0000);
     x.set_v16(var::SCROLL_2_Y, 0);
     x.set_v16(var::LAYERS, 0x12ce);
@@ -646,31 +630,22 @@ fn t1c_wait_logo(x: &mut Ctx) -> Flow {
 }
 /// `0xfa830` : trois objets de texte autour de la caméra, puis le texte de droits.
 pub fn title_text(x: &mut Ctx) -> Flow {
-    x.c.d[5] = 2;
-    x.c.d[4] = 0x00e4_e5e6;
-    x.c.a[2] = 0xfa8bc;
-    x.c.a[3] = crate::mem::A5 + 0x4fe;
-    if x.v8(var::SCREEN_TYPE) != 0 {
-        x.c.a[3] = crate::mem::A5 + 0x54e;
-    }
-    loop {
+    // trois variantes (0xe6, 0xe5, 0xe4, octet bas en premier) placées d'après la caméra en service et la table
+    // des décalages 0xfa8bc
+    const DECALAGES: u32 = 0xfa8bc;
+    let camera = crate::mem::A5 + if x.v8(var::SCREEN_TYPE) != 0 { 0x54e } else { 0x4fe };
+    let mut variantes = 0x00e4_e5e6u32;
+    for k in 0..3 {
         let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
-        wr8(x.b, o + 3, x.c.d[4] as u8);
-        x.c.d[4] >>= 8;
-        let cam = x.c.a[3];
-        let (px, py) = (rd16(x.b, cam + 8), rd16(x.b, cam + 12));
-        let (dx, dy) = (rd16(x.b, x.c.a[2]), rd16(x.b, x.c.a[2] + 2));
-        x.c.a[2] += 4;
+        wr8(x.b, o + 3, variantes as u8);
+        variantes >>= 8;
+        let (px, py) = (rd16(x.b, camera + 8), rd16(x.b, camera + 12));
+        let (dx, dy) = (rd16(x.b, DECALAGES + 4 * k), rd16(x.b, DECALAGES + 4 * k + 2));
         wr16(x.b, o + 8, px.wrapping_add(dx));
         wr16(x.b, o + 12, py.wrapping_add(dy));
         wr32(x.b, o + 0x10, 0);
-        let left = (x.c.d[5] as u16).wrapping_sub(1);
-        set_low_word(&mut x.c.d[5], left);
-        if left == 0xffff {
-            break;
-        }
     }
     x.wait(1, Etape::T1cText)
 }
@@ -707,7 +682,6 @@ fn leave_wait(x: &mut Ctx, loop_resume: Etape, cleared: Etape, second_title: boo
     if x.v8(var::FADE_STEPS) != 0 {
         return x.wait(1, loop_resume);
     }
-    let a0 = x.c.a[0];
     // l'original libère les pools dans un ordre différent selon l'écran
     use crate::objects::pools::{EFFCT, SET, SOBJ};
     let pools = if second_title { [&SET, &EFFCT, &SOBJ] } else { [&SOBJ, &SET, &EFFCT] };
@@ -715,7 +689,6 @@ fn leave_wait(x: &mut Ctx, loop_resume: Etape, cleared: Etape, second_title: boo
         pool.reset(x.b);
     }
     unlink_and_clear_lists(x);
-    x.c.a[0] = a0;
     crate::video::vider_objets(x.b);
     if second_title {
         x.set_v8(var::SCREEN_TYPE, 0);
@@ -753,7 +726,6 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
 /// Étape 2 : fond de titre, palette, deux objets (variante 9 de SOBJ, puis SET 2).
 fn s02_setup(x: &mut Ctx) -> Flow {
     x.set_v16(var::LAYERS, 0x12c2);
-    x.c.d[0] = 0;
     for off in [var::CAMERA_X, var::CAMERA_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
         x.set_v32(off, 0);
     }
@@ -779,9 +751,6 @@ fn clear_sprite_area(x: &mut Ctx) {
     for i in 0..128 {
         wr32(x.b, SPRITE_CLEAR_AREA + 4 * i, 0);
     }
-    x.c.a[1] = SPRITE_CLEAR_AREA + 512;
-    x.c.d[0] = 0;
-    x.c.d[1] = (x.c.d[1] & 0xffff_0000) | 0xffff;
 }
 
 /// Étape 4 : attend le signal de l'objet (`+8`), crée l'objet SET de variante 68.

@@ -284,6 +284,8 @@ fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Suite>) -> Flow {
 /// 0xfa1e2 : mise à jour du monde (A0 et A6 gardés).
 fn world(x: &mut Ctx) {
     let (a0, a6) = (x.c.a[0], x.c.a[6]);
+    // sonde `rendu` (voir `dispatch::Class::update_sans_suite`)
+    crate::diag::registres_morts(x.c, "rendu", crate::diag::REGISTRES_DE_TACHE);
     let flow = crate::game::update_world(x.c, x.b);
     assert!(flow == Flow::Done, "script de transition : un gestionnaire a cédé la main pendant la mise à jour du monde");
     (x.c.a[0], x.c.a[6]) = (a0, a6);

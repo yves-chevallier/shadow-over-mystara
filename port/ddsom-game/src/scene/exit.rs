@@ -492,6 +492,8 @@ fn run_update(ex: &mut Ex, update: Update) {
     }
     match update {
         Update::Reduced => {
+            // sonde `rendu` (voir `dispatch::Class::update_sans_suite`)
+            crate::diag::registres_morts(ex.x.c, "rendu", crate::diag::REGISTRES_DE_TACHE);
             crate::player::update::mettre_a_jour(ex.x.c, ex.x.b);
             crate::player::overlays::mettre_a_jour(ex.x.c, ex.x.b);
             for class in CLASSES {

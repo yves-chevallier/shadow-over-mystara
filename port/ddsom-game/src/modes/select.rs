@@ -22,7 +22,7 @@
 use super::{Flow, Sequence};
 use crate::dispatch;
 use crate::families::effects_creators::{bandeau, element_d_interface};
-use crate::mem::{rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
 use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::video::{charger_grille, effacer_couche, Couche, Grille};
@@ -84,11 +84,10 @@ mod ext {
     pub const FADE_TASK_C: u32 = 0x14de;
 }
 
-/// Tables en ROM : octets de variante par personnage (code), routines d'initialisation des quatre
-/// types de joueur (mots), annonces, déplacements du curseur (données).
+/// Tables en ROM : octets de variante par personnage (code), annonces, déplacements du curseur (données). Les
+/// routines d'initialisation des quatre joueurs (0x1d0f6) sont celles de `player::init::initialiser`.
 mod table {
     pub const VARIANT: u32 = 0x1d118;
-    pub const INIT_ROUTINES: u32 = 0x1d0f6;
     pub const BANNERS: u32 = 0x1d3aa;
     pub const CURSOR_DOWN_DELTAS: u32 = 0x1d6d2;
     pub const CURSOR_UP_DELTAS: u32 = 0x1d6cc;
@@ -139,7 +138,6 @@ pub const PHASE_4: Native = Native {
 
 /// Phase 4 de la partie (`0x1ca20`) : l'écran de sélection, un pas par image.
 pub fn phase_4(x: &mut Ctx) -> Flow {
-    x.c.a[5] = A5;
     let step = rd8(x.b, var::STEP);
     match step {
         0 => step_0(x),
@@ -293,16 +291,8 @@ crate::etapes! {
                     wr32(x.b, 0x91c000 + 0x20 * i + 4 * j, 0);
                 }
             }
-            x.c.a[4] = 0x91c000 + 0x100;
-            for r in 0..6 {
-                x.c.d[r] = 0;
-            }
-            x.c.a[1] = 0;
-            x.c.a[2] = 0;
-            x.c.d[6] = 0xffff;
             wr8(x.b, var::FADE_PAGES, 0xf);
             crate::palette::full_brightness(x.b);
-            x.c.d[0] = 0;
             for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
                 wr32(x.b, v, 0);
             }
@@ -346,7 +336,6 @@ fn fade_wait(x: &mut Ctx) -> Flow {
     }
     wr8(x.b, var::SCREEN_ID, 3);
     let main = sign_ext(rd16(x.b, var::MAIN_LINK));
-    x.c.a[6] = main;
     wr8(x.b, main + 0x1c, 1);
     // `jmp 0x1de96` à la fin
     render(x, &[&dispatch::EFFCT]);
@@ -363,8 +352,6 @@ const FADE_LOOP: u32 = 0x1cca4;
 
 /// Crée la tâche d'entrée `entry` dans l'emplacement `slot` (`move.w #slot,D0w ; jsr 0x9b6`).
 fn create_task(x: &mut Ctx, entry: u32, slot: u16) {
-    x.c.a[0] = entry;
-    set_low_word(&mut x.c.d[0], slot);
     crate::kernel::creer_tache(x.b, slot as u32, entry);
 }
 
@@ -388,7 +375,6 @@ fn step_2(x: &mut Ctx) -> Flow {
     mark_choices(x);
     check_all_chosen(x);
     let main = sign_ext(rd16(x.b, var::MAIN_LINK));
-    x.c.a[6] = main;
     publish_choices(x, main);
     wr8(x.b, var::LOCKED_FLAG, 0);
     // `jmp 0x1de96` à la fin
@@ -644,8 +630,6 @@ fn step_6(x: &mut Ctx) -> Flow {
         // ce numéro (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
         let kind = rd8(x.b, p + 2) as u32;
         assert!(kind < 4, "sélection : joueur {kind} hors de la table 0x1d0f6");
-        x.c.a[0] = p;
-        x.c.a[1] = sign_ext(x.prog16(table::INIT_ROUTINES + 2 * kind));
         crate::player::init::initialiser(x.c, x.b, kind);
         if (rd8(x.b, p + 3) & 0x7f) >> 1 == 5 {
             wr8(x.b, p + 0x162, 1);

@@ -6,7 +6,7 @@
 
 use super::{Flow, Sequence};
 use crate::video::Couche;
-use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -65,10 +65,8 @@ crate::etapes! {
             crate::families::items::effacer_ramasses(x.b);
             crate::taches::partie::effacer_variables(x.c, x.b);
             wr8(x.b, A5 - 0x713c, 0);
-            set_low_word(&mut x.c.d[0], 0xe);
             wr16(x.b, CPS_REG_VIDEO, 0xe);
             wr16(x.b, A5 + 0x12, 0xe);
-            set_low_word(&mut x.c.d[0], 0x12ce);
             wr16(x.b, CPS_REG_VIDEO_B, 0x12ce);
             wr16(x.b, A5 + 0x14, 0x12ce);
             let region = rd8(x.b, REGION_BYTE);
@@ -122,9 +120,6 @@ fn clear_mode_state(x: &mut Ctx) {
     for i in 0..4 {
         wr32(x.b, SCENE_SCRIPT + 4 * i, 0);
     }
-    x.c.d[0] = 0;
-    x.c.d[6] |= 0xffff;
-    x.c.a[6] = MODES + 0x40;
 }
 
 /// Tableau des meilleurs scores par défaut (`0x18082`) : dix entrées de 14 octets copiées de la ROM vers
@@ -138,9 +133,6 @@ fn default_high_scores(x: &mut Ctx) {
         let w = rd16(x.b, src + i);
         wr16(x.b, SCORES + i, w);
     }
-    x.c.a[1] = src + SIZE;
-    x.c.a[2] = SCORES + SIZE;
-    x.c.d[6] |= 0xffff;
 }
 
 /// Affiche le texte de la région courante : mot `A5+0x70` (modulo 16) indexe la table de pointeurs.

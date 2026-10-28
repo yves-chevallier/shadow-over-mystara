@@ -16,14 +16,13 @@
 //! durée. Étapes de l'écran (`FF0E72`) : 0 début de script, 2 scène en cours, 6 présentation d'un personnage.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::{mode, Block, Flow, Sequence};
 use crate::effects_aids::decor_6;
 use crate::families::creators::set_15_pur;
 use crate::objects::Obj;
 use crate::video::{effacer_couche, Couche};
-use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::pools;
 use crate::scene::Ctx;
 use crate::Native;
@@ -138,7 +137,6 @@ fn rd_state(x: &mut Ctx, off: u32) -> u8 {
 
 fn interpreter_a(x: &mut Ctx) -> Flow {
     let step = rd_state(x, f::STEP);
-    x.c.d[0] = step as u32;
     x.push_return(Etape::ReturnA);
     match step {
         0 => start_a(x),
@@ -261,34 +259,27 @@ fn start_a(x: &mut Ctx) -> Flow {
 fn next_operation(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     wr8(x.b, mode::BASE + 3, 0);
-    let a1 = rd32(x.b, mode::BASE + f::SCRIPT);
-    let op = rd8(x.b, a1);
-    x.c.a[1] = a1 + 1;
-    x.c.d[0] = (x.c.d[0] & !0xff) | op as u32;
+    let script = rd32(x.b, mode::BASE + f::SCRIPT);
+    let op = rd8(x.b, script);
     if op & 0x80 != 0 {
         return end_of_script(x);
     }
     match op {
-        0 => scene_start(x),
+        0 => scene_start(x, script + 1),
         2 => {
-            // commande son : l'octet suivant indexe la table des routines
-            let index = rd8(x.b, a1 + 1) as u32;
-            x.c.a[1] = a1 + 2;
-            x.c.d[0] = index;
-            // une commande son de la table 0x1f3aa (0xe0ef8, 0xe0f70, 0xe0f34, 0xe1024), appelée par `jsr (A6)`
+            // commande son : l'octet suivant indexe la table des routines (0x1f3aa : 0xe0ef8, 0xe0f70, 0xe0f34,
+            // 0xe1024), appelée par `jsr (A6)`
+            let index = rd8(x.b, script + 1) as u32;
             let routine = prog32(x, table::COMMANDS + index);
-            x.c.a[6] = routine;
             crate::sound::jouer_global(x.b, routine);
-            x.c.a[1] += 1;
-            scene_start(x)
+            scene_start(x, script + 3)
         }
-        _ => presentation(x),
+        _ => presentation(x, script + 1),
     }
 }
 
-/// `0x1f818` : début d'une scène de démonstration d'après le script (A1 après l'opération).
-fn scene_start(x: &mut Ctx) -> Flow {
-    let mut a1 = x.c.a[1];
+/// `0x1f818` : début d'une scène de démonstration d'après le script (`a1` : après l'opération).
+fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
     wr8(x.b, mode::BASE + f::STEP, 2);
     let scene = rd8(x.b, a1);
     wr8(x.b, var::SCENE, scene);
@@ -305,7 +296,6 @@ fn scene_start(x: &mut Ctx) -> Flow {
     wr8(x.b, var::STEP, 0);
     crate::rng::seed(x.b);
     let mut a0 = PLAYERS;
-    x.c.d[6] = 3;
     for d6 in (0..4u32).rev() {
         if rd8(x.b, a1) & 0x80 == 0 {
             let character = rd8(x.b, a1);
@@ -320,16 +310,12 @@ fn scene_start(x: &mut Ctx) -> Flow {
         a1 += 6;
         a0 += PLAYER_STRIDE;
     }
-    x.c.d[6] = 0xffff;
     let v = rd32(x.b, a1);
     wr32(x.b, var::SCRIPT_TAIL, v);
     a1 += 4;
-    x.c.a[1] = a1;
     wr32(x.b, mode::BASE + f::SCRIPT, a1);
     wr8(x.b, A5 + 0x31, 0);
     wr8(x.b, var::SCREEN_WAIT, 3);
-    x.c.a[0] = ext::PLAYER_UI;
-    set_low_word(&mut x.c.d[0], 0x30);
     crate::kernel::creer_tache(x.b, 0x30, ext::PLAYER_UI);
     Flow::Done
 }
@@ -364,7 +350,6 @@ fn loop_a(x: &mut Ctx) -> Flow {
     let skip = rd8(x.b, var::SKIP_YIELD) as i8;
     if rd8(x.b, var::SCREEN_WAIT) != 0 || rd8(x.b, var::YIELDED) != 0 || skip > 1 {
         wr8(x.b, var::SKIP_YIELD, 0);
-        x.c.d[0] = 1;
         return x.wait(1, Etape::AfterYieldA);
     }
     wr8(x.b, var::SKIP_YIELD, skip.wrapping_add(3) as u8);
@@ -391,9 +376,9 @@ fn run_phase(x: &mut Ctx, phases: u32, loop_top: Etape, after: Etape) -> Flow {
     x.push_return(loop_top);
     x.push_return(after);
     let phase = rd8(x.b, var::PHASE) as u32;
-    let handler = prog32(x, phases + phase);
-    x.c.d[0] = phase;
-    x.c.a[0] = handler;
+    // Glitch d'origine : A0 reste l'adresse du gestionnaire de phase (`jsr (A0)`) ; l'entrée de scène le relit comme
+    // créateur d'objets (`scene::entry` : finale, effets 0x13)
+    x.c.a[0] = prog32(x, phases + phase);
     // les deux tables n'ont que les phases 8 (entrée de scène) et 12 (le jeu) ; les autres entrées sont nulles
     // (code-mort.md, lot « sortie du Cpu »)
     match phase {
@@ -423,7 +408,6 @@ fn after_phase(x: &mut Ctx) -> Flow {
             for (i, l) in longs.into_iter().enumerate() {
                 wr32(x.b, 0x708000 + 4 * i as u32, l);
             }
-            x.c.a[4] = 0x708018;
         }
     }
     reset_queues(x);
@@ -435,7 +419,6 @@ fn reset_queues(x: &mut Ctx) {
     for queue in [&pools::QUEUE_PSHL, &pools::QUEUE_ESHL, &pools::QUEUE_ENEMY_BOSS, &pools::QUEUE_BOX, &pools::QUEUE_ITEM] {
         queue.reset(x.b);
     }
-    x.c.a[0] = A5 + pools::QUEUE_ITEM.array;
 }
 
 // --- fin d'une scène, fin du script -------------------------------------------------------------
@@ -460,7 +443,6 @@ fn scene_end_common(x: &mut Ctx, resume: Etape) -> Flow {
     stop_recorder(x.b);
     wr8(x.b, var::PHASE, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
-    set_low_word(&mut x.c.d[0], 0x30);
     crate::kernel::tuer_tache(x.b, 0x30);
     clear_lists_and_objects(x);
     x.wait(1, resume)
@@ -488,7 +470,6 @@ fn end_of_script(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PHASE, 0);
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
-    set_low_word(&mut x.c.d[0], 0x30);
     crate::kernel::tuer_tache(x.b, 0x30);
     clear_lists_and_objects(x);
     x.wait(1, Etape::EndClear)
@@ -506,9 +487,8 @@ const END_SHOW: u32 = 0x1fb18;
 
 // --- présentation d'un personnage (opération autre que 0 et 2) -----------------------------------
 
-/// `0x1fbd6` : mémorise les trois paramètres de la présentation et prépare l'affichage.
-fn presentation(x: &mut Ctx) -> Flow {
-    let mut a1 = x.c.a[1];
+/// `0x1fbd6` : mémorise les trois paramètres de la présentation (`a1` : après l'opération) et prépare l'affichage.
+fn presentation(x: &mut Ctx, mut a1: u32) -> Flow {
     crate::taches::invite::arreter(x.b);
     wr8(x.b, mode::BASE + f::STEP, 6);
     wr16(x.b, mode::BASE + f::TIMER, 0);
@@ -520,7 +500,6 @@ fn presentation(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::BASE + f::PRESENT_CHARACTER, b);
     a1 += 3;
     wr32(x.b, mode::BASE + f::SCRIPT, a1);
-    x.c.a[1] = a1;
     wr8(x.b, A5 + 0x53c, 0);
     wr8(x.b, A5 + 0x36, 0);
     wr16(x.b, A5 + 0x506, 0);
@@ -542,7 +521,6 @@ fn presentation(x: &mut Ctx) -> Flow {
 
 fn presentation_step(x: &mut Ctx) -> Flow {
     let substep = rd_state(x, f::SUBSTEP);
-    x.c.d[0] = substep as u32;
     match substep {
         0 => p0_images(x),
         2 => p2_show(x),
@@ -634,9 +612,6 @@ fn p6_text(x: &mut Ctx) -> Flow {
         let v = rd32(x.b, src + 4 * i);
         wr32(x.b, 0x91c1e0 + 4 * i, v);
     }
-    x.c.a[1] = 0x91c1e0;
-    x.c.a[2] = src + 32;
-    x.c.a[4] = a4 + 2;
     x.push_return(Etape::PresentAgain);
     text_screen(x);
     portrait_object(x)
@@ -650,7 +625,6 @@ fn p4_end(x: &mut Ctx) -> Flow {
         return p_render(x);
     }
     let link = rd16(x.b, mode::BASE + f::LINK) as i16 as i32 as u32 & 0xff_ffff;
-    x.c.a[1] = link;
     wr32(x.b, link + 4, 0x0600_0000);
     wr8(x.b, mode::BASE + f::STEP, 2);
     wr16(x.b, mode::BASE + 0x30, 300);
@@ -738,7 +712,6 @@ fn text_lines(x: &mut Ctx, start: u32, text: u32, attr: u16) {
 
 fn interpreter_b(x: &mut Ctx) -> Flow {
     let step = rd_state(x, f::STEP);
-    x.c.d[0] = step as u32;
     x.push_return(Etape::ReturnB);
     match step {
         0 => {
@@ -765,14 +738,12 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
 fn next_operation_b(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     wr8(x.b, mode::BASE + 3, 0);
-    let a1 = rd32(x.b, mode::BASE + f::SCRIPT);
-    let op = rd8(x.b, a1);
-    x.c.a[1] = a1 + 1;
-    x.c.d[0] = (x.c.d[0] & !0xff) | op as u32;
+    let script = rd32(x.b, mode::BASE + f::SCRIPT);
+    let op = rd8(x.b, script);
     if op & 0x80 != 0 {
         return end_of_script(x);
     }
-    scene_start(x)
+    scene_start(x, script + 1)
 }
 
 fn loop_b(x: &mut Ctx) -> Flow {
@@ -781,7 +752,6 @@ fn loop_b(x: &mut Ctx) -> Flow {
     let skip = rd8(x.b, var::SKIP_YIELD) as i8;
     if rd8(x.b, var::SCREEN_WAIT) != 0 || rd8(x.b, var::YIELDED) != 0 || skip > 1 {
         wr8(x.b, var::SKIP_YIELD, 0);
-        x.c.d[0] = 1;
         return x.wait(1, Etape::AfterYieldB);
     }
     wr8(x.b, var::SKIP_YIELD, skip.wrapping_add(3) as u8);
@@ -809,11 +779,9 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
                     wr8(x.b, mode::BASE + f::ENDING, 1);
                     let _ = decor_6(x.b, 8);
                 } else {
-                    x.c.a[0] = ext::FADE_TASK_OUT;
                     wr16(x.b, var::FADE_DELAY, 2);
                     wr8(x.b, var::FADE_PAGES, 15);
-                    x.c.d[0] = 0x10;
-                    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
+                    crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_OUT);
                     crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0 });
                 }
             }
@@ -844,7 +812,6 @@ fn ending_b(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PHASE, 0);
     wr16(x.b, mode::BASE + f::STEP, 0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
-    set_low_word(&mut x.c.d[0], 0x30);
     crate::kernel::tuer_tache(x.b, 0x30);
     effacer_couche(x.b, Couche::Un);
     crate::video::effacer_debut_couche1_68k(x.c, x.b);
@@ -916,18 +883,30 @@ fn demo_inputs(x: &mut Ctx) {
 /// `0xe0538` (entrée de scène, hors partie) : prépare l'enregistreur. Réglage bit 13 : graine du hasard et
 /// compteurs d'images à zéro, puis relecture active ; bit 15 : enregistrement en 0x930000 ; sinon relecture
 /// (inactive) de la démonstration pointée par `A5-0x5aa8`.
-pub fn reset_recorder(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn reset_recorder(b: &mut Cps2Bus) {
+    reset_recorder_par(b);
+}
+
+/// Ce que 0xe0538 laisse dans les registres : D5.w = les réglages lus, A0 = la démonstration relue.
+#[derive(Default)]
+struct RestesEnregistreur {
+    reglages: Option<u16>,
+    demo: Option<u32>,
+}
+
+fn reset_recorder_par(b: &mut Cps2Bus) -> RestesEnregistreur {
     const DEMO: u32 = A5 - 0x5aa8;
     const RECORD_AREA: u32 = 0x93_0000;
+    let mut restes = RestesEnregistreur::default();
     if rd8(b, var::GAME) != 0 {
-        return;
+        return restes;
     }
     wr16(b, rec::LEFT, 0);
     wr8(b, rec::RECORDING, 0);
     wr8(b, rec::PLAYING, 0);
     wr8(b, rec::ACTIVE, 0);
     let dsw = rd16(b, var::DSW);
-    c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
+    restes.reglages = Some(dsw);
     if dsw & 0x2000 != 0 {
         crate::rng::seed(b);
         wr16(b, A5 + 0x6c, 0);
@@ -941,14 +920,15 @@ pub fn reset_recorder(c: &mut Cpu, b: &mut Cps2Bus) {
         }
         wr16(b, RECORD_AREA + 0xc, 0xffff);
         wr8(b, rec::RECORDING, 1);
-        return;
+        return restes;
     }
     let demo = rd32(b, DEMO);
-    c.a[0] = demo;
+    restes.demo = Some(demo);
     wr32(b, rec::POINTER, demo);
     let length = rd16(b, demo);
     wr16(b, rec::LEFT, length);
     wr8(b, rec::PLAYING, 1);
+    restes
 }
 
 /// `0xe05d6` : arrête l'enregistreur.
@@ -964,7 +944,13 @@ pub const RECORDER_RESET: Native = Native {
     entry: 0xe0538,
     name: "demo_enregistreur_depart",
     run: crate::Corps::Processeur(|c, b| {
-        reset_recorder(c, b);
+        let restes = reset_recorder_par(b);
+        if let Some(dsw) = restes.reglages {
+            c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
+        }
+        if let Some(demo) = restes.demo {
+            c.a[0] = demo;
+        }
         crate::mem::rts(c, b);
     }),
     touches_sound: false,
@@ -974,10 +960,7 @@ pub const RECORDER_RESET: Native = Native {
 pub const RECORDER_STOP: Native = Native {
     entry: 0xe05d6,
     name: "demo_enregistreur_arret",
-    run: crate::Corps::Processeur(|c, b| {
-        stop_recorder(b);
-        crate::mem::rts(c, b);
-    }),
+    run: crate::Corps::Memoire(stop_recorder),
     touches_sound: false,
     outputs: 0,
 };
@@ -1025,7 +1008,6 @@ pub const DEMO_PHASE_12: Native = Native {
 /// `0x1fa38` : entrées de l'IA, puis la mise à jour du monde (un gestionnaire d'objet peut y faire céder la main à la
 /// tâche : elle reprendra à [`Etape::ApresMonde`]).
 fn demo_phase_12(x: &mut Ctx) -> Flow {
-    x.c.a[5] = A5;
     // Glitch d'origine : D0-D4 de la copie des entrées (0x2aec) sont relus par des gestionnaires (voir game.rs)
     crate::inputs::recopier_68k(x.c, x.b);
     demo_inputs(x);
