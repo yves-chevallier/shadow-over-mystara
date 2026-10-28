@@ -15,7 +15,7 @@
 //! D0.w, dont l'octet haut est le lien de liste laissé par `reinsert`. Les natives 0x1ee1a et
 //! 0x1ef6c (`Reinsert`) transcrivent donc l'original instruction par instruction et rendent
 //! D0-D2, A1-A4 et les drapeaux tels que lui, selon le chemin suivi (`SortedList::reinsert_68k`). Les
-//! appelants qui n'ont pas ce contrat utilisent l'algorithme en clair (`SortedList::reinsert`, `plan_reinsert`).
+//! appelants qui n'ont pas ce contrat utilisent `SortedList::reinsert`, la même transcription sans registres.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -42,25 +42,9 @@ fn is_sentinel_or_none(l: Link) -> bool {
     l.0 as i16 >= 0
 }
 
-/// Où replacer un objet.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Place {
-    /// À sa place : rien à faire.
-    Keep,
-    /// La liste est vide.
-    Alone,
-    /// Juste avant l'objet (plus près de la tête).
-    Before(Obj),
-    /// Juste après l'objet (plus près de la queue).
-    After(Obj),
-}
-
 impl SortedList {
     fn head(self, b: &mut Cps2Bus) -> Link {
         Link(rd16(b, A5 + self.head))
-    }
-    fn tail(self, b: &mut Cps2Bus) -> Link {
-        Link(rd16(b, A5 + self.tail))
     }
     fn set_head(self, b: &mut Cps2Bus, l: Link) {
         wr16(b, A5 + self.head, l.0)
@@ -70,136 +54,104 @@ impl SortedList {
     }
 
     /// Insère `obj` s'il n'est dans aucune liste, sinon le replace si l'ordre est rompu.
+    ///
+    /// Les écritures sont celles de 0x1ee1a, dans le même ordre (comme `Reinsert`, sans registres) : sur une liste
+    /// incohérente (liens qui se recouvrent), l'original et cette fonction laissent la même mémoire, ce que la
+    /// version par plan (`plan_reinsert`, `apply`) ne garantissait pas (écart trouvé par `fuzz_couv` sur ESHL 44).
     pub fn reinsert(self, b: &mut Cps2Bus, obj: Obj) {
-        let place = self.plan_reinsert(b, obj);
-        self.apply(b, obj, place);
+        let a0 = obj.0;
+        let (prev, next) = (rd16(b, a0 + Obj::PREV), rd16(b, a0 + Obj::NEXT));
+        if prev.wrapping_add(next) == 0 {
+            return self.insert_exact(b, obj);
+        }
+        if self.relocate_exact(b, obj, Way::toward_head(self)) {
+            return;
+        }
+        self.relocate_exact(b, obj, Way::toward_tail(self));
     }
 
-    /// Cherche la nouvelle place de `obj` sans rien modifier.
-    fn plan_reinsert(self, b: &mut Cps2Bus, obj: Obj) -> Place {
-        let (prev, next) = (obj.prev(b), obj.next(b));
-        let y = obj.depth(b);
-        if prev.0.wrapping_add(next.0) == 0 {
-            return self.plan_insert(b, y);
+    /// `Reinsert::relocate` sans registres.
+    fn relocate_exact(self, b: &mut Cps2Bus, obj: Obj, w: Way) -> bool {
+        let a0 = obj.0;
+        let link = rd16(b, a0 + w.ahead);
+        if (link as i16) >= 0 {
+            return false;
         }
-        // trop loin de la tête ? alors on remonte vers la tête
-        if !is_sentinel_or_none(prev) {
-            let p = prev.target();
-            if y > p.depth(b) {
-                let mut a1 = p;
-                loop {
-                    let before = a1.prev(b);
-                    if is_sentinel_or_none(before) {
-                        break;
-                    }
-                    let a2 = before.target();
-                    if y <= a2.depth(b) {
-                        break;
-                    }
-                    a1 = a2;
-                }
-                return Place::Before(a1);
-            }
+        let mut a1 = link as i16 as i32 as u32;
+        let y = rd32(b, a0 + Obj::Y);
+        if w.settled(y, rd32(b, a1.wrapping_add(Obj::Y))) {
+            return false;
         }
-        // trop près de la tête ? alors on descend vers la queue
-        if is_sentinel_or_none(next) {
-            return Place::Keep;
-        }
-        let n = next.target();
-        if y >= n.depth(b) {
-            return Place::Keep;
-        }
-        let mut a1 = n;
+        let mut d0;
         loop {
-            let after = a1.next(b);
-            if is_sentinel_or_none(after) {
+            d0 = rd16(b, a1.wrapping_add(w.ahead));
+            if (d0 as i16) >= 0 {
+                wr16(b, A5 + w.reach, a0 as u16);
                 break;
             }
-            let a2 = after.target();
-            if y >= a2.depth(b) {
+            let a2 = d0 as i16 as i32 as u32;
+            if w.settled(y, rd32(b, a2.wrapping_add(Obj::Y))) {
                 break;
             }
             a1 = a2;
         }
-        Place::After(a1)
+        let a3 = rd16(b, a0 + w.ahead) as i16 as i32 as u32;
+        let d2 = rd16(b, a0 + w.behind);
+        if (d2 as i16) < 0 {
+            wr16(b, (d2 as i16 as i32 as u32).wrapping_add(w.ahead), a3 as u16);
+        }
+        wr16(b, a3.wrapping_add(w.behind), d2);
+        if (d2 as i16) >= 0 {
+            wr16(b, A5 + w.far, a3 as u16);
+        }
+        wr16(b, a0 + w.ahead, d0);
+        if (d0 as i16) < 0 {
+            wr16(b, (d0 as i16 as i32 as u32).wrapping_add(w.behind), a0 as u16);
+        }
+        wr16(b, a1.wrapping_add(w.ahead), a0 as u16);
+        wr16(b, a0 + w.behind, a1 as u16);
+        true
     }
 
-    /// Place d'un objet absent de la liste, en partant de la queue.
-    fn plan_insert(self, b: &mut Cps2Bus, y: i32) -> Place {
-        let tail = self.tail(b);
-        if tail.is_none() {
-            return Place::Alone;
+    /// `Reinsert::insert` sans registres (0x1eef2).
+    fn insert_exact(self, b: &mut Cps2Bus, obj: Obj) {
+        let a0 = obj.0;
+        let y = rd32(b, a0 + Obj::Y);
+        let tail = rd16(b, A5 + self.tail);
+        if tail == 0 {
+            wr16(b, a0 + Obj::PREV, self.end.0);
+            wr16(b, a0 + Obj::NEXT, self.end.0);
+            wr16(b, A5 + self.head, a0 as u16);
+            wr16(b, A5 + self.tail, a0 as u16);
+            return;
         }
-        let mut a1 = tail.target();
-        if y <= a1.depth(b) {
-            return Place::After(a1);
+        let mut a1 = tail as i16 as i32 as u32;
+        if y as i32 <= rd32(b, a1.wrapping_add(Obj::Y)) as i32 {
+            wr16(b, a1.wrapping_add(Obj::NEXT), a0 as u16);
+            wr16(b, a0 + Obj::PREV, a1 as u16);
+            wr16(b, a0 + Obj::NEXT, self.end.0);
+            wr16(b, A5 + self.tail, a0 as u16);
+            return;
         }
         loop {
-            let before = a1.prev(b);
-            if is_sentinel_or_none(before) {
-                return Place::Before(a1);
+            let before = rd16(b, a1.wrapping_add(Obj::PREV));
+            if (before as i16) >= 0 {
+                wr16(b, a1.wrapping_add(Obj::PREV), a0 as u16);
+                wr16(b, a0 + Obj::NEXT, a1 as u16);
+                wr16(b, a0 + Obj::PREV, self.end.0);
+                wr16(b, A5 + self.head, a0 as u16);
+                return;
             }
-            a1 = before.target();
-            if y <= a1.depth(b) {
-                return Place::After(a1);
-            }
-        }
-    }
-
-    fn apply(self, b: &mut Cps2Bus, obj: Obj, place: Place) {
-        let linked = obj.prev(b).0.wrapping_add(obj.next(b).0) != 0;
-        match place {
-            Place::Keep => {}
-            Place::Alone => {
-                obj.set_prev(b, self.end);
-                obj.set_next(b, self.end);
-                self.set_head(b, Link::to(obj));
-                self.set_tail(b, Link::to(obj));
-            }
-            Place::Before(anchor) => {
-                if linked {
-                    self.detach(b, obj);
-                }
-                let before = anchor.prev(b);
-                obj.set_prev(b, before);
-                if is_sentinel_or_none(before) {
-                    self.set_head(b, Link::to(obj));
-                } else {
-                    before.target().set_next(b, Link::to(obj));
-                }
-                anchor.set_prev(b, Link::to(obj));
-                obj.set_next(b, Link::to(anchor));
-            }
-            Place::After(anchor) => {
-                if linked {
-                    self.detach(b, obj);
-                }
-                let after = anchor.next(b);
-                obj.set_next(b, after);
-                if is_sentinel_or_none(after) {
-                    self.set_tail(b, Link::to(obj));
-                } else {
-                    after.target().set_prev(b, Link::to(obj));
-                }
-                anchor.set_next(b, Link::to(obj));
-                obj.set_prev(b, Link::to(anchor));
+            a1 = before as i16 as i32 as u32;
+            if y as i32 <= rd32(b, a1.wrapping_add(Obj::Y)) as i32 {
+                break;
             }
         }
-    }
-
-    /// Raccorde les voisins de `obj` entre eux (ses propres liens restent à jour par l'appelant).
-    fn detach(self, b: &mut Cps2Bus, obj: Obj) {
-        let (prev, next) = (obj.prev(b), obj.next(b));
-        if is_sentinel_or_none(prev) {
-            self.set_head(b, next);
-        } else {
-            prev.target().set_next(b, next);
-        }
-        if is_sentinel_or_none(next) {
-            self.set_tail(b, prev);
-        } else {
-            next.target().set_prev(b, prev);
-        }
+        let a2 = rd16(b, a1.wrapping_add(Obj::NEXT)) as i16 as i32 as u32;
+        wr16(b, a1.wrapping_add(Obj::NEXT), a0 as u16);
+        wr16(b, a2.wrapping_add(Obj::PREV), a0 as u16);
+        wr16(b, a0 + Obj::PREV, a1 as u16);
+        wr16(b, a0 + Obj::NEXT, a2 as u16);
     }
 }
 

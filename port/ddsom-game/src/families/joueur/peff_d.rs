@@ -40,7 +40,6 @@ mod beam {
     const ANIMS: u32 = 0x1b5ab8;
     const OFFSETS: u32 = 0x4b2dc;
     const SFX: u32 = 0xe8d4a;
-    const SPAWN_TRAIL: u32 = 0x54700;
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
@@ -58,7 +57,7 @@ mod beam {
             2 => {
                 if x.u8(0x33) != 0 {
                     x.set8(0x33, 0);
-                    x.call(SPAWN_TRAIL);
+                    crate::families::petites::shot_17(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                 }
                 if x.anim_step() {
                     x.add8(0x4, 2);

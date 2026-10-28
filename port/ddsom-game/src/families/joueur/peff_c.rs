@@ -301,7 +301,6 @@ mod holy {
     const SFX_BURST_A: u32 = 0xe9fc8;
     const SFX_BURST_B: u32 = 0xe996c;
     const SFX_END: u32 = 0xea032;
-    const BURST_SPAWN: u32 = 0x4aed0;
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
@@ -401,7 +400,7 @@ mod holy {
         x.set16(0x58, 0x50);
         x.set16(0xc, 8);
         x.anim_start(ANIMS, 0);
-        x.call(BURST_SPAWN);
+        crate::families::petites::peff_5_pair(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
         crate::sound::jouer(x.b, SFX_BURST_A, x.o);
         crate::sound::jouer(x.b, SFX_BURST_B, x.o);
         let owner = x.link_a1(f::OWNER);

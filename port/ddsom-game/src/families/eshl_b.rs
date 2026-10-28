@@ -1419,7 +1419,6 @@ mod shot25 {
     use super::*;
 
     const ANIMS: u32 = 0x16ea18;
-    const SHADOW: u32 = 0x54818;
     const IMPACT_EFFECT: u32 = 0xeafdc;
 
     pub fn run(x: &mut Cx) {
@@ -1462,9 +1461,8 @@ mod shot25 {
             x.add16(0x10, dy);
         }
         x.anim_start(ANIMS, 0);
-        x.call(SHADOW);
-        if x.c.cond(6) {
-            x.set16(0x5a, low16(Obj(x.c.a[1])));
+        if let Some(ombre) = crate::families::petites::shot_18(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 0) {
+            x.set16(0x5a, low16(ombre));
         }
         x.reinsert();
     }
@@ -1501,7 +1499,6 @@ mod shot26 {
     const ANIMS: u32 = 0x16ea90;
     const HEIGHTS: u32 = 0xa1968;
     const SPEED_TABLES: u32 = 0xa1972;
-    const SHADOW: u32 = 0x54842;
     const LAND_SOUND: u32 = 0xeb1a4;
     const FLY: u8 = 0;
     const GROUND: u8 = 2;
@@ -1562,9 +1559,8 @@ mod shot26 {
         x.set16(0x58, 0x80);
         x.anim_start(ANIMS, 1);
         crate::sound::jouer(x.b, LAND_SOUND, x.o);
-        x.call(SHADOW);
-        if x.c.cond(6) {
-            x.set16(0x5a, low16(Obj(x.c.a[1])));
+        if let Some(ombre) = crate::families::petites::shot_18(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 1) {
+            x.set16(0x5a, low16(ombre));
         }
     }
 

@@ -522,7 +522,7 @@ fn blink(x: &mut Cx, c: u8) {
 /// 0x3e158 : pas suivant, puis 0x51c06.
 fn step_51c06(x: &mut Cx) {
     next(x);
-    x.call(0x51c06);
+    crate::families::creators::weapon_shot(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
 }
 /// 0x3e162 : pas suivant.
 fn skip(x: &mut Cx) {

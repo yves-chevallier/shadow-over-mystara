@@ -75,42 +75,39 @@ fn sobj_10(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x54700 : tir de type 0x17 qui reprend le mot `+0x50` du créateur.
-fn shot_17(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(o) = alloc(c, b, &pools::PSHL) {
-        let me = Obj(c.a[0]);
-        o.set_u8(b, 0x0, 1);
-        o.set_u8(b, 0x2, 0x17);
-        let v = me.u16(b, 0x50);
-        o.set_u16(b, 0x50, v);
-        moved(c, v as u32, Size::Word);
-    }
-    rts(c, b);
+pub(crate) fn shot_17(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    let o = r.alloue(b, &pools::PSHL)?;
+    o.set_u8(b, 0x0, 1);
+    o.set_u8(b, 0x2, 0x17);
+    let v = me.u16(b, 0x50);
+    o.set_u16(b, 0x50, v);
+    r.drapeaux(v as u32, Size::Word);
+    Some(o)
 }
 
-/// Tir de type 0x18 lié au créateur par `+0x5c`, résistances 0x10, variante `variant` ; D0 = 1 si
-/// créé. `always_zero` : 0x54872 rend D0 = 0 même quand le tir est créé (bizarrerie de l'original).
-fn shot_18(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, always_zero: bool) {
-    let me = word(c);
-    let created = alloc(c, b, &pools::PSHL);
-    if let Some(shot) = created {
-        shot.set_u8(b, 0x0, 1);
-        shot.set_u8(b, 0x2, 0x18);
-        if variant != 0 {
-            shot.set_u8(b, 0x3, variant);
-        }
-        shot.set_u8(b, 0x45, 0x10);
-        shot.set_u8(b, 0x46, 0x10);
-        shot.set_u16(b, 0x5c, me);
+/// 0x54818 (variante laissée telle quelle : `variant` nul), 0x54842 (variante 1) et 0x54872 (variante 2) : tir de type
+/// 0x18 lié au créateur par `+0x5c`, résistances 0x10 ; le tir créé, `None` si le pool PSHL est plein.
+pub(crate) fn shot_18(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+    let shot = r.alloue(b, &pools::PSHL)?;
+    shot.set_u8(b, 0x0, 1);
+    shot.set_u8(b, 0x2, 0x18);
+    if variant != 0 {
+        shot.set_u8(b, 0x3, variant);
     }
-    c.d[0] = (created.is_some() && !always_zero) as u32;
+    shot.set_u8(b, 0x45, 0x10);
+    shot.set_u8(b, 0x46, 0x10);
+    shot.set_u16(b, 0x5c, me.word());
+    Some(shot)
+}
+
+/// Native de `shot_18` : D0 = 1 si le tir est créé.
+/// Glitch d'origine : 0x54872 (`toujours_nul`) rend D0 = 0 même quand le tir est créé.
+fn shot_18_native(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, toujours_nul: bool) {
+    let me = Obj(c.a[0]);
+    let created = shot_18(c, b, me, variant).is_some();
+    c.d[0] = (created && !toujours_nul) as u32;
     moved(c, c.d[0], Size::Long);
     rts(c, b);
-}
-fn shot_18_a(c: &mut Cpu, b: &mut Cps2Bus) {
-    shot_18(c, b, 0, false);
-}
-fn shot_18_c(c: &mut Cpu, b: &mut Cps2Bus) {
-    shot_18(c, b, 2, true);
 }
 
 /// 0x76ec4 : s'il reste plus de deux emplacements ENEMY, crée deux ennemis de type 0x19 (variantes 0 et
@@ -325,18 +322,16 @@ fn palette_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x4aed0 : deux effets de type 5, variante 1, indices `+0x2f` 0 et 1, liés au créateur (`+0x50`).
-fn peff_5_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn peff_5_pair(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) {
     for index in [0, 1] {
-        let Some(o) = alloc(c, b, &pools::PEFF) else { break };
+        let Some(o) = r.alloue(b, &pools::PEFF) else { break };
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 5);
         o.set_u8(b, 0x3, 1);
         o.set_u8(b, 0x2f, index);
-        let me = word(c);
-        o.set_u16(b, 0x50, me);
-        moved(c, me as u32, Size::Word);
+        o.set_u16(b, 0x50, me.word());
+        r.drapeaux(me.word() as u32, Size::Word);
     }
-    rts(c, b);
 }
 
 /// 0x53746 : douze pierres (tirs de type 0x11, variantes 0 à 11) réparties autour de la caméra en service,
@@ -607,9 +602,10 @@ pub const NATIVES: &[Native] = &[
     native(0x4f132, "cree_effet_21", peff_33, CREATED),
     native(0xdf4bc, "cree_sobj_7", sobj_7, CREATED),
     native(0xdf896, "cree_sobj_10", sobj_10, CREATED),
-    native(0x54700, "cree_tir_17", shot_17, CREATED),
-    native(0x54818, "cree_tir_18_a", shot_18_a, CREATED | regs::d(0)),
-    native(0x54872, "cree_tir_18_c", shot_18_c, CREATED | regs::d(0)),
+    native(0x54700, "cree_tir_17", |c, b| { let me = Obj(c.a[0]); shot_17(c, b, me); rts(c, b) }, CREATED),
+    native(0x54818, "cree_tir_18_a", |c, b| shot_18_native(c, b, 0, false), CREATED | regs::d(0)),
+    native(0x54842, "cree_tir_18", |c, b| shot_18_native(c, b, 1, false), CREATED | regs::d(0)),
+    native(0x54872, "cree_tir_18_c", |c, b| shot_18_native(c, b, 2, true), CREATED | regs::d(0)),
     native(0x76ec4, "cree_ennemis_19", enemy_pair, CREATED | regs::d(0)),
     native(0x792f8, "copie_56_53_a", copy_56_to_53, regs::CCR),
     native(0x71e3c, "copie_56_53_b", copy_56_to_53, regs::CCR),
@@ -621,7 +617,7 @@ pub const NATIVES: &[Native] = &[
     native(0x10158, "palette_quatre_blocs", palette_blocks_lit, regs::ALL),
     native(0x101da, "palette_quatre_blocs_69", palette_blocks, regs::ALL),
     native(0x1ac90, "eclair_palette_fin", flash_off, regs::CCR),
-    native(0x4aed0, "cree_effets_5", peff_5_pair, CREATED),
+    native(0x4aed0, "cree_effets_5", |c, b| { let me = Obj(c.a[0]); peff_5_pair(c, b, me); rts(c, b) }, CREATED),
     native(0x53746, "cree_pierres_11", pshl_stones, CREATED | regs::ALL),
     native(0x1a5e8, "palette_douze_blocs", palette_blocks_copy, regs::ALL),
     native(0x1ad6a, "palette_page_restitue", |c, b| { palette_page_restore(c, b); rts(c, b) }, regs::ALL),

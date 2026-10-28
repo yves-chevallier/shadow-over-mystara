@@ -985,9 +985,6 @@ mod lob48 {
     const WAIT: u32 = 0x4c;
     const HOME_Z: u32 = 0x4e;
     const TARGET: u32 = 0x58;
-    /// Création d'un tir joueur de type 0x18 lié à cet objet ; Z levé si échec (l'original rend
-    /// toujours Z levé).
-    const SPAWN_PLAYER_SHOT: u32 = 0x54872;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1029,11 +1026,9 @@ mod lob48 {
                         x.add8(0x5, 2);
                         x.set16(0x18, neg(0x100));
                         x.set16(0x1a, neg(0x20));
-                        x.call(SPAWN_PLAYER_SHOT);
-                        if x.c.cond(6) {
-                            let shot = x.c.a[1] as u16;
-                            x.set16(TARGET, shot);
-                        }
+                        // Glitch d'origine : 0x54872 rend D0 = 0 même quand le tir est créé, si bien que le `bne`
+                        // qui devait le retenir en `TARGET` n'est jamais pris
+                        crate::families::petites::shot_18(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 2);
                     }
                     2 => {
                         x.move_z();
@@ -2734,7 +2729,6 @@ mod platform60 {
     /// Dernier défilement vertical (mot), et son nouveau relevé.
     const LAST_SCROLL: u32 = 0x16;
     const SCROLL: u32 = 0x14;
-    const SPAWN_PLAYER_SHOT: u32 = 0x54872;
     const THUD: u32 = 0xeb04e;
     /// Positions de départ de la variante 2 par sous-type (4 octets par ligne).
     const START_POSITIONS: u32 = 0xa6046;
@@ -2787,7 +2781,7 @@ mod platform60 {
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 0x17);
         x.anim_start(ANIMS, 0);
-        x.call(SPAWN_PLAYER_SHOT);
+        crate::families::petites::shot_18(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 2);
         x.reinsert();
     }
 
