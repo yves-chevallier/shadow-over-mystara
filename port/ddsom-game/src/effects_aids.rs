@@ -202,6 +202,13 @@ pub fn decor_11(b: &mut Cps2Bus, variante: u8, orientation: u8) -> Result<Obj, O
     Ok(object)
 }
 
+/// 0x517ba : effet de joueur (PEFF) de type 44, de variante `variante`, réglage `+0x2f` = `reglage`.
+pub fn effet_44(b: &mut Cps2Bus, variante: u8, reglage: u8) -> Option<Obj> {
+    let object = creer(b, &pools::PEFF, 44, variante).ok()?;
+    object.set_u8(b, 0x2f, reglage);
+    Some(object)
+}
+
 /// Crée un objet de type `kind` dans `pool`, variante D0 ; drapeaux de D0.b.
 fn spawn(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     let object = pool.alloc_68k(c, b)?;

@@ -13,9 +13,12 @@
 //!
 //! Le défilement vertical est le long `FF2B1C` (16.16) ; un bouton pressé le ralentit.
 
-use super::{Block, Flow, Sequence};
-use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
+use super::{Flow, Sequence};
+use crate::families::effects_creators::{ecran_de_fin, ou_reste};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::objects::pools;
 use crate::scene::Ctx;
+use crate::video::{effacer_couche, Couche};
 use crate::Native;
 
 const STATE: u32 = 0xff_2b10;
@@ -34,27 +37,8 @@ const FRAME_COUNT: u32 = A5 + 0x7e68;
 const VIDEO: u32 = A5 + 0x14;
 const CPS_REG_4: u32 = 0x400004;
 
-mod ext {
-    pub const SOUND_E172C: u32 = 0xe172c;
-    pub const RESET_PLAYERS: u32 = 0x1f184;
-    pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const SPRITES: u32 = 0x1de96;
-    pub const CLEAR_SPRITES: u32 = 0xc58;
-    pub const CLEAR_SCROLL_1: u32 = 0xca8;
-    pub const CLEAR_SCROLL_2: u32 = 0xcc8;
-    pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    pub const POOLS: u32 = 0x2062;
-    pub const PEFF: u32 = 0x3996c;
-    pub const EFFCT: u32 = 0x39cba;
-    pub const PALETTE_PAGE_B: u32 = 0x1a608;
-    pub const PALETTE_SET: u32 = 0x1a67e;
-    pub const PALETTE_93: u32 = 0x1a366;
-    pub const TILE_BLOCK: u32 = 0x26d4;
-    pub const LINE: u32 = 0x517ba;
-    pub const SCORE_OBJECT: u32 = 0xb1a7a;
-    pub const BOOTED_CLEAR: u32 = 0x133f0;
-    pub const CLEAR_STATUS: u32 = 0xdabba;
-}
+/// Musique de l'écran.
+const SOUND_E172C: u32 = 0xe172c;
 
 /// Retour de l'étape à `0xfc584` : A0 revient sur le bloc de la machine à modes.
 const RETURN: u32 = 0xfc584;
@@ -93,13 +77,12 @@ crate::etapes! {
             x.wait(1, Etape::S0Palettes)
         },
         S0Palettes = S0_PALETTES => |x| {
-            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::PALETTE_PAGE_B] {
-                x.call(f);
-            }
-            x.call_d0_low(ext::PALETTE_SET, 83);
-            x.call_d0_low(ext::PALETTE_SET, 83);
+            clear_layers(x);
+            crate::palette::charger_page_de_la_scene(x.b, 1);
+            crate::palette::charger_page(x.b, 2, 83);
+            crate::palette::charger_page(x.b, 2, 83);
             wr8(x.b, A5 + 0x34, 0);
-            x.call_d0_low(ext::PALETTE_93, 89);
+            crate::palette::charger_palettes_de_scene(x.b, 89);
             // quatre blocs de palette, de la ROM vers la table des palettes (D0-D6 et A3 gardent le dernier)
             for (dst, src) in [(0x91c3e0u32, 0x291f00u32), (0x91c2e0, 0xfc6d8), (0x91c000, 0x292260), (0x91c3c0, 0x2537c0)] {
                 x.c.a[1] = dst;
@@ -122,9 +105,8 @@ crate::etapes! {
             x.wait(4, Etape::S0Tiles)
         },
         S0Tiles = S0_TILES => |x| {
-            x.c.a[1] = 0x917000;
-            x.call_d0_low(ext::TILE_BLOCK, 197);
-            x.call_d0_low(ext::TILE_BLOCK, 198);
+            let fin = crate::video::charger_grille(x.b, crate::video::Grille::Couche2, 197, 0x917000);
+            crate::video::charger_grille(x.b, crate::video::Grille::Couche2, 198, fin.destination);
             wr16(x.b, VIDEO, 0x24ce);
             wr16(x.b, STATE + f::MARK, 0x728);
             wr32(x.b, STATE + f::TEXT, 0xfc938);
@@ -132,9 +114,7 @@ crate::etapes! {
         },
         SaFaded = SA_FADED => |x| {
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-            for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES, ext::POOLS] {
-                x.call(f);
-            }
+            reset_objects(x);
             x.wait(1, Etape::SaVideo)
         },
         SaVideo = SA_VIDEO => |x| {
@@ -142,9 +122,7 @@ crate::etapes! {
             x.wait(4, Etape::SaCleared)
         },
         SaCleared = SA_CLEARED => |x| {
-            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-                x.call(f);
-            }
+            clear_layers(x);
             wr8(x.b, super::mode::SUB, 0);
             wr16(x.b, super::mode::STEP, 0);
             wr8(x.b, A5 + 0x36, 0);
@@ -152,8 +130,8 @@ crate::etapes! {
             for off in [0x4bau32, 0x50a, 0x55a] {
                 wr16(x.b, A5 + off, 0);
             }
-            x.call(ext::BOOTED_CLEAR);
-            x.call(ext::CLEAR_STATUS);
+            crate::families::petites::demarrage_fait(x.b, false);
+            crate::families::items::effacer_ramasses(x.b);
             wr8(x.b, A5 + 0x30, 0);
             Flow::Done
         },
@@ -165,40 +143,62 @@ fn next_step(x: &mut Ctx) {
     wr8(x.b, STATE, s);
 }
 
+/// Les trois couches effacées.
+fn clear_layers(x: &mut Ctx) {
+    for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+        effacer_couche(x.b, couche);
+    }
+}
+
+/// Listes défaites et vidées, objets effacés, pools remis à zéro (0x1f184, 0x1de7c, 0xc58, 0x2062).
+fn reset_objects(x: &mut Ctx) {
+    crate::objects::lists::unlink_all(x.b);
+    crate::sprites::vider_listes(x.b);
+    crate::video::vider_objets(x.b);
+    for pool in pools::POOLS {
+        pool.reset(x.b);
+    }
+}
+
 /// Un rendu : PEFF, EFFCT, sprites (`0xfc91c`).
 fn render(x: &mut Ctx) {
-    for f in [ext::PEFF, ext::EFFCT, ext::SPRITES] {
-        x.call(f);
+    for classe in [&crate::dispatch::PEFF, &crate::dispatch::EFFCT] {
+        classe.update_sans_suite(x.c, x.b);
     }
+    crate::sprites::construire_68k(x.c, x.b);
     x.c.a[0] = STATE;
 }
 
+/// Vitesse du défilement et boutons pressés (D0 et D1.b de l'original).
+struct Vitesse {
+    vitesse: u32,
+    boutons: u8,
+}
+
 /// `0xfc6f8` : vitesse du défilement (1 pixel par image, 1/4 si un bouton est pressé).
-fn speed(x: &mut Ctx) -> u32 {
+fn speed(x: &mut Ctx) -> Vitesse {
     let mut buttons = 0;
     for k in 0..4 {
         buttons |= rd8(x.b, A5 + k);
     }
-    x.c.d[1] = (x.c.d[1] & !0xff) | (buttons & 0xf0) as u32;
-    x.c.d[0] = if buttons & 0xf0 == 0 { 0x10000 } else { 0x4000 };
-    x.c.d[0]
+    let boutons = buttons & 0xf0;
+    Vitesse { vitesse: if boutons == 0 { 0x10000 } else { 0x4000 }, boutons }
 }
 
 /// Fait avancer le défilement du fond d'une image ; la caméra 2 le suit.
-fn scroll(x: &mut Ctx) {
-    let d0 = speed(x);
-    let v = rd32(x.b, SCROLL).wrapping_sub(d0);
-    wr32(x.b, SCROLL, v);
-    wr16(x.b, A5 + 0x55a, (v >> 16) as u16);
+fn scroll(x: &mut Ctx) -> Vitesse {
+    let v = speed(x);
+    let s = rd32(x.b, SCROLL).wrapping_sub(v.vitesse);
+    wr32(x.b, SCROLL, s);
+    wr16(x.b, A5 + 0x55a, (s >> 16) as u16);
+    v
 }
 
 fn s0_prepare(x: &mut Ctx) -> Flow {
     next_step(x);
     wr16(x.b, STATE + f::TIMER, 300);
-    crate::sound::jouer_global(x.b, ext::SOUND_E172C);
-    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES, ext::POOLS] {
-        x.call(f);
-    }
+    crate::sound::jouer_global(x.b, SOUND_E172C);
+    reset_objects(x);
     x.c.a[0] = STATE;
     x.wait(1, Etape::S0Video)
 }
@@ -218,15 +218,17 @@ fn s2_scroll(x: &mut Ctx) -> Flow {
     let camera = rd16(x.b, A5 + 0x55a);
     wr16(x.b, STATE + f::MARK, camera);
     let mut a4 = rd32(x.b, STATE + f::TEXT);
-    for counter in (0..6u32).rev() {
-        x.c.d[0] = counter;
+    for counter in (0..6u8).rev() {
         if rd8(x.b, a4) & 0x80 != 0 {
             next_step(x);
             return Flow::Done;
         }
-        x.c.a[4] = a4;
-        x.call(ext::LINE);
-        a4 = x.c.a[4];
+        // 0x517ba : une ligne du classement (variante = compteur), son réglage est l'octet suivant du texte, qui
+        // n'avance que si l'effet est créé
+        let reglage = rd8(x.b, a4);
+        if crate::effects_aids::effet_44(x.b, counter, reglage).is_some() {
+            a4 += 1;
+        }
     }
     if rd8(x.b, a4) & 0x80 != 0 {
         next_step(x);
@@ -242,44 +244,39 @@ fn s4_scores(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     render(x);
-    scroll(x);
+    let v = scroll(x);
     next_step(x);
-    for kind in [4u32, 6] {
-        x.call_d0(ext::SCORE_OBJECT, kind);
+    // les deux premiers cartouches reçoivent pour réglage le D1.b de la vitesse (les boutons pressés)
+    for kind in [4u8, 6] {
+        ecran_de_fin(x.b, kind, v.boutons);
     }
-    x.c.d[0] = 5;
-    x.c.d[2] = 3;
+    // Glitch d'origine : la retenue n'est pas testée, un échec écrit dans l'A1 laissé par l'allocation
+    let mut rang = 3u8;
     let mut a4 = SCORES;
-    for counter in (0..4u32).rev() {
-        x.c.d[1] = counter;
+    for counter in (0..4u8).rev() {
         if rd32(x.b, a4) != 0 || rd32(x.b, a4 + 4) != 0 {
-            x.c.d[0] = 5;
-            x.call(ext::SCORE_OBJECT);
-            let o = x.c.a[1];
-            wr8(x.b, o + 0x42, x.c.d[2] as u8);
-            x.c.d[2] = (x.c.d[2] & !0xff) | (x.c.d[2] as u8).wrapping_sub(1) as u32;
-            wr32(x.b, o + 0x4c, a4);
+            let o = ecran_de_fin(x.b, 5, counter);
+            let o = ou_reste(x.b, o);
+            wr8(x.b, o.0 + 0x42, rang);
+            rang = rang.wrapping_sub(1);
+            wr32(x.b, o.0 + 0x4c, a4);
         }
         a4 += 0x10;
     }
-    x.c.d[0] = 9;
-    x.c.d[2] = 3;
+    let mut rang = 3u8;
     a4 = SCORES;
-    for counter in (0..4u32).rev() {
-        x.c.d[1] = counter;
+    for counter in (0..4u8).rev() {
         if rd8(x.b, a4) != 0 {
             if rd8(x.b, a4 + 14) != 0 {
-                x.c.d[0] = 9;
-                x.call(ext::SCORE_OBJECT);
-                let o = x.c.a[1];
-                wr8(x.b, o + 0x42, x.c.d[2] as u8);
-                wr32(x.b, o + 0x4c, a4);
+                let o = ecran_de_fin(x.b, 9, counter);
+                let o = ou_reste(x.b, o);
+                wr8(x.b, o.0 + 0x42, rang);
+                wr32(x.b, o.0 + 0x4c, a4);
             }
-            x.c.d[2] = (x.c.d[2] & !0xff) | (x.c.d[2] as u8).wrapping_sub(1) as u32;
+            rang = rang.wrapping_sub(1);
         }
         a4 += 0x10;
     }
-    x.c.a[4] = a4;
     Flow::Done
 }
 
@@ -299,8 +296,8 @@ fn s6_decor(x: &mut Ctx) -> Flow {
 /// Étape 8 : les deux plans défilent ensemble jusqu'à l'ordonnée 832.
 fn s8_decor(x: &mut Ctx) -> Flow {
     render(x);
-    scroll(x);
-    let v = rd32(x.b, SCROLL_2).wrapping_sub(x.c.d[0]);
+    let vitesse = scroll(x).vitesse;
+    let v = rd32(x.b, SCROLL_2).wrapping_sub(vitesse);
     wr32(x.b, SCROLL_2, v);
     wr16(x.b, A5 + 0x4ba, (v >> 16) as u16);
     if rd16(x.b, A5 + 0x55a) != 832 {
@@ -317,7 +314,6 @@ fn sa_leave(x: &mut Ctx) -> Flow {
     for k in 0..4 {
         buttons |= rd8(x.b, A5 + 0xc + k);
     }
-    x.c.d[1] = (x.c.d[1] & !0xff) | (buttons & 0xf0) as u32;
     if buttons & 0xf0 != 0 {
         wr16(x.b, STATE + f::TIMER, 1);
     }
@@ -335,16 +331,5 @@ fn sa_leave(x: &mut Ctx) -> Flow {
 const SA_FADED: u32 = 0xfc8a8;
 const SA_VIDEO: u32 = 0xfc8ce;
 const SA_CLEARED: u32 = 0xfc8dc;
-
-/// Charge D0 sur son mot bas (`move.w #n,D0w`) avant l'appel.
-trait LowWord {
-    fn call_d0_low(&mut self, addr: u32, d0: u16);
-}
-impl LowWord for Ctx<'_> {
-    fn call_d0_low(&mut self, addr: u32, d0: u16) {
-        set_low_word(&mut self.c.d[0], d0);
-        self.call(addr);
-    }
-}
 
 pub const NATIVES: &[Native] = &[];
