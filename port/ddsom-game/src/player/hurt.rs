@@ -1411,6 +1411,9 @@ fn frozen_fall(g: &mut Ctx, p: Player) {
         return;
     }
     next_step(g, p);
+    // le créateur prend la variante dans D0.b : celui que laisse le mouvement 0x1da6 (`swap` puis `asr.l #8` de
+    // la vitesse verticale), dont l'octet bas est nul
+    g.c.d[0] = ((p.u16(g, Obj::VZ) as i16 as i32) << 8) as u32;
     g.rom(FROZEN_EFFECT, p);
 }
 
