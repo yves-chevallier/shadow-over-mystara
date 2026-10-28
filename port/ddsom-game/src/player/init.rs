@@ -285,12 +285,16 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     ram::PLAYERS_ALIVE.set(g.b, alive);
 }
 
-/// Les entrées 0x2e58.. sauvegardent D0 et A0-A3 (movem) puis construisent le joueur `k`.
-fn init_entry(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
+/// Les entrées 0x2e58, 0x2e6e, 0x2e86, 0x2e9e : construisent le joueur `k` ; D0 et A0-A3 sont gardés (movem).
+pub fn initialiser(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
     let (d0, a) = (c.d[0], [c.a[0], c.a[1], c.a[2], c.a[3]]);
     init_slot(&mut Ctx::new(c, b), Player::nth(k), k as u8);
     c.d[0] = d0;
     c.a[..4].copy_from_slice(&a);
+}
+
+fn init_entry(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
+    initialiser(c, b, k);
     rts(c, b);
 }
 

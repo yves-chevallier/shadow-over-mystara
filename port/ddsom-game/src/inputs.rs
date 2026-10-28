@@ -212,6 +212,19 @@ pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
     outputs: crate::regs::ALL,
 };
 
+/// Entrées d'un joueur : touches maintenues et nouveaux appuis.
+#[derive(Clone, Copy)]
+pub struct Entrees {
+    pub maintenues: u8,
+    pub nouvelles: u8,
+}
+
+/// 0x2bfe : entrées du joueur de l'objet `objet` (son numéro en `+2`).
+pub fn entrees_du_joueur(b: &mut Cps2Bus, objet: u32) -> Entrees {
+    let player = rd8(b, objet + 2) as u32;
+    Entrees { maintenues: rd8(b, A5 + player), nouvelles: rd8(b, A5 + ram::NEW + player) }
+}
+
 /// 0x2bfe : entrées du joueur de l'objet A0. Sortie : D0 = maintenues, D1 = nouveaux appuis.
 fn get_player_input(c: &mut Cpu, b: &mut Cps2Bus) {
     let player = rd8(b, c.a[0] + 2) as u32;

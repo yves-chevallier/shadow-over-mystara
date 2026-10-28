@@ -19,11 +19,14 @@
 //! | 10 / 12 | attente d'un bouton, annonce clignotante |
 //! | 14 | fondu final, phase 8 |
 
-use super::{Block, Flow, Sequence};
+use super::{Flow, Sequence};
+use crate::dispatch;
+use crate::families::effects_creators::{bandeau, element_d_interface};
 use crate::mem::{rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
-use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
-use crate::Native;
 use crate::objects::{pools, Obj};
+use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
+use crate::video::{charger_grille, effacer_couche, Couche, Grille};
+use crate::Native;
 
 /// Variables de la RAM de travail (adresses absolues).
 mod var {
@@ -72,34 +75,13 @@ mod var {
     pub const MAIN_LINK: u32 = A5 - 0x6604;
 }
 
-/// Sous-routines d'origine.
+/// Sons et tâches de fondu de l'écran.
 mod ext {
-    pub const CLEAR_SPRITES: u32 = 0xc58;
-    pub const CLEAR_SCROLL_1: u32 = 0xca8;
-    pub const CLEAR_SCROLL_2: u32 = 0xcc8;
-    pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const SPRITES: u32 = 0x1de96;
-    pub const EFFCT: u32 = 0x39cba;
-    pub const SET: u32 = 0x39e86;
-    pub const SOBJ: u32 = 0x39f82;
-    pub const PLAYER_UI: u32 = 0x1507a;
     pub const SOUND_E10D8: u32 = 0xe10d8;
     pub const SOUND_E109C: u32 = 0xe109c;
-    pub const ALLOC_CURSOR: u32 = 0xae776;
-    pub const ALLOC_PANEL: u32 = 0xaf346;
     pub const FADE_TASK: u32 = 0x1ced4;
     pub const FADE_TASK_B: u32 = 0x14ba;
     pub const FADE_TASK_C: u32 = 0x14de;
-    pub const TILE_BLOCK: u32 = 0x26d4;
-    pub const TILE_BLOCK_2: u32 = 0x2766;
-    pub const PLAYER_INPUT: u32 = 0x2bfe;
-    pub const CHOICE_SOUND: u32 = 0x2e630;
-    pub const BLINK_SOUND: u32 = 0xcdedc;
-    pub const PALETTE_PAGE_A: u32 = 0x1a608;
-    pub const PALETTE_SET: u32 = 0x1a67e;
-    pub const PALETTE_FADE: u32 = 0x1a8b2;
-    pub const PALETTE_PAGE_C: u32 = 0x1a3d4;
 }
 
 /// Tables en ROM : octets de variante par personnage (code), routines d'initialisation des quatre
@@ -126,6 +108,20 @@ fn sign_ext(v: u16) -> u32 {
 
 fn player(k: u32) -> u32 {
     PLAYERS + k * PLAYER_STRIDE
+}
+
+/// Aiguillage des objets des classes données, puis la liste de sprites (`jsr 0x39cba`... `jsr 0x1de96`).
+fn render(x: &mut Ctx, classes: &[&dispatch::Class]) {
+    for classe in classes {
+        classe.update_sans_suite(x.c, x.b);
+    }
+    crate::sprites::construire_68k(x.c, x.b);
+}
+
+/// Deux blocs de tuiles (`n`, `n + 1`) à la suite l'un de l'autre à partir de `destination`.
+fn two_blocks(x: &mut Ctx, grille: Grille, n: u16, destination: u32) {
+    let fin = charger_grille(x.b, grille, n, destination);
+    charger_grille(x.b, grille, n + 1, fin.destination);
 }
 
 pub const PHASE_4: Native = Native {
@@ -166,12 +162,11 @@ fn step_0(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, var::STEP).wrapping_add(2);
     wr8(x.b, var::STEP, s);
     wr8(x.b, var::SUB, 0);
-    x.call(ext::CLEAR_SPRITES);
+    crate::video::vider_objets(x.b);
     for pool in [&crate::objects::pools::EFFCT, &crate::objects::pools::SET, &crate::objects::pools::SOBJ] {
         pool.reset(x.b);
     }
-    x.call(ext::SPRITES_RESET);
-    x.c.d[0] = 0;
+    crate::sprites::vider_listes(x.b);
     wr32(x.b, var::SCROLL_1, 0);
     wr32(x.b, var::SCROLL_2, 0);
     // curseur de départ de chaque joueur : un bit de case par joueur
@@ -195,7 +190,7 @@ fn step_0(x: &mut Ctx) -> Flow {
     for off in [0u32, 4, 8] {
         wr32(x.b, var::CHOICES + off, 0xffff_ffff);
     }
-    x.call(ext::PLAYER_UI);
+    crate::hud::oublier_affiches(x.b);
     crate::sound::jouer_global(x.b, ext::SOUND_E10D8);
     wr16(x.b, var::COUNTDOWN, 0x203c);
     wr16(x.b, var::COUNTDOWN, COUNTDOWN_START);
@@ -207,25 +202,19 @@ fn step_0(x: &mut Ctx) -> Flow {
 fn objects_0(x: &mut Ctx) -> Flow {
     let mut links = var::SLOT_LINKS;
     for slot in (0..4u32).rev() {
-        x.c.d[0] = slot;
-        x.call(ext::ALLOC_CURSOR);
-        if x.c.sr & 1 != 0 {
+        let Some(Obj(o)) = element_d_interface(x.b) else {
             return Flow::Done;
-        }
-        let o = x.c.a[1];
+        };
         wr8(x.b, o + 3, 1);
         wr8(x.b, o + 0x2f, slot as u8);
         wr16(x.b, links, o as u16);
         links += 2;
     }
-    x.call(ext::ALLOC_CURSOR);
-    if x.c.sr & 1 != 0 {
+    let Some(Obj(main)) = element_d_interface(x.b) else {
         return Flow::Done;
-    }
-    let main = x.c.a[1];
+    };
     wr8(x.b, main + 3, 0);
     wr8(x.b, main + 0x1c, 0);
-    x.c.a[0] = main;
     wr16(x.b, var::MAIN_LINK, main as u16);
     publish_choices(x, main);
     for k in 0..4u32 {
@@ -233,20 +222,16 @@ fn objects_0(x: &mut Ctx) -> Flow {
         wr16(x.b, o + 0x1e, main as u16);
     }
     for slot in (0..6u32).rev() {
-        x.call(ext::ALLOC_CURSOR);
-        if x.c.sr & 1 != 0 {
+        let Some(Obj(o)) = element_d_interface(x.b) else {
             return Flow::Done;
-        }
-        let o = x.c.a[1];
+        };
         wr8(x.b, o + 3, 2);
         wr8(x.b, o + 0x2f, slot as u8);
         wr16(x.b, o + 0x1e, main as u16);
     }
-    x.call(ext::ALLOC_CURSOR);
-    if x.c.sr & 1 != 0 {
+    let Some(Obj(o)) = element_d_interface(x.b) else {
         return Flow::Done;
-    }
-    let o = x.c.a[1];
+    };
     wr8(x.b, o + 3, 3);
     wr8(x.b, o + 0x2f, 0);
     wr16(x.b, var::LINK_9A10, o as u16);
@@ -254,17 +239,13 @@ fn objects_0(x: &mut Ctx) -> Flow {
     wr8(x.b, o + 0x14, seconds);
     wr8(x.b, o + 0x15, 0);
     for slot in (0..8u32).rev() {
-        x.c.d[1] = slot;
-        x.call(ext::ALLOC_CURSOR);
-        if x.c.sr & 1 != 0 {
+        let Some(Obj(o)) = element_d_interface(x.b) else {
             return Flow::Done;
-        }
-        let o = x.c.a[1];
+        };
         wr8(x.b, o + 3, 4);
         wr8(x.b, o + 0x2f, slot as u8);
     }
-    x.call(ext::EFFCT);
-    x.call(ext::SPRITES);
+    render(x, &[&dispatch::EFFCT]);
     x.wait(2, Etape::FadeStart)
 }
 const FADE_START: u32 = 0x1cc0c;
@@ -280,41 +261,33 @@ crate::etapes! {
             wr32(x.b, var::FADE_SOURCES + 12, 0x28c6e0);
             create_task(x, ext::FADE_TASK, 0x10);
             wr8(x.b, var::FADE_STEPS, 1);
-            set_low_word(&mut x.c.d[0], 0x203);
-            x.c.a[1] = 0x917000;
-            x.call(ext::TILE_BLOCK);
-            set_low_word(&mut x.c.d[0], 0x204);
-            x.call(ext::TILE_BLOCK);
-            set_low_word(&mut x.c.d[0], 0xfc);
-            x.c.a[1] = 0x91b800;
-            x.call(ext::TILE_BLOCK_2);
-            set_low_word(&mut x.c.d[0], 0xfd);
-            x.call(ext::TILE_BLOCK_2);
+            two_blocks(x, Grille::Couche2, 0x203, 0x917000);
+            two_blocks(x, Grille::Couche3, 0xfc, 0x91b800);
             wr16(x.b, var::VIDEO, 0x12ce);
             fade_wait(x)
         },
         FadeLoop = FADE_LOOP => fade_wait,
         Step6Faded = STEP_6_FADED => |x| {
-            x.call(ext::EFFCT);
+            dispatch::EFFCT.update_sans_suite(x.c, x.b);
             crate::objects::pools::EFFCT.reset(x.b);
-            x.call(ext::SPRITES_RESET);
-            x.call(ext::SPRITES);
+            crate::sprites::vider_listes(x.b);
+            crate::sprites::construire_68k(x.c, x.b);
             let v = rd16(x.b, var::VIDEO) & !0xe;
             wr16(x.b, var::VIDEO, v);
             x.wait(1, Etape::Step6Clear)
         },
         Step6Clear = STEP_6_CLEAR => |x| {
             wr8(x.b, var::SCREEN_ID, 0xff);
-            for f in [ext::CLEAR_SPRITES, ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-                x.call(f);
-            }
+            crate::video::vider_objets(x.b);
+            clear_layers(x);
             x.wait(4, Etape::Step6Palette)
         },
         Step6Palette = STEP_6_PALETTE => |x| {
-            x.call_d0(ext::PALETTE_PAGE_A, 0);
-            x.call_d0(ext::PALETTE_SET, 0x56);
-            x.call_d0(ext::PALETTE_FADE, 0x56);
-            x.call_d0(ext::PALETTE_PAGE_C, 3);
+            // 0x1a608 (la page 1 prend l'entrée 0), 0x1a67e, 0x1a8b2, 0x1a3d4
+            crate::palette::charger_page_de_la_scene(x.b, 1);
+            crate::palette::charger_page(x.b, 2, 0x56);
+            crate::palette::charger_page(x.b, 3, 0x56);
+            crate::palette::charger_ensemble(x.b, 3);
             for i in 0..8 {
                 for j in 0..8 {
                     wr32(x.b, 0x91c000 + 0x20 * i + 4 * j, 0);
@@ -344,8 +317,8 @@ crate::etapes! {
         StepEFaded = STEP_E_FADED => |x| {
             crate::objects::pools::SET.reset(x.b);
             crate::objects::pools::SOBJ.reset(x.b);
-            x.call(ext::SPRITES_RESET);
-            x.call(ext::CLEAR_SPRITES);
+            crate::sprites::vider_listes(x.b);
+            crate::video::vider_objets(x.b);
             x.wait(1, Etape::StepEHide)
         },
         StepEHide = STEP_E_HIDE => |x| {
@@ -354,9 +327,7 @@ crate::etapes! {
             x.wait(1, Etape::StepEClear)
         },
         StepEClear = STEP_E_CLEAR => |x| {
-            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-                x.call(f);
-            }
+            clear_layers(x);
             x.wait(4, Etape::StepEFade)
         },
         StepEFade = STEP_E_FADE => |x| {
@@ -370,16 +341,23 @@ crate::etapes! {
 /// Attend la fin du fondu d'ouverture (une image par tour), puis allume les curseurs.
 fn fade_wait(x: &mut Ctx) -> Flow {
     if rd8(x.b, var::FADE_STEPS) != 0 {
-        x.call(ext::EFFCT);
-        x.call(ext::SPRITES);
+        render(x, &[&dispatch::EFFCT]);
         return x.wait(1, Etape::FadeLoop);
     }
     wr8(x.b, var::SCREEN_ID, 3);
     let main = sign_ext(rd16(x.b, var::MAIN_LINK));
     x.c.a[6] = main;
     wr8(x.b, main + 0x1c, 1);
-    x.call(ext::EFFCT);
-    x.sauter(&crate::sprites::BUILD_SPRITE_LIST)
+    // `jmp 0x1de96` à la fin
+    render(x, &[&dispatch::EFFCT]);
+    Flow::Done
+}
+
+/// Les trois couches effacées.
+fn clear_layers(x: &mut Ctx) {
+    for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+        effacer_couche(x.b, couche);
+    }
 }
 const FADE_LOOP: u32 = 0x1cca4;
 
@@ -413,8 +391,9 @@ fn step_2(x: &mut Ctx) -> Flow {
     x.c.a[6] = main;
     publish_choices(x, main);
     wr8(x.b, var::LOCKED_FLAG, 0);
-    x.call(ext::EFFCT);
-    x.sauter(&crate::sprites::BUILD_SPRITE_LIST)
+    // `jmp 0x1de96` à la fin
+    render(x, &[&dispatch::EFFCT]);
+    Flow::Done
 }
 
 /// Recopie les choix des joueurs dans l'objet principal (lu par les objets curseurs).
@@ -472,9 +451,7 @@ fn cursor(x: &mut Ctx, a0: u32) {
         return;
     }
     dedupe(x, a0);
-    x.c.a[0] = a0;
-    x.call(ext::PLAYER_INPUT);
-    let d1 = x.c.d[1];
+    let d1 = crate::inputs::entrees_du_joueur(x.b, a0).nouvelles;
     let mut d3 = rd8(x.b, a0 + 3) as u32;
     let slot = rd8(x.b, a0 + 2);
     let mut d0: u8 = 0;
@@ -538,12 +515,10 @@ fn cursor(x: &mut Ctx, a0: u32) {
         }
         other |= 1 << (d3 & 31);
         wr16(x.b, var::WORD_9A0E, other as u16);
-        let saved = (x.c.d, x.c.a);
-        x.c.d[0] = (x.c.d[0] & !0xff) | (d3 & 0xff);
-        x.call(ext::CHOICE_SOUND);
-        // `movem.l d0-d6/a0-a6` : D7 n'est pas restauré
-        x.c.d[..7].copy_from_slice(&saved.0[..7]);
-        x.c.a[..7].copy_from_slice(&saved.1[..7]);
+        // 0x2e630 : statistique du personnage (carte de développement seulement). Glitch d'origine : elle reçoit
+        // D0.w, dont seul l'octet bas est le choix ; l'octet haut est un reste des appels précédents
+        let d0 = (x.c.d[0] as u16 & 0xff00) | (d3 & 0xff) as u16;
+        crate::eeprom::stat_personnage_choisi(x.b, d0);
         d3 |= 0x80;
         wr8(x.b, var::LOCKED_FLAG, 1);
     }
@@ -640,8 +615,7 @@ fn freeze(x: &mut Ctx) {
 // Étape 4 : courte attente
 
 fn step_4(x: &mut Ctx) -> Flow {
-    x.call(ext::EFFCT);
-    x.call(ext::SPRITES);
+    render(x, &[&dispatch::EFFCT]);
     let left = rd8(x.b, var::COUNTDOWN).wrapping_sub(1);
     wr8(x.b, var::COUNTDOWN, left);
     if left == 0 {
@@ -666,12 +640,13 @@ fn step_6(x: &mut Ctx) -> Flow {
         wr8(x.b, p + 3, cell);
         let variant = x.prog8(table::VARIANT + (cell as u32 >> 1));
         wr8(x.b, p + 0x15d, variant);
+        // la routine de la table 0x1d0f6 (`movea.w`, appelée avec A0 = le joueur) est l'initialisation du joueur de
+        // ce numéro (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
         let kind = rd8(x.b, p + 2) as u32;
-        let routine = x.prog16(table::INIT_ROUTINES + 2 * kind);
+        assert!(kind < 4, "sélection : joueur {kind} hors de la table 0x1d0f6");
         x.c.a[0] = p;
-        x.c.a[1] = sign_ext(routine);
-        let a1 = x.c.a[1];
-        x.call(a1);
+        x.c.a[1] = sign_ext(x.prog16(table::INIT_ROUTINES + 2 * kind));
+        crate::player::init::initialiser(x.c, x.b, kind);
         if (rd8(x.b, p + 3) & 0x7f) >> 1 == 5 {
             wr8(x.b, p + 0x162, 1);
             wr8(x.b, p + 0x16b, 5);
@@ -695,25 +670,15 @@ fn step_8(x: &mut Ctx) -> Flow {
     wr8(x.b, var::STEP, s);
     crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 0xff, ligne: 4 });
     crate::sound::jouer_global(x.b, ext::SOUND_E109C);
-    x.c.a[1] = 0x917000;
-    x.call_d0(ext::TILE_BLOCK, 0x208);
-    x.call_d0(ext::TILE_BLOCK, 0x209);
-    x.c.a[1] = 0x91b800;
-    x.call_d0(ext::TILE_BLOCK_2, 0x14a);
-    x.call_d0(ext::TILE_BLOCK_2, 0x14b);
-    x.c.d[5] = 0;
-    x.c.a[2] = var::PLAYERS_PRESENT;
-    for counter in (0..2u32).rev() {
-        // D0 est le compteur de la boucle `dbf` : l'allocateur le lit (variante du panneau)
-        x.c.d[0] = counter;
-        x.call(ext::ALLOC_PANEL);
-        if x.c.sr & 1 != 0 {
-            break;
-        }
-        wr32(x.b, x.c.a[1] + 0x58, var::PLAYERS_PRESENT);
-        x.c.d[5] = (x.c.d[5] & !0xff) | (x.c.d[5].wrapping_add(1) & 0xff);
+    two_blocks(x, Grille::Couche2, 0x208, 0x917000);
+    two_blocks(x, Grille::Couche3, 0x14a, 0x91b800);
+    let mut count = 0u8;
+    for counter in (0..2u8).rev() {
+        // la variante du panneau est le compteur de la boucle `dbf` (D0)
+        let Some(Obj(o)) = bandeau(x.b, counter) else { break };
+        wr32(x.b, o + 0x58, var::PLAYERS_PRESENT);
+        count = count.wrapping_add(1);
     }
-    let count = x.c.d[5] as u8;
     wr8(x.b, var::PLAYERS_PRESENT, count);
     let mut d4 = 0xeau8;
     for _ in 0..2 {
@@ -726,9 +691,7 @@ fn step_8(x: &mut Ctx) -> Flow {
         wr16(x.b, o + 0xc, 0xc0);
         wr32(x.b, o + 0x10, 1);
     }
-    x.call(ext::EFFCT);
-    x.call(ext::SOBJ);
-    x.call(ext::SPRITES);
+    render(x, &[&dispatch::EFFCT, &dispatch::SOBJ]);
     x.wait(2, Etape::Step8Show)
 }
 const STEP_8_SHOW: u32 = 0x1d31c;
@@ -753,9 +716,7 @@ fn any_button(x: &mut Ctx) -> bool {
 // Étapes 10, 12, 14
 
 fn step_a(x: &mut Ctx) -> Flow {
-    for f in [ext::EFFCT, ext::SOBJ, ext::SPRITES] {
-        x.call(f);
-    }
+    render(x, &[&dispatch::EFFCT, &dispatch::SOBJ]);
     if any_button(x) {
         wr16(x.b, var::COUNTDOWN, 1);
         crate::objects::pools::EFFCT.reset(x.b);
@@ -779,9 +740,7 @@ fn step_a(x: &mut Ctx) -> Flow {
 }
 
 fn step_c(x: &mut Ctx) -> Flow {
-    for f in [ext::SET, ext::SOBJ, ext::SPRITES] {
-        x.call(f);
-    }
+    render(x, &[&dispatch::SET, &dispatch::SOBJ]);
     if rd8(x.b, var::FRAME_COUNTER) & 3 == 0 {
         let y = rd16(x.b, var::BANNER_Y).wrapping_sub(1);
         wr16(x.b, var::BANNER_Y, y);
@@ -796,11 +755,10 @@ fn step_c(x: &mut Ctx) -> Flow {
         if phase != rd8(x.b, var::PLAYERS_PRESENT) && rd8(x.b, var::LOCKED_FLAG) != 7 {
             let v = rd8(x.b, var::PLAYERS_PRESENT) ^ 0x10;
             wr8(x.b, var::PLAYERS_PRESENT, v);
-            let n = rd8(x.b, var::LOCKED_FLAG) as u32;
-            x.call_d0(ext::BLINK_SOUND, n);
-            if x.c.sr & 1 == 0 {
-                let n = n as u8 + 1;
-                wr8(x.b, var::LOCKED_FLAG, n);
+            // 0xcdedc : objet SET de type 13 (le clignotement), de variante le compteur
+            let n = rd8(x.b, var::LOCKED_FLAG);
+            if crate::families::creators::set_13_pur(x.b, n).is_ok() {
+                wr8(x.b, var::LOCKED_FLAG, n + 1);
             }
         }
     }
@@ -816,9 +774,7 @@ fn finish_c(x: &mut Ctx) -> Flow {
 }
 
 fn step_e(x: &mut Ctx) -> Flow {
-    for f in [ext::SET, ext::SOBJ, ext::SPRITES] {
-        x.call(f);
-    }
+    render(x, &[&dispatch::SET, &dispatch::SOBJ]);
     if rd8(x.b, var::FADE_STEPS) != 0 {
         return Flow::Done;
     }
