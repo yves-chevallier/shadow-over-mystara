@@ -384,7 +384,16 @@ fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x1a5e8 : douze blocs de huit couleurs recopiés dans la palette 0x91c480.
+/// 0x1a5e8 : douze blocs de huit couleurs (0x25c4c0) recopiés dans la palette 0x91c480. Cœur.
+pub fn palette_douze_blocs(b: &mut Cps2Bus) {
+    let (dst, src) = (0x91c480, 0x25c4c0);
+    for i in 0..12 * 8 {
+        let v = rd32(b, src + 4 * i);
+        wr32(b, dst + 4 * i, v);
+    }
+}
+
+/// `palette_douze_blocs` avec les registres de l'original (le dernier bloc dans D1-D6, A1, A2).
 fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
     const MASK: u16 = 0x067e; // D1-D6, A1, A2
     let (mut dst, mut src) = (0x91c480, 0x25c4c0);

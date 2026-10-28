@@ -5,15 +5,11 @@ use cps2::Cps2Bus;
 use super::{choice, draw, panel, player, select, v8, var, Slot};
 use crate::game::sbcd;
 use crate::mem::{prog16, prog8, rd32, rd8, wr32, wr8, A5};
+use crate::player::init::Join;
 use crate::scene::Ctx;
 
 /// Routines d'origine appelées par l'interface (comptabilité, sons, démarrage de joueur...).
 mod rom {
-    /// Initialisations du joueur k (créent le joueur dans la partie), pour le choix du personnage et pour
-    /// la reprise ; leur adresse est dans une table du code.
-    pub const START_PLAYER: u32 = 0x158b8;
-    pub const START_PLAYER_RESUME: u32 = 0x15de0;
-    pub const START_PLAYER_ALT: u32 = 0x15e10;
     /// Classe du joueur selon son personnage (octet, tables du code).
     pub const CLASS_OF_CHARACTER: u32 = 0x158c0;
     pub const CLASS_OF_CHARACTER_ALT: u32 = 0x15e18;
@@ -680,15 +676,15 @@ fn choose(x: &mut Ctx, s: Slot) {
     s.set_p8(b, panel::STATE, 0);
     let class = prog8(b, rom::CLASS_OF_CHARACTER + (chosen >> 1) as u32);
     s.set_g8(b, 0x15d, class);
-    start_player(x, s, rom::START_PLAYER);
+    start_player(x, s, Join::New);
 }
 
-/// 0x1588c : appelle l'initialisation du joueur de ce panneau (adresse lue dans une table du code), puis
-/// règle le personnage 5.
-fn start_player(x: &mut Ctx, s: Slot, table: u32) {
-    let index = s.index(x.b) as u32;
-    let routine = prog16(x.b, table + 2 * index) as i16 as i32 as u32;
-    x.call(routine);
+/// 0x1588c : l'arrivée du joueur de ce panneau, puis le réglage du personnage 5. Les tables du code (0x158b8 :
+/// 0x2f46... nouveau joueur, 0x15de0 : 0x3142... recharge, 0x15e10 : 0x3048... reprise) donnent l'entrée de
+/// `player::init::rejoindre` propre au joueur.
+fn start_player(x: &mut Ctx, s: Slot, how: Join) {
+    let index = s.index(x.b);
+    crate::player::init::rejoindre(x.c, x.b, index, how);
     let b = &mut *x.b;
     if (s.g8(b, player::CHARACTER) & 0x7f) >> 1 == 5 {
         s.set_g8(b, 0x162, 1);
@@ -961,10 +957,10 @@ fn resume_choose(x: &mut Ctx, s: Slot) {
     s.set_p8(b, panel::STATE, 0);
     if chosen >> 1 == s.p8(b, panel::CHOSEN) >> 1 {
         s.set_p32(b, panel::FRAMES, 0);
-        start_player(x, s, rom::START_PLAYER_RESUME);
+        start_player(x, s, Join::Refill);
     } else {
         let class = prog8(b, rom::CLASS_OF_CHARACTER_ALT + (chosen >> 1) as u32);
         s.set_g8(b, 0x15d, class);
-        start_player(x, s, rom::START_PLAYER_ALT);
+        start_player(x, s, Join::Continue);
     }
 }

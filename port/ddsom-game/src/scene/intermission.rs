@@ -144,7 +144,7 @@ fn scroll_out(x: &mut Ctx) {
             if x.rd16(TIMER) != 0 {
                 if x.tick(TIMER) {
                     x.set_v16(TRANSITION, 76);
-                    x.call(0xb68b0);
+                    crate::families::effects_creators::types_54(x.b);
                 }
             } else if x.v16(TRANSITION) == 92 {
                 x.next_sub();
@@ -160,7 +160,7 @@ fn scroll_out(x: &mut Ctx) {
             } else {
                 x.next_sub();
                 x.set_v16(CAMERA_X, 2408);
-                x.call(0xb66e4);
+                crate::families::effects_creators::type_53_pur(x.b);
             }
         }
         6 => {} // 0xb66e4 passe lui-même à la sous-étape 8

@@ -330,7 +330,7 @@ pub const INIT_P4: Native = init_native(0x2e9e, "player_init_4", init_p4);
 
 /// Trois façons d'entrer en cours de partie (une entrée par joueur pour chacune).
 #[derive(Clone, Copy, PartialEq)]
-enum Join {
+pub enum Join {
     /// 0x2f46.. : nouveau joueur (score remis à zéro).
     New,
     /// 0x3048.. : reprise après « continue » (le score est gardé).
@@ -342,6 +342,11 @@ enum Join {
 /// Le joueur `k` arrive en cours de partie : il tombe du ciel (état scénarisé de résurrection, `0x00040000` ;
 /// `0x00040800` entrées figées, `0x00040c00` marche lente globale), puis tous les ennemis et boss reçoivent
 /// un choc (`join_shockwave`).
+/// Les entrées 0x2f46.., 0x3048.., 0x3142.. (une par joueur `k`) : le joueur arrive en cours de partie.
+pub fn rejoindre(c: &mut Cpu, b: &mut Cps2Bus, k: u8, how: Join) {
+    join(&mut Ctx::new(c, b), k, how);
+}
+
 fn join(g: &mut Ctx, k: u8, how: Join) {
     let p = Player::nth(k as u32);
     p.set_u8(g, Player::INDEX, k);

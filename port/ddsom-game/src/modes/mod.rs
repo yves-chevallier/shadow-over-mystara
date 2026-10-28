@@ -141,10 +141,6 @@ pub trait Block {
     fn set_m16(&mut self, off: u32, v: u16);
     /// Passe à l'étape suivante de l'écran (`FF0E72` += 2).
     fn next_step(&mut self);
-    /// Appelle une routine d'origine avec D0 chargé (`moveq`/`move.w #n,D0`).
-    fn call_d0(&mut self, addr: u32, d0: u32);
-    /// Dernier appel réussi ? (retenue effacée : convention des allocateurs d'objets)
-    fn ok(&self) -> bool;
     /// Un tour d'objets et de sprites (`0xfaca2`) : SET, EFFCT, SOBJ puis liste de sprites.
     fn render(&mut self);
 }
@@ -165,14 +161,6 @@ impl Block for Ctx<'_> {
     fn next_step(&mut self) {
         let s = self.m8(2).wrapping_add(2);
         self.set_m8(2, s);
-    }
-    #[track_caller]
-    fn call_d0(&mut self, addr: u32, d0: u32) {
-        self.c.d[0] = d0;
-        self.call(addr);
-    }
-    fn ok(&self) -> bool {
-        self.c.sr & 1 == 0
     }
     fn render(&mut self) {
         let a0 = self.c.a[0];

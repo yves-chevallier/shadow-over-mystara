@@ -275,9 +275,10 @@ fn next_operation(x: &mut Ctx) -> Flow {
             let index = rd8(x.b, a1 + 1) as u32;
             x.c.a[1] = a1 + 2;
             x.c.d[0] = index;
+            // une commande son de la table 0x1f3aa (0xe0ef8, 0xe0f70, 0xe0f34, 0xe1024), appelée par `jsr (A6)`
             let routine = prog32(x, table::COMMANDS + index);
             x.c.a[6] = routine;
-            x.call(routine);
+            crate::sound::jouer_global(x.b, routine);
             x.c.a[1] += 1;
             scene_start(x)
         }

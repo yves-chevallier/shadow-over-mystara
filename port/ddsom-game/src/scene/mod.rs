@@ -33,7 +33,7 @@ use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
-use crate::{call, Native};
+use crate::Native;
 
 /// Variables de la RAM de travail (offsets depuis A5) communes aux séquences de scène.
 pub mod var {
@@ -135,13 +135,6 @@ impl<'a> Ctx<'a> {
     pub fn prog8(&mut self, addr: u32) -> u8 {
         let word = self.b.fetch16(addr & !1);
         if addr & 1 == 0 { (word >> 8) as u8 } else { word as u8 }
-    }
-
-    /// Sous-routine d'origine (JSR) avec A5 en place.
-    #[track_caller]
-    pub fn call(&mut self, addr: u32) {
-        self.c.a[5] = A5;
-        call(self.c, self.b, addr);
     }
 
     // --- étapes ----------------------------------------------------------------------------------

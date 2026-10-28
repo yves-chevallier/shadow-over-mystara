@@ -20,6 +20,7 @@ use crate::aides::divide;
 use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::scene::Ctx;
+use crate::video::Grille;
 use crate::objects::pools;
 
 /// Bloc d'état de l'écran (`A0`, A5 - 0x70b0).
@@ -51,24 +52,6 @@ mod var {
     pub const CAMERA_2_X: u32 = 0x556;
     pub const CAMERA_2_Y: u32 = 0x55a;
     pub const FADE_PAGES: u32 = 0x48e;
-}
-
-/// Routines d'origine.
-mod sub {
-    pub const CLEAR_SPRITES: u32 = 0xc58;
-    pub const CLEAR_SCROLL_1: u32 = 0xca8;
-    pub const ENABLE_LAYERS: u32 = 0xbc6;
-    pub const PAGE_0: u32 = 0x1a366;
-    pub const PAGE_1: u32 = 0x1a60a;
-    pub const PAGE_2: u32 = 0x1a67e;
-    pub const PAGE_3: u32 = 0x1a8b2;
-    /// Palettes complémentaires de l'écran (rôle non étudié).
-    pub const MORE_PALETTES: u32 = 0x1a5e8;
-    pub const BLOCKS_SCROLL_2: u32 = 0x26d4;
-    pub const BLOCKS_SMALL: u32 = 0x2766;
-    pub const EFFCT: u32 = 0x39cba;
-    pub const SET: u32 = 0x39e86;
-    pub const SPRITES: u32 = 0x1de96;
 }
 
 crate::etapes! {
@@ -262,8 +245,8 @@ fn ligne_haute(x: &mut Ctx, ligne: Ligne, p: u32, rang: u16) {
 
 /// Étape 0 (`0x1838a`) : le décor et les rangs 5 à 10.
 fn decor(x: &mut Ctx) -> Flow {
-    x.call(sub::CLEAR_SPRITES);
-    x.call(sub::CLEAR_SCROLL_1);
+    crate::video::vider_objets(x.b);
+    crate::video::effacer_couche(x.b, crate::video::Couche::Un);
     let etape = rd8(x.b, etat::ETAPE).wrapping_add(2);
     wr8(x.b, etat::ETAPE, etape);
     wr16(x.b, etat::MINUTERIE, 0x40);
@@ -272,11 +255,12 @@ fn decor(x: &mut Ctx) -> Flow {
     x.set_v16(var::CAMERA_Y, 0x10);
     x.set_v16(var::CAMERA_2_X, 0);
     x.set_v16(var::CAMERA_2_Y, 0x20);
-    for (routine, d0) in [(sub::PAGE_0, 1), (sub::PAGE_1, 2), (sub::PAGE_2, 0x3a), (sub::PAGE_3, 0x3a)] {
-        x.c.d[0] = d0;
-        x.call(routine);
+    // 0x1a366 (palettes de la scène 1), pages 1 à 3 (0x1a60a, 0x1a67e, 0x1a8b2), 0x1a5e8
+    crate::palette::charger_palettes_de_scene(x.b, 1);
+    for (page, n) in [(1, 2), (2, 0x3a), (3, 0x3a)] {
+        crate::palette::charger_page(x.b, page, n);
     }
-    x.call(sub::MORE_PALETTES);
+    crate::families::petites::palette_douze_blocs(x.b);
     // `ori.l #0xf000f000` sur les six premiers longs, `adda.l` (addition) sur les deux derniers
     for (source, dest) in PALETTES {
         for i in 0..8 {
@@ -285,20 +269,17 @@ fn decor(x: &mut Ctx) -> Flow {
             wr32(x.b, dest + 4 * i, v);
         }
     }
-    for (routine, d0, dest) in [
-        (sub::BLOCKS_SCROLL_2, 0x80, 0x917000),
-        (sub::BLOCKS_SCROLL_2, 0x81, 0x917400),
-        (sub::BLOCKS_SMALL, 0x111, 0x91b800),
-        (sub::BLOCKS_SMALL, 0x112, 0x91b900),
+    for (grille, n, dest) in [
+        (Grille::Couche2, 0x80, 0x917000),
+        (Grille::Couche2, 0x81, 0x917400),
+        (Grille::Couche3, 0x111, 0x91b800),
+        (Grille::Couche3, 0x112, 0x91b900),
     ] {
-        set_low_word(&mut x.c.d[0], d0);
-        x.c.a[1] = dest;
-        x.call(routine);
+        crate::video::charger_grille(x.b, grille, n, dest);
     }
     wr16(x.b, 0x400004, 0x1144);
-    set_low_word(&mut x.c.d[0], 0x1e0e);
     x.set_v16(var::LAYERS, 0);
-    x.call(sub::ENABLE_LAYERS);
+    crate::video::activer_couches(x.b, 0x1e0e);
     for k in 0..6 {
         ligne_basse(x, Ligne(RANGS_BAS - LIGNE * k), 0x912168 - 0x10 * k, 10 - k as u16);
     }
@@ -435,8 +416,8 @@ fn tour(x: &mut Ctx) -> Flow {
 /// `0x1836e` : retour de l'étape.
 fn apres_etape(x: &mut Ctx) -> Flow {
     x.c.a[0] = etat::BASE;
-    for routine in [sub::EFFCT, sub::SET, sub::SPRITES] {
-        x.call(routine);
-    }
+    crate::dispatch::EFFCT.update_sans_suite(x.c, x.b);
+    crate::dispatch::SET.update_sans_suite(x.c, x.b);
+    crate::sprites::construire_68k(x.c, x.b);
     super::une_image(x, Etape::Reprise)
 }
