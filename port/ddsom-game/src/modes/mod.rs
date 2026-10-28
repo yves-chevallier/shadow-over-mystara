@@ -166,6 +166,7 @@ impl Block for Ctx<'_> {
         let s = self.m8(2).wrapping_add(2);
         self.set_m8(2, s);
     }
+    #[track_caller]
     fn call_d0(&mut self, addr: u32, d0: u32) {
         self.c.d[0] = d0;
         self.call(addr);
@@ -173,6 +174,7 @@ impl Block for Ctx<'_> {
     fn ok(&self) -> bool {
         self.c.sr & 1 == 0
     }
+    #[track_caller]
     fn render(&mut self) {
         let a0 = self.c.a[0];
         for f in [0x39e86, 0x39cba, 0x39f82, 0x1de96] {

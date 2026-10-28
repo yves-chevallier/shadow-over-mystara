@@ -285,6 +285,17 @@ fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
     rts(c, b);
 }
 
+/// 0x1a360 : palettes de la scène en cours dans la page 0.
+pub fn charger_palettes_de_la_scene(b: &mut Cps2Bus) {
+    let stage = rd8(b, crate::mem::A5 + STAGE_VAR) as u32;
+    load_stage_palettes(b, crate::mem::A5, stage, PALETTES);
+}
+
+/// 0x1a366 : palettes de la scène `scene` dans la page 0 (puis les supplémentaires de la scène en cours).
+pub fn charger_palettes_de_scene(b: &mut Cps2Bus, scene: u8) {
+    load_stage_palettes(b, crate::mem::A5, scene as u32, PALETTES);
+}
+
 pub const STAGE_FREE: Native = native(0x1a366, "palette_scene_d0", |c, b| stage_run(c, b, 0x1a366));
 pub const STAGE_PAGE0: Native = native(0x1a360, "palette_scene", |c, b| stage_run(c, b, 0x1a360));
 pub const STAGE_SCROLL1: Native = native(0x1a350, "palette_scene_scroll1", |c, b| stage_run(c, b, 0x1a350));
@@ -323,6 +334,11 @@ fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
         c.a[4] = PALETTES + PAGE_PALETTES * PALETTE_BYTES;
     }
     rts(c, b);
+}
+
+/// 0x1a3d4 : les 32 palettes de l'ensemble `n` dans la page 0 (rien si l'ensemble est absent).
+pub fn charger_ensemble(b: &mut Cps2Bus, n: u16) {
+    load_set(b, n as u32);
 }
 
 pub const LOAD_SET: Native = native(0x1a3d4, "palette_ensemble", set_run);
@@ -379,6 +395,19 @@ fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
     rts(c, b);
 }
 
+/// Pages de palettes 1 à 3 (0x1a608/0x1a60a, 0x1a678/0x1a67e, 0x1a8ac/0x1a8b2) : les 32 palettes de l'entrée `n`
+/// de la table de la page.
+pub fn charger_page(b: &mut Cps2Bus, page: usize, n: u16) {
+    assert!((1..=3).contains(&page), "page de palettes {page}");
+    load_page(b, page - 1, n as u32);
+}
+
+/// 0x1a678, 0x1a8ac : la page 2 ou 3 d'après la scène en cours (0x1a608 : la page 1 prend toujours l'entrée 0).
+pub fn charger_page_de_la_scene(b: &mut Cps2Bus, page: usize) {
+    let n = if page == 1 { 0 } else { rd8(b, crate::mem::A5 + STAGE_VAR) as u16 };
+    charger_page(b, page, n);
+}
+
 macro_rules! page_native {
     ($name:ident, $nom:literal, $k:literal, $entry:expr) => {
         pub const $name: Native = native(
@@ -411,24 +440,40 @@ fn special_sources(stage: u8) -> Option<[u32; 4]> {
     }
 }
 
-fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
-    let stage = rd8(b, c.a[5] + STAGE_VAR);
+/// 0x1a296 : toutes les palettes de la scène en cours.
+pub fn charger_tout(b: &mut Cps2Bus) {
+    charger_tout_par(b, None);
+}
+
+/// `charger_tout`, et les registres de l'original si `c` est donné.
+fn charger_tout_par(b: &mut Cps2Bus, mut c: Option<&mut Cpu>) {
+    let a5 = crate::mem::A5;
+    let stage = rd8(b, a5 + STAGE_VAR);
     let special = special_sources(stage);
-    let entry = if special.is_some() { 0x1a350 } else { 0x1a360 };
-    let (d0, dst) = stage_args(b, c, entry);
-    let end = load_stage_palettes(b, c.a[5], d0, dst);
-    stage_regs(c, b, &end);
+    let dst = if special.is_some() { hw::SCROLL1 } else { PALETTES };
+    let end = load_stage_palettes(b, a5, stage as u32, dst);
+    if let Some(c) = c.as_deref_mut() {
+        stage_regs(c, b, &end);
+    }
     for (k, d0) in [(0, 0), (1, stage as u32), (2, stage as u32)] {
         let source = load_page(b, k, d0);
-        page_regs(c, b, k, source);
-    }
-    wr16(b, CLEARED_WORD, 0);
-    c.flags_logic(0, m68k::decode::Size::Word);
-    if let Some(sources) = special {
-        for (k, source) in sources.into_iter().enumerate() {
-            wr32(b, c.a[5] + FADE_SOURCES + 4 * k as u32, source);
+        if let Some(c) = c.as_deref_mut() {
+            page_regs(c, b, k, source);
         }
     }
+    wr16(b, CLEARED_WORD, 0);
+    if let Some(c) = c {
+        c.flags_logic(0, m68k::decode::Size::Word);
+    }
+    if let Some(sources) = special {
+        for (k, source) in sources.into_iter().enumerate() {
+            wr32(b, a5 + FADE_SOURCES + 4 * k as u32, source);
+        }
+    }
+}
+
+fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
+    charger_tout_par(b, Some(c));
     rts(c, b);
 }
 

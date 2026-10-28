@@ -1,6 +1,12 @@
-//! Liste des routines natives : « adresse nom », une par ligne.
+//! Liste des routines natives : « adresse nom forme », une par ligne (forme du corps : `P` processeur, `E` processeur
+//! avec son entrée, `M` mémoire seule).
 fn main() {
     for n in ddsom_game::all_natives() {
-        println!("{:06x} {}", n.entry, n.name);
+        let forme = match n.run {
+            ddsom_game::Corps::Processeur(_) => 'P',
+            ddsom_game::Corps::ProcesseurEn(_) => 'E',
+            ddsom_game::Corps::Memoire(_) => 'M',
+        };
+        println!("{:06x} {} {forme}", n.entry, n.name);
     }
 }

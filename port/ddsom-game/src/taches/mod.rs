@@ -184,6 +184,7 @@ pub fn executer(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
     let mut x = Ctx::new(c, b);
     crate::modes::c_a5(&mut x);
     if etape.pas(&mut x) == Flow::Done {
+        crate::diag::sonder_retour(x.c, &etape);
         revenir(x.c, x.b);
     }
 }

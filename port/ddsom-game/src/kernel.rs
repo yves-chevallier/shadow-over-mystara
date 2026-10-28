@@ -268,10 +268,11 @@ pub fn retenir_le_pas(b: &mut Cps2Bus) {
 fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: Suite) {
     let mut a = [0; 7];
     a.copy_from_slice(&c.a[..7]);
-    let ctx = Contexte { pc: reprise.adresse(), sr: c.sr, usp: c.a[7], d: c.d, a };
+    let mut ctx = Contexte { pc: reprise.adresse(), sr: c.sr, usp: c.a[7], d: c.d, a };
     let Suite::Etape(etape) = reprise else {
         unreachable!("cession vers l'adresse {:x} : toutes les reprises sont des étapes Rust", reprise.adresse())
     };
+    crate::diag::sonder_cession(&mut ctx.d, &mut ctx.a, &mut ctx.sr, &etape);
     table(b).ceder(etat, compte, Reprise::Etape(etape, ctx));
     c.a[1] = ctx.usp.wrapping_sub(64);
     vers_ordonnanceur(c, b);

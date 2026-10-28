@@ -191,6 +191,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// Fin de l'image d'une séquence : mise à jour du monde, puis liste de sprites.
+    #[track_caller]
     pub fn world(&mut self) {
         self.call(sub::WORLD_UPDATE);
         self.call(sub::SPRITES);
