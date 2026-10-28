@@ -33,7 +33,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x99362 : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
-fn dead(x: &mut Cx) -> bool {
+fn dead<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }
@@ -68,7 +68,7 @@ fn reaction(x: &mut Cx) {
 // --- aides ------------------------------------------------------------------------------------------------
 
 /// 0x99414 : orientation du boss opposée au coup (`+0x4a`) ; vitesses inversées si elle est non nulle.
-fn face_away(x: &mut Cx) {
+fn face_away<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let side = x.u8(0x4a) ^ 0x20;
     x.set8(f::FLIP, side);
     if side != 0 {
@@ -79,7 +79,7 @@ fn face_away(x: &mut Cx) {
 }
 
 /// 0x9940c : le gel après le coup (`+0x53`) reprend la valeur d'étourdissement.
-fn freeze_by_stun(x: &mut Cx) {
+fn freeze_by_stun<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let stun = x.u8(STUN);
     x.set8(f::FREEZE, stun);
 }
@@ -97,7 +97,7 @@ fn throw_speeds(x: &mut Cx, row: u32) {
     x.set16(0x1e, 0);
 }
 
-fn begin_throw(x: &mut Cx) {
+fn begin_throw<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     face_away(x);
     freeze_by_stun(x);
@@ -370,7 +370,7 @@ fn pushed_back(x: &mut Cx) {
     }
 }
 
-fn step_only(x: &mut Cx) {
+fn step_only<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 

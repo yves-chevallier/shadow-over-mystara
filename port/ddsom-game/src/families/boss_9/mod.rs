@@ -97,10 +97,10 @@ pub(self) fn anim(x: &mut Cx) {
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6(x: &mut Cx) {
+pub(self) fn next6<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7(x: &mut Cx) {
+pub(self) fn next7<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 pub(self) fn steps(x: &mut Cx, s6: u8, s7: u8) {
@@ -109,7 +109,7 @@ pub(self) fn steps(x: &mut Cx, s6: u8, s7: u8) {
 }
 
 /// `bchg.b #1,(0xd,A0)` : l'engin cahote.
-pub(self) fn jolt(x: &mut Cx) {
+pub(self) fn jolt<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(0xd) ^ 2;
     x.set8(0xd, v);
 }
@@ -194,7 +194,7 @@ pub(self) fn stop_over(x: &mut Cx) {
 
 // --- tables par difficulté (données de la ROM) ----------------------------------------------------
 
-fn difficulty(x: &mut Cx) -> u32 {
+fn difficulty<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
     var::RANK.get(x.b) as u32
 }
 

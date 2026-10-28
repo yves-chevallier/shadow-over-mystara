@@ -48,7 +48,7 @@ mod guardian {
         x.free_peff();
     }
 
-    fn die(x: &mut Cx) {
+    fn die<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.set32(0x4, 0x0400_0000);
     }
 
@@ -424,7 +424,7 @@ mod guardian {
         }
     }
 
-    fn overlap(x: &mut Cx, m: Obj, frame: u32, mine: u32, with_z: bool) -> bool {
+    fn overlap<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, m: Obj, frame: u32, mine: u32, with_z: bool) -> bool {
         let (e, p) = (frame, mine);
         let d = (x.data8(e + 4) as i8 as i16 as u16).wrapping_add(m.u16(x.b, 0x10));
         let q = (x.data8(p + 4) as i8 as i16 as u16).wrapping_add(x.u16(0x10));
@@ -448,7 +448,7 @@ mod guardian {
         d.wrapping_sub(q).wrapping_add(reach) <= reach.wrapping_mul(2)
     }
 
-    fn frame_of(x: &mut Cx, m: Obj) -> u32 {
+    fn frame_of<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, m: Obj) -> u32 {
         let boxes = (m.u8(x.b, 0x2e) as u32) << 2;
         let table = rd32(x.b, FRAMES + boxes);
         table.wrapping_add((m.u8(x.b, 0x38) as u32) << 3)

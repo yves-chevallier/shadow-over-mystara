@@ -30,7 +30,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Recul (0x6e738).
-fn recoil(x: &mut Cx) {
+fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

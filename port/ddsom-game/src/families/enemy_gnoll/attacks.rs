@@ -58,7 +58,7 @@ fn next_and_start(x: &mut Cx) {
 }
 
 /// 0x6b74a : étape suivante à la fin de l'animation.
-fn next_when_done(x: &mut Cx) {
+fn next_when_done<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
@@ -109,7 +109,7 @@ fn windup(x: &mut Cx) {
 }
 
 /// +6 = 2 : demi-tour puis geste 0xc.
-fn turn_back(x: &mut Cx) {
+fn turn_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -228,7 +228,7 @@ fn leap_start(x: &mut Cx, height: u32, shift: i16) {
 }
 
 /// 0x6b8a8 : retombée du saut.
-fn land(x: &mut Cx) {
+fn land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) > 0 {
         return;
@@ -398,7 +398,7 @@ fn teleport(x: &mut Cx) {
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
-fn pause(x: &mut Cx) {
+fn pause<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

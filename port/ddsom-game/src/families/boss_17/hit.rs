@@ -39,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x975cc : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
-fn out_of_hp(x: &mut Cx) -> bool {
+fn out_of_hp<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }
@@ -221,7 +221,7 @@ fn get_up(x: &mut Cx) {
     }
 }
 
-fn body_hurt(x: &mut Cx, n: u32) {
+fn body_hurt<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     body(x, n);
 }
 

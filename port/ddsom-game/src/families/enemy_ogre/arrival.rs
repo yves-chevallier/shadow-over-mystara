@@ -16,7 +16,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Début commun d'une arrivée : plus invulnérable, immunités remises.
-fn begin(x: &mut Cx) {
+fn begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set_bit(1, 1, false);
     x.set8(INVULNERABLE, 0);
@@ -162,7 +162,7 @@ fn thump(x: &mut Cx) {
 }
 
 /// 0x70794 : début de la course (animation 5).
-fn begin_dash(x: &mut Cx) {
+fn begin_dash<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x14);
     x.set16(TIMER2, 0);

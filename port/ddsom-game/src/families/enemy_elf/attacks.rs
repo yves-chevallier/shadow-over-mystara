@@ -42,20 +42,20 @@ pub(super) fn run(x: &mut Cx) {
 // --- étapes communes ----------------------------------------------------------------------------
 
 /// 0x69de8 / 0x69a3a : s'accroupit.
-fn crouch_step(x: &mut Cx) {
+fn crouch_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     crouch(x);
 }
 
 /// 0x69df0 : attend la fin de l'animation.
-fn wait_step(x: &mut Cx) {
+fn wait_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.add8(f::SUB3, 2);
     }
 }
 
 /// 0x69e1c : fin de l'animation, retour debout.
-fn finish_back(x: &mut Cx) {
+fn finish_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if step(x) {
         back_to_stance(x);
     }
@@ -109,7 +109,7 @@ fn approach(x: &mut Cx) {
 }
 
 /// `+6` = 2 : demi-tour puis retour à l'approche (`+6 = 0x0c`).
-fn turn_around(x: &mut Cx) {
+fn turn_around<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -317,12 +317,12 @@ fn drop_strike(x: &mut Cx, kind: Drop) {
 }
 
 /// Élan (`+6` = 14) : saute puis retombe devant la cible.
-fn dash(x: &mut Cx) {
+fn dash<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     jump_group(x, 0)
 }
 
 /// Étapes communes des groupes de sauts : 0 s'accroupit, 2 attend, `jump` selon le groupe, puis réception.
-fn jump_group(x: &mut Cx, _g: u8) {
+fn jump_group<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, _g: u8) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 | 6 => wait_step(x),
@@ -579,7 +579,7 @@ fn idle_choice(x: &mut Cx) {
 }
 
 /// 0x69fbc : mémorise l'action choisie ; la répète tant qu'elle ne change pas (compte à rebours `+0xa4`).
-fn post_choice(x: &mut Cx, choice: u8) {
+fn post_choice<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, choice: u8) {
     if choice != x.u8(WALK_ANIM) {
         x.set8(WALK_ANIM, choice);
         x.set8(WALK_ANIM_TIMER, 2);

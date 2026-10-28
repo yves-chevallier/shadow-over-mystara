@@ -122,7 +122,7 @@ pub(super) fn grab(x: &mut Cx) {
 }
 
 /// 0x5cb70 : part en courant vers le bord (animation 2, vitesse 0x21).
-fn run_away(x: &mut Cx) {
+fn run_away<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     walk_angle(x);
     mv(x, 2);

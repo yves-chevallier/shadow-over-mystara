@@ -18,7 +18,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x5befc : surgit : points de vie à 1 (mots `+0x60`, `+0x62`, `+0x64`), marche en place.
-fn begin(x: &mut Cx) {
+fn begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set16(0x60, 1);
     x.set16(f::HP, 1);
@@ -46,7 +46,7 @@ fn active(x: &mut Cx) {
 }
 
 /// +6 = 0 : marche sur place pendant `+0xa4` images, puis les tirs.
-fn walk(x: &mut Cx) {
+fn walk<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     x.anim_step();
     let n = x.u8(TIMER).wrapping_sub(1);

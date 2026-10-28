@@ -19,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn at_camera(x: &mut Cx) {
+fn at_camera<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let cx = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     x.set16(0x8, cx);
 }

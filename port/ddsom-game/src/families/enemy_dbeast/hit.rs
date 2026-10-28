@@ -222,7 +222,7 @@ fn flee(x: &mut Cx) {
 }
 
 /// 0x7444e : s'enfuit en courant vers le bord de l'écran.
-fn run_away(x: &mut Cx) {
+fn run_away<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x16);
     x.set8(Obj::SPEED_INDEX, 8);

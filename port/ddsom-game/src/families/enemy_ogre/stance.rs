@@ -20,29 +20,29 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Un joueur qui saisit l'ogre ou la fin de la partie interrompt le geste ; vrai si l'état a changé.
-fn interrupted(x: &mut Cx) -> bool {
+fn interrupted<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     held_by_player(x) || nobody_left(x)
 }
 
 /// Animation de vol 2 ou 3 selon le sens de la vitesse (0x70a94).
-fn fly_forward_or_back(x: &mut Cx) {
+fn fly_forward_or_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 2 } else { 3 };
     play(x, SET_A, n);
 }
 
 /// Le jeu de vol correspondant au sens de la vitesse, à la même image (0x70b6e).
-fn switch_flight_set(x: &mut Cx) {
+fn switch_flight_set<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let table = if lib::moving_forward(x) { SET_FLY_ALONG } else { SET_FLY_AGAINST };
     lib::switch_keeping_time(x, table);
 }
 
-fn charge_a(x: &mut Cx) {
+fn charge_a<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x719f6 + level);
     x.set8(CHARGE, v);
 }
 
-fn charge_b(x: &mut Cx) {
+fn charge_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x71a16 + level);
     x.set8(CHARGE, v);
@@ -93,7 +93,7 @@ fn pursue(x: &mut Cx) {
 
 // --- +6 = 2 : demi-tour ---------------------------------------------------------------------------
 
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -237,7 +237,7 @@ fn pick_a2(x: &mut Cx) {
 }
 
 /// 0x71d62 : coup 6 sans lever l'invulnérabilité.
-fn strike_6_quiet(x: &mut Cx) {
+fn strike_6_quiet<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     set_state_long(x, 0x0204_0600);
 }
@@ -348,12 +348,12 @@ fn plunge(x: &mut Cx) {
     }
 }
 
-fn act_a(x: &mut Cx, n: u32) {
+fn act_a<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     mv(x, n);
 }
 
 /// 0x70c6c : début de la course du plongeon.
-fn plunge_dash(x: &mut Cx) {
+fn plunge_dash<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x14);
     x.set16(TIMER2, 0);
@@ -440,7 +440,7 @@ fn leap(x: &mut Cx) {
 }
 
 /// 0x70e1c : fin du bond : retraite, saisie ou nouveau geste.
-fn end_leap(x: &mut Cx) {
+fn end_leap<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if !interrupted(x) {
         go::wander(x);
     }

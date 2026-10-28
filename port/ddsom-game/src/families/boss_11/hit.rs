@@ -19,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x8e8ca : vrai si le jeu est en pause (le serpent reste alors affiché : `+0` = 2).
-fn paused(x: &mut Cx) -> bool {
+fn paused<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return true;
@@ -198,7 +198,7 @@ fn generic(x: &mut Cx) {
 }
 
 /// 0x8e8fc : relevé après la chute (état 4, groupe 4).
-fn fallen(x: &mut Cx) {
+fn fallen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set32(f::STATE, 0x0404_0000);
     x.set8(0x86, 1);
@@ -315,7 +315,7 @@ fn throw(x: &mut Cx) {
     }
 }
 
-fn arc_end(x: &mut Cx) {
+fn arc_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x29) == 0 {
         return;
     }

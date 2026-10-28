@@ -33,14 +33,14 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Fin des sous-états 2 et 4 : l'état est mémorisé et la période de repos décomptée.
-fn tail(x: &mut Cx) {
+fn tail<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let s = x.u32(f::STATE);
     x.set32(STATE_SAVED, s);
     cooldown(x);
 }
 
 /// 0x65ac8 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ennemi meurt.
-fn death_check(x: &mut Cx) -> bool {
+fn death_check<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }
@@ -79,7 +79,7 @@ fn first(x: &mut Cx) {
 }
 
 /// 0x65168 : la créature n'est plus tenue : elle reprend l'état mémorisé avec une courte période de repos.
-fn resume(x: &mut Cx) {
+fn resume<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let code = x.u8(HIT_CODE_SAVED);
     x.set8(0x49, code);
     let s = x.u32(STATE_SAVED);

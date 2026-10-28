@@ -44,7 +44,7 @@ pub(super) fn walk_in(x: &mut Cx, timer: u8, speed: u32) {
 }
 
 /// Variante 4 : chute depuis le haut (`+0x18` = −4 ajouté à la hauteur à chaque image).
-fn fall_in(x: &mut Cx) {
+fn fall_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set16(Obj::VZ, -4i16 as u16);

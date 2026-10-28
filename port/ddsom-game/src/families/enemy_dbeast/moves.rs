@@ -50,7 +50,7 @@ fn stand(x: &mut Cx) {
     }
 }
 
-fn stand_pose(x: &mut Cx) {
+fn stand_pose<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(WANT_ANIM, 0);
     x.set8(CUR_ANIM, 0);
     x.set8(VULNERABLE, 1);
@@ -215,7 +215,7 @@ pub(super) fn enter(x: &mut Cx) {
 // --- sous-état 12 : sortie ----------------------------------------------------------------------
 
 /// Une pièce quitte la scène : animation de sortie, puis bond vers le haut jusqu'à disparaître.
-pub(super) fn leave(x: &mut Cx) {
+pub(super) fn leave<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

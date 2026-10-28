@@ -43,7 +43,7 @@ fn finish(x: &mut Cx, to: fn(&mut Cx)) {
 }
 
 /// Consomme l'image-clé `+0x33` ; vrai si elle était levée.
-fn take_key(x: &mut Cx) -> bool {
+fn take_key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::KEY_FRAME) == 0 {
         return false;
     }
@@ -52,7 +52,7 @@ fn take_key(x: &mut Cx) -> bool {
 }
 
 /// Un effet 0x32 lié au boss avec la variante `v` (poussière, étincelles...), sans insister.
-fn puff(x: &mut Cx, v: u8) {
+fn puff<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u8) {
     effect(x, false, 0x32, Some(v), true);
 }
 
@@ -158,7 +158,7 @@ fn strike_4(x: &mut Cx) {
 
 /// Distance parcourue en X pour atteindre le joueur visé (`+0x50`) à la vitesse courante, convertie en vitesse
 /// verticale de saut : 0x100 + 0xe par pas de vitesse nécessaire.
-fn leap_speed(x: &mut Cx) -> u16 {
+fn leap_speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
     let target = x.linked(f::TARGET);
     let mut gap = x.u32(0x8).wrapping_sub(target.u32(x.b, 0x8)) as i32;
     if gap < 0 {
@@ -393,12 +393,12 @@ fn cinematic_shot(x: &mut Cx) {
     }
 }
 
-fn step_only(x: &mut Cx) {
+fn step_only<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 /// La clé est levée ? (sans la consommer ici : l'original la consomme plus loin).
-fn take_key_keep(x: &mut Cx) -> bool {
+fn take_key_keep<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     x.u8(f::KEY_FRAME) != 0
 }
 

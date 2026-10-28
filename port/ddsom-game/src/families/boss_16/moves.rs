@@ -318,7 +318,7 @@ pub(super) fn jump_to_spot(x: &mut Cx) {
 
 /// 0x9514a : choisit le point d'arrivée (`+0xae`, `+0xb0`), le sens de rotation (`+0xb3`) et l'angle (`+0x2d`) d'après la
 /// position du boss par rapport à la caméra (quatre coins, table 0x951b0 : X, Z, angle, sens).
-fn choose_spot(x: &mut Cx) {
+fn choose_spot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let cam = camera_record(x);
     let dx = x.u16(0x8).wrapping_sub(cam.u16(x.b, 0x8));
     let dz = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc));
@@ -481,7 +481,7 @@ pub(super) fn paused(x: &mut Cx) {
 // --- groupe 12 : joueur saisi ---------------------------------------------------------------------------
 
 /// 0x9402a : plus de proie, le boss s'éloigne d'un bond.
-fn drop_prey(x: &mut Cx) {
+fn drop_prey<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::WALK);
     x.set16(0x18, 0x400);
     x.set16(0x1a, (-0x40i16) as u16);

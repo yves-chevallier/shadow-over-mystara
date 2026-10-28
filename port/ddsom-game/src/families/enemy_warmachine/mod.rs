@@ -79,12 +79,12 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Démarre l'animation `n` du jeu des mouvements.
-pub(self) fn mv(x: &mut Cx, n: u32) {
+pub(self) fn mv<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_MOVE, n);
 }
 
 /// Démarre l'animation `n` du jeu de l'arme.
-pub(self) fn weapon(x: &mut Cx, n: u32) {
+pub(self) fn weapon<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_WEAPON, n);
 }
 
@@ -95,7 +95,7 @@ pub(self) fn look(x: &mut Cx, v: u8) {
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed(x: &mut Cx, n: u32) {
+pub(self) fn set_speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
@@ -105,7 +105,7 @@ pub(self) fn spark(x: &mut Cx, n: u32) {
 }
 
 /// X de la caméra (écran unique ou deuxième écran).
-pub(self) fn camera_x(x: &mut Cx) -> u16 {
+pub(self) fn camera_x<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 {
         var::CAMERA2_X.get(x.b)
     } else {
@@ -114,7 +114,7 @@ pub(self) fn camera_x(x: &mut Cx) -> u16 {
 }
 
 /// Orientation : `forward` quand l'orientation est nulle donne 0x18, sinon 8.
-pub(self) fn heading(x: &mut Cx) -> u8 {
+pub(self) fn heading<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u8 {
     if x.u8(f::FLIP) != 0 {
         8
     } else {
@@ -127,7 +127,7 @@ pub(self) fn heading(x: &mut Cx) -> u8 {
 pub(self) mod go {
     use super::*;
 
-    pub fn arrive(x: &mut Cx, s6: u32) {
+    pub fn arrive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, s6: u32) {
         x.set8(FLAG, 1);
         set_state_long(x, 0x0200_0000 | s6 << 8);
     }
@@ -137,21 +137,21 @@ pub(self) mod go {
         set_state_long(x, 0x0202_0000);
     }
     /// 0x791e0 : demi-tour (état à reprendre mémorisé).
-    pub fn turn(x: &mut Cx) {
+    pub fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         let state = x.u32(f::STATE);
         x.set32(RESUME_STATE, state);
         set_state_long(x, 0x0202_0200);
     }
     /// 0x791f4 : tir A (type de tir 0x34, ou 0x36 selon le profil).
-    pub fn fire_a(x: &mut Cx) {
+    pub fn fire_a<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let kind = if x.u8(GROUP) != 0 { 0x36 } else { 0x34 };
         x.set8(SHOT_KIND, kind);
         x.set8(VULNERABLE, 1);
         set_state_long(x, 0x0202_0400);
     }
     /// 0x79216 : tir B (0x35 ou 0x37).
-    pub fn fire_b(x: &mut Cx) {
+    pub fn fire_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let kind = if x.u8(GROUP) != 0 { 0x37 } else { 0x35 };
         x.set8(SHOT_KIND, kind);
         x.set8(VULNERABLE, 1);
@@ -165,7 +165,7 @@ pub(self) mod go {
     }
     /// 0x7925e à 0x792be : geste du sous-état 4 (`s6` = 0, 2, 4, 6, 8, 0xa, 0xc) ; `flag` : pose `+0xad` (talons
     /// 0x79288 et 0x792aa).
-    pub fn attack(x: &mut Cx, s6: u32, flag: bool) {
+    pub fn attack<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, s6: u32, flag: bool) {
         if flag {
             x.set8(FLAG, 1);
         }
@@ -177,7 +177,7 @@ pub(self) mod go {
         set_state_long(x, 0x020a_0000);
     }
     /// 0x792d6.
-    pub fn held(x: &mut Cx) {
+    pub fn held<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x0408_0000);
     }
 }

@@ -100,7 +100,7 @@ fn approach(x: &mut Cx) {
 }
 
 /// +6 = 2 : demi-tour.
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -115,7 +115,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// +6 = 4 : attente sur place.
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

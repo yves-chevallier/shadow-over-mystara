@@ -194,7 +194,7 @@ mod man_scorpion {
     }
 
     /// Le coup de grâce n'est possible que tant que le parent a des coups en réserve (`+0x32`).
-    fn take_from_parent(x: &mut Cx) {
+    fn take_from_parent<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let parent = x.linked(f::OWNER);
         let left = parent.u8(x.b, 0x32);
         if left == 0 {
@@ -314,14 +314,14 @@ mod man_scorpion {
     }
 
     /// Copie le gel (`+0x58` long, `+0x53`) sur une partie.
-    fn share_freeze(x: &mut Cx, o: Obj) {
+    fn share_freeze<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, o: Obj) {
         let (l, g) = (x.u32(0x58), x.u8(f::FREEZE));
         o.set_u32(x.b, 0x58, l);
         o.set_u8(x.b, f::FREEZE, g);
     }
 
     /// Début d'un coup : gèle les parties, démarre le recul (15 images) et l'effet `0xab7d8`.
-    fn react(x: &mut Cx) {
+    fn react<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let freeze = x.u8(p::HIT_FREEZE);
         x.set8(f::FREEZE, freeze);
         x.set8(p::DELAY, 0xf);
@@ -341,7 +341,7 @@ mod man_scorpion {
     }
 
     /// Recul de 15 images (2 pixels, sens alterné), puis retour à l'état 2.
-    fn recoil(x: &mut Cx) {
+    fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let left = x.u8(p::DELAY);
         if left != 0 {
             let left = left - 1;
@@ -409,7 +409,7 @@ mod man_scorpion {
         x.reinsert();
     }
 
-    fn wait(x: &mut Cx) {
+    fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let n = x.u8(p::DELAY).wrapping_sub(1);
         x.set8(p::DELAY, n);
         if n == 0 {
@@ -419,7 +419,7 @@ mod man_scorpion {
         x.reinsert();
     }
 
-    fn death_end(x: &mut Cx) {
+    fn death_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let n = x.u8(p::DELAY).wrapping_sub(1);
         x.set8(p::DELAY, n);
         if n != 0 {
@@ -434,7 +434,7 @@ mod man_scorpion {
         free(x);
     }
 
-    fn death_start_b(x: &mut Cx) {
+    fn death_start_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
         lib::sound(x, 0xeb4ba);
         let parent = x.linked(f::OWNER);
@@ -455,7 +455,7 @@ mod man_scorpion {
         x.reinsert();
     }
 
-    fn death_end_b(x: &mut Cx) {
+    fn death_end_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let n = x.u8(p::DELAY).wrapping_sub(1);
         x.set8(p::DELAY, n);
         if n != 0 {
@@ -468,7 +468,7 @@ mod man_scorpion {
     }
 
     /// Clignote pendant l'attente (caché quand `(+0xa2) & 3 != 0`), puis remet l'objet en liste.
-    fn blink(x: &mut Cx) {
+    fn blink<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let hidden = x.u8(p::DELAY) & 3 != 0;
         x.set_bit(0x1, 1, hidden);
         x.reinsert();
@@ -477,7 +477,7 @@ mod man_scorpion {
     // --- état 6 : libération -------------------------------------------------------------------
 
     /// Libère les parties ; la variante 0 rend aussi ses compteurs au parent et à l'hôte.
-    fn die(x: &mut Cx) {
+    fn die<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let first = x.u8(0x3) == 0;
         let mut host = None;
         if first {
@@ -537,7 +537,7 @@ mod nagpa {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let variant = x.u8(0x3);
         if variant > 1 {
             return;
@@ -579,7 +579,7 @@ mod nagpa {
         false
     }
 
-    fn mark_visible(x: &mut Cx, on: bool) {
+    fn mark_visible<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, on: bool) {
         let bit = x.u8(0x3) != 0;
         let v = x.data8(VISIBLE_FLAGS);
         let mask = if bit { 1 } else { 2 };
@@ -597,7 +597,7 @@ mod nagpa {
         x.set8(0x86, 1);
     }
 
-    fn appear(x: &mut Cx) {
+    fn appear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             x.add8(f::SUB, 2);
         }
@@ -614,7 +614,7 @@ mod nagpa {
         x.anim_start(ANIMS, n as u16);
     }
 
-    fn disappear(x: &mut Cx) {
+    fn disappear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if !x.anim_step() {
             return;
         }

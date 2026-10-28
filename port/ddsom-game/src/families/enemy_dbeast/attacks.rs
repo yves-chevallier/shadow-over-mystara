@@ -39,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 // --- étapes communes ----------------------------------------------------------------------------
 
 /// +7 = 0 (0x72e80) : la bête se prépare (animation de repos).
-pub(super) fn ready(x: &mut Cx) {
+pub(super) fn ready<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0);
@@ -51,7 +51,7 @@ pub(super) fn ready(x: &mut Cx) {
 
 /// +7 = 2 (0x72ffc / 0x72ff0) : elle suit sa cible du regard pendant `+0x77` images (demi-tour au
 /// besoin, puis reprise de l'attaque `resume`).
-pub(super) fn track(x: &mut Cx, resume: u32) {
+pub(super) fn track<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, resume: u32) {
     x.set32(RESUME_STATE, resume);
     let n = x.u8(AI_KICK).wrapping_sub(1);
     x.set8(AI_KICK, n);
@@ -85,7 +85,7 @@ pub(super) enum Replay {
     End,
 }
 
-pub(super) fn replay(x: &mut Cx) -> Replay {
+pub(super) fn replay<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Replay {
     let want = x.u8(WANT_ANIM);
     if want != x.u8(CUR_ANIM) {
         x.set8(CUR_ANIM, want);
@@ -101,7 +101,7 @@ pub(super) fn replay(x: &mut Cx) -> Replay {
 }
 
 /// Début d'un coup : étape suivante, vulnérabilité, animation voulue, force du coup.
-fn strike_begin(x: &mut Cx, vulnerable: u8, want: u8, power: u8, kind: u8) {
+fn strike_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vulnerable: u8, want: u8, power: u8, kind: u8) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, vulnerable);
     x.set8(STRIKE_POWER, power);
@@ -110,7 +110,7 @@ fn strike_begin(x: &mut Cx, vulnerable: u8, want: u8, power: u8, kind: u8) {
 }
 
 /// Lance l'animation `n` de la série des coups, sauf si la série de répétitions est finie.
-fn strike_play(x: &mut Cx, n: u8) {
+fn strike_play<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u8) {
     if !matches!(replay(x), Replay::End) {
         play_b(x, n);
     }
@@ -132,7 +132,7 @@ fn strike_end_quick(x: &mut Cx) {
 }
 
 /// Un tir lancé (0x9dda8 ou 0x9e062), quand l'image-clé est atteinte.
-fn key_throw(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn key_throw<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);
@@ -140,7 +140,7 @@ fn key_throw(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
 }
 
 /// Direction de marche : vers la droite (8) ou la gauche (0x18) selon l'orientation.
-fn walk_angle(x: &mut Cx) {
+fn walk_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
         x.set8(Obj::SPEED_INDEX, 0x18);
@@ -267,7 +267,7 @@ fn claw_pair(x: &mut Cx) {
 }
 
 /// Bond griffes dehors, vitesse initiale en X `vx` (0x7337a et ses trois entrées).
-fn leap_strike_start(x: &mut Cx, vx: i16) {
+fn leap_strike_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vx: i16) {
     strike_begin(x, 1, 0x2f, 6, 2);
     let vx = if x.u8(f::FLIP) != 0 { vx.wrapping_neg() } else { vx };
     set_velocity(x, vx, 0x4c0, -0x38);
@@ -456,7 +456,7 @@ fn turn_run(x: &mut Cx) {
 }
 
 /// Début d'une griffe (0x73786, 0x7382c) : animation 4 de la série des coups.
-fn claw_begin(x: &mut Cx) {
+fn claw_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(WANT_ANIM, 0x2e);
     x.set8(VULNERABLE, 1);

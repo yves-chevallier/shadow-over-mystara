@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Courant;
 
 /// Clé d'animation `kind` (`+0xa2`, recopiée en `+0xa3`).
-fn key(x: &mut Cx, kind: u8) {
+fn key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }

@@ -195,7 +195,7 @@ fn run_away(x: &mut Cx) {
 }
 
 /// 0x56b42 : le Kobold court vers le bord de l'écran (animation 0x16).
-fn run_begin(x: &mut Cx) {
+fn run_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);
     set_angle(x);

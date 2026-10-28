@@ -72,7 +72,7 @@ pub fn run(x: &mut Cx) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn mv(x: &mut Cx, n: u32) {
+pub(self) fn mv<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
@@ -81,23 +81,23 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 }
 
 /// L'aspect voulu : `+0xa2` et son double `+0xa3`.
-pub(self) fn look(x: &mut Cx, v: u8) {
+pub(self) fn look<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed(x: &mut Cx, n: u32) {
+pub(self) fn set_speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
-pub(self) fn set_angle(x: &mut Cx) {
+pub(self) fn set_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Étape commune : attend la clé d'animation `+0x33` (0x54fae).
-pub(self) fn wait_key(x: &mut Cx) {
+pub(self) fn wait_key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
@@ -106,7 +106,7 @@ pub(self) fn wait_key(x: &mut Cx) {
 }
 
 /// L'animation finie, le Kobold se met debout, tourné vers sa cible (0x54e9a).
-pub(self) fn stand_when_done(x: &mut Cx) {
+pub(self) fn stand_when_done<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
     }
@@ -124,7 +124,7 @@ pub(self) fn puff(x: &mut Cx, mask: u16, d1: u16, d2: i16, d3: i16) {
 }
 
 /// 0x57b9c : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
-pub(self) fn must_turn(x: &mut Cx) -> bool {
+pub(self) fn must_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -136,7 +136,7 @@ pub(self) fn must_turn(x: &mut Cx) -> bool {
 }
 
 /// 0x57bee : la cible est à plus de 0x30 de profondeur et à plus de 0xa0 en X.
-pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
+pub(self) fn target_far_in_line<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -151,7 +151,7 @@ pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
 }
 
 /// 0x57c34 : force du coup (`+0x45`) d'après le type de coup `+0x44` et le profil `+0x2f` (table 0x57c52).
-pub(self) fn set_power(x: &mut Cx) {
+pub(self) fn set_power<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let kind = x.u8(STRIKE_KIND).wrapping_mul(4) as u32;
     let group = x.u8(GROUP) as u32;
     let p = x.data8(0x57c52 + kind + group);
@@ -159,7 +159,7 @@ pub(self) fn set_power(x: &mut Cx) {
 }
 
 /// 0x57c66 : l'ennemi est dans la moitié droite de l'écran (à 0xc0 de la caméra).
-pub(self) fn on_right_half(x: &mut Cx) -> bool {
+pub(self) fn on_right_half<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d1 = cam.wrapping_add(0xc0).wrapping_sub(x.u16(Obj::X));
     let right = (d1 as i16) <= 0;

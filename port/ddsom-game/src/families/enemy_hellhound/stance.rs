@@ -154,7 +154,7 @@ fn far_attack(x: &mut Cx) -> bool {
 
 // --- +6 = 2 : demi-tour ------------------------------------------------------------------------------------
 
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -175,7 +175,7 @@ fn turn(x: &mut Cx) {
 
 // --- +6 = 4 : attente -----------------------------------------------------------------------------------------
 
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -224,7 +224,7 @@ fn spit(x: &mut Cx) {
 }
 
 /// 0x61d08 : début du crachat : le chien recule en soufflant.
-fn spit_begin(x: &mut Cx) {
+fn spit_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 3);
     x.set8(STRIKE_KIND, 0x2c);

@@ -56,7 +56,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// +6 = 2 : saut en arc (vitesse verticale 0x800).
-fn arc(x: &mut Cx) {
+fn arc<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set32(Obj::VX, 0);
         x.add8(f::SUB3, 2);

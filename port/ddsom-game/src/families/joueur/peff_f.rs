@@ -297,7 +297,7 @@ mod flash {
     }
 
     /// `0x4cfbc` : quatre étincelles de coin, puis l'éclair d'écran.
-    fn spawn_corners(x: &mut Cx) {
+    fn spawn_corners<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         for rank in (0..4u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { break };
             o.set_u8(x.b, 0, 1);

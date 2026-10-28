@@ -154,7 +154,7 @@ pub(super) fn needs_turn_around(x: &mut Cx) -> bool {
 }
 
 /// `+6 = 2` : demi-tour (animation 2, puis inversion de l'orientation).
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -169,7 +169,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// `+6 = 4` : attente en position de garde.
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

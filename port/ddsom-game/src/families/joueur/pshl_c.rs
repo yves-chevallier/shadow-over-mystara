@@ -18,7 +18,7 @@ const COUNTER_15: u32 = 0xff2048;
 const COUNTER_16: u32 = 0xff204a;
 
 /// Décrémente un compteur de la RAM (`subq.w #1`).
-fn decrement(x: &mut Cx, address: u32) {
+fn decrement<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, address: u32) {
     let v = rd16(x.b, address).wrapping_sub(1);
     wr16(x.b, address, v);
 }

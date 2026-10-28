@@ -152,7 +152,7 @@ fn glide(x: &mut Cx) {
 }
 
 /// La caméra a-t-elle dépassé le seuil suivant de `STOPS` ? Si oui, passe au suivant.
-fn next_stop(x: &mut Cx) -> bool {
+fn next_stop<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let reach = scroll_x(x).wrapping_add(0x100) as i16;
     let i = x.u8(STOP_INDEX) as u32;
     let stop = x.rom16(STOPS + 2 * i) as i16;
@@ -164,11 +164,11 @@ fn next_stop(x: &mut Cx) -> bool {
 }
 
 /// Fin demandée (`RETREAT_FLAG`) ou seuil franchi : le dragon passe en mode « départ » (`+6` = 0xe).
-fn must_leave(x: &mut Cx) -> bool {
+fn must_leave<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     x.data8(RETREAT_FLAG) != 0 || next_stop(x)
 }
 
-fn leave_now(x: &mut Cx) {
+fn leave_now<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, ACTIVE_LEAVE);
     x.set8(SLOW, 1);
 }
@@ -183,7 +183,7 @@ fn begin(x: &mut Cx) {
 }
 
 /// Fige ou libère le jeu et les joueurs pendant la cinématique.
-fn freeze_players(x: &mut Cx, on: bool) {
+fn freeze_players<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, on: bool) {
     for k in 0..4 {
         let player = PLAYERS + 0x200 * k;
         if x.data8(player) != 0 {

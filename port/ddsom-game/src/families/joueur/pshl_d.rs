@@ -213,7 +213,7 @@ mod chain {
     }
 
     /// `0x54152` : vrai quand le maillon est hors de la zone visible (caméra +/- marges).
-    fn off_screen(x: &mut Cx) -> bool {
+    fn off_screen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
         let cam = if x.a5_u8(a5::USE_CAM2) != 0 { 0x54e } else { 0x4fe };
         let (cx, cy) = (x.a5_u16(cam + 8), x.a5_u16(cam + 0xc));
         let d0 = x.u16(0x8).wrapping_sub(cx).wrapping_add(0x40);

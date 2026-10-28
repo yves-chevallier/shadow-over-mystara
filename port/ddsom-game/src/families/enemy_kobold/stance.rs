@@ -138,7 +138,7 @@ fn far_attack(x: &mut Cx) -> bool {
 
 // --- +6 = 2 : demi-tour --------------------------------------------------------------------------------------
 
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -159,7 +159,7 @@ fn turn(x: &mut Cx) {
 
 // --- +6 = 4 : attente -----------------------------------------------------------------------------------------
 
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -221,7 +221,7 @@ fn run_up(x: &mut Cx) {
 }
 
 /// 0x5583c : début de la course.
-fn run_begin(x: &mut Cx) {
+fn run_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);
     mv(x, 0x16);

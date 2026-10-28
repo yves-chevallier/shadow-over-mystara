@@ -97,7 +97,7 @@ pub fn alloc(x: &mut Cx, pool: &pools::Pool) -> Obj {
 
 /// Alloue un tir ESHL actif de type `kind`, avec la variante `variant`, lié à l'objet courant par le mot `link`
 /// (`None` si le pool est plein). Les créateurs ci-dessous sont les petites routines 0x9ddee..0xa6824 de l'original.
-fn spawn_eshl(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
+fn spawn_eshl<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
     let Some(o) = x.alloc(&pools::ESHL) else { return None };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
@@ -107,7 +107,7 @@ fn spawn_eshl(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
 }
 
 /// Alloue un EFFCT actif de type `kind`, variante `variant`, lié à l'objet courant par le mot `link`.
-fn spawn_effct(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
+fn spawn_effct<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
     let Some(o) = x.alloc(&pools::EFFCT) else { return None };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
@@ -117,32 +117,32 @@ fn spawn_effct(x: &mut Cx, kind: u8, variant: u8, link: u32) -> Option<Obj> {
 }
 
 /// 0x9eca4 : un éclat (ESHL 7) de variante `variant`, propriétaire `+0x50`.
-pub fn eshl_debris(x: &mut Cx, variant: u8) {
+pub fn eshl_debris<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8) {
     spawn_eshl(x, 7, variant, 0x50);
 }
 
 /// 0xa1d54 : un ESHL 0x1d de variante `variant`, lié par `+0x5c`.
-pub fn eshl_sweep_1d(x: &mut Cx, variant: u8) {
+pub fn eshl_sweep_1d<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8) {
     spawn_eshl(x, 0x1d, variant, 0x5c);
 }
 
 /// 0xa2048 : un ESHL 0x1e, propriétaire `+0x50`.
-pub fn eshl_wave_1e(x: &mut Cx) {
+pub fn eshl_wave_1e<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     spawn_eshl(x, 0x1e, 0, 0x50);
 }
 
 /// 0xa219e : un ESHL 0x1f, lié par `+0x5c`.
-pub fn eshl_wave_1f(x: &mut Cx) {
+pub fn eshl_wave_1f<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     spawn_eshl(x, 0x1f, 0, 0x5c);
 }
 
 /// 0xb64b0 : un EFFCT 0x33 lié par `+0x5c`.
-pub fn effct_33(x: &mut Cx) {
+pub fn effct_33<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     spawn_effct(x, 0x33, 0, 0x5c);
 }
 
 /// 0xb53f4 : trois EFFCT 0x2e (`+0x2f` = 2, 1, 0) liés par `+0x46` ; le premier refus du pool arrête la série.
-pub fn effct_trio_2e(x: &mut Cx) {
+pub fn effct_trio_2e<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     for index in [2, 1, 0] {
         let Some(e) = spawn_effct(x, 0x2e, 0, f::HOST) else { return };
         e.set_u8(x.b, 0x2f, index);
@@ -181,7 +181,7 @@ pub fn eshl_burst_27(x: &mut Cx) {
 }
 
 /// 0xa6824 : deux tirs ESHL 0x3f (orientation 0 puis 0x20) liés par `+0x5c`.
-pub fn eshl_pair_3f(x: &mut Cx) {
+pub fn eshl_pair_3f<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     for flip in [0, 0x20] {
         let Some(o) = spawn_eshl(x, 0x3f, 0, 0x5c) else { return };
         o.set_u8(x.b, f::FLIP, flip);
@@ -190,7 +190,7 @@ pub fn eshl_pair_3f(x: &mut Cx) {
 
 /// 0xa460a, 0xa464e, 0xa4676 : un tir ESHL 0x34 de variante 2, 1 ou 0 lié par `+0x46` (la variante 1 copie
 /// l'orientation du créateur).
-pub fn eshl_shot_34(x: &mut Cx, variant: u8) {
+pub fn eshl_shot_34<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8) {
     let flip = x.u8(f::FLIP);
     if let Some(o) = spawn_eshl(x, 0x34, variant, f::HOST) {
         o.set_u8(x.b, 0x2f, 0);
@@ -206,7 +206,7 @@ pub fn alloc_failed(x: &Cx) -> bool {
 }
 
 /// Libère l'ennemi courant (état « mort » traité).
-pub fn free(x: &mut Cx) {
+pub fn free<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::ENEMY);
 }
 
@@ -217,22 +217,22 @@ pub fn random(x: &mut Cx) -> u32 {
 }
 
 /// Jeu en pause (`A5+0x3d` non nul).
-pub fn paused(x: &mut Cx) -> bool {
+pub fn paused<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     x.a5_u8(rom::PAUSE_FLAG) != 0
 }
 
 /// Le gestionnaire est suspendu (hook de pause `0x29ea`, Z = non suspendu).
-pub fn suspended(x: &mut Cx) -> bool {
+pub fn suspended<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     x.suspended()
 }
 
 /// Objet désigné par un mot de 16 bits de l'objet courant (`movea.w (off,A0),A1`).
-pub fn link(x: &mut Cx, off: u32) -> Obj {
+pub fn link<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
     x.linked(off)
 }
 
 /// Écrit le long d'état (`+4..+7`) d'un autre objet.
-pub fn set_state(x: &mut Cx, o: Obj, state: u32) {
+pub fn set_state<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, o: Obj, state: u32) {
     o.set_u32(x.b, f::STATE, state);
 }
 
@@ -275,7 +275,7 @@ pub fn hit_loop_at(x: &mut Cx, no_zone: u32, sub: impl FnOnce(&mut Cx)) {
 }
 
 /// Long lu dans une table du programme (adressage relatif au PC, espace des opcodes).
-pub fn rom32(x: &mut Cx, addr: u32) -> u32 {
+pub fn rom32<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
     (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
 }
 
@@ -307,13 +307,13 @@ pub fn set_dw(x: &mut Cx, n: usize, v: u16) {
 }
 
 /// `add.b #v,(off,An)` sur un autre objet (modulo 2^8).
-pub fn add8(x: &mut Cx, o: Obj, off: u32, v: u8) {
+pub fn add8<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, o: Obj, off: u32, v: u8) {
     let n = o.u8(x.b, off).wrapping_add(v);
     o.set_u8(x.b, off, n);
 }
 
 /// `add.w #v,(off,An)` sur un autre objet (modulo 2^16).
-pub fn add16(x: &mut Cx, o: Obj, off: u32, v: u16) {
+pub fn add16<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, o: Obj, off: u32, v: u16) {
     let n = o.u16(x.b, off).wrapping_add(v);
     o.set_u16(x.b, off, n);
 }
@@ -335,7 +335,7 @@ pub fn zone_and_terrain(x: &mut Cx) -> bool {
 }
 
 /// `neg.w (off,A0)`.
-pub fn negate(x: &mut Cx, off: u32) {
+pub fn negate<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) {
     let v = x.u16(off).wrapping_neg();
     x.set16(off, v);
 }
@@ -354,7 +354,7 @@ pub fn rand_and(x: &mut Cx, mask: u32) -> u32 {
 }
 
 /// Écrit le long d'état de l'objet courant (`move.l #v,(4,A0)`).
-pub fn set_state_long(x: &mut Cx, v: u32) {
+pub fn set_state_long<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
@@ -366,12 +366,12 @@ pub fn pick_target(x: &mut Cx) -> bool {
 }
 
 /// L'ennemi est saisi par un joueur (0x2810).
-pub fn grabbed(x: &mut Cx) -> bool {
+pub fn grabbed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     !crate::aides::grabbed(x.b, x.o).z()
 }
 
 /// La cible de l'ennemi (joueur désigné par `+0x50`), ou `None` s'il n'en a pas.
-pub fn target(x: &mut Cx) -> Option<Obj> {
+pub fn target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     if x.u16(f::TARGET) == 0 {
         return None;
     }
@@ -380,7 +380,7 @@ pub fn target(x: &mut Cx) -> Option<Obj> {
 
 /// L'ennemi ne regarde pas vers sa cible (0x74eac, 0x5f710) : faux sans animation en cours
 /// (`+0xa2` nul) ou sans cible.
-pub fn needs_turn(x: &mut Cx) -> bool {
+pub fn needs_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(0xa2) == 0 {
         return false;
     }
@@ -428,7 +428,7 @@ pub fn find_player(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 /// Crée les objets d'une liste de la ROM : `lists` (pointeurs, espace des opcodes) donne la liste `index`, dont
 /// chaque entrée est `routine d'allocation (octet), type, variante, +0x2f, X, hauteur, profondeur` ; le créateur
 /// est rangé en `+0x5c` de chaque objet. Les allocations qui échouent sautent leur entrée.
-pub fn spawn_list(x: &mut Cx, lists: u32, allocs: u32, index: u32) {
+pub fn spawn_list<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, lists: u32, allocs: u32, index: u32) {
     let mut at = rom32(x, lists + 4 * index);
     let count = x.data16(at);
     at += 2;

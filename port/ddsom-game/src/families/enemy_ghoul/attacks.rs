@@ -129,7 +129,7 @@ fn guard(x: &mut Cx) {
 }
 
 /// Début d'une approche : marche vers l'avant (animation 2) pendant `0x18` images.
-fn begin_charge(x: &mut Cx) {
+fn begin_charge<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     look(x, 6);
     x.set8(VULNERABLE, 1);

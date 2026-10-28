@@ -33,7 +33,7 @@ pub(super) fn stance_begin(x: &mut Cx) {
 }
 
 /// 0x5c2de : début de l'attente.
-fn idle_begin(x: &mut Cx) {
+fn idle_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     mv(x, 0);
 }
@@ -197,7 +197,7 @@ pub(super) fn idle(x: &mut Cx) {
 
 // --- sous-état 12 : demi-tour -------------------------------------------------------------------------
 
-pub(super) fn turn_around(x: &mut Cx) {
+pub(super) fn turn_around<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

@@ -70,7 +70,7 @@ pub(self) const WAIT: u32 = 0x020a_0000;
 /// État du combat (groupe 2, marche).
 pub(self) const FIGHT: u32 = 0x0202_0000;
 
-pub(self) fn body(x: &mut Cx, n: u32) {
+pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
@@ -98,7 +98,7 @@ pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
 }
 
 /// Clé d'animation `kind` (`+0xa2`, recopiée en `+0xa3`).
-pub(self) fn key(x: &mut Cx, kind: u8) {
+pub(self) fn key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }
@@ -263,13 +263,13 @@ fn active(x: &mut Cx) {
     lib::collide_terrain(x);
 }
 
-fn idle_reset(x: &mut Cx) {
+fn idle_reset<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set16(IDLE_WAIT, 0x3c);
     x.set16(IDLE_TIME, 0xf0);
 }
 
 /// Trop longtemps sans combattre : le boss se redresse et attaque (état 2, groupe 4, attaque tirée dans 0x85cd8).
-fn idle_attack(x: &mut Cx) {
+fn idle_attack<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set16(HITS, 0);
     x.set8(0x86, 0);

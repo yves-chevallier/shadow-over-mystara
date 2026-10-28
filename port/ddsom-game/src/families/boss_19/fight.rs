@@ -76,7 +76,7 @@ fn walk(x: &mut Cx, shot: u8) {
 }
 
 /// 0x901c2 : une riposte spéciale est-elle due ? Les PV restants (en quarts de `+0x60`) la déclenchent.
-fn special_due(x: &mut Cx) -> bool {
+fn special_due<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let d1 = x.u16(0x60) as u32;
     let d3 = (x.u16(0x62) as u32) << 2;
     let (mut d0, mut d2) = (-1i32, 0u32);
@@ -98,7 +98,7 @@ fn special_due(x: &mut Cx) -> bool {
 }
 
 /// 0x91024 : le dragon tourne-t-il le dos à sa cible ? (sans cible : attend, et rend vrai comme l'original).
-fn facing_away(x: &mut Cx) -> bool {
+fn facing_away<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::TARGET) as i16) >= 0 {
         wait(x);
         return true;

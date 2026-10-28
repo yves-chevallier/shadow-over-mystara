@@ -320,7 +320,7 @@ fn hold_high(x: &mut Cx) {
 }
 
 /// 0x7fbca : monte jusqu'à l'altitude 0x30.
-fn climb(x: &mut Cx) {
+fn climb<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0);
     if x.u8(0x7) == 0 {
         next7(x);
@@ -341,7 +341,7 @@ fn climb(x: &mut Cx) {
 }
 
 /// 0x7fc34 : descend jusqu'au sol, puis vol stationnaire.
-fn land(x: &mut Cx) {
+fn land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0);
     if x.u8(0x7) == 0 {
         next7(x);
@@ -403,7 +403,7 @@ pub(super) fn round(x: &mut Cx) {
 }
 
 /// 0x81810 : point de passage opposé au quart de l'écran où se trouve le boss ; Z = sens nul.
-fn pick_round_point(x: &mut Cx) -> bool {
+fn pick_round_point<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let cam = camera(x);
     let dx = x.u16(0x8).wrapping_sub(cam.u16(x.b, 0x8)) as i16;
     let dz = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc)) as i16;
@@ -458,7 +458,7 @@ fn circling(x: &mut Cx) {
 }
 
 /// 0x807aa : saut d'envol (vers l'avant), retombée, puis approche.
-fn take_off(x: &mut Cx) {
+fn take_off<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     match x.u8(0x7) {
         0 => {

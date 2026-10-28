@@ -61,7 +61,7 @@ fn end(x: &mut Cx) {
     fight::run(x);
 }
 
-fn camera(x: &mut Cx) -> (u16, u16) {
+fn camera<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
     if var::CAMERA_SELECT.get(x.b) != 0 {
         (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b))
     } else {
@@ -71,7 +71,7 @@ fn camera(x: &mut Cx) -> (u16, u16) {
 
 // --- type 14 --------------------------------------------------------------------------------------
 
-fn green_wait(x: &mut Cx) {
+fn green_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 0x80);
@@ -103,7 +103,7 @@ fn green_enter_b(x: &mut Cx) {
     lib::sound(x, 0xe508a);
 }
 
-fn green_descend(x: &mut Cx) {
+fn green_descend<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.move_z();
     if cmp16(x, 0xc, 0x60).ge() {
         x.add8(f::SUB2, 2);
@@ -120,7 +120,7 @@ fn green_descend(x: &mut Cx) {
     x.reinsert_foreground();
 }
 
-fn green_land(x: &mut Cx) {
+fn green_land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
     x.move_xyz();
     if !tst16(x, 0x18).pl() {
@@ -194,7 +194,7 @@ fn bubbles(x: &mut Cx) {
 }
 
 /// Position d'entrée à droite de la caméra, à la profondeur `dy` sous son bord haut.
-fn enter_from_right(x: &mut Cx, dy: u16) {
+fn enter_from_right<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, dy: u16) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, false);
     let (cx, cy) = camera(x);
@@ -215,14 +215,14 @@ fn enter(x: &mut Cx) {
 }
 
 /// Vol d'approche : la retombée est coupée sous l'altitude 0x20.
-fn glide(x: &mut Cx) {
+fn glide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.move_xyz();
     if x.u16(0x18) != 0 && (x.u16(0xc) as i16) < 0x20 {
         x.set16(0x18, 0);
     }
 }
 
-fn fly(x: &mut Cx) {
+fn fly<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     crate::families::effects_creators::scenery_10(x.b, x.o);
     glide(x);
     let (cx, _) = camera(x);
@@ -238,11 +238,11 @@ fn fly(x: &mut Cx) {
     finish_step(x);
 }
 
-fn finish_step(x: &mut Cx) {
+fn finish_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-fn wait_camera(x: &mut Cx) {
+fn wait_camera<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 1);
     step(x);
     if (var::PHASE.get(x.b) as i8) < 0xc {
@@ -259,7 +259,7 @@ fn pet_enter(x: &mut Cx) {
     pet_fly(x);
 }
 
-fn pet_fly(x: &mut Cx) {
+fn pet_fly<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     glide(x);
     let (cx, _) = camera(x);
     if Fl::sub16(cx.wrapping_add(0x128), x.u16(0x8)).le() {
@@ -273,7 +273,7 @@ fn pet_fly(x: &mut Cx) {
     finish_step(x);
 }
 
-fn pet_wait_camera(x: &mut Cx) {
+fn pet_wait_camera<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 1);
     step(x);
     if (var::PHASE.get(x.b) as i8) < 0xc {

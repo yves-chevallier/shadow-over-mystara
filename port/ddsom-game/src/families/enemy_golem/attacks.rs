@@ -124,7 +124,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x67c74 : tant que le drapeau de fin `+0x32` n'est pas levé, l'animation avance ; ensuite debout.
-fn until_end(x: &mut Cx) {
+fn until_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_END) as i16) >= 0 {
         x.anim_step();
         return;
@@ -165,7 +165,7 @@ fn leap_start(x: &mut Cx, speed: Option<i16>, kind: Option<u8>) {
 }
 
 /// 0x67e0e : attend la clé d'animation.
-fn wait_key(x: &mut Cx) {
+fn wait_key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
         return;
@@ -174,7 +174,7 @@ fn wait_key(x: &mut Cx) {
 }
 
 /// 0x67e22 : montée, jusqu'au sommet (`+0x18` négatif).
-fn rise(x: &mut Cx) {
+fn rise<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     x.anim_step();
     if (x.u16(Obj::VZ) as i16) < 0 {
@@ -297,7 +297,7 @@ fn squat_step(x: &mut Cx) {
 }
 
 /// 0x6829e : s'accroupit : étape suivante, minuterie 0x3c, animation 8.
-pub(super) fn squat_begin(x: &mut Cx) {
+pub(super) fn squat_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x3c);
     x.set8(0x68, 9);

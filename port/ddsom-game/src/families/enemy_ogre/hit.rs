@@ -31,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x71e24 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ogre meurt.
-fn death_check(x: &mut Cx) -> bool {
+fn death_check<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }

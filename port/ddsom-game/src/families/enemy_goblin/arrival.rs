@@ -16,7 +16,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Variante 0 : marche vers l'écran pendant `+0xa2` images.
-fn walk_in(x: &mut Cx) {
+fn walk_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
         x.anim_step();
@@ -37,7 +37,7 @@ fn walk_in(x: &mut Cx) {
 
 /// Variantes 2 et 4 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc`) avant de se
 /// relever, la variante 4 se relève tout de suite.
-fn drop_in(x: &mut Cx, gravity: bool) {
+fn drop_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, gravity: bool) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(Obj::VZ, 0);

@@ -418,7 +418,7 @@ mod fountain {
     }
 
     /// Crée une braise ou une étincelle liée à la boule (`0x53992`, `0x539b2`).
-    fn spawn(x: &mut Cx, variant: u8, _power: Option<(u8, u8)>) {
+    fn spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8, _power: Option<(u8, u8)>) {
         if let Some(o) = x.alloc(&pools::PSHL) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 0x12);
@@ -427,13 +427,13 @@ mod fountain {
         }
     }
 
-    fn spark(x: &mut Cx) {
+    fn spark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             x.add8(0x4, 2);
         }
     }
 
-    fn ember(x: &mut Cx) {
+    fn ember<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x5a, 0xffff);
         if x.u16(0x5a) == 0 {
             x.add8(0x4, 2);

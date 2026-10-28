@@ -91,7 +91,7 @@ pub(super) fn must_turn(x: &mut Cx) -> bool {
 }
 
 /// 0x87c6c : pas de côté tiré dans la table 0x87c8a.
-pub(super) fn random_sidestep(x: &mut Cx) {
+pub(super) fn random_sidestep<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let alea = x.random();
     let i = alea & 0xe;
     let mut d = x.rom16(0x87c8a + i as u32);
@@ -102,7 +102,7 @@ pub(super) fn random_sidestep(x: &mut Cx) {
 }
 
 /// 0x87cfe : ramène le boss dans l'aire de jeu (x de 0x45f à 0x68f, y de 0x168 à 0x19f).
-pub(super) fn clamp(x: &mut Cx) {
+pub(super) fn clamp<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let y = x.u16(0x10);
     if Fl::sub16(y, 0x168).gt() {
         if !Fl::sub16(y, 0x19f).lt() {
@@ -151,7 +151,7 @@ pub(super) fn dodge_nearby(x: &mut Cx) {
 }
 
 /// 0x87eca : un point de chute tiré dans une table choisie selon le quart d'écran où se trouve le boss.
-pub(super) fn dodge_spot(x: &mut Cx) {
+pub(super) fn dodge_spot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let dy = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     let right = Fl::sub16(dx, 0xc0).gt();

@@ -90,7 +90,7 @@ fn side_leap(x: &mut Cx) {
 }
 
 /// Début d'un bond en X de la seconde série (0x73b30) : vitesse `vx`, hauteur `vz`.
-fn leap_start(x: &mut Cx, vx: i16, vz: u16, anim: Option<u8>) {
+fn leap_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vx: i16, vz: u16, anim: Option<u8>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x1c);
@@ -150,7 +150,7 @@ fn long_leap(x: &mut Cx) {
 }
 
 /// 0x73c5a : recule en rugissant puis se retourne, à terre.
-fn retreat(x: &mut Cx) {
+fn retreat<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         return play(x, 0x18);

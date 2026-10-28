@@ -106,7 +106,7 @@ fn b_somersault(x: &mut Cx) {
 }
 
 /// 0x55148 : attend la clé d'animation.
-fn attacks_wait_key(x: &mut Cx) {
+fn attacks_wait_key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
@@ -115,7 +115,7 @@ fn attacks_wait_key(x: &mut Cx) {
 }
 
 /// 0x5515e : retombée du saut périlleux.
-fn land_yz(x: &mut Cx) {
+fn land_yz<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.move_yz().gt() {
         x.anim_step();
         return;
@@ -156,12 +156,12 @@ fn b_hop(x: &mut Cx, vx: i16, vz: u16, strike_anim: bool) {
 }
 
 /// 0x54fae : attend la clé d'animation (la clé n'est pas remise à zéro).
-fn attacks_wait_key_clear(x: &mut Cx) {
+fn attacks_wait_key_clear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     wait_key(x);
 }
 
 /// 0x54fc4 : retombée d'un saut.
-fn land(x: &mut Cx) {
+fn land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
         return;
@@ -203,7 +203,7 @@ pub(super) fn run_c(x: &mut Cx) {
     }
 }
 
-fn c_wait(x: &mut Cx) {
+fn c_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);
@@ -232,7 +232,7 @@ fn c_wait(x: &mut Cx) {
     }
 }
 
-fn c_begin(x: &mut Cx) {
+fn c_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     look(x, 0);
     x.set8(VULNERABLE, 1);
     mv(x, 0);

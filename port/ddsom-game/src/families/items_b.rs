@@ -73,7 +73,7 @@ const SHADOW_SET: u8 = 0x3c;
 const LIFETIME: u16 = 0x4b0;
 
 /// `jmp (table,PC,D0.w)` : D0 = indice, D1.w = mot de la table ; renvoie la cible.
-fn jump(x: &mut Cx, table: u32, i: u8) -> u32 {
+fn jump<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
     let w = x.rom16(table + i as u32);
     table.wrapping_add(w as i16 as i32 as u32)
 }
@@ -91,7 +91,7 @@ fn run(x: &mut Cx) {
 
 /// Recopie la fiche de la variante (le scintillement sauf pour une pièce rejetée) ; A1 = la table, D0 =
 /// le décalage de la ligne.
-fn load_sheet(x: &mut Cx, sparkle: bool) {
+fn load_sheet<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, sparkle: bool) {
     let row = 8 * x.u8(f::VARIANT) as u32;
     let sheet = rom::SHEETS + row;
     let v = x.data8(sheet);
@@ -180,7 +180,7 @@ fn fall(x: &mut Cx) {
 }
 
 /// Ramène la pièce dans la vue : au plus haut à `caméra.y + 0x20`, entre `caméra.x + 0x18` et `+ 0x168`.
-fn into_view(x: &mut Cx) {
+fn into_view<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
     let (cam_x, cam_y) = if cam2 { (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b)) } else { (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b)) };
     let top = cam_y.wrapping_add(0x20);
@@ -216,7 +216,7 @@ fn age(x: &mut Cx) {
 
 /// Sous-état 6 : la pièce rejetée attend son délai, puis part en arc depuis le joueur, vers le centre de
 /// l'écran ; retombée, elle attend d'être ramassée.
-fn thrown(x: &mut Cx) {
+fn thrown<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_xz();
         if x.u16(f::Z) as i16 >= 0 {
@@ -336,7 +336,7 @@ fn slot_4(x: &mut Cx, player: Obj, id: u8) {
 }
 
 /// `0xdb500` : la pièce était déjà portée : événement de score du joueur, puis son.
-fn already_worn(x: &mut Cx) {
+fn already_worn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let player = x.linked(f::OWNER);
     let number = (player.u8(x.b, p::NUMBER) as u32) << 8;
     crate::evenements::enfiler_points(x.b, (0x11 + number) as u16);

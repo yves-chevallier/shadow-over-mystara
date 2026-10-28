@@ -28,7 +28,7 @@ mod badge {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let variant = x.u8(0x3) as u32;
         let column = x.rom16(COLUMNS + 2 * variant);

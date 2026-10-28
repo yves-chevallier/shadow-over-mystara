@@ -39,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Sous-état 2 : le ghoul recule (animation 9), puis se remet debout.
-fn recoil(x: &mut Cx) {
+fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -167,7 +167,7 @@ fn caught(x: &mut Cx) {
 }
 
 /// 0x60bda : le ghoul court (animation 2).
-fn flee_begin(x: &mut Cx) {
+fn flee_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     body(x, 2);
 }

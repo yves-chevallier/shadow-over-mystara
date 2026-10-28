@@ -258,7 +258,7 @@ mod cure {
     }
 
     /// `0x4ab82` : étincelle (variante 1) ; le compteur `+0x5f` tourne sur 8.
-    fn spawn_spark(x: &mut Cx) {
+    fn spawn_spark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if let Some(o) = x.alloc(&pools::PEFF) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 4);
@@ -269,7 +269,7 @@ mod cure {
         }
     }
 
-    fn spark(x: &mut Cx) {
+    fn spark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.move_z();
         let fin = x.anim_step();
         if x.u8(0x2f) == 0 {

@@ -21,7 +21,7 @@ fn gesture_changed(x: &mut Cx, field: u32) -> bool {
 
 /// Fait clignoter l'objet : caché une image sur deux (`+0x5c` bascule). `hidden_when_zero` choisit la
 /// phase cachée.
-fn flicker(x: &mut Cx, hidden_when_zero: bool) {
+fn flicker<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, hidden_when_zero: bool) {
     x.set_bit(0x1, 1, true);
     let v = x.u8(0x5c) ^ 1;
     x.set8(0x5c, v);

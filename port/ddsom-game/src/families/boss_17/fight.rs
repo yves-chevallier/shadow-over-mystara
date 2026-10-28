@@ -29,28 +29,28 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn players_alive(x: &mut Cx) -> bool {
+fn players_alive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c, Z levé = non) ?
-fn needs_turn(x: &mut Cx) -> bool {
+fn needs_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
 /// Le boss regarde-t-il dans le sens où il avance (0x10560, Z levé = oui) ?
-fn facing_forward(x: &mut Cx) -> bool {
+fn facing_forward<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
 /// Animation de marche d'après le sens (2 ou 3).
-fn walk_anim(x: &mut Cx) {
+fn walk_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
 /// Animation de marche choisie par la marque `+0x33` dans le jeu du sens de marche.
-fn walk_select(x: &mut Cx) {
+fn walk_select<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
 }
@@ -82,7 +82,7 @@ fn idle(x: &mut Cx) {
 
 // --- +6 = 2 : demi-tour ----------------------------------------------------------------------
 
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         let side = x.u8(f::FLIP) ^ 0x20;

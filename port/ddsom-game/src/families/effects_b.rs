@@ -64,11 +64,11 @@ fn players() -> impl Iterator<Item = u32> {
 }
 
 /// Créateur de l'objet.
-fn owner(x: &mut Cx) -> Obj {
+fn owner<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(f::OWNER)
 }
 
-fn free(x: &mut Cx) {
+fn free<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
@@ -77,7 +77,7 @@ fn free(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 /// 0xb8dc2 : crée le clignotement (type 79) sur la position de l'objet, un cran plus haut.
-fn spawn_blink(x: &mut Cx) {
+fn spawn_blink<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let Some(blink) = x.alloc(&pools::EFFCT) else { return };
     wr8(x.b, blink.0, 1);
     wr8(x.b, blink.0 + 2, 79);
@@ -91,7 +91,7 @@ fn spawn_blink(x: &mut Cx) {
 }
 
 /// 0xa532e : crée le tir d'éclat de ramassage (ESHL de type 55) à l'endroit où le détecteur est touché.
-fn spawn_pickup_flash(x: &mut Cx) {
+fn spawn_pickup_flash<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let Some(Obj(flash)) = x.alloc(&pools::ESHL) else { return };
     wr8(x.b, flash, 1);
     wr8(x.b, flash + 2, 55);
@@ -104,7 +104,7 @@ fn spawn_pickup_flash(x: &mut Cx) {
 }
 
 /// Un joueur marche sur le détecteur : à 6 pixels en profondeur et 8 en x près.
-fn player_on_detector(x: &mut Cx) -> bool {
+fn player_on_detector<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {
         rd8(x.b, player) != 0
@@ -113,7 +113,7 @@ fn player_on_detector(x: &mut Cx) -> bool {
     })
 }
 
-fn pickup_detector(x: &mut Cx) {
+fn pickup_detector<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -135,7 +135,7 @@ fn pickup_detector(x: &mut Cx) {
     }
 }
 
-fn pickup_waiting(x: &mut Cx) {
+fn pickup_waiting<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x40) != 0 || x.a5_u8(PAUSED) != 0 {
         return;
     }
@@ -151,13 +151,13 @@ fn pickup_waiting(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 /// Clignotement : caché une image sur deux selon la parité du compteur d'images de partie.
-fn blink_by_frame(x: &mut Cx) {
+fn blink_by_frame<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let hidden = x.a5_u16(0x6e) & 1 == 0;
     let flags = x.u8(f::FLAGS);
     x.set8(f::FLAGS, if hidden { flags | 2 } else { flags & !2 });
 }
 
-fn victory_screen(x: &mut Cx) {
+fn victory_screen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -177,7 +177,7 @@ fn victory_screen(x: &mut Cx) {
     }
 }
 
-fn victory_active(x: &mut Cx) {
+fn victory_active<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let creator = owner(x);
     match x.u8(f::SUB_STATE) {
         0 => {
@@ -222,7 +222,7 @@ fn victory_active(x: &mut Cx) {
 // Type 74 : bulle à côté du créateur
 // ---------------------------------------------------------------------------------------------
 
-fn bubble(x: &mut Cx) {
+fn bubble<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::OWNER) == 0 {
         return x.set32(f::STATE, 0x0600_0000);
     }
@@ -317,7 +317,7 @@ fn menu_button(x: &mut Cx) {
     }
 }
 
-fn menu_step(x: &mut Cx) -> u8 {
+fn menu_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u8 {
     crate::mem::rd8(x.b, MENU_STEP)
 }
 
@@ -393,7 +393,7 @@ fn menu_button_active(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 /// Un joueur vivant, de classe 5, est à portée (32 en profondeur, 96 en x).
-fn class_5_player_near(x: &mut Cx) -> bool {
+fn class_5_player_near<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {
         rd8(x.b, player) != 0
@@ -404,7 +404,7 @@ fn class_5_player_near(x: &mut Cx) -> bool {
     })
 }
 
-fn blinking(x: &mut Cx) {
+fn blinking<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);

@@ -137,7 +137,7 @@ pub(super) fn pick_attack_far(x: &mut Cx) {
 }
 
 /// 0x5a208 : bond de la série 1 vers la cible.
-fn begin_jump(x: &mut Cx) {
+fn begin_jump<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, 6);
     x.set8(f::SUB3, 2);
     x.set16(Obj::VZ, 0x500);
@@ -176,7 +176,7 @@ fn jump(x: &mut Cx) {
 }
 
 /// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -191,7 +191,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// `+6` = 4 : attente.
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

@@ -33,13 +33,13 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x6cd5c : l'étape suivante lance l'animation 4.
-fn next_and_start(x: &mut Cx) {
+fn next_and_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 4);
 }
 
 /// 0x6cd64 : étape suivante à la fin de l'animation.
-fn next_when_done(x: &mut Cx) {
+fn next_when_done<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
@@ -82,7 +82,7 @@ fn windup(x: &mut Cx) {
 }
 
 /// +6 = 2 : demi-tour puis geste 0xc (marche).
-fn turn_back(x: &mut Cx) {
+fn turn_back<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -163,7 +163,7 @@ fn throw(x: &mut Cx) {
 
 /// 0x6cad2 : le lancer suit son animation ; à la clé, l'objet lancé passe à l'étape suivante ; on attend qu'il soit
 /// parti (état `+4` de l'objet à 4 ou plus).
-fn throw_hold(x: &mut Cx) {
+fn throw_hold<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let obj = Obj(x.u32(THROWN));
     if x.u8(f::KEY_FRAME) != 0 {
@@ -177,7 +177,7 @@ fn throw_hold(x: &mut Cx) {
 }
 
 /// 0x6caf2 : fin du lancer.
-fn throw_end(x: &mut Cx) {
+fn throw_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(AFTER_THROW, 0xb4);
     mv(x, 0);
@@ -201,7 +201,7 @@ fn again(x: &mut Cx, kind: u8) {
 // --- sauts ---------------------------------------------------------------------------------------------
 
 /// 0x6cdb6 : saut de côté (vitesse horizontale 0x300, élan vers le haut).
-fn jump_start(x: &mut Cx) {
+fn jump_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set32(Obj::VX, 0x0300_0000);
     let mut shift = 0x20i16;
@@ -218,7 +218,7 @@ fn jump_start(x: &mut Cx) {
 }
 
 /// 0x6cdea : retombée du saut.
-fn land(x: &mut Cx) {
+fn land<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) >= 0 {
         return;
@@ -351,7 +351,7 @@ fn teleport(x: &mut Cx) {
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
-fn pause(x: &mut Cx) {
+fn pause<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

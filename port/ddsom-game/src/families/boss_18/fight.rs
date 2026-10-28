@@ -26,11 +26,11 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn players_alive(x: &mut Cx) -> bool {
+fn players_alive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
-fn needs_turn(x: &mut Cx) -> bool {
+fn needs_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
@@ -62,7 +62,7 @@ fn idle(x: &mut Cx) {
 // --- +6 = 2 : demi-tour ------------------------------------------------------------------------
 
 /// Le boss marchait (état mémorisé `0x0202_04xx` ou `06xx`) : il avance pendant le demi-tour.
-fn was_walking(x: &mut Cx) -> bool {
+fn was_walking<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     x.u16(SAVED_STATE) == 0x0202 && matches!(x.u8(SAVED_STATE + 2), 4 | 6)
 }
 
@@ -224,7 +224,7 @@ fn dash(x: &mut Cx) {
 
 // --- +6 = 10 : reprise -------------------------------------------------------------------------------
 
-fn resume(x: &mut Cx) {
+fn resume<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set8(ANIM_KIND, 5);

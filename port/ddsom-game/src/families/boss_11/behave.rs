@@ -95,14 +95,14 @@ pub(super) fn lone(x: &mut Cx) {
 // --- groupes 2, 8, 10, 12 : poursuite --------------------------------------------------------------------------
 
 /// 0x8eb52 : délai de marche selon la difficulté.
-fn walk_delay(x: &mut Cx) {
+fn walk_delay<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b);
     let v = x.rom8(0x8eb5e + level as u32);
     x.set8(0x71, v);
 }
 
 /// 0x8eb7e : nombre de pas tiré.
-fn walk_steps(x: &mut Cx) {
+fn walk_steps<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let alea = x.random();
     let i = alea & 0x1f;
     let v = x.rom8(0x8eb90 + i as u32);
@@ -185,7 +185,7 @@ fn pose(x: &mut Cx) {
 }
 
 /// 0x8da02 : le serpent est hors de l'écran.
-fn off_screen(x: &mut Cx) -> bool {
+fn off_screen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let mut d0 = var::SCROLL_X.get(x.b);
     if var::CAMERA_SELECT.get(x.b) != 0 {
         d0 = var::CAMERA_ALT_X.get(x.b);

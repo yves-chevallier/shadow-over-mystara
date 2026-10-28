@@ -91,7 +91,7 @@ fn recoil(x: &mut Cx) {
 
 // --- sous-état 4 : chute --------------------------------------------------------------------------
 
-fn down(x: &mut Cx) {
+fn down<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

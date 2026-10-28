@@ -42,7 +42,7 @@ fn first_reaction(x: &mut Cx) {
 }
 
 /// Recul (0x6bbf8).
-fn recoil(x: &mut Cx) {
+fn recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

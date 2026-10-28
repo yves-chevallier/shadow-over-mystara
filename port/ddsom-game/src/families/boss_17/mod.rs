@@ -79,7 +79,7 @@ pub(self) const SET_STRIKE: u32 = 0x1807a2;
 pub(self) const SET_HURT: u32 = 0x1807c0;
 
 /// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
-pub(self) fn body(x: &mut Cx, n: u32) {
+pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 

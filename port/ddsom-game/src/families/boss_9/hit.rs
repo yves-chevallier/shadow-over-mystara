@@ -116,7 +116,7 @@ fn recoil(x: &mut Cx) {
 }
 
 /// Le coup est consommé (gel, dérive, coup, état mémorisé).
-fn clear_hit(x: &mut Cx) {
+fn clear_hit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::FREEZE, 0);
     x.set16(0x16, 0);
     x.set32(0x58, 0);

@@ -67,7 +67,7 @@ fn roll_in(x: &mut Cx) {
 }
 
 /// 0x77f48 : début du bond d'arrivée (poussée verticale ±0x20, animation 9).
-pub(super) fn leap_begin(x: &mut Cx) {
+pub(super) fn leap_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x1e);
     x.set16(TIMER2, 0);

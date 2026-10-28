@@ -29,7 +29,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// L'aspect voulu `v` ; l'animation `anim` n'est lancée (et rendu vrai) que si l'aspect change.
-fn set_look(x: &mut Cx, v: u8, anim: u32) -> bool {
+fn set_look<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
     x.set8(LOOK, v);
     if v == x.u8(LOOK_PREV) {
         return false;
@@ -98,7 +98,7 @@ fn decide(x: &mut Cx) {
 }
 
 /// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -114,7 +114,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// `+6` = 4 : attente.
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -131,7 +131,7 @@ fn wait(x: &mut Cx) {
 }
 
 /// Sous-état 10 : patrouille tant qu'aucun joueur n'est en vie.
-pub(super) fn patrol(x: &mut Cx) {
+pub(super) fn patrol<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

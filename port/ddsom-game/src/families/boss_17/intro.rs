@@ -25,13 +25,13 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn state7(x: &mut Cx) -> u32 {
+fn state7<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
     x.u8(0x7) as u32 / 2
 }
 
 /// Un effet (EFFCT) lié au boss (`+0x42`) : octet actif, type, variante facultative, orientation du boss.
 /// `retry` : insiste tant que le pool est plein.
-fn effect(x: &mut Cx, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
+fn effect<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
     let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, kind);
@@ -60,7 +60,7 @@ fn open_message(x: &mut Cx, kind: u32) {
 }
 
 /// Le dialogue en cours (`+0x42`) est-il terminé (octet `+0x22` non nul) ?
-fn message_done(x: &mut Cx) -> bool {
+fn message_done<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     let m = x.linked(0x42);
     m.u8(x.b, 0x22) != 0
 }

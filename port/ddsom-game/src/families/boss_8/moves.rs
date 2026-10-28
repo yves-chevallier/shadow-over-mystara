@@ -6,7 +6,7 @@ use super::attacks::{leap_rest, leap_start};
 use super::*;
 use crate::objects::Courant;
 
-fn key(x: &mut Cx, kind: u8) {
+fn key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }
@@ -41,7 +41,7 @@ fn finish(x: &mut Cx, state: u32) {
 }
 
 /// Réapparition : le boss est invisible (`bset 1`) 8 images, animation 5.
-fn reappear(x: &mut Cx) {
+fn reappear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 8);
     body(x, 5);

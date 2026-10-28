@@ -113,7 +113,7 @@ pub(super) fn intro(x: &mut Cx) {
 }
 
 /// Abscisse de la caméra du plan de l'engin.
-fn x_cam(x: &mut Cx) -> u16 {
+fn x_cam<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
     x.a5_u16(CAM_X)
 }
 

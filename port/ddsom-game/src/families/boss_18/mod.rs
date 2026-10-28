@@ -64,7 +64,7 @@ pub(self) const SET_BODY: u32 = 0x181ae0;
 pub(self) const SET_STRIKE: u32 = 0x181af2;
 pub(self) const SET_HURT: u32 = 0x181b10;
 
-pub(self) fn body(x: &mut Cx, n: u32) {
+pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 

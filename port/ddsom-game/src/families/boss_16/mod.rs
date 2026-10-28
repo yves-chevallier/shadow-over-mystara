@@ -106,7 +106,7 @@ pub(self) fn anim_c(x: &mut Cx, n: u32) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// 0x95210 : annule les vitesses.
-pub(self) fn stop(x: &mut Cx) {
+pub(self) fn stop<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -117,15 +117,15 @@ pub(self) fn idle(x: &mut Cx) {
     x.set32(f::STATE, state::IDLE);
 }
 
-pub(self) fn next7(x: &mut Cx) {
+pub(self) fn next7<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn next6(x: &mut Cx) {
+pub(self) fn next6<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
 /// 0x95220 : la caméra en service (son enregistrement ; X en `+8`, Y en `+0xc`).
-pub(self) fn camera_record(x: &mut Cx) -> crate::objects::Obj {
+pub(self) fn camera_record<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     crate::objects::Obj(if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe })
 }
 
@@ -176,7 +176,7 @@ pub(self) fn edge_target(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 }
 
 /// 0x951dc : pesanteur douce quand l'étape l'a demandée (`+0xa2`) : le boss retombe sur le sol.
-fn gravity(x: &mut Cx) {
+fn gravity<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(FALLS) == 0 {
         return;
     }
@@ -193,7 +193,7 @@ fn gravity(x: &mut Cx) {
 }
 
 /// 0x95272 : joueurs devant le boss dans l'état 0x0200_0e00 (qu'il laisse ainsi sans défense) : ils reçoivent `+0x189`.
-fn count_victims(x: &mut Cx) -> u32 {
+fn count_victims<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
     let mut n = 0;
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
@@ -300,7 +300,7 @@ fn active(x: &mut Cx) {
 }
 
 /// 0x933d0..0x93452 : vrai si le groupe doit tourner cette image (hors pause, ou en attente de pause).
-fn paused_dispatch(x: &mut Cx) -> bool {
+fn paused_dispatch<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) == 0 {
         x.set8(PAUSE_SEEN, 0);
         return true;

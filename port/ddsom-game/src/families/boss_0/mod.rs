@@ -77,7 +77,7 @@ pub(self) const SET_RUN_BACK: u32 = 0x171c1a;
 pub(self) const THRESHOLDS: u32 = 0x10ae2;
 
 /// Lance l'animation `n` du jeu des corps par l'IA (0x103d6).
-pub(self) fn body(x: &mut Cx, n: u32) {
+pub(self) fn body<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
@@ -87,10 +87,10 @@ pub(self) fn entry(x: &mut Cx, n: u32) {
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6(x: &mut Cx) {
+pub(self) fn next6<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7(x: &mut Cx) {
+pub(self) fn next7<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
@@ -170,7 +170,7 @@ fn init(x: &mut Cx) {
 }
 
 /// 0x7aad0 : la moitié principale attend, invulnérable, que la scène la lance (entrée en scène `+6` = 0).
-fn wait_for_transformation(x: &mut Cx) {
+fn wait_for_transformation<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set8(INVULNERABLE, 1);
     x.set8(ANIM_KIND, 0x30);
@@ -179,7 +179,7 @@ fn wait_for_transformation(x: &mut Cx) {
 }
 
 /// 0x7ab4c : la seconde moitié attend sa création complète (entrée en scène `+6` = 4).
-fn partner_waits(x: &mut Cx) {
+fn partner_waits<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set8(ANIM_KIND, 0x32);
     x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -221,7 +221,7 @@ pub(self) fn stand(x: &mut Cx) {
 }
 
 /// 0x7ab84 : demi-tour, l'état courant sera repris.
-pub(self) fn turn(x: &mut Cx) {
+pub(self) fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -257,7 +257,7 @@ pub(self) fn strike(x: &mut Cx, n: u32, shielded: bool) {
 }
 
 /// 0x7ac70 : plus aucun joueur, attente.
-pub(self) fn idle_alone(x: &mut Cx) {
+pub(self) fn idle_alone<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
@@ -351,7 +351,7 @@ pub(self) fn from_far_gesture(x: &mut Cx, g: u32) {
 }
 
 /// 0x7a7a4 et 0x7a7b0 : délai entre deux pas de la course, selon la difficulté.
-pub(self) fn walk_delay(x: &mut Cx, kind: u8) {
+pub(self) fn walk_delay<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, kind: u8) {
     let level = var::RANK.get(x.b) as u32;
     let table = if kind == 3 { 0x7a7dc } else { 0x7a7bc };
     let d = x.rom8(table + level);

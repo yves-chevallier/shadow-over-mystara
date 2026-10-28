@@ -13,7 +13,7 @@ use crate::machine::Machine;
 
 /// Alloue un objet ESHL ; `None` si le pool est plein.
 /// `subq.w #1,(off,A0)` : vrai quand le compteur atteint zéro.
-fn count_down(x: &mut Cx, off: u32) -> bool {
+fn count_down<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
     x.add16(off, 0xffff);
     x.u16(off) == 0
 }
@@ -59,7 +59,7 @@ mod flame64 {
         }
     }
 
-    fn shape(x: &mut Cx) {
+    fn shape<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 0x26);
     }
@@ -174,7 +174,7 @@ mod flame64 {
         }
     }
 
-    fn spawn_all(x: &mut Cx) {
+    fn spawn_all<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         spawn(x, 0);
         spawn(x, 1);
         spawn(x, 2);
@@ -182,7 +182,7 @@ mod flame64 {
 
     /// Flamme fille de variante `variant` (0xa6e8e, 0xa6eb2, 0xa6ed6) : la variante 0 hérite de la
     /// génération, les colonnes du compteur de sons.
-    fn spawn(x: &mut Cx, variant: u8) {
+    fn spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8) {
         let Some(child) = x.alloc(&pools::ESHL) else { return };
         child.set_u8(x.b, 0x0, 1);
         child.set_u8(x.b, 0x2, 64);
@@ -269,7 +269,7 @@ mod rocks65 {
     }
 
     /// Tirage pseudo-aléatoire (mot bas de D0).
-    fn random(x: &mut Cx) -> u16 {
+    fn random<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u16 {
         x.random()
     }
 
@@ -331,7 +331,7 @@ mod shard66 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set8(f::BOX_SET, 0x2c);
@@ -426,7 +426,7 @@ mod shard66 {
     }
 
     /// `subq.w #1,+0x42 ; bgt` : vrai quand le compteur n'est plus positif.
-    fn count_down_signed(x: &mut Cx) -> bool {
+    fn count_down_signed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
         x.add16(TIMER, 0xffff);
         x.u16(TIMER) as i16 <= 0
     }
@@ -511,7 +511,7 @@ mod barrel67 {
     }
 
     /// Mouvement en X et en hauteur ; vrai quand l'objet touche le sol (hauteur remise à 0).
-    fn lands(x: &mut Cx) -> bool {
+    fn lands<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
         x.move_xz();
         if x.u16(0xc) as i16 > 0 {
             return false;
@@ -602,7 +602,7 @@ mod barrel67 {
     }
 
     /// `subq.w #1 ; ble` : vrai quand le compteur n'est plus positif.
-    fn count_down_le(x: &mut Cx, off: u32) -> bool {
+    fn count_down_le<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
         x.add16(off, 0xffff);
         x.u16(off) as i16 <= 0
     }
@@ -711,7 +711,7 @@ mod stone68 {
     }
 
     /// 0xa7d20 : animation selon la hauteur dans l'écran (seuils croissants, la dernière par défaut).
-    fn height_anim(x: &mut Cx) {
+    fn height_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let top = if x.a5_u8(0x36) != 0 { SCREEN_TOP_P2 } else { SCREEN_TOP };
         let h = x.u16(0x10).wrapping_sub(x.a5_u16(top)) as i16;
         let count = x.data16(HEIGHT_ANIMS);
@@ -855,7 +855,7 @@ mod gate70 {
         }
     }
 
-    fn init(x: &mut Cx, variant: u8) {
+    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8) {
         x.add8(0x4, 2);
         if let Some(set) = x.alloc(&pools::SET) {
             set.set_u8(x.b, 0x0, 1);
@@ -873,7 +873,7 @@ mod gate70 {
         x.reinsert();
     }
 
-    fn wait_and_animate(x: &mut Cx) {
+    fn wait_and_animate<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             x.add16(TIMER, 0xffff);
             if x.u16(TIMER) as i16 >= 0 {
@@ -934,11 +934,11 @@ mod ball71 {
         }
     }
 
-    fn ai_anim(x: &mut Cx, n: u32) {
+    fn ai_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
         crate::families::enemy_lib::start(x, ANIMS, n);
     }
 
-    fn init(x: &mut Cx, variant: u8) {
+    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 0x14);
@@ -969,7 +969,7 @@ mod ball71 {
         crate::families::enemy_lib::step(x);
     }
 
-    fn rolling(x: &mut Cx) {
+    fn rolling<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if crate::families::enemy_lib::step(x) {
             return x.free_eshl();
         }

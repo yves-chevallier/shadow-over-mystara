@@ -67,13 +67,13 @@ mod util {
     }
 
     /// Joueur présent dans la partie : emplacement occupé et points de vie non nuls.
-    pub fn alive(x: &mut Cx, p: Obj) -> bool {
+    pub fn alive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) != 0
     }
 
     /// Avance chaque composante (rouge, vert, bleu : un quartet chacune) d'une couleur 4+4+4 bits
     /// d'un cran vers son maximum, et force le quartet de luminosité à 0xf.
-    pub fn brighten(x: &mut Cx, addr: u32, count: u32) {
+    pub fn brighten<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, addr: u32, count: u32) {
         for i in 0..count {
             let a = addr + 2 * i;
             let c = rd16(x.b, a);
@@ -92,7 +92,7 @@ mod util {
 mod inert {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x40) != 0 {
             return;
         }
@@ -122,7 +122,7 @@ mod level_end {
     const P_WEAPON: u32 = 0x8a;
     const P_WEAPON_OBJ: u32 = 0x86;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -133,7 +133,7 @@ mod level_end {
         }
     }
 
-    fn wait_players(x: &mut Cx) {
+    fn wait_players<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(IN_GAME) == 0 || (x.a5_u16(PROGRESS) as i16) <= PROGRESS_LIMIT {
             return;
         }
@@ -176,7 +176,7 @@ mod fade_white {
 
     const PALETTE_BLOCKS: [(u32, u32); 4] = [(0x91c100, 128), (0x91c720, 32), (0x91c800, 32), (0x91cc00, 32)];
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -213,7 +213,7 @@ mod palette_anim {
     const TICK: u32 = 0x29;
     const STEP: u32 = 0x2a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -267,7 +267,7 @@ mod scene_trigger {
     const CAMERA_LIMIT: u16 = 0x1c80;
     const PLAYER_MODE_DONE: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -278,7 +278,7 @@ mod scene_trigger {
         }
     }
 
-    fn trigger(x: &mut Cx) {
+    fn trigger<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(IN_GAME) == 0 || x.a5_u16(CAMERA_X) < CAMERA_LIMIT {
             return;
         }
@@ -366,7 +366,7 @@ mod tile_anim {
     }
 
     /// Un pas : attend la fin de la durée du bloc courant, puis applique le bloc suivant.
-    fn step(x: &mut Cx, skip_transparent: bool) {
+    fn step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, skip_transparent: bool) {
         let t = x.u16(TIMER).wrapping_sub(1);
         x.set16(TIMER, t);
         if (t as i16) >= 0 {
@@ -591,13 +591,13 @@ mod wave_leader {
     }
 
     /// Le chef compte un ennemi de moins.
-    fn release_one(x: &mut Cx, boss: Obj) {
+    fn release_one<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, boss: Obj) {
         let n = boss.u16(x.b, BOSS_COUNT).wrapping_sub(1);
         boss.set_u16(x.b, BOSS_COUNT, n);
     }
 
     /// Vague finale : le meneur est de variante 2 et le verdict de vague passe à 0xff.
-    fn final_wave(x: &mut Cx) {
+    fn final_wave<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if let Some(lead) = spawn_wave(x) {
             lead.set_u8(x.b, 3, FINAL_VARIANT);
             x.add8(0x5, 2);
@@ -609,7 +609,7 @@ mod wave_leader {
     /// `+0x50`, placé à droite de la caméra) et deux ailiers (type 0x13) rattachés à lui.
     /// `None` quand le pool ENEMY a moins de trois places libres. (L'original trie ensuite les
     /// trois adresses par une boucle qui ne modifie rien.)
-    fn spawn_wave(x: &mut Cx) -> Option<Obj> {
+    fn spawn_wave<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         if (x.a5_u16(ENEMY_FREE) as i16) < ENEMIES_PER_WAVE {
             return None;
         }
@@ -899,7 +899,7 @@ mod exit_gate {
     }
 
     /// Après le fondu de fin de scène (0xcb9c0) : la partie repasse en phase 8 sur la scène `+0x4f`.
-    pub fn next_scene(x: &mut Cx) {
+    pub fn next_scene<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         for off in PLAYER_WEAPONS {
             x.set_a5_u32(off, 0);
         }
@@ -960,7 +960,7 @@ mod exit_gate {
         set_b::suspend(x, &PSHL_POOL);
     }
 
-    fn free_player_effects(x: &mut Cx) {
+    fn free_player_effects<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         for i in 0..PEFF_POOL.count {
             let o = Obj(PEFF_POOL.base + i * PEFF_POOL.size);
             if o.u8(x.b, 0) != 0 {
@@ -1135,7 +1135,7 @@ mod exit_gate {
     // --- l'automate ---------------------------------------------------------------------------------
 
     /// Toutes les 32 images : nombre de joueurs vivants dans `A5+0x35`.
-    fn refresh_player_count(x: &mut Cx) {
+    fn refresh_player_count<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let t = x.u16(PLAYER_COUNT_TIMER).wrapping_sub(1);
         x.set16(PLAYER_COUNT_TIMER, t);
         if (t as i16) >= 0 {
@@ -1146,7 +1146,7 @@ mod exit_gate {
         x.set_a5_u8(IN_GAME, n as u8);
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         for off in [NEAR_COUNTERS, NEAR_COUNTERS + 1, NEAR_COUNTERS + 2, NEAR_COUNTERS + 3, ARRIVED, TRIGGERED] {
             x.set8(off, 0);
@@ -1196,7 +1196,7 @@ mod exit_gate {
 
     /// Le joueur `p` déclenche la sortie : il passe dans l'état imposé par la zone ; la porte
     /// devient propriétaire de la transition (`A5+0x52`).
-    fn trigger(x: &mut Cx, p: Obj, bit: u8) {
+    fn trigger<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, p: Obj, bit: u8) {
         if p.u8(x.b, P_ACTIVE) == 0 || p.u16(x.b, P_LIFE) == 0 {
             return;
         }
@@ -1576,22 +1576,22 @@ mod name_entry {
     // --- aides communes -------------------------------------------------------------------------
 
     /// Octet haut de l'enregistrement d'un autre objet désigné par un mot.
-    fn at(x: &mut Cx, off: u32) -> Obj {
+    fn at<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
         x.linked(off)
     }
 
-    fn wide(x: &mut Cx) -> bool {
+    fn wide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
         x.u8(WIDE) != 0
     }
 
     /// 0xca85c : touches maintenues et touches pressées de l'image pour le joueur `player`.
-    fn inputs(x: &mut Cx, player: u32) -> (u8, u8) {
+    fn inputs<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, player: u32) -> (u8, u8) {
         (x.a5_u8(INPUT_HELD + player), x.a5_u8(INPUT_PRESSED + player))
     }
 
     /// 0xca8a0 : adresse dans la carte de tuiles et taille (colonnes, lignes - 1) de la case (`col`,
     /// `row`). Rend (adresse, D0 = taille).
-    fn cell_region(x: &mut Cx, col: u16, row: u16) -> (u32, u16) {
+    fn cell_region<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, col: u16, row: u16) -> (u32, u16) {
         let (row_offsets, cells) = if wide(x) { (WIDE_ROW_OFFSETS, WIDE_CELLS) } else { (NARROW_ROW_OFFSETS, NARROW_CELLS) };
         let row_off = x.rom16(row_offsets.wrapping_add((row.wrapping_mul(2)) as i16 as i32 as u32));
         let index = col.wrapping_mul(4).wrapping_add(row_off);
@@ -1602,7 +1602,7 @@ mod name_entry {
 
     /// 0xca86e : remplit la région `size` (octet haut : lignes - 1, octet bas : colonnes - 1) avec la
     /// tuile `tile`, un mot toutes les 4 octets.
-    fn fill_tiles(x: &mut Cx, mut a1: u32, size: u16, tile: u16) {
+    fn fill_tiles<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, mut a1: u32, size: u16, tile: u16) {
         let cols = size & 0xff;
         for _ in 0..=(size >> 8) as u32 {
             let mut advance = 0;
@@ -1617,7 +1617,7 @@ mod name_entry {
 
     /// 0xca81a : redessine la case (`col`, `row`) : tuile 0x1c, ou une teinte de la table quand elle
     /// est dans la colonne spéciale.
-    fn redraw_cell(x: &mut Cx, col: u16, row: u16) {
+    fn redraw_cell<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, col: u16, row: u16) {
         let (a1, size) = cell_region(x, col, row);
         let mut tile: u16 = 0x1c;
         if !wide(x) {
@@ -1637,7 +1637,7 @@ mod name_entry {
 
         /// 0xc979e : état 0. Remet les enregistrements à zéro et charge quatre palettes (avec la
         /// luminosité de la première couleur de la page).
-        pub fn init(x: &mut Cx) {
+        pub fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             x.add8(0x4, 2);
             for off in [0x30, 0x34, 0x38, 0x3c] {
                 x.set32(off, 0);
@@ -1656,7 +1656,7 @@ mod name_entry {
         }
 
         /// États 4 et 6 : libère les curseurs puis le tableau.
-        pub fn release(x: &mut Cx) {
+        pub fn release<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             for i in 0..4 {
                 let slave = at(x, SLAVES + 2 * i);
                 slave.set_u32(x.b, 4, FREE_ON_NEXT);
@@ -1665,7 +1665,7 @@ mod name_entry {
         }
 
         /// 0xc9810 : une image. Compte les curseurs, repère les cases partagées, anime et dessine.
-        pub fn update(x: &mut Cx) {
+        pub fn update<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             count_cursors(x);
             count_finished(x);
             // enregistrements de l'image précédente (cases partagées à ignorer selon le nombre)
@@ -1703,7 +1703,7 @@ mod name_entry {
 
         /// Cases où au moins deux curseurs se superposent : enregistre (colonne, ligne, masque des
         /// joueurs) pour les deux premières, balayage ligne par ligne. Rend leur nombre.
-        fn find_shared_cells(x: &mut Cx) -> u8 {
+        fn find_shared_cells<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u8 {
             let mut found = 0u8;
             let (mut col, mut row) = (0u16, 0u16);
             loop {
@@ -1745,7 +1745,7 @@ mod name_entry {
 
         /// 0xc9912 et suivants : pour chaque case partagée, tient à jour le joueur « en vedette »
         /// (`REC_DIR`) et son temps d'affichage (`REC_TIMER`) en tenant compte de l'image précédente.
-        fn animate_records(x: &mut Cx) {
+        fn animate_records<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             for k in 0..2u32 {
                 let rec = x.o.0 + RECORDS + 8 * k;
                 if rd8(x.b, rec + REC_MASK) == 0 {
@@ -1800,7 +1800,7 @@ mod name_entry {
         }
 
         /// 0xc998a : joueur suivant dans le masque, tour à tour (temps d'affichage 12 images).
-        fn next_player(x: &mut Cx, rec: u32, mask: u8) {
+        fn next_player<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, rec: u32, mask: u8) {
             let mut d = rd8(x.b, rec + REC_DIR);
             loop {
                 d = d.wrapping_add(1) & 3;
@@ -1813,7 +1813,7 @@ mod name_entry {
         }
 
         /// 0xca7ea : la case partagée est-elle dans la colonne spéciale ? (tuile de base 0 sinon 0x18).
-        fn shared_in_special(x: &mut Cx, col: u16, row: u16) -> bool {
+        fn shared_in_special<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, col: u16, row: u16) -> bool {
             if !wide(x) {
                 col == 0xa
             } else {
@@ -1822,7 +1822,7 @@ mod name_entry {
         }
 
         /// 0xca6b0 : nombre de curseurs actifs (`+0x17`) et de ceux qui ont tapé une lettre (`+0x14`).
-        fn count_cursors(x: &mut Cx) {
+        fn count_cursors<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             let (mut active, mut typed) = (0u8, 0u8);
             for i in 0..4 {
                 let slave = at(x, SLAVES + 2 * i);
@@ -1839,13 +1839,13 @@ mod name_entry {
         }
 
         /// 0xca6ea : nombre de curseurs qui ont terminé leur saisie (`+0x16`).
-        fn count_finished(x: &mut Cx) {
+        fn count_finished<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             let n = (0..4).filter(|&i| at(x, SLAVES + 2 * i).u8(x.b, DONE) != 0).count();
             x.set8(COUNT_DONE, n as u8);
         }
 
         /// 0xca78c : dessine les curseurs (leur case, teinte spéciale dans la colonne de commandes).
-        fn draw_cursors(x: &mut Cx) {
+        fn draw_cursors<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             for i in 0..4 {
                 let slave = at(x, SLAVES + 2 * i);
                 if slave.u8(x.b, ACTIVE) == 0 {
@@ -1880,7 +1880,7 @@ mod name_entry {
             }
         }
 
-        fn owner(x: &mut Cx) -> Obj {
+        fn owner<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Obj {
             at(x, OWNER)
         }
 
@@ -2071,7 +2071,7 @@ mod name_entry {
         }
 
         /// Ramène la colonne dans la largeur de la ligne courante (grille large).
-        fn clamp_wide(x: &mut Cx) {
+        fn clamp_wide<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             let r = x.u16(ROW);
             let w = x.data16(ROW_WIDTH_WIDE.wrapping_add(r.wrapping_mul(2) as i16 as i32 as u32));
             if w < x.u16(COL) {
@@ -2096,7 +2096,7 @@ mod name_entry {
         }
 
         /// 0xcaaae : caractère de la case courante.
-        fn char_under_cursor(x: &mut Cx) -> u8 {
+        fn char_under_cursor<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u8 {
             let index = x.u16(COL).wrapping_add(x.u16(ROW) << 4);
             let table = if wide(x) { GRID_WIDE } else { GRID_NARROW };
             x.rom8(table.wrapping_add(index as i16 as i32 as u32))
@@ -2120,7 +2120,7 @@ mod name_entry {
         }
 
         /// 0xcab86 : ajoute le caractère `ch` ; 0x9f et 0x9d transforment la lettre précédente.
-        fn enter_char(x: &mut Cx, mut ch: u8, buffer: u32, len: u8) {
+        fn enter_char<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, mut ch: u8, buffer: u32, len: u8) {
             if x.u8(NO_NAME) != 0 {
                 return;
             }
@@ -2148,7 +2148,7 @@ mod name_entry {
         }
 
         /// 0xc9c90 : écrit le caractère dans le tampon ; nom plein → curseur sur « valider ».
-        fn store_char(x: &mut Cx, ch: u8, buffer: u32) {
+        fn store_char<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, ch: u8, buffer: u32) {
             let len = x.u8(LENGTH) as u32;
             wr8(x.b, buffer + len, ch);
             x.set8(TYPED, 1);
@@ -2165,7 +2165,7 @@ mod name_entry {
         }
 
         /// 0xc9e6a : efface le dernier caractère (ou tout le tampon après un nom par défaut).
-        fn erase_button(x: &mut Cx) {
+        fn erase_button<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             if x.u8(LENGTH) == 0 {
                 return;
             }
@@ -2185,7 +2185,7 @@ mod name_entry {
         }
 
         /// 0xc9d16 : charge le nom par défaut du joueur dans le tampon.
-        fn load_default_name(x: &mut Cx) {
+        fn load_default_name<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             x.set8(NO_NAME, 0);
             let player = owner(x);
             let mut offset = (player.u8(x.b, 3) as u16) << 3;
@@ -2268,7 +2268,7 @@ mod name_entry {
 
         /// 0xca374 : recherche une suite de la table des codes de remise à zéro dans le tampon.
         /// `n` : indicateur N laissé par 0xca524 (le balayage n'a lieu que s'il est levé).
-        fn scan_reset_codes(x: &mut Cx, n: bool) {
+        fn scan_reset_codes<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: bool) {
             if !n {
                 return;
             }
@@ -2282,7 +2282,7 @@ mod name_entry {
         /// puis `trailer` octets d'action), comme les routines 0xca384 et 0xca54c : la première lettre
         /// est cherchée plus loin dans le tampon ; un désaccord relit la lettre fautive comme début de
         /// suite sans rembobiner le compteur. Rend l'adresse qui suit les caractères de la suite trouvée.
-        fn find_code(x: &mut Cx, buffer: u32, table: u32, trailer: u32) -> Option<u32> {
+        fn find_code<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, buffer: u32, table: u32, trailer: u32) -> Option<u32> {
             enum Step {
                 Start,
                 ReadLength,
@@ -2355,7 +2355,7 @@ mod name_entry {
 
         /// 0xca524 : si le joueur maintient les trois boutons (0x70) plus d'une seconde, cherche un
         /// code spécial et remplace le tampon. Rend l'indicateur N laissé par la routine.
-        fn special_codes(x: &mut Cx) -> bool {
+        fn special_codes<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
             let player = x.u8(PLAYER) as u32;
             let (_, pressed) = inputs(x, player);
             let n_of = |a: u8, b: u8| (a.wrapping_sub(b) as i8) < 0;
@@ -2381,7 +2381,7 @@ mod name_entry {
         }
 
         /// 0xca5fe : chiffre de contrôle du nom en BCD (`+0x2a..+0x2d`, résultat dans `+0x2b`).
-        fn check_digit(x: &mut Cx) {
+        fn check_digit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             let buffer = owner(x).0 + BUFFER;
             let first = rd8(x.b, buffer) as i8 as i16;
             let d0 = (-first).wrapping_sub(2) as u16;
@@ -2418,7 +2418,7 @@ mod name_entry {
         }
 
         /// Ajoute la valeur BCD (`+0x2c:+0x2d`) à (`+0x2a:+0x2b`) avec retenue (deux ABCD).
-        fn add_bcd(x: &mut Cx) {
+        fn add_bcd<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             let (low, carry) = abcd(x.u8(0x2d), x.u8(0x2b), false);
             x.set8(0x2b, low);
             let (high, _) = abcd(x.u8(0x2c), x.u8(0x2a), carry);
@@ -2441,7 +2441,7 @@ mod name_entry {
 
         /// 0xca0f4 : écrit le résultat : indicateur de fin à l'écran, enregistrement du joueur
         /// (nom validé, chiffre de contrôle), le curseur passe à l'état 4.
-        fn commit_name(x: &mut Cx) {
+        fn commit_name<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
             let player = owner(x);
             let kind = player.u8(x.b, 2) as u16;
             let mut index = kind.wrapping_mul(2);

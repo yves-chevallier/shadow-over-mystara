@@ -16,7 +16,7 @@ fn finish(x: &mut Cx) {
 }
 
 /// Le coup frappe quand la clé d'animation `+0x33` passe : elle est aussitôt remise à zéro.
-fn strike_hit(x: &mut Cx) {
+fn strike_hit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         lib::sound(x, 0xebfdc);
@@ -24,7 +24,7 @@ fn strike_hit(x: &mut Cx) {
 }
 
 /// Libère la victime saisie (`+0x54`) : ses drapeaux de saisie retombent.
-fn release_victim(x: &mut Cx) {
+fn release_victim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u16(VICTIM) != 0 {
         let v = x.linked(VICTIM);
         v.set_u8(x.b, 0x7e, 0);
@@ -446,7 +446,7 @@ fn aim_dive(x: &mut Cx) {
 }
 
 /// 0x64eee : retombée du plongeon : la créature se pose en glissant dans l'autre sens.
-fn land_from_dive(x: &mut Cx) {
+fn land_from_dive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x18);
     x.set16(TIMER2, 0);
@@ -460,7 +460,7 @@ fn land_from_dive(x: &mut Cx) {
 
 // --- sous-états 6, 8, 10 : repos -----------------------------------------------------------------------
 
-pub(super) fn rest(x: &mut Cx) {
+pub(super) fn rest<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::wander(x);
     }

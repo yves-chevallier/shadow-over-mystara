@@ -78,17 +78,17 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// La cible est-elle hors de la zone `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
-fn off_screen(x: &mut Cx) -> bool {
+fn off_screen<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::outside_band(x, -0x50, 0x1d0)
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
-fn needs_turn(x: &mut Cx) -> bool {
+fn needs_turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
 /// Avance-t-il dans le sens où il regarde (0x10560) ?
-fn facing_forward(x: &mut Cx) -> bool {
+fn facing_forward<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
@@ -121,13 +121,13 @@ fn idle(x: &mut Cx) {
 }
 
 /// Animation de marche 2 (de face) ou 3 (de côté).
-fn walk_anim(x: &mut Cx) {
+fn walk_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
 /// Animation de marche reprise à la même marque dans le jeu du sens de marche.
-fn walk_select(x: &mut Cx) {
+fn walk_select<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
 }
@@ -191,14 +191,14 @@ fn walk(x: &mut Cx, slow: bool) {
 }
 
 /// Délai entre deux pas, selon la difficulté (table de la ROM `table`).
-fn set_delay(x: &mut Cx, table: u32) {
+fn set_delay<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32) {
     let level = var::RANK.get(x.b);
     let d = x.rom8(table + level as u32);
     x.set8(WALK_DELAY, d);
 }
 
 /// Vise la cible (0xe76c) et prend la table de vitesses 0xd.
-fn aim(x: &mut Cx) {
+fn aim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
     speed(x, 0xd);
 }
@@ -331,7 +331,7 @@ fn charging(x: &mut Cx) {
 }
 
 /// 0x82196 : freinage (animation 5, 0x14 images, recul de 0x40).
-fn brake(x: &mut Cx) {
+fn brake<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(TIMER, 0x14);
     x.set16(DUST, 0);
@@ -417,7 +417,7 @@ fn hop(x: &mut Cx) {
 // --- groupes 6 à 12 : attente ---------------------------------------------------------------
 
 /// 0x82be2 : sans joueur en vie, le boss se tient debout ; dès qu'un joueur revient (en partie), il marche.
-pub(super) fn wait_for_players(x: &mut Cx) {
+pub(super) fn wait_for_players<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::walk(x);
     }

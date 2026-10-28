@@ -195,7 +195,7 @@ fn run_away(x: &mut Cx) {
 }
 
 /// 0x62ec0 : le chien court vers le bord de l'écran.
-fn run_begin(x: &mut Cx) {
+fn run_begin<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x);
     mv(x, 3);

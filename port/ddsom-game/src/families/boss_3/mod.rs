@@ -70,42 +70,42 @@ pub(self) const SET_DEATH: u32 = 0x1747f0;
 pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
-pub(self) fn body_anim(x: &mut Cx, n: u32) {
+pub(self) fn body_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn attack_anim(x: &mut Cx, n: u32) {
+pub(self) fn attack_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK, n);
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6(x: &mut Cx) {
+pub(self) fn next6<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7(x: &mut Cx) {
+pub(self) fn next7<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
 /// `move.w #v,(6,A0)` : étapes `+6` et `+7` d'un coup.
-pub(self) fn set_steps(x: &mut Cx, v: u16) {
+pub(self) fn set_steps<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u16) {
     x.set16(f::SUB2, v);
 }
 
 /// 0x8188e : vitesses et accélérations (`+0x14..+0x1f`) à zéro.
-pub(self) fn stop(x: &mut Cx) {
+pub(self) fn stop<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
 }
 
 /// 0x8189e : enregistrement de la caméra en service (A2 : 0xff84fe, ou 0xff854e si `A5+0x36`).
-pub(self) fn camera(x: &mut Cx) -> Obj {
+pub(self) fn camera<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Obj {
     let a = if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe };
     Obj(a)
 }
 
 /// 0x7f5ae : plus de cible, attente (`+4` = 0x020a0000).
-pub(self) fn idle_alone(x: &mut Cx) {
+pub(self) fn idle_alone<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 

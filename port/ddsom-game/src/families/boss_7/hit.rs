@@ -27,7 +27,7 @@ fn step(x: &mut Cx, table: u32) -> u32 {
     dispatch(x, table, f::SUB2)
 }
 
-fn paused(x: &mut Cx) -> bool {
+fn paused<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 

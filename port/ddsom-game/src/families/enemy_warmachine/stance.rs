@@ -109,13 +109,13 @@ fn turn(x: &mut Cx) {
 }
 
 /// 0x78244 : animation de marche (6 si la vitesse suit l'orientation, 7 sinon).
-fn walk_anim(x: &mut Cx) {
+fn walk_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 6 } else { 7 };
     mv(x, n);
 }
 
 /// 0x7831e : bascule dans l'animation de vol de même clé, selon le sens de la marche.
-fn fly_anim(x: &mut Cx) {
+fn fly_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let set = if lib::moving_forward(x) { SET_FLY_B } else { SET_FLY_A };
     lib::switch_keeping_time(x, set);
 }

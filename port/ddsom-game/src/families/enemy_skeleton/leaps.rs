@@ -26,7 +26,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Repos de 16 images, puis debout.
-fn rest(x: &mut Cx) {
+fn rest<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set16(TIMER, 0x10);
@@ -126,7 +126,7 @@ fn hop_rise(x: &mut Cx) {
     }
 }
 
-fn hop_fall(x: &mut Cx) {
+fn hop_fall<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
     x.move_yz();
     if (x.u32(Obj::Z) as i32) <= 0 {
@@ -137,7 +137,7 @@ fn hop_fall(x: &mut Cx) {
 }
 
 /// Fin d'un bond : l'animation de réception terminée, retour debout.
-fn hop_end(x: &mut Cx) {
+fn hop_end<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u16(ANIM_STATE) as i16) < 0 {
         set_state_long(x, STANCE);
@@ -145,7 +145,7 @@ fn hop_end(x: &mut Cx) {
 }
 
 /// Fin d'un bond avec animation de coup : le test porte sur l'octet fort de l'état.
-fn hop_end_byte(x: &mut Cx) {
+fn hop_end_byte<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u8(ANIM_STATE) as i8) < 0 {
         set_state_long(x, STANCE);
@@ -192,7 +192,7 @@ fn guard_leap(x: &mut Cx) {
 }
 
 /// 0x58966 / 0x58974 : commence la garde depuis un bond (`+6` = 8, riposte aléatoire ou aucune).
-fn guard_windup(x: &mut Cx) {
+fn guard_windup<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set16(COUNTER, 0);
     x.set8(f::SUB2, 8);
     guard_start(x);
@@ -207,7 +207,7 @@ fn guard_windup_random(x: &mut Cx) {
 }
 
 /// 0x58990 : la garde dure `0x3c` images, la posture passe à « en garde ».
-fn guard_start(x: &mut Cx) {
+fn guard_start<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x3c);
     x.set8(POSTURE, 9);
@@ -215,7 +215,7 @@ fn guard_start(x: &mut Cx) {
 }
 
 /// 0x589ae : tient la garde, puis la relâche.
-fn guard_wait(x: &mut Cx) {
+fn guard_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         let t = x.u16(TIMER).wrapping_sub(1);
         x.set16(TIMER, t);
@@ -273,7 +273,7 @@ pub(super) fn run_dash(x: &mut Cx) {
 }
 
 /// Pause de 30 images.
-fn pause(x: &mut Cx) {
+fn pause<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set16(TIMER, 0x1e);

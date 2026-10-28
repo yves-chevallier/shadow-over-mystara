@@ -202,7 +202,7 @@ fn gate(x: &mut Cx) {
     }
 }
 
-fn gate_init(x: &mut Cx) {
+fn gate_init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let period = x.u8(gate::PERIOD);
     x.set8(gate::MOVING, period);
@@ -233,7 +233,7 @@ fn gate_init(x: &mut Cx) {
 }
 
 /// 0xae3bc : oscillation (vitesses `+0x14` en x, `+0x18` en profondeur, inversées chaque demi-période).
-fn gate_swing(x: &mut Cx) {
+fn gate_swing<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(gate::MOVING) == 0 {
         return;
     }
@@ -251,7 +251,7 @@ fn gate_swing(x: &mut Cx) {
     x.set16(Obj::VZ, vy.wrapping_neg());
 }
 
-fn gate_watch(x: &mut Cx) {
+fn gate_watch<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     gate_swing(x);
     if (crate::ram::CAMERA_X.get(x.b).wrapping_sub(0x40) as i16) > (x.u16(Obj::X) as i16) {
@@ -418,7 +418,7 @@ fn gate_leave(x: &mut Cx) {
 }
 
 /// État 4, sous-état 2 : le rideau s'ouvre (deux colonnes effacées par image depuis le centre).
-fn gate_open(x: &mut Cx) {
+fn gate_open<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(0x51e, 4);
     let step = x.u16(gate::CURTAIN);
     if step as i16 > 0xa {
@@ -464,7 +464,7 @@ mod attack_fx {
 }
 
 /// 0xabec8 : crée un EFFCT 11 de variante `variant` et de mode `mode`, rattaché à l'objet courant.
-fn attack_fx_spawn(x: &mut Cx, variant: u8, mode: u8) -> Option<Obj> {
+fn attack_fx_spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant: u8, mode: u8) -> Option<Obj> {
     let o = x.alloc(&pools::EFFCT)?;
     wr8(x.b, o.0, 1);
     wr8(x.b, o.0 + 2, 11);
@@ -476,7 +476,7 @@ fn attack_fx_spawn(x: &mut Cx, variant: u8, mode: u8) -> Option<Obj> {
 
 /// Indice de l'attaquant dans les tables : son type, + 0x20 si sa classe (`+0x28`) vaut `class`
 /// (`when_equal`) ou ne la vaut pas.
-fn attacker_index(x: &mut Cx, a: Obj, class: u8, when_equal: bool) -> u32 {
+fn attacker_index<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, a: Obj, class: u8, when_equal: bool) -> u32 {
     let shifted = (a.u8(x.b, 0x28) == class) == when_equal;
     let base: u8 = if shifted { 0x20 } else { 0 };
     base.wrapping_add(a.u8(x.b, 2)) as u32
@@ -498,7 +498,7 @@ fn attack_fx(x: &mut Cx) {
 }
 
 /// Fin d'animation : retrait (état 6), sinon remise en liste.
-fn attack_fx_anim_or_leave(x: &mut Cx) {
+fn attack_fx_anim_or_leave<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         return x.set32(f::STATE, 0x0600_0000);
     }
@@ -507,7 +507,7 @@ fn attack_fx_anim_or_leave(x: &mut Cx) {
 
 /// Variante 0 : éclat posé au hasard autour de l'attaquant (huit places par type d'attaquant, retourné une
 /// image sur deux), animation tirée au hasard, son ; disparaît à la fin de l'animation.
-fn attack_fx_flash(x: &mut Cx) {
+fn attack_fx_flash<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -545,7 +545,7 @@ fn attack_fx_flash(x: &mut Cx) {
 
 /// Variante 2 : marque posée sur l'attaquant (décalage et animation par type) ; à la fin de son animation,
 /// elle fait avancer l'attaquant (`+6` += 2) et disparaît.
-fn attack_fx_mark(x: &mut Cx) {
+fn attack_fx_mark<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -584,7 +584,7 @@ fn attack_fx_mark(x: &mut Cx) {
 
 /// Variante 5 : comme l'éclat (1), mais il ne suit l'attaquant que tant que celui-ci garde l'action notée à la
 /// naissance (`+0x49` → `+0x42`) et n'a pas passé l'étape 4.
-fn attack_fx_trail(x: &mut Cx) {
+fn attack_fx_trail<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             let owner = x.linked(attack_fx::OWNER);
@@ -634,7 +634,7 @@ fn attack_fx_shower(x: &mut Cx) {
     }
 }
 
-fn attack_fx_shower_spawn(x: &mut Cx) {
+fn attack_fx_shower_spawn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let owner = x.linked(attack_fx::OWNER);
     let k = attacker_index(x, owner, 4, true);
     let sheet = x.rom8(attack_fx::SHOWER_SHEETS + k) as u16;
@@ -724,7 +724,7 @@ fn attack_fx_shard(x: &mut Cx) {
 }
 
 /// Variante 1 : éclat lancé depuis l'attaquant, qui le suit puis disparaît.
-fn attack_fx_burst(x: &mut Cx) {
+fn attack_fx_burst<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => burst_init(x),
         2 => {
@@ -746,7 +746,7 @@ fn attack_fx_burst(x: &mut Cx) {
 }
 
 /// Naissance de l'éclat (variantes 1 et 5) : posé sur l'attaquant, vitesse et animation selon son type.
-fn burst_init(x: &mut Cx) {
+fn burst_init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let owner = x.linked(attack_fx::OWNER);
     for off in [Obj::X, Obj::Z, Obj::Y] {
@@ -781,7 +781,7 @@ fn burst_init(x: &mut Cx) {
 }
 
 /// Variante 3 : reflet posé sur l'attaquant tant qu'il est dans l'action 0x68 ou 0x6c.
-fn attack_fx_glint(x: &mut Cx) {
+fn attack_fx_glint<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -818,7 +818,7 @@ fn attack_fx_glint(x: &mut Cx) {
 }
 
 /// Variante 4 : colonne qui monte depuis le bas de l'écran jusqu'à une hauteur selon l'attaquant.
-fn attack_fx_rise(x: &mut Cx) {
+fn attack_fx_rise<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let owner = x.linked(attack_fx::OWNER);
     match x.u8(f::STATE) {
         0 => {
@@ -861,7 +861,7 @@ fn attack_fx_rise(x: &mut Cx) {
 }
 
 /// Variante 6 : pièces d'un objet brisé ; le mode 0 crée les modes 2 et 3 (et devient le mode 1).
-fn attack_fx_parts(x: &mut Cx) {
+fn attack_fx_parts<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let mode = x.u8(0x2f);
     if mode == 0 {
         let source = x.linked(attack_fx::SOURCE);
@@ -941,7 +941,7 @@ fn attack_fx_parts(x: &mut Cx) {
 
 /// Variante 7 : le mode 0 crée une gerbe d'étincelles (modes 1 et 2, liste selon l'attaquant) puis
 /// disparaît ; une étincelle suit l'attaquant tant qu'il frappe.
-fn attack_fx_sparks(x: &mut Cx) {
+fn attack_fx_sparks<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x2f) {
         0 => {
             if x.u8(f::STATE) == 0 {

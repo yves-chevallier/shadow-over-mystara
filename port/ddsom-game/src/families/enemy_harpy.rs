@@ -58,16 +58,16 @@ pub fn run(x: &mut Cx) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn step(x: &mut Cx) {
+fn step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-fn set_state_long(x: &mut Cx, v: u32) {
+fn set_state_long<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
 /// Remise en liste : la variante 8 vit dans la liste du premier plan.
-fn reinsert(x: &mut Cx) {
+fn reinsert<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 8 {
         x.reinsert_foreground();
     } else {
@@ -76,13 +76,13 @@ fn reinsert(x: &mut Cx) {
 }
 
 /// Le compagnon (`+0xaa`) passe à l'état 6 (libération).
-fn release_companion(x: &mut Cx) {
+fn release_companion<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let c = x.linked(COMPANION);
     c.set_u8(x.b, f::STATE, 6);
 }
 
 /// Fin du vol : la créature et son compagnon passent à l'état suivant.
-fn vanish(x: &mut Cx) {
+fn vanish<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 4);
     release_companion(x);
 }
@@ -94,17 +94,17 @@ fn leave(x: &mut Cx) {
     release_companion(x);
 }
 
-fn speed(x: &mut Cx, n: u32) {
+fn speed<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-fn move_xz_table(x: &mut Cx) {
+fn move_xz_table<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xz();
 }
 
 /// Un tour de l'angle de vol : toutes les `reload` images, `+0xa2` s'ajoute à la direction. En vol libre
 /// (`clamp`, 0x758aa) un angle devenu négatif est remis à zéro.
-fn bank(x: &mut Cx, reload: u8, clamp: bool) {
+fn bank<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, reload: u8, clamp: bool) {
     let t = x.u8(TIMER_A).wrapping_sub(1);
     x.set8(TIMER_A, t);
     if (t as i8) < 0 {
@@ -209,7 +209,7 @@ fn fly(x: &mut Cx) {
 }
 
 /// Fin d'un passage : `+0xa1` écoulé, la créature repart ou attaque (variantes 0 et 1).
-fn fly_loop(x: &mut Cx, reload: u8) {
+fn fly_loop<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, reload: u8) {
     move_xz_table(x);
     step(x);
     bank(x, reload, false);
@@ -231,7 +231,7 @@ fn fly_loop(x: &mut Cx, reload: u8) {
 }
 
 /// Variantes 2 à 5 (0x75aec) : même vol, passage plus lent et pause de 0x30 images.
-fn fly_loop_b(x: &mut Cx) {
+fn fly_loop_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     move_xz_table(x);
     step(x);
     bank(x, 0x10, false);
@@ -250,7 +250,7 @@ fn fly_loop_b(x: &mut Cx) {
 }
 
 /// Variante 8 (0x75aa2) : vol au premier plan.
-fn fly_front(x: &mut Cx) {
+fn fly_front<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     move_xz_table(x);
     step(x);
     bank(x, 0xc, false);
@@ -318,7 +318,7 @@ fn turn_back(x: &mut Cx) {
 }
 
 /// +5 = 4 (0x75b2e) : attente puis retour au vol.
-fn pause(x: &mut Cx) {
+fn pause<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
     let n = x.u8(0x77).wrapping_sub(1);
     x.set8(0x77, n);
@@ -413,7 +413,7 @@ fn attack_start(x: &mut Cx) {
 }
 
 /// 0x75bd0 : attend la fin du geste de tir.
-fn attack_aim(x: &mut Cx) {
+fn attack_aim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     step(x);
     if x.u8(SHOT_DONE) != 0 {
         x.add8(f::SUB2, 2);
@@ -423,7 +423,7 @@ fn attack_aim(x: &mut Cx) {
 }
 
 /// 0x75bf4 : lâche le projectile à l'image-clé.
-fn attack_wait(x: &mut Cx) {
+fn attack_wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         return x.add8(f::SUB2, 2);
     }
@@ -516,7 +516,7 @@ fn attack_fire(x: &mut Cx) {
 
 // --- état 4 : touché ----------------------------------------------------------------------------
 
-fn hit(x: &mut Cx) {
+fn hit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -532,12 +532,12 @@ fn hit(x: &mut Cx) {
 }
 
 /// Animation de chute de la série d'attaque (`+0x2f`).
-fn hit_anim(x: &mut Cx) -> u8 {
+fn hit_anim<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u8 {
     let series = x.u8(SERIES) as u32;
     x.rom8(HIT_ANIM + series)
 }
 
-fn hit_recoil(x: &mut Cx) {
+fn hit_recoil<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -573,7 +573,7 @@ fn hit_recoil(x: &mut Cx) {
     }
 }
 
-fn hit_fall(x: &mut Cx) {
+fn hit_fall<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let c = x.linked(COMPANION);
     c.set_u8(x.b, 0x5a, 1);
     let kind = x.u8(KIND) != 0;
@@ -616,7 +616,7 @@ fn hit_fall(x: &mut Cx) {
     }
 }
 
-fn hit_dying(x: &mut Cx) {
+fn hit_dying<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         if x.anim_step() {
             set_state_long(x, 0x0200_0000);

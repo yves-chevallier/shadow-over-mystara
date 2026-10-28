@@ -84,7 +84,7 @@ fn approach(x: &mut Cx) {
 }
 
 /// +6 = 2 : demi-tour.
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -99,7 +99,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// +6 = 4 : attente sur place.
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -115,7 +115,7 @@ fn wait(x: &mut Cx) {
 
 /// +6 = 6 (et sous-état 4, +6 = 20) : le Goblin quitte l'écran en marchant. L'original rend la main à la boucle
 /// avec une remise en liste (`jmp 0x1ee1a`) à plusieurs endroits : on la rejoue.
-pub(super) fn walk_off(x: &mut Cx) {
+pub(super) fn walk_off<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let step = x.u8(f::SUB3);
     if step == 2 {
         if x.in_arena_default() {

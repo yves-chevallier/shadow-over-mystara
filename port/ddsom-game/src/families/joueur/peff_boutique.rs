@@ -45,12 +45,12 @@ fn player_of(x: &mut Cx) -> Obj {
 }
 
 /// Première case de l'inventaire qui contient `item`.
-fn find_slot(x: &mut Cx, player: Obj, item: u8) -> Option<u32> {
+fn find_slot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, player: Obj, item: u8) -> Option<u32> {
     (0..SLOTS).find(|&k| player.u8(x.b, p::SLOTS + k) == item)
 }
 
 /// Pose le message et joue le son du message.
-fn say(x: &mut Cx, message: u16) {
+fn say<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, message: u16) {
     wr16(x.b, MESSAGE, message);
     crate::sound::jouer(x.b, SOUND_MESSAGE, x.o);
 }

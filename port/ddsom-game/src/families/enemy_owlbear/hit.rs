@@ -148,7 +148,7 @@ fn flee(x: &mut Cx) {
 }
 
 /// 0x5ede8 : s'enfuit en courant vers le bord de l'écran.
-fn run_away(x: &mut Cx) {
+fn run_away<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x, 8, 0x18);
     body(x, 5);

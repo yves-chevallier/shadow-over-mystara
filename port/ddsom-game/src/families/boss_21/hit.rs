@@ -36,7 +36,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x9ae8a : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
-fn out_of_hp(x: &mut Cx) -> bool {
+fn out_of_hp<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }

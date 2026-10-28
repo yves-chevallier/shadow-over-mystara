@@ -51,7 +51,7 @@ mod pet {
     }
 
     /// `move.l #0x4000000,(4,A0)` : état 4, sous-états nuls.
-    fn die(x: &mut Cx) {
+    fn die<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.set32(0x4, 0x0400_0000);
     }
 
@@ -477,7 +477,7 @@ mod pet {
         flip_by_angle(x);
     }
 
-    fn flip_by_angle(x: &mut Cx) {
+    fn flip_by_angle<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.set8(f::FLIP, 0);
         if (x.u8(0x2d) as i8) <= 0x10 {
             x.set8(f::FLIP, 0x20);
@@ -486,7 +486,7 @@ mod pet {
 
     /// Recouvrement de la boîte du monstre `frame` et de la boîte `mine` du familier : profondeur (`0x4fb44`),
     /// largeur (`0x4fb6c`) et, pour la morsure, hauteur (`0x4fba4`).
-    fn overlap(x: &mut Cx, m: Obj, frame: u32, mine: u32, with_z: bool) -> bool {
+    fn overlap<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, m: Obj, frame: u32, mine: u32, with_z: bool) -> bool {
         let (e, p) = (frame, mine);
         let d = (x.data8(e + 4) as i8 as i16 as u16).wrapping_add(m.u16(x.b, 0x10));
         let q = (x.data8(p + 4) as i8 as i16 as u16).wrapping_add(x.u16(0x10));

@@ -181,7 +181,7 @@ mod thrown {
     }
 
     /// Animation d'après l'angle `+0x2d` (`0x51f48`).
-    fn pose(x: &mut Cx) {
+    fn pose<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let angle = (x.u8(0x2d) & 7) as u32;
         let set = if x.u8(0x2) == 1 { ANIMS_A } else { ANIMS_B };
         x.anim_start(set, angle as u16);

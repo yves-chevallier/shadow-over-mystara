@@ -5,7 +5,7 @@ use super::*;
 use crate::objects::Obj;
 
 /// Saut par table de mots : `base + mot(base + index)` (adressage `(base,PC,Dn)`, espace des opcodes).
-fn table_target(x: &mut Cx, base: u32, index: u32) -> u32 {
+fn table_target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, base: u32, index: u32) -> u32 {
     let w = x.rom16(base.wrapping_add(index)) as i16 as i32;
     (base as i32).wrapping_add(w) as u32
 }

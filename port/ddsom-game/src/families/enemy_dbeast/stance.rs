@@ -99,7 +99,7 @@ pub(super) fn engage(x: &mut Cx) {
 }
 
 /// Si la cible est derrière la bête, elle fait demi-tour puis reprend (0x72ce2 et suivantes).
-fn face_resume(x: &mut Cx) {
+fn face_resume<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let Some(t) = target(x) else { return };
     let dx = x.u16(0x8).wrapping_sub(t.u16(x.b, 0x8)) as i16;
     let want = if dx >= 0 { 0 } else { 0x20 };
@@ -145,7 +145,7 @@ fn reach_back(x: &mut Cx) -> bool {
 }
 
 /// +6 = 2 (0x72e18) : demi-tour ; fini, la bête reprend l'état mémorisé.
-fn turn(x: &mut Cx) {
+fn turn<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 1);
@@ -166,7 +166,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// +6 = 4 (0x72e78) : attente debout avant de passer à l'attaque.
-fn wait(x: &mut Cx) {
+fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         return super::attacks::ready(x);
     }
@@ -224,7 +224,7 @@ fn approach(x: &mut Cx) {
     }
 }
 
-fn approach_walk(x: &mut Cx) {
+fn approach_walk<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x16);
     if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {

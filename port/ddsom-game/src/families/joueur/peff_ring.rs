@@ -70,7 +70,7 @@ fn follow_parent(x: &mut Cx) {
 }
 
 /// L'anneau meurt si la génération a changé, si le jeu est en pause ou si le joueur est mort.
-fn ring_alive(x: &mut Cx, generation: u32) -> bool {
+fn ring_alive<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, generation: u32) -> bool {
     if x.a5_u8(a5::PAUSED) != 0 {
         return false;
     }
@@ -171,7 +171,7 @@ mod ring0 {
     }
 
     /// Animation de l'icône d'après l'équipement (`0x49edc`).
-    fn icon(x: &mut Cx) {
+    fn icon<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
         let count = if x.u8(0x2d) != 0 { 0xa } else { count };
@@ -179,7 +179,7 @@ mod ring0 {
         x.anim_start(set, ((item << 4) + count & 0xffff) as u16);
     }
 
-    fn parent_init(x: &mut Cx) {
+    fn parent_init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u16(a5::PEFF_FREE) <= 6 {
             return;
         }
@@ -372,7 +372,7 @@ mod ring1 {
         }
     }
 
-    fn player_is_8_or_9(x: &mut Cx) -> bool {
+    fn player_is_8_or_9<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
         let player = x.linked(f::OWNER);
         let v = player.u8(x.b, 0x3);
         v == 8 || v == 9
@@ -402,7 +402,7 @@ mod ring1 {
     }
 
     /// Animation de l'icône (`0x4a29c`).
-    fn icon(x: &mut Cx) {
+    fn icon<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
         let d0;
@@ -471,7 +471,7 @@ mod ring1 {
     }
 
     /// Sous-état 0 du parent : prépare l'anneau (nombre d'enfants et leurs équipements).
-    fn create(x: &mut Cx) {
+    fn create<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u16(a5::PEFF_FREE) <= 6 {
             return;
         }

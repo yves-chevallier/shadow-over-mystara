@@ -39,14 +39,14 @@ mod slot_icon {
     }
 
     /// Joueur propriétaire + rang de l'emplacement (`lea (0,A1,D0.w),A1`).
-    fn slot(x: &mut Cx) -> Obj {
+    fn slot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> Obj {
         let owner = x.linked(f::OWNER);
         let rank = x.u8(0x3) as u32;
         let at = Obj(owner.0 + rank);
         at
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(TAKEN, 0);
         let at = slot(x);
@@ -72,7 +72,7 @@ mod slot_icon {
     }
 
     /// `0x4cb16` : image de l'icône d'après l'équipement courant.
-    fn choose_icon(x: &mut Cx) {
+    fn choose_icon<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let at = slot(x);
         let item = at.u8(x.b, 0x140) as u32;
         let count = at.u8(x.b, 0x148) as u32;
@@ -89,7 +89,7 @@ mod slot_icon {
     }
 
     /// `0x4cb50` : l'équipement a changé : nouvelle image (l'icône d'un objet retiré retourne à sa place).
-    fn refresh(x: &mut Cx) {
+    fn refresh<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let at = slot(x);
         let item = at.u8(x.b, 0x140);
         let count = at.u8(x.b, 0x148);
@@ -108,7 +108,7 @@ mod slot_icon {
     }
 
     /// `0x4cc56` : un objet ramassé (lié par `+0x5c`) passe sur l'icône : elle le prend.
-    fn pickup(x: &mut Cx) {
+    fn pickup<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         if x.u8(TAKEN) != 0 {
             return;
         }
@@ -130,7 +130,7 @@ mod slot_icon {
     }
 
     /// `0x4cbb2` : rejoint sa place huit pixels par image ; prise, elle suit l'objet.
-    fn approach(x: &mut Cx) {
+    fn approach<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let taken = x.u8(TAKEN) as i8;
         if taken > 0 {
             let item = x.linked(0x5c);
@@ -173,7 +173,7 @@ mod slot_icon {
     }
 
     /// Avance de 8 vers `target` sans le dépasser.
-    fn step_axis(x: &mut Cx, at: u32, target: u16) {
+    fn step_axis<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, at: u32, target: u16) {
         let here = x.u16(at) as i16;
         let t = target as i16;
         if t == here {
@@ -193,7 +193,7 @@ mod slot_icon {
     }
 
     /// `0x4cc9a` : suit le défilement de la caméra.
-    fn scroll(x: &mut Cx) {
+    fn scroll<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
         let delta = x.a5_u32(a5::CAM_X).wrapping_sub(x.a5_u32(0x524));
         x.add32(0x8, delta);
         x.add32(HOME, delta);

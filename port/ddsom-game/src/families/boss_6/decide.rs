@@ -16,13 +16,13 @@ const ATTACK_4: u32 = 0x0204_0400;
 const ATTACK_6: u32 = 0x0204_0600;
 const ATTACK_8: u32 = 0x0204_0800;
 
-fn set_state(x: &mut Cx, vulnerable: u8, state: u32) {
+fn set_state<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, vulnerable: u8, state: u32) {
     x.set8(VULNERABLE, vulnerable);
     x.set32(f::STATE, state);
 }
 
 /// 0x85962 : attend (aucun joueur en vie).
-pub(super) fn wait(x: &mut Cx) {
+pub(super) fn wait<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
@@ -32,7 +32,7 @@ pub(super) fn stand(x: &mut Cx) {
 }
 
 /// 0x8589a : interrompt l'action (état mémorisé en `+0xa2`).
-pub(super) fn interrupt(x: &mut Cx) {
+pub(super) fn interrupt<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let state = x.u32(f::STATE);
     x.set32(SAVED_STATE, state);
@@ -46,7 +46,7 @@ pub(super) fn chase(x: &mut Cx) {
 }
 
 /// 0x858c4 : marche lente.
-pub(super) fn chase_b(x: &mut Cx) {
+pub(super) fn chase_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(SHOT, 0x2d);
     set_state(x, 1, CHASE_B);
 }
@@ -59,36 +59,36 @@ pub(super) fn charge(x: &mut Cx, at_target: bool) {
 }
 
 /// 0x85900 : tir en bond.
-pub(super) fn shoot(x: &mut Cx) {
+pub(super) fn shoot<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     set_state(x, 0, SHOOT);
 }
 
-pub(super) fn attack_0(x: &mut Cx) {
+pub(super) fn attack_0<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     set_state(x, 1, ATTACK_0);
 }
 
-pub(super) fn attack_2(x: &mut Cx) {
+pub(super) fn attack_2<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     set_state(x, 0, ATTACK_2);
 }
 
-pub(super) fn attack_4(x: &mut Cx) {
+pub(super) fn attack_4<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     set_state(x, 0, ATTACK_4);
 }
 
 /// 0x8593a : attaque 6 en invulnérable.
-pub(super) fn attack_6_shielded(x: &mut Cx) {
+pub(super) fn attack_6_shielded<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     set_state(x, 0, ATTACK_6);
 }
 
 /// 0x8594e : attaque 8 en invulnérable.
-pub(super) fn attack_8_shielded(x: &mut Cx) {
+pub(super) fn attack_8_shielded<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     set_state(x, 0, ATTACK_8);
 }
 
 /// Cible d'une table de sauts de mots relatifs à son début.
-fn target(x: &mut Cx, table: u32, index: u32) -> u32 {
+fn target<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
     (table as i32 + x.rom16(table + index) as i16 as i32) as u32
 }
 
@@ -115,13 +115,13 @@ fn apply(x: &mut Cx, routine: u32) {
 
 // --- tirages ------------------------------------------------------------------------------------
 
-pub(super) fn walk_delay_fast(x: &mut Cx) {
+pub(super) fn walk_delay_fast<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x85614 + level);
     x.set8(WALK_DELAY, v);
 }
 
-pub(super) fn walk_delay_slow(x: &mut Cx) {
+pub(super) fn walk_delay_slow<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x85634 + level);
     x.set8(WALK_DELAY, v);

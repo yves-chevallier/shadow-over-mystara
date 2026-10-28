@@ -30,7 +30,7 @@ pub(super) fn run_c(x: &mut Cx) {
 }
 
 /// 0x68080 : minuterie `+0xa2` puis debout.
-fn countdown_stance(x: &mut Cx) {
+fn countdown_stance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let n = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, n);
     if n == 0 {
@@ -39,7 +39,7 @@ fn countdown_stance(x: &mut Cx) {
 }
 
 /// 0x680ee : attend la clé d'animation.
-fn wait_key(x: &mut Cx) {
+fn wait_key<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
         return;
@@ -48,7 +48,7 @@ fn wait_key(x: &mut Cx) {
 }
 
 /// 0x68146 : attend la fin de l'animation, puis debout.
-fn end_stance(x: &mut Cx) {
+fn end_stance<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u16(ANIM_END) as i16) < 0 {
         set_state_long(x, STANCE);

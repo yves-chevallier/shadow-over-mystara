@@ -15,12 +15,12 @@ fn players() -> impl Iterator<Item = u32> {
 }
 
 /// Joueur en jeu : actif et état principal (octet `+4`) inférieur à 4.
-fn present(x: &mut Cx, p: u32) -> bool {
+fn present<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, p: u32) -> bool {
     rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4
 }
 
 /// Libère l'objet au passage suivant : `+4 = 6` et les trois octets suivants à zéro.
-fn retire(x: &mut Cx) {
+fn retire<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.set32(0x4, 0x0600_0000);
 }
 
@@ -53,7 +53,7 @@ fn spawn_effct(x: &mut Cx, variant: u32, extra: u32) -> Option<Obj> {
 
 /// Secousse à quatre composantes (0xce24c) : caméra du fond et du second plan, avec recopie des
 /// positions « précédentes ». `table` : enregistrements de 8 octets, un par pas de `+0x18` & 3.
-fn shake4(x: &mut Cx, table: u32) {
+fn shake4<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, table: u32) {
     let at = table + 8 * (x.u8(0x18) & 3) as u32;
     x.add8(0x18, 1);
     for (i, var) in [a5::CAM_X, a5::CAM_Y, a5::BG_X, a5::BG_Y].into_iter().enumerate() {
@@ -64,14 +64,14 @@ fn shake4(x: &mut Cx, table: u32) {
     copy_cameras(x);
 }
 
-fn copy_cameras(x: &mut Cx) {
+fn copy_cameras<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     for (from, to) in [(a5::CAM_X, a5::CAM_X_PREV), (a5::CAM_Y, a5::CAM_Y_PREV), (a5::BG_X, a5::BG_X_PREV), (a5::BG_Y, a5::BG_Y_PREV)] {
         let v = x.a5_u16(from);
         x.set_a5_u16(to, v);
     }
 }
 
-fn mask_tasks(x: &mut Cx, keep: u16) {
+fn mask_tasks<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, keep: u16) {
     let v = x.a5_u16(TASK_FLAGS) & keep;
     x.set_a5_u16(TASK_FLAGS, v);
 }
@@ -80,7 +80,7 @@ fn mask_tasks(x: &mut Cx, keep: u16) {
 
 /// Prépare la liste (joueur, réserve) : `+0x30 + 4 i` = adresse du joueur, `+0x32 + 4 i` = PV rendus
 /// d'office ; le pas de base dépend du score `A5+0x38`, majoré (variante 23) du `+0x64` du joueur.
-fn refill_setup(x: &mut Cx, with_player_bonus: bool) {
+fn refill_setup<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
     let score = x.a5_u16(0x38) as i16;
     let mut step: u16 = 0x14;
     for (limit, add) in [(0x100, 8), (0x130, 4), (0x200, 8), (0x230, 8)] {
@@ -105,7 +105,7 @@ fn refill_setup(x: &mut Cx, with_player_bonus: bool) {
 /// Un tour de remplissage : chaque joueur dont les PV (`+0x62`) sont sous le maximum (`+0x60`) en
 /// gagne un tant que sa réserve est non vide, puis jusqu'à 1,25 fois la moitié du maximum. Vrai
 /// si un joueur a reçu un PV.
-fn refill_step(x: &mut Cx, variant_b: bool) -> bool {
+fn refill_step<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
     let mut slot = 0x30;
     let mut gave = 0u8;
     let count = (x.a5_u8(0x35) as u16).wrapping_sub(1) as u32 + 1;
@@ -134,7 +134,7 @@ fn refill_step(x: &mut Cx, variant_b: bool) -> bool {
 }
 
 /// Variante 8 (0xcf3a8) : fin de niveau, les PV remontent.
-pub fn hp_refill_a(x: &mut Cx) {
+pub fn hp_refill_a<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -150,7 +150,7 @@ pub fn hp_refill_a(x: &mut Cx) {
 }
 
 /// Variante 23 (0xd0932) : idem avec le bonus propre à chaque joueur.
-pub fn hp_refill_b(x: &mut Cx) {
+pub fn hp_refill_b<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -195,7 +195,7 @@ fn free_character(taken: &mut u32) -> Option<u32> {
 }
 
 /// Masque des personnages présents (variante `+3` de chaque joueur en jeu).
-fn characters_present(x: &mut Cx) -> u32 {
+fn characters_present<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> u32 {
     let mut mask = 0;
     for p in players() {
         if present(x, p) {
@@ -264,7 +264,7 @@ fn handover_step(x: &mut Cx, mark: u8) {
     x.set_a5_u8(0x33, 1);
 }
 
-fn handover_step2(x: &mut Cx) {
+fn handover_step2<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(0x31) as i8) >= 0 {
         return;
     }
@@ -273,7 +273,7 @@ fn handover_step2(x: &mut Cx) {
     x.set16(0x42, 1);
 }
 
-fn handover_step3(x: &mut Cx) {
+fn handover_step3<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add16(0x42, 0xffff);
     if x.u16(0x42) != 0 {
         return;
@@ -309,7 +309,7 @@ pub fn handover_effects(x: &mut Cx) {
 /// Variante 10 (0xcf5e6) : secousse (table 0xd0b30) jusqu'à la fin du fondu (`A5+0x48f`), puis le fond
 /// accélère en défilement horizontal (`+0x14`, `+0x16`) jusqu'à ce que la vitesse tombe sous 0x100,
 /// et enfin met le chef d'orchestre à 2. `+5` : 0 secousse, 2 attente du chef, 4 défilement.
-pub fn shaking_intro(x: &mut Cx) {
+pub fn shaking_intro<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     const SHAKE: u32 = 0xd0b30;
     const SCROLL_SHAKE: u32 = 0xd0b50;
     if x.u8(0x4) == 0 {
@@ -498,7 +498,7 @@ pub fn lightning(x: &mut Cx) {
 // --- variante 15 : secousse légère -----------------------------------------------------------------------------------
 
 /// Variante 15 (0xcfa4c) : secoue le fond (table 0xd0b70) tant que le chef d'orchestre a `+8 >= 0`.
-pub fn quake_light(x: &mut Cx) {
+pub fn quake_light<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -733,7 +733,7 @@ fn bonus_step(x: &mut Cx) {
 }
 
 /// Fait varier huit longs de la palette du joueur courant (`+0x26`) toutes les 4 images, 8 fois.
-fn palette_pulse(x: &mut Cx, delta: u32) {
+fn palette_pulse<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, delta: u32) {
     x.add8(0x2a, 0xff);
     if x.u8(0x2a) != 0 {
         return;
@@ -852,7 +852,7 @@ fn choose_reward(x: &mut Cx) {
 /// Variante 19 (0xd004a) : l'objet porte un nombre en BCD dans `+0x4c` (4 chiffres de 4 bits en
 /// octets 0x100, 0x1000, 0x10000, 0x100000) ; chaque image retire une unité du chiffre de poids
 /// faible non nul et lance l'événement 0x19ae6 (son/score) pour ce chiffre ; à zéro, se libère.
-pub fn countdown_digits(x: &mut Cx) {
+pub fn countdown_digits<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     let mut value = x.u32(0x4c);
     if value == 0 {
         return x.free(&pools::SET);
@@ -1140,7 +1140,7 @@ pub fn results_panel(x: &mut Cx) {
     }
 }
 
-fn fade_flag(x: &mut Cx) {
+fn fade_flag<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x20, 0xff);
     mask_tasks(x, 0xfff7);
 }

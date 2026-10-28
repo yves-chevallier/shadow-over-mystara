@@ -35,7 +35,7 @@ pub fn blink(x: &mut Cx) {
 }
 
 /// Copie la position (X, Z, Y : parties entières) du propriétaire dans le tir.
-pub fn copy_position(x: &mut Cx, owner: Obj) {
+pub fn copy_position<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, owner: Obj) {
     for off in [0x8, 0xc, 0x10] {
         let v = owner.u16(x.b, off);
         x.set16(off, v);
@@ -44,7 +44,7 @@ pub fn copy_position(x: &mut Cx, owner: Obj) {
 
 /// Place le tir devant le propriétaire : sa position, un pixel plus près (profondeur - 1), puis
 /// décalé de `dx` du côté où il regarde et de `dz` en hauteur.
-pub fn place_in_front(x: &mut Cx, owner: Obj, dx: i16, dz: u16) {
+pub fn place_in_front<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, owner: Obj, dx: i16, dz: u16) {
     copy_position(x, owner);
     x.add16(0x10, 0xffff);
     let side = if owner.u8(x.b, f::FLIP) != 0 { dx } else { -dx };
@@ -53,7 +53,7 @@ pub fn place_in_front(x: &mut Cx, owner: Obj, dx: i16, dz: u16) {
 }
 
 /// Pause du jeu : vrai quand l'objet est suspendu (octet `+0x40`).
-pub fn suspended(x: &mut Cx) -> bool {
+pub fn suspended<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     x.suspended()
 }
 

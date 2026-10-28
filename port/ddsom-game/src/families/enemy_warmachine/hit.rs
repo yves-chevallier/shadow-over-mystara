@@ -33,7 +33,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x792e0 : PV épuisés : passe en mort (`+5` = 6) ; vrai dans ce cas.
-fn dying(x: &mut Cx) -> bool {
+fn dying<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }

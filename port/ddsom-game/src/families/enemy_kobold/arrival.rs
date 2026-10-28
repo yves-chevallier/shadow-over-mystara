@@ -161,7 +161,7 @@ fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
 }
 
 /// +6 = 10 : chute d'en haut.
-fn drop_in(x: &mut Cx) {
+fn drop_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -188,7 +188,7 @@ fn drop_in(x: &mut Cx) {
 }
 
 /// +6 = 12 : apparition.
-fn appear(x: &mut Cx) {
+fn appear<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -214,7 +214,7 @@ fn appear(x: &mut Cx) {
 }
 
 /// +6 = 14 : course d'arrivée (0x1e images).
-fn run_in(x: &mut Cx) {
+fn run_in<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -338,7 +338,7 @@ fn get_up(x: &mut Cx) {
 
 /// Clé d'animation : effet `effect` ; en fin de script, le Kobold reprend sa marche un pas en avant (`−0x20`
 /// à droite, `+0x20` à gauche).
-fn landing_hit(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn landing_hit<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);
