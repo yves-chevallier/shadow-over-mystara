@@ -19,6 +19,7 @@ pub(crate) mod early;
 pub(crate) mod late;
 
 use super::Ctx;
+use crate::video::{charger_grille, effacer_couche, Couche, Grille};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::objects::Obj;
@@ -64,23 +65,15 @@ mod a5 {
 const ALL_PAGES: u8 = 15;
 const SCENE_PAGES: u8 = 13;
 
+/// Tâches de fondu.
 mod sub {
     pub const FADE_TASK: u32 = 0x14ba;
     pub const FADE_TASK_PAGES: u32 = 0x14d0;
-    pub const MESSAGE: u32 = 0xc8312;
-    /// Objet système (D0 = variante) et objet SET (D0 = type) ; retenue : pool plein.
-    pub const SOBJ: u32 = 0xddeaa;
-    pub const SET: u32 = 0xce00a;
-    pub const WORLD_UPDATE: u32 = 0x1c86e;
-    pub const SPRITES: u32 = 0x1de96;
-    pub const TILE_BLOCK: u32 = 0x26d4;
-    pub const TILE_BLOCK_2: u32 = 0x2766;
-    pub const LOAD_PALETTE: u32 = 0x1a67e;
-    pub const SOUND: u32 = 0xe0a82;
-    pub const CLEAR_SPRITES: u32 = 0xc58;
-    pub const CLEAR_SCROLL_2: u32 = 0xcc8;
-    pub const CLEAR_SCROLL_3: u32 = 0xce8;
 }
+
+/// Grilles de blocs de tuiles : couche 2 (0x26d4) et couche 3 (0x2766).
+const TB: Grille = Grille::Couche2;
+const TB2: Grille = Grille::Couche3;
 
 /// Plans des décors : plan 1 (caractères), plan 2 et plan 3, en GFX RAM.
 const SCROLL_2: u32 = 0x917000;
@@ -155,11 +148,6 @@ fn set_d0_byte(x: &mut Ctx, v: u8) {
 fn set_d0_word(x: &mut Ctx, v: u16) {
     x.c.d[0] = x.c.d[0] & !0xffff | v as u32;
 }
-#[track_caller]
-fn call_d0(x: &mut Ctx, routine: u32, d0: u32) {
-    x.c.d[0] = d0;
-    x.call(routine);
-}
 
 fn layers_or(x: &mut Ctx, bits: u16) {
     let v = x.v16(a5::LAYERS) | bits;
@@ -170,20 +158,15 @@ fn layers_and(x: &mut Ctx, mask: u16) {
     x.set_v16(a5::LAYERS, v);
 }
 
-/// Bloc de tuiles `n` (0x26d4) ou `n` du second jeu (0x2766) ; `at` : destination (A1), sinon à la suite du précédent.
-fn tiles(x: &mut Ctx, routine: u32, n: u32, at: Option<u32>) {
-    if let Some(a) = at {
-        x.c.a[1] = a;
-    }
-    call_d0(x, routine, n);
+/// Bloc de tuiles `n` de la grille à `destination` ; rend la case qui suit (A1 de l'original : le bloc suivant
+/// d'une suite s'y écrit).
+fn tiles(x: &mut Ctx, grille: Grille, n: u16, destination: u32) -> u32 {
+    charger_grille(x.b, grille, n, destination).destination
 }
-/// Comme [`tiles`], numéro chargé par `move.w` (le haut de D0 est gardé).
-fn tiles_w(x: &mut Ctx, routine: u32, n: u16, at: Option<u32>) {
-    if let Some(a) = at {
-        x.c.a[1] = a;
-    }
-    set_d0_word(x, n);
-    x.call(routine);
+
+/// Commande son 0xff07 de la ligne `ligne` (0xe0a82, sans verrou).
+fn sound(x: &mut Ctx, ligne: u16) {
+    crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne });
 }
 
 /// Caméra : position et copie.
@@ -241,7 +224,7 @@ crate::etapes! {
     pub enum Etape {
         FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::taches::fondu::montee, Caller),
         SpritesAfterFrame = 0xfa1ca => |x| {
-            keep_a0_a6(x, sub::SPRITES);
+            crate::sprites::construire_68k(x.c, x.b);
             Flow::Done
         },
     }
@@ -300,11 +283,9 @@ fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Suite>) -> Flow {
 
 /// 0xfa1e2 : mise à jour du monde (A0 et A6 gardés).
 fn world(x: &mut Ctx) {
-    keep_a0_a6(x, sub::WORLD_UPDATE);
-}
-fn keep_a0_a6(x: &mut Ctx, routine: u32) {
     let (a0, a6) = (x.c.a[0], x.c.a[6]);
-    x.call(routine);
+    let flow = crate::game::update_world(x.c, x.b);
+    assert!(flow == Flow::Done, "script de transition : un gestionnaire a cédé la main pendant la mise à jour du monde");
     (x.c.a[0], x.c.a[6]) = (a0, a6);
 }
 
@@ -315,9 +296,9 @@ fn reset_pools(x: &mut Ctx) {
     }
 }
 
-/// 0xfa22e : palette D0 des pages de fond, puis noir sur la page 2.
-fn dark_palette(x: &mut Ctx) {
-    x.call(sub::LOAD_PALETTE);
+/// 0xfa22e : palette `n` des pages de fond (0x1a67e), puis noir sur la page 2.
+fn dark_palette(x: &mut Ctx, n: u16) {
+    crate::palette::charger_page(x.b, 2, n);
     x.set_v8(a5::FADE_PAGES, 4);
     crate::palette::no_brightness(x.b);
 }
@@ -368,33 +349,23 @@ fn answer(x: &mut Ctx, table: u32) -> u8 {
     x.prog8(table + k as u32)
 }
 
-/// Ouvre le message `n` (mémorisé en `+4`) ; vrai si l'objet a été créé.
-fn try_message(x: &mut Ctx, n: u32) -> bool {
-    call_d0(x, sub::MESSAGE, n);
-    let ok = x.c.sr & 1 == 0;
-    if ok {
-        store_message(x);
-    }
-    ok
+/// Ouvre le message `n` (0xc8312, mémorisé en `+4`) ; vrai si l'objet a été créé.
+fn try_message(x: &mut Ctx, n: u8) -> bool {
+    let Some(o) = crate::families::creators::scene_set(x.b, n) else { return false };
+    store_message(x, o);
+    true
 }
-fn store_message(x: &mut Ctx) {
-    let a1 = x.c.a[1] as u16;
-    set16(x, var::MESSAGE, a1);
+fn store_message(x: &mut Ctx, o: Obj) {
+    set16(x, var::MESSAGE, o.0 as u16);
+}
+/// Message `n` dont l'échec n'est pas testé. Glitch d'origine : l'A1 laissé par l'allocation est mémorisé.
+fn message_untested(x: &mut Ctx, n: u8) -> Obj {
+    crate::families::creators::scene_set_ou_reste(x.b, n)
 }
 /// Boucle `moveq #n,D0 ; jsr 0xc8312 ; bcc ; moveq #1,D0 ; jsr 0xa40 ; bra` : vrai si le message est ouvert ;
 /// sinon la tâche cède une image et reprendra en `retry`.
-fn message(x: &mut Ctx, n: u32, retry: impl Into<Suite>) -> bool {
-    x.c.d[0] = n;
-    message_d0(x, retry)
-}
-/// Comme [`message`], numéro déjà dans D0.
-fn message_d0(x: &mut Ctx, retry: impl Into<Suite>) -> bool {
-    x.call(sub::MESSAGE);
-    if x.c.sr & 1 != 0 {
-        return retry_next_frame(x, retry);
-    }
-    store_message(x);
-    true
+fn message(x: &mut Ctx, n: u8, retry: impl Into<Suite>) -> bool {
+    try_message(x, n) || retry_next_frame(x, retry)
 }
 fn retry_next_frame(x: &mut Ctx, retry: impl Into<Suite>) -> bool {
     yield_frames(x, 1, At(retry.into()));
@@ -402,26 +373,30 @@ fn retry_next_frame(x: &mut Ctx, retry: impl Into<Suite>) -> bool {
 }
 
 /// Objet système de variante `n` (0xddeaa) qui reçoit l'adresse des variables ; sinon cède et reprendra en `retry`.
-fn system_object(x: &mut Ctx, n: u32, retry: impl Into<Suite>) -> Option<Obj> {
-    call_d0(x, sub::SOBJ, n);
-    if x.c.sr & 1 != 0 {
+fn system_object(x: &mut Ctx, n: u8, retry: impl Into<Suite>) -> Option<Obj> {
+    let Ok(o) = crate::effects_aids::decor_6(x.b, n) else {
         retry_next_frame(x, retry);
         return None;
-    }
-    Some(attach(x))
+    };
+    Some(attach(x, o))
+}
+/// Objet système de variante `n` dont l'échec n'est pas testé. Glitch d'origine : l'A1 laissé par l'allocation reçoit
+/// l'adresse des variables.
+fn system_object_untested(x: &mut Ctx, n: u8) -> Obj {
+    let o = crate::effects_aids::decor_6(x.b, n).unwrap_or_else(|a1| a1);
+    attach(x, o)
 }
 /// Objet SET de type `n` (0xce00a) attaché aux variables ; `None` si le pool est plein.
-fn try_set_object(x: &mut Ctx, n: u32) -> Option<Obj> {
-    call_d0(x, sub::SET, n);
-    (x.c.sr & 1 == 0).then(|| attach(x))
+fn try_set_object(x: &mut Ctx, n: u8) -> Option<Obj> {
+    let o = crate::families::creators::set_15_pur(x.b, n).ok()?;
+    Some(attach(x, o))
 }
-fn set_object(x: &mut Ctx, n: u32, retry: impl Into<Suite>) -> bool {
+fn set_object(x: &mut Ctx, n: u8, retry: impl Into<Suite>) -> bool {
     try_set_object(x, n).is_some() || retry_next_frame(x, retry)
 }
-/// `move.l A6,0x4c(A1)` : l'objet créé connaît les variables du script.
-fn attach(x: &mut Ctx) -> Obj {
-    let o = Obj(x.c.a[1]);
-    wr32(x.b, o.0 + 0x4c, x.c.a[6]);
+/// `move.l A6,0x4c(A1)` : l'objet créé connaît les variables du script (A6 de l'original).
+fn attach(x: &mut Ctx, o: Obj) -> Obj {
+    wr32(x.b, o.0 + 0x4c, VARS);
     o
 }
 
