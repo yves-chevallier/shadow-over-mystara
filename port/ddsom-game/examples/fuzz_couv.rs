@@ -279,7 +279,7 @@ impl Alea {
         x
     }
     fn sur(&mut self, n: u64) -> u64 {
-        self.alea() % n
+        self.alea() % n.max(1)
     }
 }
 
@@ -483,7 +483,7 @@ fn analyser_base(e: &Etat, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<
     // aiguillages par table de sauts : les lectures des trois instructions précédentes reçoivent les indices valides
     // (bruts, ou divisés par 2 ou 4 : l'index est souvent doublé avant l'accès)
     for w in o.pcs.windows(4) {
-        let Some(indices) = indices_table(&mut bb, w[3]) else { continue };
+        let Some(indices) = indices_table(&mut bb, w[3]).filter(|v| !v.is_empty()) else { continue };
         let mut valeurs: Vec<u32> = Vec::new();
         for i in indices {
             for d in [1, 2, 4] {
@@ -584,7 +584,7 @@ fn muter(e: &mut Alea, domaines: &Domaines, base: &Base, muts: &mut Vec<Mutation
                 7 => actuelle.wrapping_add(1),
                 8 => actuelle.wrapping_sub(1),
                 9 => 0x8000,
-                10 => {
+                10 if !base.lectures.is_empty() => {
                     // valeur d'une autre lecture
                     let (a2, _) = base.lectures[e.sur(base.lectures.len() as u64) as usize];
                     lire(&base.b, a2 & !1, 2)
@@ -1109,7 +1109,10 @@ fn main() {
             trace: std::env::var_os("FUZZ_TRACE").is_some(),
         })
     });
-    std::panic::set_hook(Box::new(|_| {}));
+    // les paniques des essais sont comptées, pas affichées (FUZZ_PANIQUES=1 : affichées)
+    if std::env::var_os("FUZZ_PANIQUES").is_none() {
+        std::panic::set_hook(Box::new(|_| {}));
+    }
     let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scénario");
     for f in 0..a[4].parse().unwrap() {
         script.apply(f, &mut m);

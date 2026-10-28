@@ -705,5 +705,91 @@ Les écarts d'outillage (états impossibles, registres non relus) ne sont pas co
   ceux des boucles de dispatch (registres laissés par le gestionnaire précédent, `DDSOM_RESTES`).
 * **Retours non standard** (`select_phase_4`, `ia_atterrissage_par_type`) : la native revient plus haut (cession,
   épilogue étranger) ; le cadre du fuzz ne les compare pas.
-* Non analysés (un exemple chacun, domaine douteux) : variante `+3` = 0x0a du boss 19 (0x9101a), animation des
-  surcouches d'armes pour le personnage 6.
+* À trancher : la table des sous-états de la réaction des boss 15 (0x929b8) a six entrées, dont 8 (`rts`) et 0xa
+  (0x92ce0 : retour au combat, état 0x02020000) que la native ignore (`_ => {}`) ; même motif pour le boss 19
+  (0x9101a). Aucun écrivain de `+5` = 8 ou 0xa dans l'état 4 n'a été trouvé (les valeurs viennent d'autres états du
+  même objet) : état probablement impossible, non corrigé. Animation des surcouches d'armes pour le personnage 6
+  (P4, `+3` = 6 hors des six personnages).
+
+### Couverture obtenue
+
+Union de tous les essais (environ 900 exécutions de `fuzz_couv`, une par scénario et par zone) : instructions, côtés de
+sauts et fonctions du code d'origine que les 272 scénarios n'exécutent pas, exécutés par le fuzz ; « sans écart » :
+des essais où l'original et la native sont identiques (relevé seulement pour les dernières séries, minorant).
+
+| Zone | Instructions jamais exécutées par les scénarios | exécutées par le fuzz | dont sans écart (essais tracés) | Sauts pris d'un seul côté | autre côté pris par le fuzz | dont sans écart | Fonctions jamais exécutées | exécutées par le fuzz | dont sans écart |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| S1 | 552 | 520 | 316 | 472 | 471 | 266 | 63 | 59 | 46 |
+| C04 | 426 | 328 | 297 | 101 | 76 | 69 | 45 | 37 | 36 |
+| C10 | 399 | 213 | 209 | 52 | 28 | 27 | 15 | 9 | 9 |
+| C1 | 372 | 347 | 347 | 29 | 24 | 24 | 0 | 0 | 0 |
+| P5 | 188 | 74 | 74 | 48 | 23 | 23 | 20 | 9 | 9 |
+| F3 | 154 | 55 | 55 | 23 | 12 | 12 | 0 | 0 | 0 |
+| C12 | 106 | 82 | 66 | 19 | 17 | 14 | 39 | 29 | 25 |
+| V4 | 104 | 102 | 102 | 7 | 6 | 6 | 1 | 1 | 1 |
+| C02 | 81 | 76 | 63 | 24 | 21 | 18 | 26 | 20 | 18 |
+| P4 | 74 | 45 | 32 | 16 | 13 | 13 | 2 | 2 | 2 |
+| C08 | 73 | 56 | 27 | 28 | 22 | 15 | 25 | 18 | 18 |
+| C0c | 66 | 51 | 31 | 20 | 13 | 7 | 0 | 0 | 0 |
+| P6 | 62 | 34 | 34 | 9 | 6 | 6 | 0 | 0 | 0 |
+| C0e | 57 | 21 | 12 | 29 | 17 | 11 | 9 | 5 | 5 |
+| X1 | 46 | 20 | 20 | 18 | 7 | 7 | 0 | 0 | 0 |
+| O2 | 43 | 37 | 37 | 11 | 8 | 8 | 0 | 0 | 0 |
+| E1 | 42 | 33 | 33 | 15 | 13 | 13 | 5 | 3 | 3 |
+| X2 | 33 | 29 | 29 | 9 | 7 | 7 | 0 | 0 | 0 |
+| K1 | 28 | 0 | 0 | 5 | 0 | 0 | 0 | 0 | 0 |
+| B1 | 27 | 2 | 2 | 3 | 3 | 3 | 1 | 1 | 1 |
+| C06 | 26 | 26 | 26 | 15 | 15 | 15 | 9 | 8 | 8 |
+| V2 | 19 | 12 | 12 | 11 | 7 | 7 | 7 | 3 | 3 |
+| W1 | 19 | 19 | 19 | 1 | 1 | 1 | 0 | 0 | 0 |
+| O3 | 19 | 10 | 10 | 4 | 4 | 4 | 1 | 1 | 1 |
+| W3 | 16 | 11 | 11 | 6 | 6 | 6 | 0 | 0 | 0 |
+| V3 | 15 | 11 | 11 | 8 | 5 | 5 | 0 | 0 | 0 |
+| U1 | 9 | 8 | 8 | 5 | 5 | 5 | 0 | 0 | 0 |
+| F5 | 9 | 5 | 0 | 4 | 1 | 0 | 2 | 0 | 0 |
+| F1 | 7 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 |
+| O1 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F4 | 6 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0 |
+| V1 | 4 | 4 | 4 | 1 | 1 | 1 | 0 | 0 | 0 |
+| K2 | 4 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 |
+| C14 | 4 | 4 | 4 | 4 | 4 | 4 | 1 | 1 | 1 |
+| F6 | 3 | 3 | 3 | 2 | 2 | 2 | 0 | 0 | 0 |
+| F7 | 3 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| C0a | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| K3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| P1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| U2 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 1 | 1 |
+| W2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| P3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| W0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| total | 3103 | 2238 | 1894 | 1008 | 838 | 599 | 274 | 207 | 187 |
+
+Restent (zones de jeu) :
+
+* **Code du corps des tâches** sans native de test : K1 (noyau), F1, F4, F7, O1, K2 (auto-test RAM) ; F3 (interface
+  joueurs) n'est couvert qu'à 55/154 par l'emplacement 0x15216 (choix du personnage et reprise : il faut des
+  enchaînements d'entrées).
+* **C10** : les styles de fenêtres de 0xc8430 (76 instructions) ne sont choisis que par des enregistrements de la ROM que
+  les scénarios n'affichent pas (le fuzz ne fabrique pas d'enregistrement) ; 0xca524 (39), 0xcc200, 0xd764a.
+* **P5** : sorts et objets jamais lancés (0x41aa4 bannissement du clerc, 0x474c4 foudre, 0x47750 tempête,
+  0x48392 mur de feu, 0x46044 baguettes du magicien) : réécrits, atteignables en jeu, mais il faut le sort ou l'objet
+  en main ; les bots longs (`scenarios/long`, lot « trous ») ne les couvrent pas non plus.
+* Fonctions jamais exécutées, ni par les scénarios ni par le fuzz :
+  * S1 : 0xe089e 0xe19f8 0xe8676 0xe8ef2 
+  * C04 : 0x800e0 0x80130 0x801c2 0x801ca 0x89760 0x8bcd2 0x8c576 0x9ad94 
+  * C10 : 0xbacec 0xc8a10 0xcc548 0xcffd0 0xd76b4 0xd7a38 
+  * P5 : 0x41aa4 0x41ac4 0x439fc 0x44384 0x474c4 0x474e4 0x47750 0x47770 0x48392 0x48660 0x49d1e 
+  * C12 : 0x4ef1a 0x508fc 0x5094a 0x509ae 0x50a3c 0x50a66 0x50ad0 0x50b02 0x50b2a 0x50b62 
+  * C02 : 0x5f2c6 0x65ae0 0x666bc 0x689e6 0x6d5ea 0x791d0 
+  * C08 : 0x9f346 0xa09ca 0xa0ae0 0xa2048 0xa3ac4 0xa4b8e 0xa63b2 
+  * C0e : 0xb3ec6 0xb8d80 0xb96c0 0xb97a2 
+  * V2 : 0x00d18 0x00fe8 0x011bc 0x012c4 
+  * E1 : 0x07024 0x0ffda 
+  * F5 : 0x1d848 0x1d888 
+  * F4 : 0x196ae 
+  * U2 : 0x1aaee 
+  * C06 : 0x52a9e 
+
+  (aucun appelant direct dans `decomp/index.tsv` pour celles de S1 et C04 : atteintes, si elles le sont, par des tables
+  que ni les scénarios ni le fuzz ne choisissent ; voir aussi les entrées « code-mort.md » des listes ci-dessus.)
+* Débogage et tests (K4, M1, M2, M3) : non traités par ce lot (le groupe `m2` de `examples/fuzz` couvre l'EEPROM).
