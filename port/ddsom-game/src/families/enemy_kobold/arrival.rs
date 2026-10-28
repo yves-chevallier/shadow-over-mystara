@@ -1,6 +1,8 @@
 //! Type 0, sous-état 0 : arrivée. `+6` : 0 et 2 hurlement, 4 bond d'entrée, 6 et 8 saut périlleux (variantes 12 et 13),
 //! 10 chute d'en haut, 12 apparition, 14 course d'arrivée, 16 et 20 réveil, 18 course vers le joueur.
 
+use crate::families::cx::Banc;
+use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -160,7 +162,7 @@ fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
 }
 
 /// +6 = 10 : chute d'en haut.
-fn drop_in(x: &mut Cx) {
+fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -187,7 +189,7 @@ fn drop_in(x: &mut Cx) {
 }
 
 /// +6 = 12 : apparition.
-fn appear(x: &mut Cx) {
+fn appear<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -213,7 +215,7 @@ fn appear(x: &mut Cx) {
 }
 
 /// +6 = 14 : course d'arrivée (0x1e images).
-fn run_in(x: &mut Cx) {
+fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -285,7 +287,7 @@ fn dash(x: &mut Cx) {
             x.add8(f::SUB3, 2);
             x.anim_start(SET_STRIKE, 6);
         }
-        4 => landing_hit(x, 0x9dda8),
+        4 => landing_hit(x, eshl_creators::throw_1),
         6 => {
             if x.anim_step() {
                 x.set32(f::STATE, 0x0408_0000);
@@ -322,7 +324,7 @@ fn get_up(x: &mut Cx) {
             x.add8(f::SUB3, 2);
             x.anim_start(SET_STRIKE, 6);
         }
-        4 => landing_hit(x, 0x9e062),
+        4 => landing_hit(x, eshl_creators::throw_2),
         6 => {
             if x.anim_step() {
                 x.set32(f::STATE, 0x0408_0000);
@@ -337,10 +339,10 @@ fn get_up(x: &mut Cx) {
 
 /// Clé d'animation : effet `effect` ; en fin de script, le Kobold reprend sa marche un pas en avant (`−0x20`
 /// à droite, `+0x20` à gauche).
-fn landing_hit(x: &mut Cx, effect: u32) {
+fn landing_hit<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        x.call(effect);
+        throw(x.b, x.o);
     }
     if !x.anim_step() {
         return;

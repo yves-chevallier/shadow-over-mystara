@@ -1,6 +1,7 @@
 //! Boss 7, état 4 « touché » (0x86baa). Groupes `+5` : 0 réaction (routine commune des ennemis choisie par le code de coup
 //! `+0x49` dans la table de longs 0x86c3a), 2 projeté, 4 chute, 6 mort, 8 et 10 retour au combat.
 
+use crate::families::cx::Banc;
 use super::aids;
 use super::*;
 use crate::objects::Courant;
@@ -27,7 +28,7 @@ fn step(x: &mut Cx, table: u32) -> u32 {
     dispatch(x, table, f::SUB2)
 }
 
-fn paused(x: &mut Cx) -> bool {
+fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 
@@ -114,7 +115,7 @@ fn thrown(x: &mut Cx) {
         }
         _ => {
             if x.u8(f::KEY_FRAME) != 0 {
-                x.call(0xb4f1c);
+                crate::families::effects_creators::spell_ring(x.b, x.o, 4);
                 x.set8(f::KEY_FRAME, 0);
             }
             if x.anim_step() {

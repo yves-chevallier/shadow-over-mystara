@@ -1,13 +1,13 @@
 //! Effets des joueurs (PEFF), quatorzième série : type 41 (le gardien invoqué par la magie du mur, créé
 //! par `player/spawn.rs::wall_target`). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd32, rd8, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-const SPAWN_EFFECT: u32 = 0xb10c8;
 const ANIMS: u32 = 0x1bc9b6;
 const SPEEDS: u32 = 0x1c7836;
 const FRAMES: u32 = 0x11bffa;
@@ -48,7 +48,7 @@ mod guardian {
         x.free_peff();
     }
 
-    fn die(x: &mut Cx) {
+    fn die<R: Banc>(x: &mut Cx<'_, R>) {
         x.set32(0x4, 0x0400_0000);
     }
 
@@ -106,8 +106,10 @@ mod guardian {
             4 => wander(x),
             _ => lunge(x),
         }
-        crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-        x.call(crate::terrain::SHADOW.entry);
+        x.keep_in_zone();
+        // Glitch d'origine : les registres de la collision (D2...) passent aux gestionnaires suivants ; l'éclat de gel
+        // (0x4bda8) tire son rebond dans le D2 hérité (`sorts_combattant`, `sorts_voleur`)
+        crate::terrain::push_68k(x.c, x.b, x.o);
         x.reinsert();
     }
 
@@ -162,15 +164,7 @@ mod guardian {
 
     /// Poussière de l'arrivée (`0xb10c8`) : effet EFFCT 7 à une hauteur légèrement plus haute.
     fn dust(x: &mut Cx) {
-        x.c.d[0] = 7;
-        x.c.d[1] = 0x200;
-        x.c.d[2] = 0;
-        x.c.d[3] = 0xffff;
-        x.call(SPAWN_EFFECT);
-        if x.c.cond(5) {
-            return;
-        }
-        let o = Obj(x.c.a[1]);
+        let Some(o) = crate::effects_aids::shock(x.b, x.o, 7, 0x200, 0, 0xffff) else { return };
         o.set_u8(x.b, 0x43, 1);
         let z = o.u16(x.b, 0xc).wrapping_add(0x18);
         o.set_u16(x.b, 0xc, z);
@@ -308,11 +302,7 @@ mod guardian {
                 let t = x.u8(0x4b) & 3;
                 x.set8(0x4b, t);
                 if t == 0 {
-                    x.c.d[0] = 1;
-                    x.c.d[1] = 1;
-                    x.c.d[2] = 0xfff0;
-                    x.c.d[3] = 0xffff;
-                    x.call(SPAWN_EFFECT);
+                    crate::effects_aids::shock(x.b, x.o, 1, 1, 0xfff0, 0xffff);
                 }
                 x.move_x();
                 if x.u8(0x14) == 0 {
@@ -424,7 +414,7 @@ mod guardian {
         }
     }
 
-    fn overlap(x: &mut Cx, m: Obj, frame: u32, mine: u32, with_z: bool) -> bool {
+    fn overlap<R: Banc>(x: &mut Cx<'_, R>, m: Obj, frame: u32, mine: u32, with_z: bool) -> bool {
         let (e, p) = (frame, mine);
         let d = (x.data8(e + 4) as i8 as i16 as u16).wrapping_add(m.u16(x.b, 0x10));
         let q = (x.data8(p + 4) as i8 as i16 as u16).wrapping_add(x.u16(0x10));
@@ -448,7 +438,7 @@ mod guardian {
         d.wrapping_sub(q).wrapping_add(reach) <= reach.wrapping_mul(2)
     }
 
-    fn frame_of(x: &mut Cx, m: Obj) -> u32 {
+    fn frame_of<R: Banc>(x: &mut Cx<'_, R>, m: Obj) -> u32 {
         let boxes = (m.u8(x.b, 0x2e) as u32) << 2;
         let table = rd32(x.b, FRAMES + boxes);
         table.wrapping_add((m.u8(x.b, 0x38) as u32) << 3)

@@ -313,7 +313,7 @@ mod tentacle {
                 x.add8(f::SUB2, 2);
                 x.set16(0xa4, 0x168);
                 start(x, MID, 10);
-                x.call(0x9eede);
+                crate::families::eshl_creators::pair_9(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                 lib::sound(x, 0xe4fb6);
                 lib::sound(x, 0xe4e5a);
             }

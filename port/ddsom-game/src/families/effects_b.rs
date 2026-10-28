@@ -7,6 +7,7 @@
 //! - 75 : bouton de menu, une machine à sept sous-états ;
 //! - 79 : clignotement d'un objet ramassé, détecté par les joueurs voisins.
 
+use crate::families::cx::Banc;
 use crate::machine::Machine;
 use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
@@ -64,11 +65,11 @@ fn players() -> impl Iterator<Item = u32> {
 }
 
 /// Créateur de l'objet.
-fn owner(x: &mut Cx) -> Obj {
+fn owner<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(f::OWNER)
 }
 
-fn free(x: &mut Cx) {
+fn free<R: Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
@@ -77,7 +78,7 @@ fn free(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 /// 0xb8dc2 : crée le clignotement (type 79) sur la position de l'objet, un cran plus haut.
-fn spawn_blink(x: &mut Cx) {
+fn spawn_blink<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(blink) = x.alloc(&pools::EFFCT) else { return };
     wr8(x.b, blink.0, 1);
     wr8(x.b, blink.0 + 2, 79);
@@ -91,7 +92,7 @@ fn spawn_blink(x: &mut Cx) {
 }
 
 /// 0xa532e : crée le tir d'éclat de ramassage (ESHL de type 55) à l'endroit où le détecteur est touché.
-fn spawn_pickup_flash(x: &mut Cx) {
+fn spawn_pickup_flash<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(Obj(flash)) = x.alloc(&pools::ESHL) else { return };
     wr8(x.b, flash, 1);
     wr8(x.b, flash + 2, 55);
@@ -104,7 +105,7 @@ fn spawn_pickup_flash(x: &mut Cx) {
 }
 
 /// Un joueur marche sur le détecteur : à 6 pixels en profondeur et 8 en x près.
-fn player_on_detector(x: &mut Cx) -> bool {
+fn player_on_detector<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {
         rd8(x.b, player) != 0
@@ -113,7 +114,7 @@ fn player_on_detector(x: &mut Cx) -> bool {
     })
 }
 
-fn pickup_detector(x: &mut Cx) {
+fn pickup_detector<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -135,7 +136,7 @@ fn pickup_detector(x: &mut Cx) {
     }
 }
 
-fn pickup_waiting(x: &mut Cx) {
+fn pickup_waiting<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x40) != 0 || x.a5_u8(PAUSED) != 0 {
         return;
     }
@@ -151,13 +152,13 @@ fn pickup_waiting(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 /// Clignotement : caché une image sur deux selon la parité du compteur d'images de partie.
-fn blink_by_frame(x: &mut Cx) {
+fn blink_by_frame<R: Banc>(x: &mut Cx<'_, R>) {
     let hidden = x.a5_u16(0x6e) & 1 == 0;
     let flags = x.u8(f::FLAGS);
     x.set8(f::FLAGS, if hidden { flags | 2 } else { flags & !2 });
 }
 
-fn victory_screen(x: &mut Cx) {
+fn victory_screen<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -166,7 +167,7 @@ fn victory_screen(x: &mut Cx) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(0x18, 0xf000);
-            x.call(rom::SOUND_0ED11C);
+            crate::sound::jouer(x.b, rom::SOUND_0ED11C, x.o);
             x.anim_start(anims::INTERFACE, 0);
         }
         state::ACTIVE => victory_active(x),
@@ -177,7 +178,7 @@ fn victory_screen(x: &mut Cx) {
     }
 }
 
-fn victory_active(x: &mut Cx) {
+fn victory_active<R: Banc>(x: &mut Cx<'_, R>) {
     let creator = owner(x);
     match x.u8(f::SUB_STATE) {
         0 => {
@@ -195,7 +196,7 @@ fn victory_active(x: &mut Cx) {
             }
             x.add8(f::SUB_STATE, 2);
             blink_by_frame(x);
-            x.call(rom::SOUND_0ED056);
+            crate::sound::jouer(x.b, rom::SOUND_0ED056, x.o);
             x.anim_start(anims::INTERFACE, 1);
         }
         4 => {
@@ -205,7 +206,7 @@ fn victory_active(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB_STATE, 2);
-            x.call(rom::SOUND_0ED90A);
+            crate::sound::jouer(x.b, rom::SOUND_0ED90A, x.o);
             x.anim_start(anims::INTERFACE, 2);
         }
         6 => {
@@ -222,7 +223,7 @@ fn victory_active(x: &mut Cx) {
 // Type 74 : bulle à côté du créateur
 // ---------------------------------------------------------------------------------------------
 
-fn bubble(x: &mut Cx) {
+fn bubble<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::OWNER) == 0 {
         return x.set32(f::STATE, 0x0600_0000);
     }
@@ -317,7 +318,7 @@ fn menu_button(x: &mut Cx) {
     }
 }
 
-fn menu_step(x: &mut Cx) -> u8 {
+fn menu_step<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     crate::mem::rd8(x.b, MENU_STEP)
 }
 
@@ -341,7 +342,7 @@ fn menu_button_active(x: &mut Cx) {
         2 => {
             if x.anim_step() {
                 advance(x, 5);
-                x.call(rom::SOUND_0ECF10);
+                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
             } else if x.u8(0x33) != 0 {
                 x.set8(0x33, 0);
                 // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
@@ -363,7 +364,7 @@ fn menu_button_active(x: &mut Cx) {
                 let flags = x.u8(f::FLAGS) & !2;
                 x.set8(f::FLAGS, flags);
                 x.anim_start(anims::MENU, 6);
-                x.call(rom::SOUND_0ECF10);
+                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
             }
         }
         8 => {
@@ -374,7 +375,7 @@ fn menu_button_active(x: &mut Cx) {
         10 => {
             if menu_step(x) == 28 {
                 advance(x, 5);
-                x.call(rom::SOUND_0ECF10);
+                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
             } else {
                 x.anim_step();
             }
@@ -393,7 +394,7 @@ fn menu_button_active(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 
 /// Un joueur vivant, de classe 5, est à portée (32 en profondeur, 96 en x).
-fn class_5_player_near(x: &mut Cx) -> bool {
+fn class_5_player_near<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {
         rd8(x.b, player) != 0
@@ -404,7 +405,7 @@ fn class_5_player_near(x: &mut Cx) -> bool {
     })
 }
 
-fn blinking(x: &mut Cx) {
+fn blinking<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -456,9 +457,9 @@ fn blinking(x: &mut Cx) {
 }
 
 handlers! {
-    0xb841c "effct_detecteur" pickup_detector,
-    0xb84c6 "effct_victoire" victory_screen,
-    0xb85fa "effct_bulle_createur" bubble,
+    0xb841c "effct_detecteur" #[sans] pickup_detector,
+    0xb84c6 "effct_victoire" #[sans] victory_screen,
+    0xb85fa "effct_bulle_createur" #[sans] bubble,
     0xb871a "effct_bouton" menu_button,
-    0xb8df2 "effct_clignotement" blinking,
+    0xb8df2 "effct_clignotement" #[sans] blinking,
 }

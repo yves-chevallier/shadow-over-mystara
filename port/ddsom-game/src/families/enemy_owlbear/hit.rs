@@ -1,6 +1,7 @@
 //! Type 4, état touché (`+4 = 4`, 0x5ea0c). `+5` : 0 et 6 réaction commune par table (`+0x49`),
 //! 2 recul, 4 chute, 8 mort ou fuite.
 
+use crate::families::cx::Banc;
 use super::stance::next_move;
 use super::*;
 use crate::objects::Courant;
@@ -148,7 +149,7 @@ fn flee(x: &mut Cx) {
 }
 
 /// 0x5ede8 : s'enfuit en courant vers le bord de l'écran.
-fn run_away(x: &mut Cx) {
+fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x, 8, 0x18);
     body(x, 5);

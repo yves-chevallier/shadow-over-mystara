@@ -1,5 +1,6 @@
 //! Type 4, arrivée (`+5 = 0`), bête debout (`+5 = 2`) et repos (`+5 = 10`).
 
+use crate::families::cx::Banc;
 use super::*;
 
 /// Tables de la ROM : attaques à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
@@ -49,7 +50,7 @@ pub(super) fn arrival(x: &mut Cx) {
 }
 
 /// 0x5daa6 : marche vers l'avant (animation 2, vitesse 0xb) pendant `0x24` images.
-pub(super) fn walk_begin(x: &mut Cx) {
+pub(super) fn walk_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(TIMER, 0x24);
     x.set8(VULNERABLE, 1);
@@ -59,7 +60,7 @@ pub(super) fn walk_begin(x: &mut Cx) {
 }
 
 /// 0x5db66 : fin d'un demi-tour de l'arrivée.
-pub(super) fn turn_end(x: &mut Cx) {
+pub(super) fn turn_end<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.set8(0x7, 0);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -195,14 +196,14 @@ pub(super) fn choose_attack(x: &mut Cx, table: u32) {
 }
 
 /// 0x5ee68 : la cible est loin en abscisse.
-fn target_far(x: &mut Cx) -> bool {
+fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let Some(t) = target(x) else { return false };
     let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xa0);
     dx > 0x140
 }
 
 /// +6 = 2 (0x5dbd4) : demi-tour (animation 1 puis 3) puis reprise de l'état mémorisé.
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 1);
@@ -222,7 +223,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// +6 = 4 (0x5de68) : attente debout avant de passer à l'attaque.
-fn wait(x: &mut Cx) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         return ready(x);
     }
@@ -238,7 +239,7 @@ fn wait(x: &mut Cx) {
 }
 
 /// +7 = 0 des attaques (0x5de70) : la bête se prépare (animation de repos).
-pub(super) fn ready(x: &mut Cx) {
+pub(super) fn ready<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
     pose(x, 6, SET_BODY, 0);
@@ -297,7 +298,7 @@ pub(super) fn next_move(x: &mut Cx) {
 // --- sous-état 10 : repos -----------------------------------------------------------------------
 
 /// Repos : attend qu'un joueur soit en vie (`+6` = 0 seulement).
-pub(super) fn rest(x: &mut Cx) {
+pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         match x.u8(0x7) {
             0 => walk_begin(x),

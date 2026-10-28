@@ -1,12 +1,13 @@
 //! Boss 8, groupe 4 : les attaques (`+6` = 0 à 18), chacune en étapes `+7` = 0, 2, 4...
 //! À la fin d'une attaque, `aids::after_attack` choisit la suite.
 
+use crate::families::cx::Banc;
 use super::aids;
 use super::*;
 use crate::objects::Courant;
 
 /// Clé d'animation `kind` (`+0xa2`, recopiée en `+0xa3`).
-fn key(x: &mut Cx, kind: u8) {
+fn key<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }
@@ -76,7 +77,7 @@ fn combo(x: &mut Cx) {
                 x.set8(VULNERABLE, 1);
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xa5c9a);
+                crate::families::eshl_creators::series_3b(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
             }
             x.anim_step();
         }
@@ -91,11 +92,10 @@ fn combo(x: &mut Cx) {
     }
 }
 
-/// Lance un projectile (0xb4f44, D1 = 5) vers un joueur choisi par `pick`.
+/// Lance un projectile (0xb4f44, réglage 5) vers un joueur choisi par `pick`.
 fn shoot(x: &mut Cx, pick: fn(&mut Cx)) {
     pick(x);
-    x.c.d[1] = 5;
-    x.call(0xb4f44);
+    crate::families::effects_creators::spell(x.b, x.o, 5);
 }
 
 /// 0x888ac (`+6` = 4, 6) et 0x88cae (`+6` = 14) : rafale de projectiles, chacun vers un joueur.
@@ -374,7 +374,7 @@ fn lunge(x: &mut Cx, first: bool) {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x20);
                 x.c.d[4] = first as u32;
-                x.call(0xa4e84);
+                crate::families::eshl_creators::series_36(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, first as u8);
                 strike(x, 0xd);
             }
         }

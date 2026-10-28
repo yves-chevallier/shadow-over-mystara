@@ -13,6 +13,7 @@
 //! | 12 | `attacks` | saisie d'un joueur |
 //! | état 4 | `hit` | réactions aux coups, recul, chute, saisie par un joueur |
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -68,7 +69,7 @@ pub fn run(x: &mut Cx) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn mv(x: &mut Cx, n: u32) {
+pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
@@ -77,23 +78,23 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 }
 
 /// L'aspect voulu : `+0xa1` et son double `+0xa2`.
-pub(self) fn look(x: &mut Cx, v: u8) {
+pub(self) fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed(x: &mut Cx, n: u32) {
+pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
-pub(self) fn set_angle(x: &mut Cx) {
+pub(self) fn set_angle<R: Banc>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Étape commune des gestes : attend la clé d'animation `+0x33` puis passe à l'étape suivante (0x6244a).
-pub(self) fn wait_key(x: &mut Cx) {
+pub(self) fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
@@ -138,7 +139,7 @@ pub(self) fn puff(x: &mut Cx, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
 }
 
 /// 0x639fe : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
-pub(self) fn must_turn(x: &mut Cx) -> bool {
+pub(self) fn must_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -150,7 +151,7 @@ pub(self) fn must_turn(x: &mut Cx) -> bool {
 }
 
 /// 0x63a98 : la cible est dans la même rangée (profondeur à 0x30 près) mais loin en X (plus de 0xf0).
-pub(self) fn target_far_in_line(x: &mut Cx) -> bool {
+pub(self) fn target_far_in_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }

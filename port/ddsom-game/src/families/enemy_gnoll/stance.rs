@@ -1,6 +1,7 @@
 //! Type 13, sous-état 2 (debout : approche, demi-tour, attente) et sous-état 10 (promenade tant qu'aucun joueur
 //! n'est en vie).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -100,7 +101,7 @@ fn approach(x: &mut Cx) {
 }
 
 /// +6 = 2 : demi-tour.
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -115,7 +116,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// +6 = 4 : attente sur place.
-fn wait(x: &mut Cx) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

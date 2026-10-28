@@ -22,6 +22,7 @@
 //! type, `+0xd` : variante, `+0xe` : `+0x2f`, `+0xf` : `+0x2c`, `+0x10` : mot `+0x42`, `+0x12` : non
 //! nul = coordonnées absolues (sinon relatives à la caméra).
 
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 use crate::families::cx::Cx;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
@@ -116,7 +117,7 @@ pub fn run(x: &mut Cx) {
 }
 
 /// Alloue et active un objet de type `kind` (et de variante `variant`).
-fn spawn(x: &mut Cx, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Option<Obj> {
+fn spawn<R: Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let o = x.alloc(pool)?;
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
@@ -126,7 +127,7 @@ fn spawn(x: &mut Cx, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Optio
     Some(o)
 }
 
-fn next_state(x: &mut Cx, by: u8) {
+fn next_state<R: Banc>(x: &mut Cx<'_, R>, by: u8) {
     x.add8(0x4, by);
 }
 
@@ -150,7 +151,7 @@ fn init(x: &mut Cx) {
 }
 
 /// Action de départ (0 à 11), choisie par la variante.
-fn start(x: &mut Cx, action: u8) {
+fn start<R: Banc>(x: &mut Cx<'_, R>, action: u8) {
     match action {
         // 10 et 11 : sans partie en cours (A5+0x66 nul), le contrôleur se libère
         10 | 11 if x.a5_u8(0x66) == 0 => x.free(&pools::SET),
@@ -189,7 +190,7 @@ fn start(x: &mut Cx, action: u8) {
 
 /// Action 4 : efface la tilemap de l'écran par colonnes (une de chaque côté du centre par image,
 /// 11 images), puis passe à l'état 2.
-fn opening_wipe(x: &mut Cx) {
+fn opening_wipe<R: Banc>(x: &mut Cx<'_, R>) {
     const LEFT: u32 = 0x91203c;
     const RIGHT: u32 = 0x912040;
     let column = x.u16(f::WAIT) as i16;
@@ -206,7 +207,7 @@ fn opening_wipe(x: &mut Cx) {
 }
 
 /// Remplit de blanc une colonne de la tilemap (48 lignes de 0x80 octets).
-fn clear_column(x: &mut Cx, top: u32) {
+fn clear_column<R: Banc>(x: &mut Cx<'_, R>, top: u32) {
     for row in 0..0x30 {
         wr32(x.b, top.wrapping_add(row * 0x80), 0x100000);
     }
@@ -214,7 +215,7 @@ fn clear_column(x: &mut Cx, top: u32) {
 
 // --- état 2 : interpréteur du script d'événements -----------------------------------------------
 
-fn script(x: &mut Cx) {
+fn script<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(a5::STAGE) != 4 && x.a5_u8(a5::PHASE) != 0xc {
         return;
     }
@@ -243,7 +244,7 @@ fn script(x: &mut Cx) {
 }
 
 /// Fin du script (`done` : interrompu plutôt qu'épuisé) : passe à l'état 4.
-fn end_of_script(x: &mut Cx, done: bool) {
+fn end_of_script<R: Banc>(x: &mut Cx<'_, R>, done: bool) {
     if done {
         x.set8(f::DONE, 1);
     }
@@ -252,7 +253,7 @@ fn end_of_script(x: &mut Cx, done: bool) {
 }
 
 /// Saute les entrées hors de la difficulté ou du rang courants, exécute la première convenable.
-fn next_entry(x: &mut Cx) {
+fn next_entry<R: Banc>(x: &mut Cx<'_, R>) {
     loop {
         let entry = x.u32(f::CURSOR);
         let word = x.data16(entry);
@@ -270,7 +271,7 @@ fn next_entry(x: &mut Cx) {
 }
 
 /// Exécute une entrée : règle l'attente puis crée l'objet.
-fn run_entry(x: &mut Cx, entry: u32, word: u16) {
+fn run_entry<R: Banc>(x: &mut Cx<'_, R>, entry: u32, word: u16) {
     x.set8(f::WAIT_FLAG, 0);
     x.set16(f::LIVE_LIMIT, 0xffff);
     x.set16(f::WAIT, word);
@@ -428,7 +429,7 @@ fn players_leave(x: &mut Cx) {
 /// joueur est dans l'état 2, copie deux blocs de 22 couleurs (0xbcfc6) vers les adresses de la table
 /// 0xbcea4 à chaque image ; quand la table est épuisée, repousse tous les objets vers leur
 /// disparition (voir `clear_all`).
-fn curtain(x: &mut Cx) {
+fn curtain<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x5) == 0 {
         x.add8(0x5, 2);
         x.set16(0x14, 0x80);
@@ -468,7 +469,7 @@ fn curtain(x: &mut Cx) {
 
 /// Fin du rideau : tout objet actif dont le compteur `+0x40` tombe sous zéro passe à l'état 6
 /// (disparition), dans les huit pools.
-fn clear_all(x: &mut Cx) {
+fn clear_all<R: Banc>(x: &mut Cx<'_, R>) {
     next_state(x, 2);
     x.set_a5_u8(a5::SCENE_LATCH, 0xff);
     x.set_a5_u8(a5::FROZEN, 0);
@@ -491,7 +492,7 @@ fn clear_all(x: &mut Cx) {
 }
 
 /// Action 7 : quatre effets de type 0x21 (variantes 0 à 3, les 1 et 3 avec `+0x2c = 0x20`).
-fn effects_wave(x: &mut Cx) {
+fn effects_wave<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(a5::FROZEN) != 0 {
         return next_state(x, 2);
     }
@@ -509,7 +510,7 @@ fn effects_wave(x: &mut Cx) {
 }
 
 /// Actions 13 et 14 : crée un boss (type 3 ou 1) sauf s'il est interdit ou si la scène est figée.
-fn spawn_boss(x: &mut Cx, kind: u8) {
+fn spawn_boss<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
     if x.a5_u8(a5::NO_BOSS) == 0 && x.a5_u8(a5::FROZEN) == 0 && spawn(x, &pools::BOSS, kind, None).is_none() {
         return;
     }

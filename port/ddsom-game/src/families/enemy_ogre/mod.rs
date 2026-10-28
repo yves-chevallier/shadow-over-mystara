@@ -14,6 +14,7 @@
 //!
 //! Animations 0x177874 et 0x17788c (mouvements et coups), 0x1778a4 (mort).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
@@ -78,7 +79,7 @@ pub fn run(x: &mut Cx) {
 }
 
 /// 0x71dde : un objet de variante négative (le « bras ») meurt avec l'objet `+0x46` qu'il accompagne.
-fn arm_dies_with_ogre(x: &mut Cx) {
+fn arm_dies_with_ogre<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }
@@ -92,24 +93,24 @@ fn arm_dies_with_ogre(x: &mut Cx) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn play(x: &mut Cx, set: u32, n: u32) {
+pub(self) fn play<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     lib::start(x, set, n);
 }
 
-pub(self) fn mv(x: &mut Cx, n: u32) {
+pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_A, n);
 }
 
-pub(self) fn act(x: &mut Cx, n: u32) {
+pub(self) fn act<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_B, n);
 }
 
-pub(self) fn look(x: &mut Cx, v: u8) {
+pub(self) fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed(x: &mut Cx, n: u32) {
+pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
@@ -117,24 +118,24 @@ pub(self) fn spark(x: &mut Cx, d5: u32) {
     lib::debris(x, d5);
 }
 
-pub(self) fn camera_x(x: &mut Cx) -> u16 {
+pub(self) fn camera_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
-pub(self) fn count_down(x: &mut Cx, off: u32) -> bool {
+pub(self) fn count_down<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
     let n = x.u16(off).wrapping_sub(1);
     x.set16(off, n);
     (n as i16) > 0
 }
 
 /// Orientation vers la droite (0x18) ou la gauche (8) selon `flip`.
-pub(self) fn angle_by_flip(x: &mut Cx) {
+pub(self) fn angle_by_flip<R: Banc>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// L'ogre peut être saisi par un joueur (pas les variantes négatives) : abandonne alors le geste.
-pub(self) fn held_by_player(x: &mut Cx) -> bool {
+pub(self) fn held_by_player<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(Obj::VARIANT) as i8) < 0 || !grabbed(x) {
         return false;
     }
@@ -143,7 +144,7 @@ pub(self) fn held_by_player(x: &mut Cx) -> bool {
 }
 
 /// Plus de joueur en vie : retraite ; vrai si l'état a changé.
-pub(self) fn nobody_left(x: &mut Cx) -> bool {
+pub(self) fn nobody_left<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if lib::players_alive(x) {
         return false;
     }
@@ -186,62 +187,62 @@ pub(self) mod go {
         set_state_long(x, 0x0202_0000);
     }
     /// 0x71cbc : demi-tour, avec mémorisation de l'état courant.
-    pub fn turn_around(x: &mut Cx) {
+    pub fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         let s = x.u32(f::STATE);
         x.set32(SAVED_STATE, s);
         set_state_long(x, 0x0202_0200);
     }
-    pub fn wander(x: &mut Cx) {
+    pub fn wander<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 1);
         x.set8(STRIKE_KIND_NEXT, 0x2c);
         set_state_long(x, 0x0202_0400);
     }
-    pub fn wander_far(x: &mut Cx) {
+    pub fn wander_far<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 1);
         x.set8(STRIKE_KIND_NEXT, 0x2d);
         set_state_long(x, 0x0202_0600);
     }
-    pub fn dive(x: &mut Cx) {
+    pub fn dive<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(SIDE_TURN, 0);
         set_state_long(x, 0x0202_0800);
     }
-    pub fn dive_side(x: &mut Cx) {
+    pub fn dive_side<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(SIDE_TURN, 1);
         set_state_long(x, 0x0202_0800);
     }
-    pub fn leap(x: &mut Cx) {
+    pub fn leap<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0202_0a00);
     }
-    pub fn strike_0(x: &mut Cx) {
+    pub fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 1);
         set_state_long(x, 0x0204_0000);
     }
-    pub fn strike_2(x: &mut Cx) {
+    pub fn strike_2<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0200);
     }
-    pub fn strike_4(x: &mut Cx) {
+    pub fn strike_4<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0400);
     }
-    pub fn strike_6(x: &mut Cx) {
+    pub fn strike_6<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(INVULNERABLE, 1);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0600);
     }
-    pub fn strike_8(x: &mut Cx) {
+    pub fn strike_8<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(INVULNERABLE, 1);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0800);
     }
-    pub fn retire(x: &mut Cx) {
+    pub fn retire<R: Banc>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x020a_0000);
     }
-    pub fn held(x: &mut Cx) {
+    pub fn held<R: Banc>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x0408_0000);
     }
 }
@@ -249,7 +250,7 @@ pub(self) mod go {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x71e04 : PV initiaux ; la variante négative les calcule comme un type 6 (0x453c) puis reprend le type 0x12.
-fn initial_hp(x: &mut Cx) {
+fn initial_hp<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 {
         return lib::initial_hp(x);
     }

@@ -16,6 +16,7 @@
 //! Animations : 0x18076e (mouvements), 0x1807a2 (coups), 0x1807c0 (recul). `+0xa0` est le jeu courant
 //! (0x30 à 0x34 : séquences spéciales, sans ombre ni test de zone) et `+0xa1` l'animation en cours.
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -79,7 +80,7 @@ pub(self) const SET_STRIKE: u32 = 0x1807a2;
 pub(self) const SET_HURT: u32 = 0x1807c0;
 
 /// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
-pub(self) fn body(x: &mut Cx, n: u32) {
+pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
@@ -89,7 +90,6 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const NEW_MESSAGE: u32 = 0xc8312;
     pub const SPAWN_RING: u32 = 0x57c8c;
 }
 

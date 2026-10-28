@@ -5,6 +5,7 @@
 //! Les rares registres que la suite relit encore (glitches d'origine) sont écrits en clair par l'appelant, à
 //! l'endroit qui les relit (voir `docs/refactorisation.md`, lot IA).
 
+use crate::families::cx::Banc;
 use super::cx::Cx;
 use super::enemy_common::*;
 use crate::ai;
@@ -13,61 +14,61 @@ use crate::machine::Machine;
 use crate::objects::{Courant, Obj};
 
 /// 0x1046c : le type de coup `+0x44` suit la clé d'animation `+0x3e`.
-fn copy_strike_kind(x: &mut Cx) {
+fn copy_strike_kind<R: Banc>(x: &mut Cx<'_, R>) {
     let k = x.u8(0x3e);
     x.set8(0x44, k);
 }
 
 /// 0x103d6 : démarre le script `n` du jeu `set`.
-pub fn start(x: &mut Cx, set: u32, n: u32) {
+pub fn start<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     x.anim_start(set, n as u16);
     copy_strike_kind(x);
 }
 
 /// 0x103e0 : reprend l'animation de même clé (`+0x33`) dans le jeu `set`, en gardant la durée (`+0x30`).
-pub fn switch_keeping_time(x: &mut Cx, set: u32) {
+pub fn switch_keeping_time<R: Banc>(x: &mut Cx<'_, R>, set: u32) {
     ai_aids::animation_by_variant(x.b, x.o, set);
 }
 
 /// 0x1040c : un pas d'animation ; vrai à la fin du script.
-pub fn step(x: &mut Cx) -> bool {
+pub fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let end = x.anim_step();
     copy_strike_kind(x);
     end
 }
 
 /// 0x10474 : au moins un joueur en vie (`A5+0x35`).
-pub fn players_alive(x: &mut Cx) -> bool {
+pub fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     ai_aids::players_alive(x.b)
 }
 
 /// 0x104a2 : vrai si l'objet est hors de la bande `[écran + left, écran + right]`.
-pub fn outside_band(x: &mut Cx, left: i16, right: i16) -> bool {
+pub fn outside_band<R: Banc>(x: &mut Cx<'_, R>, left: i16, right: i16) -> bool {
     ai_aids::outside_band(x.b, x.o, left as u16, right as u16)
 }
 
 /// 0x1050c : vrai si l'objet regarde vers sa cible (ou n'en a pas).
-pub fn facing_target(x: &mut Cx) -> bool {
+pub fn facing_target<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     ai::facing_target(x.b, x.o)
 }
 
 /// 0x10560 : vrai si la vitesse en X suit l'orientation.
-pub fn moving_forward(x: &mut Cx) -> bool {
+pub fn moving_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     ai::moving_forward(x.b, x.o)
 }
 
 /// 0x10574 : le cap `Obj::SPEED_INDEX` change d'au plus un cran au hasard.
-pub fn drift_heading(x: &mut Cx) {
+pub fn drift_heading<R: Banc>(x: &mut Cx<'_, R>) {
     ai::drift_heading(x.b, x.o);
 }
 
 /// 0x1059e : rang de PV `+0xac` selon le nombre de joueurs en vie et le rang.
-pub fn spread_index(x: &mut Cx) {
+pub fn spread_index<R: Banc>(x: &mut Cx<'_, R>) {
     ai::hp_rank(x.b, x.o);
 }
 
 /// 0x105b6 : franchit le palier de PV suivant de la table `thresholds` ; vrai si un palier est passé.
-pub fn next_threshold(x: &mut Cx, thresholds: u32) -> bool {
+pub fn next_threshold<R: Banc>(x: &mut Cx<'_, R>, thresholds: u32) -> bool {
     ai_aids::next_threshold(x.b, x.o, thresholds)
 }
 
@@ -75,53 +76,53 @@ pub fn next_threshold(x: &mut Cx, thresholds: u32) -> bool {
 pub use crate::ai::Turn;
 
 /// 0x1047a : décision de l'IA selon le côté de la cible.
-pub fn turn_decision(x: &mut Cx) -> Turn {
+pub fn turn_decision<R: Banc>(x: &mut Cx<'_, R>) -> Turn {
     ai::turn_decision(x.b, x.o)
 }
 
 /// 0xa470 : tire l'attitude `+0x71` dans la ligne `+0x70` de la table d'attitudes (indexée par le rang).
-pub fn draw_stance(x: &mut Cx) {
+pub fn draw_stance<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::stance(x.b, x.o);
 }
 
 /// 0x788c : `+0x6b` tiré au hasard dans la ligne `+0x6a` de sa table.
-pub fn draw_6b(x: &mut Cx) {
+pub fn draw_6b<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::draw_6b(x.b, x.o);
 }
 
 /// 0x79f6 : dans l'écran, `+0x6e` est tiré dans la ligne `+0x6d` de sa table ; sinon il vaut 1.
-pub fn draw_6e(x: &mut Cx) {
+pub fn draw_6e<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::draw_6e(x.b, x.o);
 }
 
 /// 0x79ce : si le bit tiré dans le masque de la ligne `+0x6c` est levé, comme `draw_6e` et vrai ; sinon faux.
-pub fn maybe_draw_6e(x: &mut Cx) -> bool {
+pub fn maybe_draw_6e<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     ai_aids::maybe_draw_6e(x.b, x.o)
 }
 
 /// 0xf118 : hors de l'écran, `+0x84` = 1 ; sinon `+0x84` = 0 et `+0x85` tiré dans la ligne `+0x8e`.
-pub fn draw_84(x: &mut Cx) {
+pub fn draw_84<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::draw_84(x.b, x.o);
 }
 
 /// 0x10112 : `+0x68` selon le niveau `A5+0x5a` et le nombre de joueurs en vie (8 sans niveau).
-pub fn set_68(x: &mut Cx) {
+pub fn set_68<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::set_68(x.b, x.o);
 }
 
 /// 0xac3a : `+0x77` tiré dans la table choisie par `+0x76` (indexée par le rang).
-pub fn pick_byte(x: &mut Cx) {
+pub fn pick_byte<R: Banc>(x: &mut Cx<'_, R>) {
     ai::pick_byte(x.b, x.o);
 }
 
 /// 0xe76c : vise le point d'approche de la cible `+0x50` (le plus proche ; loin de l'écran, le plus éloigné) et
 /// tourne l'objet d'un cran vers lui.
-pub fn approach_target(x: &mut Cx) {
+pub fn approach_target<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::approach_target(x.b, x.o);
 }
 
 /// 0xf0e8 : tourne d'un cran le cap `Obj::SPEED_INDEX` vers le point (`px`, `py`).
-pub fn turn_toward(x: &mut Cx, px: u16, py: u16) {
+pub fn turn_toward<R: Banc>(x: &mut Cx<'_, R>, px: u16, py: u16) {
     ai::turn_toward(x.b, x.o, (px, py));
 }
 
@@ -164,7 +165,7 @@ pub fn pick_target_any(x: &mut Cx) -> bool {
 }
 
 /// 0x44ee : un joueur ciblable tiré au hasard (trois essais) devient la cible ; faux si aucun.
-pub fn random_player(x: &mut Cx) -> bool {
+pub fn random_player<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     ai::random_player(x.b, x.o).is_some()
 }
 
@@ -180,18 +181,18 @@ pub fn target_by_criterion(x: &mut Cx, criterion: u8) -> Option<Obj> {
 }
 
 /// 0x453c : PV initiaux d'un boss (table 0x458c), copiés en `+0x60`, `+0x62` et `+0x64`.
-pub fn initial_hp_boss(x: &mut Cx) {
+pub fn initial_hp_boss<R: Banc>(x: &mut Cx<'_, R>) {
     ai::initial_hp(x.b, x.o, ai::HP_TABLE_BOSS);
 }
 
 /// 0x4544 : PV initiaux d'un ennemi (table 0x5c8c).
-pub fn initial_hp(x: &mut Cx) {
+pub fn initial_hp<R: Banc>(x: &mut Cx<'_, R>) {
     ai::initial_hp(x.b, x.o, ai::HP_TABLE_ENEMY);
 }
 
 /// 0xfe5a : immunités (`+0x94`) selon la classe et le type. Rend l'index lu dans la table (D0 de l'original, que la
 /// harpie relit).
-pub fn set_immunities(x: &mut Cx) -> u16 {
+pub fn set_immunities<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     ai::set_immunities(x.b, x.o)
 }
 
@@ -257,28 +258,28 @@ pub fn guard_in_front_strict(x: &mut Cx, dx: i16, half_w: u16, half_d: u16) -> b
 }
 
 /// 0xa4b4 (`+0x72`) : l'IA agit-elle à cette image ? (bit tiré dans un masque choisi par le rang.)
-pub fn decision_a(x: &mut Cx) -> bool {
+pub fn decision_a<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     ai::decision_a(x.b, x.o)
 }
 
 /// 0xa4c2 : comme `decision_a`, avec la table de `+0x73`.
-pub fn decision_b(x: &mut Cx) -> bool {
+pub fn decision_b<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     ai::decision_b(x.b, x.o)
 }
 
 /// Décision de l'IA selon le côté de la cible : `decision_b` si elle regarde du même côté que l'objet, sinon
 /// `decision_a`.
-pub fn decision(x: &mut Cx, same_side: bool) -> bool {
+pub fn decision<R: Banc>(x: &mut Cx<'_, R>, same_side: bool) -> bool {
     if same_side { decision_b(x) } else { decision_a(x) }
 }
 
 /// 0x57c66 (`creators.rs`) : l'objet est-il dans la moitié droite de l'écran (x >= caméra + 0xc0) ?
-pub fn in_right_half(x: &mut Cx) -> bool {
+pub fn in_right_half<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     super::creators::in_right_half(x.b, x.o)
 }
 
 /// 0x5cdc6 (`creators.rs`) : tirage au sort, vrai 10 fois sur 16.
-pub fn chance_10_16(x: &mut Cx) -> bool {
+pub fn chance_10_16<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     super::creators::chance_10_16(x.b)
 }
 
@@ -305,12 +306,12 @@ pub fn aim_to(x: &mut Cx, cible: Obj) -> u8 {
 }
 
 /// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de l'objet ? Rend ce joueur.
-pub fn attack_hits_a_player(x: &mut Cx, attack: u8) -> Option<Obj> {
+pub fn attack_hits_a_player<R: Banc>(x: &mut Cx<'_, R>, attack: u8) -> Option<Obj> {
     ai_aids::attack_hits_a_player(x.b, x.o, attack)
 }
 
 /// 0xfd64 : le joueur `player` est saisi par l'objet (animation de prise `anim`).
-pub fn seize_player(x: &mut Cx, player: Obj, anim: u8) {
+pub fn seize_player<R: Banc>(x: &mut Cx<'_, R>, player: Obj, anim: u8) {
     ai_aids::seize_player(x.b, x.o, player, anim);
 }
 
@@ -320,17 +321,17 @@ pub fn release_player(_x: &mut Cx, player: Obj) {
 }
 
 /// 0xfda2 : le joueur saisi (`+0x50`) suit l'objet selon l'étape de l'animation de prise.
-pub fn hold_seized(x: &mut Cx) {
+pub fn hold_seized<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::hold_seized(x.b, x.o);
 }
 
 /// 0xff54 : compte à rebours `+0x98`, puis nouvel état selon le nombre de joueurs et un tirage.
-pub fn countdown_then_state(x: &mut Cx) {
+pub fn countdown_then_state<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::countdown_then_state(x.b, x.o);
 }
 
 /// 0xfffc : paramètre de comportement `+0x98` lu selon le type.
-pub fn behaviour_by_kind(x: &mut Cx) {
+pub fn behaviour_by_kind<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::behaviour_by_kind(x.b, x.o);
 }
 
@@ -349,7 +350,7 @@ pub fn ground_debris(x: &mut Cx, second: u8) {
 }
 
 /// 0xb648 : une seule fois par objet, selon un tirage, lâche l'objet propre à son type.
-pub fn drop_once(x: &mut Cx) {
+pub fn drop_once<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::drop_once(x.b, x.o);
 }
 
@@ -372,7 +373,7 @@ pub fn drop_rewards(x: &mut Cx) {
 }
 
 /// 0x115e2 : le boss pousse les joueurs présents devant lui.
-pub fn push_players(x: &mut Cx) {
+pub fn push_players<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::push_players(x.b, x.o);
 }
 
@@ -395,86 +396,86 @@ pub fn landing_by_kind(x: &mut Cx) {
 }
 
 /// 0x10428 : démarre l'animation du jeu `set` dont la marque est la variante (`+0x33`) du maître (`+0xb2`).
-pub fn animation_of_master(x: &mut Cx, set: u32) {
+pub fn animation_of_master<R: Banc>(x: &mut Cx<'_, R>, set: u32) {
     ai_aids::animation_of_master(x.b, x.o, set);
 }
 
 /// 0x10450 : démarre l'animation du jeu `set` dont la marque est celle de `+0x3e` du maître.
-pub fn animation_of_mark(x: &mut Cx, set: u32) {
+pub fn animation_of_mark<R: Banc>(x: &mut Cx<'_, R>, set: u32) {
     ai_aids::animation_of_mark(x.b, x.o, set);
 }
 
 /// 0x2824, 0x2860, 0x289c : secousse de la caméra en service pendant `frames` images, dans le mode 0x54, 0x58 ou
 /// 0x5c (`camera_modes.rs`).
-pub fn shake_54(x: &mut Cx, frames: u16) {
+pub fn shake_54<R: Banc>(x: &mut Cx<'_, R>, frames: u16) {
     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, frames);
 }
-pub fn shake_58(x: &mut Cx, frames: u16) {
+pub fn shake_58<R: Banc>(x: &mut Cx<'_, R>, frames: u16) {
     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, frames);
 }
-pub fn shake_5c(x: &mut Cx, frames: u16) {
+pub fn shake_5c<R: Banc>(x: &mut Cx<'_, R>, frames: u16) {
     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, frames);
 }
 
 /// Points de marche autour de la cible : 0xe886 (le plus éloigné, sauf le dernier), 0xe914 (atteint : un autre),
 /// 0xeff2 (le plus proche, retourné selon la cible), 0xf084 (le plus éloigné), 0xe7fa (le plus proche, numéroté).
-pub fn choose_walk_point(x: &mut Cx) {
+pub fn choose_walk_point<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::choose_walk_point(x.b, x.o);
 }
-pub fn walk_point_reached(x: &mut Cx) {
+pub fn walk_point_reached<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::walk_point_reached(x.b, x.o);
 }
-pub fn walk_near_point(x: &mut Cx) {
+pub fn walk_near_point<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::walk_near_point(x.b, x.o);
 }
-pub fn walk_far_point(x: &mut Cx) {
+pub fn walk_far_point<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::walk_far_point(x.b, x.o);
 }
-pub fn choose_near_walk_point(x: &mut Cx) {
+pub fn choose_near_walk_point<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::choose_near_walk_point(x.b, x.o);
 }
 
 // --- sons ---------------------------------------------------------------------------------------------
 
 /// Joue le son `wrapper` (petite routine d'origine de la table `sound_table.rs`) pour l'objet.
-pub fn sound(x: &mut Cx, wrapper: u32) {
+pub fn sound<R: Banc>(x: &mut Cx<'_, R>, wrapper: u32) {
     crate::sound::jouer(x.b, wrapper, x.o);
 }
 
 // --- créateurs d'objets et services d'autres modules ---------------------------------------------------
 
 /// 0xd5f30 : en partie, objet SET 0x14 lié au boss (barre de vie, retenue en `A5-0x5b8a`).
-pub fn create_set_14(x: &mut Cx) {
+pub fn create_set_14<R: Banc>(x: &mut Cx<'_, R>) {
     super::creators::set_14(x.b, x.o);
 }
 
 /// 0xd6952 : objet SET 0x15 (variante 2) dont `+0x42` dépend du type du créateur.
-pub fn create_set_15(x: &mut Cx) {
+pub fn create_set_15<R: Banc>(x: &mut Cx<'_, R>) {
     super::creators::set_15_b(x.b, x.o);
 }
 
 /// 0xd5ef8 : la barre de vie affichée est rattachée au boss.
-pub fn create_life_bar(x: &mut Cx) {
+pub fn create_life_bar<R: Banc>(x: &mut Cx<'_, R>) {
     super::set_residu::attach_life_bar(x.b, x.o);
 }
 
 /// 0x19ad6 : événement de l'objet (type `+0x7e`, joueur `+0x48`) dans l'anneau des points.
-pub fn object_event(x: &mut Cx) {
+pub fn object_event<R: Banc>(x: &mut Cx<'_, R>) {
     crate::evenements::evenement_objet(x.b, x.o);
 }
 
 /// 0x19e10 : efface le pop-up courant.
-pub fn clear_popup(x: &mut Cx) {
+pub fn clear_popup<R: Banc>(x: &mut Cx<'_, R>) {
     crate::evenements::effacer_popup_courant(x.b);
 }
 
 /// 0x19db4 : vide la file des pop-ups.
-pub fn empty_popups(x: &mut Cx) {
+pub fn empty_popups<R: Banc>(x: &mut Cx<'_, R>) {
     crate::evenements::vider_popups(x.b);
 }
 
 /// 0x19eb0 : efface tous les pop-ups affichés.
-pub fn clear_all_popups(x: &mut Cx) {
+pub fn clear_all_popups<R: Banc>(x: &mut Cx<'_, R>) {
     crate::popups::effacer_tout(x.b);
 }
 
@@ -486,7 +487,7 @@ pub fn shock(x: &mut Cx, variant: u32, setting: u16, vx: u16, vy: u16) {
 }
 
 /// 0xabec8 : effet d'attaque (EFFCT 11) lié par `+0x5c`, de variante et réglage donnés.
-pub fn attack_effect(x: &mut Cx, variant: u32, setting: u32) {
+pub fn attack_effect<R: Banc>(x: &mut Cx<'_, R>, variant: u32, setting: u32) {
     super::effects_creators::attack(x.b, x.o, variant as u8, setting as u8);
 }
 
@@ -508,7 +509,7 @@ pub fn attack_effects(x: &mut Cx, variant: u32, first: u32) -> bool {
 }
 
 /// 0xab7d8 : gerbe de débris (EFFCT 6) de variante donnée, liée par `+0x50`.
-pub fn debris_spray(x: &mut Cx, variant: u32) {
+pub fn debris_spray<R: Banc>(x: &mut Cx<'_, R>, variant: u32) {
     super::effects_creators::debris(x.b, x.o, variant as u8);
 }
 
@@ -519,7 +520,7 @@ pub fn debris_spray(x: &mut Cx, variant: u32) {
 // par un scénario (voir docs/code-mort.md, lot A).
 
 /// Copie des positions et de l'orientation de l'objet vers un tir créé.
-fn copy_place(x: &mut Cx, o: Obj, with_z: bool) {
+fn copy_place<R: Banc>(x: &mut Cx<'_, R>, o: Obj, with_z: bool) {
     let (px, py) = (x.u32(Obj::X), x.u32(Obj::Y));
     o.set_u32(x.b, Obj::X, px);
     o.set_u32(x.b, Obj::Y, py);
@@ -530,7 +531,7 @@ fn copy_place(x: &mut Cx, o: Obj, with_z: bool) {
 }
 
 /// Allocation ESHL de ces créateurs (`jsr 0x22ea ; bcs fin`) : A1 = l'objet comme l'original.
-fn alloc_eshl(x: &mut Cx) -> Option<Obj> {
+fn alloc_eshl<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let o = x.alloc(&crate::objects::pools::ESHL)?;
     Some(o)
 }
@@ -539,7 +540,7 @@ fn alloc_eshl(x: &mut Cx) -> Option<Obj> {
 /// retenue finale de l'original.
 /// Glitch d'origine : la retenue que l'appelant teste ensuite (`bcc`) est celle de l'addition de la position en X,
 /// pas celle de l'allocation, quand le tir a pu être créé.
-pub fn eshl_12(x: &mut Cx) -> (Option<Obj>, bool) {
+pub fn eshl_12<R: Banc>(x: &mut Cx<'_, R>) -> (Option<Obj>, bool) {
     let Some(o) = alloc_eshl(x) else { return (None, true) };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, Obj::KIND, 0x12);
@@ -554,7 +555,7 @@ pub fn eshl_12(x: &mut Cx) -> (Option<Obj>, bool) {
 }
 
 /// 0xa0ae0 : tir ESHL 0x13 visant `target` (long `+0x50`), lancé par l'objet (`+0x54`), à sa position.
-pub fn eshl_13(x: &mut Cx, target: u32) -> Option<Obj> {
+pub fn eshl_13<R: Banc>(x: &mut Cx<'_, R>, target: u32) -> Option<Obj> {
     let o = alloc_eshl(x)?;
     let link = x.u16(0x42);
     o.set_u16(x.b, 0x42, link);
@@ -584,7 +585,7 @@ pub fn eshl_16(x: &mut Cx, variant: u8) {
 }
 
 /// 0x9f346 : tir ESHL 0xa lancé par l'objet (`+0x50`), à sa position, orienté à l'opposé.
-pub fn eshl_0a(x: &mut Cx) -> Option<Obj> {
+pub fn eshl_0a<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let o = alloc_eshl(x)?;
     o.set_u16(x.b, 0x50, x.o.0 as u16);
     o.set_u8(x.b, 0, 1);
@@ -611,7 +612,7 @@ pub fn eshl_burst_26(x: &mut Cx) {
 
 /// Tirage d'un bit (`random & mask`) dans un masque ; D0 = le tirage, comme l'original.
 fn roll_bit(x: &mut Cx, mask: u32, bits: u32) -> bool {
-    let r = (x.random_68k() as u32) & bits;
+    let r = (x.random() as u32) & bits;
     x.c.d[0] = x.c.d[0] & !0xffff | r;
     mask >> r & 1 != 0
 }

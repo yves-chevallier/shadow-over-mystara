@@ -176,6 +176,19 @@ pub fn in_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     y < 0x100 + 2 * ARENA_MARGIN
 }
 
+/// Le `bhi` qui suit 0x1e92 : vrai si la dernière valeur comparée dépasse strictement sa borne (l'abscisse, quand elle
+/// sort de la zone en largeur ; sinon la profondeur). Faux dans la zone, et aussi pile sur le bord en largeur.
+pub fn beyond_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
+    let cam = camera(b);
+    let x = screen_x(b, obj, cam).wrapping_add(margin);
+    let bord_x = 0x180u16.wrapping_add(margin.wrapping_add(margin));
+    if x >= bord_x {
+        return x > bord_x;
+    }
+    let y = obj.u16(b, Obj::Y).wrapping_sub(rd16(b, cam + 0xc)).wrapping_add(ARENA_MARGIN);
+    y > 0x100 + 2 * ARENA_MARGIN
+}
+
 /// `in_arena` avec les registres de l'original : D0 = marge (long), puis D0-D2 et A1 (caméra) des calculs,
 /// retenue = dedans.
 #[track_caller]

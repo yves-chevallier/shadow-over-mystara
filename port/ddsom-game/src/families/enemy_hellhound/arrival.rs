@@ -1,6 +1,7 @@
 //! Type 6, sous-état 0 : arrivée. `+6` = 0 hurlement puis course, 2 demi-tour de l'arrivée, 4 et 6 bond d'entrée,
 //! 8 chute d'en haut, 10 apparition.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -17,7 +18,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Fin du geste d'arrivée : l'animation finie, le chien se met debout (0x616d8).
-pub(super) fn stand_when_done(x: &mut Cx) {
+pub(super) fn stand_when_done<R: Banc>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
     }
@@ -114,11 +115,11 @@ fn turn_in(x: &mut Cx) {
 }
 
 /// Angle de la course d'arrivée : 0x18 vers la droite, 8 vers la gauche (0x6174c).
-fn set_angle_run(x: &mut Cx) {
+fn set_angle_run<R: Banc>(x: &mut Cx<'_, R>) {
     set_angle_facing(x, 0x18, 8);
 }
 
-pub(super) fn set_angle_facing(x: &mut Cx, forward: u8, flipped: u8) {
+pub(super) fn set_angle_facing<R: Banc>(x: &mut Cx<'_, R>, forward: u8, flipped: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { forward };
     x.set8(Obj::SPEED_INDEX, angle);
 }
@@ -151,7 +152,7 @@ fn leap_in(x: &mut Cx) {
 
 // --- +6 = 8 : chute d'en haut -----------------------------------------------------------------------------
 
-fn drop_in(x: &mut Cx) {
+fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -179,7 +180,7 @@ fn drop_in(x: &mut Cx) {
 
 // --- +6 = 10 : apparition ----------------------------------------------------------------------------------
 
-fn appear(x: &mut Cx) {
+fn appear<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

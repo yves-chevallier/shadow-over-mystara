@@ -17,6 +17,7 @@
 //!
 //! Animations : trois jeux par type (`+0xa0` = 0, 2 ou 4, `set_anim`), `+0xa1` est l'animation en cours.
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -112,7 +113,7 @@ pub(self) fn rest(x: &mut Cx) {
     set_anim(x, 0, 0);
 }
 
-pub(self) fn step(x: &mut Cx) -> bool {
+pub(self) fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
@@ -143,7 +144,7 @@ pub(self) fn wander(x: &mut Cx) {
 }
 
 /// 0x91748 : attend un joueur.
-pub(self) fn wait(x: &mut Cx) {
+pub(self) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
@@ -259,14 +260,14 @@ pub(self) fn finish(x: &mut Cx) {
 }
 
 /// Les positions mémorisées reprennent la place du dragon au début de l'image (un coup ne le déplace pas).
-pub(self) fn restore_position(x: &mut Cx) {
+pub(self) fn restore_position<R: Banc>(x: &mut Cx<'_, R>) {
     let (px, pz, py) = (x.u16(KEPT_X), x.u16(KEPT_Z), x.u16(KEPT_Y));
     x.set16(0x8, px);
     x.set16(0xc, pz);
     x.set16(0x10, py);
 }
 
-pub(self) fn keep_position(x: &mut Cx) {
+pub(self) fn keep_position<R: Banc>(x: &mut Cx<'_, R>) {
     let (px, pz, py) = (x.u16(0x8), x.u16(0xc), x.u16(0x10));
     x.set16(KEPT_X, px);
     x.set16(KEPT_Z, pz);
@@ -274,7 +275,7 @@ pub(self) fn keep_position(x: &mut Cx) {
 }
 
 /// 0x93066 : balancement vertical, quand `+0xa4` est levé : l'altitude suit une table de sinus (0x1c67b6).
-pub(self) fn hover(x: &mut Cx) {
+pub(self) fn hover<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         return;
     }
@@ -374,7 +375,7 @@ fn release(x: &mut Cx) {
 }
 
 /// `jsr 0x1a56` : un pas de script, rend vrai à la fin (retenue levée).
-fn step_anim(x: &mut Cx) -> bool {
+fn step_anim<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 

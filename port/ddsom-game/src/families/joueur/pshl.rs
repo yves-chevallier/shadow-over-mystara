@@ -4,6 +4,7 @@
 //! Les tirs naissent d'un créateur (`player/spawn.rs`) qui fixe leur genre, leur propriétaire (`+0x50`),
 //! leurs boîtes (`+0x2e`), la puissance (`+0x45`, `+0x46`) et la vitesse ; le gestionnaire les fait vivre.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
@@ -181,7 +182,7 @@ mod thrown {
     }
 
     /// Animation d'après l'angle `+0x2d` (`0x51f48`).
-    fn pose(x: &mut Cx) {
+    fn pose<R: Banc>(x: &mut Cx<'_, R>) {
         let angle = (x.u8(0x2d) & 7) as u32;
         let set = if x.u8(0x2) == 1 { ANIMS_A } else { ANIMS_B };
         x.anim_start(set, angle as u16);
@@ -548,7 +549,7 @@ mod burst {
                     if x.u8(0x5e) == 0 {
                         x.set_a5_u16(0x4ba, 0);
                     } else if x.u8(0x5e) == 2 {
-                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+                        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                     }
                 }
                 if x.anim_step() {
@@ -581,7 +582,7 @@ mod burst {
         x.add16(0x10, dy);
         x.set8(0x5e, 4);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(crate::palette::FLASH_COLOR_ON.entry);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
         x.anim(ANIMS, 1);
         crate::sound::jouer(x.b, SFX_FLAME, x.o);

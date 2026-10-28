@@ -1,6 +1,7 @@
 //! Type 5, état touché (`+4 = 4`, 0x6089a). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
 //! 4 chute, 8 saisie par un joueur (le ghoul s'enfuit).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -39,7 +40,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Sous-état 2 : le ghoul recule (animation 9), puis se remet debout.
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -167,7 +168,7 @@ fn caught(x: &mut Cx) {
 }
 
 /// 0x60bda : le ghoul court (animation 2).
-fn flee_begin(x: &mut Cx) {
+fn flee_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     body(x, 2);
 }

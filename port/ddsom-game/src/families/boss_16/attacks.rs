@@ -1,5 +1,6 @@
 //! Boss 16, groupe 4 : les huit attaques (`+6` = 0 à 14). Chacune finit par `next_attack` (0x94e24).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -21,7 +22,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0xb59a6 / 0xb59c8 : un EFFCT 0x30 (variante 1 ou 2) lié au boss (`+0x46`).
-fn spawn_trail(x: &mut Cx, variant: u8) {
+fn spawn_trail<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
     if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x30);
@@ -32,7 +33,7 @@ fn spawn_trail(x: &mut Cx, variant: u8) {
 }
 
 /// 0xa3b4a / 0xa3b66 : un ESHL 0x2d (variante 0 ou, avec `index` en `+0x2f`, 1) lié au boss (`+0x46`).
-fn spawn_flame(x: &mut Cx, variant: u8, index: u8) {
+fn spawn_flame<R: Banc>(x: &mut Cx<'_, R>, variant: u8, index: u8) {
     if let Some(s) = x.alloc(&pools::ESHL) {
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 2, 0x2d);
@@ -45,7 +46,7 @@ fn spawn_flame(x: &mut Cx, variant: u8, index: u8) {
 }
 
 /// 0x93950 : cherche un joueur à saisir (0xfc44) et le saisit (0xfd64) ; vrai s'il est saisi.
-fn try_grab(x: &mut Cx) -> bool {
+fn try_grab<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 2) else {
         return false;
     };

@@ -1,5 +1,6 @@
 //! Boss 1, état actif : arrivée (`+5` = 0), combat (2), attaques (4), attente (6 à 10), saisie (12).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -322,7 +323,7 @@ fn hop_walk(x: &mut Cx, second: bool) {
 }
 
 /// Animation `k` du bond, à partir de la première animation du sens (`+0xb4`).
-fn hop_anim(x: &mut Cx, k: u8) {
+fn hop_anim<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
     let n = k.wrapping_add(x.u8(HOP_ANIM));
     body(x, n as u32);
 }
@@ -753,10 +754,12 @@ pub(super) fn holding(x: &mut Cx) {
                 }
                 set_dw(x, 0, dx);
                 let (px, ph, pz) = (x.u16(0x8), x.u16(0xc), x.u16(0x10));
-                set_dw(x, 2, px.wrapping_add(dx));
-                set_dw(x, 3, ph.wrapping_add(0x28));
-                set_dw(x, 4, pz.wrapping_sub(1));
-                x.call(0xaaa40);
+                let pos = (px.wrapping_add(dx), ph.wrapping_add(0x28), pz.wrapping_sub(1));
+                set_dw(x, 2, pos.0);
+                set_dw(x, 3, pos.1);
+                set_dw(x, 4, pos.2);
+                // l'autre objet de l'étincelle est A1, la cible chargée en tête de l'état
+                crate::families::effects_creators::spark_at(x.b, x.o, t.0, 2, pos);
                 let t = target_obj(x);
                 let hp = t.u16(x.b, f::HP);
                 t.set_u16(x.b, f::HP, hp.wrapping_sub(4));

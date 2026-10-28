@@ -8,6 +8,7 @@
 //! - 1 : trophée du tableau de fin, qui attend le signal de son contrôleur, s'anime après un délai tiré
 //!   au hasard puis se décompte auprès du contrôleur ; 9 : enseigne posée sur la caméra alternative.
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
 use crate::objects::Obj;
@@ -33,7 +34,7 @@ mod f {
 
 const ANIM_SET: u32 = 0x1c03a6;
 
-fn free(x: &mut Cx) {
+fn free<R: Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
@@ -50,7 +51,7 @@ fn finish(x: &mut Cx) {
     free(x)
 }
 
-fn sequence_step(x: &mut Cx) -> u8 {
+fn sequence_step<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     let seq = x.u32(f::SEQUENCE);
     rd8(x.b, seq + 8)
 }
@@ -89,7 +90,7 @@ fn countdown_screen(x: &mut Cx) {
 }
 
 /// Fin depuis l'état actif (`0xb2916` : `addq.b #2` puis libération).
-fn finish_from_active(x: &mut Cx) {
+fn finish_from_active<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     free(x)
 }
@@ -127,7 +128,7 @@ fn coin_init(x: &mut Cx) {
     x.reinsert();
 }
 
-fn coin_active(x: &mut Cx) {
+fn coin_active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB_STATE) == 2 {
         if sequence_step(x) == 2 {
             x.add8(f::SUB_STATE, 2);
@@ -174,7 +175,7 @@ mod trophy {
     pub const SCENERY_KIND: u32 = 0x1d;
 }
 
-fn trophy_init(x: &mut Cx) {
+fn trophy_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let source = x.u16(trophy::SOURCE);
     let rank = if (source as i16) < 0 { x.linked(trophy::SOURCE).u8(x.b, f::VARIANT) as u16 } else { source };
@@ -253,7 +254,7 @@ fn trophy_active(x: &mut Cx) {
 /// Hauteurs par valeur `+0x42` (mots, espace programme).
 const SIGN_HEIGHTS: u32 = 0xb2908;
 
-fn sign_init(x: &mut Cx) {
+fn sign_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let (cy, cx) = (crate::ram::CAMERA_ALT_Y.get(x.b), crate::ram::CAMERA_ALT_X.get(x.b));
     x.set16(Obj::Z, cy);
@@ -276,13 +277,13 @@ const REWARD_ANIMS: u32 = 0xb1c9a;
 const REWARD_SET: u32 = 0x190ba8;
 
 /// 0xb24b6 : animation de base du mode + `n`.
-fn reward_anim(x: &mut Cx, n: u16) {
+fn reward_anim<R: Banc>(x: &mut Cx<'_, R>, n: u16) {
     let mode = x.u8(f::MODE) as u32;
     let base = x.data16(REWARD_ANIMS + 2 * mode);
     x.anim_start(REWARD_SET, (base.wrapping_add(n) as u32) as u16);
 }
 
-fn reward_init(x: &mut Cx) {
+fn reward_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     reward_anim(x, 2);
     x.reinsert();
@@ -300,7 +301,7 @@ fn reward_active(x: &mut Cx) {
     x.set8(f::VARIANT, mode);
     x.set8(0x02, kind);
     x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
-    x.call(0xe24d8);
+    crate::sound::jouer(x.b, 0xe24d8, x.o);
     let back = x.c.d[0] as u8;
     x.set8(f::VARIANT, back);
     x.set8(0x02, 31);
@@ -311,19 +312,19 @@ fn reward_active(x: &mut Cx) {
 // variantes 3, 4, 6, 8 : rang, plaque, compteurs, lignes des joueurs
 // ---------------------------------------------------------------------------------------------
 
-fn at_camera(x: &mut Cx, cx: u32, cy: u32) {
+fn at_camera<R: Banc>(x: &mut Cx<'_, R>, cx: u32, cy: u32) {
     let (px, pz) = (x.a5_u16(cx), x.a5_u16(cy));
     x.set16(Obj::X, px);
     x.set16(Obj::Z, pz);
     x.set32(Obj::Y, 0);
 }
 
-fn rank_anim(x: &mut Cx, value: u8) {
+fn rank_anim<R: Banc>(x: &mut Cx<'_, R>, value: u8) {
     x.anim_start(ANIM_SET, (0xe3u16.wrapping_sub(value as u16) as u32) as u16);
     x.reinsert();
 }
 
-fn rank_init(x: &mut Cx) {
+fn rank_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     at_camera(x, 0x506, 0x50a);
     x.add16(Obj::X, 0x13c);
@@ -333,7 +334,7 @@ fn rank_init(x: &mut Cx) {
     rank_anim(x, value);
 }
 
-fn rank_active(x: &mut Cx) {
+fn rank_active<R: Banc>(x: &mut Cx<'_, R>) {
     let value = x.u8(f::VALUE);
     if value != x.u8(f::SHOWN) {
         x.set8(f::SHOWN, value);
@@ -341,7 +342,7 @@ fn rank_active(x: &mut Cx) {
     }
 }
 
-fn plate_init(x: &mut Cx) {
+fn plate_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let cam = crate::ram::CAMERA_ALT_X.get(x.b);
     x.set16(Obj::X, cam);
@@ -382,7 +383,7 @@ fn to_bcd(value: u16) -> u16 {
 
 /// 0xb230e : bloc de 2 × 2 tuiles (`tile`, `tile + 0x10` ; rangée suivante `tile + 1`...), puis la rangée
 /// d'après. Renvoie la tuile suivante (`tile + 2`) et la nouvelle adresse.
-fn draw_block(x: &mut Cx, at: &mut u32, tile: u16, attr: u16) -> u16 {
+fn draw_block<R: Banc>(x: &mut Cx<'_, R>, at: &mut u32, tile: u16, attr: u16) -> u16 {
     let mut t = tile;
     for _ in 0..2 {
         wr16(x.b, *at, t);
@@ -396,7 +397,7 @@ fn draw_block(x: &mut Cx, at: &mut u32, tile: u16, attr: u16) -> u16 {
 }
 
 /// 0xb22d0 : nombre BCD de trois chiffres en gros chiffres (zéros de tête effacés).
-fn draw_big_number(x: &mut Cx, mut at: u32, bcd: u16) {
+fn draw_big_number<R: Banc>(x: &mut Cx<'_, R>, mut at: u32, bcd: u16) {
     let mut shown = false;
     for i in 0..4 {
         let digit = bcd.rotate_left(4 * (i + 1)) & 0xf;
@@ -414,7 +415,7 @@ fn draw_big_number(x: &mut Cx, mut at: u32, bcd: u16) {
     }
 }
 
-fn counters_init(x: &mut Cx) {
+fn counters_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let cam = crate::ram::CAMERA_ALT_X.get(x.b);
     x.set16(Obj::X, cam);
@@ -430,7 +431,7 @@ fn counters_init(x: &mut Cx) {
     }
 }
 
-fn counters_active(x: &mut Cx) {
+fn counters_active<R: Banc>(x: &mut Cx<'_, R>) {
     let gap = x.u16(Obj::Z).wrapping_sub(crate::ram::CAMERA_ALT_Y.get(x.b));
     if (gap as i16) < 0x100 {
         return;
@@ -443,7 +444,7 @@ fn counters_active(x: &mut Cx) {
     }
 }
 
-fn player_line_init(x: &mut Cx) {
+fn player_line_init<R: Banc>(x: &mut Cx<'_, R>) {
     let mode = x.u8(f::MODE) as u32;
     let player = Obj(0xff85de + 0x200 * mode);
     let present = player.is_active(x.b)
@@ -493,7 +494,7 @@ mod line {
     pub const SPECIAL_TITLES: u32 = 0xb2a24;
 }
 
-fn line_init(x: &mut Cx) {
+fn line_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let (cam_x, cam_y) = (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b));
     x.set16(Obj::Z, cam_y);
@@ -694,7 +695,7 @@ mod walker {
     pub const RUN_SPEEDS: u32 = 0x1c7eb6;
 }
 
-fn walker_init(x: &mut Cx) {
+fn walker_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let place = walker::PLACES + 12 * x.u8(f::VALUE) as u32;
     for (k, off) in [Obj::X, Obj::Z, Obj::Y, walker::TARGET_X, walker::TARGET_Y].into_iter().enumerate() {
@@ -712,7 +713,7 @@ fn walker_init(x: &mut Cx) {
     x.set8(f::FACING, if left { 0x20 } else { 0 });
 }
 
-fn walker_active(x: &mut Cx) {
+fn walker_active<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB_STATE) {
         0 => walker_wait(x),
         2 => walker_walk(x),
@@ -724,7 +725,7 @@ fn walker_active(x: &mut Cx) {
     x.reinsert();
 }
 
-fn walker_facing_target(x: &mut Cx) -> u8 {
+fn walker_facing_target<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     if (x.u16(Obj::X) as i16) > (x.u16(walker::TARGET_X) as i16) {
         0
     } else {
@@ -733,7 +734,7 @@ fn walker_facing_target(x: &mut Cx) -> u8 {
 }
 
 /// 0xb27aa : demi-tour, puis retour au sous-état courant.
-fn walker_start_turn(x: &mut Cx) {
+fn walker_start_turn<R: Banc>(x: &mut Cx<'_, R>) {
     let sub = x.u8(f::SUB_STATE);
     x.set8(f::SUB_STEP, sub);
     x.set8(f::STEP, 0);
@@ -741,7 +742,7 @@ fn walker_start_turn(x: &mut Cx) {
     walker_turn(x);
 }
 
-fn walker_wait(x: &mut Cx) {
+fn walker_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::STEP) == 0 {
         if x.u8(f::FACING) != 0 {
             return walker_start_turn(x);
@@ -756,22 +757,19 @@ fn walker_wait(x: &mut Cx) {
 }
 
 /// Un pas vers la cible (direction 0x137e, table de vitesses courante).
-fn walker_move(x: &mut Cx) {
+fn walker_move<R: Banc>(x: &mut Cx<'_, R>) {
     let (tx, ty) = (x.u16(walker::TARGET_X), x.u16(walker::TARGET_Y));
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | tx as u32;
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | ty as u32;
-    x.call(0x137e);
-    let direction = x.c.d[0] as u8;
+    let direction = crate::aides::direction_from(x.b, x.o, (tx, ty));
     x.set8(Obj::SPEED_INDEX, direction);
     x.move_by_table_xy();
 }
 
 /// La cible est atteinte à 8 près sur l'axe `off`.
-fn walker_near(x: &mut Cx, off: u32, target: u32) -> bool {
+fn walker_near<R: Banc>(x: &mut Cx<'_, R>, off: u32, target: u32) -> bool {
     x.u16(off).wrapping_sub(x.u16(target)).wrapping_add(8) <= 0x10
 }
 
-fn walker_walk(x: &mut Cx) {
+fn walker_walk<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::STEP) == 0 {
         if walker_facing_target(x) != x.u8(f::FACING) {
             return walker_start_turn(x);
@@ -789,7 +787,7 @@ fn walker_walk(x: &mut Cx) {
     }
 }
 
-fn walker_jump(x: &mut Cx) {
+fn walker_jump<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STEP) {
         0 => {
             x.add8(f::STEP, 2);
@@ -837,7 +835,7 @@ fn walker_jump(x: &mut Cx) {
     }
 }
 
-fn walker_turn(x: &mut Cx) {
+fn walker_turn<R: Banc>(x: &mut Cx<'_, R>) {
     let late = (x.u8(f::MODE) as i8) >= 0xa;
     if x.u8(f::STEP) == 0 {
         x.add8(f::STEP, 2);
@@ -860,7 +858,7 @@ fn walker_turn(x: &mut Cx) {
     reward_anim(x, 2);
 }
 
-fn walker_run(x: &mut Cx) {
+fn walker_run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STEP) {
         0 => {
             x.add8(f::STEP, 2);

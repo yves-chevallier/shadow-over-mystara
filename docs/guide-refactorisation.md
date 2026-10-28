@@ -242,6 +242,23 @@ ou les registres relus, l'épargne et recommence jusqu'à VALIDE ; il imprime le
 qui échoue, jusqu'à ce que tout échec restant soit une lecture connue (épargnée) ; enfin la même validation sur le code
 converti avec `rendu` en plus.
 
+## Gestionnaires sans registres (sortie du Cpu, partie 3)
+
+* **Sonde de sortie** : `DDSOM_POISON=sortie` inverse, au retour de chaque gestionnaire de la boucle d'aiguillage, les
+  registres qu'il a changés (sauf A0, D7) ; `sortie.d2@4bc66` (un registre, un gestionnaire), `!sortie.d4@ba310`
+  (exclusion). La liste des gestionnaires dont la sortie est relue est dans [refactorisation.md](refactorisation.md)
+  § 18 ; un scénario nouveau peut en ajouter (bissection : `sortie@<boucle>`, `sortie@<gestionnaire>`, puis par
+  registre).
+* **Écrire une fonction sans registres** : `fn f<R: Banc>(x: &mut Cx<'_, R>, …)` ; elle sert aux gestionnaires sur le
+  processeur (`Cx`) comme aux convertis (`Gx`). `x.reinsert()`, `x.keep_in_zone()`, `x.keep_on_screen(m)`,
+  `x.push_terrain()` font ce qu'il faut selon le banc. Un reste relu par un autre gestionnaire passe par
+  `dispatch::Restes` (`x.restes().d4` sur `Gx`, `*x.c.d5()` générique).
+* **Déclarer un gestionnaire converti** : `0x… "nom" #[sans] chemin` dans `handlers!` (natif
+  `Corps::Gestionnaire`). Seulement si sa sortie n'est relue par personne, ou si ses restes relus sont écrits dans
+  `Restes`.
+* **Créateurs** : écrits sur `effects_creators::restes::Registres` (`r.alloue`, `r.d(n, v)`…) ; les appelants Rust
+  passent `&mut Pur` (aucun registre), la native passe le processeur.
+
 ## Exemple : l'allocation d'objets (pilote)
 
 Avant (une variante parmi une vingtaine, chaque fichier avait sa constante et souvent son `alloc`) :

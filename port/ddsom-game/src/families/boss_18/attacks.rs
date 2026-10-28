@@ -13,6 +13,7 @@
 //! | 18 | pluie de 16 tirs ESHL 0x23 |
 //! | 20 | tirs successifs ESHL 0x24 (nombre tiré d'une table) |
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -48,12 +49,12 @@ fn finish(x: &mut Cx, to: fn(&mut Cx)) {
     to(x);
 }
 
-fn step_only(x: &mut Cx) {
+fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 /// Consomme le bit 0 de l'image-clé `+0x33`.
-fn key_bit0(x: &mut Cx) -> bool {
+fn key_bit0<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::KEY_FRAME) & 1 == 0 {
         return false;
     }
@@ -69,7 +70,7 @@ fn end_shot(x: &mut Cx, to: fn(&mut Cx)) {
 }
 
 /// Un pas de l'animation, plus un dernier effet par image-clé (0xe5e2a).
-fn step_with_spark(x: &mut Cx) -> bool {
+fn step_with_spark<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if !lib::step(x) {
         if key_bit0(x) {
             lib::sound(x, 0xe5e2a);
@@ -433,7 +434,7 @@ fn beam(x: &mut Cx) {
 // --- +6 = 14 : onde de choc ----------------------------------------------------------------------
 
 /// 0x9931a : un nuage (effet 0x32, variante 15) derrière le Lich.
-fn dust(x: &mut Cx) {
+fn dust<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, 0x32);
@@ -456,7 +457,7 @@ fn dust(x: &mut Cx) {
 }
 
 /// 0x9921c : à la troisième pulsation, les joueurs au sol qui ne sont pas déjà à terre sont renversés.
-fn topple_all(x: &mut Cx) {
+fn topple_all<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(COUNT) != 3 {
         return;
     }
@@ -577,7 +578,7 @@ fn shockwave(x: &mut Cx) {
 // --- +6 = 16 : téléportation ----------------------------------------------------------------------
 
 /// 0x99184 : réapparition dans l'un des neuf points autour de la caméra, selon la position du Lich.
-fn place_after_teleport(x: &mut Cx) {
+fn place_after_teleport<R: Banc>(x: &mut Cx<'_, R>) {
     let cam = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
     let here = x.u16(0x8);
     let mut d5 = 0u32;

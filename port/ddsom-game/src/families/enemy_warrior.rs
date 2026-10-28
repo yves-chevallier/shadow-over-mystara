@@ -9,6 +9,7 @@
 //! La position se calcule en deux temps : les vitesses `+0x14..+0x1e` s'intègrent dans des décalages
 //! `+0xb4` (X), `+0xb6` (altitude), `+0xb8` (profondeur) que `apply_motion` ajoute ensuite à la position.
 
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -62,7 +63,7 @@ pub fn run(x: &mut Cx) {
 }
 
 /// L'hôte (`+0x46`) s'il est encore actif.
-fn live_host(x: &mut Cx) -> Option<Obj> {
+fn live_host<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let w = x.u16(HOST);
     if (w as i16) >= 0 {
         return None;
@@ -74,13 +75,13 @@ fn live_host(x: &mut Cx) -> Option<Obj> {
     Some(h)
 }
 
-fn host(x: &mut Cx) -> Obj {
+fn host<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(HOST)
 }
 
 /// Lance l'animation `n` du jeu des corps (0x776fe) ou des coups (0x77708) si elle n'est pas déjà
 /// la courante.
-fn play(x: &mut Cx, set_id: u8, n: u8) {
+fn play<R: Banc>(x: &mut Cx<'_, R>, set_id: u8, n: u8) {
     let set = if set_id == 0 { SET_BODY } else { SET_STRIKE };
     if set_id != x.u8(ANIM_SET) || n != x.u8(ANIM_NUM) {
         x.set8(ANIM_SET, set_id);
@@ -89,7 +90,7 @@ fn play(x: &mut Cx, set_id: u8, n: u8) {
     }
 }
 
-fn body(x: &mut Cx, n: u8) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
     play(x, 0, n);
 }
 
@@ -97,13 +98,13 @@ fn strike(x: &mut Cx, n: u8) {
     play(x, 2, n);
 }
 
-fn set_state_long(x: &mut Cx, v: u32) {
+fn set_state_long<R: Banc>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0x46);
     x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -168,13 +169,13 @@ fn active(x: &mut Cx) {
 }
 
 /// Force du coup : 0x4a, ou 0x5a quand l'hôte n'est pas de type 0xf.
-fn hit_power(x: &mut Cx) -> u8 {
+fn hit_power<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     let h = host(x);
     if h.u8(x.b, 2) == 0xf { 0x4a } else { 0x5a }
 }
 
 /// Fin commune : drapeau « hôte visible », puis remise en liste (0x77016).
-fn end_part(x: &mut Cx) {
+fn end_part<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(FLAGS, 1, false);
     let h = host(x);
     if h.u8(x.b, 0x42) != 0 {
@@ -184,7 +185,7 @@ fn end_part(x: &mut Cx) {
 }
 
 /// 0x774a8 : le bras se place à côté de l'hôte, 0x82 pixels de part et d'autre selon son côté.
-fn follow_host(x: &mut Cx) {
+fn follow_host<R: Banc>(x: &mut Cx<'_, R>) {
     let h = host(x);
     let (px, pz, py) = (h.u16(x.b, SLOT_X), h.u16(x.b, SLOT_Z), h.u16(x.b, SLOT_Y));
     let dx: u16 = if x.u8(f::FLIP) != 0 { 0xff7e } else { 0x82 };
@@ -195,7 +196,7 @@ fn follow_host(x: &mut Cx) {
 
 /// 0x774e0 : ajoute les décalages à la position ; l'altitude ne descend pas sous 0 et la
 /// profondeur garde le bras à 0x60 pixels sous le haut de l'écran au moins.
-fn apply_motion(x: &mut Cx) {
+fn apply_motion<R: Banc>(x: &mut Cx<'_, R>) {
     let px = x.u16(0x8).wrapping_add(x.u16(OFFSET_X));
     x.set16(0x8, px);
     let mut z = x.u16(0xc).wrapping_add(x.u16(OFFSET_Z));
@@ -215,7 +216,7 @@ fn apply_motion(x: &mut Cx) {
 }
 
 /// Ajoute les décalages à la position, sans bornes (états 4 à 8 : 0x77252).
-fn add_offsets(x: &mut Cx) {
+fn add_offsets<R: Banc>(x: &mut Cx<'_, R>) {
     for (off, o) in [(0x8, OFFSET_X), (0xc, OFFSET_Z), (0x10, OFFSET_Y)] {
         let v = x.u16(off).wrapping_add(x.u16(o));
         x.set16(off, v);
@@ -224,7 +225,7 @@ fn add_offsets(x: &mut Cx) {
 
 /// 0x776a2.. : intègre une vitesse (`vel`, accélération `vel + 2`) dans un décalage entier `int` et la
 /// fraction `frac` de la position.
-fn integrate(x: &mut Cx, vel: u32, int: u32, frac: u32) {
+fn integrate<R: Banc>(x: &mut Cx<'_, R>, vel: u32, int: u32, frac: u32) {
     let v = x.u16(vel).wrapping_add(x.u16(vel + 2));
     x.set16(vel, v);
     let delta = ((v as i16 as i32) << 8) as u32;
@@ -234,7 +235,7 @@ fn integrate(x: &mut Cx, vel: u32, int: u32, frac: u32) {
 }
 
 /// 0x77684 : intègre les trois vitesses.
-fn integrate_all(x: &mut Cx) {
+fn integrate_all<R: Banc>(x: &mut Cx<'_, R>) {
     integrate(x, 0x1c, OFFSET_Y, 0x12);
     integrate(x, 0x14, OFFSET_X, 0xa);
     integrate(x, 0x18, OFFSET_Z, 0xe);
@@ -242,7 +243,7 @@ fn integrate_all(x: &mut Cx) {
 
 /// 0x77032 : rapproche les décalages des cibles `(d0, d1, d2)` de moitié à chaque image ; vrai quand
 /// les trois sont arrivés.
-fn converge(x: &mut Cx, targets: [i16; 3]) -> bool {
+fn converge<R: Banc>(x: &mut Cx<'_, R>, targets: [i16; 3]) -> bool {
     let mut arrived = 0;
     for (t, off) in targets.into_iter().zip([OFFSET_X, OFFSET_Z, OFFSET_Y]) {
         let diff = t.wrapping_sub(x.u16(off) as i16);
@@ -265,7 +266,7 @@ fn converge(x: &mut Cx, targets: [i16; 3]) -> bool {
 
 /// 0x775de : un pas du scénario de déplacement `n` ; vrai quand il est fini. La première image lit
 /// la première paire d'octets ; les suivantes reprennent à la fin (indice = compteur restant).
-fn script_step(x: &mut Cx, n: u32) -> bool {
+fn script_step<R: Banc>(x: &mut Cx<'_, R>, n: u32) -> bool {
     let offset = x.rom16(SCRIPTS + 2 * n) as i16 as i32 as u32;
     let a2 = SCRIPTS.wrapping_add(offset);
     let cur = x.u16(SCRIPT_LEFT);
@@ -310,7 +311,7 @@ fn idle(x: &mut Cx) {
 }
 
 /// 0x77562 : ondulation verticale pendant que l'hôte agit.
-fn bob(x: &mut Cx) {
+fn bob<R: Banc>(x: &mut Cx<'_, R>) {
     let h = host(x);
     if h.u8(x.b, 5) == 0 {
         return;
@@ -327,7 +328,7 @@ fn bob(x: &mut Cx) {
 }
 
 /// 0x77530 : les décalages s'amortissent d'un seizième à chaque image.
-fn damp(x: &mut Cx) {
+fn damp<R: Banc>(x: &mut Cx<'_, R>) {
     for off in [OFFSET_X, OFFSET_Z, OFFSET_Y] {
         let v = x.u16(off) as i16;
         if v != 0 {
@@ -429,7 +430,7 @@ fn sparks(x: &mut Cx) {
 }
 
 /// 0x77244 : le bras qui ne frappe pas descend doucement (`+5` = 0 départ, 2 accélération).
-fn drift(x: &mut Cx) {
+fn drift<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 => {
             x.add8(f::SUB, 2);
@@ -456,7 +457,7 @@ fn drift(x: &mut Cx) {
 // --- états 6 à 8 de l'hôte : sortie en scène ------------------------------------------------------
 
 /// Variante qui reste à terre pendant que l'hôte monte : même mouvement que `drift`.
-fn rise_b(x: &mut Cx) {
+fn rise_b<R: Banc>(x: &mut Cx<'_, R>) {
     drift(x);
 }
 
@@ -485,7 +486,7 @@ fn rise_step(x: &mut Cx) {
             x.add8(f::SUB, 2);
             x.set16(0xa6, 0x50);
             strike(x, 0x25);
-            x.call(0xb4002);
+            crate::families::effects_creators::scenery_7(x.b, x.o);
         }
         4 => {
             if !x.anim_step() {
@@ -497,7 +498,7 @@ fn rise_step(x: &mut Cx) {
             if var::SCENE.get(x.b) != 0x2e {
                 return finale(x);
             }
-            x.call(0xa6e6a);
+            crate::families::eshl_creators::single_40(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
             lib::sound(x, 0xe4cfe);
             rise_script_two(x);
         }
@@ -506,7 +507,7 @@ fn rise_step(x: &mut Cx) {
     }
 }
 
-fn rise_script_two(x: &mut Cx) {
+fn rise_script_two<R: Banc>(x: &mut Cx<'_, R>) {
     if script_step(x, 2) {
         x.add8(f::SUB, 2);
         let h = host(x);
@@ -519,13 +520,13 @@ fn finale(x: &mut Cx) {
     let base = if x.u8(Obj::VARIANT) == 0 { 0 } else { 3 };
     for k in 0..3 {
         x.c.d[4] = base + k;
-        x.call(0xa836c);
+        crate::families::effects_creators::eshl_slash(x.b, x.o, (base + k) as u8);
     }
 }
 
 // --- état 4 : touché ----------------------------------------------------------------------------
 
-fn hit(x: &mut Cx) {
+fn hit<R: Banc>(x: &mut Cx<'_, R>) {
     let h = host(x);
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {

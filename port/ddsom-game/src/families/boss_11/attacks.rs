@@ -1,19 +1,20 @@
 //! Boss 11/12, groupe 4 : les huit attaques (`+6` = 0 à 14), étapes `+7` = 0, 2, 4...
 
+use crate::families::cx::Banc;
 use super::behave::life_rank;
 use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
-fn step(x: &mut Cx, table: u32) -> u32 {
+fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch0(x, table, f::SUB3)
 }
 
-fn cam_x(x: &mut Cx) -> u16 {
+fn cam_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
-fn cam_y(x: &mut Cx) -> u16 {
+fn cam_y<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) }
 }
 
@@ -31,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x8dc30 : coup de queue (le effet dépend du type).
-fn sting(x: &mut Cx) {
+fn sting<R: Banc>(x: &mut Cx<'_, R>) {
     if is_12(x) {
         lib::sound(x, 0xe4de6)
     } else {
@@ -85,18 +86,18 @@ fn spit(x: &mut Cx) {
                 return;
             }
             x.set8(f::KEY_FRAME, 0);
-            x.random_68k();
+            let alea = x.random();
             if is_12(x) {
-                let r = x.c.d[0] as u16 & 3;
+                let r = alea & 3;
                 setw(x, 0, r);
                 if r == 0 {
-                    return x.call(0xa7da2);
+                    return crate::families::eshl_creators::fragments_45(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                 }
-                return x.call(0xa7b0a);
+                return crate::families::eshl_creators::boss11_shards(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
             }
-            let r = x.c.d[0] as u16 & 7;
+            let r = alea & 7;
             setw(x, 0, r);
-            x.call(0xa7570)
+            crate::families::eshl_creators::fragments_42(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, r)
         }
         0x8dcec => {
             if x.anim_step() {
@@ -342,7 +343,7 @@ fn seg_choice(x: &mut Cx) {
 }
 
 /// 0x8dfaa : pas entre deux visées (`+0xb1`, table 0x8dfbc).
-fn pause_tick(x: &mut Cx) {
+fn pause_tick<R: Banc>(x: &mut Cx<'_, R>) {
     let alea = x.random();
     let r = alea & 0xf;
     let v = x.rom8(0x8dfbc + r as u32);
@@ -543,12 +544,8 @@ fn spit_c(x: &mut Cx) {
             }
             x.set8(f::KEY_FRAME, 0);
             x.set16(0x5c, 0);
-            x.call(0xa817c);
-            if zero(x) {
-                return;
-            }
-            let a1 = x.c.a[1] as u16;
-            x.set16(0x5c, a1);
+            let Some(column) = crate::families::effects_creators::eshl_rise(x.b, x.o) else { return };
+            x.set16(0x5c, column.word());
         }
         0x8e2a0 => {
             if !x.anim_step() {

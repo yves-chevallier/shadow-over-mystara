@@ -1,12 +1,11 @@
 //! Tirs des joueurs (PSHL), cinquième série : types 6 (tourbillon du rayon) et 18 (gerbe du clerc).
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Courant;
-
-const FLASH_OFF: u32 = 0x1ac90;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -278,7 +277,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(crate::palette::FLASH_COLOR_ON.entry);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         x.reinsert();
     }
 
@@ -330,7 +329,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(crate::palette::FLASH_COLOR_ON.entry);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         x.reinsert();
     }
 
@@ -393,7 +392,7 @@ mod fountain {
             if x.u16(0x5e) == 0 {
                 x.set_a5_u16(0x4ba, 0);
             } else if x.u16(0x5e) == 2 {
-                x.call(FLASH_OFF);
+                crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_FIN);
             }
         }
         x.move_x();
@@ -420,7 +419,7 @@ mod fountain {
     }
 
     /// Crée une braise ou une étincelle liée à la boule (`0x53992`, `0x539b2`).
-    fn spawn(x: &mut Cx, variant: u8, _power: Option<(u8, u8)>) {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>, variant: u8, _power: Option<(u8, u8)>) {
         if let Some(o) = x.alloc(&pools::PSHL) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 0x12);
@@ -429,13 +428,13 @@ mod fountain {
         }
     }
 
-    fn spark(x: &mut Cx) {
+    fn spark<R: Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             x.add8(0x4, 2);
         }
     }
 
-    fn ember(x: &mut Cx) {
+    fn ember<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x5a, 0xffff);
         if x.u16(0x5a) == 0 {
             x.add8(0x4, 2);
@@ -454,7 +453,7 @@ mod fountain {
                     x.set8(0x5c, 4);
                     x.set_a5_u16(0x4ba, 0);
                 } else if x.u16(0x5e) == 2 {
-                    x.call(FLASH_OFF);
+                    crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_FIN);
                 }
             }
             x.anim_step();

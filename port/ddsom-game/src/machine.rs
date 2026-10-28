@@ -20,25 +20,12 @@ use crate::rng;
 
 /// Accès commun à la machine (voir l'en-tête du module).
 pub trait Machine {
-    /// Le processeur et le bus, empruntés ensemble (les adaptateurs `_68k` ont besoin des deux).
-    fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus);
-
     /// Le bus : la mémoire du jeu.
-    fn bus(&mut self) -> &mut Cps2Bus {
-        self.machine().1
-    }
+    fn bus(&mut self) -> &mut Cps2Bus;
 
     /// Tirage du générateur pseudo-aléatoire du jeu (0x19a88, `rng::random`) ; les appelants masquent le résultat.
     fn random(&mut self) -> u16 {
         rng::random(self.bus())
-    }
-
-    /// `random` qui laisse aussi D0.w et les drapeaux de l'original (`rng::random_68k`), pour les sites dont la
-    /// suite relit le registre.
-    #[track_caller]
-    fn random_68k(&mut self) -> u16 {
-        let (c, b) = self.machine();
-        rng::random_68k(c, b)
     }
 
     /// Octet, mot et long de l'espace programme (tables lues relativement au PC dans l'original : le programme
@@ -66,10 +53,21 @@ pub trait Machine {
     }
 }
 
-/// Implémente `Machine` pour un contexte qui a les champs `c` et `b`.
+/// Contexte qui tient aussi le processeur : les adaptateurs `_68k` (registres de l'original) passent par lui.
+pub trait Processeur: Machine {
+    /// Le processeur et le bus, empruntés ensemble (les adaptateurs `_68k` ont besoin des deux).
+    fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus);
+}
+
+/// Implémente `Machine` et `Processeur` pour un contexte qui a les champs `c` et `b`.
 macro_rules! machine {
     ($($t:ty),* $(,)?) => {
         $(impl Machine for $t {
+            fn bus(&mut self) -> &mut Cps2Bus {
+                &mut *self.b
+            }
+        }
+        impl Processeur for $t {
             fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus) {
                 (&mut *self.c, &mut *self.b)
             }
@@ -78,7 +76,6 @@ macro_rules! machine {
 }
 
 machine!(
-    crate::families::cx::Cx<'_>,
     crate::families::Ctx<'_>,
     crate::player::Ctx<'_>,
     crate::scene::Ctx<'_>,

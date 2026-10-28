@@ -1,6 +1,7 @@
 //! Type 8, sous-état 2 : déplacements. `+6` = 0 poursuite lente, 2 demi-tour, 4 et 6 vol de poursuite (deux
 //! cadences), 8 plongeon vers la cible, 10 saut avec retombée.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -19,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Arrête le geste si un joueur saisit l'ennemi ou si plus personne n'est en vie ; vrai si l'état a changé.
-fn interrupted(x: &mut Cx) -> bool {
+fn interrupted<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if grabbed(x) {
         go::held(x);
         return true;
@@ -32,13 +33,13 @@ fn interrupted(x: &mut Cx) -> bool {
 }
 
 /// Animation de vol en avant (3) ou en arrière (4) selon le sens de la vitesse (0x644f4).
-fn fly_forward_or_back(x: &mut Cx) {
+fn fly_forward_or_back<R: Banc>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 3 } else { 4 };
     fly(x, n);
 }
 
 /// Le jeu d'animations de vol correspondant au sens de la vitesse, à la même image (0x645b8).
-fn switch_flight_set(x: &mut Cx) {
+fn switch_flight_set<R: Banc>(x: &mut Cx<'_, R>) {
     let table = if lib::moving_forward(x) { SET_FLY_ALONG } else { SET_FLY_AGAINST };
     lib::switch_keeping_time(x, table);
 }
@@ -104,7 +105,7 @@ fn pursue(x: &mut Cx) {
 
 // --- +6 = 2 : demi-tour ---------------------------------------------------------------------------
 
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;

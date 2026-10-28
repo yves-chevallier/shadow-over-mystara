@@ -1,6 +1,7 @@
 //! Ce que le boss de type 2 (0x7c5a8) a en propre : création (il fait naître le type 22 et, plus tard, la scène de
 //! fin), arrivée par un grand bond, et deux attaques (bond-écrasement `+6` = 10, rotation et rugissement `+6` = 12).
 
+use crate::families::cx::Banc;
 use super::moves::step_anim;
 use super::*;
 use crate::objects::pools;
@@ -68,9 +69,8 @@ pub(super) fn init(x: &mut Cx) {
         x.set8(0x9a, 0xff);
     }
     x.add8(f::STATE, 2);
-    // `jmp 0x1a32` (registres de l'original laissés au gestionnaire suivant)
-    x.c.a[0] = x.o.0;
-    crate::objects::anim::start_68k(x.c, x.b, x.o, TWO_KIT.set_a, 0);
+    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `sortie`)
+    x.anim_start(TWO_KIT.set_a, 0);
 }
 
 // --- groupe 0 : arrivée -----------------------------------------------------------------------------
@@ -124,7 +124,7 @@ pub(super) fn arrive(x: &mut Cx) {
 }
 
 /// 0x7d0bc : attend l'image-clé de l'animation de saut.
-pub(super) fn rise_wait(x: &mut Cx) {
+pub(super) fn rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
@@ -133,7 +133,7 @@ pub(super) fn rise_wait(x: &mut Cx) {
 }
 
 /// 0x7d0d2 (montée) et 0x7d0f2 (descente) : la vitesse verticale franchit ±0x100.
-pub(super) fn climb(x: &mut Cx, up: bool) {
+pub(super) fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
     x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
@@ -164,7 +164,7 @@ pub(super) fn land(x: &mut Cx) {
 
 /// 0x7f10a : vitesses du bond selon la distance à la caméra (quatre lignes de 8 octets en 0x7f14c : X, hauteur,
 /// gravité, profondeur).
-fn jump_speeds(x: &mut Cx) {
+fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
     let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let row = if Fl::sub16(d, 0x60).le() {
         0
@@ -347,7 +347,7 @@ pub(super) fn slam(x: &mut Cx) {
 // --- attaque 12 : rotation et rugissement ------------------------------------------------------------------
 
 /// Point visé sur le bord de l'écran, du côté où le boss regarde (`+0xb0`, `+0xb2`).
-fn edge_spot(x: &mut Cx) {
+fn edge_spot<R: Banc>(x: &mut Cx<'_, R>) {
     let off = if x.u8(f::FLIP) != 0 { 0x160 } else { 0x20 };
     let sx = var::SCROLL_X.get(x.b).wrapping_add(off);
     x.set16(SPOT_X, sx);
@@ -430,7 +430,7 @@ pub(super) fn spin_roar(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 eshl_wave_1e(x);
-                x.call(0x1ac9a);
+                crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_JAUNE);
                 x.set8(0xb9, 4);
             }
             x.set_a5_u16(0x4ba, 0);

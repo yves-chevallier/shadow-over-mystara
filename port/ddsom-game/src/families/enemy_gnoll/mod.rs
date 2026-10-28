@@ -15,6 +15,7 @@
 //!
 //! Animations 0x1649d0 (mouvements, `+0xa6` ajouté à l'animation de provocation) et 0x1649e8 (coups).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -78,7 +79,7 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Démarre l'animation `n` du jeu des mouvements.
-pub(self) fn mv(x: &mut Cx, n: u32) {
+pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
@@ -94,7 +95,7 @@ pub(self) fn strike_with(x: &mut Cx, n: u32, kind: u8, power: u8) {
     strike(x, n);
 }
 
-pub(self) fn set_speed(x: &mut Cx, n: u32) {
+pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
@@ -114,7 +115,7 @@ pub(self) fn row_byte(x: &mut Cx, table: u32) -> u8 {
 }
 
 /// 0x6c01a : fin d'un geste ; debout, et si le tirage le veut, attente (`+5 = 10`).
-pub(self) fn done_attack(x: &mut Cx) {
+pub(self) fn done_attack<R: Banc>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -204,7 +205,7 @@ pub(self) fn grab(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// Faux si le jeu est en pause (rien n'est fait) ; sinon le corps de l'état actif suit dans la même image.
-fn init(x: &mut Cx) -> bool {
+fn init<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if paused(x) {
         return false;
     }

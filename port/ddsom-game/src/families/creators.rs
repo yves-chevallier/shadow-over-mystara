@@ -6,7 +6,7 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
 use crate::mem::{prog32, prog8, rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::Obj;
@@ -32,20 +32,20 @@ fn word(o: Obj) -> u16 {
 
 /// 0x51c06 : tir de joueur (PSHL) qui accompagne l'arme du joueur A0, si son genre `+2` (décalé de 4
 /// quand `+0x28` != 2) est dans le masque de la table 0x51c5c ; le tir et le joueur se lient par `+0x5c`.
-fn weapon_shot(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = Obj(c.a[0]);
+pub(crate) fn weapon_shot(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
     me.set_u16(b, 0x5c, 0);
     let shift = if me.u8(b, 0x28) == 2 { 0 } else { 4 };
-    c.d[1] = prog32(b, 0x51c5c + shift);
+    let masque = prog32(b, 0x51c5c + shift);
+    r.d(1, masque);
     let bit = (shift as u8).wrapping_add(me.u8(b, 0x2));
-    c.d[0] = bit as u32;
-    if c.d[1] >> (bit & 31) & 1 == 0 {
-        c.sr = c.sr & 0xff00 | SR_C;
-        return rts(c, b);
+    r.d(0, bit as u32);
+    if masque >> (bit & 31) & 1 == 0 {
+        r.retenue_seule();
+        return None;
     }
-    let Some(shot) = alloc(c, b, &pools::PSHL) else {
-        c.sr = c.sr & 0xff00 | SR_C;
-        return rts(c, b);
+    let Some(shot) = r.alloue(b, &pools::PSHL) else {
+        r.retenue_seule();
+        return None;
     };
     me.set_u8(b, 0x38, 0);
     shot.set_u8(b, 0x0, 1);
@@ -58,8 +58,8 @@ fn weapon_shot(c: &mut Cpu, b: &mut Cps2Bus) {
     shot.set_u16(b, 0x5c, word(me));
     let power = me.u8(b, 0x49);
     shot.set_u8(b, 0x42, power);
-    moved(c, power as u32, Size::Byte);
-    rts(c, b);
+    r.drapeaux(power as u32, Size::Byte);
+    Some(shot)
 }
 
 /// Effet PEFF de genre `kind` (à lier ensuite au joueur par `link_effect`).
@@ -524,21 +524,28 @@ fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xcc0ca : la scène repart de son début (h) : caméras (0x33aa6), décor et palettes (0xf2e56, 0x1a360,
-/// 0x1a678, 0x1a8ac), luminosité pleine (0x1686) ; chaque joueur vivant revient en jeu normal (masqué et
-/// en entrée scénarisée s'il était à terre ou mort), est replacé (0x20de6) puis trié. A0 et D7 conservés.
-pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Le décor de la scène est repris : caméras (`cameras` : 0x33aa6 au départ de la scène, 0x33b24 au retour d'une zone
+/// annexe), script de la scène (0xf2e56), pages de palettes (0x1a360, 0x1a678, 0x1a8ac), toutes les pages à recopier,
+/// luminosité pleine (0x1686). Début commun de 0xcc0ca, des portes de zones annexes (SET 7) et du passage (EFFCT 14).
+/// A0 et D7 conservés.
+pub(crate) fn reprendre_decor(c: &mut Cpu, b: &mut Cps2Bus, cameras: u32) {
     let (a0, d7) = (c.a[0], c.d[7]);
-    call(c, b, 0x33aa6);
+    call(c, b, cameras);
     (c.a[0], c.d[7]) = (a0, d7);
-    call(c, b, 0xf2e56);
-    let (a0, d7) = (c.a[0], c.d[7]);
+    call(c, b, crate::scene::script::RESET_ENTRY);
     for routine in [0x1a360, 0x1a678, 0x1a8ac] {
         call(c, b, routine);
     }
     (c.a[0], c.d[7]) = (a0, d7);
     wr8(b, A5 + 0x48e, 0xf);
     crate::palette::full_brightness(b);
+}
+
+/// 0xcc0ca : la scène repart de son début (h) : décor repris (`reprendre_decor`) ; chaque joueur vivant revient en jeu
+/// normal (masqué et en entrée scénarisée s'il était à terre ou mort), est replacé (0x20de6) puis trié. A0 et D7
+/// conservés.
+pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
+    reprendre_decor(c, b, 0x33aa6);
     wr16(b, A5 + 0x52, 0);
     let alive = |b: &mut Cps2Bus, p: u32| rd8(b, p) != 0 && rd16(b, p + 0x62) != 0;
     for k in 0..4 {
@@ -630,25 +637,6 @@ fn shot_5(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x54842 : tir de type 0x18 (variante 1, résistances 0x10) lié par `+0x5c` ; D0 = 1, ou 0 si le pool est plein.
-fn shot_18(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    c.d[0] = match alloc(c, b, &pools::PSHL) {
-        Some(shot) => {
-            shot.set_u8(b, 0x0, 1);
-            shot.set_u8(b, 0x2, 0x18);
-            shot.set_u8(b, 0x3, 1);
-            shot.set_u8(b, 0x45, 0x10);
-            shot.set_u8(b, 0x46, 0x10);
-            shot.set_u16(b, 0x5c, me as u16);
-            1
-        }
-        None => 0,
-    };
-    moved(c, c.d[0], Size::Long);
-    rts(c, b);
-}
-
 /// Effet de joueur (PEFF) de type `kind`, variante `variant`, lié au joueur (`+0x50`).
 fn peff(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let me = c.a[0];
@@ -703,7 +691,7 @@ fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
             break;
         }
     }
-    call(c, b, 0x1ac68);
+    crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
     rts(c, b);
 }
 
@@ -832,7 +820,7 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus),
 const CREATED: u32 = regs::a(1) | regs::CCR;
 
 pub const NATIVES: &[Native] = &[
-    native(0x51c06, "cree_tir_arme", weapon_shot, regs::d(0) | regs::d(1) | CREATED),
+    native(0x51c06, "cree_tir_arme", |c, b| { let me = Obj(c.a[0]); weapon_shot(c, b, me); rts(c, b) }, regs::d(0) | regs::d(1) | CREATED),
     native(0x4b7a0, "cree_eclair", |c, b| { let (me, v) = (Obj(c.a[0]), c.d[0] as u8); bolt_par(c, b, me, v); rts(c, b) }, CREATED),
     native(0x4dc9a, "cree_etincelles", |c, b| { let me = Obj(c.a[0]); sparks_par(c, b, me); rts(c, b) }, CREATED),
     native(0x9ef20, "cree_tir_9", enemy_shot_9, regs::d(0) | CREATED),
@@ -847,7 +835,6 @@ pub const NATIVES: &[Native] = &[
     native(0xcc0ca, "scene_repart", |c, b| { restart_scene(c, b); rts(c, b) }, regs::a(0) | regs::d(7)),
     native(0x53e48, "cree_eclair_joueur", bolt_shot, CREATED | regs::d(6) | regs::a(4)),
     native(0x52578, "cree_tir_5", shot_5, CREATED | regs::d(0) | regs::d(1) | regs::a(4)),
-    native(0x54842, "cree_tir_18", shot_18, CREATED | regs::d(0)),
     native(0x4b8d0, "cree_effet_b", peff_b, CREATED),
     native(0x4b518, "cree_effet_8", peff_8, CREATED),
     native(0x51bb6, "cree_effet_2f", peff_2f, CREATED),

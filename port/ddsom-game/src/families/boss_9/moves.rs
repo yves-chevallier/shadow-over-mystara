@@ -1,5 +1,6 @@
 //! Boss 9, état actif : entrée en scène (`+5` = 0), départ (2), passages et arrêts (4), attente (6).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -17,12 +18,8 @@ pub(super) fn intro(x: &mut Cx) {
             x.set16(TIMER, 0xa);
             x.set16(0x14, 0);
             x.set16(0x16, 0);
-            x.c.d[0] = 5;
-            x.call(call::MESSAGE);
-            if carry(x) {
-                return;
-            }
-            x.set16(MESSAGE, x.c.a[1] as u16);
+            let Some(bulle) = crate::families::creators::scene_set(x.b, 5) else { return };
+            x.set16(MESSAGE, bulle.word());
             next6(x);
         }
         6 => {
@@ -113,12 +110,12 @@ pub(super) fn intro(x: &mut Cx) {
 }
 
 /// Abscisse de la caméra du plan de l'engin.
-fn x_cam(x: &mut Cx) -> u16 {
+fn x_cam<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     x.a5_u16(CAM_X)
 }
 
 /// L'engin roule (0x1d78) et ses roues tournent (0x1a56).
-pub(super) fn roll(x: &mut Cx) {
+pub(super) fn roll<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_x();
     anim(x);
 }

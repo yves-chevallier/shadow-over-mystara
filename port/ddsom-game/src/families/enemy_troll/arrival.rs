@@ -1,11 +1,12 @@
 //! Type 14, sous-état 0 : arrivée selon la variante `+3` (valeurs paires). 0 marche d'entrée, 2 chute depuis le haut,
 //! 4 chute déjà amorcée.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x),
         2 => drop_in(x, true),
@@ -15,7 +16,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Variante 0 : marche vers l'écran pendant `+0xa2` images.
-fn walk_in(x: &mut Cx) {
+fn walk_in<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
         x.anim_step();
@@ -36,7 +37,7 @@ fn walk_in(x: &mut Cx) {
 
 /// Variantes 2 et 4 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc` négatif) avant de
 /// se relever, la variante 4 se relève tout de suite.
-fn drop_in(x: &mut Cx, gravity: bool) {
+fn drop_in<R: Banc>(x: &mut Cx<'_, R>, gravity: bool) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(Obj::VZ, -0x600i16 as u16);

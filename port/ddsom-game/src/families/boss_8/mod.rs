@@ -15,6 +15,7 @@
 //!
 //! Animations : 0x1790f6 (mouvements), 0x179116 (coups).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::mem::A5;
@@ -63,7 +64,7 @@ pub(self) const SET_STRIKE: u32 = 0x179116;
 
 pub(self) const WAIT: u32 = 0x020a_0000;
 
-pub(self) fn body(x: &mut Cx, n: u32) {
+pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
@@ -168,7 +169,7 @@ fn init(x: &mut Cx) {
     x.set16(0x10, py);
     x.add16(0xc, 0x50);
     x.set16(TIMER, 0x3c);
-    x.call(0xb84ae);
+    crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::VICTORY, None);
     // points de vie « affaiblis » (seuil du ralenti) selon le nombre de joueurs
     let hp = x.u16(0x60);
     setw(x, 1, hp);
@@ -242,13 +243,13 @@ fn active(x: &mut Cx) {
     lib::collide_terrain(x);
 }
 
-fn idle_reset(x: &mut Cx) {
+fn idle_reset<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(IDLE_WAIT, 0x3c);
     x.set16(IDLE_TIME, 0x12c);
 }
 
 /// Trop longtemps sans combattre : le boss se redresse et attaque (état 2, groupe 4, étape tirée dans 0x88294).
-fn idle_attack(x: &mut Cx) {
+fn idle_attack<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set16(HITS, 0);
     x.set8(0x86, 0);

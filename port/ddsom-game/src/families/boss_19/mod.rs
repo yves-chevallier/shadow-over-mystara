@@ -18,6 +18,7 @@
 //! Animations : trois jeux (`+0xa0` = 0, 2 ou 4) par type, à choisir par `set_anim` ; `+0xa1` est l'animation en cours.
 //! Le dragon flotte autour de l'altitude 0x20 (`hover`, 0x91424) quand `+0xa4` est levé.
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -120,7 +121,7 @@ pub(self) fn rest(x: &mut Cx) {
     set_anim(x, 0, 0);
 }
 
-fn step(x: &mut Cx) -> bool {
+fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
@@ -147,18 +148,18 @@ pub(self) fn turn(x: &mut Cx) {
 }
 
 /// 0x9140a : l'attaque 4 (souffle), invulnérable un instant.
-pub(self) fn attack_4(x: &mut Cx) {
+pub(self) fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, ATTACK_4);
     x.set8(SHIELD, 8);
 }
 
 /// 0x8fcf0 : attend un joueur.
-pub(self) fn wait(x: &mut Cx) {
+pub(self) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
 /// 0x9141a : plus d'hôte : le boss disparaît.
-pub(self) fn host_gone(x: &mut Cx) {
+pub(self) fn host_gone<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, DEAD_HOST);
 }
 
@@ -287,7 +288,7 @@ fn idle(x: &mut Cx) {
 }
 
 /// 0x91424 : flottement autour de l'altitude 0x20 quand `+0xa4` est levé ; l'altitude ne descend pas sous 0.
-fn hover(x: &mut Cx) {
+fn hover<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(TYPE) == TYPE_GREEN && x.u8(f::SUB) == 0 {
         return;
     }

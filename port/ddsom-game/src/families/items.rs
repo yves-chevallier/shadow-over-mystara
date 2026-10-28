@@ -343,7 +343,7 @@ fn effet_nourriture(ctx: &mut Ctx, o: Obj) {
     if !(vie <= vie_max) {
         joueur.set_u16(ctx.b, 0x62, vie_max);
     }
-    ctx.jsr(appel::FIN_EFFET);
+    crate::sound::jouer(ctx.b, appel::FIN_EFFET, ctx.obj());
 }
 
 /// Potions : le joueur reçoit un compte à rebours de 0x2d0 images et des drapeaux +0x180..0x184.
@@ -353,7 +353,7 @@ fn effet_potion(ctx: &mut Ctx, o: Obj, octets: &[(u32, u8)]) {
     for &(off, v) in octets {
         joueur.set_u8(ctx.b, off, v);
     }
-    ctx.jsr(appel::FIN_EFFET);
+    crate::sound::jouer(ctx.b, appel::FIN_EFFET, ctx.obj());
 }
 
 fn conso_effet(ctx: &mut Ctx, o: Obj) {
@@ -849,7 +849,6 @@ mod scene {
     pub const JOUEURS: u32 = 0xff85de;
     pub const PAS_JOUEUR: u32 = 0x200;
     // sous-routines non réécrites
-    pub const ANGLE: u32 = 0x137e;
 }
 
 /// `0xdcdae` : se place à côté du propriétaire (un pixel devant, décalé selon l'orientation).
@@ -902,7 +901,7 @@ fn icone_son(ctx: &mut Ctx, o: Obj, base: u32) {
     o.set_u8(ctx.b, scene::DELAI, scene::DELAI_SON);
     let tirage = o.u8(ctx.b, champ::MODE) as u32;
     let son = ctx.prog32(scene::ICONE_SONS + base + tirage * 4);
-    ctx.jsr(son);
+    crate::sound::jouer(ctx.b, son, ctx.obj());
 }
 
 /// Sous-état 0 de l'icône : suit le joueur, anime, trie, et joue le son tiré toutes les 0x3c images.
@@ -1083,7 +1082,7 @@ fn depart_arret(ctx: &mut Ctx, o: Obj) {
     ctx.c.d[0] = mode;
     let son = ctx.prog8(depart::SONS_ARRET + mode);
     if son != 0 {
-        ctx.jsr(depart::SON_ARRET);
+        crate::sound::jouer(ctx.b, depart::SON_ARRET, ctx.obj());
     }
     let animation = ctx.prog8(depart::ANIMATIONS_ARRET + mode);
     ctx.anim_start(scene::ANIMATIONS, animation as u16);
@@ -1224,10 +1223,8 @@ fn cree_set(ctx: &mut Ctx, type_set: u32) -> Option<Obj> {
 fn guide_marche(ctx: &mut Ctx, o: Obj) {
     let cible_x = o.u16(ctx.b, scene::CIBLE_X);
     let cible_y = o.u16(ctx.b, scene::CIBLE_Y);
-    ctx.c.d[1] = ctx.c.d[1] & 0xffff_0000 | cible_x as u32;
-    ctx.c.d[2] = ctx.c.d[2] & 0xffff_0000 | cible_y as u32;
-    ctx.jsr(scene::ANGLE);
-    o.set_u8(ctx.b, Obj::SPEED_INDEX, ctx.c.d[0] as u8);
+    let direction = crate::aides::direction_from(ctx.b, o, (cible_x, cible_y));
+    o.set_u8(ctx.b, Obj::SPEED_INDEX, direction);
     ctx.move_by_table_xy();
     let dx = cible_x.wrapping_sub(o.u16(ctx.b, Obj::X)).wrapping_add(8);
     let dy = cible_y.wrapping_sub(o.u16(ctx.b, Obj::Y)).wrapping_add(8);
@@ -2372,8 +2369,7 @@ fn tombe(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte) -> bool {
     c.d[0] = i;
     let masque = rd16(b, p.chances + i);
     c.d[2] = c.d[2] & 0xffff_0000 | masque as u32;
-    crate::rng::random_68k(c, b);
-    let bit = c.d[0] as u16 & 0xf;
+    let bit = crate::rng::random(b) & 0xf;
     c.d[0] = c.d[0] & 0xffff_0000 | bit as u32;
     c.d[2] >> bit & 1 != 0
 }

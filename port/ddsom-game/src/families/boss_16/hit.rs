@@ -9,6 +9,7 @@
 //! | 8 | rien |
 //! | 10 | retour au combat |
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 
@@ -84,7 +85,7 @@ fn counter(x: &mut Cx) -> bool {
 }
 
 /// Fin des reculs : le boss se relève à l'écart des bords (attaque 0xe pour revenir vers l'écran) ou marche.
-fn recover_position(x: &mut Cx) {
+fn recover_position<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(0x49, 0);
     x.set32(0x58, 0);
@@ -147,7 +148,7 @@ fn knockback_start(x: &mut Cx, hard: bool) {
 }
 
 /// 0x941c4 : tremblement puis glissade.
-fn knockback_hold(x: &mut Cx) {
+fn knockback_hold<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SHAKE) != 0 {
         let n = x.u8(SHAKE).wrapping_sub(1);
         x.set8(SHAKE, n);

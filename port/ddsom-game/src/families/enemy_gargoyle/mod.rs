@@ -15,6 +15,7 @@
 //! `+0x50` est la cible (joueur), `+0x54` l'éventuelle victime saisie. Animations 0x162ebc (vol), 0x162eee (coups),
 //! 0x163014 et 0x163098 (vol contre ou avec l'orientation).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
@@ -83,11 +84,11 @@ pub fn run(x: &mut Cx) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn play(x: &mut Cx, set: u32, n: u32) {
+pub(self) fn play<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     lib::start(x, set, n);
 }
 
-pub(self) fn fly(x: &mut Cx, n: u32) {
+pub(self) fn fly<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_FLY, n);
 }
 
@@ -95,13 +96,13 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
     play(x, SET_STRIKE, n);
 }
 
-pub(self) fn look(x: &mut Cx, v: u8) {
+pub(self) fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
 /// Table de vitesses `n` (0x1b64) pour l'angle `+0x2d`.
-pub(self) fn set_speed(x: &mut Cx, n: u32) {
+pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
@@ -110,12 +111,12 @@ pub(self) fn spark(x: &mut Cx, d5: u32) {
     lib::debris(x, d5);
 }
 
-pub(self) fn camera_x(x: &mut Cx) -> u16 {
+pub(self) fn camera_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
 /// Décompte d'une minuterie mot `+off` : vrai tant qu'elle reste positive.
-pub(self) fn count_down(x: &mut Cx, off: u32) -> bool {
+pub(self) fn count_down<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
     let n = x.u16(off).wrapping_sub(1);
     x.set16(off, n);
     (n as i16) > 0
@@ -144,7 +145,7 @@ pub(self) fn bob(x: &mut Cx) {
 }
 
 /// 0x65a72 : montée progressive (table de longs `0x65a86`).
-pub(self) fn rise(x: &mut Cx) {
+pub(self) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let d = rom32(x, 0x65a86 + idx);
     x.add32(Obj::Z, d);
@@ -156,34 +157,34 @@ pub(self) mod go {
     use super::*;
 
     /// Sous-état 2 (déplacements) : `+6` = 2, saisie de l'état courant pour y revenir.
-    pub fn turn_around(x: &mut Cx) {
+    pub fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         let s = x.u32(f::STATE);
         x.set32(SAVED_STATE, s);
         set_state_long(x, 0x0202_0200);
     }
-    pub fn wander(x: &mut Cx) {
+    pub fn wander<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(STRIKE_KIND_NEXT, 0x3b);
         set_state_long(x, 0x0202_0400);
     }
-    pub fn wander_far(x: &mut Cx) {
+    pub fn wander_far<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(STRIKE_KIND_NEXT, 0x3c);
         set_state_long(x, 0x0202_0600);
     }
-    pub fn dive(x: &mut Cx) {
+    pub fn dive<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(SIDE_TURN, 0);
         set_state_long(x, 0x0202_0800);
     }
-    pub fn circle(x: &mut Cx) {
+    pub fn circle<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(INVULNERABLE, 1);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0202_0a00);
     }
     /// Sous-état 4 (coups), `+6` = 0 ; `grab` : la créature a déjà saisi sa victime.
-    pub fn strike_0(x: &mut Cx, grab: bool) {
+    pub fn strike_0<R: Banc>(x: &mut Cx<'_, R>, grab: bool) {
         if grab {
             x.set8(HIT_FLAGS, 0);
         }
@@ -191,7 +192,7 @@ pub(self) mod go {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0000);
     }
-    pub fn strike_2(x: &mut Cx, grab: bool) {
+    pub fn strike_2<R: Banc>(x: &mut Cx<'_, R>, grab: bool) {
         if grab {
             x.set8(HIT_FLAGS, 0);
         }
@@ -199,34 +200,34 @@ pub(self) mod go {
         x.set8(VULNERABLE, 1);
         set_state_long(x, 0x0204_0200);
     }
-    pub fn strike_4(x: &mut Cx, grab: bool) {
+    pub fn strike_4<R: Banc>(x: &mut Cx<'_, R>, grab: bool) {
         x.set8(GRABBED_ONCE, grab as u8);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0400);
     }
-    pub fn strike_6(x: &mut Cx) {
+    pub fn strike_6<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0600);
     }
-    pub fn strike_8(x: &mut Cx) {
+    pub fn strike_8<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(INVULNERABLE, 1);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0800);
     }
-    pub fn strike_10(x: &mut Cx) {
+    pub fn strike_10<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0a00);
     }
-    pub fn strike_12(x: &mut Cx) {
+    pub fn strike_12<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0c00);
     }
     /// Plus de joueur en vie : la créature se retire (sous-état 10).
-    pub fn retire(x: &mut Cx) {
+    pub fn retire<R: Banc>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x020a_0000);
     }
     /// Saisie par un joueur : état touché 8.
-    pub fn held(x: &mut Cx) {
+    pub fn held<R: Banc>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x0408_0000);
     }
 }
@@ -308,7 +309,7 @@ fn active(x: &mut Cx) {
 }
 
 /// 0x65ab6 : décompte de la période de repos (`+0xb4`) ; à zéro, le drapeau `+0x58` retombe.
-pub(self) fn cooldown(x: &mut Cx) {
+pub(self) fn cooldown<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u16(COOLDOWN) as i16) <= 0 {
         return;
     }

@@ -1,6 +1,7 @@
 //! Type 13, sous-états 4, 6 et 8 : les gestes. Le sous-état 4 contient les coups de hache, les sauts sur la cible et
 //! le repos, le 6 les pas, sauts et téléportations, le 8 le choix qui suit un geste.
 
+use crate::families::cx::Banc;
 use super::stance::{approach_restart, approach_start};
 use super::*;
 use crate::objects::Courant;
@@ -58,7 +59,7 @@ fn next_and_start(x: &mut Cx) {
 }
 
 /// 0x6b74a : étape suivante à la fin de l'animation.
-fn next_when_done(x: &mut Cx) {
+fn next_when_done<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
@@ -109,7 +110,7 @@ fn windup(x: &mut Cx) {
 }
 
 /// +6 = 2 : demi-tour puis geste 0xc.
-fn turn_back(x: &mut Cx) {
+fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -228,7 +229,7 @@ fn leap_start(x: &mut Cx, height: u32, shift: i16) {
 }
 
 /// 0x6b8a8 : retombée du saut.
-fn land(x: &mut Cx) {
+fn land<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) > 0 {
         return;
@@ -398,7 +399,7 @@ fn teleport(x: &mut Cx) {
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
-fn pause(x: &mut Cx) {
+fn pause<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

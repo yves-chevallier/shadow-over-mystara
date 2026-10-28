@@ -299,8 +299,6 @@ mod ring {
 
     const ANIMS: u32 = 0x1bb80a;
     const OFFSETS: u32 = 0x4e412;
-    const FLASH_A: u32 = 0x1ac72;
-    const FLASH_B: u32 = 0x1ac9a;
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
@@ -362,9 +360,9 @@ mod ring {
                 x.set8(0x5e, 1);
                 let owner = x.link_a1(f::OWNER);
                 if owner.u8(x.b, 0x15e) == 0x16 {
-                    x.call(FLASH_B);
+                    crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_JAUNE);
                 } else {
-                    x.call(FLASH_A);
+                    crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_VERT);
                 }
             }
             4 if child => {

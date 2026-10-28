@@ -1,5 +1,6 @@
 //! Boss 0, état actif : entrées en scène (`+5` = 0), combat (2), attaques (4), attente (6 à 10).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -25,7 +26,7 @@ fn end_of_strike(x: &mut Cx) {
 
 /// Le boss est-il arrivé à la position qu'il vise ? `limit` : abscisse visée (sinon la caméra décalée de 0xa0
 /// vers la droite, 0xe0 vers la gauche). Il faut avoir atteint ou dépassé la limite dans le sens du mouvement.
-fn reached(x: &mut Cx, limit: Option<u16>) -> bool {
+fn reached<R: Banc>(x: &mut Cx<'_, R>, limit: Option<u16>) -> bool {
     let moving_left = x.u16(0x14) as i16 >= 0;
     let bound = match limit {
         Some(l) => l,
@@ -52,7 +53,7 @@ fn gallop_step(x: &mut Cx) {
 }
 
 /// Fin de la course d'entrée : lance la glissade (vitesse `v` en `+0x16`, orientée selon le sens).
-fn start_slide(x: &mut Cx, v: u16, extra: bool) {
+fn start_slide<R: Banc>(x: &mut Cx<'_, R>, v: u16, extra: bool) {
     next7(x);
     x.set16(TIMER, 0x1e);
     x.set16(TIMER2, 0);
@@ -82,7 +83,7 @@ fn slide(x: &mut Cx) {
 }
 
 /// La cible (`+0x50`) devient la position visée (`+0xbc`) ; D0 = angle de la charge.
-fn mark_target(x: &mut Cx) {
+fn mark_target<R: Banc>(x: &mut Cx<'_, R>) {
     let t = x.linked(f::TARGET);
     let tx = t.u16(x.b, 0x8);
     x.set16(MARK_X, tx);
@@ -202,7 +203,7 @@ fn transformation(x: &mut Cx) {
 
 /// 0x7ac7a : place la seconde moitié au bord de l'écran, du côté où la moitié principale regarde : à
 /// `caméra + 0x1c0` (ou `caméra - 0x40` si elle regarde à gauche), en hauteur selon le rang de la caméra.
-fn place_partner(x: &mut Cx, partner: crate::objects::Obj) {
+fn place_partner<R: Banc>(x: &mut Cx<'_, R>, partner: crate::objects::Obj) {
     let side = if x.u8(f::FLIP) != 0 { (-0x40i16) as u16 } else { 0x1c0 };
     let px = camera_x(x).wrapping_add(side);
     partner.set_u16(x.b, 0x8, px);
@@ -308,7 +309,7 @@ fn idle(x: &mut Cx) {
 }
 
 /// 0x79ad4 : demi-tour, puis l'état mémorisé est repris.
-fn turn_around(x: &mut Cx) {
+fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         next7(x);
         let side = x.u8(f::FLIP) ^ 0x20;
@@ -334,13 +335,13 @@ fn turn_around(x: &mut Cx) {
 }
 
 /// 0x79bb8 : animation de course vers l'avant (6) ou vers l'arrière (7) selon le sens de la cible.
-fn run_animation(x: &mut Cx) {
+fn run_animation<R: Banc>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 6 } else { 7 };
     body(x, n);
 }
 
 /// 0x79c92 : choisit, dans la table de l'animation de course, l'entrée du geste en cours.
-fn select_run(x: &mut Cx) {
+fn select_run<R: Banc>(x: &mut Cx<'_, R>) {
     let set = if lib::moving_forward(x) { SET_RUN_BACK } else { SET_RUN_FORWARD };
     lib::switch_keeping_time(x, set);
 }

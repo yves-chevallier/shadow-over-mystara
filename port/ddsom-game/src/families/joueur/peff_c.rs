@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), troisième série : types 2 à 5 (aura de maintien, coup, soin, lumière).
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
@@ -258,7 +259,7 @@ mod cure {
     }
 
     /// `0x4ab82` : étincelle (variante 1) ; le compteur `+0x5f` tourne sur 8.
-    fn spawn_spark(x: &mut Cx) {
+    fn spawn_spark<R: Banc>(x: &mut Cx<'_, R>) {
         if let Some(o) = x.alloc(&pools::PEFF) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 4);
@@ -269,7 +270,7 @@ mod cure {
         }
     }
 
-    fn spark(x: &mut Cx) {
+    fn spark<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_z();
         let fin = x.anim_step();
         if x.u8(0x2f) == 0 {
@@ -300,7 +301,6 @@ mod holy {
     const SFX_BURST_A: u32 = 0xe9fc8;
     const SFX_BURST_B: u32 = 0xe996c;
     const SFX_END: u32 = 0xea032;
-    const BURST_SPAWN: u32 = 0x4aed0;
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
@@ -400,7 +400,7 @@ mod holy {
         x.set16(0x58, 0x50);
         x.set16(0xc, 8);
         x.anim_start(ANIMS, 0);
-        x.call(BURST_SPAWN);
+        crate::families::petites::peff_5_pair(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
         crate::sound::jouer(x.b, SFX_BURST_A, x.o);
         crate::sound::jouer(x.b, SFX_BURST_B, x.o);
         let owner = x.link_a1(f::OWNER);

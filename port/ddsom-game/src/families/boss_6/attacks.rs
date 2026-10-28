@@ -8,6 +8,7 @@
 //! | 6 | bond sur la cible |
 //! | 8 | vol bas avec un ESHL 0x2a (variante 2) : le tir part en bout de course |
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -30,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn players_alive(x: &mut Cx) -> bool {
+fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
@@ -62,7 +63,7 @@ fn wing_beat(x: &mut Cx) {
 }
 
 /// `(0xc).l += (mot << 16) >> 8` : la hauteur avance de `v` pixels par image (8.8).
-fn climb(x: &mut Cx, v: u16) {
+fn climb<R: Banc>(x: &mut Cx<'_, R>, v: u16) {
     let d0 = ((v as i16 as i32) << 8) as u32;
     let z = x.u32(0xc).wrapping_add(d0);
     x.set32(0xc, z);
@@ -91,7 +92,7 @@ fn roar(x: &mut Cx) {
 // --- tir lié ----------------------------------------------------------------------------------------
 
 /// Crée l'ESHL 0x2a lié au boss (variante `v`) ; faux si le pool est plein.
-fn make_shot(x: &mut Cx, v: u8) -> bool {
+fn make_shot<R: Banc>(x: &mut Cx<'_, R>, v: u8) -> bool {
     let Some(shot) = x.alloc(&pools::ESHL) else { return false };
     x.set16(CHILD, shot.0 as u16);
     shot.set_u8(x.b, 0, 1);
@@ -106,7 +107,7 @@ fn make_shot(x: &mut Cx, v: u8) -> bool {
 }
 
 /// 0x84b9c : le boss s'élève (ailes) une fois le tir créé.
-fn take_off(x: &mut Cx) {
+fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(0x18, 0x400);
     x.set16(0x1a, 0);

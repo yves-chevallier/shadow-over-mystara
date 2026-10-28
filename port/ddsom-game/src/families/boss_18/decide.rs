@@ -5,6 +5,7 @@
 //! (octet de la table 1, puis mot de la table 2) donnent l'adresse d'une des routines d'état ci-dessous ;
 //! `go` retrouve la routine par cette adresse.
 
+use crate::families::cx::Banc;
 use super::*;
 
 pub(super) const WAIT: u32 = 0x020a_0000;
@@ -15,7 +16,7 @@ const CHASE_B: u32 = 0x0202_0600;
 const DASH: u32 = 0x0202_0800;
 
 /// 0x9917a : attend (aucun joueur en vie).
-pub(super) fn wait(x: &mut Cx) {
+pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
@@ -26,7 +27,7 @@ pub(super) fn stand(x: &mut Cx) {
 }
 
 /// 0x98fac : interrompt l'action en cours (l'état est mémorisé en `+0xa2`).
-pub(super) fn interrupt(x: &mut Cx) {
+pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let state = x.u32(f::STATE);
     x.set32(SAVED_STATE, state);
@@ -41,7 +42,7 @@ pub(super) fn chase(x: &mut Cx) {
 }
 
 /// 0x98fd6 : idem (tir 0x2a), marche lente.
-pub(super) fn chase_b(x: &mut Cx) {
+pub(super) fn chase_b<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x2a);
     x.set32(f::STATE, CHASE_B);
@@ -59,23 +60,23 @@ pub(super) fn dash_or_attack(x: &mut Cx) {
     x.set32(f::STATE, DASH);
 }
 
-fn attack(x: &mut Cx, state: u32) {
+fn attack<R: Banc>(x: &mut Cx<'_, R>, state: u32) {
     x.set8(VULNERABLE, 0);
     x.set32(f::STATE, state);
 }
 
 /// 0x99032 : attaque 0.
-pub(super) fn attack_0(x: &mut Cx) {
+pub(super) fn attack_0<R: Banc>(x: &mut Cx<'_, R>) {
     attack(x, 0x0204_0000);
 }
 
 /// 0x99040 : attaque 2.
-pub(super) fn attack_2(x: &mut Cx) {
+pub(super) fn attack_2<R: Banc>(x: &mut Cx<'_, R>) {
     attack(x, 0x0204_0200);
 }
 
 /// 0x9904e : attaque 4 (une fois).
-pub(super) fn attack_4(x: &mut Cx) {
+pub(super) fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     x.set8(BUDGET_4, 1);
     x.set32(f::STATE, 0x0204_0400);
@@ -94,7 +95,7 @@ pub(super) fn attack_6(x: &mut Cx) {
 }
 
 /// 0x9908c : attaque 8.
-pub(super) fn attack_8(x: &mut Cx) {
+pub(super) fn attack_8<R: Banc>(x: &mut Cx<'_, R>) {
     attack(x, 0x0204_0800);
 }
 
@@ -107,7 +108,7 @@ pub(super) fn attack_10(x: &mut Cx) {
 }
 
 /// 0x990b0 : attaque 12 tant qu'il en reste ; sinon l'attaque 8.
-pub(super) fn attack_12(x: &mut Cx) {
+pub(super) fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(BUDGET_B) as i8) <= 0 {
         return attack_8(x);
     }
@@ -115,7 +116,7 @@ pub(super) fn attack_12(x: &mut Cx) {
 }
 
 /// 0x990c4 : attaque 14 (lâcher d'objets) si rien n'est déjà lâché et qu'il en reste.
-pub(super) fn attack_14(x: &mut Cx) {
+pub(super) fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(AIM_ON, 0);
     if (x.u8(SPAWNED) as i8) > 0 || (x.u8(BUDGET_C) as i8) <= 0 {
         return attack_8(x);
@@ -166,27 +167,27 @@ pub(super) fn attack_20(x: &mut Cx) {
 
 // --- tirages ------------------------------------------------------------------------------------
 
-fn table8(x: &mut Cx, table: u32, index: u32) -> u8 {
+fn table8<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u8 {
     x.rom8(table + index)
 }
 
-fn table16(x: &mut Cx, table: u32, index: u32) -> u16 {
+fn table16<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u16 {
     x.rom16(table + index)
 }
 
 /// Adresse visée par l'entrée `index` (octets) d'une table de mots relatifs à son début.
-fn target(x: &mut Cx, table: u32, index: u32) -> u32 {
+fn target<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
     (table as i32 + table16(x, table, index) as i16 as i32) as u32
 }
 
 /// 0x98cae : délai avant le pas suivant, marche rapide ; 0x98cba : marche lente.
-pub(super) fn walk_delay_fast(x: &mut Cx) {
+pub(super) fn walk_delay_fast<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x98cc6, level);
     x.set8(WALK_DELAY, v);
 }
 
-pub(super) fn walk_delay_slow(x: &mut Cx) {
+pub(super) fn walk_delay_slow<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x98ce6, level);
     x.set8(WALK_DELAY, v);

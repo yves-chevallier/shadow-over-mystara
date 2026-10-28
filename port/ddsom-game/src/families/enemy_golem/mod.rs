@@ -15,6 +15,7 @@
 //! Animations 0x15eed8 (mouvements) et 0x15eef4 (coups). Beaucoup de gestes partagent trois étapes communes :
 //! `next_anim` (0x6935c), `wait` (0x69346, attente de `+0x77` images) et `turn` (0x6899a, demi-tour).
 
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -65,7 +66,7 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Démarre l'animation `n` du jeu des mouvements.
-pub(self) fn mv(x: &mut Cx, n: u32) {
+pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
@@ -75,19 +76,19 @@ pub(self) fn strike(x: &mut Cx, n: u32) {
 }
 
 /// Fixe le type de coup et sa force.
-pub(self) fn set_strike(x: &mut Cx, kind: u8, power: u8) {
+pub(self) fn set_strike<R: Banc>(x: &mut Cx<'_, R>, kind: u8, power: u8) {
     x.set8(STRIKE_KIND, kind);
     x.set8(STRIKE_POWER, power);
 }
 
 /// 0x6935c : étape suivante, animation 0.
-pub(self) fn next_anim(x: &mut Cx) {
+pub(self) fn next_anim<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 0);
 }
 
 /// 0x69346 : attend `+0x77` images (compte à rebours), puis étape suivante.
-pub(self) fn wait(x: &mut Cx) {
+pub(self) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u8(AI_WAIT);
     if n != 0 {
         let m = n.wrapping_sub(1);
@@ -100,7 +101,7 @@ pub(self) fn wait(x: &mut Cx) {
 }
 
 /// 0x6899a : demi-tour selon `+0xa6` (0 ou 1 : rien, 2 : animation 1 puis 3 : attend la fin et se retourne).
-pub(self) fn turn(x: &mut Cx) {
+pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
         return x.add8(f::SUB3, 2);
@@ -137,7 +138,7 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
 }
 
 /// 0x68910 : drapeau de coup reçu `+0x8f` : rend vrai quand l'état doit continuer normalement.
-pub(self) fn hit_gate(x: &mut Cx) -> bool {
+pub(self) fn hit_gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let v = x.u8(HIT_FLAG);
     if v == 0 {
         return true;
@@ -208,7 +209,7 @@ pub(self) fn choose(x: &mut Cx) {
 
 /// 0x67ea4 : relance l'animation 2 en reprenant le temps et le drapeau de fin de l'animation précédente
 /// (au plus huit images d'avance), marque le coup et mémorise la position.
-pub(self) fn restart_walk(x: &mut Cx) {
+pub(self) fn restart_walk<R: Banc>(x: &mut Cx<'_, R>) {
     let time = x.u16(ANIM_TIME);
     let end = x.u16(ANIM_END);
     mv(x, 2);
@@ -237,7 +238,7 @@ pub(self) fn restart_walk(x: &mut Cx) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     lib::initial_hp(x);
     let (bx, by) = if var::CAMERA_SELECT.get(x.b) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };

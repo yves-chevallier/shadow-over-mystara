@@ -1,6 +1,7 @@
 //! Type 15, sous-états 4, 6 et 8 : les gestes. Le sous-état 4 contient les séries de coups, la charge et le repos,
 //! le 6 les pas de côté, sauts et téléportations, le 8 le choix qui suit une série.
 
+use crate::families::cx::Banc;
 use super::stance::{approach_start, walk_off};
 use super::*;
 use crate::objects::Courant;
@@ -33,20 +34,20 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x6e228 : l'étape suivante lance l'animation 4.
-fn next_and_start(x: &mut Cx) {
+fn next_and_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 4);
 }
 
 /// 0x6e230 : étape suivante à la fin de l'animation.
-fn next_when_done(x: &mut Cx) {
+fn next_when_done<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
 }
 
 /// Étape commune « s'accroupit » (0x6e27e, 0x6e32a, 0x6e502) : fin d'animation, esquive invulnérable `ticks` images.
-fn crouch(x: &mut Cx, ticks: u8) {
+fn crouch<R: Banc>(x: &mut Cx<'_, R>, ticks: u8) {
     if !x.anim_step() {
         return;
     }
@@ -57,7 +58,7 @@ fn crouch(x: &mut Cx, ticks: u8) {
 }
 
 /// Étape commune « se déplace de `dist` » (0x6e100, 0x6e34a, 0x6e522) : après l'accroupi, saute de côté.
-fn shift(x: &mut Cx, dist: i16) {
+fn shift<R: Banc>(x: &mut Cx<'_, R>, dist: i16) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if n != 0 {
@@ -72,13 +73,13 @@ fn shift(x: &mut Cx, dist: i16) {
 }
 
 /// Étape commune « tire un coup » (0x6e086, 0x6e3a4) : en cours, la clé d'animation déclenche l'effet.
-fn swing_key(x: &mut Cx) -> bool {
+fn swing_key<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.anim_step() {
         return true;
     }
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        x.call(call::SWING);
+        crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
     }
     false
 }
@@ -113,7 +114,7 @@ fn windup(x: &mut Cx) {
 }
 
 /// +6 = 2 : demi-tour puis geste 0xc (marche).
-fn turn_back(x: &mut Cx) {
+fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -251,7 +252,7 @@ fn depth_step(x: &mut Cx) {
 }
 
 /// +6 = 8 : esquive sur place.
-fn dodge(x: &mut Cx) {
+fn dodge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => crouch(x, 0xa),
@@ -343,7 +344,7 @@ fn teleport(x: &mut Cx) {
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
-fn pause(x: &mut Cx) {
+fn pause<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -359,7 +360,7 @@ fn pause(x: &mut Cx) {
 }
 
 /// +6 = 2 : pas en arrière.
-fn back_step(x: &mut Cx) {
+fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => crouch(x, 0xa),

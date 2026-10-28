@@ -17,6 +17,7 @@
 //! | 14 | `moves` | transformation en seconde forme |
 //! | état 4 | `hit` | réactions aux coups, recul, à terre, mort |
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -116,16 +117,16 @@ const PART_KIT: Kit = Kit {
 };
 
 /// Le boss est-il le type 2 (et non le type 22) ?
-pub(self) fn two(x: &mut Cx) -> bool {
+pub(self) fn two<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.u8(2) == 2
 }
 
-pub(self) fn kit(x: &mut Cx) -> &'static Kit {
+pub(self) fn kit<R: Banc>(x: &mut Cx<'_, R>) -> &'static Kit {
     if two(x) { &TWO_KIT } else { &PART_KIT }
 }
 
 /// Lance l'animation `n` du jeu `set` (0x1a32).
-pub(self) fn start(x: &mut Cx, set: Set, n: u32) {
+pub(self) fn start<R: Banc>(x: &mut Cx<'_, R>, set: Set, n: u32) {
     let k = kit(x);
     x.anim_start(if matches!(set, Set::A) { k.set_a } else { k.set_b }, n as u16);
 }
@@ -139,13 +140,12 @@ pub(self) mod state {
 }
 
 pub(self) mod call {
-    pub const SPLASH: u32 = 0xaaa40;
 }
 
 // --- animations --------------------------------------------------------------------------------
 
 /// Numéro d'animation `id` (+0xa2) ; lance l'animation `n` du jeu `set` si ce n'est pas la dernière lancée (+0xa3).
-pub(self) fn pose(x: &mut Cx, set: Set, id: u8, n: u32) {
+pub(self) fn pose<R: Banc>(x: &mut Cx<'_, R>, set: Set, id: u8, n: u32) {
     x.set8(ANIM_ID, id);
     if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
         let id = x.u8(ANIM_ID);
@@ -155,20 +155,20 @@ pub(self) fn pose(x: &mut Cx, set: Set, id: u8, n: u32) {
 }
 
 /// Réglages sonores `+0x44` et `+0x45` posés avec l'animation.
-pub(self) fn sounds(x: &mut Cx, a: u8, b: u8) {
+pub(self) fn sounds<R: Banc>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     x.set8(0x44, a);
     x.set8(0x45, b);
 }
 
 /// Animation du corps ou des attaques selon qu'il est en seconde forme.
-pub(self) fn second_form(x: &mut Cx) -> bool {
+pub(self) fn second_form<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.u8(SECOND) != 0
 }
 
-pub(self) fn next7(x: &mut Cx) {
+pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn next6(x: &mut Cx) {
+pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
@@ -184,7 +184,7 @@ pub(self) fn rubble(x: &mut Cx, d0: u32, d1: u32, d2: u32, d3: u32) {
 }
 
 /// 0x9d8e0 : la cible est-elle du mauvais côté (le boss ne la regarde pas) ?
-pub(self) fn needs_turn(x: &mut Cx) -> bool {
+pub(self) fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -195,7 +195,7 @@ pub(self) fn needs_turn(x: &mut Cx) -> bool {
 }
 
 /// 0x9d928 : la cible est-elle loin à la fois en profondeur et en X ?
-pub(self) fn target_far(x: &mut Cx) -> bool {
+pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -274,7 +274,7 @@ pub(self) fn next_attack(x: &mut Cx) {
 }
 
 /// 0x9d9d0 : un joueur tout près (boîte ±0x28 en X, ±8 en profondeur) à la hauteur du sol ?
-pub(self) fn player_within_reach(x: &mut Cx) -> bool {
+pub(self) fn player_within_reach<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
@@ -288,7 +288,7 @@ pub(self) fn player_within_reach(x: &mut Cx) -> bool {
 }
 
 /// 0x9da00 : `p` est-il dans la boîte (décalage `d0`, demi-largeur `d1`, demi-profondeur `d2`) du boss, au sol ?
-pub(self) fn reach(x: &mut Cx, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16) -> bool {
+pub(self) fn reach<R: Banc>(x: &mut Cx<'_, R>, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16) -> bool {
     if p.u16(x.b, 0xc) != 0 {
         return false;
     }
@@ -306,7 +306,7 @@ pub(self) fn reach(x: &mut Cx, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16
 
 /// 0x9da5c : choisit le point d'arrivée de la course (`+0xb0`, `+0xb2`), l'angle et le sens de rotation, d'après la
 /// position du boss dans l'écran (table 0x9dabe : X, Z, angle, sens).
-pub(self) fn choose_spot(x: &mut Cx) {
+pub(self) fn choose_spot<R: Banc>(x: &mut Cx<'_, R>) {
     let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let dz = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     let row = if (dx as i16) > 0xc0 {
@@ -353,7 +353,7 @@ pub(self) fn scatter(x: &mut Cx) {
 }
 
 /// 0x9db28 : quinze couleurs de palette écrites en 0x91c340 ; le boss prend le décalage de palette 0x1a.
-fn set_palette(x: &mut Cx) {
+fn set_palette<R: Banc>(x: &mut Cx<'_, R>) {
     const COLORS: [u16; 15] = [
         0xf333, 0xfdef, 0xfaed, 0xf9b9, 0xf575, 0xf244, 0xffff, 0xfddd, 0xfa9a, 0xf656, 0xf5cb, 0xf397, 0xf075, 0xf053, 0xf031,
     ];
@@ -415,10 +415,9 @@ fn init(x: &mut Cx) {
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x10);
     x.set8(0x93, 0);
-    // `jmp 0x1a32` (registres de l'original laissés au gestionnaire suivant)
+    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `sortie`)
     let set = kit(x).set_a;
-    x.c.a[0] = x.o.0;
-    crate::objects::anim::start_68k(x.c, x.b, x.o, set, 0);
+    x.anim_start(set, 0);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------

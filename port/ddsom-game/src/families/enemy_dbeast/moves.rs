@@ -1,6 +1,7 @@
 //! Type 19, déplacements de la bête : charges et bonds (`+5 = 8`, 0x73c92), entrée en scène
 //! (`+5 = 10`, 0x73efe) et sortie (`+5 = 12`, 0x73f98).
 
+use crate::families::cx::Banc;
 use super::parts::{bound_land, bound_wait, bound_y_land, bound_y_wait, finish_to_stance};
 use super::stance::engage;
 use super::*;
@@ -50,7 +51,7 @@ fn stand(x: &mut Cx) {
     }
 }
 
-fn stand_pose(x: &mut Cx) {
+fn stand_pose<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(WANT_ANIM, 0);
     x.set8(CUR_ANIM, 0);
     x.set8(VULNERABLE, 1);
@@ -215,7 +216,7 @@ pub(super) fn enter(x: &mut Cx) {
 // --- sous-état 12 : sortie ----------------------------------------------------------------------
 
 /// Une pièce quitte la scène : animation de sortie, puis bond vers le haut jusqu'à disparaître.
-pub(super) fn leave(x: &mut Cx) {
+pub(super) fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

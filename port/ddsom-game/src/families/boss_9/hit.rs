@@ -1,5 +1,6 @@
 //! Boss 9, état 4 : coup reçu (`+5` = 0) et engin détruit (`+5` = 2).
 
+use crate::families::cx::Banc;
 use super::moves::{restart, roll};
 use super::*;
 use crate::objects::Courant;
@@ -116,7 +117,7 @@ fn recoil(x: &mut Cx) {
 }
 
 /// Le coup est consommé (gel, dérive, coup, état mémorisé).
-fn clear_hit(x: &mut Cx) {
+fn clear_hit<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::FREEZE, 0);
     x.set16(0x16, 0);
     x.set32(0x58, 0);
@@ -241,13 +242,11 @@ fn wreck(x: &mut Cx) {
                 anim(x);
                 x.set8(0x3b, 9);
             } else {
-                x.call(0xb8a0a);
+                crate::families::effects_creators::spawn_kind(x.b, crate::families::effects_creators::kind::SOUND_FADE);
                 x.set16(TIMER, 0xc0);
-                x.c.d[0] = 8;
-                x.call(call::MESSAGE);
-                if !carry(x) {
+                if let Some(bulle) = crate::families::creators::scene_set(x.b, 8) {
                     next6(x);
-                    x.set16(MESSAGE, x.c.a[1] as u16);
+                    x.set16(MESSAGE, bulle.word());
                 }
             }
         }

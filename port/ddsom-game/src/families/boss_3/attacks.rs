@@ -13,6 +13,7 @@
 //! | 28 | vol de côté vers le milieu de l'écran en repoussant les joueurs, avec cris |
 //! | 30 | enlèvement : monte hors de l'écran, fond sur un joueur et l'emporte (groupe 12) |
 
+use crate::families::cx::Banc;
 use super::body::push_players;
 use super::*;
 use crate::objects::Courant;
@@ -36,7 +37,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Début d'un coup : vitesses à zéro, animation `n` du jeu des attaques, cri (0xebfdc).
-fn swing(x: &mut Cx, n: u32) {
+fn swing<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     next7(x);
     x.set8(0x44, 0);
     x.set8(0x45, 0x10);
@@ -46,7 +47,7 @@ fn swing(x: &mut Cx, n: u32) {
 }
 
 /// Pas en avant aux images-clés (`+0x33`) : décalage lu dans la table `table` (relative au PC), vers l'avant.
-fn key_step(x: &mut Cx, table: u32, clear: bool) {
+fn key_step<R: Banc>(x: &mut Cx<'_, R>, table: u32, clear: bool) {
     let key = x.u8(f::KEY_FRAME) as u32;
     if clear {
         if key == 0 {
@@ -180,7 +181,7 @@ fn leap(x: &mut Cx) {
 }
 
 /// Image-clé marquée (bit 7 de `+0x33`) : vrai et marque effacée.
-fn marked_key(x: &mut Cx) -> bool {
+fn marked_key<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         return false;
     }
@@ -201,7 +202,7 @@ fn cries(x: &mut Cx) {
             if !marked_key(x) || sub8(x, TIMER, 1).gt() {
                 return;
             }
-            x.call(0xb3e4e);
+            crate::families::effects_creators::shouts(x.b, x.o, false);
             next7(x);
             x.set8(TIMER, 4);
             lib::sound(x, 0xedb82);
@@ -212,7 +213,7 @@ fn cries(x: &mut Cx) {
             if !marked_key(x) {
                 return;
             }
-            x.call(0xb3e4e);
+            crate::families::effects_creators::shouts(x.b, x.o, false);
             if sub8(x, TIMER, 1).gt() {
                 return lib::sound(x, 0xedb82);
             }
@@ -222,7 +223,7 @@ fn cries(x: &mut Cx) {
 }
 
 /// 0x80130 : distance en X au joueur présent le plus proche (0x7fff sans joueur).
-fn nearest_player_dx(x: &mut Cx) -> u16 {
+fn nearest_player_dx<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     let mut best = 0x7fffu16;
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
@@ -241,7 +242,7 @@ fn nearest_player_dx(x: &mut Cx) -> u16 {
 }
 
 /// 0x801ca : lancé à pleine vitesse (0x900 ou plus), il ne dérive plus en profondeur.
-fn no_drift_when_fast(x: &mut Cx) {
+fn no_drift_when_fast<R: Banc>(x: &mut Cx<'_, R>) {
     let mut v = x.u16(0x14);
     if (v as i16) < 0 {
         v = v.wrapping_neg();
@@ -333,7 +334,7 @@ fn skim(x: &mut Cx) {
 }
 
 /// 0x800e0 : fin du rase-mottes (animation 7).
-fn skim_end(x: &mut Cx) {
+fn skim_end<R: Banc>(x: &mut Cx<'_, R>) {
     stop(x);
     let v = ((x.u16(0x14) as i16) >> 2) as u16;
     x.set16(0x14, v);
@@ -343,7 +344,7 @@ fn skim_end(x: &mut Cx) {
 }
 
 /// 0x8030e : vitesse en X ramenée à ±0x800 si elle la dépasse (et plus de dérive en profondeur).
-fn cap_speed(x: &mut Cx) {
+fn cap_speed<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u16(0x14);
     let (cap, abs) = if (v as i16) < 0 { (0xf800u16, v.wrapping_neg()) } else { (0x800, v) };
     if abs as i16 <= 0x800 {
@@ -460,8 +461,8 @@ fn cry(x: &mut Cx) {
 }
 
 /// 0x804b0 : cri (0xb3ec6, 0xedb82).
-fn shriek(x: &mut Cx) {
-    x.call(0xb3ec6);
+fn shriek<R: Banc>(x: &mut Cx<'_, R>) {
+    crate::families::effects_creators::shouts(x.b, x.o, true);
     lib::sound(x, 0xedb82);
 }
 
@@ -545,14 +546,14 @@ fn descend_to_0x40(x: &mut Cx) {
 }
 
 /// Hauteur au-dessus du sol de la caméra : `z - caméra + hauteur`.
-fn height_over_camera(x: &mut Cx) -> i16 {
+fn height_over_camera<R: Banc>(x: &mut Cx<'_, R>) -> i16 {
     let cam = camera(x);
     let h = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc)).wrapping_add(x.u16(0xc));
     h as i16
 }
 
 /// 0x8069a : un joueur à portée est saisi (0xfc44, 0xfd64 : groupe 12) ; vrai si saisi.
-fn try_grab(x: &mut Cx) -> bool {
+fn try_grab<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 1) else {
         return false;
     };

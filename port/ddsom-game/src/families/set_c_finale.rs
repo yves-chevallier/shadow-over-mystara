@@ -7,6 +7,7 @@
 //! objet « chef d'orchestre »). Elles ne sont jamais appelées dans les scénarios (voir
 //! `docs/familles/set_c.md`). Les variantes pas encore réécrites sont exécutées par le code d'origine.
 
+use crate::families::cx::Banc;
 use crate::families::cx::Cx;
 use crate::mem::wr16;
 use crate::objects::Obj;
@@ -24,8 +25,6 @@ mod rom {
     pub const LOAD_BLOCKS: u32 = 0x26d4;
     /// Chargeur de blocs 4x4.
     pub const LOAD_SMALL: u32 = 0x2766;
-    /// Crée un objet EFFCT de type D0.
-    pub const SPAWN_EFFCT: u32 = 0xb1a7a;
     pub const SPAWN_SOBJ: u32 = 0xddeaa;
 }
 
@@ -90,25 +89,25 @@ pub fn run(x: &mut Cx) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn next_state(x: &mut Cx) {
+fn next_state<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
 }
 
-fn next_substate(x: &mut Cx) {
+fn next_substate<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x5, 2);
 }
 
 /// Passe l'objet à l'état 6 (libération au passage suivant).
-fn free(x: &mut Cx) {
+fn free<R: Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::SET);
 }
 
 /// Le chef d'orchestre : l'objet pointé par `+0x4c` (adresse longue).
-fn conductor(x: &mut Cx) -> Obj {
+fn conductor<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
     Obj(x.u32(0x4c))
 }
 
-fn rng(x: &mut Cx) -> u16 {
+fn rng<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     x.random()
 }
 
@@ -156,7 +155,7 @@ fn title_blink(x: &mut Cx) {
         0 => {
             next_state(x);
             x.call(INIT_A);
-            x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+            crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             x.set8(0x42, 0);
             x.set_a5_u16(FLASH, 0);
         }
@@ -258,7 +257,7 @@ fn quake(x: &mut Cx) {
 }
 
 /// Délai aléatoire avant le prochain effet : octet de la table 0xce138 tiré par le rng.
-fn quake_delay(x: &mut Cx, table: u32) {
+fn quake_delay<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let r = rng(x) & 7;
     let d = x.rom8(table + r as u32);
     x.set8(0x42, d);
@@ -271,12 +270,9 @@ fn quake_effects(x: &mut Cx, table: u32) {
         return;
     }
     x.set8(0x42, 1);
-    x.c.d[0] = 0;
-    x.call(rom::SPAWN_EFFCT);
-    if x.c.sr & SR_C != 0 {
-        return;
-    }
-    let child = Obj(x.c.a[1]);
+    // 0xb1a7a, variante 0 ; le réglage est l'octet bas de D1, laissé par ce qui précède
+    let reglage = x.c.d[1] as u8;
+    let Some(child) = crate::families::effects_creators::countdown(x.b, 0, reglage) else { return };
     child.set_u16(x.b, 0x42, x.o.0 as u16);
     let owner = x.u32(0x4c);
     child.set_u32(x.b, 0x4c, owner);
@@ -287,7 +283,7 @@ fn quake_effects(x: &mut Cx, table: u32) {
 
 /// Variante 2 (0xce294) : un fond (scroll 3, GFX 0x920000) dont la position `+0x34` accélère ;
 /// `+5` = 0 : il entre ; 2 : il sort. Écrit sa position dans les 176 mots du bloc quand elle change.
-fn backdrop_slide(x: &mut Cx) {
+fn backdrop_slide<R: Banc>(x: &mut Cx<'_, R>) {
     const TILEMAP: u32 = 0x920000;
     match x.u8(0x4) {
         0 => {
@@ -396,7 +392,7 @@ fn load_scene(x: &mut Cx, index: u32) {
 
 /// Un pas de défilement du fond : position += vitesse (8.8), masquée par `+0x1c` / `+0x1e`, puis
 /// publiée dans le second plan avec le décalage `+0x16`.
-fn scroll_step(x: &mut Cx) {
+fn scroll_step<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u32(0x8).wrapping_add(velocity(x.u16(0x14)));
     x.set32(0x8, v);
     let v = x.u32(0xc).wrapping_add(velocity(x.u16(0x18)));
@@ -426,7 +422,7 @@ fn scene_scroll(x: &mut Cx) {
     }
 }
 
-fn publish_background(x: &mut Cx) {
+fn publish_background<R: Banc>(x: &mut Cx<'_, R>) {
     let (px, py) = (x.a5_u16(a5::BG_X), x.a5_u16(a5::BG_Y));
     x.set_a5_u16(a5::BG_X_PREV, px);
     x.set_a5_u16(a5::BG_Y_PREV, py);

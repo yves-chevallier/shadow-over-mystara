@@ -8,6 +8,7 @@
 //! 0xff2072 (nom du joueur, puis message) que le moteur de texte affiche ensuite. L'état 2 recompose
 //! la suite du message page par page (`+0x10` : délai entre deux pages).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::mem::{rd8, wr16, wr32, wr8, A5};
 
@@ -52,7 +53,7 @@ pub fn status_window(x: &mut Cx) {
     }
 }
 
-fn next_state(x: &mut Cx) {
+fn next_state<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
 }
 
@@ -145,7 +146,7 @@ fn pick_message(x: &mut Cx, player: u32) {
 
 /// 0xceb20 : prend le maximum, octet par octet, de neuf valeurs de la ROM et des statistiques
 /// `+0x151..` du joueur (sauf si l'enregistrement commence par un octet négatif). Rend la suite.
-fn merge_statistics(x: &mut Cx, player: u32, at: u32) -> u32 {
+fn merge_statistics<R: Banc>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
     let skip = x.data8(at) as i8 <= -1;
     if !skip {
         for i in 0..9 {
@@ -191,7 +192,7 @@ fn equip(x: &mut Cx, player: u32, at: u32) {
 
 /// Palette de la fenêtre et en-tête du texte (0xce88a) : recopie trois blocs de palette, fixe le
 /// tampon de texte et y compose le nom du joueur. Rend le nombre de caractères écrits.
-fn compose_header(x: &mut Cx, player: u32) -> u16 {
+fn compose_header<R: Banc>(x: &mut Cx<'_, R>, player: u32) -> u16 {
     for (from, to, blocks) in PALETTE_SOURCES {
         for i in 0..8 * blocks {
             let v = x.data32(from + 4 * i);
@@ -207,7 +208,7 @@ fn compose_header(x: &mut Cx, player: u32) -> u16 {
 
 /// Nom du joueur (0xce8de) : codes de glyphes de l'enregistrement `+0x118` du joueur, six au plus ;
 /// un code >= 0xf9 renvoie à une liste de la table 0xce9a4. Rend (fin du tampon, nombre de glyphes).
-fn write_name(x: &mut Cx, player: u32, buffer: u32) -> (u32, u16) {
+fn write_name<R: Banc>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u16) {
     let japanese = x.a5_u8(LANGUAGE) == 2;
     let mut src = player + 0x118;
     let mut out = buffer;
@@ -274,7 +275,7 @@ fn write_name(x: &mut Cx, player: u32, buffer: u32) -> (u32, u16) {
 
 /// Composition de la suite du message (0xce9ea) : recopie dans le tampon (`+0xc`) les caractères de la
 /// source (`+8`) jusqu'à une marque de fin de page ; `count` = glyphes déjà écrits sur la ligne.
-fn compose_message(x: &mut Cx, mut count: u16) {
+fn compose_message<R: Banc>(x: &mut Cx<'_, R>, mut count: u16) {
     let mut src = x.u32(0x8);
     let mut out = x.u32(0xc);
     if x.a5_u8(LANGUAGE) == 2 {
@@ -360,6 +361,6 @@ fn compose_message(x: &mut Cx, mut count: u16) {
     }
 }
 
-fn next_substate(x: &mut Cx) {
+fn next_substate<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x5, 2);
 }

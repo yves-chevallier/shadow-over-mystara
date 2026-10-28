@@ -14,6 +14,7 @@
 //!
 //! Animations : 0x17b14e (mouvements), 0x17b162 (tirs), 0x17b166 (recul, mort).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -71,15 +72,15 @@ pub fn run(x: &mut Cx) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-fn body(x: &mut Cx, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn players_alive(x: &mut Cx) -> bool {
+fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn wait(x: &mut Cx) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
@@ -97,17 +98,17 @@ fn next_action(x: &mut Cx) {
 }
 
 /// 0x8d560 : interrompt l'action (état mémorisé).
-fn interrupt(x: &mut Cx) {
+fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
     x.set32(f::STATE, INTERRUPTED);
 }
 
-fn needs_turn(x: &mut Cx) -> bool {
+fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
-fn facing_forward(x: &mut Cx) -> bool {
+fn facing_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
@@ -315,7 +316,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// Choisit l'animation de marche par l'image-clé (0x103e0) ; `mirror` : le test de sens est inversé.
-fn select_walk(x: &mut Cx, mirror: bool) {
+fn select_walk<R: Banc>(x: &mut Cx<'_, R>, mirror: bool) {
     let z = lib::moving_forward(x);
     let set = if z != mirror { WALK_A } else { WALK_B };
     lib::switch_keeping_time(x, set);
@@ -347,7 +348,7 @@ fn keep_walking(x: &mut Cx) {
     x.anim_step();
 }
 
-fn walk_delay(x: &mut Cx) {
+fn walk_delay<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x8d47c + level);
     x.set8(WALK_DELAY, v);
@@ -448,7 +449,7 @@ fn shoot(x: &mut Cx) {
 }
 
 /// 0x8d0a0 : fin du tir.
-fn shot_end(x: &mut Cx) {
+fn shot_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
     x.anim_start(SET_SHOT, 0);
@@ -569,7 +570,7 @@ fn hit(x: &mut Cx) {
 }
 
 /// 0x8d57a : plus de PV ? Passe alors au groupe 6 (mort).
-fn out_of_hp(x: &mut Cx) -> bool {
+fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }

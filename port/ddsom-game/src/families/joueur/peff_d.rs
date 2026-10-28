@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), quatrième série : types 6 à 10 (rayons : tir de magie, impact, souffle).
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
@@ -21,7 +22,7 @@ fn gesture_changed(x: &mut Cx, field: u32) -> bool {
 
 /// Fait clignoter l'objet : caché une image sur deux (`+0x5c` bascule). `hidden_when_zero` choisit la
 /// phase cachée.
-fn flicker(x: &mut Cx, hidden_when_zero: bool) {
+fn flicker<R: Banc>(x: &mut Cx<'_, R>, hidden_when_zero: bool) {
     x.set_bit(0x1, 1, true);
     let v = x.u8(0x5c) ^ 1;
     x.set8(0x5c, v);
@@ -39,7 +40,6 @@ mod beam {
     const ANIMS: u32 = 0x1b5ab8;
     const OFFSETS: u32 = 0x4b2dc;
     const SFX: u32 = 0xe8d4a;
-    const SPAWN_TRAIL: u32 = 0x54700;
 
     pub fn run(x: &mut Cx) {
         let child = x.u8(0x3) != 0;
@@ -57,7 +57,7 @@ mod beam {
             2 => {
                 if x.u8(0x33) != 0 {
                     x.set8(0x33, 0);
-                    x.call(SPAWN_TRAIL);
+                    crate::families::petites::shot_17(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                 }
                 if x.anim_step() {
                     x.add8(0x4, 2);

@@ -453,7 +453,7 @@ fn eclat_atterrit(ctx: &mut Ctx, o: Obj) {
     if !(variante != 0) {
         let pause = ctx.ram8(0x42) != 0;
         if !pause {
-            ctx.jsr(eclat::CREER_TIR_A);
+            crate::sound::jouer(ctx.b, eclat::CREER_TIR_A, ctx.obj());
             let tir = ctx.alloc(&pools::ESHL);
             if tir.is_none() {
                 return;
@@ -759,7 +759,7 @@ fn interface_1(ctx: &mut Ctx, o: Obj) {
             decale_u16(ctx, o, Obj::X, dx);
             decale_u16(ctx, o, Obj::Z, dz);
             if change {
-                ctx.jsr(interface::CHANGE_PERSONNAGE);
+                crate::sound::jouer(ctx.b, interface::CHANGE_PERSONNAGE, ctx.obj());
             }
             let rehausse = o.u8(ctx.b, 0x16) != 0;
             if rehausse {
@@ -852,7 +852,7 @@ fn interface_2(ctx: &mut Ctx, o: Obj) {
                 let clignote = o.u8(ctx.b, 0x15) != 0;
                 if !clignote {
                     o.set_u8(ctx.b, 0x15, 0xc);
-                    ctx.jsr(interface::SON_JAUGE);
+                    crate::sound::jouer(ctx.b, interface::SON_JAUGE, ctx.obj());
                 }
             }
             let reste = o.u8(ctx.b, 0x15);
@@ -1936,7 +1936,7 @@ mod declencheur {
 
 /// `0xb53b0` : déclenchement.
 fn declencheur_effet(ctx: &mut Ctx, o: Obj) {
-    ctx.jsr(declencheur::EFFET);
+    crate::sound::jouer(ctx.b, declencheur::EFFET, ctx.obj());
     let niveau = ctx.ram8(0x35) as u32;
     let mut decalage = ctx.prog8(declencheur::DECALAGES + niveau) as u16;
     for i in 0..4u32 {

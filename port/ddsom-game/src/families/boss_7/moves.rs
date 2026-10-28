@@ -2,6 +2,7 @@
 //! `aids::after_attack` et les coups encaissés. Le groupe 6 tire deux variantes de la réapparition selon `+6`, le
 //! groupe 8 en a quatre.
 
+use crate::families::cx::Banc;
 use super::aids;
 use super::attacks::{leap_rest, leap_start};
 use super::*;
@@ -38,7 +39,7 @@ fn finish(x: &mut Cx, state: u32) {
 }
 
 /// Réapparition : le boss est invisible (`bset 1`) 8 images, animation 5.
-fn reappear(x: &mut Cx) {
+fn reappear<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 8);
     body(x, 5);

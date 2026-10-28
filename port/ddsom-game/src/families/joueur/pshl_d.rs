@@ -1,6 +1,7 @@
 //! Tirs des joueurs (PSHL), quatrième série : types 19 à 24 (foudre en chaîne, projectiles de l'elfe et du
 //! magicien : flèche, couteau, boule de feu). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
@@ -33,7 +34,6 @@ mod chain {
     const LINKS: u32 = 0xff204c;
     const SPEEDS: u32 = 0x1c89b6;
     const ANIMS: u32 = 0x15cdb6;
-    const SPAWN_EFFECT: u32 = 0xabec8;
     const SFX_END: u32 = 0xe859a;
 
     pub fn run(x: &mut Cx) {
@@ -214,7 +214,7 @@ mod chain {
     }
 
     /// `0x54152` : vrai quand le maillon est hors de la zone visible (caméra +/- marges).
-    fn off_screen(x: &mut Cx) -> bool {
+    fn off_screen<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let cam = if x.a5_u8(a5::USE_CAM2) != 0 { 0x54e } else { 0x4fe };
         let (cx, cy) = (x.a5_u16(cam + 8), x.a5_u16(cam + 0xc));
         let d0 = x.u16(0x8).wrapping_sub(cx).wrapping_add(0x40);
@@ -295,11 +295,7 @@ mod chain {
             x.unlink();
             if x.u16(0x54) != 0 {
                 x.set32(0x58, 0x8080_8080);
-                x.c.d[0] = 6;
-                x.c.d[1] = 0;
-                x.call(SPAWN_EFFECT);
-                if !x.c.cond(5) {
-                    let spark = Obj(x.c.a[1]);
+                if let Some(spark) = crate::families::effects_creators::attack(x.b, x.o, 6, 0) {
                     let v = x.u16(0x54);
                     spark.set_u16(x.b, 0x54, v);
                     let (px, pz) = (x.u32(0x8), x.u32(0xc));
@@ -508,7 +504,7 @@ mod fireball {
                 x.set8(f::POWER2, p2);
                 x.set8(0x56, 4);
                 x.set_a5_u16(0x4ba, 0x100);
-                x.call(crate::palette::FLASH_COLOR_ON.entry);
+                crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
                 x.anim(ANIMS, 2);
                 x.reinsert();
@@ -542,7 +538,7 @@ mod fireball {
                     if x.u8(0x56) == 0 {
                         x.set_a5_u16(0x4ba, 0);
                     } else if x.u8(0x56) == 2 {
-                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+                        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                     }
                 }
                 if x.anim_step() {

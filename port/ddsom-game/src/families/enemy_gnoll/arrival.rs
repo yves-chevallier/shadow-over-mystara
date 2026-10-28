@@ -1,6 +1,7 @@
 //! Type 13, sous-état 0 : arrivée selon la variante `+3` (valeurs paires). 0 marche d'entrée, 2 et 6 chute depuis le
 //! haut, 4 saut de côté, 8 arrivée armée (pose la hache), 10 course d'entrée armée suivie de la saisie.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -18,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Variante 0 : marche vers l'écran pendant `+0xa2` images.
-fn walk_in(x: &mut Cx) {
+fn walk_in<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
         x.anim_step();
@@ -39,7 +40,7 @@ fn walk_in(x: &mut Cx) {
 
 /// Variantes 2 et 6 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc`) avant de se
 /// relever, la variante 6 se relève tout de suite.
-fn drop_in(x: &mut Cx, gravity: bool) {
+fn drop_in<R: Banc>(x: &mut Cx<'_, R>, gravity: bool) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(Obj::VZ, 0);
@@ -117,7 +118,7 @@ fn side_jump(x: &mut Cx) {
 }
 
 /// L'arme se pose (clé 9) ou se reprend (clé 0xb) pendant les animations d'arrivée armée.
-fn weapon_key_drop(x: &mut Cx) {
+fn weapon_key_drop<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) == 9 {
         x.set8(f::KEY_FRAME, 0);
         x.set8(WEAPON, 0);

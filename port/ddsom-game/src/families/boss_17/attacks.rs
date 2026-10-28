@@ -11,6 +11,7 @@
 //! | 14 | cri qui lâche des objets autour de la caméra |
 //! | 16 | cri final, mode ralenti |
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -31,11 +32,11 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn players_alive(x: &mut Cx) -> bool {
+fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn state7(x: &mut Cx) -> u8 {
+fn state7<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     x.u8(0x7)
 }
 
@@ -49,14 +50,14 @@ fn finish(x: &mut Cx, to: fn(&mut Cx)) {
     }
 }
 
-fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
+fn strike_anim<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
     lib::start(x, SET_STRIKE, n);
 }
 
 /// Poussière : un EFFCT 0x32 de variante `v` lié au boss, sans insister (0x2318).
-fn puff(x: &mut Cx, v: u8) {
+fn puff<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x32);
@@ -68,7 +69,7 @@ fn puff(x: &mut Cx, v: u8) {
 }
 
 /// 0x97580 : poussière à intervalle régulier pendant le ralenti.
-pub(super) fn slow_tick(x: &mut Cx) {
+pub(super) fn slow_tick<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         return;
     }
@@ -82,13 +83,13 @@ pub(super) fn slow_tick(x: &mut Cx) {
 }
 
 /// 0x975a2 : poussière sauf pendant le ralenti.
-pub(super) fn dust_unless_slow(x: &mut Cx) {
+pub(super) fn dust_unless_slow<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         puff(x, 4);
     }
 }
 
-fn spark(x: &mut Cx) {
+fn spark<R: Banc>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xe580a);
 }
 
@@ -341,7 +342,7 @@ fn throw(x: &mut Cx) {
 }
 
 /// 0x96614 : le tir a disparu (ou n'a pas pu naître) : fin du geste.
-fn throw_end(x: &mut Cx) {
+fn throw_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     lib::start(x, SET_STRIKE, 8);
 }
@@ -428,12 +429,12 @@ fn breath(x: &mut Cx) {
     }
 }
 
-fn step_only(x: &mut Cx) {
+fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 /// 0x9676c.
-fn breath_end(x: &mut Cx) {
+fn breath_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
     lib::start(x, SET_STRIKE, 0xa);

@@ -10,6 +10,7 @@
 //! | 10 | geste du premier double (deux signaux) |
 //! | 12 | souffle au sol (jets ESHL 0x32 variante 1) |
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -28,7 +29,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Fin commune : s'il reste un joueur, le boss reprend la marche.
-fn back_to_walk(x: &mut Cx) {
+fn back_to_walk<R: Banc>(x: &mut Cx<'_, R>) {
     if alive(x) {
         decide::walk(x)
     } else {
@@ -37,7 +38,7 @@ fn back_to_walk(x: &mut Cx) {
 }
 
 /// 0x8232e (`+6` = 0) : cri.
-fn roar(x: &mut Cx) {
+fn roar<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         lib::sound(x, 0xe3f76);
@@ -50,7 +51,7 @@ fn roar(x: &mut Cx) {
 }
 
 /// 0x823a6 : départ de l'envol (animation de vol 1, vitesse verticale 0x400).
-fn take_off(x: &mut Cx) {
+fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(0x18, 0x400);
     x.set16(0x1a, 0);
@@ -219,7 +220,7 @@ fn swoop(x: &mut Cx) {
 }
 
 /// Atterrissage : secousse de `shake` images, poussière, animation de vol `n`.
-fn landing(x: &mut Cx, shake: u16, n: u32) {
+fn landing<R: Banc>(x: &mut Cx<'_, R>, shake: u16, n: u32) {
     lib::shake_54(x, shake);
     lib::sound(x, 0xec976);
     lib::sound(x, 0xecdba);
@@ -404,7 +405,7 @@ fn breath_in_flight(x: &mut Cx) {
 
 /// Un jet du souffle (ESHL 0x32, variante `variant`) : son angle suit la table `angles` (16 crans, retournés
 /// quand le boss regarde à gauche). Faux si le pool est plein.
-fn breath_shot(x: &mut Cx, angles: u32, variant: Option<u8>) -> bool {
+fn breath_shot<R: Banc>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) -> bool {
     let Some(s) = x.alloc(&pools::ESHL) else { return false };
     s.set_u8(x.b, 0, 1);
     s.set_u8(x.b, 2, 0x32);

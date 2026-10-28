@@ -16,6 +16,7 @@
 //!
 //! Animations : 0x175da6 (corps), 0x175dc4 (attaques), 0x175e0c (chute, mort).
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -60,26 +61,26 @@ pub fn run(x: &mut Cx) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// 0x83dfe, 0x83e12, 0x83e28 : démarre le script `n` d'un des trois jeux d'animations.
-fn body(x: &mut Cx, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 0);
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn attack_anim(x: &mut Cx, n: u32) {
+fn attack_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 1);
     x.anim_start(SET_ATTACK, n as u16);
 }
 
-fn fall_anim(x: &mut Cx, n: u32) {
+fn fall_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 2);
     x.anim_start(SET_FALL, n as u16);
 }
 
 /// 0x83dde : fige-la un cran d'animation demandé par `+0x91` (bit 7 = demande).
-fn take_frame_request(x: &mut Cx) {
+fn take_frame_request<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(DEATH_FLAG);
     if v & 0x80 == 0 {
         return;
@@ -90,7 +91,7 @@ fn take_frame_request(x: &mut Cx) {
 }
 
 /// Index dans les tables de difficulté : `(difficulté & 0xfc) / 2` (mots).
-fn level_index(x: &mut Cx) -> u32 {
+fn level_index<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     (var::RANK.get(x.b) as u32 & 0xfc) >> 1
 }
 
@@ -102,7 +103,7 @@ fn call_on_list(x: &mut Cx, list: u32, addr: u32) {
     x.c.a[0] = me;
 }
 
-fn step(x: &mut Cx) -> bool {
+fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
@@ -179,7 +180,7 @@ fn intro(x: &mut Cx) {
             x.set16(COUNT, 0x100);
             set_dw(x, 0, 0x100);
             x.call(0x2a42);
-            x.call(0x1ab22);
+            crate::palette::flash(x.b, crate::palette::Flash::F);
             x.set_a5_u16(0x490, 0x10);
             x.set_a5_u8(0x48e, 0xf);
             set_dw(x, 0, 0x10);
@@ -204,7 +205,7 @@ fn intro(x: &mut Cx) {
                 set.set_u8(x.b, 2, 2);
                 set.set_u8(x.b, 3, 0x73);
             }
-            x.call(0x1abe0);
+            crate::palette::restore_flash(x.b);
             x.set_a5_u8(0x48e, 0xf);
             crate::palette::full_brightness(x.b);
             next_action(x);
@@ -213,7 +214,7 @@ fn intro(x: &mut Cx) {
     }
 }
 
-fn intro_wait_scene(x: &mut Cx) {
+fn intro_wait_scene<R: Banc>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x2e) != 4 {
         return;
     }
@@ -736,7 +737,7 @@ fn dying(x: &mut Cx) {
             x.set16(COUNT, 0);
             x.set_a5_u8(0x50, 0);
             x.set_a5_u8(0x42, 1);
-            x.call(0x1ac86);
+            crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe3b6c);

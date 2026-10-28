@@ -16,6 +16,7 @@
 //!
 //! Animations : 0x15eed8 (mouvements) et 0x15eef4 (coups).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -100,7 +101,7 @@ pub fn run(x: &mut Cx) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn body(x: &mut Cx, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
@@ -108,11 +109,11 @@ fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step(x: &mut Cx) -> bool {
+fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-fn move_xy(x: &mut Cx) {
+fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
@@ -147,7 +148,7 @@ fn pick_move(x: &mut Cx, table: u32, state: u16) {
 
 /// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main (l'adresse de reprise que
 /// l'original passait en A6 n'est relue par personne).
-fn special_hit(x: &mut Cx) -> bool {
+fn special_hit<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let flag = x.u8(SPECIAL_HIT);
     match flag {
         1 => {
@@ -365,7 +366,7 @@ fn blink(x: &mut Cx) {
 
 // --- état 6 : libération ------------------------------------------------------------------------
 
-fn dead(x: &mut Cx) {
+fn dead<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0xac) != 0 {
         let parent = x.linked(0xaa);
         let n = parent.u8(x.b, 0xaf).wrapping_sub(1);

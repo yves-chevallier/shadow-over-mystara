@@ -55,7 +55,7 @@ fn combo(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xb4ef4);
+                crate::families::effects_creators::spell_ring(x.b, x.o, 0);
                 lib::sound(x, 0xed25a);
             }
             x.anim_step();
@@ -81,11 +81,10 @@ fn combo(x: &mut Cx) {
     }
 }
 
-/// Lance un projectile (0xb4f44, D1 = 1) vers un joueur choisi par `pick`.
+/// Lance un projectile (0xb4f44, réglage 1) vers un joueur choisi par `pick`.
 fn shoot(x: &mut Cx, pick: fn(&mut Cx)) {
     pick(x);
-    x.c.d[1] = 1;
-    x.call(0xb4f44);
+    crate::families::effects_creators::spell(x.b, x.o, 1);
 }
 
 /// Début d'une rafale de projectiles (clé `kind`).
@@ -113,7 +112,7 @@ fn volley_fire(x: &mut Cx, pick: fn(&mut Cx)) {
     lib::sound(x, 0xedd2c);
     addq8(x, f::SUB3, 2);
     x.set16(TIMER, 0x32);
-    x.call(0xb4f60);
+    crate::families::effects_creators::spell_ring(x.b, x.o, 2);
     let n = var::PLAYERS_ALIVE.get(x.b);
     x.set8(VOLLEY, n);
     sub8(x, VOLLEY, 1);
@@ -186,8 +185,7 @@ fn plunge(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
-                x.c.d[1] = 3;
-                x.call(0xb4f44);
+                crate::families::effects_creators::spell(x.b, x.o, 3);
             }
             x.anim_step();
         }

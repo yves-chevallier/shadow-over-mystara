@@ -1,6 +1,7 @@
 //! Boss 16, états actifs de déplacement : réveil (`+5` = 0), combat (2), bond vers un point (6), attente avant
 //! une attaque (8), pause (10), joueur saisi (12).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 
@@ -135,7 +136,7 @@ fn wake_high_wait(x: &mut Cx) {
     x.c.d[0] = event as u32;
     if event == 8 {
         x.set_a5_u16(0x4be, 2);
-        x.call(0x1ac68);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
     }
     let event = x.u8(0x3e);
     if event == 0 {
@@ -318,7 +319,7 @@ pub(super) fn jump_to_spot(x: &mut Cx) {
 
 /// 0x9514a : choisit le point d'arrivée (`+0xae`, `+0xb0`), le sens de rotation (`+0xb3`) et l'angle (`+0x2d`) d'après la
 /// position du boss par rapport à la caméra (quatre coins, table 0x951b0 : X, Z, angle, sens).
-fn choose_spot(x: &mut Cx) {
+fn choose_spot<R: Banc>(x: &mut Cx<'_, R>) {
     let cam = camera_record(x);
     let dx = x.u16(0x8).wrapping_sub(cam.u16(x.b, 0x8));
     let dz = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc));
@@ -481,7 +482,7 @@ pub(super) fn paused(x: &mut Cx) {
 // --- groupe 12 : joueur saisi ---------------------------------------------------------------------------
 
 /// 0x9402a : plus de proie, le boss s'éloigne d'un bond.
-fn drop_prey(x: &mut Cx) {
+fn drop_prey<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::WALK);
     x.set16(0x18, 0x400);
     x.set16(0x1a, (-0x40i16) as u16);
@@ -552,9 +553,8 @@ fn hold_bite(x: &mut Cx, prey: crate::objects::Obj) {
     if x.u8(f::FLIP) == 0 {
         dx = dx.wrapping_neg();
     }
-    x.c.d[2] = dx.wrapping_add(x.u16(0x8)) as u32;
-    x.c.d[3] = x.u16(0xc).wrapping_add(8) as u32;
-    x.c.d[4] = x.u16(0x10).wrapping_sub(2) as u32;
-    x.call(call::SPLASH);
+    let pos = (dx.wrapping_add(x.u16(0x8)), x.u16(0xc).wrapping_add(8), x.u16(0x10).wrapping_sub(2));
+    (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+    crate::families::effects_creators::spark_at(x.b, x.o, prey.0, 2, pos);
     lib::hold_seized(x);
 }

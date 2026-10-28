@@ -9,6 +9,7 @@
 //! | 8 | charge (vers la caméra, ou vers la position mémorisée de la cible si `+0xb2`) |
 //! | 10 | tir en bond : crée un ESHL 0x2a, saute et le lâche |
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::pools;
@@ -31,29 +32,29 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn players_alive(x: &mut Cx) -> bool {
+fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn needs_turn(x: &mut Cx) -> bool {
+fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
-fn facing_forward(x: &mut Cx) -> bool {
+fn facing_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
 /// Le boss est-il hors de la fenêtre `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
-fn off_screen(x: &mut Cx) -> bool {
+fn off_screen<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::outside_band(x, -0x50, 0x1d0)
 }
 
-fn walk_anim(x: &mut Cx) {
+fn walk_anim<R: Banc>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
-fn walk_select(x: &mut Cx) {
+fn walk_select<R: Banc>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
 }
@@ -88,7 +89,7 @@ fn idle(x: &mut Cx) {
 
 // --- +6 = 2 -----------------------------------------------------------------------------------
 
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         let side = x.u8(f::FLIP) ^ 0x20;
@@ -261,7 +262,7 @@ fn charge(x: &mut Cx) {
 }
 
 /// 0x84930 : le boss est arrivé : il freine.
-fn charge_end(x: &mut Cx) {
+fn charge_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(TIMER, 0x14);
     x.set16(COUNT, 0);
@@ -348,7 +349,7 @@ fn shoot(x: &mut Cx) {
     }
 }
 
-fn step_only(x: &mut Cx) {
+fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 

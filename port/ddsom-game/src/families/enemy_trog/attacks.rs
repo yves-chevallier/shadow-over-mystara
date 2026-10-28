@@ -2,6 +2,7 @@
 //! 12 estoc répété, 14 jet, 16 course ou bond, 20 attaque spéciale, 22 annonce, 24 demi-tour, 26 geste long.
 //! `+5 = 6` : gardes et bonds. `+5 = 8` : coups de repli. `+7` est l'étape.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -156,7 +157,7 @@ fn leap_strike(x: &mut Cx, id: u8) {
 }
 
 /// Montée et chute d'un bond, puis animation de réception (0xc).
-fn land_with(x: &mut Cx) {
+fn land_with<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if step(x) && (x.u16(Obj::Z) as i16) < 0 {
         x.add8(f::SUB3, 2);
@@ -196,8 +197,7 @@ fn stab_begin(x: &mut Cx) {
 fn throw(x: &mut Cx) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.call(0x9e194);
-        if !x.c.cond(5) {
+        if crate::families::eshl_creators::four_3(&mut crate::families::effects_creators::restes::Pur, x.b, x.o) {
             x.set8(REPEAT, 6);
             return body(x, 8);
         }
@@ -250,7 +250,7 @@ fn dash(x: &mut Cx) {
 }
 
 /// 0x5a5a4 : grand bond de côté.
-fn long_jump(x: &mut Cx) {
+fn long_jump<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 6);
     x.set8(LOOK_PREV, 0xcc);
     x.set16(Obj::AZ, -0x38i16 as u16);
@@ -277,8 +277,7 @@ fn special(x: &mut Cx) {
         return end_attack(x);
     }
     if x.u8(f::KEY_FRAME) != 0 {
-        x.call(0x9e2a0);
-        if x.c.cond(5) {
+        if crate::families::eshl_creators::above_4(&mut crate::families::effects_creators::restes::Pur, x.b, x.o).is_none() {
             set_state_long(x, IDLE);
         }
     }
@@ -314,7 +313,7 @@ fn approach(x: &mut Cx) {
 }
 
 /// 24 : demi-tour, puis reprise du coup prévu.
-fn turn_around(x: &mut Cx) {
+fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 0xe);
@@ -365,7 +364,7 @@ pub(super) fn run_b(x: &mut Cx) {
 }
 
 /// Garde sur place (animation 8) jusqu'à la fin de l'animation, puis retour debout.
-fn hold(x: &mut Cx) {
+fn hold<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 0xee);
@@ -378,7 +377,7 @@ fn hold(x: &mut Cx) {
 }
 
 /// 2 : garde en posture 9 pendant `0x3c` images.
-fn guard(x: &mut Cx) {
+fn guard<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(POSTURE, 9);

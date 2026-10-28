@@ -1,6 +1,7 @@
 //! Tirs des joueurs (PSHL), troisième série : types 12 à 17 (objets lancés des magiciens et du
 //! clerc : jarre, flèches, gerbes de flamme). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::mem::{rd16, wr16};
@@ -18,7 +19,7 @@ const COUNTER_15: u32 = 0xff2048;
 const COUNTER_16: u32 = 0xff204a;
 
 /// Décrémente un compteur de la RAM (`subq.w #1`).
-fn decrement(x: &mut Cx, address: u32) {
+fn decrement<R: Banc>(x: &mut Cx<'_, R>, address: u32) {
     let v = rd16(x.b, address).wrapping_sub(1);
     wr16(x.b, address, v);
 }
@@ -372,7 +373,7 @@ mod stone {
                         x.add8(0x5, 2);
                         x.set16(0x5c, 4);
                         x.set_a5_u16(0x4ba, 0x100);
-                        x.call(crate::palette::FLASH_COLOR_ON.entry);
+                        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
                     }
                     x.anim_step();
                 }
@@ -381,7 +382,7 @@ mod stone {
                     if x.u16(0x5c) == 0 {
                         x.add8(0x5, 2);
                         x.set16(0x5c, 2);
-                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+                        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                     }
                     x.anim_step();
                 }

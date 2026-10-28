@@ -4,6 +4,7 @@
 //! lit dans une table d'octets de la ROM (choisie selon la phase `+0xaa` et, pour les deux boîtes de l'IA, le geste
 //! 1 ou 2 rendu par 0x1047a) un indice dans une table de sauts vers l'un des états ci-dessous.
 
+use crate::families::cx::Banc;
 use super::*;
 
 /// 0x8328e : combat, debout.
@@ -13,7 +14,7 @@ pub(super) fn idle(x: &mut Cx) {
 }
 
 /// 0x8329e : demi-tour, puis reprise de l'état en cours.
-pub(super) fn turn(x: &mut Cx) {
+pub(super) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -21,14 +22,14 @@ pub(super) fn turn(x: &mut Cx) {
 }
 
 /// 0x832b2 : marche vers la cible, pas rapides (tir 0x38).
-pub(super) fn walk(x: &mut Cx) {
+pub(super) fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x38);
     x.set32(f::STATE, 0x0202_0400);
 }
 
 /// 0x832c8 : marche lente (tir 0x39).
-pub(super) fn walk_slow(x: &mut Cx) {
+pub(super) fn walk_slow<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x39);
     x.set32(f::STATE, 0x0202_0600);
@@ -48,25 +49,25 @@ fn hop(x: &mut Cx) {
 }
 
 /// Attaque `n` (`+6` = 2n du groupe 4), vulnérable ou non.
-fn attack(x: &mut Cx, n: u8, vulnerable: bool) {
+fn attack<R: Banc>(x: &mut Cx<'_, R>, n: u8, vulnerable: bool) {
     x.set8(VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, 0x0204_0000 | (n as u32 * 2) << 8);
 }
 
 /// 0x8333e : traversée de l'écran en vol (attaque 3), invulnérable.
-pub(super) fn swoop(x: &mut Cx) {
+pub(super) fn swoop<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     attack(x, 3, false);
 }
 
 /// Le premier double est-il occupé (`+0xaf`) ? Les souffles cèdent alors la place à une autre attaque.
-fn double_busy(x: &mut Cx) -> bool {
+fn double_busy<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let d = double(x, DOUBLE_A);
     d.u8(x.b, 0xaf) != 0
 }
 
 /// 0x833ac : attente d'un joueur.
-pub(super) fn wait(x: &mut Cx) {
+pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
@@ -109,7 +110,7 @@ fn enter(x: &mut Cx, target: u32) {
 }
 
 /// `move.w (tbl,PC,Dn),Dn ; jmp (tbl,PC,Dn)` : adresse d'arrivée pour l'indice `i` (mot de `D0` mis à jour).
-fn jump(x: &mut Cx, table: u32, i: u16) -> u32 {
+fn jump<R: Banc>(x: &mut Cx<'_, R>, table: u32, i: u16) -> u32 {
     let off = x.rom16(table + i as u32);
     table.wrapping_add(off as i16 as i32 as u32)
 }
@@ -123,7 +124,7 @@ fn roll(x: &mut Cx, r: u32, bytes: u32, jumps: u32) {
 }
 
 /// Phase `+0xaa` (octet étendu en mot).
-fn phase(x: &mut Cx) -> u16 {
+fn phase<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     x.u8(PHASE) as i8 as i16 as u16
 }
 

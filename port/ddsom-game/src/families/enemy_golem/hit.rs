@@ -2,6 +2,7 @@
 //! 6 seconde table de réactions, 8 saisie par un joueur (le Golem sort de l'écran), 10 rien. Zone et ombre sont
 //! toujours testées.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -30,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Recul (0x685ea).
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) || !hit_gate(x) {
         return;
     }

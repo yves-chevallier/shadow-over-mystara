@@ -1,6 +1,7 @@
 //! Type 12, elfe debout (`+5 = 2`) et au repos (`+5 = 10`). `+6` : 0 marche vers la cible et
 //! décide d'attaquer, 2 demi-tour, 4 attente.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -154,7 +155,7 @@ pub(super) fn needs_turn_around(x: &mut Cx) -> bool {
 }
 
 /// `+6 = 2` : demi-tour (animation 2, puis inversion de l'orientation).
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -169,7 +170,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// `+6 = 4` : attente en position de garde.
-fn wait(x: &mut Cx) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

@@ -11,6 +11,7 @@
 //! | 12 | monte, rugit (0xa7234 / 0xa727c), descend |
 //! | 14 | plonge sur un joueur et le saisit |
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::mem::{rd16, rts};
 use crate::objects::Obj;
@@ -48,7 +49,7 @@ fn rise_start(x: &mut Cx) {
 }
 
 /// 0x91cec : monte jusqu'à l'altitude 0x300.
-fn rise_up(x: &mut Cx) {
+fn rise_up<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) < 0x300 {
         return;
@@ -89,7 +90,7 @@ fn fall_down(x: &mut Cx) {
 }
 
 /// Le joueur visé (`+0x50`) s'il existe, sinon le dragon attend (0x91748).
-fn target(x: &mut Cx) -> Option<Obj> {
+fn target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
     if x.u16(f::TARGET) == 0 {
         wait(x);
         return None;
@@ -103,7 +104,7 @@ fn target(x: &mut Cx) -> Option<Obj> {
 }
 
 /// Rejoint par quarts l'altitude 0x40 et la profondeur du joueur visé ; passe à l'étape suivante à l'arrivée.
-fn reach_player(x: &mut Cx) {
+fn reach_player<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(p) = target(x) else { return };
     let y = p.u16(x.b, 0x10) as i16;
     if fight_close(x, y) {
@@ -111,7 +112,7 @@ fn reach_player(x: &mut Cx) {
     }
 }
 
-fn fight_close(x: &mut Cx, y: i16) -> bool {
+fn fight_close<R: Banc>(x: &mut Cx<'_, R>, y: i16) -> bool {
     super::fight::close_in_zy(x, 0x40, y)
 }
 
@@ -130,7 +131,7 @@ fn attack_0(x: &mut Cx) {
         4 => {
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
-                x.call(0x1ac86);
+                crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 x.set_a5_u16(0x4be, 8);
                 return settle(x);
             }
@@ -140,7 +141,7 @@ fn attack_0(x: &mut Cx) {
                 let z = x.u16(0xc).wrapping_sub(3);
                 x.set16(0xc, z);
             }
-            x.call(0xb3fd4);
+            crate::families::effects_creators::scenery_6(x.b, x.o);
         }
         6 => settle(x),
         8 => {
@@ -245,7 +246,7 @@ fn push_side(x: &mut Cx) {
             p.set_u16(x.b, 0x8, nx);
         }
     }
-    x.call(0xba18a);
+    crate::families::effects_creators::drift(x.b, x.o);
     let t = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, t);
     if (t as i16) >= 0 {
@@ -314,7 +315,7 @@ fn sweep(x: &mut Cx) {
 }
 
 /// 0x92036 : fin du souffle, puis lance le vol de sortie.
-fn sweep_end(x: &mut Cx) {
+fn sweep_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     if !step(x) {
         return;
@@ -332,7 +333,7 @@ fn sweep_end(x: &mut Cx) {
 }
 
 /// 0x92066 : s'éloigne jusqu'à sortir de l'écran, puis se replace en haut à droite.
-fn leave(x: &mut Cx) {
+fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.move_x();
     let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b)) as i16;
@@ -378,7 +379,7 @@ fn attack_4(x: &mut Cx) {
 }
 
 /// 0x92180 : place le dragon au-dessus de l'écran, selon son type.
-fn dive_position(x: &mut Cx) {
+fn dive_position<R: Banc>(x: &mut Cx<'_, R>) {
     let big = x.u8(TYPE) == TYPE_BIG;
     let px = var::SCROLL_X.get(x.b).wrapping_add(if big { 0x96 } else { 0xc0 });
     x.set16(0x8, px);
@@ -394,7 +395,7 @@ fn dive_a(x: &mut Cx) {
     if step(x) {
         x.add8(0x7, 2);
         set_anim(x, 2, 0x16);
-        x.call(0xb4026);
+        crate::families::effects_creators::scenery_8(x.b, x.o);
         return dive_b(x);
     }
     if x.u8(0x33) == 0 {
@@ -564,14 +565,14 @@ fn attack_14(x: &mut Cx) {
 }
 
 /// 0x9249e : un joueur à portée (0xfc44) est saisi ; rend vrai.
-fn try_seize(x: &mut Cx) -> bool {
+fn try_seize<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 7) else { return false };
     lib::seize_player(x, player, 0);
     true
 }
 
 /// 0x931ea : se rapproche du joueur visé de 2 pixels par image en X et en Y (sans le dépasser).
-fn follow(x: &mut Cx) {
+fn follow<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return;
     }

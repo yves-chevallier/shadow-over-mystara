@@ -1,5 +1,6 @@
 //! Boss 8, groupes 0 (arrivée), 2 (combat), 10 (attente sans joueur) et 14 (relevé).
 
+use crate::families::cx::Banc;
 use super::aids;
 use super::*;
 use crate::objects::Courant;
@@ -133,8 +134,7 @@ fn near_checks(x: &mut Cx) {
         return;
     }
     if aids::player_near(x, true) {
-        x.random_68k();
-        let i = x.c.d[0] as u16 & 0xf;
+        let i = x.random() & 0xf;
         x.set32(f::STATE, if i >= 6 { 0x0204_1000 } else { 0x0204_1200 });
         return lib::pick_byte(x);
     }
@@ -177,8 +177,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
         x.c.d[0] = 0;
         return false;
     }
-    x.random_68k();
-    let i = x.c.d[0] as u16 & 0xf;
+    let i = x.random() & 0xf;
     if i >= 6 {
         x.set32(f::STATE, 0x0202_0800);
         return true;
@@ -190,7 +189,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
 }
 
 /// 0x8863a : demi-tour, puis reprise de l'état mémorisé (`+0xa6`, `+0xa5`).
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);

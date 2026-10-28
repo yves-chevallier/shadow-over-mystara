@@ -17,6 +17,7 @@
 //! Animations : 0x164174 (mouvements) et 0x164184 (coups). L'état actif exécute toujours, hors gel, le
 //! test de proximité 0x81aa4, le test de zone, l'ombre et la remise en liste.
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -81,7 +82,7 @@ pub fn run(x: &mut Cx) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn body(x: &mut Cx, n: u32) {
+fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
@@ -89,22 +90,22 @@ fn strike(x: &mut Cx, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step(x: &mut Cx) -> bool {
+fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-fn move_xy(x: &mut Cx) {
+fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
 /// 0x69528 : saut — effet 0xecfe4 et animation 3.
-fn launch(x: &mut Cx) {
+fn launch<R: Banc>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xecfe4);
     body(x, 3);
 }
 
 /// 0x6954a : accroupi (animation 4).
-fn crouch(x: &mut Cx) {
+fn crouch<R: Banc>(x: &mut Cx<'_, R>) {
     body(x, 4);
 }
 
@@ -116,14 +117,14 @@ fn wait_anim(x: &mut Cx) {
 }
 
 /// 0x6957c : l'animation finie, retour debout.
-fn end_to_stance(x: &mut Cx) {
+fn end_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
     if step(x) {
         set_state_long(x, STANCE);
     }
 }
 
 /// 0x6a680 : retour debout ; si la décision 0x79ce le veut, au repos.
-fn back_to_stance(x: &mut Cx) {
+fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -278,7 +279,7 @@ fn arrival(x: &mut Cx) {
 }
 
 /// 0x69558 : descente (déplacement en hauteur) puis réception.
-fn land(x: &mut Cx) {
+fn land<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(Obj::Z) as i16) > 0 {
         return;

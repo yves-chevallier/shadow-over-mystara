@@ -1,6 +1,7 @@
 //! Boss 6, groupe `+5` = 0 : arrivée. La Manticore entre par la droite en bondissant, retombe, rugit puis
 //! attend que la caméra se fige avant de combattre.
 
+use crate::families::cx::Banc;
 use super::decide;
 use super::*;
 use crate::objects::Courant;
@@ -20,7 +21,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// +6 = 0 : placée à droite de la caméra, elle part en bond vers la gauche.
-fn enter(x: &mut Cx) {
+fn enter<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, false);
     let px = var::CAMERA1_X.get(x.b).wrapping_add(0x1e0);
@@ -36,7 +37,7 @@ fn enter(x: &mut Cx) {
 }
 
 /// +6 = 2 : montée du bond.
-fn rise(x: &mut Cx) {
+fn rise<R: Banc>(x: &mut Cx<'_, R>) {
     lib::step(x);
     if x.u8(f::KEY_FRAME) != 0 {
         return;
@@ -50,7 +51,7 @@ fn rise(x: &mut Cx) {
 }
 
 /// +6 = 4 : sommet du bond.
-fn peak(x: &mut Cx) {
+fn peak<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if cmp16(x, 0x18, 0xff00).le() {
         x.add8(f::SUB2, 2);
@@ -59,7 +60,7 @@ fn peak(x: &mut Cx) {
 }
 
 /// +6 = 6 : chute ; à l'atterrissage, secousse et poussière.
-fn land(x: &mut Cx) {
+fn land<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if tst16(x, 0xc).gt() {
         return;
@@ -99,7 +100,7 @@ fn settle(x: &mut Cx) {
 }
 
 /// +6 = 12 : se relève.
-fn stand_up(x: &mut Cx) {
+fn stand_up<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::step(x) {
         x.add8(f::SUB2, 2);
         body(x, 0);

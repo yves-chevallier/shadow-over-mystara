@@ -14,6 +14,7 @@
 //! État 4 (touché) : recul, chute puis mort clignotante.
 //! Animations 0x163a86 (mouvements) et 0x163a9e (touché).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -83,18 +84,18 @@ pub fn run(x: &mut Cx) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-fn anim_play(x: &mut Cx, n: u32) {
+fn anim_play<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(ANIMS, n as u16);
 }
 
 /// 0x6662e : position de la caméra, X dans le mot bas de D6, Y dans le mot haut.
-fn camera(x: &mut Cx) -> (u16, u16) {
+fn camera<R: Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
     let (cx, cy) = if var::CAMERA_SELECT.get(x.b) != 0 { (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b)) } else { (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b)) };
     (cx, cy)
 }
 
 /// 0x666de : adopte une table de vitesses (paires de mots par angle `+0x2d`).
-fn speeds(x: &mut Cx, table: u32) {
+fn speeds<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     x.set32(SPEEDS, table);
     let off = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
     let (vx, vy) = (x.data16(table + off), x.data16(table + off + 2));
@@ -105,21 +106,21 @@ fn speeds(x: &mut Cx, table: u32) {
 }
 
 /// 0x666d2 : table de vitesses choisie par la difficulté (`A5+0x7f92` & 0x1c).
-fn speeds_by_level(x: &mut Cx, list: u32) {
+fn speeds_by_level<R: Banc>(x: &mut Cx<'_, R>, list: u32) {
     let level = (var::RANK.get(x.b) & 0x1c) as u32;
     let table = x.data32(list + level);
     speeds(x, table);
 }
 
 /// 0x666a2 : cadence de virage (octets `+0xa2/+0xa3`) selon la difficulté.
-fn turn_timer(x: &mut Cx, table: u32) {
+fn turn_timer<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let off = ((var::RANK.get(x.b) & 0x10) >> 3) as u32;
     let v = x.data16(table + off);
     x.set16(TURN_PERIOD, v);
 }
 
 /// 0x6664c / 0x6664e : vitesse `+0x1e` lue dans la table selon la difficulté, `base` = décalage de ligne.
-fn set_speed_y(x: &mut Cx, base: u16) {
+fn set_speed_y<R: Banc>(x: &mut Cx<'_, R>, base: u16) {
     let off = ((var::RANK.get(x.b) & 0x18) >> 2).wrapping_add(base);
     let v = x.data16(SPEED_Y_ROW + off as u32);
     x.set16(Obj::AY, v);
@@ -127,7 +128,7 @@ fn set_speed_y(x: &mut Cx, base: u16) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set16(f::SUB2, 0);
     x.set8(f::BOX_SET, 0x15);
@@ -148,7 +149,7 @@ fn init(x: &mut Cx) {
 }
 
 /// 0x65b6c : l'insecte part dans le sens que dicte la parité de `+0x2f`.
-fn start_walk(x: &mut Cx) {
+fn start_walk<R: Banc>(x: &mut Cx<'_, R>) {
     let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
     x.set16(SAVED_DEPTH, pz);
@@ -165,7 +166,7 @@ fn start_walk(x: &mut Cx) {
 }
 
 /// 0x65bb4 : reprise de la marche après un bond, selon l'orientation et la parité de `+0x2f`.
-fn resume_walk(x: &mut Cx) {
+fn resume_walk<R: Banc>(x: &mut Cx<'_, R>) {
     let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
     x.set16(SAVED_DEPTH, pz);
@@ -178,7 +179,7 @@ fn resume_walk(x: &mut Cx) {
 }
 
 /// Variante 2 : entre par le bord droit (ou gauche pour les groupes impairs) de l'écran.
-fn enter_from_edge(x: &mut Cx) {
+fn enter_from_edge<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 4);
     let (cx, _) = camera(x);
     let mut offset = 0x190u16;
@@ -198,7 +199,7 @@ fn enter_from_edge(x: &mut Cx) {
 }
 
 /// Variante 4 : le nid engendre ses pièces (liste `+0x42`) puis dort jusqu'à être visible.
-fn nest(x: &mut Cx) {
+fn nest<R: Banc>(x: &mut Cx<'_, R>) {
     start_walk(x);
     x.set8(f::SUB, 8);
     let list = x.u8(0x42) as u32;
@@ -252,7 +253,7 @@ fn march(x: &mut Cx) {
 
 /// 0x66740 : avance dans la table de vitesses ; toutes les `+0xa2` images tourne d'un cran vers l'angle voulu
 /// et enchaîne l'animation de virage.
-fn steer(x: &mut Cx) {
+fn steer<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     let n = x.u8(TURN_TIMER).wrapping_sub(1);
     x.set8(TURN_TIMER, n);
@@ -319,7 +320,7 @@ fn routes(x: &mut Cx) {
 }
 
 /// 0x65ea8 : début de traversée.
-fn cross_start(x: &mut Cx) {
+fn cross_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     speeds_by_level(x, SPEEDS_FLY);
     turn_timer(x, TIMER_A);
@@ -430,14 +431,14 @@ fn drift(x: &mut Cx) {
 }
 
 /// 0x660bc : abscisse d'arrêt (`+0xb6`) lue dans la table selon le rang d'arrêt.
-fn set_stop(x: &mut Cx, rank: u8) {
+fn set_stop<R: Banc>(x: &mut Cx<'_, R>, rank: u8) {
     let base = STOP_XS + if x.u8(GROUP) & 1 != 0 { 6 } else { 0 };
     let v = x.data16(base + rank as u32);
     x.set16(STOP_X, v);
 }
 
 /// 0x660aa : début d'un vol arrêté.
-fn halt_start(x: &mut Cx) {
+fn halt_start<R: Banc>(x: &mut Cx<'_, R>) {
     cross_start(x);
     x.set8(STOP_STEP, 0);
     speeds_by_level(x, SPEEDS_FLY);
@@ -608,7 +609,7 @@ fn turn_back(x: &mut Cx) {
 
 // --- sous-état 6 : bond -------------------------------------------------------------------------
 
-fn pounce(x: &mut Cx) {
+fn pounce<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -647,7 +648,7 @@ fn pounce(x: &mut Cx) {
 }
 
 /// Sous-état 8 : dormant ; réveillé (sous-état 0) quand il est à moins de 0x1c0 pixels de la caméra.
-fn dormant(x: &mut Cx) {
+fn dormant<R: Banc>(x: &mut Cx<'_, R>) {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d0 = x.u16(Obj::X).wrapping_sub(cam).wrapping_add(0x20);
     if d0 <= 0x1c0 {
@@ -712,7 +713,7 @@ fn shake_timer(x: &mut Cx) {
 }
 
 /// 0x664f8 : recul, la face opposée au coup.
-fn knock_back(x: &mut Cx) {
+fn knock_back<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set8(f::SUB2, 0);
     let freeze = x.u8(FREEZE_AT_HIT);
@@ -784,7 +785,7 @@ fn fall(x: &mut Cx) {
     x.anim_step();
 }
 
-fn free(x: &mut Cx) {
+fn free<R: Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::ENEMY);
 }
 

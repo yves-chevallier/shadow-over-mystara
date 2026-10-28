@@ -1,5 +1,6 @@
 //! Boss 22, groupe 4 : les attaques (`+6` = 0 à 22). Chacune se termine par `next_attack` (0x9d680).
 
+use crate::families::cx::Banc;
 use super::moves::step_anim;
 use super::*;
 use crate::objects::Courant;
@@ -95,7 +96,7 @@ fn bite(x: &mut Cx) {
 }
 
 /// Fin de la course d'une attaque de la seconde forme : le boss se tourne vers sa cible s'il lui tourne le dos.
-fn facing_wrong(x: &mut Cx) -> bool {
+fn facing_wrong<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -218,7 +219,7 @@ fn second_form_strike(x: &mut Cx) {
 }
 
 /// 0x9c29a : le boss reste dans l'écran et la cible est assez proche devant lui (comme au demi-tour du combat).
-fn still_close(x: &mut Cx) -> bool {
+fn still_close<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
         return false;
@@ -269,7 +270,7 @@ fn charge_strike(x: &mut Cx) {
     }
 }
 
-fn charge_start(x: &mut Cx) {
+fn charge_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(ANIM_ID, 0xf);
     x.set8(ANIM_LAST, 0xf);
@@ -315,7 +316,7 @@ fn stomp(x: &mut Cx) {
     }
 }
 
-fn stomp_start(x: &mut Cx) {
+fn stomp_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(ANIM_ID, 0xd);
     x.set8(ANIM_LAST, 0xd);
@@ -361,7 +362,7 @@ fn dive(x: &mut Cx) {
     }
 }
 
-fn rise_wait(x: &mut Cx) {
+fn rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
@@ -369,7 +370,7 @@ fn rise_wait(x: &mut Cx) {
     step_anim(x);
 }
 
-fn climb(x: &mut Cx, up: bool) {
+fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
     x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };

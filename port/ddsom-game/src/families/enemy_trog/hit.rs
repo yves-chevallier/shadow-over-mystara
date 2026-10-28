@@ -1,6 +1,7 @@
 //! Type 2, état touché (`+4 = 4`, 0x5ab72). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
 //! 4 chute, 8 saisie par un joueur (le troglodyte s'enfuit).
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -39,7 +40,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Le clignotement de la série 0 continue pendant l'état touché (0x5ab72).
-fn blink_hit(x: &mut Cx) {
+fn blink_hit<R: Banc>(x: &mut Cx<'_, R>) {
     let phase = x.u8(BLINK_PHASE) as i8;
     if phase <= 0 {
         return;
@@ -65,7 +66,7 @@ fn blink_hit(x: &mut Cx) {
 }
 
 /// Sous-état 2 : le troglodyte recule, puis se remet debout.
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -96,7 +97,7 @@ fn recoil(x: &mut Cx) {
 }
 
 /// Sous-état 4 : chute, attente couché, relevé.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -172,7 +173,7 @@ pub(super) fn caught(x: &mut Cx) {
 }
 
 /// 0x5ac8c : s'enfuit en courant vers le bord de l'écran.
-fn run_away(x: &mut Cx) {
+fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {

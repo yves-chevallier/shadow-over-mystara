@@ -1,6 +1,7 @@
 //! Type 19, état touché (`+4 = 4`, 0x7407a) : réactions aux coups. `+5` : 0 réaction commune par
 //! table (`+0x49`), 2 recul des pièces, 4 chute, 6 deuxième table de réactions, 8 mort ou fuite.
 
+use crate::families::cx::Banc;
 use super::stance::next_move;
 use super::*;
 use crate::objects::Courant;
@@ -179,8 +180,7 @@ fn flee(x: &mut Cx) {
                 x.add8(f::SUB2, 2);
             }
             let t = crate::video::terrain_of(x.b, x.o);
-            crate::video::terrain_68k(x.c, &t);
-            let terrain = t.numero as u8;
+                let terrain = t.numero as u8;
             x.set8(0x29, terrain);
             x.move_by_table_xy();
             if x.in_arena_default() {
@@ -222,7 +222,7 @@ fn flee(x: &mut Cx) {
 }
 
 /// 0x7444e : s'enfuit en courant vers le bord de l'écran.
-fn run_away(x: &mut Cx) {
+fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x16);
     x.set8(Obj::SPEED_INDEX, 8);

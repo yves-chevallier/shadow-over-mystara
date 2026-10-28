@@ -3,6 +3,8 @@
 //! 30 coup suivi d'un bond, 32 coup de patte court.
 //! Chaque geste commence par `begin_wait` (étape 0) et `hold` (étape 2, poursuite en place).
 
+use crate::families::cx::Banc;
+use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -37,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x557bc : prépare l'attente.
-pub(super) fn begin_wait(x: &mut Cx) {
+pub(super) fn begin_wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0);
@@ -46,7 +48,7 @@ pub(super) fn begin_wait(x: &mut Cx) {
 
 /// 0x5590e / 0x55902 : poursuite en place jusqu'à la fin du compteur `+0x77`, avec demi-tour si la cible change de
 /// côté ; `resume` est l'état à reprendre après le demi-tour.
-pub(super) fn hold(x: &mut Cx, resume: u32) {
+pub(super) fn hold<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
     x.set32(RESUME_STATE, resume);
     let n = x.u8(AI_LUNGE).wrapping_sub(1);
     x.set8(AI_LUNGE, n);
@@ -62,7 +64,7 @@ pub(super) fn hold(x: &mut Cx, resume: u32) {
 }
 
 /// 0x57924 après un pas en arrière de 0x20 : le Kobold rétablit sa place devant le coup.
-fn shift_back(x: &mut Cx) {
+fn shift_back<R: Banc>(x: &mut Cx<'_, R>) {
     let dx: u16 = if x.u8(f::FLIP) == 0 { 0xffe0 } else { 0x20 };
     x.add16(Obj::X, dx);
 }
@@ -81,11 +83,11 @@ fn step_then_after(x: &mut Cx) {
     }
 }
 
-/// Clé d'animation : effet `effect` (la clé est remise à zéro).
-fn key_effect(x: &mut Cx, effect: u32) {
+/// Clé d'animation : tir lancé `throw` (0x9dda8 ou 0x9e062 ; la clé est remise à zéro).
+fn key_effect<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        x.call(effect);
+        throw(x.b, x.o);
     }
 }
 
@@ -293,7 +295,7 @@ fn jump_series(x: &mut Cx, vx: i16, kind: u8) {
 }
 
 /// 0x54fc4 : retombée d'un saut → animation 0x18 d'atterrissage.
-fn land(x: &mut Cx) {
+fn land<R: Banc>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
         return;
@@ -309,7 +311,7 @@ fn strike_then_jump(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_strike(x),
         6 => {
-            key_effect(x, 0x9e062);
+            key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
                 strike(x, 7);
@@ -555,7 +557,7 @@ fn series_a(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_strike(x),
         6 => {
-            key_effect(x, 0x9dda8);
+            key_effect(x, eshl_creators::throw_1);
             if x.anim_step() {
                 end_strike(x);
             }
@@ -581,7 +583,7 @@ fn series_b(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_strike(x),
         6 => {
-            key_effect(x, 0x9e062);
+            key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
                 x.set8(AI_SHOT, 0xff);
                 end_strike(x);
@@ -598,7 +600,7 @@ fn series_c(x: &mut Cx) {
             series_strike(x);
         }
         6 => {
-            key_effect(x, 0x9dda8);
+            key_effect(x, eshl_creators::throw_1);
             if x.anim_step() {
                 strike(x, 6);
                 let n = x.u8(REPEAT).wrapping_sub(1);
@@ -618,7 +620,7 @@ fn series_d(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_prologue(x),
         6 => {
-            key_effect(x, 0x9e062);
+            key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
                 strike(x, 6);
                 let n = x.u8(REPEAT).wrapping_sub(1);

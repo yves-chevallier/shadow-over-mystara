@@ -18,6 +18,7 @@
 //!
 //! Animations : 0x17a276.
 
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 use super::boss_common::*;
 use crate::objects::Obj;
@@ -86,21 +87,17 @@ pub(self) const ESHL_FREE: u32 = 0x7e64;
 /// Mode « dur » (mot non nul) : vitesses de la table rapide.
 pub(self) const HARD: u32 = 0x70;
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const MESSAGE: u32 = 0xc8312;
-}
 
 /// Un pas d'animation (0x1a56).
-pub(self) fn anim(x: &mut Cx) {
+pub(self) fn anim<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6(x: &mut Cx) {
+pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7(x: &mut Cx) {
+pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 pub(self) fn steps(x: &mut Cx, s6: u8, s7: u8) {
@@ -109,7 +106,7 @@ pub(self) fn steps(x: &mut Cx, s6: u8, s7: u8) {
 }
 
 /// `bchg.b #1,(0xd,A0)` : l'engin cahote.
-pub(self) fn jolt(x: &mut Cx) {
+pub(self) fn jolt<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(0xd) ^ 2;
     x.set8(0xd, v);
 }
@@ -194,7 +191,7 @@ pub(self) fn stop_over(x: &mut Cx) {
 
 // --- tables par difficulté (données de la ROM) ----------------------------------------------------
 
-fn difficulty(x: &mut Cx) -> u32 {
+fn difficulty<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     var::RANK.get(x.b) as u32
 }
 

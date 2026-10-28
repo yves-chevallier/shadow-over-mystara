@@ -31,14 +31,16 @@ pub fn poison_actif(etiquette: &str) -> bool {
     !e.is_empty() && e.iter().any(|x| x == etiquette || x == "tout")
 }
 
-/// L'étiquette est-elle empoisonnée au site d'appel `site` (`fichier:ligne:colonne`) ? Une entrée `étiquette@motif`
-/// ne vaut que pour les sites qui contiennent le motif (`motion@families/sobj`) ; une entrée précédée de `!` exclut
-/// ces sites (`motion,!motion@sobj.rs:120`), pour isoler par bissection le lecteur d'un registre. Rend les registres
-/// à épargner : une entrée `étiquette@motif#a1+d0` empoisonne ce site sauf A1 et D0 (lecture déjà connue et écrite
-/// en clair, pour chercher les autres) ; précédée de `=`, elle épargne ces registres sans empoisonner le site.
-fn gardes(etiquette: &str, site: &str) -> Option<u32> {
-    let mut actif = false;
-    let mut epargnes = 0;
+/// Registres visés au site `site` (`fichier:ligne:colonne`, ou nom d'étape) par l'une des étiquettes `noms`, ou
+/// `None` si aucune entrée ne vise le site. Une entrée `étiquette@motif` ne vaut que pour les sites qui contiennent le
+/// motif (`motion@families/sobj`) ; `étiquette.d4` (`.a1`, `.ccr`) ne vise qu'un registre ; une entrée précédée de
+/// `!` exclut ces sites ou ce registre (`motion,!motion@sobj.rs:120`, `sortie,!sortie.d4@ba310`), pour isoler par
+/// bissection le lecteur d'un registre. Une entrée `étiquette@motif#a1+d0` vise ce site sauf A1 et D0 (lecture déjà
+/// connue et écrite en clair, pour chercher les autres) ; précédée de `=`, elle épargne ces registres sans viser le
+/// site.
+fn selection(noms: &[&str], site: &str) -> Option<u32> {
+    const TOUS: u32 = 0x7fff | regs::CCR | X;
+    let (mut vises, mut epargnes, mut actif) = (0, 0, false);
     for x in etiquettes() {
         let (exclu, x) = match x.strip_prefix('!') {
             Some(x) => (true, x),
@@ -56,15 +58,32 @@ fn gardes(etiquette: &str, site: &str) -> Option<u32> {
             Some((n, m)) => (n, Some(m)),
             None => (x, None),
         };
-        if (nom == etiquette || nom == "tout") && motif.map_or(true, |m| site.contains(m)) {
-            if exclu {
+        let (nom, registres) = match nom.split_once('.') {
+            Some((n, r)) => (n, masque_de(r)),
+            None => (nom, TOUS),
+        };
+        if !(noms.contains(&nom) || nom == "tout") || !motif.map_or(true, |m| site.contains(m)) {
+            continue;
+        }
+        if exclu {
+            if registres == TOUS {
                 return None;
             }
-            actif |= !garde_seule;
+            epargnes |= registres;
+        } else {
+            if !garde_seule {
+                actif = true;
+                vises |= registres;
+            }
             epargnes |= garde;
         }
     }
-    actif.then_some(epargnes)
+    actif.then_some(vises & !epargnes)
+}
+
+/// [`selection`] pour une seule étiquette.
+fn gardes(etiquette: &str, site: &str) -> Option<u32> {
+    selection(&[etiquette], site)
 }
 
 /// Masque `crate::regs` d'une liste `d0+a1+ccr`.
@@ -92,9 +111,31 @@ pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16)
     }
     let etiquette = format!("appel_{adresse:x}");
     let site = site.to_string();
-    let Some(garde) = gardes(&etiquette, &site) else {
+    // `appel` seul vise tous les appels par adresse (`appel@families/` : ceux des familles)
+    let Some(choisis) = selection(&[&etiquette, "appel"], &site) else {
         return;
     };
+    inverser_changes(c, avant, !choisis, &etiquette, &site);
+}
+
+/// Sonde de la sortie d'un gestionnaire d'objet (boucle de dispatch, `dispatch.rs`) : avec l'étiquette `sortie` dans
+/// `DDSOM_POISON`, les registres et drapeaux que le gestionnaire a changés (sauf A0 et D7, que la boucle relit) sont
+/// inversés à son retour. Le site est `<boucle> <gestionnaire>` en hexadécimal (`39f82 a17d0`) : `sortie@a17d0` vise
+/// un gestionnaire, `sortie@39e86` une classe. Si la validation reste VALIDE, aucun gestionnaire suivant ni aucune suite
+/// ne relit ce que le gestionnaire laisse : il peut devenir une fonction Rust sans registres de sortie.
+pub fn sonder_sortie(c: &mut Cpu, avant: &([u32; 8], [u32; 8], u16), boucle: u32, gestionnaire: u32) {
+    if etiquettes().is_empty() {
+        return;
+    }
+    let site = format!("{boucle:x} {gestionnaire:x}");
+    let Some(choisis) = selection(&["sortie"], &site) else {
+        return;
+    };
+    inverser_changes(c, avant, !choisis | regs::a(0) | regs::d(7), "sortie", &site);
+}
+
+/// Inverse les registres et drapeaux changés depuis `avant`, sauf ceux de `garde`.
+fn inverser_changes(c: &mut Cpu, avant: &([u32; 8], [u32; 8], u16), garde: u32, etiquette: &str, site: &str) {
     let mut masque = 0;
     for i in 0..8 {
         if c.d[i] != avant.0[i] {
@@ -114,15 +155,8 @@ pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16)
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
         eprintln!("POISON {etiquette} {site} masque={masque:05x}");
     }
-    for i in 0..8 {
-        if masque & regs::d(i) != 0 {
-            c.d[i as usize] = !c.d[i as usize];
-        }
-        if i < 7 && masque & regs::a(i) != 0 {
-            c.a[i as usize] = !c.a[i as usize];
-        }
-    }
-    inverser_drapeaux(&mut c.sr, masque);
+    let (d, a, sr) = (&mut c.d, &mut c.a, &mut c.sr);
+    inverser(d, &mut a[..7], sr, masque);
 }
 
 /// Registres d'une tâche qu'une étape peut hériter : D0-D7, A0-A4, A6 et les drapeaux (A5 est remis par chaque pas,
@@ -164,13 +198,13 @@ pub fn sonder_cession(d: &mut [u32; 8], a: &mut [u32; 7], sr: &mut u16, etape: &
         return;
     }
     let site = format!("{etape:?}");
-    let Some(garde) = gardes("cession", &site) else {
+    let Some(choisis) = gardes("cession", &site) else {
         return;
     };
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
         eprintln!("POISON cession {site}");
     }
-    inverser(d, a, sr, REGISTRES_DE_TACHE & !garde);
+    inverser(d, a, sr, REGISTRES_DE_TACHE & choisis);
 }
 
 /// Sonde du retour d'une étape (`taches::executer`, pas qui rend `Flow::Done`) : avec l'étiquette `retour`
@@ -182,14 +216,14 @@ pub fn sonder_retour(c: &mut Cpu, etape: &dyn std::fmt::Debug) {
         return;
     }
     let site = format!("{etape:?}");
-    let Some(garde) = gardes("retour", &site) else {
+    let Some(choisis) = gardes("retour", &site) else {
         return;
     };
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
         eprintln!("POISON retour {site}");
     }
     let (d, a, sr) = (&mut c.d, &mut c.a, &mut c.sr);
-    inverser(d, &mut a[..7], sr, REGISTRES_DE_TACHE & !garde);
+    inverser(d, &mut a[..7], sr, REGISTRES_DE_TACHE & choisis);
 }
 
 /// Registres que l'adaptateur `etiquette` écrit comme l'original et dont on veut prouver qu'ils sont morts
@@ -202,11 +236,11 @@ pub fn registres_morts(c: &mut Cpu, etiquette: &str, masque: u32) {
     // le site est celui de l'appelant de l'adaptateur (`#[track_caller]` sur les adaptateurs et les méthodes de
     // `objects::Courant`)
     let site = std::panic::Location::caller().to_string();
-    let Some(garde) = gardes(etiquette, &site) else {
+    let Some(choisis) = gardes(etiquette, &site) else {
         return;
     };
     // `regs::CCR` d'un adaptateur : tous les drapeaux, X compris
-    let masque = if masque & regs::CCR != 0 { masque | X } else { masque } & !garde;
+    let masque = if masque & regs::CCR != 0 { masque | X } else { masque } & choisis;
     // DDSOM_POISON_TRACE=1 : chaque empoisonnement, avec son site d'appel et A1 (diagnostic d'un écart)
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
         eprintln!("POISON {etiquette} {site} a1={:06x}", c.a[1]);

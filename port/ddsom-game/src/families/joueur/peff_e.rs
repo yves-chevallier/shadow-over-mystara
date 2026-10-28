@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), cinquième série : types 12 (le gel), 13 (bénédiction) et 14 (renvoi).
 //! Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
@@ -13,7 +14,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 }
 
 /// Caméra de référence : position (X, Y) de la caméra principale, ou de la secondaire si `A5+0x36`.
-fn camera(x: &mut Cx) -> (u16, u16) {
+fn camera<R: Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
     if x.a5_u8(a5::USE_CAM2) != 0 {
         (x.a5_u16(a5::CAM2_X), x.a5_u16(a5::CAM2_Y))
     } else {
@@ -133,7 +134,8 @@ mod ice {
     /// Rebond sur les bords de l'écran (`0x4bda8`) : le tirage `andi.w #7,D2w` porte sur D2, laissé
     /// par l'appelant.
     fn bounce(x: &mut Cx) {
-        x.random_68k();
+        // Glitch d'origine : le tirage n'est pas utilisé, le rebond est choisi par le D2 hérité.
+        x.random();
         let d2 = x.c.d[2] & 7;
         x.c.d[2] = x.c.d[2] & 0xffff_0000 | d2;
         let d0 = x.u16(0x8);

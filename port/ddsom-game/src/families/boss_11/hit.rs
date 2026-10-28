@@ -1,6 +1,7 @@
 //! Boss 11/12, état 4 « touché » (0x8e39a). Groupes `+5` : 0 réaction (table de longs 0x8e3dc : six routines selon le code de
 //! coup `+0x49`), 4 étourdi, 2, 6, 8, 10 mort.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
@@ -19,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x8e8ca : vrai si le jeu est en pause (le serpent reste alors affiché : `+0` = 2).
-fn paused(x: &mut Cx) -> bool {
+fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return true;
@@ -143,9 +144,7 @@ fn hit_b(x: &mut Cx) {
     x.set8(f::FREEZE, stun);
     stop(x);
     body(x, 2);
-    x.c.d[0] = 3;
-    x.c.d[1] = 0;
-    x.call(0xabec8)
+    crate::families::effects_creators::attack(x.b, x.o, 3, 0);
 }
 
 /// 0x8e5da : projection (codes 4 à 0x94 sans routine propre).
@@ -200,7 +199,7 @@ fn generic(x: &mut Cx) {
 }
 
 /// 0x8e8fc : relevé après la chute (état 4, groupe 4).
-fn fallen(x: &mut Cx) {
+fn fallen<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set32(f::STATE, 0x0404_0000);
     x.set8(0x86, 1);
@@ -287,10 +286,9 @@ fn throw(x: &mut Cx) {
                 x.set8(0x90, 1);
             }
             let mut d2 = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            x.random_68k();
+            let alea = x.random();
             d2 &= 0xf;
-            let d0 = ((x.c.d[0] as u16).wrapping_add(d2 as u16)) & 0x1f;
-            setw(x, 0, d0);
+            let d0 = alea.wrapping_add(d2 as u16) & 0x1f;
             x.set8(0x2d, d0 as u8);
             x.c.d[0] = 1;
             hurt(x, 1)
@@ -318,7 +316,7 @@ fn throw(x: &mut Cx) {
     }
 }
 
-fn arc_end(x: &mut Cx) {
+fn arc_end<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x29) == 0 {
         return;
     }

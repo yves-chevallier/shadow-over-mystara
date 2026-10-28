@@ -3,6 +3,7 @@
 //! Même cadre que `eshl.rs` : un `mod` par type, `run` est appelé par le dispatch avec l'objet
 //! courant ; `+4` est l'état principal, `+5` / `+6` / `+7` les sous-états (octets pairs).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::mem::wr32;
@@ -29,12 +30,12 @@ fn obj_of(word: u16) -> Obj {
 }
 
 /// Démarre une animation par la routine de l'IA (`0x103d6`).
-fn ai_anim(x: &mut Cx, set: u32, n: u32) {
+fn ai_anim<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     crate::families::enemy_lib::start(x, set, n);
 }
 
 /// Un pas d'animation par la routine de l'IA ; vrai à la fin du script.
-fn ai_step(x: &mut Cx) -> bool {
+fn ai_step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     crate::families::enemy_lib::step(x)
 }
 
@@ -46,7 +47,7 @@ fn random(x: &mut Cx) -> u32 {
 }
 
 /// Les trois coordonnées 16.16 (X, Y, Z) de `from`, copiées en long.
-fn copy_xyz32(x: &mut Cx, from: Obj) {
+fn copy_xyz32<R: Banc>(x: &mut Cx<'_, R>, from: Obj) {
     for off in [0x8, 0x10, 0xc] {
         let v = from.u32(x.b, off);
         x.set32(off, v);
@@ -54,7 +55,7 @@ fn copy_xyz32(x: &mut Cx, from: Obj) {
 }
 
 /// Même chose en mots (parties entières seulement).
-fn copy_xyz16(x: &mut Cx, from: Obj) {
+fn copy_xyz16<R: Banc>(x: &mut Cx<'_, R>, from: Obj) {
     for off in [0x8, 0x10, 0xc] {
         let v = from.u16(x.b, off);
         x.set16(off, v);
@@ -62,7 +63,7 @@ fn copy_xyz16(x: &mut Cx, from: Obj) {
 }
 
 /// Orientation recopiée d'un autre objet.
-fn copy_flip(x: &mut Cx, from: Obj) -> u8 {
+fn copy_flip<R: Banc>(x: &mut Cx<'_, R>, from: Obj) -> u8 {
     let flip = from.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
     flip
@@ -146,7 +147,7 @@ mod shot40 {
         x.anim_start(ANIMS, (anim as u32) as u16);
     }
 
-    fn live(x: &mut Cx) {
+    fn live<R: Banc>(x: &mut Cx<'_, R>) {
         cycle_palette(x);
         if x.linked(f::OWNER).u16(x.b, 0x4) == 0x406 {
             return x.free_eshl();
@@ -165,7 +166,7 @@ mod shot40 {
     }
 
     /// Tous les 5 pas, passe à la palette suivante de la table (8 entrées).
-    fn cycle_palette(x: &mut Cx) {
+    fn cycle_palette<R: Banc>(x: &mut Cx<'_, R>) {
         let n = x.u8(PALETTE_COUNTDOWN).wrapping_sub(1);
         x.set8(PALETTE_COUNTDOWN, n);
         if s8(n) >= 0 {
@@ -180,7 +181,7 @@ mod shot40 {
     }
 
     /// Caché quand la parité de la variante diffère de la phase globale.
-    fn flicker(x: &mut Cx) {
+    fn flicker<R: Banc>(x: &mut Cx<'_, R>) {
         let hidden = (x.u8(0x3) & 1) as u16 != x.a5_u16(BLINK_PHASE) & 1;
         x.set_bit(0x1, 1, hidden);
     }
@@ -212,12 +213,12 @@ mod shot41 {
         }
     }
 
-    fn target(x: &mut Cx) -> Obj {
+    fn target<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
         let w = x.linked(CREATOR).u16(x.b, CREATOR);
         obj_of(w)
     }
 
-    fn spawn(x: &mut Cx) {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(CREATOR) == 0 {
             return;
         }
@@ -252,7 +253,7 @@ mod shot41 {
     }
 
     /// Recopie 8 longs de la ROM dans la RAM palette.
-    fn copy_palette(x: &mut Cx) {
+    fn copy_palette<R: Banc>(x: &mut Cx<'_, R>) {
         for i in 0..8 {
             let v = x.data32(PALETTE_SRC + 4 * i);
             wr32(x.b, PALETTE_DST + 4 * i, v);
@@ -286,7 +287,7 @@ mod shot41 {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x13);
         x.anim_start(ANIMS, 1);
-        crate::families::eshl_creators::appeler(x, crate::families::eshl_creators::ring_28);
+        crate::families::eshl_creators::ring_28(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
     }
 }
 
@@ -344,7 +345,7 @@ mod shot42 {
     }
 
     /// Se cale devant l'hôte (32 pixels côté regard, 64 en hauteur, un cran plus près).
-    fn follow_host(x: &mut Cx) {
+    fn follow_host<R: Banc>(x: &mut Cx<'_, R>) {
         let host = x.linked(HOST);
         copy_xyz16(x, host);
         x.add16(0x10, 1);
@@ -385,7 +386,7 @@ mod shot42 {
         ai_anim(x, ANIMS, anim as u32);
     }
 
-    fn fight(x: &mut Cx) {
+    fn fight<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             WIND_UP => {
                 if ai_step(x) {
@@ -447,7 +448,7 @@ mod shot42 {
     }
 
     /// Crée un éclat (type 43) devant l'attaque, avec l'angle courant, puis tourne l'angle.
-    fn spawn_shard(x: &mut Cx) {
+    fn spawn_shard<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(c) = x.alloc(&pools::ESHL) else { return };
         c.set_u8(x.b, 0, 1);
         c.set_u8(x.b, 2, 0x2b);
@@ -479,7 +480,7 @@ mod shot43 {
     const ANIMS: u32 = 0x170222;
     const ANIM_OF_DIRECTION: u32 = 0xa37ba;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -500,7 +501,7 @@ mod shot43 {
         }
     }
 
-    fn fly(x: &mut Cx) {
+    fn fly<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) != 0 {
             return;
         }
@@ -536,7 +537,7 @@ mod beam44 {
     /// Hauteur au-dessus de A2 de la position de visée en Z.
     const RAISE_Z: u16 = 0x50;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -548,7 +549,7 @@ mod beam44 {
     }
 
     /// Objet vivant désigné par un mot (adresse négative et octet d'activité non nul).
-    fn live_link(x: &mut Cx, word: u16) -> Option<Obj> {
+    fn live_link<R: Banc>(x: &mut Cx<'_, R>, word: u16) -> Option<Obj> {
         if s16(word) >= 0 {
             return None;
         }
@@ -557,13 +558,13 @@ mod beam44 {
     }
 
     /// Le faisceau est terminé : état suivant.
-    fn end(x: &mut Cx) {
+    fn end<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
     }
 
     /// Les deux extrémités (créateur et créateur du créateur).
-    fn ends(x: &mut Cx) -> Option<(Obj, Obj)> {
+    fn ends<R: Banc>(x: &mut Cx<'_, R>) -> Option<(Obj, Obj)> {
         let w = x.u16(CREATOR);
         let a1 = live_link(x, w)?;
         let w = a1.u16(x.b, CREATOR);
@@ -572,12 +573,12 @@ mod beam44 {
     }
 
     /// Le créateur compte un faisceau de plus.
-    fn count_beam(x: &mut Cx, a1: Obj) {
+    fn count_beam<R: Banc>(x: &mut Cx<'_, R>, a1: Obj) {
         let n = a1.u8(x.b, BEAM_COUNT).wrapping_add(1);
         a1.set_u8(x.b, BEAM_COUNT, n);
     }
 
-    fn variant0(x: &mut Cx) {
+    fn variant0<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 end(x);
@@ -596,7 +597,7 @@ mod beam44 {
         }
     }
 
-    fn variant1(x: &mut Cx) {
+    fn variant1<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 end(x);
@@ -626,7 +627,7 @@ mod beam44 {
 
     /// État 2. `hit_anim` : animation de fin lancée au contact ; `lingers` : variante 1, où la fin
     /// de l'animation de fin garde le faisceau (et où l'animation en cours le termine).
-    fn beam(x: &mut Cx, hit_anim: u32, lingers: bool) {
+    fn beam<R: Banc>(x: &mut Cx<'_, R>, hit_anim: u32, lingers: bool) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return x.reinsert();
         }
@@ -652,7 +653,7 @@ mod beam44 {
 
     /// Position = A2 + t * (A1 - A2) / 16 (arithmétique en mots), t = `+0x14` ; rien si t = 0.
     /// En Z, la différence est mesurée 0x50 plus haut.
-    fn interpolate(x: &mut Cx, a1: Obj, a2: Obj) {
+    fn interpolate<R: Banc>(x: &mut Cx<'_, R>, a1: Obj, a2: Obj) {
         let t = x.u8(STEP) as u16;
         if t == 0 {
             return;
@@ -666,7 +667,7 @@ mod beam44 {
     }
 
     /// État 4 : rend un faisceau à son créateur.
-    fn release(x: &mut Cx) {
+    fn release<R: Banc>(x: &mut Cx<'_, R>) {
         let w = x.u16(CREATOR);
         if let Some(a1) = live_link(x, w) {
             let n = a1.u8(x.b, BEAM_COUNT).wrapping_sub(1);
@@ -709,13 +710,13 @@ mod debris45 {
     }
 
     /// L'objet disparaît : état 6.
-    fn vanish(x: &mut Cx) {
+    fn vanish<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x4, 6);
         x.set8(0x5, 0);
     }
 
     /// Source (adresse négative), éventuellement vivante.
-    fn source(x: &mut Cx, check_active: bool) -> Option<Obj> {
+    fn source<R: Banc>(x: &mut Cx<'_, R>, check_active: bool) -> Option<Obj> {
         let word = x.u16(SOURCE);
         if s16(word) >= 0 {
             return None;
@@ -779,12 +780,12 @@ mod debris45 {
     }
 
     /// Fin commune : retenu à l'écran, puis remis dans la liste triée.
-    fn settle(x: &mut Cx) {
-        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, MARGIN as u16);
+    fn settle<R: Banc>(x: &mut Cx<'_, R>) {
+        x.keep_on_screen(MARGIN as u16);
         x.reinsert();
     }
 
-    fn variant1(x: &mut Cx) {
+    fn variant1<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(src) = source(x, false) else { return vanish(x) };
         match x.u8(0x4) {
             0 => {
@@ -837,7 +838,7 @@ mod debris45 {
     }
 
     /// Pose l'éclat sur la source : X et Y de la source, Z + 0x30, puis décalage selon `+0x2f`.
-    fn place(x: &mut Cx, src: Obj) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>, src: Obj) {
         let (sx, sy, sz) = (src.u16(x.b, 0x8), src.u16(x.b, 0x10), src.u16(x.b, 0xc));
         x.set16(0x8, sx);
         x.set16(0x10, sy);
@@ -865,7 +866,7 @@ mod scroller46 {
     /// Bord gauche de l'écran (variable `A5+0x506`).
     const SCREEN_LEFT: u32 = 0x506;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -984,9 +985,6 @@ mod lob48 {
     const WAIT: u32 = 0x4c;
     const HOME_Z: u32 = 0x4e;
     const TARGET: u32 = 0x58;
-    /// Création d'un tir joueur de type 0x18 lié à cet objet ; Z levé si échec (l'original rend
-    /// toujours Z levé).
-    const SPAWN_PLAYER_SHOT: u32 = 0x54872;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1028,11 +1026,9 @@ mod lob48 {
                         x.add8(0x5, 2);
                         x.set16(0x18, neg(0x100));
                         x.set16(0x1a, neg(0x20));
-                        x.call(SPAWN_PLAYER_SHOT);
-                        if x.c.cond(6) {
-                            let shot = x.c.a[1] as u16;
-                            x.set16(TARGET, shot);
-                        }
+                        // Glitch d'origine : 0x54872 rend D0 = 0 même quand le tir est créé, si bien que le `bne`
+                        // qui devait le retenir en `TARGET` n'est jamais pris
+                        crate::families::petites::shot_18(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 2);
                     }
                     2 => {
                         x.move_z();
@@ -1065,7 +1061,7 @@ mod lob48 {
     }
 
     /// Décompte du délai `+0x4c` : vrai tant qu'il n'est pas écoulé.
-    fn dec_wait(x: &mut Cx) -> bool {
+    fn dec_wait<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let t = x.u16(WAIT).wrapping_sub(1);
         x.set16(WAIT, t);
         t != 0
@@ -1162,7 +1158,7 @@ mod bullet50 {
     /// Sauvegarde de `+0x3b` (priorité du cadre) à travers l'animation.
     const SAVED_PRIORITY: u32 = 0x5e;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -1178,14 +1174,14 @@ mod bullet50 {
             _ => x.free_eshl(),
         }
         if x.u8(0) != 0 {
-            crate::ai::keep_in_zone_d5(x.c, x.b, x.o);
-            x.call(crate::terrain::SHADOW.entry);
+            x.keep_in_zone();
+            x.push_terrain();
             x.reinsert();
         }
     }
 
     /// Création : variante 0 (`lob = true`) ou 1.
-    fn launch(x: &mut Cx, speed: u32, dx: u16, dz: u16, vz: u16, lob: bool) {
+    fn launch<R: Banc>(x: &mut Cx<'_, R>, speed: u32, dx: u16, dz: u16, vz: u16, lob: bool) {
         x.add8(0x4, 2);
         if !lob {
             x.set16(FALL_TIMER, 0x28);
@@ -1205,7 +1201,7 @@ mod bullet50 {
     }
 
     /// Avance d'une phase quand sa durée est écoulée (et qu'on n'est pas déjà en phase 2).
-    fn phase_tick(x: &mut Cx) {
+    fn phase_tick<R: Banc>(x: &mut Cx<'_, R>) {
         if s8(x.u8(PHASE)) < 2 {
             let n = x.u8(PHASE_TIMER).wrapping_sub(1);
             x.set8(PHASE_TIMER, n);
@@ -1219,7 +1215,7 @@ mod bullet50 {
     }
 
     /// Démarre l'animation de la phase courante, puis un pas.
-    fn start_phase(x: &mut Cx) {
+    fn start_phase<R: Banc>(x: &mut Cx<'_, R>) {
         let phase = x.u8(PHASE);
         let len = x.rom8(PHASE_LENGTHS + phase as u32);
         x.set8(PHASE_TIMER, len);
@@ -1229,30 +1225,30 @@ mod bullet50 {
         step_phase(x);
     }
 
-    fn step_phase(x: &mut Cx) {
+    fn step_phase<R: Banc>(x: &mut Cx<'_, R>) {
         ai_step(x);
         let p = x.u8(0x3b);
         x.set8(SAVED_PRIORITY, p);
     }
 
-    fn restore_priority(x: &mut Cx) {
+    fn restore_priority<R: Banc>(x: &mut Cx<'_, R>) {
         let p = x.u8(SAVED_PRIORITY);
         x.set8(0x3b, p);
     }
 
     /// L'hôte est étourdi : passe à l'animation de fin (`phase + 6`), sous-état 4 pour la variante 0
     /// (état 2, sous-état 4), prochain sous-état pour la variante 1.
-    fn host_stunned(x: &mut Cx) -> bool {
+    fn host_stunned<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let host = x.linked(HOST);
         host.u8(x.b, 4) == 4
     }
 
-    fn end_animation(x: &mut Cx) {
+    fn end_animation<R: Banc>(x: &mut Cx<'_, R>) {
         let phase = x.u8(PHASE) as u32;
         ai_anim(x, ANIMS, phase + 6);
     }
 
-    fn lob(x: &mut Cx) {
+    fn lob<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 if host_stunned(x) {
@@ -1294,7 +1290,7 @@ mod bullet50 {
         }
     }
 
-    fn slow(x: &mut Cx) {
+    fn slow<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 if host_stunned(x) {
@@ -1319,7 +1315,7 @@ mod bullet50 {
         }
     }
 
-    fn end_slow(x: &mut Cx) {
+    fn end_slow<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         end_animation(x);
     }
@@ -1342,7 +1338,6 @@ mod drop51 {
     /// Haut de l'écran : `A5+0x50a` (joueur 1) ou `A5+0x55a` (joueur 2, si `A5+0x36`).
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
-    const IMPACT_FX: u32 = 0xab7d8;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1384,7 +1379,7 @@ mod drop51 {
                 }
                 x.add8(0x4, 2);
                 x.c.d[0] = 3;
-                x.call(IMPACT_FX);
+                crate::families::effects_creators::debris(x.b, x.o, 3);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             }
             4 => {
@@ -1400,7 +1395,7 @@ mod drop51 {
     }
 
     /// Décompte du délai `+0x42` : vrai tant qu'il n'est pas écoulé.
-    fn wait(x: &mut Cx) -> bool {
+    fn wait<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let t = x.u16(WAIT).wrapping_sub(1);
         x.set16(WAIT, t);
         t != 0
@@ -1464,13 +1459,13 @@ mod finale52 {
         }
     }
 
-    fn vanish(x: &mut Cx) {
+    fn vanish<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x4, 6);
         x.set8(0x5, 0);
     }
 
     /// Boss vivant (adresse négative, octet d'activité non nul).
-    fn parent(x: &mut Cx) -> Option<Obj> {
+    fn parent<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let w = x.u16(PARENT);
         if s16(w) >= 0 {
             return None;
@@ -1479,13 +1474,13 @@ mod finale52 {
         (o.u8(x.b, 0) != 0).then_some(o)
     }
 
-    fn init_boxes(x: &mut Cx) {
+    fn init_boxes<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 0);
     }
 
     /// Se cale sur le boss ; le sous-type décale en hauteur (0x1c moins le sous-type).
-    fn attach(x: &mut Cx, boss: Obj) {
+    fn attach<R: Banc>(x: &mut Cx<'_, R>, boss: Obj) {
         copy_xyz16(x, boss);
         let sub = x.u8(SUBTYPE) as u16;
         if sub == 0 {
@@ -1496,12 +1491,12 @@ mod finale52 {
     }
 
     /// Fin de l'image : retenu dans l'écran puis remis dans la liste triée.
-    fn settle(x: &mut Cx) {
-        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
+    fn settle<R: Banc>(x: &mut Cx<'_, R>) {
+        x.keep_on_screen(0x10);
         x.reinsert();
     }
 
-    fn unlock_screen(x: &mut Cx) {
+    fn unlock_screen<R: Banc>(x: &mut Cx<'_, R>) {
         x.set_a5_u8(SCREEN_LOCK, LOCK_FREE);
         x.set_a5_u16(FLAG_4BA, 0);
     }
@@ -1586,7 +1581,7 @@ mod finale52 {
     }
 
     /// Sous-types 1 à 3 : invisibles tant que le boss n'a pas armé `+0x3e` (sauf le sous-type 2).
-    fn follower(x: &mut Cx, boss: Obj) {
+    fn follower<R: Banc>(x: &mut Cx<'_, R>, boss: Obj) {
         attach(x, boss);
         x.set_bit(0x1, 1, true);
         let always = x.u8(SUBTYPE) & 7 == 2;
@@ -1599,7 +1594,7 @@ mod finale52 {
 
     // ----- variante 1 -----
 
-    fn variant1(x: &mut Cx) {
+    fn variant1<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1637,7 +1632,7 @@ mod finale52 {
     }
 
     /// Collé au boss, 8 pixels devant lui et 0x28 plus haut ; le boss avance d'un cran en Y.
-    fn beside(x: &mut Cx, boss: Obj) {
+    fn beside<R: Banc>(x: &mut Cx<'_, R>, boss: Obj) {
         let (px, pz) = (boss.u16(x.b, 0x8), boss.u16(x.b, 0xc));
         x.set16(0x8, px);
         x.set16(0xc, pz);
@@ -1654,7 +1649,7 @@ mod finale52 {
     // ----- variantes 2 et 3 : voile plein écran -----
 
     /// Cale le voile sur l'écran (X, Y) à la hauteur 0x108 ; le boss avance d'un cran en Y s'il y en a un.
-    fn cover_screen(x: &mut Cx, boss: Option<Obj>) {
+    fn cover_screen<R: Banc>(x: &mut Cx<'_, R>, boss: Option<Obj>) {
         let sx = x.a5_u16(SCREEN_X);
         x.set16(0x8, sx);
         x.set16(0xc, 0);
@@ -1667,7 +1662,7 @@ mod finale52 {
         }
     }
 
-    fn lock_screen(x: &mut Cx) {
+    fn lock_screen<R: Banc>(x: &mut Cx<'_, R>) {
         x.set_a5_u8(SCREEN_LOCK, LOCK_TAKEN);
         init_boxes(x);
     }
@@ -1766,7 +1761,7 @@ mod finale52 {
         }
     }
 
-    fn end3(x: &mut Cx) {
+    fn end3<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.add8(0x4, 2);
         unlock_screen(x);
@@ -1779,12 +1774,12 @@ mod finale52 {
     }
 
     /// Joueur en jeu normal : actif, vivant (PV non nuls), état 2, non invulnérable.
-    fn alive(x: &mut Cx, p: Obj) -> bool {
+    fn alive<R: Banc>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         p.u8(x.b, 0) != 0 && p.u8(x.b, 0x7e) == 0 && p.u8(x.b, 4) == 2 && p.u8(x.b, 0x10f) == 0 && p.u16(x.b, 0x62) != 0
     }
 
     /// Le voile blesse les joueurs touchés par l'attaque (boîtes `+0x3e`).
-    fn hit_players(x: &mut Cx) {
+    fn hit_players<R: Banc>(x: &mut Cx<'_, R>) {
         for p in players() {
             if alive(x, p) && overlap(x, p) {
                 hurt(x, p);
@@ -1793,7 +1788,7 @@ mod finale52 {
     }
 
     /// Blesse les joueurs qui ne sont pas dans une zone sûre (étages 0x2e et 0x69).
-    fn fall_check(x: &mut Cx) {
+    fn fall_check<R: Banc>(x: &mut Cx<'_, R>) {
         for p in players() {
             if !alive(x, p) {
                 continue;
@@ -1814,7 +1809,7 @@ mod finale52 {
     }
 
     /// Étage 0x2e : le joueur est au sol (Z < 0x100) et dans une des zones sûres.
-    fn on_safe_range(x: &mut Cx, p: Obj) -> bool {
+    fn on_safe_range<R: Banc>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         if p.u8(x.b, 0xc) != 0 {
             return false;
         }
@@ -1838,7 +1833,7 @@ mod finale52 {
     }
 
     /// Étage 0x69 : le joueur est au sol et dans le rectangle (X, largeur, Y, hauteur).
-    fn in_rect(x: &mut Cx, p: Obj, rect: u32) -> bool {
+    fn in_rect<R: Banc>(x: &mut Cx<'_, R>, p: Obj, rect: u32) -> bool {
         if p.u8(x.b, 0xc) != 0 {
             return false;
         }
@@ -1857,7 +1852,7 @@ mod finale52 {
     /// Recouvrement des boîtes de l'attaque (ligne `+0x3e` - 1) et du joueur (pointeur selon son
     /// numéro de personnage, ligne selon `+0x38`), axe par axe : X (miroir selon l'orientation),
     /// Z puis Y. Distance absolue des centres contre la somme des demi-tailles.
-    fn overlap(x: &mut Cx, p: Obj) -> bool {
+    fn overlap<R: Banc>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         if p.u8(x.b, 0x38) == 0 {
             return false;
         }
@@ -1897,7 +1892,7 @@ mod finale52 {
 
     /// Blessure : le joueur passe à l'état 0x02042000 ; PV -= PV max / 2 (sauf attaques 0x2c), un
     /// joueur à 0 PV est retiré du compte `A5+0x35`.
-    fn hurt(x: &mut Cx, p: Obj) {
+    fn hurt<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
         p.set_u32(x.b, 0x4, 0x0204_2000);
         let mut hp = 0u16;
         if p.u8(x.b, 0x10d) == 0x2c || p.u8(x.b, 0x10e) == 0x2c {
@@ -1922,13 +1917,13 @@ mod finale52 {
 // ---------------------------------------------------------------------------------------------
 
 /// Caché une image sur deux selon la parité de la variante comparée à la phase globale `A5+0x6e`.
-fn blink_by_variant(x: &mut Cx) {
+fn blink_by_variant<R: Banc>(x: &mut Cx<'_, R>) {
     let hidden = (x.u8(0x3) & 1) as u16 != x.a5_u16(0x6e) & 1;
     x.set_bit(0x1, 1, hidden);
 }
 
 /// Haut de l'écran (`A5+0x50a`, ou `A5+0x55a` en mode deux joueurs `A5+0x36`).
-fn screen_top(x: &mut Cx) -> u16 {
+fn screen_top<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     let off = if x.a5_u8(0x36) != 0 { 0x55a } else { 0x50a };
     x.a5_u16(off)
 }
@@ -1945,7 +1940,7 @@ mod aimed53 {
     /// Pour chaque direction : (animation, orientation).
     const DIRECTIONS: u32 = 0xa4e16;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => spawn(x),
             2 => {
@@ -1961,7 +1956,7 @@ mod aimed53 {
         }
     }
 
-    fn spawn(x: &mut Cx) {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         if x.u16(LINK) == 0 {
             return x.free_eshl();
@@ -2119,7 +2114,7 @@ mod fall55 {
         }
     }
 
-    fn spawn(x: &mut Cx) {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 0x2d);
@@ -2280,7 +2275,7 @@ mod pickup56 {
     }
 
     /// Un joueur au sol, assez proche, ramasse l'objet : `+5` suivant, décompte de 30 images.
-    fn pickup_touch(x: &mut Cx) {
+    fn pickup_touch<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(HIDDEN) != 0 || x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -2303,7 +2298,7 @@ mod pickup56 {
     }
 
     /// Décompte du ramassage : clignote tous les 8 pas ; `true` quand il est écoulé.
-    fn pick_countdown(x: &mut Cx) -> bool {
+    fn pick_countdown<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let t = x.u16(COUNTDOWN).wrapping_sub(1);
         x.set16(COUNTDOWN, t);
         if t == 0 {
@@ -2319,7 +2314,7 @@ mod pickup56 {
     }
 
     /// Variantes 0, 1 (`with_effects`) et 4, 5 : attend le ramassage, clignote, joue l'animation de fin.
-    fn touch_then_pick(x: &mut Cx, with_effects: bool) {
+    fn touch_then_pick<R: Banc>(x: &mut Cx<'_, R>, with_effects: bool) {
         match x.u8(0x5) {
             0 => pickup_touch(x),
             2 => {
@@ -2404,7 +2399,7 @@ mod seeker57 {
     const LIFE: u32 = 0x46;
     const RETARGET: u32 = 0x42;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(LINK) == 0 {
             return x.set32(0x4, 0x0600_0000);
         }
@@ -2416,7 +2411,7 @@ mod seeker57 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 7);
@@ -2433,7 +2428,7 @@ mod seeker57 {
         x.select_speed(&crate::objects::motion::SPEEDS_B, 7);
     }
 
-    fn live(x: &mut Cx) {
+    fn live<R: Banc>(x: &mut Cx<'_, R>) {
         let maker = x.linked(LINK);
         if maker.u16(x.b, 0x4) == 0x406 || maker.u16(x.b, f::OWNER) == 0 {
             x.set32(0x4, 0x0400_0000);
@@ -2446,7 +2441,7 @@ mod seeker57 {
         x.reinsert();
     }
 
-    fn track(x: &mut Cx, maker: Obj) {
+    fn track<R: Banc>(x: &mut Cx<'_, R>, maker: Obj) {
         let left = x.u16(LIFE).wrapping_sub(1);
         x.set16(LIFE, left);
         if s16(left) < 0 {
@@ -2476,13 +2471,13 @@ mod seeker57 {
         explode(x);
     }
 
-    fn approach(x: &mut Cx) {
+    fn approach<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_by_table_xy();
         x.anim_step();
     }
 
     /// Crée 16 éclats (type 58, variantes 15 à 0) puis passe à l'état 6.
-    fn explode(x: &mut Cx) {
+    fn explode<R: Banc>(x: &mut Cx<'_, R>) {
         for n in (0..16u8).rev() {
             let Some(c) = x.alloc(&pools::ESHL) else { break };
             c.set_u8(x.b, 0, 1);
@@ -2493,7 +2488,7 @@ mod seeker57 {
         x.add8(0x4, 4);
     }
 
-    fn fade(x: &mut Cx) {
+    fn fade<R: Banc>(x: &mut Cx<'_, R>) {
         let t = x.u16(RETARGET).wrapping_sub(1);
         x.set16(RETARGET, t);
         if s16(t) < 0 {
@@ -2516,7 +2511,7 @@ mod shard58 {
     const ROWS: u32 = 0xa5bd6;
     const TIMER: u32 = 0x42;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(LINK) == 0 {
             return x.set32(0x4, 0x0600_0000);
         }
@@ -2543,7 +2538,7 @@ mod shard58 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 0x23);
@@ -2594,7 +2589,7 @@ mod ring59 {
     const PALETTE_COUNTDOWN: u32 = 0x46;
     const PALETTE_INDEX: u32 = 0x47;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => start(x),
             2 => {
@@ -2609,7 +2604,7 @@ mod ring59 {
         }
     }
 
-    fn start(x: &mut Cx) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(LINK) == 0 {
             return;
         }
@@ -2652,7 +2647,7 @@ mod ring59 {
     }
 
     /// Sous-type 0 : suit le propriétaire.
-    fn ring(x: &mut Cx) {
+    fn ring<R: Banc>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         if owner.u16(x.b, 0x4) == 0x406 {
             return x.free_eshl();
@@ -2687,7 +2682,7 @@ mod ring59 {
     }
 
     /// Sous-type 1 : animation puis signal au créateur.
-    fn satellite(x: &mut Cx) {
+    fn satellite<R: Banc>(x: &mut Cx<'_, R>) {
         let maker = x.linked(LINK);
         if maker.u16(x.b, 0x4) == 0x406 {
             return x.free_eshl();
@@ -2701,7 +2696,7 @@ mod ring59 {
         blink_by_variant(x);
     }
 
-    fn cycle_palette(x: &mut Cx) {
+    fn cycle_palette<R: Banc>(x: &mut Cx<'_, R>) {
         let n = x.u8(PALETTE_COUNTDOWN).wrapping_sub(1);
         x.set8(PALETTE_COUNTDOWN, n);
         if s8(n) >= 0 {
@@ -2734,7 +2729,6 @@ mod platform60 {
     /// Dernier défilement vertical (mot), et son nouveau relevé.
     const LAST_SCROLL: u32 = 0x16;
     const SCROLL: u32 = 0x14;
-    const SPAWN_PLAYER_SHOT: u32 = 0x54872;
     const THUD: u32 = 0xeb04e;
     /// Positions de départ de la variante 2 par sous-type (4 octets par ligne).
     const START_POSITIONS: u32 = 0xa6046;
@@ -2787,11 +2781,11 @@ mod platform60 {
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 0x17);
         x.anim_start(ANIMS, 0);
-        x.call(SPAWN_PLAYER_SHOT);
+        crate::families::petites::shot_18(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 2);
         x.reinsert();
     }
 
-    fn live(x: &mut Cx) {
+    fn live<R: Banc>(x: &mut Cx<'_, R>) {
         // suit le défilement vertical de l'écran
         let top = screen_top(x);
         x.set16(SCROLL, top);
@@ -2837,7 +2831,7 @@ mod platform60 {
         Maker,
     }
 
-    fn cycle(x: &mut Cx, trigger: Trigger) {
+    fn cycle<R: Banc>(x: &mut Cx<'_, R>, trigger: Trigger) {
         match x.u8(0x5) {
             WAIT => {
                 let go = match trigger {
@@ -2904,7 +2898,7 @@ mod platform60 {
     }
 
     /// Un joueur (hors personnage 5) est-il sur la plateforme ? (collision 0x7f19c.)
-    fn player_on(x: &mut Cx) -> bool {
+    fn player_on<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         for p in players() {
             let character = p.u8(x.b, 3) >> 1;
             if character == 5 || p.u8(x.b, 0) != 1 {
@@ -2930,7 +2924,7 @@ mod marker61 {
     /// Tables de décalages (X, Y) selon la variante du créateur.
     const OFFSET_TABLES: [u32; 3] = [0xa6538, 0xa65de, 0xa6670];
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -2968,7 +2962,7 @@ mod marker61 {
     }
 
     /// Se pose sur le créateur avec le décalage de la table (miroir selon l'orientation du créateur).
-    fn place(x: &mut Cx, table: u32) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
         if x.u16(LINK) == 0 {
             return;
         }
@@ -2995,7 +2989,6 @@ mod meteor62 {
     const ANIMS: u32 = 0x16ea18;
     /// Retard avant la chute (octets) par variante (32 entrées).
     const DELAYS: u32 = 0xa679e;
-    const IMPACT_FX: [u32; 2] = [0xb9c88, 0xab7d8];
     const IMPACT_SOUND: u32 = 0xeafdc;
     const TIMER: u32 = 0x42;
 
@@ -3046,15 +3039,15 @@ mod meteor62 {
         x.anim_step();
         x.move_z();
         if s16(x.u16(0xc)) < 0 {
-            x.call(IMPACT_FX[0]);
+            crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::WISP, Some(1));
             x.set16(0xc, 0);
             x.add8(0x4, 2);
             x.c.d[0] = 3;
-            x.call(IMPACT_FX[1]);
+            crate::families::effects_creators::debris(x.b, x.o, 3);
             crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             crate::sound::jouer(x.b, IMPACT_SOUND, x.o);
         }
-        crate::ai::keep_on_screen_d5(x.c, x.b, x.o, 0x10);
+        x.keep_on_screen(0x10);
         x.reinsert();
     }
 }
@@ -3153,7 +3146,7 @@ mod hand63 {
         mask >> r & 1 != 0
     }
 
-    fn lost_boss(x: &mut Cx) {
+    fn lost_boss<R: Banc>(x: &mut Cx<'_, R>) {
         x.set16(0x4, 0x400);
     }
 
@@ -3195,7 +3188,7 @@ mod hand63 {
     }
 
     /// Fin de la phase de repos par `+6 = 8` : attend la fin de l'animation puis crée un tir 53.
-    fn finish_attack(x: &mut Cx) {
+    fn finish_attack<R: Banc>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if boss.u16(x.b, f::OWNER) == 0 {
             return x.set16(0x6, 0);
@@ -3223,7 +3216,7 @@ mod hand63 {
     }
 
     /// Attaque en cours (le boss est en phase 1) : suit le boss, joue l'animation, puis termine.
-    fn attack(x: &mut Cx) {
+    fn attack<R: Banc>(x: &mut Cx<'_, R>) {
         follow(x);
         if !x.anim_step() {
             return;
@@ -3234,7 +3227,7 @@ mod hand63 {
     }
 
     /// Le boss a-t-il fini son attaque ? Repos si la phase est retombée sous 1.
-    fn back_to_rest(x: &mut Cx) {
+    fn back_to_rest<R: Banc>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if boss.u8(x.b, 0) == 0 {
             return x.set8(0x4, 6);
@@ -3250,7 +3243,7 @@ mod hand63 {
     }
 
     /// État 4 : animation 5 jusqu'à la fin, puis disparition.
-    fn striking(x: &mut Cx) {
+    fn striking<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add8(0x5, 4);
@@ -3263,7 +3256,7 @@ mod hand63 {
         x.reinsert();
     }
 
-    fn strike_step(x: &mut Cx) {
+    fn strike_step<R: Banc>(x: &mut Cx<'_, R>) {
         follow(x);
         if x.anim_step() {
             x.set16(0x4, 0x600);
@@ -3272,7 +3265,7 @@ mod hand63 {
 
     /// Rapproche la main de sa position cible (devant le boss, côté où il regarde), de 2 pixels par
     /// image en X et en Y. Boss disparu : état 4 (et retour à l'appelant qui continue).
-    fn follow(x: &mut Cx) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if boss.u8(x.b, 0) == 0 {
             return lost_boss(x);
@@ -3304,25 +3297,25 @@ handlers! {
     0xa31e4 "eshl_40" shot40::run,
     0xa336c "eshl_41" shot41::run,
     0xa3568 "eshl_42" shot42::run,
-    0xa3762 "eshl_43" shot43::run,
-    0xa380a "eshl_44" beam44::run,
+    0xa3762 "eshl_43" #[sans] shot43::run,
+    0xa380a "eshl_44" #[sans] beam44::run,
     0xa3b88 "eshl_45" debris45::run,
-    0xa3e72 "eshl_46" scroller46::run,
+    0xa3e72 "eshl_46" #[sans] scroller46::run,
     0xa3ebe "eshl_47" spawn47::run,
     0xa4088 "eshl_48" lob48::run,
     0xa418e "eshl_49" strike49::run,
-    0xa4266 "eshl_50" bullet50::run,
+    0xa4266 "eshl_50" #[sans] bullet50::run,
     0xa4522 "eshl_51" drop51::run,
     0xa46c6 "eshl_52" finale52::run,
-    0xa4d82 "eshl_53" aimed53::run,
+    0xa4d82 "eshl_53" #[sans] aimed53::run,
     0xa4eaa "eshl_54" burst54::run,
     0xa5358 "eshl_55" fall55::run,
     0xa5466 "eshl_56" pickup56::run,
-    0xa593c "eshl_57" seeker57::run,
-    0xa5ad6 "eshl_58" shard58::run,
-    0xa5cc2 "eshl_59" ring59::run,
+    0xa593c "eshl_57" #[sans] seeker57::run,
+    0xa5ad6 "eshl_58" #[sans] shard58::run,
+    0xa5cc2 "eshl_59" #[sans] ring59::run,
     0xa5f5c "eshl_60" platform60::run,
-    0xa63d8 "eshl_61" marker61::run,
+    0xa63d8 "eshl_61" #[sans] marker61::run,
     0xa66ea "eshl_62" meteor62::run,
     0xa6864 "eshl_63" hand63::run,
 }

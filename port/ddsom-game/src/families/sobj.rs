@@ -6,6 +6,7 @@
 //! (non nul) ou celle des acteurs. Le créateur renseigne `+3` (variante) et souvent `+0x4c` /
 //! `+0x2f` / `+0x14` (paramètres propres au type).
 
+use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::shell::{suspended, GAME_PAUSED};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
@@ -33,7 +34,7 @@ const ANIMS: u32 = 0x1c03a6;
 
 /// Fin de gestionnaire des objets à liste variable : liste du premier plan si `+0x42` est non nul,
 /// liste des acteurs sinon.
-fn reinsert_by_layer(x: &mut Cx) {
+fn reinsert_by_layer<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x42) != 0 {
         x.reinsert_foreground();
     } else {
@@ -61,7 +62,7 @@ fn cull_beyond(x: &mut Cx, margin: u16) {
 }
 
 /// Décalage de la caméra depuis la précédente image (X puis Y), en 16.16.
-fn camera_delta(x: &mut Cx) -> (u32, u32) {
+fn camera_delta<R: Banc>(x: &mut Cx<'_, R>) -> (u32, u32) {
     (
         x.a5_u32(ram::CAMERA_X).wrapping_sub(x.a5_u32(ram::PREV_CAMERA_X)),
         x.a5_u32(ram::CAMERA_Y).wrapping_sub(x.a5_u32(ram::PREV_CAMERA_Y)),
@@ -72,7 +73,7 @@ fn camera_delta(x: &mut Cx) -> (u32, u32) {
 const BRIGHT: u32 = 0xf000_f000;
 
 /// Copie `n` longs de la ROM (espace de données) vers la mémoire vidéo ou la RAM.
-fn copy_longs(x: &mut Cx, from: u32, to: u32, n: u32) {
+fn copy_longs<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
     for i in 0..n {
         let v = x.data32(from + 4 * i);
         wr32(x.b, to + 4 * i, v);
@@ -80,7 +81,7 @@ fn copy_longs(x: &mut Cx, from: u32, to: u32, n: u32) {
 }
 
 /// Force des bits dans `n` longs consécutifs.
-fn or_longs(x: &mut Cx, at: u32, mask: u32, n: u32) {
+fn or_longs<R: Banc>(x: &mut Cx<'_, R>, at: u32, mask: u32, n: u32) {
     for i in 0..n {
         let v = rd32(x.b, at + 4 * i) | mask;
         wr32(x.b, at + 4 * i, v);
@@ -126,7 +127,7 @@ mod scenery {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x14, 0);
         x.set8(0x42, 0);
@@ -173,7 +174,7 @@ mod scenery {
     }
 
     /// Positionne le décor (X, Y) et le remonte (Z = -0x100), au premier plan.
-    fn place_at(x: &mut Cx, px: u16, py: u16) {
+    fn place_at<R: Banc>(x: &mut Cx<'_, R>, px: u16, py: u16) {
         x.set16(0x8, px);
         x.set16(0x10, py);
         x.set16(0xc, 0xff00);
@@ -305,7 +306,7 @@ mod scenery {
     }
 
     /// Passe à l'état suivant (+`step`) quand l'animation est terminée.
-    fn wait_script_end(x: &mut Cx, step: u8) {
+    fn wait_script_end<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
         if x.u8(0x32) == ANIM_END {
             x.add8(0x4, step);
         }
@@ -404,7 +405,7 @@ mod flasher {
         x.reinsert();
     }
 
-    fn restart(x: &mut Cx) {
+    fn restart<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x14, BLINKS);
         let variant = x.u8(0x3) as u32;
         x.anim_start(ANIMS, variant as u16);
@@ -425,7 +426,7 @@ mod tag {
     const OFFSET_Y: u16 = 0x58;
     const HOST: u32 = 0x14;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -459,7 +460,7 @@ mod tag {
 mod ghost {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x4) == 0 {
             x.add8(0x4, 2);
         }
@@ -484,8 +485,6 @@ mod scene {
     /// Palettes de la page des éléments (GFX RAM) : 16 couleurs.
     const PALETTE_A: u32 = 0x91c080;
     const PALETTE_B: u32 = 0x91c3e0;
-    /// Création d'un objet SET dont le type est dans D0.
-    const SPAWN_SET: u32 = 0xc8312;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x3) {
@@ -538,39 +537,39 @@ mod scene {
         }
     }
 
-    fn kill(x: &mut Cx) {
+    fn kill<R: Banc>(x: &mut Cx<'_, R>) {
         x.set32(0x4, DEAD);
         x.free(&pools::SOBJ);
     }
 
-    fn rom32(x: &mut Cx, addr: u32) -> u32 {
+    fn rom32<R: Banc>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
         (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
     }
 
     /// Le maître de la scène (`+0x4c`).
-    fn master(x: &mut Cx) -> Obj {
+    fn master<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
         Obj(x.u32(0x4c) & 0xff_ffff)
     }
 
     /// Octet de signal du maître (`+8`).
-    fn signal(x: &mut Cx) -> u8 {
+    fn signal<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
         let m = master(x);
         m.u8(x.b, 0x8)
     }
 
-    fn send_signal(x: &mut Cx, v: u8) {
+    fn send_signal<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
         let m = master(x);
         m.set_u8(x.b, 0x8, v);
     }
 
     /// Démarre le script `n` et remet l'objet en place dans la liste des acteurs.
-    fn start(x: &mut Cx, n: u32) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
         x.anim_start(ANIMS, n as u16);
         x.reinsert();
     }
 
     /// Crée un objet SOBJ de type 6 (routine 0xddeaa), de variante `variant` ; rien en cas d'échec.
-    fn spawn(x: &mut Cx, variant: u8) -> Option<Obj> {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
         let Some(child) = x.alloc(&pools::SOBJ) else { return None };
         child.set_u8(x.b, 0, 1);
         child.set_u8(x.b, 2, 6);
@@ -580,7 +579,7 @@ mod scene {
 
     /// Fait défiler l'écran d'un pixel toutes les 8 images (routine 0xdea4a) en gardant l'objet
     /// immobile à l'écran.
-    fn scroll_creep(x: &mut Cx) {
+    fn scroll_creep<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x6f) & 7 != 0 {
             return;
         }
@@ -599,7 +598,7 @@ mod scene {
     /// une table à 8 octets par valeur de `+0x2f`), flip aléatoire si l'indicateur est négatif.
     const V0_ENTRIES: u32 = 0xddf6c;
 
-    fn random_flip(x: &mut Cx) {
+    fn random_flip<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x2c, 0);
         let alea = x.random();
         if alea as u32 & 1 != 0 {
@@ -686,7 +685,7 @@ mod scene {
     /// 0xde1e8 si `A5+0x38`), un toutes les 30 images, jusqu'à la fin de son script.
     const V3_LISTS: u32 = 0xde1e0;
 
-    fn v3_init(x: &mut Cx) {
+    fn v3_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x8, 0x60);
         x.set16(0xc, 0xc0);
@@ -718,11 +717,8 @@ mod scene {
         let kind = x.data8(list);
         list += 1;
         if kind != 0 {
-            x.c.d[0] = kind as u32;
-            x.call(SPAWN_SET);
-            if x.c.sr & m68k::SR_C == 0 {
-                let a1 = x.c.a[1] as u16;
-                x.set16(0x48, a1);
+            if let Some(set) = crate::families::creators::scene_set(x.b, kind) {
+                x.set16(0x48, set.word());
             }
         }
         x.set32(0x44, list);
@@ -798,7 +794,7 @@ mod scene {
         }
     }
 
-    fn v5_spawn(x: &mut Cx) {
+    fn v5_spawn<R: Banc>(x: &mut Cx<'_, R>) {
         let n = x.u8(0x43).wrapping_sub(1);
         x.set8(0x43, n);
         if n != 0 || x.u8(0x42) == 2 {
@@ -1245,7 +1241,7 @@ mod scene {
     }
 
     /// Place la pastille d'après la table, relativement à la caméra courante.
-    fn v19_place(x: &mut Cx) {
+    fn v19_place<R: Banc>(x: &mut Cx<'_, R>) {
         let v = x.u8(0x2f) as u32;
         let px = x.rom16(V19_POSITIONS + 4 * v);
         x.set16(0x8, px);
@@ -1357,7 +1353,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v23_follow(x: &mut Cx) {
+    fn v23_follow<R: Banc>(x: &mut Cx<'_, R>) {
         let camera = if x.a5_u8(ram::USE_CAMERA2) != 0 { 0x54e } else { 0x4fe };
         x.set16(0x42, (0xff_8000u32 + camera) as u16);
         let cam = x.linked(0x42);
@@ -1415,7 +1411,7 @@ mod hint {
         }
     }
 
-    fn start(x: &mut Cx) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -1427,7 +1423,7 @@ mod hint {
     }
 
     /// Palette de la bulle, luminosité maximale ; l'objet devient visible (`+0x2a`, `+0x2b`).
-    fn load_palette(x: &mut Cx) {
+    fn load_palette<R: Banc>(x: &mut Cx<'_, R>) {
         copy_longs(x, PALETTE, PALETTE_DST, 8);
         or_longs(x, PALETTE_DST, BRIGHT, 8);
         x.set8(0x2a, 1);
@@ -1464,7 +1460,7 @@ mod hint {
 
     /// Sous-état 0 : le conseil reste affiché `+0x16` images, puis passe au suivant (sous-état 2)
     /// ou, après le dernier, rend la main à l'objet lié.
-    fn countdown(x: &mut Cx) {
+    fn countdown<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x46) == 0 {
             return x.set16(0x4, LEAVE_6_2);
         }
@@ -1489,7 +1485,7 @@ mod hint {
         follow(x);
     }
 
-    fn next_advice(x: &mut Cx) {
+    fn next_advice<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 0u8.wrapping_sub(2));
         x.set8(0x16, ADVICE_FRAMES);
         let n = x.u16(0x14).wrapping_add(1);
@@ -1499,7 +1495,7 @@ mod hint {
     }
 
     /// La bulle suit la caméra (X + 0xb0, Z + 0xcf) et avance son animation.
-    fn follow(x: &mut Cx) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         let v = x.a5_u16(ram::CAMERA_X).wrapping_add(0xb0);
         x.set16(0x8, v);
         let v = x.a5_u16(ram::CAMERA_Y).wrapping_add(0xcf);
@@ -1508,7 +1504,7 @@ mod hint {
         x.anim_step();
     }
 
-    fn leave(x: &mut Cx) {
+    fn leave<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) != 0 {
             return x.free(&pools::SOBJ);
         }
@@ -1522,7 +1518,7 @@ mod hint {
 mod marker {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1535,7 +1531,7 @@ mod marker {
         }
     }
 
-    fn track(x: &mut Cx) {
+    fn track<R: Banc>(x: &mut Cx<'_, R>) {
         let target = x.linked(0x14);
         for off in [0x8, 0xc, 0x10] {
             let v = target.u16(x.b, off);
@@ -1565,7 +1561,7 @@ mod frame {
     /// Mot de la RAM (A5+0x46) : joueur suivi.
     const TRACKED: u32 = 0x46;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x42) != 0 {
             x.set32(0x4, 0x0600_0000);
         }
@@ -1605,7 +1601,7 @@ mod frame {
 
     /// Position : avec `+0x2f`, ne reste que si le joueur suivi est dans la zone de profondeur
     /// 0x170..0x260 ; sinon, caméra + décalage de la table.
-    fn place(x: &mut Cx) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) != 0 {
             let who = x.a5_u16(TRACKED);
             let ok = who != 0 && {
@@ -1639,7 +1635,7 @@ mod arrow {
     const BLINK_FRAMES: u16 = 0x14;
     const BLINKS: u8 = 0xa;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x42) != 0 {
             x.set32(0x4, 0x0600_0000);
         }
@@ -1654,12 +1650,12 @@ mod arrow {
         }
     }
 
-    fn advice_of_owner(x: &mut Cx) -> u16 {
+    fn advice_of_owner<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
         let owner = x.linked(0x46);
         owner.u16(x.b, 0x14)
     }
 
-    fn start(x: &mut Cx) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x46) == 0 {
             return;
         }
@@ -1676,7 +1672,7 @@ mod arrow {
         x.reinsert();
     }
 
-    fn place(x: &mut Cx, dz: u16) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>, dz: u16) {
         let v = x.a5_u16(ram::CAMERA_X).wrapping_add(0x58);
         x.set16(0x8, v);
         let v = x.a5_u16(ram::CAMERA_Y).wrapping_add(dz);
@@ -1685,7 +1681,7 @@ mod arrow {
     }
 
     /// Quatre événements consécutifs (codes +0x100 par joueur).
-    fn announce(x: &mut Cx) {
+    fn announce<R: Banc>(x: &mut Cx<'_, R>) {
         let advice = advice_of_owner(x);
         let i = advice.wrapping_sub(0x118).wrapping_mul(2);
         let code = x.rom16(EVENT_BY_ADVICE.wrapping_add(i as i16 as i32 as u32));
@@ -1695,7 +1691,7 @@ mod arrow {
         }
     }
 
-    fn pick_anim(x: &mut Cx) {
+    fn pick_anim<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x46) == 0 {
             return;
         }
@@ -1705,7 +1701,7 @@ mod arrow {
         x.anim_start(ANIMS, anim as u16);
     }
 
-    fn step(x: &mut Cx) {
+    fn step<R: Banc>(x: &mut Cx<'_, R>) {
         let n = x.u16(0x16).wrapping_sub(1);
         x.set16(0x16, n);
         if (n as i16) < 0 {
@@ -1727,13 +1723,13 @@ mod arrow {
 // ---------------------------------------------------------------------------------------------
 
 /// Adresse (mot) de la structure de caméra dans la RAM : A5+0x4fe, ou A5+0x54e si `A5+0x36`.
-fn camera_record(x: &mut Cx) -> u16 {
+fn camera_record<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     let record = if x.a5_u8(ram::USE_CAMERA2) != 0 { 0x54e } else { 0x4fe };
     (0xff_8000u32 + record) as u16
 }
 
 /// Place l'objet à la position de la structure de caméra `+0x42`, décalée de (`+0x14`, `+0x18`).
-fn stick_to_camera(x: &mut Cx) {
+fn stick_to_camera<R: Banc>(x: &mut Cx<'_, R>) {
     let camera = x.linked(0x42);
     let v = camera.u16(x.b, 0x8).wrapping_add(x.u16(0x14));
     x.set16(0x8, v);
@@ -1753,7 +1749,7 @@ mod badge {
     const BADGE_VARIANT: u8 = 1;
     const SOUND: u32 = 0xea428;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) == 0 {
             parent(x)
         } else {
@@ -1762,7 +1758,7 @@ mod badge {
     }
 
     /// Crée un objet SOBJ de type 11 de variante `variant` et de paramètre `param` (`+0x2c`).
-    fn spawn(x: &mut Cx, variant: u8, param: u8) -> Option<Obj> {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>, variant: u8, param: u8) -> Option<Obj> {
         let Some(o) = x.alloc(&pools::SOBJ) else { return None };
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 0xb);
@@ -1771,7 +1767,7 @@ mod badge {
         Some(o)
     }
 
-    fn parent(x: &mut Cx) {
+    fn parent<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1841,12 +1837,12 @@ mod badge {
         }
     }
 
-    fn back_to_idle(x: &mut Cx) {
+    fn back_to_idle<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         x.anim_start(ANIMS, 0x15c);
     }
 
-    fn child(x: &mut Cx) {
+    fn child<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1905,7 +1901,7 @@ mod badge {
 mod hud_dot {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1939,7 +1935,7 @@ mod panel {
     const PALETTE_DST: u32 = 0x91c3c0;
     const SLIDE_ANIMS: u32 = 0x1c40c6;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x4) == 0 {
             x.add8(0x4, 2);
             copy_longs(x, PALETTE, PALETTE_DST, 8);
@@ -1996,7 +1992,7 @@ mod stage_title {
     /// `A5+0x70` : jeu à deux joueurs (h), décale le titre.
     const ALT: u32 = 0x70;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x48f) != 0 {
             return;
         }
@@ -2013,12 +2009,12 @@ mod stage_title {
         }
     }
 
-    fn fade_to(x: &mut Cx, step: u16) {
+    fn fade_to<R: Banc>(x: &mut Cx<'_, R>, step: u16) {
         let from = FADE + ((step as u32) << 5 & 0xffff);
         copy_longs(x, from, PALETTE_DST, 8);
     }
 
-    fn start(x: &mut Cx) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x30) == 0 {
             return x.free(&pools::SOBJ);
         }
@@ -2042,7 +2038,7 @@ mod stage_title {
         place(x);
     }
 
-    fn start_2b(x: &mut Cx) {
+    fn start_2b<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x14, DURATION);
         x.set16(0x18, STEP_FRAMES);
@@ -2054,7 +2050,7 @@ mod stage_title {
     }
 
     /// Titre à (X caméra + 0x44, Z caméra + 0xa8) ; un peu plus à gauche à deux joueurs.
-    fn place(x: &mut Cx) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>) {
         let camera = Obj(0xff_0000 | camera_record(x) as u32);
         let v = camera.u16(x.b, 0x8);
         x.set16(0x8, v);
@@ -2068,7 +2064,7 @@ mod stage_title {
         x.add16(0xc, 0xa8);
     }
 
-    fn step(x: &mut Cx) {
+    fn step<R: Banc>(x: &mut Cx<'_, R>) {
         let stage = x.a5_u8(0x34);
         if stage == STAGE_7 && x.u8(0x5) == 0 {
             return step_stage_7(x);
@@ -2086,7 +2082,7 @@ mod stage_title {
 
     /// Un pas du fondu : toutes les 4 images, palette suivante ; à l'étape 0 le compteur reste
     /// bloqué à 0xffff.
-    fn tick_fade(x: &mut Cx) -> bool {
+    fn tick_fade<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let n = x.u16(0x18).wrapping_sub(1);
         x.set16(0x18, n);
         if n != 0 {
@@ -2105,7 +2101,7 @@ mod stage_title {
     }
 
     /// Décompte de la durée du titre ; à zéro il passe à l'état 4. Remise en place dans la liste.
-    fn finish_tick(x: &mut Cx) {
+    fn finish_tick<R: Banc>(x: &mut Cx<'_, R>) {
         let n = x.u16(0x14).wrapping_sub(1);
         x.set16(0x14, n);
         if n == 0 {
@@ -2115,7 +2111,7 @@ mod stage_title {
     }
 
     /// Niveau 0x2b : comme le fondu normal mais sans avancer l'animation.
-    fn step_stage_2b(x: &mut Cx) {
+    fn step_stage_2b<R: Banc>(x: &mut Cx<'_, R>) {
         tick_fade(x);
         place(x);
         finish_tick(x);
@@ -2123,7 +2119,7 @@ mod stage_title {
 
     /// Niveau 7, sous-état 0 : le fondu dure jusqu'à l'étape négative, où la palette finale
     /// (0x292120) est posée et le sous-état passe à 2.
-    fn step_stage_7(x: &mut Cx) {
+    fn step_stage_7<R: Banc>(x: &mut Cx<'_, R>) {
         place(x);
         let n = x.u16(0x18).wrapping_sub(1);
         x.set16(0x18, n);
@@ -2163,7 +2159,7 @@ mod target {
     const FLAG_B: u32 = 0xff_2ac1;
     const VARIANT_A: u8 = 0x25;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -2200,22 +2196,22 @@ mod target {
         }
     }
 
-    fn cam2_dx(x: &mut Cx) -> u16 {
+    fn cam2_dx<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
         x.a5_u16(ram::CAMERA2_X).wrapping_sub(x.a5_u16(ram::CAMERA_X))
     }
 
-    fn cam2_dy(x: &mut Cx) -> u16 {
+    fn cam2_dy<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
         x.a5_u16(ram::CAMERA2_Y).wrapping_sub(x.a5_u16(ram::CAMERA_Y))
     }
 
-    fn follow_camera2(x: &mut Cx) {
+    fn follow_camera2<R: Banc>(x: &mut Cx<'_, R>) {
         let v = x.u16(0xa).wrapping_sub(cam2_dx(x));
         x.set16(0x8, v);
     }
 
     /// Le joueur `p` est-il dans le rectangle ? Si oui, `+0x15` = 1 ; une attaque en cours
     /// (`+0x58` > 0) compte un coup.
-    fn probe(x: &mut Cx, p: Obj) {
+    fn probe<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
         let dx = x.u16(0x8).wrapping_sub(p.u16(x.b, 0x8)).wrapping_add(x.u16(0x16));
         if dx > x.u16(0x18) {
             return;
@@ -2242,7 +2238,7 @@ mod target {
         }
     }
 
-    fn hit(x: &mut Cx, p: Obj) {
+    fn hit<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
         p.set_u8(x.b, 0x58, 0xff);
         let n = x.u8(0x14) + 1;
         x.set8(0x14, n);
@@ -2260,16 +2256,16 @@ handlers! {
     0xdd61e "sobj_00" scenery::run,
     0xddc28 "sobj_01" fixture::run,
     0xdddb2 "sobj_02" flasher::run,
-    0xdde18 "sobj_03" tag::run,
-    0xdde8c "sobj_05" ghost::run,
+    0xdde18 "sobj_03" #[sans] tag::run,
+    0xdde8c "sobj_05" #[sans] ghost::run,
     0xddec4 "sobj_06" scene::run,
     0xdf4d4 "sobj_07" hint::run,
-    0xdf6b0 "sobj_08" marker::run,
-    0xdf774 "sobj_09" frame::run,
-    0xdf8ae "sobj_10" arrow::run,
-    0xdfa68 "sobj_11" badge::run,
-    0xdfca0 "sobj_12" hud_dot::run,
-    0xdfd44 "sobj_13" panel::run,
-    0xdfe3c "sobj_14" stage_title::run,
-    0xe0258 "sobj_15" target::run,
+    0xdf6b0 "sobj_08" #[sans] marker::run,
+    0xdf774 "sobj_09" #[sans] frame::run,
+    0xdf8ae "sobj_10" #[sans] arrow::run,
+    0xdfa68 "sobj_11" #[sans] badge::run,
+    0xdfca0 "sobj_12" #[sans] hud_dot::run,
+    0xdfd44 "sobj_13" #[sans] panel::run,
+    0xdfe3c "sobj_14" #[sans] stage_title::run,
+    0xe0258 "sobj_15" #[sans] target::run,
 }

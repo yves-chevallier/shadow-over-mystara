@@ -17,6 +17,7 @@
 //! | 10 | idem, puis tient la position tant que `+0xa5` bit 0 |
 //! | 14 | s'éloigne et sort de l'écran |
 
+use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::mem::wr8;
@@ -31,7 +32,6 @@ const BOB_TABLE: u32 = 0x8faa2;
 
 mod rom {
     pub const BEGIN_A: u32 = 0xdf4bc;
-    pub const NEW_MESSAGE: u32 = 0xc8312;
 }
 
 /// Champs propres à ce type.
@@ -152,7 +152,7 @@ fn glide(x: &mut Cx) {
 }
 
 /// La caméra a-t-elle dépassé le seuil suivant de `STOPS` ? Si oui, passe au suivant.
-fn next_stop(x: &mut Cx) -> bool {
+fn next_stop<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let reach = scroll_x(x).wrapping_add(0x100) as i16;
     let i = x.u8(STOP_INDEX) as u32;
     let stop = x.rom16(STOPS + 2 * i) as i16;
@@ -164,11 +164,11 @@ fn next_stop(x: &mut Cx) -> bool {
 }
 
 /// Fin demandée (`RETREAT_FLAG`) ou seuil franchi : le dragon passe en mode « départ » (`+6` = 0xe).
-fn must_leave(x: &mut Cx) -> bool {
+fn must_leave<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.data8(RETREAT_FLAG) != 0 || next_stop(x)
 }
 
-fn leave_now(x: &mut Cx) {
+fn leave_now<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, ACTIVE_LEAVE);
     x.set8(SLOW, 1);
 }
@@ -183,7 +183,7 @@ fn begin(x: &mut Cx) {
 }
 
 /// Fige ou libère le jeu et les joueurs pendant la cinématique.
-fn freeze_players(x: &mut Cx, on: bool) {
+fn freeze_players<R: Banc>(x: &mut Cx<'_, R>, on: bool) {
     for k in 0..4 {
         let player = PLAYERS + 0x200 * k;
         if x.data8(player) != 0 {
@@ -203,10 +203,8 @@ fn wait_stop(x: &mut Cx) {
         x.set_a5_u8(0x3c, 1);
         x.set_a5_u8(0x33, 1);
         freeze_players(x, true);
-        x.c.d[0] = 0xe;
-        x.call(rom::NEW_MESSAGE);
-        if !alloc_failed(x) {
-            x.set16(MESSAGE, x.c.a[1] as u16);
+        if let Some(bulle) = crate::families::creators::scene_set(x.b, 0xe) {
+            x.set16(MESSAGE, bulle.word());
             x.add8(f::SUB2, 2);
             lib::sound(x, 0xe0d8c);
             x.set8(TALKING, 1);

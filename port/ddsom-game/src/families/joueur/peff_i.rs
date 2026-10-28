@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), neuvième série : types 30 (tempête), 31 (tourbillon) et 32 (cible de la
 //! foudre). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
@@ -151,7 +152,7 @@ mod storm {
         }
     }
 
-    fn toggle(x: &mut Cx, off: u32, mask: u8) {
+    fn toggle<R: Banc>(x: &mut Cx<'_, R>, off: u32, mask: u8) {
         let v = x.u8(off) ^ mask;
         x.set8(off, v);
     }
@@ -167,14 +168,14 @@ mod storm {
         x.anim_step();
     }
 
-    fn end(x: &mut Cx) {
+    fn end<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.anim_step();
         crate::sound::jouer(x.b, SFX_END, x.o);
     }
 
     /// `0x4ec02` : seize éclairs.
-    fn spawn_bolts(x: &mut Cx) {
+    fn spawn_bolts<R: Banc>(x: &mut Cx<'_, R>) {
         for rank in (0..16u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, 0, 1);
@@ -189,7 +190,7 @@ mod storm {
     }
 
     /// `0x4ec36` : quatre étincelles.
-    fn spawn_sparks(x: &mut Cx) {
+    fn spawn_sparks<R: Banc>(x: &mut Cx<'_, R>) {
         for rank in (0..4u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { return };
             o.set_u8(x.b, 0, 1);
@@ -202,7 +203,7 @@ mod storm {
         }
     }
 
-    fn move_towards(x: &mut Cx, at: u32, target: u16, step: u32) {
+    fn move_towards<R: Banc>(x: &mut Cx<'_, R>, at: u32, target: u16, step: u32) {
         let here = x.u16(at);
         if target == here {
             return;
@@ -275,7 +276,7 @@ mod storm {
         x.add16(0xc, pz);
     }
 
-    fn spark(x: &mut Cx) {
+    fn spark<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x3d) == 0 {
             x.add8(0x4, 2);
             return;
@@ -402,7 +403,7 @@ mod whirl {
                 x.set8(0x5c, 3);
                 x.set8(0x5d, 1);
                 x.set_a5_u16(0x4ba, 0x100);
-                x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+                crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 crate::sound::jouer(x.b, SFX_LOOP, x.o);
                 x.anim(ANIMS, 0x20);
                 return x.reinsert();
@@ -460,7 +461,7 @@ mod whirl {
         }
     }
 
-    fn hit(x: &mut Cx, player: Obj, m: Obj) {
+    fn hit<R: Banc>(x: &mut Cx<'_, R>, player: Obj, m: Obj) {
         if m.u8(x.b, 0) == 0 || m.u8(x.b, 1) == 0 || m.u16(x.b, 0x62) == 0 || m.u8(x.b, 0x40) != 0 {
             return;
         }

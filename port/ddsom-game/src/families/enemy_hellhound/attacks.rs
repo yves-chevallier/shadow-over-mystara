@@ -7,6 +7,7 @@
 //! * 10 : promenade tant qu'aucun joueur n'est en vie ;
 //! * 12 : morsure d'un joueur terrassé.
 
+use crate::families::cx::Banc;
 use super::arrival::stand_when_done;
 use super::*;
 use crate::objects::Courant;
@@ -19,12 +20,12 @@ const FLAME_SCRIPT: u32 = 0x62284;
 fn bite_effect(x: &mut Cx, kind: u32) {
     x.set8(f::KEY_FRAME, 0);
     x.c.d[0] = kind;
-    x.call(0x9eba6);
+    crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, kind as u8);
     lib::sound(x, 0xebd30);
 }
 
 /// 0x61c88 : prépare l'attente (aspect 0, animation 0).
-fn begin_wait(x: &mut Cx) {
+fn begin_wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 0);
@@ -33,7 +34,7 @@ fn begin_wait(x: &mut Cx) {
 
 /// 0x61fa0 / 0x61f94 : poursuite en place jusqu'à la fin du compteur `+0x77`, avec demi-tour si la cible change
 /// de côté ; `resume` est l'état à reprendre après le demi-tour.
-fn hold(x: &mut Cx, resume: u32) {
+fn hold<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
     x.set32(RESUME_STATE, resume);
     let n = x.u8(AI_LUNGE).wrapping_sub(1);
     x.set8(AI_LUNGE, n);
@@ -65,7 +66,7 @@ fn done_then_after(x: &mut Cx) {
 
 /// Attend la clé d'animation puis passe à l'étape suivante, sans remettre la clé à zéro (0x61ec0 remet
 /// `+0x33` à zéro, pas 0x6244a).
-fn wait_key_clear(x: &mut Cx) {
+fn wait_key_clear<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         x.add8(f::SUB3, 2);
@@ -107,7 +108,7 @@ fn slide(x: &mut Cx) {
 }
 
 /// Début d'un bond d'attaque : vitesse horizontale `vx` (inversée si l'ennemi regarde à gauche).
-fn begin_jump(x: &mut Cx, vx: i16, speed_z: u16, anim: u32, set: u32) {
+fn begin_jump<R: Banc>(x: &mut Cx<'_, R>, vx: i16, speed_z: u16, anim: u32, set: u32) {
     x.set16(Obj::VX, vx as u16);
     if x.u8(f::FLIP) != 0 {
         negate(x, Obj::VX);
@@ -299,7 +300,7 @@ fn breath(x: &mut Cx) {
 }
 
 /// 0x6220e : la clé d'animation lance la série de flammes.
-fn flame_start(x: &mut Cx) {
+fn flame_start<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(TIMER, 1);
         x.set8(SCRIPT, 0);
@@ -311,7 +312,7 @@ fn flame_start(x: &mut Cx) {
 
 /// Décompte de la série de flammes ; à zéro, tire la durée suivante dans la table ; `both` : deux effets par tir
 /// (sous-état 4) au lieu d'un seul (sous-état 6). Rend faux quand la série est finie (0x62266 dans l'original).
-fn flame_tick(x: &mut Cx, both: bool) -> bool {
+fn flame_tick<R: Banc>(x: &mut Cx<'_, R>, both: bool) -> bool {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if n != 0 {
@@ -329,7 +330,7 @@ fn flame_tick(x: &mut Cx, both: bool) -> bool {
     if both {
         lib::sound(x, 0xed398);
     }
-    x.call(0x9ed78);
+    crate::families::eshl_creators::sweeping_8(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
     true
 }
 
@@ -477,7 +478,7 @@ fn b_slash(x: &mut Cx) {
 }
 
 /// 0x62404 : élan du bond (animation 6).
-fn jump_forward(x: &mut Cx) {
+fn jump_forward<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 6);
@@ -507,7 +508,7 @@ fn b_claw(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
                 x.c.d[0] = 1;
-                x.call(0x9eba6);
+                crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 1);
             }
             if x.anim_step() {
                 stand_and_ready(x);
@@ -557,7 +558,7 @@ pub(super) fn run_c(x: &mut Cx) {
     }
 }
 
-fn c_wait(x: &mut Cx) {
+fn c_wait<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);
@@ -586,7 +587,7 @@ fn c_wait(x: &mut Cx) {
     }
 }
 
-fn c_begin(x: &mut Cx) {
+fn c_begin<R: Banc>(x: &mut Cx<'_, R>) {
     look(x, 0);
     x.set8(VULNERABLE, 1);
     mv(x, 0);
@@ -746,14 +747,14 @@ fn bite_victim(x: &mut Cx, which: u8) {
     let reach = if x.u8(f::FLIP) != 0 { 0x38i16 } else { -0x38 };
     let d3 = if which == 0 { 0x1c } else { 0x2c };
     x.c.d[1] = 2;
-    x.c.d[2] = x.u16(Obj::X).wrapping_add(reach as u16) as u32;
-    x.c.d[3] = x.u16(Obj::Z).wrapping_add(d3) as u32;
-    x.c.d[4] = x.u16(Obj::Y).wrapping_sub(1) as u32;
-    x.call(0xaaa40);
+    let pos = (x.u16(Obj::X).wrapping_add(reach as u16), x.u16(Obj::Z).wrapping_add(d3), x.u16(Obj::Y).wrapping_sub(1));
+    (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+    // l'autre objet de l'étincelle est A1, la victime (posée par `grab`)
+    let victim = x.linked(f::TARGET);
+    crate::families::effects_creators::spark_at(x.b, x.o, victim.0, 2, pos);
     if (x.u16(f::TARGET) as i16) >= 0 {
         return set_state_long(x, STANCE);
     }
-    let victim = x.linked(f::TARGET);
     x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);

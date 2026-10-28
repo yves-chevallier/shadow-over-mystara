@@ -91,10 +91,12 @@ impl Class {
                 c.sr &= !SR_X;
                 let address = self.handler(b, kind);
                 c.a[1] = address;
+                let avant = (c.d, c.a, c.sr);
                 let appel = crate::taches::table::appeler_attendu(c, b, Etape::Aiguillage(index));
                 if !crate::appeler_attendu(c, b, address, appel) {
                     return Flow::Yield;
                 }
+                crate::diag::sonder_sortie(c, &avant, self.entry, address);
             }
             after_current = false;
             c.a[0] = c.a[0].wrapping_add(self.pool.stride);
@@ -104,6 +106,48 @@ impl Class {
                 return Flow::Done;
             }
         }
+    }
+}
+
+/// Ce que la boucle d'aiguillage passe à un gestionnaire converti (`Corps::Gestionnaire`), au lieu des registres de
+/// l'original.
+#[derive(Clone, Copy, Debug)]
+pub struct Aiguillage {
+    /// L'objet traité (A0).
+    pub objet: Obj,
+    /// Compteur de la boucle (D7.w) : phase des clignotements « une image sur deux ».
+    pub compteur: u16,
+    /// Restes de registres que les gestionnaires se transmettent.
+    pub restes: Restes,
+}
+
+/// Restes de registres qu'un gestionnaire laisse et qu'un gestionnaire suivant relit (glitches d'origine). La sonde
+/// `DDSOM_POISON=sortie` (registres changés par chaque gestionnaire, inversés à son retour) les a désignés sur tous les
+/// scénarios ; les autres registres qu'un gestionnaire laisse ne sont relus par personne. Ils vivent encore dans le
+/// banc du processeur, que d'autres routines (liste des sprites, caméras) écrivent aussi : la boucle les y prend et
+/// les y rend.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Restes {
+    /// D4 : le dernier long copié par l'animation de palette (SET 0, 0xba310), le déplacement du radeau (EFFCT,
+    /// 0xad63e), les attributs du dernier morceau de la liste des sprites... ; le radeau sans pilote l'ajoute à la
+    /// position des joueurs (0xad7b0).
+    pub d4: u32,
+    /// D5 : 0 ou 1 (l'objet a bougé) après le maintien dans l'écran (0xfbae, `ai::keep_on_screen`), 1 après une
+    /// collision avec le décor (0x33fe4), le compteur épuisé d'une boucle `dbf`... ; la rangée d'éclats d'une caisse
+    /// (0xa17d0, `eshl_creators::row_1a`) en relit l'octet haut.
+    pub d5: u32,
+}
+
+impl Aiguillage {
+    /// Les valeurs que l'original trouve dans les registres à l'entrée du gestionnaire.
+    pub fn du_processeur(c: &Cpu) -> Self {
+        Aiguillage { objet: Obj(c.a[0]), compteur: c.d[7] as u16, restes: Restes { d4: c.d[4], d5: c.d[5] } }
+    }
+
+    /// Rend les restes au processeur (le gestionnaire laisse les autres registres tels quels).
+    pub fn rendre(&self, c: &mut Cpu) {
+        c.d[4] = self.restes.d4;
+        c.d[5] = self.restes.d5;
     }
 }
 

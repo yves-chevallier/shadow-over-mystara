@@ -2,6 +2,7 @@
 //! jusqu'à ce que sa durée de vie `+0xa8` s'écoule (`+0xa7` : saisi), après quoi il sort de l'écran à pied. Sans zone
 //! ni ombre : seules les remises en liste des routines (`jmp 0x1ee1a`) sont rejouées.
 
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -18,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x5befc : surgit : points de vie à 1 (mots `+0x60`, `+0x62`, `+0x64`), marche en place.
-fn begin(x: &mut Cx) {
+fn begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set16(0x60, 1);
     x.set16(f::HP, 1);
@@ -46,7 +47,7 @@ fn active(x: &mut Cx) {
 }
 
 /// +6 = 0 : marche sur place pendant `+0xa4` images, puis les tirs.
-fn walk(x: &mut Cx) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     x.anim_step();
     let n = x.u8(TIMER).wrapping_sub(1);
@@ -128,7 +129,7 @@ fn shoot(x: &mut Cx) {
     }
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        x.call(call::SWING);
+        crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
     }
     x.reinsert();
 }
