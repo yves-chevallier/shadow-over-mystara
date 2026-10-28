@@ -90,44 +90,75 @@ fn start(x: &mut Ctx) -> Flow {
     fade(x, crate::taches::fondu::descente, Etape::FadedOut)
 }
 
-crate::etapes! {
-    /// Étapes (points de reprise) de la machine à états.
-    pub enum Etape {
-        /// Écran vidé, caméras à l'origine, palettes de l'intermède (84) ; puis le premier joueur.
-        FadedOut = at::FADED_OUT => |x| {
-            for off in [0x50a, 0x55a, 0x506, 0x556] {
-                x.set_v16(off, 0);
-            }
-            x.set_v8(0x53c, 0);
-            super::bonus::reset_camera_copies(x);
-            x.set_v8(0x42, 2);
-            next_sub_step(x);
-            wr16(x.b, v::PLAYER, super::PLAYERS as u16);
-            wr8(x.b, v::LEFT, 4);
-            reset_objects(x);
-            effacer_couche(x.b, Couche::Un);
-            x.set_v8(0x3c, 0xff);
-            crate::palette::charger_page(x.b, 2, 84);
-            crate::palette::charger_page(x.b, 3, 84);
-            crate::palette::charger_page(x.b, 1, 0);
-            x.set_v8(0x48e, 15);
-            crate::palette::full_brightness(x.b);
-            next_player(x)
-        },
-        Retry5 = at::RETRY_5 => |x| {
-            let Some(o) = object(x, 5, 4, Etape::Retry5) else { return Flow::Yield };
-            bind(x, o);
-            objects_6_7(x)
-        },
-        Retry6 = at::RETRY_6 => objects_6_7,
-        Retry7 = at::RETRY_7 => object_7,
-        NextWaited = at::NEXT_WAITED => |x| {
-            for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
-                effacer_couche(x.b, couche);
-            }
-            Flow::Done
-        },
+/// Le joueur de l'intermède en cours : son enregistrement (A6 de l'original) et son octet `+3` (D1), que l'original
+/// garde dans les registres pendant les cessions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Joueur {
+    enregistrement: u32,
+    octet: u8,
+}
+
+/// Étapes (points de reprise) de la machine à états.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Etape {
+    /// Écran vidé, caméras à l'origine, palettes de l'intermède (84) ; puis le premier joueur.
+    FadedOut,
+    /// Après une attente, nouvelle tentative de création des objets 5, 6 et 7.
+    Retry5(Joueur),
+    Retry6(Joueur),
+    Retry7(Joueur),
+    NextWaited,
+}
+
+impl Etape {
+    /// Adresse que l'original reprend à cette étape.
+    pub const fn adresse(self) -> u32 {
+        match self {
+            Etape::FadedOut => at::FADED_OUT,
+            Etape::Retry5(_) => at::RETRY_5,
+            Etape::Retry6(_) => at::RETRY_6,
+            Etape::Retry7(_) => at::RETRY_7,
+            Etape::NextWaited => at::NEXT_WAITED,
+        }
     }
+
+    /// Le pas de l'étape.
+    pub fn pas(self, x: &mut Ctx) -> Flow {
+        match self {
+            Etape::FadedOut => faded_out(x),
+            Etape::Retry5(j) => objects(x, j),
+            Etape::Retry6(j) => objects_6_7(x, j),
+            Etape::Retry7(j) => object_7(x, j),
+            Etape::NextWaited => {
+                for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+                    effacer_couche(x.b, couche);
+                }
+                Flow::Done
+            }
+        }
+    }
+}
+
+/// Écran vidé, caméras à l'origine, palettes de l'intermède (84) ; puis le premier joueur.
+fn faded_out(x: &mut Ctx) -> Flow {
+    for off in [0x50a, 0x55a, 0x506, 0x556] {
+        x.set_v16(off, 0);
+    }
+    x.set_v8(0x53c, 0);
+    super::bonus::reset_camera_copies(x);
+    x.set_v8(0x42, 2);
+    next_sub_step(x);
+    wr16(x.b, v::PLAYER, super::PLAYERS as u16);
+    wr8(x.b, v::LEFT, 4);
+    reset_objects(x);
+    effacer_couche(x.b, Couche::Un);
+    x.set_v8(0x3c, 0xff);
+    crate::palette::charger_page(x.b, 2, 84);
+    crate::palette::charger_page(x.b, 3, 84);
+    crate::palette::charger_page(x.b, 1, 0);
+    x.set_v8(0x48e, 15);
+    crate::palette::full_brightness(x.b);
+    next_player(x)
 }
 
 /// Sous-état 2 : le prochain joueur concerné, ou la fin de l'état.
@@ -153,16 +184,14 @@ fn next_player(x: &mut Ctx) -> Flow {
     }
 }
 
-/// Sous-état 4 : l'intermède du joueur, après quatre images ; A6 = le joueur et D1 = son octet `+3` restent dans
-/// les registres pendant les cessions, comme dans l'original.
+/// Sous-état 4 : l'intermède du joueur, après quatre images (le joueur suit dans l'étape de reprise).
 fn player_scene(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     wr8(x.b, v::TIMER, 0xf0);
     x.set_v16(0x14, 0x12c0);
     let p = rd16(x.b, v::PLAYER) as i16 as i32 as u32;
-    x.c.a[6] = p;
-    x.c.d[1] = rd8(x.b, p + 3) as u32;
-    x.wait(4, Etape::Retry5)
+    let joueur = Joueur { enregistrement: p, octet: rd8(x.b, p + 3) };
+    x.wait(4, Etape::Retry5(joueur))
 }
 
 /// Listes défaites et vidées (0x1f184, 0x1de7c), pools remis à zéro.
@@ -186,21 +215,28 @@ fn object(x: &mut Ctx, kind: u8, frames: u32, retry: Etape) -> Option<u32> {
     }
 }
 
-/// L'objet est lié au joueur (octet `+0x2f` = D1) et au bloc (long `+0x4c` = A0).
-fn bind(x: &mut Ctx, o: u32) {
-    wr8(x.b, o + 0x2f, x.c.d[1] as u8);
+/// L'objet est lié au joueur (octet `+0x2f`) et au bloc (long `+0x4c` = A0).
+fn bind(x: &mut Ctx, o: u32, j: Joueur) {
+    wr8(x.b, o + 0x2f, j.octet);
     wr32(x.b, o + 0x4c, x.c.a[0]);
 }
 
-fn objects_6_7(x: &mut Ctx) -> Flow {
-    let Some(o) = object(x, 6, 1, Etape::Retry6) else { return Flow::Yield };
-    bind(x, o);
-    object_7(x)
+/// Les objets 5, 6 et 7 du joueur.
+fn objects(x: &mut Ctx, j: Joueur) -> Flow {
+    let Some(o) = object(x, 5, 4, Etape::Retry5(j)) else { return Flow::Yield };
+    bind(x, o, j);
+    objects_6_7(x, j)
 }
 
-fn object_7(x: &mut Ctx) -> Flow {
-    let Some(o) = object(x, 7, 1, Etape::Retry7) else { return Flow::Yield };
-    wr16(x.b, o + 0x34, x.c.a[6] as u16);
+fn objects_6_7(x: &mut Ctx, j: Joueur) -> Flow {
+    let Some(o) = object(x, 6, 1, Etape::Retry6(j)) else { return Flow::Yield };
+    bind(x, o, j);
+    object_7(x, j)
+}
+
+fn object_7(x: &mut Ctx, j: Joueur) -> Flow {
+    let Some(o) = object(x, 7, 1, Etape::Retry7(j)) else { return Flow::Yield };
+    wr16(x.b, o + 0x34, j.enregistrement as u16);
     Flow::Done
 }
 
