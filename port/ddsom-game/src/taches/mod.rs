@@ -195,13 +195,15 @@ pub fn revenir(c: &mut Cpu, b: &mut Cps2Bus) {
     if a_cede() {
         return;
     }
-    match table::retour(c, b) {
-        None => {}
+    match table::retour(b) {
+        table::Retour::Rendu => {}
+        table::Retour::Suite(Suite::Etape(e)) => executer(e, c, b),
+        // un cadre dont la suite est une adresse : outils (natives appelées par un outil de diagnostic)
+        table::Retour::Suite(Suite::Adresse(a)) => c.pc = a,
         // jeu : chaque retour est celui d'un appel en cours (étape, appel attendu, appel par adresse)
-        Some(Suite::Adresse(a)) if crate::sans68k::actif() => panic!("retour vers {a:06x} sans appel en cours"),
-        // outils (machine sans table des tâches) : l'adresse de retour dépilée
-        Some(Suite::Adresse(a)) => c.pc = a,
-        Some(Suite::Etape(e)) => executer(e, c, b),
+        table::Retour::Pile68000 if crate::sans68k::actif() => panic!("retour sans appel en cours"),
+        // outils (natives appelées par le code d'origine) : l'adresse de retour dépilée
+        table::Retour::Pile68000 => c.pc = table::depiler_68000(c, b),
     }
 }
 

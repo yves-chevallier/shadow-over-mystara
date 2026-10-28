@@ -1184,7 +1184,7 @@ fn hero_rockets(x: &mut Cx) {
     x.add8(f::SUB_STATE, 2);
     // la partie entière attend quatre images (`jsr 0xa40` au milieu de la boucle de dispatch) : la tâche reprendra
     // à l'étape `ApresAttente`, puis, au retour, à `ApresEtat` (la fin du gestionnaire), comme l'original
-    crate::taches::table::appeler(x.c, x.b, Etape::ApresEtat);
+    crate::taches::table::appeler(x.b, Etape::ApresEtat);
     x.c.d[0] = 4;
     crate::kernel::attendre(x.c, x.b, Etape::ApresAttente);
     // la boucle de dispatch et les appelants Rust en cours abandonnent (`taches::a_cede`) : la tâche reprendra par les

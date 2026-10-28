@@ -68,7 +68,7 @@ mod at {
 
 /// Appel en cours de la tâche : `suite` reprendra quand l'appelé reviendra (rien n'est empilé sur la pile 68000).
 fn push(x: &mut Ctx, suite: impl Into<super::table::Suite>) {
-    super::table::appeler(x.c, x.b, suite);
+    super::table::appeler(x.b, suite);
 }
 
 /// Drapeaux N et Z d'un octet chargé (`move.b`), V et C à zéro.

@@ -91,6 +91,9 @@ pub enum Point {
     /// Boucle sans fin de l'original (`bra.b *` à cette adresse : blocages du menu TEST et de l'EEPROM, [`bloquer`]) :
     /// plus rien ne s'exécute, hors des interruptions.
     Bloque(u32),
+    /// `0x574` : l'interruption de VBLANK est prise ([`interrompre`]) ; après son traitement, le processeur revient
+    /// (`rte`) au point interrompu, que la table garde (`Table::interrompu`) au lieu du PC et du SR empilés.
+    Interruption,
 }
 
 impl Point {
@@ -110,6 +113,7 @@ impl Point {
             Point::Tache => c.pc,
             Point::PasRetenu => crate::GAME_STEP,
             Point::Bloque(adresse) => adresse,
+            Point::Interruption => 0x574,
         }
     }
 
@@ -206,11 +210,14 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
             c.a[4] = e.pile;
             c.other_sp = e.pile;
             c.set_sr(0);
-            crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"))
+            let etape = crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"));
+            crate::diag::sonder_lancement(c, "neuve", &format!("{etape:?}"), crate::regs::a(1) | crate::regs::a(4) | crate::regs::a(5));
+            etape
         }
         (Etat::Prete | Etat::EnCours, Reprise::Etape(etape, ctx)) => {
             e.etat = Etat::EnCours;
             remettre(c, ctx);
+            crate::diag::sonder_lancement(c, "reprise", &format!("{etape:?}"), crate::regs::a(5));
             etape
         }
         (etat, reprise) => unreachable!("tâche {k} lancée dans l'état {etat:?} avec la reprise {reprise:?}"),
@@ -251,6 +258,21 @@ fn vers_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) {
 pub fn bloquer(b: &mut Cps2Bus, adresse: u32) {
     table(b).point = Point::Bloque(adresse);
     crate::taches::noter_cession();
+}
+
+/// L'interruption de VBLANK est prise au point `point` (entre deux points, le SR l'autorisant) : le noyau retient où
+/// revenir. L'original empile PC et SR sur la pile courante (celle de la tâche, ou du superviseur) ; rien ne les y
+/// relit hors du `rte`.
+pub fn interrompre(b: &mut Cps2Bus, point: Point) {
+    let t = table(b);
+    assert!(t.interrompu.is_none(), "interruption prise au point {point:?} pendant une interruption");
+    t.interrompu = Some(point);
+    t.point = Point::Interruption;
+}
+
+/// `rte` : fin de l'interruption, retour au point interrompu.
+pub fn fin_d_interruption(b: &mut Cps2Bus) -> Point {
+    table(b).interrompu.take().expect("fin d'interruption sans point interrompu")
 }
 
 /// Le pas de jeu est retenu jusqu'à l'image suivante (plafond des pas par image) : la tâche de partie reste en cours.

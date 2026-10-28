@@ -16,7 +16,8 @@
 //!
 //! 1. l'interruption de VBLANK, levée à la fin de l'image précédente, est prise dès que le SR l'autorise, entre deux
 //!    points (au début de l'image : l'ordonnanceur l'attend, le pas de jeu retenu aussi ; pendant le démarrage, quand
-//!    `boot_init` démasque) ; elle s'exécute en entier (`vblank::interruption`) ;
+//!    `boot_init` démasque) : c'est un point du noyau (`Point::Interruption`, le point interrompu rangé dans la table,
+//!    sans PC ni SR empilés), qui s'exécute en entier (`vblank::interruption`) puis revient au point interrompu ;
 //! 2. puis les points s'enchaînent (ordonnanceur, tâches, cessions) jusqu'à ce que l'ordonnanceur tourne à vide
 //!    ([`au_repos`] : plus aucune tâche prête, ou seule la tâche du gel sans rien à faire), ou que le pas de jeu
 //!    atteigne le plafond de l'image (`MAX_STEPS_PER_FRAME` pas, [`pas_de_jeu`] : le pas retenu s'exécute au début de
@@ -149,8 +150,8 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
         crate::taches::oublier_cession();
         let point = crate::kernel::point(b);
         let niveau = b.irq_level();
-        if niveau > (c.sr >> 8 & 7) as u8 {
-            crate::vblank::interruption(c, b, niveau, point.adresse(c));
+        if point != Point::Interruption && niveau > (c.sr >> 8 & 7) as u8 {
+            crate::kernel::interrompre(b, point);
             continue;
         }
         // (une interruption masquée attend que l'ordonnanceur rouvre sa fenêtre)
@@ -165,6 +166,10 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
             }
             Point::Debut | Point::Parcours | Point::Examen | Point::Suivant | Point::Retour => {
                 crate::kernel::executer(c, b, point)
+            }
+            Point::Interruption => {
+                crate::vblank::interruption(b, niveau);
+                crate::kernel::fin_d_interruption(b)
             }
             // une tâche ne continue plus par un saut vers une native : chaque pas cède, se termine ou bloque
             Point::Tache => arreter(c, b, "la tâche a rendu la main sans céder".into()),
@@ -283,7 +288,7 @@ fn arreter(c: &Cpu, b: &mut Cps2Bus, cause: String) -> ! {
         m += &format!(" ; point {:?}", t.point);
         let k = t.courante;
         let e = &t.emplacements[k];
-        let cadres: Vec<String> = e.cadres.iter().map(|k| format!("{:x?}@{:x}", k.suite, k.pile)).collect();
+        let cadres: Vec<String> = e.cadres.iter().map(|k| format!("{:x?}@{}", k.suite, k.appels)).collect();
         m += &format!(" ; tâche {k} ({:?}, {:?}) ; cadres [{}]", e.tache, e.etat, cadres.join(" "));
     }
     let pile: Vec<String> = (0..6).map(|i| format!("{:x}", rd32(b, c.a[7].wrapping_add(4 * i)))).collect();

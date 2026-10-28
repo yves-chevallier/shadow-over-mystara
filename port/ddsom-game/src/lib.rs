@@ -273,8 +273,9 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(hud::NATIVES)
 }
 
-/// Appelle une routine par son adresse depuis une routine native, comme un `jsr` : les natives (et, en mode hybride, le
-/// code d'origine) s'exécutent jusqu'au retour. L'adresse de retour empilée est une sentinelle. La routine ne doit ni
+/// Appelle une routine par son adresse depuis une routine native, comme un `jsr`. Dans le jeu, la native s'exécute
+/// aussitôt et son `rts` ferme l'appel (`taches::table::ouvrir_appel`) : ni PC, ni pile 68000. Dans les outils, les
+/// natives et le code d'origine s'exécutent jusqu'au retour à une adresse sentinelle empilée. La routine ne doit ni
 /// céder la main ni revenir plus haut que son appelant : les appels qui le peuvent ont une suite (étape Rust, voir
 /// `taches::table::appeler` et [`appeler_attendu`]).
 #[track_caller]
@@ -287,7 +288,7 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     if sans68k::actif() {
         // le jeu : la native s'exécute aussitôt ; son `rts` revient à un appel attendu de la tâche (ni PC, ni pile 68000)
         let n = sans68k::native(c, b, addr);
-        let appel = taches::table::ouvrir_appel(c, b);
+        let appel = taches::table::ouvrir_appel(b);
         executer(n, c, b, 0);
         if taches::a_cede() || !taches::table::appel_revenu(b, appel) {
             panic!("appel de {addr:06x} ({site}) : la routine a cédé la main ou est revenue plus haut que son appelant");
@@ -344,10 +345,20 @@ pub fn appeler_attendu(c: &mut Cpu, b: &mut Cps2Bus, adresse: u32, appel: taches
     if sans68k::actif() {
         let n = sans68k::native(c, b, adresse);
         executer(n, c, b, 0);
+    } else if let Some(n) = lookup(adresse) {
+        executer(n, c, b, 0);
     } else {
+        // outils : code d'origine, jusqu'au retour à une adresse sentinelle empilée
+        const RETURN: u32 = 0x00_fffe;
+        let sp = c.a[7];
+        c.a[7] = sp.wrapping_sub(4);
+        mem::wr32(b, c.a[7], RETURN);
         c.pc = adresse;
-        while taches::table::en_attente(b, appel) && !taches::a_cede() {
+        while !(c.pc == RETURN && c.a[7] == sp) && taches::table::en_attente(b, appel) && !taches::a_cede() {
             un_pas(c, b);
+        }
+        if c.pc == RETURN && c.a[7] == sp {
+            taches::table::rendre_attendu(b, appel);
         }
     }
     taches::table::revenu(b, appel)
@@ -404,7 +415,9 @@ pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32
         if let Some(h) = hook {
             h(pc, true);
         }
+        let appel = taches::table::ouvrir_appel_68000(b);
         exec(n, c, b);
+        taches::table::fermer_appels(b, appel);
         if let Some(h) = hook {
             h(pc, false);
         }
@@ -416,14 +429,6 @@ pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32
         c.step(b);
     }
     Some(c.pc)
-}
-
-/// Diagnostic (`examples/cessions`) : `run` exécute le code 68000 une instruction à la fois et vérifie qu'il ne dépile
-/// jamais un appel en cours tenu en Rust (`taches::table::verifier_68000`).
-static VERIFIER_APPELS: AtomicBool = AtomicBool::new(false);
-
-pub fn set_verifier_appels(on: bool) {
-    VERIFIER_APPELS.store(on, Ordering::Relaxed);
 }
 
 thread_local! {
@@ -452,15 +457,12 @@ fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
 pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
-        if c.cycles + DUREE_NATIVE <= limit || tient_la_table(n) || taches::table::appelee_par_un_cadre(c, b) {
+        if c.cycles + DUREE_NATIVE <= limit || tient_la_table(n) {
+            let appel = taches::table::ouvrir_appel_68000(b);
             executer(n, c, b, DUREE_NATIVE);
+            taches::table::fermer_appels(b, appel);
             return Some(c.pc);
         }
-    }
-    if VERIFIER_APPELS.load(Ordering::Relaxed) {
-        taches::table::verifier_68000(c, b);
-        c.step(b);
-        return Some(c.pc);
     }
     ddsom_rc::run_block(pc, c, b, dl)
 }
@@ -495,9 +497,6 @@ fn executer(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, duree: u64) {
             }
         }
     } else {
-        if VERIFIER_APPELS.load(Ordering::Relaxed) {
-            taches::table::noter(c.pc, c.a[7]);
-        }
         exec(n, c, b);
         c.cycles += duree;
         if COUNT.load(Ordering::Relaxed) {
@@ -520,7 +519,9 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
     if c.cycles + DUREE_NATIVE > limit {
         return None;
     }
+    let appel = taches::table::ouvrir_appel_68000(b);
     n.executer(c, b);
+    taches::table::fermer_appels(b, appel);
     c.cycles += DUREE_NATIVE;
     Some(c.pc)
 }
@@ -677,10 +678,10 @@ fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
     c2
 }
 
-/// Contrôle d'une native appelée par un pas Rust (son retour est un appel en cours de la tâche, pas une adresse
-/// empilée) : la copie qui exécute l'original reçoit une adresse de retour sentinelle.
+/// Contrôle d'une native dans le jeu (appelée par du Rust : son retour est un appel en cours tenu en Rust, pas une
+/// adresse empilée) : la copie qui exécute l'original reçoit une adresse de retour sentinelle.
 fn pile_pour_l_original(c2: &mut Cpu, b2: &mut Cps2Bus) {
-    if taches::table::appelee_par_un_cadre(c2, b2) {
+    if sans68k::actif() {
         c2.a[7] = c2.a[7].wrapping_sub(4);
         mem::wr32(b2, c2.a[7], 0x00_fffe);
     }
@@ -695,8 +696,8 @@ fn checked(n: &Native) -> bool {
 }
 
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
-    // une native appelée par un appel en cours de la tâche ne pose pas de PC au retour
-    let par_cadre = taches::table::appelee_par_un_cadre(c, b);
+    // dans le jeu, une native ne pose pas de PC au retour
+    let par_cadre = sans68k::actif();
     let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();

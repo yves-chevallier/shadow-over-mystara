@@ -217,13 +217,16 @@ impl Default for Emplacement {
 /// céder la main (fondu, écran noir, gestionnaire d'objet, mise à jour du monde...), la suite de l'appelant est rangée
 /// ici au lieu d'une adresse de retour empilée (ce que le sous-programme garde pendant qu'il cède est dans son étape) :
 /// à chaque cession, la pile 68000 de la tâche reste ainsi vide, et sa reprise ne dépend plus que de la table (étape,
-/// registres, cadres).
+/// contexte, cadres).
+///
+/// Le retour d'un sous-programme (`rts`) revient au plus récent des appels en cours : le dernier cadre de la tâche, ou
+/// un appel par adresse ouvert après lui ([`Table::appels`]). La profondeur de chacun dit lequel ; le pointeur de pile
+/// 68000 (A7) n'y sert plus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cadre {
-    /// Pointeur de pile 68000 quand le cadre a été ouvert : il revient à l'appelé qui rend la main avec cette pile (un
-    /// appel par adresse imbriqué, `crate::call`, a toujours une pile plus basse, son adresse de retour y étant
-    /// empilée).
-    pub pile: u32,
+    /// Nombre d'appels hors cadre en cours ([`Table::appels`]) quand le cadre a été ouvert : un appel par adresse
+    /// ouvert après lui (`crate::call`, imbriqué) revient avant lui.
+    pub appels: usize,
     /// Quand l'appelé revient (`rts` d'une native, fin d'une étape, ou cession terminale `jmp 0xa40`), la tâche
     /// continue à cette suite.
     pub suite: Suite,
@@ -245,7 +248,7 @@ pub struct Cadres {
 
 impl Default for Cadres {
     fn default() -> Self {
-        Cadres { liste: [Cadre { pile: 0, suite: Suite::Adresse(0), attendu: None }; PROFONDEUR], n: 0 }
+        Cadres { liste: [Cadre { appels: 0, suite: Suite::Adresse(0), attendu: None }; PROFONDEUR], n: 0 }
     }
 }
 
@@ -274,17 +277,6 @@ impl Cadres {
         self.liste[..self.n].iter().copied()
     }
 
-    /// Retour d'un appelé dont la pile 68000 est `pile` : l'appel en cours, s'il lui correspond.
-    fn retour(&mut self, pile: u32) -> Option<Cadre> {
-        match self.sommet()? {
-            cadre if cadre.pile == pile => {
-                self.n -= 1;
-                Some(cadre)
-            }
-            _ => None,
-        }
-    }
-
     /// L'appel attendu `id` n'est plus attendu (la fonction Rust qui l'attendait l'abandonne) : s'il est encore là, son
     /// retour exécutera sa suite.
     fn delaisser(&mut self, id: u32) {
@@ -305,12 +297,37 @@ pub struct Table {
     pub piles: Vec<u32>,
     /// Où en est le processeur (point du démarrage ou de l'ordonnanceur, ou tâche en cours).
     pub point: crate::kernel::Point,
+    /// Pendant l'interruption de VBLANK (`Point::Interruption`) : le point où le processeur reviendra.
+    pub interrompu: Option<crate::kernel::Point>,
     /// Numéro du prochain appel attendu, et dernier appel attendu revenu (voir [`appeler_attendu`]).
     prochain_appel: u32,
     revenu: Option<u32>,
-    /// Appels par adresse en cours (`crate::call`), toutes tâches confondues : la pile 68000 qu'aurait l'appelé (son
-    /// adresse de retour n'y est pas écrite). Ils ne cèdent jamais la main : vides à chaque cession.
-    appels: Vec<u32>,
+    /// Appels en cours hors des cadres des tâches, du plus ancien au plus récent : appels par adresse
+    /// (`crate::call`), et, dans les outils, natives appelées par le code d'origine. Ils ne cèdent jamais la main :
+    /// aucun n'est en cours à une cession (ils ne sont donc à aucune tâche).
+    pub appels: Vec<HorsCadre>,
+}
+
+/// Un appel en cours hors des cadres d'une tâche.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HorsCadre {
+    /// Appel par adresse d'une fonction Rust (`crate::call`) : le retour de la native lui rend la main.
+    ParAdresse,
+    /// Outils (machine qui exécute aussi le code d'origine) : native appelée par un `jsr` du 68000, dont l'adresse de
+    /// retour est sur la pile 68000.
+    Par68000,
+}
+
+/// Ce que devient la tâche au retour d'un sous-programme (voir [`retour`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Retour {
+    /// La suite de l'appel en cours, rangée par un pas Rust.
+    Suite(Suite),
+    /// La fonction Rust qui attendait ce retour reprend la main (appel attendu, appel par adresse).
+    Rendu,
+    /// Aucun appel en cours tenu en Rust : l'adresse de retour est sur la pile 68000 (outils seulement ; dans le jeu,
+    /// c'est une erreur).
+    Pile68000,
 }
 
 impl Table {
@@ -431,8 +448,8 @@ fn table_si(b: &mut Cps2Bus) -> Option<&mut Table> {
 
 /// Un pas Rust de la tâche courante appelle un sous-programme qui peut céder la main : quand celui-ci reviendra, la
 /// tâche continuera à `suite`. Rien n'est empilé sur la pile 68000.
-pub fn appeler(c: &Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) {
-    table(b).cadres().empiler(Cadre { pile: c.a[7], suite: suite.into(), attendu: None });
+pub fn appeler(b: &mut Cps2Bus, suite: impl Into<Suite>) {
+    table(b).ouvrir_cadre(suite.into(), None);
 }
 
 /// Appel attendu (voir [`appeler_attendu`]).
@@ -443,11 +460,11 @@ pub struct Appel(u32);
 /// Une fonction Rust appelle une native qui revient par `rts` (le gestionnaire d'un objet) et continue après elle : le
 /// retour de la native lui rend la main ([`revenu`]). Si la native cède la main avant, la tâche reprendra plus tard à
 /// `suite`, la fonction Rust ayant abandonné.
-pub fn appeler_attendu(c: &Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) -> Appel {
+pub fn appeler_attendu(b: &mut Cps2Bus, suite: impl Into<Suite>) -> Appel {
     let t = table(b);
     t.prochain_appel = t.prochain_appel.wrapping_add(1);
     let id = t.prochain_appel;
-    t.cadres().empiler(Cadre { pile: c.a[7], suite: suite.into(), attendu: Some(id) });
+    t.ouvrir_cadre(suite.into(), Some(id));
     Appel(id)
 }
 
@@ -468,36 +485,69 @@ pub fn revenu(b: &mut Cps2Bus, appel: Appel) -> bool {
     false
 }
 
-/// Retour d'un sous-programme : la suite de l'appel en cours de la tâche courante s'il a été fait par un pas Rust avec
-/// cette pile, sinon l'adresse de retour dépilée de la pile 68000. `None` : l'appel était attendu par une fonction Rust
-/// ([`appeler_attendu`]), qui reprend la main.
-pub fn retour(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Suite> {
-    let pile = c.a[7];
-    if let Some(t) = table_si(b) {
-        if let Some(cadre) = t.cadres().retour(pile) {
-            if let Some(id) = cadre.attendu {
-                t.revenu = Some(id);
-                return None;
-            }
-            return Some(cadre.suite);
-        }
-        if t.appels.last() == Some(&pile) {
-            t.appels.pop();
-            c.a[7] = pile.wrapping_add(4);
-            return None;
-        }
-    }
-    let adresse = rd32(b, pile);
-    c.a[7] = pile.wrapping_add(4);
-    Some(Suite::Adresse(adresse))
+/// Outils : l'appel attendu `appel`, fait à du code d'origine, est revenu par la pile 68000 (adresse de retour
+/// sentinelle) : son cadre, le plus récent de la tâche courante, est fermé comme par le `rts` d'une native.
+pub fn rendre_attendu(b: &mut Cps2Bus, appel: Appel) {
+    let t = table(b);
+    let cadre = t.cadres().depiler();
+    assert!(cadre.is_some_and(|k| k.attendu == Some(appel.0)), "appel attendu {appel:?} : ce n'est pas le dernier cadre ({cadre:x?})");
+    t.revenu = Some(appel.0);
 }
 
-/// Un appel par adresse (`crate::call`) commence : la pile de l'appelé est celle de l'appelant moins l'adresse de
-/// retour, qui n'est pas écrite ; son `rts` la rendra ([`retour`]). Rend la profondeur à laquelle revenir.
-pub fn ouvrir_appel(c: &mut Cpu, b: &mut Cps2Bus) -> usize {
+impl Table {
+    /// Le plus récent des appels en cours de la tâche courante : un appel hors cadre ouvert après le dernier cadre (il
+    /// est dépilé et rendu), sinon le dernier cadre (dépilé et rendu).
+    fn depiler_le_plus_recent(&mut self) -> Option<Result<HorsCadre, Cadre>> {
+        let sommet = self.cadres().sommet();
+        let hauteur = sommet.map_or(0, |k| k.appels);
+        assert!(
+            self.appels.len() >= hauteur,
+            "appels hors cadre {:?} revenus avant le cadre {sommet:x?} ouvert pendant eux",
+            self.appels
+        );
+        if self.appels.len() > hauteur {
+            return self.appels.pop().map(Ok);
+        }
+        self.cadres().depiler().map(Err)
+    }
+
+    /// Retour d'un sous-programme (`rts`) : il revient au plus récent des appels en cours ([`Cadre`]).
+    pub fn retour(&mut self) -> Retour {
+        match self.depiler_le_plus_recent() {
+            Some(Ok(HorsCadre::ParAdresse)) => Retour::Rendu,
+            Some(Ok(HorsCadre::Par68000)) | None => Retour::Pile68000,
+            Some(Err(Cadre { attendu: Some(id), .. })) => {
+                self.revenu = Some(id);
+                Retour::Rendu
+            }
+            Some(Err(cadre)) => Retour::Suite(cadre.suite),
+        }
+    }
+
+    /// Un pas Rust de la tâche courante appelle un sous-programme qui peut céder ; `attendu` : appel attendu.
+    fn ouvrir_cadre(&mut self, suite: Suite, attendu: Option<u32>) {
+        let appels = self.appels.len();
+        self.cadres().empiler(Cadre { appels, suite, attendu });
+    }
+}
+
+/// Retour d'un sous-programme (`rts`) : il revient au plus récent des appels en cours ([`Cadre`]).
+pub fn retour(b: &mut Cps2Bus) -> Retour {
+    table_si(b).map_or(Retour::Pile68000, Table::retour)
+}
+
+/// Outils : dépile l'adresse de retour de la pile 68000 (`rts` d'une native appelée par le code d'origine).
+pub fn depiler_68000(c: &mut Cpu, b: &mut Cps2Bus) -> u32 {
+    let adresse = rd32(b, c.a[7]);
+    c.a[7] = c.a[7].wrapping_add(4);
+    adresse
+}
+
+/// Un appel par adresse (`crate::call`) commence ; son `rts` le fermera ([`retour`]). Rend la profondeur à laquelle
+/// revenir.
+pub fn ouvrir_appel(b: &mut Cps2Bus) -> usize {
     let t = table(b);
-    c.a[7] = c.a[7].wrapping_sub(4);
-    t.appels.push(c.a[7]);
+    t.appels.push(HorsCadre::ParAdresse);
     t.appels.len() - 1
 }
 
@@ -506,16 +556,35 @@ pub fn appel_revenu(b: &Cps2Bus, profondeur: usize) -> bool {
     lire(b).is_some_and(|t| t.appels.len() == profondeur)
 }
 
-/// Comme [`retour`], pour une cession terminale (`jmp 0xa40`) ou un appel abandonné : la suite, qu'elle soit attendue ou
-/// non (la fonction Rust qui l'attendait voit qu'elle n'est pas revenue).
-pub fn depiler_retour(c: &mut Cpu, b: &mut Cps2Bus) -> Suite {
-    let pile = c.a[7];
-    if let Some(cadre) = table_si(b).and_then(|t| t.cadres().retour(pile)) {
-        return cadre.suite;
+/// Outils : le code d'origine appelle une native (son adresse de retour est sur la pile 68000). Rend la profondeur à
+/// rétablir après elle ([`fermer_appels`]) si la machine a une table des tâches (sans table, tous les retours sont sur
+/// la pile 68000).
+pub fn ouvrir_appel_68000(b: &mut Cps2Bus) -> Option<usize> {
+    let t = table_si(b)?;
+    t.appels.push(HorsCadre::Par68000);
+    Some(t.appels.len() - 1)
+}
+
+/// Outils : la native appelée par le code d'origine est finie ; si elle n'est pas revenue par `rts` (saut, cession),
+/// son appel est fermé.
+pub fn fermer_appels(b: &mut Cps2Bus, profondeur: Option<usize>) {
+    if let (Some(p), Some(t)) = (profondeur, table_si(b)) {
+        t.appels.truncate(p);
     }
-    let retour = rd32(b, pile);
-    c.a[7] = pile.wrapping_add(4);
-    Suite::Adresse(retour)
+}
+
+/// Comme [`retour`], pour une cession terminale (`jmp 0xa40`) ou un appel abandonné : la suite du dernier cadre, qu'elle
+/// soit attendue ou non (la fonction Rust qui l'attendait voit qu'elle n'est pas revenue). Une cession ne peut avoir
+/// lieu dans un appel par adresse.
+pub fn depiler_retour(c: &mut Cpu, b: &mut Cps2Bus) -> Suite {
+    match table_si(b).and_then(Table::depiler_le_plus_recent) {
+        Some(Err(cadre)) => cadre.suite,
+        Some(Ok(HorsCadre::ParAdresse)) => panic!("cession ou abandon de l'appel en cours dans un appel par adresse"),
+        Some(Ok(HorsCadre::Par68000)) | None => {
+            assert!(!crate::sans68k::actif(), "cession ou abandon sans appel en cours");
+            Suite::Adresse(depiler_68000(c, b))
+        }
+    }
 }
 
 /// Les `n` appels en cours les plus récents de la tâche courante sont dépilés sans revenir (une routine qui dépile les
@@ -526,53 +595,6 @@ pub fn depiler_appels(b: &mut Cps2Bus, n: usize) -> Vec<Suite> {
     (0..n)
         .map(|_| cadres.depiler().unwrap_or_else(|| panic!("{n} appels en cours à dépiler : il n'y en a pas assez")).suite)
         .collect()
-}
-
-/// La native qui va s'exécuter a été appelée par un pas Rust (le dernier cadre de la tâche courante est à la hauteur
-/// de pile actuelle) : en mode hybride, elle n'est jamais remplacée par son original, même quand elle déborderait sur
-/// l'interruption suivante (l'original ne trouverait pas son retour sur la pile 68000).
-pub fn appelee_par_un_cadre(c: &Cpu, b: &Cps2Bus) -> bool {
-    c.sr & 0x2000 == 0
-        && lire(b).is_some_and(|t| t.emplacements[t.courante].cadres.sommet().is_some_and(|k| k.pile == c.a[7]))
-}
-
-thread_local! {
-    /// Diagnostic : dernières instructions 68000 et natives exécutées (PC, pile), montrées quand la vérification échoue.
-    static TRACE: std::cell::RefCell<std::collections::VecDeque<(u32, u32)>> = const { std::cell::RefCell::new(std::collections::VecDeque::new()) };
-}
-
-/// Diagnostic : note une instruction ou une native exécutée (voir [`verifier_68000`]).
-pub fn noter(pc: u32, pile: u32) {
-    TRACE.with(|t| {
-        let mut t = t.borrow_mut();
-        if t.len() == 600 {
-            t.pop_front();
-        }
-        t.push_back((pc, pile));
-    });
-}
-
-/// Diagnostic (`examples/cessions`) : avant chaque instruction 68000, vérifie qu'elle ne dépile pas un cadre de la tâche
-/// courante tenu en Rust (pile au-dessus de celle du dernier cadre, ou `rts`/`rtr` à sa hauteur).
-pub fn verifier_68000(c: &Cpu, b: &mut Cps2Bus) {
-    if c.sr & 0x2000 != 0 {
-        return;
-    }
-    noter(c.pc, c.a[7]);
-    // DDSOM_ARRET=pc (hexadécimal) : arrêt, avec la trace, quand le 68000 atteint cette adresse
-    static ARRET: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
-    if *ARRET.get_or_init(|| std::env::var("DDSOM_ARRET").ok().and_then(|v| u32::from_str_radix(&v, 16).ok())) == Some(c.pc) {
-        let trace = TRACE.with(|t| t.borrow().iter().map(|(pc, sp)| format!("{pc:x}/{sp:x}")).collect::<Vec<_>>().join(" "));
-        panic!("arrêt en {:x} (pile {:x}) ; avant : {trace}", c.pc, c.a[7]);
-    }
-    let Some(t) = lire(b) else { return };
-    let k = t.courante;
-    let Some(cadre) = t.emplacements[k].cadres.sommet() else { return };
-    let op = m68k::decode::Fetch::fetch16(b, c.pc);
-    if c.a[7] > cadre.pile || (c.a[7] == cadre.pile && matches!(op, 0x4e75 | 0x4e77)) {
-        let trace = TRACE.with(|t| t.borrow().iter().map(|(pc, sp)| format!("{pc:x}/{sp:x}")).collect::<Vec<_>>().join(" "));
-        panic!("code 68000 en {:x} (pile {:x}) : dépile un cadre de la tâche {k} tenu en Rust ({cadre:x?}) ; avant : {trace}", c.pc, c.a[7]);
-    }
 }
 
 /// Octets de la RAM du noyau d'origine (décalage depuis FF0000) que le jeu ne tient plus en RAM : pile de
@@ -707,15 +729,23 @@ mod tests {
     }
 
     #[test]
-    fn un_appel_en_cours_ne_revient_qu_a_sa_pile() {
-        let mut k = Cadres::default();
-        k.empiler(Cadre { pile: 0x1000, suite: Suite::Adresse(0x1341a), attendu: None });
-        k.empiler(Cadre { pile: 0x1000, suite: Suite::Adresse(0x1376e), attendu: Some(1) });
-        // un appel par adresse imbriqué revient avec une pile plus basse (son adresse de retour y est empilée)
-        assert_eq!(k.retour(0xffc), None);
-        assert_eq!(k.retour(0x1000).map(|k| k.suite), Some(Suite::Adresse(0x1376e)));
-        assert_eq!(k.retour(0x1000).map(|k| k.suite), Some(Suite::Adresse(0x1341a)));
-        assert_eq!(k.retour(0x1000), None);
+    fn un_retour_revient_au_plus_recent_des_appels_en_cours() {
+        let mut t = Table::default();
+        t.ouvrir_cadre(Suite::Adresse(0x1341a), None);
+        t.ouvrir_cadre(Suite::Adresse(0x1376e), Some(1));
+        // un appel par adresse imbriqué revient le premier
+        t.appels.push(HorsCadre::ParAdresse);
+        assert_eq!(t.retour(), Retour::Rendu);
+        assert!(t.appels.is_empty());
+        assert_eq!(t.retour(), Retour::Rendu);
+        assert_eq!(t.revenu, Some(1));
+        // un appel par adresse ouvert avant un cadre revient après lui
+        t.appels.push(HorsCadre::ParAdresse);
+        t.ouvrir_cadre(Suite::Adresse(0x1376e), None);
+        assert_eq!(t.retour(), Retour::Suite(Suite::Adresse(0x1376e)));
+        assert_eq!(t.retour(), Retour::Rendu);
+        assert_eq!(t.retour(), Retour::Suite(Suite::Adresse(0x1341a)));
+        assert_eq!(t.retour(), Retour::Pile68000);
     }
 
     #[test]

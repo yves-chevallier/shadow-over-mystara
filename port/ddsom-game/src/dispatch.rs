@@ -88,7 +88,7 @@ impl Class {
                 let address = self.handler(b, kind);
                 c.a[1] = address;
                 let avant = (c.d, c.a, c.sr);
-                let appel = crate::taches::table::appeler_attendu(c, b, Etape::Aiguillage(index));
+                let appel = crate::taches::table::appeler_attendu(b, Etape::Aiguillage(index));
                 if !crate::appeler_attendu(c, b, address, appel) {
                     return Flow::Yield;
                 }

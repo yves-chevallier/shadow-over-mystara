@@ -192,3 +192,32 @@ pub fn registres_morts(c: &mut Cpu, etiquette: &str, masque: u32) {
         c.sr ^= 0x1f;
     }
 }
+
+/// Sonde des registres qu'une tâche retrouve quand l'ordonnanceur la lance (`kernel::lancer`) : avec l'étiquette
+/// `etiquette` (`reprise` : registres rendus par le contexte d'une tâche qui a cédé ; `neuve` : registres hérités par
+/// une tâche neuve) dans `DDSOM_POISON`, les registres choisis (tous, ou `reprise.d3`...), sauf ceux de `garde`, sont
+/// inversés. Le site est l'étape lancée (`Aiguillage(3)`...). Si la validation reste VALIDE, la tâche ne relit pas ces
+/// registres : le contexte n'a pas à les garder.
+pub fn sonder_lancement(c: &mut Cpu, etiquette: &str, site: &str, garde: u32) {
+    if etiquettes().is_empty() {
+        return;
+    }
+    let masque = registres_choisis(&[etiquette], site) & !garde;
+    if masque == 0 {
+        return;
+    }
+    if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
+        eprintln!("POISON {etiquette} {site} masque={masque:05x}");
+    }
+    for i in 0..8 {
+        if masque & regs::d(i) != 0 {
+            c.d[i as usize] = !c.d[i as usize];
+        }
+        if i < 7 && masque & regs::a(i) != 0 {
+            c.a[i as usize] = !c.a[i as usize];
+        }
+    }
+    if masque & regs::CCR != 0 {
+        c.sr ^= 0x1f;
+    }
+}
