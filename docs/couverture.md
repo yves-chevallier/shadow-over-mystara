@@ -223,3 +223,54 @@ Trous trouvés et corrigés (2026-10-27) ; chacun passait inaperçu des 272 scé
 
 Résultat : les 14 bots finissent VALIDE en mode par défaut et avec `DDSOM_ASSETS` (assets régénérés avec les zones
 ci-dessus). `validate` accepte `DDSOM_DIFF_MAX=n` pour afficher plus de 10 mots de RAM différents.
+
+## Sorts, objets et interface des joueurs (`sorts_*`, lot « sorts », 2026-10-28)
+
+Les bots longs précédents ne lançaient que les magies de la ligne d'équipement que le jeu donne au personnage. Les
+`sorts_*` forcent chaque magie et chaque objet de chaque personnage, et exercent le curseur et les noms de l'interface.
+Ils sont rangés dans `scenarios/long/` (validés avec `DDSOM_LONG=1`) et générés par `tools/gen_long.py` ; le bot
+(`examples/autobot.rs`) gagne `--spells`, `--spell-period`, `--rods` et `--door`, et `tools/bot_lib.py` l'argument `late`.
+
+**Numéros de sélection.** L'ordre réel des personnages du choix est : 0 combattant, 1 magicien, 2 clerc, 3 voleur, 4 nain,
+5 elfe (octet `+3` du joueur : 0, 8, 2, 0xa, 6, 4 ; classe = `+3 >> 1`). Les commentaires et les noms des bots
+`long_*` plus haut suivent un ordre erroné (« clerc » pour le 1, « magicien » pour le 4...) : les noms des `sorts_*`
+sont les bons.
+
+**Méthode des magies.** Le bouton 4 (attaque spéciale, `checks::special_attack`) lit l'identifiant de la ligne
+d'équipement choisie (`+0x120 + 16 × (+0x15d)`) et la table 0x372e4 le convertit en numéro de sort (`+0x15e`, identifiant
++ 0xd pour 0 à 0x20, 0x21 + sort pour les sorts 0 à 0xb, 0x2e pour le 0xc). Le bot, au repos (état 0x0200, action hors 0xc,
+0xe, 0x14, 0x22), écrit (`poke`, donc dans le scénario) l'identifiant du sort suivant dans la première ligne, une
+réserve de 5 charges, la sélection 0, puis appuie trois fois sur le bouton 4. Un identifiant posé en pleine action, ou qui
+n'est pas un sort du personnage (le sort 0x28 du clerc donné au magicien), mène l'original dans une table de sauts hors
+limites : exception illégale et redémarrage de la machine (scène 0, RAM effacée) ; les listes de `gen_long.py` ne
+contiennent que les sorts de chaque personnage, sans l'échange d'arme (0xc), qui exige un objet ramassé.
+
+| Scénario | Images | Contenu |
+|---|---|---|
+| `sorts_combattant`, `sorts_voleur`, `sorts_nain` | 30 000 | objets lancés 0 à 8 (sauf 3), 9, 10 et magies partagées 13 à 20 (foudre, etc.), couteau du voleur (11) |
+| `sorts_magicien` | 30 000 | sorts du magicien 0x18 à 0x24 (étincelles, éclair, gel, séisme, tempête, pluie, sorcière, malédiction, vague, portail, invocation, mur de feu, drain), et les quatre baguettes (`WEAPON_B` 0x24 à 0x27, pleines puis épuisées) |
+| `sorts_clerc` | 30 000 | prières 0x24 à 0x2d (retenue, tempête, essaim, rayon, bannissement, lumière sacrée, protection, bénédiction, soins) |
+| `sorts_elfe` | 30 000 | sorts 0 à 0x1c de l'elfe (lunes, protections, rayon...) |
+| `sorts_select` | 12 000 | quatre joueurs, trois rejoignent en cours de partie (pièce puis Start) et manient le curseur de choix : touches tenues plus de 60 images (répétition), croisements des personnages déjà pris : `hud/select.rs` (0x153ba, 0x15444, 0x154e8, 0x158c6, 0x15958) |
+| `sorts_noms_a`, `sorts_noms_b` | 40 000 | quatre joueurs mortels dont le nom commence par -2 à -7 (noms prédéfinis, 0x180c8) et des scores très différents (tous les rangs du tableau) |
+| `sorts_porte_34` | 7 500 | scène 34 depuis la 1 avec le rang à 0 (les portes SET 27 n'apparaissent qu'à ce rang) : le joueur est posé devant les portes (`--door`) ; sortie de zone SET 7 |
+
+Fonctions de la liste « jamais exécutées » (couverture-fonctions.md, P5) atteintes par ces scénarios (`examples/cov`) :
+0x41aa4 et 0x41ac4 (bannissement), 0x439fc et 0x44384 (elfe), 0x474c4 et 0x474e4 (foudre), 0x47750 et 0x47770 (tempête
+à gauche), 0x48392 et 0x48660 (mur de feu), 0x49d1e (voleur), 0x46044 (baguettes) : les onze. Pour F3, les branches des
+noms prédéfinis de 0x180c8 (-2 à -7, rang du tableau) et la répétition du curseur de 0x158c6 / 0x15958 sont exécutées.
+
+Trous trouvés et corrigés (chacun dans un commit séparé) :
+
+| Bot (image) | Symptôme | Cause et correction |
+|---|---|---|
+| `sorts_nain` (21 306) | un second tir de type 15 (pièce lancée) créé par un ESHL 14 | `families/eshl.rs`, `shot14::attack` : la table de sauts de 0x9fbd4 n'a que deux entrées (`+7` = 0 et 2), le troisième mot mène à 0x9fb1e (fin commune des autres séries) ; la native rejouait la création pour tout `+7` ≥ 2 tant que `+0x33` restait posé. Le cas `+7` = 4 appelle `close(x, 7)` |
+| `sorts_noms_b` (38 138) | les quatre joueurs de la scène 0xb ne sont plus écartés du boss 3 | `families/boss_3/body.rs`, `push_players` : la boucle de 0x818b2 / 0x819b0 appelle les formes 0x818e6 / 0x819e2 avec A1 = le joueur ; la native laissait A1 au reste de l'appel précédent (il vaut 0xff8dde en sortie) |
+| `sorts_magicien` (4 593) | arrêt : pas de native en 0x535f2 | `rod_shot` appelait par adresse les tirs de baguette 0x5336a (flammes), 0x53478 (boule) et 0x535f2 (étoiles). Réécrits dans `player/spawn.rs` (`rod_row`, `rod_ball`) avec leurs natives |
+| `sorts_combattant`, avec `DDSOM_ASSETS` (23 834) | un sprite d'un mot différent | lectures hors bornes du constructeur de sprites en 0x3200 et 0x1ef5c (dans le code, absent des assets) : zones ajoutées à `tools/zones_natives.py` et `port/extract/zones_natives.txt` |
+
+Limites : le fuzz `fuzz_player spawn` ne peut pas comparer les trois tirs de baguette (l'original, depuis des états
+tirés au hasard, boucle plus d'un million de blocs : un niveau absurde donne un compte de 65 536 tours) ; ils sont
+validés par les scénarios (les quatre baguettes sont tirées, pleines et épuisées). Les portes de passage SET 27 et 29
+(0xd8458, 0xd8dce) étaient déjà exécutées presque en entier par les scénarios (restent 0xd8316, 0xd8366, 0xd83b8, 0xd840a,
+helpers de suspension) ; les boutiques et les routes 0x14 et 0x38 ne reçoivent pas de bot nouveau ici.
