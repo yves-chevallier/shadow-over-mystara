@@ -67,7 +67,7 @@ impl Cx<'_> {
 
     /// `jsr rng ; andi.w #mask,D0w` : D0 garde son mot haut, le mot bas est masqué ; renvoie le mot bas.
     pub fn rand_and(&mut self, mask: u16) -> u32 {
-        let alea = self.random_68k();
+        let alea = self.random();
         let low = alea & mask;
         self.c.d[0] = self.c.d[0] & 0xffff_0000 | low as u32;
         low as u32
@@ -80,7 +80,7 @@ impl Cx<'_> {
 
     /// `jsr rng ; andi.b #mask,D0b` : seul l'octet bas de D0 est masqué (le reste du mot garde le tirage).
     pub fn rand_and_b(&mut self, mask: u8) -> u8 {
-        let alea = self.random_68k();
+        let alea = self.random();
         let low = alea as u8 & mask;
         self.c.d[0] = self.c.d[0] & !0xff | low as u32;
         low

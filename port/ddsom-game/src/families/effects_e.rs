@@ -8,7 +8,7 @@
 //!   (rideau de tuiles dans le fond 2) : entrée dans la sous-scène (`0xada96` : contexte de la scène
 //!   sauvé dans l'objet, objets gelés), puis retour (`0xae11a` : contexte rendu, joueurs replacés).
 
-use super::cx::{handlers, Cx};
+use super::cx::{handlers, Cx, Gx};
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -29,21 +29,22 @@ fn players() -> impl DoubleEndedIterator<Item = Obj> {
     (0..4).map(|k| Obj(PLAYERS + 0x200 * k))
 }
 
-fn free(x: &mut Cx) {
+fn free(x: &mut impl Courant) {
     x.free(&pools::EFFCT);
 }
 
 /// Préambule commun : le crochet de pause (0x29ea, Z faux : objet suspendu), la pause du jeu, et au
 /// moins un joueur présent dans un état ≤ 2. Vrai si le gestionnaire continue.
-fn scene_running(x: &mut Cx, suspended: impl FnOnce(&mut Cx)) -> bool {
+fn scene_running<X: Courant>(x: &mut X, suspended: impl FnOnce(&mut X)) -> bool {
     if x.suspended() {
         suspended(x);
         return false;
     }
-    if x.a5_u8(0x3d) != 0 {
+    let b = x.bus();
+    if rd8(b, A5 + 0x3d) != 0 {
         return false;
     }
-    players().any(|p| p.is_active(x.b) && (p.u8(x.b, f::STATE) as i8) <= 2)
+    players().any(|p| p.is_active(b) && (p.u8(b, f::STATE) as i8) <= 2)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -57,7 +58,7 @@ mod raft {
     pub const CAMERA_MODE: u32 = 0x51e;
 }
 
-fn raft(x: &mut Cx) {
+fn raft(x: &mut Gx) {
     if !scene_running(x, |x| x.set8(f::STATE, 4)) {
         return;
     }
@@ -90,9 +91,10 @@ fn raft(x: &mut Cx) {
 
 /// Les directions des joueurs présents accélèrent le radeau (haut/bas : profondeur ±1 ou ±0.19 au-delà
 /// de ±1 ; droite/gauche : x ±1.19 ou ±0.25), puis les joueurs sont posés dessus, à 0x48 près en x.
-fn raft_drift(x: &mut Cx) {
-    // D4 de l'original : sans pilotage (caméra fixée), la valeur laissée dans le registre
-    let mut dx = x.c.d[4] as i32;
+fn raft_drift(x: &mut Gx) {
+    // Glitch d'origine : sans pilotage (caméra fixée), le déplacement est le D4 laissé par ce qui précède (dernier
+    // long de l'animation de palette SET 0, déplacement du radeau à une image précédente, liste des sprites...).
+    let mut dx = x.restes().d4 as i32;
     if x.a5_u16(raft::CAMERA_MODE) != 4 {
         let (mut dy, mut sx) = (0i32, 0i32);
         for (k, p) in players().enumerate() {
@@ -116,8 +118,8 @@ fn raft_drift(x: &mut Cx) {
         dx = sx.wrapping_add(x.u32(raft::SPEED) as i32);
         x.add32(Obj::X, dx as u32);
         x.add32(Obj::Y, dy as u32);
-        x.c.d[4] = dx as u32;
-        crate::terrain::push_68k(x.c, x.b, x.o);
+        x.restes().d4 = dx as u32;
+        crate::terrain::push(x.b, x.o);
     }
     let (rx, ry) = (x.u16(Obj::X), x.u16(Obj::Y));
     for p in players().rev() {
@@ -1004,6 +1006,6 @@ fn attack_fx_sparks(x: &mut Cx) {
 
 handlers! {
     0xabeea "effct_attaque" attack_fx,
-    0xad63e "effct_radeau" raft,
+    0xad63e "effct_radeau" #[sans] raft,
     0xad866 "effct_passage" gate,
 }

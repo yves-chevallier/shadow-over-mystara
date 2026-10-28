@@ -133,7 +133,8 @@ mod ice {
     /// Rebond sur les bords de l'écran (`0x4bda8`) : le tirage `andi.w #7,D2w` porte sur D2, laissé
     /// par l'appelant.
     fn bounce(x: &mut Cx) {
-        x.random_68k();
+        // Glitch d'origine : le tirage n'est pas utilisé, le rebond est choisi par le D2 hérité.
+        x.random();
         let d2 = x.c.d[2] & 7;
         x.c.d[2] = x.c.d[2] & 0xffff_0000 | d2;
         let d0 = x.u16(0x8);

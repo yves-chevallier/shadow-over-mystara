@@ -2368,8 +2368,7 @@ fn tombe(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Porte) -> bool {
     c.d[0] = i;
     let masque = rd16(b, p.chances + i);
     c.d[2] = c.d[2] & 0xffff_0000 | masque as u32;
-    crate::rng::random_68k(c, b);
-    let bit = c.d[0] as u16 & 0xf;
+    let bit = crate::rng::random(b) & 0xf;
     c.d[0] = c.d[0] & 0xffff_0000 | bit as u32;
     c.d[2] >> bit & 1 != 0
 }

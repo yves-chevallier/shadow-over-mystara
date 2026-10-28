@@ -12,9 +12,8 @@
 //! résultat = nouvel état (mot)
 //! ```
 //!
-//! Un seul tirage pour tout le jeu : [`random`] (cœur) ; [`random_68k`] laisse en plus D0.w et les
-//! drapeaux de l'original pour les appelants pas encore libérés des registres. Les contextes l'offrent
-//! sous `x.random()` (`crate::machine::Machine`).
+//! Un seul tirage pour tout le jeu : [`random`] (cœur). Les contextes l'offrent sous `x.random()`
+//! (`crate::machine::Machine`) ; la native (appels par adresse) laisse en plus D0.w et les drapeaux de l'original.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -58,18 +57,8 @@ fn tirage(b: &mut Cps2Bus) -> (u16, bool) {
     r
 }
 
-/// Masque des registres que l'original laisse (voir `diag::registres_morts`).
-pub const REGS_RANDOM: u32 = regs::d(0) | regs::CCR;
-
-/// `random` avec les registres de l'original : D0.w = nouvel état (D0 haut intact), N et Z du mot, X = retenue
-/// de l'addition d'octets.
-#[track_caller]
-pub fn random_68k(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
-    let v = random_regs(c, b);
-    crate::diag::registres_morts(c, "random", REGS_RANDOM);
-    v
-}
-
+/// `random` avec les registres de l'original (native) : D0.w = nouvel état (D0 haut intact), N et Z du mot, X =
+/// retenue de l'addition d'octets.
 fn random_regs(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
     let (etat, retenue) = tirage(b);
     c.d[0] = c.d[0] & 0xffff_0000 | etat as u32;

@@ -36,8 +36,6 @@ pub(crate) mod restes {
         fn alloue(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj>;
         /// Glitch d'origine : allocation dont l'échec n'est pas testé (voir `Pool::alloc_unchecked`).
         fn alloue_sans_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj;
-        /// Tirage du hasard (`rng::random`) ; le processeur reçoit D0.w et les drapeaux.
-        fn hasard(&mut self, b: &mut Cps2Bus) -> u16;
         /// Drapeaux d'un `move`/`tst`/`and` de `v`.
         fn drapeaux(&mut self, _v: u32, _taille: Size) {}
         /// Drapeau X seul (dernier bit sorti d'un décalage, que les instructions suivantes gardent).
@@ -86,9 +84,6 @@ pub(crate) mod restes {
         fn alloue_sans_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
             pool.alloc_unchecked(b)
         }
-        fn hasard(&mut self, b: &mut Cps2Bus) -> u16 {
-            crate::rng::random(b)
-        }
     }
 
     /// Les registres de l'original.
@@ -100,10 +95,6 @@ pub(crate) mod restes {
         #[track_caller]
         fn alloue_sans_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
             pool.alloc_unchecked_68k(self, b)
-        }
-        #[track_caller]
-        fn hasard(&mut self, b: &mut Cps2Bus) -> u16 {
-            crate::rng::random_68k(self, b)
         }
         fn drapeaux(&mut self, v: u32, taille: Size) {
             self.flags_logic(v, taille);
@@ -688,7 +679,7 @@ fn scenery_4(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<O
     }
     let o = spawn(r, b, kind::SCENERY)?;
     o.set_u8(b, Obj::VARIANT, 4);
-    let alea = r.hasard(b);
+    let alea = crate::rng::random(b);
     let v = and_d0(r, alea, 7);
     o.set_u8(b, REGLAGE, v as u8);
     let high = (v & 4) >> 2;
@@ -700,7 +691,7 @@ fn scenery_4(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<O
 
 /// 0xb3fd4 (variante 6, une fois sur seize) et 0xb4088 (variante 10, réglage nul, une fois sur quatre).
 fn scenery_by_chance(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, masque: u16, variante: u8, reglage: Option<u8>) -> Option<Obj> {
-    let alea = r.hasard(b);
+    let alea = crate::rng::random(b);
     if and_d0(r, alea, masque) != 0 {
         return None;
     }
@@ -734,7 +725,7 @@ fn spell_ring(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u
 /// (`rng & 0x38`, octets en `table`) donne le nombre d'effets moins un, puis le réglage `+0x2f` de chacun ;
 /// liés au créateur par `+0x46`. A2 suit la lecture de la fiche.
 fn shouts(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, table: u32) -> Option<Obj> {
-    let alea = r.hasard(b);
+    let alea = crate::rng::random(b);
     let mut at = table + and_d0(r, alea, 0x38) as u32;
     let n = rd8(b, at);
     r.d(1, n as u32);

@@ -1492,17 +1492,15 @@ fn puff_init(x: &mut Cx) {
     let area = scenery::AREAS_8 + 8 * x.u8(0x2f) as u32;
     for (field, origin, k) in [(Obj::X, 0x506, 0), (Obj::Y, 0x50a, 4)] {
         let mut v = x.a5_u16(origin).wrapping_add(x.data16(area + k));
-        x.random_68k();
+        let alea = x.random();
         let mask = x.data16(area + k + 2);
-        x.c.d[6] = x.c.d[6] & 0xffff_0000 | mask as u32;
-        v = v.wrapping_add(x.c.d[0] as u16 & mask);
+        v = v.wrapping_add(alea & mask);
         let alea = x.random();
         v = v.wrapping_add(alea & 0xf);
         x.set16(field, v);
     }
-    x.random_68k();
-    let d0 = x.c.d[0];
-    x.anim_start(scenery::ANIM_DEBRIS, (d0 & 0xffff_0000 | (d0 & 1) + 1) as u16);
+    let alea = x.random();
+    x.anim_start(scenery::ANIM_DEBRIS, (alea & 1) + 1);
 }
 
 fn puff_active(x: &mut Cx) {
@@ -2074,9 +2072,8 @@ fn shard_rain(x: &mut Cx) {
             let base = x.rom16(shards::RAIN_OFFSETS + k);
             let r = random_nibble16(x) & 3;
             x.add16(Obj::X, base.wrapping_add(r));
-            x.random_68k();
-            let d0 = x.c.d[0];
-            x.anim_start(shards::ANIM_RAIN, (d0 & 0xffff_0000 | (d0 & 1) + 1) as u16);
+            let alea = x.random();
+            x.anim_start(shards::ANIM_RAIN, (alea & 1) + 1);
             x.reinsert();
         }
         2 if v == 0 => {
@@ -3891,10 +3888,8 @@ fn blow(x: &mut Cx) {
             x.set16(Obj::AX, ax);
             x.add16(Obj::X, dx);
             x.add16(Obj::Z, dz);
-            x.random_68k();
-            let d0 = x.c.d[0];
-            let anim = d0 & 0xffff_0000 | ((d0 & 1) as u8).wrapping_add(0x10) as u32;
-            x.anim_start(blow::ANIM_SET, anim as u16);
+            let alea = x.random();
+            x.anim_start(blow::ANIM_SET, 0x10 + (alea & 1));
             x.reinsert();
         }
         (4, 2) => blow_debris(x),

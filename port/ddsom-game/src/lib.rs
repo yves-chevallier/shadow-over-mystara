@@ -88,6 +88,9 @@ pub enum Corps {
     ProcesseurEn(fn(&mut Cpu, &mut Cps2Bus, u32)),
     /// Sans registre (la forme cible : la mémoire seule) ; le retour (`rts`) est fait pour lui.
     Memoire(fn(&mut Cps2Bus)),
+    /// Gestionnaire d'objet sans registre : il reçoit ce que la boucle d'aiguillage lui passe (l'objet, le compteur,
+    /// les restes que les gestionnaires se transmettent : `dispatch::Aiguillage`) ; le retour est fait pour lui.
+    Gestionnaire(fn(&mut Cps2Bus, &mut dispatch::Aiguillage)),
 }
 
 impl Native {
@@ -100,12 +103,18 @@ impl Native {
                 f(b);
                 mem::rts(c, b);
             }
+            Corps::Gestionnaire(f) => {
+                let mut a = dispatch::Aiguillage::du_processeur(c);
+                f(b, &mut a);
+                a.rendre(c);
+                mem::rts(c, b);
+            }
         }
     }
 
     /// Le corps n'utilise pas le processeur.
     pub fn sans_processeur(&self) -> bool {
-        matches!(self.run, Corps::Memoire(_))
+        matches!(self.run, Corps::Memoire(_) | Corps::Gestionnaire(_))
     }
 }
 

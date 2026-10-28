@@ -14,16 +14,66 @@ use m68k::decode::Fetch;
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::dispatch::{Aiguillage, Restes};
 use crate::objects::pools;
 use crate::objects::{Courant, Obj};
 use crate::{call, regs, Native};
 
 /// Contexte d'un gestionnaire : l'objet courant (A0) et la machine.
-pub struct Cx<'a> {
-    pub c: &'a mut Cpu,
+///
+/// `R` est le banc de registres : le processeur (`&mut Cpu`, par défaut) tant que le gestionnaire lit ou laisse des
+/// registres de l'original, ou [`SansRegistres`] pour un gestionnaire converti, dont rien n'entre ni ne sort par les
+/// registres (le compilateur le garantit : `x.c.d[0]` n'existe pas). Les fonctions qui n'utilisent pas les registres
+/// s'écrivent pour les deux (`fn f<R>(x: &mut Cx<'_, R>)`).
+pub struct Cx<'a, R = &'a mut Cpu> {
+    pub c: R,
     pub b: &'a mut Cps2Bus,
     /// L'objet que le dispatch fait traiter (A0).
     pub o: Obj,
+}
+
+/// Contexte d'un gestionnaire sans registres : ce que la boucle d'aiguillage lui passe (`dispatch::Aiguillage`).
+pub type Gx<'a> = Cx<'a, &'a mut Aiguillage>;
+
+impl<'a> Gx<'a> {
+    /// Contexte du gestionnaire appelé par la boucle d'aiguillage.
+    pub fn aiguille(b: &'a mut Cps2Bus, a: &'a mut Aiguillage) -> Self {
+        let o = a.objet;
+        Cx { c: a, b, o }
+    }
+
+    /// Compteur de la boucle d'aiguillage (D7.w de l'original).
+    pub fn compteur(&self) -> u16 {
+        self.c.compteur
+    }
+
+    /// Restes de registres que les gestionnaires se transmettent (glitches d'origine).
+    pub fn restes(&mut self) -> &mut Restes {
+        &mut self.c.restes
+    }
+
+    /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (cœur : un gestionnaire converti ne laisse
+    /// aucun registre au suivant).
+    pub fn reinsert(&mut self) {
+        crate::objects::lists::ACTORS.reinsert(self.b, self.o);
+    }
+
+    /// 0x1ef6c : remet l'objet à sa place dans la liste du premier plan (cœur).
+    pub fn reinsert_foreground(&mut self) {
+        crate::objects::lists::FOREGROUND.reinsert(self.b, self.o);
+    }
+}
+
+impl crate::machine::Machine for Gx<'_> {
+    fn bus(&mut self) -> &mut Cps2Bus {
+        &mut *self.b
+    }
+}
+
+impl Courant for Gx<'_> {
+    fn obj(&self) -> Obj {
+        self.o
+    }
 }
 
 /// Sous-routines appelées par adresse (le moteur d'objets, lui, s'appelle par `objects::Courant`).
@@ -40,6 +90,37 @@ impl<'a> Cx<'a> {
         Cx { c, b, o }
     }
 
+    /// Appelle la fonction convertie `f` sur le même objet, sans registres (les restes passent par le processeur).
+    pub fn sans<T>(&mut self, f: impl FnOnce(&mut Gx) -> T) -> T {
+        let mut a = Aiguillage::du_processeur(self.c);
+        a.objet = self.o;
+        let r = f(&mut Cx { c: &mut a, b: &mut *self.b, o: self.o });
+        a.rendre(self.c);
+        r
+    }
+
+    /// Compteur de la boucle d'aiguillage (D7.w).
+    pub fn compteur(&self) -> u16 {
+        self.c.d[7] as u16
+    }
+
+    // --- sous-routines -------------------------------------------------------------------------
+
+    /// JSR `addr` avec A0 = l'objet et A5 = base de la RAM de travail.
+    #[track_caller]
+    pub fn call(&mut self, addr: u32) {
+        self.c.a[0] = self.o.0;
+        self.c.a[5] = A5;
+        call(self.c, self.b, addr);
+    }
+
+    /// RTS.
+    pub fn ret(self) {
+        rts(self.c, self.b);
+    }
+}
+
+impl<R> Cx<'_, R> {
     // --- champs de l'objet courant -----------------------------------------------------------
 
     pub fn u8(&mut self, off: u32) -> u8 {
@@ -128,24 +209,12 @@ impl<'a> Cx<'a> {
         self.b.fetch16(addr) as i16
     }
 
-    // --- sous-routines -------------------------------------------------------------------------
-
-    /// JSR `addr` avec A0 = l'objet et A5 = base de la RAM de travail.
-    #[track_caller]
-    pub fn call(&mut self, addr: u32) {
-        self.c.a[0] = self.o.0;
-        self.c.a[5] = A5;
-        call(self.c, self.b, addr);
-    }
-
     /// Fin du gestionnaire : l'objet est libéré (tir détruit).
-    pub fn free_eshl(&mut self) {
+    pub fn free_eshl(&mut self)
+    where
+        Self: Courant,
+    {
         self.free(&pools::ESHL);
-    }
-
-    /// RTS.
-    pub fn ret(self) {
-        rts(self.c, self.b);
     }
 }
 
@@ -154,16 +223,30 @@ pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2
     Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
-/// Déclare la table `NATIVES` d'un fichier de types : `adresse "nom" chemin::du::gestionnaire`.
+/// Native d'un gestionnaire converti (`Gx`, sans registres) : ce que passe la boucle d'aiguillage en argument.
+pub const fn handler_sans(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Aiguillage)) -> Native {
+    Native { entry, name, run: crate::Corps::Gestionnaire(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+}
+
+/// Déclare la table `NATIVES` d'un fichier de types : `adresse "nom" chemin::du::gestionnaire` (sur `Cx`), ou
+/// `adresse "nom" #[sans] chemin::du::gestionnaire` (sur `Gx`, sans registres).
 macro_rules! handlers {
-    ($( $entry:literal $name:literal $f:path ),* $(,)?) => {
+    ($( $entry:literal $name:literal $(#[$sans:ident])? $f:path ),* $(,)?) => {
         pub const NATIVES: &[$crate::Native] = &[ $(
-            $crate::families::cx::handler($entry, $name, |c, b| {
-                let mut x = $crate::families::cx::Cx::new(c, b);
-                $f(&mut x);
-                x.ret();
-            }),
+            $crate::families::cx::handlers!(@une $entry $name $(#[$sans])? $f),
         )* ];
+    };
+    (@une $entry:literal $name:literal $f:path) => {
+        $crate::families::cx::handler($entry, $name, |c, b| {
+            let mut x = $crate::families::cx::Cx::new(c, b);
+            $f(&mut x);
+            x.ret();
+        })
+    };
+    (@une $entry:literal $name:literal #[sans] $f:path) => {
+        $crate::families::cx::handler_sans($entry, $name, |b, a| {
+            $f(&mut $crate::families::cx::Gx::aiguille(b, a));
+        })
     };
 }
 pub(crate) use handlers;

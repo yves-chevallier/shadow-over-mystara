@@ -85,16 +85,16 @@ fn spit(x: &mut Cx) {
                 return;
             }
             x.set8(f::KEY_FRAME, 0);
-            x.random_68k();
+            let alea = x.random();
             if is_12(x) {
-                let r = x.c.d[0] as u16 & 3;
+                let r = alea & 3;
                 setw(x, 0, r);
                 if r == 0 {
                     return x.call(0xa7da2);
                 }
                 return x.call(0xa7b0a);
             }
-            let r = x.c.d[0] as u16 & 7;
+            let r = alea & 7;
             setw(x, 0, r);
             x.call(0xa7570)
         }

@@ -1,7 +1,7 @@
 //! Objets de décor (classe SET, pool de 32 objets de 0x50 octets, table 0x39eac) : types 0, 1 et
 //! 3 à 14. Les objets SET ne figurent pas dans les listes triées (voir `docs/objets.md`).
 
-use super::cx::Cx;
+use super::cx::{Cx, Gx};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -1271,20 +1271,12 @@ mod palette_script {
     /// Variantes de remplacement en fin de script.
     const NEXT_VARIANTS: [(u8, u8); 3] = [(0x48, 0), (0x4c, 0), (0x4d, 1)];
 
-    /// Table de sauts des états (mots, espace programme).
-    const STATE_JUMPS: u32 = 0xba338;
-
-    pub fn run(x: &mut Cx) {
+    pub fn run(x: &mut Gx) {
         let variant = x.u8(0x3);
         if variant != ALWAYS_RUNS && (x.a5_u8(GAME_PAUSED) != 0 || x.u8(0x40) != 0) {
             return;
         }
-        // l'original laisse D0 = état et D1.w = entrée de la table de sauts, relus par ses suites
-        let state = x.u8(0x4);
-        x.c.d[0] = state as u32;
-        let entry = x.rom16(STATE_JUMPS + state as u32);
-        x.c.d[1] = x.c.d[1] & 0xffff_0000 | entry as u32;
-        match state {
+        match x.u8(0x4) {
             0 => start(x),
             2 => play(x),
             4 => finish(x),
@@ -1292,7 +1284,7 @@ mod palette_script {
         }
     }
 
-    fn start(x: &mut Cx) {
+    fn start(x: &mut Gx) {
         x.add8(0x4, 2);
         let entry = TABLE.wrapping_add((((x.u8(0x3) as u16) << 3) as i16) as u32);
         let (script, source) = (x.data32(entry), x.data32(entry + 4));
@@ -1307,11 +1299,10 @@ mod palette_script {
         copy_lines(x, script + 4, source, dest);
     }
 
-    fn play(x: &mut Cx) {
+    fn play(x: &mut Gx) {
         if x.a5_u8(TRANSITION) != 0 {
             let variant = x.u8(0x3) as u32;
             let action = x.rom8(TRANSITION_ACTION + variant);
-            x.c.d[0] = (action as u32) << 2;
             match action {
                 0 => {}
                 1 => return,
@@ -1331,8 +1322,6 @@ mod palette_script {
         let source = x.u32(SOURCE);
         let duration = x.data16(script);
         script += 2;
-        x.c.a[1] = source;
-        x.c.a[2] = script;
         x.set16(TIMER, duration);
         if (duration as i16) < 0 {
             if duration == 0xffff {
@@ -1347,49 +1336,33 @@ mod palette_script {
             finish(x);
         } else {
             let dest = x.u32(DEST);
-            x.c.a[6] = dest;
             copy_lines(x, script, source, dest);
         }
     }
 
     /// Copie les lignes d'un bloc (nombre, puis un indice par ligne) vers la palette de destination
-    /// et mémorise la suite du script. Laisse les registres de l'original : D1-D4 = les quatre
-    /// derniers longs copiés (avec la luminosité), D5.w = -1, D6 = luminosité de la dernière ligne,
-    /// D0 = décalage de cette ligne, A1 = palettes sources, A2 = fin du bloc, A3 = fin de la ligne
-    /// source, A6 = fin de la destination (relus par les gestionnaires suivants, p. ex. D4 par 0xad7b0).
-    fn copy_lines(x: &mut Cx, mut script: u32, source: u32, mut dest: u32) {
+    /// et mémorise la suite du script.
+    /// Glitch d'origine : le dernier long copié (avec la luminosité) reste dans D4, que le radeau sans pilote
+    /// (0xad7b0) ajoute à la position des joueurs : c'est un reste de la boucle d'aiguillage (`Restes::d4`).
+    fn copy_lines(x: &mut Gx, mut script: u32, source: u32, mut dest: u32) {
         let count = rd16(x.b, script).wrapping_sub(1);
         script += 2;
-        let (mut offset, mut keep, mut last) = (0u16, 0u32, [0u32; 4]);
-        let mut src_end = source;
+        let mut last = 0;
         for _ in 0..=count as u32 {
-            offset = rd16(x.b, script) << 5;
+            let line = (rd16(x.b, script) << 5) as u32;
             script += 2;
-            let line = offset as u32;
-            keep = rd32(x.b, dest) & KEEP_BRIGHTNESS;
+            let keep = rd32(x.b, dest) & KEEP_BRIGHTNESS;
             for i in (0..LINE_BYTES).step_by(4) {
-                let v = rd32(x.b, source + line + i) | keep;
-                wr32(x.b, dest + i, v);
-                if i >= LINE_BYTES - 16 {
-                    last[(i as usize - (LINE_BYTES as usize - 16)) / 4] = v;
-                }
+                last = rd32(x.b, source + line + i) | keep;
+                wr32(x.b, dest + i, last);
             }
-            src_end = source.wrapping_add(line).wrapping_add(LINE_BYTES);
             dest += LINE_BYTES;
         }
         x.set32(SCRIPT, script);
-        x.c.d[0] = offset as u32;
-        x.c.d[1..5].copy_from_slice(&last);
-        x.c.d[5] |= 0xffff;
-        x.c.d[6] = keep;
-        x.c.a[1] = source;
-        x.c.a[2] = script;
-        x.c.a[3] = src_end;
-        x.c.a[6] = dest;
-        x.c.flags_logic(last[3], m68k::decode::Size::Long);
+        x.restes().d4 = last;
     }
 
-    fn finish(x: &mut Cx) {
+    fn finish(x: &mut Gx) {
         let variant = x.u8(0x3) as u32;
         match x.rom8(END_ACTION + variant) {
             0 => x.set8(0x4, 6),
@@ -2521,18 +2494,14 @@ mod name_entry {
 
 /// Déclare une native de gestionnaire : adresse, nom, fonction.
 macro_rules! entry {
-    ($entry:literal $name:literal, $f:path) => {
-        super::cx::handler($entry, $name, |c, b| {
-            let mut x = Cx::new(c, b);
-            $f(&mut x);
-            x.ret();
-        })
+    ($entry:literal $name:literal, $(#[$sans:ident])? $f:path) => {
+        super::cx::handlers!(@une $entry $name $(#[$sans])? $f)
     };
 }
 
 pub const NATIVES: &[crate::Native] = &[
     entry!(0xcc25a "set_commun_cc25a", scene_spawner::run),
-    entry!(0xba310 "set_0", palette_script::run),
+    entry!(0xba310 "set_0", #[sans] palette_script::run),
     entry!(0xbc518 "set_1", wave_leader::run),
     entry!(0xc935a "set_4", tile_anim::run4),
     entry!(0xc9780 "set_5", name_entry::run),

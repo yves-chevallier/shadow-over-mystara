@@ -287,10 +287,9 @@ fn throw(x: &mut Cx) {
                 x.set8(0x90, 1);
             }
             let mut d2 = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            x.random_68k();
+            let alea = x.random();
             d2 &= 0xf;
-            let d0 = ((x.c.d[0] as u16).wrapping_add(d2 as u16)) & 0x1f;
-            setw(x, 0, d0);
+            let d0 = alea.wrapping_add(d2 as u16) & 0x1f;
             x.set8(0x2d, d0 as u8);
             x.c.d[0] = 1;
             hurt(x, 1)

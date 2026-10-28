@@ -611,7 +611,7 @@ pub fn eshl_burst_26(x: &mut Cx) {
 
 /// Tirage d'un bit (`random & mask`) dans un masque ; D0 = le tirage, comme l'original.
 fn roll_bit(x: &mut Cx, mask: u32, bits: u32) -> bool {
-    let r = (x.random_68k() as u32) & bits;
+    let r = (x.random() as u32) & bits;
     x.c.d[0] = x.c.d[0] & !0xffff | r;
     mask >> r & 1 != 0
 }

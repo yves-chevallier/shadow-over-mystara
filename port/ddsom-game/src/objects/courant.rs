@@ -17,7 +17,7 @@ use super::lists::{self, ACTORS, FOREGROUND};
 use super::motion::{self, LastAdd, SpeedTables, AXIS_Y, AXIS_Z};
 use super::pools::Pool;
 use super::Obj;
-use crate::machine::Machine;
+use crate::machine::{Machine, Processeur};
 
 
 
@@ -171,7 +171,10 @@ pub trait Courant: Machine {
     /// de dispatch, qui les relit parfois (glitch d'origine : `joueur/peff_e.rs` tire son rebond dans le D2 hérité ;
     /// `DDSOM_POISON=lists` le montre sur `scorpion_scene36`, `mash_c5`).
     #[track_caller]
-    fn reinsert(&mut self) {
+    fn reinsert(&mut self)
+    where
+        Self: Processeur,
+    {
         let o = self.obj();
         let (c, b) = self.machine();
         ACTORS.reinsert_68k(c, b, o);
@@ -179,7 +182,10 @@ pub trait Courant: Machine {
 
     /// 0x1ef6c : remet l'objet à sa place dans la liste du premier plan (adaptateur, comme `reinsert`).
     #[track_caller]
-    fn reinsert_foreground(&mut self) {
+    fn reinsert_foreground(&mut self)
+    where
+        Self: Processeur,
+    {
         let o = self.obj();
         let (c, b) = self.machine();
         FOREGROUND.reinsert_68k(c, b, o);

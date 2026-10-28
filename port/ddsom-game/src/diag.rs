@@ -65,9 +65,75 @@ pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16)
     }
     let etiquette = format!("appel_{adresse:x}");
     let site = site.to_string();
-    if !empoisonne(&etiquette, &site) {
+    // `appel` seul vise tous les appels par adresse (`appel@families/` : ceux des familles)
+    let choisis = registres_choisis(&[&etiquette, "appel"], &site);
+    if choisis == 0 {
         return;
     }
+    inverser_changes(c, avant, !choisis, &etiquette, &site);
+}
+
+/// Sonde de la sortie d'un gestionnaire d'objet (boucle de dispatch, `dispatch.rs`) : avec l'étiquette `sortie` dans
+/// `DDSOM_POISON`, les registres et drapeaux que le gestionnaire a changés (sauf A0 et D7, que la boucle relit) sont
+/// inversés à son retour. Le site est `<boucle> <gestionnaire>` en hexadécimal (`39f82 a17d0`) : `sortie@a17d0` vise
+/// un gestionnaire, `sortie@39e86` une classe. Si la validation reste VALIDE, aucun gestionnaire suivant ni aucune suite
+/// ne relit ce que le gestionnaire laisse : il peut devenir une fonction Rust sans registres de sortie.
+pub fn sonder_sortie(c: &mut Cpu, avant: &([u32; 8], [u32; 8], u16), boucle: u32, gestionnaire: u32) {
+    if etiquettes().is_empty() {
+        return;
+    }
+    let site = format!("{boucle:x} {gestionnaire:x}");
+    let choisis = registres_choisis(&["sortie"], &site);
+    if choisis == 0 {
+        return;
+    }
+    inverser_changes(c, avant, !choisis | regs::a(0) | regs::d(7), "sortie", &site);
+}
+
+/// Registres visés par l'étiquette d'une sonde au site : tous (`étiquette`), ou un seul (`étiquette.d4`, `.a1`, `.ccr`) ;
+/// une entrée précédée de `!` en exclut (`sortie,!sortie.d4@ba310` : tout sauf D4 au gestionnaire 0xba310).
+fn registres_choisis(etiquettes: &[&str], site: &str) -> u32 {
+    let mut masque = 0;
+    for i in 0..17u32 {
+        let (bit, suffixe) = match i {
+            0..=7 => (regs::d(i), format!("d{i}")),
+            8..=14 => (regs::a(i - 8), format!("a{}", i - 8)),
+            16 => (regs::CCR, "ccr".to_string()),
+            _ => continue,
+        };
+        let noms: Vec<String> = etiquettes.iter().flat_map(|e| [e.to_string(), format!("{e}.{suffixe}")]).collect();
+        let noms: Vec<&str> = noms.iter().map(String::as_str).collect();
+        if empoisonne_parmi(&noms, site) {
+            masque |= bit;
+        }
+    }
+    masque
+}
+
+/// Comme [`empoisonne`], une entrée valant pour l'un des noms.
+fn empoisonne_parmi(noms: &[&str], site: &str) -> bool {
+    let mut actif = false;
+    for x in etiquettes() {
+        let (exclu, x) = match x.strip_prefix('!') {
+            Some(x) => (true, x),
+            None => (false, x.as_str()),
+        };
+        let (nom, motif) = match x.split_once('@') {
+            Some((n, m)) => (n, Some(m)),
+            None => (x, None),
+        };
+        if (noms.contains(&nom) || nom == "tout") && motif.map_or(true, |m| site.contains(m)) {
+            if exclu {
+                return false;
+            }
+            actif = true;
+        }
+    }
+    actif
+}
+
+/// Inverse les registres et drapeaux changés depuis `avant`, sauf ceux de `garde`.
+fn inverser_changes(c: &mut Cpu, avant: &([u32; 8], [u32; 8], u16), garde: u32, etiquette: &str, site: &str) {
     let mut masque = 0;
     for i in 0..8 {
         if c.d[i] != avant.0[i] {
@@ -80,6 +146,7 @@ pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16)
     if (c.sr ^ avant.2) & 0x1f != 0 {
         masque |= regs::CCR;
     }
+    masque &= !garde;
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
         eprintln!("POISON {etiquette} {site} masque={masque:05x}");
     }

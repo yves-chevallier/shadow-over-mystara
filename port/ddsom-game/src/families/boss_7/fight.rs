@@ -138,8 +138,7 @@ fn near_checks(x: &mut Cx) {
         return;
     }
     if aids::player_near(x, true) {
-        x.random_68k();
-        let i = x.c.d[0] as u16 & 0xf;
+        let i = x.random() & 0xf;
         x.set32(f::STATE, if i >= 6 { 0x0204_1000 } else { 0x0204_0600 });
         return lib::pick_byte(x);
     }
@@ -183,8 +182,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
         x.c.d[0] = 0;
         return false;
     }
-    x.random_68k();
-    let i = x.c.d[0] as u16 & 0xf;
+    let i = x.random() & 0xf;
     if i >= 6 {
         x.set32(f::STATE, 0x0202_0800);
         return true;
