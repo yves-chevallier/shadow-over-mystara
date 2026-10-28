@@ -111,6 +111,7 @@ pub(super) fn push_players(x: &mut Cx, shape: u8) {
             continue;
         }
         x.c.a[0] = x.o.0;
+        x.c.a[1] = p;
         if shape == 1 {
             shove_front(x.c, x.b);
         } else {
@@ -118,6 +119,7 @@ pub(super) fn push_players(x: &mut Cx, shape: u8) {
         }
     }
     x.c.d[6] = x.c.d[6] & 0xffff_0000 | 0xffff;
+    x.c.a[1] = 0xff85de + 0x800;
 }
 
 fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cpu, &mut Cps2Bus) -> bool) {
