@@ -1309,7 +1309,7 @@ fn seq14_message_done(ex: &mut Ex) {
     if ex.message_done() {
         ex.next();
         ex.set_b16(blk::TIMER, 256);
-        crate::video::effacer_debut_couche1_68k(ex.x.c, ex.x.b);
+        crate::video::effacer_debut_couche1(ex.x.b);
     }
 }
 

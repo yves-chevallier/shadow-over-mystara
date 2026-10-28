@@ -2,10 +2,9 @@
 //! palettes, remises à zéro de blocs d'état (W3).
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::tiles::{BLANK, COLUMN};
-use crate::mem::{rd32, rts, wr32};
+use crate::mem::{rd32, wr32};
 use crate::Native;
 
 /// Rectangle de cases vides : `columns` colonnes de `rows` cases à partir de `at`.
@@ -18,21 +17,10 @@ pub fn blank_rect(b: &mut Cps2Bus, at: u32, columns: u32, rows: u32) {
 }
 
 /// 0xf683c : efface la zone de texte des écrans de fin (48 colonnes de 22 cases à partir de la ligne 5).
-/// Laisse les registres de l'original (D1 est relu par l'appelant d'origine comme valeur de `+0x2f`).
+/// L'original laisse D1.w = -1, relu par l'écran de bonus comme réglage (écrit en clair dans `bonus.rs`).
 pub fn clear_text(b: &mut Cps2Bus) {
     const AT: u32 = 0x912014;
     blank_rect(b, AT, 48, 22);
-}
-
-/// `clear_text` avec les registres de l'original : A1, A2 en fin de zone, D0 = la case vide, D1.w = D2.w = -1.
-fn clear_text_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    const AT: u32 = 0x912014;
-    clear_text(b);
-    c.a[1] = AT + 47 * COLUMN + 22 * 4;
-    c.a[2] = AT + 47 * COLUMN;
-    c.d[0] = BLANK;
-    c.d[1] = c.d[1] & !0xffff | 0xffff;
-    c.d[2] = c.d[2] & !0xffff | 0xffff;
 }
 
 /// 0xf688c : efface le cadre de l'écran de bonus (40 colonnes de 21 cases à partir de la ligne 6, colonne 5).
@@ -76,37 +64,27 @@ pub mod blocks {
 }
 
 macro_rules! clear_native {
-    ($name:ident, $entry:expr, $label:expr, $at:expr, $n:expr, $d0:expr) => {
+    ($name:ident, $entry:expr, $label:expr, $at:expr, $n:expr) => {
         pub const $name: Native = Native {
             entry: $entry,
             name: $label,
-            run: crate::Corps::Processeur(|c, b| {
-                clear_longs(b, $at, $n);
-                if $d0 {
-                    c.d[0] = 0;
-                }
-                rts(c, b);
-            }),
+            run: crate::Corps::Memoire(|b| clear_longs(b, $at, $n)),
             touches_sound: false,
             outputs: 0,
         };
     };
 }
 
-/// 0xf3130 : appelée depuis l'entrée de scène (Rust) ; A4 et D6 restent ceux de la boucle d'origine.
+/// 0xf3130 : plus aucun appel par adresse (l'entrée de scène appelle `clear_longs`) ; A4 et D6 laissés par la boucle
+/// d'origine ne sont relus par personne (code-mort.md).
 pub const RESET_EXIT: Native = Native {
     entry: 0xf3130,
     name: "scene_exit_reset",
-    run: crate::Corps::Processeur(|c, b| {
-        clear_longs(b, blocks::EXIT, 8);
-        c.a[4] = blocks::EXIT + 32;
-        c.d[6] |= 0xffff;
-        rts(c, b);
-    }),
+    run: crate::Corps::Memoire(|b| clear_longs(b, blocks::EXIT, 8)),
     touches_sound: false,
     outputs: 0,
 };
-clear_native!(RESET_SHOP, 0xf7916, "scene_shop_reset", blocks::SHOP, 5, true);
+clear_native!(RESET_SHOP, 0xf7916, "scene_shop_reset", blocks::SHOP, 5);
 pub const RESET_TRANSITION: Native = Native {
     entry: 0xf7ee0,
     name: "scene_transition_reset",
@@ -114,19 +92,17 @@ pub const RESET_TRANSITION: Native = Native {
     touches_sound: false,
     outputs: 0,
 };
-clear_native!(RESET_RANKING, 0xfc562, "ranking_reset", blocks::RANKING, 4, true);
+clear_native!(RESET_RANKING, 0xfc562, "ranking_reset", blocks::RANKING, 4);
 
 pub const CLEAR_TEXT: Native = Native {
     entry: 0xf683c,
     name: "scene_clear_text",
-    run: crate::Corps::Processeur(|c, b| {
-        clear_text_68k(c, b);
-        rts(c, b);
-    }),
+    run: crate::Corps::Memoire(clear_text),
     touches_sound: false,
     outputs: 0,
 };
 
+/// Plus aucun appel par adresse vers ces cinq natives : registres laissés par l'original non reproduits.
 pub const NATIVES: &[Native] = &[RESET_EXIT, RESET_SHOP, RESET_TRANSITION, RESET_RANKING, CLEAR_TEXT];
 
 #[cfg(test)]

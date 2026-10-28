@@ -1158,8 +1158,7 @@ fn scene_47(x: &mut Ctx) {
         2 => {
             if fondu::PAS.get(x.b) == 0 {
                 x.end_scene();
-                // Glitch d'origine possible : les restes de 0x3525c (tous les registres) passent à la mise à jour du monde
-                crate::video::effacer_debut_couche1_68k(x.c, x.b);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         _ => {}
@@ -1329,8 +1328,7 @@ fn scene_66(x: &mut Ctx) {
             if x.players_in_state(4) {
                 x.next_sub();
                 x.message(82, MESSAGE);
-                // Glitch d'origine possible : les restes de 0x3525c (tous les registres) passent à la mise à jour du monde
-                crate::video::effacer_debut_couche1_68k(x.c, x.b);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         4 => {
@@ -1359,8 +1357,7 @@ fn scene_66(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.message(83, MESSAGE);
-                // Glitch d'origine possible : les restes de 0x3525c (tous les registres) passent à la mise à jour du monde
-                crate::video::effacer_debut_couche1_68k(x.c, x.b);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         14 => {

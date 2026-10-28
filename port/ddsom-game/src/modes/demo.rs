@@ -811,7 +811,7 @@ fn ending_b(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     crate::kernel::tuer_tache(x.b, 0x30);
     effacer_couche(x.b, Couche::Un);
-    crate::video::effacer_debut_couche1_68k(x.c, x.b);
+    crate::video::effacer_debut_couche1(x.b);
     wr16(x.b, 0x91c41c, 0xf112);
     wr16(x.b, A5 + 0x4ba, 256);
     wr16(x.b, A5 + 0x4b6, 0);

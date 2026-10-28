@@ -35,11 +35,14 @@ mod at {
     pub const NEXT_WAITED: u32 = 0xf66aa;
 }
 
+/// Bloc de la sortie de scène : l'A0 de l'original, posé par l'aiguillage et gardé à travers les cessions.
+const BLOC: u32 = super::screen::blocks::EXIT;
+
 fn sub_step(x: &mut Ctx) -> u8 {
-    rd8(x.b, x.c.a[0] + 3)
+    rd8(x.b, BLOC + 3)
 }
 fn set_sub_step(x: &mut Ctx, s: u8) {
-    wr8(x.b, x.c.a[0] + 3, s)
+    wr8(x.b, BLOC + 3, s)
 }
 fn next_sub_step(x: &mut Ctx) {
     let s = sub_step(x).wrapping_add(2);
@@ -215,10 +218,10 @@ fn object(x: &mut Ctx, kind: u8, frames: u32, retry: Etape) -> Option<u32> {
     }
 }
 
-/// L'objet est lié au joueur (octet `+0x2f`) et au bloc (long `+0x4c` = A0).
+/// L'objet est lié au joueur (octet `+0x2f`) et au bloc de la sortie de scène (long `+0x4c`, A0 de l'original).
 fn bind(x: &mut Ctx, o: u32, j: Joueur) {
     wr8(x.b, o + 0x2f, j.octet);
-    wr32(x.b, o + 0x4c, x.c.a[0]);
+    wr32(x.b, o + 0x4c, BLOC);
 }
 
 /// Les objets 5, 6 et 7 du joueur.
@@ -253,9 +256,8 @@ fn player_done(x: &mut Ctx) -> Flow {
     let left = rd8(x.b, v::LEFT).wrapping_sub(1);
     wr8(x.b, v::LEFT, left);
     reset_objects(x);
-    let a0 = x.c.a[0];
     crate::sprites::construire_68k(x.c, x.b);
-    x.c.a[0] = a0;
+    x.c.a[0] = BLOC;
     crate::video::vider_objets(x.b);
     x.set_v16(0x14, 0x12c0);
     x.wait(1, Etape::NextWaited)

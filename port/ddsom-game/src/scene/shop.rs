@@ -17,6 +17,9 @@ use crate::modes::{Flow, Sequence};
 use crate::Native;
 use crate::objects::{pools, Obj};
 
+/// Bloc de la sortie de scène : l'A0 de l'original, posé par l'aiguillage et gardé à travers les cessions.
+const BLOC: u32 = super::screen::blocks::EXIT;
+
 /// Bloc de la boutique.
 pub const BLOCK: u32 = A5 - 0x5560;
 mod f {
@@ -198,10 +201,9 @@ crate::etapes! {
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
             // 0x33aa6 (D7 et A0 gardés) : caméras au départ et mises à jour (D4 relu : `update_cameras_68k`)
-            let a0 = x.c.a[0];
             crate::scroll::cameras_depart(x.b);
             crate::scroll::update_cameras_68k(x.c, x.b);
-            x.c.a[0] = a0;
+            x.c.a[0] = BLOC;
             x.set_v16(0x14, 0);
             crate::video::activer_couches(x.b, 0x12c0);
             super::script::reset(x.b);
@@ -217,9 +219,8 @@ crate::etapes! {
         /// Retour de la boutique : couches effacées, état suivant de la séquence, scène de retour.
         LeaveWaited = at::LEAVE_WAITED => |x| {
             clear_layers(x);
-            let a0 = x.c.a[0];
-            let s = rd8(x.b, a0 + 2).wrapping_add(4);
-            wr8(x.b, a0 + 2, s);
+            let s = rd8(x.b, BLOC + 2).wrapping_add(4);
+            wr8(x.b, BLOC + 2, s);
             x.set_v8(0x3c, 0xff);
             x.set_v8(0x59, 0);
             x.and16(0x12, 0xfffe);
@@ -232,6 +233,8 @@ crate::etapes! {
                 let back = rd8(x.b, BLOCK + f::RETURN_SCENE);
                 x.set_v8(0x34, back);
             }
+            // l'aiguillage de la sortie de scène relit l'octet `+2` du bloc désigné par A0 (le bloc, gardé par la cession)
+            x.c.a[0] = BLOC;
             Flow::Done
         },
         ChainFaded = at::CHAIN_FADED => |x| {

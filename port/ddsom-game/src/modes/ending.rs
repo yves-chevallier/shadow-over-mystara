@@ -788,7 +788,7 @@ fn s1a_wait_fade(x: &mut Ctx) -> Flow {
     render(x);
     unlink_and_clear_lists(x);
     reset_pools(x);
-    crate::video::effacer_debut_couche1_68k(x.c, x.b);
+    crate::video::effacer_debut_couche1(x.b);
     wr16(x.b, var::SCROLL_2, 256);
     // `jmp 0xc58`
     crate::video::vider_objets(x.b);
