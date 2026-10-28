@@ -68,14 +68,45 @@ use m68k::Cpu;
 pub struct Native {
     pub entry: u32,
     pub name: &'static str,
-    /// Exécute la routine, RTS final compris (durée non comptée : ajoutée par l'appelant, [`DUREE_NATIVE`]).
-    pub run: fn(&mut Cpu, &mut Cps2Bus),
+    /// Le corps de la routine (durée non comptée : ajoutée par l'appelant, [`DUREE_NATIVE`]).
+    pub run: Corps,
     /// La routine accède à la RAM partagée avec le Z80 : elle doit tenir dans la ligne en cours,
     /// sinon l'entrelacement avec le Z80 changerait.
     pub touches_sound: bool,
     /// Contrat : registres et drapeaux que l'appelant peut lire au retour (voir `regs`). Les autres
     /// registres sont libres ; la mémoire doit toujours être identique.
     pub outputs: u32,
+}
+
+/// Corps d'une native.
+#[derive(Clone, Copy)]
+pub enum Corps {
+    /// Sur le processeur : lit des registres de l'original ou en laisse à ses appelants (contrat d'un appel par
+    /// adresse), et finit par son `rts`.
+    Processeur(fn(&mut Cpu, &mut Cps2Bus)),
+    /// Comme `Processeur`, pour un corps partagé par plusieurs entrées : il reçoit l'adresse de la sienne.
+    ProcesseurEn(fn(&mut Cpu, &mut Cps2Bus, u32)),
+    /// Sans registre (la forme cible : la mémoire seule) ; le retour (`rts`) est fait pour lui.
+    Memoire(fn(&mut Cps2Bus)),
+}
+
+impl Native {
+    /// Exécute la routine, retour (`rts`) compris.
+    pub fn executer(&self, c: &mut Cpu, b: &mut Cps2Bus) {
+        match self.run {
+            Corps::Processeur(f) => f(c, b),
+            Corps::ProcesseurEn(f) => f(c, b, self.entry),
+            Corps::Memoire(f) => {
+                f(b);
+                mem::rts(c, b);
+            }
+        }
+    }
+
+    /// Le corps n'utilise pas le processeur.
+    pub fn sans_processeur(&self) -> bool {
+        matches!(self.run, Corps::Memoire(_))
+    }
 }
 
 /// Durée d'une native en mode hybride (cycles du 68000), la même pour toutes : ce mode ne sert plus qu'au diagnostic.
@@ -231,7 +262,6 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
         .chain(hud::NATIVES)
-        .chain(service::NATIVES)
 }
 
 /// Appelle une routine par son adresse depuis une routine native, comme un `jsr` : les natives (et, en mode hybride, le
@@ -244,6 +274,19 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     const RETURN: u32 = 0x00_fffe;
     let site = std::panic::Location::caller();
     let _site = (TRACE.get().is_some() || sans68k::actif()).then(|| SiteDAppel::entrer(site, addr));
+    let avant = (c.d, c.a, c.sr);
+    if sans68k::actif() {
+        // le jeu : la native s'exécute aussitôt ; son `rts` revient à un appel attendu de la tâche (ni PC, ni pile 68000)
+        let n = sans68k::native(c, b, addr);
+        let appel = taches::table::ouvrir_appel(c, b);
+        executer(n, c, b, 0);
+        if taches::a_cede() || !taches::table::appel_revenu(b, appel) {
+            panic!("appel de {addr:06x} ({site}) : la routine a cédé la main ou est revenue plus haut que son appelant");
+        }
+        diag::sonder_appel(c, addr, &avant, site);
+        return;
+    }
+    // outils (machine sans table des tâches Rust) : natives et code d'origine, jusqu'au retour à une sentinelle
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], RETURN);
@@ -254,16 +297,29 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
         }
         un_pas(c, b);
     }
+    diag::sonder_appel(c, addr, &avant, site);
+}
+
+/// Appel terminal (`jmp`) de la native `n` depuis une fonction Rust : elle s'exécute aussitôt (avec les diagnostics de
+/// `DDSOM_CHECK`...), et son `rts` revient à la suite de l'appel en cours de la tâche. Remplace la pose du PC (saut d'une
+/// native à une autre).
+pub fn sauter(c: &mut Cpu, b: &mut Cps2Bus, n: &'static Native) {
+    executer(n, c, b, 0);
+}
+
+/// Comme [`sauter`], vers la native posée à `adresse` (gestionnaire désigné par une table de la ROM).
+#[track_caller]
+pub fn sauter_a(c: &mut Cpu, b: &mut Cps2Bus, adresse: u32) {
+    let n = lookup(adresse).unwrap_or_else(|| panic!("saut vers {adresse:06x} ({}) : pas de native", std::panic::Location::caller()));
+    executer(n, c, b, 0);
 }
 
 /// Point de bascule de l'ordonnanceur : une tâche qui cède la main (0xa40, 0xa86) ou se termine y passe.
 const TASK_SWITCH: u32 = 0x984;
 
-/// Une native (ou, en mode hybride, une instruction ou un bloc d'origine) à l'adresse du PC.
+/// Outils : une native, ou une instruction ou un bloc d'origine, à l'adresse du PC.
 fn un_pas(c: &mut Cpu, b: &mut Cps2Bus) {
-    if sans68k::actif() {
-        sans68k::pas(c, b);
-    } else if TRACE.get().is_some() {
+    if TRACE.get().is_some() {
         run_traced(c.pc, c, b, u64::MAX);
     } else if run(c.pc, c, b, u64::MAX).is_none() {
         c.step(b);
@@ -276,9 +332,14 @@ fn un_pas(c: &mut Cpu, b: &mut Cps2Bus) {
 /// tâche a cédé la main, ou si l'appelé a dépilé l'appel pour revenir plus haut (épilogue étranger des bulles) : la
 /// fonction Rust abandonne alors, et la tâche continuera par les suites des appels en cours.
 pub fn appeler_attendu(c: &mut Cpu, b: &mut Cps2Bus, adresse: u32, appel: taches::table::Appel) -> bool {
-    c.pc = adresse;
-    while taches::table::en_attente(b, appel) && !taches::a_cede() {
-        un_pas(c, b);
+    if sans68k::actif() {
+        let n = sans68k::native(c, b, adresse);
+        executer(n, c, b, 0);
+    } else {
+        c.pc = adresse;
+        while taches::table::en_attente(b, appel) && !taches::a_cede() {
+            un_pas(c, b);
+        }
     }
     taches::table::revenu(b, appel)
 }
@@ -375,7 +436,7 @@ fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     if niveau.0 == 0 {
         taches::oublier_cession();
     }
-    (n.run)(c, b);
+    n.executer(c, b);
 }
 
 /// Exécuteur : routine native si disponible, sinon bloc recompilé.
@@ -450,7 +511,7 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
     if c.cycles + DUREE_NATIVE > limit {
         return None;
     }
-    (n.run)(c, b);
+    n.executer(c, b);
     c.cycles += DUREE_NATIVE;
     Some(c.pc)
 }
@@ -625,6 +686,8 @@ fn checked(n: &Native) -> bool {
 }
 
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
+    // une native appelée par un appel en cours de la tâche ne pose pas de PC au retour
+    let par_cadre = taches::table::appelee_par_un_cadre(c, b);
     let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();
@@ -639,7 +702,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
         guard += 1;
         assert!(guard < 1_000_000, "{} : la routine d'origine ne revient pas", n.name);
     }
-    (n.run)(c, b);
+    n.executer(c, b);
     let mut diffs = Vec::new();
     let mut reg_diffs = [false; 16];
     let outputs = if CHECK_ALL.load(Ordering::Relaxed) { regs::ALL } else { n.outputs };
@@ -658,7 +721,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     if c.sr & sr_mask != c2.sr & sr_mask {
         diffs.push(format!("sr={:04x} au lieu de {:04x}", c.sr, c2.sr));
     }
-    if c.pc != c2.pc {
+    if !par_cadre && c.pc != c2.pc {
         diffs.push(format!("pc={:06x} au lieu de {:06x}", c.pc, c2.pc));
     }
     let sp = c2.a[7] & 0xff_ffff;

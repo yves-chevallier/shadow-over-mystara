@@ -83,7 +83,6 @@ mod ext {
     pub const CAMERA_INIT: u32 = 0x2a52;
     pub const PALETTE_360: u32 = 0x1a360;
     pub const REWARD: u32 = 0xce668;
-    pub const BOOTED_SET: u32 = 0x133f6;
 }
 
 mod at {
@@ -95,21 +94,25 @@ const FADE_ALL: u8 = 0xf;
 pub const PHASE_28: Native = Native {
     entry: 0xfb292,
     name: "ending_phase_28",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
-        x.c.a[5] = A5;
-        x.c.a[0] = BLOCK;
-        let step = rd8(x.b, var::STEP);
-        x.c.d[0] = step as u32;
-        x.push_return(Etape::Return);
-        let flow = state(&mut x, step);
-        if flow == Flow::Done {
+        if phase_28(&mut x) == Flow::Done {
             rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
+/// Phase 28 de la partie (`0xfb292`) : le générique de fin. L'état revient à [`Etape::Return`].
+pub fn phase_28(x: &mut Ctx) -> Flow {
+    x.c.a[5] = A5;
+    x.c.a[0] = BLOCK;
+    let step = rd8(x.b, var::STEP);
+    x.c.d[0] = step as u32;
+    x.push_return(Etape::Return);
+    state(x, step)
+}
+
 crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
@@ -483,7 +486,8 @@ crate::etapes! {
             x.call(ext::PLAYERS_UPDATE);
             wr8(x.b, var::PHASE, 20);
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-            x.jump_to(ext::BOOTED_SET)
+            crate::families::petites::booted_set(x.c, x.b);
+            Flow::Yield
         },
     }
 }
@@ -652,7 +656,7 @@ fn s06_wait(x: &mut Ctx) -> Flow {
     s06_object(x)
 }
 fn s06_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::S06Retry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::S06Retry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 70);
@@ -856,7 +860,7 @@ fn s1a_wait_fade(x: &mut Ctx) -> Flow {
         x.call(f);
     }
     wr16(x.b, var::SCROLL_2, 256);
-    x.jump_to(ext::CLEAR_SPRITES)
+    x.sauter(&crate::video::CLEAR_OBJECTS)
 }
 const S1A_LOOP: u32 = 0xfbc92;
 
@@ -891,7 +895,7 @@ fn s1c_wait(x: &mut Ctx) -> Flow {
 fn credits_objects_a(x: &mut Ctx) {
     let mut a2 = 0xfbe92;
     while rd16(x.b, a2) != 0xffff {
-        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return };
+        let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { return };
         wr8(x.b, o, 1);
         for (dst, size) in [(8u32, 2u32), (0xc, 2), (0x10, 2), (0x2c, 1), (2, 1), (3, 1), (0x2f, 1)] {
             if size == 2 {

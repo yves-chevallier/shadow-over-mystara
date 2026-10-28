@@ -282,11 +282,11 @@ macro_rules! anim_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            run: |c, b| {
+            run: crate::Corps::Processeur(|c, b| {
                 let obj = Obj(c.a[0]);
                 $run(c, b, obj);
                 rts(c, b);
-            },
+            }),
             touches_sound: false,
             outputs: regs::ALL,
         };

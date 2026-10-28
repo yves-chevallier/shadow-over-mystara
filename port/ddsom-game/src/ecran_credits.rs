@@ -332,12 +332,12 @@ macro_rules! native {
         pub const $nom: Native = Native {
             entry: $entree,
             name: stringify!($nom),
-            run: |c, b| {
+            run: crate::Corps::Processeur(|c, b| {
                 let mut x = Ctx::new(c, b);
                 x.c.a[5] = A5;
                 let corps: fn(&mut Ctx) = $corps;
                 corps(&mut x);
-            },
+            }),
             touches_sound: false,
             outputs: 0,
         };

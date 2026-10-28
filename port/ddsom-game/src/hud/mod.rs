@@ -288,10 +288,10 @@ fn starting(x: &mut Ctx) -> Flow {
 pub const FORGET_DISPLAYED: Native = Native {
     entry: 0x1507a,
     name: "hud_forget_displayed",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         slot::forget_displayed(b);
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
@@ -334,11 +334,11 @@ pub const NATIVES_DE_TEST: &[Native] = &[Native {
     // 0x15216 : un emplacement (A0 panneau, A6 joueur, A4 compteur de pièces)
     entry: 0x15216,
     name: "hud_emplacement",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let s = Slot { panel: c.a[0], player: c.a[6], coins: c.a[4] };
         slot::step(&mut Ctx::new(c, b), s);
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 }];

@@ -2292,7 +2292,7 @@ macro_rules! reaction_natives {
         &[$(Native {
             entry: $entry,
             name: "enemy_reaction",
-            run: |c, b| native_run(c, b, $entry),
+            run: crate::Corps::Processeur(|c, b| native_run(c, b, $entry)),
             touches_sound: false,
             outputs: 0,
         }),*]
@@ -2312,7 +2312,7 @@ pub const NATIVES: &[Native] = reaction_natives![
 pub const PLAYER_HURT_ANIMATION: Native = Native {
     entry: 0x3bb16,
     name: "player_hurt_animation",
-    run: player_hurt_animation,
+    run: crate::Corps::Processeur(player_hurt_animation),
     touches_sound: false,
     outputs: 0,
 };

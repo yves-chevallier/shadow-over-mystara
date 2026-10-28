@@ -654,7 +654,7 @@ fn approach(c: &mut Cpu, b: &mut Cps2Bus) {
 pub(super) const APPROACH: Native = Native {
     entry: 0x930a4,
     name: "boss_15_rapprochement",
-    run: approach,
+    run: crate::Corps::Processeur(approach),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::a(2),
 };

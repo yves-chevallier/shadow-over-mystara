@@ -281,7 +281,7 @@ pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
 pub const SHADOW: Native = Native {
     entry: 0x33fe4,
     name: "terrain_push",
-    run: |c, b| run(FIRST, c, b),
+    run: crate::Corps::Processeur(|c, b| run(FIRST, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -289,7 +289,7 @@ pub const SHADOW: Native = Native {
 pub const SHADOW_SECOND: Native = Native {
     entry: 0x3403c,
     name: "terrain_push_2",
-    run: |c, b| run(SECOND, c, b),
+    run: crate::Corps::Processeur(|c, b| run(SECOND, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };

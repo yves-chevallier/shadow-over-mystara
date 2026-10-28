@@ -77,7 +77,6 @@ mod ext {
     pub const INVITE_START: u32 = 0xe03e4;
     pub const RESET_PLAYERS: u32 = 0x1f184;
     pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const SPRITES: u32 = 0x1de96;
     pub const CLEAR_SPRITES: u32 = 0xc58;
     pub const CLEAR_SCROLL_1: u32 = 0xca8;
     pub const CLEAR_SCROLL_2: u32 = 0xcc8;
@@ -166,7 +165,9 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
             loop_a(x)
         }
         6 => presentation_step(x),
-        _ => x.jump_to(0x1fb20),
+        // étape 4 (0x1fb20, fin de scène) : jamais écrite, la boucle y mène directement (`scene_end_a`) ; au-delà :
+        // hors de la table 0x1f340 (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("démonstration A : étape {step:#x} jamais produite"),
     }
 }
 crate::etapes! {
@@ -303,7 +304,7 @@ fn scene_start(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     wr8(x.b, var::PHASE, 8);
     wr8(x.b, var::STEP, 0);
-    crate::rng::seed_68k(x.c, x.b);
+    crate::rng::seed(x.b);
     let mut a0 = PLAYERS;
     x.c.d[6] = 3;
     for d6 in (0..4u32).rev() {
@@ -399,7 +400,16 @@ fn run_phase(x: &mut Ctx, phases: u32, loop_top: Etape, after: Etape) -> Flow {
     let handler = prog32(x, phases + phase);
     x.c.d[0] = phase;
     x.c.a[0] = handler;
-    x.jump_to(handler)
+    // les deux tables n'ont que les phases 8 (entrée de scène) et 12 (le jeu) ; les autres entrées sont nulles
+    // (code-mort.md, lot « sortie du Cpu »)
+    match phase {
+        8 => {
+            crate::scene::entry::phase_8(x.c, x.b);
+            Flow::Done
+        }
+        12 => demo_phase_12(x),
+        _ => unreachable!("démonstration : phase {phase:#x} sans gestionnaire (table {phases:#x})"),
+    }
 }
 
 /// `0x1f9b0` : après la phase, gère l'écran de chargement et vide les files de collision ; le `rts`
@@ -551,7 +561,8 @@ fn presentation_step(x: &mut Ctx) -> Flow {
         2 => p2_show(x),
         4 => p4_end(x),
         6 => p6_text(x),
-        _ => x.jump_to(0x1fc5a),
+        // la table 0x1fc72 a quatre entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("présentation : sous-étape {substep:#x} hors de la table 0x1fc72"),
     }
 }
 
@@ -559,7 +570,7 @@ fn presentation_step(x: &mut Ctx) -> Flow {
 fn p_render(x: &mut Ctx) -> Flow {
     x.call(ext::SET);
     x.call(ext::SOBJ);
-    x.jump_to(ext::SPRITES)
+    x.sauter(&crate::sprites::BUILD_SPRITE_LIST)
 }
 
 fn next_substep(x: &mut Ctx) {
@@ -933,7 +944,7 @@ pub fn reset_recorder(c: &mut Cpu, b: &mut Cps2Bus) {
     let dsw = rd16(b, var::DSW);
     c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
     if dsw & 0x2000 != 0 {
-        crate::rng::seed_68k(c, b);
+        crate::rng::seed(b);
         wr16(b, A5 + 0x6c, 0);
         wr16(b, A5 + 0x6e, 0);
         wr16(b, A5 + 0x7f92, 0xe);
@@ -967,10 +978,10 @@ pub fn stop_recorder(b: &mut Cps2Bus) {
 pub const RECORDER_RESET: Native = Native {
     entry: 0xe0538,
     name: "demo_enregistreur_depart",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         reset_recorder(c, b);
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: crate::regs::d(5) | crate::regs::a(0),
 };
@@ -978,10 +989,10 @@ pub const RECORDER_RESET: Native = Native {
 pub const RECORDER_STOP: Native = Native {
     entry: 0xe05d6,
     name: "demo_enregistreur_arret",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         stop_recorder(b);
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
@@ -1016,12 +1027,12 @@ fn record_inputs(x: &mut Ctx) {
 pub const DEMO_PHASE_12: Native = Native {
     entry: 0x1fa38,
     name: "demo_phase_12",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if demo_phase_12(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

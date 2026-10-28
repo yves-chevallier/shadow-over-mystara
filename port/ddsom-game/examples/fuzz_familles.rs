@@ -273,7 +273,7 @@ fn essai(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: boo
         return;
     }
     // routine native sur la copie perturbée (même état de départ que l'original)
-    let resultat = catch_unwind(AssertUnwindSafe(|| (n.run)(&mut c1, &mut b1)));
+    let resultat = catch_unwind(AssertUnwindSafe(|| n.executer(&mut c1, &mut b1)));
     let mut diffs = Vec::new();
     match resultat {
         Err(e) => {

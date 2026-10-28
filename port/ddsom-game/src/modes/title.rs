@@ -97,10 +97,6 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
     })
 }
 
-fn unknown_step(x: &mut Ctx, entry: u32) -> Flow {
-    x.jump(entry)
-}
-
 // ---------------------------------------------------------------------------------------------
 // Aides communes
 
@@ -172,7 +168,8 @@ fn title_step(x: &mut Ctx, step: u8) -> Flow {
         0x1a => t1a_wait(x),
         0x1c => t1c_wait_logo(x),
         0x1e => t1e_end(x),
-        _ => unknown_step(x, 0xfa296),
+        // la table 0xfa2a4 a seize entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("titre : étape {step:#x} hors de la table 0xfa2a4"),
     }
 }
 
@@ -316,7 +313,7 @@ crate::etapes! {
         T1eDone = T1E_DONE => |x| {
             x.set_m16(f::TIMER, 300);
             x.c.d[0] = 1;
-            x.jump_to(ext::PALETTE_PAGE_A)
+            x.sauter(&crate::palette::PAGE1_D0)
         },
         S02Load = S02_LOAD => |x| {
             x.set_v8(var::SCREEN_TYPE, 1);
@@ -602,7 +599,7 @@ fn t18_palette(x: &mut Ctx) -> Flow {
     t18_object(x)
 }
 fn t18_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::T18Retry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::T18Retry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 4);
     wr8(x.b, o + 3, 0x34);
@@ -627,7 +624,7 @@ fn t18_sub(x: &mut Ctx) -> Flow {
     t18_text_object(x)
 }
 fn t18_text_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::T18SubRetry) };
+    let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { return x.wait(1, Etape::T18SubRetry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0xf0);
@@ -661,7 +658,7 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
     t1a_object(x)
 }
 fn t1a_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::T1aRetry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::T1aRetry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x42);
@@ -692,7 +689,7 @@ pub fn title_text(x: &mut Ctx) -> Flow {
         x.c.a[3] = crate::mem::A5 + 0x54e;
     }
     loop {
-        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { break };
+        let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, x.c.d[4] as u8);
@@ -785,7 +782,8 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
             x.render();
             leave_screen(x, Etape::S08Wait)
         }
-        _ => unknown_step(x, 0xfaef2),
+        // la table 0xfaf00 a cinq entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("second titre : étape {step:#x} hors de la table 0xfaf00"),
     }
 }
 
@@ -835,7 +833,7 @@ fn s04_wait_object(x: &mut Ctx) -> Flow {
     s04_object(x)
 }
 fn s04_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::S04Retry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::S04Retry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x44);

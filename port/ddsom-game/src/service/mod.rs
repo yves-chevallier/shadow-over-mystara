@@ -25,9 +25,8 @@ pub mod reglages;
 
 use crate::config;
 use crate::mem::{set_low_word, wr32};
-use crate::modes::{Flow, Sequence};
+use crate::modes::Flow;
 use crate::scene::Ctx;
-use crate::Native;
 
 /// Enregistrement du menu (A5 - 0x6308), 0x60 octets.
 pub const MENU: u32 = 0xff_1cf8;
@@ -98,7 +97,6 @@ pub mod ext {
     pub const PALETTES: u32 = 0x1a296;
     pub const SOUND_REQUEST: u32 = 0xe0836;
     pub const BOOT_TASK: u32 = 0x11b16;
-    pub const SECRET_TEST: u32 = 0xee16e;
 }
 
 /// Textes du menu (descripteurs en ROM).
@@ -331,7 +329,8 @@ pub fn menu_after_clear(x: &mut Ctx) -> Flow {
 fn menu(x: &mut Ctx) -> Flow {
     if x.rd16(SECRET_ENABLE) != 0 {
         if get(x, f::SECRET) != 0 {
-            return x.jump_to(ext::SECRET_TEST);
+            // le mot 0xc0 du programme est nul dans cette version (docs/service.md) : le « Secret Test » n'est pas réécrit
+            unreachable!("menu TEST : « Secret Test » (0xee16e) demandé");
         }
         if (x.v8(0) & x.v8(1)) & key::SHOT2 != 0 {
             set(x, f::SECRET, 1);
@@ -404,17 +403,3 @@ pub fn back_to_menu(x: &mut Ctx) -> Flow {
     show_menu(x)
 }
 
-/// Les deux blocages définitifs du menu TEST et des réglages : la tâche reste sur une boucle `bra.b *` de l'original,
-/// que la machine tient sans interpréteur en laissant passer le temps jusqu'à la fin de l'image. Aucune
-/// EEPROM ni aucune RAM de la machine émulée n'y mène (voir `docs/service.md` §7) : ils existent pour que
-/// l'adresse ait une native.
-const fn blocage(entry: u32, name: &'static str) -> Native {
-    Native { entry, name, run: |_, _| {}, touches_sound: false, outputs: 0 }
-}
-
-/// « NG » du MEMORY CHECK (`0x2d112`).
-pub const BLOCAGE_MEMOIRE: Native = blocage(memoire::BLOQUE, "service_blocage_memoire");
-/// « EEPROM ERROR » (`0x2d7fa`).
-pub const BLOCAGE_EEPROM: Native = blocage(config::BLOQUE, "service_blocage_eeprom");
-
-pub const NATIVES: &[Native] = &[BLOCAGE_MEMOIRE, BLOCAGE_EEPROM];

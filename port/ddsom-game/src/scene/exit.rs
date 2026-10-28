@@ -56,7 +56,6 @@ const SEQUENCE_JUMPS: u32 = 0xf31ea;
 /// Sous-routines du jeu appelées par les séquences.
 mod call {
     pub const PLAYER_INPUT: u32 = 0x2bdc;
-    pub const WAIT: u32 = 0xa40;
     pub const SOUND_C0C: u32 = 0xc0c;
     pub const COLLISIONS: u32 = 0x260ee;
     pub const PLAYERS: u32 = 0x35292;
@@ -215,11 +214,11 @@ impl<'a> Ex<'a> {
         super::screen::clear_text(self.x.c, self.x.b);
     }
 
-    /// Cède la main à l'original à l'adresse `pc` (aucun retour de la native).
-    fn delegate(&mut self, pc: u32) {
-        self.x.c.a[0] = BASE;
-        self.x.jump_to(pc);
-        self.handed_off = true;
+    /// Séquence ou étape sans réécriture : la table des séquences par scène (0xf3170) ne désigne que des séquences
+    /// réécrites, dont les étapes restent dans leurs états (code-mort.md, lot « sortie du Cpu »).
+    fn hors_table(&mut self) -> ! {
+        let (sequence, step) = (self.b8(blk::SEQUENCE), self.b8(blk::STEP));
+        unreachable!("sortie de scène : séquence {sequence:#x}, étape {step:#x} sans réécriture (entrée {:#x})", self.entry)
     }
     /// Cède la main à l'ordonnanceur pour `frames` images ; la reprise a lieu à `resume` (sinon à la suite de
     /// l'appelant).
@@ -228,10 +227,12 @@ impl<'a> Ex<'a> {
         if let Some(back) = self.dispatch_return {
             self.x.push_return(back);
         }
-        if let Some(resume) = resume {
-            self.x.push_return(resume);
-        }
-        self.x.c.pc = call::WAIT;
+        // `jsr 0xa40` (ou `jmp 0xa40` sans reprise propre : la tâche reprendra à la suite de l'appel en cours)
+        let reprise = match resume {
+            Some(resume) => resume.into(),
+            None => crate::taches::table::depiler_retour(self.x.c, self.x.b),
+        };
+        crate::kernel::attendre(self.x.c, self.x.b, reprise);
         self.handed_off = true;
     }
 }
@@ -420,7 +421,7 @@ fn run_sequence(ex: &mut Ex) {
         27 if ex.x.v8(0x66) != 0 => (&SEQ_29, None),
         27 => (&SEQ_27, Some(ex.entry + 20)),
         index => {
-            let Some(s) = sequence(index) else { return ex.delegate(ex.entry) };
+            let Some(s) = sequence(index) else { ex.hors_table() };
             // l'aiguillage d'origine (10 octets) appelle l'état par `jsr (A1)` : sa pile en garde le retour ;
             // les séquences dont les états finissent eux-mêmes l'image sautent à l'état (`jmp (A1)`)
             (s, (s.update != Nothing).then(|| ex.entry + 10))
@@ -429,7 +430,7 @@ fn run_sequence(ex: &mut Ex) {
     ex.dispatch_return = dispatcher.map(dispatch_tail_at);
     let step = ex.b8(blk::STEP);
     match sequence.states.get(step as usize / 4) {
-        None => return ex.delegate(ex.entry),
+        None => ex.hors_table(),
         Some(&St::Shared(shared)) => run_shared(ex, shared),
         Some(&state) => run_state(ex, state),
     }
@@ -450,7 +451,7 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
         Shared::Shop => super::shop::run,
         Shared::Blackout => super::blackout::run,
     };
-    let Some(back) = ex.dispatch_return else { return ex.delegate(ex.entry) };
+    let Some(back) = ex.dispatch_return else { ex.hors_table() };
     ex.x.c.a[0] = BASE;
     ex.x.push_return(back);
     if run(&mut ex.x) == Flow::Yield {
@@ -471,7 +472,7 @@ fn redispatch(ex: &mut Ex, sequence: &Sequence) {
     ex.x.c.a[1] = (ex.x.prog16(table) as u32) << 16 | ex.x.prog16(table + 2) as u32;
     ex.x.c.a[0] = BASE;
     match sequence.states.get(step as usize / 4) {
-        None => ex.delegate(ex.entry),
+        None => ex.hors_table(),
         Some(&St::Shared(shared)) => run_shared(ex, shared),
         Some(&state) => run_state(ex, state),
     }
@@ -657,7 +658,7 @@ const DISPATCHERS: [(u8, u32); 29] = [
 fn dispatch_tail_at(at: u32) -> Suite {
     match DISPATCHERS.iter().find(|&&(_, entry)| entry + 10 == at) {
         Some(&(index, _)) => Etape::DispatchTail(index).into(),
-        None => Suite::Adresse(at),
+        None => unreachable!("sortie de scène : aiguillage {at:#x} absent de DISPATCHERS"),
     }
 }
 
@@ -697,11 +698,11 @@ impl Etape {
 pub const PHASE_16: Native = Native {
     entry: 0xf3142,
     name: "scene_phase_16",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         if !phase_16(c, b) {
             rts(c, b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

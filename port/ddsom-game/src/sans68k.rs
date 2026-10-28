@@ -166,10 +166,10 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
             Point::Debut | Point::Parcours | Point::Examen | Point::Suivant | Point::Retour => {
                 crate::kernel::executer(c, b, point)
             }
-            Point::Tache => {
-                pas(c, b);
-                crate::kernel::point(b)
-            }
+            // une tâche ne continue plus par un saut vers une native : chaque pas cède, se termine ou bloque
+            Point::Tache => arreter(c, b, "la tâche a rendu la main sans céder".into()),
+            // la boucle sans fin de l'original : l'image est finie
+            Point::Bloque(_) => break,
             Point::PasRetenu => {
                 if plafond_atteint() {
                     break;
@@ -179,6 +179,9 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
                 crate::kernel::point(b)
             }
         };
+        if suivant == Point::Tache {
+            arreter(c, b, "la tâche a rendu la main sans céder".into());
+        }
         table(b).point = suivant;
     }
     c.cycles = c.cycles.max(fin);
@@ -244,10 +247,11 @@ fn image_finie(c: &Cpu, b: &Cps2Bus, point: Point) -> bool {
     })
 }
 
-/// Exécute la native posée au PC, ou arrête le jeu s'il n'y en a pas.
-pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
-    let Some(n) = crate::lookup(c.pc) else {
-        arreter(c, b, format!("pas de native en {:06x}", c.pc));
+/// La native de l'adresse `adresse` (appel par adresse, gestionnaire d'une table de la ROM), ou l'arrêt du jeu s'il
+/// n'y en a pas. Elle est notée pour le diagnostic d'un arrêt (`DDSOM_SANS_TRACE=image` : chaque native de l'image).
+pub(crate) fn native(c: &Cpu, b: &mut Cps2Bus, adresse: u32) -> &'static Native {
+    let Some(n) = crate::lookup(adresse) else {
+        arreter(c, b, format!("pas de native en {adresse:06x}"));
     };
     DERNIERES.with(|d| {
         let mut d = d.borrow_mut();
@@ -257,10 +261,9 @@ pub(crate) fn pas(c: &mut Cpu, b: &mut Cps2Bus) {
         d.push_back(n);
     });
     if trace(b) {
-        eprintln!("{}:{} {:06x} {} sr={:04x} sp={:x}", b.frame, b.scanline, c.pc, n.name, c.sr, c.a[7]);
+        eprintln!("{}:{} {:06x} {} sr={:04x} sp={:x}", b.frame, b.scanline, adresse, n.name, c.sr, c.a[7]);
     }
-    // sans 68000, une native ne dure rien
-    crate::executer(n, c, b, 0);
+    n
 }
 
 /// Diagnostic : `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n.

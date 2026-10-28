@@ -40,7 +40,7 @@ fn players() -> impl Iterator<Item = Obj> {
 pub const SPAWN_BUMPERS: crate::Native = crate::Native {
     entry: 0xd40e8,
     name: "set_tremplins_d40e8",
-    run: spawn_bumpers,
+    run: crate::Corps::Processeur(spawn_bumpers),
     touches_sound: false,
     outputs: crate::regs::d(5) | crate::regs::d(6) | crate::regs::a(1),
 };

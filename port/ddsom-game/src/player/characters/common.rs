@@ -123,6 +123,7 @@ pub fn wait_then_stand(g: &mut Ctx, p: Player) {
 pub fn step_keeping_regs(g: &mut Ctx, p: Player, d0: u8) -> bool {
     cov!();
     g.c.d[0] = g.c.d[0] & !0xff | d0 as u32;
+    // registres de l'original relus ensuite (DDSOM_POISON=anim : long_3p_mortels, image 22018)
     crate::objects::anim::step_68k(g.c, g.b, p.obj(), true).finished()
 }
 

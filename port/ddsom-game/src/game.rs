@@ -38,23 +38,10 @@ mod ram {
     pub const SCROLL2_Y: u32 = 0x4ba;
 }
 
-/// Natives d'autres modules encore appelées par leur adresse (`call`) : leur corps n'est pas une fonction Rust publique.
+/// Natives d'autres modules encore appelées par leur adresse (`call`).
 mod ext {
-    /// Jauge de charge : D1 = marqueur écrit dans la première ligne du plan 2.
-    pub const GAUGE: u32 = 0xb3e;
-    /// Caméras et défilement.
-    pub const CAMERAS: u32 = 0x33e20;
-    /// Construction de la liste de sprites.
-    pub const SPRITES: u32 = 0x1de96;
-    pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const PLAYERS_PREPARE_B: u32 = 0x3525c;
     pub const PHASE0_END_FADE: u32 = 0x1cf3c;
     pub const CLEAR_STATUS: u32 = 0xdabba;
-    pub const INPUT_HOOK: u32 = 0x2aec;
-    /// Pop-ups (`popups::animer`).
-    pub const WORLD_EXTRA: u32 = 0x19e20;
-    /// Lecteur du script d'apparition de la scène.
-    pub const WORLD_EXTRA_2: u32 = 0xf2e5c;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -167,7 +154,13 @@ fn run_steps(c: &mut Cpu, b: &mut Cps2Bus, ordre: u8, from: usize) -> Flow {
                 }
                 table::depiler_retour(c, b);
             }
-            Cameras => call(c, b, ext::CAMERAS),
+            // 0x33e20. Glitch d'origine : le D4 de la recopie du décor est relu par un gestionnaire suivant
+            // (boss13_dragon, image 7241) ; l'A0 de l'original (la caméra 2) ne l'est pas
+            Cameras => {
+                for (v, m) in crate::scroll::update_cameras(b).into_iter().flatten() {
+                    c.d[4] = c.d[4] & !m | v;
+                }
+            }
         }
     }
     Flow::Done
@@ -178,8 +171,10 @@ const JSR: u32 = 6;
 
 /// Jauge de charge, avec son marqueur (D1).
 fn gauge(c: &mut Cpu, b: &mut Cps2Bus, marker: u32) {
+    // 0xb3e. Glitch d'origine : la jauge masquée laisse D2.w = 0x400 (test de DSW), qu'un gestionnaire écrit dans un
+    // champ d'objet (DDSOM_POISON=appel_b3e : long_magicien_57_86, image 13398, ram ffd692)
     c.d[1] = marker;
-    call(c, b, ext::GAUGE);
+    crate::video::jauge_68k(c, b);
 }
 
 /// Les quatre ordres de mise à jour.
@@ -220,11 +215,11 @@ impl Etape {
 pub const WORLD_UPDATE: Native = Native {
     entry: 0x1c86e,
     name: "world_update",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         if update_world(c, b) == Flow::Done {
             rts(c, b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0, // les appelants enchaînent sur d'autres appels
 };
@@ -274,7 +269,7 @@ fn next_step(b: &mut Cps2Bus) {
 }
 
 /// Étape 0 : trois objets SET (animations de palette), prépare les joueurs.
-fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
+fn create_palette_objects(b: &mut Cps2Bus) {
     next_step(b);
     wr16(b, A5 + ram::TIMER, 0x40);
     wr8(b, A5 + ram::ACTIVE, 1);
@@ -282,14 +277,15 @@ fn create_palette_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     crate::objects::pools::SET.reset(b);
     for (variant, index) in SET_PALETTES {
         // le pool vient d'être vidé : l'allocation réussit
-        let set = pools::SET.alloc_68k(c, b).expect("pool SET vide");
+        let set = pools::SET.alloc(b).expect("pool SET vide");
         set.set_u8(b, Obj::ACTIVE, 1);
         set.set_u8(b, Obj::KIND, 0);
         set.set_u8(b, Obj::VARIANT, variant);
         set.set_u8(b, SET_PALETTE_INDEX, index);
     }
     crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_WHITE_VALUE);
-    call(c, b, ext::PLAYERS_PREPARE_B);
+    // 0x3525c
+    crate::video::effacer_debut_couche1(b);
     let y = rd16(b, A5 + ram::SCROLL2_Y).wrapping_add(0x100);
     wr16(b, A5 + ram::SCROLL2_Y, y);
 }
@@ -308,7 +304,8 @@ fn clear_text_boxes(b: &mut Cps2Bus) {
 fn animate(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     dispatch::SOBJ.update_sans_suite(c, b);
     dispatch::SET.update_sans_suite(c, b);
-    call(c, b, ext::SPRITES);
+    // 0x1de96
+    crate::sprites::construire_68k(c, b);
     let left = rd16(b, A5 + ram::TIMER).wrapping_sub(1);
     wr16(b, A5 + ram::TIMER, left);
     (left as i16) < 0
@@ -319,7 +316,7 @@ fn wait_then_spawn(c: &mut Cpu, b: &mut Cps2Bus) {
     if !animate(c, b) {
         return;
     }
-    let Some(set) = pools::SET.alloc_68k(c, b) else { return };
+    let Some(set) = pools::SET.alloc(b) else { return };
     set.set_u8(b, Obj::ACTIVE, 1);
     set.set_u8(b, Obj::KIND, 0xc);
     next_step(b);
@@ -339,7 +336,8 @@ fn wait_then_fade(c: &mut Cpu, b: &mut Cps2Bus) {
 /// Étape 16 : remise à neuf des pools, puis sortie de la phase.
 fn reset_pools_and_leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + ram::STEP, 0);
-    call(c, b, ext::SPRITES_RESET);
+    // 0x1de7c
+    crate::sprites::vider_listes(b);
     crate::objects::pools::SOBJ.reset(b);
     crate::objects::pools::SET.reset(b);
     leave(c, b);
@@ -351,7 +349,7 @@ fn leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + ram::PHASE, phase);
     wr8(b, CLEARED_B, 0);
     wr8(b, A5 + ram::ACTIVE, 1);
-    crate::objects::rank::load_preset_68k(c, b);
+    crate::objects::rank::charger_preset(b);
     wr8(b, A5 + ram::SCENE, 1);
     wr8(b, A5 + EXIT_CLEARED_BYTES[0], 0);
     wr16(b, A5 + ram::TIMER, 0);
@@ -369,7 +367,7 @@ pub fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
         return leave(c, b);
     }
     match rd8(b, A5 + ram::STEP) {
-        0 => create_palette_objects(c, b),
+        0 => create_palette_objects(b),
         4 => {
             clear_text_boxes(b);
             wait_then_spawn(c, b);
@@ -384,10 +382,10 @@ pub fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const PHASE_0: Native = Native {
     entry: 0x1c522,
     name: "game_phase0",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         phase0(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
@@ -484,7 +482,11 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
     if rd16(b, A5 + CLOCK) != 0 {
         tick_clock(c, b);
     }
-    call(c, b, ext::INPUT_HOOK);
+    // 0x2aec
+    // Glitch d'origine : les octets d'entrée que la copie laisse dans D0-D4 (et ses drapeaux) sont relus par un
+    // gestionnaire de la mise à jour du monde, qui les écrit dans un objet (DDSOM_POISON=appel_2aec :
+    // long_voleur_objets, image 13133, ram ffd694)
+    crate::inputs::recopier_68k(c, b);
     table::appeler(c, b, Etape::ApresMonde);
     if update_world(c, b) == Flow::Yield {
         return Flow::Yield;
@@ -507,15 +509,18 @@ fn phase12_after_world(c: &mut Cpu, b: &mut Cps2Bus) {
 /// pop-ups, script d'apparition, rang, fin de partie ; chacun précédé de sa jauge de charge.
 pub fn apres_le_monde(c: &mut Cpu, b: &mut Cps2Bus) {
     gauge(c, b, 0x54_0000);
-    call(c, b, ext::SPRITES);
+    // 0x1de96. Glitch d'origine : D4 (attributs du dernier morceau) relu plus tard (DDSOM_POISON=appel_1de96 :
+    // long_28_scenes, image 10431), voir `sprites::construire`
+    crate::sprites::construire_68k(c, b);
     gauge(c, b, 0x48_0002);
     // 0x260ee
     crate::combat::combat_update(&mut crate::combat::World { c, b, a2: 0 });
     gauge(c, b, 0x4f_001e);
-    call(c, b, ext::WORLD_EXTRA);
-    call(c, b, ext::WORLD_EXTRA_2);
+    // 0x19e20 : pop-ups ; 0xf2e5c : lecteur du script d'apparition
+    crate::popups::animer(b);
+    crate::scene::script::step(c, b);
     // 0x1f27c (registres de l'original : la tâche les garde jusqu'à l'image suivante)
-    crate::objects::rank::tick_68k(c, b);
+    crate::objects::rank::tick(b);
     // 0x28d8
     crate::aides::game_over(c, b);
 }
@@ -536,11 +541,11 @@ pub fn debug_scene_skip(b: &mut Cps2Bus) {
 pub const PHASE_12: Native = Native {
     entry: 0x1c6a0,
     name: "game_phase12",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         if phase12(c, b) == Flow::Done {
             rts(c, b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

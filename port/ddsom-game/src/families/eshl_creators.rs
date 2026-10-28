@@ -655,7 +655,7 @@ pub fn appeler(x: &mut super::cx::Cx, createur: fn(&mut Cpu, &mut Cps2Bus)) {
 /// Native d'un créateur appelé par adresse : la fonction, puis `rts`.
 macro_rules! native {
     ($entry:literal, $name:literal, $f:ident, $outputs:expr) => {
-        Native { entry: $entry, name: $name, run: |c, b| { $f(c, b); rts(c, b) }, touches_sound: false, outputs: $outputs }
+        Native { entry: $entry, name: $name, run: crate::Corps::Processeur(|c, b| { $f(c, b); rts(c, b) }), touches_sound: false, outputs: $outputs }
     };
 }
 

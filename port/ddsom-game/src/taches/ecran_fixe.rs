@@ -76,6 +76,8 @@ crate::etapes! {
     pub enum Etape {
         Entree = 0x1835e => tour,
         Reprise = 0x18384 => tour,
+        /// Retour de l'appel de l'étape (`jsr (table,PC)`) : les objets, les sprites, une image de cession.
+        ApresEtape = at::APRES_ETAPE => apres_etape,
     }
 }
 
@@ -83,8 +85,6 @@ crate::etapes! {
 mod at {
     /// Retour de l'appel de l'étape (`jsr (table,PC)`).
     pub const APRES_ETAPE: u32 = 0x1836e;
-    pub const ETAPES: u32 = 0x18386;
-    pub const SOUS_ETAPES: u32 = 0x1853c;
 }
 
 /// Tables de tuiles (ROM, données).
@@ -206,7 +206,7 @@ fn embleme(x: &mut Ctx, ligne: Ligne) {
 
 /// Allocation d'un objet : son adresse, ou rien (retenue levée).
 fn alloue(x: &mut Ctx, pool: &pools::Pool) -> Option<u32> {
-    pool.alloc_68k(x.c, x.b).map(|o| o.0)
+    pool.alloc(x.b).map(|o| o.0)
 }
 
 /// `0x18b8e` : ligne des rangs 5 à 10 (`rang` = 10 à 5) à partir de la case `p`.
@@ -415,36 +415,25 @@ fn fin(x: &mut Ctx) -> Flow {
     super::terminer(x)
 }
 
-/// Entrée `n` (pas de 2) d'une table de sauts relatifs de l'original.
-fn table(x: &mut Ctx, table: u32, n: u8) -> u32 {
-    table.wrapping_add(x.prog16(table + n as u32) as i16 as u32)
-}
-
 /// Un tour de la boucle : l'étape, les objets, les sprites, une image de cession.
 fn tour(x: &mut Ctx) -> Flow {
     x.c.a[0] = etat::BASE;
     let etape = rd8(x.b, etat::ETAPE);
     x.c.d[0] = etape as u32;
-    x.push_return(at::APRES_ETAPE);
-    let flow = match (etape, rd8(x.b, etat::SOUS_ETAPE)) {
+    x.push_return(Etape::ApresEtape);
+    match (etape, rd8(x.b, etat::SOUS_ETAPE)) {
         (0, _) => decor(x),
         (2, 0) => premiers_rangs(x),
         (2, 2) => montee(x),
         (2, 4) => fin(x),
-        // étape inconnue : le code d'origine
-        (2, s) => {
-            let cible = table(x, at::SOUS_ETAPES, s);
-            x.jump_to(cible)
-        }
-        (e, _) => {
-            let cible = table(x, at::ETAPES, e);
-            x.jump_to(cible)
-        }
-    };
-    if flow == Flow::Yield {
-        return flow;
+        // les tables 0x18386 (deux étapes) et 0x1853c (trois sous-étapes) sont réécrites ; `fin` termine la tâche
+        // (code-mort.md, lot « sortie du Cpu »)
+        (e, s) => unreachable!("tableau des scores : étape {e:#x}, sous-étape {s:#x} hors des tables"),
     }
-    crate::mem::rts(x.c, x.b);
+}
+
+/// `0x1836e` : retour de l'étape.
+fn apres_etape(x: &mut Ctx) -> Flow {
     x.c.a[0] = etat::BASE;
     for routine in [sub::EFFCT, sub::SET, sub::SPRITES] {
         x.call(routine);

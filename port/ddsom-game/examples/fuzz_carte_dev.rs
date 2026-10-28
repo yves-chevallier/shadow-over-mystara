@@ -144,7 +144,7 @@ fn main() {
     // (nom, entrée d'origine, routine Rust, registre D0 aléatoire ?)
     let natives = |entree: u32| -> Rust {
         let n = ddsom_game::all_natives().find(|n| n.entry == entree).expect("native");
-        Box::new(move |c, b| (n.run)(c, b))
+        Box::new(move |c, b| n.executer(c, b))
     };
     let cas: Vec<(&str, u32, Rust)> = vec![
         ("démarrage 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),

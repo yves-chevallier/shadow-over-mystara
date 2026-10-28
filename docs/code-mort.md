@@ -185,6 +185,39 @@ Routines jamais atteintes par les scénarios mais réécrites et validées par `
 0xe914 (point de marche atteint), 0xe7fa (point proche numéroté), 0xb068 (seconde table de parade), 0x103e0
 (animation de la variante), 0xf084 seule.
 
+## Lot « sortie du Cpu » (sauts vers des natives, partie 1)
+
+Les replis qui sautaient (`jump`, `jump_to`, pose du PC) vers une adresse d'origine sans native s'arrêtaient de toute
+façon (« pas de native ») dans le jeu sans 68000. Chacun vise une entrée de table que le jeu ne produit pas ; ils sont
+remplacés par `unreachable!` (message qui nomme la table) ou par l'arrêt documenté de l'original. Preuves : tables lues
+dans la ROM (`modes`, `taches`, `scene/exit`), 286 scénarios (`DDSOM_LONG=1`) sans arrêt.
+
+| Site | Table (ROM) | Entrées | Pourquoi le repli n'est pas atteint | Nature |
+|---|---|---|---|---|
+| `modes::turn` (mode inconnu) | 0x13424 | modes 0 et 2 | seul `init` écrit le mode (0 → 2) | repli défensif |
+| `modes::dispatch` (sous-mode inconnu) | 0x1345c | 11 (0 à 0x14), toutes réécrites | les écrans n'écrivent que ces sous-modes | repli défensif |
+| `title::title_step`, `second_title_step` | 0xfa2a4 (16), 0xfaf00 (5) | toutes réécrites | les étapes avancent de 2 jusqu'à la dernière | repli défensif |
+| `demo::interpreter_a`, étape 4 et au-delà | 0x1f340 (4) | l'étape 4 (0x1fb20, fin de scène) n'est jamais écrite | la boucle A y mène directement (`scene_end_a`, même code) | entrée de table jamais choisie |
+| `demo::presentation_step` | 0x1fc72 (4) | toutes réécrites | sous-étapes 0 à 6 | repli défensif |
+| `demo::run_phase` (phases autres que 8 et 12) | 0x1f990, 0x20a9c | phases 8 et 12, les autres sont nulles (saut en 0) | la démonstration ne pose que ces deux phases | entrées nulles |
+| `partie::gestionnaire` (phase hors table) | 0x1c502 (8) | phases 0 à 0x1c | la phase avance de 4 et revient | repli défensif |
+| `ecran_fixe::tour` | 0x18386 (2), 0x1853c (3) | toutes réécrites | la sous-étape 4 (`fin`) termine la tâche | repli défensif |
+| `scene::exit` (`delegate` : séquence ou étape non réécrite) | 0xf3170 (séquence par scène) | séquences 0 à 0x46 (indices 0 à 35), toutes réécrites | les étapes restent dans leurs états | repli défensif |
+| `service::menu` (« Secret Test », 0xee16e) | mot 0xc0 du programme | nul dans cette version | voir `docs/service.md` | fonction cachée, non réécrite |
+
+**Boutique (0xf7dfa).** L'ouverture alloue un SOBJ et un EFFCT par joueur juste après avoir vidé tous les pools ; en
+cas d'échec l'original saute en 0xf7dfa (`tst.w 1(A5)` : erreur d'adresse, comme 0xaf2bc). Jamais atteint (pools vides) :
+`effects::erreur_d_adresse(0xf7dfa)`.
+
+**Blocages (0x2d112, 0x2d7fa).** « NG » du MEMORY CHECK et « EEPROM ERROR » finissent sur `bra.b *` ; la native vide
+posée à l'adresse est remplacée par le point `kernel::Point::Bloque` (l'image finit, les interruptions continuent).
+Jamais atteints (`docs/service.md` §7).
+
+**Affichage des verrous du Z80 (fin de 0x68c, appel de 0x29d78).** Écran de débogage : chaque octet des verrous
+0x618001... en hexadécimal dans la couche de texte, seulement si le mot 0xc0 du programme (nul dans cette version) et
+`A5+0x7fc6` sont non nuls ; 0x29d78 n'a pas de native. Le cœur `sound::envoyer` (VBLANK) s'arrête sur `unreachable!` ;
+la native de 0x68c garde sa transcription (`afficher_verrous`). Nature : mode de mise au point.
+
 ## Lot fuzz : branches non jouées, validées ou écartées par fuzz différentiel
 
 Aucun code retiré. Le fuzz différentiel `examples/fuzz_couv` (bilan et méthode : [couverture-fonctions.md](couverture-fonctions.md),

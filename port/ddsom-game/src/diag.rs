@@ -55,6 +55,47 @@ fn empoisonne(etiquette: &str, site: &str) -> bool {
     actif
 }
 
+/// Sonde d'un appel par adresse (`crate::call`) : avec l'étiquette `appel_<adresse en hexa>` dans `DDSOM_POISON`, les
+/// registres et drapeaux que la routine appelée a changés (comparés à `avant`) sont inversés au retour, au site
+/// `site`. Si la validation reste VALIDE, aucune suite ne relit ce que la routine laisse : l'appel peut devenir celui
+/// d'un cœur sans registres.
+pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16), site: &std::panic::Location) {
+    if etiquettes().is_empty() {
+        return;
+    }
+    let etiquette = format!("appel_{adresse:x}");
+    let site = site.to_string();
+    if !empoisonne(&etiquette, &site) {
+        return;
+    }
+    let mut masque = 0;
+    for i in 0..8 {
+        if c.d[i] != avant.0[i] {
+            masque |= regs::d(i as u32);
+        }
+        if i < 7 && c.a[i] != avant.1[i] {
+            masque |= regs::a(i as u32);
+        }
+    }
+    if (c.sr ^ avant.2) & 0x1f != 0 {
+        masque |= regs::CCR;
+    }
+    if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
+        eprintln!("POISON {etiquette} {site} masque={masque:05x}");
+    }
+    for i in 0..8 {
+        if masque & regs::d(i) != 0 {
+            c.d[i as usize] = !c.d[i as usize];
+        }
+        if i < 7 && masque & regs::a(i) != 0 {
+            c.a[i as usize] = !c.a[i as usize];
+        }
+    }
+    if masque & regs::CCR != 0 {
+        c.sr ^= 0x1f;
+    }
+}
+
 /// Registres que l'adaptateur `etiquette` écrit comme l'original et dont on veut prouver qu'ils sont morts
 /// (masque de `crate::regs` : `regs::a(1) | regs::d(6) | regs::CCR`...). Avec `DDSOM_POISON`, ils sont inversés.
 #[track_caller]

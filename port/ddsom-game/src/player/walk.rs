@@ -155,7 +155,7 @@ fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CLAMP: Native = Native {
     entry: 0x35c0,
     name: "player_clamp_to_screen",
-    run: clamp_native,
+    run: crate::Corps::Processeur(clamp_native),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1),
 };

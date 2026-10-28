@@ -333,7 +333,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     // cinq objets système : (variante, X, Z)
     for (variant, px, pz) in [(0xe7, 0x70, 0xd0), (0xe8, 0x70, 0xd0), (0xe4, 0x20, 0xb0), (0xe5, 0x00, 0x70), (0xe6, 0x13c, 0x60)] {
         // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
-        let Obj(o) = pools::SOBJ.alloc_unchecked_68k(x.c, x.b);
+        let Obj(o) = pools::SOBJ.alloc_unchecked(x.b);
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, variant);
@@ -621,12 +621,12 @@ pub const NATIVES_DE_TEST: &[crate::Native] = &[crate::Native {
     // 0x13c2c : état des crédits (démarrage, reprise, ralliement des quatre emplacements)
     entry: 0x13c2c,
     name: "credits_etat",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         if let Flow::Yield = credits(&mut Ctx::new(c, b)) {
             panic!("credits_etat : cède la main (hors du cadre du fuzz)");
         }
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 }];

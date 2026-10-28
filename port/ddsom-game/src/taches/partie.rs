@@ -17,7 +17,7 @@
 
 use super::{ceder, Attente};
 use crate::mem::{rd8, wr32, wr8, A5};
-use crate::modes::{Flow, Sequence};
+use crate::modes::Flow;
 use crate::scene::Ctx;
 
 crate::etapes! {
@@ -136,6 +136,35 @@ fn step(x: &mut Ctx) -> Flow {
     let handler = (x.prog16(PHASES + phase as u32) as u32) << 16 | x.prog16(PHASES + phase as u32 + 2) as u32;
     x.c.a[0] = handler;
     push(x, Etape::FinImage);
-    x.jump_to(handler)
+    gestionnaire(x, phase)
+}
+
+/// Le gestionnaire de la phase (table `0x1c502` de l'original, une adresse par phase, laissée dans A0), appelé
+/// directement : il revient (`Flow::Done`, à la fin d'image) ou a cédé la main.
+fn gestionnaire(x: &mut Ctx, phase: u8) -> Flow {
+    match phase {
+        0 => {
+            crate::game::phase0(x.c, x.b);
+            Flow::Done
+        }
+        4 => crate::modes::select::phase_4(x),
+        8 => {
+            crate::scene::entry::phase_8(x.c, x.b);
+            Flow::Done
+        }
+        12 => crate::game::phase12(x.c, x.b),
+        16 => match crate::scene::exit::phase_16(x.c, x.b) {
+            true => Flow::Yield,
+            false => Flow::Done,
+        },
+        20 => crate::modes::gameover::phase_20(x),
+        24 => {
+            crate::scene::intermission::phase_24(x.c, x.b);
+            Flow::Done
+        }
+        28 => crate::modes::ending::phase_28(x),
+        // la table a huit entrées (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("phase {phase:#x} : hors de la table 0x1c502"),
+    }
 }
 

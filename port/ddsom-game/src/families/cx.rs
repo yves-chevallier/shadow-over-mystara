@@ -138,13 +138,6 @@ impl<'a> Cx<'a> {
         call(self.c, self.b, addr);
     }
 
-    /// `jmp addr` en fin de gestionnaire : la routine revient à la place du gestionnaire (appelée ici comme un `jsr`,
-    /// suivi du `rts` du gestionnaire).
-    #[track_caller]
-    pub fn tail(&mut self, addr: u32) {
-        self.call(addr);
-    }
-
     /// Fin du gestionnaire : l'objet est libéré (tir détruit).
     pub fn free_eshl(&mut self) {
         self.free(&pools::ESHL);
@@ -158,7 +151,7 @@ impl<'a> Cx<'a> {
 
 /// Native d'un gestionnaire : contrat de la boucle de dispatch (A0 et D7 conservés).
 pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
 /// Déclare la table `NATIVES` d'un fichier de types : `adresse "nom" chemin::du::gestionnaire`.

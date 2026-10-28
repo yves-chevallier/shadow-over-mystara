@@ -179,11 +179,6 @@ impl Suite {
     }
 }
 
-impl From<u32> for Suite {
-    fn from(a: u32) -> Self {
-        Suite::Adresse(a)
-    }
-}
 
 impl From<Etape> for Suite {
     fn from(e: Etape) -> Self {
@@ -313,6 +308,9 @@ pub struct Table {
     /// Numéro du prochain appel attendu, et dernier appel attendu revenu (voir [`appeler_attendu`]).
     prochain_appel: u32,
     revenu: Option<u32>,
+    /// Appels par adresse en cours (`crate::call`), toutes tâches confondues : la pile 68000 qu'aurait l'appelé (son
+    /// adresse de retour n'y est pas écrite). Ils ne cèdent jamais la main : vides à chaque cession.
+    appels: Vec<u32>,
 }
 
 impl Table {
@@ -483,10 +481,29 @@ pub fn retour(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Suite> {
             }
             return Some(cadre.suite);
         }
+        if t.appels.last() == Some(&pile) {
+            t.appels.pop();
+            c.a[7] = pile.wrapping_add(4);
+            return None;
+        }
     }
     let adresse = rd32(b, pile);
     c.a[7] = pile.wrapping_add(4);
     Some(Suite::Adresse(adresse))
+}
+
+/// Un appel par adresse (`crate::call`) commence : la pile de l'appelé est celle de l'appelant moins l'adresse de
+/// retour, qui n'est pas écrite ; son `rts` la rendra ([`retour`]). Rend la profondeur à laquelle revenir.
+pub fn ouvrir_appel(c: &mut Cpu, b: &mut Cps2Bus) -> usize {
+    let t = table(b);
+    c.a[7] = c.a[7].wrapping_sub(4);
+    t.appels.push(c.a[7]);
+    t.appels.len() - 1
+}
+
+/// L'appel par adresse ouvert à la profondeur `profondeur` est-il revenu ?
+pub fn appel_revenu(b: &Cps2Bus, profondeur: usize) -> bool {
+    lire(b).is_some_and(|t| t.appels.len() == profondeur)
 }
 
 /// Comme [`retour`], pour une cession terminale (`jmp 0xa40`) ou un appel abandonné : la suite, qu'elle soit attendue ou

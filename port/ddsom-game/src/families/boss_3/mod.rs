@@ -341,11 +341,11 @@ pub const NATIVES: &[crate::Native] = &[
     crate::Native {
         entry: 0x81ae0,
         name: "boss_3_riposte",
-        run: |c, b| {
+        run: crate::Corps::Processeur(|c, b| {
             let mut x = Cx::new(c, b);
             counter_reaction(&mut x);
             x.ret();
-        },
+        }),
         touches_sound: false,
         outputs: crate::regs::d(0) | crate::regs::d(1),
     },

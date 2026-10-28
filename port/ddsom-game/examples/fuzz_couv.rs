@@ -655,7 +655,7 @@ fn comparer(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Res
     let (mut c1, mut b1) = (c0.clone(), b0.clone());
     b1.irq_horizon = u64::MAX;
     table_depuis_origine(&mut b1);
-    let r = catch_unwind(AssertUnwindSafe(|| (n.run)(&mut c1, &mut b1)));
+    let r = catch_unwind(AssertUnwindSafe(|| n.executer(&mut c1, &mut b1)));
     if let Err(p) = r {
         return Err(p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default());
     }

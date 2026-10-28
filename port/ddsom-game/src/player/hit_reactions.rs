@@ -202,7 +202,7 @@ fn enemy_reacts_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const ENEMY_REACTS: Native = Native {
     entry: 0xf232e,
     name: "enemy_reacts_to_player_hit",
-    run: enemy_reacts_native,
+    run: crate::Corps::Processeur(enemy_reacts_native),
     touches_sound: false,
     outputs: crate::regs::a(0) | crate::regs::a(1) | crate::regs::a(2),
 };

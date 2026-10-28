@@ -248,7 +248,7 @@ fn place_scripted_player(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs }
 }
 
 macro_rules! leaf {

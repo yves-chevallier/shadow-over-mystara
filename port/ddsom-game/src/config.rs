@@ -306,7 +306,7 @@ fn variables(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const VARIANTE: Native = Native {
     entry: 0x2d648,
     name: "config_variante",
-    run: variante,
+    run: crate::Corps::Processeur(variante),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(6) | regs::CCR,
 };
@@ -314,7 +314,7 @@ pub const VARIANTE: Native = Native {
 pub const DEFAUTS: Native = Native {
     entry: 0x2d7aa,
     name: "config_defauts",
-    run: charger_defauts,
+    run: crate::Corps::Processeur(charger_defauts),
     touches_sound: false,
     outputs: 0,
 };
@@ -322,7 +322,7 @@ pub const DEFAUTS: Native = Native {
 pub const VALIDER: Native = Native {
     entry: 0x2d662,
     name: "config_valider",
-    run: natif_valider,
+    run: crate::Corps::Processeur(natif_valider),
     touches_sound: false,
     outputs: 0,
 };
@@ -330,7 +330,7 @@ pub const VALIDER: Native = Native {
 pub const VARIABLES: Native = Native {
     entry: 0x2d358,
     name: "config_variables",
-    run: charger_variables,
+    run: crate::Corps::Processeur(charger_variables),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR,
 };
@@ -371,8 +371,8 @@ fn signature_ok(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
 
 /// 0x2d30a : lecture de l'EEPROM, réglages par défaut si besoin, variables du jeu.
 fn init(c: &mut Cpu, b: &mut Cps2Bus) {
-    crate::eeprom::toute_eeprom(c, b);
-    let lu = crate::eeprom::lire_verifier(c, b);
+    crate::eeprom::toute_eeprom(b);
+    let lu = crate::eeprom::lire_verifier(b);
     let valide = lu && {
         // D0 de 0x2d648 (déplacement du bloc), comme l'original avant sa boucle
         let index = crate::mem::rd16(b, a5(c, ram::VARIANTE));
@@ -384,9 +384,9 @@ fn init(c: &mut Cpu, b: &mut Cps2Bus) {
         c.a[1] = a5(c, ram::CONFIG);
     } else {
         defauts(c, b);
-        crate::eeprom::toute_eeprom(c, b);
-        if !crate::eeprom::ecrire_verifier(c, b) {
-            erreur(c, b);
+        crate::eeprom::toute_eeprom(b);
+        if !crate::eeprom::ecrire_verifier(b) {
+            erreur(b);
             return;
         }
     }
@@ -395,19 +395,19 @@ fn init(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x2d7d2 : « EEPROM ERROR » et blocage (jamais vu : l'EEPROM émulée ne refuse pas l'écriture).
-fn erreur(c: &mut Cpu, b: &mut Cps2Bus) {
+fn erreur(b: &mut Cps2Bus) {
     for k in 0..12 {
         let ch = rd8(b, MESSAGE_ERREUR + k) as u16;
         crate::mem::wr16(b, CASE_ERREUR + 0x80 * k, ch);
         crate::mem::wr16(b, CASE_ERREUR + 0x80 * k + 2, 8);
     }
-    c.pc = BLOQUE;
+    crate::kernel::bloquer(b, BLOQUE);
 }
 
 pub const INIT: Native = Native {
     entry: 0x2d30a,
     name: "config_init",
-    run: init,
+    run: crate::Corps::Processeur(init),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR,
 };
@@ -442,8 +442,8 @@ pub fn save(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     // les deux exemplaires : 0x30 mots
     crate::mem::wr16(b, a5(c, ram::MOTS), 0x2f);
     crate::mem::wr16(b, a5(c, ram::DEBUT), 0);
-    if !crate::eeprom::ecrire_verifier(c, b) {
-        erreur(c, b);
+    if !crate::eeprom::ecrire_verifier(b) {
+        erreur(b);
         return false;
     }
     variables(c, b);

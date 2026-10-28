@@ -1033,7 +1033,7 @@ fn eshl_rise(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<O
 // Natives : les registres de l'original (A0 = le créateur, D0/D1... = paramètres)
 
 const fn creator(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs }
 }
 
 /// Déclare les natives : `adresse "nom" |c, b, me| corps, sorties;` (`me` = A0, le créateur) ; chaque native se

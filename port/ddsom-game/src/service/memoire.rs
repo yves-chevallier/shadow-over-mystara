@@ -68,7 +68,7 @@ pub fn memory(x: &mut Ctx) -> Flow {
         2 => {
             // l'original masque les interruptions autour du test (trap 12) : sans effet sur un test instantané
             if !check(x) {
-                x.c.pc = BLOQUE;
+                crate::kernel::bloquer(x.b, BLOQUE);
                 return Flow::Yield;
             }
             next_step(x);

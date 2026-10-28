@@ -131,28 +131,32 @@ fn player(k: u32) -> u32 {
 pub const PHASE_4: Native = Native {
     entry: 0x1ca20,
     name: "select_phase_4",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
-        x.c.a[5] = A5;
-        let step = rd8(x.b, var::STEP);
-        let flow = match step {
-            0 => step_0(&mut x),
-            2 => step_2(&mut x),
-            4 => step_4(&mut x),
-            6 => step_6(&mut x),
-            8 => step_8(&mut x),
-            10 => step_a(&mut x),
-            12 => step_c(&mut x),
-            14 => step_e(&mut x),
-            _ => Flow::Done,
-        };
-        if flow == Flow::Done {
+        if phase_4(&mut x) == Flow::Done {
             rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
+
+/// Phase 4 de la partie (`0x1ca20`) : l'écran de sélection, un pas par image.
+pub fn phase_4(x: &mut Ctx) -> Flow {
+    x.c.a[5] = A5;
+    let step = rd8(x.b, var::STEP);
+    match step {
+        0 => step_0(x),
+        2 => step_2(x),
+        4 => step_4(x),
+        6 => step_6(x),
+        8 => step_8(x),
+        10 => step_a(x),
+        12 => step_c(x),
+        14 => step_e(x),
+        _ => Flow::Done,
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Étape 0 : écran de sélection
@@ -375,7 +379,7 @@ fn fade_wait(x: &mut Ctx) -> Flow {
     x.c.a[6] = main;
     wr8(x.b, main + 0x1c, 1);
     x.call(ext::EFFCT);
-    x.jump_to(ext::SPRITES)
+    x.sauter(&crate::sprites::BUILD_SPRITE_LIST)
 }
 const FADE_LOOP: u32 = 0x1cca4;
 
@@ -410,7 +414,7 @@ fn step_2(x: &mut Ctx) -> Flow {
     publish_choices(x, main);
     wr8(x.b, var::LOCKED_FLAG, 0);
     x.call(ext::EFFCT);
-    x.jump_to(ext::SPRITES)
+    x.sauter(&crate::sprites::BUILD_SPRITE_LIST)
 }
 
 /// Recopie les choix des joueurs dans l'objet principal (lu par les objets curseurs).
@@ -713,7 +717,7 @@ fn step_8(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PLAYERS_PRESENT, count);
     let mut d4 = 0xeau8;
     for _ in 0..2 {
-        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { break };
+        let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, d4);

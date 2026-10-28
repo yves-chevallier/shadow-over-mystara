@@ -198,7 +198,7 @@ fn update_players(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const UPDATE_PLAYERS: Native = Native {
     entry: 0x35292,
     name: "players_update",
-    run: update_players,
+    run: crate::Corps::Processeur(update_players),
     touches_sound: false,
     outputs: 0,
 };

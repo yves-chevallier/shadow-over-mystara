@@ -2553,7 +2553,7 @@ mod barriere {
     }
 
     const fn feuille(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-        Native { entry, name, run, touches_sound: false, outputs: regs::ALL }
+        Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::ALL }
     }
 
     pub const BOITE_TOUCHEE: Native = feuille(0xb9ee6, "effct_dans_la_boite", dans_la_boite_native);

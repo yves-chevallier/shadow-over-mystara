@@ -879,11 +879,11 @@ macro_rules! rare_native {
         pub const $name: crate::Native = crate::Native {
             entry: $entry,
             name: $label,
-            run: |c, b| {
+            run: crate::Corps::Processeur(|c, b| {
                 let p = Player(c.a[0]);
                 $f(&mut Ctx::new(c, b), p);
                 crate::mem::rts(c, b)
-            },
+            }),
             touches_sound: false,
             outputs: 0,
         };
@@ -1156,11 +1156,11 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
 pub const LEAP: crate::Native = crate::Native {
     entry: 0x35a78,
     name: "leap_attack",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let p = Player(c.a[0]);
         leap_attack(&mut Ctx::new(c, b), p);
         crate::mem::rts(c, b)
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
@@ -1168,11 +1168,11 @@ pub const LEAP: crate::Native = crate::Native {
 pub const HOP_BACK: crate::Native = crate::Native {
     entry: 0x35b96,
     name: "magic_user_hop_back",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let p = Player(c.a[0]);
         hop_back(&mut Ctx::new(c, b), p);
         crate::mem::rts(c, b)
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

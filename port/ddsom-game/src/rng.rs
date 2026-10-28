@@ -95,11 +95,11 @@ pub fn seed_68k(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const SEED: Native = Native {
     entry: 0x19a80,
     name: "rng_seed",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         seed(b);
         c.flags_logic(GRAINE as u32, Size::Word);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: regs::CCR,
 };
@@ -107,10 +107,10 @@ pub const SEED: Native = Native {
 pub const NEXT: Native = Native {
     entry: 0x19a88,
     name: "rng_next",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         random_regs(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
 };
