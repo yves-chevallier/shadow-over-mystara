@@ -760,7 +760,7 @@ et les créateurs ne passent plus par le banc de registres du `Cpu`.
   d'aiguillage `dispatch.rs`) inverse au retour de chaque gestionnaire les registres qu'il a changés (sauf A0 et D7) ;
   `sortie.d4@ba310` vise un registre d'un gestionnaire, `!…` en exclut (la même syntaxe vaut pour `appel_<adresse>`,
   et `appel@families/` vise tous les appels par adresse d'un dossier). Bissection automatique (`tools/registres_bissecte.py` : classe, gestionnaire,
-  registre) sur chaque scénario qui diverge. Résultat sur les 296 scénarios : **les registres que laisse un
+  registre) sur chaque scénario qui diverge. Résultat sur les 286 scénarios, complété sur les 296 : **les registres que laisse un
   gestionnaire ne sont relus par personne, sauf pour une douzaine de gestionnaires** (tableau ci-dessous). Tout ce que
   les autres écrivent dans les registres (copies des registres de l'original, restes de `reinsert`, de la collision
   avec le décor, des tests de terrain, des tirages…) n'a d'effet qu'à l'intérieur du gestionnaire.
@@ -774,7 +774,11 @@ et les créateurs ne passent plus par le banc de registres du `Cpu`.
   | BOSS 0 (0x794ae) | D2, D3 (collision, tests de boîte) | `flash_and_shake` |
   | ITEM 5 (0xdc382) | D2 | (`covb_long3p_10`) |
   | ENEMY 16 (0x6f1c0), ENEMY 4 (0x5d87a) | D5 | la rangée d'éclats d'une caisse (0xa17d0) |
-  NOUVEAUX_RESTES
+  | PEFF 41 (0x50348), et la collision des PEFF 39/41 | D2 (registres de 0x33fe4) | l'éclat de gel (`sorts_*`, lot « sorts ») |
+
+  Les dix scénarios longs du lot « sorts » ont montré, après coup, deux de ces lecteurs (PEFF 41, éclat de gel : D2 et
+  d'autres registres ensemble) : la preuve ne vaut que pour les chemins joués. Les gestionnaires de ce tableau restent sur
+  le processeur.
 * **Restes nommés de la boucle.** Ces registres deviennent les champs de `dispatch::Restes` (`d4`, `d5`), passés au
   gestionnaire converti dans `dispatch::Aiguillage` (objet A0, compteur D7.w, restes) et rendus au processeur après lui
   (les routines encore sur le processeur, liste des sprites, caméras, gestionnaires non convertis, les lisent et les
@@ -863,3 +867,4 @@ total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Corps::Gestionnaire`.
 | Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B, 9b27479), 272/272 sans 68000 et 272/272 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `zones_natives.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
 | Lot « noyau final » : J3 achevé (appels en cours en étapes, appel attendu, cession notée au lieu de `Unwound`), ordonnanceur, démarrage et VBLANK en machine à états Rust, mode hybride retiré, appels directs de la fin de phase | voir `git log` (wt-noyau) | complète après fusion de main (f8f67af), 272/272 sans 68000 (14 min 55 s, 8 tâches) et 272/272 (10 min 53 s) depuis les assets (`DDSOM_ASSETS`, `data` réextrait par l'`extract` de main : `reste.json`) |
 | Lot IA : cœurs des aides d'IA et services restants, natives retirées, glitches de registres en clair, fuzz_ia | voir `git log` (wt-ia) | complète, 272/272 puis, fusionné avec le lot « trous », 286/286 (DDSOM_LONG=1) sans 68000 et depuis les assets (`trous_assets`), JOBS=8 ; poison par adresse et par registre (sondes), `fuzz_ia` 0 écart |
+| Sortie du Cpu, partie 3 : familles (sonde de sortie des gestionnaires, `Cx<R>`/`Banc`/`Restes`, 1 870 fonctions génériques, 82 gestionnaires `Corps::Gestionnaire`, créateurs ESHL et d'effets en Rust, `random_68k` retiré, remise en liste exacte) | voir `git log` (wt-familles) | complète après fusion de main (044c685) : 296/296 sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=7/6 ; sonde `sortie` 285/286 puis exclusions bissectées ; `fuzz_couv` C08, C10, C0e, C14 avant/après : aucun écart nouveau |
