@@ -619,3 +619,177 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 * `0xf2970` FUN_000f2970 (116 o)
 * `0xf29fa` FUN_000f29fa (18 o)
 
+
+## Validation par fuzz
+
+Lot « fuzz » (branche `wt-fuzz`, 2026-10-27/28) : le code d'origine que les 272 scénarios n'exécutent pas (tableaux
+ci-dessus) est exécuté par un fuzz différentiel, l'original et la native Rust partant du même état, et comparé.
+
+### Méthode : `examples/fuzz_couv`
+
+`fuzz_couv <roms> <eeprom> <scénario> <images> <cibles> <sortie.bin>` déroule un scénario sur la machine de
+référence (code d'origine seul, 68000 ×16). Aux appels d'une native ciblée (zone de l'atlas, adresse ou préfixe de
+nom), l'état réel devient une *base* ; des copies perturbées en sont exécutées par l'original (interprété, couverture
+relevée) et par la native, puis comparées : RAM (hors piles mortes et RAM du noyau, la table des tâches Rust étant
+reconstruite depuis FF0064 puis comparée par `taches::table::ecarts`), mémoire vidéo, registres du contrat, PC.
+
+* **Perturbations ciblées.** La base est d'abord exécutée par l'original avec un bus qui journalise ses lectures de
+  RAM : seuls les octets, mots et longs *lus* sont réécrits. Les lectures faites juste avant un saut conditionnel pris
+  d'un seul côté par les scénarios (`FUZZ_UNION`, union des bitmaps de `cov`) sont « chaudes » : la valeur immédiate
+  comparée et ses voisines, le bit testé ; celles qui précèdent un aiguillage par table de sauts reçoivent les index
+  valides de la table. Les autres valeurs sont tirées du *domaine* du champ (valeurs vues dans le même champ d'un objet
+  du même pool et du même type, ou à la même adresse), plus rarement quelconques. Une copie qui atteint une instruction
+  nouvelle entre au corpus et sera de nouveau perturbée.
+* **États exclus** (aucun code ne les produit) : RAM du noyau et pile privée des wrappers de son, têtes et liens des
+  listes triées, octets d'existence et de type des objets ; un essai dont l'original sort du code (PC impair, hors des
+  débuts d'instruction du listing, table de sauts lue au-delà de ses entrées) est écarté (« hors code »).
+* **Entrées jamais appelées** (`FUZZ_SUBSTITUTS=1`) : une native de la zone jamais appelée est essayée depuis l'état
+  d'une voisine (un gestionnaire d'objet sur l'objet A0 d'un gestionnaire du même pool, dont le type est changé et
+  l'état souvent remis à zéro ; un wrapper de son avec A0 sur un joueur). Ces bases sont marquées `SUBST` : leurs
+  registres d'entrée sont ceux d'un autre appel.
+* **Code des tâches** : des « natives de test » (`hud::NATIVES_DE_TEST` 0x15216, `credits` 0x1422e, `tache_credits`
+  0x13c2c, `modes::demo` 0xe05ec) présentent au fuzz des sous-programmes réécrits dans le corps d'une tâche ; le jeu
+  ne les appelle pas par adresse. `FUZZ_FOCUS=zone` avec la cible `tout` fuzze toutes les natives dont la base passe
+  par la zone (code atteint par des natives d'autres zones : collisions X1, interface F3...).
+* **Tri des écarts** : chaque écart est réduit (perturbations retirées une à une tant que l'écart persiste) et
+  étiqueté : `HORS` (une valeur hors du domaine du champ : état que le jeu ne produit pas), `REG` (registres seuls,
+  sans effet tant qu'aucun appelant ne les relit), `SUBST`, `NEUF` (l'original passe par du code jamais exécuté par
+  les scénarios). Les écarts *plausibles* (ni HORS, ni REG, ni SUBST) ont tous été analysés.
+* **Diagnostic** : la fonctionnalité `surveille` de `ddsom-game` (`FUZZ_SURVEILLE=adresse[-fin]`) donne la pile
+  d'appels Rust de chaque écriture de la native dans la plage, et les écritures de l'original avec leur PC ;
+  `FUZZ_PC=adresse,...` montre les registres de l'original à ces PC.
+
+Bilan : `tools/couverture_fuzz.py <listing> <index.tsv> <atlas.md> <union des scénarios> <bitmaps de fuzz_couv>...
+[--detail ZONE]` ; la sortie `<sortie>.identiques` de `fuzz_couv` ne garde que les essais sans écart.
+
+Par zone : 6 à 16 scénarios choisis pour couvrir les sauts de la frontière de la zone, un appel retenu sur 8 (les
+4 premiers toujours, 400 au plus par native), 32 essais par appel retenu. Une zone dure de 2 à 15 minutes sur 6
+cœurs.
+
+### Écarts trouvés et corrigés
+
+Tous sur des chemins que les scénarios n'exercent pas ; chacun corrigé dans un commit séparé (`git log wt-fuzz`).
+
+| Zone | Routine | Écart | Correction |
+|---|---|---|---|
+| C04 | 0x833b6 oscillation des boss | D0 (décalage) non rendu ; `subq.w #1` + `bgt` depuis 0x8000 (dépassement) | D0 rendu ; comparaison signée exacte de l'ancienne valeur |
+| C04 | 0x87048 seuil de PV des boss | D1.w (moitié des PV) non rendu | D1.w rendu |
+| C04 | 0x81ae0 riposte du boss 3 | D0 (`andi.l #0xf`) non rendu ; index de table `(d8,PC,D1.w)` non étendu en signe | idem |
+| C04 | 0x7c430 hauteur du bond du boss 1 | mot haut de D3 pris dans le reste du registre Rust, nul dans l'original (laissé par la direction 0x137e) | D3 = mot bas seul |
+| C04 | 0x7aeda traversée du boss 1 | index des tables de vitesses et d'animations calculés sur 32 bits au lieu d'un mot étendu en signe | `wrapping_mul` sur un mot, extension de signe |
+| C04 | boss 21, bond étape 2 (0x99e52) | pas d'animation avec recopie de la sorte de coup `+0x44` (0x1040c) au lieu de 0x1a56 | `anim_step` seul |
+| V2 | 0x1386 direction | `add.l #0x8000,D4` : la retenue dans le mot haut de D4 n'était pas rendue | idem |
+| E1 / C04 | 0x10298 script de palette (réveil du boss 16, variante 1) | table lue dans l'espace programme (opcodes déchiffrés) au lieu de l'espace des données (`lea (d,PC),A2` puis `movem.l (A2)`) : couleurs fausses | `data32` (corrigé aussi, en parallèle, par le lot IA) |
+| C12 | PEFF 12 (gel), éclat qui rebondit | table d'angles du bord bas en 0x4be8c au lieu de 0x4be88 (`lea` de 0x4be5e) | adresse corrigée |
+| C10 | 0xd40e8 création des tremplins | mot haut de D5 (compteur `moveq #12`) laissé au reste | D5 long |
+| C08 | ESHL 8 (0x9ee00) et 13 (0x9f712) | sans propriétaire (`+0x50` nul), l'original passe l'effet à l'état 6 ; la native le laissait tel quel | `move.l #0x6000000,(4,A0)` |
+| C0c | ITEM 3, échange d'équipement (0xdbc2e → 0xdc28a) | l'objet expulsé est tiré de la table par D0.w, dont l'octet haut (classe × 8) n'est nul qu'avec un vrai propriétaire ; index non étendu en signe | index D0.w complet passé à `objet_expulse` |
+| P4 | 0x3b3aa joueur gelé, chute hors de l'état 4 | variante de l'effet 0xb6ba8 prise dans un reste Rust de D0 au lieu du D0 laissé par le mouvement 0x1da6 (octet bas nul) | D0 recalculé |
+
+Les écarts d'outillage (états impossibles, registres non relus) ne sont pas corrigés : voir ci-dessous.
+
+### Écarts restants (états que le jeu ne produit pas)
+
+* **HORS** : valeurs hors du domaine du champ. Les plus fréquents : octet `+0x15e` des joueurs ≥ 0x80 (P5, ses
+  valeurs sont 0 à 0x25), orientation `+0x42` des anneaux du boss 11 hors de 0 à 31, rang `A5+0x7f92` ≥ 0x8000 (index
+  négatifs : boss 0, 6, 9, 21), personnage `+3` des joueurs à 6 (P4, surcouches d'armes), pointeurs impairs. Les
+  natives qui détectent ces états paniquent avec un message (« indice hors de la table de sauts », « pool plein :
+  l'original lit un mot à une adresse impaire », réaction 0x3ddf6 « pas 0xc hors de la table d'origine »).
+* **REG** : registres de sortie seuls (contrats `regs::ALL` des natives des scripts SET, CCR des poussées du boss 3,
+  CCR de `ia_boite`) : aucun appelant Rust ne les relit.
+* **SUBST** : wrappers de son appelés depuis l'état d'un autre wrapper imbriqué (la sauvegarde de l'original sur la
+  pile privée, plus profonde que dans le jeu, recouvre les têtes de la file : écart assumé de `sound::jouer_wrapper`) ;
+  gestionnaires de boss dont les champs viennent d'un autre type.
+* **Natives de haut niveau** (`world_update`, `game_phase12`, `scene_phase_*`, `players_update`) : une perturbation
+  profonde y fait diverger un gestionnaire ; les cas plausibles retombent sur les écarts du tableau ci-dessus ou sur
+  ceux des boucles de dispatch (registres laissés par le gestionnaire précédent, `DDSOM_RESTES`).
+* **Retours non standard** (`select_phase_4`, `ia_atterrissage_par_type`) : la native revient plus haut (cession,
+  épilogue étranger) ; le cadre du fuzz ne les compare pas.
+* À trancher : la table des sous-états de la réaction des boss 15 (0x929b8) a six entrées, dont 8 (`rts`) et 0xa
+  (0x92ce0 : retour au combat, état 0x02020000) que la native ignore (`_ => {}`) ; même motif pour le boss 19
+  (0x9101a). Aucun écrivain de `+5` = 8 ou 0xa dans l'état 4 n'a été trouvé (les valeurs viennent d'autres états du
+  même objet) : état probablement impossible, non corrigé. Animation des surcouches d'armes pour le personnage 6
+  (P4, `+3` = 6 hors des six personnages).
+
+### Couverture obtenue
+
+Union de tous les essais (environ 900 exécutions de `fuzz_couv`, une par scénario et par zone) : instructions, côtés de
+sauts et fonctions du code d'origine que les 272 scénarios n'exécutent pas, exécutés par le fuzz ; « sans écart » :
+des essais où l'original et la native sont identiques (relevé seulement pour les dernières séries, minorant).
+
+| Zone | Instructions jamais exécutées par les scénarios | exécutées par le fuzz | dont sans écart (essais tracés) | Sauts pris d'un seul côté | autre côté pris par le fuzz | dont sans écart | Fonctions jamais exécutées | exécutées par le fuzz | dont sans écart |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| S1 | 552 | 520 | 316 | 472 | 471 | 266 | 63 | 59 | 46 |
+| C04 | 426 | 328 | 297 | 101 | 76 | 69 | 45 | 37 | 36 |
+| C10 | 399 | 213 | 209 | 52 | 28 | 27 | 15 | 9 | 9 |
+| C1 | 372 | 347 | 347 | 29 | 24 | 24 | 0 | 0 | 0 |
+| P5 | 188 | 74 | 74 | 48 | 23 | 23 | 20 | 9 | 9 |
+| F3 | 154 | 55 | 55 | 23 | 12 | 12 | 0 | 0 | 0 |
+| C12 | 106 | 82 | 66 | 19 | 17 | 14 | 39 | 29 | 25 |
+| V4 | 104 | 102 | 102 | 7 | 6 | 6 | 1 | 1 | 1 |
+| C02 | 81 | 76 | 63 | 24 | 21 | 18 | 26 | 20 | 18 |
+| P4 | 74 | 45 | 32 | 16 | 13 | 13 | 2 | 2 | 2 |
+| C08 | 73 | 56 | 27 | 28 | 22 | 15 | 25 | 18 | 18 |
+| C0c | 66 | 51 | 31 | 20 | 13 | 7 | 0 | 0 | 0 |
+| P6 | 62 | 34 | 34 | 9 | 6 | 6 | 0 | 0 | 0 |
+| C0e | 57 | 21 | 12 | 29 | 17 | 11 | 9 | 5 | 5 |
+| X1 | 46 | 20 | 20 | 18 | 7 | 7 | 0 | 0 | 0 |
+| O2 | 43 | 37 | 37 | 11 | 8 | 8 | 0 | 0 | 0 |
+| E1 | 42 | 33 | 33 | 15 | 13 | 13 | 5 | 3 | 3 |
+| X2 | 33 | 29 | 29 | 9 | 7 | 7 | 0 | 0 | 0 |
+| K1 | 28 | 0 | 0 | 5 | 0 | 0 | 0 | 0 | 0 |
+| B1 | 27 | 2 | 2 | 3 | 3 | 3 | 1 | 1 | 1 |
+| C06 | 26 | 26 | 26 | 15 | 15 | 15 | 9 | 8 | 8 |
+| V2 | 19 | 12 | 12 | 11 | 7 | 7 | 7 | 3 | 3 |
+| W1 | 19 | 19 | 19 | 1 | 1 | 1 | 0 | 0 | 0 |
+| O3 | 19 | 10 | 10 | 4 | 4 | 4 | 1 | 1 | 1 |
+| W3 | 16 | 11 | 11 | 6 | 6 | 6 | 0 | 0 | 0 |
+| V3 | 15 | 11 | 11 | 8 | 5 | 5 | 0 | 0 | 0 |
+| U1 | 9 | 8 | 8 | 5 | 5 | 5 | 0 | 0 | 0 |
+| F5 | 9 | 5 | 0 | 4 | 1 | 0 | 2 | 0 | 0 |
+| F1 | 7 | 0 | 0 | 4 | 0 | 0 | 0 | 0 | 0 |
+| O1 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| F4 | 6 | 0 | 0 | 1 | 0 | 0 | 1 | 0 | 0 |
+| V1 | 4 | 4 | 4 | 1 | 1 | 1 | 0 | 0 | 0 |
+| K2 | 4 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 |
+| C14 | 4 | 4 | 4 | 4 | 4 | 4 | 1 | 1 | 1 |
+| F6 | 3 | 3 | 3 | 2 | 2 | 2 | 0 | 0 | 0 |
+| F7 | 3 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| C0a | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| K3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| P1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| U2 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 1 | 1 |
+| W2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| P3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| W0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| total | 3103 | 2238 | 1894 | 1008 | 838 | 599 | 274 | 207 | 187 |
+
+Restent (zones de jeu) :
+
+* **Code du corps des tâches** sans native de test : K1 (noyau), F1, F4, F7, O1, K2 (auto-test RAM) ; F3 (interface
+  joueurs) n'est couvert qu'à 55/154 par l'emplacement 0x15216 (choix du personnage et reprise : il faut des
+  enchaînements d'entrées).
+* **C10** : les styles de fenêtres de 0xc8430 (76 instructions) ne sont choisis que par des enregistrements de la ROM que
+  les scénarios n'affichent pas (le fuzz ne fabrique pas d'enregistrement) ; 0xca524 (39), 0xcc200, 0xd764a.
+* **P5** : sorts et objets jamais lancés (0x41aa4 bannissement du clerc, 0x474c4 foudre, 0x47750 tempête,
+  0x48392 mur de feu, 0x46044 baguettes du magicien) : réécrits, atteignables en jeu, mais il faut le sort ou l'objet
+  en main ; les bots longs (`scenarios/long`, lot « trous ») ne les couvrent pas non plus.
+* Fonctions jamais exécutées, ni par les scénarios ni par le fuzz :
+  * S1 : 0xe089e 0xe19f8 0xe8676 0xe8ef2 
+  * C04 : 0x800e0 0x80130 0x801c2 0x801ca 0x89760 0x8bcd2 0x8c576 0x9ad94 
+  * C10 : 0xbacec 0xc8a10 0xcc548 0xcffd0 0xd76b4 0xd7a38 
+  * P5 : 0x41aa4 0x41ac4 0x439fc 0x44384 0x474c4 0x474e4 0x47750 0x47770 0x48392 0x48660 0x49d1e 
+  * C12 : 0x4ef1a 0x508fc 0x5094a 0x509ae 0x50a3c 0x50a66 0x50ad0 0x50b02 0x50b2a 0x50b62 
+  * C02 : 0x5f2c6 0x65ae0 0x666bc 0x689e6 0x6d5ea 0x791d0 
+  * C08 : 0x9f346 0xa09ca 0xa0ae0 0xa2048 0xa3ac4 0xa4b8e 0xa63b2 
+  * C0e : 0xb3ec6 0xb8d80 0xb96c0 0xb97a2 
+  * V2 : 0x00d18 0x00fe8 0x011bc 0x012c4 
+  * E1 : 0x07024 0x0ffda 
+  * F5 : 0x1d848 0x1d888 
+  * F4 : 0x196ae 
+  * U2 : 0x1aaee 
+  * C06 : 0x52a9e 
+
+  (aucun appelant direct dans `decomp/index.tsv` pour celles de S1 et C04 : atteintes, si elles le sont, par des tables
+  que ni les scénarios ni le fuzz ne choisissent ; voir aussi les entrées « code-mort.md » des listes ci-dessus.)
+* Débogage et tests (K4, M1, M2, M3) : non traités par ce lot (le groupe `m2` de `examples/fuzz` couvre l'EEPROM).

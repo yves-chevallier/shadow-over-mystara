@@ -316,8 +316,11 @@ pub(self) fn end_frame(x: &mut Cx, margin: u16) {
 /// l'attaque 24 (ruée au sol).
 pub(crate) fn counter_reaction(x: &mut Cx) {
     let r = random(x) & 0xf;
+    // `andi.l #0xf,D0` : D0 rendu (contrat de sortie)
+    x.c.d[0] = r;
     let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
-    let mask = x.rom16(0x81b1a + level as u32);
+    // index `(d8,PC,D1.w)` : mot étendu en signe
+    let mask = x.rom16(0x81b1a_u32.wrapping_add(level as i16 as i32 as u32));
     x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;
     if mask >> r & 1 == 0 {
         return;

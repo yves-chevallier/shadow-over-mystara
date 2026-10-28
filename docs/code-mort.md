@@ -217,3 +217,22 @@ Jamais atteints (`docs/service.md` §7).
 0x618001... en hexadécimal dans la couche de texte, seulement si le mot 0xc0 du programme (nul dans cette version) et
 `A5+0x7fc6` sont non nuls ; 0x29d78 n'a pas de native. Le cœur `sound::envoyer` (VBLANK) s'arrête sur `unreachable!` ;
 la native de 0x68c garde sa transcription (`afficher_verrous`). Nature : mode de mise au point.
+
+## Lot fuzz : branches non jouées, validées ou écartées par fuzz différentiel
+
+Aucun code retiré. Le fuzz différentiel `examples/fuzz_couv` (bilan et méthode : [couverture-fonctions.md](couverture-fonctions.md),
+« Validation par fuzz ») exécute les branches que les scénarios ne prennent pas ; les cas suivants restent des états que
+le jeu ne produit pas, gardés tels quels dans le Rust :
+
+* **Index hors des tables de sauts** (états `+4`/`+6`/variante au-delà des entrées : réaction 0x3ddf6 pas 0xc,
+  bulle EFFCT 0xaabd8, actions des joueurs 0x35586) : l'original sauterait dans des données ou dans la table
+  elle-même ; les natives paniquent avec l'adresse (`unreachable!`/`assert!`). Preuve : aucun écrivain de ces champs
+  ne produit ces valeurs (tables relues), et le fuzz ne les atteint qu'en forçant l'octet.
+* **Pool plein avec lecture à une adresse impaire** (bourse EFFCT 0xaf2bc) : l'original lèverait une erreur
+  d'adresse (écran d'exception) ; panique documentée dans la native.
+* **Champs hors domaine** : octet `+0x15e` des joueurs ≥ 0x80 (P5 : 0 à 0x25 dans tous les scénarios et les bots
+  longs), orientation `+0x42` des anneaux du boss 11 hors de 0 à 31 (toujours masquée par `& 0x1f` à l'écriture),
+  rang `A5+0x7f92` ≥ 0x8000 (0 à 0x1f). Les écarts natif/original n'y apparaissent que par ces valeurs.
+* **Échange d'équipement sans propriétaire** (ITEM 3, `+0x50` nul : pointeur 0, lecture des octets de la ROM en 0x3 et
+  0x140) : glitch reproduit (index D0.w avec l'octet haut de la classe), bien qu'un objet ramassé ait toujours un
+  propriétaire.

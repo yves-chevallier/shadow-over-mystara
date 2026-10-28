@@ -41,7 +41,7 @@ mod ice {
     const BOUNCE_LEFT: u32 = 0x4be70;
     const BOUNCE_RIGHT: u32 = 0x4be78;
     const BOUNCE_TOP: u32 = 0x4be80;
-    const BOUNCE_BOTTOM: u32 = 0x4be8c;
+    const BOUNCE_BOTTOM: u32 = 0x4be88;
 
     pub fn run(x: &mut Cx) {
         let variant = x.u8(0x3);

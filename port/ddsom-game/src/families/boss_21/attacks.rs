@@ -196,7 +196,8 @@ fn leap(x: &mut Cx) {
             body(x, 5);
         }
         2 => {
-            lib::step(x);
+            // 0x99e52 : `jsr 0x1a56`, un pas d'animation sans recopie de la sorte de coup (`+0x44`)
+            x.anim_step();
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
             }

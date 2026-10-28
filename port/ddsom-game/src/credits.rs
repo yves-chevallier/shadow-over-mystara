@@ -305,3 +305,17 @@ pub fn ecrire_chiffre(b: &mut Cps2Bus, case: u32, valeur: u8, attribut: u16) -> 
     crate::mem::wr16(b, case.wrapping_add(2), attribut);
     case.wrapping_add(2)
 }
+/// Sous-programme d'origine réécrit dans le corps de la tâche des crédits, présenté comme une native pour le fuzz
+/// différentiel (`examples/fuzz_couv`) ; le jeu ne l'appelle pas par son adresse.
+pub const NATIVES_DE_TEST: &[Native] = &[Native {
+    // 0x1422e : bouton de départ d'un monnayeur (A0 monnayeur, D1.b octet de IN2+1)
+    entry: 0x1422e,
+    name: "credits_depart_ligne",
+    run: crate::Corps::Processeur(|c, b| {
+        let (a0, service) = (c.a[0], c.d[1] as u8);
+        depart_ligne(b, a0, service);
+        crate::mem::rts(c, b);
+    }),
+    touches_sound: false,
+    outputs: 0,
+}];

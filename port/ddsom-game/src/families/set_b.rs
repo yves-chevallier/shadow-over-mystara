@@ -47,8 +47,9 @@ pub const SPAWN_BUMPERS: crate::Native = crate::Native {
 
 fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     crate::mem::wr16(b, A5 + 0x46, 0);
+    // `moveq #12,D5` : compteur long, mot haut nul
     for counter in (0..13u32).rev() {
-        c.d[5] = c.d[5] & !0xffff | counter;
+        c.d[5] = counter;
         let Some(o) = pools::SET.alloc_68k(c, b) else { return crate::mem::rts(c, b) };
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, 0x10);

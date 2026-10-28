@@ -320,3 +320,18 @@ fn tour(x: &mut Ctx) -> Flow {
 
 /// Routines natives de l'interface des joueurs.
 pub const NATIVES: &[Native] = &[FORGET_DISPLAYED];
+
+/// Sous-programmes d'origine réécrits dans le corps de la tâche, présentés comme des natives pour le fuzz
+/// différentiel (`examples/fuzz_couv`) ; le jeu ne les appelle pas par leur adresse.
+pub const NATIVES_DE_TEST: &[Native] = &[Native {
+    // 0x15216 : un emplacement (A0 panneau, A6 joueur, A4 compteur de pièces)
+    entry: 0x15216,
+    name: "hud_emplacement",
+    run: crate::Corps::Processeur(|c, b| {
+        let s = Slot { panel: c.a[0], player: c.a[6], coins: c.a[4] };
+        slot::step(&mut Ctx::new(c, b), s);
+        crate::mem::rts(c, b);
+    }),
+    touches_sound: false,
+    outputs: 0,
+}];

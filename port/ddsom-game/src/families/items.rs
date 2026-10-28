@@ -466,17 +466,20 @@ mod inventaire {
 }
 
 /// `0xdc28a` : recrée en l'air l'objet `ancien` (remplacé dans l'inventaire) avec sa quantité.
-fn objet_expulse(ctx: &mut Ctx, o: Obj, joueur: Obj, ancien: u8, quantite: u8) {
+/// `index` : D0.w de l'appelant, l'identifiant dans l'octet bas (l'octet haut n'est nul qu'avec un vrai joueur, voir
+/// `equipement_ajoute`).
+fn objet_expulse(ctx: &mut Ctx, o: Obj, joueur: Obj, index: u16, quantite: u8) {
     let Some(n) = ctx.alloc(&pools::ITEM) else {
         return;
     };
     n.set_u8(ctx.b, Obj::ACTIVE, 1);
     n.set_u8(ctx.b, champ::MODE, 1);
     n.set_u8(ctx.b, inventaire::QUANTITE, quantite);
-    let rang = ((ancien as u32) * 2) & 0xffff;
-    let kind = ctx.prog8(inventaire::RECREES + rang);
+    // `add.w D0,D0` puis `(d8,PC,D0.w)` : mot étendu en signe
+    let rang = index.wrapping_mul(2) as i16 as i32 as u32;
+    let kind = ctx.prog8(inventaire::RECREES.wrapping_add(rang));
     n.set_u8(ctx.b, Obj::KIND, kind);
-    let variante = ctx.prog8(inventaire::RECREES + rang + 1);
+    let variante = ctx.prog8(inventaire::RECREES.wrapping_add(rang).wrapping_add(1));
     n.set_u8(ctx.b, Obj::VARIANT, variante);
     n.set_u16(ctx.b, champ::PROPRIETAIRE, joueur.0 as u16);
     let x = o.u16(ctx.b, Obj::X);
@@ -560,7 +563,7 @@ fn inventaire_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
     let ancienne_quantite = joueur.u8(ctx.b, inventaire::QUANTITES);
     joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS, id);
     joueur.set_u8(ctx.b, inventaire::QUANTITES, quantite);
-    objet_expulse(ctx, o, joueur, premier, ancienne_quantite);
+    objet_expulse(ctx, o, joueur, premier as u16, ancienne_quantite);
     false
 }
 
@@ -2157,7 +2160,10 @@ fn equipement_ajoute(ctx: &mut Ctx, o: Obj) -> bool {
         }
     }
     let ancienne_quantite = joueur.u8(ctx.b, inventaire::QUANTITES);
-    objet_expulse(ctx, o, joueur, premier, ancienne_quantite);
+    // D0.w : la classe × 8 (`lsr.w #1` puis `lsl.w #3` de l'octet +3) garde son octet haut sous l'identifiant ; il
+    // n'est non nul que si le propriétaire n'est pas un joueur (pointeur nul : octets de la ROM)
+    let index = ((classe << 3) as u16 & 0xff00) | premier as u16;
+    objet_expulse(ctx, o, joueur, index, ancienne_quantite);
     joueur.set_u8(ctx.b, inventaire::IDENTIFIANTS, id);
     joueur.set_u8(ctx.b, inventaire::QUANTITES, 0);
     equipement_bonus(ctx, o);

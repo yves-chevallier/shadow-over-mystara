@@ -476,7 +476,9 @@ pub(self) fn aim_at_mark(x: &mut Cx) {
 /// horizontale (la plus grande des deux distances, avec la vitesse correspondante).
 pub(self) fn hop_height(x: &mut Cx) {
     let abs = |v: u16| if (v as i16) < 0 { v.wrapping_neg() } else { v };
-    let d3 = x.c.d[3] & 0xffff_0000 | abs(x.u16(0x1c)) as u32;
+    // `move.w (0x1c,A0),D3` : le mot haut de D3 est celui que laisse la direction 0x137e appelée juste avant par
+    // les deux appelants (`moveq #0,D3` puis le pas) : nul
+    let d3 = abs(x.u16(0x1c)) as u32;
     let mut d4 = abs(x.u16(0x14)) as u32;
     let dz = abs(x.u16(MARK_Z).wrapping_sub(x.u16(0x10)));
     let mut d2 = abs(x.u16(MARK_X).wrapping_sub(x.u16(0x8))) as u32;

@@ -276,9 +276,11 @@ pub fn bob(x: &mut Cx) {
         d = d.wrapping_neg();
     }
     x.add32(Obj::Z, d);
-    let t = x.u16(0xa8).wrapping_sub(1);
-    x.set16(0xa8, t);
-    if t as i16 <= 0 {
+    x.c.d[0] = d;
+    // `subq.w #1` puis `bgt` : comparaison signée exacte de l'ancienne valeur (0x8000 repart aussi à 72)
+    let avant = x.u16(0xa8);
+    x.set16(0xa8, avant.wrapping_sub(1));
+    if avant as i16 <= 1 {
         x.set16(0xa8, 72);
     }
 }
@@ -298,6 +300,8 @@ pub fn hp_threshold(x: &mut Cx) {
             return;
         }
         let half = x.u16(f::HP) >> 1;
+        // l'original calcule la moitié dans D1.w (contrat de sortie)
+        x.c.d[1] = (x.c.d[1] & 0xffff_0000) | half as u32;
         if half as i16 > 72 {
             x.set8(0xb9, 0);
             x.set16(0xb6, half);
