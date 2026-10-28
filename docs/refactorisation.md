@@ -681,6 +681,76 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
   et 0xa8ae8 ; les adaptateurs `_68k` des autres lots (`random_68k`, `terrain_68k`, `push_68k`, `shock_68k`,
   `in_arena_68k`, `reinsert_68k`) n'ont pas été réexaminés.
 
+## 16. Lot « sortie du Cpu », partie 1 : PC, vidéo, adaptateurs, forme cible des natives
+
+But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin du jeu (§ 14, « Sortie du `Cpu` »).
+
+* **Le PC.** Plus aucune fonction du jeu n'écrit `c.pc`. `Sequence::jump`, `jump_to`, `tail` et `Cx::tail` sont
+  supprimés : les phases de la partie et de la démonstration sont appelées directement (`partie::gestionnaire`,
+  `select::phase_4`, `ending::phase_28`, `gameover::phase_20`...), un saut terminal vers une native connue passe
+  par `Sequence::sauter` (`crate::sauter` : la native s'exécute aussitôt, son `rts` revient à l'appel en cours), la
+  cession de la sortie de scène appelle `kernel::attendre`, les deux blocages définitifs (`bra.b *` du MEMORY CHECK
+  et de l'EEPROM) sont un point du noyau (`Point::Bloque`), et la fin d'étape du tableau des scores une étape
+  (`ecran_fixe::Etape::ApresEtape`). Les replis vers une adresse sans native (entrées de tables jamais produites)
+  sont des `unreachable!` (code-mort.md). `Suite` n'est plus convertible depuis une adresse ; `taches::executer`
+  ne pose plus de PC ; une tâche qui rendrait la main sans céder arrête le jeu (`Point::Tache` n'est plus qu'un état
+  transitoire). Dans le jeu, **un appel par adresse n'écrit plus ni le PC ni la pile 68000** : `crate::call` et
+  `crate::appeler_attendu` exécutent la native aussitôt ; le retour d'un appel par adresse est une entrée de
+  `taches::table::Table::appels` (A7 descend de 4 comme si l'adresse de retour était empilée, sans écriture), et
+  un retour sans appel en cours arrête le jeu. Restent : le chemin des outils (machine sans table des tâches) et
+  les correctifs (`cps2::Patch`) de la machine de référence. Les natives partagées par plusieurs entrées (536
+  enveloppes son, services son) reçoivent leur adresse (`Corps::ProcesseurEn`) au lieu de lire le PC.
+* **Vidéo et entrées.** Cœurs Rust : `video::jauge`, `activer_couches` (0xbc6), `effacer_debut_couche1`
+  (0x3525c), `charger_grille(b, Grille::{Blocs4x4, Couche2, Couche3}, n, destination) -> FinDeGrille` (0x260c,
+  0x26d4, 0x2766), `sprites::construire(b, d4) -> Option<Restes>` (0x1de96), `sprites::vider_listes` (0x1de7c),
+  `inputs::lire_panneau` (0x80c), `inputs::recopier` (0x2aec), `sound::envoyer` (0x68c),
+  `credits::lire_monnayeurs` (0x143da, et la comptabilité `eeprom::compter_piece`, 0x2e448, sans `Cpu`),
+  `eeprom::vblank` (0x2dcf6) ; `eeprom.rs` n'utilise plus le processeur que pour les registres de ses natives.
+  Le VBLANK n'appelle plus que des cœurs (`vblank::vblank(b)`). `scroll::update_cameras(b)`,
+  `camera_modes::update_camera_1/2(b)`, `scroll::cameras_depart`, `cameras_retour` ne prennent plus de `Cpu` :
+  les scripts de caméra ont leur contexte (`camera_modes::Cam`, bus et caméra), les parallaxes et le défilement
+  pas à pas sont des cœurs, 0xa8ae8 est `effects_creators::set_list`. La mise à jour du monde et la fin de la phase
+  12 appellent directement jauge, caméras, sprites, entrées, pop-ups et script (`game.rs` : `adr` 11 → 2).
+* **Glitches d'origine trouvés (registres relus, écrits en clair).** D4 laissé par la recopie du décor des caméras
+  (0x3f/0x40, 0x1f/0xe0) : relu par un gestionnaire d'objet (`boss13_dragon`, image 7241) — `update_cameras` le
+  rend (`[RestesD4; 2]`), `update_cameras_68k` le pose. D4 de la liste de sprites (attributs du dernier morceau,
+  relu par 0xad7b0) — `sprites::Restes::d4`. D2.w = 0x400 laissé par la jauge masquée (test de DSW), écrit par un
+  gestionnaire dans un champ d'objet (`long_magicien_57_86`, image 13398, `ram ffd692`) — `video::jauge_68k`.
+* **Preuve.** Sonde générique `DDSOM_POISON=appel_<adresse>` dans `crate::call` (registres changés par l'appelé,
+  inversés au retour, au site d'appel) et étiquettes des adaptateurs restreintes hors des familles
+  (`alloc,!alloc@families/`...). Faux positifs écartés : enchaînement des blocs de tuiles (A1 = fin du bloc
+  précédent, `modes/title.rs` : un argument, pas un reste), A1 des créateurs appelés par adresse
+  (`effects_aids.rs`, `player/spawn.rs` : contrat de leur native).
+* **Adaptateurs `_68k` hors des familles (55 sites au départ).** Registres morts (sonde et étiquettes sur les 286
+  scénarios), passés au cœur : allocations des modes, scènes, boutique, tableau des scores, crédits et phase 0 (16),
+  `rank::reset/lower/tick` et `charger_preset` (12), `lists::unlink_all` (3), `rng::seed` (3), pop-ups et
+  effacement de la couche 1 de la phase 12, A0 des caméras. Registres relus, gardés et documentés (glitches
+  d'origine) : copie des entrées 0x2aec (`inputs::recopier_68k`, D0-D4 relus : `long_voleur_objets`, image 13133),
+  pas d'animation des personnages (`step_keeping_regs`, D0.b relu : `long_3p_mortels`, image 22018), jauge (D2),
+  sprites (D4), caméras (D4). Contrats de natives appelées par adresse (restent tant que leurs appelants le
+  sont) : créateurs (`effects_aids.rs`, `player/spawn.rs` : A1 relu par `modes/title.rs`), terrain
+  (`terrain.rs`, `placement.rs`, `video.rs`), files d'événements (`evenements.rs`), adaptateurs des natives de ce
+  lot (`scroll`, `video`, `eeprom`, `sprites`, `inputs`, `popups`). Familles : 65 sites (liste dans le rapport du
+  lot : `random_68k` 18, `push_68k` 14, `terrain_68k` 9, `alloc_68k` 5, `alloc_unchecked_68k` 4, `start_68k` 2,
+  `reinsert_68k` 2, `in_front_68k` 2, `flash_68k` 2, et un site de `target_in_front_68k`, `start_by_character_68k`,
+  `shock_68k`, `release_68k`, `regs_68k`, `in_arena_68k`, `box_around_68k`).
+* **Forme cible des natives.** `Native::run` est un `Corps` : `Processeur(fn(&mut Cpu, &mut Cps2Bus))`,
+  `ProcesseurEn(fn(&mut Cpu, &mut Cps2Bus, u32))` (corps partagé, reçoit son entrée) ou `Memoire(fn(&mut
+  Cps2Bus))` (sans registre ; le `rts` est fait pour lui, `Native::executer`). Converties en `Memoire` : 0x1de7c,
+  0xc58, 0x143da, 0xf2e56, 0xf7ee0, 0xe03e4. Bilan : 956 `Processeur`, 532 `ProcesseurEn`, 6 `Memoire`.
+* **Ce qui bloque encore le retrait du `Cpu`** (mesure `tools/mesure_refacto.py` après le lot : `regs` 3 676, `adr`
+  749, `pile` 80). (1) Les **appels par adresse** : 749 `adr`, dont 301 dans `families`, 154 `modes`, 169 `scene`,
+  28 `tache_credits` ; environ 490 `call`/`x.call` hors des familles (`modes/ending` 56, `select` 46, `scene/entry`
+  44, `title` 41, `tache_credits` 28, `scene/exit` 28, `demo` 28, `transition` 38...) : leurs cibles sont des natives
+  `(c, b)` dont le contrat de registres est à prouver une par une (la sonde `appel_<adresse>` le fait). (2) Les
+  **registres** : 3 676 `regs`, dont 2 077 `families`, 348 `modes`, 275 `scene`, 56 `taches`, 53 `video`, 38
+  `scroll` (natives des caméras et parallaxes appelées par adresse), et les glitches relus listés plus haut, qui
+  devront devenir des champs nommés d'un état (`Registres`) quand le banc `Cpu` disparaîtra. (3) La **pile** :
+  80 `pile` (cadres des tâches et appels attendus, `Table::appels`, contexte des cessions, prise du VBLANK qui
+  empile PC et SR) : plus aucune écriture de la pile 68000 par un appel du jeu, mais A7 sert encore de clé aux
+  retours. (4) Les **natives** : 956 corps `Processeur` et 532 `ProcesseurEn` (enveloppes et services son, qui lisent
+  A0, A1, D4 ou D0/D1) ; un corps `Memoire` n'est possible que pour une routine qui ne lit ni ne laisse aucun registre.
+
 ## Avancement
 
 | Étape | Commit | Validation |

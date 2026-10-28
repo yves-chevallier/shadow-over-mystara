@@ -595,12 +595,12 @@ fn pay_digit(v: u32) -> (u32, u32) {
 pub const TALLY: Native = Native {
     entry: 0xf590e,
     name: "scene_tally",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

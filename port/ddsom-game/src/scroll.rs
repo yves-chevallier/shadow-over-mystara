@@ -15,7 +15,8 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
+use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::objects::Obj;
 use crate::video::hw;
 use crate::Native;
 
@@ -356,26 +357,26 @@ fn layer_row_offset(page: u16, y: u16) -> u16 {
     0x3000u16.wrapping_sub((page & 0x300) << 4).wrapping_add(0x3c - (((y & 0xf0) >> 2) as u8 as u16))
 }
 
-fn camera<'a>(x: Exec<'a>, c: &Cpu) -> Camera1<'a> {
-    Camera1 { x, a5: c.a[5], cam: c.a[0], d4: None }
+fn camera(b: &mut Cps2Bus) -> Camera1<'_> {
+    Camera1 { x: Exec::real(b), a5: A5, cam: A5 + CAMERA_1, d4: None }
 }
 
-/// 0x2f81c : suite du script de mode de la caméra 1 (A0), après le script.
-pub(crate) fn after_mode(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut cam = camera(Exec::real(b), c);
+/// D4 que laisse la recopie d'une colonne ou d'une ligne de décor : valeur et bits remplacés (`D4 & !masque |
+/// valeur`).
+pub type RestesD4 = Option<(u32, u32)>;
+
+/// 0x2f81c : suite du script de mode de la caméra 1, après le script.
+pub(crate) fn after_mode(b: &mut Cps2Bus) -> RestesD4 {
+    let mut cam = camera(b);
     cam.after_mode();
-    if let Some(d4) = cam.d4 {
-        c.d[4] = d4;
-    }
+    cam.d4.map(|v| (v, u32::MAX))
 }
 
-/// 0x2f86e : écarts cible - dessiné de la caméra 1 (A0), puis recopie des colonnes et lignes manquantes.
-pub(crate) fn draw1(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut cam = camera(Exec::real(b), c);
+/// 0x2f86e : écarts cible - dessiné de la caméra 1, puis recopie des colonnes et lignes manquantes.
+pub(crate) fn draw1(b: &mut Cps2Bus) -> RestesD4 {
+    let mut cam = camera(b);
     cam.draw();
-    if let Some(d4) = cam.d4 {
-        c.d[4] = d4;
-    }
+    cam.d4.map(|v| (v, u32::MAX))
 }
 
 
@@ -625,17 +626,11 @@ impl Camera2<'_> {
     }
 }
 
-fn camera2<'a>(x: Exec<'a>, c: &Cpu) -> Camera2<'a> {
-    Camera2 { x, a5: c.a[5], cam: c.a[0], d4: None }
-}
-
-/// 0x328a8 : écarts cible - dessiné de la caméra 2 (A0), puis recopie des colonnes et lignes manquantes.
-pub(crate) fn draw2(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut cam = camera2(Exec::real(b), c);
+/// 0x328a8 : écarts cible - dessiné de la caméra 2, puis recopie des colonnes et lignes manquantes.
+pub(crate) fn draw2(b: &mut Cps2Bus) -> RestesD4 {
+    let mut cam = Camera2 { x: Exec::real(b), a5: A5, cam: A5 + CAMERA_2, d4: None };
     cam.draw();
-    if let Some((value, mask)) = cam.d4 {
-        c.d[4] = c.d[4] & !mask | value;
-    }
+    cam.d4
 }
 
 
@@ -658,62 +653,90 @@ pub(crate) fn scroll_delta(b: &mut Cps2Bus, a5: u32, axis: usize) -> i32 {
     crate::mem::rd32(b, a5 + SCROLL[axis]).wrapping_sub(crate::mem::rd32(b, a5 + PREVIOUS_SCROLL[axis])) as i32
 }
 
-/// Ajoute `d` à une position de l'objet A0 ; rend les drapeaux de l'addition au registre de statut.
-fn move_object(c: &mut Cpu, b: &mut Cps2Bus, field: u32, d: i32) {
-    let at = c.a[0] + field;
+/// Ajoute `d` à une position de l'objet `o`. Rend la somme (les drapeaux de l'addition : `move_object_68k`).
+fn move_object(b: &mut Cps2Bus, o: Obj, field: u32, d: i32) -> (u32, u32) {
+    let at = o.0 + field;
     let v = crate::mem::rd32(b, at);
-    let sum = crate::ops::add(c, d as u32, v, Size::Long);
-    crate::mem::wr32(b, at, sum);
+    crate::mem::wr32(b, at, v.wrapping_add(d as u32));
+    (d as u32, v)
 }
 
-/// 0x33178 : le décor suit le quart du défilement en x et la moitié en y.
-pub(crate) fn parallax_quarter(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (dx, dy) = (scroll_delta(b, c.a[5], 0), scroll_delta(b, c.a[5], 1));
-    move_object(c, b, OBJECT_X, dx >> 2);
-    move_object(c, b, OBJECT_Y, dy >> 1);
+/// `move_object` avec les drapeaux de l'addition (`add.l`).
+fn move_object_68k(c: &mut Cpu, b: &mut Cps2Bus, field: u32, d: i32) {
+    let (d, v) = move_object(b, Obj(c.a[0]), field, d);
+    crate::ops::add(c, d, v, Size::Long);
 }
 
-/// 0x33196 : le décor suit la moitié du défilement en x et les trois quarts en y.
-pub(crate) fn parallax_three_quarters(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (dx, dy) = (scroll_delta(b, c.a[5], 0), scroll_delta(b, c.a[5], 1));
-    move_object(c, b, OBJECT_X, dx >> 1);
-    move_object(c, b, OBJECT_Y, (dy >> 1) + (dy >> 2));
+/// Défilement de l'image pour un décor qui suit `(fx, fy)` du défilement (x, y).
+fn parallaxe(b: &mut Cps2Bus, fx: fn(i32) -> i32, fy: fn(i32) -> i32) -> (i32, i32) {
+    (fx(scroll_delta(b, A5, 0)), fy(scroll_delta(b, A5, 1)))
+}
+const QUART: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 2, |dy| dy >> 1);
+const TROIS_QUARTS: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 1, |dy| (dy >> 1) + (dy >> 2));
+
+/// 0x33178 : le décor `o` suit le quart du défilement en x et la moitié en y.
+pub(crate) fn parallax_quarter(b: &mut Cps2Bus, o: Obj) {
+    let (dx, dy) = parallaxe(b, QUART.0, QUART.1);
+    move_object(b, o, OBJECT_X, dx);
+    move_object(b, o, OBJECT_Y, dy);
 }
 
-/// 0x331e8 / 0x3326c : le décor avance de 6 / 3 pixels par image, sa position dessinée suit.
-pub(crate) fn creep(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
+/// 0x33196 : le décor `o` suit la moitié du défilement en x et les trois quarts en y.
+pub(crate) fn parallax_three_quarters(b: &mut Cps2Bus, o: Obj) {
+    let (dx, dy) = parallaxe(b, TROIS_QUARTS.0, TROIS_QUARTS.1);
+    move_object(b, o, OBJECT_X, dx);
+    move_object(b, o, OBJECT_Y, dy);
+}
+
+/// Natives des deux parallaxes (objet A0 ; drapeaux de la dernière addition).
+fn parallaxe_68k(c: &mut Cpu, b: &mut Cps2Bus, f: (fn(i32) -> i32, fn(i32) -> i32)) {
+    let (dx, dy) = parallaxe(b, f.0, f.1);
+    move_object_68k(c, b, OBJECT_X, dx);
+    move_object_68k(c, b, OBJECT_Y, dy);
+}
+
+/// 0x331e8 / 0x3326c : le décor `o` avance de 6 / 3 pixels par image, sa position dessinée suit. Rend la nouvelle
+/// position (drapeaux de l'original : `creep_68k`).
+pub(crate) fn creep(b: &mut Cps2Bus, o: Obj, pixels: u16) -> u16 {
+    let x = crate::mem::rd16(b, o.0 + OBJECT_X).wrapping_add(pixels);
+    crate::mem::wr16(b, o.0 + OBJECT_X, x);
+    crate::mem::wr16(b, o.0 + OBJECT_DRAWN_X, x);
+    x
+}
+
+fn creep_68k(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
     let old = crate::mem::rd16(b, c.a[0] + OBJECT_X);
-    let x = crate::ops::add(c, pixels as u32, old as u32, Size::Word) as u16;
-    crate::mem::wr16(b, c.a[0] + OBJECT_X, x);
-    crate::mem::wr16(b, c.a[0] + OBJECT_DRAWN_X, x);
+    let x = creep(b, Obj(c.a[0]), pixels);
+    // add.w (X), puis move.w (N, Z, V, C)
+    crate::ops::add(c, pixels as u32, old as u32, Size::Word);
     crate::ops::logique(c, x as u32, Size::Word);
 }
 
 const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: crate::regs::CCR }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: crate::regs::CCR }
 }
 
 pub const PARALLAX_QUARTER: Native = Native {
     ..leaf(0x33178, "decor_parallaxe_quart", |c, b| {
-        parallax_quarter(c, b);
+        parallaxe_68k(c, b, QUART);
         rts(c, b)
     })
 };
 pub const PARALLAX_THREE_QUARTERS: Native = Native {
     ..leaf(0x33196, "decor_parallaxe_trois_quarts", |c, b| {
-        parallax_three_quarters(c, b);
+        parallaxe_68k(c, b, TROIS_QUARTS);
         rts(c, b)
     })
 };
 pub const CREEP_6: Native = Native {
     ..leaf(0x331e8, "decor_avance_6", |c, b| {
-        creep(c, b, 6);
+        creep_68k(c, b, 6);
         rts(c, b)
     })
 };
 pub const CREEP_3: Native = Native {
     ..leaf(0x3326c, "decor_avance_3", |c, b| {
-        creep(c, b, 3);
+        creep_68k(c, b, 3);
         rts(c, b)
     })
 };
@@ -826,45 +849,53 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const FOLLOW_PLAYERS_Y: Native = Native {
     entry: 0x31616,
     name: "camera_suit_joueurs_y",
-    run: follow_players_y,
+    run: crate::Corps::Processeur(follow_players_y),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
 
 /// 0x33e20 : met à jour les deux caméras. La première mémorise sa cible précédente (+0x26, +0x2a)
 /// avant que son script de mode (0x2ede0) la déplace ; la seconde est traitée par 0x32108.
-/// Appelée directement (sans adresse) : A0 = la caméra 2 en sortie, comme l'original.
-pub fn update_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
-    use crate::mem::{rd32, wr32, A5};
+/// Rend le D4 que laissent les recopies de décor des deux caméras (dans l'ordre).
+pub fn update_cameras(b: &mut Cps2Bus) -> [RestesD4; 2] {
     let camera = A5 + CAMERA_1;
     let (x, y) = (rd32(b, camera + cam::X), rd32(b, camera + cam::Y));
     wr32(b, camera + cam::PREVIOUS_X, x);
     wr32(b, camera + cam::PREVIOUS_Y, y);
-    crate::camera_modes::update_camera_1(c, b);
-    crate::camera_modes::update_camera_2(c, b);
+    [crate::camera_modes::update_camera_1(b), crate::camera_modes::update_camera_2(b)]
 }
 
+/// `update_cameras` avec les registres de l'original : D4 des recopies de décor, A0 = la caméra 2.
+pub fn update_cameras_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    for (v, m) in update_cameras(b).into_iter().flatten() {
+        c.d[4] = c.d[4] & !m | v;
+    }
+    c.a[0] = A5 + CAMERA_2;
+}
+
+/// Native de 0x33e20.
 fn update_cameras_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    update_cameras(c, b);
+    update_cameras_68k(c, b);
     rts(c, b);
 }
+
+/// Table (par scène) de la caméra en service, et positions de départ (x, y) de la première caméra.
+const SERVICE: u32 = 0x33bdc;
+const STARTS: u32 = 0x33c54;
 
 /// 0x33aa6 : caméras de la scène à leur position de départ. Les deux caméras (`A5+0x4fe`, `A5+0x54e`)
 /// sont remises à zéro, le début de la couche 1 effacé (0x3525c) ; la scène (`A5+0x34`) choisit la caméra
 /// en service (`A5+0x36`, table 0x33bdc) et la position de départ de la première (table 0x33c54 : x, y),
-/// puis les caméras sont mises à jour (0x33e20).
-fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
-    use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
-    const SERVICE: u32 = 0x33bdc;
-    const STARTS: u32 = 0x33c54;
+/// puis les caméras sont mises à jour (0x33e20, par l'appelant : `cameras_depart` ne fait que la remise à zéro).
+pub fn cameras_depart(b: &mut Cps2Bus) {
     for off in [0x54e, 0x556, 0x55a, 0x55e, 0x562, 0x56a, 0x4fe, 0x506, 0x50a, 0x50e, 0x512, 0x51a] {
         wr32(b, A5 + off, 0);
     }
     wr16(b, A5 + 0x566, 0);
     wr8(b, 0xff858b, 0);
     wr8(b, A5 + 0x53a, 0);
-    crate::call(c, b, 0x3525c);
-    let stage = rd8(b, A5 + 0x34) as u32;
+    crate::video::effacer_debut_couche1(b);
+    let stage = rd8(b, A5 + STAGE) as u32;
     let service = rd8(b, SERVICE + stage);
     wr8(b, A5 + 0x36, service);
     for off in [0x508, 0x50c, 0x52e] {
@@ -875,32 +906,38 @@ fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + 0x506, x);
     wr16(b, A5 + 0x50a, y);
     wr32(b, A5 + 0x50e, 0);
-    c.d[0] = 4 * stage;
+}
+
+/// Native de 0x33aa6 : registres de l'effacement de la couche 1, D0 = 4 x scène, A1 = table des départs, A0 = la
+/// caméra 2.
+fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+    cameras_depart(b);
+    crate::video::restes_effacer_debut_couche1(c);
+    c.d[0] = 4 * rd8(b, A5 + STAGE) as u32;
     c.a[1] = STARTS;
-    update_cameras_native(c, b);
+    update_cameras_68k(c, b);
+    rts(c, b);
 }
 
 pub const RESET_CAMERAS: Native = Native {
     entry: 0x33aa6,
     name: "cameras_depart",
-    run: reset_cameras,
+    run: crate::Corps::Processeur(reset_cameras),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
 
 /// 0x33b24 : caméras au retour d'une zone annexe (porte de sortie SET 7 et portes 27, 29, avant qu'elles ne
 /// rétablissent la caméra mémorisée). La scène (`A5+0x34`) choisit la caméra en service (`A5+0x36`, table
-/// 0x33bdc), une limite (`A5+0x532`), le mot de contrôle vidéo 0x400004 et les couches affichées (0xbc6,
-/// D0), puis les caméras sont remises à leur position initiale (0x200) et leurs bornes rechargées (tables
-/// par scène, espace données), avant leur mise à jour (0x33e20).
-fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
-    use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-    const SERVICE: u32 = 0x33bdc;
+/// 0x33bdc), une limite (`A5+0x532`), le mot de contrôle vidéo 0x400004 et les couches affichées (0xbc6),
+/// puis les caméras sont remises à leur position initiale (0x200) et leurs bornes rechargées (tables par
+/// scène, espace données), avant leur mise à jour (0x33e20, par l'appelant).
+pub fn cameras_retour(b: &mut Cps2Bus) {
     use crate::camera_modes::tables::{
         FROZEN as MODES, HOLD_MIN as PRIORITIES, LAYERS, MAX_X_1 as LIMITS, OUTPUT as VIDEO_CONTROL,
         ROW_STEP_1 as BOUNDS_A, ROW_STEP_2 as BOUNDS_B,
     };
-    use crate::camera_modes::{ENABLE_LAYERS as LAYERS_ON, OUTPUT_PORT as VIDEO_CONTROL_PORT};
+    use crate::camera_modes::OUTPUT_PORT as VIDEO_CONTROL_PORT;
     let stage = rd8(b, A5 + STAGE) as u32;
     let service = rd8(b, SERVICE + stage);
     wr8(b, A5 + 0x36, service);
@@ -908,11 +945,9 @@ fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + 0x532, limit);
     let control = rd16(b, VIDEO_CONTROL + 2 * stage);
     wr16(b, VIDEO_CONTROL_PORT, control);
-    c.d[0] = rd16(b, LAYERS + 2 * stage) as u32;
-    c.a[1] = VIDEO_CONTROL;
-    c.a[4] = LAYERS;
+    let couches = rd16(b, LAYERS + 2 * stage);
     wr16(b, A5 + 0x14, 0);
-    crate::call(c, b, LAYERS_ON);
+    crate::video::activer_couches(b, couches);
     let priority = rd8(b, PRIORITIES + stage);
     wr8(b, A5 + 0x53b, priority);
     wr16(b, A5 + 0x4fe, 0x200);
@@ -933,15 +968,22 @@ fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + 0x58e, v);
     let mode = rd8(b, MODES + stage);
     wr8(b, A5 + 0x53c, mode);
-    c.d[0] = stage;
-    c.a[4] = MODES;
-    update_cameras_native(c, b);
+}
+
+/// Native de 0x33b24 : D0 = scène, A1 = table du contrôle vidéo, A4 = table des modes, A0 = la caméra 2.
+fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
+    cameras_retour(b);
+    c.d[0] = rd8(b, A5 + STAGE) as u32;
+    c.a[1] = crate::camera_modes::tables::OUTPUT;
+    c.a[4] = crate::camera_modes::tables::FROZEN;
+    update_cameras_68k(c, b);
+    rts(c, b);
 }
 
 pub const RETURN_CAMERAS: Native = Native {
     entry: 0x33b24,
     name: "cameras_retour",
-    run: return_cameras,
+    run: crate::Corps::Processeur(return_cameras),
     touches_sound: false,
     // appelée par les portes (natives), qui ne relisent aucun registre
     outputs: 0,
@@ -950,7 +992,7 @@ pub const RETURN_CAMERAS: Native = Native {
 pub const UPDATE_CAMERAS: Native = Native {
     entry: 0x33e20,
     name: "cameras_mise_a_jour",
-    run: update_cameras_native,
+    run: crate::Corps::Processeur(update_cameras_native),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };

@@ -131,12 +131,12 @@ fn player(k: u32) -> u32 {
 pub const PHASE_4: Native = Native {
     entry: 0x1ca20,
     name: "select_phase_4",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if phase_4(&mut x) == Flow::Done {
             rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
@@ -717,7 +717,7 @@ fn step_8(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PLAYERS_PRESENT, count);
     let mut d4 = 0xeau8;
     for _ in 0..2 {
-        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { break };
+        let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, d4);

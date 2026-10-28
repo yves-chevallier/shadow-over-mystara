@@ -73,7 +73,7 @@ fn set_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: 0 }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: 0 }
 }
 
 pub const FULL_BRIGHTNESS: Native = native(0x1686, "palette_full_brightness", full_brightness_native);
@@ -766,7 +766,7 @@ fn flash_native_run(c: &mut Cpu, b: &mut Cps2Bus, teinte: Flash) {
 }
 
 const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: regs::ALL }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::ALL }
 }
 
 pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", |c, b| flash_native_run(c, b, Flash::Gray));
@@ -798,7 +798,7 @@ pub const FLASH_COLOR_RED: u16 = 0xff00;
 pub const FLASH_COLOR_WHITE_VALUE: u16 = 0xffff;
 
 const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: regs::CCR }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::CCR }
 }
 
 pub const FLASH_COLOR_ON: Native =
@@ -860,8 +860,8 @@ fn character_palette_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_sauve_page1", run: save_page1, touches_sound: false, outputs: regs::ALL };
-pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", run: character_palette_native, touches_sound: false, outputs: regs::ALL };
+pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_sauve_page1", run: crate::Corps::Processeur(save_page1), touches_sound: false, outputs: regs::ALL };
+pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", run: crate::Corps::Processeur(character_palette_native), touches_sound: false, outputs: regs::ALL };
 
 /// Routines natives de ce module (les réglages de luminosité sont déclarés dans `lib.rs`).
 pub const NATIVES: &[Native] = &[

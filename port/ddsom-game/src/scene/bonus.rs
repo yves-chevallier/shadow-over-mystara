@@ -208,7 +208,7 @@ crate::etapes! {
         },
         /// Le titre du bonus (objet SET type 0, variante 69).
         Started = at::STARTED => |x| {
-            if let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) {
+            if let Some(Obj(o)) = pools::SET.alloc(x.b) {
                 for (off, v) in [(0, 1), (2, 0), (3, 69), (0x2f, 3)] {
                     wr8(x.b, o + off, v);
                 }
@@ -437,12 +437,12 @@ fn end(x: &mut Ctx) -> Flow {
 pub const BONUS: Native = Native {
     entry: 0xf5938,
     name: "scene_bonus",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

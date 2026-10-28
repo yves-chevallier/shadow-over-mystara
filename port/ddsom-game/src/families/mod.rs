@@ -296,7 +296,7 @@ macro_rules! gestionnaire {
         pub const $const: crate::Native = crate::Native {
             entry: $entree,
             name: $nom,
-            run: |c, b| crate::families::executer(c, b, $logique),
+            run: crate::Corps::Processeur(|c, b| crate::families::executer(c, b, $logique)),
             touches_sound: false,
             outputs: crate::regs::a(0) | crate::regs::d(7),
         };

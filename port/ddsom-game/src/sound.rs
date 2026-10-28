@@ -224,7 +224,7 @@ fn enfiler_si_son(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const ENFILER_SI_SON: Native = Native {
     entry: 0xe0836,
     name: "son_enfiler",
-    run: enfiler_si_son,
+    run: crate::Corps::Processeur(enfiler_si_son),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
 };
@@ -232,7 +232,7 @@ pub const ENFILER_SI_SON: Native = Native {
 pub const ENFILER_DIRECT: Native = Native {
     entry: 0xe0848,
     name: "son_enfiler_direct",
-    run: enfiler_direct,
+    run: crate::Corps::Processeur(enfiler_direct),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
 };
@@ -434,10 +434,6 @@ fn jouer_wrapper(b: &mut Cps2Bus, w: &Wrapper, source: Source) {
 
 /// Native d'un wrapper ou d'un aiguillage (appels par adresse) : le cœur, avec ce qu'il lit dans les registres ;
 /// tous les registres sont rendus intacts, les drapeaux sont ceux du dernier `move.l` du pointeur de pile privée.
-fn son_natif(c: &mut Cpu, b: &mut Cps2Bus) {
-    son_natif_en(c, b, c.pc);
-}
-
 fn son_natif_en(c: &mut Cpu, b: &mut Cps2Bus, son: u32) {
     jouer_avec(b, son, Source { objet: Some(Obj(c.a[0])), a1: Some(c.a[1]), d4: Some(c.d[4]) });
     let sommet = rd32(b, a5(ram::PILE_PRIVEE));
@@ -458,7 +454,7 @@ pub fn wrappers_natifs() -> &'static [Native] {
             .map(|(entry, name)| Native {
                 entry,
                 name,
-                run: son_natif,
+                run: crate::Corps::ProcesseurEn(son_natif_en),
                 touches_sound: false,
                 outputs: 0, // tous les registres sont rendus intacts : rien à comparer
             })
@@ -587,27 +583,47 @@ fn transmettre(b: &mut Cps2Bus, entree: u32) {
     }
 }
 
-/// 0x68c (VBLANK) : une commande de la file part vers le Z80 si celui-ci a acquitté la précédente.
-fn envoyer_au_z80(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x68c (VBLANK) : une commande de la file part vers le Z80 si celui-ci a acquitté la précédente. Rend l'entrée de file
+/// transmise.
+pub fn envoyer(b: &mut Cps2Bus) -> Option<u32> {
     let silence = rd8(b, a5(ram::SILENCE)) != 0;
     wr8(b, z80::VERROU, if silence { 0xff } else { 0 });
     let delai = rd16(b, a5(ram::DELAI));
     if delai != 0 {
         wr16(b, a5(ram::DELAI), delai - 1);
     }
-    let mut lecture = rd16(b, a5(ram::TETE_LECTURE));
-    c.d[0] = if silence { 0xffff_0000 } else { 0 } | lecture as u32;
+    let lecture = rd16(b, a5(ram::TETE_LECTURE));
     let ecriture = rd16(b, a5(ram::TETE_ECRITURE));
+    let mut envoyee = None;
     if lecture != ecriture && rd8(b, z80::ACQUIT) == 0xff {
         let entree = a5(ram::FILE).wrapping_add(lecture as i16 as u32);
         transmettre(b, entree);
-        c.a[4] = entree + 12;
         wr8(b, z80::ACQUIT, 0);
-        lecture = lecture.wrapping_add(ENTREE) & MASQUE_TETE;
-        wr16(b, a5(ram::TETE_LECTURE), lecture);
-        c.d[0] = c.d[0] & 0xffff_0000 | lecture as u32;
+        wr16(b, a5(ram::TETE_LECTURE), lecture.wrapping_add(ENTREE) & MASQUE_TETE);
+        envoyee = Some(entree);
     }
     // l'original se termine par un JMP vers l'affichage des verrous
+    if verrous_affiches(b) {
+        // Code mort d'origine : écran de débogage, voir `afficher_verrous` (docs/code-mort.md, lot « sortie du Cpu »)
+        unreachable!("affichage des verrous du Z80 : le mot 0xc0 du programme est nul dans cette version");
+    }
+    envoyee
+}
+
+/// L'affichage de débogage des verrous est actif (mot 0xc0 du programme et `A5+0x7fc6` non nuls).
+fn verrous_affiches(b: &mut Cps2Bus) -> bool {
+    rd16(b, DEBUG_FLAG) != 0 && rd16(b, a5(DEBUG_DISPLAY)) != 0
+}
+
+/// `envoyer` avec les registres de l'original (D0 : tête de lecture, D0 haut = -1 si silence ; A4 après l'entrée
+/// transmise ; drapeaux du test de l'affichage des verrous).
+fn envoyer_au_z80(c: &mut Cpu, b: &mut Cps2Bus) {
+    let silence = rd8(b, a5(ram::SILENCE)) != 0;
+    if let Some(entree) = envoyer(b) {
+        c.a[4] = entree + 12;
+    }
+    let lecture = rd16(b, a5(ram::TETE_LECTURE));
+    c.d[0] = if silence { 0xffff_0000 } else { 0 } | lecture as u32;
     afficher_verrous(c, b);
     rts(c, b);
 }
@@ -615,7 +631,7 @@ fn envoyer_au_z80(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const ENVOYER_AU_Z80: Native = Native {
     entry: 0x68c,
     name: "son_envoyer_z80",
-    run: envoyer_au_z80,
+    run: crate::Corps::Processeur(envoyer_au_z80),
     touches_sound: true,
     outputs: 0, // le VBLANK a sauvegardé tous les registres
 };
@@ -701,7 +717,7 @@ fn service_en(entree: u32, c: &Cpu) -> Service {
 }
 
 const fn service_natif(entry: u32, name: &'static str, touches_sound: bool) -> Native {
-    Native { entry, name, run: |c, b| service_natif_run(c, b, service_en(c.pc, c)), touches_sound, outputs: regs::CCR }
+    Native { entry, name, run: crate::Corps::ProcesseurEn(|c, b, entree| service_natif_run(c, b, service_en(entree, c))), touches_sound, outputs: regs::CCR }
 }
 
 pub const SERVICE_FF00: Native = service_natif(0xe0882, "son_service_ff00", false);
@@ -745,7 +761,7 @@ fn init_pile_privee(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const INIT_PILE_PRIVEE: Native = Native {
     entry: 0xee044,
     name: "son_init_pile",
-    run: init_pile_privee,
+    run: crate::Corps::Processeur(init_pile_privee),
     touches_sound: false,
     outputs: regs::a(0) | regs::CCR,
 };
@@ -754,7 +770,7 @@ pub const INIT_PILE_PRIVEE: Native = Native {
 pub const AUCUN: Native = Native {
     entry: 0xec238,
     name: "son_aucun",
-    run: rts,
+    run: crate::Corps::Processeur(rts),
     touches_sound: false,
     outputs: regs::ALL,
 };

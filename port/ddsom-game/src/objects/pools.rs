@@ -306,14 +306,14 @@ macro_rules! pool_natives {
         pub const $alloc: Native = Native {
             entry: $pool.alloc_routine,
             name: $alloc_name,
-            run: |c, b| alloc_native(&$pool, c, b),
+            run: crate::Corps::Processeur(|c, b| alloc_native(&$pool, c, b)),
             touches_sound: false,
             outputs: regs::a(1) | regs::d(6) | regs::CCR,
         };
         pub const $free: Native = Native {
             entry: $pool.free_routine,
             name: $free_name,
-            run: |c, b| free_native(&$pool, c, b),
+            run: crate::Corps::Processeur(|c, b| free_native(&$pool, c, b)),
             touches_sound: false,
             outputs: regs::d(0) | regs::d(1) | regs::a(0) | regs::a(4) | regs::CCR,
         };
@@ -336,7 +336,7 @@ macro_rules! init_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            run: |c, b| init_native(&$pools, c, b),
+            run: crate::Corps::Processeur(|c, b| init_native(&$pools, c, b)),
             touches_sound: false,
             outputs: regs::ALL,
         };

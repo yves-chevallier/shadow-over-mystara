@@ -145,14 +145,14 @@ fn effect_palette_native(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
 }
 
 const fn palette(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: REGS_EFFECT_PALETTE }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: REGS_EFFECT_PALETTE }
 }
 
 pub const NATIVES: &[Native] = &[
     Native {
         entry: 0x3668,
         name: "joueur_place_au_sol",
-        run: place_on_free_ground_native,
+        run: crate::Corps::Processeur(place_on_free_ground_native),
         touches_sound: false,
         outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::d(6),
     },

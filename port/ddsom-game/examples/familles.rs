@@ -24,7 +24,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     let mut c1 = c.clone();
     let mut b1 = b.clone();
     let (c0, b0) = (c.clone(), b.clone());
-    (n.run)(&mut c1, &mut b1);
+    n.executer(&mut c1, &mut b1);
     // original
     let ret = ddsom_game::mem::rd32(b, c.a[7]);
     let sp_apres = c.a[7].wrapping_add(4);

@@ -74,13 +74,13 @@ macro_rules! clear_native {
         pub const $name: Native = Native {
             entry: $entry,
             name: $label,
-            run: |c, b| {
+            run: crate::Corps::Processeur(|c, b| {
                 clear_longs(b, $at, $n);
                 if $d0 {
                     c.d[0] = 0;
                 }
                 rts(c, b);
-            },
+            }),
             touches_sound: false,
             outputs: 0,
         };
@@ -91,26 +91,32 @@ macro_rules! clear_native {
 pub const RESET_EXIT: Native = Native {
     entry: 0xf3130,
     name: "scene_exit_reset",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         clear_longs(b, blocks::EXIT, 8);
         c.a[4] = blocks::EXIT + 32;
         c.d[6] |= 0xffff;
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
 clear_native!(RESET_SHOP, 0xf7916, "scene_shop_reset", blocks::SHOP, 5, true);
-clear_native!(RESET_TRANSITION, 0xf7ee0, "scene_transition_reset", blocks::TRANSITION, 4, false);
+pub const RESET_TRANSITION: Native = Native {
+    entry: 0xf7ee0,
+    name: "scene_transition_reset",
+    run: crate::Corps::Memoire(|b| clear_longs(b, blocks::TRANSITION, 4)),
+    touches_sound: false,
+    outputs: 0,
+};
 clear_native!(RESET_RANKING, 0xfc562, "ranking_reset", blocks::RANKING, 4, true);
 
 pub const CLEAR_TEXT: Native = Native {
     entry: 0xf683c,
     name: "scene_clear_text",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         clear_text(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

@@ -13,7 +13,6 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::call;
 
 /// Registres CPS-A (0x804100 + décalage).
 mod cps_a {
@@ -181,7 +180,7 @@ pub fn interruption(c: &mut Cpu, b: &mut Cps2Bus, niveau: u8, pc: u32) {
     c.a[7] = c.a[7].wrapping_sub(2);
     wr16(b, c.a[7], sr);
     c.sr = c.sr & !0x0700 | (niveau as u16) << 8;
-    vblank(c, b);
+    vblank(b);
     // `rte`
     c.a[7] = c.a[7].wrapping_add(6);
     c.set_sr(sr);
@@ -189,10 +188,9 @@ pub fn interruption(c: &mut Cpu, b: &mut Cps2Bus, niveau: u8, pc: u32) {
 
 const SR_S: u16 = 0x2000;
 
-/// 0x574 : le traitement de l'interruption ; tous les registres sont rendus.
-fn vblank(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (d, a) = (c.d, c.a);
-    c.a[5] = A5;
+/// 0x574 : le traitement de l'interruption. L'original sauve et rend tous les registres : ce qu'y laissent ses
+/// services ne sort pas.
+fn vblank(b: &mut Cps2Bus) {
     let sortie = rd8(b, a5(var::SORTIE));
     wr8(b, port::SORTIE, sortie);
     wr16(b, a5(var::RAZ), 0);
@@ -204,13 +202,12 @@ fn vblank(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, NOUVELLE_IMAGE, 0xff);
     wr8(b, AVANCE_RAPIDE, 0);
     registres_affichage(b);
-    call(c, b, 0x80c); // entrées
+    // les services rendent des valeurs que l'original laisse dans ses registres ; le VBLANK les rend tous
+    crate::inputs::lire_panneau(b); // 0x80c
     controle_video(b);
-    call(c, b, 0x68c); // commandes du Z80
-    call(c, b, 0x143da); // monnayeurs
-    call(c, b, 0x2dcf6); // comptabilité
+    crate::sound::envoyer(b); // 0x68c : commandes du Z80
+    crate::credits::lire_monnayeurs(b); // 0x143da
+    crate::eeprom::vblank(b); // 0x2dcf6 : comptabilité
     reveiller_taches(b);
     // le code d'origine finit par la jauge de charge (0xb3e), inactive tant que DSW a son bit 0x400
-    c.d = d;
-    c.a = a;
 }

@@ -151,7 +151,7 @@ impl<'a> Cx<'a> {
 
 /// Native d'un gestionnaire : contrat de la boucle de dispatch (A0 et D7 conservés).
 pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
 /// Déclare la table `NATIVES` d'un fichier de types : `adresse "nom" chemin::du::gestionnaire`.

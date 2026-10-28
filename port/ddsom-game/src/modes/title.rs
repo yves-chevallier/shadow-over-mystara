@@ -599,7 +599,7 @@ fn t18_palette(x: &mut Ctx) -> Flow {
     t18_object(x)
 }
 fn t18_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::T18Retry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::T18Retry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 4);
     wr8(x.b, o + 3, 0x34);
@@ -624,7 +624,7 @@ fn t18_sub(x: &mut Ctx) -> Flow {
     t18_text_object(x)
 }
 fn t18_text_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::T18SubRetry) };
+    let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { return x.wait(1, Etape::T18SubRetry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0xf0);
@@ -658,7 +658,7 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
     t1a_object(x)
 }
 fn t1a_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::T1aRetry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::T1aRetry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x42);
@@ -689,7 +689,7 @@ pub fn title_text(x: &mut Ctx) -> Flow {
         x.c.a[3] = crate::mem::A5 + 0x54e;
     }
     loop {
-        let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { break };
+        let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, x.c.d[4] as u8);
@@ -833,7 +833,7 @@ fn s04_wait_object(x: &mut Ctx) -> Flow {
     s04_object(x)
 }
 fn s04_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc_68k(x.c, x.b) else { return x.wait(1, Etape::S04Retry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::S04Retry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x44);

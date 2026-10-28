@@ -97,22 +97,21 @@ fn stop(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
 }
 
 /// `0xe03e4` : lance la tâche ; registres gardés.
-fn start(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+fn start(b: &mut cps2::Cps2Bus) {
     crate::kernel::creer_tache(b, SLOT, ENTRY);
-    crate::mem::rts(c, b);
 }
 
 pub const STOP: Native = Native {
     entry: 0xe03c6,
     name: "invite_stop",
-    run: stop,
+    run: crate::Corps::Processeur(stop),
     touches_sound: false,
     outputs: 0,
 };
 pub const START: Native = Native {
     entry: 0xe03e4,
     name: "invite_start",
-    run: start,
+    run: crate::Corps::Memoire(start),
     touches_sound: false,
     outputs: 0,
 };

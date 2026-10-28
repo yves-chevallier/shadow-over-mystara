@@ -304,7 +304,7 @@ fn scene_start(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     wr8(x.b, var::PHASE, 8);
     wr8(x.b, var::STEP, 0);
-    crate::rng::seed_68k(x.c, x.b);
+    crate::rng::seed(x.b);
     let mut a0 = PLAYERS;
     x.c.d[6] = 3;
     for d6 in (0..4u32).rev() {
@@ -944,7 +944,7 @@ pub fn reset_recorder(c: &mut Cpu, b: &mut Cps2Bus) {
     let dsw = rd16(b, var::DSW);
     c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
     if dsw & 0x2000 != 0 {
-        crate::rng::seed_68k(c, b);
+        crate::rng::seed(b);
         wr16(b, A5 + 0x6c, 0);
         wr16(b, A5 + 0x6e, 0);
         wr16(b, A5 + 0x7f92, 0xe);
@@ -978,10 +978,10 @@ pub fn stop_recorder(b: &mut Cps2Bus) {
 pub const RECORDER_RESET: Native = Native {
     entry: 0xe0538,
     name: "demo_enregistreur_depart",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         reset_recorder(c, b);
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: crate::regs::d(5) | crate::regs::a(0),
 };
@@ -989,10 +989,10 @@ pub const RECORDER_RESET: Native = Native {
 pub const RECORDER_STOP: Native = Native {
     entry: 0xe05d6,
     name: "demo_enregistreur_arret",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         stop_recorder(b);
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
@@ -1027,12 +1027,12 @@ fn record_inputs(x: &mut Ctx) {
 pub const DEMO_PHASE_12: Native = Native {
     entry: 0x1fa38,
     name: "demo_phase_12",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if demo_phase_12(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

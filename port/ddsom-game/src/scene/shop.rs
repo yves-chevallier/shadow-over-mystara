@@ -148,7 +148,7 @@ crate::etapes! {
         /// Ouverture : numéro de boutique, tâche des portraits, musique, objets de la boutique et des joueurs, puis la
         /// scène de la boutique (69 + numéro) est chargée et son script d'apparition relancé.
         OpenFaded = at::OPEN_FADED => |x| {
-            crate::objects::lists::unlink_all_68k(x.c, x.b);
+            crate::objects::lists::unlink_all(x.b);
             for pool in crate::objects::pools::POOLS {
                 pool.reset(x.b);
             }
@@ -182,7 +182,7 @@ crate::etapes! {
             x.call(0xca8);
             crate::hud::forget_displayed(x.b);
             // pools vidés juste avant : l'échec (erreur d'adresse de l'original) n'arrive pas (code-mort.md)
-            let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
+            let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
             wr8(x.b, o, 1);
             wr8(x.b, o + 2, 13);
             for k in 0..4u32 {
@@ -193,7 +193,7 @@ crate::etapes! {
                     continue;
                 }
                 x.c.a[2] = p;
-                let Some(Obj(e)) = pools::EFFCT.alloc_68k(x.c, x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
+                let Some(Obj(e)) = pools::EFFCT.alloc(x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
                 wr8(x.b, e, 1);
                 wr8(x.b, e + 2, 20);
                 let (variant, character) = (rd8(x.b, p + 3), rd8(x.b, p + 2));
@@ -222,7 +222,7 @@ crate::etapes! {
         LeaveFaded = at::LEAVE_FADED => |x| {
             x.call(0xc58);
             let a0 = x.c.a[0];
-            crate::objects::lists::unlink_all_68k(x.c, x.b);
+            crate::objects::lists::unlink_all(x.b);
             x.c.a[0] = a0;
             x.set_v8(0x3d, 1);
             crate::taches::une_image(x, Etape::LeaveWaited)
@@ -407,7 +407,7 @@ fn leave(x: &mut Ctx) -> Flow {
     x.call(0xc58);
     wr32(x.b, BLOCK, 0);
     let a0 = x.c.a[0];
-    crate::objects::lists::unlink_all_68k(x.c, x.b);
+    crate::objects::lists::unlink_all(x.b);
     x.c.a[0] = a0;
     crate::taches::une_image(x, Etape::ReopenWaited)
 }
@@ -433,12 +433,12 @@ fn portraits(x: &mut Ctx) -> Flow {
 pub const SHOP: Native = Native {
     entry: 0xf792e,
     name: "scene_shop",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

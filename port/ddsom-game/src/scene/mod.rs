@@ -229,7 +229,7 @@ impl<'a> Ctx<'a> {
 
     /// Crée un objet (allocateur `alloc`) actif, de type `kind` ; l'original écrit sans tester la retenue.
     pub fn spawn(&mut self, pool: &pools::Pool, kind: u8) -> Obj {
-        let o = pool.alloc_unchecked_68k(self.c, self.b);
+        let o = pool.alloc_unchecked(self.b);
         o.set_u8(self.b, Obj::ACTIVE, 1);
         o.set_u8(self.b, Obj::KIND, kind);
         o

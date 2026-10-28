@@ -333,7 +333,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     // cinq objets système : (variante, X, Z)
     for (variant, px, pz) in [(0xe7, 0x70, 0xd0), (0xe8, 0x70, 0xd0), (0xe4, 0x20, 0xb0), (0xe5, 0x00, 0x70), (0xe6, 0x13c, 0x60)] {
         // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
-        let Obj(o) = pools::SOBJ.alloc_unchecked_68k(x.c, x.b);
+        let Obj(o) = pools::SOBJ.alloc_unchecked(x.b);
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
         wr8(x.b, o + 3, variant);

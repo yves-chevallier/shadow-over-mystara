@@ -73,26 +73,36 @@ fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
     gauge(c, b);
 }
 
-/// 0xb46 : remplit la première colonne de la couche de caractères avec D1 (la jauge de chargement)
-/// sauf si les réglages la masquent.
-fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
-    let hidden = rd16(b, a5(c, ram::DIP)) & 0x400 != 0;
-    // Registres laissés pour les appelants (la mise à jour du monde les hérite) : D2 et les
-    // drapeaux du dernier calcul, A0 après la dernière écriture.
+/// 0xb46 : remplit la première colonne de la couche de caractères avec `marqueur` (la jauge de chargement), sauf si
+/// les réglages la masquent (bit 0x400 de DSW : toujours, dans ce jeu). Rend vrai si la jauge est dessinée.
+pub fn jauge(b: &mut Cps2Bus, marqueur: u32) -> bool {
+    let hidden = rd16(b, A5 + ram::DIP) & 0x400 != 0;
+    if !hidden {
+        for i in 0..GAUGE_LONGS {
+            wr32(b, hw::TEXT_LAYER + 4 * i, marqueur);
+        }
+    }
+    !hidden
+}
+
+/// `jauge` (D1 = marqueur) avec les registres de l'original : D2 et les drapeaux du dernier calcul, A0 après la
+/// dernière écriture (la mise à jour du monde les laisse au gestionnaire suivant).
+pub fn jauge_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     let flags_clear = !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
-    if hidden {
+    if !jauge(b, c.d[1]) {
         c.d[2] = c.d[2] & 0xffff_0000 | 0x400;
         c.sr &= flags_clear;
     } else {
-        for i in 0..GAUGE_LONGS {
-            wr32(b, hw::TEXT_LAYER + 4 * i, c.d[1]);
-        }
         c.d[2] |= 0xffff;
         c.a[0] = hw::TEXT_LAYER + 4 * GAUGE_LONGS;
         c.sr = c.sr & flags_clear
             | if c.d[1] == 0 { m68k::SR_Z } else { 0 }
             | if c.d[1] & 0x8000_0000 != 0 { m68k::SR_N } else { 0 };
     }
+}
+
+fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
+    jauge_68k(c, b);
     rts(c, b);
 }
 
@@ -118,19 +128,23 @@ fn unlock(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xbc6 : active les couches D0 (bits ajoutés à l'image du registre) et programme les registres
-/// d'affichage, sauf si l'écran est figé.
-fn enable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
-    let enable = rd16(b, a5(c, ram::LAYER_ENABLE)) | c.d[0] as u16;
-    wr16(b, a5(c, ram::LAYER_ENABLE), enable);
+/// 0xbc6 : active les couches `bits` (ajoutés à l'image du registre) et programme les registres d'affichage, sauf si
+/// l'écran est figé. Ni registre ni drapeau ne change.
+pub fn activer_couches(b: &mut Cps2Bus, bits: u16) {
+    let enable = rd16(b, A5 + ram::LAYER_ENABLE) | bits;
+    wr16(b, A5 + ram::LAYER_ENABLE, enable);
     if rd8(b, ram::FROZEN) == 0 {
         wr16(b, hw::LAYER_ENABLE, enable);
-        let objects = rd16(b, a5(c, ram::OBJ_TABLE));
+        let objects = rd16(b, A5 + ram::OBJ_TABLE);
         wr16(b, hw::CPS_A_OBJECTS, objects);
         for (reg, base) in hw::CPS_A_SCROLL.into_iter().zip([hw::SCROLL1, hw::SCROLL2, hw::SCROLL3]) {
             wr16(b, reg, (base >> 8) as u16);
         }
     }
+}
+
+fn enable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
+    activer_couches(b, c.d[0] as u16);
     rts(c, b);
 }
 
@@ -156,10 +170,6 @@ fn empty_objects(b: &mut Cps2Bus) {
     }
 }
 
-fn clear_objects(c: &mut Cpu, b: &mut Cps2Bus) {
-    empty_objects(b);
-    rts(c, b);
-}
 
 /// Écran noir, première moitié (0xc0c, 0xc32) : toutes les couches éteintes (`0xbfc` avec D0 = 0x12ce,
 /// après la remise à zéro de `A5+0x14`).
@@ -234,11 +244,24 @@ fn fill_run(c: &mut Cpu, b: &mut Cps2Bus, from: u32, to: u32, tile: u16) {
 fn clear_scroll1(c: &mut Cpu, b: &mut Cps2Bus) {
     fill_run(c, b, hw::SCROLL1, hw::SCROLL2, 0x20);
 }
-/// 0x3525c : efface les 8 Ko du début de la couche 1 avec la tuile vide 0x1f. Le code d'origine laisse
-/// la case dans D0-D5, A2 et A3, D6 = -1 et A1 à la fin de la zone.
-fn clear_scroll1_start(c: &mut Cpu, b: &mut Cps2Bus) {
-    const SIZE: u32 = 0x2000;
-    fill_layer(b, hw::SCROLL1, hw::SCROLL1 + SIZE, 0x1f);
+/// Octets effacés par 0x3525c.
+const SCROLL1_START: u32 = 0x2000;
+
+/// 0x3525c : efface les 8 Ko du début de la couche 1 avec la tuile vide 0x1f.
+pub fn effacer_debut_couche1(b: &mut Cps2Bus) {
+    fill_layer(b, hw::SCROLL1, hw::SCROLL1 + SCROLL1_START, 0x1f);
+}
+
+/// `effacer_debut_couche1` avec les registres de l'original : la case dans D0-D5, A2 et A3, D6 = -1 et A1 à la fin
+/// de la zone.
+pub fn effacer_debut_couche1_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_debut_couche1(b);
+    restes_effacer_debut_couche1(c);
+}
+
+/// Les registres que laisse 0x3525c.
+pub fn restes_effacer_debut_couche1(c: &mut Cpu) {
+    const SIZE: u32 = SCROLL1_START;
     for n in 0..6 {
         c.d[n] = 0x1f_0000;
     }
@@ -247,6 +270,10 @@ fn clear_scroll1_start(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[1] = hw::SCROLL1 + SIZE;
     set_low_word(&mut c.d[6], 0xffff);
     c.sr &= !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
+}
+
+fn clear_scroll1_start(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_debut_couche1_68k(c, b);
     rts(c, b);
 }
 fn clear_scroll2(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -257,7 +284,7 @@ fn clear_scroll3(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs }
 }
 
 pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
@@ -271,11 +298,12 @@ pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_couches_off", disable_lay
 pub const BLANK_SCREEN: Native = Native {
     entry: 0xc0c,
     name: "video_ecran_noir",
-    run: blank_screen,
+    run: crate::Corps::Processeur(blank_screen),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1),
 };
-pub const CLEAR_OBJECTS: Native = fixed(0xc58, "video_effacer_objets", clear_objects, 0);
+pub const CLEAR_OBJECTS: Native =
+    Native { entry: 0xc58, name: "video_effacer_objets", run: crate::Corps::Memoire(empty_objects), touches_sound: false, outputs: 0 };
 pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_effacer_scroll1", clear_scroll1, regs::d(0) | regs::d(1));
 pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_effacer_debut_scroll1", clear_scroll1_start, regs::ALL);
 pub const CLEAR_SCROLL2: Native = fixed(0xcc8, "video_effacer_scroll2", clear_scroll2, regs::d(0) | regs::d(1));
@@ -493,19 +521,59 @@ impl Blocks {
     }
 }
 
-fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, blocks: &Blocks) {
-    let (dst, at) = blocks.load(b, c.d[0] as u16, c.a[1]);
+/// Les chargeurs de grilles de blocs de tuiles.
+#[derive(Clone, Copy)]
+pub enum Grille {
+    /// 0x260c : blocs de 4 x 4 cases.
+    Blocs4x4,
+    /// 0x26d4 : couche de défilement 2 (blocs de 2 x 2 cases, pages de 0x1000 octets).
+    Couche2,
+    /// 0x2766 : couche de défilement 3 (petits blocs, pages de 0x800 octets).
+    Couche3,
+}
+
+impl Grille {
+    fn blocs(self) -> &'static Blocks {
+        match self {
+            Grille::Blocs4x4 => &LOAD_4X4,
+            Grille::Couche2 => &LOAD_SCROLL2,
+            Grille::Couche3 => &LOAD_SMALL,
+        }
+    }
+}
+
+/// Fin d'un chargement de grille : la destination après le dernier bloc (A1) et l'indice qui suit le dernier (A2).
+#[derive(Clone, Copy, Debug)]
+pub struct FinDeGrille {
+    pub destination: u32,
+    pub indices: u32,
+}
+
+/// Charge la grille de blocs `n` de `grille` à `destination` (GFX RAM).
+pub fn charger_grille(b: &mut Cps2Bus, grille: Grille, n: u16, destination: u32) -> FinDeGrille {
+    let (destination, indices) = grille.blocs().load(b, n, destination);
+    FinDeGrille { destination, indices }
+}
+
+/// `charger_grille` (D0 = numéro, A1 = destination) avec les registres de l'original : D0 = 0xffff, A1 et A2 en fin
+/// de grille.
+pub fn charger_grille_68k(c: &mut Cpu, b: &mut Cps2Bus, grille: Grille) {
+    let fin = charger_grille(b, grille, c.d[0] as u16, c.a[1]);
     c.d[0] = 0xffff;
-    c.a[1] = dst;
-    c.a[2] = at;
+    c.a[1] = fin.destination;
+    c.a[2] = fin.indices;
+}
+
+fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, grille: Grille) {
+    charger_grille_68k(c, b, grille);
     rts(c, b);
 }
 
 const LOAD_OUT: u32 = regs::d(0) | regs::a(1) | regs::a(2);
 
-pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocs_4x4", |c, b| load_blocks(c, b, &LOAD_4X4), LOAD_OUT);
-pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocs_scroll2", |c, b| load_blocks(c, b, &LOAD_SCROLL2), LOAD_OUT);
-pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocs_petits", |c, b| load_blocks(c, b, &LOAD_SMALL), LOAD_OUT);
+pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocs_4x4", |c, b| load_blocks(c, b, Grille::Blocs4x4), LOAD_OUT);
+pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocs_scroll2", |c, b| load_blocks(c, b, Grille::Couche2), LOAD_OUT);
+pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocs_petits", |c, b| load_blocks(c, b, Grille::Couche3), LOAD_OUT);
 
 // ---------------------------------------------------------------------------------------------
 // V2 : chiffres dans la couche de caractères
@@ -574,7 +642,7 @@ fn copy_fixed_screens(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const COPY_FIXED_SCREENS: Native = Native {
     entry: 0x19038,
     name: "video_copie_ecrans_fixes",
-    run: copy_fixed_screens,
+    run: crate::Corps::Processeur(copy_fixed_screens),
     touches_sound: false,
     outputs: 0,
 };

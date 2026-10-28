@@ -152,12 +152,29 @@ fn screen_height(p: &mut Painter, o: u32) -> u16 {
     h.wrapping_sub(p.cam.y)
 }
 
-/// 0x1de96 : construit la table d'objets de l'image.
-fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
-    let a5 = c.a[5];
-    if rd16(b, a5 + ram::BUILT) == 0 {
+/// Ce que la construction de la table d'objets laisse dans les registres de l'original.
+#[derive(Clone, Copy, Debug)]
+pub struct Restes {
+    /// D4 : attributs du dernier morceau, couleur du dernier texte... (mot bas ou long, selon le dernier écrit).
+    pub d4: u32,
+    /// A4 : pointeur d'écriture à la fin de la table.
+    pub fin: u32,
+    /// A6 : bloc de la caméra courante.
+    pub camera: u32,
+}
+
+/// 0x1de96 : construit la table d'objets de l'image (rien si elle l'est déjà : `None`). `d4` : le D4 de l'appelant,
+/// dont l'original ne remplace parfois que le mot bas.
+/// Glitch d'origine : D4 garde les attributs du dernier morceau dessiné, et des gestionnaires le relisent plus tard
+/// (0xad7b0 l'additionne à une position) : les appelants le rendent au processeur (`Restes::d4`).
+pub fn construire(b: &mut Cps2Bus, d4: u32) -> Option<Restes> {
+    let a5 = crate::mem::A5;
+    if rd16(b, a5 + ram::BUILT) != 0 {
+        return None;
+    }
+    {
         let cam = camera(b, a5);
-        let mut p = Painter { b, a5, at: OBJECT_RAM, cam, d4: c.d[4] };
+        let mut p = Painter { b, a5, at: OBJECT_RAM, cam, d4 };
         for a in [ram::BUDGET_INIT, ram::BUDGET] {
             let a = p.ram(a);
             wr16(p.b, a, 0x36a);
@@ -178,11 +195,20 @@ fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
         let v = rd8(p.b, bank) ^ 0xff;
         wr8(p.b, bank, v);
         wr16(p.b, a5 + ram::BUILT, 1);
-        c.d[4] = p.d4;
-        // A4 : pointeur d'écriture à la fin de la table ; A6 : bloc de la caméra courante
-        c.a[4] = p.at;
-        c.a[6] = a5 + if rd8(p.b, a5 + ram::USE_ALT_CAMERA) != 0 { ram::ALT_CAMERA } else { ram::CAMERA };
+        let camera = a5 + if rd8(p.b, a5 + ram::USE_ALT_CAMERA) != 0 { ram::ALT_CAMERA } else { ram::CAMERA };
+        Some(Restes { d4: p.d4, fin: p.at, camera })
     }
+}
+
+/// `construire` avec les registres de l'original (D4, A4, A6 quand la table est construite).
+pub fn construire_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(r) = construire(b, c.d[4]) {
+        (c.d[4], c.a[4], c.a[6]) = (r.d4, r.fin, r.camera);
+    }
+}
+
+fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
+    construire_68k(c, b);
     rts(c, b);
 }
 
@@ -625,21 +651,21 @@ fn return_if(c: &mut Cpu, b: &mut Cps2Bus, empty: bool) -> bool {
     empty
 }
 /// 0x1de7c : vide les têtes de listes d'objets, les marqueurs de joueurs et les trois textes.
-fn reset_lists(c: &mut Cpu, b: &mut Cps2Bus) {
-    let a5 = c.a[5];
+pub fn vider_listes(b: &mut Cps2Bus) {
+    let a5 = crate::mem::A5;
     wr32(b, a5 + ram::ACTORS, 0);
     wr32(b, a5 + ram::FOREGROUND, 0);
     wr8(b, a5 + ram::PLAYER_MARKERS, 0);
     for text in ram::TEXTS {
         wr32(b, a5 + text, 0);
     }
-    rts(c, b);
 }
+
 
 pub const RESET_LISTS: Native = Native {
     entry: 0x1de7c,
     name: "sprites_vide_les_listes",
-    run: reset_lists,
+    run: crate::Corps::Memoire(vider_listes),
     touches_sound: false,
     outputs: 0,
 };
@@ -647,7 +673,7 @@ pub const RESET_LISTS: Native = Native {
 pub const BUILD_SPRITE_LIST: Native = Native {
     entry: 0x1de96,
     name: "build_sprite_list",
-    run: build_sprite_list,
+    run: crate::Corps::Processeur(build_sprite_list),
     touches_sound: false,
     outputs: 0,
 };

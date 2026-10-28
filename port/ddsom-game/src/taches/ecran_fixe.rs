@@ -206,7 +206,7 @@ fn embleme(x: &mut Ctx, ligne: Ligne) {
 
 /// Allocation d'un objet : son adresse, ou rien (retenue levée).
 fn alloue(x: &mut Ctx, pool: &pools::Pool) -> Option<u32> {
-    pool.alloc_68k(x.c, x.b).map(|o| o.0)
+    pool.alloc(x.b).map(|o| o.0)
 }
 
 /// `0x18b8e` : ligne des rangs 5 à 10 (`rang` = 10 à 5) à partir de la case `p`.

@@ -721,7 +721,7 @@ fn combat_update_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const COMBAT_UPDATE: Native = Native {
     entry: 0x260ee,
     name: "combat_update",
-    run: combat_update_native,
+    run: crate::Corps::Processeur(combat_update_native),
     touches_sound: false,
     outputs: 0,
 };

@@ -598,7 +598,7 @@ fn shake_b(x: &mut Cx) {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs }
 }
 
 const CREATED: u32 = regs::a(1) | regs::CCR;

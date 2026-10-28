@@ -212,3 +212,8 @@ cas d'échec l'original saute en 0xf7dfa (`tst.w 1(A5)` : erreur d'adresse, comm
 **Blocages (0x2d112, 0x2d7fa).** « NG » du MEMORY CHECK et « EEPROM ERROR » finissent sur `bra.b *` ; la native vide
 posée à l'adresse est remplacée par le point `kernel::Point::Bloque` (l'image finit, les interruptions continuent).
 Jamais atteints (`docs/service.md` §7).
+
+**Affichage des verrous du Z80 (fin de 0x68c, appel de 0x29d78).** Écran de débogage : chaque octet des verrous
+0x618001... en hexadécimal dans la couche de texte, seulement si le mot 0xc0 du programme (nul dans cette version) et
+`A5+0x7fc6` sont non nuls ; 0x29d78 n'a pas de native. Le cœur `sound::envoyer` (VBLANK) s'arrête sur `unreachable!` ;
+la native de 0x68c garde sa transcription (`afficher_verrous`). Nature : mode de mise au point.

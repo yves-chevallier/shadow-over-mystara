@@ -233,12 +233,12 @@ fn end(x: &mut Ctx) -> Flow {
 pub const CHARACTERS: Native = Native {
     entry: 0xf6492,
     name: "scene_characters",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

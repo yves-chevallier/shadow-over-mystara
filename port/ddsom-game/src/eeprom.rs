@@ -24,7 +24,7 @@ use m68k::decode::Size;
 use m68k::{Cpu, SR_X};
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 
 pub mod carte_dev;
 
@@ -67,8 +67,9 @@ const ESSAIS: u8 = 10;
 /// Durée maximale de l'attente de fin d'écriture (itérations).
 const ATTENTE_MAX: u32 = 0x2ffff;
 
-fn a5(c: &Cpu, off: u32) -> u32 {
-    c.a[5].wrapping_add(off)
+/// Adresse `A5 + off` (A5 vaut toujours `mem::A5`).
+const fn a5(off: u32) -> u32 {
+    crate::mem::A5.wrapping_add(off)
 }
 
 /// L'état des lignes de l'EEPROM, que l'original garde dans D2 d'un bout à l'autre du transfert.
@@ -78,58 +79,58 @@ struct Lignes {
 
 impl Lignes {
     /// 0x2da2c : écrit les lignes sur le port, complétées par les autres bits de sortie.
-    fn ecrire(&mut self, c: &Cpu, b: &mut Cps2Bus) {
-        let mut v = self.etat | rd16(b, a5(c, ram::SORTIE_MOT));
+    fn ecrire(&mut self, b: &mut Cps2Bus) {
+        let mut v = self.etat | rd16(b, a5(ram::SORTIE_MOT));
         v &= !6;
-        v |= rd8(b, a5(c, ram::SORTIE_OCTET)) as u16;
+        v |= rd8(b, a5(ram::SORTIE_OCTET)) as u16;
         wr16(b, PORT_SORTIE, v);
         self.etat = v & (DI | CLK | CS);
     }
 
     /// 0x2da22 : une impulsion d'horloge.
-    fn impulsion(&mut self, c: &Cpu, b: &mut Cps2Bus) {
+    fn impulsion(&mut self, b: &mut Cps2Bus) {
         self.etat |= CLK;
-        self.ecrire(c, b);
+        self.ecrire(b);
         self.etat &= !CLK;
-        self.ecrire(c, b);
+        self.ecrire(b);
     }
 
     /// Fin de commande : CS bas, une écriture et une impulsion.
-    fn relacher(&mut self, c: &Cpu, b: &mut Cps2Bus) {
+    fn relacher(&mut self, b: &mut Cps2Bus) {
         self.etat &= !CS;
-        self.ecrire(c, b);
-        self.impulsion(c, b);
+        self.ecrire(b);
+        self.impulsion(b);
     }
 
     /// 0x2d9f4 : CS haut, puis les 10 bits de `commande` (poids fort d'abord), chacun suivi d'une impulsion.
-    fn commande(&mut self, c: &Cpu, b: &mut Cps2Bus, commande: u16) {
+    fn commande(&mut self, b: &mut Cps2Bus, commande: u16) {
         self.etat |= CS;
-        self.ecrire(c, b);
+        self.ecrire(b);
         for i in (0..10).rev() {
             self.etat = self.etat & !DI | ((commande >> i & 1) << 12);
-            self.ecrire(c, b);
-            self.impulsion(c, b);
+            self.ecrire(b);
+            self.impulsion(b);
         }
     }
 
     /// 0x2d9c0 : attend la fin d'une écriture (DO haut). Faux si le délai est dépassé.
-    fn attendre(&mut self, c: &Cpu, b: &mut Cps2Bus) -> bool {
+    fn attendre(&mut self, b: &mut Cps2Bus) -> bool {
         self.etat |= CS;
-        self.ecrire(c, b);
+        self.ecrire(b);
         let mut restant = ATTENTE_MAX;
         loop {
             restant -= 1;
             if restant == 0 {
                 return false;
             }
-            self.impulsion(c, b);
+            self.impulsion(b);
             if rd16(b, PORT_ENTREE) & 1 != 0 {
                 break;
             }
         }
         self.etat &= !CS;
-        self.ecrire(c, b);
-        self.impulsion(c, b);
+        self.ecrire(b);
+        self.impulsion(b);
         true
     }
 }
@@ -146,11 +147,11 @@ struct Transfert {
     debut: u16,
 }
 
-fn transfert(c: &Cpu, b: &mut Cps2Bus) -> Transfert {
+fn transfert(b: &mut Cps2Bus) -> Transfert {
     Transfert {
-        tampon: rd32(b, a5(c, ram::TAMPON)),
-        mots: rd16(b, a5(c, ram::MOTS_COURANT)),
-        debut: rd16(b, a5(c, ram::DEBUT_COURANT)),
+        tampon: rd32(b, a5(ram::TAMPON)),
+        mots: rd16(b, a5(ram::MOTS_COURANT)),
+        debut: rd16(b, a5(ram::DEBUT_COURANT)),
     }
 }
 
@@ -163,26 +164,26 @@ fn debut_tampon(t: &Transfert) -> u32 {
 // Lecture et écriture
 
 /// 0x2d846 : lit `mots + 1` mots depuis l'adresse `debut / 2` de l'EEPROM vers le tampon.
-fn lire(c: &Cpu, b: &mut Cps2Bus) {
-    wr8(b, a5(c, ram::OCCUPE), 1);
+fn lire(b: &mut Cps2Bus) {
+    wr8(b, a5(ram::OCCUPE), 1);
     let mut lignes = Lignes { etat: 0 };
-    let t = transfert(c, b);
+    let t = transfert(b);
     let mut ptr = debut_tampon(&t);
     let mut cmd = adresse(t.debut) | CMD_LIRE;
     for _ in 0..=t.mots {
-        lignes.commande(c, b, cmd);
+        lignes.commande(b, cmd);
         let mut mot = 0u16;
         for _ in 0..16 {
-            lignes.impulsion(c, b);
+            lignes.impulsion(b);
             mot = mot << 1 | rd16(b, PORT_ENTREE) & 1;
         }
-        lignes.impulsion(c, b);
-        lignes.relacher(c, b);
+        lignes.impulsion(b);
+        lignes.relacher(b);
         wr16(b, ptr, mot);
         ptr = ptr.wrapping_add(2);
         cmd = cmd.wrapping_add(1);
     }
-    wr8(b, a5(c, ram::OCCUPE), 0);
+    wr8(b, a5(ram::OCCUPE), 0);
 }
 
 /// Résultat d'un transfert : `true` si tout s'est bien passé.
@@ -190,54 +191,54 @@ type Succes = bool;
 
 /// 0x2d90e : écrit `mots + 1` mots du tampon dans l'EEPROM (autorisation d'écriture, puis pour chaque
 /// mot : effacement, attente, écriture, attente).
-fn ecrire(c: &Cpu, b: &mut Cps2Bus) -> Succes {
-    wr8(b, a5(c, ram::OCCUPE), 1);
+fn ecrire(b: &mut Cps2Bus) -> Succes {
+    wr8(b, a5(ram::OCCUPE), 1);
     let mut lignes = Lignes { etat: 0 };
-    lignes.commande(c, b, CMD_AUTORISER);
-    lignes.relacher(c, b);
-    let t = transfert(c, b);
+    lignes.commande(b, CMD_AUTORISER);
+    lignes.relacher(b);
+    let t = transfert(b);
     let mut ptr = debut_tampon(&t);
     let mut cmd = adresse(t.debut);
     for _ in 0..=t.mots {
         let cmd_effacer = cmd & 0x3f | CMD_EFFACER;
-        lignes.commande(c, b, cmd_effacer);
-        lignes.impulsion(c, b);
-        lignes.relacher(c, b);
-        if !lignes.attendre(c, b) {
-            wr8(b, a5(c, ram::OCCUPE), 0);
+        lignes.commande(b, cmd_effacer);
+        lignes.impulsion(b);
+        lignes.relacher(b);
+        if !lignes.attendre(b) {
+            wr8(b, a5(ram::OCCUPE), 0);
             return false;
         }
         let cmd_ecrire = cmd_effacer & 0x3f | CMD_ECRIRE;
-        lignes.commande(c, b, cmd_ecrire);
+        lignes.commande(b, cmd_ecrire);
         let mot = rd16(b, ptr);
         ptr = ptr.wrapping_add(2);
         for i in (0..16).rev() {
             lignes.etat = lignes.etat & !DI | ((mot >> i & 1) << 12);
-            lignes.ecrire(c, b);
-            lignes.impulsion(c, b);
+            lignes.ecrire(b);
+            lignes.impulsion(b);
         }
         lignes.etat &= !CS;
-        lignes.ecrire(c, b);
-        lignes.impulsion(c, b);
-        lignes.impulsion(c, b);
-        if !lignes.attendre(c, b) {
-            wr8(b, a5(c, ram::OCCUPE), 0);
+        lignes.ecrire(b);
+        lignes.impulsion(b);
+        lignes.impulsion(b);
+        if !lignes.attendre(b) {
+            wr8(b, a5(ram::OCCUPE), 0);
             return false;
         }
         lignes.etat &= !CLK;
-        lignes.ecrire(c, b);
+        lignes.ecrire(b);
         cmd = cmd_ecrire.wrapping_add(1);
     }
-    wr8(b, a5(c, ram::OCCUPE), 0);
+    wr8(b, a5(ram::OCCUPE), 0);
     true
 }
 
-fn poser_transfert(c: &Cpu, b: &mut Cps2Bus, tampon: u32) {
-    wr32(b, a5(c, ram::TAMPON), tampon);
-    let mots = rd16(b, a5(c, ram::MOTS));
-    wr16(b, a5(c, ram::MOTS_COURANT), mots);
-    let debut = rd16(b, a5(c, ram::DEBUT));
-    wr16(b, a5(c, ram::DEBUT_COURANT), debut);
+fn poser_transfert(b: &mut Cps2Bus, tampon: u32) {
+    wr32(b, a5(ram::TAMPON), tampon);
+    let mots = rd16(b, a5(ram::MOTS));
+    wr16(b, a5(ram::MOTS_COURANT), mots);
+    let debut = rd16(b, a5(ram::DEBUT));
+    wr16(b, a5(ram::DEBUT_COURANT), debut);
 }
 
 /// Résultat de `moveq #0/-1,D0` : D0, N, Z, V, C ; X est à zéro dans ces routines (dernière
@@ -250,32 +251,32 @@ fn rendre(c: &mut Cpu, b: &mut Cps2Bus, succes: Succes) {
 }
 
 fn natif_lire(c: &mut Cpu, b: &mut Cps2Bus) {
-    lire(c, b);
+    lire(b);
     rts(c, b);
 }
 
 fn natif_ecrire(c: &mut Cpu, b: &mut Cps2Bus) {
-    let ok = ecrire(c, b);
+    let ok = ecrire(b);
     rendre(c, b, ok);
 }
 
 /// 0x2d8aa : écrit la copie en RAM dans l'EEPROM, relit dans `COPIE` et compare ; 10 essais.
-pub(crate) fn ecrire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
-    wr8(b, a5(c, ram::ESSAIS), ESSAIS);
+pub(crate) fn ecrire_verifier(b: &mut Cps2Bus) -> Succes {
+    wr8(b, a5(ram::ESSAIS), ESSAIS);
     loop {
-        poser_transfert(c, b, a5(c, ram::CONFIG));
-        ecrire(c, b);
-        poser_transfert(c, b, a5(c, ram::COPIE));
-        lire(c, b);
-        let debut = rd16(b, a5(c, ram::DEBUT)) as i16 as u32;
-        let mots = rd16(b, a5(c, ram::MOTS));
-        let (config, copie) = (a5(c, ram::CONFIG).wrapping_add(debut), a5(c, ram::COPIE).wrapping_add(debut));
+        poser_transfert(b, a5(ram::CONFIG));
+        ecrire(b);
+        poser_transfert(b, a5(ram::COPIE));
+        lire(b);
+        let debut = rd16(b, a5(ram::DEBUT)) as i16 as u32;
+        let mots = rd16(b, a5(ram::MOTS));
+        let (config, copie) = (a5(ram::CONFIG).wrapping_add(debut), a5(ram::COPIE).wrapping_add(debut));
         let egal = (0..=mots as u32).all(|i| rd16(b, config + 2 * i) == rd16(b, copie + 2 * i));
         if egal {
             return true;
         }
-        let reste = rd8(b, a5(c, ram::ESSAIS)).wrapping_sub(1);
-        wr8(b, a5(c, ram::ESSAIS), reste);
+        let reste = rd8(b, a5(ram::ESSAIS)).wrapping_sub(1);
+        wr8(b, a5(ram::ESSAIS), reste);
         if reste == 0 {
             return false;
         }
@@ -283,23 +284,23 @@ pub(crate) fn ecrire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
 }
 
 fn natif_ecrire_verifier(c: &mut Cpu, b: &mut Cps2Bus) {
-    let ok = ecrire_verifier(c, b);
+    let ok = ecrire_verifier(b);
     rendre(c, b, ok);
 }
 
 /// 0x2d808 : lit l'EEPROM dans la copie en RAM jusqu'à ce que ses deux exemplaires de la
 /// configuration (mots 0-23 et 24-47) concordent ; 10 essais.
-pub(crate) fn lire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
-    wr8(b, a5(c, ram::ESSAIS), ESSAIS);
+pub(crate) fn lire_verifier(b: &mut Cps2Bus) -> Succes {
+    wr8(b, a5(ram::ESSAIS), ESSAIS);
     loop {
-        poser_transfert(c, b, a5(c, ram::CONFIG));
-        lire(c, b);
-        let config = a5(c, ram::CONFIG);
+        poser_transfert(b, a5(ram::CONFIG));
+        lire(b);
+        let config = a5(ram::CONFIG);
         if (0..24).all(|i| rd16(b, config + 2 * i) == rd16(b, config + 0x30 + 2 * i)) {
             return true;
         }
-        let reste = rd8(b, a5(c, ram::ESSAIS)).wrapping_sub(1);
-        wr8(b, a5(c, ram::ESSAIS), reste);
+        let reste = rd8(b, a5(ram::ESSAIS)).wrapping_sub(1);
+        wr8(b, a5(ram::ESSAIS), reste);
         if reste == 0 {
             return false;
         }
@@ -307,7 +308,7 @@ pub(crate) fn lire_verifier(c: &Cpu, b: &mut Cps2Bus) -> Succes {
 }
 
 fn natif_lire_verifier(c: &mut Cpu, b: &mut Cps2Bus) {
-    let ok = lire_verifier(c, b);
+    let ok = lire_verifier(b);
     rendre(c, b, ok);
 }
 
@@ -320,36 +321,36 @@ const MOTS_EEPROM: u16 = 0x40;
 const MOTIFS: [u16; 4] = [0xffff, 0xaaaa, 0x5555, 0];
 
 /// Pose le transfert de toute l'EEPROM (`MOTS`, `DEBUT`).
-pub(crate) fn toute_eeprom(c: &Cpu, b: &mut Cps2Bus) {
-    wr16(b, a5(c, ram::MOTS), MOTS_EEPROM - 1);
-    wr16(b, a5(c, ram::DEBUT), 0);
+pub(crate) fn toute_eeprom(b: &mut Cps2Bus) {
+    wr16(b, a5(ram::MOTS), MOTS_EEPROM - 1);
+    wr16(b, a5(ram::DEBUT), 0);
 }
 
 /// 0x2da90 : écrit `motif` dans les 64 mots de l'EEPROM (depuis `COPIE`), relit et compare.
-fn tester_motif(c: &Cpu, b: &mut Cps2Bus, motif: u16) -> bool {
-    let copie = a5(c, ram::COPIE);
+fn tester_motif(b: &mut Cps2Bus, motif: u16) -> bool {
+    let copie = a5(ram::COPIE);
     for i in 0..MOTS_EEPROM as u32 {
         wr16(b, copie + 2 * i, motif);
     }
-    wr32(b, a5(c, ram::TAMPON), copie);
-    wr16(b, a5(c, ram::MOTS_COURANT), MOTS_EEPROM - 1);
-    wr16(b, a5(c, ram::DEBUT_COURANT), 0);
-    ecrire(c, b);
-    lire(c, b);
+    wr32(b, a5(ram::TAMPON), copie);
+    wr16(b, a5(ram::MOTS_COURANT), MOTS_EEPROM - 1);
+    wr16(b, a5(ram::DEBUT_COURANT), 0);
+    ecrire(b);
+    lire(b);
     (0..MOTS_EEPROM as u32).all(|i| rd16(b, copie + 2 * i) == motif)
 }
 
 /// 0x2da4a : lit l'EEPROM dans la copie en RAM, la teste avec quatre motifs, puis y réécrit la copie
 /// (validée par `config::valider_copie`). Faux si un motif n'a pas été relu.
 pub fn tester(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    toute_eeprom(c, b);
-    lire_verifier(c, b);
-    if !MOTIFS.iter().all(|&m| tester_motif(c, b, m)) {
+    toute_eeprom(b);
+    lire_verifier(b);
+    if !MOTIFS.iter().all(|&m| tester_motif(b, m)) {
         return false;
     }
     crate::config::valider_copie(c, b);
-    toute_eeprom(c, b);
-    ecrire_verifier(c, b);
+    toute_eeprom(b);
+    ecrire_verifier(b);
     true
 }
 
@@ -372,33 +373,54 @@ const CONTINUES: Compteur =
     Compteur { condition: Some(0x25), valeur: 0x7e, image: 0xffff_9df6, place: 0x68 };
 const PARTIES: Compteur = Compteur { condition: None, valeur: 0x7fd4, image: 0xffff_9dfa, place: 0x6c };
 
+/// Ce qu'un compteur laisse dans D0 (et les drapeaux) de l'original.
+enum Compte {
+    /// Pas de comptage (condition fausse, ou comptabilité sur la carte de développement) : D0 intact.
+    Rien,
+    /// D0 = la nouvelle valeur (inchangée par rapport à son image : pas d'écriture).
+    Valeur(u32),
+    /// L'EEPROM a été écrite (0x2d8aa) : D0 = 0 ou -1 selon le succès.
+    Ecrit(Succes),
+}
+
 /// Incrémente le compteur et, s'il a changé par rapport à son image, l'écrit dans l'EEPROM (0x2d8aa).
-/// Rend vrai si l'EEPROM a été écrite.
-fn compter(c: &mut Cpu, b: &mut Cps2Bus, k: &Compteur) {
+fn compter(b: &mut Cps2Bus, k: &Compteur) -> Compte {
     if let Some(cond) = k.condition {
-        if rd8(b, a5(c, cond)) == 0 {
-            return;
+        if rd8(b, a5(cond)) == 0 {
+            return Compte::Rien;
         }
     }
-    let valeur = rd32(b, a5(c, k.valeur)).wrapping_add(1);
-    wr32(b, a5(c, k.valeur), valeur);
-    if rd8(b, a5(c, ram::SANS_COMPTA)) != 0 {
-        return;
+    let valeur = rd32(b, a5(k.valeur)).wrapping_add(1);
+    wr32(b, a5(k.valeur), valeur);
+    if rd8(b, a5(ram::SANS_COMPTA)) != 0 {
+        return Compte::Rien;
     }
-    c.d[0] = valeur;
-    if valeur == rd32(b, a5(c, k.image)) {
-        return;
+    if valeur == rd32(b, a5(k.image)) {
+        return Compte::Valeur(valeur);
     }
-    wr32(b, a5(c, k.image), valeur);
-    wr16(b, a5(c, ram::MOTS), 1);
-    wr16(b, a5(c, ram::DEBUT), k.place);
-    call(c, b, 0x2d8aa);
+    wr32(b, a5(k.image), valeur);
+    wr16(b, a5(ram::MOTS), 1);
+    wr16(b, a5(ram::DEBUT), k.place);
+    Compte::Ecrit(ecrire_verifier(b))
+}
+
+/// `compter` avec les registres de l'original.
+fn compter_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Compteur) {
+    match compter(b, k) {
+        Compte::Rien => {}
+        Compte::Valeur(v) => c.d[0] = v,
+        Compte::Ecrit(ok) => {
+            c.d[0] = if ok { 0 } else { u32::MAX };
+            c.flags_logic(c.d[0], Size::Long);
+            c.sr &= !SR_X;
+        }
+    }
 }
 
 macro_rules! natif_compteur {
     ($fn:ident, $k:expr) => {
         fn $fn(c: &mut Cpu, b: &mut Cps2Bus) {
-            compter(c, b, &$k);
+            compter_68k(c, b, &$k);
             rts(c, b);
         }
     };
@@ -416,16 +438,29 @@ natif_compteur!(compter_parties, PARTIES);
 /// puis, si la RAM supplémentaire est utilisée (`SANS_COMPTA` ≠ 0, carte de développement), les trois
 /// exemplaires du compteur dans cette RAM (`carte_dev`).
 struct Complet {
-    compteur: u32,
+    compteur: &'static Compteur,
     carte: fn(&mut Cps2Bus) -> u32,
 }
 
-const COMPLET_PIECES: Complet = Complet { compteur: 0x2daca, carte: carte_dev::pieces };
-const COMPLET_DEPARTS: Complet = Complet { compteur: 0x2daf4, carte: carte_dev::departs };
+const COMPLET_PIECES: Complet = Complet { compteur: &PIECES, carte: carte_dev::pieces };
+const COMPLET_DEPARTS: Complet = Complet { compteur: &DEPARTS, carte: carte_dev::departs };
 
-fn compta_complete(c: &mut Cpu, b: &mut Cps2Bus, k: &Complet) {
-    call(c, b, k.compteur);
-    let actif = rd8(b, a5(c, ram::SANS_COMPTA)) != 0;
+/// Une pièce (0x2e448) ou un départ (0x2e49a) comptés : l'EEPROM, puis la RAM de la carte de développement. Rend la
+/// valeur de la carte (`None` sur une borne).
+fn compta_complete(b: &mut Cps2Bus, k: &Complet) -> Option<u32> {
+    compter(b, k.compteur);
+    (rd8(b, a5(ram::SANS_COMPTA)) != 0).then(|| (k.carte)(b))
+}
+
+/// 0x2e448 : une pièce comptée (lecture des monnayeurs, VBLANK).
+pub fn compter_piece(b: &mut Cps2Bus) {
+    compta_complete(b, &COMPLET_PIECES);
+}
+
+/// `compta_complete` avec les registres de l'original (D0 du compteur, drapeaux du dernier test).
+fn compta_complete_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Complet) {
+    compter_68k(c, b, k.compteur);
+    let actif = rd8(b, a5(ram::SANS_COMPTA)) != 0;
     c.flags_logic(actif as u32, Size::Byte);
     if actif {
         let valeur = (k.carte)(b);
@@ -435,25 +470,32 @@ fn compta_complete(c: &mut Cpu, b: &mut Cps2Bus, k: &Complet) {
 }
 
 fn natif_compta_pieces(c: &mut Cpu, b: &mut Cps2Bus) {
-    compta_complete(c, b, &COMPLET_PIECES);
+    compta_complete_68k(c, b, &COMPLET_PIECES);
 }
 
 fn natif_compta_departs(c: &mut Cpu, b: &mut Cps2Bus) {
-    compta_complete(c, b, &COMPLET_DEPARTS);
+    compta_complete_68k(c, b, &COMPLET_DEPARTS);
 }
 
 // ---------------------------------------------------------------------------------------------
 // VBLANK
 
-/// 0x2dcf6 (VBLANK) : lève le bit 0 du mot 0x664000 de la RAM supplémentaire (si la comptabilité est active).
+/// 0x2dcf6 (VBLANK) : lève le bit 0 du mot 0x664000 de la RAM supplémentaire (si la comptabilité est active). Rend le
+/// mot final (D0.w de l'original), s'il a été lu.
+pub fn vblank(b: &mut Cps2Bus) -> Option<u16> {
+    if rd8(b, a5(ram::SANS_COMPTA)) == 0 {
+        return None;
+    }
+    let mot = rd16(b, 0x664000);
+    if mot & 1 == 0 {
+        wr16(b, 0x664000, mot | 1);
+    }
+    Some(mot | 1)
+}
+
 fn vblank_compta(c: &mut Cpu, b: &mut Cps2Bus) {
-    if rd8(b, a5(c, ram::SANS_COMPTA)) != 0 {
-        let mot = rd16(b, 0x664000);
+    if let Some(mot) = vblank(b) {
         c.d[0] = c.d[0] & 0xffff_0000 | mot as u32;
-        if mot & 1 == 0 {
-            wr16(b, 0x664000, mot | 1);
-            c.d[0] = c.d[0] & 0xffff_0000 | (mot | 1) as u32;
-        }
     }
     rts(c, b);
 }
@@ -463,7 +505,7 @@ macro_rules! natif {
         pub const $nom: Native = Native {
             entry: $entree,
             name: $name,
-            run: $run,
+            run: crate::Corps::Processeur($run),
             touches_sound: false,
             outputs: $sorties,
         };
@@ -485,23 +527,22 @@ natif!(COMPLET_DEPARTS_NATIF, 0x2e49a, "compta_complete_departs", natif_compta_d
 // ---------------------------------------------------------------------------------------------
 // Parties gratuites et RAM de la carte de développement
 
-/// Compteur des parties gratuites (A5+0x25 non nul : jeu gratuit) ; sur la carte de développement
-/// (`SANS_COMPTA` non nul : jamais sur une borne), le compteur correspondant de la RAM supplémentaire.
-const COMPTEUR_GRATUIT: u32 = 0x2db1e;
+/// Jeu gratuit (A5+0x25 non nul) : le compteur des parties gratuites (`CONTINUES`, 0x2db1e) ; sur la carte de
+/// développement (`SANS_COMPTA` non nul : jamais sur une borne), le compteur correspondant de la RAM supplémentaire.
 const JEU_GRATUIT: u32 = 0x25;
 
 /// `tst.b (SANS_COMPTA,A5)` : rend vrai si la RAM supplémentaire est utilisée (drapeaux comme l'original).
 fn carte_de_developpement(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    let v = rd8(b, a5(c, ram::SANS_COMPTA));
+    let v = rd8(b, a5(ram::SANS_COMPTA));
     c.flags_logic(v as u32, Size::Byte);
     v != 0
 }
 
 /// 0x2e4ec (départ d'un joueur) : en jeu gratuit, le compteur des parties gratuites.
 fn compta_parties(c: &mut Cpu, b: &mut Cps2Bus) {
-    let gratuit = rd8(b, a5(c, JEU_GRATUIT)) != 0;
+    let gratuit = rd8(b, a5(JEU_GRATUIT)) != 0;
     if gratuit {
-        call(c, b, COMPTEUR_GRATUIT);
+        compter_68k(c, b, &CONTINUES);
     }
     if carte_de_developpement(c, b) {
         let valeur = if gratuit { carte_dev::parties_gratuites(b) } else { carte_dev::parties_payantes(b) };
@@ -544,7 +585,7 @@ fn stat_duree(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const STAT_PERSONNAGE: Native = Native {
     entry: 0x2e630,
     name: "compta_stat_personnage",
-    run: stat_personnage,
+    run: crate::Corps::Processeur(stat_personnage),
     touches_sound: false,
     outputs: regs::CCR,
 };
@@ -552,7 +593,7 @@ pub const STAT_PERSONNAGE: Native = Native {
 pub const STAT_DUREE: Native = Native {
     entry: 0x2e696,
     name: "compta_stat_duree",
-    run: stat_duree,
+    run: crate::Corps::Processeur(stat_duree),
     touches_sound: false,
     outputs: regs::CCR,
 };
@@ -560,7 +601,7 @@ pub const STAT_DUREE: Native = Native {
 pub const COMPTA_PARTIES: Native = Native {
     entry: 0x2e4ec,
     name: "compta_parties",
-    run: compta_parties,
+    run: crate::Corps::Processeur(compta_parties),
     touches_sound: false,
     outputs: regs::CCR,
 };
@@ -568,7 +609,7 @@ pub const COMPTA_PARTIES: Native = Native {
 pub const COMPTA_INIT: Native = Native {
     entry: 0x2dc9a,
     name: "compta_init",
-    run: compta_init,
+    run: crate::Corps::Processeur(compta_init),
     touches_sound: false,
     outputs: regs::CCR,
 };

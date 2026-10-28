@@ -29,12 +29,12 @@ const CLEARED: u32 = 0x1c846;
 pub const PHASE_20: Native = Native {
     entry: 0x1c80c,
     name: "gameover_phase_20",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if phase_20(&mut x) == Flow::Done {
             rts(x.c, x.b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

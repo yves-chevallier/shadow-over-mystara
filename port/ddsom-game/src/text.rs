@@ -287,7 +287,7 @@ fn clear_box_native(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run, touches_sound: false, outputs: regs::a(4) | regs::CCR }
+    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::a(4) | regs::CCR }
 }
 
 pub const PRINT: Native = native(0x0d5e, "text_print", |c, b| texte_native(c, b, Sorte::Texte));

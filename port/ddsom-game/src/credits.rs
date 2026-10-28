@@ -23,7 +23,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::mem::{rd16, rd8, rts, set_low_byte, wr8};
+use crate::mem::{rd16, rd8, rts, set_low_byte, wr8, A5};
 use crate::ops;
 use crate::{regs, Native};
 
@@ -93,8 +93,7 @@ const CREDITS_MAX: u8 = 9;
 mod ext {
     /// Bruit d'insertion de pièce (wrapper son).
     pub const BRUIT_PIECE: u32 = 0xe18f8;
-    /// Comptabilité des pièces / des départs (EEPROM, compteurs de service).
-    pub const COMPTABILITE_PIECE: u32 = 0x2e448;
+    /// Comptabilité des départs (EEPROM, compteurs de service).
     pub const COMPTABILITE_DEPART: u32 = 0x2e49a;
     /// Verrouillage / déverrouillage des compteurs de pièces (masque dans D0).
     pub const VERROUILLER: u32 = 0xb96;
@@ -119,51 +118,43 @@ struct Ligne {
 /// Parcourt les monnayeurs configurés dans l'ordre de l'original : les lignes à examiner et, entre
 /// elles, les décisions des tests sur le nombre de monnayeurs (`apres_ligne(k)` est appelé après chaque
 /// ligne). Le deuxième monnayeur lit la ligne 3 si les pièces sont partagées.
-fn parcourir(b: &mut Cps2Bus, c: &mut Cpu, mut ligne: impl FnMut(&mut Cps2Bus, &mut Cpu, Ligne)) {
-    let n = rd8(b, a5(c, ram::MONNAYEURS)) as i8;
-    ligne(b, c, Ligne { k: 0, masque: 0x10 });
+fn parcourir(b: &mut Cps2Bus, mut ligne: impl FnMut(&mut Cps2Bus, Ligne)) {
+    let n = rd8(b, A5 + ram::MONNAYEURS) as i8;
+    ligne(b, Ligne { k: 0, masque: 0x10 });
     if n == 0 {
         return;
     }
     if n == 1 {
-        let partage = rd8(b, a5(c, ram::MODE_PARTAGE)) != 0;
-        ligne(b, c, Ligne { k: 1, masque: if partage { 0x40 } else { 0x20 } });
+        let partage = rd8(b, A5 + ram::MODE_PARTAGE) != 0;
+        ligne(b, Ligne { k: 1, masque: if partage { 0x40 } else { 0x20 } });
         return;
     }
-    ligne(b, c, Ligne { k: 1, masque: 0x20 });
+    ligne(b, Ligne { k: 1, masque: 0x20 });
     if n < 2 {
         return;
     }
-    ligne(b, c, Ligne { k: 2, masque: 0x40 });
+    ligne(b, Ligne { k: 2, masque: 0x40 });
     if n < 3 {
         return;
     }
-    ligne(b, c, Ligne { k: 3, masque: 0x80 });
+    ligne(b, Ligne { k: 3, masque: 0x80 });
 }
 
 // ---------------------------------------------------------------------------------------------
 // Lecture des monnayeurs (0x143da)
 
 /// Traite une ligne (0x14546 compteurs communs, 0x145cc compteurs séparés). `niveau` : `IN2 & masque`.
-fn traiter_ligne(b: &mut Cps2Bus, c: &mut Cpu, separes: bool, l: Ligne, niveau: u8) {
-    let a0 = enregistrement(c, l.k);
-    let compteurs = if separes { a0 } else { enregistrement(c, 0) };
-    // D0 : l'original y garde le niveau lu, puis l'antirebond ; une ligne haute le remet à zéro (moveq)
-    set_low_byte(&mut c.d[0], niveau);
+fn traiter_ligne(b: &mut Cps2Bus, separes: bool, l: Ligne, niveau: u8) {
+    let a0 = A5 + ram::MONNAYEUR_1 + ram::PAS * l.k;
+    let compteurs = if separes { a0 } else { A5 + ram::MONNAYEUR_1 };
     let antirebond = rd8(b, a0);
     if !(niveau != 0) {
         // ligne basse : l'antirebond compte les images, plafonné
-        let n = antirebond.wrapping_add(1);
-        let sous_le_plafond = n < ANTIREBOND_MAX;
-        let valeur = if sous_le_plafond { n } else { ANTIREBOND_MAX };
-        set_low_byte(&mut c.d[0], valeur);
-        wr8(b, a0, valeur);
+        wr8(b, a0, antirebond.wrapping_add(1).min(ANTIREBOND_MAX));
         return;
     }
     // ligne haute : la pièce est comptée si la ligne était restée basse assez longtemps, sans saturer
-    set_low_byte(&mut c.d[0], antirebond);
     if (antirebond < ANTIREBOND_MIN) || (antirebond == ANTIREBOND_MAX) {
-        c.d[0] = 0;
         wr8(b, a0, 0);
         return;
     }
@@ -175,46 +166,38 @@ fn traiter_ligne(b: &mut Cps2Bus, c: &mut Cpu, separes: bool, l: Ligne, niveau: 
         wr8(b, compteurs + 1, pieces);
     }
     let pieces = rd8(b, compteurs + 1);
-    let seuil = rd8(b, a5(c, ram::PIECES_PAR_CREDIT));
+    let seuil = rd8(b, A5 + ram::PIECES_PAR_CREDIT);
     if !(pieces < seuil) {
         wr8(b, compteurs + 1, pieces - seuil);
-        let gain = rd8(b, a5(c, ram::CREDITS_PAR_SEUIL));
+        let gain = rd8(b, A5 + ram::CREDITS_PAR_SEUIL);
         let credits = rd8(b, compteurs + 2).wrapping_add(gain);
         let plafond_atteint = !(credits < 10);
         wr8(b, compteurs + 2, if plafond_atteint { CREDITS_MAX } else { credits });
     }
     // bruit de pièce si une partie est en cours ou si le drapeau son est levé
-    let somme = rd8(b, a5(c, ram::PARTIE)).wrapping_add(rd8(b, a5(c, ram::SON_PIECE)));
-    c.a[0] = a0;
-    set_low_byte(&mut c.d[0], somme);
+    let somme = rd8(b, A5 + ram::PARTIE).wrapping_add(rd8(b, A5.wrapping_add(ram::SON_PIECE)));
     if !(somme == 0) {
         crate::sound::jouer_global(b, ext::BRUIT_PIECE);
     }
-    crate::call(c, b, ext::COMPTABILITE_PIECE);
-    c.d[0] = 0;
+    // 0x2e448 : comptabilité
+    crate::eeprom::compter_piece(b);
     wr8(b, a0, 0);
 }
 
-/// 0x143da (VBLANK) : D0 et A0 sont rendus intacts ; les autres registres ne servent pas au retour.
-fn lire_monnayeurs(b: &mut Cps2Bus, c: &mut Cpu) {
-    let menu = rd16(b, a5(c, ram::MENU_TEST));
+/// 0x143da (VBLANK) : lit les lignes des monnayeurs. L'original rend D0 et A0 intacts et le VBLANK rend tous les
+/// registres : rien ne sort dans les registres.
+pub fn lire_monnayeurs(b: &mut Cps2Bus) {
+    let menu = rd16(b, A5 + ram::MENU_TEST);
     if menu != 0 {
         return;
     }
-    let (d0, a0) = (c.d[0], c.a[0]);
-    let separes = rd8(b, a5(c, ram::MODE_SEPARE)) != 0;
-    parcourir(b, c, |b, c, l| {
+    let separes = rd8(b, A5 + ram::MODE_SEPARE) != 0;
+    parcourir(b, |b, l| {
         let niveau = rd8(b, PORT_PIECES) & l.masque;
-        traiter_ligne(b, c, separes, l, niveau);
+        traiter_ligne(b, separes, l, niveau);
     });
-    c.d[0] = d0;
-    c.a[0] = a0;
 }
 
-fn natif_lire_monnayeurs(c: &mut Cpu, b: &mut Cps2Bus) {
-    lire_monnayeurs(b, c);
-    rts(c, b);
-}
 
 // ---------------------------------------------------------------------------------------------
 // Boutons de départ (0x141e0)
@@ -354,7 +337,7 @@ fn natif_verrouiller_compteurs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const LIRE_MONNAYEURS: Native = Native {
     entry: 0x143da,
     name: "credits_lire_monnayeurs",
-    run: natif_lire_monnayeurs,
+    run: crate::Corps::Memoire(lire_monnayeurs),
     touches_sound: false,
     outputs: 0,
 };
@@ -362,7 +345,7 @@ pub const LIRE_MONNAYEURS: Native = Native {
 pub const LIRE_DEPARTS: Native = Native {
     entry: 0x141e0,
     name: "credits_lire_departs",
-    run: natif_lire_departs,
+    run: crate::Corps::Processeur(natif_lire_departs),
     touches_sound: false,
     outputs: 0,
 };
@@ -370,7 +353,7 @@ pub const LIRE_DEPARTS: Native = Native {
 pub const VERROUILLER_COMPTEURS: Native = Native {
     entry: 0x14290,
     name: "credits_verrouiller",
-    run: natif_verrouiller_compteurs,
+    run: crate::Corps::Processeur(natif_verrouiller_compteurs),
     touches_sound: false,
     outputs: 0,
 };
@@ -396,7 +379,7 @@ fn ecrire_chiffre(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const ECRIRE_CHIFFRE: Native = Native {
     entry: 0x14e46,
     name: "credits_chiffre",
-    run: ecrire_chiffre,
+    run: crate::Corps::Processeur(ecrire_chiffre),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(4) | regs::CCR,
 };

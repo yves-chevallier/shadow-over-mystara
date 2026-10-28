@@ -176,10 +176,10 @@ pub const RESET_ENTRY: u32 = 0xf2e56;
 pub const SPAWN_SCRIPT: Native = Native {
     entry: SPAWN_ENTRY,
     name: "scene_script",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         step(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };
@@ -188,10 +188,7 @@ pub const SPAWN_SCRIPT: Native = Native {
 pub const SCRIPT_RESET: Native = Native {
     entry: RESET_ENTRY,
     name: "scene_script_reset",
-    run: |c, b| {
-        wr8(b, STATE, state::LOAD);
-        rts(c, b);
-    },
+    run: crate::Corps::Memoire(|b| wr8(b, STATE, state::LOAD)),
     touches_sound: false,
     outputs: 0,
 };

@@ -10,7 +10,7 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
-use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, wr8};
+use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, wr8, A5};
 use crate::Native;
 
 /// Décalages par rapport à A5 (RAM FF8000).
@@ -51,20 +51,12 @@ fn set_nz_byte(c: &mut Cpu, v: u8) {
     c.flags_logic(v as u32, Size::Byte);
 }
 
-/// Branchements de read_inputs : (FOUR_PLAYERS != 0, LAYERS_OFF == 0, EEPROM_BUSY != 0).
-fn read_inputs_path(c: &Cpu, b: &mut Cps2Bus) -> (bool, bool, bool) {
-    let a5 = c.a[5];
-    (
-        rd8(b, a5 + ram::FOUR_PLAYERS) != 0,
-        rd8(b, a5.wrapping_add(ram::LAYERS_OFF)) == 0,
-        rd8(b, a5 + ram::EEPROM_BUSY) != 0,
-    )
-}
-
-/// 0x080c : lecture du panneau (appelée par le VBLANK).
-fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
-    let a5 = c.a[5];
-    let (four_players, layers_on, eeprom_busy) = read_inputs_path(c, b);
+/// 0x080c (VBLANK) : lecture du panneau. Rend ce que l'original laisse dans ses registres (`EntreesLues`).
+pub fn lire_panneau(b: &mut Cps2Bus) -> EntreesLues {
+    let a5 = A5;
+    let four_players = rd8(b, a5 + ram::FOUR_PLAYERS) != 0;
+    let layers_on = rd8(b, a5.wrapping_add(ram::LAYERS_OFF)) == 0;
+    let eeprom_busy = rd8(b, a5 + ram::EEPROM_BUSY) != 0;
 
     let mut cur = [0u8; 6];
     for i in 0..6 {
@@ -79,12 +71,8 @@ fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
         wr8(b, a5 + ram::NEW + i as u32, p);
     }
 
-    // registres laissés par l'original
-    set_low_byte(&mut c.d[1], cur[3]);
-    set_low_byte(&mut c.d[2], pressed[2]);
-    set_low_byte(&mut c.d[3], pressed[3]);
-    if four_players {
-        set_low_byte(&mut c.d[0], cur[2]);
+    let d0 = if four_players {
+        cur[2]
     } else {
         // cabinet 2 joueurs : le bouton 1 de P3 devient le bouton 4 de P2, la droite de P3 le
         // bouton 4 de P1 (câblage des boutons supplémentaires)
@@ -92,10 +80,8 @@ fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
         let p1_b4 = (cur[2] & 0x01) << 7;
         wr8(b, a5 + ram::CUR + 1, cur[1] | p2_b4);
         wr8(b, a5 + ram::CUR, cur[0] | p1_b4);
-        set_low_byte(&mut c.d[0], p1_b4);
-        // lsl.b #3 sur (cur2 & 0x10) : le dernier bit sorti vaut 0, X et C passent à 0
-        c.sr &= !SR_X;
-    }
+        p1_b4
+    };
 
     if !layers_on {
         let v = rd16(b, a5 + ram::LAYER_CTRL) & 0xfff1;
@@ -103,13 +89,44 @@ fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     let layer_ctrl = rd16(b, a5 + ram::LAYER_CTRL);
     wr16(b, 0x804166, layer_ctrl);
-    if eeprom_busy {
-        let v = rd8(b, a5 + ram::EEPROM_BUSY);
-        set_nz_byte(c, v);
+    let dernier = if eeprom_busy {
+        Dernier::Octet(rd8(b, a5 + ram::EEPROM_BUSY))
     } else {
         let v = rd16(b, a5 + ram::EEPROM_PORT);
         wr16(b, 0x804040, v);
-        c.flags_logic(v as u32, Size::Word);
+        Dernier::Mot(v)
+    };
+    EntreesLues { d: [d0, cur[3], pressed[2], pressed[3]], quatre_joueurs: four_players, dernier }
+}
+
+/// Dernière valeur testée par 0x80c (drapeaux de l'original).
+#[derive(Clone, Copy)]
+pub enum Dernier {
+    Octet(u8),
+    Mot(u16),
+}
+
+/// Restes de 0x80c dans les registres de l'original : octets bas de D0-D3, X effacé (cabinet à deux joueurs),
+/// drapeaux de la dernière valeur testée.
+#[derive(Clone, Copy)]
+pub struct EntreesLues {
+    pub d: [u8; 4],
+    pub quatre_joueurs: bool,
+    pub dernier: Dernier,
+}
+
+fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
+    let r = lire_panneau(b);
+    for (n, v) in r.d.into_iter().enumerate() {
+        set_low_byte(&mut c.d[n], v);
+    }
+    if !r.quatre_joueurs {
+        // lsl.b #3 sur (cur2 & 0x10) : le dernier bit sorti vaut 0, X et C passent à 0
+        c.sr &= !SR_X;
+    }
+    match r.dernier {
+        Dernier::Octet(v) => set_nz_byte(c, v),
+        Dernier::Mot(v) => c.flags_logic(v as u32, Size::Word),
     }
     rts(c, b);
 }
@@ -117,14 +134,14 @@ fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const READ_INPUTS: Native = Native {
     entry: 0x080c,
     name: "read_inputs",
-    run: read_inputs,
+    run: crate::Corps::Processeur(read_inputs),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
 
-/// 0x2aec : recopie les entrées dans les enregistrements des joueurs.
-fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    let a5 = c.a[5];
+/// 0x2aec : recopie les entrées dans les enregistrements des joueurs. Rend les restes de l'original (`Recopie`).
+pub fn recopier(b: &mut Cps2Bus) -> Recopie {
+    let a5 = A5;
     let player = |k: u32| a5 + ram::PLAYER1 + ram::PLAYER_STRIDE * k;
     if rd8(b, a5 + ram::INPUT_RAW) != 0 {
         // entrées gelées : état brut limité à droite/gauche, aucun nouvel appui
@@ -137,13 +154,11 @@ fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
         for k in 0..4 {
             wr8(b, player(k) + ram::P_NEW, 0);
         }
-        // clr.b final
-        c.sr = (c.sr & !(SR_N | SR_V | SR_C)) | SR_Z;
+        Recopie::Gelees
     } else {
         let mask = rd8(b, a5 + ram::INPUT_MASK);
-        set_low_byte(&mut c.d[4], mask);
+        let mut regs = [0u8; 4];
         for pair in [0u32, 2] {
-            let mut regs = [0u8; 4];
             for (j, k) in [pair, pair + 1].into_iter().enumerate() {
                 let held = rd8(b, a5 + ram::CUR + k) & mask;
                 let prev = rd8(b, a5 + ram::PREV + k) & mask;
@@ -154,22 +169,45 @@ fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
                 regs[j] = held;
                 regs[2 + j] = new;
             }
-            set_low_byte(&mut c.d[0], regs[0]);
-            set_low_byte(&mut c.d[1], regs[1]);
-            set_low_byte(&mut c.d[2], regs[2]);
-            set_low_byte(&mut c.d[3], regs[3]);
         }
-        // move.b d3,(...) final
-        let d3 = c.d[3] as u8;
-        set_nz_byte(c, d3);
+        Recopie::Masquees { masque: mask, d: regs }
     }
+}
+
+/// Restes de 0x2aec dans les registres de l'original.
+#[derive(Clone, Copy)]
+pub enum Recopie {
+    /// Entrées gelées : drapeaux du `clr.b` final.
+    Gelees,
+    /// D4.b = masque, D0-D3.b = entrées et nouveaux appuis de la dernière paire de joueurs ; drapeaux de D3.b.
+    Masquees { masque: u8, d: [u8; 4] },
+}
+
+/// `recopier` avec les registres de l'original.
+pub fn recopier_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    match recopier(b) {
+        // clr.b final
+        Recopie::Gelees => c.sr = (c.sr & !(SR_N | SR_V | SR_C)) | SR_Z,
+        Recopie::Masquees { masque, d } => {
+            set_low_byte(&mut c.d[4], masque);
+            for (n, v) in d.into_iter().enumerate() {
+                set_low_byte(&mut c.d[n], v);
+            }
+            // move.b d3,(...) final
+            set_nz_byte(c, d[3]);
+        }
+    }
+}
+
+fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
+    recopier_68k(c, b);
     rts(c, b);
 }
 
 pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
     entry: 0x2aec,
     name: "copy_inputs_to_players",
-    run: copy_inputs_to_players,
+    run: crate::Corps::Processeur(copy_inputs_to_players),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -191,7 +229,7 @@ fn get_player_input(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const GET_PLAYER_INPUT: Native = Native {
     entry: 0x2bfe,
     name: "get_player_input",
-    run: get_player_input,
+    run: crate::Corps::Processeur(get_player_input),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -210,7 +248,7 @@ fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CLEAR_PLAYER_INPUTS: Native = Native {
     entry: 0x2bdc,
     name: "clear_player_inputs",
-    run: clear_player_inputs,
+    run: crate::Corps::Processeur(clear_player_inputs),
     touches_sound: false,
     outputs: crate::regs::CCR,
 };

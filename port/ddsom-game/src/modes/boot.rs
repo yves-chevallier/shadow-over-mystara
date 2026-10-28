@@ -59,7 +59,7 @@ crate::etapes! {
                 x.call(f);
             }
             clear_mode_state(x);
-            crate::rng::seed_68k(x.c, x.b);
+            crate::rng::seed(x.b);
             default_high_scores(x);
             x.call(ext::INIT_STEP_LAST);
             x.call(ext::CLEAR_STATUS);

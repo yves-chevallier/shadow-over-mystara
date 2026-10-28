@@ -2327,7 +2327,7 @@ fn efface_ramasses(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const EFFACE_RAMASSES: Native = Native {
     entry: 0xdabba,
     name: "item_efface_ramasses",
-    run: efface_ramasses,
+    run: crate::Corps::Processeur(efface_ramasses),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(6) | regs::a(0),
 };
@@ -2413,7 +2413,7 @@ fn chute_equipement(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CHUTE_EQUIPEMENT: Native = Native {
     entry: 0xdb6c0,
     name: "item_chute_equipement",
-    run: chute_equipement,
+    run: crate::Corps::Processeur(chute_equipement),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(2) | regs::a(4),
 };

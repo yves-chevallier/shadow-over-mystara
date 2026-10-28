@@ -698,11 +698,11 @@ impl Etape {
 pub const PHASE_16: Native = Native {
     entry: 0xf3142,
     name: "scene_phase_16",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         if !phase_16(c, b) {
             rts(c, b);
         }
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

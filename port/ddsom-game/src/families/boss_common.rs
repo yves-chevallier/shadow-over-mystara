@@ -315,10 +315,10 @@ macro_rules! natif {
         Native {
             entry: $entry,
             name: $name,
-            run: |c, b| {
+            run: crate::Corps::Processeur(|c, b| {
                 $f(&mut Cx::new(c, b));
                 rts(c, b);
-            },
+            }),
             touches_sound: false,
             outputs: $outputs,
         }

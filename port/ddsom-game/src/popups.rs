@@ -207,7 +207,8 @@ pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
 }
 
 /// `animer` avec les registres de l'original : A0 = le pop-up courant, A2 = la file, D0 = l'index lu.
-fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+/// `animer` avec les registres de l'original (A0 = le pop-up courant, A2 = la file, D0 = l'index lu).
+pub fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = A5.wrapping_add(COURANT);
     c.a[2] = A5 + ENTREES;
     if let Some(index) = animer(b) {
@@ -232,10 +233,10 @@ pub fn effacer_tout(b: &mut Cps2Bus) -> u32 {
 pub const ANIMER: Native = Native {
     entry: 0x19e20,
     name: "popups_animer",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         animer_68k(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: 0,
 };

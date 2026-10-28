@@ -58,6 +58,13 @@ pub fn load_preset(b: &mut Cps2Bus, row: u8) {
     }
 }
 
+/// 0x1f238 : les réglages de la ligne `A5+0x2a`, puis `reset`.
+pub fn charger_preset(b: &mut Cps2Bus) {
+    let row = rd8(b, A5 + PRESET_ROW);
+    load_preset(b, row);
+    reset(b);
+}
+
 /// Remet le compte à rebours et le rang à leur valeur de départ.
 pub fn reset(b: &mut Cps2Bus) {
     if rd8(b, A5 + GAME_ACTIVE) == 0 {
@@ -269,10 +276,10 @@ fn lower_regs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const RANK_RESET: Native = Native {
     entry: 0x1f258,
     name: "rank_reset",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         reset_regs(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -280,10 +287,10 @@ pub const RANK_RESET: Native = Native {
 pub const RANK_LOAD_PRESET: Native = Native {
     entry: 0x1f1b8,
     name: "rank_load_preset",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         load_preset_regs(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -291,10 +298,10 @@ pub const RANK_LOAD_PRESET: Native = Native {
 pub const RANK_RAISE: Native = Native {
     entry: 0x1f2c0,
     name: "rank_raise",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         raise_regs(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -302,10 +309,10 @@ pub const RANK_RAISE: Native = Native {
 pub const RANK_LOWER: Native = Native {
     entry: 0x1f300,
     name: "rank_lower",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         lower_regs(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -313,10 +320,10 @@ pub const RANK_LOWER: Native = Native {
 pub const RANK_TICK: Native = Native {
     entry: 0x1f27c,
     name: "rank_tick",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         tick_regs(c, b);
         rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: regs::ALL,
 };

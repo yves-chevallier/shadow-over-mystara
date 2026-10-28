@@ -137,12 +137,12 @@ macro_rules! natives {
         pub const $nom: Native = Native {
             entry: $class.entry,
             name: $name,
-            run: |c, b| {
+            run: crate::Corps::Processeur(|c, b| {
                 // appelée par adresse (écrans hors partie) : un gestionnaire n'y cède jamais la main
                 if $class.update(c, b) == Flow::Done {
                     rts(c, b);
                 }
-            },
+            }),
             touches_sound: false,
             outputs: 0, // les appelants enchaînent sur d'autres appels
         };

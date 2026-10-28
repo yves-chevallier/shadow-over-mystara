@@ -375,7 +375,7 @@ macro_rules! natif {
         pub const $nom: Native = Native {
             entry: $entree,
             name: stringify!($nom),
-            run: $corps,
+            run: crate::Corps::Processeur($corps),
             touches_sound: false,
             outputs: 0,
         };

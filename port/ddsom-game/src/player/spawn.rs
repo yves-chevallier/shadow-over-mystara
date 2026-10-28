@@ -791,7 +791,7 @@ macro_rules! creator {
         pub const $name: Native = Native {
             entry: $entry,
             name: $label,
-            run: |c, b| run(c, b, |$g, $p| $body),
+            run: crate::Corps::Processeur(|c, b| run(c, b, |$g, $p| $body)),
             touches_sound: false,
             outputs: $outputs,
         };

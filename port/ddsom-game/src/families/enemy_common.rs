@@ -472,10 +472,10 @@ pub fn detach_from_host(x: &mut Cx) {
 pub const NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x27ee,
     name: "ennemi_detacher_hote",
-    run: |c, b| {
+    run: crate::Corps::Processeur(|c, b| {
         detach_from_host(&mut Cx::new(c, b));
         crate::mem::rts(c, b);
-    },
+    }),
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::a(1),
 }];

@@ -726,7 +726,7 @@ fn join_continue(x: &mut Ctx, s: Slot) {
         s.set_p8(b, panel::CLAIM, 0);
     }
     // un joueur arrive : le rang baisse (`objects::rank`)
-    crate::objects::rank::lower_68k(x.c, x.b);
+    crate::objects::rank::lower(x.b);
     let b = &mut *x.b;
     s.set_p8(b, panel::STEP, 0);
     s.set_p8(b, panel::FLAG_27, 0);

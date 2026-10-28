@@ -188,15 +188,18 @@ pub fn executer(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// Retour d'un sous-programme (`rts`) : la suite de l'appel en cours, étape Rust exécutée aussitôt ; adresse posée au
-/// PC pour le retour d'un appel par adresse (`crate::call`, sentinelle de la pile 68000) ; rien si une fonction Rust attendait ce retour (`table::appeler_attendu`), ou si la tâche a déjà cédé la main
-/// (le code Rust qui suit une cession ne fait que revenir : voir [`a_cede`]).
+/// Retour d'un sous-programme (`rts`) : la suite de l'appel en cours, étape Rust exécutée aussitôt ; rien si une
+/// fonction Rust attendait ce retour (`table::appeler_attendu`, `crate::call`), ou si la tâche a déjà cédé la main (le
+/// code Rust qui suit une cession ne fait que revenir : voir [`a_cede`]).
 pub fn revenir(c: &mut Cpu, b: &mut Cps2Bus) {
     if a_cede() {
         return;
     }
     match table::retour(c, b) {
         None => {}
+        // jeu : chaque retour est celui d'un appel en cours (étape, appel attendu, appel par adresse)
+        Some(Suite::Adresse(a)) if crate::sans68k::actif() => panic!("retour vers {a:06x} sans appel en cours"),
+        // outils (machine sans table des tâches) : l'adresse de retour dépilée
         Some(Suite::Adresse(a)) => c.pc = a,
         Some(Suite::Etape(e)) => executer(e, c, b),
     }
