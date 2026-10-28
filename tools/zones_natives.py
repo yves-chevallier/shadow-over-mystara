@@ -23,6 +23,13 @@ FIXES = [('p', 0x0, 0x8, 'vecteurs')]
 for _h in range(256):
     _a = 0x4bd98 + ((_h << 8) - (0x10000 if _h >= 0x80 else 0))
     FIXES.append(('p', _a & ~1, (_a + 16 + 1) & ~1, 'families/joueur/peff_e.rs'))
+# Lectures du bot `sorts_combattant` (image 23 834, scène du combattant jouée avec toutes ses magies) : le constructeur de
+# la liste de sprites lit une entrée de table hors de ses bornes, dans le code (0x3200) et avant 0x1ef5e.
+FIXES.append(('d', 0x3200, 0x320a, 'sprites.rs'))
+FIXES.append(('d', 0x1ef5c, 0x1ef5e, 'sprites.rs'))
+# Bot `sorts_noms_a` (image 19 704) : un nom de joueur commençant par 0xfe (-2) donne à `write_name` (0xce8de) l'index -4 de la
+# table 0xce9a4 : le pointeur lu avant la table mène à la liste de glyphes 0xceaa0, dans le code.
+FIXES.append(('d', 0xceaa0, 0xceaa2, 'families/set_c_finale_c.rs'))
 # lecteurs que trois niveaux d'appel ne résolvent pas (accès génériques) : début de zone -> fichier
 LECTEURS = {
     # page 3 des palettes des scènes 0x58 et 0x59 : entrée nulle, le jeu copie 32 palettes depuis l'adresse 0
