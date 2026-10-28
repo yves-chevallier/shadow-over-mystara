@@ -796,12 +796,12 @@ fn walker(x: &mut Cx) {
 }
 
 handlers! {
-    0xa8594 "effct_ouverture" opening,
+    0xa8594 "effct_ouverture" #[sans] opening,
     0xb2f40 "effct_silhouette_reflet" mirrored,
     0xb66f8 "effct_traversee" crossing,
-    0xb68f4 "effct_passage" passage,
+    0xb68f4 "effct_passage" #[sans] passage,
     0xb6a74 "effct_lanceur" launcher,
-    0xb7f28 "effct_enseigne_depart" start_sign,
-    0xb896e "effct_fondu_sonore" sound_fade,
+    0xb7f28 "effct_enseigne_depart" #[sans] start_sign,
+    0xb896e "effct_fondu_sonore" #[sans] sound_fade,
     0xba0b0 "effct_passant" walker,
 }

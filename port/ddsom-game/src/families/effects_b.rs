@@ -457,9 +457,9 @@ fn blinking<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xb841c "effct_detecteur" pickup_detector,
-    0xb84c6 "effct_victoire" victory_screen,
-    0xb85fa "effct_bulle_createur" bubble,
+    0xb841c "effct_detecteur" #[sans] pickup_detector,
+    0xb84c6 "effct_victoire" #[sans] victory_screen,
+    0xb85fa "effct_bulle_createur" #[sans] bubble,
     0xb871a "effct_bouton" menu_button,
-    0xb8df2 "effct_clignotement" blinking,
+    0xb8df2 "effct_clignotement" #[sans] blinking,
 }

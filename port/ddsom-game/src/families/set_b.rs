@@ -3696,7 +3696,7 @@ mod dialog {
 }
 
 handlers! {
-    0xd4110 "set_16" bumper::run,
+    0xd4110 "set_16" #[sans] bumper::run,
     0xd7056 "set_24" dialog::run,
     0xd9424 "set_30" game_over::run,
     0xd9492 "set_31" level_clock::run,
@@ -3704,13 +3704,13 @@ handlers! {
     0xd8458 "set_27" door_a::run,
     0xd8ce4 "set_28" zone_end::run,
     0xd8dce "set_29" door_b::run,
-    0xd801e "set_25" rearguard::run,
+    0xd801e "set_25" #[sans] rearguard::run,
     0xd810a "set_26" idle_hunter::run,
-    0xd69c2 "set_22" rank_adjust::run,
+    0xd69c2 "set_22" #[sans] rank_adjust::run,
     0xd6c5c "set_23" exit_gate::run,
-    0xd5f5a "set_20" life_bar::run,
+    0xd5f5a "set_20" #[sans] life_bar::run,
     0xd6372 "set_21" continue_countdown::run,
     0xd466a "set_17" boss_intro::run,
     0xd49a2 "set_19" wave_spawner::run,
-    0xd4950 "set_18" scroll_to::run,
+    0xd4950 "set_18" #[sans] scroll_to::run,
 }

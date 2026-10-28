@@ -1276,7 +1276,7 @@ handlers! {
     0xb8ef6 "effct_feu_artifice" fireworks,
     0xb59ea "effct_machine_volante" flyer,
     0xb5454 "effct_armure" armour,
-    0xb4bec "effct_pluie_debris" debris_rain,
+    0xb4bec "effct_pluie_debris" #[sans] debris_rain,
     0xb7866 "effct_morceau_ennemi" chunk,
-    0xb96dc "effct_eclat_lance" shard,
+    0xb96dc "effct_eclat_lance" #[sans] shard,
 }
