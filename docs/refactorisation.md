@@ -751,6 +751,100 @@ But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin 
   retours. (4) Les **natives** : 956 corps `Processeur` et 532 `ProcesseurEn` (enveloppes et services son, qui lisent
   A0, A1, D4 ou D0/D1) ; un corps `Memoire` n'est possible que pour une routine qui ne lit ni ne laisse aucun registre.
 
+## 18. Lot « sortie du Cpu », partie 3 : familles d'objets
+
+Périmètre : `families/` (et les créateurs appelés par `player/spawn.rs`, `effects_aids.rs`). But : que les gestionnaires
+et les créateurs ne passent plus par le banc de registres du `Cpu`.
+
+* **Sonde de sortie des gestionnaires.** `DDSOM_POISON=sortie` (`diag::sonder_sortie`, appelée par la boucle
+  d'aiguillage `dispatch.rs`) inverse au retour de chaque gestionnaire les registres qu'il a changés (sauf A0 et D7) ;
+  `sortie.d4@ba310` vise un registre d'un gestionnaire, `!…` en exclut (la même syntaxe vaut pour `appel_<adresse>`,
+  et `appel@families/` vise tous les appels par adresse d'un dossier). Bissection automatique (`tools/registres_bissecte.py` : classe, gestionnaire,
+  registre) sur chaque scénario qui diverge. Résultat sur les 296 scénarios : **les registres que laisse un
+  gestionnaire ne sont relus par personne, sauf pour une douzaine de gestionnaires** (tableau ci-dessous). Tout ce que
+  les autres écrivent dans les registres (copies des registres de l'original, restes de `reinsert`, de la collision
+  avec le décor, des tests de terrain, des tirages…) n'a d'effet qu'à l'intérieur du gestionnaire.
+
+  | Gestionnaire | Registre relu par la suite | Lecteur |
+  |---|---|---|
+  | SET 0 (0xba310, palette) | D4 (dernier long copié) | le radeau sans pilote (0xad7b0) |
+  | EFFCT radeau (0xad63e) | D4 (déplacement) | lui-même à l'image suivante |
+  | PSHL 2 (0x5204e) | D3 (case du terrain) | `flash_and_shake` (boss 11, scène 42) |
+  | PEFF 0, 1, 12 (0x49e36, 0x4a21e, 0x4bc66) | D2 | le rebond de l'éclat de gel (0x4bda8) |
+  | BOSS 0 (0x794ae) | D2, D3 (collision, tests de boîte) | `flash_and_shake` |
+  | ITEM 5 (0xdc382) | D2 | (`covb_long3p_10`) |
+  | ENEMY 16 (0x6f1c0), ENEMY 4 (0x5d87a) | D5 | la rangée d'éclats d'une caisse (0xa17d0) |
+  NOUVEAUX_RESTES
+* **Restes nommés de la boucle.** Ces registres deviennent les champs de `dispatch::Restes` (`d4`, `d5`), passés au
+  gestionnaire converti dans `dispatch::Aiguillage` (objet A0, compteur D7.w, restes) et rendus au processeur après lui
+  (les routines encore sur le processeur, liste des sprites, caméras, gestionnaires non convertis, les lisent et les
+  écrivent toujours dans le banc). SET 0 et le radeau écrivent `restes.d4` ; la zone de jeu et la collision avec le
+  décor écrivent `restes.d5` (`Cx::keep_in_zone`, `keep_on_screen`, `push_terrain`).
+* **Forme des gestionnaires.** `Cx<'a, R>` est générique sur le banc de registres : `&mut Cpu` (par défaut, inchangé)
+  ou `&mut Aiguillage` (`Gx`, sans registres : `x.c.d[0]` n'existe pas, le compilateur le garantit). Le trait
+  `cx::Banc` porte ce qui dépend du banc : la remise en liste (adaptateur `reinsert_68k` sur le processeur, cœur sans
+  registres) et l'accès au reste D5. `Machine` n'exige plus que le bus (`Processeur` donne `machine()` aux contextes
+  qui ont un `Cpu`). Un gestionnaire `Gx` est déclaré `0x… "nom" #[sans] chemin` dans `handlers!` : sa native est
+  `Corps::Gestionnaire(fn(&mut Cps2Bus, &mut Aiguillage))`.
+* **Généralisation par point fixe** (`tools/registres_generique.py`) : toutes les fonctions
+  `fn f(x: &mut Cx, …)` sont rendues génériques (`<R: Banc>`), puis celles où le compilateur trouve une erreur reprennent
+  leur signature, jusqu'à ce que tout compile ; un contrôle par entrée (`tools/registres_sans.py`) marque `#[sans]` les gestionnaires
+  dont la fonction est générique. Résultat : **1 870 fonctions des familles prouvées sans registres** (2 796 restent
+  sur le processeur, dont 728 l'utilisent directement : 1 212 accès à Dn, 304 à An, 76 appels par adresse), **82
+  gestionnaires `Corps::Gestionnaire`** (SET, SOBJ, EFFCT, ESHL…).
+* **Adaptateurs `_68k` (65 au départ).** Retirés : les 18 `random_68k` (valeur rendue ; `rand_and_b` garde l'octet
+  haut du tirage dans D0, relu par l'éclat de gel), 10 des 14 `push_68k` et 6 des 9 `terrain_68k`, dans les gestionnaires dont
+  la sortie n'est pas relue (`push_terrain`, `terrain_of`), `alloc*_68k` des créateurs (portés par `Registres`),
+  `start_68k`, `start_by_character_68k`, `release_68k`, `regs_68k` (boucle d'éclats de caméra), `flash_68k`
+  (`palette::set_flash_color`), `in_arena_68k` (le `bhi` de `reactions.rs` est `cull::beyond_arena`). Restent (22 sites)
+  : les implémentations `Registres` et `Banc` du processeur (natives et gestionnaires non convertis), `terrain_68k` de
+  PSHL 2 et de l'éclat de gel (D2, D3 relus), la façade `enemy_lib` (tests de boîte, collision, choc : D1-D3, A1 relus
+  par `flash_and_shake` et les ennemis), `items.rs` (contexte `families::Ctx`), les créateurs de paires d'ennemis.
+* **Appels par adresse (301 → 97 `adr`).** Sons (`convertir_sons.py` puis à la main : 70 sites), éclairs de palette
+  (`palette::set_flash_color`, `flash`, `restore_flash`), directions (`aides::direction_from`), créateurs d'effets
+  (cœurs `effects_creators::scenery_*`, `spark_at`, `spell*`, `shouts`… sur `Pur`), créateurs ESHL (`eshl_creators`
+  réécrit sur `Registres` : 33 créateurs, cœur sans registres et native ; tirs lancés passés en `fn(&mut Cps2Bus, Obj)`),
+  SET de scène (bulles de dialogue), écrans de fin, vote, SET 0xa, tirs 0x17/0x18, effets 5, tir d'arme, chocs.
+  Restent : tables par type de la ROM (réactions, routines de chute, de mort, de vague : 42 sites), routines de scène
+  (`scene/`, autre lot), palettes par page, et une vingtaine de créateurs de `creators.rs`/`petites.rs` (paires
+  d'ennemis, SOBJ, pierres, éclair du joueur).
+* **Glitches d'origine écrits en clair** : D4 du radeau, D5 de la rangée d'éclats (`row_1a(…, sorte, d5)`), réglage de
+  0xb1a7a pris dans D1 laissé (`set_c_finale`), variante des débris prise dans le D1 laissé par le choc 0xb10c8
+  (`eshl_b`), D0 = 0 de 0x54872 qui empêche de retenir le tir créé (`eshl_c`), A1 « reste » de l'allocation où
+  0x9dda8 / 0x9ed78 écrivent l'orientation quand le pool est plein (`eshl_creators::copy_flip`).
+* **Factorisation** : le décor repris (0xcc0ca) avait quatre copies (`creators`, porte de zone annexe SET 7 à l'aller
+  et au retour, passage EFFCT 14) : `creators::reprendre_decor` ; tirs 0x18 (trois natives, une fonction) ; éclairs de
+  couleur (`petites` sur `palette`).
+* **Écart trouvé par `fuzz_couv`** (ESHL, zone C08, avant/après sur les mêmes états) : la remise en liste en clair
+  (`SortedList::reinsert` : plan puis application) ne refaisait pas les écritures de 0x1ee1a dans le même ordre ; sur une
+  liste dont des liens se recouvrent, la mémoire différait (ESHL 44). Le cœur est maintenant la transcription exacte de
+  `Reinsert`, sans registres (`objects/lists.rs`).
+
+**Ce qu'il faut encore pour que `m68k::Cpu` disparaisse du jeu.**
+1. *Registres portés.* Familles : 2 796 fonctions sur le processeur, dont 728 l'utilisent directement (`boss_1`,
+   `boss_9`, `boss_11/chain`, `reactions`, `set_b`, `effects_c`, `joueur/peff_*`, `enemy_lib`, `enemy_common`…) ; ce
+   sont presque toujours des copies de registres que rien ne relit hors du gestionnaire (sonde `sortie`) : à remplacer
+   par des variables locales, fonction par fonction, en relançant `tools/registres_generique.py` et `tools/registres_sans.py` (chaque fonction convertie
+   en libère d'autres). Les flux réels sont connus : restes de la boucle (tableau ci-dessus : D2, D3 à ajouter à
+   `Restes`, avec les valeurs que laissent la collision et les tests de boîte), et à l'intérieur d'un gestionnaire les
+   registres d'entrée des tables par type (D0 = index, A1 = routine). Hors familles : `modes/`, `scene/` (autre lot),
+   `player/` (189), `palette` (86), `video` (53), `scroll` (38), `evenements` (35), `aides` (30), `tache_credits`,
+   `credits`, `config`, `kernel` (33).
+2. *Appels par adresse.* Familles : 97 `adr` (tables par type, scène, palettes par page, créateurs restants) ; il faut
+   une table Rust (adresse → fonction) pour les tables par type de la ROM, comme `boxes::effet_special`.
+3. *La pile A7 comme clé des retours.* `taches::table::Table::appels` et les cadres (`Cadre::pile`) identifient un retour
+   par la valeur d'A7 ; `crate::call` décrémente A7. Sans `Cpu`, il faut une profondeur d'appel portée par la table des
+   tâches (compteur par tâche) à la place d'A7, et le contexte d'une tâche (ses registres sauvés à la cession) réduit à
+   ses restes nommés.
+4. *Prise du VBLANK.* `vblank::interruption` empile PC et SR sur la pile de la tâche interrompue (et le noyau les
+   reprend) : à remplacer par un état du noyau (« interrompu au point P ») sans pile 68000, ce qui suppose 3.
+5. *Restes des routines hors familles.* La liste des sprites (D4), les caméras (D4), la jauge (D2), la copie des
+   entrées (D0-D4) écrivent encore leurs restes dans le banc : quand le banc disparaît, `dispatch::Restes` devient un
+   état de la partie (dans la table des tâches) que ces routines et les gestionnaires lisent et écrivent par leur nom.
+
+Mesure (`tools/mesure_refacto.py`, avant 1ead669 / après) : `families` regs 2 079 / 1 841, adr 301 / 97, drap 83 / 64 ;
+total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Corps::Gestionnaire`.
+
 ## Avancement
 
 | Étape | Commit | Validation |
