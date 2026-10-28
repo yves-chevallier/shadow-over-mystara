@@ -12,7 +12,7 @@
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use super::{scratch, sub, var, Ctx};
+use super::{scratch, var, Ctx};
 use crate::mem::{rts, wr32};
 use crate::Native;
 use crate::objects::pools;
@@ -46,7 +46,7 @@ pub fn phase_24(c: &mut Cpu, b: &mut Cps2Bus) {
         STEP_SCROLL => scroll_out(&mut x),
         _ => {}
     }
-    x.call(sub::INPUTS);
+    x.inputs();
     x.world();
 }
 

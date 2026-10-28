@@ -202,6 +202,26 @@ pub fn scene_set(b: &mut Cps2Bus, variante: u8) -> Option<Obj> {
     scene_set_par(&mut Pur, b, variante)
 }
 
+/// `scene_set` dont l'échec n'est pas testé : rend l'A1 que l'original laisse (`Pool::alloc_or_leftover`).
+pub fn scene_set_ou_reste(b: &mut Cps2Bus, variante: u8) -> Obj {
+    scene_set(b, variante).unwrap_or_else(|| pools::SET.alloc_or_leftover(b).expect_err("le pool SET vient d'être trouvé plein"))
+}
+
+/// 0x4cfbc : quatre effets 0x13 (variante 1, `+0x2f` = 3 à 0, `+0x5a` = 2) liés au créateur, puis l'éclair d'écran
+/// rouge (0x1ac68).
+pub fn effets_13(b: &mut Cps2Bus, createur: Obj) {
+    for rang in (0..4u8).rev() {
+        let Some(fx) = pools::PEFF.alloc(b) else { break };
+        fx.set_u8(b, 0x0, 1);
+        fx.set_u8(b, 0x2, 0x13);
+        fx.set_u8(b, 0x3, 1);
+        fx.set_u8(b, 0x2f, rang);
+        fx.set_u8(b, 0x5a, 2);
+        fx.set_u16(b, 0x50, createur.0 as u16);
+    }
+    crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
+}
+
 pub(crate) fn scene_set_par(r: &mut impl Registres, b: &mut Cps2Bus, variante: u8) -> Option<Obj> {
     let set = r.alloue(b, &pools::SET)?;
     for at in [A5 + 0x51, A5 - 0x5b8e] {
@@ -310,6 +330,20 @@ fn set_a_joueur_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xdc5fe : objet ITEM 6 (objet de scène) de variante D0, sauf quand `A5-0x5ac6` est négatif (le
 /// drapeau N du test reste alors levé) ; retenue si le pool est plein.
+/// 0xdc5fe : objet de ramassage de la scène (ITEM 6) de variante `variante`, sauf quand le niveau d'objets
+/// (`A5-0x5ac6`) est négatif.
+pub fn objet_de_scene(b: &mut Cps2Bus, variante: u8) {
+    if (rd8(b, A5 - 0x5ac6) as i8) < 0 {
+        return;
+    }
+    if let Some(item) = pools::ITEM.alloc(b) {
+        item.set_u8(b, 0x0, 1);
+        item.set_u8(b, 0x2, 6);
+        item.set_u8(b, 0x3, variante);
+        item.set_u8(b, 0x2f, 0);
+    }
+}
+
 fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
     let niveau = rd8(b, A5 - 0x5ac6);
     if (niveau as i8) < 0 {

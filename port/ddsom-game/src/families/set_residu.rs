@@ -18,7 +18,7 @@ const ROW: u32 = 0x80;
 const BLANK: u32 = 0x20_0000;
 
 /// Efface les trois colonnes du tampon de tuiles ; rend la fin de la dernière (A1 de l'original).
-fn clear_columns(b: &mut Cps2Bus) -> u32 {
+pub fn clear_columns(b: &mut Cps2Bus) -> u32 {
     let mut a1 = 0;
     for column in COLUMNS {
         a1 = column;

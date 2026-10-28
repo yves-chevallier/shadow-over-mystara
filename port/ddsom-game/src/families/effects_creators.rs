@@ -953,8 +953,7 @@ fn trails(r: &mut impl Registres, b: &mut Cps2Bus) -> Option<Obj> {
 
 /// 0xa8a42 : caméra de scène en mode 0x60 (`A5+0x51e`), `A5+0x4ff` effacé.
 fn camera_mode_60(c: &mut Cpu, b: &mut Cps2Bus) {
-    crate::mem::wr8(b, A5 + 0x4ff, 0);
-    wr16(b, A5 + 0x51e, 0x60);
+    camera_en_mode_60(b);
     c.flags_logic(0x60, Size::Word);
 }
 
@@ -1117,6 +1116,37 @@ pub fn minuteur(b: &mut Cps2Bus, variante: u8) -> Option<Obj> {
 /// 0xb66e4 : effet de type 53 (activité incrémentée).
 pub fn type_53_pur(b: &mut Cps2Bus) -> Option<Obj> {
     type_53(&mut Pur, b)
+}
+
+/// 0xb9942 : pluie (type 83).
+pub fn pluie(b: &mut Cps2Bus) -> Option<Obj> {
+    spawn(&mut Pur, b, kind::RAIN)
+}
+
+/// 0xb1764 : banc de poissons.
+pub fn banc(b: &mut Cps2Bus) -> Option<Obj> {
+    fish_school(&mut Pur, b)
+}
+
+/// 0xb17ba : poissons nageurs.
+pub fn nageurs(b: &mut Cps2Bus) -> Option<Obj> {
+    fish_swimmers(&mut Pur, b)
+}
+
+/// 0xabb70 : traînées des joueurs.
+pub fn trainees(b: &mut Cps2Bus) -> Option<Obj> {
+    trails(&mut Pur, b)
+}
+
+/// 0xb68b0 : trois effets de type 54.
+pub fn types_54(b: &mut Cps2Bus) -> Option<Obj> {
+    type_54_trio(&mut Pur, b)
+}
+
+/// 0xa8a42 : caméra 1 en mode 0x60.
+pub fn camera_en_mode_60(b: &mut Cps2Bus) {
+    crate::mem::wr8(b, A5 + 0x4ff, 0);
+    wr16(b, A5 + 0x51e, 0x60);
 }
 use regs::d as D;
 

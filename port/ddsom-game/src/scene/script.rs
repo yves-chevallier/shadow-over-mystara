@@ -18,10 +18,10 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
-use m68k::{Cpu, SR_C};
+use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr32, wr8, A5};
-use crate::objects::Obj;
+use crate::objects::{pools, Obj};
 use crate::scene::var;
 use crate::{call, Native};
 
@@ -138,13 +138,9 @@ fn spawn(c: &mut Cpu, b: &mut Cps2Bus, e: u32) -> Spawn {
     }
     let class = rd8(b, e + entry::CLASS) as i8 as i16 as u16;
     set_low_word(&mut c.d[6], class);
-    let alloc = b.fetch16(ALLOCATORS + class as i16 as i32 as u32) as i16 as i32 as u32;
-    c.a[1] = alloc;
-    call(c, b, alloc);
-    if c.sr & SR_C != 0 {
+    let Some(o) = pool_of_class(b, class).alloc(b) else {
         return Spawn::PoolFull;
-    }
-    let o = Obj(c.a[1]);
+    };
     let offset = rd16(b, e + entry::OFFSET_X);
     set_low_word(&mut c.d[0], offset);
     let bytes = [
@@ -169,6 +165,22 @@ fn spawn(c: &mut Cpu, b: &mut Cps2Bus, e: u32) -> Spawn {
     Spawn::Done
 }
 
+/// Le pool de la classe `class` (octet pair) : la table des allocateurs (0xf2f38, mots de l'espace programme) donne
+/// l'adresse de la routine d'allocation de l'un des pools.
+fn pool_of_class(b: &mut Cps2Bus, class: u16) -> &'static pools::Pool {
+    let alloc = b.fetch16(ALLOCATORS + class as i16 as i32 as u32) as i16 as i32 as u32 & 0xff_ffff;
+    pools::POOLS
+        .into_iter()
+        .find(|p| p.alloc_routine == alloc)
+        // la dixième entrée (0x226e) n'est l'allocateur d'aucun pool : aucun script ne l'emploie
+        .unwrap_or_else(|| unreachable!("script d'apparition : classe {class:#x} sans allocateur ({alloc:#x})"))
+}
+
+/// Remet le lecteur à l'état « charger le script » (0xf2e56, changement de scène).
+pub fn reset(b: &mut Cps2Bus) {
+    wr8(b, STATE, state::LOAD);
+}
+
 /// Entrées des deux routines.
 pub const SPAWN_ENTRY: u32 = 0xf2e5c;
 pub const RESET_ENTRY: u32 = 0xf2e56;
@@ -188,7 +200,7 @@ pub const SPAWN_SCRIPT: Native = Native {
 pub const SCRIPT_RESET: Native = Native {
     entry: RESET_ENTRY,
     name: "scene_script_reset",
-    run: crate::Corps::Memoire(|b| wr8(b, STATE, state::LOAD)),
+    run: crate::Corps::Memoire(reset),
     touches_sound: false,
     outputs: 0,
 };

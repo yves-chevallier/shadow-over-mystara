@@ -78,25 +78,12 @@ pub const fn scratch(offset16: u16) -> u32 {
     A5 - 0x1_0000 + offset16 as u32
 }
 
-/// Sous-routines du moteur appelées par les séquences.
+/// Tâches de fondu lancées par les séquences.
 pub mod sub {
     /// Tâche de fondu de palette vers la cible (emplacement 0x10).
     pub const FADE_TASK: u32 = 0x14ba;
     /// Tâche de fondu à 1 niveau par pas (emplacement 0x10).
     pub const FADE_STEP_TASK: u32 = 0x1ced4;
-    /// Mise à jour du monde et construction de la liste de sprites : fin de chaque image de scène.
-    pub const WORLD_UPDATE: u32 = 0x1c86e;
-    pub const SPRITES: u32 = 0x1de96;
-    /// Copie des entrées vers les joueurs.
-    pub const INPUTS: u32 = 0x2aec;
-    /// Ouvre un message (bulle de dialogue, SET) numéro D0 ; A1 = le message, dont l'octet `+0x22`
-    /// passe à 1 quand il est terminé.
-    pub const MESSAGE: u32 = 0xc8312;
-    pub const ALLOC_SET: u32 = 0x2348;
-    /// Objet système « carton » de début de scène (type 14).
-    pub const TITLE_CARD: u32 = 0xdfe26;
-    /// Objet système de type 6, de variante D0.
-    pub const SOBJ_TYPE_6: u32 = 0xddeaa;
 }
 
 /// Contexte d'une séquence de scène : la machine, et des accès nommés à la RAM de travail.
@@ -190,11 +177,28 @@ impl<'a> Ctx<'a> {
         self.set_v8(var::PLAYERS_FROZEN, 1);
     }
 
-    /// Fin de l'image d'une séquence : mise à jour du monde, puis liste de sprites.
-    #[track_caller]
+    /// Fin de l'image d'une séquence : mise à jour du monde (0x1c86e), puis liste de sprites (0x1de96). Aucun
+    /// gestionnaire n'y cède la main (l'appel par adresse de l'original ne l'admettait pas).
     pub fn world(&mut self) {
-        self.call(sub::WORLD_UPDATE);
-        self.call(sub::SPRITES);
+        let flow = crate::game::update_world(self.c, self.b);
+        assert!(flow == crate::modes::Flow::Done, "séquence de scène : un gestionnaire a cédé la main pendant la mise à jour du monde");
+        crate::sprites::construire_68k(self.c, self.b);
+    }
+
+    /// Objet système « carton » de début de scène (SOBJ de type 14, 0xdfe26).
+    pub fn title_card(&mut self) {
+        let _ = crate::families::creators::sobj_14_pur(self.b);
+    }
+
+    /// Objet système de type 6, de variante `variante` (0xddeaa).
+    pub fn sobj_6(&mut self, variante: u8) {
+        let _ = crate::effects_aids::decor_6(self.b, variante);
+    }
+
+    /// Copie des entrées vers les joueurs (0x2aec). Glitch d'origine : D0-D4 qu'elle laisse sont relus par des
+    /// gestionnaires de la mise à jour du monde (`inputs::recopier_68k`).
+    pub fn inputs(&mut self) {
+        crate::inputs::recopier_68k(self.c, self.b);
     }
 
     // --- minuteries ------------------------------------------------------------------------------
@@ -236,11 +240,11 @@ impl<'a> Ctx<'a> {
         o
     }
 
-    /// Ouvre le message `n` et mémorise (sur 16 bits) l'adresse de l'objet dans `slot`.
-    pub fn message(&mut self, n: u32, slot: u32) {
-        self.c.d[0] = n;
-        self.call(sub::MESSAGE);
-        self.store_obj(slot, Obj(self.c.a[1]));
+    /// Ouvre le message `n` (0xc8312) et mémorise (sur 16 bits) l'adresse de l'objet dans `slot`. Glitch d'origine :
+    /// l'échec n'est pas testé, l'A1 laissé par l'allocation est mémorisé.
+    pub fn message(&mut self, n: u8, slot: u32) {
+        let o = crate::families::creators::scene_set_ou_reste(self.b, n);
+        self.store_obj(slot, o);
     }
     /// Message terminé (octet `+0x22` non nul) ?
     pub fn message_done(&mut self, slot: u32) -> bool {

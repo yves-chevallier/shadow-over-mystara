@@ -29,6 +29,7 @@ use m68k::decode::Fetch;
 use m68k::Cpu;
 
 use super::{player, scratch, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
+use crate::dispatch;
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::modes::Sequence as _;
 use crate::objects::Obj;
@@ -53,18 +54,21 @@ mod blk {
 const SEQUENCE_OF_SCENE: u32 = 0xf3170;
 const SEQUENCE_JUMPS: u32 = 0xf31ea;
 
-/// Sous-routines du jeu appelées par les séquences.
-mod call {
-    pub const PLAYER_INPUT: u32 = 0x2bdc;
-    pub const SOUND_C0C: u32 = 0xc0c;
-    pub const COLLISIONS: u32 = 0x260ee;
-    pub const PLAYERS: u32 = 0x35292;
-    pub const PLAYER_PARTS: u32 = 0x392e4;
-    /// Boucles de dispatch des classes d'objets, dans l'ordre de la mise à jour réduite.
-    pub const CLASSES: [u32; 9] = [0x398e2, 0x3996c, 0x39a52, 0x39b70, 0x39cba, 0x39e86, 0x39e50, 0x39f34, 0x39f82];
-    pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const EVENT_E57D6: u32 = 0xe57d6;
-}
+/// Commande son de la sortie vers la fin du jeu.
+const SOUND_E57D6: u32 = 0xe57d6;
+
+/// Boucles de dispatch des classes d'objets, dans l'ordre de la mise à jour réduite (sans les boss).
+const CLASSES: [&dispatch::Class; 9] = [
+    &dispatch::PSHL,
+    &dispatch::PEFF,
+    &dispatch::ENEMY,
+    &dispatch::ESHL,
+    &dispatch::EFFCT,
+    &dispatch::SET,
+    &dispatch::BOX,
+    &dispatch::ITEM,
+    &dispatch::SOBJ,
+];
 
 /// Joueur : champs écrits quand les joueurs quittent l'écran.
 const WALK_OUT_STATE: u32 = 0x000c_0000;
@@ -124,13 +128,6 @@ impl<'a> Ex<'a> {
         left == 0
     }
 
-    /// Appel d'une sous-routine du jeu avec A0 sur le bloc d'état.
-    fn call(&mut self, addr: u32) {
-        self.x.c.a[0] = BASE;
-        self.x.call(addr);
-        self.x.c.a[0] = BASE;
-    }
-
     /// Lance la tâche de fondu `entry` (délai `delay`), A0 est conservé.
     fn fade(&mut self, delay: u16, entry: u32) {
         self.x.set_v16(var::FADE_DELAY, delay);
@@ -141,12 +138,11 @@ impl<'a> Ex<'a> {
         self.x.c.a[0] = BASE;
     }
 
-    /// Ouvre le message `n` ; son adresse (16 bits) va dans `+0x12`.
-    fn message(&mut self, n: u32) {
-        self.x.c.d[0] = n;
-        self.call(sub::MESSAGE);
-        let a1 = self.x.c.a[1] as u16;
-        self.set_b16(blk::MESSAGE, a1);
+    /// Ouvre le message `n` (0xc8312) ; son adresse (16 bits) va dans `+0x12`. Glitch d'origine : l'échec n'est pas
+    /// testé, l'A1 laissé par l'allocation est mémorisé.
+    fn message(&mut self, n: u8) {
+        let o = crate::families::creators::scene_set_ou_reste(self.x.b, n);
+        self.set_b16(blk::MESSAGE, o.0 as u16);
     }
     fn message_done(&mut self) -> bool {
         let m = self.object(blk::MESSAGE);
@@ -187,7 +183,7 @@ impl<'a> Ex<'a> {
     fn start_walk_out(&mut self, rank: bool) {
         self.x.set_v8(PAUSE, 0);
         self.x.set_v8(var::INPUT_LOCK, 0);
-        self.call(call::PLAYER_INPUT);
+        crate::inputs::effacer_entrees(self.x.b);
         self.release_players(rank);
     }
     /// Les joueurs en jeu et vivants sont-ils tous dans l'état `state` (octet `+6`) ?
@@ -492,22 +488,21 @@ fn run_update(ex: &mut Ex, update: Update) {
         return;
     }
     if update != Update::World {
-        ex.x.call(sub::INPUTS);
+        ex.x.inputs();
     }
     match update {
         Update::Reduced => {
-            ex.x.call(call::PLAYERS);
-            ex.x.call(call::PLAYER_PARTS);
-            for class in call::CLASSES {
-                ex.x.call(class);
+            crate::player::update::mettre_a_jour(ex.x.c, ex.x.b);
+            crate::player::overlays::mettre_a_jour(ex.x.c, ex.x.b);
+            for class in CLASSES {
+                class.update_sans_suite(ex.x.c, ex.x.b);
             }
-            ex.x.call(sub::SPRITES);
+            crate::sprites::construire_68k(ex.x.c, ex.x.b);
         }
         _ => {
-            ex.x.call(sub::WORLD_UPDATE);
-            ex.x.call(sub::SPRITES);
+            ex.x.world();
             if update == Update::Full {
-                ex.x.call(call::COLLISIONS);
+                crate::combat::mettre_a_jour(ex.x.c, ex.x.b);
             }
         }
     }
@@ -567,7 +562,7 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         match leave.wait_fade {
             WaitFade::World => ex.x.world(),
             WaitFade::InputsWorld => {
-                ex.x.call(sub::INPUTS);
+                ex.x.inputs();
                 ex.x.world();
             }
             _ => {}
@@ -586,7 +581,7 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
     for off in PLAYER_LONGS {
         wr32(ex.x.b, A5 + off, 0);
     }
-    ex.x.call(call::SPRITES_RESET);
+    crate::sprites::vider_listes(ex.x.b);
     if leave.clear_flags {
         let flags = ex.x.v16(FLAGS) & FLAGS_KEEP;
         ex.x.set_v16(FLAGS, flags);
@@ -679,13 +674,13 @@ impl Etape {
         match self {
             Etape::DispatchTail(index) => dispatch_tail(x, index),
             Etape::Both => {
-                x.call(call::SOUND_C0C);
+                crate::video::ecran_noir(x.b);
                 crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             }
-            Etape::Sound => x.call(call::SOUND_C0C),
+            Etape::Sound => crate::video::ecran_noir(x.b),
             Etape::Command | Etape::TwiceEnd => crate::sound::service(x.b, crate::sound::Service::ArretGeneral),
             Etape::Twice => {
-                x.call(call::SOUND_C0C);
+                crate::video::ecran_noir(x.b);
                 x.c.d[0] = 2;
                 crate::kernel::attendre(x.c, x.b, Etape::TwiceEnd);
                 return crate::modes::Flow::Yield;
@@ -1025,7 +1020,7 @@ static SEQ_35: Sequence = Sequence {
         St::Custom(seq35_fade),
         St::Custom(seq35_message),
         St::Custom(seq35_boss),
-        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(call::EVENT_E57D6), ..LEAVE }),
+        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(SOUND_E57D6), ..LEAVE }),
     ],
 };
 
@@ -1075,7 +1070,7 @@ fn seq0_start(ex: &mut Ex) {
     ex.next();
     ex.fade(2, 0x14d0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    ex.call(call::PLAYER_INPUT);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.x.world();
 }
 
@@ -1084,7 +1079,7 @@ fn seq6_start(ex: &mut Ex) {
     ex.next();
     ex.fade(2, 0x14d0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    ex.call(call::PLAYER_INPUT);
+    crate::inputs::effacer_entrees(ex.x.b);
     crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
     ex.x.world();
 }
@@ -1138,7 +1133,7 @@ fn seq31_start(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 192);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    ex.call(call::PLAYER_INPUT);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.x.world();
 }
 
@@ -1156,7 +1151,7 @@ fn seq33_walk(ex: &mut Ex) {
         ex.next();
         ex.x.set_v8(PAUSE, 0);
         ex.x.set_v8(var::INPUT_LOCK, 0);
-        ex.call(call::PLAYER_INPUT);
+        crate::inputs::effacer_entrees(ex.x.b);
         ex.fade(2, 0x14d0);
         ex.release_players(false);
     }
@@ -1193,8 +1188,7 @@ fn walk_out_now(ex: &mut Ex) {
 fn seq1_clear(ex: &mut Ex) {
     ex.next();
     ex.reset_transition();
-    ex.x.c.d[0] = 1;
-    ex.call(0xdc5fe);
+    crate::families::creators::objet_de_scene(ex.x.b, 1);
 }
 
 /// Séquence 2 : la minuterie (mot) est décrémentée une fois, puis les joueurs sortent s'il y en a.
@@ -1292,7 +1286,7 @@ fn walk_with_effect(ex: &mut Ex) {
     ex.next();
     ex.x.set_v8(PAUSE, 0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    ex.call(call::PLAYER_INPUT);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.set_b16(blk::TIMER, 144);
     ex.release_players(false);
     let effect = Obj(ex.x.v16(0x46) as i16 as i32 as u32 & 0xff_ffff);
@@ -1307,7 +1301,7 @@ fn seq10_walk(ex: &mut Ex) {
     }
     ex.next();
     ex.start_walk_out(true);
-    ex.call(0xd5f12);
+    crate::families::set_residu::clear_columns(ex.x.b);
 }
 
 /// Séquence 14 : attend l'état 12 des joueurs, puis dialogue 35.
@@ -1322,7 +1316,7 @@ fn seq14_message_done(ex: &mut Ex) {
     if ex.message_done() {
         ex.next();
         ex.set_b16(blk::TIMER, 256);
-        ex.call(0x3525c);
+        crate::video::effacer_debut_couche1_68k(ex.x.c, ex.x.b);
     }
 }
 
@@ -1354,8 +1348,7 @@ fn seq15_fade(ex: &mut Ex) {
     ex.next();
     ex.fade(2, sub::FADE_TASK);
     ex.clear_text();
-    ex.x.c.d[0] = 3;
-    ex.call(0xdc5fe);
+    crate::families::creators::objet_de_scene(ex.x.b, 3);
 }
 
 /// Séquence 16 : transition et boutique remises à zéro, les joueurs sortent.
@@ -1371,7 +1364,7 @@ fn seq21_start(ex: &mut Ex) {
     ex.next();
     ex.x.set_v8(PAUSE, 0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    ex.call(call::PLAYER_INPUT);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.reset_transition();
     ex.reset_shop();
     ex.message(70);
@@ -1486,7 +1479,7 @@ fn seq35_walk(ex: &mut Ex) {
     ex.x.set_v8(PAUSE, 0);
     ex.x.wr16(scratch(0xaa84), 0x1400);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    ex.call(call::PLAYER_INPUT);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.release_players(false);
 }
 
@@ -1504,10 +1497,9 @@ fn seq35_message(ex: &mut Ex) {
     }
     ex.next();
     ex.message(88);
-    ex.x.c.d[0] = 24;
-    ex.call(0xce00a);
-    let a1 = ex.x.c.a[1] as u16;
-    ex.set_b16(blk::OBJECT, a1);
+    // Glitch d'origine : l'échec n'est pas testé, l'A1 laissé par l'allocation est mémorisé
+    let set = crate::families::creators::set_15_pur(ex.x.b, 24).unwrap_or_else(|a1| a1);
+    ex.set_b16(blk::OBJECT, set.0 as u16);
     crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 0x7fff);
     crate::sound::jouer_global(ex.x.b, 0xe5776);
 }

@@ -190,7 +190,7 @@ fn step_0(x: &mut Ctx) -> Flow {
     for off in [0u32, 4, 8] {
         wr32(x.b, var::CHOICES + off, 0xffff_ffff);
     }
-    crate::hud::oublier_affiches(x.b);
+    crate::hud::forget_displayed(x.b);
     crate::sound::jouer_global(x.b, ext::SOUND_E10D8);
     wr16(x.b, var::COUNTDOWN, 0x203c);
     wr16(x.b, var::COUNTDOWN, COUNTDOWN_START);

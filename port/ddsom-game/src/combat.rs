@@ -713,6 +713,11 @@ fn count_combo(w: &mut World, p: Obj, e: Obj) {
 // ---------------------------------------------------------------------------------------------
 // Routines natives
 
+/// 0x260ee : les collisions de l'image.
+pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
+    combat_update(&mut World { c, b, a2: 0 });
+}
+
 fn combat_update_native(c: &mut Cpu, b: &mut Cps2Bus) {
     combat_update(&mut World { c, b, a2: 0 });
     crate::mem::rts(c, b);

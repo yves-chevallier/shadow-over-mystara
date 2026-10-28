@@ -282,11 +282,6 @@ fn starting(x: &mut Ctx) -> Flow {
     tour(x)
 }
 
-/// 0x1507a : les panneaux oublient ce qu'ils affichent (ils seront redessinés).
-pub fn oublier_affiches(b: &mut cps2::Cps2Bus) {
-    slot::forget_displayed(b);
-}
-
 /// 0x1507a, appelée par d'autres modules.
 pub const FORGET_DISPLAYED: Native = Native {
     entry: 0x1507a,

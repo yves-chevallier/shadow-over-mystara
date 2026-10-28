@@ -328,6 +328,11 @@ pub fn update(g: &mut Ctx) {
     }
 }
 
+/// 0x392e4 : mise à jour des armes et boucliers des joueurs.
+pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
+    update(&mut Ctx::new(c, b));
+}
+
 fn update_native(c: &mut Cpu, b: &mut Cps2Bus) {
     update(&mut Ctx::new(c, b));
     rts(c, b);
