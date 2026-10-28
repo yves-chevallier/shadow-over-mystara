@@ -107,7 +107,9 @@ mod guardian {
             _ => lunge(x),
         }
         x.keep_in_zone();
-        x.push_terrain();
+        // Glitch d'origine : les registres de la collision (D2...) passent aux gestionnaires suivants ; l'éclat de gel
+        // (0x4bda8) tire son rebond dans le D2 hérité (`sorts_combattant`, `sorts_voleur`)
+        crate::terrain::push_68k(x.c, x.b, x.o);
         x.reinsert();
     }
 
