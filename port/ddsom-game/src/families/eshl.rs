@@ -1333,7 +1333,7 @@ mod shot14 {
                     x.add8(0x7, 2);
                     x.anim_start(ANIMS_CHARGE, 2);
                 }
-                _ => {
+                2 => {
                     if x.u8(0x33) != 0 {
                         crate::sound::jouer(x.b, sfx::E47BC, x.o);
                         x.add8(0x7, 2);
@@ -1343,6 +1343,8 @@ mod shot14 {
                     attach(x);
                     x.anim_step();
                 }
+                // 0x9fbd4 : le troisième mot de la table de sauts (0x9fbe2) mène à 0x9fb1e, la fin des autres séries
+                _ => close(x, 7),
             },
         }
     }
