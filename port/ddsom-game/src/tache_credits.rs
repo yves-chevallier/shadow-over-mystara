@@ -581,6 +581,7 @@ fn join(x: &mut Ctx, d: Depart) -> Flow {
     crate::eeprom::compter_partie(x.b);
     Flow::Done
 }
+
 /// Sous-programme d'origine réécrit dans le corps de la tâche, présenté comme une native pour le fuzz différentiel
 /// (`examples/fuzz_couv`) ; le jeu ne l'appelle pas par son adresse. S'il cède la main, l'essai est écarté (panique).
 pub const NATIVES_DE_TEST: &[crate::Native] = &[crate::Native {
