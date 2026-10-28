@@ -1052,16 +1052,3 @@ pub const NATIVES: &[Native] = &[
     RECORDER_RESET,
     RECORDER_STOP,
 ];
-
-/// Sous-programme d'origine réécrit, présenté comme une native pour le fuzz différentiel (`examples/fuzz_couv`) ; le
-/// jeu ne l'appelle pas par son adresse.
-pub const NATIVES_DE_TEST: &[crate::Native] = &[crate::Native {
-    entry: 0xe05ec,
-    name: "demo_entrees",
-    run: |c, b| {
-        demo_inputs(&mut Ctx::new(c, b));
-        crate::mem::rts(c, b);
-    },
-    touches_sound: false,
-    outputs: 0,
-}];

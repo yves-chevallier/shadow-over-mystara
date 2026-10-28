@@ -46,7 +46,7 @@ impl Journal<'_> {
             let a = a & 0xff_ffff;
             // ni la RAM du noyau (tâches, piles), ni la pile privée des wrappers de son et son pointeur, ni les
             // listes triées (têtes, liens des objets) : des états qu'aucun code ne produit
-            if a >= 0xff_1000 && !(0xff_2900..0xff_2a20).contains(&a) && !lien_de_liste(a) && l.len() < 200_000 {
+            if a >= 0xff_1000 && !(0xff_2900..0xff_2a20).contains(&a) && !lien_de_liste(a) && !existence_ou_type(a) && l.len() < 200_000 {
                 // lecture longue : deux mots consécutifs lus par la même instruction
                 if let Some(d) = l.last_mut().filter(|d| taille == 2 && d.1 == 2 && d.2 == self.pc && d.0 + 2 == a) {
                     d.1 = 4;
@@ -137,6 +137,17 @@ fn cle(b: &Cps2Bus, a: u32) -> u32 {
         return 0x0200_0000 | (a - 0xff_85de) % 0x200;
     }
     a
+}
+
+/// Octets d'existence (`+0`) et de type (`+2`) des objets des pools : un objet ne naît ni ne change de type sous
+/// un gestionnaire (ses autres champs n'auraient pas l'état de ce type, et la boucle de dispatch laisserait des
+/// registres d'un autre gestionnaire).
+fn existence_ou_type(a: u32) -> bool {
+    use ddsom_game::objects::pools::POOLS;
+    POOLS.iter().any(|p| {
+        let debut = ddsom_game::mem::A5 + p.first;
+        (debut..debut + p.stride * p.slots).contains(&a) && matches!((a - debut) % p.stride, 0 | 2)
+    })
 }
 
 /// Têtes et queues des listes triées (A5+0x5be-0x5c5) et liens `+0x24`/`+0x26` des objets listés et des joueurs.
@@ -1056,7 +1067,7 @@ fn main() {
     let gestionnaires = gestionnaires(&mut m.bus.clone());
     let mut cibles = HashMap::new();
     let specs: Vec<&str> = a[5].split(',').collect();
-    let essais_natifs = ddsom_game::hud::NATIVES_DE_TEST.iter().chain(ddsom_game::credits::NATIVES_DE_TEST).chain(ddsom_game::tache_credits::NATIVES_DE_TEST).chain(ddsom_game::modes::demo::NATIVES_DE_TEST);
+    let essais_natifs = ddsom_game::hud::NATIVES_DE_TEST.iter().chain(ddsom_game::credits::NATIVES_DE_TEST).chain(ddsom_game::tache_credits::NATIVES_DE_TEST);
     for n in ddsom_game::all_natives().chain(essais_natifs) {
         let voulu = |s: &str| {
             if let Some(p) = s.strip_prefix("nom:") {

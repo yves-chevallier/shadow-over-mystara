@@ -184,3 +184,22 @@ sont fondues avec les cœurs.
 Routines jamais atteintes par les scénarios mais réécrites et validées par `fuzz_ia` (300 tirages chacune, 0 écart) :
 0xe914 (point de marche atteint), 0xe7fa (point proche numéroté), 0xb068 (seconde table de parade), 0x103e0
 (animation de la variante), 0xf084 seule.
+
+## Lot fuzz : branches non jouées, validées ou écartées par fuzz différentiel
+
+Aucun code retiré. Le fuzz différentiel `examples/fuzz_couv` (bilan et méthode : [couverture-fonctions.md](couverture-fonctions.md),
+« Validation par fuzz ») exécute les branches que les scénarios ne prennent pas ; les cas suivants restent des états que
+le jeu ne produit pas, gardés tels quels dans le Rust :
+
+* **Index hors des tables de sauts** (états `+4`/`+6`/variante au-delà des entrées : réaction 0x3ddf6 pas 0xc,
+  bulle EFFCT 0xaabd8, actions des joueurs 0x35586) : l'original sauterait dans des données ou dans la table
+  elle-même ; les natives paniquent avec l'adresse (`unreachable!`/`assert!`). Preuve : aucun écrivain de ces champs
+  ne produit ces valeurs (tables relues), et le fuzz ne les atteint qu'en forçant l'octet.
+* **Pool plein avec lecture à une adresse impaire** (bourse EFFCT 0xaf2bc) : l'original lèverait une erreur
+  d'adresse (écran d'exception) ; panique documentée dans la native.
+* **Champs hors domaine** : octet `+0x15e` des joueurs ≥ 0x80 (P5 : 0 à 0x25 dans tous les scénarios et les bots
+  longs), orientation `+0x42` des anneaux du boss 11 hors de 0 à 31 (toujours masquée par `& 0x1f` à l'écriture),
+  rang `A5+0x7f92` ≥ 0x8000 (0 à 0x1f). Les écarts natif/original n'y apparaissent que par ces valeurs.
+* **Échange d'équipement sans propriétaire** (ITEM 3, `+0x50` nul : pointeur 0, lecture des octets de la ROM en 0x3 et
+  0x140) : glitch reproduit (index D0.w avec l'octet haut de la classe), bien qu'un objet ramassé ait toujours un
+  propriétaire.
