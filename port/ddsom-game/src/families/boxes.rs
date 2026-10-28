@@ -281,7 +281,7 @@ use crate::objects::Courant;
             x.set8(f::SOUS_SOUS_ETAT, 4);
             x.set8(f::ACTIVE, 2);
             x.set8(f::DELAI, 8);
-            x.call(rom::SON_CASSE);
+            crate::sound::jouer(x.b, rom::SON_CASSE, x.o);
         }
     }
 
@@ -391,7 +391,7 @@ use crate::objects::Courant;
         if x.u8(f::COUP) != 0 {
             x.set8(f::COUP, 0);
             lache_butin(x);
-            x.call(rom::SON_COUP);
+            crate::sound::jouer(x.b, rom::SON_COUP, x.o);
             if x.u8(f::SPECIAL) != 0 {
                 effet_special(x, 0);
             }
@@ -459,7 +459,7 @@ use crate::objects::Courant;
                 effet_special(x, 1);
             }
             lache_butin(x);
-            x.call(rom::SON_COUP);
+            crate::sound::jouer(x.b, rom::SON_COUP, x.o);
         }
         if !x.anim_step() {
             return;
@@ -600,7 +600,7 @@ use crate::objects::Courant;
                 lache_butin(x);
             }
             eclats(x);
-            x.call(rom::SON_ATTERRIT);
+            crate::sound::jouer(x.b, rom::SON_ATTERRIT, x.o);
             return compte_cassee(x);
         }
         let rebondit = x.u8(f::REBOND) == 0 && (x.u8(f::SANS_DECOR) != 0 || obstacle(x));
@@ -616,7 +616,7 @@ use crate::objects::Courant;
             avance(x) < 0
         };
         if pose {
-            x.call(rom::SON_POSE);
+            crate::sound::jouer(x.b, rom::SON_POSE, x.o);
             x.add8(f::SOUS_SOUS_ETAT, 2);
             x.set8(f::SANS_DECOR, 0);
             x.set16(f::Z, 0);
@@ -690,7 +690,7 @@ use crate::objects::Courant;
         x.set16(f::ORIGINE_X, px);
         let py = x.u16(f::Y);
         x.set16(f::ORIGINE_Y, py);
-        x.call(rom::SON_POSE);
+        crate::sound::jouer(x.b, rom::SON_POSE, x.o);
     }
 
     /// Lâchée, 4 : au premier coup, butin et effet spécial ; fin d'animation : clignotement.
@@ -698,7 +698,7 @@ use crate::objects::Courant;
         if x.u8(f::COUP) != 0 {
             x.set8(f::COUP, 0);
             lache_butin(x);
-            x.call(rom::SON_COUP);
+            crate::sound::jouer(x.b, rom::SON_COUP, x.o);
             compte_cassee(x);
             if x.u8(f::SPECIAL) != 0 {
                 effet_special(x, 2);

@@ -129,7 +129,7 @@ fn chunk_active(x: &mut Cx) {
             x.add8(f::SUB_STATE, 2);
             x.set16(Obj::Z, 0);
             x.set16(chunk::TIMER, 0x5a);
-            x.call(rom::SOUND_LANDING);
+            crate::sound::jouer(x.b, rom::SOUND_LANDING, x.o);
             crate::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
             match x.u8(f::VARIANT) {
                 0 => {
@@ -987,7 +987,7 @@ fn fireworks_active(x: &mut Cx) {
                 x.set16(Obj::AX, 0);
                 x.set16(Obj::VZ, 0x340);
                 x.set16(Obj::AZ, 0xfff0);
-                x.call(sfx::JUMP);
+                crate::sound::jouer(x.b, sfx::JUMP, x.o);
                 x.anim_start(0x17788c, 7);
             }
             0 => {
@@ -1005,7 +1005,7 @@ fn fireworks_active(x: &mut Cx) {
             0 => {
                 if scene_go(x) {
                     x.add8(f::SUB_STATE, 2);
-                    x.call(sfx::CHEER);
+                    crate::sound::jouer(x.b, sfx::CHEER, x.o);
                 }
                 x.anim_step();
             }
@@ -1051,7 +1051,7 @@ fn last_actor(x: &mut Cx, sub: u8) {
             x.add16(Obj::Z, 0xfffa);
             if z <= 0 {
                 x.add8(f::SUB_STATE, 2);
-                x.call(sfx::LANDING);
+                crate::sound::jouer(x.b, sfx::LANDING, x.o);
                 x.set16(Obj::Z, 0);
                 x.anim_start(fireworks::ANIMS_LAST, 5);
                 return;
@@ -1159,7 +1159,7 @@ fn hero(x: &mut Cx, sub: u8) {
             x.set16(Obj::VZ, 0x700);
             x.set16(Obj::AZ, 0);
             x.set32(Obj::VX, 0);
-            x.call(sfx::LIFT_OFF);
+            crate::sound::jouer(x.b, sfx::LIFT_OFF, x.o);
             x.anim_start(fireworks::ANIMS_HERO, 6);
         }
         14 => hero_lift_off(x),
@@ -1176,7 +1176,7 @@ fn hero_rockets(x: &mut Cx) {
     let t = countdown(x, fireworks::TIMER);
     if t >= 0 {
         if t == 0 {
-            x.call(sfx::LAST_ROCKET);
+            crate::sound::jouer(x.b, sfx::LAST_ROCKET, x.o);
         }
         return rocket(x);
     }

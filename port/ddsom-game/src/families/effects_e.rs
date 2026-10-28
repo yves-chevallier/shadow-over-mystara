@@ -340,7 +340,7 @@ fn gate_enter(x: &mut Cx) {
     let v = x.u8(f::VARIANT);
     x.c.d[1] = x.c.d[1] & !0xff | v as u32;
     scene_prop(x);
-    x.call(gate::MUSIC_OF_SCENE);
+    crate::sound::jouer(x.b, gate::MUSIC_OF_SCENE, x.o);
     x.c.a[0] = x.o.0;
     super::creators::restart_scene(x.c, x.b);
 }
@@ -414,7 +414,7 @@ fn gate_leave(x: &mut Cx) {
     let music = x.u16(gate::MUSIC);
     x.c.d[4] = x.c.d[4] & 0xffff_0000 | music as u32;
     x.add8(f::SUB_STATE, 2);
-    x.call(gate::PLAY_MUSIC);
+    crate::sound::jouer_avec(x.b, gate::PLAY_MUSIC, crate::sound::Source { objet: Some(x.o), d4: Some(music as u32), ..Default::default() });
 }
 
 /// État 4, sous-état 2 : le rideau s'ouvre (deux colonnes effacées par image depuis le centre).
@@ -536,7 +536,7 @@ fn attack_fx_flash(x: &mut Cx) {
             let alea = x.random();
             let anim = alea as u32 & 3;
             x.anim_start(attack_fx::ANIM_A, anim as u16);
-            x.call(attack_fx::SOUND_FLASH);
+            crate::sound::jouer(x.b, attack_fx::SOUND_FLASH, x.o);
         }
         2 => attack_fx_anim_or_leave(x),
         _ => free(x),

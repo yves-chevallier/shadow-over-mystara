@@ -166,7 +166,7 @@ fn victory_screen(x: &mut Cx) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(0x18, 0xf000);
-            x.call(rom::SOUND_0ED11C);
+            crate::sound::jouer(x.b, rom::SOUND_0ED11C, x.o);
             x.anim_start(anims::INTERFACE, 0);
         }
         state::ACTIVE => victory_active(x),
@@ -195,7 +195,7 @@ fn victory_active(x: &mut Cx) {
             }
             x.add8(f::SUB_STATE, 2);
             blink_by_frame(x);
-            x.call(rom::SOUND_0ED056);
+            crate::sound::jouer(x.b, rom::SOUND_0ED056, x.o);
             x.anim_start(anims::INTERFACE, 1);
         }
         4 => {
@@ -205,7 +205,7 @@ fn victory_active(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB_STATE, 2);
-            x.call(rom::SOUND_0ED90A);
+            crate::sound::jouer(x.b, rom::SOUND_0ED90A, x.o);
             x.anim_start(anims::INTERFACE, 2);
         }
         6 => {
@@ -341,7 +341,7 @@ fn menu_button_active(x: &mut Cx) {
         2 => {
             if x.anim_step() {
                 advance(x, 5);
-                x.call(rom::SOUND_0ECF10);
+                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
             } else if x.u8(0x33) != 0 {
                 x.set8(0x33, 0);
                 // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
@@ -363,7 +363,7 @@ fn menu_button_active(x: &mut Cx) {
                 let flags = x.u8(f::FLAGS) & !2;
                 x.set8(f::FLAGS, flags);
                 x.anim_start(anims::MENU, 6);
-                x.call(rom::SOUND_0ECF10);
+                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
             }
         }
         8 => {
@@ -374,7 +374,7 @@ fn menu_button_active(x: &mut Cx) {
         10 => {
             if menu_step(x) == 28 {
                 advance(x, 5);
-                x.call(rom::SOUND_0ECF10);
+                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
             } else {
                 x.anim_step();
             }

@@ -82,7 +82,8 @@ impl Cx<'_> {
     pub fn rand_and_b(&mut self, mask: u8) -> u8 {
         let alea = self.random();
         let low = alea as u8 & mask;
-        self.c.d[0] = self.c.d[0] & !0xff | low as u32;
+        // D0.w garde l'octet haut du tirage (relu : index des délais de l'éclat de gel)
+        self.c.d[0] = self.c.d[0] & 0xffff_0000 | (alea & 0xff00) as u32 | low as u32;
         low
     }
 

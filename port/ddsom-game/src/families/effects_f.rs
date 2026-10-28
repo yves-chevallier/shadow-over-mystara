@@ -112,13 +112,13 @@ fn opening(x: &mut Cx) {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
-                x.call(opening::SOUND_SCROLL);
+                crate::sound::jouer(x.b, opening::SOUND_SCROLL, x.o);
             }
             12 => {
                 if !x.anim_step() {
                     return;
                 }
-                x.call(opening::SOUND_ARRIVAL);
+                crate::sound::jouer(x.b, opening::SOUND_ARRIVAL, x.o);
                 let step = x.a5_u8(SCENE_STEP).wrapping_add(4);
                 x.set_a5_u8(SCENE_STEP, step);
                 x.add8(f::STATE, 4);
@@ -178,7 +178,7 @@ fn opening_slide(x: &mut Cx) {
     }
     x.add8(f::STATE, 2);
     clear_scene(x);
-    x.call(opening::SOUND_ARRIVAL);
+    crate::sound::jouer(x.b, opening::SOUND_ARRIVAL, x.o);
     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x20);
 }
 
@@ -367,7 +367,7 @@ fn crossing_steps(x: &mut Cx) {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
-                x.call(crossing::SOUND_LAND);
+                crate::sound::jouer(x.b, crossing::SOUND_LAND, x.o);
                 x.anim_start(crossing::ANIM_SET, 3);
                 x.reinsert();
             }
@@ -394,7 +394,7 @@ fn crossing_steps(x: &mut Cx) {
                 x.c.a[1] = x.linked(crossing::SCENERY).0;
                 if timer_out(x) {
                     x.set16(crossing::TIMER, 0x30);
-                    x.call(crossing::SOUND_WAIT);
+                    crate::sound::jouer(x.b, crossing::SOUND_WAIT, x.o);
                 }
                 if Obj(x.c.a[1]).u8(x.b, 0x22) == 0 {
                     return;
@@ -406,7 +406,7 @@ fn crossing_steps(x: &mut Cx) {
                 if !x.anim_step() {
                     return;
                 }
-                x.call(crossing::SOUND_DONE);
+                crate::sound::jouer(x.b, crossing::SOUND_DONE, x.o);
                 let o = x.o;
                 let lanceur = super::effects_creators::launcher(x.b, o);
                 if lanceur.is_none() {
@@ -535,7 +535,6 @@ mod launcher {
     /// Objet prévenu au départ (passé à l'état 4).
     pub const PARTNER: u32 = 0x5c;
     pub const SOUND_START: u32 = 0xed474;
-    pub const SOUND_SERVICE: u32 = 0xe0a10;
     pub const SOUND_LAUNCH: u32 = 0xedcd0;
     /// Sauvegarde de la palette (0x91c000, 33 × 32 octets) pour le fondu.
     pub const PALETTE_RAM: u32 = 0x91c000;
@@ -548,7 +547,7 @@ fn launcher(x: &mut Cx) {
         0 => {
             x.add8(f::STATE, 2);
             x.set16(launcher::TIMER, 0x40);
-            x.call(launcher::SOUND_START);
+            crate::sound::jouer(x.b, launcher::SOUND_START, x.o);
             x.set16(Obj::X, 0xa00);
             x.set16(Obj::Y, 0x17c);
             x.anim_start(launcher::ANIM_SET, 0);
@@ -578,8 +577,8 @@ fn launch(x: &mut Cx) {
         let px = p.u16(x.b, Obj::X).wrapping_add(0x310);
         p.set_u16(x.b, Obj::X, px);
         x.c.a[1] = p.0;
-        x.call(launcher::SOUND_SERVICE);
-        x.call(launcher::SOUND_LAUNCH);
+        crate::sound::service(x.b, crate::sound::Service::Ff05);
+        crate::sound::jouer(x.b, launcher::SOUND_LAUNCH, x.o);
         // animation 2 du joueur, puis le joueur est projeté en l'air
         let d6 = x.c.d[6];
         crate::objects::anim::start_by_character_68k(x.c, x.b, p, &crate::objects::anim::SETS_BY_VARIANT, 2);
@@ -696,7 +695,6 @@ mod sound_fade {
     /// Commandes de service 0xff08 / 0xff09 (niveau en D0) et 0xff07 (arrêt, D0 = 0xc).
     pub const SET_A: u32 = 0xe0ad8;
     pub const SET_B: u32 = 0xe0af8;
-    pub const STOP: u32 = 0xe0a82;
 }
 
 fn sound_fade_levels(x: &mut Cx) {
@@ -732,8 +730,7 @@ fn sound_fade(x: &mut Cx) {
             if (n as i16) > 0 {
                 return;
             }
-            x.c.d[0] = 0xc;
-            x.call(sound_fade::STOP);
+            crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0xc });
             free(x);
         }
         2 => {}

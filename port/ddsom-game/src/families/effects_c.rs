@@ -211,7 +211,7 @@ fn buyer_player(x: &mut Cx, buyer: Obj) -> Obj {
 
 /// Refus : son, puis message.
 fn shop_refuse(x: &mut Cx, message: u16) {
-    x.call(shop::SOUND_REFUSED);
+    crate::sound::jouer(x.b, shop::SOUND_REFUSED, x.o);
     crate::mem::wr16(x.b, shop::MESSAGE, message);
 }
 
@@ -249,7 +249,7 @@ fn shop_buy(x: &mut Cx, buyer: Obj) {
             if let Some(&(_, message)) = refused.iter().find(|&&(c, _)| c == class) {
                 if message == shop::TOO_MANY {
                     crate::mem::wr16(x.b, shop::MESSAGE, message);
-                    return x.call(shop::SOUND_REFUSED);
+                    return crate::sound::jouer(x.b, shop::SOUND_REFUSED, x.o);
                 }
                 return shop_refuse(x, message);
             }
@@ -285,13 +285,13 @@ fn shop_take(x: &mut Cx, buyer: Obj) {
             }
             None => {
                 crate::mem::wr16(x.b, shop::MESSAGE, shop::NO_ROOM);
-                return x.call(shop::SOUND_REFUSED);
+                return crate::sound::jouer(x.b, shop::SOUND_REFUSED, x.o);
             }
         },
     };
     if player.u8(x.b, 0x148 + slot) as i8 >= 9 {
         crate::mem::wr16(x.b, shop::MESSAGE, shop::TOO_MANY);
-        return x.call(shop::SOUND_REFUSED);
+        return crate::sound::jouer(x.b, shop::SOUND_REFUSED, x.o);
     }
     let id = x.u8(shop::ITEM + 1);
     player.set_u8(x.b, 0x140 + slot, id);
@@ -316,7 +316,7 @@ fn shop_pay(x: &mut Cx, player: Obj) {
         }
         x.c.sr = x.c.sr & !m68k::SR_X | if borrow { m68k::SR_X } else { 0 };
     }
-    x.call(shop::SOUND_BOUGHT);
+    crate::sound::jouer(x.b, shop::SOUND_BOUGHT, x.o);
 }
 
 /// `0xafc3c` : repas (soin de `heal`) : refusé si la vie est pleine ; le dernier du stock fait reculer
@@ -330,7 +330,7 @@ fn shop_meal(x: &mut Cx, buyer: Obj, heal: u16) {
     let full = player.u16(x.b, 0x60);
     if full as i16 <= player.u16(x.b, 0x62) as i16 {
         crate::mem::wr16(x.b, shop::MESSAGE, shop::FULL_LIFE);
-        return x.call(shop::SOUND_REFUSED);
+        return crate::sound::jouer(x.b, shop::SOUND_REFUSED, x.o);
     }
     if !shop_can_pay(x, player) {
         return;
@@ -893,7 +893,7 @@ fn attached_init(x: &mut Cx) {
             x.anim_start(attached::ANIM_SET, 4);
             let carrier = x.linked(attached::CARRIER);
             if matches!(carrier.u8(x.b, f::VARIANT), 4 | 9) {
-                x.call(0xe5d36);
+                crate::sound::jouer(x.b, 0xe5d36, x.o);
             }
         }
         6 => {
@@ -1596,7 +1596,7 @@ fn barrier(x: &mut Cx) {
                 if barrier_all_pressed(x) {
                     x.add8(f::SUB_STATE, 2);
                     x.set8(barrier::OPEN, 1);
-                    x.call(barrier::OPEN_SOUND);
+                    crate::sound::jouer(x.b, barrier::OPEN_SOUND, x.o);
                     x.set16(Obj::VZ, 0x180);
                     x.set16(Obj::VX, 0x200);
                 }
@@ -1811,7 +1811,7 @@ fn floater_main(x: &mut Cx) {
                 x.set8(0x33, 0);
                 crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
                 super::effects_creators::pillars(x.b);
-                x.call(0xe637c);
+                crate::sound::jouer(x.b, 0xe637c, x.o);
                 x.set_a5_u16(0x4ba, 0x100);
                 x.set8(floater::SHAKE, 8);
                 x.call(0x1ac86);
@@ -1951,7 +1951,7 @@ fn prop_active(x: &mut Cx) {
         (1, 2) => {
             if matches!(carrier_state(x), 0x0200_060c | 0x0200_080c) {
                 x.add8(f::SUB_STATE, 2);
-                x.call(0xe4e5a);
+                crate::sound::jouer(x.b, 0xe4e5a, x.o);
             }
             x.anim_step();
         }
@@ -1967,7 +1967,7 @@ fn prop_active(x: &mut Cx) {
         (2, 2) => {
             if carrier_state(x) == 0x0200_000c {
                 x.add8(f::SUB_STATE, 2);
-                x.call(0xe4e5a);
+                crate::sound::jouer(x.b, 0xe4e5a, x.o);
             }
             x.anim_step();
         }
@@ -2756,7 +2756,7 @@ fn lob_active(x: &mut Cx) {
             x.set_a5_u16(0x4be, shake);
             x.c.d[1] = shake as u32;
             x.call(0x1ac68);
-            x.call(0xe5d36);
+            crate::sound::jouer(x.b, 0xe5d36, x.o);
         }
         4 => {
             if x.anim_step() {
@@ -2788,7 +2788,7 @@ fn ending_piece(x: &mut Cx) {
             0 => {
                 if x.a5_u8(0x42) != 0 && rd8(x.b, floater::STEP) == 0xc {
                     x.add8(f::SUB_STATE, 2);
-                    x.call(0xead60);
+                    crate::sound::jouer(x.b, 0xead60, x.o);
                 }
             }
             2 => {
@@ -4070,7 +4070,7 @@ fn riser_shoot(x: &mut Cx, variant: u8) {
         wr16(x.b, o.0 + 0x42, x.o.0 as u16);
         let facing = x.u8(0x2c);
         wr8(x.b, o.0 + 0x2c, facing);
-        x.call(0xe5dea);
+        crate::sound::jouer(x.b, 0xe5dea, x.o);
     } else {
         for field in [Obj::X, Obj::Y, Obj::Z] {
             let v = x.u16(field);
@@ -4089,8 +4089,8 @@ fn riser(x: &mut Cx) {
             x.add16(Obj::Z, 0x32);
             x.call(0x1ac86);
             x.set_a5_u16(0x4be, 0xa);
-            x.call(0xead04);
-            x.call(0xe5daa);
+            crate::sound::jouer(x.b, 0xead04, x.o);
+            crate::sound::jouer(x.b, 0xe5daa, x.o);
             x.anim_start(riser::ANIM_SET, 9);
         }
         2 => riser_active(x),
@@ -4179,14 +4179,14 @@ fn riser_active(x: &mut Cx) {
             wr16(x.b, o.0 + Obj::X, px);
             wr16(x.b, o.0 + Obj::Y, py);
             wr16(x.b, o.0 + Obj::Z, 0x66);
-            x.call(0xe5c7a);
+            crate::sound::jouer(x.b, 0xe5c7a, x.o);
         }
         18 => {
             if countdown(x, riser::TIMER) {
                 return;
             }
             x.set16(riser::TIMER, 0x3c);
-            x.call(0xe5cd6);
+            crate::sound::jouer(x.b, 0xe5cd6, x.o);
             riser_anim(x, 5);
         }
         20 => {
@@ -4351,7 +4351,7 @@ fn spell(x: &mut Cx) {
                     }
                     x.set8(0x2a, 1);
                     x.set8(0x2b, 0x17);
-                    x.call(0xed2c4);
+                    crate::sound::jouer(x.b, 0xed2c4, x.o);
                     x.anim_start(spell::ANIM_SET, 6);
                 }
                 _ => return,
@@ -4385,7 +4385,7 @@ fn spell(x: &mut Cx) {
                             x.set8(0x33, 0);
                             x.c.a[0] = x.o.0;
                             super::eshl_creators::ring_28(x.c, x.b);
-                            x.call(0xed186);
+                            crate::sound::jouer(x.b, 0xed186, x.o);
                         }
                         if x.anim_step() {
                             match mode {
@@ -4421,7 +4421,7 @@ fn spell(x: &mut Cx) {
 fn title_card(x: &mut Cx) {
     let creator = x.linked(0x42);
     let gone = |x: &mut Cx| {
-        x.call(0xed90a);
+        crate::sound::jouer(x.b, 0xed90a, x.o);
         free(x);
     };
     if creator.u8(x.b, f::STATE) == 4 {
@@ -4430,7 +4430,7 @@ fn title_card(x: &mut Cx) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            x.call(0xed11c);
+            crate::sound::jouer(x.b, 0xed11c, x.o);
             x.anim_start(0x1942b2, 0);
         }
         2 => {
@@ -4469,7 +4469,7 @@ fn result_card(x: &mut Cx) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(Obj::VZ, 0xf000);
-            x.call(0xed11c);
+            crate::sound::jouer(x.b, 0xed11c, x.o);
             x.anim_start(0x19431a, 0);
         }
         2 => {
@@ -4487,7 +4487,7 @@ fn result_card(x: &mut Cx) {
                     if creator.u32(x.b, f::STATE) == 0x0200_0200 {
                         x.add8(f::SUB_STATE, 2);
                         blink_frames(x);
-                        x.call(0xed056);
+                        crate::sound::jouer(x.b, 0xed056, x.o);
                         x.anim_start(0x19431a, 1);
                     } else {
                         x.anim_step();
@@ -4497,7 +4497,7 @@ fn result_card(x: &mut Cx) {
                     blink_frames(x);
                     if creator.u32(x.b, f::STATE) == 0x0200_0600 {
                         x.add8(f::SUB_STATE, 2);
-                        x.call(0xed90a);
+                        crate::sound::jouer(x.b, 0xed90a, x.o);
                         x.anim_start(0x19431a, 2);
                     } else {
                         x.anim_step();
@@ -4655,14 +4655,15 @@ fn scene_timer(x: &mut Cx) {
             x.add8(f::STATE, 2);
             let (delay, sound) = if v == 0 { (0x168, 0xeac08) } else { (0x10e, 0xeabac) };
             x.set16(0x30, delay);
-            x.call(sound);
+            crate::sound::jouer(x.b, sound, x.o);
         }
         2 => {
             if countdown(x, 0x30) {
                 return;
             }
-            x.c.d[4] = if v == 0 { 0x15 } else { 0x14 };
-            x.call(0xe17a4);
+            let musique = if v == 0 { 0x15 } else { 0x14 };
+            x.c.d[4] = musique;
+            crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { objet: Some(x.o), d4: Some(musique), ..Default::default() });
             free(x);
         }
         _ => free(x),
@@ -4785,7 +4786,7 @@ fn finale_step(x: &mut Cx) {
                 return;
             }
             x.add8(f::SUB_STATE, 4);
-            x.call(0xe633c);
+            crate::sound::jouer(x.b, 0xe633c, x.o);
             x.set_a5_u16(0x490, 1);
             x.set_a5_u8(0x48e, 8);
             x.set_a5_u16(0x49e, 0xf20);

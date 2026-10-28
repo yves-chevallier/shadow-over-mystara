@@ -300,7 +300,7 @@ fn reward_active(x: &mut Cx) {
     x.set8(f::VARIANT, mode);
     x.set8(0x02, kind);
     x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
-    x.call(0xe24d8);
+    crate::sound::jouer(x.b, 0xe24d8, x.o);
     let back = x.c.d[0] as u8;
     x.set8(f::VARIANT, back);
     x.set8(0x02, 31);
