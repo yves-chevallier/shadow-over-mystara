@@ -6,6 +6,7 @@ d 0019f0 001a10 demarrage.rs
 d 001ffe 002000 scene/mod.rs
 d 00275a 002766 inconnu
 d 002ffc 002ffe scene/mod.rs
+d 003200 00320a sprites.rs
 d 0039fa 003a04 combat/damage.rs
 d 003a18 003a20 combat/damage.rs
 d 003a36 003a38 combat/damage.rs
@@ -217,6 +218,7 @@ d 01cfe2 01cfe4 scene/mod.rs
 d 01d6cc 01d6d4 modes/select.rs
 d 01d8be 01ddd0 sprites.rs
 d 01dfe2 01dfe4 scene/mod.rs
+d 01ef5c 01ef5e sprites.rs
 d 01efe0 01efe2 scene/mod.rs
 d 01f1d8 01f1e8 objects/rank.rs
 d 01f208 01f218 objects/rank.rs
@@ -748,6 +750,7 @@ d 0cbfb4 0cbfb6 scene/mod.rs
 d 0cdfb2 0cdfb4 scene/mod.rs
 d 0ce51a 0ce60a families/cx.rs
 d 0ce686 0ce6b2 families/cx.rs
+d 0ceaa0 0ceaa2 families/set_c_finale_c.rs
 d 0cf1c8 0cf1ca player/mod.rs
 d 0cf1f0 0cf1f2 player/mod.rs
 d 0cf20e 0cf210 player/mod.rs
