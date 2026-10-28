@@ -76,7 +76,6 @@ macro_rules! machine {
 }
 
 machine!(
-    crate::families::cx::Cx<'_>,
     crate::families::Ctx<'_>,
     crate::player::Ctx<'_>,
     crate::scene::Ctx<'_>,

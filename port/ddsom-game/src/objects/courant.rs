@@ -226,7 +226,7 @@ pub trait Courant: Machine {
     }
 }
 
-impl Courant for crate::families::cx::Cx<'_> {
+impl<R> Courant for crate::families::cx::Cx<'_, R> {
     fn obj(&self) -> Obj {
         self.o
     }

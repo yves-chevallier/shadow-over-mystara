@@ -51,28 +51,53 @@ impl<'a> Gx<'a> {
     pub fn restes(&mut self) -> &mut Restes {
         &mut self.c.restes
     }
-
-    /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (cœur : un gestionnaire converti ne laisse
-    /// aucun registre au suivant).
-    pub fn reinsert(&mut self) {
-        crate::objects::lists::ACTORS.reinsert(self.b, self.o);
-    }
-
-    /// 0x1ef6c : remet l'objet à sa place dans la liste du premier plan (cœur).
-    pub fn reinsert_foreground(&mut self) {
-        crate::objects::lists::FOREGROUND.reinsert(self.b, self.o);
-    }
 }
 
-impl crate::machine::Machine for Gx<'_> {
+impl<R> crate::machine::Machine for Cx<'_, R> {
     fn bus(&mut self) -> &mut Cps2Bus {
         &mut *self.b
     }
 }
 
-impl Courant for Gx<'_> {
-    fn obj(&self) -> Obj {
-        self.o
+impl crate::machine::Processeur for Cx<'_> {
+    fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus) {
+        (&mut *self.c, &mut *self.b)
+    }
+}
+
+/// Banc de registres d'un gestionnaire : ce qui change selon qu'il travaille encore sur le processeur ou non.
+pub trait Banc {
+    /// Remise en liste (0x1ee1a / 0x1ef6c, `premier_plan`) : sur le processeur, l'adaptateur laisse les registres de
+    /// l'original au gestionnaire suivant ; sans registres, le cœur.
+    fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool);
+}
+
+impl Banc for &mut Cpu {
+    #[track_caller]
+    fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool) {
+        let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
+        liste.reinsert_68k(self, b, o);
+    }
+}
+
+impl Banc for &mut Aiguillage {
+    fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool) {
+        let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
+        liste.reinsert(b, o);
+    }
+}
+
+impl<R: Banc> Cx<'_, R> {
+    /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (fin ordinaire d'un gestionnaire ; voir [`Banc`]).
+    #[track_caller]
+    pub fn reinsert(&mut self) {
+        self.c.remettre_en_liste(self.b, self.o, false);
+    }
+
+    /// 0x1ef6c : remet l'objet à sa place dans la liste du premier plan (voir [`Banc`]).
+    #[track_caller]
+    pub fn reinsert_foreground(&mut self) {
+        self.c.remettre_en_liste(self.b, self.o, true);
     }
 }
 
