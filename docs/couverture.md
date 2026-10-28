@@ -269,8 +269,13 @@ Trous trouvés et corrigés (chacun dans un commit séparé) :
 | `sorts_magicien` (4 593) | arrêt : pas de native en 0x535f2 | `rod_shot` appelait par adresse les tirs de baguette 0x5336a (flammes), 0x53478 (boule) et 0x535f2 (étoiles). Réécrits dans `player/spawn.rs` (`rod_row`, `rod_ball`) avec leurs natives |
 | `sorts_combattant`, avec `DDSOM_ASSETS` (23 834) | un sprite d'un mot différent | lectures hors bornes du constructeur de sprites en 0x3200 et 0x1ef5c (dans le code, absent des assets) : zones ajoutées à `tools/zones_natives.py` et `port/extract/zones_natives.txt` |
 
-Limites : le fuzz `fuzz_player spawn` ne peut pas comparer les trois tirs de baguette (l'original, depuis des états
-tirés au hasard, boucle plus d'un million de blocs : un niveau absurde donne un compte de 65 536 tours) ; ils sont
-validés par les scénarios (les quatre baguettes sont tirées, pleines et épuisées). Les portes de passage SET 27 et 29
+Limites : `fuzz_player spawn` s'arrête sur les trois tirs de baguette (« la routine d'origine ne revient pas » : depuis un état tiré
+au hasard, l'original dépasse la garde du contrôle) ; ils sont validés par les scénarios (les quatre baguettes sont tirées, pleines et épuisées). Les portes de passage SET 27 et 29
 (0xd8458, 0xd8dce) étaient déjà exécutées presque en entier par les scénarios (restent 0xd8316, 0xd8366, 0xd83b8, 0xd840a,
 helpers de suspension) ; les boutiques et les routes 0x14 et 0x38 ne reçoivent pas de bot nouveau ici.
+
+Résultat (après les quatre corrections et les trois zones) : `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=8
+tools/validate_all.sh 30000` donne 296 scénarios VALIDE sur 296, en mode par défaut et avec `DDSOM_ASSETS` (assets
+réextraits avec les zones ci-dessus : `extract <roms> <assets> data`). Régénération : `tools/gen_long.py sorts_<nom>` (environ
+5 à 10 minutes chacun) ; sélection `late` de `bot_lib.build` et option `--door` documentées dans leurs en-têtes.
+
