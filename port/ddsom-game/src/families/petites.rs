@@ -488,7 +488,7 @@ fn scroll_1_on_at_d0(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x133f6 / 0x133f0 : l'indicateur « démarrage fait » (`A5-0x715e`) levé / baissé.
-fn booted_set(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn booted_set(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 - 0x715e, 1);
     moved(c, 1, Size::Byte);
     rts(c, b);

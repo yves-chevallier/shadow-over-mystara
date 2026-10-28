@@ -415,9 +415,10 @@ fn init(x: &mut Cx) {
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x10);
     x.set8(0x93, 0);
-    x.c.d[0] = 0;
-    x.c.a[4] = kit(x).set_a;
-    x.tail(0x1a32);
+    // `jmp 0x1a32` (registres de l'original laissés au gestionnaire suivant)
+    let set = kit(x).set_a;
+    x.c.a[0] = x.o.0;
+    crate::objects::anim::start_68k(x.c, x.b, x.o, set, 0);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------

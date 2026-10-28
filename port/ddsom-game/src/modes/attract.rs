@@ -158,7 +158,7 @@ crate::etapes! {
         },
         SecondPalette = SECOND_PALETTE => |x| {
             x.c.d[0] = 0;
-            x.jump_to(sub::LOAD_PALETTE)
+            x.sauter(&crate::palette::PAGE2_D0)
         },
         NoticeTextShown = NOTICE_TEXT_SHOWN => |x| {
             crate::text::print(x.b, NOTICE_TEXT);

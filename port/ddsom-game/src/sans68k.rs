@@ -166,10 +166,10 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
             Point::Debut | Point::Parcours | Point::Examen | Point::Suivant | Point::Retour => {
                 crate::kernel::executer(c, b, point)
             }
-            Point::Tache => {
-                pas(c, b);
-                crate::kernel::point(b)
-            }
+            // une tâche ne continue plus par un saut vers une native : chaque pas cède, se termine ou bloque
+            Point::Tache => arreter(c, b, "la tâche a rendu la main sans céder".into()),
+            // la boucle sans fin de l'original : l'image est finie
+            Point::Bloque(_) => break,
             Point::PasRetenu => {
                 if plafond_atteint() {
                     break;
@@ -179,6 +179,9 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
                 crate::kernel::point(b)
             }
         };
+        if suivant == Point::Tache {
+            arreter(c, b, "la tâche a rendu la main sans céder".into());
+        }
         table(b).point = suivant;
     }
     c.cycles = c.cycles.max(fin);

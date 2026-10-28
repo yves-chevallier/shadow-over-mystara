@@ -50,7 +50,6 @@ mod at {
     pub const AFTER_WAIT: u32 = 0x13422;
     /// Table des gestionnaires de mode, et table des sous-modes.
     pub const MODE_TABLE: u32 = 0x13424;
-    pub const SUB_TABLE: u32 = 0x1345c;
 }
 
 /// Sous-routines du moteur appelées par les écrans.
@@ -79,12 +78,9 @@ pub trait Sequence {
     /// Cède `frames` images à l'ordonnanceur ; la tâche reprendra en `resume` (étape Rust, ou adresse qui suit le
     /// `jsr 0xa40` de l'original). La séquence doit rendre `Flow::Yield` aussitôt.
     fn wait(&mut self, frames: u32, resume: impl Into<Suite>) -> Flow;
-    /// Appelle une routine d'origine qui peut céder : elle revient (`rts`) en `resume`.
-    fn tail(&mut self, addr: u32, resume: impl Into<Suite>) -> Flow;
-    /// Continue dans le code d'origine à `addr`, qui rendra la main à l'appelant de la séquence.
-    fn jump(&mut self, addr: u32) -> Flow;
-    /// Comme `jump`, sans toucher à A0 (appel terminal `jmp` d'une routine d'origine).
-    fn jump_to(&mut self, addr: u32) -> Flow;
+    /// Appel terminal (`jmp`) de la native `n` : elle s'exécute aussitôt, et son `rts` revient à la suite de l'appel en
+    /// cours (la séquence rend `Flow::Yield`, la suite ayant déjà été exécutée).
+    fn sauter(&mut self, n: &'static Native) -> Flow;
     /// Appelle un sous-programme Rust qui peut céder la main (fondu, écran noir : `taches::fondu::descente`,
     /// `video::ecran_noir::debut`...) : `resume` est rangée dans les appels en cours ; s'il revient sans céder,
     /// elle s'exécute aussitôt.
@@ -106,27 +102,12 @@ fn push(c: &mut Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) {
     crate::taches::table::appeler(c, b, suite);
 }
 
-/// Saut à `addr` : la native qui y est posée continue la tâche.
-fn goto(c: &mut Cpu, addr: u32) {
-    c.pc = addr;
-}
-
 impl Sequence for Ctx<'_> {
     fn wait(&mut self, frames: u32, resume: impl Into<Suite>) -> Flow {
         crate::taches::ceder(self, crate::taches::Attente::Images(frames), resume)
     }
-    fn tail(&mut self, addr: u32, resume: impl Into<Suite>) -> Flow {
-        push(self.c, self.b, resume);
-        goto(self.c, addr);
-        Flow::Yield
-    }
-    fn jump(&mut self, addr: u32) -> Flow {
-        self.c.a[0] = mode::BASE;
-        goto(self.c, addr);
-        Flow::Yield
-    }
-    fn jump_to(&mut self, addr: u32) -> Flow {
-        goto(self.c, addr);
+    fn sauter(&mut self, n: &'static Native) -> Flow {
+        crate::sauter(self.c, self.b, n);
         Flow::Yield
     }
     fn push_return(&mut self, suite: impl Into<Suite>) {
@@ -232,8 +213,8 @@ fn turn(x: &mut Ctx) -> Flow {
     match m {
         0 => init(x),
         2 => dispatch(x),
-        // mode inconnu : le gestionnaire d'origine
-        _ => x.jump(at::MODE_TABLE + offset as u32),
+        // la table n'a que deux entrées, et seul `init` écrit le mode (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("mode {m:#x} : hors de la table 0x13424 (modes 0 et 2)"),
     }
 }
 
@@ -258,10 +239,8 @@ fn dispatch(x: &mut Ctx) -> Flow {
     x.c.d[0] = sub as u32;
     match attract::screen(x, sub).or_else(|| title::screen(x, sub)).or_else(|| ranking::screen(x, sub)).or_else(|| demo::screen(x, sub)) {
         Some(flow) => flow,
-        None => {
-            let offset = x.prog16(at::SUB_TABLE + sub as u32);
-            x.jump(at::SUB_TABLE + offset as u32)
-        }
+        // les onze entrées de la table (0 à 0x14) sont réécrites (code-mort.md, lot « sortie du Cpu »)
+        None => unreachable!("sous-mode {sub:#x} : hors de la table 0x1345c"),
     }
 }
 

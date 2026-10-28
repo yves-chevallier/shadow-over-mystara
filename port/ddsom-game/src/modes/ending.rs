@@ -83,7 +83,6 @@ mod ext {
     pub const CAMERA_INIT: u32 = 0x2a52;
     pub const PALETTE_360: u32 = 0x1a360;
     pub const REWARD: u32 = 0xce668;
-    pub const BOOTED_SET: u32 = 0x133f6;
 }
 
 mod at {
@@ -97,19 +96,23 @@ pub const PHASE_28: Native = Native {
     name: "ending_phase_28",
     run: |c, b| {
         let mut x = Ctx::new(c, b);
-        x.c.a[5] = A5;
-        x.c.a[0] = BLOCK;
-        let step = rd8(x.b, var::STEP);
-        x.c.d[0] = step as u32;
-        x.push_return(Etape::Return);
-        let flow = state(&mut x, step);
-        if flow == Flow::Done {
+        if phase_28(&mut x) == Flow::Done {
             rts(x.c, x.b);
         }
     },
     touches_sound: false,
     outputs: 0,
 };
+/// Phase 28 de la partie (`0xfb292`) : le générique de fin. L'état revient à [`Etape::Return`].
+pub fn phase_28(x: &mut Ctx) -> Flow {
+    x.c.a[5] = A5;
+    x.c.a[0] = BLOCK;
+    let step = rd8(x.b, var::STEP);
+    x.c.d[0] = step as u32;
+    x.push_return(Etape::Return);
+    state(x, step)
+}
+
 crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
@@ -483,7 +486,8 @@ crate::etapes! {
             x.call(ext::PLAYERS_UPDATE);
             wr8(x.b, var::PHASE, 20);
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-            x.jump_to(ext::BOOTED_SET)
+            crate::families::petites::booted_set(x.c, x.b);
+            Flow::Yield
         },
     }
 }
@@ -856,7 +860,7 @@ fn s1a_wait_fade(x: &mut Ctx) -> Flow {
         x.call(f);
     }
     wr16(x.b, var::SCROLL_2, 256);
-    x.jump_to(ext::CLEAR_SPRITES)
+    x.sauter(&crate::video::CLEAR_OBJECTS)
 }
 const S1A_LOOP: u32 = 0xfbc92;
 

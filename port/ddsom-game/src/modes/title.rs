@@ -97,10 +97,6 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
     })
 }
 
-fn unknown_step(x: &mut Ctx, entry: u32) -> Flow {
-    x.jump(entry)
-}
-
 // ---------------------------------------------------------------------------------------------
 // Aides communes
 
@@ -172,7 +168,8 @@ fn title_step(x: &mut Ctx, step: u8) -> Flow {
         0x1a => t1a_wait(x),
         0x1c => t1c_wait_logo(x),
         0x1e => t1e_end(x),
-        _ => unknown_step(x, 0xfa296),
+        // la table 0xfa2a4 a seize entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("titre : étape {step:#x} hors de la table 0xfa2a4"),
     }
 }
 
@@ -316,7 +313,7 @@ crate::etapes! {
         T1eDone = T1E_DONE => |x| {
             x.set_m16(f::TIMER, 300);
             x.c.d[0] = 1;
-            x.jump_to(ext::PALETTE_PAGE_A)
+            x.sauter(&crate::palette::PAGE1_D0)
         },
         S02Load = S02_LOAD => |x| {
             x.set_v8(var::SCREEN_TYPE, 1);
@@ -785,7 +782,8 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
             x.render();
             leave_screen(x, Etape::S08Wait)
         }
-        _ => unknown_step(x, 0xfaef2),
+        // la table 0xfaf00 a cinq entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("second titre : étape {step:#x} hors de la table 0xfaf00"),
     }
 }
 

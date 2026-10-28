@@ -216,25 +216,6 @@ impl<'a> Ctx<'a> {
         crate::call(self.c, self.b, adresse);
     }
 
-    /// `jsr adresse` exécuté par le code d'origine seul (aucune routine native, même imbriquée) : les
-    /// registres que l'original laisse derrière lui (restes de calcul) sont alors exactement les siens.
-    pub fn jsr_origine(&mut self, adresse: u32) {
-        if crate::sans68k::actif() {
-            // jeu sans 68000 : la native, qui rend les mêmes registres (`objects::lists::Reinsert`)
-            return crate::call(self.c, self.b, adresse);
-        }
-        const RETOUR: u32 = 0x00_fffe;
-        let sp = self.c.a[7];
-        self.c.a[7] = sp.wrapping_sub(4);
-        crate::mem::wr32(self.b, self.c.a[7], RETOUR);
-        self.c.pc = adresse;
-        while !(self.c.pc == RETOUR && self.c.a[7] == sp) {
-            if ddsom_rc::run_block(self.c.pc, self.c, self.b, u64::MAX).is_none() {
-                self.c.step(self.b);
-            }
-        }
-    }
-
     // Le moteur d'objets (animation, listes, pools...) : trait `objects::Courant` sur l'objet A0.
 
     /// Condition « plus grand » (bgt) des drapeaux courants.

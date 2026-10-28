@@ -83,10 +83,14 @@ pub enum Point {
     Suivant,
     /// `0x984` : retour à l'ordonnanceur d'une tâche qui a cédé (ou s'est terminée).
     Retour,
-    /// Une tâche continue dans la native posée au PC (saut d'une native à une autre, `Sequence::jump_to`...).
+    /// Une tâche s'exécute (le pas de son étape, `taches::executer`) ; elle en sort en cédant la main, en se terminant
+    /// ou en bloquant.
     Tache,
     /// Le pas de jeu attend l'image suivante (plafond des pas par image, `taches::partie`).
     PasRetenu,
+    /// Boucle sans fin de l'original (`bra.b *` à cette adresse : blocages du menu TEST et de l'EEPROM, [`bloquer`]) :
+    /// plus rien ne s'exécute, hors des interruptions.
+    Bloque(u32),
 }
 
 impl Point {
@@ -105,6 +109,7 @@ impl Point {
             Point::Retour => 0x984,
             Point::Tache => c.pc,
             Point::PasRetenu => crate::GAME_STEP,
+            Point::Bloque(adresse) => adresse,
         }
     }
 
@@ -238,6 +243,13 @@ fn vers_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = enregistrement(t.courante);
     t.point = Point::Retour;
     superviseur(c);
+    crate::taches::noter_cession();
+}
+
+/// La tâche courante entre dans une boucle sans fin de l'original (`bra.b *` en `adresse`) : le processeur n'en
+/// sortira plus que pour les interruptions. Le code Rust en cours revient sans rien faire (`taches::a_cede`).
+pub fn bloquer(b: &mut Cps2Bus, adresse: u32) {
+    table(b).point = Point::Bloque(adresse);
     crate::taches::noter_cession();
 }
 

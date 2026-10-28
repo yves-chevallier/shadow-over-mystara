@@ -181,7 +181,8 @@ crate::etapes! {
             x.set_v8(0x3d, 0);
             x.call(0xca8);
             crate::hud::forget_displayed(x.b);
-            let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
+            // pools vidés juste avant : l'échec (erreur d'adresse de l'original) n'arrive pas (code-mort.md)
+            let Some(Obj(o)) = pools::SOBJ.alloc_68k(x.c, x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
             wr8(x.b, o, 1);
             wr8(x.b, o + 2, 13);
             for k in 0..4u32 {
@@ -192,7 +193,7 @@ crate::etapes! {
                     continue;
                 }
                 x.c.a[2] = p;
-                let Some(Obj(e)) = pools::EFFCT.alloc_68k(x.c, x.b) else { return x.jump_to(sub::FULL) };
+                let Some(Obj(e)) = pools::EFFCT.alloc_68k(x.c, x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
                 wr8(x.b, e, 1);
                 wr8(x.b, e + 2, 20);
                 let (variant, character) = (rd8(x.b, p + 3), rd8(x.b, p + 2));

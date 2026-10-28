@@ -231,7 +231,6 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
         .chain(hud::NATIVES)
-        .chain(service::NATIVES)
 }
 
 /// Appelle une routine par son adresse depuis une routine native, comme un `jsr` : les natives (et, en mode hybride, le
@@ -244,6 +243,7 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     const RETURN: u32 = 0x00_fffe;
     let site = std::panic::Location::caller();
     let _site = (TRACE.get().is_some() || sans68k::actif()).then(|| SiteDAppel::entrer(site, addr));
+    let avant = (c.d, c.a, c.sr);
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], RETURN);
@@ -254,6 +254,21 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
         }
         un_pas(c, b);
     }
+    diag::sonder_appel(c, addr, &avant, site);
+}
+
+/// Appel terminal (`jmp`) de la native `n` depuis une fonction Rust : elle s'exécute aussitôt (avec les diagnostics de
+/// `DDSOM_CHECK`...), et son `rts` revient à la suite de l'appel en cours de la tâche. Remplace la pose du PC (saut d'une
+/// native à une autre).
+pub fn sauter(c: &mut Cpu, b: &mut Cps2Bus, n: &'static Native) {
+    executer(n, c, b, 0);
+}
+
+/// Comme [`sauter`], vers la native posée à `adresse` (gestionnaire désigné par une table de la ROM).
+#[track_caller]
+pub fn sauter_a(c: &mut Cpu, b: &mut Cps2Bus, adresse: u32) {
+    let n = lookup(adresse).unwrap_or_else(|| panic!("saut vers {adresse:06x} ({}) : pas de native", std::panic::Location::caller()));
+    executer(n, c, b, 0);
 }
 
 /// Point de bascule de l'ordonnanceur : une tâche qui cède la main (0xa40, 0xa86) ou se termine y passe.

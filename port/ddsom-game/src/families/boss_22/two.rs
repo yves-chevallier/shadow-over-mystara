@@ -68,9 +68,9 @@ pub(super) fn init(x: &mut Cx) {
         x.set8(0x9a, 0xff);
     }
     x.add8(f::STATE, 2);
-    x.c.d[0] = 0;
-    x.c.a[4] = TWO_KIT.set_a;
-    x.tail(0x1a32);
+    // `jmp 0x1a32` (registres de l'original laissés au gestionnaire suivant)
+    x.c.a[0] = x.o.0;
+    crate::objects::anim::start_68k(x.c, x.b, x.o, TWO_KIT.set_a, 0);
 }
 
 // --- groupe 0 : arrivée -----------------------------------------------------------------------------

@@ -181,8 +181,6 @@ etapes_des_taches! {
 /// Exécute l'étape `etape` de la tâche courante ; si elle finit (`Flow::Done`, retour de sous-programme), la suite de
 /// l'appel en cours ([`revenir`]).
 pub fn executer(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
-    // adresse d'origine, pour les diagnostics (et la boucle d'image, si le pas rend la main sans céder)
-    c.pc = etape.adresse();
     let mut x = Ctx::new(c, b);
     crate::modes::c_a5(&mut x);
     if etape.pas(&mut x) == Flow::Done {
@@ -190,8 +188,8 @@ pub fn executer(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// Retour d'un sous-programme (`rts`) : la suite de l'appel en cours, étape Rust exécutée aussitôt, ou adresse posée
-/// au PC ; rien si une fonction Rust attendait ce retour (`table::appeler_attendu`), ou si la tâche a déjà cédé la main
+/// Retour d'un sous-programme (`rts`) : la suite de l'appel en cours, étape Rust exécutée aussitôt ; adresse posée au
+/// PC pour le retour d'un appel par adresse (`crate::call`, sentinelle de la pile 68000) ; rien si une fonction Rust attendait ce retour (`table::appeler_attendu`), ou si la tâche a déjà cédé la main
 /// (le code Rust qui suit une cession ne fait que revenir : voir [`a_cede`]).
 pub fn revenir(c: &mut Cpu, b: &mut Cps2Bus) {
     if a_cede() {

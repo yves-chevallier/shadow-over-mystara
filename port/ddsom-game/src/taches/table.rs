@@ -179,11 +179,6 @@ impl Suite {
     }
 }
 
-impl From<u32> for Suite {
-    fn from(a: u32) -> Self {
-        Suite::Adresse(a)
-    }
-}
 
 impl From<Etape> for Suite {
     fn from(e: Etape) -> Self {

@@ -31,7 +31,6 @@ pub const PHASE_20: Native = Native {
     name: "gameover_phase_20",
     run: |c, b| {
         let mut x = Ctx::new(c, b);
-        x.c.a[5] = A5;
         if phase_20(&mut x) == Flow::Done {
             rts(x.c, x.b);
         }
@@ -40,7 +39,9 @@ pub const PHASE_20: Native = Native {
     outputs: 0,
 };
 
-fn phase_20(x: &mut Ctx) -> Flow {
+/// Phase 20 de la partie (`0x1c80c`) : fin de partie.
+pub fn phase_20(x: &mut Ctx) -> Flow {
+    x.c.a[5] = A5;
     set_low_word(&mut x.c.d[0], PLAYER_UI_SLOT);
     crate::kernel::tuer_tache(x.b, PLAYER_UI_SLOT as u32);
     wr16(x.b, A5 + 0x490, 1);
