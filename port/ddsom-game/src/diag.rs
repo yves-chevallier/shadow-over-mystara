@@ -35,13 +35,18 @@ pub fn poison_actif(etiquette: &str) -> bool {
 /// ne vaut que pour les sites qui contiennent le motif (`motion@families/sobj`) ; une entrée précédée de `!` exclut
 /// ces sites (`motion,!motion@sobj.rs:120`), pour isoler par bissection le lecteur d'un registre. Rend les registres
 /// à épargner : une entrée `étiquette@motif#a1+d0` empoisonne ce site sauf A1 et D0 (lecture déjà connue et écrite
-/// en clair, pour chercher les autres).
+/// en clair, pour chercher les autres) ; précédée de `=`, elle épargne ces registres sans empoisonner le site.
 fn gardes(etiquette: &str, site: &str) -> Option<u32> {
-    let mut actif = None;
+    let mut actif = false;
+    let mut epargnes = 0;
     for x in etiquettes() {
         let (exclu, x) = match x.strip_prefix('!') {
             Some(x) => (true, x),
             None => (false, x.as_str()),
+        };
+        let (garde_seule, x) = match x.strip_prefix('=') {
+            Some(x) => (true, x),
+            None => (false, x),
         };
         let (x, garde) = match x.split_once('#') {
             Some((x, g)) => (x, masque_de(g)),
@@ -55,10 +60,11 @@ fn gardes(etiquette: &str, site: &str) -> Option<u32> {
             if exclu {
                 return None;
             }
-            actif = Some(actif.unwrap_or(0) | garde);
+            actif |= !garde_seule;
+            epargnes |= garde;
         }
     }
-    actif
+    actif.then_some(epargnes)
 }
 
 /// Masque `crate::regs` d'une liste `d0+a1+ccr`.

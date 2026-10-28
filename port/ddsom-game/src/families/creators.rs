@@ -144,6 +144,47 @@ fn enemy_shot_9(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xcdedc : objet SET 13 de variante D0.
+/// Objet actif de type `kind` dans `pool`, de variante `variante`. L'échec rend l'A1 que l'original laisse
+/// (`Pool::alloc_or_leftover`), pour les appelants qui ne testent pas la retenue.
+fn objet(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variante: Option<u8>) -> Result<Obj, Obj> {
+    let o = pool.alloc_or_leftover(b)?;
+    o.set_u8(b, Obj::ACTIVE, 1);
+    o.set_u8(b, Obj::KIND, kind);
+    if let Some(v) = variante {
+        o.set_u8(b, Obj::VARIANT, v);
+    }
+    Ok(o)
+}
+
+/// 0xcdedc : objet SET de type 13, de variante `variante`.
+pub fn set_13_pur(b: &mut Cps2Bus, variante: u8) -> Result<Obj, Obj> {
+    objet(b, &pools::SET, 13, Some(variante))
+}
+
+/// 0xce00a : objet SET de type 15, de variante `variante`.
+pub fn set_15_pur(b: &mut Cps2Bus, variante: u8) -> Result<Obj, Obj> {
+    objet(b, &pools::SET, 0xf, Some(variante))
+}
+
+/// 0xc9760 : objet SET de type 5, variante 1, `+0x24` nul.
+pub fn set_5_pur(b: &mut Cps2Bus) -> Result<Obj, Obj> {
+    let set = objet(b, &pools::SET, 5, Some(1))?;
+    set.set_u8(b, 0x24, 0);
+    Ok(set)
+}
+
+/// 0xdfe26 : objet SOBJ de type 14 (sa variante n'est pas posée).
+pub fn sobj_14_pur(b: &mut Cps2Bus) -> Result<Obj, Obj> {
+    objet(b, &pools::SOBJ, 0xe, None)
+}
+
+/// 0xdfc78 : objet SOBJ de type 12, de variante `variante`, vitesse nulle.
+pub fn sobj_12_pur(b: &mut Cps2Bus, variante: u8) -> Result<Obj, Obj> {
+    let o = objet(b, &pools::SOBJ, 0xc, Some(variante))?;
+    o.set_u16(b, 0x14, 0);
+    Ok(o)
+}
+
 fn set_13(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);

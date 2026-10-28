@@ -3,7 +3,8 @@
 //! Chaque sous-mode (`FF0E71`) est un écran ; on y entre à l'étape 0 (préparation) et l'on y
 //! reste, une étape à la fois, jusqu'à ce que sa minuterie (`FF0E78`) atteigne zéro.
 
-use super::{mode, sub, Flow, Sequence};
+use super::{mode, Flow, Sequence};
+use crate::video::{charger_grille, effacer_couche, Couche, Grille};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
@@ -28,14 +29,11 @@ const SCREEN_READY: u32 = 0xff_0f53;
 /// Tâche d'écran fixe (exécuteur d'objets) et son emplacement.
 const FIXED_SCREEN_TASK: u32 = 0x1835e;
 const FIXED_SCREEN_SLOT: u32 = 0xf0;
-const SETUP_SCREEN: u32 = 0x180ac;
 /// Palette des écrans de texte et ses deux blocs de tuiles (écran « copyright »).
-const TEXT_PALETTE: u32 = 0x53;
+const TEXT_PALETTE: u16 = 0x53;
 const TILE_PLANE_3: u32 = 0x917000;
 const SOUND_SCREEN_A: u32 = 0xe0be2;
 const SOUND_SCREEN_B: u32 = 0xe0c16;
-/// Arrête (et lance) la tâche du texte « INSERT COIN » clignotant (`taches/invite.rs`).
-const INVITE_STOP: u32 = 0xe03c6;
 
 /// Écran du sous-mode `sub`, s'il est réécrit.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
@@ -53,9 +51,7 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
     if rd8(x.b, mode::STEP) == 0 {
         wr8(x.b, mode::STEP, 2);
         wr8(x.b, mode::BOOTED, 1);
-        x.call(SETUP_SCREEN);
-        x.c.d[0] = FIXED_SCREEN_SLOT;
-        x.c.a[0] = FIXED_SCREEN_TASK;
+        crate::families::petites::remise_ecran_fixe(x.b);
         crate::kernel::creer_tache(x.b, FIXED_SCREEN_SLOT as u32, FIXED_SCREEN_TASK);
         return Flow::Done;
     }
@@ -77,27 +73,22 @@ crate::etapes! {
     pub enum Etape {
         FixedScreenAfterFade = FIXED_SCREEN_FADED => |x| {
             x.set_v32(var::SCROLL_2, 0);
-            x.call(sub::CLEAR_SPRITES);
-            x.call(sub::CLEAR_SCROLL_1);
+            crate::video::vider_objets(x.b);
+            effacer_couche(x.b, Couche::Un);
             Flow::Done
         },
         LegalScreenSetup = LEGAL_SETUP => |x| {
             wr16(x.b, mode::TIMER, 300);
             let step = rd8(x.b, mode::STEP).wrapping_add(2);
             wr8(x.b, mode::STEP, step);
-            x.c.d[0] = TEXT_PALETTE;
-            x.call(sub::LOAD_PALETTE);
-            x.call(sub::CLEAR_SCROLL_3);
+            crate::palette::charger_page(x.b, 2, TEXT_PALETTE);
+            effacer_couche(x.b, Couche::Trois);
             x.set_v32(var::CAMERA, 0);
             x.set_v32(var::CAMERA_2, 0);
             x.wait(1, Etape::LegalScreenTiles)
         },
         LegalScreenTiles = LEGAL_TILES => |x| {
-            x.c.d[0] = 0x1c0;
-            x.c.a[1] = TILE_PLANE_3;
-            x.call(sub::TILE_BLOCK);
-            x.c.d[0] = 0x1c1;
-            x.call(sub::TILE_BLOCK);
+            two_tile_blocks(x, 0x1c0);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::LegalScreenSound)
         },
@@ -112,34 +103,28 @@ crate::etapes! {
             x.wait(1, Etape::LegalScreenCleared)
         },
         LegalScreenCleared = LEGAL_CLEARED => |x| {
-            x.call(sub::CLEAR_SCROLL_2);
+            effacer_couche(x.b, Couche::Deux);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::LegalScreenPalette)
         },
         LegalScreenPalette = LEGAL_PALETTE => |x| {
             wr16(x.b, mode::TIMER, 300);
-            x.c.d[0] = 0;
-            x.call(sub::LOAD_PALETTE);
+            crate::palette::charger_page(x.b, 2, 0);
             Flow::Done
         },
         SecondSetup = SECOND_SETUP => |x| {
             wr16(x.b, mode::TIMER, 300);
             let step = rd8(x.b, mode::STEP).wrapping_add(2);
             wr8(x.b, mode::STEP, step);
-            x.c.d[0] = TEXT_PALETTE;
-            x.call(sub::LOAD_PALETTE);
-            x.call(sub::CLEAR_SCROLL_3);
+            crate::palette::charger_page(x.b, 2, TEXT_PALETTE);
+            effacer_couche(x.b, Couche::Trois);
             x.set_v32(var::CAMERA, 0);
             x.set_v32(var::CAMERA_2, 0);
-            x.call(INVITE_STOP);
+            crate::taches::invite::arreter(x.b);
             x.wait(1, Etape::SecondTiles)
         },
         SecondTiles = SECOND_TILES => |x| {
-            x.c.d[0] = 0x1c2;
-            x.c.a[1] = TILE_PLANE_3;
-            x.call(sub::TILE_BLOCK);
-            x.c.d[0] = 0x1c3;
-            x.call(sub::TILE_BLOCK);
+            two_tile_blocks(x, 0x1c2);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::SecondFadeIn)
         },
@@ -152,13 +137,14 @@ crate::etapes! {
             x.wait(1, Etape::SecondCleared)
         },
         SecondCleared = SECOND_CLEARED => |x| {
-            x.call(sub::CLEAR_SCROLL_2);
+            effacer_couche(x.b, Couche::Deux);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::SecondPalette)
         },
         SecondPalette = SECOND_PALETTE => |x| {
-            x.c.d[0] = 0;
-            x.sauter(&crate::palette::PAGE2_D0)
+            // `jmp 0x1a67e`
+            crate::palette::charger_page(x.b, 2, 0);
+            Flow::Done
         },
         NoticeTextShown = NOTICE_TEXT_SHOWN => |x| {
             crate::text::print(x.b, NOTICE_TEXT);
@@ -176,12 +162,18 @@ crate::etapes! {
             x.wait(1, Etape::NoticeCleared)
         },
         NoticeCleared = NOTICE_CLEARED => |x| {
-            x.call(sub::CLEAR_SCROLL_1);
+            effacer_couche(x.b, Couche::Un);
             x.or16(var::LAYERS, LAYER_BITS);
             x.c.d[0] = 1;
             crate::taches::attendre_puis_revenir(x)
         },
     }
+}
+
+/// Deux blocs de tuiles de la couche 2 (`n`, `n + 1`) à la suite, à partir de `TILE_PLANE_3`.
+fn two_tile_blocks(x: &mut Ctx, n: u16) {
+    let fin = charger_grille(x.b, Grille::Couche2, n, TILE_PLANE_3);
+    charger_grille(x.b, Grille::Couche2, n + 1, fin.destination);
 }
 
 /// Sous-mode 8 (`0x1377e`) : image à deux blocs de tuiles pendant 300 images, entre deux fondus.

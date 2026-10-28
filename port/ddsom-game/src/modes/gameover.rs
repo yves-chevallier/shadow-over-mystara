@@ -13,10 +13,8 @@ use crate::mem::{rd16, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
-mod ext {
-    pub const PHASE_VARS_CLEAR: u32 = 0x1c44a;
-    pub const MODE_LOOP: u32 = 0x133fe;
-}
+/// Boucle de la machine à modes, que la tâche devient.
+const MODE_LOOP: u32 = 0x133fe;
 
 /// Tâche d'interface des joueurs (emplacement 0x30).
 const PLAYER_UI_SLOT: u16 = 0x30;
@@ -62,12 +60,12 @@ crate::etapes! {
             x.sous_programme(crate::video::ecran_noir::debut, Etape::Cleared)
         },
         Cleared = CLEARED => |x| {
-            x.call(ext::PHASE_VARS_CLEAR);
+            crate::families::petites::variables_de_partie_a_zero(x.b);
             wr8(x.b, A5 + 0x30, 1);
             reset_modes(x);
             wr8(x.b, mode::BOOTED, 1);
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-            x.c.a[0] = ext::MODE_LOOP;
+            x.c.a[0] = MODE_LOOP;
             crate::taches::recommencer(x)
         },
     }

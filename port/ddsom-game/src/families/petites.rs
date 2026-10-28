@@ -11,7 +11,7 @@ use m68k::Cpu;
 use crate::mem::{prog16, prog8, rd16, rd32, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use super::cx::{handler, Cx};
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 use crate::objects::pools;
 use super::effects_creators::restes::{Pur, Registres};
 
@@ -455,11 +455,10 @@ const BACKGROUND_BLOCKS: [(u16, u32); 8] = [
 ];
 
 /// 0x2a52 : fond 2 allumé (blocs de tuiles, bit 0 du registre vidéo `A5+0x12`, caméra 2 en mode 0x80).
-fn scroll_2_on(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn fond_2_allume(b: &mut Cps2Bus) -> crate::video::FinDeGrille {
+    let mut fin = None;
     for (block, dst) in BACKGROUND_BLOCKS {
-        set_low_word(&mut c.d[0], block);
-        c.a[1] = dst;
-        call(c, b, 0x26d4);
+        fin = Some(crate::video::charger_grille(b, crate::video::Grille::Couche2, block, dst));
     }
     let video = rd16(b, A5 + 0x12) | 1;
     wr16(b, A5 + 0x12, video);
@@ -468,14 +467,29 @@ fn scroll_2_on(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + 0x53c, 2);
     wr16(b, A5 + 0x51e, 0x80);
     wr8(b, A5 + 0x36, 1);
+    fin.expect("huit blocs")
+}
+
+/// `fond_2_allume`, registres de l'original : D0 et A1 du dernier bloc (0x26d4), drapeaux du dernier `move.b`.
+fn scroll_2_on(c: &mut Cpu, b: &mut Cps2Bus) {
+    let fin = fond_2_allume(b);
+    c.d[0] = 0xffff;
+    c.a[1] = fin.destination;
+    c.a[2] = fin.indices;
     moved(c, 1, Size::Byte);
     rts(c, b);
 }
 
-/// 0x2a42 : `A5+0x548` = D0, fond 1 réglé sur 0x34 ; 0x2a36 : fond 1 réglé sur 0x18.
-fn scroll_1_on_with(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
+/// 0x2a36 : fond 1 allumé (caméra en mode 0x18) ; 0x2a42 : `A5+0x548` = D0, fond 1 réglé sur 0x34.
+pub fn fond_1_allume(b: &mut Cps2Bus) {
+    fond_1_en_mode(b, 0x18);
+}
+fn fond_1_en_mode(b: &mut Cps2Bus, mode: u16) {
     wr8(b, A5 + 0x4ff, 0);
     wr16(b, A5 + 0x51e, mode);
+}
+fn scroll_1_on_with(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
+    fond_1_en_mode(b, mode);
     moved(c, mode as u32, Size::Word);
     rts(c, b);
 }
@@ -520,11 +534,14 @@ fn player_table_byte(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1c44a : les variables de partie `A5+0x2c..0x6b` à zéro.
-fn game_vars_clear(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.d[0] = 0;
+pub fn variables_de_partie_a_zero(b: &mut Cps2Bus) {
     for k in 0..16 {
         wr32(b, A5 + 0x2c + 4 * k, 0);
     }
+}
+fn game_vars_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.d[0] = 0;
+    variables_de_partie_a_zero(b);
     c.a[0] = A5 + 0x6c;
     c.d[6] = 0xffff;
     moved(c, 0, Size::Long);
@@ -532,11 +549,19 @@ fn game_vars_clear(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x180ac : remise à zéro de l'écran fixe : pools SET et EFFCT, sprites, liste triée.
+pub fn remise_ecran_fixe(b: &mut Cps2Bus) {
+    wr32(b, A5 - 0x70b0, 0);
+    crate::objects::lists::unlink_all(b);
+    crate::sprites::vider_listes(b);
+    pools::SET.reset(b);
+    pools::EFFCT.reset(b);
+}
+
+/// `remise_ecran_fixe` ; A0 = le dernier objet délié (0x1f184).
 fn fixed_screen_reset(c: &mut Cpu, b: &mut Cps2Bus) {
     wr32(b, A5 - 0x70b0, 0);
-    for routine in [0x1f184, 0x1de7c] {
-        call(c, b, routine);
-    }
+    crate::objects::lists::unlink_all_68k(c, b);
+    crate::sprites::vider_listes(b);
     pools::SET.reset(b);
     pools::EFFCT.reset(b);
     rts(c, b);

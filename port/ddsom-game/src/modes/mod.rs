@@ -174,12 +174,12 @@ impl Block for Ctx<'_> {
     fn ok(&self) -> bool {
         self.c.sr & 1 == 0
     }
-    #[track_caller]
     fn render(&mut self) {
         let a0 = self.c.a[0];
-        for f in [0x39e86, 0x39cba, 0x39f82, 0x1de96] {
-            self.call(f);
+        for classe in [&crate::dispatch::SET, &crate::dispatch::EFFCT, &crate::dispatch::SOBJ] {
+            classe.update_sans_suite(self.c, self.b);
         }
+        crate::sprites::construire_68k(self.c, self.b);
         self.c.a[0] = a0;
     }
 }

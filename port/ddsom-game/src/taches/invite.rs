@@ -86,32 +86,31 @@ fn print_shown(x: &mut Ctx, routine: u32) {
     x.call(routine);
 }
 
-/// `0xe03c6` : efface le texte (comme le texte des pièces) et arrête la tâche (0xa14) ; D0 et A4 gardés.
-fn stop(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    let (d0, a4) = (c.d[0], c.a[4]);
-    let mut x = Ctx::new(c, b);
-    print_shown(&mut x, print::COINS_CLEAR);
-    crate::kernel::tuer_tache(x.b, SLOT);
-    (x.c.d[0], x.c.a[4]) = (d0, a4);
-    crate::mem::rts(x.c, x.b);
+/// `0xe03c6` : efface le texte (comme le texte des pièces, 0xf4a) et arrête la tâche (0xa14) ; aucun registre ne
+/// change. L'effacement ne lit l'objet A0 de l'appelant que si les attributs du texte sont négatifs : jamais pour
+/// les textes que la tâche garde (attribut 3, tables 0xe048c, 0xe04b0, 0xe04e4).
+pub fn arreter(b: &mut cps2::Cps2Bus) {
+    let texte = rd32(b, SHOWN);
+    crate::text::clear_blocks(b, texte, 0);
+    crate::kernel::tuer_tache(b, SLOT);
 }
 
 /// `0xe03e4` : lance la tâche ; registres gardés.
-fn start(b: &mut cps2::Cps2Bus) {
+pub fn lancer(b: &mut cps2::Cps2Bus) {
     crate::kernel::creer_tache(b, SLOT, ENTRY);
 }
 
 pub const STOP: Native = Native {
     entry: 0xe03c6,
     name: "invite_stop",
-    run: crate::Corps::Processeur(stop),
+    run: crate::Corps::Memoire(arreter),
     touches_sound: false,
     outputs: 0,
 };
 pub const START: Native = Native {
     entry: 0xe03e4,
     name: "invite_start",
-    run: crate::Corps::Memoire(start),
+    run: crate::Corps::Memoire(lancer),
     touches_sound: false,
     outputs: 0,
 };

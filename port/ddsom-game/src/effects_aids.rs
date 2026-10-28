@@ -180,6 +180,28 @@ fn place_between(b: &mut Cps2Bus, me: u32, fx: u32, victim: u32) -> (u16, u16, u
 }
 
 
+/// Crée un objet actif de type `kind` dans `pool`, de variante `variante`. L'échec rend l'A1 que l'original laisse
+/// (`Pool::alloc_or_leftover`), pour les appelants qui ne testent pas la retenue.
+fn creer(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variante: u8) -> Result<Obj, Obj> {
+    let object = pool.alloc_or_leftover(b)?;
+    object.set_u8(b, Obj::ACTIVE, 1);
+    object.set_u8(b, Obj::KIND, kind);
+    object.set_u8(b, Obj::VARIANT, variante);
+    Ok(object)
+}
+
+/// 0xddeaa : décor (SOBJ) de type 6, de variante `variante`.
+pub fn decor_6(b: &mut Cps2Bus, variante: u8) -> Result<Obj, Obj> {
+    creer(b, &pools::SOBJ, 6, variante)
+}
+
+/// 0xdfa4a : décor (SOBJ) de type 11, de variante `variante`, orienté selon `orientation` (`+0x2c`).
+pub fn decor_11(b: &mut Cps2Bus, variante: u8, orientation: u8) -> Result<Obj, Obj> {
+    let object = creer(b, &pools::SOBJ, 11, variante)?;
+    object.set_u8(b, 0x2c, orientation);
+    Ok(object)
+}
+
 /// Crée un objet de type `kind` dans `pool`, variante D0 ; drapeaux de D0.b.
 fn spawn(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     let object = pool.alloc_68k(c, b)?;
