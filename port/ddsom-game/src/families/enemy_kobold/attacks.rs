@@ -3,6 +3,7 @@
 //! 30 coup suivi d'un bond, 32 coup de patte court.
 //! Chaque geste commence par `begin_wait` (étape 0) et `hold` (étape 2, poursuite en place).
 
+use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
@@ -81,11 +82,11 @@ fn step_then_after(x: &mut Cx) {
     }
 }
 
-/// Clé d'animation : effet `effect` (la clé est remise à zéro).
-fn key_effect(x: &mut Cx, effect: u32) {
+/// Clé d'animation : tir lancé `throw` (0x9dda8 ou 0x9e062 ; la clé est remise à zéro).
+fn key_effect(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        x.call(effect);
+        throw(x.b, x.o);
     }
 }
 
@@ -309,7 +310,7 @@ fn strike_then_jump(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_strike(x),
         6 => {
-            key_effect(x, 0x9e062);
+            key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
                 strike(x, 7);
@@ -555,7 +556,7 @@ fn series_a(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_strike(x),
         6 => {
-            key_effect(x, 0x9dda8);
+            key_effect(x, eshl_creators::throw_1);
             if x.anim_step() {
                 end_strike(x);
             }
@@ -581,7 +582,7 @@ fn series_b(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_strike(x),
         6 => {
-            key_effect(x, 0x9e062);
+            key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
                 x.set8(AI_SHOT, 0xff);
                 end_strike(x);
@@ -598,7 +599,7 @@ fn series_c(x: &mut Cx) {
             series_strike(x);
         }
         6 => {
-            key_effect(x, 0x9dda8);
+            key_effect(x, eshl_creators::throw_1);
             if x.anim_step() {
                 strike(x, 6);
                 let n = x.u8(REPEAT).wrapping_sub(1);
@@ -618,7 +619,7 @@ fn series_d(x: &mut Cx) {
     match x.u8(f::SUB3) {
         4 => series_prologue(x),
         6 => {
-            key_effect(x, 0x9e062);
+            key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
                 strike(x, 6);
                 let n = x.u8(REPEAT).wrapping_sub(1);

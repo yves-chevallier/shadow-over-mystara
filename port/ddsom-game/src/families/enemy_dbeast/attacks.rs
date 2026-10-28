@@ -4,6 +4,7 @@
 //! `+7 = 2` elle suit sa cible du regard (demi-tour si elle est derrière) ; les étapes suivantes
 //! sont propres au coup. Quand le coup est fini, `next_move` enchaîne ou remet la bête debout.
 
+use crate::families::eshl_creators;
 use super::parts::{bound_land, bound_wait};
 use super::stance::{engage, next_move};
 use super::*;
@@ -130,11 +131,11 @@ fn strike_end_quick(x: &mut Cx) {
     }
 }
 
-/// Un son d'impact, quand l'image-clé est atteinte.
-fn key_sound(x: &mut Cx, sound: u32) {
+/// Un tir lancé (0x9dda8 ou 0x9e062), quand l'image-clé est atteinte.
+fn key_throw(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        x.call(sound);
+        throw(x.b, x.o);
     }
 }
 
@@ -463,8 +464,8 @@ fn claw_begin(x: &mut Cx) {
 }
 
 /// Fin d'une griffe simple : son d'impact, puis repos et coup suivant.
-fn claw_end(x: &mut Cx, sound: u32) {
-    key_sound(x, sound);
+fn claw_end(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+    key_throw(x, throw);
     strike_end(x);
 }
 
@@ -472,7 +473,7 @@ fn claw_end(x: &mut Cx, sound: u32) {
 fn claw(x: &mut Cx) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),
-        6 => claw_end(x, 0x9dda8),
+        6 => claw_end(x, eshl_creators::throw_1),
         _ => {}
     });
 }
@@ -481,14 +482,14 @@ fn claw(x: &mut Cx) {
 fn claw_b(x: &mut Cx) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),
-        6 => claw_end(x, 0x9e062),
+        6 => claw_end(x, eshl_creators::throw_2),
         _ => {}
     });
 }
 
 /// Fin d'une griffe d'une série de `+0xab` : la dernière ramène au repos.
-fn series_end(x: &mut Cx, sound: u32) {
-    key_sound(x, sound);
+fn series_end(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+    key_throw(x, throw);
     if x.anim_step() {
         play_b(x, 4);
         let left = x.u8(REPEAT).wrapping_sub(1);
@@ -507,7 +508,7 @@ fn claw_series(x: &mut Cx) {
             x.set8(REPEAT, 1);
             claw_begin(x);
         }
-        6 => series_end(x, 0x9dda8),
+        6 => series_end(x, eshl_creators::throw_1),
         _ => {}
     });
 }
@@ -520,7 +521,7 @@ fn claw_series_b(x: &mut Cx) {
             x.set8(REPEAT, count);
             claw_begin(x);
         }
-        6 => series_end(x, 0x9e062),
+        6 => series_end(x, eshl_creators::throw_2),
         _ => {}
     });
 }
@@ -530,7 +531,7 @@ fn claw_leap(x: &mut Cx) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),
         6 => {
-            key_sound(x, 0x9e062);
+            key_throw(x, eshl_creators::throw_2);
             if x.anim_step() {
                 x.add8(0x7, 2);
                 play_b(x, 5);

@@ -90,13 +90,13 @@ fn spit(x: &mut Cx) {
                 let r = alea & 3;
                 setw(x, 0, r);
                 if r == 0 {
-                    return x.call(0xa7da2);
+                    return crate::families::eshl_creators::fragments_45(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                 }
-                return x.call(0xa7b0a);
+                return crate::families::eshl_creators::boss11_shards(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
             }
             let r = alea & 7;
             setw(x, 0, r);
-            x.call(0xa7570)
+            crate::families::eshl_creators::fragments_42(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, r)
         }
         0x8dcec => {
             if x.anim_step() {

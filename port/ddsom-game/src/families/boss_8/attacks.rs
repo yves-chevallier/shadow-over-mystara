@@ -76,7 +76,7 @@ fn combo(x: &mut Cx) {
                 x.set8(VULNERABLE, 1);
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xa5c9a);
+                crate::families::eshl_creators::series_3b(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
             }
             x.anim_step();
         }
@@ -373,7 +373,7 @@ fn lunge(x: &mut Cx, first: bool) {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x20);
                 x.c.d[4] = first as u32;
-                x.call(0xa4e84);
+                crate::families::eshl_creators::series_36(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, first as u8);
                 strike(x, 0xd);
             }
         }

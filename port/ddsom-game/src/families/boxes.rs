@@ -296,18 +296,25 @@ use crate::objects::Courant;
         x.c.d[0] = i;
         let effet = x.rom32(rom::SPECIAUX + i);
         x.c.a[1] = effet;
-        // créateurs ESHL du lot C, désignés par la table d'origine
+        // créateurs ESHL désignés par la table d'origine
         use crate::families::eshl_creators as eshl;
-        let creer: fn(&mut m68k::Cpu, &mut cps2::Cps2Bus) = match effet {
-            0xa1360 => eshl::single_18,
-            0xa1a40 => eshl::single_1b,
-            0xa1670 => eshl::row_19,
-            0xa17d0 => eshl::row_1a,
-            0xa1c6a => eshl::four_1c,
+        let r = &mut crate::families::effects_creators::restes::Pur;
+        match effet {
+            0xa1360 => eshl::single_18(r, x.b, x.o),
+            0xa1a40 => {
+                eshl::single_1b(r, x.b, x.o, moment as u16);
+            }
+            0xa1670 => {
+                eshl::row_19(r, x.b, x.o);
+            }
+            // Glitch d'origine : le D5 que laisse ce qui précède (`Restes`) fixe l'octet haut du compte des éclats.
+            0xa17d0 => {
+                let d5 = x.c.d[5] as u16;
+                eshl::row_1a(r, x.b, x.o, moment as u16, d5);
+            }
+            0xa1c6a => eshl::four_1c(r, x.b, x.o),
             _ => crate::families::effects::hors_table(effet),
-        };
-        x.c.a[0] = x.o.0;
-        creer(x.c, x.b);
+        }
     }
 
     /// Crée l'ITEM `butin` (type et variante lus dans `BUTINS`) au-dessus de la caisse, lancé avec
@@ -798,7 +805,7 @@ fn barriere_init(ctx: &mut Ctx, o: Obj) {
         1 => {
             ajoute_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, champ::JEU_OMBRES, OMBRES);
-            super::eshl_creators::single_3c(ctx.c, ctx.b);
+            super::eshl_creators::single_3c(&mut crate::families::effects_creators::restes::Pur, ctx.b, o);
             ctx.anim_start(barriere::ANIMATIONS_1, 4);
         }
         _ => crate::families::effects::hors_table(cible),

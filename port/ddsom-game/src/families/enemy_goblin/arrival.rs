@@ -105,7 +105,7 @@ fn run_in(x: &mut Cx) {
             if !x.anim_step() {
                 if x.u8(f::KEY_FRAME) != 0 {
                     x.set8(f::KEY_FRAME, 0);
-                    x.call(call::SWING);
+                    crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                 }
                 return;
             }

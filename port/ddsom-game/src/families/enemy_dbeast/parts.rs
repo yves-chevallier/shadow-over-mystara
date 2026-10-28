@@ -4,6 +4,7 @@
 //! lâchées (projectiles, bonds, ombre) : à la création elles reçoivent chacune un `+6` qui choisit
 //! leur comportement dans `run`.
 
+use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Courant;
 
@@ -495,7 +496,7 @@ fn slide(x: &mut Cx) {
 }
 
 /// Rampe : durée aléatoire, puis la bête surgit et frappe (+6 = 20 et 22, 0x72a16 / 0x72b16).
-fn sneak_gen(x: &mut Cx, sound: u32) {
+fn sneak_gen(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     const DELAYS: u32 = 0x72a6e;
     match x.u8(0x7) {
         0 => {
@@ -516,7 +517,7 @@ fn sneak_gen(x: &mut Cx, sound: u32) {
         4 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
-                x.call(sound);
+                throw(x.b, x.o);
             }
             if x.anim_step() {
                 x.add8(0x7, 2);
@@ -536,9 +537,9 @@ fn sneak_gen(x: &mut Cx, sound: u32) {
 }
 
 fn sneak(x: &mut Cx) {
-    sneak_gen(x, 0x9dda8);
+    sneak_gen(x, eshl_creators::throw_1);
 }
 
 fn sneak_b(x: &mut Cx) {
-    sneak_gen(x, 0x9e062);
+    sneak_gen(x, eshl_creators::throw_2);
 }

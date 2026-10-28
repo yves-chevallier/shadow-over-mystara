@@ -497,7 +497,7 @@ fn rise_step(x: &mut Cx) {
             if var::SCENE.get(x.b) != 0x2e {
                 return finale(x);
             }
-            x.call(0xa6e6a);
+            crate::families::eshl_creators::single_40(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
             lib::sound(x, 0xe4cfe);
             rise_script_two(x);
         }

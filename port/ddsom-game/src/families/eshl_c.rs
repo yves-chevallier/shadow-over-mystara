@@ -286,7 +286,7 @@ mod shot41 {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x13);
         x.anim_start(ANIMS, 1);
-        crate::families::eshl_creators::appeler(x, crate::families::eshl_creators::ring_28);
+        crate::families::eshl_creators::ring_28(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
     }
 }
 

@@ -250,8 +250,8 @@ fn init(x: &mut Cx) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
-    x.call(0x9e426);
-    if zero(x) {
+    // D0.w = l'état (0, posé par `run`) : comparé au nombre maximal de tirs de type 5
+    if !crate::families::eshl_creators::twelve_5(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 0) {
         return;
     }
     x.add8(f::STATE, 2);

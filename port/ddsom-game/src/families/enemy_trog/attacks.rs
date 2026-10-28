@@ -196,8 +196,7 @@ fn stab_begin(x: &mut Cx) {
 fn throw(x: &mut Cx) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.call(0x9e194);
-        if !x.c.cond(5) {
+        if crate::families::eshl_creators::four_3(&mut crate::families::effects_creators::restes::Pur, x.b, x.o) {
             x.set8(REPEAT, 6);
             return body(x, 8);
         }
@@ -277,8 +276,7 @@ fn special(x: &mut Cx) {
         return end_attack(x);
     }
     if x.u8(f::KEY_FRAME) != 0 {
-        x.call(0x9e2a0);
-        if x.c.cond(5) {
+        if crate::families::eshl_creators::above_4(&mut crate::families::effects_creators::restes::Pur, x.b, x.o).is_none() {
             set_state_long(x, IDLE);
         }
     }

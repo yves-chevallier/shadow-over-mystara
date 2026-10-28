@@ -5,6 +5,7 @@
 //! appels à `reinsert` des créations les y inscrivent tout de même quand ils les rendent visibles).
 
 use super::cx::{handlers, Cx};
+use super::effects_creators::restes::Pur;
 use super::eshl_creators;
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
@@ -17,6 +18,14 @@ const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_SIZE: u32 = 0x200;
 
 /// Champs d'un enregistrement de joueur utilisés par les décors.
+
+/// Appel direct d'une routine `(c, b)` par un gestionnaire : A0 = l'objet courant, A5 = la RAM de travail.
+fn appeler(x: &mut Cx, routine: fn(&mut m68k::Cpu, &mut cps2::Cps2Bus)) {
+    x.c.a[0] = x.o.0;
+    x.c.a[5] = A5;
+    routine(x.c, x.b);
+}
+
 mod pl {
     pub const ACTIVE: u32 = 0x00;
     pub const STATE: u32 = 0x04;
@@ -404,7 +413,7 @@ mod boss_intro {
             }
             14 => {
                 if countdown(x) {
-                    eshl_creators::appeler(x, eshl_creators::single_25);
+                    eshl_creators::single_25(&mut Pur, x.b, x.o);
                     next(x, 0x32);
                     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x32);
                 }
@@ -456,7 +465,7 @@ mod boss_intro {
             x.set8(BLAST, 0x14);
         }
         if x.u8(STEP) & 3 == 0 {
-            eshl_creators::appeler(x, eshl_creators::single_25);
+            eshl_creators::single_25(&mut Pur, x.b, x.o);
             random_blast(x);
         }
         if countdown(x) {
@@ -631,7 +640,7 @@ mod wave_spawner {
         let timer = x.data16(script);
         x.set16(TIMER, timer);
         x.set32(CURSOR, script + 2);
-        eshl_creators::appeler(x, crate::families::set_residu::wave_start);
+        appeler(x, crate::families::set_residu::wave_start);
         match x.rom8(START_KIND + variant) {
             0 => x.set_a5_u16(SCROLL_LIMIT, 0x20),
             2 => x.set_a5_u16(SCROLL_LIMIT, 4),
@@ -765,7 +774,7 @@ mod wave_spawner {
         }
         let n = x.a5_u8(ACTIVE_COUNT).wrapping_sub(1);
         x.set_a5_u8(ACTIVE_COUNT, if (n as i8) < 0 { 0 } else { n });
-        eshl_creators::appeler(x, crate::families::set_residu::wave_end);
+        appeler(x, crate::families::set_residu::wave_end);
         let variant = x.u8(0x3) as u32;
         match x.rom8(END_KIND + variant) {
             0 => {
@@ -1797,13 +1806,7 @@ mod idle_hunter {
         if active >= allowed {
             return None;
         }
-        x.c.a[2] = p.0;
-        x.c.d[0] = slot;
-        eshl_creators::appeler(x, eshl_creators::chasers);
-        if x.c.cond(7) {
-            return None;
-        }
-        Some(x.c.a[1] as u16)
+        eshl_creators::chasers(&mut Pur, x.b, x.o, slot as u8, p).map(Obj::word)
     }
 }
 
@@ -2328,7 +2331,7 @@ mod zone_end {
                 }
                 x.add8(0x4, 2);
                 x.set_a5_u16(SCROLL_LOCK, 0);
-                eshl_creators::appeler(x, eshl_creators::linked_34_3);
+                eshl_creators::linked_34(&mut Pur, x.b, x.o, 3);
                 crate::sound::jouer(x.b, 0xe55a2, x.o);
                 crate::sound::jouer(x.b, 0xe13b0, x.o);
             }

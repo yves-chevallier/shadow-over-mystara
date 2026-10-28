@@ -36,6 +36,8 @@ pub(crate) mod restes {
         fn alloue(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj>;
         /// Glitch d'origine : allocation dont l'échec n'est pas testé (voir `Pool::alloc_unchecked`).
         fn alloue_sans_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj;
+        /// Allocation dont l'échec rend l'A1 que l'original laisse (voir `Pool::alloc_or_leftover`).
+        fn alloue_ou_reste(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj>;
         /// Drapeaux d'un `move`/`tst`/`and` de `v`.
         fn drapeaux(&mut self, _v: u32, _taille: Size) {}
         /// Drapeau X seul (dernier bit sorti d'un décalage, que les instructions suivantes gardent).
@@ -84,6 +86,9 @@ pub(crate) mod restes {
         fn alloue_sans_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
             pool.alloc_unchecked(b)
         }
+        fn alloue_ou_reste(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+            pool.alloc_or_leftover(b)
+        }
     }
 
     /// Les registres de l'original.
@@ -95,6 +100,11 @@ pub(crate) mod restes {
         #[track_caller]
         fn alloue_sans_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
             pool.alloc_unchecked_68k(self, b)
+        }
+        #[track_caller]
+        fn alloue_ou_reste(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+            let a1 = pool.alloc_unchecked_68k(self, b);
+            if self.sr & m68k::SR_C != 0 { Err(a1) } else { Ok(a1) }
         }
         fn drapeaux(&mut self, v: u32, taille: Size) {
             self.flags_logic(v, taille);

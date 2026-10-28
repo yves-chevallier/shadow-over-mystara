@@ -19,7 +19,7 @@ const FLAME_SCRIPT: u32 = 0x62284;
 fn bite_effect(x: &mut Cx, kind: u32) {
     x.set8(f::KEY_FRAME, 0);
     x.c.d[0] = kind;
-    x.call(0x9eba6);
+    crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, kind as u8);
     lib::sound(x, 0xebd30);
 }
 
@@ -329,7 +329,7 @@ fn flame_tick(x: &mut Cx, both: bool) -> bool {
     if both {
         lib::sound(x, 0xed398);
     }
-    x.call(0x9ed78);
+    crate::families::eshl_creators::sweeping_8(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
     true
 }
 
@@ -507,7 +507,7 @@ fn b_claw(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
                 x.c.d[0] = 1;
-                x.call(0x9eba6);
+                crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 1);
             }
             if x.anim_step() {
                 stand_and_ready(x);

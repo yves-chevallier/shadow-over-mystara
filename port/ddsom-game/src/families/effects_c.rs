@@ -4377,8 +4377,7 @@ fn spell(x: &mut Cx) {
                         }
                         if mode == 1 && x.u8(0x33) == 1 {
                             x.set8(0x33, 0);
-                            x.c.a[0] = x.o.0;
-                            super::eshl_creators::ring_28(x.c, x.b);
+                            super::eshl_creators::ring_28(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                             crate::sound::jouer(x.b, 0xed186, x.o);
                         }
                         if x.anim_step() {
@@ -4386,12 +4385,10 @@ fn spell(x: &mut Cx) {
                                 1 => x.add8(f::STATE, 2),
                                 3 => {
                                     x.add8(f::STATE, 2);
-                                    x.c.a[0] = x.o.0;
-                                    super::eshl_creators::single_29(x.c, x.b);
+                                    super::eshl_creators::single_29(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                                 }
                                 _ => {
-                                    x.c.a[0] = x.o.0;
-                                    super::eshl_creators::single_3b(x.c, x.b);
+                                    super::eshl_creators::single_3b(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                                     x.add8(f::STATE, 2);
                                 }
                             }
