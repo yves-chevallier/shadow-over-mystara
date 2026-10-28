@@ -168,7 +168,7 @@ fn init(x: &mut Cx) {
     x.set16(0x10, py);
     x.add16(0xc, 0x50);
     x.set16(TIMER, 0x3c);
-    x.call(0xb84ae);
+    crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::VICTORY, None);
     // points de vie « affaiblis » (seuil du ralenti) selon le nombre de joueurs
     let hp = x.u16(0x60);
     setw(x, 1, hp);

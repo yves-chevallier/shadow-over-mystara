@@ -753,10 +753,12 @@ pub(super) fn holding(x: &mut Cx) {
                 }
                 set_dw(x, 0, dx);
                 let (px, ph, pz) = (x.u16(0x8), x.u16(0xc), x.u16(0x10));
-                set_dw(x, 2, px.wrapping_add(dx));
-                set_dw(x, 3, ph.wrapping_add(0x28));
-                set_dw(x, 4, pz.wrapping_sub(1));
-                x.call(0xaaa40);
+                let pos = (px.wrapping_add(dx), ph.wrapping_add(0x28), pz.wrapping_sub(1));
+                set_dw(x, 2, pos.0);
+                set_dw(x, 3, pos.1);
+                set_dw(x, 4, pos.2);
+                // l'autre objet de l'étincelle est A1, la cible chargée en tête de l'état
+                crate::families::effects_creators::spark_at(x.b, x.o, t.0, 2, pos);
                 let t = target_obj(x);
                 let hp = t.u16(x.b, f::HP);
                 t.set_u16(x.b, f::HP, hp.wrapping_sub(4));

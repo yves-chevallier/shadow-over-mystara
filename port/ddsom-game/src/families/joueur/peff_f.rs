@@ -307,7 +307,7 @@ mod flash {
             o.set_u8(x.b, 0x5a, 2);
             o.set_u16(x.b, f::OWNER, x.o.0 as u16);
         }
-        x.call(crate::palette::FLASH_COLOR_ON.entry);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
     }
 
     fn corner(x: &mut Cx) {

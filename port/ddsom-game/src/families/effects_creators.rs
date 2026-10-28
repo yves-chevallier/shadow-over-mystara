@@ -285,7 +285,7 @@ fn strip(r: &mut impl Registres, b: &mut Cps2Bus, variante: u8) -> Option<Obj> {
 }
 
 /// 0xb1a7a (écran de fin de scène, type 31), 0xafe02 (vote du chemin, type 23) : variante, réglage.
-fn with_setting(r: &mut impl Registres, b: &mut Cps2Bus, kind: u8, variante: u8, reglage: u8) -> Option<Obj> {
+fn with_setting_par(r: &mut impl Registres, b: &mut Cps2Bus, kind: u8, variante: u8, reglage: u8) -> Option<Obj> {
     let o = spawn(r, b, kind)?;
     o.set_u8(b, Obj::VARIANT, variante);
     put8(r, b, o, REGLAGE, reglage);
@@ -400,7 +400,7 @@ pub(crate) fn pickup_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj,
 }
 
 /// Créateur d'un type à variante fixe, lié au créateur par `+0x5c` (types 51, 73, 74, 82, 84, 86).
-fn linked(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, kind: u8, variante: Option<u8>) -> Option<Obj> {
+fn linked_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, kind: u8, variante: Option<u8>) -> Option<Obj> {
     let o = spawn(r, b, kind)?;
     if let Some(v) = variante {
         o.set_u8(b, Obj::VARIANT, v);
@@ -414,7 +414,7 @@ pub fn posed_flash(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     linked_posed_flash_par(&mut Pur, b, createur)
 }
 pub(crate) fn linked_posed_flash_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
-    linked(r, b, createur, kind::POSED_FLASH, None)
+    linked_par(r, b, createur, kind::POSED_FLASH, None)
 }
 
 /// 0xb8956 : minuteur de scène (type 76) de variante `variante`.
@@ -425,7 +425,7 @@ fn timer(r: &mut impl Registres, b: &mut Cps2Bus, variante: u8) -> Option<Obj> {
 }
 
 /// 0xba18a : poussière qui dérive (type 90), orientée comme le créateur, liée par le long `+0x46`.
-fn drift(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+fn drift_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::DRIFT)?;
     let facing = createur.u8(b, RETOURNE);
     o.set_u8(b, RETOURNE, facing);
@@ -473,7 +473,7 @@ pub(crate) fn camera_shard_par(r: &mut impl Registres, b: &mut Cps2Bus) -> Optio
 
 /// 0xb2ef6 : silhouette et reflet (type 35, variantes 0 et 1) du créateur, dont l'image transmise
 /// (`+0xa0`) est remise à zéro.
-fn mirrored_pair(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+fn mirrored_pair_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     createur.set_u8(b, 0xa0, 0);
     let mut dernier = None;
     for variante in 0..2u8 {
@@ -555,7 +555,7 @@ pub(crate) fn shimmer_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj
 }
 
 /// 0xb5730 : repère (type 47) à la place du créateur : réglage `+0x46`, même variante.
-fn beacon(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+fn beacon_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::BEACON)?;
     let setting = createur.u8(b, 0x46);
     o.set_u8(b, REGLAGE, setting);
@@ -567,7 +567,7 @@ fn beacon(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj>
 }
 
 /// 0xb3c14 : objet lancé (type 41) depuis le créateur, 24 pixels plus haut, même orientation.
-fn toss(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+fn toss_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::TOSS)?;
     let facing = createur.u8(b, RETOURNE);
     o.set_u8(b, RETOURNE, facing);
@@ -598,7 +598,7 @@ pub(crate) fn flash_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) 
 }
 
 /// 0xaaa40 : étincelle (type 4, variante `variante`) entre le créateur et `autre`, posée en (x, z, y).
-fn spark_at(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, autre: u32, variante: u8, (x, z, y): (u16, u16, u16)) -> Option<Obj> {
+fn spark_at_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, autre: u32, variante: u8, (x, z, y): (u16, u16, u16)) -> Option<Obj> {
     let o = spawn(r, b, kind::SPARK)?;
     o.set_u8(b, Obj::VARIANT, variante);
     let facing = createur.u8(b, RETOURNE) ^ 0x20;
@@ -616,7 +616,7 @@ fn spark_at(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, autre: u32, 
 // Effets de décor (type 42) liés par `+0x46`
 
 /// Effet de décor (type 42) de variante `variante` et de réglage `reglage`, lié par `+0x46`.
-fn scenery(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, reglage: Option<u8>) -> Option<Obj> {
+fn scenery_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, reglage: Option<u8>) -> Option<Obj> {
     let o = spawn(r, b, kind::SCENERY)?;
     o.set_u8(b, Obj::VARIANT, variante);
     if let Some(s) = reglage {
@@ -647,13 +647,13 @@ fn repete<R: Registres>(
 }
 
 /// Plusieurs effets de décor : D1 compte de `dernier` à 0, réglage = D1 ou nul.
-fn scenery_burst(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, dernier: u16, reglage_compteur: bool) -> Option<Obj> {
+fn scenery_burst_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, dernier: u16, reglage_compteur: bool) -> Option<Obj> {
     r.d(1, dernier as u32);
-    repete(r, b, 1, dernier, |r, b, n| scenery(r, b, createur, variante, Some(if reglage_compteur { n as u8 } else { 0 })))
+    repete(r, b, 1, dernier, |r, b, n| scenery_par(r, b, createur, variante, Some(if reglage_compteur { n as u8 } else { 0 })))
 }
 
 /// 0xb3df6 : deux éclats brefs (variante 0, réglages 0 et 1) posés sur le créateur (x et profondeur).
-fn scenery_0_pair(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+fn scenery_0_pair_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     let mut dernier = None;
     for setting in 0..2u8 {
         let o = spawn(r, b, kind::SCENERY)?;
@@ -670,7 +670,7 @@ fn scenery_0_pair(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Opt
 
 /// 0xb3f6a : une image sur quatre (`A5+0x6e`), bouffée (variante 4) de réglage tiré au hasard ;
 /// `+0x58` = bit 2 du tirage.
-fn scenery_4(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+fn scenery_4_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     let frame = var::IMAGES_MOT_BAS.get(b);
     r.d_mot(0, frame);
     r.d_mot(1, frame);
@@ -690,19 +690,19 @@ fn scenery_4(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<O
 }
 
 /// 0xb3fd4 (variante 6, une fois sur seize) et 0xb4088 (variante 10, réglage nul, une fois sur quatre).
-fn scenery_by_chance(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, masque: u16, variante: u8, reglage: Option<u8>) -> Option<Obj> {
+fn scenery_by_chance_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, masque: u16, variante: u8, reglage: Option<u8>) -> Option<Obj> {
     let alea = crate::rng::random(b);
     if and_d0(r, alea, masque) != 0 {
         return None;
     }
-    scenery(r, b, createur, variante, reglage)
+    scenery_par(r, b, createur, variante, reglage)
 }
 
 // ---------------------------------------------------------------------------------------------
 // Sorts d'un ennemi magicien (type 44) liés par `+0x5c`
 
 /// 0xb4f44 : un effet de sort, réglage `reglage` (variante laissée telle quelle).
-fn spell(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
+fn spell_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::SPELL)?;
     o.set_u8(b, REGLAGE, reglage);
     link(r, b, o, lien::CREATEUR, createur.0);
@@ -710,7 +710,7 @@ fn spell(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u8) ->
 }
 
 /// 0xb4ef4 / 0xb4f60 / 0xb4f1c : six effets de sort (variantes 5 à 0) de réglage `reglage`.
-fn spell_ring(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
+fn spell_ring_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
     r.d(1, 5);
     repete(r, b, 1, 5, |r, b, n| {
         let o = spawn(r, b, kind::SPELL)?;
@@ -724,7 +724,7 @@ fn spell_ring(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u
 /// 0xb3e4e, 0xb3ec6 : cris d'un boss (effet de scène 42, variante `variante`) : une fiche tirée au hasard
 /// (`rng & 0x38`, octets en `table`) donne le nombre d'effets moins un, puis le réglage `+0x2f` de chacun ;
 /// liés au créateur par `+0x46`. A2 suit la lecture de la fiche.
-fn shouts(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, table: u32) -> Option<Obj> {
+fn shouts_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, table: u32) -> Option<Obj> {
     let alea = crate::rng::random(b);
     let mut at = table + and_d0(r, alea, 0x38) as u32;
     let n = rd8(b, at);
@@ -744,7 +744,7 @@ fn shouts(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, 
 }
 
 /// 0xb4bcc : pluie de débris (type 43) de variante `variante`, réglage `reglage`, liée par `+0x5c`.
-fn debris_rain(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, reglage: u8) -> Option<Obj> {
+fn debris_rain_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante: u8, reglage: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::DEBRIS_RAIN)?;
     o.set_u8(b, Obj::VARIANT, variante);
     o.set_u8(b, REGLAGE, reglage);
@@ -988,7 +988,7 @@ pub(crate) fn set_list_par(r: &mut impl Registres, b: &mut Cps2Bus, liste: u8) -
 // Tirs ennemis (ESHL) créés par la famille
 
 /// 0xa836c : coup (ESHL 0x48, variante 0) de réglage `reglage`, lié par `+0x5c`.
-fn eshl_slash(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
+fn eshl_slash_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
     let o = spawn_in(r, b, &pools::ESHL, kind::ESHL_SLASH)?;
     o.set_u8(b, Obj::VARIANT, 0);
     o.set_u8(b, REGLAGE, reglage);
@@ -998,7 +998,7 @@ fn eshl_slash(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, reglage: u
 
 /// 0xa817c : colonne montante (ESHL 0x47) posée sur le créateur, 0x80 plus haut, juste devant ; D0 = 1, ou 0 si le
 /// pool est plein.
-fn eshl_rise(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+fn eshl_rise_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
     let Some(o) = spawn_in(r, b, &pools::ESHL, kind::ESHL_RISE) else {
         r.d(0, 0);
         r.drapeaux(0, Size::Long);
@@ -1042,6 +1042,103 @@ macro_rules! creators {
     };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Cœurs des créateurs appelés par les gestionnaires (fonctions Rust : ni registres ni retenue ; l'effet créé,
+// `None` si le pool est plein)
+
+/// 0xaaa40 : étincelle (type 4) entre le créateur et `autre`, posée en (x, z, y).
+pub fn spark_at(b: &mut Cps2Bus, createur: Obj, autre: u32, variante: u8, pos: (u16, u16, u16)) -> Option<Obj> {
+    spark_at_par(&mut Pur, b, createur, autre, variante, pos)
+}
+/// 0xb3df6 : deux effets de décor (variante 0).
+pub fn scenery_0(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    scenery_0_pair_par(&mut Pur, b, createur)
+}
+/// 0xb3f40 : effets de décor de variante 3.
+pub fn scenery_3(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    scenery_burst_par(&mut Pur, b, createur, 3, 6, true)
+}
+/// 0xb3f6a : une image sur quatre, bouffée de variante 4.
+pub fn scenery_4(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    scenery_4_par(&mut Pur, b, createur)
+}
+/// 0xb3fb0 : effet de décor de variante 5, réglage `reglage`.
+pub fn scenery_5(b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
+    scenery_par(&mut Pur, b, createur, 5, Some(reglage))
+}
+/// 0xb3fd4 : une fois sur seize, effet de décor de variante 6.
+pub fn scenery_6(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    scenery_by_chance_par(&mut Pur, b, createur, 0xf, 6, None)
+}
+/// 0xb4002 : effet de décor de variante 7, réglage nul.
+pub fn scenery_7(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    scenery_par(&mut Pur, b, createur, 7, Some(0))
+}
+/// 0xb4026 : effets de décor de variante 8.
+pub fn scenery_8(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    scenery_burst_par(&mut Pur, b, createur, 8, 9, false)
+}
+/// 0xb4088 : une fois sur quatre, effet de décor de variante 10, réglage nul.
+pub fn scenery_10(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    scenery_by_chance_par(&mut Pur, b, createur, 3, 10, Some(0))
+}
+/// 0xb3e4e (`second` faux) et 0xb3ec6 : cris d'un boss.
+pub fn shouts(b: &mut Cps2Bus, createur: Obj, second: bool) -> Option<Obj> {
+    if second { shouts_par(&mut Pur, b, createur, 2, 0xb3f00) } else { shouts_par(&mut Pur, b, createur, 1, 0xb3e86) }
+}
+/// 0xb2ef6 : silhouette et son reflet.
+pub fn mirrored_pair(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    mirrored_pair_par(&mut Pur, b, createur)
+}
+/// 0xba18a : dérive.
+pub fn drift(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    drift_par(&mut Pur, b, createur)
+}
+/// 0xb5730 : repère.
+pub fn beacon(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    beacon_par(&mut Pur, b, createur)
+}
+/// 0xb3c14 : lance.
+pub fn toss(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    toss_par(&mut Pur, b, createur)
+}
+/// 0xb4f44 : un effet de sort, réglage `reglage`.
+pub fn spell(b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
+    spell_par(&mut Pur, b, createur, reglage)
+}
+/// 0xb4ef4 (réglage 0), 0xb4f60 (2), 0xb4f1c (4) : six effets de sort.
+pub fn spell_ring(b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
+    spell_ring_par(&mut Pur, b, createur, reglage)
+}
+/// 0xa817c : tir qui monte en colonne.
+pub fn eshl_rise(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    eshl_rise_par(&mut Pur, b, createur)
+}
+/// 0xa836c : tir d'un coup, réglage `reglage`.
+pub fn eshl_slash(b: &mut Cps2Bus, createur: Obj, reglage: u8) -> Option<Obj> {
+    eshl_slash_par(&mut Pur, b, createur, reglage)
+}
+/// 0xb4bcc : pluie de débris.
+pub fn debris_rain(b: &mut Cps2Bus, createur: Obj, variante: u8, reglage: u8) -> Option<Obj> {
+    debris_rain_par(&mut Pur, b, createur, variante, reglage)
+}
+/// 0xb1a7a : écran de fin de scène (type 31).
+pub fn countdown(b: &mut Cps2Bus, variante: u8, reglage: u8) -> Option<Obj> {
+    with_setting_par(&mut Pur, b, kind::COUNTDOWN, variante, reglage)
+}
+/// 0xafe02 : vote du chemin (type 23).
+pub fn vote(b: &mut Cps2Bus, variante: u8, reglage: u8) -> Option<Obj> {
+    with_setting_par(&mut Pur, b, kind::VOTE, variante, reglage)
+}
+/// Effet de genre `kind` lié au créateur (0xb84ae victoire, 0xb85e2 bulle, 0xb9c6a/0xb9c88 flammèches...).
+pub fn linked(b: &mut Cps2Bus, createur: Obj, kind: u8, variante: Option<u8>) -> Option<Obj> {
+    linked_par(&mut Pur, b, createur, kind, variante)
+}
+/// Effet de genre `kind` sans lien (0xb8a0a fondu sonore, 0xb9942 pluie...).
+pub fn spawn_kind(b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
+    spawn(&mut Pur, b, kind)
+}
+
 /// Paramètres lus dans les registres.
 fn d0b(c: &Cpu) -> u8 {
     c.d[0] as u8
@@ -1054,7 +1151,7 @@ fn d1b(c: &Cpu) -> u8 {
 fn spark_at_native(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) {
     let saved = [c.a[1], c.a[2], c.a[3], c.a[4]];
     let (autre, variante, pos) = (c.a[1], d1b(c), (c.d[2] as u16, c.d[3] as u16, c.d[4] as u16));
-    spark_at(c, b, me, autre, variante, pos);
+    spark_at_par(c, b, me, autre, variante, pos);
     [c.a[1], c.a[2], c.a[3], c.a[4]] = saved;
 }
 
@@ -1070,8 +1167,8 @@ use regs::d as D;
 creators! {
     0xae776 "cree_interface" |c, b, me| interface(c, b), CREATED;
     0xaf346 "cree_bandeau" |c, b, me| { let v = d0b(c); strip(c, b, v) }, CREATED;
-    0xb1a7a "cree_ecran_fin" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting(c, b, kind::COUNTDOWN, v, s) }, CREATED;
-    0xafe02 "cree_vote" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting(c, b, kind::VOTE, v, s) }, CREATED;
+    0xb1a7a "cree_ecran_fin" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting_par(c, b, kind::COUNTDOWN, v, s) }, CREATED;
+    0xafe02 "cree_vote" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting_par(c, b, kind::VOTE, v, s) }, CREATED;
     0xab7d8 "cree_gerbe_debris" |c, b, me| { let v = d0b(c); debris_par(c, b, me, v) }, CREATED;
     0xabec8 "cree_effet_attaque" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); attached_par(c, b, kind::ATTACK, me, v, s) }, CREATED;
     0xb378a "cree_coup" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); attached_par(c, b, kind::BLOW, me, v, s) }, CREATED;
@@ -1079,39 +1176,39 @@ creators! {
     0xb1352 "cree_etincelle_posee" |c, b, me| { let v = d0b(c); posed_spark_par(c, b, me, v) }, CREATED;
     0xb141a "cree_impact" |c, b, me| { let (vx, ax) = (c.d[2] as u16, c.d[3] as u16); impact(c, b, me, vx, ax) }, CREATED;
     0xb12c0 "cree_ramassage" |c, b, me| { let v = d0b(c); pickup_par(c, b, me, v) }, CREATED;
-    0xb9c6a "cree_flammeche" |c, b, me| linked(c, b, me, kind::WISP, Some(0)), CREATED;
-    0xb9c88 "cree_flammeche_b" |c, b, me| linked(c, b, me, kind::WISP, Some(1)), CREATED;
-    0xb9aa0 "cree_finale" |c, b, me| linked(c, b, me, kind::FINALE, None), CREATED;
-    0xb84ae "cree_ecran_victoire" |c, b, me| linked(c, b, me, kind::VICTORY, None), CREATED;
-    0xb85e2 "cree_bulle_createur" |c, b, me| linked(c, b, me, kind::BUBBLE, None), CREATED;
+    0xb9c6a "cree_flammeche" |c, b, me| linked_par(c, b, me, kind::WISP, Some(0)), CREATED;
+    0xb9c88 "cree_flammeche_b" |c, b, me| linked_par(c, b, me, kind::WISP, Some(1)), CREATED;
+    0xb9aa0 "cree_finale" |c, b, me| linked_par(c, b, me, kind::FINALE, None), CREATED;
+    0xb84ae "cree_ecran_victoire" |c, b, me| linked_par(c, b, me, kind::VICTORY, None), CREATED;
+    0xb85e2 "cree_bulle_createur" |c, b, me| linked_par(c, b, me, kind::BUBBLE, None), CREATED;
     0xb9942 "cree_pluie" |c, b, me| spawn(c, b, kind::RAIN), CREATED;
     0xb7f14 "cree_type_68" |c, b, me| spawn(c, b, kind::TYPE_68), CREATED;
     0xb8956 "cree_minuteur" |c, b, me| { let v = d1b(c); timer(c, b, v) }, CREATED;
-    0xba18a "cree_derive" |c, b, me| drift(c, b, me), CREATED;
+    0xba18a "cree_derive" |c, b, me| drift_par(c, b, me), CREATED;
     0xb66e4 "cree_type_53" |c, b, me| type_53(c, b), CREATED;
     0xb6a5c "cree_lanceur" |c, b, me| launcher_par(c, b, me), CREATED;
     0xb6c42 "cree_eclat_camera" |c, b, me| camera_shard_par(c, b), CREATED;
-    0xb2ef6 "cree_silhouette_reflet" |c, b, me| mirrored_pair(c, b, me), CREATED;
+    0xb2ef6 "cree_silhouette_reflet" |c, b, me| mirrored_pair_par(c, b, me), CREATED;
     0xb6ba8 "cree_type_57" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); type_57(c, b, me, v, s) }, CREATED;
     0xb8a0a "cree_fondu_sonore" |c, b, me| spawn(c, b, kind::SOUND_FADE), CREATED;
     0xb68b0 "cree_types_54" |c, b, me| type_54_trio(c, b), CREATED;
     0xae3ec "cree_scintillement" |c, b, me| twinkle_par(c, b, me), CREATED;
     0xb6596 "cree_scintillement_perso" |c, b, me| shimmer_par(c, b, me), CREATED | D(0);
-    0xb5730 "cree_repere" |c, b, me| beacon(c, b, me), CREATED;
-    0xb3c14 "cree_lance" |c, b, me| toss(c, b, me), CREATED;
+    0xb5730 "cree_repere" |c, b, me| beacon_par(c, b, me), CREATED;
+    0xb3c14 "cree_lance" |c, b, me| toss_par(c, b, me), CREATED;
     0xaba16 "cree_eclat_unique" |c, b, me| flash_par(c, b, me), CREATED;
     0xaaa40 "cree_etincelle_en" |c, b, me| spark_at_native(c, b, me), regs::CCR;
-    0xb3df6 "cree_decor_0" |c, b, me| scenery_0_pair(c, b, me), CREATED;
-    0xb3f40 "cree_decor_3" |c, b, me| scenery_burst(c, b, me, 3, 6, true), CREATED | D(1);
-    0xb3f6a "cree_decor_4" |c, b, me| scenery_4(c, b, me), CREATED | D(0) | D(1);
-    0xb3fb0 "cree_decor_5" |c, b, me| { let s = d1b(c); scenery(c, b, me, 5, Some(s)) }, CREATED;
-    0xb3fd4 "cree_decor_6" |c, b, me| scenery_by_chance(c, b, me, 0xf, 6, None), CREATED | D(0);
-    0xb4002 "cree_decor_7" |c, b, me| scenery(c, b, me, 7, Some(0)), CREATED;
-    0xb4026 "cree_decor_8" |c, b, me| scenery_burst(c, b, me, 8, 9, false), CREATED | D(1);
-    0xb4088 "cree_decor_10" |c, b, me| scenery_by_chance(c, b, me, 3, 10, Some(0)), CREATED | D(0);
-    0xb4f44 "cree_sort" |c, b, me| { let s = d1b(c); spell(c, b, me, s) }, CREATED;
-    0xb4ef4 "cree_sorts" |c, b, me| spell_ring(c, b, me, 0), CREATED | D(1);
-    0xb4f60 "cree_sorts_b" |c, b, me| spell_ring(c, b, me, 2), CREATED | D(1);
+    0xb3df6 "cree_decor_0" |c, b, me| scenery_0_pair_par(c, b, me), CREATED;
+    0xb3f40 "cree_decor_3" |c, b, me| scenery_burst_par(c, b, me, 3, 6, true), CREATED | D(1);
+    0xb3f6a "cree_decor_4" |c, b, me| scenery_4_par(c, b, me), CREATED | D(0) | D(1);
+    0xb3fb0 "cree_decor_5" |c, b, me| { let s = d1b(c); scenery_par(c, b, me, 5, Some(s)) }, CREATED;
+    0xb3fd4 "cree_decor_6" |c, b, me| scenery_by_chance_par(c, b, me, 0xf, 6, None), CREATED | D(0);
+    0xb4002 "cree_decor_7" |c, b, me| scenery_par(c, b, me, 7, Some(0)), CREATED;
+    0xb4026 "cree_decor_8" |c, b, me| scenery_burst_par(c, b, me, 8, 9, false), CREATED | D(1);
+    0xb4088 "cree_decor_10" |c, b, me| scenery_by_chance_par(c, b, me, 3, 10, Some(0)), CREATED | D(0);
+    0xb4f44 "cree_sort" |c, b, me| { let s = d1b(c); spell_par(c, b, me, s) }, CREATED;
+    0xb4ef4 "cree_sorts" |c, b, me| spell_ring_par(c, b, me, 0), CREATED | D(1);
+    0xb4f60 "cree_sorts_b" |c, b, me| spell_ring_par(c, b, me, 2), CREATED | D(1);
     0xb1764 "cree_banc" |c, b, me| fish_school(c, b), CREATED | D(0) | D(4) | D(5);
     0xb17ba "cree_nageurs" |c, b, me| fish_swimmers(c, b), CREATED | D(0) | D(1) | D(2) | D(4) | D(5);
     0xb7dec "cree_colonnes" |c, b, me| pillars_par(c, b), CREATED | D(5) | D(6) | regs::a(2);
@@ -1119,18 +1216,18 @@ creators! {
     0xa8a42 "camera_mode_60" |c, b, me| camera_mode_60(c, b), regs::CCR;
     0xa8ae8 "cree_liste_decors_d0" |c, b, me| { let v = c.d[0] as u16; set_low_word(&mut c.d[1], v); set_list_par(c, b, v as u8) }, CREATED | D(0) | D(1) | regs::a(4);
     0xa8af8 "cree_liste_decors" |c, b, me| { let v = d1b(c); set_list_par(c, b, v) }, CREATED | D(0) | D(1) | regs::a(4);
-    0xb3e4e "cree_cris" |c, b, me| shouts(c, b, me, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
-    0xb3ec6 "cree_cris_b" |c, b, me| shouts(c, b, me, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);
-    0xb4bcc "cree_pluie_debris" |c, b, me| { let (v, s) = (d1b(c), c.d[2] as u8); debris_rain(c, b, me, v, s) }, CREATED;
-    0xb4f1c "cree_sorts_c" |c, b, me| spell_ring(c, b, me, 4), CREATED | D(1);
+    0xb3e4e "cree_cris" |c, b, me| shouts_par(c, b, me, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
+    0xb3ec6 "cree_cris_b" |c, b, me| shouts_par(c, b, me, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);
+    0xb4bcc "cree_pluie_debris" |c, b, me| { let (v, s) = (d1b(c), c.d[2] as u8); debris_rain_par(c, b, me, v, s) }, CREATED;
+    0xb4f1c "cree_sorts_c" |c, b, me| spell_ring_par(c, b, me, 4), CREATED | D(1);
     0xb53f4 "cree_type_46" |c, b, me| type_46_trio(c, b, me), CREATED;
     0xb59a6 "cree_type_48" |c, b, me| type_48(c, b, me, 1), CREATED;
     0xb59c8 "cree_type_48_b" |c, b, me| type_48(c, b, me, 2), CREATED;
-    0xb64b0 "cree_projectile" |c, b, me| linked(c, b, me, kind::PROJECTILE, None), CREATED;
+    0xb64b0 "cree_projectile" |c, b, me| linked_par(c, b, me, kind::PROJECTILE, None), CREATED;
     0xb96c0 "cree_eclat_lance" |c, b, me| { let v = d1b(c); thrown_shard(c, b, me, v) }, CREATED;
-    0xb97a2 "cree_eclat_pose" |c, b, me| linked(c, b, me, kind::POSED_FLASH, None), CREATED;
-    0xb97ba "cree_eclat_pose_b" |c, b, me| linked(c, b, me, kind::POSED_FLASH, Some(1)), CREATED;
+    0xb97a2 "cree_eclat_pose" |c, b, me| linked_par(c, b, me, kind::POSED_FLASH, None), CREATED;
+    0xb97ba "cree_eclat_pose_b" |c, b, me| linked_par(c, b, me, kind::POSED_FLASH, Some(1)), CREATED;
     0xb230e "bloc_tuiles" |c, b, me| tile_block_native(c, b), regs::d(0) | regs::a(1);
-    0xa836c "cree_tir_coup" |c, b, me| { let s = c.d[4] as u8; eshl_slash(c, b, me, s) }, CREATED;
-    0xa817c "cree_tir_colonne" |c, b, me| eshl_rise(c, b, me), CREATED | D(0);
+    0xa836c "cree_tir_coup" |c, b, me| { let s = c.d[4] as u8; eshl_slash_par(c, b, me, s) }, CREATED;
+    0xa817c "cree_tir_colonne" |c, b, me| eshl_rise_par(c, b, me), CREATED | D(0);
 }

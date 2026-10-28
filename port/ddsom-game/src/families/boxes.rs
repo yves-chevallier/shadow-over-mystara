@@ -862,7 +862,7 @@ fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
                 ajoute_u8(ctx, o, champ::SOUS_ETAT, 0xfa);
             }
             o.set_u8(ctx.b, champ::COUP_B, 0);
-            ctx.jsr(barriere::SON);
+            crate::sound::jouer(ctx.b, barriere::SON, ctx.obj());
         }
         _ => crate::families::effects::hors_table(cible),
     }

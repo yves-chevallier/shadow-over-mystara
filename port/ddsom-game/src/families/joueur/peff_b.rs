@@ -276,7 +276,7 @@ mod witch {
         x.add16(0xc, 0x60);
         x.add16(0x10, 1);
         x.anim_start(ANIMS, 0);
-        x.call(0x1ac7c);
+        crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_BLEU);
         x.reinsert();
     }
 

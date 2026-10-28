@@ -72,7 +72,6 @@ pub(self) mod state {
 
 /// Routines du moteur appelées par ce boss.
 pub(self) mod call {
-    pub const SPLASH: u32 = 0xaaa40;
 }
 
 // --- animations --------------------------------------------------------------------------------

@@ -902,7 +902,7 @@ fn attached_init(x: &mut Cx) {
         7 => {}
         8..=11 => {
             const SOUNDS: [u32; 4] = [0xe6a8e, 0xe6fe6, 0xe713c, 0xe6e90];
-            x.call(SOUNDS[v as usize - 8]);
+            crate::sound::jouer(x.b, SOUNDS[v as usize - 8], x.o);
             x.anim_start(attached::ANIM_SET, (v as u32 - 3) as u16);
         }
         12 | 13 => {
@@ -1814,7 +1814,7 @@ fn floater_main(x: &mut Cx) {
                 crate::sound::jouer(x.b, 0xe637c, x.o);
                 x.set_a5_u16(0x4ba, 0x100);
                 x.set8(floater::SHAKE, 8);
-                x.call(0x1ac86);
+                crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             }
             x.anim_step();
         }
@@ -2049,7 +2049,7 @@ fn shard_rain(x: &mut Cx) {
         0 if v == 0 => {
             x.add8(f::STATE, 2);
             x.set16(shards::TIMER, 0xe6);
-            super::petites::flash_68k(x.c, x.b, super::petites::ECLAIR_BLEU);
+            crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_BLEU);
         }
         0 => {
             // A1 : adresse du gestionnaire, laissée par la boucle de dispatch (octet `+0x2c` constant)
@@ -2319,10 +2319,7 @@ fn double_active(x: &mut Cx) {
             toggle_hidden(x);
             let carrier = x.linked(double::CARRIER);
             let (cx_, cy) = (carrier.u16(x.b, Obj::X), carrier.u16(x.b, Obj::Y));
-            x.c.d[1] = x.c.d[1] & 0xffff_0000 | cx_ as u32;
-            x.c.d[2] = x.c.d[2] & 0xffff_0000 | cy as u32;
-            x.call(0x137e);
-            let dir = x.c.d[0] as u8;
+            let dir = crate::aides::direction_from(x.b, x.o, (cx_, cy));
             x.set8(Obj::SPEED_INDEX, dir);
             double_speed_table(x);
             if double_slide(x) {
@@ -2677,10 +2674,7 @@ fn lob_init(x: &mut Cx) {
     let ty = x.rom16(lob::TARGETS + 4 * v + 2).wrapping_add(x.a5_u16(0x5aa));
     x.set16(lob::TARGET_X, tx);
     x.set16(lob::TARGET_Y, ty);
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | tx as u32;
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | ty as u32;
-    x.call(0x137e);
-    let dir = x.c.d[0] as u8;
+    let dir = crate::aides::direction_from(x.b, x.o, (tx, ty));
     x.set8(Obj::SPEED_INDEX, dir);
     let n = (x.rom8(lob::SPEED_TABLES + v) as u32) as u16;
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
@@ -2755,7 +2749,7 @@ fn lob_active(x: &mut Cx) {
             };
             x.set_a5_u16(0x4be, shake);
             x.c.d[1] = shake as u32;
-            x.call(0x1ac68);
+            crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
             crate::sound::jouer(x.b, 0xe5d36, x.o);
         }
         4 => {
@@ -4087,7 +4081,7 @@ fn riser(x: &mut Cx) {
         0 => {
             x.add8(f::STATE, 2);
             x.add16(Obj::Z, 0x32);
-            x.call(0x1ac86);
+            crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             x.set_a5_u16(0x4be, 0xa);
             crate::sound::jouer(x.b, 0xead04, x.o);
             crate::sound::jouer(x.b, 0xe5daa, x.o);

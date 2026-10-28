@@ -130,7 +130,7 @@ fn attack_0(x: &mut Cx) {
         4 => {
             if !sub16(x, TIMER, 1).gt() {
                 x.add8(0x7, 2);
-                x.call(0x1ac86);
+                crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 x.set_a5_u16(0x4be, 8);
                 return settle(x);
             }
@@ -140,7 +140,7 @@ fn attack_0(x: &mut Cx) {
                 let z = x.u16(0xc).wrapping_sub(3);
                 x.set16(0xc, z);
             }
-            x.call(0xb3fd4);
+            crate::families::effects_creators::scenery_6(x.b, x.o);
         }
         6 => settle(x),
         8 => {
@@ -245,7 +245,7 @@ fn push_side(x: &mut Cx) {
             p.set_u16(x.b, 0x8, nx);
         }
     }
-    x.call(0xba18a);
+    crate::families::effects_creators::drift(x.b, x.o);
     let t = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, t);
     if (t as i16) >= 0 {
@@ -394,7 +394,7 @@ fn dive_a(x: &mut Cx) {
     if step(x) {
         x.add8(0x7, 2);
         set_anim(x, 2, 0x16);
-        x.call(0xb4026);
+        crate::families::effects_creators::scenery_8(x.b, x.o);
         return dive_b(x);
     }
     if x.u8(0x33) == 0 {

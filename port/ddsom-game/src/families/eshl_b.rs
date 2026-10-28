@@ -1419,7 +1419,6 @@ mod shot25 {
 
     const ANIMS: u32 = 0x16ea18;
     const SHADOW: u32 = 0x54818;
-    const IMPACT_SOUND: u32 = 0xab7d8;
     const IMPACT_EFFECT: u32 = 0xeafdc;
 
     pub fn run(x: &mut Cx) {
@@ -1478,7 +1477,7 @@ mod shot25 {
         x.add8(0x4, 2);
         x.set32(0xc, 0);
         x.c.d[0] = 3;
-        x.call(IMPACT_SOUND);
+        crate::families::effects_creators::debris(x.b, x.o, 3);
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
         crate::sound::jouer(x.b, IMPACT_EFFECT, x.o);
         if x.u16(0x5a) != 0 {
@@ -2711,8 +2710,6 @@ mod shot37 {
     const START_ANIMS: u32 = 0xa2c9e;
     const X_OFFSETS: u32 = 0xa2ce0;
     const Y_OFFSETS: u32 = 0xa2d00;
-    const IMPACT: u32 = 0xb10c8;
-    const IMPACT_PIECE: u32 = 0xb4bcc;
     const FALL: u8 = 0;
     const BLINK: u8 = 2;
 
@@ -2779,10 +2776,14 @@ mod shot37 {
                     x.c.d[1] = x.c.d[1] & 0xffff_0000 | 0x201;
                     x.c.d[2] &= 0xffff_0000;
                     x.c.d[3] &= 0xffff_0000;
-                    x.call(IMPACT);
+                    let choc = crate::effects_aids::shock(x.b, x.o, 0, 0x201, 0, 0);
+                    // Glitch d'origine : la variante des débris est le D1.b que laisse le choc (0xb10c8) : l'octet
+                    // haut de son réglage, ou l'octet bas quand le choc n'est pas créé (scène 41, pool plein).
+                    let variante = if choc.is_some() { 2 } else { 1 };
+                    x.c.d[1] = x.c.d[1] & 0xffff_0000 | if choc.is_some() { 2 } else { 0x201 };
                     for _ in 0..2 {
                         x.c.d[2] = 1;
-                        x.call(IMPACT_PIECE);
+                        crate::families::effects_creators::debris_rain(x.b, x.o, variante, 1);
                     }
                 }
             }

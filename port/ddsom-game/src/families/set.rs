@@ -769,7 +769,6 @@ mod exit_gate {
     const GATE_BONUS: u32 = 10;
     /// États de joueur imposés selon l'indice de zone (`+0x46`), longs (4 octets par indice).
     const PLAYER_STATES: u32 = 0xcb998;
-    const FINISH_LEVEL_HOOK: u32 = 0xb5730;
 
     // --- variables de A5 ---
     const IN_GAME: u32 = 0x35;
@@ -1204,7 +1203,7 @@ mod exit_gate {
         let triggered = x.u8(TRIGGERED) | bit;
         x.set8(TRIGGERED, triggered);
         if x.a5_u16(OWNER_GATE) == 0 {
-            x.call(FINISH_LEVEL_HOOK);
+            crate::families::effects_creators::beacon(x.b, x.o);
         }
         let me = x.o.0 as u16;
         x.set_a5_u16(OWNER_GATE, me);

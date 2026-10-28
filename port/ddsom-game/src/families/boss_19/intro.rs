@@ -21,7 +21,7 @@ pub(super) fn run(x: &mut Cx) {
         if x.u8(Obj::VARIANT) != 0 {
             return end(x);
         }
-        x.call(0xb3f6a);
+        crate::families::effects_creators::scenery_4(x.b, x.o);
         return match x.u8(f::SUB2) {
             0 => green_wait(x),
             2 => green_enter(x),
@@ -99,7 +99,7 @@ fn green_enter_b(x: &mut Cx) {
     x.set16(0x18, 0x400);
     x.set16(0x1a, 0);
     set_anim(x, 0, 4);
-    x.call(0xb3f40);
+    crate::families::effects_creators::scenery_3(x.b, x.o);
     lib::sound(x, 0xe508a);
 }
 
@@ -115,7 +115,7 @@ fn green_descend(x: &mut Cx) {
         x.unlink();
         return green_land(x);
     }
-    x.call(0xb3f6a);
+    crate::families::effects_creators::scenery_4(x.b, x.o);
     x.unlink();
     x.reinsert_foreground();
 }
@@ -163,7 +163,7 @@ fn bubble_tick(x: &mut Cx) {
     }
     if !sub8(x, BUBBLE_TICK, 1).gt() {
         x.set_a5_u16(0x4be, 6);
-        x.call(0x1ac86);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
         let r = (random(x) & 0x3f) as u8 + 0xf;
         x.set8(BUBBLE_TICK, r);
         sub8(x, BUBBLES, 1);
@@ -174,11 +174,11 @@ fn bubble_tick(x: &mut Cx) {
 fn bubbles(x: &mut Cx) {
     bubble_tick(x);
     match x.u16(TIMER) as i16 {
-        t if t < 0x64 => x.call(0xb4088),
+        t if t < 0x64 => { crate::families::effects_creators::scenery_10(x.b, x.o); }
         0x64 => {
             lib::shake_58(x, 0xa0);
             lib::sound(x, 0xe50fe);
-            x.call(0xb4088);
+            crate::families::effects_creators::scenery_10(x.b, x.o);
         }
         _ => {}
     }
@@ -223,7 +223,7 @@ fn glide(x: &mut Cx) {
 }
 
 fn fly(x: &mut Cx) {
-    x.call(0xb4088);
+    crate::families::effects_creators::scenery_10(x.b, x.o);
     glide(x);
     let (cx, _) = camera(x);
     if Fl::sub16(cx.wrapping_add(0x130), x.u16(0x8)).le() {

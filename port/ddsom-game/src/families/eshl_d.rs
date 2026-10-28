@@ -219,7 +219,6 @@ mod rocks65 {
     /// Coin de l'écran (joueur 1, ou joueur 2 si `A5+0x36`).
     const SCREEN: u32 = 0x4fe;
     const SCREEN_P2: u32 = 0x54e;
-    const IMPACT_FX: u32 = 0xab7d8;
     const SFX: [u32; 2] = [0xeafdc, 0xed548];
 
     pub fn run(x: &mut Cx) {
@@ -290,12 +289,12 @@ mod rocks65 {
         x.add8(0x4, 2);
         if v == 0 {
             x.c.d[0] = 3;
-            x.call(IMPACT_FX);
+            crate::families::effects_creators::debris(x.b, x.o, 3);
         } else {
             x.anim_start(ANIMS[1], 1);
         }
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
-        x.call(SFX[v]);
+        crate::sound::jouer(x.b, SFX[v], x.o);
     }
 }
 

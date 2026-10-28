@@ -525,7 +525,7 @@ pub(super) fn grab(x: &mut Cx) {
             x.c.d[2] = d2 as u32;
             x.c.d[3] = d3 as u32;
             x.c.d[4] = d4 as u32;
-            x.call(0xaaa40);
+            crate::families::effects_creators::spark_at(x.b, x.o, victim.0, 2, (d2, d3, d4));
             lib::sound(x, 0xedd96);
             let victim = x.linked(f::TARGET);
             let hp = victim.u16(x.b, f::HP).wrapping_sub(4);

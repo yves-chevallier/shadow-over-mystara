@@ -241,7 +241,7 @@ fn wreck(x: &mut Cx) {
                 anim(x);
                 x.set8(0x3b, 9);
             } else {
-                x.call(0xb8a0a);
+                crate::families::effects_creators::spawn_kind(x.b, crate::families::effects_creators::kind::SOUND_FADE);
                 x.set16(TIMER, 0xc0);
                 x.c.d[0] = 8;
                 x.call(call::MESSAGE);

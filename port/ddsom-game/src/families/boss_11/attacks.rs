@@ -543,12 +543,8 @@ fn spit_c(x: &mut Cx) {
             }
             x.set8(f::KEY_FRAME, 0);
             x.set16(0x5c, 0);
-            x.call(0xa817c);
-            if zero(x) {
-                return;
-            }
-            let a1 = x.c.a[1] as u16;
-            x.set16(0x5c, a1);
+            let Some(column) = crate::families::effects_creators::eshl_rise(x.b, x.o) else { return };
+            x.set16(0x5c, column.word());
         }
         0x8e2a0 => {
             if !x.anim_step() {

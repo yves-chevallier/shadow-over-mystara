@@ -139,7 +139,6 @@ pub(self) mod state {
 }
 
 pub(self) mod call {
-    pub const SPLASH: u32 = 0xaaa40;
 }
 
 // --- animations --------------------------------------------------------------------------------

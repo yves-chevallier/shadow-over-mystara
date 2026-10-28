@@ -81,7 +81,7 @@ fn descend(x: &mut Cx) {
             x.set16(0xc, 0);
             next6(x);
             stop(x);
-            x.call(0xb3df6);
+            crate::families::effects_creators::scenery_0(x.b, x.o);
             lib::shake_54(x, 0x30);
             body_anim(x, 0xe);
         }

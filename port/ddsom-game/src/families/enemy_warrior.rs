@@ -485,7 +485,7 @@ fn rise_step(x: &mut Cx) {
             x.add8(f::SUB, 2);
             x.set16(0xa6, 0x50);
             strike(x, 0x25);
-            x.call(0xb4002);
+            crate::families::effects_creators::scenery_7(x.b, x.o);
         }
         4 => {
             if !x.anim_step() {
@@ -519,7 +519,7 @@ fn finale(x: &mut Cx) {
     let base = if x.u8(Obj::VARIANT) == 0 { 0 } else { 3 };
     for k in 0..3 {
         x.c.d[4] = base + k;
-        x.call(0xa836c);
+        crate::families::effects_creators::eshl_slash(x.b, x.o, (base + k) as u8);
     }
 }
 

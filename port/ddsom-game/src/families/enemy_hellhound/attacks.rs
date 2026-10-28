@@ -746,14 +746,14 @@ fn bite_victim(x: &mut Cx, which: u8) {
     let reach = if x.u8(f::FLIP) != 0 { 0x38i16 } else { -0x38 };
     let d3 = if which == 0 { 0x1c } else { 0x2c };
     x.c.d[1] = 2;
-    x.c.d[2] = x.u16(Obj::X).wrapping_add(reach as u16) as u32;
-    x.c.d[3] = x.u16(Obj::Z).wrapping_add(d3) as u32;
-    x.c.d[4] = x.u16(Obj::Y).wrapping_sub(1) as u32;
-    x.call(0xaaa40);
+    let pos = (x.u16(Obj::X).wrapping_add(reach as u16), x.u16(Obj::Z).wrapping_add(d3), x.u16(Obj::Y).wrapping_sub(1));
+    (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+    // l'autre objet de l'étincelle est A1, la victime (posée par `grab`)
+    let victim = x.linked(f::TARGET);
+    crate::families::effects_creators::spark_at(x.b, x.o, victim.0, 2, pos);
     if (x.u16(f::TARGET) as i16) >= 0 {
         return set_state_long(x, STANCE);
     }
-    let victim = x.linked(f::TARGET);
     x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);

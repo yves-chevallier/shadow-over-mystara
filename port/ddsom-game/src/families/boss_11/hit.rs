@@ -143,9 +143,7 @@ fn hit_b(x: &mut Cx) {
     x.set8(f::FREEZE, stun);
     stop(x);
     body(x, 2);
-    x.c.d[0] = 3;
-    x.c.d[1] = 0;
-    x.call(0xabec8)
+    crate::families::effects_creators::attack(x.b, x.o, 3, 0);
 }
 
 /// 0x8e5da : projection (codes 4 à 0x94 sans routine propre).

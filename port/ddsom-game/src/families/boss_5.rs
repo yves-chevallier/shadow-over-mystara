@@ -179,7 +179,7 @@ fn intro(x: &mut Cx) {
             x.set16(COUNT, 0x100);
             set_dw(x, 0, 0x100);
             x.call(0x2a42);
-            x.call(0x1ab22);
+            crate::palette::flash(x.b, crate::palette::Flash::F);
             x.set_a5_u16(0x490, 0x10);
             x.set_a5_u8(0x48e, 0xf);
             set_dw(x, 0, 0x10);
@@ -204,7 +204,7 @@ fn intro(x: &mut Cx) {
                 set.set_u8(x.b, 2, 2);
                 set.set_u8(x.b, 3, 0x73);
             }
-            x.call(0x1abe0);
+            crate::palette::restore_flash(x.b);
             x.set_a5_u8(0x48e, 0xf);
             crate::palette::full_brightness(x.b);
             next_action(x);
@@ -736,7 +736,7 @@ fn dying(x: &mut Cx) {
             x.set16(COUNT, 0);
             x.set_a5_u8(0x50, 0);
             x.set_a5_u8(0x42, 1);
-            x.call(0x1ac86);
+            crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::sound(x, 0xe3b6c);

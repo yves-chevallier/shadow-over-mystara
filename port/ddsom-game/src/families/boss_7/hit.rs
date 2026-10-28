@@ -114,7 +114,7 @@ fn thrown(x: &mut Cx) {
         }
         _ => {
             if x.u8(f::KEY_FRAME) != 0 {
-                x.call(0xb4f1c);
+                crate::families::effects_creators::spell_ring(x.b, x.o, 4);
                 x.set8(f::KEY_FRAME, 0);
             }
             if x.anim_step() {

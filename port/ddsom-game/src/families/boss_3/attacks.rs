@@ -201,7 +201,7 @@ fn cries(x: &mut Cx) {
             if !marked_key(x) || sub8(x, TIMER, 1).gt() {
                 return;
             }
-            x.call(0xb3e4e);
+            crate::families::effects_creators::shouts(x.b, x.o, false);
             next7(x);
             x.set8(TIMER, 4);
             lib::sound(x, 0xedb82);
@@ -212,7 +212,7 @@ fn cries(x: &mut Cx) {
             if !marked_key(x) {
                 return;
             }
-            x.call(0xb3e4e);
+            crate::families::effects_creators::shouts(x.b, x.o, false);
             if sub8(x, TIMER, 1).gt() {
                 return lib::sound(x, 0xedb82);
             }
@@ -461,7 +461,7 @@ fn cry(x: &mut Cx) {
 
 /// 0x804b0 : cri (0xb3ec6, 0xedb82).
 fn shriek(x: &mut Cx) {
-    x.call(0xb3ec6);
+    crate::families::effects_creators::shouts(x.b, x.o, true);
     lib::sound(x, 0xedb82);
 }
 

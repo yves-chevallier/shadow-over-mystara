@@ -692,17 +692,14 @@ mod sound_fade {
     pub const DELAY: u32 = 0x32;
     pub const LEVEL_A: u32 = 0x34;
     pub const LEVEL_B: u32 = 0x36;
-    /// Commandes de service 0xff08 / 0xff09 (niveau en D0) et 0xff07 (arrêt, D0 = 0xc).
-    pub const SET_A: u32 = 0xe0ad8;
-    pub const SET_B: u32 = 0xe0af8;
 }
 
+/// Niveaux du son : commandes de service 0xff08 et 0xff09 (0xe0ad8, 0xe0af8), de paramètre le niveau.
 fn sound_fade_levels(x: &mut Cx) {
-    for (level, command) in [(sound_fade::LEVEL_A, sound_fade::SET_A), (sound_fade::LEVEL_B, sound_fade::SET_B)] {
-        let v = x.u16(level);
-        x.c.d[0] = x.c.d[0] & 0xffff_0000 | v as u32;
-        x.call(command);
-    }
+    let a = x.u16(sound_fade::LEVEL_A);
+    crate::sound::service(x.b, crate::sound::Service::Ff08(a));
+    let b = x.u16(sound_fade::LEVEL_B);
+    crate::sound::service(x.b, crate::sound::Service::Ff09(b));
 }
 
 fn sound_fade(x: &mut Cx) {

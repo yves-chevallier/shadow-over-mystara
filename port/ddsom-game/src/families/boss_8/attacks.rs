@@ -91,11 +91,10 @@ fn combo(x: &mut Cx) {
     }
 }
 
-/// Lance un projectile (0xb4f44, D1 = 5) vers un joueur choisi par `pick`.
+/// Lance un projectile (0xb4f44, réglage 5) vers un joueur choisi par `pick`.
 fn shoot(x: &mut Cx, pick: fn(&mut Cx)) {
     pick(x);
-    x.c.d[1] = 5;
-    x.call(0xb4f44);
+    crate::families::effects_creators::spell(x.b, x.o, 5);
 }
 
 /// 0x888ac (`+6` = 4, 6) et 0x88cae (`+6` = 14) : rafale de projectiles, chacun vers un joueur.

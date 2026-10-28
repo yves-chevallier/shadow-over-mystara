@@ -579,10 +579,9 @@ pub(super) fn holding(x: &mut Cx) {
             if x.u8(f::FLIP) == 0 {
                 dx = dx.wrapping_neg();
             }
-            x.c.d[2] = dx.wrapping_add(x.u16(0x8)) as u32;
-            x.c.d[3] = x.u16(0xc).wrapping_add(0x38) as u32;
-            x.c.d[4] = x.u16(0x10).wrapping_sub(1) as u32;
-            x.call(call::SPLASH);
+            let pos = (dx.wrapping_add(x.u16(0x8)), x.u16(0xc).wrapping_add(0x38), x.u16(0x10).wrapping_sub(1));
+            (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+            crate::families::effects_creators::spark_at(x.b, x.o, prey.0, 2, pos);
             if (prey.u16(x.b, f::HP) as i16) <= 1 {
                 return release_prey(x);
             }

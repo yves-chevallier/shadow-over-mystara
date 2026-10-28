@@ -417,29 +417,28 @@ pub(crate) fn palette_page_restore(c: &mut Cpu, b: &mut Cps2Bus) {
     movem_store(c, b, MASK_D0_D6_A3, 0xff1390);
 }
 
-/// Éclair de palette : couleur 14 de la page 0x91c400 (`0x91c41c`) fixée à `v` ; drapeaux du `move.w`.
-pub(crate) fn flash_68k(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
-    wr16(b, 0x91c41c, v);
-    moved(c, v as u32, Size::Word);
-}
+/// Natives des éclairs d'écran (couleur 14 de la page 1, `palette::set_flash_color`) : les drapeaux du `move.w`.
 fn flash(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
-    flash_68k(c, b, v);
+    crate::palette::set_flash_color(b, v);
+    moved(c, v as u32, Size::Word);
     rts(c, b);
 }
-/// Couleurs des éclairs (`flash_68k`) : bleu (0x1ac7c).
+/// Couleurs des éclairs : jaune (0x1ac9a), vert (0x1ac72), bleu (0x1ac7c), fin de l'éclair (0x1ac90).
+pub(crate) const ECLAIR_JAUNE: u16 = 0xfff0;
+pub(crate) const ECLAIR_VERT: u16 = 0xf0f0;
 pub(crate) const ECLAIR_BLEU: u16 = 0xf00f;
-/// 0x1ac90 : fin de l'éclair (couleur 0xff50).
+pub(crate) const ECLAIR_FIN: u16 = 0xff50;
 fn flash_off(c: &mut Cpu, b: &mut Cps2Bus) {
-    flash(c, b, 0xff50);
+    flash(c, b, ECLAIR_FIN);
 }
 fn flash_a(c: &mut Cpu, b: &mut Cps2Bus) {
-    flash(c, b, 0xfff0);
+    flash(c, b, ECLAIR_JAUNE);
 }
 fn flash_b(c: &mut Cpu, b: &mut Cps2Bus) {
-    flash(c, b, 0xf0f0);
+    flash(c, b, ECLAIR_VERT);
 }
 fn flash_c(c: &mut Cpu, b: &mut Cps2Bus) {
-    flash(c, b, 0xf00f);
+    flash(c, b, ECLAIR_BLEU);
 }
 
 /// Les huit blocs de tuiles du fond 2 (0x26d4 : D0 = bloc, A1 = destination).

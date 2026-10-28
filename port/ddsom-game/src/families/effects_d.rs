@@ -758,10 +758,7 @@ fn walker_wait(x: &mut Cx) {
 /// Un pas vers la cible (direction 0x137e, table de vitesses courante).
 fn walker_move(x: &mut Cx) {
     let (tx, ty) = (x.u16(walker::TARGET_X), x.u16(walker::TARGET_Y));
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | tx as u32;
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | ty as u32;
-    x.call(0x137e);
-    let direction = x.c.d[0] as u8;
+    let direction = crate::aides::direction_from(x.b, x.o, (tx, ty));
     x.set8(Obj::SPEED_INDEX, direction);
     x.move_by_table_xy();
 }

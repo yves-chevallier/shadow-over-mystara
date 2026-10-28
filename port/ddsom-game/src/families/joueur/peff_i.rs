@@ -402,7 +402,7 @@ mod whirl {
                 x.set8(0x5c, 3);
                 x.set8(0x5d, 1);
                 x.set_a5_u16(0x4ba, 0x100);
-                x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+                crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 crate::sound::jouer(x.b, SFX_LOOP, x.o);
                 x.anim(ANIMS, 0x20);
                 return x.reinsert();

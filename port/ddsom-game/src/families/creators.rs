@@ -628,7 +628,7 @@ fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
             break;
         }
     }
-    call(c, b, 0x1ac68);
+    crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
     rts(c, b);
 }
 

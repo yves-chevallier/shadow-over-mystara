@@ -6,8 +6,6 @@ use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-const FLASH_OFF: u32 = 0x1ac90;
-
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
@@ -278,7 +276,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(crate::palette::FLASH_COLOR_ON.entry);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         x.reinsert();
     }
 
@@ -330,7 +328,7 @@ mod fountain {
         x.anim(ANIMS, 3);
         x.set16(0x5e, 6);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(crate::palette::FLASH_COLOR_ON.entry);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         x.reinsert();
     }
 
@@ -393,7 +391,7 @@ mod fountain {
             if x.u16(0x5e) == 0 {
                 x.set_a5_u16(0x4ba, 0);
             } else if x.u16(0x5e) == 2 {
-                x.call(FLASH_OFF);
+                crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_FIN);
             }
         }
         x.move_x();
@@ -454,7 +452,7 @@ mod fountain {
                     x.set8(0x5c, 4);
                     x.set_a5_u16(0x4ba, 0);
                 } else if x.u16(0x5e) == 2 {
-                    x.call(FLASH_OFF);
+                    crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_FIN);
                 }
             }
             x.anim_step();

@@ -270,7 +270,7 @@ fn init(x: &mut Cx) {
     }
     x.set8(INVULNERABLE, 0);
     crate::mem::wr16(x.b, BODY_OWNER, x.o.0 as u16);
-    x.call(0xb2ef6);
+    crate::families::effects_creators::mirrored_pair(x.b, x.o);
     body_anim(x, 0);
     lib::empty_popups(x);
     lib::clear_popup(x);

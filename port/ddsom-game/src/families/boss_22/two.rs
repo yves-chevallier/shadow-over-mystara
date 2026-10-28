@@ -430,7 +430,7 @@ pub(super) fn spin_roar(x: &mut Cx) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 eshl_wave_1e(x);
-                x.call(0x1ac9a);
+                crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_JAUNE);
                 x.set8(0xb9, 4);
             }
             x.set_a5_u16(0x4ba, 0);

@@ -548,7 +548,7 @@ mod burst {
                     if x.u8(0x5e) == 0 {
                         x.set_a5_u16(0x4ba, 0);
                     } else if x.u8(0x5e) == 2 {
-                        x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+                        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                     }
                 }
                 if x.anim_step() {
@@ -581,7 +581,7 @@ mod burst {
         x.add16(0x10, dy);
         x.set8(0x5e, 4);
         x.set_a5_u16(0x4ba, 0x100);
-        x.call(crate::palette::FLASH_COLOR_ON.entry);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
         x.anim(ANIMS, 1);
         crate::sound::jouer(x.b, SFX_FLAME, x.o);

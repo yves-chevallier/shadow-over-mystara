@@ -1342,7 +1342,6 @@ mod drop51 {
     /// Haut de l'écran : `A5+0x50a` (joueur 1) ou `A5+0x55a` (joueur 2, si `A5+0x36`).
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
-    const IMPACT_FX: u32 = 0xab7d8;
 
     pub fn run(x: &mut Cx) {
         match x.u8(0x4) {
@@ -1384,7 +1383,7 @@ mod drop51 {
                 }
                 x.add8(0x4, 2);
                 x.c.d[0] = 3;
-                x.call(IMPACT_FX);
+                crate::families::effects_creators::debris(x.b, x.o, 3);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             }
             4 => {
@@ -2995,7 +2994,6 @@ mod meteor62 {
     const ANIMS: u32 = 0x16ea18;
     /// Retard avant la chute (octets) par variante (32 entrées).
     const DELAYS: u32 = 0xa679e;
-    const IMPACT_FX: [u32; 2] = [0xb9c88, 0xab7d8];
     const IMPACT_SOUND: u32 = 0xeafdc;
     const TIMER: u32 = 0x42;
 
@@ -3046,11 +3044,11 @@ mod meteor62 {
         x.anim_step();
         x.move_z();
         if s16(x.u16(0xc)) < 0 {
-            x.call(IMPACT_FX[0]);
+            crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::WISP, Some(1));
             x.set16(0xc, 0);
             x.add8(0x4, 2);
             x.c.d[0] = 3;
-            x.call(IMPACT_FX[1]);
+            crate::families::effects_creators::debris(x.b, x.o, 3);
             crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             crate::sound::jouer(x.b, IMPACT_SOUND, x.o);
         }

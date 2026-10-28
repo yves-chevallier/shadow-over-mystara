@@ -7,7 +7,6 @@ use crate::mem::{rd16, rd32, wr16};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-const BLOOD: u32 = 0xb141a;
 const SFX_BITE: u32 = 0xe8ba2;
 const ANIMS: u32 = 0x1bc346;
 const SPEEDS: u32 = 0x1c7836;
@@ -354,7 +353,7 @@ mod pet {
             die(x);
             x.c.d[2] = 0x10;
             x.c.d[3] = 0x10;
-            x.call(BLOOD);
+            crate::families::effects_creators::impact_spark(x.b, x.o, 0x10, 0x10);
             return true;
         }
         if left == 0 {
@@ -382,7 +381,7 @@ mod pet {
         }
         x.c.d[2] = 0x10;
         x.c.d[3] = 0x10;
-        x.call(BLOOD);
+        crate::families::effects_creators::impact_spark(x.b, x.o, 0x10, 0x10);
         true
     }
 

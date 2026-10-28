@@ -1415,7 +1415,7 @@ fn seized_hits(x: &mut Cx) {
     }
     x.c.d[2] = x.c.d[2] & !0xffff | d2 as u32;
     x.c.d[3] = x.c.d[3] & !0xffff | d3 as u32;
-    x.call(0xb141a);
+    crate::families::effects_creators::impact_spark(x.b, x.o, d2, d3);
 }
 /// 0x3d224 : lâché : projection prédéfinie 1, immunités du type (0xfe5a).
 fn released(x: &mut Cx) {
@@ -1614,7 +1614,7 @@ fn zapped_burn(x: &mut Cx) {
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);
     if c == 0 {
-        x.call(0xb3c14);
+        crate::families::effects_creators::toss(x.b, x.o);
         x.set32(f::STATE, 0x0600_0000);
         detach_from_host(x);
         return lib::object_event(x);

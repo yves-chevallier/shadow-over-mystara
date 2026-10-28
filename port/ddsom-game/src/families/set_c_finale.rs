@@ -156,7 +156,7 @@ fn title_blink(x: &mut Cx) {
         0 => {
             next_state(x);
             x.call(INIT_A);
-            x.call(crate::palette::FLASH_COLOR_WHITE.entry);
+            crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             x.set8(0x42, 0);
             x.set_a5_u16(FLASH, 0);
         }

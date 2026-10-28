@@ -135,7 +135,7 @@ fn wake_high_wait(x: &mut Cx) {
     x.c.d[0] = event as u32;
     if event == 8 {
         x.set_a5_u16(0x4be, 2);
-        x.call(0x1ac68);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
     }
     let event = x.u8(0x3e);
     if event == 0 {
@@ -552,9 +552,8 @@ fn hold_bite(x: &mut Cx, prey: crate::objects::Obj) {
     if x.u8(f::FLIP) == 0 {
         dx = dx.wrapping_neg();
     }
-    x.c.d[2] = dx.wrapping_add(x.u16(0x8)) as u32;
-    x.c.d[3] = x.u16(0xc).wrapping_add(8) as u32;
-    x.c.d[4] = x.u16(0x10).wrapping_sub(2) as u32;
-    x.call(call::SPLASH);
+    let pos = (dx.wrapping_add(x.u16(0x8)), x.u16(0xc).wrapping_add(8), x.u16(0x10).wrapping_sub(2));
+    (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+    crate::families::effects_creators::spark_at(x.b, x.o, prey.0, 2, pos);
     lib::hold_seized(x);
 }

@@ -209,7 +209,7 @@ fn death(x: &mut Cx) {
         0x89660 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
-                x.call(0xb85e2);
+                crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::BUBBLE, None);
             }
             x.move_xz();
             if (x.u16(0xc) as i16) > 0 {
