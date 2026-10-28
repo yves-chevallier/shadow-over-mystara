@@ -7,6 +7,7 @@
 //! l'ordonnanceur et reprennent à une étape Rust (`etapes!`).
 
 use super::{mode, Block, Flow, Sequence};
+use crate::scene::fondu;
 use crate::effects_aids::decor_6;
 use crate::families::creators::set_15_pur;
 use crate::palette::{charger_ensemble, charger_page};
@@ -38,9 +39,6 @@ mod var {
     pub const LAYERS: u32 = 0x14;
     pub const REGION: u32 = 0x70;
     pub const SCREEN_TYPE: u32 = 0x36;
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_STEPS: u32 = 0x48f;
-    pub const FADE_DELAY: u32 = 0x490;
     pub const SCROLL_1_X: u32 = 0x4b6;
     pub const SCROLL_2_Y: u32 = 0x4ba;
     pub const CAMERA_X: u32 = 0x506;
@@ -55,9 +53,6 @@ mod var {
 mod ext {
     pub const SOUND_E0EBC: u32 = 0xe0ebc;
     pub const SOUND_E185C: u32 = 0xe185c;
-    /// Tâches de fondu : vers la couleur, depuis la couleur.
-    pub const FADE_TASK_IN: u32 = 0x14ba;
-    pub const FADE_TASK_OUT: u32 = 0x14d0;
     /// Fin du texte de titre : continue dans l'original (objet SOBJ qui passe à la suite).
     pub const OBJECT_LAUNCH: u32 = 0xea288;
 }
@@ -108,8 +103,8 @@ fn start_fade_task(x: &mut Ctx, entry: u32) {
 
 /// Réglages de fondu communs (délai, pages).
 fn fade_setup(x: &mut Ctx, delay: u16, pages: u8) {
-    x.set_v16(var::FADE_DELAY, delay);
-    x.set_v8(var::FADE_PAGES, pages);
+    fondu::DELAI.set(x.b, delay);
+    fondu::PAGES.set(x.b, pages);
 }
 
 /// Charge la palette de titre sur toutes les pages (début d'écran).
@@ -232,7 +227,7 @@ crate::etapes! {
         },
         T12Fade = T12_FADE => |x| {
             fade_setup(x, 3, FADE_PAGES_ALL);
-            start_fade_task(x, ext::FADE_TASK_IN);
+            start_fade_task(x, crate::scene::fondu::MONTEE);
             x.next_step();
             x.set_m16(f::SPEED, 0xb00);
             x.set_m16(f::ACCEL, 0xffe0);
@@ -317,7 +312,7 @@ crate::etapes! {
         },
         S02Palette = S02_PALETTE => |x| {
             crate::palette::charger_page_de_la_scene(x.b, 1);
-            x.set_v8(var::FADE_PAGES, 2);
+            fondu::PAGES.set(x.b, 2);
             crate::palette::full_brightness(x.b);
             Flow::Done
         },
@@ -411,7 +406,7 @@ fn t08_wait_flash(x: &mut Ctx) -> Flow {
     if x.m8(f::DONE) != 0 {
         return Flow::Done;
     }
-    x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
+    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
     crate::palette::full_brightness(x.b);
     x.wait(4, Etape::T08Next)
 }
@@ -446,14 +441,14 @@ fn t0c_fade_task(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    start_fade_task(x, ext::FADE_TASK_OUT);
+    start_fade_task(x, crate::scene::fondu::DESCENTE);
     Flow::Done
 }
 
 /// Étape 14 : attend la fin du fondu (`A5+0x48f` nul).
 fn t0e_wait_fade(x: &mut Ctx) -> Flow {
     x.render();
-    if x.v8(var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         return Flow::Done;
     }
     x.next_step();
@@ -487,7 +482,7 @@ fn t12_wait(x: &mut Ctx) -> Flow {
     if x.m8(f::DONE) != 0 {
         return Flow::Done;
     }
-    x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
+    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
     crate::palette::full_brightness(x.b);
     x.wait(4, Etape::T12Scenery)
 }
@@ -546,7 +541,7 @@ fn t18_palette(x: &mut Ctx) -> Flow {
         }
         src += 32;
     }
-    x.set_v8(var::FADE_PAGES, 1);
+    fondu::PAGES.set(x.b, 1);
     crate::palette::full_brightness(x.b);
     t18_object(x)
 }
@@ -669,17 +664,17 @@ fn leave_screen(x: &mut Ctx, loop_resume: Etape) -> Flow {
     let s = rd8(x.b, mode::SUB).wrapping_add(2);
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::BASE + f::STEP, 0);
-    x.set_v8(var::FADE_STEPS, 1);
-    x.set_v16(var::FADE_DELAY, 4);
-    x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
-    start_fade_task(x, ext::FADE_TASK_OUT);
+    fondu::PAS.set(x.b, 1);
+    fondu::DELAI.set(x.b, 4);
+    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
+    start_fade_task(x, crate::scene::fondu::DESCENTE);
     x.wait(1, loop_resume)
 }
 
 /// Attente de la fin du fondu (`A5+0x48f`), puis effacement et cession de 16 images.
 fn leave_wait(x: &mut Ctx, loop_resume: Etape, cleared: Etape, second_title: bool) -> Flow {
     x.render();
-    if x.v8(var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         return x.wait(1, loop_resume);
     }
     // l'original libère les pools dans un ordre différent selon l'écran

@@ -10,6 +10,7 @@
 //! Chaque état revient en `0xfb2a4` (la native de reprise rétablit A0).
 
 use super::{Flow, Sequence};
+use crate::scene::fondu;
 use crate::effects_aids::decor_6;
 use crate::families::creators::set_15_pur;
 use crate::families::effects_creators::ecran_de_fin;
@@ -32,9 +33,6 @@ mod var {
     pub const STEP: u32 = A5 + 0x2d;
     pub const PHASE: u32 = A5 + 0x2c;
     pub const VIDEO: u32 = A5 + 0x14;
-    pub const FADE_PAGES: u32 = A5 + 0x48e;
-    pub const FADE_STEPS: u32 = A5 + 0x48f;
-    pub const FADE_DELAY: u32 = A5 + 0x490;
     pub const SCROLL_1: u32 = A5 + 0x4b6;
     pub const SCROLL_2: u32 = A5 + 0x4ba;
     pub const CAMERA: u32 = A5 + 0x506;
@@ -52,12 +50,6 @@ mod var {
 }
 
 mod ext {
-    pub const FADE_TASK_IN: u32 = 0x14ba;
-    pub const FADE_TASK_OUT: u32 = 0x14d0;
-    pub const FADE_TASK_C: u32 = 0x14de;
-    pub const FADE_TASK_D: u32 = 0x14c8;
-    pub const FADE_TASK_STEP: u32 = 0x1ced4;
-    pub const FADE_TASK_E: u32 = 0x1ccf8;
     pub const SOUND_E1528: u32 = 0xe1528;
     pub const SOUND_E16F0: u32 = 0xe16f0;
 }
@@ -114,7 +106,7 @@ crate::etapes! {
             crate::palette::charger_page_de_la_scene(x.b, 1);
             charger_page(x.b, 2, 89);
             charger_page(x.b, 3, 86);
-            wr8(x.b, var::FADE_PAGES, 12);
+            fondu::PAGES.set(x.b, 12);
             crate::palette::full_brightness(x.b);
             s02_clear(x)
         },
@@ -177,7 +169,7 @@ crate::etapes! {
             wr16(x.b, BLOCK + f::TIMER, 180);
             fade_settings(x, 3, FADE_ALL);
             // `jmp 0x9b6` : la tâche de fondu, puis le retour
-            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_IN);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::MONTEE);
             Flow::Done
         },
         S10Retry = S10_RETRY => |x| {
@@ -210,21 +202,21 @@ crate::etapes! {
             for i in 0..256u32 {
                 wr32(x.b, 0x91c000 + 4 * i, 0xffff_ffff);
             }
-            wr16(x.b, var::FADE_DELAY, 1);
-            wr8(x.b, var::FADE_PAGES, FADE_ALL);
+            fondu::DELAI.set(x.b, 1);
+            fondu::PAGES.set(x.b, FADE_ALL);
             wr32(x.b, A5 + 0x492, 0x910000);
             wr32(x.b, A5 + 0x496, 0x25c0c0);
             wr32(x.b, A5 + 0x49a, 0x269120);
             wr32(x.b, A5 + 0x49e, 0x27e600);
-            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_STEP);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::DEPUIS_LE_BLANC);
             crate::sound::jouer_global(x.b, ext::SOUND_E16F0);
-            wr8(x.b, var::FADE_STEPS, 1);
+            fondu::PAS.set(x.b, 1);
             x.c.a[0] = BLOCK;
             s1c_wait_fade(x)
         },
         S1cFadeLoop = S1C_FADE_LOOP => |x| {
             render_scroll(x);
-            if rd8(x.b, var::FADE_STEPS) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return s1c_wait_fade(x);
             }
             wr16(x.b, BLOCK + f::TIMER, 30);
@@ -232,7 +224,7 @@ crate::etapes! {
         },
         S1eLoop = S1E_LOOP => |x| {
             render_scroll(x);
-            if rd8(x.b, var::FADE_STEPS) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return s1e_loop(x);
             }
             next_step(x);
@@ -240,7 +232,7 @@ crate::etapes! {
         },
         S1eRetry = S1E_RETRY => s1e_object,
         S22Loop = S22_LOOP => |x| {
-            if rd8(x.b, var::FADE_STEPS) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return s22_wait(x);
             }
             next_step(x);
@@ -258,7 +250,7 @@ crate::etapes! {
         S28Loop = S28_LOOP => |x| {
             x.c.a[0] = BLOCK;
             render_scroll(x);
-            if rd8(x.b, var::FADE_STEPS) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return s28_loop(x);
             }
             Flow::Done
@@ -295,11 +287,11 @@ crate::etapes! {
             wr16(x.b, var::VIDEO, 0x12ce);
             render(x);
             fade_settings(x, 3, 13);
-            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_IN);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::MONTEE);
             Flow::Done
         },
         S2cLoop = S2C_LOOP => |x| {
-            if rd8(x.b, var::FADE_STEPS) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return s2c_loop(x);
             }
             wr8(x.b, BLOCK + f::SIGNAL, 0xff);
@@ -336,7 +328,7 @@ crate::etapes! {
             }
             charger_page(x.b, 2, 84);
             charger_page(x.b, 3, 84);
-            wr8(x.b, var::FADE_PAGES, 12);
+            fondu::PAGES.set(x.b, 12);
             crate::palette::no_brightness(x.b);
             crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
             // joueurs présents et joueurs « prêts à partir » (octet +0x192)
@@ -404,7 +396,7 @@ crate::etapes! {
             wr16(x.b, var::VIDEO, 0x12ce);
             wr16(x.b, BLOCK + f::TIMER, 240);
             fade_settings(x, 3, FADE_ALL);
-            crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_IN);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::MONTEE);
             Flow::Done
         },
         S32Faded = S32_FADED => |x| {
@@ -529,8 +521,8 @@ fn link(x: &mut Ctx) -> u32 {
 }
 
 fn fade_settings(x: &mut Ctx, delay: u16, pages: u8) {
-    wr16(x.b, var::FADE_DELAY, delay);
-    wr8(x.b, var::FADE_PAGES, pages);
+    fondu::DELAI.set(x.b, delay);
+    fondu::PAGES.set(x.b, pages);
 }
 
 /// Crée la tâche de fondu d'entrée `entry` (emplacement 0x10).
@@ -693,12 +685,12 @@ fn s0e_wait_timer(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     fade_settings(x, 3, FADE_ALL);
-    wr8(x.b, var::FADE_STEPS, 1);
-    fade_task(x, ext::FADE_TASK_OUT);
+    fondu::PAS.set(x.b, 1);
+    fade_task(x, crate::scene::fondu::DESCENTE);
     s0e_wait_fade(x)
 }
 fn s0e_wait_fade(x: &mut Ctx) -> Flow {
-    if rd8(x.b, var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         return x.wait(1, Etape::S0eLoop);
     }
     tile_blocks(x, 0x91b000, 352, 353, Grille::Couche3);
@@ -781,14 +773,14 @@ fn s1a_wait_signal(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
-    wr8(x.b, var::FADE_STEPS, 1);
-    wr16(x.b, var::FADE_DELAY, 4);
-    wr8(x.b, var::FADE_PAGES, FADE_ALL);
-    fade_task(x, ext::FADE_TASK_E);
+    fondu::PAS.set(x.b, 1);
+    fondu::DELAI.set(x.b, 4);
+    fondu::PAGES.set(x.b, FADE_ALL);
+    fade_task(x, crate::scene::fondu::VERS_LE_BLANC);
     s1a_wait_fade(x)
 }
 fn s1a_wait_fade(x: &mut Ctx) -> Flow {
-    if rd8(x.b, var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         return x.wait(1, Etape::S1aLoop);
     }
     wr16(x.b, BLOCK + f::TIMER, 120);
@@ -895,9 +887,9 @@ fn s1e_fade(x: &mut Ctx) -> Flow {
     if !timer_tick(x) {
         return Flow::Done;
     }
-    wr8(x.b, var::FADE_STEPS, 8);
+    fondu::PAS.set(x.b, 8);
     fade_settings(x, 3, FADE_ALL);
-    fade_task(x, ext::FADE_TASK_C);
+    fade_task(x, crate::scene::fondu::DESCENTE_PAS);
     s1e_loop(x)
 }
 fn s1e_loop(x: &mut Ctx) -> Flow {
@@ -921,9 +913,9 @@ fn s22_object(x: &mut Ctx) -> Flow {
     if set_15_pur(x.b, 16).is_err() {
         return Flow::Done;
     }
-    wr8(x.b, var::FADE_STEPS, 8);
+    fondu::PAS.set(x.b, 8);
     fade_settings(x, 3, FADE_ALL);
-    fade_task(x, ext::FADE_TASK_D);
+    fade_task(x, crate::scene::fondu::MONTEE_PAS);
     s22_wait(x)
 }
 fn s22_wait(x: &mut Ctx) -> Flow {
@@ -951,9 +943,9 @@ fn s28_fade(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     next_step(x);
-    wr8(x.b, var::FADE_STEPS, 1);
+    fondu::PAS.set(x.b, 1);
     fade_settings(x, 3, 13);
-    fade_task(x, ext::FADE_TASK_OUT);
+    fade_task(x, crate::scene::fondu::DESCENTE);
     s28_loop(x)
 }
 fn s28_loop(x: &mut Ctx) -> Flow {
@@ -1001,8 +993,8 @@ fn s2c_wait(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     fade_settings(x, 3, 13);
-    wr8(x.b, var::FADE_STEPS, 1);
-    fade_task(x, ext::FADE_TASK_OUT);
+    fondu::PAS.set(x.b, 1);
+    fade_task(x, crate::scene::fondu::DESCENTE);
     s2c_loop(x)
 }
 fn s2c_loop(x: &mut Ctx) -> Flow {
@@ -1047,7 +1039,7 @@ fn s30_rewards(x: &mut Ctx) -> Flow {
             wr32(x.b, dst + 4 * i, v);
         }
     }
-    wr8(x.b, var::FADE_PAGES, 1);
+    fondu::PAGES.set(x.b, 1);
     crate::palette::no_brightness(x.b);
     render(x);
     let mut fp = var::PLAYERS;

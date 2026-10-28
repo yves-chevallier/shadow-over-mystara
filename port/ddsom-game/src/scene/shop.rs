@@ -264,7 +264,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     crate::video::activer_couches(x.b, 0x12ce);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    crate::kernel::creer_tache(x.b, 16, 0x14ba);
+    crate::kernel::creer_tache(x.b, 16, crate::scene::fondu::MONTEE);
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {

@@ -19,6 +19,7 @@ pub(crate) mod early;
 pub(crate) mod late;
 
 use super::Ctx;
+use crate::scene::fondu;
 use crate::video::{charger_grille, effacer_couche, Couche, Grille};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
@@ -45,9 +46,6 @@ mod a5 {
     /// Horloge de la scène (mot BCD, minutes et secondes) ; non nulle : temps restant.
     pub const CLOCK: u32 = 0x38;
     /// Fondu : pages, pas restants, délai, palettes cibles (longs).
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_STEPS: u32 = 0x48f;
-    pub const FADE_DELAY: u32 = 0x490;
     /// Caméras : position (X, Y) et leurs copies (`+8`).
     pub const CAM1_X: u32 = 0x506;
     pub const CAM1_Y: u32 = 0x50a;
@@ -64,12 +62,6 @@ mod a5 {
 /// Pages de palettes : toutes, ou celles de la scène (0, 2 et 3).
 const ALL_PAGES: u8 = 15;
 const SCENE_PAGES: u8 = 13;
-
-/// Tâches de fondu.
-mod sub {
-    pub const FADE_TASK: u32 = 0x14ba;
-    pub const FADE_TASK_PAGES: u32 = 0x14d0;
-}
 
 /// Grilles de blocs de tuiles : couche 2 (0x26d4) et couche 3 (0x2766).
 const TB: Grille = Grille::Couche2;
@@ -217,15 +209,15 @@ crate::etapes! {
 
 /// Fondu (délai 3) des `pages` vers le noir (0x1460) ou depuis le noir (0x144c) : 0xfa122, 0xfa134, 0xfa146.
 fn fade(x: &mut Ctx, pages: u8, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow {
-    x.set_v16(a5::FADE_DELAY, 3);
-    x.set_v8(a5::FADE_PAGES, pages);
+    fondu::DELAI.set(x.b, 3);
+    fondu::PAGES.set(x.b, pages);
     goto(x, routine, ret)
 }
 
 /// Fondu avec délai et pages donnés, sans attendre sa fin : tâche de fondu `task` (0xfa1fa, 0xfa214).
 fn fade_task(x: &mut Ctx, delay: u16, pages: u8, task: u32) {
-    x.set_v16(a5::FADE_DELAY, delay);
-    x.set_v8(a5::FADE_PAGES, pages);
+    fondu::DELAI.set(x.b, delay);
+    fondu::PAGES.set(x.b, pages);
     start_task(x, task);
 }
 fn start_task(x: &mut Ctx, task: u32) {
@@ -282,7 +274,7 @@ fn reset_pools(x: &mut Ctx) {
 /// 0xfa22e : palette `n` des pages de fond (0x1a67e), puis noir sur la page 2.
 fn dark_palette(x: &mut Ctx, n: u16) {
     crate::palette::charger_page(x.b, 2, n);
-    x.set_v8(a5::FADE_PAGES, 4);
+    fondu::PAGES.set(x.b, 4);
     crate::palette::no_brightness(x.b);
 }
 

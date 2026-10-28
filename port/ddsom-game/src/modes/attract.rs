@@ -4,6 +4,7 @@
 //! reste, une étape à la fois, jusqu'à ce que sa minuterie (`FF0E78`) atteigne zéro.
 
 use super::{mode, Flow, Sequence};
+use crate::scene::fondu;
 use crate::video::{charger_grille, effacer_couche, Couche, Grille};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::scene::Ctx;
@@ -14,8 +15,6 @@ mod var {
     /// Bits 1 à 3 : plans de fond allumés (mot de commande vidéo).
     pub const LAYERS: u32 = 0x14;
     /// Fondu : pages, délai.
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_DELAY: u32 = 0x490;
     /// Défilement vertical du plan 2 ; abscisses des caméras (longs).
     pub const SCROLL_2: u32 = 0x4ba;
     pub const CAMERA: u32 = 0x506;
@@ -62,8 +61,8 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
     wr16(x.b, mode::TIMER, 1);
-    x.set_v16(var::FADE_DELAY, 3);
-    x.set_v8(var::FADE_PAGES, 0xf);
+    fondu::DELAI.set(x.b, 3);
+    fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::FixedScreenAfterFade)
 }
 
@@ -95,7 +94,7 @@ crate::etapes! {
         LegalScreenSound = LEGAL_SOUND => |x| {
             crate::sound::jouer_global(x.b, SOUND_SCREEN_A);
             crate::sound::jouer_global(x.b, SOUND_SCREEN_B);
-            x.set_v8(var::FADE_PAGES, 0xf);
+            fondu::PAGES.set(x.b, 0xf);
             crate::taches::fondu::montee(x)
         },
         LegalScreenFaded = LEGAL_FADED => |x| {
@@ -129,7 +128,7 @@ crate::etapes! {
             x.wait(1, Etape::SecondFadeIn)
         },
         SecondFadeIn = SECOND_FADE_IN => |x| {
-            x.set_v8(var::FADE_PAGES, 0xf);
+            fondu::PAGES.set(x.b, 0xf);
             crate::taches::fondu::montee(x)
         },
         SecondFaded = SECOND_FADED => |x| {
@@ -152,7 +151,7 @@ crate::etapes! {
             x.wait(1, Etape::NoticeFadeIn)
         },
         NoticeFadeIn = NOTICE_FADE_IN => |x| {
-            x.set_v8(var::FADE_PAGES, 0xf);
+            fondu::PAGES.set(x.b, 0xf);
             // `jsr 0x144c` : la suite est le décompte, juste après
             x.sous_programme(crate::taches::fondu::montee, Etape::NoticeCountdown)
         },
@@ -201,7 +200,7 @@ fn legal_screen_wait(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, mode::SUB).wrapping_add(2);
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
-    x.set_v8(var::FADE_PAGES, 0xf);
+    fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::LegalScreenFaded)
 }
 
@@ -238,7 +237,7 @@ fn second_legal_wait(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, mode::SUB).wrapping_add(2);
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
-    x.set_v8(var::FADE_PAGES, 0xf);
+    fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::SecondFaded)
 }
 const SECOND_FADED: u32 = 0x138f8;
@@ -273,7 +272,7 @@ fn notice_countdown(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::TIMER, 300);
     wr8(x.b, mode::SUB, 2);
     wr8(x.b, mode::STEP, 0);
-    x.set_v8(var::FADE_PAGES, 0xf);
+    fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::NoticeFaded)
 }
 const NOTICE_FADED: u32 = 0x1398a;

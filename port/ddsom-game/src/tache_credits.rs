@@ -21,6 +21,7 @@
 //! de retour de l'original.
 
 use crate::ecran_credits::{self, PREMIER_MONNAYEUR};
+use crate::scene::fondu;
 use crate::modes::{Flow, Sequence};
 use crate::mem::{rd16, rd8, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
@@ -75,8 +76,6 @@ mod var {
     pub const FLAGS: u32 = 0x12;
     pub const VIDEO_B: u32 = 0x14;
     pub const SCROLL_MODE: u32 = 0x53c;
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_STEP: u32 = 0x490;
     pub const GAME_LANGUAGE: u32 = 0x70;
     /// Drapeau (A5 - 0x7155) et octet (A5 - 0x5b8e) remis à zéro / posé par l'écran.
     pub const CLEAR_FLAG: u32 = 0xffff_8eab;
@@ -326,7 +325,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     crate::palette::charger_page(x.b, 1, 2);
     crate::palette::charger_page(x.b, 2, 0x55);
     crate::palette::charger_page(x.b, 3, 0x55);
-    set8(x, var::FADE_PAGES, 0xf);
+    fondu::PAGES.set(x.b, 0xf);
     crate::palette::full_brightness(x.b);
     video_on(x);
     crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
@@ -492,10 +491,10 @@ fn end(x: &mut Ctx) -> Flow {
     set8(x, var::SCROLL_MODE, 0);
     set8(x, var::CLEAR_FLAG, 0);
     kill(x, &[0, 0x10, 0xd0]);
-    set8(x, var::FADE_PAGES, 0xf);
+    fondu::PAGES.set(x.b, 0xf);
     crate::palette::full_brightness(x.b);
-    set16(x, var::FADE_STEP, 2);
-    set8(x, var::FADE_PAGES, 0xf);
+    fondu::DELAI.set(x.b, 2);
+    fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::AfterFade)
 }
 

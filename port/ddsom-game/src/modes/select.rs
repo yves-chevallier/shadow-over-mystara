@@ -20,6 +20,7 @@
 //! | 14 | fondu final, phase 8 |
 
 use super::{Flow, Sequence};
+use crate::scene::fondu;
 use crate::dispatch;
 use crate::families::effects_creators::{bandeau, element_d_interface};
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
@@ -45,9 +46,6 @@ mod var {
     pub const SCREEN_ID: u32 = A5 + 0x3c;
     pub const VIDEO: u32 = A5 + 0x14;
     /// Fondu.
-    pub const FADE_PAGES: u32 = A5 + 0x48e;
-    pub const FADE_STEPS: u32 = A5 + 0x48f;
-    pub const FADE_DELAY: u32 = A5 + 0x490;
     pub const FADE_SOURCES: u32 = A5 + 0x492;
     pub const SCROLL_1: u32 = A5 + 0x4b6;
     pub const SCROLL_2: u32 = A5 + 0x4ba;
@@ -79,9 +77,6 @@ mod var {
 mod ext {
     pub const SOUND_E10D8: u32 = 0xe10d8;
     pub const SOUND_E109C: u32 = 0xe109c;
-    pub const FADE_TASK: u32 = 0x1ced4;
-    pub const FADE_TASK_B: u32 = 0x14ba;
-    pub const FADE_TASK_C: u32 = 0x14de;
 }
 
 /// Tables en ROM : octets de variante par personnage (code), annonces, déplacements du curseur (données). Les
@@ -251,14 +246,14 @@ crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
         FadeStart = FADE_START => |x| {
-            wr16(x.b, var::FADE_DELAY, 1);
-            wr8(x.b, var::FADE_PAGES, 0xf);
+            fondu::DELAI.set(x.b, 1);
+            fondu::PAGES.set(x.b, 0xf);
             wr32(x.b, var::FADE_SOURCES, 0x28ff00);
             wr32(x.b, var::FADE_SOURCES + 4, 0x25c0c0);
             wr32(x.b, var::FADE_SOURCES + 8, 0x279460);
             wr32(x.b, var::FADE_SOURCES + 12, 0x28c6e0);
-            create_task(x, ext::FADE_TASK, 0x10);
-            wr8(x.b, var::FADE_STEPS, 1);
+            create_task(x, crate::scene::fondu::DEPUIS_LE_BLANC, 0x10);
+            fondu::PAS.set(x.b, 1);
             two_blocks(x, Grille::Couche2, 0x203, 0x917000);
             two_blocks(x, Grille::Couche3, 0xfc, 0x91b800);
             wr16(x.b, var::VIDEO, 0x12ce);
@@ -291,7 +286,7 @@ crate::etapes! {
                     wr32(x.b, 0x91c000 + 0x20 * i + 4 * j, 0);
                 }
             }
-            wr8(x.b, var::FADE_PAGES, 0xf);
+            fondu::PAGES.set(x.b, 0xf);
             crate::palette::full_brightness(x.b);
             for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
                 wr32(x.b, v, 0);
@@ -321,16 +316,16 @@ crate::etapes! {
             x.wait(4, Etape::StepEFade)
         },
         StepEFade = STEP_E_FADE => |x| {
-            wr16(x.b, var::FADE_DELAY, 3);
-            wr8(x.b, var::FADE_PAGES, 0xf);
-            create_task(x, ext::FADE_TASK_B, 0x10);
+            fondu::DELAI.set(x.b, 3);
+            fondu::PAGES.set(x.b, 0xf);
+            create_task(x, crate::scene::fondu::MONTEE, 0x10);
             Flow::Done
         },
     }
 }
 /// Attend la fin du fondu d'ouverture (une image par tour), puis allume les curseurs.
 fn fade_wait(x: &mut Ctx) -> Flow {
-    if rd8(x.b, var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         render(x, &[&dispatch::EFFCT]);
         return x.wait(1, Etape::FadeLoop);
     }
@@ -638,8 +633,8 @@ fn step_6(x: &mut Ctx) -> Flow {
         }
     }
     crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0x1c });
-    wr16(x.b, var::FADE_DELAY, 1);
-    wr8(x.b, var::FADE_PAGES, 0xf);
+    fondu::DELAI.set(x.b, 1);
+    fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::Step6Faded)
 }
 const STEP_6_FADED: u32 = 0x1d19c;
@@ -716,10 +711,10 @@ fn step_a(x: &mut Ctx) -> Flow {
     wr16(x.b, var::BANNER_Y, 0xc0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     wr8(x.b, var::LOCKED_FLAG, 0);
-    wr16(x.b, var::FADE_DELAY, 3);
-    wr8(x.b, var::FADE_PAGES, 0xf);
-    wr8(x.b, var::FADE_STEPS, 7);
-    create_task(x, ext::FADE_TASK_C, 0x10);
+    fondu::DELAI.set(x.b, 3);
+    fondu::PAGES.set(x.b, 0xf);
+    fondu::PAS.set(x.b, 7);
+    create_task(x, crate::scene::fondu::DESCENTE_PAS, 0x10);
     Flow::Done
 }
 
@@ -759,7 +754,7 @@ fn finish_c(x: &mut Ctx) -> Flow {
 
 fn step_e(x: &mut Ctx) -> Flow {
     render(x, &[&dispatch::SET, &dispatch::SOBJ]);
-    if rd8(x.b, var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         return Flow::Done;
     }
     if any_button(x) {
@@ -775,9 +770,9 @@ fn step_e(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PHASE, phase);
     wr8(x.b, var::STEP, 0);
     wr16(x.b, var::SUB, 0);
-    wr16(x.b, var::FADE_DELAY, 1);
+    fondu::DELAI.set(x.b, 1);
     x.c.d[0] = 8;
-    wr8(x.b, var::FADE_PAGES, 0xf);
+    fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente_d0, Etape::StepEFaded)
 }
 const STEP_E_FADED: u32 = 0x1d498;

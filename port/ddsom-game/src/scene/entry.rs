@@ -12,9 +12,10 @@
 //! à la phase 12. Voir `docs/scenes.md` pour la table des scènes.
 
 use cps2::Cps2Bus;
+use super::fondu;
 use m68k::Cpu;
 
-use super::{player, scratch, script, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
+use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::families::effects_creators as createurs;
 use crate::game;
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
@@ -310,7 +311,7 @@ fn quick_with_music(x: &mut Ctx) {
 fn white_start(x: &mut Ctx) {
     x.leave_phase();
     x.set_v8(var::PLAYERS_FROZEN, 0);
-    x.set_v8(var::FADE_PAGES, 15);
+    fondu::PAGES.set(x.b, 15);
     crate::palette::full_brightness(x.b);
     x.sobj_6(23);
     x.world();
@@ -990,10 +991,10 @@ fn scene_38(x: &mut Ctx) {
             let players = x.v8(var::PLAYERS) as u32;
             let duration = x.prog16(DURATIONS + 2 * players);
             x.wr16(TIMER, duration);
-            x.set_v16(var::FADE_DELAY, 2);
-            x.set_v8(var::FADE_PAGES, 15);
+            fondu::DELAI.set(x.b, 2);
+            fondu::PAGES.set(x.b, 15);
             crate::palette::no_brightness(x.b);
-            crate::kernel::creer_tache(x.b, 0x10, sub::FADE_TASK);
+            crate::kernel::creer_tache(x.b, 0x10, fondu::MONTEE);
         }
         2 => {
             if x.tick(TIMER) {
@@ -1155,7 +1156,7 @@ fn scene_47(x: &mut Ctx) {
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
-            if x.v8(var::FADE_STEPS) == 0 {
+            if fondu::PAS.get(x.b) == 0 {
                 x.end_scene();
                 // Glitch d'origine possible : les restes de 0x3525c (tous les registres) passent à la mise à jour du monde
                 crate::video::effacer_debut_couche1_68k(x.c, x.b);

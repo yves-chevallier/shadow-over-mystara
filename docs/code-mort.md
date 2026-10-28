@@ -236,3 +236,15 @@ le jeu ne produit pas, gardés tels quels dans le Rust :
 * **Échange d'équipement sans propriétaire** (ITEM 3, `+0x50` nul : pointeur 0, lecture des octets de la ROM en 0x3 et
   0x140) : glitch reproduit (index D0.w avec l'octet haut de la classe), bien qu'un objet ramassé ait toujours un
   propriétaire.
+
+## Lot « sortie du Cpu », partie 2 (écrans)
+
+| Site | Adresse(s) | Ce que fait le code | Pourquoi il n'est jamais atteint | Nature | Décision |
+|---|---|---|---|---|---|
+| `scene::script::pool_of_class` | table 0xf2f38, dixième entrée (0x226e) | allocation de l'apparition par la routine de la classe | 0x226e n'est l'allocateur d'aucun pool (aucune native) ; aucun script d'apparition n'emploie la classe 9 (286 scénarios, et le jeu sans 68000 s'arrêterait sur l'adresse) | entrée de table jamais choisie | `unreachable!` |
+| `taches::invite::arreter`, `print_shown` | 0xf38, 0xf4a (attributs négatifs) | les blocs lisent la palette `+0x2b` de l'objet A0 de l'appelant quand les attributs du texte sont négatifs | les textes gardés par la tâche ont tous l'attribut 3 (tables 0xe048c, 0xe04b0, 0xe04e4, lues dans la ROM) | repli défensif du moteur de texte | objet 0 passé, commenté |
+| `modes::select`, étape 6 | table 0x1d0f6 | appel de la routine d'initialisation par l'octet `+2` du joueur | la table ne contient que 0x2e58, 0x2e6e, 0x2e86, 0x2e9e (une par joueur) ; un octet `+2` ≥ 4 n'est jamais produit | repli défensif | `assert!` |
+
+Les natives qui ne servaient plus qu'aux appels par adresse des écrans sont retirées avec leurs appels (le code reste,
+en fonctions Rust) : textes et chiffres de l'écran des crédits (0x148be, 0x14652, 0x14b74, 0x14c1e), boutons de départ
+et verrous des monnayeurs (0x141e0, 0x14290), chiffre des crédits (0x14e46).

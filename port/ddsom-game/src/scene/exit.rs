@@ -25,10 +25,11 @@
 //! l'image (`Update::Nothing`). La séquence 27 devient la 29 quand `A5+0x66` est posé.
 
 use cps2::Cps2Bus;
+use super::fondu;
 use m68k::decode::Fetch;
 use m68k::Cpu;
 
-use super::{player, scratch, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
+use super::{player, scratch, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::dispatch;
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::modes::Sequence as _;
@@ -130,8 +131,8 @@ impl<'a> Ex<'a> {
 
     /// Lance la tâche de fondu `entry` (délai `delay`) ; A0 revient sur le bloc.
     fn fade(&mut self, delay: u16, entry: u32) {
-        self.x.set_v16(var::FADE_DELAY, delay);
-        self.x.set_v8(var::FADE_PAGES, 15);
+        fondu::DELAI.set(self.x.b, delay);
+        fondu::PAGES.set(self.x.b, 15);
         crate::kernel::creer_tache(self.x.b, 0x10, entry);
         self.x.c.a[0] = BASE;
     }
@@ -533,7 +534,7 @@ fn run_state(ex: &mut Ex, state: St) {
         St::FadeScript { timer } => {
             ex.next();
             ex.set_b16(blk::TIMER, timer);
-            ex.fade(2, sub::FADE_TASK);
+            ex.fade(2, fondu::MONTEE);
             ex.clear_text();
         }
         St::PlayersThen { state, timer } => {
@@ -551,7 +552,7 @@ fn run_state(ex: &mut Ex, state: St) {
 
 /// État final : la scène suivante se prépare, puis cession à l'ordonnanceur.
 fn do_leave(ex: &mut Ex, leave: &Leave) {
-    if leave.wait_fade != WaitFade::No && ex.x.v8(var::FADE_PAGES) != 0 {
+    if leave.wait_fade != WaitFade::No && fondu::PAGES.get(ex.x.b) != 0 {
         match leave.wait_fade {
             WaitFade::World => ex.x.world(),
             WaitFade::InputsWorld => {
@@ -565,7 +566,7 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
     }
     ex.x.set_v8(0x42, 0);
     if leave.black {
-        ex.x.set_v8(var::FADE_PAGES, 15);
+        fondu::PAGES.set(ex.x.b, 15);
         crate::palette::no_brightness(ex.x.b);
     }
     if let Some(w) = leave.clear_word {
@@ -1060,7 +1061,7 @@ fn sequence(index: u8) -> Option<&'static Sequence> {
 /// Séquence 0 (la plus courante) : les joueurs sortent, fondu.
 fn seq0_start(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, 0x14d0);
+    ex.fade(2, fondu::DESCENTE);
     ex.x.set_v8(var::INPUT_LOCK, 0);
     crate::inputs::effacer_entrees(ex.x.b);
     ex.x.world();
@@ -1069,7 +1070,7 @@ fn seq0_start(ex: &mut Ex) {
 /// Séquence 6 : comme `seq0_start`, avec la commande sonore 0xe0a82(4).
 fn seq6_start(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, 0x14d0);
+    ex.fade(2, fondu::DESCENTE);
     ex.x.set_v8(var::INPUT_LOCK, 0);
     crate::inputs::effacer_entrees(ex.x.b);
     crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
@@ -1086,7 +1087,7 @@ fn seq20_walk(ex: &mut Ex) {
 fn fade_out_world(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
-        ex.fade(2, 0x14d0);
+        ex.fade(2, fondu::DESCENTE);
     }
     ex.x.world();
 }
@@ -1115,7 +1116,7 @@ fn seq29_walk(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.start_walk_out(false);
-        ex.fade(2, 0x14d0);
+        ex.fade(2, fondu::DESCENTE);
     }
     run_update(ex, Update::Full);
 }
@@ -1144,7 +1145,7 @@ fn seq33_walk(ex: &mut Ex) {
         ex.x.set_v8(PAUSE, 0);
         ex.x.set_v8(var::INPUT_LOCK, 0);
         crate::inputs::effacer_entrees(ex.x.b);
-        ex.fade(2, 0x14d0);
+        ex.fade(2, fondu::DESCENTE);
         ex.release_players(false);
     }
     ex.x.world();
@@ -1283,7 +1284,7 @@ fn walk_with_effect(ex: &mut Ex) {
     ex.release_players(false);
     let effect = Obj(ex.x.v16(0x46) as i16 as i32 as u32 & 0xff_ffff);
     wr32(ex.x.b, effect.0 + 0x58, 0x2_0000);
-    ex.fade(1, 0x14d0);
+    ex.fade(1, fondu::DESCENTE);
 }
 
 /// Séquence 10 : les joueurs reçoivent leur rang puis 0xd5f12.
@@ -1338,7 +1339,7 @@ fn seq15_clear(ex: &mut Ex) {
 /// Séquence 15 : fondu, script de fondu, événement 0xdc5fe(3).
 fn seq15_fade(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, sub::FADE_TASK);
+    ex.fade(2, fondu::MONTEE);
     ex.clear_text();
     crate::families::creators::objet_de_scene(ex.x.b, 3);
 }
@@ -1373,7 +1374,7 @@ fn seq21_route(ex: &mut Ex) {
         let scene = ex.x.prog16((NEXT_SCENES + index) & !1);
         let scene = if (NEXT_SCENES + index) & 1 == 0 { (scene >> 8) as u8 } else { scene as u8 };
         ex.set_b8(blk::NEXT_SCENE, scene);
-        ex.fade(1, 0x14d0);
+        ex.fade(1, fondu::DESCENTE);
     }
 }
 
@@ -1384,7 +1385,7 @@ fn seq23_walk(ex: &mut Ex) {
     }
     ex.next();
     ex.start_walk_out(false);
-    ex.fade(2, 0x14d0);
+    ex.fade(2, fondu::DESCENTE);
 }
 
 /// Séquence 25 : selon la route (`A5+0x5c`), saute à l'état 20 (écran de bonus) ou fond.
@@ -1395,7 +1396,7 @@ fn seq25_route(ex: &mut Ex) {
     }
     ex.next();
     ex.set_b16(blk::TIMER, 128);
-    ex.fade(2, sub::FADE_TASK);
+    ex.fade(2, fondu::MONTEE);
     ex.clear_text();
 }
 
@@ -1478,7 +1479,7 @@ fn seq35_walk(ex: &mut Ex) {
 fn seq35_fade(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 64);
-    ex.fade(2, sub::FADE_TASK);
+    ex.fade(2, fondu::MONTEE);
     ex.clear_text();
     crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
 }

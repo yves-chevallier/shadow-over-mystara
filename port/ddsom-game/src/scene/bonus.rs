@@ -6,6 +6,7 @@
 //! effet (`+0x42` : secondes restantes), fondu, retour des caméras. Le jeu lui-même est dans les objets.
 
 use super::screen::{self, copy_page};
+use super::fondu;
 use super::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
@@ -34,9 +35,6 @@ mod v {
 /// Variables de la RAM de travail (décalages depuis A5) touchées par le bonus.
 mod a5 {
     pub const SCENE: u32 = 0x34;
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_STEPS: u32 = 0x48f;
-    pub const FADE_DELAY: u32 = 0x490;
     /// Caméra principale : X, Y, copies de X et Y, et autres champs remis à zéro ; idem pour l'alternative.
     pub const CAM_X: u32 = 0x506;
     pub const CAM_Y: u32 = 0x50a;
@@ -89,9 +87,9 @@ pub fn dispatch(x: &mut Ctx, _table: u32) -> u8 {
 /// Fondu au noir ou depuis le noir (délai 4, toutes les pages, 15 pas) ; la routine cède la main et revient en
 /// `resume`.
 pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::taches::table::Suite>) -> Flow {
-    x.set_v8(a5::FADE_STEPS, 15);
-    x.set_v16(a5::FADE_DELAY, 4);
-    x.set_v8(a5::FADE_PAGES, 15);
+    fondu::PAS.set(x.b, 15);
+    fondu::DELAI.set(x.b, 4);
+    fondu::PAGES.set(x.b, 15);
     x.sous_programme(routine, resume)
 }
 

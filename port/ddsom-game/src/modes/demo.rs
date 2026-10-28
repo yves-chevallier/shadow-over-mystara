@@ -16,6 +16,7 @@
 //! durée. Étapes de l'écran (`FF0E72`) : 0 début de script, 2 scène en cours, 6 présentation d'un personnage.
 
 use cps2::Cps2Bus;
+use crate::scene::fondu;
 
 use super::{mode, Block, Flow, Sequence};
 use crate::effects_aids::decor_6;
@@ -66,18 +67,14 @@ mod var {
     pub const FRAME_COUNTER: u32 = A5 + 0x6e;
     pub const DEMO_TIME: u32 = A5 + 0x6c;
     pub const RANK: u32 = A5 + 0x7f92;
-    pub const FADE_STEPS: u32 = A5 + 0x48f;
-    pub const FADE_PAGES: u32 = A5 + 0x48e;
-    pub const FADE_DELAY: u32 = A5 + 0x490;
     /// Partie en cours ; mot de réglages.
     pub const GAME: u32 = A5 + 0x30;
     pub const DSW: u32 = A5 + 0x7fd0;
 }
 
 mod ext {
-    /// Tâche de l'interface des joueurs, et tâche de fondu au noir.
+    /// Tâche de l'interface des joueurs.
     pub const PLAYER_UI: u32 = 0x150ac;
-    pub const FADE_TASK_OUT: u32 = 0x14d0;
 }
 
 /// Tables en ROM (données, ou adresses lues par le code d'origine relativement au PC).
@@ -513,7 +510,7 @@ fn presentation(x: &mut Ctx, mut a1: u32) -> Flow {
     wr16(x.b, var::VIDEO, 0x12c0);
     crate::palette::charger_page(x.b, 2, 84);
     crate::palette::charger_page(x.b, 3, 84);
-    wr8(x.b, var::FADE_PAGES, 12);
+    fondu::PAGES.set(x.b, 12);
     crate::palette::full_brightness(x.b);
     x.c.d[0] = 1;
     crate::taches::attendre_puis_revenir(x)
@@ -767,7 +764,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
             if ending & 0x80 != 0 {
                 return ending_b(x);
             }
-            if ending == 0 && rd8(x.b, var::FADE_STEPS) == 0 {
+            if ending == 0 && fondu::PAS.get(x.b) == 0 {
                 return scene_next_b(x);
             }
         } else {
@@ -779,9 +776,9 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
                     wr8(x.b, mode::BASE + f::ENDING, 1);
                     let _ = decor_6(x.b, 8);
                 } else {
-                    wr16(x.b, var::FADE_DELAY, 2);
-                    wr8(x.b, var::FADE_PAGES, 15);
-                    crate::kernel::creer_tache(x.b, 0x10, ext::FADE_TASK_OUT);
+                    fondu::DELAI.set(x.b, 2);
+                    fondu::PAGES.set(x.b, 15);
+                    crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::DESCENTE);
                     crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0 });
                 }
             }

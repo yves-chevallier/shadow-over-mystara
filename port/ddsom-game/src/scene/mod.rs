@@ -52,9 +52,6 @@ pub mod var {
     /// Masque de boutons verrouillés (lu par la copie des entrées).
     pub const INPUT_LOCK: u32 = 0x43;
     /// Fondu de palette : masque des pages, nombre de pas restants, délai entre pas.
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_STEPS: u32 = 0x48f;
-    pub const FADE_DELAY: u32 = 0x490;
     /// Caméra principale et caméra alternative (choisie si `USE_ALT_CAMERA` est non nul).
     pub const CAMERA: u32 = 0x4fe;
     pub const ALT_CAMERA: u32 = 0x54e;
@@ -78,13 +75,33 @@ pub const fn scratch(offset16: u16) -> u32 {
     A5 - 0x1_0000 + offset16 as u32
 }
 
-/// Tâches de fondu lancées par les séquences.
-pub mod sub {
-    /// Tâche de fondu de palette vers la cible (emplacement 0x10).
-    pub const FADE_TASK: u32 = 0x14ba;
-    /// Tâche de fondu à 1 niveau par pas (emplacement 0x10).
-    pub const FADE_STEP_TASK: u32 = 0x1ced4;
+/// Le fondu de luminosité que conduisent les tâches de fondu (`taches/fondu.rs`) : pages concernées, pas restants,
+/// délai entre deux pas ; et les entrées de ces tâches, que les écrans créent dans l'emplacement 0x10.
+pub mod fondu {
+    use crate::ram::{Mot, Octet};
+
+    /// Pages concernées (bit k : page k).
+    pub const PAGES: Octet = Octet::a5(0x48e);
+    /// Pas restants (nul : le fondu est fini).
+    pub const PAS: Octet = Octet::a5(0x48f);
+    /// Délai entre deux pas (images).
+    pub const DELAI: Mot = Mot::a5(0x490);
+
+    /// Tâches : montée et descente complètes, descente et montée du nombre de pas de l'état, fondu vers le blanc,
+    /// fondu par composante depuis le blanc vers les palettes.
+    pub const MONTEE: u32 = 0x14ba;
+    pub const DESCENTE: u32 = 0x14d0;
+    pub const DESCENTE_PAS: u32 = 0x14de;
+    pub const MONTEE_PAS: u32 = 0x14c8;
+    pub const VERS_LE_BLANC: u32 = 0x1ccf8;
+    pub const DEPUIS_LE_BLANC: u32 = 0x1ced4;
+
+    /// Crée la tâche de fondu `entree` dans l'emplacement 0x10 (`jsr 0x9b6`).
+    pub fn lancer(b: &mut cps2::Cps2Bus, entree: u32) {
+        crate::kernel::creer_tache(b, 0x10, entree);
+    }
 }
+
 
 /// Contexte d'une séquence de scène : la machine, et des accès nommés à la RAM de travail.
 pub struct Ctx<'a> {
@@ -210,17 +227,17 @@ impl<'a> Ctx<'a> {
 
     /// Écran noir puis fondu d'ouverture : délai 2, toutes les pages, tâche de fondu.
     pub fn fade_in(&mut self) {
-        self.set_v16(var::FADE_DELAY, 2);
-        self.set_v8(var::FADE_PAGES, 15);
+        fondu::DELAI.set(self.b, 2);
+        fondu::PAGES.set(self.b, 15);
         crate::palette::no_brightness(self.b);
-        self.start_fade_task(sub::FADE_TASK);
+        self.start_fade_task(crate::scene::fondu::MONTEE);
     }
     /// Variante : fondu à un niveau par pas (`A5+0x48f` = 1), sans passer par le noir.
     pub fn fade_in_stepped(&mut self) {
-        self.set_v16(var::FADE_DELAY, 2);
-        self.set_v8(var::FADE_PAGES, 15);
-        self.set_v8(var::FADE_STEPS, 1);
-        self.start_fade_task(sub::FADE_STEP_TASK);
+        fondu::DELAI.set(self.b, 2);
+        fondu::PAGES.set(self.b, 15);
+        fondu::PAS.set(self.b, 1);
+        self.start_fade_task(crate::scene::fondu::DEPUIS_LE_BLANC);
     }
     fn start_fade_task(&mut self, entry: u32) {
         crate::kernel::creer_tache(self.b, 0x10, entry);

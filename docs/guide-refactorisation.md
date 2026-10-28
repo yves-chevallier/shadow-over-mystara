@@ -214,6 +214,34 @@ sites empoisonnés avant l'image de l'écart se réduit à quelques candidats qu
 `DDSOM_POISON` change l'empreinte des résultats de `tools/validate_all.sh` (variables `DDSOM_*`) : pas de mélange avec
 les résultats ordinaires.
 
+### Sondes des appels, des cessions et des retours (sortie du `Cpu`)
+
+Pour un appel par adresse, une étape de tâche ou un rendu, il n'y a pas d'adaptateur où poser `registres_morts` :
+des sondes génériques (`diag.rs`) inversent les registres au bon endroit.
+
+| Étiquette | Où | Registres inversés | Site (motif) |
+|---|---|---|---|
+| `appel_<adresse>` | retour de `crate::call` | ceux que l'appelé a changés | `fichier:ligne:colonne` de l'appel |
+| `cession` | `kernel::ceder` (contexte rangé) | D0-D7, A0-A4, A6, drapeaux | nom de l'étape de reprise : `Ending(S04Timer)` |
+| `retour` | `taches::executer`, pas qui rend `Flow::Done` | D0-D7, A0-A4, A6, drapeaux | nom de l'étape : `Exit(Both)` |
+| `rendu` | `dispatch::Class::update_sans_suite`, mises à jour du monde des écrans | D0-D7, A0-A4, A6, drapeaux | appelant (`#[track_caller]`) |
+
+VALIDE avec `cession@Ending(,retour@Ending(` : aucune étape du générique ne relit, après une cession ou au retour d'un
+sous-programme, un registre d'avant ; avec `rendu@modes/` : les gestionnaires d'objets ne relisent rien de l'écran
+qui les fait tourner. Les drapeaux sont inversés en deux parts (`nzvc` et `x`) pour savoir lequel est relu.
+
+**Registres épargnés.** Une entrée `étiquette@motif#a1+nzvc` empoisonne le site sauf A1 et N/Z/V/C (une lecture
+connue, écrite en clair, comme l'objet rendu par un créateur) ; précédée de `=`, elle épargne ces registres sans
+empoisonner le site (à ajouter à une liste large : `tout@modes/,=appel_ddeaa@modes/#a1+nzvc`).
+
+**Bissection.** `tools/bissecte_poison.py <validate> <scénario> <images> <liste>` relance le scénario avec la trace
+(`DDSOM_POISON_TRACE`), cherche par dichotomie l'entrée responsable parmi les sites empoisonnés avant l'écart, puis le
+ou les registres relus, l'épargne et recommence jusqu'à VALIDE ; il imprime les lecteurs trouvés et la ligne
+`GARDES` à ajouter. Méthode du lot « écrans » : une validation complète du code d'origine (avant conversion) avec
+`tout@<fichiers du lot>` et les sondes de cession et de retour des tâches du lot, puis une bissection par scénario
+qui échoue, jusqu'à ce que tout échec restant soit une lecture connue (épargnée) ; enfin la même validation sur le code
+converti avec `rendu` en plus.
+
 ## Exemple : l'allocation d'objets (pilote)
 
 Avant (une variante parmi une vingtaine, chaque fichier avait sa constante et souvent son `alloc`) :

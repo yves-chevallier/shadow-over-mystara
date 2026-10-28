@@ -17,6 +17,7 @@
 //! `+4` ligne suivante, `+0x80` colonne suivante. Les tables de tuiles sont lues dans la ROM (données).
 
 use crate::aides::divide;
+use crate::scene::fondu;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::scene::Ctx;
@@ -51,7 +52,6 @@ mod var {
     pub const CAMERA_Y: u32 = 0x50a;
     pub const CAMERA_2_X: u32 = 0x556;
     pub const CAMERA_2_Y: u32 = 0x55a;
-    pub const FADE_PAGES: u32 = 0x48e;
 }
 
 crate::etapes! {
@@ -290,7 +290,7 @@ fn decor(x: &mut Ctx) -> Flow {
         wr8(x.b, o + 0x2f, 1);
     }
     for (pages, niveau) in [(0xc, 0xa000), (3, 0xf000)] {
-        x.set_v8(var::FADE_PAGES, pages);
+        fondu::PAGES.set(x.b, pages);
         crate::palette::or_brightness(x.b, niveau);
     }
     Flow::Done
