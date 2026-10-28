@@ -189,9 +189,13 @@ fn remove(g: &mut Ctx, p: Player) {
     clear_overlays_of(g, k);
 }
 
+/// 0x35292 : mise à jour des joueurs.
+pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
+    update_all(&mut Ctx::new(c, b));
+}
+
 fn update_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut g = Ctx::new(c, b);
-    update_all(&mut g);
+    mettre_a_jour(c, b);
     rts(c, b);
 }
 

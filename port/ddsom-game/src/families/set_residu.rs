@@ -64,8 +64,19 @@ pub fn attach_life_bar(b: &mut Cps2Bus, boss: crate::objects::Obj) -> Option<u32
     Some(clear_columns(b))
 }
 
-/// 0xce668 : charge deux grilles de blocs (0x26d4, destination 0x917000) dont les numéros sont lus, par
-/// paire de mots, dans la table 0xce686 à l'indice D0 (numéro de personnage).
+/// 0xce668 : charge deux grilles de blocs (0x26d4, destination 0x917000, la seconde à la suite) dont les numéros sont
+/// lus, par paire de mots, dans la table 0xce686 à l'indice `personnage`.
+pub fn deux_grilles(b: &mut Cps2Bus, personnage: u16) {
+    const GRIDS: u32 = 0xce686;
+    let table = GRIDS.wrapping_add(personnage.wrapping_mul(4) as u32);
+    let mut destination = 0x91_7000;
+    for k in 0..2 {
+        let n = rd16(b, table + 2 * k); // lecture par (A4)+ : espace données
+        destination = crate::video::charger_grille(b, crate::video::Grille::Couche2, n, destination).destination;
+    }
+}
+
+/// `deux_grilles` (personnage D0) avec les registres de l'original.
 fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
     const GRIDS: u32 = 0xce686;
     const LOAD_BLOCKS: u32 = 0x26d4;

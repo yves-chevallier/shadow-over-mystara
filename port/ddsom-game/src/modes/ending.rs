@@ -9,7 +9,12 @@
 //! (mot), `+8` octet de signal lu et écrit par les objets (par le pointeur `+0x4c` de leur enregistrement).
 //! Chaque état revient en `0xfb2a4` (la native de reprise rétablit A0).
 
-use super::{Block, Flow, Sequence};
+use super::{Flow, Sequence};
+use crate::effects_aids::decor_6;
+use crate::families::creators::set_15_pur;
+use crate::families::effects_creators::ecran_de_fin;
+use crate::palette::{charger_ensemble, charger_page};
+use crate::video::{charger_grille, effacer_couche, Couche, Grille};
 use crate::mem::{rd16, rd32, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
@@ -47,42 +52,14 @@ mod var {
 }
 
 mod ext {
-    pub const POOLS: u32 = 0x2062;
-    pub const SOUND_C0C: u32 = 0xc0c;
-    pub const RESET_PLAYERS: u32 = 0x1f184;
-    pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const SPRITES: u32 = 0x1de96;
-    pub const CLEAR_SPRITES: u32 = 0xc58;
-    pub const CLEAR_SCROLL_1: u32 = 0xca8;
-    pub const CLEAR_SCROLL_2: u32 = 0xcc8;
-    pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    pub const PALETTE_PAGE_B: u32 = 0x1a608;
-    pub const PALETTE_PAGE_C: u32 = 0x1a3d4;
-    pub const PALETTE_SET: u32 = 0x1a67e;
-    pub const PALETTE_FADE: u32 = 0x1a8b2;
-    pub const TILE_BLOCK: u32 = 0x26d4;
-    pub const TILE_BLOCK_2: u32 = 0x2766;
-    pub const SOBJ_VARIANT: u32 = 0xddeaa;
-    pub const SET_VARIANT: u32 = 0xce00a;
-    pub const MESSAGE: u32 = 0xc8312;
-    pub const SCORE_OBJECT: u32 = 0xb1a7a;
     pub const FADE_TASK_IN: u32 = 0x14ba;
     pub const FADE_TASK_OUT: u32 = 0x14d0;
     pub const FADE_TASK_C: u32 = 0x14de;
     pub const FADE_TASK_D: u32 = 0x14c8;
     pub const FADE_TASK_STEP: u32 = 0x1ced4;
     pub const FADE_TASK_E: u32 = 0x1ccf8;
-    pub const SET: u32 = 0x39e86;
-    pub const EFFCT: u32 = 0x39cba;
-    pub const SOBJ: u32 = 0x39f82;
-    pub const CAMERAS: u32 = 0x33e20;
     pub const SOUND_E1528: u32 = 0xe1528;
     pub const SOUND_E16F0: u32 = 0xe16f0;
-    pub const PLAYER_PREPARE: u32 = 0x3525c;
-    pub const PLAYERS_UPDATE: u32 = 0x35292;
-    pub const CAMERA_INIT: u32 = 0x2a52;
-    pub const PALETTE_360: u32 = 0x1a360;
-    pub const REWARD: u32 = 0xce668;
 }
 
 mod at {
@@ -137,16 +114,15 @@ crate::etapes! {
             x.wait(4, Etape::S00Palette)
         },
         S00Palette = S00_PALETTE => |x| {
-            x.call(ext::PALETTE_PAGE_B);
-            x.call_d0(ext::PALETTE_SET, 89);
-            x.call_d0(ext::PALETTE_FADE, 86);
+            crate::palette::charger_page_de_la_scene(x.b, 1);
+            charger_page(x.b, 2, 89);
+            charger_page(x.b, 3, 86);
             wr8(x.b, var::FADE_PAGES, 12);
             crate::palette::full_brightness(x.b);
             s02_clear(x)
         },
         S02Cleared = S02_CLEARED => |x| {
-            x.call(ext::CLEAR_SCROLL_2);
-            x.call(ext::CLEAR_SCROLL_3);
+            clear_layers(x, &[Couche::Deux, Couche::Trois]);
             Flow::Done
         },
         S04Fade = S04_FADE => |x| {
@@ -170,14 +146,10 @@ crate::etapes! {
             x.wait(4, Etape::S08Picture)
         },
         S08Picture = S08_PICTURE => |x| {
-            x.call_d0(ext::PALETTE_FADE, 87);
-            x.call_d0(ext::PALETTE_PAGE_C, 6);
-            tile_blocks(x, 0x91b800, 350, 351, ext::TILE_BLOCK_2);
-            set_low_word(&mut x.c.d[0], 548);
-            x.c.a[1] = 0x917000;
-            x.call(ext::TILE_BLOCK);
-            set_low_word(&mut x.c.d[0], 549);
-            x.call(ext::TILE_BLOCK);
+            charger_page(x.b, 3, 87);
+            charger_ensemble(x.b, 6);
+            tile_blocks(x, 0x91b800, 350, 351, Grille::Couche3);
+            tile_blocks(x, 0x917000, 548, 549, Grille::Couche2);
             wr8(x.b, BLOCK + f::SIGNAL, 0);
             s08_object(x)
         },
@@ -195,12 +167,13 @@ crate::etapes! {
         },
         S0eObjects = S0E_OBJECTS => |x| {
             wr8(x.b, var::SCREEN_ID, 1);
-            x.call_d0(ext::SOBJ_VARIANT, 11);
-            x.call_d0(ext::SOBJ_VARIANT, 12);
-            wr8(x.b, x.c.a[1] + 0x2f, 0);
-            x.call_d0(ext::SOBJ_VARIANT, 12);
-            wr8(x.b, x.c.a[1] + 0x2f, 1);
-            x.call_d0(ext::SET_VARIANT, 14);
+            // Glitch d'origine : la retenue n'est pas testée ; un échec écrit dans l'A1 laissé par l'allocation
+            let _ = decor_6(x.b, 11);
+            let o = decor_6(x.b, 12).unwrap_or_else(|a1| a1);
+            wr8(x.b, o.0 + 0x2f, 0);
+            let o = decor_6(x.b, 12).unwrap_or_else(|a1| a1);
+            wr8(x.b, o.0 + 0x2f, 1);
+            let _ = set_15_pur(x.b, 14);
             wr8(x.b, BLOCK + f::SIGNAL, 0xff);
             render(x);
             wr8(x.b, BLOCK + f::SIGNAL, 1);
@@ -231,7 +204,7 @@ crate::etapes! {
             x.wait(4, Etape::S1cPalette)
         },
         S1cPalette = S1C_PALETTE => |x| {
-            x.call(ext::PALETTE_360);
+            crate::palette::charger_palettes_de_la_scene(x.b);
             // sauvegarde les 1024 octets de palette en 0x910000, puis les remplit de blanc
             for i in 0..256u32 {
                 let v = rd32(x.b, 0x91c000 + 4 * i);
@@ -288,12 +261,10 @@ crate::etapes! {
             wr16(x.b, BLOCK + f::TIMER, 60);
             wr8(x.b, BLOCK + f::SIGNAL, 0);
             render_scroll(x);
-            x.call_d0(ext::SET_VARIANT, 20);
-            if !x.ok() {
+            let Ok(set) = set_15_pur(x.b, 20) else {
                 return Flow::Done;
-            }
-            let link = x.c.a[1] as u16;
-            wr16(x.b, BLOCK + f::LINK, link);
+            };
+            wr16(x.b, BLOCK + f::LINK, set.0 as u16);
             let n = rd8(x.b, var::COUNTER).wrapping_add(1);
             wr8(x.b, var::COUNTER, n);
             Flow::Done
@@ -313,8 +284,7 @@ crate::etapes! {
             x.wait(1, Etape::S2aScrolls)
         },
         S2aScrolls = S2A_SCROLLS => |x| {
-            x.call(ext::CLEAR_SCROLL_2);
-            x.call(ext::CLEAR_SCROLL_3);
+            clear_layers(x, &[Couche::Deux, Couche::Trois]);
             wr8(x.b, var::CAMERA_MODE, 4);
             x.c.d[0] = 0;
             for v in [var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
@@ -322,8 +292,8 @@ crate::etapes! {
             }
             next_step(x);
             wr16(x.b, BLOCK + f::TIMER, 4);
-            x.call_d0(ext::PALETTE_FADE, 87);
-            x.call_d0(ext::PALETTE_PAGE_C, 6);
+            charger_page(x.b, 3, 87);
+            charger_ensemble(x.b, 6);
             s2a_wait(x)
         },
         S2aWait = S2A_WAIT => |x| {
@@ -331,7 +301,7 @@ crate::etapes! {
                 return s2a_wait(x);
             }
             wr16(x.b, BLOCK + f::TIMER, 600);
-            tile_blocks(x, 0x91b800, 354, 355, ext::TILE_BLOCK_2);
+            tile_blocks(x, 0x91b800, 354, 355, Grille::Couche3);
             wr8(x.b, BLOCK + f::SIGNAL, 0);
             s2a_object(x)
         },
@@ -349,11 +319,10 @@ crate::etapes! {
                 return s2c_loop(x);
             }
             wr8(x.b, BLOCK + f::SIGNAL, 0xff);
-            x.call(ext::RESET_PLAYERS);
-            x.call(ext::SPRITES_RESET);
+            unlink_and_clear_lists(x);
             crate::objects::pools::EFFCT.reset(x.b);
             crate::objects::pools::SOBJ.reset(x.b);
-            x.call(ext::CLEAR_SPRITES);
+            crate::video::vider_objets(x.b);
             x.wait(1, Etape::S2cPlanes)
         },
         S2cPlanes = S2C_PLANES => |x| {
@@ -362,8 +331,7 @@ crate::etapes! {
             x.wait(1, Etape::S2cCleared)
         },
         S2cCleared = S2C_CLEARED => |x| {
-            x.call(ext::CLEAR_SCROLL_3);
-            x.call(ext::CLEAR_SCROLL_1);
+            clear_layers(x, &[Couche::Trois, Couche::Un]);
             wr16(x.b, BLOCK + f::TIMER, 4);
             let o = link(x);
             wr32(x.b, o + 4, 0x0600_0000);
@@ -382,8 +350,8 @@ crate::etapes! {
             if !timer_tick(x) {
                 return s2c_wait_timer(x);
             }
-            x.call_d0(ext::PALETTE_SET, 84);
-            x.call_d0(ext::PALETTE_FADE, 84);
+            charger_page(x.b, 2, 84);
+            charger_page(x.b, 3, 84);
             wr8(x.b, var::FADE_PAGES, 12);
             crate::palette::no_brightness(x.b);
             crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
@@ -402,10 +370,8 @@ crate::etapes! {
                 fp += 0x200;
             }
             if ready != 0 || present.wrapping_sub(2) == rd8(x.b, A5 + 0x20) {
-                x.call_d0(ext::SET_VARIANT, 22);
-                if x.ok() {
-                    let link = x.c.a[1] as u16;
-                    wr16(x.b, BLOCK + f::LINK, link);
+                if let Ok(set) = set_15_pur(x.b, 22) {
+                    wr16(x.b, BLOCK + f::LINK, set.0 as u16);
                     return render_flow(x);
                 }
             }
@@ -429,22 +395,19 @@ crate::etapes! {
                 return Flow::Done;
             }
             next_step(x);
-            x.c.d[0] = 0;
-            x.c.d[4] = 13;
+            let mut d4 = 13u8;
             for counter in (0..3u32).rev() {
-                x.c.d[1] = counter;
                 wr8(x.b, BLOCK + f::SIGNAL, 0);
-                x.call(ext::SOBJ_VARIANT);
-                let o = x.c.a[1];
+                // Glitch d'origine : la retenue n'est pas testée ; un échec écrit dans l'A1 laissé par l'allocation
+                let Obj(o) = decor_6(x.b, 0).unwrap_or_else(|a1| a1);
                 wr32(x.b, o + 0x4c, BLOCK);
                 let v = rd16(x.b, var::CAMERA);
                 wr16(x.b, o + 8, v);
                 let v = rd16(x.b, var::CAMERA_Y);
                 wr16(x.b, o + 0xc, v);
                 wr32(x.b, o + 0x10, 0);
-                let d4 = x.c.d[4] as u8;
                 wr8(x.b, o + 0x2f, d4);
-                x.c.d[4] = (x.c.d[4] & !0xff) | d4.wrapping_add(1) as u32;
+                d4 = d4.wrapping_add(1);
                 let idx = counter * 4;
                 let dx = x.prog16(0xfc3e4 + idx);
                 let dy = x.prog16(0xfc3e6 + idx);
@@ -462,15 +425,13 @@ crate::etapes! {
             crate::taches::creer_puis_revenir(x)
         },
         S32Faded = S32_FADED => |x| {
-            for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::POOLS, ext::CLEAR_SPRITES] {
-                x.call(f);
-            }
+            unlink_and_clear_lists(x);
+            reset_pools(x);
+            crate::video::vider_objets(x.b);
             x.wait(1, Etape::S32Cleared)
         },
         S32Cleared = S32_CLEARED => |x| {
-            for f in [ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-                x.call(f);
-            }
+            clear_layers(x, &[Couche::Un, Couche::Deux, Couche::Trois]);
             // le score (long BCD à +0x110) reçoit la récompense (+0x114, sans son quartet faible), plafonné à 9 999 999
             for k in 0..4u32 {
                 let p = var::PLAYERS + 0x200 * k;
@@ -483,7 +444,7 @@ crate::etapes! {
                 let score = bcd_add(rd32(x.b, p + 0x110), reward);
                 wr32(x.b, p + 0x110, if score as i32 > 0x0999_9999 { 0x0999_9999 } else { score });
             }
-            x.call(ext::PLAYERS_UPDATE);
+            crate::player::update::mettre_a_jour(x.c, x.b);
             wr8(x.b, var::PHASE, 20);
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             // `jmp 0x133f6` : le démarrage noté fait, puis le retour à l'appelant
@@ -535,20 +496,43 @@ fn next_step(x: &mut Ctx) {
 /// `0xfc4ea` : décor (SET, SOBJ) et sprites ; A0 est conservé.
 fn render(x: &mut Ctx) {
     let a0 = x.c.a[0];
-    for f in [ext::SET, ext::SOBJ, ext::SPRITES] {
-        x.call(f);
-    }
+    crate::dispatch::SET.update_sans_suite(x.c, x.b);
+    crate::dispatch::SOBJ.update_sans_suite(x.c, x.b);
+    crate::sprites::construire_68k(x.c, x.b);
     x.c.a[0] = a0;
 }
 
-/// `0xfc506` : comme `render`, avec les effets et les caméras.
+/// `0xfc506` : comme `render`, avec les effets et les caméras (dont le D4 est relu par des gestionnaires : voir
+/// `scroll::update_cameras_68k`).
 fn render_scroll(x: &mut Ctx) -> Flow {
     let a0 = x.c.a[0];
-    for f in [ext::SET, ext::EFFCT, ext::CAMERAS, ext::SOBJ, ext::SPRITES] {
-        x.call(f);
-    }
+    crate::dispatch::SET.update_sans_suite(x.c, x.b);
+    crate::dispatch::EFFCT.update_sans_suite(x.c, x.b);
+    crate::scroll::update_cameras_68k(x.c, x.b);
+    crate::dispatch::SOBJ.update_sans_suite(x.c, x.b);
+    crate::sprites::construire_68k(x.c, x.b);
     x.c.a[0] = a0;
     Flow::Done
+}
+
+/// Couches effacées (0xca8, 0xcc8, 0xce8).
+fn clear_layers(x: &mut Ctx, couches: &[Couche]) {
+    for &couche in couches {
+        effacer_couche(x.b, couche);
+    }
+}
+
+/// Listes triées défaites (0x1f184) et listes de sprites vidées (0x1de7c).
+fn unlink_and_clear_lists(x: &mut Ctx) {
+    crate::objects::lists::unlink_all(x.b);
+    crate::sprites::vider_listes(x.b);
+}
+
+/// Les dix pools remis à zéro (0x2062).
+fn reset_pools(x: &mut Ctx) {
+    for pool in pools::POOLS {
+        pool.reset(x.b);
+    }
 }
 
 fn timer_tick(x: &mut Ctx) -> bool {
@@ -581,12 +565,10 @@ fn task_clobber_a0(x: &mut Ctx, entry: u32) {
     crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
-fn tile_blocks(x: &mut Ctx, a1: u32, first: u16, second: u16, which: u32) {
-    x.c.a[1] = a1;
-    set_low_word(&mut x.c.d[0], first);
-    x.call(which);
-    set_low_word(&mut x.c.d[0], second);
-    x.call(which);
+/// Deux blocs de tuiles de la grille `grille` à la suite l'un de l'autre à partir de `destination`.
+fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grille: Grille) {
+    let fin = charger_grille(x.b, grille, first, destination);
+    charger_grille(x.b, grille, second, fin.destination);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -597,9 +579,10 @@ fn s00_reset(x: &mut Ctx) -> Flow {
     next_step(x);
     set_low_word(&mut x.c.d[0], 0x30);
     crate::kernel::tuer_tache(x.b, 0x30);
-    for f in [ext::POOLS, ext::SOUND_C0C, ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::CLEAR_SPRITES] {
-        x.call(f);
-    }
+    reset_pools(x);
+    crate::video::ecran_noir(x.b);
+    unlink_and_clear_lists(x);
+    crate::video::vider_objets(x.b);
     for k in 0..4u32 {
         let p = var::PLAYERS + 0x200 * k;
         if rd8(x.b, p) != 0
@@ -641,7 +624,7 @@ const S02_CLEARED: u32 = 0xfb78c;
 /// État 4 : image de fond, fondu d'ouverture.
 fn s04_picture(x: &mut Ctx) -> Flow {
     next_step(x);
-    tile_blocks(x, 0x917000, 0x222, 0x223, ext::TILE_BLOCK);
+    tile_blocks(x, 0x917000, 0x222, 0x223, Grille::Couche2);
     wr16(x.b, var::VIDEO, 0x12ce);
     x.wait(1, Etape::S04Fade)
 }
@@ -681,11 +664,10 @@ const S08_FADE: u32 = 0xfb916;
 const S08_FADED: u32 = 0xfb92c;
 const S08_PICTURE: u32 = 0xfb93a;
 fn s08_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SOBJ_VARIANT, 10);
-    if !x.ok() {
+    let Ok(Obj(o)) = decor_6(x.b, 10) else {
         return x.wait(1, Etape::S08Retry);
-    }
-    wr32(x.b, x.c.a[1] + 0x4c, BLOCK);
+    };
+    wr32(x.b, o + 0x4c, BLOCK);
     render(x);
     let v = rd16(x.b, var::VIDEO) | 0xe;
     wr16(x.b, var::VIDEO, v);
@@ -704,14 +686,12 @@ fn s0a_wait_signal(x: &mut Ctx) -> Flow {
     next_step(x);
     open_message(x, 89, Etape::S0aRetry)
 }
-/// Message `n` : A1 est l'objet de dialogue, rangé dans le bloc ; `retry` : cession en cas d'échec.
-fn open_message(x: &mut Ctx, n: u32, retry: Etape) -> Flow {
-    x.call_d0(ext::MESSAGE, n);
-    if !x.ok() {
+/// Message `n` (0xc8312) : l'objet de dialogue est rangé dans le bloc ; `retry` : cession en cas d'échec.
+fn open_message(x: &mut Ctx, n: u8, retry: Etape) -> Flow {
+    let Some(message) = crate::families::creators::scene_set(x.b, n) else {
         return x.wait(1, retry);
-    }
-    let link = x.c.a[1] as u16;
-    wr16(x.b, BLOCK + f::LINK, link);
+    };
+    wr16(x.b, BLOCK + f::LINK, message.0 as u16);
     Flow::Done
 }
 const S0A_RETRY: u32 = 0xfb9dc;
@@ -728,11 +708,10 @@ fn s0c_wait_dialogue(x: &mut Ctx) -> Flow {
 }
 const S0C_OBJECT: u32 = 0xfb9fa;
 fn s0c_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SET_VARIANT, 13);
-    if !x.ok() {
+    let Ok(Obj(set)) = set_15_pur(x.b, 13) else {
         return x.wait(1, Etape::S0cRetry);
-    }
-    wr32(x.b, x.c.a[1] + 0x4c, BLOCK);
+    };
+    wr32(x.b, set + 0x4c, BLOCK);
     wr16(x.b, BLOCK + f::TIMER, 180);
     Flow::Done
 }
@@ -754,12 +733,8 @@ fn s0e_wait_fade(x: &mut Ctx) -> Flow {
     if rd8(x.b, var::FADE_STEPS) != 0 {
         return x.wait(1, Etape::S0eLoop);
     }
-    tile_blocks(x, 0x91b000, 352, 353, ext::TILE_BLOCK_2);
-    set_low_word(&mut x.c.d[0], 543);
-    x.c.a[1] = 0x916000;
-    x.call(ext::TILE_BLOCK);
-    set_low_word(&mut x.c.d[0], 0);
-    x.call(ext::TILE_BLOCK);
+    tile_blocks(x, 0x91b000, 352, 353, Grille::Couche3);
+    tile_blocks(x, 0x916000, 543, 0, Grille::Couche2);
     wr16(x.b, var::CAMERA_2_Y, 256);
     wr16(x.b, var::CAMERA_2, 0);
     wr16(x.b, var::CAMERA_Y, 256);
@@ -821,11 +796,10 @@ const S14_RETRY: u32 = 0xfbbf6;
 
 /// État 24 : objet SET 13, caméras remises à zéro.
 fn s18_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SET_VARIANT, 13);
-    if !x.ok() {
+    let Ok(Obj(set)) = set_15_pur(x.b, 13) else {
         return x.wait(1, Etape::S18Retry);
-    }
-    wr32(x.b, x.c.a[1] + 0x4c, BLOCK);
+    };
+    wr32(x.b, set + 0x4c, BLOCK);
     for v in [var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
         wr16(x.b, v, 0);
     }
@@ -857,11 +831,13 @@ fn s1a_wait_fade(x: &mut Ctx) -> Flow {
     wr16(x.b, BLOCK + f::TIMER, 120);
     wr8(x.b, BLOCK + f::SIGNAL, 0xff);
     render(x);
-    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET, ext::POOLS, ext::PLAYER_PREPARE] {
-        x.call(f);
-    }
+    unlink_and_clear_lists(x);
+    reset_pools(x);
+    crate::video::effacer_debut_couche1_68k(x.c, x.b);
     wr16(x.b, var::SCROLL_2, 256);
-    x.sauter(&crate::video::CLEAR_OBJECTS)
+    // `jmp 0xc58`
+    crate::video::vider_objets(x.b);
+    Flow::Done
 }
 const S1A_LOOP: u32 = 0xfbc92;
 
@@ -872,9 +848,7 @@ fn s1c_wait(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     wr16(x.b, var::VIDEO, 0x138e);
-    x.c.a[1] = 0x91b900;
-    x.call_d0(ext::TILE_BLOCK_2, 115);
-    x.call_d0(ext::TILE_BLOCK_2, 116);
+    tile_blocks(x, 0x91b900, 115, 116, Grille::Couche3);
     wr8(x.b, var::SCREEN_ID, 1);
     wr16(x.b, var::CAMERA_2, 384);
     wr16(x.b, var::CAMERA_2_Y, 0);
@@ -883,7 +857,7 @@ fn s1c_wait(x: &mut Ctx) -> Flow {
     let v = rd16(x.b, var::CAMERA_2_Y);
     wr16(x.b, var::CAMERA_2_COPY_Y, v);
     wr16(x.b, var::CAMERA_2_MODE, 4);
-    x.call(ext::CAMERA_INIT);
+    crate::families::petites::fond_2_allume(x.b);
     credits_objects_a(x);
     credits_objects_b(x);
     credits_objects_c(x);
@@ -916,11 +890,7 @@ fn credits_objects_b(x: &mut Ctx) {
     let mut a2 = 0xfbebc;
     for (counter, d3) in (0..4u32).rev().zip(0u8..) {
         if rd8(x.b, fp) != 0 && (rd8(x.b, fp + 4) as i8) < 4 {
-            x.c.d[0] = 2;
-            x.c.d[1] = counter;
-            x.call(ext::SCORE_OBJECT);
-            if x.ok() {
-                let o = x.c.a[1];
+            if let Some(Obj(o)) = ecran_de_fin(x.b, 2, counter as u8) {
                 let variant = rd8(x.b, fp + 3);
                 wr8(x.b, o + 0x2f, variant);
                 let (px, py) = (rd16(x.b, a2), rd16(x.b, a2 + 2));
@@ -939,16 +909,10 @@ fn credits_objects_b(x: &mut Ctx) {
 }
 /// `0xfbe6e` : deux objets (variante 18).
 fn credits_objects_c(x: &mut Ctx) {
-    x.call_d0(ext::SOBJ_VARIANT, 18);
-    if !x.ok() {
-        return;
+    for k in 0..2 {
+        let Ok(Obj(o)) = decor_6(x.b, 18) else { return };
+        wr8(x.b, o + 0x2f, k);
     }
-    wr8(x.b, x.c.a[1] + 0x2f, 0);
-    x.call_d0(ext::SOBJ_VARIANT, 18);
-    if !x.ok() {
-        return;
-    }
-    wr8(x.b, x.c.a[1] + 0x2f, 1);
 }
 /// `0xfbd38` : rendu avec défilement pendant trois images.
 fn s1c_scroll(x: &mut Ctx) -> Flow {
@@ -981,8 +945,7 @@ fn s1e_loop(x: &mut Ctx) -> Flow {
 }
 const S1E_LOOP: u32 = 0xfbf00;
 fn s1e_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SET_VARIANT, 18);
-    if x.ok() {
+    if set_15_pur(x.b, 18).is_ok() {
         return Flow::Done;
     }
     // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40` : la cession dure D0 images, tel que le rendu le laisse
@@ -994,8 +957,7 @@ const S1E_RETRY: u32 = 0xfbf26;
 
 /// État 34 : objet SET 16, fondu (tâche), puis objet SET 20.
 fn s22_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SET_VARIANT, 16);
-    if !x.ok() {
+    if set_15_pur(x.b, 16).is_err() {
         return Flow::Done;
     }
     wr8(x.b, var::FADE_STEPS, 8);
@@ -1043,11 +1005,10 @@ const S28_LOOP: u32 = 0xfbfe8;
 /// État 42 : vide tout, retire les plans, nouvelle image, objet SOBJ 0.
 fn s2a_clear(x: &mut Ctx) -> Flow {
     render_scroll(x);
-    x.call(ext::RESET_PLAYERS);
-    x.call(ext::SPRITES_RESET);
+    unlink_and_clear_lists(x);
     crate::objects::pools::EFFCT.reset(x.b);
     crate::objects::pools::SOBJ.reset(x.b);
-    x.call(ext::CLEAR_SPRITES);
+    crate::video::vider_objets(x.b);
     x.wait(1, Etape::S2aPlanes)
 }
 const S2A_PLANES: u32 = 0xfc022;
@@ -1059,13 +1020,10 @@ fn s2a_wait(x: &mut Ctx) -> Flow {
 }
 const S2A_WAIT: u32 = 0xfc07e;
 fn s2a_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SOBJ_VARIANT, 0);
-    if !x.ok() {
+    let Ok(Obj(o)) = decor_6(x.b, 0) else {
         render(x);
-        x.c.d[0] = 1;
         return x.wait(1, Etape::S2aRetry);
-    }
-    let o = x.c.a[1];
+    };
     wr32(x.b, o + 0x4c, BLOCK);
     wr8(x.b, o + 0x2f, 12);
     wr16(x.b, o + 8, 32);
@@ -1139,10 +1097,8 @@ fn s30_rewards(x: &mut Ctx) -> Flow {
     let mut fp = var::PLAYERS;
     for _ in 0..4 {
         if rd8(x.b, fp) != 0 && (rd8(x.b, fp + 4) as i8) < 4 && rd8(x.b, fp + 0x18a) != 0 {
-            let character = rd8(x.b, fp + 3) as u32;
-            x.c.d[0] = character;
-            x.c.a[6] = fp;
-            x.call(ext::REWARD);
+            let character = rd8(x.b, fp + 3);
+            crate::families::set_residu::deux_grilles(x.b, character as u16);
             break;
         }
         fp += 0x200;
