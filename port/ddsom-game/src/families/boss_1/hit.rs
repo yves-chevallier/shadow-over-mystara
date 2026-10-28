@@ -201,7 +201,7 @@ fn down(x: &mut Cx) {
 
 /// 0x7bece : retour au combat (aussi appelé par les réactions communes, table 0x3e000) : franchit le palier de
 /// PV suivant (0x105b6), puis bond si hors de l'écran, bond en ciseaux, saisie ou attente.
-pub(super) fn get_up(x: &mut Cx) {
+pub(crate) fn get_up(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {

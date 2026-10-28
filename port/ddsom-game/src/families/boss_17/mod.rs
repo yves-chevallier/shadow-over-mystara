@@ -24,7 +24,7 @@ use crate::objects::Obj;
 mod attacks;
 mod decide;
 mod fight;
-mod hit;
+pub(crate) mod hit;
 mod intro;
 
 /// Champs propres à ce type.

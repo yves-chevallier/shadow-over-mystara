@@ -22,7 +22,7 @@ use crate::objects::Obj;
 
 mod arrival;
 mod attacks;
-mod hit;
+pub(crate) mod hit;
 mod stance;
 
 pub(self) mod g {

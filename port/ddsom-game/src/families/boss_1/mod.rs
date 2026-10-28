@@ -23,7 +23,7 @@ use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
 
-mod hit;
+pub(crate) mod hit;
 mod moves;
 
 /// Champs propres à ce type.

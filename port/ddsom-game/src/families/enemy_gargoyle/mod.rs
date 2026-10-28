@@ -22,7 +22,7 @@ use super::enemy_lib as lib;
 use crate::objects::Obj;
 
 mod arrival;
-mod attacks;
+pub(crate) mod attacks;
 mod hit;
 mod stance;
 

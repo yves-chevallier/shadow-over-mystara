@@ -563,7 +563,7 @@ pub(super) fn done(x: &mut Cx) {
 }
 
 /// 0x653b2 : le combat reprend : cible choisie, palier de PV franchi, nouveau geste.
-pub(super) fn regroup(x: &mut Cx) {
+pub(crate) fn regroup(x: &mut Cx) {
     x.set8(HIT_FLAGS, 0);
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);

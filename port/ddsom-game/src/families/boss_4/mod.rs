@@ -26,7 +26,7 @@ use crate::objects::Obj;
 mod attacks;
 mod decide;
 mod fight;
-mod hit;
+pub(crate) mod hit;
 
 /// Champs propres à ce type.
 pub(self) mod g {

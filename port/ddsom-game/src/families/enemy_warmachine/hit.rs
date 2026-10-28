@@ -129,7 +129,7 @@ fn get_up(x: &mut Cx) {
 }
 
 /// 0x78c3c : relevé : choisit une cible, franchit un palier de PV, puis tir ou bond d'attaque.
-pub(super) fn recover(x: &mut Cx) {
+pub(crate) fn recover(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);
     if !pick_target(x) {

@@ -393,13 +393,11 @@ pub fn flash_and_shake<R: Banc>(x: &mut Cx<'_, R>) {
     ai_aids::flash_and_shake(x.b, x.o, vx, ax);
 }
 
-/// 0x3e480 : routine d'atterrissage propre au type de l'objet (table de la ROM, appelée par son adresse).
-pub fn landing_by_kind(x: &mut Cx) {
-    if let Some((routine, index)) = ai_aids::landing_routine(x.b, x.o) {
-        // `jmp (A1)` : la routine trouve D0 = l'index et A1 = elle-même
-        x.c.d[0] = index as u32;
-        x.c.a[1] = routine;
-        x.call(routine);
+/// 0x3e480 : son d'atterrissage propre au type de l'objet (table par type de la ROM : chaque entrée est un son, ou
+/// un `rts`).
+pub fn landing_by_kind<R: Banc>(x: &mut Cx<'_, R>) {
+    if let Some((son, _)) = ai_aids::landing_routine(x.b, x.o) {
+        sound(x, son);
     }
 }
 
@@ -489,14 +487,37 @@ pub fn clear_all_popups<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0xb10c8 : effet de choc à la position de l'objet : variante, réglage (`+0x2d`, `+0x2f`), vitesses `+0x14`, `+0x1c`.
 #[track_caller]
-pub fn shock(x: &mut Cx, variant: u32, setting: u16, vx: u16, vy: u16) {
+pub fn shock_68k(x: &mut Cx, variant: u32, setting: u16, vx: u16, vy: u16) {
     // A1, D1 et la retenue de l'original restent : un gestionnaire suivant les relit (boss15_scene46, mash_c5)
     crate::effects_aids::shock_68k(x.c, x.b, x.o, variant as u8, setting, vx, vy);
 }
 
-/// 0xabec8 : effet d'attaque (EFFCT 11) lié par `+0x5c`, de variante et réglage donnés.
-pub fn attack_effect<R: Banc>(x: &mut Cx<'_, R>, variant: u32, setting: u32) {
-    super::effects_creators::attack(x.b, x.o, variant as u8, setting as u8);
+/// Ce que rend le choc 0xb10c8 : l'effet créé, ou ce que l'original laisse dans A1 et la retenue.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Choc {
+    Cree(Obj),
+    /// Pool plein (retenue levée) : A1 = l'emplacement que laisse l'allocation (`Pool::alloc_or_leftover`).
+    Refuse(Obj),
+    /// Scène 41 : aucun effet, ni A1 ni retenue (le `cmp.b` final laisse la retenue à zéro).
+    Aucun,
+}
+
+/// 0xb10c8 : effet de choc à la position de l'objet : variante, réglage (`+0x2d`, `+0x2f`), vitesses `+0x14`, `+0x1c`.
+pub fn shock<R: Banc>(x: &mut Cx<'_, R>, variant: u32, setting: u16, vx: u16, vy: u16) -> Choc {
+    if let Some(o) = crate::effects_aids::shock(x.b, x.o, variant as u8, setting, vx, vy) {
+        return Choc::Cree(o);
+    }
+    if crate::ram::SCENE.get(x.b) == 41 {
+        return Choc::Aucun;
+    }
+    // l'allocation a échoué : la refaire ne change rien, et rend l'A1 laissé
+    Choc::Refuse(crate::objects::pools::EFFCT.alloc_or_leftover(x.b).unwrap_err())
+}
+
+/// 0xabec8 : effet d'attaque (EFFCT 11) lié par `+0x5c`, de variante et réglage donnés ; faux si le pool l'a refusé
+/// (la retenue de l'original).
+pub fn attack_effect<R: Banc>(x: &mut Cx<'_, R>, variant: u32, setting: u32) -> bool {
+    super::effects_creators::attack(x.b, x.o, variant as u8, setting as u8).is_some()
 }
 
 /// Série d'effets d'attaque (0xabec8) de variante `variant`, réglages `first` à 0 (`dbf D1`). Faux si le pool a

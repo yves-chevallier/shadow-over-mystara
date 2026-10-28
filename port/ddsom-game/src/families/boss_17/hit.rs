@@ -70,7 +70,10 @@ fn reaction(x: &mut Cx) {
             return down(x);
         }
     }
-    react_with(x, REACTIONS, STUN_REACTION, stun);
+    if reaction_routine(x, REACTIONS) == STUN_REACTION {
+        return stun(x);
+    }
+    react(x, REACTIONS);
 }
 
 /// 0x96ab8 : étourdissement : le boss tremble sur place puis repart.
@@ -232,7 +235,7 @@ fn back_on_feet(x: &mut Cx) {
 }
 
 /// 0x96ce0 : le boss est debout ; choisit sa suite d'après sa phase.
-pub(super) fn recovered_tail(x: &mut Cx) {
+pub(crate) fn recovered_tail(x: &mut Cx) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {

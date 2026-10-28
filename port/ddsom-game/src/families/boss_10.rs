@@ -588,7 +588,10 @@ fn reaction(x: &mut Cx) {
             return down(x);
         }
     }
-    react_with(x, REACTIONS, STUN_REACTION, stun);
+    if reaction_routine(x, REACTIONS) == STUN_REACTION {
+        return stun(x);
+    }
+    react(x, REACTIONS);
 }
 
 /// 0x8d294 : étourdissement.

@@ -276,26 +276,21 @@ pub fn rom32<R: Banc>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
     (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
 }
 
-/// Réaction à un coup : la routine commune, choisie dans `table` (longs, indexés par le code de
-/// réaction `+0x49`) par la collision, joue l'animation de recul, de chute ou de mort.
-pub fn react(x: &mut Cx, table: u32) {
+/// La routine de réaction que désigne le code de coup `+0x49` dans `table` (longs, indexés par le code).
+pub fn reaction_routine<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     let code = x.u8(0x49) as u32;
-    x.c.d[0] = code;
-    let routine = rom32(x, table + code);
-    x.c.a[1] = routine;
-    if !super::reactions::run_common(x, routine) {
-        // routine propre au type (native de sa famille)
-        x.call(routine);
-    }
+    rom32(x, table + code)
 }
 
-/// `react`, sauf la routine `own` de la table, propre au type, exécutée par `own_reaction`.
-pub fn react_with(x: &mut Cx, table: u32, own: u32, own_reaction: fn(&mut Cx)) {
-    let code = x.u8(0x49) as u32;
-    if rom32(x, table + code) == own {
-        return own_reaction(x);
+/// Réaction à un coup : la routine commune, choisie dans `table` (longs, indexés par le code de
+/// réaction `+0x49`) par la collision, joue l'animation de recul, de chute ou de mort. Les routines sont appelées par
+/// `jsr (A1)` avec D0 = le code : la routine lue reste l'index des tables Rust (`reactions`, `petites::own_reaction`).
+pub fn react(x: &mut Cx, table: u32) {
+    let routine = reaction_routine(x, table);
+    if !super::reactions::run_common(x, routine) {
+        super::petites::own_reaction(x, routine)
+            .unwrap_or_else(|| unreachable!("réaction {routine:#x} de la table {table:#x} : ni commune ni propre au type"));
     }
-    react(x, table);
 }
 
 /// `move.w #v,Dn` : ne change que le mot de poids faible du registre.

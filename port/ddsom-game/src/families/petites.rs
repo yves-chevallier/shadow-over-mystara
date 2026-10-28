@@ -10,7 +10,8 @@ use m68k::Cpu;
 
 use crate::mem::{prog16, prog8, rd16, rd32, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use super::cx::{handler, Cx};
+use super::cx::{handler_sans, Banc, Cx};
+use crate::objects::Courant;
 use crate::{call, regs, Native};
 use crate::objects::pools;
 use super::effects_creators::restes::{Pur, Registres};
@@ -538,15 +539,12 @@ fn fixed_screen_reset(c: &mut Cpu, b: &mut Cps2Bus) {
 // ---------------------------------------------------------------------------------------------
 
 
-/// 0x78ad2 et 0x71680 : l'ennemi touché tremble sur place. Pas 0 : mémorise X (`+0xa`), lance l'animation 8
-/// du jeu `anim` et pose le compteur (`+0x90` = 16). Pas 2 : décale X de ±2 selon la parité du compteur et
-/// l'orientation, puis, le compteur épuisé, revient à X d'origine et à l'état 0x04040200.
-/// `table` : table de sauts d'origine, dont le mot lu reste dans D1.
-fn shake(x: &mut Cx, table: u32, anim: u32) {
+/// 0x78ad2, 0x71680 et 0x65236 : l'ennemi touché tremble sur place. Pas 0 : mémorise X (`+0xa`), lance
+/// l'animation 8 du jeu `anim` (avec le type de coup, 0x103d6, si `strike_kind`) et pose le compteur (`+0x90` = 16).
+/// Pas 2 : décale X de ±2 selon la parité du compteur et l'orientation, puis, le compteur épuisé, revient à X
+/// d'origine et à l'état 0x04040200. `_table` : table de sauts d'origine sur `+6`.
+fn shake<R: Banc>(x: &mut Cx<'_, R>, _table: u32, anim: u32, strike_kind: bool) {
     let step = x.u8(0x6);
-    x.c.d[0] = step as u32;
-    let word = x.rom16(table + step as u32);
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | word as u32;
     match step {
         0 => {
             x.add8(0x6, 2);
@@ -557,7 +555,11 @@ fn shake(x: &mut Cx, table: u32, anim: u32) {
             let v = x.u8(0x56);
             x.set8(0x53, v);
             x.set8(0x90, 0x10);
-            crate::families::enemy_lib::start(x, anim, 8);
+            if strike_kind {
+                crate::families::enemy_lib::start(x, anim, 8);
+            } else {
+                x.anim_start(anim, 8);
+            }
         }
         2 => {
             let timer = x.u8(0x90);
@@ -578,17 +580,24 @@ fn shake(x: &mut Cx, table: u32, anim: u32) {
             if x.u8(0x2c) != 0 {
                 d = -d;
             }
-            x.c.d[0] = d as u16 as u32;
             x.add16(0x8, d as u16);
         }
         _ => {}
     }
 }
-fn shake_a(x: &mut Cx) {
-    shake(x, 0x78ae0, 0x171a94);
-}
-fn shake_b(x: &mut Cx) {
-    shake(x, 0x7168e, 0x1778a4);
+/// Réaction propre à un type, de la table des réactions de l'ennemi (code 0x4c : tremblement), désignée par son
+/// adresse d'origine ; `None` si l'adresse n'en est pas une.
+pub(crate) fn own_reaction<R: Banc>(x: &mut Cx<'_, R>, routine: u32) -> Option<()> {
+    match routine {
+        // engin de guerre (type 27)
+        0x78ad2 => shake(x, 0x78ae0, 0x171a94, true),
+        // ogre (type 18)
+        0x71680 => shake(x, 0x7168e, 0x1778a4, true),
+        // gargouille (type 8) ; jamais atteinte par les scénarios (voir docs/code-mort.md)
+        0x65236 => shake(x, 0x65244, 0x162f12, false),
+        _ => return None,
+    }
+    Some(())
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
@@ -635,14 +644,14 @@ pub const NATIVES: &[Native] = &[
     native(0x180ac, "ecran_fixe_remise", fixed_screen_reset, regs::CCR),
 ];
 
-/// Réactions d'ennemis : mêmes registres que `handler` (A0, D7) et ceux qu'elles modifient.
+/// Réactions d'ennemis propres à un type (`own_reaction`), à leur adresse d'origine (le jeu les appelle directement
+/// depuis `enemy_common::react`).
 pub const SHAKES: &[Native] = &[
-    Native { outputs: regs::a(0) | regs::d(7) | regs::d(0) | regs::d(1) | regs::a(4), ..handler(0x78ad2, "ennemi_tremble_a", |c, b| run_shake(c, b, shake_a)) },
-    Native { outputs: regs::a(0) | regs::d(7) | regs::d(0) | regs::d(1) | regs::a(4), ..handler(0x71680, "ennemi_tremble_b", |c, b| run_shake(c, b, shake_b)) },
+    handler_sans(0x78ad2, "ennemi_tremble_a", |b, a| run_shake(b, a, 0x78ad2)),
+    handler_sans(0x71680, "ennemi_tremble_b", |b, a| run_shake(b, a, 0x71680)),
+    handler_sans(0x65236, "ennemi_tremble_c", |b, a| run_shake(b, a, 0x65236)),
 ];
 
-fn run_shake(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cx)) {
-    let mut x = Cx::new(c, b);
-    f(&mut x);
-    x.ret();
+fn run_shake(b: &mut Cps2Bus, a: &mut crate::dispatch::Aiguillage, routine: u32) {
+    own_reaction(&mut crate::families::cx::Gx::aiguille(b, a), routine);
 }

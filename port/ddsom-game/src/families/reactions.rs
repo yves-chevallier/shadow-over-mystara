@@ -135,7 +135,7 @@ fn speeds<R: Banc>(x: &mut Cx<'_, R>, vx: u16, vy: u16, vz: u16, gravity: u16) {
     x.set16(f::VZ, vz);
     x.set16(f::GRAVITY, gravity);
 }
-fn anim_step(x: &mut Cx) {
+fn anim_step<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 fn move_x<R: Banc>(x: &mut Cx<'_, R>) {
@@ -147,16 +147,15 @@ fn move_xz<R: Banc>(x: &mut Cx<'_, R>) {
 fn move_xyz<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xyz();
 }
-fn landed(x: &mut Cx) {
+fn landed<R: Banc>(x: &mut Cx<'_, R>) {
     lib::landing_by_kind(x);
 }
-fn random(x: &mut Cx) -> u32 {
-    let alea = x.random();
-    x.c.d[0] & 0xffff_0000 | alea as u32
+fn random<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+    x.random() as u32
 }
-/// Effet `0xabec8` (D0 = variante, D1 = paramètre).
-fn effect<R: Banc>(x: &mut Cx<'_, R>, d0: u32, d1: u32) {
-    lib::attack_effect(x, d0, d1);
+/// Effet `0xabec8` de variante et réglage donnés ; faux si le pool l'a refusé.
+fn effect<R: Banc>(x: &mut Cx<'_, R>, variant: u32, setting: u32) -> bool {
+    lib::attack_effect(x, variant, setting)
 }
 /// Indice des tables par type : type, plus 32 hors de la classe ENEMY.
 fn type_index<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
@@ -171,45 +170,60 @@ fn stun<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x3de2e : animation `n` du jeu du type (les types 13, 19, 34 et 54 ajoutent une variante `+0xbf`).
-fn anim(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
+fn anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     let i = 4 * type_index(x);
     let entry = rd32(x.b, rom::ANIM_SETS + i);
-    if entry >> 16 != 0 {
-        x.c.a[4] = entry;
+    let (set, n) = if entry >> 16 != 0 {
+        (entry, n as u16)
     } else {
-        // routine propre : `bsr 0x3e27e ; movea.l #jeu,A4 ; jmp 0x1a32`
+        // routine propre : `bsr 0x3e27e ; movea.l #jeu,A4 ; jmp 0x1a32` (0x3e27e ajoute la variante à l'octet bas)
         let routine = rom::ANIM_SETS + (entry & 0xffff);
         let v = x.u8(0xbf) as u32;
         let add = x.rom8(rom::ANIM_VARIANTS + v);
-        x.c.d[0] = x.c.d[0] & !0xff | (x.c.d[0] as u8).wrapping_add(add) as u32;
-        x.c.a[4] = (x.rom16(routine + 6) as u32) << 16 | x.rom16(routine + 8) as u32;
-    }
-    let (set, n) = (x.c.a[4], x.c.d[0] as u16);
+        let n = n as u16 & !0xff | (n as u8).wrapping_add(add) as u16;
+        ((x.rom16(routine + 6) as u32) << 16 | x.rom16(routine + 8) as u32, n)
+    };
     x.anim_start(set, n);
 }
 
-/// Routine d'une table par type (longs relatifs au PC) ; les entrées vides (`rts`) ne font rien.
-fn per_type(x: &mut Cx, table: u32, index: u32) {
+/// Routine d'une table par type (longs relatifs au PC, `jsr (A1)` avec D0 = l'index) ; `None` pour les entrées vides
+/// (`rts`).
+fn per_type<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> Option<u32> {
     let i = 4 * index;
-    x.c.d[0] = i;
     let routine = (x.rom16(table + i) as u32) << 16 | x.rom16(table + i + 2) as u32;
-    x.c.a[1] = routine;
-    if !rom::NOTHING.contains(&routine) {
-        x.call(routine);
+    (!rom::NOTHING.contains(&routine)).then_some(routine)
+}
+/// 0x3e28e et 0x3e388 : son du coup, son de la mort (tables par type de sons : la routine lue est le son).
+fn hit_sound<R: Banc>(x: &mut Cx<'_, R>) {
+    let i = type_index(x);
+    if let Some(son) = per_type(x, rom::HIT_SOUNDS, i) {
+        lib::sound(x, son);
     }
 }
-/// 0x3e28e et 0x3e388 : son du coup, son de la mort.
-fn hit_sound(x: &mut Cx) {
+fn death_sound<R: Banc>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
-    per_type(x, rom::HIT_SOUNDS, i);
+    if let Some(son) = per_type(x, rom::DEATH_SOUNDS, i) {
+        lib::sound(x, son);
+    }
 }
-fn death_sound(x: &mut Cx) {
-    let i = type_index(x);
-    per_type(x, rom::DEATH_SOUNDS, i);
+/// 0x3e000 : relevé propre au type (table par type ; l'adresse lue désigne le gestionnaire de sa famille).
+fn get_up_by_kind(x: &mut Cx, index: u32) {
+    let Some(routine) = per_type(x, rom::GET_UP, index) else { return };
+    match routine {
+        0x653b2 => super::enemy_gargoyle::attacks::regroup(x),
+        0x717ea => super::enemy_ogre::hit::regroup(x),
+        0x78c3c => super::enemy_warmachine::hit::recover(x),
+        0x7a5ac => super::boss_0::hit::get_up(x),
+        0x7bece => super::boss_1::hit::get_up(x),
+        0x82ea0 => super::boss_4::hit::resume(x),
+        0x85490 => super::boss_6::hit::recovered_tail(x),
+        0x96ce0 => super::boss_17::hit::recovered_tail(x),
+        0x9a6d4 => super::boss_21::hit::recovered(x),
+        _ => unreachable!("relevé du type {index} : routine {routine:#x} hors de la table 0x3e000"),
+    }
 }
 /// 0x3e180 : son du coup, ou mort (sous-état 6) et son de la mort.
-fn hurt(x: &mut Cx) {
+fn hurt<R: Banc>(x: &mut Cx<'_, R>) {
     if dead(x) {
         mark_dead(x);
         death_sound(x);
@@ -219,9 +233,11 @@ fn hurt(x: &mut Cx) {
 }
 
 /// 0x3e130 : l'objet se tourne vers l'agresseur ; les vitesses X et profondeur suivent l'orientation.
-fn face_attacker(x: &mut Cx) {
+fn face_attacker<R: Banc>(x: &mut Cx<'_, R>) {
     let flip = x.u8(f::ATTACKER_FLIP) ^ 0x20;
-    x.c.d[2] = x.c.d[2] & !0xff | flip as u32;
+    // reste : l'orientation dans l'octet bas de D2 (`dispatch::Restes::d2`, vitesse de l'étincelle de
+    // `flash_and_shake`)
+    *x.c.d2() = *x.c.d2() & !0xff | flip as u32;
     x.set8(f::FLIP, flip);
     if flip != 0 {
         neg16(x, f::VX);
@@ -279,7 +295,7 @@ fn launch<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Tremblement sur place : X oscille de ±2 selon la parité du compteur et l'orientation.
-fn shake(x: &mut Cx, amount: u16) {
+fn shake<R: Banc>(x: &mut Cx<'_, R>, amount: u16) {
     let mut d = amount;
     if x.u8(f::COUNTER) & 1 != 0 {
         d = d.wrapping_neg();
@@ -287,7 +303,6 @@ fn shake(x: &mut Cx, amount: u16) {
     if flipped(x) {
         d = d.wrapping_neg();
     }
-    x.c.d[0] = x.c.d[0] & !0xffff | d as u32;
     x.add16(f::X, d);
 }
 
@@ -371,7 +386,6 @@ fn bounce_2(x: &mut Cx) {
 /// 0x3bea8 : le rebond, quatre sous-pas (`+7`).
 fn bounce(x: &mut Cx) {
     let s = x.u8(f::SUB_STEP);
-    x.c.d[0] = x.c.d[0] & !0xff | s as u32;
     match s {
         0 => {
             anim_step(x);
@@ -423,7 +437,9 @@ fn get_up(x: &mut Cx) {
         return next_clear(x);
     }
     x.set8(f::DOWNED, 1);
-    grab_check(x, get_up_done);
+    if !kept_down(x) {
+        get_up_done(x);
+    }
 }
 /// 0x3df7c : fin de la glissade : l'objet se relève.
 fn slide_end(x: &mut Cx) {
@@ -433,12 +449,14 @@ fn slide_end(x: &mut Cx) {
     }
     x.set8(f::ACTIVE, 1);
     x.set8(f::REACTION, 0);
-    grab_check(x, resume_after_slide);
+    if !kept_down(x) {
+        resume_after_slide(x);
+    }
 }
 
 /// 0x3e19a : un objet saisi (`+0x87`) au sol peut rester à terre (code de réaction 104, ou 108 s'il était à
-/// terre) ; sinon la suite `then` (A6 la désigne dans l'original : `jmp (A6)`).
-fn grab_check(x: &mut Cx, then: fn(&mut Cx)) {
+/// terre) : vrai dans ce cas ; sinon l'appelant continue (A6 désigne sa suite dans l'original : `jmp (A6)`).
+fn kept_down<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::GRABBED) != 0 {
         // `bhi` sur la dernière comparaison de 0x1e92 (marge nulle) : un objet pile sur le bord en largeur compte comme
         // dedans
@@ -450,12 +468,12 @@ fn grab_check(x: &mut Cx, then: fn(&mut Cx)) {
                 let code = if x.u8(f::DOWNED) != 0 { 108 } else { 104 };
                 x.set8(f::REACTION, code);
                 x.set16(f::STEP, 0);
-                return;
+                return true;
             }
         }
     }
     x.set8(f::GRABBED, 0);
-    then(x);
+    false
 }
 
 /// 0x3e0fc : debout, l'état principal reprend (0x04040000) ; le relevé du boss (0xf118) sauf code 108.
@@ -491,7 +509,7 @@ fn resume_after_slide(x: &mut Cx) {
     x.set8(0x78, 0xff);
     let base = if x.u8(f::CLASS) == BOSS { 32 } else { 0 };
     let i = (base + x.u8(f::KIND) as u32) & 0xff;
-    per_type(x, rom::GET_UP, i);
+    get_up_by_kind(x, i);
 }
 
 /// 0x3dd9c : mort ; 40 images de clignotement, puis l'objet disparaît (0x19ad6).
@@ -513,7 +531,6 @@ fn death(x: &mut Cx) {
 /// Clignotement : bit 1 de `+1` (caché) une image sur quatre... selon les deux bits bas du compteur.
 fn blink(x: &mut Cx, c: u8) {
     x.set_bit(f::DISPLAY, 1, false);
-    x.c.d[0] = x.c.d[0] & !0xff | (c & 3) as u32;
     if c & 3 != 0 {
         x.set_bit(f::DISPLAY, 1, true);
     }
@@ -785,7 +802,6 @@ fn skim(x: &mut Cx) {
 /// 0x3c3ce : vol rasant (`+7`) : 0 plané, 4 chute, 2 chute qui repart en arrière.
 fn skim_flight(x: &mut Cx) {
     let s = x.u8(f::SUB_STEP);
-    x.c.d[0] = x.c.d[0] & !0xff | s as u32;
     match s {
         0 => {
             move_xz(x);
@@ -806,12 +822,10 @@ fn skim_flight(x: &mut Cx) {
             }
             let camera = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
             let dx = x.u16(f::X).wrapping_sub(camera);
-            x.c.d[0] = x.c.d[0] & !0xffff | dx as u32;
             if dx <= 0x180 && x.u8(f::BLOCKED) == 0 {
                 return;
             }
             next_sub(x);
-            x.c.d[0] = 0;
             x.set8(f::COUNTER, 0);
             x.set32(f::VX, 0);
             x.set16(f::VZ, 0);
@@ -971,8 +985,8 @@ fn disintegrate(x: &mut Cx) -> bool {
         x.set8(0x81, 0);
         x.set8(0x80, 0);
         anim(x, 12);
-        let r = if x.u8(f::KIND) == 1 { 0xeb448 } else { 0xe35a6 };
-        x.call(r);
+        let son = if x.u8(f::KIND) == 1 { 0xeb448 } else { 0xe35a6 };
+        lib::sound(x, son);
         return true;
     }
     if (x.u16(f::ANIM_END) as i16) >= 0 {
@@ -1003,9 +1017,8 @@ fn dazed(x: &mut Cx) {
     face_attacker(x);
     dazed_delay(x);
 }
-fn dazed_delay(x: &mut Cx) {
+fn dazed_delay<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 3;
-    x.c.d[0] = x.c.d[0] & !0xffff | r;
     let d = x.rom8(0x3c904 + r);
     x.set8(f::COUNTER, d);
     hurt(x);
@@ -1019,8 +1032,7 @@ fn dazed_wait(x: &mut Cx) {
     if c != 0 {
         return;
     }
-    effect(x, 0, 0);
-    if x.c.sr & m68k::SR_C == 0 {
+    if effect(x, 0, 0) {
         return dazed_delay(x);
     }
     x.set8(f::COUNTER, 1);
@@ -1098,7 +1110,6 @@ fn hop(x: &mut Cx) {
     if dead(x) {
         mark_dead(x);
     }
-    x.c.d[0] = 0;
     x.set16(f::VZ, 0x400);
     x.set16(f::GRAVITY, 64);
     x.set32(f::VX, 0);
@@ -1108,10 +1119,8 @@ fn hop(x: &mut Cx) {
 fn hop_rise(x: &mut Cx) {
     move_xz(x);
     let camera = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) };
-    x.c.d[0] = x.c.d[0] & !0xffff | camera as u32;
-    let d1 = x.u16(f::HEIGHT).wrapping_add(x.u16(f::Y)).wrapping_sub(camera);
-    x.c.d[1] = x.c.d[1] & !0xffff | d1 as u32;
-    if d1 >= 0x110 {
+    let above = x.u16(f::HEIGHT).wrapping_add(x.u16(f::Y)).wrapping_sub(camera);
+    if above >= 0x110 {
         next(x);
     }
     hop_top(x);
@@ -1123,7 +1132,6 @@ fn hop_top(x: &mut Cx) {
         return;
     }
     let r = (random(x) & 7) << 4;
-    x.c.d[0] = x.c.d[0] & !0xffff | r;
     x.add16(f::HEIGHT, r as u16);
     x.set8(f::STEP, 6);
     x.set16(f::VZ, 0xfc00);
@@ -1256,7 +1264,6 @@ fn floored(x: &mut Cx, stars: bool) {
     if dead(x) {
         mark_dead(x);
     }
-    x.c.d[0] = 1;
     speeds(x, 0x200, 0, 0x400, -128i16 as u16);
     face_attacker(x);
     if !stars {
@@ -1322,7 +1329,6 @@ fn floored_9(x: &mut Cx) {
     if dead(x) {
         x.set8(f::SUB, 6);
     }
-    x.c.d[0] = 1;
     speeds(x, 0x200, 0, 0x400, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
@@ -1350,7 +1356,6 @@ fn seized_again(x: &mut Cx) {
 /// 0x3d036 : la saisie (`+7`) : se colle au joueur, puis subit ses coups.
 fn seized_by(x: &mut Cx) {
     let s = x.u8(f::SUB_STEP);
-    x.c.d[0] = x.c.d[0] & !0xff | s as u32;
     match s {
         0 => seized_stick(x),
         2 => seized_hits(x),
@@ -1385,7 +1390,6 @@ fn seized_stick<R: Banc>(x: &mut Cx<'_, R>) {
 /// table 0x3d0da), points (0x19dce), effet (0xb141a) ; sinon fin de la saisie.
 fn seized_hits(x: &mut Cx) {
     let p = x.u16(f::OWNER) as i16 as i32 as u32;
-    x.c.a[6] = p;
     let character = rd8(x.b, p + 3) >> 1;
     if character != 5 || rd32(x.b, p + 4) & 0xffff_ff00 != 0x0200_0c00 || rd8(x.b, p + 0x6a) != 26 {
         return next_clear(x);
@@ -1395,7 +1399,6 @@ fn seized_hits(x: &mut Cx) {
     }
     let hit = (rd8(x.b, p + 0x10c).wrapping_sub(11)) as u32;
     let damage = x.rom8(0x3d0da + hit) as u16;
-    x.c.d[0] = damage as u32;
     next_sub(x);
     crate::mem::wr8(x.b, p + 0x33, 0);
     let hp = x.u16(f::HP).wrapping_sub(damage);
@@ -1408,15 +1411,15 @@ fn seized_hits(x: &mut Cx) {
     let popup = crate::evenements::Popup { entete, max: x.u16(0x60), valeur: x.u16(f::HP), brut: x.u8(f::CLASS) == 2 };
     crate::evenements::creer_popup(x.b, popup);
     let i = 4 * x.u8(f::KIND) as u32;
-    x.c.d[0] = i;
-    let mut d2 = x.rom16(0x3d198 + i);
-    let d3 = x.rom16(0x3d19a + i);
+    let mut vx = x.rom16(0x3d198 + i);
+    let ax = x.rom16(0x3d19a + i);
     if flipped(x) {
-        d2 = d2.wrapping_neg();
+        vx = vx.wrapping_neg();
     }
-    x.c.d[2] = x.c.d[2] & !0xffff | d2 as u32;
-    x.c.d[3] = x.c.d[3] & !0xffff | d3 as u32;
-    crate::families::effects_creators::impact_spark(x.b, x.o, d2, d3);
+    // restes : les vitesses de l'étincelle dans D2.w et D3.w (`dispatch::Restes`)
+    *x.c.d2() = *x.c.d2() & !0xffff | vx as u32;
+    *x.c.d3() = *x.c.d3() & !0xffff | ax as u32;
+    crate::families::effects_creators::impact_spark(x.b, x.o, vx, ax);
 }
 /// 0x3d224 : lâché : projection prédéfinie 1, immunités du type (0xfe5a).
 fn released(x: &mut Cx) {
@@ -1464,7 +1467,8 @@ fn grab_hit(x: &mut Cx) {
         x.set32(f::HEIGHT, 0);
         x.set8(f::STEP, 10);
         anim(x, 15);
-        return effect(x, 3, 0);
+        effect(x, 3, 0);
+        return;
     }
     anim(x, 2);
     let flip = x.u8(f::FLIP) ^ 0x20;
@@ -1540,9 +1544,8 @@ fn quiver(x: &mut Cx) {
     stun(x);
     hurt(x);
 }
-fn quiver_delay(x: &mut Cx) {
+fn quiver_delay<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 3;
-    x.c.d[0] = x.c.d[0] & !0xffff | r;
     let d = x.rom8(0x3d42a + r);
     x.set8(f::COUNTER, d);
 }
@@ -1552,7 +1555,6 @@ fn quiver_shake(x: &mut Cx) {
     x.set8(f::COUNTER, c);
     if (c as i8) <= 0 {
         let r = random(x) & 3;
-        x.c.d[0] = x.c.d[0] & !0xffff | r;
         if r != 0 {
             effect(x, 1, 1);
         }
@@ -1574,7 +1576,6 @@ fn roll(x: &mut Cx, stars: bool) {
     }
     x.set8(f::FREEZE, 1);
     x.set8(f::COUNTER, 1);
-    x.c.d[0] = 0;
     speeds(x, 0x100, 0, 0x800, -64i16 as u16);
     x.set16(f::VY2, 0);
     x.set16(f::VX2, 64);
@@ -1623,11 +1624,9 @@ fn zapped_burn(x: &mut Cx) {
     if c & 7 != 0 {
         return;
     }
-    lib::shock(x, 7, 0x200, 0, 0xffff);
-    if x.c.sr & m68k::SR_C != 0 {
-        return;
-    }
-    let o = Obj(x.c.a[1]);
+    // Glitch d'origine : dans la scène 41, 0xb10c8 rend la main sans effet ni retenue, et la suite écrit dans l'A1
+    // laissé, la routine de réaction elle-même (ROM) : les écritures sont perdues.
+    let lib::Choc::Cree(o) = lib::shock(x, 7, 0x200, 0, 0xffff) else { return };
     o.set_u8(x.b, 0x43, 1);
     let h = o.u16(x.b, 0xc).wrapping_add(16);
     o.set_u16(x.b, 0xc, h);
@@ -1684,7 +1683,6 @@ fn stagger(x: &mut Cx) {
         return run_entry(x, 0x3dd72);
     }
     next(x);
-    x.c.d[0] = 5;
     x.set8(f::COUNTER, 60);
     stun(x);
     x.set16(f::VX, 0x180);
@@ -1738,8 +1736,8 @@ fn burnt(x: &mut Cx) {
     x.set8(f::DOWNED, 0);
     x.set8(f::GRABBED, 0);
     x.set8(f::COUNTER, 0xf0);
-    let n = x.c.d[0];
-    anim(x, n);
+    // Glitch d'origine : l'animation est le D0 laissé par l'aiguillage sur `+6`, le pas courant (0)
+    anim(x, 0);
     if !lib::attack_effects(x, 4, 5) {
         x.set8(f::STEP, 6);
     }
@@ -1773,7 +1771,6 @@ fn spin_angle(x: &mut Cx) {
     let d2 = if flipped(x) { 24 } else { 8 };
     let r = random(x);
     let a = (r as u16).wrapping_add(d2 as u16 & 15) & 31;
-    x.c.d[0] = x.c.d[0] & !0xffff | a as u32;
     x.set8(f::ANGLE, a as u8);
     anim(x, 3);
 }
@@ -1783,7 +1780,6 @@ fn whirl(x: &mut Cx) {
     x.set8(f::DOWNED, 0);
     apply_pending(x);
     next(x);
-    x.c.d[0] = 0;
     x.set32(f::VX, 0);
     x.set32(f::VZ, 0);
     x.set32(f::VX2, 0);
@@ -1799,7 +1795,6 @@ fn turn_angle(x: &mut Cx) {
     x.set8(f::ANGLE, a);
     x.set8(f::FLIP, 0);
     let d = a.wrapping_sub(8);
-    x.c.d[0] = x.c.d[0] & !0xff | d as u32;
     if d >= 16 {
         x.set8(f::FLIP, 32);
     }
@@ -1857,11 +1852,10 @@ fn spin(x: &mut Cx) {
     next(x);
     x.set8(f::COUNTER, 60);
     apply_pending(x);
-    x.c.d[0] = 0;
     x.set32(f::VX, 0);
     x.set32(f::VZ, 0);
     x.set32(f::VX2, 0);
-    let g = if x.c.d[7] & 1 != 0 { 1 } else { 2 };
+    let g = if x.compteur() & 1 != 0 { 1 } else { 2 };
     x.set8(f::GRABBED, g);
     spin_angle(x);
 }
@@ -2000,207 +1994,146 @@ fn death_throw_b(x: &mut Cx) {
 // ---------------------------------------------------------------------------------------------
 // Les routines de réaction (entrées des tables par type)
 
-type Step = fn(&mut Cx);
-
-/// Aiguillage d'origine sur `+6` (`moveq #0,D0 ; move.b 6(A0),D0 ; move.w table(PC,D0),D1 ; jmp`) ; faux pour
-/// un pas inconnu (le code d'origine s'en charge).
-fn dispatch(x: &mut Cx, table: u32, steps: &[Step]) -> bool {
-    let s = x.u8(f::STEP);
-    x.c.d[0] = s as u32; // relu : D0 relu par la suite (DDSOM_POISON : cov_tour2_c1...)
-    let off = x.rom16(table + s as u32);
-    x.c.d[1] = x.c.d[1] & !0xffff | off as u32;
-    match steps.get(s as usize / 2) {
-        Some(step) if s & 1 == 0 => {
-            step(x);
+/// Aiguillage d'origine sur `+6` (`moveq #0,D0 ; move.b 6(A0),D0 ; move.w table(PC,D0),D1 ; jmp`) : le pas
+/// `+6` = 2 × i exécute la i-ième fonction de la liste ; faux pour un pas hors de la table (ou impair).
+macro_rules! pas {
+    ($x:ident; $($f:path),+ $(,)?) => {{
+        let s = $x.u8(f::STEP);
+        s & 1 == 0 && pas!(@ $x, s, 0u8; $($f),+)
+    }};
+    (@ $x:ident, $s:ident, $i:expr; $f:path $(, $reste:path)*) => {
+        if $s == $i {
+            $f($x);
             true
+        } else {
+            pas!(@ $x, $s, $i + 2; $($reste),*)
         }
-        _ => false,
-    }
-}
-
-/// Une routine de réaction : sa table de sauts et ses pas.
-struct Reaction {
-    entry: u32,
-    table: u32,
-    steps: &'static [Step],
+    };
+    (@ $x:ident, $s:ident, $i:expr;) => {
+        false
+    };
 }
 
 /// Pas communs de fin : relevé, mort.
-const AIR: [Step; 6] = [wait_anim, fall, boss_3_hook, bounce_start, bounce, get_up];
-const fn standard(first: Step) -> [Step; 8] {
-    [first, AIR[0], AIR[1], AIR[2], AIR[3], AIR[4], AIR[5], death]
+macro_rules! standard {
+    ($x:ident, $first:path) => {
+        pas!($x; $first, wait_anim, fall, boss_3_hook, bounce_start, bounce, get_up, death)
+    };
 }
-const HIGH: [Step; 8] = [wait_anim, step_51c06, fall_38, skip, bounce_high, bounce, get_up, death];
-const fn high(first: Step) -> [Step; 9] {
-    [first, HIGH[0], HIGH[1], HIGH[2], HIGH[3], HIGH[4], HIGH[5], HIGH[6], HIGH[7]]
+macro_rules! high {
+    ($x:ident, $first:path) => {
+        pas!($x; $first, wait_anim, step_51c06, fall_38, skip, bounce_high, bounce, get_up, death)
+    };
 }
-const fn slides(first: Step) -> [Step; 9] {
-    [first, wait_anim, step_51c06, fall_38, skip, slide_start_fast, slide_fast, get_up, death]
+macro_rules! slides {
+    ($x:ident, $first:path) => {
+        pas!($x; $first, wait_anim, step_51c06, fall_38, skip, slide_start_fast, slide_fast, get_up, death)
+    };
 }
 
-const THROW_1: [Step; 8] = standard(throw_1);
-const THROW_2: [Step; 8] = standard(throw_2);
-const THROW_3: [Step; 8] = standard(throw_3);
-const THROW_4: [Step; 8] = standard(throw_4);
-const THROW_1B: [Step; 8] = standard(throw_1b);
-const THROW_2B: [Step; 8] = standard(throw_2b);
-const THROW_3B: [Step; 8] = standard(throw_3b);
-const THROW_4B: [Step; 8] = standard(throw_4b);
-const UPPERCUT_2: [Step; 9] = high(uppercut_2);
-const UPPERCUT_3: [Step; 9] = high(uppercut_3);
-const SLIDE_2: [Step; 9] = slides(uppercut_2);
-const SLIDE_3: [Step; 9] = slides(uppercut_3);
-
-static REACTIONS: &[Reaction] = &[
-    Reaction { entry: 0x3bc24, table: 0x3bc32, steps: &THROW_1 },
-    Reaction { entry: 0x3bc82, table: 0x3bc90, steps: &THROW_2 },
-    Reaction { entry: 0x3bce2, table: 0x3bcf0, steps: &THROW_3 },
-    Reaction { entry: 0x3bd42, table: 0x3bd50, steps: &THROW_4 },
-    Reaction { entry: 0x3bf56, table: 0x3bf64, steps: &UPPERCUT_2 },
-    Reaction { entry: 0x3bfc0, table: 0x3bfce, steps: &THROW_1B },
-    Reaction { entry: 0x3c01c, table: 0x3c02a, steps: &THROW_2B },
-    Reaction { entry: 0x3c07a, table: 0x3c088, steps: &THROW_3B },
-    Reaction { entry: 0x3c0d4, table: 0x3c0e2, steps: &THROW_4B },
-    Reaction { entry: 0x3c12e, table: 0x3c13c, steps: &UPPERCUT_3 },
-    Reaction { entry: 0x3c1c2, table: 0x3c1d0, steps: &SLIDE_2 },
-    Reaction { entry: 0x3c1e2, table: 0x3c1f0, steps: &SLIDE_3 },
-    Reaction {
-        entry: 0x3c2ee,
-        table: 0x3c2fc,
-        steps: &[low_hit, fall, boss_3_hook, bounce_start, bounce, get_up, death],
-    },
-    Reaction { entry: 0x3c35a, table: 0x3c368, steps: &[skim, skim_flight, bounce_start, bounce, get_up, death] },
-    Reaction {
-        entry: 0x3c4b4,
-        table: 0x3c4c2,
-        steps: &[throw_1, wait_anim, step_51c06, fall, slide_start_slow, slide_slow, get_up, death],
-    },
-    Reaction {
-        entry: 0x3c570,
-        table: 0x3c57e,
-        steps: &[pop_by_code, wait_anim, fall_animated, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3c70c,
-        table: 0x3c71a,
-        steps: &[pop_10, wait_anim, fall_animated, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3c784,
-        table: 0x3c792,
-        steps: &[pop_11, step_51c06, fall_38, sparks, skip, bounce_back, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3c8b8,
-        table: 0x3c8c6,
-        steps: &[dazed, dazed_wait, knock, wait_anim, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction { entry: 0x3c954, table: 0x3c962, steps: &[blast, idle, skim_flight, bounce_start, bounce, get_up, death] },
-    Reaction {
-        entry: 0x3c9cc,
-        table: 0x3c9da,
-        steps: &[wind_up, wind_up_wait, launch_3_kill, wait_anim, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3ca56,
-        table: 0x3ca64,
-        steps: &[wind_up, wind_up_wait, launch_3_hurt, wait_anim, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3ca76,
-        table: 0x3ca84,
-        steps: &[hop, hop_rise, hop_top, hop_land, sparks, bounce_back, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3cb4c,
-        table: 0x3cb5a,
-        steps: &[tumble, tumble_rise, tumble_fall, tumble_link, boss_3_hook, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3ccee,
-        table: 0x3ccfc,
-        steps: &[tumble_13_stars, tumble_rise, tumble_fall, boss_3_hook, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3cd70,
-        table: 0x3cd7e,
-        steps: &[floored_plain, fall, floored_wait_cry, bounce_linked, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3cd90,
-        table: 0x3cd9e,
-        steps: &[floored_stars, fall, floored_wait_quiet, bounce_2, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3cede,
-        table: 0x3ceec,
-        steps: &[floored_plain, fall, unpaused_cry, bounce_linked, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3cefe,
-        table: 0x3cf0c,
-        steps: &[floored_stars, fall, unpaused_next, bounce_2, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3cf8e,
-        table: 0x3cf9c,
-        steps: &[tumble_18, fall, tumble_link, bounce_start, bounce, get_up, death],
-    },
-    Reaction { entry: 0x3cfd0, table: 0x3cfde, steps: &[tumble_18_stars, fall, bounce_start, bounce, get_up, death] },
-    Reaction {
-        entry: 0x3cfea,
-        table: 0x3cff8,
-        steps: &[seized, seized_by, released, wait_anim, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction { entry: 0x3d250, table: 0x3d25e, steps: &[grab_hit, fall, bounce_start, bounce, get_up, grab_down] },
-    Reaction {
-        entry: 0x3d3a8,
-        table: 0x3d3b6,
-        steps: &[quiver, quiver_shake, knock, wait_anim, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3d488,
-        table: 0x3d496,
-        steps: &[roll_plain, tumble_rise, tumble_fall, tumble_link, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3d504,
-        table: 0x3d512,
-        steps: &[roll_stars, tumble_rise, tumble_fall, tumble_link, bounce_start, bounce, get_up, death],
-    },
-    Reaction { entry: 0x3d590, table: 0x3d59e, steps: &[zapped, zapped_burn] },
-    Reaction { entry: 0x3d618, table: 0x3d626, steps: &[petrified, petrified_fall, petrified_end] },
-    Reaction {
-        entry: 0x3d6d8,
-        table: 0x3d6e6,
-        steps: &[floored_9, fall, unpaused_next, bounce_2, fall, bounce_start, bounce, get_up, death],
-    },
-    Reaction { entry: 0x3d74e, table: 0x3d75c, steps: &[stagger, stagger_shake, slide] },
-    Reaction { entry: 0x3d80c, table: 0x3d81a, steps: &[hop_back, wait_anim, fall, bounce_start, bounce, get_up, death] },
-    Reaction {
-        entry: 0x3d932,
-        table: 0x3d940,
-        steps: &[whirl, whirl_rise, whirl_fall, sparks, bounce_start, bounce, get_up, death],
-    },
-    Reaction {
-        entry: 0x3da86,
-        table: 0x3da94,
-        steps: &[
-            spin, spin_rise, spin_drop, spin_fall, spin_bounce, spin_fall, spin_blast, idle, spin_death, skim_flight,
-            bounce_start, bounce, get_up, death,
-        ],
-    },
-    Reaction {
-        entry: 0x3dab0,
-        table: 0x3dabe,
-        steps: &[
-            spin, spin_rise, spin_drop_stars, spin_fall, spin_bounce_stars, spin_fall, spin_blast, idle, spin_death,
-            skim_flight, bounce_start, bounce, get_up, death,
-        ],
-    },
-    Reaction { entry: 0x3dd72, table: 0x3dd80, steps: &[death_throw, wait_anim, fall, bounce_start, bounce, death] },
-    Reaction { entry: 0x3ddf6, table: 0x3de04, steps: &[death_throw_b, wait_anim, fall, bounce_start, bounce, death] },
+/// Les routines de réaction à table de sauts en tête : (entrée, table sur `+6`).
+#[cfg(test)]
+const REACTIONS: &[(u32, u32)] = &[
+    (0x3bc24, 0x3bc32),
+    (0x3bc82, 0x3bc90),
+    (0x3bce2, 0x3bcf0),
+    (0x3bd42, 0x3bd50),
+    (0x3bf56, 0x3bf64),
+    (0x3bfc0, 0x3bfce),
+    (0x3c01c, 0x3c02a),
+    (0x3c07a, 0x3c088),
+    (0x3c0d4, 0x3c0e2),
+    (0x3c12e, 0x3c13c),
+    (0x3c1c2, 0x3c1d0),
+    (0x3c1e2, 0x3c1f0),
+    (0x3c2ee, 0x3c2fc),
+    (0x3c35a, 0x3c368),
+    (0x3c4b4, 0x3c4c2),
+    (0x3c570, 0x3c57e),
+    (0x3c70c, 0x3c71a),
+    (0x3c784, 0x3c792),
+    (0x3c8b8, 0x3c8c6),
+    (0x3c954, 0x3c962),
+    (0x3c9cc, 0x3c9da),
+    (0x3ca56, 0x3ca64),
+    (0x3ca76, 0x3ca84),
+    (0x3cb4c, 0x3cb5a),
+    (0x3ccee, 0x3ccfc),
+    (0x3cd70, 0x3cd7e),
+    (0x3cd90, 0x3cd9e),
+    (0x3cede, 0x3ceec),
+    (0x3cefe, 0x3cf0c),
+    (0x3cf8e, 0x3cf9c),
+    (0x3cfd0, 0x3cfde),
+    (0x3cfea, 0x3cff8),
+    (0x3d250, 0x3d25e),
+    (0x3d3a8, 0x3d3b6),
+    (0x3d488, 0x3d496),
+    (0x3d504, 0x3d512),
+    (0x3d590, 0x3d59e),
+    (0x3d618, 0x3d626),
+    (0x3d6d8, 0x3d6e6),
+    (0x3d74e, 0x3d75c),
+    (0x3d80c, 0x3d81a),
+    (0x3d932, 0x3d940),
+    (0x3da86, 0x3da94),
+    (0x3dab0, 0x3dabe),
+    (0x3dd72, 0x3dd80),
+    (0x3ddf6, 0x3de04),
 ];
+
+/// Les pas de la routine de réaction `entry` (une de `REACTIONS`), sur `+6` ; `None` si `entry` n'en est pas une.
+fn run_table(x: &mut Cx, entry: u32) -> Option<bool> {
+    Some(match entry {
+        0x3bc24 /* table 0x3bc32 */ => standard!(x, throw_1),
+        0x3bc82 /* table 0x3bc90 */ => standard!(x, throw_2),
+        0x3bce2 /* table 0x3bcf0 */ => standard!(x, throw_3),
+        0x3bd42 /* table 0x3bd50 */ => standard!(x, throw_4),
+        0x3bf56 /* table 0x3bf64 */ => high!(x, uppercut_2),
+        0x3bfc0 /* table 0x3bfce */ => standard!(x, throw_1b),
+        0x3c01c /* table 0x3c02a */ => standard!(x, throw_2b),
+        0x3c07a /* table 0x3c088 */ => standard!(x, throw_3b),
+        0x3c0d4 /* table 0x3c0e2 */ => standard!(x, throw_4b),
+        0x3c12e /* table 0x3c13c */ => high!(x, uppercut_3),
+        0x3c1c2 /* table 0x3c1d0 */ => slides!(x, uppercut_2),
+        0x3c1e2 /* table 0x3c1f0 */ => slides!(x, uppercut_3),
+        0x3c2ee /* table 0x3c2fc */ => pas!(x; low_hit, fall, boss_3_hook, bounce_start, bounce, get_up, death),
+        0x3c35a /* table 0x3c368 */ => pas!(x; skim, skim_flight, bounce_start, bounce, get_up, death),
+        0x3c4b4 /* table 0x3c4c2 */ => pas!(x; throw_1, wait_anim, step_51c06, fall, slide_start_slow, slide_slow, get_up, death),
+        0x3c570 /* table 0x3c57e */ => pas!(x; pop_by_code, wait_anim, fall_animated, bounce_start, bounce, get_up, death),
+        0x3c70c /* table 0x3c71a */ => pas!(x; pop_10, wait_anim, fall_animated, bounce_start, bounce, get_up, death),
+        0x3c784 /* table 0x3c792 */ => pas!(x; pop_11, step_51c06, fall_38, sparks, skip, bounce_back, bounce, get_up, death),
+        0x3c8b8 /* table 0x3c8c6 */ => pas!(x; dazed, dazed_wait, knock, wait_anim, fall, bounce_start, bounce, get_up, death),
+        0x3c954 /* table 0x3c962 */ => pas!(x; blast, idle, skim_flight, bounce_start, bounce, get_up, death),
+        0x3c9cc /* table 0x3c9da */ => pas!(x; wind_up, wind_up_wait, launch_3_kill, wait_anim, fall, bounce_start, bounce, get_up, death),
+        0x3ca56 /* table 0x3ca64 */ => pas!(x; wind_up, wind_up_wait, launch_3_hurt, wait_anim, fall, bounce_start, bounce, get_up, death),
+        0x3ca76 /* table 0x3ca84 */ => pas!(x; hop, hop_rise, hop_top, hop_land, sparks, bounce_back, bounce, get_up, death),
+        0x3cb4c /* table 0x3cb5a */ => pas!(x; tumble, tumble_rise, tumble_fall, tumble_link, boss_3_hook, bounce_start, bounce, get_up, death),
+        0x3ccee /* table 0x3ccfc */ => pas!(x; tumble_13_stars, tumble_rise, tumble_fall, boss_3_hook, bounce_start, bounce, get_up, death),
+        0x3cd70 /* table 0x3cd7e */ => pas!(x; floored_plain, fall, floored_wait_cry, bounce_linked, fall, bounce_start, bounce, get_up, death),
+        0x3cd90 /* table 0x3cd9e */ => pas!(x; floored_stars, fall, floored_wait_quiet, bounce_2, fall, bounce_start, bounce, get_up, death),
+        0x3cede /* table 0x3ceec */ => pas!(x; floored_plain, fall, unpaused_cry, bounce_linked, fall, bounce_start, bounce, get_up, death),
+        0x3cefe /* table 0x3cf0c */ => pas!(x; floored_stars, fall, unpaused_next, bounce_2, fall, bounce_start, bounce, get_up, death),
+        0x3cf8e /* table 0x3cf9c */ => pas!(x; tumble_18, fall, tumble_link, bounce_start, bounce, get_up, death),
+        0x3cfd0 /* table 0x3cfde */ => pas!(x; tumble_18_stars, fall, bounce_start, bounce, get_up, death),
+        0x3cfea /* table 0x3cff8 */ => pas!(x; seized, seized_by, released, wait_anim, fall, bounce_start, bounce, get_up, death),
+        0x3d250 /* table 0x3d25e */ => pas!(x; grab_hit, fall, bounce_start, bounce, get_up, grab_down),
+        0x3d3a8 /* table 0x3d3b6 */ => pas!(x; quiver, quiver_shake, knock, wait_anim, fall, bounce_start, bounce, get_up, death),
+        0x3d488 /* table 0x3d496 */ => pas!(x; roll_plain, tumble_rise, tumble_fall, tumble_link, bounce_start, bounce, get_up, death),
+        0x3d504 /* table 0x3d512 */ => pas!(x; roll_stars, tumble_rise, tumble_fall, tumble_link, bounce_start, bounce, get_up, death),
+        0x3d590 /* table 0x3d59e */ => pas!(x; zapped, zapped_burn),
+        0x3d618 /* table 0x3d626 */ => pas!(x; petrified, petrified_fall, petrified_end),
+        0x3d6d8 /* table 0x3d6e6 */ => pas!(x; floored_9, fall, unpaused_next, bounce_2, fall, bounce_start, bounce, get_up, death),
+        0x3d74e /* table 0x3d75c */ => pas!(x; stagger, stagger_shake, slide),
+        0x3d80c /* table 0x3d81a */ => pas!(x; hop_back, wait_anim, fall, bounce_start, bounce, get_up, death),
+        0x3d932 /* table 0x3d940 */ => pas!(x; whirl, whirl_rise, whirl_fall, sparks, bounce_start, bounce, get_up, death),
+        0x3da86 /* table 0x3da94 */ => pas!(x; spin, spin_rise, spin_drop, spin_fall, spin_bounce, spin_fall, spin_blast, idle, spin_death, skim_flight, bounce_start, bounce, get_up, death),
+        0x3dab0 /* table 0x3dabe */ => pas!(x; spin, spin_rise, spin_drop_stars, spin_fall, spin_bounce_stars, spin_fall, spin_blast, idle, spin_death, skim_flight, bounce_start, bounce, get_up, death),
+        0x3dd72 /* table 0x3dd80 */ => pas!(x; death_throw, wait_anim, fall, bounce_start, bounce, death),
+        0x3ddf6 /* table 0x3de04 */ => pas!(x; death_throw_b, wait_anim, fall, bounce_start, bounce, death),
+        _ => return None,
+    })
+}
 
 /// Routines sans table de sauts en tête.
 const RECOIL: u32 = 0x3bb9c;
@@ -2224,21 +2157,14 @@ fn run_entry_flag(x: &mut Cx, entry: u32) -> bool {
         HELD => {
             let n = x.u16(f::RECOVER).wrapping_sub(1);
             x.set16(f::RECOVER, n);
-            dispatch(x, 0x3c64c, &[held_start, held_shake, held_end, death])
+            pas!(x; held_start, held_shake, held_end, death) // table 0x3c64c
         }
         DISINTEGRATE => disintegrate(x),
         GROUNDED_GRAB => grounded_grab(x),
-        BURNT => {
-            // `move.b 6(A0),D0` sans `moveq` : l'indice est le mot bas de D0
-            if x.c.d[0] & 0xff00 != 0 {
-                return false;
-            }
-            dispatch(x, 0x3d87a, &[burnt, burnt_fall, anim_step, burnt_wait])
-        }
-        _ => match REACTIONS.iter().find(|r| r.entry == entry) {
-            Some(r) => dispatch(x, r.table, r.steps),
-            None => false,
-        },
+        // `move.b 6(A0),D0` sans `moveq` : l'indice est le mot bas de D0, dont l'octet haut est nul (D0 = le code de
+        // réaction, un octet, posé par l'appelant : `enemy_common::react`, les tables propres des boss)
+        BURNT => pas!(x; burnt, burnt_fall, anim_step, burnt_wait), // table 0x3d87a
+        _ => run_table(x, entry).unwrap_or(false),
     }
 }
 
@@ -2268,9 +2194,6 @@ pub fn run_common(x: &mut Cx, entry: u32) -> bool {
     if !NATIVES.iter().any(|n| n.entry == entry) {
         return false;
     }
-    // comme l'appel par adresse : A0 = l'objet, A5 = la RAM de travail
-    x.c.a[0] = x.o.0;
-    x.c.a[5] = crate::mem::A5;
     let step = x.u8(f::STEP);
     assert!(run_entry_flag(x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
     true
@@ -2278,11 +2201,10 @@ pub fn run_common(x: &mut Cx, entry: u32) -> bool {
 
 /// Exécute la routine de réaction `entry` (RTS compris). Tous les pas des tables d'origine sont réécrits : le pas
 /// (`+6`) part de 0 et n'avance que de 2 en 2 jusqu'au dernier pas de la table, qui ne l'avance plus (mort, fin de
-/// saisie...), et l'indice de `BURNT` (D0.w) est le code de réaction posé par `enemy_common::react` (octet haut
-/// nul). Un pas hors table ferait sauter l'original dans des données : il ne peut pas se produire.
+/// saisie...), et l'indice de `BURNT` (D0.w) est le code de réaction posé par l'appelant (octet haut nul). Un pas
+/// hors table ferait sauter l'original dans des données : il ne peut pas se produire.
 fn native_run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, entry: u32) {
     let mut x = Cx::new(c, b);
-    x.c.a[5] = crate::mem::A5;
     let step = x.u8(f::STEP);
     assert!(run_entry_flag(&mut x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
     x.ret();
@@ -2325,8 +2247,8 @@ mod tests {
     /// Chaque routine de réaction a une native, et inversement.
     #[test]
     fn routines_et_natives() {
-        for r in REACTIONS {
-            assert!(NATIVES.iter().any(|n| n.entry == r.entry), "{:#x}", r.entry);
+        for &(entry, _) in REACTIONS {
+            assert!(NATIVES.iter().any(|n| n.entry == entry), "{entry:#x}");
         }
         assert_eq!(NATIVES.len(), REACTIONS.len() + 6);
     }

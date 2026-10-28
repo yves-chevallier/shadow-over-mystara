@@ -22,7 +22,7 @@ use super::enemy_lib as lib;
 mod arrival;
 mod attacks;
 mod decide;
-mod hit;
+pub(crate) mod hit;
 mod stance;
 
 pub(self) mod g {
