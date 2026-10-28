@@ -365,17 +365,7 @@ fn gate_leave(x: &mut Cx) {
     let scene = if crate::ram::SCENE.get(x.b) == 6 { 7 } else { 9 };
     x.set_a5_u8(0x34, scene);
     x.set_a5_u8(0x44, 1);
-    let (a0, d7) = (x.c.a[0], x.c.d[7]);
-    crate::call(x.c, x.b, 0x33aa6);
-    (x.c.a[0], x.c.d[7]) = (a0, d7);
-    crate::call(x.c, x.b, 0xf2e56);
-    let (a0, d7) = (x.c.a[0], x.c.d[7]);
-    for routine in [0x1a360, 0x1a678, 0x1a8ac] {
-        crate::call(x.c, x.b, routine);
-    }
-    (x.c.a[0], x.c.d[7]) = (a0, d7);
-    x.set_a5_u8(0x48e, 0xf);
-    crate::palette::full_brightness(x.b);
+    super::creators::reprendre_decor(x.c, x.b, 0x33aa6);
     for p in players() {
         if p.u8(x.b, 0) == 0 || p.u16(x.b, 0x62) == 0 {
             continue;

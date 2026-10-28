@@ -69,9 +69,8 @@ pub(super) fn init(x: &mut Cx) {
         x.set8(0x9a, 0xff);
     }
     x.add8(f::STATE, 2);
-    // `jmp 0x1a32` (registres de l'original laissés au gestionnaire suivant)
-    x.c.a[0] = x.o.0;
-    crate::objects::anim::start_68k(x.c, x.b, x.o, TWO_KIT.set_a, 0);
+    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `sortie`)
+    x.anim_start(TWO_KIT.set_a, 0);
 }
 
 // --- groupe 0 : arrivée -----------------------------------------------------------------------------

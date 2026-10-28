@@ -148,17 +148,6 @@ pub(crate) mod var {
     pub const JOUEURS_VIVANTS: Octet = Octet::a5(0x35);
 }
 
-/// Appel d'un créateur du lot par un gestionnaire Rust, avec les registres de l'original (A0 = le créateur, A5),
-/// déclarés morts ensuite (`sorties`, étiquette `effets` de `DDSOM_POISON`) : étape de preuve avant le cœur.
-#[track_caller]
-pub(crate) fn regs_68k<T>(c: &mut Cpu, b: &mut Cps2Bus, createur: Obj, sorties: u32, f: impl FnOnce(&mut Cpu, &mut Cps2Bus) -> T) -> T {
-    c.a[0] = createur.0;
-    c.a[5] = A5;
-    let r = f(c, b);
-    crate::diag::registres_morts(c, "effets", sorties);
-    r
-}
-
 /// Joueurs : quatre enregistrements de 0x200 octets.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;

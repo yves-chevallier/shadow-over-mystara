@@ -581,9 +581,7 @@ fn launch(x: &mut Cx) {
         crate::sound::service(x.b, crate::sound::Service::Ff05);
         crate::sound::jouer(x.b, launcher::SOUND_LAUNCH, x.o);
         // animation 2 du joueur, puis le joueur est projeté en l'air
-        let d6 = x.c.d[6];
-        crate::objects::anim::start_by_character_68k(x.c, x.b, p, &crate::objects::anim::SETS_BY_VARIANT, 2);
-        x.c.d[6] = d6;
+        crate::objects::anim::start_by_character(x.b, p, &crate::objects::anim::SETS_BY_VARIANT, 2);
         p.set_u16(x.b, Obj::VX, 0);
         p.set_u16(x.b, Obj::AX, 0);
         p.set_u16(x.b, Obj::VZ, 0x400);
@@ -602,16 +600,11 @@ fn launch(x: &mut Cx) {
     x.set_a5_u8(0x48e, 13);
     new_task(x, launcher::FADE_PROGRAM, 0x10);
     x.set_a5_u16(CAMERA_X, 0xc78);
-    // éclats (type 56) : dix-sept en principe (`dbf D6`), mais l'allocation se sert de D6 pour
-    // parcourir le pool, si bien qu'en pratique la boucle remplit le pool
+    // éclats (type 56) : dix-sept en principe (`dbf D6`), mais l'allocation se sert de D6 pour parcourir le pool.
     // Glitch d'origine : la boucle compte dans D6 (`dbf`), que l'allocation réécrit (rang de l'emplacement trouvé
     // depuis la fin du pool) : elle s'arrête au pool plein, ou quand le dernier emplacement vient d'être pris.
-    x.c.d[6] = 0x10;
-    let o = x.o;
     let dernier = pools::EFFCT.slot(pools::EFFCT.slots - 1);
-    while let Some(eclat) = super::effects_creators::regs_68k(x.c, x.b, o, super::effects_creators::CREATED, |c, b| super::effects_creators::camera_shard_par(c, b)) {
-        let n = (x.c.d[6] as u16).wrapping_sub(1);
-        x.c.d[6] = x.c.d[6] & 0xffff_0000 | n as u32;
+    while let Some(eclat) = super::effects_creators::camera_shard(x.b) {
         if eclat == dernier {
             break;
         }

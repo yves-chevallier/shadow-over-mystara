@@ -440,9 +440,9 @@ fn slide_end(x: &mut Cx) {
 /// terre) ; sinon la suite `then` (A6 la désigne dans l'original : `jmp (A6)`).
 fn grab_check(x: &mut Cx, then: fn(&mut Cx)) {
     if x.u8(f::GRABBED) != 0 {
-        // `bhi` sur la dernière comparaison de 0x1e92 (Z compris) : drapeaux de l'original (adaptateur)
-        crate::objects::cull::in_arena_68k(x.c, x.b, x.o, 0);
-        if !x.c.cond(2) {
+        // `bhi` sur la dernière comparaison de 0x1e92 (marge nulle) : un objet pile sur le bord en largeur compte comme
+        // dedans
+        if !crate::objects::cull::beyond_arena(x.b, x.o, 0) {
             x.set16(f::RECOVER, 1);
             let i = type_index(x);
             let keep = x.rom8(rom::NO_GRAB_DOWN + i);

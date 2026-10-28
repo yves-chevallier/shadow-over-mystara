@@ -415,10 +415,9 @@ fn init(x: &mut Cx) {
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x10);
     x.set8(0x93, 0);
-    // `jmp 0x1a32` (registres de l'original laissés au gestionnaire suivant)
+    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `sortie`)
     let set = kit(x).set_a;
-    x.c.a[0] = x.o.0;
-    crate::objects::anim::start_68k(x.c, x.b, x.o, set, 0);
+    x.anim_start(set, 0);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------

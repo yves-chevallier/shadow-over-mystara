@@ -950,7 +950,7 @@ mod exit_gate {
             for i in 0..set_b::SET_POOL.count {
                 let o = Obj(set_b::SET_POOL.base + i * set_b::SET_POOL.size);
                 if o.u8(x.b, 0) != 0 && o.u8(x.b, 2) == FREED_KIND {
-                    pools::SET.release_68k(x.c, x.b, o);
+                    pools::SET.release(x.b, o);
                 }
             }
         }
@@ -972,21 +972,8 @@ mod exit_gate {
 
     /// Entrée dans la zone annexe (0xcc0ca) : caméras, script de scène, palettes, joueurs replacés.
     fn enter_annex(x: &mut Cx) {
-        set_b::call_keeping(x, &[0x33aa6]);
-        x.call(crate::scene::script::SCRIPT_RESET.entry);
-        set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
-        x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
-        crate::palette::full_brightness(x.b);
-        x.set_a5_u16(OWNER_GATE, 0);
-        set_b::reset_players_after_exit(x);
-        x.call(crate::scene::entry::PLACE_PLAYERS.entry);
-        for p in players() {
-            if p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) != 0 {
-                x.c.a[0] = p.0;
-                crate::objects::lists::ACTORS.reinsert_68k(x.c, x.b, p);
-            }
-        }
         x.c.a[0] = x.o.0;
+        crate::families::creators::restart_scene(x.c, x.b);
     }
 
     /// Retour d'une zone annexe (0xcbeba) : joueurs relâchés, la porte se libère, le monde se réveille.
@@ -1019,11 +1006,8 @@ mod exit_gate {
 
     /// État 4 (0xcba48) : retour de la zone annexe, la scène d'avant est rechargée.
     fn arrive(x: &mut Cx) {
-        set_b::call_keeping(x, &[0x33b24]);
-        x.call(crate::scene::script::SCRIPT_RESET.entry);
-        set_b::call_keeping(x, &[0x1a360, 0x1a678, 0x1a8ac]);
-        x.set_a5_u8(fondu_de_sortie::PAGES, 0xf);
-        crate::palette::full_brightness(x.b);
+        x.c.a[0] = x.o.0;
+        crate::families::creators::reprendre_decor(x.c, x.b, 0x33b24);
         x.set_a5_u16(OWNER_GATE, 0);
         crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
         set_b::restore_camera(x);

@@ -449,21 +449,28 @@ fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xcc0ca : la scène repart de son début (h) : caméras (0x33aa6), décor et palettes (0xf2e56, 0x1a360,
-/// 0x1a678, 0x1a8ac), luminosité pleine (0x1686) ; chaque joueur vivant revient en jeu normal (masqué et
-/// en entrée scénarisée s'il était à terre ou mort), est replacé (0x20de6) puis trié. A0 et D7 conservés.
-pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
+/// Le décor de la scène est repris : caméras (`cameras` : 0x33aa6 au départ de la scène, 0x33b24 au retour d'une zone
+/// annexe), script de la scène (0xf2e56), pages de palettes (0x1a360, 0x1a678, 0x1a8ac), toutes les pages à recopier,
+/// luminosité pleine (0x1686). Début commun de 0xcc0ca, des portes de zones annexes (SET 7) et du passage (EFFCT 14).
+/// A0 et D7 conservés.
+pub(crate) fn reprendre_decor(c: &mut Cpu, b: &mut Cps2Bus, cameras: u32) {
     let (a0, d7) = (c.a[0], c.d[7]);
-    call(c, b, 0x33aa6);
+    call(c, b, cameras);
     (c.a[0], c.d[7]) = (a0, d7);
-    call(c, b, 0xf2e56);
-    let (a0, d7) = (c.a[0], c.d[7]);
+    call(c, b, crate::scene::script::RESET_ENTRY);
     for routine in [0x1a360, 0x1a678, 0x1a8ac] {
         call(c, b, routine);
     }
     (c.a[0], c.d[7]) = (a0, d7);
     wr8(b, A5 + 0x48e, 0xf);
     crate::palette::full_brightness(b);
+}
+
+/// 0xcc0ca : la scène repart de son début (h) : décor repris (`reprendre_decor`) ; chaque joueur vivant revient en jeu
+/// normal (masqué et en entrée scénarisée s'il était à terre ou mort), est replacé (0x20de6) puis trié. A0 et D7
+/// conservés.
+pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
+    reprendre_decor(c, b, 0x33aa6);
     wr16(b, A5 + 0x52, 0);
     let alive = |b: &mut Cps2Bus, p: u32| rd8(b, p) != 0 && rd16(b, p + 0x62) != 0;
     for k in 0..4 {
