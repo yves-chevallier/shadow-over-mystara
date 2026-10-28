@@ -63,7 +63,6 @@ crate::etapes! {
 }
 
 fn entry(x: &mut Ctx) -> Flow {
-    x.c.a[0] = SHOWN;
     if x.v8(var::FREE_PLAY) != 0 {
         wr32(x.b, SHOWN, text::FREE_PLAY);
         return show(x, Impression::Pieces, Etape::CoinsShown);
@@ -73,7 +72,6 @@ fn entry(x: &mut Ctx) -> Flow {
         return show(x, Impression::Simple, Etape::PlainShown);
     }
     let k = 4 * x.v8(var::COINAGE) as u32;
-    x.c.d[0] = k;
     let t = rd32(x.b, text::BY_COINAGE + k - 4);
     wr32(x.b, SHOWN, t);
     show(x, Impression::Pieces, Etape::CoinsShown)

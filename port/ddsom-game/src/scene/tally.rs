@@ -198,15 +198,10 @@ fn start(x: &mut Ctx) -> Flow {
     x.set_v8(a5::HOLD, 1);
     crate::sound::jouer_global(x.b, sub::MUSIC);
     x.set_v8(a5::FADE_STEPS, 8);
-    // 0xf68c8 : A0 sauvegardé autour de la création de la tâche
-    let a0 = x.c.a[0];
-    x.c.a[0] = sub::FADE_TASK;
-    x.c.d[1] = 0;
+    // 0xf68c8 : la tâche de fondu (A0 gardé)
     x.set_v16(a5::FADE_DELAY, 1);
     x.set_v8(a5::FADE_PAGES, 13);
-    x.c.d[0] = x.c.d[0] & !0xffff | 16;
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
-    x.c.a[0] = a0;
+    crate::kernel::creer_tache(x.b, 16, sub::FADE_TASK);
     x.push_return(Etape::AfterFade);
     x.wait(1, Etape::FadeWait)
 }

@@ -22,7 +22,6 @@ pub fn scene_1(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            x.c.d[0] = 2;
             finish(x, 2)
         }
     }
@@ -97,13 +96,7 @@ crate::etapes! {
             for k in 0..8 {
                 let v = rd32(x.b, FROM + 4 * k);
                 wr32(x.b, TO + 4 * k, v);
-                if k < 7 {
-                    x.c.d[k as usize] = v;
-                } else {
-                    x.c.a[3] = v;
-                }
             }
-            (x.c.a[1], x.c.a[2]) = (TO, FROM);
             scroll_text(x, 0xf8810);
             set16(x, var::TIMER, 120);
             x.set_v8(a5::FADE_PAGES, ALL_PAGES);
@@ -166,9 +159,6 @@ crate::etapes! {
             for (n, at) in [(206, 0x917000), (173, 0x917400), (175, 0x917800), (175, 0x917c00), (172, 0x916000), (205, 0x916400),
                 (174, 0x916800), (174, 0x916c00)]
             {
-                if at == 0x917800 {
-                    x.c.d[4] = 0;
-                }
                 tiles(x, TB, n, at);
             }
             x.set_v16(a5::CAM2_Y, 0xffe0);
@@ -232,7 +222,6 @@ crate::etapes! {
         S11End = 0xf8e80 => |x| {
             effacer_couche(x.b, Couche::Deux);
             effacer_couche(x.b, Couche::Trois);
-            x.c.d[0] = 13;
             finish(x, 13)
         },
         S13RetryObject = 0xf8ee2 => s13_object,
@@ -249,11 +238,9 @@ crate::etapes! {
         S13LeftWaited = 0xf8fa0 => |x| hide_layers(x, At(Etape::S13LeftHidden.into())),
         S13LeftHidden = 0xf8fa4 => |x| yield_frames(x, 4, At(Etape::S13LeftScenery.into())),
         S13LeftScenery = 0xf8fac => |x| {
-            let a6 = x.c.a[6];
             crate::palette::charger_palettes_de_scene(x.b, 1);
             crate::palette::charger_page(x.b, 2, 29);
             crate::palette::charger_page(x.b, 3, 11);
-            x.c.a[6] = a6;
             x.set_v8(0x36, 1);
             // quatre blocs à la suite : 8, 9, 10, 8
             let mut fin = tiles(x, TB, 8, SCROLL_2);
@@ -316,7 +303,6 @@ crate::etapes! {
         S13End = 0xf938e => |x| {
             effacer_couche(x.b, Couche::Deux);
             let scene = get8(x, var::FLAG);
-            x.c.d[0] = scene as u32;
             finish(x, scene)
         },
     }
@@ -517,9 +503,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
 fn drift(x: &mut Ctx) {
     let t = get16(x, var::TIMER).wrapping_sub(1);
     set16(x, var::TIMER, t);
-    let phase = t as u8 & 3;
-    set_d0_byte(x, phase);
-    if phase == 0 {
+    if t & 3 == 0 {
         let cam = x.v16(a5::CAM1_X).wrapping_add(1);
         set_camera(x, a5::CAM1_X, cam);
     }
@@ -571,7 +555,6 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf8ce4) {
         0 => {
             if x.v8(a5::CLOCK) == 0 {
-                x.c.d[0] = 13;
                 return finish(x, 13);
             }
             next(x);
@@ -613,7 +596,6 @@ pub fn scene_11(x: &mut Ctx) -> Flow {
                 set8(x, var::SIGNAL, 0);
             }
             let busy = get8(x, var::SIGNAL).wrapping_add(get8(x, var::FLAG));
-            x.c.d[0] = busy as u32;
             if busy != 0 {
                 return Flow::Done;
             }
@@ -811,11 +793,8 @@ fn s13_route(x: &mut Ctx) {
     let mut found = false;
     for k in 0..4u32 {
         let p = A5 + a5::PLAYERS + k * 0x200;
-        x.c.a[1] = p;
-        x.c.d[1] = 3 - k;
         if rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4 {
             let pose = (rd8(x.b, p + 3) >> 1).wrapping_sub(2);
-            x.c.d[2] = x.c.d[2] & !0xff | pose as u32;
             if pose == 0 {
                 found = true;
                 break;
@@ -823,14 +802,11 @@ fn s13_route(x: &mut Ctx) {
         }
     }
     if !found {
-        x.c.a[1] = A5 + a5::PLAYERS + 0x800;
-        x.c.d[1] = 0xffff;
         route += 4;
     }
     if x.v16(a5::CLOCK) != 0 {
         route += 2;
     }
-    x.c.d[0] = route as u32;
     set8(x, var::FLAG, route);
 }
 

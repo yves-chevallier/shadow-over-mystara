@@ -128,12 +128,10 @@ impl<'a> Ex<'a> {
         left == 0
     }
 
-    /// Lance la tâche de fondu `entry` (délai `delay`), A0 est conservé.
+    /// Lance la tâche de fondu `entry` (délai `delay`) ; A0 revient sur le bloc.
     fn fade(&mut self, delay: u16, entry: u32) {
         self.x.set_v16(var::FADE_DELAY, delay);
         self.x.set_v8(var::FADE_PAGES, 15);
-        self.x.c.a[0] = entry;
-        self.x.c.d[0] = 0x10;
         crate::kernel::creer_tache(self.x.b, 0x10, entry);
         self.x.c.a[0] = BASE;
     }
@@ -200,14 +198,13 @@ impl<'a> Ex<'a> {
     fn reset_transition(&mut self) {
         super::screen::clear_longs(self.x.b, super::screen::blocks::TRANSITION, 4);
     }
-    /// 0xf7916 : bloc de la boutique remis à zéro (D0 = 0, comme l'original).
+    /// 0xf7916 : bloc de la boutique remis à zéro.
     fn reset_shop(&mut self) {
         super::screen::clear_longs(self.x.b, super::screen::blocks::SHOP, 5);
-        self.x.c.d[0] = 0;
     }
     /// 0xf683c : zone de texte des écrans de fin effacée.
     fn clear_text(&mut self) {
-        super::screen::clear_text(self.x.c, self.x.b);
+        super::screen::clear_text(self.x.b);
     }
 
     /// Séquence ou étape sans réécriture : la table des séquences par scène (0xf3170) ne désigne que des séquences
@@ -408,9 +405,7 @@ fn init(ex: &mut Ex) {
 /// État 2 : la séquence choisie.
 fn run_sequence(ex: &mut Ex) {
     let number = ex.b8(blk::SEQUENCE) as u32;
-    ex.x.c.d[0] = number;
     let jump = ex.x.prog16(SEQUENCE_JUMPS + number);
-    ex.x.c.d[1] = jump as u32;
     ex.entry = SEQUENCE_JUMPS + jump as u32;
     let (sequence, dispatcher) = match number as u8 / 2 {
         // la séquence 27 devient la 29 quand `A5+0x66` est posé ; sinon son aiguillage suit ce test (10 octets)
@@ -459,13 +454,9 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
 }
 
 /// Un état saute au début de l'aiguillage d'origine (`bra entrée`) après avoir changé d'étape : l'état de la
-/// nouvelle étape s'exécute dans la même image, appelé comme par l'aiguillage (D0.b = étape, A1 = état).
+/// nouvelle étape s'exécute dans la même image, appelé comme par l'aiguillage (A0 sur le bloc).
 fn redispatch(ex: &mut Ex, sequence: &Sequence) {
-    const TABLE: u32 = 0x2c; // table des états de l'aiguillage, après son code
     let step = ex.b8(blk::STEP);
-    crate::mem::set_low_byte(&mut ex.x.c.d[0], step);
-    let table = ex.entry + TABLE + step as u32;
-    ex.x.c.a[1] = (ex.x.prog16(table) as u32) << 16 | ex.x.prog16(table + 2) as u32;
     ex.x.c.a[0] = BASE;
     match sequence.states.get(step as usize / 4) {
         None => ex.hors_table(),
@@ -709,7 +700,6 @@ pub const PHASE_16: Native = Native {
 fn dispatch_tail(x: &mut Ctx, index: u8) {
     let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("séquence réécrite") };
     let mut ex = Ex { x: Ctx::new(x.c, x.b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: true };
-    ex.x.c.a[5] = A5;
     finish_frame(&mut ex, sequence);
 }
 

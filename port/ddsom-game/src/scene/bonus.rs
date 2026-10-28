@@ -81,13 +81,9 @@ fn leave(x: &mut Ctx) {
     wr8(x.b, a0 + 3, 0);
 }
 
-/// Aiguillage d'origine (`moveq #0,D0 ; move.b 3(A0),D0 ; move.w table(PC,D0),D1`) : D0 et D1 sont relus plus loin.
-pub fn dispatch(x: &mut Ctx, table: u32) -> u8 {
-    let s = sub_step(x);
-    x.c.d[0] = s as u32;
-    let off = prog16(x.b, table + s as u32);
-    x.c.d[1] = x.c.d[1] & !0xffff | off as u32;
-    s
+/// Aiguillage d'origine (`moveq #0,D0 ; move.b 3(A0),D0 ; move.w table(PC,D0),D1`) : la sous-étape.
+pub fn dispatch(x: &mut Ctx, _table: u32) -> u8 {
+    sub_step(x)
 }
 
 /// Fondu au noir ou depuis le noir (délai 4, toutes les pages, 15 pas) ; la routine cède la main et revient en
@@ -281,7 +277,7 @@ fn set_up(x: &mut Ctx) -> Flow {
         }
         effacer_couche(x.b, Couche::Deux);
         effacer_couche(x.b, Couche::Trois);
-        screen::clear_text(x.c, x.b);
+        screen::clear_text(x.b);
         0xff
     } else {
         prog16(x.b, rom::DISPATCH + 2) as u8
@@ -296,8 +292,6 @@ fn set_up(x: &mut Ctx) -> Flow {
         let o = ou_reste(x.b, cree);
         wr8(x.b, o.0 + 0x2f, k);
     }
-    x.c.d[1] = 0xffff;
-    x.c.d[2] = 4;
     crate::sound::jouer_global(x.b, sub::MUSIC);
     x.wait(4, Etape::SetUp)
 }

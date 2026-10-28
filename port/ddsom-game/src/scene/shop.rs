@@ -12,7 +12,7 @@
 
 use super::Ctx;
 use crate::video::{effacer_couche, Couche};
-use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -38,7 +38,6 @@ mod f {
 
 /// Tables (`data` : lues comme données ; `pc` : relatives au PC).
 mod rom {
-    pub const DISPATCH: u32 = 0xf793e;
     /// Numéro de boutique par scène (data).
     pub const SHOP_OF_SCENE: u32 = 0xf7ad0;
     /// Musique de la boutique : décalage (data) dans une table de routines (data).
@@ -96,9 +95,6 @@ fn add_b8(x: &mut Ctx, off: u32, v: u8) {
 pub fn run(x: &mut Ctx) -> Flow {
     x.c.a[6] = BLOCK;
     let s = b8(x, f::STATE);
-    x.c.d[0] = s as u32;
-    let off = prog16(x.b, rom::DISPATCH + s as u32);
-    x.c.d[1] = x.c.d[1] & !0xffff | off as u32;
     match s {
         0 => open(x),
         2 => {
@@ -155,19 +151,13 @@ crate::etapes! {
             let scene = x.v8(0x34) as u32;
             let shop = rd8(x.b, rom::SHOP_OF_SCENE + scene);
             set_b8(x, f::SHOP, shop);
-            let a0 = x.c.a[0];
-            x.c.a[0] = PORTRAITS_TASK;
-            x.c.d[0] = x.c.d[0] & !0xffff | 192;
             crate::kernel::creer_tache(x.b, 192, PORTRAITS_TASK);
-            x.c.a[0] = a0;
             x.set_v8(0x4e, (scene == 5) as u8);
             if b8(x, f::REOPENED) == 0 {
                 set_b8(x, f::RETURN_SCENE, scene as u8);
             }
             let index = rd8(x.b, rom::MUSIC_INDEX + shop as u32) as u32;
-            x.c.d[0] = index;
             let music = rd32(x.b, rom::MUSIC + index);
-            x.c.a[1] = music;
             crate::sound::jouer_global(x.b, music);
             set_b16(x, f::STATE, 0x200);
             set_b8(x, f::SHOPPERS, 0);
@@ -192,7 +182,6 @@ crate::etapes! {
                 if rd8(x.b, p) == 0 || rd16(x.b, p + 0x62) == 0 {
                     continue;
                 }
-                x.c.a[2] = p;
                 let Some(Obj(e)) = pools::EFFCT.alloc(x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
                 wr8(x.b, e, 1);
                 wr8(x.b, e + 2, 20);
@@ -203,17 +192,16 @@ crate::etapes! {
                 wr16(x.b, slot, e as u16);
                 add_b8(x, f::SHOPPERS, 1);
             }
-            x.c.d[7] = x.c.d[7] & !0xffff | 0xffff;
             let shop_scene = b8(x, f::SHOP).wrapping_add(69);
             x.set_v8(0x34, shop_scene);
             crate::palette::charger_tout(x.b);
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
             // 0x33aa6 (D7 et A0 gardés) : caméras au départ et mises à jour (D4 relu : `update_cameras_68k`)
-            let saved = (x.c.d[7], x.c.a[0]);
+            let a0 = x.c.a[0];
             crate::scroll::cameras_depart(x.b);
             crate::scroll::update_cameras_68k(x.c, x.b);
-            (x.c.d[7], x.c.a[0]) = saved;
+            x.c.a[0] = a0;
             x.set_v16(0x14, 0);
             crate::video::activer_couches(x.b, 0x12c0);
             super::script::reset(x.b);
@@ -222,9 +210,7 @@ crate::etapes! {
         },
         LeaveFaded = at::LEAVE_FADED => |x| {
             crate::video::vider_objets(x.b);
-            let a0 = x.c.a[0];
             crate::objects::lists::unlink_all(x.b);
-            x.c.a[0] = a0;
             x.set_v8(0x3d, 1);
             crate::taches::une_image(x, Etape::LeaveWaited)
         },
@@ -240,8 +226,6 @@ crate::etapes! {
             let layers = x.v16(0x12);
             wr16(x.b, 0x804122, layers);
             let shop = rd8(x.b, BLOCK + f::SHOP) as u32;
-            x.c.d[0] = shop;
-            x.c.a[1] = rom::NEXT_SCENE;
             let next = rd8(x.b, rom::NEXT_SCENE + shop);
             x.set_v8(0x34, next);
             if next == 0 {
@@ -276,31 +260,22 @@ fn clear_layers(x: &mut Ctx) {
 /// État 4 : fondu d'ouverture (tâche 0x14ba, qui laisse A0 sur elle), premier message (101), son d'accueil.
 fn welcome(x: &mut Ctx) -> Flow {
     add_b8(x, f::STATE, 2);
-    x.c.d[0] = x.c.d[0] & !0xffff | 0x12ce;
     x.set_v16(0x14, 0);
     crate::video::activer_couches(x.b, 0x12ce);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
-    x.c.d[0] = x.c.d[0] & !0xffff | 16;
-    x.c.a[0] = 0x14ba;
     crate::kernel::creer_tache(x.b, 16, 0x14ba);
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {
         // scènes de démonstration hors table : correctif commun aux deux machines (`exit::patch_shared_next`)
-        x.c.d[0] &= 0xffff_0000;
-        x.c.a[1] = rom::WELCOME_INDEX;
         return Flow::Done;
     }
     let index = rd8(x.b, rom::WELCOME_INDEX + shop as u32);
-    x.c.d[0] = index as u32;
     if index == 0 {
-        x.c.a[1] = rom::WELCOME_INDEX;
         return Flow::Done;
     }
-    x.c.d[0] = 4 * index as u32;
     let sound = rd32(x.b, rom::WELCOME + 4 * index as u32);
-    x.c.a[1] = sound;
     crate::sound::jouer_global(x.b, sound);
     Flow::Done
 }
@@ -315,7 +290,6 @@ fn messages(x: &mut Ctx) {
     }
     if b8(x, f::TALKING) == 0 {
         let n = b16(x, f::NEXT_MESSAGE);
-        x.c.d[0] = x.c.d[0] & !0xffff | n as u32;
         if n == 0 {
             return;
         }
@@ -329,9 +303,7 @@ fn messages(x: &mut Ctx) {
         set_b16(x, f::PENDING, 0);
         return;
     }
-    let m = rd16(x.b, BLOCK + f::MESSAGE) as i16 as i32 as u32;
-    x.c.a[1] = m;
-    let m = m & 0xff_ffff;
+    let m = rd16(x.b, BLOCK + f::MESSAGE) as i16 as i32 as u32 & 0xff_ffff;
     if rd8(x.b, m) == 0 || rd8(x.b, m + 0x22) != 0 {
         set_b8(x, f::TALKING, 0);
         return;
@@ -345,13 +317,11 @@ fn messages(x: &mut Ctx) {
 /// Sortie, étape 0 : messages de sortie de la liste de la boutique, l'un après l'autre.
 fn exit_messages(x: &mut Ctx) {
     messages(x);
-    x.c.d[0] = 0;
     match b8(x, f::EXIT_SUB) {
         0 => {
             let shop = b8(x, f::SHOP) as u32;
             let index = prog8(x.b, rom::EXIT_LIST_INDEX + shop) as u32;
             let list = prog32(x.b, rom::EXIT_LISTS + 4 * index);
-            x.c.d[0] = 4 * index;
             wr32(x.b, BLOCK + f::EXIT_MESSAGES, list);
             if list == 0 {
                 return exit_messages_done(x);
@@ -371,8 +341,6 @@ fn exit_messages(x: &mut Ctx) {
 fn next_exit_message(x: &mut Ctx) {
     let at = rd32(x.b, BLOCK + f::EXIT_MESSAGES);
     let n = rd16(x.b, at);
-    x.c.d[0] = x.c.d[0] & !0xffff | n as u32;
-    x.c.a[1] = at + 2;
     if n == 0 {
         return exit_messages_done(x);
     }
@@ -388,10 +356,7 @@ fn exit_messages_done(x: &mut Ctx) {
 /// Sortie, étape 4 : fondu au noir, puis retour à la scène de retour ; ou une boutique enchaînée.
 fn leave(x: &mut Ctx) -> Flow {
     let shop = b8(x, f::SHOP) as u32;
-    x.c.d[0] = shop;
     let chained = rd8(x.b, rom::CHAINED + shop);
-    x.c.d[0] = chained as u32;
-    x.c.a[1] = rom::CHAINED;
     if chained == 0 {
         x.set_v16(0x490, 2);
         x.set_v8(0x48e, 15);
@@ -408,9 +373,7 @@ fn leave(x: &mut Ctx) -> Flow {
     set_b8(x, f::REOPENED, 1);
     crate::video::vider_objets(x.b);
     wr32(x.b, BLOCK, 0);
-    let a0 = x.c.a[0];
     crate::objects::lists::unlink_all(x.b);
-    x.c.a[0] = a0;
     crate::taches::une_image(x, Etape::ReopenWaited)
 }
 

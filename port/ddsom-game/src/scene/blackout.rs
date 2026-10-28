@@ -9,15 +9,13 @@ use super::bonus::dispatch;
 use super::screen;
 use super::Ctx;
 use crate::video::{effacer_couche, Couche};
-use crate::mem::{prog16, rd8, wr16, wr8};
+use crate::mem::{rd8, wr16, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
 
 const DISPATCH: u32 = 0xf7eda;
 /// Palettes de la scène suivante : ensemble de la page 0 (négatif : aucun), puis D0 de 0x1a60a, 0x1a67e, 0x1a8b2.
 const PALETTES: u32 = 0xf80c4;
-/// Scripts de transition, par scène (mots relatifs à la table) : D1 de l'aiguillage d'origine.
-const SCRIPTS: u32 = 0xf81fa;
 /// La scène 105 (fin du jeu) prend les palettes et le script de la scène 69.
 const FINALE: u8 = 105;
 const FINALE_AS: u32 = 69;
@@ -105,7 +103,6 @@ crate::etapes! {
             x.set_v8(0x53c, 0);
             x.set_v32(0x534, 0);
             super::bonus::reset_camera_copies(x);
-            x.c.d[0] = 0;
             for pool in crate::objects::pools::POOLS {
                 pool.reset(x.b);
             }
@@ -135,20 +132,14 @@ fn palettes(x: &mut Ctx) {
         let n = rd8(x.b, at + page as u32);
         crate::palette::charger_page(x.b, page, n as u16);
     }
-    x.c.a[6] = at + 4;
     crate::hud::forget_displayed(x.b);
     x.set_v8(0x48e, 12);
     crate::palette::no_brightness(x.b);
 }
 
-/// Sous-état 2 : le script de transition de la scène (`transition`), avec les registres de l'aiguillage d'origine.
+/// Sous-état 2 : le script de transition de la scène (`transition`, table 0xf81fa).
 fn script(x: &mut Ctx) -> Flow {
     let scene = table_scene(x);
-    let index = 2 * scene;
-    x.c.d[0] = index;
-    x.c.a[6] = super::transition::VARS;
-    let off = prog16(x.b, SCRIPTS + index);
-    x.c.d[1] = x.c.d[1] & !0xffff | off as u32;
     super::transition::run(x, scene)
 }
 

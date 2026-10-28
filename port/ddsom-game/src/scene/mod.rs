@@ -223,8 +223,6 @@ impl<'a> Ctx<'a> {
         self.start_fade_task(sub::FADE_STEP_TASK);
     }
     fn start_fade_task(&mut self, entry: u32) {
-        self.c.a[0] = entry;
-        self.c.d[0] = 0x10;
         crate::kernel::creer_tache(self.b, 0x10, entry);
     }
 

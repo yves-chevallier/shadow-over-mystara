@@ -19,9 +19,15 @@ pub fn blank_rect(b: &mut Cps2Bus, at: u32, columns: u32, rows: u32) {
 
 /// 0xf683c : efface la zone de texte des écrans de fin (48 colonnes de 22 cases à partir de la ligne 5).
 /// Laisse les registres de l'original (D1 est relu par l'appelant d'origine comme valeur de `+0x2f`).
-pub fn clear_text(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn clear_text(b: &mut Cps2Bus) {
     const AT: u32 = 0x912014;
     blank_rect(b, AT, 48, 22);
+}
+
+/// `clear_text` avec les registres de l'original : A1, A2 en fin de zone, D0 = la case vide, D1.w = D2.w = -1.
+fn clear_text_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    const AT: u32 = 0x912014;
+    clear_text(b);
     c.a[1] = AT + 47 * COLUMN + 22 * 4;
     c.a[2] = AT + 47 * COLUMN;
     c.d[0] = BLANK;
@@ -114,7 +120,7 @@ pub const CLEAR_TEXT: Native = Native {
     entry: 0xf683c,
     name: "scene_clear_text",
     run: crate::Corps::Processeur(|c, b| {
-        clear_text(c, b);
+        clear_text_68k(c, b);
         rts(c, b);
     }),
     touches_sound: false,

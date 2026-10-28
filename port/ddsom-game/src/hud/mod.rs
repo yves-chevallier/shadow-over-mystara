@@ -242,7 +242,6 @@ crate::etapes! {
 /// 0x150ac : entrée de la tâche. Panneaux remis à zéro (numéro de joueur en `+0`), variables de la tâche, puis
 /// attente du début de la partie.
 fn entry(x: &mut Ctx) -> Flow {
-    x.c.d[0] = 0;
     for k in 0..4 {
         let at = A5 + var::PANELS + k * panel::SIZE;
         wr32(x.b, at, 0);
@@ -269,7 +268,6 @@ fn entry(x: &mut Ctx) -> Flow {
 /// la phase 4 (choix des personnages) avant la première mise à jour.
 fn starting(x: &mut Ctx) -> Flow {
     let cabinet = x.v8(CABINET);
-    x.c.d[0] = x.c.d[0] & !0xff | cabinet as u32;
     let layout = x.prog8(at::LAYOUTS + cabinet as u32);
     x.set_v8(var::LAYOUT, layout);
     if x.v8(var::GAME_ON) == 0 {

@@ -128,7 +128,6 @@ fn set16(x: &mut Ctx, off: u32, v: u16) {
 /// Tue les tâches de ces décalages dans la table (`0xa14`, D0 = décalage).
 fn kill(x: &mut Ctx, slots: &[u16]) {
     for &s in slots {
-        set_low_word(&mut x.c.d[0], s);
         crate::kernel::tuer_tache(x.b, s as u32);
     }
 }
@@ -259,8 +258,6 @@ fn shutdown(x: &mut Ctx) -> Flow {
 fn shutdown_after_clear(x: &mut Ctx) -> Flow {
     crate::palette::charger_tout(x.b);
     crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-    x.c.a[0] = UI_TASK;
-    set_low_word(&mut x.c.d[0], 0);
     crate::kernel::creer_tache(x.b, 0, UI_TASK);
     taches::terminer(x)
 }

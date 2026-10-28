@@ -17,7 +17,7 @@
 //! `+4` ligne suivante, `+0x80` colonne suivante. Les tables de tuiles sont lues dans la ROM (données).
 
 use crate::aides::divide;
-use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::scene::Ctx;
 use crate::video::Grille;
@@ -392,7 +392,6 @@ fn fin(x: &mut Ctx) -> Flow {
     }
     let fini = rd8(x.b, etat::FINI).wrapping_add(1);
     wr8(x.b, etat::FINI, fini);
-    set_low_word(&mut x.c.d[0], 0xf0);
     super::terminer(x)
 }
 
@@ -400,7 +399,6 @@ fn fin(x: &mut Ctx) -> Flow {
 fn tour(x: &mut Ctx) -> Flow {
     x.c.a[0] = etat::BASE;
     let etape = rd8(x.b, etat::ETAPE);
-    x.c.d[0] = etape as u32;
     x.push_return(Etape::ApresEtape);
     match (etape, rd8(x.b, etat::SOUS_ETAPE)) {
         (0, _) => decor(x),

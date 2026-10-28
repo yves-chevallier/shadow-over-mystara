@@ -21,7 +21,6 @@ const PALETTE_SAVE: u32 = 0xff1190;
 
 pub fn scene_27(x: &mut Ctx) -> Flow {
     let choice = get8(x, var::MESSAGE);
-    x.c.d[0] = choice as u32;
     if choice == 0 {
         x.set_v8(0x4e, 0);
     }
@@ -50,12 +49,10 @@ pub fn scene_31(x: &mut Ctx) -> Flow {
             // prime et durée d'après le temps restant (table de 8 octets par dizaine de secondes)
             let clock = x.v16(a5::CLOCK);
             let at = (clock >> 8 & 15) * 48 + (clock & 0xf0) / 2;
-            x.c.d[0] = at as u32;
             let time = x.prog16(0xf95ba + at as u32);
             set16(x, SHOWN_TIME, time);
             let prize = crate::mem::prog32(x.b, 0xf95bc + at as u32);
             wr32(x.b, VARS + PRIZE, prize);
-            x.c.d[1] = 2;
             duration(x, 0x912958, time);
             tiles::number6(x.b, PRIZE_AT, VARS + PRIZE, 2);
             Flow::Done
@@ -186,17 +183,13 @@ crate::etapes! {
         S38Scenery = 0xf9d22 => |x| {
             // décor 540, ou 551 si un joueur en jeu est dans la posture 11 (le premier dans la posture 10 arrête la recherche)
             let mut decor = 540;
-            x.c.d[1] = 0xffff;
             for k in 0..4u32 {
                 let p = A5 + a5::PLAYERS + k * 0x200;
                 if rd8(x.b, p) == 0 || (rd8(x.b, p + 4) as i8) >= 4 {
                     continue;
                 }
                 match rd8(x.b, p + 3) {
-                    10 => {
-                        x.c.d[1] = 3 - k;
-                        break;
-                    }
+                    10 => break,
                     11 => decor = 551,
                     _ => {}
                 }
@@ -320,7 +313,6 @@ fn pay_players(x: &mut Ctx) -> bool {
     let mut paid = false;
     for k in 0..4u32 {
         let p = A5 + a5::PLAYERS + k * 0x200;
-        x.c.a[1] = p;
         if rd8(x.b, p) == 0 || (rd8(x.b, p + 4) as i8) >= 4 {
             continue;
         }
@@ -369,7 +361,6 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
             }
             let v = answer(x, 0xf99e2);
             x.set_v8(0x59, v);
-            x.c.a[1] = 0xff2478;
             wr8(x.b, 0xff2478 + 0x56, v);
             fade(x, ALL_PAGES, crate::taches::fondu::descente, At(Etape::S33EndFaded.into()))
         }
@@ -587,10 +578,8 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9e58) {
         0 => {
             // palettes de la scène 7
-            let a6 = x.c.a[6];
             x.set_v8(a5::SCENE, 7);
             crate::palette::charger_palettes_de_la_scene(x.b);
-            x.c.a[6] = a6;
             x.set_v8(a5::SCENE, 46);
             home_cameras(x, At(Etape::S46Homed.into()))
         }

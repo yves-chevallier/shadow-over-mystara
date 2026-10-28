@@ -129,24 +129,10 @@ fn tick(x: &mut Ctx) -> bool {
     t == 0
 }
 
-/// Aiguillage `moveq #0,D0 ; move.b (off,A6),D0 ; move.w (table,PC,D0.w),D1` : rend l'état, D0 et D1 comme l'original.
-fn dispatch(x: &mut Ctx, off: u32, table: u32) -> u8 {
-    let s = get8(x, off);
-    if off == var::STATE {
-        x.c.d[0] = s as u32;
-    } else {
-        x.c.d[0] = x.c.d[0] & !0xff | s as u32;
-    }
-    let jump = x.prog16(table + s as u32);
-    x.c.d[1] = x.c.d[1] & !0xffff | jump as u32;
-    s
-}
-
-fn set_d0_byte(x: &mut Ctx, v: u8) {
-    x.c.d[0] = x.c.d[0] & !0xff | v as u32;
-}
-fn set_d0_word(x: &mut Ctx, v: u16) {
-    x.c.d[0] = x.c.d[0] & !0xffff | v as u32;
+/// Aiguillage `moveq #0,D0 ; move.b (off,A6),D0 ; move.w (table,PC,D0.w),D1` : rend l'état (la table n'est que
+/// celle de l'original).
+fn dispatch(x: &mut Ctx, off: u32, _table: u32) -> u8 {
+    get8(x, off)
 }
 
 fn layers_or(x: &mut Ctx, bits: u16) {
@@ -180,7 +166,6 @@ fn set_camera(x: &mut Ctx, off: u32, v: u16) {
 
 /// 0xfa0e6 : fin du script, scène suivante `next` ; la sortie de scène passe à son état suivant, une image cédée.
 fn finish(x: &mut Ctx, next_scene: u8) -> Flow {
-    set_d0_byte(x, next_scene);
     x.set_v8(a5::SCENE, next_scene);
     end(x)
 }
@@ -244,11 +229,7 @@ fn fade_task(x: &mut Ctx, delay: u16, pages: u8, task: u32) {
     start_task(x, task);
 }
 fn start_task(x: &mut Ctx, task: u32) {
-    let a0 = x.c.a[0];
-    x.c.a[0] = task;
-    set_d0_word(x, 0x10);
     crate::kernel::creer_tache(x.b, 0x10, task);
-    x.c.a[0] = a0;
 }
 
 /// 0xfa158 : plans 2 et 3 cachés, une image.
@@ -310,33 +291,24 @@ fn clear_920000(x: &mut Ctx) {
     super::screen::clear_920000(x.b);
 }
 
-/// 0xfa270 : un joueur en jeu presse-t-il un bouton (`A5+0xc + k`, quatre bits hauts) ? Registres de l'original.
+/// 0xfa270 : un joueur en jeu presse-t-il un bouton (`A5+0xc + k`, quatre bits hauts) ?
 fn any_button(x: &mut Ctx) -> bool {
     let mut pressed = 0u8;
     for k in (0..4u32).rev() {
         let player = A5 + a5::PLAYERS + k * 0x200;
         if rd8(x.b, player) != 0 {
-            let b = rd8(x.b, A5 + 0xc + k);
-            x.c.d[1] = x.c.d[1] & !0xff | b as u32;
-            pressed |= b;
+            pressed |= rd8(x.b, A5 + 0xc + k);
         }
     }
-    pressed &= 0xf0;
-    x.c.d[0] = pressed as u32;
-    x.c.d[2] = x.c.d[2] & !0xffff | 0xffff;
-    x.c.a[1] = A5 + 0xc;
-    x.c.a[4] = A5 + a5::PLAYERS - 0x200;
-    pressed != 0
+    pressed & 0xf0 != 0
 }
 
 // ---------------------------------------------------------------------------------------------
 // Objets : messages, objets système, objets SET
 
-/// Le message ouvert (A1, comme `movea.w 4(A6),A1`).
+/// Le message ouvert (`movea.w 4(A6),A1`).
 fn message_obj(x: &mut Ctx) -> Obj {
-    let o = Obj(get16(x, var::MESSAGE) as i16 as i32 as u32);
-    x.c.a[1] = o.0;
-    o
+    Obj(get16(x, var::MESSAGE) as i16 as i32 as u32)
 }
 /// Le message ouvert est-il terminé (octet `+0x22`) ?
 fn message_done(x: &mut Ctx) -> bool {
@@ -347,7 +319,6 @@ fn message_done(x: &mut Ctx) -> bool {
 fn answer(x: &mut Ctx, table: u32) -> u8 {
     let o = message_obj(x);
     let k = rd8(x.b, o.0 + 0x23);
-    x.c.d[0] = k as u32;
     x.prog8(table + k as u32)
 }
 
@@ -406,36 +377,27 @@ fn attach(x: &mut Ctx, o: Obj) -> Obj {
 /// mots, puis le texte.
 fn scroll_text(x: &mut Ctx, table: u32) {
     let k = x.v16(a5::REGION).wrapping_sub(2).wrapping_mul(2);
-    set_d0_word(x, k);
     let mut a4 = crate::mem::prog32(x.b, table + (k as i16 as i32 as u32));
     for off in [a5::SCROLL_TEXT + 4, a5::SCROLL_TEXT + 6] {
         let w = rd16(x.b, a4);
         x.set_v16(off, w);
         a4 += 2;
     }
-    x.c.a[4] = a4;
     x.set_v32(a5::SCROLL_TEXT, a4);
 }
 
-/// Copie de 0x400 octets de palettes (0xf9e38, `movem.l` par huit longs : les registres gardent les derniers).
+/// Copie de 0x400 octets de palettes (0xf9e38, `movem.l` par huit longs).
 fn copy_palettes(x: &mut Ctx, from: u32, to: u32) {
     for i in (0..0x400).step_by(4) {
         let v = rd32(x.b, from + i);
         wr32(x.b, to + i, v);
-        match i % 32 / 4 {
-            k @ 0..=5 => x.c.d[k as usize + 1] = v,
-            k => x.c.a[k as usize - 3] = v,
-        }
     }
-    (x.c.a[1], x.c.a[2]) = (from + 0x400, to + 0x400);
-    x.c.d[0] = 0xffff;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Aiguillage par scène
 
-/// Script de la scène (D0 = deux fois la scène, comme l'aiguillage d'origine) ; rend la main à l'appelant
-/// (`Flow::Done`) ou cède.
+/// Script de la scène ; rend la main à l'appelant (`Flow::Done`) ou cède.
 pub fn run(x: &mut Ctx, scene: u32) -> Flow {
     match scene {
         1 => early::scene_1(x),
@@ -451,11 +413,8 @@ pub fn run(x: &mut Ctx, scene: u32) -> Flow {
         38 | 40 | 42 | 44 => late::scene_38(x),
         46 => late::scene_46(x),
         69 => late::finale(x),
-        // pas de script : la scène suivante est l'octet bas de D0 (deux fois la scène)
-        _ => {
-            let d0 = x.c.d[0] as u8;
-            finish(x, d0)
-        }
+        // pas de script : la scène suivante est l'octet bas de D0 de l'aiguillage (deux fois la scène)
+        _ => finish(x, (2 * scene) as u8),
     }
 }
 

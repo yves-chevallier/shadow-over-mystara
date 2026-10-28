@@ -17,7 +17,7 @@ use m68k::Cpu;
 use super::{player, scratch, script, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::families::effects_creators as createurs;
 use crate::game;
-use crate::mem::{rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::Native;
 use crate::objects::pools;
@@ -96,7 +96,6 @@ fn init_scene(x: &mut Ctx) {
     x.set_v8(0x58, 0);
     x.set_v8(0x51, 0);
     let scene = x.v8(var::SCENE) as u32;
-    x.c.d[0] = scene;
     let (pa, pb) = (x.rd8(table::PALETTE_A + scene), x.rd8(table::PALETTE_B + scene));
     x.set_v8(0x48, pa);
     x.set_v8(0x49, pb);
@@ -132,9 +131,8 @@ fn init_scene(x: &mut Ctx) {
             wr32(x.b, p + 4, 0);
         }
     }
-    x.c.d[0] = alive as u32;
     x.set_v8(var::PLAYERS, alive);
-    place_players(x);
+    place_players(x.b);
 }
 
 fn clear_player(x: &mut Ctx, p: u32) {
@@ -152,49 +150,59 @@ fn clear_player(x: &mut Ctx, p: u32) {
     }
 }
 
-/// Place chaque joueur en jeu devant la caméra, d'après les tables de la scène (consommées dans
-/// l'ordre des joueurs en jeu).
-pub fn place_players(x: &mut Ctx) {
-    let scene = x.v8(var::SCENE) as u32;
+/// Ce que le placement des joueurs laisse dans les registres de l'original : D0/D1 = la caméra (ou la scène
+/// décalée), D2 = le rang, A2/A3 = les fins des tables.
+struct RestesPlacement {
+    d0: u32,
+    d1: u32,
+    rang: u8,
+    positions: u32,
+    etats: u32,
+}
+
+/// 0x20de6 : place chaque joueur en jeu devant la caméra, d'après les tables de la scène (consommées dans l'ordre
+/// des joueurs en jeu).
+pub fn place_players(b: &mut Cps2Bus) {
+    placer_joueurs(b);
+}
+
+fn placer_joueurs(b: &mut Cps2Bus) -> RestesPlacement {
+    let scene = rd8(b, A5 + var::SCENE) as u32;
     let mut positions = table::START_POSITIONS + (scene << 4);
     let mut states = table::START_STATES + (scene << 2);
-    let camera = if x.v8(var::USE_ALT_CAMERA) != 0 { 0x556 } else { 0x506 };
-    // registres de l'original : D0/D1 = caméra (ou scène décalée), D2 = rang, D6 = -1, A1-A3 = fins
+    let camera = A5 + if rd8(b, A5 + var::USE_ALT_CAMERA) != 0 { 0x556 } else { 0x506 };
     let (mut d0, mut d1) = (scene << 4, scene << 2);
     let mut rank = 0u8;
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
-        if x.rd8(p + player::ACTIVE) == 0 || x.rd16(p + player::HEALTH) == 0 {
+        if rd8(b, p + player::ACTIVE) == 0 || rd16(b, p + player::HEALTH) == 0 {
             continue;
         }
-        let (dx, dy) = (x.v16(camera), x.v16(camera + 4));
+        let (dx, dy) = (rd16(b, camera), rd16(b, camera + 4));
         (d0, d1) = (dx as u32, dy as u32);
-        let (px, py) = (x.rd16(positions), x.rd16(positions + 2));
+        let (px, py) = (rd16(b, positions), rd16(b, positions + 2));
         positions += 4;
-        wr16(x.b, p + 8, px.wrapping_add(dx));
-        wr16(x.b, p + 0x10, py.wrapping_add(dy));
-        wr32(x.b, p + 0xc, 0);
-        let state = x.rd8(states);
-        wr8(x.b, p + 0x2c, state);
+        wr16(b, p + 8, px.wrapping_add(dx));
+        wr16(b, p + 0x10, py.wrapping_add(dy));
+        wr32(b, p + 0xc, 0);
+        let state = rd8(b, states);
+        wr8(b, p + 0x2c, state);
         states += 1;
-        wr8(x.b, p + 0x7d, rank);
+        wr8(b, p + 0x7d, rank);
         rank += 1;
     }
-    x.c.d[0] = d0;
-    x.c.d[1] = d1;
-    x.c.d[2] = rank as u32;
-    x.c.d[6] = 0xffff;
-    x.c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
-    x.c.a[2] = positions;
-    x.c.a[3] = states;
+    RestesPlacement { d0, d1, rang: rank, positions, etats: states }
 }
 
-/// 0x20de6 appelée par le code d'origine (sortie de scène) : `place_players`.
+/// 0x20de6 appelée par le code d'origine (renaissance d'un joueur, `families/creators.rs`) : `place_players`, avec
+/// les registres de l'original (D6 = -1, A1 après le dernier joueur).
 pub const PLACE_PLAYERS: Native = Native {
     entry: 0x20de6,
     name: "scene_place_joueurs",
     run: crate::Corps::Processeur(|c, b| {
-        place_players(&mut Ctx::new(c, b));
+        let r = placer_joueurs(b);
+        (c.d[0], c.d[1], c.d[2], c.d[6]) = (r.d0, r.d1, r.rang as u32, 0xffff);
+        (c.a[1], c.a[2], c.a[3]) = (PLAYERS + 4 * PLAYER_STRIDE, r.positions, r.etats);
         crate::mem::rts(c, b);
     }),
     touches_sound: false,
@@ -256,7 +264,6 @@ pub fn phase_8(c: &mut Cpu, b: &mut Cps2Bus) {
         STEP_INIT => init_scene(&mut x),
         STEP_SEQUENCE => {
             let scene = x.v8(var::SCENE);
-            x.c.d[0] = (scene as u32) << 2;
             sequence(scene)(&mut x);
             script::step(x.c, x.b);
             game::debug_scene_skip(x.b);
