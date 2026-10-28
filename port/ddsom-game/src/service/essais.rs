@@ -3,7 +3,7 @@
 //! Chacun a deux étapes (préparation, puis mise à jour à chaque image) et revient au menu par départ 1P
 //! tenu + tir 1 (`exit_check`).
 
-use super::{call_d0, exit_check, ext, f, get, get16, hex_digits, key, layers_off, layers_on, next_step, pressed, print, set, set16, var};
+use super::{exit_check, f, get, get16, hex_digits, key, layers_off, layers_on, next_step, pressed, print, set, set16, var};
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
@@ -138,12 +138,12 @@ pub fn output(x: &mut Ctx) -> Flow {
 
 /// Verrou du monnayeur du joueur `p` (bit `mask`) : posé quand son tir 1 est pressé, levé quand il est
 /// relâché.
-fn coin_lock(x: &mut Ctx, p: u32, mask: u16) {
+fn coin_lock(x: &mut Ctx, p: u32, mask: u8) {
     let (cur, prev) = (x.v8(var::INPUT + p), x.v8(var::PREV + p));
     if cur & !prev & key::SHOT1 != 0 {
-        call_d0(x, ext::LOCK, mask);
+        crate::video::verrouiller_compteurs(x.b, mask);
     } else if !cur & prev & key::SHOT1 != 0 {
-        call_d0(x, ext::UNLOCK, mask);
+        crate::video::deverrouiller_compteurs(x.b, mask);
     }
 }
 
@@ -162,7 +162,11 @@ fn output_update(x: &mut Ctx) {
     if (x.v8(var::INPUT) ^ x.v8(var::PREV)) & key::SHOT2 != 0 {
         let on = crate::mem::rd8(x.b, output::COUNTER) ^ 1;
         crate::mem::wr8(x.b, output::COUNTER, on);
-        call_d0(x, if on != 0 { ext::LOCK } else { ext::UNLOCK }, 1);
+        if on != 0 {
+            crate::video::verrouiller_compteurs(x.b, 1);
+        } else {
+            crate::video::deverrouiller_compteurs(x.b, 1);
+        }
     }
     if card_variant(x) && x.v8(var::CARD_DISPENSER) != 0 {
         let new = x.v8(var::INPUT + 1) & !x.v8(var::PREV + 1);
@@ -262,10 +266,7 @@ fn request(x: &mut Ctx, new: u8) {
         let code = get16(x, sound::CODE);
         if code != 0 {
             // D2 et D3 sont ceux que laissent les touches du code (0x2b50e)
-            x.c.d[1] = code as u32;
-            x.c.d[2] = 1;
-            x.c.d[3] = 3;
-            x.call(ext::SOUND_REQUEST);
+            crate::sound::emettre(x.b, crate::sound::Commande { d1: code as u32, d2: 1, d3: 3 });
         }
     } else if new & key::SHOT2 != 0 {
         crate::sound::service(x.b, crate::sound::Service::ArretGeneral);

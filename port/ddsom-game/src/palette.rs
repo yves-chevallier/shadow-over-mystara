@@ -440,9 +440,11 @@ fn special_sources(stage: u8) -> Option<[u32; 4]> {
     }
 }
 
-/// 0x1a296 : toutes les palettes de la scène en cours.
-pub fn charger_tout(b: &mut Cps2Bus) {
+/// 0x1a296 : toutes les palettes de la scène en cours. Rend le D0 que laisse l'original : le premier long de la
+/// dernière palette de la page 3 (le menu de configuration le relit).
+pub fn charger_tout(b: &mut Cps2Bus) -> u32 {
     charger_tout_par(b, None);
+    rd32(b, PALETTES + 3 * PAGE_SIZE + (PAGE_PALETTES - 1) * PALETTE_BYTES)
 }
 
 /// `charger_tout`, et les registres de l'original si `c` est donné.

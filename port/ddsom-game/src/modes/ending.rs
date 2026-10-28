@@ -486,8 +486,9 @@ crate::etapes! {
             x.call(ext::PLAYERS_UPDATE);
             wr8(x.b, var::PHASE, 20);
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-            crate::families::petites::booted_set(x.c, x.b);
-            Flow::Yield
+            // `jmp 0x133f6` : le démarrage noté fait, puis le retour à l'appelant
+            crate::families::petites::demarrage_fait(x.b, true);
+            Flow::Done
         },
     }
 }

@@ -20,38 +20,19 @@
 //! coupent le code en morceaux : chacun est une étape de la machine à états de la tâche ([`Etape`]), à l'adresse
 //! de retour de l'original.
 
+use crate::ecran_credits::{self, PREMIER_MONNAYEUR};
 use crate::modes::{Flow, Sequence};
-use crate::mem::{rd16, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, set_low_word, wr16, wr32, wr8, A5};
+use crate::objects::{pools, Obj};
 use crate::scene::Ctx;
 use crate::taches;
-use crate::objects::{pools, Obj};
+use crate::video::{charger_grille, Grille};
 
-/// Sous-routines d'origine.
-mod ext {
-    pub const VIDEO_ON: u32 = 0xbc6;
-    pub const PAGE_PALETTE: u32 = 0x1a3d4;
-    pub const PALETTE_SCENE: u32 = 0x1a60a;
-    pub const PALETTE_BACK: u32 = 0x1a67e;
-    pub const PALETTE_FRONT: u32 = 0x1a8b2;
-    pub const PALETTE_RESET: u32 = 0x1a296;
-    pub const SPRITES: u32 = 0x1de96;
-    pub const START_BUTTONS: u32 = 0x141e0;
-    pub const LOCK_COUNTERS: u32 = 0x14290;
-    pub const LOCK: u32 = 0xb96;
-    pub const UNLOCK: u32 = 0xbac;
-    pub const DISPLAY_CREDITS: u32 = 0x148be;
-    pub const DISPLAY_COUNTS: u32 = 0x14652;
-    pub const PLAYERS_INIT: u32 = 0x2d9e;
-    pub const PLAYERS_RESET: u32 = 0x1de7c;
-    pub const PLAYERS_PANELS: u32 = 0x21bc;
-    pub const DISPATCH_SOBJ: u32 = 0x39f82;
-    pub const TILES_16: u32 = 0x260c;
-    pub const TILES_BLOCK: u32 = 0x26d4;
-    pub const TILES_SCROLL3: u32 = 0x2766;
-    pub const SOUND_E1060: u32 = 0xe1060;
-    pub const SOUND_E18B8: u32 = 0xe18b8;
-    pub const SOUND_START: u32 = 0xe181c;
-    pub const ACCOUNTING: u32 = 0x2e4ec;
+/// Sons de l'écran des crédits.
+mod son {
+    pub const ECRAN_A: u32 = 0xe1060;
+    pub const ECRAN_B: u32 = 0xe18b8;
+    pub const DEPART: u32 = 0xe181c;
 }
 
 /// Entrée de la tâche de partie, et de la tâche d'interface des joueurs.
@@ -158,11 +139,10 @@ fn clear_scrolls(x: &mut Ctx) {
     }
 }
 
-/// `D0 = VIDEO_ON ; A5+0x14 = 0 ; 0xbc6` : remet les plans en route.
+/// `A5+0x14 = 0 ; 0xbc6` : remet les plans en route.
 fn video_on(x: &mut Ctx) {
-    set_low_word(&mut x.c.d[0], VIDEO_ON);
     set16(x, var::VIDEO_B, 0);
-    x.call(ext::VIDEO_ON);
+    crate::video::activer_couches(x.b, VIDEO_ON);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -187,7 +167,7 @@ pub enum Etape {
     AfterFade,
     AfterFadeClear,
     /// Départ d'un joueur en mode « continue », après l'effacement de l'écran.
-    StartAfterClear,
+    StartAfterClear(Depart),
     /// Impulsion de verrouillage après sa première cession ; `d0` est le D0 que l'original garde sur la pile
     /// (`move.l D0,-(SP)`).
     PulseAfterWait { d0: u32 },
@@ -208,7 +188,7 @@ impl Etape {
             Etape::Sequence(seq, k) => seq.returns()[k],
             Etape::AfterFade => at::AFTER_FADE,
             Etape::AfterFadeClear => at::AFTER_FADE_CLEAR,
-            Etape::StartAfterClear => at::START_AFTER_CLEAR,
+            Etape::StartAfterClear(_) => at::START_AFTER_CLEAR,
             Etape::PulseAfterWait { .. } => at::PULSE_AFTER_WAIT,
             Etape::Lock(k) => at::LOCKOUT[k - 1],
         }
@@ -224,7 +204,7 @@ impl Etape {
             Etape::Sequence(seq, k) => sequence(x, seq, k + 1),
             Etape::AfterFade => x.sous_programme(crate::video::ecran_noir::debut, Etape::AfterFadeClear),
             Etape::AfterFadeClear => after_fade_clear(x),
-            Etape::StartAfterClear => start_after_clear(x),
+            Etape::StartAfterClear(d) => start_after_clear(x, d),
             Etape::PulseAfterWait { d0 } => pulse_after_wait(x, d0),
             Etape::Lock(k) => lockouts(x, k),
         }
@@ -233,13 +213,13 @@ impl Etape {
 
 /// `0x13c10` : un tour.
 fn tour(x: &mut Ctx) -> Flow {
-    x.call(ext::START_BUTTONS);
+    crate::credits::lire_departs(x.b);
     x.push_return(Etape::AfterState);
     credits(x)
 }
 
 fn after_state(x: &mut Ctx) -> Flow {
-    x.call(ext::LOCK_COUNTERS);
+    crate::credits::verrouiller_compteurs(x.b);
     x.push_return(Etape::AfterContinue);
     lockouts(x, 0)
 }
@@ -277,7 +257,7 @@ fn shutdown(x: &mut Ctx) -> Flow {
 
 /// Fin du démontage : la tâche du menu TEST prend l'emplacement 0, la tâche se termine.
 fn shutdown_after_clear(x: &mut Ctx) -> Flow {
-    x.call(ext::PALETTE_RESET);
+    crate::palette::charger_tout(x.b);
     crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     x.c.a[0] = UI_TASK;
     set_low_word(&mut x.c.d[0], 0);
@@ -293,7 +273,6 @@ fn credits(x: &mut Ctx) -> Flow {
     if v8(x, var::GAME) != 0 {
         return Flow::Done;
     }
-    x.c.a[1] = a5(var::COIN_1);
     if v8(x, var::CONTINUE) == 0 {
         // des crédits ou des pièces quelque part ?
         let somme = [0x44f, 0x45f, 0x46f, 0x47f, 0x450, 0x460, 0x470, 0x480].iter().fold(0u8, |s, &o| s.wrapping_add(v8(x, o)));
@@ -323,13 +302,12 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     set8(x, var::CLEAR_FLAG, 0);
     set8(x, var::SCREEN_FLAG, 1);
     crate::taches::partie::effacer_variables(x.c, x.b);
-    x.call(ext::PLAYERS_INIT);
-    x.call(ext::PLAYERS_RESET);
+    crate::player::init::effacer_joueurs(x.c, x.b);
+    crate::sprites::vider_listes(x.b);
     wr16(x.b, OUTPUT_4, OUTPUT_ON);
     video_on(x);
-    x.c.d[0] = 1;
-    x.call(ext::PAGE_PALETTE);
-    x.call(ext::PLAYERS_PANELS);
+    crate::palette::charger_ensemble(x.b, 1);
+    pools::SOBJ.reset(x.b);
     // cinq objets système : (variante, X, Z)
     for (variant, px, pz) in [(0xe7, 0x70, 0xd0), (0xe8, 0x70, 0xd0), (0xe4, 0x20, 0xb0), (0xe5, 0x00, 0x70), (0xe6, 0x13c, 0x60)] {
         // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
@@ -340,50 +318,42 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
         wr16(x.b, o + 8, px);
         wr16(x.b, o + 0xc, pz);
     }
-    x.call(ext::DISPATCH_SOBJ);
-    x.c.d[0] = 5;
-    x.c.a[1] = 0x912000;
-    x.call(ext::TILES_16);
-    x.c.d[0] = 6;
-    x.call(ext::TILES_16);
-    set_low_word(&mut x.c.d[0], 0x201);
-    x.c.a[1] = 0x917000;
-    x.call(ext::TILES_BLOCK);
-    set_low_word(&mut x.c.d[0], 0x202);
-    x.call(ext::TILES_BLOCK);
-    set_low_word(&mut x.c.d[0], 8);
-    x.c.a[1] = 0x91b800;
-    x.call(ext::TILES_SCROLL3);
-    set_low_word(&mut x.c.d[0], 8);
-    x.call(ext::TILES_SCROLL3);
-    x.c.d[0] = 2;
-    x.call(ext::PALETTE_SCENE);
-    x.c.d[0] = 0x55;
-    x.call(ext::PALETTE_BACK);
-    x.c.d[0] = 0x55;
-    x.call(ext::PALETTE_FRONT);
+    crate::dispatch::SOBJ.update_sans_suite(x.c, x.b);
+    // deux grilles de chaque sorte, la seconde à la suite de la première
+    let fin = charger_grille(x.b, Grille::Blocs4x4, 5, 0x912000);
+    charger_grille(x.b, Grille::Blocs4x4, 6, fin.destination);
+    let fin = charger_grille(x.b, Grille::Couche2, 0x201, 0x917000);
+    charger_grille(x.b, Grille::Couche2, 0x202, fin.destination);
+    let fin = charger_grille(x.b, Grille::Couche3, 8, 0x91b800);
+    charger_grille(x.b, Grille::Couche3, 8, fin.destination);
+    crate::palette::charger_page(x.b, 1, 2);
+    crate::palette::charger_page(x.b, 2, 0x55);
+    crate::palette::charger_page(x.b, 3, 0x55);
     set8(x, var::FADE_PAGES, 0xf);
     crate::palette::full_brightness(x.b);
     video_on(x);
     crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-    crate::sound::jouer_global(x.b, ext::SOUND_E1060);
-    crate::sound::jouer_global(x.b, ext::SOUND_E18B8);
+    crate::sound::jouer_global(x.b, son::ECRAN_A);
+    crate::sound::jouer_global(x.b, son::ECRAN_B);
     set8(x, var::COIN_SOUND, 1);
     display(x)
 }
 
 /// `0x13e46` : affiche l'écran des crédits (compteurs, textes, sprites), puis traite les départs.
 fn display(x: &mut Ctx) -> Flow {
-    x.c.a[1] = a5(var::COIN_1);
-    x.call(ext::DISPLAY_CREDITS);
-    x.call(ext::DISPLAY_COUNTS);
+    ecran_credits::credit_text(x.b, PREMIER_MONNAYEUR);
+    ecran_credits::digits(x.b, PREMIER_MONNAYEUR);
     crate::text::print(x.b, TEXT_CREDITS);
-    let d0 = (rd16(x.b, a5(var::GAME_LANGUAGE)) as u32 * 2) & 0xffff;
-    set_low_word(&mut x.c.d[0], d0 as u16);
-    let texte = x.rd32(TEXT_TABLE + d0);
+    let texte = language_text(x);
     crate::text::print(x.b, texte);
-    x.call(ext::SPRITES);
+    crate::sprites::construire_68k(x.c, x.b);
     starts(x)
+}
+
+/// Texte de la langue du jeu (`A5+0x70`, deux octets par langue dans la table des pointeurs).
+fn language_text(x: &mut Ctx) -> u32 {
+    let d0 = (rd16(x.b, a5(var::GAME_LANGUAGE)) as u32 * 2) & 0xffff;
+    x.rd32(TEXT_TABLE + d0)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -418,7 +388,7 @@ fn pulse(x: &mut Ctx) -> Flow {
     wr8(x.b, x.c.a[0] + 3, counter - 1);
     // D0 est gardé pendant la cession (`move.l D0,-(SP)` de l'original) : dans l'étape de reprise
     let d0 = x.c.d[0];
-    x.call(ext::LOCK);
+    crate::video::verrouiller_compteurs(x.b, d0 as u8);
     set_low_word(&mut x.c.d[0], 0x10);
     crate::kernel::attendre(x.c, x.b, Etape::PulseAfterWait { d0 });
     Flow::Yield
@@ -427,7 +397,7 @@ fn pulse(x: &mut Ctx) -> Flow {
 /// `0x143c8` : déverrouille, puis la seconde attente (`jmp 0xa40`) : la tâche reprendra à la suite de l'appelant.
 fn pulse_after_wait(x: &mut Ctx, d0: u32) -> Flow {
     x.c.d[0] = d0;
-    x.call(ext::UNLOCK);
+    crate::video::deverrouiller_compteurs(x.b, d0 as u8);
     set_low_word(&mut x.c.d[0], 0x10);
     let suite = crate::taches::table::depiler_retour(x.c, x.b);
     crate::kernel::attendre(x.c, x.b, suite);
@@ -471,7 +441,6 @@ impl Seq {
 
 /// `0x13e7a` : choisit la séquence d'appels de départ.
 fn starts(x: &mut Ctx) -> Flow {
-    x.c.a[1] = a5(var::COIN_1);
     if v8(x, var::SEPARATE) != 0 {
         let seq = if v8(x, var::COIN_COUNT) == 1 && v8(x, var::SHARED) != 0 { Seq::B } else { Seq::C };
         return sequence(x, seq, 0);
@@ -498,9 +467,9 @@ fn sequence(x: &mut Ctx, seq: Seq, k: usize) -> Flow {
             return end(x);
         }
     }
-    let (a1, mask, player, a3) = seq.calls()[k];
+    let (monnayeur, mask, joueur, enregistrement) = seq.calls()[k];
     x.push_return(Etape::Sequence(seq, k));
-    start_player(x, a5(a1), mask, player, a5(a3))
+    start_player(x, Depart { monnayeur: a5(monnayeur), joueur: joueur as u8, enregistrement: a5(enregistrement), cout: 0 }, mask)
 }
 
 /// `0x13fa8` : si un joueur a démarré, lance la partie.
@@ -514,15 +483,13 @@ fn end(x: &mut Ctx) -> Flow {
         set8(x, var::GAME, 1);
         set8(x, var::COIN_1 + 6, 0);
         crate::text::erase(x.b, TEXT_CREDITS);
-        let d0 = (rd16(x.b, a5(var::GAME_LANGUAGE)) as u32 * 2) & 0xffff;
-        set_low_word(&mut x.c.d[0], d0 as u16);
-        let texte = x.rd32(TEXT_TABLE + d0);
+        let texte = language_text(x);
         crate::text::erase(x.b, texte);
         return create_game_task(x);
     }
     // reprise de partie : l'écran de continue est démonté, fondu au noir et effacé
-    x.call(ext::PLAYERS_RESET);
-    x.call(ext::PLAYERS_PANELS);
+    crate::sprites::vider_listes(x.b);
+    pools::SOBJ.reset(x.b);
     let flags = rd16(x.b, a5(var::FLAGS)) & !1;
     set16(x, var::FLAGS, flags);
     set8(x, var::SCROLL_MODE, 0);
@@ -547,8 +514,6 @@ fn after_fade_clear(x: &mut Ctx) -> Flow {
 /// `jmp 0x9b6` avec A0 = tâche de partie, D0 = emplacement 0 : la tâche de partie est créée, et l'on revient à
 /// l'appelant de `0x13c2c`.
 fn create_game_task(x: &mut Ctx) -> Flow {
-    set_low_word(&mut x.c.d[0], 0);
-    x.c.a[0] = GAME_TASK;
     crate::kernel::creer_tache(x.b, 0, GAME_TASK);
     Flow::Done
 }
@@ -556,61 +521,66 @@ fn create_game_task(x: &mut Ctx) -> Flow {
 // ---------------------------------------------------------------------------------------------
 // Départ d'un joueur (0x140b4)
 
-/// `0x140b4` : le joueur dont le bouton de départ est `mask` (IN2) entre dans la partie. `a1` est
-/// son monnayeur, `a3` son enregistrement de joueur, `player` son numéro.
-fn start_player(x: &mut Ctx, a1: u32, mask: u8, player: u32, a3: u32) -> Flow {
-    x.c.a[1] = a1;
-    set_low_byte(&mut x.c.d[1], mask);
-    x.c.d[2] = player;
-    x.c.a[3] = a3;
+/// Un départ de joueur (A1, D2, A3 et D3 de l'original, gardés pendant l'effacement de l'écran d'un départ en
+/// mode « continue »).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Depart {
+    /// Enregistrement du monnayeur qui paie.
+    monnayeur: u32,
+    /// Numéro du joueur.
+    joueur: u8,
+    /// Enregistrement du joueur.
+    enregistrement: u32,
+    /// Crédits débités.
+    cout: u8,
+}
+
+/// `0x140b4` : le joueur dont le bouton de départ est `mask` (IN2) entre dans la partie.
+fn start_player(x: &mut Ctx, mut d: Depart, mask: u8) -> Flow {
     let button = x.rd8(IN2) & mask;
     if v8(x, var::CONTINUE) == 0 {
-        let cost = if rd8(x.b, a1 + 9) != 0 { 2 } else { 1 };
-        x.c.d[3] = cost;
-        if rd8(x.b, a1 + 2) < cost as u8 || button != 0 {
+        d.cout = if rd8(x.b, d.monnayeur + 9) != 0 { 2 } else { 1 };
+        if rd8(x.b, d.monnayeur + 2) < d.cout || button != 0 {
             return Flow::Done;
         }
-        return join(x);
+        return join(x, d);
     }
-    x.c.d[3] = 0;
     if button != 0 {
         return Flow::Done;
     }
-    if rd8(x.b, a1 + 6) == 0 {
-        wr8(x.b, a1 + 6, 1);
+    if rd8(x.b, d.monnayeur + 6) == 0 {
+        wr8(x.b, d.monnayeur + 6, 1);
         kill(x, &[0, 0x10, 0x30, 0xd0, 0xf0]);
         clear_scrolls(x);
-        return x.sous_programme(crate::video::ecran_noir::debut, Etape::StartAfterClear);
+        return x.sous_programme(crate::video::ecran_noir::debut, Etape::StartAfterClear(d));
     }
-    join(x)
+    join(x, d)
 }
 
-fn start_after_clear(x: &mut Ctx) -> Flow {
+fn start_after_clear(x: &mut Ctx, d: Depart) -> Flow {
     wr16(x.b, OUTPUT_4, OUTPUT_ON);
     video_on(x);
     let flags = rd16(x.b, a5(var::FLAGS)) & !1;
     set16(x, var::FLAGS, flags);
     crate::taches::partie::effacer_variables(x.c, x.b);
-    x.call(ext::PLAYERS_INIT);
+    crate::player::init::effacer_joueurs(x.c, x.b);
     set8(x, var::SCROLL_MODE, 0);
-    x.call(ext::PLAYERS_RESET);
-    join(x)
+    crate::sprites::vider_listes(x.b);
+    join(x, d)
 }
 
-/// `0x141a6` : le joueur démarre : bruit, crédit débité (`D3`), enregistrement du joueur créé,
-/// comptabilité (`jmp`, qui revient à l'appelant).
-fn join(x: &mut Ctx) -> Flow {
-    crate::sound::jouer_global(x.b, ext::SOUND_START);
+/// `0x141a6` : le joueur démarre : bruit, crédit débité, enregistrement du joueur créé, comptabilité (`jmp`, qui
+/// revient à l'appelant).
+fn join(x: &mut Ctx, d: Depart) -> Flow {
+    crate::sound::jouer_global(x.b, son::DEPART);
     crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
-    let (a1, a3, player, cost) = (x.c.a[1], x.c.a[3], x.c.d[2], x.c.d[3] as u8);
-    let credits = rd8(x.b, a1 + 2).wrapping_sub(cost);
-    wr8(x.b, a1 + 2, credits);
+    let credits = rd8(x.b, d.monnayeur + 2).wrapping_sub(d.cout);
+    wr8(x.b, d.monnayeur + 2, credits);
     crate::taches::partie::effacer_variables(x.c, x.b);
-    wr8(x.b, a3, 1);
-    wr8(x.b, a3 + 2, player as u8);
-    let started = rd8(x.b, a5(var::STARTED)) | 1 << (player & 7);
+    wr8(x.b, d.enregistrement, 1);
+    wr8(x.b, d.enregistrement + 2, d.joueur);
+    let started = rd8(x.b, a5(var::STARTED)) | 1 << (d.joueur & 7);
     wr8(x.b, a5(var::STARTED), started);
-    x.call(ext::ACCOUNTING);
+    crate::eeprom::compter_partie(x.b);
     Flow::Done
 }
-

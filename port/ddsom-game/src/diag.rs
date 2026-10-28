@@ -31,15 +31,11 @@ pub fn poison_actif(etiquette: &str) -> bool {
     !e.is_empty() && e.iter().any(|x| x == etiquette || x == "tout")
 }
 
-/// L'étiquette est empoisonnée au site d'appel `site` (`fichier:ligne:colonne`). Une entrée `étiquette@motif` ne vaut
-/// que pour les sites qui contiennent le motif (`motion@families/sobj`) ; une entrée précédée de `!` exclut ces sites
-/// (`motion,!motion@sobj.rs:120`), pour isoler par bissection le lecteur d'un registre.
-fn empoisonne(etiquette: &str, site: &str) -> bool {
-    gardes(etiquette, site).is_some()
-}
-
-/// Comme [`empoisonne`], et rend les registres à épargner : une entrée `étiquette@motif#a1+d0` empoisonne ce site
-/// sauf A1 et D0 (lecture déjà connue et écrite en clair, pour chercher les autres).
+/// L'étiquette est-elle empoisonnée au site d'appel `site` (`fichier:ligne:colonne`) ? Une entrée `étiquette@motif`
+/// ne vaut que pour les sites qui contiennent le motif (`motion@families/sobj`) ; une entrée précédée de `!` exclut
+/// ces sites (`motion,!motion@sobj.rs:120`), pour isoler par bissection le lecteur d'un registre. Rend les registres
+/// à épargner : une entrée `étiquette@motif#a1+d0` empoisonne ce site sauf A1 et D0 (lecture déjà connue et écrite
+/// en clair, pour chercher les autres).
 fn gardes(etiquette: &str, site: &str) -> Option<u32> {
     let mut actif = None;
     for x in etiquettes() {
@@ -72,7 +68,9 @@ fn masque_de(liste: &str) -> u32 {
         .map(|r| match (r.get(..1), r.get(1..).and_then(|n| n.parse::<u32>().ok())) {
             (Some("d"), Some(n)) if n < 8 => regs::d(n),
             (Some("a"), Some(n)) if n < 8 => regs::a(n),
-            _ if r == "ccr" => regs::CCR,
+            _ if r == "ccr" => regs::CCR | X,
+            _ if r == "nzvc" => regs::CCR,
+            _ if r == "x" => X,
             _ => panic!("DDSOM_POISON : registre {r:?}"),
         })
         .fold(0, |m, r| m | r)
@@ -100,8 +98,11 @@ pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16)
             masque |= regs::a(i as u32);
         }
     }
-    if (c.sr ^ avant.2) & 0x1f != 0 {
+    if (c.sr ^ avant.2) & 0x0f != 0 {
         masque |= regs::CCR;
+    }
+    if (c.sr ^ avant.2) & 0x10 != 0 {
+        masque |= X;
     }
     masque &= !garde;
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
@@ -115,14 +116,25 @@ pub fn sonder_appel(c: &mut Cpu, adresse: u32, avant: &([u32; 8], [u32; 8], u16)
             c.a[i as usize] = !c.a[i as usize];
         }
     }
-    if masque & regs::CCR != 0 {
-        c.sr ^= 0x1f;
-    }
+    inverser_drapeaux(&mut c.sr, masque);
 }
 
 /// Registres d'une tâche qu'une étape peut hériter : D0-D7, A0-A4, A6 et les drapeaux (A5 est remis par chaque pas,
 /// A7 est la pile).
-const REGISTRES_DE_TACHE: u32 = 0xff | 0x1f00 | 0x4000 | regs::CCR;
+const REGISTRES_DE_TACHE: u32 = 0xff | 0x1f00 | 0x4000 | regs::CCR | X;
+
+/// Sondes : le drapeau X, à part des autres drapeaux (`regs::CCR` : N, Z, V et C), pour savoir lequel est relu.
+const X: u32 = 1 << 17;
+
+/// Inverse N, Z, V, C (`regs::CCR`) et X (`X`) selon le masque.
+fn inverser_drapeaux(sr: &mut u16, masque: u32) {
+    if masque & regs::CCR != 0 {
+        *sr ^= 0x0f;
+    }
+    if masque & X != 0 {
+        *sr ^= 0x10;
+    }
+}
 
 /// Inverse les registres du masque (`crate::regs`).
 fn inverser(d: &mut [u32; 8], a: &mut [u32], sr: &mut u16, masque: u32) {
@@ -134,9 +146,7 @@ fn inverser(d: &mut [u32; 8], a: &mut [u32], sr: &mut u16, masque: u32) {
             a[i as usize] = !a[i as usize];
         }
     }
-    if masque & regs::CCR != 0 {
-        *sr ^= 0x1f;
-    }
+    inverser_drapeaux(sr, masque);
 }
 
 /// Sonde d'une cession (`kernel::ceder`) : avec l'étiquette `cession` (`cession@<motif>` : le motif est cherché dans
@@ -189,7 +199,8 @@ pub fn registres_morts(c: &mut Cpu, etiquette: &str, masque: u32) {
     let Some(garde) = gardes(etiquette, &site) else {
         return;
     };
-    let masque = masque & !garde;
+    // `regs::CCR` d'un adaptateur : tous les drapeaux, X compris
+    let masque = if masque & regs::CCR != 0 { masque | X } else { masque } & !garde;
     // DDSOM_POISON_TRACE=1 : chaque empoisonnement, avec son site d'appel et A1 (diagnostic d'un écart)
     if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
         eprintln!("POISON {etiquette} {site} a1={:06x}", c.a[1]);
@@ -202,7 +213,5 @@ pub fn registres_morts(c: &mut Cpu, etiquette: &str, masque: u32) {
             c.a[i as usize] = !c.a[i as usize];
         }
     }
-    if masque & regs::CCR != 0 {
-        c.sr ^= 0x1f;
-    }
+    inverser_drapeaux(&mut c.sr, masque);
 }

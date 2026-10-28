@@ -50,10 +50,6 @@ pub mod hw {
     pub const OBJ_BANK: u32 = 0x8040e1;
 }
 
-fn a5(c: &Cpu, off: u32) -> u32 {
-    c.a[5].wrapping_add(off)
-}
-
 fn set_low_word(r: &mut u32, v: u16) {
     *r = *r & 0xffff_0000 | v as u32;
 }
@@ -159,13 +155,17 @@ fn enable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xbfc : désactive les couches D0 (D0 est complémenté au retour, comme l'original).
-fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mask = !(c.d[0] as u16);
-    set_low_word(&mut c.d[0], mask);
-    let enable = rd16(b, a5(c, ram::LAYER_ENABLE)) & mask;
-    wr16(b, a5(c, ram::LAYER_ENABLE), enable);
+/// 0xbfc : désactive les couches `bits`. Le processeur reçoit D0.w complémenté.
+pub fn desactiver_couches(b: &mut Cps2Bus, bits: u16) {
+    let enable = rd16(b, A5 + ram::LAYER_ENABLE) & !bits;
+    wr16(b, A5 + ram::LAYER_ENABLE, enable);
     wr16(b, hw::LAYER_ENABLE, enable);
+}
+
+fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
+    let bits = c.d[0] as u16;
+    set_low_word(&mut c.d[0], !bits);
+    desactiver_couches(b, bits);
     rts(c, b);
 }
 

@@ -65,19 +65,29 @@ pub fn clear_overlays_of(g: &mut Ctx, k: u32) {
     clear(g, overlay(k, true), 3);
 }
 
-fn clear_players(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2d9e : les quatre enregistrements de joueur à zéro.
+pub fn effacer_joueurs(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
         clear_player(&mut g, k);
     }
-    rts(c, b);
 }
 
-fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2df8 : les huit sous-objets des joueurs à zéro.
+pub fn effacer_sous_objets(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
         clear_overlays_of(&mut g, k);
     }
+}
+
+fn clear_players(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_joueurs(c, b);
+    rts(c, b);
+}
+
+fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_sous_objets(c, b);
     rts(c, b);
 }
 

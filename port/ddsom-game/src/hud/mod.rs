@@ -223,8 +223,6 @@ mod at {
     /// Entrée de la tâche, et reprise de l'attente du début de la partie.
     /// Disposition par type de borne (`A5+0x20`), table d'octets relative au PC.
     pub const LAYOUTS: u32 = 0x15164;
-    /// Services de l'interface appelés à chaque tour (entrées des pièces, sons...).
-    pub const SERVICES: [u32; 2] = [0x19b2a, 0x19b9c];
 }
 
 /// Type de borne (nombre de joueurs, h) : choisit la disposition.
@@ -319,9 +317,9 @@ fn tour(x: &mut Ctx) -> Flow {
         wr8(x.b, var::SEEN_PAUSE, pause);
         status::countdown(x);
     }
-    for service in at::SERVICES {
-        x.call(service);
-    }
+    // 0x19b2a, 0x19b9c : les événements en attente crédités aux compteurs des joueurs
+    crate::evenements::crediter_points(x.b);
+    crate::evenements::crediter_compteur(x.b);
     crate::taches::une_image(x, Etape::AfterWait)
 }
 

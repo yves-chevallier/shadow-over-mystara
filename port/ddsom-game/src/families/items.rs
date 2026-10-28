@@ -2312,15 +2312,19 @@ gestionnaire!(ITEM_9, accompagnement::ENTREE, "item_accompagnement", accompagnem
 // Sous-routines appelées hors des gestionnaires
 
 /// `0xdabba` : efface le tableau des objets de collection ramassés (48 longs en `A5 - 0x5b88`).
-/// Registres laissés comme l'original : D0 = 0, D6.w = 0xffff, A0 = fin du tableau.
-fn efface_ramasses(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn effacer_ramasses(b: &mut Cps2Bus) {
     let debut = A5.wrapping_add(RAMASSES as u32);
     for k in 0..48 {
         wr32(b, debut + 4 * k, 0);
     }
+}
+
+/// `effacer_ramasses`, registres laissés comme l'original : D0 = 0, D6.w = 0xffff, A0 = fin du tableau.
+fn efface_ramasses(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_ramasses(b);
     c.d[0] = 0;
     c.d[6] = c.d[6] & 0xffff_0000 | 0xffff;
-    c.a[0] = debut + 4 * 48;
+    c.a[0] = A5.wrapping_add(RAMASSES as u32) + 4 * 48;
     rts(c, b);
 }
 

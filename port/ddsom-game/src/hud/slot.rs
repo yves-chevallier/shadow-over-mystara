@@ -9,11 +9,6 @@ use crate::scene::Ctx;
 
 /// Routines d'origine appelées par l'interface (comptabilité, sons, démarrage de joueur...).
 mod rom {
-    /// Comptabilité : une partie démarre.
-    pub const COUNT_GAME: u32 = 0x2e4ec;
-    /// Statistiques : le joueur a choisi le personnage D0 ; temps de jeu D0 (long) d'un joueur qui revient.
-    pub const COUNT_CHARACTER: u32 = 0x2e630;
-    pub const COUNT_TIME: u32 = 0x2e696;
     /// Initialisations du joueur k (créent le joueur dans la partie), pour le choix du personnage et pour
     /// la reprise ; leur adresse est dans une table du code.
     pub const START_PLAYER: u32 = 0x158b8;
@@ -206,7 +201,7 @@ fn idle(x: &mut Ctx, s: Slot) {
     if !start_pressed(b, s) || v8(b, var::GAME_ON) == 0 {
         return idle_banner(b, s);
     }
-    x.call(rom::COUNT_GAME);
+    crate::eeprom::compter_partie(x.b);
     let b = &mut *x.b;
     let credits = rd8(b, s.coins + 2).wrapping_sub(cost);
     wr8(b, s.coins + 2, credits);
@@ -679,8 +674,7 @@ fn choose(x: &mut Ctx, s: Slot) {
     let chosen = select::free_choice(b, current, false);
     s.set_p8(b, panel::CHOICE, chosen);
     s.set_g8(b, player::CHARACTER, chosen);
-    x.c.d[0] = chosen as u32;
-    x.call(rom::COUNT_CHARACTER);
+    crate::eeprom::stat_personnage_choisi(x.b, chosen as u16);
     let b = &mut *x.b;
     s.set_p8(b, panel::LAST_MODE, 0x80);
     s.set_p8(b, panel::STATE, 0);
@@ -709,8 +703,8 @@ fn start_player(x: &mut Ctx, s: Slot, table: u32) {
 
 /// 0x15a26 : le joueur est tombé (état 0x402) : début de la reprise.
 fn join_continue(x: &mut Ctx, s: Slot) {
-    x.c.d[0] = s.p32(x.b, panel::FRAMES);
-    x.call(rom::COUNT_TIME);
+    let frames = s.p32(x.b, panel::FRAMES);
+    crate::eeprom::stat_duree_de_partie(x.b, frames);
     let b = &mut *x.b;
     s.set_p8(b, panel::SUBSTEP, 1);
     let character = s.g8(b, player::CHARACTER);
@@ -811,7 +805,7 @@ fn resume(x: &mut Ctx, s: Slot) {
     if !start_pressed(b, s) {
         return;
     }
-    x.call(rom::COUNT_GAME);
+    crate::eeprom::compter_partie(x.b);
     let b = &mut *x.b;
     let credits = rd8(b, s.coins + 2).wrapping_sub(1);
     wr8(b, s.coins + 2, credits);
@@ -959,8 +953,7 @@ fn resume_choose(x: &mut Ctx, s: Slot) {
     let chosen = select::resume_choice(b, s, current, false);
     s.set_p8(b, panel::CHOICE, chosen);
     s.set_g8(b, player::CHARACTER, chosen);
-    x.c.d[0] = chosen as u32;
-    x.call(rom::COUNT_CHARACTER);
+    crate::eeprom::stat_personnage_choisi(x.b, chosen as u16);
     let b = &mut *x.b;
     let counter = rd8(b, A5 + 0x5a).wrapping_add(1);
     wr8(b, A5 + 0x5a, counter);

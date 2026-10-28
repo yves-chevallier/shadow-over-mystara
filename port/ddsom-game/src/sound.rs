@@ -749,11 +749,17 @@ fn version_alternative(b: &mut Cps2Bus) -> bool {
     rd16(b, a5(0x70)) != 0
 }
 
-/// 0xee044 : pile privée des wrappers vide (pointeur = sa propre adresse) ; A0 = le pointeur.
+/// 0xee044 : pile privée des wrappers vide (pointeur = sa propre adresse).
+pub fn vider_pile_privee(b: &mut Cps2Bus) {
+    let p = a5(ram::PILE_PRIVEE);
+    wr32(b, p, p);
+}
+
+/// `vider_pile_privee` ; A0 = le pointeur, drapeaux de sa valeur.
 fn init_pile_privee(c: &mut Cpu, b: &mut Cps2Bus) {
+    vider_pile_privee(b);
     let p = a5(ram::PILE_PRIVEE);
     c.a[0] = p;
-    wr32(b, p, p);
     c.flags_logic(p, Size::Long);
     rts(c, b);
 }
