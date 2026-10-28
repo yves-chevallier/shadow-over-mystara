@@ -515,6 +515,83 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     true
 }
 
+/// Baguettes du magicien : réserve de la baguette (`+0x18b..+0x18d`), son compteur d'objets en vie (mot de la RAM) et le
+/// numéro d'objet SET qu'affiche l'interface quand la réserve tombe à 5.
+struct Rod {
+    counter: u32,
+    kind: u8,
+    reserve: u32,
+    interface: u32,
+}
+
+const ROD_FLAME: Rod = Rod { counter: 0xff_2046, kind: 0xe, reserve: 0x18c, interface: 0xe };
+const ROD_STAR: Rod = Rod { counter: 0xff_204a, kind: 0x10, reserve: 0x18d, interface: 0xd };
+const ROD_BALL: Rod = Rod { counter: 0xff_2048, kind: 0xf, reserve: 0x18b, interface: 0xc };
+
+/// Fin commune des baguettes (0x533de) : une charge de moins, et à 5 l'interface est avertie (0xcc352, D0).
+fn rod_used(g: &mut Ctx, p: Player, rod: &Rod) {
+    cov!();
+    let left = p.u8(g, rod.reserve).wrapping_sub(1);
+    p.set_u8(g, rod.reserve, left);
+    if left == 5 {
+        g.c.d[0] = rod.interface;
+        g.rom(crate::player::externes::effet::WAND, p);
+    }
+}
+
+/// 0x5336a (flammes, genre 0xe) et 0x535f2 (étoiles, genre 0x10) : une rangée de tirs devant le magicien, tant qu'aucune
+/// rangée précédente n'est en vie. Le nombre de tirs vient du niveau (octets à `counts`), chacun 0x28 pixels plus loin
+/// que le précédent, avec sa variante et un retard (`+0x5c`) croissants. Le pool plein arrête la rangée.
+fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
+    cov!();
+    if rd16(g.b, rod.counter) != 0 {
+        return;
+    }
+    let forward = p.u8(g, 0x2c) != 0;
+    let (mut variant, mut delay) = (0u8, 1u8);
+    let mut offset = if forward { first_offset } else { first_offset.wrapping_neg() };
+    let level = p.u8(g, 0x10c) as u32;
+    // `subq.w #1` sur un compte nul donnerait 65 536 tours : le pool plein les arrête
+    let mut left = (g.prog8(counts + level) as u16).wrapping_sub(1);
+    loop {
+        let Some(o) = create(g, p, &pools::PSHL, rod.kind) else { break };
+        let alive = rd16(g.b, rod.counter);
+        wr16(g.b, rod.counter, alive.wrapping_add(1));
+        let (facing, x, y) = (p.u8(g, 0x2c), p.u16(g, Obj::X), p.u16(g, Obj::Y));
+        o.set_u8(g.b, Obj::VARIANT, variant);
+        o.set_u8(g.b, 0x5c, delay);
+        o.set_u8(g.b, 0x2c, facing);
+        o.set_u16(g.b, Obj::X, x.wrapping_add(offset));
+        o.set_u16(g.b, Obj::Y, y);
+        o.set_u16(g.b, field::LINK, p.0 as u16);
+        delay = delay.wrapping_add(6);
+        variant = variant.wrapping_add(1);
+        offset = offset.wrapping_add(if forward { 0x28 } else { 0x28u16.wrapping_neg() });
+        left = left.wrapping_sub(1);
+        if left == 0xffff {
+            break;
+        }
+    }
+    rod_used(g, p, rod);
+}
+
+/// 0x53478 : boule de la baguette (genre 0xf) : au plus autant en vie que l'indique le niveau (octets à 0x534b8). Un échec
+/// d'allocation ne consomme pas de charge.
+fn rod_ball(g: &mut Ctx, p: Player) {
+    cov!();
+    let level = p.u8(g, 0x10c) as u32;
+    let most = g.prog8(0x534b8 + level) as i16;
+    let alive = rd16(g.b, ROD_BALL.counter) as i16;
+    if most <= alive {
+        return;
+    }
+    let Some(o) = create(g, p, &pools::PSHL, ROD_BALL.kind) else { return };
+    let alive = rd16(g.b, ROD_BALL.counter);
+    wr16(g.b, ROD_BALL.counter, alive.wrapping_add(1));
+    o.set_u16(g.b, field::LINK, p.0 as u16);
+    rod_used(g, p, &ROD_BALL);
+}
+
 /// 0x54522 : boule de feu (magie 14), tir de genre 0x16.
 pub fn fireball(g: &mut Ctx, p: Player) {
     cov!();
@@ -950,3 +1027,6 @@ creator!(WAVE_BOLT, 0x4dfe2, "spawn_wave_bolt", regs::a(1), |g, p| {
 });
 creator!(WITCH_A, 0x53954, "spawn_witch_a", regs::a(1), |g, p| witch_strike(g, p, 1));
 creator!(WITCH_B, 0x539e4, "spawn_witch_b", regs::a(1), |g, p| witch_strike(g, p, 4));
+creator!(ROD_FLAME_SHOT, 0x5336a, "spawn_rod_flame", 0, |g, p| rod_row(g, p, &ROD_FLAME, 0x38, 0x533f4));
+creator!(ROD_BALL_SHOT, 0x53478, "spawn_rod_ball", 0, |g, p| rod_ball(g, p));
+creator!(ROD_STAR_SHOT, 0x535f2, "spawn_rod_star", 0, |g, p| rod_row(g, p, &ROD_STAR, 0x48, 0x5367c));

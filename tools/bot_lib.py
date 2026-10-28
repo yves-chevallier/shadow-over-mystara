@@ -18,7 +18,7 @@ import random
 
 
 def build(frames=30000, seed=1, chars=(0,), players=1, scene=None, pokes=(), item_rate=1,
-          coin_period=3000, poke_frame=2400, start_frame=4300, god=0, base_only=False, offset=0):
+          coin_period=3000, poke_frame=2400, start_frame=4300, god=0, base_only=False, offset=0, late=()):
     """Retourne la liste des lignes du scénario. `offset` : pièces, départ et sélection décalés d'autant
     d'images (l'attract tourne d'abord ; autobot --offset), les `pokes` restent à leur image."""
     rnd = random.Random(seed)
@@ -34,6 +34,10 @@ def build(frames=30000, seed=1, chars=(0,), players=1, scene=None, pokes=(), ite
         ev.append((f + dur, name, 0))
 
     pls = range(1, players + 1)
+    # `late` : (joueur, image, touches) : le joueur rejoint en cours de partie (pièce puis Start) et manie son curseur de
+    # choix ; touches = (nom, décalage, durée) à partir de l'image de la pièce
+    tardifs = {pl for pl, _, _ in late}
+    avant = [pl for pl in pls if pl not in tardifs]
 
     def coin(pl):
         return f"Coin {pl}"
@@ -41,13 +45,21 @@ def build(frames=30000, seed=1, chars=(0,), players=1, scene=None, pokes=(), ite
         # réglage monnayeur chargé de l'EEPROM (FF8021 = 1 : deux monnayeurs) : il en faut un par joueur
         pk.append((800 + offset, "poke8 ff8021", 3))
         pk.append((800 + offset, "poke8 ff8020", 2))  # FF8020 = joueurs - 2 (1 : trois joueurs)
-    for pl in pls:
+    for pl in avant:
         press(900 + 20 * pl, coin(pl), 6)
     press(1000 if players == 1 else 1100, "1 Player Start", 6)
     for pl in range(2, players + 1):
+        if pl in tardifs:
+            continue
         # les autres joueurs rejoignent pendant l'écran de sélection (« JOIN IN »)
         press(1250 + 20 * (pl - 2), f"{pl} Players Start", 6)
-    for pl in pls:
+    for pl, f0, touches in late:
+        press(f0, coin(pl), 6)
+        press(f0 + 30, f"{pl} Players Start", 6)
+        for name, dt, dur in touches:
+            ev.append((f0 + dt, f"P{pl} {name}", 1))
+            ev.append((f0 + dt + dur, f"P{pl} {name}", 0))
+    for pl in avant:
         k_char = chars[(pl - 1) % len(chars)]
         for k in range(k_char + pl - 1):
             press(1400 + 40 * k, f"P{pl} Right", 6)

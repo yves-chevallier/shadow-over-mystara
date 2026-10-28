@@ -1,0 +1,3200 @@
+920 Coin 1 1
+926 Coin 1 0
+1000 1 Player Start 1
+1006 1 Player Start 0
+1400 P1 Right 1
+1406 P1 Right 0
+1480 P1 Button 1 1
+1486 P1 Button 1 0
+2399 poke8 ff8034 1
+3571 poke16 ff8640 112
+3571 P1 Left 1
+3571 P1 Down 1
+3587 poke8 ff86ec 38
+3587 poke8 ff8769 0
+3587 poke8 ff876a 0
+3587 poke8 ff876b 0
+3587 poke8 ff876c 0
+3587 poke8 ff876d 0
+3587 poke8 ff876e 0
+3587 poke8 ff876f 0
+3599 poke8 ff86fe 33
+3599 poke8 ff8706 0
+3599 poke8 ff872e 5
+3599 poke8 ff873b 0
+3601 P1 Button 4 1
+3605 P1 Button 4 0
+3631 P1 Left 0
+3633 P1 Down 0
+3641 P1 Button 4 1
+3645 P1 Button 4 0
+3670 P1 Button 2 1
+3671 P1 Button 2 0
+3681 P1 Button 4 1
+3685 P1 Button 4 0
+3749 poke8 ff86fe 34
+3749 poke8 ff8706 0
+3749 poke8 ff872e 5
+3749 poke8 ff873b 0
+3751 P1 Button 4 1
+3755 P1 Button 4 0
+3791 P1 Button 4 1
+3795 P1 Button 4 0
+3831 P1 Button 4 1
+3835 P1 Button 4 0
+3854 poke8 ff86ec 39
+3854 poke8 ff8769 0
+3854 poke8 ff876a 0
+3854 poke8 ff876b 0
+3854 poke8 ff876c 0
+3854 poke8 ff876d 0
+3854 poke8 ff876e 0
+3854 poke8 ff876f 0
+3899 poke8 ff86fe 39
+3899 poke8 ff8706 0
+3899 poke8 ff872e 5
+3899 poke8 ff873b 0
+3901 P1 Button 4 1
+3905 P1 Button 4 0
+3941 P1 Button 4 1
+3945 P1 Button 4 0
+3981 P1 Button 4 1
+3985 P1 Button 4 0
+4003 P1 Right 1
+4004 P1 Up 1
+4027 P1 Up 0
+4048 P1 Button 1 1
+4051 P1 Button 1 0
+4053 P1 Right 0
+4055 P1 Button 1 1
+4059 P1 Button 1 0
+4063 P1 Right 1
+4063 P1 Button 1 1
+4065 P1 Right 0
+4067 P1 Button 1 0
+4071 P1 Button 1 1
+4075 P1 Button 1 0
+4079 P1 Right 1
+4079 P1 Button 1 1
+4081 P1 Right 0
+4083 P1 Button 1 0
+4087 P1 Button 1 1
+4091 P1 Button 1 0
+4095 P1 Right 1
+4095 P1 Button 1 1
+4097 P1 Right 0
+4098 poke8 ff86fe 40
+4098 poke8 ff8706 0
+4098 poke8 ff872e 5
+4098 poke8 ff873b 0
+4099 P1 Button 1 0
+4100 P1 Button 4 1
+4103 P1 Button 1 1
+4104 P1 Button 4 0
+4107 P1 Button 1 0
+4111 P1 Right 1
+4111 P1 Button 1 1
+4113 P1 Right 0
+4115 P1 Button 1 0
+4119 P1 Button 1 1
+4119 P1 Button 2 1
+4120 P1 Button 2 0
+4123 P1 Button 1 0
+4127 P1 Right 1
+4127 P1 Button 1 1
+4129 P1 Right 0
+4131 P1 Button 1 0
+4135 P1 Button 1 1
+4139 P1 Button 1 0
+4140 P1 Button 4 1
+4143 P1 Right 1
+4143 P1 Button 1 1
+4144 P1 Button 4 0
+4145 P1 Right 0
+4147 P1 Button 1 0
+4151 P1 Right 1
+4151 P1 Button 1 1
+4155 P1 Button 1 0
+4159 P1 Button 1 1
+4163 P1 Button 1 0
+4167 P1 Button 1 1
+4171 P1 Button 1 0
+4175 P1 Button 1 1
+4177 P1 Button 1 0
+4180 P1 Button 4 1
+4184 P1 Button 4 0
+4199 poke8 ff86fe 42
+4199 poke8 ff8706 0
+4199 poke8 ff872e 5
+4199 poke8 ff873b 0
+4199 poke8 ff86ec 36
+4199 poke8 ff8769 1
+4199 poke8 ff876a 1
+4199 poke8 ff876b 1
+4199 poke8 ff876c 1
+4199 poke8 ff876d 1
+4199 poke8 ff876e 1
+4199 poke8 ff876f 1
+4201 P1 Button 4 1
+4205 P1 Button 4 0
+4241 P1 Button 4 1
+4245 P1 Button 4 0
+4281 P1 Button 4 1
+4285 P1 Button 4 0
+4339 P1 Right 0
+4339 P1 Left 1
+4339 P1 Up 1
+4399 P1 Button 4 1
+4403 P1 Button 4 0
+4419 P1 Button 3 1
+4423 P1 Button 3 0
+4434 poke8 ff86fe 43
+4434 poke8 ff8706 0
+4434 poke8 ff872e 5
+4434 poke8 ff873b 0
+4436 P1 Button 4 1
+4440 P1 Button 4 0
+4442 P1 Up 0
+4443 P1 Right 1
+4443 P1 Left 0
+4443 P1 Down 1
+4476 P1 Button 4 1
+4480 P1 Button 4 0
+4482 P1 Right 0
+4504 P1 Left 1
+4510 Coin 1 1
+4516 Coin 1 0
+4516 poke8 ff86fe 0
+4516 poke8 ff8706 0
+4516 poke8 ff872e 5
+4516 poke8 ff873b 0
+4518 P1 Button 4 1
+4522 P1 Button 4 0
+4540 1 Player Start 1
+4546 1 Player Start 0
+4558 P1 Button 4 1
+4562 P1 Button 4 0
+4568 poke8 ff86ec 37
+4568 poke8 ff8769 1
+4568 poke8 ff876a 1
+4568 poke8 ff876b 1
+4568 poke8 ff876c 1
+4568 poke8 ff876d 1
+4568 poke8 ff876e 1
+4568 poke8 ff876f 1
+4575 P1 Left 0
+4576 P1 Left 1
+4576 P1 Button 1 1
+4577 P1 Left 0
+4579 P1 Button 1 0
+4583 P1 Button 1 1
+4587 P1 Button 1 0
+4591 P1 Left 1
+4591 P1 Button 1 1
+4593 P1 Left 0
+4595 P1 Up 1
+4595 P1 Down 0
+4595 P1 Button 1 0
+4598 P1 Button 4 1
+4602 P1 Button 4 0
+4611 P1 Left 1
+4615 P1 Button 1 1
+4619 P1 Button 1 0
+4619 P1 Button 2 1
+4620 P1 Button 2 0
+4623 P1 Button 1 1
+4627 P1 Button 1 0
+4631 P1 Button 1 1
+4633 P1 Button 3 1
+4635 P1 Button 1 0
+4637 P1 Button 3 0
+4639 P1 Button 1 1
+4643 P1 Button 1 0
+4647 P1 Button 1 1
+4651 P1 Button 1 0
+4655 P1 Button 1 1
+4659 P1 Button 1 0
+4663 P1 Button 1 1
+4667 P1 Button 1 0
+4669 poke8 ff86fe 1
+4669 poke8 ff8706 0
+4669 poke8 ff872e 5
+4669 poke8 ff873b 0
+4671 P1 Button 1 1
+4671 P1 Button 4 1
+4675 P1 Button 1 0
+4675 P1 Button 4 0
+4679 P1 Button 1 1
+4683 P1 Button 1 0
+4687 P1 Button 1 1
+4691 P1 Button 1 0
+4695 P1 Button 1 1
+4699 P1 Button 1 0
+4703 P1 Button 1 1
+4707 P1 Button 1 0
+4711 P1 Button 4 1
+4715 P1 Button 4 0
+4723 P1 Up 0
+4723 P1 Down 1
+4734 P1 Button 2 1
+4735 P1 Button 2 0
+4751 P1 Button 4 1
+4755 P1 Button 4 0
+4799 poke8 ff86fe 2
+4799 poke8 ff8706 0
+4799 poke8 ff872e 5
+4799 poke8 ff873b 0
+4800 P1 Down 0
+4801 P1 Button 4 1
+4805 P1 Button 4 0
+4818 P1 Up 1
+4841 P1 Button 4 1
+4845 P1 Button 4 0
+4881 P1 Button 4 1
+4885 P1 Button 4 0
+4931 poke8 ff86ec 38
+4931 poke8 ff8769 1
+4931 poke8 ff876a 1
+4931 poke8 ff876b 1
+4931 poke8 ff876c 1
+4931 poke8 ff876d 1
+4931 poke8 ff876e 1
+4931 poke8 ff876f 1
+4933 P1 Up 0
+4949 poke8 ff86fe 3
+4949 poke8 ff8706 0
+4949 poke8 ff872e 5
+4949 poke8 ff873b 0
+4951 P1 Button 4 1
+4955 P1 Button 4 0
+4991 P1 Button 2 1
+4991 P1 Button 4 1
+4992 P1 Button 2 0
+4995 P1 Button 4 0
+5031 P1 Button 4 1
+5035 P1 Button 4 0
+5075 P1 Left 0
+5099 poke8 ff86fe 4
+5099 poke8 ff8706 0
+5099 poke8 ff872e 5
+5099 poke8 ff873b 0
+5101 P1 Button 4 1
+5105 P1 Button 4 0
+5141 P1 Button 4 1
+5145 P1 Button 4 0
+5181 P1 Button 4 1
+5185 P1 Button 4 0
+5218 P1 Right 1
+5219 P1 Button 1 1
+5223 P1 Button 1 0
+5249 poke8 ff86fe 5
+5249 poke8 ff8706 0
+5249 poke8 ff872e 5
+5249 poke8 ff873b 0
+5249 poke8 ff86ec 39
+5249 poke8 ff8769 1
+5249 poke8 ff876a 1
+5249 poke8 ff876b 1
+5249 poke8 ff876c 1
+5249 poke8 ff876d 1
+5249 poke8 ff876e 1
+5249 poke8 ff876f 1
+5249 P1 Down 1
+5251 P1 Button 4 1
+5252 P1 Down 0
+5255 P1 Button 4 0
+5291 P1 Button 4 1
+5295 P1 Button 4 0
+5309 P1 Button 1 1
+5313 P1 Button 1 0
+5331 P1 Button 4 1
+5335 P1 Button 4 0
+5358 P1 Button 2 1
+5359 P1 Button 2 0
+5399 poke8 ff86fe 6
+5399 poke8 ff8706 0
+5399 poke8 ff872e 5
+5399 poke8 ff873b 0
+5399 P1 Up 1
+5399 P1 Button 1 1
+5401 P1 Button 4 1
+5402 P1 Up 0
+5403 P1 Button 1 0
+5405 P1 Button 4 0
+5441 P1 Button 4 1
+5445 P1 Button 4 0
+5481 P1 Button 4 1
+5485 P1 Button 4 0
+5499 P1 Button 4 1
+5503 P1 Button 4 0
+5519 P1 Button 3 1
+5523 P1 Button 3 0
+5571 poke8 ff86fe 7
+5571 poke8 ff8706 0
+5571 poke8 ff872e 5
+5571 poke8 ff873b 0
+5571 poke16 ff8640 112
+5573 P1 Button 4 1
+5577 P1 Button 4 0
+5613 P1 Button 4 1
+5617 P1 Button 4 0
+5653 P1 Button 4 1
+5657 P1 Button 4 0
+5662 P1 Button 2 1
+5663 P1 Button 2 0
+5759 poke8 ff86fe 11
+5759 poke8 ff8706 0
+5759 poke8 ff872e 5
+5759 poke8 ff873b 0
+5761 P1 Button 4 1
+5765 P1 Button 4 0
+5801 P1 Button 4 1
+5805 P1 Button 4 0
+5841 P1 Button 4 1
+5845 P1 Button 4 0
+5849 P1 Down 1
+5849 P1 Button 1 1
+5852 P1 Down 0
+5853 P1 Button 1 0
+5908 poke8 ff86fe 12
+5908 poke8 ff8706 0
+5908 poke8 ff872e 5
+5908 poke8 ff873b 0
+5910 P1 Button 4 1
+5914 P1 Button 4 0
+5939 P1 Button 1 1
+5943 P1 Button 1 0
+5950 P1 Button 4 1
+5954 P1 Button 4 0
+5990 P1 Button 4 1
+5994 P1 Button 4 0
+5999 P1 Up 1
+6002 P1 Up 0
+6010 Coin 1 1
+6016 Coin 1 0
+6029 P1 Button 1 1
+6033 P1 Button 1 0
+6040 1 Player Start 1
+6046 1 Player Start 0
+6119 P1 Button 1 1
+6123 P1 Button 1 0
+6149 poke8 ff86fe 13
+6149 poke8 ff8706 0
+6149 poke8 ff872e 5
+6149 poke8 ff873b 0
+6149 P1 Down 1
+6151 P1 Button 4 1
+6152 P1 Down 0
+6155 P1 Button 4 0
+6191 P1 Button 4 1
+6195 P1 Button 4 0
+6209 P1 Button 1 1
+6213 P1 Button 1 0
+6231 P1 Button 4 1
+6235 P1 Button 4 0
+6299 P1 Up 1
+6299 P1 Button 1 1
+6299 P1 Button 2 1
+6302 P1 Up 0
+6303 P1 Button 1 0
+6303 P1 Button 2 0
+6381 poke8 ff86fe 14
+6381 poke8 ff8706 0
+6381 poke8 ff872e 5
+6381 poke8 ff873b 0
+6381 poke8 ff86ec 38
+6381 poke8 ff8769 6
+6381 poke8 ff876a 6
+6381 poke8 ff876b 6
+6381 poke8 ff876c 6
+6381 poke8 ff876d 6
+6381 poke8 ff876e 6
+6381 poke8 ff876f 6
+6383 P1 Button 4 1
+6387 P1 Button 4 0
+6389 P1 Button 1 1
+6393 P1 Button 1 0
+6423 P1 Button 4 1
+6427 P1 Button 4 0
+6449 P1 Down 1
+6452 P1 Down 0
+6463 P1 Button 4 1
+6467 P1 Button 4 0
+6479 P1 Button 1 1
+6483 P1 Button 1 0
+6569 P1 Button 1 1
+6573 P1 Button 1 0
+6599 P1 Up 1
+6599 P1 Button 4 1
+6602 P1 Up 0
+6603 P1 Button 4 0
+6619 P1 Button 3 1
+6623 P1 Button 3 0
+6629 poke8 ff86fe 15
+6629 poke8 ff8706 0
+6629 poke8 ff872e 5
+6629 poke8 ff873b 0
+6631 P1 Button 4 1
+6635 P1 Button 4 0
+6659 P1 Button 1 1
+6663 P1 Button 1 0
+6671 P1 Button 4 1
+6675 P1 Button 4 0
+6711 P1 Button 4 1
+6715 P1 Button 4 0
+6749 P1 Down 1
+6749 P1 Button 1 1
+6752 P1 Down 0
+6753 P1 Button 1 0
+6839 P1 Button 1 1
+6843 P1 Button 1 0
+6899 poke8 ff86fe 16
+6899 poke8 ff8706 0
+6899 poke8 ff872e 5
+6899 poke8 ff873b 0
+6899 P1 Up 1
+6901 P1 Up 0
+6901 P1 Down 1
+6901 P1 Button 4 1
+6905 P1 Button 4 0
+6941 P1 Button 4 1
+6945 P1 Button 4 0
+6981 P1 Button 4 1
+6985 P1 Button 4 0
+7059 poke8 ff86fe 17
+7059 poke8 ff8706 0
+7059 poke8 ff872e 5
+7059 poke8 ff873b 0
+7059 poke8 ff86ec 36
+7059 poke8 ff8769 0
+7059 poke8 ff876a 0
+7059 poke8 ff876b 0
+7059 poke8 ff876c 0
+7059 poke8 ff876d 0
+7059 poke8 ff876e 0
+7059 poke8 ff876f 0
+7061 P1 Button 4 1
+7065 P1 Button 4 0
+7101 P1 Button 4 1
+7105 P1 Button 4 0
+7141 P1 Button 4 1
+7145 P1 Button 4 0
+7207 poke8 ff86fe 18
+7207 poke8 ff8706 0
+7207 poke8 ff872e 5
+7207 poke8 ff873b 0
+7209 P1 Button 4 1
+7213 P1 Button 4 0
+7249 P1 Button 4 1
+7253 P1 Button 4 0
+7289 P1 Button 4 1
+7293 P1 Button 4 0
+7301 P1 Down 0
+7349 P1 Down 1
+7352 P1 Down 0
+7363 poke8 ff86fe 19
+7363 poke8 ff8706 0
+7363 poke8 ff872e 5
+7363 poke8 ff873b 0
+7363 poke8 ff86ec 37
+7363 poke8 ff8769 0
+7363 poke8 ff876a 0
+7363 poke8 ff876b 0
+7363 poke8 ff876c 0
+7363 poke8 ff876d 0
+7363 poke8 ff876e 0
+7363 poke8 ff876f 0
+7365 P1 Button 4 1
+7369 P1 Button 4 0
+7379 P1 Button 1 1
+7383 P1 Button 1 0
+7405 P1 Button 4 1
+7409 P1 Button 4 0
+7445 P1 Button 4 1
+7449 P1 Button 4 0
+7469 P1 Button 1 1
+7473 P1 Button 1 0
+7499 P1 Up 1
+7502 P1 Up 0
+7510 Coin 1 1
+7516 Coin 1 0
+7527 poke8 ff86fe 20
+7527 poke8 ff8706 0
+7527 poke8 ff872e 5
+7527 poke8 ff873b 0
+7529 P1 Button 4 1
+7533 P1 Button 4 0
+7540 1 Player Start 1
+7546 1 Player Start 0
+7559 P1 Button 1 1
+7563 P1 Button 1 0
+7569 P1 Button 4 1
+7573 P1 Button 4 0
+7586 P1 Button 2 1
+7587 P1 Button 2 0
+7609 P1 Button 4 1
+7613 P1 Button 4 0
+7649 P1 Down 1
+7649 P1 Button 1 1
+7652 P1 Down 0
+7653 P1 Button 1 0
+7699 P1 Button 2 1
+7699 P1 Button 4 1
+7703 P1 Button 2 0
+7703 P1 Button 4 0
+7719 P1 Button 3 1
+7723 P1 Button 3 0
+7739 P1 Button 1 1
+7743 P1 Button 1 0
+7760 poke8 ff86ec 38
+7760 poke8 ff8769 0
+7760 poke8 ff876a 0
+7760 poke8 ff876b 0
+7760 poke8 ff876c 0
+7760 poke8 ff876d 0
+7760 poke8 ff876e 0
+7760 poke8 ff876f 0
+7799 poke8 ff86fe 21
+7799 poke8 ff8706 0
+7799 poke8 ff872e 5
+7799 poke8 ff873b 0
+7799 P1 Up 1
+7801 P1 Button 4 1
+7802 P1 Up 0
+7805 P1 Button 4 0
+7829 P1 Button 1 1
+7833 P1 Button 1 0
+7839 P1 Right 0
+7839 P1 Up 1
+7841 P1 Button 4 1
+7845 P1 Button 4 0
+7881 P1 Button 4 1
+7885 P1 Button 4 0
+7924 P1 Button 2 1
+7925 P1 Button 2 0
+8191 poke8 ff86fe 22
+8191 poke8 ff8706 0
+8191 poke8 ff872e 5
+8191 poke8 ff873b 0
+8193 P1 Button 4 1
+8197 P1 Button 4 0
+8201 P1 Button 2 1
+8202 P1 Button 2 0
+8233 P1 Button 4 1
+8237 P1 Button 4 0
+8239 P1 Right 1
+8239 P1 Up 0
+8249 P1 Down 1
+8252 P1 Down 0
+8273 P1 Button 4 1
+8277 P1 Button 4 0
+8279 P1 Button 1 1
+8283 P1 Button 1 0
+8315 poke8 ff86fe 23
+8315 poke8 ff8706 0
+8315 poke8 ff872e 5
+8315 poke8 ff873b 0
+8317 P1 Button 4 1
+8321 P1 Button 4 0
+8357 P1 Button 4 1
+8361 P1 Button 4 0
+8369 P1 Button 1 1
+8373 P1 Button 1 0
+8397 P1 Button 4 1
+8399 poke16 ff8640 112
+8399 P1 Up 1
+8399 P1 Button 2 1
+8401 P1 Button 4 0
+8402 P1 Up 0
+8403 P1 Button 2 0
+8459 P1 Button 1 1
+8463 P1 Button 1 0
+8549 P1 Down 1
+8549 P1 Button 1 1
+8552 P1 Down 0
+8553 P1 Button 1 0
+8639 P1 Button 1 1
+8643 P1 Button 1 0
+8699 poke8 ff86fe 33
+8699 poke8 ff8706 0
+8699 poke8 ff872e 5
+8699 poke8 ff873b 0
+8699 P1 Up 1
+8701 P1 Button 4 1
+8702 P1 Up 0
+8705 P1 Button 4 0
+8729 P1 Button 1 1
+8733 P1 Button 1 0
+8741 P1 Right 0
+8741 P1 Left 1
+8741 P1 Up 1
+8741 P1 Button 4 1
+8745 P1 Button 4 0
+8750 poke8 ff86ec 37
+8750 poke8 ff8769 1
+8750 poke8 ff876a 1
+8750 poke8 ff876b 1
+8750 poke8 ff876c 1
+8750 poke8 ff876d 1
+8750 poke8 ff876e 1
+8750 poke8 ff876f 1
+8757 P1 Left 0
+8766 P1 Right 1
+8781 P1 Button 4 1
+8783 P1 Up 0
+8783 P1 Down 1
+8785 P1 Button 4 0
+8799 P1 Button 4 1
+8803 P1 Button 4 0
+8819 P1 Button 3 1
+8823 P1 Button 3 0
+8826 P1 Button 2 1
+8827 P1 Button 2 0
+8831 P1 Button 1 1
+8834 P1 Right 0
+8835 P1 Button 1 0
+8836 P1 Right 1
+8864 P1 Down 0
+8881 P1 Button 1 1
+8883 P1 Button 1 0
+8887 P1 Button 1 1
+8891 P1 Button 1 0
+8895 P1 Button 1 1
+8899 P1 Button 1 0
+8903 P1 Button 1 1
+8907 P1 Button 1 0
+8911 poke8 ff86fe 34
+8911 poke8 ff8706 0
+8911 poke8 ff872e 5
+8911 poke8 ff873b 0
+8911 P1 Button 1 1
+8913 P1 Button 1 0
+8913 P1 Button 4 1
+8917 P1 Button 4 0
+8946 P1 Button 1 1
+8947 P1 Button 1 0
+8951 P1 Button 1 1
+8952 P1 Right 0
+8952 P1 Up 1
+8952 P1 Button 1 0
+8953 P1 Button 4 1
+8957 P1 Button 4 0
+8991 P1 Right 1
+8991 P1 Button 1 1
+8993 P1 Right 0
+8993 P1 Button 4 1
+8995 P1 Button 1 0
+8997 P1 Button 4 0
+8999 P1 Button 1 1
+9003 P1 Button 1 0
+9007 P1 Right 1
+9007 P1 Button 1 1
+9009 P1 Right 0
+9010 Coin 1 1
+9011 P1 Button 1 0
+9015 P1 Button 1 1
+9016 Coin 1 0
+9019 P1 Button 1 0
+9021 poke8 ff86fe 39
+9021 poke8 ff8706 0
+9021 poke8 ff872e 5
+9021 poke8 ff873b 0
+9023 P1 Right 1
+9023 P1 Button 1 1
+9023 P1 Button 4 1
+9025 P1 Right 0
+9027 P1 Button 1 0
+9027 P1 Button 4 0
+9031 P1 Button 1 1
+9035 P1 Button 1 0
+9039 P1 Right 1
+9039 P1 Button 1 1
+9040 1 Player Start 1
+9041 P1 Right 0
+9043 P1 Button 1 0
+9046 1 Player Start 0
+9047 P1 Button 1 1
+9051 P1 Button 1 0
+9055 P1 Right 1
+9055 P1 Button 1 1
+9057 P1 Right 0
+9059 P1 Button 1 0
+9063 P1 Button 1 1
+9063 P1 Button 4 1
+9067 P1 Button 1 0
+9067 P1 Button 4 0
+9071 P1 Right 1
+9071 P1 Button 1 1
+9073 P1 Right 0
+9075 P1 Button 1 0
+9079 P1 Button 1 1
+9080 P1 Right 1
+9083 P1 Button 1 0
+9094 P1 Up 0
+9099 poke8 ff86ec 38
+9099 poke8 ff8769 1
+9099 poke8 ff876a 1
+9099 poke8 ff876b 1
+9099 poke8 ff876c 1
+9099 poke8 ff876d 1
+9099 poke8 ff876e 1
+9099 poke8 ff876f 1
+9103 P1 Button 1 1
+9103 P1 Button 4 1
+9107 P1 Button 1 0
+9107 P1 Button 2 1
+9107 P1 Button 4 0
+9108 P1 Button 2 0
+9111 P1 Right 0
+9111 P1 Button 1 1
+9115 P1 Button 1 0
+9117 P1 Right 1
+9149 poke8 ff86fe 40
+9149 poke8 ff8706 0
+9149 poke8 ff872e 5
+9149 poke8 ff873b 0
+9151 P1 Button 4 1
+9154 P1 Button 1 1
+9155 P1 Button 1 0
+9155 P1 Button 4 0
+9159 P1 Button 1 1
+9163 P1 Button 1 0
+9164 P1 Right 0
+9167 P1 Right 1
+9167 P1 Button 1 1
+9169 P1 Right 0
+9171 P1 Button 1 0
+9175 P1 Button 1 1
+9179 P1 Button 1 0
+9183 P1 Right 1
+9183 P1 Button 1 1
+9185 P1 Right 0
+9187 P1 Button 1 0
+9191 P1 Button 1 1
+9191 P1 Button 4 1
+9195 P1 Button 1 0
+9195 P1 Button 4 0
+9199 P1 Right 1
+9199 P1 Button 1 1
+9201 P1 Right 0
+9203 P1 Button 1 0
+9207 P1 Button 1 1
+9211 P1 Button 1 0
+9215 P1 Right 1
+9215 P1 Button 1 1
+9217 P1 Right 0
+9219 P1 Button 1 0
+9223 P1 Button 1 1
+9227 P1 Button 1 0
+9231 P1 Left 1
+9231 P1 Button 1 1
+9231 P1 Button 4 1
+9233 P1 Left 0
+9235 P1 Button 1 0
+9235 P1 Button 4 0
+9239 P1 Button 1 1
+9243 P1 Button 1 0
+9247 P1 Left 1
+9247 P1 Button 1 1
+9249 P1 Left 0
+9251 P1 Button 1 0
+9255 P1 Button 1 1
+9259 P1 Button 1 0
+9263 P1 Left 1
+9263 P1 Button 1 1
+9265 P1 Left 0
+9267 P1 Button 1 0
+9267 P1 Button 3 1
+9271 P1 Button 1 1
+9271 P1 Button 3 0
+9275 P1 Button 1 0
+9279 P1 Left 1
+9279 P1 Button 1 1
+9281 P1 Left 0
+9283 P1 Button 1 0
+9287 P1 Button 1 1
+9291 P1 Button 1 0
+9295 P1 Left 1
+9295 P1 Button 1 1
+9297 P1 Left 0
+9299 P1 Button 1 0
+9302 poke8 ff86fe 42
+9302 poke8 ff8706 0
+9302 poke8 ff872e 5
+9302 poke8 ff873b 0
+9303 P1 Button 1 1
+9304 P1 Button 4 1
+9307 P1 Button 1 0
+9308 P1 Button 4 0
+9311 P1 Left 1
+9311 P1 Button 1 1
+9313 P1 Left 0
+9315 P1 Button 1 0
+9319 P1 Button 1 1
+9323 P1 Button 1 0
+9327 P1 Left 1
+9327 P1 Button 1 1
+9329 P1 Left 0
+9331 P1 Button 1 0
+9335 P1 Button 1 1
+9339 P1 Button 1 0
+9343 P1 Left 1
+9343 P1 Button 1 1
+9344 P1 Button 4 1
+9345 P1 Left 0
+9347 P1 Button 1 0
+9348 P1 Button 4 0
+9351 P1 Button 1 1
+9355 P1 Button 1 0
+9359 P1 Left 1
+9359 P1 Button 1 1
+9361 P1 Left 0
+9363 P1 Button 1 0
+9367 P1 Button 1 1
+9371 P1 Button 1 0
+9375 P1 Left 1
+9375 P1 Button 1 1
+9379 P1 Button 1 0
+9383 P1 Button 1 1
+9384 P1 Button 4 1
+9387 P1 Button 1 0
+9388 P1 Button 4 0
+9391 P1 Button 1 1
+9395 P1 Button 1 0
+9399 P1 Button 1 1
+9403 P1 Button 1 0
+9407 P1 Button 1 1
+9411 P1 Button 1 0
+9447 P1 Button 1 1
+9448 P1 Button 1 0
+9477 poke8 ff86fe 43
+9477 poke8 ff8706 0
+9477 poke8 ff872e 5
+9477 poke8 ff873b 0
+9477 poke8 ff86ec 39
+9477 poke8 ff8769 1
+9477 poke8 ff876a 1
+9477 poke8 ff876b 1
+9477 poke8 ff876c 1
+9477 poke8 ff876d 1
+9477 poke8 ff876e 1
+9477 poke8 ff876f 1
+9479 P1 Button 4 1
+9483 P1 Button 4 0
+9519 P1 Button 4 1
+9523 P1 Button 4 0
+9559 P1 Button 4 1
+9562 P1 Right 1
+9562 P1 Left 0
+9562 P1 Up 1
+9563 P1 Up 0
+9563 P1 Down 1
+9563 P1 Button 4 0
+9639 poke8 ff86fe 0
+9639 poke8 ff8706 0
+9639 poke8 ff872e 5
+9639 poke8 ff873b 0
+9641 P1 Button 4 1
+9645 P1 Button 4 0
+9681 P1 Button 4 1
+9685 P1 Button 4 0
+9700 P1 Down 0
+9721 P1 Button 4 1
+9725 P1 Down 1
+9725 P1 Button 4 0
+9771 poke8 ff86fe 1
+9771 poke8 ff8706 0
+9771 poke8 ff872e 5
+9771 poke8 ff873b 0
+9773 P1 Button 4 1
+9777 P1 Button 4 0
+9813 P1 Button 4 1
+9817 P1 Button 4 0
+9843 poke8 ff86ec 36
+9843 poke8 ff8769 6
+9843 poke8 ff876a 6
+9843 poke8 ff876b 6
+9843 poke8 ff876c 6
+9843 poke8 ff876d 6
+9843 poke8 ff876e 6
+9843 poke8 ff876f 6
+9853 P1 Button 4 1
+9857 P1 Button 4 0
+9899 P1 Button 4 1
+9903 P1 Button 4 0
+9919 P1 Button 3 1
+9923 poke8 ff86fe 2
+9923 poke8 ff8706 0
+9923 poke8 ff872e 5
+9923 poke8 ff873b 0
+9923 P1 Button 3 0
+9925 P1 Button 4 1
+9926 P1 Down 0
+9929 P1 Button 4 0
+9965 P1 Button 4 1
+9969 P1 Button 4 0
+10005 P1 Button 4 1
+10009 P1 Button 4 0
+10055 poke8 ff86fe 3
+10055 poke8 ff8706 0
+10055 poke8 ff872e 5
+10055 poke8 ff873b 0
+10057 P1 Button 4 1
+10061 P1 Button 4 0
+10097 P1 Button 4 1
+10101 P1 Button 4 0
+10137 P1 Button 4 1
+10141 P1 Button 4 0
+10177 poke8 ff86ec 37
+10177 poke8 ff8769 6
+10177 poke8 ff876a 6
+10177 poke8 ff876b 6
+10177 poke8 ff876c 6
+10177 poke8 ff876d 6
+10177 poke8 ff876e 6
+10177 poke8 ff876f 6
+10185 P1 Button 1 1
+10187 P1 Button 1 0
+10191 P1 Button 1 1
+10195 P1 Button 1 0
+10199 P1 Button 1 1
+10201 P1 Button 1 0
+10202 P1 Button 1 1
+10203 P1 Button 1 0
+10208 P1 Button 1 1
+10209 P1 Button 1 0
+10210 P1 Button 1 1
+10211 P1 Button 1 0
+10215 poke8 ff86fe 4
+10215 poke8 ff8706 0
+10215 poke8 ff872e 5
+10215 poke8 ff873b 0
+10217 P1 Button 1 1
+10217 P1 Button 4 1
+10219 P1 Button 1 0
+10221 P1 Button 4 0
+10222 P1 Right 0
+10222 P1 Up 1
+10232 P1 Right 1
+10232 P1 Up 0
+10232 P1 Button 1 1
+10233 P1 Button 1 0
+10234 P1 Button 1 1
+10235 P1 Button 1 0
+10240 P1 Button 1 1
+10241 P1 Button 1 0
+10242 P1 Button 1 1
+10243 P1 Button 1 0
+10249 P1 Button 1 1
+10251 P1 Button 1 0
+10255 P1 Button 1 1
+10257 P1 Button 4 1
+10259 P1 Button 1 0
+10260 P1 Button 3 1
+10261 P1 Button 4 0
+10263 P1 Button 1 1
+10264 P1 Button 3 0
+10265 P1 Button 1 0
+10266 P1 Button 1 1
+10267 P1 Button 1 0
+10272 P1 Button 1 1
+10273 P1 Button 1 0
+10274 P1 Button 1 1
+10275 P1 Button 1 0
+10281 P1 Button 1 1
+10283 P1 Button 1 0
+10287 P1 Right 0
+10287 P1 Left 1
+10297 P1 Button 4 1
+10301 P1 Button 4 0
+10345 P1 Button 1 1
+10347 P1 Button 1 0
+10351 P1 Button 1 1
+10355 P1 Button 1 0
+10359 P1 Button 1 1
+10363 P1 Button 1 0
+10366 poke8 ff86fe 5
+10366 poke8 ff8706 0
+10366 poke8 ff872e 5
+10366 poke8 ff873b 0
+10367 P1 Button 1 1
+10368 P1 Button 4 1
+10371 P1 Button 1 0
+10372 P1 Button 4 0
+10375 P1 Button 1 1
+10379 P1 Button 1 0
+10383 P1 Button 1 1
+10387 P1 Button 1 0
+10391 P1 Button 1 1
+10395 P1 Button 1 0
+10399 P1 Button 1 1
+10402 P1 Button 1 0
+10408 P1 Button 4 1
+10412 P1 Button 4 0
+10416 P1 Left 0
+10416 P1 Up 1
+10424 P1 Left 1
+10424 P1 Up 0
+10424 P1 Button 1 1
+10425 P1 Button 1 0
+10426 P1 Button 1 1
+10427 P1 Button 1 0
+10431 P1 Button 1 1
+10432 P1 Button 1 0
+10448 P1 Button 4 1
+10452 P1 Button 4 0
+10456 P1 Button 1 1
+10457 P1 Button 1 0
+10485 P1 Up 1
+10497 P1 Left 0
+10498 P1 Button 1 1
+10499 P1 Button 1 0
+10503 P1 Button 1 1
+10507 P1 Button 1 0
+10510 Coin 1 1
+10511 P1 Left 1
+10511 P1 Button 1 1
+10513 P1 Left 0
+10515 P1 Button 1 0
+10516 Coin 1 0
+10519 P1 Button 1 1
+10523 P1 Button 1 0
+10527 P1 Left 1
+10527 P1 Button 1 1
+10528 poke8 ff86fe 6
+10528 poke8 ff8706 0
+10528 poke8 ff872e 5
+10528 poke8 ff873b 0
+10528 poke8 ff86ec 38
+10528 poke8 ff8769 6
+10528 poke8 ff876a 6
+10528 poke8 ff876b 6
+10528 poke8 ff876c 6
+10528 poke8 ff876d 6
+10528 poke8 ff876e 6
+10528 poke8 ff876f 6
+10529 P1 Left 0
+10530 P1 Left 1
+10530 P1 Button 4 1
+10531 P1 Left 0
+10531 P1 Button 1 0
+10532 P1 Left 1
+10534 P1 Button 4 0
+10535 P1 Button 1 1
+10539 P1 Button 1 0
+10540 1 Player Start 1
+10543 P1 Button 1 1
+10546 1 Player Start 0
+10547 P1 Button 1 0
+10551 P1 Button 1 1
+10555 P1 Button 1 0
+10559 P1 Button 1 1
+10563 P1 Button 1 0
+10567 P1 Button 1 1
+10570 P1 Button 4 1
+10571 P1 Button 1 0
+10574 P1 Button 4 0
+10575 P1 Button 1 1
+10579 P1 Button 1 0
+10583 P1 Button 1 1
+10587 P1 Button 1 0
+10591 P1 Button 1 1
+10591 P1 Button 3 1
+10595 P1 Button 1 0
+10595 P1 Button 3 0
+10599 P1 Button 1 1
+10603 P1 Button 1 0
+10607 P1 Button 1 1
+10610 P1 Button 4 1
+10611 P1 Button 1 0
+10614 P1 Button 4 0
+10615 P1 Button 1 1
+10619 P1 Button 1 0
+10619 P1 Button 2 1
+10620 P1 Button 2 0
+10623 P1 Button 1 1
+10627 P1 Button 1 0
+10631 P1 Button 1 1
+10635 P1 Button 1 0
+10639 P1 Button 1 1
+10643 P1 Button 1 0
+10647 P1 Button 1 1
+10650 P1 Button 2 1
+10651 P1 Button 1 0
+10651 P1 Button 2 0
+10655 P1 Button 1 1
+10659 P1 Button 1 0
+10660 poke8 ff86fe 7
+10660 poke8 ff8706 0
+10660 poke8 ff872e 5
+10660 poke8 ff873b 0
+10660 poke16 ff8640 112
+10661 P1 Left 0
+10662 P1 Button 4 1
+10663 P1 Up 0
+10663 P1 Button 1 1
+10666 P1 Button 4 0
+10667 P1 Button 1 0
+10671 P1 Left 1
+10671 P1 Button 1 1
+10673 P1 Left 0
+10675 P1 Button 1 0
+10679 P1 Button 1 1
+10683 P1 Button 1 0
+10687 P1 Left 1
+10687 P1 Button 1 1
+10689 P1 Left 0
+10691 P1 Button 1 0
+10695 P1 Button 1 1
+10699 P1 Button 1 0
+10702 P1 Button 4 1
+10703 P1 Left 1
+10703 P1 Button 1 1
+10705 P1 Left 0
+10706 P1 Button 4 0
+10707 P1 Button 1 0
+10711 P1 Button 1 1
+10715 P1 Button 1 0
+10719 P1 Left 1
+10719 P1 Button 1 1
+10721 P1 Left 0
+10723 P1 Button 1 0
+10727 P1 Button 1 1
+10731 P1 Button 1 0
+10735 P1 Right 1
+10735 P1 Button 1 1
+10737 P1 Right 0
+10739 P1 Button 1 0
+10742 P1 Button 4 1
+10743 P1 Button 1 1
+10744 P1 Right 1
+10744 P1 Down 1
+10744 P1 Button 1 0
+10746 P1 Button 4 0
+10848 poke8 ff86fe 11
+10848 poke8 ff8706 0
+10848 poke8 ff872e 5
+10848 poke8 ff873b 0
+10849 poke8 ff86ec 39
+10849 poke8 ff8769 6
+10849 poke8 ff876a 6
+10849 poke8 ff876b 6
+10849 poke8 ff876c 6
+10849 poke8 ff876d 6
+10849 poke8 ff876e 6
+10849 poke8 ff876f 6
+10850 P1 Button 4 1
+10854 P1 Button 4 0
+10890 P1 Button 4 1
+10894 P1 Button 4 0
+10930 P1 Button 4 1
+10934 P1 Button 4 0
+10997 poke8 ff86fe 12
+10997 poke8 ff8706 0
+10997 poke8 ff872e 5
+10997 poke8 ff873b 0
+10999 P1 Button 4 1
+11000 P1 Down 0
+11003 P1 Button 4 0
+11019 P1 Button 3 1
+11023 P1 Button 3 0
+11039 P1 Button 4 1
+11043 P1 Button 4 0
+11079 P1 Button 4 1
+11083 P1 Button 4 0
+11195 poke8 ff86fe 13
+11195 poke8 ff8706 0
+11195 poke8 ff872e 5
+11195 poke8 ff873b 0
+11197 P1 Button 4 1
+11201 P1 Button 4 0
+11237 P1 Button 4 1
+11241 P1 Button 4 0
+11277 P1 Button 4 1
+11281 P1 Button 4 0
+11427 poke8 ff86fe 14
+11427 poke8 ff8706 0
+11427 poke8 ff872e 5
+11427 poke8 ff873b 0
+11428 P1 Button 2 1
+11429 P1 Button 2 0
+11429 P1 Button 4 1
+11433 P1 Button 4 0
+11441 P1 Button 2 1
+11442 P1 Button 2 0
+11469 P1 Button 4 1
+11473 P1 Button 4 0
+11504 P1 Button 2 1
+11505 P1 Button 2 0
+11509 P1 Button 4 1
+11513 P1 Button 4 0
+11699 poke8 ff86fe 15
+11699 poke8 ff8706 0
+11699 poke8 ff872e 5
+11699 poke8 ff873b 0
+11701 P1 Button 4 1
+11705 P1 Button 4 0
+11741 P1 Button 4 1
+11745 P1 Button 4 0
+11781 P1 Button 4 1
+11785 P1 Button 4 0
+11844 P1 Down 1
+11955 poke8 ff86ec 38
+11955 poke8 ff8769 0
+11955 poke8 ff876a 0
+11955 poke8 ff876b 0
+11955 poke8 ff876c 0
+11955 poke8 ff876d 0
+11955 poke8 ff876e 0
+11955 poke8 ff876f 0
+11973 P1 Down 0
+11991 P1 Button 1 1
+11995 P1 Button 1 0
+11999 P1 Button 1 1
+12003 P1 Button 1 0
+12007 P1 Button 1 1
+12010 Coin 1 1
+12011 P1 Button 1 0
+12015 P1 Button 1 1
+12016 Coin 1 0
+12019 P1 Button 1 0
+12023 P1 Button 1 1
+12027 P1 Button 1 0
+12029 poke8 ff86fe 16
+12029 poke8 ff8706 0
+12029 poke8 ff872e 5
+12029 poke8 ff873b 0
+12031 P1 Button 1 1
+12031 P1 Button 4 1
+12035 P1 Button 1 0
+12035 P1 Button 4 0
+12039 P1 Button 1 1
+12040 1 Player Start 1
+12043 P1 Button 1 0
+12046 1 Player Start 0
+12047 P1 Button 1 1
+12051 P1 Button 1 0
+12053 P1 Button 2 1
+12054 P1 Button 2 0
+12055 P1 Button 1 1
+12059 P1 Button 1 0
+12063 P1 Button 1 1
+12067 P1 Button 1 0
+12071 P1 Button 1 1
+12071 P1 Button 4 1
+12075 P1 Button 1 0
+12075 P1 Button 4 0
+12079 P1 Button 1 1
+12083 P1 Button 1 0
+12087 P1 Button 1 1
+12091 P1 Button 1 0
+12095 P1 Button 1 1
+12099 P1 Button 1 0
+12099 P1 Button 4 1
+12101 P1 Right 0
+12101 P1 Up 1
+12103 P1 Button 4 0
+12111 P1 Button 4 1
+12115 P1 Button 4 0
+12119 P1 Button 3 1
+12123 P1 Button 3 0
+12126 P1 Right 1
+12147 P1 Up 0
+12149 poke8 ff86fe 17
+12149 poke8 ff8706 0
+12149 poke8 ff872e 5
+12149 poke8 ff873b 0
+12151 P1 Button 4 1
+12155 P1 Button 4 0
+12191 P1 Button 4 1
+12195 P1 Button 4 0
+12231 P1 Button 4 1
+12235 P1 Button 4 0
+12238 P1 Down 1
+12297 poke8 ff86ec 39
+12297 poke8 ff8769 0
+12297 poke8 ff876a 0
+12297 poke8 ff876b 0
+12297 poke8 ff876c 0
+12297 poke8 ff876d 0
+12297 poke8 ff876e 0
+12297 poke8 ff876f 0
+12299 poke8 ff86fe 18
+12299 poke8 ff8706 0
+12299 poke8 ff872e 5
+12299 poke8 ff873b 0
+12301 P1 Button 4 1
+12305 P1 Button 4 0
+12341 P1 Button 4 1
+12345 P1 Button 4 0
+12381 P1 Button 4 1
+12385 P1 Button 4 0
+12437 P1 Button 2 1
+12438 P1 Button 2 0
+12444 P1 Button 2 1
+12445 P1 Button 2 0
+12455 poke8 ff86fe 19
+12455 poke8 ff8706 0
+12455 poke8 ff872e 5
+12455 poke8 ff873b 0
+12457 P1 Button 4 1
+12461 P1 Button 4 0
+12485 P1 Right 0
+12485 P1 Left 1
+12487 P1 Right 1
+12487 P1 Left 0
+12497 P1 Button 4 1
+12501 P1 Button 4 0
+12537 P1 Button 4 1
+12541 P1 Button 4 0
+12619 poke8 ff86fe 20
+12619 poke8 ff8706 0
+12619 poke8 ff872e 5
+12619 poke8 ff873b 0
+12619 poke8 ff86ec 36
+12619 poke8 ff8769 1
+12619 poke8 ff876a 1
+12619 poke8 ff876b 1
+12619 poke8 ff876c 1
+12619 poke8 ff876d 1
+12619 poke8 ff876e 1
+12619 poke8 ff876f 1
+12621 P1 Button 4 1
+12625 P1 Button 4 0
+12631 P1 Up 1
+12631 P1 Down 0
+12661 P1 Button 4 1
+12665 P1 Button 4 0
+12701 P1 Button 4 1
+12705 P1 Button 4 0
+12713 P1 Button 2 1
+12714 P1 Button 2 0
+12865 P1 Up 0
+12887 P1 Button 1 1
+12889 P1 Button 2 1
+12890 P1 Right 0
+12890 P1 Button 2 0
+12891 P1 Button 1 0
+12893 P1 Up 1
+12895 P1 Right 1
+12895 P1 Button 1 1
+12897 P1 Right 0
+12899 P1 Button 1 0
+12903 P1 Button 1 1
+12907 P1 Button 1 0
+12908 P1 Button 3 1
+12911 P1 Left 1
+12911 P1 Button 1 1
+12912 P1 Button 3 0
+12913 P1 Left 0
+12915 P1 Button 1 0
+12917 poke8 ff86fe 21
+12917 poke8 ff8706 0
+12917 poke8 ff872e 5
+12917 poke8 ff873b 0
+12919 P1 Button 1 1
+12919 P1 Button 4 1
+12923 P1 Button 1 0
+12923 P1 Button 4 0
+12927 P1 Left 1
+12927 P1 Button 1 1
+12929 P1 Left 0
+12931 P1 Button 1 0
+12935 P1 Button 1 1
+12939 P1 Button 1 0
+12943 P1 Left 1
+12943 P1 Button 1 1
+12945 P1 Left 0
+12947 P1 Button 1 0
+12949 poke8 ff86ec 37
+12949 poke8 ff8769 1
+12949 poke8 ff876a 1
+12949 poke8 ff876b 1
+12949 poke8 ff876c 1
+12949 poke8 ff876d 1
+12949 poke8 ff876e 1
+12949 poke8 ff876f 1
+12950 P1 Up 0
+12951 P1 Button 1 1
+12955 P1 Button 1 0
+12959 P1 Left 1
+12959 P1 Button 1 1
+12959 P1 Button 4 1
+12961 P1 Left 0
+12963 P1 Button 1 0
+12963 P1 Button 4 0
+12967 P1 Button 1 1
+12971 P1 Button 1 0
+12975 P1 Left 1
+12975 P1 Button 1 1
+12977 P1 Left 0
+12979 P1 Button 1 0
+12983 P1 Button 1 1
+12987 P1 Button 1 0
+12991 P1 Left 1
+12991 P1 Button 1 1
+12993 P1 Left 0
+12995 P1 Button 1 0
+12999 P1 Button 1 1
+12999 P1 Button 4 1
+13003 P1 Button 1 0
+13003 P1 Button 4 0
+13007 P1 Left 1
+13007 P1 Button 1 1
+13009 P1 Left 0
+13011 P1 Button 1 0
+13015 P1 Button 1 1
+13019 P1 Button 1 0
+13023 P1 Left 1
+13023 P1 Button 1 1
+13025 P1 Left 0
+13027 P1 Button 1 0
+13031 P1 Button 1 1
+13035 P1 Button 1 0
+13039 P1 Left 1
+13039 P1 Button 1 1
+13041 P1 Left 0
+13043 P1 Button 1 0
+13047 P1 Button 1 1
+13051 P1 Button 1 0
+13055 P1 Left 1
+13055 P1 Button 1 1
+13057 P1 Left 0
+13059 P1 Button 1 0
+13063 P1 Button 1 1
+13067 P1 Button 1 0
+13071 P1 Left 1
+13071 P1 Button 1 1
+13073 P1 Left 0
+13074 poke8 ff86fe 22
+13074 poke8 ff8706 0
+13074 poke8 ff872e 5
+13074 poke8 ff873b 0
+13075 P1 Button 1 0
+13076 P1 Button 4 1
+13079 P1 Button 1 1
+13080 P1 Button 4 0
+13083 P1 Button 1 0
+13087 P1 Left 1
+13087 P1 Button 1 1
+13089 P1 Left 0
+13091 P1 Button 1 0
+13095 P1 Button 1 1
+13099 P1 Button 1 0
+13103 P1 Left 1
+13103 P1 Button 1 1
+13105 P1 Left 0
+13107 P1 Button 1 0
+13107 P1 Button 2 1
+13108 P1 Button 2 0
+13111 P1 Button 1 1
+13115 P1 Button 1 0
+13116 P1 Button 4 1
+13119 P1 Left 1
+13119 P1 Button 1 1
+13119 P1 Button 2 1
+13120 P1 Button 2 0
+13120 P1 Button 4 0
+13121 P1 Left 0
+13123 P1 Button 1 0
+13127 P1 Button 1 1
+13131 P1 Button 1 0
+13135 P1 Left 1
+13135 P1 Button 1 1
+13136 P1 Button 2 1
+13137 P1 Left 0
+13137 P1 Button 2 0
+13139 P1 Button 1 0
+13143 P1 Button 1 1
+13147 P1 Button 1 0
+13151 P1 Left 1
+13151 P1 Button 1 1
+13153 P1 Left 0
+13155 P1 Button 1 0
+13156 P1 Button 4 1
+13159 P1 Button 1 1
+13160 P1 Button 4 0
+13163 P1 Button 1 0
+13167 P1 Left 1
+13167 P1 Button 1 1
+13169 P1 Left 0
+13171 P1 Button 1 0
+13175 P1 Button 1 1
+13179 P1 Button 1 0
+13183 P1 Left 1
+13183 P1 Button 1 1
+13185 P1 Left 0
+13187 P1 Button 1 0
+13191 P1 Button 1 1
+13195 P1 Button 1 0
+13199 P1 Left 1
+13199 P1 Button 1 1
+13199 P1 Button 4 1
+13201 P1 Left 0
+13202 poke8 ff86fe 23
+13202 poke8 ff8706 0
+13202 poke8 ff872e 5
+13202 poke8 ff873b 0
+13203 P1 Button 1 0
+13203 P1 Button 4 0
+13204 P1 Button 4 1
+13207 P1 Button 1 1
+13208 P1 Button 4 0
+13211 P1 Button 1 0
+13215 P1 Right 1
+13215 P1 Button 1 1
+13217 P1 Right 0
+13218 P1 Right 1
+13219 P1 Button 1 0
+13219 P1 Button 3 1
+13223 P1 Button 3 0
+13244 P1 Button 4 1
+13248 P1 Button 4 0
+13284 P1 Button 4 1
+13286 poke16 ff8640 112
+13288 P1 Button 4 0
+13510 Coin 1 1
+13516 Coin 1 0
+13540 1 Player Start 1
+13546 1 Player Start 0
+13562 poke8 ff86fe 33
+13562 poke8 ff8706 0
+13562 poke8 ff872e 5
+13562 poke8 ff873b 0
+13564 P1 Button 4 1
+13568 P1 Button 4 0
+13604 P1 Button 4 1
+13608 P1 Button 4 0
+13644 P1 Button 4 1
+13648 P1 Button 4 0
+14105 P1 Button 2 1
+14106 P1 Button 2 0
+14299 P1 Button 4 1
+14303 P1 Button 4 0
+14319 P1 Button 3 1
+14323 P1 Button 3 0
+15010 Coin 1 1
+15016 Coin 1 0
+15040 1 Player Start 1
+15046 1 Player Start 0
+15266 P1 Button 2 1
+15267 P1 Button 2 0
+15399 P1 Button 4 1
+15403 P1 Button 4 0
+15419 P1 Button 3 1
+15423 P1 Button 3 0
+15662 P1 Button 2 1
+15663 P1 Button 2 0
+16002 P1 Button 2 1
+16003 P1 Button 2 0
+16019 P1 Button 1 1
+16023 P1 Button 1 0
+16049 P1 Down 1
+16052 P1 Right 0
+16052 P1 Down 0
+16058 P1 Left 1
+16058 P1 Down 1
+16073 P1 Right 1
+16073 P1 Left 0
+16134 P1 Right 0
+16184 poke8 ff86ec 38
+16184 poke8 ff8769 0
+16184 poke8 ff876a 0
+16184 poke8 ff876b 0
+16184 poke8 ff876c 0
+16184 poke8 ff876d 0
+16184 poke8 ff876e 0
+16184 poke8 ff876f 0
+16199 poke8 ff86fe 34
+16199 poke8 ff8706 0
+16199 poke8 ff872e 5
+16199 poke8 ff873b 0
+16201 P1 Button 4 1
+16205 P1 Button 4 0
+16241 P1 Button 4 1
+16245 P1 Button 4 0
+16281 P1 Button 4 1
+16285 P1 Button 4 0
+16349 poke8 ff86fe 39
+16349 poke8 ff8706 0
+16349 poke8 ff872e 5
+16349 poke8 ff873b 0
+16351 P1 Button 4 1
+16355 P1 Button 4 0
+16391 P1 Button 4 1
+16395 P1 Button 4 0
+16431 P1 Button 4 1
+16435 P1 Button 4 0
+16452 poke8 ff86ec 39
+16452 poke8 ff8769 0
+16452 poke8 ff876a 0
+16452 poke8 ff876b 0
+16452 poke8 ff876c 0
+16452 poke8 ff876d 0
+16452 poke8 ff876e 0
+16452 poke8 ff876f 0
+16458 P1 Right 1
+16458 P1 Down 0
+16469 P1 Button 1 1
+16473 P1 Button 1 0
+16499 poke8 ff86fe 40
+16499 poke8 ff8706 0
+16499 poke8 ff872e 5
+16499 poke8 ff873b 0
+16499 P1 Up 1
+16499 P1 Button 4 1
+16502 P1 Up 0
+16505 P1 Button 4 0
+16510 Coin 1 1
+16514 P1 Button 2 1
+16515 P1 Button 2 0
+16516 Coin 1 0
+16519 P1 Button 3 1
+16523 P1 Button 3 0
+16540 1 Player Start 1
+16541 P1 Button 4 1
+16545 P1 Button 4 0
+16546 1 Player Start 0
+16559 P1 Button 1 1
+16563 P1 Button 1 0
+16581 P1 Button 4 1
+16585 P1 Button 4 0
+16649 poke8 ff86fe 42
+16649 poke8 ff8706 0
+16649 poke8 ff872e 5
+16649 poke8 ff873b 0
+16649 P1 Down 1
+16649 P1 Button 1 1
+16651 P1 Button 4 1
+16652 P1 Down 0
+16653 P1 Button 1 0
+16655 P1 Button 4 0
+16676 P1 Up 1
+16691 P1 Button 4 1
+16695 P1 Button 4 0
+16731 P1 Button 4 1
+16735 P1 Button 4 0
+16829 P1 Up 0
+16829 P1 Button 1 1
+16833 P1 Button 1 0
+16919 P1 Button 1 1
+16922 P1 Button 1 0
+16930 P1 Right 0
+16930 P1 Left 1
+16930 P1 Up 1
+16931 P1 Up 0
+16949 poke8 ff86fe 43
+16949 poke8 ff8706 0
+16949 poke8 ff872e 5
+16949 poke8 ff873b 0
+16951 P1 Up 1
+16951 P1 Button 4 1
+16955 P1 Button 4 0
+16991 P1 Button 4 1
+16995 P1 Button 4 0
+17020 P1 Up 0
+17031 P1 Button 4 1
+17032 P1 Up 1
+17035 P1 Button 4 0
+17111 poke8 ff86fe 0
+17111 poke8 ff8706 0
+17111 poke8 ff872e 5
+17111 poke8 ff873b 0
+17113 P1 Button 4 1
+17117 P1 Button 4 0
+17153 P1 Button 4 1
+17157 P1 Button 4 0
+17163 poke8 ff86ec 37
+17163 poke8 ff8769 1
+17163 poke8 ff876a 1
+17163 poke8 ff876b 1
+17163 poke8 ff876c 1
+17163 poke8 ff876d 1
+17163 poke8 ff876e 1
+17163 poke8 ff876f 1
+17171 P1 Left 0
+17181 P1 Left 1
+17192 P1 Button 1 1
+17193 P1 Button 4 1
+17195 P1 Button 1 0
+17197 P1 Button 4 0
+17218 P1 Button 2 1
+17219 P1 Button 2 0
+17230 P1 Up 0
+17249 poke8 ff86fe 1
+17249 poke8 ff8706 0
+17249 poke8 ff872e 5
+17249 poke8 ff873b 0
+17251 P1 Button 4 1
+17255 P1 Button 4 0
+17290 P1 Down 1
+17291 P1 Button 4 1
+17295 P1 Button 4 0
+17331 P1 Button 4 1
+17335 P1 Button 4 0
+17401 poke8 ff86fe 2
+17401 poke8 ff8706 0
+17401 poke8 ff872e 5
+17401 poke8 ff873b 0
+17403 P1 Button 4 1
+17407 P1 Button 4 0
+17443 P1 Button 4 1
+17444 P1 Button 2 1
+17445 P1 Button 2 0
+17447 P1 Button 4 0
+17483 P1 Button 4 1
+17487 P1 Button 4 0
+17533 poke8 ff86ec 38
+17533 poke8 ff8769 1
+17533 poke8 ff876a 1
+17533 poke8 ff876b 1
+17533 poke8 ff876c 1
+17533 poke8 ff876d 1
+17533 poke8 ff876e 1
+17533 poke8 ff876f 1
+17549 poke8 ff86fe 3
+17549 poke8 ff8706 0
+17549 poke8 ff872e 5
+17549 poke8 ff873b 0
+17551 P1 Button 4 1
+17552 P1 Left 0
+17555 P1 Button 4 0
+17591 P1 Button 4 1
+17595 P1 Button 4 0
+17599 P1 Button 4 1
+17603 P1 Button 4 0
+17619 P1 Button 3 1
+17623 P1 Button 3 0
+17631 P1 Button 4 1
+17635 P1 Button 4 0
+17658 P1 Right 1
+17695 P1 Button 1 1
+17699 P1 Button 1 0
+17703 P1 Button 1 1
+17707 P1 Button 1 0
+17717 poke8 ff86fe 4
+17717 poke8 ff8706 0
+17717 poke8 ff872e 5
+17717 poke8 ff873b 0
+17719 P1 Button 4 1
+17720 P1 Down 0
+17723 P1 Button 4 0
+17759 P1 Button 4 1
+17763 P1 Button 4 0
+17799 P1 Button 4 1
+17803 P1 Button 4 0
+17849 poke8 ff86fe 5
+17849 poke8 ff8706 0
+17849 poke8 ff872e 5
+17849 poke8 ff873b 0
+17849 poke8 ff86ec 39
+17849 poke8 ff8769 1
+17849 poke8 ff876a 1
+17849 poke8 ff876b 1
+17849 poke8 ff876c 1
+17849 poke8 ff876d 1
+17849 poke8 ff876e 1
+17849 poke8 ff876f 1
+17851 P1 Button 4 1
+17855 P1 Button 4 0
+17891 P1 Button 4 1
+17895 P1 Button 4 0
+17931 P1 Button 4 1
+17935 P1 Button 4 0
+17971 P1 Up 1
+17999 poke8 ff86fe 6
+17999 poke8 ff8706 0
+17999 poke8 ff872e 5
+17999 poke8 ff873b 0
+18001 P1 Button 4 1
+18005 P1 Button 4 0
+18007 P1 Button 2 1
+18008 P1 Button 2 0
+18010 Coin 1 1
+18016 Coin 1 0
+18040 1 Player Start 1
+18041 P1 Button 4 1
+18045 P1 Button 4 0
+18046 1 Player Start 0
+18081 P1 Button 4 1
+18085 P1 Button 4 0
+18131 poke16 ff8640 112
+18134 P1 Up 0
+18135 P1 Right 0
+18149 poke8 ff86fe 7
+18149 poke8 ff8706 0
+18149 poke8 ff872e 5
+18149 poke8 ff873b 0
+18151 P1 Button 4 1
+18155 P1 Button 4 0
+18177 P1 Right 1
+18177 P1 Down 1
+18191 P1 Button 4 1
+18195 P1 Button 4 0
+18231 P1 Button 4 1
+18235 P1 Button 4 0
+18337 poke8 ff86fe 11
+18337 poke8 ff8706 0
+18337 poke8 ff872e 5
+18337 poke8 ff873b 0
+18339 P1 Button 4 1
+18343 P1 Button 4 0
+18379 P1 Button 4 1
+18383 P1 Button 4 0
+18419 P1 Button 4 1
+18423 P1 Button 4 0
+18486 poke8 ff86fe 12
+18486 poke8 ff8706 0
+18486 poke8 ff872e 5
+18486 poke8 ff873b 0
+18488 P1 Button 4 1
+18492 P1 Button 4 0
+18528 P1 Button 4 1
+18532 P1 Button 4 0
+18568 P1 Button 4 1
+18572 P1 Button 4 0
+18577 P1 Down 0
+18578 P1 Right 0
+18578 P1 Left 1
+18578 P1 Up 1
+18629 P1 Right 1
+18629 P1 Left 0
+18629 P1 Up 0
+18629 P1 Button 1 1
+18633 P1 Button 1 0
+18684 poke8 ff86fe 13
+18684 poke8 ff8706 0
+18684 poke8 ff872e 5
+18684 poke8 ff873b 0
+18686 P1 Button 4 1
+18690 P1 Button 4 0
+18699 P1 Button 4 1
+18703 P1 Button 4 0
+18719 P1 Button 1 1
+18719 P1 Button 3 1
+18723 P1 Button 1 0
+18723 P1 Button 3 0
+18726 P1 Button 4 1
+18730 P1 Button 4 0
+18749 P1 Down 1
+18752 P1 Down 0
+18766 P1 Button 4 1
+18770 P1 Button 4 0
+18809 P1 Button 1 1
+18813 P1 Button 1 0
+18899 P1 Up 1
+18899 P1 Button 1 1
+18899 P1 Button 2 1
+18902 P1 Up 0
+18903 P1 Button 1 0
+18903 P1 Button 2 0
+18916 poke8 ff86fe 14
+18916 poke8 ff8706 0
+18916 poke8 ff872e 5
+18916 poke8 ff873b 0
+18916 poke8 ff86ec 38
+18916 poke8 ff8769 6
+18916 poke8 ff876a 6
+18916 poke8 ff876b 6
+18916 poke8 ff876c 6
+18916 poke8 ff876d 6
+18916 poke8 ff876e 6
+18916 poke8 ff876f 6
+18918 P1 Button 4 1
+18922 P1 Button 4 0
+18958 P1 Button 4 1
+18962 P1 Button 4 0
+18989 P1 Button 1 1
+18993 P1 Button 1 0
+18998 P1 Button 4 1
+19002 P1 Button 4 0
+19049 P1 Down 1
+19052 P1 Down 0
+19079 P1 Button 1 1
+19083 P1 Button 1 0
+19169 P1 Button 1 1
+19173 P1 Button 1 0
+19199 poke8 ff86fe 15
+19199 poke8 ff8706 0
+19199 poke8 ff872e 5
+19199 poke8 ff873b 0
+19199 P1 Up 1
+19201 P1 Button 4 1
+19205 P1 Button 4 0
+19241 P1 Button 4 1
+19245 P1 Button 4 0
+19281 P1 Button 4 1
+19285 P1 Button 4 0
+19453 P1 Button 2 1
+19454 P1 Button 2 0
+19459 P1 Up 0
+19499 poke8 ff86fe 16
+19499 poke8 ff8706 0
+19499 poke8 ff872e 5
+19499 poke8 ff873b 0
+19501 P1 Button 4 1
+19505 P1 Button 4 0
+19510 Coin 1 1
+19516 Coin 1 0
+19533 P1 Button 2 1
+19534 P1 Button 2 0
+19540 1 Player Start 1
+19541 P1 Button 4 1
+19545 P1 Button 4 0
+19546 1 Player Start 0
+19556 P1 Button 2 1
+19557 P1 Button 2 0
+19581 P1 Button 4 1
+19583 P1 Button 2 1
+19584 P1 Button 2 0
+19585 P1 Button 4 0
+19601 P1 Button 2 1
+19603 P1 Button 2 0
+19619 P1 Button 1 1
+19623 P1 Button 1 0
+19649 P1 Down 1
+19652 P1 Down 0
+19659 poke8 ff86fe 17
+19659 poke8 ff8706 0
+19659 poke8 ff872e 5
+19659 poke8 ff873b 0
+19659 poke8 ff86ec 36
+19659 poke8 ff8769 0
+19659 poke8 ff876a 0
+19659 poke8 ff876b 0
+19659 poke8 ff876c 0
+19659 poke8 ff876d 0
+19659 poke8 ff876e 0
+19659 poke8 ff876f 0
+19661 P1 Button 4 1
+19665 P1 Button 4 0
+19701 P1 Button 4 1
+19705 P1 Button 4 0
+19709 P1 Button 1 1
+19713 P1 Button 1 0
+19741 P1 Button 4 1
+19745 P1 Button 4 0
+19799 P1 Up 1
+19799 P1 Button 1 1
+19799 P1 Button 4 1
+19802 P1 Up 0
+19803 P1 Button 1 0
+19803 P1 Button 4 0
+19807 poke8 ff86fe 18
+19807 poke8 ff8706 0
+19807 poke8 ff872e 5
+19807 poke8 ff873b 0
+19809 P1 Button 4 1
+19813 P1 Button 4 0
+19819 P1 Button 3 1
+19823 P1 Button 3 0
+19849 P1 Button 4 1
+19853 P1 Button 4 0
+19889 P1 Button 1 1
+19889 P1 Button 4 1
+19893 P1 Button 1 0
+19893 P1 Button 4 0
+19925 P1 Right 0
+19935 P1 Left 1
+19943 P1 Down 1
+19944 P1 Down 0
+19945 P1 Left 0
+19949 poke8 ff86fe 19
+19949 poke8 ff8706 0
+19949 poke8 ff872e 5
+19949 poke8 ff873b 0
+19949 poke8 ff86ec 37
+19949 poke8 ff8769 0
+19949 poke8 ff876a 0
+19949 poke8 ff876b 0
+19949 poke8 ff876c 0
+19949 poke8 ff876d 0
+19949 poke8 ff876e 0
+19949 poke8 ff876f 0
+19951 P1 Button 4 1
+19955 P1 Button 4 0
+19991 P1 Button 4 1
+19995 P1 Button 4 0
+20031 P1 Button 4 1
+20035 P1 Button 4 0
+20113 poke8 ff86fe 20
+20113 poke8 ff8706 0
+20113 poke8 ff872e 5
+20113 poke8 ff873b 0
+20115 P1 Button 4 1
+20119 P1 Button 4 0
+20130 P1 Right 1
+20155 P1 Button 4 1
+20159 P1 Button 4 0
+20195 P1 Button 4 1
+20199 P1 Button 4 0
+20299 P1 Button 2 1
+20300 P1 Up 1
+20300 P1 Button 2 0
+20346 poke8 ff86fe 21
+20346 poke8 ff8706 0
+20346 poke8 ff872e 5
+20346 poke8 ff873b 0
+20346 poke8 ff86ec 38
+20346 poke8 ff8769 0
+20346 poke8 ff876a 0
+20346 poke8 ff876b 0
+20346 poke8 ff876c 0
+20346 poke8 ff876d 0
+20346 poke8 ff876e 0
+20346 poke8 ff876f 0
+20348 P1 Button 4 1
+20352 P1 Button 4 0
+20388 P1 Button 4 1
+20392 P1 Button 4 0
+20428 P1 Button 4 1
+20432 P1 Button 4 0
+20460 P1 Button 2 1
+20461 P1 Button 2 0
+20700 P1 Button 1 1
+20701 P1 Up 0
+20701 P1 Down 1
+20701 P1 Button 1 0
+20738 poke8 ff86fe 22
+20738 poke8 ff8706 0
+20738 poke8 ff872e 5
+20738 poke8 ff873b 0
+20738 poke8 ff86ec 39
+20738 poke8 ff8769 0
+20738 poke8 ff876a 0
+20738 poke8 ff876b 0
+20738 poke8 ff876c 0
+20738 poke8 ff876d 0
+20738 poke8 ff876e 0
+20738 poke8 ff876f 0
+20740 P1 Button 4 1
+20744 P1 Button 4 0
+20780 P1 Button 4 1
+20784 P1 Button 4 0
+20820 P1 Button 4 1
+20824 P1 Button 4 0
+20862 poke8 ff86fe 23
+20862 poke8 ff8706 0
+20862 poke8 ff872e 5
+20862 poke8 ff873b 0
+20864 P1 Button 4 1
+20868 P1 Button 4 0
+20899 P1 Button 4 1
+20903 P1 Button 4 0
+20904 P1 Button 4 1
+20908 P1 Button 4 0
+20919 P1 Button 3 1
+20923 P1 Button 3 0
+20944 P1 Button 4 1
+20946 poke16 ff8640 112
+20948 P1 Button 4 0
+21010 Coin 1 1
+21016 Coin 1 0
+21040 1 Player Start 1
+21046 1 Player Start 0
+21051 P1 Button 2 1
+21052 P1 Button 2 0
+21101 P1 Down 0
+21149 P1 Down 1
+21149 P1 Button 1 1
+21152 P1 Down 0
+21153 P1 Button 1 0
+21222 poke8 ff86fe 33
+21222 poke8 ff8706 0
+21222 poke8 ff872e 5
+21222 poke8 ff873b 0
+21224 P1 Button 4 1
+21228 P1 Button 4 0
+21239 P1 Button 1 1
+21243 P1 Button 1 0
+21264 P1 Button 4 1
+21268 P1 Button 4 0
+21299 poke8 ff86fe 34
+21299 poke8 ff8706 0
+21299 poke8 ff872e 5
+21299 poke8 ff873b 0
+21299 P1 Up 1
+21301 P1 Button 4 1
+21302 P1 Up 0
+21305 P1 Button 4 0
+21317 P1 Button 2 1
+21318 P1 Button 2 0
+21329 P1 Button 1 1
+21333 P1 Button 1 0
+21341 P1 Button 4 1
+21345 P1 Button 4 0
+21351 poke8 ff86ec 37
+21351 poke8 ff8769 1
+21351 poke8 ff876a 1
+21351 poke8 ff876b 1
+21351 poke8 ff876c 1
+21351 poke8 ff876d 1
+21351 poke8 ff876e 1
+21351 poke8 ff876f 1
+21381 P1 Button 4 1
+21385 P1 Button 4 0
+21419 P1 Button 1 1
+21423 P1 Button 1 0
+21432 P1 Button 2 1
+21433 P1 Button 2 0
+21446 P1 Up 1
+21449 poke8 ff86fe 39
+21449 poke8 ff8706 0
+21449 poke8 ff872e 5
+21449 poke8 ff873b 0
+21451 P1 Button 4 1
+21452 P1 Up 0
+21455 P1 Button 4 0
+21487 P1 Button 1 1
+21491 P1 Button 1 0
+21491 P1 Button 4 1
+21495 P1 Button 1 1
+21495 P1 Button 4 0
+21499 P1 Button 1 0
+21503 P1 Button 1 1
+21507 P1 Button 1 0
+21519 P1 Down 1
+21527 P1 Button 1 1
+21529 P1 Down 0
+21531 P1 Button 1 0
+21531 P1 Button 4 1
+21535 P1 Button 4 0
+21599 poke8 ff86fe 40
+21599 poke8 ff8706 0
+21599 poke8 ff872e 5
+21599 poke8 ff873b 0
+21601 P1 Button 4 1
+21605 P1 Button 4 0
+21641 P1 Button 4 1
+21645 P1 Button 4 0
+21664 P1 Up 1
+21665 P1 Up 0
+21668 P1 Up 1
+21669 P1 Up 0
+21672 P1 Up 1
+21673 P1 Up 0
+21673 P1 Button 2 1
+21674 P1 Button 2 0
+21676 P1 Up 1
+21681 P1 Button 4 1
+21685 P1 Button 4 0
+21699 poke8 ff86ec 38
+21699 poke8 ff8769 1
+21699 poke8 ff876a 1
+21699 poke8 ff876b 1
+21699 poke8 ff876c 1
+21699 poke8 ff876d 1
+21699 poke8 ff876e 1
+21699 poke8 ff876f 1
+21749 poke8 ff86fe 42
+21749 poke8 ff8706 0
+21749 poke8 ff872e 5
+21749 poke8 ff873b 0
+21751 P1 Button 4 1
+21752 P1 Up 0
+21755 P1 Button 4 0
+21791 P1 Button 4 1
+21795 P1 Button 4 0
+21831 P1 Button 4 1
+21835 P1 Button 4 0
+21899 P1 Up 1
+21902 P1 Up 0
+21959 P1 Button 1 1
+21963 P1 Button 1 0
+21984 poke8 ff86fe 43
+21984 poke8 ff8706 0
+21984 poke8 ff872e 5
+21984 poke8 ff873b 0
+21984 P1 Right 0
+21984 P1 Up 1
+21986 P1 Button 4 1
+21990 P1 Button 4 0
+21991 P1 Up 0
+21991 P1 Button 1 1
+21995 P1 Button 1 0
+21999 P1 Left 1
+21999 P1 Button 1 1
+21999 P1 Button 4 1
+22001 P1 Left 0
+22002 P1 Down 1
+22003 P1 Button 1 0
+22003 P1 Button 4 0
+22017 P1 Left 1
+22017 P1 Down 0
+22019 P1 Button 3 1
+22023 P1 Down 1
+22023 P1 Button 3 0
+22026 P1 Button 4 1
+22030 P1 Button 4 0
+22033 P1 Left 0
+22043 P1 Button 2 1
+22044 P1 Button 2 0
+22066 poke8 ff86fe 0
+22066 poke8 ff8706 0
+22066 poke8 ff872e 5
+22066 poke8 ff873b 0
+22066 poke8 ff86ec 39
+22066 poke8 ff8769 1
+22066 poke8 ff876a 1
+22066 poke8 ff876b 1
+22066 poke8 ff876c 1
+22066 poke8 ff876d 1
+22066 poke8 ff876e 1
+22066 poke8 ff876f 1
+22068 P1 Button 4 1
+22072 P1 Button 4 0
+22108 P1 Button 4 1
+22112 P1 Button 4 0
+22135 P1 Down 0
+22135 P1 Button 1 1
+22139 P1 Button 1 0
+22143 P1 Left 1
+22143 P1 Button 1 1
+22145 P1 Left 0
+22147 P1 Button 1 0
+22148 P1 Button 4 1
+22151 P1 Left 1
+22151 P1 Button 1 1
+22152 P1 Button 4 0
+22155 P1 Button 1 0
+22171 P1 Down 1
+22199 poke8 ff86fe 1
+22199 poke8 ff8706 0
+22199 poke8 ff872e 5
+22199 poke8 ff873b 0
+22201 P1 Button 4 1
+22205 P1 Button 4 0
+22239 P1 Right 1
+22239 P1 Left 0
+22239 P1 Down 0
+22241 P1 Button 4 1
+22245 P1 Button 4 0
+22272 P1 Right 0
+22272 P1 Left 1
+22272 P1 Down 1
+22281 P1 Button 4 1
+22285 P1 Button 4 0
+22351 poke8 ff86fe 2
+22351 poke8 ff8706 0
+22351 poke8 ff872e 5
+22351 poke8 ff873b 0
+22353 P1 Button 4 1
+22357 P1 Button 4 0
+22393 P1 Button 4 1
+22397 P1 Button 4 0
+22413 P1 Button 2 1
+22414 P1 Button 2 0
+22433 P1 Button 4 1
+22437 P1 Button 4 0
+22483 poke8 ff86ec 36
+22483 poke8 ff8769 6
+22483 poke8 ff876a 6
+22483 poke8 ff876b 6
+22483 poke8 ff876c 6
+22483 poke8 ff876d 6
+22483 poke8 ff876e 6
+22483 poke8 ff876f 6
+22492 P1 Down 0
+22499 poke8 ff86fe 3
+22499 poke8 ff8706 0
+22499 poke8 ff872e 5
+22499 poke8 ff873b 0
+22501 P1 Button 4 1
+22502 P1 Up 1
+22505 P1 Button 4 0
+22510 Coin 1 1
+22516 Coin 1 0
+22540 1 Player Start 1
+22541 P1 Button 4 1
+22545 P1 Button 4 0
+22546 1 Player Start 0
+22548 P1 Button 2 1
+22549 P1 Button 2 0
+22581 P1 Button 4 1
+22585 P1 Button 4 0
+22649 poke8 ff86fe 4
+22649 poke8 ff8706 0
+22649 poke8 ff872e 5
+22649 poke8 ff873b 0
+22651 P1 Button 4 1
+22655 P1 Button 4 0
+22687 P1 Button 2 1
+22688 P1 Button 2 0
+22691 P1 Button 4 1
+22695 P1 Button 4 0
+22704 P1 Up 0
+22714 P1 Up 1
+22726 P1 Up 0
+22727 P1 Up 1
+22730 P1 Up 0
+22731 P1 Button 4 1
+22735 P1 Button 4 0
+22781 poke8 ff86ec 37
+22781 poke8 ff8769 6
+22781 poke8 ff876a 6
+22781 poke8 ff876b 6
+22781 poke8 ff876c 6
+22781 poke8 ff876d 6
+22781 poke8 ff876e 6
+22781 poke8 ff876f 6
+22799 poke8 ff86fe 5
+22799 poke8 ff8706 0
+22799 poke8 ff872e 5
+22799 poke8 ff873b 0
+22801 P1 Button 1 1
+22801 P1 Button 4 1
+22803 P1 Button 1 0
+22805 P1 Button 4 0
+22807 P1 Button 1 1
+22811 P1 Button 1 0
+22815 P1 Button 1 1
+22819 P1 Button 1 0
+22823 P1 Button 1 1
+22827 P1 Button 1 0
+22831 P1 Button 1 1
+22834 P1 Button 1 0
+22841 P1 Button 4 1
+22845 P1 Button 4 0
+22856 P1 Button 1 1
+22859 P1 Button 1 0
+22863 P1 Button 1 1
+22867 P1 Button 1 0
+22871 P1 Button 1 1
+22875 P1 Button 1 0
+22879 P1 Button 1 1
+22881 P1 Button 4 1
+22883 P1 Button 1 0
+22885 P1 Button 4 0
+22887 P1 Button 1 1
+22888 P1 Button 1 0
+22895 P1 Right 1
+22895 P1 Left 0
+22895 P1 Up 1
+22935 P1 Up 0
+22949 poke8 ff86fe 6
+22949 poke8 ff8706 0
+22949 poke8 ff872e 5
+22949 poke8 ff873b 0
+22951 P1 Button 4 1
+22955 P1 Button 4 0
+22991 P1 Button 4 1
+22995 P1 Button 4 0
+23031 P1 Button 4 1
+23035 P1 Button 4 0
+23081 poke16 ff8640 112
+23099 poke8 ff86fe 7
+23099 poke8 ff8706 0
+23099 poke8 ff872e 5
+23099 poke8 ff873b 0
+23099 poke8 ff86ec 38
+23099 poke8 ff8769 6
+23099 poke8 ff876a 6
+23099 poke8 ff876b 6
+23099 poke8 ff876c 6
+23099 poke8 ff876d 6
+23099 poke8 ff876e 6
+23099 poke8 ff876f 6
+23099 P1 Button 4 1
+23105 P1 Button 4 0
+23119 P1 Button 3 1
+23123 P1 Button 3 0
+23141 P1 Button 4 1
+23145 P1 Button 4 0
+23181 P1 Button 4 1
+23184 P1 Button 2 1
+23185 P1 Button 2 0
+23185 P1 Button 4 0
+23227 P1 Down 1
+23285 poke8 ff86fe 11
+23285 poke8 ff8706 0
+23285 poke8 ff872e 5
+23285 poke8 ff873b 0
+23287 P1 Button 4 1
+23291 P1 Button 4 0
+23327 P1 Button 4 1
+23331 P1 Button 4 0
+23367 P1 Button 4 1
+23371 P1 Button 4 0
+23434 poke8 ff86fe 12
+23434 poke8 ff8706 0
+23434 poke8 ff872e 5
+23434 poke8 ff873b 0
+23436 P1 Button 4 1
+23440 P1 Button 4 0
+23476 P1 Button 4 1
+23480 P1 Button 4 0
+23516 P1 Button 4 1
+23520 P1 Button 2 1
+23520 P1 Button 4 0
+23521 P1 Button 2 0
+23578 P1 Down 0
+23579 P1 Button 1 1
+23583 P1 Button 1 0
+23632 poke8 ff86fe 13
+23632 poke8 ff8706 0
+23632 poke8 ff872e 5
+23632 poke8 ff873b 0
+23634 P1 Button 4 1
+23638 P1 Button 4 0
+23641 P1 Button 2 1
+23642 P1 Button 2 0
+23669 P1 Button 1 1
+23673 P1 Button 1 0
+23674 P1 Button 4 1
+23678 P1 Button 4 0
+23699 P1 Up 1
+23702 P1 Up 0
+23714 P1 Button 4 1
+23718 P1 Button 4 0
+23759 P1 Button 1 1
+23763 P1 Button 1 0
+23799 P1 Button 2 1
+23803 P1 Button 2 0
+23849 P1 Down 1
+23849 P1 Button 1 1
+23852 P1 Down 0
+23853 P1 Button 1 0
+23864 poke8 ff86fe 14
+23864 poke8 ff8706 0
+23864 poke8 ff872e 5
+23864 poke8 ff873b 0
+23864 poke8 ff86ec 36
+23864 poke8 ff8769 0
+23864 poke8 ff876a 0
+23864 poke8 ff876b 0
+23864 poke8 ff876c 0
+23864 poke8 ff876d 0
+23864 poke8 ff876e 0
+23864 poke8 ff876f 0
+23866 P1 Button 4 1
+23870 P1 Button 4 0
+23906 P1 Button 4 1
+23910 P1 Button 4 0
+23939 P1 Button 1 1
+23943 P1 Button 1 0
+23946 P1 Button 4 1
+23950 P1 Button 4 0
+23959 P1 Button 2 1
+23960 P1 Button 2 0
+23999 P1 Up 1
+24002 P1 Up 0
+24010 Coin 1 1
+24016 Coin 1 0
+24029 P1 Button 1 1
+24033 P1 Button 1 0
+24040 1 Player Start 1
+24046 1 Player Start 0
+24119 P1 Button 1 1
+24123 P1 Button 1 0
+24149 poke8 ff86fe 15
+24149 poke8 ff8706 0
+24149 poke8 ff872e 5
+24149 poke8 ff873b 0
+24149 poke8 ff86ec 37
+24149 poke8 ff8769 0
+24149 poke8 ff876a 0
+24149 poke8 ff876b 0
+24149 poke8 ff876c 0
+24149 poke8 ff876d 0
+24149 poke8 ff876e 0
+24149 poke8 ff876f 0
+24151 P1 Button 4 1
+24155 P1 Button 4 0
+24191 P1 Button 4 1
+24195 P1 Button 4 0
+24199 P1 Button 4 1
+24203 P1 Button 4 0
+24219 P1 Button 3 1
+24223 P1 Button 3 0
+24231 P1 Button 4 1
+24235 P1 Button 4 0
+24449 poke8 ff86fe 16
+24449 poke8 ff8706 0
+24449 poke8 ff872e 5
+24449 poke8 ff873b 0
+24451 P1 Button 4 1
+24455 P1 Button 4 0
+24491 P1 Button 4 1
+24495 P1 Button 4 0
+24531 P1 Button 4 1
+24535 P1 Button 4 0
+24569 P1 Button 1 1
+24573 P1 Button 1 0
+24599 P1 Up 1
+24602 P1 Up 0
+24609 poke8 ff86fe 17
+24609 poke8 ff8706 0
+24609 poke8 ff872e 5
+24609 poke8 ff873b 0
+24611 P1 Button 4 1
+24614 P1 Button 2 1
+24615 P1 Button 2 0
+24615 P1 Button 4 0
+24651 P1 Button 4 1
+24655 P1 Button 4 0
+24659 P1 Button 1 1
+24663 P1 Button 1 0
+24691 P1 Button 4 1
+24695 P1 Button 4 0
+24749 P1 Down 1
+24749 P1 Button 1 1
+24752 P1 Down 0
+24753 P1 Button 1 0
+24757 poke8 ff86fe 18
+24757 poke8 ff8706 0
+24757 poke8 ff872e 5
+24757 poke8 ff873b 0
+24759 P1 Down 1
+24759 P1 Button 4 1
+24763 P1 Button 4 0
+24799 P1 Button 4 1
+24803 P1 Button 4 0
+24815 P1 Button 2 1
+24816 P1 Button 2 0
+24839 P1 Button 4 1
+24843 P1 Button 2 1
+24843 P1 Button 4 0
+24844 P1 Button 2 0
+24913 poke8 ff86fe 19
+24913 poke8 ff8706 0
+24913 poke8 ff872e 5
+24913 poke8 ff873b 0
+24913 poke8 ff86ec 39
+24913 poke8 ff8769 0
+24913 poke8 ff876a 0
+24913 poke8 ff876b 0
+24913 poke8 ff876c 0
+24913 poke8 ff876d 0
+24913 poke8 ff876e 0
+24913 poke8 ff876f 0
+24915 P1 Button 4 1
+24919 P1 Button 4 0
+24955 P1 Button 4 1
+24959 P1 Button 4 0
+24995 P1 Button 4 1
+24999 P1 Button 4 0
+25077 poke8 ff86fe 20
+25077 poke8 ff8706 0
+25077 poke8 ff872e 5
+25077 poke8 ff873b 0
+25079 P1 Button 4 1
+25083 P1 Button 4 0
+25119 P1 Button 4 1
+25123 P1 Button 4 0
+25159 P1 Down 0
+25159 P1 Button 4 1
+25163 P1 Button 4 0
+25199 P1 Up 1
+25199 P1 Button 1 1
+25199 P1 Button 2 1
+25202 P1 Up 0
+25203 P1 Button 1 0
+25203 P1 Button 2 0
+25289 P1 Button 1 1
+25293 P1 Button 1 0
+25299 P1 Button 4 1
+25303 P1 Button 4 0
+25319 P1 Button 3 1
+25323 P1 Button 3 0
+25331 P1 Down 1
+25336 P1 Down 0
+25434 P1 Button 1 1
+25435 P1 Button 1 0
+25437 P1 Right 0
+25439 P1 Right 1
+25439 P1 Button 1 1
+25441 P1 Right 0
+25443 P1 Button 1 0
+25447 P1 Button 1 1
+25451 P1 Button 1 0
+25453 P1 Left 1
+25453 P1 Button 2 1
+25454 P1 Button 2 0
+25455 P1 Button 1 1
+25457 P1 Button 1 0
+25472 P1 Right 1
+25472 P1 Left 0
+25472 P1 Down 1
+25472 P1 Button 2 1
+25473 P1 Button 2 0
+25477 P1 Right 0
+25488 P1 Left 1
+25488 P1 Button 1 1
+25488 P1 Button 3 1
+25489 P1 Left 0
+25490 P1 Button 3 0
+25491 P1 Button 1 0
+25493 P1 Left 1
+25495 P1 Button 1 1
+25496 P1 Button 1 0
+25510 Coin 1 1
+25516 Coin 1 0
+25530 P1 Down 0
+25540 1 Player Start 1
+25543 P1 Button 1 1
+25546 1 Player Start 0
+25547 P1 Button 1 0
+25551 P1 Button 1 1
+25555 P1 Button 1 0
+25559 P1 Button 1 1
+25563 P1 Button 1 0
+25567 P1 Button 1 1
+25571 P1 Button 1 0
+25573 poke8 ff86fe 21
+25573 poke8 ff8706 0
+25573 poke8 ff872e 5
+25573 poke8 ff873b 0
+25573 poke8 ff86ec 37
+25573 poke8 ff8769 1
+25573 poke8 ff876a 1
+25573 poke8 ff876b 1
+25573 poke8 ff876c 1
+25573 poke8 ff876d 1
+25573 poke8 ff876e 1
+25573 poke8 ff876f 1
+25575 P1 Button 1 1
+25575 P1 Button 4 1
+25579 P1 Button 1 0
+25579 P1 Button 4 0
+25583 P1 Button 1 1
+25587 P1 Button 1 0
+25591 P1 Button 1 1
+25595 P1 Button 1 0
+25599 P1 Button 1 1
+25601 P1 Button 1 0
+25615 P1 Button 4 1
+25619 P1 Button 4 0
+25655 P1 Button 4 1
+25659 P1 Button 4 0
+25757 P1 Button 2 1
+25758 P1 Button 2 0
+25777 P1 Up 1
+25869 P1 Right 1
+25869 P1 Left 0
+25869 P1 Up 0
+25961 P1 Button 2 1
+25962 P1 Button 2 0
+26005 poke8 ff86fe 22
+26005 poke8 ff8706 0
+26005 poke8 ff872e 5
+26005 poke8 ff873b 0
+26005 P1 Right 0
+26005 P1 Left 1
+26005 P1 Up 1
+26007 P1 Button 4 1
+26011 P1 Button 4 0
+26047 P1 Button 4 1
+26051 P1 Button 4 0
+26081 P1 Right 1
+26081 P1 Left 0
+26081 P1 Up 0
+26087 P1 Button 4 1
+26091 P1 Button 4 0
+26129 poke8 ff86fe 23
+26129 poke8 ff8706 0
+26129 poke8 ff872e 5
+26129 poke8 ff873b 0
+26131 P1 Button 4 1
+26135 P1 Button 4 0
+26171 P1 Button 4 1
+26175 P1 Button 4 0
+26211 P1 Button 4 1
+26213 poke16 ff8640 112
+26215 P1 Button 2 1
+26215 P1 Button 4 0
+26216 P1 Button 2 0
+26340 P1 Button 2 1
+26341 P1 Button 2 0
+26399 P1 Button 4 1
+26403 P1 Button 4 0
+26419 P1 Button 3 1
+26423 P1 Button 3 0
+26489 poke8 ff86fe 33
+26489 poke8 ff8706 0
+26489 poke8 ff872e 5
+26489 poke8 ff873b 0
+26489 P1 Up 1
+26491 P1 Button 4 1
+26495 P1 Button 4 0
+26531 P1 Button 4 1
+26535 P1 Button 4 0
+26554 poke8 ff86fe 34
+26554 poke8 ff8706 0
+26554 poke8 ff872e 5
+26554 poke8 ff873b 0
+26556 P1 Button 4 1
+26560 P1 Button 4 0
+26596 P1 Button 4 1
+26600 P1 Button 4 0
+26608 P1 Up 0
+26608 P1 Down 1
+26619 poke8 ff86ec 36
+26619 poke8 ff8769 6
+26619 poke8 ff876a 6
+26619 poke8 ff876b 6
+26619 poke8 ff876c 6
+26619 poke8 ff876d 6
+26619 poke8 ff876e 6
+26619 poke8 ff876f 6
+26636 P1 Button 4 1
+26640 P1 Button 4 0
+26657 P1 Right 0
+26671 P1 Right 1
+26671 P1 Button 1 1
+26673 P1 Right 0
+26675 P1 Button 1 0
+26679 P1 Button 1 1
+26683 P1 Button 1 0
+26687 P1 Right 1
+26687 P1 Button 1 1
+26689 P1 Right 0
+26691 P1 Button 1 0
+26695 P1 Button 1 1
+26699 P1 Button 1 0
+26701 poke8 ff86fe 39
+26701 poke8 ff8706 0
+26701 poke8 ff872e 5
+26701 poke8 ff873b 0
+26703 P1 Right 1
+26703 P1 Button 1 1
+26703 P1 Button 4 1
+26705 P1 Right 0
+26707 P1 Button 1 0
+26707 P1 Button 4 0
+26711 P1 Button 1 1
+26715 P1 Button 1 0
+26719 P1 Right 1
+26719 P1 Button 1 1
+26721 P1 Right 0
+26723 P1 Button 1 0
+26727 P1 Button 1 1
+26731 P1 Button 1 0
+26735 P1 Right 1
+26735 P1 Button 1 1
+26737 P1 Right 0
+26738 P1 Down 0
+26739 P1 Button 1 0
+26743 P1 Button 1 1
+26743 P1 Button 4 1
+26747 P1 Button 1 0
+26747 P1 Button 4 0
+26749 P1 Right 1
+26749 P1 Up 1
+26775 P1 Up 0
+26778 P1 Down 1
+26783 P1 Button 4 1
+26787 P1 Button 4 0
+26810 P1 Right 0
+26812 P1 Button 3 1
+26814 P1 Button 3 0
+26815 P1 Right 1
+26815 P1 Button 1 1
+26817 P1 Right 0
+26819 P1 Button 1 0
+26823 P1 Button 1 1
+26827 P1 Button 1 0
+26831 P1 Right 1
+26831 P1 Button 1 1
+26833 P1 Right 0
+26835 P1 Button 1 0
+26839 P1 Button 1 1
+26840 P1 Right 1
+26843 P1 Button 1 0
+26847 P1 Button 1 1
+26849 P1 Button 1 0
+26869 poke8 ff86fe 40
+26869 poke8 ff8706 0
+26869 poke8 ff872e 5
+26869 poke8 ff873b 0
+26871 P1 Button 4 1
+26872 P1 Down 0
+26875 P1 Button 4 0
+26911 P1 Button 4 1
+26915 P1 Button 4 0
+26949 poke8 ff86ec 37
+26949 poke8 ff8769 6
+26949 poke8 ff876a 6
+26949 poke8 ff876b 6
+26949 poke8 ff876c 6
+26949 poke8 ff876d 6
+26949 poke8 ff876e 6
+26949 poke8 ff876f 6
+26951 P1 Button 4 1
+26955 P1 Button 4 0
+26974 P1 Up 1
+26996 P1 Up 0
+26999 poke8 ff86fe 42
+26999 poke8 ff8706 0
+26999 poke8 ff872e 5
+26999 poke8 ff873b 0
+27000 P1 Button 1 1
+27001 P1 Button 4 1
+27003 P1 Button 1 0
+27005 P1 Button 4 0
+27006 P1 Right 0
+27007 P1 Right 1
+27007 P1 Button 1 1
+27009 P1 Right 0
+27010 Coin 1 1
+27011 P1 Button 1 0
+27015 P1 Button 1 1
+27016 Coin 1 0
+27019 P1 Button 1 0
+27023 P1 Right 1
+27023 P1 Button 1 1
+27025 P1 Right 0
+27027 P1 Button 1 0
+27031 P1 Button 1 1
+27033 poke16 ff8640 112
+27035 P1 Button 1 0
+27039 P1 Left 1
+27039 P1 Button 1 1
+27040 1 Player Start 1
+27041 P1 Left 0
+27041 P1 Button 4 1
+27043 P1 Button 1 0
+27045 P1 Button 4 0
+27046 1 Player Start 0
+27047 P1 Button 1 1
+27051 P1 Button 1 0
+27055 P1 Left 1
+27055 P1 Button 1 1
+27057 P1 Left 0
+27059 P1 Button 1 0
+27063 P1 Button 1 1
+27067 P1 Button 1 0
+27071 P1 Left 1
+27071 P1 Button 1 1
+27073 P1 Left 0
+27075 P1 Button 1 0
+27079 P1 Button 1 1
+27081 P1 Button 4 1
+27083 P1 Button 1 0
+27085 P1 Button 4 0
+27087 P1 Left 1
+27087 P1 Button 1 1
+27089 P1 Left 0
+27091 P1 Button 1 0
+27095 P1 Button 1 1
+27099 P1 Button 1 0
+27103 P1 Left 1
+27103 P1 Button 1 1
+27105 P1 Left 0
+27107 P1 Button 1 0
+27111 P1 Button 1 1
+27115 P1 Button 1 0
+27119 P1 Left 1
+27119 P1 Button 1 1
+27119 P1 Button 2 1
+27120 P1 Button 2 0
+27121 P1 Left 0
+27123 P1 Button 1 0
+27124 poke16 ff8640 112
+27127 P1 Button 1 1
+27131 P1 Button 1 0
+27135 P1 Left 1
+27135 P1 Button 1 1
+27137 P1 Left 0
+27139 P1 Button 1 0
+27141 P1 Button 3 1
+27143 P1 Button 1 1
+27145 P1 Button 3 0
+27147 P1 Button 1 0
+27151 P1 Left 1
+27151 P1 Button 1 1
+27153 P1 Left 0
+27155 P1 Button 1 0
+27159 P1 Button 1 1
+27163 P1 Button 1 0
+27167 P1 Left 1
+27167 P1 Button 1 1
+27169 P1 Left 0
+27171 P1 Button 1 0
+27175 P1 Button 1 1
+27179 P1 Button 1 0
+27183 P1 Left 1
+27183 P1 Button 1 1
+27185 P1 Left 0
+27187 P1 Button 1 0
+27191 P1 Button 1 1
+27194 poke8 ff86fe 43
+27194 poke8 ff8706 0
+27194 poke8 ff872e 5
+27194 poke8 ff873b 0
+27195 P1 Button 1 0
+27196 P1 Button 4 1
+27199 P1 Left 1
+27199 P1 Button 1 1
+27200 P1 Button 4 0
+27201 P1 Left 0
+27202 P1 Up 1
+27203 P1 Button 1 0
+27207 P1 Button 1 1
+27208 P1 Button 1 0
+27231 P1 Button 2 1
+27232 P1 Button 2 0
+27236 P1 Button 4 1
+27240 P1 Button 4 0
+27276 P1 Button 4 1
+27280 P1 Button 4 0
+27316 poke16 ff8640 112
+27321 P1 Button 1 1
+27323 P1 Button 1 0
+27327 P1 Left 1
+27327 P1 Up 0
+27327 P1 Button 1 1
+27329 P1 Left 0
+27331 P1 Button 1 0
+27333 P1 Left 1
+27335 P1 Button 1 1
+27339 P1 Button 1 0
+27399 P1 Button 1 1
+27403 P1 Button 1 0
+27405 P1 Left 0
+27407 P1 Left 1
+27407 P1 Button 1 1
+27409 P1 Left 0
+27411 P1 Button 1 0
+27415 P1 Button 1 1
+27419 P1 Button 1 0
+27423 P1 Left 1
+27423 P1 Button 1 1
+27425 P1 Left 0
+27427 P1 Button 1 0
+27431 P1 Button 1 1
+27435 P1 Button 1 0
+27439 P1 Left 1
+27439 P1 Button 1 1
+27441 P1 Left 0
+27443 P1 Button 1 0
+27447 P1 Button 1 1
+27451 P1 Button 1 0
+27455 P1 Left 1
+27455 P1 Button 1 1
+27457 P1 Left 0
+27459 P1 Button 1 0
+27463 P1 Button 1 1
+27466 poke8 ff86fe 0
+27466 poke8 ff8706 0
+27466 poke8 ff872e 5
+27466 poke8 ff873b 0
+27466 P1 Left 1
+27466 P1 Down 1
+27466 P1 Button 1 0
+27468 P1 Button 4 1
+27472 P1 Button 4 0
+27499 P1 Button 4 1
+27503 P1 Button 4 0
+27508 P1 Button 4 1
+27512 P1 Button 4 0
+27519 P1 Button 3 1
+27523 P1 Button 3 0
+27548 P1 Button 4 1
+27552 P1 Button 4 0
+27599 poke8 ff86fe 1
+27599 poke8 ff8706 0
+27599 poke8 ff872e 5
+27599 poke8 ff873b 0
+27601 P1 Button 4 1
+27605 P1 Button 4 0
+27607 P1 Right 1
+27607 P1 Left 0
+27607 P1 Down 0
+27641 P1 Button 4 1
+27645 P1 Button 4 0
+27671 poke8 ff86ec 39
+27671 poke8 ff8769 6
+27671 poke8 ff876a 6
+27671 poke8 ff876b 6
+27671 poke8 ff876c 6
+27671 poke8 ff876d 6
+27671 poke8 ff876e 6
+27671 poke8 ff876f 6
+27681 P1 Button 4 1
+27685 P1 Button 4 0
+27831 P1 Up 1
+27848 P1 Right 0
+27848 P1 Left 1
+27848 P1 Up 0
+27848 P1 Down 1
+27877 poke16 ffba80 1
+27947 poke8 ff86fe 2
+27947 poke8 ff8706 0
+27947 poke8 ff872e 5
+27947 poke8 ff873b 0
+27949 P1 Button 4 1
+27952 P1 Down 0
+27953 P1 Button 4 0
+27989 P1 Button 4 1
+27992 P1 Button 1 1
+27993 P1 Left 0
+27993 P1 Button 4 0
+27995 P1 Button 1 0
+27999 P1 Right 1
+27999 P1 Button 1 1
+28000 P1 Right 0
+28000 P1 Left 1
+28001 P1 Left 0
+28003 P1 Button 1 0
+28007 P1 Button 1 1
+28011 P1 Button 1 0
+28013 P1 Right 1
+28026 poke8 ff86ec 36
+28026 poke8 ff8769 0
+28026 poke8 ff876a 0
+28026 poke8 ff876b 0
+28026 poke8 ff876c 0
+28026 poke8 ff876d 0
+28026 poke8 ff876e 0
+28026 poke8 ff876f 0
+28029 P1 Button 4 1
+28033 P1 Button 4 0
+28049 poke8 ff86fe 3
+28049 poke8 ff8706 0
+28049 poke8 ff872e 5
+28049 poke8 ff873b 0
+28051 P1 Button 4 1
+28055 P1 Button 4 0
+28078 P1 Button 2 1
+28079 P1 Button 2 0
+28091 P1 Button 4 1
+28095 P1 Button 4 0
+28131 P1 Button 4 1
+28135 P1 Button 4 0
+28183 P1 Button 2 1
+28184 P1 Button 2 0
+28199 poke8 ff86fe 4
+28199 poke8 ff8706 0
+28199 poke8 ff872e 5
+28199 poke8 ff873b 0
+28199 P1 Button 1 1
+28201 P1 Button 4 1
+28202 P1 Right 0
+28203 P1 Button 1 0
+28205 P1 Button 4 0
+28207 P1 Right 1
+28207 P1 Button 1 1
+28209 P1 Right 0
+28211 P1 Button 1 0
+28215 P1 Button 1 1
+28219 P1 Button 1 0
+28223 P1 Left 1
+28223 P1 Button 1 1
+28225 P1 Left 0
+28227 P1 Button 1 0
+28231 P1 Button 1 1
+28235 P1 Button 1 0
+28239 P1 Left 1
+28239 P1 Button 1 1
+28241 P1 Left 0
+28241 P1 Button 4 1
+28243 P1 Button 1 0
+28245 P1 Button 4 0
+28247 P1 Button 1 1
+28251 P1 Button 1 0
+28255 P1 Left 1
+28255 P1 Button 1 1
+28257 P1 Left 0
+28259 P1 Button 1 0
+28263 P1 Button 1 1
+28264 P1 Left 1
+28267 P1 Button 1 0
+28270 P1 Right 1
+28270 P1 Left 0
+28272 P1 Button 1 1
+28275 P1 Button 1 0
+28276 P1 Right 0
+28279 P1 Button 1 1
+28281 P1 Button 4 1
+28283 P1 Button 1 0
+28285 P1 Button 4 0
+28287 P1 Left 1
+28287 P1 Button 1 1
+28289 P1 Left 0
+28291 P1 Button 1 0
+28295 P1 Button 1 1
+28298 P1 Left 1
+28299 P1 Button 1 0
+28327 P1 Button 1 1
+28331 P1 Button 1 0
+28335 P1 Button 1 1
+28337 P1 Button 1 0
+28349 poke8 ff86fe 5
+28349 poke8 ff8706 0
+28349 poke8 ff872e 5
+28349 poke8 ff873b 0
+28349 poke8 ff86ec 37
+28349 poke8 ff8769 0
+28349 poke8 ff876a 0
+28349 poke8 ff876b 0
+28349 poke8 ff876c 0
+28349 poke8 ff876d 0
+28349 poke8 ff876e 0
+28349 poke8 ff876f 0
+28351 P1 Button 4 1
+28355 P1 Button 4 0
+28391 P1 Button 4 1
+28395 P1 Button 4 0
+28431 P1 Button 4 1
+28435 P1 Button 4 0
+28436 P1 Button 2 1
+28437 P1 Button 2 0
+28499 poke8 ff86fe 6
+28499 poke8 ff8706 0
+28499 poke8 ff872e 5
+28499 poke8 ff873b 0
+28501 P1 Button 4 1
+28505 P1 Button 4 0
+28510 Coin 1 1
+28516 Coin 1 0
+28540 1 Player Start 1
+28541 P1 Button 4 1
+28545 P1 Button 4 0
+28546 1 Player Start 0
+28581 P1 Button 4 1
+28585 P1 Button 4 0
+28599 P1 Button 4 1
+28603 P1 Button 4 0
+28619 P1 Button 3 1
+28623 P1 Button 3 0
+28936 P1 Button 1 1
+28938 P1 Left 0
+28939 P1 Button 1 0
+28943 P1 Right 1
+28943 P1 Button 1 1
+28945 P1 Right 0
+28947 P1 Button 1 0
+28951 P1 Button 1 1
+28955 P1 Right 1
+28955 P1 Button 1 0
+29089 P1 Button 2 1
+29090 P1 Button 2 0
+29311 P1 Down 1
+29330 P1 Right 0
+29330 P1 Left 1
+29330 P1 Up 1
+29330 P1 Down 0
+29461 P1 Button 2 1
+29462 P1 Button 2 0
+29622 P1 Right 1
+29622 P1 Left 0
+29622 P1 Up 0
+29699 P1 Up 1
+29699 P1 Button 1 1
+29699 P1 Button 4 1
+29702 P1 Up 0
+29703 P1 Button 1 0
+29703 P1 Button 4 0
+29719 P1 Button 3 1
+29723 P1 Button 3 0
+29789 P1 Button 1 1
+29793 P1 Button 1 0
+29849 P1 Down 1
+29852 P1 Down 0
+29879 P1 Button 1 1
+29883 P1 Button 1 0
+29922 P1 Button 2 1
+29923 P1 Button 2 0
+29969 P1 Button 1 1
+29973 P1 Button 1 0
+30001 quit

@@ -18,6 +18,9 @@
 //! * `--spawn famille:type:variante:image` : à l'image indiquée, crée à la main un objet `enemy` ou `boss` du type
 //!   et de la variante donnés, à 0x60 pixels à droite du joueur 1 (comme `creatures spawn`), pour les types que les
 //!   parcours ne font jamais apparaître ; les écritures RAM font partie du scénario produit.
+//! * `--door image:x:y:touche[:durée]` : à l'image donnée, tous les joueurs sont posés au sol en (x, y) et tiennent la
+//!   touche (bit de `+0x6c` : 0 droite, 1 gauche, 2 bas, 3 haut) `durée` images (60 par défaut), puis le bot reprend : pour
+//!   traverser les portes de passage (SET 27 et 29) et de sortie de zone (SET 7), voir `tools/gen_long.py`.
 //! * `--patience N` : un objet ou une caisse poursuivi plus de N images est ignorée 2 000 images
 //!   (sinon le bot reste bloqué devant un objet hors d'atteinte et la scène n'avance plus).
 //! * `--cast N`, `--charges V` : magies et objets fréquents (voir `Magic`).
@@ -38,6 +41,17 @@ struct Bot {
     patience: usize,
     chase: [(u32, usize); 4],
     ignore: std::collections::HashMap<u32, usize>,
+    /// `--spells a,b,..` `--spell-period N` : identifiants posés tour à tour dans la 1re ligne d'équipement, lancés devant un ennemi
+    spells: Vec<u32>,
+    spell_period: usize,
+    spell_next: usize,
+    /// image du dernier identifiant posé par joueur (une pose par période, quand le joueur est au repos)
+    spell_at: [usize; 4],
+    rod_at: [usize; 4],
+    /// `--rods N` : toutes les N images, le magicien change de baguette (`WEAPON_B` 0x24..0x27, réserve pleine ou vide)
+    rods: usize,
+    /// `--door` : (image, x, y, touche, durée)
+    doors: Vec<(usize, u32, u32, u32, usize)>,
 }
 
 impl Bot {
@@ -75,6 +89,8 @@ fn main() {
     let mut magic = Magic::default();
     let mut patience = 0usize;
     let mut spawn: Option<(bool, u32, u32, usize)> = None;
+    let (mut spells, mut spell_period, mut rods) = (Vec::<u32>::new(), 0usize, 0usize);
+    let mut doors = Vec::<(usize, u32, u32, u32, usize)>::new();
     let mut i = 6;
     while i < a.len() {
         match a[i].as_str() {
@@ -86,6 +102,15 @@ fn main() {
             "--patience" => patience = a[i + 1].parse().unwrap(),
             "--cast" => magic.period = a[i + 1].parse().unwrap(),
             "--charges" => magic.charges = a[i + 1].parse().unwrap(),
+            "--spells" => {
+                spells = a[i + 1].split(',').map(|t| u32::from_str_radix(t.trim_start_matches("0x"), 16).unwrap()).collect()
+            }
+            "--spell-period" => spell_period = a[i + 1].parse().unwrap(),
+            "--door" => {
+                let t: Vec<usize> = a[i + 1].split(':').map(|v| usize::from_str_radix(v.trim_start_matches("0x"), if v.starts_with("0x") { 16 } else { 10 }).unwrap()).collect();
+                doors.push((t[0], t[1] as u32, t[2] as u32, t[3] as u32, t.get(4).copied().unwrap_or(60)));
+            }
+            "--rods" => rods = a[i + 1].parse().unwrap(),
             "--spawn" => {
                 let t: Vec<&str> = a[i + 1].split(':').collect();
                 spawn = Some((t[0] == "boss", t[1].parse().unwrap(), t[2].parse().unwrap(), t[3].parse().unwrap()));
@@ -108,7 +133,7 @@ fn main() {
     ddsom_game::install_reference(&mut m);
     m.idle = Some(ddsom_game::idle);
     let base = ddsom_game::scenario::Scenario::load(Path::new(base_path)).unwrap();
-    let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new(), patience, chase: [(0, 0); 4], ignore: Default::default() };
+    let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new(), patience, chase: [(0, 0); 4], ignore: Default::default(), spells, spell_period, spell_next: 0, spell_at: [usize::MAX; 4], rod_at: [usize::MAX; 4], rods, doors };
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut rnd = move |n: u32| {
         rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
@@ -208,6 +233,18 @@ fn main() {
                     // entrée de scène : aucune touche (une entrée pendant cette phase fait diverger
                     // les deux machines de validate, voir docs/couverture.md)
                     apply_keys(&mut b, pl, [false; 8]);
+                } else if let Some(&(at, x, y, key, dur)) = b.doors.iter().find(|d| f >= d.0 && f < d.0 + d.4) {
+                    // porte : les joueurs vivants sont posés devant et tiennent la touche
+                    let base = P0 + 0x200 * pl as u32;
+                    if f == at && b.rd8(base) != 0 {
+                        b.poke(base + 8, x, 2);
+                        b.poke(base + 0x10, y, 2);
+                        b.poke(base + 0xc, 0, 2);
+                    }
+                    let _ = dur;
+                    let mut keys = [false; 8];
+                    keys[[0, 1, 3, 2][key as usize]] = f > at + 2;
+                    apply_keys(&mut b, pl, keys);
                 } else {
                     policy(&mut b, pl, &mut rnd, god, magic);
                 }
@@ -252,6 +289,28 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
             if b.rd8(row) != 0x56 && b.rd8(row + 8) < 9 && b.rd8(slot) < magic.charges {
                 b.poke(slot, magic.charges, 1);
             }
+        }
+    }
+    let quiet = b.rd16(base + 4) == 0x200 && !matches!(b.rd8(base + 6), 0xc | 0xe | 0x14 | 0x22) && b.rd8(base + 0x15c) == 0;
+    if b.spell_period != 0 && !b.spells.is_empty() && f % b.spell_period < 100 && quiet
+        && b.spell_at[pl] / b.spell_period != f / b.spell_period
+    {
+        b.spell_at[pl] = f;
+        // pose l'identifiant suivant en tête de la 1re ligne, chargé, et la choisit (`0x15d` = 0)
+        let id = b.spells[b.spell_next % b.spells.len()];
+        b.spell_next += 1;
+        b.poke(base + 0x120, id, 1);
+        b.poke(base + 0x128, 0, 1);
+        b.poke(base + 0x150, 5, 1);
+        b.poke(base + 0x15d, 0, 1);
+    }
+    if b.rods != 0 && f % b.rods < 100 && b.rd8(base + 3) >> 1 == 4 && quiet && b.rod_at[pl] / b.rods != f / b.rods {
+        // une baguette (0x24 à 0x27), à tour de rôle pleine (1), à six charges (la dernière avertit l'interface) et épuisée
+        b.rod_at[pl] = f;
+        let n = (f / b.rods) as u32;
+        b.poke(base + 0x10e, 0x24 + n % 4, 1);
+        for flag in 0x18b..0x192 {
+            b.poke(base + flag, [1, 6, 0][(n as usize / 4) % 3], 1);
         }
     }
     let hp = b.rd16(base + 0x62);
@@ -321,6 +380,7 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
             if f % 700 < 4 { b2 = true }
         }
     }
+    if b.spell_period != 0 && matches!(f.wrapping_sub(b.spell_at[pl]), 2..=5 | 42..=45 | 82..=85) { b4 = true } // attaque spéciale du --spells
     // objets : choisir (Button 4) puis utiliser (Button 3)
     if f % 1100 < 4 { b4 = true }
     if f % 1100 >= 20 && f % 1100 < 24 { b3 = true }
