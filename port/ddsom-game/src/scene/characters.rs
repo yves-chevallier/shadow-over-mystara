@@ -5,7 +5,8 @@
 //! joueur trois objets SET (types 5, 6, 7) créés dès qu'il y a de la place, 240 images, et le joueur suivant.
 //! Six sous-états (octet `+3` du bloc, pas de 2) ; plusieurs cèdent la main à l'ordonnanceur.
 
-use super::bonus::{call_keep_a0, dispatch, fade};
+use super::bonus::{dispatch, fade};
+use crate::video::{effacer_couche, Couche};
 use super::Ctx;
 use crate::mem::{prog8, rd16, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
@@ -24,7 +25,6 @@ mod v {
 const DISPATCH: u32 = 0xf64a0;
 /// Masque des personnages concernés, par scène (octets relatifs au PC).
 const MASKS: u32 = 0xf672e;
-const SET: u32 = 0xce00a;
 
 mod at {
     pub const FADED_OUT: u32 = 0xf64d4;
@@ -104,18 +104,12 @@ crate::etapes! {
             next_sub_step(x);
             wr16(x.b, v::PLAYER, super::PLAYERS as u16);
             wr8(x.b, v::LEFT, 4);
-            call_keep_a0(x, &[0x1f184, 0x1de7c]);
-            for pool in crate::objects::pools::POOLS {
-                pool.reset(x.b);
-            }
-            x.call(0xca8);
+            reset_objects(x);
+            effacer_couche(x.b, Couche::Un);
             x.set_v8(0x3c, 0xff);
-            x.c.d[0] = x.c.d[0] & !0xffff | 84;
-            x.call(0x1a67e);
-            x.c.d[0] = x.c.d[0] & !0xffff | 84;
-            x.call(0x1a8b2);
-            x.c.d[0] = 0;
-            x.call(0x1a60a);
+            crate::palette::charger_page(x.b, 2, 84);
+            crate::palette::charger_page(x.b, 3, 84);
+            crate::palette::charger_page(x.b, 1, 0);
             x.set_v8(0x48e, 15);
             crate::palette::full_brightness(x.b);
             next_player(x)
@@ -128,8 +122,8 @@ crate::etapes! {
         Retry6 = at::RETRY_6 => objects_6_7,
         Retry7 = at::RETRY_7 => object_7,
         NextWaited = at::NEXT_WAITED => |x| {
-            for r in [0xca8, 0xcc8, 0xce8] {
-                x.call(r);
+            for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+                effacer_couche(x.b, couche);
             }
             Flow::Done
         },
@@ -171,15 +165,25 @@ fn player_scene(x: &mut Ctx) -> Flow {
     x.wait(4, Etape::Retry5)
 }
 
-/// Crée l'objet SET de type `kind` ; s'il n'y a pas de place, attend `frames` images et reprend en `retry`.
-fn object(x: &mut Ctx, kind: u32, frames: u32, retry: Etape) -> Option<u32> {
-    x.c.d[0] = kind;
-    x.call(SET);
-    if x.c.sr & m68k::SR_C != 0 {
-        x.wait(frames, retry);
-        return None;
+/// Listes défaites et vidées (0x1f184, 0x1de7c), pools remis à zéro.
+fn reset_objects(x: &mut Ctx) {
+    crate::objects::lists::unlink_all(x.b);
+    crate::sprites::vider_listes(x.b);
+    for pool in crate::objects::pools::POOLS {
+        pool.reset(x.b);
     }
-    Some(x.c.a[1])
+}
+
+/// Crée l'objet SET de type 15 et de variante `kind` (0xce00a) ; s'il n'y a pas de place, attend `frames` images et
+/// reprend en `retry`.
+fn object(x: &mut Ctx, kind: u8, frames: u32, retry: Etape) -> Option<u32> {
+    match crate::families::creators::set_15_pur(x.b, kind) {
+        Ok(o) => Some(o.0),
+        Err(_) => {
+            x.wait(frames, retry);
+            None
+        }
+    }
 }
 
 /// L'objet est lié au joueur (octet `+0x2f` = D1) et au bloc (long `+0x4c` = A0).
@@ -212,11 +216,11 @@ fn player_done(x: &mut Ctx) -> Flow {
     wr16(x.b, v::PLAYER, p as u16);
     let left = rd8(x.b, v::LEFT).wrapping_sub(1);
     wr8(x.b, v::LEFT, left);
-    call_keep_a0(x, &[0x1f184, 0x1de7c]);
-    for pool in crate::objects::pools::POOLS {
-        pool.reset(x.b);
-    }
-    call_keep_a0(x, &[0x1de96, 0xc58]);
+    reset_objects(x);
+    let a0 = x.c.a[0];
+    crate::sprites::construire_68k(x.c, x.b);
+    x.c.a[0] = a0;
+    crate::video::vider_objets(x.b);
     x.set_v16(0x14, 0x12c0);
     x.wait(1, Etape::NextWaited)
 }

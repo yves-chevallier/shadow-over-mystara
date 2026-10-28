@@ -11,6 +11,7 @@
 //! `0xf7d5e`, ou recommence une boutique si `0xf7d72` le demande).
 
 use super::Ctx;
+use crate::video::{effacer_couche, Couche};
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
@@ -59,7 +60,6 @@ mod rom {
 }
 
 mod sub {
-    pub const MESSAGE: u32 = 0xc8312;
     /// Chemin d'erreur de l'original (`tst.w 1(A5)` : erreur d'adresse) quand un pool est plein.
     pub const FULL: u32 = 0xf7dfa;
 }
@@ -168,7 +168,7 @@ crate::etapes! {
             x.c.d[0] = index;
             let music = rd32(x.b, rom::MUSIC + index);
             x.c.a[1] = music;
-            x.call(music);
+            crate::sound::jouer_global(x.b, music);
             set_b16(x, f::STATE, 0x200);
             set_b8(x, f::SHOPPERS, 0);
             set_b8(x, f::TALKING, 0);
@@ -179,7 +179,7 @@ crate::etapes! {
             set_b16(x, 0x1e, 0);
             set_b16(x, 0x20, 0);
             x.set_v8(0x3d, 0);
-            x.call(0xca8);
+            effacer_couche(x.b, Couche::Un);
             crate::hud::forget_displayed(x.b);
             // pools vidés juste avant : l'échec (erreur d'adresse de l'original) n'arrive pas (code-mort.md)
             let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { crate::families::effects::erreur_d_adresse(sub::FULL) };
@@ -206,21 +206,22 @@ crate::etapes! {
             x.c.d[7] = x.c.d[7] & !0xffff | 0xffff;
             let shop_scene = b8(x, f::SHOP).wrapping_add(69);
             x.set_v8(0x34, shop_scene);
-            x.call(0x1a296);
+            crate::palette::charger_tout(x.b);
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
+            // 0x33aa6 (D7 et A0 gardés) : caméras au départ et mises à jour (D4 relu : `update_cameras_68k`)
             let saved = (x.c.d[7], x.c.a[0]);
-            x.call(0x33aa6);
+            crate::scroll::cameras_depart(x.b);
+            crate::scroll::update_cameras_68k(x.c, x.b);
             (x.c.d[7], x.c.a[0]) = saved;
-            x.c.d[0] = x.c.d[0] & !0xffff | 0x12c0;
             x.set_v16(0x14, 0);
-            x.call(0xbc6);
-            x.call(0xf2e56);
-            x.call(0xf2e5c);
+            crate::video::activer_couches(x.b, 0x12c0);
+            super::script::reset(x.b);
+            super::script::step(x.c, x.b);
             Flow::Done
         },
         LeaveFaded = at::LEAVE_FADED => |x| {
-            x.call(0xc58);
+            crate::video::vider_objets(x.b);
             let a0 = x.c.a[0];
             crate::objects::lists::unlink_all(x.b);
             x.c.a[0] = a0;
@@ -229,9 +230,7 @@ crate::etapes! {
         },
         /// Retour de la boutique : couches effacées, état suivant de la séquence, scène de retour.
         LeaveWaited = at::LEAVE_WAITED => |x| {
-            for r in [0xca8, 0xcc8, 0xce8] {
-                x.call(r);
-            }
+            clear_layers(x);
             let a0 = x.c.a[0];
             let s = rd8(x.b, a0 + 2).wrapping_add(4);
             wr8(x.b, a0 + 2, s);
@@ -252,21 +251,25 @@ crate::etapes! {
             Flow::Done
         },
         ChainFaded = at::CHAIN_FADED => |x| {
-            x.c.d[0] = x.c.d[0] & !0xffff | 0x12c0;
             x.set_v16(0x14, 0);
-            x.call(0xbc6);
+            crate::video::activer_couches(x.b, 0x12c0);
             Flow::Done
         },
         ReopenWaited = at::REOPEN_WAITED => |x| {
             crate::objects::pools::SET.reset(x.b);
             crate::objects::pools::SOBJ.reset(x.b);
-            x.call(0x20ae);
+            crate::objects::pools::PEFF.reset(x.b);
             crate::objects::pools::EFFCT.reset(x.b);
-            for r in [0xca8, 0xcc8, 0xce8] {
-                x.call(r);
-            }
+            clear_layers(x);
             Flow::Done
         },
+    }
+}
+
+/// Les trois couches effacées.
+fn clear_layers(x: &mut Ctx) {
+    for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+        effacer_couche(x.b, couche);
     }
 }
 
@@ -275,7 +278,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     add_b8(x, f::STATE, 2);
     x.c.d[0] = x.c.d[0] & !0xffff | 0x12ce;
     x.set_v16(0x14, 0);
-    x.call(0xbc6);
+    crate::video::activer_couches(x.b, 0x12ce);
     x.set_v16(0x490, 2);
     x.set_v8(0x48e, 15);
     x.c.d[0] = x.c.d[0] & !0xffff | 16;
@@ -298,7 +301,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     x.c.d[0] = 4 * index as u32;
     let sound = rd32(x.b, rom::WELCOME + 4 * index as u32);
     x.c.a[1] = sound;
-    x.call(sound);
+    crate::sound::jouer_global(x.b, sound);
     Flow::Done
 }
 
@@ -316,12 +319,11 @@ fn messages(x: &mut Ctx) {
         if n == 0 {
             return;
         }
-        x.call(sub::MESSAGE);
-        if x.c.sr & m68k::SR_C != 0 {
+        let Some(message) = crate::families::creators::scene_set(x.b, n as u8) else {
             return;
-        }
+        };
         set_b8(x, f::TALKING, 1);
-        set_b16(x, f::MESSAGE, x.c.a[1] as u16);
+        set_b16(x, f::MESSAGE, message.0 as u16);
         let p = b16(x, f::PENDING);
         set_b16(x, f::NEXT_MESSAGE, p);
         set_b16(x, f::PENDING, 0);
@@ -404,7 +406,7 @@ fn leave(x: &mut Ctx) -> Flow {
     // boutique suivante : le bloc repart de l'état 0
     x.and16(0x12, 0xfffe);
     set_b8(x, f::REOPENED, 1);
-    x.call(0xc58);
+    crate::video::vider_objets(x.b);
     wr32(x.b, BLOCK, 0);
     let a0 = x.c.a[0];
     crate::objects::lists::unlink_all(x.b);

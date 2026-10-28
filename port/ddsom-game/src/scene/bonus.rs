@@ -10,7 +10,9 @@ use super::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
+use crate::families::effects_creators::{ecran_de_fin, ou_reste};
 use crate::objects::{pools, Obj};
+use crate::video::{charger_grille, effacer_couche, Couche, Grille};
 
 /// Variables de l'écran de bonus (sous A5).
 mod v {
@@ -50,13 +52,7 @@ mod rom {
     pub const BACKDROP_ALT: u32 = 0x3f6c08;
 }
 mod sub {
-    /// Effet de type 31 : D0 = variante, D1 = `+0x2f`.
-    pub const EFFECT: u32 = 0xb1a7a;
-    /// Objet SET de type 5.
-    pub const SET_5: u32 = 0xc9760;
     pub const MUSIC: u32 = 0xe1114;
-    pub const TILE_BLOCK: u32 = 0x26d4;
-    pub const TILE_BLOCK_3: u32 = 0x2766;
 }
 
 /// Reprises (adresses d'origine qui suivent une cession).
@@ -103,12 +99,10 @@ pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate:
     x.sous_programme(routine, resume)
 }
 
-/// `movem.l A0,-(SP) ; jsr … ; movem.l (SP)+,A0`.
-pub fn call_keep_a0(x: &mut Ctx, routines: &[u32]) {
+/// `movem.l A0,-(SP) ; jsr 0x1de96 ; movem.l (SP)+,A0` : la liste de sprites, A0 gardé.
+pub fn sprites_keep_a0(x: &mut Ctx) {
     let a0 = x.c.a[0];
-    for &r in routines {
-        x.call(r);
-    }
+    crate::sprites::construire_68k(x.c, x.b);
     x.c.a[0] = a0;
 }
 
@@ -136,7 +130,7 @@ pub fn run(x: &mut Ctx) -> Flow {
         }
         12 => {
             x.or16(0x14, 12);
-            call_keep_a0(x, &[0x1de96]);
+            sprites_keep_a0(x);
             x.wait(1, Etape::LastFrame)
         }
         _ => Flow::Done,
@@ -200,10 +194,9 @@ crate::etapes! {
             for (from, to) in PAGES {
                 copy_page(x.b, from, to);
             }
-            for (routine, d0) in [(0x1a67e, 85), (0x1a8b2, 85), (0x1a3d4, 2)] {
-                x.c.d[0] = d0;
-                x.call(routine);
-            }
+            crate::palette::charger_page(x.b, 2, 85);
+            crate::palette::charger_page(x.b, 3, 85);
+            crate::palette::charger_ensemble(x.b, 2);
             Flow::Done
         },
         /// Le titre du bonus (objet SET type 0, variante 69).
@@ -222,12 +215,15 @@ crate::etapes! {
             screen::clear_bonus_frame(x.b);
             let counter = rd16(x.b, v::COUNTER) as i16 as i32 as u32 & 0xff_ffff;
             wr32(x.b, counter + 4, 0x0600_0000);
-            call_keep_a0(x, &[0x39cba, 0x1de96]);
+            let a0 = x.c.a[0];
+            crate::dispatch::EFFCT.update_sans_suite(x.c, x.b);
+            crate::sprites::construire_68k(x.c, x.b);
+            x.c.a[0] = a0;
             if x.v8(a5::SCENE) != 1 {
                 x.set_v8(0x3c, 0xff);
-                for r in [0xcc8, 0xce8, 0xc58] {
-                    x.call(r);
-                }
+                effacer_couche(x.b, Couche::Deux);
+                effacer_couche(x.b, Couche::Trois);
+                crate::video::vider_objets(x.b);
                 leave(x);
                 return Flow::Done;
             }
@@ -273,27 +269,32 @@ fn set_up(x: &mut Ctx) -> Flow {
     if (x.v16(0x7e68) as i16) < 5 {
         return Flow::Done;
     }
-    if x.v8(a5::SCENE) != 1 {
+    // Glitch d'origine : l'effet du compte à rebours reçoit en `+0x2f` l'octet bas de D1 tel que le laisse
+    // l'effacement de la zone de texte (D1.w = 0xffff), ou, dans la scène 1, l'aiguillage (le déplacement de la
+    // sous-étape 2 dans sa table)
+    let reglage = if x.v8(a5::SCENE) != 1 {
         x.set_v8(0x42, 2);
-        call_keep_a0(x, &[0x1f184, 0x1de7c]);
+        crate::objects::lists::unlink_all(x.b);
+        crate::sprites::vider_listes(x.b);
         for pool in crate::objects::pools::POOLS {
             pool.reset(x.b);
         }
-        x.call(0xcc8);
-        x.call(0xce8);
+        effacer_couche(x.b, Couche::Deux);
+        effacer_couche(x.b, Couche::Trois);
         screen::clear_text(x.c, x.b);
-    }
-    // l'effet du compte à rebours reçoit en `+0x2f` l'octet bas de D1 tel que laissé (aiguillage ou effacement)
-    x.c.d[0] = 3;
-    x.call(sub::EFFECT);
-    let counter = x.c.a[1];
+        0xff
+    } else {
+        prog16(x.b, rom::DISPATCH + 2) as u8
+    };
+    // Glitch d'origine : les échecs d'allocation ne sont pas testés (l'A1 laissé reçoit les écritures)
+    let cree = ecran_de_fin(x.b, 3, reglage);
+    let counter = ou_reste(x.b, cree).0;
     wr16(x.b, v::COUNTER, counter as u16);
     wr8(x.b, counter + 0x42, 20);
     for k in 0..4u8 {
-        x.c.d[0] = 8;
-        x.c.d[1] = (3 - k) as u32;
-        x.call(sub::EFFECT);
-        wr8(x.b, x.c.a[1] + 0x2f, k);
+        let cree = ecran_de_fin(x.b, 8, 3 - k);
+        let o = ou_reste(x.b, cree);
+        wr8(x.b, o.0 + 0x2f, k);
     }
     x.c.d[1] = 0xffff;
     x.c.d[2] = 4;
@@ -311,10 +312,10 @@ fn objects(x: &mut Ctx) -> Flow {
     if x.v16(0x7e66) < 5 {
         return Flow::Done;
     }
+    // Glitch d'origine : les échecs d'allocation ne sont pas testés (l'A1 laissé est rangé)
     let mut objs = [0u16; 5];
     for o in objs.iter_mut() {
-        x.call(sub::SET_5);
-        *o = x.c.a[1] as u16;
+        *o = crate::families::creators::set_5_pur(x.b).unwrap_or_else(|a1| a1).0 as u16;
     }
     // tri à bulles de l'original sur les adresses étendues en signe (cmpa.w)
     objs.sort_by_key(|&w| w as i16 as i32 as u32);
@@ -346,19 +347,12 @@ fn objects(x: &mut Ctx) -> Flow {
     x.set_v16(0x14, 0x12ce);
     let f = x.v8(0x13) & !1;
     x.set_v8(0x13, f);
-    x.c.d[0] = 0x205;
-    x.c.a[1] = 0x917000;
-    x.call(sub::TILE_BLOCK);
-    x.c.d[0] = 0x206;
-    x.call(sub::TILE_BLOCK);
-    x.c.d[0] = 0x172;
-    x.c.a[1] = 0x919800;
-    x.call(sub::TILE_BLOCK_3);
-    x.c.d[0] = 0x173;
-    x.call(sub::TILE_BLOCK_3);
+    for (grille, n, destination) in [(Grille::Couche2, 0x205, 0x917000), (Grille::Couche3, 0x172, 0x919800)] {
+        let fin = charger_grille(x.b, grille, n, destination);
+        charger_grille(x.b, grille, n + 1, fin.destination);
+    }
     x.set_v8(0x3c, 2);
-    x.c.d[0] = 1;
-    x.call(0x1a60a);
+    crate::palette::charger_page(x.b, 1, 1);
     fade(x, crate::taches::fondu::montee, Etape::Started)
 }
 

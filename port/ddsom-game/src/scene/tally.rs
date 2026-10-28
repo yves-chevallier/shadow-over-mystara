@@ -12,6 +12,7 @@ use super::Ctx;
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::ops::abcd;
+use crate::objects::Obj;
 use crate::Native;
 
 /// Variables du décompte (RAM de travail, sous A5).
@@ -98,7 +99,6 @@ mod rom {
 mod sub {
     pub const MUSIC: u32 = 0xe1150;
     pub const FADE_TASK: u32 = 0x14de;
-    pub const ALLOC_SET: u32 = 0xce00a;
 }
 
 /// Le bandeau est dessiné hors champ (lignes 8 et 9 de la première page de la couche, 0x910000), puis copié.
@@ -514,12 +514,10 @@ fn announce(x: &mut Ctx, first: u16) -> Flow {
         next_sub_step(x);
         set_timer(x, 20);
         sign(x, first);
-        x.c.d[0] = 19;
-        x.call(sub::ALLOC_SET);
-        if x.c.sr & m68k::SR_C != 0 {
+        // 0xce00a : objet SET de type 15, variante 19
+        let Ok(Obj(o)) = crate::families::creators::set_15_pur(x.b, 19) else {
             return Flow::Done;
-        }
-        let o = x.c.a[1];
+        };
         let prime = rd32(x.b, v::PRIME);
         wr32(x.b, o + 0x4c, prime);
         let w = winner(x);

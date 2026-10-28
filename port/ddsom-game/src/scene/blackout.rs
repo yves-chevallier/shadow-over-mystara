@@ -8,6 +8,7 @@
 use super::bonus::dispatch;
 use super::screen;
 use super::Ctx;
+use crate::video::{effacer_couche, Couche};
 use crate::mem::{prog16, rd8, wr16, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
@@ -71,26 +72,27 @@ crate::etapes! {
                     x.set_v16(off, v);
                 }
                 let (a0, a6) = (x.c.a[0], x.c.a[6]);
-                x.call(0x1de96);
+                crate::sprites::construire_68k(x.c, x.b);
                 (x.c.a[0], x.c.a[6]) = (a0, a6);
                 return x.wait(1, Etape::Finale1);
             }
             for off in [0x602, 0x802, 0xa02, 0xc02] {
                 x.set_v32(off, 0);
             }
-            for r in [0x1f184, 0x1de7c, 0xc58] {
-                x.call(r);
-            }
+            // Glitch d'origine : l'A0 que laisse le déliement des listes (le dernier objet délié) traverse la cession
+            crate::objects::lists::unlink_all_68k(x.c, x.b);
+            crate::sprites::vider_listes(x.b);
+            crate::video::vider_objets(x.b);
             x.set_v16(0x14, 0x12c0 & 0xfff1);
             x.wait(1, Etape::Cleared)
         },
         /// Couches effacées, défilements et caméras remis à zéro.
         Cleared = at::CLEARED => |x| {
             wr16(x.b, 0x400004, 0x1355);
-            x.call(0xca8);
+            effacer_couche(x.b, Couche::Un);
             x.set_v8(0x3c, 1);
-            x.call(0xcc8);
-            x.call(0xce8);
+            effacer_couche(x.b, Couche::Deux);
+            effacer_couche(x.b, Couche::Trois);
             let f = x.v8(0x13) & !1;
             x.set_v8(0x13, f);
             screen::clear_920000(x.b);
@@ -126,12 +128,12 @@ fn palettes(x: &mut Ctx) {
     let at = PALETTES + 4 * table_scene(x);
     let set = rd8(x.b, at);
     if (set as i8) >= 0 {
-        x.c.d[0] = set as u32;
-        x.call(0x1a3d4);
+        crate::palette::charger_ensemble(x.b, set as u16);
     }
-    for (k, routine) in [0x1a60a, 0x1a67e, 0x1a8b2].into_iter().enumerate() {
-        x.c.d[0] = rd8(x.b, at + 1 + k as u32) as u32;
-        x.call(routine);
+    // pages 1, 2 et 3 (0x1a60a, 0x1a67e, 0x1a8b2)
+    for page in 1..=3 {
+        let n = rd8(x.b, at + page as u32);
+        crate::palette::charger_page(x.b, page, n as u16);
     }
     x.c.a[6] = at + 4;
     crate::hud::forget_displayed(x.b);
