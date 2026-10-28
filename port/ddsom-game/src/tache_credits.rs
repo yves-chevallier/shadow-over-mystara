@@ -614,3 +614,19 @@ fn join(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
+
+/// Sous-programme d'origine réécrit dans le corps de la tâche, présenté comme une native pour le fuzz différentiel
+/// (`examples/fuzz_couv`) ; le jeu ne l'appelle pas par son adresse. S'il cède la main, l'essai est écarté (panique).
+pub const NATIVES_DE_TEST: &[crate::Native] = &[crate::Native {
+    // 0x13c2c : état des crédits (démarrage, reprise, ralliement des quatre emplacements)
+    entry: 0x13c2c,
+    name: "credits_etat",
+    run: |c, b| {
+        if let Flow::Yield = credits(&mut Ctx::new(c, b)) {
+            panic!("credits_etat : cède la main (hors du cadre du fuzz)");
+        }
+        crate::mem::rts(c, b);
+    },
+    touches_sound: false,
+    outputs: 0,
+}];

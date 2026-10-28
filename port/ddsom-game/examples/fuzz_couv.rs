@@ -1056,7 +1056,8 @@ fn main() {
     let gestionnaires = gestionnaires(&mut m.bus.clone());
     let mut cibles = HashMap::new();
     let specs: Vec<&str> = a[5].split(',').collect();
-    for n in ddsom_game::all_natives().chain(ddsom_game::hud::NATIVES_DE_TEST) {
+    let essais_natifs = ddsom_game::hud::NATIVES_DE_TEST.iter().chain(ddsom_game::credits::NATIVES_DE_TEST).chain(ddsom_game::tache_credits::NATIVES_DE_TEST).chain(ddsom_game::modes::demo::NATIVES_DE_TEST);
+    for n in ddsom_game::all_natives().chain(essais_natifs) {
         let voulu = |s: &str| {
             if let Some(p) = s.strip_prefix("nom:") {
                 n.name.starts_with(p)
