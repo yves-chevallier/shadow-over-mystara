@@ -52,12 +52,11 @@ use crate::objects::Courant;
 pub(self) const SET_MOVE: u32 = 0x162126;
 pub(self) const SET_STRIKE: u32 = 0x162148;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
     x.tick_counters();
-    x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -73,7 +72,7 @@ pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -103,7 +102,7 @@ pub(self) fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Retombée d'un saut (0x62460) : le geste se termine par une poussière et l'animation 0xc.
-pub(self) fn land(x: &mut Cx) {
+pub(self) fn land<R: Banc>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
         return;
@@ -112,7 +111,7 @@ pub(self) fn land(x: &mut Cx) {
 }
 
 /// 0x62478 : poussière, retour au sol, étape suivante.
-pub(self) fn land_dust(x: &mut Cx) {
+pub(self) fn land_dust<R: Banc>(x: &mut Cx<'_, R>) {
     dust(x);
     lib::sound(x, 0xec820);
     x.set32(Obj::Z, 0);
@@ -123,14 +122,14 @@ pub(self) fn land_dust(x: &mut Cx) {
 }
 
 /// 0x63a50 : quatre nuages de poussière autour de l'ennemi.
-pub(self) fn dust(x: &mut Cx) {
+pub(self) fn dust<R: Banc>(x: &mut Cx<'_, R>) {
     for d2 in [-0x1c, -8, 8, 0x1c] {
         lib::shock(x, 0, 0, d2 as u16, 4);
     }
 }
 
 /// Un pas de fumée toutes les `mask + 1` images (`A5+0x6e` est le compteur d'images, que l'original masque en place).
-pub(self) fn puff(x: &mut Cx, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
+pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
@@ -167,7 +166,7 @@ pub(self) fn target_far_in_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x62f1e / 0x62f26 : choisit le coup suivant (`+6`) dans la ligne de la difficulté du profil `+0x2f` ;
 /// `bias` = 8 pour la série lointaine.
-pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
+pub(self) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP) as u32;
     let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
@@ -182,7 +181,7 @@ pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
 }
 
 /// 0x63790 : fin d'un geste : si la cible est dans une boîte de portée, un coup de la série `0x637fe` suit ; sinon debout.
-pub(self) fn after_strike(x: &mut Cx) {
+pub(self) fn after_strike<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
@@ -204,7 +203,7 @@ pub(self) const IDLE: u32 = 0x020a_0000;
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -253,9 +252,8 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     active_loop(x, |x| {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => arrival::run(x),
             2 => stance::run(x),
@@ -271,5 +269,5 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x61364 "enemy_6" run,
+    0x61364 "enemy_6" #[sans] run,
 }

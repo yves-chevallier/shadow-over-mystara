@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x),
         2 => drop_in(x, true),
@@ -74,7 +74,7 @@ fn drop_in<R: Banc>(x: &mut Cx<'_, R>, gravity: bool) {
 }
 
 /// Variante 4 : bond par le côté (vitesse horizontale −0x280), coup en l'air, retombée.
-fn side_jump(x: &mut Cx) {
+fn side_jump<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -127,8 +127,7 @@ fn weapon_key_drop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 8 : le Gnoll arrive en courant avec sa hache, la lâche (animation 9) puis la reprend.
-fn armed_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn armed_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -164,7 +163,7 @@ fn armed_in(x: &mut Cx) {
 }
 
 /// 0x6ae42 : course armée pendant `+0xa2` images, puis animation 5.
-fn armed_run(x: &mut Cx) {
+fn armed_run<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     x.anim_step();
     let n = x.u8(TIMER).wrapping_sub(1);
@@ -177,7 +176,7 @@ fn armed_run(x: &mut Cx) {
 }
 
 /// Variante 10 : le Gnoll entre par le bord de l'écran avec sa hache ; saisi aussitôt la course finie.
-fn armed_run_in(x: &mut Cx) {
+fn armed_run_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

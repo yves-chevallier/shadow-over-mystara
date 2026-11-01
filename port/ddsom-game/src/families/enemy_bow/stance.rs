@@ -86,7 +86,7 @@ pub(super) fn decide<R: Banc>(x: &mut Cx<'_, R>) {
         let same_side = facing == found.u8(x.b, f::FLIP);
         if lib::decision(x, same_side) {
             set_state_long(x, 0x0204_0000);
-            let d5 = (*x.c.d5()) as u8;
+            let d5 = *x.c.d5() as u8;
             x.set8(f::SUB2, d5);
             return check_facing(x);
         }

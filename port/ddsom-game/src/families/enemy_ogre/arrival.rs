@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => fall_in(x),
         2 => walk_in(x),
@@ -26,7 +26,7 @@ fn begin<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 : chute d'entrée ----------------------------------------------------------------------------
 
-fn fall_in(x: &mut Cx) {
+fn fall_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             begin(x);
@@ -113,8 +113,7 @@ fn fall_in(x: &mut Cx) {
 
 // --- +6 = 2 : apparition au sol ---------------------------------------------------------------------------
 
-fn walk_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn walk_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             begin(x);
@@ -152,7 +151,7 @@ fn walk_in(x: &mut Cx) {
 }
 
 /// 0x70770 : la clé 3 de l'animation fait trembler le sol.
-fn thump(x: &mut Cx) {
+fn thump<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 3 {
         return;
     }
@@ -176,7 +175,7 @@ fn begin_dash<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x707d2 : la course, puis le premier geste.
-fn dash(x: &mut Cx) {
+fn dash<R: Banc>(x: &mut Cx<'_, R>) {
     if !count_down(x, TIMER2) {
         x.set16(TIMER2, 4);
         spark(x, 3);
@@ -194,8 +193,7 @@ fn dash(x: &mut Cx) {
 
 // --- +6 = 4 : attente d'un joueur ------------------------------------------------------------------------
 
-fn wait_for_player(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn wait_for_player<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             begin(x);
@@ -217,7 +215,7 @@ fn wait_for_player(x: &mut Cx) {
 }
 
 /// 0x75c36 : fin d'attente, décompte de `+0xa0` puis retour au sous-état d'avant (`+0xb1`).
-fn waiting_out(x: &mut Cx) {
+fn waiting_out<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u8(LOOK).wrapping_sub(1);
     x.set8(LOOK, n);
     if (n as i8) >= 0 {
@@ -239,8 +237,7 @@ fn waiting_out(x: &mut Cx) {
 
 // --- +6 = 6 : apparition cachée -----------------------------------------------------------------------------
 
-fn hidden(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn hidden<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

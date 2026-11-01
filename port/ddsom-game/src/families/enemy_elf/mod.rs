@@ -64,7 +64,7 @@ const FALLBACK_MOVES: u32 = 0x6a480;
 const CLOSE_ATTACKS: u32 = 0x6a73c;
 const FAR_ATTACKS: u32 = 0x6a93c;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -86,7 +86,7 @@ fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike(x: &mut Cx, n: u32) {
+fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -110,7 +110,7 @@ fn crouch<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6953c : attend la fin de l'animation, puis passe au `+6` suivant.
-fn wait_anim(x: &mut Cx) {
+fn wait_anim<R: Banc>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.add8(f::SUB2, 2);
     }
@@ -132,10 +132,9 @@ fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6a452 : fin d'un coup — le suivant est tiré dans la ligne de la difficulté (32 octets).
-fn end_attack(x: &mut Cx) {
+fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     let row = (var::RANK.get(x.b) >> 1) << 5;
-    set_dw(x, 0, row);
     let n = rand_and(x, 0x1f);
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row as u32 + n);
@@ -145,7 +144,7 @@ fn end_attack(x: &mut Cx) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -173,12 +172,11 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else if !paused(x) {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => arrival(x),
             2 => stance::run(x),
@@ -196,7 +194,7 @@ fn active(x: &mut Cx) {
 
 /// Sous-état 0 : arrivée selon la variante `+3` (octet pair, indice de table : 0 marche, 2 chute, 4 bond,
 /// 6 chute lente).
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
@@ -290,5 +288,5 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x69384 "enemy_12" run,
+    0x69384 "enemy_12" #[sans] run,
 }

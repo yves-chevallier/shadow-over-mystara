@@ -11,12 +11,11 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x6bb4c;
 const REACT_SECOND: u32 = 0x6bd3a;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => first_reaction(x),
             2 => recoil(x),
@@ -31,7 +30,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x6bb20 : la hache tombe (le Gnoll la lâche à la première image), puis réaction par la table.
-fn first_reaction(x: &mut Cx) {
+fn first_reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(1, 1, false);
     }
@@ -70,8 +69,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Chute puis relevé (0x6bc64). Les animations dépendent de `+0xbf` (arme).
-fn fall(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

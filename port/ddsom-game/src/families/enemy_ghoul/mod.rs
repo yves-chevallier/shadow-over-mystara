@@ -55,7 +55,7 @@ const CLOSE_ATTACKS: u32 = 0x60d38;
 const FAR_ATTACKS: u32 = 0x60f38;
 const FALLBACK_MOVES: u32 = 0x61164;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -75,7 +75,7 @@ fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike(x: &mut Cx, n: u32) {
+fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -110,15 +110,14 @@ fn difficulty_row<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
 }
 
 /// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
-fn pick_byte(x: &mut Cx, table: u32) -> u8 {
+fn pick_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = difficulty_row(x);
-    set_dw(x, 0, row as u16);
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
 
 /// 0x61138 : fin d'un coup, le suivant est tiré dans la ligne de la difficulté.
-fn end_attack(x: &mut Cx) {
+fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
     let mv = pick_byte(x, FALLBACK_MOVES);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, mv);
@@ -126,14 +125,14 @@ fn end_attack(x: &mut Cx) {
 }
 
 /// 0x60d04 / 0x60d0c : choisit le coup de l'attaque (`+6` = octet de la table + `bias`).
-fn pick_attack(x: &mut Cx, table: u32, bias: u8) {
+fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32, bias: u8) {
     let mv = pick_byte(x, table);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set8(f::SUB3, 0);
 }
 
 /// 0x5fdf8 : la cible est de l'autre côté de l'orientation (D0 = 1 ou 0).
-fn needs_turn_around(x: &mut Cx) -> bool {
+fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -145,16 +144,15 @@ fn needs_turn_around(x: &mut Cx) -> bool {
 }
 
 /// Décision par masque (0xa4c2 de même orientation, 0xa4b4 sinon) pour la cible courante.
-fn decision(x: &mut Cx) -> bool {
+fn decision<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let target = load_target(x);
     let theirs = target.u8(x.b, f::FLIP);
-    x.c.d[0] = x.c.d[0] & !0xff | theirs as u32;
     let same = theirs == x.u8(f::FLIP);
     lib::decision(x, same)
 }
 
 /// 0x5fe22 / 0x5fe70 : un joueur dans la boîte et la décision l'accepte ; l'attaque est alors choisie.
-fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bool {
+fn box_attack<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bool {
     let ok = lib::target_in_box(x, d0, d1, d2) && decision(x);
     if ok {
         set_state_long(x, 0x0204_0000);
@@ -164,7 +162,7 @@ fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bo
 }
 
 /// Réaction aux drapeaux de coup `+0x8f` (0x60c88) : vrai si elle a pris la main.
-fn special_hit(x: &mut Cx) -> bool {
+fn special_hit<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let flag = x.u8(SPECIAL_HIT);
     match flag {
         1 => {
@@ -200,7 +198,7 @@ fn special_hit(x: &mut Cx) -> bool {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -241,9 +239,8 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     active_loop(x, |x| {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => arrival(x),
             2 => stance::run(x),
@@ -258,7 +255,7 @@ fn active(x: &mut Cx) {
 }
 
 /// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 saut, 2 chute, 3 réveil, 4 apparition, 5 clignotement).
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
@@ -389,7 +386,7 @@ fn arrival(x: &mut Cx) {
                 x.set8(VULNERABLE, 1);
                 look(x, 0xff);
                 x.set16(0x42, 0x703);
-                let d7 = x.c.d[7] as u8;
+                let d7 = x.compteur() as u8;
                 x.set8(TIMER, d7);
                 body(x, 0);
             }
@@ -443,5 +440,5 @@ fn dead<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x5f792 "enemy_5" run,
+    0x5f792 "enemy_5" #[sans] run,
 }

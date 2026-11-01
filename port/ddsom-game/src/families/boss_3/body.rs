@@ -122,6 +122,19 @@ pub(super) fn push_players(x: &mut Cx, shape: u8) {
     x.c.a[1] = 0xff85de + 0x800;
 }
 
+/// Forme du corps `routine` (0x818e6 devant, 0x819e2 de côté) appliquée à l'objet `other` par le boss `me` ; vrai si
+/// l'objet a été poussé (pour 0x81aa4 de `boss_common`). Les registres de travail de la forme ne sortent pas.
+pub fn pousser(b: &mut Cps2Bus, me: Obj, other: Obj, routine: u32) -> bool {
+    let mut c = Cpu::default();
+    c.a[0] = me.0;
+    c.a[1] = other.0;
+    match routine {
+        0x818e6 => shove_front(&mut c, b),
+        0x819e2 => shove_side(&mut c, b),
+        _ => unreachable!("forme du corps du boss 3 en {routine:#x} : la table 0x81ad4 n'a que 0x818e6 et 0x819e2"),
+    }
+}
+
 fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cpu, &mut Cps2Bus) -> bool) {
     f(c, b);
     c.flags_logic(c.d[0], Size::Long);

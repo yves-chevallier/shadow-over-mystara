@@ -14,7 +14,7 @@ const JUMP_DY: u32 = 0x69f42;
 
 // --- sous-état 4 --------------------------------------------------------------------------------
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => approach(x),
         2 => turn_around(x),
@@ -63,7 +63,7 @@ fn finish_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x69e4e : retombe jusqu'au sol, puis animation de réception.
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) <= 0 {
         x.add8(f::SUB3, 2);
@@ -73,7 +73,7 @@ fn fall(x: &mut Cx) {
 }
 
 /// 0x698ac : fin de l'animation, puis le coup suivant.
-fn finish(x: &mut Cx) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     if step(x) {
         end_attack(x);
     }
@@ -82,7 +82,7 @@ fn finish(x: &mut Cx) {
 // --- coups ---------------------------------------------------------------------------------------
 
 /// `+6` = 0 : annonce du coup, animation de marche `+0xa6`, puis passage au coup prévu `+0xa5`.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -127,7 +127,7 @@ fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Coup simple (`+6` = 4 : type 0x1b, animation 0 ; `+6` = 6 : type 0x1c, animation 2).
 /// Il peut aussi être annulé au profit d'une reprise de la marche.
-fn cut(x: &mut Cx, kind: u8, anim: u32) {
+fn cut<R: Banc>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
             let r = rand_and(x, 0xf);
@@ -147,7 +147,7 @@ fn cut(x: &mut Cx, kind: u8, anim: u32) {
 }
 
 /// Triple coup (`+6` = 8) : trois fois le coup bas ou haut, tiré au sort.
-fn triple(x: &mut Cx) {
+fn triple<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -184,7 +184,7 @@ fn triple(x: &mut Cx) {
 }
 
 /// Double coup (`+6` = 10) : deux animations, tirées au sort pour la première.
-fn double(x: &mut Cx) {
+fn double<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -228,7 +228,7 @@ enum Drop {
 }
 
 /// L'elfe s'accroupit, disparaît, réapparaît au-dessus de la cible et la frappe en retombant.
-fn drop_strike(x: &mut Cx, kind: Drop) {
+fn drop_strike<R: Banc>(x: &mut Cx<'_, R>, kind: Drop) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 => {
@@ -338,7 +338,7 @@ fn jump_group<R: Banc>(x: &mut Cx<'_, R>, _g: u8) {
 
 // --- sous-état 6 : coups d'après-bond -------------------------------------------------------------
 
-pub(super) fn run_b(x: &mut Cx) {
+pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => approach(x),
         2 => turn_around(x),
@@ -352,7 +352,7 @@ pub(super) fn run_b(x: &mut Cx) {
 }
 
 /// `+6` = 6 : petit saut de côté (en profondeur).
-fn hover_group(x: &mut Cx) {
+fn hover_group<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 => wait_step(x),
@@ -372,7 +372,7 @@ fn hover_group(x: &mut Cx) {
 }
 
 /// `+6` = 10 : bond avec coup à l'atterrissage.
-fn landing_group(x: &mut Cx) {
+fn landing_group<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 | 6 => wait_step(x),
@@ -408,7 +408,7 @@ fn landing_group(x: &mut Cx) {
 }
 
 /// `+6` = 12 : saute près de la cible, à un endroit tiré au hasard autour d'elle.
-fn random_jump_group(x: &mut Cx) {
+fn random_jump_group<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 | 6 => wait_step(x),
@@ -438,7 +438,7 @@ fn random_jump_group(x: &mut Cx) {
 
 // --- sous-état 8 : coups de repli -----------------------------------------------------------------
 
-pub(super) fn run_fallback(x: &mut Cx) {
+pub(super) fn run_fallback<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if x.u8(f::SUB3) != 0 {
@@ -463,7 +463,7 @@ pub(super) fn run_fallback(x: &mut Cx) {
 }
 
 /// `+6` = 2 : disparaît et réapparaît à 0x30 pixels devant l'elfe.
-fn backstep_group(x: &mut Cx) {
+fn backstep_group<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 => {
@@ -512,7 +512,7 @@ fn backstep_group(x: &mut Cx) {
 }
 
 /// `+6` = 4 : saute vers la cible ou marche vers elle.
-fn forward_group(x: &mut Cx) {
+fn forward_group<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) != 0 {
@@ -559,7 +559,7 @@ fn forward_group(x: &mut Cx) {
 }
 
 /// `+6` = 6 : choisit le prochain coup selon ce que la cible fait à portée.
-fn idle_choice(x: &mut Cx) {
+fn idle_choice<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);
     let choice = if lib::target_in_box(x, -0x20, 0x20, 0xc) {
@@ -568,11 +568,9 @@ fn idle_choice(x: &mut Cx) {
         x.set16(f::SUB2, 0);
         x.u8(NEXT_ATTACK)
     } else if front_box(x) {
-        pick_attack(x, CLOSE_ATTACKS);
-        x.c.d[0] as u8
+        pick_attack(x, CLOSE_ATTACKS)
     } else if side_box(x) {
-        pick_attack(x, FAR_ATTACKS);
-        x.c.d[0] as u8
+        pick_attack(x, FAR_ATTACKS)
     } else {
         return;
     };

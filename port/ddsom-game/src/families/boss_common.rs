@@ -15,7 +15,7 @@ pub use super::cx::Cx;
 pub use super::enemy_common::*;
 use crate::mem::{prog16, prog32, rts, A5};
 use crate::objects::Obj;
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 use crate::objects::pools;
 use crate::objects::Courant;
 
@@ -237,32 +237,35 @@ const BODY: u32 = A5 - 0x5fb2;
 const BODY_SHAPES: u32 = 0x81ad4;
 
 /// 0x81aa4 : repousse l'objet hors du corps du boss enregistré, si ce boss est actif, de classe 3 et a une forme
-/// non nulle (la routine de la forme, restée en code d'origine, déplace l'objet en X). Vrai si l'objet a été
-/// déplacé. Registres de l'original : D0 = 1 / 0 (drapeaux de `tst.l`), A0 intact, A1 = A6 = l'objet.
-pub fn push_out_of_boss(x: &mut Cx) -> bool {
+/// non nulle (la forme, `boss_3::body`, déplace l'objet en X). Vrai si l'objet a été déplacé.
+pub fn push_out_of_boss<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    let body = x.data16(BODY);
+    if (body as i16) >= 0 {
+        return false;
+    }
+    let boss = Obj(body as i16 as i32 as u32 & 0xff_ffff);
+    if boss.u8(x.b, 0) == 0 || boss.u8(x.b, 2) != 3 {
+        return false;
+    }
+    let shape = boss.u8(x.b, 0xa4) as u16;
+    if shape == 0 {
+        return false;
+    }
+    let off = prog16(x.b, BODY_SHAPES + 2 * shape as u32);
+    let routine = BODY_SHAPES.wrapping_add(off as i16 as u32);
+    super::boss_3::body::pousser(x.b, boss, x.o, routine)
+}
+
+/// `push_out_of_boss` avec les registres de l'original : D0 = 1 / 0 (drapeaux de `tst.l`), A0 intact, A1 = A6 =
+/// l'objet.
+fn push_out_of_boss_68k(x: &mut Cx) {
+    let moved = push_out_of_boss(x);
     let me = x.o.0;
     x.c.a[6] = me;
     x.c.a[1] = me;
-    let body = x.data16(BODY);
-    let mut moved = false;
-    if (body as i16) < 0 {
-        x.c.a[0] = body as i16 as i32 as u32;
-        let boss = Obj(x.c.a[0] & 0xff_ffff);
-        if boss.u8(x.b, 0) != 0 && boss.u8(x.b, 2) == 3 {
-            let shape = boss.u8(x.b, 0xa4) as u16;
-            if shape != 0 {
-                let off = prog16(x.b, BODY_SHAPES + 2 * shape as u32);
-                x.c.d[0] = off as u32;
-                // la routine de forme (0x818e6, 0x819e2) n'a pas de native : jamais atteinte par les scénarios
-                call(x.c, x.b, BODY_SHAPES.wrapping_add(off as i16 as u32));
-                moved = !x.c.cond(7);
-            }
-        }
-    }
     x.c.d[0] = moved as u32;
     x.c.flags_logic(x.c.d[0], Size::Long);
-    x.c.a[0] = x.c.a[6];
-    moved
+    x.c.a[0] = me;
 }
 
 /// Oscillation verticale (par `+0x33`) : décalages longs ajoutés à la hauteur `+0xc`, dans un sens
@@ -331,9 +334,7 @@ macro_rules! natif {
 }
 
 pub const NATIVES: &[Native] = &[
-    natif!(0x81aa4, "boss_repousse", regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR, |x: &mut Cx| {
-        push_out_of_boss(x);
-    }),
+    natif!(0x81aa4, "boss_repousse", regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR, push_out_of_boss_68k),
     natif!(0x833b6, "boss_oscillation", regs::d(0), bob),
     natif!(0x87048, "boss_seuil_pv", regs::d(0) | regs::d(1), hp_threshold),
 ];

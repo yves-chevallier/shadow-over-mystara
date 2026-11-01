@@ -10,12 +10,11 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x6a206;
 const REACT_SECOND: u32 = 0x6a3a0;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => {
                 if x.u8(f::SUB2) == 0 {
@@ -99,7 +98,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 8 (0x6a198) : saisi par un joueur ; l'animation 4 terminée, l'elfe disparaît.
-pub(super) fn caught(x: &mut Cx) {
+pub(super) fn caught<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

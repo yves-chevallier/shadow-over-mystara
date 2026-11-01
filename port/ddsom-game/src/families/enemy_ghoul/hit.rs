@@ -10,7 +10,7 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x6090c;
 const REACT_SECOND: u32 = 0x60abe;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -18,7 +18,6 @@ pub(super) fn run(x: &mut Cx) {
         if x.u8(f::SUB2) == 0 {
             x.set8(LOOK, 0xff);
         }
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => {
                 x.set8(LOOK, 0xff);
@@ -67,7 +66,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 : chute (animation 6), attente couché, relevé.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -105,7 +104,7 @@ fn down(x: &mut Cx) {
 }
 
 /// Sous-état 8 (0x60b6a) : saisi par un joueur, le ghoul se retourne et s'enfuit hors de l'écran.
-fn caught(x: &mut Cx) {
+fn caught<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -115,7 +114,6 @@ fn caught(x: &mut Cx) {
             let pos = x.u16(Obj::X);
             x.set16(SAVED_X, pos);
             let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
-            set_dw(x, 0, cam);
             x.set16(Obj::AX, 0);
             x.set16(Obj::VX, 0x300);
             let mut want = 0x20;

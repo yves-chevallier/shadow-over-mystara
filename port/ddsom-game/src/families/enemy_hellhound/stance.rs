@@ -6,11 +6,10 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 10 && grabbed(x) {
         return set_state_long(x, HELD);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 | 8 => approach(x),
         2 => turn(x),
@@ -26,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
 
 // --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
 
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     let dx = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b));
     if dx >= 0x180 {
         // loin de la caméra : se tourne vers la cible puis tire son geste au hasard
@@ -38,7 +37,7 @@ fn approach(x: &mut Cx) {
             }
         }
         x.set8(f::FLIP, flip);
-        let mask = x.rom32(0x61a00);
+        let mask = rom32(x, 0x61a00);
         let r = rand_and(x, 0x1f);
         let next = if mask >> r & 1 != 0 { 0x0202_0600 } else { 0x0202_0a00 };
         return set_state_long(x, next);
@@ -75,13 +74,13 @@ fn approach(x: &mut Cx) {
 }
 
 /// 0x61a9e : le chien est en garde ; un joueur à portée ? Coup immédiat, sinon pas de marche.
-pub(super) fn reach(x: &mut Cx) {
+pub(super) fn reach<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(GUARD, 2);
     reach_boxes(x);
 }
 
 /// 0x61aa4 : boîtes de portée successives (coup immédiat, attaque de face, attaque lointaine, annonce, marche).
-pub(super) fn reach_boxes(x: &mut Cx) {
+pub(super) fn reach_boxes<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x28, 0xc) {
         x.set16(f::STATE, 0x0204);
         lib::pick_byte(x);
@@ -108,37 +107,32 @@ pub(super) fn reach_boxes(x: &mut Cx) {
 }
 
 /// Décision d'attaque selon l'orientation relative de la cible (0xa4c2 de même sens, 0xa4b4 sinon).
-fn gate(x: &mut Cx) -> bool {
+fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let theirs = target.u8(x.b, f::FLIP);
-    x.c.d[0] = x.c.d[0] & !0xff | theirs as u32;
     let same = theirs == x.u8(f::FLIP);
     lib::decision(x, same)
 }
 
 /// 0x61b3a : un joueur devant, assez près : coup de queue ou geste.
-fn front_attack(x: &mut Cx) -> bool {
+fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x40, 0x10) || x.u16(f::TARGET) == 0 || !gate(x) {
-        x.c.d[0] = 0;
         return false;
     }
     let r = random(x) & 0xf;
-    x.c.d[0] = r;
     if (0xffc0u32 >> r) & 1 != 0 {
         set_state_long(x, 0x0202_0800);
     } else {
         set_state_long(x, 0x0204_0000);
         lib::pick_byte(x);
         pick_attack(x, 0);
-        x.c.d[0] = 1;
     }
     true
 }
 
 /// 0x61bb4 : un joueur loin devant : geste de la série lointaine.
-fn far_attack(x: &mut Cx) -> bool {
+fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0xc0, 0x40, 0x10) || x.u16(f::TARGET) == 0 || !gate(x) {
-        x.c.d[0] = 0;
         return false;
     }
     let r = rand_and(x, 2);
@@ -148,7 +142,6 @@ fn far_attack(x: &mut Cx) -> bool {
         set_state_long(x, 0x0204_0000);
         lib::pick_byte(x);
         pick_attack(x, 8);
-        x.c.d[0] = 1;
     }
     true
 }
@@ -198,7 +191,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : crachat ---------------------------------------------------------------------------------------
 
-fn spit(x: &mut Cx) {
+fn spit<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);
@@ -236,8 +229,7 @@ fn spit_begin<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : saut ---------------------------------------------------------------------------------------------
 
-fn hop(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn hop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

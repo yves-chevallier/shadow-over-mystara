@@ -237,7 +237,7 @@ pub fn set_state<R: Banc>(x: &mut Cx<'_, R>, o: Obj, state: u32) {
 /// et rien d'autre ne bouge ; sinon, hors pause, `sub` exécute le sous-état (il rend vrai pour
 /// abandonner l'image sans la suite, comme l'original qui dépile son adresse de retour). La suite
 /// teste la zone et la collision avec le décor dès que le sous-état n'est plus 0, puis remet l'objet en liste.
-pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
+pub fn active_loop<'a, R: Banc>(x: &mut Cx<'a, R>, sub: impl FnOnce(&mut Cx<'a, R>) -> bool) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -252,12 +252,12 @@ pub fn active_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx) -> bool) {
 }
 
 /// Boucle commune de l'état « touché » : même gel ; la zone n'est testée que si `+0xae` est nul.
-pub fn hit_loop(x: &mut Cx, sub: impl FnOnce(&mut Cx)) {
+pub fn hit_loop<'a, R: Banc>(x: &mut Cx<'a, R>, sub: impl FnOnce(&mut Cx<'a, R>)) {
     hit_loop_at(x, 0xae, sub)
 }
 
 /// `hit_loop` avec l'octet « pas de test de zone » à un autre décalage (`+0xa5` pour le type 4).
-pub fn hit_loop_at(x: &mut Cx, no_zone: u32, sub: impl FnOnce(&mut Cx)) {
+pub fn hit_loop_at<'a, R: Banc>(x: &mut Cx<'a, R>, no_zone: u32, sub: impl FnOnce(&mut Cx<'a, R>)) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);

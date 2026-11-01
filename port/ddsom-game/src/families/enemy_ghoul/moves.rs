@@ -2,12 +2,13 @@
 //! 10 sortie d'écran) et demi-tours enchaînés sur une attaque (`+5 = 8`, `+6` : 0 à 6).
 
 use super::*;
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
 // --- sous-état 6 --------------------------------------------------------------------------------
 
-pub(super) fn run_b(x: &mut Cx) {
+pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -22,7 +23,7 @@ pub(super) fn run_b(x: &mut Cx) {
 }
 
 /// 0 : pas en avant (animation 0 ou coup 3) ; 2 : pas en profondeur vers un côté tiré au hasard.
-fn side_step(x: &mut Cx, depth: bool) {
+fn side_step<R: Banc>(x: &mut Cx<'_, R>, depth: bool) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         look(x, 6);
@@ -55,7 +56,7 @@ fn side_step(x: &mut Cx, depth: bool) {
 }
 
 /// 4 et 6 : petit bond en arrière puis retombée (animation 3, 4, 5).
-fn hop(x: &mut Cx) {
+fn hop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -98,7 +99,7 @@ fn hop(x: &mut Cx) {
 }
 
 /// 8 : approche, puis deux coups de griffe de suite.
-fn two_strikes(x: &mut Cx) {
+fn two_strikes<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -141,7 +142,7 @@ fn two_strikes(x: &mut Cx) {
 }
 
 /// 10 : le ghoul quitte l'écran en courant vers le bord le plus proche.
-fn exit_screen(x: &mut Cx) {
+fn exit_screen<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
@@ -166,7 +167,7 @@ fn exit_screen(x: &mut Cx) {
 
 // --- sous-état 8 --------------------------------------------------------------------------------
 
-pub(super) fn run_c(x: &mut Cx) {
+pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -187,7 +188,7 @@ enum Axis {
 }
 
 /// Se retourne vers la cible si besoin, puis marche selon `axis` (rien, vers elle en X, en profondeur).
-fn turn_then(x: &mut Cx, axis: Axis) {
+fn turn_then<R: Banc>(x: &mut Cx<'_, R>, axis: Axis) {
     match (x.u8(f::SUB3), axis) {
         (0, Axis::None) => {
             x.add8(f::SUB3, 2);
@@ -247,7 +248,7 @@ fn turn_then(x: &mut Cx, axis: Axis) {
 }
 
 /// 0x60472 / 0x60512 : marche vers la cible, en X ou en profondeur.
-fn walk_toward(x: &mut Cx, axis: Axis) {
+fn walk_toward<R: Banc>(x: &mut Cx<'_, R>, axis: Axis) {
     x.add8(f::SUB3, 2);
     let target = load_target(x);
     if axis == Axis::Horizontal {
@@ -268,7 +269,7 @@ fn walk_toward(x: &mut Cx, axis: Axis) {
 }
 
 /// 6 : se retourne si besoin puis regarde si un joueur est à portée de coup.
-fn wake(x: &mut Cx) {
+fn wake<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         if needs_turn_around(x) {

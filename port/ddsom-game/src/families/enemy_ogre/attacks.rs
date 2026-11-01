@@ -12,7 +12,7 @@ use crate::objects::Obj;
 /// Table des montées de l'ogre qui suit son bras, indexée par la clé d'animation (longs).
 const RISE: u32 = 0x713e8;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => roar(x),
         2 => fly_up(x),
@@ -24,7 +24,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Plus personne en vie → retraite ; sinon `then` (0x71094 : debout, 0x71cd0 : nouveau geste).
-fn end_with(x: &mut Cx, stand: bool) {
+fn end_with<R: Banc>(x: &mut Cx<'_, R>, stand: bool) {
     if !lib::players_alive(x) {
         return go::retire(x);
     }
@@ -37,8 +37,7 @@ fn end_with(x: &mut Cx, stand: bool) {
 
 // --- +6 = 0 : rugissement -----------------------------------------------------------------------------
 
-fn roar(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn roar<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -83,8 +82,7 @@ fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 2 : l'ogre lance un bras, monte hors de l'écran, redescend au-dessus du joueur et retombe.
-fn fly_up(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn fly_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if !pick_target(x) {
@@ -101,8 +99,7 @@ fn fly_up(x: &mut Cx) {
 }
 
 /// `+6` = 4 : comme 2, après un bond d'arrivée par le haut (0x710ba, 0x710d8..).
-fn fly_up_b(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn fly_up_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if !pick_target(x) {
@@ -174,7 +171,7 @@ fn fly_up_b(x: &mut Cx) {
 }
 
 /// Étapes 2 à 8 communes aux `+6` = 2 et 4 : le vol (70f14), la retombée (70fd6, 7102e, 7107e).
-fn fly_common(x: &mut Cx) {
+fn fly_common<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         2 => fly_loop(x),
         4 => fly_down_from_above(x),
@@ -193,7 +190,7 @@ fn fly_common(x: &mut Cx) {
 }
 
 /// 0x70f14 : vol en montée avec les bras ; fini quand la hauteur dépasse le haut de l'écran.
-fn fly_loop(x: &mut Cx) {
+fn fly_loop<R: Banc>(x: &mut Cx<'_, R>) {
     let top = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let here = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
     if (here as i16) >= (top as i16) {
@@ -250,7 +247,7 @@ fn fly_down_from_above<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7102e : chute libre jusqu'au sol, secousse et animation d'impact.
-fn land_heavily(x: &mut Cx) {
+fn land_heavily<R: Banc>(x: &mut Cx<'_, R>) {
     let g = x.u16(Obj::AZ);
     x.add16(Obj::VZ, g);
     let d = ((x.u16(Obj::VZ) as u32) << 16) as i32 >> 8;
@@ -269,8 +266,7 @@ fn land_heavily(x: &mut Cx) {
 
 // --- +6 = 6 : bond et chute sur la cible ---------------------------------------------------------------------
 
-fn crash(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn crash<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -357,8 +353,7 @@ fn crash(x: &mut Cx) {
 
 // --- +6 = 8 : bras variante 2 ---------------------------------------------------------------------------
 
-fn arm_swing(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn arm_swing<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if !pick_target(x) {
@@ -380,7 +375,7 @@ fn arm_swing(x: &mut Cx) {
                 x.set16(TIMER2, 0x48);
             } else {
                 let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-                let d = x.rom32(RISE + idx);
+                let d = rom32(x, RISE + idx);
                 x.add32(Obj::Z, d);
             }
             lib::step(x);

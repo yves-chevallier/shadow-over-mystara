@@ -7,8 +7,7 @@ use crate::objects::pools;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => pursue(x),
         2 => turn(x),
@@ -49,13 +48,13 @@ fn charge_b<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(CHARGE, v);
 }
 
-fn wander_a(x: &mut Cx) {
+fn wander_a<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(0x71a5a + r);
     x.set8(WANDER, v);
 }
 
-fn wander_b(x: &mut Cx) {
+fn wander_b<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(0x71a7a + r);
     x.set8(WANDER, v);
@@ -63,14 +62,13 @@ fn wander_b(x: &mut Cx) {
 
 // --- +6 = 0 : poursuite lente ---------------------------------------------------------------------
 
-fn pursue(x: &mut Cx) {
+fn pursue<R: Banc>(x: &mut Cx<'_, R>) {
     if interrupted(x) {
         return;
     }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         lib::draw_6e(x);
-        x.c.d[0] &= !0xff;
         x.set8(LOOK, 0);
         if x.u8(LOOK_PREV) != 0 {
             x.set8(LOOK_PREV, 0);
@@ -120,7 +118,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 et 6 : vol de poursuite -----------------------------------------------------------------
 
-fn glide(x: &mut Cx, second: bool) {
+fn glide<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
     if interrupted(x) {
         return;
     }
@@ -139,7 +137,7 @@ fn glide(x: &mut Cx, second: bool) {
     glide_step(x);
 }
 
-fn begin_glide(x: &mut Cx) {
+fn begin_glide<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(Obj::AX, 0);
     x.set16(Obj::AY, 0);
@@ -158,7 +156,7 @@ fn begin_glide(x: &mut Cx) {
     }
 }
 
-fn glide_step(x: &mut Cx) {
+fn glide_step<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u8(CHARGE).wrapping_sub(1);
     x.set8(CHARGE, n);
     if (n as i8) < 0 {
@@ -205,12 +203,12 @@ fn glide_step(x: &mut Cx) {
 }
 
 /// 0x7ef4 : comme `target_in_box`, pour l'ogre.
-fn target_in_box_close(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+fn target_in_box_close<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// 0x71a9a / 0x71ab8 : un joueur dans la boîte `(−0x60, 0x30, 6)` ou `(−0xc0, 0x20, 8)`, puis la décision de l'IA.
-fn near_box(x: &mut Cx, which: u32) -> u32 {
+fn near_box<R: Banc>(x: &mut Cx<'_, R>, which: u32) -> u32 {
     let found = if which == 0x71a9a { lib::target_in_box(x, -0x60, 0x30, 6) } else { lib::target_in_box(x, -0xc0, 0x20, 8) };
     if !found {
         return 0;
@@ -219,14 +217,14 @@ fn near_box(x: &mut Cx, which: u32) -> u32 {
 }
 
 /// 0x71ad4 : cercle autour du joueur (la table de choix n'a qu'une entrée).
-fn pick_a(x: &mut Cx) {
+fn pick_a<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let _ = x.rom8(0x71aea + r);
     go::leap(x);
 }
 
 /// 0x71afc : choisit un geste de la série 0x71b34 (plongeon de côté, coup 6 ou 8).
-fn pick_a2(x: &mut Cx) {
+fn pick_a2<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let v = x.rom8(0x71b34 + r);
     match v {
@@ -244,7 +242,7 @@ fn strike_6_quiet<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x71b4a : geste de la série devant, par palier `+0xaa` (tables 0x71ba4, 0x71bb4, 0x71bc4).
-fn pick_b(x: &mut Cx, gate: u32) {
+fn pick_b<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE).min(2) as usize;
     // décision 1 (cible devant) : une table par palier ; décision 2 : toujours la première
@@ -258,7 +256,7 @@ fn pick_b(x: &mut Cx, gate: u32) {
 }
 
 /// 0x71bd8 : geste de la série derrière.
-fn pick_c(x: &mut Cx) {
+fn pick_c<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE).min(2) as usize;
     let table = [0x71c32u32, 0x71c42, 0x71c52][phase];
@@ -278,8 +276,7 @@ fn pick_c(x: &mut Cx) {
 
 // --- +6 = 8 : plongeon -------------------------------------------------------------------------------
 
-fn plunge(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn plunge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -368,8 +365,7 @@ fn plunge_dash<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : bond et lancer de bras ----------------------------------------------------------------------
 
-fn leap(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

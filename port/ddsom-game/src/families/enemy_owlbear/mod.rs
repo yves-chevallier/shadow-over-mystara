@@ -69,7 +69,7 @@ const ACTIVE_TURN: u32 = 0x0202_0200;
 const ACTIVE_ENGAGE: u32 = 0x0202_0002;
 const KNOCKED: u32 = 0x0408_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -123,7 +123,7 @@ fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike(x: &mut Cx, n: u32) {
+fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -174,7 +174,7 @@ fn turn_if_behind<R: Banc>(x: &mut Cx<'_, R>) {
 const AI_PARAMS: [(u32, u8); 14] =
     [(0x68, 2), (0x69, 2), (0x70, 0), (0x6a, 2), (0x6c, 2), (0x6d, 2), (0x72, 4), (0x73, 3), (0x74, 2), (0x75, 4), (0x76, 3), (0x78, 0xff), (0x81, 9), (0x80, 0xa)];
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -229,7 +229,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     active_loop(x, |x| {
         match x.u8(f::SUB) {
             0 => stance::arrival(x),
@@ -245,5 +245,5 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x5d87a "enemy_4" run,
+    0x5d87a "enemy_4" #[sans] run,
 }

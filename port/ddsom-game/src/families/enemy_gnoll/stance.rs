@@ -6,14 +6,13 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     // la variante 10 est saisie dès qu'elle se met debout
     if x.u8(Obj::VARIANT) == 0xa || grabbed(x) {
         x.set16(f::STATE, 0x0408);
         x.set16(f::SUB2, 0);
         return grab(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => approach(x),
         2 => turn(x),
@@ -26,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x6affa : (re)commence la marche vers la cible.
-pub(super) fn approach_start(x: &mut Cx) {
+pub(super) fn approach_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xf0);
     x.set8(SHOT_KIND, 0x1a);
@@ -34,7 +33,7 @@ pub(super) fn approach_start(x: &mut Cx) {
 }
 
 /// 0x6b00a : suite de `approach_start` sans avancer l'étape (appelé directement après un coup).
-pub(super) fn approach_restart(x: &mut Cx) {
+pub(super) fn approach_restart<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_speed(x, 0x12);
     mv(x, 1);
@@ -44,7 +43,7 @@ pub(super) fn approach_restart(x: &mut Cx) {
 }
 
 /// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return approach_start(x);
     }
@@ -71,7 +70,6 @@ fn approach(x: &mut Cx) {
         x.set16(f::STATE, 0x0204);
         let r = rand_and(x, 1);
         let chosen = (r * 2 + 4) as u8;
-        x.c.d[0] = x.c.d[0] & !0xff | chosen as u32;
         x.set8(CHOSEN, chosen);
         x.set16(f::SUB2, 0);
         return;
@@ -131,7 +129,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : promenade sur place tant qu'aucun joueur n'est en vie, puis retour debout.
-pub(super) fn idle(x: &mut Cx) {
+pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(VULNERABLE, 1);

@@ -10,13 +10,12 @@ use crate::objects::Obj;
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACTIONS: u32 = 0x715d4;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
         zone_and_terrain(x);
         return;
     }
-    x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
         0 => first(x),
         2 => recoil(x),
@@ -41,7 +40,7 @@ fn death_check<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn first(x: &mut Cx) {
+fn first<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(INVULNERABLE, 0);
         if death_check(x) {
@@ -53,8 +52,7 @@ fn first(x: &mut Cx) {
 
 // --- sous-état 2 : recul ----------------------------------------------------------------------------------
 
-fn recoil(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -90,7 +88,7 @@ fn recoil(x: &mut Cx) {
 
 // --- sous-état 4 : chute et relevé ---------------------------------------------------------------------------
 
-fn get_up(x: &mut Cx) {
+fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -145,8 +143,7 @@ pub(crate) fn regroup<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 6 : mort --------------------------------------------------------------------------------------
 
-fn dying(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn dying<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -208,8 +205,7 @@ fn dying(x: &mut Cx) {
 
 // --- sous-état 8 : fuite --------------------------------------------------------------------------------------
 
-fn flee(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn flee<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

@@ -10,7 +10,7 @@ use crate::objects::Courant;
 const REACT_FIRST: u32 = 0x5ea5c;
 const REACT_SECOND: u32 = 0x5ecb8;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     hit_loop_at(x, NO_ZONE, |x| match x.u8(f::SUB) {
         0 => {
             x.set8(CUR_ANIM, 0x7f);
@@ -34,7 +34,7 @@ pub(super) fn run(x: &mut Cx) {
 
 // --- sous-état 2 : recul -------------------------------------------------------------------------
 
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -73,7 +73,7 @@ fn recoil(x: &mut Cx) {
 
 // --- sous-état 4 : chute -------------------------------------------------------------------------
 
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -110,7 +110,7 @@ fn fall(x: &mut Cx) {
 
 // --- sous-état 8 : mort ou fuite -----------------------------------------------------------------
 
-fn flee(x: &mut Cx) {
+fn flee<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set8(NO_ZONE, 1);

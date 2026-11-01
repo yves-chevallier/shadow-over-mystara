@@ -17,8 +17,7 @@ enum Leap {
     HighThenSeries,
 }
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match (x.u8(f::SUB), x.u8(f::SUB2)) {
         (4, 0) | (6, 0) => windup(x),
         (4, 2) | (6, 2) => turn_back(x),
@@ -53,7 +52,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x6b742 : l'étape suivante lance l'animation 4 (avec son).
-fn next_and_start(x: &mut Cx) {
+fn next_and_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     wind_up(x);
 }
@@ -66,14 +65,14 @@ fn next_when_done<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6b776 : fin de l'animation, geste terminé.
-fn finish(x: &mut Cx) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         done_attack(x);
     }
 }
 
 /// 0x6b4c6 : fin de l'animation, geste de repli.
-fn finish_follow(x: &mut Cx) {
+fn finish_follow<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         follow_up(x);
     }
@@ -81,7 +80,7 @@ fn finish_follow(x: &mut Cx) {
 
 // --- geste 0 : provocation, puis geste choisi --------------------------------------------------------
 
-fn windup(x: &mut Cx) {
+fn windup<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -128,7 +127,7 @@ fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
 // --- coups de hache -----------------------------------------------------------------------------------
 
 /// +6 = 4 et 6 : un coup de hache (animation `anim`, type `kind`), ou, une fois sur dix à seize, retour à la marche.
-fn swing(x: &mut Cx, anim: u32, kind: u8) {
+fn swing<R: Banc>(x: &mut Cx<'_, R>, anim: u32, kind: u8) {
     if x.u8(f::SUB3) != 0 {
         if x.anim_step() {
             follow_up(x);
@@ -147,7 +146,7 @@ fn swing(x: &mut Cx, anim: u32, kind: u8) {
 }
 
 /// +6 = 8 : un coup, puis un coup bas répété `+0xa2` fois.
-fn combo_a(x: &mut Cx) {
+fn combo_a<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -178,7 +177,7 @@ fn combo_a(x: &mut Cx) {
 }
 
 /// +6 = 10 : un coup tiré au hasard entre deux, puis un deuxième.
-fn combo_b(x: &mut Cx) {
+fn combo_b<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(AI_SHOT, 3);
@@ -205,7 +204,7 @@ fn combo_b(x: &mut Cx) {
 
 /// 0x6b3bc / 0x6b4fa : le Gnoll se place sur la cible (position copiée), à la hauteur `height`, et bondit de
 /// `shift` en avant.
-fn leap_start(x: &mut Cx, height: u32, shift: i16) {
+fn leap_start<R: Banc>(x: &mut Cx<'_, R>, height: u32, shift: i16) {
     x.add8(f::SUB3, 2);
     let target = load_target(x);
     let at = target.u32(x.b, Obj::X);
@@ -239,7 +238,7 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
     mv(x, 5);
 }
 
-fn leap_on_target(x: &mut Cx, kind: Leap) {
+fn leap_on_target<R: Banc>(x: &mut Cx<'_, R>, kind: Leap) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => {
@@ -299,7 +298,7 @@ fn leap_on_target(x: &mut Cx, kind: Leap) {
 }
 
 /// +6 = 14 (sous-état 4) et 8 (sous-état 6) : saut sur place.
-fn hop(x: &mut Cx) {
+fn hop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -315,7 +314,7 @@ fn hop(x: &mut Cx) {
 // --- sous-état 6 --------------------------------------------------------------------------------------
 
 /// +6 = 6 : pas en profondeur.
-fn depth_step(x: &mut Cx) {
+fn depth_step<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => next_when_done(x),
@@ -333,7 +332,7 @@ fn depth_step(x: &mut Cx) {
 }
 
 /// +6 = 10 : bond en l'air, coup plongeant.
-fn jump_up(x: &mut Cx) {
+fn jump_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -368,7 +367,7 @@ const TELEPORT_X: u32 = 0x6b8a4;
 const TELEPORT_Y: u32 = 0x6b89c;
 
 /// +6 = 12 : le Gnoll réapparaît près de sa cible.
-fn teleport(x: &mut Cx) {
+fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -415,7 +414,7 @@ fn pause<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : pas en arrière (les étapes 8 et plus sont un saut sur place, jamais atteint depuis l'étape 6).
-fn back_step(x: &mut Cx) {
+fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 | 8 => next_and_start(x),
         2 => {
@@ -458,7 +457,7 @@ fn back_step(x: &mut Cx) {
 }
 
 /// +6 = 4 : bond (ou course) vers la cible.
-fn lunge(x: &mut Cx) {
+fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) != 0 {
@@ -501,7 +500,7 @@ fn lunge(x: &mut Cx) {
 }
 
 /// +6 = 6 : rechoisit un geste ; ne change de geste que si le nouveau diffère du précédent ou après un délai.
-fn pick_again(x: &mut Cx) {
+fn pick_again<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);
     let b = if lib::target_in_box(x, -0x20, 0x20, 0xc) {

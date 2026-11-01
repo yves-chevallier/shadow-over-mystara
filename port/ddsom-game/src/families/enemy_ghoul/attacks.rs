@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -30,7 +30,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Coup de griffe (type `kind`, animation `anim` des coups).
-fn claw(x: &mut Cx, kind: u8, anim: u32) {
+fn claw<R: Banc>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(STRIKE_KIND, kind);
@@ -61,7 +61,7 @@ struct Leap {
     then: Then,
 }
 
-fn leap(x: &mut Cx, l: Leap) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>, l: Leap) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -113,7 +113,7 @@ fn leap(x: &mut Cx, l: Leap) {
 }
 
 /// 8 : garde (animation 3) pendant `0x78` images.
-fn guard(x: &mut Cx) {
+fn guard<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         look(x, 6);
@@ -141,7 +141,7 @@ fn begin_charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 14 : approche, puis un nouveau choix (ou un coup immédiat).
-fn charge(x: &mut Cx) {
+fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return begin_charge(x);
     }
@@ -158,7 +158,7 @@ fn charge(x: &mut Cx) {
 }
 
 /// 16 : approche puis geste de feinte (griffe ou animation 3 des coups).
-fn feint(x: &mut Cx) {
+fn feint<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_charge(x),
         2 => {

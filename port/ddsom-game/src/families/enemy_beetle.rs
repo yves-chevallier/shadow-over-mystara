@@ -293,7 +293,7 @@ fn bite_check(x: &mut Cx) {
         if player.u16(x.b, 4) == 0x200 && player.u8(x.b, 6) == 0xc {
             let roll = random(x) & 0x1f;
             let row = ((var::RANK.get(x.b) >> 1) as u32) << 2;
-            let odds = x.rom32(BITE_ODDS + row);
+            let odds = rom32(x, BITE_ODDS + row);
             if odds >> roll & 1 != 0 {
                 let state = x.u32(f::STATE);
                 x.set32(SAVED_STATE, state);

@@ -17,9 +17,8 @@ use crate::objects::Obj;
 const FLAME_SCRIPT: u32 = 0x62284;
 
 /// Effet d'une morsure ou d'un coup (0x9eba6 puis 0xebd30) ; la clé d'animation est remise à zéro.
-fn bite_effect(x: &mut Cx, kind: u32) {
+fn bite_effect<R: Banc>(x: &mut Cx<'_, R>, kind: u32) {
     x.set8(f::KEY_FRAME, 0);
-    x.c.d[0] = kind;
     crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, kind as u8);
     lib::sound(x, 0xebd30);
 }
@@ -50,14 +49,14 @@ fn hold<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
 }
 
 /// 0x61eb0 : fin de l'animation d'un coup → suite (0x63790).
-fn step_then_after(x: &mut Cx) {
+fn step_then_after<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         after_strike(x);
     }
 }
 
 /// Fin d'animation d'un coup : animation de marche, puis suite (0x63790).
-fn done_then_after(x: &mut Cx) {
+fn done_then_after<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         mv(x, 0);
         after_strike(x);
@@ -76,7 +75,7 @@ fn wait_key_clear<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x61eda : en plein bond, la clé déclenche la morsure ; à terre, poussière et animation d'atterrissage.
-fn bite_land(x: &mut Cx) {
+fn bite_land<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         let Some(player) = lib::attack_hits_a_player(x, 4) else { return step_then_after(x) };
         x.set32(Obj::Z, 0);
@@ -97,7 +96,7 @@ fn bite_land(x: &mut Cx) {
 }
 
 /// 0x61f3c : le chien glisse en soufflant de la poussière jusqu'à l'arrêt.
-fn slide(x: &mut Cx) {
+fn slide<R: Banc>(x: &mut Cx<'_, R>) {
     puff(x, 3, 1, 1, -0x18, -1);
     if x.u8(Obj::VX) == 0 {
         x.add8(f::SUB3, 2);
@@ -121,7 +120,7 @@ fn begin_jump<R: Banc>(x: &mut Cx<'_, R>, vx: i16, speed_z: u16, anim: u32, set:
 
 // --- sous-état 4 ----------------------------------------------------------------------------------------
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => lunge(x),
         2 | 4 => bite(x),
@@ -134,8 +133,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// `+6` = 0 : course, saut éventuel puis morsure.
-fn lunge(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -169,7 +167,7 @@ fn lunge(x: &mut Cx) {
 }
 
 /// `+6` = 2 et 4 : morsure en place.
-fn bite(x: &mut Cx) {
+fn bite<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -188,8 +186,7 @@ fn bite(x: &mut Cx) {
 }
 
 /// `+6` = 6 : coup de patte, avec élan ou en courant (deux variantes tirées au hasard).
-fn paw(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn paw<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
@@ -237,14 +234,14 @@ fn paw(x: &mut Cx) {
 }
 
 /// Le geste fini, le chien reprend l'approche (état 2, `+6` = 0, étape 2) et revérifie les portées (0x61aa4).
-fn back_on_guard(x: &mut Cx) {
+fn back_on_guard<R: Banc>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0202_0002);
     mv(x, 2);
     stance::reach_boxes(x);
 }
 
 /// `+6` = 8 : bond en avant puis morsure.
-fn jump_bite(x: &mut Cx) {
+fn jump_bite<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -263,7 +260,7 @@ fn jump_bite(x: &mut Cx) {
 }
 
 /// `+6` = 10, 12, 14 : coup de patte court.
-fn short_paw(x: &mut Cx) {
+fn short_paw<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -282,7 +279,7 @@ fn short_paw(x: &mut Cx) {
 }
 
 /// `+6` = 16 : souffle de feu (animation 8 puis une série de tirs d'après la table).
-fn breath(x: &mut Cx) {
+fn breath<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -336,7 +333,7 @@ fn flame_tick<R: Banc>(x: &mut Cx<'_, R>, both: bool) -> bool {
 
 // --- sous-état 6 -------------------------------------------------------------------------------------------
 
-pub(super) fn run_b(x: &mut Cx) {
+pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
     // étapes communes : 0 attente, 2 poursuite en place (retour à l'état 6)
     match x.u8(f::SUB3) {
         0 => return begin_wait(x),
@@ -356,7 +353,7 @@ pub(super) fn run_b(x: &mut Cx) {
 }
 
 /// 0x61a8c : le chien se met à l'affût (test aléatoire, puis boîtes de portée ou charge).
-fn ready(x: &mut Cx) {
+fn ready<R: Banc>(x: &mut Cx<'_, R>) {
     if !lib::maybe_draw_6e(x) {
         stance::reach(x);
     } else {
@@ -365,7 +362,7 @@ fn ready(x: &mut Cx) {
 }
 
 /// 0x62332 : debout, aspect 0, puis à l'affût.
-fn stand_and_ready(x: &mut Cx) {
+fn stand_and_ready<R: Banc>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     x.set8(LOOK, 0);
     mv(x, 0);
@@ -373,13 +370,13 @@ fn stand_and_ready(x: &mut Cx) {
 }
 
 /// 0x6231e : l'animation finie, retour debout et à l'affût.
-fn b_end(x: &mut Cx) {
+fn b_end<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         stand_and_ready(x);
     }
 }
 
-fn b_charge(x: &mut Cx) {
+fn b_charge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             let r = rand_and(x, 1);
@@ -406,7 +403,7 @@ fn b_charge(x: &mut Cx) {
     }
 }
 
-fn b_stretch(x: &mut Cx) {
+fn b_stretch<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
@@ -420,7 +417,7 @@ fn b_stretch(x: &mut Cx) {
 }
 
 /// Saut de côté (0x6239e) : vitesse en profondeur tirée au hasard.
-fn b_hop(x: &mut Cx) {
+fn b_hop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
@@ -450,7 +447,7 @@ fn b_hop(x: &mut Cx) {
 }
 
 /// `+6` = 6 : bond en avant, atterrissage, retour à l'affût.
-fn b_lunge(x: &mut Cx) {
+fn b_lunge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -461,7 +458,7 @@ fn b_lunge(x: &mut Cx) {
 }
 
 /// `+6` = 8 : bond, atterrissage puis coup de queue.
-fn b_slash(x: &mut Cx) {
+fn b_slash<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -492,7 +489,7 @@ fn jump_forward<R: Banc>(x: &mut Cx<'_, R>) {
     mv(x, 6);
 }
 
-fn b_claw(x: &mut Cx) {
+fn b_claw<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -507,7 +504,6 @@ fn b_claw(x: &mut Cx) {
         12 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
-                x.c.d[0] = 1;
                 crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 1);
             }
             if x.anim_step() {
@@ -518,7 +514,7 @@ fn b_claw(x: &mut Cx) {
     }
 }
 
-fn b_flames(x: &mut Cx) {
+fn b_flames<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -549,7 +545,7 @@ fn b_flames(x: &mut Cx) {
 
 // --- sous-état 8 ----------------------------------------------------------------------------------------------
 
-pub(super) fn run_c(x: &mut Cx) {
+pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 6 => c_wait(x),
         2 => c_leap(x),
@@ -594,7 +590,7 @@ fn c_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 2 : bond d'attaque, retombée, retour debout (0x616d8).
-fn c_leap(x: &mut Cx) {
+fn c_leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => jump_forward(x),
         2 => wait_key(x),
@@ -605,8 +601,7 @@ fn c_leap(x: &mut Cx) {
 }
 
 /// `+6` = 4 : pas de côté (en courant) ou saut de côté.
-fn c_side(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn c_side<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
@@ -659,7 +654,7 @@ fn c_side(x: &mut Cx) {
 
 // --- sous-état 10 : promenade ----------------------------------------------------------------------------
 
-pub(super) fn idle(x: &mut Cx) {
+pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -700,13 +695,12 @@ pub(super) fn idle(x: &mut Cx) {
 
 // --- sous-état 12 : morsure d'un joueur terrassé ------------------------------------------------------------
 
-pub(super) fn grab(x: &mut Cx) {
+pub(super) fn grab<R: Banc>(x: &mut Cx<'_, R>) {
     let which = x.u8(f::SUB2);
     if (x.u16(f::TARGET) as i16) >= 0 {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if victim.u8(x.b, 0) == 0 || victim.u8(x.b, 0x188) == 0 {
         return set_state_long(x, STANCE);
     }
@@ -729,7 +723,7 @@ pub(super) fn grab(x: &mut Cx) {
 }
 
 /// 0x6293e : chaque morsure (clé `+0x33`) tire de la vie au joueur ; à la dernière il est libéré.
-fn bite_victim(x: &mut Cx, which: u8) {
+fn bite_victim<R: Banc>(x: &mut Cx<'_, R>, which: u8) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
         return lib::hold_seized(x);
@@ -746,16 +740,14 @@ fn bite_victim(x: &mut Cx, which: u8) {
     }
     let reach = if x.u8(f::FLIP) != 0 { 0x38i16 } else { -0x38 };
     let d3 = if which == 0 { 0x1c } else { 0x2c };
-    x.c.d[1] = 2;
     let pos = (x.u16(Obj::X).wrapping_add(reach as u16), x.u16(Obj::Z).wrapping_add(d3), x.u16(Obj::Y).wrapping_sub(1));
-    (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+    (*x.c.d2(), *x.c.d3(), *x.c.d4()) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
     // l'autre objet de l'étincelle est A1, la victime (posée par `grab`)
     let victim = x.linked(f::TARGET);
     crate::families::effects_creators::spark_at(x.b, x.o, victim.0, 2, pos);
     if (x.u16(f::TARGET) as i16) >= 0 {
         return set_state_long(x, STANCE);
     }
-    x.c.a[1] = victim.0 | 0xff00_0000; // relu : A1 relu par la suite (DDSOM_POISON : hellhound_scene49, scorpion_scene38)
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);
     }
@@ -769,7 +761,7 @@ fn bite_victim(x: &mut Cx, which: u8) {
     lib::hold_seized(x);
 }
 
-fn release(x: &mut Cx) {
+fn release<R: Banc>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
     victim.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, victim);

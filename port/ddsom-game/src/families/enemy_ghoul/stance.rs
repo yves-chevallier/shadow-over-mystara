@@ -5,7 +5,7 @@ use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -41,7 +41,7 @@ fn set_look<R: Banc>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
 }
 
 /// 0x5fcec : le ghoul se met en marche vers sa cible.
-pub(super) fn begin_walk(x: &mut Cx) {
+pub(super) fn begin_walk<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     set_look(x, 0, 2);
@@ -52,7 +52,7 @@ pub(super) fn begin_walk(x: &mut Cx) {
 }
 
 /// 0x5fd3e : marche ; se retourne, attend ou attaque.
-fn walk(x: &mut Cx) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(AI_SHOT, 0);
         lib::walk_near_point(x);
@@ -80,7 +80,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// 0x5fd96 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
-fn decide(x: &mut Cx) {
+fn decide<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 8) {
         x.set16(f::STATE, 0x204);
         return pick_attack(x, CLOSE_ATTACKS, 0);

@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => howl(x),
         2 => turn_in(x),
@@ -30,8 +30,7 @@ pub(super) fn stand_when_done<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 -----------------------------------------------------------------------------------------
 
-fn howl(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn howl<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -58,11 +57,10 @@ fn howl(x: &mut Cx) {
 
 // --- +6 = 2 : demi-tour ---------------------------------------------------------------------------------
 
-fn turn_in(x: &mut Cx) {
+fn turn_in<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -126,8 +124,7 @@ pub(super) fn set_angle_facing<R: Banc>(x: &mut Cx<'_, R>, forward: u8, flipped:
 
 // --- +6 = 4 et 6 : bond d'entrée -----------------------------------------------------------------------
 
-fn leap_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

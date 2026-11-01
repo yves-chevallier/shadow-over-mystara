@@ -134,7 +134,7 @@ pub(self) fn face_target(x: &mut Cx) {
 /// 0x65a30 : ondulation verticale en vol selon la clé d'animation (table de longs `0x65a5a`).
 pub(self) fn bob(x: &mut Cx) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-    let mut d = x.rom32(0x65a5a + idx) as i32;
+    let mut d = rom32(x, 0x65a5a + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
