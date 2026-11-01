@@ -212,7 +212,7 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
             c.a[4] = e.pile;
             c.set_sr(0);
             let etape = crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"));
-            crate::diag::sonder_lancement(c, "neuve", &etape, crate::regs::a(1) | crate::regs::a(4) | crate::regs::a(5));
+            crate::diag::sonder_lancement(c, "neuve", &etape, crate::regs::a(5));
             etape
         }
         (Etat::Prete | Etat::EnCours, Reprise::Etape(etape, ctx)) => {
