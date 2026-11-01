@@ -255,3 +255,25 @@ pub fn registres_morts(c: &mut Cpu, etiquette: &str, masque: u32) {
     }
     inverser_drapeaux(&mut c.sr, masque);
 }
+
+/// Sonde des registres qu'une tâche retrouve quand l'ordonnanceur la lance (`kernel::lancer`) : avec l'étiquette
+/// `etiquette` (`reprise` : registres rendus par le contexte d'une tâche qui a cédé ; `neuve` : registres hérités par
+/// une tâche neuve) dans `DDSOM_POISON`, les registres choisis (tous, ou `reprise.d3`...), sauf ceux de `garde`, sont
+/// inversés. Le site est l'étape lancée (`Aiguillage(3)`...). Si la validation reste VALIDE, la tâche ne relit pas ces
+/// registres : le contexte n'a pas à les garder.
+pub fn sonder_lancement(c: &mut Cpu, etiquette: &str, etape: &dyn std::fmt::Debug, garde: u32) {
+    if etiquettes().is_empty() {
+        return;
+    }
+    // sans espaces ni virgules : le site reste un seul mot d'une liste `DDSOM_POISON` (`tools/bissecte_poison.py`)
+    let site: String = format!("{etape:?}").chars().filter(|c| *c != ' ').map(|c| if c == ',' { ';' } else { c }).collect();
+    let Some(choisis) = gardes(etiquette, &site) else {
+        return;
+    };
+    let masque = REGISTRES_DE_TACHE & choisis & !garde;
+    if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
+        eprintln!("POISON {etiquette} {site} masque={masque:05x}");
+    }
+    let (d, a, sr) = (&mut c.d, &mut c.a, &mut c.sr);
+    inverser(d, &mut a[..7], sr, masque);
+}

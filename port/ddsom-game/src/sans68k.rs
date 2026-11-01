@@ -16,7 +16,8 @@
 //!
 //! 1. l'interruption de VBLANK, levée à la fin de l'image précédente, est prise dès que le SR l'autorise, entre deux
 //!    points (au début de l'image : l'ordonnanceur l'attend, le pas de jeu retenu aussi ; pendant le démarrage, quand
-//!    `boot_init` démasque) ; elle s'exécute en entier (`vblank::interruption`) ;
+//!    `boot_init` démasque) : c'est un point du noyau (`Point::Interruption`, le point interrompu rangé dans la table,
+//!    sans PC ni SR empilés), qui s'exécute en entier (`vblank::interruption`) puis revient au point interrompu ;
 //! 2. puis les points s'enchaînent (ordonnanceur, tâches, cessions) jusqu'à ce que l'ordonnanceur tourne à vide
 //!    ([`au_repos`] : plus aucune tâche prête, ou seule la tâche du gel sans rien à faire), ou que le pas de jeu
 //!    atteigne le plafond de l'image (`MAX_STEPS_PER_FRAME` pas, [`pas_de_jeu`] : le pas retenu s'exécute au début de
@@ -97,8 +98,11 @@ struct Instantane {
 
 impl Instantane {
     fn prendre(c: &Cpu, b: &Cps2Bus) -> Self {
+        let mut ram = b.ram.clone();
+        // la RAM des piles d'origine ne compte pas (changée à chaque point par la sonde `pile`)
+        ram[PILES.0 / 2..PILES.1 / 2].fill(0);
         Instantane {
-            ram: b.ram.clone(),
+            ram,
             extra_ram: b.extra_ram.clone(),
             gfxram: b.gfxram.clone(),
             objram: b.objram.clone(),
@@ -144,13 +148,17 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
         }
         i.plafond = plafond.map(|p| p.max);
     });
+    let poison_pile = crate::diag::poison_actif("pile");
     loop {
         // un point de premier niveau : aucune cession en cours
         crate::taches::oublier_cession();
         let point = crate::kernel::point(b);
+        if poison_pile && !point.demarrage() {
+            empoisonner_pile(b);
+        }
         let niveau = b.irq_level();
-        if niveau > (c.sr >> 8 & 7) as u8 {
-            crate::vblank::interruption(c, b, niveau, point.adresse(c));
+        if point != Point::Interruption && niveau > (c.sr >> 8 & 7) as u8 {
+            crate::kernel::interrompre(b, point);
             continue;
         }
         // (une interruption masquée attend que l'ordonnanceur rouvre sa fenêtre)
@@ -165,6 +173,10 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
             }
             Point::Debut | Point::Parcours | Point::Examen | Point::Suivant | Point::Retour => {
                 crate::kernel::executer(c, b, point)
+            }
+            Point::Interruption => {
+                crate::vblank::interruption(b, niveau);
+                crate::kernel::fin_d_interruption(b)
             }
             // une tâche ne continue plus par un saut vers une native : chaque pas cède, se termine ou bloque
             Point::Tache => arreter(c, b, "la tâche a rendu la main sans céder".into()),
@@ -185,6 +197,23 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
         table(b).point = suivant;
     }
     c.cycles = c.cycles.max(fin);
+}
+
+/// RAM des piles d'origine (décalages depuis FF0000) : tas des piles, piles des tâches et du superviseur
+/// (FF0166-FF0E65, que `validate` ignore : `taches::table::ram_du_noyau`). Au-delà, FF0E66 et la suite sont des
+/// variables du jeu (relatives à A5 : `placement::LAST_X` en A5 - 0x719a...).
+const PILES: (usize, usize) = (0x166, 0xe66);
+
+/// Sonde `DDSOM_POISON=pile` : avant chaque point de l'ordonnanceur ou d'une tâche, la RAM des piles d'origine
+/// ([`PILES`]) est remplie d'une valeur qui change à chaque fois. Si la validation reste VALIDE, le jeu n'y lit rien :
+/// il n'a plus de pile 68000.
+fn empoisonner_pile(b: &mut Cps2Bus) {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let motif = (n as u16).wrapping_mul(0x9e37) ^ 0xa5c3;
+    for (i, mot) in b.ram[PILES.0 / 2..PILES.1 / 2].iter_mut().enumerate() {
+        *mot = motif.wrapping_add(i as u16);
+    }
 }
 
 /// L'ordonnanceur tourne à vide, entre deux tâches : aucune tâche prête et pas de nouvelle image, ou seule la tâche du
@@ -283,7 +312,7 @@ fn arreter(c: &Cpu, b: &mut Cps2Bus, cause: String) -> ! {
         m += &format!(" ; point {:?}", t.point);
         let k = t.courante;
         let e = &t.emplacements[k];
-        let cadres: Vec<String> = e.cadres.iter().map(|k| format!("{:x?}@{:x}", k.suite, k.pile)).collect();
+        let cadres: Vec<String> = e.cadres.iter().map(|k| format!("{:x?}@{}", k.suite, k.appels)).collect();
         m += &format!(" ; tâche {k} ({:?}, {:?}) ; cadres [{}]", e.tache, e.etat, cadres.join(" "));
     }
     let pile: Vec<String> = (0..6).map(|i| format!("{:x}", rd32(b, c.a[7].wrapping_add(4 * i)))).collect();

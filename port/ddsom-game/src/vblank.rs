@@ -10,7 +10,6 @@
 //! forcés à 0xffff). Ils n'apparaissent donc pas ici.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 
@@ -168,25 +167,18 @@ fn reveiller_taches(b: &mut Cps2Bus) {
     wr8(b, a5(var::RALENTI), ralenti);
 }
 
-/// Prise de l'interruption de VBLANK (niveau `niveau`, autovecteur `0x574`) là où le processeur en est (`pc` : adresse
-/// d'origine du point interrompu), comme le 68000 : superviseur, PC et SR empilés, niveau dans le SR ; puis le
-/// traitement et le `rte`.
-pub fn interruption(c: &mut Cpu, b: &mut Cps2Bus, niveau: u8, pc: u32) {
+/// L'interruption de VBLANK (niveau `niveau`, autovecteur `0x574`), prise par le noyau entre deux points
+/// (`kernel::interrompre`) : acquittement, puis le traitement. Ni registre ni pile : l'original passe en superviseur,
+/// empile PC et SR et relève son masque, mais son traitement sauve et rend tous les registres et ne peut être
+/// interrompu ; le `rte` rend le SR. Le point où revenir est gardé par le noyau (`Table::interrompu`).
+///
+/// Écart assumé : PC et SR ne sont plus écrits sur la pile courante (pile de la tâche interrompue, FF01A6-FF0DA5, ou
+/// du superviseur, sous FF0E66). `validate` ignore ces mots (`taches::table::ram_du_noyau`), et le jeu ne les relit pas
+/// (preuve : docs/refactorisation.md, lot « sortie du Cpu », partie 4).
+pub fn interruption(b: &mut Cps2Bus, niveau: u8) {
     m68k::Bus::irq_ack(b, niveau);
-    let sr = c.sr;
-    c.set_sr((sr | SR_S) & !m68k::SR_T);
-    c.a[7] = c.a[7].wrapping_sub(4);
-    wr32(b, c.a[7], pc);
-    c.a[7] = c.a[7].wrapping_sub(2);
-    wr16(b, c.a[7], sr);
-    c.sr = c.sr & !0x0700 | (niveau as u16) << 8;
     vblank(b);
-    // `rte`
-    c.a[7] = c.a[7].wrapping_add(6);
-    c.set_sr(sr);
 }
-
-const SR_S: u16 = 0x2000;
 
 /// 0x574 : le traitement de l'interruption. L'original sauve et rend tous les registres : ce qu'y laissent ses
 /// services ne sort pas.

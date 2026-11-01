@@ -6,17 +6,18 @@
 //! boucle d'image (`sans68k`) fait avancer d'un point à la fois, en prenant l'interruption de VBLANK entre deux
 //! points quand le SR l'autorise, comme le processeur entre deux instructions ; il garde les registres que l'original
 //! laisse et la fenêtre d'interruption entre deux emplacements, mais plus aucun enregistrement en RAM (FF0064), ni
-//! pile de l'ordonnanceur (FF0E66 reste son pointeur fixe), ni tas des piles (FF005A), ni registres sauvés sur la pile
-//! des tâches. Il ne pose plus de PC : une tâche est lancée en appelant le pas de son étape.
+//! pile (ni A7 ni USP : FF0166-FF0E65 n'est plus lu, sonde `DDSOM_POISON=pile`), ni tas des piles (FF005A), ni
+//! registres sauvés. Il ne pose plus de PC : une tâche est lancée en appelant le pas de son étape.
 //!
 //! ## Ordonnanceur
 //!
 //! Il parcourt les emplacements dans l'ordre (A0 = adresse de l'enregistrement d'origine, D0.w = emplacements
 //! restants, de 15 à 0). Chaque emplacement est examiné par un point séparé ([`Point::Examen`]), interruptions
 //! masquées jusqu'au niveau 6 ; entre deux, la fenêtre de 0x952 les autorise. Un VBLANK pose l'indicateur
-//! `NOUVELLE_IMAGE` (FF0164) : le parcours reprend alors au début. Une tâche prête reprend avec les registres, le SR
-//! et la pile sauvés à sa cession, à l'adresse qui suit son appel de l'enveloppe ; une tâche neuve démarre à son
-//! entrée, A0 = enregistrement, A1 = entrée, A4 = pile, SR = 0 (mode utilisateur). Quand elle cède, l'ordonnanceur
+//! `NOUVELLE_IMAGE` (FF0164) : le parcours reprend alors au début. Une tâche prête reprend à l'étape qui suit son appel
+//! de l'enveloppe, avec son SR et les seuls registres relus après une cession ([`Contexte`]) ; une tâche neuve démarre à son
+//! entrée, SR = 0 (mode utilisateur), sans registre : elle ne lit pas ceux que l'original lui donne (A0 =
+//! enregistrement, A1 = entrée, A4 = pile, D1.w = état ; sonde `DDSOM_POISON=neuve`). Quand elle cède, l'ordonnanceur
 //! reprend à l'emplacement suivant ([`Point::Retour`] 0x984, puis [`Point::Suivant`] 0x952).
 //!
 //! ## Enveloppes (et traps de l'original)
@@ -52,8 +53,6 @@ mod ram {
     pub const NOUVELLE_IMAGE: u32 = 0xff0164;
     /// Mot de réglages lu en VBLANK (DSW) : bits 0 à 2, vitesse du jeu.
     pub const DSW: u32 = 0xffffd0;
-    /// Pile du superviseur de l'ordonnanceur (A5 - 0x719a).
-    pub const PILE_SUPERVISEUR: u32 = super::A5 - 0x719a;
 }
 
 const SR_SUPERVISEUR: u16 = 0x2000;
@@ -91,6 +90,9 @@ pub enum Point {
     /// Boucle sans fin de l'original (`bra.b *` à cette adresse : blocages du menu TEST et de l'EEPROM, [`bloquer`]) :
     /// plus rien ne s'exécute, hors des interruptions.
     Bloque(u32),
+    /// `0x574` : l'interruption de VBLANK est prise ([`interrompre`]) ; après son traitement, le processeur revient
+    /// (`rte`) au point interrompu, que la table garde (`Table::interrompu`) au lieu du PC et du SR empilés.
+    Interruption,
 }
 
 impl Point {
@@ -110,7 +112,13 @@ impl Point {
             Point::Tache => c.pc,
             Point::PasRetenu => crate::GAME_STEP,
             Point::Bloque(adresse) => adresse,
+            Point::Interruption => 0x574,
         }
+    }
+
+    /// Un point du démarrage (avant que l'ordonnanceur prenne la main).
+    pub fn demarrage(self) -> bool {
+        matches!(self, Point::Reset | Point::RelacheZ80 | Point::Poignee | Point::BootInit | Point::Lancement)
     }
 
     /// L'ordonnanceur entre deux tâches (où l'original tourne à vide en attendant une tâche prête).
@@ -147,7 +155,6 @@ fn superviseur(c: &mut Cpu) {
 
 /// 0x928 : l'ordonnanceur prend la main (une fois, à la fin du démarrage).
 fn debut(c: &mut Cpu) -> Point {
-    c.a[7] = ram::PILE_SUPERVISEUR;
     c.a[5] = A5;
     Point::Parcours
 }
@@ -198,19 +205,19 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
     t.courante = k;
     t.point = Point::Tache;
     let e = &mut t.emplacements[k];
-    set_low_word(&mut c.d[1], e.etat.octet() as u16);
     let etape = match (e.etat, e.reprise) {
         (Etat::Neuve, Reprise::Entree(entree)) => {
             e.etat = Etat::EnCours;
-            c.a[1] = entree;
-            c.a[4] = e.pile;
-            c.other_sp = e.pile;
+            // l'original lui donne A1 = entrée, A4 = pile et D1.w = état : aucune tâche ne les lit (sonde `neuve`)
             c.set_sr(0);
-            crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"))
+            let etape = crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"));
+            crate::diag::sonder_lancement(c, "neuve", &etape, crate::regs::a(5));
+            etape
         }
         (Etat::Prete | Etat::EnCours, Reprise::Etape(etape, ctx)) => {
             e.etat = Etat::EnCours;
-            remettre(c, ctx);
+            ctx.remettre(c);
+            crate::diag::sonder_lancement(c, "reprise", &etape, crate::regs::a(5));
             etape
         }
         (etat, reprise) => unreachable!("tâche {k} lancée dans l'état {etat:?} avec la reprise {reprise:?}"),
@@ -219,18 +226,9 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
     table(b).point
 }
 
-/// Registres, SR et pile d'une tâche qui a cédé.
-fn remettre(c: &mut Cpu, ctx: Contexte) {
-    c.d = ctx.d;
-    c.a[..7].copy_from_slice(&ctx.a);
-    c.other_sp = ctx.usp;
-    c.set_sr(ctx.sr);
-}
-
 /// 0x984 : une tâche a cédé (ou s'est terminée) ; l'ordonnanceur reprend à l'emplacement qui suit le sien.
 fn retour_ordonnanceur(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
     let k = table(b).courante;
-    c.a[7] = ram::PILE_SUPERVISEUR;
     c.a[0] = enregistrement(k);
     set_low_word(&mut c.d[0], DERNIER - k as u16);
     Point::Suivant
@@ -253,28 +251,43 @@ pub fn bloquer(b: &mut Cps2Bus, adresse: u32) {
     crate::taches::noter_cession();
 }
 
+/// L'interruption de VBLANK est prise au point `point` (entre deux points, le SR l'autorisant) : le noyau retient où
+/// revenir. L'original empile PC et SR sur la pile courante (celle de la tâche, ou du superviseur) ; rien ne les y
+/// relit hors du `rte`.
+pub fn interrompre(b: &mut Cps2Bus, point: Point) {
+    let t = table(b);
+    assert!(t.interrompu.is_none(), "interruption prise au point {point:?} pendant une interruption");
+    t.interrompu = Some(point);
+    t.point = Point::Interruption;
+}
+
+/// `rte` : fin de l'interruption, retour au point interrompu.
+pub fn fin_d_interruption(b: &mut Cps2Bus) -> Point {
+    table(b).interrompu.take().expect("fin d'interruption sans point interrompu")
+}
+
 /// Le pas de jeu est retenu jusqu'à l'image suivante (plafond des pas par image) : la tâche de partie reste en cours.
 pub fn retenir_le_pas(b: &mut Cps2Bus) {
     table(b).point = Point::PasRetenu;
 }
 
 // ---------------------------------------------------------------------------------------------
-// Cessions : la tâche courante rend la main ; elle reprendra à l'étape `reprise` avec ses registres, son SR et sa
-// pile (A7) actuels. Les tâches Rust cèdent directement (`taches::ceder`) ; les enveloppes de l'original dépilent
+// Cessions : la tâche courante rend la main ; elle reprendra à l'étape `reprise` avec son SR et les registres
+// qu'elle relit ([`Contexte`]). Les tâches Rust cèdent directement (`taches::ceder`) ; les enveloppes de l'original dépilent
 // d'abord leur adresse de retour (la suite d'un appel en cours).
 
-/// Range le contexte de la tâche courante dans la table, puis rend la main à l'ordonnanceur. A1 reçoit la pile de la
-/// tâche telle que l'original l'avait laissée (adresse de retour et 15 registres empilés).
+/// Range le contexte de la tâche courante dans la table (ce qu'elle relira à sa reprise : [`Contexte`]), puis rend la
+/// main à l'ordonnanceur.
 fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: Suite) {
-    let mut a = [0; 7];
-    a.copy_from_slice(&c.a[..7]);
-    let mut ctx = Contexte { pc: reprise.adresse(), sr: c.sr, usp: c.a[7], d: c.d, a };
     let Suite::Etape(etape) = reprise else {
         unreachable!("cession vers l'adresse {:x} : toutes les reprises sont des étapes Rust", reprise.adresse())
     };
-    crate::diag::sonder_cession(&mut ctx.d, &mut ctx.a, &mut ctx.sr, &etape);
+    // la sonde `cession` inverse les registres sauvés (une copie : la tâche continue jusqu'à son retour sans rien faire)
+    let (mut d, mut a, mut sr) = (c.d, [0; 7], c.sr);
+    a.copy_from_slice(&c.a[..7]);
+    crate::diag::sonder_cession(&mut d, &mut a, &mut sr, &etape);
+    let ctx = Contexte { sr, a0: a[0], d4: d[4], d7: d[7] };
     table(b).ceder(etat, compte, Reprise::Etape(etape, ctx));
-    c.a[1] = ctx.usp.wrapping_sub(64);
     vers_ordonnanceur(c, b);
 }
 
@@ -319,7 +332,6 @@ fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, S
 pub fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
     let t = table(b);
     t.recommencer(c.a[0]);
-    c.a[4] = enregistrement(t.courante);
     t.point = Point::Retour;
     superviseur(c);
     crate::taches::noter_cession();

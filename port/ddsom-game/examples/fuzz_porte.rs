@@ -68,14 +68,11 @@ fn origine(c: &mut Cpu, b: &mut Cps2Bus, arret: u32, sans_cession: bool) -> Opti
     None
 }
 
-/// Registres, SR et pile rangés par la cession de la tâche courante (comme `kernel::remettre`), et son étape.
+/// Contexte (SR, registres relus) rangé par la cession de la tâche courante (comme `kernel::remettre`), et son étape.
 fn reprise(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::taches::Etape> {
     let t = table::table(b);
     let Reprise::Etape(etape, ctx) = t.emplacements[t.courante].reprise else { return None };
-    c.d = ctx.d;
-    c.a[..7].copy_from_slice(&ctx.a);
-    c.other_sp = ctx.usp;
-    c.set_sr(ctx.sr);
+    ctx.remettre(c);
     Some(etape)
 }
 

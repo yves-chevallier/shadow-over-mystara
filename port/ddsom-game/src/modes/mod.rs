@@ -18,7 +18,6 @@ pub mod select;
 pub mod title;
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::scene::Ctx;
@@ -96,8 +95,8 @@ pub trait Sequence {
 
 /// Appel d'un sous-programme natif depuis un pas Rust : sa suite est un appel en cours de la tâche, pas une
 /// adresse empilée.
-fn push(c: &mut Cpu, b: &mut Cps2Bus, suite: impl Into<Suite>) {
-    crate::taches::table::appeler(c, b, suite);
+fn push(b: &mut Cps2Bus, suite: impl Into<Suite>) {
+    crate::taches::table::appeler(b, suite);
 }
 
 impl Sequence for Ctx<'_> {
@@ -109,10 +108,10 @@ impl Sequence for Ctx<'_> {
         Flow::Yield
     }
     fn push_return(&mut self, suite: impl Into<Suite>) {
-        push(self.c, self.b, suite);
+        push(self.b, suite);
     }
     fn sous_programme(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Suite>) -> Flow {
-        push(self.c, self.b, resume);
+        push(self.b, resume);
         if sp(self) == Flow::Done {
             crate::taches::revenir(self.c, self.b);
         }
@@ -194,7 +193,7 @@ crate::etapes! {
 fn turn(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     let m = rd8(x.b, mode::MODE);
-    push(x.c, x.b, Etape::ApresGestionnaire);
+    push(x.b, Etape::ApresGestionnaire);
     match m {
         0 => init(x),
         2 => dispatch(x),

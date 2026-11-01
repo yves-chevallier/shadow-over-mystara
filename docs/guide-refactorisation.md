@@ -225,6 +225,9 @@ des sondes génériques (`diag.rs`) inversent les registres au bon endroit.
 | `cession` | `kernel::ceder` (contexte rangé) | D0-D7, A0-A4, A6, drapeaux | nom de l'étape de reprise : `Ending(S04Timer)` |
 | `retour` | `taches::executer`, pas qui rend `Flow::Done` | D0-D7, A0-A4, A6, drapeaux | nom de l'étape : `Exit(Both)` |
 | `rendu` | `dispatch::Class::update_sans_suite`, mises à jour du monde des écrans | D0-D7, A0-A4, A6, drapeaux | appelant (`#[track_caller]`) |
+| `reprise` | `kernel::lancer`, tâche qui reprend après une cession | D0-D7, A0-A4, A6, drapeaux | étape reprise, sans espaces ni virgules : `Partie(Pas)` |
+| `neuve` | `kernel::lancer`, tâche neuve | D0-D7, A0-A4, A6, drapeaux | étape d'entrée : `Gel(Entree)` |
+| `pile` | `sans68k::ligne`, avant chaque point (hors démarrage) | aucun : la RAM des piles d'origine FF0166-FF0E65 est remplie d'une valeur changeante | — |
 
 VALIDE avec `cession@Ending(,retour@Ending(` : aucune étape du générique ne relit, après une cession ou au retour d'un
 sous-programme, un registre d'avant ; avec `rendu@modes/` : les gestionnaires d'objets ne relisent rien de l'écran

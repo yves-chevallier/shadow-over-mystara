@@ -148,7 +148,7 @@ fn run_steps(c: &mut Cpu, b: &mut Cps2Bus, ordre: u8, from: usize) -> Flow {
             // dernier appel : un `jmp`, la boucle de dispatch revient directement à l'appelant
             Objs(class) if i + 1 == order.len() => return class.update(c, b),
             Objs(class) => {
-                table::appeler(c, b, Etape::Monde { ordre, etape: i as u8 });
+                table::appeler(b, Etape::Monde { ordre, etape: i as u8 });
                 if class.update(c, b) == Flow::Yield {
                     return Flow::Yield;
                 }
@@ -487,7 +487,7 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
     // gestionnaire de la mise à jour du monde, qui les écrit dans un objet (DDSOM_POISON=appel_2aec :
     // long_voleur_objets, image 13133, ram ffd694)
     crate::inputs::recopier_68k(c, b);
-    table::appeler(c, b, Etape::ApresMonde);
+    table::appeler(b, Etape::ApresMonde);
     if update_world(c, b) == Flow::Yield {
         return Flow::Yield;
     }
