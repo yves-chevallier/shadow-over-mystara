@@ -139,12 +139,18 @@ impl Tache {
 pub struct Contexte {
     /// SR de la tâche : son masque d'interruption (`trap #12`, `kernel::masquer`), mode utilisateur.
     pub sr: u16,
-    /// A0 de l'appelant d'un sous-programme qui cède, relu au retour (glitch d'origine : registre gardé à travers la
-    /// cession) : fondu de luminosité appelé en sous-programme (`taches::fondu`, reprise `0x14b4`), bonus de fin de
-    /// scène (`Bonus(SetUp)`), sortie de scène (`Exit(..)` : le bloc de l'état partagé).
+    /// A0 de l'appelant d'un sous-programme qui cède, relu au retour (registre gardé à travers la cession) : fondu de
+    /// luminosité appelé en sous-programme (`taches::fondu`, reprise `0x14b4`), bonus de fin de scène
+    /// (`Bonus(SetUp)`), sortie de scène (`Exit(..)` : le bloc de l'état partagé), transitions entre scènes
+    /// (`Transition(SpritesAfterFrame)`, `TransitionEarly(..)`, `TransitionLate(..)`), objet courant de la boucle
+    /// d'aiguillage interrompue (voir `d7`).
     pub a0: u32,
     /// D4 laissé par le pas de jeu précédent, relu par la phase du pas suivant (tâche de partie, `Partie(Pas)`).
     pub d4: u32,
+    /// D7 : compteur de la boucle d'aiguillage des objets (`dispatch`) qu'un gestionnaire interrompt en cédant (feu
+    /// d'artifice, `FeuArtifice(ApresAttente)` ; fondu de luminosité appelé par un gestionnaire, `Fondu(Luminosite)`) ;
+    /// la boucle reprend avec lui (et l'objet dans A0).
+    pub d7: u32,
 }
 
 impl Contexte {
@@ -152,6 +158,7 @@ impl Contexte {
     pub fn remettre(self, c: &mut Cpu) {
         c.a[0] = self.a0;
         c.d[4] = self.d4;
+        c.d[7] = self.d7;
         c.set_sr(self.sr);
     }
 }
@@ -706,6 +713,7 @@ pub fn ecarts(t: &Table, ram: &[u16], tout: bool) -> Vec<String> {
                 ecart("reprise", etape.adresse(), long(usp + 60));
                 ecart("SR", c.sr as u32, mot(r + champ::SR) as u32);
                 ecart("D4", c.d4, long(usp + 4 * 4));
+                ecart("D7", c.d7, long(usp + 4 * 7));
                 ecart("A0", c.a0, long(usp + 32));
             }
             Reprise::Etape(..) => {}

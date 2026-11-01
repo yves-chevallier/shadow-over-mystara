@@ -287,7 +287,7 @@ fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: 
     let (mut d, mut a, mut sr) = (c.d, [0; 7], c.sr);
     a.copy_from_slice(&c.a[..7]);
     crate::diag::sonder_cession(&mut d, &mut a, &mut sr, &etape);
-    let ctx = Contexte { sr, a0: a[0], d4: d[4] };
+    let ctx = Contexte { sr, a0: a[0], d4: d[4], d7: d[7] };
     table(b).ceder(etat, compte, Reprise::Etape(etape, ctx));
     vers_ordonnanceur(c, b);
 }
