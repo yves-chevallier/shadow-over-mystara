@@ -285,7 +285,7 @@ pub fn reaction_routine<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
 /// Réaction à un coup : la routine commune, choisie dans `table` (longs, indexés par le code de
 /// réaction `+0x49`) par la collision, joue l'animation de recul, de chute ou de mort. Les routines sont appelées par
 /// `jsr (A1)` avec D0 = le code : la routine lue reste l'index des tables Rust (`reactions`, `petites::own_reaction`).
-pub fn react(x: &mut Cx, table: u32) {
+pub fn react<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let routine = reaction_routine(x, table);
     if !super::reactions::run_common(x, routine) {
         super::petites::own_reaction(x, routine)
@@ -333,9 +333,9 @@ pub fn negate<R: Banc>(x: &mut Cx<'_, R>, off: u32) {
     x.set16(off, v);
 }
 
-/// `movea.w (0x50,A0),A1` : A1 = la cible (adresse étendue en signe), qui est rendue.
-pub fn load_target(x: &mut Cx) -> Obj {
-    x.c.a[1] = x.u16(f::TARGET) as i16 as i32 as u32; // relu : A1 relu par la suite (DDSOM_POISON : beetle_scene18, boss2_poke3p, scorpion_scene53)
+/// `movea.w (0x50,A0),A1` : la cible (adresse étendue en signe). L'original la garde dans A1, que relisent ensuite le
+/// scarabée et le scorpion (`aim_to`) : ils prennent la valeur rendue.
+pub fn load_target<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(f::TARGET)
 }
 
@@ -352,7 +352,7 @@ pub fn set_state_long<R: Banc>(x: &mut Cx<'_, R>, v: u32) {
 // --- aides d'IA communes ------------------------------------------------------------------------
 
 /// Choisit un joueur comme cible (0x424e) ; faux si aucun n'est vivant.
-pub fn pick_target(x: &mut Cx) -> bool {
+pub fn pick_target<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::pick_target(x).is_some()
 }
 

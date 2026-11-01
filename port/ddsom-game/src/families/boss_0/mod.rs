@@ -211,7 +211,7 @@ fn active(x: &mut Cx) {
 // --- décisions : états posés d'un coup (0x7ab74..0x7ac70) -----------------------------------------
 
 /// Pose le long d'état `+4..+7` et rend le boss vulnérable ou non (`+0x67`).
-fn state(x: &mut Cx, vulnerable: bool, s: u32) {
+fn state<R: Banc>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
     x.set8(VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, s);
 }
@@ -230,7 +230,7 @@ pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7ab98 : début de la course (animation de course selon le rôle : 0x34 ou, seconde moitié, 0x36).
-pub(self) fn run_start(x: &mut Cx) {
+pub(self) fn run_start<R: Banc>(x: &mut Cx<'_, R>) {
     let kind = if x.u8(3) == 0 { 0x34 } else { 0x36 };
     x.set8(0x79, kind);
     state(x, true, 0x0202_0400);
@@ -244,13 +244,13 @@ pub(self) fn run_end(x: &mut Cx) {
 }
 
 /// 0x7abdc et 0x7abee : charge, vers la caméra (`aimed` faux) ou vers la cible mémorisée.
-pub(self) fn charge(x: &mut Cx, aimed: bool) {
+pub(self) fn charge<R: Banc>(x: &mut Cx<'_, R>, aimed: bool) {
     x.set8(CHARGE_AIMED, aimed as u8);
     state(x, false, 0x0202_0800);
 }
 
 /// 0x7ac02, 0x7ac10, 0x7ac1e, 0x7ac32, 0x7ac40, 0x7ac4e, 0x7ac62 : attaque `n` (`+6` = 0 à 12).
-pub(self) fn strike(x: &mut Cx, n: u32, shielded: bool) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32, shielded: bool) {
     if shielded {
         x.set8(INVULNERABLE, 1);
     }
@@ -263,7 +263,7 @@ pub(self) fn idle_alone<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7aaf4 : la transformation (PV à la moitié) : la moitié principale lance la cinématique.
-pub(self) fn transform(x: &mut Cx) {
+pub(self) fn transform<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x31);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(0x93, 0);

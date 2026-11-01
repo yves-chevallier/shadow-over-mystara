@@ -30,7 +30,7 @@ pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9aaf2 : debout, immobile et vulnérable.
-pub(super) fn stand(x: &mut Cx) {
+pub(super) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, STAND);
 }
@@ -44,7 +44,7 @@ pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9ab16 : marche vers un joueur (tir 0x31).
-pub(super) fn chase(x: &mut Cx) {
+pub(super) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x31);
     x.set32(f::STATE, CHASE);
@@ -112,7 +112,7 @@ pub(super) fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9ac18 : attaque 16 (fin du ralenti).
-pub(super) fn attack_16(x: &mut Cx) {
+pub(super) fn attack_16<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(SLOW) as i8) > 0 {
         return chase(x);
     }
@@ -162,7 +162,7 @@ pub(super) fn host_dead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Fin d'attaque : la mort de l'hôte, puis l'absence de joueurs, l'emportent ; sinon `then`.
-pub(super) fn after_attack(x: &mut Cx, then: fn(&mut Cx)) {
+pub(super) fn after_attack<R: Banc>(x: &mut Cx<'_, R>, then: fn(&mut Cx<'_, R>)) {
     if host_dead(x) {
         return start_death(x);
     }

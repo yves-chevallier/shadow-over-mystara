@@ -30,7 +30,7 @@ pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x971f4 : debout, immobile et vulnérable.
-pub(super) fn stand(x: &mut Cx) {
+pub(super) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, STAND);
 }
@@ -44,7 +44,7 @@ pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97218 : marche vers un joueur (tir 0x31).
-pub(super) fn chase(x: &mut Cx) {
+pub(super) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x31);
     x.set32(f::STATE, CHASE);
@@ -118,7 +118,7 @@ pub(super) fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97324 : attaque 14 (lâcher d'objets), tant qu'il en reste à lâcher.
-pub(super) fn attack_14(x: &mut Cx) {
+pub(super) fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(BUDGET_C) == 0 {
         return attack_6(x);
     }
@@ -129,7 +129,7 @@ pub(super) fn attack_14(x: &mut Cx) {
 }
 
 /// 0x97340 : attaque 16 (fin du ralenti).
-pub(super) fn attack_16(x: &mut Cx) {
+pub(super) fn attack_16<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(SLOW) as i8) > 0 {
         return chase(x);
     }

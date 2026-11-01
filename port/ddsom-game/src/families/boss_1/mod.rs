@@ -134,7 +134,7 @@ pub(self) fn expired(x: &mut Cx, off: u32) -> bool {
 }
 
 /// Cible du boss (`movea.w (0x50,A0),A1`).
-pub(self) fn target_obj(x: &mut Cx) -> crate::objects::Obj {
+pub(self) fn target_obj<R: Banc>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     load_target(x)
 }
 
@@ -236,13 +236,13 @@ fn active(x: &mut Cx) {
 // --- décisions : états posés d'un coup (0x7c24a..0x7c372) -----------------------------------------
 
 /// Pose le long d'état `+4..+7` et rend le boss vulnérable ou non (`+0x67`).
-fn state(x: &mut Cx, vulnerable: bool, s: u32) {
+fn state<R: Banc>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
     x.set8(VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, s);
 }
 
 /// 0x7c24a : debout.
-pub(self) fn stand(x: &mut Cx) {
+pub(self) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     state(x, true, 0x0202_0000);
 }
 
@@ -255,27 +255,27 @@ pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c26e et 0x7c27c : marche par bonds (deux tirages du nombre de bonds).
-pub(self) fn walk(x: &mut Cx) {
+pub(self) fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0400);
 }
-pub(self) fn walk_b(x: &mut Cx) {
+pub(self) fn walk_b<R: Banc>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0600);
 }
 
 /// 0x7c2a2 : grand bond, vers la cible ou (`center`) vers le milieu de l'écran.
-pub(self) fn leap(x: &mut Cx, center: bool) {
+pub(self) fn leap<R: Banc>(x: &mut Cx<'_, R>, center: bool) {
     x.set8(LEAP_TO_CENTER, center as u8);
     state(x, false, 0x0202_0800);
 }
 
 /// 0x7c28a : grand bond vers la cible après une riposte (invulnérable).
-pub(self) fn leap_guarded(x: &mut Cx) {
+pub(self) fn leap_guarded<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     leap(x, false);
 }
 
 /// 0x7c2b0 : bond en arrière, sauf hors de l'écran (grand bond).
-fn back_step(x: &mut Cx) {
+fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
     if outside(x, 0x18, 0x168) {
         return leap_guarded(x);
     }
@@ -284,7 +284,7 @@ fn back_step(x: &mut Cx) {
 }
 
 /// 0x7c2de : premier coup (une cible saisissable reçoit le coup 4).
-fn strike_a(x: &mut Cx) {
+fn strike_a<R: Banc>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0400 } else { 0x0204_0000 };
     x.set8(0x57, 0);
@@ -292,7 +292,7 @@ fn strike_a(x: &mut Cx) {
 }
 
 /// 0x7c304 : deuxième coup (ou le coup 6 contre une cible saisissable).
-fn strike_b(x: &mut Cx) {
+fn strike_b<R: Banc>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0600 } else { 0x0204_0200 };
     x.set8(0x57, 0);
@@ -300,13 +300,13 @@ fn strike_b(x: &mut Cx) {
 }
 
 /// 0x7c300 : enchaînement (nombre de coups tiré selon la difficulté) qui commence par le deuxième coup.
-fn combo(x: &mut Cx) {
+fn combo<R: Banc>(x: &mut Cx<'_, R>) {
     combo_count(x);
     strike_b(x);
 }
 
 /// 0x7c34a : saisie.
-fn grab(x: &mut Cx) {
+fn grab<R: Banc>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0204_0800);
 }
 
@@ -324,7 +324,7 @@ pub(self) fn idle_alone<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Exécute la décision dont l'adresse d'origine est `at` (sauts par tables de la ROM).
-pub(self) fn go(x: &mut Cx, at: u32) {
+pub(self) fn go<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
     match at {
         0x7c24a => stand(x),
         0x7c25a => turn(x),
@@ -407,30 +407,26 @@ pub(self) fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
 }
 
 /// 0x7c47c : nombre de coups de l'enchaînement, selon la difficulté et le nombre de joueurs.
-fn combo_count(x: &mut Cx) {
+fn combo_count<R: Banc>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) & 0x1e) * 2;
     let mut players = var::PLAYERS_ALIVE.get(x.b) as u16;
     if players != 0 {
         players -= 1;
     }
     let i = level.wrapping_add(players);
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | i as u32;
-    x.c.d[1] = players as u32;
     let n = x.rom8(0x7c49a + i as u32);
     x.set8(COMBO, n);
 }
 
 /// 0x7c50c : tentative de bond en ciseaux (sans double en cours) : une chance qui croît à chaque essai.
-pub(self) fn try_split_leap(x: &mut Cx) -> bool {
+pub(self) fn try_split_leap<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(DOUBLE) != 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.add8(GRAB_TRIES, 1);
     let r = rand_and(x, 0xf);
     let tries = x.u8(GRAB_TRIES) as u32;
     let mask = x.rom16(0x7c534 + 2 * tries);
-    x.c.d[1] = mask as u32;
     mask >> r & 1 != 0
 }
 

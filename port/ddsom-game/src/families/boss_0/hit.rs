@@ -9,6 +9,7 @@
 //! | 10 | retour au combat |
 
 use super::*;
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
@@ -157,7 +158,7 @@ fn down(x: &mut Cx) {
 /// 0x7a5ac : retour au combat (aussi appelé par les réactions communes, table 0x3e000) : franchit le palier de
 /// PV suivant (0x105b6) ; la moitié principale se transforme au deuxième palier ; sinon coup si la cible est
 /// tout près, ou course.
-pub(crate) fn get_up(x: &mut Cx) {
+pub(crate) fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {

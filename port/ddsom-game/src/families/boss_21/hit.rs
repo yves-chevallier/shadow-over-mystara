@@ -219,7 +219,7 @@ fn get_up(x: &mut Cx) {
 }
 
 /// 0x9a6d4 : le boss est debout ; choisit sa suite d'après sa phase.
-pub(crate) fn recovered(x: &mut Cx) {
+pub(crate) fn recovered<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {

@@ -7,8 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => howl(x),
         2 => growl(x),
@@ -26,7 +25,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Le joueur à portée : le geste est tiré au hasard entre deux animations (`a` si le tirage est pair, `b` sinon).
-fn pick_anim(x: &mut Cx, a: u8, b: u8) {
+fn pick_anim<R: Banc>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     let r = rand_and(x, 1);
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -36,7 +35,7 @@ fn pick_anim(x: &mut Cx, a: u8, b: u8) {
 }
 
 /// Attend un joueur dans la boîte devant l'ennemi, anime l'attente ; vrai quand il est là.
-fn player_ahead(x: &mut Cx) -> bool {
+fn player_ahead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if !pick_target(x) {
         return false;
     }
@@ -45,11 +44,10 @@ fn player_ahead(x: &mut Cx) -> bool {
 }
 
 /// +6 = 0 : hurlement, puis démarche vers la cible (animations 4 ou 3).
-fn howl(x: &mut Cx) {
+fn howl<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -67,7 +65,7 @@ fn howl(x: &mut Cx) {
 }
 
 /// +6 = 2 : comme 0 sans le hurlement ; animations 2 ou 1.
-fn growl(x: &mut Cx) {
+fn growl<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -83,8 +81,7 @@ fn growl(x: &mut Cx) {
 }
 
 /// +6 = 4 : bond d'entrée.
-fn leap_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -118,8 +115,7 @@ fn leap_in(x: &mut Cx) {
 
 /// +6 = 6 et 8 : saut périlleux, la clé d'animation déclenche l'effet (0xeb92e ou 0xeb9a0) ; `d3` : variante
 /// qui l'accompagne, `vx2` la vitesse de côté.
-fn somersault(x: &mut Cx, variant: u8, vx2: i16, anim: u32) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn somersault<R: Banc>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
             x.set16(Obj::VY, vx2 as u16);
@@ -239,8 +235,7 @@ fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 16 : attente d'un nombre d'images (`+0x42`) puis démarche.
-fn wake(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn wake<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -264,8 +259,7 @@ fn wake(x: &mut Cx) {
 }
 
 /// +6 = 18 : course vers le joueur sur une durée tirée au hasard, puis grande attaque.
-fn dash(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn dash<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -301,8 +295,7 @@ fn dash(x: &mut Cx) {
 }
 
 /// +6 = 20 : comme 18, avec un autre effet et une reprise différente.
-fn get_up(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

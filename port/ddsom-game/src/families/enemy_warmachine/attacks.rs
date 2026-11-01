@@ -3,12 +3,13 @@
 //! quand plus aucun joueur n'est en vie.
 
 use super::arrival::hop_loop;
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => cannon(x, 0x10, 0),
         2 => cannon(x, 0x11, 1),
@@ -22,13 +23,13 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Fin de geste : à la fin de l'animation, retour à `fire_a`, ou attente s'il n'y a plus de joueur en vie.
-fn end_of_animation(x: &mut Cx) {
+fn end_of_animation<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::step(x) {
         end_gesture(x);
     }
 }
 
-fn end_gesture(x: &mut Cx) {
+fn end_gesture<R: Banc>(x: &mut Cx<'_, R>) {
     if !lib::players_alive(x) {
         return go::idle(x);
     }
@@ -36,7 +37,7 @@ fn end_gesture(x: &mut Cx) {
 }
 
 /// +6 = 0, 2, 4 : une animation de l'arme (`look` = aspect, `anim` = numéro) jouée jusqu'au bout.
-fn cannon(x: &mut Cx, look_v: u8, anim: u32) {
+fn cannon<R: Banc>(x: &mut Cx<'_, R>, look_v: u8, anim: u32) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         look(x, look_v);
@@ -46,8 +47,7 @@ fn cannon(x: &mut Cx, look_v: u8, anim: u32) {
 }
 
 /// +6 = 6 : charge vers la cible, étincelles pendant le roulement, puis bond.
-fn rush(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn rush<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -99,8 +99,7 @@ fn rush(x: &mut Cx) {
 }
 
 /// +6 = 8 : bond d'écrasement vers la cible, puis choc au sol.
-fn smash(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn smash<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -178,8 +177,7 @@ fn smash(x: &mut Cx) {
 }
 
 /// +6 = 10 : salve : l'arme tire un nombre de fois lu dans la table 0x78856.
-fn volley(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn volley<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -225,8 +223,7 @@ fn volley(x: &mut Cx) {
 }
 
 /// +6 = 12 : lance un objet (type 0x43) devant la machine, puis reste en place un moment.
-fn grenade(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn grenade<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -275,7 +272,7 @@ fn grenade(x: &mut Cx) {
 }
 
 /// Sous-états 6, 8 et 10 : plus aucun joueur en vie : tourne sur place tant que `A5+0x35` est nul.
-pub(super) fn spin(x: &mut Cx) {
+pub(super) fn spin<R: Banc>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::fire_a(x);
     }

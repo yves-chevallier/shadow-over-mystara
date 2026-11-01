@@ -168,7 +168,7 @@ fn get_up(x: &mut Cx) {
 }
 
 /// 0x85490 : le boss est debout ; il continue au corps à corps ou marche.
-pub(crate) fn recovered_tail(x: &mut Cx) {
+pub(crate) fn recovered_tail<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {

@@ -41,7 +41,7 @@ pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x858ae : marche rapide vers un joueur.
-pub(super) fn chase(x: &mut Cx) {
+pub(super) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(SHOT, 0x2c);
     set_state(x, 1, CHASE);
 }

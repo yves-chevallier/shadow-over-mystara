@@ -11,7 +11,7 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x5cbe8;
 const REACT_SECOND: u32 = 0x5cd14;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -31,7 +31,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Chute puis relevé (0x5cc94).
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -69,11 +69,10 @@ fn fall(x: &mut Cx) {
 
 /// 0x5cae0 : saisi par un joueur : le Bow Gnoll fait demi-tour vers le bord de l'écran le plus proche (selon la
 /// caméra `A5+0x34` et la moitié de l'écran), s'enfuit puis disparaît.
-pub(super) fn grab(x: &mut Cx) {
+pub(super) fn grab<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.set8(NO_ZONE, 1);

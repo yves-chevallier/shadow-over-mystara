@@ -7,8 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match (x.u8(f::SUB), x.u8(f::SUB2)) {
         (4, 0) | (6, 0) => windup(x),
         (4, 2) | (6, 2) => turn_back(x),
@@ -86,7 +85,7 @@ fn swing_key<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- geste 0 : provocation, puis geste choisi --------------------------------------------------------
 
-fn windup(x: &mut Cx) {
+fn windup<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -131,13 +130,13 @@ fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
 // --- séries de coups ----------------------------------------------------------------------------------
 
 /// 0x6e048 : lance la série (+6 = 4).
-fn series_begin(x: &mut Cx) {
+fn series_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(f::SUB2, 0x400);
     series(x);
 }
 
 /// +6 = 4 : série de coups de la durée tirée dans la rangée de difficulté, puis geste de repli.
-fn series(x: &mut Cx) {
+fn series<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let t = row_byte(x, SERIES_TABLE);
@@ -156,7 +155,7 @@ fn series(x: &mut Cx) {
 }
 
 /// +6 = 10 : au hasard, retour à la marche (0x1c) ou série.
-fn maybe_series(x: &mut Cx) {
+fn maybe_series<R: Banc>(x: &mut Cx<'_, R>) {
     if rand_and(x, 1) == 0 {
         return again(x, 0x1c);
     }
@@ -164,14 +163,14 @@ fn maybe_series(x: &mut Cx) {
 }
 
 /// +6 = 14, 16 (et 10 au tirage) : retour debout et reprise de la marche, `kind` = type de tir mémorisé.
-fn again(x: &mut Cx, kind: u8) {
+fn again<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(SHOT_KIND, kind);
     set_state_long(x, STANCE);
     approach_start(x);
 }
 
 /// +6 = 6 et 8 : pas de côté invulnérable, puis série (6) ou retour à la marche (8).
-fn side_hop(x: &mut Cx) {
+fn side_hop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 8 => next_when_done(x),
@@ -194,7 +193,7 @@ fn side_hop(x: &mut Cx) {
 }
 
 /// +6 = 12 : charge vers la cible pendant `+0xa2` images.
-fn charge(x: &mut Cx) {
+fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x40);
@@ -213,7 +212,7 @@ fn charge(x: &mut Cx) {
 }
 
 /// +6 = 18 : repos. L'original sort du repos dès la deuxième image (le test de fin de minuterie est inversé).
-fn rest(x: &mut Cx) {
+fn rest<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x1e);
@@ -230,7 +229,7 @@ fn rest(x: &mut Cx) {
 // --- sous-état 6 --------------------------------------------------------------------------------------
 
 /// +6 = 6 : pas en profondeur.
-fn depth_step(x: &mut Cx) {
+fn depth_step<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => next_when_done(x),
@@ -276,7 +275,7 @@ fn dodge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 10 : esquive avec saut de côté, puis série de coups terminée par le retour debout.
-fn dodge_then_series(x: &mut Cx) {
+fn dodge_then_series<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => crouch(x, 0xa),
@@ -309,7 +308,7 @@ const TELEPORT_X: u32 = 0x6e44c;
 const TELEPORT_Y: u32 = 0x6e43e;
 
 /// +6 = 12 : le Goblin réapparaît près de sa cible.
-fn teleport(x: &mut Cx) {
+fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -375,7 +374,7 @@ fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : bond (ou course) vers la cible.
-fn lunge(x: &mut Cx) {
+fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) != 0 {
@@ -430,7 +429,7 @@ fn lunge(x: &mut Cx) {
 }
 
 /// +6 = 6 : rechoisit un geste ; ne change de geste que si le nouveau diffère du précédent ou après un délai.
-fn pick_again(x: &mut Cx) {
+fn pick_again<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);
     let table = if near_box(x) {

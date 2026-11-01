@@ -11,12 +11,11 @@ use crate::objects::Obj;
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACT: u32 = 0x78a26;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(f::FREEZE) as i8) > 0 {
         let n = x.u8(f::FREEZE).wrapping_sub(1);
         x.set8(f::FREEZE, n);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => first(x),
             2 => hop_back(x),
@@ -43,7 +42,7 @@ fn dying<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn first(x: &mut Cx) {
+fn first<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(FLAG, 0);
         if dying(x) {
@@ -54,8 +53,7 @@ fn first(x: &mut Cx) {
 }
 
 /// 0x78b4a : recul vers l'arrière.
-fn hop_back(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn hop_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -95,7 +93,7 @@ fn hop_back(x: &mut Cx) {
 }
 
 /// 0x78be2 : chute puis relevé.
-fn get_up(x: &mut Cx) {
+fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -129,7 +127,7 @@ fn get_up(x: &mut Cx) {
 }
 
 /// 0x78c3c : relevé : choisit une cible, franchit un palier de PV, puis tir ou bond d'attaque.
-pub(crate) fn recover(x: &mut Cx) {
+pub(crate) fn recover<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);
     if !pick_target(x) {
@@ -144,8 +142,7 @@ pub(crate) fn recover(x: &mut Cx) {
 }
 
 /// 0x78c84 : mort en cinq temps : éjection, vol, retombée, tremblement, disparition.
-fn death(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -209,8 +206,7 @@ fn death(x: &mut Cx) {
 }
 
 /// 0x78d92 : saisie : la machine s'enfuit hors de l'écran puis disparaît.
-fn run_off(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn run_off<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -242,7 +238,7 @@ fn run_off(x: &mut Cx) {
 }
 
 /// 0x78e34 : assommé : animation 0xc, puis tir.
-fn stunned(x: &mut Cx) {
+fn stunned<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB3, 2);
         return mv(x, 0xc);

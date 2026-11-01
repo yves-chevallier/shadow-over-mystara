@@ -39,7 +39,7 @@ fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
 }
 
 /// Fin d'une attaque : retour au combat (l'hôte mort et l'absence de joueurs l'emportent).
-fn finish(x: &mut Cx, to: fn(&mut Cx)) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
     decide::after_attack(x, to);
 }
 

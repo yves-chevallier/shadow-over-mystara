@@ -9,6 +9,7 @@
 //! | 10 | retour au combat |
 
 use super::decide;
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 
@@ -157,7 +158,7 @@ fn down(x: &mut Cx) {
 
 /// 0x82ea0 : retour au combat (aussi appelé par les réactions communes, table 0x3e000) : franchit le palier de
 /// PV, puis traversée en vol si un joueur est tout près, sinon la marche.
-pub(crate) fn resume(x: &mut Cx) {
+pub(crate) fn resume<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if var::GAME_ON.get(x.b) == 0 || !pick_target(x) {

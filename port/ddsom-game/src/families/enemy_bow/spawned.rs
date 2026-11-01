@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(NO_ZONE) != 0 {
         return set_state_long(x, HELD);
     }
@@ -31,13 +31,12 @@ fn begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5bf40 : tire en place.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(EXPIRED) != 0 || grabbed(x) {
         x.set16(f::STATE, 0x0408);
         x.set16(f::SUB2, 0);
         return hit::grab(x);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => walk(x),
         2 => leave(x),
@@ -59,7 +58,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : la durée de vie est écoulée : le Bow Gnoll s'éloigne de l'écran, puis disparaît.
-fn leave(x: &mut Cx) {
+fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -109,7 +108,7 @@ fn leave(x: &mut Cx) {
 }
 
 /// +6 = 4 : tire (nombre de tirs tiré dans la rangée), reste dans la boucle de tirs.
-fn shoot(x: &mut Cx) {
+fn shoot<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let n = row_byte(x, SHOT_REPEATS);
@@ -135,7 +134,7 @@ fn shoot(x: &mut Cx) {
 }
 
 /// 0x5c04a : animation de tir (0 ou 5 selon le profil `+0x2f`).
-fn shoot_anim(x: &mut Cx) {
+fn shoot_anim<R: Banc>(x: &mut Cx<'_, R>) {
     let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
     shot(x, anim);
 }

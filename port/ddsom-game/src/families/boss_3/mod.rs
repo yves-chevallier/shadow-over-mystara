@@ -315,21 +315,19 @@ pub(self) fn end_frame(x: &mut Cx, margin: u16) {
 
 /// 0x81ae0 : riposte d'un coup commun (appelée par les réactions, 0x3e22e) : tirage selon la difficulté, puis
 /// l'attaque 24 (ruée au sol).
-pub(crate) fn counter_reaction(x: &mut Cx) {
+/// Rend le tirage (D0 de l'original, `andi.l #0xf`) et le masque (D1.w) pour le contrat de la native.
+pub(crate) fn counter_reaction<R: Banc>(x: &mut Cx<'_, R>) -> (u32, u16) {
     let r = random(x) & 0xf;
-    // `andi.l #0xf,D0` : D0 rendu (contrat de sortie)
-    x.c.d[0] = r;
     let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
     // index `(d8,PC,D1.w)` : mot étendu en signe
     let mask = x.rom16(0x81b1a_u32.wrapping_add(level as i16 as i32 as u32));
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;
-    if mask >> r & 1 == 0 {
-        return;
+    if mask >> r & 1 != 0 {
+        x.set8(INVULNERABLE, 8);
+        x.set32(f::STATE, 0x0204_1800);
+        x.set8(VULNERABLE, 1);
+        x.set8(0, 1);
     }
-    x.set8(INVULNERABLE, 8);
-    x.set32(f::STATE, 0x0204_1800);
-    x.set8(VULNERABLE, 1);
-    x.set8(0, 1);
+    (r, mask)
 }
 
 /// Natives : gestionnaire, riposte et formes du corps (appelées par 0x81aa4 de `boss_common`).
@@ -344,7 +342,10 @@ pub const NATIVES: &[crate::Native] = &[
         name: "boss_3_riposte",
         run: crate::Corps::Processeur(|c, b| {
             let mut x = Cx::new(c, b);
-            counter_reaction(&mut x);
+            let (r, mask) = counter_reaction(&mut x);
+            // contrat de sortie de l'original : D0 = le tirage, D1.w = le masque
+            x.c.d[0] = r;
+            x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;
             x.ret();
         }),
         touches_sound: false,

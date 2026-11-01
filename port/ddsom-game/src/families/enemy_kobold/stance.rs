@@ -5,14 +5,13 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return set_state_long(x, IDLE);
     }
     if matches!(x.u8(Obj::VARIANT), 0xa | 0xb) || grabbed(x) {
         return set_state_long(x, HELD);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 | 8 => approach(x),
         2 => turn(x),
@@ -27,7 +26,7 @@ pub(super) fn run(x: &mut Cx) {
 
 // --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
 
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     if target_far_in_line(x) {
         return set_state_long(x, 0x0202_0600);
     }
@@ -60,13 +59,13 @@ fn approach(x: &mut Cx) {
 }
 
 /// 0x555d4 : en garde ; un joueur tout près ? Coup immédiat, sinon boîtes de portée, sinon pas de marche.
-pub(super) fn reach(x: &mut Cx) {
+pub(super) fn reach<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(GUARD, 2);
     reach_boxes(x);
 }
 
 /// 0x555da : boîtes de portée successives.
-pub(super) fn reach_boxes(x: &mut Cx) {
+pub(super) fn reach_boxes<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x18, 4) {
         set_state_long(x, 0x0204_0200);
         return lib::pick_byte(x);
@@ -92,37 +91,32 @@ pub(super) fn reach_boxes(x: &mut Cx) {
 }
 
 /// Décision d'attaque selon l'orientation relative de la cible (0xa4c2 de même sens, 0xa4b4 sinon).
-fn gate(x: &mut Cx) -> bool {
+fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let theirs = target.u8(x.b, f::FLIP);
-    x.c.d[0] = x.c.d[0] & !0xff | theirs as u32;
     let same = theirs == x.u8(f::FLIP);
     lib::decision(x, same)
 }
 
 /// 0x5566e : un joueur devant, tout près : coup de la série courte ou nouveau pas.
-fn front_attack(x: &mut Cx) -> bool {
+fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
-        x.c.d[0] = 0;
         return false;
     }
     let r = random(x) & 0xf;
-    x.c.d[0] = r;
     if (0xffc0u32 >> r) & 1 != 0 {
         set_state_long(x, 0x0202_0800);
     } else {
         set_state_long(x, 0x0204_0000);
         lib::pick_byte(x);
         pick_attack(x, 0);
-        x.c.d[0] = 1;
     }
     true
 }
 
 /// 0x556e8 : un joueur plus loin devant : geste de la série lointaine.
-fn far_attack(x: &mut Cx) -> bool {
+fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0xb0, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
-        x.c.d[0] = 0;
         return false;
     }
     let r = rand_and(x, 2);
@@ -132,7 +126,6 @@ fn far_attack(x: &mut Cx) -> bool {
         set_state_long(x, 0x0204_0000);
         lib::pick_byte(x);
         pick_attack(x, 0x14);
-        x.c.d[0] = 1;
     }
     true
 }
@@ -182,7 +175,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : course ------------------------------------------------------------------------------------------
 
-fn run_up(x: &mut Cx) {
+fn run_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);

@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x),
         2 => drop_in(x, true),
@@ -73,8 +73,7 @@ fn drop_in<R: Banc>(x: &mut Cx<'_, R>, gravity: bool) {
 
 /// Variante 6 : le Goblin entre en courant par le bord (position posée d'après la caméra), puis frappe en série
 /// jusqu'à être saisi.
-fn run_in(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

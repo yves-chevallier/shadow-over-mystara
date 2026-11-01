@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x, 0x40, 0xd),
         2 => walk_in(x, 0x20, 0x17),
@@ -19,7 +19,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Fin d'une marche d'entrée : à la fin de la minuterie `+0xa4`, debout et premier choix (0x5c17e).
-fn end_of_walk(x: &mut Cx) {
+fn end_of_walk<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if n == 0 {
@@ -33,7 +33,7 @@ fn end_of_walk(x: &mut Cx) {
 
 /// Variantes 0 (0x5ca68) et 2 (0x5c9ca) : marche `timer` images à la vitesse `speed`. Aussi appelée par le sous-état 4
 /// quand le Bow Gnoll sort de l'écran (variante 2).
-pub(super) fn walk_in(x: &mut Cx, timer: u8, speed: u32) {
+pub(super) fn walk_in<R: Banc>(x: &mut Cx<'_, R>, timer: u8, speed: u32) {
     if x.u8(f::SUB2) != 0 {
         return end_of_walk(x);
     }
@@ -63,7 +63,7 @@ fn fall_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 6 : apparition sur place, attend un joueur dans la boîte (0, 0x80, 0x20).
-fn appear(x: &mut Cx) {
+fn appear<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         set_state_long(x, HELD);
         return;
@@ -96,7 +96,7 @@ fn appear(x: &mut Cx) {
 }
 
 /// Variante 8 : course d'entrée.
-fn run_in(x: &mut Cx) {
+fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(TIMER, 0x20);

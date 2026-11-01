@@ -10,13 +10,12 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x6e68c;
 const REACT_SECOND: u32 = 0x6e824;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
         x.set8(0, 1);
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => react(x, REACT_FIRST),
             2 => recoil(x),
@@ -58,7 +57,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Chute puis relevé (0x6e7a2).
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

@@ -56,12 +56,11 @@ pub(self) const SET_WEAPON: u32 = 0x171a7e;
 pub(self) const SET_FLY_A: u32 = 0x171b76;
 pub(self) const SET_FLY_B: u32 = 0x171c1a;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
     x.tick_counters();
-    x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -90,8 +89,7 @@ pub(self) fn weapon<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Aspect (`+0xa0`) et son double (`+0xa1`).
-pub(self) fn look(x: &mut Cx, v: u8) {
-    x.c.d[0] = x.c.d[0] & !0xff | v as u32;
+pub(self) fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
@@ -101,7 +99,7 @@ pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Étincelle (0x1172e) numéro `n`.
-pub(self) fn spark(x: &mut Cx, n: u32) {
+pub(self) fn spark<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::debris(x, n);
 }
 
@@ -133,7 +131,7 @@ pub(self) mod go {
         set_state_long(x, 0x0200_0000 | s6 << 8);
     }
     /// 0x791d0.
-    pub fn stand(x: &mut Cx) {
+    pub fn stand<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 1);
         set_state_long(x, 0x0202_0000);
     }
@@ -159,7 +157,7 @@ pub(self) mod go {
         set_state_long(x, 0x0202_0600);
     }
     /// 0x79238 (`aimed` = 0) et 0x7924a (`aimed` = 1) : charge.
-    pub fn charge(x: &mut Cx, aimed: u8) {
+    pub fn charge<R: Banc>(x: &mut Cx<'_, R>, aimed: u8) {
         x.set8(VULNERABLE, 0);
         x.set8(AIMED, aimed);
         set_state_long(x, 0x0202_0800);
@@ -174,7 +172,7 @@ pub(self) mod go {
         set_state_long(x, 0x0204_0000 | s6 << 8);
     }
     /// 0x792cc.
-    pub fn idle(x: &mut Cx) {
+    pub fn idle<R: Banc>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x020a_0000);
     }
     /// 0x792d6.
@@ -185,7 +183,7 @@ pub(self) mod go {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x20);
@@ -231,12 +229,11 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(f::FREEZE) as i8) > 0 {
         let n = x.u8(f::FREEZE).wrapping_sub(1);
         x.set8(f::FREEZE, n);
     } else if !paused(x) {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => arrival::run(x),
             2 => stance::run(x),
@@ -252,7 +249,7 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x77d12 "enemy_27" run,
+    0x77d12 "enemy_27" #[sans] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x78c3c "enemy_27_releve" hit::recover,
 }

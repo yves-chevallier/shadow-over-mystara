@@ -7,7 +7,7 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 /// Fin d'un geste du sous-état 6 : retour à l'affût (0x5634a).
-fn ready_after_anim(x: &mut Cx) {
+fn ready_after_anim<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, STANCE);
         x.set8(LOOK, 0);
@@ -17,7 +17,7 @@ fn ready_after_anim(x: &mut Cx) {
 }
 
 /// 0x555c2 : le Kobold se met à l'affût (test aléatoire, puis boîtes de portée ou charge).
-fn ready(x: &mut Cx) {
+fn ready<R: Banc>(x: &mut Cx<'_, R>) {
     if !lib::maybe_draw_6e(x) {
         stance::reach(x);
     } else {
@@ -27,7 +27,7 @@ fn ready(x: &mut Cx) {
 
 // --- sous-état 6 --------------------------------------------------------------------------------------------
 
-pub(super) fn run_b(x: &mut Cx) {
+pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => return begin_wait(x),
         2 => return hold(x, 0x0206_0000),
@@ -45,7 +45,7 @@ pub(super) fn run_b(x: &mut Cx) {
 }
 
 /// +6 = 0 : rugissement ou souffle (tirage au hasard).
-fn b_roar(x: &mut Cx) {
+fn b_roar<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             let r = rand_and(x, 1);
@@ -69,7 +69,7 @@ fn b_roar(x: &mut Cx) {
     }
 }
 
-fn b_stretch(x: &mut Cx) {
+fn b_stretch<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
@@ -83,7 +83,7 @@ fn b_stretch(x: &mut Cx) {
 }
 
 /// +6 = 4 : saut périlleux de côté.
-fn b_somersault(x: &mut Cx) {
+fn b_somersault<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
@@ -130,7 +130,7 @@ fn land_yz<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 6 et 10 : bond de côté ; `strike` : l'animation 7 de coups au lieu de la 0x1c de marche.
-fn b_hop(x: &mut Cx, vx: i16, vz: u16, strike_anim: bool) {
+fn b_hop<R: Banc>(x: &mut Cx<'_, R>, vx: i16, vz: u16, strike_anim: bool) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
@@ -175,7 +175,7 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 8 : bond de côté puis coup.
-fn b_hop_strike(x: &mut Cx) {
+fn b_hop_strike<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => b_hop(x, 0x80, 0x2c0, false),
         6 => attacks_wait_key_clear(x),
@@ -195,7 +195,7 @@ fn b_hop_strike(x: &mut Cx) {
 
 // --- sous-état 8 ----------------------------------------------------------------------------------------------
 
-pub(super) fn run_c(x: &mut Cx) {
+pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 6 => c_wait(x),
         2 => c_paw(x),
@@ -240,7 +240,7 @@ fn c_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : coup de patte.
-fn c_paw(x: &mut Cx) {
+fn c_paw<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => paw_begin(x),
         2 => {
@@ -261,8 +261,7 @@ fn c_paw(x: &mut Cx) {
 }
 
 /// +6 = 4 : pas de côté ou saut de côté.
-fn c_side(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn c_side<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
@@ -310,7 +309,7 @@ fn c_side(x: &mut Cx) {
 
 // --- sous-état 10 : promenade -----------------------------------------------------------------------------------
 
-pub(super) fn idle(x: &mut Cx) {
+pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, STANCE);
         x.set8(LOOK, 0x7f);

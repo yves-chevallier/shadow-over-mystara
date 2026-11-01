@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Obj;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(EXPIRED) != 0 || grabbed(x) {
         set_state_long(x, HELD);
         return hit::grab(x);
@@ -20,7 +20,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x5c17e : premier pas debout : choisit une cible et s'oriente vers elle.
-pub(super) fn stance_begin(x: &mut Cx) {
+pub(super) fn stance_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     if !pick_target(x) {
         set_state_long(x, IDLE);
@@ -40,7 +40,7 @@ fn idle_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : marche vers la cible ; tire ou esquive quand elle est à portée.
-fn advance(x: &mut Cx) {
+fn advance<R: Banc>(x: &mut Cx<'_, R>) {
     if !x.in_arena_default() {
         x.set8(SHOT_KIND, 5);
         x.add8(f::SUB2, 2);
@@ -77,17 +77,16 @@ fn advance(x: &mut Cx) {
 }
 
 /// 0x5c22c : un joueur à portée de tir ? Alors tir ou esquive selon la boîte qui l'a vu.
-pub(super) fn decide(x: &mut Cx) {
+pub(super) fn decide<R: Banc>(x: &mut Cx<'_, R>) {
     if in_front(x) || on_line(x) {
         // la cible vue par la boîte (A1 de l'original : la cible `+0x50`, non nulle puisque la boîte l'a trouvée) ;
         // D5 dit quelle boîte (0 devant, 2 sur la ligne)
         let found = x.linked(f::TARGET);
         let facing = x.u8(f::FLIP);
-        x.c.d[0] = x.c.d[0] & !0xff | facing as u32;
         let same_side = facing == found.u8(x.b, f::FLIP);
         if lib::decision(x, same_side) {
             set_state_long(x, 0x0204_0000);
-            let d5 = x.c.d[5] as u8;
+            let d5 = (*x.c.d5()) as u8;
             x.set8(f::SUB2, d5);
             return check_facing(x);
         }
@@ -100,7 +99,7 @@ pub(super) fn decide(x: &mut Cx) {
 }
 
 /// 0x5c27a : si le Bow Gnoll tourne le dos à sa cible, demi-tour (état à reprendre mémorisé en `+0xa0`).
-pub(super) fn check_facing(x: &mut Cx) {
+pub(super) fn check_facing<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return;
     }
@@ -118,7 +117,7 @@ pub(super) fn check_facing(x: &mut Cx) {
 }
 
 /// +6 = 4 : marche latérale pendant `+0xa4` images, puis retour à l'approche.
-fn strafe(x: &mut Cx) {
+fn strafe<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if (n as i8) < 0 {
@@ -133,8 +132,7 @@ fn strafe(x: &mut Cx) {
 
 // --- sous-état 8 : repos ------------------------------------------------------------------------------
 
-pub(super) fn rest(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             set_state_long(x, IDLE);
@@ -152,7 +150,7 @@ pub(super) fn rest(x: &mut Cx) {
 }
 
 /// +6 = 2 (en X, regarde vers la cible) et 4 (en profondeur) : pas de côté pendant `+0x6b` images.
-fn side_step(x: &mut Cx, along_x: bool) {
+fn side_step<R: Banc>(x: &mut Cx<'_, R>, along_x: bool) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(AI_WANDER, 0x18);
@@ -160,7 +158,6 @@ fn side_step(x: &mut Cx, along_x: bool) {
         if along_x {
             x.set8(Obj::SPEED_INDEX, 0x18);
             let d = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
-            x.c.d[1] = x.c.d[1] & 0xffff_0000 | d as u32;
             if (d as i16) >= 0 {
                 x.set8(Obj::SPEED_INDEX, 8);
             }
@@ -184,7 +181,7 @@ fn side_step(x: &mut Cx, along_x: bool) {
 
 // --- sous-état 10 : attente ---------------------------------------------------------------------------
 
-pub(super) fn idle(x: &mut Cx) {
+pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         return idle_begin(x);
     }

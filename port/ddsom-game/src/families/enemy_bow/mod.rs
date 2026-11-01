@@ -63,7 +63,7 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const HELD: u32 = 0x0408_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -71,7 +71,6 @@ pub fn run(x: &mut Cx) {
     if x.u16(f::TARGET) == 0 {
         pick_target(x);
     }
-    x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => {
             if init(x) {
@@ -93,7 +92,7 @@ pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Démarre l'animation `n` du jeu des tirs.
-pub(self) fn shot(x: &mut Cx, n: u32) {
+pub(self) fn shot<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_SHOT, n as u16);
 }
 
@@ -114,9 +113,8 @@ pub(self) fn walk_angle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
-pub(self) fn row_byte(x: &mut Cx, table: u32) -> u8 {
+pub(self) fn row_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | row;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
     x.data8(at + r)
@@ -129,38 +127,37 @@ pub(self) const SECOND_ACTIONS: u32 = 0x5d67a;
 pub(self) const FOLLOW_TABLE: u32 = 0x5ce72;
 
 /// 0x5cdc6 : tirage au hasard (dix chances sur seize) qui décide d'un tir ; D0 = 0 ou 1.
-pub(self) fn shoot_roll(x: &mut Cx) -> bool {
+pub(self) fn shoot_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let r = rand_and(x, 0xf);
     let mask = x.rom16(0x5cde0);
     let hit = (mask >> r) & 1 != 0;
-    x.c.d[0] = hit as u32;
     hit
 }
 
 /// Boîtes de portée (0xb5e0) ; D5 est posé comme dans l'original.
-fn range_box(x: &mut Cx, d5: u32, d0: i16, d1: u16, d2: u16) -> bool {
-    x.c.d[5] = d5; // relu : D5 relu par la suite (comme pour in_front)
+fn range_box<R: Banc>(x: &mut Cx<'_, R>, d5: u32, d0: i16, d1: u16, d2: u16) -> bool {
+    *x.c.d5() = d5; // relu : D5 relu par la suite (comme pour in_front)
     lib::target_in_box(x, d0, d1, d2)
 }
 
 /// 0x5ce14 : joueur tout près (assez pour un tir à bout portant).
-pub(self) fn point_blank(x: &mut Cx) -> bool {
+pub(self) fn point_blank<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, -0x28, 0x28, 0xc)
 }
 
 /// 0x5cdf6 : joueur devant, à courte distance.
-pub(self) fn in_front(x: &mut Cx) -> bool {
-    x.c.d[5] = 0; // relu : D5 relu par la suite (DDSOM_POISON : covb_long3p_02)
+pub(self) fn in_front<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    *x.c.d5() = 0; // relu : D5 relu par la suite (DDSOM_POISON : covb_long3p_02)
     lib::target_in_box(x, -0xd0, 0x60, 0x18)
 }
 
 /// 0x5ce06 : joueur près, sur la même ligne.
-pub(self) fn on_line(x: &mut Cx) -> bool {
+pub(self) fn on_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, 0, 0x38, 0x10)
 }
 
 /// 0x5ce36 : fin d'un tir, choix du geste de repli (sous-état 8) ; saisi si `+0xa7`.
-pub(self) fn follow_up(x: &mut Cx) {
+pub(self) fn follow_up<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u8(EXPIRED) != 0 {
         set_state_long(x, HELD);
@@ -213,7 +210,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -229,7 +226,6 @@ fn active(x: &mut Cx) {
         if x.u8(SPAWNED) != 0 {
             return spawned::run(x);
         }
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => arrival::run(x),
             2 => stance::run(x),
@@ -248,5 +244,5 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x5bda6 "enemy_3" run,
+    0x5bda6 "enemy_3" #[sans] run,
 }

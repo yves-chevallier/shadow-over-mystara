@@ -14,8 +14,7 @@ const CHARGE_B: u32 = 0x78eac;
 const WANDER_A: u32 = 0x78ef0;
 const WANDER_B: u32 = 0x78f10;
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => wait(x),
         2 => turn(x),
@@ -27,7 +26,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Début commun des gestes 0 à 6 : saisi ou plus aucun joueur → états de repli (vrai si l'on en est sorti).
-fn gate(x: &mut Cx) -> bool {
+fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if grabbed(x) {
         go::held(x);
         return true;
@@ -40,14 +39,13 @@ fn gate(x: &mut Cx) -> bool {
 }
 
 /// 0x780d4 : attente.
-fn wait(x: &mut Cx) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if gate(x) {
         return;
     }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         pick_wait(x);
-        x.c.d[0] = 0;
         x.set8(LOOK, 0);
         if x.u8(LOOK_PREV) == 0 {
             return;
@@ -70,14 +68,12 @@ fn wait(x: &mut Cx) {
 }
 
 /// 0x79f6 : fixe le délai d'attente `+0x6e` d'après la difficulté et rend la main (D0 = 1).
-fn pick_wait(x: &mut Cx) {
+fn pick_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if !x.in_arena(0) {
         x.set8(AI_WAIT, 1);
-        x.c.d[0] = 1;
         return;
     }
     let group = x.u8(0x6d) as u32;
-    x.c.d[0] = group << 2;
     let list = x.data32(0x7a50 + group * 4);
     let r = rand_and(x, 0x1f);
     let v = x.data8(list + r);
@@ -85,7 +81,7 @@ fn pick_wait(x: &mut Cx) {
 }
 
 /// 0x78142 : demi-tour.
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -122,7 +118,7 @@ fn fly_anim<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 (`first`) et 6 : marche vers le joueur ; chaque variante tire son délai et son aspect (2 ou 3).
-fn march(x: &mut Cx, first: bool) {
+fn march<R: Banc>(x: &mut Cx<'_, R>, first: bool) {
     if gate(x) {
         return;
     }
@@ -157,7 +153,7 @@ fn march(x: &mut Cx, first: bool) {
 }
 
 /// 0x7827c : marche : délai de charge, puis décisions de tir.
-fn march_step(x: &mut Cx) {
+fn march_step<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u8(AI_CHARGE).wrapping_sub(1);
     x.set8(AI_CHARGE, n);
     if (n as i8) < 0 {
@@ -201,8 +197,7 @@ fn march_step(x: &mut Cx) {
 }
 
 /// +6 = 8 : charge vers le joueur (ou vers `+0xbc` si `+0xb2`), puis bond.
-fn charge(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

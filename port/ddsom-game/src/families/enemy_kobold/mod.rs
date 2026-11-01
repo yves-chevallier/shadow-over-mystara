@@ -56,12 +56,11 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const HELD: u32 = 0x0408_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
     x.tick_counters();
-    x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -77,7 +76,7 @@ pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -116,7 +115,7 @@ pub(self) fn stand_when_done<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Un coup de poussière (0xb10c8) toutes les `mask + 1` images (le compteur `A5+0x6e` est masqué en place).
-pub(self) fn puff(x: &mut Cx, mask: u16, d1: u16, d2: i16, d3: i16) {
+pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
@@ -169,7 +168,7 @@ pub(self) fn on_right_half<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x56c70 / 0x56c78 : choisit le coup suivant (`+6`) dans la ligne de la difficulté du profil `+0x2f` ;
 /// `bias` = 0x14 pour la série lointaine.
-pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
+pub(self) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP).wrapping_mul(4) as u32;
     let table = if bias == 0 { 0x56d04 } else { 0x56d14 };
     let list = x.data32(table + profile);
@@ -186,7 +185,7 @@ pub(self) fn pick_attack(x: &mut Cx, bias: u8) {
 
 /// 0x57924 : fin d'un geste : le variant 0 se remet debout ; les autres, si la cible est dans une boîte de portée,
 /// enchaînent un coup de la série `0x5799c`.
-pub(self) fn after_strike(x: &mut Cx) {
+pub(self) fn after_strike<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
@@ -204,7 +203,7 @@ pub(self) fn after_strike(x: &mut Cx) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -263,7 +262,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -272,7 +271,6 @@ fn active(x: &mut Cx) {
             x.set8(f::FREEZE, 0);
         }
         if !paused(x) {
-            x.c.d[0] = x.u8(f::SUB) as u32;
             match x.u8(f::SUB) {
                 0 => arrival::run(x),
                 2 => stance::run(x),
@@ -291,5 +289,5 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x54914 "enemy_0" run,
+    0x54914 "enemy_0" #[sans] run,
 }

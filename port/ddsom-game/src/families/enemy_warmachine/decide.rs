@@ -12,7 +12,7 @@ fn table_target<R: Banc>(x: &mut Cx<'_, R>, base: u32, index: u32) -> u32 {
 }
 
 /// Exécute le talon d'état d'adresse `target` (ceux que les tables de sauts de ce type désignent).
-fn stub(x: &mut Cx, target: u32) {
+fn stub<R: Banc>(x: &mut Cx<'_, R>, target: u32) {
     match target {
         0x7924a => go::charge(x, 1),
         0x7925e => go::attack(x, 0, false),
@@ -26,21 +26,20 @@ fn stub(x: &mut Cx, target: u32) {
 }
 
 /// Tire `r = rand & 0xf`, lit l'octet `bytes[r]` puis saute par la table de mots `words`.
-fn pick(x: &mut Cx, bytes: u32, words: u32) {
+fn pick<R: Banc>(x: &mut Cx<'_, R>, bytes: u32, words: u32) {
     let r = rand_and(x, 0xf);
     let b = x.rom8(bytes + r) as u32;
-    x.c.d[0] = x.c.d[0] & !0xff | b;
     let target = table_target(x, words, b);
     stub(x, target);
 }
 
 /// 0x78fa2 : tir quand le joueur est tout près (table 0x78fb8).
-pub(super) fn point_blank(x: &mut Cx) {
+pub(super) fn point_blank<R: Banc>(x: &mut Cx<'_, R>) {
     pick(x, 0x78fb8, 0x78fc8);
 }
 
 /// 0x78fca : tir sur une cible touchée par la boîte (−0x10, 0x10, 8) ; trois blocs identiques selon `+0xaa`.
-pub(super) fn pick_by_phase(x: &mut Cx) {
+pub(super) fn pick_by_phase<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let block = table_target(x, 0x78fe4, phase.wrapping_mul(2));
@@ -52,7 +51,7 @@ pub(super) fn pick_by_phase(x: &mut Cx) {
 }
 
 /// 0x79014 : décision après la boîte de tir (0x78f30) ; `gate` = résultat de `ai_gate` (1 ou 2).
-pub(super) fn near_decision(x: &mut Cx, gate: u32) {
+pub(super) fn near_decision<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
     let bytes = if x.u8(GROUP) == 0 {
         0x7907e
     } else if gate as u8 == 1 {
@@ -64,7 +63,7 @@ pub(super) fn near_decision(x: &mut Cx, gate: u32) {
 }
 
 /// 0x790b4 : décision après la boîte large (0x78f4e) : bloc choisi selon le tirage, `+0xaa` et le profil.
-pub(super) fn wide_decision(x: &mut Cx, gate: u32) {
+pub(super) fn wide_decision<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
     let r = rand_and(x, 0xf);
     let d2 = (gate.wrapping_sub(1) as u16).wrapping_mul(2);
     let d1 = (x.u8(PHASE) as i8 as i16 as u16).wrapping_mul(4);
@@ -84,7 +83,7 @@ pub(super) fn wide_decision(x: &mut Cx, gate: u32) {
 }
 
 /// 0x78f30 : joueur dans la boîte (−0x50, 0x30, 6) puis décision d'attaque de la bibliothèque ; 0 si rien.
-pub(super) fn gate_near(x: &mut Cx) -> u32 {
+pub(super) fn gate_near<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     if !lib::target_in_box(x, -0x50, 0x30, 6) {
         return 0;
     }
@@ -92,7 +91,7 @@ pub(super) fn gate_near(x: &mut Cx) -> u32 {
 }
 
 /// 0x78f4e : joueur dans la boîte large (−0xe0, 0x40 ou 0x60, 0xc ou 8 selon le profil), à l'écran.
-pub(super) fn gate_wide(x: &mut Cx) -> u32 {
+pub(super) fn gate_wide<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     let lo = camera_x(x).wrapping_sub(0x10) as i16;
     let hi = camera_x(x).wrapping_add(0x190) as i16;
     let at = x.u16(Obj::X) as i16;
@@ -107,15 +106,14 @@ pub(super) fn gate_wide(x: &mut Cx) -> u32 {
 }
 
 /// 0x78e74 / 0x78e80 : délai de charge `+0x71` d'après la difficulté.
-pub(super) fn charge_delay(x: &mut Cx, table: u32) {
+pub(super) fn charge_delay<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let level = var::RANK.get(x.b) as u32;
-    x.c.d[0] = x.c.d[0] & !0xffff | level;
     let v = x.rom8(table + level);
     x.set8(AI_CHARGE, v);
 }
 
 /// 0x78ecc / 0x78ede : délai de marche `+0x6b` tiré dans une rangée.
-pub(super) fn wander_delay(x: &mut Cx, table: u32) {
+pub(super) fn wander_delay<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(table + r);
     x.set8(AI_WANDER, v);

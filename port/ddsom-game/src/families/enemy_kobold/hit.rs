@@ -10,7 +10,7 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x56816;
 const REACT_SECOND: u32 = 0x56a0e;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -18,7 +18,6 @@ pub(super) fn run(x: &mut Cx) {
         if freeze < 0 {
             x.set8(f::FREEZE, 0);
         }
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => {
                 x.set8(LOOK_PREV, 0x7f);
@@ -40,11 +39,10 @@ pub(super) fn run(x: &mut Cx) {
 
 // --- sous-état 2 : recul ------------------------------------------------------------------------------------
 
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -77,7 +75,7 @@ fn recoil(x: &mut Cx) {
 
 // --- sous-état 4 : chute et relevé --------------------------------------------------------------------------
 
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -111,11 +109,10 @@ fn fall(x: &mut Cx) {
 
 // --- sous-état 8 : saisie par un joueur ------------------------------------------------------------------------
 
-fn run_away(x: &mut Cx) {
+fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             let right = on_right_half(x);

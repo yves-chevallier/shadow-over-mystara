@@ -41,7 +41,7 @@ fn state7<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
 }
 
 /// Fin d'une attaque : retour au combat si l'animation est finie.
-fn finish(x: &mut Cx, to: fn(&mut Cx)) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
     if lib::step(x) {
         if !players_alive(x) {
             return decide::wait(x);

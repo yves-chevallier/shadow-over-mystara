@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(NO_ZONE) != 0 || grabbed(x) {
         set_state_long(x, HELD);
         return grab(x);
@@ -14,7 +14,6 @@ pub(super) fn run(x: &mut Cx) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return set_state_long(x, IDLE);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => approach(x),
         2 => turn(x),
@@ -25,7 +24,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x6de46 : (re)commence la marche vers la cible.
-pub(super) fn approach_start(x: &mut Cx) {
+pub(super) fn approach_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     set_speed(x, 0x12);
@@ -36,7 +35,7 @@ pub(super) fn approach_start(x: &mut Cx) {
 }
 
 /// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set8(SHOT_KIND, 0x1a);
         return approach_start(x);
@@ -157,7 +156,7 @@ pub(super) fn walk_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : promenade sur place tant qu'aucun joueur n'est en vie, puis retour debout.
-pub(super) fn idle(x: &mut Cx) {
+pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(VULNERABLE, 1);
