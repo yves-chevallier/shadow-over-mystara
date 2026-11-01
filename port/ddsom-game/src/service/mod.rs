@@ -24,7 +24,8 @@ pub mod mire;
 pub mod reglages;
 
 use crate::config;
-use crate::mem::{set_low_word, wr32};
+use crate::video::Couche;
+use crate::mem::wr32;
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
@@ -83,21 +84,8 @@ pub mod key {
     pub const START1: u8 = 0x01;
 }
 
-/// Routines d'origine.
-pub mod ext {
-    pub const LOCK: u32 = 0xb96;
-    pub const UNLOCK: u32 = 0xbac;
-    pub const LAYERS_ON: u32 = 0xbc6;
-    pub const LAYERS_OFF: u32 = 0xbfc;
-    pub const CLEAR_OBJECTS: u32 = 0xc58;
-    pub const CLEAR_SCROLL_1: u32 = 0xca8;
-    pub const CLEAR_SCROLL_2: u32 = 0xcc8;
-    pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    pub const PRINT: u32 = 0xd5e;
-    pub const PALETTES: u32 = 0x1a296;
-    pub const SOUND_REQUEST: u32 = 0xe0836;
-    pub const BOOT_TASK: u32 = 0x11b16;
-}
+/// Entrée de la tâche de démarrage, que la tâche du menu redevient en sortant.
+const BOOT_TASK: u32 = 0x11b16;
 
 /// Textes du menu (descripteurs en ROM).
 mod text {
@@ -145,12 +133,6 @@ pub fn pressed(x: &mut Ctx) -> u8 {
     x.v8(var::INPUT) & !x.v8(var::PREV)
 }
 
-/// Appelle une routine d'origine avec D0 (mot bas) chargé.
-#[track_caller]
-pub fn call_d0(x: &mut Ctx, addr: u32, d0: u16) {
-    set_low_word(&mut x.c.d[0], d0);
-    x.call(addr);
-}
 /// Affiche un texte (descripteur en ROM).
 pub fn print(x: &mut Ctx, descriptor: u32) {
     crate::text::print(x.b, descriptor);
@@ -158,10 +140,25 @@ pub fn print(x: &mut Ctx, descriptor: u32) {
 /// Couches de l'écran coupées / rétablies (masque 0x12ce).
 pub const ALL_LAYERS: u16 = 0x12ce;
 pub fn layers_off(x: &mut Ctx) {
-    call_d0(x, ext::LAYERS_OFF, ALL_LAYERS);
+    crate::video::desactiver_couches(x.b, ALL_LAYERS);
 }
 pub fn layers_on(x: &mut Ctx) {
-    call_d0(x, ext::LAYERS_ON, ALL_LAYERS);
+    crate::video::activer_couches(x.b, ALL_LAYERS);
+}
+
+/// Objets et couches effacés, palettes de la scène rechargées (0xc58, 0xca8, 0xcc8, 0xce8, 0x1a296). Rend le D0 que
+/// laisse le chargement des palettes (relu par le menu de configuration).
+pub fn clear_screen(x: &mut Ctx) -> u32 {
+    clear_layers(x);
+    crate::palette::charger_tout(x.b)
+}
+
+/// Objets et couches effacés (0xc58, 0xca8, 0xcc8, 0xce8).
+fn clear_layers(x: &mut Ctx) {
+    crate::video::vider_objets(x.b);
+    for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+        crate::video::effacer_couche(x.b, couche);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -297,9 +294,7 @@ pub fn handler(x: &mut Ctx) -> Flow {
 /// une image d'attente, puis le menu (`menu_after_clear`).
 pub fn show_menu(x: &mut Ctx) -> Flow {
     layers_off(x);
-    for f in [ext::CLEAR_OBJECTS, ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::PALETTES] {
-        x.call(f);
-    }
+    clear_screen(x);
     full_brightness(x);
     for off in var::SCROLLS {
         x.set_v16(off, 0);
@@ -313,7 +308,7 @@ pub fn menu_after_clear(x: &mut Ctx) -> Flow {
     set(x, f::SECRET, 0);
     set(x, f::REPEAT_V, 1);
     x.wr16(OUTPUTS, MENU_OUTPUTS);
-    call_d0(x, ext::UNLOCK, 0xf1);
+    crate::video::deverrouiller_compteurs(x.b, 0xf1);
     print(x, text::MENU);
     print(x, text::HELP);
     let line = get(x, f::CURSOR);
@@ -348,7 +343,7 @@ fn menu(x: &mut Ctx) -> Flow {
     if pressed(x) & key::SHOT1 != 0 {
         set(x, f::STATE, state::SCREEN);
         if get(x, f::CURSOR) != LAST_LINE {
-            x.call(ext::CLEAR_SCROLL_1);
+            crate::video::effacer_couche(x.b, Couche::Un);
         }
     }
     Flow::Done
@@ -371,14 +366,12 @@ fn screen(x: &mut Ctx) -> Flow {
 
 /// `0x29314` (9. EXIT) : écran effacé, la tâche redevient la tâche de démarrage (`0xae4`).
 fn exit(x: &mut Ctx) -> Flow {
-    for f in [ext::CLEAR_OBJECTS, ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3] {
-        x.call(f);
-    }
+    clear_layers(x);
     for off in var::SCROLLS {
         x.set_v32(off, 0);
     }
     x.set_v16(var::ACTIVE, 0);
-    x.c.a[0] = ext::BOOT_TASK;
+    x.c.a[0] = BOOT_TASK;
     crate::taches::recommencer(x)
 }
 

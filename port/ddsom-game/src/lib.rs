@@ -181,8 +181,6 @@ pub const NATIVES: &[Native] = &[
     evenements::CREDITER_POINTS,
     evenements::CREDITER_COMPTEUR,
     credits::LIRE_MONNAYEURS,
-    credits::LIRE_DEPARTS,
-    credits::VERROUILLER_COMPTEURS,
     eeprom::LIRE,
     eeprom::ECRIRE,
     eeprom::ECRIRE_VERIFIER,
@@ -202,7 +200,6 @@ pub const NATIVES: &[Native] = &[
     config::VARIABLES,
     config::INIT,
     popups::ANIMER,
-    credits::ECRIRE_CHIFFRE,
     eeprom::COMPLET_PIECES_NATIF,
     eeprom::COMPLET_DEPARTS_NATIF,
 ];
@@ -268,7 +265,6 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(sound::wrappers_natifs())
         .chain(kernel::NATIVES)
         .chain(taches::natives())
-        .chain(ecran_credits::NATIVES)
         .chain(aides::NATIVES)
         .chain(hud::NATIVES)
 }

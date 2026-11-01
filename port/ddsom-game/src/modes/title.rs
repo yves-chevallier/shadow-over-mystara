@@ -6,8 +6,13 @@
 //! Les attentes dans une étape (pool d'objets plein, fondu en cours) cèdent une image à
 //! l'ordonnanceur et reprennent à une étape Rust (`etapes!`).
 
-use super::{mode, sub, Block, Flow, Sequence};
-use crate::mem::{rd16, rd8, rd32, set_low_word, wr16, wr32, wr8};
+use super::{mode, Block, Flow, Sequence};
+use crate::scene::fondu;
+use crate::effects_aids::decor_6;
+use crate::families::creators::set_15_pur;
+use crate::palette::{charger_ensemble, charger_page};
+use crate::video::{charger_grille, effacer_couche, Couche, Grille};
+use crate::mem::{rd16, rd8, rd32, wr16, wr32, wr8};
 use crate::scene::Ctx;
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -34,9 +39,6 @@ mod var {
     pub const LAYERS: u32 = 0x14;
     pub const REGION: u32 = 0x70;
     pub const SCREEN_TYPE: u32 = 0x36;
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_STEPS: u32 = 0x48f;
-    pub const FADE_DELAY: u32 = 0x490;
     pub const SCROLL_1_X: u32 = 0x4b6;
     pub const SCROLL_2_Y: u32 = 0x4ba;
     pub const CAMERA_X: u32 = 0x506;
@@ -47,30 +49,10 @@ mod var {
     pub const GAUGE_SKIP: u32 = 0x7fb2;
 }
 
-/// Sous-routines d'origine.
+/// Sons et tâches de fondu des titres.
 mod ext {
-    pub const SOUND_RESET: u32 = 0xc0c;
-    pub const RESET_PLAYERS: u32 = 0x1f184;
-    pub const SPRITES_RESET: u32 = 0x1de7c;
-    /// Objet SOBJ de la scène de titre, de variante D0 (retenue = échec) ; SET de type 0xf.
-    pub const SOBJ_VARIANT: u32 = 0xddeaa;
-    pub const SET_VARIANT: u32 = 0xce00a;
     pub const SOUND_E0EBC: u32 = 0xe0ebc;
-    /// Arrête (et lance) la tâche du texte « INSERT COIN » clignotant (`taches/invite.rs`).
-    pub const INVITE_STOP: u32 = 0xe03c6;
-    pub const INVITE_START: u32 = 0xe03e4;
     pub const SOUND_E185C: u32 = 0xe185c;
-    pub const PALETTE_SET: u32 = 0x1a67e;
-    pub const PALETTE_FADE: u32 = 0x1a8b2;
-    pub const PALETTE_PAGE_A: u32 = 0x1a60a;
-    pub const PALETTE_PAGE_B: u32 = 0x1a608;
-    pub const PALETTE_PAGE_C: u32 = 0x1a3d4;
-    pub const TILE_BLOCK: u32 = 0x26d4;
-    pub const TILE_BLOCK_2: u32 = 0x2766;
-    pub const CLEAR_BLOCK: u32 = 0x260c;
-    /// Tâches de fondu : vers la couleur, depuis la couleur.
-    pub const FADE_TASK_IN: u32 = 0x14ba;
-    pub const FADE_TASK_OUT: u32 = 0x14d0;
     /// Fin du texte de titre : continue dans l'original (objet SOBJ qui passe à la suite).
     pub const OBJECT_LAUNCH: u32 = 0xea288;
 }
@@ -78,7 +60,7 @@ mod ext {
 const LAYER_BITS: u16 = 0xe;
 const FADE_PAGES_ALL: u8 = 0xf;
 /// Palette des écrans de titre.
-const TITLE_PALETTE: u32 = 0x53;
+const TITLE_PALETTE: u16 = 0x53;
 const GFX_PLANE_1: u32 = 0x914000;
 const GFX_PLANE_2: u32 = 0x917000;
 const GFX_PLANE_1_START: u32 = 0x912000;
@@ -102,49 +84,45 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
 
 /// Libère les pools d'objets et remet les sprites à zéro (début et fin d'écran).
 fn reset_objects(x: &mut Ctx) {
-    let a0 = x.c.a[0];
     for pool in [&crate::objects::pools::SOBJ, &crate::objects::pools::SET, &crate::objects::pools::EFFCT] {
         pool.reset(x.b);
     }
-    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET] {
-        x.call(f);
-    }
-    x.c.a[0] = a0;
+    unlink_and_clear_lists(x);
 }
 
-/// Crée la tâche de fondu `entry` (emplacement 0x10) sans toucher à A0.
+/// Listes triées défaites (0x1f184) et listes de sprites vidées (0x1de7c).
+fn unlink_and_clear_lists(x: &mut Ctx) {
+    crate::objects::lists::unlink_all(x.b);
+    crate::sprites::vider_listes(x.b);
+}
+
+/// Crée la tâche de fondu `entry` (emplacement 0x10), A0 gardé.
 fn start_fade_task(x: &mut Ctx, entry: u32) {
-    let a0 = x.c.a[0];
-    x.c.a[0] = entry;
-    x.c.d[0] = 0x10;
-    crate::kernel::creer_tache(x.b, 0x10, x.c.a[0]);
-    x.c.a[0] = a0;
+    crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
 /// Réglages de fondu communs (délai, pages).
 fn fade_setup(x: &mut Ctx, delay: u16, pages: u8) {
-    x.set_v16(var::FADE_DELAY, delay);
-    x.set_v8(var::FADE_PAGES, pages);
+    fondu::DELAI.set(x.b, delay);
+    fondu::PAGES.set(x.b, pages);
 }
 
 /// Charge la palette de titre sur toutes les pages (début d'écran).
 fn load_title_palette(x: &mut Ctx) {
-    x.call_d0(ext::PALETTE_SET, TITLE_PALETTE);
-    x.call_d0(ext::PALETTE_FADE, TITLE_PALETTE);
+    charger_page(x.b, 2, TITLE_PALETTE);
+    charger_page(x.b, 3, TITLE_PALETTE);
 }
 
 /// Copie deux blocs de tuiles de plan 1 puis deux de plan 2 (images du titre).
 fn load_title_tiles(x: &mut Ctx, a: u16, b: u16) {
-    x.c.a[1] = GFX_PLANE_1;
-    set_low_word(&mut x.c.d[0], a);
-    x.call(ext::TILE_BLOCK);
-    set_low_word(&mut x.c.d[0], a + 1);
-    x.call(ext::TILE_BLOCK);
-    set_low_word(&mut x.c.d[0], b);
-    x.c.a[1] = GFX_TABLE_B;
-    x.call(ext::TILE_BLOCK_2);
-    set_low_word(&mut x.c.d[0], b + 1);
-    x.call(ext::TILE_BLOCK_2);
+    two_blocks(x, Grille::Couche2, a, GFX_PLANE_1);
+    two_blocks(x, Grille::Couche3, b, GFX_TABLE_B);
+}
+
+/// Deux blocs de tuiles (`n`, `n + 1`) à la suite l'un de l'autre à partir de `destination` ; rend la fin.
+fn two_blocks(x: &mut Ctx, grille: Grille, n: u16, destination: u32) -> u32 {
+    let fin = charger_grille(x.b, grille, n, destination);
+    charger_grille(x.b, grille, n + 1, fin.destination).destination
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -176,7 +154,7 @@ fn title_step(x: &mut Ctx, step: u8) -> Flow {
 /// Étape 0 : remet tout à zéro, charge la palette et les images, affiche le fond.
 fn t00_reset(x: &mut Ctx) -> Flow {
     reset_objects(x);
-    x.call(ext::SOUND_RESET);
+    crate::video::ecran_noir(x.b);
     x.set_v16(var::LAYERS, 0x12c0);
     x.wait(4, Etape::T00Load)
 }
@@ -185,16 +163,14 @@ crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
         T00Load = T00_LOAD => |x| {
-            x.c.d[0] = 0;
             x.set_v16(var::CAMERA_Y, 0x300);
             for off in [var::CAMERA_X, var::SCROLL_1_X, var::SCROLL_2_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
                 x.set_v16(off, 0);
             }
             load_title_palette(x);
-            x.call_d0(ext::PALETTE_PAGE_A, 2);
-            x.call_d0(ext::PALETTE_PAGE_C, 1);
+            charger_page(x.b, 1, 2);
+            charger_ensemble(x.b, 1);
             load_title_tiles(x, 138, 403);
-            set_low_word(&mut x.c.d[3], 0x300);
             x.render();
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::T00Fade)
@@ -221,18 +197,16 @@ crate::etapes! {
         },
         T0aRetry = T0A_RETRY => |x| {
             // `bra 0xfa4e8` : retente sans reposer le drapeau
-            x.call_d0(ext::SET_VARIANT, 1);
-            if !x.ok() {
+            let Ok(set) = set_15_pur(x.b, 1) else {
                 return x.wait(1, Etape::T0aRetry);
-            }
-            wr32(x.b, x.c.a[1] + 0x4c, mode::BASE);
+            };
+            wr32(x.b, set.0 + 0x4c, mode::BASE);
             x.next_step();
             Flow::Done
         },
         T10Object = T10_OBJECT => t10_object,
         T10Retry = T10_RETRY => t10_object,
         T12Scenery = T12_SCENERY => |x| {
-            set_low_word(&mut x.c.d[3], 0x70);
             x.set_m8(f::CUE, 2);
             x.render();
             x.set_v16(var::LAYERS, 0x12ce);
@@ -242,31 +216,25 @@ crate::etapes! {
             x.set_v16(var::SCROLL_1_X, 0);
             x.set_v16(var::SCROLL_2_Y, 0);
             let mut tile = 480u16;
-            x.c.a[1] = GFX_PLANE_1;
+            let mut destination = GFX_PLANE_1;
             for _ in 0..4 {
-                set_low_word(&mut x.c.d[0], tile);
-                x.call(ext::TILE_BLOCK);
-                set_low_word(&mut x.c.d[0], tile + 1);
-                x.call(ext::TILE_BLOCK);
+                destination = two_blocks(x, Grille::Couche2, tile, destination) + 0x800;
                 tile += 2;
-                x.c.a[1] += 0x800;
             }
-            set_low_word(&mut x.c.d[2], tile);
-            x.c.d[1] = 0xffff;
             x.render();
             x.set_v16(var::LAYERS, 0x09ce);
             x.wait(1, Etape::T12Fade)
         },
         T12Fade = T12_FADE => |x| {
             fade_setup(x, 3, FADE_PAGES_ALL);
-            start_fade_task(x, ext::FADE_TASK_IN);
+            start_fade_task(x, crate::scene::fondu::MONTEE);
             x.next_step();
             x.set_m16(f::SPEED, 0xb00);
             x.set_m16(f::ACCEL, 0xffe0);
             x.set_m16(f::TIMER, 60);
-            x.call_d0(ext::SET_VARIANT, 0);
-            let link = x.c.a[1] as u16;
-            x.set_m16(f::OBJECT, link);
+            // Glitch d'origine : la retenue n'est pas testée ; un échec garde l'A1 de l'allocation
+            let set = set_15_pur(x.b, 0).unwrap_or_else(|a1| a1);
+            x.set_m16(f::OBJECT, set.0 as u16);
             Flow::Done
         },
         T18Retry = T18_RETRY => t18_object,
@@ -292,33 +260,33 @@ crate::etapes! {
         T1aRetry = T1A_RETRY => t1a_object,
         T1cText = T1C_TEXT => |x| {
             x.render();
-            x.call(ext::INVITE_START);
+            crate::taches::invite::lancer(x.b);
             x.set_m16(f::TIMER, 300);
             crate::text::print(x.b, 0xfacc4);
             let region = x.v16(var::REGION);
-            x.c.d[0] = (x.c.d[0] & 0xffff_0000) | (region.wrapping_add(region) as u32);
-            let index = (x.c.d[0] as u16) as i16 as i32 as u32;
+            let index = region.wrapping_add(region) as i16 as i32 as u32;
             let texte = rd32(x.b, 0xfad92u32.wrapping_add(index));
             crate::text::print(x.b, texte);
             Flow::Done
         },
         T1eWait = T1E_FADED => |x| leave_wait(x, Etape::T1eWait, Etape::T1eCleared, false),
         T1eCleared = T1E_CLEARED => |x| {
-            x.call(ext::INVITE_STOP);
-            x.call(sub::CLEAR_SCROLL_1);
-            x.call(sub::CLEAR_SCROLL_2);
+            crate::taches::invite::arreter(x.b);
+            effacer_couche(x.b, Couche::Un);
+            effacer_couche(x.b, Couche::Deux);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::T1eDone)
         },
         T1eDone = T1E_DONE => |x| {
             x.set_m16(f::TIMER, 300);
-            x.c.d[0] = 1;
-            x.sauter(&crate::palette::PAGE1_D0)
+            // `jmp 0x1a60a`
+            charger_page(x.b, 1, 1);
+            Flow::Done
         },
         S02Load = S02_LOAD => |x| {
             x.set_v8(var::SCREEN_TYPE, 1);
             load_title_palette(x);
-            x.call_d0(ext::PALETTE_PAGE_C, 1);
+            charger_ensemble(x.b, 1);
             fade_setup(x, 3, 13);
             crate::palette::full_brightness(x.b);
             x.or16(var::VIDEO_FLAGS, 1);
@@ -328,17 +296,8 @@ crate::etapes! {
             x.set_v16(var::CPS_COPY, 0x9200);
             x.set_v16(var::GAUGE_SKIP, 0);
             clear_sprite_area(x);
-            x.c.d[0] = 0;
-            set_low_word(&mut x.c.d[0], 454);
-            x.c.a[1] = GFX_PLANE_2;
-            x.call(ext::TILE_BLOCK);
-            set_low_word(&mut x.c.d[0], 455);
-            x.call(ext::TILE_BLOCK);
-            set_low_word(&mut x.c.d[0], 368);
-            x.c.a[1] = GFX_TABLE_B;
-            x.call(ext::TILE_BLOCK_2);
-            set_low_word(&mut x.c.d[0], 369);
-            x.call(ext::TILE_BLOCK_2);
+            two_blocks(x, Grille::Couche2, 454, GFX_PLANE_2);
+            two_blocks(x, Grille::Couche3, 368, GFX_TABLE_B);
             s02_object(x)
         },
         S02Retry = S02_RETRY => |x| {
@@ -348,31 +307,29 @@ crate::etapes! {
             x.or16(var::LAYERS, LAYER_BITS);
             x.next_step();
             x.set_v16(var::SCROLL_2_Y, 0);
-            x.call_d0(ext::SET_VARIANT, 2);
+            let _ = set_15_pur(x.b, 2);
             x.wait(1, Etape::S02Palette)
         },
         S02Palette = S02_PALETTE => |x| {
-            x.call(ext::PALETTE_PAGE_B);
-            x.set_v8(var::FADE_PAGES, 2);
+            crate::palette::charger_page_de_la_scene(x.b, 1);
+            fondu::PAGES.set(x.b, 2);
             crate::palette::full_brightness(x.b);
             Flow::Done
         },
         S04Retry = S04_RETRY => s04_object,
         S04Show = S04_SHOW => |x| {
             x.render();
-            x.c.a[1] = GFX_PLANE_1_START;
-            x.call_d0(ext::CLEAR_BLOCK, 7);
-            x.call_d0(ext::CLEAR_BLOCK, 8);
+            two_blocks(x, Grille::Blocs4x4, 7, GFX_PLANE_1_START);
             Flow::Done
         },
         S08Wait = S08_WAIT => |x| leave_wait(x, Etape::S08Wait, Etape::S08Cleared, true),
         S08Cleared = S08_CLEARED => |x| {
-            x.call(sub::CLEAR_SCROLL_1);
-            x.call(sub::CLEAR_SCROLL_2);
-            x.call(sub::CLEAR_SCROLL_3);
+            for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+                effacer_couche(x.b, couche);
+            }
             x.set_v16(var::GAUGE_SKIP, 0);
             clear_sprite_area(x);
-            x.call_d0(ext::PALETTE_PAGE_A, 1);
+            charger_page(x.b, 1, 1);
             x.or16(var::LAYERS, LAYER_BITS);
             x.wait(1, Etape::S08Done)
         },
@@ -392,12 +349,10 @@ fn t02_cue(x: &mut Ctx) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    x.call_d0(ext::SOBJ_VARIANT, 6);
-    if !x.ok() {
+    let Ok(Obj(obj)) = decor_6(x.b, 6) else {
         x.next_step();
         return Flow::Done;
-    }
-    let obj = x.c.a[1];
+    };
     let index = x.m8(f::CUE_INDEX);
     wr8(x.b, obj + 0x2f, index);
     wr32(x.b, obj + 0x4c, mode::BASE);
@@ -434,13 +389,12 @@ fn t06_start(x: &mut Ctx) -> Flow {
 }
 const T06_OBJECT: u32 = 0xfa472;
 fn t06_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SOBJ_VARIANT, 7);
-    if !x.ok() {
+    let Ok(Obj(o)) = decor_6(x.b, 7) else {
         return x.wait(1, Etape::T06Retry);
-    }
+    };
     x.set_m8(f::DONE, 1);
-    wr32(x.b, x.c.a[1] + 0x4c, mode::BASE);
-    wr8(x.b, x.c.a[1] + 0x2f, 0);
+    wr32(x.b, o + 0x4c, mode::BASE);
+    wr8(x.b, o + 0x2f, 0);
     x.next_step();
     Flow::Done
 }
@@ -452,7 +406,7 @@ fn t08_wait_flash(x: &mut Ctx) -> Flow {
     if x.m8(f::DONE) != 0 {
         return Flow::Done;
     }
-    x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
+    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
     crate::palette::full_brightness(x.b);
     x.wait(4, Etape::T08Next)
 }
@@ -470,11 +424,10 @@ fn t0a_wait(x: &mut Ctx) -> Flow {
 }
 fn t0a_object(x: &mut Ctx) -> Flow {
     x.set_m8(f::DONE, 1);
-    x.call_d0(ext::SET_VARIANT, 1);
-    if !x.ok() {
+    let Ok(Obj(set)) = set_15_pur(x.b, 1) else {
         return x.wait(1, Etape::T0aRetry);
-    }
-    wr32(x.b, x.c.a[1] + 0x4c, mode::BASE);
+    };
+    wr32(x.b, set + 0x4c, mode::BASE);
     x.next_step();
     Flow::Done
 }
@@ -488,14 +441,14 @@ fn t0c_fade_task(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    start_fade_task(x, ext::FADE_TASK_OUT);
+    start_fade_task(x, crate::scene::fondu::DESCENTE);
     Flow::Done
 }
 
 /// Étape 14 : attend la fin du fondu (`A5+0x48f` nul).
 fn t0e_wait_fade(x: &mut Ctx) -> Flow {
     x.render();
-    if x.v8(var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         return Flow::Done;
     }
     x.next_step();
@@ -512,13 +465,12 @@ fn t10_start(x: &mut Ctx) -> Flow {
 }
 const T10_OBJECT: u32 = 0xfa56e;
 fn t10_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SOBJ_VARIANT, 7);
-    if !x.ok() {
+    let Ok(Obj(o)) = decor_6(x.b, 7) else {
         return x.wait(1, Etape::T10Retry);
-    }
+    };
     x.set_m8(f::DONE, 1);
-    wr32(x.b, x.c.a[1] + 0x4c, mode::BASE);
-    wr8(x.b, x.c.a[1] + 0x2f, 1);
+    wr32(x.b, o + 0x4c, mode::BASE);
+    wr8(x.b, o + 0x2f, 1);
     x.next_step();
     Flow::Done
 }
@@ -530,7 +482,7 @@ fn t12_wait(x: &mut Ctx) -> Flow {
     if x.m8(f::DONE) != 0 {
         return Flow::Done;
     }
-    x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
+    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
     crate::palette::full_brightness(x.b);
     x.wait(4, Etape::T12Scenery)
 }
@@ -580,7 +532,6 @@ fn t18_palette(x: &mut Ctx) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    let saved = (x.c.d, x.c.a[2]);
     // quatre blocs de 32 octets de la ROM vers la table des palettes
     let mut src = LOGO_PALETTE;
     for dst in [0x91c2e0u32, 0x91c300, 0x91c360, 0x91c3e0] {
@@ -590,12 +541,8 @@ fn t18_palette(x: &mut Ctx) -> Flow {
         }
         src += 32;
     }
-    x.c.a[4] = src;
-    x.c.a[1] = 0x91c3e0;
-    x.set_v8(var::FADE_PAGES, 1);
+    fondu::PAGES.set(x.b, 1);
     crate::palette::full_brightness(x.b);
-    x.c.d[..7].copy_from_slice(&saved.0[..7]);
-    x.c.a[2] = saved.1;
     t18_object(x)
 }
 fn t18_object(x: &mut Ctx) -> Flow {
@@ -633,7 +580,6 @@ fn t18_text_object(x: &mut Ctx) -> Flow {
     wr16(x.b, o + 0xc, 0x3f0);
     wr32(x.b, o + 0x10, 1);
     let target = x.m16(f::OBJECT) as i16 as i32 as u32 & 0xff_ffff;
-    x.c.a[1] = target;
     wr32(x.b, target + 4, 0x0600_0000);
     x.set_v16(var::SCROLL_2_Y, 0);
     x.set_v16(var::LAYERS, 0x12ce);
@@ -651,9 +597,7 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     x.next_step();
-    x.c.a[1] = GFX_PLANE_1_START;
-    x.call_d0(ext::CLEAR_BLOCK, 7);
-    x.call_d0(ext::CLEAR_BLOCK, 8);
+    two_blocks(x, Grille::Blocs4x4, 7, GFX_PLANE_1_START);
     crate::sound::jouer_global(x.b, ext::SOUND_E185C);
     t1a_object(x)
 }
@@ -681,31 +625,22 @@ fn t1c_wait_logo(x: &mut Ctx) -> Flow {
 }
 /// `0xfa830` : trois objets de texte autour de la caméra, puis le texte de droits.
 pub fn title_text(x: &mut Ctx) -> Flow {
-    x.c.d[5] = 2;
-    x.c.d[4] = 0x00e4_e5e6;
-    x.c.a[2] = 0xfa8bc;
-    x.c.a[3] = crate::mem::A5 + 0x4fe;
-    if x.v8(var::SCREEN_TYPE) != 0 {
-        x.c.a[3] = crate::mem::A5 + 0x54e;
-    }
-    loop {
+    // trois variantes (0xe6, 0xe5, 0xe4, octet bas en premier) placées d'après la caméra en service et la table
+    // des décalages 0xfa8bc
+    const DECALAGES: u32 = 0xfa8bc;
+    let camera = crate::mem::A5 + if x.v8(var::SCREEN_TYPE) != 0 { 0x54e } else { 0x4fe };
+    let mut variantes = 0x00e4_e5e6u32;
+    for k in 0..3 {
         let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
-        wr8(x.b, o + 3, x.c.d[4] as u8);
-        x.c.d[4] >>= 8;
-        let cam = x.c.a[3];
-        let (px, py) = (rd16(x.b, cam + 8), rd16(x.b, cam + 12));
-        let (dx, dy) = (rd16(x.b, x.c.a[2]), rd16(x.b, x.c.a[2] + 2));
-        x.c.a[2] += 4;
+        wr8(x.b, o + 3, variantes as u8);
+        variantes >>= 8;
+        let (px, py) = (rd16(x.b, camera + 8), rd16(x.b, camera + 12));
+        let (dx, dy) = (rd16(x.b, DECALAGES + 4 * k), rd16(x.b, DECALAGES + 4 * k + 2));
         wr16(x.b, o + 8, px.wrapping_add(dx));
         wr16(x.b, o + 12, py.wrapping_add(dy));
         wr32(x.b, o + 0x10, 0);
-        let left = (x.c.d[5] as u16).wrapping_sub(1);
-        set_low_word(&mut x.c.d[5], left);
-        if left == 0xffff {
-            break;
-        }
     }
     x.wait(1, Etape::T1cText)
 }
@@ -729,31 +664,27 @@ fn leave_screen(x: &mut Ctx, loop_resume: Etape) -> Flow {
     let s = rd8(x.b, mode::SUB).wrapping_add(2);
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::BASE + f::STEP, 0);
-    x.set_v8(var::FADE_STEPS, 1);
-    x.set_v16(var::FADE_DELAY, 4);
-    x.set_v8(var::FADE_PAGES, FADE_PAGES_ALL);
-    start_fade_task(x, ext::FADE_TASK_OUT);
+    fondu::PAS.set(x.b, 1);
+    fondu::DELAI.set(x.b, 4);
+    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
+    start_fade_task(x, crate::scene::fondu::DESCENTE);
     x.wait(1, loop_resume)
 }
 
 /// Attente de la fin du fondu (`A5+0x48f`), puis effacement et cession de 16 images.
 fn leave_wait(x: &mut Ctx, loop_resume: Etape, cleared: Etape, second_title: bool) -> Flow {
     x.render();
-    if x.v8(var::FADE_STEPS) != 0 {
+    if fondu::PAS.get(x.b) != 0 {
         return x.wait(1, loop_resume);
     }
-    let a0 = x.c.a[0];
     // l'original libère les pools dans un ordre différent selon l'écran
     use crate::objects::pools::{EFFCT, SET, SOBJ};
     let pools = if second_title { [&SET, &EFFCT, &SOBJ] } else { [&SOBJ, &SET, &EFFCT] };
     for pool in pools {
         pool.reset(x.b);
     }
-    for f in [ext::RESET_PLAYERS, ext::SPRITES_RESET] {
-        x.call(f);
-    }
-    x.c.a[0] = a0;
-    x.call(sub::CLEAR_SPRITES);
+    unlink_and_clear_lists(x);
+    crate::video::vider_objets(x.b);
     if second_title {
         x.set_v8(var::SCREEN_TYPE, 0);
         x.and16(var::VIDEO_FLAGS, !1);
@@ -770,7 +701,7 @@ const T1E_DONE: u32 = 0xfa96e;
 fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
     match step {
         0 => {
-            x.call(ext::INVITE_STOP);
+            crate::taches::invite::arreter(x.b);
             x.next_step();
             reset_objects(x);
             Flow::Done
@@ -790,7 +721,6 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
 /// Étape 2 : fond de titre, palette, deux objets (variante 9 de SOBJ, puis SET 2).
 fn s02_setup(x: &mut Ctx) -> Flow {
     x.set_v16(var::LAYERS, 0x12c2);
-    x.c.d[0] = 0;
     for off in [var::CAMERA_X, var::CAMERA_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
         x.set_v32(off, 0);
     }
@@ -798,14 +728,12 @@ fn s02_setup(x: &mut Ctx) -> Flow {
 }
 const S02_LOAD: u32 = 0xfaf5c;
 fn s02_object(x: &mut Ctx) -> Flow {
-    x.call_d0(ext::SOBJ_VARIANT, 9);
-    if !x.ok() {
+    let Ok(Obj(o)) = decor_6(x.b, 9) else {
         return x.wait(1, Etape::S02Retry);
-    }
+    };
     x.set_m8(f::CUE, 0);
-    wr32(x.b, x.c.a[1] + 0x4c, mode::BASE);
-    let link = x.c.a[1] as u16;
-    x.set_m16(f::DONE, link);
+    wr32(x.b, o + 0x4c, mode::BASE);
+    x.set_m16(f::DONE, o as u16);
     x.render();
     x.wait(2, Etape::S02Show)
 }
@@ -818,9 +746,6 @@ fn clear_sprite_area(x: &mut Ctx) {
     for i in 0..128 {
         wr32(x.b, SPRITE_CLEAR_AREA + 4 * i, 0);
     }
-    x.c.a[1] = SPRITE_CLEAR_AREA + 512;
-    x.c.d[0] = 0;
-    x.c.d[1] = (x.c.d[1] & 0xffff_0000) | 0xffff;
 }
 
 /// Étape 4 : attend le signal de l'objet (`+8`), crée l'objet SET de variante 68.

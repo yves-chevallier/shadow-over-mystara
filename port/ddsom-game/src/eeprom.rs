@@ -457,6 +457,11 @@ pub fn compter_piece(b: &mut Cps2Bus) {
     compta_complete(b, &COMPLET_PIECES);
 }
 
+/// 0x2e49a : un départ compté (bouton de départ du premier monnayeur).
+pub fn compter_depart(b: &mut Cps2Bus) {
+    compta_complete(b, &COMPLET_DEPARTS);
+}
+
 /// `compta_complete` avec les registres de l'original (D0 du compteur, drapeaux du dernier test).
 fn compta_complete_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Complet) {
     compter_68k(c, b, k.compteur);
@@ -538,7 +543,43 @@ fn carte_de_developpement(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     v != 0
 }
 
-/// 0x2e4ec (départ d'un joueur) : en jeu gratuit, le compteur des parties gratuites.
+/// 0x2e4ec (départ d'un joueur) : en jeu gratuit, le compteur des parties gratuites ; sur la carte de développement,
+/// celui de sa RAM.
+pub fn compter_partie(b: &mut Cps2Bus) {
+    let gratuit = rd8(b, a5(JEU_GRATUIT)) != 0;
+    if gratuit {
+        compter(b, &CONTINUES);
+    }
+    if rd8(b, a5(ram::SANS_COMPTA)) != 0 {
+        if gratuit {
+            carte_dev::parties_gratuites(b);
+        } else {
+            carte_dev::parties_payantes(b);
+        }
+    }
+}
+
+/// 0x2dc9a : vérification de la RAM de la carte de développement.
+pub fn initialiser_compta(b: &mut Cps2Bus) {
+    if rd8(b, a5(ram::SANS_COMPTA)) != 0 {
+        carte_dev::demarrer(b);
+    }
+}
+
+/// 0x2e630 : statistique du personnage choisi (carte de développement seulement).
+pub fn stat_personnage_choisi(b: &mut Cps2Bus, personnage: u16) {
+    if rd8(b, a5(ram::SANS_COMPTA)) != 0 {
+        carte_dev::partie_du_personnage(b, personnage);
+    }
+}
+
+/// 0x2e696 : statistique de la durée d'une partie, en images (carte de développement seulement).
+pub fn stat_duree_de_partie(b: &mut Cps2Bus, images: u32) {
+    if rd8(b, a5(ram::SANS_COMPTA)) != 0 {
+        carte_dev::duree_de_partie(b, images);
+    }
+}
+
 fn compta_parties(c: &mut Cpu, b: &mut Cps2Bus) {
     let gratuit = rd8(b, a5(JEU_GRATUIT)) != 0;
     if gratuit {

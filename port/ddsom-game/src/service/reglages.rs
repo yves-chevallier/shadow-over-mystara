@@ -10,7 +10,7 @@
 //! du sous-menu (`+4`), ligne du sous-menu (`+5`), compteurs de répétition (`+0x10` haut/bas, `+0x11`
 //! gauche/droite, `+0x12` tirs).
 
-use super::{arrow, back_to_menu, ext, f, get, horizontal, key, layers_off, layers_on, move_arrow, paint, pressed, print, set, shots, var, vertical, HIGHLIGHT};
+use super::{arrow, back_to_menu, clear_screen, f, get, horizontal, key, layers_off, layers_on, move_arrow, paint, pressed, print, set, shots, var, vertical, HIGHLIGHT};
 use crate::config;
 use crate::modes::Flow;
 use crate::scene::Ctx;
@@ -325,15 +325,12 @@ fn remember(x: &mut Ctx) {
 /// `0x2bb70` : écran du menu de configuration.
 fn show_menu(x: &mut Ctx) {
     set(x, f::STEP, 2);
-    x.c.d[0] = 0;
     x.wr16(super::MENU + field::SUB_STEP, 0);
-    for f in [ext::CLEAR_OBJECTS, ext::CLEAR_SCROLL_1, ext::CLEAR_SCROLL_2, ext::CLEAR_SCROLL_3, ext::PALETTES] {
-        x.call(f);
-    }
+    let d0 = clear_screen(x);
     super::full_brightness(x);
-    // compteurs de répétition : D0 tel que le laisse le chargement des palettes
-    let d0 = x.c.d[0] as u16;
-    super::set16(x, f::REPEAT_V, d0);
+    // Glitch d'origine : les compteurs de répétition reçoivent le D0 que laisse le chargement des palettes (premier
+    // long de la dernière palette de la page 3)
+    super::set16(x, f::REPEAT_V, d0 as u16);
     set(x, f::REPEAT_SHOTS, 0x7f);
     for t in [text::TITLE, text::MENU, text::SELECT, text::HELP_START] {
         print(x, t);
@@ -380,7 +377,7 @@ fn menu(x: &mut Ctx) -> Flow {
         line::SAVE => {
             if new & key::SHOT1 != 0 {
                 layers_off(x);
-                x.call(ext::CLEAR_SCROLL_1);
+                crate::video::effacer_couche(x.b, crate::video::Couche::Un);
                 print(x, text::SAVING);
                 layers_on(x);
                 if !config::save(x.c, x.b) {
@@ -413,7 +410,7 @@ fn sub_screen(x: &mut Ctx, texts: &[u32]) {
     let s = get(x, field::SUB_STEP).wrapping_add(2);
     set(x, field::SUB_STEP, s);
     set(x, field::SUB_LINE, 0);
-    x.call(ext::CLEAR_SCROLL_1);
+    crate::video::effacer_couche(x.b, crate::video::Couche::Un);
     for &t in texts {
         print(x, t);
     }

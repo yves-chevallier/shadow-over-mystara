@@ -223,8 +223,6 @@ mod at {
     /// Entrée de la tâche, et reprise de l'attente du début de la partie.
     /// Disposition par type de borne (`A5+0x20`), table d'octets relative au PC.
     pub const LAYOUTS: u32 = 0x15164;
-    /// Services de l'interface appelés à chaque tour (entrées des pièces, sons...).
-    pub const SERVICES: [u32; 2] = [0x19b2a, 0x19b9c];
 }
 
 /// Type de borne (nombre de joueurs, h) : choisit la disposition.
@@ -244,7 +242,6 @@ crate::etapes! {
 /// 0x150ac : entrée de la tâche. Panneaux remis à zéro (numéro de joueur en `+0`), variables de la tâche, puis
 /// attente du début de la partie.
 fn entry(x: &mut Ctx) -> Flow {
-    x.c.d[0] = 0;
     for k in 0..4 {
         let at = A5 + var::PANELS + k * panel::SIZE;
         wr32(x.b, at, 0);
@@ -271,7 +268,6 @@ fn entry(x: &mut Ctx) -> Flow {
 /// la phase 4 (choix des personnages) avant la première mise à jour.
 fn starting(x: &mut Ctx) -> Flow {
     let cabinet = x.v8(CABINET);
-    x.c.d[0] = x.c.d[0] & !0xff | cabinet as u32;
     let layout = x.prog8(at::LAYOUTS + cabinet as u32);
     x.set_v8(var::LAYOUT, layout);
     if x.v8(var::GAME_ON) == 0 {
@@ -288,10 +284,7 @@ fn starting(x: &mut Ctx) -> Flow {
 pub const FORGET_DISPLAYED: Native = Native {
     entry: 0x1507a,
     name: "hud_forget_displayed",
-    run: crate::Corps::Processeur(|c, b| {
-        slot::forget_displayed(b);
-        crate::mem::rts(c, b);
-    }),
+    run: crate::Corps::Memoire(slot::forget_displayed),
     touches_sound: false,
     outputs: 0,
 };
@@ -319,9 +312,9 @@ fn tour(x: &mut Ctx) -> Flow {
         wr8(x.b, var::SEEN_PAUSE, pause);
         status::countdown(x);
     }
-    for service in at::SERVICES {
-        x.call(service);
-    }
+    // 0x19b2a, 0x19b9c : les événements en attente crédités aux compteurs des joueurs
+    crate::evenements::crediter_points(x.b);
+    crate::evenements::crediter_compteur(x.b);
     crate::taches::une_image(x, Etape::AfterWait)
 }
 

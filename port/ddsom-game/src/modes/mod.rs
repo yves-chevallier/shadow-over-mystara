@@ -48,8 +48,6 @@ mod at {
     pub const AFTER_HANDLER: u32 = 0x1341a;
     /// Reprise après la cession : tour suivant.
     pub const AFTER_WAIT: u32 = 0x13422;
-    /// Table des gestionnaires de mode, et table des sous-modes.
-    pub const MODE_TABLE: u32 = 0x13424;
 }
 
 /// Sous-routines du moteur appelées par les écrans.
@@ -141,10 +139,6 @@ pub trait Block {
     fn set_m16(&mut self, off: u32, v: u16);
     /// Passe à l'étape suivante de l'écran (`FF0E72` += 2).
     fn next_step(&mut self);
-    /// Appelle une routine d'origine avec D0 chargé (`moveq`/`move.w #n,D0`).
-    fn call_d0(&mut self, addr: u32, d0: u32);
-    /// Dernier appel réussi ? (retenue effacée : convention des allocateurs d'objets)
-    fn ok(&self) -> bool;
     /// Un tour d'objets et de sprites (`0xfaca2`) : SET, EFFCT, SOBJ puis liste de sprites.
     fn render(&mut self);
 }
@@ -166,18 +160,12 @@ impl Block for Ctx<'_> {
         let s = self.m8(2).wrapping_add(2);
         self.set_m8(2, s);
     }
-    fn call_d0(&mut self, addr: u32, d0: u32) {
-        self.c.d[0] = d0;
-        self.call(addr);
-    }
-    fn ok(&self) -> bool {
-        self.c.sr & 1 == 0
-    }
     fn render(&mut self) {
         let a0 = self.c.a[0];
-        for f in [0x39e86, 0x39cba, 0x39f82, 0x1de96] {
-            self.call(f);
+        for classe in [&crate::dispatch::SET, &crate::dispatch::EFFCT, &crate::dispatch::SOBJ] {
+            classe.update_sans_suite(self.c, self.b);
         }
+        crate::sprites::construire_68k(self.c, self.b);
         self.c.a[0] = a0;
     }
 }
@@ -206,9 +194,6 @@ crate::etapes! {
 fn turn(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     let m = rd8(x.b, mode::MODE);
-    x.c.d[0] = m as u32;
-    let offset = x.prog16(at::MODE_TABLE + m as u32);
-    x.c.d[1] = offset as u32;
     push(x.c, x.b, Etape::ApresGestionnaire);
     match m {
         0 => init(x),
@@ -222,7 +207,6 @@ fn turn(x: &mut Ctx) -> Flow {
 fn init(x: &mut Ctx) -> Flow {
     let m = rd8(x.b, mode::MODE).wrapping_add(2);
     wr8(x.b, mode::MODE, m);
-    x.c.d[0] = 0;
     wr8(x.b, mode::SUB, 2);
     if rd8(x.b, mode::BOOTED) != 0 {
         wr8(x.b, mode::SUB, 0x14);
@@ -236,7 +220,6 @@ fn init(x: &mut Ctx) -> Flow {
 /// Mode 2 (`0x13450`) : aiguille sur le sous-mode.
 fn dispatch(x: &mut Ctx) -> Flow {
     let sub = rd8(x.b, mode::SUB);
-    x.c.d[0] = sub as u32;
     match attract::screen(x, sub).or_else(|| title::screen(x, sub)).or_else(|| ranking::screen(x, sub)).or_else(|| demo::screen(x, sub)) {
         Some(flow) => flow,
         // les onze entrées de la table (0 à 0x14) sont réécrites (code-mort.md, lot « sortie du Cpu »)

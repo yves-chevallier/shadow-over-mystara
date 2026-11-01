@@ -31,13 +31,16 @@ mod text {
     pub const SETTING: u32 = 0xe04e4;
 }
 
-/// Impressions et effacements de texte (A4 = texte).
-mod print {
-    pub const COINS: u32 = 0xf38;
-    pub const COINS_CLEAR: u32 = 0xf4a;
-    pub const PLAIN: u32 = 0xd5e;
-    pub const PLAIN_CLEAR: u32 = 0xd32;
+/// Impressions et effacements du texte gardé : blocs (0xf38, 0xf4a) ou texte simple (0xd5e, 0xd32). Les blocs ne
+/// lisent l'objet A0 que pour des attributs négatifs : jamais pour ces textes (attribut 3).
+#[derive(Clone, Copy)]
+enum Impression {
+    Pieces,
+    EffacerPieces,
+    Simple,
+    EffacerSimple,
 }
+
 
 const SHOW_FRAMES: u32 = 40;
 const HIDE_FRAMES: u32 = 20;
@@ -47,71 +50,73 @@ crate::etapes! {
     pub enum Etape {
         Entree = 0xe03fe => entry,
         CoinsShown = 0xe0440 => |x| {
-            print_shown(x, print::COINS_CLEAR);
+            print_shown(x, Impression::EffacerPieces);
             ceder(x, Attente::Images(HIDE_FRAMES), Etape::CoinsHidden)
         },
-        CoinsHidden = 0xe0452 => |x| show(x, print::COINS, Etape::CoinsShown),
+        CoinsHidden = 0xe0452 => |x| show(x, Impression::Pieces, Etape::CoinsShown),
         PlainShown = 0xe0478 => |x| {
-            print_shown(x, print::PLAIN_CLEAR);
+            print_shown(x, Impression::EffacerSimple);
             ceder(x, Attente::Images(HIDE_FRAMES), Etape::PlainHidden)
         },
-        PlainHidden = 0xe048a => |x| show(x, print::PLAIN, Etape::PlainShown),
+        PlainHidden = 0xe048a => |x| show(x, Impression::Simple, Etape::PlainShown),
     }
 }
 
 fn entry(x: &mut Ctx) -> Flow {
-    x.c.a[0] = SHOWN;
     if x.v8(var::FREE_PLAY) != 0 {
         wr32(x.b, SHOWN, text::FREE_PLAY);
-        return show(x, print::COINS, Etape::CoinsShown);
+        return show(x, Impression::Pieces, Etape::CoinsShown);
     }
     if x.v8(var::SETTING) != 0 {
         wr32(x.b, SHOWN, text::SETTING);
-        return show(x, print::PLAIN, Etape::PlainShown);
+        return show(x, Impression::Simple, Etape::PlainShown);
     }
     let k = 4 * x.v8(var::COINAGE) as u32;
-    x.c.d[0] = k;
     let t = rd32(x.b, text::BY_COINAGE + k - 4);
     wr32(x.b, SHOWN, t);
-    show(x, print::COINS, Etape::CoinsShown)
+    show(x, Impression::Pieces, Etape::CoinsShown)
 }
 
 /// Imprime le texte gardé, puis l'attente d'affichage.
-fn show(x: &mut Ctx, routine: u32, resume: Etape) -> Flow {
-    print_shown(x, routine);
+fn show(x: &mut Ctx, impression: Impression, resume: Etape) -> Flow {
+    print_shown(x, impression);
     ceder(x, Attente::Images(SHOW_FRAMES), resume)
 }
-fn print_shown(x: &mut Ctx, routine: u32) {
-    x.c.a[4] = rd32(x.b, SHOWN);
-    x.call(routine);
+fn print_shown(x: &mut Ctx, impression: Impression) {
+    let texte = rd32(x.b, SHOWN);
+    match impression {
+        Impression::Pieces => crate::text::draw_blocks(x.b, texte, 0),
+        Impression::EffacerPieces => crate::text::clear_blocks(x.b, texte, 0),
+        Impression::Simple => crate::text::print(x.b, texte),
+        Impression::EffacerSimple => crate::text::erase(x.b, texte),
+    };
 }
 
-/// `0xe03c6` : efface le texte (comme le texte des pièces) et arrête la tâche (0xa14) ; D0 et A4 gardés.
-fn stop(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    let (d0, a4) = (c.d[0], c.a[4]);
-    let mut x = Ctx::new(c, b);
-    print_shown(&mut x, print::COINS_CLEAR);
-    crate::kernel::tuer_tache(x.b, SLOT);
-    (x.c.d[0], x.c.a[4]) = (d0, a4);
-    crate::mem::rts(x.c, x.b);
+/// `0xe03c6` : efface le texte (comme le texte des pièces, 0xf4a) et arrête la tâche (0xa14) ; aucun registre ne
+/// change. L'effacement ne lit l'objet A0 de l'appelant que si les attributs du texte sont négatifs : jamais pour
+/// les textes que la tâche garde (attribut 3, tables 0xe048c, 0xe04b0, 0xe04e4).
+pub fn arreter(b: &mut cps2::Cps2Bus) {
+    let texte = rd32(b, SHOWN);
+    crate::text::clear_blocks(b, texte, 0);
+    crate::kernel::tuer_tache(b, SLOT);
 }
 
 /// `0xe03e4` : lance la tâche ; registres gardés.
-fn start(b: &mut cps2::Cps2Bus) {
+pub fn lancer(b: &mut cps2::Cps2Bus) {
     crate::kernel::creer_tache(b, SLOT, ENTRY);
 }
 
 pub const STOP: Native = Native {
     entry: 0xe03c6,
     name: "invite_stop",
-    run: crate::Corps::Processeur(stop),
+    run: crate::Corps::Memoire(arreter),
     touches_sound: false,
     outputs: 0,
 };
 pub const START: Native = Native {
     entry: 0xe03e4,
     name: "invite_start",
-    run: crate::Corps::Memoire(start),
+    run: crate::Corps::Memoire(lancer),
     touches_sound: false,
     outputs: 0,
 };

@@ -943,8 +943,7 @@ fn trails(r: &mut impl Registres, b: &mut Cps2Bus) -> Option<Obj> {
 
 /// 0xa8a42 : caméra de scène en mode 0x60 (`A5+0x51e`), `A5+0x4ff` effacé.
 fn camera_mode_60(c: &mut Cpu, b: &mut Cps2Bus) {
-    crate::mem::wr8(b, A5 + 0x4ff, 0);
-    wr16(b, A5 + 0x51e, 0x60);
+    camera_en_mode_60(b);
     c.flags_logic(0x60, Size::Word);
 }
 
@@ -1161,6 +1160,81 @@ fn tile_block_native(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 pub(crate) const CREATED: u32 = regs::a(1) | regs::CCR;
+
+// ---------------------------------------------------------------------------------------------
+// Créateurs appelés par les écrans (machine à modes, scènes) : cœurs sans registre
+
+/// L'effet créé, ou l'A1 que l'original laisse quand le pool EFFCT est plein (`Pool::alloc_or_leftover`, qui
+/// n'écrit rien après un échec) : pour les appelants qui ne testent pas la retenue.
+pub fn ou_reste(b: &mut Cps2Bus, cree: Option<Obj>) -> Obj {
+    cree.unwrap_or_else(|| pools::EFFCT.alloc_or_leftover(b).expect_err("le pool EFFCT vient d'être trouvé plein"))
+}
+
+/// 0xae776 : élément d'interface (type 17).
+pub fn element_d_interface(b: &mut Cps2Bus) -> Option<Obj> {
+    interface(&mut Pur, b)
+}
+
+/// 0xaf346 : bandeau d'interface (type 21) de variante `variante`.
+pub fn bandeau(b: &mut Cps2Bus, variante: u8) -> Option<Obj> {
+    strip(&mut Pur, b, variante)
+}
+
+/// 0xb1a7a : écran de fin (type 31) de variante `variante`, réglage `reglage`.
+pub fn ecran_de_fin(b: &mut Cps2Bus, variante: u8, reglage: u8) -> Option<Obj> {
+    with_setting_par(&mut Pur, b, kind::COUNTDOWN, variante, reglage)
+}
+
+/// 0xb9aa0 : finale (type 74) liée au créateur.
+pub fn finale(b: &mut Cps2Bus, createur: Obj) -> Option<Obj> {
+    linked(b, createur, kind::FINALE, None)
+}
+
+/// 0xb7f14 : effet de type 68.
+pub fn type_68_pur(b: &mut Cps2Bus) -> Option<Obj> {
+    spawn(&mut Pur, b, kind::TYPE_68)
+}
+
+/// 0xb8956 : minuteur de scène (type 76) de variante `variante`.
+pub fn minuteur(b: &mut Cps2Bus, variante: u8) -> Option<Obj> {
+    timer(&mut Pur, b, variante)
+}
+
+/// 0xb66e4 : effet de type 53 (activité incrémentée).
+pub fn type_53_pur(b: &mut Cps2Bus) -> Option<Obj> {
+    type_53(&mut Pur, b)
+}
+
+/// 0xb9942 : pluie (type 83).
+pub fn pluie(b: &mut Cps2Bus) -> Option<Obj> {
+    spawn(&mut Pur, b, kind::RAIN)
+}
+
+/// 0xb1764 : banc de poissons.
+pub fn banc(b: &mut Cps2Bus) -> Option<Obj> {
+    fish_school(&mut Pur, b)
+}
+
+/// 0xb17ba : poissons nageurs.
+pub fn nageurs(b: &mut Cps2Bus) -> Option<Obj> {
+    fish_swimmers(&mut Pur, b)
+}
+
+/// 0xabb70 : traînées des joueurs.
+pub fn trainees(b: &mut Cps2Bus) -> Option<Obj> {
+    trails(&mut Pur, b)
+}
+
+/// 0xb68b0 : trois effets de type 54.
+pub fn types_54(b: &mut Cps2Bus) -> Option<Obj> {
+    type_54_trio(&mut Pur, b)
+}
+
+/// 0xa8a42 : caméra 1 en mode 0x60.
+pub fn camera_en_mode_60(b: &mut Cps2Bus) {
+    crate::mem::wr8(b, A5 + 0x4ff, 0);
+    wr16(b, A5 + 0x51e, 0x60);
+}
 use regs::d as D;
 
 creators! {
