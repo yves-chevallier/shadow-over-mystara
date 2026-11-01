@@ -131,16 +131,29 @@ impl Tache {
     }
 }
 
-/// Contexte du 68000 d'une tâche qui a cédé la main.
+/// Ce qu'une tâche qui a cédé la main retrouve à sa reprise. L'original sauve ses 15 registres et son SR à la cession
+/// (sur sa pile et dans son enregistrement) et les restaure ; la sonde `DDSOM_POISON=reprise` (`diag::sonder_lancement`,
+/// tous les registres inversés à la reprise, 296 scénarios) montre que seuls ceux-ci sont relus. Les autres registres
+/// d'une tâche qui reprend sont ceux que l'ordonnanceur laisse : personne ne les lit.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Contexte {
-    /// Adresse de reprise : retour de l'enveloppe de cession (`jsr 0xa40`...).
-    pub pc: u32,
+    /// SR de la tâche : son masque d'interruption (`trap #12`, `kernel::masquer`), mode utilisateur.
     pub sr: u16,
-    /// Pointeur de pile utilisateur à la reprise (adresse de retour dépilée).
-    pub usp: u32,
-    pub d: [u32; 8],
-    pub a: [u32; 7],
+    /// A0 de l'appelant d'un sous-programme qui cède, relu au retour (glitch d'origine : registre gardé à travers la
+    /// cession) : fondu de luminosité appelé en sous-programme (`taches::fondu`, reprise `0x14b4`), bonus de fin de
+    /// scène (`Bonus(SetUp)`), sortie de scène (`Exit(..)` : le bloc de l'état partagé).
+    pub a0: u32,
+    /// D4 laissé par le pas de jeu précédent, relu par la phase du pas suivant (tâche de partie, `Partie(Pas)`).
+    pub d4: u32,
+}
+
+impl Contexte {
+    /// Rend le contexte à la reprise de la tâche.
+    pub fn remettre(self, c: &mut Cpu) {
+        c.a[0] = self.a0;
+        c.d[4] = self.d4;
+        c.set_sr(self.sr);
+    }
 }
 
 /// Où reprendre une tâche.
@@ -654,7 +667,7 @@ fn un_decompte_d_ecart(rust: (Etat, u8), origine: (u8, u8)) -> bool {
 /// même image : état (« prête » et « en cours » confondus : la fin d'image peut tomber pendant qu'une tâche tourne
 /// dans l'original ; pour la tâche principale, une image d'écart décomptée par le gel est admise, voir
 /// [`un_decompte_d_ecart`]), compte, pile, entrée d'une tâche neuve, et tas des piles. Avec `tout`, le contexte des tâches
-/// qui ont cédé aussi (diagnostic) : adresse de reprise, pile, SR et registres. Ils peuvent différer sans effet : une
+/// qui ont cédé aussi (diagnostic) : adresse de reprise, SR et registres gardés ([`Contexte`]). Ils peuvent différer sans effet : une
 /// native reprend parfois à une copie identique du code de reprise d'origine (`0xf32cc` pour `0xf5902`), ou laisse
 /// un registre que personne ne relit.
 pub fn ecarts(t: &Table, ram: &[u16], tout: bool) -> Vec<String> {
@@ -684,21 +697,16 @@ pub fn ecarts(t: &Table, ram: &[u16], tout: bool) -> Vec<String> {
         match e.reprise {
             Reprise::Entree(entree) => ecart("entrée", entree, long(r + champ::PC)),
             // la pile d'une tâche en cours a changé depuis sa cession
-            Reprise::Etape(_, c) if tout && !en_cours => {
+            Reprise::Etape(etape, c) if tout && !en_cours => {
                 let usp = long(r + champ::USP);
                 if !REPRISES_ORIGINE.contains(&long(r + champ::PC)) {
-                    ecart("reprise (PC de l'enregistrement)", c.pc, long(r + champ::PC));
+                    ecart("reprise (PC de l'enregistrement)", etape.adresse(), long(r + champ::PC));
                     continue;
                 }
-                ecart("reprise", c.pc, long(usp + 60));
-                ecart("pile de reprise", c.usp, usp + 64);
+                ecart("reprise", etape.adresse(), long(usp + 60));
                 ecart("SR", c.sr as u32, mot(r + champ::SR) as u32);
-                for i in 0..8 {
-                    ecart(&format!("D{i}"), c.d[i], long(usp + 4 * i as u32));
-                }
-                for i in 0..7 {
-                    ecart(&format!("A{i}"), c.a[i], long(usp + 32 + 4 * i as u32));
-                }
+                ecart("D4", c.d4, long(usp + 4 * 4));
+                ecart("A0", c.a0, long(usp + 32));
             }
             Reprise::Etape(..) => {}
         }
