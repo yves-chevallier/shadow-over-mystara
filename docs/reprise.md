@@ -14,23 +14,16 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
   * Le `Cpu` sert encore de banc de registres à la plupart des natives.
   * Ce qui bloque sa suppression : [refactorisation.md](refactorisation.md) § 18, « Ce qu'il faut encore pour supprimer `m68k::Cpu` ».
 
-## Branches en cours (non fusionnées)
+## Lots en cours (mise à jour du 2026-11-01)
 
-Chacune a été arrêtée proprement. Le dernier commit est poussé, préfixé « EN COURS (non validé) » s'il n'a pas été validé. Sa ligne dans « Avancement » de refactorisation.md dit où elle en est.
+Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes 1-2 et 11 familles d'ennemis) sont fusionnés dans main (edd4e00), 296/296 VALIDE dans les deux modes.
 
-| Branche | Worktree | Lot | Suite |
-|---|---|---|---|
-| `wt-pile` (b9a0702, NON validé) | `.claude/worktrees/pile` | Partie 4 : un retour identifié par une profondeur d'appel et non plus par A7 (fait) ; VBLANK = `Point::Interruption`, plus de PC/SR empilés (fait) ; `Restes` en état nommé (pas commencé) | 1) lire la validation empoisonnée restée en cache (`DDSOM_POISON=reprise,neuve`) ; 2) réduire `Contexte` aux registres relus, nommés ; 3) sonde gratuite hors poison, et poison de FF0166-FF0FFF pour prouver que le jeu ne relit pas la pile (zone déjà ignorée par validate : `ram_du_noyau`) ; 4) `Restes` ; 5) fusionner main, valider |
+Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 5 » de refactorisation.md) :
+* **Partie 4, point 5** : `dispatch::Restes` en état nommé dans la table des tâches. A0, D4, D7 sortiront du `Contexte` en devenant des champs des étapes qui les relisent. Resserrer `ram_du_noyau` (FF0E66-FF0FFF contient de vraies variables du jeu, aujourd'hui non comparées).
+* **Partie 5, suite** : familles d'ennemis à vraie lecture de registre (squelette D1, trog A1, gargouille D0, golem D0, bête de l'ombre D0), familles pas encore tentées (scarabée, scorpion, harpie, Riyakaa, guerrier, double, part), puis boss, `joueur/`, `set_b`, `effects_c`, enfin `registres_generique.py` et `registres_sans.py`.
+* Outils de la partie 5 : `tools/registres/` (`lecteurs.py` liste les lecteurs de registres d'entrée, `generique.py`/`nettoie.py`/`famille.sh` rendent une famille générique, `fuzz.sh`/`compare_fuzz.py` comparent fuzz_couv branche/main ; variables `SCRATCH` et `W`).
 
-La partie 2 (`wt-ecrans2`, écrans : `modes/`, `scene/`, crédits, HUD, service) est fusionnée (6163236). Elle a été validée 296/296 dans les deux modes : `adr` 0 ou presque dans ces zones, 14 natives `Memoire`. Il reste les adaptateurs `construire_68k` (D4), `update_cameras_68k` (D4), `recopier_68k` (D0-D4), l'A0 de la sortie de scène, et les natives des phases en `Processeur` (refactorisation.md § 17).
-| `wt-locales` (0e2ccf8 étape 1, 1a3aff7 étape 2 NON validée) | `.claude/worktrees/locales` | Partie 5, familles. Étape 1 : `Restes` reçoit D2/D3, et les façades `enemy_lib`/`enemy_common` sont sans processeur. Étape 2 : `reactions.rs` sans registres, deux tables par type en Rust, réaction de la gargouille 0x65236 réécrite (elle manquait) | 1) valider 0e2ccf8 (DDSOM_ASSETS jamais lancé) puis 1a3aff7, dans les deux modes ; 2) `fuzz_couv` C02/C04 contre main ; 3) les fonctions qui lisent un registre de l'appelant, famille par famille (228 candidats ; l'outil `lecteurs.py` était dans le scratchpad, à refaire) ; 4) `registres_generique.py` puis `registres_sans.py` |
-
-Pour reprendre une branche :
-1. Fusionner main dans la branche.
-2. Relancer la validation complète (elle est reprenable).
-3. Fusionner dans main seulement si les deux modes sont à 100 % VALIDE.
-
-## Après ces trois lots
+## Après ces lots
 
 1. **Retirer `m68k::Cpu` du jeu.** Plus de `Corps::Processeur` : la machine de référence garde son 68000, le jeu n'en a plus.
 2. **Le reste de la couverture.**
