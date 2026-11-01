@@ -79,8 +79,9 @@ fn advance(x: &mut Cx) {
 /// 0x5c22c : un joueur à portée de tir ? Alors tir ou esquive selon la boîte qui l'a vu.
 pub(super) fn decide(x: &mut Cx) {
     if in_front(x) || on_line(x) {
-        // la cible trouvée par la boîte est dans A1 ; D5 dit laquelle (0 devant, 2 sur la ligne)
-        let found = Obj(x.c.a[1]);
+        // la cible vue par la boîte (A1 de l'original : la cible `+0x50`, non nulle puisque la boîte l'a trouvée) ;
+        // D5 dit quelle boîte (0 devant, 2 sur la ligne)
+        let found = x.linked(f::TARGET);
         let facing = x.u8(f::FLIP);
         x.c.d[0] = x.c.d[0] & !0xff | facing as u32;
         let same_side = facing == found.u8(x.b, f::FLIP);
