@@ -265,7 +265,8 @@ pub fn sonder_lancement(c: &mut Cpu, etiquette: &str, etape: &dyn std::fmt::Debu
     if etiquettes().is_empty() {
         return;
     }
-    let site = format!("{etape:?}");
+    // sans espaces ni virgules : le site reste un seul mot d'une liste `DDSOM_POISON` (`tools/bissecte_poison.py`)
+    let site: String = format!("{etape:?}").chars().filter(|c| *c != ' ').map(|c| if c == ',' { ';' } else { c }).collect();
     let Some(choisis) = gardes(etiquette, &site) else {
         return;
     };

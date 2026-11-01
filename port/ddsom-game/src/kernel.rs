@@ -117,6 +117,11 @@ impl Point {
         }
     }
 
+    /// Un point du démarrage (avant que l'ordonnanceur prenne la main).
+    pub fn demarrage(self) -> bool {
+        matches!(self, Point::Reset | Point::RelacheZ80 | Point::Poignee | Point::BootInit | Point::Lancement)
+    }
+
     /// L'ordonnanceur entre deux tâches (où l'original tourne à vide en attendant une tâche prête).
     pub fn entre_deux_taches(self) -> bool {
         matches!(self, Point::Parcours | Point::Examen | Point::Suivant)

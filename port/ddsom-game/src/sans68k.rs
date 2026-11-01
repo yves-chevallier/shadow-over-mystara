@@ -98,8 +98,11 @@ struct Instantane {
 
 impl Instantane {
     fn prendre(c: &Cpu, b: &Cps2Bus) -> Self {
+        let mut ram = b.ram.clone();
+        // la RAM des piles d'origine ne compte pas (changée à chaque point par la sonde `pile`)
+        ram[PILES.0 / 2..PILES.1 / 2].fill(0);
         Instantane {
-            ram: b.ram.clone(),
+            ram,
             extra_ram: b.extra_ram.clone(),
             gfxram: b.gfxram.clone(),
             objram: b.objram.clone(),
@@ -145,10 +148,14 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
         }
         i.plafond = plafond.map(|p| p.max);
     });
+    let poison_pile = crate::diag::poison_actif("pile");
     loop {
         // un point de premier niveau : aucune cession en cours
         crate::taches::oublier_cession();
         let point = crate::kernel::point(b);
+        if poison_pile && !point.demarrage() {
+            empoisonner_pile(b);
+        }
         let niveau = b.irq_level();
         if point != Point::Interruption && niveau > (c.sr >> 8 & 7) as u8 {
             crate::kernel::interrompre(b, point);
@@ -190,6 +197,23 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
         table(b).point = suivant;
     }
     c.cycles = c.cycles.max(fin);
+}
+
+/// RAM des piles d'origine (décalages depuis FF0000) : tas des piles, piles des tâches et du superviseur
+/// (FF0166-FF0E65, que `validate` ignore : `taches::table::ram_du_noyau`). Au-delà, FF0E66 et la suite sont des
+/// variables du jeu (relatives à A5 : `placement::LAST_X` en A5 - 0x719a...).
+const PILES: (usize, usize) = (0x166, 0xe66);
+
+/// Sonde `DDSOM_POISON=pile` : avant chaque point de l'ordonnanceur ou d'une tâche, la RAM des piles d'origine
+/// ([`PILES`]) est remplie d'une valeur qui change à chaque fois. Si la validation reste VALIDE, le jeu n'y lit rien :
+/// il n'a plus de pile 68000.
+fn empoisonner_pile(b: &mut Cps2Bus) {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let motif = (n as u16).wrapping_mul(0x9e37) ^ 0xa5c3;
+    for (i, mot) in b.ram[PILES.0 / 2..PILES.1 / 2].iter_mut().enumerate() {
+        *mot = motif.wrapping_add(i as u16);
+    }
 }
 
 /// L'ordonnanceur tourne à vide, entre deux tâches : aucune tâche prête et pas de nouvelle image, ou seule la tâche du
