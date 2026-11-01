@@ -28,10 +28,10 @@ const OVERCLOCK: f64 = 16.0;
 /// - le noyau (`ram_du_noyau`) : pile de l'ordonnanceur, tâche courante, tas des piles, enregistrements des tâches. Le
 ///   jeu les garde dans sa table des tâches en Rust, comparée à part à celle de la RAM de la machine d'origine
 ///   (`ecarts`) ;
-/// - les piles des tâches (FF01A6-FF0DA5) et celle du superviseur (jusqu'à FF0E66), dans la même zone : le jeu n'y
-///   sauve plus les registres des tâches qui cèdent la main (ils sont dans la table) et le reste n'est qu'adresses de
-///   retour et sauvegardes de registres ; FF0E66-FF0FFF était déjà ignoré (débordement de la pile de la première
-///   tâche) ;
+/// - les piles des tâches (FF01A6-FF0DA5) et celle du superviseur (jusqu'à FF0E65), dans la même zone : le jeu n'y
+///   sauve plus les registres des tâches qui cèdent la main (ce qu'elles relisent est dans leurs étapes) et le reste
+///   n'est qu'adresses de retour et sauvegardes de registres ; FF0E66 et la suite (variables du jeu relatives à A5)
+///   sont comparés ;
 /// - la sauvegarde fantôme des wrappers son (FF297E-FF2A19, `sound::jouer_wrapper`).
 fn ignored(word: usize) -> bool {
     let a = 2 * word;

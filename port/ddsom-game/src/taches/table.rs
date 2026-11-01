@@ -619,11 +619,11 @@ pub fn depiler_appels(b: &mut Cps2Bus, n: usize) -> Vec<Suite> {
 
 /// Octets de la RAM du noyau d'origine (décalage depuis FF0000) que le jeu ne tient plus en RAM : pile de
 /// l'ordonnanceur, tâche courante et sommet du tas (FF0052-FF005D), enregistrements (FF0064-FF0163), tas des piles
-/// (FF0166-FF01A5), piles des tâches (FF01A6-FF0DA5) et du superviseur (jusqu'à FF0E66). Les outils qui comparent la
-/// RAM du jeu à celle de l'original les ignorent (avec le reste de FF0E66-FF0FFF, ignoré de tout temps) et comparent
-/// la table avec [`ecarts`].
+/// (FF0166-FF01A5), piles des tâches (FF01A6-FF0DA5) et du superviseur (jusqu'à FF0E65). Les outils qui comparent la
+/// RAM du jeu à celle de l'original les ignorent et comparent la table avec [`ecarts`]. FF0E66 et la suite sont des
+/// variables du jeu (relatives à A5 : `placement::LAST_X`...), comparées comme le reste de la RAM.
 pub fn ram_du_noyau(decalage: u32) -> bool {
-    (0x52..0x5e).contains(&decalage) || (0x64..0x164).contains(&decalage) || (0x166..0x1000).contains(&decalage)
+    (0x52..0x5e).contains(&decalage) || (0x64..0x164).contains(&decalage) || (0x166..0xe66).contains(&decalage)
 }
 
 // ---------------------------------------------------------------------------------------------
