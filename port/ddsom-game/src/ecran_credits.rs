@@ -1,29 +1,21 @@
 //! Écran des crédits (C1) : textes et chiffres des crédits et des pièces affichés pendant
 //! l'attente d'un départ (`0x148be` texte du crédit, `0x14b74` texte d'un joueur, `0x14c1e` effacement,
-//! `0x14652` chiffres). Ils sont appelés par la tâche des crédits (`tache_credits.rs`) avec A1 = le
-//! premier monnayeur (`A5+0x44e`, voir `credits.rs`) et ne cèdent jamais la main.
+//! `0x14652` chiffres). La tâche des crédits (`tache_credits.rs`) les appelle avec le premier monnayeur
+//! (`A5+0x44e`, voir `credits.rs`, A1 de l'original) ; ils ne cèdent jamais la main.
 //!
 //! Les textes sont des tables de pointeurs de la ROM, indexées par le nombre de crédits ou de pièces
 //! en attente : l'index se calcule en 4 octets par pas. Les chiffres s'écrivent dans la couche de
-//! caractères (GFX RAM 0x912000) par `0x14e46` (`credits::ECRIRE_CHIFFRE`).
+//! caractères (GFX RAM 0x912000) par `credits::ecrire_chiffre` (0x14e46).
 //!
 //! Variables : `A5+0x20` monnayeur partagé, `+0x21` nombre de monnayeurs moins un, `+0x22` compteurs
 //! séparés, `+0x1e` pièces par crédit, `+0x456` écran à gros chiffres. Dans un monnayeur : `+1` pièces
 //! en attente, `+2` crédits, `+9` crédit à deux pièces, `+0xb` dernier texte affiché.
 
-use crate::mem::{rd32, rd8, rts, set_low_byte, set_low_word, wr8, A5};
-use crate::scene::Ctx;
-use crate::Native;
+use cps2::Cps2Bus;
 
-/// Sous-routines d'origine.
-mod ext {
-    pub const PRINT: u32 = 0xd5e;
-    pub const PRINT_TALL: u32 = 0xdca;
-    pub const PRINT_STRINGS: u32 = 0x1136;
-    pub const PRINT_AT: u32 = 0x1234;
-    pub const DIGIT: u32 = 0x14e46;
-    pub const COUNT_TEXT: u32 = 0x14b74;
-}
+use crate::credits::ecrire_chiffre;
+use crate::mem::{prog16, rd32, rd8, set_low_byte, wr8, A5};
+use crate::text;
 
 /// Tables de la ROM : pointeurs de textes selon le crédit (une table par variante), et zone effacée.
 mod table {
@@ -40,32 +32,23 @@ mod table {
     pub const RECT: u32 = 0x14e54;
 }
 
+/// Premier monnayeur (`A5+0x44e`).
+pub const PREMIER_MONNAYEUR: u32 = A5 + 0x44e;
+
 const CHARACTERS: u32 = 0x912000;
 
-fn v8(x: &mut Ctx, off: u32) -> u8 {
-    rd8(x.b, A5 + off)
+fn v8(b: &mut Cps2Bus, off: u32) -> u8 {
+    rd8(b, A5 + off)
 }
 
-/// Octet `off` de l'enregistrement pointé par le registre A1.
-fn a1(x: &mut Ctx, off: u32) -> u8 {
-    rd8(x.b, x.c.a[1] + off)
+/// Pointeur de texte `table[index]` (A4 de l'original).
+fn texte(b: &mut Cps2Bus, table: u32, index: u32) -> u32 {
+    rd32(b, table + (index & 0xffff))
 }
 
-fn finish(x: &mut Ctx) {
-    rts(x.c, x.b);
-}
-
-/// Lit le pointeur de texte `table[index]` (A4 de l'original) puis appelle `routine`.
-fn print_from(x: &mut Ctx, table: u32, index: u32, routine: u32) {
-    x.c.a[4] = rd32(x.b, table + (index & 0xffff));
-    x.call(routine);
-}
-
-/// Écrit un chiffre (D0 = valeur, A4 = destination, D1 = attribut 1) par `0x14e46`.
-fn digit(x: &mut Ctx, value: u8) {
-    x.c.d[0] = value as u32;
-    x.c.d[1] = 1;
-    x.call(ext::DIGIT);
+/// Écrit un chiffre (attribut 1) par `0x14e46` ; rend la case qui suit.
+fn digit(b: &mut Cps2Bus, case: u32, value: u8) -> u32 {
+    ecrire_chiffre(b, case, value, 1)
 }
 
 /// Reste de `value` modulo `by` par soustractions (`sub.b ; bgt`), comme l'original.
@@ -83,17 +66,17 @@ fn modulo(value: u8, by: u8) -> u8 {
 // ---------------------------------------------------------------------------------------------
 // 0x14c1e et 0x14b74
 
-/// Efface le rectangle de texte du crédit.
-fn clear_credit_text(x: &mut Ctx) {
-    crate::text::clear_box(x.b, table::RECT);
+/// 0x14c1e : efface le rectangle de texte du crédit.
+pub fn clear_credit_text(b: &mut Cps2Bus) {
+    text::clear_box(b, table::RECT);
 }
 
-/// Index (en octets) du texte de crédit : 4 octets par crédit entier, plus une fraction de pièces
+/// Index (en octets) du texte de crédit du monnayeur `m` : 4 octets par crédit entier, plus une fraction de pièces
 /// quand le crédit est à une pièce.
-fn credit_index(x: &mut Ctx) -> u32 {
-    let (coins, credits, per_credit) = (a1(x, 1), a1(x, 2), v8(x, 0x1e));
+fn credit_index(b: &mut Cps2Bus, m: u32) -> u32 {
+    let (coins, credits, per_credit) = (rd8(b, m + 1), rd8(b, m + 2), v8(b, 0x1e));
     let mut d0: u32;
-    if a1(x, 9) != 0 {
+    if rd8(b, m + 9) != 0 {
         d0 = (credits as u32) << 2 & 0xffff;
         if d0 as u8 > 8 {
             set_low_byte(&mut d0, 8);
@@ -119,61 +102,49 @@ fn credit_index(x: &mut Ctx) -> u32 {
     d0
 }
 
-/// `0x14b74` : texte du crédit d'un joueur, à la position D4 (ligne), D5 (colonne), D6 (attribut).
-fn count_text(x: &mut Ctx) {
-    let index = credit_index(x);
-    let two_coins = (a1(x, 9) != 0) as usize;
-    let variant = match v8(x, 0x21) {
+/// `0x14b74` : texte du crédit du monnayeur `m` en colonne `col` (D5), ligne 0xd (D6).
+fn count_text(b: &mut Cps2Bus, m: u32, col: u8) {
+    let index = credit_index(b, m);
+    let two_coins = (rd8(b, m + 9) != 0) as usize;
+    let variant = match v8(b, 0x21) {
         3 => 2,
         2 => 1,
         _ => 0,
     };
-    print_from(x, table::PLAYER_TEXT[variant][two_coins], index, ext::PRINT_AT);
-    finish(x);
-}
-
-/// Appelle `0x14b74` pour le monnayeur `a1` (décalage depuis A5) aux coordonnées données.
-fn player_text(x: &mut Ctx, monnayeur: u32, d4: u16, d5: u16) {
-    x.c.a[1] = A5 + monnayeur;
-    set_low_word(&mut x.c.d[4], d4);
-    set_low_word(&mut x.c.d[5], d5);
-    set_low_word(&mut x.c.d[6], 0xd);
-    x.call(ext::COUNT_TEXT);
+    let t = texte(b, table::PLAYER_TEXT[variant][two_coins], index);
+    text::print_tall_at(b, t, col, 0xd);
 }
 
 // ---------------------------------------------------------------------------------------------
 // 0x148be : texte du crédit
 
-fn credit_text(x: &mut Ctx) {
-    if v8(x, 0x22) != 0 {
-        return credit_text_separate(x);
+/// `0x148be` : texte du crédit, d'après le premier monnayeur `m`.
+pub fn credit_text(b: &mut Cps2Bus, m: u32) {
+    if v8(b, 0x22) != 0 {
+        return credit_text_separate(b);
     }
-    let two_coins = a1(x, 9) != 0;
+    let two_coins = rd8(b, m + 9) != 0;
     if two_coins {
         // crédit à deux pièces : le texte suit le nombre de crédits, plafonné selon le partage
-        let limit = if v8(x, 0x20) == 0 {
-            4
-        } else if v8(x, 0x20) == 1 {
-            6
-        } else {
-            8
+        let limit = match v8(b, 0x20) {
+            0 => 4,
+            1 => 6,
+            _ => 8,
         };
-        let mut d0 = a1(x, 2) as i8;
-        if d0 > limit {
-            d0 = limit;
-        }
+        let d0 = (rd8(b, m + 2) as i8).min(limit);
         let index = (d0 as u8 as u32) << 2;
-        if index as u8 == a1(x, 0xb) {
-            return finish(x);
+        if index as u8 == rd8(b, m + 0xb) {
+            return;
         }
-        wr8(x.b, x.c.a[1] + 0xb, index as u8);
-        clear_credit_text(x);
-        let index = a1(x, 0xb) as u32;
-        print_from(x, table::TEXT_TWO_COINS, index, ext::PRINT_STRINGS);
-        return finish(x);
+        wr8(b, m + 0xb, index as u8);
+        clear_credit_text(b);
+        let index = rd8(b, m + 0xb) as u32;
+        let t = texte(b, table::TEXT_TWO_COINS, index);
+        text::print_tall(b, t);
+        return;
     }
-    let credits = a1(x, 2);
-    let shared = v8(x, 0x20);
+    let credits = rd8(b, m + 2);
+    let shared = v8(b, 0x20);
     // 4 octets par crédit entier jusqu'à 3 (selon le partage), puis la fraction de pièces
     let mut d0 = 0u8;
     let mut fraction = true;
@@ -192,22 +163,22 @@ fn credit_text(x: &mut Ctx) {
         }
     }
     if fraction {
-        d0 = fraction_index(x, d0);
+        d0 = fraction_index(b, m, d0);
     }
-    wr8(x.b, x.c.a[1] + 0xb, d0);
-    clear_credit_text(x);
-    let table = if a1(x, 2) != 0 { table::TEXT_ONE } else { table::TEXT_ONE_EMPTY };
-    let index = a1(x, 0xb) as u32;
-    print_from(x, table, index, ext::PRINT_STRINGS);
-    finish(x);
+    wr8(b, m + 0xb, d0);
+    clear_credit_text(b);
+    let table = if rd8(b, m + 2) != 0 { table::TEXT_ONE } else { table::TEXT_ONE_EMPTY };
+    let index = rd8(b, m + 0xb) as u32;
+    let t = texte(b, table, index);
+    text::print_tall(b, t);
 }
 
 /// Texte intermédiaire (0x14912) : `d0` plus 4 octets par pièce manquante pour le crédit suivant.
-fn fraction_index(x: &mut Ctx, d0: u8) -> u8 {
+fn fraction_index(b: &mut Cps2Bus, m: u32, d0: u8) -> u8 {
     let mut d1 = 0u8;
-    let coins = a1(x, 1);
+    let coins = rd8(b, m + 1);
     if coins != 0 {
-        let mut left = v8(x, 0x1e).wrapping_sub(coins);
+        let mut left = v8(b, 0x1e).wrapping_sub(coins);
         loop {
             d1 = d1.wrapping_add(4);
             left = left.wrapping_sub(1);
@@ -219,137 +190,111 @@ fn fraction_index(x: &mut Ctx, d0: u8) -> u8 {
     d0.wrapping_add(d1)
 }
 
-/// Compteurs séparés (0x149aa) : un texte par joueur, aux positions de chaque configuration.
-fn credit_text_separate(x: &mut Ctx) {
-    clear_credit_text(x);
+/// Compteurs séparés (0x149aa) : un texte par joueur, aux colonnes de chaque configuration.
+fn credit_text_separate(b: &mut Cps2Bus) {
+    clear_credit_text(b);
     const P1: u32 = 0x44e;
     const P2: u32 = 0x45e;
     const P3: u32 = 0x46e;
     const P4: u32 = 0x47e;
-    let layout: &[(u32, u16, u16)] = if v8(x, 0x21) == 3 {
-        &[(P1, 0, 1), (P2, 4, 0xd), (P3, 8, 0x19), (P4, 0xc, 0x25)]
-    } else if v8(x, 0x21) == 2 {
-        &[(P1, 0, 1), (P2, 4, 0x11), (P3, 8, 0x21)]
-    } else if v8(x, 0x20) == 1 {
-        &[(P1, 0, 1), (P1, 4, 0x11), (P2, 8, 0x21)]
-    } else if v8(x, 0x20) == 2 {
-        if v8(x, 0x21) == 1 {
-            &[(P1, 0, 0xa), (P2, 4, 0x18)]
+    // (monnayeur, colonne) ; l'original passe aussi une ligne (D4 : 0, 4, 8, 0xc) que le texte ne lit pas
+    let layout: &[(u32, u8)] = if v8(b, 0x21) == 3 {
+        &[(P1, 1), (P2, 0xd), (P3, 0x19), (P4, 0x25)]
+    } else if v8(b, 0x21) == 2 {
+        &[(P1, 1), (P2, 0x11), (P3, 0x21)]
+    } else if v8(b, 0x20) == 1 {
+        &[(P1, 1), (P1, 0x11), (P2, 0x21)]
+    } else if v8(b, 0x20) == 2 {
+        if v8(b, 0x21) == 1 {
+            &[(P1, 0xa), (P2, 0x18)]
         } else {
-            &[(P1, 0, 1), (P1, 4, 0xd), (P2, 8, 0x19), (P2, 0xc, 0x25)]
+            &[(P1, 1), (P1, 0xd), (P2, 0x19), (P2, 0x25)]
         }
     } else {
-        &[(P1, 0, 0xa), (P2, 4, 0x18)]
+        &[(P1, 0xa), (P2, 0x18)]
     };
-    for &(monnayeur, d4, d5) in layout {
-        player_text(x, monnayeur, d4, d5);
+    for &(monnayeur, col) in layout {
+        count_text(b, A5 + monnayeur, col);
     }
-    x.c.a[1] = A5 + P1;
-    finish(x);
 }
 
 // ---------------------------------------------------------------------------------------------
 // 0x14652 : chiffres des crédits et des pièces
 
 /// Variante du tableau de joueurs : 0 pour un monnayeur, 2 pour deux, 5 pour trois et quatre.
-fn rank(x: &mut Ctx) -> u8 {
-    match v8(x, 0x21) {
+fn rank(b: &mut Cps2Bus) -> u8 {
+    match v8(b, 0x21) {
         1 => 0,
         2 => 2,
         _ => 5,
     }
 }
 
-fn digits(x: &mut Ctx) {
-    let tall = v8(x, 0x456) != 0;
-    if v8(x, 0x21) == 0 || v8(x, 0x22) == 0 {
-        return if tall { digits_tall_single(x) } else { digits_single(x) };
+/// Case de la couche de caractères à un décalage signé (mot) de son début.
+fn case(offset: u32) -> u32 {
+    CHARACTERS.wrapping_add(offset as u16 as i16 as i32 as u32)
+}
+
+/// `0x14652` : chiffres des crédits et des pièces, d'après le premier monnayeur `m`.
+pub fn digits(b: &mut Cps2Bus, m: u32) {
+    let tall = v8(b, 0x456) != 0;
+    if v8(b, 0x21) == 0 || v8(b, 0x22) == 0 {
+        return if tall { digits_tall_single(b) } else { digits_single(b, m) };
     }
     let mut a2 = A5 + 0x44e;
-    for player in 0..=v8(x, 0x21) as u32 {
-        let index = (rank(x) as u32 + player) << 2;
+    for player in 0..=v8(b, 0x21) as u32 {
+        let index = (rank(b) as u32 + player) << 2;
         if tall {
-            print_from(x, table::TALL_TEXT, index, ext::PRINT_TALL);
-            x.c.a[4] = CHARACTERS;
-            let offset = rd32(x.b, table::TALL_OFFSETS + index);
-            x.c.a[4] = x.c.a[4].wrapping_add(offset as u16 as i16 as i32 as u32);
-            let credits = rd8(x.b, a2 + 2);
-            digit(x, credits);
-            x.c.a[4] = x.c.a[4].wrapping_sub(0x7e);
-            if v8(x, 0x21) != 3 {
-                x.c.a[4] = x.c.a[4].wrapping_add(0x17c);
+            let t = texte(b, table::TALL_TEXT, index);
+            text::print_over(b, t);
+            let offset = rd32(b, table::TALL_OFFSETS + index);
+            let credits = rd8(b, a2 + 2);
+            let mut at = digit(b, case(offset), credits);
+            at = at.wrapping_sub(0x7e);
+            if v8(b, 0x21) != 3 {
+                at = at.wrapping_add(0x17c);
             }
-            let coins = modulo(rd8(x.b, a2 + 1), v8(x, 0x1e));
-            digit(x, coins);
-            x.c.a[4] = x.c.a[4].wrapping_add(0xfe);
-            let per = v8(x, 0x1e);
-            digit(x, per);
+            let coins = modulo(rd8(b, a2 + 1), v8(b, 0x1e));
+            at = digit(b, at, coins);
+            at = at.wrapping_add(0xfe);
+            let per = v8(b, 0x1e);
+            digit(b, at, per);
         } else {
-            let two_coins = a1(x, 9) != 0;
-            print_from(x, table::DIGIT_TEXT[two_coins as usize], index, ext::PRINT);
-            x.c.a[4] = CHARACTERS;
+            let two_coins = rd8(b, m + 9) != 0;
+            let t = texte(b, table::DIGIT_TEXT[two_coins as usize], index);
+            text::print(b, t);
             // la table des décalages se lit relativement au PC (programme déchiffré)
-            let mut offset = x.prog16(table::DIGIT_OFFSETS + index + 2) as u32;
-            if a1(x, 9) != 0 {
-                offset = rd32(x.b, table::DIGIT_OFFSETS_TWO_COINS + index);
+            let mut offset = prog16(b, table::DIGIT_OFFSETS + index + 2) as u32;
+            if rd8(b, m + 9) != 0 {
+                offset = rd32(b, table::DIGIT_OFFSETS_TWO_COINS + index);
             }
-            x.c.a[4] = x.c.a[4].wrapping_add(offset as u16 as i16 as i32 as u32);
-            let credits = rd8(x.b, a2 + 2);
-            digit(x, credits);
+            let credits = rd8(b, a2 + 2);
+            digit(b, case(offset), credits);
         }
         a2 += 0x10;
     }
-    finish(x);
 }
 
 /// Un seul tableau (0x14700) : crédits d'un monnayeur.
-fn digits_single(x: &mut Ctx) {
-    let two_coins = a1(x, 9) != 0;
-    print_from(x, table::DIGIT_TEXT[two_coins as usize], 0x24, ext::PRINT);
-    x.c.a[4] = if a1(x, 9) != 0 { 0x912df4 } else { 0x912e74 };
-    let credits = v8(x, 0x450);
-    digit(x, credits);
-    finish(x);
+fn digits_single(b: &mut Cps2Bus, m: u32) {
+    let two_coins = rd8(b, m + 9) != 0;
+    let t = texte(b, table::DIGIT_TEXT[two_coins as usize], 0x24);
+    text::print(b, t);
+    let at = if rd8(b, m + 9) != 0 { 0x912df4 } else { 0x912e74 };
+    let credits = v8(b, 0x450);
+    digit(b, at, credits);
 }
 
 /// Gros chiffres, un seul tableau (0x1484c).
-fn digits_tall_single(x: &mut Ctx) {
-    print_from(x, table::TALL_TEXT, 0x24, ext::PRINT_TALL);
-    x.c.a[4] = 0x912cf4;
-    let credits = v8(x, 0x450);
-    digit(x, credits);
-    x.c.a[4] = x.c.a[4].wrapping_add(0xfe);
-    let coins = modulo(v8(x, 0x44f), v8(x, 0x1e));
-    digit(x, coins);
-    x.c.a[4] = x.c.a[4].wrapping_add(0xfe);
-    let per = v8(x, 0x1e);
-    digit(x, per);
-    finish(x);
+fn digits_tall_single(b: &mut Cps2Bus) {
+    let t = texte(b, table::TALL_TEXT, 0x24);
+    text::print_over(b, t);
+    let credits = v8(b, 0x450);
+    let mut at = digit(b, 0x912cf4, credits);
+    at = at.wrapping_add(0xfe);
+    let coins = modulo(v8(b, 0x44f), v8(b, 0x1e));
+    at = digit(b, at, coins);
+    at = at.wrapping_add(0xfe);
+    let per = v8(b, 0x1e);
+    digit(b, at, per);
 }
-
-macro_rules! native {
-    ($nom:ident, $entree:expr, $corps:expr) => {
-        pub const $nom: Native = Native {
-            entry: $entree,
-            name: stringify!($nom),
-            run: crate::Corps::Processeur(|c, b| {
-                let mut x = Ctx::new(c, b);
-                x.c.a[5] = A5;
-                let corps: fn(&mut Ctx) = $corps;
-                corps(&mut x);
-            }),
-            touches_sound: false,
-            outputs: 0,
-        };
-    };
-}
-
-native!(CREDIT_TEXT, 0x148be, credit_text);
-native!(DIGITS, 0x14652, digits);
-native!(COUNT_TEXT, 0x14b74, count_text);
-native!(CLEAR_CREDIT_TEXT, 0x14c1e, |x| {
-    clear_credit_text(x);
-    finish(x)
-});
-
-pub const NATIVES: &[Native] = &[CREDIT_TEXT, DIGITS, COUNT_TEXT, CLEAR_CREDIT_TEXT];

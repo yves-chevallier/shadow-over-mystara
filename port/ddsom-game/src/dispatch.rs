@@ -68,8 +68,12 @@ impl Class {
         self.sweep(c, b, false)
     }
 
-    /// Parcours appelé sans suite (phase 0, écrans hors partie) : aucun gestionnaire n'y cède la main.
+    /// Parcours appelé sans suite (phase 0, écrans hors partie) : aucun gestionnaire n'y cède la main. Sonde
+    /// `DDSOM_POISON=rendu` : les registres hérités de l'appelant (tous sauf A5 et A7) sont inversés avant le parcours,
+    /// pour prouver que les gestionnaires ne relisent rien de l'écran qui les appelle.
+    #[track_caller]
     pub fn update_sans_suite(&self, c: &mut Cpu, b: &mut Cps2Bus) {
+        crate::diag::registres_morts(c, "rendu", crate::diag::REGISTRES_DE_TACHE);
         assert!(self.update(c, b) == Flow::Done, "dispatch {:x} : un gestionnaire a cédé la main sans suite", self.entry);
     }
 

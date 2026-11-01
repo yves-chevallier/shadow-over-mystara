@@ -751,6 +751,59 @@ But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin 
   retours. (4) Les **natives** : 956 corps `Processeur` et 532 `ProcesseurEn` (enveloppes et services son, qui lisent
   A0, A1, D4 ou D0/D1) ; un corps `Memoire` n'est possible que pour une routine qui ne lit ni ne laisse aucun registre.
 
+## 17. Lot « sortie du Cpu », partie 2 : les écrans
+
+But : plus d'appel par adresse ni de registre miroir dans les écrans (`modes/`, `scene/`, `tache_credits.rs`,
+`ecran_credits.rs`, `hud/`, `service/`), contrats prouvés par poison, état nommé.
+
+* **Appels par adresse.** Les quelque 490 `call`/`x.call` des écrans sont des appels Rust : cœurs nouveaux ou rendus
+  publics dans les services (`video::{verrouiller_compteurs, vider_objets, ecran_noir, effacer_couche(Couche),
+  desactiver_couches, copier_ecrans_fixes}`, `palette::{charger_palettes_de_scene, charger_ensemble, charger_page,
+  charger_tout}`, `eeprom::{compter_partie, compter_depart, stat_personnage_choisi, stat_duree_de_partie}`,
+  `credits::{lire_departs, ecrire_chiffre, initialiser}`, `inputs::entrees_du_joueur`, `player::init::{initialiser,
+  rejoindre, effacer_joueurs}`, `config::initialiser`, `sound::emettre`), créateurs des familles en fonctions pures
+  (`creators::set_13_pur`... `-> Result<Obj, Obj>`, l'`Err` est l'A1 laissé par un échec : conversion mécanique
+  seulement). `adr` : `scene` 169 → 1 (`script.rs` : appels `CALL` des scripts, lus dans la ROM), `modes` 154 → 0,
+  `tache_credits` 28 → 0, `hud` 8 → 0, `service` 9 → 0, `ecran_credits` 3 → 0, `taches` 8 → 0. `Ctx::call`,
+  `Block::call_d0/ok` et les natives qui ne servaient qu'aux appels par adresse (textes de l'écran des crédits,
+  boutons de départ, verrous, chiffre des crédits) sont retirés.
+* **Registres.** Les miroirs (`c.d[0] = ...` pour un appelé qui n'en lit rien, A0 rechargé après chaque appel) sont
+  retirés ; le contexte d'une tâche relu après une cession devient un champ nommé de son `Etape`
+  (`tache_credits::Depart {monnayeur, joueur, enregistrement, cout}`, D2/D3/A3 de l'original ;
+  `characters::Joueur {enregistrement, octet}`, A6/D1). `regs` : `scene` 275 → 67, `modes` 348 → 33,
+  `tache_credits` 42 → 8, `ecran_credits` 30 → 0, `hud` 6 → 3, `service` 10 → 3, `taches` 56 → 43.
+* **État nommé.** `scene::fondu` (pages, pas, délai et les six tâches de fondu : `MONTEE`, `DESCENTE`,
+  `DESCENTE_PAS`, `MONTEE_PAS`, `VERS_LE_BLANC`, `DEPUIS_LE_BLANC`) remplace les copies par écran (`FADE_*`) ;
+  `ecran_credits` en fonctions pures ; `taches::invite::Impression`.
+* **Natives.** `Memoire` : `video::copier_ecrans_fixes`, `hud::FORGET_DISPLAYED` (0x1507a), `RECORDER_STOP`
+  (0xe05d6), remises à zéro des blocs (0xf3130, 0xf7916, 0xfc562) et effacement du texte (0xf683c), qui n'ont plus
+  d'appelant par adresse. Bilan du lot (après fusion de main 044c685) : 944 `Processeur`, 532 `ProcesseurEn`, 14 `Memoire` (6 avant le
+  lot) ; total `regs` 3 676 → 3 045, `adr` 749 → 368 (299 dans `families`). Après fusion de la partie 3 (a911566) :
+  862 `Processeur`, 532 `ProcesseurEn`, 14 `Memoire`, 82 `Gestionnaire` ; `regs` 2 811, `adr` 163.
+* **Glitches d'origine (registres relus, écrits en clair).** A1 laissé par une allocation qui échoue (créateurs,
+  messages, objets système : l'échec n'est pas testé) ; D0 du chargement des palettes (premier long de la dernière
+  page) relu par les compteurs de répétition du menu des réglages ; D1.w = -1 de l'effacement du texte (0xf683c) relu
+  comme réglage de l'effet du compte à rebours du bonus ; A0 du gestionnaire de phase (`jsr (A0)`) relu par l'entrée
+  de scène ; A0 laissé par la boucle de partie lié aux effets d'ouverture (`effets_13`) et à l'objet de la finale ;
+  A0 du déliement des listes à travers la cession de l'écran noir ; D0 du rendu qui fixe la durée d'une cession du
+  générique ; reprise de la transition 32 qui rouvre le message 1 (D0 de l'attente) ; octet haut de D0.w de la
+  statistique du personnage choisi ; contexte des cessions (D2/D3/A3 du départ d'un joueur, A6/D1 de l'intermède
+  des personnages) ; A0 sur le bloc de la sortie de scène gardé par les cessions de la boutique et de l'intermède
+  des personnages (constante `BLOC`), et relu par l'aiguillage en fin d'état partagé (octet `+2` du bloc désigné par
+  A0 : `x.c.a[0] = BLOC` posé en clair au retour de la boutique).
+* **Preuve.** Sondes `cession`, `retour` et `rendu` (guide, « Sondes des appels, des cessions et des retours »),
+  validation empoisonnée du code d'origine avec `tout@` les fichiers du lot et les cessions/retours de ses tâches,
+  bissection de chaque échec (`tools/bissecte_poison.py`), puis la même liste sur le code converti (`rendu` compris) : 46 échecs au premier passage (A0 du bloc relu après
+  les cessions de la boutique et de l'intermède, contexte D1/A6 déjà en champs), 0 après correction, une seule
+  lecture gardée (`retour@Shop(LeaveWaited)#a0`, A0 vers l'aiguillage). Les restes de l'effacement de la couche 1
+  (0x3525c) avant une mise à jour du monde, notés « glitch possible », sont morts (rendu empoisonné VALIDE) : appel du
+  cœur.
+* **Ce qui reste.** Les appels `CALL` des scripts d'apparition (adresse lue dans la ROM) ; les natives des phases et
+  des écrans gardent un corps `Processeur` tant que le noyau leur passe la main par adresse ; des adaptateurs `_68k`
+  dont les restes sont relus (glitches d'origine) : listes de sprites (`construire_68k`, D4, 17 sites), caméras
+  (`update_cameras_68k`, D4, 3), copie des entrées (`recopier_68k`, D0-D4, 2), déliement des listes de l'écran
+  noir (A0) ; le passage d'A0 d'un état partagé à l'aiguillage de la sortie de scène (`a0_clobbered`).
+
 ## 18. Lot « sortie du Cpu », partie 3 : familles d'objets
 
 Périmètre : `families/` (et les créateurs appelés par `player/spawn.rs`, `effects_aids.rs`). But : que les gestionnaires
@@ -867,5 +920,6 @@ total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Corps::Gestionnaire`.
 | Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B, 9b27479), 272/272 sans 68000 et 272/272 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `zones_natives.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
 | Lot « noyau final » : J3 achevé (appels en cours en étapes, appel attendu, cession notée au lieu de `Unwound`), ordonnanceur, démarrage et VBLANK en machine à états Rust, mode hybride retiré, appels directs de la fin de phase | voir `git log` (wt-noyau) | complète après fusion de main (f8f67af), 272/272 sans 68000 (14 min 55 s, 8 tâches) et 272/272 (10 min 53 s) depuis les assets (`DDSOM_ASSETS`, `data` réextrait par l'`extract` de main : `reste.json`) |
 | Lot IA : cœurs des aides d'IA et services restants, natives retirées, glitches de registres en clair, fuzz_ia | voir `git log` (wt-ia) | complète, 272/272 puis, fusionné avec le lot « trous », 286/286 (DDSOM_LONG=1) sans 68000 et depuis les assets (`trous_assets`), JOBS=8 ; poison par adresse et par registre (sondes), `fuzz_ia` 0 écart |
+| Lot « sortie du Cpu », partie 2 : écrans sans appel par adresse ni registre miroir, contexte des tâches en champs d'étape, `scene::fondu`, sondes `cession`/`retour`/`rendu` | voir `git log` (wt-ecrans2) | complète après fusion de main a911566 : 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée 296/296 après cette fusion aussi. Avant, après fusion de main (044c685), 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée (`tout@` les fichiers du lot, cessions et retours de ses tâches, une lecture gardée) 296/296. Étape suivante : prouver le reste des `_68k` des écrans (`construire_68k`, `update_cameras_68k`) avec la sonde `sortie` et `tools/registres_*.py` |
 | Sortie du Cpu, partie 3 : familles (sonde de sortie des gestionnaires, `Cx<R>`/`Banc`/`Restes`, 1 870 fonctions génériques, 82 gestionnaires `Corps::Gestionnaire`, créateurs ESHL et d'effets en Rust, `random_68k` retiré, remise en liste exacte) | voir `git log` (wt-familles) | complète après fusion de main (044c685) : 296/296 sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=7/6 ; sonde `sortie` 285/286 puis exclusions bissectées ; `fuzz_couv` C08, C10, C0e, C14 avant/après : aucun écart nouveau |
 | Sortie du Cpu, partie 4 : pile et interruption (EN COURS, wt-pile) | voir `git log` (wt-pile) | **non validé** : seulement `bot_2p` 3 000 images VALIDE et tests de la bibliothèque. Fait : (point 3) les retours ne sont plus identifiés par A7 : `Cadre::appels` (profondeur des appels hors cadre à l'ouverture) et `Table::appels: Vec<HorsCadre>` (`ParAdresse`, `Par68000` pour les outils), `taches::table::Retour` ; `crate::call` ne touche plus A7 ; `appeler`/`appeler_attendu` sans `Cpu` ; `appelee_par_un_cadre`, `verifier_68000` et `examples/cessions` retirés. (Point 4) VBLANK = point du noyau `Point::Interruption`, point interrompu dans `Table::interrompu`, plus de PC/SR empilés (`vblank::interruption(b, niveau)`). Pile en RAM comparée : non concernée, les piles des tâches et du superviseur (FF0166-FF0FFF) sont déjà ignorées par `validate` (`ram_du_noyau`) ; sonde temporaire sur `bot_2p` : à chaque VBLANK, A7 y est (pas d'écriture hors zone, démarrage compris). Reste à prouver sur les 296 scénarios (poison de la zone par le jeu). Sonde `DDSOM_POISON=reprise,neuve` (`diag::sonder_lancement`, appelée dans `kernel::lancer`, à rendre gratuite : le `format!` est fait même sans poison) : sur `bot_2p` 4 000 images, aucun registre rendu à la reprise ni hérité par une tâche neuve n'est relu ; la validation complète empoisonnée (copie scratchpad/pile_copie, sur a911566 + sonde) donne 177 VALIDE et 119 ÉCHEC sur 296 (boss*_mort, boss13_dragon, boss16_poke...) : des registres rendus par le contexte ou hérités par une tâche neuve **sont relus** ; il faut bissecter (`reprise.<registre>@<étape>`, puis `neuve`) avant de réduire le contexte. **Étape suivante** : lire ses résultats (cache validate, DDSOM_POISON=reprise,neuve), réduire `Contexte` aux registres relus (nommés), retirer la gestion d'A7/USP du noyau, puis point 5 (`dispatch::Restes` dans la table, synchronisé avec le banc autour du code sur processeur), validation complète DDSOM_LONG=1 dans les deux modes, fusion de main. |

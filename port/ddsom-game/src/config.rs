@@ -369,8 +369,10 @@ fn signature_ok(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     true
 }
 
-/// 0x2d30a : lecture de l'EEPROM, réglages par défaut si besoin, variables du jeu.
-fn init(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2d30a : lecture de l'EEPROM, réglages par défaut si besoin, variables du jeu. Rend faux si l'écriture des
+/// réglages par défaut a échoué : le jeu est alors bloqué sur « EEPROM ERROR » (la tâche a cédé la main pour
+/// toujours).
+pub fn initialiser(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     crate::eeprom::toute_eeprom(b);
     let lu = crate::eeprom::lire_verifier(b);
     let valide = lu && {
@@ -387,11 +389,17 @@ fn init(c: &mut Cpu, b: &mut Cps2Bus) {
         crate::eeprom::toute_eeprom(b);
         if !crate::eeprom::ecrire_verifier(b) {
             erreur(b);
-            return;
+            return false;
         }
     }
     variables(c, b);
-    rts(c, b);
+    true
+}
+
+fn init(c: &mut Cpu, b: &mut Cps2Bus) {
+    if initialiser(c, b) {
+        rts(c, b);
+    }
 }
 
 /// 0x2d7d2 : « EEPROM ERROR » et blocage (jamais vu : l'EEPROM émulée ne refuse pas l'écriture).

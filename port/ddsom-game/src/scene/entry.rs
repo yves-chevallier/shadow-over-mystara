@@ -12,11 +12,13 @@
 //! à la phase 12. Voir `docs/scenes.md` pour la table des scènes.
 
 use cps2::Cps2Bus;
+use super::fondu;
 use m68k::Cpu;
 
-use super::{player, scratch, script, sub, var, Ctx, PLAYERS, PLAYER_STRIDE};
+use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
+use crate::families::effects_creators as createurs;
 use crate::game;
-use crate::mem::{rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::Native;
 use crate::objects::pools;
@@ -47,13 +49,6 @@ mod table {
     pub const START_STATES: u32 = 0x2196c;
 }
 
-/// Sous-routines d'initialisation de scène appelées à l'étape 0.
-mod init {
-    pub const SPRITES_RESET: u32 = 0x1de7c;
-    pub const SCENE_LOAD: u32 = 0x33aa6;
-    pub const PALETTES: u32 = 0x1a296;
-    pub const HOOKS: [u32; 5] = [0x19aa2, 0x19abc, 0x19db4, 0x19e10, 0xf3130];
-}
 
 /// Variables de RAM de travail hors de la page A5 ± 0x7fff, remises à zéro à l'entrée.
 mod ram {
@@ -102,20 +97,24 @@ fn init_scene(x: &mut Ctx) {
     x.set_v8(0x58, 0);
     x.set_v8(0x51, 0);
     let scene = x.v8(var::SCENE) as u32;
-    x.c.d[0] = scene;
     let (pa, pb) = (x.rd8(table::PALETTE_A + scene), x.rd8(table::PALETTE_B + scene));
     x.set_v8(0x48, pa);
     x.set_v8(0x49, pb);
-    crate::modes::demo::reset_recorder(x.c, x.b);
-    for routine in [init::SPRITES_RESET, init::SCENE_LOAD, script::RESET_ENTRY] {
-        x.call(routine);
-    }
+    crate::modes::demo::reset_recorder(x.b);
+    crate::sprites::vider_listes(x.b);
+    // 0x33aa6 : caméras au départ, puis leur mise à jour (dont le D4 est relu : `scroll::update_cameras_68k`)
+    crate::scroll::cameras_depart(x.b);
+    crate::scroll::update_cameras_68k(x.c, x.b);
+    script::reset(x.b);
     for pool in crate::objects::pools::POOLS {
         pool.reset(x.b);
     }
-    for routine in [init::PALETTES].into_iter().chain(init::HOOKS) {
-        x.call(routine);
-    }
+    crate::palette::charger_tout(x.b);
+    crate::evenements::vider_points(x.b);
+    crate::evenements::vider_compteur(x.b);
+    crate::evenements::vider_popups(x.b);
+    crate::evenements::effacer_popup_courant(x.b);
+    super::screen::clear_longs(x.b, super::screen::blocks::EXIT, 8);
     crate::hud::forget_displayed(x.b);
     for k in 0..4 {
         clear_player(x, PLAYERS + k * PLAYER_STRIDE);
@@ -133,9 +132,8 @@ fn init_scene(x: &mut Ctx) {
             wr32(x.b, p + 4, 0);
         }
     }
-    x.c.d[0] = alive as u32;
     x.set_v8(var::PLAYERS, alive);
-    place_players(x);
+    place_players(x.b);
 }
 
 fn clear_player(x: &mut Ctx, p: u32) {
@@ -153,49 +151,59 @@ fn clear_player(x: &mut Ctx, p: u32) {
     }
 }
 
-/// Place chaque joueur en jeu devant la caméra, d'après les tables de la scène (consommées dans
-/// l'ordre des joueurs en jeu).
-pub fn place_players(x: &mut Ctx) {
-    let scene = x.v8(var::SCENE) as u32;
+/// Ce que le placement des joueurs laisse dans les registres de l'original : D0/D1 = la caméra (ou la scène
+/// décalée), D2 = le rang, A2/A3 = les fins des tables.
+struct RestesPlacement {
+    d0: u32,
+    d1: u32,
+    rang: u8,
+    positions: u32,
+    etats: u32,
+}
+
+/// 0x20de6 : place chaque joueur en jeu devant la caméra, d'après les tables de la scène (consommées dans l'ordre
+/// des joueurs en jeu).
+pub fn place_players(b: &mut Cps2Bus) {
+    placer_joueurs(b);
+}
+
+fn placer_joueurs(b: &mut Cps2Bus) -> RestesPlacement {
+    let scene = rd8(b, A5 + var::SCENE) as u32;
     let mut positions = table::START_POSITIONS + (scene << 4);
     let mut states = table::START_STATES + (scene << 2);
-    let camera = if x.v8(var::USE_ALT_CAMERA) != 0 { 0x556 } else { 0x506 };
-    // registres de l'original : D0/D1 = caméra (ou scène décalée), D2 = rang, D6 = -1, A1-A3 = fins
+    let camera = A5 + if rd8(b, A5 + var::USE_ALT_CAMERA) != 0 { 0x556 } else { 0x506 };
     let (mut d0, mut d1) = (scene << 4, scene << 2);
     let mut rank = 0u8;
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
-        if x.rd8(p + player::ACTIVE) == 0 || x.rd16(p + player::HEALTH) == 0 {
+        if rd8(b, p + player::ACTIVE) == 0 || rd16(b, p + player::HEALTH) == 0 {
             continue;
         }
-        let (dx, dy) = (x.v16(camera), x.v16(camera + 4));
+        let (dx, dy) = (rd16(b, camera), rd16(b, camera + 4));
         (d0, d1) = (dx as u32, dy as u32);
-        let (px, py) = (x.rd16(positions), x.rd16(positions + 2));
+        let (px, py) = (rd16(b, positions), rd16(b, positions + 2));
         positions += 4;
-        wr16(x.b, p + 8, px.wrapping_add(dx));
-        wr16(x.b, p + 0x10, py.wrapping_add(dy));
-        wr32(x.b, p + 0xc, 0);
-        let state = x.rd8(states);
-        wr8(x.b, p + 0x2c, state);
+        wr16(b, p + 8, px.wrapping_add(dx));
+        wr16(b, p + 0x10, py.wrapping_add(dy));
+        wr32(b, p + 0xc, 0);
+        let state = rd8(b, states);
+        wr8(b, p + 0x2c, state);
         states += 1;
-        wr8(x.b, p + 0x7d, rank);
+        wr8(b, p + 0x7d, rank);
         rank += 1;
     }
-    x.c.d[0] = d0;
-    x.c.d[1] = d1;
-    x.c.d[2] = rank as u32;
-    x.c.d[6] = 0xffff;
-    x.c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
-    x.c.a[2] = positions;
-    x.c.a[3] = states;
+    RestesPlacement { d0, d1, rang: rank, positions, etats: states }
 }
 
-/// 0x20de6 appelée par le code d'origine (sortie de scène) : `place_players`.
+/// 0x20de6 appelée par le code d'origine (renaissance d'un joueur, `families/creators.rs`) : `place_players`, avec
+/// les registres de l'original (D6 = -1, A1 après le dernier joueur).
 pub const PLACE_PLAYERS: Native = Native {
     entry: 0x20de6,
     name: "scene_place_joueurs",
     run: crate::Corps::Processeur(|c, b| {
-        place_players(&mut Ctx::new(c, b));
+        let r = placer_joueurs(b);
+        (c.d[0], c.d[1], c.d[2], c.d[6]) = (r.d0, r.d1, r.rang as u32, 0xffff);
+        (c.a[1], c.a[2], c.a[3]) = (PLAYERS + 4 * PLAYER_STRIDE, r.positions, r.etats);
         crate::mem::rts(c, b);
     }),
     touches_sound: false,
@@ -257,9 +265,8 @@ pub fn phase_8(c: &mut Cpu, b: &mut Cps2Bus) {
         STEP_INIT => init_scene(&mut x),
         STEP_SEQUENCE => {
             let scene = x.v8(var::SCENE);
-            x.c.d[0] = (scene as u32) << 2;
             sequence(scene)(&mut x);
-            x.call(script::SPAWN_ENTRY);
+            script::step(x.c, x.b);
             game::debug_scene_skip(x.b);
         }
         _ => {}
@@ -304,10 +311,9 @@ fn quick_with_music(x: &mut Ctx) {
 fn white_start(x: &mut Ctx) {
     x.leave_phase();
     x.set_v8(var::PLAYERS_FROZEN, 0);
-    x.set_v8(var::FADE_PAGES, 15);
+    fondu::PAGES.set(x.b, 15);
     crate::palette::full_brightness(x.b);
-    x.c.d[0] = 23;
-    x.call(sub::SOBJ_TYPE_6);
+    x.sobj_6(23);
     x.world();
 }
 
@@ -316,8 +322,7 @@ fn quick_with_sobj(x: &mut Ctx) {
     x.leave_phase();
     x.set_v8(var::PLAYERS_FROZEN, 0);
     x.fade_in();
-    x.c.d[0] = 23;
-    x.call(sub::SOBJ_TYPE_6);
+    x.sobj_6(23);
     crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
     x.world();
 }
@@ -335,8 +340,8 @@ fn scene_67(x: &mut Ctx) {
     x.set_v8(var::INPUT_LOCK, 0x0f);
     x.set_v8(var::PLAYERS_FROZEN, 1);
     x.fade_in();
-    x.call(sub::TITLE_CARD);
-    x.call(sub::INPUTS);
+    x.title_card();
+    x.inputs();
     x.world();
 }
 
@@ -357,18 +362,17 @@ fn stage_1(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0x140);
             x.fade_in();
-            x.call(0xabb70);
-            x.call(sub::TITLE_CARD);
+            createurs::trainees(x.b);
+            x.title_card();
             crate::objects::rank::reset(x.b);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
             if x.tick(TIMER) {
                 x.next_sub();
-                x.c.d[0] = 0;
-                x.call(sub::MESSAGE);
-                let a1 = x.c.a[1];
-                wr32(x.b, MESSAGE, a1);
+                // Glitch d'origine : l'échec n'est pas testé, l'A1 laissé par l'allocation est mémorisé
+                let message = crate::families::creators::scene_set_ou_reste(x.b, 0);
+                wr32(x.b, MESSAGE, message.0);
             }
         }
         4 => {
@@ -413,7 +417,7 @@ fn stage_2(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 1);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::objects::rank::reset(x.b);
             crate::sound::jouer_global(x.b, sfx::COMMAND_EAAF4);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
@@ -438,7 +442,7 @@ fn scene_4(x: &mut Ctx) {
             x.wr16(SHAKE, 0);
             x.wr16(TIMER, 0x158);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::objects::rank::reset(x.b);
         }
         2 => {
@@ -476,7 +480,7 @@ fn boss_cave(x: &mut Ctx) {
             x.fade_in();
             let scene = x.v8(var::SCENE);
             if scene != 9 {
-                x.call(sub::TITLE_CARD);
+                x.title_card();
             }
             let effect = x.spawn(&pools::EFFCT, 13);
             let camera_x = x.v16(0x506);
@@ -519,8 +523,7 @@ fn scene_8(x: &mut Ctx) {
             effect.set_u16(x.b, Obj::Y, camera_y.wrapping_add(0x50));
             x.set_v16(0x46, effect.0 as u16);
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-            x.c.d[1] = 1;
-            x.call(0xb8956);
+            createurs::minuteur(x.b, 1);
         }
         2 => {
             if x.tick(TIMER) {
@@ -571,8 +574,8 @@ fn scene_11(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0x78);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
-            x.call(0xb17ba);
+            x.title_card();
+            createurs::nageurs(x.b);
             crate::objects::rank::reset(x.b);
             crate::sound::jouer_global(x.b, sfx::COMMAND_EA6E2);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
@@ -581,7 +584,7 @@ fn scene_11(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.wr16(TIMER, 0xa0);
-                x.call(0xb1764);
+                createurs::banc(x.b);
             }
         }
         4 => {
@@ -589,7 +592,7 @@ fn scene_11(x: &mut Ctx) {
                 x.next_sub();
                 x.message(95, MESSAGE);
             } else if x.rd16(TIMER) == 0x40 {
-                x.call(0xb1764);
+                createurs::banc(x.b);
             }
         }
         6 => {
@@ -644,7 +647,7 @@ fn wait_players_10(x: &mut Ctx) {
             x.set_v8(0x67, 0);
             x.lock();
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::objects::rank::reset(x.b);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
@@ -666,7 +669,7 @@ fn title_card(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 1);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::objects::rank::reset(x.b);
         }
         2 => {
@@ -692,7 +695,7 @@ fn scene_24(x: &mut Ctx) {
             x.wr16(TIMER, 0xb4);
             x.fade_in();
             crate::objects::rank::reset(x.b);
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -712,7 +715,6 @@ fn scene_24(x: &mut Ctx) {
                         found |= character as u8 == 2;
                     }
                 }
-                x.c.d[1] = found as u32;
                 if found {
                     x.message(32, MESSAGE);
                 } else {
@@ -769,7 +771,7 @@ fn scene_26(x: &mut Ctx) {
             if x.message_done(MESSAGE) {
                 x.next_sub();
                 x.wr16(TIMER, 30);
-                x.call(0xa8a42);
+                createurs::camera_en_mode_60(x.b);
             }
         }
         6 => {
@@ -791,7 +793,7 @@ fn scene_27(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0x100);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -820,7 +822,7 @@ fn scene_28(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0x100);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             if x.rd16(MUSIC_STATE) == 0 {
                 x.wr16(MUSIC_STATE, 1);
                 crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
@@ -868,7 +870,7 @@ fn scene_32(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0xe0);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -898,7 +900,7 @@ fn scene_34(x: &mut Ctx) {
             x.wr16(TIMER, 1);
             x.fade_in();
             if x.v8(0x59) != 0 {
-                x.call(0xb7f14);
+                createurs::type_68_pur(x.b);
             }
             crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
@@ -942,7 +944,7 @@ fn title_card_music(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 1);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -963,7 +965,7 @@ fn title_card_timed(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 1);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -988,14 +990,11 @@ fn scene_38(x: &mut Ctx) {
             x.set_v8(var::INPUT_LOCK, 0);
             let players = x.v8(var::PLAYERS) as u32;
             let duration = x.prog16(DURATIONS + 2 * players);
-            x.c.d[0] = 2 * players;
             x.wr16(TIMER, duration);
-            x.set_v16(var::FADE_DELAY, 2);
-            x.set_v8(var::FADE_PAGES, 15);
+            fondu::DELAI.set(x.b, 2);
+            fondu::PAGES.set(x.b, 15);
             crate::palette::no_brightness(x.b);
-            x.c.a[0] = sub::FADE_TASK;
-            x.c.d[0] = 0x10;
-            crate::kernel::creer_tache(x.b, 0x10, sub::FADE_TASK);
+            crate::kernel::creer_tache(x.b, 0x10, fondu::MONTEE);
         }
         2 => {
             if x.tick(TIMER) {
@@ -1018,7 +1017,7 @@ fn scene_38(x: &mut Ctx) {
         }
         _ => {}
     }
-    x.call(sub::INPUTS);
+    x.inputs();
     x.world();
 }
 
@@ -1030,15 +1029,13 @@ fn wait_players_6(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 1);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
             if x.players_in_state(6) {
                 if x.v8(var::SCENE) == 41 {
-                    x.c.d[0] = 0;
-                    x.c.d[1] = 0;
-                    x.call(0xdfa4a);
+                    let _ = crate::effects_aids::decor_11(x.b, 0, 0);
                 }
                 x.end_scene();
             }
@@ -1048,18 +1045,26 @@ fn wait_players_6(x: &mut Ctx) {
     x.world();
 }
 
-/// Scène 40 : joueurs dans l'état 4, puis un boss (type 12) apparaît pendant le compte à rebours.
+/// Scène 40 : joueurs dans l'état 4, éclair gris (0x1ab56) et quatre effets 0x13 (0x4cfbc), puis un boss (type 12)
+/// apparaît pendant le compte à rebours.
 fn scene_40(x: &mut Ctx) {
-    boss_gate(x, 0x1ab56, 0x4cfbc, 0x60, 12, 0x90)
+    boss_gate(x, Ouverture::Eclairs, 0x60, 12, 0x90)
 }
 
-/// Scène 42 : comme la 40 avec d'autres appels et le boss de type 11.
+/// Scène 42 : comme la 40 avec un éclair (0x1aaba) et la pluie (0xb9942), et le boss de type 11.
 fn scene_42(x: &mut Ctx) {
-    boss_gate(x, 0x1aaba, 0xb9942, 0x40, 11, 0x80)
+    boss_gate(x, Ouverture::Pluie, 0x40, 11, 0x80)
+}
+
+/// Ce que les scènes 40 et 42 lancent quand les joueurs sont en place.
+#[derive(Clone, Copy)]
+enum Ouverture {
+    Eclairs,
+    Pluie,
 }
 
 /// Sous-programme commun des scènes 40 et 42.
-fn boss_gate(x: &mut Ctx, prepare: u32, tail: u32, spawn_at: u16, boss: u8, wait: u16) {
+fn boss_gate(x: &mut Ctx, ouverture: Ouverture, spawn_at: u16, boss: u8, wait: u16) {
     const TIMER: u32 = scratch(0x9a56);
     match x.sub() {
         0 => {
@@ -1071,8 +1076,17 @@ fn boss_gate(x: &mut Ctx, prepare: u32, tail: u32, spawn_at: u16, boss: u8, wait
             if x.players_in_state(4) {
                 x.next_sub();
                 x.wr16(TIMER, wait);
-                x.call(prepare);
-                x.call(tail);
+                match ouverture {
+                    Ouverture::Eclairs => {
+                        crate::palette::flash(x.b, crate::palette::Flash::Gray);
+                        // Glitch d'origine : les effets sont liés à l'objet A0 laissé par la boucle de partie
+                        crate::families::creators::effets_13(x.b, Obj(x.c.a[0]));
+                    }
+                    Ouverture::Pluie => {
+                        crate::palette::flash(x.b, crate::palette::Flash::B);
+                        createurs::pluie(x.b);
+                    }
+                }
             }
         }
         4 => {
@@ -1098,8 +1112,7 @@ fn scene_44(x: &mut Ctx) {
             x.wr16(TIMER, 1);
             x.fade_in();
             if x.v8(0x30) == 0 {
-                x.c.d[0] = 23;
-                x.call(sub::SOBJ_TYPE_6);
+                x.sobj_6(23);
             }
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
@@ -1139,13 +1152,13 @@ fn scene_47(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 1);
             x.fade_in_stepped();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
-            if x.v8(var::FADE_STEPS) == 0 {
+            if fondu::PAS.get(x.b) == 0 {
                 x.end_scene();
-                x.call(0x3525c);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         _ => {}
@@ -1161,7 +1174,7 @@ fn scene_54(x: &mut Ctx) {
             begin(x);
             x.wr16(scratch(0x9a5a), 1);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             if x.v8(0x66) == 0 {
                 x.set_sub(4);
                 let boss = x.spawn(&pools::BOSS, 0x11);
@@ -1199,7 +1212,7 @@ fn scene_58(x: &mut Ctx) {
             begin(x);
             x.fade_in();
             x.spawn(&pools::BOSS, 5);
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -1239,7 +1252,7 @@ fn scene_64(x: &mut Ctx) {
             begin(x);
             x.fade_in();
             x.spawn(&pools::EFFCT, 75);
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -1271,7 +1284,7 @@ fn scene_65(x: &mut Ctx) {
         0 => {
             begin(x);
             x.fade_in();
-            x.call(sub::TITLE_CARD);
+            x.title_card();
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
@@ -1315,7 +1328,7 @@ fn scene_66(x: &mut Ctx) {
             if x.players_in_state(4) {
                 x.next_sub();
                 x.message(82, MESSAGE);
-                x.call(0x3525c);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         4 => {
@@ -1344,7 +1357,7 @@ fn scene_66(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.message(83, MESSAGE);
-                x.call(0x3525c);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         14 => {
@@ -1400,9 +1413,8 @@ fn scene_105(x: &mut Ctx) {
                 if x.v8(0x5c) == 0 {
                     x.set_sub(12);
                     x.wr16(TIMER, 0x40);
-                    x.call(0xb9aa0);
-                    let a1 = x.c.a[1];
-                    x.wr16(BOSS, a1 as u16);
+                    let finale = finale(x);
+                    x.wr16(BOSS, finale.0 as u16);
                     crate::sound::jouer_global(x.b, sfx::COMMAND_E62FC);
                 } else {
                     x.next_sub();
@@ -1427,9 +1439,8 @@ fn scene_105(x: &mut Ctx) {
         10 => {
             if x.message_done(MESSAGE) {
                 x.next_sub();
-                x.call(0xb9aa0);
-                let a1 = x.c.a[1];
-                x.wr16(BOSS, a1 as u16);
+                let finale = finale(x);
+                x.wr16(BOSS, finale.0 as u16);
             }
         }
         12 | 14 => {
@@ -1454,4 +1465,12 @@ mod tests {
             let _ = sequence(scene);
         }
     }
+}
+
+/// 0xb9aa0 : objet de la finale (type 74). Glitch d'origine : il est lié à l'objet A0 laissé par la boucle de partie,
+/// et l'échec de l'allocation n'est pas testé (l'A1 laissé est mémorisé).
+fn finale(x: &mut Ctx) -> Obj {
+    let createur = Obj(x.c.a[0]);
+    let o = createurs::finale(x.b, createur);
+    createurs::ou_reste(x.b, o)
 }

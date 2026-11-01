@@ -65,19 +65,29 @@ pub fn clear_overlays_of(g: &mut Ctx, k: u32) {
     clear(g, overlay(k, true), 3);
 }
 
-fn clear_players(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2d9e : les quatre enregistrements de joueur à zéro.
+pub fn effacer_joueurs(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
         clear_player(&mut g, k);
     }
-    rts(c, b);
 }
 
-fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x2df8 : les huit sous-objets des joueurs à zéro.
+pub fn effacer_sous_objets(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
         clear_overlays_of(&mut g, k);
     }
+}
+
+fn clear_players(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_joueurs(c, b);
+    rts(c, b);
+}
+
+fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
+    effacer_sous_objets(c, b);
     rts(c, b);
 }
 
@@ -275,12 +285,16 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     ram::PLAYERS_ALIVE.set(g.b, alive);
 }
 
-/// Les entrées 0x2e58.. sauvegardent D0 et A0-A3 (movem) puis construisent le joueur `k`.
-fn init_entry(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
+/// Les entrées 0x2e58, 0x2e6e, 0x2e86, 0x2e9e : construisent le joueur `k` ; D0 et A0-A3 sont gardés (movem).
+pub fn initialiser(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
     let (d0, a) = (c.d[0], [c.a[0], c.a[1], c.a[2], c.a[3]]);
     init_slot(&mut Ctx::new(c, b), Player::nth(k), k as u8);
     c.d[0] = d0;
     c.a[..4].copy_from_slice(&a);
+}
+
+fn init_entry(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
+    initialiser(c, b, k);
     rts(c, b);
 }
 
@@ -316,7 +330,7 @@ pub const INIT_P4: Native = init_native(0x2e9e, "player_init_4", init_p4);
 
 /// Trois façons d'entrer en cours de partie (une entrée par joueur pour chacune).
 #[derive(Clone, Copy, PartialEq)]
-enum Join {
+pub enum Join {
     /// 0x2f46.. : nouveau joueur (score remis à zéro).
     New,
     /// 0x3048.. : reprise après « continue » (le score est gardé).
@@ -328,6 +342,11 @@ enum Join {
 /// Le joueur `k` arrive en cours de partie : il tombe du ciel (état scénarisé de résurrection, `0x00040000` ;
 /// `0x00040800` entrées figées, `0x00040c00` marche lente globale), puis tous les ennemis et boss reçoivent
 /// un choc (`join_shockwave`).
+/// Les entrées 0x2f46.., 0x3048.., 0x3142.. (une par joueur `k`) : le joueur arrive en cours de partie.
+pub fn rejoindre(c: &mut Cpu, b: &mut Cps2Bus, k: u8, how: Join) {
+    join(&mut Ctx::new(c, b), k, how);
+}
+
 fn join(g: &mut Ctx, k: u8, how: Join) {
     let p = Player::nth(k as u32);
     p.set_u8(g, Player::INDEX, k);

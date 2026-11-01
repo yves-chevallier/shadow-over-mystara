@@ -211,13 +211,13 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
             c.other_sp = e.pile;
             c.set_sr(0);
             let etape = crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"));
-            crate::diag::sonder_lancement(c, "neuve", &format!("{etape:?}"), crate::regs::a(1) | crate::regs::a(4) | crate::regs::a(5));
+            crate::diag::sonder_lancement(c, "neuve", &etape, crate::regs::a(1) | crate::regs::a(4) | crate::regs::a(5));
             etape
         }
         (Etat::Prete | Etat::EnCours, Reprise::Etape(etape, ctx)) => {
             e.etat = Etat::EnCours;
             remettre(c, ctx);
-            crate::diag::sonder_lancement(c, "reprise", &format!("{etape:?}"), crate::regs::a(5));
+            crate::diag::sonder_lancement(c, "reprise", &etape, crate::regs::a(5));
             etape
         }
         (etat, reprise) => unreachable!("tâche {k} lancée dans l'état {etat:?} avec la reprise {reprise:?}"),
@@ -290,10 +290,11 @@ pub fn retenir_le_pas(b: &mut Cps2Bus) {
 fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: Suite) {
     let mut a = [0; 7];
     a.copy_from_slice(&c.a[..7]);
-    let ctx = Contexte { pc: reprise.adresse(), sr: c.sr, usp: c.a[7], d: c.d, a };
+    let mut ctx = Contexte { pc: reprise.adresse(), sr: c.sr, usp: c.a[7], d: c.d, a };
     let Suite::Etape(etape) = reprise else {
         unreachable!("cession vers l'adresse {:x} : toutes les reprises sont des étapes Rust", reprise.adresse())
     };
+    crate::diag::sonder_cession(&mut ctx.d, &mut ctx.a, &mut ctx.sr, &etape);
     table(b).ceder(etat, compte, Reprise::Etape(etape, ctx));
     c.a[1] = ctx.usp.wrapping_sub(64);
     vers_ordonnanceur(c, b);

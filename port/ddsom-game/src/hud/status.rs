@@ -117,8 +117,6 @@ mod over {
     /// Routines d'origine : musique de départ du compte à rebours, de fin, sortie vers les modes.
     pub const MUSIC_START: u32 = 0xe12b8;
     pub const MUSIC_STOP: u32 = 0xe12f4;
-    /// Lève le drapeau de fin de partie (A5-0x715e) lu par la machine à modes.
-    pub const GAME_OVER_FLAG: u32 = 0x133f6;
 }
 
 /// Tous les panneaux (même ceux qui n'existent pas dans la disposition courante).
@@ -282,6 +280,6 @@ fn wait_game_over(x: &mut Ctx) -> Flow {
     }
     x.set_v8(var::PHASE, over::PHASE_GAME_OVER);
     crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-    x.call(over::GAME_OVER_FLAG);
+    crate::families::petites::demarrage_fait(x.b, true);
     Flow::Done
 }

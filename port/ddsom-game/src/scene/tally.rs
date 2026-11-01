@@ -8,10 +8,12 @@
 //! fin d'un fondu en cédant la main à l'ordonnanceur.
 
 use super::tiles::{self, Number, COLUMN, LAYER};
+use super::fondu;
 use super::Ctx;
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::ops::abcd;
+use crate::objects::Obj;
 use crate::Native;
 
 /// Variables du décompte (RAM de travail, sous A5).
@@ -47,9 +49,6 @@ mod a5 {
     /// Bit 0 : disposition de l'écran à deux colonnes (positions des panneaux des joueurs).
     pub const LAYOUT: u32 = 0x20;
     pub const HOLD: u32 = 0x33;
-    pub const FADE_PAGES: u32 = 0x48e;
-    pub const FADE_STEPS: u32 = 0x48f;
-    pub const FADE_DELAY: u32 = 0x490;
     pub const FLAG_5F: u32 = 0x5f;
 }
 
@@ -97,8 +96,6 @@ mod rom {
 /// Sous-routines du jeu.
 mod sub {
     pub const MUSIC: u32 = 0xe1150;
-    pub const FADE_TASK: u32 = 0x14de;
-    pub const ALLOC_SET: u32 = 0xce00a;
 }
 
 /// Le bandeau est dessiné hors champ (lignes 8 et 9 de la première page de la couche, 0x910000), puis copié.
@@ -197,16 +194,11 @@ fn start(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     x.set_v8(a5::HOLD, 1);
     crate::sound::jouer_global(x.b, sub::MUSIC);
-    x.set_v8(a5::FADE_STEPS, 8);
-    // 0xf68c8 : A0 sauvegardé autour de la création de la tâche
-    let a0 = x.c.a[0];
-    x.c.a[0] = sub::FADE_TASK;
-    x.c.d[1] = 0;
-    x.set_v16(a5::FADE_DELAY, 1);
-    x.set_v8(a5::FADE_PAGES, 13);
-    x.c.d[0] = x.c.d[0] & !0xffff | 16;
-    crate::kernel::creer_tache(x.b, x.c.d[0], x.c.a[0]);
-    x.c.a[0] = a0;
+    fondu::PAS.set(x.b, 8);
+    // 0xf68c8 : la tâche de fondu (A0 gardé)
+    fondu::DELAI.set(x.b, 1);
+    fondu::PAGES.set(x.b, 13);
+    crate::kernel::creer_tache(x.b, 16, fondu::DESCENTE_PAS);
     x.push_return(Etape::AfterFade);
     x.wait(1, Etape::FadeWait)
 }
@@ -215,7 +207,7 @@ crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
         FadeWait = FADE_WAIT => |x| {
-            if x.v8(a5::FADE_PAGES) != 0 {
+            if fondu::PAGES.get(x.b) != 0 {
                 return x.wait(1, Etape::FadeWait);
             }
             Flow::Done
@@ -514,12 +506,10 @@ fn announce(x: &mut Ctx, first: u16) -> Flow {
         next_sub_step(x);
         set_timer(x, 20);
         sign(x, first);
-        x.c.d[0] = 19;
-        x.call(sub::ALLOC_SET);
-        if x.c.sr & m68k::SR_C != 0 {
+        // 0xce00a : objet SET de type 15, variante 19
+        let Ok(Obj(o)) = crate::families::creators::set_15_pur(x.b, 19) else {
             return Flow::Done;
-        }
-        let o = x.c.a[1];
+        };
         let prime = rd32(x.b, v::PRIME);
         wr32(x.b, o + 0x4c, prime);
         let w = winner(x);

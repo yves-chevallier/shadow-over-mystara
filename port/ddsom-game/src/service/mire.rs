@@ -1,7 +1,7 @@
 //! Écrans 4. COLOR, 5. DOT CROSS HATCH et 6. GAME DATA du menu TEST : deux étapes de préparation (ou une),
 //! puis l'attente du retour au menu (départ 1P + tir 1).
 
-use super::{call_d0, decimal, exit_check, ext, f, get, layers_off, layers_on, next_step, print, var};
+use super::{decimal, exit_check, f, get, layers_off, layers_on, next_step, print, var};
 use crate::mem::wr32;
 use crate::modes::Flow;
 use crate::scene::Ctx;
@@ -80,7 +80,7 @@ pub fn cross_hatch(x: &mut Ctx) -> Flow {
             next_step(x);
             x.set_v16(var::LAYERS, super::ALL_LAYERS);
             // D0 vaut l'étape (0) : aucune couche coupée
-            call_d0(x, ext::LAYERS_OFF, 0);
+            crate::video::desactiver_couches(x.b, 0);
             print(x, hatch::TITLE);
             print(x, HELP);
             for k in 0..8 {
@@ -94,8 +94,7 @@ pub fn cross_hatch(x: &mut Ctx) -> Flow {
             grid(x);
             x.set_v16(var::LAYERS, super::ALL_LAYERS);
             // D0 vaut l'étape (2)
-            x.c.d[0] = 2;
-            x.call(ext::LAYERS_ON);
+            crate::video::activer_couches(x.b, 2);
             Flow::Done
         }
         _ => exit_check(x),
