@@ -16,7 +16,8 @@
 //! masquées jusqu'au niveau 6 ; entre deux, la fenêtre de 0x952 les autorise. Un VBLANK pose l'indicateur
 //! `NOUVELLE_IMAGE` (FF0164) : le parcours reprend alors au début. Une tâche prête reprend à l'étape qui suit son appel
 //! de l'enveloppe, avec son SR et les seuls registres relus après une cession ([`Contexte`]) ; une tâche neuve démarre à son
-//! entrée, A0 = enregistrement, A1 = entrée, A4 = pile, SR = 0 (mode utilisateur). Quand elle cède, l'ordonnanceur
+//! entrée, SR = 0 (mode utilisateur), sans registre : elle ne lit pas ceux que l'original lui donne (A0 =
+//! enregistrement, A1 = entrée, A4 = pile, D1.w = état ; sonde `DDSOM_POISON=neuve`). Quand elle cède, l'ordonnanceur
 //! reprend à l'emplacement suivant ([`Point::Retour`] 0x984, puis [`Point::Suivant`] 0x952).
 //!
 //! ## Enveloppes (et traps de l'original)
@@ -204,12 +205,10 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
     t.courante = k;
     t.point = Point::Tache;
     let e = &mut t.emplacements[k];
-    set_low_word(&mut c.d[1], e.etat.octet() as u16);
     let etape = match (e.etat, e.reprise) {
         (Etat::Neuve, Reprise::Entree(entree)) => {
             e.etat = Etat::EnCours;
-            c.a[1] = entree;
-            c.a[4] = e.pile;
+            // l'original lui donne A1 = entrée, A4 = pile et D1.w = état : aucune tâche ne les lit (sonde `neuve`)
             c.set_sr(0);
             let etape = crate::taches::entree(entree).unwrap_or_else(|| panic!("tâche {k} : entrée {entree:x} sans étape Rust"));
             crate::diag::sonder_lancement(c, "neuve", &etape, crate::regs::a(5));
@@ -333,7 +332,6 @@ fn enveloppe(c: &mut Cpu, b: &mut Cps2Bus, cession: fn(&mut Cpu, &mut Cps2Bus, S
 pub fn recommencer(c: &mut Cpu, b: &mut Cps2Bus) {
     let t = table(b);
     t.recommencer(c.a[0]);
-    c.a[4] = enregistrement(t.courante);
     t.point = Point::Retour;
     superviseur(c);
     crate::taches::noter_cession();
