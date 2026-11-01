@@ -11,12 +11,11 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x68542;
 const REACT_SECOND: u32 = 0x68724;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => react(x, REACT_FIRST),
             2 => recoil(x),
@@ -71,7 +70,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Chute puis relevé (0x6869a).
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -108,11 +107,10 @@ fn fall(x: &mut Cx) {
 }
 
 /// Saisi par un joueur : le Golem marche vers le bord de l'écran le plus proche (0x687cc).
-fn grab(x: &mut Cx) {
+fn grab<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

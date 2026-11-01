@@ -2,7 +2,8 @@
 # fuzz.sh : fuzz_couv C02 (scénarios d'ennemis) et C04 (boss), branche et main, même graine ; sorties dans fuzz/
 S=${SCRATCH:?dossier temporaire}
 W=${W:?worktree}
-out=$S/locales_fuzz; mkdir -p $out
+P=${P:-locales}
+out=$S/${P}_fuzz; mkdir -p $out
 cd $W
 {
 for s in kobold_scene7 skeleton_scene58 gargoyle_scene55 hellhound_scene55 ogre_scene66 scorpion_scene36 trog_scene101 elf_scene96 beetle_scene18 ghoul_scene26; do
@@ -13,6 +14,6 @@ for s in boss0_poke boss2_poke3p boss5_scene58 boss8_scene64 boss10_scene65 boss
 done
 } | xargs -P ${JOBS:-8} -L 1 sh -c '
   n=$(basename $2 .txt)
-  FUZZ_PERIODE=8 FUZZ_ESSAIS=32 '"$S"'/locales_fuzz_$0 /home/ycr/som/rom /home/ycr/som/testdata/eeprom_ddsom.bin $2 12000 $1 '"$out"'/$0_$1_$n.bin > '"$out"'/$0_$1_$n.txt 2> '"$out"'/$0_$1_$n.err
+  FUZZ_PERIODE=8 FUZZ_ESSAIS=32 '"$S"'/'"$P"'_fuzz_$0 /home/ycr/som/rom /home/ycr/som/testdata/eeprom_ddsom.bin $2 12000 $1 '"$out"'/$0_$1_$n.bin > '"$out"'/$0_$1_$n.txt 2> '"$out"'/$0_$1_$n.err
   echo "$0 $1 $n : $(tail -1 '"$out"'/$0_$1_$n.txt)"
 '

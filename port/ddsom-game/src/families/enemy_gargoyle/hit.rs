@@ -11,14 +11,13 @@ use crate::objects::Obj;
 /// Réactions communes aux coups, indexées par le code `+0x49`.
 const REACTIONS: u32 = 0x6518a;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
         zone_and_terrain(x);
         return;
     }
-    x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
         0 => first(x),
         2 => recoil(x),
@@ -52,13 +51,12 @@ fn death_check<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- sous-état 0 : réaction -----------------------------------------------------------------------
 
-fn first(x: &mut Cx) {
+fn first<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         let mut dismissed = true;
         if x.u8(HIT_FLAGS) & 1 != 0 {
             let victim = x.linked(VICTIM);
             let code = victim.u8(x.b, 0x10d) as i8;
-            x.c.d[0] = x.c.d[0] & !0xff | code as u8 as u32;
             dismissed = code == 0xd || (0x10..=0x13).contains(&code);
             if !dismissed {
                 return resume(x);
@@ -94,8 +92,7 @@ fn resume<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 2 : recul ----------------------------------------------------------------------------
 
-fn recoil(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -132,8 +129,7 @@ fn recoil(x: &mut Cx) {
 
 // --- sous-état 4 : chute et relevé --------------------------------------------------------------------
 
-fn get_up(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -165,8 +161,7 @@ fn get_up(x: &mut Cx) {
 
 // --- sous-état 6 : mort ------------------------------------------------------------------------------
 
-fn dying(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn dying<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -252,8 +247,7 @@ fn dying(x: &mut Cx) {
 
 // --- sous-état 8 : chute d'une créature en vol -------------------------------------------------------
 
-fn fall(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

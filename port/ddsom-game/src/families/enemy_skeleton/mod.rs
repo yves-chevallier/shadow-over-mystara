@@ -85,7 +85,7 @@ const CLOSE_ATTACKS: u32 = 0x5932a;
 const FAR_ATTACKS: u32 = 0x5952a;
 const NEXT_MOVES: u32 = 0x59982;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -105,7 +105,7 @@ fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike(x: &mut Cx, n: u32) {
+fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -118,7 +118,7 @@ fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin des coups : étape suivante tirée dans la table par difficulté, ou retour debout.
-fn end_attack(x: &mut Cx) {
+fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     if x.u16(f::TARGET) != 0 {
         load_target(x);
@@ -136,9 +136,8 @@ fn end_attack(x: &mut Cx) {
 }
 
 /// Choisit le coup `+6` dans la ligne de la difficulté (32 octets) de `table`, et pose `+4/+5` à `state`.
-fn pick_move(x: &mut Cx, table: u32, state: u16) {
+fn pick_move<R: Banc>(x: &mut Cx<'_, R>, table: u32, state: u16) {
     let row = (var::RANK.get(x.b) >> 1) << 5;
-    set_dw(x, 0, row);
     let n = rand_and(x, 0x1f);
     let mv = x.data8(table + row as u32 + n);
     x.set8(f::SUB2, mv);
@@ -186,7 +185,7 @@ fn special_hit<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -269,7 +268,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -288,7 +287,7 @@ fn active(x: &mut Cx) {
 }
 
 /// Sous-état 0 : arrivée (`+6` : 0 et 2 attente de l'animation, 4 chute, 6 clignotement).
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => {
             step(x);
@@ -327,7 +326,7 @@ fn arrival(x: &mut Cx) {
 }
 
 /// Arrivée clignotante (`+6 = 6`) : trois séries de clignotements puis l'état debout.
-fn blink(x: &mut Cx) {
+fn blink<R: Banc>(x: &mut Cx<'_, R>) {
     let d1 = match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -335,7 +334,7 @@ fn blink(x: &mut Cx) {
             x.set8(0xac, 1);
             x.set8(VULNERABLE, 1);
             x.set16(0x42, 0x703);
-            let d7 = x.c.d[7] as u8;
+            let d7 = x.compteur() as u8;
             x.set8(TIMER, d7);
             return;
         }
@@ -376,5 +375,5 @@ fn dead<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x57cc4 "enemy_1" run,
+    0x57cc4 "enemy_1" #[sans] run,
 }

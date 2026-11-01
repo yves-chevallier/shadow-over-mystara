@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run_c(x: &mut Cx) {
+pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
     if !hit_gate(x) {
         return;
     }
@@ -57,7 +57,7 @@ fn end_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : bond en arrière (vitesses latérales ±0x200).
-fn back_hop(x: &mut Cx, step: u8) {
+fn back_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -102,7 +102,7 @@ fn back_hop(x: &mut Cx, step: u8) {
 }
 
 /// +6 = 4 : bond en avant (vitesse ±0x200).
-fn forward_hop(x: &mut Cx, step: u8) {
+fn forward_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -149,7 +149,7 @@ fn forward_hop(x: &mut Cx, step: u8) {
 }
 
 /// +6 = 6 : bond avec coup de poing en l'air.
-fn punch_hop(x: &mut Cx, step: u8) {
+fn punch_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -201,7 +201,7 @@ fn punch_hop(x: &mut Cx, step: u8) {
 }
 
 /// +6 = 8 : accroupi (tirage ou profil), puis retour debout.
-fn squat_again(x: &mut Cx, step: u8) {
+fn squat_again<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -232,7 +232,7 @@ fn squat_again(x: &mut Cx, step: u8) {
 }
 
 /// +6 = 10 : sortie d'écran à pied (vitesse −0x230 vers le bord le plus proche), puis disparition.
-fn leave(x: &mut Cx) {
+fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
@@ -258,7 +258,7 @@ fn leave(x: &mut Cx) {
 
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
-pub(super) fn run_d(x: &mut Cx) {
+pub(super) fn run_d<R: Banc>(x: &mut Cx<'_, R>) {
     if !hit_gate(x) {
         return;
     }
@@ -302,7 +302,7 @@ pub(super) fn run_d(x: &mut Cx) {
 }
 
 /// +6 = 4 : pas latéral en profondeur ou bond latéral (au hasard).
-fn sidestep(x: &mut Cx, step: u8) {
+fn sidestep<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => {
             x.add8(f::SUB3, 2);

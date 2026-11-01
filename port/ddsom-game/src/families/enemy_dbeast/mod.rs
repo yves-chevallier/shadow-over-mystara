@@ -91,7 +91,7 @@ const ACTIVE_IDLE: u32 = 0x020a_0000;
 /// État touché, sous-état 8 : la bête est projetée ou s'enfuit.
 const KNOCKED: u32 = 0x0408_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -255,7 +255,7 @@ fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x74f8e : un joueur est tout près (boîte devant la bête).
-fn player_near(x: &mut Cx) -> bool {
+fn player_near<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     for p in 0..4 {
         let player = Obj(0xff85de + 0x200 * p);
         if player.u8(x.b, 0) != 0 && lib::target_in_box(x, 0, 0x60, 0x28) {
@@ -273,7 +273,7 @@ const PROFILE_A: [(u32, u8); 12] =
 const PROFILE_B: [(u32, u8); 12] =
     [(0x68, 2), (0x69, 2), (0x6a, 1), (0x6c, 3), (0x6d, 3), (0x72, 4), (0x73, 4), (0x74, 3), (0x75, 0x20), (0x76, 3), (0x81, 5), (0x80, 6)];
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -313,7 +313,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -349,5 +349,5 @@ fn held<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x71e44 "enemy_19" run,
+    0x71e44 "enemy_19" #[sans] run,
 }

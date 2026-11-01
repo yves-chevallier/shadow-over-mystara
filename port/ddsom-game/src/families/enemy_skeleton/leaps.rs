@@ -10,7 +10,7 @@ use crate::objects::Obj;
 
 // --- sous-état 6 --------------------------------------------------------------------------------
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -41,7 +41,7 @@ fn rest<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Bond de côté (`+6` = 2) : vitesse latérale au hasard.
-fn hop_sideways(x: &mut Cx) {
+fn hop_sideways<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -68,7 +68,7 @@ fn hop_sideways(x: &mut Cx) {
 }
 
 /// Bonds vers l'avant (`+6` = 4 avec animation de mouvement, 6 avec animation de coup).
-fn hop_forward(x: &mut Cx, striking: bool) {
+fn hop_forward<R: Banc>(x: &mut Cx<'_, R>, striking: bool) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -118,7 +118,7 @@ fn hop_forward(x: &mut Cx, striking: bool) {
 }
 
 /// Montée d'un bond de côté (déplacement en profondeur et en hauteur).
-fn hop_rise(x: &mut Cx) {
+fn hop_rise<R: Banc>(x: &mut Cx<'_, R>) {
     step(x);
     x.move_yz();
     if (x.u16(Obj::VZ) as i16) < 0 {
@@ -156,7 +156,7 @@ fn hop_end_byte<R: Banc>(x: &mut Cx<'_, R>) {
 // --- gardes -------------------------------------------------------------------------------------
 
 /// Garde du coup 18/20 (`+5 = 4`) : prépare la riposte `+0xa9 = 2` ; termine par le choix d'un nouveau coup.
-pub(super) fn guard(x: &mut Cx) {
+pub(super) fn guard<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -176,7 +176,7 @@ pub(super) fn guard(x: &mut Cx) {
 }
 
 /// Garde du saut de la série 1 (`+5 = 6`, `+6` = 8).
-fn guard_leap(x: &mut Cx) {
+fn guard_leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -200,7 +200,7 @@ fn guard_windup<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5897a : riposte tirée au hasard (0 ou 2), puis la garde.
-fn guard_windup_random(x: &mut Cx) {
+fn guard_windup_random<R: Banc>(x: &mut Cx<'_, R>) {
     let n = rand_and(x, 1) * 2;
     x.set8(COUNTER_MOVE, n as u8);
     x.set8(COUNTER, 0xff);
@@ -235,7 +235,7 @@ fn guard_wait<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sortie d'écran -----------------------------------------------------------------------------
 
 /// Le squelette s'enfuit vers le bord le plus proche (`+6` = 10).
-fn exit_screen(x: &mut Cx) {
+fn exit_screen<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
@@ -260,7 +260,7 @@ fn exit_screen(x: &mut Cx) {
 
 // --- sous-état 8 : esquives ---------------------------------------------------------------------
 
-pub(super) fn run_dash(x: &mut Cx) {
+pub(super) fn run_dash<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -288,7 +288,7 @@ fn pause<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Course de côté : même animation que la glissade, pendant 0x20 images.
-fn run_aside(x: &mut Cx) {
+fn run_aside<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         restart_slide(x);
@@ -312,19 +312,16 @@ fn run_aside(x: &mut Cx) {
 }
 
 /// Esquive en profondeur (`+6` = 4) : course vers l'avant ou bond selon un tirage.
-fn dodge(x: &mut Cx) {
+fn dodge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
             let mut angle = 0;
-            x.c.d[1] = 0;
             if x.u16(f::TARGET) != 0 {
                 let target = load_target(x);
                 let depth = x.u16(Obj::Y);
-                set_dw(x, 0, depth);
                 if depth < target.u16(x.b, Obj::Y) {
                     angle = 0x10;
-                    x.c.d[1] = 0x10;
                 }
             }
             x.set8(Obj::SPEED_INDEX, angle);
@@ -372,12 +369,12 @@ fn dodge(x: &mut Cx) {
 
 // --- sous-état 10 : chute d'arrivée -------------------------------------------------------------
 
-pub(super) fn run_land(x: &mut Cx) {
+pub(super) fn run_land<R: Banc>(x: &mut Cx<'_, R>) {
     land(x);
     zone_and_terrain(x);
 }
 
-fn land(x: &mut Cx) {
+fn land<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

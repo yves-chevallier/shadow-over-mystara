@@ -7,8 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let step = x.u8(f::SUB3);
     match x.u8(f::SUB2) {
         0 => match step {
@@ -136,8 +135,7 @@ fn until_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x67c32 : au tirage (dix chances sur seize), retour à la marche (état 0x2020600), sinon étape suivante.
-fn coin_flip(x: &mut Cx) {
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | 0xffc0;
+fn coin_flip<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     if (0xffc0u32 >> r) & 1 != 0 {
         return set_state_long(x, 0x0202_0600);
@@ -147,7 +145,7 @@ fn coin_flip(x: &mut Cx) {
 
 /// 0x67dce / 0x67dda / 0x67f5e : met en route un bond : vitesse horizontale (inversée si l'orientation est nulle),
 /// poussée vers le haut 0x900, coup de force 5 ; `speed` / `kind` absents quand l'appelant les a déjà posés.
-fn leap_start(x: &mut Cx, speed: Option<i16>, kind: Option<u8>) {
+fn leap_start<R: Banc>(x: &mut Cx<'_, R>, speed: Option<i16>, kind: Option<u8>) {
     if let Some(speed) = speed {
         x.set16(Obj::VX, speed as u16);
     }
@@ -186,7 +184,7 @@ fn rise<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x67e46 : descente jusqu'au sol.
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     x.anim_step();
     if x.u32(Obj::Z) as i32 > 0 {
@@ -198,7 +196,7 @@ fn fall(x: &mut Cx) {
 }
 
 /// 0x67e6a : fin du bond : choix du geste suivant à la fin de l'animation.
-fn end_choose(x: &mut Cx) {
+fn end_choose<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u8(ANIM_END) as i8) < 0 {
         choose(x);
@@ -207,7 +205,7 @@ fn end_choose(x: &mut Cx) {
 
 /// 0x67f00 : marche d'approche : avance tant que la clé n'est pas négative, puis choix quand la minuterie est
 /// écoulée ou que le Golem a trop bougé.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         let n = x.u16(TIMER).wrapping_sub(1);
@@ -224,7 +222,7 @@ fn approach(x: &mut Cx) {
 }
 
 /// +6 = 14 et 16 : bond (vitesse 0x480) puis demi-tour si la cible est derrière, et un coup (16).
-fn hop_turn(x: &mut Cx, step: u8) {
+fn hop_turn<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -260,7 +258,7 @@ fn hop_turn(x: &mut Cx, step: u8) {
 }
 
 /// +6 = 18 et 20 (et 0x12 posé par le profil `+0x2f`) : se fige un moment (animation 8), puis choix.
-fn squat_step(x: &mut Cx) {
+fn squat_step<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_anim(x),
         2 => wait(x),
@@ -282,7 +280,6 @@ fn squat_step(x: &mut Cx) {
                 x.add8(f::SUB3, 2);
                 x.set16(ANIM_TIME, 1);
                 let group = x.u8(GROUP) as i8 as i32 as u32;
-                x.c.d[0] = group;
                 let v = x.rom8(0x682e8u32.wrapping_add(group));
                 x.set8(0x68, v);
             }

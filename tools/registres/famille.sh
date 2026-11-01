@@ -1,9 +1,9 @@
 #!/bin/bash
 # famille.sh <fichier.rs:fonction> <motif de nettoyage> : rend générique la fonction et ce qu'elle appelle, nettoie les
 # registres dans les fichiers du motif ; en cas d'échec, restaure src depuis l'instantané.
-O=$(dirname "$0")
+O=$(cd "$(dirname "$0")" && pwd)
 cd ${W:?worktree}/port
-snap=${SCRATCH:?dossier temporaire}/locales_snap
+snap=${SCRATCH:?dossier temporaire}/${P:-locales}_snap
 rm -rf $snap; cp -r ddsom-game/src $snap
 for i in 1 2 3 4; do
   out=$(python3 $O/generique.py . $([ $i = 1 ] && echo $1) 2>&1)

@@ -61,12 +61,11 @@ pub(self) const SET_STRIKE: u32 = 0x162eee;
 pub(self) const SET_FLY_AGAINST: u32 = 0x163014;
 pub(self) const SET_FLY_ALONG: u32 = 0x163098;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
     x.tick_counters();
-    x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -92,7 +91,7 @@ pub(self) fn fly<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_FLY, n);
 }
 
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_STRIKE, n);
 }
 
@@ -107,7 +106,7 @@ pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Éclat de décor (0x1172e) au point d'impact `d5`.
-pub(self) fn spark(x: &mut Cx, d5: u32) {
+pub(self) fn spark<R: Banc>(x: &mut Cx<'_, R>, d5: u32) {
     lib::debris(x, d5);
 }
 
@@ -123,16 +122,15 @@ pub(self) fn count_down<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
 }
 
 /// 0x65a9e : se tourne vers la cible.
-pub(self) fn face_target(x: &mut Cx) {
+pub(self) fn face_target<R: Banc>(x: &mut Cx<'_, R>) {
     let target = x.linked(f::TARGET);
     let d1 = target.u16(x.b, Obj::X);
     let flip = if (d1 as i16) < (x.u16(Obj::X) as i16) { 0 } else { 0x20 };
-    x.c.d[0] = flip;
     x.set8(f::FLIP, flip as u8);
 }
 
 /// 0x65a30 : ondulation verticale en vol selon la clé d'animation (table de longs `0x65a5a`).
-pub(self) fn bob(x: &mut Cx) {
+pub(self) fn bob<R: Banc>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let mut d = rom32(x, 0x65a5a + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
@@ -234,7 +232,7 @@ pub(self) mod go {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x14);
@@ -285,11 +283,10 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
     } else if !paused(x) {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => arrival::run(x),
             2 => stance::run(x),
@@ -319,7 +316,7 @@ pub(self) fn cooldown<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x63fb0 "enemy_8" run,
+    0x63fb0 "enemy_8" #[sans] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x653b2 "enemy_8_releve" attacks::regroup,
 }

@@ -12,7 +12,7 @@ use crate::objects::Courant;
 /// Reprise après un demi-tour : état actif, sous-état 8 (charge), `+7 = 4`.
 const RESUME_CHARGE: u32 = 0x0208_0004;
 
-pub(super) fn charge(x: &mut Cx) {
+pub(super) fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 6 => stand(x),
         2 => leap_to_player(x),
@@ -22,7 +22,7 @@ pub(super) fn charge(x: &mut Cx) {
 }
 
 /// Repos debout pendant 16 images avant de repartir (0x73ca6).
-fn stand(x: &mut Cx) {
+fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -59,7 +59,7 @@ fn stand_pose<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x73d3c : bond vers un joueur, de face (marche) ou par-dessus.
-pub(super) fn jump_toward(x: &mut Cx) {
+pub(super) fn jump_toward<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     if random(x) & 1 == 0 {
         x.add8(0x7, 4);
@@ -81,7 +81,7 @@ pub(super) fn jump_toward(x: &mut Cx) {
 }
 
 /// 0x73402 : le bond se déroule ; à la fin du délai la bête se remet en garde.
-pub(super) fn jump_wait(x: &mut Cx) {
+pub(super) fn jump_wait<R: Banc>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if (t as i8) >= 0 {
@@ -92,14 +92,14 @@ pub(super) fn jump_wait(x: &mut Cx) {
 }
 
 /// 0x7343a : fin du bond.
-pub(super) fn jump_end(x: &mut Cx) {
+pub(super) fn jump_end<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         back_on_guard(x);
     }
 }
 
 /// La bête retombe en garde et teste aussitôt la portée de sa cible (0x72c96).
-fn back_on_guard(x: &mut Cx) {
+fn back_on_guard<R: Banc>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0202_0002);
     x.set8(WANT_ANIM, 0xc);
     play(x, 8);
@@ -107,7 +107,7 @@ fn back_on_guard(x: &mut Cx) {
 }
 
 /// +6 = 2 (0x73d26) : bond vers un joueur, de face.
-fn leap_to_player(x: &mut Cx) {
+fn leap_to_player<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => jump_toward(x),
         2 => {
@@ -127,7 +127,7 @@ fn leap_to_player(x: &mut Cx) {
 }
 
 /// +6 = 4 (0x73e08) : bond vers un joueur par-dessus, en profondeur.
-fn leap_over_player(x: &mut Cx) {
+fn leap_over_player<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.set8(VULNERABLE, 1);
@@ -175,7 +175,7 @@ fn leap_over_player(x: &mut Cx) {
 // --- sous-état 10 : entrée en scène -------------------------------------------------------------
 
 /// La bête tombe du haut de l'écran, se relève, puis attend qu'un joueur soit vivant.
-pub(super) fn enter(x: &mut Cx) {
+pub(super) fn enter<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

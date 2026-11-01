@@ -6,8 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => pursue(x),
         2 => turn(x),
@@ -45,28 +44,26 @@ fn switch_flight_set<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6563c / 0x65648 : cadence de poursuite lue selon la difficulté.
-fn charge_a(x: &mut Cx) {
+fn charge_a<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    x.c.d[0] = x.c.d[0] & !0xffff | level;
     let v = x.rom8(0x65654 + level);
     x.set8(CHARGE, v);
 }
 
-fn charge_b(x: &mut Cx) {
+fn charge_b<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    x.c.d[0] = x.c.d[0] & !0xffff | level;
     let v = x.rom8(0x65674 + level);
     x.set8(CHARGE, v);
 }
 
 /// 0x65694 / 0x656a6 : nombre de passages avant de changer de geste.
-fn wander_a(x: &mut Cx) {
+fn wander_a<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(0x656b8 + r);
     x.set8(WANDER, v);
 }
 
-fn wander_b(x: &mut Cx) {
+fn wander_b<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(0x656d8 + r);
     x.set8(WANDER, v);
@@ -74,14 +71,13 @@ fn wander_b(x: &mut Cx) {
 
 // --- +6 = 0 : poursuite lente ---------------------------------------------------------------------
 
-fn pursue(x: &mut Cx) {
+fn pursue<R: Banc>(x: &mut Cx<'_, R>) {
     if interrupted(x) {
         return;
     }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         lib::draw_6e(x);
-        x.c.d[0] &= !0xff;
         x.set8(LOOK, 0);
         if x.u8(LOOK_PREV) != 0 {
             x.set8(LOOK_PREV, 0);
@@ -132,7 +128,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +6 = 4 et 6 : vol de poursuite -----------------------------------------------------------------
 
 /// `second` : la variante 6 (`+0xa0 = 3`, cadence B), sinon la variante 4 (`+0xa0 = 2`, cadence A).
-fn glide(x: &mut Cx, second: bool) {
+fn glide<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
     if interrupted(x) {
         return;
     }
@@ -152,7 +148,7 @@ fn glide(x: &mut Cx, second: bool) {
 }
 
 /// 0x644b8 : début du vol.
-fn begin_glide(x: &mut Cx) {
+fn begin_glide<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(Obj::AX, 0);
     x.set16(Obj::AY, 0);
@@ -172,7 +168,7 @@ fn begin_glide(x: &mut Cx) {
 }
 
 /// 0x6452c : un pas de vol ; change de geste quand les compteurs sont épuisés ou qu'un joueur est à portée.
-fn glide_step(x: &mut Cx) {
+fn glide_step<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.u8(CHARGE).wrapping_sub(1);
     x.set8(CHARGE, n);
     if (n as i8) < 0 {
@@ -216,7 +212,7 @@ fn glide_step(x: &mut Cx) {
 }
 
 /// 0x656f8 / 0x65716 : un joueur dans la boîte, puis la décision de l'IA (0, 1 ou 2).
-fn near_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u32 {
+fn near_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u32 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
@@ -224,11 +220,10 @@ fn near_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u32 {
 }
 
 /// 0x6575a : choisit le geste d'attaque suivant (table par palier de PV `+0xaa`).
-fn pick_a(x: &mut Cx) {
+fn pick_a<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let table = [0x65792, 0x657a2, 0x657b2][x.u8(PHASE).min(2) as usize];
     let v = x.rom8(table + r);
-    x.c.d[0] = x.c.d[0] & !0xff | v as u32;
     match v {
         0 => go::strike_0(x, false),
         2 => go::strike_0(x, true),
@@ -238,12 +233,11 @@ fn pick_a(x: &mut Cx) {
 }
 
 /// 0x657c8 : comme `pick_a`, mais selon le résultat `gate` de la décision de l'IA (1 : devant, 2 : derrière).
-fn pick_a2(x: &mut Cx, gate: u32) {
-    x.c.d[2] = x.c.d[2] & !0xffff | gate;
+fn pick_a2<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
+    *x.c.d2() = (*x.c.d2()) & !0xffff | gate;
     let r = rand_and(x, 0xf);
     let table = if gate == 1 { 0x65822 } else { 0x65832 };
     let v = x.rom8(table + r);
-    x.c.d[0] = x.c.d[0] & !0xff | v as u32;
     match v {
         0 => go::strike_2(x, false),
         2 => go::strike_2(x, true),
@@ -253,12 +247,11 @@ fn pick_a2(x: &mut Cx, gate: u32) {
 }
 
 /// 0x65848 : tire un geste de repli (table par palier `+0xaa`).
-fn pick_b(x: &mut Cx, gate: u32) {
-    x.c.d[2] = x.c.d[2] & !0xffff | gate;
+fn pick_b<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
+    *x.c.d2() = (*x.c.d2()) & !0xffff | gate;
     let r = rand_and(x, 0xf);
     let table = 0x658a2 + 0x10 * x.u8(PHASE).min(2) as u32;
     let v = x.rom8(table + r);
-    x.c.d[0] = x.c.d[0] & !0xff | v as u32;
     match v {
         0 => go::strike_10(x),
         2 => go::strike_6(x),
@@ -269,8 +262,7 @@ fn pick_b(x: &mut Cx, gate: u32) {
 
 // --- +6 = 8 : plongeon -------------------------------------------------------------------------------
 
-fn plunge(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn plunge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -370,8 +362,7 @@ fn plunge(x: &mut Cx) {
 
 // --- +6 = 10 : saut ----------------------------------------------------------------------------------
 
-fn leap(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

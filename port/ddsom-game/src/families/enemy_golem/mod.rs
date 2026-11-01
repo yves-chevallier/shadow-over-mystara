@@ -49,11 +49,10 @@ pub(self) const SET_MOVE: u32 = 0x15eed8;
 pub(self) const SET_STRIKE: u32 = 0x15eef4;
 pub(self) const STANCE: u32 = 0x0202_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
-    x.c.d[0] = x.u8(f::STATE) as u32;
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -71,7 +70,7 @@ pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Démarre l'animation `n` du jeu des coups.
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -120,7 +119,7 @@ pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x689e6 : mémorise dans `+0xa6` si la cible est derrière (2) ou devant (0) ; vrai si derrière.
-pub(self) fn target_behind(x: &mut Cx) -> bool {
+pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let mut d1 = 0u32;
     if x.u16(f::TARGET) != 0 {
         let target = load_target(x);
@@ -178,16 +177,15 @@ pub(self) fn hit_gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Octet tiré au hasard dans la rangée de difficulté de `table`.
-pub(self) fn row_byte(x: &mut Cx, table: u32) -> u8 {
+pub(self) fn row_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | row;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
     x.data8(at + r)
 }
 
 /// 0x690ce : choisit le geste suivant (`+5` = 8) d'après la distance de la cible, ou se remet debout.
-pub(self) fn choose(x: &mut Cx) {
+pub(self) fn choose<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -255,12 +253,11 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else if !paused(x) {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 | 2 => control::run(x),
             4 => attacks::run(x),
@@ -274,5 +271,5 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x67854 "enemy_11" run,
+    0x67854 "enemy_11" #[sans] run,
 }

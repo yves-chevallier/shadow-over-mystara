@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(BLINK_ON) != 0 {
         let n = x.u16(BLINK_COUNT).wrapping_sub(1);
         x.set16(BLINK_COUNT, n);
@@ -34,7 +34,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x5a08a : le troglodyte se met en marche vers sa cible.
-fn begin_walk(x: &mut Cx) {
+fn begin_walk<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(AI_SHOT, 0x14);
     x.set8(VULNERABLE, 1);
@@ -47,7 +47,7 @@ fn begin_walk(x: &mut Cx) {
 }
 
 /// 0x5a0ce : marche ; se retourne, attend ou attaque ; saisi par un joueur, il part en chute.
-fn walk(x: &mut Cx) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
     if grabbed(x) {
         x.set16(f::STATE, 0x408);
@@ -75,7 +75,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// 0x5a13c : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
-fn decide(x: &mut Cx) {
+fn decide<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 8) {
         set_state_long(x, 0x0204_1600);
         x.set8(RESUME, 6);
@@ -109,10 +109,10 @@ fn decide(x: &mut Cx) {
 }
 
 /// 0x5b002 : un coup est tiré dans la ligne de la difficulté ; il sera joué après l'annonce.
-pub(super) fn pick_attack_close(x: &mut Cx) {
+pub(super) fn pick_attack_close<R: Banc>(x: &mut Cx<'_, R>) {
     let table = if x.u8(SERIES) != 0 { CLOSE_ATTACKS_ARMED } else { CLOSE_ATTACKS };
     let mv = pick_byte(x, table);
-    x.c.d[4] = x.c.d[4] & !0xff | mv as u32;
+    *x.c.d4() = (*x.c.d4()) & !0xff | mv as u32;
     if mv <= 8 {
         if lib::chance_10_16(x) {
             return x.set8(AI_SHOT, 0x15);
@@ -126,7 +126,7 @@ pub(super) fn pick_attack_close(x: &mut Cx) {
 }
 
 /// 0x5b474 : coup d'approche, 0x12 ou 0x14 au hasard.
-pub(super) fn pick_attack_far(x: &mut Cx) {
+pub(super) fn pick_attack_far<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set8(RESUME, 0x12);
     if rand_and(x, 1) != 0 {
@@ -152,7 +152,7 @@ fn begin_jump<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 6 : bond d'approche (étape 0 : envol, 2 : montée et chute, 4 : réception).
-fn jump(x: &mut Cx) {
+fn jump<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_jump(x),
         2 => {
@@ -209,7 +209,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : repos jusqu'à ce qu'un joueur soit en vie.
-pub(super) fn rest(x: &mut Cx) {
+pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         return rest_begin(x);
     }

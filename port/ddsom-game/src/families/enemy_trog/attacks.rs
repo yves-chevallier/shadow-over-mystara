@@ -8,9 +8,9 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 /// Poussée d'esprit inconnue de la ROM : lecture de la table de coups d'un bond, par difficulté.
-fn pick_jump_move(x: &mut Cx) {
+fn pick_jump_move<R: Banc>(x: &mut Cx<'_, R>) {
     let row = difficulty_row(x);
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | row;
+    *x.c.d2() = (*x.c.d2()) & 0xffff_0000 | row;
     let mv = pick_byte(x, JUMP_MOVES);
     x.set8(f::SUB2, mv);
     x.set8(f::SUB3, 0);
@@ -18,7 +18,7 @@ fn pick_jump_move(x: &mut Cx) {
 
 // --- sous-état 4 --------------------------------------------------------------------------------
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(BLINK_PHASE) != 0 && (x.u8(BLINK_PHASE) as i8) > 0 {
         let n = x.u16(BLINK_COUNT).wrapping_sub(1);
         x.set16(BLINK_COUNT, n);
@@ -45,7 +45,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0, 2 ou 4 : une série de coups d'animation 15fabe (nombre de répétitions `+0xa2`).
-fn combo(x: &mut Cx, id: u8) {
+fn combo<R: Banc>(x: &mut Cx<'_, R>, id: u8) {
     if x.u8(f::SUB3) != 0 {
         if step(x) {
             let n = x.u8(REPEAT).wrapping_sub(1);
@@ -85,7 +85,7 @@ fn combo(x: &mut Cx, id: u8) {
 }
 
 /// 6 : double coup.
-fn double(x: &mut Cx) {
+fn double<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(AI_KIND, 3);
@@ -109,7 +109,7 @@ fn double(x: &mut Cx) {
 }
 
 /// 8, 10 et 18 : bond sur la cible avec un coup (8 et 18 enchaînent le coup suivant, 10 rejoue un bond).
-fn leap_strike(x: &mut Cx, id: u8) {
+fn leap_strike<R: Banc>(x: &mut Cx<'_, R>, id: u8) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -167,7 +167,7 @@ fn land_with<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 12 : estoc répété `+0xa2` fois (animation 5).
-fn stab(x: &mut Cx) {
+fn stab<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(AI_KIND, 2);
@@ -187,14 +187,14 @@ fn stab(x: &mut Cx) {
     }
 }
 
-fn stab_begin(x: &mut Cx) {
+fn stab_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(STRIKE_KIND, 0x1a);
     x.set8(STRIKE_POWER, 5);
     strike(x, 5);
 }
 
 /// 14 : jet (animation 8 répétée), avec la routine 0x9e194 qui peut interrompre le geste.
-fn throw(x: &mut Cx) {
+fn throw<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         if crate::families::eshl_creators::four_3(&mut crate::families::effects_creators::restes::Pur, x.b, x.o) {
@@ -216,7 +216,7 @@ fn throw(x: &mut Cx) {
 }
 
 /// 16 : course vers la cible (animation 2) ou bond.
-fn dash(x: &mut Cx) {
+fn dash<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) == 0 {
@@ -267,7 +267,7 @@ fn long_jump<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 20 : geste spécial (animation 3), interrompu par 0x9e2a0.
-fn special(x: &mut Cx) {
+fn special<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(AI_KIND, 2);
@@ -284,7 +284,7 @@ fn special(x: &mut Cx) {
 }
 
 /// 22 : annonce du coup, puis passage au coup prévu `+0xa3` (ou demi-tour si la cible est derrière).
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 1);
@@ -329,7 +329,7 @@ fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 26 : geste long (animation 8 répétée `+0xa2` fois).
-fn long_gesture(x: &mut Cx) {
+fn long_gesture<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(REPEAT, 6);
@@ -349,7 +349,7 @@ fn long_gesture(x: &mut Cx) {
 
 // --- sous-état 6 : gardes et bonds --------------------------------------------------------------
 
-pub(super) fn run_b(x: &mut Cx) {
+pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 16 | 18 | 20 => hold(x),
         2 => guard(x),
@@ -394,7 +394,7 @@ fn guard<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 4 : bond de côté vers la profondeur de la cible.
-fn side_hop(x: &mut Cx) {
+fn side_hop<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(LOOK_PREV, 0xb1);
@@ -421,7 +421,7 @@ fn side_hop(x: &mut Cx) {
 }
 
 /// 6, 8 et 10 : course vers l'avant (animation 3) ; à la fin, 6 retourne debout, 8 et 10 enchaînent un coup.
-fn forward_hop(x: &mut Cx) {
+fn forward_hop<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return forward_hop_begin(x);
     }
@@ -437,7 +437,7 @@ fn forward_hop(x: &mut Cx) {
 }
 
 /// 0x5a8c8.
-pub(super) fn forward_hop_begin(x: &mut Cx) {
+pub(super) fn forward_hop_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xb0);
     x.set8(Obj::SPEED_INDEX, 8);
@@ -449,7 +449,7 @@ pub(super) fn forward_hop_begin(x: &mut Cx) {
 }
 
 /// 12 : bond avec coup (animation 6 de la série des coups).
-fn hop_strike(x: &mut Cx) {
+fn hop_strike<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => hop_strike_begin(x),
         2 => {
@@ -471,7 +471,7 @@ fn hop_strike(x: &mut Cx) {
 }
 
 /// 0x5a934.
-pub(super) fn hop_strike_begin(x: &mut Cx) {
+pub(super) fn hop_strike_begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xb2);
     x.set16(Obj::VZ, 0x680);
@@ -488,7 +488,7 @@ pub(super) fn hop_strike_begin(x: &mut Cx) {
 
 // --- sous-état 8 : coups de repli -----------------------------------------------------------------
 
-pub(super) fn run_fallback(x: &mut Cx) {
+pub(super) fn run_fallback<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if x.u8(f::SUB3) == 0 {
@@ -523,7 +523,7 @@ pub(super) fn run_fallback(x: &mut Cx) {
 }
 
 /// `+6` = 4 : pas de côté, soit course (étape 0), soit bond en profondeur.
-fn sidestep(x: &mut Cx) {
+fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) == 0 {
@@ -581,7 +581,7 @@ fn sidestep(x: &mut Cx) {
 }
 
 /// `+6` = 6 : choisit le prochain coup selon la cible.
-fn choose(x: &mut Cx) {
+fn choose<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(LOOK_PREV, 1);
     body(x, 0);
     if lib::target_in_box(x, -0x20, 0x20, 8) {

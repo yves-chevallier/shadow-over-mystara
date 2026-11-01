@@ -108,7 +108,7 @@ fn detached<R: Banc>(x: &mut Cx<'_, R>, state: u32, active: bool) {
 
 // --- sous-état 0 --------------------------------------------------------------------------------
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => attached(x),
         2 => arm(x),
@@ -157,7 +157,7 @@ fn attached<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// +6 = 2 (0x724cc) : bras de la bête : suit le parent, joue l'animation de son état et frappe un
 /// joueur proche.
-fn arm(x: &mut Cx) {
+fn arm<R: Banc>(x: &mut Cx<'_, R>) {
     const BY_PARENT_STATE: u32 = 0x724c8;
     follow_body(x);
     if x.u8(DONE) == 0 {
@@ -210,11 +210,13 @@ fn arm_rest<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Se dirige vers le point de ralliement de la pièce (0x721a2) ; vrai quand elle y est.
-fn rally(x: &mut Cx) -> bool {
+/// Glitch d'origine : sans parent, la pièce devient orpheline (saut à 0x725c8) et l'appelant teste le drapeau Z
+/// laissé par le démarrage d'animation (0x1a32 : `move.l A4,(0x20,A0)`, pointeur non nul) : « arrivée ».
+fn rally<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     const OFFSETS: u32 = 0x72224;
     let Some(p) = parent(x) else {
         orphan(x);
-        return !x.c.cond(7);
+        return true;
     };
     let flip = p.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
@@ -228,10 +230,9 @@ fn rally(x: &mut Cx) -> bool {
     let ay = dy.wrapping_add(p.u16(x.b, 0x10));
     x.set16(AIM_X, ax);
     x.set16(AIM_Y, ay);
-    set_dw(x, 1, ax);
-    set_dw(x, 2, ay);
-    x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
-    let angle = x.c.d[0] as u8;
+    // D2 (mot bas) = Y visé, laissé en reste (l'original y laisse le calcul de 0x137e, que `aim_from` ne rend pas).
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | ay as u32;
+    let angle = lib::aim_from(x, (ax, ay));
     x.set8(Obj::SPEED_INDEX, angle);
     move_xy(x);
     let near = |a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x10;
@@ -239,7 +240,7 @@ fn rally(x: &mut Cx) -> bool {
 }
 
 /// +6 = 4 (0x725e2) : la pièce se lève, attend, puis rejoint son parent.
-fn reach(x: &mut Cx) {
+fn reach<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -278,7 +279,7 @@ fn reach(x: &mut Cx) {
 }
 
 /// +6 = 6 (0x7267c) : crache dès qu'un joueur est devant.
-fn spit(x: &mut Cx) {
+fn spit<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, KNOCKED);
     }
@@ -309,7 +310,7 @@ pub(super) fn finish_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 8 (0x7270c) : comme `spit` mais sans attendre la fin du geste.
-fn spit_once(x: &mut Cx) {
+fn spit_once<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, KNOCKED);
     }
@@ -497,7 +498,7 @@ fn slide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Rampe : durée aléatoire, puis la bête surgit et frappe (+6 = 20 et 22, 0x72a16 / 0x72b16).
-fn sneak_gen(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn sneak_gen<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     const DELAYS: u32 = 0x72a6e;
     match x.u8(0x7) {
         0 => {
@@ -537,10 +538,10 @@ fn sneak_gen(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     }
 }
 
-fn sneak(x: &mut Cx) {
+fn sneak<R: Banc>(x: &mut Cx<'_, R>) {
     sneak_gen(x, eshl_creators::throw_1);
 }
 
-fn sneak_b(x: &mut Cx) {
+fn sneak_b<R: Banc>(x: &mut Cx<'_, R>) {
     sneak_gen(x, eshl_creators::throw_2);
 }

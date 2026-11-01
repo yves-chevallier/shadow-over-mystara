@@ -11,7 +11,7 @@ const PICK_TABLE: u32 = 0x7462e;
 /// Attaques de contact (0x74c3e) : tirage par niveau de difficulté.
 const CLOSE_TABLE: u32 = 0x74cac;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if matches!(x.u8(Obj::VARIANT), 0xc | 0xd) || grabbed(x) {
         return set_state_long(x, KNOCKED);
     }
@@ -37,7 +37,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// +6 = 0 (0x72be0) : marche vers la cible, observe, puis attaque ou change de côté.
-fn pursue(x: &mut Cx) {
+fn pursue<R: Banc>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return set_state_long(x, 0x0202_0600);
     }
@@ -74,7 +74,7 @@ fn pursue(x: &mut Cx) {
 }
 
 /// 0x72c7e : la bête se fige un instant si un test de la cible l'y invite, sinon elle engage.
-pub(super) fn pursue_tail(x: &mut Cx) {
+pub(super) fn pursue_tail<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::maybe_draw_6e(x) {
         return x.set16(f::SUB2, 0x0400);
     }
@@ -83,7 +83,7 @@ pub(super) fn pursue_tail(x: &mut Cx) {
 }
 
 /// 0x72c96 : la cible est-elle à portée ? Frappe, saisit, ou continue d'avancer.
-pub(super) fn engage(x: &mut Cx) {
+pub(super) fn engage<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x30, 0x18, 4) {
         set_state_long(x, 0x0204_0200);
         return lib::pick_byte(x);
@@ -113,7 +113,7 @@ fn face_resume<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Un joueur est juste devant (0x72d2a ou 0x72da4) : attaque courte ou longue. `far` : portée de
 /// la seconde boîte.
-fn reach_gen(x: &mut Cx, d0: i16, close: bool) -> bool {
+fn reach_gen<R: Banc>(x: &mut Cx<'_, R>, d0: i16, close: bool) -> bool {
     if !lib::target_in_box(x, d0, 0x20, 2) {
         return false;
     }
@@ -136,12 +136,12 @@ fn reach_gen(x: &mut Cx, d0: i16, close: bool) -> bool {
 }
 
 /// 0x72d2a : un joueur à bout de bras.
-fn reach_front(x: &mut Cx) -> bool {
+fn reach_front<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     reach_gen(x, -0x40, true)
 }
 
 /// 0x72da4 : un joueur plus loin derrière.
-fn reach_back(x: &mut Cx) -> bool {
+fn reach_back<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     reach_gen(x, -0xb0, false)
 }
 
@@ -185,7 +185,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 6 (0x72eec) : s'approche de la cible en la regardant.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -239,7 +239,7 @@ fn approach_walk<R: Banc>(x: &mut Cx<'_, R>) {
 // --- choix des attaques ---------------------------------------------------------------------------
 
 /// 0x745a4 (`close`) / 0x745ac : tire une attaque dans la table du profil et du niveau de difficulté.
-fn choose_attack_a(x: &mut Cx, close: bool) {
+fn choose_attack_a<R: Banc>(x: &mut Cx<'_, R>, close: bool) {
     let base = if close { 0 } else { 0x14 };
     let profile = x.u8(PROFILE).wrapping_shl(2) as u32;
     let table = x.data32(PICK_TABLE + profile);
@@ -259,7 +259,7 @@ fn choose_attack_a(x: &mut Cx, close: bool) {
 }
 
 /// 0x74c3e : fin d'une attaque, la bête enchaîne sur une charge ou se remet debout.
-pub(super) fn next_move(x: &mut Cx) {
+pub(super) fn next_move<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(_) = target(x) else { return set_state_long(x, ACTIVE_STANCE) };
     if !lib::target_in_box(x, -0x30, 0x30, 8) && !lib::target_in_box(x, -0xd0, 0x70, 8) {
         return set_state_long(x, ACTIVE_STANCE);

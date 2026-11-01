@@ -7,7 +7,7 @@ use crate::objects::pools;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => flight(x),
         2 => landed(x),
@@ -20,8 +20,7 @@ fn signed_by_facing<R: Banc>(x: &mut Cx<'_, R>, v: i16) -> u16 {
     if x.u8(f::FLIP) != 0 { v.wrapping_neg() as u16 } else { v as u16 }
 }
 
-fn flight(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn flight<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -92,8 +91,7 @@ fn flight(x: &mut Cx) {
 }
 
 /// `+6` = 2 : l'ombre est créée (EFFCT 0x32), puis la créature attend un joueur dans sa boîte.
-fn landed(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn landed<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

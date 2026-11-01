@@ -10,7 +10,7 @@ use crate::objects::Courant;
 const REACT_PART: u32 = 0x740c0;
 const REACT_BEAST: u32 = 0x742fa;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -46,14 +46,14 @@ pub(super) fn run(x: &mut Cx) {
     x.reinsert();
 }
 
-fn zone_and_shadow(x: &mut Cx) {
+fn zone_and_shadow<R: Banc>(x: &mut Cx<'_, R>) {
     lib::keep_in_zone(x);
     lib::collide_terrain(x);
 }
 
 // --- sous-état 2 : recul d'une pièce --------------------------------------------------------------
 
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -93,7 +93,7 @@ fn recoil(x: &mut Cx) {
 
 // --- sous-état 4 : chute --------------------------------------------------------------------------
 
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -140,7 +140,7 @@ fn fall(x: &mut Cx) {
 
 // --- sous-état 8 : mort ou fuite ------------------------------------------------------------------
 
-fn flee(x: &mut Cx) {
+fn flee<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             let wall = var::SCENE.get(x.b);
@@ -234,7 +234,7 @@ fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7449e : continue jusqu'à sortir de l'écran, puis disparaît.
-fn leave_screen(x: &mut Cx) {
+fn leave_screen<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     if x.in_arena_default() {
         return step(x);

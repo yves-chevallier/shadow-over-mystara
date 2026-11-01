@@ -5,7 +5,7 @@ use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -61,7 +61,7 @@ fn begin_idle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6 = 2` : attend la fin de l'animation en marchant, puis tire l'idée suivante.
-fn wait(x: &mut Cx) {
+fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         if x.u8(f::KEY_FRAME) != 0xff {
             move_xy(x);
@@ -105,7 +105,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58126 : marche vers la cible ; décide de se retourner, d'attendre ou d'attaquer.
-fn walk(x: &mut Cx) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     lib::walk_point_reached(x);
     let (y, z) = (x.u16(WALK_ARGS_Y), x.u16(WALK_ARGS_Z));
     lib::turn_toward(x, y, z);
@@ -118,9 +118,7 @@ fn walk(x: &mut Cx) {
         }
         let target = load_target(x);
         let mine = x.u16(Obj::X);
-        set_dw(x, 0, mine);
         let want = if mine as i16 > target.u16(x.b, Obj::X) as i16 { 0 } else { 0x20 };
-        x.c.d[1] = want;
         if want != x.u8(f::FLIP) as u32 {
             return x.set16(f::SUB2, 0x400);
         }
@@ -137,7 +135,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// 0x58194 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
-fn attack_choice(x: &mut Cx) {
+fn attack_choice<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) != 0 && lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, DASH);
         return x.set16(COUNTER, 0);
@@ -159,41 +157,35 @@ fn attack_choice(x: &mut Cx) {
 }
 
 /// 0x59254 : cible devant ; l'attaque est lancée si la décision par masque le veut.
-fn front_attack(x: &mut Cx) -> bool {
+fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let side = lib::target_in_front(x, -8, 0x68, 8);
     if !side.found() {
-        x.c.d[0] = 0;
         return false;
     }
     x.set8(SIDE, side as u8);
     if !decision(x) {
-        x.c.d[0] = 0;
         return false;
     }
     pick_move(x, CLOSE_ATTACKS, 0x204);
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x592a4 : cible plus loin (boîte large) ; même décision, attaque de loin.
-fn far_attack(x: &mut Cx) -> bool {
+fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let side = lib::target_in_front(x, -0xa0, 0x30, 8);
     if !side.found() {
-        x.c.d[0] = 0;
         return false;
     }
     x.set8(SIDE, side as u8);
     if !decision(x) {
-        x.c.d[0] = 0;
         return false;
     }
     pick_move(x, FAR_ATTACKS, 0x204);
-    x.c.d[0] = 1;
     true
 }
 
 /// Décision par masque (0xa4c2 si cible et squelette regardent du même côté, 0xa4b4 sinon).
-fn decision(x: &mut Cx) -> bool {
+fn decision<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }

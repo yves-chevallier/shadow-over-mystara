@@ -10,7 +10,7 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x5acfc;
 const REACT_SECOND: u32 = 0x5ae8e;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) == 0 {
         blink_hit(x);
     }
@@ -18,7 +18,6 @@ pub(super) fn run(x: &mut Cx) {
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => {
                 if x.u8(f::SUB2) == 0 {
@@ -131,7 +130,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 8 (0x5ac08) : saisi par un joueur, le troglodyte se retourne et s'enfuit.
-pub(super) fn caught(x: &mut Cx) {
+pub(super) fn caught<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

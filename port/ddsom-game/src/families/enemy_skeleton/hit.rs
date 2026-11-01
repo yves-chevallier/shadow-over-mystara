@@ -10,7 +10,7 @@ use crate::objects::Obj;
 const REACT_FIRST: u32 = 0x58d0a;
 const REACT_SECOND: u32 = 0x58f2e;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -37,7 +37,7 @@ pub(super) fn run(x: &mut Cx) {
 
 // --- sous-état 2 : recul ------------------------------------------------------------------------
 
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) || special_hit(x) {
         return;
     }
@@ -130,7 +130,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : fuite ------------------------------------------------------------------------
 
-fn flee(x: &mut Cx) {
+fn flee<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -141,15 +141,15 @@ fn flee(x: &mut Cx) {
             let x0 = x.u16(Obj::X);
             x.set16(SAVED_POS, x0);
             let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
-            x.c.d[2] = 0;
+            *x.c.d2() = 0;
             x.set16(Obj::VX, -0x280i16 as u16);
             x.set16(Obj::AX, 0);
             let edge = x0.wrapping_sub(0xc0) as i16;
             if edge > cam as i16 {
                 negate(x, Obj::VX);
-                x.c.d[2] = 0x20;
+                *x.c.d2() = 0x20;
             }
-            if x.u8(f::FLIP) != x.c.d[2] as u8 {
+            if x.u8(f::FLIP) != (*x.c.d2()) as u8 {
                 body(x, 1);
             } else {
                 x.add8(f::SUB2, 2);
@@ -177,7 +177,7 @@ fn flee(x: &mut Cx) {
 }
 
 /// 0x59082 : court vers le bord de l'écran ; hors de l'écran, il disparaît.
-fn run_away(x: &mut Cx) {
+fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         x.move_x();

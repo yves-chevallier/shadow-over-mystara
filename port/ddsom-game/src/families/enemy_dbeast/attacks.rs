@@ -14,7 +14,7 @@ use crate::objects::Courant;
 /// État long à reprendre après un demi-tour : sous-état 4 (ici) ou 6 (`attacks_b`).
 pub(super) const RESUME_ATTACK: u32 = 0x0204_0000;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => jab(x),
         2 => jab_b(x),
@@ -68,7 +68,7 @@ pub(super) fn track<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
 }
 
 /// Les trois premières étapes communes, puis `later(étape)` pour les autres.
-pub(super) fn phased(x: &mut Cx, resume: u32, later: impl FnOnce(&mut Cx, u8)) {
+pub(super) fn phased<'a, R: Banc>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
     match x.u8(0x7) {
         0 => ready(x),
         2 => track(x, resume),
@@ -118,7 +118,7 @@ fn strike_play<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
 }
 
 /// Fin d'animation d'un coup, retour au repos puis choix du coup suivant.
-fn strike_end(x: &mut Cx) {
+fn strike_end<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         play(x, 0);
         next_move(x);
@@ -126,7 +126,7 @@ fn strike_end(x: &mut Cx) {
 }
 
 /// Fin d'animation d'un coup, choix immédiat du coup suivant (0x73108).
-fn strike_end_quick(x: &mut Cx) {
+fn strike_end_quick<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         next_move(x);
     }
@@ -148,14 +148,14 @@ fn walk_angle<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn random_bit(x: &mut Cx) -> bool {
+fn random_bit<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     random(x) & 1 != 0
 }
 
 // --- les coups ----------------------------------------------------------------------------------
 
 /// 0x72fdc : coup de patte rapide.
-fn jab(x: &mut Cx) {
+fn jab<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             strike_begin(x, 0, 0x2d, 5, 0);
@@ -167,7 +167,7 @@ fn jab(x: &mut Cx) {
 }
 
 /// 0x730a2 : second coup de patte.
-fn jab_b(x: &mut Cx) {
+fn jab_b<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             strike_begin(x, 0, 0x28, 5, 1);
@@ -179,7 +179,7 @@ fn jab_b(x: &mut Cx) {
 }
 
 /// 0x73118 : avance puis bondit sur un joueur en le griffant.
-fn lunge(x: &mut Cx) {
+fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -217,7 +217,7 @@ fn lunge(x: &mut Cx) {
 }
 
 /// 0x731da : deux ou trois coups de patte d'affilée.
-fn double_strike(x: &mut Cx) {
+fn double_strike<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             let count = if random_bit(x) { 3 } else { 2 };
@@ -249,7 +249,7 @@ fn double_strike(x: &mut Cx) {
 }
 
 /// 0x732b4 : coup de patte suivi, au hasard, d'un second.
-fn claw_pair(x: &mut Cx) {
+fn claw_pair<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             strike_begin(x, 0, 0x2a, 5, 1);
@@ -276,7 +276,7 @@ fn leap_strike_start<R: Banc>(x: &mut Cx<'_, R>, vx: i16) {
 }
 
 /// Retombée d'un bond griffu : attendre l'image-clé, atterrir, finir l'animation.
-fn leap_landing(x: &mut Cx, n: u8, first: u8) {
+fn leap_landing<R: Banc>(x: &mut Cx<'_, R>, n: u8, first: u8) {
     match n.wrapping_sub(first) {
         0 => bound_wait(x),
         2 => bound_land(x),
@@ -285,7 +285,7 @@ fn leap_landing(x: &mut Cx, n: u8, first: u8) {
 }
 
 /// 0x73348 : bond en avant griffes dehors.
-fn leap_strike(x: &mut Cx) {
+fn leap_strike<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => leap_strike_start(x, -0x1c0),
         n => leap_landing(x, n, 6),
@@ -293,7 +293,7 @@ fn leap_strike(x: &mut Cx) {
 }
 
 /// 0x73754 : le même bond, plus rapide.
-fn leap_strike_b(x: &mut Cx) {
+fn leap_strike_b<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => leap_strike_start(x, -0x300),
         n => leap_landing(x, n, 6),
@@ -301,7 +301,7 @@ fn leap_strike_b(x: &mut Cx) {
 }
 
 /// 0x733e8 : saute vers un joueur.
-fn jump_in(x: &mut Cx) {
+fn jump_in<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => super::moves::jump_toward(x),
         6 => super::moves::jump_wait(x),
@@ -313,7 +313,7 @@ fn jump_in(x: &mut Cx) {
 }
 
 /// 0x7346a : prend son élan.
-fn crouch(x: &mut Cx) {
+fn crouch<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -328,7 +328,7 @@ fn crouch(x: &mut Cx) {
 }
 
 /// 0x734a8 : saute sur place plusieurs fois (le nombre est tiré dans une table).
-fn pounce(x: &mut Cx) {
+fn pounce<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => pounce_start(x),
         6 => pounce_repeat(x),
@@ -337,7 +337,7 @@ fn pounce(x: &mut Cx) {
 }
 
 /// Tire le nombre de sauts sur place (table de la ROM en 0x73516).
-pub(super) fn roll_pounces(x: &mut Cx) {
+pub(super) fn roll_pounces<R: Banc>(x: &mut Cx<'_, R>) {
     const COUNTS: u32 = 0x73516;
     let r = random(x) & 0x1f;
     let count = x.data8(COUNTS + r);
@@ -345,7 +345,7 @@ pub(super) fn roll_pounces(x: &mut Cx) {
 }
 
 /// 0x734bc : début d'une série de sauts sur place.
-fn pounce_start(x: &mut Cx) {
+fn pounce_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 7);
@@ -356,14 +356,13 @@ fn pounce_start(x: &mut Cx) {
 }
 
 /// 0x73536 : un saut sur place fini ; au hasard un cri accompagne l'image-clé.
-pub(super) fn pounce_repeat(x: &mut Cx) {
+pub(super) fn pounce_repeat<R: Banc>(x: &mut Cx<'_, R>) {
     const SOUNDS: u32 = 0x73584;
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         let r = random(x) & 0xf;
         let sound = x.rom8(SOUNDS + r);
         if sound != 0 {
-            set_dw(x, 0, sound as u16);
             lib::sound(x, 0xe38d2);
         }
     }
@@ -378,7 +377,7 @@ pub(super) fn pounce_repeat(x: &mut Cx) {
 }
 
 /// 0x73594 : saut périlleux.
-fn backflip(x: &mut Cx) {
+fn backflip<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -412,7 +411,7 @@ fn backflip(x: &mut Cx) {
 }
 
 /// 0x7365e : fait demi-tour en courant, repart vers le joueur puis s'arrête.
-fn turn_run(x: &mut Cx) {
+fn turn_run<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -465,13 +464,13 @@ fn claw_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'une griffe simple : son d'impact, puis repos et coup suivant.
-fn claw_end(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn claw_end<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     key_throw(x, throw);
     strike_end(x);
 }
 
 /// 0x7376c : griffe.
-fn claw(x: &mut Cx) {
+fn claw<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),
         6 => claw_end(x, eshl_creators::throw_1),
@@ -480,7 +479,7 @@ fn claw(x: &mut Cx) {
 }
 
 /// 0x737fe : griffe, autre son.
-fn claw_b(x: &mut Cx) {
+fn claw_b<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),
         6 => claw_end(x, eshl_creators::throw_2),
@@ -489,7 +488,7 @@ fn claw_b(x: &mut Cx) {
 }
 
 /// Fin d'une griffe d'une série de `+0xab` : la dernière ramène au repos.
-fn series_end(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn series_end<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     key_throw(x, throw);
     if x.anim_step() {
         play_b(x, 4);
@@ -503,7 +502,7 @@ fn series_end(x: &mut Cx, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
 }
 
 /// 0x738a4 : une griffe, puis coup suivant.
-fn claw_series(x: &mut Cx) {
+fn claw_series<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             x.set8(REPEAT, 1);
@@ -515,7 +514,7 @@ fn claw_series(x: &mut Cx) {
 }
 
 /// 0x73904 : une ou deux griffes.
-fn claw_series_b(x: &mut Cx) {
+fn claw_series_b<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
             let count = if random_bit(x) { 2 } else { 1 };
@@ -528,7 +527,7 @@ fn claw_series_b(x: &mut Cx) {
 }
 
 /// 0x73964 : griffe puis bond griffu.
-fn claw_leap(x: &mut Cx) {
+fn claw_leap<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),
         6 => {

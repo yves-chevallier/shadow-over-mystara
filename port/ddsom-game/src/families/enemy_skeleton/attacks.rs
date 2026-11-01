@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -69,7 +69,7 @@ pub(super) fn face<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x59222 : mémorise si la cible est derrière (`+0xa6` = 2, sinon 0) ; vrai si un demi-tour est nécessaire.
-fn needs_turn_around(x: &mut Cx) -> bool {
+fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let mut side = 0;
     if x.u16(f::TARGET) != 0 {
         let target = load_target(x);
@@ -87,7 +87,7 @@ fn needs_turn_around(x: &mut Cx) -> bool {
 }
 
 /// 0x58370 : fin d'un coup — on attend la fin de l'animation, puis on choisit la suite.
-fn finish(x: &mut Cx) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_STATE) as i16) >= 0 {
         step(x);
     } else {
@@ -100,11 +100,10 @@ fn finish(x: &mut Cx) {
 
 /// Estoc (`+6` = 0 ou 2) : tire au sort de reprendre l'idée, sinon prépare puis frappe (type `kind`,
 /// force `power`, animation `anim`).
-fn thrust(x: &mut Cx, kind: u8, power: u8, anim: u32) {
+fn thrust<R: Banc>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
             let r = random(x) & 0xf;
-            x.c.d[0] = x.c.d[0] & 0xffff_0000 | r;
             if 0xffc0u32 >> r & 1 != 0 {
                 set_state_long(x, STANCE_ALT);
             } else {
@@ -126,7 +125,7 @@ fn thrust(x: &mut Cx, kind: u8, power: u8, anim: u32) {
 }
 
 /// Enchaînement (`+6` = 4) : coup de bouclier, puis, au hasard, un second coup ; la série 1 passe à la garde.
-fn combo(x: &mut Cx) {
+fn combo<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face(x),
         2 => ready(x),
@@ -161,7 +160,7 @@ fn combo(x: &mut Cx) {
 }
 
 /// Double coup (`+6` = 6) : un coup au hasard parmi deux animations, puis le suivant.
-fn double_cut(x: &mut Cx) {
+fn double_cut<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face(x),
         2 => ready(x),
@@ -203,7 +202,7 @@ pub(super) enum Leap {
     TurningCombo,
 }
 
-fn leap(x: &mut Cx, kind: Leap) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>, kind: Leap) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -272,7 +271,7 @@ pub(super) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58536 : descente jusqu'au sol.
-pub(super) fn fall(x: &mut Cx) {
+pub(super) fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     step(x);
     if (x.u32(Obj::Z) as i32) <= 0 {
@@ -283,7 +282,7 @@ pub(super) fn fall(x: &mut Cx) {
 }
 
 /// Début du bond : vitesse horizontale selon le type de bond et l'orientation, puis envol.
-fn jump_up(x: &mut Cx, kind: Leap) {
+fn jump_up<R: Banc>(x: &mut Cx<'_, R>, kind: Leap) {
     match kind {
         Leap::Short => {
             x.set16(Obj::VX, 0x180);
@@ -307,7 +306,7 @@ fn jump_up(x: &mut Cx, kind: Leap) {
 }
 
 /// Glissade (`+6` = 10) : le squelette fonce vers la cible en déplaçant son animation.
-fn slide(x: &mut Cx) {
+fn slide<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -318,29 +317,29 @@ fn slide(x: &mut Cx) {
 }
 
 /// 0x58582 : lance l'animation 2 en la ramenant à l'image qu'elle avait, mémorise la position.
-fn begin_slide(x: &mut Cx) {
+fn begin_slide<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x2a);
     restart_slide(x);
 }
 
 /// 0x5858c : animation 2 rejouée jusqu'à retrouver la même image (au plus huit pas).
-pub(super) fn restart_slide(x: &mut Cx) {
+pub(super) fn restart_slide<R: Banc>(x: &mut Cx<'_, R>) {
     let (count, state) = (x.u16(ANIM_COUNT), x.u16(ANIM_STATE));
-    set_dw(x, 1, count);
-    set_dw(x, 2, state);
+    // D2 (mot bas) = l'image cherchée, D3 = compteur de pas : restes relus par la suite (DDSOM_POISON :
+    // skeleton_scene13, boss17_scene13).
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | state as u32;
     x.anim_start(SET_BODY, 2);
-    x.c.d[3] = 7;
+    *x.c.d3() = 7;
     loop {
-        if x.u16(ANIM_STATE) == x.c.d[2] as u16 {
-            let d1 = x.c.d[1] as u16;
-            x.set16(ANIM_COUNT, d1);
+        if x.u16(ANIM_STATE) == state {
+            x.set16(ANIM_COUNT, count);
             break;
         }
         x.set16(ANIM_STATE, 1);
         step(x);
-        let n = (x.c.d[3] as u16).wrapping_sub(1);
-        set_dw(x, 3, n); // relu : D3 relu par la suite (DDSOM_POISON : skeleton_scene13, boss17_scene13)
+        let n = (*x.c.d3() as u16).wrapping_sub(1);
+        *x.c.d3() = *x.c.d3() & 0xffff_0000 | n as u32;
         if n == 0xffff {
             break;
         }
@@ -356,7 +355,7 @@ fn finish_restart<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(SAVED_POS, pos);
 }
 
-fn slide_move(x: &mut Cx) {
+fn slide_move<R: Banc>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         let t = x.u16(TIMER).wrapping_sub(1);

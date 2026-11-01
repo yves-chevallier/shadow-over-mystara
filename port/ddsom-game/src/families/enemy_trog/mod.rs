@@ -78,7 +78,7 @@ const BLINK_TIMES: u32 = 0x5b96c;
 /// Vitesses de marche par série (2 mots par série).
 const WALK_SPEEDS: u32 = 0x5af64;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -98,7 +98,7 @@ fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike(x: &mut Cx, n: u32) {
+fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -122,23 +122,21 @@ fn difficulty_row<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
 }
 
 /// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
-fn pick_byte(x: &mut Cx, table: u32) -> u8 {
+fn pick_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = difficulty_row(x);
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
 
 /// 0x5af4e : choisit la table de vitesses selon la série (`idx` : 0, 2 ou 4).
-fn walk_speed(x: &mut Cx, idx: u32) {
+fn walk_speed<R: Banc>(x: &mut Cx<'_, R>, idx: u32) {
     let series = x.u8(SERIES) as u32;
-    x.c.d[1] = (series << 2) & 0xff;
-    x.c.a[1] = WALK_SPEEDS + x.c.d[1];
-    let n = (x.data16(x.c.a[1] + idx) as u32) as u16;
+    let n = x.data16(WALK_SPEEDS + ((series << 2) & 0xff) + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
 /// Un joueur dans la boîte ? Les deux décisions par masque (0xa4c2, 0xa4b4) doivent accepter.
-fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+fn box_attack<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     let ok = lib::target_in_box(x, d0, d1, d2) && {
         load_target(x);
         lib::decision_b(x)
@@ -149,18 +147,17 @@ fn box_attack(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
 }
 
 /// 0x5afa0 : cible devant, à portée courte.
-fn front_box(x: &mut Cx) -> bool {
-    x.c.d[0] = 0;
+fn front_box<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, 0, 0x70, 8)
 }
 
 /// 0x5af90 : cible derrière ou loin devant.
-fn side_box(x: &mut Cx) -> bool {
+fn side_box<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, -0xb5, 0x35, 0x15)
 }
 
 /// 0x5afda : la cible est de l'autre côté de l'orientation.
-fn needs_turn_around(x: &mut Cx) -> bool {
+fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -180,10 +177,9 @@ fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin des coups : le suivant est tiré dans la ligne de la difficulté (0x5bb74).
-fn end_attack(x: &mut Cx) {
+fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     let row = difficulty_row(x);
-    set_dw(x, 0, row as u16);
     let n = rand_and(x, 0x1f);
     x.set8(f::SUB, 8);
     let mv = x.data8(FALLBACK_MOVES + row + n);
@@ -202,7 +198,7 @@ fn blink_if_running<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -236,7 +232,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     let dispatch = if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -251,7 +247,6 @@ fn active(x: &mut Cx) {
         }
         return x.reinsert();
     }
-    x.c.d[0] = x.u8(f::SUB) as u32;
     match x.u8(f::SUB) {
         0 => arrival(x),
         2 => stance::run(x),
@@ -272,7 +267,7 @@ fn active(x: &mut Cx) {
 
 /// Clignotement de la série 0 (0x59d02) : `+0xa5` est la phase (0xff : au repos, décompte `+0xae` ; 0 : lance le
 /// clignotement ; positive : alterne la visibilité `+1` bit 1).
-fn flicker(x: &mut Cx) {
+fn flicker<R: Banc>(x: &mut Cx<'_, R>) {
     let phase = x.u8(BLINK_PHASE) as i8;
     if phase == 0 {
         x.add8(BLINK_PHASE, 1);
@@ -307,12 +302,12 @@ fn flicker(x: &mut Cx) {
 }
 
 /// 0x5b940 : durée d'invisibilité tirée au hasard.
-fn pick_blink_delay(x: &mut Cx) {
+fn pick_blink_delay<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(BLINK_WAIT, 1);
     let mut d2 = var::RANK.get(x.b);
     d2 = d2 & 0xff00 | (d2 as u8 >> 1) as u16;
     let row = (d2 << 5) as u32;
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | row;
+    *x.c.d2() = (*x.c.d2()) & 0xffff_0000 | row;
     let n = rand_and(x, 0x1f);
     let idx = x.data8(BLINK_DELAYS + row + n) as u32;
     let w = x.rom16(BLINK_TIMES + idx);
@@ -320,7 +315,7 @@ fn pick_blink_delay(x: &mut Cx) {
 }
 
 /// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 chute, 2 bond, 3 et 4 saut, 5 réveil).
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
@@ -455,5 +450,5 @@ fn dead<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x59baa "enemy_2" run,
+    0x59baa "enemy_2" #[sans] run,
 }

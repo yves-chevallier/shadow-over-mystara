@@ -8,7 +8,7 @@ use crate::objects::Courant;
 use crate::objects::Obj;
 
 /// Fin d'un geste : si plus personne n'est en vie la créature se retire, sinon elle repart au hasard.
-fn finish(x: &mut Cx) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::players_alive(x) {
         go::wander(x);
     } else {
@@ -33,7 +33,7 @@ fn release_victim<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => claw(x),
         2 => claw_b(x),
@@ -48,8 +48,7 @@ pub(super) fn run(x: &mut Cx) {
 
 // --- +6 = 0 : griffe ----------------------------------------------------------------------------
 
-fn claw(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn claw<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -79,8 +78,7 @@ fn claw(x: &mut Cx) {
 
 // --- +6 = 2 : griffe lourde ---------------------------------------------------------------------
 
-fn claw_b(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn claw_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -110,8 +108,7 @@ fn claw_b(x: &mut Cx) {
 
 // --- +6 = 4 : coup bref --------------------------------------------------------------------------
 
-fn short_blow(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn short_blow<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -131,8 +128,7 @@ fn short_blow(x: &mut Cx) {
 
 // --- +6 = 6 : charge latérale --------------------------------------------------------------------
 
-fn sidestep(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -187,8 +183,7 @@ fn sidestep(x: &mut Cx) {
 
 // --- +6 = 8 : saut en arrière --------------------------------------------------------------------
 
-fn jump_back(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn jump_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -248,8 +243,7 @@ fn jump_back(x: &mut Cx) {
 
 // --- +6 = 10 : plongeon sur la cible ---------------------------------------------------------------
 
-fn plunge_attack(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn plunge_attack<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -335,8 +329,7 @@ fn plunge_attack(x: &mut Cx) {
 
 // --- +6 = 12 : le gargouille fond sur la cible --------------------------------------------------------
 
-fn stoop(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn stoop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -398,15 +391,12 @@ fn stoop(x: &mut Cx) {
 }
 
 /// 0x64e00 : vise la cible : angle, vitesse verticale pour y arriver en autant d'images que la course horizontale.
-fn aim_dive(x: &mut Cx) {
+fn aim_dive<R: Banc>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     let (tx, tz) = (target.u16(x.b, Obj::X), target.u16(x.b, Obj::Y));
-    x.c.d[1] = tx as u32;
-    x.c.d[2] = tz as u32;
     x.set16(GOAL_X, tx);
     x.set16(GOAL_DEPTH, tz);
-    x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
-    let angle = x.c.d[0] as u8;
+    let angle = lib::aim_from(x, (tx, tz));
     x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x35);
     let abs = |v: u16| (v as i16).unsigned_abs();
@@ -430,10 +420,12 @@ fn aim_dive(x: &mut Cx) {
         frames = frames.wrapping_add(1);
         guard += 1;
     }
-    x.c.d[0] = x.u16(Obj::Z) as u32;
-    x.c.d[1] = frames as u32;
-    x.call(0x17ea);
-    let mut d0 = (x.c.d[0].rotate_left(16) as i32 >> 8) as i16;
+    // 0x17ea : hauteur / nombre d'images. Glitch d'origine : la division laisse son reste dans D2 et son compteur
+    // dans D3 (restes).
+    let (q, r) = crate::aides::divide(x.u16(Obj::Z) as u32, frames as u32);
+    *x.c.d2() = r;
+    *x.c.d3() = 0xffff;
+    let mut d0 = (q.rotate_left(16) as i32 >> 8) as i16;
     if d0 > 0x400 {
         d0 = 0x400;
     }
@@ -480,9 +472,8 @@ pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 12 : saisie ------------------------------------------------------------------------------
 
-pub(super) fn grab(x: &mut Cx) {
+pub(super) fn grab<R: Banc>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
-    x.c.a[1] = victim.0 | 0xff00_0000;
     if victim.u8(x.b, 0) == 0 {
         return go::strike_10(x);
     }
@@ -492,7 +483,6 @@ pub(super) fn grab(x: &mut Cx) {
     if x.u8(f::SUB2) != 0 {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB3) as u32;
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -520,12 +510,11 @@ pub(super) fn grab(x: &mut Cx) {
                 lib::step(x);
                 return;
             }
-            x.c.d[1] = 2;
             let shift = if x.u8(f::FLIP) != 0 { 0x23i16 } else { -0x23 };
             let (d2, d3, d4) = (x.u16(Obj::X).wrapping_add(shift as u16), x.u16(Obj::Z).wrapping_add(0x11), x.u16(Obj::Y).wrapping_sub(1));
-            x.c.d[2] = d2 as u32;
-            x.c.d[3] = d3 as u32;
-            x.c.d[4] = d4 as u32;
+            *x.c.d2() = d2 as u32;
+            *x.c.d3() = d3 as u32;
+            *x.c.d4() = d4 as u32;
             crate::families::effects_creators::spark_at(x.b, x.o, victim.0, 2, (d2, d3, d4));
             lib::sound(x, 0xedd96);
             let victim = x.linked(f::TARGET);
@@ -548,7 +537,7 @@ pub(super) fn grab(x: &mut Cx) {
 }
 
 /// 0x650a6 : la victime est relâchée (`+0x6f` levé) et la créature passe en vol circulaire.
-fn dismount(x: &mut Cx) {
+fn dismount<R: Banc>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
     victim.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, victim);
@@ -556,7 +545,7 @@ fn dismount(x: &mut Cx) {
 }
 
 /// Sous-état 14 : fin de geste, cible de remplacement.
-pub(super) fn done(x: &mut Cx) {
+pub(super) fn done<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         regroup(x);
     }

@@ -9,7 +9,7 @@ use super::*;
 
 const RESUME_ATTACK_B: u32 = 0x0206_0000;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => hop_or_pounce(x),
         2 => roar(x),
@@ -23,7 +23,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Retour à la bête debout, puis suite de la poursuite (0x73a4a).
-fn end_and_pursue(x: &mut Cx) {
+fn end_and_pursue<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, ACTIVE_STANCE);
         x.set8(WANT_ANIM, 0);
@@ -33,7 +33,7 @@ fn end_and_pursue(x: &mut Cx) {
 }
 
 /// 0x739cc : au hasard un petit saut vers l'avant, sinon une série de sauts sur place.
-fn hop_or_pounce(x: &mut Cx) {
+fn hop_or_pounce<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
             if random(x) & 1 != 0 {
@@ -55,7 +55,7 @@ fn hop_or_pounce(x: &mut Cx) {
 }
 
 /// 0x73a78 : rugit.
-fn roar(x: &mut Cx) {
+fn roar<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -69,7 +69,7 @@ fn roar(x: &mut Cx) {
 }
 
 /// 0x73aae : bond de côté (en profondeur), vers le haut ou le bas au hasard.
-fn side_leap(x: &mut Cx) {
+fn side_leap<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -109,7 +109,7 @@ fn leap_start<R: Banc>(x: &mut Cx<'_, R>, vx: i16, vz: u16, anim: Option<u8>) {
 }
 
 /// 0x73b18 : petit bond en avant.
-fn short_leap(x: &mut Cx) {
+fn short_leap<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => leap_start(x, 0x80, 0x2c0, None),
         6 => bound_wait(x),
@@ -120,7 +120,7 @@ fn short_leap(x: &mut Cx) {
 }
 
 /// 0x73b7a : petit bond puis coup de griffe.
-fn leap_and_claw(x: &mut Cx) {
+fn leap_and_claw<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => leap_start(x, 0x80, 0x2c0, None),
         6 => bound_wait(x),
@@ -140,7 +140,7 @@ fn leap_and_claw(x: &mut Cx) {
 }
 
 /// 0x73bec : grand bond griffu.
-fn long_leap(x: &mut Cx) {
+fn long_leap<R: Banc>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => leap_start(x, 0x280, 0x2c0, Some(5)),
         6 => bound_wait(x),

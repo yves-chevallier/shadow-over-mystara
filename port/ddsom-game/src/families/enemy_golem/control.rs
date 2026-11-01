@@ -6,8 +6,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB2) as u32;
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => walk(x),
         2 => arc(x),
@@ -15,11 +14,8 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn walk(x: &mut Cx) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     let keys = x.a5_u8(3);
-    x.c.d[0] = x.c.d[0] & !0xff | keys as u32;
-    let held = x.a5_u8(0xf);
-    x.c.d[1] = x.c.d[1] & !0xff | held as u32;
     let mut moved = false;
     if keys & 1 != 0 {
         let at = x.u16(Obj::X).wrapping_add(3);
@@ -43,11 +39,18 @@ fn walk(x: &mut Cx) {
         x.set16(Obj::Y, at);
         moved = true;
     }
+    // Glitch d'origine : les boutons sont relus dans D0, que le pas d'animation (0x1a56) écrase par l'octet `+0x32`
+    // quand l'image en cours se termine.
+    let mut buttons = keys;
+    // Glitch d'origine : le drapeau « a bougé » reste dans D2 (`Restes`).
+    *x.c.d2() = moved as u32;
     if moved {
+        let (ends, state) = (x.u16(ANIM_TIME) == 1, x.u8(ANIM_END));
         x.anim_step();
+        if ends {
+            buttons = state;
+        }
     }
-    // les boutons sont lus dans D0, que l'animation a pu écraser
-    let buttons = x.c.d[0] as u8;
     if buttons & 0x10 != 0 {
         return set_state_long(x, 0x0204_0000);
     }
