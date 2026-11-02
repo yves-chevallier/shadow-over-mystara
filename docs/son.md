@@ -480,6 +480,14 @@ programme du Z80 (extraction, machine de référence, mode avec ROMs) ; `region_
 adresses (assets sans ROM, tests sans perte). Sans ROM, `cps2` relit encore les tables depuis la région reconstruite
 (`cps2::Contents`, lot L14).
 
+**Contrôles du lot** (2026-11-02) : `sound_fuzz songs 0 1167 1500` avec `FUZZ_STATE=1` 1 168 / 1 168 identiques
+(773 938 écritures, état compris) ; `random 1 1700 2000` avec `FUZZ_STATE=1` 1 700 / 1 700 ; `synth 1 900 1500` 878
+identiques, 21 abandonnés, 1 écart, et `short 1 3000 600` 2 875 identiques, 122 abandonnés, 3 écarts : exactement les
+mêmes comptes (et les mêmes écritures comparées) que le pilote d'avant le lot (5b55ead), donc des écarts anciens des
+pistes synthétiques, sans lien avec les tableaux ; `sound_compare` bot30k 30 000 images : identité exacte (158 327
+écritures) ; tests `music_lossless`, `music_indices_in_bounds`, `audio_region_lossless`, `music_driver_identical`,
+`differential` ; `no_rom` bot30k et ending identiques.
+
 **DSP QSound.** `qsound::DspTables` : pan (0x110), pas de l'ADPCM (0x9dc), coefficients des filtres (0xd53-0xfff, et
 les 3 mots de 0 où le second filtre déborde), décrits par `qsound::DSP_TABLES` (aussi utilisé par `extract`) ;
 l'émulation ne lit plus le programme du DSP par adresse.
