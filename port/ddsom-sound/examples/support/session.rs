@@ -73,8 +73,7 @@ pub fn system_command(rng: &mut Rng) -> [u8; 16] {
 }
 
 pub fn song_count(rom: &Rom) -> u16 {
-    let header = u32::from(rom.word(0x39e1));
-    u16::from(rom.byte(header)) << 8 | u16::from(rom.byte(header + 1))
+    rom.sound_header().count
 }
 
 pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverage: Option<&mut [bool]>) -> Report {

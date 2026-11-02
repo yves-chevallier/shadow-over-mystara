@@ -69,12 +69,9 @@ impl Driver {
         if flags & 0x7f < self.adpcm[slot].priority {
             return;
         }
-        let amplitude = self.rom.table(TABLE_AMPLITUDE, self.rom.byte(p + 4));
-        let sample = u16::from(self.rom.byte(p + 5)) << 8 | u16::from(self.rom.byte(p + 6));
-        // Sample record: bank, one ignored byte, start, end.
-        let entry = u32::from(self.rom.word(SAMPLE_PTR)) + ((u32::from(sample) * 8) & 0xffff);
-        let start = self.rom.word(entry + 2);
-        let end = self.rom.word(entry + 4);
+        let amplitude = self.rom.amplitude(self.rom.byte(p + 4));
+        let sample = self.rom.adpcm_sample(self.rom.word_be(p + 5));
+        let (start, end) = (sample.start, sample.end);
         let Some(fade) = PanFade::from_command(cmd) else { return };
         let mut a = AdpcmChannel {
             fresh: true,
@@ -84,7 +81,7 @@ impl Driver {
             pan: fade,
             priority: flags & 0x7f,
             length: end.wrapping_sub(start),
-            bank: self.rom.byte(entry),
+            bank: sample.bank,
             start,
             end,
             ..AdpcmChannel::default()

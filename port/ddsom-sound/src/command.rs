@@ -26,7 +26,7 @@ impl Driver {
         // definition.
         let number = (u16::from(cmd[0]) << 8 | u16::from(cmd[1])) % self.song_count.max(1);
         let entry = self.song_table.wrapping_add(u32::from(number.wrapping_mul(4))) & 0xff_ffff;
-        let song = u32::from(self.rom.byte(entry)) << 16 | u32::from(self.rom.word(entry + 1).swap_bytes());
+        let song = self.rom.sound(entry);
         if song == 0 {
             return;
         }
@@ -49,7 +49,7 @@ impl Driver {
             let was_active = m.state != 0;
             self.priority = m.state;
             m.state = 0;
-            let offset = u32::from(self.rom.word(p).swap_bytes());
+            let offset = u32::from(self.rom.word_be(p));
             p += 2;
             if offset != 0 {
                 m = Voice::track(self.song + offset, self.inst_bank0());
@@ -75,7 +75,7 @@ impl Driver {
 
     /// Default instrument bank of the tracks.
     fn inst_bank0(&self) -> u16 {
-        self.rom.word(INSTRUMENT_BANKS_PTR)
+        self.rom.instrument_bank(0)
     }
 
     /// Multi-track effect: same format as a song, but a track only starts if the command
@@ -84,7 +84,7 @@ impl Driver {
         self.priority = priority;
         for ch in 0..16u8 {
             self.cur = ch;
-            let offset = u32::from(self.rom.word(p).swap_bytes());
+            let offset = u32::from(self.rom.word_be(p));
             p += 2;
             if offset == 0 || priority < self.sfx[usize::from(ch)].priority {
                 continue;
@@ -111,7 +111,7 @@ impl Driver {
         if priority < self.sfx[slot].priority {
             return;
         }
-        let duration = self.rom.word(p).swap_bytes();
+        let duration = self.rom.word_be(p);
         p += 2;
         if duration == 0 {
             return;
@@ -121,8 +121,8 @@ impl Driver {
             state: 1,
             fresh: 0xff,
             wait: duration,
-            gate: self.rom.word(p).swap_bytes(),
-            amplitude: self.rom.table(TABLE_AMPLITUDE, self.rom.byte(p + 2)),
+            gate: self.rom.word_be(p),
+            amplitude: self.rom.amplitude(self.rom.byte(p + 2)),
             instrument: u16::from(self.rom.byte(p + 3)) << 8 | u16::from(self.rom.byte(p + 4)),
             pitch: clamp_pitch(note.wrapping_add(sext(self.rom.byte(p + 6)))),
             priority,
@@ -233,7 +233,7 @@ impl Driver {
         self.g.ramp_dir = dir;
         let step = u16::from(cmd[3]) << 8 | u16::from(cmd[4]);
         self.g.ramp_step = if dir == 1 { step } else { 0u16.wrapping_sub(step) };
-        self.g.ramp_target = self.rom.word(TABLE_LEVELS + u32::from(cmd[2] & 0xfe));
+        self.g.ramp_target = self.rom.level(cmd[2] >> 1);
     }
 
     /// Global fade of all channels: bytes 3-4 = speed.

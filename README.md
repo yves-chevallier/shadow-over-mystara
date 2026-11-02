@@ -84,8 +84,8 @@ Images des créatures (ennemis, boss, personnages) régénérables depuis les RO
   `testdata/vsnap` (`cd port && cargo test --release`).
 - `vrender` : rend un instantané et le compare à la capture MAME.
 - `ddsom-sound` : pilote son (séquenceur, voies, enveloppes) réécrit à partir du programme du Z80, identique
-  écriture par écriture ; format et protocole dans [docs/son.md](docs/son.md). Option `Sound::use_rust_driver`
-  de `cps2` pour jouer sans Z80.
+  écriture par écriture ; format et protocole dans [docs/son.md](docs/son.md). C'est le seul pilote du jeu :
+  le Z80 émulé (fonctionnalité `z80` de `cps2`) ne sert plus qu'à la machine de référence et aux outils.
 
 Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=...` avec
 `mame/session.lua` (voir `mame/vsnap.lua`). Points de fidélité appris en route :
@@ -116,7 +116,8 @@ Rust Windows (MSVC) : son par waveOut et manettes Xbox par XInput (`Pad1A`, `Pad
 la racine (produit par `extract`, voir plus bas), il joue sans aucune ROM ; sinon il prépare `rom\`
 depuis `ddsom.zip` et `qsound.zip`.
 
-Son : `DDSOM_SON_RUST=1 ./play.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
+Son : le jeu utilise toujours le pilote son Rust (`ddsom-sound`), avec ou sans ROM ; le programme du Z80 ne
+tourne plus que dans la machine de référence des outils (`validate` compare les deux).
 
 Sans ROM : une fois les ressources extraites (ci-dessous), `port/target/release/ddsom --assets
 assets` joue sans aucun fichier ROM ni 68000 (routines Rust seules, pilote son Rust) ; voir

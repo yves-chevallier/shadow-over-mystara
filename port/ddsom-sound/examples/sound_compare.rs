@@ -4,6 +4,8 @@
 //! commands (that is, with what the Z80 read from the shared RAM).
 //!
 //! sound_compare <roms> <eeprom> <scenario> <frames>
+//!
+//! `SON_REFERENCE=1`: the machine is the reference machine of `validate` (overclocked 68000) instead of the arcade one.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -13,6 +15,13 @@ use ddsom_sound::{Driver, Rom, Write};
 use std::path::Path;
 use support::Report;
 
+/// `SON_SHOW=from-to`: writes of both sides for these interrupts.
+fn show() -> Option<(usize, usize)> {
+    let v = std::env::var("SON_SHOW").ok()?;
+    let (a, b) = v.split_once('-')?;
+    Some((a.parse().ok()?, b.parse().ok()?))
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
@@ -21,7 +30,14 @@ fn main() {
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    ddsom_rc::install(&mut m);
+    if std::env::var_os("SON_REFERENCE").is_some() {
+        ddsom_game::install_reference(&mut m);
+        m.set_overclock(16.0);
+        m.idle = Some(ddsom_game::idle);
+        m.rendering = false;
+    } else {
+        ddsom_rc::install(&mut m);
+    }
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     m.sound.trace = Some(Vec::new());
@@ -109,6 +125,15 @@ fn run_interval(
         driver.reset(shared, &mut drv);
     } else if irq > 0 {
         driver.interrupt(shared, &mut drv);
+    }
+    if let Some((from, to)) = show() {
+        if (from..=to).contains(&irq) {
+            let f = |w: &[Write]| w.iter().map(|w| match w {
+                Write::Qsound { reg, data } => format!("{reg:02x}={data:x}"),
+                Write::Shared { offset, value } => format!("[{offset:03x}]={value:02x}"),
+            }).collect::<Vec<_>>().join(" ");
+            println!("irq {irq} cmd {:02x?}\n  Z80  {}\n  Rust {}", &shared[..16], f(&real), f(&drv));
+        }
     }
     report.add_interval(irq, real, drv);
 }

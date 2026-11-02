@@ -87,7 +87,7 @@ pub struct Song {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tracks: Vec<u16>,
     /// Single note (10 bytes: flags, duration, hold, amplitude, instrument, note, tuning) or ADPCM
-    /// (7 bytes: flags, 4 ignored bytes... see docs/son.md §5).
+    /// (8 bytes: flags, 4 ignored bytes, amplitude, sample number as a big-endian word; see docs/son.md §5).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub body: Vec<u8>,
 }

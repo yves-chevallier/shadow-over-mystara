@@ -153,13 +153,11 @@ impl Driver {
     /// Table entries are 8 bytes: bank, start, loop start, end, reference note.
     pub(crate) fn start_sample(&mut self, v: &mut Voice, id: u16) {
         let base = self.cur.wrapping_mul(8);
-        let p = u32::from(self.rom.word(SAMPLE_PTR)) + ((u32::from(id) * 8) & 0xffff);
         self.qsound(base.wrapping_add(2), 0);
-        let bank = self.rom.byte(p);
-        v.start = self.rom.word(p + 1);
-        let loop_start = self.rom.word(p + 3);
-        let end = self.rom.word(p + 5);
-        v.root = self.rom.byte(p + 7);
+        let sample = self.rom.sample(id);
+        let (bank, loop_start, end) = (sample.bank, sample.loop_start, sample.end);
+        v.start = sample.start;
+        v.root = sample.root;
         self.qsound(base.wrapping_add(1), v.start);
         self.qsound(base.wrapping_add(5), end);
         self.qsound(base.wrapping_add(4), end.wrapping_sub(loop_start));
@@ -193,11 +191,10 @@ impl Driver {
         } else {
             0
         };
-        let octave = self.rom.byte(TABLE_OCTAVE + u32::from(n));
-        let semitone = n.wrapping_sub(self.rom.byte(TABLE_OCTAVE_START + u32::from(octave)));
-        let fine_at = TABLE_FINE + (u32::from(semitone) << 8 | u32::from(pitch as u8));
-        let fine = u16::from(self.rom.byte(fine_at)) << octave;
-        self.rom.word(TABLE_RATE + 2 * u32::from(n)).wrapping_add(fine)
+        let octave = self.rom.semitone_octave(n);
+        let semitone = n.wrapping_sub(self.rom.octave_start(octave));
+        let fine = u16::from(self.rom.fine(semitone, pitch as u8)) << octave;
+        self.rom.rate(n).wrapping_add(fine)
     }
 
     /// Writes volume and frequency of the current voice.

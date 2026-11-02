@@ -98,11 +98,11 @@ impl Driver {
         let mut sample = v.instrument;
         if sample & 0x8000 != 0 {
             // Instrument: 8-byte record in the bank chosen by the high byte.
-            let bank = self.rom.table(INSTRUMENT_BANKS_PTR, (sample >> 8) as u8 & 0x7f);
-            let p = u32::from(bank) + (sample & 0xff) as u32 * 8;
-            sample = u16::from(self.rom.byte(p + 1) & 0x7f) << 8 | u16::from(self.rom.byte(p));
-            v.pitch = clamp_note(v.pitch.wrapping_add(sext(self.rom.byte(p + 2))));
-            self.load_envelope(v, p + 3);
+            let bank = self.rom.instrument_bank((sample >> 8) as u8 & 0x7f);
+            let instrument = self.rom.instrument(bank, sample as u8);
+            sample = instrument.sample & 0x7fff;
+            v.pitch = clamp_note(v.pitch.wrapping_add(sext(instrument.detune)));
+            self.load_envelope(v, &instrument.envelope);
             level = v.env_attack;
         }
         v.env_level = level;
@@ -113,13 +113,13 @@ impl Driver {
     }
 
     /// Reads the five envelope parameters of an instrument record (indices into the tables).
-    fn load_envelope(&self, v: &mut Voice, p: u32) {
+    fn load_envelope(&self, v: &mut Voice, envelope: &[u8; 5]) {
         let rom = &self.rom;
-        v.env_attack = rom.table(TABLE_ATTACK, rom.byte(p));
-        v.env_decay = rom.table(TABLE_DECAY, rom.byte(p + 1));
-        v.env_sustain = rom.table(TABLE_LEVELS, rom.byte(p + 2));
-        v.env_slow = rom.table(TABLE_DECAY, rom.byte(p + 3));
-        v.env_release = rom.table(TABLE_DECAY, rom.byte(p + 4));
+        v.env_attack = rom.attack(envelope[0]);
+        v.env_decay = rom.decay(envelope[1]);
+        v.env_sustain = rom.level(envelope[2]);
+        v.env_slow = rom.decay(envelope[3]);
+        v.env_release = rom.decay(envelope[4]);
     }
 
     /// End of an effect voice: the channel is silenced, and the music of the same channel resumes.
@@ -182,13 +182,13 @@ impl Driver {
         // Duration: table depending on the mode (normal, dotted, triplet) and the note value.
         let mode = v.flags & (flag::DOTTED | flag::TRIPLET);
         v.flags &= !flag::DOTTED;
-        let duration = self.rom.word(TABLE_DURATION + u32::from(((event >> 4) & 0x0e) | mode));
+        let duration = self.rom.duration(((event >> 4) & 0x0e) | mode);
         v.wait = v.wait.wrapping_add(duration);
         let note = event & 0x1f;
         if note == 0 {
             return;
         }
-        let note = note.wrapping_add(self.rom.byte(TABLE_OCTAVE_BASE + u32::from(v.flags & flag::OCTAVE_MASK)));
+        let note = note.wrapping_add(self.rom.octave_offset(v.flags & flag::OCTAVE_MASK));
         let transpose = if self.is_music { self.g.music_transpose } else { 0 };
         let note = transpose.wrapping_add(v.transpose).wrapping_add(note);
         let detune = sext(v.detune.wrapping_add(v.detune2));
@@ -259,7 +259,7 @@ impl Driver {
                     }
                 }
                 op::SET_GATE => v.gate_ratio = v.fetch(rom),
-                op::SET_AMPLITUDE => v.amplitude = rom.table(TABLE_AMPLITUDE, v.fetch(rom)),
+                op::SET_AMPLITUDE => v.amplitude = rom.amplitude(v.fetch(rom)),
                 op::SET_INSTRUMENT => self.select_instrument(v),
                 op::SET_OCTAVE => v.flags = v.flags & !flag::OCTAVE_INDEX | v.fetch(rom),
                 op::SET_MUSIC_TRANSPOSE => {
@@ -317,18 +317,18 @@ impl Driver {
                         }
                     }
                 }
-                op::SET_ECHO => v.echo = rom.table(TABLE_AMPLITUDE, v.fetch(rom)) << 2,
+                op::SET_ECHO => v.echo = rom.amplitude(v.fetch(rom)) << 2,
                 op::SET_MUSIC_VOLUME => {
-                    let level = rom.table(TABLE_LEVELS, v.fetch(rom));
+                    let level = rom.level(v.fetch(rom));
                     if self.is_music {
                         self.g.music_volume = hi16(hi16(self.g.sfx_volume, level), self.g.music_factor);
                     }
                 }
-                op::SET_VIBRATO => v.vibrato = rom.table(TABLE_VIBRATO, v.fetch(rom)),
-                op::SET_TREMOLO => v.tremolo = rom.table(TABLE_TREMOLO, v.fetch(rom)),
-                op::SET_LFO_RATE => v.lfo_rate = rom.table(TABLE_LFO_RATE, v.fetch(rom)),
+                op::SET_VIBRATO => v.vibrato = rom.vibrato(v.fetch(rom)),
+                op::SET_TREMOLO => v.tremolo = rom.tremolo(v.fetch(rom)),
+                op::SET_LFO_RATE => v.lfo_rate = rom.lfo_rate(v.fetch(rom)),
                 op::SET_LFO_MODE => v.lfo = v.lfo & !1 | v.fetch(rom),
-                op::SET_INSTRUMENT_BANK => v.inst_bank = rom.table(INSTRUMENT_BANKS_PTR, v.fetch(rom)),
+                op::SET_INSTRUMENT_BANK => v.inst_bank = rom.instrument_bank(v.fetch(rom)),
                 _ => unreachable!("instruction {instr}"),
             }
             instr = v.fetch(&self.rom);
@@ -349,11 +349,10 @@ impl Driver {
     /// "Instrument" instruction: 8-byte record (sample, detune, envelope).
     fn select_instrument(&mut self, v: &mut Voice) {
         let index = v.fetch(&self.rom);
-        let p = u32::from(v.inst_bank) + u32::from(index) * 8;
-        let rom = &self.rom;
-        let mut sample = u16::from(rom.byte(p + 1)) << 8 | u16::from(rom.byte(p));
-        v.detune2 = rom.byte(p + 2);
-        self.load_envelope(v, p + 3);
+        let instrument = self.rom.instrument(v.inst_bank, index);
+        let mut sample = instrument.sample;
+        v.detune2 = instrument.detune;
+        self.load_envelope(v, &instrument.envelope);
         if sample & 0x8000 != 0 {
             sample &= 0x7fff;
             v.dirty |= 0x80;

@@ -335,6 +335,20 @@ n'ont pas de priorité (elles remplacent toujours la musique en cours).
 
 ## 13. Validation et écarts
 
+**Le pilote Rust est le seul pilote du jeu** (2026-11, branche `wt-son`). `ddsom`, avec ou sans ROM, n'a plus de
+Z80 : dans `cps2`, le Z80 émulé et le programme d'origine sont derrière la fonctionnalité `z80` (par défaut, activée
+par `ddsom-game/tools` pour la machine de référence et les outils) ; sans elle `Sound::new` installe le pilote Rust
+(`cargo tree -p ddsom -e normal` ne contient plus `z80`). `DDSOM_SON_RUST` n'existe plus.
+
+**`validate` compare le son à chaque image** sur tous les scénarios : la machine du jeu (A) a toujours le pilote Rust,
+la machine de référence (B) le Z80 d'origine. `Sound::output` relève dans l'ordre les écritures du pilote (registres
+QSound, octets de la RAM partagée) ; les deux suites doivent être égales écriture par écriture, à un retard de
+`SOUND_MAX_LAG` (4) images près (le Z80 finit souvent un tic après l'interruption suivante, voir ci-dessous), et la
+RAM partagée doit être identique à chaque image, sauf l'octet 5 (rapport de pan, comparé dans la suite).
+L'acquittement (octet 00F, écrit par la routine d'interruption) est hors de la suite mais compris dans la RAM
+partagée. La ligne `sound: N driver writes identical (largest delay k frames…)` de `validate` donne le compte.
+Témoin : une seule donnée QSound altérée côté jeu (bot30k, image 3 001) fait échouer `validate` à cette image.
+
 Outils (`port/ddsom-sound/examples`, à lancer depuis `port/` avec `DDSOM_ROMS=/home/ycr/som/rom`) :
 
 - `son_compare <roms> <eeprom> <scénario> <images>` : machine complète (68000 recompilé + Z80 + QSound)
@@ -393,5 +407,15 @@ loop { driver.irq_request(&mut shared, &mut out); /* toutes les 32 000 périodes
 
 `shared` est la RAM partagée (4 096 octets, un octet par mot côté 68000) ; `out` reçoit les
 `Write::Qsound { reg, data }` à appliquer à la puce (les écritures dans la RAM partagée sont déjà faites
-dans `shared`, et rappelées dans `out` pour les outils). Dans `cps2`, `Sound::use_rust_driver()` (ou `DDSOM_SON_RUST=1` pour `play.sh`) fait
-tout cela à la place du Z80.
+dans `shared`, et rappelées dans `out` pour les outils). Dans `cps2`, la machine du jeu fait tout cela (sans la
+fonctionnalité `z80`, ou après `Sound::use_rust_driver()` avec elle).
+
+**Données.** Le pilote lit ses données par les accesseurs nommés de `Rom` (`rom.rs`) : tables de la ROM fixe
+(`amplitude`, `level`, `attack`, `decay`, `lfo_rate`, `vibrato`, `tremolo`, `duration`, `octave_offset`,
+`semitone_octave`, `octave_start`, `rate`, `fine`, `init_registers`), en-tête et table des sons (`sound_header`,
+`sound`), instruments (`instrument_bank`, `instrument` → `Instrument`), échantillons (`sample` → `Sample`,
+`adpcm_sample` → `AdpcmSample`), et les octets des définitions et des pistes (`byte`, `word_be`), lus par le
+pointeur de lecture des voies. Aucune adresse de table n'est plus dans le code du pilote. Les données restent
+rangées à leurs adresses d'origine, dans la région du Z80 (ROM, ou reconstruite depuis `sound/music.json` sans
+ROM) : l'état du pilote garde ces adresses (pointeurs de lecture, bancs, définitions), comme la RAM du Z80 que
+`Driver::ram_image` reproduit, et l'original lit au-delà de certaines tables (voir « Lectures du pilote »).

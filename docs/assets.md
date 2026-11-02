@@ -368,7 +368,7 @@ Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors �
   suit une entrée de 4 octets par son (adresse sur 3 octets grand-boutiste, 0). `songs[n]` : définition du
   son `n` (`null` : entrée vide, 245 sur 1 168). `kind` : 0 musique (53), 1 à 0x7f effet de cette priorité
   (868), 0x80-0x8f note simple (aucune), 0x90-0x92 ADPCM (2). Musique et effet : `tracks`, 16 déplacements
-  (mots grand-boutistes depuis `rom`, 0 = canal sans piste) ; note simple (10 octets) et ADPCM (7 octets) :
+  (mots grand-boutistes depuis `rom`, 0 = canal sans piste) ; note simple (10 octets) et ADPCM (8 octets ; jusqu'au 2026-11-02 l'extraction en prenait 7 et perdait l'octet bas du numéro d'échantillon) :
   `body`, voir [son.md](son.md) §5. La première définition (`0xa245`) commence sur le dernier octet nul de
   la table.
 * **Pistes** (`code`) : toutes les instructions qu'atteignent les pistes des sons, en suivant les sauts

@@ -597,3 +597,46 @@ fn audio_region_lossless() {
     let first = ddsom_assets::rebuild::first_difference(&img, region);
     assert!(first.is_none(), "Z80 region: difference at {:#x}", first.unwrap());
 }
+
+/// The sound driver plays every sound identically from the ROMs and from the Z80 region rebuilt from `music.json`:
+/// same writes (QSound, shared RAM) and same state, interrupt by interrupt. Catches a byte the driver reads that the
+/// assets do not describe (the 8th byte of the ADPCM definitions was missing until 2026-11-02).
+#[test]
+fn music_driver_identical() {
+    if !has("sound/music.json") {
+        return;
+    }
+    use ddsom_sound::{Driver, Rom, SHARED_SIZE};
+    let from_roms = Rom::load(&roms()).unwrap();
+    let rebuilt = Rom::from_region(rebuild::audio_region(&assets()).unwrap().bytes);
+    let count = from_roms.sound_header().count;
+    for n in 0..count {
+        let mut drivers = [Driver::new(from_roms.clone()), Driver::new(rebuilt.clone())];
+        let mut shared = [vec![0u8; SHARED_SIZE], vec![0u8; SHARED_SIZE]];
+        let mut out: [Vec<ddsom_sound::Write>; 2] = Default::default();
+        for (d, (s, o)) in drivers.iter_mut().zip(shared.iter_mut().zip(out.iter_mut())) {
+            d.reset(s, o);
+        }
+        for k in 0..1500 {
+            for (d, (s, o)) in drivers.iter_mut().zip(shared.iter_mut().zip(out.iter_mut())) {
+                if k == 10 {
+                    s[0xfff] = 0xff;
+                    s[0xffd] = 0x88;
+                    s[0xffe] = 1;
+                    s[0xf] = 0xff;
+                }
+                if k == 20 {
+                    s[..16].fill(0);
+                    s[0] = (n >> 8) as u8;
+                    s[1] = n as u8;
+                    s[0xf] = 0;
+                }
+                d.irq_request(s, o);
+            }
+            assert_eq!(out[0], out[1], "sound {n}, interrupt {k}");
+            assert_eq!(drivers[0].ram_image(), drivers[1].ram_image(), "sound {n}, interrupt {k}: state");
+            out[0].clear();
+            out[1].clear();
+        }
+    }
+}
