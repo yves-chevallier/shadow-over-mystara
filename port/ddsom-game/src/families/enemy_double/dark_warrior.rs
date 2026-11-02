@@ -1,6 +1,7 @@
 //! Double of type 26 (DarkWarrior 2): replays the movement of its master.
 
 use super::*;
+use crate::data::RomAddr;
 
 // ---------------------------------------------------------------------------------------------
 // Type 26 (0x77736): "DarkWarrior 2" (h)
@@ -22,7 +23,7 @@ pub(super) mod dark_warrior_double {
     const PHASE: u32 = 0xba;
     const STEP: u32 = 0xbb;
     /// Table of hit reaction addresses (master's code `+0x49`).
-    const REACTIONS: u32 = 0x77aec;
+    const REACTIONS: RomAddr = RomAddr(0x77aec);
     /// Terrain under the object that reverses the depth speed (bytes per terrain 0..8).
     const REVERSING_TERRAIN: u32 = 0x77d08;
     const ATTACKED: u16 = 0x400;
@@ -42,16 +43,16 @@ pub(super) mod dark_warrior_double {
             6 => free(x),
             _ => {}
         }
-        if x.u8(0) == 0 {
+        if x.u8(Enemy::ACTIVE) == 0 {
             return;
         }
         let m = x.linked(MASTER);
-        let v = m.u8(x.b, 0);
-        x.set8(0, v);
+        let v = m.u8(x.b, Enemy::ACTIVE);
+        x.set8(Enemy::ACTIVE, v);
         let v = m.u8(x.b, f::FLIP);
         x.set8(f::FLIP, v);
-        let v = m.u16(x.b, 0x54);
-        x.set16(0x54, v);
+        let v = m.u16(x.b, Enemy::HOLDER);
+        x.set16(Enemy::HOLDER, v);
         x.set8(0x3f, 4);
         x.reinsert();
     }
@@ -67,24 +68,24 @@ pub(super) mod dark_warrior_double {
     /// 0x77c8a: EFFCT 0x32 effect in place of the double (one pixel higher).
     fn spawn_effect<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(e) = x.alloc(&pools::EFFCT) else { return };
-        e.set_u8(x.b, 0, 1);
-        e.set_u8(x.b, 2, 0x32);
-        e.set_u8(x.b, 3, 7);
+        e.set_u8(x.b, Enemy::ACTIVE, 1);
+        e.set_u8(x.b, Enemy::KIND, 0x32);
+        e.set_u8(x.b, Enemy::VARIANT, 7);
         e.set_u16(x.b, f::CREATOR, x.o.0 as u16);
         for off in [0x8, 0xc, 0x10] {
             let v = x.u16(off);
             e.set_u16(x.b, off, v);
         }
-        x.add16(0x10, 1);
+        x.add16(Obj::Y, 1);
         let v = x.u8(f::FLIP);
         e.set_u8(x.b, f::FLIP, v);
-        let v = x.u32(0x34);
-        e.set_u32(x.b, 0x34, v);
+        let v = x.u32(Obj::FRAME);
+        e.set_u32(x.b, Obj::FRAME, v);
         let v = x.u8(0x3c);
         e.set_u8(x.b, 0x3c, v);
         let v = x.u8(0x3f);
         e.set_u8(x.b, 0x3f, v);
-        e.set_u16(x.b, 0x30, 0x28);
+        e.set_u16(x.b, Obj::ANIM_TIMER, 0x28);
     }
 
     // --- copies from the master ----------------------------------------------------------------------
@@ -92,17 +93,17 @@ pub(super) mod dark_warrior_double {
     /// 0x77cdc: copy of the animation frame (`+0x34` long, `+0x38`) from the master.
     fn copy_frame<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
-        let v = m.u32(x.b, 0x34);
-        x.set32(0x34, v);
-        let v = m.u8(x.b, 0x38);
-        x.set8(0x38, v);
+        let v = m.u32(x.b, Obj::FRAME);
+        x.set32(Obj::FRAME, v);
+        let v = m.u8(x.b, Enemy::FRAME_TAG);
+        x.set8(Enemy::FRAME_TAG, v);
     }
 
     /// Master's height (`+0xc`, word), then its frame.
     fn copy_height<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
-        let v = m.u16(x.b, 0xc);
-        x.set16(0xc, v);
+        let v = m.u16(x.b, Obj::Z);
+        x.set16(Obj::Z, v);
     }
 
     fn copy_height_frame<R: Bench>(x: &mut Cx<'_, R>) {
@@ -122,19 +123,19 @@ pub(super) mod dark_warrior_double {
     /// Master's speeds inverted in X and Y (Z kept), height and frame (0x777fa, 0x77a34).
     fn mirror_speeds<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
-        let z = m.u32(x.b, 0x18);
-        x.set32(0x18, z);
-        let vx = m.u32(x.b, 0x14).wrapping_neg();
-        let vy = m.u32(x.b, 0x1c).wrapping_neg();
-        x.set32(0x14, vx);
-        x.set32(0x1c, vy);
+        let z = m.u32(x.b, Enemy::VZ_LONG);
+        x.set32(Enemy::VZ_LONG, z);
+        let vx = m.u32(x.b, Enemy::VX_LONG).wrapping_neg();
+        let vy = m.u32(x.b, Enemy::VY_LONG).wrapping_neg();
+        x.set32(Enemy::VX_LONG, vx);
+        x.set32(Enemy::VY_LONG, vy);
         copy_height_frame(x);
     }
 
     /// The master has not finished its animation step (`+0x33` zero): the double replays the movement.
     fn replay<'a, R: Bench>(x: &mut Cx<'a, R>, mover: fn(&mut Cx<'a, R>)) {
         let m = x.linked(MASTER);
-        if m.u8(x.b, 0x33) == 0 {
+        if m.u8(x.b, Enemy::KEY_FRAME) == 0 {
             mover(x);
         }
     }
@@ -184,12 +185,12 @@ pub(super) mod dark_warrior_double {
                         copy_frame(x);
                     }
                     2 => {
-                        if m.u8(x.b, 0x33) == 0 {
+                        if m.u8(x.b, Enemy::KEY_FRAME) == 0 {
                             x.move_xyz();
                             copy_height(x);
                             if terrain_reverses(x) {
-                                let v = (x.u32(0x1c) as i32).wrapping_neg();
-                                x.set32(0x1c, v as u32);
+                                let v = (x.u32(Enemy::VY_LONG) as i32).wrapping_neg();
+                                x.set32(Enemy::VY_LONG, v as u32);
                             }
                         }
                         copy_frame(x);
@@ -198,8 +199,8 @@ pub(super) mod dark_warrior_double {
                         x.move_xyz();
                         copy_height(x);
                         if terrain_reverses(x) {
-                            let v = (x.u32(0x1c) as i32).wrapping_neg();
-                            x.set32(0x1c, v as u32);
+                            let v = (x.u32(Enemy::VY_LONG) as i32).wrapping_neg();
+                            x.set32(Enemy::VY_LONG, v as u32);
                         }
                         copy_frame(x);
                     }
@@ -211,7 +212,7 @@ pub(super) mod dark_warrior_double {
                 match step {
                     0 => copy_speeds(x),
                     2 => {
-                        if m.u8(x.b, 0x33) == 0 {
+                        if m.u8(x.b, Enemy::KEY_FRAME) == 0 {
                             x.move_xyz();
                             copy_height(x);
                         }
@@ -228,7 +229,7 @@ pub(super) mod dark_warrior_double {
                 let step = m.u8(x.b, STEP);
                 match step {
                     2 => {
-                        if m.u8(x.b, 0x33) != 0 {
+                        if m.u8(x.b, Enemy::KEY_FRAME) != 0 {
                             copy_speeds(x);
                             x.move_xz();
                             copy_height(x);
@@ -237,16 +238,16 @@ pub(super) mod dark_warrior_double {
                     4 => {
                         x.move_xz();
                         copy_height(x);
-                        let v = m.u16(x.b, 0x16);
-                        x.set16(0x16, v);
+                        let v = m.u16(x.b, Enemy::AX);
+                        x.set16(Enemy::AX, v);
                     }
                     6 => {
                         x.move_xz();
-                        let h = m.u16(x.b, 0xc);
-                        x.set16(0xc, h);
+                        let h = m.u16(x.b, Obj::Z);
+                        x.set16(Obj::Z, h);
                         if (h as i16) <= 0 {
-                            let v = m.u32(x.b, 0x14);
-                            x.set32(0x14, v);
+                            let v = m.u32(x.b, Enemy::VX_LONG);
+                            x.set32(Enemy::VX_LONG, v);
                         }
                     }
                     8 => {
@@ -303,14 +304,14 @@ pub(super) mod dark_warrior_double {
             0 => replay_reaction(x),
             2 => match m.u8(x.b, PHASE) {
                 0 => {
-                    let v = m.u32(x.b, 0x14);
-                    x.set32(0x14, v);
-                    x.set16(0xc, 0);
+                    let v = m.u32(x.b, Enemy::VX_LONG);
+                    x.set32(Enemy::VX_LONG, v);
+                    x.set16(Obj::Z, 0);
                     copy_frame(x);
                 }
                 2 | 4 => {
-                    let v = m.u16(x.b, 0x16);
-                    x.set16(0x16, v);
+                    let v = m.u16(x.b, Enemy::AX);
+                    x.set16(Enemy::AX, v);
                     x.move_x();
                     copy_frame(x);
                 }
@@ -357,8 +358,8 @@ pub(super) mod dark_warrior_double {
         x.set16(f::SUB2, sub);
         copy_speeds(x);
         copy_height(x);
-        let code = m.u8(x.b, 0x49) as u32;
-        let routine = x.prog32(REACTIONS + code);
+        let code = m.u8(x.b, Enemy::REACTION) as u32;
+        let routine = x.prog32(REACTIONS.0 + code);
         run_reaction(x, routine);
         x.set8(0x3b, 0);
     }

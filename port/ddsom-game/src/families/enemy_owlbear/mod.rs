@@ -17,6 +17,7 @@
 //! (the same one is not restarted).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -60,8 +61,8 @@ use g::*;
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
-const SET_BODY: u32 = 0x160e26;
-const SET_STRIKE: u32 = 0x160e44;
+const SET_BODY: RomAddr = RomAddr(0x160e26);
+const SET_STRIKE: RomAddr = RomAddr(0x160e44);
 /// Long states (`+4..+7`).
 const ACTIVE_STANCE: u32 = 0x0202_0000;
 const ACTIVE_IDLE: u32 = 0x020a_0000;
@@ -119,11 +120,11 @@ fn replay<R: Bench>(x: &mut Cx<'_, R>, want: u8) -> Replay {
 }
 
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_BODY, n as u16);
+    x.anim_start(SET_BODY.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 fn step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -152,13 +153,13 @@ fn set_angle<R: Bench>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
 /// X offset from the target to the beast (positive: the target is on the right), `None` without a target.
 fn target_dx<R: Bench>(x: &mut Cx<'_, R>) -> Option<i16> {
     let t = target(x)?;
-    Some(t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16)
+    Some(t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16)
 }
 
 /// Same thing in depth (positive: the target is lower on the screen).
 fn target_dy<R: Bench>(x: &mut Cx<'_, R>) -> Option<i16> {
     let t = target(x)?;
-    Some(t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)) as i16)
+    Some(t.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)) as i16)
 }
 
 /// 0x5f710: the target is behind the beast, it turns around.
@@ -179,8 +180,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let scene = var::SCENE.get(x.b);
     if scene == 6 || scene == 0xc {
-        x.set8(0x2a, 1);
-        x.set8(0x2b, 0x18);
+        x.set8(Enemy::OWN_PALETTE, 1);
+        x.set8(Enemy::PALETTE, 0x18);
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0x10);
@@ -190,9 +191,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set32(f::IMMUNITY, 0);
     lib::set_immunities(x);
-    x.set8(0x7e, 0xd);
-    x.set8(0x7f, 0);
-    x.set8(0x8e, 0);
+    x.set8(Enemy::EVENT_KIND, 0xd);
+    x.set8(Enemy::EVENT_LOW, 0);
+    x.set8(Enemy::AI_ROW_8E, 0);
     x.set16(DELAY, 0x258);
     pick_target(x);
     lib::draw_stance(x);
@@ -215,7 +216,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         2 => {
-            x.set16(0x14, (-0x500i16) as u16);
+            x.set16(Enemy::VX, (-0x500i16) as u16);
             set_state_long(x, 0x0204_0404);
             x.set8(WANT_ANIM, 0xc);
             x.set8(VULNERABLE, 0);

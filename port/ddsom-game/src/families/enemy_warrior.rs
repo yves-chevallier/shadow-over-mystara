@@ -10,14 +10,15 @@
 //! `+0xb4` (X), `+0xb6` (altitude), `+0xb8` (depth) that `apply_motion` then adds to the position.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use crate::objects::Current;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
 
 /// Animation sets: body (0x17e03a) and hits (0x17e048).
-const SET_BODY: u32 = 0x17e03a;
-const SET_STRIKE: u32 = 0x17e048;
+const SET_BODY: RomAddr = RomAddr(0x17e03a);
+const SET_STRIKE: RomAddr = RomAddr(0x17e048);
 /// Table of vertical undulations (signed bytes, read in the opcode space).
 const BOB_TABLE: u32 = 0x7759e;
 /// Movement scenarios: table of words (offsets) followed by bytes (dx, dz) per frame.
@@ -69,7 +70,7 @@ fn live_host<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         return None;
     }
     let h = x.linked(HOST);
-    if h.u8(x.b, 0) == 0 {
+    if h.u8(x.b, Enemy::ACTIVE) == 0 {
         return None;
     }
     Some(h)
@@ -82,7 +83,7 @@ fn host<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
 /// Starts animation `n` of the body set (0x776fe) or the hit set (0x77708) if it is not already
 /// the current one.
 fn play<R: Bench>(x: &mut Cx<'_, R>, set_id: u8, n: u8) {
-    let set = if set_id == 0 { SET_BODY } else { SET_STRIKE };
+    let set = if set_id == 0 { SET_BODY.0 } else { SET_STRIKE.0 };
     if set_id != x.u8(ANIM_SET) || n != x.u8(ANIM_NUM) {
         x.set8(ANIM_SET, set_id);
         x.set8(ANIM_NUM, n);
@@ -122,16 +123,16 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 // --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(0x38, 0);
+    x.set8(Enemy::FRAME_TAG, 0);
     if paused(x) {
         return end_part(x);
     }
     follow_host(x);
     let h = host(x);
     let (px, pz, py) = (x.u16(SLOT_X), x.u16(SLOT_Z), x.u16(SLOT_Y));
-    x.set16(0x8, px);
-    x.set16(0xc, pz);
-    x.set16(0x10, py);
+    x.set16(Obj::X, px);
+    x.set16(Obj::Z, pz);
+    x.set16(Obj::Y, py);
     let hs = h.u8(x.b, HOST_STATE);
     if hs != x.u8(HOST_STATE) {
         x.set8(HOST_STATE, hs);
@@ -171,7 +172,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 /// Hit strength: 0x4a, or 0x5a when the host is not of type 0xf.
 fn hit_power<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let h = host(x);
-    if h.u8(x.b, 2) == 0xf { 0x4a } else { 0x5a }
+    if h.u8(x.b, Enemy::KIND) == 0xf { 0x4a } else { 0x5a }
 }
 
 /// Common ending: "host visible" flag, then re-listing (0x77016).
@@ -197,22 +198,22 @@ fn follow_host<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x774e0: adds the offsets to the position; the altitude does not go below 0 and the
 /// depth keeps the arm at least 0x60 pixels below the top of the screen.
 fn apply_motion<R: Bench>(x: &mut Cx<'_, R>) {
-    let px = x.u16(0x8).wrapping_add(x.u16(OFFSET_X));
-    x.set16(0x8, px);
-    let mut z = x.u16(0xc).wrapping_add(x.u16(OFFSET_Z));
+    let px = x.u16(Obj::X).wrapping_add(x.u16(OFFSET_X));
+    x.set16(Obj::X, px);
+    let mut z = x.u16(Obj::Z).wrapping_add(x.u16(OFFSET_Z));
     if (z as i16) < 0 {
         let off = x.u16(OFFSET_Z).wrapping_add(z);
         x.set16(OFFSET_Z, off);
         z = 0;
     }
-    x.set16(0xc, z);
-    let mut y = x.u16(0x10).wrapping_add(x.u16(OFFSET_Y));
+    x.set16(Obj::Z, z);
+    let mut y = x.u16(Obj::Y).wrapping_add(x.u16(OFFSET_Y));
     let cam_y = var::SCROLL_Y.get(x.b);
-    let t = (x.u16(0xc).wrapping_add(y).wrapping_sub(cam_y)) as i16;
+    let t = (x.u16(Obj::Z).wrapping_add(y).wrapping_sub(cam_y)) as i16;
     if t < 0x60 {
-        y = cam_y.wrapping_add(0x60).wrapping_sub(x.u16(0xc));
+        y = cam_y.wrapping_add(0x60).wrapping_sub(x.u16(Obj::Z));
     }
-    x.set16(0x10, y);
+    x.set16(Obj::Y, y);
 }
 
 /// Adds the offsets to the position, with no bounds (states 4 to 8: 0x77252).
@@ -313,7 +314,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x77562: vertical undulation while the host acts.
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let h = host(x);
-    if h.u8(x.b, 5) == 0 {
+    if h.u8(x.b, Enemy::SUB) == 0 {
         return;
     }
     if x.u8(BOB_PENDING) == 0 {
@@ -324,7 +325,7 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BOB_PHASE, phase);
     let i = (phase as u16 >> 2 & 0x3f) as u32;
     let d = x.rom8(BOB_TABLE + i) as i8 as i16 as u16;
-    x.add16(0x10, d);
+    x.add16(Obj::Y, d);
 }
 
 /// 0x77530: the offsets damp by a sixteenth each frame.
@@ -357,23 +358,23 @@ fn swing_step<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB, 2);
             lib::sound(x, crate::sound::CMD_380);
-            x.set16(0x1c, 0);
-            x.set16(0x1e, 0);
-            x.set16(0x18, (-0x180i16) as u16);
-            x.set16(0x1a, 0);
+            x.set16(Enemy::VY, 0);
+            x.set16(Enemy::AY, 0);
+            x.set16(Enemy::VZ, (-0x180i16) as u16);
+            x.set16(Enemy::GRAVITY, 0);
             let (mut vx, mut vy) = (-0xc00i16, 0x80i16);
             if x.u8(f::FLIP) == 0 {
                 vx = -vx;
                 vy = -vy;
             }
-            x.set16(0x14, vx as u16);
-            x.set16(0x16, vy as u16);
+            x.set16(Enemy::VX, vx as u16);
+            x.set16(Enemy::AX, vy as u16);
             strike(x, 0xb);
         }
         2 => {
             sparks(x);
             integrate_all(x);
-            let mut vx = x.u16(0x14) as i16;
+            let mut vx = x.u16(Enemy::VX) as i16;
             let mut off = x.u16(OFFSET_X) as i16;
             if x.u8(f::FLIP) == 0 {
                 vx = -vx;
@@ -425,13 +426,13 @@ fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
     if e.word() == 0 {
         return;
     }
-    e.set_u16(x.b, 0xc, 0);
+    e.set_u16(x.b, Obj::Z, 0);
     let dy = ((x.random() as u32) & 7) as u16;
-    let ny = e.u16(x.b, 0x10).wrapping_add(dy.wrapping_sub(3));
-    e.set_u16(x.b, 0x10, ny);
+    let ny = e.u16(x.b, Obj::Y).wrapping_add(dy.wrapping_sub(3));
+    e.set_u16(x.b, Obj::Y, ny);
     let dx = ((x.random() as u32) & 0xf) as u16;
-    let nx = e.u16(x.b, 0x8).wrapping_add(dx.wrapping_sub(7));
-    e.set_u16(x.b, 0x8, nx);
+    let nx = e.u16(x.b, Obj::X).wrapping_add(dx.wrapping_sub(7));
+    e.set_u16(x.b, Obj::X, nx);
 }
 
 /// 0x77244: the non-striking arm slowly descends (`+5` = 0 start, 2 acceleration).
@@ -442,11 +443,11 @@ fn drift<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(OFFSET_X, 0);
             x.set32(OFFSET_Y, 0);
             x.set16(OFFSET_Z, 0);
-            x.set16(0x18, 1);
+            x.set16(Enemy::VZ, 1);
             body(x, 6);
         }
         2 => {
-            let v = x.u16(0x18).wrapping_add(x.u16(OFFSET_Z));
+            let v = x.u16(Enemy::VZ).wrapping_add(x.u16(OFFSET_Z));
             x.set16(OFFSET_Z, v);
             if (v as i16) >= 0x10 {
                 x.add8(f::SUB, 2);
@@ -535,13 +536,13 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let h = host(x);
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
-        x.set8(0, 2);
+        x.set8(Enemy::ACTIVE, 2);
         let left = x.u8(f::FREEZE).wrapping_sub(2);
         x.set8(f::FREEZE, left);
         return end_part(x);
     }
-    x.set8(0, 1);
-    let mut hp = x.u16(0x60) as i16;
+    x.set8(Enemy::ACTIVE, 1);
+    let mut hp = x.u16(Enemy::HP_MAX) as i16;
     if hp > 0 {
         hp = hp.wrapping_sub(x.u16(f::HP) as i16);
         if hp > 0 {
@@ -553,9 +554,9 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     let host_hp = h.u16(x.b, f::HP);
-    x.set16(0x60, host_hp);
+    x.set16(Enemy::HP_MAX, host_hp);
     x.set16(f::HP, host_hp);
-    x.set16(0x64, host_hp);
+    x.set16(Enemy::HP_LAST, host_hp);
     let mut next = 0x0200_0000;
     let prev = x.u32(PREV_STATE);
     if prev != 0 && (prev >> 24) as u8 == 2 {

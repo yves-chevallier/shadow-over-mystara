@@ -41,7 +41,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +7 = 0 (0x72e80): the beast gets ready (rest animation).
 pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0);
     if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {
@@ -57,7 +57,7 @@ pub(super) fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     let n = x.u8(AI_KICK).wrapping_sub(1);
     x.set8(AI_KICK, n);
     if (n as i8) < 0 {
-        return x.add8(0x7, 2);
+        return x.add8(Enemy::SUB_STEP, 2);
     }
     if player_ahead(x) {
         let sub2 = x.u8(f::SUB2);
@@ -69,7 +69,7 @@ pub(super) fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
 
 /// The first three common steps, then `later(step)` for the others.
 pub(super) fn phased<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => ready(x),
         2 => track(x, resume),
         n => later(x, n),
@@ -103,7 +103,7 @@ pub(super) fn replay<R: Bench>(x: &mut Cx<'_, R>) -> Replay {
 
 /// Start of an attack: next step, vulnerability, wanted animation, strength of the attack.
 fn strike_begin<R: Bench>(x: &mut Cx<'_, R>, vulnerable: u8, want: u8, power: u8, kind: u8) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(VULNERABLE, vulnerable);
     x.set8(STRIKE_POWER, power);
     x.set8(STRIKE_KIND, kind);
@@ -182,7 +182,7 @@ fn jab_b<R: Bench>(x: &mut Cx<'_, R>) {
 fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(TIMER, 0x14);
             x.set8(VULNERABLE, 1);
             x.set8(WANT_ANIM, 0x16);
@@ -197,18 +197,18 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
                 step(x);
                 return move_xy(x);
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             let flip = x.u8(f::FLIP) != 0;
-            x.set16(0x14, if flip { -0x180i16 } else { 0x180 } as u16);
-            x.set16(0x16, if flip { 0x10 } else { -0x10i16 } as u16);
+            x.set16(Enemy::VX, if flip { -0x180i16 } else { 0x180 } as u16);
+            x.set16(Enemy::AX, if flip { 0x10 } else { -0x10i16 } as u16);
             play_b(x, 0);
         }
         8 => {
-            if x.u8(0x14) != 0 {
+            if x.u8(Enemy::VX) != 0 {
                 x.move_x();
             }
             if x.anim_step() {
-                x.set32(0x14, 0);
+                x.set32(Enemy::VX_LONG, 0);
                 next_move(x);
             }
         }
@@ -255,7 +255,7 @@ fn claw_pair<R: Bench>(x: &mut Cx<'_, R>) {
             strike_begin(x, 0, 0x2a, 5, 1);
             play_b(x, 1);
             if random_bit(x) {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 x.set8(WANT_ANIM, 0x2b);
                 play_b(x, 2);
             }
@@ -316,7 +316,7 @@ fn jump_in<R: Bench>(x: &mut Cx<'_, R>) {
 fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(VULNERABLE, 1);
             x.set8(TIMER, 0xe);
             play(x, 8);
@@ -346,7 +346,7 @@ pub(super) fn roll_pounces<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x734bc: start of a series of jumps in place.
 fn pounce_start<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 7);
     roll_pounces(x);
@@ -380,13 +380,13 @@ pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
 fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(VULNERABLE, 1);
             x.set8(STRIKE_POWER, 6);
             x.set8(STRIKE_KIND, 2);
-            x.set32(0x14, 0);
-            x.set16(0x18, 0x380);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.set32(Enemy::VX_LONG, 0);
+            x.set16(Enemy::VZ, 0x380);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             play(x, 6);
         }
         6 | 10 => bound_wait(x),
@@ -394,14 +394,14 @@ fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
             if x.move_xz().gt() {
                 return step(x);
             }
-            x.set32(0xc, 0);
-            x.add8(0x7, 2);
+            x.set32(Obj::Z, 0);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(VULNERABLE, 1);
             x.set8(WANT_ANIM, 0x18);
             x.set8(CUR_ANIM, 0x18);
-            x.set32(0x14, 0);
-            x.set16(0x18, 0x380);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.set32(Enemy::VX_LONG, 0);
+            x.set16(Enemy::VZ, 0x380);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             play(x, 6);
         }
         12 => bound_land(x),
@@ -414,15 +414,15 @@ fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
 fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(VULNERABLE, 1);
-            let ahead = target(x).is_some_and(|t| (t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16) >= 0);
+            let ahead = target(x).is_some_and(|t| (t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16) >= 0);
             x.set8(Obj::SPEED_INDEX, if ahead { 0x18 } else { 8 });
             play(x, 5);
         }
         6 => {
             if x.anim_step() {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
                 x.set8(WANT_ANIM, 0x16);
@@ -438,7 +438,7 @@ fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
                 step(x);
                 return move_xy(x);
             }
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             play(x, 5);
         }
         10 => {
@@ -457,7 +457,7 @@ fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Start of a claw (0x73786, 0x7382c): animation 4 of the attack series.
 fn claw_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(WANT_ANIM, 0x2e);
     x.set8(VULNERABLE, 1);
     strike_play(x, 4);
@@ -533,7 +533,7 @@ fn claw_leap<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             key_throw(x, eshl_creators::throw_2);
             if x.anim_step() {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 play_b(x, 5);
             }
         }

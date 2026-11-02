@@ -26,7 +26,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(BLINK_ON, 0);
             x.set8(BLINK_WAIT, 0);
             x.set8(BLINK_PHASE, 0xff);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
         }
     }
     match x.u8(f::SUB2) {
@@ -115,7 +115,7 @@ fn leap_strike<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
             x.add8(f::SUB3, 2);
             x.set16(Obj::VX, 0);
             let target = load_target(x);
-            if target.u8(x.b, 0) == 0 {
+            if target.u8(x.b, Enemy::ACTIVE) == 0 {
                 set_state_long(x, IDLE);
                 return rest_begin(x);
             }
@@ -402,7 +402,7 @@ fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(Obj::AY, 0);
         x.set16(Obj::VY, 0x80);
         let target = load_target(x);
-        if target.u8(x.b, 0) == 0 {
+        if target.u8(x.b, Enemy::ACTIVE) == 0 {
             set_state_long(x, IDLE);
             return rest_begin(x);
         }
@@ -536,7 +536,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
             }
             let target = load_target(x);
             let mut d0 = 0;
-            if target.u8(x.b, 0) == 0 {
+            if target.u8(x.b, Enemy::ACTIVE) == 0 {
                 set_state_long(x, IDLE);
             }
             let dy = target.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y));

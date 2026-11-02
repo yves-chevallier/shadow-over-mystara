@@ -18,7 +18,7 @@ const CODE: &str = include_str!("../code_68k.txt");
 /// Longest table read without an explicit end (bytes).
 const MAX: u32 = 0x400;
 
-fn code_starts() -> Vec<u32> {
+pub(crate) fn code_starts() -> Vec<u32> {
     let mut starts: Vec<u32> = CODE
         .lines()
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())

@@ -242,14 +242,14 @@ fn grenade<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(f::KEY_FRAME, 0);
             let Some(obj) = x.alloc(&pools::ESHL) else { return };
-            obj.set_u8(x.b, 0, 1);
-            obj.set_u8(x.b, 2, 0x43);
+            obj.set_u8(x.b, Enemy::ACTIVE, 1);
+            obj.set_u8(x.b, Enemy::KIND, 0x43);
             let at = x.u16(Obj::X);
             obj.set_u16(x.b, Obj::X, at);
             let h = x.u16(Obj::Z);
             obj.set_u16(x.b, Obj::Z, h);
-            let depth = x.u16(0x10);
-            obj.set_u16(x.b, 0x10, depth);
+            let depth = x.u16(Obj::Y);
+            obj.set_u16(x.b, Obj::Y, depth);
             let flip = x.u8(f::FLIP);
             obj.set_u8(x.b, f::FLIP, flip);
             let target = x.u16(f::TARGET);

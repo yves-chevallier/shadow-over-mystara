@@ -60,10 +60,10 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
 fn throw_arm<R: Bench>(x: &mut Cx<'_, R>, variant: Option<u8>) -> bool {
     let Some(arm) = x.alloc(&pools::ESHL) else { return false };
     x.set16(ARM, arm.0 as u16);
-    arm.set_u8(x.b, 0, 1);
-    arm.set_u8(x.b, 2, 0x2a);
+    arm.set_u8(x.b, Enemy::ACTIVE, 1);
+    arm.set_u8(x.b, Enemy::KIND, 0x2a);
     if let Some(v) = variant {
-        arm.set_u8(x.b, 3, v);
+        arm.set_u8(x.b, Enemy::VARIANT, v);
     }
     arm.set_u16(x.b, f::CREATOR, x.o.0 as u16);
     let target = x.u16(f::TARGET);
@@ -116,7 +116,7 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if !count_down(x, TIMER) {
                 x.add8(f::SUB3, 2);
-                x.set_bit(1, 1, false);
+                x.set_bit(Enemy::DISPLAY, 1, false);
                 let t = x.linked(f::TARGET);
                 let tz = t.u16(x.b, Obj::Y);
                 x.set16(Obj::Y, tz);
@@ -197,7 +197,7 @@ fn fly_loop<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB3, 2);
         x.set16(TIMER, 0x28);
         x.set8(INVULNERABLE, 1);
-        x.set_bit(1, 1, true);
+        x.set_bit(Enemy::DISPLAY, 1, true);
         let arm = x.linked(ARM);
         arm.set_u8(x.b, 0x58, 1);
         return;
@@ -235,7 +235,7 @@ fn fly_down_from_above<R: Bench>(x: &mut Cx<'_, R>) {
     if n != 0xa {
         return;
     }
-    x.set_bit(1, 1, false);
+    x.set_bit(Enemy::DISPLAY, 1, false);
     let t = x.linked(f::TARGET);
     let (tx, tz) = (t.u16(x.b, Obj::X), t.u16(x.b, Obj::Y));
     x.set16(Obj::X, tx);
@@ -408,7 +408,7 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             bob(x);
             lib::push_players(x);
             let arm = x.linked(ARM);
-            if arm.u8(x.b, 0) == 0 || (arm.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
+            if arm.u8(x.b, Enemy::ACTIVE) == 0 || (arm.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
                 x.add8(f::SUB3, 2);
             }
         }

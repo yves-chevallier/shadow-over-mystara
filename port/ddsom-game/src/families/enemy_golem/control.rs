@@ -45,7 +45,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     // Original glitch: the "has moved" flag stays in D2 (`Leftovers`).
     *x.c.d2() = moved as u32;
     if moved {
-        let (ends, state) = (x.u16(ANIM_TIME) == 1, x.u8(ANIM_END));
+        let (ends, state) = (x.u16(Golem::ANIM_TIME) == 1, x.u8(Enemy::ANIM_END));
         x.anim_step();
         if ends {
             buttons = state;

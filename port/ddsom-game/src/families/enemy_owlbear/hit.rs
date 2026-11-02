@@ -2,19 +2,20 @@
 //! or flight.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::stance::next_move;
 use super::*;
 use crate::objects::Current;
 
 /// Tables of the common reaction, indexed by reaction code `+0x49`.
-const REACT_FIRST: u32 = 0x5ea5c;
-const REACT_SECOND: u32 = 0x5ecb8;
+const REACT_FIRST: RomAddr = RomAddr(0x5ea5c);
+const REACT_SECOND: RomAddr = RomAddr(0x5ecb8);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     hit_loop_at(x, NO_ZONE, |x| match x.u8(f::SUB) {
         0 => {
             x.set8(CUR_ANIM, 0x7f);
-            react(x, REACT_FIRST);
+            react(x, REACT_FIRST.0);
         }
         2 => {
             if !paused(x) {
@@ -22,7 +23,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         4 => fall(x),
-        6 => react(x, REACT_SECOND),
+        6 => react(x, REACT_SECOND.0),
         8 => {
             if !paused(x) {
                 flee(x);
@@ -40,11 +41,11 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set8(WANT_ANIM, 8);
             x.set8(CUR_ANIM, 8);
-            let flip = x.u8(0x4a) ^ 0x20;
+            let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
             let flipped = flip != 0;
-            x.set16(0x14, if flipped { -0x500i16 } else { 0x500 } as u16);
-            x.set16(0x16, if flipped { 0x28 } else { -0x28i16 } as u16);
+            x.set16(Enemy::VX, if flipped { -0x500i16 } else { 0x500 } as u16);
+            x.set16(Enemy::AX, if flipped { 0x28 } else { -0x28i16 } as u16);
             body(x, 8);
         }
         2 => {
@@ -57,13 +58,13 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             if low == 0 {
                 lib::shock(x, 1, 2, 0x18, 0xffff);
             }
-            if x.u8(0x14) != 0 {
+            if x.u8(Enemy::VX) != 0 {
                 x.move_x();
                 return;
             }
             if x.anim_step() {
-                x.set32(0x58, 0);
-                x.set32(0x14, 0);
+                x.set32(Enemy::HIT_LOCK, 0);
+                x.set32(Enemy::VX_LONG, 0);
                 next_move(x);
             }
         }
@@ -83,22 +84,22 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             if paused(x) {
                 return;
             }
-            let t = x.u16(0x84).wrapping_sub(1);
-            x.set16(0x84, t);
+            let t = x.u16(Enemy::RECOVER).wrapping_sub(1);
+            x.set16(Enemy::RECOVER, t);
             if (t as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(0, 2);
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
+            x.set8(Enemy::ACTIVE, 2);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
         }
         4 => {
             if paused(x) {
                 return;
             }
             if x.anim_step() {
-                x.set8(0, 1);
+                x.set8(Enemy::ACTIVE, 1);
                 x.set8(VULNERABLE, 1);
                 set_state_long(x, ACTIVE_STANCE);
                 body(x, 0);

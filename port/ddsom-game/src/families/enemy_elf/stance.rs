@@ -43,7 +43,7 @@ pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn begin_walk_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(WALK_ANIM, 0xf0);
-    x.set8(0x79, 0x1a);
+    x.set8(Enemy::AI_POINT_SET, 0x1a);
     begin_walk(x);
 }
 
@@ -131,10 +131,8 @@ fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 
 /// 0x6a706 / 0x6a70c: the attack to play after the approach is drawn from the difficulty row; it is returned (D0.b of
 /// the original).
-pub(super) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = (var::RANK.get(x.b) >> 1) << 5;
-    let n = rand_and(x, 0x1f);
-    let mv = x.data8(table + row as u32 + n);
+pub(super) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) -> u8 {
+    let mv = rank_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
     x.set8(NEXT_ATTACK, mv);

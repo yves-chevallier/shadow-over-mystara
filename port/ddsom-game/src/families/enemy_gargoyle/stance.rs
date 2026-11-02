@@ -39,7 +39,7 @@ fn fly_forward_or_back<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// The flight animation set matching the direction of the speed, on the same frame (0x645b8).
 fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
-    let table = if lib::moving_forward(x) { SET_FLY_ALONG } else { SET_FLY_AGAINST };
+    let table = if lib::moving_forward(x) { SET_FLY_ALONG.0 } else { SET_FLY_AGAINST.0 };
     lib::switch_keeping_time(x, table);
 }
 

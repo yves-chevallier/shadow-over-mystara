@@ -52,7 +52,7 @@ fn crouch<R: Bench>(x: &mut Cx<'_, R>, ticks: u8) {
     }
     x.add8(f::SUB3, 2);
     x.set8(0x3b, 0);
-    x.set_bit(1, 1, true);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     x.set8(TIMER, ticks);
 }
 
@@ -67,7 +67,7 @@ fn shift<R: Bench>(x: &mut Cx<'_, R>, dist: i16) {
     let d = if x.u8(f::FLIP) != 0 { -dist } else { dist };
     let at = x.u16(Obj::X).wrapping_add(d as u16);
     x.set16(Obj::X, at);
-    x.set_bit(1, 1, false);
+    x.set_bit(Enemy::DISPLAY, 1, false);
     mv(x, 3);
 }
 
@@ -139,7 +139,7 @@ fn series_begin<R: Bench>(x: &mut Cx<'_, R>) {
 fn series<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        let t = row_byte(x, SERIES_TABLE);
+        let t = rank_byte(x, SERIES_TABLE);
         x.set8(TIMER, t);
         return strike(x, 0);
     }
@@ -176,7 +176,7 @@ fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
         2 | 8 => next_when_done(x),
         4 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, true);
+            x.set_bit(Enemy::DISPLAY, 1, true);
             x.set8(0x3b, 0);
             x.set8(TIMER, 0x14);
         }
@@ -262,7 +262,7 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             mv(x, 3);
         }
         6 => {
@@ -283,7 +283,7 @@ fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
-                let t = row_byte(x, SERIES_TABLE);
+                let t = rank_byte(x, SERIES_TABLE);
                 x.set8(TIMER, t);
                 strike(x, 0);
             }
@@ -304,8 +304,8 @@ fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Arrival positions (X then depth) of the teleportation, relative to the target.
-const TELEPORT_X: u32 = 0x6e44c;
-const TELEPORT_Y: u32 = 0x6e43e;
+const TELEPORT_X: &str = "goblin/teleport_x";
+const TELEPORT_Y: &str = "goblin/teleport_y";
 
 /// +6 = 12: the Goblin reappears near its target.
 fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
@@ -316,12 +316,12 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 3) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_X + r);
+            let off = tables::table(TELEPORT_X).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::X));
             x.set16(Obj::X, at);
             let r = rand_and(x, 7) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_Y + r);
+            let off = tables::table(TELEPORT_Y).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::Y));
             x.set16(Obj::Y, at);
             x.set8(f::FLIP, 0x20);

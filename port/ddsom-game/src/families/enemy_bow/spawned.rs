@@ -21,9 +21,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5befc: springs up: hit points set to 1 (words `+0x60`, `+0x62`, `+0x64`), walks in place.
 fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
-    x.set16(0x60, 1);
+    x.set16(Enemy::HP_MAX, 1);
     x.set16(f::HP, 1);
-    x.set16(0x64, 1);
+    x.set16(Enemy::HP_LAST, 1);
     set_speed(x, 0x18);
     x.set8(TIMER, 0x10);
     walk_angle(x);
@@ -111,7 +111,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
 fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        let n = row_byte(x, SHOT_REPEATS);
+        let n = rank_byte(x, SHOT_REPEATS);
         x.set8(REPEAT, n);
         shoot_anim(x);
         return x.reinsert();

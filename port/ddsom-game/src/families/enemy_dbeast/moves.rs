@@ -23,14 +23,14 @@ pub(super) fn charge<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Standing rest for 16 frames before moving off again (0x73ca6).
 fn stand<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(TIMER, 0x10);
             stand_pose(x);
         }
         4 => {
-            x.add8(0x7, 0xfe);
+            x.add8(Enemy::SUB_STEP, 0xfe);
             stand_pose(x);
         }
         2 => {
@@ -62,16 +62,16 @@ fn stand_pose<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn jump_toward<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     if (x.random() as u32) & 1 == 0 {
-        x.add8(0x7, 4);
+        x.add8(Enemy::SUB_STEP, 4);
         let vx = if x.u8(f::FLIP) != 0 { -0x180 } else { 0x180 };
         set_velocity(x, vx, 0x3c0, -0x38);
         x.set8(WANT_ANIM, 0x1c);
         x.set8(CUR_ANIM, 0x1c);
         return play(x, 0x11);
     }
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     // to the right (8) if the target is on the right, otherwise to the left (0x18)
-    let right = target(x).is_some_and(|t| (t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16) >= 0);
+    let right = target(x).is_some_and(|t| (t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16) >= 0);
     x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
     x.set8(WANT_ANIM, 0x1d);
     x.set8(CUR_ANIM, 0x1d);
@@ -108,7 +108,7 @@ fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 2 (0x73d26): leap towards a player, facing.
 fn leap_to_player<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => jump_toward(x),
         2 => {
             let t = x.u8(TIMER).wrapping_sub(1);
@@ -128,27 +128,27 @@ fn leap_to_player<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 4 (0x73e08): leap over a player, in depth.
 fn leap_over_player<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.set8(VULNERABLE, 1);
             if (x.random() as u32) & 1 == 0 {
-                x.set8(0x7, 4);
+                x.set8(Enemy::SUB_STEP, 4);
                 let mut vy = -0x80i16;
                 if let Some(t) = target(x) {
-                    if (t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)) as i16) < 0 {
+                    if (t.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)) as i16) < 0 {
                         vy = 0x80;
                     }
                 }
-                x.set16(0x1c, vy as u16);
-                x.set16(0x1e, 0);
-                x.set16(0x18, 0x3c0);
-                x.set16(0x1a, (-0x38i16) as u16);
+                x.set16(Enemy::VY, vy as u16);
+                x.set16(Enemy::AY, 0);
+                x.set16(Enemy::VZ, 0x3c0);
+                x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
                 x.set8(WANT_ANIM, 6);
                 x.set8(CUR_ANIM, 6);
                 return play(x, 6);
             }
-            x.add8(0x7, 2);
-            let below = target(x).is_some_and(|t| (t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)) as i16) >= 0);
+            x.add8(Enemy::SUB_STEP, 2);
+            let below = target(x).is_some_and(|t| (t.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)) as i16) >= 0);
             x.set8(Obj::SPEED_INDEX, if below { 0x10 } else { 0 });
             x.set8(WANT_ANIM, 0xc);
             x.set8(CUR_ANIM, 0xc);
@@ -179,19 +179,19 @@ pub(super) fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set32(0x1c, 0);
-            x.set32(0x14, 0);
-            x.set16(0x18, 0x400);
-            x.set16(0x1a, (-0x40i16) as u16);
+            x.set32(Enemy::VY_LONG, 0);
+            x.set32(Enemy::VX_LONG, 0);
+            x.set16(Enemy::VZ, 0x400);
+            x.set16(Enemy::GRAVITY, (-0x40i16) as u16);
             play(x, 6);
         }
         2 => {
             step(x);
             x.move_xz();
-            if (x.u16(0xc) as i16) > 0 {
+            if (x.u16(Obj::Z) as i16) > 0 {
                 return;
             }
-            x.set32(0xc, 0);
+            x.set32(Obj::Z, 0);
             x.set8(ENTRY_TIMER, 0xa);
             x.add8(f::SUB2, 2);
             play(x, 0);
@@ -241,8 +241,8 @@ pub(super) fn leave<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(TIMER, t);
             if (t as i8) < 0 {
                 x.add8(f::SUB2, 2);
-                x.set16(0x18, (-0x300i16) as u16);
-                x.set16(0x1a, (-0x10i16) as u16);
+                x.set16(Enemy::VZ, (-0x300i16) as u16);
+                x.set16(Enemy::GRAVITY, (-0x10i16) as u16);
                 return;
             }
             if t == 0xa && x.u8(PART) != 6 {
@@ -253,7 +253,7 @@ pub(super) fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         }
         8 => {
             let (_, cam_y) = camera(x);
-            let top = x.u16(0xc).wrapping_add(0x80).wrapping_sub(cam_y) as i16;
+            let top = x.u16(Obj::Z).wrapping_add(0x80).wrapping_sub(cam_y) as i16;
             if top < 0 {
                 set_state_long(x, 0x0600_0000);
             }

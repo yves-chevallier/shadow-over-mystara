@@ -9,8 +9,8 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Arrival positions (offsets in X then in depth) after a jump toward the target, drawn by 0x69eee.
-const JUMP_DX: u32 = 0x69f4a;
-const JUMP_DY: u32 = 0x69f42;
+const JUMP_DX: &str = "elf/jump_dx";
+const JUMP_DY: &str = "elf/jump_dy";
 
 // --- substate 4 --------------------------------------------------------------------------------
 
@@ -33,7 +33,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         }
         24 => {
             set_state_long(x, STANCE);
-            x.set8(0x79, 0x1c);
+            x.set8(Enemy::AI_POINT_SET, 0x1c);
             begin_walk(x);
         }
         _ => {}
@@ -132,7 +132,7 @@ fn cut<R: Bench>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
         0 => {
             let r = rand_and(x, 0xf);
             if 0xffc0u32 >> r & 1 != 0 {
-                x.set8(0x79, 0x1b);
+                x.set8(Enemy::AI_POINT_SET, 0x1b);
                 set_state_long(x, STANCE);
                 begin_walk(x);
             } else {
@@ -234,7 +234,7 @@ fn drop_strike<R: Bench>(x: &mut Cx<'_, R>, kind: Drop) {
         2 => {
             if step(x) {
                 x.add8(f::SUB3, 2);
-                x.set_bit(1, 1, true);
+                x.set_bit(Enemy::DISPLAY, 1, true);
                 x.set8(0x3b, 0);
                 x.set8(REPEAT, 0x1e);
             }
@@ -263,7 +263,7 @@ fn drop_strike<R: Bench>(x: &mut Cx<'_, R>, kind: Drop) {
             x.set16(Obj::X, px);
             x.set16(Obj::VX, vx);
             x.set16(Obj::AX, 0);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             launch(x);
         }
         6 => {
@@ -416,12 +416,12 @@ fn random_jump_group<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let n = rand_and(x, 3) * 2;
             let target = load_target(x);
-            let dx = x.rom16(JUMP_DX + n);
+            let dx = tables::table(JUMP_DX).at16(x.b, n);
             let px = dx.wrapping_add(target.u16(x.b, Obj::X));
             x.set16(Obj::X, px);
             let n = rand_and(x, 3) * 2;
             let target = load_target(x);
-            let dy = x.rom16(JUMP_DY + n);
+            let dy = tables::table(JUMP_DY).at16(x.b, n);
             let py = dy.wrapping_add(target.u16(x.b, Obj::Y));
             x.set16(Obj::Y, py);
             x.set8(f::FLIP, 0x20);
@@ -470,7 +470,7 @@ fn backstep_group<R: Bench>(x: &mut Cx<'_, R>) {
             if step(x) {
                 x.add8(f::SUB3, 2);
                 x.set8(REPEAT, 0x1e);
-                x.set_bit(1, 1, true);
+                x.set_bit(Enemy::DISPLAY, 1, true);
                 x.set8(0x3b, 0);
             }
         }
@@ -483,7 +483,7 @@ fn backstep_group<R: Bench>(x: &mut Cx<'_, R>) {
             let dx = if x.u8(f::FLIP) != 0 { -0x30i16 as u16 } else { 0x30 };
             let px = x.u16(Obj::X).wrapping_add(dx);
             x.set16(Obj::X, px);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.add8(f::SUB3, 2);
             launch(x);
         }

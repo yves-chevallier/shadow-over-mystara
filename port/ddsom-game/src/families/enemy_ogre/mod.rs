@@ -16,6 +16,7 @@
 //! Animations 0x177874 and 0x17788c (movements and attacks), 0x1778a4 (death).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
@@ -51,11 +52,11 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_A: u32 = 0x177874;
-const SET_B: u32 = 0x17788c;
-const SET_DEATH: u32 = 0x1778a4;
-const SET_FLY_AGAINST: u32 = 0x177992;
-const SET_FLY_ALONG: u32 = 0x177a36;
+const SET_A: RomAddr = RomAddr(0x177874);
+const SET_B: RomAddr = RomAddr(0x17788c);
+const SET_DEATH: RomAddr = RomAddr(0x1778a4);
+const SET_FLY_AGAINST: RomAddr = RomAddr(0x177992);
+const SET_FLY_ALONG: RomAddr = RomAddr(0x177a36);
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -71,9 +72,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         _ => {}
     }
     if x.u8(INVULNERABLE) != 0 {
-        x.set8(0x38, 0);
+        x.set8(Enemy::FRAME_TAG, 0);
     }
-    if x.u8(0) != 0 {
+    if x.u8(Enemy::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -88,7 +89,7 @@ fn arm_dies_with_ogre<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     set_state_long(x, 0x0406_0000);
-    x.set8(0, 2);
+    x.set8(Enemy::ACTIVE, 2);
 }
 
 // --- aides --------------------------------------------------------------------------------------
@@ -98,11 +99,11 @@ fn play<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
 }
 
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    play(x, SET_A, n);
+    play(x, SET_A.0, n);
 }
 
 fn act<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    play(x, SET_B, n);
+    play(x, SET_B.0, n);
 }
 
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
@@ -254,9 +255,9 @@ fn initial_hp<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 {
         return lib::initial_hp(x);
     }
-    x.set8(2, 6);
+    x.set8(Enemy::KIND, 6);
     lib::initial_hp_boss(x);
-    x.set8(2, 0x12);
+    x.set8(Enemy::KIND, 0x12);
 }
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -265,30 +266,30 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0x26);
     initial_hp(x);
     lib::spread_index(x);
-    x.set8(0, 1);
+    x.set8(Enemy::ACTIVE, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set_bit(1, 1, true);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     for (off, v) in [
-        (0x76, 0),
-        (0x70, 0),
-        (0x6a, 2),
-        (0x75, 0),
-        (0x72, 1),
-        (0x73, 1),
-        (0x6c, 6),
-        (0x6d, 1),
-        (0x74, 7),
-        (0x78, 0xff),
-        (0x8e, 3),
-        (0x68, 8),
-        (0x69, 1),
+        (Enemy::AI_BYTE_ROW, 0),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::AI_WANDER_ROW, 2),
+        (Enemy::AI_BOX_ANIM, 0),
+        (Enemy::AI_DECISION_A, 1),
+        (Enemy::AI_DECISION_B, 1),
+        (Enemy::AI_WAIT_MASKS, 6),
+        (Enemy::AI_WAIT_ROW, 1),
+        (Enemy::AI_BOX_CHANCE, 7),
+        (Enemy::AI_SHOT, 0xff),
+        (Enemy::AI_ROW_8E, 3),
+        (Enemy::AI_68, 8),
+        (Enemy::AI_69, 1),
         (VULNERABLE, 0),
         (LOOK, 0),
         (LOOK_PREV, 0xff),
-        (0x7e, 0x17),
-        (0x7f, 0),
-        (0x80, 0x21),
-        (0x81, 0x1b),
+        (Enemy::EVENT_KIND, 0x17),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::LOOT_ROW, 0x21),
+        (Enemy::LOOT, 0x1b),
     ] {
         x.set8(off, v);
     }

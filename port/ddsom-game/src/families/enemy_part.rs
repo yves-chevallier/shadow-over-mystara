@@ -54,7 +54,7 @@ mod tentacle {
     /// Live host, or `None`: then the part goes to state 6 (`0x63e96`).
     fn host<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let h = host_ptr(x)?;
-        if h.u8(x.b, 0) == 0 {
+        if h.u8(x.b, Enemy::ACTIVE) == 0 {
             x.set8(f::STATE, st::DEAD);
             return None;
         }
@@ -82,16 +82,16 @@ mod tentacle {
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::STATE, 2);
         let Some(h) = host(x) else { return };
-        if h.u8(x.b, 2) == TROLL {
-            x.set8(0x2a, 1);
-            x.set8(0x2b, 0x1c);
+        if h.u8(x.b, Enemy::KIND) == TROLL {
+            x.set8(Enemy::OWN_PALETTE, 1);
+            x.set8(Enemy::PALETTE, 0x1c);
         }
         x.set8(f::BOX_SET, 0x2e);
         x.set8(f::SUB, 0);
         x.set16(f::SUB2, 0);
         follow(x);
         lib::set_immunities(x);
-        let n = if x.u8(0x3) != 0 { 3 } else { 2 };
+        let n = if x.u8(Enemy::VARIANT) != 0 { 3 } else { 2 };
         start(x, BODY, n);
     }
 
@@ -105,9 +105,9 @@ mod tentacle {
         }
         let flip = h.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
-        let flags = h.u8(x.b, 1);
-        x.set8(1, flags);
-        let row = (x.u8(0x3) as u32) << 3;
+        let flags = h.u8(x.b, Enemy::DISPLAY);
+        x.set8(Enemy::DISPLAY, flags);
+        let row = (x.u8(Enemy::VARIANT) as u32) << 3;
         let mut dx = x.rom16(OFFSETS + row) as i16;
         let dy = x.rom16(OFFSETS + row + 2);
         let dy_frac = x.rom16(OFFSETS + row + 4) as i16;
@@ -115,17 +115,17 @@ mod tentacle {
         if flip != 0 {
             dx = dx.wrapping_neg();
         }
-        x.add16(0x8, dx as u16);
-        x.add16(0x10, dy);
-        x.add32(0x10, dy_frac as i32 as u32);
-        x.add16(0xc, dz);
+        x.add16(Obj::X, dx as u16);
+        x.add16(Obj::Y, dy);
+        x.add32(Obj::Y, dy_frac as i32 as u32);
+        x.add16(Obj::Z, dz);
     }
 
     /// Starts animation `n` of the set `sets` (that of the Displacer Beast if the host is one).
     fn start<R: Bench>(x: &mut Cx<'_, R>, sets: (u32, u32), n: u32) {
         let mut set = sets.0;
         let w = x.u16(f::HOST);
-        if (w as i16) < 0 && x.linked(f::HOST).u8(x.b, 2) == DISPLACER_BEAST {
+        if (w as i16) < 0 && x.linked(f::HOST).u8(x.b, Enemy::KIND) == DISPLACER_BEAST {
             set = sets.1;
         }
         x.anim_start(set, n as u16);
@@ -136,7 +136,7 @@ mod tentacle {
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         follow(x);
         if paused(x) {
-            if x.u8(0x3) != 0 {
+            if x.u8(Enemy::VARIANT) != 0 {
                 return finish(x);
             }
             let l = x.u32(f::STATE) & !0xff;
@@ -148,7 +148,7 @@ mod tentacle {
         let host_state = h.u8(x.b, HOST_STATE);
         if host_state != x.u8(HOST_STATE) {
             x.set8(HOST_STATE, host_state);
-            if x.u8(0x3) == 0 {
+            if x.u8(Enemy::VARIANT) == 0 {
                 h.set_u8(x.b, HOST_DONE, 0);
             }
             let sub = x.data8(SUB_FOR_HOST + host_state as u32);
@@ -171,7 +171,7 @@ mod tentacle {
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(h) = host(x) else { return };
         if (h.u8(x.b, HOST_LAST_HIT) as i8) < 0 {
-            x.set_bit(0x1, 1, true);
+            x.set_bit(Enemy::DISPLAY, 1, true);
         }
         x.reinsert();
     }
@@ -181,7 +181,7 @@ mod tentacle {
         start(x, BODY, 2);
         let r = (x.random() as u32) & 0xe;
         let delay = x.rom16(IDLE_DELAYS + r);
-        x.set16(0x30, delay);
+        x.set16(Obj::ANIM_TIMER, delay);
     }
 
     /// Simple substate of variant 1: starts animation 3 once.
@@ -193,7 +193,7 @@ mod tentacle {
     }
 
     fn idle<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x3) != 0 {
+        if x.u8(Enemy::VARIANT) != 0 {
             return variant1_once(x);
         }
         if x.u8(f::SUB2) == 0 {
@@ -203,11 +203,11 @@ mod tentacle {
         if x.anim_step() {
             return idle_anim(x);
         }
-        if x.u8(0x33) == 0 {
+        if x.u8(Enemy::KEY_FRAME) == 0 {
             return;
         }
-        x.set8(0x33, 0);
-        if x.u8(2) == TROLL {
+        x.set8(Enemy::KEY_FRAME, 0);
+        if x.u8(Enemy::KIND) == TROLL {
             lib::sound(x, crate::sound::CMD_311_411_B);
         } else {
             lib::sound(x, crate::sound::CMD_311_411);
@@ -215,7 +215,7 @@ mod tentacle {
     }
 
     fn step2<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x3) == 0 {
+        if x.u8(Enemy::VARIANT) == 0 {
             if x.u8(f::SUB2) == 0 {
                 x.add8(f::SUB2, 2);
                 idle_anim(x);
@@ -225,7 +225,7 @@ mod tentacle {
         match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set8(0x44, 0x48);
+                x.set8(Enemy::STRIKE_KIND, 0x48);
                 start(x, MID, 0);
             }
             2 => {
@@ -240,7 +240,7 @@ mod tentacle {
     }
 
     fn step4<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x3) != 0 {
+        if x.u8(Enemy::VARIANT) != 0 {
             return variant1_once(x);
         }
         match x.u8(f::SUB2) {
@@ -282,7 +282,7 @@ mod tentacle {
     }
 
     fn step6<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x3) != 0 {
+        if x.u8(Enemy::VARIANT) != 0 {
             return variant1_once(x);
         }
         if x.u8(f::SUB2) == 0 {
@@ -292,7 +292,7 @@ mod tentacle {
     }
 
     fn step8<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x3) != 0 {
+        if x.u8(Enemy::VARIANT) != 0 {
             return variant1_once(x);
         }
         match x.u8(f::SUB2) {
@@ -330,7 +330,7 @@ mod tentacle {
     }
 
     fn step10<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(0x3) != 0 {
+        if x.u8(Enemy::VARIANT) != 0 {
             return variant1_once(x);
         }
         if x.u8(f::SUB2) == 0 {
@@ -346,7 +346,7 @@ mod tentacle {
     /// The host was hit: the part syncs to its HP (`+0x60/+0x62/+0x64` at 0x7fff).
     fn hit<R: Bench>(x: &mut Cx<'_, R>) {
         follow(x);
-        if x.u16(0x60) != x.u16(f::HP) {
+        if x.u16(Enemy::HP_MAX) != x.u16(f::HP) {
             for off in [0x60, f::HP, 0x64] {
                 x.set16(off, 0x7fff);
             }

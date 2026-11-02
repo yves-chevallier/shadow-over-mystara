@@ -1,6 +1,7 @@
 //! Doubles that draw their own animation: types 24 (Manticore), 23 (Spectre) and 22 (Chimera).
 
 use super::*;
+use crate::data::RomAddr;
 
 // ---------------------------------------------------------------------------------------------
 // Type 24 (0x76afc): "Manticore" (h)
@@ -13,7 +14,7 @@ pub(super) mod manticore {
     use super::*;
 
     /// Neutral set (rest) played when the master is in a state with no gesture of its own.
-    const REST: u32 = 0x16c2da;
+    const REST: RomAddr = RomAddr(0x16c2da);
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
@@ -41,11 +42,11 @@ pub(super) mod manticore {
         match sub {
             0 => match s6 {
                 2 => Anim(0x16c59a),
-                4 => Anim(REST),
+                4 => Anim(REST.0),
                 _ => Nothing,
             },
             2 => match s6 {
-                0 if s7 != 0 => Anim(REST),
+                0 if s7 != 0 => Anim(REST.0),
                 2 if s7 != 0 => Anim(0x16c33a),
                 4 | 6 if s7 != 0 => Anim(0x16c39a),
                 8 if gesture => match step {
@@ -73,11 +74,11 @@ pub(super) mod manticore {
                 (6, 4) => Anim(0x16c6ca),
                 (6, 6) => Anim(0x16c6da),
                 (8, 0 | 2 | 4 | 6 | 8) => Anim(0x16c6fa),
-                (8, 10) => Anim(REST),
-                (10, 0 | 2 | 4 | 6) | (12, 0 | 2 | 4 | 6 | 8) => Anim(REST),
+                (8, 10) => Anim(REST.0),
+                (10, 0 | 2 | 4 | 6) | (12, 0 | 2 | 4 | 6 | 8) => Anim(REST.0),
                 _ => Nothing,
             },
-            6 | 8 | 10 | 12 if s6 != 0 => Anim(REST),
+            6 | 8 | 10 | 12 if s6 != 0 => Anim(REST.0),
             _ => Nothing,
         }
     }

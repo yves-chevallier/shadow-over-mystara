@@ -15,6 +15,7 @@
 //! `wait` (0x69346, wait of `+0x77` frames) and `turn` (0x6899a, turn-around).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use crate::objects::Current;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -44,8 +45,8 @@ mod g {
 use g::*;
 use crate::objects::pools;
 
-const SET_MOVE: u32 = 0x15eed8;
-const SET_STRIKE: u32 = 0x15eef4;
+const SET_MOVE: RomAddr = RomAddr(0x15eed8);
+const SET_STRIKE: RomAddr = RomAddr(0x15eef4);
 const STANCE: u32 = 0x0202_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -65,12 +66,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of the movement set.
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 /// Starts animation `n` of the attack set.
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 /// Sets the attack type and its strength.
@@ -148,7 +149,7 @@ fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
                 return true;
             }
             x.set8(HIT_FLAG, 0);
-            x.set8(0x49, 0x58);
+            x.set8(Enemy::REACTION, 0x58);
             if x.u32(f::STATE) == 0x0404_0200 {
                 x.set16(ANIM_END, 0xffff);
                 set_state_long(x, 0x0406_0200);
@@ -161,7 +162,7 @@ fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             set_state_long(x, 0x0400_0000);
             x.set8(HIT_FLAG, 0);
             let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
-            x.set8(0x49, code);
+            x.set8(Enemy::REACTION, code);
             false
         }
         3 => {
@@ -174,14 +175,6 @@ fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         }
         _ => false,
     }
-}
-
-/// Byte drawn at random from the difficulty row of `table`.
-fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
-    let r = rand_and(x, 0x1f);
-    x.data8(at + r)
 }
 
 /// 0x690ce: chooses the next move (`+5` = 8) according to the distance of the target, or gets back on its feet.
@@ -199,7 +192,7 @@ fn choose<R: Bench>(x: &mut Cx<'_, R>) {
         return set_state_long(x, STANCE);
     }
     x.set8(SIDE, side as u8);
-    let b = row_byte(x, 0x69146);
+    let b = rank_byte(x, "golem/next_moves");
     x.set8(f::SUB2, b);
     x.set16(f::STATE, 0x0208);
     x.set8(f::SUB3, 0);
@@ -225,7 +218,7 @@ fn restart_walk<R: Bench>(x: &mut Cx<'_, R>) {
         keep = x.u16(ANIM_TIME);
     }
     x.set16(ANIM_TIME, keep);
-    x.set32(0x4c, 0x1c7336);
+    x.set32(Obj::SPEED_TABLE, 0x1c7336);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
         x.add8(Obj::SPEED_INDEX, 0x10);

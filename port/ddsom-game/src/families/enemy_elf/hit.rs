@@ -2,13 +2,14 @@
 //! grabbed by a player (the elf disappears).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables of the common reaction, indexed by reaction code `+0x49`.
-const REACT_FIRST: u32 = 0x6a206;
-const REACT_SECOND: u32 = 0x6a3a0;
+const REACT_FIRST: RomAddr = RomAddr(0x6a206);
+const REACT_SECOND: RomAddr = RomAddr(0x6a3a0);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -18,13 +19,13 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB) {
             0 => {
                 if x.u8(f::SUB2) == 0 {
-                    x.set_bit(1, 1, false);
+                    x.set_bit(Enemy::DISPLAY, 1, false);
                 }
-                react(x, REACT_FIRST);
+                react(x, REACT_FIRST.0);
             }
             2 => recoil(x),
             4 => down(x),
-            6 => react(x, REACT_SECOND),
+            6 => react(x, REACT_SECOND.0),
             8 => caught(x),
             _ => {}
         }
@@ -43,8 +44,8 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::FREEZE, 4);
         x.set32(Obj::VX, 0x0500_0000);
         x.set16(Obj::AX, -0x38i16 as u16);
-        let flip = x.u8(0x4a) ^ 0x20;
-        x.set8(0x4a, flip);
+        let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
+        x.set8(Enemy::ATTACKER_FLIP, flip);
         if flip != 0 {
             negate(x, Obj::VX);
             negate(x, Obj::AX);
@@ -56,7 +57,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if step(x) {
         set_state_long(x, STANCE);
-        x.set32(0x58, 0);
+        x.set32(Enemy::HIT_LOCK, 0);
     }
 }
 
@@ -71,14 +72,14 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             if paused(x) {
                 return;
             }
-            let t = x.u16(0x84).wrapping_sub(1);
-            x.set16(0x84, t);
+            let t = x.u16(Enemy::RECOVER).wrapping_sub(1);
+            x.set16(Enemy::RECOVER, t);
             if (t as i16) > 0 {
                 return;
             }
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
-            x.set8(0, 2);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
+            x.set8(Enemy::ACTIVE, 2);
             x.add8(f::SUB2, 2);
             body(x, 6);
         }
@@ -87,8 +88,8 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             if step(x) {
-                x.set8(0x86, 0);
-                x.set8(0, 1);
+                x.set8(Enemy::DOWNED, 0);
+                x.set8(Enemy::ACTIVE, 1);
                 x.set8(VULNERABLE, 1);
                 set_state_long(x, STANCE);
             }

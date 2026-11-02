@@ -20,7 +20,7 @@ fn roll_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.set8(FLAG, 0);
             lib::set_immunities(x);
             let cam = camera_x(x).wrapping_add(0xc0);
@@ -102,7 +102,7 @@ fn wait_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.set8(FLAG, 0);
             lib::set_immunities(x);
             look(x, 0x31);
@@ -123,7 +123,7 @@ fn wait_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.set8(FLAG, 0);
             lib::set_immunities(x);
             look(x, 0x32);

@@ -16,13 +16,14 @@
 //! 0x163dba (hit).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
 
-const ANIMS: u32 = 0x163da8;
-const ANIMS_STRIKE: u32 = 0x163db8;
-const ANIMS_HIT: u32 = 0x163dba;
+const ANIMS: RomAddr = RomAddr(0x163da8);
+const ANIMS_STRIKE: RomAddr = RomAddr(0x163db8);
+const ANIMS_HIT: RomAddr = RomAddr(0x163dba);
 
 /// Fields specific to this type.
 mod g {
@@ -74,7 +75,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- helpers ------------------------------------------------------------------------------------
 
 fn anim_play<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(ANIMS, n as u16);
+    x.anim_start(ANIMS.0, n as u16);
 }
 
 /// Starting height of a fall: the object appears above the screen.
@@ -148,21 +149,21 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::initial_hp(x);
     lib::set_immunities(x);
     for (off, v) in [
-        (0x70, 0),
-        (0x7e, 4),
-        (0x7f, 0),
-        (0x6a, 2),
-        (0x6c, 3),
-        (0x74, 3),
-        (0x76, 3),
-        (0x69, 2),
-        (0x78, 3),
-        (0x8e, 0),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::EVENT_KIND, 4),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::AI_WANDER_ROW, 2),
+        (Enemy::AI_WAIT_MASKS, 3),
+        (Enemy::AI_BOX_CHANCE, 3),
+        (Enemy::AI_BYTE_ROW, 3),
+        (Enemy::AI_69, 2),
+        (Enemy::AI_SHOT, 3),
+        (Enemy::AI_ROW_8E, 0),
         (EXIT_TIMER, 0),
-        (0x6d, 2),
-        (0x72, 4),
-        (0x73, 3),
-        (0x68, 2),
+        (Enemy::AI_WAIT_ROW, 2),
+        (Enemy::AI_DECISION_A, 4),
+        (Enemy::AI_DECISION_B, 3),
+        (Enemy::AI_68, 2),
         (f::SUB, 0),
     ] {
         x.set8(off, v);
@@ -300,7 +301,7 @@ fn stance<R: Bench>(x: &mut Cx<'_, R>) {
         0 => free_stance(x),
         2 => {
             let parent = x.linked(PARENT);
-            if parent.u8(x.b, 4) == 4 {
+            if parent.u8(x.b, Enemy::STATE) == 4 {
                 return set_state_long(x, HELD);
             }
             walk(x);
@@ -548,7 +549,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(STRIKE_KIND, 0x1f);
             x.set8(STRIKE_POWER, 2);
             pick_move(x);
-            x.anim_start(ANIMS_STRIKE, 0);
+            x.anim_start(ANIMS_STRIKE.0, 0);
             x.set8(FROZEN, 0);
             let m = x.u8(MOVE) as u32;
             let t = x.rom8(STRIKE_TIMER + m);
@@ -587,20 +588,20 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn knock_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
-    let freeze = x.u8(0x56);
+    let freeze = x.u8(Enemy::STUN);
     x.set8(f::FREEZE, freeze);
     x.set16(Obj::VZ, 0x400);
     x.set16(Obj::AZ, -0x40i16 as u16);
     x.set16(Obj::VX, 0x200);
     x.set16(Obj::AX, 0);
-    let flip = x.u8(0x4a) ^ 0x20;
+    let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
     x.set8(f::FLIP, flip);
     if flip != 0 {
         negate(x, Obj::VX);
         negate(x, Obj::AX);
     }
-    x.set8(0, 2);
-    x.anim_start(ANIMS_HIT, 0);
+    x.set8(Enemy::ACTIVE, 2);
+    x.anim_start(ANIMS_HIT.0, 0);
     zone_and_terrain(x);
 }
 
@@ -608,7 +609,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.move_xz();
-            if x.u8(0x29) != 0 {
+            if x.u8(Enemy::BLOCKED) != 0 {
                 x.set16(Obj::VX, 0);
                 x.set16(Obj::AX, 0);
             }
@@ -616,7 +617,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB2, 2);
                 x.set32(Obj::Z, 0);
                 x.set8(TIMER, 0x28);
-                x.set16(0x30, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
                 detach_from_host(x);
             }
             x.anim_step();
@@ -628,7 +629,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
                 set_state_long(x, DEAD);
                 lib::object_event(x);
             } else {
-                x.set_bit(1, 1, n & 3 != 0);
+                x.set_bit(Enemy::DISPLAY, 1, n & 3 != 0);
                 x.anim_step();
             }
         }

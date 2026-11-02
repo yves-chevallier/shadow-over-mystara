@@ -15,6 +15,7 @@
 //! Animations 0x15d4ae (movements) and 0x15d4ec (attacks); `+0xa2/+0xa3` current and previous look.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -50,8 +51,8 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_MOVE: u32 = 0x15d4ae;
-const SET_STRIKE: u32 = 0x15d4ec;
+const SET_MOVE: RomAddr = RomAddr(0x15d4ae);
+const SET_STRIKE: RomAddr = RomAddr(0x15d4ec);
 const STANCE: u32 = 0x0202_0000;
 const HELD: u32 = 0x0408_0000;
 const IDLE: u32 = 0x020a_0000;
@@ -73,11 +74,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 /// The wanted look: `+0xa2` and its twin `+0xa3`.
@@ -205,13 +206,13 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     if matches!(var::SCENE.get(x.b), 6 | 0xc) {
-        x.set8(0x2a, 1);
-        x.set8(0x2b, 0x19);
+        x.set8(Enemy::OWN_PALETTE, 1);
+        x.set8(Enemy::PALETTE, 0x19);
     }
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xc);
     lib::initial_hp(x);
-    for (off, v) in [(0x70, 0), (0x7e, 8), (0x7f, 0), (0x8e, 0), (0x78, 0xff)] {
+    for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::EVENT_KIND, 8), (Enemy::EVENT_LOW, 0), (Enemy::AI_ROW_8E, 0), (Enemy::AI_SHOT, 0xff)] {
         x.set8(off, v);
     }
     lib::set_immunities(x);
@@ -250,7 +251,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     };
     set_state_long(x, state);
     if active {
-        x.set8(0, 2);
+        x.set8(Enemy::ACTIVE, 2);
     }
     look(x, look_v);
     x.set8(VULNERABLE, 1);

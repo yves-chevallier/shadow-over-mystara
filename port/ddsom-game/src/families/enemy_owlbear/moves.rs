@@ -25,12 +25,12 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Waits a moment standing (`+0xa0` frames), then the beast sets off again.
 fn stand<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(TIMER, 0x1e);
             x.set8(VULNERABLE, 1);
-            pose(x, 6, SET_BODY, 0);
+            pose(x, 6, SET_BODY.0, 0);
         }
         2 => {
             let t = x.u8(TIMER).wrapping_sub(1);
@@ -46,11 +46,11 @@ fn stand<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Run toward the target: `timer` frames, direction `angle`, animation `want`/`n`, speed `speed_n`.
 fn dash_begin<R: Bench>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(Obj::SPEED_INDEX, angle);
     x.set8(TIMER, timer);
     x.set8(VULNERABLE, 1);
-    pose(x, want, SET_BODY, n);
+    pose(x, want, SET_BODY.0, n);
     speed(x, speed_n);
 }
 
@@ -67,7 +67,7 @@ fn dash_run<'a, R: Bench>(x: &mut Cx<'a, R>, advance: fn(&mut Cx<'a, R>)) {
 
 /// +6 = 2 (0x5e85c): horizontal run toward the side of the target.
 fn dash_x<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
             let right = target_dx(x).is_some_and(|dx| dx >= 0);
             dash_begin(x, if right { 8 } else { 0x18 }, 0x30, 0x16, 4, 8);
@@ -79,7 +79,7 @@ fn dash_x<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 4 (0x5e8ee): run in depth toward the target, through the speed table then ballistic.
 fn dash_y<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
             let below = target_dy(x).is_some_and(|dy| dy >= 0);
             dash_begin(x, if below { 0x10 } else { 0 }, 0x15, 4, 2, 0xb);

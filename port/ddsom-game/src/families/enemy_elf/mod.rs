@@ -17,6 +17,7 @@
 //! proximity test 0x81aa4, the zone test, the shadow and the re-queuing.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -53,15 +54,15 @@ use g::*;
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
-const SET_BODY: u32 = 0x164174;
-const SET_STRIKE: u32 = 0x164184;
+const SET_BODY: RomAddr = RomAddr(0x164174);
+const SET_STRIKE: RomAddr = RomAddr(0x164184);
 /// Long states (`+4..+7`).
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
 /// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
-const FALLBACK_MOVES: u32 = 0x6a480;
-const CLOSE_ATTACKS: u32 = 0x6a73c;
-const FAR_ATTACKS: u32 = 0x6a93c;
+const FALLBACK_MOVES: &str = "elf/fallback_moves";
+const CLOSE_ATTACKS: &str = "elf/close_attacks";
+const FAR_ATTACKS: &str = "elf/far_attacks";
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -82,11 +83,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_BODY, n as u16);
+    x.anim_start(SET_BODY.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
@@ -133,10 +134,8 @@ fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6a452: end of an attack — the next one is drawn from the difficulty row (32 bytes).
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
-    let row = (var::RANK.get(x.b) >> 1) << 5;
-    let n = rand_and(x, 0x1f);
+    let mv = rank_byte(x, FALLBACK_MOVES);
     x.set8(f::SUB, 8);
-    let mv = x.data8(FALLBACK_MOVES + row as u32 + n);
     x.set8(f::SUB2, mv);
     x.set8(f::SUB3, 0);
 }
@@ -151,20 +150,20 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0x18);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    for (off, v) in [(0x68, 4), (0x69, 1), (0x70, 0), (0x6a, 1), (0x6c, 3), (0x6d, 3), (0x72, 3), (0x73, 2), (0x74, 3), (0x75, 0x38), (0x76, 3), (REPEAT, 0x20), (WALK_ANIM, 0), (WALK_ANIM_TIMER, 2)] {
+    for (off, v) in [(Enemy::AI_68, 4), (Enemy::AI_69, 1), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 1), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 3), (Enemy::AI_DECISION_A, 3), (Enemy::AI_DECISION_B, 2), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x38), (Enemy::AI_BYTE_ROW, 3), (REPEAT, 0x20), (WALK_ANIM, 0), (WALK_ANIM_TIMER, 2)] {
         x.set8(off, v);
     }
     if var::GAME_ON.get(x.b) != 0 {
         x.set8(VULNERABLE, 1);
     }
-    for (off, v) in [(0x8e, 0), (0x7f, 0), (0x7e, 0xe)] {
+    for (off, v) in [(Enemy::AI_ROW_8E, 0), (Enemy::EVENT_LOW, 0), (Enemy::EVENT_KIND, 0xe)] {
         x.set8(off, v);
     }
-    x.set32(0x8a, 0);
+    x.set32(Enemy::RESUME_STATE, 0);
     x.set8(APPROACH_ANIM, 0);
     x.set8(AI_KIND, 0xff);
-    x.set8(0x80, 0xc);
-    x.set8(0x81, 0xb);
+    x.set8(Enemy::LOOT_ROW, 0xc);
+    x.set8(Enemy::LOOT, 0xb);
     // creation chains directly into the active state
     active(x);
 }
@@ -239,7 +238,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             2 => wait_anim(x),
             4 => {
                 x.add8(f::SUB2, 2);
-                x.anim_start(SET_STRIKE, 1);
+                x.anim_start(SET_STRIKE.0, 1);
             }
             6 => {
                 x.move_xz();

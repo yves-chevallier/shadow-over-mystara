@@ -6,8 +6,10 @@
 //! address is noted when it helps to find the code.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::objects::Obj;
 use crate::objects::Current;
 
 mod attacks;
@@ -19,11 +21,11 @@ use decide::*;
 use hit::*;
 
 /// Animation sets of the body and of the hits.
-const BODY: u32 = 0x1665d6;
-const STRIKE: u32 = 0x1665f8;
+const BODY: RomAddr = RomAddr(0x1665d6);
+const STRIKE: RomAddr = RomAddr(0x1665f8);
 /// Address tables of the reactions to hits (state 4: hit while standing / hit in the middle of an action).
-const REACT_STANDING: u32 = 0x6fe22;
-const REACT_ACTING: u32 = 0x70018;
+const REACT_STANDING: RomAddr = RomAddr(0x6fe22);
+const REACT_ACTING: RomAddr = RomAddr(0x70018);
 /// Bytes for choosing the next gesture, 32 per difficulty level (`A5+0x7f92` / 2), 5-bit draw.
 const NEXT_MOVES: u32 = 0x5ce72;
 const NEXT_ATTACKS: u32 = 0x701dc;
@@ -59,41 +61,41 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
     // AI parameters read by the decision tables, and starting values
     for (off, v) in [
-        (0x68, 2),
-        (0x69, 2),
-        (0x70, 0),
-        (0x6a, 1),
-        (0x6c, 2),
-        (0x6d, 4),
-        (0x72, 2),
-        (0x73, 2),
-        (0x74, 2),
-        (0x75, 0),
-        (0x76, 3),
+        (Enemy::AI_68, 2),
+        (Enemy::AI_69, 2),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::AI_WANDER_ROW, 1),
+        (Enemy::AI_WAIT_MASKS, 2),
+        (Enemy::AI_WAIT_ROW, 4),
+        (Enemy::AI_DECISION_A, 2),
+        (Enemy::AI_DECISION_B, 2),
+        (Enemy::AI_BOX_CHANCE, 2),
+        (Enemy::AI_BOX_ANIM, 0),
+        (Enemy::AI_BYTE_ROW, 3),
         (0xa2, 0x20),
         (0xa1, 2),
-        (0x67, 1),
-        (0x8e, 0),
-        (0x7f, 0),
-        (0x7e, 0x44),
+        (Enemy::VULNERABLE, 1),
+        (Enemy::AI_ROW_8E, 0),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::EVENT_KIND, 0x44),
     ] {
         x.set8(off, v);
     }
-    x.set32(0x8a, 0);
+    x.set32(Enemy::RESUME_STATE, 0);
     x.set8(0xad, 0);
-    x.set8(0x79, 6);
-    x.set8(0x81, 6);
-    x.set8(0x80, 7);
+    x.set8(Enemy::AI_POINT_SET, 6);
+    x.set8(Enemy::LOOT, 6);
+    x.set8(Enemy::LOOT_ROW, 7);
 }
 
 /// Plays animation `n` of the movement set.
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(BODY, n as u16);
+    x.anim_start(BODY.0, n as u16);
 }
 
 /// Plays animation `n` of the hit set.
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(STRIKE, n as u16);
+    x.anim_start(STRIKE.0, n as u16);
 }
 
 /// Chooses speed table `n`.
@@ -138,7 +140,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 /// Substate 0: arrival according to the variant `+3`. Returns true when the original abandons the frame without
 /// finishing it (variant 8, `+6 = 2`: it pops the return address of the substate function).
 fn arrive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    match x.u8(0x3) {
+    match x.u8(Enemy::VARIANT) {
         0 | 4 => charge_in(x),
         2 => rise(x),
         6 => leap_in(x),
@@ -153,7 +155,7 @@ fn arrive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn fly_step<R: Bench>(x: &mut Cx<'_, R>) {
     if countdown(x, 0xa2) == 0 {
         walk(x);
-        x.set8(0, 1);
+        x.set8(Enemy::ACTIVE, 1);
     }
     x.move_by_table_xy();
     x.anim_step();
@@ -165,17 +167,17 @@ fn charge_in<R: Bench>(x: &mut Cx<'_, R>) {
         return fly_step(x);
     }
     x.add8(f::SUB2, 2);
-    x.set8(0x67, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     x.set16(0xa0, 0);
     x.set8(0xa2, 0x18);
-    x.set8(0x2d, 0x18);
+    x.set8(Enemy::HEADING, 0x18);
     if x.u8(f::FLIP) != 0 {
-        x.set8(0x2d, 8);
+        x.set8(Enemy::HEADING, 8);
     }
     x.set16(0xa0, 0x202);
     speed(x, 0x17);
     let mut n = 3;
-    if x.u8(0x3) == 0 {
+    if x.u8(Enemy::VARIANT) == 0 {
         x.set16(0xa0, 0);
         speed(x, 0xd);
         n = 2;
@@ -189,10 +191,10 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
         return fly_step(x);
     }
     x.add8(f::SUB2, 2);
-    x.set8(0x67, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     x.set8(0xa2, 0x20);
     x.set8(0xa1, 0xd);
-    x.set8(0x2d, 0x10);
+    x.set8(Enemy::HEADING, 0x10);
     speed(x, 0xd);
     body(x, 6);
 }
@@ -200,21 +202,21 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6f3aa: start of the fall (springs upward then falls back).
 fn rise_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
-    x.set8(0x67, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     x.set8(0xa1, 0xe);
-    x.set16(0x18, 0xfd00);
-    x.set16(0x1a, 0xff80);
+    x.set16(Enemy::VZ, 0xfd00);
+    x.set16(Enemy::GRAVITY, 0xff80);
     body(x, 0xb);
 }
 
 /// 0x6f3d2: falls back to the ground.
 fn rise_fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
-    if (x.u16(0xc) as i16) >= 0 {
+    if (x.u16(Obj::Z) as i16) >= 0 {
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set32(0xc, 0);
+    x.set32(Obj::Z, 0);
     body(x, 0x10);
 }
 
@@ -222,7 +224,7 @@ fn rise_fall<R: Bench>(x: &mut Cx<'_, R>) {
 fn rise_land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         walk(x);
-        x.set8(0, 1);
+        x.set8(Enemy::ACTIVE, 1);
     }
 }
 
@@ -240,7 +242,7 @@ fn rise<R: Bench>(x: &mut Cx<'_, R>) {
 fn hover<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            x.set8(0x90, 0x1e);
+            x.set8(Enemy::COUNTER, 0x1e);
             rise_start(x);
         }
         2 => {
@@ -259,7 +261,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(0x67, 0);
+            x.set8(Enemy::VULNERABLE, 0);
             x.set8(0xa1, 0xb);
             body(x, 0xd);
         }
@@ -272,7 +274,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         }
         4 => {
             x.add8(f::SUB2, 2);
-            x.set8(0x67, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             x.set8(0xa1, 0xc);
             body(x, 0xa);
         }
@@ -291,7 +293,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
-        x.set8(0x67, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         x.set8(0xa1, 1);
         return body(x, 0);
     }

@@ -60,7 +60,7 @@ pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Preparation (`+7 = 0`), gaze tracking (`+7 = 2`), then `later(step)`.
 fn chain<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => ready(x),
         2 => track(x, resume),
         n => later(x, n),
@@ -72,7 +72,7 @@ fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     let n = x.u8(AI_KICK).wrapping_sub(1);
     x.set8(AI_KICK, n);
     if (n as i8) < 0 {
-        return x.add8(0x7, 2);
+        return x.add8(Enemy::SUB_STEP, 2);
     }
     x.set32(RESUME_STATE, resume);
     let sub2 = x.u8(f::SUB2);
@@ -90,7 +90,7 @@ fn strike_play<R: Bench>(x: &mut Cx<'_, R>, want: u8, n: u32) {
 
 /// A wait before continuing (`+0xa0` frames), then next step.
 fn pause<R: Bench>(x: &mut Cx<'_, R>, frames: u8) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(TIMER, frames);
 }
 
@@ -102,7 +102,7 @@ fn walk_on<R: Bench>(x: &mut Cx<'_, R>) {
         step(x);
         move_xy(x);
     } else {
-        x.add8(0x7, 2);
+        x.add8(Enemy::SUB_STEP, 2);
     }
 }
 
@@ -117,7 +117,7 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Start of a paw strike (0x5e0e0).
 fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(VULNERABLE, 0);
     x.set8(STRIKE_KIND, 0xe);
     x.set8(STRIKE_POWER, 5);
@@ -169,7 +169,7 @@ fn swipe_walk<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Start of a leap (0x5e1b2 / 0x5e1b8 / 0x5e1bc): X speed `vx` already set by the caller.
 pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     leap_body(x);
 }
 
@@ -179,24 +179,24 @@ fn leap_body<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(STRIKE_POWER, 8);
     x.set8(VULNERABLE, 1);
     if x.u8(f::FLIP) != 0 {
-        let vx = x.u16(0x14).wrapping_neg();
-        x.set16(0x14, vx);
+        let vx = x.u16(Enemy::VX).wrapping_neg();
+        x.set16(Enemy::VX, vx);
     }
-    x.set16(0x16, 0);
-    x.set16(0x18, 0x400);
-    x.set16(0x1a, (-0x38i16) as u16);
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::VZ, 0x400);
+    x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
     strike_play(x, 0xc, 1);
 }
 
 fn leap_at<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
-    x.set16(0x14, vx as u16);
+    x.set16(Enemy::VX, vx as u16);
     leap_begin(x);
 }
 
 /// 0x5e222: waits for the key frame of the jump.
 fn leap_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
-        x.add8(0x7, 2);
+        x.add8(Enemy::SUB_STEP, 2);
         x.set8(VULNERABLE, 0);
     }
     step(x);
@@ -207,12 +207,12 @@ fn leap_land<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.move_xz().gt() {
         lib::sound(x, crate::sound::CMD_326_426_B);
         lib::sound(x, crate::sound::CMD_329_429);
-        x.set32(0xc, 0);
-        x.add8(0x7, 2);
-        x.set16(0x30, 1);
+        x.set32(Obj::Z, 0);
+        x.add8(Enemy::SUB_STEP, 2);
+        x.set16(Obj::ANIM_TIMER, 1);
         x.set8(VULNERABLE, 1);
         let v = if x.u8(f::FLIP) != 0 { -0x1c } else { 0x1c };
-        x.set16(0x16, v as u16);
+        x.set16(Enemy::AX, v as u16);
     }
     step(x);
 }
@@ -229,12 +229,12 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     if low == 0 {
         dust(x, -0x18);
     }
-    if x.u8(0x14) != 0 {
+    if x.u8(Enemy::VX) != 0 {
         x.move_x();
         return;
     }
-    x.add8(0x7, 2);
-    x.set32(0x14, 0);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set32(Enemy::VX_LONG, 0);
 }
 
 /// End of an attack on the ground (0x5e2ae).
@@ -272,8 +272,8 @@ fn run_leap<R: Bench>(x: &mut Cx<'_, R>) {
 fn leap_far<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
-            x.set16(0x14, (-0x400i16) as u16);
+            x.add8(Enemy::SUB_STEP, 2);
+            x.set16(Enemy::VX, (-0x400i16) as u16);
             leap_body(x);
         }
         6 => leap_wait(x),
@@ -288,18 +288,18 @@ fn leap_far<R: Bench>(x: &mut Cx<'_, R>) {
 fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(STRIKE_KIND, 0x10);
             x.set8(STRIKE_POWER, 0xa);
-            x.set16(0x14, (-0x400i16) as u16);
+            x.set16(Enemy::VX, (-0x400i16) as u16);
             x.set8(VULNERABLE, 1);
             if x.u8(f::FLIP) != 0 {
-                let vx = x.u16(0x14).wrapping_neg();
-                x.set16(0x14, vx);
+                let vx = x.u16(Enemy::VX).wrapping_neg();
+                x.set16(Enemy::VX, vx);
             }
-            x.set16(0x16, 0);
-            x.set16(0x18, 0x300);
-            x.set16(0x1a, (-0x38i16) as u16);
+            x.set16(Enemy::AX, 0);
+            x.set16(Enemy::VZ, 0x300);
+            x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             strike_play(x, 0xe, 3);
         }
         6 | 10 => leap_wait(x),
@@ -307,12 +307,12 @@ fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
             if !x.move_xz().gt() {
                 lib::sound(x, crate::sound::CMD_326_426_B);
                 dust(x, -0x18);
-                x.set32(0xc, 0);
-                x.add8(0x7, 2);
-                x.set16(0x30, 1);
+                x.set32(Obj::Z, 0);
+                x.add8(Enemy::SUB_STEP, 2);
+                x.set16(Obj::ANIM_TIMER, 1);
                 x.set8(VULNERABLE, 1);
-                x.set16(0x18, 0x200);
-                x.set16(0x1a, (-0x38i16) as u16);
+                x.set16(Enemy::VZ, 0x200);
+                x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             }
             step(x);
         }
@@ -327,11 +327,11 @@ fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5e318: takes a run-up running toward the wanted side.
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(TIMER, 0x42);
     x.set8(VULNERABLE, 1);
     set_angle(x, 0x18, 8);
-    pose(x, 0x16, SET_BODY, 4);
+    pose(x, 0x16, SET_BODY.0, 4);
     speed(x, 8);
 }
 
@@ -370,7 +370,7 @@ fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
             let t = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, t);
             if t == 0 {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 x.set8(WANT_ANIM, 0x1c);
                 x.set8(CUR_ANIM, 0x1c);
                 return body(x, 0xc);
@@ -392,7 +392,7 @@ fn rush_gen<'a, R: Bench>(x: &mut Cx<'a, R>, last: impl FnOnce(&mut Cx<'a, R>)) 
             let t = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, t);
             if t == 0 {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 x.set8(TIMER, 0x1e);
                 x.set8(VULNERABLE, 1);
                 x.set8(WANT_ANIM, 6);
@@ -427,22 +427,22 @@ fn rush_b<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5e64a: small leap forward.
 fn hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     let vx = if x.u8(f::FLIP) != 0 { -0x200 } else { 0x200 };
-    x.set16(0x14, vx as u16);
+    x.set16(Enemy::VX, vx as u16);
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x1a);
     x.set8(CUR_ANIM, 0x1a);
-    x.set16(0x16, 0);
-    x.set16(0x18, 0x200);
-    x.set16(0x1a, (-0x38i16) as u16);
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::VZ, 0x200);
+    x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
     body(x, 0xd);
 }
 
 /// 0x5e690: waits for the key frame of the small leap.
 fn hop_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
-        x.add8(0x7, 2);
+        x.add8(Enemy::SUB_STEP, 2);
     }
     step(x);
 }
@@ -454,12 +454,12 @@ fn hop_slide<R: Bench>(x: &mut Cx<'_, R>) {
     if low == 0 {
         dust(x, -0x18);
     }
-    if (x.u8(0x14) as i8) >= 0 {
+    if (x.u8(Enemy::VX) as i8) >= 0 {
         x.move_x();
         return;
     }
-    x.add8(0x7, 2);
-    x.set32(0x14, 0);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set32(Enemy::VX_LONG, 0);
 }
 
 /// 0x5e6a2: landing of the small leap, always followed by the slide.
@@ -467,11 +467,11 @@ fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     lib::sound(x, crate::sound::CMD_326_426_B);
     lib::sound(x, crate::sound::CMD_329_429);
-    x.set32(0xc, 0);
-    x.add8(0x7, 2);
-    x.set16(0x30, 1);
+    x.set32(Obj::Z, 0);
+    x.add8(Enemy::SUB_STEP, 2);
+    x.set16(Obj::ANIM_TIMER, 1);
     let v = if x.u8(f::FLIP) != 0 { 0x1c } else { -0x1c };
-    x.set16(0x16, v as u16);
+    x.set16(Enemy::AX, v as u16);
     step(x);
 }
 
@@ -487,7 +487,7 @@ fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5e750: run toward the side of the target.
 fn run_toward_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     let right = match target_dx(x) {
         Some(dx) => dx >= 0,
         None => false,
@@ -495,7 +495,7 @@ fn run_toward_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
     x.set8(TIMER, 0x42);
     x.set8(VULNERABLE, 1);
-    pose(x, 0x16, SET_BODY, 4);
+    pose(x, 0x16, SET_BODY.0, 4);
     speed(x, 8);
 }
 

@@ -92,6 +92,8 @@ record! {
         flip, set_flip, FLIP: u8 @ 0x2c;
         /// Angle of a whirl (0 to 31), also the heading `Obj::SPEED_INDEX`.
         angle, set_angle, ANGLE: u8 @ 0x2d;
+        /// Heading of the moves by speed table (0 to 31, `Obj::SPEED_INDEX`: 0 right, 8 down, 0x10 left, 0x18 up).
+        heading, set_heading, HEADING: u8 @ 0x2d;
         /// Collision box set (docs/combat.md §3).
         box_set, set_box_set, BOX_SET: u8 @ 0x2e;
         /// Group or series of the object (AI profile, list, rank of a piece).
@@ -141,15 +143,42 @@ record! {
         hp_last, set_hp_last, HP_LAST: u16 @ 0x64;
         /// Non-zero: can be hit again (cleared at the start of a reaction).
         vulnerable, set_vulnerable, VULNERABLE: u8 @ 0x67;
-        /// AI: get-up parameter set by `enemy_lib::set_68`.
+        /// AI: row of the first parry table (0xb048), set by `enemy_lib::set_68` from the level and the players.
         ai_68, set_ai_68, AI_68: u8 @ 0x68;
+        /// AI: row of the second parry table (0xb068).
+        ai_69, set_ai_69, AI_69: u8 @ 0x69;
+        /// AI: row of the wander draw (`enemy_lib::draw_6b`) and the drawn duration (counted down by the families).
+        ai_wander_row, set_ai_wander_row, AI_WANDER_ROW: u8 @ 0x6a;
+        ai_wander, set_ai_wander, AI_WANDER: u8 @ 0x6b;
+        /// AI: row of the masks of `enemy_lib::maybe_draw_6e`.
+        ai_wait_masks, set_ai_wait_masks, AI_WAIT_MASKS: u8 @ 0x6c;
+        /// AI: row of the wait draw (`enemy_lib::draw_6e`) and the drawn duration.
+        ai_wait_row, set_ai_wait_row, AI_WAIT_ROW: u8 @ 0x6d;
+        ai_wait, set_ai_wait, AI_WAIT: u8 @ 0x6e;
+        /// AI: row of the stance draw (`enemy_lib::draw_stance`) and the drawn stance (or its duration).
+        ai_stance_row, set_ai_stance_row, AI_STANCE_ROW: u8 @ 0x70;
+        ai_stance, set_ai_stance, AI_STANCE: u8 @ 0x71;
+        /// AI: rows of the decision masks (`enemy_lib::decision_a`, `decision_b`).
+        ai_decision_a, set_ai_decision_a, AI_DECISION_A: u8 @ 0x72;
+        ai_decision_b, set_ai_decision_b, AI_DECISION_B: u8 @ 0x73;
+        /// AI: chance row and animation of the attack box (`ai_aids`).
+        ai_box_chance, set_ai_box_chance, AI_BOX_CHANCE: u8 @ 0x74;
+        ai_box_anim, set_ai_box_anim, AI_BOX_ANIM: u8 @ 0x75;
+        /// AI: row of the byte draw (`enemy_lib::pick_byte`) and the drawn byte (a duration or a move).
+        ai_byte_row, set_ai_byte_row, AI_BYTE_ROW: u8 @ 0x76;
+        ai_byte, set_ai_byte, AI_BYTE: u8 @ 0x77;
         /// AI: row of the chance of a shot or a special gesture (`enemy_lib::roll_78`; 0xff: none).
         ai_shot, set_ai_shot, AI_SHOT: u8 @ 0x78;
+        /// AI: set of approach points (`ai_aids`); some families keep the kind of their shot there.
+        ai_point_set, set_ai_point_set, AI_POINT_SET: u8 @ 0x79;
         /// Type of the event of the object (`enemy_lib::object_event`).
         event_kind, set_event_kind, EVENT_KIND: u8 @ 0x7e;
-        /// Cleared by the disintegration (h).
-        flag_80, set_flag_80, FLAG_80: u8 @ 0x80;
-        flag_81, set_flag_81, FLAG_81: u8 @ 0x81;
+        /// Second byte of the event word, cleared or set with `EVENT_KIND` at the creation; not read (h).
+        event_low, set_event_low, EVENT_LOW: u8 @ 0x7f;
+        /// Row of the loot table (`ai_aids`); cleared by the disintegration.
+        loot_row, set_loot_row, LOOT_ROW: u8 @ 0x80;
+        /// Loot that a thief's hit can make the enemy drop (`combat::damage::steal_loot`; 0: none).
+        loot, set_loot, LOOT: u8 @ 0x81;
         /// Hits before the end of a grab (word).
         recover, set_recover, RECOVER: u16 @ 0x84;
         /// Non-zero: the object was down (lying on the ground); 0 makes it not grabbable for some types.
@@ -160,6 +189,8 @@ record! {
         resume_state, set_resume_state, RESUME_STATE: u32 @ 0x8a;
         /// Word of the state to resume (`0x205`: active, group 5).
         resume_word, set_resume_word, RESUME_WORD: u16 @ 0x8a;
+        /// AI: row of the draw of `enemy_lib::draw_84`.
+        ai_row_8e, set_ai_row_8e, AI_ROW_8E: u8 @ 0x8e;
         /// Counter of the reaction steps.
         counter, set_counter, COUNTER: u8 @ 0x90;
         /// Palette to take at the next reaction (bit 7: pending; becomes `PALETTE`, `OWN_PALETTE` set).

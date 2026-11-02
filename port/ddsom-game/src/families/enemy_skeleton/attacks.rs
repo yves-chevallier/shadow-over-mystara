@@ -139,7 +139,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(AI_KIND, 3);
             x.set8(STRIKE_POWER, 4);
             let state = x.u32(f::STATE);
-            x.set32(0x8a, state);
+            x.set32(Enemy::RESUME_STATE, state);
             x.add8(f::SUB3, 2);
             strike(x, 3);
         }
@@ -168,7 +168,7 @@ fn double_cut<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             x.add8(f::SUB3, 2);
             let state = x.u32(f::STATE);
-            x.set32(0x8a, state);
+            x.set32(Enemy::RESUME_STATE, state);
             x.set8(STRIKE_KIND, 5);
             x.set8(STRIKE_POWER, 2);
             x.set8(AI_KIND, 3);
@@ -329,7 +329,7 @@ pub(super) fn restart_slide<R: Bench>(x: &mut Cx<'_, R>) {
     // D2 (low word) = the sought frame, D3 = step counter: leftovers re-read afterwards (DDSOM_POISON:
     // skeleton_scene13, boss17_scene13).
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | state as u32;
-    x.anim_start(SET_BODY, 2);
+    x.anim_start(SET_BODY.0, 2);
     *x.c.d3() = 7;
     loop {
         if x.u16(ANIM_STATE) == state {

@@ -24,7 +24,7 @@ fn flight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             let right = camera_x(x).wrapping_add(0xc0);
             x.set8(f::FLIP, 0);
             let mut angle = 0x18;
@@ -95,19 +95,19 @@ fn landed<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.set8(NO_GRAB, 1);
             if let Some(shadow) = x.alloc(&pools::EFFCT) {
-                shadow.set_u8(x.b, 0, 1);
-                shadow.set_u8(x.b, 2, 0x32);
-                shadow.set_u8(x.b, 3, 0xe);
+                shadow.set_u8(x.b, Enemy::ACTIVE, 1);
+                shadow.set_u8(x.b, Enemy::KIND, 0x32);
+                shadow.set_u8(x.b, Enemy::VARIANT, 0xe);
                 let px = x.u16(Obj::X);
                 shadow.set_u16(x.b, Obj::X, px);
                 let depth = x.u32(Obj::Y);
                 shadow.set_u32(x.b, Obj::Y, depth);
                 let n = shadow.u16(x.b, 0x12).wrapping_add(1);
                 shadow.set_u16(x.b, 0x12, n);
-                shadow.set_u16(x.b, 0x42, x.o.0 as u16);
+                shadow.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
                 x.set16(Obj::Z, 0x28);
             }
             look(x, 0x31);

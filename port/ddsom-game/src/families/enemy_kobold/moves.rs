@@ -121,7 +121,7 @@ fn land_yz<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         return;
     }
-    x.set8(0, 1);
+    x.set8(Enemy::ACTIVE, 1);
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);

@@ -16,6 +16,7 @@
 //! goes back to substate 2 when count `+0x6e` has elapsed.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -57,8 +58,8 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_MOVE: u32 = 0x16032c;
-const SET_SHOT: u32 = 0x160350;
+const SET_MOVE: RomAddr = RomAddr(0x16032c);
+const SET_SHOT: RomAddr = RomAddr(0x160350);
 const STANCE: u32 = 0x0202_0000;
 const HELD: u32 = 0x0408_0000;
 const IDLE: u32 = 0x020a_0000;
@@ -88,12 +89,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of the movement set.
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 /// Starts animation `n` of the shot set.
 fn shot<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_SHOT, n as u16);
+    x.anim_start(SET_SHOT.0, n as u16);
 }
 
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
@@ -112,24 +113,16 @@ fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
-fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
-    let r = rand_and(x, 0x1f);
-    x.data8(at + r)
-}
-
 /// Difficulty row tables: first moves, number of shots, second moves, follow-up.
-const FIRST_ACTIONS: u32 = 0x5d47a;
-const SHOT_REPEATS: u32 = 0x5d07a;
-const SECOND_ACTIONS: u32 = 0x5d67a;
-const FOLLOW_TABLE: u32 = 0x5ce72;
+const FIRST_ACTIONS: &str = "bow/first_actions";
+const SHOT_REPEATS: &str = "bow/shot_repeats";
+const SECOND_ACTIONS: &str = "bow/second_actions";
+const FOLLOW_TABLE: &str = "bow/follow_moves";
 
 /// 0x5cdc6: random draw (ten chances out of sixteen) that decides on a shot; D0 = 0 or 1.
 fn shoot_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let r = rand_and(x, 0xf);
-    let mask = x.rom16(0x5cde0);
+    let mask = tables::table("bow/shot_mask").at16(x.b, 0);
     (mask >> r) & 1 != 0
 }
 
@@ -161,7 +154,7 @@ fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(EXPIRED) != 0 {
         set_state_long(x, HELD);
     }
-    let b = row_byte(x, FOLLOW_TABLE);
+    let b = rank_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
     x.set8(f::SUB3, 0);
@@ -178,28 +171,28 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.set8(f::BOX_SET, 0xf);
     lib::initial_hp(x);
     for (off, v) in [
-        (0x80, 8),
+        (Enemy::LOOT_ROW, 8),
         (VULNERABLE, 0),
-        (0x70, 0),
-        (0x68, 2),
-        (0x69, 2),
-        (0x6a, 1),
-        (0x6c, 2),
-        (0x6d, 4),
-        (0x72, 2),
-        (0x73, 2),
-        (0x74, 2),
-        (0x76, 3),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::AI_68, 2),
+        (Enemy::AI_69, 2),
+        (Enemy::AI_WANDER_ROW, 1),
+        (Enemy::AI_WAIT_MASKS, 2),
+        (Enemy::AI_WAIT_ROW, 4),
+        (Enemy::AI_DECISION_A, 2),
+        (Enemy::AI_DECISION_B, 2),
+        (Enemy::AI_BOX_CHANCE, 2),
+        (Enemy::AI_BYTE_ROW, 3),
         (AI_SHOT, 0xff),
-        (0x75, 0),
+        (Enemy::AI_BOX_ANIM, 0),
     ] {
         x.set8(off, v);
     }
     lib::set_immunities(x);
     x.set32(FLAGS, 0);
-    x.set8(0x7f, 0);
-    x.set8(0x7e, 0xc);
-    x.set8(0x81, 7);
+    x.set8(Enemy::EVENT_LOW, 0);
+    x.set8(Enemy::EVENT_KIND, 0xc);
+    x.set8(Enemy::LOOT, 7);
     if x.u8(TIMED) != 0 {
         x.set16(LIFETIME, 0x80);
     }

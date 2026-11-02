@@ -16,6 +16,7 @@
 //! (attacks), 0x163014 and 0x163098 (flight against or with the orientation).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
@@ -55,11 +56,11 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_FLY: u32 = 0x162ebc;
-const SET_STRIKE: u32 = 0x162eee;
+const SET_FLY: RomAddr = RomAddr(0x162ebc);
+const SET_STRIKE: RomAddr = RomAddr(0x162eee);
 /// Flight sets depending on whether or not the speed follows the orientation (`lib::moving_forward`).
-const SET_FLY_AGAINST: u32 = 0x163014;
-const SET_FLY_ALONG: u32 = 0x163098;
+const SET_FLY_AGAINST: RomAddr = RomAddr(0x163014);
+const SET_FLY_ALONG: RomAddr = RomAddr(0x163098);
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -74,9 +75,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         _ => {}
     }
     if x.u8(INVULNERABLE) != 0 {
-        x.set8(0x38, 0);
+        x.set8(Enemy::FRAME_TAG, 0);
     }
-    if x.u8(0) != 0 {
+    if x.u8(Enemy::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -88,11 +89,11 @@ fn play<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
 }
 
 fn fly<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    play(x, SET_FLY, n);
+    play(x, SET_FLY.0, n);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    play(x, SET_STRIKE, n);
+    play(x, SET_STRIKE.0, n);
 }
 
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
@@ -238,30 +239,30 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0x14);
     lib::initial_hp(x);
     lib::spread_index(x);
-    x.set8(0, 1);
+    x.set8(Enemy::ACTIVE, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set_bit(1, 1, true);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     for (off, v) in [
-        (0x76, 0),
-        (0x70, 0),
-        (0x6a, 0),
-        (0x75, 0),
-        (0x72, 1),
-        (0x73, 1),
-        (0x6c, 6),
-        (0x6d, 1),
-        (0x74, 7),
-        (0x78, 0xff),
-        (0x8e, 3),
-        (0x68, 8),
-        (0x69, 1),
+        (Enemy::AI_BYTE_ROW, 0),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::AI_WANDER_ROW, 0),
+        (Enemy::AI_BOX_ANIM, 0),
+        (Enemy::AI_DECISION_A, 1),
+        (Enemy::AI_DECISION_B, 1),
+        (Enemy::AI_WAIT_MASKS, 6),
+        (Enemy::AI_WAIT_ROW, 1),
+        (Enemy::AI_BOX_CHANCE, 7),
+        (Enemy::AI_SHOT, 0xff),
+        (Enemy::AI_ROW_8E, 3),
+        (Enemy::AI_68, 8),
+        (Enemy::AI_69, 1),
         (VULNERABLE, 0),
         (LOOK, 0),
         (LOOK_PREV, 0xff),
-        (0x7e, 0x11),
-        (0x7f, 0),
-        (0x80, 0x11),
-        (0x81, 0x10),
+        (Enemy::EVENT_KIND, 0x11),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::LOOT_ROW, 0x11),
+        (Enemy::LOOT, 0x10),
     ] {
         x.set8(off, v);
     }

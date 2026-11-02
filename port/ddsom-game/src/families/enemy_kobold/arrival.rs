@@ -145,7 +145,7 @@ fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
                 x.anim_step();
                 return;
             }
-            x.set8(0, 1);
+            x.set8(Enemy::ACTIVE, 1);
             x.set32(Obj::Z, 0);
             x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
@@ -240,7 +240,7 @@ fn wake<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             look(x, 0x17);
-            let t = x.u16(0x42);
+            let t = x.u16(Enemy::CREATOR);
             x.set16(TIMER, t);
             mv(x, 0x17);
         }
@@ -279,7 +279,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.anim_start(SET_STRIKE, 6);
+            x.anim_start(SET_STRIKE.0, 6);
         }
         4 => landing_hit(x, eshl_creators::throw_1),
         6 => {
@@ -315,7 +315,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.anim_start(SET_STRIKE, 6);
+            x.anim_start(SET_STRIKE.0, 6);
         }
         4 => landing_hit(x, eshl_creators::throw_2),
         6 => {

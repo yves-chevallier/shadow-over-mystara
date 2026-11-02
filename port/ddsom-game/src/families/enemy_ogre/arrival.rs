@@ -19,7 +19,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// Common start of an arrival: no longer invulnerable, immunities reset.
 fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set_bit(1, 1, false);
+    x.set_bit(Enemy::DISPLAY, 1, false);
     x.set8(INVULNERABLE, 0);
     lib::set_immunities(x);
 }
@@ -242,7 +242,7 @@ fn hidden<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             x.set8(NO_GRAB, 1);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.set8(INVULNERABLE, 0);
             lib::set_immunities(x);
             look(x, 0x33);

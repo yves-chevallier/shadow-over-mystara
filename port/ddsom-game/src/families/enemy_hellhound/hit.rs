@@ -2,24 +2,25 @@
 //! reaction table, 8 grabbed by a player (the dog runs off the screen).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Reaction tables shared by the hits, indexed by code `+0x49`.
-const REACT_FIRST: u32 = 0x62aa2;
-const REACT_SECOND: u32 = 0x62d76;
+const REACT_FIRST: RomAddr = RomAddr(0x62aa2);
+const REACT_SECOND: RomAddr = RomAddr(0x62d76);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     hit_loop_at(x, NO_ZONE, |x| {
         match x.u8(f::SUB) {
             0 => {
                 x.set8(LOOK_PREV, 0x7f);
-                react(x, REACT_FIRST);
+                react(x, REACT_FIRST.0);
             }
             2 => recoil(x),
             4 => fall(x),
-            6 => react(x, REACT_SECOND),
+            6 => react(x, REACT_SECOND.0),
             8 => run_away(x),
             _ => {}
         }
@@ -38,7 +39,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             look(x, 0x1e);
             x.set16(Obj::VX, 0x300);
             x.set16(Obj::AX, -0x28i16 as u16);
-            let flip = x.u8(0x4a) ^ 0x20;
+            let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
             if flip != 0 {
                 negate(x, Obj::VX);
@@ -53,7 +54,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             if x.anim_step() {
-                x.set32(0x58, 0);
+                x.set32(Enemy::HIT_LOCK, 0);
                 x.set32(Obj::VX, 0);
                 set_state_long(x, STANCE);
             }
@@ -74,24 +75,24 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             if paused(x) {
                 return;
             }
-            let n = x.u16(0x84).wrapping_sub(1);
-            x.set16(0x84, n);
+            let n = x.u16(Enemy::RECOVER).wrapping_sub(1);
+            x.set16(Enemy::RECOVER, n);
             if (n as i16) > 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(0, 2);
-            x.set16(0x84, 0);
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
+            x.set8(Enemy::ACTIVE, 2);
+            x.set16(Enemy::RECOVER, 0);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
         }
         4 => {
             if paused(x) || !x.anim_step() {
                 return;
             }
             if !lib::target_in_box(x, 0, 0x40, 8) {
-                x.set8(0x86, 0);
-                x.set8(0, 1);
+                x.set8(Enemy::DOWNED, 0);
+                x.set8(Enemy::ACTIVE, 1);
                 x.set8(VULNERABLE, 1);
                 set_state_long(x, STANCE);
                 return mv(x, 0);
@@ -135,8 +136,8 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         }
         10 => {
             if x.anim_step() {
-                x.set8(0, 1);
-                x.set8(0x86, 0);
+                x.set8(Enemy::ACTIVE, 1);
+                x.set8(Enemy::DOWNED, 0);
                 x.set8(VULNERABLE, 1);
                 set_state_long(x, STANCE);
                 mv(x, 0);

@@ -73,7 +73,7 @@ fn pick_wait<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(AI_WAIT, 1);
         return;
     }
-    let group = x.u8(0x6d) as u32;
+    let group = x.u8(Enemy::AI_WAIT_ROW) as u32;
     let list = x.data32(0x7a50 + group * 4);
     let r = rand_and(x, 0x1f);
     let v = x.data8(list + r);
@@ -113,7 +113,7 @@ fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7831e: switches to the flight animation with the same key, according to the direction of the walk.
 fn fly_anim<R: Bench>(x: &mut Cx<'_, R>) {
-    let set = if lib::moving_forward(x) { SET_FLY_B } else { SET_FLY_A };
+    let set = if lib::moving_forward(x) { SET_FLY_B.0 } else { SET_FLY_A.0 };
     lib::switch_keeping_time(x, set);
 }
 

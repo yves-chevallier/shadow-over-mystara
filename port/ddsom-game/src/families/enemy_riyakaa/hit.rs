@@ -8,10 +8,10 @@ use crate::objects::Current;
 
 pub(super) fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     hit_loop(x, |x| match x.u8(f::SUB) {
-        0 => react(x, REACT_STANDING),
+        0 => react(x, REACT_STANDING.0),
         2 => knockback(x),
         4 => recover(x),
-        6 => react(x, REACT_ACTING),
+        6 => react(x, REACT_ACTING.0),
         8 => grab(x),
         _ => {}
     });
@@ -25,25 +25,25 @@ pub(super) fn knockback<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(f::FREEZE, 4);
-        x.set16(0x14, 0x500);
-        x.set16(0x16, 0xffc8);
+        x.set16(Enemy::VX, 0x500);
+        x.set16(Enemy::AX, 0xffc8);
         lib::sound(x, crate::sound::CMD_127_227_B);
-        let side = x.u8(0x4a) ^ 0x20;
-        x.set8(0x4a, side);
+        let side = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
+        x.set8(Enemy::ATTACKER_FLIP, side);
         if side != 0 {
-            let a = (x.u16(0x14) as i16).wrapping_neg();
-            x.set16(0x14, a as u16);
-            let b = (x.u16(0x16) as i16).wrapping_neg();
-            x.set16(0x16, b as u16);
+            let a = (x.u16(Enemy::VX) as i16).wrapping_neg();
+            x.set16(Enemy::VX, a as u16);
+            let b = (x.u16(Enemy::AX) as i16).wrapping_neg();
+            x.set16(Enemy::AX, b as u16);
         }
         return body(x, 5);
     }
-    if x.u8(0x14) != 0 {
+    if x.u8(Enemy::VX) != 0 {
         x.move_x();
         return;
     }
-    x.set8(0, 1);
-    x.set32(0x58, 0);
+    x.set8(Enemy::ACTIVE, 1);
+    x.set32(Enemy::HIT_LOCK, 0);
     let level = ((var::RANK.get(x.b) >> 2) << 2) as u32;
     let mask = x.data32(MASKS + level);
     let bit = (x.random() as u32) & 0x1f;
@@ -67,14 +67,14 @@ pub(super) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
             if paused(x) {
                 return;
             }
-            let n = (x.u16(0x84) as i16).wrapping_sub(1);
-            x.set16(0x84, n as u16);
+            let n = (x.u16(Enemy::RECOVER) as i16).wrapping_sub(1);
+            x.set16(Enemy::RECOVER, n as u16);
             if n > 0 {
                 return;
             }
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
-            x.set8(0, 2);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
+            x.set8(Enemy::ACTIVE, 2);
             x.add8(f::SUB2, 2);
             body(x, 8);
         }
@@ -83,9 +83,9 @@ pub(super) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             if x.anim_step() {
-                x.set8(0x86, 0);
-                x.set8(0, 1);
-                x.set8(0x67, 1);
+                x.set8(Enemy::DOWNED, 0);
+                x.set8(Enemy::ACTIVE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 x.set32(f::STATE, WALK);
                 x.set8(0xa0, 0xc0);
             }
@@ -123,7 +123,7 @@ pub(super) fn grab_start<R: Bench>(x: &mut Cx<'_, R>) {
     };
     if turn {
         x.add8(f::SUB2, 2);
-        x.set8(0x67, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         x.set8(0xa0, 0x7f);
         x.set8(0xa1, 0x7f);
         body(x, 4);
@@ -135,10 +135,10 @@ pub(super) fn grab_start<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x6fdc0: flees running, facing the direction of the escape.
 pub(super) fn grab_run<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(0x67, 1);
-    x.set8(0x2d, 8);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Enemy::HEADING, 8);
     if x.u8(f::FLIP) == 0 {
-        x.set8(0x2d, 0x18);
+        x.set8(Enemy::HEADING, 0x18);
     }
     body(x, 2);
     speed(x, 0x21);

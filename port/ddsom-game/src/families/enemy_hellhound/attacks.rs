@@ -87,7 +87,7 @@ fn bite_land<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
-    x.set16(0x30, 1);
+    x.set16(Obj::ANIM_TIMER, 1);
     x.set8(VULNERABLE, 1);
     mv(x, 0xc);
     let vy = if x.u8(f::FLIP) != 0 { -0x1c } else { 0x1c };
@@ -146,7 +146,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB3, 4);
                 x.set8(VULNERABLE, 1);
                 x.set8(LOOK, 8);
-                begin_jump(x, -0x280, 0x4c0, 7, SET_STRIKE);
+                begin_jump(x, -0x280, 0x4c0, 7, SET_STRIKE.0);
             }
         }
         6 => {
@@ -195,7 +195,7 @@ fn paw<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB3, 4);
                 look(x, 0xff);
                 x.set8(STRIKE_KIND, 0x2b);
-                return begin_jump(x, 0x180, 0x3c0, 5, SET_MOVE);
+                return begin_jump(x, 0x180, 0x3c0, 5, SET_MOVE.0);
             }
             x.add8(f::SUB3, 2);
             let mut angle = 0x18;
@@ -249,7 +249,7 @@ fn jump_bite<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             x.set8(VULNERABLE, 1);
             x.set8(LOOK, 8);
-            begin_jump(x, -0x380, 0x4c0, 7, SET_STRIKE);
+            begin_jump(x, -0x380, 0x4c0, 7, SET_STRIKE.0);
         }
         6 => wait_key_clear(x),
         8 => bite_land(x),
@@ -660,14 +660,14 @@ pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             set_angle(x);
             set_speed(x, 0xd);
-            x.set8(0x90, 0x50);
+            x.set8(Enemy::COUNTER, 0x50);
             mv(x, 2);
         }
         2 => {
             x.move_by_table_xy();
             x.anim_step();
-            let n = x.u8(0x90).wrapping_sub(1);
-            x.set8(0x90, n);
+            let n = x.u8(Enemy::COUNTER).wrapping_sub(1);
+            x.set8(Enemy::COUNTER, n);
             if n == 0 {
                 x.add8(f::SUB2, 2);
                 mv(x, 4);
@@ -681,7 +681,7 @@ pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
                 let a = x.u8(Obj::SPEED_INDEX) & 0x1f;
                 x.set8(Obj::SPEED_INDEX, a);
                 x.set8(f::SUB2, 2);
-                x.set8(0x90, 0x50);
+                x.set8(Enemy::COUNTER, 0x50);
                 mv(x, 2);
             }
         }
@@ -701,7 +701,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    if victim.u8(x.b, 0) == 0 || victim.u8(x.b, 0x188) == 0 {
+    if victim.u8(x.b, Enemy::ACTIVE) == 0 || victim.u8(x.b, 0x188) == 0 {
         return set_state_long(x, STANCE);
     }
     match x.u8(f::SUB3) {

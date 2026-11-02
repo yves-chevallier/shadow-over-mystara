@@ -27,8 +27,8 @@ fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
 fn release_victim<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(VICTIM) != 0 {
         let v = x.linked(VICTIM);
-        v.set_u8(x.b, 0x7e, 0);
-        v.set_u8(x.b, 0x53, 0);
+        v.set_u8(x.b, Enemy::EVENT_KIND, 0);
+        v.set_u8(x.b, Enemy::FREEZE, 0);
     }
 }
 
@@ -473,7 +473,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
 
 pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
-    if victim.u8(x.b, 0) == 0 {
+    if victim.u8(x.b, Enemy::ACTIVE) == 0 {
         return go::strike_10(x);
     }
     if victim.u8(x.b, 0x188) == 0 {
@@ -553,7 +553,7 @@ pub(super) fn done<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x653b2: the fight resumes: target chosen, HP threshold crossed, new move.
 pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_FLAGS, 0);
-    x.set8(0, 1);
+    x.set8(Enemy::ACTIVE, 1);
     x.set8(LOOK_PREV, 0xff);
     if !pick_target(x) {
         return go::retire(x);

@@ -96,7 +96,7 @@ fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            let t = row_byte(x, SERIES_TABLE);
+            let t = rank_byte(x, SERIES_TABLE);
             x.set8(TIMER, t);
             strike(x, 0);
         }

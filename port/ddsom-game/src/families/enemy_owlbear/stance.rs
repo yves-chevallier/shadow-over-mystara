@@ -21,7 +21,7 @@ pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if left == 0 && attack_chance(x) {
         return set_state_long(x, ACTIVE_STANCE);
     }
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => walk_begin(x),
         2 => {
             if !pick_target(x) {
@@ -30,7 +30,7 @@ pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             let t = x.u8(TIMER).wrapping_sub(1);
             x.set8(TIMER, t);
             if t == 0 {
-                x.add8(0x7, 2);
+                x.add8(Enemy::SUB_STEP, 2);
                 x.set8(VULNERABLE, 1);
                 x.set8(WANT_ANIM, 0);
                 x.set8(CUR_ANIM, 0);
@@ -51,18 +51,18 @@ pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5daa6: walks forward (animation 2, speed 0xb) for `0x24` frames.
 pub(super) fn walk_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(TIMER, 0x24);
     x.set8(VULNERABLE, 1);
     set_angle(x, 8, 0x18);
-    pose(x, 2, SET_BODY, 2);
+    pose(x, 2, SET_BODY.0, 2);
     speed(x, 0xb);
 }
 
 /// 0x5db66: end of an arrival turn-around.
 pub(super) fn turn_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
-        x.set8(0x7, 0);
+        x.set8(Enemy::SUB_STEP, 0);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         x.set8(VULNERABLE, 1);
@@ -102,10 +102,10 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return set_state_long(x, 0x0202_0600);
     }
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         x.set8(VULNERABLE, 1);
-        pose(x, 2, SET_BODY, 2);
+        pose(x, 2, SET_BODY.0, 2);
         speed(x, 0xb);
         return lib::draw_stance(x);
     }
@@ -192,20 +192,20 @@ pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let pick = x.data8(table + level + r);
     x.set8(f::SUB2, pick);
     x.set16(f::STATE, 0x0204);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
 }
 
 /// 0x5ee68: the target is far in abscissa.
 fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(t) = target(x) else { return false };
-    let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xa0);
+    let dx = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xa0);
     dx > 0x140
 }
 
 /// +6 = 2 (0x5dbd4): turn-around (animation 1 then 3) then resumes the saved state.
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         x.set8(VULNERABLE, 1);
         x.set8(WANT_ANIM, 0);
         x.set8(CUR_ANIM, 0);
@@ -224,7 +224,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 4 (0x5de68): standing wait before moving on to the attack.
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
+    if x.u8(Enemy::SUB_STEP) == 0 {
         return ready(x);
     }
     let n = x.u8(AI_REPEAT).wrapping_sub(1);
@@ -240,20 +240,20 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +7 = 0 of the attacks (0x5de70): the beast gets ready (rest animation).
 pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x7, 2);
+    x.add8(Enemy::SUB_STEP, 2);
     x.set8(VULNERABLE, 1);
-    pose(x, 6, SET_BODY, 0);
+    pose(x, 6, SET_BODY.0, 0);
 }
 
 /// +6 = 6 (0x5decc): approaches the target while looking at it.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(TIMER, 0x28);
             lib::draw_stance(x);
             x.set8(VULNERABLE, 1);
-            pose(x, 4, SET_BODY, 5);
+            pose(x, 4, SET_BODY.0, 5);
             speed(x, 0x1a);
         }
         2 => {
@@ -292,7 +292,7 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
     let pick = x.data8(NEXT_MOVES + level + r);
     x.set8(f::SUB2, pick);
     x.set16(f::STATE, 0x0208);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
 }
 
 // --- substate 10: rest -----------------------------------------------------------------------
@@ -300,7 +300,7 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
 /// Rest: waits until a player is alive (`+6` = 0 only).
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
-        match x.u8(0x7) {
+        match x.u8(Enemy::SUB_STEP) {
             0 => walk_begin(x),
             2 => {
                 let t = x.u8(TIMER).wrapping_sub(1);
@@ -309,7 +309,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
                     step(x);
                     move_xy(x);
                 } else {
-                    x.add8(0x7, 2);
+                    x.add8(Enemy::SUB_STEP, 2);
                     x.set8(VULNERABLE, 1);
                     x.set8(WANT_ANIM, 0);
                     x.set8(CUR_ANIM, 0);

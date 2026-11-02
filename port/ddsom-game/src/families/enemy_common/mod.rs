@@ -287,6 +287,18 @@ pub fn rand_and<R: Bench>(x: &mut Cx<'_, R>, mask: u32) -> u32 {
     x.random() as u32 & mask
 }
 
+/// Row of 32 bytes of the difficulty level (`RANK / 2`) in a table of `data/enemies.json` by rank.
+pub fn rank_row<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
+    ((var::RANK.get(x.b) >> 1) << 5) as u32
+}
+
+/// Byte drawn at random (5 bits) in the row of the difficulty level of the table `name` (rows of 32 bytes).
+pub fn rank_byte<R: Bench>(x: &mut Cx<'_, R>, name: &str) -> u8 {
+    let row = rank_row(x);
+    let r = rand_and(x, 0x1f);
+    tables::table(name).at8(x.b, row + r)
+}
+
 /// Writes the state long of the current object (`move.l #v,(4,A0)`).
 pub fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);

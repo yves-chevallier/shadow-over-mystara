@@ -27,12 +27,12 @@ fn interrupted<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// Flight animation 2 or 3 according to the direction of the speed (0x70a94).
 fn fly_forward_or_back<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 2 } else { 3 };
-    play(x, SET_A, n);
+    play(x, SET_A.0, n);
 }
 
 /// The flight set matching the direction of the speed, on the same frame (0x70b6e).
 fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
-    let table = if lib::moving_forward(x) { SET_FLY_ALONG } else { SET_FLY_AGAINST };
+    let table = if lib::moving_forward(x) { SET_FLY_ALONG.0 } else { SET_FLY_AGAINST.0 };
     lib::switch_keeping_time(x, table);
 }
 
@@ -380,8 +380,8 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let Some(arm) = x.alloc(&pools::ESHL) else { return end_leap(x) };
             x.set16(ARM, arm.0 as u16);
-            arm.set_u8(x.b, 0, 1);
-            arm.set_u8(x.b, 2, 0x2a);
+            arm.set_u8(x.b, Enemy::ACTIVE, 1);
+            arm.set_u8(x.b, Enemy::KIND, 0x2a);
             arm.set_u16(x.b, f::CREATOR, x.o.0 as u16);
             let target = x.u16(f::TARGET);
             arm.set_u16(x.b, f::TARGET, target);

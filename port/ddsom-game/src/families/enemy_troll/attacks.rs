@@ -170,7 +170,7 @@ fn throw_hold<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::KEY_FRAME, 0);
         add8(x, obj, 5, 2);
     }
-    if (obj.u8(x.b, 4) as i8) < 4 {
+    if (obj.u8(x.b, Enemy::STATE) as i8) < 4 {
         return;
     }
     throw_end(x);
@@ -316,8 +316,8 @@ fn depth_step<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Arrival positions (X then depth) of the teleportation, relative to the target.
-const TELEPORT_X: u32 = 0x6ceaa;
-const TELEPORT_Y: u32 = 0x6ce9c;
+const TELEPORT_X: &str = "troll/teleport_x";
+const TELEPORT_Y: &str = "troll/teleport_y";
 
 /// +6 = 12: the Troll reappears near its target.
 fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
@@ -328,12 +328,12 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 3) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_X + r);
+            let off = tables::table(TELEPORT_X).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::X));
             x.set16(Obj::X, at);
             let r = rand_and(x, 7) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_Y + r);
+            let off = tables::table(TELEPORT_Y).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::Y));
             x.set16(Obj::Y, at);
             x.set8(f::FLIP, 0x20);

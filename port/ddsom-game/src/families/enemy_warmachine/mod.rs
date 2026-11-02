@@ -14,6 +14,7 @@
 //! | state 4 | `hit` | reactions, death in five stages, flight |
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
@@ -50,10 +51,10 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_MOVE: u32 = 0x171a52;
-const SET_WEAPON: u32 = 0x171a7e;
-const SET_FLY_A: u32 = 0x171b76;
-const SET_FLY_B: u32 = 0x171c1a;
+const SET_MOVE: RomAddr = RomAddr(0x171a52);
+const SET_WEAPON: RomAddr = RomAddr(0x171a7e);
+const SET_FLY_A: RomAddr = RomAddr(0x171b76);
+const SET_FLY_B: RomAddr = RomAddr(0x171c1a);
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -68,9 +69,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         _ => {}
     }
     if x.u8(FLAG) != 0 {
-        x.set8(0x38, 0);
+        x.set8(Enemy::FRAME_TAG, 0);
     }
-    if x.u8(0) != 0 {
+    if x.u8(Enemy::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -79,12 +80,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of the movement set.
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_MOVE, n);
+    lib::start(x, SET_MOVE.0, n);
 }
 
 /// Starts animation `n` of the weapon set.
 fn weapon<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    lib::start(x, SET_WEAPON, n);
+    lib::start(x, SET_WEAPON.0, n);
 }
 
 /// Look (`+0xa0`) and its twin (`+0xa1`).
@@ -187,37 +188,37 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0x20);
     lib::initial_hp(x);
     lib::spread_index(x);
-    x.set8(0, 1);
+    x.set8(Enemy::ACTIVE, 1);
     x.set32(f::IMMUNITY, 0xffff_ffff);
-    x.set_bit(1, 1, true);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     for (off, v) in [
-        (0x76, 0),
-        (0x70, 0),
-        (0x6a, 2),
-        (0x75, 0),
-        (0x72, 1),
-        (0x73, 1),
-        (0x6c, 6),
-        (0x6d, 1),
-        (0x74, 7),
+        (Enemy::AI_BYTE_ROW, 0),
+        (Enemy::AI_STANCE_ROW, 0),
+        (Enemy::AI_WANDER_ROW, 2),
+        (Enemy::AI_BOX_ANIM, 0),
+        (Enemy::AI_DECISION_A, 1),
+        (Enemy::AI_DECISION_B, 1),
+        (Enemy::AI_WAIT_MASKS, 6),
+        (Enemy::AI_WAIT_ROW, 1),
+        (Enemy::AI_BOX_CHANCE, 7),
         (AI_SHOT, 0xff),
-        (0x8e, 3),
-        (0x68, 0xb),
-        (0x69, 1),
+        (Enemy::AI_ROW_8E, 3),
+        (Enemy::AI_68, 0xb),
+        (Enemy::AI_69, 1),
         (VULNERABLE, 0),
         (LOOK, 0),
         (LOOK_PREV, 0xff),
-        (0x7e, 0xc),
-        (0x7f, 0),
-        (0x80, 0x1e),
-        (0x81, 0x19),
+        (Enemy::EVENT_KIND, 0xc),
+        (Enemy::EVENT_LOW, 0),
+        (Enemy::LOOT_ROW, 0x1e),
+        (Enemy::LOOT, 0x19),
     ] {
         x.set8(off, v);
     }
     pick_target(x);
     mv(x, 4);
     // the starting state depends on the variant: 0, 2 or 4 for `+6`
-    match x.u8(3) {
+    match x.u8(Enemy::VARIANT) {
         0 => go::arrive(x, 0),
         1 => go::arrive(x, 2),
         2 => go::arrive(x, 4),

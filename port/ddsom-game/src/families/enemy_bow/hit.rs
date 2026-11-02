@@ -3,13 +3,14 @@
 //! non-zero.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Reaction tables shared by the hits, indexed by code `+0x49`.
-const REACT_FIRST: u32 = 0x5cbe8;
-const REACT_SECOND: u32 = 0x5cd14;
+const REACT_FIRST: RomAddr = RomAddr(0x5cbe8);
+const REACT_SECOND: RomAddr = RomAddr(0x5cd14);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -17,9 +18,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
         match x.u8(f::SUB) {
-            0 | 2 => react(x, REACT_FIRST),
+            0 | 2 => react(x, REACT_FIRST.0),
             4 => fall(x),
-            6 => react(x, REACT_SECOND),
+            6 => react(x, REACT_SECOND.0),
             8 => grab(x),
             _ => {}
         }
@@ -41,14 +42,14 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             if paused(x) {
                 return;
             }
-            let n = x.u16(0x84).wrapping_sub(1);
-            x.set16(0x84, n);
+            let n = x.u16(Enemy::RECOVER).wrapping_sub(1);
+            x.set16(Enemy::RECOVER, n);
             if (n as i16) > 0 {
                 return;
             }
-            x.set8(0x86, 0);
-            x.set8(0x49, 0);
-            x.set8(0, 2);
+            x.set8(Enemy::DOWNED, 0);
+            x.set8(Enemy::REACTION, 0);
+            x.set8(Enemy::ACTIVE, 2);
             x.add8(f::SUB2, 2);
             mv(x, 7);
         }
@@ -57,10 +58,10 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             if x.anim_step() {
-                x.set8(0, 1);
+                x.set8(Enemy::ACTIVE, 1);
                 set_state_long(x, STANCE);
-                x.set8(0, 1);
-                x.set8(0x86, 0);
+                x.set8(Enemy::ACTIVE, 1);
+                x.set8(Enemy::DOWNED, 0);
             }
         }
         _ => {}

@@ -14,6 +14,7 @@
 //! | state 4 | `hit` | reactions to hits, recoil, fall, grab by a player |
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -49,8 +50,8 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SET_MOVE: u32 = 0x162126;
-const SET_STRIKE: u32 = 0x162148;
+const SET_MOVE: RomAddr = RomAddr(0x162126);
+const SET_STRIKE: RomAddr = RomAddr(0x162148);
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -69,11 +70,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_MOVE, n as u16);
+    x.anim_start(SET_MOVE.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 /// The wanted look: `+0xa1` and its twin `+0xa2`.
@@ -209,7 +210,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x6f, 1);
     x.set8(f::BOX_SET, 0x12);
     lib::initial_hp(x);
-    for (off, v) in [(0x70, 0), (0x7e, 0xf), (0x7f, 0), (0x8e, 0), (0x78, 0xff), (0x81, 0xf), (0x80, 0x10)] {
+    for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::EVENT_KIND, 0xf), (Enemy::EVENT_LOW, 0), (Enemy::AI_ROW_8E, 0), (Enemy::AI_SHOT, 0xff), (Enemy::LOOT, 0xf), (Enemy::LOOT_ROW, 0x10)] {
         x.set8(off, v);
     }
     x.set32(f::IMMUNITY, 0);

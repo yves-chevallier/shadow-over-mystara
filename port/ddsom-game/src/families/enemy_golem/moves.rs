@@ -16,7 +16,7 @@ pub(super) fn run_c<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             if step == 0 {
                 x.add8(f::SUB3, 2);
-                x.set16(TIMER, 0x10);
+                x.set16(Golem::TIMER, 0x10);
                 return mv(x, 0);
             }
             countdown_stance(x);
@@ -32,8 +32,8 @@ pub(super) fn run_c<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x68080: timer `+0xa2` then standing.
 fn countdown_stance<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u16(TIMER).wrapping_sub(1);
-    x.set16(TIMER, n);
+    let n = x.u16(Golem::TIMER).wrapping_sub(1);
+    x.set16(Golem::TIMER, n);
     if n == 0 {
         set_state_long(x, STANCE);
     }
@@ -51,7 +51,7 @@ fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x68146: waits for the end of the animation, then standing.
 fn end_stance<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
-    if (x.u16(ANIM_END) as i16) < 0 {
+    if (x.u16(Enemy::ANIM_END) as i16) < 0 {
         set_state_long(x, STANCE);
     }
 }
@@ -62,7 +62,7 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         0 => next_anim(x),
         2 => wait(x),
         4 => {
-            if x.u8(GROUP) != 0 {
+            if x.u8(Enemy::GROUP) != 0 {
                 x.set16(0xa8, 0);
                 x.set8(f::SUB2, 8);
                 return squat_begin(x);
@@ -83,7 +83,7 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             x.move_yz();
             if (x.u16(Obj::VZ) as i16) < 0 {
                 x.add8(f::SUB3, 2);
-                x.set16(ANIM_TIME, 1);
+                x.set16(Golem::ANIM_TIME, 1);
             }
         }
         10 => {
@@ -94,7 +94,7 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             }
             x.add8(f::SUB3, 2);
             x.set32(Obj::Z, 0);
-            x.set16(ANIM_TIME, 1);
+            x.set16(Golem::ANIM_TIME, 1);
         }
         12 => end_stance(x),
         _ => {}
@@ -107,7 +107,7 @@ fn forward_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         0 => next_anim(x),
         2 => wait(x),
         4 => {
-            if x.u8(GROUP) != 0 {
+            if x.u8(Enemy::GROUP) != 0 {
                 x.set8(f::SUB2, 8);
                 let r = rand_and(x, 1);
                 x.set8(0xa9, (r * 2) as u8);
@@ -130,7 +130,7 @@ fn forward_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             x.move_xz();
             if (x.u16(Obj::VZ) as i16) < 0 {
                 x.add8(f::SUB3, 2);
-                x.set16(ANIM_TIME, 1);
+                x.set16(Golem::ANIM_TIME, 1);
             }
         }
         10 => {
@@ -141,7 +141,7 @@ fn forward_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             }
             x.add8(f::SUB3, 2);
             x.set32(Obj::Z, 0);
-            x.set16(ANIM_TIME, 1);
+            x.set16(Golem::ANIM_TIME, 1);
         }
         12 => end_stance(x),
         _ => {}
@@ -176,7 +176,7 @@ fn punch_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             x.anim_step();
             if (x.u16(Obj::VZ) as i16) < 0 {
                 x.add8(f::SUB3, 2);
-                x.set16(ANIM_TIME, 1);
+                x.set16(Golem::ANIM_TIME, 1);
                 x.set8(f::KEY_FRAME, 0);
             }
         }
@@ -187,12 +187,12 @@ fn punch_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
                 return;
             }
             x.set32(Obj::Z, 0);
-            x.set16(ANIM_TIME, 1);
+            x.set16(Golem::ANIM_TIME, 1);
             x.add8(f::SUB3, 2);
         }
         12 => {
             x.anim_step();
-            if (x.u8(ANIM_END) as i8) < 0 {
+            if (x.u8(Enemy::ANIM_END) as i8) < 0 {
                 set_state_long(x, 0x1ed2a0);
             }
         }
@@ -213,16 +213,16 @@ fn squat_again<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         }
         6 => {
             if x.u8(f::KEY_FRAME) != 0 {
-                let n = x.u16(TIMER).wrapping_sub(1);
-                x.set16(TIMER, n);
+                let n = x.u16(Golem::TIMER).wrapping_sub(1);
+                x.set16(Golem::TIMER, n);
                 if (n as i16) >= 0 {
                     return;
                 }
                 x.add8(f::SUB3, 2);
-                x.set16(ANIM_TIME, 1);
-                let group = x.u8(GROUP) as i8 as i32 as u32;
+                x.set16(Golem::ANIM_TIME, 1);
+                let group = x.u8(Enemy::GROUP) as i8 as i32 as u32;
                 let v = x.rom8(0x682e8u32.wrapping_add(group));
-                x.set8(0x68, v);
+                x.set8(Enemy::AI_68, v);
             }
             x.anim_step();
         }
@@ -267,7 +267,7 @@ pub(super) fn run_d<R: Bench>(x: &mut Cx<'_, R>) {
         0 | 6 => {
             if step == 0 {
                 x.add8(f::SUB3, 2);
-                x.set16(TIMER, 0x1e);
+                x.set16(Golem::TIMER, 0x1e);
                 return mv(x, 0);
             }
             countdown_stance(x);
@@ -276,18 +276,18 @@ pub(super) fn run_d<R: Bench>(x: &mut Cx<'_, R>) {
             0 => {
                 x.add8(f::SUB3, 2);
                 restart_walk(x);
-                x.set16(TIMER, 0x20);
+                x.set16(Golem::TIMER, 0x20);
             }
             2 => {
                 x.anim_step();
                 if (x.u8(f::KEY_FRAME) as i8) < 0 {
                     return;
                 }
-                let n = x.u16(TIMER).wrapping_sub(1);
-                x.set16(TIMER, n);
+                let n = x.u16(Golem::TIMER).wrapping_sub(1);
+                x.set16(Golem::TIMER, n);
                 if n != 0 {
                     x.move_by_table_xy();
-                    let d = x.u16(TIMER2).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x30);
+                    let d = x.u16(Golem::TIMER2).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x30);
                     if d < 0x60 {
                         return;
                     }
@@ -326,10 +326,10 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
                 x.set16(Obj::AZ, -0x80i16 as u16);
                 return mv(x, 3);
             }
-            x.set16(TIMER, 0x16);
+            x.set16(Golem::TIMER, 0x16);
             let depth = x.u16(Obj::Y);
-            x.set16(TIMER2, depth);
-            x.set32(0x4c, 0x1c74b6);
+            x.set16(Golem::TIMER2, depth);
+            x.set32(Obj::SPEED_TABLE, 0x1c74b6);
             mv(x, 0);
         }
         2 => {
@@ -337,11 +337,11 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             if (x.u8(f::KEY_FRAME) as i8) < 0 {
                 return;
             }
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Golem::TIMER).wrapping_sub(1);
+            x.set16(Golem::TIMER, n);
             if n != 0 {
                 x.move_by_table_xy();
-                let d = x.u16(TIMER2).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);
+                let d = x.u16(Golem::TIMER2).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x20);
                 if d < 0x40 {
                     return;
                 }
@@ -354,7 +354,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             x.move_yz();
             if (x.u16(Obj::VZ) as i16) < 0 {
                 x.add8(f::SUB3, 2);
-                x.set16(ANIM_TIME, 1);
+                x.set16(Golem::ANIM_TIME, 1);
             }
         }
         8 => {
@@ -365,7 +365,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             }
             x.add8(f::SUB3, 2);
             x.set32(Obj::Z, 0);
-            x.set16(ANIM_TIME, 1);
+            x.set16(Golem::ANIM_TIME, 1);
         }
         10 => end_stance(x),
         _ => {}

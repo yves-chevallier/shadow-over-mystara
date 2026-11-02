@@ -12,7 +12,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(BLINK_COUNT, n);
         if (n as i16) < 0 {
             x.set8(BLINK_ON, 0);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
         }
     }
     match x.u8(f::SUB2) {

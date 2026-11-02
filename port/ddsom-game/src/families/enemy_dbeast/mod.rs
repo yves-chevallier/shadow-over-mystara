@@ -17,6 +17,7 @@
 //! The parts are not separate objects in the original: the same code animates them all.
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -78,8 +79,8 @@ use g::*;
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
-const SET_A: u32 = 0x166fb6;
-const SET_B: u32 = 0x167054;
+const SET_A: RomAddr = RomAddr(0x166fb6);
+const SET_B: RomAddr = RomAddr(0x167054);
 /// Animation-number offsets per series (`+0xbf`), ROM tables.
 const SHIFT_A: u32 = 0x74f7a;
 const SHIFT_B: u32 = 0x74f8a;
@@ -124,13 +125,13 @@ fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
 /// Plays animation `n` of the movement series.
 fn play<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     let n = anim_a(x, n);
-    x.anim_start(SET_A, n as u16);
+    x.anim_start(SET_A.0, n as u16);
 }
 
 /// Plays animation `n` of the attack series.
 fn play_b<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     let n = anim_b(x, n);
-    x.anim_start(SET_B, n as u16);
+    x.anim_start(SET_B.0, n as u16);
 }
 
 /// Plays animation `n` (movement series) if it is not already the current one (`+0xaf`).
@@ -138,7 +139,7 @@ fn play_once<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     let n = anim_a(x, n);
     if n as u8 != x.u8(LAST_ANIM) {
         x.set8(LAST_ANIM, n as u8);
-        x.anim_start(SET_A, n as u16);
+        x.anim_start(SET_A.0, n as u16);
     }
 }
 
@@ -159,10 +160,10 @@ fn speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 
 /// Sets the three speeds of a leap: X, Z, acceleration in Z.
 fn set_velocity<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, az: i16) {
-    x.set16(0x14, vx as u16);
-    x.set16(0x16, 0);
-    x.set16(0x18, vz);
-    x.set16(0x1a, az as u16);
+    x.set16(Enemy::VX, vx as u16);
+    x.set16(Enemy::AX, 0);
+    x.set16(Enemy::VZ, vz);
+    x.set16(Enemy::GRAVITY, az as u16);
 }
 
 /// The long state (`+4..+7`) of another object.
@@ -198,17 +199,17 @@ fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
 fn follow_offset<R: Bench>(x: &mut Cx<'_, R>) {
     const OFFSETS: u32 = 0x7202a;
     let p = x.linked(PARENT);
-    let (px, py) = (p.u16(x.b, 0x8), p.u16(x.b, 0x10));
-    x.set16(0x8, px);
-    x.set16(0x10, py);
+    let (px, py) = (p.u16(x.b, Obj::X), p.u16(x.b, Obj::Y));
+    x.set16(Obj::X, px);
+    x.set16(Obj::Y, py);
     let row = (x.u8(PART).wrapping_mul(4)) as u32;
     let mut dx = x.rom16(OFFSETS + row);
     let dy = x.rom16(OFFSETS + row + 2);
     if x.u8(f::FLIP) != 0 {
         dx = dx.wrapping_neg();
     }
-    x.add16(0x8, dx);
-    x.add16(0x10, dy);
+    x.add16(Obj::X, dx);
+    x.add16(Obj::Y, dy);
 }
 
 /// 0x7208c: places itself on the parent (position, orientation, altitude) according to the rank of the part. Without a
@@ -216,11 +217,11 @@ fn follow_offset<R: Bench>(x: &mut Cx<'_, R>) {
 fn follow_body<R: Bench>(x: &mut Cx<'_, R>) {
     const OFFSETS: u32 = 0x720ee;
     let Some(p) = parent(x) else { return orphan(x) };
-    let (px, py, flip) = (p.u16(x.b, 0x8), p.u16(x.b, 0x10), p.u8(x.b, f::FLIP));
-    x.set16(0x8, px);
-    x.set16(0x10, py);
+    let (px, py, flip) = (p.u16(x.b, Obj::X), p.u16(x.b, Obj::Y), p.u8(x.b, f::FLIP));
+    x.set16(Obj::X, px);
+    x.set16(Obj::Y, py);
     x.set8(f::FLIP, flip);
-    x.set32(0xc, 0);
+    x.set32(Obj::Z, 0);
     let row = (x.u8(PART).wrapping_mul(8)) as u32;
     let mut dx = x.rom16(OFFSETS + row);
     let dy = x.rom16(OFFSETS + row + 2);
@@ -229,10 +230,10 @@ fn follow_body<R: Bench>(x: &mut Cx<'_, R>) {
     if flip != 0 {
         dx = dx.wrapping_neg();
     }
-    x.add16(0x8, dx);
-    x.add16(0x10, dy);
-    x.add16(0xc, dz);
-    x.add32(0x10, fraction);
+    x.add16(Obj::X, dx);
+    x.add16(Obj::Y, dy);
+    x.add16(Obj::Z, dz);
+    x.add32(Obj::Y, fraction);
 }
 
 /// 0x74eac: the beast must turn around to face its target.
@@ -243,11 +244,11 @@ fn player_ahead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x74efe: the target is far, in depth and in width.
 fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(t) = target(x) else { return false };
-    let dy = t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)).wrapping_add(0x30);
+    let dy = t.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x30);
     if dy <= 0x60 {
         return false;
     }
-    let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xa0);
+    let dx = t.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xa0);
     dx > 0x140
 }
 
@@ -255,7 +256,7 @@ fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     for p in 0..4 {
         let player = Obj(0xff85de + 0x200 * p);
-        if player.u8(x.b, 0) != 0 && lib::target_in_box(x, 0, 0x60, 0x28) {
+        if player.u8(x.b, Enemy::ACTIVE) != 0 && lib::target_in_box(x, 0, 0x60, 0x28) {
             return true;
         }
     }
@@ -278,11 +279,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0xc);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    x.set8(0x70, 0);
-    x.set8(0x7e, 0xa);
-    x.set8(0x7f, 0);
-    x.set8(0x8e, 0);
-    x.set8(0x78, 0xff);
+    x.set8(Enemy::AI_STANCE_ROW, 0);
+    x.set8(Enemy::EVENT_KIND, 0xa);
+    x.set8(Enemy::EVENT_LOW, 0);
+    x.set8(Enemy::AI_ROW_8E, 0);
+    x.set8(Enemy::AI_SHOT, 0xff);
     let profile = match x.u8(PROFILE) {
         0 | 1 => {
             // random offset of this beast's animation series

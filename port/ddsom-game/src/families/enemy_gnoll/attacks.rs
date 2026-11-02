@@ -223,7 +223,7 @@ fn leap_start<R: Bench>(x: &mut Cx<'_, R>, height: u32, shift: i16) {
     x.set16(Obj::X, pos);
     x.set16(Obj::VX, v as u16);
     x.set16(Obj::AX, 0);
-    x.set_bit(1, 1, false);
+    x.set_bit(Enemy::DISPLAY, 1, false);
     mv(x, 3);
 }
 
@@ -244,7 +244,7 @@ fn leap_on_target<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
         2 => {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
-                x.set_bit(1, 1, true);
+                x.set_bit(Enemy::DISPLAY, 1, true);
                 x.set8(0x3b, 0);
                 x.set8(TIMER, 0x1e);
             }
@@ -363,8 +363,8 @@ fn jump_up<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Arrival positions (X then depth) of the teleportation, relative to the target.
-const TELEPORT_X: u32 = 0x6b8a4;
-const TELEPORT_Y: u32 = 0x6b89c;
+const TELEPORT_X: &str = "gnoll/teleport_x";
+const TELEPORT_Y: &str = "gnoll/teleport_y";
 
 /// +6 = 12: the Gnoll reappears near its target.
 fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
@@ -375,12 +375,12 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 3) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_X + r);
+            let off = tables::table(TELEPORT_X).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::X));
             x.set16(Obj::X, at);
             let r = rand_and(x, 3) * 2;
             let target = load_target(x);
-            let off = x.rom16(TELEPORT_Y + r);
+            let off = tables::table(TELEPORT_Y).at16(x.b, r);
             let at = off.wrapping_add(target.u16(x.b, Obj::Y));
             x.set16(Obj::Y, at);
             x.set8(f::FLIP, 0x20);
@@ -421,7 +421,7 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
                 x.set8(TIMER, 0x1e);
-                x.set_bit(1, 1, true);
+                x.set_bit(Enemy::DISPLAY, 1, true);
                 x.set8(0x3b, 0);
             }
         }
@@ -434,7 +434,7 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
             let d: i16 = if x.u8(f::FLIP) != 0 { -0x30 } else { 0x30 };
             let at = x.u16(Obj::X).wrapping_add(d as u16);
             x.set16(Obj::X, at);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
             x.add8(f::SUB3, 2);
             mv(x, 3);
         }

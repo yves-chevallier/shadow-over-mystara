@@ -16,6 +16,7 @@
 //! Animations: 0x15eed8 (movements) and 0x15eef4 (attacks).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -70,8 +71,8 @@ use g::*;
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
-const SET_BODY: u32 = 0x15eed8;
-const SET_STRIKE: u32 = 0x15eef4;
+const SET_BODY: RomAddr = RomAddr(0x15eed8);
+const SET_STRIKE: RomAddr = RomAddr(0x15eef4);
 /// Long states (`+4..+7`).
 const STANCE: u32 = 0x0202_0000;
 const STANCE_ALT: u32 = 0x0202_0600;
@@ -101,11 +102,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_BODY, n as u16);
+    x.anim_start(SET_BODY.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
@@ -154,7 +155,7 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
                 return false;
             }
             x.set8(SPECIAL_HIT, 0);
-            x.set8(0x49, 0x58);
+            x.set8(Enemy::REACTION, 0x58);
             if x.u32(f::STATE) == 0x0404_0200 {
                 x.set16(ANIM_STATE, 0xffff);
                 set_state_long(x, 0x0406_0200);
@@ -167,11 +168,11 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             set_state_long(x, 0x0400_0000);
             x.set8(SPECIAL_HIT, 0);
             let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
-            x.set8(0x49, code);
+            x.set8(Enemy::REACTION, code);
             true
         }
         3 => {
-            if x.u16(Obj::Z) != 0 || x.u8(0x86) != 0 {
+            if x.u16(Obj::Z) != 0 || x.u8(Enemy::DOWNED) != 0 {
                 return false;
             }
             x.set8(SPECIAL_HIT, 0);
@@ -189,8 +190,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     if x.u8(Obj::VARIANT) == 4 {
-        let t = x.u16(0x42).wrapping_sub(1);
-        x.set16(0x42, t);
+        let t = x.u16(Enemy::CREATOR).wrapping_sub(1);
+        x.set16(Enemy::CREATOR, t);
         if t != 0 {
             return;
         }
@@ -198,14 +199,14 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(f::BOX_SET, 0xd);
     lib::initial_hp(x);
-    for (off, v) in [(0x70, 0), (0x7e, 0x44), (0x7f, 0), (0x6a, 2), (0x6c, 3), (0x74, 3), (0x76, 3), (0x69, 2), (0x78, 0xff)] {
+    for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::EVENT_KIND, 0x44), (Enemy::EVENT_LOW, 0), (Enemy::AI_WANDER_ROW, 2), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BYTE_ROW, 3), (Enemy::AI_69, 2), (Enemy::AI_SHOT, 0xff)] {
         x.set8(off, v);
     }
     x.set16(COUNTER, 0);
-    x.set8(0x8e, 0);
-    x.set8(0x81, 0);
-    x.set8(0x80, 0);
-    x.set32(0x8a, 0);
+    x.set8(Enemy::AI_ROW_8E, 0);
+    x.set8(Enemy::LOOT, 0);
+    x.set8(Enemy::LOOT_ROW, 0);
+    x.set32(Enemy::RESUME_STATE, 0);
     x.set8(CAUGHT, 0);
     x.set8(0xac, 0);
     x.set8(0x83, 1);
@@ -213,8 +214,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
     let series = x.u8(SERIES) as u32;
     if series != 0 {
-        x.set8(0x2a, 1);
-        x.set8(0x2b, 0x1a);
+        x.set8(Enemy::OWN_PALETTE, 1);
+        x.set8(Enemy::PALETTE, 0x1a);
     }
     // four bytes per series: 0x6d, 0x72, 0x73, 0x68
     let row = 0x57de6 + 4 * series;
@@ -230,11 +231,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         }
         1 | 4 => {
             if series != 0 {
-                let v = x.u8(0x2b) | 0x80;
-                x.set8(0x91, v);
+                let v = x.u8(Enemy::PALETTE) | 0x80;
+                x.set8(Enemy::PENDING_PALETTE, v);
             }
             x.set8(f::SUB, 0);
-            x.set8(0x2a, 0);
+            x.set8(Enemy::OWN_PALETTE, 0);
             body(x, 5 + series);
         }
         2 => {
@@ -254,7 +255,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
             body(x, 10);
         }
         5 => {
-            x.set8(0, 2);
+            x.set8(Enemy::ACTIVE, 2);
             x.set8(f::SUB, 0);
             x.set8(f::SUB2, 6);
             body(x, 0);
@@ -296,8 +297,8 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::SUB, 2);
             x.set16(f::SUB2, 0);
             if x.u8(SERIES) != 0 {
-                x.set8(0x91, 0);
-                x.set8(0x2a, 1);
+                x.set8(Enemy::PENDING_PALETTE, 0);
+                x.set8(Enemy::OWN_PALETTE, 1);
                 body(x, 0);
             }
         }
@@ -329,10 +330,10 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
     let d1 = match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(0, 2);
+            x.set8(Enemy::ACTIVE, 2);
             x.set8(0xac, 1);
             x.set8(VULNERABLE, 1);
-            x.set16(0x42, 0x703);
+            x.set16(Enemy::CREATOR, 0x703);
             let d7 = x.counter() as u8;
             x.set8(TIMER, d7);
             return;
@@ -341,25 +342,25 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
         4 | 6 => 0x110,
         8 => {
             set_state_long(x, STANCE);
-            x.set8(0, 1);
+            x.set8(Enemy::ACTIVE, 1);
             return;
         }
         _ => return,
     };
-    x.set_bit(1, 1, true);
+    x.set_bit(Enemy::DISPLAY, 1, true);
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if t & x.u8(0x42) != 0 {
         return;
     }
-    x.set_bit(1, 1, false);
+    x.set_bit(Enemy::DISPLAY, 1, false);
     let n = x.u8(0x43).wrapping_sub(1);
     x.set8(0x43, n);
     if n != 0 {
         return;
     }
     x.add8(f::SUB3, 2);
-    x.set16(0x42, d1);
+    x.set16(Enemy::CREATOR, d1);
 }
 
 // --- state 6: release ------------------------------------------------------------------------

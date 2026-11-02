@@ -7,8 +7,8 @@
 //!   that a small routine of the original gives, and the small tables of the reaction steps;
 //! * the tables of `enemy_lib` (decision masks, palette scripts) and the piece lists of `enemy_common::spawn_list`.
 //!
-//! The tables of the families themselves (`enemy_*/`: attitudes by level, decisions...) are to be added here by the
-//! next batch (L8b), one `Spec` per table, named `<family>/<table>`.
+//! * the tables of the families themselves (`enemy_*/`: moves by difficulty level, decisions, offsets...), named
+//!   `<family>/<table>` ([`families`]).
 
 use crate::data::{data, prog, Spec};
 use crate::rom::Program;
@@ -116,5 +116,28 @@ pub fn specs(rom: &Program) -> Vec<Spec> {
             s.push(data(&format!("{name}/{k}"), at + 2, "u8*4 u16*3", PIECE, entries));
         }
     }
+    families(rom, &mut s);
     s
+}
+
+/// A row of 32 bytes per pair of difficulty levels (`rank / 2`), drawn with a 5-bit random number.
+const BY_RANK: (&str, usize) = ("u8*32", 16);
+
+/// Tables of the families (`enemy_*/`), one per line: name `<family>/<table>`, space, address, format, rows.
+fn families(rom: &Program, s: &mut Vec<Spec>) {
+    let _ = rom;
+    let rank = |s: &mut Vec<Spec>, name: &str, at: u32| s.push(data(name, at, BY_RANK.0, &[], BY_RANK.1));
+    // ---- goblin (type 15) ----
+    rank(s, "goblin/near_moves", 0x6ebc0);
+    rank(s, "goblin/far_moves", 0x6edc0);
+    rank(s, "goblin/series", 0x6efc0);
+    rank(s, "goblin/follow_moves", 0x6e904);
+    s.push(prog("goblin/teleport_x", 0x6e44c, "i16", &[], 4));
+    s.push(prog("goblin/teleport_y", 0x6e43e, "i16", &[], 8));
+    // ---- gnoll (type 14) ----
+    s.push(prog("gnoll/teleport_x", 0x6b8a4, "i16", &[], 4));
+    s.push(prog("gnoll/teleport_y", 0x6b89c, "i16", &[], 4));
+    // ---- troll (type 13) ----
+    s.push(prog("troll/teleport_x", 0x6ceaa, "i16", &[], 4));
+    s.push(prog("troll/teleport_y", 0x6ce9c, "i16", &[], 8));
 }

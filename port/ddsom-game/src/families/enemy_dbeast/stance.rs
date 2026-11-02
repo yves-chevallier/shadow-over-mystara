@@ -31,7 +31,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         _ => {}
     }
     // nobody left to fight: the beast rests
-    if x.u16(0xc) == 0 && var::PLAYERS_ALIVE.get(x.b) == 0 {
+    if x.u16(Obj::Z) == 0 && var::PLAYERS_ALIVE.get(x.b) == 0 {
         set_state_long(x, ACTIVE_IDLE);
     }
 }
@@ -41,8 +41,8 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return set_state_long(x, 0x0202_0600);
     }
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         x.set8(VULNERABLE, 1);
         x.set8(WANT_ANIM, 0xc);
         if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {
@@ -102,7 +102,7 @@ pub(super) fn engage<R: Bench>(x: &mut Cx<'_, R>) {
 /// If the target is behind the beast, it turns around then resumes (0x72ce2 and following).
 fn face_resume<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(t) = target(x) else { return };
-    let dx = x.u16(0x8).wrapping_sub(t.u16(x.b, 0x8)) as i16;
+    let dx = x.u16(Obj::X).wrapping_sub(t.u16(x.b, Obj::X)) as i16;
     let want = if dx >= 0 { 0 } else { 0x20 };
     if want != x.u8(f::FLIP) {
         x.set32(RESUME_STATE, ACTIVE_STANCE);
@@ -146,8 +146,8 @@ fn reach_back<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// +6 = 2 (0x72e18): turn-around; when done, the beast resumes the saved state.
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
-        x.add8(0x7, 2);
+    if x.u8(Enemy::SUB_STEP) == 0 {
+        x.add8(Enemy::SUB_STEP, 2);
         x.set8(VULNERABLE, 1);
         x.set8(WANT_ANIM, 5);
         let want = x.u8(WANT_ANIM);
@@ -167,7 +167,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 4 (0x72e78): standing wait before moving on to the attack.
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x7) == 0 {
+    if x.u8(Enemy::SUB_STEP) == 0 {
         return super::attacks::ready(x);
     }
     let n = x.u8(AI_REPEAT).wrapping_sub(1);
@@ -185,16 +185,16 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 6 (0x72eec): approaches the target while looking at it.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x7) {
+    match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.add8(0x7, 2);
+            x.add8(Enemy::SUB_STEP, 2);
             x.set8(TIMER, 0x28);
             lib::draw_stance(x);
             approach_walk(x);
         }
         // resumes the walking step, without redoing the count
         4 => {
-            x.add8(0x7, 0xfe);
+            x.add8(Enemy::SUB_STEP, 0xfe);
             approach_walk(x);
         }
         2 => {
@@ -247,7 +247,7 @@ fn choose_attack_a<R: Bench>(x: &mut Cx<'_, R>, close: bool) {
     let pick = x.data8(table.wrapping_add(level).wrapping_add(r));
     x.set8(f::SUB2, pick.wrapping_add(base));
     x.set16(f::STATE, 0x0204);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
     if x.in_arena(0) {
         return;
     }
@@ -268,5 +268,5 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
     let pick = x.data8(CLOSE_TABLE + level + r);
     x.set8(f::SUB2, pick);
     x.set16(f::STATE, 0x0208);
-    x.set8(0x7, 0);
+    x.set8(Enemy::SUB_STEP, 0);
 }

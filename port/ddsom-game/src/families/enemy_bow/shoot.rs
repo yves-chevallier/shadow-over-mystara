@@ -37,7 +37,7 @@ fn turn_to_resume<R: Bench>(x: &mut Cx<'_, R>) {
 fn first<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
-            let action = row_byte(x, FIRST_ACTIONS);
+            let action = rank_byte(x, FIRST_ACTIONS);
             match action {
                 0 => shoot_or_approach(x),
                 2 => {
@@ -106,7 +106,7 @@ fn shoot_or_approach<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5c44e: a shot in place: number of shots drawn from the row, then shot animation.
 fn aim_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    let n = row_byte(x, SHOT_REPEATS);
+    let n = rank_byte(x, SHOT_REPEATS);
     x.set8(REPEAT, n);
     reload_shot(x);
 }
@@ -120,7 +120,7 @@ fn reload_shot<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5c418: faces the living target, or goes to wait if it has fallen.
 fn approach_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
-    if target.u8(x.b, 0) == 0 {
+    if target.u8(x.b, Enemy::ACTIVE) == 0 {
         set_state_long(x, IDLE);
         return;
     }
@@ -183,7 +183,7 @@ fn side_walk<R: Bench>(x: &mut Cx<'_, R>) {
 fn second<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
-            let action = row_byte(x, SECOND_ACTIONS);
+            let action = rank_byte(x, SECOND_ACTIONS);
             match action {
                 0 => {
                     x.set8(f::SUB3, 2);

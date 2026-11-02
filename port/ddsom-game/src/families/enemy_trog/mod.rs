@@ -17,6 +17,7 @@
 //! (counters `+0xa5..+0xa8`, `+0xaa`, `+0xae`).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -62,8 +63,8 @@ use g::*;
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
-const SET_BODY: u32 = 0x15faa0;
-const SET_STRIKE: u32 = 0x15fabe;
+const SET_BODY: RomAddr = RomAddr(0x15faa0);
+const SET_STRIKE: RomAddr = RomAddr(0x15fabe);
 /// Long states (`+4..+7`).
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
@@ -95,11 +96,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides ------------------------------------------------------------------------------------
 
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_BODY, n as u16);
+    x.anim_start(SET_BODY.0, n as u16);
 }
 
 fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(SET_STRIKE, n as u16);
+    x.anim_start(SET_STRIKE.0, n as u16);
 }
 
 fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
@@ -204,21 +205,21 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0xe);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    for (off, v) in [(0x80, 0xb), (0x68, 4), (0x69, 4), (0x70, 0), (0x6a, 3), (0x6c, 3), (0x6d, 5), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x2c), (BLINK_PHASE, 0xff)] {
+    for (off, v) in [(Enemy::LOOT_ROW, 0xb), (Enemy::AI_68, 4), (Enemy::AI_69, 4), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 3), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 5), (Enemy::AI_DECISION_A, 4), (Enemy::AI_DECISION_B, 3), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x2c), (BLINK_PHASE, 0xff)] {
         x.set8(off, v);
     }
     x.set16(BLINK_REST, 0x258);
     x.set8(BLINK_ON, 0);
     if x.u8(SERIES) != 0 {
-        x.add8(0x75, 4);
+        x.add8(Enemy::AI_BOX_ANIM, 4);
         x.set8(BLINK_PHASE, 0xff);
     }
-    for (off, v) in [(0x76, 4), (REPEAT, 0x20), (LOOK_PREV, 2), (VULNERABLE, 1), (0x8e, 0), (0x7f, 0), (0x7e, 0xf)] {
+    for (off, v) in [(Enemy::AI_BYTE_ROW, 4), (REPEAT, 0x20), (LOOK_PREV, 2), (VULNERABLE, 1), (Enemy::AI_ROW_8E, 0), (Enemy::EVENT_LOW, 0), (Enemy::EVENT_KIND, 0xf)] {
         x.set8(off, v);
     }
-    x.set32(0x8a, 0);
+    x.set32(Enemy::RESUME_STATE, 0);
     x.set8(AI_KIND, 0xff);
-    x.set8(0x81, 0xa);
+    x.set8(Enemy::LOOT, 0xa);
     x.set8(AI_SHOT, 0x14);
     if pick_target(x) {
         // creation chains directly into the active state
@@ -281,21 +282,21 @@ fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     if x.u8(BLINK_ON) != 0 {
-        let v = x.u8(1) ^ 2;
-        x.set8(1, v);
+        let v = x.u8(Enemy::DISPLAY) ^ 2;
+        x.set8(Enemy::DISPLAY, v);
     } else if x.u8(BLINK_WAIT) != 0 {
-        x.set_bit(1, 1, true);
+        x.set_bit(Enemy::DISPLAY, 1, true);
         let n = x.u16(BLINK_DELAY).wrapping_sub(1);
         x.set16(BLINK_DELAY, n);
         if (n as i16) < 0 {
             x.set8(BLINK_WAIT, 0);
             x.set8(BLINK_ON, 1);
             x.set16(BLINK_COUNT, 0xc);
-            x.set_bit(1, 1, false);
+            x.set_bit(Enemy::DISPLAY, 1, false);
         }
     } else {
         x.set8(BLINK_PHASE, 0xff);
-        x.set_bit(1, 1, false);
+        x.set_bit(Enemy::DISPLAY, 1, false);
     }
 }
 
@@ -322,7 +323,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 if t == 0 {
                     x.set8(LOOK_PREV, 0);
                     set_state_long(x, STANCE);
-                    x.set8(0, 1);
+                    x.set8(Enemy::ACTIVE, 1);
                 }
                 move_xy(x);
                 step(x);
@@ -364,7 +365,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB2, 2);
                 x.set16(Obj::VX, 0);
                 let t = load_target(x);
-                if t.u8(x.b, 0) == 0 {
+                if t.u8(x.b, Enemy::ACTIVE) == 0 {
                     set_state_long(x, IDLE);
                     return rest_begin(x);
                 }
@@ -430,7 +431,7 @@ fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.set8(LOOK_PREV, 0xe0);
         set_state_long(x, STANCE);
-        x.set8(0, 1);
+        x.set8(Enemy::ACTIVE, 1);
     }
 }
 

@@ -15,12 +15,13 @@
 //! Animations 0x163a86 (movements) and 0x163a9e (hit).
 
 use crate::families::cx::Bench;
+use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
 
-const ANIMS: u32 = 0x163a86;
-const ANIMS_HIT: u32 = 0x163a9e;
+const ANIMS: RomAddr = RomAddr(0x163a86);
+const ANIMS_HIT: RomAddr = RomAddr(0x163a9e);
 
 /// Fields specific to this type.
 mod g {
@@ -81,7 +82,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 fn anim_play<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(ANIMS, n as u16);
+    x.anim_start(ANIMS.0, n as u16);
 }
 
 /// 0x6662e: camera position, X in the low word of D6, Y in the high word.
@@ -130,7 +131,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0x15);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    for (off, v) in [(0x7e, 4), (0x7f, 0), (0x6c, 3), (0x74, 3), (0x76, 3)] {
+    for (off, v) in [(Enemy::EVENT_KIND, 4), (Enemy::EVENT_LOW, 0), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BYTE_ROW, 3)] {
         x.set8(off, v);
     }
     x.set16(Obj::Z, 0x36);
@@ -286,7 +287,7 @@ fn bite_check<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(BITING) == 0 {
         let player = x.linked(f::TARGET);
-        if player.u16(x.b, 4) == 0x200 && player.u8(x.b, 6) == 0xc {
+        if player.u16(x.b, Enemy::STATE_WORD) == 0x200 && player.u8(x.b, Enemy::STEP) == 0xc {
             let roll = (x.random() as u32) & 0x1f;
             let row = ((var::RANK.get(x.b) >> 1) as u32) << 2;
             let odds = x.prog32(BITE_ODDS + row);
@@ -351,7 +352,7 @@ fn cross_turn<R: Bench>(x: &mut Cx<'_, R>) {
     let wanted = if x.u8(GROUP) & 1 != 0 { 0x18 } else { 8 };
     if x.u8(Obj::SPEED_INDEX) == wanted {
         x.add8(f::SUB3, 2);
-        x.set8(0, 1);
+        x.set8(Enemy::ACTIVE, 1);
         speeds_by_level(x, SPEEDS_WALK);
     }
 }
@@ -602,7 +603,7 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::VZ, 0x400);
             x.set16(Obj::AX, 0);
             x.set16(Obj::AZ, 0);
-            x.set8(0x6e, 0xc);
+            x.set8(Enemy::AI_WAIT, 0xc);
             if x.u8(f::FLIP) != 0 {
                 negate(x, Obj::VX);
             }
@@ -610,17 +611,17 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             x.move_xz();
-            let n = x.u8(0x6e).wrapping_sub(1);
-            x.set8(0x6e, n);
+            let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+            x.set8(Enemy::AI_WAIT, n);
             if n == 0 {
                 x.add8(f::SUB2, 2);
-                x.set8(0x6e, 0x40);
+                x.set8(Enemy::AI_WAIT, 0x40);
             }
             x.anim_step();
         }
         4 => {
-            let n = x.u8(0x6e).wrapping_sub(1);
-            x.set8(0x6e, n);
+            let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+            x.set8(Enemy::AI_WAIT, n);
             if n != 0 {
                 x.anim_step();
                 return;
@@ -705,14 +706,14 @@ fn knock_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::AZ, -0x40i16 as u16);
     x.set16(Obj::VX, 0x200);
     x.set16(Obj::AX, 0);
-    let flip = x.u8(0x4a) ^ 0x20;
+    let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
     x.set8(f::FLIP, flip);
     if flip != 0 {
         negate(x, Obj::VX);
         negate(x, Obj::AX);
     }
-    x.set8(0, 2);
-    x.anim_start(ANIMS_HIT, 0);
+    x.set8(Enemy::ACTIVE, 2);
+    x.anim_start(ANIMS_HIT.0, 0);
 }
 
 /// Substate 2: landing then blinking until death.
@@ -720,7 +721,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.move_xz();
-            if x.u8(0x29) != 0 {
+            if x.u8(Enemy::BLOCKED) != 0 {
                 x.set16(Obj::VX, 0);
                 x.set16(Obj::AX, 0);
             }
@@ -728,7 +729,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB2, 2);
                 x.set32(Obj::Z, 0);
                 x.set8(0xa2, 0x28);
-                x.set16(0x30, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
                 detach_from_host(x);
             }
             x.anim_step();
@@ -740,7 +741,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
                 set_state_long(x, DEAD);
                 return lib::object_event(x);
             }
-            x.set_bit(1, 1, n & 3 != 0);
+            x.set_bit(Enemy::DISPLAY, 1, n & 3 != 0);
             x.anim_step();
         }
         _ => {}
