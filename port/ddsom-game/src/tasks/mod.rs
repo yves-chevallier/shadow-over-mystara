@@ -163,7 +163,7 @@ task_steps! {
     // object handlers that call a subroutine that cedes (SET doors: fade to black)
     DoorSet(crate::families::set::exit_fading::Step),
     // object handlers that make the game task wait
-    Firework(crate::families::effects_g::Step),
+    Firework(crate::families::effects::g::Step),
 }
 
 /// Executes stage `step` of the current task; if it finishes (`Flow::Done`, subroutine return), the continuation of

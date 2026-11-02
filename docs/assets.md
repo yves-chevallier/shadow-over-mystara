@@ -230,6 +230,28 @@ lit donc par adresse à travers les tables (`Speeds::at`).
   tableau ou le code (objets de SET `0x1c65b6`, marche et course des marcheurs `0x1c75b6`, `0x1c7eb6`) et
   va jusqu'à la suivante.
 
+## Tables des effets : `data/effects.json`
+
+Tables de la famille EFFCT (effets visuels, `families/effects*`, lot L5 de [fin.md](fin.md)), une entrée par
+table nommée : adresse (clé, gardée pour la reconstruction et les outils), espace (`program` : lue en relatif au
+PC, vue déchiffrée), taille des éléments (1, 2 ou 4 octets) et valeurs.
+
+```json
+{"shop_prices":{"rom":"0xaf566","size":4,"values":[100, ...]},
+ "shop_stock":{"rom":"0xaf4c4","program":true,"size":1,"values":[...]}, ...}
+```
+
+* Déclarations : `ddsom-data/src/effects.rs` (macro `tables!` : nom, espace, taille, adresse, fin éventuelle,
+  sens). L'extraction (`extract/src/effects.rs`) lit chaque table jusqu'à la table déclarée suivante ou au
+  prochain code exécuté (`code_68k.txt`), au plus 0x400 octets, sauf fin donnée.
+* Le jeu lit une table à un décalage, comme l'original (`table + 4 × variante`), par
+  `families/effects/tables.rs` ; au-delà des octets extraits, c'est le résidu (compté, `DDSOM_STRICT=1`).
+* Les tables à enregistrements de longueur variable (décalages puis fiches) sont une seule table ; une donnée
+  désignée par une adresse rangée dans l'objet se lit par `held8`/`held16` (la table qui la contient).
+* Quelques palettes de la bibliothèque (`palettes.png`) copiées par les effets sont reprises en extraits
+  (`interface_palettes`, `purse_portraits`...) : les mêmes octets, en attendant que la bibliothèque soit une
+  donnée typée du jeu (lot L12).
+
 ## Cartes des décors : `levels.json`
 
 Mêmes tables que les caméras (`scroll.rs`, [video.md](video.md) §B1) et [niveaux.md](niveaux.md).

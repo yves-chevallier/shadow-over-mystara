@@ -110,7 +110,7 @@ impl Program {
     }
 
     /// Files (paths relative to `dir`) used to rebuild the program.
-    pub const FILES: [&'static str; 21] = [
+    pub const FILES: [&'static str; 22] = [
         "palettes.png",
         "sprites/frames.json",
         "sprites/anims.json",
@@ -132,6 +132,7 @@ impl Program {
         "data/natives.json",
         "data/set.json",
         "data/reste.json",
+        "data/effects.json",
     ];
 
     /// Like `load`, but only the files that `want` accepts are written (the sprite frames are read
@@ -186,6 +187,9 @@ impl Program {
         }
         if need(&mut p, "data/speeds.json") {
             p.put_speeds(&Speeds::load(&dir.join("data/speeds.json"))?);
+        }
+        if need(&mut p, "data/effects.json") {
+            p.put_effects(&ddsom_data::EffectTables::load(&dir.join("data/effects.json"))?);
         }
         for rel in &Self::FILES[10..20] {
             if need(&mut p, rel) {
@@ -291,6 +295,14 @@ impl Program {
         for t in &s.tables {
             let words: Vec<u16> = t.speeds.iter().flat_map(|&(vx, vy)| [vx as u16, vy as u16]).collect();
             self.data.put_words(t.rom, &words);
+        }
+    }
+
+    /// Tables of the EFFCT family, each in its space.
+    pub fn put_effects(&mut self, e: &ddsom_data::EffectTables) {
+        for t in e.tables() {
+            let image = if t.program { &mut self.prog } else { &mut self.data };
+            image.put(t.rom, &t.bytes());
         }
     }
 

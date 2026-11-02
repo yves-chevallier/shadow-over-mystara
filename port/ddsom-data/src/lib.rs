@@ -6,6 +6,7 @@
 //! modes. Formats: docs/assets.md.
 
 pub mod data;
+pub mod effects;
 pub mod json;
 pub mod levels;
 pub mod pointers;
@@ -18,6 +19,7 @@ pub mod terrain;
 pub mod texts;
 
 pub use data::DataFile;
+pub use effects::EffectTables;
 pub use levels::Levels;
 pub use scene_palettes::ScenePalettes;
 pub use spawns::Spawns;
@@ -49,6 +51,7 @@ pub struct GameData {
     pub frames: Frames,
     pub anims: Anims,
     pub speeds: Speeds,
+    pub effects: EffectTables,
     /// Tables of the SET objects (`families/set*` of the game; docs/fin.md, L6).
     pub set: DataFile,
     /// Dialog windows, bubbles and their texts, in the three languages (SET 3, 10, 15 and 24).
@@ -57,8 +60,14 @@ pub struct GameData {
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 5] =
-        ["sprites/frames.json", "sprites/anims.json", "data/speeds.json", "data/set.json", "data/dialogs.json"];
+    pub const FILES: [&'static str; 6] = [
+        "sprites/frames.json",
+        "sprites/anims.json",
+        "data/speeds.json",
+        "data/effects.json",
+        "data/set.json",
+        "data/dialogs.json",
+    ];
 
     /// Loads the game data from an assets folder (written by `extract`).
     pub fn load(dir: &Path) -> io::Result<Self> {
@@ -66,8 +75,9 @@ impl GameData {
             frames: Frames::load(&dir.join(Self::FILES[0]))?,
             anims: Anims::load(&dir.join(Self::FILES[1]))?,
             speeds: Speeds::load(&dir.join(Self::FILES[2]))?,
-            set: DataFile::load(&dir.join(Self::FILES[3]))?,
-            dialogs: DataFile::load(&dir.join(Self::FILES[4]))?,
+            effects: EffectTables::load(&dir.join(Self::FILES[3]))?,
+            set: DataFile::load(&dir.join(Self::FILES[4]))?,
+            dialogs: DataFile::load(&dir.join(Self::FILES[5]))?,
         })
     }
 }

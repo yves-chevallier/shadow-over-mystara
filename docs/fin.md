@@ -60,6 +60,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 | Zone (périmètre) | Fichiers | Lignes | Lectures ROM par accesseur¹ | Champs à décalage littéral² | A5 + littéral³ | `rd*`/`wr*` bruts | Appels de son par adresse⁴ | Constantes `u32` dans 0x400-0x3fffff⁵ | Plus gros fichier |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | Effets (`families/effects*.rs`) | 8 | 13 267 | 292 | 525 | 135 | 322 | 58 | 358 | `effects_c.rs` (5 162) |
+| Effets après L5 (`families/effects/`, `effects_creators/`) | 33 | 13 908 | 0 | 0 | 0 | 311 | 0 | 0 | `effects/d.rs` (881) |
 | SET (`families/set*.rs`, `scenery.rs`) | 10 | 9 911 | 247 | 1 108 | 182 | 346 | 22 | 184 | `set_b.rs` (3 628) |
 | SET après L6 (`families/set*`, `scenery.rs`) | 52 | 11 094 | 0 | 0 | 0 | 287 | 0 | 196 | `set/name_entry/cursor.rs` (623) |
 | ESHL, SOBJ, objets, caisses | 10 | 15 808 | 274 | 2 378 | 71 | 51 | 91 | 424 | `eshl_c.rs` (3 300), `eshl_b.rs` (3 054) |
@@ -570,7 +571,7 @@ libre.
 * Risque : le rendu n'est pas vérifié par `validate`, qui ne calcule plus l'image. `render_check` et le test
   `mame_snapshots` sont le seul filet : les lancer à chaque étape.
 
-**L5. Effets** (moyen)
+**L5. Effets** (moyen) — **fait** (branche `wt-l5-effets`, voir « Résultat »)
 * Périmètre : `families/effects.rs`, `effects_b.rs` à `effects_g.rs`, `effects_creators.rs`, plus
   `extract/src/effects.rs` et `ddsom-data/src/effects.rs`.
 * (a) Découpage : `effects_c.rs` (5 162 lignes) en `families/effects/c/` par groupe de types EFFCT (8 à 10 fichiers de
@@ -579,6 +580,48 @@ libre.
   (`effects_e.rs`, 0xadad0-0xae118), et les tables de pièces et de couleurs.
 * (c) Champs : 525 décalages littéraux et 135 `A5 + littéral`.
 * Fin : chiffres (b) et (c) à 0, aucun fichier au-delà de 1 000 lignes, 308/308 dans les deux modes.
+* Résultat :
+  * (a) Découpage (48fb00b) : `families/effects/` — socle (`mod.rs` : `three_states`, `bad_index`...) et types de
+    l'ancien `effects.rs` en `player.rs`, `screen.rs`, `bursts.rs`, `followers.rs` ; `c/` (11 fichiers : `shops`,
+    `carriers`, `scenery_fx`, `intro`, `voting`, `attacks`, `mechanisms`, `ending`, `screen`, `paths`, `mod`),
+    `e/` (`gates`, `attacks`), `g/` (`thrown`, `enemy`, `rockets`), `b.rs`, `d.rs`, `f.rs` ;
+    `effects_creators/` (`mod`, `leftovers`, `scenery`), chemin inchangé pour ses appelants. `examples/names`
+    identique ; plus grand fichier 881 lignes (`effects/d.rs`). `measure_end.py` : zone `effects` étendue aux
+    dossiers.
+  * (b) Données : `data/effects.json` (`ddsom-data/src/effects.rs`, `GameData::effects`), 204 tables nommées
+    déclarées une fois par la macro `tables!` (nom, espace données ou programme, taille des éléments, adresse,
+    fin éventuelle, sens) ; `extract/src/effects.rs` lit chaque table jusqu'à la table suivante ou au prochain
+    code exécuté (`code_68k.txt`, au plus 0x400 octets) sauf fin donnée ; `rebuild::put_effects`, tests
+    `effects_lossless` et `to_data` (ROM = assets). Le jeu lit par `families/effects/tables.rs` : `at8/16/32`
+    (décalage en octets, comme l'original), `nth16/32`, `held8/16` (donnée désignée par une adresse rangée dans
+    l'objet : script des lettres, chemin du messager, trajectoire des canons) ; au-delà des octets extraits, le
+    résidu (`Missing::byte_in/word_in/long_in`, ajoutés à `data.rs`). Les tables à fiches de longueur variable
+    (décalages puis fiches) sont une seule table, lue relativement à son début. Quelques palettes de la
+    bibliothèque copiées par les effets sont des extraits (`interface_palettes`, `purse_portraits`,
+    `line_portraits`...) : mêmes octets que `palettes.png`, à remplacer par la bibliothèque typée (L12). Cas
+    d'origine gardés : bulle de la balise lue à la variante -1 (`beacon_sheets` commence une fiche avant),
+    vitesses X des éclats lues jusque dans la table des Y, fin de la jauge lue à rebours (`purse_gauge_end`).
+    Plus de lecture des tables d'aiguillage : `effects::target` ne lit plus la ROM (il rend la case ; `items.rs`
+    s'en sert encore pour ses messages d'erreur), `bad_index` pour les cas hors table. Entrées des natives en
+    littéraux de `handler!`, jeux d'animation, tables de vitesses et entrées de tâches en `RomAddr` (clés).
+    Résidu de la zone sur les 308 scénarios : 0 (les clés restantes sont celles de L1 : images, animations,
+    vitesses).
+  * (c) Champs : `record!` par type dans `effects/records.rs` (communs : `Effect`, `Carrier` — l'objet porteur
+    ou créateur, `PlayerView` — les champs de la fiche de joueur lus par les effets, à fusionner avec la fiche
+    de L10 —, `Interface`, `Blinker`, `Coin`) et `effects/c/records.rs` (`Ballot`, `VoteCursor`, `VoteTimer`,
+    `Shop`, `Purse`, `Buyer`, `Spell`, `Toss`, `Card`, `Letters`, `Courier`, `Pillar`, `Ferry`...) ; un sens
+    deviné est marqué (h). Variables de la RAM de travail dans `effects/vars.rs` (`Byte`/`Word`/`Long` de
+    `ram.rs`), sinon `crate::ram` (`SCENE`, `CAMERA_X`, `PLAYERS.nth(k)`...). Les modules de constantes de champs
+    déjà nommées (`shop::PRICE`...) restent tels quels.
+  * Mesures (`measure_end.py`, zone `effects`) : 8 → 33 fichiers, 13 245 → 13 908 lignes, accesseurs ROM
+    292 → 0, décalages littéraux 551 → 0, `A5 + littéral` 136 → 0, constantes d'adresses ROM 331 → 0,
+    `rd*`/`wr*` 322 → 311, plus gros fichier 5 158 → 881 lignes.
+  * Validation : 308/308 VALID après (a) (mode par défaut) ; après (b) seul, 308/308 (mode par défaut) ; final,
+    après fusion de main (0b0486d, L3) : 308/308 VALID en mode par défaut et avec `DDSOM_ASSETS` (assets
+    réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; résidu identique dans les deux
+    modes à celui de L1 (16 146 lectures, 19 clés, aucune de la zone) ; `DDSOM_STRICT=1` sans arrêt sur les
+    scénarios qui lisaient hors des tables avant leur extension ; tests `ddsom-assets` (`effects_lossless`),
+    `extract` (`to_data`) ; `cargo clippy` sans avertissement, avec et sans `tools`.
 
 ### Vague 2 (trois agents)
 

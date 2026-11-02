@@ -7,7 +7,7 @@ pub mod remainder;
 
 pub use ddsom_data::{data, json, levels, pointers, scene_palettes, spawns, speeds, sprites, tables, terrain, texts};
 pub use ddsom_data::{DataFile, Levels, ScenePalettes, Spawns, Speeds, SpriteTables, Terrain, Texts};
-pub use ddsom_data::{Anims, Frames};
+pub use ddsom_data::{Anims, EffectTables, Frames};
 pub use music::Music;
 
 use std::io;

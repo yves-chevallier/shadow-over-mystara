@@ -74,10 +74,9 @@ const MISSING: &str = "set";
 /// functions (an address taken from the state can designate either).
 const ROM_END: u32 = 0x40_0000;
 
-/// Long of the residue in the program space.
-fn residue_pc(b: &mut Cps2Bus, a: u32) -> u32 {
-    let read = Missing::prog32;
-    read(Missing { table: MISSING, key: a }, b, a)
+/// What a read outside the tables was looking for.
+fn missing(a: u32) -> Missing {
+    Missing { table: MISSING, key: a }
 }
 
 /// Byte of the data space.
@@ -87,10 +86,7 @@ pub fn byte(b: &mut Cps2Bus, a: u32) -> u8 {
     }
     match bytes(false, a, 1) {
         Some(v) => v as u8,
-        None => {
-            let w = Missing { table: MISSING, key: a }.read16(b, a & !1);
-            if a & 1 == 0 { (w >> 8) as u8 } else { w as u8 }
-        }
+        None => missing(a).byte_in(b, a, false),
     }
 }
 
@@ -99,7 +95,7 @@ pub fn word(b: &mut Cps2Bus, a: u32) -> u16 {
     if a >= ROM_END {
         return crate::mem::rd16(b, a);
     }
-    bytes(false, a, 2).map_or_else(|| Missing { table: MISSING, key: a }.read16(b, a), |v| v as u16)
+    bytes(false, a, 2).map_or_else(|| missing(a).word_in(b, a, false), |v| v as u16)
 }
 
 /// Long of the data space.
@@ -107,23 +103,23 @@ pub fn long(b: &mut Cps2Bus, a: u32) -> u32 {
     if a >= ROM_END {
         return crate::mem::rd32(b, a);
     }
-    bytes(false, a, 4).unwrap_or_else(|| Missing { table: MISSING, key: a }.read32(b, a))
+    bytes(false, a, 4).unwrap_or_else(|| missing(a).long_in(b, a, false))
 }
 
 /// Byte of the program space (table read PC-relative).
 pub fn pc_byte(b: &mut Cps2Bus, a: u32) -> u8 {
     match bytes(true, a, 1) {
         Some(v) => v as u8,
-        None => (residue_pc(b, a & !1) >> if a & 1 == 0 { 24 } else { 16 }) as u8,
+        None => missing(a).byte_in(b, a, true),
     }
 }
 
 /// Word of the program space.
 pub fn pc_word(b: &mut Cps2Bus, a: u32) -> u16 {
-    bytes(true, a, 2).map_or_else(|| (residue_pc(b, a) >> 16) as u16, |v| v as u16)
+    bytes(true, a, 2).map_or_else(|| missing(a).word_in(b, a, true), |v| v as u16)
 }
 
 /// Long of the program space.
 pub fn pc_long(b: &mut Cps2Bus, a: u32) -> u32 {
-    bytes(true, a, 4).unwrap_or_else(|| residue_pc(b, a))
+    bytes(true, a, 4).unwrap_or_else(|| missing(a).long_in(b, a, true))
 }
