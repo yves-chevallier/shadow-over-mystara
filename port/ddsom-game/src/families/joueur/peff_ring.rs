@@ -42,7 +42,7 @@ fn whole_part(word: u16) -> u32 {
 
 /// Règle les vitesses de l'enfant pour l'étape `step` (`0x4a1e0`, `0x4a822`) : table de vitesses
 /// choisie par `step`, ligne choisie par l'angle `+0x2d`.
-fn set_speeds(x: &mut Cx, tables: u32, step: u8) {
+fn set_speeds<R: Banc>(x: &mut Cx<'_, R>, tables: u32, step: u8) {
     let table = x.rom32(tables + 4 * (step as i8 as i16 as u16 as u32 & 0xffff) );
     x.set32(0x4c, table);
     let row = (x.u8(0x2d) as u32) << 2 & 0xffff;
@@ -55,7 +55,7 @@ fn set_speeds(x: &mut Cx, tables: u32, step: u8) {
 }
 
 /// Position de l'enfant : celle du parent, plus deux fois la partie entière des vitesses de la rangée courante.
-fn follow_parent(x: &mut Cx) {
+fn follow_parent<R: Banc>(x: &mut Cx<'_, R>) {
     let parent = x.linked(g::PARENT);
     let d0 = if x.u8(0x3) != 0 { 0x8000 } else { 0 };
     x.copy_pos(parent);
@@ -84,21 +84,18 @@ fn ring_alive<R: Banc>(x: &mut Cx<'_, R>, generation: u32) -> bool {
 }
 
 /// Le parent continue tant que le jeu n'est pas en pause, que la génération n'a pas changé et que le joueur vit.
-fn parent_alive(x: &mut Cx, generation: u32, player: Obj) -> bool {
+fn parent_alive<R: Banc>(x: &mut Cx<'_, R>, generation: u32, player: Obj) -> bool {
     if x.a5_u8(a5::PAUSED) != 0 {
         return false;
     }
     let current = x.a5_u8(0x34);
-    // registre résiduel (`move.b (0x34,A5),D0b`), voir `parent_follow`
-    x.c.d[0] = x.c.d[0] & !0xff | current as u32;
     current == x.u8(generation) && player.u16(x.b, 0x62) != 0
 }
 
 /// Parent : suit le joueur à un décalage (mots lus en ROM, selon la variante du joueur).
-/// Laisse D0 = rang, D1.w = décalage X, D2.w = décalage Z comme l'original : la boucle de dispatch ne les
-/// rétablit pas et le gestionnaire PEFF suivant peut les relire (le rebond du gel, 0x4bda8, indexe sa table
-/// par D2 : bot `longue_a`, image 59 919).
-fn parent_follow(x: &mut Cx, offsets: u32) {
+/// Glitch d'origine : D2.w garde le décalage Z (`dispatch::Restes`) ; le gestionnaire PEFF suivant peut le relire
+/// (le rebond du gel, 0x4bda8, indexe sa table par D2 : bot `longue_a`, image 59 919).
+fn parent_follow<R: Banc>(x: &mut Cx<'_, R>, offsets: u32) {
     let player = x.linked(f::OWNER);
     x.copy_pos(player);
     x.add16(0x10, 0xffff);
@@ -108,15 +105,13 @@ fn parent_follow(x: &mut Cx, offsets: u32) {
     if player.u8(x.b, f::FLIP) == 0 {
         dx = dx.wrapping_neg();
     }
-    x.c.d[0] = row;
-    x.c.d[1] = x.c.d[1] & !0xffff | dx as u32;
-    x.c.d[2] = x.c.d[2] & !0xffff | dz as u32;
+    *x.c.d2() = *x.c.d2() & !0xffff | dz as u32;
     x.add16(0x8, dx);
     x.add16(0xc, dz);
 }
 
 /// Pour chacun des `n` enfants du parent, appelle `f`.
-fn for_children(x: &mut Cx, n: u32, mut f: impl FnMut(&mut Cx, Obj)) {
+fn for_children<R: Banc>(x: &mut Cx<'_, R>, n: u32, mut f: impl FnMut(&mut Cx<'_, R>, Obj)) {
     let mut a2 = x.o.0 + g::CHILDREN;
     for _ in 0..n {
         let child = Obj(x.u16(a2 - x.o.0) as i16 as i32 as u32 & 0xff_ffff);
@@ -134,7 +129,7 @@ mod ring0 {
     const SPEEDS: u32 = 0x4a20a;
     const NEXT_ANGLE: u32 = 0x4a172;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => {
@@ -156,7 +151,7 @@ mod ring0 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if (x.u8(0x3) as i8) < 0 {
             return parent_init(x);
         }
@@ -210,7 +205,7 @@ mod ring0 {
         }
     }
 
-    fn parent(x: &mut Cx) {
+    fn parent<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 // attente de l'ouverture de l'anneau
@@ -240,7 +235,7 @@ mod ring0 {
     }
 
     /// L'anneau est ouvert : le bouton fait tourner la rangée d'équipement, la fin referme l'anneau.
-    fn open(x: &mut Cx) {
+    fn open<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x3e, 0xffff);
         if x.u16(0x3e) == 0 {
             return close(x);
@@ -272,13 +267,13 @@ mod ring0 {
         player.set_u8(x.b, 0x148, last_count);
     }
 
-    fn close(x: &mut Cx) {
+    fn close<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x5, 4);
         x.set8(g::DELAY, 8);
         for_children(x, 6, |x, child| child.set_u8(x.b, 5, 6));
     }
 
-    fn child(x: &mut Cx) {
+    fn child<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add8(g::STEP, 1);
@@ -291,7 +286,6 @@ mod ring0 {
             }
             2 => {
                 x.add8(0x5, 2);
-                x.linked(g::PARENT);
                 let n = x.u8(0x3).wrapping_add(1);
                 let n = if n > 5 { 0 } else { n };
                 x.set8(0x3, n);
@@ -351,7 +345,7 @@ mod ring1 {
     const GENERATION: u32 = 0x5b;
     const CHILD_COUNT: u32 = 0x3d;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => {
@@ -379,7 +373,7 @@ mod ring1 {
         v == 8 || v == 9
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         if (x.u8(0x3) as i8) < 0 {
             return parent(x);
@@ -428,7 +422,7 @@ mod ring1 {
         x.anim_start(set, (d0 + d1 & 0xffff) as u16);
     }
 
-    fn parent(x: &mut Cx) {
+    fn parent<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => create(x),
             2 => {
@@ -510,7 +504,7 @@ mod ring1 {
         }
     }
 
-    fn rotate_or_close(x: &mut Cx) {
+    fn rotate_or_close<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x40, 0xffff);
         if x.u16(0x40) == 0 {
             return shut(x, 8);
@@ -536,7 +530,7 @@ mod ring1 {
     }
 
     /// Referme l'anneau : tous les enfants en sous-état 6, le parent en `sub`.
-    fn shut(x: &mut Cx, sub: u8) {
+    fn shut<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
         x.set8(0x5, sub);
         x.set8(g::DELAY, 8);
         let n = x.u8(CHILD_COUNT) as u32 + 1;
@@ -544,7 +538,7 @@ mod ring1 {
     }
 
     /// Fait tourner la rangée des équipements de la page courante.
-    fn turn(x: &mut Cx, player: Obj) {
+    fn turn<R: Banc>(x: &mut Cx<'_, R>, player: Obj) {
         x.add8(0x5, 0xfe);
         x.set8(g::DELAY, 0x10);
         let n = x.u8(CHILD_COUNT) as u32 + 1;
@@ -566,7 +560,7 @@ mod ring1 {
         crate::mem::wr8(x.b, base + 8, keep_count);
     }
 
-    fn child(x: &mut Cx) {
+    fn child<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add8(g::STEP, 1);
@@ -655,6 +649,6 @@ mod ring1 {
 }
 
 handlers! {
-    0x49e36 "peff_0" ring0::run,
-    0x4a21e "peff_1" ring1::run,
+    0x49e36 "peff_0" #[sans] ring0::run,
+    0x4a21e "peff_1" #[sans] ring1::run,
 }

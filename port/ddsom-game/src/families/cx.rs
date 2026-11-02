@@ -101,7 +101,8 @@ impl Banc for &mut Cpu {
 impl Banc for &mut Aiguillage {
     fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool) {
         let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
-        liste.reinsert(b, o);
+        // Glitch d'origine : la remise en liste laisse D2 (le lien quitté) au gestionnaire suivant
+        liste.reinsert_restes(b, o, &mut self.restes.d2);
     }
     fn d2(&mut self) -> &mut u32 {
         &mut self.restes.d2

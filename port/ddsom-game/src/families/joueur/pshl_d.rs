@@ -14,13 +14,12 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-fn stopped_by_terrain(x: &mut Cx) -> bool {
-    // registres de 0x24a8 laissés : D3 (index de la case) est relu par un gestionnaire suivant (lot C :
+fn stopped_by_terrain<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    // Glitch d'origine : les restes de 0x24a8 (D3 = index de la case) sont relus par un gestionnaire suivant (lot C :
     // `boss11_scene42_mort`, image 4447)
     let t = crate::video::terrain_of(x.b, x.o);
-    crate::video::terrain_68k(x.c, &t);
+    restes_terrain(x, &t);
     let terrain = t.numero as u32;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | ((terrain & 0x3f).wrapping_sub(5) & 0xffff);
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
 
@@ -36,7 +35,7 @@ mod chain {
     const ANIMS: u32 = 0x15cdb6;
     const SFX_END: u32 = 0xe859a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x53ea2) {
             0 => init(x),
             2 => active(x),
@@ -45,29 +44,27 @@ mod chain {
         }
     }
 
-    fn release(x: &mut Cx) {
+    fn release<R: Banc>(x: &mut Cx<'_, R>) {
         let n = rd16(x.b, LINKS).wrapping_add(1);
         wr16(x.b, LINKS, n);
         x.free_pshl();
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u16(0x7e68) < 4 {
             return release(x);
         }
         x.add8(0x4, 2);
         x.set16(0x42, 0x12c);
         x.set8(f::BOX_SET, 6);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         for off in [0x8, 0xc, 0x10] {
             let v = owner.u32(x.b, off);
             x.set32(off, v);
         }
         let dz = x.u16(0x18);
-        x.c.d[0] = dz as u32;
         x.add16(0xc, dz);
         let mut dx = x.u16(0x14);
-        x.c.d[0] = dx as u32;
         let y = x.u32(0x10).wrapping_sub(1);
         x.set32(0x10, y);
         let flip = owner.u8(x.b, f::FLIP);
@@ -80,7 +77,6 @@ mod chain {
         x.add16(0x8, dx);
         x.set8(0x47, 2);
         x.set32(0x4c, SPEEDS);
-        x.c.a[4] = x.o.0 + 0x58 + 4;
         x.set32(0x58, 0xffff_ffff);
         // quatre étincelles, triées par adresse puis chaînées
         let mut sparks = [0u16; 4];
@@ -109,7 +105,7 @@ mod chain {
         x.reinsert();
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         'follow: {
             if x.u16(0x42) != 0 {
@@ -123,18 +119,17 @@ mod chain {
                 }
                 x.set8(0x47, 2);
                 if x.u16(0x5c) != 0 {
-                    let target = x.link_a1(0x5c);
+                    let target = x.linked(0x5c);
                     if target.u16(x.b, 0x62) != 0 {
                         if target.u8(x.b, 0x86) == 0 {
-                            steer(x);
+                            steer(x, target);
                         } else {
                             // cible en transit : on en cherche une autre
-                            x.c.d[6] = x.c.a[1] & 0xffff;
-                            x.set16(0x52, x.c.a[1] as u16);
+                            x.set16(0x52, target.0 as u16);
                             find_target(x, target.0 as u16);
-                            let now = x.link_a1(0x5c);
+                            let now = x.linked(0x5c);
                             if now.0 as u16 == x.u16(0x52) {
-                                steer(x);
+                                steer(x, now);
                             }
                         }
                         break 'follow;
@@ -151,7 +146,7 @@ mod chain {
                 x.set8(0x5, 0);
                 x.add8(0x4, 2);
                 if x.u16(0x5c) != 0 {
-                    let target = x.link_a1(0x5c);
+                    let target = x.linked(0x5c);
                     let n = target.u8(x.b, 0x92).wrapping_sub(1);
                     target.set_u8(x.b, 0x92, n);
                 }
@@ -176,29 +171,24 @@ mod chain {
     }
 
     /// Tourne d'un cran vers la cible (`0x53fe0`).
-    fn steer(x: &mut Cx) {
-        // la cible est l'objet que l'appelant a laissé dans A1
-        let delta = crate::aides::direction_to(x.b, x.o, Obj(x.c.a[1]));
+    fn steer<R: Banc>(x: &mut Cx<'_, R>, target: Obj) {
+        let delta = crate::aides::direction_to(x.b, x.o, target);
         let mut step: u8 = 1;
-        x.c.d[1] = 1;
         let diff = delta.wrapping_sub(x.u8(0x2d)) & 0x1f;
-        x.c.d[0] = x.c.d[0] & !0xff | diff as u32;
         if diff > 0x10 {
             step = 0xff;
-            x.c.d[1] = 0xffff_ffff;
         }
         let a = x.u8(0x2d).wrapping_add(step) & 0x1f;
         x.set8(0x2d, a);
     }
 
     /// Monte ou descend d'un cran de 3 pixels vers la hauteur de la cible (`0x54090`).
-    fn rise(x: &mut Cx) {
+    fn rise<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x5c) == 0 {
             return;
         }
-        let target = x.link_a1(0x5c);
+        let target = x.linked(0x5c);
         let d0 = target.u16(x.b, 0xc).wrapping_add(0x20).wrapping_sub(x.u16(0xc)).wrapping_add(8);
-        x.c.d[0] = d0 as u32;
         if d0 < 0x10 {
             return;
         }
@@ -226,7 +216,7 @@ mod chain {
     }
 
     /// `0x54190` / `0x54192` : choisit la cible. `held` est la cible prioritaire déjà tenue.
-    fn find_target(x: &mut Cx, held: u16) {
+    fn find_target<R: Banc>(x: &mut Cx<'_, R>, held: u16) {
         let mut best_priority = held;
         let mut nearest = 0u16;
         let mut best_distance = u32::MAX;
@@ -274,9 +264,7 @@ mod chain {
                 a1 += 0xc0;
             }
         }
-        x.c.d[1] = best_distance;
-        x.c.d[5] = nearest as u32;
-        x.c.d[6] = best_priority as u32;
+        *x.c.d5() = nearest as u32;
         let chosen = if nearest != 0 { nearest } else { best_priority };
         x.set16(0x5c, chosen);
         if chosen != 0 {
@@ -287,7 +275,7 @@ mod chain {
     }
 
     /// État 4 : le maillon s'éteint (avec un éclat de fin à l'endroit où il est mort).
-    fn dying(x: &mut Cx) {
+    fn dying<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             x.add8(0x5, 2);
             x.set8(0x0, 2);
@@ -325,19 +313,17 @@ mod wall {
     const POWER_B: u32 = 0x1041d4;
     const PICK: u32 = 0x5438e;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x542fc) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(f::BOX_SET, 6);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 x.copy_pos(owner);
                 let mut dx = -0x80i16 as u16;
                 if owner.u8(x.b, f::FLIP) != 0 {
                     dx = dx.wrapping_neg();
                 }
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = 0x38;
                 x.add16(0x8, dx);
                 x.add16(0xc, 0x38);
                 let rank = x.u8(0x3) as u32;
@@ -347,7 +333,6 @@ mod wall {
                 x.set8(0x5c, delay);
                 x.set8(0x5b, 0x40u8.wrapping_sub(delay));
                 let class = owner.u8(x.b, 0x10c) as u32;
-                x.c.d[0] = class;
                 let p1 = x.data8(POWER_A + class);
                 let p2 = x.data8(POWER_B + class);
                 x.set8(f::POWER, p1);
@@ -364,7 +349,6 @@ mod wall {
                         } else {
                             x.add8(0x5a, 0xff);
                             let dx = signed(0x10, x.u8(f::FLIP) == 0);
-                            x.set_d0w(dx);
                             x.add16(0x8, dx);
                         }
                     }
@@ -383,7 +367,6 @@ mod wall {
                         } else {
                             x.add8(0x5c, 0xff);
                             let dx = signed(0x10, x.u8(f::FLIP) != 0);
-                            x.set_d0w(dx);
                             x.add16(0x8, dx);
                         }
                     }
@@ -402,12 +385,12 @@ mod knife {
     const ANIMS: u32 = 0x15d0b0;
     const SFX_HIT: u32 = 0xeba12;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x5445e) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(f::BOX_SET, 6);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 for off in [0x8, 0xc] {
@@ -427,8 +410,6 @@ mod knife {
                     let v = x.u32(0x14).wrapping_neg();
                     x.set32(0x14, v);
                 }
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = dz as u32;
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.anim(ANIMS, 1);
@@ -458,21 +439,19 @@ mod fireball {
     const POWER_A: u32 = 0x10426a;
     const POWER_B: u32 = 0x104288;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x5456e) {
             0 if !child => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 x.copy_pos(owner);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                x.c.d[0] = row;
                 let mut dx = x.rom16(OFFSETS + row);
                 let dz = x.rom16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 x.set16(0x14, -0x500i16 as u16);
                 x.set16(0x16, -0x40i16 as u16);
                 x.set16(0x18, -0x500i16 as u16);
@@ -485,7 +464,6 @@ mod fireball {
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 let class = owner.u8(x.b, 0x10c) as u32;
-                x.c.d[0] = class;
                 let p1 = x.data8(POWER_A + class);
                 let p2 = x.data8(POWER_B + class);
                 x.set8(f::POWER, p1);
@@ -495,7 +473,7 @@ mod fireball {
             }
             0 => {
                 x.add8(0x4, 2);
-                let parent = x.link_a1(0x5c);
+                let parent = x.linked(0x5c);
                 x.copy_pos(parent);
                 let flip = parent.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
@@ -557,32 +535,28 @@ mod bolt {
     const OFFSETS: u32 = 0x547ec;
     const ANIMS: u32 = 0x15d3fa;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x54728) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(f::POWER, 0);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
                 if owner.u8(x.b, 0x15e) == 0x17 {
                     let dx = signed(-0x3c_i16 as u16, x.u8(f::FLIP) != 0);
-                    x.c.d[0] = dx as u32;
-                    x.c.d[1] = 0x39;
-                    x.c.d[2] = 0xfffe_8000;
+                    *x.c.d2() = 0xfffe_8000;
                     x.add16(0x8, dx);
                     x.add16(0xc, 0x39);
                     x.add32(0x10, 0xfffe_8000);
                 } else {
                     let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                    x.c.d[0] = row;
                     let dx = x.rom16(OFFSETS + row);
                     let dz = x.rom16(OFFSETS + row + 2);
-                    x.c.d[1] = dx as u32;
-                    x.c.d[2] = dz as u32;
+                    *x.c.d2() = dz as u32;
                     let dx = signed(dx, x.u8(f::FLIP) != 0);
-                    x.c.d[3] = 0xfffe_8000;
+                    *x.c.d3() = 0xfffe_8000;
                     x.add16(0x8, dx);
                     x.add16(0xc, dz);
                     x.add32(0x10, 0xfffe_8000);
@@ -606,12 +580,12 @@ mod spark {
 
     const ANIMS: u32 = 0x15ad38;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x548ae) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(f::BOX_SET, 6);
-                let parent = x.link_a1(0x5c);
+                let parent = x.linked(0x5c);
                 x.copy_pos(parent);
                 let n = 0x1du32.wrapping_add(x.u8(0x3) as u32) & 0xff;
                 x.anim(ANIMS, n);
@@ -619,7 +593,7 @@ mod spark {
                 x.reinsert();
             }
             2 => {
-                let parent = x.link_a1(0x5c);
+                let parent = x.linked(0x5c);
                 x.copy_pos(parent);
                 x.reinsert();
             }
@@ -629,10 +603,10 @@ mod spark {
 }
 
 handlers! {
-    0x53e94 "pshl_19" chain::run,
-    0x542ee "pshl_20" wall::run,
-    0x54450 "pshl_21" knife::run,
-    0x54560 "pshl_22" fireball::run,
-    0x5471a "pshl_23" bolt::run,
-    0x548a0 "pshl_24" spark::run,
+    0x53e94 "pshl_19" #[sans] chain::run,
+    0x542ee "pshl_20" #[sans] wall::run,
+    0x54450 "pshl_21" #[sans] knife::run,
+    0x54560 "pshl_22" #[sans] fireball::run,
+    0x5471a "pshl_23" #[sans] bolt::run,
+    0x548a0 "pshl_24" #[sans] spark::run,
 }

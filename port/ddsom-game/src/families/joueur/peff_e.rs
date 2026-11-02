@@ -44,9 +44,8 @@ mod ice {
     const BOUNCE_TOP: u32 = 0x4be80;
     const BOUNCE_BOTTOM: u32 = 0x4be88;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let variant = x.u8(0x3);
-        x.c.d[0] = variant as u32 * 2;
         match variant {
             0 => shard(x),
             1 => halo(x),
@@ -59,7 +58,7 @@ mod ice {
 
     // --- variante 0 : éclat qui rebondit ---------------------------------------------------------
 
-    fn shard(x: &mut Cx) {
+    fn shard<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4bc90) {
             0 => {
                 x.add16(0x54, 0xffff);
@@ -72,15 +71,13 @@ mod ice {
                 x.set16(0x10, cy);
                 x.set16(0xc, 0);
                 let k = (x.u8(0x2f) as u32) << 2 & 0xffff;
-                x.c.d[0] = k;
                 let (dx, dy) = offset(x, OFFSETS, k);
                 x.add16(0x8, dx);
                 x.add16(0x10, dy);
                 let r = x.rand_and_b(0x1f);
                 x.set8(0x2d, r);
                 x.set8(0x54, r.wrapping_add(1));
-                x.set_d0w(0x2b);
-                let n = x.c.d[0] as u16;
+                let n = 0x2b;
                 x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                 x.anim(ANIMS, 0);
                 // un halo (variante 1) suit l'éclat
@@ -96,23 +93,19 @@ mod ice {
             2 => {
                 x.add8(0x54, 0xff);
                 if x.u8(0x54) == 0 {
-                    let r = x.rand_and_b(0x1f);
-                    x.set8(0x2d, r);
-                    let low = x.c.d[0] as u8 & 0xf;
-                    x.c.d[0] = x.c.d[0] & !0xff | low as u32;
-                    let index = x.c.d[0] as u16 as i16 as i32 as u32;
+                    let w = x.rand_and_b_mot(0x1f);
+                    x.set8(0x2d, w as u8);
+                    // Glitch d'origine : `andi.b #0xf,D0` puis index D0.w : l'octet haut du tirage entre dans
+                    // l'index des délais
+                    let index = (w & 0xff00 | w & 0xf) as i16 as i32 as u32;
                     let delay = x.rom8(DELAYS.wrapping_add(index));
                     x.set8(0x54, delay);
                 }
                 bounce(x);
                 x.anim_step();
                 x.move_by_table_xy();
-                x.c.d[0] = x.u16(0x8) as u32;
-                x.c.d[1] = x.u16(0x10) as u32;
-                x.call(crate::terrain::SHADOW.entry);
-                if !x.c.cond(7) {
+                if !x.push_terrain() {
                     let a = x.u8(0x2d).wrapping_add(0x10) & 0x1f;
-                    x.c.d[0] = x.c.d[0] & !0xff | a as u32;
                     x.set8(0x2d, a);
                     x.move_by_table_xy();
                 }
@@ -121,7 +114,6 @@ mod ice {
                 }
                 x.set_bit(0x1, 1, true);
                 let t = x.u8(0x54);
-                x.c.d[0] = x.c.d[0] & !0xff | (t & 2) as u32;
                 if t & 2 != 0 {
                     x.set_bit(0x1, 1, false);
                 }
@@ -133,16 +125,14 @@ mod ice {
 
     /// Rebond sur les bords de l'écran (`0x4bda8`) : le tirage `andi.w #7,D2w` porte sur D2, laissé
     /// par l'appelant.
-    fn bounce(x: &mut Cx) {
+    fn bounce<R: Banc>(x: &mut Cx<'_, R>) {
         // Glitch d'origine : le tirage n'est pas utilisé, le rebond est choisi par le D2 hérité.
         x.random();
-        let d2 = x.c.d[2] & 7;
-        x.c.d[2] = x.c.d[2] & 0xffff_0000 | d2;
+        let d2 = *x.c.d2() & 7;
+        *x.c.d2() = *x.c.d2() & 0xffff_0000 | d2;
         let d0 = x.u16(0x8);
         let (cx, cy) = camera(x);
         let d1 = cx.wrapping_add(8);
-        x.c.d[0] = d0 as u32;
-        x.c.d[1] = d1 as u32;
         if d1 > d0 {
             let d1 = d1.wrapping_add(1);
             x.set16(0x8, d1);
@@ -181,18 +171,18 @@ mod ice {
 
     // --- variante 1 : halo de l'éclat --------------------------------------------------------------
 
-    fn halo(x: &mut Cx) {
+    fn halo<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4be9e) {
             0 => {
                 x.add8(0x4, 2);
-                let parent = x.link_a1(0x5c);
+                let parent = x.linked(0x5c);
                 x.copy_pos(parent);
                 x.add16(0x10, 0xffff);
                 x.anim(ANIMS, 1);
             }
             2 => {
                 x.anim_step();
-                let parent = x.link_a1(0x5c);
+                let parent = x.linked(0x5c);
                 let flags = parent.u8(x.b, 0x1);
                 x.set8(0x1, flags);
                 x.copy_pos(parent);
@@ -208,13 +198,13 @@ mod ice {
 
     // --- variante 2 : brume ------------------------------------------------------------------------
 
-    fn mist(x: &mut Cx) {
+    fn mist<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4bf16) {
             0 => {
                 x.add8(0x4, 2);
                 crate::sound::jouer(x.b, SFX, x.o);
                 x.set16(0x54, 0x168);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x15e) != 0x1a {
                     x.set16(0x54, 0x78);
                 }
@@ -225,7 +215,7 @@ mod ice {
         }
     }
 
-    fn mist_tick(x: &mut Cx) {
+    fn mist_tick<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x54, 0xffff);
         if x.u16(0x54) == 0 {
             x.add8(0x4, 2);
@@ -239,8 +229,6 @@ mod ice {
                 mask = 7;
             }
         }
-        x.c.d[1] = x.c.d[1] & !0xff | mask as u32;
-        x.c.d[0] = x.c.d[0] & !0xff | (d0 & mask) as u32;
         if d0 & mask == 0 {
             // flocon (variante 3), sans lien
             if let Some(o) = x.alloc(&pools::PEFF) {
@@ -249,7 +237,6 @@ mod ice {
                 o.set_u8(x.b, 3, 3);
             }
         }
-        x.c.d[0] = (t & 0x3f) as u32;
         if t & 0x3f == 0 {
             crate::sound::jouer(x.b, SFX, x.o);
         }
@@ -257,7 +244,7 @@ mod ice {
 
     // --- variante 3 : flocon -----------------------------------------------------------------------
 
-    fn flake(x: &mut Cx) {
+    fn flake<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4bf92) {
             0 => {
                 x.add8(0x4, 2);
@@ -265,23 +252,16 @@ mod ice {
                 x.set16(0x8, cx);
                 x.set16(0x10, cy);
                 let a = x.rand_and(0xf);
-                x.c.d[1] = a;
                 let b = x.rand_and(0xf);
                 let (a2, b2) = (b * 2, a * 2);
-                x.c.d[0] = a2;
-                x.c.d[1] = b2;
                 let dx = x.rom16(SCATTER_X + a2);
                 let dy = x.rom16(SCATTER_Y + b2);
-                x.set_d0w(dx);
-                x.c.d[1] = x.c.d[1] & 0xffff_0000 | dy as u32;
                 x.add16(0x8, dx);
                 x.add16(0x10, dy);
-                x.c.d[0] = x.u16(0x8) as u32;
-                x.c.d[1] = x.u16(0x10) as u32;
-                // registres de 0x24b0 laissés : D2 (le terrain) est relu par le rebond d'un gestionnaire suivant
+                // Glitch d'origine : les restes de 0x24b0 (D2 = le terrain) sont relus par le rebond d'un gestionnaire suivant
                 let (px, py) = (x.u16(0x8), x.u16(0x10));
                 let t = crate::video::terrain(x.b, px, py);
-                crate::video::terrain_68k(x.c, &t);
+                restes_terrain(x, &t);
                 if t.numero != 0 {
                     x.set8(0x4, 4);
                 }
@@ -300,7 +280,7 @@ mod ice {
 
     // --- variante 4 : éclat tombant ----------------------------------------------------------------
 
-    fn falling(x: &mut Cx) {
+    fn falling<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4c076) {
             0 => {
                 x.add16(0x54, 0xffff);
@@ -309,9 +289,7 @@ mod ice {
                 }
                 x.add8(0x4, 2);
                 let k = x.u8(0x2f) as u32;
-                x.c.d[0] = k;
                 let dx = x.rom16(SPREAD + k);
-                x.set_d0w(dx);
                 let dx = signed(dx, x.u8(f::FLIP) == 0);
                 x.add16(0x8, dx);
                 x.anim(ANIMS, 4);
@@ -328,15 +306,14 @@ mod ice {
 
     // --- variante 5 : couronne autour du lanceur ----------------------------------------------------
 
-    fn crown(x: &mut Cx) {
+    fn crown<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4c0da) {
             0 => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 x.copy_pos(owner);
                 x.add16(0x10, 0xffff);
                 let k = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                x.c.d[0] = k;
                 let table = if owner.u8(x.b, 0x15e) == 0x1a { CROWN_A } else { CROWN_B };
                 let (dx, dz) = offset(x, table, k);
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
@@ -348,9 +325,8 @@ mod ice {
                 x.anim_step();
                 let frozen = x.a5_u8(0x3d) != 0;
                 if frozen {
-                    let owner = x.link_a1(f::OWNER);
+                    let owner = x.linked(f::OWNER);
                     let gesture = owner.u8(x.b, 0x7);
-                    x.c.d[0] = x.c.d[0] & !0xff | gesture as u32;
                     if gesture == x.u8(0x56) {
                         return x.reinsert();
                     }
@@ -371,7 +347,7 @@ mod blessing {
     const OFFSETS: u32 = 0x4c226;
     const ANIMS: u32 = 0x1b670a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4c1c4) {
             0 => {
                 x.add8(0x4, 2);
@@ -379,7 +355,6 @@ mod blessing {
                 x.add16(0x10, 0xffff);
                 let v = x.u8(0x3);
                 let k = (v as u32) << 2;
-                x.c.d[0] = k;
                 let (dx, dz) = offset(x, OFFSETS, k);
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(0x8, dx);
@@ -387,13 +362,12 @@ mod blessing {
                 x.anim(ANIMS, (v & 1) as u32);
             }
             2 => {
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u16(x.b, 0x168) == 0 {
                     x.add8(0x4, 2);
                 }
                 x.set_bit(0x1, 1, false);
                 let blink = x.a5_u8(a5::FRAME) & 1;
-                x.c.d[0] = x.c.d[0] & !0xff | blink as u32;
                 if blink != 0 {
                     x.set_bit(0x1, 1, true);
                 }
@@ -418,15 +392,13 @@ mod banish {
     const POWER_TABLE: u32 = 0x1042e2;
     const POWER_TABLE_BOSS: u32 = 0x104300;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x4c2c2) {
             0 if !child => {
                 x.add8(0x4, 2);
                 follow_owner(x);
                 let dx = signed(-7i16 as u16, x.u8(f::FLIP) != 0);
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = 0x5e;
                 x.add16(0x8, dx);
                 x.add16(0xc, 0x5e);
                 x.add16(0x10, 0xffff);
@@ -437,11 +409,10 @@ mod banish {
                 x.anim_step();
                 x.set_bit(0x1, 1, true);
                 let blink = x.a5_u8(a5::FRAME) & 1;
-                x.c.d[0] = x.c.d[0] & !0xff | blink as u32;
                 if blink != 0 {
                     x.set_bit(0x1, 1, false);
                 }
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x7) == 4 {
                     x.add8(0x4, 2);
                 }
@@ -452,40 +423,36 @@ mod banish {
         }
     }
 
-    fn init_beam(x: &mut Cx) {
+    fn init_beam<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let target = Obj(x.u16(0x5c) as i16 as i32 as u32 & 0xff_ffff);
-        x.c.a[2] = x.u16(0x5c) as i16 as i32 as u32;
         let (tx, ty) = (target.u16(x.b, 0x8), target.u16(x.b, 0x10));
         x.set16(0x8, tx);
         x.set16(0x10, ty);
         target.set_u16(x.b, 0x12, 0x4000);
         let k = x.u8(0x2f);
         let priority = if k & 2 != 0 { 0x8000 } else { 0 };
-        x.c.d[1] = k as u32;
         x.set16(0x12, priority);
         let (_, cy) = camera(x);
         let z = cy.wrapping_add(0x100).wrapping_sub(x.u16(0x10));
         x.set16(0xc, z);
-        x.c.d[0] = k as u32;
         let hold = x.rom8(ALT_BANK + k as u32);
         x.set8(0x58, hold);
         let kind = target.u8(x.b, 0x2) as u32;
         let row = kind * 2;
-        x.c.d[1] = row;
         let mut frame = x.rom16(FRAMES_A + row);
         if target.u8(x.b, 0x28) != 4 {
             frame = x.rom16(FRAMES_B + row);
         }
         let anim = frame & 0xff00 | (frame as u8).wrapping_add(k) as u16;
-        let n = (x.c.d[0] & 0xffff_0000 | anim as u32) as u16;
+        let n = anim;
         x.anim_start(ANIMS, n);
         if k == 0 {
             crate::sound::jouer(x.b, SFX, x.o);
         }
     }
 
-    fn fall(x: &mut Cx) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>) {
         let k = x.u8(0x2f);
         if x.u8(0x58) != 0 {
             x.add8(0x58, 0xff);
@@ -505,15 +472,14 @@ mod banish {
     }
 
     /// Le faisceau 0 touche le sol : blesse le monstre visé (`0x4c4a0`).
-    fn strike(x: &mut Cx) {
+    fn strike<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) != 0 || (x.u16(0xc) as i16) >= 0 {
             return;
         }
-        let player = x.link_a1(f::OWNER);
+        let player = x.linked(f::OWNER);
         let v = player.u16(x.b, 0x190).wrapping_add(2);
         player.set_u16(x.b, 0x190, v);
         let monster = Obj(x.u16(0x5c) as i16 as i32 as u32 & 0xff_ffff);
-        x.c.a[2] = x.u16(0x5c) as i16 as i32 as u32;
         let hits = monster.u8(x.b, 0x9c).wrapping_add(1);
         monster.set_u8(x.b, 0x9c, hits);
         if monster.u8(x.b, 0x49) == 0x5c {
@@ -536,7 +502,6 @@ mod banish {
         if player.u8(x.b, 0x166) == 4 {
             damage += damage >> 2;
         }
-        x.c.d[0] = damage as u32;
         let hp = monster.u16(x.b, 0x62).wrapping_sub(damage);
         monster.set_u16(x.b, 0x62, if (hp as i16) < 0 { 0 } else { hp });
         if monster.u8(x.b, 0x28) != 4 && matches!(monster.u8(x.b, 0x2), 0 | 0x13) {
@@ -555,7 +520,7 @@ mod banish {
 }
 
 handlers! {
-    0x4bc66 "peff_12" ice::run,
-    0x4c1b6 "peff_13" blessing::run,
-    0x4c2b4 "peff_14" banish::run,
+    0x4bc66 "peff_12" #[sans] ice::run,
+    0x4c1b6 "peff_13" #[sans] blessing::run,
+    0x4c2b4 "peff_14" #[sans] banish::run,
 }

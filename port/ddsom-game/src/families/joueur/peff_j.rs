@@ -2,6 +2,7 @@
 //! la glissade, du coup de nain, éclats des monstres touchés, pluie de l'écran de choix). Voir
 //! `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Courant;
@@ -17,7 +18,7 @@ mod leap {
 
     const ANIMS: u32 = 0x1bc60a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4fc28) {
             0 => {
                 x.add8(0x4, 2);
@@ -31,8 +32,6 @@ mod leap {
                 if x.u8(0x3) != 0 {
                     dx = -0x62i16 as u16;
                 }
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = dz as u32;
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -41,7 +40,7 @@ mod leap {
                 x.reinsert();
             }
             2 => {
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x5) != 0 || owner.u16(x.b, 0x62) == 0 || owner.u8(x.b, 0x6a) != 0x16 {
                     return x.free_peff();
                 }
@@ -50,8 +49,6 @@ mod leap {
                     x.set16(0x12, 0);
                     x.set16(0x12, 0x8000);
                     let dx = signed(-0x62i16 as u16, x.u8(f::FLIP) != 0);
-                    x.c.d[0] = dx as u32;
-                    x.c.d[1] = 0x82;
                     x.add16(0x8, dx);
                     x.add16(0xc, 0x82);
                     if x.anim_step() {
@@ -74,19 +71,17 @@ mod swap {
     const OFFSETS_B: u32 = 0x4fdec;
     const SFX: u32 = 0xe7c20;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4fd58) {
             0 => {
                 x.add8(0x4, 2);
                 let owner = follow_owner(x);
                 x.add16(0x10, 0xffff);
                 let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                x.c.d[0] = row;
                 let table = if x.u8(0x3) != 0 { OFFSETS_B } else { OFFSETS_A };
                 let dx = x.rom16(table + row);
                 let dz = x.rom16(table + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let dx = signed(dx, x.u8(f::FLIP) != 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -112,7 +107,7 @@ mod dash {
 
     const ANIMS: u32 = 0x1bc6f4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4fe46) {
             0 => {
                 x.add8(0x4, 2);
@@ -121,7 +116,7 @@ mod dash {
                 x.reinsert();
             }
             2 => {
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x5) != 0
                     || owner.u8(x.b, 0x7) != 2
                     || owner.u16(x.b, 0x62) == 0
@@ -140,13 +135,11 @@ mod dash {
         }
     }
 
-    fn pose(x: &mut Cx) {
+    fn pose<R: Banc>(x: &mut Cx<'_, R>) {
         follow_owner(x);
         x.set16(0x12, 0);
         x.set16(0x12, 0x8000);
         let dx = signed(-0x2a_i16 as u16, x.u8(f::FLIP) != 0);
-        x.c.d[0] = dx as u32;
-        x.c.d[1] = 0xc;
         x.add16(0x8, dx);
         x.add16(0xc, 0xc);
     }
@@ -159,7 +152,7 @@ mod chip {
     const ANIMS: u32 = 0x1bc77c;
     const OFFSETS: u32 = 0x4ff9a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4ff2c) {
             0 => {
                 x.add8(0x4, 2);
@@ -168,11 +161,9 @@ mod chip {
                 x.set16(0x12, 0);
                 owner.set_u16(x.b, 0x12, 0x8000);
                 let row = ((x.u8(0x3) >> 1) as u32) << 2;
-                x.c.d[0] = row;
                 let dx = x.rom16(OFFSETS + row);
                 let dz = x.rom16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -180,7 +171,7 @@ mod chip {
                 x.reinsert();
             }
             2 => {
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x5) == 0 {
                     return x.free_peff();
                 }
@@ -202,38 +193,31 @@ mod chunk {
     const ANIM_SETS: u32 = 0x396e8;
     const FRAMES: u32 = 0x11ae86;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4ffea) {
             0 => {
-                x.c.d[0] = x.u8(0x3) as u32 * 2;
                 if x.u8(0x3) == 0 {
                     x.add8(0x4, 2);
                     x.set16(0x30, 0x14);
                 } else {
-                    let host = x.link_a1(0x42);
+                    let host = x.linked(0x42);
                     x.add8(0x4, 2);
                     let class = host.u8(x.b, 0x10e) as u32;
                     let set = x.data32(ANIM_SETS + 4 * class);
-                    x.c.a[4] = set;
                     let row = (host.u16(x.b, 0x42) as u32) << 3 & 0xffff;
-                    x.c.d[1] = row;
                     let d0 = x.data16(FRAMES + row);
                     let d2 = x.data16(FRAMES + row + 2);
                     let d3 = x.data16(FRAMES + row + 4);
-                    x.c.d[0] = x.c.d[0] & 0xffff_0000 | d0 as u32;
-                    x.c.d[2] = d2 as u32;
-                    x.c.d[3] = d3 as u32;
+                    *x.c.d2() = d2 as u32;
+                    *x.c.d3() = d3 as u32;
                     let dx = signed(d2, host.u8(x.b, f::FLIP) != 0);
                     x.add16(0x8, dx);
                     x.add16(0xc, d3);
-                    let set = x.c.a[4];
-                    let n = x.c.d[0] as u16;
-                    x.anim_start(set, n);
+                    x.anim_start(set, d0);
                     x.set16(0x30, 0x14);
                 }
             }
             2 => {
-                x.c.d[0] = x.u8(0x5) as u32;
                 if x.u8(0x5) == 0 {
                     x.add16(0x30, 0xffff);
                     if (x.u16(0x30) as i16) <= 0 {
@@ -266,7 +250,7 @@ mod rain {
     const OFFSETS: u32 = 0x51b44;
     const DELAYS: u32 = 0x51ba8;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x51ae4) {
             0 => {
                 x.add8(0x4, 2);
@@ -275,11 +259,9 @@ mod rain {
                 x.set16(0x8, cx);
                 x.set16(0x10, cy);
                 let row = (x.u8(0x3) as u32) << 3;
-                x.c.d[0] = row;
                 let dx = x.rom16(OFFSETS + row);
                 let dz = x.rom16(OFFSETS + row + 2);
                 let delay = x.rom16(OFFSETS + row + 4);
-                x.c.d[1] = dx as u32;
                 x.set16(0xc, dz);
                 x.set16(0x58, delay);
                 x.add16(0x8, dx);
@@ -315,7 +297,7 @@ mod rain {
 mod timer {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let state = x.state(0x51bda);
         if state == 0 {
             // l'initialisation enchaîne sur l'état 2
@@ -339,11 +321,11 @@ mod timer {
 }
 
 handlers! {
-    0x4fc1a "peff_35" leap::run,
-    0x4fd4a "peff_36" swap::run,
-    0x4fe38 "peff_37" dash::run,
-    0x4ff1e "peff_38" chip::run,
-    0x4ffd0 "peff_39" chunk::run,
-    0x51ad6 "peff_46" rain::run,
-    0x51bcc "peff_47" timer::run,
+    0x4fc1a "peff_35" #[sans] leap::run,
+    0x4fd4a "peff_36" #[sans] swap::run,
+    0x4fe38 "peff_37" #[sans] dash::run,
+    0x4ff1e "peff_38" #[sans] chip::run,
+    0x4ffd0 "peff_39" #[sans] chunk::run,
+    0x51ad6 "peff_46" #[sans] rain::run,
+    0x51bcc "peff_47" #[sans] timer::run,
 }

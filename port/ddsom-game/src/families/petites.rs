@@ -351,46 +351,45 @@ pub(crate) fn peff_5_pair(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) {
 /// 0x53746 : douze pierres (tirs de type 0x11, variantes 0 à 11) réparties autour de la caméra en service,
 /// décalages X, Y en table (0x537ca, espace programme), hauteur 0x100 au-dessus de leur point de chute, délai
 /// `+0x5c` de 0x40 à 0x148 par pas de 0x18 ; orientation et propriétaire du créateur.
-fn pshl_stones(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn pshl_stones(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) {
     const OFFSETS: u32 = 0x537ca;
     const COUNT: u16 = 12;
-    let me = Obj(c.a[0]);
-    c.d[3] = 0;
-    set_low_word(&mut c.d[4], 0x40);
-    set_low_word(&mut c.d[5], COUNT - 1);
+    // D3 : variante, D4 : délai, D5 : compteur du `dbf` ; laissés aux gestionnaires suivants (`dispatch::Restes`)
+    let (mut variant, mut delay, mut n) = (0u8, 0x40u16, COUNT - 1);
+    r.d(3, 0);
+    r.d_mot(4, delay);
+    r.d_mot(5, n);
     loop {
-        let Some(o) = alloc(c, b, &pools::PSHL) else { break };
+        let Some(o) = r.alloue(b, &pools::PSHL) else { break };
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x11);
         let v = me.u8(b, 0x2c);
         o.set_u8(b, 0x2c, v);
         let v = me.u16(b, 0x50);
         o.set_u16(b, 0x50, v);
-        o.set_u8(b, 0x3, c.d[3] as u8);
-        o.set_u16(b, 0x5c, c.d[4] as u16);
+        o.set_u8(b, 0x3, variant);
+        o.set_u16(b, 0x5c, delay);
         let (cx, cy) = if crate::ram::CAMERA_ALT_ACTIVE.get(b) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
         let (x, y) = (rd16(b, A5 + cx), rd16(b, A5 + cy));
-        let index = (c.d[3] as u16).wrapping_shl(2) as u32;
+        let index = (variant as u16).wrapping_shl(2) as u32;
         let (dx, dy) = (prog16(b, OFFSETS + index), prog16(b, OFFSETS + 2 + index));
         let ground = y.wrapping_add(dy);
         o.set_u16(b, 0x8, x.wrapping_add(dx));
         o.set_u16(b, 0x10, ground);
         o.set_u16(b, 0xc, y.wrapping_add(0x100).wrapping_sub(ground));
-        set_low_word(&mut c.d[0], ground);
-        set_low_word(&mut c.d[1], dx);
-        set_low_word(&mut c.d[2], dy);
-        let variant = (c.d[3] as u8).wrapping_add(1);
-        crate::mem::set_low_byte(&mut c.d[3], variant);
-        let d4 = c.d[4];
-        let delay = crate::ops::add(c, 0x18, d4, Size::Word);
-        set_low_word(&mut c.d[4], delay as u16);
-        let n = (c.d[5] as u16).wrapping_sub(1);
-        set_low_word(&mut c.d[5], n);
+        r.d_mot(0, ground);
+        r.d_mot(1, dx);
+        r.d_mot(2, dy);
+        variant = variant.wrapping_add(1);
+        r.d_octet(3, variant);
+        delay = r.addition(0x18, delay as u32, Size::Word) as u16;
+        r.d_mot(4, delay);
+        n = n.wrapping_sub(1);
+        r.d_mot(5, n);
         if n == 0xffff {
             break;
         }
     }
-    rts(c, b);
 }
 
 /// 0x1a5e8 : douze blocs de huit couleurs (0x25c4c0) recopiés dans la palette 0x91c480. Cœur.
@@ -677,7 +676,6 @@ pub const NATIVES: &[Native] = &[
     native(0x101da, "palette_quatre_blocs_69", palette_blocks, regs::ALL),
     native(0x1ac90, "eclair_palette_fin", flash_off, regs::CCR),
     native(0x4aed0, "cree_effets_5", |c, b| { let me = Obj(c.a[0]); peff_5_pair(c, b, me); rts(c, b) }, CREATED),
-    native(0x53746, "cree_pierres_11", pshl_stones, CREATED | regs::ALL),
     native(0x1a5e8, "palette_douze_blocs", palette_blocks_copy, regs::ALL),
     native(0x1ad6a, "palette_page_restitue", |c, b| { palette_page_restore(c, b); rts(c, b) }, regs::ALL),
     native(0x1ac9a, "eclair_palette_jaune", flash_a, regs::CCR),

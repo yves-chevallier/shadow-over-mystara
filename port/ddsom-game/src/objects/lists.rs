@@ -448,6 +448,16 @@ pub const REGS_REINSERT: u32 =
     regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4) | regs::CCR;
 
 impl SortedList {
+    /// `reinsert`, avec le reste D2 de l'original (`dispatch::Restes`) : quand l'objet est déplacé, le mot bas de D2
+    /// reçoit le lien qu'il quitte (`move.w (behind,A0),D2`). Glitch d'origine : un gestionnaire suivant le relit (le
+    /// rebond de l'éclat de gel, 0x4bda8). D2 entre et ressort tel quel sinon.
+    pub fn reinsert_restes(self, b: &mut Cps2Bus, obj: Obj, d2: &mut u32) {
+        let mut c = Cpu::default();
+        c.d[2] = *d2;
+        Reinsert { c: &mut c, b, obj, list: self }.run();
+        *d2 = c.d[2];
+    }
+
     /// `reinsert` avec les registres de l'original, selon le chemin suivi (voir `Reinsert`).
     #[track_caller]
     pub fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {

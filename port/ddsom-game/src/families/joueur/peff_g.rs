@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), septième série : types 21 à 23 (étincelle du coup, fumée de la fin de
 //! prière, lueur de la prière). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::pools;
@@ -17,7 +18,7 @@ mod hit_spark {
 
     const ANIMS: u32 = 0x1bb146;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.u8(0x4) {
             0 => {
@@ -74,7 +75,7 @@ mod prayer {
     const ANGLES: u32 = 0x4d5e6;
     const KIND: u8 = 0x16;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let variant = x.u8(0x3);
         match x.u8(0x4) {
             0 => match variant {
@@ -101,7 +102,7 @@ mod prayer {
         }
     }
 
-    fn init_halo(x: &mut Cx) {
+    fn init_halo<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
@@ -120,7 +121,7 @@ mod prayer {
         x.reinsert();
     }
 
-    fn init_rays(x: &mut Cx) {
+    fn init_rays<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) == 0 {
             x.add8(0x4, 2);
             let owner = x.linked(f::OWNER);
@@ -142,7 +143,7 @@ mod prayer {
         x.reinsert();
     }
 
-    fn init_glow(x: &mut Cx) {
+    fn init_glow<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
@@ -155,7 +156,7 @@ mod prayer {
         x.reinsert();
     }
 
-    fn rays(x: &mut Cx) {
+    fn rays<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) == 0 {
             x.add16(0x5c, 0xffff);
             if x.u16(0x5c) == 0 {
@@ -178,7 +179,7 @@ mod prayer {
             return;
         }
         x.set_bit(0x1, 1, true);
-        let d = x.u16(0x5c).wrapping_add(x.c.d[7] as u16);
+        let d = x.u16(0x5c).wrapping_add(x.compteur() as u16);
         if d & 1 != 0 {
             x.set_bit(0x1, 1, false);
         }
@@ -207,7 +208,7 @@ mod glow {
 
     const ANIMS: u32 = 0x1bb402;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -238,7 +239,7 @@ mod glow {
 }
 
 handlers! {
-    0x4d2fe "peff_21" hit_spark::run,
-    0x4d3e2 "peff_22" prayer::run,
-    0x4d682 "peff_23" glow::run,
+    0x4d2fe "peff_21" #[sans] hit_spark::run,
+    0x4d3e2 "peff_22" #[sans] prayer::run,
+    0x4d682 "peff_23" #[sans] glow::run,
 }

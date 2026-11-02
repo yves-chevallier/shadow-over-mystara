@@ -241,18 +241,24 @@ fn spawn_player_effect_44(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// 0xcc18e : toutes les 32 images, compte les joueurs vivants dans `A5+0x35`.
-fn count_living_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    let timer = rd16(b, me + 0x20).wrapping_sub(1);
-    wr16(b, me + 0x20, timer);
+/// 0xcc18e : toutes les 32 images (compteur `+0x20` de l'objet `me`), compte les joueurs vivants dans `A5+0x35` ;
+/// rend le compte quand il est refait (D0 de l'original).
+pub fn decompte_joueurs_vivants(b: &mut Cps2Bus, me: Obj) -> Option<u8> {
+    let timer = me.u16(b, 0x20).wrapping_sub(1);
+    me.set_u16(b, 0x20, timer);
     if (timer as i16) >= 0 {
-        return;
+        return None;
     }
-    wr16(b, me + 0x20, 32);
+    me.set_u16(b, 0x20, 32);
     let alive = (0..4).filter(|k| rd8(b, A5 + 0x5de + k * 0x200) != 0 && rd16(b, A5 + 0x5de + k * 0x200 + 0x62) != 0).count();
     wr8(b, A5 + 0x35, alive as u8);
-    c.d[0] = alive as u32;
+    Some(alive as u8)
+}
+
+fn count_living_players(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(alive) = decompte_joueurs_vivants(b, Obj(c.a[0])) {
+        c.d[0] = alive as u32;
+    }
 }
 
 /// 0x25260 : un joueur scripté se place devant l'objet (`A5+0x46`), décalé selon son numéro (`+2`).

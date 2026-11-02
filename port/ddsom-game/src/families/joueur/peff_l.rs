@@ -25,7 +25,7 @@ mod slot_icon {
     const HOME: u32 = 0x52;
     const TAKEN: u32 = 0x56;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x3d) != 0 {
             return;
         }
@@ -81,7 +81,7 @@ mod slot_icon {
         x.anim_start(set, ((item << 4) + count & 0xffff) as u16);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         refresh(x);
         pickup(x);
         approach(x);
@@ -202,5 +202,5 @@ mod slot_icon {
 }
 
 handlers! {
-    0x4c9fe "peff_17" slot_icon::run,
+    0x4c9fe "peff_17" #[sans] slot_icon::run,
 }

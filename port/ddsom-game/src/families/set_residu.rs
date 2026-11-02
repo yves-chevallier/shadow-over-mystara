@@ -8,6 +8,7 @@ use m68k::Cpu;
 
 use crate::mem::{prog32, prog8, rd16, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::{call, regs, Native};
+use crate::objects::Obj;
 
 /// Tampon de tuiles de la couche 3 : les colonnes de 44 mots longs effacées par 0xd5f12.
 const COLUMNS: [u32; 3] = [0x91_215c, 0x91_2160, 0x91_2164];
@@ -105,6 +106,29 @@ fn variant_routine(c: &mut Cpu, b: &mut Cps2Bus, kinds: u32, routines: u32) {
     if c.a[1] != NOTHING {
         call(c, b, c.a[1]);
     }
+}
+
+/// Cœur de `variant_routine` pour le générateur `me` : la routine de la variante, rien (0xd99f8) ou une musique de
+/// la scène (0xe0c5c, 0xe0d8c), sans registres.
+fn variant_sound(b: &mut Cps2Bus, me: Obj, kinds: u32, routines: u32) {
+    const NOTHING: u32 = 0xd99f8;
+    let variant = me.u8(b, 3) as u32;
+    let index = (prog8(b, kinds + variant) as u16).wrapping_mul(4);
+    match prog32(b, routines + index as u32) {
+        NOTHING => {}
+        son @ (0xe0c5c | 0xe0d8c) => crate::sound::jouer(b, son, me),
+        r => unreachable!("routine de vague {r:#x} : les tables 0xd98cc et 0xd996e n'ont que 0xd99f8, 0xe0c5c, 0xe0d8c"),
+    }
+}
+
+/// 0xd98b8 sans registres (générateur `me`).
+pub fn debut_de_vague(b: &mut Cps2Bus, me: Obj) {
+    variant_sound(b, me, 0xd98d8, 0xd98cc);
+}
+
+/// 0xd995a sans registres (générateur `me`).
+pub fn fin_de_vague(b: &mut Cps2Bus, me: Obj) {
+    variant_sound(b, me, 0xd9976, 0xd996e);
 }
 
 /// 0xd98b8 : routine propre à la variante, au démarrage d'une vague (appelée directement par le générateur SET 19,
