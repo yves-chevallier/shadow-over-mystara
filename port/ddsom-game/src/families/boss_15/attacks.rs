@@ -20,7 +20,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => attack_0(x),
         2 => attack_2(x),
@@ -39,7 +39,7 @@ pub(super) fn run(x: &mut Cx) {
 // --- étapes communes ----------------------------------------------------------------------------------------
 
 /// 0x91cce : début de montée.
-fn rise_start(x: &mut Cx) {
+fn rise_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set32(0x14, 0);
     x.set32(0x1c, 0);
@@ -59,7 +59,7 @@ fn rise_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91d08, 0x91d6e : attend la fin du minuteur.
-fn pause(x: &mut Cx) {
+fn pause<R: Banc>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).gt() {
         return;
     }
@@ -68,7 +68,7 @@ fn pause(x: &mut Cx) {
 }
 
 /// 0x91d30 : début de descente.
-fn fall_start(x: &mut Cx) {
+fn fall_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set32(0x14, 0);
     x.set32(0x1c, 0);
@@ -78,7 +78,7 @@ fn fall_start(x: &mut Cx) {
 }
 
 /// 0x91d4e : descend jusqu'à l'altitude 0x20, puis attend 0x20 images.
-fn fall_down(x: &mut Cx) {
+fn fall_down<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) > 0x20 {
         return;
@@ -118,7 +118,7 @@ fn fight_close<R: Banc>(x: &mut Cx<'_, R>, y: i16) -> bool {
 
 // --- +6 = 0 -----------------------------------------------------------------------------------------------
 
-fn attack_0(x: &mut Cx) {
+fn attack_0<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(SHIELD, 2);
     match x.u8(0x7) {
         0 => reach_player(x),
@@ -168,7 +168,7 @@ fn attack_0(x: &mut Cx) {
 }
 
 /// 0x91e16 : descend de 8 par image jusqu'à l'altitude 0x20.
-fn settle(x: &mut Cx) {
+fn settle<R: Banc>(x: &mut Cx<'_, R>) {
     let z = x.u16(0xc).wrapping_sub(8);
     x.set16(0xc, z);
     if (z as i16) > 0x20 {
@@ -180,7 +180,7 @@ fn settle(x: &mut Cx) {
 }
 
 /// 0x91e62 : bat des ailes : l'altitude et la profondeur oscillent.
-fn flap(x: &mut Cx) {
+fn flap<R: Banc>(x: &mut Cx<'_, R>) {
     step(x);
     if !sub16(x, TIMER, 1).gt() {
         x.add8(0x7, 2);
@@ -200,7 +200,7 @@ fn flap(x: &mut Cx) {
 
 // --- +6 = 2 : souffle en travers de l'écran ----------------------------------------------------------------------
 
-fn attack_2(x: &mut Cx) {
+fn attack_2<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(SHIELD, 2);
     match x.u8(0x7) {
         0 => rise_start(x),
@@ -237,7 +237,7 @@ fn attack_2(x: &mut Cx) {
 }
 
 /// 0x91f36 : pousse les joueurs de 2 pixels du côté où le dragon entre pendant que le minuteur décompte.
-fn push_side(x: &mut Cx) {
+fn push_side<R: Banc>(x: &mut Cx<'_, R>) {
     let d: i16 = if x.u8(f::FLIP) != 0 { -2 } else { 2 };
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
@@ -257,7 +257,7 @@ fn push_side(x: &mut Cx) {
 }
 
 /// 0x91f6c : rejoint la position d'attaque (0x138 ou 0x48 devant la caméra).
-fn align(x: &mut Cx) {
+fn align<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     let edge: u16 = if x.u8(f::FLIP) != 0 { 0x48 } else { 0x138 };
     let d = edge.wrapping_add(var::SCROLL_X.get(x.b)).wrapping_sub(x.u16(0x8)) as i16;
@@ -276,7 +276,7 @@ fn align(x: &mut Cx) {
 }
 
 /// 0x91fa6 : souffle : la profondeur suit la table de vecteurs pointée par `+0x4c` (posée par le script d'animation).
-fn sweep(x: &mut Cx) {
+fn sweep<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     let table = x.u32(0x4c);
     if table != 0 {
@@ -352,7 +352,7 @@ fn leave<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : plongeon ------------------------------------------------------------------------------------------
 
-fn attack_4(x: &mut Cx) {
+fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(SHIELD, 2);
     match x.u8(0x7) {
         0 => rise_start(x),
@@ -363,9 +363,8 @@ fn attack_4(x: &mut Cx) {
             x.set8(0x42, 1);
             x.set8(f::FLIP, 0);
             set_anim(x, 2, 0x15);
-            x.c.d[0] = 0xa000;
             x.set_a5_u8(0x48e, 4);
-            x.call(0x168e);
+            crate::palette::or_brightness(x.b, 0xa000);
             dive_a(x);
         }
         8 => dive_a(x),
@@ -388,7 +387,7 @@ fn dive_position<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0xc, z);
 }
 
-fn dive_a(x: &mut Cx) {
+fn dive_a<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.set8(FOREGROUND, 1);
     dive_position(x);
@@ -406,12 +405,11 @@ fn dive_a(x: &mut Cx) {
     lib::sound(x, 0xe54dc);
 }
 
-fn dive_b(x: &mut Cx) {
+fn dive_b<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.set8(FOREGROUND, 1);
-    x.c.d[0] = 0xf000;
     x.set_a5_u8(0x48e, 4);
-    x.call(0x168e);
+    crate::palette::or_brightness(x.b, 0xf000);
     dive_position(x);
     if !step(x) {
         return;
@@ -424,7 +422,7 @@ fn dive_b(x: &mut Cx) {
 // --- +6 = 6 et 16 : coup de griffe --------------------------------------------------------------------------
 
 /// `boxes` : boîtes de coups (`+0xa2`) ; `dx` : déplacement par image du coup (6 à droite, -6 à gauche).
-fn claw(x: &mut Cx, boxes: u8, dx: i16) {
+fn claw<R: Banc>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
     match x.u8(0x7) {
         0 => reach_player(x),
         2 => {
@@ -446,7 +444,7 @@ fn claw(x: &mut Cx, boxes: u8, dx: i16) {
     }
 }
 
-fn claw_sweep(x: &mut Cx, boxes: u8, dx: i16) {
+fn claw_sweep<R: Banc>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
     x.set8(HURT_BOX, boxes);
     x.add16(0x8, dx as u16);
     if sub16(x, TIMER, 1).gt() {
@@ -458,7 +456,7 @@ fn claw_sweep(x: &mut Cx, boxes: u8, dx: i16) {
 
 // --- +6 = 8, 10, 18 : pose -----------------------------------------------------------------------------------
 
-fn pose(x: &mut Cx, boxes: u8) {
+fn pose<R: Banc>(x: &mut Cx<'_, R>, boxes: u8) {
     x.set8(HURT_BOX, boxes);
     match x.u8(0x7) {
         0 => {
@@ -478,7 +476,7 @@ fn pose(x: &mut Cx, boxes: u8) {
 
 // --- +6 = 12 : rugissement -----------------------------------------------------------------------------------------
 
-fn attack_12(x: &mut Cx) {
+fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => rise_start(x),
         2 => rise_up(x),
@@ -486,8 +484,9 @@ fn attack_12(x: &mut Cx) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x50);
             lib::shake_5c(x, 0x10);
-            let routine = if x.u8(TYPE) == TYPE_BIG { 0xa7234 } else { 0xa727c };
-            x.call(routine);
+            // 0xa7234 (grand) ou 0xa727c (petit)
+            let big = x.u8(TYPE) == TYPE_BIG;
+            super::super::petites::roar_cree(x.b, x.o, big);
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
@@ -505,7 +504,7 @@ fn attack_12(x: &mut Cx) {
 
 // --- +6 = 14 : plongeon sur un joueur ---------------------------------------------------------------------------
 
-fn attack_14(x: &mut Cx) {
+fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -592,7 +591,7 @@ fn follow<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x930e2 : repousse les joueurs trop proches (moins de 0x10 pixels en X + Y) le long de l'axe dragon-joueur.
-fn push_players(x: &mut Cx) {
+fn push_players<R: Banc>(x: &mut Cx<'_, R>) {
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
@@ -606,32 +605,43 @@ fn push_players(x: &mut Cx) {
         if dx.wrapping_add(dy) <= 0x10 {
             continue;
         }
-        x.c.d[1] = x.u16(0x8) as u32; // relu : D1-D4 relus par la suite (DDSOM_POISON : cov_tour2_c1...)
-        x.c.d[2] = x.u16(0x10) as u32; // relu : relu
-        x.c.d[3] = p.u16(x.b, 0x8) as u32; // relu : relu
-        x.c.d[4] = p.u16(x.b, 0x10) as u32; // relu : relu
-        shove(x.c, x.b, p);
+        // 0x1386 : direction du joueur (D3, D4) vers le dragon (D1, D2). Glitch d'origine : les registres de travail
+        // de 0x1386 (D2, D3, D4 : écart en Z, pas, unité) restent aux gestionnaires suivants (`dispatch::Restes`).
+        let (bx, bz) = (x.u16(0x8) as u32, x.u16(0x10) as u32);
+        let (px, pz) = (p.u16(x.b, 0x8) as u32, p.u16(x.b, 0x10) as u32);
+        let r = crate::aides::calcul(x.b, bx, bz, px, pz);
+        *x.c.d2() = r.d2;
+        *x.c.d3() = r.d3;
+        // `add.l #0x8000,D4` (retenue dans le mot haut), puis l'unité dans D4.w
+        *x.c.d4() = pz.wrapping_add(0x8000) & 0xffff_0000 | r.unite as u32;
+        step_toward(x.b, p, r.direction);
     }
 }
 
 /// Pente (en 1/256 de pixel) des pas de `shove` : 32 directions, (dx, dy) en mots.
 const SHOVE_STEPS: u32 = 0x1c6636;
 
-/// 0x93158 puis l'ajout à la position : déplace `o` d'un pas dans la direction de (D3, D4) vers (D1, D2) (0x1386).
-/// D0 et D1 rendent le pas (longs, 8 bits de fraction), A2 la table.
-fn shove(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
-    crate::call(c, b, 0x1386);
-    let a = (c.d[0] as u16 & 0x1f) * 4;
-    c.d[0] = c.d[0] & 0xffff_0000 | a as u32;
-    c.a[2] = SHOVE_STEPS;
+/// 0x93158 puis l'ajout à la position : déplace `o` d'un pas dans la direction `direction` (0x1386) ; rend le pas (dx,
+/// dy : longs, 8 bits de fraction).
+fn step_toward(b: &mut Cps2Bus, o: Obj, direction: u8) -> (u32, u32) {
+    let a = (direction as u16 & 0x1f) * 4;
     let dy = ((rd16(b, SHOVE_STEPS + 2 + a as u32) as i16 as i32) << 8) as u32;
     let dx = ((rd16(b, SHOVE_STEPS + a as u32) as i16 as i32) << 8) as u32;
-    c.d[0] = dx;
-    c.d[1] = dy;
     let nx = o.u32(b, 0x8).wrapping_add(dx);
     o.set_u32(b, 0x8, nx);
     let ny = o.u32(b, 0x10).wrapping_add(dy);
     o.set_u32(b, 0x10, ny);
+    (dx, dy)
+}
+
+/// `step_toward` dans la direction de (D3, D4) vers (D1, D2) (0x1386, registres de travail laissés) ; D0 et D1 rendent le
+/// pas, A2 la table.
+fn shove(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
+    crate::call(c, b, 0x1386);
+    let (dx, dy) = step_toward(b, o, c.d[0] as u8);
+    c.a[2] = SHOVE_STEPS;
+    c.d[0] = dx;
+    c.d[1] = dy;
 }
 
 /// 0x930a4 (appelé par un effet, 0xb482e) : l'objet A0 se rapproche de l'objet A1 d'un pas tant qu'il en est à

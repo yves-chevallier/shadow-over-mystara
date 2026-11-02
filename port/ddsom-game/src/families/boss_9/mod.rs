@@ -100,7 +100,7 @@ pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
 pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn steps(x: &mut Cx, s6: u8, s7: u8) {
+pub(self) fn steps<R: Banc>(x: &mut Cx<'_, R>, s6: u8, s7: u8) {
     x.set8(f::SUB2, s6);
     x.set8(0x7, s7);
 }
@@ -112,40 +112,39 @@ pub(self) fn jolt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Une image sur `mask` + 1 (`+0x42`), vrai.
-pub(self) fn every(x: &mut Cx, mask: u8) -> bool {
-    x.c.d[0] = mask as u32;
+pub(self) fn every<R: Banc>(x: &mut Cx<'_, R>, mask: u8) -> bool {
     let n = x.u8(PUFFS).wrapping_add(1) & mask;
     x.set8(PUFFS, n);
     n == 0
 }
 
 /// Deux fumées (0xb10c8) : sorte `kind`, décalage `dx`.
-pub(self) fn smoke_pair(x: &mut Cx, kind: u32, dx: u16) {
+pub(self) fn smoke_pair<R: Banc>(x: &mut Cx<'_, R>, kind: u32, dx: u16) {
     for (dy, dz) in [(0x30, 0x28), (0x28, 8)] {
         lib::shock(x, kind, dx, dy, dz);
     }
 }
 
 /// 0x8ca22 : fumée de l'engin qui roule.
-pub(self) fn smoke(x: &mut Cx) {
+pub(self) fn smoke<R: Banc>(x: &mut Cx<'_, R>) {
     smoke_pair(x, 1, 0x100)
 }
 
 /// Une fumée toutes les `mask` + 1 images.
-pub(self) fn smoke_every(x: &mut Cx, mask: u8) {
+pub(self) fn smoke_every<R: Banc>(x: &mut Cx<'_, R>, mask: u8) {
     if every(x, mask) {
         smoke(x);
     }
 }
 
 /// Fumée plus serrée quand l'équipage est réduit (plus de deux servants : une image sur 4, sinon sur 8).
-pub(self) fn crew_smoke(x: &mut Cx) {
+pub(self) fn crew_smoke<R: Banc>(x: &mut Cx<'_, R>) {
     let mask = if (x.u8(CREW_COUNT) as i8) > 8 { 3 } else { 7 };
     smoke_every(x, mask);
 }
 
 /// L'engin est-il sorti par le bord vers lequel il roule (`+0x2c` : 0 vers la gauche) ?
-pub(self) fn past_edge(x: &mut Cx) -> bool {
+pub(self) fn past_edge<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let cam = x.a5_u16(CAM_X);
     if x.u8(f::FLIP) == 0 {
         left_of(x, 0x80, cam)
@@ -155,22 +154,19 @@ pub(self) fn past_edge(x: &mut Cx) -> bool {
 }
 
 /// `x + d - bord` négatif (`sub.w ; bge`) : l'engin est à gauche du bord.
-pub(self) fn left_of(x: &mut Cx, d: u16, edge: u16) -> bool {
+pub(self) fn left_of<R: Banc>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_add(d);
-    set_dw(x, 0, a.wrapping_sub(edge));
     Fl::sub16(a, edge).lt()
 }
 
 /// `x - d - bord` positif (`sub.w ; ble`) : l'engin est à droite du bord.
-pub(self) fn right_of(x: &mut Cx, d: u16, edge: u16) -> bool {
+pub(self) fn right_of<R: Banc>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_sub(d);
-    set_dw(x, 1, edge);
-    set_dw(x, 0, a.wrapping_sub(edge));
     Fl::sub16(a, edge).gt()
 }
 
 /// Plus de servants assez longtemps (`+0xbf` négatif) : l'engin clignote, et repart d'un passage.
-pub(self) fn crew_gone(x: &mut Cx) -> bool {
+pub(self) fn crew_gone<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(LIVES) as i8) >= 0 {
         return false;
     }
@@ -183,7 +179,7 @@ pub(self) fn crew_gone(x: &mut Cx) -> bool {
 }
 
 /// Fin d'un arrêt : clignotement si l'équipage est perdu, sinon nouveau passage (`+6` = 2, `+7` = 4).
-pub(self) fn stop_over(x: &mut Cx) {
+pub(self) fn stop_over<R: Banc>(x: &mut Cx<'_, R>) {
     if !crew_gone(x) {
         steps(x, 2, 4);
     }
@@ -196,66 +192,60 @@ fn difficulty<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
 }
 
 /// Octet de la table à une entrée par difficulté.
-fn per_level(x: &mut Cx, table: u32) -> u8 {
+fn per_level<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let d = difficulty(x);
-    x.c.a[4] = table;
     x.data8(table + d)
 }
 
 /// Octet tiré (`mask`) dans la table de la difficulté, dont l'adresse est dans la table de longs `lists`.
-fn draw(x: &mut Cx, lists: u32, mask: u32) -> u8 {
+fn draw<R: Banc>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
     let d = difficulty(x);
     let at = x.data32(lists + 4 * d);
-    x.c.a[4] = at;
     let r = rand_and(x, mask);
     x.data8(at + r)
 }
 
 /// 0x8c9ee : équipage perdu avant clignotement.
-pub(self) fn reset_lives(x: &mut Cx) {
+pub(self) fn reset_lives<R: Banc>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8ca02).wrapping_sub(1);
     x.set8(LIVES, n);
 }
 
 /// 0x8c9ba : attente avant le tir.
-pub(self) fn reset_count(x: &mut Cx) {
+pub(self) fn reset_count<R: Banc>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c9ce).wrapping_add(5);
     x.set8(COUNT, n);
 }
 
 /// 0x8c420 : ruées autorisées.
-pub(self) fn reset_dashes(x: &mut Cx) {
+pub(self) fn reset_dashes<R: Banc>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c430);
     x.set8(DASHES, n);
 }
 
 /// 0x8beca : passages avant un arrêt.
-pub(self) fn draw_passes(x: &mut Cx) {
-    x.c.d[0] = 0;
+pub(self) fn draw_passes<R: Banc>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8bef0, 0x1f).wrapping_sub(1);
     x.set8(PASSES, n);
 }
 
 /// 0x8c450 : bombardements.
-pub(self) fn draw_bombs(x: &mut Cx) {
-    x.c.d[0] = 0;
+pub(self) fn draw_bombs<R: Banc>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8c476, 0xf).wrapping_sub(1);
     x.set8(BOMBS, n);
 }
 
 /// 0x8c576 : arrêts.
-pub(self) fn draw_stops(x: &mut Cx) {
-    x.c.d[0] = 0;
+pub(self) fn draw_stops<R: Banc>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8c598, 0xf);
     x.set8(STOPS, n);
 }
 
 /// 0x8bc0c : attente avant de repartir, selon le nombre de joueurs, la difficulté et l'équipage.
-pub(self) fn reset_wait(x: &mut Cx) {
+pub(self) fn reset_wait<R: Banc>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8bc3e + 4 * players);
     let d = difficulty(x);
-    x.c.a[4] = list;
     let mut n = x.data8(list + d).wrapping_add(0xf);
     if (x.u8(CREW_COUNT) as i8) >= 8 {
         n = n.wrapping_add(0xf);
@@ -264,21 +254,18 @@ pub(self) fn reset_wait(x: &mut Cx) {
 }
 
 /// 0x8bcd2 : abscisse de l'arrêt, tirée devant l'engin.
-pub(self) fn draw_stop_x(x: &mut Cx) {
+pub(self) fn draw_stop_x<R: Banc>(x: &mut Cx<'_, R>) {
     let d = difficulty(x);
     let list = (x.rom16(0x8bd08 + 4 * d) as u32) << 16 | x.rom16(0x8bd08 + 4 * d + 2) as u32;
-    x.c.a[4] = list;
     let r = rand_and(x, 0x1f);
     let k = x.data8(list + r) as u16;
-    set_dw(x, 0, k);
     let cam = x.a5_u16(CAM_X);
     let goal = if x.u8(f::FLIP) != 0 { cam.wrapping_add(k) } else { cam.wrapping_add(0x180).wrapping_sub(k) };
-    set_dw(x, 1, goal);
     x.set16(STOP_X, goal);
 }
 
 /// 0x8be88 : profondeur du passage selon celle de la cible (trois voies).
-pub(self) fn pick_lane(x: &mut Cx) {
+pub(self) fn pick_lane<R: Banc>(x: &mut Cx<'_, R>) {
     let lane: u32 = if x.u16(f::TARGET) == 0 {
         1
     } else {
@@ -292,18 +279,14 @@ pub(self) fn pick_lane(x: &mut Cx) {
             2
         }
     };
-    x.c.d[6] = lane * 2;
-    x.c.a[4] = 0x8bec4;
     let z = x.data16(0x8bec4 + 2 * lane);
     x.set16(0x10, z);
 }
 
 /// 0x8c988 : nouvelle cible (0x424e ou 0x44ee, au hasard).
-pub(self) fn retarget(x: &mut Cx) {
+pub(self) fn retarget<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    x.c.a[4] = 0x8c9aa;
     let k = x.data8(0x8c9aa + r);
-    x.c.d[0] = x.c.d[0] & !0xff | k as u32;
     if k == 0 {
         lib::pick_target(x);
     } else {
@@ -312,22 +295,19 @@ pub(self) fn retarget(x: &mut Cx) {
 }
 
 /// 0x8bff0 : compte les servants actifs (état 0x0200) : bits en `+0xb6`, nombre × 4 en `+0xb7` ; aucun : `+0xaa` = 4.
-pub(self) fn count_crew(x: &mut Cx) {
+pub(self) fn count_crew<R: Banc>(x: &mut Cx<'_, R>) {
     let (mut bits, mut count) = (0u8, 0u8);
     for k in 0..4u32 {
         let link = x.u16(CREW + 2 * k);
         let m = Obj(link as i16 as i32 as u32 & 0xff_ffff);
-        x.c.a[1] = link as i16 as i32 as u32;
         if m.u16(x.b, 4) == 0x0200 {
             count = count.wrapping_add(4);
             bits |= 1 << k;
         }
     }
-    x.c.a[2] = x.o.0 + CREW + 8;
-    x.c.d[3] = bits as u32; // relu : D3 relu par la suite (DDSOM_POISON : covb_long3p_02)
-    x.c.d[4] = 4;
-    x.c.d[5] = 0xffff;
-    x.c.d[6] = count as u32;
+    *x.c.d3() = bits as u32; // relu : D3 relu par la suite (DDSOM_POISON : covb_long3p_02)
+    *x.c.d4() = 4;
+    *x.c.d5() = 0xffff;
     x.set8(CREW_BITS, bits);
     x.set8(CREW_COUNT, count);
     if count == 0 {
@@ -336,49 +316,42 @@ pub(self) fn count_crew(x: &mut Cx) {
 }
 
 /// 0x8c026 : vitesse de roulement selon l'équipage (table rapide en mode dur), allure des roues.
-pub(self) fn set_speed(x: &mut Cx) {
+pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>) {
     let hard = x.a5_u16(HARD) != 0;
     let mut top = if hard { 0x800u16 } else { 0x680 };
     if x.u8(f::FLIP) == 0 {
         top = top.wrapping_neg();
     }
-    set_dw(x, 0, top);
     if top == x.u16(0x14) {
         return;
     }
     let i = x.u8(CREW_COUNT) as u32 * 2;
-    x.c.d[6] = i;
     let table = if hard { 0x8c092 } else { 0x8c0ba };
     let mut vx = x.rom16(table + i);
     let mut vz = x.rom16(table + 2 + i);
     let gait = x.rom8(table + 5 + i);
-    x.c.d[2] = gait as u32;
+    *x.c.d2() = gait as u32;
     if x.u8(f::FLIP) == 0 {
         vx = vx.wrapping_neg();
         vz = vz.wrapping_neg();
     }
-    set_dw(x, 0, vx);
-    set_dw(x, 1, vz);
     x.set8(GAIT, gait);
     x.set16(0x14, vx);
     x.set16(0x16, vz);
 }
 
 /// 0x8c1a0 : ruée (équipage au complet, tirage par joueurs et difficulté) : pleine vitesse ; vrai si lancée.
-pub(self) fn try_dash(x: &mut Cx) -> bool {
+pub(self) fn try_dash<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(CREW_COUNT) != 0x10 || x.u8(DASHES) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8c20c + 4 * players);
     let d = difficulty(x);
-    x.c.a[4] = list;
     let chances = x.data32(list + 4 * d);
-    x.c.d[2] = chances;
+    *x.c.d2() = chances;
     let r = rand_and(x, 0x1f);
     if chances >> r & 1 == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     x.set8(GAIT, 1);
@@ -386,15 +359,13 @@ pub(self) fn try_dash(x: &mut Cx) -> bool {
     if x.u8(f::FLIP) == 0 {
         v = v.wrapping_neg();
     }
-    set_dw(x, 0, v);
     x.set16(0x14, v);
     x.add8(DASHES, 0xff);
-    x.c.d[0] = 1;
     true
 }
 
 /// 0x8c124 / 0x8c132 : remplace les servants perdus (ENEMY 0x13, variante 2 sans aucun servant, 1 sinon).
-pub(self) fn refill_crew(x: &mut Cx, all: bool) {
+pub(self) fn refill_crew<R: Banc>(x: &mut Cx<'_, R>, all: bool) {
     if all {
         if x.u8(CREW_COUNT) == 0x10 {
             return;
@@ -404,8 +375,7 @@ pub(self) fn refill_crew(x: &mut Cx, all: bool) {
     }
     let mut slot = 5u8;
     for k in 0..4u32 {
-        x.c.d[4] = k;
-        x.c.a[2] = x.o.0 + CREW + 2 * k;
+        *x.c.d4() = k;
         if x.u8(CREW_BITS) >> k & 1 == 0 {
             x.set16(CREW + 2 * k, 0);
             if let Some(m) = x.alloc(&pools::ENEMY) {
@@ -420,14 +390,13 @@ pub(self) fn refill_crew(x: &mut Cx, all: bool) {
         }
         slot = slot.wrapping_sub(1);
     }
-    x.c.d[2] = 0xffff;
-    x.c.d[4] = 4;
-    x.c.d[5] = slot as u32;
-    x.c.a[2] = x.o.0 + CREW + 8;
+    *x.c.d2() = 0xffff;
+    *x.c.d4() = 4;
+    *x.c.d5() = slot as u32;
 }
 
 /// 0x8c8d2 : une cible au sol devant l'engin ? 1 tout près, 0 à portée de tir, 2 sinon.
-pub(self) fn target_range(x: &mut Cx) -> u8 {
+pub(self) fn target_range<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     let r = if x.u16(f::TARGET) == 0 {
         2
     } else {
@@ -442,16 +411,14 @@ pub(self) fn target_range(x: &mut Cx) -> u8 {
             2
         }
     };
-    x.c.d[0] = r as u32;
     r
 }
 
 /// 0x8c698 / 0x8c6a0 : arrêt de tir tiré par difficulté (`base` : 2 cible proche, 0xe cible à portée).
-pub(self) fn draw_halt(x: &mut Cx, base: u8) {
-    x.c.d[2] = base as u32;
+pub(self) fn draw_halt<R: Banc>(x: &mut Cx<'_, R>, base: u8) {
+    *x.c.d2() = base as u32;
     let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = 0x8c6d2u32.wrapping_add(level as i16 as u32);
-    x.c.a[4] = at;
     let r = rand_and(x, 0x1f);
     let k = x.data8(at + r).wrapping_add(base);
     x.set8(f::SUB2, k);
@@ -460,9 +427,8 @@ pub(self) fn draw_halt(x: &mut Cx, base: u8) {
 }
 
 /// 0x8b9ea : avaries par paliers de huitièmes de PV (bits de `+0xa8`, cumulés).
-pub(self) fn damage_bits(x: &mut Cx) {
+pub(self) fn damage_bits<R: Banc>(x: &mut Cx<'_, R>) {
     let q = x.u16(0x60) >> 3;
-    set_dw(x, 0, q);
     let hp = x.u16(f::HP) as i16;
     let mut stage = 7u8;
     let mut d1 = q.wrapping_mul(6);
@@ -475,14 +441,12 @@ pub(self) fn damage_bits(x: &mut Cx) {
             d1 = d1.wrapping_sub(q);
         }
     }
-    set_dw(x, 1, d1);
-    x.c.d[6] = (stage * 2) as u32;
     const MASKS: [u8; 8] = [0, 0x40, 0xc0, 0xc4, 0xcc, 0xdc, 0xdd, 0xdd];
     let v = x.u8(DAMAGE) | MASKS[stage as usize];
     x.set8(DAMAGE, v);
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -494,7 +458,7 @@ pub fn run(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x8a772 : hors cinématique, et dès qu'il y a la place (10 ESHL, 5 ENEMY) : parties, conducteur, position.
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -519,7 +483,7 @@ fn init(x: &mut Cx) {
     // deux parties 0xd (liées par `+0xa4`, `+0xa6`), huit parties 0xe
     for (kind, last, linked) in [(0xdu8, 1u8, true), (0xe, 7, false)] {
         for k in (0..=last).rev() {
-            x.c.d[5] = k as u32;
+            *x.c.d5() = k as u32;
             let Some(p) = x.alloc(&pools::ESHL) else { break };
             let active = x.u8(0);
             p.set_u8(x.b, 0, active);
@@ -531,7 +495,6 @@ fn init(x: &mut Cx) {
             }
         }
     }
-    x.c.a[2] = x.o.0 + DRIVER;
     if let Some(d) = x.alloc(&pools::ENEMY) {
         let active = x.u8(0);
         d.set_u8(x.b, 0, active);
@@ -552,12 +515,11 @@ fn init(x: &mut Cx) {
     x.set8(0x2d, 8);
     x.set16(0x10, 0x48);
     // `move.w #-0x8000,D3 ; swap ; asr.l #16` : moins une demi-unité
-    x.c.d[3] = 0xffff_8000;
+    *x.c.d3() = 0xffff_8000;
     let z = x.u32(0x10).wrapping_add(0xffff_8000);
     x.set32(0x10, z);
     x.set16(0x8, 0x80);
     lib::pick_target_any(x);
-    x.c.d[0] = 0;
     x.set32(0xc, 0);
     x.anim_start(SET, 6);
 }
@@ -565,7 +527,7 @@ fn init(x: &mut Cx) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x8a8c0 : gel, clignotement, un groupe par image, ombre ; sans cible ni joueur : attente.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE);
     if freeze != 0 && (freeze as i8) > 0 {
         x.set8(f::FREEZE, freeze - 1);
@@ -581,7 +543,6 @@ fn active(x: &mut Cx) {
             x.set8(BLINKING, 0);
             x.set8(BLINK_TIME, 0);
         }
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => moves::intro(x),
             2 => moves::start(x),
@@ -600,7 +561,7 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x8a75c "boss_9" run,
+    0x8a75c "boss_9" #[sans] run,
 }
 
 use super::cx::handlers;

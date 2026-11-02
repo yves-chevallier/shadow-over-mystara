@@ -15,7 +15,7 @@ use crate::objects::Courant;
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs, toutes communes).
 const REACTIONS: u32 = 0x80b0a;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 && !tst16(x, f::HP).gt() {
         x.set8(f::SUB, 6);
         x.set8(f::SUB2, 0);
@@ -25,7 +25,6 @@ pub(super) fn run(x: &mut Cx) {
     if freeze != 0 && (freeze as i8) > 0 {
         x.set8(f::FREEZE, freeze - 1);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => reaction(x),
             2 => pushed_back(x),
@@ -39,21 +38,17 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x80ae8 : premier passage : immunités du type ; puis la routine commune du code de coup.
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0xff);
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
-        // 0xfe5a laisse D0 = l'index de la table des immunités (mot haut nul)
-        x.c.d[0] = lib::set_immunities(x) as u32;
+        lib::set_immunities(x);
     }
-    // Glitch d'origine : seul l'octet bas de D0 est posé ; l'index de la table garde l'octet haut de D0 (celui de
-    // 0xfe5a, ou le D0 hérité).
-    let code = x.u8(0x49);
-    x.c.d[0] = x.c.d[0] & 0xffff_ff00 | code as u32;
-    let i = x.c.d[0] as u16 as i16 as u32;
-    let routine = rom32(x, REACTIONS.wrapping_add(i));
-    x.c.a[1] = routine;
-    x.call(routine);
+    // L'original indexe la table par D0.w dont seul l'octet bas est posé : l'octet haut vient du `moveq #0` de
+    // l'aiguillage des groupes, ou de l'index rendu par 0xfe5a (au plus (32 + type) × 4 < 0x100) : il est nul.
+    let code = x.u8(0x49) as u32;
+    let routine = rom32(x, REACTIONS + code);
+    run_reaction(x, routine);
 }
 
 /// 0x80bb6 : recul en vol (animation 9) jusqu'à l'arrêt ; il se retrouve à terre.
@@ -83,7 +78,7 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x80c2c : à terre (`+0x84` images hors pause), puis relevé ou riposte.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -127,7 +122,7 @@ fn down(x: &mut Cx) {
 }
 
 /// 0x80d16 : mort : la scène est prévenue (0x300 : boss 3 vaincu), chute, rebond, effondrement.
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -150,7 +145,6 @@ fn death(x: &mut Cx) {
             if x.u8(f::FLIP) != 0 {
                 v = v.wrapping_neg();
             }
-            set_dw(x, 0, v);
             x.set16(0x14, v);
             x.anim_start(SET_DEATH, 2);
             falling(x)

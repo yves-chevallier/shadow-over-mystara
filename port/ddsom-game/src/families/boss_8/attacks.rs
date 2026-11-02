@@ -13,18 +13,18 @@ fn key<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
 }
 
 /// Fin d'une étape de décompte : le décompte de `+0xa0` est-il écoulé ?
-fn timer_done(x: &mut Cx) -> bool {
+fn timer_done<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     sub16(x, TIMER, 1).mi()
 }
 
 /// Étape finale commune des attaques (0x8880a) : joue l'animation jusqu'au bout, puis choisit la suite.
-fn finish(x: &mut Cx) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         aids::after_attack(x);
     }
 }
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x887ba, f::SUB2) {
         0x887ce => slash(x),
         0x88e0e => lunge(x, true),
@@ -38,12 +38,12 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn step(x: &mut Cx, table: u32) -> u32 {
+fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB3)
 }
 
 /// 0x887ce (`+6` = 0) : un seul coup.
-fn slash(x: &mut Cx) {
+fn slash<R: Banc>(x: &mut Cx<'_, R>) {
     if step(x, 0x887dc) == 0x887e0 {
         addq8(x, f::SUB3, 2);
         x.set8(0x45, 5);
@@ -56,7 +56,7 @@ fn slash(x: &mut Cx) {
 }
 
 /// 0x8881a (`+6` = 8) : coup en trois temps (le boss ne frappe qu'aux images clés `+0x33`).
-fn combo(x: &mut Cx) {
+fn combo<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x88828) {
         0x88830 => {
             addq8(x, f::SUB3, 2);
@@ -93,13 +93,13 @@ fn combo(x: &mut Cx) {
 }
 
 /// Lance un projectile (0xb4f44, réglage 5) vers un joueur choisi par `pick`.
-fn shoot(x: &mut Cx, pick: fn(&mut Cx)) {
+fn shoot<'a, R: Banc>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     pick(x);
     crate::families::effects_creators::spell(x.b, x.o, 5);
 }
 
 /// 0x888ac (`+6` = 4, 6) et 0x88cae (`+6` = 14) : rafale de projectiles, chacun vers un joueur.
-fn volley_start(x: &mut Cx, kind: u8, extra: bool) {
+fn volley_start<R: Banc>(x: &mut Cx<'_, R>, kind: u8, extra: bool) {
     addq8(x, f::SUB3, 2);
     if !extra {
         x.set8(PHASE_TIMER, 0xa);
@@ -117,7 +117,7 @@ fn volley_start(x: &mut Cx, kind: u8, extra: bool) {
 }
 
 /// Premier tir d'une rafale : sons, effet, puis un tir par joueur en vie.
-fn volley_fire(x: &mut Cx, pick: fn(&mut Cx)) {
+fn volley_fire<'a, R: Banc>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     lib::shake_58(x, 0x30);
     lib::sound(x, 0xedd2c);
     addq8(x, f::SUB3, 2);
@@ -130,14 +130,14 @@ fn volley_fire(x: &mut Cx, pick: fn(&mut Cx)) {
 }
 
 /// Un tir de plus tant qu'il reste des joueurs à viser.
-fn volley_next(x: &mut Cx, pick: fn(&mut Cx)) {
+fn volley_next<'a, R: Banc>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     let f = sub8(x, VOLLEY, 1);
     if !f.eq() && !f.mi() {
         shoot(x, pick);
     }
 }
 
-fn throw_knives(x: &mut Cx) {
+fn throw_knives<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x888ba) {
         0x888c2 => volley_start(x, 0xc, false),
         0x888f6 => {
@@ -157,7 +157,7 @@ fn throw_knives(x: &mut Cx) {
 }
 
 /// 0x88cae (`+6` = 14) : pluie de projectiles, répétée jusqu'à épuisement de `+0xaa`.
-fn rain(x: &mut Cx) {
+fn rain<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x88cbc) {
         0x88cc4 => volley_start(x, 0x11, true),
         0x88cf2 => {
@@ -183,7 +183,7 @@ fn rain(x: &mut Cx) {
 }
 
 /// 0x88a64 (`+6` = 10) : charge latérale avec bouffées de poussière, puis arrêt.
-fn charge(x: &mut Cx) {
+fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x88a72) {
         0x88a7c => {
             addq8(x, f::SUB3, 2);
@@ -244,7 +244,7 @@ fn charge(x: &mut Cx) {
 }
 
 /// Toutes les 4 images, une bouffée de poussière sous les pieds (`andi.w #3,(0x6e,A5) ; beq`).
-fn dust(x: &mut Cx) {
+fn dust<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
@@ -253,7 +253,7 @@ fn dust(x: &mut Cx) {
 }
 
 /// 0x88b92 (`+6` = 12) : bond avec chute, atterrissage et gerbe d'effets.
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x88ba0, f::SUB3) {
         0x88bac => leap_start(x, -0x400, 0x10, 9),
         t => leap_rest(x, t),
@@ -261,7 +261,7 @@ fn leap(x: &mut Cx) {
 }
 
 /// Début du bond : élan horizontal `vx` (inversé si le boss regarde à gauche), clé d'animation `kind`.
-pub(super) fn leap_start(x: &mut Cx, vx: i16, kind: u8, anim: u32) {
+pub(super) fn leap_start<R: Banc>(x: &mut Cx<'_, R>, vx: i16, kind: u8, anim: u32) {
     addq8(x, f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     key(x, kind);
@@ -278,7 +278,7 @@ pub(super) fn leap_start(x: &mut Cx, vx: i16, kind: u8, anim: u32) {
 }
 
 /// Étapes communes du bond (0x88bf8, 0x88c0e, 0x88c34, 0x88c7e, 0x88c9a).
-pub(super) fn leap_rest(x: &mut Cx, t: u32) {
+pub(super) fn leap_rest<R: Banc>(x: &mut Cx<'_, R>, t: u32) {
     match t {
         0x88bf8 => {
             if x.u8(f::KEY_FRAME) != 0 {
@@ -330,7 +330,7 @@ pub(super) fn leap_rest(x: &mut Cx, t: u32) {
 }
 
 /// 0x88d86 (`+6` = 16) : disparition, réapparition à côté.
-fn vanish(x: &mut Cx) {
+fn vanish<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x88d94) {
         0x88d9c => {
             addq8(x, f::SUB3, 2);
@@ -360,7 +360,7 @@ fn vanish(x: &mut Cx) {
 }
 
 /// 0x88e0e (`+6` = 2, `first`) et 0x88e50 (`+6` = 18) : bond en avant puis coup (0xa4e84 reçoit D4).
-fn lunge(x: &mut Cx, first: bool) {
+fn lunge<R: Banc>(x: &mut Cx<'_, R>, first: bool) {
     let t = step(x, if first { 0x88e1c } else { 0x88e5e });
     match t {
         0x88e66 => {
@@ -373,7 +373,8 @@ fn lunge(x: &mut Cx, first: bool) {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x20);
-                x.c.d[4] = first as u32;
+                // D4 = `first` (reste relu par les gestionnaires suivants, `dispatch::Restes`)
+                *x.c.d4() = first as u32;
                 crate::families::eshl_creators::series_36(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, first as u8);
                 strike(x, 0xd);
             }

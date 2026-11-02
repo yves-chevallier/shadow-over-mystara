@@ -18,7 +18,7 @@ use super::body::push_players;
 use super::*;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => short_claw(x),
         4 => double_claw(x),
@@ -64,7 +64,7 @@ fn key_step<R: Banc>(x: &mut Cx<'_, R>, table: u32, clear: bool) {
 }
 
 /// 0x7fdee : coup de griffes.
-fn claw(x: &mut Cx) {
+fn claw<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         return swing(x, 3);
     }
@@ -75,7 +75,7 @@ fn claw(x: &mut Cx) {
 }
 
 /// 0x7fe34 : coup de griffes court.
-fn short_claw(x: &mut Cx) {
+fn short_claw<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         return swing(x, 4);
     }
@@ -85,7 +85,7 @@ fn short_claw(x: &mut Cx) {
 }
 
 /// 0x7fd2c : double coup de griffes.
-fn double_claw(x: &mut Cx) {
+fn double_claw<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => swing(x, 3),
         2 => {
@@ -108,7 +108,7 @@ fn double_claw(x: &mut Cx) {
 }
 
 /// 0x7fe7a : bond : montée à 0x70, retombée en avant, glissade.
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -190,7 +190,7 @@ fn marked_key<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x7ffbc : un cri (animation 8), puis quatre autres qui repoussent les joueurs devant lui.
-fn cries(x: &mut Cx) {
+fn cries<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
             if x.u8(0x7) == 0 {
@@ -253,7 +253,7 @@ fn no_drift_when_fast<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8003e : rase-mottes : ruée en avant, coup (animation 6) au premier joueur frôlé, remontée si le coup porte.
-fn skim(x: &mut Cx) {
+fn skim<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -355,7 +355,7 @@ fn cap_speed<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x801de : ruée : monte ou descend à hauteur 0x50, plane, puis plonge vers l'avant.
-fn rush(x: &mut Cx) {
+fn rush<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
             if x.u8(0x7) == 0 {
@@ -429,7 +429,7 @@ fn rush(x: &mut Cx) {
 }
 
 /// 0x80330 : cri sur place : montée, cri (0xa2d22, 0xedbf4) aux images-clés.
-fn cry(x: &mut Cx) {
+fn cry<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
             if x.u8(0x7) == 0 {
@@ -467,7 +467,7 @@ fn shriek<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x803aa : vol de côté à hauteur 0x60 vers le milieu de l'écran (corps de côté : il écarte les joueurs).
-fn side_flight(x: &mut Cx) {
+fn side_flight<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -479,7 +479,6 @@ fn side_flight(x: &mut Cx) {
             if h as i16 > 0x60 {
                 v = v.wrapping_neg();
             }
-            set_dw(x, 0, v);
             x.set16(0x18, v);
             attack_anim(x, 0xe);
         }
@@ -490,7 +489,6 @@ fn side_flight(x: &mut Cx) {
             if (x.u16(0x18) as i16) < 0 {
                 d = d.wrapping_neg();
             }
-            set_dw(x, 0, d);
             if (d as i16) < 0 {
                 return;
             }
@@ -513,7 +511,6 @@ fn side_flight(x: &mut Cx) {
                 }
                 d = m as u16;
             }
-            set_dw(x, 0, d);
             x.add16(0x8, d);
             push_players(x, 2);
             lib::step(x);
@@ -536,7 +533,7 @@ fn side_flight(x: &mut Cx) {
 }
 
 /// 0x80496 : redescend à hauteur 0x40, puis fin de l'attaque.
-fn descend_to_0x40(x: &mut Cx) {
+fn descend_to_0x40<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) > 0x40 {
         return;
@@ -562,7 +559,7 @@ fn try_grab<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x804ba : enlèvement : monte hors de l'écran, attend, fond sur la cible en saisissant au passage, remonte.
-fn abduction(x: &mut Cx) {
+fn abduction<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
             if x.u8(0x7) == 0 {

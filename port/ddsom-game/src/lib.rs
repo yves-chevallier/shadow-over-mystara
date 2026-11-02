@@ -665,7 +665,7 @@ fn adopt_mask() -> u32 {
 /// Exécute la routine d'origine sur une copie de la machine jusqu'à son retour ; rend le CPU obtenu.
 fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
     let (mut c2, mut b2) = (c.clone(), b.clone());
-    pile_pour_l_original(&mut c2, &mut b2);
+    pile_pour_l_original(n, &mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
     let mut guard = 0;
@@ -680,11 +680,13 @@ fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
 }
 
 /// Contrôle d'une native dans le jeu (appelée par du Rust : son retour est un appel en cours tenu en Rust, pas une
-/// adresse empilée) : la copie qui exécute l'original reçoit une adresse de retour sentinelle.
-fn pile_pour_l_original(c2: &mut Cpu, b2: &mut Cps2Bus) {
+/// adresse empilée) : la copie qui exécute l'original reçoit une adresse de retour sentinelle, et part de l'entrée de la
+/// native (le PC du banc n'est pas tenu sans 68000 : `call` ne le pose pas).
+fn pile_pour_l_original(n: &Native, c2: &mut Cpu, b2: &mut Cps2Bus) {
     if sans68k::actif() {
         c2.a[7] = c2.a[7].wrapping_sub(4);
         mem::wr32(b2, c2.a[7], 0x00_fffe);
+        c2.pc = n.entry;
     }
 }
 
@@ -702,7 +704,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();
-    pile_pour_l_original(&mut c2, &mut b2);
+    pile_pour_l_original(n, &mut c2, &mut b2);
     let ret = mem::rd32(&mut b2, c2.a[7]);
     let sp_after = c2.a[7].wrapping_add(4);
     let mut guard = 0;

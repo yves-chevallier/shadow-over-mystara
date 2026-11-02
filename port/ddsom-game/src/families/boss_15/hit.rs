@@ -5,9 +5,10 @@
 //! ne l'interrompt pas : le dragon reprend l'état qu'il avait à l'image précédente (`+0xb0`).
 
 use super::*;
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         if x.u8(TYPE) == TYPE_BIG {
             lib::drop_once(x);
@@ -57,7 +58,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x929c4 : réaction au coup (la table 0x929da n'a qu'une routine, 0x92a82).
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
     }
@@ -97,7 +98,7 @@ fn reaction(x: &mut Cx) {
 }
 
 /// 0x92b2c : recul : le dragon glisse en arrière pendant 15 images.
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -124,7 +125,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 /// 0x92b8c : relevé (`+6` = 0 à 8) : attente, puis redressement avec clignotement.
-fn get_up(x: &mut Cx) {
+fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => {
             if x.u8(f::SUB2) == 0 {
@@ -180,7 +181,7 @@ fn get_up(x: &mut Cx) {
 }
 
 /// 0x92c2a : mort : chute hors de l'écran, puis libération quand le décor a fini (`A5+0x42` ≥ 2).
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             lib::sound(x, 0xe5416);

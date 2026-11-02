@@ -6,15 +6,10 @@ use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
-/// Octet de poids faible d'un registre de données.
-fn setb(x: &mut Cx, n: usize, v: u8) {
-    x.c.d[n] = x.c.d[n] & !0xff | v as u32;
-}
-
 // --- groupe 0 : arrivée --------------------------------------------------------------------------------------
 
 /// 0x882ae : pause, apparition, saut, atterrissage, premier combat.
-pub(super) fn intro(x: &mut Cx) {
+pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x882ba, f::SUB2) {
         0x882c4 => {
             if sub16(x, TIMER, 1).pl() {
@@ -72,7 +67,7 @@ pub(super) fn intro(x: &mut Cx) {
 // --- groupe 2 : combat -----------------------------------------------------------------------------------------
 
 /// 0x8839a : tant qu'un joueur est en vie, marche, demi-tour, arrêt, approche.
-pub(super) fn fight(x: &mut Cx) {
+pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, super::WAIT);
         return;
@@ -89,7 +84,7 @@ pub(super) fn fight(x: &mut Cx) {
 }
 
 /// Animation `kind` (clé `+0xa2`) ; le script `anim` ne repart que si la clé change.
-fn keyed_body(x: &mut Cx, kind: u8, anim: u32) {
+fn keyed_body<R: Banc>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     x.set8(ANIM_KIND, kind);
     setb(x, 2, kind);
     if kind != x.u8(ANIM_LAST) {
@@ -99,7 +94,7 @@ fn keyed_body(x: &mut Cx, kind: u8, anim: u32) {
 }
 
 /// 0x883d6 : marche vers l'adversaire, et regarde s'il peut attaquer.
-fn walk(x: &mut Cx) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -125,7 +120,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// 0x88470 : décide d'attaquer, de s'écarter ou de continuer la marche.
-fn near_checks(x: &mut Cx) {
+fn near_checks<R: Banc>(x: &mut Cx<'_, R>) {
     if aids::player_near(x, false) {
         x.set32(f::STATE, 0x0204_0000);
         return lib::pick_byte(x);
@@ -155,7 +150,6 @@ fn near_checks(x: &mut Cx) {
     let t = x.linked(f::TARGET);
     let d = x.u16(0x8).wrapping_sub(t.u16(x.b, 0x8));
     let side = if (d as i16) < 0 { 0x20 } else { 0 };
-    setb(x, 1, side);
     if side != x.u8(f::FLIP) {
         x.set32(RESUME_STATE, 0x0202_0000);
         x.set8(RESUME_SUB, 0);
@@ -164,17 +158,14 @@ fn near_checks(x: &mut Cx) {
 }
 
 /// 0x88546 (devant, `front`) et 0x885c0 (loin) : un adversaire à portée de coup. Rend vrai si une attaque est engagée.
-fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
+fn guard<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let t = x.linked(f::TARGET);
     let side = t.u8(x.b, f::FLIP);
-    setb(x, 0, side);
     let mine = x.u8(f::FLIP);
     if !lib::decision(x, side == mine) {
-        x.c.d[0] = 0;
         return false;
     }
     let i = x.random() & 0xf;
@@ -209,7 +200,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x88692 : arrêt face à l'adversaire.
-fn stop(x: &mut Cx) {
+fn stop<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -234,7 +225,7 @@ fn stop(x: &mut Cx) {
 }
 
 /// 0x88702 : approche lente de l'adversaire.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x8870e, f::SUB3) {
         0x8875a => {
             if sub16(x, TIMER, 1).mi() {
@@ -276,7 +267,7 @@ fn approach(x: &mut Cx) {
 // --- groupe 10 : attente sans joueur ----------------------------------------------------------------------------
 
 /// 0x891e2 : attend qu'un joueur soit en vie.
-pub(super) fn wait(x: &mut Cx) {
+pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, 0x0202_0000);
         x.set8(ANIM_KIND, 0x7f);
@@ -294,7 +285,7 @@ pub(super) fn wait(x: &mut Cx) {
 // --- groupe 14 : relevé -------------------------------------------------------------------------------------------
 
 /// 0x8921e : le boss se relève après une chute.
-pub(super) fn stand_up(x: &mut Cx) {
+pub(super) fn stand_up<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x8922c, f::SUB2) {
         0x89232 => {
             x.add8(f::SUB2, 2);

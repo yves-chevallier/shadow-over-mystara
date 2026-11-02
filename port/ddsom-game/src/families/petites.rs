@@ -27,11 +27,6 @@ fn moved(c: &mut Cpu, v: u32, size: Size) {
     c.flags_logic(v, size);
 }
 
-/// Mot d'adresse d'un objet (`move.w An,...`).
-fn word(c: &Cpu) -> u16 {
-    c.a[0] as u16
-}
-
 /// Crée un objet de `pool` de type `kind`, lié au créateur par le mot `link` (drapeaux de ce `move.w`).
 pub(crate) fn linked_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, pool: &pools::Pool, kind: u8, link: u32) -> Option<Obj> {
     let o = r.alloue(b, pool)?;
@@ -112,24 +107,35 @@ fn shot_18_native(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, toujours_nul: bool)
 }
 
 /// 0x76ec4 : s'il reste plus de deux emplacements ENEMY, crée deux ennemis de type 0x19 (variantes 0 et
-/// 1) liés au créateur ; D0 = 1 si créés, 0 sinon. L'original ne teste pas la retenue des allocations.
+/// 1) liés au créateur ; vrai (D0 = 1) si créés. L'original ne teste pas la retenue des allocations.
+pub(crate) fn enemy_pair_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj) -> bool {
+    paire_d_ennemis_par(r, b, createur, 0x19)
+}
+/// 0x76ec4 (type 0x19) et 0x63ae0 (type 7, `creators`) : deux ennemis de type `kind`, variantes 0 et 1.
+pub(crate) fn paire_d_ennemis_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, kind: u8) -> bool {
+    let cree = (rd16(b, A5 + 0x7e62) as i16) > 2;
+    if cree {
+        for variant in 0..2 {
+            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            let o = r.alloue_sans_test(b, &pools::ENEMY);
+            o.set_u8(b, 0x0, 1);
+            o.set_u8(b, 0x2, kind);
+            o.set_u8(b, 0x3, variant);
+            o.set_u8(b, 0x2f, 0);
+            o.set_u16(b, 0x46, createur.word());
+        }
+    }
+    r.d(0, cree as u32);
+    r.drapeaux(cree as u32, Size::Long);
+    cree
+}
+/// 0x76ec4 sans registres.
+pub fn enemy_pair_cree(b: &mut Cps2Bus, createur: Obj) -> bool {
+    enemy_pair_par(&mut Pur, b, createur)
+}
 fn enemy_pair(c: &mut Cpu, b: &mut Cps2Bus) {
-    if (rd16(b, A5 + 0x7e62) as i16) <= 2 {
-        c.d[0] = 0;
-        moved(c, 0, Size::Long);
-        return rts(c, b);
-    }
-    for variant in 0..2 {
-        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
-        let o = pools::ENEMY.alloc_unchecked_68k(c, b);
-        o.set_u8(b, 0x0, 1);
-        o.set_u8(b, 0x2, 0x19);
-        o.set_u8(b, 0x3, variant);
-        o.set_u8(b, 0x2f, 0);
-        o.set_u16(b, 0x46, word(c));
-    }
-    c.d[0] = 1;
-    moved(c, 1, Size::Long);
+    let me = Obj(c.a[0]);
+    enemy_pair_par(c, b, me);
     rts(c, b);
 }
 
@@ -164,35 +170,44 @@ fn eshl_volley(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// 0xa7234 et 0xa727c : gonflement du rugissement de Boss 15 : un nombre de tirs ESHL de type 0x41 (variante
 /// `variant`) donné par la table (selon `A5+0x7f92`), numérotés de n-1 à 0 par `+0x2f`, liés par `+0x5c`.
-fn roar(c: &mut Cpu, b: &mut Cps2Bus, table: u32, variant: u8) {
+/// D0.w et D1.w de l'original : l'index de la table, le compteur (épuisé : 0xffff, ou le numéro du tir refusé).
+pub(crate) fn roar_par(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, big: bool) {
+    let (table, variant) = if big { (0xa726c, 0) } else { (0xa72b4, 1) };
     let i = rd16(b, A5 + 0x7f92) >> 1;
-    set_low_word(&mut c.d[0], i);
-    c.d[1] = prog8(b, table + i as u32) as u32;
-    let mut n = (c.d[1] as u16).wrapping_sub(1);
-    set_low_word(&mut c.d[1], n);
+    r.d_mot(0, i);
+    let total = prog8(b, table + i as u32);
+    r.d(1, total as u32);
+    let mut n = (total as u16).wrapping_sub(1);
+    r.d_mot(1, n);
     loop {
-        let Some(o) = alloc(c, b, &pools::ESHL) else { break };
-        let me = Obj(c.a[0]);
+        let Some(o) = r.alloue(b, &pools::ESHL) else { break };
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x41);
         o.set_u8(b, 0x3, variant);
-        o.set_u8(b, 0x2f, c.d[1] as u8);
-        let link = me.u16(b, 0x5c);
+        o.set_u8(b, 0x2f, n as u8);
+        let link = createur.u16(b, 0x5c);
         o.set_u16(b, 0x5c, link);
-        moved(c, link as u32, Size::Word);
-        n = (c.d[1] as u16).wrapping_sub(1);
-        set_low_word(&mut c.d[1], n);
+        r.drapeaux(link as u32, Size::Word);
+        n = n.wrapping_sub(1);
+        r.d_mot(1, n);
         if n == 0xffff {
             break;
         }
     }
-    rts(c, b);
+}
+/// 0xa7234 (`big`) et 0xa727c sans registres.
+pub fn roar_cree(b: &mut Cps2Bus, createur: Obj, big: bool) {
+    roar_par(&mut Pur, b, createur, big)
 }
 fn roar_big(c: &mut Cpu, b: &mut Cps2Bus) {
-    roar(c, b, 0xa726c, 0);
+    let me = Obj(c.a[0]);
+    roar_par(c, b, me, true);
+    rts(c, b);
 }
 fn roar_small(c: &mut Cpu, b: &mut Cps2Bus) {
-    roar(c, b, 0xa72b4, 1);
+    let me = Obj(c.a[0]);
+    roar_par(c, b, me, false);
+    rts(c, b);
 }
 
 /// 0xa036e : harpie, créature compagne (ESHL 0x10) : copie la variante, la position décalée de ±0x2f en X
@@ -512,9 +527,15 @@ fn scroll_1_on_with(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
 fn scroll_1_on(c: &mut Cpu, b: &mut Cps2Bus) {
     scroll_1_on_with(c, b, 0x18);
 }
+/// 0x2a42 : `A5+0x548` = `valeur` (D0.w de l'original), fond 1 réglé sur 0x34.
+pub fn fond_1_allume_a(b: &mut Cps2Bus, valeur: u16) {
+    wr16(b, A5 + 0x548, valeur);
+    fond_1_en_mode(b, 0x34);
+}
 fn scroll_1_on_at_d0(c: &mut Cpu, b: &mut Cps2Bus) {
-    wr16(b, A5 + 0x548, c.d[0] as u16);
-    scroll_1_on_with(c, b, 0x34);
+    fond_1_allume_a(b, c.d[0] as u16);
+    moved(c, 0x34, Size::Word);
+    rts(c, b);
 }
 
 /// 0x133f6 / 0x133f0 : l'indicateur « démarrage fait » (`A5-0x715e`) levé / baissé.

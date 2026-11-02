@@ -3,14 +3,15 @@
 //! forme donne, par tranche de 16 pixels de distance, la hauteur maximale, la demi-profondeur et la poussée.
 //!
 //! Les joueurs sont poussés par le boss lui-même (`push_players`) ; les autres objets appellent 0x81aa4
-//! (`boss_common`), qui appelle ces formes par leur adresse d'origine (natives `SHOVE_FRONT`, `SHOVE_SIDE`).
+//! (`boss_common`), qui appelle ces formes par `pousser`.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
 use super::*;
-use crate::mem::{rd16, rd8, rts, wr16};
+use crate::families::cx::Banc;
+use crate::mem::{rd16, rts};
 
 /// Une forme : tranches (octets, relatives au PC) et lignes (hauteur, demi-profondeur, poussée ; données).
 struct Shape {
@@ -21,122 +22,102 @@ struct Shape {
 const FRONT: Shape = Shape { slices: 0x81950, rows: 0x81970 };
 const SIDE: Shape = Shape { slices: 0x81a44, rows: 0x81a64 };
 
-/// 0x81916 / 0x81a0a : poussée pour l'objet A1 à la distance `d` (D0) du boss A0, 0 hors de la forme.
-/// Registres comme l'original : D0 = la poussée, D1, A2.
-fn shove_amount(c: &mut Cpu, b: &mut Cps2Bus, shape: &Shape, d: u16) -> u16 {
-    let (me, other) = (c.a[0], c.a[1]);
-    let push = if (d as i16) < 0x200 {
-        let slice = crate::mem::prog8(b, shape.slices + (d >> 4) as u32) as u32;
-        let row = shape.rows + (slice << 3);
-        let height = rd16(b, row);
-        if (height as i16) < rd16(b, other + 0xc) as i16 {
-            c.a[2] = row + 2;
-            c.d[1] = slice << 3;
-            0
-        } else {
-            c.a[2] = row + 4;
-            let depth = rd16(b, row + 2);
-            let mut dz = rd16(b, other + 0x10).wrapping_sub(rd16(b, me + 0x10));
-            if (dz as i16) < 0 {
-                dz = dz.wrapping_neg();
-            }
-            c.d[1] = dz as u32;
-            if dz as i16 >= depth as i16 { 0 } else { rd16(b, row + 4) }
-        }
-    } else {
-        0
-    };
-    c.d[0] = push as u32;
-    push
+/// 0x81916 / 0x81a0a : poussée pour l'objet `other` à la distance `d` du boss `me`, 0 hors de la forme (hauteur
+/// de l'objet au-dessus de la tranche, ou trop loin en profondeur).
+fn shove_amount(b: &mut Cps2Bus, shape: &Shape, me: Obj, other: Obj, d: u16) -> u16 {
+    if (d as i16) >= 0x200 {
+        return 0;
+    }
+    let slice = crate::mem::prog8(b, shape.slices + (d >> 4) as u32) as u32;
+    let row = shape.rows + (slice << 3);
+    let height = rd16(b, row);
+    if (height as i16) < other.u16(b, 0xc) as i16 {
+        return 0;
+    }
+    let depth = rd16(b, row + 2);
+    let mut dz = other.u16(b, 0x10).wrapping_sub(me.u16(b, 0x10));
+    if (dz as i16) < 0 {
+        dz = dz.wrapping_neg();
+    }
+    if dz as i16 >= depth as i16 { 0 } else { rd16(b, row + 4) }
 }
 
-/// 0x818e6 : forme 1 : l'objet A1 devant le boss A0 (jusqu'à 0x20 derrière lui) est poussé vers l'avant.
-fn shove_front(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    let (me, other) = (c.a[0], c.a[1]);
-    let ahead = rd8(b, me + 0x2c) != 0;
-    let mut d = rd16(b, other + 0x8).wrapping_sub(rd16(b, me + 0x8));
+/// 0x818e6 : forme 1 : l'objet `other` devant le boss `me` (jusqu'à 0x20 derrière lui) est poussé vers l'avant.
+fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
+    let ahead = me.u8(b, 0x2c) != 0;
+    let mut d = other.u16(b, 0x8).wrapping_sub(me.u16(b, 0x8));
     if !ahead {
         d = d.wrapping_neg();
     }
     d = d.wrapping_add(0x20);
-    let moved = (d as i16) >= 0 && {
-        let mut p = shove_amount(c, b, &FRONT, d);
-        p != 0 && {
-            if !ahead {
-                p = p.wrapping_neg();
-            }
-            let ox = rd16(b, other + 0x8);
-            wr16(b, other + 0x8, ox.wrapping_add(p));
-            true
-        }
-    };
-    c.d[0] = moved as u32;
-    moved
+    if (d as i16) < 0 {
+        return false;
+    }
+    let mut p = shove_amount(b, &FRONT, me, other, d);
+    if p == 0 {
+        return false;
+    }
+    if !ahead {
+        p = p.wrapping_neg();
+    }
+    let ox = other.u16(b, 0x8);
+    other.set_u16(b, 0x8, ox.wrapping_add(p));
+    true
 }
 
-/// 0x819e2 : forme 2 : l'objet A1 est écarté du boss A0, du côté où il se trouve.
-fn shove_side(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    let (me, other) = (c.a[0], c.a[1]);
-    let mut d = rd16(b, other + 0x8).wrapping_sub(rd16(b, me + 0x8));
+/// 0x819e2 : forme 2 : l'objet `other` est écarté du boss `me`, du côté où il se trouve.
+fn shove_side(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
+    let mut d = other.u16(b, 0x8).wrapping_sub(me.u16(b, 0x8));
     if (d as i16) < 0 {
         d = d.wrapping_neg();
     }
-    let mut p = shove_amount(c, b, &SIDE, d);
-    let moved = p != 0 && {
-        let ox = rd16(b, other + 0x8);
-        c.d[1] = c.d[1] & 0xffff_0000 | ox as u32;
-        if (ox as i16) < rd16(b, me + 0x8) as i16 {
-            p = p.wrapping_neg();
-        }
-        wr16(b, other + 0x8, ox.wrapping_add(p));
-        true
-    };
-    c.d[0] = moved as u32;
-    moved
+    let mut p = shove_amount(b, &SIDE, me, other, d);
+    if p == 0 {
+        return false;
+    }
+    let ox = other.u16(b, 0x8);
+    if (ox as i16) < me.u16(b, 0x8) as i16 {
+        p = p.wrapping_neg();
+    }
+    other.set_u16(b, 0x8, ox.wrapping_add(p));
+    true
 }
 
 /// 0x818b2 (`shape` = 1) et 0x819b0 (2) : le boss pousse chaque joueur présent, sauf l'elfe (classe 5) dans son
 /// état 0x1a.
-pub(super) fn push_players(x: &mut Cx, shape: u8) {
+pub(super) fn push_players<R: Banc>(x: &mut Cx<'_, R>, shape: u8) {
     x.set8(BODY_SHAPE, shape);
     for k in 0..4u32 {
-        let p = 0xff85de + 0x200 * k;
-        x.c.d[6] = x.c.d[6] & 0xffff_0000 | (3 - k);
-        if rd8(x.b, p) == 0 {
+        let p = Obj(0xff85de + 0x200 * k);
+        if p.u8(x.b, 0) == 0 {
             continue;
         }
-        let class = rd8(x.b, p + 3) >> 1;
-        x.c.d[0] = x.c.d[0] & !0xff | class as u32;
-        if class == 5 && rd8(x.b, p + 0x6a) == 0x1a {
+        let class = p.u8(x.b, 3) >> 1;
+        if class == 5 && p.u8(x.b, 0x6a) == 0x1a {
             continue;
         }
-        x.c.a[0] = x.o.0;
-        x.c.a[1] = p;
         if shape == 1 {
-            shove_front(x.c, x.b);
+            shove_front(x.b, x.o, p);
         } else {
-            shove_side(x.c, x.b);
+            shove_side(x.b, x.o, p);
         }
     }
-    x.c.d[6] = x.c.d[6] & 0xffff_0000 | 0xffff;
-    x.c.a[1] = 0xff85de + 0x800;
 }
 
 /// Forme du corps `routine` (0x818e6 devant, 0x819e2 de côté) appliquée à l'objet `other` par le boss `me` ; vrai si
-/// l'objet a été poussé (pour 0x81aa4 de `boss_common`). Les registres de travail de la forme ne sortent pas.
+/// l'objet a été poussé (pour 0x81aa4 de `boss_common`).
 pub fn pousser(b: &mut Cps2Bus, me: Obj, other: Obj, routine: u32) -> bool {
-    let mut c = Cpu::default();
-    c.a[0] = me.0;
-    c.a[1] = other.0;
     match routine {
-        0x818e6 => shove_front(&mut c, b),
-        0x819e2 => shove_side(&mut c, b),
+        0x818e6 => shove_front(b, me, other),
+        0x819e2 => shove_side(b, me, other),
         _ => unreachable!("forme du corps du boss 3 en {routine:#x} : la table 0x81ad4 n'a que 0x818e6 et 0x819e2"),
     }
 }
 
-fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cpu, &mut Cps2Bus) -> bool) {
-    f(c, b);
+/// Adaptateur des natives (fuzz contre l'original) : A0 = le boss, A1 = l'objet ; D0 = 1 / 0 et ses drapeaux. Le
+/// seul appelant d'origine, 0x81aa4 (`boss_common::push_out_of_boss`), ne relit ni D1 ni A2, que l'original laisse.
+fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cps2Bus, Obj, Obj) -> bool) {
+    c.d[0] = f(b, Obj(c.a[0]), Obj(c.a[1])) as u32;
     c.flags_logic(c.d[0], Size::Long);
     rts(c, b);
 }
@@ -146,7 +127,7 @@ pub const SHOVE_FRONT: crate::Native = crate::Native {
     name: "boss_3_pousse_devant",
     run: crate::Corps::Processeur(|c, b| native(c, b, shove_front)),
     touches_sound: false,
-    outputs: crate::regs::d(0) | crate::regs::d(1) | crate::regs::a(2) | crate::regs::CCR,
+    outputs: crate::regs::d(0) | crate::regs::CCR,
 };
 
 pub const SHOVE_SIDE: crate::Native = crate::Native {
@@ -154,5 +135,5 @@ pub const SHOVE_SIDE: crate::Native = crate::Native {
     name: "boss_3_pousse_cote",
     run: crate::Corps::Processeur(|c, b| native(c, b, shove_side)),
     touches_sound: false,
-    outputs: crate::regs::d(0) | crate::regs::d(1) | crate::regs::a(2) | crate::regs::CCR,
+    outputs: crate::regs::d(0) | crate::regs::CCR,
 };

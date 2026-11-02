@@ -111,7 +111,7 @@ pub(self) fn idle_alone<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8173c : la cible est-elle derrière le boss ? Sans cible : attente, et vrai.
-pub(self) fn target_behind(x: &mut Cx) -> bool {
+pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::TARGET) as i16) >= 0 {
         idle_alone(x);
         return true;
@@ -126,7 +126,7 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
 }
 
 /// 0x81764 : la cible est-elle loin (plus de 0x20 en profondeur ou 0xc0 en largeur) ? Sans cible : attente, et vrai.
-pub(self) fn target_far(x: &mut Cx) -> bool {
+pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         idle_alone(x);
         return true;
@@ -143,10 +143,10 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
 }
 
 /// 0x81722 : seizièmes de PV restants (0 à 15).
-fn hp_sixteenths(x: &mut Cx) -> u32 {
+fn hp_sixteenths<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     let mut d1 = x.u16(f::HP) << 4;
     let max = x.u16(0x60);
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | max as u32;
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | max as u32;
     let mut d0 = 0xfu32;
     loop {
         d1 = d1.wrapping_sub(max);
@@ -162,7 +162,7 @@ fn hp_sixteenths(x: &mut Cx) -> u32 {
 }
 
 /// 0x816f8 : le boss vient-il de changer de palier de PV (`+0xa2`, table 0x81712) ?
-pub(self) fn wound_changed(x: &mut Cx) -> bool {
+pub(self) fn wound_changed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let n = hp_sixteenths(x);
     let w = x.rom8(0x81712 + n);
     let changed = w != x.u8(FLYING);
@@ -174,7 +174,7 @@ pub(self) fn wound_changed(x: &mut Cx) -> bool {
 
 /// Tirage d'une attaque dans une table de 32 octets par niveau de difficulté (lue en données, à partir de `table`) :
 /// `+6` = l'attaque, `+4..+5` = actif / attaques, `+7` = 0.
-fn draw_attack(x: &mut Cx, table: u32) {
+fn draw_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = table.wrapping_add(level as i16 as u32);
     let r = rand_and(x, 0x1f);
@@ -185,7 +185,7 @@ fn draw_attack(x: &mut Cx, table: u32) {
 }
 
 /// 0x80e1c / 0x80e22 : attaque tirée pour une cible proche (`far` : à distance) ; blessé, la table des blessés.
-pub(self) fn choose_attack(x: &mut Cx, far: bool) {
+pub(self) fn choose_attack<R: Banc>(x: &mut Cx<'_, R>, far: bool) {
     let table = if x.u8(FLYING) != 0 {
         0x81262
     } else if far {
@@ -197,7 +197,7 @@ pub(self) fn choose_attack(x: &mut Cx, far: bool) {
 }
 
 /// 0x81462 : fin d'une attaque : nouvelle attaque si la cible est tout près, sinon reprise du vol (ou attente).
-pub(self) fn after_attack(x: &mut Cx) {
+pub(self) fn after_attack<R: Banc>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
         return x.set32(f::STATE, s);
@@ -213,7 +213,7 @@ pub(self) fn after_attack(x: &mut Cx) {
     x.set32(f::STATE, 0x0202_0400);
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -236,7 +236,7 @@ pub fn run(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x7f44e : réglages du boss (hors cinématique) ; il s'enregistre comme obstacle.
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -263,7 +263,6 @@ fn init(x: &mut Cx) {
     if x.u16(f::TARGET) != 0 && var::PLAYERS_ALIVE.get(x.b) != 1 {
         n = 7;
     }
-    x.c.d[0] = n as u32;
     x.set8(0x72, n);
     x.set8(0x73, n);
     for (off, v) in [(0x74, 1), (0x75, 0x44), (0x76, 6), (0x7e, 0x21), (0x7f, 0), (0x81, 0), (0x80, 0x19), (0xbf, 0)] {
@@ -281,7 +280,7 @@ fn init(x: &mut Cx) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x7f550 : un groupe par image (hors gel et pause), invulnérabilité décomptée, puis zone, ombre et liste.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -307,7 +306,7 @@ fn active(x: &mut Cx) {
 }
 
 /// Fin d'image ordinaire : retenue dans l'écran (marge `margin`), ombre, remise en liste.
-pub(self) fn end_frame(x: &mut Cx, margin: u16) {
+pub(self) fn end_frame<R: Banc>(x: &mut Cx<'_, R>, margin: u16) {
     lib::keep_on_screen(x, margin);
     lib::collide_terrain(x);
     x.reinsert();
@@ -332,11 +331,7 @@ pub(crate) fn counter_reaction<R: Banc>(x: &mut Cx<'_, R>) -> (u32, u16) {
 
 /// Natives : gestionnaire, riposte et formes du corps (appelées par 0x81aa4 de `boss_common`).
 pub const NATIVES: &[crate::Native] = &[
-    super::cx::handler(0x7f41a, "boss_3", |c, b| {
-        let mut x = Cx::new(c, b);
-        run(&mut x);
-        x.ret();
-    }),
+    super::cx::handler_sans(0x7f41a, "boss_3", |b, a| run(&mut super::cx::Gx::aiguille(b, a))),
     crate::Native {
         entry: 0x81ae0,
         name: "boss_3_riposte",

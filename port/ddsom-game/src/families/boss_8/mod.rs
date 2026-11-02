@@ -68,25 +68,44 @@ pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-/// Mot de poids faible d'un registre de données (`move.w`, `andi.w`...) : le reste du registre est conservé.
-pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
-    set_dw(x, n, v);
+/// Les restes D2 à D5 (relus par les gestionnaires suivants) ; D0, D1 et D6 ne sont relus par personne.
+fn reste<'a, R: Banc>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
+    match n {
+        2 => Some(x.c.d2()),
+        3 => Some(x.c.d3()),
+        4 => Some(x.c.d4()),
+        5 => Some(x.c.d5()),
+        _ => None,
+    }
+}
+
+/// Mot de poids faible d'un registre de données (`move.w`, `andi.w`...), gardé s'il est un reste.
+pub(self) fn setw<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+    if let Some(r) = reste(x, n) {
+        *r = *r & 0xffff_0000 | v as u32;
+    }
+}
+
+/// Octet de poids faible d'un registre de données, gardé s'il est un reste.
+pub(self) fn setb<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u8) {
+    if let Some(r) = reste(x, n) {
+        *r = *r & !0xff | v as u32;
+    }
 }
 
 /// Saut par table relative (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexée par l'octet `idx` de l'objet :
-/// rend l'adresse d'arrivée. D0 reçoit l'octet (après un `moveq 0,D0`), D1w le décalage.
-pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
+/// rend l'adresse d'arrivée.
+pub(self) fn dispatch<R: Banc>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
-    setw(x, 1, off);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -95,9 +114,6 @@ pub fn run(x: &mut Cx) {
         if x.u16(f::TARGET) == 0 {
             lib::pick_target(x);
         }
-        x.c.d[0] = x.u8(f::STATE) as u32;
-        let off = x.rom16(0x8803e + x.c.d[0]);
-        setw(x, 1, off);
         match x.u8(f::STATE) {
             st::INIT => init(x),
             st::ACTIVE => active(x),
@@ -135,7 +151,7 @@ pub fn run(x: &mut Cx) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -163,8 +179,6 @@ fn init(x: &mut Cx) {
     x.set_bit(0x1, 1, true);
     let px = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     let py = var::SCROLL_Y.get(x.b).wrapping_add(0x69);
-    setw(x, 0, px);
-    setw(x, 1, py);
     x.set16(0x8, px);
     x.set16(0x10, py);
     x.add16(0xc, 0x50);
@@ -172,19 +186,17 @@ fn init(x: &mut Cx) {
     crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::VICTORY, None);
     // points de vie « affaiblis » (seuil du ralenti) selon le nombre de joueurs
     let hp = x.u16(0x60);
-    setw(x, 1, hp);
-    setw(x, 2, hp);
-    aids::lsr_w(x, 1, 1);
-    aids::lsr_w(x, 2, 2);
-    x.c.d[0] = var::PLAYERS_ALIVE.get(x.b) as u32;
-    let mut d1 = x.c.d[1] as u16;
-    if Fl::sub8(x.c.d[0] as u8, 1).gt() {
-        if Fl::sub8(x.c.d[0] as u8, 2).ne() {
+    let (mut d1, d2) = (hp >> 1, hp >> 2);
+    // D2.w (le quart) reste dans le registre (`dispatch::Restes`)
+    setw(x, 2, d2);
+    let players = var::PLAYERS_ALIVE.get(x.b);
+    if Fl::sub8(players, 1).gt() {
+        if Fl::sub8(players, 2).ne() {
             x.set8(PHASES, 3);
             d1 = d1.wrapping_add(d1);
         } else {
             x.set8(PHASES, 2);
-            d1 = d1.wrapping_add(x.c.d[2] as u16);
+            d1 = d1.wrapping_add(d2);
         }
     } else {
         x.set8(PHASES, 1);
@@ -198,7 +210,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         lib::pick_target(x);
     }
@@ -264,5 +276,5 @@ fn idle_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x87fc0 "boss_8" run,
+    0x87fc0 "boss_8" #[sans] run,
 }

@@ -25,21 +25,21 @@ fn set_low_byte(r: &mut u32, v: u8) {
 const DIRECTIONS: u32 = 0x140c;
 
 /// Calcul de 0x1386 sur les registres de l'original (D1-D4), avec les registres de travail qu'il laisse.
-struct Calcul {
-    direction: u8,
-    d1: u32,
-    d2: u32,
-    d3: u32,
+pub(crate) struct Calcul {
+    pub direction: u8,
+    pub d1: u32,
+    pub d2: u32,
+    pub d3: u32,
     /// D4.w : unité de la comparaison.
-    unite: u16,
+    pub unite: u16,
     /// D6 : compteur de la boucle d'estimation, s'il a été posé.
-    d6: Option<u32>,
+    pub d6: Option<u32>,
 }
 
 /// Direction du point (D3, D4) vers le point (D1, D2). Les écarts sont pris en valeur absolue (16 bits,
 /// positions biaisées de 0x8000 pour comparer en non signé) ; l'octant dépend des signes et du plus grand
 /// écart, le pas (0 à 3) du rapport entre le petit écart et le grand, estimé par soustractions.
-fn calcul(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Calcul {
+pub(crate) fn calcul(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Calcul {
     let mut octant = 0u8;
     let mut dx = d1.wrapping_add(0x8000);
     let (diff, borrow) = (dx as u16).overflowing_sub(d3.wrapping_add(0x8000) as u16);

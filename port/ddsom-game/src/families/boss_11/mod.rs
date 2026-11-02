@@ -45,13 +45,29 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-/// `move.b #v,Dn` : l'octet de poids faible d'un registre de données.
-pub(self) fn setb(x: &mut Cx, n: usize, v: u8) {
-    x.c.d[n] = x.c.d[n] & !0xff | v as u32;
+/// Les restes D2 à D5 (relus par les gestionnaires suivants) ; D0, D1 et D6 ne sont relus par personne.
+fn reste<'a, R: Banc>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
+    match n {
+        2 => Some(x.c.d2()),
+        3 => Some(x.c.d3()),
+        4 => Some(x.c.d4()),
+        5 => Some(x.c.d5()),
+        _ => None,
+    }
 }
 
-pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
-    set_dw(x, n, v);
+/// `move.b #v,Dn` : l'octet de poids faible d'un registre de données (gardé s'il est un reste).
+pub(self) fn setb<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u8) {
+    if let Some(r) = reste(x, n) {
+        *r = *r & !0xff | v as u32;
+    }
+}
+
+/// `move.w #v,Dn` : le mot de poids faible d'un registre de données (gardé s'il est un reste).
+pub(self) fn setw<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+    if let Some(r) = reste(x, n) {
+        *r = *r & 0xffff_0000 | v as u32;
+    }
 }
 
 /// `asr.w #k,Dn`.
@@ -73,9 +89,7 @@ pub(self) fn sync<R: Banc>(x: &mut Cx<'_, R>) {
 // --- animations (0x8f508, 0x8f530, 0x8f558) ------------------------------------------------------------------
 
 /// Lance le script `n` (déjà dans D0) du jeu `kind` (0, 2 ou 4 : D1b) pour le type, sauf s'il tourne déjà.
-pub(self) fn play(x: &mut Cx, kind: u8, n: u32) {
-    setb(x, 1, kind);
-    x.c.d[0] = n;
+pub(self) fn play<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     let t12 = is_12(x);
     let table = match (kind, t12) {
         (0, true) => 0x17b9c2,
@@ -85,37 +99,32 @@ pub(self) fn play(x: &mut Cx, kind: u8, n: u32) {
         (_, true) => 0x17ba32,
         (_, false) => 0x17c93a,
     };
-    x.c.a[4] = table;
     if x.u8(ANIM_KIND) == kind && x.u8(ANIM_N) == n as u8 {
         return;
     }
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_N, n as u8);
-    let set = x.c.a[4];
-    let n = x.c.d[0] as u16;
-    x.anim_start(set, n);
+    x.anim_start(table, n as u16);
 }
 
 /// 0x8f508.
-pub(self) fn body(x: &mut Cx, n: u32) {
+pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, 0, n)
 }
 
 /// 0x8f530.
-pub(self) fn act(x: &mut Cx, n: u32) {
+pub(self) fn act<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, 2, n)
 }
 
 /// 0x8f558.
-pub(self) fn hurt(x: &mut Cx, n: u32) {
+pub(self) fn hurt<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play(x, 4, n)
 }
 
 /// 0x8eb28 : octet `+0x44` selon le type et `n`.
-fn set44(x: &mut Cx, n: u32) {
-    x.c.d[0] = n;
-    let d = (x.c.d[0] as u16).wrapping_mul(2);
-    setw(x, 0, d);
+fn set44<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+    let d = (n as u16).wrapping_mul(2);
     let base = if is_12(x) { 0x8eb43 } else { 0x8eb42 };
     let v = x.rom8(base + d as u32);
     x.set8(0x44, v);
@@ -124,20 +133,20 @@ fn set44(x: &mut Cx, n: u32) {
 // --- changements d'état (0x8eac8...) ---------------------------------------------------------------------------
 
 /// 0x8eac8 : plus de cible, attente (état 2, groupe 6).
-pub(self) fn to_wait(x: &mut Cx) {
+pub(self) fn to_wait<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0206_0000);
     body(x, 0)
 }
 
 /// 0x8ead6 : retour à la poursuite.
-pub(self) fn to_chase(x: &mut Cx) {
+pub(self) fn to_chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0000);
     x.set8(0x79, 0x3f);
     body(x, 0)
 }
 
 /// 0x8eaea : demi-tour.
-pub(self) fn to_turn(x: &mut Cx) {
+pub(self) fn to_turn<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0000);
     let flip = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, flip);
@@ -145,19 +154,19 @@ pub(self) fn to_turn(x: &mut Cx) {
 }
 
 /// 0x8eafe : attaque 2 (groupe 4, étape 4).
-pub(self) fn to_attack_2(x: &mut Cx) {
+pub(self) fn to_attack_2<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0400);
     body(x, 8)
 }
 
 /// 0x8eb0c.
-pub(self) fn to_attack_3(x: &mut Cx) {
+pub(self) fn to_attack_3<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0600);
     body(x, 0)
 }
 
 /// 0x8eb1a.
-pub(self) fn to_attack_7(x: &mut Cx) {
+pub(self) fn to_attack_7<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0e00);
     body(x, 0)
 }
@@ -174,7 +183,7 @@ pub(self) fn stop<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(0x1c, 0);
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -183,7 +192,6 @@ pub fn run(x: &mut Cx) {
     set44(x, 0);
     x.set8(NO_ZONE, 0);
     let state = x.u8(f::STATE) as u32;
-    x.c.d[0] = state;
     let off = x.rom16(0x8d5ca + state);
     setw(x, 1, off);
     match state {
@@ -247,7 +255,7 @@ fn restore<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -273,7 +281,9 @@ fn init(x: &mut Cx) {
     x.set8(0x80, 0x26);
     x.set8(0x9e, 2);
     x.set8(0x9f, 1);
-    if x.c.d[0] as u8 != 0xc {
+    // Glitch d'origine : `cmpi.b #0xc,D0b` voulait sans doute distinguer le type 12, mais D0 vient d'être mis à zéro par
+    // 0x19e10 (`clear_popup`) : les deux types prennent ces réglages.
+    {
         x.set8(0x81, 0);
         x.set8(0x80, 0x27);
         x.set8(0x9e, 1);
@@ -303,7 +313,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -321,7 +331,7 @@ fn active(x: &mut Cx) {
 }
 
 /// `moveq 0,D0 ; move.b (idx,A0),D0b ; move.w (table,PC,D0w),D1w ; jsr (table,PC,D1w)` : adresse d'arrivée.
-pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
+pub(self) fn dispatch<R: Banc>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
     setw(x, 1, off);
@@ -336,5 +346,5 @@ pub(self) fn dispatch0<R: Banc>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 
 }
 
 handlers! {
-    0x8d59e "boss_11" run,
+    0x8d59e "boss_11" #[sans] run,
 }
